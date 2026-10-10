@@ -55,6 +55,8 @@ var families = []family{
 	shebangFamily,
 	comparisonsFamily,
 	loopsFamily,
+	pipelinesFamily,
+	redirectSafetyFamily,
 }
 
 var catalog, rules, commandChecks = assemble(families)

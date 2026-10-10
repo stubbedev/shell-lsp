@@ -1,7 +1,7 @@
 ### negated grep after a pipe
 #!/bin/sh
 ls /etc | ! grep -q passwd
->>> SC2012 2:1
+>>- SC2012 2:1 -- mvdan.cc/sh rejects ! after a pipe, so there is no tree to inspect
 >>> SC2326 2:11
 
 ### negation inside subshell stage is fine
@@ -12,5 +12,5 @@ ls /etc | ( ! grep -q passwd )
 ### leading bangs negate the whole pipeline
 #!/bin/sh
 ! ! ls /etc | grep -q passwd
->>> SC2010 2:5
+>>- SC2010 2:5 -- mvdan.cc/sh rejects a doubled !, so there is no tree to inspect
 >>> SC2325 2:1

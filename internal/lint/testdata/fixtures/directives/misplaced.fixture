@@ -180,6 +180,7 @@ ps aux |
 >>> SC1072 3:30
 >>> SC1073 3:3
 >>> SC1126 3:3
+>>+ SC2009 2:1 -- shellcheck aborts at a comment between pipeline stages, but the script is valid and does grep ps output
 
 ### directive after a logical and that continues on the next line
 #!/bin/sh
