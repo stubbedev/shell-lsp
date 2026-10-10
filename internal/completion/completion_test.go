@@ -297,3 +297,25 @@ func TestEscapeName(t *testing.T) {
 		}
 	}
 }
+
+func TestNestedContexts(t *testing.T) {
+	t.Parallel()
+
+	for _, src := range []string{"kill \"$(gr‸", "case \"$(gr‸", "x=\"a $(echo b) $(gr‸", "echo $(ls | gr‸"} {
+		if _, ok := find(complete(t, dialect.Bash, src), "grep"); !ok {
+			t.Errorf("%q: grep not offered inside a command substitution", src)
+		}
+	}
+	for _, src := range []string{"count=1\n(( cou‸", "count=1\nx=$((cou‸", "count=1\n(( x = (cou‸", "count=1\necho \"$(( cou‸"} {
+		if _, ok := find(complete(t, dialect.Bash, src), "count"); !ok {
+			t.Errorf("%q: count not offered in arithmetic", src)
+		}
+	}
+	after := complete(t, dialect.Bash, "echo \"$(date)\" --he‸")
+	if len(after.Items) != 0 {
+		t.Errorf("after a closed substitution the outer argument context is lost: %v", labels(after))
+	}
+	if got := labels(complete(t, dialect.Bash, "grep \"$(echo x)\" -‸")); len(got) != 4 {
+		t.Errorf("flags of the outer command after a substitution = %v", got)
+	}
+}

@@ -57,6 +57,13 @@ func analyze(tree *parser.Tree, offset int) site {
 			return st
 		}
 	}
+	if lx.arithmetic {
+		return site{
+			position: positionVariable,
+			prefix:   lx.current,
+			replace:  parser.Span{Start: offset - len(lx.current), End: offset},
+		}
+	}
 	if (lx.singleQuoted || lx.doubleQuoted) && !startsQuoted(lx.current) {
 		return site{}
 	}
@@ -109,74 +116,129 @@ type lexed struct {
 	comment      bool
 	singleQuoted bool
 	doubleQuoted bool
+	arithmetic   bool
+}
+
+type frameMode uint8
+
+const (
+	frameCommand frameMode = iota
+	frameDouble
+	frameArithmetic
+)
+
+type frame struct {
+	mode  frameMode
+	words []string
+	cur   strings.Builder
+	depth int
 }
 
 func lexLine(line string) lexed {
-	var lx lexed
-	var cur strings.Builder
-	endWord := func() {
-		if cur.Len() > 0 {
-			lx.words = append(lx.words, cur.String())
-			cur.Reset()
+	stack := []*frame{{mode: frameCommand}}
+	top := func() *frame { return stack[len(stack)-1] }
+	push := func(mode frameMode) { stack = append(stack, &frame{mode: mode}) }
+	pop := func() {
+		if len(stack) > 1 {
+			stack = stack[:len(stack)-1]
 		}
 	}
-	reset := func() {
-		endWord()
-		lx.words = nil
+	endWord := func() {
+		f := top()
+		if f.cur.Len() > 0 {
+			f.words = append(f.words, f.cur.String())
+			f.cur.Reset()
+		}
 	}
+	singleQuoted := false
 	for i := 0; i < len(line); i++ {
 		c := line[i]
+		f := top()
+		next := byte(0)
+		if i+1 < len(line) {
+			next = line[i+1]
+		}
 		switch {
-		case lx.singleQuoted:
-			cur.WriteByte(c)
+		case singleQuoted:
+			f.cur.WriteByte(c)
 			if c == '\'' {
-				lx.singleQuoted = false
+				singleQuoted = false
 			}
-		case lx.doubleQuoted:
-			cur.WriteByte(c)
-			switch c {
-			case '\\':
-				if i+1 < len(line) {
-					i++
-					cur.WriteByte(line[i])
-				}
-			case '"':
-				lx.doubleQuoted = false
+		case f.mode == frameArithmetic:
+			switch {
+			case c == ')' && next == ')' && f.depth == 0:
+				pop()
+				i++
+			case c == '(':
+				f.depth++
+				f.cur.Reset()
+			case c == ')':
+				f.depth = max(f.depth-1, 0)
+				f.cur.Reset()
+			case c == '_' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9':
+				f.cur.WriteByte(c)
+			default:
+				f.cur.Reset()
 			}
 		case c == '\\':
-			if i+1 < len(line) && line[i+1] == '\n' {
+			if next == '\n' {
 				i++
 				endWord()
 				continue
 			}
-			cur.WriteByte(c)
+			f.cur.WriteByte(c)
 			if i+1 < len(line) {
 				i++
-				cur.WriteByte(line[i])
+				f.cur.WriteByte(line[i])
+			}
+		case c == '$' && next == '(' && i+2 < len(line) && line[i+2] == '(':
+			push(frameArithmetic)
+			i += 2
+		case c == '$' && next == '(':
+			push(frameCommand)
+			i++
+		case f.mode == frameDouble:
+			f.cur.WriteByte(c)
+			if c == '"' {
+				pop()
+				top().cur.WriteString(f.cur.String())
 			}
 		case c == '\'':
-			lx.singleQuoted = true
-			cur.WriteByte(c)
+			singleQuoted = true
+			f.cur.WriteByte(c)
 		case c == '"':
-			lx.doubleQuoted = true
-			cur.WriteByte(c)
-		case c == '#' && cur.Len() == 0:
-			lx.comment = true
-			return lx
+			push(frameDouble)
+			top().cur.WriteByte(c)
+		case c == '#' && f.cur.Len() == 0:
+			return lexed{comment: true}
 		case c == ' ' || c == '\t' || c == '\n':
 			endWord()
-		case c == '$' && i+1 < len(line) && line[i+1] == '(':
-			reset()
+		case c == '(' && next == '(' && f.cur.Len() == 0 && len(f.words) == 0:
+			push(frameArithmetic)
 			i++
+		case c == ')' && len(stack) > 1:
+			pop()
 		case c == ';' || c == '&' || c == '|' || c == '(' || c == ')' || c == '`':
-			reset()
-		case (c == '{' || c == '}') && cur.Len() == 0 && (i+1 == len(line) || line[i+1] == ' ' || line[i+1] == '\t'):
-			reset()
+			endWord()
+			f.words = nil
+		case (c == '{' || c == '}') && f.cur.Len() == 0 && (next == 0 || next == ' ' || next == '\t'):
+			endWord()
+			f.words = nil
 		default:
-			cur.WriteByte(c)
+			f.cur.WriteByte(c)
 		}
 	}
-	lx.current = cur.String()
+	f := top()
+	lx := lexed{current: f.cur.String(), words: f.words, singleQuoted: singleQuoted}
+	switch f.mode {
+	case frameDouble:
+		outer := stack[len(stack)-2]
+		lx.doubleQuoted = true
+		lx.current = outer.cur.String() + lx.current
+		lx.words = outer.words
+	case frameArithmetic:
+		lx.arithmetic = true
+	}
 	return lx
 }
 

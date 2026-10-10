@@ -28,3 +28,21 @@ build:
 # Format every Go source in place with gofmt.
 fmt:
     gofmt -w .
+
+# Compare diagnostics and completion recall with bash-language-server; rewrites docs/crosscheck.md.
+crosscheck:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    bin="$(mktemp -d)"
+    trap 'rm -rf "$bin"' EXIT
+    go build -o "$bin/shell-lsp" .
+    go run ./cmd/crosscheck -ours "$bin/shell-lsp"
+
+# Drive the server from headless Neovim: diagnostics, hover, definition, completion.
+smoke:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    bin="$(mktemp -d)"
+    trap 'rm -rf "$bin"' EXIT
+    go build -o "$bin/shell-lsp" .
+    nvim --headless -l scripts/nvim-smoke.lua "$bin/shell-lsp"
