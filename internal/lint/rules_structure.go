@@ -79,7 +79,7 @@ func unconditionalCalls(stmt *syntax.Stmt, into []*syntax.CallExpr) []*syntax.Ca
 		}
 	case *syntax.BinaryCmd:
 		into = unconditionalCalls(cmd.X, into)
-		if cmd.Op == syntax.Pipe || cmd.Op == syntax.PipeAll {
+		if pipes(cmd.Op) {
 			return unconditionalCalls(cmd.Y, into)
 		}
 	}

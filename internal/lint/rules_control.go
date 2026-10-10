@@ -101,7 +101,7 @@ func (p *pass) checkRepeatedAppends(list []*syntax.Stmt) {
 }
 
 func (p *pass) appendTarget(stmt *syntax.Stmt) (*syntax.Stmt, string) {
-	if list, ok := stmt.Cmd.(*syntax.BinaryCmd); ok && list.Op != syntax.Pipe && list.Op != syntax.PipeAll {
+	if list, ok := stmt.Cmd.(*syntax.BinaryCmd); ok && !pipes(list.Op) {
 		return nil, ""
 	}
 	stages := pipelineStages(stmt, nil)
@@ -202,14 +202,14 @@ func (p *pass) subshellKind(n syntax.Node, depth int) string {
 func (p *pass) pipedStatement(depth int) bool {
 	stmt, _ := p.ancestor(depth).(*syntax.Stmt)
 	pipe, ok := p.ancestor(depth + 1).(*syntax.BinaryCmd)
-	if !ok || (pipe.Op != syntax.Pipe && pipe.Op != syntax.PipeAll) {
+	if !ok || !pipes(pipe.Op) {
 		return false
 	}
 	if pipe.X == stmt || !p.lastPipe() {
 		return true
 	}
 	outer, ok := p.ancestor(depth + 3).(*syntax.BinaryCmd)
-	return ok && (outer.Op == syntax.Pipe || outer.Op == syntax.PipeAll) && outer.X == p.ancestor(depth+2)
+	return ok && pipes(outer.Op) && outer.X == p.ancestor(depth+2)
 }
 
 func (p *pass) lastPipe() bool {
@@ -310,7 +310,7 @@ func checkEmptyRedirection(p *pass, n syntax.Node) {
 	if !ok {
 		return
 	}
-	if pipe, ok := p.parent().(*syntax.BinaryCmd); ok && (pipe.Op == syntax.Pipe || pipe.Op == syntax.PipeAll) {
+	if pipe, ok := p.parent().(*syntax.BinaryCmd); ok && pipes(pipe.Op) {
 		p.report(2189, span, "This pipeline element is only a redirection; the pipe cannot feed a command that is not there. Attach the redirection to a command.")
 		return
 	}

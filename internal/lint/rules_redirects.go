@@ -156,7 +156,7 @@ func lastTargeting(targets []redirectTarget, fd int) (*syntax.Redirect, bool) {
 
 func checkPipedRedirections(p *pass, n syntax.Node) {
 	bin, ok := n.(*syntax.BinaryCmd)
-	if !ok || (bin.Op != syntax.Pipe && bin.Op != syntax.PipeAll) {
+	if !ok || !pipes(bin.Op) {
 		return
 	}
 	receiver := leftmost(bin.Y)

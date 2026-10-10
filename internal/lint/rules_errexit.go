@@ -208,7 +208,7 @@ func (p *pass) maskedUnits(n syntax.Node) []syntax.Node {
 			return []syntax.Node{n.Word}
 		}
 	case *syntax.BinaryCmd:
-		if (n.Op == syntax.Pipe || n.Op == syntax.PipeAll) && !p.options().pipefail && !p.insidePipeline() {
+		if pipes(n.Op) && !p.options().pipefail && !p.insidePipeline() {
 			return allButLastWithCommand(pipelineStages(&syntax.Stmt{Cmd: n}, nil), func(s *syntax.Stmt) syntax.Node { return s })
 		}
 	case *syntax.CallExpr:
@@ -225,7 +225,7 @@ func (p *pass) maskedUnits(n syntax.Node) []syntax.Node {
 
 func (p *pass) insidePipeline() bool {
 	bin, ok := p.ancestor(1).(*syntax.BinaryCmd)
-	return ok && (bin.Op == syntax.Pipe || bin.Op == syntax.PipeAll)
+	return ok && pipes(bin.Op)
 }
 
 func (p *pass) commandOperands(call *syntax.CallExpr) []syntax.Node {

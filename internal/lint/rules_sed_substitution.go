@@ -42,10 +42,10 @@ func checkSedSubstitution(p *pass, n syntax.Node) {
 }
 
 func (p *pass) isTwoStageEchoSed(bin *syntax.BinaryCmd) bool {
-	if bin.Op != syntax.Pipe && bin.Op != syntax.PipeAll {
+	if !pipes(bin.Op) {
 		return false
 	}
-	if outer, ok := p.ancestor(1).(*syntax.BinaryCmd); ok && (outer.Op == syntax.Pipe || outer.Op == syntax.PipeAll) {
+	if outer, ok := p.ancestor(1).(*syntax.BinaryCmd); ok && pipes(outer.Op) {
 		return false
 	}
 	echo, ok := bin.X.Cmd.(*syntax.CallExpr)

@@ -47,7 +47,7 @@ func (p *pass) outputCaptured(stmt *syntax.Stmt) bool {
 		case *syntax.CmdSubst, *syntax.ProcSubst:
 			return true
 		case *syntax.BinaryCmd:
-			if (a.Op == syntax.Pipe || a.Op == syntax.PipeAll) && a.X == child {
+			if pipes(a.Op) && a.X == child {
 				return true
 			}
 		}

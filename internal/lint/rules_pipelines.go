@@ -54,12 +54,12 @@ func (p *pass) pipelineTop(n syntax.Node) (*syntax.Stmt, bool) {
 		return nil, false
 	}
 	bin, ok := p.parent().(*syntax.BinaryCmd)
-	return stmt, !ok || (bin.Op != syntax.Pipe && bin.Op != syntax.PipeAll)
+	return stmt, !ok || !pipes(bin.Op)
 }
 
 func isPipe(stmt *syntax.Stmt) bool {
 	bin, ok := stmt.Cmd.(*syntax.BinaryCmd)
-	return ok && (bin.Op == syntax.Pipe || bin.Op == syntax.PipeAll)
+	return ok && pipes(bin.Op)
 }
 
 func checkPipeline(p *pass, n syntax.Node) {

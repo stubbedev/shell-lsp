@@ -74,7 +74,7 @@ func checkInteractiveSu(p *pass, c command) {
 	for _, n := range p.stack {
 		switch n := n.(type) {
 		case *syntax.BinaryCmd:
-			if n.Op == syntax.Pipe || n.Op == syntax.PipeAll {
+			if pipes(n.Op) {
 				return
 			}
 		case *syntax.Stmt:
