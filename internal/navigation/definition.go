@@ -4,8 +4,6 @@ import (
 	"context"
 	"slices"
 
-	"mvdan.cc/sh/v3/syntax"
-
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
@@ -65,22 +63,8 @@ func functionAt(tree *parser.Tree, offset int) (string, bool) {
 }
 
 func variableAt(tree *parser.Tree, offset int) (string, bool) {
-	for _, ref := range tree.References {
-		if ref.Span.Covers(offset) {
-			return ref.Name, true
-		}
-	}
-	for _, def := range tree.Definitions {
-		if def.NameSpan.Covers(offset) {
-			return def.Name, true
-		}
-	}
-	for _, node := range slices.Backward(tree.PathAt(offset)) {
-		if exp, ok := node.(*syntax.ParamExp); ok && exp.Param != nil {
-			return exp.Param.Value, true
-		}
-	}
-	return "", false
+	name, _, ok := variableSpanAt(tree, offset)
+	return name, ok
 }
 
 func functionLocations(ctx context.Context, file *workspace.File, name string, env Env, files WorkspaceFiles, mode Mode) ([]Location, error) {

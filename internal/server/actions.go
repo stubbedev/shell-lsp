@@ -179,19 +179,39 @@ func (s *Server) applyEdit(ctx context.Context, label string, edit lsp.Workspace
 	return nil
 }
 
+type fileEdits struct {
+	doc       *docstore.Document
+	versioned bool
+	edits     []textedit.Edit
+}
+
 func (s *Server) workspaceEdit(doc *docstore.Document, enc docstore.Encoding, edits []textedit.Edit) lsp.WorkspaceEdit {
-	lspEdits := make([]lsp.TextEdit, len(edits))
-	for i, e := range edits {
-		lspEdits[i] = lsp.TextEdit{Range: doc.RangeFor(e.Start, e.End, enc), NewText: e.NewText}
+	return s.multiFileEdit(enc, []fileEdits{{doc: doc, versioned: true, edits: edits}})
+}
+
+func (s *Server) multiFileEdit(enc docstore.Encoding, files []fileEdits) lsp.WorkspaceEdit {
+	documentChanges := s.clientCapabilities().Workspace.WorkspaceEdit.DocumentChanges
+	out := lsp.WorkspaceEdit{}
+	for _, f := range files {
+		lspEdits := make([]lsp.TextEdit, len(f.edits))
+		for i, e := range f.edits {
+			lspEdits[i] = lsp.TextEdit{Range: f.doc.RangeFor(e.Start, e.End, enc), NewText: e.NewText}
+		}
+		if !documentChanges {
+			if out.Changes == nil {
+				out.Changes = map[string][]lsp.TextEdit{}
+			}
+			out.Changes[f.doc.URI] = lspEdits
+			continue
+		}
+		id := lsp.OptionalVersionedTextDocumentIdentifier{URI: f.doc.URI}
+		if f.versioned {
+			version := f.doc.Version
+			id.Version = &version
+		}
+		out.DocumentChanges = append(out.DocumentChanges, lsp.TextDocumentEdit{TextDocument: id, Edits: lspEdits})
 	}
-	if s.clientCapabilities().Workspace.WorkspaceEdit.DocumentChanges {
-		version := doc.Version
-		return lsp.WorkspaceEdit{DocumentChanges: []lsp.TextDocumentEdit{{
-			TextDocument: lsp.OptionalVersionedTextDocumentIdentifier{URI: doc.URI, Version: &version},
-			Edits:        lspEdits,
-		}}}
-	}
-	return lsp.WorkspaceEdit{Changes: map[string][]lsp.TextEdit{doc.URI: lspEdits}}
+	return out
 }
 
 func toActionDiagnostics(snap *snapshot, diags []lsp.Diagnostic) []actions.Diagnostic {

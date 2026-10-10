@@ -34,6 +34,7 @@ const (
 	DefDeclare
 	DefLoop
 	DefArithmetic
+	DefBuiltin
 )
 
 type Attr uint8
@@ -240,6 +241,86 @@ func (b *builder) call(n *syntax.CallExpr) {
 	if variant, ok := declVariants[name]; ok {
 		b.declarationWords(variant, n.Args[1:])
 	}
+	b.builtinAssignments(name, n.Args[1:])
+}
+
+var optionsWithArgument = map[string]string{
+	"read":      "adinNptu",
+	"mapfile":   "dnOsuCc",
+	"readarray": "dnOsuCc",
+	"printf":    "v",
+}
+
+func (b *builder) builtinAssignments(name string, args []*syntax.Word) {
+	argOpts, known := optionsWithArgument[name]
+	if !known && name != "getopts" {
+		return
+	}
+	var names []*syntax.Word
+	var arrays []*syntax.Word
+	for i := 0; i < len(args); i++ {
+		value, ok := Literal(args[i])
+		if !ok {
+			continue
+		}
+		if value == "--" {
+			names = append(names, args[i+1:]...)
+			break
+		}
+		if strings.HasPrefix(value, "-") && len(value) > 1 && name != "getopts" {
+			last := value[len(value)-1]
+			if strings.IndexByte(argOpts, last) >= 0 && i+1 < len(args) {
+				i++
+				switch {
+				case name == "read" && last == 'a':
+					arrays = append(arrays, args[i])
+				case name == "printf" && last == 'v':
+					names = append(names, args[i])
+				}
+			}
+			continue
+		}
+		names = append(names, args[i])
+	}
+	switch name {
+	case "getopts":
+		if len(names) >= 2 {
+			b.wordDefinition(names[1], 0)
+		}
+	case "printf":
+		if len(names) > 0 && len(args) > 0 {
+			if first, _ := Literal(args[0]); first == "-v" {
+				b.wordDefinition(names[0], 0)
+			}
+		}
+	case "mapfile", "readarray":
+		if len(names) > 0 {
+			b.wordDefinition(names[len(names)-1], AttrArray)
+		}
+	case "read":
+		for _, w := range names {
+			b.wordDefinition(w, 0)
+		}
+	}
+	for _, w := range arrays {
+		b.wordDefinition(w, AttrArray)
+	}
+}
+
+func (b *builder) wordDefinition(w *syntax.Word, attrs Attr) {
+	value, ok := Literal(w)
+	if !ok || !isName(value) || len(w.Parts) != 1 {
+		return
+	}
+	span := b.span(w)
+	b.index.Definitions = append(b.index.Definitions, Definition{
+		Name:     value,
+		NameSpan: span,
+		Span:     span,
+		Kind:     DefBuiltin,
+		Attrs:    attrs,
+		Within:   b.scope(),
+	})
 }
 
 type declVariant struct {

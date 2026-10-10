@@ -305,3 +305,25 @@ func FuzzParse(f *testing.F) {
 		}
 	})
 }
+
+func TestBuiltinAssignments(t *testing.T) {
+	t.Parallel()
+
+	src := "read -r line\nread -rp 'Name: ' name rest\nread -a parts\nmapfile -t lines < f\nprintf -v out '%s' x\ngetopts 'ab:' opt\nread -r \"$dynamic\"\n"
+	tree := Parse(src, dialect.Bash)
+	got := map[string]Attr{}
+	for _, d := range tree.Definitions {
+		if d.Kind == DefBuiltin {
+			got[d.Name] = d.Attrs
+		}
+	}
+	want := map[string]Attr{"line": 0, "name": 0, "rest": 0, "parts": AttrArray, "lines": AttrArray, "out": 0, "opt": 0}
+	if len(got) != len(want) {
+		t.Fatalf("builtin definitions = %v, want %v", got, want)
+	}
+	for name, attrs := range want {
+		if a, ok := got[name]; !ok || a != attrs {
+			t.Errorf("%s: attrs = %v, %t; want %v", name, a, ok, attrs)
+		}
+	}
+}

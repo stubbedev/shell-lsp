@@ -367,3 +367,32 @@ type ApplyWorkspaceEditResult struct {
 	Applied       bool   `json:"applied"`
 	FailureReason string `json:"failureReason,omitempty"`
 }
+
+type ReferenceParams struct {
+	TextDocumentPositionParams
+	Context struct {
+		IncludeDeclaration bool `json:"includeDeclaration"`
+	} `json:"context"`
+}
+
+type RenameParams struct {
+	TextDocumentPositionParams
+	NewName string `json:"newName"`
+}
+
+type PrepareRenameResult struct {
+	Range       Range  `json:"range"`
+	Placeholder string `json:"placeholder"`
+}
+
+type DocumentHighlightKind uint8
+
+const (
+	HighlightRead  DocumentHighlightKind = 2
+	HighlightWrite DocumentHighlightKind = 3
+)
+
+type DocumentHighlight struct {
+	Range Range                 `json:"range"`
+	Kind  DocumentHighlightKind `json:"kind"`
+}

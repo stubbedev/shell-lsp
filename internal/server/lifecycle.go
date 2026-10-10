@@ -97,6 +97,13 @@ type ServerCapabilities struct {
 	DocumentRangeFormattingProvider bool                    `json:"documentRangeFormattingProvider"`
 	CodeActionProvider              CodeActionOptions       `json:"codeActionProvider"`
 	ExecuteCommandProvider          ExecuteCommandOptions   `json:"executeCommandProvider"`
+	ReferencesProvider              bool                    `json:"referencesProvider"`
+	DocumentHighlightProvider       bool                    `json:"documentHighlightProvider"`
+	RenameProvider                  RenameOptions           `json:"renameProvider"`
+}
+
+type RenameOptions struct {
+	PrepareProvider bool `json:"prepareProvider"`
 }
 
 type CodeActionOptions struct {
@@ -160,6 +167,9 @@ func (s *Server) handleInitialize(_ context.Context, _ *docstore.View, params js
 			DocumentRangeFormattingProvider: true,
 			CodeActionProvider:              CodeActionOptions{CodeActionKinds: codeActionKinds, ResolveProvider: true},
 			ExecuteCommandProvider:          ExecuteCommandOptions{Commands: serverCommands},
+			ReferencesProvider:              true,
+			DocumentHighlightProvider:       true,
+			RenameProvider:                  RenameOptions{PrepareProvider: true},
 		},
 		ServerInfo: ServerInfo{Name: "shell-lsp", Version: s.version},
 	}, nil

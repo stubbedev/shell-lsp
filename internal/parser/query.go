@@ -19,28 +19,29 @@ func (ix *Index) ScopeAt(offset int) ScopeID {
 	return best
 }
 
-func (ix *Index) Visible(name string, scope ScopeID) []Definition {
+func (ix *Index) Binding(name string, scope ScopeID) (ScopeID, bool) {
 	for s := scope; ; s = ix.Scopes[s].Parent {
-		var locals []Definition
-		for _, def := range ix.Definitions {
-			if def.Name == name && def.Local && def.Within == s {
-				locals = append(locals, def)
-			}
-		}
-		if len(locals) > 0 {
-			return locals
+		if slices.ContainsFunc(ix.Definitions, func(d Definition) bool { return d.Name == name && d.Local && d.Within == s }) {
+			return s, true
 		}
 		if s == FileScope {
-			break
+			return FileScope, false
 		}
 	}
-	var globals []Definition
+}
+
+func (ix *Index) Visible(name string, scope ScopeID) []Definition {
+	binding, local := ix.Binding(name, scope)
+	var defs []Definition
 	for _, def := range ix.Definitions {
-		if def.Name == name && !def.Local {
-			globals = append(globals, def)
+		if def.Name != name {
+			continue
+		}
+		if local && def.Local && def.Within == binding || !local && !def.Local {
+			defs = append(defs, def)
 		}
 	}
-	return globals
+	return defs
 }
 
 func (ix *Index) FunctionNamed(name string) (Function, bool) {
