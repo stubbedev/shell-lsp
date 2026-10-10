@@ -1,5 +1,7 @@
 # shell-lsp dev tasks.
 
+export CGO_ENABLED := "0"
+
 # List all recipes with their descriptions.
 default:
     @just --list

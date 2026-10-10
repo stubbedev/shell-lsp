@@ -46,7 +46,6 @@
             # Cross-checking the language server under development
             shellcheck # Reference diagnostics for shell scripts
             shfmt # Reference formatter for shell scripts
-            tree-sitter # Grammar debugging and corpus inspection
 
             # Development workflow
             git # Version control
