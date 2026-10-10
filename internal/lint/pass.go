@@ -25,15 +25,20 @@ type pass struct {
 	stack    []syntax.Node
 	stmts    []parser.Span
 	flow     *flowResult
+	catalog  map[Code]meta
+	rules    []rule
+	settings fileWide
 	findings []Finding
 }
 
-func newPass(tree *parser.Tree, imports []parser.Import) *pass {
-	return &pass{tree: tree, imports: imports, text: tree.Text(), dialect: tree.Dialect, bats: isBats(tree.Text())}
+func newPass(tree *parser.Tree, imports []parser.Import, settings fileWide) *pass {
+	return &pass{tree: tree, imports: imports, text: tree.Text(), dialect: tree.Dialect, bats: isBats(tree.Text()), catalog: catalog, rules: rules, settings: settings}
 }
 
 func (p *pass) run() {
-	p.flow = analyzeFlow(p.tree, p.imports, p.bats)
+	if p.settings.extended {
+		p.flow = analyzeFlow(p.tree, p.imports, p.bats)
+	}
 	syntax.Walk(p.tree.File, func(n syntax.Node) bool {
 		if n == nil {
 			p.stack = p.stack[:len(p.stack)-1]
@@ -44,7 +49,7 @@ func (p *pass) run() {
 				p.stmts = append(p.stmts, span)
 			}
 		}
-		for _, r := range rules {
+		for _, r := range p.rules {
 			if r.node != nil {
 				r.node(p, n)
 			}
@@ -52,7 +57,7 @@ func (p *pass) run() {
 		p.stack = append(p.stack, n)
 		return true
 	})
-	for _, r := range rules {
+	for _, r := range p.rules {
 		if r.finish != nil {
 			r.finish(p)
 		}
@@ -72,9 +77,12 @@ func (p *pass) ancestor(depth int) syntax.Node {
 func (p *pass) span(n syntax.Node) (parser.Span, bool) { return p.tree.NodeSpan(n) }
 
 func (p *pass) report(code Code, span parser.Span, message string, fix ...textedit.Edit) {
-	m, ok := catalog[code]
+	m, ok := p.catalog[code]
 	if !ok {
 		panic(fmt.Sprintf("lint: %s is reported but missing from the catalog", code))
+	}
+	if m.optional != "" && !p.settings.enabled(m.optional) {
+		return
 	}
 	p.findings = append(p.findings, Finding{Code: code, Severity: m.severity, Tag: m.tag, Span: span, Message: message, Fix: fix})
 }

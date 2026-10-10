@@ -92,16 +92,44 @@ func (s *suppression) add(item string) {
 	s.ranges = append(s.ranges, codeRange{from: first, to: last})
 }
 
-func (p *pass) hasShellDirective() bool {
-	for _, c := range p.tree.Comments {
-		if d, ok := directive.Parse("#" + c.Text); ok {
-			if _, found := d.Value("shell"); found {
-				return true
-			}
+type fileWide struct {
+	optional map[string]bool
+	extended bool
+	shell    bool
+}
+
+func fileWideDirectives(tree *parser.Tree, enabled []string) fileWide {
+	firstCommand := len(tree.Text())
+	if len(tree.File.Stmts) > 0 {
+		if span, ok := tree.NodeSpan(tree.File.Stmts[0]); ok {
+			firstCommand = span.Start
 		}
 	}
-	return false
+	out := fileWide{optional: setOf(enabled...), extended: true}
+	for _, c := range tree.Comments {
+		d, ok := directive.Parse("#" + c.Text)
+		if !ok {
+			continue
+		}
+		if _, found := d.Value("shell"); found {
+			out.shell = true
+		}
+		if c.Span.End > firstCommand {
+			continue
+		}
+		for _, value := range d.Values("enable") {
+			for name := range strings.SplitSeq(strings.Trim(value, `"'`), ",") {
+				out.optional[strings.TrimSpace(name)] = true
+			}
+		}
+		if value, found := d.Value("extended-analysis"); found {
+			out.extended = strings.Trim(value, `"'`) != "false"
+		}
+	}
+	return out
 }
+
+func (f fileWide) enabled(name string) bool { return f.optional[name] || f.optional[allCodes] }
 
 func (p *pass) directiveScope(comment parser.Span) (parser.Span, bool) {
 	if len(p.stmts) == 0 || comment.End <= p.stmts[0].Start {

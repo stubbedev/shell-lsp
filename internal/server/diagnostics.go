@@ -44,7 +44,7 @@ func (s *Server) findings(snap *snapshot) ([]lint.Finding, uint64) {
 	if snap.lint.valid && snap.lint.stamp == stamp {
 		return snap.lint.findings, stamp
 	}
-	findings := lint.Check(snap.tree, s.imports(snap), lint.Options{Exclude: snap.settings.Lint.Exclude, ForcedDialect: snap.settings.Dialect != nil})
+	findings := lint.Check(snap.tree, s.imports(snap), lint.Options{Exclude: snap.settings.Lint.Exclude, Optional: snap.settings.Lint.Optional, ForcedDialect: snap.settings.Dialect != nil})
 	snap.lint.valid, snap.lint.stamp, snap.lint.findings = true, stamp, findings
 	return findings, stamp
 }

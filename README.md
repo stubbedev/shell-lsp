@@ -64,6 +64,7 @@ the offending field.
 | `dialect` | detected per file | Force `bash`, `zsh`, `sh`, `dash` or `ksh` for every document |
 | `lint.enable` | `true` | Report lint findings alongside syntax errors |
 | `lint.exclude` | `[]` | Codes to suppress, as `SC2034` or `2034` |
+| `lint.optional` | `[]` | Opt-in checks to enable by name, such as `require-variable-braces`, or `all` |
 | `format.enable` | `true` | Answer formatting requests |
 | `format.indent` | editor setting | Spaces per level; `0` indents with tabs |
 | `format.binaryNextLine` | `false` | Put `&&`, `\|\|` and `\|` at the start of continuation lines |

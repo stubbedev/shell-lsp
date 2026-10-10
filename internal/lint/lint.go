@@ -53,12 +53,13 @@ type Finding struct {
 
 type Options struct {
 	Exclude       []Code
+	Optional      []string
 	ForcedDialect bool
 }
 
 func Check(tree *parser.Tree, imports []parser.Import, opts Options) []Finding {
-	p := newPass(tree, imports)
-	if name, foreign := foreignInterpreter(p.text); foreign && !opts.ForcedDialect && !p.hasShellDirective() {
+	p := newPass(tree, imports, fileWideDirectives(tree, opts.Optional))
+	if name, foreign := foreignInterpreter(p.text); foreign && !opts.ForcedDialect && !p.settings.shell {
 		first, _, _ := strings.Cut(p.text, "\n")
 		p.report(1071, parser.Span{Start: 0, End: len(first)}, name+" is not a shell, so this file is not linted.")
 	} else {
@@ -77,6 +78,8 @@ func Check(tree *parser.Tree, imports []parser.Import, opts Options) []Finding {
 	})
 	return slices.CompactFunc(out, func(a, b Finding) bool { return a.Code == b.Code && a.Span == b.Span })
 }
+
+var foreignFamily = family{codes: map[Code]meta{1071: {severity: SeverityError}}}
 
 var foreignInterpreters = []string{"awk", "csh", "expect", "fish", "perl", "python", "ruby", "tcsh"}
 

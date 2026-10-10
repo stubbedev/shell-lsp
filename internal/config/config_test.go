@@ -27,7 +27,7 @@ func TestParseDefaults(t *testing.T) {
 func TestParseFull(t *testing.T) {
 	t.Parallel()
 
-	got, err := Parse(json.RawMessage(`{"dialect":"zsh","lint":{"enable":false,"exclude":["SC2034","sc1090","2154"]}}`))
+	got, err := Parse(json.RawMessage(`{"dialect":"zsh","lint":{"enable":false,"exclude":["SC2034","sc1090","2154"],"optional":["require-variable-braces"]}}`))
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -39,6 +39,9 @@ func TestParseFull(t *testing.T) {
 	}
 	if !slices.Equal(got.Lint.Exclude, []lint.Code{2034, 1090, 2154}) {
 		t.Errorf("Exclude = %v", got.Lint.Exclude)
+	}
+	if !slices.Equal(got.Lint.Optional, []string{"require-variable-braces"}) {
+		t.Errorf("Optional = %v", got.Lint.Optional)
 	}
 }
 

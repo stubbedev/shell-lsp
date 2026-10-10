@@ -29,8 +29,9 @@ type Format struct {
 }
 
 type Lint struct {
-	Enabled bool
-	Exclude []lint.Code
+	Enabled  bool
+	Exclude  []lint.Code
+	Optional []string
 }
 
 func Default() Settings {
@@ -58,8 +59,9 @@ type rawFormat struct {
 }
 
 type rawLint struct {
-	Enable  *bool    `json:"enable"`
-	Exclude []string `json:"exclude"`
+	Enable   *bool    `json:"enable"`
+	Exclude  []string `json:"exclude"`
+	Optional []string `json:"optional"`
 }
 
 func Parse(raw json.RawMessage) (Settings, error) {
@@ -133,6 +135,7 @@ func parseLint(raw rawLint, l Lint) (Lint, error) {
 	if raw.Enable != nil {
 		l.Enabled = *raw.Enable
 	}
+	l.Optional = raw.Optional
 	l.Exclude = make([]lint.Code, 0, len(raw.Exclude))
 	for i, code := range raw.Exclude {
 		c, err := lint.ParseCode(code)

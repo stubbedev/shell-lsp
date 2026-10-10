@@ -9,6 +9,23 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 )
 
+var quotingFamily = family{
+	codes: map[Code]meta{
+		2006: {severity: SeverityStyle, tag: TagDeprecated},
+		2046: {severity: SeverityWarning},
+		2048: {severity: SeverityWarning},
+		2068: {severity: SeverityError},
+		2086: {severity: SeverityInfo},
+		2206: {severity: SeverityWarning},
+		2207: {severity: SeverityWarning},
+		2223: {severity: SeverityInfo},
+	},
+	rules: []rule{
+		{node: checkUnquotedExpansion},
+		{node: checkUnquotedSubstitution},
+	},
+}
+
 var spacelessSpecials = setOf("-", "$", "?", "!", "#")
 
 func quoteFix(span parser.Span) []textedit.Edit {

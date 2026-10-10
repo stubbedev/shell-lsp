@@ -216,6 +216,9 @@ type flowResult struct {
 }
 
 func (r *flowResult) expansion(pe *syntax.ParamExp) space {
+	if r == nil {
+		return spaceDirty
+	}
 	if s, ok := r.expansions[pe]; ok {
 		return s
 	}
