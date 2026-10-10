@@ -181,7 +181,7 @@ func probes(text string, d dialect.Dialect) []probe {
 		}
 	}
 	for _, ref := range tree.References {
-		if len(ref.Name) > recallPrefix && len(tree.Visible(ref.Name, ref.Within)) > 0 {
+		if len(ref.Name) > recallPrefix && tree.Visible(ref.Name, ref.Within).Len() > 0 {
 			out = append(out, probe{want: ref.Name, position: doc(ref.Span.Start + recallPrefix)})
 		}
 	}

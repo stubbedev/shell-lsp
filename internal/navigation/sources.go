@@ -235,7 +235,7 @@ func (e evaluator) variable(p *syntax.ParamExp, at, depth int) (string, bool) {
 		return "", false
 	}
 	defs := e.tree.Visible(name, e.tree.ScopeAt(at))
-	for _, def := range slices.Backward(defs) {
+	for def := range defs.Backward() {
 		if def.Span.Start < at && def.Value != nil {
 			return e.word(def.Value, def.Span.Start, depth+1)
 		}

@@ -105,13 +105,13 @@ func (g *generator) index() {
 
 func (g *generator) referenceModifiers(ref parser.Reference) Modifier {
 	defs := g.tree.Visible(ref.Name, ref.Within)
-	if len(defs) == 0 {
+	if defs.Len() == 0 {
 		if _, ok := shelldocs.Variable(ref.Name); ok {
 			return ModDefaultLibrary
 		}
 		return 0
 	}
-	if slices.ContainsFunc(defs, func(d parser.Definition) bool { return d.Attrs.Has(parser.AttrReadonly) }) {
+	if defs.Any(func(d *parser.Definition) bool { return d.Attrs.Has(parser.AttrReadonly) }) {
 		return ModReadonly
 	}
 	return 0

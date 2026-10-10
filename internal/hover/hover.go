@@ -121,14 +121,14 @@ func (h hoverer) variableName() (Result, bool) {
 
 func (h hoverer) variable(name string) string {
 	defs := h.Tree.Visible(name, h.scope)
-	if len(defs) == 0 {
+	if defs.Len() == 0 {
 		return h.undefinedVariable(name)
 	}
-	first := defs[0]
+	first := *defs.At(0)
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "**%s**: %s", name, h.describe(first, defs))
 	fmt.Fprintf(&sb, "\n\nDeclared on line %d:\n```%s\n%s\n```", h.line(first.Span.Start), fence(h.dialect), h.snippet(first.Span.Start))
-	if n := len(defs); n > 1 {
+	if n := defs.Len(); n > 1 {
 		fmt.Fprintf(&sb, "\n\nAssigned in %d places.", n)
 	}
 	if entry, ok := shelldocs.Variable(name); ok {
@@ -137,9 +137,9 @@ func (h hoverer) variable(name string) string {
 	return sb.String()
 }
 
-func (h hoverer) describe(first parser.Definition, defs []parser.Definition) string {
+func (h hoverer) describe(first parser.Definition, defs parser.Definitions) string {
 	var attrs parser.Attr
-	for _, d := range defs {
+	for d := range defs.All() {
 		attrs |= d.Attrs
 	}
 	words := []string{}

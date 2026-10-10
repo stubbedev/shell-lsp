@@ -9,15 +9,21 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/shell-lsp/internal/actions"
+	"github.com/stubbedev/shell-lsp/internal/assist"
 	"github.com/stubbedev/shell-lsp/internal/completion"
 	"github.com/stubbedev/shell-lsp/internal/diagnostics"
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
+	"github.com/stubbedev/shell-lsp/internal/format"
 	"github.com/stubbedev/shell-lsp/internal/hover"
+	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/manpage"
+	"github.com/stubbedev/shell-lsp/internal/navigation"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/semantic"
 	"github.com/stubbedev/shell-lsp/internal/structure"
+	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
 func largeScript(lines int) string {
@@ -163,4 +169,107 @@ func TestBudgets(t *testing.T) {
 		}
 	}
 	t.Logf("p95: diagnostics %v", diagnose)
+}
+
+func benchFile() *workspace.File {
+	doc := document()
+	return &workspace.File{Path: "/w/large.bash", URI: doc.URI, Doc: doc, Tree: parser.Parse(text, dialect.Bash)}
+}
+
+func benchEnv() navigation.Env {
+	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, func(string) *dialect.Dialect { return nil })
+	return navigation.Env{Loader: ws}
+}
+
+func BenchmarkFolds(b *testing.B) {
+	file := benchFile()
+	for b.Loop() {
+		structure.Folds(file.Tree, func(o int) int { return int(file.Doc.OffsetToPosition(o, docstore.EncodingUTF16).Line) })
+	}
+}
+
+func BenchmarkReferencesLocal(b *testing.B) {
+	file := benchFile()
+	offset := strings.LastIndex(text, "$count")
+	for b.Loop() {
+		if _, err := navigation.References(b.Context(), file, offset+1, benchEnv(), nil, true); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkReferencesGlobalFunction(b *testing.B) {
+	file := benchFile()
+	offset := strings.LastIndex(text, "\nstep_") + 1
+	for b.Loop() {
+		if _, err := navigation.References(b.Context(), file, offset, benchEnv(), nil, true); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkDefinition(b *testing.B) {
+	file := benchFile()
+	offset := strings.LastIndex(text, "$count") + 1
+	for b.Loop() {
+		if _, err := navigation.Definition(b.Context(), file, offset, benchEnv(), nil, navigation.ModeDefinition); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkInlayHints(b *testing.B) {
+	file := benchFile()
+	lookup := func(name string) (*parser.Tree, parser.Function, bool) {
+		fn, ok := file.Tree.FunctionNamed(name)
+		return file.Tree, fn, ok
+	}
+	for b.Loop() {
+		assist.InlayHints(file, parser.Span{Start: 0, End: len(text)}, lookup, benchEnv())
+	}
+}
+
+func BenchmarkCodeActions(b *testing.B) {
+	tree := parser.Parse(text, dialect.Bash)
+	offset := strings.LastIndex(text, "count=0")
+	for b.Loop() {
+		actions.Actions(actions.Input{Tree: tree, Selection: parser.Span{Start: offset, End: offset + 5}, LocalSupported: true})
+	}
+}
+
+func BenchmarkFormat(b *testing.B) {
+	for b.Loop() {
+		formatted, err := format.Format(text, dialect.Bash, format.Options{})
+		if err != nil {
+			b.Fatal(err)
+		}
+		format.Edits(text, formatted)
+	}
+}
+
+func BenchmarkSelection(b *testing.B) {
+	tree := parser.Parse(text, dialect.Bash)
+	offset := strings.LastIndex(text, "$count")
+	for b.Loop() {
+		structure.SelectionPath(tree, offset)
+	}
+}
+
+func BenchmarkDocumentChange(b *testing.B) {
+	store := docstore.NewStore()
+	store.Open(lsp.TextDocumentItem{URI: "file:///large.bash", Version: 1, Text: text})
+	version := int32(1)
+	change := []lsp.TextDocumentContentChangeEvent{{Range: &lsp.Range{Start: lsp.Position{Line: 5000}, End: lsp.Position{Line: 5000}}, Text: "x"}}
+	for b.Loop() {
+		version++
+		if err := store.Change("file:///large.bash", version, change); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkDetectDialect(b *testing.B) {
+	for b.Loop() {
+		dialect.Detect(nil, dialect.Input{URI: "file:///w/large", Text: text})
+	}
 }

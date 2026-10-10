@@ -118,26 +118,26 @@ func variableLocations(file *workspace.File, name string, scope parser.ScopeID, 
 	return nil
 }
 
-func pick(defs []parser.Definition, mode Mode) []parser.Definition {
-	if len(defs) == 0 {
+func pick(defs parser.Definitions, mode Mode) []parser.Definition {
+	if defs.Len() == 0 {
 		return nil
 	}
 	switch mode {
 	case ModeDeclaration:
-		for _, d := range defs {
+		for d := range defs.All() {
 			if d.Kind == parser.DefDeclare {
-				return []parser.Definition{d}
+				return []parser.Definition{*d}
 			}
 		}
 	case ModeTypeDefinition:
-		for _, d := range defs {
+		for d := range defs.All() {
 			if d.Attrs.Has(parser.AttrArray) || d.Attrs.Has(parser.AttrAssoc) {
-				return []parser.Definition{d}
+				return []parser.Definition{*d}
 			}
 		}
 		return nil
 	}
-	return defs[:1]
+	return []parser.Definition{*defs.At(0)}
 }
 
 func locate(f *workspace.File, defs []parser.Definition) []Location {

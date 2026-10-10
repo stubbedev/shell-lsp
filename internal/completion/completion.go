@@ -303,12 +303,12 @@ func (c completer) variables() []Item {
 			continue
 		}
 		visible := c.Tree.Visible(def.Name, scope)
-		if len(visible) == 0 {
+		if visible.Len() == 0 {
 			continue
 		}
 		sort := "1"
 		detail := "global"
-		if visible[0].Local {
+		if visible.At(0).Local {
 			sort, detail = "0", "local"
 		}
 		it := c.item(def.Name, KindVariable, sort)

@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"iter"
 	"slices"
 	"sort"
 
@@ -32,18 +33,51 @@ func (ix *Index) Binding(name string, scope ScopeID) (ScopeID, bool) {
 	}
 }
 
-func (ix *Index) Visible(name string, scope ScopeID) []Definition {
+type Definitions struct {
+	all       []Definition
+	positions []int
+}
+
+func (d Definitions) Len() int { return len(d.positions) }
+
+func (d Definitions) At(i int) *Definition { return &d.all[d.positions[i]] }
+
+func (d Definitions) All() iter.Seq[*Definition] {
+	return func(yield func(*Definition) bool) {
+		for _, p := range d.positions {
+			if !yield(&d.all[p]) {
+				return
+			}
+		}
+	}
+}
+
+func (d Definitions) Backward() iter.Seq[*Definition] {
+	return func(yield func(*Definition) bool) {
+		for _, p := range slices.Backward(d.positions) {
+			if !yield(&d.all[p]) {
+				return
+			}
+		}
+	}
+}
+
+func (d Definitions) Any(match func(*Definition) bool) bool {
+	for def := range d.All() {
+		if match(def) {
+			return true
+		}
+	}
+	return false
+}
+
+func (ix *Index) Visible(name string, scope ScopeID) Definitions {
 	bound, local := ix.Binding(name, scope)
 	key := binding{name: name}
 	if local {
 		key.scope, key.local = bound, true
 	}
-	indices := ix.definitionsByBinding[key]
-	defs := make([]Definition, len(indices))
-	for i, index := range indices {
-		defs[i] = ix.Definitions[index]
-	}
-	return defs
+	return Definitions{all: ix.Definitions, positions: ix.definitionsByBinding[key]}
 }
 
 func (ix *Index) FunctionNamed(name string) (Function, bool) {
