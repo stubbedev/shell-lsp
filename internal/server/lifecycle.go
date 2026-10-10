@@ -4,15 +4,32 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/stubbedev/shell-lsp/internal/config"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
+	"github.com/stubbedev/shell-lsp/internal/lsp"
 )
 
 type InitializeParams struct {
-	ProcessID          *int            `json:"processId"`
-	RootPath           string          `json:"rootPath"`
-	RootURI            string          `json:"rootUri"`
-	ClientCapabilities json.RawMessage `json:"capabilities"`
-	Trace              TraceValue      `json:"trace"`
+	ProcessID             *int               `json:"processId"`
+	RootPath              string             `json:"rootPath"`
+	RootURI               string             `json:"rootUri"`
+	Capabilities          ClientCapabilities `json:"capabilities"`
+	InitializationOptions json.RawMessage    `json:"initializationOptions"`
+	Trace                 TraceValue         `json:"trace"`
+}
+
+type ClientCapabilities struct {
+	General struct {
+		PositionEncodings []string `json:"positionEncodings"`
+	} `json:"general"`
+	TextDocument struct {
+		Diagnostic *struct{} `json:"diagnostic"`
+	} `json:"textDocument"`
+	Workspace struct {
+		Diagnostics struct {
+			RefreshSupport bool `json:"refreshSupport"`
+		} `json:"diagnostics"`
+	} `json:"workspace"`
 }
 
 type CancelParams struct {
@@ -21,16 +38,6 @@ type CancelParams struct {
 
 type SetTraceParams struct {
 	Value TraceValue `json:"value"`
-}
-
-type LogMessageParams struct {
-	Type    int    `json:"type"`
-	Message string `json:"message"`
-}
-
-type LogTraceParams struct {
-	Message string `json:"message"`
-	Verbose string `json:"verbose,omitempty"`
 }
 
 type ServerInfo struct {
@@ -43,9 +50,15 @@ type TextDocumentSyncOptions struct {
 	Change    int  `json:"change"`
 }
 
+type DiagnosticOptions struct {
+	InterFileDependencies bool `json:"interFileDependencies"`
+	WorkspaceDiagnostics  bool `json:"workspaceDiagnostics"`
+}
+
 type ServerCapabilities struct {
-	PositionEncoding string                  `json:"positionEncoding,omitempty"`
-	TextDocumentSync TextDocumentSyncOptions `json:"textDocumentSync"`
+	PositionEncoding   string                  `json:"positionEncoding,omitempty"`
+	TextDocumentSync   TextDocumentSyncOptions `json:"textDocumentSync"`
+	DiagnosticProvider DiagnosticOptions       `json:"diagnosticProvider"`
 }
 
 type InitializeResult struct {
@@ -54,33 +67,49 @@ type InitializeResult struct {
 }
 
 func (s *Server) handleInitialize(_ context.Context, params json.RawMessage) (any, error) {
-	var initParams InitializeParams
-	if len(params) > 0 {
-		if err := json.Unmarshal(params, &initParams); err != nil {
-			return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing initialize params: %v", err)
-		}
+	initParams, err := lsp.DecodeParams[InitializeParams](params)
+	if err != nil {
+		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing initialize params: %v", err)
+	}
+	settings, err := config.Parse(initParams.InitializationOptions)
+	if err != nil {
+		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "initializationOptions: %v", err)
 	}
 	if initParams.Trace != "" {
 		s.setTrace(initParams.Trace)
 	}
-	enc := negotiateEncoding(initParams.ClientCapabilities, s.logger)
+	caps := initParams.Capabilities
+	enc := negotiateEncoding(caps.General.PositionEncodings)
 	s.docs.SetEncoding(enc)
+	if caps.TextDocument.Diagnostic == nil {
+		s.push = newPushScheduler(diagnosticsDebounce, s.publishDiagnostics)
+	}
 	s.mu.Lock()
+	s.settings = settings
+	s.refreshSupport = caps.Workspace.Diagnostics.RefreshSupport
 	s.initialized = true
 	s.mu.Unlock()
 	return InitializeResult{
 		Capabilities: ServerCapabilities{
-			PositionEncoding: enc.String(),
-			TextDocumentSync: TextDocumentSyncOptions{OpenClose: true, Change: 2},
+			PositionEncoding:   enc.String(),
+			TextDocumentSync:   TextDocumentSyncOptions{OpenClose: true, Change: 2},
+			DiagnosticProvider: DiagnosticOptions{},
 		},
 		ServerInfo: ServerInfo{Name: "shell-lsp", Version: s.version},
 	}, nil
+}
+
+func (s *Server) handleInitialized(_ context.Context, _ json.RawMessage) error {
+	return nil
 }
 
 func (s *Server) handleShutdown(_ context.Context, _ json.RawMessage) (any, error) {
 	s.mu.Lock()
 	s.shutdown = true
 	s.mu.Unlock()
+	if s.push != nil {
+		s.push.close()
+	}
 	return nil, nil
 }
 
@@ -118,7 +147,7 @@ func (s *Server) setTrace(value TraceValue) {
 }
 
 func (s *Server) handleClientLogMessage(_ context.Context, params json.RawMessage) error {
-	var logParams LogMessageParams
+	var logParams lsp.LogMessageParams
 	if err := json.Unmarshal(params, &logParams); err != nil {
 		return err
 	}

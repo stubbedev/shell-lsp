@@ -98,11 +98,14 @@ func TestFromNameTable(t *testing.T) {
 func TestShellcheckName(t *testing.T) {
 	t.Parallel()
 
-	if got := Posix.ShellcheckName(); got != "sh" {
-		t.Errorf("Posix.ShellcheckName() = %q, want sh", got)
+	want := map[Dialect]string{Bash: "bash", Posix: "sh", Dash: "dash", Ksh: "ksh"}
+	for d, name := range want {
+		if got, ok := d.ShellcheckName(); !ok || got != name {
+			t.Errorf("%s.ShellcheckName() = %q, %t; want %q", d, got, ok, name)
+		}
 	}
-	if got := Dash.ShellcheckName(); got != "dash" {
-		t.Errorf("Dash.ShellcheckName() = %q, want dash", got)
+	if got, ok := Zsh.ShellcheckName(); ok {
+		t.Errorf("Zsh.ShellcheckName() = %q, want unsupported", got)
 	}
 }
 

@@ -6,6 +6,7 @@ package docstore
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -228,6 +229,7 @@ func (s *Store) Documents() []*Document {
 	for _, d := range s.docs {
 		docs = append(docs, d)
 	}
+	slices.SortFunc(docs, func(a, b *Document) int { return strings.Compare(a.URI, b.URI) })
 	return docs
 }
 

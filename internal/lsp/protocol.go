@@ -73,3 +73,90 @@ func DecodeParams[T any](raw json.RawMessage) (T, error) {
 	}
 	return params, nil
 }
+
+type DiagnosticSeverity uint8
+
+const (
+	SeverityError       DiagnosticSeverity = 1
+	SeverityWarning     DiagnosticSeverity = 2
+	SeverityInformation DiagnosticSeverity = 3
+	SeverityHint        DiagnosticSeverity = 4
+)
+
+type DiagnosticTag uint8
+
+const (
+	TagUnnecessary DiagnosticTag = 1
+	TagDeprecated  DiagnosticTag = 2
+)
+
+type CodeDescription struct {
+	Href string `json:"href"`
+}
+
+type Diagnostic struct {
+	Range           Range              `json:"range"`
+	Severity        DiagnosticSeverity `json:"severity"`
+	Code            string             `json:"code,omitempty"`
+	CodeDescription *CodeDescription   `json:"codeDescription,omitempty"`
+	Source          string             `json:"source"`
+	Message         string             `json:"message"`
+	Tags            []DiagnosticTag    `json:"tags,omitempty"`
+	Data            json.RawMessage    `json:"data,omitempty"`
+}
+
+type PublishDiagnosticsParams struct {
+	URI         string       `json:"uri"`
+	Version     *int32       `json:"version,omitempty"`
+	Diagnostics []Diagnostic `json:"diagnostics"`
+}
+
+type DocumentDiagnosticParams struct {
+	TextDocument     TextDocumentIdentifier `json:"textDocument"`
+	Identifier       string                 `json:"identifier,omitempty"`
+	PreviousResultID string                 `json:"previousResultId,omitempty"`
+}
+
+type FullDocumentDiagnosticReport struct {
+	Kind     string       `json:"kind"`
+	ResultID string       `json:"resultId"`
+	Items    []Diagnostic `json:"items"`
+}
+
+type UnchangedDocumentDiagnosticReport struct {
+	Kind     string `json:"kind"`
+	ResultID string `json:"resultId"`
+}
+
+const (
+	ReportFull      = "full"
+	ReportUnchanged = "unchanged"
+)
+
+type DidChangeConfigurationParams struct {
+	Settings json.RawMessage `json:"settings"`
+}
+
+type MessageType uint8
+
+const (
+	MessageError   MessageType = 1
+	MessageWarning MessageType = 2
+	MessageInfo    MessageType = 3
+	MessageLog     MessageType = 4
+)
+
+type LogMessageParams struct {
+	Type    MessageType `json:"type"`
+	Message string      `json:"message"`
+}
+
+type ShowMessageParams struct {
+	Type    MessageType `json:"type"`
+	Message string      `json:"message"`
+}
+
+type TextEdit struct {
+	Range   Range  `json:"range"`
+	NewText string `json:"newText"`
+}

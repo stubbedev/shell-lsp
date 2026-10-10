@@ -1,6 +1,3 @@
-// Package server implements the LSP dispatch loop: bounded-concurrency
-// request handling, ordered notification processing, cancellation, and
-// server-to-client requests with response matching by ID.
 package server
 
 import (
@@ -16,7 +13,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/config"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 )
@@ -39,36 +36,43 @@ const (
 )
 
 type Server struct {
-	conn    *jsonrpc.Conn
-	version string
-	logger  *slog.Logger
-	docs    *docstore.Store
+	conn        *jsonrpc.Conn
+	version     string
+	logger      *slog.Logger
+	docs        *docstore.Store
+	snapshots   *snapshotCache
+	diagnostics *diagnosticsState
+	push        *pushScheduler
 
-	mu            sync.Mutex
-	shutdown      bool
-	initialized   bool
-	trace         TraceValue
-	forcedDialect dialect.Dialect
-	dialectForced bool
+	mu             sync.Mutex
+	shutdown       bool
+	initialized    bool
+	trace          TraceValue
+	settings       config.Settings
+	generation     uint64
+	refreshSupport bool
 
 	requests      map[string]requestHandler
 	notifications map[string]notificationHandler
 
-	pending  sync.Map
-	nextID   atomic.Int64
-	cancels  sync.Map
-	dialects sync.Map
-	sem      chan struct{}
-	wg       sync.WaitGroup
+	pending sync.Map
+	nextID  atomic.Int64
+	cancels sync.Map
+	notices sync.Map
+	sem     chan struct{}
+	wg      sync.WaitGroup
 }
 
 func New(conn *jsonrpc.Conn, version string) *Server {
 	s := &Server{
-		conn:    conn,
-		version: version,
-		logger:  slog.New(slog.NewTextHandler(os.Stderr, nil)),
-		docs:    docstore.NewStore(),
-		sem:     make(chan struct{}, maxConcurrency),
+		conn:        conn,
+		version:     version,
+		logger:      slog.New(slog.NewTextHandler(os.Stderr, nil)),
+		docs:        docstore.NewStore(),
+		snapshots:   newSnapshotCache(),
+		diagnostics: newDiagnosticsState(),
+		settings:    config.Default(),
+		sem:         make(chan struct{}, maxConcurrency),
 	}
 	s.registerHandlers()
 	return s
@@ -80,17 +84,20 @@ func (s *Server) SetLogger(logger *slog.Logger) {
 
 func (s *Server) registerHandlers() {
 	s.requests = map[string]requestHandler{
-		"initialize": s.handleInitialize,
-		"shutdown":   s.handleShutdown,
+		"initialize":              s.handleInitialize,
+		"shutdown":                s.handleShutdown,
+		"textDocument/diagnostic": s.handleDocumentDiagnostic,
 	}
 	s.notifications = map[string]notificationHandler{
-		"$/cancelRequest":        s.handleCancelRequest,
-		"$/setTrace":             s.handleSetTrace,
-		"window/logMessage":      s.handleClientLogMessage,
-		"textDocument/didOpen":   s.handleDidOpen,
-		"textDocument/didChange": s.handleDidChange,
-		"textDocument/didClose":  s.handleDidClose,
-		"textDocument/didSave":   s.handleDidSave,
+		"$/cancelRequest":                  s.handleCancelRequest,
+		"$/setTrace":                       s.handleSetTrace,
+		"initialized":                      s.handleInitialized,
+		"window/logMessage":                s.handleClientLogMessage,
+		"textDocument/didOpen":             s.handleDidOpen,
+		"textDocument/didChange":           s.handleDidChange,
+		"textDocument/didClose":            s.handleDidClose,
+		"textDocument/didSave":             s.handleDidSave,
+		"workspace/didChangeConfiguration": s.handleDidChangeConfiguration,
 	}
 }
 
@@ -99,6 +106,9 @@ func (s *Server) Run(ctx context.Context) error {
 	defer func() {
 		cancel()
 		s.wg.Wait()
+		if s.push != nil {
+			s.push.close()
+		}
 	}()
 	for {
 		msg, err := s.conn.Read()

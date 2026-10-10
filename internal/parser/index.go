@@ -483,10 +483,34 @@ func (b *builder) recoveredStmt(n *syntax.Stmt) {
 	if !n.Position.IsRecovered() {
 		return
 	}
-	if _, ok := b.parent().(*syntax.BinaryCmd); ok {
+	switch p := b.parent().(type) {
+	case *syntax.BinaryCmd:
+		return
+	case *syntax.IfClause:
+		b.emptyBody(p.ThenPos, p.Position, "then")
+		return
+	case *syntax.WhileClause:
+		b.emptyBody(p.DoPos, p.WhilePos, "do")
+		return
+	case *syntax.ForClause:
+		b.emptyBody(p.DoPos, p.ForPos, "do")
+		return
+	case *syntax.Block:
+		b.emptyBody(p.Lbrace, p.Lbrace, "{")
+		return
+	case *syntax.Subshell:
+		b.emptyBody(p.Lparen, p.Lparen, "(")
 		return
 	}
 	b.errorAt(b.anchor(), "expected a command")
+}
+
+func (b *builder) emptyBody(keyword, fallback syntax.Pos, name string) {
+	if keyword.IsValid() {
+		b.errorAt(keyword, fmt.Sprintf("expected a command after %#q", name))
+		return
+	}
+	b.errorAt(fallback, "expected a command")
 }
 
 func (b *builder) recoveredLit(n *syntax.Lit) {

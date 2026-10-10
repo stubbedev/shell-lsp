@@ -54,14 +54,12 @@ func FromName(name string) (Dialect, bool) {
 	return 0, false
 }
 
-// ShellcheckName is the dialect spelling shellcheck's -s flag expects.
-func (d Dialect) ShellcheckName() string {
+func (d Dialect) ShellcheckName() (string, bool) {
 	switch d {
-	case Posix:
-		return "sh"
-	default:
-		return d.String()
+	case Bash, Posix, Dash, Ksh:
+		return d.String(), true
 	}
+	return "", false
 }
 
 type Features struct {

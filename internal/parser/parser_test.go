@@ -46,6 +46,8 @@ func TestRecoveredClosersReportMissingTokens(t *testing.T) {
 		{src: "echo \"open\n", message: "missing `\"` to match `\"`", at: "\"open"},
 		{src: "case x in\n", message: "missing `esac` to match `case`", at: "case"},
 		{src: "true &&\n", message: "expected a command after `&&`", at: "&&"},
+		{src: "if true; then\n", message: "expected a command after `then`", at: "then"},
+		{src: "while true; do\n", message: "expected a command after `do`", at: "do"},
 	}
 	for _, tc := range tests {
 		tree := Parse(tc.src, dialect.Bash)
