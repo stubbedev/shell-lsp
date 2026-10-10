@@ -4,7 +4,6 @@ import (
 	"path"
 	"slices"
 	"strconv"
-	"strings"
 
 	"mvdan.cc/sh/v3/syntax"
 
@@ -76,7 +75,7 @@ func checkRedirectTargets(p *pass, n syntax.Node) {
 		return
 	}
 	switch {
-	case strings.Trim(lit.Value, "0123456789") == "" && !p.insideBrackets(r):
+	case isDigits(lit.Value) && !p.insideBrackets(r):
 		span, ok := p.span(r.Word)
 		if !ok {
 			return
@@ -116,7 +115,7 @@ func redirectDescriptors(r *syntax.Redirect) descriptors {
 	case syntax.RdrAll, syntax.AppAll:
 		fds = []int{1, 2}
 	case syntax.DplOut:
-		if target := r.Word.Lit(); target == "-" || strings.Trim(target, "0123456789") == "" {
+		if target := r.Word.Lit(); target == "" || target == "-" || isDigits(target) {
 			return descriptors{}
 		}
 		fds = []int{1, 2}
