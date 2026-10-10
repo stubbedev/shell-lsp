@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"fmt"
 	"slices"
 
 	"github.com/stubbedev/shell-lsp/internal/docstore"
@@ -14,7 +15,10 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
-const maxWorkspaceSymbols = 500
+const (
+	maxWorkspaceSymbols = 500
+	progressStep        = 50
+)
 
 var symbolKinds = map[structure.SymbolKind]lsp.SymbolKind{
 	structure.SymbolFile:     lsp.SymbolFile,
@@ -102,7 +106,7 @@ func (s *Server) handleWorkspaceSymbol(ctx context.Context, docs *docstore.View,
 	if err != nil {
 		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing workspace/symbol params: %v", err)
 	}
-	files, err := s.workspaceFiles(ctx, docs)
+	files, err := s.indexWorkspace(ctx, docs)
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +136,32 @@ func workspaceSymbol(file *workspace.File, enc docstore.Encoding, name string, k
 	return lsp.SymbolInformation{Name: name, Kind: kind, Location: lsp.Location{URI: file.URI, Range: file.Doc.RangeFor(span.Start, span.End, enc)}}
 }
 
-func (s *Server) workspaceFiles(ctx context.Context, docs *docstore.View) ([]*workspace.File, error) {
+func (s *Server) indexWorkspace(ctx context.Context, docs *docstore.View) ([]*workspace.File, error) {
+	report := func(int, int) {}
+	if s.clientCapabilities().Window.WorkDoneProgress {
+		progress, err := s.StartProgress(ctx, "Indexing shell files")
+		if err != nil {
+			return nil, err
+		}
+		ctx = progress.Context()
+		defer func() {
+			if err := progress.End("done"); err != nil {
+				s.logger.Warn("ending progress", "err", err)
+			}
+		}()
+		report = func(done, total int) {
+			if done%progressStep != 0 {
+				return
+			}
+			if err := progress.Report(fmt.Sprintf("%d/%d files", done, total), done*100/max(total, 1)); err != nil {
+				s.logger.Warn("reporting progress", "err", err)
+			}
+		}
+	}
+	return s.workspaceFiles(ctx, docs, report)
+}
+
+func (s *Server) workspaceFiles(ctx context.Context, docs *docstore.View, report func(done, total int)) ([]*workspace.File, error) {
 	paths, err := s.workspace.ShellFiles(ctx)
 	if err != nil {
 		return nil, err
@@ -147,7 +176,11 @@ func (s *Server) workspaceFiles(ctx context.Context, docs *docstore.View) ([]*wo
 		seen[file.URI] = true
 		files = append(files, file)
 	}
-	for _, path := range paths {
+	for i, path := range paths {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		report(i+1, len(paths))
 		file, err := s.workspace.Load(path)
 		if err != nil || seen[file.URI] {
 			continue

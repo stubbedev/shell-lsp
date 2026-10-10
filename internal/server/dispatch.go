@@ -63,12 +63,13 @@ type Server struct {
 	requests      map[string]requestHandler
 	notifications map[string]notificationHandler
 
-	pending sync.Map
-	nextID  atomic.Int64
-	cancels sync.Map
-	notices sync.Map
-	sem     chan struct{}
-	wg      sync.WaitGroup
+	pending  sync.Map
+	nextID   atomic.Int64
+	cancels  sync.Map
+	progress sync.Map
+	notices  sync.Map
+	sem      chan struct{}
+	wg       sync.WaitGroup
 }
 
 func New(conn *jsonrpc.Conn, version string) *Server {
@@ -112,6 +113,7 @@ func (s *Server) registerHandlers() {
 		"workspace/symbol":                       s.handleWorkspaceSymbol,
 		"textDocument/formatting":                s.handleFormatting,
 		"textDocument/rangeFormatting":           s.handleRangeFormatting,
+		"textDocument/rangesFormatting":          s.handleRangesFormatting,
 		"textDocument/codeAction":                s.handleCodeAction,
 		"codeAction/resolve":                     s.handleCodeActionResolve,
 		"workspace/executeCommand":               s.handleExecuteCommand,
@@ -140,12 +142,11 @@ func (s *Server) registerHandlers() {
 	s.notifications = map[string]notificationHandler{
 		"$/cancelRequest":                     s.handleCancelRequest,
 		"$/setTrace":                          s.handleSetTrace,
+		"window/workDoneProgress/cancel":      s.handleWorkDoneProgressCancel,
 		"initialized":                         s.handleInitialized,
-		"window/logMessage":                   s.handleClientLogMessage,
 		"textDocument/didOpen":                s.handleDidOpen,
 		"textDocument/didChange":              s.handleDidChange,
 		"textDocument/didClose":               s.handleDidClose,
-		"textDocument/didSave":                s.handleDidSave,
 		"workspace/didChangeConfiguration":    s.handleDidChangeConfiguration,
 		"workspace/didChangeWatchedFiles":     s.handleDidChangeWatchedFiles,
 		"workspace/didChangeWorkspaceFolders": s.handleDidChangeWorkspaceFolders,
@@ -179,6 +180,7 @@ func (s *Server) Run(ctx context.Context) error {
 		case msg.IsResponse():
 			s.routeResponse(msg)
 		case msg.IsNotification():
+			s.traceIncoming("notification", msg.Method, nil, msg.Params)
 			if msg.Method == exitMethod {
 				s.wg.Wait()
 				if s.isShutdown() {
@@ -188,6 +190,7 @@ func (s *Server) Run(ctx context.Context) error {
 			}
 			s.dispatchNotification(rootCtx, msg)
 		case msg.IsRequest():
+			s.traceIncoming("request", msg.Method, msg.ID, msg.Params)
 			if msg.Method == "initialize" || msg.Method == "shutdown" {
 				s.handleLifecycleRequest(msg)
 				continue
@@ -201,6 +204,15 @@ func (s *Server) handleLifecycleRequest(msg *jsonrpc.Message) {
 	if s.isShutdown() {
 		s.replyError(msg, jsonrpc.NewError(jsonrpc.CodeInvalidRequest,
 			"request %q after shutdown", msg.Method))
+		return
+	}
+	initialized := s.isInitialized()
+	if msg.Method == "initialize" && initialized {
+		s.replyError(msg, jsonrpc.NewError(jsonrpc.CodeInvalidRequest, "the server is already initialized"))
+		return
+	}
+	if msg.Method == "shutdown" && !initialized {
+		s.replyError(msg, jsonrpc.NewError(jsonrpc.CodeServerNotInitialized, "shutdown before initialize"))
 		return
 	}
 	handler, ok := s.requests[msg.Method]
@@ -225,14 +237,9 @@ func (s *Server) dispatchRequest(ctx context.Context, msg *jsonrpc.Message) {
 			"request %q after shutdown", msg.Method))
 		return
 	}
-	if !s.isInitialized() && msg.Method != "initialize" {
-		s.replyError(msg, jsonrpc.NewError(jsonrpc.CodeInvalidRequest,
+	if !s.isInitialized() {
+		s.replyError(msg, jsonrpc.NewError(jsonrpc.CodeServerNotInitialized,
 			"request %q before initialize", msg.Method))
-		return
-	}
-	if s.isShutdown() {
-		s.replyError(msg, jsonrpc.NewError(jsonrpc.CodeInvalidRequest,
-			"request %q after shutdown", msg.Method))
 		return
 	}
 	handler, ok := s.requests[msg.Method]
@@ -285,6 +292,10 @@ func (s *Server) invoke(ctx context.Context, handler requestHandler, docs *docst
 }
 
 func (s *Server) dispatchNotification(ctx context.Context, msg *jsonrpc.Message) {
+	if !s.isInitialized() {
+		s.logger.Warn("dropping notification before initialize", "method", msg.Method)
+		return
+	}
 	handler, ok := s.notifications[msg.Method]
 	if !ok {
 		if strings.HasPrefix(msg.Method, "$/") {

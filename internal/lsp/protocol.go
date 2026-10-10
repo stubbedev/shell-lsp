@@ -60,10 +60,6 @@ type DidCloseTextDocumentParams struct {
 	TextDocument TextDocumentIdentifier `json:"textDocument"`
 }
 
-type DidSaveTextDocumentParams struct {
-	TextDocument TextDocumentIdentifier `json:"textDocument"`
-}
-
 func DecodeParams[T any](raw json.RawMessage) (T, error) {
 	var params T
 	if len(raw) > 0 {
@@ -570,4 +566,10 @@ type FileOperationTarget struct {
 
 type FileOperationsParams struct {
 	Files []FileOperationTarget `json:"files"`
+}
+
+type DocumentRangesFormattingParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Ranges       []Range                `json:"ranges"`
+	Options      FormattingOptions      `json:"options"`
 }

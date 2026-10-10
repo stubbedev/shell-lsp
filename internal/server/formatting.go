@@ -3,12 +3,14 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"slices"
 
 	"github.com/stubbedev/shell-lsp/internal/config"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/format"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
+	"github.com/stubbedev/shell-lsp/internal/textedit"
 )
 
 func (s *Server) handleFormatting(_ context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
@@ -24,10 +26,21 @@ func (s *Server) handleRangeFormatting(_ context.Context, docs *docstore.View, p
 	if err != nil {
 		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing textDocument/rangeFormatting params: %v", err)
 	}
-	return s.format(docs, formatParams.TextDocument.URI, formatParams.Options, &formatParams.Range)
+	return s.format(docs, formatParams.TextDocument.URI, formatParams.Options, []lsp.Range{formatParams.Range})
 }
 
-func (s *Server) format(docs *docstore.View, uri string, opts lsp.FormattingOptions, within *lsp.Range) ([]lsp.TextEdit, error) {
+func (s *Server) handleRangesFormatting(_ context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
+	formatParams, err := lsp.DecodeParams[lsp.DocumentRangesFormattingParams](params)
+	if err != nil {
+		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing textDocument/rangesFormatting params: %v", err)
+	}
+	if len(formatParams.Ranges) == 0 {
+		return []lsp.TextEdit{}, nil
+	}
+	return s.format(docs, formatParams.TextDocument.URI, formatParams.Options, formatParams.Ranges)
+}
+
+func (s *Server) format(docs *docstore.View, uri string, opts lsp.FormattingOptions, within []lsp.Range) ([]lsp.TextEdit, error) {
 	snap, err := s.snapshot(docs, uri)
 	if err != nil {
 		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
@@ -42,7 +55,15 @@ func (s *Server) format(docs *docstore.View, uri string, opts lsp.FormattingOpti
 	}
 	edits := format.Edits(text, formatted)
 	if within != nil {
-		edits = format.RangeEdits(edits, snap.doc.PositionToOffset(within.Start, snap.encoding), snap.doc.PositionToOffset(within.End, snap.encoding))
+		var kept []textedit.Edit
+		for _, e := range edits {
+			if slices.ContainsFunc(within, func(r lsp.Range) bool {
+				return len(format.RangeEdits([]textedit.Edit{e}, snap.doc.PositionToOffset(r.Start, snap.encoding), snap.doc.PositionToOffset(r.End, snap.encoding))) > 0
+			}) {
+				kept = append(kept, e)
+			}
+		}
+		edits = kept
 	}
 	out := make([]lsp.TextEdit, len(edits))
 	for i, e := range edits {

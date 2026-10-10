@@ -9,6 +9,10 @@ The implementation plan lives in the issue tracker. Status: protocol core,
 incremental document sync, dialect detection, an error-tolerant parser for every
 dialect, diagnostics (syntax errors plus shellcheck, push or pull), hover, completion, navigation, symbols, folding, formatting and code actions.
 
+Every LSP method, in both directions, is listed with its status in
+[docs/lsp-methods.md](docs/lsp-methods.md), generated from the table the
+conformance tests check the server against.
+
 ## Goals
 
 - Auto-detected dialects: bash, zsh, sh, dash, ksh (shebang, extension, modeline)

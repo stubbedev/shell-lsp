@@ -178,19 +178,37 @@ func TestRequestBeforeInitialize(t *testing.T) {
 	var output bytes.Buffer
 	srv := New(jsonrpc.NewConn(&input, &output), "test")
 
+	opened := notification("textDocument/didOpen")
+	opened.Params = json.RawMessage(`{"textDocument": {"uri": "file:///t.sh", "languageId": "shellscript", "version": 1, "text": "x"}}`)
 	send(t, &input,
 		request(9, "textDocument/hover", ""),
 		request(1, "shutdown", ""),
+		opened,
 		notification("exit"))
 
-	if err := srv.Run(t.Context()); err != nil {
-		t.Fatalf("Run() error = %v", err)
+	if err := srv.Run(t.Context()); err == nil {
+		t.Error("exit without a successful shutdown returned no error (exit code 0)")
 	}
 
 	client := readerFor(&output)
-	msg := responseByID(t, client, "9", 2)
-	if msg.Error == nil || msg.Error.Code != jsonrpc.CodeInvalidRequest {
-		t.Errorf("error = %+v, want invalid request", msg.Error)
+	for _, id := range []string{"9", "1"} {
+		msg := responseByID(t, client, id, 2)
+		if msg.Error == nil || msg.Error.Code != jsonrpc.CodeServerNotInitialized {
+			t.Errorf("response %s error = %+v, want ServerNotInitialized", id, msg.Error)
+		}
+	}
+	if _, ok := srv.docs.View().Document("file:///t.sh"); ok {
+		t.Error("didOpen before initialize was processed")
+	}
+}
+
+func TestDoubleInitialize(t *testing.T) {
+	t.Parallel()
+
+	c, _ := startClient(t, `{}`)
+	again := c.call("initialize", `{}`)
+	if again.Error == nil || again.Error.Code != jsonrpc.CodeInvalidRequest {
+		t.Errorf("second initialize error = %+v, want InvalidRequest", again.Error)
 	}
 }
 
@@ -203,16 +221,21 @@ func TestInvalidInitializeParams(t *testing.T) {
 
 	send(t, &input,
 		request(1, "initialize", `{"processId":"not-a-number"}`),
-		request(2, "shutdown", ""),
+		request(2, "initialize", `{}`),
+		request(3, "shutdown", ""),
 		notification("exit"))
 
 	if err := srv.Run(t.Context()); err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
 
-	msg := readResponse(t, readerFor(&output))
+	client := readerFor(&output)
+	msg := readResponse(t, client)
 	if msg.Error == nil || msg.Error.Code != jsonrpc.CodeInvalidParams {
 		t.Errorf("error = %+v, want invalid params", msg.Error)
+	}
+	if retry := readResponse(t, client); retry.Error != nil {
+		t.Errorf("initialize after a failed initialize = %+v, want success", retry.Error)
 	}
 }
 
@@ -234,6 +257,7 @@ func TestNotificationsProcessedInOrder(t *testing.T) {
 	var mu sync.Mutex
 	var order []string
 	srv := New(jsonrpc.NewConn(nil, nil), "test")
+	srv.initialized = true
 	for _, name := range []string{"a", "b", "c"} {
 		srv.notifications["test/"+name] = func(_ context.Context, _ json.RawMessage) error {
 			mu.Lock()

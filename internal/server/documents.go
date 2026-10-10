@@ -51,17 +51,6 @@ func (s *Server) handleDidClose(_ context.Context, params json.RawMessage) error
 	return nil
 }
 
-func (s *Server) handleDidSave(_ context.Context, params json.RawMessage) error {
-	saveParams, err := lsp.DecodeParams[lsp.DidSaveTextDocumentParams](params)
-	if err != nil {
-		return err
-	}
-	if _, ok := s.docs.View().Document(saveParams.TextDocument.URI); !ok {
-		s.logger.Warn("didSave for unopened document", "uri", saveParams.TextDocument.URI)
-	}
-	return nil
-}
-
 func (s *Server) documentChanged(uri string) {
 	if s.push != nil {
 		s.push.schedule(uri)

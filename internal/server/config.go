@@ -81,10 +81,30 @@ func (s *Server) applySettings(ctx context.Context, update func()) {
 	s.mu.Lock()
 	update()
 	s.generation++
-	refresh := s.client.Workspace.Diagnostics.RefreshSupport
+	caps := s.client.Workspace
 	s.mu.Unlock()
 	s.workspace.InvalidateAll()
-	s.refreshDiagnostics(ctx, refresh)
+	s.refreshDiagnostics(ctx, caps.Diagnostics.RefreshSupport)
+	for _, refresh := range []struct {
+		method    string
+		supported bool
+	}{
+		{"workspace/semanticTokens/refresh", caps.SemanticTokens.RefreshSupport},
+		{"workspace/inlayHint/refresh", caps.InlayHint.RefreshSupport},
+		{"workspace/codeLens/refresh", caps.CodeLens.RefreshSupport},
+	} {
+		if refresh.supported {
+			s.requestRefresh(ctx, refresh.method)
+		}
+	}
+}
+
+func (s *Server) requestRefresh(ctx context.Context, method string) {
+	go func() {
+		if err := s.call(ctx, method, nil, nil); err != nil {
+			s.logger.Warn("requesting refresh", "method", method, "err", err)
+		}
+	}()
 }
 
 func (s *Server) pullConfiguration(ctx context.Context) {
@@ -169,9 +189,5 @@ func (s *Server) refreshDiagnostics(ctx context.Context, clientRefresh bool) {
 	if !clientRefresh {
 		return
 	}
-	go func() {
-		if err := s.call(ctx, "workspace/diagnostic/refresh", nil, nil); err != nil {
-			s.logger.Warn("requesting diagnostic refresh", "err", err)
-		}
-	}()
+	s.requestRefresh(ctx, "workspace/diagnostic/refresh")
 }

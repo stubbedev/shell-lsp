@@ -47,6 +47,9 @@ type ClientCapabilities struct {
 			} `json:"resolveSupport"`
 		} `json:"codeAction"`
 	} `json:"textDocument"`
+	Window struct {
+		WorkDoneProgress bool `json:"workDoneProgress"`
+	} `json:"window"`
 	Workspace struct {
 		Diagnostics struct {
 			RefreshSupport bool `json:"refreshSupport"`
@@ -54,7 +57,16 @@ type ClientCapabilities struct {
 		WorkspaceEdit struct {
 			DocumentChanges bool `json:"documentChanges"`
 		} `json:"workspaceEdit"`
-		Configuration         bool `json:"configuration"`
+		Configuration  bool `json:"configuration"`
+		SemanticTokens struct {
+			RefreshSupport bool `json:"refreshSupport"`
+		} `json:"semanticTokens"`
+		InlayHint struct {
+			RefreshSupport bool `json:"refreshSupport"`
+		} `json:"inlayHint"`
+		CodeLens struct {
+			RefreshSupport bool `json:"refreshSupport"`
+		} `json:"codeLens"`
 		DidChangeWatchedFiles struct {
 			DynamicRegistration bool `json:"dynamicRegistration"`
 		} `json:"didChangeWatchedFiles"`
@@ -98,7 +110,7 @@ type ServerCapabilities struct {
 	FoldingRangeProvider            bool                    `json:"foldingRangeProvider"`
 	WorkspaceSymbolProvider         bool                    `json:"workspaceSymbolProvider"`
 	DocumentFormattingProvider      bool                    `json:"documentFormattingProvider"`
-	DocumentRangeFormattingProvider bool                    `json:"documentRangeFormattingProvider"`
+	DocumentRangeFormattingProvider RangeFormattingOptions  `json:"documentRangeFormattingProvider"`
 	CodeActionProvider              CodeActionOptions       `json:"codeActionProvider"`
 	ExecuteCommandProvider          ExecuteCommandOptions   `json:"executeCommandProvider"`
 	ReferencesProvider              bool                    `json:"referencesProvider"`
@@ -119,6 +131,10 @@ type ServerCapabilities struct {
 
 type RenameOptions struct {
 	PrepareProvider bool `json:"prepareProvider"`
+}
+
+type RangeFormattingOptions struct {
+	RangesSupport bool `json:"rangesSupport"`
 }
 
 type CodeActionOptions struct {
@@ -179,7 +195,7 @@ func (s *Server) handleInitialize(_ context.Context, _ *docstore.View, params js
 			FoldingRangeProvider:            true,
 			WorkspaceSymbolProvider:         true,
 			DocumentFormattingProvider:      true,
-			DocumentRangeFormattingProvider: true,
+			DocumentRangeFormattingProvider: RangeFormattingOptions{RangesSupport: true},
 			CodeActionProvider:              CodeActionOptions{CodeActionKinds: codeActionKinds, ResolveProvider: true},
 			ExecuteCommandProvider:          ExecuteCommandOptions{Commands: serverCommands},
 			ReferencesProvider:              true,
@@ -254,13 +270,4 @@ func (s *Server) setTrace(value TraceValue) {
 	default:
 		s.logger.Warn("ignoring unknown trace value", "value", string(value))
 	}
-}
-
-func (s *Server) handleClientLogMessage(_ context.Context, params json.RawMessage) error {
-	var logParams lsp.LogMessageParams
-	if err := json.Unmarshal(params, &logParams); err != nil {
-		return err
-	}
-	s.logger.Info("client message", "type", logParams.Type, "message", logParams.Message)
-	return nil
 }

@@ -15,15 +15,16 @@ import (
 const Version = "2.0"
 
 const (
-	CodeParseError       = -32700
-	CodeInvalidRequest   = -32600
-	CodeMethodNotFound   = -32601
-	CodeInvalidParams    = -32602
-	CodeInternalError    = -32603
-	CodeServerClosing    = -32000
-	CodeRequestFailed    = -32803
-	CodeContentModified  = -32801
-	CodeRequestCancelled = -32800
+	CodeParseError           = -32700
+	CodeInvalidRequest       = -32600
+	CodeMethodNotFound       = -32601
+	CodeInvalidParams        = -32602
+	CodeInternalError        = -32603
+	CodeServerClosing        = -32000
+	CodeRequestFailed        = -32803
+	CodeContentModified      = -32801
+	CodeServerNotInitialized = -32002
+	CodeRequestCancelled     = -32800
 )
 
 const maxBodySize = 64 << 20
