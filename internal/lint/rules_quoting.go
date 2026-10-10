@@ -19,6 +19,7 @@ var quotingFamily = family{
 		2206: {severity: SeverityWarning},
 		2207: {severity: SeverityWarning},
 		2223: {severity: SeverityInfo},
+		2248: {severity: SeverityStyle, optional: "quote-safe-variables"},
 	},
 	rules: []rule{
 		{node: checkUnquotedExpansion},
@@ -63,7 +64,11 @@ func checkUnquotedExpansion(p *pass, n syntax.Node) {
 			p.report(2048, span, "Unquoted "+text+" joins the elements and splits them again; use \"$@\" or \"${array[@]}\" to keep them intact.")
 		}
 	}
-	if context != contextSplit || spacelessSpecials[pe.Param.Value] || p.namesAssignment(pe) || p.flow.expansion(pe).clean() {
+	if context != contextSplit || spacelessSpecials[pe.Param.Value] || p.namesAssignment(pe) {
+		return
+	}
+	if p.flow.expansion(pe).clean() {
+		p.report(2248, span, text+" holds no spaces or globs today, but quoting it keeps it safe if that changes: \""+text+"\".", quoteFix(span)...)
 		return
 	}
 	if isDefaultAssignment(pe) && p.isArgumentOf(":") {
