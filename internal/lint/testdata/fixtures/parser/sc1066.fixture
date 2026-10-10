@@ -4,7 +4,7 @@ $fruits=(apple pear)
 >>- SC1066 1:1 -- bash rejects $name=(...), so this is a parser syntax error whose message says to remove the $
 >>> SC1088 1:9
 >>> SC2154 1:1
->>> SC2281 1:1
+>>- SC2281 1:1 -- mvdan rejects a dollar-prefixed array assignment; the line is reported as a syntax error instead
 
 ### dollar on an indexed append of an array
 $queue[1]+=(job)
@@ -14,8 +14,8 @@ $queue[1]+=(job)
 >>> SC1088 1:12
 >>- SC2086 1:1 -- mvdan rejects a dollar-prefixed indexed array append; the line is reported as a syntax error instead
 >>> SC2154 1:1
->>> SC2211 1:1
->>> SC2276 1:1
+>>- SC2211 1:1 -- mvdan rejects a dollar-prefixed indexed array append; the line is reported as a syntax error instead
+>>- SC2276 1:1 -- mvdan rejects a dollar-prefixed indexed array append; the line is reported as a syntax error instead
 
 ### dollar on a scalar assignment is left to later analysis
 $fruits=apple
@@ -26,4 +26,4 @@ $fruits=apple
 fruits =(apple pear)
 >>- SC1036 1:9 -- bash rejects the unquoted parenthesis; the parser reports =( as a syntax error
 >>> SC1088 1:9
->>> SC2283 1:8
+>>- SC2283 1:8 -- mvdan rejects =( after a command word as a syntax error, so the line is not linted

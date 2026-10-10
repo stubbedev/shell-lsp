@@ -3,7 +3,7 @@ rsync -a \
   # --delete \
   src/ dest/
 >>> SC1143 2:15
->>> SC2287 3:3
+>>- SC2287 3:3 -- mvdan continues the command through the commented-out line, so src/ is an argument of rsync rather than a command
 
 ### comment without a trailing backslash inside a continuation
 rsync -a  \
@@ -20,4 +20,4 @@ echo next
 rsync -a\
   # --delete \
   src/ dest/
->>> SC2287 3:3
+>>- SC2287 3:3 -- mvdan continues the command through the commented-out line, so src/ is an argument of rsync rather than a command

@@ -38,6 +38,7 @@ var families = []family{
 	getoptsFamily,
 	fileOpsFamily,
 	elevationFamily,
+	commandWordFamily,
 }
 
 var catalog, rules, commandChecks = assemble(families)

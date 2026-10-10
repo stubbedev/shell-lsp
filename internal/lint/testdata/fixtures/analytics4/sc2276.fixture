@@ -6,7 +6,7 @@ var${x}/=value
 
 ### empty braced expansion before equals
 ${}=value
->>> SC2276 1:1
+>>- SC2276 1:1 -- mvdan rejects the empty expansion ${} as a syntax error, so the line is not linted
 
 ### length expansion before equals
 ${#name}=value

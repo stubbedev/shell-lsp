@@ -5,7 +5,7 @@ deploy*
 ### array index written as a bracket glob in a substitution
 current=$(slots[idx])
 >>> SC2034 1:1
->>> SC2211 1:11
+>>- SC2211 1:11 -- mvdan requires = after name[...] in command position; reported as a syntax error instead
 
 ### question mark glob as command name
 build-v? --release
@@ -15,7 +15,7 @@ build-v? --release
 run[$stage]x
 >>- SC2086 1:5 -- mvdan requires = after name[...] in command position; reported as a syntax error instead
 >>> SC2154 1:5
->>> SC2211 1:1
+>>- SC2211 1:1 -- mvdan requires = after name[...] in command position; reported as a syntax error instead
 
 ### prefix assignment before a globbed command name
 LANG=C report* --summary

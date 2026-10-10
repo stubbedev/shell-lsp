@@ -79,9 +79,9 @@ func (p *pass) ancestor(depth int) syntax.Node {
 
 func (p *pass) span(n syntax.Node) (parser.Span, bool) { return p.tree.NodeSpan(n) }
 
-func (p *pass) reportNode(code Code, n syntax.Node, message string) {
+func (p *pass) reportNode(code Code, n syntax.Node, message string, fix ...textedit.Edit) {
 	if span, ok := p.span(n); ok {
-		p.report(code, span, message)
+		p.report(code, span, message, fix...)
 	}
 }
 
