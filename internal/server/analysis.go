@@ -38,11 +38,11 @@ func newSnapshotCache() *snapshotCache {
 	return &snapshotCache{entries: map[string]*snapshotEntry{}}
 }
 
-func (c *snapshotCache) get(uri string, doc *docstore.Document, generation uint64, build func() *snapshot) *snapshot {
+func (c *snapshotCache) get(uri string, doc *docstore.Document, generation uint64, build func(previous *snapshot) *snapshot) *snapshot {
 	for {
-		e, owner := c.claim(uri, doc, generation)
+		e, owner, previous := c.claim(uri, doc, generation)
 		if owner {
-			return c.fill(uri, e, build)
+			return c.fill(uri, e, func() *snapshot { return build(previous) })
 		}
 		<-e.ready
 		if e.snap != nil {
@@ -51,17 +51,26 @@ func (c *snapshotCache) get(uri string, doc *docstore.Document, generation uint6
 	}
 }
 
-func (c *snapshotCache) claim(uri string, doc *docstore.Document, generation uint64) (*snapshotEntry, bool) {
+func (c *snapshotCache) claim(uri string, doc *docstore.Document, generation uint64) (*snapshotEntry, bool, *snapshot) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if e, ok := c.entries[uri]; ok && e.doc == doc && e.generation == generation {
-		return e, false
+	current, ok := c.entries[uri]
+	if ok && current.doc == doc && current.generation == generation {
+		return current, false, nil
 	}
 	e := &snapshotEntry{doc: doc, generation: generation, ready: make(chan struct{})}
-	if current, ok := c.entries[uri]; !ok || current.doc.Version <= doc.Version {
+	if !ok || current.doc.Version <= doc.Version {
 		c.entries[uri] = e
 	}
-	return e, true
+	if !ok {
+		return e, true, nil
+	}
+	select {
+	case <-current.ready:
+		return e, true, current.snap
+	default:
+		return e, true, nil
+	}
 }
 
 func (c *snapshotCache) fill(uri string, e *snapshotEntry, build func() *snapshot) *snapshot {
@@ -92,9 +101,13 @@ func (s *Server) snapshot(docs *docstore.View, uri string) (*snapshot, error) {
 		return nil, fmt.Errorf("document %s is not open", uri)
 	}
 	settings, generation := s.settingsFor(uri)
-	return s.snapshots.get(uri, doc, generation, func() *snapshot {
+	return s.snapshots.get(uri, doc, generation, func(previous *snapshot) *snapshot {
 		d := dialect.Detect(settings.Dialect, dialect.Input{URI: uri, LanguageID: doc.Language, Text: doc.Text()})
-		tree := parser.Parse(doc.Text(), d)
+		var like *parser.Tree
+		if previous != nil {
+			like = previous.tree
+		}
+		tree := parser.ParseEdit(like, doc.Text(), d)
 		path, err := fileuri.ToPath(uri)
 		if err != nil {
 			path = ""

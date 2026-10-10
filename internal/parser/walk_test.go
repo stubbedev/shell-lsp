@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -162,4 +163,29 @@ func BenchmarkWalk(b *testing.B) {
 			syntax.Walk(tree.File, visit)
 		}
 	})
+}
+
+func TestParseEditBuildsTheSameIndexAsParse(t *testing.T) {
+	t.Parallel()
+
+	for name, text := range walkScripts(t) {
+		unrelated := Parse(text[:len(text)/2], dialect.Bash)
+		want := reflect.ValueOf(Parse(text, dialect.Bash).Index)
+		got := reflect.ValueOf(ParseEdit(unrelated, text, dialect.Bash).Index)
+		for i := range want.NumField() {
+			field := want.Type().Field(i)
+			if !field.IsExported() || field.Type.Kind() != reflect.Slice {
+				continue
+			}
+			w, g := want.Field(i), got.Field(i)
+			if w.Len() != g.Len() {
+				t.Fatalf("%s: %s has %d entries, want %d", name, field.Name, g.Len(), w.Len())
+			}
+			for j := range w.Len() {
+				if !reflect.DeepEqual(g.Index(j).Interface(), w.Index(j).Interface()) {
+					t.Fatalf("%s: %s[%d] = %+v, want %+v", name, field.Name, j, g.Index(j), w.Index(j))
+				}
+			}
+		}
+	}
 }

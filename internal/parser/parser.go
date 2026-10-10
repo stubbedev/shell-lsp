@@ -51,6 +51,10 @@ type Tree struct {
 }
 
 func Parse(text string, d dialect.Dialect) *Tree {
+	return ParseEdit(nil, text, d)
+}
+
+func ParseEdit(previous *Tree, text string, d dialect.Dialect) *Tree {
 	lang := Language(d)
 	if d == dialect.Bash && IsBats(text) {
 		lang = syntax.LangBats
@@ -94,7 +98,7 @@ func Parse(text string, d dialect.Dialect) *Tree {
 	if len(src) > len(text) {
 		closedAtEnd = closeAtEndOfText(file, text)
 	}
-	index, recovered := buildIndex(file, text, closedAtEnd)
+	index, recovered := buildIndex(file, text, closedAtEnd, previous)
 	errs = append(errs, recovered...)
 	return &Tree{Dialect: d, File: file, Errors: sortErrors(errs), Index: index, text: text, lineStarts: lineStarts(text)}
 }

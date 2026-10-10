@@ -139,18 +139,44 @@ type builder struct {
 	closedAtEnd map[*syntax.Redirect]bool
 }
 
-func buildIndex(file *syntax.File, text string, closedAtEnd map[*syntax.Redirect]bool) (Index, []Error) {
+func buildIndex(file *syntax.File, text string, closedAtEnd map[*syntax.Redirect]bool, previous *Tree) (Index, []Error) {
 	b := &builder{
 		text:        text,
 		closedAtEnd: closedAtEnd,
-		index:       Index{Scopes: []Scope{{Span: Span{Start: 0, End: len(text)}, Parent: FileScope}}},
+		index:       presized(previous),
 		scopes:      []ScopeID{FileScope},
 		elseClauses: map[*syntax.IfClause]bool{},
 	}
+	b.index.Scopes = append(b.index.Scopes, Scope{Span: Span{Start: 0, End: len(text)}, Parent: FileScope})
 	Walk(file, b.visit)
 	slices.SortStableFunc(b.index.Keywords, func(x, y Keyword) int { return x.Span.Start - y.Span.Start })
 	b.index.buildLookups()
 	return b.index, b.errs
+}
+
+func presized(previous *Tree) Index {
+	if previous == nil {
+		return Index{}
+	}
+	p := previous.Index
+	return Index{
+		Scopes:      withRoomFor(p.Scopes),
+		Functions:   withRoomFor(p.Functions),
+		Definitions: withRoomFor(p.Definitions),
+		References:  withRoomFor(p.References),
+		Commands:    withRoomFor(p.Commands),
+		Redirects:   withRoomFor(p.Redirects),
+		Heredocs:    withRoomFor(p.Heredocs),
+		Comments:    withRoomFor(p.Comments),
+		Keywords:    withRoomFor(p.Keywords),
+	}
+}
+
+func withRoomFor[T any](like []T) []T {
+	if len(like) == 0 {
+		return nil
+	}
+	return make([]T, 0, len(like)+len(like)/8+8)
 }
 
 func (b *builder) visit(node syntax.Node) bool {
