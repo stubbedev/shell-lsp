@@ -78,6 +78,5 @@ if not found then
   fail("completion of 'gr' does not offer greet")
 end
 
-vim.lsp.stop_client(client_id)
 print("nvim smoke test passed")
 os.exit(0)
