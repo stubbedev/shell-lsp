@@ -48,7 +48,7 @@ func (s *Server) handleDocumentSymbol(_ context.Context, docs *docstore.View, pa
 	if s.clientCapabilities().TextDocument.DocumentSymbol.HierarchicalDocumentSymbolSupport {
 		return documentSymbols(snap.doc, snap.encoding, symbols), nil
 	}
-	return flatSymbols(snap.doc, snap.encoding, symbols, ""), nil
+	return appendFlatSymbols([]lsp.SymbolInformation{}, snap.doc, snap.encoding, symbols, ""), nil
 }
 
 func documentSymbols(doc *docstore.Document, enc docstore.Encoding, symbols []structure.Symbol) []lsp.DocumentSymbol {
@@ -66,8 +66,7 @@ func documentSymbols(doc *docstore.Document, enc docstore.Encoding, symbols []st
 	return out
 }
 
-func flatSymbols(doc *docstore.Document, enc docstore.Encoding, symbols []structure.Symbol, container string) []lsp.SymbolInformation {
-	out := []lsp.SymbolInformation{}
+func appendFlatSymbols(out []lsp.SymbolInformation, doc *docstore.Document, enc docstore.Encoding, symbols []structure.Symbol, container string) []lsp.SymbolInformation {
 	for _, sym := range symbols {
 		out = append(out, lsp.SymbolInformation{
 			Name:          sym.Name,
@@ -75,7 +74,7 @@ func flatSymbols(doc *docstore.Document, enc docstore.Encoding, symbols []struct
 			Location:      lsp.Location{URI: doc.URI, Range: doc.RangeFor(sym.Span.Start, sym.Span.End, enc)},
 			ContainerName: container,
 		})
-		out = append(out, flatSymbols(doc, enc, sym.Children, sym.Name)...)
+		out = appendFlatSymbols(out, doc, enc, sym.Children, sym.Name)
 	}
 	return out
 }

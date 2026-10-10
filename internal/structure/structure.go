@@ -32,20 +32,22 @@ type Symbol struct {
 
 func Symbols(tree *parser.Tree) []Symbol {
 	byScope := map[parser.ScopeID][]Symbol{}
-	seen := map[parser.ScopeID]map[string]bool{}
+	type scopedName struct {
+		scope parser.ScopeID
+		name  string
+	}
+	seen := make(map[scopedName]bool, len(tree.Definitions))
 	for _, def := range tree.Definitions {
-		scope := def.Within
-		if seen[scope] == nil {
-			seen[scope] = map[string]bool{}
-		}
-		if seen[scope][def.Name] || def.Kind == parser.DefCommandEnv {
+		key := scopedName{scope: def.Within, name: def.Name}
+		if seen[key] || def.Kind == parser.DefCommandEnv {
 			continue
 		}
-		seen[scope][def.Name] = true
-		byScope[scope] = append(byScope[scope], variableSymbol(def))
+		seen[key] = true
+		byScope[def.Within] = append(byScope[def.Within], variableSymbol(def))
 	}
 	for _, src := range sources(tree) {
-		byScope[tree.ScopeAt(src.Span.Start)] = append(byScope[tree.ScopeAt(src.Span.Start)], src)
+		scope := tree.ScopeAt(src.Span.Start)
+		byScope[scope] = append(byScope[scope], src)
 	}
 	for _, h := range tree.Heredocs {
 		sym := Symbol{Name: "<<" + h.Delimiter, Detail: "heredoc", Kind: SymbolHeredoc, Span: parser.Span{Start: h.Span.Start, End: max(h.Body.End, h.Span.End)}, Selection: h.Span}
