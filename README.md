@@ -75,7 +75,10 @@ the offending field.
 | `format.minify` | `false` | Minify the script (like `shfmt -mn`) |
 
 Formatting runs the same printer shfmt is built on, in-process, so no shfmt
-binary is needed. Documents with syntax errors are not formatted, and range
+binary is needed. Likewise, hover and completion documentation for external
+commands comes from the installed manual pages, which the server locates
+through `MANPATH` (or next to every `PATH` entry), decompresses and renders
+itself; neither `man` nor groff is involved. Documents with syntax errors are not formatted, and range
 formatting only changes the lines that intersect the range.
 
 ## Linting

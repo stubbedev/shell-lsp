@@ -75,7 +75,7 @@ type Server struct {
 }
 
 func New(conn *jsonrpc.Conn, version string) *Server {
-	pages := manpage.NewLookup()
+	pages := manpage.NewLookup(os.Getenv("MANPATH"), os.Getenv("PATH"))
 	s := &Server{
 		conn:        conn,
 		version:     version,
