@@ -143,10 +143,15 @@ func parseFixtures(path, raw string) ([]fixtureCase, error) {
 	return out, nil
 }
 
-func fixtureDialect(script string) (dialect.Dialect, bool) {
-	_, fromShebang := dialect.FromShebang(script)
-	explicit := fromShebang || strings.Contains(script, "shell=")
-	return dialect.Detect(nil, dialect.Input{URI: "file:///fixture", Text: script}), explicit
+func fixtureDialect(script string) (dialect.Dialect, DialectSource) {
+	d := dialect.Detect(nil, dialect.Input{URI: "file:///fixture", Text: script})
+	if _, fromShebang := dialect.FromShebang(script); fromShebang {
+		return d, DialectDetected
+	}
+	if strings.Contains(script, "shell=") {
+		return d, DialectGuessed
+	}
+	return d, DialectForced
 }
 
 func position(text string, offset int) string {
@@ -156,10 +161,10 @@ func position(text string, offset int) string {
 }
 
 func ours(script string) []string {
-	d, explicit := fixtureDialect(script)
+	d, source := fixtureDialect(script)
 	tree := parser.Parse(script, d)
 	var out []string
-	for _, f := range Check(tree, nil, Options{ForcedDialect: !explicit, GuessedDialect: explicit}) {
+	for _, f := range Check(tree, nil, Options{DialectSource: source}) {
 		out = append(out, f.Code.String()+" "+position(script, f.Span.Start))
 	}
 	slices.Sort(out)
@@ -249,7 +254,7 @@ func theirs(ctx context.Context, script string) ([]string, error) {
 	ctx, cancel := context.WithTimeout(ctx, oracleTimeout)
 	defer cancel()
 	args := []string{"--format=json1", "--norc"}
-	if _, explicit := fixtureDialect(script); !explicit {
+	if _, source := fixtureDialect(script); source == DialectForced {
 		args = append(args, "--shell=bash")
 	}
 	cmd := exec.CommandContext(ctx, "shellcheck", append(args, "-")...)

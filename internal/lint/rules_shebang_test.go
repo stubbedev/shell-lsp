@@ -8,6 +8,34 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/parser"
 )
 
+func TestDialectSourceDecidesShellFindings(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		script string
+		source DialectSource
+		want   []string
+	}{
+		{"echo hi\n", DialectDetected, nil},
+		{"echo hi\n", DialectGuessed, []string{"SC2148 1:1"}},
+		{"echo hi\n", DialectForced, nil},
+		{"# shellcheck shell=sh\necho hi\n", DialectGuessed, nil},
+		{"#!/usr/bin/python\nprint(1)\n", DialectDetected, []string{"SC1071 1:1"}},
+		{"#!/usr/bin/python\nprint(1)\n", DialectForced, nil},
+		{"#!/bin/ash\necho hi\n", DialectDetected, []string{"SC2187 1:1"}},
+		{"#!/bin/ash\necho hi\n", DialectForced, nil},
+	} {
+		tree := parser.Parse(tc.script, dialect.Posix)
+		var got []string
+		for _, f := range Check(tree, nil, Options{DialectSource: tc.source}) {
+			got = append(got, f.Code.String()+" "+position(tc.script, f.Span.Start))
+		}
+		if !slices.Equal(got, tc.want) {
+			t.Errorf("%q from source %d: got %v, want %v", tc.script, tc.source, got, tc.want)
+		}
+	}
+}
+
 func TestShebangLines(t *testing.T) {
 	t.Parallel()
 

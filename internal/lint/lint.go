@@ -56,18 +56,25 @@ type Source struct {
 	Tree    *parser.Tree
 }
 
+type DialectSource uint8
+
+const (
+	DialectDetected DialectSource = iota
+	DialectForced
+	DialectGuessed
+)
+
 type Options struct {
-	Exclude        []Code
-	Optional       []string
-	ForcedDialect  bool
-	GuessedDialect bool
-	Sources        []Source
+	Exclude       []Code
+	Optional      []string
+	DialectSource DialectSource
+	Sources       []Source
 }
 
 func Check(tree *parser.Tree, imports []parser.Import, opts Options) []Finding {
 	p := newPass(tree, imports, opts)
-	p.shellChosen = opts.ForcedDialect || p.settings.shell
-	p.dialectGuessed = opts.GuessedDialect && !p.settings.shell
+	p.shellChosen = opts.DialectSource == DialectForced || p.settings.shell
+	p.dialectGuessed = opts.DialectSource == DialectGuessed && !p.settings.shell
 	if name, foreign := foreignInterpreter(p.text); foreign && !p.shellChosen {
 		first, _, _ := strings.Cut(p.text, "\n")
 		p.report(1071, parser.Span{Start: 0, End: len(first)}, name+" is not a shell, so this file is not linted.")

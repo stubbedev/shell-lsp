@@ -47,11 +47,18 @@ func (s *Server) findings(file *workspace.File, settings config.Settings, genera
 		return lint.Check(file.Tree, s.imports(file), lint.Options{
 			Exclude:       settings.Lint.Exclude,
 			Optional:      settings.Lint.Optional,
-			ForcedDialect: settings.Dialect != nil,
+			DialectSource: dialectSource(settings),
 			Sources:       s.followedSources(file),
 		})
 	}).([]lint.Finding)
 	return findings, stamp
+}
+
+func dialectSource(settings config.Settings) lint.DialectSource {
+	if settings.Dialect != nil {
+		return lint.DialectForced
+	}
+	return lint.DialectDetected
 }
 
 func (s *Server) diagnose(snap *snapshot) diagnosticReport {

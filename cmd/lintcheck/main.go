@@ -157,7 +157,7 @@ func analyze(ctx context.Context, path string) fileResult {
 	}
 	tree := parser.Parse(text, d)
 	var ours []finding
-	for _, f := range lint.Check(tree, nil, lint.Options{}) {
+	for _, f := range lint.Check(tree, nil, lint.Options{DialectSource: lint.DialectDetected}) {
 		line, col := position(text, f.Span.Start)
 		ours = append(ours, finding{code: f.Code, line: line, col: col})
 	}
