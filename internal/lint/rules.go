@@ -41,6 +41,7 @@ var families = []family{
 	commandWordFamily,
 	testsFamily,
 	redirectsFamily,
+	expansionsFamily,
 }
 
 var catalog, rules, commandChecks = assemble(families)

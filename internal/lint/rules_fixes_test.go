@@ -30,6 +30,12 @@ func TestAutofixes(t *testing.T) {
 		{2244, "[ \"$name\" ]\n", "[ -n \"$name\" ]\n"},
 		{2265, "[ -f a ] & [ -f b ]\n", "[ -f a ] && [ -f b ]\n"},
 		{2266, "[ -f a ] | [ -f b ]\n", "[ -f a ] || [ -f b ]\n"},
+		{2247, "echo $\"(date)\"\n", "echo \"$(date)\"\n"},
+		{2256, "dir=x\necho $\"dir\"\n", "dir=x\necho \"$dir\"\n"},
+		{2295, "echo \"${path#$root}\"\n", "echo \"${path#\"$root\"}\"\n"},
+		{2321, "slots[$((1+1))]=x\n", "slots[1+1]=x\n"},
+		{2322, "echo $(( ((1+1)) + 2 ))\n", "echo $(( (1+1) + 2 ))\n"},
+		{2323, "(( (count) ))\n", "(( count ))\n"},
 		{2314, "#!/usr/bin/env bats\n@test \"t\" {\n  ! true\n}\n", "#!/usr/bin/env bats\n@test \"t\" {\n  run ! true\n}\n"},
 	} {
 		t.Run(tc.code.String()+" "+tc.script, func(t *testing.T) {

@@ -1,0 +1,231 @@
+package lint
+
+import (
+	"mvdan.cc/sh/v3/syntax"
+
+	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/textedit"
+)
+
+var expansionsFamily = family{
+	codes: map[Code]meta{
+		2231: {severity: SeverityInfo},
+		2247: {severity: SeverityWarning},
+		2256: {severity: SeverityWarning},
+		2295: {severity: SeverityInfo},
+		2302: {severity: SeverityWarning},
+		2303: {severity: SeverityWarning},
+		2321: {severity: SeverityStyle},
+		2322: {severity: SeverityStyle},
+		2323: {severity: SeverityStyle},
+	},
+	rules: []rule{
+		{node: checkLoopGlob},
+		{node: checkTranslatedString},
+		{node: checkRemovalPattern},
+		{node: checkValueAsKey},
+		{node: checkArithmeticIndex},
+		{node: checkRedundantParentheses},
+	},
+}
+
+func checkLoopGlob(p *pass, n syntax.Node) {
+	iter, ok := n.(*syntax.WordIter)
+	if !ok {
+		return
+	}
+	for _, w := range iter.Items {
+		if !isGlob(w) {
+			continue
+		}
+		for _, part := range w.Parts {
+			switch part.(type) {
+			case *syntax.ParamExp, *syntax.CmdSubst:
+				p.reportNode(2231, part, "Quote this expansion so only the glob around it is expanded; its own value would otherwise be split and globbed too.")
+			}
+		}
+	}
+}
+
+func checkTranslatedString(p *pass, n syntax.Node) {
+	dq, ok := n.(*syntax.DblQuoted)
+	if !ok || !dq.Dollar || len(dq.Parts) == 0 {
+		return
+	}
+	lit, ok := dq.Parts[0].(*syntax.Lit)
+	if !ok || lit.Value == "" {
+		return
+	}
+	span, ok := p.span(dq)
+	if !ok {
+		return
+	}
+	swap := textedit.Edit{Start: span.Start, End: span.Start + 2, NewText: `"$`}
+	switch {
+	case lit.Value[0] == '(' || lit.Value[0] == '{':
+		p.report(2247, span, `$" starts a translated string; to quote a substitution, write "$`+lit.Value[:1]+` instead.`, swap)
+	case len(dq.Parts) == 1 && parser.IsName(lit.Value) && p.assigned(lit.Value):
+		p.report(2256, span, `$"`+lit.Value+`" is a translated string, not the variable `+lit.Value+`; write "$`+lit.Value+`" to expand it.`, swap)
+	}
+}
+
+func (p *pass) assigned(name string) bool {
+	for _, def := range p.tree.Definitions {
+		if def.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func checkRemovalPattern(p *pass, n syntax.Node) {
+	pe, ok := n.(*syntax.ParamExp)
+	if !ok || pe.Short || pe.Exp == nil || pe.Exp.Word == nil {
+		return
+	}
+	switch pe.Exp.Op {
+	case syntax.RemSmallPrefix, syntax.RemLargePrefix, syntax.RemSmallSuffix, syntax.RemLargeSuffix:
+	default:
+		return
+	}
+	for _, part := range pe.Exp.Word.Parts {
+		switch part := part.(type) {
+		case *syntax.ParamExp, *syntax.CmdSubst:
+			if cs, ok := part.(*syntax.CmdSubst); ok && (cs.TempFile || cs.ReplyVar) {
+				continue
+			}
+			if span, ok := p.span(part); ok {
+				p.report(2295, span, "Quote "+p.text[span.Start:span.End]+" inside the pattern so its value is matched literally rather than as a glob.", quoteFix(span)...)
+			}
+		}
+	}
+}
+
+func (p *pass) enclosingValueLoop(name, array string, read int) (*syntax.Word, bool) {
+	for depth := 0; ; depth++ {
+		switch n := p.ancestor(depth).(type) {
+		case nil:
+			return nil, false
+		case *syntax.ForClause:
+			iter, ok := n.Loop.(*syntax.WordIter)
+			if !ok || iter.Name == nil || iter.Name.Value != name {
+				continue
+			}
+			for _, w := range iter.Items {
+				if iterated, ok := allValuesOf(w); ok && iterated == array {
+					return w, !p.reassignedIn(n, name, read)
+				}
+			}
+		}
+	}
+}
+
+func allValuesOf(w *syntax.Word) (string, bool) {
+	pe, ok := soleExpansion(w)
+	if !ok || pe.Short || !isIndexedParam(pe) {
+		return "", false
+	}
+	index, ok := pe.Index.(*syntax.Word)
+	if !ok || index.Lit() != "@" {
+		return "", false
+	}
+	return pe.Param.Value, true
+}
+
+func (p *pass) reassignedIn(loop *syntax.ForClause, name string, read int) bool {
+	body := parser.Offset(loop.DoPos)
+	scope := p.tree.ScopeAt(body)
+	for def := range p.tree.Visible(name, scope).All() {
+		if def.Kind != parser.DefLoop && def.NameSpan.Start > body && def.NameSpan.Start < read {
+			return true
+		}
+	}
+	return false
+}
+
+func checkValueAsKey(p *pass, n syntax.Node) {
+	pe, ok := n.(*syntax.ParamExp)
+	if !ok || pe.Param == nil || !isIndexedParam(pe) {
+		return
+	}
+	index, ok := pe.Index.(*syntax.Word)
+	if !ok || len(index.Parts) != 1 {
+		return
+	}
+	var key string
+	var at syntax.Node = pe
+	switch part := index.Parts[0].(type) {
+	case *syntax.Lit:
+		key = part.Value
+	case *syntax.ParamExp:
+		if !isPlainParam(part) {
+			return
+		}
+		key = part.Param.Value
+		if !pe.Short {
+			at = part
+		}
+	default:
+		return
+	}
+	list, ok := p.enclosingValueLoop(key, pe.Param.Value, parser.Offset(pe.Pos()))
+	if !ok {
+		return
+	}
+	p.reportNode(2302, list, "This loop iterates over the values of "+pe.Param.Value+", but the loop variable is used as a key below; iterate over \"${!"+pe.Param.Value+"[@]}\" to get the keys.")
+	p.reportNode(2303, at, key+" holds a value of "+pe.Param.Value+", not a key; loop over \"${!"+pe.Param.Value+"[@]}\" if you need the keys.")
+}
+
+func checkArithmeticIndex(p *pass, n syntax.Node) {
+	a, ok := n.(*syntax.Assign)
+	if !ok || a.Name == nil || a.Index == nil {
+		return
+	}
+	w, ok := a.Index.(*syntax.Word)
+	if !ok || len(w.Parts) != 1 {
+		return
+	}
+	arith, ok := w.Parts[0].(*syntax.ArithmExp)
+	if !ok || arith.Bracket {
+		return
+	}
+	span, ok := p.span(arith)
+	if !ok || p.tree.VisibleAttrs(a.Name.Value, p.tree.ScopeAt(span.Start)).Has(parser.AttrAssoc) {
+		return
+	}
+	p.report(2321, span, "Array indices are already arithmetic; drop the $(( )) around this index.",
+		textedit.Edit{Start: span.Start, End: span.Start + 3}, textedit.Edit{Start: span.End - 2, End: span.End})
+}
+
+func checkRedundantParentheses(p *pass, n syntax.Node) {
+	switch n := n.(type) {
+	case *syntax.ParenArithm:
+		if inner, ok := n.X.(*syntax.ParenArithm); ok {
+			p.reportParentheses(2322, inner, "These doubled parentheses are redundant; one pair is enough.")
+		}
+	case *syntax.ArithmExp:
+		p.wholeParentheses(n.X, "arithmetic expansion")
+	case *syntax.ArithmCmd:
+		p.wholeParentheses(n.X, "arithmetic command")
+	case *syntax.CStyleLoop:
+		p.wholeParentheses(n.Init, "for loop")
+		p.wholeParentheses(n.Cond, "for loop")
+		p.wholeParentheses(n.Post, "for loop")
+	case *syntax.Assign:
+		p.wholeParentheses(n.Index, "array index")
+	}
+}
+
+func (p *pass) wholeParentheses(expr syntax.ArithmExpr, context string) {
+	if paren, ok := expr.(*syntax.ParenArithm); ok {
+		p.reportParentheses(2323, paren, "The parentheses around the whole "+context+" are redundant.")
+	}
+}
+
+func (p *pass) reportParentheses(code Code, paren *syntax.ParenArithm, message string) {
+	span, ok := p.span(paren)
+	if !ok {
+		return
+	}
+	p.report(code, span, message, textedit.Edit{Start: span.Start, End: span.Start + 1}, textedit.Edit{Start: span.End - 1, End: span.End})
+}
