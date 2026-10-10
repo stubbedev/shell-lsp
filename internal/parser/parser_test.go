@@ -406,7 +406,8 @@ func FuzzParse(f *testing.F) {
 func TestBuiltinAssignments(t *testing.T) {
 	t.Parallel()
 
-	src := "read -r line\nread -rp 'Name: ' name rest\nread -a parts\nmapfile -t lines < f\nprintf -v out '%s' x\ngetopts 'ab:' opt\nread -r \"$dynamic\"\nwait -n -p done %1\n"
+	src := "read -r line\nread -rp 'Name: ' name rest\nread -a parts\nmapfile -t lines < f\nprintf -v out '%s' x\ngetopts 'ab:' opt\nread -r \"$dynamic\"\nwait -n -p done %1\n" +
+		"mapfile --weird-option chunks < f\nmapfile -t rows extra < f\nprintf -v 'cells[2]' '%s' x\n"
 	tree := Parse(src, dialect.Bash)
 	got := map[string]Attr{}
 	for _, d := range tree.Definitions {
@@ -414,7 +415,10 @@ func TestBuiltinAssignments(t *testing.T) {
 			got[d.Name] = d.Attrs
 		}
 	}
-	want := map[string]Attr{"line": 0, "name": 0, "rest": 0, "parts": AttrArray, "lines": AttrArray, "out": 0, "opt": 0, "done": 0}
+	want := map[string]Attr{
+		"line": 0, "name": 0, "rest": 0, "parts": AttrArray, "lines": AttrArray, "out": 0, "opt": 0, "done": 0,
+		"chunks": AttrArray, "rows": AttrArray, "cells": AttrArray,
+	}
 	if len(got) != len(want) {
 		t.Fatalf("builtin definitions = %v, want %v", got, want)
 	}
@@ -422,6 +426,34 @@ func TestBuiltinAssignments(t *testing.T) {
 		if a, ok := got[name]; !ok || a != attrs {
 			t.Errorf("%s: attrs = %v, %t; want %v", name, a, ok, attrs)
 		}
+	}
+}
+
+func TestBuiltinAssignmentNameSpans(t *testing.T) {
+	t.Parallel()
+
+	src := "printf -v 'cells[2]' x\nread -r plain\n"
+	tree := Parse(src, dialect.Bash)
+	var got []string
+	for _, d := range tree.Definitions {
+		got = append(got, src[d.NameSpan.Start:d.NameSpan.End])
+	}
+	if want := []string{"cells", "plain"}; !slices.Equal(got, want) {
+		t.Errorf("name spans = %q, want %q", got, want)
+	}
+}
+
+func TestDeclarationsThroughWrappersAndInspectionModes(t *testing.T) {
+	t.Parallel()
+
+	src := "builtin export shipped=1\ncommand readonly sealed=2\ndeclare -f fn1\nexport -f fn2\ndeclare -F fn3\ntypeset -fx fn4\nbuiltin declare -f fn5\ndeclare +f kept\nreadonly 'quoted' plain=1\ndeclare -p shown\n"
+	tree := Parse(src, dialect.Bash)
+	var got []string
+	for _, d := range tree.Definitions {
+		got = append(got, d.Name)
+	}
+	if want := []string{"shipped", "sealed", "kept", "quoted", "plain"}; !slices.Equal(got, want) {
+		t.Errorf("definitions = %v, want %v", got, want)
 	}
 }
 

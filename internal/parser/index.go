@@ -135,7 +135,6 @@ type builder struct {
 	stack       []syntax.Node
 	scopes      []ScopeID
 	elseClauses map[*syntax.IfClause]bool
-	writeOnly   map[*syntax.Word]bool
 }
 
 func buildIndex(file *syntax.File, text string) (Index, []Error) {
@@ -144,7 +143,6 @@ func buildIndex(file *syntax.File, text string) (Index, []Error) {
 		index:       Index{Scopes: []Scope{{Span: Span{Start: 0, End: len(text)}, Parent: FileScope}}},
 		scopes:      []ScopeID{FileScope},
 		elseClauses: map[*syntax.IfClause]bool{},
-		writeOnly:   map[*syntax.Word]bool{},
 	}
 	syntax.Walk(file, b.visit)
 	slices.SortStableFunc(b.index.Keywords, func(x, y Keyword) int { return x.Span.Start - y.Span.Start })
@@ -257,10 +255,22 @@ func (b *builder) call(n *syntax.CallExpr) {
 		Args:     n.Args[1:],
 		Within:   b.scope(),
 	})
+	name, args := unwrapBuiltin(name, n.Args[1:])
 	if variant, ok := declVariants[name]; ok {
-		b.declarationWords(variant, n.Args[1:])
+		b.declarationWords(variant, args)
 	}
-	b.builtinAssignments(n, name, n.Args[1:])
+	b.builtinAssignments(n, name, args)
+}
+
+func unwrapBuiltin(name string, args []*syntax.Word) (string, []*syntax.Word) {
+	for (name == "builtin" || name == "command") && len(args) > 0 {
+		inner, ok := Literal(args[0])
+		if !ok {
+			break
+		}
+		name, args = inner, args[1:]
+	}
+	return name, args
 }
 
 var optionsWithArgument = map[string]string{
@@ -286,6 +296,9 @@ func (b *builder) builtinAssignments(call *syntax.CallExpr, name string, args []
 			names = append(names, args[i+1:]...)
 			break
 		}
+		if strings.HasPrefix(value, "--") && name != "getopts" {
+			continue
+		}
 		if strings.HasPrefix(value, "-") && len(value) > 1 && name != "getopts" {
 			last := value[len(value)-1]
 			if strings.IndexByte(argOpts, last) >= 0 && i+1 < len(args) {
@@ -308,7 +321,7 @@ func (b *builder) builtinAssignments(call *syntax.CallExpr, name string, args []
 		}
 	case "mapfile", "readarray":
 		if len(names) > 0 {
-			b.wordDefinition(call, names[len(names)-1], AttrArray)
+			b.wordDefinition(call, names[0], AttrArray)
 		}
 	case "read":
 		for _, w := range names {
@@ -325,14 +338,22 @@ func (b *builder) builtinAssignments(call *syntax.CallExpr, name string, args []
 
 func (b *builder) wordDefinition(call *syntax.CallExpr, w *syntax.Word, attrs Attr) {
 	value, ok := Literal(w)
-	if !ok || !IsName(value) || len(w.Parts) != 1 {
+	if !ok || len(w.Parts) != 1 {
 		return
 	}
-	span := b.span(w)
+	name := value
+	if base, subscript, found := strings.Cut(value, "["); found && strings.HasSuffix(subscript, "]") {
+		name = base
+		attrs |= AttrArray
+	}
+	if !IsName(name) {
+		return
+	}
+	start := nameStart(w)
 	b.index.Definitions = append(b.index.Definitions, Definition{
-		Name:     value,
-		NameSpan: span,
-		Span:     span,
+		Name:     name,
+		NameSpan: Span{Start: start, End: start + len(name)},
+		Span:     b.span(w),
 		Kind:     DefBuiltin,
 		Attrs:    attrs,
 		Within:   b.scope(),
@@ -368,9 +389,10 @@ func (b *builder) declaration(n *syntax.DeclClause) {
 	flags := declFlags{attrs: variant.attrs}
 	for _, arg := range n.Args {
 		if arg.Name == nil {
-			if word, ok := Literal(arg.Value); ok {
-				flags = flags.apply(word)
-			}
+			flags = b.declarationWord(variant, flags, arg.Value)
+			continue
+		}
+		if flags.inspects {
 			continue
 		}
 		b.assign(arg, DefDeclare, flags, variant.isLocal(b.scope(), flags.global))
@@ -380,31 +402,44 @@ func (b *builder) declaration(n *syntax.DeclClause) {
 func (b *builder) declarationWords(variant declVariant, args []*syntax.Word) {
 	flags := declFlags{attrs: variant.attrs}
 	for _, arg := range args {
-		value, ok := Literal(arg)
-		if !ok {
-			continue
-		}
-		if strings.HasPrefix(value, "-") || strings.HasPrefix(value, "+") {
-			flags = flags.apply(value)
-			continue
-		}
-		name, _, _ := strings.Cut(value, "=")
-		if !IsName(name) {
-			continue
-		}
-		start := offset(arg.Pos())
-		b.index.Definitions = append(b.index.Definitions, Definition{
-			Name:     name,
-			NameSpan: Span{Start: start, End: start + len(name)},
-			Span:     b.span(arg),
-			Kind:     DefDeclare,
-			Attrs:    flags.attrs,
-			Cleared:  flags.cleared,
-			Local:    variant.isLocal(b.scope(), flags.global),
-			Within:   b.scope(),
-			Node:     arg,
-		})
+		flags = b.declarationWord(variant, flags, arg)
 	}
+}
+
+func (b *builder) declarationWord(variant declVariant, flags declFlags, arg *syntax.Word) declFlags {
+	value, ok := Literal(arg)
+	if !ok {
+		return flags
+	}
+	if strings.HasPrefix(value, "-") || strings.HasPrefix(value, "+") {
+		return flags.apply(value)
+	}
+	name, _, _ := strings.Cut(value, "=")
+	if flags.inspects || !IsName(name) {
+		return flags
+	}
+	start := nameStart(arg)
+	b.index.Definitions = append(b.index.Definitions, Definition{
+		Name:     name,
+		NameSpan: Span{Start: start, End: start + len(name)},
+		Span:     b.span(arg),
+		Kind:     DefDeclare,
+		Attrs:    flags.attrs,
+		Cleared:  flags.cleared,
+		Local:    variant.isLocal(b.scope(), flags.global),
+		Within:   b.scope(),
+		Node:     arg,
+	})
+	return flags
+}
+
+func nameStart(w *syntax.Word) int {
+	start := offset(w.Pos())
+	switch w.Parts[0].(type) {
+	case *syntax.SglQuoted, *syntax.DblQuoted:
+		return start + 1
+	}
+	return start
 }
 
 func (v declVariant) isLocal(scope ScopeID, global bool) bool {
@@ -415,9 +450,10 @@ func (v declVariant) isLocal(scope ScopeID, global bool) bool {
 }
 
 type declFlags struct {
-	attrs   Attr
-	cleared Attr
-	global  bool
+	attrs    Attr
+	cleared  Attr
+	global   bool
+	inspects bool
 }
 
 var flagAttrs = map[rune]Attr{'a': AttrArray, 'A': AttrAssoc, 'x': AttrExport, 'r': AttrReadonly, 'i': AttrInteger, 'n': AttrNameref}
@@ -432,6 +468,8 @@ func (f declFlags) apply(word string) declFlags {
 		switch {
 		case flag == 'g':
 			f.global = set
+		case flag == 'f' || flag == 'F' || flag == 'p':
+			f.inspects = set
 		case !isAttr:
 		case set:
 			f.attrs |= attr
@@ -493,12 +531,19 @@ func (b *builder) reference(name string, span Span) {
 }
 
 func (b *builder) arithmeticWord(w *syntax.Word) {
-	if !isArithmetic(b.parent()) || b.writeOnly[w] {
-		return
-	}
-	if name, ok := arithmeticName(w); ok {
+	if name, ok := ArithmeticRead(b.parent(), w); ok {
 		b.reference(name, b.span(w))
 	}
+}
+
+func ArithmeticRead(parent syntax.Node, w *syntax.Word) (string, bool) {
+	if !isArithmetic(parent) {
+		return "", false
+	}
+	if bin, ok := parent.(*syntax.BinaryArithm); ok && bin.Op == syntax.Assgn && bin.X == w {
+		return "", false
+	}
+	return ArithmeticName(w)
 }
 
 func isArithmetic(node syntax.Node) bool {
@@ -510,7 +555,7 @@ func isArithmetic(node syntax.Node) bool {
 	return false
 }
 
-func arithmeticName(expr syntax.ArithmExpr) (string, bool) {
+func ArithmeticName(expr syntax.ArithmExpr) (string, bool) {
 	w, ok := expr.(*syntax.Word)
 	if !ok || len(w.Parts) != 1 {
 		return "", false
@@ -533,17 +578,13 @@ func IsArithmeticAssignment(op syntax.BinAritOperator) bool {
 }
 
 func (b *builder) arithmeticAssign(n *syntax.BinaryArithm) {
-	if !IsArithmeticAssignment(n.Op) {
-		return
+	if IsArithmeticAssignment(n.Op) {
+		b.arithmeticDefinition(n.X, n)
 	}
-	if w, ok := n.X.(*syntax.Word); ok && n.Op == syntax.Assgn {
-		b.writeOnly[w] = true
-	}
-	b.arithmeticDefinition(n.X, n)
 }
 
 func (b *builder) arithmeticDefinition(target syntax.ArithmExpr, expr syntax.ArithmExpr) {
-	name, ok := arithmeticName(target)
+	name, ok := ArithmeticName(target)
 	if !ok {
 		return
 	}
