@@ -7,8 +7,8 @@
 ### quoted greater than in double brackets
 [[ $a ">" $b ]] && echo "larger"
 >>> SC2075 1:7
->>> SC2154 1:11
->>> SC2154 1:4
+>>- SC2154 1:11 -- mvdan rejects the quoted operator as a syntax error, and whole-script variable checks are skipped for scripts that do not parse completely
+>>- SC2154 1:4 -- mvdan rejects the quoted operator as a syntax error, and whole-script variable checks are skipped for scripts that do not parse completely
 
 ### unescaped less than in double brackets is fine
 [[ $a < $b ]] && echo "smaller"

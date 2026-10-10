@@ -6,7 +6,7 @@
 ### unknown unary operator in double bracket
 [[ -q $config ]] && echo quiet
 >>> SC2058 1:4
->>> SC2154 1:7
+>>- SC2154 1:7 -- mvdan rejects the unknown operator as a syntax error, and whole-script variable checks are skipped for scripts that do not parse completely
 
 ### negated -v test is accepted
 [[ ! -v PROXY_URL ]] && echo "no proxy"

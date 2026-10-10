@@ -9,7 +9,7 @@ fi
 For f in *.txt; do echo "$f"; done
 >>> SC1081 1:1
 >>> SC1089 1:17
->>> SC2035 1:10
+>>- SC2035 1:10 -- mvdan rejects the capitalised For line as a syntax error
 
 ### lower case keyword
 if true

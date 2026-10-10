@@ -2,7 +2,7 @@
 slot=2
 echo "${server$slot}"
 >>> SC2082 2:7
->>> SC2154 2:7
+>>- SC2154 2:7 -- mvdan rejects the nested expansion as a syntax error, and whole-script variable checks are skipped for scripts that do not parse completely
 
 ### dollar-hash nested as the name
 echo "${$#}"
@@ -12,7 +12,7 @@ echo "${$#}"
 n=1
 echo "${cfg${n}_$((n + 1))}"
 >>> SC2082 2:7
->>> SC2154 2:7
+>>- SC2154 2:7 -- mvdan rejects the nested expansion as a syntax error, and whole-script variable checks are skipped for scripts that do not parse completely
 
 ### pattern substitution with an expansion is fine
 needle=o

@@ -10,6 +10,7 @@ fi
 >>> SC1073 1:19
 >>> SC1123 3:1
 >>+ SC2086 5:8 -- shellcheck abandons the script at its parse error; this linter parses it and keeps checking
+>>+ SC2154 5:8 -- shellcheck abandons the script at its parse error; this linter parses it and keeps checking
 
 ### directive just before done
 for f in *; do

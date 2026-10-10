@@ -45,6 +45,7 @@ find . -name '*.bak' | du --exclude-from=/dev/fd/0 -s .
 ### yes into interactive recursive copy
 yes | cp -ri templates/ project/
 >>> none
+>>+ SC2336 1:10 -- shellcheck 0.11.0 predates this check; POSIX leaves cp -r implementation-defined, so -R is the portable spelling
 
 ### yes into rm with the interactive long flag
 yes | rm --interactive *.log

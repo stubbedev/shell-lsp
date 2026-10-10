@@ -11,3 +11,4 @@ echo "$retries"
 ### three equals signs are decoration
 banner===3
 >>> SC2272 1:1
+>>+ SC2034 1:1 -- bash parses banner===3 as an assignment of ==3, and banner is never read

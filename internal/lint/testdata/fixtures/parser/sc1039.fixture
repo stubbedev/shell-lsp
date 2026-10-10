@@ -14,6 +14,7 @@ Usage: tool [options]
 >>- SC1039 3:1 -- the here-document is never closed, a parser syntax error whose message names the indented end token
 >>> SC1072 4:1
 >>> SC1073 1:5
+>>+ SC2102 2:13 -- mvdan rejects the unclosed here-document and its recovery drops the cat line, so the body is linted as a command
 
 ### dash form indented with tabs only
 cat <<-END

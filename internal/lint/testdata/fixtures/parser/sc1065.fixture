@@ -3,8 +3,8 @@ add(a, b) {
   echo "$((a + b))"
 }
 >>- SC1065 1:5 -- bash rejects a parameter list in a function definition, so this is a parser syntax error saying so
->>> SC2154 2:12
->>> SC2154 2:16
+>>- SC2154 2:12 -- mvdan rejects the parameter list as a syntax error, and whole-script variable checks are skipped for scripts that do not parse completely
+>>- SC2154 2:16 -- mvdan rejects the parameter list as a syntax error, and whole-script variable checks are skipped for scripts that do not parse completely
 
 ### empty parentheses
 add() {

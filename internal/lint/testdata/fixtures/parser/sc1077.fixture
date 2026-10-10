@@ -5,6 +5,7 @@ echo "$stamp"
 >>> SC1077 1:7
 >>- SC2006 1:7 -- an acute accent is a literal character to the shell; SC1077 reports the likely typo instead of treating it as a backtick
 >>> SC2116 1:7
+>>+ SC2154 2:7 -- an acute accent is a literal character, so stamp=´echo is only a prefix assignment for the command \"today\"´ and stamp stays unset
 
 ### backticks around a listing
 files=`ls *.txt`

@@ -11,5 +11,5 @@ echo ${"1"}
 ### double quotes with a space fall to SC2301
 echo ${"two words"}
 >>- SC2086 1:6 -- mvdan rejects a quoted name inside ${}; reported as a syntax error instead
->>> SC2154 1:6
+>>- SC2154 1:6 -- mvdan rejects the quoted name as a syntax error, and whole-script variable checks are skipped for scripts that do not parse completely
 >>> SC2301 1:8

@@ -1,11 +1,11 @@
 ### single-quoted name inside braces
 echo "${'user'}"
->>> SC2154 1:7
+>>- SC2154 1:7 -- mvdan rejects the quoted name as a syntax error, and whole-script variable checks are skipped for scripts that do not parse completely
 >>> SC2301 1:9
 
 ### double quotes with a space inside braces
 echo "${"two words"}"
->>> SC2154 1:7
+>>- SC2154 1:7 -- mvdan rejects the quoted name as a syntax error, and whole-script variable checks are skipped for scripts that do not parse completely
 >>> SC2301 1:9
 
 ### extglob as first part

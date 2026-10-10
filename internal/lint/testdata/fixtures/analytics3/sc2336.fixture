@@ -1,10 +1,12 @@
 ### cp -r is not reported by shellcheck 0.11.0
 cp -r templates/ /srv/site/
 >>> none
+>>+ SC2336 1:4 -- shellcheck 0.11.0 predates this check; POSIX leaves cp -r implementation-defined, so -R is the portable spelling
 
 ### cp -vr cluster is not reported by shellcheck 0.11.0
 cp -vr assets build/
 >>> none
+>>+ SC2336 1:4 -- shellcheck 0.11.0 predates this check; POSIX leaves cp -r implementation-defined, so -R is the portable spelling
 
 ### cp with uppercase -R
 cp -R templates/ /srv/site/

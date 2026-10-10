@@ -16,8 +16,8 @@ ElseIf true
 elseif[ $x=1 ]
 >>> SC1131 1:1
 >>- SC2086 1:9 -- mvdan rejects elseif[ as a command word and reports a syntax error
->>> SC2154 1:9
->>> SC2171 1:14
+>>- SC2154 1:9 -- mvdan rejects elseif[ as a command word and reports a syntax error, and whole-script variable checks are skipped for scripts that do not parse completely
+>>- SC2171 1:14 -- mvdan rejects elseif[ as a command word and reports a syntax error
 >>- SC2288 1:1 -- mvdan rejects elseif[ as a command word and reports a syntax error
 
 ### command name starting with other letters

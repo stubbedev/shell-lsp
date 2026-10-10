@@ -36,3 +36,4 @@ echo "usr"/"local"
 ### equals sign between quoted parts in declare
 declare "mode"="fast"
 >>> none
+>>+ SC2034 1:9 -- bash assigns mode through declare "mode"="fast", and mode is never read

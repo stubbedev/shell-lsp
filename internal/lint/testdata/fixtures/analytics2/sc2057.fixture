@@ -1,8 +1,8 @@
 ### unknown binary operator in double bracket
 [[ $src -xz $dst ]] && echo odd
 >>> SC2057 1:9
->>> SC2154 1:13
->>> SC2154 1:4
+>>- SC2154 1:13 -- mvdan rejects the unknown operator as a syntax error, and whole-script variable checks are skipped for scripts that do not parse completely
+>>- SC2154 1:4 -- mvdan rejects the unknown operator as a syntax error, and whole-script variable checks are skipped for scripts that do not parse completely
 
 ### misspelled -nt operator
 [ "$archive" -newer "$source" ] && echo stale

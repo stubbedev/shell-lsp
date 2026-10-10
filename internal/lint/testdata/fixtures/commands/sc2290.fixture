@@ -14,7 +14,7 @@ export PATH +=:/opt/bin
 
 ### let with spaces around equals
 let retries = 0
->>> SC2154 1:5
+>>- SC2154 1:5 -- mvdan rejects the spaced let expression as a syntax error, and whole-script variable checks are skipped for scripts that do not parse completely
 >>- SC2219 1:1 -- mvdan rejects let with spaces around =; the line is reported as a syntax error instead
 >>- SC2290 1:13 -- mvdan rejects let with spaces around =; the line is reported as a syntax error instead
 

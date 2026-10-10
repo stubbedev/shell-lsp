@@ -1,15 +1,15 @@
 ### decimal times a variable
 (( scaled = 1.5 * factor ))
->>> SC2034 1:11
+>>- SC2034 1:11 -- mvdan rejects the decimal literal as a syntax error, and whole-script variable checks are skipped for scripts that do not parse completely
 >>> SC2079 1:13
->>> SC2154 1:19
+>>- SC2154 1:19 -- mvdan rejects the decimal literal as a syntax error, and whole-script variable checks are skipped for scripts that do not parse completely
 
 ### decimal used as an array index
 weights[0.5]=light
->>> SC2034 1:1
+>>- SC2034 1:1 -- mvdan rejects the decimal subscript as a syntax error, and whole-script variable checks are skipped for scripts that do not parse completely
 >>> SC2079 1:9
 
 ### associative array key is fine
 declare -A weights
 weights[0.5]=light
->>> SC2034 2:1
+>>- SC2034 2:1 -- mvdan rejects the decimal subscript as a syntax error, and whole-script variable checks are skipped for scripts that do not parse completely

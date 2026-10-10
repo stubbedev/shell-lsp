@@ -91,19 +91,23 @@ func checkBracketTest(p *pass, args []*syntax.Word) {
 	if closing, _ := parser.Literal(args[len(args)-1]); closing != "]" {
 		return
 	}
-	for _, op := range bracketTestOperators(args[:len(args)-1]) {
-		span, ok := p.span(op.word)
+	t, _ := parseBracketTest(args[:len(args)-1])
+	for _, op := range t.operands {
+		if op.shape != shapeUnary && op.shape != shapeLeft {
+			continue
+		}
+		span, ok := p.span(op.opWord)
 		if !ok {
 			continue
 		}
 		issues := binaryTestIssues
-		if op.unary {
+		if op.shape == shapeUnary {
 			issues = unaryTestIssues
 		}
-		if issue, ok := issues[op.name]; ok {
+		if issue, ok := issues[op.op]; ok {
 			p.nonPortable(issue, span)
 		}
-		if op.negation != nil && p.dialect == dialect.Bash && (op.name == "-o" || op.name == "-a") {
+		if op.negation != nil && p.dialect == dialect.Bash && (op.op == "-o" || op.op == "-a") {
 			p.reportNegatedConnective(op)
 		}
 	}
@@ -122,12 +126,12 @@ func checkRedirectedComparison(p *pass, call *syntax.CallExpr) {
 	}
 }
 
-func (p *pass) reportNegatedConnective(op testOperator) {
+func (p *pass) reportNegatedConnective(op testOperand) {
 	span, ok := p.span(op.negation)
 	if !ok {
 		return
 	}
-	if op.name == "-o" {
+	if op.op == "-o" {
 		p.report(2332, span, "With three arguments, [ ! -o name ] treats -o as the binary or, so it is always true; use [[ ! -o name ]] or ! [ -o name ].")
 		return
 	}
@@ -146,84 +150,5 @@ func checkTestArguments(p *pass, call *syntax.CallExpr) {
 	op, ok := parser.Literal(call.Args[operator])
 	if issue, found := issues[op]; ok && found {
 		p.nonPortableNode(issue, call)
-	}
-}
-
-type testOperator struct {
-	word     *syntax.Word
-	name     string
-	unary    bool
-	negation *syntax.Word
-}
-
-type bracketParser struct {
-	words []*syntax.Word
-	names []string
-	pos   int
-	out   []testOperator
-}
-
-func bracketTestOperators(words []*syntax.Word) []testOperator {
-	b := bracketParser{words: words, names: make([]string, len(words))}
-	for i, w := range words {
-		b.names[i], _ = parser.Literal(w)
-	}
-	for b.pos < len(words) {
-		b.or()
-		b.pos++
-	}
-	return b.out
-}
-
-func (b *bracketParser) peek(offset int) string {
-	if b.pos+offset >= len(b.names) {
-		return ""
-	}
-	return b.names[b.pos+offset]
-}
-
-func (b *bracketParser) or() {
-	b.and()
-	for b.peek(0) == "-o" {
-		b.pos++
-		b.and()
-	}
-}
-
-func (b *bracketParser) and() {
-	b.not(nil)
-	for b.peek(0) == "-a" {
-		b.pos++
-		b.not(nil)
-	}
-}
-
-func (b *bracketParser) not(negation *syntax.Word) {
-	if b.peek(0) == "!" && b.pos+1 < len(b.words) {
-		bang := b.words[b.pos]
-		b.pos++
-		b.not(bang)
-		return
-	}
-	b.primary(negation)
-}
-
-func (b *bracketParser) primary(negation *syntax.Word) {
-	switch {
-	case b.pos >= len(b.words):
-	case b.peek(0) == "(":
-		b.pos++
-		b.or()
-		if b.peek(0) == ")" {
-			b.pos++
-		}
-	case unaryTestOperators[b.peek(0)] && b.pos+1 < len(b.words):
-		b.out = append(b.out, testOperator{word: b.words[b.pos], name: b.peek(0), unary: true, negation: negation})
-		b.pos += 2
-	case binaryTestOperators[b.peek(1)] && b.pos+2 < len(b.words):
-		b.out = append(b.out, testOperator{word: b.words[b.pos+1], name: b.peek(1)})
-		b.pos += 3
-	default:
-		b.pos++
 	}
 }

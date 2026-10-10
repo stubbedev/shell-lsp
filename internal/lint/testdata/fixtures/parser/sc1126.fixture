@@ -7,13 +7,13 @@ echo $1 # shellcheck disable=SC2086
 ### directive after an assignment-only prefix
 name=widget # shellcheck disable=SC2034
 >>> SC1126 1:13
->>> SC2034 1:1
+>>- SC2034 1:1 -- this linter honours a directive written after a command on the same line
 
 ### directive directly after for-in
 for f in # shellcheck disable=SC2034
 do echo hi; done
 >>> SC1126 1:10
->>> SC2034 1:1
+>>- SC2034 1:1 -- this linter honours a directive written after a command on the same line
 
 ### directive at the start of a pipeline stage
 ls |

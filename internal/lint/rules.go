@@ -45,6 +45,7 @@ var families = []family{
 	errexitFamily,
 	structureFamily,
 	flowFamily,
+	testOperandsFamily,
 }
 
 var catalog, rules, commandChecks = assemble(families)

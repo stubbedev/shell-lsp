@@ -6,3 +6,4 @@ read arr[val]
 ### quoted array index in read
 read 'arr[val]'
 >>> SC2162 1:1
+>>+ SC2034 1:6 -- read 'arr[val]' assigns an element of arr, which is never read

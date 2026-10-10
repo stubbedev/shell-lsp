@@ -13,13 +13,13 @@ echo "${ports[@]}"
 slot=2
 cells=($slot=filled)
 echo "${cells[@]}"
->>> SC2191 2:13
+>>- SC2191 2:13 -- mvdan rejects an expansion followed by = inside an array literal; reported as a syntax error instead
 >>- SC2206 2:8 -- mvdan rejects an expansion followed by = inside an array literal; reported as a syntax error instead
 
 ### arithmetic expansion followed by equals and value
 grid=($((1 + 1))=center)
 echo "${grid[@]}"
->>> SC2191 1:17
+>>- SC2191 1:17 -- mvdan rejects an expansion followed by = inside an array literal; reported as a syntax error instead
 
 ### undeclared array with name=value element
 settings=(debug=true level=3)

@@ -321,8 +321,14 @@ func isPlainParam(pe *syntax.ParamExp) bool {
 }
 
 func hasBraceExpansion(w *syntax.Word) bool {
-	split := *w
-	return syntax.SplitBraces(&split)
+	split := &syntax.Word{Parts: w.Parts}
+	if !syntax.SplitBraces(split) {
+		return false
+	}
+	return slices.ContainsFunc(split.Parts, func(part syntax.WordPart) bool {
+		brace, ok := part.(*syntax.BraceExp)
+		return ok && (brace.Sequence || len(brace.Elems) > 1)
+	})
 }
 
 var commandWrappers = map[string]string{
