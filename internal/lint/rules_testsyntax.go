@@ -46,21 +46,19 @@ func binaryTestOperatorsLongestFirst() []string {
 
 func checkTestCommandSyntax(p *pass, n syntax.Node) {
 	call, ok := n.(*syntax.CallExpr)
-	if !ok || len(call.Args) == 0 {
+	if !ok {
 		return
 	}
-	name := call.Args[0].Lit()
-	if name != "[" && name != "test" {
+	test, ok := testCommandOf(call)
+	if !ok {
 		return
 	}
-	args := call.Args[1:]
-	if name == "[" {
-		if closing := closingBracket(args); closing >= 0 {
-			p.checkAfterClosingBracket(args[closing+1:])
-			args = args[:closing]
-		} else {
-			p.checkUnclosedBracket(call)
-		}
+	args := test.args
+	if closing := closingBracket(args); test.style == singleBracket && closing >= 0 {
+		p.checkAfterClosingBracket(args[closing+1:])
+		args = args[:closing]
+	} else if test.unterminated {
+		p.checkUnclosedBracket(call)
 	}
 	for i, arg := range args {
 		p.checkTestArgument(args, i, arg)
