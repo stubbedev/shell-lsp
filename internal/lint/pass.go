@@ -2,6 +2,7 @@ package lint
 
 import (
 	"fmt"
+	"runtime/debug"
 
 	"mvdan.cc/sh/v3/syntax"
 
@@ -25,7 +26,8 @@ type pass struct {
 	bats         bool
 	stack        []syntax.Node
 	stmts        []parser.Span
-	flow         *flowResult
+	flowChecks   []func(flow *flowResult)
+	statements   []nestedStmt
 	catalog      map[Code]meta
 	rules        []rule
 	nodeChecks   nodeDispatch
@@ -56,9 +58,7 @@ func newPass(tree *parser.Tree, imports []parser.Import, opts Options) *pass {
 }
 
 func (p *pass) run() {
-	if p.settings.extended {
-		p.flow = analyzeFlow(p.tree, p.imports, p.bats)
-	}
+	flow := p.startFlow()
 	syntax.Walk(p.tree.File, func(n syntax.Node) bool {
 		if n == nil {
 			p.stack = p.stack[:len(p.stack)-1]
@@ -76,11 +76,50 @@ func (p *pass) run() {
 		p.stack = append(p.stack, n)
 		return true
 	})
+	result := flow()
+	for _, check := range p.flowChecks {
+		check(result)
+	}
 	for _, r := range p.rules {
 		if r.finish != nil {
 			r.finish(p)
 		}
 	}
+}
+
+type flowOutcome struct {
+	result  *flowResult
+	failure string
+}
+
+func (p *pass) startFlow() func() *flowResult {
+	if !p.settings.extended {
+		return func() *flowResult { return nil }
+	}
+	done := make(chan flowOutcome, 1)
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				done <- flowOutcome{failure: fmt.Sprintf("%v\n%s", r, debug.Stack())}
+			}
+		}()
+		done <- flowOutcome{result: analyzeFlow(p.tree, p.imports, p.bats)}
+	}()
+	return func() *flowResult {
+		outcome := <-done
+		if outcome.failure != "" {
+			panic("lint: flow analysis failed: " + outcome.failure)
+		}
+		return outcome.result
+	}
+}
+
+func (p *pass) withFlow(check func(flow *flowResult)) {
+	if !p.settings.extended {
+		check(nil)
+		return
+	}
+	p.flowChecks = append(p.flowChecks, check)
 }
 
 func (p *pass) parent() syntax.Node { return p.ancestor(0) }

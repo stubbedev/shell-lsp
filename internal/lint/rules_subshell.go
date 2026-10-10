@@ -38,15 +38,20 @@ func checkLostModification(p *pass, n syntax.Node) {
 	default:
 		return
 	}
-	lost, ok := p.flow.lostRead(n)
-	if !ok {
+	if !p.settings.extended || !p.tree.Defines(name) {
 		return
 	}
-	span, ok := p.span(n)
-	if !ok {
-		return
-	}
-	cause := subshellCauses[lost.kind]
-	p.report(2030, lost.site, "This change to "+name+" happens in a subshell caused by "+cause+", so it is gone once that subshell exits.")
-	p.report(2031, span, name+" was changed in a subshell ("+cause+" on line "+strconv.Itoa(p.tree.Line(lost.site.Start))+"), so this still sees the value from before that change.")
+	p.withFlow(func(flow *flowResult) {
+		lost, ok := flow.lostRead(n)
+		if !ok {
+			return
+		}
+		span, ok := p.span(n)
+		if !ok {
+			return
+		}
+		cause := subshellCauses[lost.kind]
+		p.report(2030, lost.site, "This change to "+name+" happens in a subshell caused by "+cause+", so it is gone once that subshell exits.")
+		p.report(2031, span, name+" was changed in a subshell ("+cause+" on line "+strconv.Itoa(p.tree.Line(lost.site.Start))+"), so this still sees the value from before that change.")
+	})
 }

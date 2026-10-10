@@ -130,7 +130,7 @@ func checkExportedExpansion(p *pass, c command) {
 }
 
 func checkReadInSameDeclaration(p *pass, c command) {
-	if c.decl == nil || p.flow == nil || len(c.decl.Args) < 2 {
+	if c.decl == nil || !p.settings.extended || len(c.decl.Args) < 2 {
 		return
 	}
 	var assigned []*syntax.Assign

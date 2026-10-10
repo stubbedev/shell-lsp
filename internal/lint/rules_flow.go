@@ -29,16 +29,31 @@ var flowFamily = family{
 
 func checkUnreachable(p *pass, n syntax.Node) {
 	stmt, ok := n.(*syntax.Stmt)
-	if !ok || p.flow == nil || p.flow.reached[stmt] {
+	if !ok || !p.settings.extended {
 		return
 	}
 	if _, body := p.parent().(*syntax.FuncDecl); body {
 		return
 	}
-	if outer, ok := p.enclosingStmt(); ok && !p.flow.reached[outer] {
-		return
+	if len(p.statements) == 0 {
+		p.withFlow(p.reportUnreachable)
 	}
-	p.reportNode(2317, stmt, "This command can never run, because every path to it exits, returns or loops forever first.")
+	outer, _ := p.enclosingStmt()
+	p.statements = append(p.statements, nestedStmt{stmt: stmt, outer: outer})
+}
+
+type nestedStmt struct {
+	stmt  *syntax.Stmt
+	outer *syntax.Stmt
+}
+
+func (p *pass) reportUnreachable(flow *flowResult) {
+	for _, s := range p.statements {
+		if flow.reached[s.stmt] || s.outer != nil && !flow.reached[s.outer] {
+			continue
+		}
+		p.reportNode(2317, s.stmt, "This command can never run, because every path to it exits, returns or loops forever first.")
+	}
 }
 
 func (p *pass) enclosingStmt() (*syntax.Stmt, bool) {
@@ -54,39 +69,58 @@ func (p *pass) enclosingStmt() (*syntax.Stmt, bool) {
 
 func checkUninvokedFunction(p *pass, n syntax.Node) {
 	decl, ok := n.(*syntax.FuncDecl)
-	if !ok || p.flow == nil || !p.flow.deadFunctions[decl] {
+	if !ok || !p.settings.extended {
 		return
 	}
+	var outers []*syntax.FuncDecl
 	for depth := 0; p.ancestor(depth) != nil; depth++ {
-		if outer, ok := p.ancestor(depth).(*syntax.FuncDecl); ok && p.flow.deadFunctions[outer] {
-			return
+		if outer, ok := p.ancestor(depth).(*syntax.FuncDecl); ok {
+			outers = append(outers, outer)
 		}
 	}
-	p.reportNode(2329, decl, "This function is never invoked, and the script cannot be sourced to call it later because it always exits first.")
+	p.withFlow(func(flow *flowResult) {
+		if !flow.deadFunctions[decl] || slices.ContainsFunc(outers, func(outer *syntax.FuncDecl) bool { return flow.deadFunctions[outer] }) {
+			return
+		}
+		p.reportNode(2329, decl, "This function is never invoked, and the script cannot be sourced to call it later because it always exits first.")
+	})
 }
 
 func checkCallBeforeDefinition(p *pass, n syntax.Node) {
 	call, ok := n.(*syntax.CallExpr)
-	if !ok || !p.flow.forwardCall(call) {
+	if !ok || !p.settings.extended || len(call.Args) == 0 {
 		return
 	}
-	p.reportNode(2218, call, "This function is only defined further down, so it does not exist yet when this line runs; move the definition up.")
+	name, ok := parser.Literal(call.Args[0])
+	if !ok {
+		return
+	}
+	if _, defined := p.tree.FunctionNamed(name); !defined {
+		return
+	}
+	p.withFlow(func(flow *flowResult) {
+		if flow.forwardCall(call) {
+			p.reportNode(2218, call, "This function is only defined further down, so it does not exist yet when this line runs; move the definition up.")
+		}
+	})
 }
 
 func checkStatusSource(p *pass, n syntax.Node) {
 	pe, ok := n.(*syntax.ParamExp)
-	if !ok || p.flow == nil || pe.Param == nil || pe.Param.Value != "?" {
+	if !ok || !p.settings.extended || pe.Param == nil || pe.Param.Value != "?" {
 		return
 	}
-	setters := p.flow.statusReads[pe]
-	switch {
-	case len(setters) == 0:
-	case !slices.ContainsFunc(setters, func(s *syntax.Stmt) bool { return !isEcho(s) }):
-		p.reportNode(2320, pe, "This $? is the status of echo, not of the command before it; save $? in a variable first.")
-	case !slices.ContainsFunc(setters, func(s *syntax.Stmt) bool { return !isTestCommand(s) }) &&
-		slices.ContainsFunc(setters, func(s *syntax.Stmt) bool { return p.flow.controls(s, pe) }):
-		p.reportNode(2319, pe, "This $? is the status of the preceding test, not of the command it checked; save $? in a variable first.")
-	}
+	p.withFlow(func(flow *flowResult) {
+		setters := flow.statusReads[pe]
+		switch {
+		case len(setters) == 0:
+		case !slices.ContainsFunc(setters, func(s *syntax.Stmt) bool { return !isEcho(s) }):
+			p.reportNode(2320, pe, "This $? is the status of echo, not of the command before it; save $? in a variable first.")
+		case !slices.ContainsFunc(setters, func(s *syntax.Stmt) bool { return !isTestCommand(s) }) &&
+			slices.ContainsFunc(setters, func(s *syntax.Stmt) bool { return flow.controls(s, pe) }):
+			p.reportNode(2319, pe, "This $? is the status of the preceding test, not of the command it checked; save $? in a variable first.")
+		}
+	})
 }
 
 func (r *flowResult) controls(setter *syntax.Stmt, pe *syntax.ParamExp) bool {
@@ -105,10 +139,12 @@ func isEcho(stmt *syntax.Stmt) bool {
 
 func checkNumericAppend(p *pass, n syntax.Node) {
 	a, ok := n.(*syntax.Assign)
-	if !ok || !a.Append || p.flow == nil {
+	if !ok || !a.Append || !p.settings.extended {
 		return
 	}
-	if fact := p.flow.appends[a]; fact.numeric && !fact.integer {
-		p.reportNode(2324, a, "+= on a variable appends text, so this produces a longer string rather than a sum; use (( var += n )) to add.")
-	}
+	p.withFlow(func(flow *flowResult) {
+		if fact := flow.appends[a]; fact.numeric && !fact.integer {
+			p.reportNode(2324, a, "+= on a variable appends text, so this produces a longer string rather than a sum; use (( var += n )) to add.")
+		}
+	})
 }

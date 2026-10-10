@@ -410,7 +410,7 @@ func (p *pass) checkComparison(double bool, op testOp, x, y *syntax.Word) {
 	}
 	switch {
 	case operator.isOrdering():
-		p.checkOrdering(double, op, x, y)
+		p.withFlow(func(flow *flowResult) { p.checkOrdering(flow, double, op, x, y) })
 	case operator.kind == arithmeticTest:
 		p.checkArithmeticOperands(double, op, x, y)
 	}
@@ -429,10 +429,10 @@ func (p *pass) checkComparison(double bool, op testOp, x, y *syntax.Word) {
 	}
 }
 
-func (p *pass) checkOrdering(double bool, op testOp, x, y *syntax.Word) {
+func (p *pass) checkOrdering(flow *flowResult, double bool, op testOp, x, y *syntax.Word) {
 	posix := p.dialect == dialect.Posix
 	strict := testOperators[op.name].kind == strictOrderTest
-	if (strict || !posix) && (p.isNumericOperand(x) || p.isNumericOperand(y)) {
+	if (strict || !posix) && (isNumericOperand(flow, x) || isNumericOperand(flow, y)) {
 		p.report(2071, op.span, op.name+" compares strings, not numbers; use "+numericOperator[op.name]+" (or (( )) arithmetic) for numbers.")
 		return
 	}
@@ -516,12 +516,12 @@ func isNumericText(s string) bool {
 	return strings.Trim(s, "0123456789+-. ") == ""
 }
 
-func (p *pass) isNumericOperand(w *syntax.Word) bool {
+func isNumericOperand(flow *flowResult, w *syntax.Word) bool {
 	switch part := solePart(w).(type) {
 	case *syntax.ArithmExp:
 		return true
 	case *syntax.ParamExp:
-		return p.flow.mayHoldInteger(part)
+		return flow.mayHoldInteger(part)
 	}
 	text := roughText(w)
 	return text != "" && strings.Trim(text, "0123456789") == ""

@@ -67,15 +67,17 @@ func checkUnquotedExpansion(p *pass, n syntax.Node) {
 	if context != contextSplit || spacelessSpecials[pe.Param.Value] || p.namesAssignment(pe) {
 		return
 	}
-	if p.flow.expansion(pe).clean() {
-		p.report(2248, span, text+" holds no spaces or globs today, but quoting it keeps it safe if that changes: \""+text+"\".", quoteFix(span)...)
-		return
-	}
-	if isDefaultAssignment(pe) && p.isArgumentOf(":") {
-		p.report(2223, span, "This default assignment is expanded unquoted, so its value is globbed on every run; quote it.", quoteFix(span)...)
-		return
-	}
-	p.report(2086, span, "Unquoted "+text+" is split on whitespace and expanded as a glob; double-quote it.", quoteFix(span)...)
+	defaultAssignment := isDefaultAssignment(pe) && p.isArgumentOf(":")
+	p.withFlow(func(flow *flowResult) {
+		switch {
+		case flow.expansion(pe).clean():
+			p.report(2248, span, text+" holds no spaces or globs today, but quoting it keeps it safe if that changes: \""+text+"\".", quoteFix(span)...)
+		case defaultAssignment:
+			p.report(2223, span, "This default assignment is expanded unquoted, so its value is globbed on every run; quote it.", quoteFix(span)...)
+		default:
+			p.report(2086, span, "Unquoted "+text+" is split on whitespace and expanded as a glob; double-quote it.", quoteFix(span)...)
+		}
+	})
 }
 
 func (p *pass) firstArrayPart(pe *syntax.ParamExp) bool {
