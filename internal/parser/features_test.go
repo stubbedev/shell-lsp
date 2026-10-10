@@ -110,7 +110,7 @@ func TestFeaturesOverCorpus(t *testing.T) {
 				}
 			}
 			if len(tree.Errors) == 0 {
-				formatted, err := format.Format(text, d, format.Options{})
+				formatted, err := format.Format(tree, format.Options{})
 				if err != nil {
 					t.Errorf("formatting a valid document: %v", err)
 				} else if got := textedit.Apply(text, format.Edits(text, formatted)); got != formatted {

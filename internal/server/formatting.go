@@ -49,7 +49,7 @@ func (s *Server) format(docs *docstore.View, uri string, opts lsp.FormattingOpti
 		return nil, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "formatting is disabled by shellLsp.format.enable")
 	}
 	text := snap.doc.Text()
-	formatted, err := format.Format(text, snap.dialect, formatOptions(snap.settings.Format, opts))
+	formatted, err := format.Format(snap.tree, formatOptions(snap.settings.Format, opts))
 	if err != nil {
 		return nil, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "%v", err)
 	}

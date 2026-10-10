@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 )
 
@@ -58,7 +59,7 @@ func TestFormat(t *testing.T) {
 	t.Parallel()
 
 	src := "if true;then\necho  hi\nfi\nf(){\nx=1\n}\n"
-	got, err := Format(src, dialect.Bash, Options{})
+	got, err := Format(parser.Parse(src, dialect.Bash), Options{})
 	if err != nil {
 		t.Fatalf("Format() error = %v", err)
 	}
@@ -66,7 +67,7 @@ func TestFormat(t *testing.T) {
 	if got != want {
 		t.Errorf("Format() = %q, want %q", got, want)
 	}
-	spaces, err := Format(src, dialect.Bash, Options{Indent: 2, FunctionNextLine: true})
+	spaces, err := Format(parser.Parse(src, dialect.Bash), Options{Indent: 2, FunctionNextLine: true})
 	if err != nil {
 		t.Fatalf("Format(spaces) error = %v", err)
 	}
@@ -79,7 +80,7 @@ func TestFormatOptions(t *testing.T) {
 	t.Parallel()
 
 	src := "case $x in\na) ls >out && echo `date` ;;\nesac\n"
-	got, err := Format(src, dialect.Bash, Options{SwitchCaseIndent: true, SpaceRedirects: true, Simplify: true})
+	got, err := Format(parser.Parse(src, dialect.Bash), Options{SwitchCaseIndent: true, SpaceRedirects: true, Simplify: true})
 	if err != nil {
 		t.Fatalf("Format() error = %v", err)
 	}
@@ -88,19 +89,33 @@ func TestFormatOptions(t *testing.T) {
 			t.Errorf("Format() = %q, lacks %q", got, want)
 		}
 	}
-	minified, err := Format("f() {\n\techo hi\n}\n", dialect.Bash, Options{Minify: true})
+	minified, err := Format(parser.Parse("f() {\n\techo hi\n}\n", dialect.Bash), Options{Minify: true})
 	if err != nil || strings.Contains(minified, "\t") {
 		t.Errorf("Format(minify) = %q, %v", minified, err)
+	}
+}
+
+func TestFormatLeavesTheTreeUntouched(t *testing.T) {
+	t.Parallel()
+
+	tree := parser.Parse("echo $(( $x + 1 ))\n", dialect.Bash)
+	simplified, err := Format(tree, Options{Simplify: true})
+	if err != nil || simplified != "echo $((x + 1))\n" {
+		t.Fatalf("Format(simplify) = %q, %v", simplified, err)
+	}
+	plain, err := Format(tree, Options{})
+	if err != nil || plain != "echo $(($x + 1))\n" {
+		t.Errorf("Format after a simplifying format = %q, %v", plain, err)
 	}
 }
 
 func TestFormatRefusesBrokenInput(t *testing.T) {
 	t.Parallel()
 
-	if _, err := Format("if true; then\n", dialect.Bash, Options{}); err == nil || !strings.Contains(err.Error(), "syntax errors") {
+	if _, err := Format(parser.Parse("if true; then\n", dialect.Bash), Options{}); err == nil || !strings.Contains(err.Error(), "syntax errors") {
 		t.Errorf("Format(broken) error = %v", err)
 	}
-	if _, err := Format("arr=(1 2)\n", dialect.Posix, Options{}); err == nil {
+	if _, err := Format(parser.Parse("arr=(1 2)\n", dialect.Posix), Options{}); err == nil {
 		t.Error("Format accepted bash arrays as POSIX sh")
 	}
 }
@@ -108,7 +123,7 @@ func TestFormatRefusesBrokenInput(t *testing.T) {
 func TestFormatZsh(t *testing.T) {
 	t.Parallel()
 
-	got, err := Format("for f in **/*(.); do\nprint -r -- ${(U)f:t}\ndone\n", dialect.Zsh, Options{})
+	got, err := Format(parser.Parse("for f in **/*(.); do\nprint -r -- ${(U)f:t}\ndone\n", dialect.Zsh), Options{})
 	if errors.Is(err, ErrNotIdempotent) {
 		t.Skipf("zsh printing is not stable upstream yet: %v", err)
 	}

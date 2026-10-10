@@ -239,12 +239,28 @@ func BenchmarkCodeActions(b *testing.B) {
 }
 
 func BenchmarkFormat(b *testing.B) {
+	tree := parser.Parse(text, dialect.Bash)
 	for b.Loop() {
-		formatted, err := format.Format(text, dialect.Bash, format.Options{})
+		formatted, err := format.Format(tree, format.Options{})
 		if err != nil {
 			b.Fatal(err)
 		}
 		format.Edits(text, formatted)
+	}
+}
+
+func BenchmarkFormatFormatted(b *testing.B) {
+	formatted, err := format.Format(parser.Parse(text, dialect.Bash), format.Options{})
+	if err != nil {
+		b.Fatal(err)
+	}
+	tree := parser.Parse(formatted, dialect.Bash)
+	for b.Loop() {
+		again, err := format.Format(tree, format.Options{})
+		if err != nil {
+			b.Fatal(err)
+		}
+		format.Edits(formatted, again)
 	}
 }
 
