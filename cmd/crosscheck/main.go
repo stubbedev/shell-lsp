@@ -242,7 +242,7 @@ func diagnosticKeys(diags []lsp.Diagnostic) []string {
 }
 
 func check(ours, theirs *client, path string) (fileReport, error) {
-	raw, err := os.ReadFile(path)
+	raw, err := os.ReadFile(path) //nolint:gosec
 	if err != nil {
 		return fileReport{}, err
 	}
