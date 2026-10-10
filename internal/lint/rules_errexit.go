@@ -40,7 +40,7 @@ func checkNegationUnderErrexit(p *pass, n syntax.Node) {
 	for _, r := range stmt.Redirs {
 		end = max(end, parser.Offset(r.End()))
 	}
-	p.report(2251, parser.Span{Start: start, End: start + 1}, "A negated command never triggers set -e, so this check has no effect; make it fail explicitly, e.g. with && exit 1.",
+	p.report(2251, posSpan(stmt.Pos(), 1), "A negated command never triggers set -e, so this check has no effect; make it fail explicitly, e.g. with && exit 1.",
 		textedit.Edit{Start: start, End: start + 1}, textedit.Edit{Start: end, End: end, NewText: " && exit 1"})
 }
 
@@ -172,7 +172,6 @@ func (p *pass) losesErrexit(cs *syntax.CmdSubst) bool {
 }
 
 var harmlessCommands = setOf("echo", "basename", "dirname", "printf", "set", "shopt")
-
 
 func checkMaskedReturns(p *pass, n syntax.Node) {
 	if !p.settings.enabled(optionalMaskedReturns) {

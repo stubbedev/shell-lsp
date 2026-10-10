@@ -387,7 +387,7 @@ func stdoutDiversion(redirs []*syntax.Redirect) (*syntax.Redirect, bool) {
 
 func checkRedirectSideEffects(p *pass, n syntax.Node) {
 	stmt, ok := n.(*syntax.Stmt)
-	if !ok || len(stmt.Redirs) == 0 || p.dialect == dialect.Dash {
+	if !ok || len(stmt.Redirs) == 0 || p.dialect == dialect.Dash || p.dialect == dialect.Busybox {
 		return
 	}
 	if call, ok := stmt.Cmd.(*syntax.CallExpr); !ok || len(call.Args) == 0 {

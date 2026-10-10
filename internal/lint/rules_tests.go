@@ -106,7 +106,7 @@ func (p *pass) checkNegatedOperand(e *syntax.UnaryTest) {
 	if e.Op != syntax.TsNot {
 		return
 	}
-	at := parser.Span{Start: parser.Offset(e.OpPos), End: parser.Offset(e.OpPos) + 1}
+	at := posSpan(e.OpPos, 1)
 	switch inner := e.X.(type) {
 	case *syntax.UnaryTest:
 		if opposite, ok := oppositeStringTests[inner.Op]; ok {
@@ -133,7 +133,7 @@ func (p *pass) checkLegacyExists(e *syntax.UnaryTest) {
 
 func (p *pass) preferDoubleBrackets(t testCommand) {
 	switch p.dialect {
-	case dialect.Bash, dialect.Ksh, dialect.Zsh:
+	case dialect.Bash, dialect.Ksh, dialect.Zsh, dialect.Busybox:
 	default:
 		return
 	}
@@ -261,7 +261,7 @@ func checkNegatedTestCommand(p *pass, n syntax.Node) {
 	if !ok || !t.bracketed() {
 		return
 	}
-	at := parser.Span{Start: parser.Offset(stmt.Pos()), End: parser.Offset(stmt.Pos()) + 1}
+	at := posSpan(stmt.Pos(), 1)
 	open, closing := "[ ", " ]"
 	if t.style == doubleBracket {
 		open, closing = "[[ ", " ]]"
@@ -284,7 +284,7 @@ func checkBackgroundedTest(p *pass, n syntax.Node) {
 		return
 	}
 	at := parser.Offset(stmt.Semicolon)
-	p.report(2265, parser.Span{Start: at, End: at + 1}, "A single & runs the test in the background instead of combining it; use && for a logical AND.",
+	p.report(2265, posSpan(stmt.Semicolon, 1), "A single & runs the test in the background instead of combining it; use && for a logical AND.",
 		textedit.Edit{Start: at + 1, End: at + 1, NewText: "&"})
 }
 
@@ -294,7 +294,7 @@ func checkPipedTest(p *pass, n syntax.Node) {
 		return
 	}
 	at := parser.Offset(bin.OpPos)
-	p.report(2266, parser.Span{Start: at, End: at + 1}, "A single | pipes between commands instead of combining tests; use || for a logical OR.",
+	p.report(2266, posSpan(bin.OpPos, 1), "A single | pipes between commands instead of combining tests; use || for a logical OR.",
 		textedit.Edit{Start: at + 1, End: at + 1, NewText: "|"})
 }
 
@@ -383,7 +383,7 @@ func checkBatsNegation(p *pass, n syntax.Node) {
 			severity = SeverityStyle
 		}
 		start := parser.Offset(stmt.Pos())
-		at := parser.Span{Start: start, End: start + 1}
+		at := posSpan(stmt.Pos(), 1)
 		if t, ok := testCommandOf(stmt.Cmd); ok && t.bracketed() {
 			p.reportWithSeverity(2315, severity, at, batsNegationMessage(last, "fold the ! into the test, e.g. [ ! -e file ] or [[ ! -e file ]]"))
 			continue

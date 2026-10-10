@@ -246,11 +246,6 @@ func dollarRemoval(p *pass, pe *syntax.ParamExp) []textedit.Edit {
 	return []textedit.Edit{{Start: span.Start, End: span.Start + 2}, {Start: span.End - 1, End: span.End}}
 }
 
-func isPlainParam(pe *syntax.ParamExp) bool {
-	return pe.Param != nil && !pe.Excl && !pe.Length && !pe.Width && pe.Flags == nil && pe.NestedParam == nil &&
-		pe.Index == nil && len(pe.Modifiers) == 0 && pe.Slice == nil && pe.Repl == nil && pe.Names == 0 && pe.Exp == nil
-}
-
 func isIndexedParam(pe *syntax.ParamExp) bool {
 	if pe.Index == nil {
 		return false
@@ -274,8 +269,8 @@ func (p *pass) reportDollarZero(at syntax.Node) {
 		p.report(2277, span, "$0 cannot be assigned like a variable; in bash, assign BASH_ARGV0 to change it.", textedit.Edit{Start: replace.Start, End: replace.End, NewText: "BASH_ARGV0"})
 	case dialect.Ksh:
 		p.reportNode(2278, at, "$0 cannot be assigned in ksh.")
-	case dialect.Dash:
-		p.reportNode(2279, at, "$0 cannot be assigned in dash or busybox sh.")
+	case dialect.Dash, dialect.Busybox:
+		p.reportNode(2279, at, "$0 cannot be assigned in "+shellLabel(p.dialect)+".")
 	default:
 		p.reportNode(2280, at, "$0 cannot be assigned, and sh offers no portable way to change it.")
 	}
@@ -366,18 +361,9 @@ func literalShape(w *syntax.Word) string {
 		switch part := part.(type) {
 		case *syntax.Lit:
 			unquotedShape(&sb, part.Value)
-		case *syntax.SglQuoted:
-			sb.WriteString(part.Value)
-		case *syntax.DblQuoted:
-			for _, inner := range part.Parts {
-				if lit, ok := inner.(*syntax.Lit); ok {
-					sb.WriteString(lit.Value)
-					continue
-				}
-				sb.WriteByte('x')
-			}
 		default:
-			sb.WriteByte('x')
+			text, _ := parser.Text(&syntax.Word{Parts: []syntax.WordPart{part}}, "x")
+			sb.WriteString(text)
 		}
 	}
 	return sb.String()
@@ -427,19 +413,8 @@ func checkSelfAssignment(p *pass, n syntax.Node) {
 		if a.Append || a.Naked || a.Index != nil || a.Array != nil || a.Name == nil || a.Value == nil {
 			continue
 		}
-		pe, ok := soleExpansion(a.Value)
-		if ok && isPlainParam(pe) && pe.Param.Value == a.Name.Value {
+		if pe, ok := soleBareExpansion(a.Value); ok && pe.Param.Value == a.Name.Value {
 			p.reportNode(2269, a, a.Name.Value+" is assigned its own value, which does nothing; remove the assignment or fix the name.")
 		}
 	}
-}
-
-func soleExpansion(w *syntax.Word) (*syntax.ParamExp, bool) {
-	parts := w.Parts
-	if len(parts) == 1 {
-		if dq, ok := parts[0].(*syntax.DblQuoted); ok {
-			parts = dq.Parts
-		}
-	}
-	return soleParamExp(parts)
 }

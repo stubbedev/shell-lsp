@@ -176,7 +176,8 @@ func unquotedName(w *syntax.Word) (string, bool) {
 
 func registerAliases(args []*syntax.Word, defined map[string]aliasDefinition) {
 	for _, arg := range args {
-		name, value, found := strings.Cut(aliasText(arg), "=")
+		text, _ := parser.Text(arg, "-")
+		name, value, found := strings.Cut(text, "=")
 		if !found || value == "" || !parser.IsName(name) {
 			continue
 		}
@@ -184,19 +185,4 @@ func registerAliases(args []*syntax.Word, defined map[string]aliasDefinition) {
 			defined[name] = aliasDefinition{word: arg, name: name}
 		}
 	}
-}
-
-func aliasText(w *syntax.Word) string {
-	var sb strings.Builder
-	for _, part := range w.Parts {
-		switch part := part.(type) {
-		case *syntax.Lit:
-			sb.WriteString(part.Value)
-		case *syntax.SglQuoted:
-			sb.WriteString(part.Value)
-		default:
-			sb.WriteByte('-')
-		}
-	}
-	return sb.String()
 }
