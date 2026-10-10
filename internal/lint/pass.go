@@ -2,7 +2,6 @@ package lint
 
 import (
 	"fmt"
-	"strings"
 
 	"mvdan.cc/sh/v3/syntax"
 
@@ -35,7 +34,7 @@ type pass struct {
 }
 
 func newPass(tree *parser.Tree, imports []parser.Import, settings fileWide) *pass {
-	return &pass{tree: tree, imports: imports, text: tree.Text(), dialect: tree.Dialect, bats: isBats(tree.Text()), catalog: catalog, rules: rules, commands: commandChecks, settings: settings}
+	return &pass{tree: tree, imports: imports, text: tree.Text(), dialect: tree.Dialect, bats: parser.IsBats(tree.Text()), catalog: catalog, rules: rules, commands: commandChecks, settings: settings}
 }
 
 func (p *pass) run() {
@@ -104,9 +103,4 @@ func (p *pass) meta(code Code) meta {
 		panic(fmt.Sprintf("lint: %s is reported but missing from the catalog", code))
 	}
 	return m
-}
-
-func isBats(text string) bool {
-	first, _, _ := strings.Cut(text, "\n")
-	return strings.HasPrefix(first, "#!") && strings.Contains(first, "bats")
 }

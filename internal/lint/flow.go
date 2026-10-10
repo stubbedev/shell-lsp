@@ -407,11 +407,22 @@ func (in *interpreter) command(stmt *syntax.Stmt, s *state) *state {
 	case *syntax.CoprocClause:
 		in.subshell(func(sub *state) *state { return in.stmt(cmd.Stmt, sub) }, s)
 	case *syntax.TestDecl:
-		in.subshell(func(sub *state) *state { return in.stmt(cmd.Body, sub) }, s)
+		s = in.testBody(cmd, s)
 	default:
 		s = in.evaluate(stmt, s)
 	}
 	return s
+}
+
+func (in *interpreter) testBody(cmd *syntax.TestDecl, s *state) *state {
+	saved := in.loops
+	in.loops = nil
+	after := in.stmt(cmd.Body, s.clone())
+	in.loops = saved
+	if !after.live {
+		return s
+	}
+	return after
 }
 
 func (in *interpreter) redirects(stmt *syntax.Stmt, s *state) *state {
