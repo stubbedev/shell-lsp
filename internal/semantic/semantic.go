@@ -1,7 +1,6 @@
 package semantic
 
 import (
-	"slices"
 	"strings"
 
 	"mvdan.cc/sh/v3/syntax"
@@ -255,11 +254,7 @@ func (g *generator) operator(pos syntax.Pos, op string) {
 }
 
 func (g *generator) result() []Token {
-	order := make([]uint64, len(g.tokens))
-	for i, t := range g.tokens {
-		order[i] = uint64(t.Span.Start)<<32 | uint64(i) //nolint:gosec
-	}
-	slices.Sort(order)
+	order := orderByStart(g.tokens, len(g.text))
 	out := make([]Token, 0, len(g.tokens))
 	end := -1
 	for _, key := range order {
@@ -271,6 +266,30 @@ func (g *generator) result() []Token {
 		end = t.Span.End
 	}
 	return out
+}
+
+func orderByStart(tokens []Token, maxStart int) []uint64 {
+	order := make([]uint64, len(tokens))
+	for i, t := range tokens {
+		order[i] = uint64(t.Span.Start)<<32 | uint64(i) //nolint:gosec
+	}
+	scratch := make([]uint64, len(tokens))
+	for shift := 32; maxStart>>(shift-32) > 0; shift += 8 {
+		var offsets [257]int
+		for _, key := range order {
+			offsets[key>>shift&0xff+1]++
+		}
+		for digit := 1; digit < len(offsets); digit++ {
+			offsets[digit] += offsets[digit-1]
+		}
+		for _, key := range order {
+			digit := key >> shift & 0xff
+			scratch[offsets[digit]] = key
+			offsets[digit]++
+		}
+		order, scratch = scratch, order
+	}
+	return order
 }
 
 func isNumber(s string) bool {

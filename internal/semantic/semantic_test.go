@@ -1,7 +1,10 @@
 package semantic
 
 import (
+	"cmp"
 	"fmt"
+	"math/rand/v2"
+	"slices"
 	"strings"
 	"testing"
 
@@ -130,5 +133,28 @@ func TestSelectionPath(t *testing.T) {
 	want := []string{"HOME", "$HOME", "\"$HOME/x\"", "echo \"$HOME/x\"", "echo \"$HOME/x\" | grep y", "if true; then\n\techo \"$HOME/x\" | grep y\nfi", text}
 	if strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Errorf("selection path:\n%q\nwant\n%q", got, want)
+	}
+}
+
+func TestOrderByStartIsAStableSortByStart(t *testing.T) {
+	t.Parallel()
+
+	for seed, maxStart := range []int{0, 1, 255, 256, 70000, 1 << 24} {
+		rng := rand.New(rand.NewPCG(uint64(seed), 7))
+		tokens := make([]Token, 5000)
+		for i := range tokens {
+			tokens[i].Span.Start = rng.IntN(maxStart + 1)
+		}
+		want := make([]int, len(tokens))
+		for i := range want {
+			want[i] = i
+		}
+		slices.SortStableFunc(want, func(a, b int) int { return cmp.Compare(tokens[a].Span.Start, tokens[b].Span.Start) })
+		got := orderByStart(tokens, maxStart)
+		for i, key := range got {
+			if int(uint32(key)) != want[i] {
+				t.Fatalf("max start %d: position %d holds token %d, want %d", maxStart, i, uint32(key), want[i])
+			}
+		}
 	}
 }
