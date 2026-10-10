@@ -9,7 +9,7 @@ var (
 	bashOnly   = dialect.SetOf(dialect.Bash)
 	zshOnly    = dialect.SetOf(dialect.Zsh)
 	zshKsh     = dialect.SetOf(dialect.Zsh, dialect.Ksh)
-	localShell = dialect.SetOf(dialect.Bash, dialect.Zsh, dialect.Dash, dialect.Ksh)
+	localShell = dialect.SetOf(dialect.Bash, dialect.Zsh, dialect.Dash, dialect.Ksh, dialect.Busybox)
 )
 
 var builtins = []Entry{

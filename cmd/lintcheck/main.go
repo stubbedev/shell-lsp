@@ -117,7 +117,7 @@ func isShellScript(path string) bool {
 
 func shellName(d dialect.Dialect) (string, bool) {
 	switch d {
-	case dialect.Bash, dialect.Dash, dialect.Ksh:
+	case dialect.Bash, dialect.Dash, dialect.Ksh, dialect.Busybox:
 		return d.String(), true
 	case dialect.Posix:
 		return "sh", true

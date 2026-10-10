@@ -40,10 +40,24 @@ func TestDetectPrecedence(t *testing.T) {
 			URI: "file:///w/untitled", LanguageID: "plaintext",
 			Text: "# shellcheck shell=dash\n",
 		}, want: Dash},
-		{name: "shellcheck directive mid-file", in: Input{
-			URI: "file:///w/untitled", LanguageID: "plaintext",
+		{name: "shellcheck directive beats shebang", in: Input{
+			URI: "file:///w/x.sh", LanguageID: "sh",
 			Text: "#!/bin/sh\n# shellcheck shell=ksh\n",
+		}, want: Ksh},
+		{name: "shellcheck directive after the first command is ignored", in: Input{
+			Text: "#!/bin/sh\n:\n# shellcheck shell=bash\n",
 		}, want: Posix},
+		{name: "first shellcheck directive wins", in: Input{
+			Text: "\n# shellcheck shell=sh\n# shellcheck shell=bash\n",
+		}, want: Posix},
+		{name: "unknown shellcheck shell means bash", in: Input{
+			Text: "#!/bin/sh\n# shellcheck shell=fish\n",
+		}, want: Bash},
+		{name: "quoted busybox directive", in: Input{
+			Text: "# shellcheck shell='busybox sh'\n",
+		}, want: Busybox},
+		{name: "shebang busybox ash", in: Input{Text: "#!/bin/busybox ash\n"}, want: Busybox},
+		{name: "shebang env busybox sh", in: Input{Text: "#!/usr/bin/env busybox sh\n"}, want: Busybox},
 		{name: "modeline last resort", in: Input{
 			URI: "file:///w/untitled", LanguageID: "plaintext",
 			Text: "# vim: set ft=zsh:\n",
@@ -81,6 +95,8 @@ func TestFromNameTable(t *testing.T) {
 		"bash": Bash, "BASH": Bash, "shellscript": Bash,
 		"zsh": Zsh, "sh": Posix, "posix": Posix,
 		"dash": Dash, "ash": Dash, "ksh": Ksh, "ksh93": Ksh, "mksh": Ksh,
+		"bats": Bash, "ksh88": Ksh, "oksh": Ksh,
+		"busybox": Busybox, "busybox sh": Busybox, "busybox ash": Busybox,
 	}
 	for name, want := range tests {
 		got, ok := FromName(name)
@@ -113,6 +129,9 @@ func TestFeaturesDiffer(t *testing.T) {
 	if Posix.Features().Local {
 		t.Error("posix sh claims local support")
 	}
+	if !Busybox.Features().Local || !Busybox.Features().DoubleBracket || Busybox.Features().Arrays {
+		t.Error("busybox sh features misattributed")
+	}
 }
 
 func TestSet(t *testing.T) {
@@ -122,7 +141,7 @@ func TestSet(t *testing.T) {
 	if !s.Has(Bash) || !s.Has(Ksh) || s.Has(Zsh) || s.Has(Posix) || s.Has(Dash) {
 		t.Errorf("SetOf(Bash, Ksh) membership wrong: %08b", s)
 	}
-	for _, d := range []Dialect{Bash, Zsh, Posix, Dash, Ksh} {
+	for _, d := range []Dialect{Bash, Zsh, Posix, Dash, Ksh, Busybox} {
 		if !All.Has(d) {
 			t.Errorf("All lacks %s", d)
 		}

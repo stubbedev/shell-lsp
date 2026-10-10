@@ -19,6 +19,8 @@ func TestParse(t *testing.T) {
 		{"# shellcheckx disable=SC2086", false, nil},
 		{"# not a directive", false, nil},
 		{"echo # shellcheck disable=SC2086", false, nil},
+		{"# shellcheck shell='busybox sh' disable=\"SC1,SC2\"", true, Directive{{"shell", "busybox sh"}, {"disable", "SC1,SC2"}}},
+		{"# shellcheck source=a'#'b #comment", true, Directive{{"source", "a#b"}}},
 	} {
 		got, ok := Parse(tc.comment)
 		if ok != tc.ok || !slices.Equal(got, tc.want) {

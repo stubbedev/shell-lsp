@@ -55,7 +55,7 @@ func directivesOf(p *pass) suppressions {
 		}
 		s := suppression{}
 		for _, value := range d.Values("disable") {
-			for item := range strings.SplitSeq(strings.Trim(value, `"'`), ",") {
+			for item := range strings.SplitSeq(value, ",") {
 				s.add(item)
 			}
 		}
@@ -118,12 +118,12 @@ func fileWideDirectives(tree *parser.Tree, enabled []string) fileWide {
 			continue
 		}
 		for _, value := range d.Values("enable") {
-			for name := range strings.SplitSeq(strings.Trim(value, `"'`), ",") {
+			for name := range strings.SplitSeq(value, ",") {
 				out.optional[strings.TrimSpace(name)] = true
 			}
 		}
 		if value, found := d.Value("extended-analysis"); found {
-			out.extended = strings.Trim(value, `"'`) != "false"
+			out.extended = value != "false"
 		}
 	}
 	return out

@@ -11,7 +11,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 )
 
-var allDialects = []dialect.Dialect{dialect.Bash, dialect.Zsh, dialect.Posix, dialect.Dash, dialect.Ksh}
+var allDialects = []dialect.Dialect{dialect.Bash, dialect.Zsh, dialect.Posix, dialect.Dash, dialect.Ksh, dialect.Busybox}
 
 func messages(tree *Tree) []string {
 	out := make([]string, 0, len(tree.Errors))

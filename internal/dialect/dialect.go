@@ -5,6 +5,7 @@ package dialect
 
 import (
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/directive"
@@ -18,6 +19,7 @@ const (
 	Posix
 	Dash
 	Ksh
+	Busybox
 )
 
 func (d Dialect) String() string {
@@ -32,6 +34,8 @@ func (d Dialect) String() string {
 		return "dash"
 	case Ksh:
 		return "ksh"
+	case Busybox:
+		return "busybox"
 	}
 	return "unknown"
 }
@@ -42,15 +46,17 @@ func (d Dialect) String() string {
 // through one table.
 func FromName(name string) (Dialect, bool) {
 	switch strings.ToLower(strings.TrimSpace(name)) {
-	case "bash", "shellscript", "bashrc":
+	case "bash", "bats", "shellscript", "bashrc":
 		return Bash, true
 	case "zsh":
 		return Zsh, true
 	case "sh", "posix", "posixsh":
 		return Posix, true
-	case "dash", "ash", "busybox sh", "busybox ash":
+	case "dash", "ash":
 		return Dash, true
-	case "ksh", "ksh93", "mksh":
+	case "busybox", "busybox sh", "busybox ash":
+		return Busybox, true
+	case "ksh", "ksh88", "ksh93", "mksh", "oksh":
 		return Ksh, true
 	}
 	return 0, false
@@ -90,6 +96,8 @@ func (d Dialect) Features() Features {
 		return Features{SplitsUnquoted: true}
 	case Dash:
 		return Features{Local: true, SplitsUnquoted: true, DeclarationAssigns: true}
+	case Busybox:
+		return Features{DoubleBracket: true, Local: true, SplitsUnquoted: true, DeclarationAssigns: true}
 	case Ksh:
 		return Features{
 			Arrays: true, AssociativeArrays: true, DoubleBracket: true,
@@ -107,15 +115,23 @@ type Input struct {
 	Text       string
 }
 
-// Detect resolves the dialect of a document. Precedence, per issue #4:
-// explicit override, shebang (with interpreter resolved through PATH so
+// Detect resolves the dialect of a document. Precedence: explicit
+// override, a shellcheck shell directive in the comment header before
+// the first command (an unrecognised shell there means bash, as in
+// shellcheck), shebang (with interpreter resolved through PATH so
 // `#!/usr/bin/env bash` works, flags like `#!/bin/sh -e` tolerated),
-// file extension, editor languageId, shellcheck directive, vim
-// modeline. The default is bash, matching the common editor setup
-// where shellscript buffers are bash.
+// file extension, editor languageId, vim modeline. The default is
+// bash, matching the common editor setup where shellscript buffers
+// are bash.
 func Detect(override *Dialect, in Input) Dialect {
 	if override != nil {
 		return *override
+	}
+	if name, ok := headerShellDirective(in.Text); ok {
+		if d, known := FromName(name); known {
+			return d
+		}
+		return Bash
 	}
 	if d, ok := FromShebang(in.Text); ok {
 		return d
@@ -124,9 +140,6 @@ func Detect(override *Dialect, in Input) Dialect {
 		return d
 	}
 	if d, ok := FromName(in.LanguageID); ok {
-		return d
-	}
-	if d, ok := fromShellcheckDirective(in.Text); ok {
 		return d
 	}
 	if d, ok := fromModeline(in.Text); ok {
@@ -150,19 +163,20 @@ func Interpreter(text string) (string, bool) {
 		return "", false
 	}
 	fields := strings.Fields(rest)
+	if len(fields) > 0 && filepath.Base(fields[0]) == "env" {
+		i := slices.IndexFunc(fields[1:], func(field string) bool {
+			return !strings.HasPrefix(field, "-") && !strings.Contains(field, "=")
+		})
+		if i < 0 {
+			return "", false
+		}
+		fields = fields[1+i:]
+	}
 	if len(fields) == 0 {
 		return "", false
 	}
 	name := filepath.Base(fields[0])
-	switch {
-	case name == "env":
-		for _, field := range fields[1:] {
-			if !strings.HasPrefix(field, "-") && !strings.Contains(field, "=") {
-				return filepath.Base(field), true
-			}
-		}
-		return "", false
-	case name == "busybox" && len(fields) > 1:
+	if name == "busybox" && len(fields) > 1 {
 		return name + " " + fields[1], true
 	}
 	return name, true
@@ -185,22 +199,22 @@ func FromFileName(path string) (Dialect, bool) {
 	return 0, false
 }
 
-func fromShellcheckDirective(text string) (Dialect, bool) {
-	seen := 0
+func headerShellDirective(text string) (string, bool) {
 	for line := range strings.SplitSeq(text, "\n") {
-		seen++
-		if seen > 50 {
-			break
-		}
-		d, ok := directive.Parse(line)
-		if !ok {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
 			continue
 		}
-		if value, ok := d.Value("shell"); ok {
-			return FromName(value)
+		if !strings.HasPrefix(trimmed, "#") {
+			return "", false
+		}
+		if d, ok := directive.Parse(trimmed); ok {
+			if value, ok := d.Value("shell"); ok {
+				return value, true
+			}
 		}
 	}
-	return 0, false
+	return "", false
 }
 
 func fromModeline(text string) (Dialect, bool) {
@@ -231,7 +245,7 @@ func fromModeline(text string) (Dialect, bool) {
 
 type Set uint8
 
-const All Set = 1<<Bash | 1<<Zsh | 1<<Posix | 1<<Dash | 1<<Ksh
+const All Set = 1<<Bash | 1<<Zsh | 1<<Posix | 1<<Dash | 1<<Ksh | 1<<Busybox
 
 func SetOf(dialects ...Dialect) Set {
 	var s Set

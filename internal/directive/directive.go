@@ -20,15 +20,45 @@ func Parse(comment string) (Directive, bool) {
 		return nil, false
 	}
 	var d Directive
-	for field := range strings.FieldsSeq(rest) {
-		if strings.HasPrefix(field, "#") {
-			break
-		}
+	for _, field := range fields(rest) {
 		if key, value, ok := strings.Cut(field, "="); ok {
 			d = append(d, Pair{Key: key, Value: value})
 		}
 	}
 	return d, true
+}
+
+func fields(s string) []string {
+	var out []string
+	var current strings.Builder
+	var quote byte
+	inField := false
+	for i := range len(s) {
+		c := s[i]
+		switch {
+		case quote != 0 && c == quote:
+			quote = 0
+		case quote != 0:
+			current.WriteByte(c)
+		case c == ' ' || c == '\t':
+			if inField {
+				out = append(out, current.String())
+				current.Reset()
+				inField = false
+			}
+		case c == '#' && !inField:
+			return out
+		case c == '\'' || c == '"':
+			quote, inField = c, true
+		default:
+			current.WriteByte(c)
+			inField = true
+		}
+	}
+	if inField {
+		out = append(out, current.String())
+	}
+	return out
 }
 
 func (d Directive) Value(key string) (string, bool) {
