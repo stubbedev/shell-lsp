@@ -13,6 +13,8 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 )
 
+var byteOrderMark = []byte{0xef, 0xbb, 0xbf}
+
 const (
 	maxRecoveredTokens = 64
 	maxUnrecoverable   = 32
@@ -59,6 +61,9 @@ func Parse(text string, d dialect.Dialect) *Tree {
 		syntax.RecoverErrors(maxRecoveredTokens),
 	)
 	src := []byte(text)
+	if bytes.HasPrefix(src, byteOrderMark) {
+		copy(src, "   ")
+	}
 	var errs []Error
 	var file *syntax.File
 	for range maxUnrecoverable {

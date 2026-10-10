@@ -33,6 +33,18 @@ func TestValidScriptHasNoErrors(t *testing.T) {
 	}
 }
 
+func TestByteOrderMarkIsNotPartOfTheShebang(t *testing.T) {
+	t.Parallel()
+
+	tree := Parse("\xef\xbb\xbf#!/bin/sh\necho hi\n", dialect.Posix)
+	if len(tree.Commands) != 1 || tree.Commands[0].Name != "echo" {
+		t.Errorf("commands = %+v, want only echo", tree.Commands)
+	}
+	if len(tree.Comments) != 1 || tree.Comments[0].Span.Start != 3 {
+		t.Errorf("comments = %+v, want the shebang after the byte order mark", tree.Comments)
+	}
+}
+
 func TestRecoveredClosersReportMissingTokens(t *testing.T) {
 	t.Parallel()
 

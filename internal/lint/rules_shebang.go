@@ -8,15 +8,24 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/parser"
 )
 
+const byteOrderMark = "\xef\xbb\xbf"
+
 var shebangFamily = family{
 	codes: map[Code]meta{
+		1082: {severity: SeverityError},
+		1084: {severity: SeverityError},
+		1104: {severity: SeverityError},
+		1113: {severity: SeverityError},
+		1114: {severity: SeverityError},
+		1115: {severity: SeverityError},
+		1128: {severity: SeverityError},
 		2096: {severity: SeverityError},
 		2148: {severity: SeverityError},
 		2187: {severity: SeverityWarning},
 		2239: {severity: SeverityError},
 		2246: {severity: SeverityError},
 	},
-	rules: []rule{{finish: checkShebang}},
+	rules: []rule{{finish: checkShebangShape}, {finish: checkShebang}},
 }
 
 var envSplitsArguments = regexp.MustCompile(`env +(-S|--split-string)`)
@@ -50,4 +59,60 @@ func checkShebang(p *pass) {
 	if name, ok := dialect.Interpreter(p.text); ok && name == "ash" && !p.shellChosen {
 		p.report(2187, line, "ash has no specification of its own, so this script is checked as dash; add '# shellcheck shell=dash' to say so explicitly.")
 	}
+}
+
+func checkShebangShape(p *pass) {
+	start := 0
+	if strings.HasPrefix(p.text, byteOrderMark) {
+		start = len(byteOrderMark)
+		p.report(1082, parser.Span{Start: 0, End: start}, "The file starts with a UTF-8 byte order mark, which makes the shell misread the first line; save the file without it.")
+	}
+	for first := true; start < len(p.text); first = false {
+		end := strings.IndexByte(p.text[start:], '\n')
+		if end < 0 {
+			end = len(p.text)
+		} else {
+			end += start
+		}
+		line := p.text[start:end]
+		if p.checkShebangLine(start, line, first) {
+			if !first {
+				p.report(1128, parser.Span{Start: start, End: end}, "The shebang only works on the very first line of the file; move it there and remove what comes before it.")
+			}
+			return
+		}
+		if trimmed := strings.TrimLeft(line, " \t\r"); trimmed != "" && trimmed[0] != '#' {
+			return
+		}
+		start = end + 1
+	}
+}
+
+func (p *pass) checkShebangLine(start int, line string, first bool) bool {
+	indent := len(line) - len(strings.TrimLeft(line, " \t"))
+	rest := line[indent:]
+	switch {
+	case strings.HasPrefix(rest, "#"):
+		gap := len(rest) - 1 - len(strings.TrimLeft(rest[1:], " \t"))
+		switch after := rest[1+gap:]; {
+		case strings.HasPrefix(after, "!"):
+			if indent > 0 {
+				p.report(1114, parser.Span{Start: start, End: start + indent}, "Remove the whitespace before #!; the shebang must start at the beginning of the line.")
+			}
+			if gap > 0 {
+				p.report(1115, parser.Span{Start: start + indent + 1, End: start + indent + 1 + gap}, "Remove the whitespace between # and !; the shebang must start with #! exactly.")
+			}
+			return true
+		case first && indent == 0 && strings.HasPrefix(after, "/"):
+			p.report(1113, parser.Span{Start: start + 1, End: start + 1 + gap}, "This looks like a shebang missing its !; write #!"+strings.TrimSpace(after)+".")
+			return true
+		}
+	case indent == 0 && strings.HasPrefix(rest, "!#"):
+		p.report(1084, parser.Span{Start: start, End: start + 2}, "The shebang is written !# instead of #!; swap the two characters.")
+		return true
+	case indent == 0 && strings.HasPrefix(rest, "!") && strings.HasPrefix(strings.TrimLeft(rest[1:], " \t"), "/"):
+		p.report(1104, parser.Span{Start: start, End: start + 1}, "This looks like a shebang missing its #; start the line with #!.")
+		return true
+	}
+	return false
 }

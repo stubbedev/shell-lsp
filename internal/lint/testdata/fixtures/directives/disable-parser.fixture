@@ -81,7 +81,7 @@ echo "$1"
 #!/bin/sh
 # shellcheck disable=SC1128
 echo "$1"
->>> SC1128 2:1
+>>- SC1128 2:1 -- this linter honours a file-wide disable for every finding, including the shebang checks shellcheck runs before reading directives
 
 ### byte order mark suppressed by a file-wide directive
 ﻿#!/bin/sh
