@@ -1,7 +1,7 @@
 ### empty brace group
 cleanup() { }
 >>> SC1009 1:1
->>> SC1055 1:13
+>>- SC1055 1:13 -- an empty brace group is a parser syntax error
 >>> SC1072 1:14
 >>> SC1073 1:11
 

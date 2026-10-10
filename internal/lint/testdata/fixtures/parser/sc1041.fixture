@@ -4,8 +4,8 @@ building
 DONE
 >>> SC1009 1:1
 >>> SC1017 1:12
->>> SC1041 1:7
->>> SC1042 1:7
+>>- SC1041 1:7 -- mvdan treats CRLF as a line ending, so the end token matches and only SC1017 applies
+>>- SC1042 1:7 -- mvdan treats CRLF as a line ending, so the end token matches and only SC1017 applies
 >>> SC1072 4:1
 >>> SC1073 1:5
 
@@ -14,8 +14,8 @@ cat <<EOF
 results below
 EOF2
 >>> SC1009 1:1
->>> SC1041 1:7
->>> SC1042 1:7
+>>- SC1041 1:7 -- an unterminated here-document is a parser syntax error whose message quotes the line holding the end token
+>>- SC1042 1:7 -- an unterminated here-document is a parser syntax error whose message quotes the line holding the end token
 >>> SC1072 4:1
 >>> SC1073 1:5
 
@@ -23,8 +23,8 @@ EOF2
 mail -s report admin <<END
 see the END of the log
 >>> SC1009 1:1
->>> SC1041 1:24
->>> SC1042 1:24
+>>- SC1041 1:24 -- an unterminated here-document is a parser syntax error whose message quotes the line holding the end token
+>>- SC1042 1:24 -- an unterminated here-document is a parser syntax error whose message quotes the line holding the end token
 >>> SC1072 3:1
 >>> SC1073 1:22
 
@@ -39,6 +39,6 @@ cat <<EOF
 results below
   EOF
 >>> SC1009 1:1
->>> SC1039 3:1
+>>- SC1039 3:1 -- the here-document is never closed, a parser syntax error whose message names the indented end token
 >>> SC1072 4:1
 >>> SC1073 1:5

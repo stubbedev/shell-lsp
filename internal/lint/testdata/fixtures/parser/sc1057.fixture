@@ -1,16 +1,16 @@
 ### for loop with done where do belongs
 for f in *.txt
 done
->>> SC1057 1:1
->>> SC1058 2:1
+>>- SC1057 1:1 -- a missing do is a parser syntax error
+>>- SC1058 2:1 -- a missing do is a parser syntax error
 >>> SC1072 2:3
 >>> SC1073 1:1
 
 ### until loop with done where do belongs
 until ping -c1 gateway
 done
->>> SC1057 1:1
->>> SC1058 2:1
+>>- SC1057 1:1 -- a missing do is a parser syntax error
+>>- SC1058 2:1 -- a missing do is a parser syntax error
 >>> SC1072 2:5
 >>> SC1073 1:1
 

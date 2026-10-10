@@ -2,8 +2,8 @@
 if [ -f /etc/motd ]
   cat /etc/motd
 fi
->>> SC1049 1:1
->>> SC1050 3:1
+>>- SC1049 1:1 -- a missing then is a parser syntax error
+>>- SC1050 3:1 -- a missing then is a parser syntax error
 >>> SC1072 3:3
 >>> SC1073 1:1
 
@@ -11,7 +11,7 @@ fi
 if grep -q root /etc/passwd; do
   echo found
 done
->>> SC1050 1:30
+>>- SC1050 1:30 -- bash rejects do in place of then; the parser reports the stray do as a syntax error
 >>> SC1072 1:32
 >>> SC1073 1:1
 

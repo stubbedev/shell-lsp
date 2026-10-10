@@ -1,11 +1,11 @@
 ### parenthesis in the middle of arguments
 echo Disk usage (approx)
->>> SC1036 1:17
+>>- SC1036 1:17 -- bash rejects the unquoted parenthesis, so this is reported as a parser syntax error
 >>> SC1088 1:17
 
 ### parenthesis glued inside a word
 mv draft(1).txt final.txt
->>> SC1036 1:9
+>>- SC1036 1:9 -- bash rejects the unquoted parenthesis, so this is reported as a parser syntax error
 >>> SC1088 1:9
 >>> SC2224 1:1
 

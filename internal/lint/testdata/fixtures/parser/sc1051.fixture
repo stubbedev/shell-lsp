@@ -1,6 +1,6 @@
 ### semicolon glued after then
 if [ -d "$HOME/.cache" ]; then; rm -rf "$HOME/.cache/thumbs"; fi
->>> SC1051 1:31
+>>- SC1051 1:31 -- bash rejects ; directly after then, so this is a parser syntax error whose message says to remove it
 
 ### if elif else without stray semicolons
 if [ "$mode" = fast ]; then

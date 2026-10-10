@@ -3,7 +3,7 @@ if [ [ -f app.pid ] -o [ -f app.lock ] ]; then
   echo running
 fi
 >>> SC1026 1:6
->>> SC1050 1:21
+>>- SC1050 1:21 -- shellcheck aborts after SC1026, but [ is an ordinary command so the script parses
 >>> SC1072 1:21
 >>> SC1073 1:1
 >>> SC1139 1:21
@@ -12,9 +12,9 @@ fi
 if [[ [ -d build ] || [ -d dist ] ]]; then
   echo "artifacts present"
 fi
->>> SC1026 1:7
->>> SC1033 1:18
->>> SC1050 1:35
+>>- SC1026 1:7 -- mvdan rejects this [[ ]] expression; the parser syntax error says to group with ( )
+>>- SC1033 1:18 -- bash rejects [[ closed by ], so this is a parser syntax error whose message names the mismatch
+>>- SC1050 1:35 -- mvdan rejects this [[ ]] expression; the parser syntax error says to group with ( )
 >>> SC1072 1:35
 >>> SC1073 1:1
 >>> SC1140 1:35

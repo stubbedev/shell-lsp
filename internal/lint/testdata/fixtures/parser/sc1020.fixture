@@ -14,7 +14,7 @@ if [[ $branch == main]]; then
   echo "on main"
 fi
 >>> SC1009 2:1
->>> SC1020 2:24
+>>- SC1020 2:24 -- mvdan rejects this [[ ]] expression; the parser syntax error says to put a space before ]]
 >>> SC1072 2:24
 >>> SC1073 2:4
 

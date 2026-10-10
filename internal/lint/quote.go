@@ -54,6 +54,27 @@ func (p *pass) contextOf(part syntax.WordPart) expansionContext {
 	return contextQuoted
 }
 
+func (p *pass) enclosingShellWord() (*syntax.Word, bool) {
+	word, ok := p.parent().(*syntax.Word)
+	if !ok {
+		return nil, false
+	}
+	switch owner := p.ancestor(1).(type) {
+	case *syntax.CallExpr, *syntax.CaseClause, *syntax.CaseItem, *syntax.WordIter,
+		*syntax.TestClause, *syntax.UnaryTest, *syntax.ParenTest:
+		return word, true
+	case *syntax.BinaryTest:
+		return word, owner.Op != syntax.TsReMatch || owner.X == word
+	case *syntax.Assign:
+		return word, owner.Value == word
+	case *syntax.ArrayElem:
+		return word, owner.Value == word
+	case *syntax.Redirect:
+		return word, owner.Word == word && owner.Op != syntax.Hdoc && owner.Op != syntax.DashHdoc
+	}
+	return nil, false
+}
+
 func (p *pass) braceContext() expansionContext {
 	for depth := 2; ; depth++ {
 		switch p.ancestor(depth).(type) {

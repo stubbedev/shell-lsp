@@ -13,7 +13,7 @@ if [[ echo "$reply" ]]; then
   echo ok
 fi
 >>> SC1009 1:1
->>> SC1014 1:7
+>>- SC1014 1:7 -- mvdan rejects this [[ ]] expression; the parser syntax error says to run the command without brackets
 >>> SC1072 1:13
 >>> SC1073 1:4
 

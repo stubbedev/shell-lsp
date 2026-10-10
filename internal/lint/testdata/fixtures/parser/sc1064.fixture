@@ -6,7 +6,7 @@ greet() echo hello
 
 ### function keyword followed by a plain command
 function shout echo HELLO
->>> SC1064 1:16
+>>- SC1064 1:16 -- mvdan reads function with two words as a zsh multi-name function and reports a syntax error for bash
 >>> SC1072 1:16
 >>> SC1073 1:1
 

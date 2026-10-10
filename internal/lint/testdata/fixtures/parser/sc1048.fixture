@@ -2,15 +2,15 @@
 if [ -n "$DEBUG" ]; then
 fi
 >>> SC1009 1:1
->>> SC1048 2:1
+>>- SC1048 2:1 -- an empty branch is a parser syntax error naming the keyword it follows
 >>> SC1072 2:3
 >>> SC1073 1:21
 
 ### empty then branch after a semicolon
 if [ -n "$DEBUG" ]; then ; else echo quiet; fi
 >>> SC1009 1:1
->>> SC1048 1:28
->>> SC1051 1:26
+>>- SC1048 1:28 -- an empty branch is a parser syntax error naming the keyword it follows
+>>- SC1051 1:26 -- bash rejects ; directly after then, so this is a parser syntax error whose message says to remove it
 >>> SC1072 1:33
 >>> SC1073 1:21
 
@@ -20,7 +20,7 @@ else
   echo quiet
 fi
 >>> SC1009 1:1
->>> SC1048 2:1
+>>- SC1048 2:1 -- an empty branch is a parser syntax error naming the keyword it follows
 >>> SC1072 2:5
 >>> SC1073 1:21
 
@@ -32,7 +32,7 @@ else
   echo other
 fi
 >>> SC1009 1:1
->>> SC1048 4:1
+>>- SC1048 4:1 -- an empty branch is a parser syntax error naming the keyword it follows
 >>> SC1072 4:5
 >>> SC1073 3:1
 
@@ -42,7 +42,7 @@ if [ -n "$DEBUG" ]; then
 else
 fi
 >>> SC1009 1:1
->>> SC1048 4:1
+>>- SC1048 4:1 -- an empty branch is a parser syntax error naming the keyword it follows
 >>> SC1072 4:3
 >>> SC1073 3:1
 
@@ -60,6 +60,6 @@ elif [ "$1" = b ]; then
   echo b
 fi
 >>> SC1009 1:1
->>> SC1048 2:1
+>>- SC1048 2:1 -- an empty branch is a parser syntax error naming the keyword it follows
 >>> SC1072 2:6
 >>> SC1073 1:18

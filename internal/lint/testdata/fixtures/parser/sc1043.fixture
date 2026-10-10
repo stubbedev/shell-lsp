@@ -3,7 +3,7 @@ cat <<EOF
 config follows
 eof
 >>> SC1009 1:1
->>> SC1043 1:7
+>>- SC1043 1:7 -- an unterminated here-document is a parser syntax error whose message names the differently cased end line
 >>> SC1072 4:1
 >>> SC1073 1:5
 
@@ -12,7 +12,7 @@ cat <<Banner
 welcome
 BANNER
 >>> SC1009 1:1
->>> SC1043 1:7
+>>- SC1043 1:7 -- an unterminated here-document is a parser syntax error whose message names the differently cased end line
 >>> SC1072 4:1
 >>> SC1073 1:5
 
@@ -21,8 +21,8 @@ cat <<EOF
 config follows
 EOF.
 >>> SC1009 1:1
->>> SC1041 1:7
->>> SC1042 1:7
+>>- SC1041 1:7 -- an unterminated here-document is a parser syntax error whose message quotes the line holding the end token
+>>- SC1042 1:7 -- an unterminated here-document is a parser syntax error whose message quotes the line holding the end token
 >>> SC1072 4:1
 >>> SC1073 1:5
 
@@ -31,6 +31,6 @@ cat <<EOF
 config follows
 end
 >>> SC1009 1:1
->>> SC1044 1:7
+>>- SC1044 1:7 -- an unterminated here-document is a parser syntax error whose message says the end token is missing
 >>> SC1072 4:1
 >>> SC1073 1:5

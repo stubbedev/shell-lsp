@@ -4,7 +4,7 @@ if [ -n "$primary" ]; then
 elif [ -n "$backup" ]; then;
   echo "$backup"
 fi
->>> SC1052 3:28
+>>- SC1052 3:28 -- bash rejects ; directly after then, so this is a parser syntax error whose message says to remove it
 
 ### elif then followed by a newline
 if [ -n "$primary" ]; then

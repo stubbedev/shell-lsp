@@ -1,6 +1,6 @@
 ### here-doc operator and token as the whole script
 cat <<EOF2
->>> SC1044 1:7
+>>- SC1044 1:7 -- an unterminated here-document is a parser syntax error whose message says the end token is missing
 >>> SC1072 2:1
 
 ### array subscript inside a here-doc body is parsed like any other

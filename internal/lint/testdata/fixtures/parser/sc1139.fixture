@@ -1,27 +1,27 @@
 ### -o between test commands
 if [ -f a.conf ] -o [ -f b.conf ]; then echo found; fi
->>> SC1050 1:18
+>>- SC1050 1:18 -- shellcheck aborts here, but -o is just an argument of the first [ command so the script parses
 >>> SC1072 1:18
 >>> SC1073 1:1
 >>> SC1139 1:18
 
 ### -a between test commands
 if [ -f a.conf ] -a [ -f b.conf ]; then echo found; fi
->>> SC1050 1:18
+>>- SC1050 1:18 -- shellcheck aborts here, but -a is just an argument of the first [ command so the script parses
 >>> SC1072 1:18
 >>> SC1073 1:1
 >>> SC1139 1:18
 
 ### or between test commands
 if [[ -f a.conf ]] or [[ -f b.conf ]]; then echo found; fi
->>> SC1050 1:20
+>>- SC1050 1:20 -- bash rejects or between tests; the parser reports that statements must be separated
 >>> SC1072 1:20
 >>> SC1073 1:1
 >>> SC1139 1:20
 
 ### and between test commands
 if [[ -f a.conf ]] and [[ -f b.conf ]]; then echo found; fi
->>> SC1050 1:20
+>>- SC1050 1:20 -- bash rejects and between tests; the parser reports that statements must be separated
 >>> SC1072 1:20
 >>> SC1073 1:1
 >>> SC1139 1:20

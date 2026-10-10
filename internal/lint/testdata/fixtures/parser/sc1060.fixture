@@ -1,15 +1,15 @@
 ### while loop with an empty body
 while pgrep -x rsync; do
 done
->>> SC1060 1:23
+>>- SC1060 1:23 -- an empty loop body is a parser syntax error
 >>> SC1072 2:5
 >>> SC1073 1:1
 
 ### empty body after do and a semicolon
 until [ -e /tmp/ready ]; do;
 done
->>> SC1059 1:28
->>> SC1060 1:26
+>>- SC1059 1:28 -- bash rejects ; directly after do, so this is a parser syntax error whose message says to remove it
+>>- SC1060 1:26 -- an empty loop body is a parser syntax error
 >>> SC1072 2:5
 >>> SC1073 1:1
 

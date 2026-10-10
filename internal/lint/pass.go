@@ -29,6 +29,8 @@ type pass struct {
 	rules    []rule
 	settings fileWide
 	findings []Finding
+
+	shellChosen bool
 }
 
 func newPass(tree *parser.Tree, imports []parser.Import, settings fileWide) *pass {

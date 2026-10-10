@@ -7,7 +7,7 @@ make all
 ### leftover starting with a parenthesis reports SC1088 instead
 echo start
 (echo a) (echo b)
->>> SC1036 2:10
+>>- SC1036 2:10 -- bash rejects the unquoted parenthesis, so this is reported as a parser syntax error
 >>> SC1088 2:10
 
 ### leftover starting with a keyword reports SC1089 instead

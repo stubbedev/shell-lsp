@@ -3,8 +3,8 @@ mode=$1
 if [ ( "$mode" = debug ) ]; then
   set -x
 fi
->>> SC1028 2:24
->>> SC1028 2:6
+>>- SC1028 2:24 -- bash rejects bare parentheses inside [ ], so this is a parser syntax error whose message says to escape them
+>>- SC1028 2:6 -- bash rejects bare parentheses inside [ ], so this is a parser syntax error whose message says to escape them
 
 ### escaped parentheses around two groups joined with -a
 if [ \( "$1" = start \) -a \( "$2" = now \) ]; then

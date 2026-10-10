@@ -2,14 +2,14 @@
 while read -r line; do
   echo "$line"
 done <<(ls /etc)
->>> SC1038 3:6
+>>- SC1038 3:6 -- bash rejects << followed by a parenthesis, so this is a parser syntax error whose message suggests < <(...)
 >>> SC1072 3:8
 >>> SC1073 3:6
 
 ### here-doc operator, space, process substitution
 sort << (printf '%s\n' b a)
 >>> SC1009 1:1
->>> SC1038 1:6
+>>- SC1038 1:6 -- bash rejects << followed by a parenthesis, so this is a parser syntax error whose message suggests < <(...)
 >>> SC1072 1:9
 >>> SC1073 1:6
 

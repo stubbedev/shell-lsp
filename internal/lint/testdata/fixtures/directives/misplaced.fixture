@@ -87,7 +87,7 @@ for host in alpha beta
 do
   ping -c1 $host
 done
->>> SC1058 3:1
+>>- SC1058 3:1 -- valid shell: a comment line may separate the word list from do, and bash and our parser accept it
 >>> SC1072 3:13
 >>> SC1073 2:1
 

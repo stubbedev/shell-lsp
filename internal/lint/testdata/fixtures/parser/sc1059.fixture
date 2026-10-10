@@ -1,6 +1,6 @@
 ### semicolon right after do
 for f in *.log; do; gzip "$f"; done
->>> SC1059 1:19
+>>- SC1059 1:19 -- bash rejects ; directly after do, so this is a parser syntax error whose message says to remove it
 
 ### do followed by a command
 for f in *.log; do gzip "$f"; done

@@ -2,7 +2,7 @@
 add(a, b) {
   echo "$((a + b))"
 }
->>> SC1065 1:5
+>>- SC1065 1:5 -- bash rejects a parameter list in a function definition, so this is a parser syntax error saying so
 >>> SC2154 2:12
 >>> SC2154 2:16
 

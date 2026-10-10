@@ -2,8 +2,8 @@
 while read -r line
   echo "$line"
 done
->>> SC1057 1:1
->>> SC1058 3:1
+>>- SC1057 1:1 -- a missing do is a parser syntax error
+>>- SC1058 3:1 -- a missing do is a parser syntax error
 >>> SC1072 3:5
 >>> SC1073 1:1
 

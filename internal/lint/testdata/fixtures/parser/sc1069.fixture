@@ -1,14 +1,14 @@
 ### if glued to the opening bracket
 if[ -d /tmp ]; then echo ok; fi
->>> SC1069 1:3
+>>- SC1069 1:3 -- bash rejects a keyword glued to [, so this is a parser syntax error whose message says to add the space
 
 ### while glued to the opening bracket
 while[ -e /run/backup.lock ]; do sleep 1; done
->>> SC1069 1:6
+>>- SC1069 1:6 -- bash rejects a keyword glued to [, so this is a parser syntax error whose message says to add the space
 
 ### until glued to the opening bracket
 until[ -s /tmp/out ]; do sleep 1; done
->>> SC1069 1:6
+>>- SC1069 1:6 -- bash rejects a keyword glued to [, so this is a parser syntax error whose message says to add the space
 
 ### keyword and bracket separated by a space
 if [ -d /tmp ]; then echo ok; fi

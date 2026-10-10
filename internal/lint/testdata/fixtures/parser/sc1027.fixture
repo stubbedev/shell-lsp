@@ -14,7 +14,7 @@ if [[ $retries -lt ]]; then
   echo again
 fi
 >>> SC1009 2:1
->>> SC1027 2:16
+>>- SC1027 2:16 -- mvdan rejects this [[ ]] expression; the parser syntax error says -lt is missing its operand
 >>> SC1072 2:21
 >>> SC1073 2:4
 

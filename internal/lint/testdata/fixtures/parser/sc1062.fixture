@@ -1,8 +1,8 @@
 ### while loop that runs off the end of the file
 while read -r user; do
   id "$user"
->>> SC1061 1:21
->>> SC1062 3:1
+>>- SC1061 1:21 -- a missing done is a parser syntax error
+>>- SC1062 3:1 -- a missing done is a parser syntax error
 >>> SC1072 3:1
 >>> SC1073 1:1
 

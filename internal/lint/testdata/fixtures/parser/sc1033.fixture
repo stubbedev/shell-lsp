@@ -2,7 +2,7 @@
 if [[ $1 = deploy ]; then
   echo deploying
 fi
->>> SC1033 1:19
+>>- SC1033 1:19 -- bash rejects [[ closed by ], so this is a parser syntax error whose message names the mismatch
 
 ### matching double brackets
 if [[ $1 = deploy ]]; then

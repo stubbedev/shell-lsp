@@ -15,6 +15,6 @@ echo 'cannot finish
 ### only one construct open gives no context note
 {
   make install
->>> SC1056 3:1
+>>- SC1056 3:1 -- a missing } is a parser syntax error
 >>> SC1072 3:1
 >>> SC1073 1:1

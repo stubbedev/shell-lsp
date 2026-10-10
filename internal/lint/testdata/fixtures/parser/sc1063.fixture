@@ -2,13 +2,13 @@
 for host in alpha beta gamma do
   ping -c1 "$host"
 done
->>> SC1063 1:30
+>>- SC1063 1:30 -- bash rejects do without a separator after the word list, so this is a parser syntax error saying so
 
 ### select list followed by do on the same line
 select opt in start stop do
   echo "$opt"
 done
->>> SC1063 1:26
+>>- SC1063 1:26 -- bash rejects do without a separator after the word list, so this is a parser syntax error saying so
 
 ### semicolon before do
 for host in alpha beta gamma; do

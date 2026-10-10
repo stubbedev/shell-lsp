@@ -1,6 +1,6 @@
 ### unquoted array assignment passed to eval
 eval items=(a b c)
->>> SC1036 1:12
+>>- SC1036 1:12 -- bash rejects the unquoted parenthesis, so this is reported as a parser syntax error
 >>> SC1088 1:12
 >>> SC1098 1:12
 

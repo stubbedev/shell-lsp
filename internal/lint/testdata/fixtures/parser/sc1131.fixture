@@ -2,8 +2,8 @@
 if [ -f a ]; then echo a
 elsif [ -f b ]; then echo b
 fi
->>> SC1046 1:1
->>> SC1047 2:17
+>>- SC1046 1:1 -- bash rejects elsif; the parser reports the stray then as a syntax error
+>>- SC1047 2:17 -- bash rejects elsif; the parser reports the stray then as a syntax error
 >>> SC1072 2:22
 >>> SC1073 1:1
 >>> SC1131 2:1

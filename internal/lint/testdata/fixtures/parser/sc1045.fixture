@@ -1,6 +1,6 @@
 ### ampersand followed by a semicolon
 ./server --port 8080 &; echo "server started"
->>> SC1045 1:23
+>>- SC1045 1:23 -- bash rejects &; so this is a parser syntax error whose message says to drop the ;
 
 ### ampersand separating two commands
 ./server --port 8080 & echo "server started"

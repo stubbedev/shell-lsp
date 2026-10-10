@@ -21,6 +21,11 @@ var families = []family{
 	portableBuiltinsFamily,
 	sedSubstitutionFamily,
 	negationFamily,
+	bracketsFamily,
+	escapesFamily,
+	charactersFamily,
+	heredocsFamily,
+	misreadsFamily,
 }
 
 var catalog, rules = assemble(families)

@@ -72,7 +72,7 @@ items=(a b)
 login_shell=/bin/busybox
 [[ -d "$1" ]] && echo "$login_shell"
 items=(a b)
->>> SC1008 1:1
+>>- SC1008 1:1 -- deliberate: we recognise busybox ash and lint it with the dash dialect, so the shebang is not unrecognised
 >>> SC2034 4:1
 >>> SC3030 4:7
 

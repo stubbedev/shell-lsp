@@ -12,7 +12,7 @@ if [[ -z ]]; then
   echo empty
 fi
 >>> SC1009 1:1
->>> SC1019 1:10
+>>- SC1019 1:10 -- mvdan rejects this [[ ]] expression; the parser syntax error says -z is missing its operand
 >>> SC1072 1:11
 >>> SC1073 1:4
 
@@ -21,7 +21,7 @@ if [[ -d && -w /tmp ]]; then
   echo writable
 fi
 >>> SC1009 1:1
->>> SC1019 1:10
+>>- SC1019 1:10 -- mvdan rejects this [[ ]] expression; the parser syntax error says a word is expected after -d
 >>> SC1072 1:10
 >>> SC1073 1:4
 

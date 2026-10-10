@@ -3,8 +3,8 @@ if command -v rsync >/dev/null; then
   for dir in docs assets; do
     rsync -a "$dir/" "backup/$dir/"
   done
->>> SC1046 1:1
->>> SC1047 5:1
+>>- SC1046 1:1 -- a missing fi is a parser syntax error
+>>- SC1047 5:1 -- a missing fi is a parser syntax error
 >>> SC1072 5:1
 >>> SC1073 1:1
 
@@ -14,8 +14,8 @@ if [ -w /var/log ]; then
 else
   logdir=$HOME/logs
 echo "$logdir"
->>> SC1046 1:1
->>> SC1047 6:1
+>>- SC1046 1:1 -- a missing fi is a parser syntax error
+>>- SC1047 6:1 -- a missing fi is a parser syntax error
 >>> SC1072 6:1
 >>> SC1073 1:1
 

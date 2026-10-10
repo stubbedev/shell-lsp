@@ -4,8 +4,8 @@ if true; then echo yes; else:; fi
 
 ### then glued to the colon no-op
 if true; then:; fi
->>> SC1049 1:1
->>> SC1050 1:17
+>>- SC1049 1:1 -- bash rejects then glued to the colon; the parser reports the stray fi as a syntax error
+>>- SC1050 1:17 -- bash rejects then glued to the colon; the parser reports the stray fi as a syntax error
 >>> SC1072 1:19
 >>> SC1073 1:1
 >>> SC1130 1:14

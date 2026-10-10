@@ -3,13 +3,13 @@ cat <<EOF
 config follows
 end
 >>> SC1009 1:1
->>> SC1044 1:7
+>>- SC1044 1:7 -- an unterminated here-document is a parser syntax error whose message says the end token is missing
 >>> SC1072 4:1
 >>> SC1073 1:5
 
 ### here-doc operator on the last line
 cat <<EOF
->>> SC1044 1:7
+>>- SC1044 1:7 -- an unterminated here-document is a parser syntax error whose message says the end token is missing
 >>> SC1072 2:1
 
 ### token appears with different case
@@ -17,7 +17,7 @@ cat <<EOF
 config follows
 Eof
 >>> SC1009 1:1
->>> SC1043 1:7
+>>- SC1043 1:7 -- an unterminated here-document is a parser syntax error whose message names the differently cased end line
 >>> SC1072 4:1
 >>> SC1073 1:5
 
@@ -26,7 +26,7 @@ cat <<EOF
 config follows
   EOF
 >>> SC1009 1:1
->>> SC1039 3:1
+>>- SC1039 3:1 -- the here-document is never closed, a parser syntax error whose message names the indented end token
 >>> SC1072 4:1
 >>> SC1073 1:5
 

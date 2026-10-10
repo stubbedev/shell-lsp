@@ -4,8 +4,8 @@ building
 DONE
 >>> SC1009 1:1
 >>> SC1017 1:12
->>> SC1041 1:7
->>> SC1042 1:7
+>>- SC1041 1:7 -- mvdan treats CRLF as a line ending, so the end token matches and only SC1017 applies
+>>- SC1042 1:7 -- mvdan treats CRLF as a line ending, so the end token matches and only SC1017 applies
 >>> SC1072 4:1
 >>> SC1073 1:5
 
@@ -14,8 +14,8 @@ cat <<STOP
 please STOP now
 do not STOP
 >>> SC1009 1:1
->>> SC1041 1:7
->>> SC1042 1:7
+>>- SC1041 1:7 -- an unterminated here-document is a parser syntax error whose message quotes the line holding the end token
+>>- SC1042 1:7 -- an unterminated here-document is a parser syntax error whose message quotes the line holding the end token
 >>> SC1072 4:1
 >>> SC1073 1:5
 
@@ -30,6 +30,6 @@ cat <<STOP
 please continue
 finished
 >>> SC1009 1:1
->>> SC1044 1:7
+>>- SC1044 1:7 -- an unterminated here-document is a parser syntax error whose message says the end token is missing
 >>> SC1072 4:1
 >>> SC1073 1:5

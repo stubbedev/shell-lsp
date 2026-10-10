@@ -4,7 +4,7 @@ if [ -w /var/log ]; then
 else; logdir=/tmp
 fi
 echo "$logdir"
->>> SC1053 3:5
+>>- SC1053 3:5 -- bash rejects ; directly after else, so this is a parser syntax error whose message says to remove it
 
 ### else followed by a newline
 if [ -w /var/log ]; then

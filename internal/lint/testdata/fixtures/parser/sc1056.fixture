@@ -1,6 +1,6 @@
 ### closing brace glued to the last word
 { echo "starting backup"}
->>> SC1056 2:1
+>>- SC1056 2:1 -- a missing } is a parser syntax error
 >>> SC1072 2:1
 >>> SC1073 1:1
 >>> SC1083 1:25

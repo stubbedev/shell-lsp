@@ -1,6 +1,6 @@
 ### brace glued to the command name
 {date; } > stamp.txt
->>> SC1054 1:2
+>>- SC1054 1:2 -- bash rejects the unmatched }, so this is a parser syntax error whose message points at the glued {
 
 ### brace group with spaces and a pipeline
 { cd /srv/app; git log --oneline | grep fix | wc -l; }

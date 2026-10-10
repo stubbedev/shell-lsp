@@ -42,7 +42,7 @@ echo "hello"
 #!/bin/busybox ash
 target_shell=busybox
 echo "$target_shell"
->>> SC1008 1:1
+>>- SC1008 1:1 -- deliberate: we recognise busybox ash and lint it with the dash dialect, so the shebang is not unrecognised
 
 ### busybox ash applet with a dash directive is fine
 #!/bin/busybox ash
