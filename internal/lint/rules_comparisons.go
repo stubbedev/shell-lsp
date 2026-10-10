@@ -136,11 +136,15 @@ func redirectedOrdering(args []*syntax.Word, r *syntax.Redirect) (ordering, bool
 func (p *pass) checkTestNode(double bool, e syntax.TestExpr) {
 	switch e := e.(type) {
 	case *syntax.Word:
+		p.recordEmptinessTest(e)
 		p.checkNullaryTest(e)
 	case *syntax.UnaryTest:
 		operand, ok := e.X.(*syntax.Word)
 		if !ok {
 			return
+		}
+		if e.Op == syntax.TsNempStr || e.Op == syntax.TsEmpStr {
+			p.recordEmptinessTest(operand)
 		}
 		p.checkUnaryTest(double, opAt(e.OpPos, e.Op.String()), operand)
 	case *syntax.BinaryTest:

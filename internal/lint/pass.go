@@ -35,6 +35,7 @@ type pass struct {
 	variables      variableUsage
 	associative    map[string]bool
 	dialectGuessed bool
+	emptinessTests map[int]bool
 }
 
 func newPass(tree *parser.Tree, imports []parser.Import, settings fileWide) *pass {

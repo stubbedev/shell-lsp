@@ -57,6 +57,8 @@ var families = []family{
 	loopsFamily,
 	pipelinesFamily,
 	redirectSafetyFamily,
+	assignmentMistakesFamily,
+	arraysFamily,
 }
 
 var catalog, rules, commandChecks = assemble(families)

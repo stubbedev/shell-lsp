@@ -185,6 +185,8 @@ func (b *builder) enter(node syntax.Node) {
 		b.declaration(n)
 	case *syntax.ForClause:
 		b.forClause(n)
+	case *syntax.CoprocClause:
+		b.coproc(n)
 	case *syntax.ParamExp:
 		b.paramExp(n)
 	case *syntax.Word:
@@ -516,6 +518,23 @@ func (b *builder) forClause(n *syntax.ForClause) {
 		Kind:     DefLoop,
 		Within:   b.scope(),
 		Node:     iter,
+	})
+}
+
+func (b *builder) coproc(n *syntax.CoprocClause) {
+	name, ok := Literal(n.Name)
+	if !ok || !IsName(name) {
+		return
+	}
+	span := b.span(n.Name)
+	b.index.Definitions = append(b.index.Definitions, Definition{
+		Name:     name,
+		NameSpan: span,
+		Span:     Span{Start: offset(n.Pos()), End: span.End},
+		Kind:     DefBuiltin,
+		Attrs:    AttrArray,
+		Within:   b.scope(),
+		Node:     n,
 	})
 }
 

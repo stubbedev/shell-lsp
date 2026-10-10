@@ -101,8 +101,6 @@ func collectVariables(p *pass, n syntax.Node) {
 			}
 			p.variables.loops[iter] = parser.Offset(n.Pos())
 		}
-	case *syntax.CoprocClause:
-		p.collectCoproc(n)
 	case *syntax.LetClause:
 		for _, expr := range n.Exprs {
 			p.collectQuotedLet(expr)
@@ -265,18 +263,6 @@ func (p *pass) collectAssign(a *syntax.Assign) {
 			p.scanWord(a.Value, span)
 		}
 	}
-}
-
-func (p *pass) collectCoproc(c *syntax.CoprocClause) {
-	if c.Name == nil {
-		return
-	}
-	name, ok := parser.Literal(c.Name)
-	if !ok || !parser.IsName(name) {
-		return
-	}
-	start := parser.Offset(c.Pos())
-	p.variables.sites = append(p.variables.sites, variableSite{name: name, span: parser.Span{Start: start, End: start}})
 }
 
 func (p *pass) scanWord(w *syntax.Word, at parser.Span) {

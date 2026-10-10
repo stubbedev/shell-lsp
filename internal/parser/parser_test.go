@@ -407,7 +407,7 @@ func TestBuiltinAssignments(t *testing.T) {
 	t.Parallel()
 
 	src := "read -r line\nread -rp 'Name: ' name rest\nread -a parts\nmapfile -t lines < f\nprintf -v out '%s' x\ngetopts 'ab:' opt\nread -r \"$dynamic\"\nwait -n -p done %1\n" +
-		"mapfile --weird-option chunks < f\nmapfile -t rows extra < f\nprintf -v 'cells[2]' '%s' x\n"
+		"mapfile --weird-option chunks < f\nmapfile -t rows extra < f\nprintf -v 'cells[2]' '%s' x\ncoproc reader { cat; }\n"
 	tree := Parse(src, dialect.Bash)
 	got := map[string]Attr{}
 	for _, d := range tree.Definitions {
@@ -417,7 +417,7 @@ func TestBuiltinAssignments(t *testing.T) {
 	}
 	want := map[string]Attr{
 		"line": 0, "name": 0, "rest": 0, "parts": AttrArray, "lines": AttrArray, "out": 0, "opt": 0, "done": 0,
-		"chunks": AttrArray, "rows": AttrArray, "cells": AttrArray,
+		"chunks": AttrArray, "rows": AttrArray, "cells": AttrArray, "reader": AttrArray,
 	}
 	if len(got) != len(want) {
 		t.Fatalf("builtin definitions = %v, want %v", got, want)
