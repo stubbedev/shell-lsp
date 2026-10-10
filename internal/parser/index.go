@@ -880,6 +880,18 @@ func (b *builder) span(n syntax.Node) Span {
 	return Span{Start: start, End: max(start, offset(end))}
 }
 
+func IsDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := range len(s) {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 func IsName(s string) bool {
 	if s == "" {
 		return false

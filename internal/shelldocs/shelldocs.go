@@ -18,7 +18,7 @@ type Entry struct {
 func (e Entry) Markdown(d dialect.Dialect) string {
 	var sb strings.Builder
 	if e.Synopsis != "" {
-		fmt.Fprintf(&sb, "```%s\n%s\n```\n\n", fence(d), e.Synopsis)
+		fmt.Fprintf(&sb, "```%s\n%s\n```\n\n", FenceLanguage(d), e.Synopsis)
 	}
 	sb.WriteString(e.Doc)
 	if note, ok := e.Notes[d]; ok {
@@ -30,7 +30,7 @@ func (e Entry) Markdown(d dialect.Dialect) string {
 	return sb.String()
 }
 
-func fence(d dialect.Dialect) string {
+func FenceLanguage(d dialect.Dialect) string {
 	if d == dialect.Zsh {
 		return "zsh"
 	}

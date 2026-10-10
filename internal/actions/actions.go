@@ -363,7 +363,7 @@ func usesPositional(tree *parser.Tree, span parser.Span) bool {
 		}
 		at := parser.Offset(exp.Param.ValuePos)
 		name := exp.Param.Value
-		if span.Start <= at && at < span.End && (name == "@" || name == "*" || name == "#" || (name != "0" && isDigits(name))) {
+		if span.Start <= at && at < span.End && (name == "@" || name == "*" || name == "#" || (name != "0" && parser.IsDigits(name))) {
 			found = true
 		}
 		return !found
@@ -530,13 +530,4 @@ func leadingSpace(text string, lineAt int) string {
 		end++
 	}
 	return text[lineAt:end]
-}
-
-func isDigits(s string) bool {
-	for i := range len(s) {
-		if s[i] < '0' || s[i] > '9' {
-			return false
-		}
-	}
-	return s != ""
 }

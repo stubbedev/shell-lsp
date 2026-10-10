@@ -174,7 +174,7 @@ func (g *generator) walk() {
 		case *syntax.Redirect:
 			g.heredoc(n)
 			if n.N != nil {
-				if span, ok := tree.NodeSpan(n.N); ok && isDigits(n.N.Value) {
+				if span, ok := tree.NodeSpan(n.N); ok && parser.IsDigits(n.N.Value) {
 					g.add(span, TypeNumber, 0)
 				}
 			}
@@ -189,7 +189,7 @@ func (g *generator) walk() {
 		case *syntax.UnaryTest:
 			g.operator(n.OpPos, n.Op.String())
 		case *syntax.Word:
-			if lit := n.Lit(); isNumber(lit) && isArithmetic(parent) {
+			if lit := n.Lit(); isNumber(lit) && parser.IsArithmetic(parent) {
 				if span, ok := tree.NodeSpan(n); ok {
 					g.add(span, TypeNumber, 0)
 				}
@@ -254,14 +254,6 @@ func (g *generator) operator(pos syntax.Pos, op string) {
 	}
 }
 
-func isArithmetic(node syntax.Node) bool {
-	switch node.(type) {
-	case *syntax.BinaryArithm, *syntax.UnaryArithm, *syntax.ParenArithm, *syntax.ArithmExp, *syntax.ArithmCmd, *syntax.CStyleLoop, *syntax.LetClause:
-		return true
-	}
-	return false
-}
-
 func (g *generator) result() []Token {
 	order := make([]uint64, len(g.tokens))
 	for i, t := range g.tokens {
@@ -281,21 +273,12 @@ func (g *generator) result() []Token {
 	return out
 }
 
-func isDigits(s string) bool {
-	for i := range len(s) {
-		if s[i] < '0' || s[i] > '9' {
-			return false
-		}
-	}
-	return s != ""
-}
-
 func isNumber(s string) bool {
 	if s == "" || s[0] < '0' || s[0] > '9' {
 		return false
 	}
 	s = strings.TrimPrefix(strings.TrimPrefix(s, "0x"), "0X")
-	if hashAt := strings.IndexByte(s, '#'); hashAt > 0 && isDigits(s[:hashAt]) {
+	if hashAt := strings.IndexByte(s, '#'); hashAt > 0 && parser.IsDigits(s[:hashAt]) {
 		s = s[hashAt+1:]
 	}
 	if s == "" {

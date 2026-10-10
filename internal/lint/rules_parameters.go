@@ -268,7 +268,7 @@ func isPlainBody(text string, body []bracePart) bool {
 		return false
 	}
 	inner := text[body[0].start:body[0].end]
-	return parser.IsName(inner) || isDigits(inner) || (len(inner) == 1 && strings.IndexByte(specialParameterChars, inner[0]) >= 0)
+	return parser.IsName(inner) || parser.IsDigits(inner) || (len(inner) == 1 && strings.IndexByte(specialParameterChars, inner[0]) >= 0)
 }
 
 func closeAt(kind bracePartKind, text string, start, from int, closer string) (bracePart, bool) {

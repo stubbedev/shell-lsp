@@ -359,6 +359,16 @@ func TestLiteral(t *testing.T) {
 	}
 }
 
+func TestIsDigits(t *testing.T) {
+	t.Parallel()
+
+	for s, want := range map[string]bool{"0": true, "2024": true, "": false, "1a": false, "-1": false, "١": false} {
+		if got := IsDigits(s); got != want {
+			t.Errorf("IsDigits(%q) = %v, want %v", s, got, want)
+		}
+	}
+}
+
 func TestLiteralChars(t *testing.T) {
 	t.Parallel()
 

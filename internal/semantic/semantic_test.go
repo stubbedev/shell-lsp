@@ -90,6 +90,16 @@ func TestTokensAreSingleLineAndOrdered(t *testing.T) {
 	}
 }
 
+func TestNumbersInZshSubscriptFlagsAreNumbers(t *testing.T) {
+	t.Parallel()
+
+	text := "echo ${items[(r)42]}\n"
+	got := strings.Join(describe(text, Tokens(parser.Parse(text, dialect.Zsh), nil)), " ")
+	if want := "42:number"; !strings.Contains(got, want) {
+		t.Errorf("tokens = %s, want %s", got, want)
+	}
+}
+
 func TestTokensUseImports(t *testing.T) {
 	t.Parallel()
 

@@ -75,7 +75,7 @@ func checkRedirectTargets(p *pass, n syntax.Node) {
 		return
 	}
 	switch {
-	case isDigits(lit.Value) && !p.insideBrackets(r):
+	case parser.IsDigits(lit.Value) && !p.insideBrackets(r):
 		span, ok := p.span(r.Word)
 		if !ok {
 			return
@@ -115,7 +115,7 @@ func redirectDescriptors(r *syntax.Redirect) descriptors {
 	case syntax.RdrAll, syntax.AppAll:
 		fds = []int{1, 2}
 	case syntax.DplOut:
-		if target := r.Word.Lit(); target == "" || target == "-" || isDigits(target) {
+		if target := r.Word.Lit(); target == "" || target == "-" || parser.IsDigits(target) {
 			return descriptors{}
 		}
 		fds = []int{1, 2}

@@ -78,14 +78,10 @@ func checkTrapSignalNumbers(p *pass, c command) {
 		case !ok:
 		case untrappableSignals[strings.ToLower(signal)]:
 			p.reportNode(2173, arg, "SIGKILL and SIGSTOP cannot be trapped; this handler never runs for "+signal+".")
-		case isDigits(signal) && !portableSignals[signal]:
+		case parser.IsDigits(signal) && !portableSignals[signal]:
 			p.reportNode(2172, arg, "Signal number "+signal+" differs between systems; use its name instead.")
 		}
 	}
-}
-
-func isDigits(s string) bool {
-	return s != "" && strings.Trim(s, "0123456789") == ""
 }
 
 const maxStatus = 255
@@ -108,7 +104,7 @@ func checkStatusArgument(tooMany, outOfRange Code) func(p *pass, c command) {
 
 func validStatus(w *syntax.Word) bool {
 	status, _ := parser.Text(w, "0")
-	if !isDigits(status) || len(status) > 5 {
+	if !parser.IsDigits(status) || len(status) > 5 {
 		return false
 	}
 	n, err := strconv.Atoi(status)

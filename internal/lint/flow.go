@@ -1130,7 +1130,7 @@ func (in *interpreter) forClause(cmd *syntax.ForClause, s *state) *state {
 			items = 0
 			for _, w := range loop.Items {
 				s = in.evaluate(w, s)
-				items |= in.itemSpace(w)
+				items |= literalWordSpace(w)
 				if in.numericWord(w, s) {
 					holdsInteger = integerYes
 				}
@@ -1172,14 +1172,6 @@ func (in *interpreter) forClause(cmd *syntax.ForClause, s *state) *state {
 			})
 	}
 	return s
-}
-
-func (in *interpreter) itemSpace(w *syntax.Word) space {
-	lit, ok := parser.Literal(w)
-	if !ok {
-		return spaceDirty
-	}
-	return literalSpace(lit)
 }
 
 func (in *interpreter) caseClause(cmd *syntax.CaseClause, s *state) *state {

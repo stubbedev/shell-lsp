@@ -196,7 +196,7 @@ func (in *interpreter) numericWord(w *syntax.Word, s *state) bool {
 	}
 	switch part := part.(type) {
 	case *syntax.Lit:
-		return isDigits(part.Value)
+		return parser.IsDigits(part.Value)
 	case *syntax.ArithmExp:
 		return true
 	case *syntax.ParamExp:
@@ -232,7 +232,7 @@ func (in *interpreter) recordAppend(a *syntax.Assign, target value, s *state) {
 	var numeric bool
 	switch part := a.Value.Parts[0].(type) {
 	case *syntax.Lit:
-		numeric = isDigits(part.Value) || (parser.IsName(part.Value) && s.get(part.Value).holdsInteger&integerYes != 0)
+		numeric = parser.IsDigits(part.Value) || (parser.IsName(part.Value) && s.get(part.Value).holdsInteger&integerYes != 0)
 	case *syntax.ParamExp:
 		numeric = isPlainParam(part) && s.get(part.Param.Value).holdsInteger&integerYes != 0
 	}

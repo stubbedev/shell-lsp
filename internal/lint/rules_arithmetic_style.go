@@ -41,7 +41,7 @@ func checkArithmeticDollar(p *pass, n syntax.Node) {
 	if !pe.Short {
 		inner = strings.TrimSuffix(strings.TrimPrefix(inner, "{"), "}")
 	}
-	if inner == "" || strings.ContainsAny(inner, dollarExemptChars) || isDigits(inner[:1]) {
+	if inner == "" || strings.ContainsAny(inner, dollarExemptChars) || parser.IsDigits(inner[:1]) {
 		return
 	}
 	p.report(2004, span, "Arithmetic already expands variable names, so the $ in "+text+" is unnecessary; write "+inner+" instead.")

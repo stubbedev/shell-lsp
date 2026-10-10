@@ -90,7 +90,7 @@ func (h hoverer) paramExp() (Result, bool) {
 }
 
 func (h hoverer) parameter(name string) string {
-	if isDigits(name) {
+	if parser.IsDigits(name) {
 		if fn, ok := h.Tree.EnclosingFunction(h.scope); ok {
 			return fmt.Sprintf("**$%s**: argument %s of function `%s`", name, name, fn.Name)
 		}
@@ -131,7 +131,7 @@ func (h hoverer) variable(name string) string {
 	first := *defs.At(0)
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "**%s**: %s", name, h.describe(first, defs))
-	fmt.Fprintf(&sb, "\n\nDeclared on line %d:\n```%s\n%s\n```", h.line(first.Span.Start), fence(h.dialect), h.snippet(first.Span.Start))
+	fmt.Fprintf(&sb, "\n\nDeclared on line %d:\n```%s\n%s\n```", h.line(first.Span.Start), shelldocs.FenceLanguage(h.dialect), h.snippet(first.Span.Start))
 	if n := defs.Len(); n > 1 {
 		fmt.Fprintf(&sb, "\n\nAssigned in %d places.", n)
 	}
@@ -222,7 +222,7 @@ func newHoverer(in Input) hoverer {
 func (h hoverer) function(fn parser.Function) string {
 	var sb strings.Builder
 	sig := FunctionSignature(h.Tree, fn)
-	fmt.Fprintf(&sb, "```%s\n%s\n```", fence(h.dialect), sig.Label())
+	fmt.Fprintf(&sb, "```%s\n%s\n```", shelldocs.FenceLanguage(h.dialect), sig.Label())
 	if sig.Doc != "" {
 		fmt.Fprintf(&sb, "\n\n%s", sig.Doc)
 	}
@@ -346,7 +346,7 @@ func positionalValue(w *syntax.Word) (int, bool) {
 		part = dq.Parts[0]
 	}
 	exp, ok := part.(*syntax.ParamExp)
-	if !ok || exp.Param == nil || !isDigits(exp.Param.Value) || exp.Param.Value == "0" || exp.Length || exp.Excl || exp.Slice != nil || exp.Repl != nil {
+	if !ok || exp.Param == nil || !parser.IsDigits(exp.Param.Value) || exp.Param.Value == "0" || exp.Length || exp.Excl || exp.Slice != nil || exp.Repl != nil {
 		return 0, false
 	}
 	if exp.Exp != nil && exp.Exp.Op != syntax.DefaultUnset && exp.Exp.Op != syntax.DefaultUnsetOrNull {
@@ -372,7 +372,7 @@ func positionalUse(fn parser.Function) (int, bool) {
 		switch name := exp.Param.Value; {
 		case name == "@" || name == "*" || name == "#":
 			variadic = true
-		case isDigits(name) && name != "0":
+		case parser.IsDigits(name) && name != "0":
 			n, err := strconv.Atoi(name)
 			if err == nil {
 				highest = max(highest, n)
@@ -507,22 +507,3 @@ func (h hoverer) snippet(offset int) string {
 }
 
 func isRuneStart(b byte) bool { return b&0xC0 != 0x80 }
-
-func fence(d dialect.Dialect) string {
-	if d == dialect.Zsh {
-		return "zsh"
-	}
-	return "sh"
-}
-
-func isDigits(s string) bool {
-	if s == "" {
-		return false
-	}
-	for i := range len(s) {
-		if s[i] < '0' || s[i] > '9' {
-			return false
-		}
-	}
-	return true
-}

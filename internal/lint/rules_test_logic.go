@@ -266,7 +266,7 @@ func isPlainLiteral(w *syntax.Word) bool {
 
 func isDigitWord(w *syntax.Word) bool {
 	lit, ok := parser.Literal(w)
-	return ok && isDigits(lit)
+	return ok && parser.IsDigits(lit)
 }
 
 func (p *pass) sameText(a, b syntax.Node) bool {
@@ -295,7 +295,7 @@ func checkArithmeticContradiction(p *pass, n syntax.Node) {
 
 func isDigitArithm(expr syntax.ArithmExpr) bool {
 	w, ok := expr.(*syntax.Word)
-	return ok && isDigits(w.Lit())
+	return ok && parser.IsDigits(w.Lit())
 }
 
 func checkTestRedirect(p *pass, _ command) {
