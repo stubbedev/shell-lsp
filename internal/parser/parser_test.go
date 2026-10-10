@@ -218,6 +218,22 @@ func TestArithmeticDefinitionsAndReferences(t *testing.T) {
 	}
 }
 
+func TestBatsFilesParseTestBlocks(t *testing.T) {
+	t.Parallel()
+
+	src := "#!/usr/bin/env bats\n@test \"works\" {\n  run true\n}\n"
+	tree := Parse(src, dialect.Bash)
+	if len(tree.Errors) != 0 {
+		t.Fatalf("bats file has errors: %v", messages(tree))
+	}
+	if _, ok := tree.File.Stmts[0].Cmd.(*syntax.TestDecl); !ok {
+		t.Errorf("first statement = %T, want a Bats test block", tree.File.Stmts[0].Cmd)
+	}
+	if IsBats("#!/bin/bash\n@test x\n") {
+		t.Error("a bash shebang was taken for Bats")
+	}
+}
+
 func TestAttrsAnywhereIgnoresScopes(t *testing.T) {
 	t.Parallel()
 
