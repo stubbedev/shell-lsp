@@ -324,7 +324,7 @@ func (b *builder) builtinAssignments(call *syntax.CallExpr, name string, args []
 
 func (b *builder) wordDefinition(call *syntax.CallExpr, w *syntax.Word, attrs Attr) {
 	value, ok := Literal(w)
-	if !ok || !isName(value) || len(w.Parts) != 1 {
+	if !ok || !IsName(value) || len(w.Parts) != 1 {
 		return
 	}
 	span := b.span(w)
@@ -388,7 +388,7 @@ func (b *builder) declarationWords(variant declVariant, args []*syntax.Word) {
 			continue
 		}
 		name, _, _ := strings.Cut(value, "=")
-		if !isName(name) {
+		if !IsName(name) {
 			continue
 		}
 		start := offset(arg.Pos())
@@ -444,7 +444,7 @@ func (f declFlags) apply(word string) declFlags {
 }
 
 func (b *builder) assign(n *syntax.Assign, kind DefinitionKind, flags declFlags, local bool) {
-	if n.Name == nil || !isName(n.Name.Value) {
+	if n.Name == nil || !IsName(n.Name.Value) {
 		return
 	}
 	attrs := flags.attrs
@@ -467,7 +467,7 @@ func (b *builder) assign(n *syntax.Assign, kind DefinitionKind, flags declFlags,
 
 func (b *builder) forClause(n *syntax.ForClause) {
 	iter, ok := n.Loop.(*syntax.WordIter)
-	if !ok || iter.Name == nil || !isName(iter.Name.Value) {
+	if !ok || iter.Name == nil || !IsName(iter.Name.Value) {
 		return
 	}
 	b.index.Definitions = append(b.index.Definitions, Definition{
@@ -481,7 +481,7 @@ func (b *builder) forClause(n *syntax.ForClause) {
 }
 
 func (b *builder) paramExp(n *syntax.ParamExp) {
-	if n.Param == nil || n.Names != 0 || !isName(n.Param.Value) || !n.Param.ValuePos.IsValid() {
+	if n.Param == nil || n.Names != 0 || !IsName(n.Param.Value) || !n.Param.ValuePos.IsValid() {
 		return
 	}
 	b.reference(n.Param.Value, b.span(n.Param))
@@ -515,7 +515,7 @@ func arithmeticName(expr syntax.ArithmExpr) (string, bool) {
 		return "", false
 	}
 	lit, ok := w.Parts[0].(*syntax.Lit)
-	if !ok || !isName(lit.Value) {
+	if !ok || !IsName(lit.Value) {
 		return "", false
 	}
 	return lit.Value, true
@@ -555,7 +555,7 @@ func (b *builder) descriptorVariable(n *syntax.Redirect) {
 		return
 	}
 	name := n.N.Value[1 : len(n.N.Value)-1]
-	if !isName(name) {
+	if !IsName(name) {
 		return
 	}
 	start := offset(n.N.Pos()) + 1
@@ -789,7 +789,7 @@ func (b *builder) span(n syntax.Node) Span {
 	return Span{Start: start, End: max(start, offset(end))}
 }
 
-func isName(s string) bool {
+func IsName(s string) bool {
 	if s == "" {
 		return false
 	}

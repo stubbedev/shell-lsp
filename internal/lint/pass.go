@@ -77,14 +77,23 @@ func (p *pass) ancestor(depth int) syntax.Node {
 func (p *pass) span(n syntax.Node) (parser.Span, bool) { return p.tree.NodeSpan(n) }
 
 func (p *pass) report(code Code, span parser.Span, message string, fix ...textedit.Edit) {
+	p.reportWithSeverity(code, p.meta(code).severity, span, message, fix...)
+}
+
+func (p *pass) reportWithSeverity(code Code, severity Severity, span parser.Span, message string, fix ...textedit.Edit) {
+	m := p.meta(code)
+	if m.optional != "" && !p.settings.enabled(m.optional) {
+		return
+	}
+	p.findings = append(p.findings, Finding{Code: code, Severity: severity, Tag: m.tag, Span: span, Message: message, Fix: fix})
+}
+
+func (p *pass) meta(code Code) meta {
 	m, ok := p.catalog[code]
 	if !ok {
 		panic(fmt.Sprintf("lint: %s is reported but missing from the catalog", code))
 	}
-	if m.optional != "" && !p.settings.enabled(m.optional) {
-		return
-	}
-	p.findings = append(p.findings, Finding{Code: code, Severity: m.severity, Tag: m.tag, Span: span, Message: message, Fix: fix})
+	return m
 }
 
 func isBats(text string) bool {

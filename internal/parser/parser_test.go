@@ -237,6 +237,17 @@ func TestPosixDeclarationBuiltins(t *testing.T) {
 	}
 }
 
+func TestDefines(t *testing.T) {
+	t.Parallel()
+
+	tree := Parse("f() { local inner=1; }\nread -r line\necho \"$used\"\n", dialect.Bash)
+	for name, want := range map[string]bool{"inner": true, "line": true, "used": false, "f": false} {
+		if got := tree.Defines(name); got != want {
+			t.Errorf("Defines(%q) = %t, want %t", name, got, want)
+		}
+	}
+}
+
 func TestFunctionDocComment(t *testing.T) {
 	t.Parallel()
 
@@ -301,6 +312,29 @@ func TestLiteral(t *testing.T) {
 		got, ok := Literal(call.Args[1])
 		if ok != tc.ok || got != tc.want {
 			t.Errorf("Literal(%s) = %q, %t; want %q, %t", tc.src, got, ok, tc.want, tc.ok)
+		}
+	}
+}
+
+func TestLiteralChars(t *testing.T) {
+	t.Parallel()
+
+	for src, want := range map[string]string{
+		`plain`:            "plain",
+		`$dir/"$name".log`: "/.log",
+		`'a b'\ c"\$d"`:    "a b c$d",
+		`$x$(y)`:           "",
+	} {
+		file, err := syntax.NewParser().Parse(strings.NewReader("echo "+src), "")
+		if err != nil {
+			t.Fatalf("parsing %q: %v", src, err)
+		}
+		call, isCall := file.Stmts[0].Cmd.(*syntax.CallExpr)
+		if !isCall {
+			t.Fatalf("parsing %q: not a simple command", src)
+		}
+		if got := LiteralChars(call.Args[1]); got != want {
+			t.Errorf("LiteralChars(%s) = %q, want %q", src, got, want)
 		}
 	}
 }

@@ -166,7 +166,7 @@ func (g *generator) walk() {
 		case *syntax.DblQuoted:
 			g.doubleQuoted(n)
 		case *syntax.ParamExp:
-			if n.Param != nil && !isName(n.Param.Value) {
+			if n.Param != nil && !parser.IsName(n.Param.Value) {
 				if span, ok := tree.NodeSpan(n.Param); ok {
 					g.add(span, TypeParameter, 0)
 				}
@@ -279,18 +279,6 @@ func (g *generator) result() []Token {
 		end = t.Span.End
 	}
 	return out
-}
-
-func isName(s string) bool {
-	if s == "" || isDigits(s[:1]) {
-		return false
-	}
-	for _, r := range s {
-		if r != '_' && (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') {
-			return false
-		}
-	}
-	return true
 }
 
 func isDigits(s string) bool {

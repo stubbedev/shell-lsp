@@ -78,6 +78,10 @@ func (ix *Index) VisibleAttrs(name string, scope ScopeID) Attr {
 	return ix.attrsByBinding[ix.visibleBinding(name, scope)]
 }
 
+func (ix *Index) Defines(name string) bool {
+	return len(ix.definitionsByBinding[binding{name: name}]) > 0 || len(ix.localScopes[name]) > 0
+}
+
 func (ix *Index) DefinitionsIn(scope ScopeID) Definitions {
 	return Definitions{all: ix.Definitions, positions: ix.definitionsByScope[scope]}
 }

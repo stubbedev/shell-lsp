@@ -38,6 +38,25 @@ func Literal(w *syntax.Word) (string, bool) {
 	return sb.String(), true
 }
 
+func LiteralChars(w *syntax.Word) string {
+	var sb strings.Builder
+	for _, part := range w.Parts {
+		switch p := part.(type) {
+		case *syntax.Lit:
+			unescape(&sb, p.Value, func(byte) bool { return true })
+		case *syntax.SglQuoted:
+			sb.WriteString(p.Value)
+		case *syntax.DblQuoted:
+			for _, inner := range p.Parts {
+				if lit, ok := inner.(*syntax.Lit); ok {
+					unescape(&sb, lit.Value, isDoubleQuoteEscapable)
+				}
+			}
+		}
+	}
+	return sb.String()
+}
+
 func isDoubleQuoteEscapable(c byte) bool {
 	return c == '$' || c == '`' || c == '"' || c == '\\' || c == '\n'
 }

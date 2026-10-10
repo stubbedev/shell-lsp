@@ -13,6 +13,12 @@ type family struct {
 var families = []family{
 	foreignFamily,
 	quotingFamily,
+	portableSyntaxFamily,
+	portableExpansionsFamily,
+	bracesFamily,
+	portableRedirectionsFamily,
+	portableTestsFamily,
+	portableBuiltinsFamily,
 }
 
 var catalog, rules = assemble(families)

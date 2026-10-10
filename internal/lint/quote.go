@@ -105,3 +105,17 @@ func isAlternativeExpansion(pe *syntax.ParamExp) bool {
 func isDefaultAssignment(pe *syntax.ParamExp) bool {
 	return pe.Exp != nil && (pe.Exp.Op == syntax.AssignUnset || pe.Exp.Op == syntax.AssignUnsetOrNull)
 }
+
+func (p *pass) parsesGlobs(w *syntax.Word) bool {
+	switch parent := p.parent().(type) {
+	case *syntax.CallExpr, *syntax.CaseItem, *syntax.WordIter, *syntax.BinaryTest:
+		return true
+	case *syntax.Assign:
+		return parent.Value == w
+	case *syntax.ArrayElem:
+		return parent.Value == w
+	case *syntax.Redirect:
+		return parent.Word == w
+	}
+	return false
+}
