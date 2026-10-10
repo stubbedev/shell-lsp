@@ -241,7 +241,7 @@ func checkSuspiciousClosingQuote(p *pass, n syntax.Node) {
 		return
 	}
 	next := p.text[span.End]
-	if !isNameChar(next) && next != '%' && strings.IndexByte(continues, next) < 0 {
+	if !parser.IsNameChar(next) && next != '%' && strings.IndexByte(continues, next) < 0 {
 		return
 	}
 	if _, single := n.(*syntax.SglQuoted); single && isASCIILetter(p.text[span.End-2]) && isASCIILetter(next) {
@@ -440,7 +440,7 @@ func startsParameter(part syntax.WordPart) bool {
 		return false
 	}
 	c := lit.Value[0]
-	return isNameChar(c) || strings.IndexByte("@#?!-", c) >= 0
+	return parser.IsNameChar(c) || strings.IndexByte("@#?!-", c) >= 0
 }
 
 func checkCommentedContinuation(p *pass, n syntax.Node) {

@@ -71,7 +71,7 @@ func (p *pass) checkStringArithmetic(assign *syntax.Assign) {
 		return
 	}
 	end := 0
-	for end < len(lit.Value) && isNameChar(lit.Value[end]) {
+	for end < len(lit.Value) && parser.IsNameChar(lit.Value[end]) {
 		end++
 	}
 	name := lit.Value[:end]

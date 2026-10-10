@@ -133,7 +133,7 @@ func (p *pass) checkGluedOperator(arg *syntax.Word) {
 		if !found {
 			continue
 		}
-		if len(arg.Parts) == 1 && (before == "" || !isNameChar(before[len(before)-1])) {
+		if len(arg.Parts) == 1 && (before == "" || !parser.IsNameChar(before[len(before)-1])) {
 			return
 		}
 		if span, ok := p.span(last); ok {

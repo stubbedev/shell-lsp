@@ -98,7 +98,7 @@ func (p *pass) checkBracedAt(dollar int) int {
 	text := p.text[first.start:first.end]
 	switch first.kind {
 	case braceLiteral:
-		if c := text[0]; !isNameChar(c) && strings.IndexByte(specialParameterChars, c) < 0 {
+		if c := text[0]; !parser.IsNameChar(c) && strings.IndexByte(specialParameterChars, c) < 0 {
 			p.report(2296, span, "A parameter expansion cannot start with '"+text[:1]+"'; ${ must be followed by a variable name or special parameter.")
 		}
 	case braceDouble:
@@ -127,7 +127,7 @@ func (p *pass) checkBracedAt(dollar int) int {
 
 func isQuotableName(s string) bool {
 	if len(s) == 1 {
-		return isNameChar(s[0]) || strings.IndexByte(specialParameterChars, s[0]) >= 0
+		return parser.IsNameChar(s[0]) || strings.IndexByte(specialParameterChars, s[0]) >= 0
 	}
 	return parser.IsName(s)
 }
@@ -253,9 +253,9 @@ func scanBracePart(text string, i int) (bracePart, bool) {
 		return scanDoubleQuoted(text, i, i+2)
 	case next != 0 && strings.IndexByte(specialParameterChars, next) >= 0, next >= '0' && next <= '9':
 		return bracePart{kind: braceVariable, start: i, end: i + 2}, true
-	case next != 0 && isNameChar(next):
+	case next != 0 && parser.IsNameChar(next):
 		end := i + 1
-		for end < len(text) && isNameChar(text[end]) {
+		for end < len(text) && parser.IsNameChar(text[end]) {
 			end++
 		}
 		return bracePart{kind: braceVariable, start: i, end: end}, true

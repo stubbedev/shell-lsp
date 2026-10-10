@@ -59,7 +59,7 @@ func (p *pass) decimalAt(dot int) (parser.Span, bool) {
 	for start > 0 && isDigit(text[start-1]) {
 		start--
 	}
-	if start == dot || (start > 0 && isNameChar(text[start-1])) || p.indexesTextKeys(start) {
+	if start == dot || (start > 0 && parser.IsNameChar(text[start-1])) || p.indexesTextKeys(start) {
 		return parser.Span{}, false
 	}
 	end := dot + 1
@@ -75,7 +75,7 @@ func (p *pass) indexesTextKeys(number int) bool {
 	}
 	nameEnd := number - 1
 	nameStart := nameEnd
-	for nameStart > 0 && isNameChar(p.text[nameStart-1]) {
+	for nameStart > 0 && parser.IsNameChar(p.text[nameStart-1]) {
 		nameStart--
 	}
 	if strings.HasSuffix(p.text[:nameStart], "${") {

@@ -892,16 +892,16 @@ func IsDigits(s string) bool {
 	return true
 }
 
+func IsNameChar(c byte) bool {
+	return c == '_' || 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || '0' <= c && c <= '9'
+}
+
 func IsName(s string) bool {
-	if s == "" {
+	if s == "" || ('0' <= s[0] && s[0] <= '9') {
 		return false
 	}
 	for i := range len(s) {
-		c := s[i]
-		switch {
-		case c == '_', 'a' <= c && c <= 'z', 'A' <= c && c <= 'Z':
-		case '0' <= c && c <= '9' && i > 0:
-		default:
+		if !IsNameChar(s[i]) {
 			return false
 		}
 	}

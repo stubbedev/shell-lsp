@@ -169,7 +169,7 @@ func checkBashParamExp(p *pass, pe *syntax.ParamExp) {
 }
 
 func checkIndirectExpansion(p *pass, pe *syntax.ParamExp, span parser.Span, text string) {
-	if !isNameChar(pe.Param.Value[0]) {
+	if !parser.IsNameChar(pe.Param.Value[0]) {
 		return
 	}
 	p.nonPortable(portabilityIssue{code: 3053, shells: strictShells, feature: "The indirect expansion " + text, alternative: "eval"}, span)
@@ -216,15 +216,11 @@ func checkExpansionOperator(p *pass, pe *syntax.ParamExp, span parser.Span, text
 
 func isNameChars(s string) bool {
 	for i := range len(s) {
-		if !isNameChar(s[i]) {
+		if !parser.IsNameChar(s[i]) {
 			return false
 		}
 	}
 	return true
-}
-
-func isNameChar(c byte) bool {
-	return c == '_' || 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || '0' <= c && c <= '9'
 }
 
 func (p *pass) isArithmeticOperand(w *syntax.Word) bool { return isArithmeticOperandOf(p.parent(), w) }

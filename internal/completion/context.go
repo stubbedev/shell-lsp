@@ -175,7 +175,7 @@ func lexLine(line string) lexed {
 			case c == ')':
 				f.depth = max(f.depth-1, 0)
 				f.cur.Reset()
-			case c == '_' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9':
+			case parser.IsNameChar(c):
 				f.cur.WriteByte(c)
 			default:
 				f.cur.Reset()
