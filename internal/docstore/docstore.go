@@ -76,13 +76,33 @@ func NewDocument(uri, language string, version int32, text string) *Document {
 
 func (d *Document) setText(text string) {
 	d.text = text
-	d.lineStart = d.lineStart[:0]
-	for i := range len(text) {
-		if text[i] == '\n' {
-			d.lineStart = append(d.lineStart, i+1)
+	d.lineStart = appendLineStarts(make([]int, 1, strings.Count(text, "\n")+1), text, 0)
+}
+
+func appendLineStarts(starts []int, text string, base int) []int {
+	for i := strings.IndexByte(text, '\n'); i >= 0; {
+		starts = append(starts, base+i+1)
+		next := strings.IndexByte(text[i+1:], '\n')
+		if next < 0 {
+			break
 		}
+		i += next + 1
 	}
-	d.lineStart = append([]int{0}, d.lineStart...)
+	return starts
+}
+
+func (d *Document) replace(start, end int, text string) {
+	kept := sort.SearchInts(d.lineStart, start+1)
+	tail := d.lineStart[sort.SearchInts(d.lineStart, end+1):]
+	starts := make([]int, kept, kept+strings.Count(text, "\n")+len(tail))
+	copy(starts, d.lineStart[:kept])
+	starts = appendLineStarts(starts, text, start)
+	shift := len(text) - (end - start)
+	for _, s := range tail {
+		starts = append(starts, s+shift)
+	}
+	d.text = d.text[:start] + text + d.text[end:]
+	d.lineStart = starts
 }
 
 func (d *Document) Text() string { return d.text }
@@ -162,7 +182,7 @@ func (d *Document) applyChanges(changes []lsp.TextDocumentContentChangeEvent, en
 		if end < start {
 			start, end = end, start
 		}
-		d.setText(d.text[:start] + NormalizeCanonical(change.Text) + d.text[end:])
+		d.replace(start, end, NormalizeCanonical(change.Text))
 	}
 }
 
@@ -257,8 +277,7 @@ func (s *Store) Change(uri string, version int32, changes []lsp.TextDocumentCont
 		if version <= d.Version {
 			return fmt.Errorf("ignoring stale change for %s: got version %d, have %d", uri, version, d.Version)
 		}
-		updated := &Document{URI: d.URI, Language: d.Language, Version: version}
-		updated.setText(d.text)
+		updated := &Document{URI: d.URI, Language: d.Language, Version: version, text: d.text, lineStart: d.lineStart}
 		updated.applyChanges(changes, next.encoding)
 		next.docs[uri] = updated
 		return nil

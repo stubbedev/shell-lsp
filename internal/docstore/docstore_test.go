@@ -2,6 +2,7 @@ package docstore
 
 import (
 	"math/rand/v2"
+	"slices"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -290,9 +291,14 @@ func TestRandomChangeSequencesMatchPlainTextModel(t *testing.T) {
 			}
 			startChar := rng.IntN(int(maxChar) + 1)
 			endChar := startChar + rng.IntN(int(maxChar)+1-startChar)
+			endLine := line
+			if rng.IntN(3) == 0 {
+				endLine = line + rng.IntN(len(modelLines)-line)
+				endChar = rng.IntN(int(maxChar) + 1)
+			}
 
 			start := lsp.Position{Line: uint32(line), Character: uint32(startChar)}
-			end := lsp.Position{Line: uint32(line), Character: uint32(endChar)}
+			end := lsp.Position{Line: uint32(endLine), Character: uint32(endChar)}
 			insert := randomText(rng, runes, rng.IntN(5))
 
 			model = applyToModel(model, start, end, insert)
@@ -305,8 +311,12 @@ func TestRandomChangeSequencesMatchPlainTextModel(t *testing.T) {
 			if err != nil {
 				t.Fatalf("seed %d: Change() error = %v", seed, err)
 			}
-			if got := mustDoc(t, store).Text(); got != model {
+			doc := mustDoc(t, store)
+			if got := doc.Text(); got != model {
 				t.Fatalf("seed %d after version %d: store = %q, model = %q", seed, version, got, model)
+			}
+			if fresh := NewDocument("file:///t.sh", "", version, model); !slices.Equal(doc.lineStart, fresh.lineStart) {
+				t.Fatalf("seed %d after version %d: line starts %v, want %v", seed, version, doc.lineStart, fresh.lineStart)
 			}
 		}
 	}
