@@ -1,0 +1,30 @@
+version: 2
+
+updates:
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    labels:
+      - "area: dependencies"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    groups:
+      all:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    labels:
+      - "area: dependencies"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    groups:
+      all:
+        patterns:
+          - "*"
