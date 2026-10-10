@@ -18,6 +18,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/format"
 	"github.com/stubbedev/shell-lsp/internal/hover"
+	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/manpage"
 	"github.com/stubbedev/shell-lsp/internal/navigation"
@@ -63,6 +64,13 @@ func BenchmarkSyntaxDiagnostics(b *testing.B) {
 	doc := document()
 	for b.Loop() {
 		diagnostics.Syntax(parser.Parse(text, dialect.Bash), doc, docstore.EncodingUTF16)
+	}
+}
+
+func BenchmarkLint(b *testing.B) {
+	tree := parser.Parse(text, dialect.Bash)
+	for b.Loop() {
+		lint.Check(tree, nil, lint.Options{})
 	}
 }
 

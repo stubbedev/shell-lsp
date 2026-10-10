@@ -2,6 +2,7 @@ package lint
 
 import (
 	"maps"
+	"slices"
 	"strings"
 
 	"mvdan.cc/sh/v3/syntax"
@@ -11,9 +12,8 @@ import (
 )
 
 const (
-	maxLoopRounds     = 3
-	maxFunctionRounds = 2
-	batsStatus        = "status"
+	maxLoopRounds = 3
+	batsStatus    = "status"
 )
 
 type space uint8
@@ -117,12 +117,12 @@ type funcRef struct {
 type state struct {
 	live     bool
 	symbolic bool
-	vars     map[string]value
-	funcs    map[string]funcRef
+	vars     pmap[value]
+	funcs    pmap[funcRef]
 }
 
 func newState(symbolic bool) *state {
-	return &state{live: true, symbolic: symbolic, vars: map[string]value{}, funcs: map[string]funcRef{}}
+	return &state{live: true, symbolic: symbolic}
 }
 
 func deadState(symbolic bool) *state {
@@ -132,11 +132,12 @@ func deadState(symbolic bool) *state {
 }
 
 func (s *state) clone() *state {
-	return &state{live: s.live, symbolic: s.symbolic, vars: maps.Clone(s.vars), funcs: maps.Clone(s.funcs)}
+	out := *s
+	return &out
 }
 
 func (s *state) get(name string) value {
-	if v, ok := s.vars[name]; ok {
+	if v, ok := s.vars.get(name); ok {
 		return v
 	}
 	if s.symbolic {
@@ -145,7 +146,7 @@ func (s *state) get(name string) value {
 	return environment(name)
 }
 
-func (s *state) set(name string, v value) { s.vars[name] = v }
+func (s *state) set(name string, v value) { s.vars = s.vars.set(name, v) }
 
 func join(a, b *state) *state {
 	switch {
@@ -155,35 +156,32 @@ func join(a, b *state) *state {
 		return a.clone()
 	}
 	out := a.clone()
-	for name, v := range b.vars {
-		out.vars[name] = out.get(name).join(v)
-	}
-	for name := range a.vars {
-		if _, ok := b.vars[name]; !ok {
-			out.vars[name] = a.vars[name].join(b.get(name))
-		}
-	}
-	for name, ref := range b.funcs {
-		mine, ok := out.funcs[name]
+	a.vars.diff(b.vars, func(name string) {
+		out.set(name, a.get(name).join(b.get(name)))
+	})
+	a.funcs.diff(b.funcs, func(name string) {
+		mine, inA := a.funcs.get(name)
+		theirs, inB := b.funcs.get(name)
 		switch {
-		case !ok:
-			out.funcs[name] = funcRef{decl: ref.decl, maybe: true}
-		case mine.decl != ref.decl:
-			out.funcs[name] = funcRef{decl: ref.decl, maybe: true}
+		case !inB:
+			out.funcs = out.funcs.set(name, funcRef{decl: mine.decl, maybe: true})
+		case !inA || mine.decl != theirs.decl:
+			out.funcs = out.funcs.set(name, funcRef{decl: theirs.decl, maybe: true})
 		default:
-			out.funcs[name] = funcRef{decl: ref.decl, maybe: mine.maybe || ref.maybe}
+			out.funcs = out.funcs.set(name, funcRef{decl: theirs.decl, maybe: mine.maybe || theirs.maybe})
 		}
-	}
-	for name, ref := range a.funcs {
-		if _, ok := b.funcs[name]; !ok {
-			out.funcs[name] = funcRef{decl: ref.decl, maybe: true}
-		}
-	}
+	})
 	return out
 }
 
 func (s *state) equal(o *state) bool {
-	return s.live == o.live && maps.Equal(s.vars, o.vars) && maps.Equal(s.funcs, o.funcs)
+	if s.live != o.live {
+		return false
+	}
+	same := true
+	s.vars.diff(o.vars, func(string) { same = false })
+	s.funcs.diff(o.funcs, func(string) { same = false })
+	return same
 }
 
 func environment(name string) value {
@@ -250,11 +248,12 @@ type interpreter struct {
 	frames     []*funcFrame
 	summaries  map[*syntax.FuncDecl]*summary
 	computing  map[*syntax.FuncDecl]bool
-	entries    map[*syntax.FuncDecl]*state
-	definedAt  map[*syntax.FuncDecl]*state
+	globals    pmap[value]
 	staticFunc map[string]*syntax.FuncDecl
 	final      *state
 	bats       bool
+	walk       []syntax.Node
+	deferred   []syntax.Node
 }
 
 func analyzeFlow(tree *parser.Tree, imports []parser.Import, bats bool) *flowResult {
@@ -267,8 +266,6 @@ func analyzeFlow(tree *parser.Tree, imports []parser.Import, bats bool) *flowRes
 		result:     &flowResult{expansions: map[*syntax.ParamExp]space{}, reached: map[*syntax.Stmt]bool{}, called: map[*syntax.FuncDecl]bool{}},
 		summaries:  map[*syntax.FuncDecl]*summary{},
 		computing:  map[*syntax.FuncDecl]bool{},
-		entries:    map[*syntax.FuncDecl]*state{},
-		definedAt:  map[*syntax.FuncDecl]*state{},
 		staticFunc: map[string]*syntax.FuncDecl{},
 	}
 	for i := range tree.Definitions {
@@ -284,13 +281,9 @@ func analyzeFlow(tree *parser.Tree, imports []parser.Import, bats bool) *flowRes
 	}
 	in.record = true
 	in.final = in.stmts(tree.File.Stmts, newState(false))
-	for range maxFunctionRounds {
-		for _, fn := range tree.Functions {
-			if fn.Decl == nil || fn.Decl.Body == nil {
-				continue
-			}
-			entry := in.entryFor(fn.Decl)
-			in.runBody(fn.Decl, entry)
+	for _, fn := range tree.Functions {
+		if fn.Decl != nil && fn.Decl.Body != nil {
+			in.runBody(fn.Decl, in.entry())
 		}
 	}
 	return in.result
@@ -334,16 +327,19 @@ func literalSpace(s string) space {
 	return spaceClean
 }
 
-func (in *interpreter) entryFor(decl *syntax.FuncDecl) *state {
-	entry := in.final.clone()
-	entry.live = true
-	if called, ok := in.entries[decl]; ok {
-		entry = join(entry, called)
+func (in *interpreter) entry() *state {
+	return &state{live: true, vars: in.globals, funcs: in.final.funcs}
+}
+
+func (in *interpreter) assign(s *state, name string, v value) {
+	s.set(name, v)
+	if s.symbolic {
+		return
 	}
-	if defined, ok := in.definedAt[decl]; ok {
-		entry = join(entry, defined)
+	if prev, ok := in.globals.get(name); ok {
+		v = prev.join(v)
 	}
-	return entry
+	in.globals = in.globals.set(name, v)
 }
 
 func (in *interpreter) stmts(list []*syntax.Stmt, s *state) *state {
@@ -426,20 +422,19 @@ func (in *interpreter) redirects(stmt *syntax.Stmt, s *state) *state {
 }
 
 func (in *interpreter) evaluate(node syntax.Node, s *state) *state {
-	var stack []syntax.Node
-	var deferred []syntax.Node
+	base, deferredBase := len(in.walk), len(in.deferred)
 	syntax.Walk(node, func(n syntax.Node) bool {
 		if n == nil {
-			done := stack[len(stack)-1]
-			stack = stack[:len(stack)-1]
+			done := in.walk[len(in.walk)-1]
+			in.walk = in.walk[:len(in.walk)-1]
 			switch {
-			case len(stack) > 0 && isDeclaration(stack[len(stack)-1]):
-				deferred = append(deferred, done)
+			case len(in.walk) > base && isDeclaration(in.walk[len(in.walk)-1]):
+				in.deferred = append(in.deferred, done)
 			case isDeclaration(done):
-				for _, d := range deferred {
+				for _, d := range in.deferred[deferredBase:] {
 					in.applyWrites(d, s)
 				}
-				deferred = deferred[:0]
+				in.deferred = in.deferred[:deferredBase]
 				in.applyWrites(done, s)
 			default:
 				in.applyWrites(done, s)
@@ -456,9 +451,10 @@ func (in *interpreter) evaluate(node syntax.Node, s *state) *state {
 		case *syntax.ParamExp:
 			in.recordExpansion(n, s)
 		}
-		stack = append(stack, n)
+		in.walk = append(in.walk, n)
 		return true
 	})
+	in.walk, in.deferred = in.walk[:base], in.deferred[:deferredBase]
 	return s
 }
 
@@ -546,8 +542,10 @@ func builtinSpace(def *parser.Definition) space {
 func (in *interpreter) assignVar(def *parser.Definition, s *state, v value) {
 	if def.Local {
 		in.declareLocal(def.Name, s)
+		s.set(def.Name, v)
+		return
 	}
-	s.set(def.Name, v)
+	in.assign(s, def.Name, v)
 }
 
 func (in *interpreter) declareLocal(name string, s *state) {
@@ -558,7 +556,7 @@ func (in *interpreter) declareLocal(name string, s *state) {
 	if _, seen := frame.locals[name]; seen {
 		return
 	}
-	if prev, ok := s.vars[name]; ok {
+	if prev, ok := s.vars.get(name); ok {
 		frame.locals[name] = &prev
 		return
 	}
@@ -715,12 +713,12 @@ func (in *interpreter) call(stmt *syntax.Stmt, call *syntax.CallExpr, s *state) 
 	case "unset":
 		for _, arg := range call.Args[1:] {
 			if v, ok := parser.Literal(arg); ok && !strings.HasPrefix(v, "-") {
-				s.set(v, value{space: spaceEmpty, integer: integerNo})
+				in.assign(s, v, value{space: spaceEmpty, integer: integerNo})
 			}
 		}
 	case "source", ".":
-		for name, v := range in.imported {
-			s.set(name, v)
+		for _, name := range slices.Sorted(maps.Keys(in.imported)) {
+			in.assign(s, name, in.imported[name])
 		}
 	}
 	return in.invoke(name, s)
@@ -746,7 +744,7 @@ func (in *interpreter) jump(name string, call *syntax.CallExpr, s *state) *state
 }
 
 func (in *interpreter) invoke(name string, s *state) *state {
-	ref, ok := s.funcs[name]
+	ref, ok := s.funcs.get(name)
 	if !ok {
 		decl, static := in.staticFunc[name]
 		if !static {
@@ -755,30 +753,20 @@ func (in *interpreter) invoke(name string, s *state) *state {
 		ref = funcRef{decl: decl, maybe: s.symbolic}
 	}
 	in.result.called[ref.decl] = true
-	if in.record && !s.symbolic {
-		if prev, ok := in.entries[ref.decl]; ok {
-			in.entries[ref.decl] = join(prev, s)
-		} else {
-			in.entries[ref.decl] = s.clone()
-		}
-	}
-	sum := in.summary(ref.decl)
-	after := apply(sum, s)
+	after := in.apply(in.summary(ref.decl), s)
 	if ref.maybe {
 		return join(after, s)
 	}
 	return after
 }
 
-func apply(sum *summary, s *state) *state {
+func (in *interpreter) apply(sum *summary, s *state) *state {
 	if !sum.exit.live {
 		return deadState(s.symbolic)
 	}
 	out := s.clone()
-	for name, v := range sum.exit.vars {
-		out.set(name, v.substitute(s.get(name)))
-	}
-	maps.Copy(out.funcs, sum.exit.funcs)
+	sum.exit.vars.each(func(name string, v value) { in.assign(out, name, v.substitute(s.get(name))) })
+	sum.exit.funcs.each(func(name string, ref funcRef) { out.funcs = out.funcs.set(name, ref) })
 	return out
 }
 
@@ -814,10 +802,10 @@ func (in *interpreter) runBody(decl *syntax.FuncDecl, entry *state) *state {
 	}
 	for name, prev := range frame.locals {
 		if prev == nil {
-			delete(exit.vars, name)
+			exit.vars = exit.vars.remove(name)
 			continue
 		}
-		exit.vars[name] = *prev
+		exit.set(name, *prev)
 	}
 	return exit
 }
@@ -828,14 +816,7 @@ func (in *interpreter) define(decl *syntax.FuncDecl, s *state) *state {
 		names = []*syntax.Lit{decl.Name}
 	}
 	for _, name := range names {
-		s.funcs[name.Value] = funcRef{decl: decl}
-	}
-	if in.record && !s.symbolic {
-		if prev, ok := in.definedAt[decl]; ok {
-			in.definedAt[decl] = join(prev, s)
-		} else {
-			in.definedAt[decl] = s.clone()
-		}
+		s.funcs = s.funcs.set(name.Value, funcRef{decl: decl})
 	}
 	return s
 }
@@ -918,7 +899,7 @@ func (in *interpreter) forClause(cmd *syntax.ForClause, s *state) *state {
 		}
 		assign := func(head *state) *state {
 			if loop.Name != nil && items != 0 {
-				head.set(loop.Name.Value, value{space: items.normalize(), integer: integerNo})
+				in.assign(head, loop.Name.Value, value{space: items.normalize(), integer: integerNo})
 			}
 			return head
 		}
