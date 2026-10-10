@@ -53,7 +53,9 @@ func newPass(tree *parser.Tree, imports []parser.Import, opts Options) *pass {
 	return &pass{
 		tree: tree, imports: imports, sources: opts.Sources, text: tree.Text(), dialect: tree.Dialect, bats: parser.IsBats(tree.Text()),
 		firstCommand: firstCommand, directives: directives, catalog: catalog, rules: rules, nodeChecks: nodeChecks, commands: commandChecks,
-		settings: fileWideSettings(directives, firstCommand, opts.Optional),
+		settings:  fileWideSettings(directives, firstCommand, opts.Optional),
+		stmts:     make([]parser.Span, 0, len(tree.Commands)),
+		variables: variableUsage{reads: make([]variableRead, 0, len(tree.References))},
 	}
 }
 
