@@ -63,7 +63,7 @@ func TestFeaturesOverCorpus(t *testing.T) {
 					t.Errorf("%s span %+v out of bounds (%d bytes)", what, s, len(text))
 				}
 			}
-			for _, tok := range semantic.Tokens(tree) {
+			for _, tok := range semantic.Tokens(tree, nil) {
 				inBounds("token", tok.Span)
 			}
 			var walk func([]structure.Symbol)

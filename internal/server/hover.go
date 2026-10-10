@@ -44,7 +44,7 @@ func (s *Server) handleHover(ctx context.Context, docs *docstore.View, params js
 		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
 	}
 	offset := snap.doc.PositionToOffset(hoverParams.Position, snap.encoding)
-	result, ok, err := hover.Hover(ctx, hover.Input{Tree: snap.tree, Offset: offset, Commands: s.commandDocs})
+	result, ok, err := hover.Hover(ctx, hover.Input{Tree: snap.tree, Imports: s.imports(snap), Offset: offset, Commands: s.commandDocs})
 	if err != nil {
 		return nil, err
 	}

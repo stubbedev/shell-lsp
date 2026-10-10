@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -17,6 +18,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
+	"github.com/stubbedev/shell-lsp/internal/navigation"
 )
 
 const diagnosticsDebounce = 200 * time.Millisecond
@@ -25,6 +27,7 @@ type shellcheckKey struct {
 	version    int32
 	generation uint64
 	binary     string
+	sources    uint64
 }
 
 type shellcheckRun struct {
@@ -92,20 +95,20 @@ type diagnosticReport struct {
 }
 
 type shellcheckPlan struct {
-	args   []string
-	binary diagnostics.Binary
+	args    []string
+	binary  diagnostics.Binary
+	sources uint64
 }
 
 func (s *Server) diagnose(ctx context.Context, snap *snapshot, wait bool) (diagnosticReport, error) {
 	items := diagnostics.Syntax(snap.tree, snap.doc, snap.encoding)
 	plan, planned := s.planShellcheck(snap)
-	binaryID := "none"
-	if planned {
-		binaryID = plan.binary.ID
-	}
 	report := diagnosticReport{
 		version:  snap.doc.Version,
-		resultID: fmt.Sprintf("%d/%d/%s", snap.doc.Version, snap.generation, binaryID),
+		resultID: fmt.Sprintf("%d/%d", snap.doc.Version, snap.generation),
+	}
+	if planned {
+		report.resultID += fmt.Sprintf("/%s/%d", plan.binary.ID, plan.sources)
 	}
 	if planned {
 		run := s.startShellcheck(snap, plan)
@@ -151,12 +154,19 @@ func (s *Server) planShellcheck(snap *snapshot) (shellcheckPlan, bool) {
 			err.Error()+"; diagnostics are limited to syntax errors until shellcheck is installed or shellLsp.shellcheck.path is set")
 		return shellcheckPlan{}, false
 	}
-	return shellcheckPlan{args: args, binary: binary}, true
+	return shellcheckPlan{args: args, binary: binary, sources: s.sourcesStamp(snap)}, true
+}
+
+func (s *Server) sourcesStamp(snap *snapshot) uint64 {
+	if !slices.ContainsFunc(snap.tree.Commands, navigation.IsSource) {
+		return 0
+	}
+	return s.workspace.Generation()
 }
 
 func (s *Server) startShellcheck(snap *snapshot, plan shellcheckPlan) *shellcheckRun {
 	uri := snap.doc.URI
-	key := shellcheckKey{version: snap.doc.Version, generation: snap.generation, binary: plan.binary.ID}
+	key := shellcheckKey{version: snap.doc.Version, generation: snap.generation, binary: plan.binary.ID, sources: plan.sources}
 	return s.diagnostics.start(uri, key, func(ctx context.Context) ([]lsp.Diagnostic, bool) {
 		output, err := diagnostics.RunShellcheck(ctx, plan.binary, plan.args, scriptDir(uri), snap.doc.Text())
 		if ctx.Err() != nil {

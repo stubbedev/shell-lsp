@@ -28,7 +28,7 @@ func TestTokens(t *testing.T) {
 	t.Parallel()
 
 	text := "#!/bin/bash\nreadonly MAX=3\ngreet() {\n\tlocal who=\"$1\"\n\techo \"hi $who\" 'raw' >&2\n}\nif (( MAX > 2 )); then greet -v \"$HOME\" | grep x; fi\ncat <<EOF\nbody $MAX\nEOF\n"
-	got := describe(text, Tokens(parser.Parse(text, dialect.Bash)))
+	got := describe(text, Tokens(parser.Parse(text, dialect.Bash), nil))
 	want := []string{
 		"#!/bin/bash:comment",
 		"readonly:function+defaultLibrary",
@@ -74,7 +74,7 @@ func TestTokensAreSingleLineAndOrdered(t *testing.T) {
 	t.Parallel()
 
 	text := "echo 'multi\nline\nstring' \"a\nb\"\n"
-	tokens := Tokens(parser.Parse(text, dialect.Bash))
+	tokens := Tokens(parser.Parse(text, dialect.Bash), nil)
 	last := -1
 	for _, tok := range tokens {
 		if strings.Contains(text[tok.Span.Start:tok.Span.End], "\n") {
@@ -87,6 +87,24 @@ func TestTokensAreSingleLineAndOrdered(t *testing.T) {
 	}
 	if got := describe(text, tokens); len(got) < 5 {
 		t.Errorf("multi-line string tokens = %v", got)
+	}
+}
+
+func TestTokensUseImports(t *testing.T) {
+	t.Parallel()
+
+	text := "test\necho \"$LIMIT\"\n"
+	tree := parser.Parse(text, dialect.Bash)
+	lib := parser.Import{Name: "lib.sh", Tree: parser.Parse("readonly LIMIT=3\ntest() { :; }\n", dialect.Bash)}
+	without := strings.Join(describe(text, Tokens(tree, nil)), " ")
+	with := strings.Join(describe(text, Tokens(tree, []parser.Import{lib})), " ")
+	if want := "test:function+defaultLibrary"; !strings.Contains(without, want) {
+		t.Errorf("tokens without imports = %s, want %s", without, want)
+	}
+	for _, want := range []string{"test:function ", "LIMIT:variable+readonly"} {
+		if !strings.Contains(with+" ", want) {
+			t.Errorf("tokens with imports = %s, want %s", with, want)
+		}
 	}
 }
 

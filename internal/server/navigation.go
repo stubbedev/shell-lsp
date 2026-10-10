@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
@@ -13,6 +14,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/navigation"
+	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
@@ -78,7 +80,7 @@ func toLocations(locations []navigation.Location, enc docstore.Encoding) []lsp.L
 	return out
 }
 
-func (s *Server) handleDidChangeWatchedFiles(_ context.Context, params json.RawMessage) error {
+func (s *Server) handleDidChangeWatchedFiles(ctx context.Context, params json.RawMessage) error {
 	watched, err := lsp.DecodeParams[lsp.DidChangeWatchedFilesParams](params)
 	if err != nil {
 		return err
@@ -91,6 +93,7 @@ func (s *Server) handleDidChangeWatchedFiles(_ context.Context, params json.RawM
 		}
 		s.workspace.Invalidate(path)
 	}
+	s.refreshDiagnostics(ctx, s.clientCapabilities().Workspace.Diagnostics.RefreshSupport)
 	return nil
 }
 
@@ -128,4 +131,17 @@ func (s *Server) candidateFiles(docs *docstore.View) navigation.WorkspaceFiles {
 		slices.Sort(paths)
 		return slices.Compact(paths), nil
 	}
+}
+
+func (s *Server) imports(snap *snapshot) []parser.Import {
+	chain := navigation.Chain(snap.file, s.navigationEnv())
+	imports := make([]parser.Import, len(chain))
+	for i, f := range chain {
+		name := f.Path
+		if rel, err := filepath.Rel(filepath.Dir(snap.file.Path), f.Path); err == nil && !strings.HasPrefix(rel, "..") {
+			name = rel
+		}
+		imports[i] = parser.Import{Name: name, Tree: f.Tree}
+	}
+	return imports
 }

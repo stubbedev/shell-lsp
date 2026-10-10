@@ -13,6 +13,13 @@ Every LSP method, in both directions, is listed with its status in
 [docs/lsp-methods.md](docs/lsp-methods.md), generated from the table the
 conformance tests check the server against.
 
+Files pulled in with `source` or `.` act as imports: their functions and
+globals are completed, hovered, highlighted and navigated to as if they were
+defined in the document, open editor buffers win over the copy on disk, and
+shellcheck follows them (`--external-sources`). Paths built from `$0`,
+`${BASH_SOURCE[0]}`, `dirname`, `cd ... && pwd` and earlier assignments are
+resolved, as are `# shellcheck source=` directives.
+
 ## Goals
 
 - Auto-detected dialects: bash, zsh, sh, dash, ksh (shebang, extension, modeline)
@@ -48,7 +55,7 @@ the offending field.
   "shellcheck": {
     "enable": true,
     "path": "shellcheck",
-    "arguments": ["--severity=style", "--external-sources"],
+    "arguments": ["--severity=style"],
     "exclude": ["SC2034"]
   }
 }
@@ -59,7 +66,7 @@ the offending field.
 | `dialect` | detected per file | Force `bash`, `zsh`, `sh`, `dash` or `ksh` for every document |
 | `shellcheck.enable` | `true` | Run shellcheck for diagnostics |
 | `shellcheck.path` | `shellcheck` | Binary name or path, resolved through `PATH` |
-| `shellcheck.arguments` | `[]` | Extra arguments; `--format`, `--shell`, `--exclude` and `-` are managed by the server |
+| `shellcheck.arguments` | `[]` | Extra arguments; `--format`, `--shell`, `--external-sources`, `--exclude` and `-` are managed by the server |
 | `shellcheck.exclude` | `[]` | Codes to suppress, as `SC2034` or `2034` |
 | `format.enable` | `true` | Answer formatting requests |
 | `format.indent` | editor setting | Spaces per level; `0` indents with tabs |

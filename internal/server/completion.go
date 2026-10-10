@@ -153,6 +153,7 @@ func (s *Server) handleCompletion(ctx context.Context, docs *docstore.View, para
 	}
 	result, err := completion.Complete(ctx, completion.Input{
 		Tree:      snap.tree,
+		Imports:   s.imports(snap),
 		Offset:    snap.doc.PositionToOffset(completionParams.Position, snap.encoding),
 		ScriptDir: scriptDir(snap.doc.URI),
 		WorkDir:   workDir,
@@ -227,7 +228,7 @@ func (s *Server) handleCompletionResolve(ctx context.Context, docs *docstore.Vie
 	if err != nil {
 		return item, nil
 	}
-	if doc, ok := completion.Documentation(snap.tree, data.Kind, data.Name, data.Offset); ok {
+	if doc, ok := completion.Documentation(snap.tree, s.imports(snap), data.Kind, data.Name, data.Offset); ok {
 		item.Documentation = &lsp.MarkupContent{Kind: lsp.MarkupMarkdown, Value: doc}
 	}
 	return item, nil

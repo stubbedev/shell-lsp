@@ -51,6 +51,7 @@ type Environment interface {
 
 type Input struct {
 	Tree      *parser.Tree
+	Imports   []parser.Import
 	Offset    int
 	ScriptDir string
 	WorkDir   string
@@ -79,16 +80,18 @@ const (
 	ResolveVariable
 )
 
-func Documentation(tree *parser.Tree, kind ResolveKind, name string, offset int) (string, bool) {
+func Documentation(tree *parser.Tree, imports []parser.Import, kind ResolveKind, name string, offset int) (string, bool) {
 	switch kind {
 	case ResolveFunction:
-		fn, ok := tree.FunctionNamed(name)
-		if !ok {
-			return "", false
+		if fn, ok := tree.FunctionNamed(name); ok {
+			return hover.FunctionDoc(tree, fn), true
 		}
-		return hover.FunctionDoc(tree, fn), true
+		if imp, fn, ok := parser.ImportedFunction(imports, name); ok {
+			return hover.ImportedFunctionDoc(imp, fn), true
+		}
+		return "", false
 	case ResolveVariable:
-		return hover.VariableDoc(tree, min(max(offset, 0), len(tree.Text())), name), true
+		return hover.VariableDoc(tree, imports, min(max(offset, 0), len(tree.Text())), name), true
 	}
 	return "", false
 }
@@ -139,6 +142,14 @@ func (c completer) commands(withKeywords bool) Result {
 		it.Detail = "function"
 		it.Resolve = ResolveFunction
 		add(it)
+	}
+	for _, imp := range c.Imports {
+		for _, fn := range imp.Tree.Functions {
+			it := c.item(fn.Name, KindFunction, "1")
+			it.Detail = "function from " + imp.Name
+			it.Resolve = ResolveFunction
+			add(it)
+		}
 	}
 	for _, alias := range c.aliases() {
 		it := c.item(alias.name, KindAlias, "1")
@@ -315,6 +326,17 @@ func (c completer) variables() []Item {
 		it.Detail = detail
 		it.Resolve = ResolveVariable
 		add(it)
+	}
+	for _, imp := range c.Imports {
+		for _, def := range imp.Tree.Definitions {
+			if def.Local || seen[def.Name] || !strings.HasPrefix(def.Name, c.site.prefix) {
+				continue
+			}
+			it := c.item(def.Name, KindVariable, "1")
+			it.Detail = "global from " + imp.Name
+			it.Resolve = ResolveVariable
+			add(it)
+		}
 	}
 	for _, e := range shelldocs.Variables(c.dialect) {
 		it := c.item(e.Name, KindVariable, "2")

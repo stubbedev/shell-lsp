@@ -54,7 +54,7 @@ func TestShellcheckArgs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ShellcheckArgs() error = %v", err)
 	}
-	want := []string{"--format=json1", "--shell=sh", "--exclude=SC2034,SC1090", "-x", "-"}
+	want := []string{"--format=json1", "--shell=sh", "--external-sources", "--exclude=SC2034,SC1090", "-x", "-"}
 	if !slices.Equal(got, want) {
 		t.Errorf("ShellcheckArgs() = %v, want %v", got, want)
 	}

@@ -118,7 +118,7 @@ func BenchmarkHover(b *testing.B) {
 func BenchmarkSemanticTokens(b *testing.B) {
 	tree := parser.Parse(text, dialect.Bash)
 	for b.Loop() {
-		semantic.Tokens(tree)
+		semantic.Tokens(tree, nil)
 	}
 }
 

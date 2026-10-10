@@ -45,17 +45,18 @@ type Token struct {
 	Modifiers Modifier
 }
 
-func Tokens(tree *parser.Tree) []Token {
-	g := generator{tree: tree, text: tree.Text()}
+func Tokens(tree *parser.Tree, imports []parser.Import) []Token {
+	g := generator{tree: tree, imports: imports, text: tree.Text()}
 	g.index()
 	g.walk()
 	return g.result()
 }
 
 type generator struct {
-	tree   *parser.Tree
-	text   string
-	tokens []Token
+	tree    *parser.Tree
+	imports []parser.Import
+	text    string
+	tokens  []Token
 }
 
 func (g *generator) add(span parser.Span, t Type, mods Modifier) {
@@ -106,10 +107,14 @@ func (g *generator) index() {
 func (g *generator) referenceModifiers(ref parser.Reference) Modifier {
 	defs := g.tree.Visible(ref.Name, ref.Within)
 	if defs.Len() == 0 {
-		if _, ok := shelldocs.Variable(ref.Name); ok {
-			return ModDefaultLibrary
+		_, imported, ok := parser.ImportedGlobal(g.imports, ref.Name)
+		if !ok {
+			if _, special := shelldocs.Variable(ref.Name); special {
+				return ModDefaultLibrary
+			}
+			return 0
 		}
-		return 0
+		defs = imported
 	}
 	if defs.Any(func(d *parser.Definition) bool { return d.Attrs.Has(parser.AttrReadonly) }) {
 		return ModReadonly
@@ -119,6 +124,9 @@ func (g *generator) referenceModifiers(ref parser.Reference) Modifier {
 
 func (g *generator) commandModifiers(name string) Modifier {
 	if _, ok := g.tree.FunctionNamed(name); ok {
+		return 0
+	}
+	if _, _, ok := parser.ImportedFunction(g.imports, name); ok {
 		return 0
 	}
 	if entry, ok := shelldocs.Builtin(name); ok && entry.Dialects.Has(g.tree.Dialect) {

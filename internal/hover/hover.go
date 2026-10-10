@@ -23,6 +23,7 @@ type Commands interface {
 
 type Input struct {
 	Tree     *parser.Tree
+	Imports  []parser.Import
 	Offset   int
 	Commands Commands
 }
@@ -122,6 +123,9 @@ func (h hoverer) variableName() (Result, bool) {
 func (h hoverer) variable(name string) string {
 	defs := h.Tree.Visible(name, h.scope)
 	if defs.Len() == 0 {
+		if imp, _, ok := parser.ImportedGlobal(h.Imports, name); ok {
+			return VariableDoc(imp.Tree, nil, 0, name) + importedFrom(imp)
+		}
 		return h.undefinedVariable(name)
 	}
 	first := *defs.At(0)
@@ -199,8 +203,16 @@ func FunctionDoc(tree *parser.Tree, fn parser.Function) string {
 	return newHoverer(Input{Tree: tree, Offset: fn.NameSpan.Start}).function(fn)
 }
 
-func VariableDoc(tree *parser.Tree, offset int, name string) string {
-	return newHoverer(Input{Tree: tree, Offset: offset}).variable(name)
+func ImportedFunctionDoc(imp parser.Import, fn parser.Function) string {
+	return FunctionDoc(imp.Tree, fn) + importedFrom(imp)
+}
+
+func importedFrom(imp parser.Import) string {
+	return fmt.Sprintf("\n\nFrom `%s`.", imp.Name)
+}
+
+func VariableDoc(tree *parser.Tree, imports []parser.Import, offset int, name string) string {
+	return newHoverer(Input{Tree: tree, Imports: imports, Offset: offset}).variable(name)
 }
 
 func newHoverer(in Input) hoverer {
@@ -230,6 +242,9 @@ func (h hoverer) command(ctx context.Context) (Result, bool, error) {
 		}
 		if fn, ok := h.Tree.FunctionNamed(cmd.Name); ok {
 			return Result{Markdown: h.function(fn), Span: cmd.NameSpan}, true, nil
+		}
+		if imp, fn, ok := parser.ImportedFunction(h.Imports, cmd.Name); ok {
+			return Result{Markdown: ImportedFunctionDoc(imp, fn), Span: cmd.NameSpan}, true, nil
 		}
 		if entry, ok := shelldocs.Builtin(cmd.Name); ok {
 			return Result{Markdown: entry.Markdown(h.dialect), Span: cmd.NameSpan}, true, nil

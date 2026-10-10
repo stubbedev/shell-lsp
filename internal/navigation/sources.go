@@ -42,13 +42,29 @@ func IsSource(cmd parser.Command) bool {
 	return (cmd.Name == "source" || cmd.Name == ".") && len(cmd.Args) > 0
 }
 
+type resolvedSource struct {
+	command parser.Command
+	arg     parser.Span
+	path    string
+}
+
 func Sources(file *workspace.File, env Env) []SourceRef {
-	refs, _ := file.Memo("navigation.sources", env.Loader.Generation(), func() any { return resolveSources(file, env) }).([]SourceRef)
+	resolved, _ := file.Memo("navigation.sources", env.Loader.Generation(), func() any { return resolveSources(file, env) }).([]resolvedSource)
+	refs := make([]SourceRef, len(resolved))
+	for i, r := range resolved {
+		refs[i] = SourceRef{Command: r.command, Arg: r.arg}
+		if r.path == "" {
+			continue
+		}
+		if target, err := env.Loader.Load(r.path); err == nil {
+			refs[i].Target = target
+		}
+	}
 	return refs
 }
 
-func resolveSources(file *workspace.File, env Env) []SourceRef {
-	var refs []SourceRef
+func resolveSources(file *workspace.File, env Env) []resolvedSource {
+	var out []resolvedSource
 	for _, cmd := range file.Tree.Commands {
 		if !IsSource(cmd) {
 			continue
@@ -57,9 +73,13 @@ func resolveSources(file *workspace.File, env Env) []SourceRef {
 		if !ok {
 			continue
 		}
-		refs = append(refs, SourceRef{Command: cmd, Arg: span, Target: resolveSource(file, cmd, env)})
+		r := resolvedSource{command: cmd, arg: span}
+		if target := resolveSource(file, cmd, env); target != nil {
+			r.path = target.Path
+		}
+		out = append(out, r)
 	}
-	return refs
+	return out
 }
 
 func Chain(file *workspace.File, env Env) []*workspace.File {

@@ -113,10 +113,10 @@ func TestCommandPosition(t *testing.T) {
 		t.Errorf("function item = %+v", fn)
 	}
 	tree := parser.Parse("# Deploys.\ndeploy() { :; }\n", dialect.Bash)
-	if doc, ok := Documentation(tree, ResolveFunction, "deploy", 0); !ok || !strings.Contains(doc, "Deploys.") {
+	if doc, ok := Documentation(tree, nil, ResolveFunction, "deploy", 0); !ok || !strings.Contains(doc, "Deploys.") {
 		t.Errorf("function documentation = %q, %t", doc, ok)
 	}
-	if doc, ok := Documentation(tree, ResolveVariable, "HOME", 3); !ok || !strings.Contains(doc, "Home directory") {
+	if doc, ok := Documentation(tree, nil, ResolveVariable, "HOME", 3); !ok || !strings.Contains(doc, "Home directory") {
 		t.Errorf("variable documentation = %q, %t", doc, ok)
 	}
 	kw, _ := find(all, "for")

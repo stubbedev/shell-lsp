@@ -41,7 +41,7 @@ func ShellcheckArgs(settings config.Shellcheck, d dialect.Dialect) ([]string, er
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", ErrDialectUnsupported, d)
 	}
-	args := []string{"--format=json1", "--shell=" + shell}
+	args := []string{"--format=json1", "--shell=" + shell, "--external-sources"}
 	if len(settings.Exclude) > 0 {
 		codes := make([]string, len(settings.Exclude))
 		for i, code := range settings.Exclude {
