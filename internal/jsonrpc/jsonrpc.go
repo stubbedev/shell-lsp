@@ -15,13 +15,16 @@ import (
 const Version = "2.0"
 
 const (
-	CodeParseError     = -32700
-	CodeInvalidRequest = -32600
-	CodeMethodNotFound = -32601
-	CodeInvalidParams  = -32602
-	CodeInternalError  = -32603
-	CodeServerClosing  = -32000
+	CodeParseError       = -32700
+	CodeInvalidRequest   = -32600
+	CodeMethodNotFound   = -32601
+	CodeInvalidParams    = -32602
+	CodeInternalError    = -32603
+	CodeServerClosing    = -32000
+	CodeRequestCancelled = -32800
 )
+
+const maxBodySize = 64 << 20
 
 type Message struct {
 	JSONRPC string          `json:"jsonrpc"`
@@ -80,6 +83,9 @@ func (c *Conn) Read() (*Message, error) {
 			if err != nil || n < 0 {
 				return nil, fmt.Errorf("invalid Content-Length %q", value)
 			}
+			if n > maxBodySize {
+				return nil, fmt.Errorf("Content-Length %d exceeds limit %d", n, maxBodySize)
+			}
 			contentLength = n
 		}
 	}
@@ -125,6 +131,18 @@ func (c *Conn) Reply(id json.RawMessage, result any, rpcErr *Error) error {
 		msg.Result = encoded
 	} else {
 		msg.Result = json.RawMessage("null")
+	}
+	return c.Write(msg)
+}
+
+func (c *Conn) Request(id json.RawMessage, method string, params any) error {
+	msg := &Message{JSONRPC: Version, ID: id, Method: method}
+	if params != nil {
+		encoded, err := json.Marshal(params)
+		if err != nil {
+			return fmt.Errorf("marshaling params: %w", err)
+		}
+		msg.Params = encoded
 	}
 	return c.Write(msg)
 }
