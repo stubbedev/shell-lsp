@@ -7,8 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strconv"
-	"strings"
 	"sync"
 )
 
@@ -56,21 +56,37 @@ func NewError(code int, format string, args ...any) *Error {
 	return &Error{Code: code, Message: fmt.Sprintf(format, args...)}
 }
 
+const (
+	readBufferSize = 64 << 10
+	lengthName     = "Content-Length"
+	lengthHeader   = lengthName + ": "
+	headerEnd      = "\r\n\r\n"
+	headerReserve  = len(lengthHeader) + 20 + len(headerEnd)
+)
+
 type Conn struct {
 	reader *bufio.Reader
+	body   []byte
 	writer io.Writer
 	mu     sync.Mutex
+	frame  bytes.Buffer
+	enc    *json.Encoder
 }
 
 func NewConn(r io.Reader, w io.Writer) *Conn {
-	return &Conn{reader: bufio.NewReader(r), writer: w}
+	c := &Conn{reader: bufio.NewReaderSize(r, readBufferSize), writer: w}
+	c.enc = json.NewEncoder(&c.frame)
+	return c
 }
 
 func (c *Conn) Read() (*Message, error) {
 	contentLength := -1
 	for {
-		line, err := c.reader.ReadBytes('\n')
+		line, err := c.reader.ReadSlice('\n')
 		if err != nil {
+			if errors.Is(err, bufio.ErrBufferFull) {
+				return nil, fmt.Errorf("header line longer than %d bytes", readBufferSize)
+			}
 			return nil, err
 		}
 		line = bytes.TrimSpace(line)
@@ -81,7 +97,7 @@ func (c *Conn) Read() (*Message, error) {
 		if !ok {
 			return nil, fmt.Errorf("malformed header %q", line)
 		}
-		if strings.EqualFold(string(name), "Content-Length") {
+		if bytes.EqualFold(name, []byte(lengthName)) {
 			n, err := strconv.Atoi(string(bytes.TrimSpace(value)))
 			if err != nil || n < 0 {
 				return nil, fmt.Errorf("invalid Content-Length %q", value)
@@ -95,69 +111,95 @@ func (c *Conn) Read() (*Message, error) {
 	if contentLength < 0 {
 		return nil, errors.New("missing Content-Length header")
 	}
-	body := make([]byte, contentLength)
-	if _, err := io.ReadFull(c.reader, body); err != nil {
+	c.body = slices.Grow(c.body[:0], contentLength)[:contentLength]
+	if _, err := io.ReadFull(c.reader, c.body); err != nil {
 		return nil, fmt.Errorf("reading %d byte body: %w", contentLength, err)
 	}
 	var msg Message
-	if err := json.Unmarshal(body, &msg); err != nil {
-		return nil, fmt.Errorf("parsing body %q: %w", body, err)
+	if err := json.Unmarshal(c.body, &msg); err != nil {
+		return nil, fmt.Errorf("parsing body %q: %w", c.body, err)
 	}
 	return &msg, nil
 }
 
 func (c *Conn) Write(msg *Message) error {
-	body, err := json.Marshal(msg)
-	if err != nil {
-		return fmt.Errorf("marshaling message: %w", err)
-	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if _, err := fmt.Fprintf(c.writer, "Content-Length: %d\r\n\r\n", len(body)); err != nil {
-		return fmt.Errorf("writing header: %w", err)
-	}
-	if _, err := c.writer.Write(body); err != nil {
-		return fmt.Errorf("writing body: %w", err)
-	}
-	return nil
+	return c.send(func() error {
+		if err := c.encode(msg); err != nil {
+			return fmt.Errorf("marshaling message: %w", err)
+		}
+		return nil
+	})
 }
 
 func (c *Conn) Reply(id json.RawMessage, result any, rpcErr *Error) error {
-	msg := &Message{JSONRPC: Version, ID: id}
 	if rpcErr != nil {
-		msg.Error = rpcErr
-	} else if result != nil {
-		encoded, err := json.Marshal(result)
-		if err != nil {
-			return fmt.Errorf("marshaling result: %w", err)
-		}
-		msg.Result = encoded
-	} else {
-		msg.Result = json.RawMessage("null")
+		return c.envelope(id, "", "error", rpcErr)
 	}
-	return c.Write(msg)
+	return c.envelope(id, "", "result", result)
 }
 
 func (c *Conn) Request(id json.RawMessage, method string, params any) error {
-	msg := &Message{JSONRPC: Version, ID: id, Method: method}
-	if params != nil {
-		encoded, err := json.Marshal(params)
-		if err != nil {
-			return fmt.Errorf("marshaling params: %w", err)
-		}
-		msg.Params = encoded
-	}
-	return c.Write(msg)
+	return c.envelope(id, method, "params", params)
 }
 
 func (c *Conn) Notify(method string, params any) error {
-	msg := &Message{JSONRPC: Version, Method: method}
-	if params != nil {
-		encoded, err := json.Marshal(params)
-		if err != nil {
-			return fmt.Errorf("marshaling params: %w", err)
+	return c.envelope(nil, method, "params", params)
+}
+
+func (c *Conn) envelope(id json.RawMessage, method, member string, value any) error {
+	return c.send(func() error {
+		c.frame.WriteString(`{"jsonrpc":"` + Version + `"`)
+		if id != nil {
+			c.frame.WriteString(`,"id":`)
+			c.frame.Write(id)
 		}
-		msg.Params = encoded
+		if method != "" {
+			c.frame.WriteString(`,"method":`)
+			if err := c.encode(method); err != nil {
+				return fmt.Errorf("marshaling method %q: %w", method, err)
+			}
+		}
+		if value != nil || member == "result" {
+			c.frame.WriteString(`,"` + member + `":`)
+			if err := c.encode(value); err != nil {
+				return fmt.Errorf("marshaling %s of %s: %w", member, describe(id, method), err)
+			}
+		}
+		c.frame.WriteByte('}')
+		return nil
+	})
+}
+
+func describe(id json.RawMessage, method string) string {
+	if method != "" {
+		return method
 	}
-	return c.Write(msg)
+	return "response " + string(id)
+}
+
+func (c *Conn) encode(v any) error {
+	if err := c.enc.Encode(v); err != nil {
+		return err
+	}
+	c.frame.Truncate(c.frame.Len() - 1)
+	return nil
+}
+
+func (c *Conn) send(body func() error) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.frame.Reset()
+	var reserve [headerReserve]byte
+	c.frame.Write(reserve[:])
+	if err := body(); err != nil {
+		return err
+	}
+	frame := c.frame.Bytes()
+	h := append(strconv.AppendInt(append(reserve[:0], lengthHeader...), int64(len(frame)-headerReserve), 10), headerEnd...)
+	start := headerReserve - len(h)
+	copy(frame[start:], h)
+	if _, err := c.writer.Write(frame[start:]); err != nil {
+		return fmt.Errorf("writing %d byte frame: %w", len(frame)-start, err)
+	}
+	return nil
 }

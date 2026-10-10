@@ -142,3 +142,73 @@ func TestReadEOF(t *testing.T) {
 		t.Errorf("Read() error = %v, want io.EOF", err)
 	}
 }
+
+type countingWriter struct {
+	bytes.Buffer
+	writes int
+}
+
+func (w *countingWriter) Write(p []byte) (int, error) {
+	w.writes++
+	return w.Buffer.Write(p)
+}
+
+func TestEachFrameIsOneWrite(t *testing.T) {
+	t.Parallel()
+
+	var w countingWriter
+	conn := NewConn(nil, &w)
+	if err := conn.Reply(json.RawMessage("3"), map[string][]int{"data": {1, 2}}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := conn.Notify("window/logMessage", map[string]string{"message": "<a&b>"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := conn.Request(json.RawMessage("4"), "workspace/configuration", nil); err != nil {
+		t.Fatal(err)
+	}
+	want := "Content-Length: 48\r\n\r\n" + `{"jsonrpc":"2.0","id":3,"result":{"data":[1,2]}}` +
+		"Content-Length: 90\r\n\r\n" + `{"jsonrpc":"2.0","method":"window/logMessage","params":{"message":"\u003ca\u0026b\u003e"}}` +
+		"Content-Length: 59\r\n\r\n" + `{"jsonrpc":"2.0","id":4,"method":"workspace/configuration"}`
+	if w.String() != want {
+		t.Errorf("frames =\n%q\nwant\n%q", w.String(), want)
+	}
+	if w.writes != 3 {
+		t.Errorf("writes = %d, want one per frame", w.writes)
+	}
+}
+
+func TestReadMessagesOutliveTheNextRead(t *testing.T) {
+	t.Parallel()
+
+	conn := NewConn(strings.NewReader(
+		"Content-Length: 50\r\n\r\n"+`{"jsonrpc":"2.0","method":"a","params":{"n":1111}}`+
+			"Content-Length: 50\r\n\r\n"+`{"jsonrpc":"2.0","method":"b","params":{"n":2222}}`), nil)
+	first, err := conn.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.Read(); err != nil {
+		t.Fatal(err)
+	}
+	if first.Method != "a" || string(first.Params) != `{"n":1111}` {
+		t.Errorf("first message changed after the next read: %s %s", first.Method, first.Params)
+	}
+}
+
+func TestReplyReportsUnencodableResults(t *testing.T) {
+	t.Parallel()
+
+	var w countingWriter
+	conn := NewConn(nil, &w)
+	err := conn.Reply(json.RawMessage("5"), map[string]any{"f": func() {}}, nil)
+	if err == nil || !strings.Contains(err.Error(), "result of response 5") {
+		t.Errorf("Reply error = %v, want a marshaling error naming the response", err)
+	}
+	if w.writes != 0 {
+		t.Errorf("writes = %d, want nothing written for a failed frame", w.writes)
+	}
+	if err := conn.Reply(json.RawMessage("6"), nil, nil); err != nil || !strings.HasSuffix(w.String(), `{"jsonrpc":"2.0","id":6,"result":null}`) {
+		t.Errorf("frame after a failed one = %q, %v", w.String(), err)
+	}
+}
