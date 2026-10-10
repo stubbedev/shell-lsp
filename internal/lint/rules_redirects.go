@@ -92,12 +92,8 @@ func (p *pass) insideBrackets(r *syntax.Redirect) bool {
 	if !ok {
 		return false
 	}
-	call, ok := stmt.Cmd.(*syntax.CallExpr)
-	if !ok || len(call.Args) == 0 || call.Args[0].Lit() != "[" {
-		return false
-	}
-	closing := call.Args[len(call.Args)-1]
-	return closing.Lit() == "]" && r.OpPos.Offset() < closing.Pos().Offset()
+	call, ok := bracketCall(stmt.Cmd)
+	return ok && endsWithBracket(call) && isWithin(call, r)
 }
 
 type descriptors struct {

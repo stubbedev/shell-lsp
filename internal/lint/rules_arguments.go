@@ -171,7 +171,7 @@ func (p *pass) expandsGlobs(w *syntax.Word) bool {
 	case *syntax.UnaryTest:
 		return owner.Op != syntax.TsVarSet
 	case *syntax.BinaryTest:
-		return !arithmeticTestOperators[owner.Op.String()]
+		return testOperators[owner.Op.String()].kind != arithmeticTest
 	case *syntax.Redirect:
 		return owner.Word == w
 	case *syntax.ParamExp:

@@ -94,6 +94,10 @@ func leadingLetters(s string) string {
 	return s[:end]
 }
 
+func isASCIILetter(c byte) bool {
+	return 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z'
+}
+
 func (p *pass) checkKeywordSpelling(name string, span parser.Span) {
 	for _, keyword := range spelledKeywords {
 		if strings.EqualFold(name, keyword) && name != keyword {

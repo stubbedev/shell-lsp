@@ -84,7 +84,7 @@ func checkTestExpressions(p *pass, n syntax.Node) {
 		p.reportNode(2212, t.node, "This test is empty and always false; write false if that is intended.")
 		return
 	}
-	walkTest(t.expr, func(e syntax.TestExpr) { p.checkTestExpression(e) })
+	walkTest(t.expr, func(e syntax.TestExpr, _ *syntax.UnaryTest) { p.checkTestExpression(e) })
 }
 
 func (p *pass) checkTestExpression(e syntax.TestExpr) {

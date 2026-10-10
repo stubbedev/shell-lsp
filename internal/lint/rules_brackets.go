@@ -1,8 +1,6 @@
 package lint
 
 import (
-	"cmp"
-	"slices"
 	"strings"
 
 	"mvdan.cc/sh/v3/syntax"
@@ -42,28 +40,6 @@ var posixUtilities = setOf(
 	"time", "times", "touch", "tput", "tr", "trap", "tsort", "tty", "type", "ulimit", "umask", "unalias", "uname",
 	"uncompress", "unexpand", "unget", "uniq", "unlink", "unset", "uucp", "uudecode", "uuencode", "uustat", "uux",
 	"val", "vi", "wait", "wc", "what", "who", "write", "xargs", "yacc", "zcat",
-)
-
-var testSymbolOperators = symbolTestOperators()
-
-func symbolTestOperators() []string {
-	var out []string
-	for op := range binaryTestOperators {
-		switch op[0] {
-		case '-':
-			continue
-		case '<', '>':
-			out = append(out, `\`+op)
-		}
-		out = append(out, op)
-	}
-	slices.SortFunc(out, func(a, b string) int { return cmp.Or(cmp.Compare(len(b), len(a)), strings.Compare(a, b)) })
-	return out
-}
-
-const (
-	testAnd = "-a"
-	testOr  = "-o"
 )
 
 type testWord struct {
@@ -271,20 +247,6 @@ func (t *bracketTest) missingSpace(at int, after string) {
 	t.p.report(1035, parser.Span{Start: at, End: at}, "Put a space after "+after+"; the test reads it as glued to the next word.")
 }
 
-func dashWord(text string) string {
-	if len(text) < 2 || text[0] != '-' {
-		return ""
-	}
-	end := 1
-	for end < len(text) && isASCIILetter(text[end]) {
-		end++
-	}
-	if end == 1 {
-		return ""
-	}
-	return text[:end]
-}
-
 func testOperatorPrefix(text string) string {
 	if op := dashWord(text); op != "" {
 		return op
@@ -305,10 +267,6 @@ func isTestGroupClose(text string) bool {
 	return text == `\)` || text == `')'` || text == `")"`
 }
 
-func isASCIILetter(c byte) bool {
-	return 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z'
-}
-
 func checkDoubleBracketTest(p *pass, n syntax.Node) {
 	tc, ok := n.(*syntax.TestClause)
 	if !ok {
@@ -321,7 +279,11 @@ func checkDoubleBracketTest(p *pass, n syntax.Node) {
 			}
 		}
 	}
-	p.gluedTestTerms(tc.X)
+	walkTest(tc.X, func(e syntax.TestExpr, _ *syntax.UnaryTest) {
+		if w, ok := e.(*syntax.Word); ok {
+			p.gluedTestTerm(w)
+		}
+	})
 }
 
 func leftmostTestWord(x syntax.TestExpr) *syntax.Word {
@@ -334,24 +296,6 @@ func leftmostTestWord(x syntax.TestExpr) *syntax.Word {
 		default:
 			return nil
 		}
-	}
-}
-
-func (p *pass) gluedTestTerms(x syntax.TestExpr) {
-	switch e := x.(type) {
-	case *syntax.Word:
-		p.gluedTestTerm(e)
-	case *syntax.UnaryTest:
-		if e.Op == syntax.TsNot {
-			p.gluedTestTerms(e.X)
-		}
-	case *syntax.BinaryTest:
-		if e.Op == syntax.AndTest || e.Op == syntax.OrTest {
-			p.gluedTestTerms(e.X)
-			p.gluedTestTerms(e.Y)
-		}
-	case *syntax.ParenTest:
-		p.gluedTestTerms(e.X)
 	}
 }
 

@@ -1,7 +1,9 @@
 package lint
 
 import (
+	"cmp"
 	"path"
+	"slices"
 
 	"mvdan.cc/sh/v3/syntax"
 
@@ -17,110 +19,145 @@ const (
 )
 
 type testCommand struct {
-	style bracketStyle
-	name  string
-	node  syntax.Command
-	args  []*syntax.Word
-	expr  syntax.TestExpr
-
-	unknown      []unknownTestOp
+	style        bracketStyle
+	name         string
+	node         syntax.Command
+	args         []*syntax.Word
+	expr         syntax.TestExpr
+	opaque       []opaqueTest
+	complete     bool
 	unterminated bool
-	malformed    bool
 }
 
-type unknownTestOp struct {
-	word  *syntax.Word
-	name  string
-	unary bool
+type opaqueTest struct {
+	op   *syntax.Word
+	name string
+	x, y *syntax.Word
+}
+
+func (o opaqueTest) unary() bool { return o.y == nil }
+
+func (o opaqueTest) anchor() *syntax.Word {
+	if o.unary() {
+		return o.op
+	}
+	return o.x
 }
 
 func (t testCommand) bracketed() bool { return t.style != testBuiltin }
 
-func (t testCommand) parsed() bool { return !t.malformed || len(t.unknown) > 0 }
+func (t testCommand) malformed() bool { return !t.complete || len(t.opaque) > 0 }
+
+func testBuiltinOf(call *syntax.CallExpr) (bracketStyle, string, bool) {
+	if len(call.Args) == 0 {
+		return 0, "", false
+	}
+	name, ok := parser.Literal(call.Args[0])
+	switch {
+	case !ok:
+		return 0, "", false
+	case name == "[":
+		return singleBracket, name, true
+	case name == "test" || (path.Base(name) == "test" && path.Dir(name) != "."):
+		return testBuiltin, name, true
+	}
+	return 0, "", false
+}
 
 func testCommandOf(cmd syntax.Command) (testCommand, bool) {
 	switch cmd := cmd.(type) {
 	case *syntax.TestClause:
-		return testCommand{style: doubleBracket, name: "[[", node: cmd, expr: cmd.X}, true
+		return testCommand{style: doubleBracket, name: "[[", node: cmd, expr: cmd.X, complete: true}, true
 	case *syntax.CallExpr:
-		if len(cmd.Args) == 0 {
-			return testCommand{}, false
-		}
-		name, ok := parser.Literal(cmd.Args[0])
+		style, name, ok := testBuiltinOf(cmd)
 		if !ok {
 			return testCommand{}, false
 		}
 		args := cmd.Args[1:]
-		switch {
-		case name == "[":
-			closed := len(args) > 0 && args[len(args)-1].Lit() == "]"
-			if closed {
-				args = args[:len(args)-1]
-			}
-			expr, unknown, wellFormed := parseTestArgs(args)
-			return testCommand{style: singleBracket, name: name, node: cmd, args: args, expr: expr, unknown: unknown, unterminated: !closed, malformed: !wellFormed}, true
-		case name == "test" || (path.Base(name) == "test" && path.Dir(name) != "."):
-			expr, unknown, wellFormed := parseTestArgs(args)
-			return testCommand{style: testBuiltin, name: name, node: cmd, args: args, expr: expr, unknown: unknown, malformed: !wellFormed}, true
+		closed := style != singleBracket || endsWithBracket(cmd)
+		if style == singleBracket && closed {
+			args = args[:len(args)-1]
 		}
+		t := testOf(style, args)
+		t.name, t.node, t.unterminated = name, cmd, !closed
+		return t, true
 	}
 	return testCommand{}, false
 }
 
+func testOf(style bracketStyle, args []*syntax.Word) testCommand {
+	tp := testArgParser{words: args}
+	expr := tp.or()
+	return testCommand{style: style, args: args, expr: expr, opaque: tp.opaque, complete: tp.pos == len(args) && !tp.unclosed}
+}
+
 func isTestCommand(stmt *syntax.Stmt) bool {
-	_, ok := testCommandOf(stmt.Cmd)
-	return ok
+	switch cmd := stmt.Cmd.(type) {
+	case *syntax.TestClause:
+		return true
+	case *syntax.CallExpr:
+		_, _, ok := testBuiltinOf(cmd)
+		return ok
+	}
+	return false
 }
 
-var (
-	unaryTestOps  = unaryTestOpTable()
-	binaryTestOps = binaryTestOpTable()
-)
-
-func unaryTestOpTable() map[string]syntax.UnTestOperator {
-	out := map[string]syntax.UnTestOperator{"-a": syntax.TsExists, "-h": syntax.TsSmbLink}
-	for op := syntax.TsExists; op <= syntax.TsRefVar; op++ {
-		out[op.String()] = op
+func bracketCall(cmd syntax.Command) (*syntax.CallExpr, bool) {
+	call, ok := cmd.(*syntax.CallExpr)
+	if !ok {
+		return nil, false
 	}
-	return out
+	style, _, ok := testBuiltinOf(call)
+	return call, ok && style == singleBracket
 }
 
-func binaryTestOpTable() map[string]syntax.BinTestOperator {
-	out := map[string]syntax.BinTestOperator{}
-	for op := syntax.TsReMatch; op <= syntax.TsGtr; op++ {
-		out[op.String()] = op
+func endsWithBracket(call *syntax.CallExpr) bool {
+	return len(call.Args) > 0 && call.Args[len(call.Args)-1].Lit() == "]"
+}
+
+func isUnterminatedBracket(cmd syntax.Command) bool {
+	call, ok := bracketCall(cmd)
+	return ok && !endsWithBracket(call)
+}
+
+func bracketTailWords(cmd syntax.Command) ([]*syntax.Word, bool) {
+	call, ok := cmd.(*syntax.CallExpr)
+	if !ok || !endsWithBracket(call) {
+		return nil, false
 	}
-	for _, op := range []syntax.BinTestOperator{syntax.TsMatchShort, syntax.TsMatch, syntax.TsNoMatch, syntax.TsBefore, syntax.TsAfter} {
-		out[op.String()] = op
+	if _, bracket := bracketCall(call); bracket {
+		return nil, false
 	}
-	return out
+	return call.Args[:len(call.Args)-1], true
+}
+
+func (p *pass) redirectInside(call *syntax.CallExpr) bool {
+	stmt, ok := p.parent().(*syntax.Stmt)
+	return ok && slices.ContainsFunc(stmt.Redirs, func(r *syntax.Redirect) bool { return isWithin(call, r) })
+}
+
+func isWithin(call *syntax.CallExpr, r *syntax.Redirect) bool {
+	return r.OpPos.Offset() < call.End().Offset()
+}
+
+func isComparisonRedirect(r *syntax.Redirect) bool {
+	return r.N == nil && (r.Op == syntax.RdrIn || r.Op == syntax.RdrOut)
 }
 
 type testArgParser struct {
 	words    []*syntax.Word
 	pos      int
 	unclosed bool
-	unknown  []unknownTestOp
+	opaque   []opaqueTest
 }
 
-func parseTestArgs(words []*syntax.Word) (syntax.TestExpr, []unknownTestOp, bool) {
-	if len(words) == 0 {
-		return nil, nil, true
-	}
-	tp := &testArgParser{words: words}
-	expr := tp.or()
-	if tp.pos != len(words) || tp.unclosed {
-		return expr, nil, false
-	}
-	return expr, tp.unknown, len(tp.unknown) == 0
-}
-
-func (tp *testArgParser) peek(ahead int) (string, bool) {
+func (tp *testArgParser) peek(ahead int) string {
 	i := tp.pos + ahead
 	if i >= len(tp.words) {
-		return "", false
+		return ""
 	}
-	return parser.Literal(tp.words[i])
+	lit, _ := parser.Literal(tp.words[i])
+	return lit
 }
 
 func (tp *testArgParser) remaining() int { return len(tp.words) - tp.pos }
@@ -134,7 +171,7 @@ func (tp *testArgParser) take() *syntax.Word {
 func (tp *testArgParser) or() syntax.TestExpr {
 	x := tp.and()
 	for tp.remaining() > 1 {
-		if lit, _ := tp.peek(0); lit != "-o" {
+		if tp.peek(0) != testOr {
 			break
 		}
 		op := tp.take()
@@ -146,7 +183,7 @@ func (tp *testArgParser) or() syntax.TestExpr {
 func (tp *testArgParser) and() syntax.TestExpr {
 	x := tp.not()
 	for tp.remaining() > 1 {
-		if lit, _ := tp.peek(0); lit != "-a" {
+		if tp.peek(0) != testAnd {
 			break
 		}
 		op := tp.take()
@@ -156,8 +193,8 @@ func (tp *testArgParser) and() syntax.TestExpr {
 }
 
 func (tp *testArgParser) not() syntax.TestExpr {
-	if lit, _ := tp.peek(0); lit == "!" && tp.remaining() > 1 {
-		if _, binary := tp.binaryAhead(1); !binary {
+	if tp.peek(0) == "!" && tp.remaining() > 1 {
+		if _, _, binary := tp.binaryAhead(); !binary {
 			op := tp.take()
 			return &syntax.UnaryTest{OpPos: op.Pos(), Op: syntax.TsNot, X: tp.not()}
 		}
@@ -165,83 +202,167 @@ func (tp *testArgParser) not() syntax.TestExpr {
 	return tp.primary()
 }
 
-func (tp *testArgParser) binaryAhead(ahead int) (syntax.BinTestOperator, bool) {
-	lit, ok := tp.peek(ahead)
-	if !ok || tp.remaining() <= ahead+1 {
-		return 0, false
+func (tp *testArgParser) binaryAhead() (string, testOperator, bool) {
+	if tp.remaining() < 3 {
+		return "", testOperator{}, false
 	}
-	op, binary := binaryTestOps[lit]
-	return op, binary
+	lit := tp.peek(1)
+	op := testOperators[lit]
+	return lit, op, op.isBinary()
 }
 
 func (tp *testArgParser) primary() syntax.TestExpr {
 	if tp.remaining() == 0 {
 		return nil
 	}
-	if op, ok := tp.binaryAhead(1); ok {
-		x := tp.take()
-		opWord := tp.take()
-		return &syntax.BinaryTest{OpPos: opWord.Pos(), Op: op, X: x, Y: tp.take()}
+	if name, op, ok := tp.binaryAhead(); ok {
+		return tp.binary(name, op)
 	}
-	lit, _ := tp.peek(0)
+	lit := tp.peek(0)
 	if lit == "(" && tp.remaining() > 2 {
 		open := tp.take()
-		x := tp.or()
-		paren := &syntax.ParenTest{Lparen: open.Pos(), X: x}
-		if closing, _ := tp.peek(0); closing == ")" {
+		paren := &syntax.ParenTest{Lparen: open.Pos(), X: tp.or()}
+		if tp.peek(0) == ")" {
 			paren.Rparen = tp.take().Pos()
 		} else {
 			tp.unclosed = true
 		}
 		return paren
 	}
-	if op, ok := unaryTestOps[lit]; ok && tp.remaining() > 1 {
+	if op := testOperators[lit]; op.kind == unaryTest && tp.remaining() > 1 {
 		opWord := tp.take()
-		return &syntax.UnaryTest{OpPos: opWord.Pos(), Op: op, X: tp.take()}
+		return &syntax.UnaryTest{OpPos: opWord.Pos(), Op: op.unary, X: tp.take()}
 	}
-	if name, _ := tp.peek(1); tp.remaining() > 2 && isOperatorShaped(name) {
-		x := tp.take()
-		tp.unknown = append(tp.unknown, unknownTestOp{word: tp.take(), name: name})
-		tp.take()
-		return x
+	if name := tp.peek(1); tp.remaining() > 2 && name != testAnd && name != testOr && isDashOperator(name) {
+		return tp.binary(name, testOperator{})
 	}
-	if isOperatorShaped(lit) && tp.remaining() > 1 {
+	if isDashOperator(lit) && tp.remaining() > 1 {
 		opWord := tp.take()
-		tp.unknown = append(tp.unknown, unknownTestOp{word: opWord, name: lit, unary: true})
-		tp.take()
+		tp.opaque = append(tp.opaque, opaqueTest{op: opWord, name: lit, x: tp.take()})
 		return opWord
 	}
 	return tp.take()
 }
 
-func isOperatorShaped(lit string) bool {
-	if len(lit) < 2 || lit[0] != '-' || lit == "-a" || lit == "-o" {
-		return false
+func (tp *testArgParser) binary(name string, op testOperator) syntax.TestExpr {
+	x, opWord, y := tp.take(), tp.take(), tp.take()
+	if binary, ok := op.treeBinary(); ok {
+		return &syntax.BinaryTest{OpPos: opWord.Pos(), Op: binary, X: x, Y: y}
 	}
-	for i := 1; i < len(lit); i++ {
-		if c := lit[i]; (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') {
-			return false
-		}
-	}
-	return true
+	tp.opaque = append(tp.opaque, opaqueTest{op: opWord, name: name, x: x, y: y})
+	return x
 }
 
-func walkTest(expr syntax.TestExpr, visit func(syntax.TestExpr)) {
+func walkTest(expr syntax.TestExpr, visit func(e syntax.TestExpr, negation *syntax.UnaryTest)) {
+	walkTestUnder(expr, nil, visit)
+}
+
+func walkTestUnder(expr syntax.TestExpr, negation *syntax.UnaryTest, visit func(syntax.TestExpr, *syntax.UnaryTest)) {
 	if expr == nil {
 		return
 	}
-	visit(expr)
+	visit(expr, negation)
 	switch e := expr.(type) {
 	case *syntax.UnaryTest:
 		if e.Op == syntax.TsNot {
-			walkTest(e.X, visit)
+			walkTestUnder(e.X, e, visit)
 		}
 	case *syntax.BinaryTest:
 		if e.Op == syntax.AndTest || e.Op == syntax.OrTest {
-			walkTest(e.X, visit)
-			walkTest(e.Y, visit)
+			walkTestUnder(e.X, nil, visit)
+			walkTestUnder(e.Y, nil, visit)
 		}
 	case *syntax.ParenTest:
-		walkTest(e.X, visit)
+		walkTestUnder(e.X, nil, visit)
 	}
+}
+
+type operandShape uint8
+
+const (
+	shapeNullary operandShape = iota
+	shapeUnary
+	shapeLeft
+	shapeRight
+)
+
+type testOperand struct {
+	word     *syntax.Word
+	shape    operandShape
+	op       string
+	opSpan   parser.Span
+	negation parser.Span
+	negated  bool
+	double   bool
+	start    int
+}
+
+func (o testOperand) binary() bool { return o.shape == shapeLeft || o.shape == shapeRight }
+
+func (p *pass) testOperands(t testCommand, visit func(testOperand)) {
+	walkTest(t.expr, func(e syntax.TestExpr, negation *syntax.UnaryTest) {
+		o := testOperand{double: t.style == doubleBracket}
+		if negation != nil {
+			_, o.negation = p.testOperator(t, negation.OpPos, 1)
+			o.negated = true
+		}
+		switch e := e.(type) {
+		case *syntax.Word:
+			if i := slices.IndexFunc(t.opaque, func(op opaqueTest) bool { return op.anchor() == e }); i >= 0 {
+				p.opaqueOperands(t.opaque[i], o, visit)
+				return
+			}
+			o.word, o.start = e, parser.Offset(e.Pos())
+			visit(o)
+		case *syntax.UnaryTest:
+			w, ok := e.X.(*syntax.Word)
+			if !ok || e.Op == syntax.TsNot {
+				return
+			}
+			o.op, o.opSpan = p.testOperator(t, e.OpPos, 2)
+			o.word, o.shape, o.start = w, shapeUnary, parser.Offset(e.OpPos)
+			visit(o)
+		case *syntax.BinaryTest:
+			if e.Op == syntax.AndTest || e.Op == syntax.OrTest {
+				return
+			}
+			o.op, o.opSpan = p.testOperator(t, e.OpPos, len(e.Op.String()))
+			o.start = parser.Offset(e.Pos())
+			binaryOperands(e.X, e.Y, o, visit)
+		}
+	})
+}
+
+func (p *pass) opaqueOperands(op opaqueTest, o testOperand, visit func(testOperand)) {
+	o.op = op.name
+	o.opSpan, _ = p.span(op.op)
+	if op.unary() {
+		o.word, o.shape, o.start = op.x, shapeUnary, parser.Offset(op.op.Pos())
+		visit(o)
+		return
+	}
+	o.start = parser.Offset(op.x.Pos())
+	binaryOperands(op.x, op.y, o, visit)
+}
+
+func binaryOperands(x, y syntax.TestExpr, o testOperand, visit func(testOperand)) {
+	if w, ok := x.(*syntax.Word); ok {
+		o.word, o.shape = w, shapeLeft
+		visit(o)
+	}
+	if w, ok := y.(*syntax.Word); ok {
+		o.word, o.shape = w, shapeRight
+		visit(o)
+	}
+}
+
+func (p *pass) testOperator(t testCommand, pos syntax.Pos, length int) (string, parser.Span) {
+	if t.style == doubleBracket {
+		span := posSpan(pos, length)
+		return p.text[span.Start:span.End], span
+	}
+	i, _ := slices.BinarySearchFunc(t.args, pos.Offset(), func(w *syntax.Word, offset uint) int { return cmp.Compare(w.Pos().Offset(), offset) })
+	name, _ := parser.Literal(t.args[i])
+	span, _ := p.span(t.args[i])
+	return name, span
 }

@@ -74,10 +74,10 @@ func checkComparisons(p *pass, n syntax.Node) {
 			return
 		}
 	}
-	if t.malformed {
+	if t.malformed() {
 		return
 	}
-	walkTest(t.expr, func(e syntax.TestExpr) { p.checkTestNode(double, e) })
+	walkTest(t.expr, func(e syntax.TestExpr, _ *syntax.UnaryTest) { p.checkTestNode(double, e) })
 }
 
 type ordering struct {
@@ -87,11 +87,12 @@ type ordering struct {
 
 func (p *pass) bracketOrderings(t testCommand) []ordering {
 	var out []ordering
-	for i := 1; i+1 < len(t.args); i++ {
-		if lit, ok := parser.Literal(t.args[i]); ok && (lit == "<=" || lit == ">=") {
-			if span, ok := p.span(t.args[i]); ok {
-				out = append(out, ordering{op: testOp{name: lit, span: span}, x: t.args[i-1], y: t.args[i+1]})
-			}
+	for _, o := range t.opaque {
+		if testOperators[o.name].kind != inclusiveOrderTest {
+			continue
+		}
+		if span, ok := p.span(o.op); ok {
+			out = append(out, ordering{op: testOp{name: o.name, span: span}, x: o.x, y: o.y})
 		}
 	}
 	stmt, ok := p.parent().(*syntax.Stmt)
@@ -99,9 +100,8 @@ func (p *pass) bracketOrderings(t testCommand) []ordering {
 	if !ok || !isCall || stmt.Cmd != t.node {
 		return out
 	}
-	closing := parser.Offset(call.Args[len(call.Args)-1].Pos())
 	for _, r := range stmt.Redirs {
-		if r.N != nil || (r.Op != syntax.RdrIn && r.Op != syntax.RdrOut) || parser.Offset(r.OpPos) > closing {
+		if !isComparisonRedirect(r) || !isWithin(call, r) {
 			continue
 		}
 		if o, ok := redirectedOrdering(t.args, r); ok {
@@ -401,51 +401,46 @@ func isConstantWord(w *syntax.Word, regex bool) bool {
 	return true
 }
 
-var (
-	orderingOps       = setOf("<", ">", "<=", ">=")
-	strictOrder       = setOf("<", ">")
-	dynamicTests      = setOf("-nt", "-ot", "-ef")
-	arithmeticTestOps = setOf("-eq", "-ne", "-lt", "-le", "-gt", "-ge")
-	equalityTests     = setOf("=", "==", "!=")
-	decimalNumber     = regexp.MustCompile(`^[+-]?[0-9]+\.[0-9]+$`)
-)
+var decimalNumber = regexp.MustCompile(`^[+-]?[0-9]+\.[0-9]+$`)
 
 func (p *pass) checkComparison(double bool, op testOp, x, y *syntax.Word) {
-	if op.name == "=~" && !double && p.dialect.Features().DoubleBracket {
+	operator := testOperators[op.name]
+	if operator.kind == regexTest && !double && p.dialect.Features().DoubleBracket {
 		p.report(2074, op.span, "=~ only works inside [[ ]]; [ ] has no regex matching.")
 	}
 	switch {
-	case orderingOps[op.name]:
+	case operator.isOrdering():
 		p.checkOrdering(double, op, x, y)
-	case arithmeticTestOps[op.name]:
+	case operator.kind == arithmeticTest:
 		p.checkArithmeticOperands(double, op, x, y)
 	}
-	if double && op.name == "=~" {
+	if double && operator.kind == regexTest {
 		p.checkRegexOperand(y)
 	}
-	if (double && arithmeticTestOps[op.name]) || dynamicTests[op.name] {
+	if (double && operator.kind == arithmeticTest) || operator.kind == fileComparisonTest {
 		return
 	}
-	if isConstantWord(x, false) && isConstantWord(y, op.name == "=~") {
+	if isConstantWord(x, false) && isConstantWord(y, operator.kind == regexTest) {
 		p.report(2050, op.span, "Both sides of "+op.name+" are constant, so this test always has the same result; did you forget a $ on a variable?")
 		return
 	}
-	if equalityTests[op.name] && !overlaps(globOf(x), globOf(y)) {
+	if operator.kind == equalityTest && !overlaps(globOf(x), globOf(y)) {
 		p.report(2193, op.span, "No string can match both sides of "+op.name+", so this comparison never succeeds.")
 	}
 }
 
 func (p *pass) checkOrdering(double bool, op testOp, x, y *syntax.Word) {
 	posix := p.dialect == dialect.Posix
-	if (strictOrder[op.name] || !posix) && (p.isNumericOperand(x) || p.isNumericOperand(y)) {
+	strict := testOperators[op.name].kind == strictOrderTest
+	if (strict || !posix) && (p.isNumericOperand(x) || p.isNumericOperand(y)) {
 		p.report(2071, op.span, op.name+" compares strings, not numbers; use "+numericOperator[op.name]+" (or (( )) arithmetic) for numbers.")
 		return
 	}
 	p.checkDecimals(x, y)
-	if !posix && !strictOrder[op.name] {
+	if !posix && !strict {
 		p.report(2122, op.span, op.name+" is not a valid test operator; negate the opposite comparison, e.g. ! [ a "+escapedOpposite(double, op.name)+" b ].")
 	}
-	if op.redirected && strictOrder[op.name] && !posix {
+	if op.redirected && strict && !posix {
 		hint := ""
 		if p.dialect.Features().DoubleBracket {
 			hint = " or use [[ ]]"
@@ -611,12 +606,7 @@ func checkSplitBracket(p *pass, n syntax.Node) {
 	if !ok || (bin.Op != syntax.AndStmt && bin.Op != syntax.OrStmt) {
 		return
 	}
-	left, ok := bin.X.Cmd.(*syntax.CallExpr)
-	if !ok || len(left.Args) == 0 || left.Args[0].Lit() != "[" || left.Args[len(left.Args)-1].Lit() == "]" {
-		return
-	}
-	right, ok := bin.Y.Cmd.(*syntax.CallExpr)
-	if !ok || len(right.Args) == 0 || right.Args[0].Lit() == "[" || right.Args[len(right.Args)-1].Lit() != "]" {
+	if _, tail := bracketTailWords(bin.Y.Cmd); !tail || !isUnterminatedBracket(bin.X.Cmd) {
 		return
 	}
 	op := opAt(bin.OpPos, bin.Op.String())
@@ -648,8 +638,3 @@ func (p *pass) insideDoubleBracket(offset int) bool {
 }
 
 func isPattern(w *syntax.Word) bool { return isGlob(w) || hasBraceExpansion(w) }
-
-func isUnaryTestOperator(s string) bool {
-	_, ok := unaryTestOps[s]
-	return ok
-}

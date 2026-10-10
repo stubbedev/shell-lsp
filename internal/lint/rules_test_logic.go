@@ -33,8 +33,6 @@ var testLogicFamily = family{
 	},
 }
 
-var globMatchTests = setOf("=", "==", "!=")
-
 type comparison struct {
 	op          string
 	left, right *syntax.Word
@@ -61,8 +59,8 @@ func comparisonOf(expr syntax.TestExpr) (comparison, bool) {
 func checkTestLogic(p *pass, n syntax.Node) {
 	switch n := n.(type) {
 	case *syntax.BinaryCmd:
-		if expr, unknown, ok := splitBracketTest(n); ok {
-			p.checkTestCommand(testCommand{style: singleBracket, expr: expr, unknown: unknown})
+		if t, ok := splitBracketTest(n); ok {
+			p.checkTestCommand(t)
 		}
 	case syntax.Command:
 		if t, ok := testCommandOf(n); ok && t.bracketed() {
@@ -71,39 +69,40 @@ func checkTestLogic(p *pass, n syntax.Node) {
 	}
 }
 
-func splitBracketTest(cmd *syntax.BinaryCmd) (syntax.TestExpr, []unknownTestOp, bool) {
+func splitBracketTest(cmd *syntax.BinaryCmd) (testCommand, bool) {
 	if cmd.Op != syntax.AndStmt && cmd.Op != syntax.OrStmt {
-		return nil, nil, false
+		return testCommand{}, false
 	}
 	head, ok := testCommandOf(cmd.X.Cmd)
-	if !ok || head.style != singleBracket || !head.unterminated || head.expr == nil || !head.parsed() {
-		return nil, nil, false
+	if !ok || head.style != singleBracket || !head.unterminated || head.expr == nil || !head.complete {
+		return testCommand{}, false
 	}
-	tail, ok := cmd.Y.Cmd.(*syntax.CallExpr)
-	if !ok || len(tail.Args) < 2 || tail.Args[0].Lit() == "[" || tail.Args[len(tail.Args)-1].Lit() != "]" {
-		return nil, nil, false
+	words, ok := bracketTailWords(cmd.Y.Cmd)
+	if !ok || len(words) == 0 {
+		return testCommand{}, false
 	}
-	right, unknown, wellFormed := parseTestArgs(tail.Args[:len(tail.Args)-1])
-	if !wellFormed && len(unknown) == 0 {
-		return nil, nil, false
+	tail := testOf(singleBracket, words)
+	if !tail.complete {
+		return testCommand{}, false
 	}
 	op := syntax.OrTest
 	if cmd.Op == syntax.AndStmt {
 		op = syntax.AndTest
 	}
-	return &syntax.BinaryTest{OpPos: cmd.OpPos, Op: op, X: head.expr, Y: right}, append(head.unknown, unknown...), true
+	expr := &syntax.BinaryTest{OpPos: cmd.OpPos, Op: op, X: head.expr, Y: tail.expr}
+	return testCommand{style: singleBracket, expr: expr, opaque: append(head.opaque, tail.opaque...), complete: true}, true
 }
 
 func (p *pass) checkTestCommand(t testCommand) {
+	if !t.complete {
+		return
+	}
 	if t.style == singleBracket {
-		for _, op := range t.unknown {
+		for _, op := range t.opaque {
 			p.reportUnknownTestOperator(op)
 		}
 	}
-	if !t.parsed() {
-		return
-	}
-	walkTest(t.expr, func(e syntax.TestExpr) {
+	walkTest(t.expr, func(e syntax.TestExpr, _ *syntax.UnaryTest) {
 		bin, ok := e.(*syntax.BinaryTest)
 		if !ok {
 			return
@@ -120,12 +119,15 @@ func (p *pass) checkTestCommand(t testCommand) {
 	})
 }
 
-func (p *pass) reportUnknownTestOperator(op unknownTestOp) {
-	span, ok := p.span(op.word)
+func (p *pass) reportUnknownTestOperator(op opaqueTest) {
+	if !isOperatorShaped(op.name) {
+		return
+	}
+	span, ok := p.span(op.op)
 	if !ok {
 		return
 	}
-	if op.unary {
+	if op.unary() {
 		p.report(2058, span, op.name+" is not a test operator, so [ ] cannot evaluate this condition; check the spelling (see help test).")
 		return
 	}
@@ -133,7 +135,7 @@ func (p *pass) reportUnknownTestOperator(op unknownTestOp) {
 }
 
 func (p *pass) checkPatternOperand(style bracketStyle, c comparison) {
-	if !globMatchTests[c.op] {
+	if testOperators[c.op].kind != equalityTest {
 		return
 	}
 	span, ok := p.span(c.right)
@@ -206,7 +208,7 @@ func soleComparison(stmt *syntax.Stmt) (comparison, bool) {
 		return comparison{}, false
 	}
 	t, ok := testCommandOf(stmt.Cmd)
-	if !ok || !t.bracketed() || t.unterminated || t.malformed {
+	if !ok || !t.bracketed() || t.unterminated || t.malformed() {
 		return comparison{}, false
 	}
 	return comparisonOf(t.expr)
@@ -321,7 +323,7 @@ func checkRejectedUnknownOperators(p *pass) {
 		return
 	}
 	token := p.text[e.Span.Start:e.Span.End]
-	if _, known := binaryTestOps[token]; isOperatorShaped(token) && !known && !isUnaryTestOperator(token) {
+	if isOperatorShaped(token) && testOperators[token].kind == notTestOperator {
 		p.report(2057, e.Span, token+" is not a comparison operator that [[ ]] understands; check the spelling (see help test).")
 		return
 	}

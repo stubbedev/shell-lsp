@@ -109,8 +109,10 @@ func collectVariables(p *pass, n syntax.Node) {
 		p.collectPrinted(n)
 	case *syntax.CallExpr:
 		p.collectCall(n)
-	case *syntax.TestClause, *syntax.ParenTest, *syntax.UnaryTest, *syntax.BinaryTest:
-		doubleBracketOperands(n, p.collectTestOperand)
+	case *syntax.TestClause:
+		if t, ok := testCommandOf(n); ok {
+			p.collectTest(t)
+		}
 	case *syntax.TestDecl:
 		p.variables.bats = true
 	}
@@ -382,8 +384,8 @@ func (p *pass) collectPrinted(d *syntax.DeclClause) {
 }
 
 func (p *pass) collectCall(call *syntax.CallExpr) {
-	if words, ok := p.bracketTail(call); ok {
-		p.collectBracketTest(words)
+	if t, ok := p.bracketTail(call); ok {
+		p.collectTest(t)
 		return
 	}
 	c, ok := commandOf(call)
@@ -410,8 +412,8 @@ func (p *pass) collectCall(call *syntax.CallExpr) {
 			}
 		}
 	}
-	if words, _, bracket := p.bracketOperandWords(call); bracket {
-		p.collectBracketTest(words)
+	if t, ok := testCommandOf(call); ok && t.style == singleBracket && !p.redirectInside(call) {
+		p.collectTest(t)
 	}
 }
 
@@ -429,17 +431,14 @@ func (p *pass) scanAlias(w *syntax.Word, at parser.Span) {
 	}
 }
 
-func (p *pass) collectBracketTest(words []*syntax.Word) {
-	t, ok := parseBracketTest(words)
-	if !ok {
-		for _, w := range words {
+func (p *pass) collectTest(t testCommand) {
+	if !t.complete {
+		for _, w := range t.args {
 			p.checkedOperand(w)
 		}
 		return
 	}
-	for _, o := range t.operands {
-		p.collectTestOperand(o)
-	}
+	p.testOperands(t, p.collectTestOperand)
 }
 
 func (p *pass) collectTestOperand(o testOperand) {
@@ -456,7 +455,7 @@ func (p *pass) collectTestOperand(o testOperand) {
 			p.variables.use(name)
 			p.read(name, o.word, "")
 		}
-	case o.double && o.binary() && arithmeticTestOperators[o.op]:
+	case o.double && o.binary() && testOperators[o.op].kind == arithmeticTest:
 		p.comparedName(o.word)
 	}
 }

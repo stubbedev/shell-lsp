@@ -45,8 +45,6 @@ var (
 		"==": {code: 3014, shells: posixOrDash, feature: "Comparing with ==", alternative: "="},
 		"=~": {code: 3015, shells: strictShells, feature: "Regex matching with =~", alternative: "expr or a case pattern"},
 	}
-	unaryTestOperators  = setOf("-a", "-b", "-c", "-d", "-e", "-f", "-g", "-h", "-k", "-n", "-o", "-p", "-r", "-s", "-t", "-u", "-w", "-x", "-z", "-G", "-L", "-N", "-O", "-R", "-S", "-v")
-	binaryTestOperators = setOf("=", "==", "!=", "<", ">", "<=", ">=", "=~", "-eq", "-ne", "-lt", "-le", "-gt", "-ge", "-nt", "-ot", "-ef")
 )
 
 func checkPortableTest(p *pass, n syntax.Node) {
@@ -56,14 +54,8 @@ func checkPortableTest(p *pass, n syntax.Node) {
 	switch n := n.(type) {
 	case *syntax.TestClause:
 		p.nonPortableNode(portabilityIssue{code: 3010, shells: posixOrDash, feature: "The [[ ]] test", alternative: "[ ] or test"}, n)
-	case *syntax.UnaryTest:
-		op := p.text[parser.Offset(n.OpPos):][:2]
-		if issue, ok := unaryTestIssues[op]; ok {
-			p.nonPortable(issue, posSpan(n.OpPos, len(op)))
-		}
-	case *syntax.BinaryTest:
-		if issue, ok := binaryTestIssues[n.Op.String()]; ok {
-			p.nonPortable(issue, posSpan(n.OpPos, len(n.Op.String())))
+		if t, ok := testCommandOf(n); ok {
+			p.checkPortableOperators(t)
 		}
 	case *syntax.CallExpr:
 		checkTestCommand(p, n)
@@ -71,46 +63,36 @@ func checkPortableTest(p *pass, n syntax.Node) {
 }
 
 func checkTestCommand(p *pass, call *syntax.CallExpr) {
-	if len(call.Args) == 0 {
-		return
-	}
-	name, _ := parser.Literal(call.Args[0])
-	switch name {
-	case "[":
-		checkBracketTest(p, call.Args[1:])
+	t, ok := testCommandOf(call)
+	switch {
+	case !ok:
+	case t.style == singleBracket:
+		if !t.unterminated {
+			p.checkPortableOperators(t)
+		}
 		checkRedirectedComparison(p, call)
-	case "test":
+	case t.name == "test":
 		checkTestArguments(p, call)
 	}
 }
 
-func checkBracketTest(p *pass, args []*syntax.Word) {
-	if len(args) == 0 {
-		return
-	}
-	if closing, _ := parser.Literal(args[len(args)-1]); closing != "]" {
-		return
-	}
-	t, _ := parseBracketTest(args[:len(args)-1])
-	for _, op := range t.operands {
-		if op.shape != shapeUnary && op.shape != shapeLeft {
-			continue
-		}
-		span, ok := p.span(op.opWord)
-		if !ok {
-			continue
-		}
+func (p *pass) checkPortableOperators(t testCommand) {
+	p.testOperands(t, func(o testOperand) {
 		issues := binaryTestIssues
-		if op.shape == shapeUnary {
+		switch o.shape {
+		case shapeUnary:
 			issues = unaryTestIssues
+		case shapeLeft:
+		default:
+			return
 		}
-		if issue, ok := issues[op.op]; ok {
-			p.nonPortable(issue, span)
+		if issue, ok := issues[o.op]; ok {
+			p.nonPortable(issue, o.opSpan)
 		}
-		if op.negation != nil && p.dialect == dialect.Bash && (op.op == "-o" || op.op == "-a") {
-			p.reportNegatedConnective(op)
+		if o.negated && !o.double && p.dialect == dialect.Bash && (o.op == "-o" || o.op == "-a") {
+			p.reportNegatedConnective(o)
 		}
-	}
+	})
 }
 
 func checkRedirectedComparison(p *pass, call *syntax.CallExpr) {
@@ -118,19 +100,15 @@ func checkRedirectedComparison(p *pass, call *syntax.CallExpr) {
 	if !ok {
 		return
 	}
-	closing := call.Args[len(call.Args)-1].Pos()
 	for _, r := range stmt.Redirs {
-		if r.N == nil && (r.Op == syntax.RdrOut || r.Op == syntax.RdrIn) && r.OpPos.Offset() < closing.Offset() {
+		if isComparisonRedirect(r) && isWithin(call, r) {
 			p.nonPortable(binaryTestIssues[r.Op.String()], posSpan(r.OpPos, 1))
 		}
 	}
 }
 
 func (p *pass) reportNegatedConnective(op testOperand) {
-	span, ok := p.span(op.negation)
-	if !ok {
-		return
-	}
+	span := op.negation
 	if op.op == "-o" {
 		p.report(2332, span, "With three arguments, [ ! -o name ] treats -o as the binary or, so it is always true; use [[ ! -o name ]] or ! [ -o name ].")
 		return

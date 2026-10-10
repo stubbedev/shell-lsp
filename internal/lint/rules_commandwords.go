@@ -79,15 +79,11 @@ func isNegatedSubshell(name *syntax.Word) bool {
 }
 
 func (p *pass) continuesBracketTest(call *syntax.CallExpr) bool {
-	if call.Args[len(call.Args)-1].Lit() != "]" {
+	if !endsWithBracket(call) {
 		return false
 	}
 	prev, ok := p.previousStatement()
-	if !ok {
-		return false
-	}
-	opener, ok := prev.Cmd.(*syntax.CallExpr)
-	return ok && len(opener.Args) > 0 && opener.Args[0].Lit() == "[" && opener.Args[len(opener.Args)-1].Lit() != "]"
+	return ok && isUnterminatedBracket(prev.Cmd)
 }
 
 func (p *pass) timed() bool {

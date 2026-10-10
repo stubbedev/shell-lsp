@@ -36,247 +36,53 @@ var testOperandsFamily = family{
 	},
 }
 
-var arithmeticTestOperators = setOf("-eq", "-ne", "-lt", "-le", "-gt", "-ge")
-
-var stringTestOperators = setOf("=", "==", "!=", "=~")
-
 var kshFirstMatchOperators = setOf(
 	"-b", "-c", "-d", "-f", "-g", "-k", "-p", "-r", "-s", "-u", "-w", "-x", "-L", "-h", "-N", "-O", "-G", "-R", "-S",
 )
 
 var grepCommands = []string{"grep", "egrep", "fgrep", "bz3grep", "bzgrep", "xzgrep", "zgrep", "zipgrep", "zstdgrep"}
 
-type operandShape uint8
-
-const (
-	shapeNullary operandShape = iota
-	shapeUnary
-	shapeLeft
-	shapeRight
-)
-
-type testOperand struct {
-	word     *syntax.Word
-	op       string
-	opWord   *syntax.Word
-	negation *syntax.Word
-	shape    operandShape
-	double   bool
-	start    int
-}
-
-func (o testOperand) binary() bool { return o.shape == shapeLeft || o.shape == shapeRight }
-
-func isBinaryTestOperator(op string) bool {
-	return binaryTestOperators[op] || (isDashOperator(op) && op != "-a" && op != "-o")
-}
-
-func isDashOperator(op string) bool {
-	for _, dash := range []string{"-", "–", "—"} {
-		if rest, found := strings.CutPrefix(op, dash); found && rest != "" {
-			return true
-		}
-	}
-	return false
-}
-
-func (p *pass) bracketOperandWords(call *syntax.CallExpr) ([]*syntax.Word, bool, bool) {
-	if len(call.Args) == 0 || call.Args[0].Lit() != "[" || p.redirectInside(call) {
-		return nil, false, false
-	}
-	words := call.Args[1:]
-	if n := len(words); n > 0 && words[n-1].Lit() == "]" {
-		return words[:n-1], true, true
-	}
-	return words, false, true
-}
-
-func (p *pass) redirectInside(call *syntax.CallExpr) bool {
-	stmt, ok := p.parent().(*syntax.Stmt)
-	if !ok {
-		return false
-	}
-	end := call.End().Offset()
-	return slices.ContainsFunc(stmt.Redirs, func(r *syntax.Redirect) bool { return r.OpPos.Offset() < end })
-}
-
-func (p *pass) bracketTail(call *syntax.CallExpr) ([]*syntax.Word, bool) {
-	if len(call.Args) < 2 || call.Args[len(call.Args)-1].Lit() != "]" || call.Args[0].Lit() == "[" {
-		return nil, false
+func (p *pass) bracketTail(call *syntax.CallExpr) (testCommand, bool) {
+	tail, ok := bracketTailWords(call)
+	if !ok || len(tail) == 0 {
+		return testCommand{}, false
 	}
 	previous, ok := p.previousStatement()
 	if !ok {
-		return nil, false
+		return testCommand{}, false
+	}
+	opener, ok := bracketCall(previous.Cmd)
+	if !ok || endsWithBracket(opener) {
+		return testCommand{}, false
 	}
 	list, joined := p.ancestor(1).(*syntax.BinaryCmd)
 	if joined && list.Op != syntax.AndStmt && list.Op != syntax.OrStmt {
-		return nil, false
-	}
-	opener, ok := previous.Cmd.(*syntax.CallExpr)
-	if !ok || len(opener.Args) == 0 || opener.Args[0].Lit() != "[" || opener.Args[len(opener.Args)-1].Lit() == "]" {
-		return nil, false
+		return testCommand{}, false
 	}
 	words := slices.Clone(opener.Args[1:])
 	if joined {
-		words = append(words, &syntax.Word{Parts: []syntax.WordPart{&syntax.Lit{Value: "-a"}}})
+		words = append(words, &syntax.Word{Parts: []syntax.WordPart{&syntax.Lit{ValuePos: list.OpPos, Value: testAnd}}})
 	}
-	return append(words, call.Args[:len(call.Args)-1]...), true
-}
-
-type bracketParser struct {
-	words    []*syntax.Word
-	names    []string
-	i        int
-	operands []testOperand
-	joined   bool
-}
-
-func parseBracketTest(words []*syntax.Word) (bracketParser, bool) {
-	t := bracketParser{words: words, names: make([]string, len(words))}
-	for i, w := range words {
-		t.names[i], _ = parser.Literal(w)
-	}
-	ok := true
-	for t.i < len(words) {
-		start := t.i
-		if !t.expression() || t.i < len(words) {
-			ok = false
-		}
-		if t.i == start || t.i < len(words) {
-			t.i++
-		}
-	}
-	return t, ok
-}
-
-func (t *bracketParser) literal(offset int) string {
-	if t.i+offset >= len(t.names) {
-		return ""
-	}
-	return t.names[t.i+offset]
-}
-
-func (t *bracketParser) expression() bool {
-	if !t.conjunction() {
-		return false
-	}
-	for t.literal(0) == "-o" {
-		t.i++
-		t.joined = true
-		if !t.conjunction() {
-			return false
-		}
-	}
-	return true
-}
-
-func (t *bracketParser) conjunction() bool {
-	if !t.negation(nil) {
-		return false
-	}
-	for t.literal(0) == "-a" {
-		t.i++
-		t.joined = true
-		if !t.negation(nil) {
-			return false
-		}
-	}
-	return true
-}
-
-func (t *bracketParser) negation(bang *syntax.Word) bool {
-	if t.literal(0) == "!" && t.i+1 < len(t.words) {
-		bang = t.words[t.i]
-		t.i++
-		return t.negation(bang)
-	}
-	return t.primary(bang)
-}
-
-func (t *bracketParser) primary(bang *syntax.Word) bool {
-	if t.i >= len(t.words) {
-		return false
-	}
-	start := parser.Offset(t.words[t.i].Pos())
-	if t.literal(0) == "(" {
-		t.i++
-		if !t.expression() || t.literal(0) != ")" {
-			return false
-		}
-		t.i++
-		return true
-	}
-	if op := t.literal(1); t.i+2 < len(t.words) && isBinaryTestOperator(op) {
-		operator := t.words[t.i+1]
-		t.operands = append(t.operands,
-			testOperand{word: t.words[t.i], op: op, opWord: operator, shape: shapeLeft, start: start},
-			testOperand{word: t.words[t.i+2], op: op, opWord: operator, shape: shapeRight, start: start})
-		t.i += 3
-		return true
-	}
-	if op := t.literal(0); isDashOperator(op) && t.i+1 < len(t.words) {
-		t.operands = append(t.operands, testOperand{word: t.words[t.i+1], op: op, opWord: t.words[t.i], negation: bang, shape: shapeUnary, start: start})
-		t.i += 2
-		return true
-	}
-	t.operands = append(t.operands, testOperand{word: t.words[t.i], shape: shapeNullary, start: start})
-	t.i++
-	return true
-}
-
-func doubleBracketOperands(n syntax.Node, visit func(testOperand)) {
-	nullary := func(x syntax.TestExpr) {
-		if w, ok := x.(*syntax.Word); ok {
-			visit(testOperand{word: w, shape: shapeNullary, double: true, start: parser.Offset(w.Pos())})
-		}
-	}
-	switch n := n.(type) {
-	case *syntax.TestClause:
-		nullary(n.X)
-	case *syntax.ParenTest:
-		nullary(n.X)
-	case *syntax.UnaryTest:
-		w, ok := n.X.(*syntax.Word)
-		switch {
-		case !ok:
-		case n.Op == syntax.TsNot:
-			nullary(w)
-		default:
-			visit(testOperand{word: w, op: n.Op.String(), shape: shapeUnary, double: true, start: parser.Offset(n.OpPos)})
-		}
-	case *syntax.BinaryTest:
-		if n.Op == syntax.AndTest || n.Op == syntax.OrTest {
-			nullary(n.X)
-			nullary(n.Y)
-			return
-		}
-		start := parser.Offset(n.Pos())
-		if w, ok := n.X.(*syntax.Word); ok {
-			visit(testOperand{word: w, op: n.Op.String(), shape: shapeLeft, double: true, start: start})
-		}
-		if w, ok := n.Y.(*syntax.Word); ok {
-			visit(testOperand{word: w, op: n.Op.String(), shape: shapeRight, double: true, start: start})
-		}
-	}
+	return testOf(singleBracket, append(words, tail...)), true
 }
 
 func checkTestOperands(p *pass, n syntax.Node) {
-	call, ok := n.(*syntax.CallExpr)
+	if t, ok := p.operandTest(n); ok {
+		p.testOperands(t, p.checkTestOperand)
+	}
+}
+
+func (p *pass) operandTest(n syntax.Node) (testCommand, bool) {
+	cmd, ok := n.(syntax.Command)
 	if !ok {
-		doubleBracketOperands(n, p.checkTestOperand)
-		return
+		return testCommand{}, false
 	}
-	words, closed, bracket := p.bracketOperandWords(call)
-	if !bracket || !closed {
-		return
+	t, ok := testCommandOf(cmd)
+	if !ok || t.style == testBuiltin || t.unterminated || !t.complete {
+		return testCommand{}, false
 	}
-	t, ok := parseBracketTest(words)
-	if !ok {
-		return
-	}
-	for _, o := range t.operands {
-		p.checkTestOperand(o)
-	}
+	call, isCall := cmd.(*syntax.CallExpr)
+	return t, !isCall || !p.redirectInside(call)
 }
 
 func (p *pass) checkTestOperand(o testOperand) {
@@ -304,17 +110,18 @@ func (p *pass) checkTestOperand(o testOperand) {
 		}
 		p.grepOutputTest(o, span)
 	default:
+		kind := testOperators[o.op].kind
 		p.arrayOperand(o, span)
-		if !o.double || o.op != "=~" || o.shape != shapeRight {
+		if !o.double || kind != regexTest || o.shape != shapeRight {
 			p.braceOperand(o, span)
 		}
 		switch {
 		case !glob:
-		case arithmeticTestOperators[o.op]:
+		case kind == arithmeticTest:
 			if !o.double && p.dialect != dialect.Ksh {
 				p.report(2255, span, "In [ ], "+p.text[span.Start:span.End]+" is a glob, not a number; quote it or compare arithmetically with (( )).")
 			}
-		case stringTestOperators[o.op] && o.shape == shapeRight:
+		case o.shape == shapeRight && (kind == equalityTest || kind == regexTest):
 		default:
 			p.globOperand(o, span)
 		}
@@ -436,16 +243,21 @@ func checkStatusComparison(p *pass, n syntax.Node) {
 		}
 		p.statusComparison(x, y, n.Op.String(), negated)
 	case *syntax.CallExpr:
-		words, closed, bracket := p.bracketOperandWords(n)
-		if !bracket || !closed {
+		t, ok := p.operandTest(n)
+		if !ok || p.firstInFunction(n) {
 			return
 		}
-		t, ok := parseBracketTest(words)
-		if !ok || t.joined || len(t.operands) != 2 || !t.operands[0].binary() || p.firstInFunction(n) {
-			return
+		var pair [2]testOperand
+		count := 0
+		p.testOperands(t, func(o testOperand) {
+			if count < len(pair) {
+				pair[count] = o
+			}
+			count++
+		})
+		if count == len(pair) && pair[0].binary() {
+			p.statusComparison(pair[0].word, pair[1].word, pair[0].op, pair[0].negated)
 		}
-		negated := words[0].Lit() == "!"
-		p.statusComparison(t.operands[0].word, t.operands[1].word, t.operands[0].op, negated)
 	case *syntax.BinaryArithm:
 		x, xok := n.X.(*syntax.Word)
 		y, yok := n.Y.(*syntax.Word)
@@ -623,10 +435,10 @@ func checkSubshellAsTest(p *pass, n syntax.Node) {
 	if !ok {
 		return
 	}
-	if first, _ := parser.Literal(call.Args[0]); first == "!" || unaryTestOperators[first] {
+	if first, _ := parser.Literal(call.Args[0]); first == "!" || isUnaryTestOperator(first) {
 		p.report(2204, span, "( ) runs a subshell, not a test; use [ "+first+" ... ] to test.")
 	}
-	if second, _ := parser.Literal(call.Args[1]); binaryTestOperators[second] {
+	if second, _ := parser.Literal(call.Args[1]); isBinaryTestOperator(second) {
 		p.report(2205, span, "( ) runs a subshell, not a test; use [ ... "+second+" ... ] to compare.")
 	}
 }
