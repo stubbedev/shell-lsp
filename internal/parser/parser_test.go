@@ -218,6 +218,21 @@ func TestArithmeticDefinitionsAndReferences(t *testing.T) {
 	}
 }
 
+func TestAttrsAnywhereIgnoresScopes(t *testing.T) {
+	t.Parallel()
+
+	tree := Parse("f() { declare -A seen; }\ng() { seen[$1]=1; }\nlist=(a)\n", dialect.Bash)
+	if !tree.AttrsAnywhere("seen").Has(AttrAssoc) {
+		t.Error("an associative declaration inside one function is not visible by name")
+	}
+	if tree.VisibleAttrs("seen", FileScope).Has(AttrAssoc) {
+		t.Error("the function-local declaration leaked into the file scope binding")
+	}
+	if got := tree.AttrsAnywhere("list"); !got.Has(AttrArray) || got.Has(AttrAssoc) {
+		t.Errorf("list attrs = %b, want an indexed array", got)
+	}
+}
+
 func TestPosixDeclarationBuiltins(t *testing.T) {
 	t.Parallel()
 

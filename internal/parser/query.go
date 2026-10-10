@@ -82,6 +82,10 @@ func (ix *Index) Defines(name string) bool {
 	return len(ix.definitionsByBinding[binding{name: name}]) > 0 || len(ix.localScopes[name]) > 0
 }
 
+func (ix *Index) AttrsAnywhere(name string) Attr {
+	return ix.attrsByName[name]
+}
+
 func (ix *Index) DefinitionsIn(scope ScopeID) Definitions {
 	return Definitions{all: ix.Definitions, positions: ix.definitionsByScope[scope]}
 }

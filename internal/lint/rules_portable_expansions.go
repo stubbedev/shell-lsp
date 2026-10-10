@@ -227,19 +227,19 @@ func isNameChar(c byte) bool {
 	return c == '_' || 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || '0' <= c && c <= '9'
 }
 
-func (p *pass) isArithmeticOperand(w *syntax.Word) bool {
+func (p *pass) isArithmeticOperand(w *syntax.Word) bool { return isArithmeticOperandOf(p.parent(), w) }
+
+func isArithmeticOperandOf(owner syntax.Node, w *syntax.Word) bool {
 	if len(w.Parts) == 0 {
 		return false
 	}
-	switch parent := p.parent().(type) {
-	case *syntax.BinaryArithm, *syntax.UnaryArithm, *syntax.ParenArithm, *syntax.ArithmExp, *syntax.ArithmCmd, *syntax.LetClause, *syntax.CStyleLoop:
-		return true
+	switch owner := owner.(type) {
 	case *syntax.Assign:
-		return parent.Index == syntax.ArithmExpr(w)
+		return owner.Index == syntax.ArithmExpr(w)
 	case *syntax.ArrayElem:
-		return parent.Index == syntax.ArithmExpr(w)
+		return owner.Index == syntax.ArithmExpr(w)
 	case *syntax.ParamExp:
-		return parent.Short && parent.Index == syntax.ArithmExpr(w)
+		return owner.Short && owner.Index == syntax.ArithmExpr(w)
 	}
-	return false
+	return parser.IsArithmetic(owner)
 }

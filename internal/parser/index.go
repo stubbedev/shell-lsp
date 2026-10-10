@@ -117,6 +117,7 @@ type Index struct {
 
 	definitionsByBinding map[binding][]int
 	attrsByBinding       map[binding]Attr
+	attrsByName          map[string]Attr
 	definitionsByScope   map[ScopeID][]int
 	localScopes          map[string]map[ScopeID]bool
 	functionsByName      map[string]int
@@ -556,7 +557,7 @@ func (b *builder) arithmeticWord(w *syntax.Word) {
 }
 
 func ArithmeticRead(parent syntax.Node, w *syntax.Word) (string, bool) {
-	if !isArithmetic(parent) {
+	if !IsArithmetic(parent) {
 		return "", false
 	}
 	if bin, ok := parent.(*syntax.BinaryArithm); ok && bin.Op == syntax.Assgn && bin.X == w {
@@ -565,7 +566,7 @@ func ArithmeticRead(parent syntax.Node, w *syntax.Word) (string, bool) {
 	return ArithmeticName(w)
 }
 
-func isArithmetic(node syntax.Node) bool {
+func IsArithmetic(node syntax.Node) bool {
 	switch node.(type) {
 	case *syntax.BinaryArithm, *syntax.UnaryArithm, *syntax.ParenArithm, *syntax.FlagsArithm,
 		*syntax.ArithmExp, *syntax.ArithmCmd, *syntax.CStyleLoop, *syntax.LetClause:
@@ -991,6 +992,7 @@ func assignedWord(n *syntax.Assign) *syntax.Word {
 func (ix *Index) buildLookups() {
 	ix.definitionsByBinding = make(map[binding][]int, len(ix.Definitions))
 	ix.attrsByBinding = make(map[binding]Attr, len(ix.Definitions))
+	ix.attrsByName = make(map[string]Attr, len(ix.Definitions))
 	ix.definitionsByScope = make(map[ScopeID][]int, len(ix.Scopes))
 	ix.localScopes = map[string]map[ScopeID]bool{}
 	for i, def := range ix.Definitions {
@@ -1004,6 +1006,7 @@ func (ix *Index) buildLookups() {
 		}
 		ix.definitionsByBinding[key] = append(ix.definitionsByBinding[key], i)
 		ix.attrsByBinding[key] |= def.Attrs
+		ix.attrsByName[def.Name] |= def.Attrs
 		ix.definitionsByScope[def.Within] = append(ix.definitionsByScope[def.Within], i)
 	}
 	ix.functionsByName = make(map[string]int, len(ix.Functions))
