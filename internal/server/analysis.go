@@ -39,19 +39,44 @@ func newSnapshotCache() *snapshotCache {
 }
 
 func (c *snapshotCache) get(uri string, doc *docstore.Document, generation uint64, build func() *snapshot) *snapshot {
-	c.mu.Lock()
-	if e, ok := c.entries[uri]; ok && e.doc == doc && e.generation == generation {
-		c.mu.Unlock()
+	for {
+		e, owner := c.claim(uri, doc, generation)
+		if owner {
+			return c.fill(uri, e, build)
+		}
 		<-e.ready
-		return e.snap
+		if e.snap != nil {
+			return e.snap
+		}
+	}
+}
+
+func (c *snapshotCache) claim(uri string, doc *docstore.Document, generation uint64) (*snapshotEntry, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if e, ok := c.entries[uri]; ok && e.doc == doc && e.generation == generation {
+		return e, false
 	}
 	e := &snapshotEntry{doc: doc, generation: generation, ready: make(chan struct{})}
 	if current, ok := c.entries[uri]; !ok || current.doc.Version <= doc.Version {
 		c.entries[uri] = e
 	}
-	c.mu.Unlock()
+	return e, true
+}
+
+func (c *snapshotCache) fill(uri string, e *snapshotEntry, build func() *snapshot) *snapshot {
+	defer close(e.ready)
+	defer func() {
+		if e.snap != nil {
+			return
+		}
+		c.mu.Lock()
+		if c.entries[uri] == e {
+			delete(c.entries, uri)
+		}
+		c.mu.Unlock()
+	}()
 	e.snap = build()
-	close(e.ready)
 	return e.snap
 }
 

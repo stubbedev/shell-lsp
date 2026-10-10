@@ -44,3 +44,33 @@ func TestSnapshotCacheBuildsEachVersionOnce(t *testing.T) {
 		t.Error("newer entry lost")
 	}
 }
+
+func TestSnapshotCacheRebuildsAfterAPanickedBuild(t *testing.T) {
+	t.Parallel()
+
+	cache := newSnapshotCache()
+	doc := docstore.NewDocument("file:///a.sh", "", 1, "echo hi\n")
+	started, release := make(chan struct{}), make(chan struct{})
+	waiter := make(chan *snapshot)
+	go func() {
+		defer func() { _ = recover() }()
+		cache.get("file:///a.sh", doc, 0, func() *snapshot {
+			close(started)
+			<-release
+			panic("parser bug")
+		})
+	}()
+	<-started
+	go func() {
+		waiter <- cache.get("file:///a.sh", doc, 0, func() *snapshot { return &snapshot{doc: doc} })
+	}()
+	close(release)
+	select {
+	case got := <-waiter:
+		if got == nil || got.doc != doc {
+			t.Errorf("waiter got %+v, want a rebuilt snapshot", got)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("a waiter hung after the build it waited on panicked")
+	}
+}
