@@ -49,7 +49,7 @@ type Tree struct {
 
 func Parse(text string, d dialect.Dialect) *Tree {
 	parser := syntax.NewParser(
-		syntax.Variant(language(d)),
+		syntax.Variant(Language(d)),
 		syntax.KeepComments(true),
 		syntax.RecoverErrors(maxRecoveredTokens),
 	)
@@ -76,7 +76,7 @@ func Parse(text string, d dialect.Dialect) *Tree {
 	return &Tree{Dialect: d, File: file, Errors: sortErrors(errs), Index: index, text: text}
 }
 
-func language(d dialect.Dialect) syntax.LangVariant {
+func Language(d dialect.Dialect) syntax.LangVariant {
 	switch d {
 	case dialect.Bash:
 		return syntax.LangBash

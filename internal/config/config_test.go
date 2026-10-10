@@ -78,3 +78,21 @@ func TestParseSection(t *testing.T) {
 		t.Errorf("ParseSection = %+v, %t, %v", got, found, err)
 	}
 }
+
+func TestParseFormat(t *testing.T) {
+	t.Parallel()
+
+	got, err := Parse(json.RawMessage(`{"format": {"indent": 2, "switchCaseIndent": true, "enable": false}}`))
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if got.Format.Enabled || got.Format.Indent == nil || *got.Format.Indent != 2 || !got.Format.SwitchCaseIndent || got.Format.Simplify {
+		t.Errorf("Format = %+v", got.Format)
+	}
+	if def := Default().Format; !def.Enabled || def.Indent != nil {
+		t.Errorf("default Format = %+v", def)
+	}
+	if _, err := Parse(json.RawMessage(`{"format": {"indent": -1}}`)); err == nil {
+		t.Error("negative indent accepted")
+	}
+}

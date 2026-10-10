@@ -72,18 +72,20 @@ type DiagnosticOptions struct {
 }
 
 type ServerCapabilities struct {
-	PositionEncoding        string                  `json:"positionEncoding,omitempty"`
-	TextDocumentSync        TextDocumentSyncOptions `json:"textDocumentSync"`
-	DiagnosticProvider      DiagnosticOptions       `json:"diagnosticProvider"`
-	HoverProvider           bool                    `json:"hoverProvider"`
-	CompletionProvider      CompletionOptions       `json:"completionProvider"`
-	DefinitionProvider      bool                    `json:"definitionProvider"`
-	DeclarationProvider     bool                    `json:"declarationProvider"`
-	TypeDefinitionProvider  bool                    `json:"typeDefinitionProvider"`
-	ImplementationProvider  bool                    `json:"implementationProvider"`
-	DocumentSymbolProvider  bool                    `json:"documentSymbolProvider"`
-	FoldingRangeProvider    bool                    `json:"foldingRangeProvider"`
-	WorkspaceSymbolProvider bool                    `json:"workspaceSymbolProvider"`
+	PositionEncoding                string                  `json:"positionEncoding,omitempty"`
+	TextDocumentSync                TextDocumentSyncOptions `json:"textDocumentSync"`
+	DiagnosticProvider              DiagnosticOptions       `json:"diagnosticProvider"`
+	HoverProvider                   bool                    `json:"hoverProvider"`
+	CompletionProvider              CompletionOptions       `json:"completionProvider"`
+	DefinitionProvider              bool                    `json:"definitionProvider"`
+	DeclarationProvider             bool                    `json:"declarationProvider"`
+	TypeDefinitionProvider          bool                    `json:"typeDefinitionProvider"`
+	ImplementationProvider          bool                    `json:"implementationProvider"`
+	DocumentSymbolProvider          bool                    `json:"documentSymbolProvider"`
+	FoldingRangeProvider            bool                    `json:"foldingRangeProvider"`
+	WorkspaceSymbolProvider         bool                    `json:"workspaceSymbolProvider"`
+	DocumentFormattingProvider      bool                    `json:"documentFormattingProvider"`
+	DocumentRangeFormattingProvider bool                    `json:"documentRangeFormattingProvider"`
 }
 
 type CompletionOptions struct {
@@ -122,18 +124,20 @@ func (s *Server) handleInitialize(_ context.Context, _ *docstore.View, params js
 	s.mu.Unlock()
 	return InitializeResult{
 		Capabilities: ServerCapabilities{
-			PositionEncoding:        enc.String(),
-			TextDocumentSync:        TextDocumentSyncOptions{OpenClose: true, Change: 2},
-			DiagnosticProvider:      DiagnosticOptions{},
-			HoverProvider:           true,
-			CompletionProvider:      CompletionOptions{TriggerCharacters: []string{"$", "{", "/", "-"}, ResolveProvider: true},
-			DefinitionProvider:      true,
-			DeclarationProvider:     true,
-			TypeDefinitionProvider:  true,
-			ImplementationProvider:  true,
-			DocumentSymbolProvider:  true,
-			FoldingRangeProvider:    true,
-			WorkspaceSymbolProvider: true,
+			PositionEncoding:                enc.String(),
+			TextDocumentSync:                TextDocumentSyncOptions{OpenClose: true, Change: 2},
+			DiagnosticProvider:              DiagnosticOptions{},
+			HoverProvider:                   true,
+			CompletionProvider:              CompletionOptions{TriggerCharacters: []string{"$", "{", "/", "-"}, ResolveProvider: true},
+			DefinitionProvider:              true,
+			DeclarationProvider:             true,
+			TypeDefinitionProvider:          true,
+			ImplementationProvider:          true,
+			DocumentSymbolProvider:          true,
+			FoldingRangeProvider:            true,
+			WorkspaceSymbolProvider:         true,
+			DocumentFormattingProvider:      true,
+			DocumentRangeFormattingProvider: true,
 		},
 		ServerInfo: ServerInfo{Name: "shell-lsp", Version: s.version},
 	}, nil

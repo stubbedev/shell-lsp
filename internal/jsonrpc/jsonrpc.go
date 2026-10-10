@@ -21,6 +21,7 @@ const (
 	CodeInvalidParams    = -32602
 	CodeInternalError    = -32603
 	CodeServerClosing    = -32000
+	CodeRequestFailed    = -32803
 	CodeRequestCancelled = -32800
 )
 

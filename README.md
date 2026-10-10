@@ -7,7 +7,7 @@ specification.
 
 The implementation plan lives in the issue tracker. Status: protocol core,
 incremental document sync, dialect detection, an error-tolerant parser for every
-dialect, diagnostics (syntax errors plus shellcheck, push or pull), hover and completion.
+dialect, diagnostics (syntax errors plus shellcheck, push or pull), hover, completion, navigation, symbols, folding and formatting.
 
 ## Goals
 
@@ -57,6 +57,18 @@ rejected with an error naming the offending field.
 | `shellcheck.path` | `shellcheck` | Binary name or path, resolved through `PATH` |
 | `shellcheck.arguments` | `[]` | Extra arguments; `--format`, `--shell`, `--exclude` and `-` are managed by the server |
 | `shellcheck.exclude` | `[]` | Codes to suppress, as `SC2034` or `2034` |
+| `format.enable` | `true` | Answer formatting requests |
+| `format.indent` | editor setting | Spaces per level; `0` indents with tabs |
+| `format.binaryNextLine` | `false` | Put `&&`, `\|\|` and `\|` at the start of continuation lines |
+| `format.switchCaseIndent` | `false` | Indent `case` arms inside `case ... esac` |
+| `format.spaceRedirects` | `false` | Write `> file` instead of `>file` |
+| `format.functionNextLine` | `false` | Put the opening brace of a function on its own line |
+| `format.simplify` | `false` | Apply shfmt's simplifications (like `shfmt -s`) |
+| `format.minify` | `false` | Minify the script (like `shfmt -mn`) |
+
+Formatting runs the same printer shfmt is built on, in-process, so no shfmt
+binary is needed. Documents with syntax errors are not formatted, and range
+formatting only changes the lines that intersect the range.
 
 shellcheck has no zsh support, so zsh documents get syntax diagnostics only; the
 server says so once via `window/logMessage`, as it does when shellcheck is not

@@ -294,3 +294,19 @@ type FoldingRange struct {
 type WorkspaceSymbolParams struct {
 	Query string `json:"query"`
 }
+
+type FormattingOptions struct {
+	TabSize      uint `json:"tabSize"`
+	InsertSpaces bool `json:"insertSpaces"`
+}
+
+type DocumentFormattingParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Options      FormattingOptions      `json:"options"`
+}
+
+type DocumentRangeFormattingParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Range        Range                  `json:"range"`
+	Options      FormattingOptions      `json:"options"`
+}

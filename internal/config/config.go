@@ -16,6 +16,18 @@ const Section = "shellLsp"
 type Settings struct {
 	Dialect    *dialect.Dialect
 	Shellcheck Shellcheck
+	Format     Format
+}
+
+type Format struct {
+	Enabled          bool
+	Indent           *uint
+	BinaryNextLine   bool
+	SwitchCaseIndent bool
+	SpaceRedirects   bool
+	FunctionNextLine bool
+	Simplify         bool
+	Minify           bool
 }
 
 type Shellcheck struct {
@@ -26,12 +38,27 @@ type Shellcheck struct {
 }
 
 func Default() Settings {
-	return Settings{Shellcheck: Shellcheck{Enabled: true, Path: "shellcheck"}}
+	return Settings{
+		Shellcheck: Shellcheck{Enabled: true, Path: "shellcheck"},
+		Format:     Format{Enabled: true},
+	}
 }
 
 type rawSettings struct {
 	Dialect    *string        `json:"dialect"`
 	Shellcheck *rawShellcheck `json:"shellcheck"`
+	Format     *rawFormat     `json:"format"`
+}
+
+type rawFormat struct {
+	Enable           *bool `json:"enable"`
+	Indent           *uint `json:"indent"`
+	BinaryNextLine   *bool `json:"binaryNextLine"`
+	SwitchCaseIndent *bool `json:"switchCaseIndent"`
+	SpaceRedirects   *bool `json:"spaceRedirects"`
+	FunctionNextLine *bool `json:"functionNextLine"`
+	Simplify         *bool `json:"simplify"`
+	Minify           *bool `json:"minify"`
 }
 
 type rawShellcheck struct {
@@ -59,6 +86,9 @@ func Parse(raw json.RawMessage) (Settings, error) {
 		}
 		settings.Dialect = &d
 	}
+	if parsed.Format != nil {
+		settings.Format = parseFormat(*parsed.Format, settings.Format)
+	}
 	if parsed.Shellcheck == nil {
 		return settings, nil
 	}
@@ -68,6 +98,25 @@ func Parse(raw json.RawMessage) (Settings, error) {
 	}
 	settings.Shellcheck = sc
 	return settings, nil
+}
+
+func parseFormat(raw rawFormat, f Format) Format {
+	set := func(dst *bool, src *bool) {
+		if src != nil {
+			*dst = *src
+		}
+	}
+	set(&f.Enabled, raw.Enable)
+	set(&f.BinaryNextLine, raw.BinaryNextLine)
+	set(&f.SwitchCaseIndent, raw.SwitchCaseIndent)
+	set(&f.SpaceRedirects, raw.SpaceRedirects)
+	set(&f.FunctionNextLine, raw.FunctionNextLine)
+	set(&f.Simplify, raw.Simplify)
+	set(&f.Minify, raw.Minify)
+	if raw.Indent != nil {
+		f.Indent = raw.Indent
+	}
+	return f
 }
 
 func ParseSection(raw json.RawMessage) (Settings, bool, error) {
