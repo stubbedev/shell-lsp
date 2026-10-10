@@ -88,7 +88,7 @@ func isMisspelledElif(name string) bool {
 
 func leadingLetters(s string) string {
 	end := 0
-	for end < len(s) && isLetter(s[end]) {
+	for end < len(s) && isASCIILetter(s[end]) {
 		end++
 	}
 	return s[:end]

@@ -1,6 +1,8 @@
 package lint
 
 import (
+	"cmp"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -24,12 +26,23 @@ var testSyntaxFamily = family{
 }
 
 var (
-	testBinaryOperatorsLongestFirst = []string{"==", "!=", `\<`, `\>`, "=~", "-eq", "-ne", "-lt", "-le", "-gt", "-ge", "-nt", "-ot", "-ef", "=", "<", ">"}
+	testBinaryOperatorsLongestFirst = binaryTestOperatorsLongestFirst()
 	testBinaryOperators             = setOf(testBinaryOperatorsLongestFirst...)
 	testConnectives                 = setOf("!", "(", ")", `\(`, `\)`, "-a", "-o")
 	unicodeDashes                   = "\u058a\u05be\u2010\u2011\u2012\u2013\u2014\u2015\ufe63\uff0d"
 	testConjunctions                = []struct{ prefix, replacement string }{{"-o", "||"}, {"-a", "&&"}, {"or", "||"}, {"and", "&&"}}
 )
+
+func binaryTestOperatorsLongestFirst() []string {
+	out := slices.Clone(testSymbolOperators)
+	for op := range binaryTestOperators {
+		if op[0] == '-' {
+			out = append(out, op)
+		}
+	}
+	slices.SortFunc(out, func(a, b string) int { return cmp.Or(cmp.Compare(len(b), len(a)), strings.Compare(a, b)) })
+	return out
+}
 
 func checkTestCommandSyntax(p *pass, n syntax.Node) {
 	call, ok := n.(*syntax.CallExpr)
@@ -101,7 +114,7 @@ func (p *pass) checkTestArgument(args []*syntax.Word, i int, arg *syntax.Word) {
 		p.report(1076, parser.Span{Start: span.Start, End: span.Start + 1}, "[ ] does not do arithmetic, so "+p.text[span.Start:span.Start+1]+" is just part of a word here; compute the value with $(( )) instead.")
 		return
 	}
-	if r, size := utf8.DecodeRuneInString(lit); lit != "" && strings.ContainsRune(unicodeDashes, r) && size < len(lit) && isLetter(lit[size]) {
+	if r, size := utf8.DecodeRuneInString(lit); lit != "" && strings.ContainsRune(unicodeDashes, r) && size < len(lit) && isASCIILetter(lit[size]) {
 		p.report(1100, parser.Span{Start: span.Start, End: span.Start + size}, "This is a Unicode dash, not a hyphen-minus; retype it as - so the test operator is recognised.")
 		return
 	}
@@ -138,7 +151,7 @@ func (p *pass) checkGluedOperator(arg *syntax.Word) {
 		if !found {
 			continue
 		}
-		if len(arg.Parts) == 1 && (before == "" || !isNameByte(before[len(before)-1])) {
+		if len(arg.Parts) == 1 && (before == "" || !isNameChar(before[len(before)-1])) {
 			return
 		}
 		if span, ok := p.span(last); ok {

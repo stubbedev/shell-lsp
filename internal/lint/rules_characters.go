@@ -241,19 +241,15 @@ func checkSuspiciousClosingQuote(p *pass, n syntax.Node) {
 		return
 	}
 	next := p.text[span.End]
-	if !isNameByte(next) && next != '%' && strings.IndexByte(continues, next) < 0 {
+	if !isNameChar(next) && next != '%' && strings.IndexByte(continues, next) < 0 {
 		return
 	}
-	if _, single := n.(*syntax.SglQuoted); single && isLetter(p.text[span.End-2]) && isLetter(next) {
+	if _, single := n.(*syntax.SglQuoted); single && isASCIILetter(p.text[span.End-2]) && isASCIILetter(next) {
 		return
 	}
 	p.report(1078, parser.Span{Start: span.Start, End: span.Start + open}, "This quote spans several lines and is closed right before more text; check that it is closed where you meant.")
 	p.report(1079, parser.Span{Start: span.End - 1, End: span.End}, "This looks like it was meant to open a new quote, but it closes the multi-line one that started earlier.")
 }
-
-func isLetter(c byte) bool { return ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') }
-
-func isNameByte(c byte) bool { return c == '_' || isLetter(c) || ('0' <= c && c <= '9') }
 
 func checkLiteralBraces(p *pass, n syntax.Node) {
 	w, ok := n.(*syntax.Word)
@@ -410,7 +406,7 @@ func checkBackgroundAmpersand(p *pass, n syntax.Node) {
 	switch {
 	case strings.HasPrefix(rest, "amp;"), strings.HasPrefix(rest, "gt;"), strings.HasPrefix(rest, "lt;"):
 		p.report(1109, parser.Span{Start: at, End: at + 1 + strings.IndexByte(rest, ';') + 1}, htmlEntityMessage)
-	case rest[0] == '_' || isLetter(rest[0]):
+	case rest[0] == '_' || isASCIILetter(rest[0]):
 		p.report(1132, parser.Span{Start: at, End: at + 1}, "This & runs the command in the background and starts a new one; quote the word if the & is part of it, such as in a URL.")
 	}
 }
@@ -444,7 +440,7 @@ func startsParameter(part syntax.WordPart) bool {
 		return false
 	}
 	c := lit.Value[0]
-	return isNameByte(c) || strings.IndexByte("@#?!-", c) >= 0
+	return isNameChar(c) || strings.IndexByte("@#?!-", c) >= 0
 }
 
 func checkCommentedContinuation(p *pass, n syntax.Node) {
