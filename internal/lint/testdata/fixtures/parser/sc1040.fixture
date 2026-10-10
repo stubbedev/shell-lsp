@@ -3,7 +3,7 @@ cat <<-USAGE
     run the tool
     USAGE
 >>> SC1009 1:1
->>- SC1040 3:1 -- the here-document is never closed, a parser syntax error whose message names the space-indented end token
+>>> SC1040 3:1
 >>> SC1072 4:1
 >>> SC1073 1:5
 

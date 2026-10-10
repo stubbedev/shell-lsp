@@ -136,11 +136,13 @@ type builder struct {
 	stack       []syntax.Node
 	scopes      []ScopeID
 	elseClauses map[*syntax.IfClause]bool
+	closedAtEnd map[*syntax.Redirect]bool
 }
 
-func buildIndex(file *syntax.File, text string) (Index, []Error) {
+func buildIndex(file *syntax.File, text string, closedAtEnd map[*syntax.Redirect]bool) (Index, []Error) {
 	b := &builder{
 		text:        text,
+		closedAtEnd: closedAtEnd,
 		index:       Index{Scopes: []Scope{{Span: Span{Start: 0, End: len(text)}, Parent: FileScope}}},
 		scopes:      []ScopeID{FileScope},
 		elseClauses: map[*syntax.IfClause]bool{},
@@ -663,7 +665,9 @@ func (b *builder) redirect(n *syntax.Redirect) {
 	body := Span{Start: target.End, End: target.End}
 	if n.Hdoc != nil && len(n.Hdoc.Parts) > 0 {
 		body = b.span(n.Hdoc)
-		body.End = max(body.Start, strings.LastIndexByte(b.text[:body.End], '\n')+1)
+		if !b.closedAtEnd[n] {
+			body.End = max(body.Start, strings.LastIndexByte(b.text[:body.End], '\n')+1)
+		}
 	}
 	b.index.Heredocs = append(b.index.Heredocs, Heredoc{
 		Delimiter: delimiter,

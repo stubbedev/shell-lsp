@@ -510,8 +510,6 @@ EOF
 >>> SC1009 1:5
 >>> SC1072 3:1
 >>> SC1073 2:5
->>+ SC2006 2:5 -- mvdan accepts a lone backtick inside an unquoted here document as a command substitution
->>+ SC2046 2:5 -- mvdan accepts a lone backtick inside an unquoted here document as a command substitution
 
 ### dash here document with a bang token
 cat <<-!END

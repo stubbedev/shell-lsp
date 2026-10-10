@@ -88,8 +88,10 @@ func keywordGluedToBracket(e Error, text string) (Error, bool) {
 	return Error{}, false
 }
 
+const unclosedHeredocPrefix = "unclosed here-document "
+
 func unclosedHeredoc(e Error, text string) (Error, bool) {
-	token, ok := quotedToken(e.Message, "unclosed here-document ")
+	token, ok := quotedToken(e.Message, unclosedHeredocPrefix)
 	if !ok {
 		return Error{}, false
 	}

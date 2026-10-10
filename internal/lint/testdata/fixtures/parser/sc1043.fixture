@@ -25,7 +25,6 @@ EOF.
 >>- SC1042 1:7 -- an unterminated here-document is a parser syntax error whose message quotes the line holding the end token
 >>> SC1072 4:1
 >>> SC1073 1:5
->>+ SC2288 3:1 -- shellcheck aborts at the unterminated here-document; we recover by blanking that line and lint the remaining lines as commands
 
 ### no case-insensitive match
 cat <<EOF

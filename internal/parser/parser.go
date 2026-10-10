@@ -66,6 +66,7 @@ func Parse(text string, d dialect.Dialect) *Tree {
 	}
 	var errs []Error
 	var file *syntax.File
+	closedAt := -1
 	for range maxUnrecoverable {
 		parsed, err := parser.Parse(bytes.NewReader(src), "")
 		file = parsed
@@ -77,13 +78,78 @@ func Parse(text string, d dialect.Dialect) *Tree {
 			break
 		}
 		errs = append(errs, parseErr)
-		if !blankLine(src, parseErr.Span.Start) {
+		at := parseErr.Span.Start
+		if delimiter, unclosed := unclosedHeredocDelimiter(err); unclosed {
+			if at == closedAt {
+				break
+			}
+			src, closedAt = endAtEndOfFile(src, delimiter), at
+			continue
+		}
+		if at >= len(text) || !blankLine(src, at) {
 			break
 		}
 	}
-	index, recovered := buildIndex(file, text)
+	var closedAtEnd map[*syntax.Redirect]bool
+	if len(src) > len(text) {
+		closedAtEnd = closeAtEndOfText(file, text)
+	}
+	index, recovered := buildIndex(file, text, closedAtEnd)
 	errs = append(errs, recovered...)
 	return &Tree{Dialect: d, File: file, Errors: sortErrors(errs), Index: index, text: text, lineStarts: lineStarts(text)}
+}
+
+func unclosedHeredocDelimiter(err error) (string, bool) {
+	parseErr, ok := errors.AsType[syntax.ParseError](err)
+	if !ok {
+		return "", false
+	}
+	return quotedToken(parseErr.Text, unclosedHeredocPrefix)
+}
+
+func endAtEndOfFile(src []byte, delimiter string) []byte {
+	if len(src) > 0 && src[len(src)-1] != '\n' {
+		src = append(src, '\n')
+	}
+	return append(src, delimiter...)
+}
+
+func closeAtEndOfText(file *syntax.File, text string) map[*syntax.Redirect]bool {
+	end := uint(len(text))
+	closed := map[*syntax.Redirect]bool{}
+	syntax.Walk(file, func(n syntax.Node) bool {
+		r, ok := n.(*syntax.Redirect)
+		if !ok || r.Hdoc == nil || r.Hdoc.End().Offset() <= end {
+			return true
+		}
+		closed[r] = true
+		r.Hdoc.Parts = partsWithinText(r.Hdoc.Parts, text)
+		if len(r.Hdoc.Parts) == 0 {
+			r.Hdoc = nil
+		}
+		return true
+	})
+	return closed
+}
+
+func partsWithinText(parts []syntax.WordPart, text string) []syntax.WordPart {
+	end := uint(len(text))
+	for len(parts) > 0 && parts[len(parts)-1].Pos().Offset() >= end {
+		parts = parts[:len(parts)-1]
+	}
+	if len(parts) == 0 || parts[len(parts)-1].End().Offset() <= end {
+		return parts
+	}
+	last, ok := parts[len(parts)-1].(*syntax.Lit)
+	if !ok {
+		panic(fmt.Sprintf("parser: here-document part %T runs past the end of the text", parts[len(parts)-1]))
+	}
+	lineStart := strings.LastIndexByte(text, '\n') + 1
+	if lineStart < len(text) {
+		last.Value = strings.TrimSuffix(last.Value, "\n")
+	}
+	last.ValueEnd = syntax.NewPos(end, uint(strings.Count(text, "\n")+1), uint(len(text)-lineStart+1))
+	return parts
 }
 
 func Language(d dialect.Dialect) syntax.LangVariant {

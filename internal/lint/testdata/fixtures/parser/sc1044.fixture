@@ -26,7 +26,7 @@ cat <<EOF
 config follows
   EOF
 >>> SC1009 1:1
->>- SC1039 3:1 -- the here-document is never closed, a parser syntax error whose message names the indented end token
+>>> SC1039 3:1
 >>> SC1072 4:1
 >>> SC1073 1:5
 
