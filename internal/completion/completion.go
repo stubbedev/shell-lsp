@@ -67,7 +67,30 @@ type Item struct {
 	InsertText    string
 	Snippet       bool
 	Replace       parser.Span
-	Resolve       bool
+	Resolve       ResolveKind
+}
+
+type ResolveKind uint8
+
+const (
+	ResolveNone ResolveKind = iota
+	ResolveCommand
+	ResolveFunction
+	ResolveVariable
+)
+
+func Documentation(tree *parser.Tree, kind ResolveKind, name string, offset int) (string, bool) {
+	switch kind {
+	case ResolveFunction:
+		fn, ok := tree.FunctionNamed(name)
+		if !ok {
+			return "", false
+		}
+		return hover.FunctionDoc(tree, fn), true
+	case ResolveVariable:
+		return hover.VariableDoc(tree, min(max(offset, 0), len(tree.Text())), name), true
+	}
+	return "", false
 }
 
 type Result struct {
@@ -114,7 +137,7 @@ func (c completer) commands(withKeywords bool) Result {
 	for _, fn := range c.Tree.Functions {
 		it := c.item(fn.Name, KindFunction, "1")
 		it.Detail = "function"
-		it.Documentation = hover.FunctionDoc(c.Tree, fn)
+		it.Resolve = ResolveFunction
 		add(it)
 	}
 	for _, alias := range c.aliases() {
@@ -147,7 +170,7 @@ func (c completer) commands(withKeywords bool) Result {
 		count++
 		it := c.item(name, KindCommand, "3")
 		it.Detail = "command"
-		it.Resolve = true
+		it.Resolve = ResolveCommand
 		add(it)
 	}
 	return Result{Items: items, Incomplete: incomplete}
@@ -276,7 +299,7 @@ func (c completer) variables() []Item {
 		items = append(items, it)
 	}
 	for _, def := range c.Tree.Definitions {
-		if seen[def.Name] {
+		if seen[def.Name] || !strings.HasPrefix(def.Name, c.site.prefix) {
 			continue
 		}
 		visible := c.Tree.Visible(def.Name, scope)
@@ -290,7 +313,7 @@ func (c completer) variables() []Item {
 		}
 		it := c.item(def.Name, KindVariable, sort)
 		it.Detail = detail
-		it.Documentation = hover.VariableDoc(c.Tree, c.Offset, def.Name)
+		it.Resolve = ResolveVariable
 		add(it)
 	}
 	for _, e := range shelldocs.Variables(c.dialect) {

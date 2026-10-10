@@ -98,7 +98,7 @@ func TestCommandPosition(t *testing.T) {
 	if !slices.Equal(labels(got), want) {
 		t.Errorf("labels = %v, want %v", labels(got), want)
 	}
-	if it, _ := find(got, "git"); !it.Resolve || it.Kind != KindCommand {
+	if it, _ := find(got, "git"); it.Resolve != ResolveCommand || it.Kind != KindCommand {
 		t.Errorf("git item = %+v, want lazily resolved command", it)
 	}
 
@@ -109,8 +109,15 @@ func TestCommandPosition(t *testing.T) {
 		}
 	}
 	fn, _ := find(all, "deploy")
-	if fn.Kind != KindFunction || !strings.Contains(fn.Documentation, "deploy") || fn.SortText >= "2" {
+	if fn.Kind != KindFunction || fn.Resolve != ResolveFunction || fn.SortText >= "2" {
 		t.Errorf("function item = %+v", fn)
+	}
+	tree := parser.Parse("# Deploys.\ndeploy() { :; }\n", dialect.Bash)
+	if doc, ok := Documentation(tree, ResolveFunction, "deploy", 0); !ok || !strings.Contains(doc, "Deploys.") {
+		t.Errorf("function documentation = %q, %t", doc, ok)
+	}
+	if doc, ok := Documentation(tree, ResolveVariable, "HOME", 3); !ok || !strings.Contains(doc, "Home directory") {
+		t.Errorf("variable documentation = %q, %t", doc, ok)
 	}
 	kw, _ := find(all, "for")
 	if !kw.Snippet || !strings.Contains(kw.InsertText, "${1:name}") {

@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
@@ -70,7 +71,7 @@ func TestCompletionResolveDescribesCommands(t *testing.T) {
 
 	c, _ := startClient(t, `{"capabilities": {"textDocument": {"diagnostic": {}}}}`)
 	got := decodeResult[lsp.CompletionItem](t, c.call("completionItem/resolve",
-		`{"label": "definitely-not-a-command", "kind": 9, "insertTextFormat": 1, "data": {"command": "definitely-not-a-command"}}`))
+		`{"label": "definitely-not-a-command", "kind": 9, "insertTextFormat": 1, "data": {"kind": 1, "name": "definitely-not-a-command"}}`))
 	if got.Documentation == nil || !strings.Contains(got.Documentation.Value, "not found in `PATH`") {
 		t.Errorf("resolved item = %+v", got)
 	}
@@ -97,7 +98,51 @@ func TestExecutableCache(t *testing.T) {
 		t.Fatal(err)
 	}
 	cache := &executableCache{}
-	if got := cache.list(dir + string(os.PathListSeparator) + filepath.Join(dir, "missing")); !slices.Equal(got, []string{"tool"}) {
+	path := dir + string(os.PathListSeparator) + filepath.Join(dir, "missing")
+	if got := cache.list(path); !slices.Equal(got, []string{"tool"}) {
 		t.Errorf("executables = %v", got)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "newtool"), nil, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	later := time.Now().Add(time.Second)
+	if err := os.Chtimes(dir, later, later); err != nil {
+		t.Fatal(err)
+	}
+	if got := cache.list(path); !slices.Equal(got, []string{"newtool", "tool"}) {
+		t.Errorf("executables after installing a tool = %v", got)
+	}
+}
+
+func TestCompletionResolveDocumentsFunctionsAndVariables(t *testing.T) {
+	t.Parallel()
+
+	c, _ := startClient(t, `{"capabilities": {"textDocument": {"diagnostic": {}}}}`)
+	c.notify("textDocument/didOpen", openParams("file:///w/a.bash", "# Says hi.\nhi() { :; }\nname=x\nh\necho $na\n"))
+	list := decodeResult[lsp.CompletionList](t, c.call("textDocument/completion", positionParams("file:///w/a.bash", 3, 1, "")))
+	i := slices.IndexFunc(list.Items, func(it lsp.CompletionItem) bool { return it.Label == "hi" })
+	if i < 0 || list.Items[i].Documentation != nil {
+		t.Fatalf("hi item = %+v", list.Items)
+	}
+	raw, err := json.Marshal(list.Items[i])
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved := decodeResult[lsp.CompletionItem](t, c.call("completionItem/resolve", string(raw)))
+	if resolved.Documentation == nil || !strings.Contains(resolved.Documentation.Value, "Says hi.") {
+		t.Errorf("resolved function = %+v", resolved)
+	}
+	vars := decodeResult[lsp.CompletionList](t, c.call("textDocument/completion", positionParams("file:///w/a.bash", 4, 8, "")))
+	j := slices.IndexFunc(vars.Items, func(it lsp.CompletionItem) bool { return it.Label == "name" })
+	if j < 0 {
+		t.Fatalf("variables = %+v", vars.Items)
+	}
+	raw, err = json.Marshal(vars.Items[j])
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolvedVar := decodeResult[lsp.CompletionItem](t, c.call("completionItem/resolve", string(raw)))
+	if resolvedVar.Documentation == nil || !strings.Contains(resolvedVar.Documentation.Value, "global variable") {
+		t.Errorf("resolved variable = %+v", resolvedVar)
 	}
 }

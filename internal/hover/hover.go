@@ -276,7 +276,7 @@ func (s Signature) Label() string {
 var paramDocLine = regexp.MustCompile(`^\$?([0-9]+|[A-Za-z_][A-Za-z0-9_]*)\s*(?:-|:)\s+(.+)$`)
 
 func FunctionSignature(tree *parser.Tree, fn parser.Function) Signature {
-	highest, variadic := positionalUse(tree, fn)
+	highest, variadic := positionalUse(fn)
 	names := parameterNames(tree, fn)
 	for index := range names {
 		highest = max(highest, index)
@@ -341,20 +341,17 @@ func positionalValue(w *syntax.Word) (int, bool) {
 	return n, err == nil
 }
 
-func positionalUse(tree *parser.Tree, fn parser.Function) (int, bool) {
+func positionalUse(fn parser.Function) (int, bool) {
 	highest, variadic := 0, false
-	syntax.Walk(tree.File, func(node syntax.Node) bool {
-		if decl, ok := node.(*syntax.FuncDecl); ok && decl.Pos().IsValid() {
-			start := parser.Offset(decl.Pos())
-			if start != fn.Span.Start && fn.Span.Contains(start) {
-				return false
-			}
+	if fn.Decl == nil || fn.Decl.Body == nil {
+		return 0, false
+	}
+	syntax.Walk(fn.Decl.Body, func(node syntax.Node) bool {
+		if _, nested := node.(*syntax.FuncDecl); nested {
+			return false
 		}
 		exp, ok := node.(*syntax.ParamExp)
 		if !ok || exp.Param == nil || !exp.Param.ValuePos.IsValid() {
-			return true
-		}
-		if !fn.Span.Contains(parser.Offset(exp.Param.ValuePos)) {
 			return true
 		}
 		switch name := exp.Param.Value; {
@@ -474,7 +471,7 @@ func zshModifierDocs(modifiers []*syntax.Lit) string {
 }
 
 func (h hoverer) line(offset int) int {
-	return strings.Count(h.text[:offset], "\n") + 1
+	return h.Tree.Line(offset)
 }
 
 func (h hoverer) snippet(offset int) string {

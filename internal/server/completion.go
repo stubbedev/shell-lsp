@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/stubbedev/shell-lsp/internal/completion"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
@@ -32,7 +33,10 @@ var completionKinds = map[completion.Kind]lsp.CompletionItemKind{
 }
 
 type completionData struct {
-	Command string `json:"command"`
+	Kind   completion.ResolveKind `json:"kind"`
+	Name   string                 `json:"name"`
+	URI    string                 `json:"uri,omitempty"`
+	Offset int                    `json:"offset,omitempty"`
 }
 
 type shellEnvironment struct {
@@ -89,19 +93,27 @@ func (e shellEnvironment) Options(ctx context.Context, command string) ([]manpag
 }
 
 type executableCache struct {
-	mu    sync.Mutex
-	path  string
-	names []string
+	mu       sync.Mutex
+	path     string
+	modTimes []time.Time
+	names    []string
 }
 
 func (c *executableCache) list(path string) []string {
+	dirs := filepath.SplitList(path)
+	modTimes := make([]time.Time, len(dirs))
+	for i, dir := range dirs {
+		if info, err := os.Stat(dir); err == nil { //nolint:gosec
+			modTimes[i] = info.ModTime()
+		}
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.names != nil && c.path == path {
+	if c.names != nil && c.path == path && slices.EqualFunc(c.modTimes, modTimes, time.Time.Equal) {
 		return c.names
 	}
 	names := []string{}
-	for _, dir := range filepath.SplitList(path) {
+	for _, dir := range dirs {
 		entries, err := os.ReadDir(dir)
 		if err != nil {
 			continue
@@ -122,7 +134,7 @@ func (c *executableCache) list(path string) []string {
 		}
 	}
 	slices.Sort(names)
-	c.path, c.names = path, slices.Compact(names)
+	c.path, c.modTimes, c.names = path, modTimes, slices.Compact(names)
 	return c.names
 }
 
@@ -181,8 +193,8 @@ func (s *Server) completionItem(snap *snapshot, it completion.Item) (lsp.Complet
 	if it.Documentation != "" {
 		item.Documentation = &lsp.MarkupContent{Kind: lsp.MarkupMarkdown, Value: it.Documentation}
 	}
-	if it.Resolve {
-		data, err := json.Marshal(completionData{Command: it.Label})
+	if it.Resolve != completion.ResolveNone {
+		data, err := json.Marshal(completionData{Kind: it.Resolve, Name: it.Label, URI: snap.doc.URI, Offset: it.Replace.Start})
 		if err != nil {
 			return lsp.CompletionItem{}, err
 		}
@@ -191,7 +203,7 @@ func (s *Server) completionItem(snap *snapshot, it completion.Item) (lsp.Complet
 	return item, nil
 }
 
-func (s *Server) handleCompletionResolve(ctx context.Context, _ *docstore.View, params json.RawMessage) (any, error) {
+func (s *Server) handleCompletionResolve(ctx context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
 	item, err := lsp.DecodeParams[lsp.CompletionItem](params)
 	if err != nil {
 		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing completionItem/resolve params: %v", err)
@@ -200,13 +212,23 @@ func (s *Server) handleCompletionResolve(ctx context.Context, _ *docstore.View, 
 		return item, nil
 	}
 	var data completionData
-	if err := json.Unmarshal(item.Data, &data); err != nil || data.Command == "" {
+	if err := json.Unmarshal(item.Data, &data); err != nil || data.Name == "" || data.Kind == completion.ResolveNone {
 		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "completion item data %s is not from this server", item.Data)
 	}
-	doc, err := s.commandDocs.Describe(ctx, data.Command)
-	if err != nil && !errors.Is(err, manpage.ErrNoPage) {
-		return nil, err
+	if data.Kind == completion.ResolveCommand {
+		doc, err := s.commandDocs.Describe(ctx, data.Name)
+		if err != nil && !errors.Is(err, manpage.ErrNoPage) {
+			return nil, err
+		}
+		item.Documentation = &lsp.MarkupContent{Kind: lsp.MarkupMarkdown, Value: doc}
+		return item, nil
 	}
-	item.Documentation = &lsp.MarkupContent{Kind: lsp.MarkupMarkdown, Value: doc}
+	snap, err := s.snapshot(docs, data.URI)
+	if err != nil {
+		return item, nil
+	}
+	if doc, ok := completion.Documentation(snap.tree, data.Kind, data.Name, data.Offset); ok {
+		item.Documentation = &lsp.MarkupContent{Kind: lsp.MarkupMarkdown, Value: doc}
+	}
 	return item, nil
 }
