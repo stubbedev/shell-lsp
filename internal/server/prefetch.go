@@ -82,7 +82,7 @@ func (s *Server) warmUp(ctx context.Context) {
 }
 
 func (s *Server) indexInBackground(ctx context.Context) {
-	if _, err := s.indexWorkspace(ctx, s.docs.View()); err != nil && ctx.Err() == nil {
+	if _, err := s.indexWorkspace(ctx, s.docs.View(), background); err != nil && ctx.Err() == nil {
 		s.logger.Warn("indexing workspace", "err", err)
 	}
 }

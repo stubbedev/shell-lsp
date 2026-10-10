@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"hash/fnv"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -124,21 +123,14 @@ func (s *Server) handleWorkspaceDiagnostic(ctx context.Context, docs *docstore.V
 	for _, p := range diagParams.PreviousResultIDs {
 		previous[p.URI] = p.Value
 	}
-	files, err := s.indexWorkspace(ctx, docs)
+	files, err := s.indexWorkspace(ctx, docs, interactive)
 	if err != nil {
 		return nil, err
 	}
 	items := make([]lsp.WorkspaceDocumentDiagnosticReport, len(files))
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, runtime.GOMAXPROCS(0))
-	for i, file := range files {
-		wg.Go(func() {
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			items[i] = s.workspaceReport(docs, file, previous[file.URI])
-		})
-	}
-	wg.Wait()
+	parallel(interactive, len(files), func(i int) {
+		items[i] = s.workspaceReport(docs, files[i], previous[files[i].URI])
+	})
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}

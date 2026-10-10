@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"sync"
 
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
@@ -105,7 +106,7 @@ func (s *Server) handleWorkspaceSymbol(ctx context.Context, docs *docstore.View,
 	if err != nil {
 		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing workspace/symbol params: %v", err)
 	}
-	files, err := s.indexWorkspace(ctx, docs)
+	files, err := s.indexWorkspace(ctx, docs, interactive)
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +136,7 @@ func workspaceSymbol(file *workspace.File, enc docstore.Encoding, name string, k
 	return lsp.SymbolInformation{Name: name, Kind: kind, Location: lsp.Location{URI: file.URI, Range: file.Doc.RangeFor(span.Start, span.End, enc)}}
 }
 
-func (s *Server) indexWorkspace(ctx context.Context, docs *docstore.View) ([]*workspace.File, error) {
+func (s *Server) indexWorkspace(ctx context.Context, docs *docstore.View, u urgency) ([]*workspace.File, error) {
 	report := func(int, int) {}
 	if s.clientCapabilities().Window.WorkDoneProgress {
 		progress, err := s.StartProgress(ctx, "Indexing shell files")
@@ -157,10 +158,10 @@ func (s *Server) indexWorkspace(ctx context.Context, docs *docstore.View) ([]*wo
 			}
 		}
 	}
-	return s.workspaceFiles(ctx, docs, report)
+	return s.workspaceFiles(ctx, docs, u, report)
 }
 
-func (s *Server) workspaceFiles(ctx context.Context, docs *docstore.View, report func(done, total int)) ([]*workspace.File, error) {
+func (s *Server) workspaceFiles(ctx context.Context, docs *docstore.View, u urgency, report func(done, total int)) ([]*workspace.File, error) {
 	paths, err := s.workspace.ShellFiles(ctx)
 	if err != nil {
 		return nil, err
@@ -175,13 +176,26 @@ func (s *Server) workspaceFiles(ctx context.Context, docs *docstore.View, report
 		seen[file.URI] = true
 		files = append(files, file)
 	}
-	for i, path := range paths {
-		if err := ctx.Err(); err != nil {
-			return nil, err
+	loaded := make([]*workspace.File, len(paths))
+	var progress sync.Mutex
+	finished := 0
+	parallel(u, len(paths), func(i int) {
+		if ctx.Err() != nil {
+			return
 		}
-		report(i+1, len(paths))
-		file, err := s.workspace.Load(path)
-		if err != nil || seen[file.URI] {
+		if file, err := s.workspace.Load(paths[i]); err == nil {
+			loaded[i] = file
+		}
+		progress.Lock()
+		finished++
+		report(finished, len(paths))
+		progress.Unlock()
+	})
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	for _, file := range loaded {
+		if file == nil || seen[file.URI] {
 			continue
 		}
 		seen[file.URI] = true
