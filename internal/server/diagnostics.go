@@ -27,47 +27,68 @@ type shellcheckKey struct {
 	binary     string
 }
 
-type diagnosticsState struct {
-	mu         sync.Mutex
-	shellcheck map[string]shellcheckResult
-	partial    atomic.Uint64
+type shellcheckRun struct {
+	key     shellcheckKey
+	done    chan struct{}
+	cancel  context.CancelFunc
+	items   []lsp.Diagnostic
+	ok      bool
+	refresh sync.Once
 }
 
-type shellcheckResult struct {
-	key   shellcheckKey
-	items []lsp.Diagnostic
+func (r *shellcheckRun) finished() bool {
+	select {
+	case <-r.done:
+		return true
+	default:
+		return false
+	}
+}
+
+type diagnosticsState struct {
+	mu      sync.Mutex
+	runs    map[string]*shellcheckRun
+	partial atomic.Uint64
 }
 
 func newDiagnosticsState() *diagnosticsState {
-	return &diagnosticsState{shellcheck: map[string]shellcheckResult{}}
+	return &diagnosticsState{runs: map[string]*shellcheckRun{}}
 }
 
-func (d *diagnosticsState) cached(uri string, key shellcheckKey) ([]lsp.Diagnostic, bool) {
+func (d *diagnosticsState) start(uri string, key shellcheckKey, launch func(ctx context.Context) ([]lsp.Diagnostic, bool)) *shellcheckRun {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	result, ok := d.shellcheck[uri]
-	if !ok || result.key != key {
-		return nil, false
+	if current, ok := d.runs[uri]; ok {
+		if current.key == key {
+			return current
+		}
+		current.cancel()
 	}
-	return result.items, true
-}
-
-func (d *diagnosticsState) remember(uri string, key shellcheckKey, items []lsp.Diagnostic) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	d.shellcheck[uri] = shellcheckResult{key: key, items: items}
+	ctx, cancel := context.WithCancel(context.Background())
+	run := &shellcheckRun{key: key, done: make(chan struct{}), cancel: cancel}
+	d.runs[uri] = run
+	go func() {
+		defer cancel()
+		run.items, run.ok = launch(ctx)
+		close(run.done)
+	}()
+	return run
 }
 
 func (d *diagnosticsState) forget(uri string) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	delete(d.shellcheck, uri)
+	if run, ok := d.runs[uri]; ok {
+		run.cancel()
+		delete(d.runs, uri)
+	}
 }
 
 type diagnosticReport struct {
 	version  int32
 	resultID string
 	items    []lsp.Diagnostic
+	pending  *shellcheckRun
 }
 
 type shellcheckPlan struct {
@@ -75,7 +96,7 @@ type shellcheckPlan struct {
 	binary diagnostics.Binary
 }
 
-func (s *Server) diagnose(ctx context.Context, snap *snapshot) (diagnosticReport, error) {
+func (s *Server) diagnose(ctx context.Context, snap *snapshot, wait bool) (diagnosticReport, error) {
 	items := diagnostics.Syntax(snap.tree, snap.doc, snap.encoding)
 	plan, planned := s.planShellcheck(snap)
 	binaryID := "none"
@@ -87,12 +108,21 @@ func (s *Server) diagnose(ctx context.Context, snap *snapshot) (diagnosticReport
 		resultID: fmt.Sprintf("%d/%d/%s", snap.doc.Version, snap.generation, binaryID),
 	}
 	if planned {
-		found, complete, err := s.runShellcheck(ctx, snap, plan)
-		if err != nil {
-			return diagnosticReport{}, err
+		run := s.startShellcheck(snap, plan)
+		if wait {
+			select {
+			case <-run.done:
+			case <-ctx.Done():
+				return diagnosticReport{}, ctx.Err()
+			}
 		}
-		items = append(items, found...)
-		if !complete {
+		switch {
+		case !run.finished():
+			report.pending = run
+			report.resultID += "/pending-" + strconv.FormatUint(s.diagnostics.partial.Add(1), 10)
+		case run.ok:
+			items = append(items, run.items...)
+		default:
 			report.resultID += "/partial-" + strconv.FormatUint(s.diagnostics.partial.Add(1), 10)
 		}
 	}
@@ -124,27 +154,25 @@ func (s *Server) planShellcheck(snap *snapshot) (shellcheckPlan, bool) {
 	return shellcheckPlan{args: args, binary: binary}, true
 }
 
-func (s *Server) runShellcheck(ctx context.Context, snap *snapshot, plan shellcheckPlan) ([]lsp.Diagnostic, bool, error) {
+func (s *Server) startShellcheck(snap *snapshot, plan shellcheckPlan) *shellcheckRun {
 	uri := snap.doc.URI
 	key := shellcheckKey{version: snap.doc.Version, generation: snap.generation, binary: plan.binary.ID}
-	if items, ok := s.diagnostics.cached(uri, key); ok {
-		return items, true, nil
-	}
-	output, err := diagnostics.RunShellcheck(ctx, plan.binary, plan.args, scriptDir(uri), snap.doc.Text())
-	if ctxErr := ctx.Err(); ctxErr != nil {
-		return nil, false, ctxErr
-	}
-	if err != nil {
-		s.noticeOnce("shellcheck-failed:"+err.Error(), lsp.MessageError, err.Error())
-		return nil, false, nil
-	}
-	items, err := diagnostics.ParseShellcheck(output, snap.doc, snap.encoding)
-	if err != nil {
-		s.noticeOnce("shellcheck-output:"+err.Error(), lsp.MessageError, err.Error())
-		return nil, false, nil
-	}
-	s.diagnostics.remember(uri, key, items)
-	return items, true, nil
+	return s.diagnostics.start(uri, key, func(ctx context.Context) ([]lsp.Diagnostic, bool) {
+		output, err := diagnostics.RunShellcheck(ctx, plan.binary, plan.args, scriptDir(uri), snap.doc.Text())
+		if ctx.Err() != nil {
+			return nil, false
+		}
+		if err != nil {
+			s.noticeOnce("shellcheck-failed:"+err.Error(), lsp.MessageError, err.Error())
+			return nil, false
+		}
+		items, err := diagnostics.ParseShellcheck(output, snap.doc, snap.encoding)
+		if err != nil {
+			s.noticeOnce("shellcheck-output:"+err.Error(), lsp.MessageError, err.Error())
+			return nil, false
+		}
+		return items, true
+	})
 }
 
 func (s *Server) handleDocumentDiagnostic(ctx context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
@@ -156,9 +184,19 @@ func (s *Server) handleDocumentDiagnostic(ctx context.Context, docs *docstore.Vi
 	if err != nil {
 		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
 	}
-	report, err := s.diagnose(ctx, snap)
+	refresh := s.clientCapabilities().Workspace.Diagnostics.RefreshSupport
+	report, err := s.diagnose(ctx, snap, !refresh)
 	if err != nil {
 		return nil, err
+	}
+	if run := report.pending; run != nil {
+		background := context.WithoutCancel(ctx)
+		go func() {
+			<-run.done
+			if run.ok {
+				run.refresh.Do(func() { s.requestRefresh(background, "workspace/diagnostic/refresh") })
+			}
+		}()
 	}
 	if diagParams.PreviousResultID == report.resultID {
 		return lsp.UnchangedDocumentDiagnosticReport{Kind: lsp.ReportUnchanged, ResultID: report.resultID}, nil
@@ -171,13 +209,25 @@ func (s *Server) publishDiagnostics(ctx context.Context, uri string) {
 	if err != nil {
 		return
 	}
-	report, err := s.diagnose(ctx, snap)
+	report, err := s.diagnose(ctx, snap, false)
 	if err != nil {
-		if !errors.Is(err, context.Canceled) {
-			s.logger.Error("computing diagnostics", "uri", uri, "err", err)
-		}
 		return
 	}
+	s.publish(uri, report)
+	if report.pending == nil {
+		return
+	}
+	select {
+	case <-report.pending.done:
+	case <-ctx.Done():
+		return
+	}
+	if full, err := s.diagnose(ctx, snap, true); err == nil {
+		s.publish(uri, full)
+	}
+}
+
+func (s *Server) publish(uri string, report diagnosticReport) {
 	if current, ok := s.docs.View().Document(uri); !ok || current.Version != report.version {
 		return
 	}

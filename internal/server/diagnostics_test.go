@@ -72,16 +72,33 @@ func awaitPublished(c *testClient, uri string, version int32) lsp.PublishDiagnos
 	return published
 }
 
+func isShellcheck(code string) bool { return strings.HasPrefix(code, "SC") }
+
+func pullSettled(c *testClient, uri, previous string) lsp.FullDocumentDiagnosticReport {
+	c.t.Helper()
+
+	params := `{"textDocument": {"uri": "` + uri + `"}, "previousResultId": "` + previous + `"}`
+	report := decodeResult[lsp.FullDocumentDiagnosticReport](c.t, c.call("textDocument/diagnostic", params))
+	if strings.Contains(report.ResultID, "/pending-") {
+		c.answerServerRequest("workspace/diagnostic/refresh")
+		report = decodeResult[lsp.FullDocumentDiagnosticReport](c.t, c.call("textDocument/diagnostic", params))
+	}
+	return report
+}
+
 func TestPushDiagnosticsSyntaxAndShellcheck(t *testing.T) {
 	t.Parallel()
 	requireShellcheck(t)
 
 	c, _ := startClient(t, `{"capabilities": {}}`)
 	c.notify("textDocument/didOpen", openParams("file:///w/a.sh", "#!/bin/bash\necho $1\nif true; then\n"))
-	got := awaitPublished(c, "file:///w/a.sh", 1)
-	isShellcheck := func(code string) bool { return strings.HasPrefix(code, "SC") }
-	if got := codes(got.Diagnostics); !slices.Contains(got, "syntax") || !slices.ContainsFunc(got, isShellcheck) {
-		t.Errorf("codes = %v, want our syntax error plus shellcheck findings", got)
+	quick := awaitPublished(c, "file:///w/a.sh", 1)
+	if got := codes(quick.Diagnostics); !slices.Contains(got, "syntax") || slices.ContainsFunc(got, isShellcheck) {
+		t.Errorf("first publication = %v, want syntax errors before shellcheck finishes", got)
+	}
+	full := awaitPublished(c, "file:///w/a.sh", 1)
+	if got := codes(full.Diagnostics); !slices.Contains(got, "syntax") || !slices.ContainsFunc(got, isShellcheck) {
+		t.Errorf("second publication = %v, want our syntax error plus shellcheck findings", got)
 	}
 
 	c.notify("textDocument/didChange", `{"textDocument": {"uri": "file:///w/a.sh", "version": 2},
@@ -107,14 +124,20 @@ func TestPullDiagnosticsMatchesPushAndReportsUnchanged(t *testing.T) {
 	text := "#!/bin/sh\necho $1\narr=(1)\n"
 	pull, _ := startClient(t, `{`+pullCapabilities+`}`)
 	pull.notify("textDocument/didOpen", openParams("file:///w/p.sh", text))
-	first := decodeResult[lsp.FullDocumentDiagnosticReport](t,
+	quick := decodeResult[lsp.FullDocumentDiagnosticReport](t,
 		pull.call("textDocument/diagnostic", `{"textDocument": {"uri": "file:///w/p.sh"}}`))
-	if first.Kind != lsp.ReportFull || first.ResultID == "" {
-		t.Fatalf("report = %+v", first)
+	if !strings.Contains(quick.ResultID, "/pending-") || slices.ContainsFunc(codes(quick.Items), isShellcheck) {
+		t.Fatalf("first report = %+v, want syntax diagnostics while shellcheck runs", quick)
+	}
+	pull.answerServerRequest("workspace/diagnostic/refresh")
+	first := pullSettled(pull, "file:///w/p.sh", quick.ResultID)
+	if first.Kind != lsp.ReportFull || !slices.ContainsFunc(codes(first.Items), isShellcheck) {
+		t.Fatalf("report after refresh = %+v", first)
 	}
 
 	push, _ := startClient(t, `{"capabilities": {}}`)
 	push.notify("textDocument/didOpen", openParams("file:///w/p.sh", text))
+	awaitPublished(push, "file:///w/p.sh", 1)
 	published := awaitPublished(push, "file:///w/p.sh", 1)
 	if !slices.Equal(codes(first.Items), codes(published.Diagnostics)) {
 		t.Errorf("pull codes %v != push codes %v", codes(first.Items), codes(published.Diagnostics))
@@ -128,9 +151,8 @@ func TestPullDiagnosticsMatchesPushAndReportsUnchanged(t *testing.T) {
 
 	pull.notify("workspace/didChangeConfiguration", `{"settings": {"shellLsp": {"shellcheck": {"exclude": ["SC2086"]}}}}`)
 	pull.answerServerRequest("workspace/diagnostic/refresh")
-	after := decodeResult[lsp.FullDocumentDiagnosticReport](t, pull.call("textDocument/diagnostic",
-		`{"textDocument": {"uri": "file:///w/p.sh"}, "previousResultId": "`+first.ResultID+`"}`))
-	if after.Kind != lsp.ReportFull || slices.Contains(codes(after.Items), "SC2086") {
+	after := pullSettled(pull, "file:///w/p.sh", first.ResultID)
+	if after.Kind != lsp.ReportFull || slices.Contains(codes(after.Items), "SC2086") || !slices.ContainsFunc(codes(after.Items), isShellcheck) {
 		t.Errorf("report after excluding SC2086 = %+v", after)
 	}
 	if !slices.Contains(codes(after.Items), "dialect") {

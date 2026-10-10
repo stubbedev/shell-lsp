@@ -55,7 +55,7 @@ func (s *Server) handleCodeAction(ctx context.Context, docs *docstore.View, para
 		LocalSupported: snap.dialect.Features().Local,
 	}
 	if wants(only, string(actions.SourceFixAll)) {
-		report, err := s.diagnose(ctx, snap)
+		report, err := s.diagnose(ctx, snap, true)
 		if err != nil {
 			return nil, err
 		}
@@ -149,7 +149,7 @@ func (s *Server) handleExecuteCommand(ctx context.Context, docs *docstore.View, 
 		if err != nil {
 			return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
 		}
-		report, err := s.diagnose(ctx, snap)
+		report, err := s.diagnose(ctx, snap, true)
 		if err != nil {
 			return nil, err
 		}
