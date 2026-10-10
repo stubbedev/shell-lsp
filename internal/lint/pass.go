@@ -32,6 +32,8 @@ type pass struct {
 
 	shellChosen  bool
 	shellOptions *shellOptions
+	variables    variableUsage
+	associative  map[string]bool
 }
 
 func newPass(tree *parser.Tree, imports []parser.Import, settings fileWide) *pass {

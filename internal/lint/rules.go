@@ -39,6 +39,7 @@ var families = []family{
 	fileOpsFamily,
 	elevationFamily,
 	commandWordFamily,
+	variablesFamily,
 	testsFamily,
 	redirectsFamily,
 	expansionsFamily,
