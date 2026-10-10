@@ -6,7 +6,7 @@ fi
 >>- SC1047 2:17 -- bash rejects elsif; the parser reports the stray then as a syntax error
 >>> SC1072 2:22
 >>> SC1073 1:1
->>> SC1131 2:1
+>>- SC1131 2:1 -- mvdan rejects the script at the keyword that follows, so it is reported as a syntax error whose message names the misspelled keyword
 
 ### mixed-case elseif
 ElseIf true
@@ -14,7 +14,7 @@ ElseIf true
 
 ### elseif glued to a test
 elseif[ $x=1 ]
->>> SC1131 1:1
+>>- SC1131 1:1 -- mvdan rejects the script at the keyword that follows, so it is reported as a syntax error whose message names the misspelled keyword
 >>- SC2086 1:9 -- mvdan rejects elseif[ as a command word and reports a syntax error
 >>- SC2154 1:9 -- mvdan rejects elseif[ as a command word and reports a syntax error, and whole-script variable checks are skipped for scripts that do not parse completely
 >>- SC2171 1:14 -- mvdan rejects elseif[ as a command word and reports a syntax error

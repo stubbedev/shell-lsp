@@ -9,7 +9,7 @@ if [ "$n" —gt 3 ]; then echo many; fi
 
 ### fullwidth hyphen before a double bracket file test
 [[ －d /srv ]] && echo dir
->>> SC1100 1:4
+>>- SC1100 1:4 -- mvdan rejects this [[ ]] expression, so it is reported as a syntax error instead
 
 ### en dash at a conjunction position
 if [ -f a.conf –o -f b.conf ]; then echo found; fi

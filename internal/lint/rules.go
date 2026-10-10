@@ -70,6 +70,8 @@ var families = []family{
 	taintFamily,
 	directivesFamily,
 	sourcesFamily,
+	typosFamily,
+	testSyntaxFamily,
 }
 
 var catalog, rules, commandChecks = assemble(families)

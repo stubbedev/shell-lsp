@@ -11,7 +11,7 @@ if [[ $count * 2 -gt 5 ]]; then echo big; fi
 >>> SC1009 1:1
 >>> SC1072 1:14
 >>> SC1073 1:4
->>> SC1076 1:14
+>>- SC1076 1:14 -- mvdan rejects this [[ ]] expression, so it is reported as a syntax error instead
 
 ### slash inside a test
 [ $total / 2 -lt 10 ] && echo small

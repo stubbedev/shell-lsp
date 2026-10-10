@@ -10,7 +10,7 @@ if [[ $count-gt 3 ]]; then echo big; fi
 >>> SC1009 1:1
 >>> SC1072 1:17
 >>> SC1073 1:4
->>> SC1108 1:13
+>>- SC1108 1:13 -- mvdan rejects this [[ ]] expression, so it is reported as a syntax error instead
 
 ### explicit operator
 if [ "$a" = "$b" ]; then echo same; fi

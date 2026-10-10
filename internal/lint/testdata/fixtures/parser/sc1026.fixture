@@ -17,7 +17,7 @@ fi
 >>- SC1050 1:35 -- mvdan rejects this [[ ]] expression; the parser syntax error says to group with ( )
 >>> SC1072 1:35
 >>> SC1073 1:1
->>> SC1140 1:35
+>>- SC1140 1:35 -- mvdan rejects this [[ ]] expression, so it is reported as a syntax error instead
 
 ### bracket glob on the right of a comparison
 choice=$1

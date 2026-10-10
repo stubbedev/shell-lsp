@@ -1,7 +1,7 @@
 ### extra word after a double bracket test
 [[ "$ready" ]] yes
 >>> SC1070 1:16
->>> SC1140 1:16
+>>- SC1140 1:16 -- mvdan rejects a word after ]], so it is reported as a syntax error whose message suggests && or ||
 
 ### redirections after a double bracket test
 [[ -f lock ]] >out.log 2>&1
@@ -19,4 +19,4 @@ if [[ -f lock ]] then echo locked; fi
 ### conjunction after the test reports SC1139 instead
 [[ -f a.lock ]] -o [[ -f b.lock ]]
 >>> SC1070 1:17
->>> SC1139 1:17
+>>- SC1139 1:17 -- mvdan rejects a word after ]], so it is reported as a syntax error whose message suggests && or ||

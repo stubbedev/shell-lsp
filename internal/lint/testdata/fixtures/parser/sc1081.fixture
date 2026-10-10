@@ -7,7 +7,7 @@ fi
 
 ### capitalised for at the start of a line
 For f in *.txt; do echo "$f"; done
->>> SC1081 1:1
+>>- SC1081 1:1 -- mvdan rejects the script at the keyword that follows, so it is reported as a syntax error whose message names the misspelled keyword
 >>> SC1089 1:17
 >>- SC2035 1:10 -- mvdan rejects the capitalised For line as a syntax error
 

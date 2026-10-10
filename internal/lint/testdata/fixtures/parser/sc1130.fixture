@@ -8,7 +8,7 @@ if true; then:; fi
 >>- SC1050 1:17 -- bash rejects then glued to the colon; the parser reports the stray fi as a syntax error
 >>> SC1072 1:19
 >>> SC1073 1:1
->>> SC1130 1:14
+>>- SC1130 1:14 -- mvdan rejects the script at the keyword that follows, so it is reported as a syntax error whose message names the misspelled keyword
 
 ### keyword and colon separated by a space
 if true; then echo yes; else :; fi

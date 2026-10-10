@@ -17,14 +17,14 @@ if [[ -f a.conf ]] or [[ -f b.conf ]]; then echo found; fi
 >>- SC1050 1:20 -- bash rejects or between tests; the parser reports that statements must be separated
 >>> SC1072 1:20
 >>> SC1073 1:1
->>> SC1139 1:20
+>>- SC1139 1:20 -- mvdan rejects a word after ]], so it is reported as a syntax error whose message suggests && or ||
 
 ### and between test commands
 if [[ -f a.conf ]] and [[ -f b.conf ]]; then echo found; fi
 >>- SC1050 1:20 -- bash rejects and between tests; the parser reports that statements must be separated
 >>> SC1072 1:20
 >>> SC1073 1:1
->>> SC1139 1:20
+>>- SC1139 1:20 -- mvdan rejects a word after ]], so it is reported as a syntax error whose message suggests && or ||
 
 ### word that merely starts with or
 [ -n "$fruit" ] orange
