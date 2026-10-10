@@ -86,6 +86,11 @@ func InlayHints(file *workspace.File, within parser.Span, lookup FunctionLookup,
 			hints = append(hints, Hint{Offset: def.NameSpan.End, Label: label, Kind: HintType})
 		}
 	}
+	type signatureKey struct {
+		tree *parser.Tree
+		name string
+	}
+	signatures := map[signatureKey]hover.Signature{}
 	for _, cmd := range tree.Commands {
 		if !inRange(cmd.Span.Start) && !inRange(cmd.Span.End) {
 			continue
@@ -94,7 +99,12 @@ func InlayHints(file *workspace.File, within parser.Span, lookup FunctionLookup,
 		if !ok {
 			continue
 		}
-		sig := hover.FunctionSignature(fnTree, fn)
+		key := signatureKey{tree: fnTree, name: fn.Name}
+		sig, seen := signatures[key]
+		if !seen {
+			sig = hover.FunctionSignature(fnTree, fn)
+			signatures[key] = sig
+		}
 		for i, arg := range cmd.Args {
 			if i >= len(sig.Params) {
 				break
