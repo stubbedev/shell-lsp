@@ -3,7 +3,7 @@ package lint
 import "math/bits"
 
 const (
-	trieBits     = 5
+	trieBits     = 4
 	trieWidth    = 1 << trieBits
 	trieMask     = trieWidth - 1
 	trieMaxDepth = 64 / trieBits
@@ -28,7 +28,6 @@ type pslot[V comparable] struct {
 }
 
 type pentry[V comparable] struct {
-	hash  uint64
 	key   string
 	value V
 }
@@ -80,14 +79,14 @@ func (m pmap[V]) get(key string) (V, bool) {
 }
 
 func (m pmap[V]) set(key string, value V) pmap[V] {
-	root, added := insert(m.root, pentry[V]{hash: hashKey(key), key: key, value: value}, 0)
+	root, added := insert(m.root, pentry[V]{key: key, value: value}, hashKey(key), 0)
 	if added {
 		return pmap[V]{root: root, size: m.size + 1}
 	}
 	return pmap[V]{root: root, size: m.size}
 }
 
-func insert[V comparable](n *pnode[V], e pentry[V], depth int) (*pnode[V], bool) {
+func insert[V comparable](n *pnode[V], e pentry[V], h uint64, depth int) (*pnode[V], bool) {
 	if n == nil {
 		n = &pnode[V]{}
 	}
@@ -104,7 +103,7 @@ func insert[V comparable](n *pnode[V], e pentry[V], depth int) (*pnode[V], bool)
 		}
 		return &pnode[V]{overflow: append(append([]pentry[V](nil), n.overflow...), e)}, true
 	}
-	bit := uint32(1) << slotIndex(e.hash, depth)
+	bit := uint32(1) << slotIndex(h, depth)
 	pos := n.position(bit)
 	if n.bitmap&bit == 0 {
 		slots := make([]pslot[V], len(n.slots)+1)
@@ -118,7 +117,7 @@ func insert[V comparable](n *pnode[V], e pentry[V], depth int) (*pnode[V], bool)
 	added := false
 	switch {
 	case slot.child != nil:
-		child, grew := insert(slot.child, e, depth+1)
+		child, grew := insert(slot.child, e, h, depth+1)
 		if child == slot.child {
 			return n, false
 		}
@@ -129,8 +128,8 @@ func insert[V comparable](n *pnode[V], e pentry[V], depth int) (*pnode[V], bool)
 		}
 		replacement = pslot[V]{entry: e}
 	default:
-		child, _ := insert(nil, slot.entry, depth+1)
-		child, _ = insert(child, e, depth+1)
+		child, _ := insert(nil, slot.entry, hashKey(slot.entry.key), depth+1)
+		child, _ = insert(child, e, h, depth+1)
 		replacement, added = pslot[V]{child: child}, true
 	}
 	slots := append([]pslot[V](nil), n.slots...)
