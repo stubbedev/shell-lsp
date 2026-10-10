@@ -19,6 +19,7 @@ var families = []family{
 	portableRedirectionsFamily,
 	portableTestsFamily,
 	portableBuiltinsFamily,
+	sedSubstitutionFamily,
 }
 
 var catalog, rules = assemble(families)
