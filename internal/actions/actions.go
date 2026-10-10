@@ -306,6 +306,11 @@ func selectedStatements(tree *parser.Tree, sel parser.Span) ([]parser.Span, bool
 			stack = stack[:len(stack)-1]
 			return true
 		}
+		if span, ok := tree.NodeSpan(node); ok && (span.End < trimmed.Start || span.Start > trimmed.End) {
+			if _, isFile := node.(*syntax.File); !isFile {
+				return false
+			}
+		}
 		if stmt, ok := node.(*syntax.Stmt); ok {
 			if span, ok := tree.NodeSpan(stmt); ok && trimmed.Start <= span.Start && span.End <= trimmed.End {
 				owner := stack[len(stack)-1]
@@ -345,6 +350,13 @@ func usesControlFlow(tree *parser.Tree, span parser.Span) bool {
 func usesPositional(tree *parser.Tree, span parser.Span) bool {
 	found := false
 	syntax.Walk(tree.File, func(node syntax.Node) bool {
+		if node == nil {
+			return !found
+		}
+		if nodeSpan, ok := tree.NodeSpan(node); ok && (nodeSpan.End < span.Start || nodeSpan.Start > span.End) {
+			_, isFile := node.(*syntax.File)
+			return isFile
+		}
 		exp, ok := node.(*syntax.ParamExp)
 		if !ok || exp.Param == nil || !exp.Param.ValuePos.IsValid() {
 			return !found

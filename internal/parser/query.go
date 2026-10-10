@@ -80,6 +80,10 @@ func (ix *Index) Visible(name string, scope ScopeID) Definitions {
 	return Definitions{all: ix.Definitions, positions: ix.definitionsByBinding[key]}
 }
 
+func (ix *Index) DefinitionsIn(scope ScopeID) Definitions {
+	return Definitions{all: ix.Definitions, positions: ix.definitionsByScope[scope]}
+}
+
 func (ix *Index) FunctionNamed(name string) (Function, bool) {
 	i, ok := ix.functionsByName[name]
 	if !ok {

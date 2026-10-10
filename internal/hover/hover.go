@@ -309,8 +309,8 @@ func FunctionSignature(tree *parser.Tree, fn parser.Function) Signature {
 
 func parameterNames(tree *parser.Tree, fn parser.Function) map[int]string {
 	names := map[int]string{}
-	for _, def := range tree.Definitions {
-		if def.Within != fn.Body || def.Value == nil {
+	for def := range tree.DefinitionsIn(fn.Body).All() {
+		if def.Value == nil {
 			continue
 		}
 		if index, ok := positionalValue(def.Value); ok {
