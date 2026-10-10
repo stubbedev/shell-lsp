@@ -318,6 +318,8 @@ type interpreter struct {
 	bats       bool
 	walk       []syntax.Node
 	deferred   []syntax.Node
+	eval       evaluation
+	visitor    func(syntax.Node) bool
 	lastPipe   bool
 	subshells  [][]subshellWrite
 
@@ -344,6 +346,7 @@ func analyzeFlow(tree *parser.Tree, imports []parser.Import, bats bool) *flowRes
 		staticFunc: map[string]*syntax.FuncDecl{},
 		lastPipe:   runsLastPipeInShell(tree),
 	}
+	in.visitor = in.visit
 	for i := range tree.Definitions {
 		def := &tree.Definitions[i]
 		if def.Node != nil {
@@ -620,55 +623,67 @@ func (in *interpreter) redirects(stmt *syntax.Stmt, s *state) *state {
 	return s
 }
 
+type evaluation struct {
+	s            *state
+	base         int
+	deferredBase int
+}
+
 func (in *interpreter) evaluate(node syntax.Node, s *state) *state {
-	base, deferredBase := len(in.walk), len(in.deferred)
-	syntax.Walk(node, func(n syntax.Node) bool {
-		if n == nil {
-			done := in.walk[len(in.walk)-1]
-			in.walk = in.walk[:len(in.walk)-1]
-			switch {
-			case len(in.walk) > base && isDeclaration(in.walk[len(in.walk)-1]):
-				in.deferred = append(in.deferred, done)
-			case isDeclaration(done):
-				for _, d := range in.deferred[deferredBase:] {
-					in.applyWrites(d, s)
-				}
-				in.deferred = in.deferred[:deferredBase]
-				in.applyWrites(done, s)
-			default:
-				in.applyWrites(done, s)
-			}
-			return true
-		}
-		switch n := n.(type) {
-		case *syntax.CmdSubst:
-			if n.TempFile || n.ReplyVar {
-				s = in.stmts(n.Stmts, s)
-				return false
-			}
-			in.subshell(subshellExpansion, func(sub *state) *state { return in.stmts(n.Stmts, sub) }, s)
-			return false
-		case *syntax.ProcSubst:
-			in.subshell(subshellProcess, func(sub *state) *state { return in.stmts(n.Stmts, sub) }, s)
-			return false
-		case *syntax.ParamExp:
-			in.recordExpansion(n, s)
-			in.recordStatusRead(n, s)
-			if n.Param != nil {
-				in.recordRead(n.Param.Value, n, s)
-			}
-		case *syntax.Word:
-			if len(in.walk) > base {
-				if name, ok := parser.ArithmeticRead(in.walk[len(in.walk)-1], n); ok {
-					in.recordRead(name, n, s)
-				}
-			}
-		}
-		in.walk = append(in.walk, n)
-		return true
-	})
-	in.walk, in.deferred = in.walk[:base], in.deferred[:deferredBase]
+	saved := in.eval
+	in.eval = evaluation{s: s, base: len(in.walk), deferredBase: len(in.deferred)}
+	syntax.Walk(node, in.visitor)
+	s = in.eval.s
+	in.walk, in.deferred = in.walk[:in.eval.base], in.deferred[:in.eval.deferredBase]
+	in.eval = saved
 	return s
+}
+
+func (in *interpreter) visit(n syntax.Node) bool {
+	e := &in.eval
+	if n == nil {
+		done := in.walk[len(in.walk)-1]
+		in.walk = in.walk[:len(in.walk)-1]
+		switch {
+		case len(in.walk) > e.base && isDeclaration(in.walk[len(in.walk)-1]):
+			in.deferred = append(in.deferred, done)
+		case isDeclaration(done):
+			for _, d := range in.deferred[e.deferredBase:] {
+				in.applyWrites(d, e.s)
+			}
+			in.deferred = in.deferred[:e.deferredBase]
+			in.applyWrites(done, e.s)
+		default:
+			in.applyWrites(done, e.s)
+		}
+		return true
+	}
+	switch n := n.(type) {
+	case *syntax.CmdSubst:
+		if n.TempFile || n.ReplyVar {
+			e.s = in.stmts(n.Stmts, e.s)
+			return false
+		}
+		in.subshell(subshellExpansion, func(sub *state) *state { return in.stmts(n.Stmts, sub) }, e.s)
+		return false
+	case *syntax.ProcSubst:
+		in.subshell(subshellProcess, func(sub *state) *state { return in.stmts(n.Stmts, sub) }, e.s)
+		return false
+	case *syntax.ParamExp:
+		in.recordExpansion(n, e.s)
+		in.recordStatusRead(n, e.s)
+		if n.Param != nil {
+			in.recordRead(n.Param.Value, n, e.s)
+		}
+	case *syntax.Word:
+		if len(in.walk) > e.base {
+			if name, ok := parser.ArithmeticRead(in.walk[len(in.walk)-1], n); ok {
+				in.recordRead(name, n, e.s)
+			}
+		}
+	}
+	in.walk = append(in.walk, n)
+	return true
 }
 
 func isDeclaration(n syntax.Node) bool {
