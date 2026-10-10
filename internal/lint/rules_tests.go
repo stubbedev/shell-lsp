@@ -72,7 +72,7 @@ func checkTestExpressions(p *pass, n syntax.Node) {
 		return
 	}
 	if !t.bracketed() {
-		if bin, ok := t.expr.(*syntax.BinaryTest); ok && len(t.args) == 3 && t.name == "test" {
+		if bin, ok := t.expr.(*syntax.BinaryTest); ok && len(t.args) == 3 && t.name == "test" && bin.Op != syntax.TsMatch {
 			p.checkLegacyPrefix(bin)
 		}
 		return

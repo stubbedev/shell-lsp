@@ -66,6 +66,8 @@ func TestFlowDeadFunctions(t *testing.T) {
 		{"f() { :; }\nf\nexit 0\n", false},
 		{"g() { f; }\nf() { :; }\ng\nexit 0\n", false},
 		{"f() { :; }\nreturn\n", false},
+		{"if x; then f() { :; }; else f() { echo; }; fi\n", false},
+		{"g() { f() { :; }; }\n", true},
 	} {
 		tree, flow := flowOf(t, tc.src)
 		fn, ok := tree.FunctionNamed("f")

@@ -80,7 +80,7 @@ func (p *pass) assigned(name string) bool {
 
 func checkRemovalPattern(p *pass, n syntax.Node) {
 	pe, ok := n.(*syntax.ParamExp)
-	if !ok || pe.Short || pe.Exp == nil || pe.Exp.Word == nil {
+	if !ok || pe.Short || pe.Index != nil || pe.Exp == nil || pe.Exp.Word == nil {
 		return
 	}
 	switch pe.Exp.Op {
@@ -200,7 +200,7 @@ func checkArithmeticIndex(p *pass, n syntax.Node) {
 func checkRedundantParentheses(p *pass, n syntax.Node) {
 	switch n := n.(type) {
 	case *syntax.ParenArithm:
-		if inner, ok := n.X.(*syntax.ParenArithm); ok {
+		if inner, ok := n.X.(*syntax.ParenArithm); ok && !p.inExpansionIndex() {
 			p.reportParentheses(2322, inner, "These doubled parentheses are redundant; one pair is enough.")
 		}
 	case *syntax.ArithmExp:
@@ -213,6 +213,18 @@ func checkRedundantParentheses(p *pass, n syntax.Node) {
 		p.wholeParentheses(n.Post, "for loop")
 	case *syntax.Assign:
 		p.wholeParentheses(n.Index, "array index")
+	}
+}
+
+func (p *pass) inExpansionIndex() bool {
+	for depth := 0; ; depth++ {
+		switch p.ancestor(depth).(type) {
+		case *syntax.ParenArithm, *syntax.BinaryArithm, *syntax.UnaryArithm, *syntax.Word:
+			continue
+		case *syntax.ParamExp:
+			return true
+		}
+		return false
 	}
 }
 

@@ -343,7 +343,17 @@ func (in *interpreter) invokable(decl *syntax.FuncDecl) bool {
 	if !in.final.live {
 		return false
 	}
-	return in.definitions[decl]
+	return slices.ContainsFunc(declaredNames(decl), func(name *syntax.Lit) bool {
+		ref, ok := in.final.funcs.get(name.Value)
+		return ok && (ref.decl == decl || (ref.maybe && in.definitions[decl]))
+	})
+}
+
+func declaredNames(decl *syntax.FuncDecl) []*syntax.Lit {
+	if decl.Name != nil {
+		return []*syntax.Lit{decl.Name}
+	}
+	return decl.Names
 }
 
 func importedGlobals(imports []parser.Import) map[string]value {
@@ -909,11 +919,7 @@ func (in *interpreter) runBody(decl *syntax.FuncDecl, entry *state) *state {
 }
 
 func (in *interpreter) define(decl *syntax.FuncDecl, s *state) *state {
-	names := decl.Names
-	if decl.Name != nil {
-		names = []*syntax.Lit{decl.Name}
-	}
-	for _, name := range names {
+	for _, name := range declaredNames(decl) {
 		s.funcs = s.funcs.set(name.Value, funcRef{decl: decl})
 		s.pending = s.pending.remove(name.Value)
 	}
