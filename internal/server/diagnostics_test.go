@@ -209,7 +209,7 @@ func TestWorkspaceDiagnosticsCoverClosedFiles(t *testing.T) {
 		t.Errorf("closed clean.sh report = %+v", clean)
 	}
 	open := byURI[openURI]
-	if open.Version == nil || *open.Version != 1 || !slices.Equal(codes(open.Items), []string{"SC2006", "SC2046"}) {
+	if open.Version == nil || *open.Version != 1 || !slices.Equal(codes(open.Items), []string{"SC2005", "SC2006", "SC2046"}) {
 		t.Errorf("open document report = %+v", open)
 	}
 	if _, ok := byURI[fileuri.FromPath(filepath.Join(root, "notes.txt"))]; ok || len(first.Items) != 3 {

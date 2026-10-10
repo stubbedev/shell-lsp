@@ -7,7 +7,7 @@ echo Disk usage (approx)
 mv draft(1).txt final.txt
 >>- SC1036 1:9 -- bash rejects the unquoted parenthesis, so this is reported as a parser syntax error
 >>> SC1088 1:9
->>> SC2224 1:1
+>>- SC2224 1:1 -- mvdan rejects a parenthesis inside a word; the line is reported as a syntax error instead
 
 ### subshell and function definition
 cleanup() { rm -f "$tmp"; }

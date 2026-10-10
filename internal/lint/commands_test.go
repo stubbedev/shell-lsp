@@ -141,6 +141,35 @@ func TestEnclosingPipeline(t *testing.T) {
 	}
 }
 
+func TestCommandDispatch(t *testing.T) {
+	t.Parallel()
+
+	var seen []string
+	record := func(label string) func(*pass, command) {
+		return func(_ *pass, c command) { seen = append(seen, label+":"+c.name) }
+	}
+	d := newCommandDispatch([]commandRule{
+		{match: matchExact, names: []string{"echo", "local"}, check: record("exact")},
+		{match: matchBase, names: []string{"echo"}, check: record("base")},
+	})
+	for src, want := range map[string][]string{
+		"echo hi\n":          {"base:echo", "exact:echo"},
+		"/bin/echo hi\n":     {"base:/bin/echo"},
+		"builtin echo hi\n":  {"exact:echo"},
+		"$cmd hi\n":          nil,
+		"f() { local x; }\n": {"exact:local"},
+	} {
+		seen = nil
+		syntax.Walk(parser.Parse(src, dialect.Bash).File, func(n syntax.Node) bool {
+			d.visit(nil, n)
+			return true
+		})
+		if !slices.Equal(seen, want) {
+			t.Errorf("dispatch(%q) = %v, want %v", src, seen, want)
+		}
+	}
+}
+
 func TestOptionGrammar(t *testing.T) {
 	t.Parallel()
 

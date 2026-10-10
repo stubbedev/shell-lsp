@@ -6,6 +6,7 @@ echo hello
 ### no-break space between two arguments
 cp notes.txt /tmp/
 >>> SC1018 1:13
+>>+ SC2225 1:1 -- the shell, like mvdan, keeps a no-break space inside the word, so cp really receives a single operand
 
 ### actual: escaped no-break space is still reported
 touch my\ file

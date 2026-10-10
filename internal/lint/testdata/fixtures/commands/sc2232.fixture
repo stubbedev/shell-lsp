@@ -4,7 +4,7 @@ sudo cd /root
 
 ### run0 export is not flagged by shellcheck 0.11
 run0 export PATH=/opt/tools/bin
->>> none
+>>+ SC2232 1:1 -- run0 cannot run builtins either; shellcheck 0.11 only knows sudo (newer releases add doas and run0)
 
 ### sudo running ls
 sudo ls /root
