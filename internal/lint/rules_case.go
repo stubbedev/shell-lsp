@@ -200,30 +200,19 @@ func exactGlob(w *syntax.Word) (globPattern, bool) {
 }
 
 func overlaps(a, b globPattern) bool {
-	seen := map[[2]int]bool{}
-	var match func(i, j int) bool
-	match = func(i, j int) bool {
-		key := [2]int{i, j}
-		if done, ok := seen[key]; ok {
-			return done
-		}
-		seen[key] = false
-		var result bool
+	return solveGlobs(len(a), len(b), func(i, j int, below, right, diagonal bool) bool {
 		switch {
 		case i == len(a) && j == len(b):
-			result = true
+			return true
 		case i < len(a) && a[i].kind == globAny:
-			result = match(i+1, j) || (j < len(b) && match(i, j+1))
+			return below || j < len(b) && right
 		case j < len(b) && b[j].kind == globAny:
-			result = match(i, j+1) || (i < len(a) && match(i+1, j))
+			return right || i < len(a) && below
 		case i == len(a) || j == len(b):
-		default:
-			result = compatible(a[i], b[j]) && match(i+1, j+1)
+			return false
 		}
-		seen[key] = result
-		return result
-	}
-	return match(0, 0)
+		return compatible(a[i], b[j]) && diagonal
+	})
 }
 
 func compatible(a, b globToken) bool {
@@ -231,28 +220,29 @@ func compatible(a, b globToken) bool {
 }
 
 func covers(general, specific globPattern) bool {
-	seen := map[[2]int]bool{}
-	var match func(i, j int) bool
-	match = func(i, j int) bool {
-		key := [2]int{i, j}
-		if done, ok := seen[key]; ok {
-			return done
-		}
-		seen[key] = false
-		var result bool
+	return solveGlobs(len(general), len(specific), func(i, j int, below, right, diagonal bool) bool {
 		switch {
 		case i == len(general):
-			result = j == len(specific)
+			return j == len(specific)
 		case general[i].kind == globAny:
-			result = match(i+1, j) || (j < len(specific) && match(i, j+1))
+			return below || j < len(specific) && right
 		case j == len(specific), specific[j].kind == globAny:
+			return false
 		case specific[j].kind == globOne:
-			result = general[i].kind == globOne && match(i+1, j+1)
-		default:
-			result = (general[i].kind == globOne || general[i].char == specific[j].char) && match(i+1, j+1)
+			return general[i].kind == globOne && diagonal
 		}
-		seen[key] = result
-		return result
+		return (general[i].kind == globOne || general[i].char == specific[j].char) && diagonal
+	})
+}
+
+func solveGlobs(rows, cols int, cell func(i, j int, below, right, diagonal bool) bool) bool {
+	cells := make([]bool, 2*(cols+2))
+	next, current := cells[:cols+2], cells[cols+2:]
+	for i := rows; i >= 0; i-- {
+		for j := cols; j >= 0; j-- {
+			current[j] = cell(i, j, next[j], current[j+1], next[j+1])
+		}
+		next, current = current, next
 	}
-	return match(0, 0)
+	return next[0]
 }
