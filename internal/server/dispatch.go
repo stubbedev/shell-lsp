@@ -16,6 +16,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 )
@@ -43,19 +44,22 @@ type Server struct {
 	logger  *slog.Logger
 	docs    *docstore.Store
 
-	mu          sync.Mutex
-	shutdown    bool
-	initialized bool
-	trace       TraceValue
+	mu            sync.Mutex
+	shutdown      bool
+	initialized   bool
+	trace         TraceValue
+	forcedDialect dialect.Dialect
+	dialectForced bool
 
 	requests      map[string]requestHandler
 	notifications map[string]notificationHandler
 
-	pending sync.Map
-	nextID  atomic.Int64
-	cancels sync.Map
-	sem     chan struct{}
-	wg      sync.WaitGroup
+	pending  sync.Map
+	nextID   atomic.Int64
+	cancels  sync.Map
+	dialects sync.Map
+	sem      chan struct{}
+	wg       sync.WaitGroup
 }
 
 func New(conn *jsonrpc.Conn, version string) *Server {
