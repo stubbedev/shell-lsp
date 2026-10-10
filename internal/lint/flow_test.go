@@ -1,0 +1,72 @@
+package lint
+
+import (
+	"slices"
+	"testing"
+
+	"mvdan.cc/sh/v3/syntax"
+
+	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/parser"
+)
+
+func lostReads(t *testing.T, src string, d dialect.Dialect) []string {
+	t.Helper()
+	tree := parser.Parse(src, d)
+	result := analyzeFlow(tree, nil, parser.IsBats(src))
+	var out []string
+	syntax.Walk(tree.File, func(n syntax.Node) bool {
+		if _, ok := result.lostRead(n); ok {
+			span, _ := tree.NodeSpan(n)
+			out = append(out, src[span.Start:span.End])
+		}
+		return true
+	})
+	return out
+}
+
+func TestFlowTracksWritesLostInSubshells(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		src  string
+		d    dialect.Dialect
+		want []string
+	}{
+		{"pipeline", "cmd | while read -r x; do :; done\necho \"$x\"\n", dialect.Bash, []string{"$x"}},
+		{"later write revives", "( x=1 )\nx=2\necho \"$x\"\n", dialect.Bash, nil},
+		{"one branch revives", "( x=1 )\nif c; then x=2; fi\necho \"$x\"\n", dialect.Bash, []string{"$x"}},
+		{"arithmetic read", "( n=1 )\n(( n++ ))\n", dialect.Bash, []string{"n"}},
+		{"bash lastpipe", "shopt -s lastpipe\necho a | read -r x\necho \"$x\"\n", dialect.Bash, nil},
+		{"ksh last stage", "echo a | read -r x\necho \"$x\"\n", dialect.Ksh, nil},
+		{"dash first stage", "x=1 | cat\necho \"$x\"\n", dialect.Dash, []string{"$x"}},
+		{"process substitution", "cat <(x=1)\necho \"$x\"\n", dialect.Bash, nil},
+		{"non-forking substitution", "y=${ x=1; echo; }\necho \"$x\"\n", dialect.Bash, nil},
+		{"through function summary", "f() { cmd | while read -r x; do :; done; }\nf\necho \"$x\"\n", dialect.Bash, []string{"$x"}},
+		{"function writes nothing in caller subshell", "f() { x=1; }\n( f )\necho \"$x\"\n", dialect.Bash, nil},
+		{"local stays local", "f() { local x; cmd | read -r x; }\nf\necho \"$x\"\n", dialect.Bash, nil},
+		{"declaration without value", "( export X )\necho \"$X\"\n", dialect.Bash, nil},
+		{"IFS ignored", "( IFS=: )\necho \"$IFS\"\n", dialect.Bash, nil},
+	}
+	for _, c := range cases {
+		if got := lostReads(t, c.src, c.d); !slices.Equal(got, c.want) {
+			t.Errorf("%s: lost reads = %q, want %q", c.name, got, c.want)
+		}
+	}
+}
+
+func TestFlowReportsLatestLostWrite(t *testing.T) {
+	t.Parallel()
+
+	src := "( x=1 )\n( x=2 )\necho \"$x\"\n"
+	tree := parser.Parse(src, dialect.Bash)
+	result := analyzeFlow(tree, nil, false)
+	var got []lostWrite
+	for _, w := range result.lostReads {
+		got = append(got, w)
+	}
+	if len(got) != 1 || src[got[0].site.Start:got[0].site.End] != "x=2" || got[0].kind != subshellGroup {
+		t.Errorf("lost writes = %+v, want the second group assignment", got)
+	}
+}

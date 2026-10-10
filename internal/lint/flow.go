@@ -118,6 +118,35 @@ type funcRef struct {
 	maybe bool
 }
 
+type subshellKind uint8
+
+const (
+	subshellGroup subshellKind = iota + 1
+	subshellPipeline
+	subshellExpansion
+	subshellBackground
+	subshellCoproc
+	subshellBats
+	subshellProcess
+)
+
+type lostWrite struct {
+	site parser.Span
+	kind subshellKind
+}
+
+func (w lostWrite) later(o lostWrite) lostWrite {
+	if o.site.Start > w.site.Start {
+		return o
+	}
+	return w
+}
+
+type subshellWrite struct {
+	name string
+	site parser.Span
+}
+
 type state struct {
 	live     bool
 	symbolic bool
@@ -125,6 +154,7 @@ type state struct {
 	funcs    pmap[funcRef]
 	status   statusSet
 	pending  pmap[*callList]
+	lost     pmap[lostWrite]
 }
 
 func newState(symbolic bool) *state {
@@ -154,6 +184,15 @@ func (s *state) get(name string) value {
 
 func (s *state) set(name string, v value) { s.vars = s.vars.set(name, v) }
 
+func (s *state) lose(name string, w lostWrite) {
+	if prev, ok := s.lost.get(name); ok {
+		w = prev.later(w)
+	}
+	s.lost = s.lost.set(name, w)
+}
+
+func (s *state) forget(name string) { s.lost = s.lost.remove(name) }
+
 func join(a, b *state) *state {
 	switch {
 	case !a.live:
@@ -166,6 +205,11 @@ func join(a, b *state) *state {
 	out.pending = unionPending(a.pending, b.pending)
 	a.vars.diff(b.vars, func(name string) {
 		out.set(name, a.get(name).join(b.get(name)))
+	})
+	a.lost.diff(b.lost, func(name string) {
+		if w, ok := b.lost.get(name); ok {
+			out.lose(name, w)
+		}
 	})
 	a.funcs.diff(b.funcs, func(name string) {
 		mine, inA := a.funcs.get(name)
@@ -190,6 +234,7 @@ func (s *state) equal(o *state) bool {
 	s.pending.diff(o.pending, func(string) { same = false })
 	s.vars.diff(o.vars, func(string) { same = false })
 	s.funcs.diff(o.funcs, func(string) { same = false })
+	s.lost.diff(o.lost, func(string) { same = false })
 	return same
 }
 
@@ -220,6 +265,7 @@ type flowResult struct {
 	expansions map[*syntax.ParamExp]space
 	reached    map[*syntax.Stmt]bool
 	called     map[*syntax.FuncDecl]bool
+	lostReads  map[syntax.Node]lostWrite
 	flowFacts
 }
 
@@ -231,6 +277,14 @@ func (r *flowResult) expansion(pe *syntax.ParamExp) space {
 		return s
 	}
 	return spaceDirty
+}
+
+func (r *flowResult) lostRead(read syntax.Node) (lostWrite, bool) {
+	if r == nil {
+		return lostWrite{}, false
+	}
+	w, ok := r.lostReads[read]
+	return w, ok
 }
 
 type loopFrame struct {
@@ -264,6 +318,8 @@ type interpreter struct {
 	bats       bool
 	walk       []syntax.Node
 	deferred   []syntax.Node
+	lastPipe   bool
+	subshells  [][]subshellWrite
 
 	trackStatus   bool
 	trackCalls    bool
@@ -282,10 +338,11 @@ func analyzeFlow(tree *parser.Tree, imports []parser.Import, bats bool) *flowRes
 		dialect:    tree.Dialect,
 		writes:     map[syntax.Node][]*parser.Definition{},
 		imported:   importedGlobals(imports),
-		result:     &flowResult{expansions: map[*syntax.ParamExp]space{}, reached: map[*syntax.Stmt]bool{}, called: map[*syntax.FuncDecl]bool{}, flowFacts: newFlowFacts()},
+		result:     &flowResult{expansions: map[*syntax.ParamExp]space{}, reached: map[*syntax.Stmt]bool{}, called: map[*syntax.FuncDecl]bool{}, lostReads: map[syntax.Node]lostWrite{}, flowFacts: newFlowFacts()},
 		summaries:  map[*syntax.FuncDecl]*summary{},
 		computing:  map[*syntax.FuncDecl]bool{},
 		staticFunc: map[string]*syntax.FuncDecl{},
+		lastPipe:   runsLastPipeInShell(tree),
 	}
 	for i := range tree.Definitions {
 		def := &tree.Definitions[i]
@@ -394,12 +451,33 @@ func literalSpace(s string) space {
 	return spaceClean
 }
 
+func runsLastPipeInShell(tree *parser.Tree) bool {
+	if tree.Dialect.Features().LastPipeInShell {
+		return true
+	}
+	if tree.Dialect != dialect.Bash {
+		return false
+	}
+	for _, c := range tree.Commands {
+		if c.Name != "shopt" && c.Name != "set" {
+			continue
+		}
+		for _, arg := range c.Args {
+			if lit, _ := parser.Literal(arg); lit == "lastpipe" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (in *interpreter) entry() *state {
 	return &state{live: true, vars: in.globals, funcs: in.final.funcs}
 }
 
 func (in *interpreter) assign(s *state, name string, v value) {
 	s.set(name, v)
+	s.forget(name)
 	if s.symbolic {
 		return
 	}
@@ -424,21 +502,27 @@ func (in *interpreter) stmt(stmt *syntax.Stmt, s *state) *state {
 		in.result.reached[stmt] = true
 	}
 	if stmt.Background || stmt.Coprocess {
-		in.subshell(func(sub *state) *state { return in.command(stmt, sub) }, s)
+		kind := subshellBackground
+		if stmt.Coprocess {
+			kind = subshellCoproc
+		}
+		in.subshell(kind, func(sub *state) *state { return in.command(stmt, sub) }, s)
 		in.setStatus(s, stmt)
 		return s
 	}
 	return in.command(stmt, s)
 }
 
-func (in *interpreter) subshell(run func(*state) *state, s *state) *state {
+func (in *interpreter) subshell(kind subshellKind, run func(*state) *state, s *state) *state {
 	saved := in.loops
 	in.loops = nil
 	in.subshellDepth++
 	if in.trackCalls {
 		in.subshellExits = append(in.subshellExits, pmap[*callList]{})
 	}
+	in.subshells = append(in.subshells, nil)
 	end := run(s.clone())
+	in.loseWrites(kind, s)
 	in.subshellDepth--
 	in.loops = saved
 	if in.trackCalls {
@@ -450,6 +534,32 @@ func (in *interpreter) subshell(run func(*state) *state, s *state) *state {
 		s.pending = unionPending(s.pending, exits)
 	}
 	return end
+}
+
+func (in *interpreter) loseWrites(kind subshellKind, s *state) {
+	top := len(in.subshells) - 1
+	if kind != subshellProcess {
+		for _, w := range in.subshells[top] {
+			s.lose(w.name, lostWrite{site: w.site, kind: kind})
+		}
+	}
+	in.subshells = in.subshells[:top]
+}
+
+func (in *interpreter) noteWrite(name string, site parser.Span) {
+	if top := len(in.subshells) - 1; top >= 0 && name != "IFS" {
+		in.subshells[top] = append(in.subshells[top], subshellWrite{name: name, site: site})
+	}
+}
+
+func writeSite(def *parser.Definition) parser.Span {
+	switch n := def.Node.(type) {
+	case *syntax.BinaryArithm:
+		return parser.Span{Start: parser.Offset(n.OpPos), End: def.Span.End}
+	case *syntax.UnaryArithm, *syntax.CallExpr:
+		return def.NameSpan
+	}
+	return def.Span
 }
 
 func (in *interpreter) command(stmt *syntax.Stmt, s *state) *state {
@@ -479,7 +589,7 @@ func (in *interpreter) command(stmt *syntax.Stmt, s *state) *state {
 		s = in.stmts(cmd.Stmts, s)
 		s = in.redirects(stmt, s)
 	case *syntax.Subshell:
-		if end := in.subshell(func(sub *state) *state { return in.stmts(cmd.Stmts, sub) }, s); end.live {
+		if end := in.subshell(subshellGroup, func(sub *state) *state { return in.stmts(cmd.Stmts, sub) }, s); end.live {
 			s.status = end.status
 		}
 		s = in.redirects(stmt, s)
@@ -492,7 +602,7 @@ func (in *interpreter) command(stmt *syntax.Stmt, s *state) *state {
 			s = in.stmt(cmd.Stmt, s)
 		}
 	case *syntax.CoprocClause:
-		in.subshell(func(sub *state) *state { return in.stmt(cmd.Stmt, sub) }, s)
+		in.subshell(subshellCoproc, func(sub *state) *state { return in.stmt(cmd.Stmt, sub) }, s)
 		in.setStatus(s, stmt)
 	case *syntax.TestDecl:
 		s = in.testBody(cmd, s)
@@ -506,11 +616,13 @@ func (in *interpreter) command(stmt *syntax.Stmt, s *state) *state {
 func (in *interpreter) testBody(cmd *syntax.TestDecl, s *state) *state {
 	saved := in.loops
 	in.loops = nil
+	in.subshells = append(in.subshells, nil)
 	after := in.stmt(cmd.Body, s.clone())
 	in.loops = saved
 	if !after.live {
-		return s
+		after = s
 	}
+	in.loseWrites(subshellBats, after)
 	return after
 }
 
@@ -543,14 +655,27 @@ func (in *interpreter) evaluate(node syntax.Node, s *state) *state {
 		}
 		switch n := n.(type) {
 		case *syntax.CmdSubst:
-			in.subshell(func(sub *state) *state { return in.stmts(n.Stmts, sub) }, s)
+			if n.TempFile || n.ReplyVar {
+				s = in.stmts(n.Stmts, s)
+				return false
+			}
+			in.subshell(subshellExpansion, func(sub *state) *state { return in.stmts(n.Stmts, sub) }, s)
 			return false
 		case *syntax.ProcSubst:
-			in.subshell(func(sub *state) *state { return in.stmts(n.Stmts, sub) }, s)
+			in.subshell(subshellProcess, func(sub *state) *state { return in.stmts(n.Stmts, sub) }, s)
 			return false
 		case *syntax.ParamExp:
 			in.recordExpansion(n, s)
 			in.recordStatusRead(n, s)
+			if n.Param != nil {
+				in.recordRead(n.Param.Value, n, s)
+			}
+		case *syntax.Word:
+			if len(in.walk) > base {
+				if name, ok := parser.ArithmeticRead(in.walk[len(in.walk)-1], n); ok {
+					in.recordRead(name, n, s)
+				}
+			}
 		}
 		in.walk = append(in.walk, n)
 		return true
@@ -576,6 +701,20 @@ func (in *interpreter) recordExpansion(pe *syntax.ParamExp, s *state) {
 	in.recordIntegerRead(pe, s)
 }
 
+func (in *interpreter) recordRead(name string, read syntax.Node, s *state) {
+	if !in.record || s.symbolic {
+		return
+	}
+	w, ok := s.lost.get(name)
+	if !ok {
+		return
+	}
+	if prev, seen := in.result.lostReads[read]; seen {
+		w = prev.later(w)
+	}
+	in.result.lostReads[read] = w
+}
+
 func (in *interpreter) applyWrites(n syntax.Node, s *state) {
 	for _, def := range in.writes[n] {
 		in.write(def, s)
@@ -586,6 +725,14 @@ func (in *interpreter) write(def *parser.Definition, s *state) {
 	switch def.Kind {
 	case parser.DefCommandEnv, parser.DefLoop:
 		return
+	case parser.DefDeclare:
+		if hasValue(def.Node) {
+			in.noteWrite(def.Name, writeSite(def))
+		}
+	default:
+		in.noteWrite(def.Name, writeSite(def))
+	}
+	switch def.Kind {
 	case parser.DefArithmetic, parser.DefDescriptor:
 		in.assignVar(def, s, value{space: spaceClean, integer: s.get(def.Name).integer, holdsInteger: integerYes})
 		return
@@ -646,6 +793,7 @@ func (in *interpreter) assignVar(def *parser.Definition, s *state, v value) {
 	if def.Local {
 		in.declareLocal(def.Name, s)
 		s.set(def.Name, v)
+		s.forget(def.Name)
 		return
 	}
 	in.assign(s, def.Name, v)
@@ -876,6 +1024,7 @@ func (in *interpreter) apply(sum *summary, s *state) *state {
 	out := s.clone()
 	sum.exit.vars.each(func(name string, v value) { in.assign(out, name, v.substitute(s.get(name))) })
 	sum.exit.funcs.each(func(name string, ref funcRef) { out.funcs = out.funcs.set(name, ref) })
+	sum.exit.lost.each(func(name string, w lostWrite) { out.lost = out.lost.set(name, w) })
 	return out
 }
 
@@ -900,16 +1049,17 @@ func (in *interpreter) summary(decl *syntax.FuncDecl) *summary {
 func (in *interpreter) runBody(decl *syntax.FuncDecl, entry *state) *state {
 	frame := &funcFrame{locals: map[string]*value{}, returns: deadState(entry.symbolic)}
 	in.frames = append(in.frames, frame)
-	savedLoops := in.loops
-	in.loops = nil
+	savedLoops, savedSubshells := in.loops, in.subshells
+	in.loops, in.subshells = nil, nil
 	exit := in.stmt(decl.Body, entry)
-	in.loops = savedLoops
+	in.loops, in.subshells = savedLoops, savedSubshells
 	in.frames = in.frames[:len(in.frames)-1]
 	exit = join(exit, frame.returns)
 	if !exit.live {
 		return exit
 	}
 	for name, prev := range frame.locals {
+		exit.forget(name)
 		if prev == nil {
 			exit.vars = exit.vars.remove(name)
 			continue
@@ -938,11 +1088,11 @@ func (in *interpreter) binary(cmd *syntax.BinaryCmd, s *state) *state {
 		right := in.stmt(cmd.Y, left.clone())
 		return join(left, right)
 	}
-	in.subshell(func(sub *state) *state { return in.stmt(cmd.X, sub) }, s)
-	if in.dialect.Features().LastPipeInShell {
+	in.subshell(subshellPipeline, func(sub *state) *state { return in.stmt(cmd.X, sub) }, s)
+	if in.lastPipe {
 		return in.stmt(cmd.Y, s)
 	}
-	if end := in.subshell(func(sub *state) *state { return in.stmt(cmd.Y, sub) }, s); end.live {
+	if end := in.subshell(subshellPipeline, func(sub *state) *state { return in.stmt(cmd.Y, sub) }, s); end.live {
 		s.status = end.status
 	}
 	return s
@@ -999,9 +1149,11 @@ func (in *interpreter) forClause(cmd *syntax.ForClause, s *state) *state {
 				}
 			}
 		}
+		site, _ := in.tree.NodeSpan(cmd)
 		assign := func(head *state) *state {
 			if loop.Name != nil && items != 0 {
 				in.assign(head, loop.Name.Value, value{space: items.normalize(), integer: integerNo, holdsInteger: holdsInteger})
+				in.noteWrite(loop.Name.Value, site)
 			}
 			return head
 		}
