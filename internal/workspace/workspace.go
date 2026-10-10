@@ -134,8 +134,12 @@ func isShellName(path string) bool {
 }
 
 func Within(path, root string) bool {
-	rel, err := filepath.Rel(root, path)
-	return err == nil && rel != ".." && !strings.HasPrefix(rel, "../")
+	return under(filepath.Clean(path), filepath.Clean(root))
+}
+
+func under(path, root string) bool {
+	rest, ok := strings.CutPrefix(path, root)
+	return ok && (rest == "" || rest[0] == filepath.Separator || strings.HasSuffix(root, string(filepath.Separator)))
 }
 
 type diskEntry struct {
@@ -152,7 +156,10 @@ func New(overlay Overlay, override func(path string) *dialect.Dialect) *Workspac
 func (w *Workspace) SetRoots(roots []string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	w.roots = slices.Clone(roots)
+	w.roots = make([]string, len(roots))
+	for i, root := range roots {
+		w.roots[i] = filepath.Clean(root)
+	}
 	w.generation.Add(1)
 }
 
@@ -181,15 +188,20 @@ func (w *Workspace) InvalidateAll() {
 }
 
 func (w *Workspace) Load(path string) (*File, error) {
-	uri := fileuri.FromPath(path)
-	if f, ok := w.overlay(uri); ok {
-		return f, nil
-	}
 	now := w.now()
 	w.mu.Lock()
 	cached, ok := w.files[path]
 	fresh := ok && (w.watchedLocked(path) || now.Sub(cached.checked) < DiskRecheck)
 	w.mu.Unlock()
+	var uri string
+	if ok {
+		uri = cached.file.URI
+	} else {
+		uri = fileuri.FromPath(path)
+	}
+	if f, open := w.overlay(uri); open {
+		return f, nil
+	}
 	if fresh {
 		return cached.file, nil
 	}
@@ -224,7 +236,7 @@ func (w *Workspace) Load(path string) (*File, error) {
 }
 
 func (w *Workspace) watchedLocked(path string) bool {
-	return w.watched.Load() && isShellName(path) && slices.ContainsFunc(w.roots, func(root string) bool { return Within(path, root) })
+	return w.watched.Load() && isShellName(path) && slices.ContainsFunc(w.roots, func(root string) bool { return under(path, root) })
 }
 
 func (w *Workspace) LoadAll(ctx context.Context, paths []string, workers int, report func(done, total int)) ([]*File, error) {

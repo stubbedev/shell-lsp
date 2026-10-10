@@ -17,7 +17,7 @@ func ToPath(uri string) (string, error) {
 	if u.Host != "" && u.Host != "localhost" {
 		return "", fmt.Errorf("document URI %q names remote host %q", uri, u.Host)
 	}
-	return filepath.FromSlash(u.Path), nil
+	return filepath.Clean(filepath.FromSlash(u.Path)), nil
 }
 
 func FromPath(path string) string {

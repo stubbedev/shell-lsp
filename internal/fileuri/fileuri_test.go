@@ -23,6 +23,9 @@ func TestToPathDecodesAndRejects(t *testing.T) {
 	if got, err := ToPath("file:///tmp/a%20b.sh"); err != nil || got != "/tmp/a b.sh" {
 		t.Errorf("ToPath(escaped) = %q, %v", got, err)
 	}
+	if got, err := ToPath("file:///tmp/./x//y/../a.sh"); err != nil || got != "/tmp/x/a.sh" {
+		t.Errorf("ToPath(uncanonical) = %q, %v; want the cleaned path", got, err)
+	}
 	for _, uri := range []string{"untitled:Untitled-1", "file://remote/x.sh", "%zz"} {
 		if _, err := ToPath(uri); err == nil {
 			t.Errorf("ToPath(%q) succeeded, want error", uri)
