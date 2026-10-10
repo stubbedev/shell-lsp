@@ -1,7 +1,7 @@
 ### unknown shell name in a directive
 # shellcheck shell=zsh
 echo $1
->>> SC1103 1:20
+>>- SC1103 1:20 -- zsh is a dialect this linter supports, so shell=zsh is a known shell
 >>- SC2086 2:6 -- zsh is linted natively, and zsh does not split unquoted parameters; shellcheck falls back to bash
 
 ### absolute interpreter path in a directive

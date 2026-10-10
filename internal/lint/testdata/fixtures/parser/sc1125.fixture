@@ -22,4 +22,5 @@ echo $1
 # shellcheck disable=SC2086 please
 echo $1
 >>> SC1072 1:35
+>>+ SC1125 1:29 -- shellcheck aborts the whole script at a malformed directive (SC1072); this linter reports the stray word and keeps checking
 >>> SC1073 1:1

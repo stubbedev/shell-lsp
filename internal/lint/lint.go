@@ -59,7 +59,7 @@ type Options struct {
 }
 
 func Check(tree *parser.Tree, imports []parser.Import, opts Options) []Finding {
-	p := newPass(tree, imports, fileWideDirectives(tree, opts.Optional))
+	p := newPass(tree, imports, opts)
 	p.shellChosen = opts.ForcedDialect || p.settings.shell
 	p.dialectGuessed = opts.GuessedDialect && !p.settings.shell
 	if name, foreign := foreignInterpreter(p.text); foreign && !p.shellChosen {
@@ -68,7 +68,7 @@ func Check(tree *parser.Tree, imports []parser.Import, opts Options) []Finding {
 	} else {
 		p.run()
 	}
-	suppressed := directivesOf(p)
+	suppressed := p.suppressions()
 	out := p.findings[:0]
 	for _, f := range p.findings {
 		if slices.Contains(opts.Exclude, f.Code) || suppressed.covers(f) {

@@ -113,7 +113,7 @@ func checkAliasesInParsingUnit(p *pass) {
 	if len(uses) == 0 {
 		return
 	}
-	suppressed := directivesOf(p)
+	suppressed := p.suppressions()
 	for _, use := range uses {
 		span, ok := p.span(use.def.word)
 		if !ok || suppressed.covers(Finding{Code: 2262, Span: span}) {

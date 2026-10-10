@@ -4,65 +4,137 @@ import "strings"
 
 const word = "shellcheck"
 
-type Pair struct {
-	Key, Value string
+const (
+	Disable          = "disable"
+	Enable           = "enable"
+	Source           = "source"
+	SourcePath       = "source-path"
+	Shell            = "shell"
+	ExternalSources  = "external-sources"
+	ExtendedAnalysis = "extended-analysis"
+)
+
+var knownKeys = map[string]bool{
+	Disable: true, Enable: true, Source: true, SourcePath: true,
+	Shell: true, ExternalSources: true, ExtendedAnalysis: true,
 }
 
-type Directive []Pair
+type Pair struct {
+	Key         string
+	Value       string
+	KeyOffset   int
+	ValueOffset int
+	ValueEnd    int
+}
+
+func (p Pair) Known() bool { return knownKeys[p.Key] }
+
+type ProblemKind uint8
+
+const (
+	LeftoverText ProblemKind = iota + 1
+	MissingEquals
+	MalformedQuote
+)
+
+type Problem struct {
+	Kind   ProblemKind
+	Offset int
+}
+
+type Directive struct {
+	Pairs   []Pair
+	Problem *Problem
+}
 
 func Parse(comment string) (Directive, bool) {
-	body, ok := strings.CutPrefix(strings.TrimSpace(comment), "#")
-	if !ok {
-		return nil, false
+	i := skipBlanks(comment, 0)
+	if i == len(comment) || comment[i] != '#' {
+		return Directive{}, false
 	}
-	rest, ok := strings.CutPrefix(strings.TrimLeft(body, " \t"), word)
-	if !ok || (rest != "" && rest[0] != ' ' && rest[0] != '\t') {
-		return nil, false
+	i = skipBlanks(comment, i+1)
+	if !strings.HasPrefix(comment[i:], word) {
+		return Directive{}, false
+	}
+	i += len(word)
+	if i < len(comment) && !isBlank(comment[i]) {
+		return Directive{}, false
 	}
 	var d Directive
-	for _, field := range fields(rest) {
-		if key, value, ok := strings.Cut(field, "="); ok {
-			d = append(d, Pair{Key: key, Value: value})
+	for {
+		i = skipBlanks(comment, i)
+		if i == len(comment) || comment[i] == '#' {
+			return d, true
 		}
+		pair, end, problem := scanPair(comment, i)
+		if problem != nil {
+			d.Problem = problem
+			return d, true
+		}
+		d.Pairs = append(d.Pairs, pair)
+		i = end
 	}
-	return d, true
 }
 
-func fields(s string) []string {
-	var out []string
-	var current strings.Builder
-	var quote byte
-	inField := false
-	for i := range len(s) {
-		c := s[i]
-		switch {
-		case quote != 0 && c == quote:
-			quote = 0
-		case quote != 0:
-			current.WriteByte(c)
-		case c == ' ' || c == '\t':
-			if inField {
-				out = append(out, current.String())
-				current.Reset()
-				inField = false
-			}
-		case c == '#' && !inField:
-			return out
-		case c == '\'' || c == '"':
-			quote, inField = c, true
-		default:
-			current.WriteByte(c)
-			inField = true
-		}
+func scanPair(s string, start int) (Pair, int, *Problem) {
+	keyEnd := start
+	for keyEnd < len(s) && isKeyChar(s[keyEnd]) {
+		keyEnd++
 	}
-	if inField {
-		out = append(out, current.String())
+	if keyEnd == start {
+		return Pair{}, 0, &Problem{Kind: LeftoverText, Offset: start}
 	}
-	return out
+	if keyEnd == len(s) || s[keyEnd] != '=' {
+		return Pair{}, 0, &Problem{Kind: MissingEquals, Offset: start}
+	}
+	valueStart := keyEnd + 1
+	value, end, ok := scanValue(s, valueStart)
+	if !ok {
+		return Pair{}, 0, &Problem{Kind: MalformedQuote, Offset: valueStart}
+	}
+	return Pair{Key: s[start:keyEnd], Value: value, KeyOffset: start, ValueOffset: valueStart, ValueEnd: end}, end, nil
 }
+
+func scanValue(s string, start int) (string, int, bool) {
+	end := start
+	for end < len(s) && !isBlank(s[end]) && s[end] != '\'' && s[end] != '"' {
+		end++
+	}
+	if end == len(s) || isBlank(s[end]) {
+		return s[start:end], end, true
+	}
+	var value strings.Builder
+	value.WriteString(s[start:end])
+	for end < len(s) && !isBlank(s[end]) {
+		quote := s[end]
+		if quote != '\'' && quote != '"' {
+			value.WriteByte(quote)
+			end++
+			continue
+		}
+		closing := strings.IndexByte(s[end+1:], quote)
+		if closing < 0 {
+			return "", 0, false
+		}
+		value.WriteString(s[end+1 : end+1+closing])
+		end += closing + 2
+	}
+	return value.String(), end, true
+}
+
+func skipBlanks(s string, i int) int {
+	for i < len(s) && isBlank(s[i]) {
+		i++
+	}
+	return i
+}
+
+func isBlank(c byte) bool { return c == ' ' || c == '\t' || c == '\r' || c == '\n' }
+
+func isKeyChar(c byte) bool { return c == '-' || ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') }
 
 func (d Directive) Value(key string) (string, bool) {
-	for _, pair := range d {
+	for _, pair := range d.Pairs {
 		if pair.Key == key {
 			return pair.Value, true
 		}
@@ -72,7 +144,7 @@ func (d Directive) Value(key string) (string, bool) {
 
 func (d Directive) Values(key string) []string {
 	var out []string
-	for _, pair := range d {
+	for _, pair := range d.Pairs {
 		if pair.Key == key {
 			out = append(out, pair.Value)
 		}

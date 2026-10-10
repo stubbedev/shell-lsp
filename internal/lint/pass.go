@@ -16,21 +16,23 @@ type rule struct {
 }
 
 type pass struct {
-	tree       *parser.Tree
-	imports    []parser.Import
-	text       string
-	dialect    dialect.Dialect
-	bats       bool
-	stack      []syntax.Node
-	stmts      []parser.Span
-	flow       *flowResult
-	catalog    map[Code]meta
-	rules      []rule
-	commands   commandDispatch
-	settings   fileWide
-	findings   []Finding
-	aliases    map[string]aliasDefinition
-	quoteTaint map[string]parser.Span
+	tree         *parser.Tree
+	imports      []parser.Import
+	text         string
+	dialect      dialect.Dialect
+	bats         bool
+	stack        []syntax.Node
+	stmts        []parser.Span
+	flow         *flowResult
+	catalog      map[Code]meta
+	rules        []rule
+	commands     commandDispatch
+	settings     fileWide
+	findings     []Finding
+	aliases      map[string]aliasDefinition
+	quoteTaint   map[string]parser.Span
+	firstCommand int
+	directives   []directiveComment
 
 	shellChosen    bool
 	shellOptions   *shellOptions
@@ -40,8 +42,14 @@ type pass struct {
 	emptinessTests map[int]bool
 }
 
-func newPass(tree *parser.Tree, imports []parser.Import, settings fileWide) *pass {
-	return &pass{tree: tree, imports: imports, text: tree.Text(), dialect: tree.Dialect, bats: parser.IsBats(tree.Text()), catalog: catalog, rules: rules, commands: commandChecks, settings: settings}
+func newPass(tree *parser.Tree, imports []parser.Import, opts Options) *pass {
+	directives := parseDirectives(tree)
+	firstCommand := firstCommandStart(tree)
+	return &pass{
+		tree: tree, imports: imports, text: tree.Text(), dialect: tree.Dialect, bats: parser.IsBats(tree.Text()),
+		firstCommand: firstCommand, directives: directives, catalog: catalog, rules: rules, commands: commandChecks,
+		settings: fileWideSettings(directives, firstCommand, opts.Optional),
+	}
 }
 
 func (p *pass) run() {

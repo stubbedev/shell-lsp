@@ -209,7 +209,7 @@ func headerShellDirective(text string) (string, bool) {
 			return "", false
 		}
 		if d, ok := directive.Parse(trimmed); ok {
-			if value, ok := d.Value("shell"); ok {
+			if value, ok := d.Value(directive.Shell); ok {
 				return value, true
 			}
 		}

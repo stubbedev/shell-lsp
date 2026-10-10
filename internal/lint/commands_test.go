@@ -118,7 +118,7 @@ func TestEnclosingPipeline(t *testing.T) {
 	t.Parallel()
 
 	tree := parser.Parse("cat log | grep err | wc -l\necho alone\n", dialect.Bash)
-	p := newPass(tree, nil, fileWide{extended: true})
+	p := newPass(tree, nil, Options{})
 	got := map[string][2]int{}
 	syntax.Walk(tree.File, func(n syntax.Node) bool {
 		if n == nil {

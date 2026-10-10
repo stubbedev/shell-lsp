@@ -16,7 +16,6 @@ import (
 const (
 	maxChain     = 64
 	maxEvalDepth = 8
-	sourceKey    = "source"
 	scriptDirVar = "SCRIPTDIR"
 )
 
@@ -164,7 +163,7 @@ func directiveTarget(tree *parser.Tree, cmd parser.Command) (string, bool) {
 			return "", false
 		}
 		if d, ok := directive.Parse(line); ok {
-			if target, ok := d.Value(sourceKey); ok {
+			if target, ok := d.Value(directive.Source); ok {
 				return target, true
 			}
 		}

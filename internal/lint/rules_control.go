@@ -466,7 +466,7 @@ func checkFunctionArguments(p *pass) {
 			continue
 		}
 		if suppressed == nil {
-			suppressed = directivesOf(p)
+			suppressed = p.suppressions()
 		}
 		if suppressed.covers(Finding{Code: 2120, Span: fn.Span}) {
 			continue

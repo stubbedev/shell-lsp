@@ -92,6 +92,7 @@ echo $1
 # shellcheck please ignore the next line
 echo $1
 >>> SC1072 2:20
+>>+ SC1125 2:14 -- shellcheck aborts the whole script at a malformed directive (SC1072); this linter reports the malformed part and keeps checking
 >>> SC1073 2:1
 >>+ SC2086 3:6 -- shellcheck abandons the script at its parse error; this linter parses it and keeps checking
 
@@ -108,6 +109,7 @@ echo $1
 # shellcheck disable=SC
 echo $1
 >>> SC1072 2:24
+>>+ SC1125 2:22 -- shellcheck aborts the whole script at a malformed directive (SC1072); this linter reports the invalid code and keeps checking
 >>> SC1073 2:1
 >>+ SC2086 3:6 -- shellcheck abandons the script at its parse error; this linter parses it and keeps checking
 
@@ -116,6 +118,7 @@ echo $1
 # shellcheck disable=2086-
 echo $1
 >>> SC1072 2:27
+>>+ SC1125 2:22 -- shellcheck aborts the whole script at a malformed directive (SC1072); this linter reports the invalid range and keeps checking
 >>> SC1073 2:1
 >>+ SC2086 3:6 -- shellcheck abandons the script at its parse error; this linter parses it and keeps checking
 

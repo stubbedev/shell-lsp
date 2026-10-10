@@ -9,6 +9,7 @@ esac
 >>> SC1073 3:3
 >>> SC1085 3:5
 >>> SC1124 3:3
+>>+ SC2086 4:14 -- shellcheck abandons the script at its parse error; this linter keeps checking and a directive in front of a case pattern has no effect
 
 ### directive in front of the whole case statement
 # shellcheck disable=SC2086

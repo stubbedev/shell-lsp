@@ -1,0 +1,164 @@
+package lint
+
+import (
+	"fmt"
+	"sort"
+	"strings"
+
+	"mvdan.cc/sh/v3/syntax"
+
+	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/directive"
+	"github.com/stubbedev/shell-lsp/internal/parser"
+)
+
+var directivesFamily = family{
+	codes: map[Code]meta{
+		1103: {severity: SeverityError},
+		1107: {severity: SeverityWarning},
+		1123: {severity: SeverityError},
+		1124: {severity: SeverityError},
+		1125: {severity: SeverityError},
+		1126: {severity: SeverityError},
+		1144: {severity: SeverityError},
+		1145: {severity: SeverityError},
+		1146: {severity: SeverityError},
+	},
+	rules: []rule{
+		{node: placeDirectivesInGaps},
+		{finish: checkDirectives},
+	},
+}
+
+func placeDirectivesInGaps(p *pass, n syntax.Node) {
+	if len(p.directives) == 0 {
+		return
+	}
+	switch n := n.(type) {
+	case *syntax.CaseClause:
+		start := parser.Offset(n.In) + len("in")
+		if n.Braces {
+			start = parser.Offset(n.In) + len("{")
+		}
+		for _, item := range n.Items {
+			p.placeDirectivesBetween(start, parser.Offset(item.Pos()), placedBeforeCaseBranch)
+			if !item.OpPos.IsValid() {
+				return
+			}
+			start = parser.Offset(item.End())
+		}
+		p.placeDirectivesBetween(start, parser.Offset(n.Esac), placedBeforeCaseBranch)
+	case *syntax.BinaryCmd:
+		p.placeDirectivesBetween(parser.Offset(n.OpPos), parser.Offset(n.Y.Pos()), placedInContinuation)
+	}
+}
+
+func (p *pass) placeDirectivesBetween(start, end int, pl placement) {
+	i := sort.Search(len(p.directives), func(i int) bool { return p.directives[i].span.Start >= start })
+	for ; i < len(p.directives) && p.directives[i].span.Start < end; i++ {
+		d := &p.directives[i]
+		if pl == placedInContinuation && d.placement == placedAfterCommand {
+			continue
+		}
+		d.placement = pl
+	}
+}
+
+func checkDirectives(p *pass) {
+	for i, d := range p.directives {
+		for _, pair := range d.parsed.Pairs {
+			p.checkDirectivePair(d, pair)
+		}
+		if problem := d.parsed.Problem; problem != nil {
+			p.report(1125, p.directiveRest(d, problem.Offset), malformedDirectiveMessage(problem.Kind))
+		}
+		p.checkPlacement(d, i > 0 && p.directives[i-1].placement == d.placement && sameRun(p.text, p.directives[i-1], d))
+	}
+}
+
+func malformedDirectiveMessage(kind directive.ProblemKind) string {
+	switch kind {
+	case directive.MissingEquals:
+		return "This word has no =value, so the rest of the directive is ignored; write key=value pairs and start any explanation with #."
+	case directive.MalformedQuote:
+		return "This quoted directive value is empty or never closed, so the rest of the directive is ignored."
+	}
+	return "This text after the directive's key=value pairs is not understood and is ignored; start a trailing explanation with #."
+}
+
+func (p *pass) directiveRest(d directiveComment, offset int) parser.Span {
+	return parser.Span{Start: d.at(offset), End: d.span.End}
+}
+
+func (p *pass) directiveValue(d directiveComment, pair directive.Pair) parser.Span {
+	return parser.Span{Start: d.at(pair.ValueOffset), End: d.at(pair.ValueEnd)}
+}
+
+func (p *pass) checkDirectivePair(d directiveComment, pair directive.Pair) {
+	value := p.directiveValue(d, pair)
+	switch pair.Key {
+	case directive.Disable:
+		p.checkDisabledCodes(value, pair.Value)
+	case directive.Shell:
+		if _, ok := dialect.FromName(pair.Value); !ok {
+			p.report(1103, value, fmt.Sprintf("%q is not a shell this linter knows, so the directive is ignored; use sh, bash, dash, ksh, zsh or busybox.", pair.Value))
+		}
+	case directive.ExternalSources:
+		switch pair.Value {
+		case "true":
+			p.report(1144, value, "external-sources=true is only honoured in a .shellcheckrc file; in a script it is ignored.")
+		case "false":
+		default:
+			p.report(1145, value, fmt.Sprintf("external-sources must be true or false, not %q; the setting is ignored.", pair.Value))
+		}
+	case directive.ExtendedAnalysis:
+		if _, ok := parseBool(pair.Value); !ok {
+			p.report(1146, value, fmt.Sprintf("extended-analysis must be true or false, not %q; the setting is ignored.", pair.Value))
+		}
+	default:
+		if !pair.Known() {
+			key := parser.Span{Start: d.at(pair.KeyOffset), End: d.at(pair.KeyOffset) + len(pair.Key)}
+			p.report(1107, key, fmt.Sprintf("%q is not a directive key, so it is ignored; known keys are disable, enable, source, source-path, shell, external-sources and extended-analysis.", pair.Key))
+		}
+	}
+}
+
+func (p *pass) checkDisabledCodes(span parser.Span, value string) {
+	if value == "" {
+		return
+	}
+	for item := range strings.SplitSeq(value, ",") {
+		if _, _, ok := parseDisabled(item); !ok {
+			p.report(1125, span, fmt.Sprintf("%q is not a check code or range, so this disable list is ignored from here on; write codes like SC2086 or ranges like SC2000-SC2099.", item))
+			return
+		}
+	}
+}
+
+func sameRun(text string, previous, current directiveComment) bool {
+	return nextToken(text, previous.span.End) == nextToken(text, current.span.End)
+}
+
+func (p *pass) checkPlacement(d directiveComment, continuesRun bool) {
+	switch d.placement {
+	case placedAfterCommand:
+		p.report(1126, d.span, "Put this directive on its own line before the command; ShellCheck rejects directives that follow a command's words. Here it only applies to its own line.")
+	case placedInContinuation:
+		p.report(1126, d.span, "This directive interrupts a pipeline or &&/|| list that continues on the next line, which ShellCheck rejects; put it before the whole list.")
+	case placedBeforeCaseBranch:
+		p.report(1124, d.span, "A directive cannot stand in front of a case branch pattern and has no effect here; put it before the case statement or before a command inside the branch.")
+	case placedBeforeBranch, placedBeforeCloser:
+		if continuesRun {
+			return
+		}
+		keyword, _ := followingKeyword(p.text[nextToken(p.text, d.span.End):])
+		p.report(1123, d.span, misplacedBeforeKeywordMessage(keyword, d.placement))
+	}
+}
+
+func misplacedBeforeKeywordMessage(keyword string, pl placement) string {
+	if pl == placedBeforeBranch {
+		return fmt.Sprintf("ShellCheck rejects a directive in front of %q; move it after %q, before the command it is meant for. Here it applies to the first command of that branch.", keyword, keyword)
+	}
+	return fmt.Sprintf("A directive in front of %q has no command to apply to, so it is ignored (and ShellCheck rejects it); put it before the command it is meant for.", keyword)
+}

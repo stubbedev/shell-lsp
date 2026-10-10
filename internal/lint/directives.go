@@ -1,6 +1,8 @@
 package lint
 
 import (
+	"cmp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -9,6 +11,141 @@ import (
 )
 
 const allCodes = "all"
+
+type placement uint8
+
+const (
+	placedBeforeCommand placement = iota
+	placedAfterCommand
+	placedInContinuation
+	placedBeforeBranch
+	placedBeforeCloser
+	placedBeforeCaseBranch
+)
+
+func (pl placement) inert() bool { return pl == placedBeforeCloser || pl == placedBeforeCaseBranch }
+
+type directiveComment struct {
+	span      parser.Span
+	parsed    directive.Directive
+	placement placement
+}
+
+func (d directiveComment) at(offset int) int { return d.span.Start + offset }
+
+func parseDirectives(tree *parser.Tree) []directiveComment {
+	var out []directiveComment
+	for _, c := range tree.Comments {
+		parsed, ok := directive.Parse("#" + c.Text)
+		if !ok {
+			continue
+		}
+		out = append(out, directiveComment{span: c.Span, parsed: parsed, placement: lexicalPlacement(tree, c.Span)})
+	}
+	slices.SortFunc(out, func(a, b directiveComment) int { return cmp.Compare(a.span.Start, b.span.Start) })
+	return out
+}
+
+func lexicalPlacement(tree *parser.Tree, comment parser.Span) placement {
+	text := tree.Text()
+	start := logicalLineStart(tree, comment.Start)
+	before := strings.TrimSpace(text[start:comment.Start])
+	if before != "" && !opensCommand(tree, before, start+strings.Index(text[start:comment.Start], before)) {
+		return placedAfterCommand
+	}
+	_, pl := followingKeyword(text[nextToken(text, comment.End):])
+	return pl
+}
+
+func logicalLineStart(tree *parser.Tree, offset int) int {
+	text := tree.Text()
+	start := strings.LastIndexByte(text[:offset], '\n') + 1
+	for start > 1 && text[start-2] == '\\' && !escaped(text, start-2) && !insideComment(tree, start-2) {
+		start = strings.LastIndexByte(text[:start-1], '\n') + 1
+	}
+	return start
+}
+
+func escaped(text string, offset int) bool {
+	backslashes := 0
+	for i := offset - 1; i >= 0 && text[i] == '\\'; i-- {
+		backslashes++
+	}
+	return backslashes%2 == 1
+}
+
+func insideComment(tree *parser.Tree, offset int) bool {
+	i := sort.Search(len(tree.Comments), func(i int) bool { return tree.Comments[i].Span.End > offset })
+	return i < len(tree.Comments) && tree.Comments[i].Span.Start <= offset
+}
+
+var commandOpeningKeywords = setOf("then", "do", "else", "elif", "if", "while", "until")
+
+func opensCommand(tree *parser.Tree, code string, start int) bool {
+	last := len(code) - 1
+	switch {
+	case strings.HasSuffix(code, "&&"), strings.HasSuffix(code, "|&"), strings.HasSuffix(code, "=("):
+		return false
+	case code[last] == ';' || code[last] == '&' || code[last] == '(':
+		return !escaped(code, last)
+	}
+	field := code[strings.LastIndexAny(code, " \t\n;&|")+1:]
+	if field == "{" {
+		return true
+	}
+	return commandOpeningKeywords[field] && keywordAt(tree, field, start+len(code)-len(field))
+}
+
+func keywordAt(tree *parser.Tree, name string, offset int) bool {
+	i := sort.Search(len(tree.Keywords), func(i int) bool { return tree.Keywords[i].Span.Start >= offset })
+	return i < len(tree.Keywords) && tree.Keywords[i].Span.Start == offset && tree.Keywords[i].Name == name
+}
+
+func nextToken(text string, from int) int {
+	for from < len(text) {
+		switch text[from] {
+		case ' ', '\t', '\r', '\n':
+			from++
+		case '#':
+			end := strings.IndexByte(text[from:], '\n')
+			if end < 0 {
+				return len(text)
+			}
+			from += end
+		default:
+			return from
+		}
+	}
+	return from
+}
+
+var keywordPlacements = []struct {
+	keyword   string
+	placement placement
+}{
+	{"then", placedBeforeBranch},
+	{"else", placedBeforeBranch},
+	{"elif", placedBeforeBranch},
+	{"do", placedBeforeBranch},
+	{"fi", placedBeforeCloser},
+	{"done", placedBeforeCloser},
+	{"esac", placedBeforeCloser},
+	{"}", placedBeforeCloser},
+}
+
+func followingKeyword(rest string) (string, placement) {
+	for _, token := range []string{";;", ")"} {
+		if strings.HasPrefix(rest, token) {
+			return token, placedBeforeCloser
+		}
+	}
+	for _, k := range keywordPlacements {
+		if after, ok := strings.CutPrefix(rest, k.keyword); ok && (after == "" || strings.ContainsRune(" \t\r\n;&|()<>", rune(after[0]))) {
+			return k.keyword, k.placement
+		}
+	}
+	return "", placedBeforeCommand
+}
 
 type codeRange struct {
 	from, to Code
@@ -46,23 +183,22 @@ func (s suppressions) covers(f Finding) bool {
 	return false
 }
 
-func directivesOf(p *pass) suppressions {
+func (p *pass) suppressions() suppressions {
 	var out suppressions
-	for _, c := range p.tree.Comments {
-		d, ok := directive.Parse("#" + c.Text)
-		if !ok {
-			continue
-		}
+	for _, d := range p.directives {
 		s := suppression{}
-		for _, value := range d.Values("disable") {
+		for _, value := range d.parsed.Values(directive.Disable) {
 			for item := range strings.SplitSeq(value, ",") {
-				s.add(item)
+				if all, r, ok := parseDisabled(item); ok {
+					s.all = s.all || all
+					s.ranges = append(s.ranges, r)
+				}
 			}
 		}
 		if !s.all && len(s.ranges) == 0 {
 			continue
 		}
-		scope, ok := p.directiveScope(c.Span)
+		scope, ok := p.directiveScope(d)
 		if !ok {
 			continue
 		}
@@ -72,24 +208,23 @@ func directivesOf(p *pass) suppressions {
 	return out
 }
 
-func (s *suppression) add(item string) {
-	item = strings.TrimSpace(item)
-	if strings.EqualFold(item, allCodes) {
-		s.all = true
-		return
+func parseDisabled(item string) (bool, codeRange, bool) {
+	if item == allCodes {
+		return true, codeRange{}, true
 	}
 	from, to, isRange := strings.Cut(item, "-")
 	first, err := ParseCode(from)
 	if err != nil {
-		return
+		return false, codeRange{}, false
 	}
-	last := first + 1
-	if isRange {
-		if last, err = ParseCode(to); err != nil {
-			return
-		}
+	if !isRange {
+		return false, codeRange{from: first, to: first + 1}, true
 	}
-	s.ranges = append(s.ranges, codeRange{from: first, to: last})
+	last, err := ParseCode(to)
+	if err != nil {
+		return false, codeRange{}, false
+	}
+	return false, codeRange{from: first, to: last}, true
 }
 
 type fileWide struct {
@@ -98,54 +233,61 @@ type fileWide struct {
 	shell    bool
 }
 
-func fileWideDirectives(tree *parser.Tree, enabled []string) fileWide {
-	firstCommand := len(tree.Text())
-	if len(tree.File.Stmts) > 0 {
-		if span, ok := tree.NodeSpan(tree.File.Stmts[0]); ok {
-			firstCommand = span.Start
-		}
-	}
+func fileWideSettings(directives []directiveComment, firstCommand int, enabled []string) fileWide {
 	out := fileWide{optional: setOf(enabled...), extended: true}
-	extendedDecided := false
-	for _, c := range tree.Comments {
-		d, ok := directive.Parse("#" + c.Text)
-		if !ok {
-			continue
-		}
-		if _, found := d.Value("shell"); found {
+	extendedSet := false
+	for _, d := range directives {
+		if _, found := d.parsed.Value(directive.Shell); found {
 			out.shell = true
 		}
-		if c.Span.End > firstCommand {
+		if d.span.End > firstCommand {
 			continue
 		}
-		for _, value := range d.Values("enable") {
+		for _, value := range d.parsed.Values(directive.Enable) {
 			for name := range strings.SplitSeq(value, ",") {
-				out.optional[strings.TrimSpace(name)] = true
+				out.optional[name] = true
 			}
 		}
-		if value, found := d.Value("extended-analysis"); found && !extendedDecided {
-			switch value {
-			case "true":
-				extendedDecided = true
-			case "false":
-				out.extended, extendedDecided = false, true
+		if value, found := d.parsed.Value(directive.ExtendedAnalysis); found && !extendedSet {
+			if extended, ok := parseBool(value); ok {
+				out.extended, extendedSet = extended, true
 			}
 		}
 	}
 	return out
 }
 
+func parseBool(value string) (bool, bool) {
+	switch value {
+	case "true":
+		return true, true
+	case "false":
+		return false, true
+	}
+	return false, false
+}
+
 func (f fileWide) enabled(name string) bool { return f.optional[name] || f.optional[allCodes] }
 
-func (p *pass) directiveScope(comment parser.Span) (parser.Span, bool) {
-	if len(p.stmts) == 0 || comment.End <= p.stmts[0].Start {
+func firstCommandStart(tree *parser.Tree) int {
+	if len(tree.File.Stmts) > 0 {
+		if span, ok := tree.NodeSpan(tree.File.Stmts[0]); ok {
+			return span.Start
+		}
+	}
+	return len(tree.Text())
+}
+
+func (p *pass) directiveScope(d directiveComment) (parser.Span, bool) {
+	switch {
+	case d.placement.inert():
+		return parser.Span{}, false
+	case d.span.End <= p.firstCommand:
 		return parser.Span{Start: 0, End: len(p.text)}, true
+	case d.placement == placedAfterCommand:
+		return parser.Span{Start: logicalLineStart(p.tree, d.span.Start), End: d.span.Start}, true
 	}
-	lineStart := strings.LastIndexByte(p.text[:comment.Start], '\n') + 1
-	if trailing := strings.TrimSpace(p.text[lineStart:comment.Start]); trailing != "" {
-		return parser.Span{Start: lineStart, End: comment.Start}, true
-	}
-	i := sort.Search(len(p.stmts), func(i int) bool { return p.stmts[i].Start >= comment.End })
+	i := sort.Search(len(p.stmts), func(i int) bool { return p.stmts[i].Start >= d.span.End })
 	if i == len(p.stmts) {
 		return parser.Span{}, false
 	}
