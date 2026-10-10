@@ -27,6 +27,7 @@ type pass struct {
 	flow     *flowResult
 	catalog  map[Code]meta
 	rules    []rule
+	commands commandDispatch
 	settings fileWide
 	findings []Finding
 
@@ -34,7 +35,7 @@ type pass struct {
 }
 
 func newPass(tree *parser.Tree, imports []parser.Import, settings fileWide) *pass {
-	return &pass{tree: tree, imports: imports, text: tree.Text(), dialect: tree.Dialect, bats: isBats(tree.Text()), catalog: catalog, rules: rules, settings: settings}
+	return &pass{tree: tree, imports: imports, text: tree.Text(), dialect: tree.Dialect, bats: isBats(tree.Text()), catalog: catalog, rules: rules, commands: commandChecks, settings: settings}
 }
 
 func (p *pass) run() {
@@ -56,6 +57,7 @@ func (p *pass) run() {
 				r.node(p, n)
 			}
 		}
+		p.commands.visit(p, n)
 		p.stack = append(p.stack, n)
 		return true
 	})
@@ -77,6 +79,12 @@ func (p *pass) ancestor(depth int) syntax.Node {
 }
 
 func (p *pass) span(n syntax.Node) (parser.Span, bool) { return p.tree.NodeSpan(n) }
+
+func (p *pass) reportNode(code Code, n syntax.Node, message string) {
+	if span, ok := p.span(n); ok {
+		p.report(code, span, message)
+	}
+}
 
 func (p *pass) report(code Code, span parser.Span, message string, fix ...textedit.Edit) {
 	p.reportWithSeverity(code, p.meta(code).severity, span, message, fix...)

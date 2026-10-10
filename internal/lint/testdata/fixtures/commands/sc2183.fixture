@@ -74,7 +74,7 @@ printf '%d at %(%H:%M)T\n' "$count"
 
 ### attached -v name with a lone time conversion
 printf -vnow '%(%s)T'
->>> SC2182 1:8
+>>- SC2182 1:8 -- shellcheck 0.11 takes an attached -vNAME for the format; it assigns the variable, so the real format is the time conversion
 
 ### long decimal conversions counted once each
 printf '%ld %lld\n' "$big"

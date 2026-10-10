@@ -12,10 +12,80 @@ import (
 
 type command struct {
 	call    *syntax.CallExpr
+	decl    *syntax.DeclClause
 	name    string
 	word    *syntax.Word
 	args    []*syntax.Word
 	builtin bool
+}
+
+type matching uint8
+
+const (
+	matchExact matching = iota
+	matchBase
+)
+
+type commandRule struct {
+	match matching
+	names []string
+	check func(p *pass, c command)
+}
+
+type commandDispatch struct {
+	exact map[string][]func(*pass, command)
+	base  map[string][]func(*pass, command)
+}
+
+func newCommandDispatch(rules []commandRule) commandDispatch {
+	d := commandDispatch{exact: map[string][]func(*pass, command){}, base: map[string][]func(*pass, command){}}
+	for _, r := range rules {
+		table := d.exact
+		if r.match == matchBase {
+			table = d.base
+		}
+		for _, name := range r.names {
+			table[name] = append(table[name], r.check)
+		}
+	}
+	return d
+}
+
+func (d commandDispatch) visit(p *pass, n syntax.Node) {
+	var c command
+	switch n := n.(type) {
+	case *syntax.CallExpr:
+		found, ok := commandOf(n)
+		if !ok {
+			return
+		}
+		c = found
+	case *syntax.DeclClause:
+		c = declarationOf(n)
+	default:
+		return
+	}
+	if !c.builtin {
+		for _, check := range d.base[path.Base(c.name)] {
+			check(p, c)
+		}
+	}
+	if strings.Contains(c.name, "/") {
+		return
+	}
+	for _, check := range d.exact[c.name] {
+		check(p, c)
+	}
+}
+
+func declarationOf(decl *syntax.DeclClause) command {
+	c := command{decl: decl, name: decl.Variant.Value}
+	for _, a := range decl.Args {
+		if a.Naked && a.Name == nil {
+			c.args = append(c.args, a.Value)
+		}
+	}
+	return c
 }
 
 func commandOf(call *syntax.CallExpr) (command, bool) {
@@ -55,6 +125,16 @@ func (c command) literalArgs() ([]string, bool) {
 	return out, true
 }
 
+func literalIs(w *syntax.Word, text string) bool {
+	lit, ok := parser.Literal(w)
+	return ok && lit == text
+}
+
+func literalIn(w *syntax.Word, set map[string]bool) bool {
+	lit, ok := parser.Literal(w)
+	return ok && set[lit]
+}
+
 type flagSet struct {
 	short    map[byte]bool
 	long     map[string]bool
@@ -91,6 +171,123 @@ func parseFlags(args []*syntax.Word, withArgument string) flagSet {
 		}
 	}
 	return f
+}
+
+type optionGrammar struct {
+	short         string
+	long          map[string]bool
+	anyLong       bool
+	stopAtOperand bool
+}
+
+type parsedOption struct {
+	name  string
+	word  *syntax.Word
+	value *syntax.Word
+}
+
+type parsedOptions struct {
+	options  []parsedOption
+	operands []*syntax.Word
+}
+
+func (o parsedOptions) has(names ...string) bool {
+	return slices.ContainsFunc(o.options, func(opt parsedOption) bool { return slices.Contains(names, opt.name) })
+}
+
+func (g optionGrammar) parse(args []*syntax.Word) (parsedOptions, bool) {
+	var out parsedOptions
+	for i := 0; i < len(args); i++ {
+		lit, ok := parser.Literal(args[i])
+		switch {
+		case !ok || lit == "-" || !strings.HasPrefix(lit, "-"):
+			if g.stopAtOperand {
+				out.operands = append(out.operands, args[i:]...)
+				return out, true
+			}
+			out.operands = append(out.operands, args[i])
+		case lit == "--":
+			out.operands = append(out.operands, args[i+1:]...)
+			return out, true
+		case strings.HasPrefix(lit, "--"):
+			name, _, attached := strings.Cut(lit[2:], "=")
+			takesValue, known := g.long[name]
+			if !known && !g.anyLong {
+				return parsedOptions{}, false
+			}
+			opt := parsedOption{name: name, word: args[i]}
+			switch {
+			case attached:
+				opt.value = args[i]
+			case takesValue && i+1 == len(args):
+				return parsedOptions{}, false
+			case takesValue:
+				i++
+				opt.value = args[i]
+			}
+			out.options = append(out.options, opt)
+		default:
+			next, ok := g.shortCluster(args, i, lit, &out)
+			if !ok {
+				return parsedOptions{}, false
+			}
+			i = next
+		}
+	}
+	return out, true
+}
+
+func (g optionGrammar) shortCluster(args []*syntax.Word, i int, lit string, out *parsedOptions) (int, bool) {
+	for j := 1; j < len(lit); j++ {
+		at := strings.IndexByte(g.short, lit[j])
+		if lit[j] == ':' || at < 0 {
+			return i, false
+		}
+		opt := parsedOption{name: lit[j : j+1], word: args[i]}
+		takesValue := at+1 < len(g.short) && g.short[at+1] == ':'
+		switch {
+		case !takesValue:
+			out.options = append(out.options, opt)
+			continue
+		case j+1 < len(lit):
+			opt.value = args[i]
+		case i+1 == len(args):
+			return i, false
+		default:
+			i++
+			opt.value = args[i]
+		}
+		out.options = append(out.options, opt)
+		return i, true
+	}
+	return i, true
+}
+
+func mayExpandToSeveralWords(w *syntax.Word) bool {
+	if isGlob(w) || hasBraceExpansion(w) {
+		return true
+	}
+	for _, part := range w.Parts {
+		switch p := part.(type) {
+		case *syntax.ParamExp:
+			return true
+		case *syntax.DblQuoted:
+			if slices.ContainsFunc(p.Parts, isSeveralWordsInQuotes) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func isSeveralWordsInQuotes(part syntax.WordPart) bool {
+	pe, ok := part.(*syntax.ParamExp)
+	return ok && (kindOf(pe) == expandsElements || pe.Excl)
+}
+
+func hasBraceExpansion(w *syntax.Word) bool {
+	split := *w
+	return syntax.SplitBraces(&split)
 }
 
 var commandWrappers = map[string]string{

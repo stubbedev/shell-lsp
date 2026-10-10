@@ -8,7 +8,7 @@ if (( count -gt 3 )); then echo big; fi
 echo $(( count -lt 3 ))
 >>> SC1102 1:6
 >>> SC1106 1:16
->>> SC2005 1:6
+>>- SC2005 1:6 -- mvdan rejects -lt inside arithmetic and reports a syntax error
 >>- SC2046 1:6 -- mvdan rejects -lt inside arithmetic and reports a syntax error
 >>> SC2205 1:8
 

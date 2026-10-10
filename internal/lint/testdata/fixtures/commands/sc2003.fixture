@@ -6,7 +6,8 @@ echo "$total"
 ### arithmetic expr nested in escaped backticks inside backticks
 report=`echo "sum: \`expr 3 + 2\`"`
 echo "$report"
->>> SC2003 1:21
+>>- SC2003 1:21 -- inside escaped nested backticks shellcheck's columns drift by the removed backslash; this linter reports the expr word itself
+>>+ SC2003 1:22 -- reported at the actual position of the expr word inside the nested backticks
 >>> SC2006 1:20
 >>> SC2006 1:8
 >>> SC2116 1:8

@@ -6,8 +6,9 @@ import (
 )
 
 type family struct {
-	codes map[Code]meta
-	rules []rule
+	codes    map[Code]meta
+	rules    []rule
+	commands []commandRule
 }
 
 var families = []family{
@@ -26,13 +27,19 @@ var families = []family{
 	charactersFamily,
 	heredocsFamily,
 	misreadsFamily,
+	outputFamily,
+	trFamily,
+	grepFamily,
+	findFamily,
+	exprFamily,
 }
 
-var catalog, rules = assemble(families)
+var catalog, rules, commandChecks = assemble(families)
 
-func assemble(fs []family) (map[Code]meta, []rule) {
+func assemble(fs []family) (map[Code]meta, []rule, commandDispatch) {
 	codes := map[Code]meta{}
 	var all []rule
+	var commands []commandRule
 	for _, f := range fs {
 		for code := range f.codes {
 			if _, dup := codes[code]; dup {
@@ -41,6 +48,7 @@ func assemble(fs []family) (map[Code]meta, []rule) {
 		}
 		maps.Copy(codes, f.codes)
 		all = append(all, f.rules...)
+		commands = append(commands, f.commands...)
 	}
-	return codes, all
+	return codes, all, newCommandDispatch(commands)
 }

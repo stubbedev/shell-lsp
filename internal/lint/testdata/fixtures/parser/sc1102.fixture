@@ -1,7 +1,7 @@
 ### arithmetic fails but a nested subshell parses
 echo $(((1)) && true)
 >>> SC1102 1:6
->>> SC2005 1:6
+>>- SC2005 1:6 -- mvdan reads the leading $(( as arithmetic and reports a syntax error instead of retrying as a subshell
 >>- SC2046 1:6 -- mvdan reads the leading $(( as arithmetic and reports a syntax error instead of retrying as a subshell
 
 ### backgrounded expansion inside a dollar double parenthesis

@@ -1,47 +1,50 @@
 ### quiet grep after a pipe with long-form pipefail is not flagged by shellcheck 0.11
 set -o pipefail
 cat server.log | grep -q ERROR
->>> none
+>>+ SC2337 2:18 -- SC2337 is newer than shellcheck 0.11, which has no early-exit grep check
 
 ### long quiet option after a pipe is not flagged by shellcheck 0.11
 set -o pipefail
 cat server.log | grep --quiet ERROR
->>> none
+>>+ SC2337 2:18 -- SC2337 is newer than shellcheck 0.11, which has no early-exit grep check
 
 ### iq cluster after a pipe is not flagged by shellcheck 0.11
 set -o pipefail
 cat server.log | grep -iq error
->>> none
+>>+ SC2337 2:18 -- SC2337 is newer than shellcheck 0.11, which has no early-exit grep check
 
 ### quiet grep at the end of a three-stage pipeline is not flagged by shellcheck 0.11
 set -o pipefail
 journalctl -u nginx | tail -n 100 | grep -q 'upstream timed out'
->>> none
+>>+ SC2337 2:37 -- SC2337 is newer than shellcheck 0.11, which has no early-exit grep check
 
 ### pipefail from an euo cluster is not flagged by shellcheck 0.11
 set -euo pipefail
 ps aux | grep -q '[s]shd'
 >>> SC2009 2:1
+>>+ SC2337 2:10 -- SC2337 is newer than shellcheck 0.11, which has no early-exit grep check
 
 ### max-count grep in the middle of a pipeline is not flagged by shellcheck 0.11
 set -o pipefail
 dmesg | grep -m 1 usb | cut -c1-40
->>> none
+>>+ SC2337 2:9 -- SC2337 is newer than shellcheck 0.11, which has no early-exit grep check
 
 ### files-without-match grep in the middle of a pipeline is not flagged by shellcheck 0.11
 set -o pipefail
 find . -name '*.go' | grep -L TODO | sort
->>> none
+>>+ SC2337 2:23 -- SC2337 is newer than shellcheck 0.11, which has no early-exit grep check
 
 ### egrep with -q after a pipe is not flagged by shellcheck 0.11
 set -o pipefail
 cat server.log | egrep -q 'ERROR|FATAL'
 >>> SC2196 2:18
+>>+ SC2337 2:18 -- SC2337 is newer than shellcheck 0.11, which has no early-exit grep check
 
 ### fgrep with -q after a pipe is not flagged by shellcheck 0.11
 set -o pipefail
 cat server.log | fgrep -q '[warn]'
 >>> SC2197 2:18
+>>+ SC2337 2:18 -- SC2337 is newer than shellcheck 0.11, which has no early-exit grep check
 
 ### no pipefail anywhere
 cat server.log | grep -q ERROR
@@ -94,4 +97,4 @@ cat server.log | grep -- -q
 ### long silent option is not counted
 set -o pipefail
 cat server.log | grep --silent ERROR
->>> none
+>>+ SC2337 2:18 -- --silent is the same as --quiet; 0.11 has no early-exit grep check and the newer one misses this spelling

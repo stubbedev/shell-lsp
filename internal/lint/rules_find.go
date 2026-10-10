@@ -1,0 +1,118 @@
+package lint
+
+import (
+	"slices"
+	"strings"
+
+	"mvdan.cc/sh/v3/syntax"
+
+	"github.com/stubbedev/shell-lsp/internal/parser"
+)
+
+var findFamily = family{
+	codes: map[Code]meta{
+		2061: {severity: SeverityWarning},
+		2146: {severity: SeverityWarning},
+		2150: {severity: SeverityWarning},
+		2156: {severity: SeverityWarning},
+		2185: {severity: SeverityInfo},
+		2227: {severity: SeverityWarning},
+	},
+	commands: []commandRule{
+		{match: matchBase, names: []string{"find"}, check: checkFindPatterns},
+		{match: matchBase, names: []string{"find"}, check: checkFindActionPrecedence},
+		{match: matchBase, names: []string{"find"}, check: checkFindExec},
+		{match: matchBase, names: []string{"find"}, check: checkFindInlineScript},
+		{match: matchBase, names: []string{"find"}, check: checkFindStartingPoint},
+		{match: matchBase, names: []string{"find"}, check: checkFindRedirection},
+	},
+}
+
+var (
+	findPatternPredicates = setOf("-name", "-iname", "-path", "-ipath", "-wholename", "-iwholename", "-lname", "-ilname", "-regex", "-iregex")
+	findNamePredicates    = setOf("-name", "-iname", "-regex", "-iregex", "-wholename", "-iwholename")
+	findActions           = setOf("-exec", "-execdir", "-ok", "-okdir", "-delete", "-print", "-print0", "-printf", "-fprint", "-fprint0", "-fprintf", "-fls", "-ls")
+	findExecActions       = setOf("-exec", "-execdir", "-ok", "-okdir")
+	findExecTerminators   = setOf(";", "+")
+	findInlineShells      = setOf("sh", "bash", "dash", "ksh")
+	findOr                = setOf("-o", "-or")
+)
+
+func checkFindPatterns(p *pass, c command) {
+	for i := 0; i+1 < len(c.args); i++ {
+		predicate, ok := parser.Literal(c.args[i])
+		if ok && findPatternPredicates[predicate] && isGlob(c.args[i+1]) {
+			p.reportNode(2061, c.args[i+1], "Quote the pattern after "+predicate+" so the shell does not expand it before find sees it.")
+		}
+	}
+}
+
+func checkFindActionPrecedence(p *pass, c command) {
+	for i := 0; i+5 < len(c.args); i++ {
+		w := c.args[i : i+6]
+		if literalIn(w[0], findNamePredicates) && literalIn(w[2], findOr) &&
+			literalIn(w[3], findNamePredicates) && literalIn(w[5], findActions) {
+			action, _ := parser.Literal(w[5])
+			p.reportNode(2146, w[5], action+" only applies to the last -o branch; group the alternatives in \\( \\) so it applies to all of them.")
+		}
+	}
+}
+
+func checkFindExec(p *pass, c command) {
+	for i := 0; i+2 < len(c.args); i++ {
+		if !literalIn(c.args[i], findExecActions) || !literalIn(c.args[i+2], findExecTerminators) {
+			continue
+		}
+		if command, _ := parser.Text(c.args[i+1], " "); strings.ContainsAny(command, " |;") {
+			action, _ := parser.Literal(c.args[i])
+			p.reportNode(2150, c.args[i], action+" runs a program directly, not a shell command line; pass the program and its arguments as separate words, or use sh -c.")
+		}
+	}
+}
+
+func checkFindInlineScript(p *pass, c command) {
+	sawExec, sawShell := false, false
+	for i, arg := range c.args {
+		switch {
+		case literalIn(arg, findExecActions):
+			sawExec = true
+		case sawExec && literalIn(arg, findInlineShells):
+			sawShell = true
+		case sawShell && literalIs(arg, "-c") && i+1 < len(c.args):
+			if script, _ := parser.Text(c.args[i+1], ""); strings.Contains(script, "{}") {
+				p.reportNode(2156, c.args[i+1], "Pass {} to the inline script as an argument and use \"$1\"; injecting file names into the script text breaks on special characters.")
+			}
+		}
+	}
+}
+
+const findOptionLetters = "-EHLPXdfsxO0123456789"
+
+func checkFindStartingPoint(p *pass, c command) {
+	if parseFlags(c.args, "").has(0, "help") {
+		return
+	}
+	for _, arg := range c.args {
+		text, _ := parser.Text(arg, "_")
+		if !strings.HasPrefix(text, "-") {
+			return
+		}
+		if len(text) > 2 && strings.Trim(text, findOptionLetters) != "" {
+			break
+		}
+	}
+	p.reportNode(2185, c.word, "Give find an explicit starting path such as . ; some versions of find require one.")
+}
+
+func checkFindRedirection(p *pass, c command) {
+	stmt, ok := p.parent().(*syntax.Stmt)
+	if !ok || len(c.args) == 0 || len(stmt.Redirs) == 0 {
+		return
+	}
+	first := slices.MinFunc(stmt.Redirs, func(a, b *syntax.Redirect) int {
+		return parser.Offset(a.Pos()) - parser.Offset(b.Pos())
+	})
+	if parser.Offset(first.Pos()) < parser.Offset(c.args[len(c.args)-1].Pos()) {
+		p.reportNode(2227, first, "This redirection applies to find itself, not to the command run by -exec; use sh -c to redirect inside the action.")
+	}
+}
