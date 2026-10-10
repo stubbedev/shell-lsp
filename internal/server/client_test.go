@@ -14,7 +14,7 @@ import (
 const clientTimeout = 10 * time.Second
 
 type testClient struct {
-	t      *testing.T
+	t      testing.TB
 	conn   *jsonrpc.Conn
 	writer *io.PipeWriter
 	runErr chan error
@@ -26,7 +26,7 @@ type testClient struct {
 	exited   bool
 }
 
-func startClient(t *testing.T, initializeParams string, setup ...func(*Server)) (*testClient, *Server) {
+func startClient(t testing.TB, initializeParams string, setup ...func(*Server)) (*testClient, *Server) {
 	t.Helper()
 
 	clientReader, serverWriter := io.Pipe()

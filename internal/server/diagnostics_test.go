@@ -41,7 +41,7 @@ func codes(items []lsp.Diagnostic) []string {
 	return out
 }
 
-func decodeResult[T any](t *testing.T, msg *jsonrpc.Message) T {
+func decodeResult[T any](t testing.TB, msg *jsonrpc.Message) T {
 	t.Helper()
 
 	if msg.Error != nil {
