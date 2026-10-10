@@ -112,7 +112,24 @@ const (
 	budgetRuns       = 21
 	completionBudget = 50 * time.Millisecond
 	diagnosticBudget = 200 * time.Millisecond
+	lintParseRatio   = 8
 )
+
+func medianRatio(measured, reference func()) float64 {
+	measuredSamples := make([]time.Duration, budgetRuns)
+	referenceSamples := make([]time.Duration, budgetRuns)
+	for i := range budgetRuns {
+		start := time.Now()
+		measured()
+		measuredSamples[i] = time.Since(start)
+		start = time.Now()
+		reference()
+		referenceSamples[i] = time.Since(start)
+	}
+	slices.Sort(measuredSamples)
+	slices.Sort(referenceSamples)
+	return float64(measuredSamples[budgetRuns/2]) / float64(referenceSamples[budgetRuns/2])
+}
 
 func p95(t *testing.T, run func()) time.Duration {
 	t.Helper()
@@ -137,6 +154,10 @@ func TestBudgets(t *testing.T) {
 		t.Errorf("parse + syntax diagnostics p95 = %v over 10k lines, budget %v", diagnose, diagnosticBudget)
 	}
 	tree := parser.Parse(text, dialect.Bash)
+	lintRatio := medianRatio(func() { lint.Check(tree, nil, lint.Options{}) }, func() { parser.Parse(text, dialect.Bash) })
+	if lintRatio > lintParseRatio {
+		t.Errorf("lint takes %.1fx as long as parsing the same 10k lines, budget %dx", lintRatio, lintParseRatio)
+	}
 	offsets := []int{strings.LastIndex(text, `"${items[@]}"`) + 4, strings.LastIndex(text, "\tif ") + 1, strings.LastIndex(text, "grep ") + 2}
 	for _, offset := range offsets {
 		complete := p95(t, func() {
@@ -148,7 +169,7 @@ func TestBudgets(t *testing.T) {
 			t.Errorf("completion at %d p95 = %v over 10k lines, budget %v", offset, complete, completionBudget)
 		}
 	}
-	t.Logf("p95: diagnostics %v", diagnose)
+	t.Logf("p95: diagnostics %v; lint %.1fx parse", diagnose, lintRatio)
 }
 
 func benchFile() *workspace.File {
