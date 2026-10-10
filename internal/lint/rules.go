@@ -65,6 +65,7 @@ var families = []family{
 	arithmeticStyleFamily,
 	parameterSyntaxFamily,
 	subshellFamily,
+	wordsFamily,
 }
 
 var catalog, rules, commandChecks = assemble(families)
