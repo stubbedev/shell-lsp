@@ -1,0 +1,37 @@
+dialect zsh
+scope 0 parent=0 1:1-22:1
+scope 1 parent=0 7:1-14:2
+function 7:1-7:15 "_prompt_precmd" body=1 within=0 doc=""
+definition 6:13-6:29 "precmd_functions" kind=2 attrs=000001 local=false within=0
+definition 9:11-9:15 "last" kind=2 attrs=010000 local=true within=1
+definition 10:8-10:12 "user" kind=2 attrs=000000 local=true within=1
+definition 11:2-11:7 "psvar" kind=0 attrs=000001 local=false within=1
+definition 12:21-12:26 "psvar" kind=0 attrs=000000 local=false within=1
+definition 13:2-13:8 "PROMPT" kind=0 attrs=000000 local=false within=1
+definition 17:1-17:5 "path" kind=0 attrs=000001 local=false within=0
+definition 18:12-18:16 "path" kind=2 attrs=000000 local=false within=0
+definition 19:5-19:11 "plugin" kind=3 attrs=000000 local=false within=0
+reference 12:5-12:9 "last" within=1
+reference 12:31-12:35 "last" within=1
+reference 13:20-13:24 "user" within=1
+reference 13:32-13:47 "vcs_info_msg_0_" within=1
+reference 17:21-17:25 "path" within=0
+reference 19:17-19:24 "ZDOTDIR" within=0
+reference 19:27-19:31 "HOME" within=0
+reference 20:10-20:16 "plugin" within=0
+command 1:1-1:9 "autoload" args=4 within=0
+command 1:46-1:52 "colors" args=0 within=0
+command 2:1-2:7 "zstyle" args=3 within=0
+command 3:1-3:7 "zstyle" args=3 within=0
+command 4:1-4:7 "setopt" args=1 within=0
+command 6:1-6:8 "typeset" args=0 within=0
+command 8:2-8:10 "vcs_info" args=0 within=1
+command 9:2-9:7 "local" args=0 within=1
+command 10:2-10:7 "local" args=0 within=1
+command 15:1-15:13 "add-zsh-hook" args=2 within=0
+command 18:1-18:8 "typeset" args=0 within=0
+command 20:2-20:8 "source" args=1 within=0
+keyword 19:1-19:4 "for"
+keyword 19:12-19:14 "in"
+keyword 19:51-19:53 "do"
+keyword 21:1-21:5 "done"

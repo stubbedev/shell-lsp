@@ -1,0 +1,6 @@
+dialect bash
+error kind=0 5:9-5:10 "\"": missing `"` to match `"`
+scope 0 parent=0 1:1-9:1
+reference 4:9-4:10 "x" within=0
+command 2:1-2:5 "echo" args=1 within=0
+comment 1:1-1:12 "#!/bin/bash"

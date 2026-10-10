@@ -1,0 +1,76 @@
+dialect bash
+scope 0 parent=0 1:1-35:1
+scope 1 parent=0 5:1-12:2
+scope 2 parent=0 14:1-23:2
+scope 3 parent=0 25:1-34:2
+function 5:1-5:35 "addToSearchPathWithCustomDelimiter" body=1 within=0 doc=""
+function 14:1-14:17 "addPkgConfigPath" body=2 within=0 doc=""
+function 25:1-25:8 "runHook" body=3 within=0 doc=""
+definition 2:13-2:22 "seenPaths" kind=2 attrs=000010 local=false within=0
+definition 3:1-3:18 "preConfigureHooks" kind=0 attrs=000001 local=false within=0
+definition 6:8-6:17 "delimiter" kind=2 attrs=000000 local=true within=1
+definition 7:8-7:15 "varName" kind=2 attrs=000000 local=true within=1
+definition 8:8-8:11 "dir" kind=2 attrs=000000 local=true within=1
+definition 15:8-15:11 "pkg" kind=2 attrs=000000 local=true within=2
+definition 16:6-16:9 "pkg" kind=3 attrs=000000 local=false within=2
+definition 20:3-20:12 "seenPaths" kind=0 attrs=000000 local=false within=2
+definition 26:8-26:16 "hookName" kind=2 attrs=000000 local=true within=3
+definition 28:8-28:18 "hooksSlice" kind=2 attrs=000000 local=true within=3
+definition 29:8-29:12 "hook" kind=2 attrs=000000 local=true within=3
+definition 30:6-30:10 "hook" kind=3 attrs=000000 local=false within=3
+reference 9:13-9:16 "dir" within=1
+reference 9:25-9:32 "varName" within=1
+reference 9:36-9:45 "delimiter" within=1
+reference 9:49-9:56 "varName" within=1
+reference 9:59-9:68 "delimiter" within=1
+reference 9:79-9:88 "delimiter" within=1
+reference 9:91-9:94 "dir" within=1
+reference 9:97-9:106 "delimiter" within=1
+reference 10:13-10:20 "varName" within=1
+reference 10:25-10:32 "varName" within=1
+reference 10:37-10:44 "varName" within=1
+reference 10:47-10:56 "delimiter" within=1
+reference 10:60-10:63 "dir" within=1
+reference 16:16-16:30 "pkgsHostTarget" within=2
+reference 17:15-17:24 "seenPaths" within=2
+reference 17:26-17:29 "pkg" within=2
+reference 20:14-20:17 "pkg" within=2
+reference 21:58-21:61 "pkg" within=2
+reference 28:22-28:30 "hookName" within=3
+reference 30:36-30:44 "hookName" within=3
+reference 30:49-30:59 "hooksSlice" within=3
+reference 30:64-30:74 "hooksSlice" within=3
+reference 31:11-31:15 "hook" within=3
+command 2:1-2:8 "declare" args=0 within=0
+command 6:2-6:7 "local" args=0 within=1
+command 7:2-7:7 "local" args=0 within=1
+command 8:2-8:7 "local" args=0 within=1
+command 10:3-10:9 "export" args=0 within=1
+command 15:2-15:7 "local" args=0 within=2
+command 18:4-18:12 "continue" args=0 within=2
+command 21:3-21:37 "addToSearchPathWithCustomDelimiter" args=3 within=2
+command 26:2-26:7 "local" args=0 within=3
+command 27:2-27:7 "shift" args=0 within=3
+command 28:2-28:7 "local" args=0 within=3
+command 29:2-29:7 "local" args=0 within=3
+command 31:3-31:8 "_eval" args=2 within=3
+command 33:2-33:8 "return" args=1 within=3
+comment 1:1-1:48 "# setup hook in the style of build system hooks"
+keyword 9:2-9:4 "if"
+keyword 9:5-9:7 "[["
+keyword 9:110-9:112 "]]"
+keyword 9:114-9:118 "then"
+keyword 11:2-11:4 "fi"
+keyword 16:2-16:5 "for"
+keyword 16:10-16:12 "in"
+keyword 16:37-16:39 "do"
+keyword 17:3-17:5 "if"
+keyword 17:6-17:8 "[["
+keyword 17:34-17:36 "]]"
+keyword 17:38-17:42 "then"
+keyword 19:3-19:5 "fi"
+keyword 22:2-22:6 "done"
+keyword 30:2-30:5 "for"
+keyword 30:11-30:13 "in"
+keyword 30:79-30:81 "do"
+keyword 32:2-32:6 "done"

@@ -1,0 +1,66 @@
+dialect sh
+scope 0 parent=0 1:1-45:1
+scope 1 parent=0 7:1-11:2
+scope 2 parent=0 13:1-17:2
+function 7:1-7:6 "usage" body=1 within=0 doc=""
+function 13:1-13:4 "log" body=2 within=0 doc=""
+definition 4:1-4:7 "prefix" kind=0 attrs=000000 local=false within=0
+definition 5:1-5:8 "verbose" kind=0 attrs=000000 local=false within=0
+definition 19:22-19:25 "opt" kind=5 attrs=000000 local=false within=0
+definition 21:6-21:12 "prefix" kind=0 attrs=000000 local=false within=0
+definition 22:6-22:13 "verbose" kind=0 attrs=000000 local=false within=0
+definition 29:1-29:4 "tmp" kind=0 attrs=000000 local=false within=0
+definition 33:9-33:11 "os" kind=0 attrs=000000 local=false within=0
+definition 34:10-34:12 "os" kind=0 attrs=000000 local=false within=0
+reference 14:9-14:16 "verbose" within=2
+reference 20:9-20:12 "opt" within=0
+reference 21:14-21:20 "OPTARG" within=0
+reference 27:10-27:16 "OPTIND" within=0
+reference 43:22-43:24 "os" within=0
+reference 43:31-43:37 "prefix" within=0
+reference 44:12-44:18 "prefix" within=0
+command 2:1-2:4 "set" args=1 within=0
+command 8:2-8:5 "cat" args=0 within=1
+command 14:5-14:6 "[" args=4 within=2
+command 15:3-15:9 "printf" args=2 within=2
+command 19:7-19:14 "getopts" args=2 within=0
+command 23:6-23:11 "usage" args=0 within=0
+command 23:13-23:17 "exit" args=1 within=0
+command 24:6-24:11 "usage" args=0 within=0
+command 24:17-24:21 "exit" args=1 within=0
+command 27:1-27:6 "shift" args=1 within=0
+command 29:7-29:13 "mktemp" args=1 within=0
+command 30:1-30:5 "trap" args=4 within=0
+command 32:9-32:14 "uname" args=1 within=0
+command 35:5-35:9 "echo" args=1 within=0
+command 35:36-35:40 "exit" args=1 within=0
+command 38:6-38:13 "command" args=2 within=0
+command 39:2-39:6 "echo" args=1 within=0
+command 40:2-40:6 "exit" args=1 within=0
+command 43:1-43:4 "log" args=1 within=0
+command 44:1-44:6 "mkdir" args=2 within=0
+redirect 8:6-8:8 "<<" target=8:8-8:13 "USAGE"
+redirect 15:22-15:24 ">&" target=15:24-15:25 "2"
+redirect 24:12-24:14 ">&" target=24:14-24:15 "2"
+redirect 35:31-35:33 ">&" target=35:33-35:34 "2"
+redirect 38:22-38:23 ">" target=38:23-38:32 "/dev/null"
+redirect 38:34-38:36 ">&" target=38:36-38:37 "1"
+redirect 39:26-39:28 ">&" target=39:28-39:29 "2"
+heredoc "USAGE" quoted=false striptabs=false body=9:1-10:1 "Usage: $0 [-p prefix] [-v]\n"
+comment 1:1-1:10 "#!/bin/sh"
+keyword 14:2-14:4 "if"
+keyword 14:27-14:31 "then"
+keyword 16:2-16:4 "fi"
+keyword 19:1-19:6 "while"
+keyword 19:27-19:29 "do"
+keyword 20:2-20:6 "case"
+keyword 20:14-20:16 "in"
+keyword 25:2-25:6 "esac"
+keyword 26:1-26:5 "done"
+keyword 32:1-32:5 "case"
+keyword 32:20-32:22 "in"
+keyword 36:1-36:5 "esac"
+keyword 38:1-38:3 "if"
+keyword 38:4-38:5 "!"
+keyword 38:39-38:43 "then"
+keyword 41:1-41:3 "fi"

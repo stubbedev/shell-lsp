@@ -1,0 +1,44 @@
+dialect ksh
+scope 0 parent=0 1:1-20:1
+scope 1 parent=0 5:1-9:2
+function 5:10-5:13 "add" body=1 within=0 doc=""
+definition 2:12-2:18 "totals" kind=2 attrs=000010 local=false within=0
+definition 3:12-3:17 "lines" kind=2 attrs=010000 local=false within=0
+definition 6:10-6:13 "key" kind=2 attrs=000000 local=true within=1
+definition 7:13-7:19 "amount" kind=2 attrs=010000 local=true within=1
+definition 8:2-8:8 "totals" kind=0 attrs=000000 local=false within=1
+definition 11:7-11:10 "IFS" kind=1 attrs=000000 local=false within=0
+definition 11:21-11:24 "key" kind=5 attrs=000000 local=false within=0
+definition 11:25-11:31 "amount" kind=5 attrs=000000 local=false within=0
+definition 13:5-13:10 "lines" kind=4 attrs=000000 local=false within=0
+definition 16:5-16:8 "key" kind=3 attrs=000000 local=false within=0
+reference 8:21-8:27 "totals" within=1
+reference 8:29-8:32 "key" within=1
+reference 8:40-8:46 "amount" within=1
+reference 8:10-8:13 "key" within=1
+reference 12:8-12:11 "key" within=0
+reference 12:15-12:21 "amount" within=0
+reference 13:5-13:10 "lines" within=0
+reference 16:16-16:22 "totals" within=0
+reference 17:16-17:19 "key" within=0
+reference 17:22-17:28 "totals" within=0
+reference 17:30-17:33 "key" within=0
+reference 19:23-19:28 "lines" within=0
+command 2:1-2:8 "typeset" args=0 within=0
+command 3:1-3:8 "typeset" args=0 within=0
+command 6:2-6:9 "typeset" args=0 within=1
+command 7:2-7:9 "typeset" args=0 within=1
+command 11:13-11:17 "read" args=3 within=0
+command 12:2-12:5 "add" args=2 within=0
+command 17:2-17:7 "print" args=3 within=0
+command 19:1-19:6 "print" args=2 within=0
+redirect 14:6-14:7 "<" target=14:8-14:26 "\"${1:-/dev/stdin}\""
+comment 1:1-1:11 "#!/bin/ksh"
+keyword 5:1-5:9 "function"
+keyword 11:1-11:6 "while"
+keyword 11:33-11:35 "do"
+keyword 14:1-14:5 "done"
+keyword 16:1-16:4 "for"
+keyword 16:9-16:11 "in"
+keyword 16:29-16:31 "do"
+keyword 18:1-18:5 "done"

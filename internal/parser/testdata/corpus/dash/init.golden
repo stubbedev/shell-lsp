@@ -1,0 +1,45 @@
+dialect dash
+scope 0 parent=0 1:1-26:1
+scope 1 parent=0 5:1-13:2
+scope 2 parent=0 15:1-18:2
+function 5:1-5:6 "start" body=1 within=0 doc=""
+function 15:1-15:5 "stop" body=2 within=0 doc=""
+definition 2:1-2:5 "NAME" kind=0 attrs=000000 local=false within=0
+definition 3:1-3:8 "PIDFILE" kind=0 attrs=000000 local=false within=0
+definition 6:8-6:11 "pid" kind=2 attrs=000000 local=true within=1
+definition 8:11-8:14 "pid" kind=5 attrs=000000 local=false within=1
+reference 3:15-3:19 "NAME" within=0
+reference 7:12-7:19 "PIDFILE" within=1
+reference 8:19-8:26 "PIDFILE" within=1
+reference 9:10-9:14 "NAME" within=1
+reference 9:35-9:38 "pid" within=1
+reference 12:13-12:17 "NAME" within=1
+reference 16:9-16:16 "PIDFILE" within=2
+reference 17:16-17:23 "PIDFILE" within=2
+reference 17:38-17:45 "PIDFILE" within=2
+command 6:2-6:7 "local" args=1 within=1
+command 7:5-7:6 "[" args=3 within=1
+command 8:3-8:7 "read" args=2 within=1
+command 9:3-9:7 "echo" args=1 within=1
+command 10:3-10:9 "return" args=1 within=1
+command 12:30-12:34 "echo" args=1 within=1
+command 16:2-16:3 "[" args=3 within=2
+command 16:23-16:29 "return" args=1 within=2
+command 17:2-17:6 "kill" args=1 within=2
+command 17:10-17:13 "cat" args=1 within=2
+command 17:30-17:32 "rm" args=2 within=2
+command 21:9-21:14 "start" args=0 within=0
+command 22:8-22:12 "stop" args=0 within=0
+command 23:11-23:15 "stop" args=0 within=0
+command 23:17-23:22 "start" args=0 within=0
+command 24:5-24:9 "echo" args=1 within=0
+command 24:48-24:52 "exit" args=1 within=0
+redirect 8:15-8:16 "<" target=8:17-8:27 "\"$PIDFILE\""
+redirect 24:43-24:45 ">&" target=24:45-24:46 "2"
+comment 1:1-1:10 "#!/bin/sh"
+keyword 7:2-7:4 "if"
+keyword 7:24-7:28 "then"
+keyword 11:2-11:4 "fi"
+keyword 20:1-20:5 "case"
+keyword 20:15-20:17 "in"
+keyword 25:1-25:5 "esac"

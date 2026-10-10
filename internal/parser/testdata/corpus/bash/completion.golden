@@ -1,0 +1,46 @@
+dialect bash
+scope 0 parent=0 1:1-24:1
+scope 1 parent=0 2:1-22:2
+function 2:1-2:8 "_mytool" body=1 within=0 doc="bash completion for a hypothetical \"mytool\" command"
+definition 3:8-3:11 "cur" kind=2 attrs=000000 local=true within=1
+definition 3:12-3:16 "prev" kind=2 attrs=000000 local=true within=1
+definition 3:17-3:22 "words" kind=2 attrs=000000 local=true within=1
+definition 3:23-3:28 "cword" kind=2 attrs=000000 local=true within=1
+definition 4:2-4:5 "cur" kind=0 attrs=000000 local=false within=1
+definition 5:2-5:6 "prev" kind=0 attrs=000000 local=false within=1
+definition 6:11-6:19 "commands" kind=2 attrs=000001 local=true within=1
+definition 9:15-9:24 "COMPREPLY" kind=5 attrs=000001 local=false within=1
+definition 13:4-13:13 "COMPREPLY" kind=0 attrs=000001 local=false within=1
+definition 18:3-18:12 "COMPREPLY" kind=0 attrs=000001 local=false within=1
+definition 20:3-20:12 "COMPREPLY" kind=0 attrs=000001 local=false within=1
+reference 4:9-4:19 "COMP_WORDS" within=1
+reference 5:10-5:20 "COMP_WORDS" within=1
+reference 5:21-5:31 "COMP_CWORD" within=1
+reference 7:9-7:13 "prev" within=1
+reference 9:45-9:48 "cur" within=1
+reference 13:54-13:57 "cur" within=1
+reference 17:10-17:13 "cur" within=1
+reference 18:60-18:63 "cur" within=1
+reference 20:30-20:38 "commands" within=1
+reference 20:49-20:52 "cur" within=1
+command 3:2-3:7 "local" args=0 within=1
+command 6:2-6:7 "local" args=0 within=1
+command 9:4-9:11 "mapfile" args=2 within=1
+command 9:29-9:36 "compgen" args=3 within=1
+command 10:4-10:10 "return" args=1 within=1
+command 13:17-13:24 "compgen" args=4 within=1
+command 14:4-14:10 "return" args=1 within=1
+command 18:16-18:23 "compgen" args=4 within=1
+command 20:16-20:23 "compgen" args=4 within=1
+command 23:1-23:9 "complete" args=3 within=0
+redirect 9:25-9:26 "<" target=9:27-9:50 "<(compgen -f -- \"$cur\")"
+comment 1:1-1:54 "# bash completion for a hypothetical \"mytool\" command"
+keyword 7:2-7:6 "case"
+keyword 7:15-7:17 "in"
+keyword 16:2-16:6 "esac"
+keyword 17:2-17:4 "if"
+keyword 17:5-17:7 "[["
+keyword 17:21-17:23 "]]"
+keyword 17:25-17:29 "then"
+keyword 19:2-19:6 "else"
+keyword 21:2-21:4 "fi"
