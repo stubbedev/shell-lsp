@@ -6,6 +6,8 @@ package dialect
 import (
 	"path/filepath"
 	"strings"
+
+	"github.com/stubbedev/shell-lsp/internal/directive"
 )
 
 type Dialect uint8
@@ -187,15 +189,12 @@ func fromShellcheckDirective(text string) (Dialect, bool) {
 		if seen > 50 {
 			break
 		}
-		trimmed := strings.TrimSpace(line)
-		fields := strings.Fields(trimmed)
-		if len(fields) < 2 || fields[0]+" "+fields[1] != "# shellcheck" {
+		d, ok := directive.Parse(line)
+		if !ok {
 			continue
 		}
-		for _, field := range fields[2:] {
-			if value, ok := strings.CutPrefix(field, "shell="); ok {
-				return FromName(value)
-			}
+		if value, ok := d.Value("shell"); ok {
+			return FromName(value)
 		}
 	}
 	return 0, false

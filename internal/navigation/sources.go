@@ -8,6 +8,7 @@ import (
 
 	"mvdan.cc/sh/v3/syntax"
 
+	"github.com/stubbedev/shell-lsp/internal/directive"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
@@ -15,8 +16,7 @@ import (
 const (
 	maxChain     = 64
 	maxEvalDepth = 8
-	directive    = "shellcheck"
-	sourceKey    = "source="
+	sourceKey    = "source"
 	scriptDirVar = "SCRIPTDIR"
 )
 
@@ -160,16 +160,12 @@ func directiveTarget(tree *parser.Tree, cmd parser.Command) (string, bool) {
 	for lineStart > 0 {
 		prevStart := strings.LastIndexByte(text[:lineStart-1], '\n') + 1
 		line := strings.TrimSpace(text[prevStart : lineStart-1])
-		body, isComment := strings.CutPrefix(line, "#")
-		if !isComment {
+		if !strings.HasPrefix(line, "#") {
 			return "", false
 		}
-		fields := strings.Fields(body)
-		if len(fields) > 0 && fields[0] == directive {
-			for _, field := range fields[1:] {
-				if target, ok := strings.CutPrefix(field, sourceKey); ok {
-					return target, true
-				}
+		if d, ok := directive.Parse(line); ok {
+			if target, ok := d.Value(sourceKey); ok {
+				return target, true
 			}
 		}
 		lineStart = prevStart
