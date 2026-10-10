@@ -43,8 +43,8 @@ func TestPmapMatchesMap(t *testing.T) {
 				}{m, maps.Clone(model)})
 			}
 		}
-		if got := contents(m); !maps.Equal(got, model) || m.size != len(model) {
-			t.Fatalf("seed %d: contents differ (size %d vs %d)", seed, m.size, len(model))
+		if got := contents(m); !maps.Equal(got, model) {
+			t.Fatalf("seed %d: contents = %v, want %v", seed, got, model)
 		}
 		for key, want := range model {
 			if got, ok := m.get(key); !ok || got != want {
@@ -102,5 +102,39 @@ func TestPmapSharesUnchangedWrites(t *testing.T) {
 	m.diff(m.set("b", 2), func(string) { calls++ })
 	if calls != 0 {
 		t.Errorf("diff of equal maps reported %d keys", calls)
+	}
+}
+
+func TestPmapFullHashCollisions(t *testing.T) {
+	t.Parallel()
+
+	const h, depth = 0x5eed, trieMaxDepth - 1
+	var n *pnode[int]
+	for i, key := range []string{"a", "b", "c"} {
+		n = insert(n, pentry[int]{key: key, value: i}, h, depth)
+	}
+	before := n
+	n = insert(n, pentry[int]{key: "b", value: 9}, h, depth)
+	got := map[string]int{}
+	n.each(func(key string, value int) { got[key] = value })
+	if want := map[string]int{"a": 0, "b": 9, "c": 2}; !maps.Equal(got, want) {
+		t.Fatalf("colliding contents = %v, want %v", got, want)
+	}
+	var changed []string
+	diffNodes(before, n, depth, func(key string) { changed = append(changed, key) })
+	if !slices.Equal(changed, []string{"b"}) {
+		t.Errorf("diff across colliding keys = %v, want [b]", changed)
+	}
+	if same := insert(n, pentry[int]{key: "a", value: 0}, h, depth); same != n {
+		t.Error("rewriting an identical colliding value copied the trie")
+	}
+	for _, key := range []string{"a", "c"} {
+		n = erase(n, h, key, depth)
+	}
+	if n == nil || len(n.children) != 0 || len(n.entries) != 1 || n.entries[0] != (pentry[int]{key: "b", value: 9}) {
+		t.Fatalf("after erasing all but one colliding key the root = %+v, want the survivor inlined", n)
+	}
+	if n = erase(n, h, "b", depth); n != nil {
+		t.Errorf("erasing the last key left %+v", n)
 	}
 }

@@ -4,8 +4,7 @@ import "math/bits"
 
 const (
 	trieBits     = 4
-	trieWidth    = 1 << trieBits
-	trieMask     = trieWidth - 1
+	trieMask     = 1<<trieBits - 1
 	trieMaxDepth = 64 / trieBits
 	fnvOffset    = 14695981039346656037
 	fnvPrime     = 1099511628211
@@ -13,18 +12,13 @@ const (
 
 type pmap[V comparable] struct {
 	root *pnode[V]
-	size int
 }
 
 type pnode[V comparable] struct {
-	bitmap   uint32
-	slots    []pslot[V]
-	overflow []pentry[V]
-}
-
-type pslot[V comparable] struct {
-	child *pnode[V]
-	entry pentry[V]
+	entryMap uint32
+	childMap uint32
+	entries  []pentry[V]
+	children []*pnode[V]
 }
 
 type pentry[V comparable] struct {
@@ -41,12 +35,12 @@ func hashKey(key string) uint64 {
 	return h
 }
 
-func slotIndex(h uint64, depth int) uint32 {
-	return uint32(h>>(uint(depth)*trieBits)) & trieMask //nolint:gosec
+func slotBit(h uint64, depth int) uint32 {
+	return 1 << (uint32(h>>(uint(depth)*trieBits)) & trieMask) //nolint:gosec
 }
 
-func (n *pnode[V]) position(bit uint32) int {
-	return bits.OnesCount32(n.bitmap & (bit - 1))
+func index(bitmap, bit uint32) int {
+	return bits.OnesCount32(bitmap & (bit - 1))
 }
 
 func (m pmap[V]) get(key string) (V, bool) {
@@ -54,151 +48,171 @@ func (m pmap[V]) get(key string) (V, bool) {
 	n := m.root
 	for depth := 0; n != nil; depth++ {
 		if depth == trieMaxDepth {
-			for _, e := range n.overflow {
-				if e.key == key {
-					return e.value, true
-				}
+			return collisionGet(n.entries, key)
+		}
+		bit := slotBit(h, depth)
+		switch {
+		case n.entryMap&bit != 0:
+			if e := n.entries[index(n.entryMap, bit)]; e.key == key {
+				return e.value, true
 			}
-			break
+			n = nil
+		case n.childMap&bit != 0:
+			n = n.children[index(n.childMap, bit)]
+		default:
+			n = nil
 		}
-		bit := uint32(1) << slotIndex(h, depth)
-		if n.bitmap&bit == 0 {
-			break
+	}
+	var zero V
+	return zero, false
+}
+
+func collisionGet[V comparable](entries []pentry[V], key string) (V, bool) {
+	for _, e := range entries {
+		if e.key == key {
+			return e.value, true
 		}
-		slot := n.slots[n.position(bit)]
-		if slot.child == nil {
-			if slot.entry.key == key {
-				return slot.entry.value, true
-			}
-			break
-		}
-		n = slot.child
 	}
 	var zero V
 	return zero, false
 }
 
 func (m pmap[V]) set(key string, value V) pmap[V] {
-	root, added := insert(m.root, pentry[V]{key: key, value: value}, hashKey(key), 0)
-	if added {
-		return pmap[V]{root: root, size: m.size + 1}
-	}
-	return pmap[V]{root: root, size: m.size}
+	return pmap[V]{root: insert(m.root, pentry[V]{key: key, value: value}, hashKey(key), 0)}
 }
 
-func insert[V comparable](n *pnode[V], e pentry[V], h uint64, depth int) (*pnode[V], bool) {
+func insert[V comparable](n *pnode[V], e pentry[V], h uint64, depth int) *pnode[V] {
 	if n == nil {
-		n = &pnode[V]{}
+		if depth == trieMaxDepth {
+			return &pnode[V]{entries: []pentry[V]{e}}
+		}
+		return &pnode[V]{entryMap: slotBit(h, depth), entries: []pentry[V]{e}}
 	}
 	if depth == trieMaxDepth {
-		for i, old := range n.overflow {
-			if old.key == e.key {
-				if old.value == e.value {
-					return n, false
-				}
-				out := &pnode[V]{overflow: append([]pentry[V](nil), n.overflow...)}
-				out.overflow[i] = e
-				return out, false
-			}
-		}
-		return &pnode[V]{overflow: append(append([]pentry[V](nil), n.overflow...), e)}, true
+		return collisionInsert(n, e)
 	}
-	bit := uint32(1) << slotIndex(h, depth)
-	pos := n.position(bit)
-	if n.bitmap&bit == 0 {
-		slots := make([]pslot[V], len(n.slots)+1)
-		copy(slots, n.slots[:pos])
-		slots[pos] = pslot[V]{entry: e}
-		copy(slots[pos+1:], n.slots[pos:])
-		return &pnode[V]{bitmap: n.bitmap | bit, slots: slots}, true
-	}
-	slot := n.slots[pos]
-	var replacement pslot[V]
-	added := false
+	bit := slotBit(h, depth)
 	switch {
-	case slot.child != nil:
-		child, grew := insert(slot.child, e, h, depth+1)
-		if child == slot.child {
-			return n, false
+	case n.entryMap&bit != 0:
+		i := index(n.entryMap, bit)
+		old := n.entries[i]
+		if old.key == e.key {
+			if old.value == e.value {
+				return n
+			}
+			entries := append([]pentry[V](nil), n.entries...)
+			entries[i] = e
+			return &pnode[V]{entryMap: n.entryMap, childMap: n.childMap, entries: entries, children: n.children}
 		}
-		replacement, added = pslot[V]{child: child}, grew
-	case slot.entry.key == e.key:
-		if slot.entry.value == e.value {
-			return n, false
+		child := insert(insert(nil, old, hashKey(old.key), depth+1), e, h, depth+1)
+		return &pnode[V]{
+			entryMap: n.entryMap &^ bit,
+			childMap: n.childMap | bit,
+			entries:  without(n.entries, i),
+			children: inserted(n.children, index(n.childMap, bit), child),
 		}
-		replacement = pslot[V]{entry: e}
-	default:
-		child, _ := insert(nil, slot.entry, hashKey(slot.entry.key), depth+1)
-		child, _ = insert(child, e, h, depth+1)
-		replacement, added = pslot[V]{child: child}, true
+	case n.childMap&bit != 0:
+		i := index(n.childMap, bit)
+		child := insert(n.children[i], e, h, depth+1)
+		if child == n.children[i] {
+			return n
+		}
+		return &pnode[V]{entryMap: n.entryMap, childMap: n.childMap, entries: n.entries, children: replaced(n.children, i, child)}
 	}
-	slots := append([]pslot[V](nil), n.slots...)
-	slots[pos] = replacement
-	return &pnode[V]{bitmap: n.bitmap, slots: slots}, added
+	return &pnode[V]{
+		entryMap: n.entryMap | bit,
+		childMap: n.childMap,
+		entries:  inserted(n.entries, index(n.entryMap, bit), e),
+		children: n.children,
+	}
+}
+
+func collisionInsert[V comparable](n *pnode[V], e pentry[V]) *pnode[V] {
+	for i, old := range n.entries {
+		if old.key != e.key {
+			continue
+		}
+		if old.value == e.value {
+			return n
+		}
+		return &pnode[V]{entries: replaced(n.entries, i, e)}
+	}
+	return &pnode[V]{entries: inserted(n.entries, len(n.entries), e)}
 }
 
 func (m pmap[V]) remove(key string) pmap[V] {
-	root, removed := erase(m.root, hashKey(key), key, 0)
-	if !removed {
-		return m
-	}
-	return pmap[V]{root: root, size: m.size - 1}
+	return pmap[V]{root: erase(m.root, hashKey(key), key, 0)}
 }
 
-func erase[V comparable](n *pnode[V], h uint64, key string, depth int) (*pnode[V], bool) {
+func erase[V comparable](n *pnode[V], h uint64, key string, depth int) *pnode[V] {
 	if n == nil {
-		return nil, false
-	}
-	if depth == trieMaxDepth {
-		for i, e := range n.overflow {
-			if e.key == key {
-				rest := append(append([]pentry[V](nil), n.overflow[:i]...), n.overflow[i+1:]...)
-				if len(rest) == 0 {
-					return nil, true
-				}
-				return &pnode[V]{overflow: rest}, true
-			}
-		}
-		return n, false
-	}
-	bit := uint32(1) << slotIndex(h, depth)
-	if n.bitmap&bit == 0 {
-		return n, false
-	}
-	pos := n.position(bit)
-	slot := n.slots[pos]
-	if slot.child == nil {
-		if slot.entry.key != key {
-			return n, false
-		}
-		return n.without(pos, bit), true
-	}
-	child, removed := erase(slot.child, h, key, depth+1)
-	if !removed {
-		return n, false
-	}
-	slots := append([]pslot[V](nil), n.slots...)
-	switch {
-	case child == nil:
-		return n.without(pos, bit), true
-	case len(child.slots) == 1 && child.slots[0].child == nil && len(child.overflow) == 0:
-		slots[pos] = pslot[V]{entry: child.slots[0].entry}
-	case len(child.overflow) == 1 && len(child.slots) == 0:
-		slots[pos] = pslot[V]{entry: child.overflow[0]}
-	default:
-		slots[pos] = pslot[V]{child: child}
-	}
-	return &pnode[V]{bitmap: n.bitmap, slots: slots}, true
-}
-
-func (n *pnode[V]) without(pos int, bit uint32) *pnode[V] {
-	if len(n.slots) == 1 {
 		return nil
 	}
-	slots := make([]pslot[V], 0, len(n.slots)-1)
-	slots = append(slots, n.slots[:pos]...)
-	slots = append(slots, n.slots[pos+1:]...)
-	return &pnode[V]{bitmap: n.bitmap &^ bit, slots: slots}
+	if depth == trieMaxDepth {
+		for i, e := range n.entries {
+			if e.key == key {
+				return nonEmpty(&pnode[V]{entries: without(n.entries, i)})
+			}
+		}
+		return n
+	}
+	bit := slotBit(h, depth)
+	switch {
+	case n.entryMap&bit != 0:
+		i := index(n.entryMap, bit)
+		if n.entries[i].key != key {
+			return n
+		}
+		return nonEmpty(&pnode[V]{entryMap: n.entryMap &^ bit, childMap: n.childMap, entries: without(n.entries, i), children: n.children})
+	case n.childMap&bit != 0:
+		i := index(n.childMap, bit)
+		child := erase(n.children[i], h, key, depth+1)
+		switch {
+		case child == n.children[i]:
+			return n
+		case child == nil:
+			return nonEmpty(&pnode[V]{entryMap: n.entryMap, childMap: n.childMap &^ bit, entries: n.entries, children: without(n.children, i)})
+		case child.childMap == 0 && len(child.entries) == 1:
+			return &pnode[V]{
+				entryMap: n.entryMap | bit,
+				childMap: n.childMap &^ bit,
+				entries:  inserted(n.entries, index(n.entryMap, bit), child.entries[0]),
+				children: without(n.children, i),
+			}
+		}
+		return &pnode[V]{entryMap: n.entryMap, childMap: n.childMap, entries: n.entries, children: replaced(n.children, i, child)}
+	}
+	return n
+}
+
+func nonEmpty[V comparable](n *pnode[V]) *pnode[V] {
+	if len(n.entries) == 0 && len(n.children) == 0 {
+		return nil
+	}
+	return n
+}
+
+func inserted[T any](s []T, i int, v T) []T {
+	out := make([]T, len(s)+1)
+	copy(out, s[:i])
+	out[i] = v
+	copy(out[i+1:], s[i:])
+	return out
+}
+
+func replaced[T any](s []T, i int, v T) []T {
+	out := append([]T(nil), s...)
+	out[i] = v
+	return out
+}
+
+func without[T any](s []T, i int) []T {
+	if len(s) == 1 {
+		return nil
+	}
+	out := make([]T, 0, len(s)-1)
+	out = append(out, s[:i]...)
+	return append(out, s[i+1:]...)
 }
 
 func (m pmap[V]) each(f func(key string, value V)) {
@@ -209,74 +223,93 @@ func (n *pnode[V]) each(f func(key string, value V)) {
 	if n == nil {
 		return
 	}
-	for _, e := range n.overflow {
+	for _, e := range n.entries {
 		f(e.key, e.value)
 	}
-	for _, s := range n.slots {
-		if s.child != nil {
-			s.child.each(f)
-			continue
-		}
-		f(s.entry.key, s.entry.value)
+	for _, c := range n.children {
+		c.each(f)
 	}
+}
+
+func (n *pnode[V]) eachKey(f func(key string)) {
+	n.each(func(key string, _ V) { f(key) })
 }
 
 func (m pmap[V]) diff(o pmap[V], f func(key string)) {
-	diffNodes(m.root, o.root, f)
+	diffNodes(m.root, o.root, 0, f)
 }
 
-func diffNodes[V comparable](a, b *pnode[V], f func(key string)) {
+func diffNodes[V comparable](a, b *pnode[V], depth int, f func(key string)) {
 	switch {
 	case a == b:
 		return
 	case a == nil:
-		b.each(func(key string, _ V) { f(key) })
+		b.eachKey(f)
 		return
 	case b == nil:
-		a.each(func(key string, _ V) { f(key) })
+		a.eachKey(f)
 		return
-	case len(a.overflow) > 0 || len(b.overflow) > 0:
-		diffEntries(a, b, f)
+	case depth == trieMaxDepth:
+		diffCollisions(a.entries, b.entries, f)
 		return
 	}
-	for union := a.bitmap | b.bitmap; union != 0; union &= union - 1 {
+	for union := a.entryMap | a.childMap | b.entryMap | b.childMap; union != 0; union &= union - 1 {
 		bit := union & -union
-		inA, inB := a.bitmap&bit != 0, b.bitmap&bit != 0
+		aEntry, aChild := a.entryMap&bit != 0, a.childMap&bit != 0
+		bEntry, bChild := b.entryMap&bit != 0, b.childMap&bit != 0
 		switch {
-		case !inA:
-			b.slotNode(bit).each(func(key string, _ V) { f(key) })
-		case !inB:
-			a.slotNode(bit).each(func(key string, _ V) { f(key) })
-		default:
-			sa, sb := a.slots[a.position(bit)], b.slots[b.position(bit)]
-			if sa.child != nil && sb.child != nil {
-				diffNodes(sa.child, sb.child, f)
-				continue
+		case aChild && bChild:
+			diffNodes(a.children[index(a.childMap, bit)], b.children[index(b.childMap, bit)], depth+1, f)
+		case aEntry && bEntry:
+			ea, eb := a.entries[index(a.entryMap, bit)], b.entries[index(b.entryMap, bit)]
+			if ea.key != eb.key {
+				f(ea.key)
+				f(eb.key)
+			} else if ea.value != eb.value {
+				f(ea.key)
 			}
-			diffEntries(a.slotNode(bit), b.slotNode(bit), f)
+		case aEntry && bChild:
+			diffEntryNode(a.entries[index(a.entryMap, bit)], b.children[index(b.childMap, bit)], f)
+		case aChild && bEntry:
+			diffEntryNode(b.entries[index(b.entryMap, bit)], a.children[index(a.childMap, bit)], f)
+		case aEntry:
+			f(a.entries[index(a.entryMap, bit)].key)
+		case aChild:
+			a.children[index(a.childMap, bit)].eachKey(f)
+		case bEntry:
+			f(b.entries[index(b.entryMap, bit)].key)
+		default:
+			b.children[index(b.childMap, bit)].eachKey(f)
 		}
 	}
 }
 
-func (n *pnode[V]) slotNode(bit uint32) *pnode[V] {
-	slot := n.slots[n.position(bit)]
-	if slot.child != nil {
-		return slot.child
-	}
-	return &pnode[V]{overflow: []pentry[V]{slot.entry}}
-}
-
-func diffEntries[V comparable](a, b *pnode[V], f func(key string)) {
-	inB := map[string]V{}
-	b.each(func(key string, value V) { inB[key] = value })
-	a.each(func(key string, value V) {
-		other, ok := inB[key]
-		if !ok || other != value {
+func diffEntryNode[V comparable](e pentry[V], n *pnode[V], f func(key string)) {
+	found := false
+	n.each(func(key string, value V) {
+		if key != e.key {
+			f(key)
+			return
+		}
+		found = true
+		if value != e.value {
 			f(key)
 		}
-		delete(inB, key)
 	})
-	for key := range inB {
-		f(key)
+	if !found {
+		f(e.key)
+	}
+}
+
+func diffCollisions[V comparable](a, b []pentry[V], f func(key string)) {
+	for _, ea := range a {
+		if vb, ok := collisionGet(b, ea.key); !ok || vb != ea.value {
+			f(ea.key)
+		}
+	}
+	for _, eb := range b {
+		if _, ok := collisionGet(a, eb.key); !ok {
+			f(eb.key)
+		}
 	}
 }
