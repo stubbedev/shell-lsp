@@ -20,10 +20,10 @@ var argumentsFamily = family{
 		2336: {severity: SeverityWarning},
 	},
 	rules: []rule{
-		{node: checkLeadingGlobArguments},
-		{node: checkBracketGlobs},
-		{node: checkReadWithoutRaw},
-		{node: checkRecursiveCopy},
+		{on: nodes(&syntax.CallExpr{}), node: checkLeadingGlobArguments},
+		{on: nodes(&syntax.Word{}), node: checkBracketGlobs},
+		{on: nodes(&syntax.CallExpr{}), node: checkReadWithoutRaw},
+		{on: nodes(&syntax.CallExpr{}), node: checkRecursiveCopy},
 	},
 }
 

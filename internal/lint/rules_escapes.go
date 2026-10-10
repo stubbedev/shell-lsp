@@ -18,8 +18,8 @@ var escapesFamily = family{
 		1012: {severity: SeverityWarning},
 	},
 	rules: []rule{
-		{node: checkUnquotedEscapes},
-		{node: checkSingleQuoteEnding},
+		{on: nodes(&syntax.Lit{}), node: checkUnquotedEscapes},
+		{on: nodes(&syntax.SglQuoted{}), node: checkSingleQuoteEnding},
 	},
 }
 

@@ -22,8 +22,8 @@ var parameterSyntaxFamily = family{
 		2301: {severity: SeverityError},
 	},
 	rules: []rule{
-		{node: checkBracedExpansion, finish: checkUnparsedBracedExpansions},
-		{node: checkUnbracedVariable},
+		{on: nodes(&syntax.ParamExp{}), node: checkBracedExpansion, finish: checkUnparsedBracedExpansions},
+		{on: nodes(&syntax.ParamExp{}), node: checkUnbracedVariable},
 	},
 }
 

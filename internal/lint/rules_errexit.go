@@ -24,9 +24,9 @@ var errexitFamily = family{
 		2312: {severity: SeverityInfo, optional: optionalMaskedReturns},
 	},
 	rules: []rule{
-		{node: checkNegationUnderErrexit},
-		{node: checkSuppressedErrexit},
-		{node: checkMaskedReturns},
+		{on: nodes(&syntax.Stmt{}), node: checkNegationUnderErrexit},
+		{on: nodes(&syntax.CallExpr{}), node: checkSuppressedErrexit},
+		{on: nodes(&syntax.ArithmCmd{}, &syntax.TestClause{}, &syntax.ProcSubst{}, &syntax.ArrayExpr{}, &syntax.DblQuoted{}, &syntax.Word{}, &syntax.Redirect{}, &syntax.BinaryCmd{}, &syntax.CallExpr{}, &syntax.DeclClause{}), node: checkMaskedReturns},
 	},
 }
 

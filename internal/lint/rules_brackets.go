@@ -20,9 +20,9 @@ var bracketsFamily = family{
 		1035: {severity: SeverityError},
 	},
 	rules: []rule{
-		{node: checkSingleBracketTest},
-		{node: checkDoubleBracketTest},
-		{node: checkGluedNegation},
+		{on: nodes(&syntax.CallExpr{}), node: checkSingleBracketTest},
+		{on: nodes(&syntax.TestClause{}), node: checkDoubleBracketTest},
+		{on: nodes(&syntax.CallExpr{}), node: checkGluedNegation},
 	},
 }
 

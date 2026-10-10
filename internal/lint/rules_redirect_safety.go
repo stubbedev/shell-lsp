@@ -16,8 +16,8 @@ var redirectSafetyFamily = family{
 		2094: {severity: SeverityInfo},
 	},
 	rules: []rule{
-		{node: checkRedirectOrder},
-		{node: checkSameFileInPipeline},
+		{on: nodes(&syntax.Stmt{}), node: checkRedirectOrder},
+		{on: nodes(&syntax.Stmt{}), node: checkSameFileInPipeline},
 	},
 }
 

@@ -13,7 +13,7 @@ var sedSubstitutionFamily = family{
 	codes: map[Code]meta{
 		2001: {severity: SeverityStyle},
 	},
-	rules: []rule{{node: checkSedSubstitution}},
+	rules: []rule{{on: nodes(&syntax.BinaryCmd{}, &syntax.Stmt{}), node: checkSedSubstitution}},
 }
 
 var parameterSubstitutionShells = dialect.SetOf(dialect.Bash, dialect.Ksh)

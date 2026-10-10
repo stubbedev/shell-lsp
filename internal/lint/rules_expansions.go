@@ -20,12 +20,12 @@ var expansionsFamily = family{
 		2323: {severity: SeverityStyle},
 	},
 	rules: []rule{
-		{node: checkLoopGlob},
-		{node: checkTranslatedString},
-		{node: checkRemovalPattern},
-		{node: checkValueAsKey},
-		{node: checkArithmeticIndex},
-		{node: checkRedundantParentheses},
+		{on: nodes(&syntax.WordIter{}), node: checkLoopGlob},
+		{on: nodes(&syntax.DblQuoted{}), node: checkTranslatedString},
+		{on: nodes(&syntax.ParamExp{}), node: checkRemovalPattern},
+		{on: nodes(&syntax.ParamExp{}), node: checkValueAsKey},
+		{on: nodes(&syntax.Assign{}), node: checkArithmeticIndex},
+		{on: nodes(&syntax.ParenArithm{}, &syntax.ArithmExp{}, &syntax.ArithmCmd{}, &syntax.CStyleLoop{}, &syntax.Assign{}), node: checkRedundantParentheses},
 	},
 }
 

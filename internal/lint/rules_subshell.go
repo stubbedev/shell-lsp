@@ -12,7 +12,7 @@ var subshellFamily = family{
 		2031: {severity: SeverityInfo},
 	},
 	rules: []rule{
-		{node: checkLostModification},
+		{on: nodes(&syntax.ParamExp{}, &syntax.Word{}), node: checkLostModification},
 	},
 }
 

@@ -29,10 +29,10 @@ var testOperandsFamily = family{
 		2255: {severity: SeverityError},
 	},
 	rules: []rule{
-		{node: checkTestOperands},
-		{node: checkStatusComparison},
-		{node: checkStrayBracket},
-		{node: checkSubshellAsTest},
+		{on: nodes(&syntax.CallExpr{}, &syntax.TestClause{}), node: checkTestOperands},
+		{on: nodes(&syntax.BinaryTest{}, &syntax.CallExpr{}, &syntax.BinaryArithm{}, &syntax.UnaryArithm{}, &syntax.ArithmCmd{}), node: checkStatusComparison},
+		{on: nodes(&syntax.CallExpr{}), node: checkStrayBracket},
+		{on: nodes(&syntax.Subshell{}), node: checkSubshellAsTest},
 	},
 }
 

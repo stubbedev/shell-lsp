@@ -28,11 +28,11 @@ var executionFamily = family{
 		{match: matchBase, names: []string{"ssh"}, check: checkRemoteHeredoc},
 	},
 	rules: []rule{
-		{node: checkExpansionAsCommand},
-		{node: checkSpacedDotSlash},
-		{node: checkFunctionViaExternal},
-		{node: checkExecNotLast},
-		{node: checkEchoSubstitution},
+		{on: nodes(&syntax.CallExpr{}), node: checkExpansionAsCommand},
+		{on: nodes(&syntax.CallExpr{}), node: checkSpacedDotSlash},
+		{on: nodes(&syntax.CallExpr{}), node: checkFunctionViaExternal},
+		{on: nodes(&syntax.File{}, &syntax.Block{}, &syntax.IfClause{}, &syntax.WhileClause{}, &syntax.ForClause{}), node: checkExecNotLast},
+		{on: nodes(&syntax.CmdSubst{}), node: checkEchoSubstitution},
 	},
 }
 

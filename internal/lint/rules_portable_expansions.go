@@ -29,7 +29,7 @@ var portableExpansionsFamily = family{
 		3059: {severity: SeverityWarning},
 		3060: {severity: SeverityWarning},
 	},
-	rules: []rule{{node: checkPortableExpansions}},
+	rules: []rule{{on: nodes(&syntax.ExtGlob{}, &syntax.DblQuoted{}, &syntax.ArithmExp{}, &syntax.UnaryArithm{}, &syntax.BinaryArithm{}, &syntax.Word{}, &syntax.ParamExp{}), node: checkPortableExpansions}},
 }
 
 var (

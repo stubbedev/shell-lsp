@@ -18,12 +18,12 @@ var misreadsFamily = family{
 		1064: {severity: SeverityError},
 	},
 	rules: []rule{
-		{node: checkSpaceAfterEquals},
-		{node: checkKeywordAsWord},
-		{node: checkKeywordDeclared},
-		{node: checkKeywordAfterTest},
-		{node: checkPositionalAboveNine},
-		{node: checkFunctionBody},
+		{on: nodes(&syntax.Assign{}), node: checkSpaceAfterEquals},
+		{on: nodes(&syntax.Lit{}), node: checkKeywordAsWord},
+		{on: nodes(&syntax.Assign{}), node: checkKeywordDeclared},
+		{on: nodes(&syntax.TestClause{}), node: checkKeywordAfterTest},
+		{on: nodes(&syntax.ParamExp{}), node: checkPositionalAboveNine},
+		{on: nodes(&syntax.FuncDecl{}), node: checkFunctionBody},
 		{finish: checkUnknownInterpreter},
 	},
 }

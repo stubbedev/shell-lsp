@@ -2,6 +2,7 @@ package lint
 
 import (
 	"fmt"
+	"reflect"
 
 	"mvdan.cc/sh/v3/syntax"
 
@@ -11,6 +12,7 @@ import (
 )
 
 type rule struct {
+	on     []reflect.Type
 	node   func(p *pass, n syntax.Node)
 	finish func(p *pass)
 }
@@ -27,6 +29,7 @@ type pass struct {
 	flow         *flowResult
 	catalog      map[Code]meta
 	rules        []rule
+	nodeChecks   nodeDispatch
 	commands     commandDispatch
 	settings     fileWide
 	findings     []Finding
@@ -48,7 +51,7 @@ func newPass(tree *parser.Tree, imports []parser.Import, opts Options) *pass {
 	firstCommand := firstCommandStart(tree)
 	return &pass{
 		tree: tree, imports: imports, sources: opts.Sources, text: tree.Text(), dialect: tree.Dialect, bats: parser.IsBats(tree.Text()),
-		firstCommand: firstCommand, directives: directives, catalog: catalog, rules: rules, commands: commandChecks,
+		firstCommand: firstCommand, directives: directives, catalog: catalog, rules: rules, nodeChecks: nodeChecks, commands: commandChecks,
 		settings: fileWideSettings(directives, firstCommand, opts.Optional),
 	}
 }
@@ -67,10 +70,8 @@ func (p *pass) run() {
 				p.stmts = append(p.stmts, span)
 			}
 		}
-		for _, r := range p.rules {
-			if r.node != nil {
-				r.node(p, n)
-			}
+		for _, check := range p.nodeChecks[reflect.TypeOf(n)] {
+			check(p, n)
 		}
 		p.commands.visit(p, n)
 		p.stack = append(p.stack, n)

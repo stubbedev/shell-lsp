@@ -22,9 +22,9 @@ var assignmentsFamily = family{
 		2192: {severity: SeverityWarning},
 	},
 	rules: []rule{
-		{node: checkPrefixAssignmentUse},
-		{node: checkSpecialAssignment},
-		{node: checkArrayLiteral},
+		{on: nodes(&syntax.ParamExp{}), node: checkPrefixAssignmentUse},
+		{on: nodes(&syntax.Assign{}), node: checkSpecialAssignment},
+		{on: nodes(&syntax.Assign{}), node: checkArrayLiteral},
 	},
 }
 

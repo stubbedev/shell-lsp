@@ -30,15 +30,15 @@ var charactersFamily = family{
 		1143: {severity: SeverityError},
 	},
 	rules: []rule{
-		{node: checkUnicodeSpaces},
+		{on: nodes(&syntax.Lit{}), node: checkUnicodeSpaces},
 		{finish: checkCarriageReturns},
-		{node: checkLiteralCharacters},
-		{node: checkSuspiciousClosingQuote},
-		{node: checkLiteralBraces},
-		{node: checkUnbracedSubscript},
-		{node: checkBackgroundAmpersand},
-		{node: checkQuotedDollar},
-		{node: checkCommentedContinuation},
+		{on: nodes(&syntax.Lit{}, &syntax.SglQuoted{}), node: checkLiteralCharacters},
+		{on: nodes(&syntax.DblQuoted{}, &syntax.SglQuoted{}, &syntax.CmdSubst{}), node: checkSuspiciousClosingQuote},
+		{on: nodes(&syntax.Word{}), node: checkLiteralBraces},
+		{on: nodes(&syntax.ParamExp{}), node: checkUnbracedSubscript},
+		{on: nodes(&syntax.Stmt{}), node: checkBackgroundAmpersand},
+		{on: nodes(&syntax.DblQuoted{}), node: checkQuotedDollar},
+		{on: nodes(&syntax.CallExpr{}), node: checkCommentedContinuation},
 	},
 }
 

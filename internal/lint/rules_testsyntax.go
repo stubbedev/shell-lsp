@@ -18,7 +18,7 @@ var testSyntaxFamily = family{
 		1140: {severity: SeverityError},
 	},
 	rules: []rule{
-		{node: checkTestCommandSyntax},
+		{on: nodes(&syntax.CallExpr{}), node: checkTestCommandSyntax},
 	},
 }
 

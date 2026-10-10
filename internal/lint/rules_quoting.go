@@ -22,8 +22,8 @@ var quotingFamily = family{
 		2248: {severity: SeverityStyle, optional: "quote-safe-variables"},
 	},
 	rules: []rule{
-		{node: checkUnquotedExpansion},
-		{node: checkUnquotedSubstitution},
+		{on: nodes(&syntax.ParamExp{}), node: checkUnquotedExpansion},
+		{on: nodes(&syntax.CmdSubst{}), node: checkUnquotedSubstitution},
 	},
 }
 

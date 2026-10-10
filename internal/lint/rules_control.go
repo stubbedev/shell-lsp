@@ -30,12 +30,12 @@ var controlFamily = family{
 		2189: {severity: SeverityError},
 	},
 	rules: []rule{
-		{node: checkStatementLists},
-		{node: checkLoopJump},
-		{node: checkUncheckedDirectoryChange},
-		{node: checkReusedLoopVariable},
-		{node: checkEmptyRedirection},
-		{node: checkStdinConsumers},
+		{on: nodes(&syntax.File{}, &syntax.Block{}, &syntax.Subshell{}, &syntax.IfClause{}, &syntax.WhileClause{}, &syntax.ForClause{}, &syntax.CaseItem{}, &syntax.CmdSubst{}, &syntax.ProcSubst{}), node: checkStatementLists},
+		{on: nodes(&syntax.CallExpr{}), node: checkLoopJump},
+		{on: nodes(&syntax.CallExpr{}), node: checkUncheckedDirectoryChange},
+		{on: nodes(&syntax.ForClause{}), node: checkReusedLoopVariable},
+		{on: nodes(&syntax.Stmt{}), node: checkEmptyRedirection},
+		{on: nodes(&syntax.WhileClause{}), node: checkStdinConsumers},
 		{finish: checkFunctionArguments},
 	},
 }

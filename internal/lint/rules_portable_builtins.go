@@ -31,7 +31,7 @@ var portableBuiltinsFamily = family{
 		3051: {severity: SeverityWarning},
 		3061: {severity: SeverityWarning},
 	},
-	rules: []rule{{node: checkPortableBuiltin}},
+	rules: []rule{{on: nodes(&syntax.CallExpr{}, &syntax.DeclClause{}, &syntax.LetClause{}), node: checkPortableBuiltin}},
 }
 
 type allowedFlags struct {

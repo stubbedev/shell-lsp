@@ -22,9 +22,9 @@ var typosFamily = family{
 		1131: {severity: SeverityError},
 	},
 	rules: []rule{
-		{node: checkElseIf},
-		{node: checkKeywordLikeCommand},
-		{node: checkDoubleEquals},
+		{on: nodes(&syntax.IfClause{}), node: checkElseIf},
+		{on: nodes(&syntax.CallExpr{}), node: checkKeywordLikeCommand},
+		{on: nodes(&syntax.Assign{}), node: checkDoubleEquals},
 	},
 }
 

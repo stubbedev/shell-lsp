@@ -14,7 +14,7 @@ var caseFamily = family{
 		2221: {severity: SeverityWarning},
 		2222: {severity: SeverityWarning},
 	},
-	rules: []rule{{node: checkCaseClause}},
+	rules: []rule{{on: nodes(&syntax.CaseClause{}), node: checkCaseClause}},
 }
 
 type globToken struct {

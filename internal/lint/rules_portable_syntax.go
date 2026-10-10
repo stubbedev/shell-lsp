@@ -20,7 +20,7 @@ var portableSyntaxFamily = family{
 		3034: {severity: SeverityWarning},
 		3035: {severity: SeverityWarning},
 	},
-	rules: []rule{{node: checkPortableSyntax}},
+	rules: []rule{{on: nodes(&syntax.ProcSubst{}, &syntax.ForClause{}, &syntax.ArithmCmd{}, &syntax.Assign{}, &syntax.BinaryCmd{}, &syntax.ArrayExpr{}, &syntax.CoprocClause{}, &syntax.FuncDecl{}, &syntax.CmdSubst{}), node: checkPortableSyntax}},
 }
 
 func checkPortableSyntax(p *pass, n syntax.Node) {

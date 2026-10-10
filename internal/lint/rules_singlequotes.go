@@ -15,7 +15,7 @@ var singleQuotesFamily = family{
 	codes: map[Code]meta{
 		2016: {severity: SeverityInfo},
 	},
-	rules: []rule{{node: checkSingleQuotedExpansion}},
+	rules: []rule{{on: nodes(&syntax.SglQuoted{}), node: checkSingleQuotedExpansion}},
 }
 
 var (

@@ -17,7 +17,7 @@ var constructsFamily = family{
 		2118: {severity: SeverityError},
 		2127: {severity: SeverityError},
 	},
-	rules: []rule{{node: checkShellConstructs}},
+	rules: []rule{{on: nodes(&syntax.FuncDecl{}, &syntax.Stmt{}, &syntax.CaseClause{}, &syntax.CmdSubst{}), node: checkShellConstructs}},
 }
 
 func checkShellConstructs(p *pass, n syntax.Node) {

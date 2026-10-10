@@ -14,7 +14,7 @@ var taintFamily = family{
 		2090: {severity: SeverityWarning},
 	},
 	rules: []rule{
-		{node: trackQuoteTaint},
+		{on: nodes(&syntax.Assign{}, &syntax.WordIter{}, &syntax.ParamExp{}), node: trackQuoteTaint},
 	},
 }
 

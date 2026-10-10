@@ -15,7 +15,7 @@ var arithmeticFamily = family{
 		2079: {severity: SeverityError},
 	},
 	rules: []rule{
-		{node: checkDivisionBeforeMultiplication},
+		{on: nodes(&syntax.BinaryArithm{}), node: checkDivisionBeforeMultiplication},
 		{finish: checkDecimalArithmetic},
 	},
 }

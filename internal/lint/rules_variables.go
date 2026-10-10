@@ -18,7 +18,7 @@ var variablesFamily = family{
 		2153: {severity: SeverityInfo},
 		2154: {severity: SeverityWarning},
 	},
-	rules: []rule{{node: collectVariables, finish: reportVariables}},
+	rules: []rule{{on: nodes(&syntax.ParamExp{}, &syntax.Word{}, &syntax.Assign{}, &syntax.ArrayElem{}, &syntax.ForClause{}, &syntax.LetClause{}, &syntax.DeclClause{}, &syntax.CallExpr{}, &syntax.TestClause{}, &syntax.TestDecl{}), node: collectVariables, finish: reportVariables}},
 }
 
 var presetVariables = setOf(

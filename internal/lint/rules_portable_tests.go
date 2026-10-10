@@ -23,7 +23,7 @@ var portableTestsFamily = family{
 		3066: {severity: SeverityWarning},
 		3067: {severity: SeverityWarning},
 	},
-	rules: []rule{{node: checkPortableTest}},
+	rules: []rule{{on: nodes(&syntax.TestClause{}, &syntax.CallExpr{}), node: checkPortableTest}},
 }
 
 var (

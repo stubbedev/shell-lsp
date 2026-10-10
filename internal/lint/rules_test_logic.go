@@ -26,9 +26,9 @@ var testLogicFamily = family{
 		{match: matchBase, names: []string{"test"}, check: checkTestRedirect},
 	},
 	rules: []rule{
-		{node: checkTestLogic},
-		{node: checkChainedTests},
-		{node: checkArithmeticContradiction},
+		{on: nodes(&syntax.BinaryCmd{}, &syntax.CallExpr{}, &syntax.TestClause{}), node: checkTestLogic},
+		{on: nodes(&syntax.BinaryCmd{}), node: checkChainedTests},
+		{on: nodes(&syntax.BinaryArithm{}), node: checkArithmeticContradiction},
 		{finish: checkRejectedUnknownOperators},
 	},
 }

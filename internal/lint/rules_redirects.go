@@ -25,12 +25,12 @@ var redirectsFamily = family{
 		2328: {severity: SeverityError},
 	},
 	rules: []rule{
-		{node: checkRedirectTargets},
-		{node: checkPipedRedirections},
-		{node: checkCompetingRedirections},
-		{node: checkRedirectedInput},
-		{node: checkDiscardedSubstitution},
-		{node: checkRedirectSideEffects},
+		{on: nodes(&syntax.Redirect{}), node: checkRedirectTargets},
+		{on: nodes(&syntax.BinaryCmd{}), node: checkPipedRedirections},
+		{on: nodes(&syntax.Stmt{}), node: checkCompetingRedirections},
+		{on: nodes(&syntax.Stmt{}), node: checkRedirectedInput},
+		{on: nodes(&syntax.CmdSubst{}), node: checkDiscardedSubstitution},
+		{on: nodes(&syntax.Stmt{}), node: checkRedirectSideEffects},
 	},
 }
 

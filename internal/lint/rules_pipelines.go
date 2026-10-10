@@ -23,7 +23,7 @@ var pipelinesFamily = family{
 		2038: {severity: SeverityWarning},
 		2126: {severity: SeverityStyle},
 	},
-	rules: []rule{{node: checkPipeline}, {node: checkAndOrFallback}},
+	rules: []rule{{on: nodes(&syntax.Stmt{}), node: checkPipeline}, {on: nodes(&syntax.BinaryCmd{}), node: checkAndOrFallback}},
 }
 
 type stage struct {

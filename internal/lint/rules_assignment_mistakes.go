@@ -19,9 +19,9 @@ var assignmentMistakesFamily = family{
 		2209: {severity: SeverityWarning},
 	},
 	rules: []rule{
-		{node: checkAssignmentCommand},
-		{node: checkAssignedValue},
-		{node: checkMixedArrayArgument},
+		{on: nodes(&syntax.CallExpr{}), node: checkAssignmentCommand},
+		{on: nodes(&syntax.Assign{}), node: checkAssignedValue},
+		{on: nodes(&syntax.Word{}), node: checkMixedArrayArgument},
 	},
 }
 

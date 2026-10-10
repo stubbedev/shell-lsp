@@ -17,8 +17,8 @@ var keywordFamily = family{
 		2219: {severity: SeverityStyle},
 	},
 	rules: []rule{
-		{node: checkTimeClause},
-		{node: checkLet},
+		{on: nodes(&syntax.TimeClause{}), node: checkTimeClause},
+		{on: nodes(&syntax.LetClause{}), node: checkLet},
 	},
 }
 

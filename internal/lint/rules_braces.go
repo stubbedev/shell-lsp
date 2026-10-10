@@ -16,7 +16,7 @@ var bracesFamily = family{
 		2175: {severity: SeverityStyle},
 		3009: {severity: SeverityWarning},
 	},
-	rules: []rule{{node: checkBraceExpansions}},
+	rules: []rule{{on: nodes(&syntax.Word{}), node: checkBraceExpansions}},
 }
 
 const (

@@ -17,10 +17,10 @@ var wordsFamily = family{
 		2254: {severity: SeverityWarning},
 	},
 	rules: []rule{
-		{node: checkWordQuoting},
-		{node: checkPromptEscapes},
-		{node: checkArrayCommas},
-		{node: checkCasePatterns},
+		{on: nodes(&syntax.Word{}), node: checkWordQuoting},
+		{on: nodes(&syntax.Assign{}), node: checkPromptEscapes},
+		{on: nodes(&syntax.ArrayExpr{}), node: checkArrayCommas},
+		{on: nodes(&syntax.CaseItem{}), node: checkCasePatterns},
 	},
 }
 

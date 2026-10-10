@@ -40,8 +40,8 @@ var comparisonsFamily = family{
 		2309: {severity: SeverityWarning},
 	},
 	rules: []rule{
-		{node: checkComparisons},
-		{node: checkSplitBracket},
+		{on: nodes(&syntax.CallExpr{}, &syntax.TestClause{}), node: checkComparisons},
+		{on: nodes(&syntax.BinaryCmd{}), node: checkSplitBracket},
 		{finish: checkRejectedTestOperators},
 	},
 }

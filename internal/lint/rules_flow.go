@@ -19,11 +19,11 @@ var flowFamily = family{
 		2329: {severity: SeverityInfo},
 	},
 	rules: []rule{
-		{node: checkUnreachable},
-		{node: checkUninvokedFunction},
-		{node: checkCallBeforeDefinition},
-		{node: checkStatusSource},
-		{node: checkNumericAppend},
+		{on: nodes(&syntax.Stmt{}), node: checkUnreachable},
+		{on: nodes(&syntax.FuncDecl{}), node: checkUninvokedFunction},
+		{on: nodes(&syntax.CallExpr{}), node: checkCallBeforeDefinition},
+		{on: nodes(&syntax.ParamExp{}), node: checkStatusSource},
+		{on: nodes(&syntax.Assign{}), node: checkNumericAppend},
 	},
 }
 

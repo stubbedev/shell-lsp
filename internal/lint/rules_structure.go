@@ -17,8 +17,8 @@ var structureFamily = family{
 		2264: {severity: SeverityError},
 	},
 	rules: []rule{
-		{node: checkDefaultCase},
-		{node: checkSelfRecursion},
+		{on: nodes(&syntax.CaseClause{}), node: checkDefaultCase},
+		{on: nodes(&syntax.FuncDecl{}), node: checkSelfRecursion},
 		{finish: checkAliasesInParsingUnit},
 	},
 }

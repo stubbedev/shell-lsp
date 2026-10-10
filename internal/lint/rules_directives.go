@@ -25,7 +25,7 @@ var directivesFamily = family{
 		1146: {severity: SeverityError},
 	},
 	rules: []rule{
-		{node: placeDirectivesInGaps},
+		{on: nodes(&syntax.CaseClause{}, &syntax.BinaryCmd{}), node: placeDirectivesInGaps},
 		{finish: checkDirectives},
 	},
 }

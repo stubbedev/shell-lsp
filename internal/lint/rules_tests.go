@@ -36,12 +36,12 @@ var testsFamily = family{
 		2338: {severity: SeverityStyle, optional: "require-double-equals"},
 	},
 	rules: []rule{
-		{node: checkTestExpressions},
-		{node: checkNegatedTestCommand},
-		{node: checkBackgroundedTest},
-		{node: checkPipedTest},
-		{node: checkSubshellTest},
-		{node: checkBatsNegation},
+		{on: nodes(&syntax.CallExpr{}, &syntax.TestClause{}), node: checkTestExpressions},
+		{on: nodes(&syntax.Stmt{}), node: checkNegatedTestCommand},
+		{on: nodes(&syntax.Stmt{}), node: checkBackgroundedTest},
+		{on: nodes(&syntax.BinaryCmd{}), node: checkPipedTest},
+		{on: nodes(&syntax.Subshell{}), node: checkSubshellTest},
+		{on: nodes(&syntax.TestDecl{}), node: checkBatsNegation},
 	},
 }
 

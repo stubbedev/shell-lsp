@@ -22,7 +22,7 @@ var loopsFamily = family{
 		2066: {severity: SeverityError},
 		2258: {severity: SeverityWarning},
 	},
-	rules: []rule{{node: checkForLoop}},
+	rules: []rule{{on: nodes(&syntax.ForClause{}), node: checkForLoop}},
 }
 
 func checkForLoop(p *pass, n syntax.Node) {

@@ -18,7 +18,7 @@ var portableRedirectionsFamily = family{
 		3025: {severity: SeverityWarning},
 		3031: {severity: SeverityWarning},
 	},
-	rules: []rule{{node: checkPortableRedirection}},
+	rules: []rule{{on: nodes(&syntax.Redirect{}), node: checkPortableRedirection}},
 }
 
 var networkDevices = []string{"/dev/tcp/", "/dev/udp/"}

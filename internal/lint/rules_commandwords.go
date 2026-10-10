@@ -37,8 +37,8 @@ var commandWordFamily = family{
 		2289: {severity: SeverityError},
 	},
 	rules: []rule{
-		{node: checkCommandWords},
-		{node: checkSelfAssignment},
+		{on: nodes(&syntax.CallExpr{}), node: checkCommandWords},
+		{on: nodes(&syntax.CallExpr{}), node: checkSelfAssignment},
 	},
 }
 

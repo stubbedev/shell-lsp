@@ -3,6 +3,9 @@ package lint
 import (
 	"fmt"
 	"maps"
+	"reflect"
+
+	"mvdan.cc/sh/v3/syntax"
 )
 
 type family struct {
@@ -74,11 +77,22 @@ var families = []family{
 	testSyntaxFamily,
 }
 
-var catalog, rules, commandChecks = assemble(families)
+type nodeDispatch map[reflect.Type][]func(p *pass, n syntax.Node)
 
-func assemble(fs []family) (map[Code]meta, []rule, commandDispatch) {
+func nodes(prototypes ...syntax.Node) []reflect.Type {
+	out := make([]reflect.Type, len(prototypes))
+	for i, prototype := range prototypes {
+		out[i] = reflect.TypeOf(prototype)
+	}
+	return out
+}
+
+var catalog, rules, nodeChecks, commandChecks = assemble(families)
+
+func assemble(fs []family) (map[Code]meta, []rule, nodeDispatch, commandDispatch) {
 	codes := map[Code]meta{}
 	var all []rule
+	dispatch := nodeDispatch{}
 	var commands []commandRule
 	for _, f := range fs {
 		for code := range f.codes {
@@ -90,5 +104,16 @@ func assemble(fs []family) (map[Code]meta, []rule, commandDispatch) {
 		all = append(all, f.rules...)
 		commands = append(commands, f.commands...)
 	}
-	return codes, all, newCommandDispatch(commands)
+	for _, r := range all {
+		if r.node == nil {
+			continue
+		}
+		if len(r.on) == 0 {
+			panic("lint: a node rule must declare the node types it handles")
+		}
+		for _, t := range r.on {
+			dispatch[t] = append(dispatch[t], r.node)
+		}
+	}
+	return codes, all, dispatch, newCommandDispatch(commands)
 }

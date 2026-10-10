@@ -15,9 +15,9 @@ var arithmeticStyleFamily = family{
 		2080: {severity: SeverityError},
 	},
 	rules: []rule{
-		{node: checkArithmeticDollar},
-		{node: checkBracketArithmetic},
-		{node: checkOctalLiteral},
+		{on: nodes(&syntax.ParamExp{}), node: checkArithmeticDollar},
+		{on: nodes(&syntax.ArithmExp{}), node: checkBracketArithmetic},
+		{on: nodes(&syntax.Word{}), node: checkOctalLiteral},
 	},
 }
 
