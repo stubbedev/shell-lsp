@@ -1,0 +1,24 @@
+dialect zsh
+error kind=0 15:26-15:29 "arg": statements must be separated by &, ; or a newline
+scope 0 parent=0 1:1-16:1
+scope 1 parent=0 11:1-14:2
+function 11:10-11:22 "prompt_setup" body=1 within=0 doc=""
+definition 3:12-3:16 "opts" kind=2 attrs=000010 local=false within=0
+definition 4:1-4:5 "opts" kind=0 attrs=000001 local=false within=0
+definition 6:5-6:6 "f" kind=3 attrs=000000 local=false within=0
+definition 12:11-12:16 "parts" kind=2 attrs=000001 local=true within=1
+definition 13:2-13:8 "PROMPT" kind=0 attrs=000000 local=false within=1
+reference 7:19-7:20 "f" within=0
+reference 12:27-12:30 "PWD" within=1
+reference 13:16-13:21 "parts" within=1
+command 2:1-2:9 "autoload" args=2 within=0
+command 2:26-2:34 "compinit" args=0 within=0
+command 3:1-3:8 "typeset" args=0 within=0
+command 5:1-5:7 "setopt" args=1 within=0
+command 7:2-7:7 "print" args=3 within=0
+command 9:1-9:5 "diff" args=2 within=0
+command 9:8-9:12 "sort" args=1 within=0
+command 9:18-9:22 "sort" args=1 within=0
+command 10:1-10:7 "repeat" args=3 within=0
+command 12:2-12:7 "local" args=0 within=1
+comment 1:1-1:19 "#!/usr/bin/env zsh"

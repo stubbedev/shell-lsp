@@ -1,0 +1,17 @@
+dialect ksh
+scope 0 parent=0 1:1-12:1
+scope 1 parent=0 2:1-10:2
+function 2:10-2:14 "main" body=1 within=0 doc=""
+definition 3:13-3:14 "n" kind=2 attrs=010000 local=true within=1
+definition 4:13-4:16 "map" kind=2 attrs=000010 local=true within=1
+definition 5:2-5:5 "map" kind=0 attrs=000000 local=false within=1
+definition 8:6-8:7 "n" kind=4 attrs=000000 local=false within=1
+reference 6:11-6:12 "n" within=1
+reference 7:18-7:21 "map" within=1
+reference 7:29-7:30 "n" within=1
+reference 8:6-8:7 "n" within=1
+command 3:2-3:9 "typeset" args=0 within=1
+command 4:2-4:9 "typeset" args=0 within=1
+command 7:3-7:8 "print" args=3 within=1
+command 11:1-11:5 "main" args=1 within=0
+comment 1:1-1:11 "#!/bin/ksh"

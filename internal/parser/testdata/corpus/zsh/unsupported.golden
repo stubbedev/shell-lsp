@@ -1,0 +1,5 @@
+dialect zsh
+error kind=0 1:1-1:4 "for": `for foo` must be followed by `in`, `do`, `;`, or a newline
+error kind=0 2:16-2:17 "{": statements must be separated by &, ; or a newline
+scope 0 parent=0 1:1-4:1
+command 3:1-3:5 "echo" args=1 within=0

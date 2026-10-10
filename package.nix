@@ -9,9 +9,7 @@ buildGo127Module {
 
   src = lib.cleanSource ./.;
 
-  # Empty while the module has no dependencies. Once go.mod grows one, run
-  # `nix build` and put the reported got: hash here.
-  vendorHash = null;
+  vendorHash = "sha256-sULOJKCnZ9nS/EVH8Q4MhH7U9zdrcruxCKI6HqP/1a4=";
 
   env.CGO_ENABLED = 0;
 

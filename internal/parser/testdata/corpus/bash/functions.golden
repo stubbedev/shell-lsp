@@ -1,0 +1,51 @@
+dialect bash
+scope 0 parent=0 1:1-33:1
+scope 1 parent=0 6:1-13:2
+scope 2 parent=0 15:1-17:2
+function 6:1-6:6 "greet" body=1 within=0 doc="Greets a user.\nUsage: greet NAME"
+function 15:10-15:17 "cleanup" body=2 within=0 doc=""
+definition 7:8-7:12 "name" kind=2 attrs=000000 local=true within=1
+definition 8:11-8:16 "parts" kind=2 attrs=000001 local=true within=1
+definition 9:13-9:17 "seen" kind=2 attrs=000010 local=true within=1
+definition 10:13-10:20 "counter" kind=2 attrs=000000 local=false within=1
+definition 12:5-12:12 "counter" kind=4 attrs=000000 local=false within=1
+definition 19:1-19:4 "tmp" kind=0 attrs=000000 local=false within=0
+definition 20:8-20:12 "PATH" kind=2 attrs=000100 local=false within=0
+definition 21:1-21:7 "LC_ALL" kind=1 attrs=000000 local=false within=0
+definition 22:5-22:6 "f" kind=3 attrs=000000 local=false within=0
+reference 11:25-11:29 "name" within=1
+reference 11:35-11:40 "parts" within=1
+reference 12:5-12:12 "counter" within=1
+reference 16:10-16:13 "tmp" within=2
+reference 20:15-20:19 "HOME" within=0
+reference 20:25-20:29 "PATH" within=0
+reference 21:18-21:21 "tmp" within=0
+reference 21:26-21:29 "tmp" within=0
+reference 23:10-23:11 "f" within=0
+reference 26:10-26:13 "tmp" within=0
+reference 32:5-32:9 "HOME" within=0
+command 2:1-2:4 "set" args=2 within=0
+command 7:2-7:7 "local" args=0 within=1
+command 8:2-8:7 "local" args=0 within=1
+command 9:2-9:9 "declare" args=0 within=1
+command 10:2-10:9 "declare" args=0 within=1
+command 11:2-11:8 "printf" args=3 within=1
+command 16:2-16:4 "rm" args=2 within=2
+command 19:7-19:13 "mktemp" args=0 within=0
+command 20:1-20:7 "export" args=0 within=0
+command 21:10-21:14 "sort" args=0 within=0
+command 23:2-23:7 "greet" args=1 within=0
+command 25:1-25:4 "cat" args=0 within=0
+command 28:1-28:4 "cat" args=0 within=0
+command 31:1-31:7 "source" args=1 within=0
+command 32:1-32:2 "." args=1 within=0
+redirect 16:16-16:17 ">" target=16:17-16:26 "/dev/null"
+redirect 21:15-21:16 "<" target=21:16-21:22 "\"$tmp\""
+redirect 21:23-21:24 ">" target=21:24-21:37 "\"$tmp.sorted\""
+redirect 25:5-25:8 "<<-" target=25:8-25:11 "EOF"
+redirect 28:5-28:7 "<<" target=28:7-28:12 "'RAW'"
+heredoc "EOF" quoted=false striptabs=true body=26:1-27:1 "\ttmp is $tmp\n"
+heredoc "RAW" quoted=true striptabs=false body=29:1-30:1 "$not_expanded\n"
+comment 1:1-1:20 "#!/usr/bin/env bash"
+comment 4:1-4:17 "# Greets a user."
+comment 5:1-5:20 "# Usage: greet NAME"

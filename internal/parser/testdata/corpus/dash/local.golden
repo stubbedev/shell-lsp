@@ -1,0 +1,12 @@
+dialect dash
+scope 0 parent=0 1:1-7:1
+scope 1 parent=0 2:1-5:2
+function 2:1-2:2 "f" body=1 within=0 doc=""
+definition 3:8-3:9 "a" kind=2 attrs=000000 local=true within=1
+definition 3:12-3:13 "b" kind=2 attrs=000000 local=true within=1
+reference 4:9-4:10 "a" within=1
+reference 4:11-4:12 "b" within=1
+command 3:2-3:7 "local" args=2 within=1
+command 4:2-4:6 "echo" args=1 within=1
+command 6:1-6:2 "f" args=0 within=0
+comment 1:1-1:16 "#!/usr/bin/dash"

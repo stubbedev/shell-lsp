@@ -1,0 +1,20 @@
+dialect sh
+scope 0 parent=0 1:1-16:1
+scope 1 parent=0 3:1-5:2
+function 3:1-3:4 "log" body=1 within=0 doc=""
+definition 6:10-6:17 "VERSION" kind=2 attrs=001000 local=false within=0
+definition 7:8-7:12 "LANG" kind=2 attrs=000100 local=false within=0
+definition 7:15-7:21 "prefix" kind=2 attrs=000100 local=false within=0
+definition 8:1-8:6 "count" kind=0 attrs=000000 local=false within=0
+definition 10:2-10:7 "count" kind=0 attrs=000000 local=false within=0
+reference 9:11-9:16 "count" within=0
+reference 10:11-10:16 "count" within=0
+command 2:1-2:4 "set" args=1 within=0
+command 4:2-4:8 "printf" args=2 within=1
+command 6:1-6:9 "readonly" args=1 within=0
+command 7:1-7:7 "export" args=2 within=0
+command 9:7-9:8 "[" args=4 within=0
+command 13:13-13:16 "log" args=1 within=0
+command 14:5-14:8 "log" args=1 within=0
+redirect 4:21-4:23 ">&" target=4:23-4:24 "2"
+comment 1:1-1:10 "#!/bin/sh"
