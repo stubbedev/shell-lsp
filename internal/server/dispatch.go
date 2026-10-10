@@ -69,6 +69,7 @@ type Server struct {
 	progress sync.Map
 	notices  sync.Map
 	sem      chan struct{}
+	exiting  chan struct{}
 	wg       sync.WaitGroup
 }
 
@@ -86,6 +87,7 @@ func New(conn *jsonrpc.Conn, version string) *Server {
 		commandDocs: commandDocs{pages: pages},
 		environment: shellEnvironment{pages: pages, executables: &executableCache{}},
 		sem:         make(chan struct{}, maxConcurrency),
+		exiting:     make(chan struct{}),
 	}
 	s.workspace = newWorkspace(s)
 	s.registerHandlers()
@@ -182,7 +184,7 @@ func (s *Server) Run(ctx context.Context) error {
 		case msg.IsNotification():
 			s.traceIncoming("notification", msg.Method, nil, msg.Params)
 			if msg.Method == exitMethod {
-				cancel()
+				close(s.exiting)
 				s.wg.Wait()
 				if s.isShutdown() {
 					return nil
@@ -363,6 +365,8 @@ func (s *Server) call(ctx context.Context, method string, params, result any) er
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
+	case <-s.exiting:
+		return fmt.Errorf("%s: the client sent exit before answering", method)
 	}
 }
 
