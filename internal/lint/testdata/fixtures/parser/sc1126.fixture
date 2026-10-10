@@ -22,7 +22,6 @@ ls |
 >>> SC1072 2:30
 >>> SC1073 2:3
 >>> SC1126 2:3
->>+ SC2010 1:1 -- shellcheck aborts at a comment between pipeline stages, but the script is valid and does grep ls output; the directive covers only the grep stage
 
 ### directive at the start of an and-or operand
 true &&

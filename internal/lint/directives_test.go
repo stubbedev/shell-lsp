@@ -26,6 +26,10 @@ func TestDirectivePlacement(t *testing.T) {
 		{"after a case terminator", "#!/bin/sh\ncase $1 in\n  a) echo $2 ;; # shellcheck disable=SC2086\n  b) echo $3 ;;\nesac\n", []string{"SC1124 3:17", "SC2086 3:11", "SC2086 4:11"}},
 		{"empty value at the end of the file", "#!/bin/sh\n# shellcheck disable=", nil},
 		{"inside a case branch body", "#!/bin/sh\ncase $1 in\n  a)\n    # shellcheck disable=SC2086\n    echo $2 ;;\nesac\n", nil},
+		{"between pipeline stages covers the whole list", "#!/bin/sh\n:\ncat $1 |\n  # shellcheck disable=SC2086\n  grep $2 && echo $3\necho $4\n", []string{"SC1126 4:3", "SC2086 6:6"}},
+		{"between and-or operands covers the whole list", "#!/bin/sh\n:\ntest -n $1 &&\n  # shellcheck disable=SC2086\n  grep -c x $2 | sort\necho $3\n", []string{"SC1126 4:3", "SC2086 6:6"}},
+		{"between pipeline stages stops at the enclosing block", "#!/bin/sh\nif true; then\n  cat $1 |\n    # shellcheck disable=SC2086\n    grep $2\n  echo $3\nfi\n", []string{"SC1126 4:5", "SC2086 6:8"}},
+		{"before a group covers the here-document bodies of its commands", "#!/bin/bash\n:\n# shellcheck disable=SC2154\n{ cat <<A; cat <<B; }\n$x\nA\n$y\nB\necho \"$z\"\n", []string{"SC2154 9:7"}},
 	} {
 		tree := parser.Parse(tc.script, dialect.Posix)
 		var got []string

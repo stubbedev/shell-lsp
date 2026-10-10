@@ -405,30 +405,33 @@ func scanGlob(w *syntax.Word, wildcards bool) bool {
 }
 
 func pipelineStages(stmt *syntax.Stmt, into []*syntax.Stmt) []*syntax.Stmt {
-	if bin, ok := stmt.Cmd.(*syntax.BinaryCmd); ok && (bin.Op == syntax.Pipe || bin.Op == syntax.PipeAll) {
+	if bin, ok := stmt.Cmd.(*syntax.BinaryCmd); ok && pipes(bin.Op) {
 		return pipelineStages(bin.Y, pipelineStages(bin.X, into))
 	}
 	return append(into, stmt)
 }
+
+func pipes(op syntax.BinCmdOperator) bool { return op == syntax.Pipe || op == syntax.PipeAll }
 
 func (p *pass) enclosingPipeline() ([]*syntax.Stmt, int) {
 	stmt, ok := p.parent().(*syntax.Stmt)
 	if !ok {
 		return nil, -1
 	}
-	top := stmt
-	for depth := 1; ; depth++ {
+	stages := pipelineStages(p.outermostJoined(stmt, pipes), nil)
+	return stages, slices.Index(stages, stmt)
+}
+
+func (p *pass) outermostJoined(stmt *syntax.Stmt, joins func(syntax.BinCmdOperator) bool) *syntax.Stmt {
+	for depth := 1; ; depth += 2 {
 		bin, ok := p.ancestor(depth).(*syntax.BinaryCmd)
-		if !ok || (bin.Op != syntax.Pipe && bin.Op != syntax.PipeAll) {
-			break
+		if !ok || !joins(bin.Op) {
+			return stmt
 		}
 		next, ok := p.ancestor(depth + 1).(*syntax.Stmt)
 		if !ok {
-			break
+			return stmt
 		}
-		top = next
-		depth++
+		stmt = next
 	}
-	stages := pipelineStages(top, nil)
-	return stages, slices.Index(stages, stmt)
 }

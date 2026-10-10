@@ -184,3 +184,33 @@ printf '%s at $HOME\n' $1
 
 du -sh $1
 >>> none
+
+### command-scoped directive covers the command's here-document body
+#!/bin/bash
+:
+# shellcheck disable=SC2154
+cat <<EOF
+Hello $visitor
+EOF
+echo "$guest"
+>>> SC2154 7:7
+
+### command-scoped directive covers here-document bodies of every pipeline stage
+#!/bin/bash
+:
+# shellcheck disable=SC2154
+cat <<EOF | grep -v '^#' | sort
+$header
+EOF
+echo "$footer"
+>>> SC2154 7:7
+
+### a directive does not reach back into the previous command's here-document body
+#!/bin/bash
+:
+cat <<EOF
+$banner
+EOF
+# shellcheck disable=SC2154
+echo "$motd"
+>>> SC2154 4:1

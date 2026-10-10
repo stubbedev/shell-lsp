@@ -26,9 +26,10 @@ const (
 func (pl placement) inert() bool { return pl == placedBeforeCloser || pl == placedBeforeCaseBranch }
 
 type directiveComment struct {
-	span      parser.Span
-	parsed    directive.Directive
-	placement placement
+	span        parser.Span
+	parsed      directive.Directive
+	placement   placement
+	interrupted parser.Span
 }
 
 func (d directiveComment) at(offset int) int { return d.span.Start + offset }
@@ -157,34 +158,58 @@ type suppression struct {
 	ranges []codeRange
 }
 
-func (s suppression) matches(f Finding) bool {
-	if f.Span.Start < s.span.Start || f.Span.Start > s.span.End {
+func (s suppression) matches(code Code, at int) bool {
+	if at < s.span.Start || at > s.span.End {
 		return false
 	}
 	if s.all {
 		return true
 	}
 	for _, r := range s.ranges {
-		if r.from <= f.Code && f.Code < r.to {
+		if r.from <= code && code < r.to {
 			return true
 		}
 	}
 	return false
 }
 
-type suppressions []suppression
+type suppressions struct {
+	list     []suppression
+	heredocs []parser.Heredoc
+}
 
 func (s suppressions) covers(f Finding) bool {
-	for _, one := range s {
-		if one.matches(f) {
+	at := s.anchor(f.Span.Start)
+	for _, one := range s.list {
+		if one.matches(f.Code, at) {
 			return true
 		}
 	}
 	return false
+}
+
+func (s suppressions) anchor(offset int) int {
+	i := sort.Search(len(s.heredocs), func(i int) bool { return s.heredocs[i].Body.End > offset })
+	if i < len(s.heredocs) && s.heredocs[i].Body.Start <= offset {
+		return s.heredocs[i].Span.Start
+	}
+	return offset
+}
+
+func outermostHeredocs(all []parser.Heredoc) []parser.Heredoc {
+	sorted := slices.SortedFunc(slices.Values(all), func(a, b parser.Heredoc) int { return cmp.Compare(a.Body.Start, b.Body.Start) })
+	out := sorted[:0]
+	for _, h := range sorted {
+		if h.Body.Start == h.Body.End || len(out) > 0 && h.Body.Start < out[len(out)-1].Body.End {
+			continue
+		}
+		out = append(out, h)
+	}
+	return out
 }
 
 func (p *pass) suppressions() suppressions {
-	var out suppressions
+	var list []suppression
 	for _, d := range p.directives {
 		s := suppression{}
 		for _, value := range d.parsed.Values(directive.Disable) {
@@ -203,9 +228,12 @@ func (p *pass) suppressions() suppressions {
 			continue
 		}
 		s.span = scope
-		out = append(out, s)
+		list = append(list, s)
 	}
-	return out
+	if len(list) == 0 {
+		return suppressions{}
+	}
+	return suppressions{list: list, heredocs: outermostHeredocs(p.tree.Heredocs)}
 }
 
 func parseDisabled(item string) (bool, codeRange, bool) {
@@ -286,6 +314,8 @@ func (p *pass) directiveScope(d directiveComment) (parser.Span, bool) {
 		return parser.Span{Start: 0, End: len(p.text)}, true
 	case d.placement == placedAfterCommand:
 		return parser.Span{Start: logicalLineStart(p.tree, d.span.Start), End: d.span.Start}, true
+	case d.placement == placedInContinuation:
+		return d.interrupted, true
 	}
 	i := sort.Search(len(p.stmts), func(i int) bool { return p.stmts[i].Start >= d.span.End })
 	if i == len(p.stmts) {

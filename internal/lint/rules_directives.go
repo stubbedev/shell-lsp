@@ -41,28 +41,50 @@ func placeDirectivesInGaps(p *pass, n syntax.Node) {
 			start = parser.Offset(n.In) + len("{")
 		}
 		for _, item := range n.Items {
-			p.placeDirectivesBetween(start, parser.Offset(item.Pos()), placedBeforeCaseBranch)
+			p.placeBeforeCaseBranch(start, parser.Offset(item.Pos()))
 			if !item.OpPos.IsValid() {
 				return
 			}
 			start = parser.Offset(item.End())
 		}
-		p.placeDirectivesBetween(start, parser.Offset(n.Esac), placedBeforeCaseBranch)
+		p.placeBeforeCaseBranch(start, parser.Offset(n.Esac))
 	case *syntax.BinaryCmd:
-		p.placeDirectivesBetween(parser.Offset(n.OpPos), parser.Offset(n.Y.Pos()), placedInContinuation)
+		if stmt, ok := p.parent().(*syntax.Stmt); ok {
+			p.placeInContinuation(stmt, parser.Offset(n.OpPos), parser.Offset(n.Y.Pos()))
+		}
 	}
 }
 
-func (p *pass) placeDirectivesBetween(start, end int, pl placement) {
-	i := sort.Search(len(p.directives), func(i int) bool { return p.directives[i].span.Start >= start })
-	for ; i < len(p.directives) && p.directives[i].span.Start < end; i++ {
-		d := &p.directives[i]
-		if pl == placedInContinuation && d.placement == placedAfterCommand {
-			continue
-		}
-		d.placement = pl
+func (p *pass) directivesBetween(start, end int) []directiveComment {
+	from := sort.Search(len(p.directives), func(i int) bool { return p.directives[i].span.Start >= start })
+	to := sort.Search(len(p.directives), func(i int) bool { return p.directives[i].span.Start >= end })
+	return p.directives[from:max(from, to)]
+}
+
+func (p *pass) placeBeforeCaseBranch(start, end int) {
+	gap := p.directivesBetween(start, end)
+	for i := range gap {
+		gap[i].placement = placedBeforeCaseBranch
 	}
 }
+
+func (p *pass) placeInContinuation(stmt *syntax.Stmt, start, end int) {
+	gap := p.directivesBetween(start, end)
+	if len(gap) == 0 {
+		return
+	}
+	list, ok := p.span(p.outermostJoined(stmt, anyOperator))
+	if !ok {
+		return
+	}
+	for i := range gap {
+		if gap[i].placement != placedAfterCommand {
+			gap[i].placement, gap[i].interrupted = placedInContinuation, list
+		}
+	}
+}
+
+func anyOperator(syntax.BinCmdOperator) bool { return true }
 
 func checkDirectives(p *pass) {
 	for i, d := range p.directives {
@@ -140,7 +162,7 @@ func (p *pass) checkPlacement(d directiveComment, continuesRun bool) {
 	case placedAfterCommand:
 		p.report(1126, d.span, "Put this directive on its own line before the command; ShellCheck rejects directives that follow a command's words. Here it only applies to its own line.")
 	case placedInContinuation:
-		p.report(1126, d.span, "This directive interrupts a pipeline or &&/|| list that continues on the next line, which ShellCheck rejects; put it before the whole list.")
+		p.report(1126, d.span, "This directive interrupts a pipeline or &&/|| list that continues on the next line, which ShellCheck rejects; put it before the whole list. Here it applies to the whole list.")
 	case placedBeforeCaseBranch:
 		p.report(1124, d.span, "A directive cannot stand in front of a case branch pattern and has no effect here; put it before the case statement or before a command inside the branch.")
 	case placedBeforeBranch, placedBeforeCloser:

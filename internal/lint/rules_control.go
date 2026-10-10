@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 
 	"mvdan.cc/sh/v3/syntax"
 
@@ -456,7 +457,7 @@ func checkFunctionArguments(p *pass) {
 			calls[cmd.Name] = append(calls[cmd.Name], cmd)
 		}
 	}
-	var suppressed suppressions
+	suppressed := sync.OnceValue(p.suppressions)
 	for _, fn := range p.tree.Functions {
 		uses := calls[fn.Name]
 		if latest[fn.Name].Decl != fn.Decl || len(uses) == 0 || !readsPositionals(fn.Decl) {
@@ -465,10 +466,7 @@ func checkFunctionArguments(p *pass) {
 		if slices.ContainsFunc(uses, func(cmd parser.Command) bool { return len(cmd.Args) > 0 }) {
 			continue
 		}
-		if suppressed == nil {
-			suppressed = p.suppressions()
-		}
-		if suppressed.covers(Finding{Code: 2120, Span: fn.Span}) {
+		if suppressed().covers(Finding{Code: 2120, Span: fn.Span}) {
 			continue
 		}
 		p.report(2120, fn.Span, fn.Name+" reads positional parameters, but no call passes any arguments.")
