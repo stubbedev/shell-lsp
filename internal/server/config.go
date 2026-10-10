@@ -108,6 +108,10 @@ func (s *Server) requestRefresh(ctx context.Context, method string) {
 }
 
 func (s *Server) pullConfiguration(ctx context.Context) {
+	go s.loadConfiguration(ctx)
+}
+
+func (s *Server) loadConfiguration(ctx context.Context) {
 	if !s.clientCapabilities().Workspace.Configuration {
 		return
 	}
@@ -116,40 +120,38 @@ func (s *Server) pullConfiguration(ctx context.Context) {
 	for _, root := range roots {
 		items = append(items, configurationItem{ScopeURI: fileuri.FromPath(root), Section: config.Section})
 	}
-	go func() {
-		var results []json.RawMessage
-		if err := s.call(ctx, "workspace/configuration", configurationParams{Items: items}, &results); err != nil {
-			s.logger.Warn("requesting workspace/configuration", "err", err)
+	var results []json.RawMessage
+	if err := s.call(ctx, "workspace/configuration", configurationParams{Items: items}, &results); err != nil {
+		s.logger.Warn("requesting workspace/configuration", "err", err)
+		return
+	}
+	if len(results) != len(items) {
+		s.logger.Warn("workspace/configuration answered the wrong number of items", "want", len(items), "got", len(results))
+		return
+	}
+	folders := map[string]config.Settings{}
+	var global *config.Settings
+	for i, raw := range results {
+		if isNull(raw) {
+			continue
+		}
+		parsed, err := config.Parse(raw)
+		if err != nil {
+			s.rejectConfiguration(err)
 			return
 		}
-		if len(results) != len(items) {
-			s.logger.Warn("workspace/configuration answered the wrong number of items", "want", len(items), "got", len(results))
-			return
+		if i == 0 {
+			global = &parsed
+			continue
 		}
-		folders := map[string]config.Settings{}
-		var global *config.Settings
-		for i, raw := range results {
-			if isNull(raw) {
-				continue
-			}
-			parsed, err := config.Parse(raw)
-			if err != nil {
-				s.rejectConfiguration(err)
-				return
-			}
-			if i == 0 {
-				global = &parsed
-				continue
-			}
-			folders[roots[i-1]] = parsed
+		folders[roots[i-1]] = parsed
+	}
+	s.applySettings(ctx, func() {
+		if global != nil {
+			s.settings = *global
 		}
-		s.applySettings(ctx, func() {
-			if global != nil {
-				s.settings = *global
-			}
-			s.folderSettings = folders
-		})
-	}()
+		s.folderSettings = folders
+	})
 }
 
 func isNull(raw json.RawMessage) bool {

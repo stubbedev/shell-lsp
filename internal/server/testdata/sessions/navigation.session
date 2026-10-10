@@ -1,0 +1,19 @@
+# hover, definition, references, highlights and rename on one bash document
+-> {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{"textDocument":{"diagnostic":{}}},"initializationOptions":{"shellcheck":{"enable":false}}}}
+<- {"jsonrpc":"2.0","id":1}
+-> {"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///w/deploy.bash","languageId":"shellscript","version":1,"text":"#!/usr/bin/env bash\n# Deploys a target.\n# $1 - target name\ndeploy() {\n\tlocal target=\"$1\"\n\techo \"deploying $target\"\n}\ndeploy prod\ndeploy staging\n"}}}
+-> {"jsonrpc":"2.0","id":2,"method":"textDocument/hover","params":{"textDocument":{"uri":"file:///w/deploy.bash"},"position":{"line":7,"character":1}}}
+<- {"jsonrpc":"2.0","id":2,"result":{"contents":{"kind":"markdown","value":"```sh\ndeploy target\n```\n\nDeploys a target.\n\n`target`: target name\n\nFunction defined on line 4."},"range":{"start":{"line":7,"character":0},"end":{"line":7,"character":6}}}}
+-> {"jsonrpc":"2.0","id":3,"method":"textDocument/definition","params":{"textDocument":{"uri":"file:///w/deploy.bash"},"position":{"line":5,"character":18}}}
+<- {"jsonrpc":"2.0","id":3,"result":[{"uri":"file:///w/deploy.bash","range":{"start":{"line":4,"character":7},"end":{"line":4,"character":13}}}]}
+-> {"jsonrpc":"2.0","id":4,"method":"textDocument/references","params":{"textDocument":{"uri":"file:///w/deploy.bash"},"position":{"line":3,"character":0},"context":{"includeDeclaration":false}}}
+<- {"jsonrpc":"2.0","id":4,"result":[{"range":{"start":{"line":7,"character":0}}},{"range":{"start":{"line":8,"character":0}}}]}
+-> {"jsonrpc":"2.0","id":5,"method":"textDocument/documentHighlight","params":{"textDocument":{"uri":"file:///w/deploy.bash"},"position":{"line":4,"character":8}}}
+<- {"jsonrpc":"2.0","id":5,"result":[{"kind":3,"range":{"start":{"line":4,"character":7}}},{"kind":2,"range":{"start":{"line":5,"character":18}}}]}
+-> {"jsonrpc":"2.0","id":6,"method":"textDocument/prepareRename","params":{"textDocument":{"uri":"file:///w/deploy.bash"},"position":{"line":4,"character":8}}}
+<- {"jsonrpc":"2.0","id":6,"result":{"placeholder":"target","range":{"start":{"line":4,"character":7},"end":{"line":4,"character":13}}}}
+-> {"jsonrpc":"2.0","id":7,"method":"textDocument/rename","params":{"textDocument":{"uri":"file:///w/deploy.bash"},"position":{"line":4,"character":8},"newName":"env"}}
+<- {"jsonrpc":"2.0","id":7,"result":{"changes":{"file:///w/deploy.bash":[{"newText":"env","range":{"start":{"line":4,"character":7}}},{"newText":"env","range":{"start":{"line":5,"character":18}}}]}}}
+-> {"jsonrpc":"2.0","id":8,"method":"shutdown"}
+<- {"jsonrpc":"2.0","id":8,"result":null}
+-> {"jsonrpc":"2.0","method":"exit"}

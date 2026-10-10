@@ -1,0 +1,14 @@
+# configuration pull, dynamic watcher registration and a configuration-driven dialect switch
+-> {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"rootUri":"file:///w","capabilities":{"textDocument":{"diagnostic":{}},"workspace":{"configuration":true,"didChangeWatchedFiles":{"dynamicRegistration":true}}},"initializationOptions":{"shellcheck":{"enable":false}}}}
+<- {"jsonrpc":"2.0","id":1}
+-> {"jsonrpc":"2.0","method":"initialized","params":{}}
+<- {"jsonrpc":"2.0","method":"workspace/configuration","params":{"items":[{"section":"shellLsp"},{"scopeUri":"file:///w","section":"shellLsp"}]}}
+=> [{"shellcheck":{"enable":false},"dialect":"zsh"},null]
+<- {"jsonrpc":"2.0","method":"client/registerCapability","params":{"registrations":[{"id":"shell-lsp/watched-files","method":"workspace/didChangeWatchedFiles"}]}}
+=> null
+-> {"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///w/rc.sh","languageId":"shellscript","version":1,"text":"print -l *(.)\n"}}}
+-> {"jsonrpc":"2.0","id":2,"method":"textDocument/diagnostic","params":{"textDocument":{"uri":"file:///w/rc.sh"}}}
+<- {"jsonrpc":"2.0","id":2,"result":{"kind":"full","items":[]}}
+-> {"jsonrpc":"2.0","id":3,"method":"shutdown"}
+<- {"jsonrpc":"2.0","id":3,"result":null}
+-> {"jsonrpc":"2.0","method":"exit"}

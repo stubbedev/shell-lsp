@@ -35,11 +35,6 @@ func TestConfigurationPullPerFolder(t *testing.T) {
 		"capabilities": {"textDocument": {"diagnostic": {}}, "workspace": {"configuration": true, "didChangeWatchedFiles": {"dynamicRegistration": true}}}}`)
 	c.notify("initialized", `{}`)
 
-	registered := c.answerServerRequest("client/registerCapability")
-	if !strings.Contains(string(registered), `"workspace/didChangeWatchedFiles"`) || !strings.Contains(string(registered), `**/*.{sh,bash,zsh,ksh,dash,bats}`) {
-		t.Errorf("registration = %s", registered)
-	}
-
 	request := c.await("workspace/configuration", func(m *jsonrpc.Message) bool { return m.IsRequest() && m.Method == "workspace/configuration" })
 	var params configurationParams
 	if err := json.Unmarshal(request.Params, &params); err != nil {
@@ -50,6 +45,10 @@ func TestConfigurationPullPerFolder(t *testing.T) {
 	}
 	if err := c.conn.Reply(request.ID, []any{nil, map[string]any{"dialect": "zsh"}, nil}, nil); err != nil {
 		t.Fatal(err)
+	}
+	registered := c.answerServerRequest("client/registerCapability")
+	if !strings.Contains(string(registered), `"workspace/didChangeWatchedFiles"`) || !strings.Contains(string(registered), `**/*.{sh,bash,zsh,ksh,dash,bats}`) {
+		t.Errorf("registration = %s", registered)
 	}
 
 	uriA := fileuri.FromPath(filepath.Join(a, "x.sh"))

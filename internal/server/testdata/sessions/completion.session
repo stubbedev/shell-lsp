@@ -1,0 +1,13 @@
+# completion of variables, keywords with snippets, signature help
+-> {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{"textDocument":{"diagnostic":{},"completion":{"completionItem":{"snippetSupport":true}}}},"initializationOptions":{"shellcheck":{"enable":false}}}}
+<- {"jsonrpc":"2.0","id":1}
+-> {"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///w/a.bash","languageId":"shellscript","version":1,"text":"greeting_text=hi\ngreet() { local who=\"$1\"; echo \"$who\"; }\necho \"$greeting_\"\nwhil\ngreet \n"}}}
+-> {"jsonrpc":"2.0","id":2,"method":"textDocument/completion","params":{"textDocument":{"uri":"file:///w/a.bash"},"position":{"line":2,"character":16}}}
+<- {"jsonrpc":"2.0","id":2,"result":{"isIncomplete":false,"items":[{"label":"greeting_text","kind":6,"detail":"global","textEdit":{"range":{"start":{"line":2,"character":7},"end":{"line":2,"character":16}},"newText":"greeting_text"}}]}}
+-> {"jsonrpc":"2.0","id":3,"method":"textDocument/completion","params":{"textDocument":{"uri":"file:///w/a.bash"},"position":{"line":3,"character":4}}}
+<- {"jsonrpc":"2.0","id":3,"result":{"items":[{"label":"while","kind":14,"insertTextFormat":2,"textEdit":{"newText":"while ${1:condition}; do\n\t$0\ndone"}}]}}
+-> {"jsonrpc":"2.0","id":4,"method":"textDocument/signatureHelp","params":{"textDocument":{"uri":"file:///w/a.bash"},"position":{"line":4,"character":6}}}
+<- {"jsonrpc":"2.0","id":4,"result":{"signatures":[{"label":"greet who","parameters":[{"label":[6,9]}]}],"activeSignature":0,"activeParameter":0}}
+-> {"jsonrpc":"2.0","id":5,"method":"shutdown"}
+<- {"jsonrpc":"2.0","id":5,"result":null}
+-> {"jsonrpc":"2.0","method":"exit"}

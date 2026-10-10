@@ -1,0 +1,11 @@
+# initialize, a rejected second initialize, shutdown, a rejected request after shutdown, exit
+-> {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{"textDocument":{"diagnostic":{}}},"initializationOptions":{"shellcheck":{"enable":false}}}}
+<- {"jsonrpc":"2.0","id":1,"result":{"capabilities":{"positionEncoding":"utf-16","textDocumentSync":{"openClose":true,"change":2},"hoverProvider":true,"renameProvider":{"prepareProvider":true}},"serverInfo":{"name":"shell-lsp","version":"test"}}}
+-> {"jsonrpc":"2.0","method":"initialized","params":{}}
+-> {"jsonrpc":"2.0","id":2,"method":"initialize","params":{}}
+<- {"jsonrpc":"2.0","id":2,"error":{"code":-32600,"message":"the server is already initialized"}}
+-> {"jsonrpc":"2.0","id":3,"method":"shutdown"}
+<- {"jsonrpc":"2.0","id":3,"result":null}
+-> {"jsonrpc":"2.0","id":4,"method":"textDocument/hover","params":{"textDocument":{"uri":"file:///w/a.sh"},"position":{"line":0,"character":0}}}
+<- {"jsonrpc":"2.0","id":4,"error":{"code":-32600}}
+-> {"jsonrpc":"2.0","method":"exit"}

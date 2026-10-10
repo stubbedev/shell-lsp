@@ -1,0 +1,17 @@
+# formatting, a lazily resolved code action, symbols and folding
+-> {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{"textDocument":{"diagnostic":{},"codeAction":{"codeActionLiteralSupport":{},"resolveSupport":{"properties":["edit"]}},"documentSymbol":{"hierarchicalDocumentSymbolSupport":true}}},"initializationOptions":{"shellcheck":{"enable":false}}}}
+<- {"jsonrpc":"2.0","id":1}
+-> {"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///w/a.bash","languageId":"shellscript","version":1,"text":"f(){\ncount=1\n}\n"}}}
+-> {"jsonrpc":"2.0","id":2,"method":"textDocument/formatting","params":{"textDocument":{"uri":"file:///w/a.bash"},"options":{"tabSize":4,"insertSpaces":false}}}
+<- {"jsonrpc":"2.0","id":2,"result":[{"range":{"start":{"line":0,"character":0},"end":{"line":2,"character":0}},"newText":"f() {\n\tcount=1\n"}]}
+-> {"jsonrpc":"2.0","id":3,"method":"textDocument/codeAction","params":{"textDocument":{"uri":"file:///w/a.bash"},"range":{"start":{"line":1,"character":1},"end":{"line":1,"character":1}},"context":{"diagnostics":[],"only":["refactor.rewrite"]}}}
+<- {"jsonrpc":"2.0","id":3,"result":[{"title":"Declare count as local","kind":"refactor.rewrite","data":{"uri":"file:///w/a.bash","version":1,"refactor":{"kind":"declareLocal","start":6,"end":6}}}]}
+-> {"jsonrpc":"2.0","id":4,"method":"codeAction/resolve","params":{"title":"Declare count as local","kind":"refactor.rewrite","data":{"uri":"file:///w/a.bash","version":1,"refactor":{"kind":"declareLocal","start":6,"end":6}}}}
+<- {"jsonrpc":"2.0","id":4,"result":{"title":"Declare count as local","edit":{"changes":{"file:///w/a.bash":[{"range":{"start":{"line":1,"character":0},"end":{"line":1,"character":0}},"newText":"local "}]}}}}
+-> {"jsonrpc":"2.0","id":5,"method":"textDocument/documentSymbol","params":{"textDocument":{"uri":"file:///w/a.bash"}}}
+<- {"jsonrpc":"2.0","id":5,"result":[{"name":"f","kind":12,"children":[{"name":"count","kind":13,"detail":"variable"}]}]}
+-> {"jsonrpc":"2.0","id":6,"method":"textDocument/foldingRange","params":{"textDocument":{"uri":"file:///w/a.bash"}}}
+<- {"jsonrpc":"2.0","id":6,"result":[{"startLine":0,"endLine":1}]}
+-> {"jsonrpc":"2.0","id":7,"method":"shutdown"}
+<- {"jsonrpc":"2.0","id":7,"result":null}
+-> {"jsonrpc":"2.0","method":"exit"}
