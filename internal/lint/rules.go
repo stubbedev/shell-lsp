@@ -49,6 +49,7 @@ var families = []family{
 	testOperandsFamily,
 	argumentsFamily,
 	assignmentsFamily,
+	constructsFamily,
 }
 
 var catalog, rules, commandChecks = assemble(families)
