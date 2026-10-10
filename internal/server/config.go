@@ -41,7 +41,7 @@ func (s *Server) handleDidChangeConfiguration(ctx context.Context, params json.R
 
 func (s *Server) refreshDiagnostics(ctx context.Context, clientRefresh bool) {
 	if s.push != nil {
-		for _, doc := range s.docs.Documents() {
+		for _, doc := range s.docs.View().Documents() {
 			s.push.schedule(doc.URI)
 		}
 		return

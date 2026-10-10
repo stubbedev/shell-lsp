@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 
 	"github.com/stubbedev/shell-lsp/internal/config"
+	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 )
@@ -66,7 +67,7 @@ type InitializeResult struct {
 	ServerInfo   ServerInfo         `json:"serverInfo"`
 }
 
-func (s *Server) handleInitialize(_ context.Context, params json.RawMessage) (any, error) {
+func (s *Server) handleInitialize(_ context.Context, _ *docstore.View, params json.RawMessage) (any, error) {
 	initParams, err := lsp.DecodeParams[InitializeParams](params)
 	if err != nil {
 		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing initialize params: %v", err)
@@ -103,7 +104,7 @@ func (s *Server) handleInitialized(_ context.Context, _ json.RawMessage) error {
 	return nil
 }
 
-func (s *Server) handleShutdown(_ context.Context, _ json.RawMessage) (any, error) {
+func (s *Server) handleShutdown(_ context.Context, _ *docstore.View, _ json.RawMessage) (any, error) {
 	s.mu.Lock()
 	s.shutdown = true
 	s.mu.Unlock()

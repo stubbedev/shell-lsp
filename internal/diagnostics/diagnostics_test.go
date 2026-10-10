@@ -19,7 +19,7 @@ func document(t *testing.T, text string) *docstore.Document {
 
 	store := docstore.NewStore()
 	store.Open(lsp.TextDocumentItem{URI: "file:///t.sh", Version: 1, Text: text})
-	doc, ok := store.Document("file:///t.sh")
+	doc, ok := store.View().Document("file:///t.sh")
 	if !ok {
 		t.Fatal("document not stored")
 	}

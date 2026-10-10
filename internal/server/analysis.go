@@ -53,8 +53,8 @@ func (c *snapshotCache) forget(uri string) {
 	delete(c.entries, uri)
 }
 
-func (s *Server) snapshot(uri string) (*snapshot, error) {
-	doc, ok := s.docs.Document(uri)
+func (s *Server) snapshot(docs *docstore.View, uri string) (*snapshot, error) {
+	doc, ok := docs.Document(uri)
 	if !ok {
 		return nil, fmt.Errorf("document %s is not open", uri)
 	}
@@ -65,7 +65,7 @@ func (s *Server) snapshot(uri string) (*snapshot, error) {
 	d := dialect.Detect(settings.Dialect, dialect.Input{URI: uri, LanguageID: doc.Language, Text: doc.Text()})
 	snap := &snapshot{
 		doc:        doc,
-		encoding:   s.docs.Encoding(),
+		encoding:   docs.Encoding(),
 		dialect:    d,
 		tree:       parser.Parse(doc.Text(), d),
 		settings:   settings,

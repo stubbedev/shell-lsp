@@ -197,7 +197,7 @@ func TestInvalidInitializationOptionsFailInitialize(t *testing.T) {
 	t.Parallel()
 
 	srv := New(jsonrpc.NewConn(nil, nil), "test")
-	_, err := srv.handleInitialize(t.Context(), json.RawMessage(`{"initializationOptions": {"dialect": "fish"}}`))
+	_, err := srv.handleInitialize(t.Context(), nil, json.RawMessage(`{"initializationOptions": {"dialect": "fish"}}`))
 	rpcErr, ok := errors.AsType[*jsonrpc.Error](err)
 	if !ok || rpcErr.Code != jsonrpc.CodeInvalidParams || !strings.Contains(rpcErr.Message, "fish") {
 		t.Errorf("error = %v, want InvalidParams naming the bad dialect", err)

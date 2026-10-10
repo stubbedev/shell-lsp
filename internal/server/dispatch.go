@@ -23,7 +23,7 @@ const (
 	maxConcurrency = 8
 )
 
-type requestHandler func(ctx context.Context, params json.RawMessage) (any, error)
+type requestHandler func(ctx context.Context, docs *docstore.View, params json.RawMessage) (any, error)
 
 type notificationHandler func(ctx context.Context, params json.RawMessage) error
 
@@ -155,7 +155,7 @@ func (s *Server) handleLifecycleRequest(msg *jsonrpc.Message) {
 			"method %q not found", msg.Method))
 		return
 	}
-	result, err := s.invoke(context.Background(), handler, msg)
+	result, err := s.invoke(context.Background(), handler, s.docs.View(), msg)
 	if err != nil {
 		s.replyError(msg, err)
 		return
@@ -187,6 +187,7 @@ func (s *Server) dispatchRequest(ctx context.Context, msg *jsonrpc.Message) {
 			"method %q not found", msg.Method))
 		return
 	}
+	docs := s.docs.View()
 	s.wg.Add(1)
 	rctx, cancel := context.WithCancel(ctx)
 	s.cancels.Store(string(msg.ID), cancel)
@@ -204,7 +205,7 @@ func (s *Server) dispatchRequest(ctx context.Context, msg *jsonrpc.Message) {
 		defer cancel()
 		defer s.cancels.Delete(string(msg.ID))
 
-		result, err := s.invoke(rctx, handler, msg)
+		result, err := s.invoke(rctx, handler, docs, msg)
 		if errors.Is(err, context.Canceled) && rctx.Err() != nil {
 			err = jsonrpc.NewError(jsonrpc.CodeRequestCancelled,
 				"request %q was cancelled", msg.Method)
@@ -219,14 +220,14 @@ func (s *Server) dispatchRequest(ctx context.Context, msg *jsonrpc.Message) {
 	}()
 }
 
-func (s *Server) invoke(ctx context.Context, handler requestHandler, msg *jsonrpc.Message) (result any, err error) {
+func (s *Server) invoke(ctx context.Context, handler requestHandler, docs *docstore.View, msg *jsonrpc.Message) (result any, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = jsonrpc.NewError(jsonrpc.CodeInternalError,
 				"panic handling %s: %v", msg.Method, r)
 		}
 	}()
-	return handler(ctx, msg.Params)
+	return handler(ctx, docs, msg.Params)
 }
 
 func (s *Server) dispatchNotification(ctx context.Context, msg *jsonrpc.Message) {

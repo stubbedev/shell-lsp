@@ -3,8 +3,11 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"testing"
+	"time"
 
+	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 )
 
@@ -13,8 +16,8 @@ func TestDocumentSync(t *testing.T) {
 
 	c, _ := startClient(t, `{"capabilities": {"general": {"positionEncodings": ["utf-32"]}, "textDocument": {"diagnostic": {}}}}`,
 		func(srv *Server) {
-			srv.requests["test/document"] = func(_ context.Context, _ json.RawMessage) (any, error) {
-				doc, ok := srv.docs.Document("file:///t.sh")
+			srv.requests["test/document"] = func(_ context.Context, docs *docstore.View, _ json.RawMessage) (any, error) {
+				doc, ok := docs.Document("file:///t.sh")
 				if !ok {
 					return nil, nil
 				}
@@ -40,7 +43,7 @@ func TestInitializeNegotiatesEncodingAndSync(t *testing.T) {
 	t.Parallel()
 
 	srv := New(jsonrpc.NewConn(nil, nil), "test")
-	result, err := srv.handleInitialize(t.Context(), json.RawMessage(`{"capabilities": {"general": {"positionEncodings": ["utf-32", "utf-16"]}, "textDocument": {"diagnostic": {}}}}`))
+	result, err := srv.handleInitialize(t.Context(), nil, json.RawMessage(`{"capabilities": {"general": {"positionEncodings": ["utf-32", "utf-16"]}, "textDocument": {"diagnostic": {}}}}`))
 	if err != nil {
 		t.Fatalf("handleInitialize() error = %v", err)
 	}
@@ -63,7 +66,7 @@ func TestStaleChangeIsIgnored(t *testing.T) {
 	if err := srv.handleDidChange(t.Context(), stale); err != nil {
 		t.Fatalf("didChange: %v", err)
 	}
-	doc, ok := srv.docs.Document("file:///t.sh")
+	doc, ok := srv.docs.View().Document("file:///t.sh")
 	if !ok {
 		t.Fatal("document missing")
 	}
@@ -91,11 +94,40 @@ func TestDidSaveKeepsVersionSequence(t *testing.T) {
 	if err := srv.handleDidChange(t.Context(), change); err != nil {
 		t.Fatalf("didChange: %v", err)
 	}
-	doc, ok := srv.docs.Document("file:///t.sh")
+	doc, ok := srv.docs.View().Document("file:///t.sh")
 	if !ok {
 		t.Fatal("document missing")
 	}
 	if doc.Text() != "two" || doc.Version != 2 {
 		t.Errorf("after save then change: text=%q version=%d, want two/2", doc.Text(), doc.Version)
+	}
+}
+
+func TestRequestsSeeDocumentsAsOfDispatch(t *testing.T) {
+	t.Parallel()
+
+	release := make(chan struct{})
+	c, _ := startClient(t, `{"capabilities": {"textDocument": {"diagnostic": {}}}}`, func(srv *Server) {
+		srv.requests["test/slow-read"] = func(_ context.Context, docs *docstore.View, _ json.RawMessage) (any, error) {
+			<-release
+			doc, ok := docs.Document("file:///t.sh")
+			if !ok {
+				return nil, nil
+			}
+			return doc.Text(), nil
+		}
+	})
+	c.notify("textDocument/didOpen", openParams("file:///t.sh", "before"))
+	c.mu.Lock()
+	c.nextID++
+	id := c.nextID
+	c.mu.Unlock()
+	c.send(request(id, "test/slow-read", ""))
+	c.notify("textDocument/didChange", `{"textDocument": {"uri": "file:///t.sh", "version": 2}, "contentChanges": [{"text": "after"}]}`)
+	time.Sleep(50 * time.Millisecond)
+	close(release)
+	msg := c.await("slow read response", func(m *jsonrpc.Message) bool { return m.IsResponse() && string(m.ID) == strconv.Itoa(id) })
+	if got := decodeResult[string](t, msg); got != "before" {
+		t.Errorf("request saw %q, want the document as it was when the request arrived", got)
 	}
 }

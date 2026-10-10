@@ -6,10 +6,12 @@ package docstore
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"unicode/utf8"
 
 	"github.com/stubbedev/shell-lsp/internal/lsp"
@@ -179,76 +181,86 @@ func codeUnits(r rune, size int, enc Encoding) uint32 {
 	return 1
 }
 
-type Store struct {
-	mu       sync.RWMutex
+type View struct {
 	encoding Encoding
 	docs     map[string]*Document
 }
 
-func NewStore() *Store {
-	return &Store{encoding: EncodingUTF16, docs: make(map[string]*Document)}
-}
+func (v *View) Encoding() Encoding { return v.encoding }
 
-func (s *Store) SetEncoding(enc Encoding) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.encoding = enc
-}
-
-func (s *Store) Encoding() Encoding {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.encoding
-}
-
-func (s *Store) Open(item lsp.TextDocumentItem) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.docs[item.URI] = newDocument(item.URI, item.LanguageID, item.Version, item.Text)
-}
-
-func (s *Store) Close(uri string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	delete(s.docs, uri)
-}
-
-// Document returns the current snapshot of an open document. Snapshots
-// are immutable: later changes produce new snapshots.
-func (s *Store) Document(uri string) (*Document, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	d, ok := s.docs[uri]
+func (v *View) Document(uri string) (*Document, bool) {
+	d, ok := v.docs[uri]
 	return d, ok
 }
 
-func (s *Store) Documents() []*Document {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	docs := make([]*Document, 0, len(s.docs))
-	for _, d := range s.docs {
+func (v *View) Documents() []*Document {
+	docs := make([]*Document, 0, len(v.docs))
+	for _, d := range v.docs {
 		docs = append(docs, d)
 	}
 	slices.SortFunc(docs, func(a, b *Document) int { return strings.Compare(a.URI, b.URI) })
 	return docs
 }
 
-// Change applies incremental or full content changes. Versions must
-// increase; stale or repeated versions are rejected so replays and
-// races cannot rewind document state.
-func (s *Store) Change(uri string, version int32, changes []lsp.TextDocumentContentChangeEvent) error {
+type Store struct {
+	mu   sync.Mutex
+	view atomic.Pointer[View]
+}
+
+func NewStore() *Store {
+	s := &Store{}
+	s.view.Store(&View{encoding: EncodingUTF16, docs: map[string]*Document{}})
+	return s
+}
+
+func (s *Store) View() *View { return s.view.Load() }
+
+func (s *Store) update(fn func(next *View) error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	d, ok := s.docs[uri]
-	if !ok {
-		return fmt.Errorf("didChange for unopened document %s", uri)
+	current := s.view.Load()
+	next := &View{encoding: current.encoding, docs: maps.Clone(current.docs)}
+	if err := fn(next); err != nil {
+		return err
 	}
-	if version <= d.Version {
-		return fmt.Errorf("ignoring stale change for %s: got version %d, have %d", uri, version, d.Version)
-	}
-	updated := &Document{URI: d.URI, Language: d.Language, Version: version}
-	updated.setText(d.text)
-	updated.applyChanges(changes, s.encoding)
-	s.docs[uri] = updated
+	s.view.Store(next)
 	return nil
+}
+
+func (s *Store) SetEncoding(enc Encoding) {
+	_ = s.update(func(next *View) error {
+		next.encoding = enc
+		return nil
+	})
+}
+
+func (s *Store) Open(item lsp.TextDocumentItem) {
+	_ = s.update(func(next *View) error {
+		next.docs[item.URI] = newDocument(item.URI, item.LanguageID, item.Version, item.Text)
+		return nil
+	})
+}
+
+func (s *Store) Close(uri string) {
+	_ = s.update(func(next *View) error {
+		delete(next.docs, uri)
+		return nil
+	})
+}
+
+func (s *Store) Change(uri string, version int32, changes []lsp.TextDocumentContentChangeEvent) error {
+	return s.update(func(next *View) error {
+		d, ok := next.docs[uri]
+		if !ok {
+			return fmt.Errorf("didChange for unopened document %s", uri)
+		}
+		if version <= d.Version {
+			return fmt.Errorf("ignoring stale change for %s: got version %d, have %d", uri, version, d.Version)
+		}
+		updated := &Document{URI: d.URI, Language: d.Language, Version: version}
+		updated.setText(d.text)
+		updated.applyChanges(changes, next.encoding)
+		next.docs[uri] = updated
+		return nil
+	})
 }

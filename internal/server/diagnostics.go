@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/stubbedev/shell-lsp/internal/diagnostics"
+	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
@@ -146,12 +147,12 @@ func (s *Server) runShellcheck(ctx context.Context, snap *snapshot, plan shellch
 	return items, true, nil
 }
 
-func (s *Server) handleDocumentDiagnostic(ctx context.Context, params json.RawMessage) (any, error) {
+func (s *Server) handleDocumentDiagnostic(ctx context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
 	diagParams, err := lsp.DecodeParams[lsp.DocumentDiagnosticParams](params)
 	if err != nil {
 		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing textDocument/diagnostic params: %v", err)
 	}
-	snap, err := s.snapshot(diagParams.TextDocument.URI)
+	snap, err := s.snapshot(docs, diagParams.TextDocument.URI)
 	if err != nil {
 		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
 	}
@@ -166,7 +167,7 @@ func (s *Server) handleDocumentDiagnostic(ctx context.Context, params json.RawMe
 }
 
 func (s *Server) publishDiagnostics(ctx context.Context, uri string) {
-	snap, err := s.snapshot(uri)
+	snap, err := s.snapshot(s.docs.View(), uri)
 	if err != nil {
 		return
 	}
@@ -177,7 +178,7 @@ func (s *Server) publishDiagnostics(ctx context.Context, uri string) {
 		}
 		return
 	}
-	if current, ok := s.docs.Document(uri); !ok || current.Version != report.version {
+	if current, ok := s.docs.View().Document(uri); !ok || current.Version != report.version {
 		return
 	}
 	s.notify("textDocument/publishDiagnostics", lsp.PublishDiagnosticsParams{

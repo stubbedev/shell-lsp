@@ -55,7 +55,7 @@ func (s *Server) handleDidSave(_ context.Context, params json.RawMessage) error 
 	if err != nil {
 		return err
 	}
-	if _, ok := s.docs.Document(saveParams.TextDocument.URI); !ok {
+	if _, ok := s.docs.View().Document(saveParams.TextDocument.URI); !ok {
 		s.logger.Warn("didSave for unopened document", "uri", saveParams.TextDocument.URI)
 	}
 	return nil

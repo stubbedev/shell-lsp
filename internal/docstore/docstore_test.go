@@ -20,7 +20,7 @@ func openDoc(t *testing.T, text string) *Store {
 func mustDoc(t *testing.T, store *Store) *Document {
 	t.Helper()
 
-	doc, ok := store.Document("file:///t.sh")
+	doc, ok := store.View().Document("file:///t.sh")
 	if !ok {
 		t.Fatal("document not found")
 	}
@@ -212,7 +212,7 @@ func TestCloseRemovesDocument(t *testing.T) {
 
 	store := openDoc(t, "x")
 	store.Close("file:///t.sh")
-	if _, ok := store.Document("file:///t.sh"); ok {
+	if _, ok := store.View().Document("file:///t.sh"); ok {
 		t.Error("document still present after Close()")
 	}
 }

@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 )
 
@@ -263,7 +264,7 @@ func TestRequestsRunConcurrently(t *testing.T) {
 
 	started := make(chan string, 2)
 	release := make(chan struct{})
-	srv.requests["test/block"] = func(ctx context.Context, _ json.RawMessage) (any, error) {
+	srv.requests["test/block"] = func(ctx context.Context, _ *docstore.View, _ json.RawMessage) (any, error) {
 		started <- "ready"
 		select {
 		case <-release:
@@ -315,7 +316,7 @@ func TestCancelRequest(t *testing.T) {
 	var output bytes.Buffer
 	srv := New(jsonrpc.NewConn(&input, &output), "test")
 
-	srv.requests["test/slow"] = func(ctx context.Context, _ json.RawMessage) (any, error) {
+	srv.requests["test/slow"] = func(ctx context.Context, _ *docstore.View, _ json.RawMessage) (any, error) {
 		select {
 		case <-time.After(2 * time.Second):
 			return "done", nil
@@ -351,7 +352,7 @@ func TestServerInitiatedRequest(t *testing.T) {
 	serverReader, serverWriter := io.Pipe()
 	srv := New(jsonrpc.NewConn(serverReader, clientWriter), "test")
 
-	srv.requests["test/roundtrip"] = func(ctx context.Context, params json.RawMessage) (any, error) {
+	srv.requests["test/roundtrip"] = func(ctx context.Context, _ *docstore.View, params json.RawMessage) (any, error) {
 		var result string
 		if err := srv.call(ctx, "client/ping", map[string]string{"hello": "world"}, &result); err != nil {
 			return nil, err
@@ -417,7 +418,7 @@ func TestProgressNotifications(t *testing.T) {
 	serverReader, serverWriter := io.Pipe()
 	srv := New(jsonrpc.NewConn(serverReader, clientWriter), "test")
 
-	srv.requests["test/progress"] = func(ctx context.Context, _ json.RawMessage) (any, error) {
+	srv.requests["test/progress"] = func(ctx context.Context, _ *docstore.View, _ json.RawMessage) (any, error) {
 		progress, err := srv.StartProgress(ctx, "scanning workspace")
 		if err != nil {
 			return nil, err
@@ -491,7 +492,7 @@ func TestPanicInHandlerReturnsInternalError(t *testing.T) {
 	var output bytes.Buffer
 	srv := New(jsonrpc.NewConn(&input, &output), "test")
 
-	srv.requests["test/panic"] = func(_ context.Context, _ json.RawMessage) (any, error) {
+	srv.requests["test/panic"] = func(_ context.Context, _ *docstore.View, _ json.RawMessage) (any, error) {
 		panic("boom")
 	}
 
