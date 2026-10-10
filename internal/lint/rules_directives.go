@@ -70,7 +70,7 @@ func checkDirectives(p *pass) {
 			p.checkDirectivePair(d, pair)
 		}
 		if problem := d.parsed.Problem; problem != nil {
-			p.report(1125, p.directiveRest(d, problem.Offset), malformedDirectiveMessage(problem.Kind))
+			p.report(1125, parser.Span{Start: d.at(problem.Offset), End: d.span.End}, malformedDirectiveMessage(problem.Kind))
 		}
 		p.checkPlacement(d, i > 0 && p.directives[i-1].placement == d.placement && sameRun(p.text, p.directives[i-1], d))
 	}
@@ -86,16 +86,12 @@ func malformedDirectiveMessage(kind directive.ProblemKind) string {
 	return "This text after the directive's key=value pairs is not understood and is ignored; start a trailing explanation with #."
 }
 
-func (p *pass) directiveRest(d directiveComment, offset int) parser.Span {
-	return parser.Span{Start: d.at(offset), End: d.span.End}
-}
-
-func (p *pass) directiveValue(d directiveComment, pair directive.Pair) parser.Span {
+func (d directiveComment) valueSpan(pair directive.Pair) parser.Span {
 	return parser.Span{Start: d.at(pair.ValueOffset), End: d.at(pair.ValueEnd)}
 }
 
 func (p *pass) checkDirectivePair(d directiveComment, pair directive.Pair) {
-	value := p.directiveValue(d, pair)
+	value := d.valueSpan(pair)
 	switch pair.Key {
 	case directive.Disable:
 		p.checkDisabledCodes(value, pair.Value)

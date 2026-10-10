@@ -24,6 +24,7 @@ func TestDirectivePlacement(t *testing.T) {
 		{"a run before a closer is reported once", "#!/bin/sh\nif true; then\n  :\n  # shellcheck disable=SC2086\n  # note\n  # shellcheck disable=SC2034\nfi\n", []string{"SC1123 4:3"}},
 		{"before a closer has no effect", "#!/bin/sh\nfor f in a b; do\n  echo \"$f\"\n  # shellcheck disable=SC2086\ndone\necho $1\n", []string{"SC1123 4:3", "SC2086 6:6"}},
 		{"after a case terminator", "#!/bin/sh\ncase $1 in\n  a) echo $2 ;; # shellcheck disable=SC2086\n  b) echo $3 ;;\nesac\n", []string{"SC1124 3:17", "SC2086 3:11", "SC2086 4:11"}},
+		{"empty value at the end of the file", "#!/bin/sh\n# shellcheck disable=", nil},
 		{"inside a case branch body", "#!/bin/sh\ncase $1 in\n  a)\n    # shellcheck disable=SC2086\n    echo $2 ;;\nesac\n", nil},
 	} {
 		tree := parser.Parse(tc.script, dialect.Posix)
