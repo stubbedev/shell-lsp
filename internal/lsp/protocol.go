@@ -396,3 +396,43 @@ type DocumentHighlight struct {
 	Range Range                 `json:"range"`
 	Kind  DocumentHighlightKind `json:"kind"`
 }
+
+type SemanticTokensParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+}
+
+type SemanticTokensDeltaParams struct {
+	TextDocument     TextDocumentIdentifier `json:"textDocument"`
+	PreviousResultID string                 `json:"previousResultId"`
+}
+
+type SemanticTokensRangeParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Range        Range                  `json:"range"`
+}
+
+type SemanticTokens struct {
+	ResultID string   `json:"resultId,omitempty"`
+	Data     []uint32 `json:"data"`
+}
+
+type SemanticTokensEdit struct {
+	Start       uint32   `json:"start"`
+	DeleteCount uint32   `json:"deleteCount"`
+	Data        []uint32 `json:"data"`
+}
+
+type SemanticTokensDelta struct {
+	ResultID string               `json:"resultId"`
+	Edits    []SemanticTokensEdit `json:"edits"`
+}
+
+type SelectionRangeParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Positions    []Position             `json:"positions"`
+}
+
+type SelectionRange struct {
+	Range  Range           `json:"range"`
+	Parent *SelectionRange `json:"parent,omitempty"`
+}

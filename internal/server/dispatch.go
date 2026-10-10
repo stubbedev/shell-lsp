@@ -49,6 +49,7 @@ type Server struct {
 	commandDocs commandDocs
 	environment shellEnvironment
 	workspace   *workspace.Workspace
+	semantic    *semanticCache
 
 	mu          sync.Mutex
 	shutdown    bool
@@ -77,6 +78,7 @@ func New(conn *jsonrpc.Conn, version string) *Server {
 		logger:      slog.New(slog.NewTextHandler(os.Stderr, nil)),
 		docs:        docstore.NewStore(),
 		snapshots:   newSnapshotCache(),
+		semantic:    newSemanticCache(),
 		diagnostics: newDiagnosticsState(),
 		settings:    config.Default(),
 		commandDocs: commandDocs{pages: pages},
@@ -94,28 +96,32 @@ func (s *Server) SetLogger(logger *slog.Logger) {
 
 func (s *Server) registerHandlers() {
 	s.requests = map[string]requestHandler{
-		"initialize":                     s.handleInitialize,
-		"shutdown":                       s.handleShutdown,
-		"textDocument/diagnostic":        s.handleDocumentDiagnostic,
-		"textDocument/hover":             s.handleHover,
-		"textDocument/completion":        s.handleCompletion,
-		"completionItem/resolve":         s.handleCompletionResolve,
-		"textDocument/definition":        s.navigationHandler(navigation.ModeDefinition),
-		"textDocument/declaration":       s.navigationHandler(navigation.ModeDeclaration),
-		"textDocument/typeDefinition":    s.navigationHandler(navigation.ModeTypeDefinition),
-		"textDocument/implementation":    s.navigationHandler(navigation.ModeImplementation),
-		"textDocument/documentSymbol":    s.handleDocumentSymbol,
-		"textDocument/foldingRange":      s.handleFoldingRange,
-		"workspace/symbol":               s.handleWorkspaceSymbol,
-		"textDocument/formatting":        s.handleFormatting,
-		"textDocument/rangeFormatting":   s.handleRangeFormatting,
-		"textDocument/codeAction":        s.handleCodeAction,
-		"codeAction/resolve":             s.handleCodeActionResolve,
-		"workspace/executeCommand":       s.handleExecuteCommand,
-		"textDocument/references":        s.handleReferences,
-		"textDocument/documentHighlight": s.handleDocumentHighlight,
-		"textDocument/prepareRename":     s.handlePrepareRename,
-		"textDocument/rename":            s.handleRename,
+		"initialize":                             s.handleInitialize,
+		"shutdown":                               s.handleShutdown,
+		"textDocument/diagnostic":                s.handleDocumentDiagnostic,
+		"textDocument/hover":                     s.handleHover,
+		"textDocument/completion":                s.handleCompletion,
+		"completionItem/resolve":                 s.handleCompletionResolve,
+		"textDocument/definition":                s.navigationHandler(navigation.ModeDefinition),
+		"textDocument/declaration":               s.navigationHandler(navigation.ModeDeclaration),
+		"textDocument/typeDefinition":            s.navigationHandler(navigation.ModeTypeDefinition),
+		"textDocument/implementation":            s.navigationHandler(navigation.ModeImplementation),
+		"textDocument/documentSymbol":            s.handleDocumentSymbol,
+		"textDocument/foldingRange":              s.handleFoldingRange,
+		"workspace/symbol":                       s.handleWorkspaceSymbol,
+		"textDocument/formatting":                s.handleFormatting,
+		"textDocument/rangeFormatting":           s.handleRangeFormatting,
+		"textDocument/codeAction":                s.handleCodeAction,
+		"codeAction/resolve":                     s.handleCodeActionResolve,
+		"workspace/executeCommand":               s.handleExecuteCommand,
+		"textDocument/references":                s.handleReferences,
+		"textDocument/documentHighlight":         s.handleDocumentHighlight,
+		"textDocument/prepareRename":             s.handlePrepareRename,
+		"textDocument/rename":                    s.handleRename,
+		"textDocument/semanticTokens/full":       s.handleSemanticTokensFull,
+		"textDocument/semanticTokens/full/delta": s.handleSemanticTokensDelta,
+		"textDocument/semanticTokens/range":      s.handleSemanticTokensRange,
+		"textDocument/selectionRange":            s.handleSelectionRange,
 	}
 	s.notifications = map[string]notificationHandler{
 		"$/cancelRequest":                  s.handleCancelRequest,

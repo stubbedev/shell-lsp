@@ -100,6 +100,8 @@ type ServerCapabilities struct {
 	ReferencesProvider              bool                    `json:"referencesProvider"`
 	DocumentHighlightProvider       bool                    `json:"documentHighlightProvider"`
 	RenameProvider                  RenameOptions           `json:"renameProvider"`
+	SemanticTokensProvider          SemanticTokensOptions   `json:"semanticTokensProvider"`
+	SelectionRangeProvider          bool                    `json:"selectionRangeProvider"`
 }
 
 type RenameOptions struct {
@@ -170,6 +172,8 @@ func (s *Server) handleInitialize(_ context.Context, _ *docstore.View, params js
 			ReferencesProvider:              true,
 			DocumentHighlightProvider:       true,
 			RenameProvider:                  RenameOptions{PrepareProvider: true},
+			SemanticTokensProvider:          semanticTokensOptions,
+			SelectionRangeProvider:          true,
 		},
 		ServerInfo: ServerInfo{Name: "shell-lsp", Version: s.version},
 	}, nil

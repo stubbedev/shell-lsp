@@ -243,3 +243,21 @@ func Matches(query, name string) bool {
 	}
 	return i == len(query)
 }
+
+func SelectionPath(tree *parser.Tree, offset int) []parser.Span {
+	var spans []parser.Span
+	for _, node := range slices.Backward(tree.PathAt(offset)) {
+		span, ok := tree.NodeSpan(node)
+		if !ok {
+			continue
+		}
+		if n := len(spans); n > 0 && (span == spans[n-1] || span.Start > spans[n-1].Start || span.End < spans[n-1].End) {
+			continue
+		}
+		spans = append(spans, span)
+	}
+	if whole := (parser.Span{Start: 0, End: len(tree.Text())}); len(spans) == 0 || spans[len(spans)-1] != whole {
+		spans = append(spans, whole)
+	}
+	return spans
+}
