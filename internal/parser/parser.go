@@ -91,10 +91,10 @@ func Language(d dialect.Dialect) syntax.LangVariant {
 
 func convertError(err error, text string, d dialect.Dialect) (Error, bool) {
 	if parseErr, ok := errors.AsType[syntax.ParseError](err); ok && parseErr.Pos.IsValid() {
-		return Error{Span: tokenSpan(text, offset(parseErr.Pos)), Kind: ErrSyntax, Message: parseErr.Text}, true
+		return refine(Error{Span: tokenSpan(text, offset(parseErr.Pos)), Kind: ErrSyntax, Message: parseErr.Text}, text), true
 	}
 	if langErr, ok := errors.AsType[syntax.LangError](err); ok && langErr.Pos.IsValid() {
-		return Error{Span: tokenSpan(text, offset(langErr.Pos)), Kind: ErrDialect, Message: dialectMessage(langErr, d)}, true
+		return refine(Error{Span: tokenSpan(text, offset(langErr.Pos)), Kind: ErrDialect, Message: dialectMessage(langErr, d)}, text), true
 	}
 	return Error{}, false
 }

@@ -631,7 +631,11 @@ func (b *builder) recoveredStmt(n *syntax.Stmt) {
 	case *syntax.BinaryCmd:
 		return
 	case *syntax.IfClause:
-		b.emptyBody(p.ThenPos, p.Position, "then")
+		keyword, name := p.ThenPos, "then"
+		if b.isElseBranch(p) {
+			keyword, name = p.Position, "else"
+		}
+		b.emptyBody(keyword, p.Position, name)
 		return
 	case *syntax.WhileClause:
 		b.emptyBody(p.DoPos, p.WhilePos, "do")
@@ -716,7 +720,11 @@ func (b *builder) recoveredClosers(node syntax.Node) {
 		if n.Braces {
 			open, closer = "{", "}"
 		}
-		b.missing(n.ForPos, n.DoPos, opener, open)
+		if stray := listedDo(n); stray != nil && n.DoPos.IsRecovered() {
+			b.errorAt(stray.Pos(), "`do` needs a `;` or line break before it; here it is read as one more word of the list")
+		} else {
+			b.missing(n.ForPos, n.DoPos, opener, open)
+		}
 		b.missing(n.ForPos, n.DonePos, opener, closer)
 	case *syntax.CaseClause:
 		open, closer := "in", "esac"
@@ -765,6 +773,17 @@ func (b *builder) recoveredClosers(node syntax.Node) {
 	case *syntax.ParenArithm:
 		b.missing(n.Lparen, n.Rparen, "(", ")")
 	}
+}
+
+func listedDo(n *syntax.ForClause) *syntax.Word {
+	iter, ok := n.Loop.(*syntax.WordIter)
+	if !ok || len(iter.Items) == 0 {
+		return nil
+	}
+	if last := iter.Items[len(iter.Items)-1]; last.Lit() == "do" {
+		return last
+	}
+	return nil
 }
 
 func (b *builder) missing(anchor, closer syntax.Pos, opener, token string) {
@@ -825,11 +844,15 @@ func docComment(text string, start int) string {
 	return strings.Join(lines, "\n")
 }
 
+func (b *builder) isElseBranch(n *syntax.IfClause) bool {
+	return b.elseClauses[n] && !n.ThenPos.IsValid() && !n.ThenPos.IsRecovered()
+}
+
 func (b *builder) keywords(node syntax.Node) {
 	switch n := node.(type) {
 	case *syntax.IfClause:
 		switch {
-		case b.elseClauses[n] && !n.ThenPos.IsValid():
+		case b.isElseBranch(n):
 			b.keyword("else", n.Position)
 		case b.elseClauses[n]:
 			b.keyword("elif", n.Position)
