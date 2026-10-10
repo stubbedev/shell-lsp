@@ -167,3 +167,7 @@ func Offset(p syntax.Pos) int {
 func offset(p syntax.Pos) int {
 	return int(p.Offset())
 }
+
+func (s Span) Covers(offset int) bool {
+	return s.Start <= offset && offset < max(s.End, s.Start+1)
+}

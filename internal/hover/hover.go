@@ -57,7 +57,7 @@ type hoverer struct {
 
 func (h hoverer) keyword() (Result, bool) {
 	for _, k := range h.Tree.Keywords {
-		if !contains(k.Span, h.Offset) {
+		if !k.Span.Covers(h.Offset) {
 			continue
 		}
 		entry, ok := shelldocs.Keyword(k.Name)
@@ -106,12 +106,12 @@ func (h hoverer) parameter(name string) string {
 
 func (h hoverer) variableName() (Result, bool) {
 	for _, ref := range h.Tree.References {
-		if contains(ref.Span, h.Offset) {
+		if ref.Span.Covers(h.Offset) {
 			return Result{Markdown: h.variable(ref.Name), Span: ref.Span}, true
 		}
 	}
 	for _, def := range h.Tree.Definitions {
-		if contains(def.NameSpan, h.Offset) {
+		if def.NameSpan.Covers(h.Offset) {
 			return Result{Markdown: h.variable(def.Name), Span: def.NameSpan}, true
 		}
 	}
@@ -187,7 +187,7 @@ func (h hoverer) undefinedVariable(name string) string {
 
 func (h hoverer) functionName() (Result, bool) {
 	for _, fn := range h.Tree.Functions {
-		if contains(fn.NameSpan, h.Offset) {
+		if fn.NameSpan.Covers(h.Offset) {
 			return Result{Markdown: h.function(fn), Span: fn.NameSpan}, true
 		}
 	}
@@ -218,7 +218,7 @@ func (h hoverer) function(fn parser.Function) string {
 
 func (h hoverer) command(ctx context.Context) (Result, bool, error) {
 	for _, cmd := range h.Tree.Commands {
-		if !contains(cmd.NameSpan, h.Offset) {
+		if !cmd.NameSpan.Covers(h.Offset) {
 			continue
 		}
 		if fn, ok := h.Tree.FunctionNamed(cmd.Name); ok {
@@ -414,10 +414,6 @@ func fence(d dialect.Dialect) string {
 		return "zsh"
 	}
 	return "sh"
-}
-
-func contains(s parser.Span, offset int) bool {
-	return s.Start <= offset && offset < max(s.End, s.Start+1)
 }
 
 func isDigits(s string) bool {

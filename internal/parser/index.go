@@ -57,6 +57,7 @@ type Definition struct {
 	Attrs    Attr
 	Local    bool
 	Within   ScopeID
+	Value    *syntax.Word
 }
 
 type Reference struct {
@@ -353,6 +354,7 @@ func (b *builder) assign(n *syntax.Assign, kind DefinitionKind, attrs Attr, loca
 		Attrs:    attrs,
 		Local:    local,
 		Within:   b.scope(),
+		Value:    assignedWord(n),
 	})
 }
 
@@ -753,4 +755,11 @@ func (b *builder) keyword(name string, pos syntax.Pos) {
 	}
 	start := offset(pos)
 	b.index.Keywords = append(b.index.Keywords, Keyword{Name: name, Span: Span{Start: start, End: start + len(name)}})
+}
+
+func assignedWord(n *syntax.Assign) *syntax.Word {
+	if n.Naked || n.Append || n.Index != nil || n.Value == nil || len(n.Value.Parts) == 0 {
+		return nil
+	}
+	return n.Value
 }

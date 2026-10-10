@@ -17,6 +17,8 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/manpage"
+	"github.com/stubbedev/shell-lsp/internal/navigation"
+	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
 const (
@@ -46,6 +48,7 @@ type Server struct {
 	push        *pushScheduler
 	commandDocs commandDocs
 	environment shellEnvironment
+	workspace   *workspace.Workspace
 
 	mu          sync.Mutex
 	shutdown    bool
@@ -80,6 +83,7 @@ func New(conn *jsonrpc.Conn, version string) *Server {
 		environment: shellEnvironment{pages: pages, executables: &executableCache{}},
 		sem:         make(chan struct{}, maxConcurrency),
 	}
+	s.workspace = newWorkspace(s)
 	s.registerHandlers()
 	return s
 }
@@ -90,12 +94,16 @@ func (s *Server) SetLogger(logger *slog.Logger) {
 
 func (s *Server) registerHandlers() {
 	s.requests = map[string]requestHandler{
-		"initialize":              s.handleInitialize,
-		"shutdown":                s.handleShutdown,
-		"textDocument/diagnostic": s.handleDocumentDiagnostic,
-		"textDocument/hover":      s.handleHover,
-		"textDocument/completion": s.handleCompletion,
-		"completionItem/resolve":  s.handleCompletionResolve,
+		"initialize":                  s.handleInitialize,
+		"shutdown":                    s.handleShutdown,
+		"textDocument/diagnostic":     s.handleDocumentDiagnostic,
+		"textDocument/hover":          s.handleHover,
+		"textDocument/completion":     s.handleCompletion,
+		"completionItem/resolve":      s.handleCompletionResolve,
+		"textDocument/definition":     s.navigationHandler(navigation.ModeDefinition),
+		"textDocument/declaration":    s.navigationHandler(navigation.ModeDeclaration),
+		"textDocument/typeDefinition": s.navigationHandler(navigation.ModeTypeDefinition),
+		"textDocument/implementation": s.navigationHandler(navigation.ModeImplementation),
 	}
 	s.notifications = map[string]notificationHandler{
 		"$/cancelRequest":                  s.handleCancelRequest,
@@ -107,6 +115,7 @@ func (s *Server) registerHandlers() {
 		"textDocument/didClose":            s.handleDidClose,
 		"textDocument/didSave":             s.handleDidSave,
 		"workspace/didChangeConfiguration": s.handleDidChangeConfiguration,
+		"workspace/didChangeWatchedFiles":  s.handleDidChangeWatchedFiles,
 	}
 }
 

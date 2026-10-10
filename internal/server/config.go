@@ -35,6 +35,7 @@ func (s *Server) handleDidChangeConfiguration(ctx context.Context, params json.R
 	s.generation++
 	refresh := s.client.Workspace.Diagnostics.RefreshSupport
 	s.mu.Unlock()
+	s.workspace.InvalidateAll()
 	s.refreshDiagnostics(ctx, refresh)
 	return nil
 }

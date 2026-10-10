@@ -221,3 +221,25 @@ type CompletionList struct {
 	IsIncomplete bool             `json:"isIncomplete"`
 	Items        []CompletionItem `json:"items"`
 }
+
+type WorkspaceFolder struct {
+	URI  string `json:"uri"`
+	Name string `json:"name"`
+}
+
+type FileChangeType uint8
+
+const (
+	FileCreated FileChangeType = 1
+	FileChanged FileChangeType = 2
+	FileDeleted FileChangeType = 3
+)
+
+type FileEvent struct {
+	URI  string         `json:"uri"`
+	Type FileChangeType `json:"type"`
+}
+
+type DidChangeWatchedFilesParams struct {
+	Changes []FileEvent `json:"changes"`
+}

@@ -68,7 +68,7 @@ type Document struct {
 	lineStart []int
 }
 
-func newDocument(uri, language string, version int32, text string) *Document {
+func NewDocument(uri, language string, version int32, text string) *Document {
 	d := &Document{URI: uri, Language: language, Version: version}
 	d.setText(NormalizeCanonical(text))
 	return d
@@ -236,7 +236,7 @@ func (s *Store) SetEncoding(enc Encoding) {
 
 func (s *Store) Open(item lsp.TextDocumentItem) {
 	_ = s.update(func(next *View) error {
-		next.docs[item.URI] = newDocument(item.URI, item.LanguageID, item.Version, item.Text)
+		next.docs[item.URI] = NewDocument(item.URI, item.LanguageID, item.Version, item.Text)
 		return nil
 	})
 }

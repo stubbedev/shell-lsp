@@ -1,0 +1,117 @@
+package server
+
+import (
+	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
+
+	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/docstore"
+	"github.com/stubbedev/shell-lsp/internal/fileuri"
+	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
+	"github.com/stubbedev/shell-lsp/internal/lsp"
+	"github.com/stubbedev/shell-lsp/internal/navigation"
+	"github.com/stubbedev/shell-lsp/internal/workspace"
+)
+
+func newWorkspace(s *Server) *workspace.Workspace {
+	return workspace.New(
+		func(uri string) (*workspace.File, bool) {
+			file, err := s.workspaceFile(s.docs.View(), uri)
+			return file, err == nil
+		},
+		func() *dialect.Dialect {
+			settings, _ := s.currentSettings()
+			return settings.Dialect
+		},
+	)
+}
+
+func (s *Server) workspaceFile(docs *docstore.View, uri string) (*workspace.File, error) {
+	snap, err := s.snapshot(docs, uri)
+	if err != nil {
+		return nil, err
+	}
+	path, err := fileuri.ToPath(uri)
+	if err != nil {
+		path = ""
+	}
+	return &workspace.File{Path: path, URI: uri, Doc: snap.doc, Tree: snap.tree}, nil
+}
+
+func (s *Server) navigationEnv() navigation.Env {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		home = ""
+	}
+	return navigation.Env{
+		Loader:   s.workspace,
+		Roots:    s.workspace.Roots(),
+		Home:     home,
+		PathDirs: filepath.SplitList(os.Getenv("PATH")),
+	}
+}
+
+func (s *Server) navigationHandler(mode navigation.Mode) requestHandler {
+	return func(ctx context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
+		position, err := lsp.DecodeParams[lsp.TextDocumentPositionParams](params)
+		if err != nil {
+			return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing position params: %v", err)
+		}
+		file, err := s.workspaceFile(docs, position.TextDocument.URI)
+		if err != nil {
+			return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
+		}
+		offset := file.Doc.PositionToOffset(position.Position, docs.Encoding())
+		locations, err := navigation.Definition(ctx, file, offset, s.navigationEnv(), s.workspace.ShellFiles, mode)
+		if err != nil {
+			return nil, err
+		}
+		return toLocations(locations, docs.Encoding()), nil
+	}
+}
+
+func toLocations(locations []navigation.Location, enc docstore.Encoding) []lsp.Location {
+	out := make([]lsp.Location, len(locations))
+	for i, loc := range locations {
+		out[i] = lsp.Location{URI: loc.File.URI, Range: loc.File.Doc.RangeFor(loc.Span.Start, loc.Span.End, enc)}
+	}
+	return out
+}
+
+func (s *Server) handleDidChangeWatchedFiles(_ context.Context, params json.RawMessage) error {
+	watched, err := lsp.DecodeParams[lsp.DidChangeWatchedFilesParams](params)
+	if err != nil {
+		return err
+	}
+	for _, change := range watched.Changes {
+		path, err := fileuri.ToPath(change.URI)
+		if err != nil {
+			s.logger.Warn("ignoring watched file event", "uri", change.URI, "err", err)
+			continue
+		}
+		s.workspace.Invalidate(path)
+	}
+	return nil
+}
+
+func workspaceRoots(params InitializeParams) []string {
+	var roots []string
+	add := func(uri string) {
+		path, err := fileuri.ToPath(uri)
+		if err == nil {
+			roots = append(roots, path)
+		}
+	}
+	for _, folder := range params.WorkspaceFolders {
+		add(folder.URI)
+	}
+	if len(roots) == 0 && params.RootURI != "" {
+		add(params.RootURI)
+	}
+	if len(roots) == 0 && params.RootPath != "" {
+		roots = append(roots, params.RootPath)
+	}
+	return roots
+}

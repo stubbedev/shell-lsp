@@ -11,12 +11,13 @@ import (
 )
 
 type InitializeParams struct {
-	ProcessID             *int               `json:"processId"`
-	RootPath              string             `json:"rootPath"`
-	RootURI               string             `json:"rootUri"`
-	Capabilities          ClientCapabilities `json:"capabilities"`
-	InitializationOptions json.RawMessage    `json:"initializationOptions"`
-	Trace                 TraceValue         `json:"trace"`
+	ProcessID             *int                  `json:"processId"`
+	RootPath              string                `json:"rootPath"`
+	RootURI               string                `json:"rootUri"`
+	Capabilities          ClientCapabilities    `json:"capabilities"`
+	InitializationOptions json.RawMessage       `json:"initializationOptions"`
+	WorkspaceFolders      []lsp.WorkspaceFolder `json:"workspaceFolders"`
+	Trace                 TraceValue            `json:"trace"`
 }
 
 type ClientCapabilities struct {
@@ -65,11 +66,15 @@ type DiagnosticOptions struct {
 }
 
 type ServerCapabilities struct {
-	PositionEncoding   string                  `json:"positionEncoding,omitempty"`
-	TextDocumentSync   TextDocumentSyncOptions `json:"textDocumentSync"`
-	DiagnosticProvider DiagnosticOptions       `json:"diagnosticProvider"`
-	HoverProvider      bool                    `json:"hoverProvider"`
-	CompletionProvider CompletionOptions       `json:"completionProvider"`
+	PositionEncoding       string                  `json:"positionEncoding,omitempty"`
+	TextDocumentSync       TextDocumentSyncOptions `json:"textDocumentSync"`
+	DiagnosticProvider     DiagnosticOptions       `json:"diagnosticProvider"`
+	HoverProvider          bool                    `json:"hoverProvider"`
+	CompletionProvider     CompletionOptions       `json:"completionProvider"`
+	DefinitionProvider     bool                    `json:"definitionProvider"`
+	DeclarationProvider    bool                    `json:"declarationProvider"`
+	TypeDefinitionProvider bool                    `json:"typeDefinitionProvider"`
+	ImplementationProvider bool                    `json:"implementationProvider"`
 }
 
 type CompletionOptions struct {
@@ -100,6 +105,7 @@ func (s *Server) handleInitialize(_ context.Context, _ *docstore.View, params js
 	if caps.TextDocument.Diagnostic == nil {
 		s.push = newPushScheduler(diagnosticsDebounce, s.publishDiagnostics)
 	}
+	s.workspace.SetRoots(workspaceRoots(initParams))
 	s.mu.Lock()
 	s.settings = settings
 	s.client = caps
@@ -107,11 +113,15 @@ func (s *Server) handleInitialize(_ context.Context, _ *docstore.View, params js
 	s.mu.Unlock()
 	return InitializeResult{
 		Capabilities: ServerCapabilities{
-			PositionEncoding:   enc.String(),
-			TextDocumentSync:   TextDocumentSyncOptions{OpenClose: true, Change: 2},
-			DiagnosticProvider: DiagnosticOptions{},
-			HoverProvider:      true,
-			CompletionProvider: CompletionOptions{TriggerCharacters: []string{"$", "{", "/", "-"}, ResolveProvider: true},
+			PositionEncoding:       enc.String(),
+			TextDocumentSync:       TextDocumentSyncOptions{OpenClose: true, Change: 2},
+			DiagnosticProvider:     DiagnosticOptions{},
+			HoverProvider:          true,
+			CompletionProvider:     CompletionOptions{TriggerCharacters: []string{"$", "{", "/", "-"}, ResolveProvider: true},
+			DefinitionProvider:     true,
+			DeclarationProvider:    true,
+			TypeDefinitionProvider: true,
+			ImplementationProvider: true,
 		},
 		ServerInfo: ServerInfo{Name: "shell-lsp", Version: s.version},
 	}, nil
