@@ -159,7 +159,7 @@ func ours(script string) []string {
 	d, explicit := fixtureDialect(script)
 	tree := parser.Parse(script, d)
 	var out []string
-	for _, f := range Check(tree, nil, Options{ForcedDialect: !explicit}) {
+	for _, f := range Check(tree, nil, Options{ForcedDialect: !explicit, GuessedDialect: explicit}) {
 		out = append(out, f.Code.String()+" "+position(script, f.Span.Start))
 	}
 	slices.Sort(out)

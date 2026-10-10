@@ -52,14 +52,16 @@ type Finding struct {
 }
 
 type Options struct {
-	Exclude       []Code
-	Optional      []string
-	ForcedDialect bool
+	Exclude        []Code
+	Optional       []string
+	ForcedDialect  bool
+	GuessedDialect bool
 }
 
 func Check(tree *parser.Tree, imports []parser.Import, opts Options) []Finding {
 	p := newPass(tree, imports, fileWideDirectives(tree, opts.Optional))
 	p.shellChosen = opts.ForcedDialect || p.settings.shell
+	p.dialectGuessed = opts.GuessedDialect && !p.settings.shell
 	if name, foreign := foreignInterpreter(p.text); foreign && !p.shellChosen {
 		first, _, _ := strings.Cut(p.text, "\n")
 		p.report(1071, parser.Span{Start: 0, End: len(first)}, name+" is not a shell, so this file is not linted.")

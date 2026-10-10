@@ -30,10 +30,11 @@ type pass struct {
 	settings fileWide
 	findings []Finding
 
-	shellChosen  bool
-	shellOptions *shellOptions
-	variables    variableUsage
-	associative  map[string]bool
+	shellChosen    bool
+	shellOptions   *shellOptions
+	variables      variableUsage
+	associative    map[string]bool
+	dialectGuessed bool
 }
 
 func newPass(tree *parser.Tree, imports []parser.Import, settings fileWide) *pass {
