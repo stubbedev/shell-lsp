@@ -23,11 +23,20 @@ type testCommand struct {
 	args  []*syntax.Word
 	expr  syntax.TestExpr
 
+	unknown      []unknownTestOp
 	unterminated bool
 	malformed    bool
 }
 
+type unknownTestOp struct {
+	word  *syntax.Word
+	name  string
+	unary bool
+}
+
 func (t testCommand) bracketed() bool { return t.style != testBuiltin }
+
+func (t testCommand) parsed() bool { return !t.malformed || len(t.unknown) > 0 }
 
 func testCommandOf(cmd syntax.Command) (testCommand, bool) {
 	switch cmd := cmd.(type) {
@@ -48,11 +57,11 @@ func testCommandOf(cmd syntax.Command) (testCommand, bool) {
 			if closed {
 				args = args[:len(args)-1]
 			}
-			expr, wellFormed := parseTestArgs(args)
-			return testCommand{style: singleBracket, name: name, node: cmd, args: args, expr: expr, unterminated: !closed, malformed: !wellFormed}, true
+			expr, unknown, wellFormed := parseTestArgs(args)
+			return testCommand{style: singleBracket, name: name, node: cmd, args: args, expr: expr, unknown: unknown, unterminated: !closed, malformed: !wellFormed}, true
 		case name == "test" || (path.Base(name) == "test" && path.Dir(name) != "."):
-			expr, wellFormed := parseTestArgs(args)
-			return testCommand{style: testBuiltin, name: name, node: cmd, args: args, expr: expr, malformed: !wellFormed}, true
+			expr, unknown, wellFormed := parseTestArgs(args)
+			return testCommand{style: testBuiltin, name: name, node: cmd, args: args, expr: expr, unknown: unknown, malformed: !wellFormed}, true
 		}
 	}
 	return testCommand{}, false
@@ -91,15 +100,19 @@ type testArgParser struct {
 	words    []*syntax.Word
 	pos      int
 	unclosed bool
+	unknown  []unknownTestOp
 }
 
-func parseTestArgs(words []*syntax.Word) (syntax.TestExpr, bool) {
+func parseTestArgs(words []*syntax.Word) (syntax.TestExpr, []unknownTestOp, bool) {
 	if len(words) == 0 {
-		return nil, true
+		return nil, nil, true
 	}
 	tp := &testArgParser{words: words}
 	expr := tp.or()
-	return expr, tp.pos == len(words) && !tp.unclosed
+	if tp.pos != len(words) || tp.unclosed {
+		return expr, nil, false
+	}
+	return expr, tp.unknown, len(tp.unknown) == 0
 }
 
 func (tp *testArgParser) peek(ahead int) (string, bool) {
@@ -186,7 +199,31 @@ func (tp *testArgParser) primary() syntax.TestExpr {
 		opWord := tp.take()
 		return &syntax.UnaryTest{OpPos: opWord.Pos(), Op: op, X: tp.take()}
 	}
+	if name, _ := tp.peek(1); tp.remaining() > 2 && isOperatorShaped(name) {
+		x := tp.take()
+		tp.unknown = append(tp.unknown, unknownTestOp{word: tp.take(), name: name})
+		tp.take()
+		return x
+	}
+	if isOperatorShaped(lit) && tp.remaining() > 1 {
+		opWord := tp.take()
+		tp.unknown = append(tp.unknown, unknownTestOp{word: opWord, name: lit, unary: true})
+		tp.take()
+		return opWord
+	}
 	return tp.take()
+}
+
+func isOperatorShaped(lit string) bool {
+	if len(lit) < 2 || lit[0] != '-' || lit == "-a" || lit == "-o" {
+		return false
+	}
+	for i := 1; i < len(lit); i++ {
+		if c := lit[i]; (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') {
+			return false
+		}
+	}
+	return true
 }
 
 func walkTest(expr syntax.TestExpr, visit func(syntax.TestExpr)) {

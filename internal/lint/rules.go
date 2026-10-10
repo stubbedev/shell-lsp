@@ -61,6 +61,7 @@ var families = []family{
 	arraysFamily,
 	singleQuotesFamily,
 	arithmeticFamily,
+	testLogicFamily,
 }
 
 var catalog, rules, commandChecks = assemble(families)
