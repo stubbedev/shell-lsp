@@ -19,32 +19,37 @@ type snapshot struct {
 	generation uint64
 }
 
+type snapshotEntry struct {
+	doc        *docstore.Document
+	generation uint64
+	ready      chan struct{}
+	snap       *snapshot
+}
+
 type snapshotCache struct {
 	mu      sync.Mutex
-	entries map[string]*snapshot
+	entries map[string]*snapshotEntry
 }
 
 func newSnapshotCache() *snapshotCache {
-	return &snapshotCache{entries: map[string]*snapshot{}}
+	return &snapshotCache{entries: map[string]*snapshotEntry{}}
 }
 
-func (c *snapshotCache) lookup(uri string, doc *docstore.Document, generation uint64) (*snapshot, bool) {
+func (c *snapshotCache) get(uri string, doc *docstore.Document, generation uint64, build func() *snapshot) *snapshot {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	snap, ok := c.entries[uri]
-	if !ok || snap.doc != doc || snap.generation != generation {
-		return nil, false
+	if e, ok := c.entries[uri]; ok && e.doc == doc && e.generation == generation {
+		c.mu.Unlock()
+		<-e.ready
+		return e.snap
 	}
-	return snap, true
-}
-
-func (c *snapshotCache) store(uri string, snap *snapshot) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if current, ok := c.entries[uri]; ok && current.doc.Version > snap.doc.Version {
-		return
+	e := &snapshotEntry{doc: doc, generation: generation, ready: make(chan struct{})}
+	if current, ok := c.entries[uri]; !ok || current.doc.Version <= doc.Version {
+		c.entries[uri] = e
 	}
-	c.entries[uri] = snap
+	c.mu.Unlock()
+	e.snap = build()
+	close(e.ready)
+	return e.snap
 }
 
 func (c *snapshotCache) forget(uri string) {
@@ -59,18 +64,52 @@ func (s *Server) snapshot(docs *docstore.View, uri string) (*snapshot, error) {
 		return nil, fmt.Errorf("document %s is not open", uri)
 	}
 	settings, generation := s.settingsFor(uri)
-	if snap, ok := s.snapshots.lookup(uri, doc, generation); ok {
-		return snap, nil
+	return s.snapshots.get(uri, doc, generation, func() *snapshot {
+		d := dialect.Detect(settings.Dialect, dialect.Input{URI: uri, LanguageID: doc.Language, Text: doc.Text()})
+		return &snapshot{
+			doc:        doc,
+			encoding:   docs.Encoding(),
+			dialect:    d,
+			tree:       parser.Parse(doc.Text(), d),
+			settings:   settings,
+			generation: generation,
+		}
+	}), nil
+}
+
+type warmer struct {
+	mu      sync.Mutex
+	running map[string]bool
+	again   map[string]bool
+}
+
+func newWarmer() *warmer {
+	return &warmer{running: map[string]bool{}, again: map[string]bool{}}
+}
+
+func (s *Server) warm(uri string) {
+	w := s.warmer
+	w.mu.Lock()
+	if w.running[uri] {
+		w.again[uri] = true
+		w.mu.Unlock()
+		return
 	}
-	d := dialect.Detect(settings.Dialect, dialect.Input{URI: uri, LanguageID: doc.Language, Text: doc.Text()})
-	snap := &snapshot{
-		doc:        doc,
-		encoding:   docs.Encoding(),
-		dialect:    d,
-		tree:       parser.Parse(doc.Text(), d),
-		settings:   settings,
-		generation: generation,
-	}
-	s.snapshots.store(uri, snap)
-	return snap, nil
+	w.running[uri] = true
+	w.mu.Unlock()
+	go func() {
+		for {
+			if _, err := s.snapshot(s.docs.View(), uri); err != nil {
+				s.logger.Debug("warming closed document", "uri", uri)
+			}
+			w.mu.Lock()
+			if !w.again[uri] {
+				delete(w.running, uri)
+				w.mu.Unlock()
+				return
+			}
+			delete(w.again, uri)
+			w.mu.Unlock()
+		}
+	}()
 }

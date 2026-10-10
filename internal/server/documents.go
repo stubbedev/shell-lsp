@@ -52,6 +52,7 @@ func (s *Server) handleDidClose(_ context.Context, params json.RawMessage) error
 }
 
 func (s *Server) documentChanged(uri string) {
+	s.warm(uri)
 	if s.push != nil {
 		s.push.schedule(uri)
 	}
