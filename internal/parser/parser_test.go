@@ -339,6 +339,36 @@ func TestLiteralChars(t *testing.T) {
 	}
 }
 
+func TestText(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		src     string
+		want    string
+		literal bool
+	}{
+		{src: `plain`, want: "plain", literal: true},
+		{src: `"a $x b"`, want: "a _ b"},
+		{src: `pre$(cmd)'post'`, want: "pre_post"},
+		{src: `$'tab\there\x41\101é\cA\q'`, want: "tab\there" + "AA" + "é" + "\x01" + `\q`, literal: true},
+		{src: `$'\xzz'`, want: `\xzz`, literal: true},
+	}
+	for _, tc := range tests {
+		file, err := syntax.NewParser().Parse(strings.NewReader("echo "+tc.src), "")
+		if err != nil {
+			t.Fatalf("parsing %q: %v", tc.src, err)
+		}
+		call, isCall := file.Stmts[0].Cmd.(*syntax.CallExpr)
+		if !isCall {
+			t.Fatalf("parsing %q: not a simple command", tc.src)
+		}
+		got, literal := Text(call.Args[1], "_")
+		if literal != tc.literal || got != tc.want {
+			t.Errorf("Text(%s) = %q, %t; want %q, %t", tc.src, got, literal, tc.want, tc.literal)
+		}
+	}
+}
+
 func FuzzParse(f *testing.F) {
 	for _, seed := range []string{
 		"echo ${bad\n", "if true; then\n", "f() {", "cat <<EOF\n", "echo \"x", "(( a = ",
