@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -70,13 +71,10 @@ type Conn struct {
 	writer io.Writer
 	mu     sync.Mutex
 	frame  bytes.Buffer
-	enc    *json.Encoder
 }
 
 func NewConn(r io.Reader, w io.Writer) *Conn {
-	c := &Conn{reader: bufio.NewReaderSize(r, readBufferSize), writer: w}
-	c.enc = json.NewEncoder(&c.frame)
-	return c
+	return &Conn{reader: bufio.NewReaderSize(r, readBufferSize), writer: w}
 }
 
 func (c *Conn) Read() (*Message, error) {
@@ -178,11 +176,7 @@ func describe(id json.RawMessage, method string) string {
 }
 
 func (c *Conn) encode(v any) error {
-	if err := c.enc.Encode(v); err != nil {
-		return err
-	}
-	c.frame.Truncate(c.frame.Len() - 1)
-	return nil
+	return jsonv2.MarshalWrite(&c.frame, v, json.DefaultOptionsV1())
 }
 
 func (c *Conn) send(body func() error) error {
