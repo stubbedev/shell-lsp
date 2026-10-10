@@ -4,13 +4,9 @@ import (
 	"slices"
 	"sort"
 	"strings"
-)
 
-type Edit struct {
-	Start   int
-	End     int
-	NewText string
-}
+	"github.com/stubbedev/shell-lsp/internal/textedit"
+)
 
 type pair struct {
 	x, y int
@@ -21,16 +17,16 @@ type hunk struct {
 	bStart, bEnd int
 }
 
-func Edits(before, after string) []Edit {
+func Edits(before, after string) []textedit.Edit {
 	a, b := splitLines(before), splitLines(after)
 	offsets := make([]int, len(a)+1)
 	for i, line := range a {
 		offsets[i+1] = offsets[i] + len(line)
 	}
 	hunks := diff(a, b)
-	edits := make([]Edit, len(hunks))
+	edits := make([]textedit.Edit, len(hunks))
 	for i, h := range hunks {
-		edits[i] = Edit{
+		edits[i] = textedit.Edit{
 			Start:   offsets[h.aStart],
 			End:     offsets[h.aEnd],
 			NewText: strings.Join(b[h.bStart:h.bEnd], ""),

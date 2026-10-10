@@ -22,6 +22,7 @@ const (
 	CodeInternalError    = -32603
 	CodeServerClosing    = -32000
 	CodeRequestFailed    = -32803
+	CodeContentModified  = -32801
 	CodeRequestCancelled = -32800
 )
 

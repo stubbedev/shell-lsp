@@ -7,7 +7,7 @@ specification.
 
 The implementation plan lives in the issue tracker. Status: protocol core,
 incremental document sync, dialect detection, an error-tolerant parser for every
-dialect, diagnostics (syntax errors plus shellcheck, push or pull), hover, completion, navigation, symbols, folding and formatting.
+dialect, diagnostics (syntax errors plus shellcheck, push or pull), hover, completion, navigation, symbols, folding, formatting and code actions.
 
 ## Goals
 
@@ -73,6 +73,15 @@ formatting only changes the lines that intersect the range.
 shellcheck has no zsh support, so zsh documents get syntax diagnostics only; the
 server says so once via `window/logMessage`, as it does when shellcheck is not
 installed.
+
+## Commands
+
+`workspace/executeCommand` accepts:
+
+| Command | Arguments | Effect |
+| --- | --- | --- |
+| `shellLsp.fixAll` | document URI | Applies every non-overlapping shellcheck autofix in the document via `workspace/applyEdit` |
+| `shellLsp.applyEdit` | `WorkspaceEdit` | Applies the edit via `workspace/applyEdit`; code actions use it for clients without code action literal support |
 
 ## Recipes
 

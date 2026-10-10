@@ -109,6 +109,9 @@ func (s *Server) registerHandlers() {
 		"workspace/symbol":             s.handleWorkspaceSymbol,
 		"textDocument/formatting":      s.handleFormatting,
 		"textDocument/rangeFormatting": s.handleRangeFormatting,
+		"textDocument/codeAction":      s.handleCodeAction,
+		"codeAction/resolve":           s.handleCodeActionResolve,
+		"workspace/executeCommand":     s.handleExecuteCommand,
 	}
 	s.notifications = map[string]notificationHandler{
 		"$/cancelRequest":                  s.handleCancelRequest,

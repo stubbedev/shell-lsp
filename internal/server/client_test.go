@@ -86,14 +86,25 @@ func (c *testClient) notify(method, params string) {
 func (c *testClient) call(method, params string) *jsonrpc.Message {
 	c.t.Helper()
 
+	return c.awaitResponse(c.start(method, params), method)
+}
+
+func (c *testClient) start(method, params string) string {
+	c.t.Helper()
+
 	c.mu.Lock()
 	c.nextID++
 	id := c.nextID
 	c.mu.Unlock()
 	c.send(request(id, method, params))
-	want := strconv.Itoa(id)
+	return strconv.Itoa(id)
+}
+
+func (c *testClient) awaitResponse(id, method string) *jsonrpc.Message {
+	c.t.Helper()
+
 	return c.await("response to "+method, func(m *jsonrpc.Message) bool {
-		return m.IsResponse() && string(m.ID) == want
+		return m.IsResponse() && string(m.ID) == id
 	})
 }
 

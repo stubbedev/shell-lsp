@@ -8,19 +8,8 @@ import (
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/textedit"
 )
-
-func apply(text string, edits []Edit) string {
-	var sb strings.Builder
-	last := 0
-	for _, e := range edits {
-		sb.WriteString(text[last:e.Start])
-		sb.WriteString(e.NewText)
-		last = e.End
-	}
-	sb.WriteString(text[last:])
-	return sb.String()
-}
 
 func TestEditsReproduceTarget(t *testing.T) {
 	t.Parallel()
@@ -40,8 +29,8 @@ func TestEditsReproduceTarget(t *testing.T) {
 		}
 		before, after := build(), build()
 		edits := Edits(before, after)
-		if got := apply(before, edits); got != after {
-			t.Fatalf("seed %d: apply(Edits) = %q, want %q (edits %+v)", seed, got, after, edits)
+		if got := textedit.Apply(before, edits); got != after {
+			t.Fatalf("seed %d: textedit.Apply(Edits) = %q, want %q (edits %+v)", seed, got, after, edits)
 		}
 		for i := 1; i < len(edits); i++ {
 			if edits[i].Start < edits[i-1].End {
@@ -134,7 +123,7 @@ func TestFormatZsh(t *testing.T) {
 func TestRangeEdits(t *testing.T) {
 	t.Parallel()
 
-	edits := []Edit{{Start: 0, End: 4}, {Start: 10, End: 14}, {Start: 20, End: 24}}
+	edits := []textedit.Edit{{Start: 0, End: 4}, {Start: 10, End: 14}, {Start: 20, End: 24}}
 	got := RangeEdits(edits, 11, 12)
 	if len(got) != 1 || got[0].Start != 10 {
 		t.Errorf("RangeEdits = %+v", got)
@@ -155,7 +144,7 @@ func TestEditsScaleToLargeReformats(t *testing.T) {
 		}
 	}
 	edits := Edits(before.String(), after.String())
-	if got := apply(before.String(), edits); got != after.String() {
+	if got := textedit.Apply(before.String(), edits); got != after.String() {
 		t.Fatal("large diff does not reproduce the target")
 	}
 }

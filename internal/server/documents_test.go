@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"strconv"
 	"testing"
 	"time"
 
@@ -118,15 +117,11 @@ func TestRequestsSeeDocumentsAsOfDispatch(t *testing.T) {
 		}
 	})
 	c.notify("textDocument/didOpen", openParams("file:///t.sh", "before"))
-	c.mu.Lock()
-	c.nextID++
-	id := c.nextID
-	c.mu.Unlock()
-	c.send(request(id, "test/slow-read", ""))
+	id := c.start("test/slow-read", "")
 	c.notify("textDocument/didChange", `{"textDocument": {"uri": "file:///t.sh", "version": 2}, "contentChanges": [{"text": "after"}]}`)
 	time.Sleep(50 * time.Millisecond)
 	close(release)
-	msg := c.await("slow read response", func(m *jsonrpc.Message) bool { return m.IsResponse() && string(m.ID) == strconv.Itoa(id) })
+	msg := c.awaitResponse(id, "test/slow-read")
 	if got := decodeResult[string](t, msg); got != "before" {
 		t.Errorf("request saw %q, want the document as it was when the request arrived", got)
 	}

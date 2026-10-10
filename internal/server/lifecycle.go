@@ -40,11 +40,20 @@ type ClientCapabilities struct {
 		FoldingRange struct {
 			RangeLimit int `json:"rangeLimit"`
 		} `json:"foldingRange"`
+		CodeAction struct {
+			CodeActionLiteralSupport *struct{} `json:"codeActionLiteralSupport"`
+			ResolveSupport           struct {
+				Properties []string `json:"properties"`
+			} `json:"resolveSupport"`
+		} `json:"codeAction"`
 	} `json:"textDocument"`
 	Workspace struct {
 		Diagnostics struct {
 			RefreshSupport bool `json:"refreshSupport"`
 		} `json:"diagnostics"`
+		WorkspaceEdit struct {
+			DocumentChanges bool `json:"documentChanges"`
+		} `json:"workspaceEdit"`
 	} `json:"workspace"`
 }
 
@@ -86,6 +95,17 @@ type ServerCapabilities struct {
 	WorkspaceSymbolProvider         bool                    `json:"workspaceSymbolProvider"`
 	DocumentFormattingProvider      bool                    `json:"documentFormattingProvider"`
 	DocumentRangeFormattingProvider bool                    `json:"documentRangeFormattingProvider"`
+	CodeActionProvider              CodeActionOptions       `json:"codeActionProvider"`
+	ExecuteCommandProvider          ExecuteCommandOptions   `json:"executeCommandProvider"`
+}
+
+type CodeActionOptions struct {
+	CodeActionKinds []string `json:"codeActionKinds"`
+	ResolveProvider bool     `json:"resolveProvider"`
+}
+
+type ExecuteCommandOptions struct {
+	Commands []string `json:"commands"`
 }
 
 type CompletionOptions struct {
@@ -138,6 +158,8 @@ func (s *Server) handleInitialize(_ context.Context, _ *docstore.View, params js
 			WorkspaceSymbolProvider:         true,
 			DocumentFormattingProvider:      true,
 			DocumentRangeFormattingProvider: true,
+			CodeActionProvider:              CodeActionOptions{CodeActionKinds: codeActionKinds, ResolveProvider: true},
+			ExecuteCommandProvider:          ExecuteCommandOptions{Commands: serverCommands},
 		},
 		ServerInfo: ServerInfo{Name: "shell-lsp", Version: s.version},
 	}, nil

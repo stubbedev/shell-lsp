@@ -10,6 +10,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/textedit"
 )
 
 var ErrNotIdempotent = errors.New("formatter output is not stable")
@@ -62,8 +63,8 @@ func formatOnce(text string, d dialect.Dialect, opts Options) (string, error) {
 	return out.String(), nil
 }
 
-func RangeEdits(edits []Edit, start, end int) []Edit {
-	var out []Edit
+func RangeEdits(edits []textedit.Edit, start, end int) []textedit.Edit {
+	var out []textedit.Edit
 	for _, e := range edits {
 		if e.End >= start && e.Start <= end {
 			out = append(out, e)
