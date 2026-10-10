@@ -106,6 +106,7 @@ func fileWideDirectives(tree *parser.Tree, enabled []string) fileWide {
 		}
 	}
 	out := fileWide{optional: setOf(enabled...), extended: true}
+	extendedDecided := false
 	for _, c := range tree.Comments {
 		d, ok := directive.Parse("#" + c.Text)
 		if !ok {
@@ -122,8 +123,13 @@ func fileWideDirectives(tree *parser.Tree, enabled []string) fileWide {
 				out.optional[strings.TrimSpace(name)] = true
 			}
 		}
-		if value, found := d.Value("extended-analysis"); found {
-			out.extended = value != "false"
+		if value, found := d.Value("extended-analysis"); found && !extendedDecided {
+			switch value {
+			case "true":
+				extendedDecided = true
+			case "false":
+				out.extended, extendedDecided = false, true
+			}
 		}
 	}
 	return out

@@ -80,21 +80,25 @@ const (
 )
 
 type value struct {
-	space   space
-	integer integerAttr
+	space        space
+	integer      integerAttr
+	holdsInteger integerAttr
 }
 
 func (v value) join(o value) value {
-	return value{space: (v.space | o.space).normalize(), integer: v.integer | o.integer}
+	return value{space: (v.space | o.space).normalize(), integer: v.integer | o.integer, holdsInteger: v.holdsInteger | o.holdsInteger}
 }
 
 func (v value) substitute(entry value) value {
-	out := value{space: v.space &^ spaceEntry, integer: v.integer &^ integerEntry}
+	out := value{space: v.space &^ spaceEntry, integer: v.integer &^ integerEntry, holdsInteger: v.holdsInteger &^ integerEntry}
 	if v.space&spaceEntry != 0 {
 		out.space = (out.space | entry.space).normalize()
 	}
 	if v.integer&integerEntry != 0 {
 		out.integer |= entry.integer
+	}
+	if v.holdsInteger&integerEntry != 0 {
+		out.holdsInteger |= entry.holdsInteger
 	}
 	return out
 }
@@ -119,6 +123,8 @@ type state struct {
 	symbolic bool
 	vars     pmap[value]
 	funcs    pmap[funcRef]
+	status   statusSet
+	pending  pmap[*callList]
 }
 
 func newState(symbolic bool) *state {
@@ -141,7 +147,7 @@ func (s *state) get(name string) value {
 		return v
 	}
 	if s.symbolic {
-		return value{space: spaceEntry, integer: integerEntry}
+		return value{space: spaceEntry, integer: integerEntry, holdsInteger: integerEntry}
 	}
 	return environment(name)
 }
@@ -156,6 +162,8 @@ func join(a, b *state) *state {
 		return a.clone()
 	}
 	out := a.clone()
+	out.status = a.status.union(b.status)
+	out.pending = unionPending(a.pending, b.pending)
 	a.vars.diff(b.vars, func(name string) {
 		out.set(name, a.get(name).join(b.get(name)))
 	})
@@ -175,10 +183,11 @@ func join(a, b *state) *state {
 }
 
 func (s *state) equal(o *state) bool {
-	if s.live != o.live {
+	if s.live != o.live || !slices.Equal(s.status, o.status) {
 		return false
 	}
 	same := true
+	s.pending.diff(o.pending, func(string) { same = false })
 	s.vars.diff(o.vars, func(string) { same = false })
 	s.funcs.diff(o.funcs, func(string) { same = false })
 	return same
@@ -211,6 +220,7 @@ type flowResult struct {
 	expansions map[*syntax.ParamExp]space
 	reached    map[*syntax.Stmt]bool
 	called     map[*syntax.FuncDecl]bool
+	flowFacts
 }
 
 func (r *flowResult) expansion(pe *syntax.ParamExp) space {
@@ -254,6 +264,15 @@ type interpreter struct {
 	bats       bool
 	walk       []syntax.Node
 	deferred   []syntax.Node
+
+	trackStatus   bool
+	trackCalls    bool
+	unreachable   bool
+	singletons    map[*syntax.Stmt]statusSet
+	definitions   map[*syntax.FuncDecl]bool
+	subshellExits []pmap[*callList]
+	subshellDepth int
+	sourceReturns *state
 }
 
 func analyzeFlow(tree *parser.Tree, imports []parser.Import, bats bool) *flowResult {
@@ -263,7 +282,7 @@ func analyzeFlow(tree *parser.Tree, imports []parser.Import, bats bool) *flowRes
 		dialect:    tree.Dialect,
 		writes:     map[syntax.Node][]*parser.Definition{},
 		imported:   importedGlobals(imports),
-		result:     &flowResult{expansions: map[*syntax.ParamExp]space{}, reached: map[*syntax.Stmt]bool{}, called: map[*syntax.FuncDecl]bool{}},
+		result:     &flowResult{expansions: map[*syntax.ParamExp]space{}, reached: map[*syntax.Stmt]bool{}, called: map[*syntax.FuncDecl]bool{}, flowFacts: newFlowFacts()},
 		summaries:  map[*syntax.FuncDecl]*summary{},
 		computing:  map[*syntax.FuncDecl]bool{},
 		staticFunc: map[string]*syntax.FuncDecl{},
@@ -279,14 +298,52 @@ func analyzeFlow(tree *parser.Tree, imports []parser.Import, bats bool) *flowRes
 			in.staticFunc[fn.Name] = fn.Decl
 		}
 	}
+	in.trackStatus = readsStatus(tree.Text())
+	in.trackCalls = len(tree.Functions) > 0
+	in.singletons = map[*syntax.Stmt]statusSet{}
+	in.definitions = map[*syntax.FuncDecl]bool{}
 	in.record = true
-	in.final = in.stmts(tree.File.Stmts, newState(false))
-	for _, fn := range tree.Functions {
-		if fn.Decl != nil && fn.Decl.Body != nil {
+	in.sourceReturns = deadState(false)
+	in.final = join(in.stmts(tree.File.Stmts, newState(false)), in.sourceReturns)
+	if in.final.live {
+		in.escape(in.final)
+	}
+	in.runFunctionBodies()
+	return in.result
+}
+
+func (in *interpreter) runFunctionBodies() {
+	done := make(map[*syntax.FuncDecl]bool, len(in.tree.Functions))
+	for progress := true; progress; {
+		progress = false
+		for _, fn := range in.tree.Functions {
+			if fn.Decl == nil || fn.Decl.Body == nil || done[fn.Decl] || !in.invokable(fn.Decl) {
+				continue
+			}
+			done[fn.Decl] = true
+			progress = true
 			in.runBody(fn.Decl, in.entry())
 		}
 	}
-	return in.result
+	in.unreachable = true
+	for _, fn := range in.tree.Functions {
+		if fn.Decl == nil || fn.Decl.Body == nil || done[fn.Decl] {
+			continue
+		}
+		in.result.deadFunctions[fn.Decl] = true
+		in.runBody(fn.Decl, in.entry())
+	}
+	in.unreachable = false
+}
+
+func (in *interpreter) invokable(decl *syntax.FuncDecl) bool {
+	if in.result.called[decl] {
+		return true
+	}
+	if !in.final.live {
+		return false
+	}
+	return in.definitions[decl]
 }
 
 func importedGlobals(imports []parser.Import) map[string]value {
@@ -353,31 +410,49 @@ func (in *interpreter) stmt(stmt *syntax.Stmt, s *state) *state {
 	if !s.live {
 		return s
 	}
-	if in.record && !s.symbolic {
+	if in.record && !s.symbolic && !in.unreachable {
 		in.result.reached[stmt] = true
 	}
 	if stmt.Background || stmt.Coprocess {
 		in.subshell(func(sub *state) *state { return in.command(stmt, sub) }, s)
+		in.setStatus(s, stmt)
 		return s
 	}
 	return in.command(stmt, s)
 }
 
-func (in *interpreter) subshell(run func(*state) *state, s *state) {
+func (in *interpreter) subshell(run func(*state) *state, s *state) *state {
 	saved := in.loops
 	in.loops = nil
-	run(s.clone())
+	in.subshellDepth++
+	if in.trackCalls {
+		in.subshellExits = append(in.subshellExits, pmap[*callList]{})
+	}
+	end := run(s.clone())
+	in.subshellDepth--
 	in.loops = saved
+	if in.trackCalls {
+		exits := in.subshellExits[len(in.subshellExits)-1]
+		in.subshellExits = in.subshellExits[:len(in.subshellExits)-1]
+		if end.live {
+			exits = unionPending(exits, end.pending)
+		}
+		s.pending = unionPending(s.pending, exits)
+	}
+	return end
 }
 
 func (in *interpreter) command(stmt *syntax.Stmt, s *state) *state {
 	switch cmd := stmt.Cmd.(type) {
 	case nil:
 		s = in.evaluate(stmt, s)
+		in.setStatus(s, stmt)
 	case *syntax.CallExpr:
 		s = in.call(stmt, cmd, s)
+		in.setStatus(s, stmt)
 	case *syntax.DeclClause:
 		s = in.evaluate(stmt, s)
+		in.setStatus(s, stmt)
 	case *syntax.IfClause:
 		s = in.ifClause(cmd, s)
 		s = in.redirects(stmt, s)
@@ -394,7 +469,9 @@ func (in *interpreter) command(stmt *syntax.Stmt, s *state) *state {
 		s = in.stmts(cmd.Stmts, s)
 		s = in.redirects(stmt, s)
 	case *syntax.Subshell:
-		in.subshell(func(sub *state) *state { return in.stmts(cmd.Stmts, sub) }, s)
+		if end := in.subshell(func(sub *state) *state { return in.stmts(cmd.Stmts, sub) }, s); end.live {
+			s.status = end.status
+		}
 		s = in.redirects(stmt, s)
 	case *syntax.BinaryCmd:
 		s = in.binary(cmd, s)
@@ -406,10 +483,12 @@ func (in *interpreter) command(stmt *syntax.Stmt, s *state) *state {
 		}
 	case *syntax.CoprocClause:
 		in.subshell(func(sub *state) *state { return in.stmt(cmd.Stmt, sub) }, s)
+		in.setStatus(s, stmt)
 	case *syntax.TestDecl:
 		s = in.testBody(cmd, s)
 	default:
 		s = in.evaluate(stmt, s)
+		in.setStatus(s, stmt)
 	}
 	return s
 }
@@ -461,6 +540,7 @@ func (in *interpreter) evaluate(node syntax.Node, s *state) *state {
 			return false
 		case *syntax.ParamExp:
 			in.recordExpansion(n, s)
+			in.recordStatusRead(n, s)
 		}
 		in.walk = append(in.walk, n)
 		return true
@@ -496,7 +576,7 @@ func (in *interpreter) write(def *parser.Definition, s *state) {
 	case parser.DefCommandEnv, parser.DefLoop:
 		return
 	case parser.DefArithmetic, parser.DefDescriptor:
-		in.assignVar(def, s, value{space: spaceClean, integer: s.get(def.Name).integer})
+		in.assignVar(def, s, value{space: spaceClean, integer: s.get(def.Name).integer, holdsInteger: integerYes})
 		return
 	case parser.DefBuiltin:
 		in.assignVar(def, s, value{space: builtinSpace(def), integer: s.get(def.Name).integer})
@@ -507,6 +587,7 @@ func (in *interpreter) write(def *parser.Definition, s *state) {
 	switch node := def.Node.(type) {
 	case *syntax.Assign:
 		v.space = in.assignSpace(node, prev, s)
+		v.holdsInteger = in.assignedInteger(node, prev, s)
 	case *syntax.Word:
 		v.space = in.declarationWordSpace(node, s)
 	}
@@ -706,19 +787,22 @@ func (in *interpreter) call(stmt *syntax.Stmt, call *syntax.CallExpr, s *state) 
 	if !ok {
 		return s
 	}
+	in.callBeforeDefinition(call, name, s)
 	switch name {
 	case "exit":
+		in.escape(s)
 		return deadState(s.symbolic)
 	case "return":
-		if len(in.frames) > 0 {
+		switch {
+		case len(in.frames) > 0:
 			frame := in.frames[len(in.frames)-1]
 			frame.returns = join(frame.returns, s)
+		case in.subshellDepth > 0:
+			in.escape(s)
+		default:
+			in.sourceReturns = join(in.sourceReturns, s)
 		}
 		return deadState(s.symbolic)
-	case "exec":
-		if len(call.Args) > 1 {
-			return deadState(s.symbolic)
-		}
 	case "break", "continue":
 		return in.jump(name, call, s)
 	case "unset":
@@ -751,7 +835,7 @@ func (in *interpreter) jump(name string, call *syntax.CallExpr, s *state) *state
 	} else {
 		frame.continues = join(frame.continues, s)
 	}
-	return deadState(s.symbolic)
+	return s
 }
 
 func (in *interpreter) invoke(name string, s *state) *state {
@@ -763,7 +847,9 @@ func (in *interpreter) invoke(name string, s *state) *state {
 		}
 		ref = funcRef{decl: decl, maybe: s.symbolic}
 	}
-	in.result.called[ref.decl] = true
+	if ok || s.symbolic {
+		in.result.called[ref.decl] = true
+	}
 	after := in.apply(in.summary(ref.decl), s)
 	if ref.maybe {
 		return join(after, s)
@@ -773,6 +859,7 @@ func (in *interpreter) invoke(name string, s *state) *state {
 
 func (in *interpreter) apply(sum *summary, s *state) *state {
 	if !sum.exit.live {
+		in.escape(s)
 		return deadState(s.symbolic)
 	}
 	out := s.clone()
@@ -828,6 +915,10 @@ func (in *interpreter) define(decl *syntax.FuncDecl, s *state) *state {
 	}
 	for _, name := range names {
 		s.funcs = s.funcs.set(name.Value, funcRef{decl: decl})
+		s.pending = s.pending.remove(name.Value)
+	}
+	if in.record && !s.symbolic && !in.unreachable {
+		in.definitions[decl] = true
 	}
 	return s
 }
@@ -835,6 +926,7 @@ func (in *interpreter) define(decl *syntax.FuncDecl, s *state) *state {
 func (in *interpreter) binary(cmd *syntax.BinaryCmd, s *state) *state {
 	switch cmd.Op {
 	case syntax.AndStmt, syntax.OrStmt:
+		in.markConditional(cmd.X, cmd.Y.Pos(), cmd.Y.End())
 		left := in.stmt(cmd.X, s)
 		right := in.stmt(cmd.Y, left.clone())
 		return join(left, right)
@@ -843,11 +935,14 @@ func (in *interpreter) binary(cmd *syntax.BinaryCmd, s *state) *state {
 	if in.dialect.Features().LastPipeInShell {
 		return in.stmt(cmd.Y, s)
 	}
-	in.subshell(func(sub *state) *state { return in.stmt(cmd.Y, sub) }, s)
+	if end := in.subshell(func(sub *state) *state { return in.stmt(cmd.Y, sub) }, s); end.live {
+		s.status = end.status
+	}
 	return s
 }
 
 func (in *interpreter) ifClause(cmd *syntax.IfClause, s *state) *state {
+	in.markConditionList(cmd.Cond, cmd.End())
 	cond := in.stmts(cmd.Cond, s)
 	then := in.stmts(cmd.Then, cond.clone())
 	switch {
@@ -859,7 +954,7 @@ func (in *interpreter) ifClause(cmd *syntax.IfClause, s *state) *state {
 	return join(then, in.ifClause(cmd.Else, cond.clone()))
 }
 
-func (in *interpreter) loop(s *state, round func(head *state) *state, exitFrom func(head *state) *state, endless bool) *state {
+func (in *interpreter) loop(s *state, round func(head *state) *state, exitFrom func(head *state) *state) *state {
 	frame := &loopFrame{breaks: deadState(s.symbolic), continues: deadState(s.symbolic)}
 	in.loops = append(in.loops, frame)
 	head := s
@@ -870,31 +965,16 @@ func (in *interpreter) loop(s *state, round func(head *state) *state, exitFrom f
 		}
 		head = next
 	}
-	exit := frame.breaks
-	if !endless {
-		exit = join(exitFrom(head.clone()), exit)
-	}
+	exit := join(exitFrom(head.clone()), frame.breaks)
 	in.loops = in.loops[:len(in.loops)-1]
 	return exit
 }
 
 func (in *interpreter) whileClause(cmd *syntax.WhileClause, s *state) *state {
+	in.markConditionList(cmd.Cond, cmd.End())
 	return in.loop(s,
 		func(head *state) *state { return in.stmts(cmd.Do, in.stmts(cmd.Cond, head)) },
-		func(head *state) *state { return in.stmts(cmd.Cond, head) },
-		!cmd.Until && alwaysTrue(cmd.Cond))
-}
-
-func alwaysTrue(cond []*syntax.Stmt) bool {
-	if len(cond) != 1 {
-		return false
-	}
-	call, ok := cond[0].Cmd.(*syntax.CallExpr)
-	if !ok || len(call.Args) != 1 || cond[0].Negated {
-		return false
-	}
-	name := call.Args[0].Lit()
-	return name == "true" || name == ":"
+		func(head *state) *state { return in.stmts(cmd.Cond, head) })
 }
 
 func (in *interpreter) forClause(cmd *syntax.ForClause, s *state) *state {
@@ -916,8 +996,7 @@ func (in *interpreter) forClause(cmd *syntax.ForClause, s *state) *state {
 		}
 		return in.loop(s,
 			func(head *state) *state { return in.stmts(cmd.Do, assign(head)) },
-			func(head *state) *state { return head },
-			false)
+			func(head *state) *state { return head })
 	case *syntax.CStyleLoop:
 		for _, expr := range []syntax.ArithmExpr{loop.Init} {
 			if expr != nil {
@@ -940,8 +1019,7 @@ func (in *interpreter) forClause(cmd *syntax.ForClause, s *state) *state {
 					head = in.evaluate(loop.Cond, head)
 				}
 				return head
-			},
-			loop.Cond == nil)
+			})
 	}
 	return s
 }
