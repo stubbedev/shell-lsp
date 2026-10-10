@@ -545,3 +545,29 @@ type LinkedEditingRanges struct {
 	Ranges      []Range `json:"ranges"`
 	WordPattern string  `json:"wordPattern,omitempty"`
 }
+
+type WorkspaceFoldersChangeEvent struct {
+	Added   []WorkspaceFolder `json:"added"`
+	Removed []WorkspaceFolder `json:"removed"`
+}
+
+type DidChangeWorkspaceFoldersParams struct {
+	Event WorkspaceFoldersChangeEvent `json:"event"`
+}
+
+type FileRename struct {
+	OldURI string `json:"oldUri"`
+	NewURI string `json:"newUri"`
+}
+
+type RenameFilesParams struct {
+	Files []FileRename `json:"files"`
+}
+
+type FileOperationTarget struct {
+	URI string `json:"uri"`
+}
+
+type FileOperationsParams struct {
+	Files []FileOperationTarget `json:"files"`
+}

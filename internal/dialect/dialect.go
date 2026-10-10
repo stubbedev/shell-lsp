@@ -123,7 +123,7 @@ func Detect(override *Dialect, in Input) Dialect {
 	if d, ok := FromShebang(in.Text); ok {
 		return d
 	}
-	if d, ok := fromExtension(in.URI); ok {
+	if d, ok := FromFileName(in.URI); ok {
 		return d
 	}
 	if d, ok := FromName(in.LanguageID); ok {
@@ -163,18 +163,18 @@ func FromShebang(text string) (Dialect, bool) {
 	return FromName(interpreter)
 }
 
-func fromExtension(uri string) (Dialect, bool) {
-	base := filepath.Base(strings.TrimPrefix(uri, "file://"))
+func FromFileName(path string) (Dialect, bool) {
+	base := filepath.Base(path)
 	switch {
-	case strings.HasPrefix(base, ".bash"), base == ".bashrc", base == ".bash_profile", base == ".bash_logout", base == ".bash_aliases":
+	case strings.HasPrefix(base, ".bash"), strings.HasSuffix(base, ".bash"), strings.HasSuffix(base, ".bats"):
 		return Bash, true
-	case strings.HasSuffix(base, ".bash"):
-		return Bash, true
-	case strings.HasSuffix(base, ".zsh"), base == ".zshrc", base == ".zprofile", base == ".zshenv", base == ".zlogin":
+	case strings.HasSuffix(base, ".zsh"), base == ".zshrc", base == ".zprofile", base == ".zshenv", base == ".zlogin", base == ".zlogout":
 		return Zsh, true
-	case strings.HasSuffix(base, ".sh"):
+	case strings.HasSuffix(base, ".dash"):
+		return Dash, true
+	case strings.HasSuffix(base, ".sh"), base == ".profile":
 		return Posix, true
-	case strings.HasSuffix(base, ".ksh"):
+	case strings.HasSuffix(base, ".ksh"), base == ".kshrc", base == ".mkshrc":
 		return Ksh, true
 	}
 	return 0, false

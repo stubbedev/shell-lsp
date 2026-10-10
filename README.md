@@ -34,9 +34,12 @@ Editor wiring (any LSP client):
 
 ## Configuration
 
-Settings arrive as `initializationOptions` and as the `shellLsp` section of
-`workspace/didChangeConfiguration`. Unknown keys and invalid values are
-rejected with an error naming the offending field.
+Settings arrive as `initializationOptions`, as the `shellLsp` section of
+`workspace/didChangeConfiguration`, and, when the client supports
+`workspace/configuration`, are pulled for the whole workspace and for each
+workspace folder; a document uses the settings of the innermost folder that
+contains it. Unknown keys and invalid values are rejected with an error naming
+the offending field.
 
 ```json
 {

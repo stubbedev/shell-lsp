@@ -58,7 +58,7 @@ func (s *Server) snapshot(docs *docstore.View, uri string) (*snapshot, error) {
 	if !ok {
 		return nil, fmt.Errorf("document %s is not open", uri)
 	}
-	settings, generation := s.currentSettings()
+	settings, generation := s.settingsFor(uri)
 	if snap, ok := s.snapshots.lookup(uri, doc, generation); ok {
 		return snap, nil
 	}

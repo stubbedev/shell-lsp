@@ -22,9 +22,10 @@ func newWorkspace(s *Server) *workspace.Workspace {
 			file, err := s.workspaceFile(s.docs.View(), uri)
 			return file, err == nil
 		},
-		func() *dialect.Dialect {
-			settings, _ := s.currentSettings()
-			return settings.Dialect
+		func(path string) *dialect.Dialect {
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			return settingsForPath(s.settings, s.folderSettings, path).Dialect
 		},
 	)
 }

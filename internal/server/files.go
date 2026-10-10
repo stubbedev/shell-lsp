@@ -1,0 +1,258 @@
+package server
+
+import (
+	"context"
+	"encoding/json"
+	"path/filepath"
+	"slices"
+	"strings"
+
+	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/docstore"
+	"github.com/stubbedev/shell-lsp/internal/fileuri"
+	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
+	"github.com/stubbedev/shell-lsp/internal/lsp"
+	"github.com/stubbedev/shell-lsp/internal/navigation"
+	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/textedit"
+	"github.com/stubbedev/shell-lsp/internal/workspace"
+)
+
+const watcherRegistration = "shell-lsp/watched-files"
+
+type workspaceFoldersCapability struct {
+	Supported           bool `json:"supported"`
+	ChangeNotifications bool `json:"changeNotifications"`
+}
+
+type fileOperationPattern struct {
+	Glob    string `json:"glob"`
+	Matches string `json:"matches,omitempty"`
+}
+
+type fileOperationFilter struct {
+	Pattern fileOperationPattern `json:"pattern"`
+}
+
+type fileOperationRegistration struct {
+	Filters []fileOperationFilter `json:"filters"`
+}
+
+type fileOperationsCapability struct {
+	DidCreate  fileOperationRegistration `json:"didCreate"`
+	WillRename fileOperationRegistration `json:"willRename"`
+	DidRename  fileOperationRegistration `json:"didRename"`
+	DidDelete  fileOperationRegistration `json:"didDelete"`
+}
+
+type WorkspaceCapabilities struct {
+	WorkspaceFolders workspaceFoldersCapability `json:"workspaceFolders"`
+	FileOperations   fileOperationsCapability   `json:"fileOperations"`
+}
+
+var workspaceCapabilities = func() WorkspaceCapabilities {
+	var filters []fileOperationFilter
+	for _, glob := range workspace.WatchGlobs() {
+		filters = append(filters, fileOperationFilter{Pattern: fileOperationPattern{Glob: glob, Matches: "file"}})
+	}
+	filters = append(filters, fileOperationFilter{Pattern: fileOperationPattern{Glob: "**/*", Matches: "folder"}})
+	registration := fileOperationRegistration{Filters: filters}
+	return WorkspaceCapabilities{
+		WorkspaceFolders: workspaceFoldersCapability{Supported: true, ChangeNotifications: true},
+		FileOperations:   fileOperationsCapability{DidCreate: registration, WillRename: registration, DidRename: registration, DidDelete: registration},
+	}
+}()
+
+type fileWatcher struct {
+	GlobPattern string `json:"globPattern"`
+}
+
+type registration struct {
+	ID              string `json:"id"`
+	Method          string `json:"method"`
+	RegisterOptions any    `json:"registerOptions"`
+}
+
+type registrationParams struct {
+	Registrations []registration `json:"registrations"`
+}
+
+func (s *Server) registerWatchers(ctx context.Context) {
+	if !s.clientCapabilities().Workspace.DidChangeWatchedFiles.DynamicRegistration {
+		return
+	}
+	globs := workspace.WatchGlobs()
+	watchers := make([]fileWatcher, len(globs))
+	for i, glob := range globs {
+		watchers[i] = fileWatcher{GlobPattern: glob}
+	}
+	params := registrationParams{Registrations: []registration{{
+		ID:              watcherRegistration,
+		Method:          "workspace/didChangeWatchedFiles",
+		RegisterOptions: map[string]any{"watchers": watchers},
+	}}}
+	go func() {
+		if err := s.call(ctx, "client/registerCapability", params, nil); err != nil {
+			s.noticeOnce("register-watchers", lsp.MessageWarning, "registering file watchers failed; changes made outside the editor are picked up when files are next read: "+err.Error())
+		}
+	}()
+}
+
+func (s *Server) handleFilesChanged(_ context.Context, params json.RawMessage) error {
+	if _, err := lsp.DecodeParams[lsp.FileOperationsParams](params); err != nil {
+		return err
+	}
+	s.workspace.InvalidateAll()
+	return nil
+}
+
+func (s *Server) handleDidRenameFiles(_ context.Context, params json.RawMessage) error {
+	if _, err := lsp.DecodeParams[lsp.RenameFilesParams](params); err != nil {
+		return err
+	}
+	s.workspace.InvalidateAll()
+	return nil
+}
+
+type move struct {
+	from, to string
+}
+
+func (m move) apply(path string) (string, bool) {
+	if path == m.from {
+		return m.to, true
+	}
+	if rel, err := filepath.Rel(m.from, path); err == nil && !strings.HasPrefix(rel, "..") && rel != "." {
+		return filepath.Join(m.to, rel), true
+	}
+	return path, false
+}
+
+func (s *Server) handleWillRenameFiles(ctx context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
+	p, err := lsp.DecodeParams[lsp.RenameFilesParams](params)
+	if err != nil {
+		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing workspace/willRenameFiles params: %v", err)
+	}
+	var moves []move
+	for _, f := range p.Files {
+		from, errFrom := fileuri.ToPath(f.OldURI)
+		to, errTo := fileuri.ToPath(f.NewURI)
+		if errFrom != nil || errTo != nil {
+			return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "file rename %s -> %s is not between file URIs", f.OldURI, f.NewURI)
+		}
+		moves = append(moves, move{from: from, to: to})
+	}
+	moved := func(path string) (string, bool) {
+		for _, m := range moves {
+			if to, ok := m.apply(path); ok {
+				return to, true
+			}
+		}
+		return path, false
+	}
+	paths, err := s.candidateFiles(docs)(ctx)
+	if err != nil {
+		return nil, err
+	}
+	env := s.navigationEnv()
+	var files []fileEdits
+	for _, path := range paths {
+		file, err := s.loadURI(docs, fileuri.FromPath(path))
+		if err != nil {
+			continue
+		}
+		edits := sourceRewrites(file, env, moved)
+		if newPath, ok := moved(file.Path); ok {
+			if edit, ok := shebangRewrite(file.Tree, file.Path, newPath); ok {
+				edits = append(edits, edit)
+			}
+		}
+		if len(edits) > 0 {
+			_, open := docs.Document(file.URI)
+			files = append(files, fileEdits{doc: file.Doc, versioned: open, edits: edits})
+		}
+	}
+	if len(files) == 0 {
+		return nil, nil
+	}
+	return s.multiFileEdit(docs.Encoding(), files), nil
+}
+
+func sourceRewrites(file *workspace.File, env navigation.Env, moved func(string) (string, bool)) []textedit.Edit {
+	var edits []textedit.Edit
+	newFile, fileMoved := moved(file.Path)
+	for _, ref := range navigation.Sources(file, env) {
+		if ref.Target == nil {
+			continue
+		}
+		newTarget, targetMoved := moved(ref.Target.Path)
+		if !fileMoved && !targetMoved {
+			continue
+		}
+		literal, ok := parser.Literal(ref.Command.Args[0])
+		if !ok {
+			continue
+		}
+		raw := file.Tree.Text()[ref.Arg.Start:ref.Arg.End]
+		rewritten := rewritePath(literal, filepath.Dir(newFile), newTarget, env.Home)
+		if rewritten == literal {
+			continue
+		}
+		edits = append(edits, textedit.Edit{Start: ref.Arg.Start, End: ref.Arg.End, NewText: requote(raw, rewritten)})
+	}
+	return edits
+}
+
+func rewritePath(original, newDir, newTarget, home string) string {
+	switch {
+	case filepath.IsAbs(original):
+		return newTarget
+	case strings.HasPrefix(original, "~/") && home != "":
+		if rel, err := filepath.Rel(home, newTarget); err == nil && !strings.HasPrefix(rel, "..") {
+			return "~/" + filepath.ToSlash(rel)
+		}
+		return newTarget
+	}
+	rel, err := filepath.Rel(newDir, newTarget)
+	if err != nil {
+		return newTarget
+	}
+	rel = filepath.ToSlash(rel)
+	if strings.HasPrefix(original, "./") && !strings.HasPrefix(rel, "../") {
+		rel = "./" + rel
+	}
+	return rel
+}
+
+func requote(raw, value string) string {
+	switch {
+	case strings.HasPrefix(raw, "'"):
+		return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
+	case strings.HasPrefix(raw, `"`):
+		return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`, "$", `\$`, "`", "\\`").Replace(value) + `"`
+	case strings.ContainsAny(value, " \t'\"$`\\&;|()<>*?[]{}!"):
+		return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
+	}
+	return value
+}
+
+func shebangRewrite(tree *parser.Tree, oldPath, newPath string) (textedit.Edit, bool) {
+	oldDialect, okOld := dialect.FromFileName(oldPath)
+	newDialect, okNew := dialect.FromFileName(newPath)
+	if !okOld || !okNew || oldDialect == newDialect {
+		return textedit.Edit{}, false
+	}
+	text := tree.Text()
+	firstLine, _, _ := strings.Cut(text, "\n")
+	current, ok := dialect.FromShebang(firstLine)
+	if !ok || current != oldDialect {
+		return textedit.Edit{}, false
+	}
+	fields := strings.Fields(strings.TrimPrefix(firstLine, "#!"))
+	target := 0
+	if filepath.Base(fields[0]) == "env" {
+		target = slices.IndexFunc(fields[1:], func(f string) bool { return !strings.HasPrefix(f, "-") }) + 1
+	}
+	fields[target] = filepath.Join(filepath.Dir(fields[target]), newDialect.String())
+	return textedit.Edit{Start: 0, End: len(firstLine), NewText: "#!" + strings.Join(fields, " ")}, true
+}

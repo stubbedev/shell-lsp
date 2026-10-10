@@ -51,13 +51,14 @@ type Server struct {
 	workspace   *workspace.Workspace
 	semantic    *semanticCache
 
-	mu          sync.Mutex
-	shutdown    bool
-	initialized bool
-	trace       TraceValue
-	settings    config.Settings
-	generation  uint64
-	client      ClientCapabilities
+	mu             sync.Mutex
+	shutdown       bool
+	initialized    bool
+	trace          TraceValue
+	settings       config.Settings
+	folderSettings map[string]config.Settings
+	generation     uint64
+	client         ClientCapabilities
 
 	requests      map[string]requestHandler
 	notifications map[string]notificationHandler
@@ -134,18 +135,23 @@ func (s *Server) registerHandlers() {
 		"textDocument/inlineValue":               s.handleInlineValue,
 		"textDocument/moniker":                   s.handleMoniker,
 		"textDocument/linkedEditingRange":        s.handleLinkedEditingRange,
+		"workspace/willRenameFiles":              s.handleWillRenameFiles,
 	}
 	s.notifications = map[string]notificationHandler{
-		"$/cancelRequest":                  s.handleCancelRequest,
-		"$/setTrace":                       s.handleSetTrace,
-		"initialized":                      s.handleInitialized,
-		"window/logMessage":                s.handleClientLogMessage,
-		"textDocument/didOpen":             s.handleDidOpen,
-		"textDocument/didChange":           s.handleDidChange,
-		"textDocument/didClose":            s.handleDidClose,
-		"textDocument/didSave":             s.handleDidSave,
-		"workspace/didChangeConfiguration": s.handleDidChangeConfiguration,
-		"workspace/didChangeWatchedFiles":  s.handleDidChangeWatchedFiles,
+		"$/cancelRequest":                     s.handleCancelRequest,
+		"$/setTrace":                          s.handleSetTrace,
+		"initialized":                         s.handleInitialized,
+		"window/logMessage":                   s.handleClientLogMessage,
+		"textDocument/didOpen":                s.handleDidOpen,
+		"textDocument/didChange":              s.handleDidChange,
+		"textDocument/didClose":               s.handleDidClose,
+		"textDocument/didSave":                s.handleDidSave,
+		"workspace/didChangeConfiguration":    s.handleDidChangeConfiguration,
+		"workspace/didChangeWatchedFiles":     s.handleDidChangeWatchedFiles,
+		"workspace/didChangeWorkspaceFolders": s.handleDidChangeWorkspaceFolders,
+		"workspace/didRenameFiles":            s.handleDidRenameFiles,
+		"workspace/didCreateFiles":            s.handleFilesChanged,
+		"workspace/didDeleteFiles":            s.handleFilesChanged,
 	}
 }
 

@@ -54,6 +54,10 @@ type ClientCapabilities struct {
 		WorkspaceEdit struct {
 			DocumentChanges bool `json:"documentChanges"`
 		} `json:"workspaceEdit"`
+		Configuration         bool `json:"configuration"`
+		DidChangeWatchedFiles struct {
+			DynamicRegistration bool `json:"dynamicRegistration"`
+		} `json:"didChangeWatchedFiles"`
 	} `json:"workspace"`
 }
 
@@ -110,6 +114,7 @@ type ServerCapabilities struct {
 	InlineValueProvider             bool                    `json:"inlineValueProvider"`
 	MonikerProvider                 bool                    `json:"monikerProvider"`
 	LinkedEditingRangeProvider      bool                    `json:"linkedEditingRangeProvider"`
+	Workspace                       WorkspaceCapabilities   `json:"workspace"`
 }
 
 type RenameOptions struct {
@@ -190,6 +195,7 @@ func (s *Server) handleInitialize(_ context.Context, _ *docstore.View, params js
 			InlineValueProvider:             true,
 			MonikerProvider:                 true,
 			LinkedEditingRangeProvider:      true,
+			Workspace:                       workspaceCapabilities,
 		},
 		ServerInfo: ServerInfo{Name: "shell-lsp", Version: s.version},
 	}, nil
@@ -201,7 +207,9 @@ func (s *Server) clientCapabilities() ClientCapabilities {
 	return s.client
 }
 
-func (s *Server) handleInitialized(_ context.Context, _ json.RawMessage) error {
+func (s *Server) handleInitialized(ctx context.Context, _ json.RawMessage) error {
+	s.pullConfiguration(ctx)
+	s.registerWatchers(ctx)
 	return nil
 }
 

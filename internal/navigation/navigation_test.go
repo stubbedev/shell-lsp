@@ -30,7 +30,7 @@ func newFixture(t *testing.T, files map[string]string) fixture {
 			t.Fatal(err)
 		}
 	}
-	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, func() *dialect.Dialect { return nil })
+	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, func(string) *dialect.Dialect { return nil })
 	ws.SetRoots([]string{root})
 	return fixture{
 		root: root,

@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -49,7 +50,7 @@ type Overlay func(uri string) (*File, bool)
 
 type Workspace struct {
 	overlay  Overlay
-	override func() *dialect.Dialect
+	override func(path string) *dialect.Dialect
 
 	mu    sync.Mutex
 	roots []string
@@ -62,7 +63,7 @@ type diskEntry struct {
 	file    *File
 }
 
-func New(overlay Overlay, override func() *dialect.Dialect) *Workspace {
+func New(overlay Overlay, override func(path string) *dialect.Dialect) *Workspace {
 	return &Workspace{overlay: overlay, override: override, files: map[string]diskEntry{}}
 }
 
@@ -116,7 +117,7 @@ func (w *Workspace) Load(path string) (*File, error) {
 		return nil, fmt.Errorf("loading %s: %w", path, err)
 	}
 	doc := docstore.NewDocument(uri, "", 0, string(raw))
-	d := dialect.Detect(w.override(), dialect.Input{URI: uri, Text: doc.Text()})
+	d := dialect.Detect(w.override(path), dialect.Input{URI: uri, Text: doc.Text()})
 	file := &File{Path: path, URI: uri, Doc: doc, Tree: parser.Parse(doc.Text(), d)}
 	w.mu.Lock()
 	w.files[path] = diskEntry{size: info.Size(), modTime: info.ModTime(), file: file}
@@ -157,6 +158,22 @@ func (w *Workspace) ShellFiles(ctx context.Context) ([]string, error) {
 	}
 	slices.Sort(out)
 	return slices.Compact(out), nil
+}
+
+func WatchGlobs() []string {
+	extensions := make([]string, len(shellExtensions))
+	for i, ext := range shellExtensions {
+		extensions[i] = strings.TrimPrefix(ext, ".")
+	}
+	names := make([]string, 0, len(rcFiles))
+	for name := range rcFiles {
+		names = append(names, strings.TrimPrefix(name, "."))
+	}
+	slices.Sort(names)
+	return []string{
+		"**/*.{" + strings.Join(extensions, ",") + "}",
+		"**/.{" + strings.Join(names, ",") + "}",
+	}
 }
 
 func isShellFile(path string, entry fs.DirEntry) bool {
