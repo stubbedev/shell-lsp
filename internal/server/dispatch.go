@@ -16,6 +16,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 )
 
@@ -40,6 +41,7 @@ type Server struct {
 	conn    *jsonrpc.Conn
 	version string
 	logger  *slog.Logger
+	docs    *docstore.Store
 
 	mu          sync.Mutex
 	shutdown    bool
@@ -61,6 +63,7 @@ func New(conn *jsonrpc.Conn, version string) *Server {
 		conn:    conn,
 		version: version,
 		logger:  slog.New(slog.NewTextHandler(os.Stderr, nil)),
+		docs:    docstore.NewStore(),
 		sem:     make(chan struct{}, maxConcurrency),
 	}
 	s.registerHandlers()
@@ -77,9 +80,13 @@ func (s *Server) registerHandlers() {
 		"shutdown":   s.handleShutdown,
 	}
 	s.notifications = map[string]notificationHandler{
-		"$/cancelRequest":   s.handleCancelRequest,
-		"$/setTrace":        s.handleSetTrace,
-		"window/logMessage": s.handleClientLogMessage,
+		"$/cancelRequest":        s.handleCancelRequest,
+		"$/setTrace":             s.handleSetTrace,
+		"window/logMessage":      s.handleClientLogMessage,
+		"textDocument/didOpen":   s.handleDidOpen,
+		"textDocument/didChange": s.handleDidChange,
+		"textDocument/didClose":  s.handleDidClose,
+		"textDocument/didSave":   s.handleDidSave,
 	}
 }
 
@@ -175,6 +182,8 @@ func (s *Server) dispatchRequest(ctx context.Context, msg *jsonrpc.Message) {
 		case s.sem <- struct{}{}:
 		case <-rctx.Done():
 			cancel()
+			s.replyError(msg, jsonrpc.NewError(jsonrpc.CodeRequestCancelled,
+				"request %q was cancelled before processing", msg.Method))
 			return
 		}
 		defer func() { <-s.sem }()

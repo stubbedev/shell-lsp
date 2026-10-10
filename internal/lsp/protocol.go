@@ -1,0 +1,76 @@
+// Package lsp holds the subset of Language Server Protocol types the
+// server exchanges with clients. Types are hand-rolled so the protocol
+// surface stays exactly as large as what the server implements.
+package lsp
+
+import "encoding/json"
+
+type Position struct {
+	Line      uint32 `json:"line"`
+	Character uint32 `json:"character"`
+}
+
+type Range struct {
+	Start Position `json:"start"`
+	End   Position `json:"end"`
+}
+
+type Location struct {
+	URI   string `json:"uri"`
+	Range Range  `json:"range"`
+}
+
+type TextDocumentIdentifier struct {
+	URI string `json:"uri"`
+}
+
+type VersionedTextDocumentIdentifier struct {
+	URI     string `json:"uri"`
+	Version int32  `json:"version"`
+}
+
+type TextDocumentItem struct {
+	URI        string `json:"uri"`
+	LanguageID string `json:"languageId"`
+	Version    int32  `json:"version"`
+	Text       string `json:"text"`
+}
+
+type TextDocumentPositionParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Position     Position               `json:"position"`
+}
+
+type DidOpenTextDocumentParams struct {
+	TextDocument TextDocumentItem `json:"textDocument"`
+}
+
+type TextDocumentContentChangeEvent struct {
+	Range       *Range  `json:"range"`
+	RangeLength *uint32 `json:"rangeLength,omitempty"`
+	Text        string  `json:"text"`
+}
+
+type DidChangeTextDocumentParams struct {
+	TextDocument   VersionedTextDocumentIdentifier  `json:"textDocument"`
+	ContentChanges []TextDocumentContentChangeEvent `json:"contentChanges"`
+}
+
+type DidCloseTextDocumentParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+}
+
+type DidSaveTextDocumentParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Text         *string                `json:"text,omitempty"`
+}
+
+func DecodeParams[T any](raw json.RawMessage) (T, error) {
+	var params T
+	if len(raw) > 0 {
+		if err := json.Unmarshal(raw, &params); err != nil {
+			return params, err
+		}
+	}
+	return params, nil
+}

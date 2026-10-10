@@ -44,6 +44,7 @@ type TextDocumentSyncOptions struct {
 }
 
 type ServerCapabilities struct {
+	PositionEncoding string                  `json:"positionEncoding,omitempty"`
 	TextDocumentSync TextDocumentSyncOptions `json:"textDocumentSync"`
 }
 
@@ -62,12 +63,15 @@ func (s *Server) handleInitialize(_ context.Context, params json.RawMessage) (an
 	if initParams.Trace != "" {
 		s.setTrace(initParams.Trace)
 	}
+	enc := negotiateEncoding(initParams.ClientCapabilities, s.logger)
+	s.docs.SetEncoding(enc)
 	s.mu.Lock()
 	s.initialized = true
 	s.mu.Unlock()
 	return InitializeResult{
 		Capabilities: ServerCapabilities{
-			TextDocumentSync: TextDocumentSyncOptions{OpenClose: true, Change: 1},
+			PositionEncoding: enc.String(),
+			TextDocumentSync: TextDocumentSyncOptions{OpenClose: true, Change: 2},
 		},
 		ServerInfo: ServerInfo{Name: "shell-lsp", Version: s.version},
 	}, nil

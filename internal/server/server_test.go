@@ -61,7 +61,7 @@ func responseByID(t *testing.T, client *jsonrpc.Conn, id string, count int) *jso
 	for range count {
 		msg, err := client.Read()
 		if err != nil {
-			t.Fatalf("reading response: %v", err)
+			t.Fatalf("reading response (wanted id %s): %v", id, err)
 		}
 		if string(msg.ID) == id {
 			return msg
@@ -137,8 +137,8 @@ func TestRunLifecycle(t *testing.T) {
 	if result.ServerInfo.Name != "shell-lsp" {
 		t.Errorf("serverInfo.name = %q, want shell-lsp", result.ServerInfo.Name)
 	}
-	if result.Capabilities.TextDocumentSync.Change != 1 {
-		t.Errorf("textDocumentSync.change = %d, want full sync", result.Capabilities.TextDocumentSync.Change)
+	if result.Capabilities.TextDocumentSync.Change != 2 {
+		t.Errorf("textDocumentSync.change = %d, want incremental sync", result.Capabilities.TextDocumentSync.Change)
 	}
 	second := readResponse(t, client)
 	if string(second.Result) != "null" {
@@ -311,9 +311,9 @@ func TestRequestsRunConcurrently(t *testing.T) {
 func TestCancelRequest(t *testing.T) {
 	t.Parallel()
 
-	clientReader, clientWriter := io.Pipe()
-	serverReader, serverWriter := io.Pipe()
-	srv := New(jsonrpc.NewConn(serverReader, clientWriter), "test")
+	var input bytes.Buffer
+	var output bytes.Buffer
+	srv := New(jsonrpc.NewConn(&input, &output), "test")
 
 	srv.requests["test/slow"] = func(ctx context.Context, _ json.RawMessage) (any, error) {
 		select {
@@ -324,40 +324,24 @@ func TestCancelRequest(t *testing.T) {
 		}
 	}
 
-	go func() {
-		_ = srv.Run(t.Context())
-	}()
-	go func() {
-		send(t, serverWriter,
-			request(1, "initialize", `{}`),
-			request(2, "test/slow", ``))
-		cancelMsg := notification("$/cancelRequest")
-		cancelMsg.Params = json.RawMessage(`{"id":2}`)
-		send(t, serverWriter, cancelMsg)
-	}()
+	cancelMsg := notification("$/cancelRequest")
+	cancelMsg.Params = json.RawMessage(`{"id":2}`)
+	send(t, &input,
+		request(1, "initialize", `{}`),
+		request(2, "test/slow", ``),
+		cancelMsg,
+		request(3, "shutdown", ``),
+		notification("exit"))
 
-	client := jsonrpc.NewConn(clientReader, serverWriter)
-	readMsg := func() *jsonrpc.Message {
-		msg, err := client.Read()
-		if err != nil {
-			t.Fatalf("reading response: %v", err)
-		}
-		return msg
+	if err := srv.Run(t.Context()); err != nil {
+		t.Fatalf("Run() error = %v", err)
 	}
-	readMsg()
-	msg := readMsg()
+
+	client := readerFor(&output)
+	msg := responseByID(t, client, "2", 3)
 	if msg.Error == nil || msg.Error.Code != jsonrpc.CodeRequestCancelled {
 		t.Errorf("error = %+v, want request cancelled", msg.Error)
 	}
-
-	go func() {
-		for {
-			if _, err := client.Read(); err != nil {
-				return
-			}
-		}
-	}()
-	send(t, serverWriter, request(3, "shutdown", ``), notification("exit"))
 }
 
 func TestServerInitiatedRequest(t *testing.T) {
