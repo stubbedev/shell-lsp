@@ -34,10 +34,10 @@ func checkElevatedRedirection(p *pass, c command) {
 		if r.N != nil || r.Word == nil || literalIs(r.Word, "/dev/null") {
 			continue
 		}
-		var advice string
+		severity, advice := p.meta(2024).severity, ""
 		switch r.Op {
 		case syntax.RdrIn:
-			advice = "read the file with '" + c.name + " cat file |' instead."
+			severity, advice = SeverityInfo, "read the file with '"+c.name+" cat file |' instead."
 		case syntax.RdrOut, syntax.RdrAll:
 			advice = "write through '| " + c.name + " tee file >/dev/null' instead."
 		case syntax.AppOut, syntax.AppAll:
@@ -46,7 +46,7 @@ func checkElevatedRedirection(p *pass, c command) {
 			continue
 		}
 		at := parser.Offset(r.OpPos)
-		p.report(2024, parser.Span{Start: at, End: at + len(r.Op.String())},
+		p.reportWithSeverity(2024, severity, parser.Span{Start: at, End: at + len(r.Op.String())},
 			c.name+" does not apply to this redirection; the shell opens the file with your own permissions. To "+advice)
 	}
 }
