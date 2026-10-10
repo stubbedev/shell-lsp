@@ -202,6 +202,7 @@ func (b *builder) enter(node syntax.Node) {
 	case *syntax.Comment:
 		b.index.Comments = append(b.index.Comments, Comment{Span: b.span(n), Text: n.Text})
 	case *syntax.Stmt:
+		liftFunctionList(n)
 		b.recoveredStmt(n)
 	case *syntax.Lit:
 		b.recoveredLit(n)
