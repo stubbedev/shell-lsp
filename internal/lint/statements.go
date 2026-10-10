@@ -40,6 +40,16 @@ func rightmost(stmt *syntax.Stmt) *syntax.Stmt {
 	}
 }
 
+func leftmost(stmt *syntax.Stmt) *syntax.Stmt {
+	for {
+		bin, ok := stmt.Cmd.(*syntax.BinaryCmd)
+		if !ok {
+			return stmt
+		}
+		stmt = bin.X
+	}
+}
+
 func (p *pass) previousStatement() (*syntax.Stmt, bool) {
 	stmt, ok := p.parent().(*syntax.Stmt)
 	if !ok {

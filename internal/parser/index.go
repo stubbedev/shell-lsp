@@ -521,12 +521,18 @@ func arithmeticName(expr syntax.ArithmExpr) (string, bool) {
 	return lit.Value, true
 }
 
-func (b *builder) arithmeticAssign(n *syntax.BinaryArithm) {
-	switch n.Op {
+func IsArithmeticAssignment(op syntax.BinAritOperator) bool {
+	switch op {
 	case syntax.Assgn, syntax.AddAssgn, syntax.SubAssgn, syntax.MulAssgn, syntax.QuoAssgn,
 		syntax.RemAssgn, syntax.AndAssgn, syntax.OrAssgn, syntax.XorAssgn, syntax.ShlAssgn,
 		syntax.ShrAssgn, syntax.AndBoolAssgn, syntax.OrBoolAssgn, syntax.XorBoolAssgn, syntax.PowAssgn:
-	default:
+		return true
+	}
+	return false
+}
+
+func (b *builder) arithmeticAssign(n *syntax.BinaryArithm) {
+	if !IsArithmeticAssignment(n.Op) {
 		return
 	}
 	if w, ok := n.X.(*syntax.Word); ok && n.Op == syntax.Assgn {

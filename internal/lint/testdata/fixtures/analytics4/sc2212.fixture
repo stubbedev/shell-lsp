@@ -8,7 +8,7 @@ fi
 if [[ ]]; then
   echo "never"
 fi
->>> SC2212 1:4
+>>- SC2212 1:4 -- mvdan rejects an empty [[ ]] as a syntax error, so the line is not linted
 
 ### brackets with content joined by -o
 if [ "$mode" -o "$fallback" ]; then

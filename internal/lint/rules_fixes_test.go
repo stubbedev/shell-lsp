@@ -21,6 +21,16 @@ func TestAutofixes(t *testing.T) {
 		{2281, "$flags+=-O2\n", "flags+=-O2\n"},
 		{2277, "#!/bin/bash\n0='worker'\n", "#!/bin/bash\nBASH_ARGV0='worker'\n"},
 		{2277, "#!/bin/bash\n${0}='worker'\n", "#!/bin/bash\nBASH_ARGV0='worker'\n"},
+		{2268, "[ x$answer = xyes ]\n", "[ $answer = yes ]\n"},
+		{2268, "[ \"x$mode\" = 'xdebug' ]\n", "[ \"$mode\" = 'debug' ]\n"},
+		{2268, "[ x = x$mode ]\n", "[ \"\" = $mode ]\n"},
+		{2331, "[ ! -a foo ]\n", "[ ! -e foo ]\n"},
+		{2292, "[ -x ./configure ]\n", "[[ -x ./configure ]]\n"},
+		{2243, "[[ $(pending) ]]\n", "[[ -n $(pending) ]]\n"},
+		{2244, "[ \"$name\" ]\n", "[ -n \"$name\" ]\n"},
+		{2265, "[ -f a ] & [ -f b ]\n", "[ -f a ] && [ -f b ]\n"},
+		{2266, "[ -f a ] | [ -f b ]\n", "[ -f a ] || [ -f b ]\n"},
+		{2314, "#!/usr/bin/env bats\n@test \"t\" {\n  ! true\n}\n", "#!/usr/bin/env bats\n@test \"t\" {\n  run ! true\n}\n"},
 	} {
 		t.Run(tc.code.String()+" "+tc.script, func(t *testing.T) {
 			t.Parallel()
@@ -33,7 +43,7 @@ func TestAutofixes(t *testing.T) {
 
 func applyFix(t *testing.T, script string, code Code) string {
 	t.Helper()
-	d := dialect.Detect(nil, dialect.Input{URI: "file:///fix.sh", Text: script})
+	d := dialect.Detect(nil, dialect.Input{URI: "file:///fix", Text: script})
 	for _, f := range Check(parser.Parse(script, d), nil, Options{Optional: []string{allCodes}}) {
 		if f.Code != code {
 			continue
