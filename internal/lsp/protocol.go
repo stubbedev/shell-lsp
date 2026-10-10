@@ -129,6 +129,28 @@ const (
 	ReportUnchanged = "unchanged"
 )
 
+type PreviousResultID struct {
+	URI   string `json:"uri"`
+	Value string `json:"value"`
+}
+
+type WorkspaceDiagnosticParams struct {
+	Identifier        string             `json:"identifier,omitempty"`
+	PreviousResultIDs []PreviousResultID `json:"previousResultIds"`
+}
+
+type WorkspaceDocumentDiagnosticReport struct {
+	Kind     string       `json:"kind"`
+	ResultID string       `json:"resultId"`
+	URI      string       `json:"uri"`
+	Version  *int32       `json:"version"`
+	Items    []Diagnostic `json:"items,omitempty"`
+}
+
+type WorkspaceDiagnosticReport struct {
+	Items []WorkspaceDocumentDiagnosticReport `json:"items"`
+}
+
 type DidChangeConfigurationParams struct {
 	Settings json.RawMessage `json:"settings"`
 }

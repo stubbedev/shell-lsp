@@ -213,7 +213,7 @@ func (s *Server) multiFileEdit(enc docstore.Encoding, files []fileEdits) lsp.Wor
 }
 
 func (s *Server) toActionDiagnostics(snap *snapshot, diags []lsp.Diagnostic) []actions.Diagnostic {
-	findings, _ := s.findings(snap)
+	findings, _ := s.findings(snap.file, snap.settings, snap.generation)
 	out := make([]actions.Diagnostic, 0, len(diags))
 	for i, d := range diags {
 		ad := actions.Diagnostic{
@@ -234,7 +234,7 @@ func (s *Server) toActionDiagnostics(snap *snapshot, diags []lsp.Diagnostic) []a
 }
 
 func (s *Server) lintActionDiagnostics(snap *snapshot) []actions.Diagnostic {
-	findings, _ := s.findings(snap)
+	findings, _ := s.findings(snap.file, snap.settings, snap.generation)
 	out := make([]actions.Diagnostic, len(findings))
 	for i, f := range findings {
 		out[i] = actions.Diagnostic{Index: i, Code: f.Code.String(), Message: f.Message, Span: f.Span, Fix: f.Fix}

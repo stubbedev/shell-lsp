@@ -4,12 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/stubbedev/shell-lsp/internal/config"
 	"github.com/stubbedev/shell-lsp/internal/diagnostics"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
@@ -17,9 +22,14 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/navigation"
+	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
-const diagnosticsDebounce = 200 * time.Millisecond
+const (
+	diagnosticsDebounce = 200 * time.Millisecond
+	lintMemoKey         = "lint.findings/"
+)
 
 type diagnosticReport struct {
 	version  int32
@@ -27,41 +37,41 @@ type diagnosticReport struct {
 	items    []lsp.Diagnostic
 }
 
-type lintCache struct {
-	mu       sync.Mutex
-	valid    bool
-	stamp    uint64
-	findings []lint.Finding
-}
-
-func (s *Server) findings(snap *snapshot) ([]lint.Finding, uint64) {
-	if !snap.settings.Lint.Enabled {
+func (s *Server) findings(file *workspace.File, settings config.Settings, generation uint64) ([]lint.Finding, uint64) {
+	if !settings.Lint.Enabled {
 		return nil, 0
 	}
-	stamp := s.sourcesStamp(snap)
-	snap.lint.mu.Lock()
-	defer snap.lint.mu.Unlock()
-	if snap.lint.valid && snap.lint.stamp == stamp {
-		return snap.lint.findings, stamp
-	}
-	findings := lint.Check(snap.tree, s.imports(snap), lint.Options{Exclude: snap.settings.Lint.Exclude, Optional: snap.settings.Lint.Optional, ForcedDialect: snap.settings.Dialect != nil})
-	snap.lint.valid, snap.lint.stamp, snap.lint.findings = true, stamp, findings
+	stamp := s.sourcesStamp(file.Tree)
+	opts := lint.Options{Exclude: settings.Lint.Exclude, Optional: settings.Lint.Optional, ForcedDialect: settings.Dialect != nil}
+	key := lintMemoKey + strconv.FormatUint(generation, 10)
+	findings, _ := file.Memo(key, stamp, func() any { return lint.Check(file.Tree, s.imports(file), opts) }).([]lint.Finding)
 	return findings, stamp
 }
 
 func (s *Server) diagnose(snap *snapshot) diagnosticReport {
-	findings, stamp := s.findings(snap)
-	items := diagnostics.Syntax(snap.tree, snap.doc, snap.encoding)
-	items = append(items, diagnostics.Lint(findings, snap.doc, snap.encoding)...)
+	return s.report(snap.file, snap.settings, snap.generation, snap.encoding, "v"+strconv.FormatInt(int64(snap.doc.Version), 10))
+}
+
+func (s *Server) diagnoseClosed(file *workspace.File, encoding docstore.Encoding) diagnosticReport {
+	settings, generation := s.settingsFor(file.URI)
+	hash := fnv.New64a()
+	_, _ = hash.Write([]byte(file.Doc.Text()))
+	return s.report(file, settings, generation, encoding, "h"+strconv.FormatUint(hash.Sum64(), 16))
+}
+
+func (s *Server) report(file *workspace.File, settings config.Settings, generation uint64, encoding docstore.Encoding, identity string) diagnosticReport {
+	findings, stamp := s.findings(file, settings, generation)
+	items := diagnostics.Syntax(file.Tree, file.Doc, encoding)
+	items = append(items, diagnostics.Lint(findings, file.Doc, encoding)...)
 	return diagnosticReport{
-		version:  snap.doc.Version,
-		resultID: fmt.Sprintf("%d/%d/%d", snap.doc.Version, snap.generation, stamp),
+		version:  file.Doc.Version,
+		resultID: fmt.Sprintf("%s/%d/%d", identity, generation, stamp),
 		items:    items,
 	}
 }
 
-func (s *Server) sourcesStamp(snap *snapshot) uint64 {
-	if !slices.ContainsFunc(snap.tree.Commands, navigation.IsSource) {
+func (s *Server) sourcesStamp(tree *parser.Tree) uint64 {
+	if !slices.ContainsFunc(tree.Commands, navigation.IsSource) {
 		return 0
 	}
 	return s.workspace.Generation()
@@ -81,6 +91,53 @@ func (s *Server) handleDocumentDiagnostic(_ context.Context, docs *docstore.View
 		return lsp.UnchangedDocumentDiagnosticReport{Kind: lsp.ReportUnchanged, ResultID: report.resultID}, nil
 	}
 	return lsp.FullDocumentDiagnosticReport{Kind: lsp.ReportFull, ResultID: report.resultID, Items: report.items}, nil
+}
+
+func (s *Server) handleWorkspaceDiagnostic(ctx context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
+	diagParams, err := lsp.DecodeParams[lsp.WorkspaceDiagnosticParams](params)
+	if err != nil {
+		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing workspace/diagnostic params: %v", err)
+	}
+	previous := make(map[string]string, len(diagParams.PreviousResultIDs))
+	for _, p := range diagParams.PreviousResultIDs {
+		previous[p.URI] = p.Value
+	}
+	files, err := s.indexWorkspace(ctx, docs)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]lsp.WorkspaceDocumentDiagnosticReport, len(files))
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, runtime.GOMAXPROCS(0))
+	for i, file := range files {
+		wg.Go(func() {
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			items[i] = s.workspaceReport(docs, file, previous[file.URI])
+		})
+	}
+	wg.Wait()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	slices.SortFunc(items, func(a, b lsp.WorkspaceDocumentDiagnosticReport) int { return strings.Compare(a.URI, b.URI) })
+	return lsp.WorkspaceDiagnosticReport{Items: items}, nil
+}
+
+func (s *Server) workspaceReport(docs *docstore.View, file *workspace.File, previous string) lsp.WorkspaceDocumentDiagnosticReport {
+	var report diagnosticReport
+	var version *int32
+	if snap, err := s.snapshot(docs, file.URI); err == nil {
+		report = s.diagnose(snap)
+		version = &report.version
+	} else {
+		report = s.diagnoseClosed(file, docs.Encoding())
+	}
+	out := lsp.WorkspaceDocumentDiagnosticReport{Kind: lsp.ReportFull, ResultID: report.resultID, URI: file.URI, Version: version, Items: report.items}
+	if previous == report.resultID {
+		out.Kind, out.Items = lsp.ReportUnchanged, nil
+	}
+	return out
 }
 
 func (s *Server) publishDiagnostics(ctx context.Context, uri string) {

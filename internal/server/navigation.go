@@ -133,12 +133,12 @@ func (s *Server) candidateFiles(docs *docstore.View) navigation.WorkspaceFiles {
 	}
 }
 
-func (s *Server) imports(snap *snapshot) []parser.Import {
-	chain := navigation.Chain(snap.file, s.navigationEnv())
+func (s *Server) imports(file *workspace.File) []parser.Import {
+	chain := navigation.Chain(file, s.navigationEnv())
 	imports := make([]parser.Import, len(chain))
 	for i, f := range chain {
 		name := f.Path
-		if rel, err := filepath.Rel(filepath.Dir(snap.file.Path), f.Path); err == nil && !strings.HasPrefix(rel, "..") {
+		if rel, err := filepath.Rel(filepath.Dir(file.Path), f.Path); err == nil && !strings.HasPrefix(rel, "..") {
 			name = rel
 		}
 		imports[i] = parser.Import{Name: name, Tree: f.Tree}

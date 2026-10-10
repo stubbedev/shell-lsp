@@ -3,12 +3,12 @@
 <- {"jsonrpc":"2.0","id":1}
 -> {"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///w/a.sh","languageId":"shellscript","version":1,"text":"#!/bin/sh\nif true; then\n  echo hi\n"}}}
 -> {"jsonrpc":"2.0","id":2,"method":"textDocument/diagnostic","params":{"textDocument":{"uri":"file:///w/a.sh"}}}
-<- {"jsonrpc":"2.0","id":2,"result":{"kind":"full","resultId":"1/0/0","items":[{"range":{"start":{"line":1,"character":0},"end":{"line":1,"character":2}},"severity":1,"code":"syntax","source":"shell-lsp","message":"missing `fi` to match `if`"}]}}
--> {"jsonrpc":"2.0","id":3,"method":"textDocument/diagnostic","params":{"textDocument":{"uri":"file:///w/a.sh"},"previousResultId":"1/0/0"}}
-<- {"jsonrpc":"2.0","id":3,"result":{"kind":"unchanged","resultId":"1/0/0"}}
+<- {"jsonrpc":"2.0","id":2,"result":{"kind":"full","resultId":"v1/0/0","items":[{"range":{"start":{"line":1,"character":0},"end":{"line":1,"character":2}},"severity":1,"code":"syntax","source":"shell-lsp","message":"missing `fi` to match `if`"}]}}
+-> {"jsonrpc":"2.0","id":3,"method":"textDocument/diagnostic","params":{"textDocument":{"uri":"file:///w/a.sh"},"previousResultId":"v1/0/0"}}
+<- {"jsonrpc":"2.0","id":3,"result":{"kind":"unchanged","resultId":"v1/0/0"}}
 -> {"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"file:///w/a.sh","version":2},"contentChanges":[{"range":{"start":{"line":3,"character":0},"end":{"line":3,"character":0}},"text":"fi\n"}]}}
--> {"jsonrpc":"2.0","id":4,"method":"textDocument/diagnostic","params":{"textDocument":{"uri":"file:///w/a.sh"},"previousResultId":"1/0/0"}}
-<- {"jsonrpc":"2.0","id":4,"result":{"kind":"full","resultId":"2/0/0","items":[]}}
+-> {"jsonrpc":"2.0","id":4,"method":"textDocument/diagnostic","params":{"textDocument":{"uri":"file:///w/a.sh"},"previousResultId":"v1/0/0"}}
+<- {"jsonrpc":"2.0","id":4,"result":{"kind":"full","resultId":"v2/0/0","items":[]}}
 -> {"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"file:///w/a.sh","version":3},"contentChanges":[{"text":"if\n"}]}}
 -> {"jsonrpc":"2.0","id":5,"method":"textDocument/diagnostic","params":{"textDocument":{"uri":"file:///w/a.sh"}}}
 <- {"jsonrpc":"2.0","id":5,"result":{"kind":"full","items":[{"code":"syntax","message":"missing `then` to match `if`"},{"code":"syntax","message":"missing `fi` to match `if`"},{"code":"syntax","message":"expected a command"}]}}

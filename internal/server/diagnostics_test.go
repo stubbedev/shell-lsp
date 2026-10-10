@@ -3,10 +3,13 @@ package server
 import (
 	"encoding/json"
 	"errors"
+	"maps"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 )
@@ -177,5 +180,54 @@ func TestPullForUnopenedDocumentIsInvalidParams(t *testing.T) {
 	msg := c.call("textDocument/diagnostic", `{"textDocument": {"uri": "file:///never/opened.sh"}}`)
 	if msg.Error == nil || msg.Error.Code != jsonrpc.CodeInvalidParams {
 		t.Errorf("error = %+v, want InvalidParams", msg.Error)
+	}
+}
+
+func TestWorkspaceDiagnosticsCoverClosedFiles(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeFiles(t, root, map[string]string{
+		"build.sh":     "#!/bin/bash\nrm $1\n",
+		"lib/clean.sh": "#!/bin/sh\necho \"$1\"\n",
+		"notes.txt":    "echo $1\n",
+	})
+	openURI := fileuri.FromPath(filepath.Join(root, "open.sh"))
+	c, _ := startClient(t, `{"rootUri": "`+fileuri.FromPath(root)+`", `+pullCapabilities+`}`)
+	c.notify("textDocument/didOpen", openParams(openURI, "#!/bin/bash\necho `date`\n"))
+
+	first := decodeResult[lsp.WorkspaceDiagnosticReport](t, c.call("workspace/diagnostic", `{"previousResultIds": []}`))
+	byURI := map[string]lsp.WorkspaceDocumentDiagnosticReport{}
+	for _, item := range first.Items {
+		byURI[item.URI] = item
+	}
+	build := byURI[fileuri.FromPath(filepath.Join(root, "build.sh"))]
+	if build.Kind != lsp.ReportFull || build.Version != nil || !slices.Equal(codes(build.Items), []string{"SC2086"}) {
+		t.Errorf("closed build.sh report = %+v", build)
+	}
+	if clean := byURI[fileuri.FromPath(filepath.Join(root, "lib", "clean.sh"))]; clean.Kind != lsp.ReportFull || len(clean.Items) != 0 {
+		t.Errorf("closed clean.sh report = %+v", clean)
+	}
+	open := byURI[openURI]
+	if open.Version == nil || *open.Version != 1 || !slices.Equal(codes(open.Items), []string{"SC2006", "SC2046"}) {
+		t.Errorf("open document report = %+v", open)
+	}
+	if _, ok := byURI[fileuri.FromPath(filepath.Join(root, "notes.txt"))]; ok || len(first.Items) != 3 {
+		t.Errorf("reported files = %v, want the three shell files only", slices.Collect(maps.Keys(byURI)))
+	}
+
+	previous := make([]lsp.PreviousResultID, 0, len(first.Items))
+	for _, item := range first.Items {
+		previous = append(previous, lsp.PreviousResultID{URI: item.URI, Value: item.ResultID})
+	}
+	raw, err := json.Marshal(lsp.WorkspaceDiagnosticParams{PreviousResultIDs: previous})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second := decodeResult[lsp.WorkspaceDiagnosticReport](t, c.call("workspace/diagnostic", string(raw)))
+	for _, item := range second.Items {
+		if item.Kind != lsp.ReportUnchanged || len(item.Items) != 0 {
+			t.Errorf("second report for %s = %+v, want unchanged", item.URI, item)
+		}
 	}
 }

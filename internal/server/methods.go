@@ -74,7 +74,7 @@ var methods = []method{
 	{"textDocument/completion", clientRequest, supported, "completionProvider", ""},
 	{"completionItem/resolve", clientRequest, supported, "completionProvider.resolveProvider", "man page documentation for commands"},
 	{"textDocument/diagnostic", clientRequest, supported, "diagnosticProvider", ""},
-	{"workspace/diagnostic", clientRequest, notAdvertised, "diagnosticProvider.workspaceDiagnostics", "diagnostics are per open document"},
+	{"workspace/diagnostic", clientRequest, supported, "diagnosticProvider.workspaceDiagnostics", "lints every shell file under the workspace folders, reporting unchanged files by result id"},
 	{"textDocument/signatureHelp", clientRequest, supported, "signatureHelpProvider", ""},
 	{"textDocument/codeAction", clientRequest, supported, "codeActionProvider", ""},
 	{"codeAction/resolve", clientRequest, supported, "codeActionProvider.resolveProvider", "refactor edits are computed on resolve"},

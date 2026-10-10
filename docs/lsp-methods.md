@@ -41,7 +41,7 @@ advertised capability, and that nothing else is handled or advertised.
 | `textDocument/completion` | implemented | `completionProvider` |  |
 | `completionItem/resolve` | implemented | `completionProvider.resolveProvider` | man page documentation for commands |
 | `textDocument/diagnostic` | implemented | `diagnosticProvider` |  |
-| `workspace/diagnostic` | not advertised | `diagnosticProvider.workspaceDiagnostics` | diagnostics are per open document |
+| `workspace/diagnostic` | implemented | `diagnosticProvider.workspaceDiagnostics` | lints every shell file under the workspace folders, reporting unchanged files by result id |
 | `textDocument/signatureHelp` | implemented | `signatureHelpProvider` |  |
 | `textDocument/codeAction` | implemented | `codeActionProvider` |  |
 | `codeAction/resolve` | implemented | `codeActionProvider.resolveProvider` | refactor edits are computed on resolve |

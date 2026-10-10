@@ -105,6 +105,7 @@ func (s *Server) registerHandlers() {
 		"initialize":                             s.handleInitialize,
 		"shutdown":                               s.handleShutdown,
 		"textDocument/diagnostic":                s.handleDocumentDiagnostic,
+		"workspace/diagnostic":                   s.handleWorkspaceDiagnostic,
 		"textDocument/hover":                     s.handleHover,
 		"textDocument/completion":                s.handleCompletion,
 		"completionItem/resolve":                 s.handleCompletionResolve,

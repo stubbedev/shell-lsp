@@ -104,7 +104,7 @@ func (s *Server) handleSemanticTokensFull(_ context.Context, docs *docstore.View
 	if err != nil {
 		return nil, err
 	}
-	return s.semantic.remember(p.TextDocument.URI, encodeTokens(snap, semantic.Tokens(snap.tree, s.imports(snap)), nil)), nil
+	return s.semantic.remember(p.TextDocument.URI, encodeTokens(snap, semantic.Tokens(snap.tree, s.imports(snap.file)), nil)), nil
 }
 
 func (s *Server) handleSemanticTokensDelta(_ context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
@@ -116,7 +116,7 @@ func (s *Server) handleSemanticTokensDelta(_ context.Context, docs *docstore.Vie
 	if err != nil {
 		return nil, err
 	}
-	data := encodeTokens(snap, semantic.Tokens(snap.tree, s.imports(snap)), nil)
+	data := encodeTokens(snap, semantic.Tokens(snap.tree, s.imports(snap.file)), nil)
 	previous, ok := s.semantic.previous(p.TextDocument.URI, p.PreviousResultID)
 	current := s.semantic.remember(p.TextDocument.URI, data)
 	if !ok {
@@ -157,7 +157,7 @@ func (s *Server) handleSemanticTokensRange(_ context.Context, docs *docstore.Vie
 		Start: snap.doc.PositionToOffset(p.Range.Start, snap.encoding),
 		End:   snap.doc.PositionToOffset(p.Range.End, snap.encoding),
 	}
-	return lsp.SemanticTokens{Data: encodeTokens(snap, semantic.Tokens(snap.tree, s.imports(snap)), &within)}, nil
+	return lsp.SemanticTokens{Data: encodeTokens(snap, semantic.Tokens(snap.tree, s.imports(snap.file)), &within)}, nil
 }
 
 func (s *Server) handleSelectionRange(_ context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
