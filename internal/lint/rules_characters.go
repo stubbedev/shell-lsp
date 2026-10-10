@@ -179,6 +179,9 @@ func (p *pass) quotedHeredoc(r *syntax.Redirect) bool {
 }
 
 func (p *pass) reportCharacters(code Code, start int, value, set, message string) {
+	if isASCII(value) {
+		return
+	}
 	for i := 0; i < len(value); {
 		r, size := utf8.DecodeRuneInString(value[i:])
 		if strings.ContainsRune(set, r) {
@@ -186,6 +189,15 @@ func (p *pass) reportCharacters(code Code, start int, value, set, message string
 		}
 		i += size
 	}
+}
+
+func isASCII(s string) bool {
+	for i := range len(s) {
+		if s[i] >= utf8.RuneSelf {
+			return false
+		}
+	}
+	return true
 }
 
 func (p *pass) checkEscapedTrailingSpace(span parser.Span) {
@@ -253,7 +265,7 @@ func checkLiteralBraces(p *pass, n syntax.Node) {
 	default:
 		return
 	}
-	if p.onBatsTestLine(w) {
+	if !hasLiteralBrace(w) || p.onBatsTestLine(w) {
 		return
 	}
 	shape, offsets := braceShape(p, w)
@@ -278,6 +290,15 @@ func checkLiteralBraces(p *pass, n syntax.Node) {
 	for _, i := range open {
 		p.reportLiteralBrace(offsets[i])
 	}
+}
+
+func hasLiteralBrace(w *syntax.Word) bool {
+	for _, part := range w.Parts {
+		if lit, ok := part.(*syntax.Lit); ok && strings.ContainsAny(lit.Value, "{}") {
+			return true
+		}
+	}
+	return false
 }
 
 func (p *pass) onBatsTestLine(w *syntax.Word) bool {
