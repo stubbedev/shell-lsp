@@ -267,9 +267,10 @@ func lineStartByte(lines []string, line int) int {
 func TestRandomChangeSequencesMatchPlainTextModel(t *testing.T) {
 	t.Parallel()
 
-	runes := []rune("aé😀中\nx ")
+	alphabets := [][]rune{[]rune("aé😀中\nx "), []rune("abcdefgh\n x=$é")}
 	for seed := range 200 {
 		rng := rand.New(rand.NewPCG(uint64(seed), 0xDECAFBAD))
+		runes := alphabets[seed%len(alphabets)]
 		text := randomText(rng, runes, 1+rng.IntN(40))
 		store := openDoc(t, text)
 		model := NormalizeCanonical(text)
@@ -315,8 +316,34 @@ func TestRandomChangeSequencesMatchPlainTextModel(t *testing.T) {
 			if got := doc.Text(); got != model {
 				t.Fatalf("seed %d after version %d: store = %q, model = %q", seed, version, got, model)
 			}
-			if fresh := NewDocument("file:///t.sh", "", version, model); !slices.Equal(doc.lineStart, fresh.lineStart) {
+			fresh := NewDocument("file:///t.sh", "", version, model)
+			if !slices.Equal(doc.lineStart, fresh.lineStart) {
 				t.Fatalf("seed %d after version %d: line starts %v, want %v", seed, version, doc.lineStart, fresh.lineStart)
+			}
+			if doc.nonASCII != fresh.nonASCII {
+				t.Fatalf("seed %d after version %d: %d non-ASCII bytes tracked, want %d", seed, version, doc.nonASCII, fresh.nonASCII)
+			}
+			assertConversionsMatchDecoding(t, doc)
+		}
+	}
+}
+
+func assertConversionsMatchDecoding(t *testing.T, doc *Document) {
+	t.Helper()
+	decoding := *doc
+	decoding.nonASCII = -1
+	for _, enc := range []Encoding{EncodingUTF8, EncodingUTF16, EncodingUTF32} {
+		for offset := 0; offset <= len(doc.text); offset++ {
+			if got, want := doc.OffsetToPosition(offset, enc), decoding.OffsetToPosition(offset, enc); got != want {
+				t.Fatalf("%q: OffsetToPosition(%d, %v) = %+v, want %+v", doc.text, offset, enc, got, want)
+			}
+		}
+		for line := range uint32(len(doc.lineStart) + 1) {
+			for char := range uint32(12) {
+				pos := lsp.Position{Line: line, Character: char}
+				if got, want := doc.PositionToOffset(pos, enc), decoding.PositionToOffset(pos, enc); got != want {
+					t.Fatalf("%q: PositionToOffset(%+v, %v) = %d, want %d", doc.text, pos, enc, got, want)
+				}
 			}
 		}
 	}

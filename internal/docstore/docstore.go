@@ -1,7 +1,3 @@
-// Package docstore tracks open text documents: versioned incremental
-// updates, line-ending and BOM normalization, and position mapping
-// between LSP positions (UTF-8, UTF-16 or UTF-32 code units) and byte
-// offsets.
 package docstore
 
 import (
@@ -49,9 +45,6 @@ func EncodingFromName(name string) (Encoding, error) {
 	return 0, fmt.Errorf("unsupported position encoding %q", name)
 }
 
-// NormalizeCanonical strips a leading UTF-8 BOM and rewrites CRLF and
-// lone CR line endings to LF. Positions, parses and edits all operate
-// on the normalized form.
 func NormalizeCanonical(text string) string {
 	text = strings.TrimPrefix(text, "\uFEFF")
 	if !strings.ContainsRune(text, '\r') {
@@ -66,6 +59,7 @@ type Document struct {
 	Version   int32
 	text      string
 	lineStart []int
+	nonASCII  int
 }
 
 func NewDocument(uri, language string, version int32, text string) *Document {
@@ -77,6 +71,17 @@ func NewDocument(uri, language string, version int32, text string) *Document {
 func (d *Document) setText(text string) {
 	d.text = text
 	d.lineStart = appendLineStarts(make([]int, 1, strings.Count(text, "\n")+1), text, 0)
+	d.nonASCII = countNonASCII(text)
+}
+
+func countNonASCII(s string) int {
+	n := 0
+	for i := range len(s) {
+		if s[i] >= utf8.RuneSelf {
+			n++
+		}
+	}
+	return n
 }
 
 func appendLineStarts(starts []int, text string, base int) []int {
@@ -101,6 +106,7 @@ func (d *Document) replace(start, end int, text string) {
 	for _, s := range tail {
 		starts = append(starts, s+shift)
 	}
+	d.nonASCII += countNonASCII(text) - countNonASCII(d.text[start:end])
 	d.text = d.text[:start] + text + d.text[end:]
 	d.lineStart = starts
 }
@@ -116,15 +122,15 @@ func (d *Document) lineEnd(line int) int {
 	return len(d.text)
 }
 
-// PositionToOffset maps an LSP position to a byte offset, clamping
-// out-of-range lines and characters per the spec. The encoding selects
-// the unit the character field is counted in.
 func (d *Document) PositionToOffset(pos lsp.Position, enc Encoding) int {
 	line := int(pos.Line)
 	if line >= len(d.lineStart) {
 		return len(d.text)
 	}
 	start, end := d.lineStart[line], d.lineEnd(line)
+	if d.nonASCII == 0 {
+		return min(start+int(pos.Character), end)
+	}
 	offset := start
 	var units uint32
 	for offset < end {
@@ -139,8 +145,6 @@ func (d *Document) PositionToOffset(pos lsp.Position, enc Encoding) int {
 	return offset
 }
 
-// OffsetToPosition maps a byte offset to an LSP position in the given
-// encoding. Offsets beyond the text clamp to its end.
 func (d *Document) OffsetToPosition(offset int, enc Encoding) lsp.Position {
 	if offset > len(d.text) {
 		offset = len(d.text)
@@ -148,8 +152,12 @@ func (d *Document) OffsetToPosition(offset int, enc Encoding) lsp.Position {
 	if offset < 0 {
 		offset = 0
 	}
-	line := sort.Search(len(d.lineStart), func(i int) bool { return d.lineStart[i] > offset }) - 1
+	line, _ := slices.BinarySearch(d.lineStart, offset+1)
+	line--
 	start := d.lineStart[line]
+	if d.nonASCII == 0 {
+		return lsp.Position{Line: uint32(line), Character: uint32(offset - start)} //nolint:gosec // line and column index into text, so they are bounded by len(text)
+	}
 	var units uint32
 	for i := start; i < offset; {
 		r, size := utf8.DecodeRuneInString(d.text[i:])
@@ -159,8 +167,6 @@ func (d *Document) OffsetToPosition(offset int, enc Encoding) lsp.Position {
 	return lsp.Position{Line: uint32(line), Character: units} //nolint:gosec // line indexes into text, so it is bounded by len(text)
 }
 
-// RangeFor returns the LSP range covering the byte-offset interval,
-// excluding any trailing newline.
 func (d *Document) RangeFor(start, end int, enc Encoding) lsp.Range {
 	if end < start {
 		start, end = end, start
@@ -277,9 +283,10 @@ func (s *Store) Change(uri string, version int32, changes []lsp.TextDocumentCont
 		if version <= d.Version {
 			return fmt.Errorf("ignoring stale change for %s: got version %d, have %d", uri, version, d.Version)
 		}
-		updated := &Document{URI: d.URI, Language: d.Language, Version: version, text: d.text, lineStart: d.lineStart}
+		updated := *d
+		updated.Version = version
 		updated.applyChanges(changes, next.encoding)
-		next.docs[uri] = updated
+		next.docs[uri] = &updated
 		return nil
 	})
 }
