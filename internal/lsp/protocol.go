@@ -243,3 +243,54 @@ type FileEvent struct {
 type DidChangeWatchedFilesParams struct {
 	Changes []FileEvent `json:"changes"`
 }
+
+type SymbolKind uint8
+
+const (
+	SymbolFile     SymbolKind = 1
+	SymbolFunction SymbolKind = 12
+	SymbolVariable SymbolKind = 13
+	SymbolConstant SymbolKind = 14
+	SymbolString   SymbolKind = 15
+	SymbolArray    SymbolKind = 18
+)
+
+type DocumentSymbol struct {
+	Name           string           `json:"name"`
+	Detail         string           `json:"detail,omitempty"`
+	Kind           SymbolKind       `json:"kind"`
+	Range          Range            `json:"range"`
+	SelectionRange Range            `json:"selectionRange"`
+	Children       []DocumentSymbol `json:"children,omitempty"`
+}
+
+type SymbolInformation struct {
+	Name          string     `json:"name"`
+	Kind          SymbolKind `json:"kind"`
+	Location      Location   `json:"location"`
+	ContainerName string     `json:"containerName,omitempty"`
+}
+
+type DocumentSymbolParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+}
+
+type FoldingRangeParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+}
+
+const (
+	FoldingComment = "comment"
+	FoldingImports = "imports"
+	FoldingRegion  = "region"
+)
+
+type FoldingRange struct {
+	StartLine uint32 `json:"startLine"`
+	EndLine   uint32 `json:"endLine"`
+	Kind      string `json:"kind,omitempty"`
+}
+
+type WorkspaceSymbolParams struct {
+	Query string `json:"query"`
+}

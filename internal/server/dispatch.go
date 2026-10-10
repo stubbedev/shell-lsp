@@ -104,6 +104,9 @@ func (s *Server) registerHandlers() {
 		"textDocument/declaration":    s.navigationHandler(navigation.ModeDeclaration),
 		"textDocument/typeDefinition": s.navigationHandler(navigation.ModeTypeDefinition),
 		"textDocument/implementation": s.navigationHandler(navigation.ModeImplementation),
+		"textDocument/documentSymbol": s.handleDocumentSymbol,
+		"textDocument/foldingRange":   s.handleFoldingRange,
+		"workspace/symbol":            s.handleWorkspaceSymbol,
 	}
 	s.notifications = map[string]notificationHandler{
 		"$/cancelRequest":                  s.handleCancelRequest,

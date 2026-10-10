@@ -1,0 +1,159 @@
+package server
+
+import (
+	"cmp"
+	"context"
+	"encoding/json"
+	"slices"
+
+	"github.com/stubbedev/shell-lsp/internal/docstore"
+	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
+	"github.com/stubbedev/shell-lsp/internal/lsp"
+	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/structure"
+	"github.com/stubbedev/shell-lsp/internal/workspace"
+)
+
+const maxWorkspaceSymbols = 500
+
+var symbolKinds = map[structure.SymbolKind]lsp.SymbolKind{
+	structure.SymbolFile:     lsp.SymbolFile,
+	structure.SymbolFunction: lsp.SymbolFunction,
+	structure.SymbolVariable: lsp.SymbolVariable,
+	structure.SymbolArray:    lsp.SymbolArray,
+	structure.SymbolConstant: lsp.SymbolConstant,
+	structure.SymbolHeredoc:  lsp.SymbolString,
+}
+
+var foldKinds = map[structure.FoldKind]string{
+	structure.FoldRegion:  lsp.FoldingRegion,
+	structure.FoldComment: lsp.FoldingComment,
+	structure.FoldImports: lsp.FoldingImports,
+}
+
+func (s *Server) handleDocumentSymbol(_ context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
+	symbolParams, err := lsp.DecodeParams[lsp.DocumentSymbolParams](params)
+	if err != nil {
+		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing textDocument/documentSymbol params: %v", err)
+	}
+	snap, err := s.snapshot(docs, symbolParams.TextDocument.URI)
+	if err != nil {
+		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
+	}
+	symbols := structure.Symbols(snap.tree)
+	if s.clientCapabilities().TextDocument.DocumentSymbol.HierarchicalDocumentSymbolSupport {
+		return documentSymbols(snap.doc, snap.encoding, symbols), nil
+	}
+	return flatSymbols(snap.doc, snap.encoding, symbols, ""), nil
+}
+
+func documentSymbols(doc *docstore.Document, enc docstore.Encoding, symbols []structure.Symbol) []lsp.DocumentSymbol {
+	out := make([]lsp.DocumentSymbol, len(symbols))
+	for i, sym := range symbols {
+		out[i] = lsp.DocumentSymbol{
+			Name:           sym.Name,
+			Detail:         sym.Detail,
+			Kind:           symbolKinds[sym.Kind],
+			Range:          doc.RangeFor(sym.Span.Start, sym.Span.End, enc),
+			SelectionRange: doc.RangeFor(sym.Selection.Start, sym.Selection.End, enc),
+			Children:       documentSymbols(doc, enc, sym.Children),
+		}
+	}
+	return out
+}
+
+func flatSymbols(doc *docstore.Document, enc docstore.Encoding, symbols []structure.Symbol, container string) []lsp.SymbolInformation {
+	out := []lsp.SymbolInformation{}
+	for _, sym := range symbols {
+		out = append(out, lsp.SymbolInformation{
+			Name:          sym.Name,
+			Kind:          symbolKinds[sym.Kind],
+			Location:      lsp.Location{URI: doc.URI, Range: doc.RangeFor(sym.Span.Start, sym.Span.End, enc)},
+			ContainerName: container,
+		})
+		out = append(out, flatSymbols(doc, enc, sym.Children, sym.Name)...)
+	}
+	return out
+}
+
+func (s *Server) handleFoldingRange(_ context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
+	foldParams, err := lsp.DecodeParams[lsp.FoldingRangeParams](params)
+	if err != nil {
+		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing textDocument/foldingRange params: %v", err)
+	}
+	snap, err := s.snapshot(docs, foldParams.TextDocument.URI)
+	if err != nil {
+		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
+	}
+	lineOf := func(offset int) int { return int(snap.doc.OffsetToPosition(offset, snap.encoding).Line) }
+	folds := structure.Folds(snap.tree, lineOf)
+	if limit := s.clientCapabilities().TextDocument.FoldingRange.RangeLimit; limit > 0 && len(folds) > limit {
+		folds = folds[:limit]
+	}
+	out := make([]lsp.FoldingRange, len(folds))
+	for i, f := range folds {
+		out[i] = lsp.FoldingRange{StartLine: uint32(f.StartLine), EndLine: uint32(f.EndLine), Kind: foldKinds[f.Kind]} //nolint:gosec
+	}
+	return out, nil
+}
+
+func (s *Server) handleWorkspaceSymbol(ctx context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
+	symbolParams, err := lsp.DecodeParams[lsp.WorkspaceSymbolParams](params)
+	if err != nil {
+		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing workspace/symbol params: %v", err)
+	}
+	files, err := s.workspaceFiles(ctx, docs)
+	if err != nil {
+		return nil, err
+	}
+	out := []lsp.SymbolInformation{}
+	for _, file := range files {
+		for _, fn := range file.Tree.Functions {
+			if structure.Matches(symbolParams.Query, fn.Name) {
+				out = append(out, workspaceSymbol(file, docs.Encoding(), fn.Name, lsp.SymbolFunction, fn.Span))
+			}
+		}
+		for _, def := range file.Tree.Definitions {
+			if def.Within == parser.FileScope && def.Kind != parser.DefCommandEnv && structure.Matches(symbolParams.Query, def.Name) {
+				out = append(out, workspaceSymbol(file, docs.Encoding(), def.Name, lsp.SymbolVariable, def.Span))
+			}
+		}
+	}
+	slices.SortStableFunc(out, func(a, b lsp.SymbolInformation) int {
+		return cmp.Or(cmp.Compare(a.Kind, b.Kind), cmp.Compare(a.Name, b.Name), cmp.Compare(a.Location.URI, b.Location.URI))
+	})
+	out = slices.CompactFunc(out, func(a, b lsp.SymbolInformation) bool {
+		return a.Kind == b.Kind && a.Name == b.Name && a.Location.URI == b.Location.URI
+	})
+	return out[:min(len(out), maxWorkspaceSymbols)], nil
+}
+
+func workspaceSymbol(file *workspace.File, enc docstore.Encoding, name string, kind lsp.SymbolKind, span parser.Span) lsp.SymbolInformation {
+	return lsp.SymbolInformation{Name: name, Kind: kind, Location: lsp.Location{URI: file.URI, Range: file.Doc.RangeFor(span.Start, span.End, enc)}}
+}
+
+func (s *Server) workspaceFiles(ctx context.Context, docs *docstore.View) ([]*workspace.File, error) {
+	paths, err := s.workspace.ShellFiles(ctx)
+	if err != nil {
+		return nil, err
+	}
+	seen := map[string]bool{}
+	var files []*workspace.File
+	for _, doc := range docs.Documents() {
+		file, err := s.workspaceFile(docs, doc.URI)
+		if err != nil {
+			return nil, err
+		}
+		seen[file.URI] = true
+		files = append(files, file)
+	}
+	for _, path := range paths {
+		file, err := s.workspace.Load(path)
+		if err != nil || seen[file.URI] {
+			continue
+		}
+		seen[file.URI] = true
+		files = append(files, file)
+	}
+	return files, nil
+}
