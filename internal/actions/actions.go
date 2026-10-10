@@ -186,7 +186,7 @@ func Compute(tree *parser.Tree, r Refactor) ([]textedit.Edit, string, bool) {
 
 func extractVariable(tree *parser.Tree, sel parser.Span) ([]textedit.Edit, string, bool) {
 	text := tree.Text()
-	if sel.End <= sel.Start || strings.ContainsRune(text[sel.Start:sel.End], '\n') {
+	if sel.End <= sel.Start || strings.ContainsRune(text[sel.Start:sel.End], '\n') || inHeredoc(tree, sel) {
 		return nil, "", false
 	}
 	path := tree.PathAt(sel.Start)
@@ -213,6 +213,17 @@ func extractVariable(tree *parser.Tree, sel parser.Span) ([]textedit.Edit, strin
 		{Start: lineAt, End: lineAt, NewText: indent + name + "=" + rhs + "\n"},
 		{Start: sel.Start, End: sel.End, NewText: replacement},
 	}, "Extract to variable " + name, true
+}
+
+func inHeredoc(tree *parser.Tree, sel parser.Span) bool {
+	text := tree.Text()
+	for _, h := range tree.Heredocs {
+		region := parser.Span{Start: h.Span.Start, End: lineEnd(text, min(h.Body.End, len(text)))}
+		if sel.Start < region.End && region.Start < sel.End {
+			return true
+		}
+	}
+	return false
 }
 
 func selectedWord(tree *parser.Tree, path []syntax.Node, sel parser.Span) (parser.Span, bool, bool) {
