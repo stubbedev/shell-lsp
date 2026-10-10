@@ -304,7 +304,7 @@ type summary struct {
 type interpreter struct {
 	tree       *parser.Tree
 	dialect    dialect.Dialect
-	writes     map[syntax.Node][]*parser.Definition
+	writes     nodeWrites
 	imported   map[string]value
 	result     *flowResult
 	record     bool
@@ -338,7 +338,7 @@ func analyzeFlow(tree *parser.Tree, imports []parser.Import, bats bool) *flowRes
 		bats:       bats,
 		tree:       tree,
 		dialect:    tree.Dialect,
-		writes:     map[syntax.Node][]*parser.Definition{},
+		writes:     indexWrites(tree),
 		imported:   importedGlobals(imports),
 		result:     &flowResult{expansions: map[*syntax.ParamExp]space{}, reached: map[*syntax.Stmt]bool{}, called: map[*syntax.FuncDecl]bool{}, lostReads: map[syntax.Node]lostWrite{}, flowFacts: newFlowFacts()},
 		summaries:  map[*syntax.FuncDecl]*summary{},
@@ -347,12 +347,6 @@ func analyzeFlow(tree *parser.Tree, imports []parser.Import, bats bool) *flowRes
 		lastPipe:   runsLastPipeInShell(tree),
 	}
 	in.visitor = in.visit
-	for i := range tree.Definitions {
-		def := &tree.Definitions[i]
-		if def.Node != nil {
-			in.writes[def.Node] = append(in.writes[def.Node], def)
-		}
-	}
 	for _, fn := range tree.Functions {
 		if _, seen := in.staticFunc[fn.Name]; !seen && fn.Decl != nil {
 			in.staticFunc[fn.Name] = fn.Decl
@@ -717,8 +711,35 @@ func (in *interpreter) recordRead(name string, read syntax.Node, s *state) {
 	in.result.lostReads[read] = w
 }
 
+type nodeWrites struct {
+	starts []uint64
+	defs   map[syntax.Node][]*parser.Definition
+}
+
+func indexWrites(tree *parser.Tree) nodeWrites {
+	w := nodeWrites{starts: make([]uint64, len(tree.Text())/64+1), defs: map[syntax.Node][]*parser.Definition{}}
+	for i := range tree.Definitions {
+		def := &tree.Definitions[i]
+		if def.Node == nil {
+			continue
+		}
+		off := def.Node.Pos().Offset()
+		w.starts[off/64] |= 1 << (off % 64)
+		w.defs[def.Node] = append(w.defs[def.Node], def)
+	}
+	return w
+}
+
+func (w nodeWrites) of(n syntax.Node) []*parser.Definition {
+	off := n.Pos().Offset()
+	if w.starts[off/64]&(1<<(off%64)) == 0 {
+		return nil
+	}
+	return w.defs[n]
+}
+
 func (in *interpreter) applyWrites(n syntax.Node, s *state) {
-	for _, def := range in.writes[n] {
+	for _, def := range in.writes.of(n) {
 		in.write(def, s)
 	}
 }
