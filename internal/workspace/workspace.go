@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
@@ -44,6 +45,24 @@ type File struct {
 	URI  string
 	Doc  *docstore.Document
 	Tree *parser.Tree
+
+	memo sync.Map
+}
+
+type memoEntry struct {
+	generation uint64
+	value      any
+}
+
+func (f *File) Memo(key string, generation uint64, compute func() any) any {
+	if cached, ok := f.memo.Load(key); ok {
+		if entry, ok := cached.(memoEntry); ok && entry.generation == generation {
+			return entry.value
+		}
+	}
+	value := compute()
+	f.memo.Store(key, memoEntry{generation: generation, value: value})
+	return value
 }
 
 type Overlay func(uri string) (*File, bool)
@@ -52,9 +71,18 @@ type Workspace struct {
 	overlay  Overlay
 	override func(path string) *dialect.Dialect
 
-	mu    sync.Mutex
-	roots []string
-	files map[string]diskEntry
+	mu         sync.Mutex
+	roots      []string
+	files      map[string]diskEntry
+	dirs       map[string]dirListing
+	generation atomic.Uint64
+	watched    atomic.Bool
+}
+
+func (w *Workspace) SetWatched(watched bool) { w.watched.Store(watched) }
+
+func isShellName(path string) bool {
+	return rcFiles[filepath.Base(path)] || slices.Contains(shellExtensions, filepath.Ext(path))
 }
 
 type diskEntry struct {
@@ -64,14 +92,17 @@ type diskEntry struct {
 }
 
 func New(overlay Overlay, override func(path string) *dialect.Dialect) *Workspace {
-	return &Workspace{overlay: overlay, override: override, files: map[string]diskEntry{}}
+	return &Workspace{overlay: overlay, override: override, files: map[string]diskEntry{}, dirs: map[string]dirListing{}}
 }
 
 func (w *Workspace) SetRoots(roots []string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.roots = slices.Clone(roots)
+	w.generation.Add(1)
 }
+
+func (w *Workspace) Generation() uint64 { return w.generation.Load() }
 
 func (w *Workspace) Roots() []string {
 	w.mu.Lock()
@@ -83,18 +114,30 @@ func (w *Workspace) Invalidate(path string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	delete(w.files, path)
+	delete(w.dirs, filepath.Dir(path))
+	w.generation.Add(1)
 }
 
 func (w *Workspace) InvalidateAll() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	clear(w.files)
+	clear(w.dirs)
+	w.generation.Add(1)
 }
 
 func (w *Workspace) Load(path string) (*File, error) {
 	uri := fileuri.FromPath(path)
 	if f, ok := w.overlay(uri); ok {
 		return f, nil
+	}
+	if w.watched.Load() && isShellName(path) {
+		w.mu.Lock()
+		cached, ok := w.files[path]
+		w.mu.Unlock()
+		if ok {
+			return cached.file, nil
+		}
 	}
 	info, err := os.Stat(path)
 	if err != nil {
@@ -125,39 +168,69 @@ func (w *Workspace) Load(path string) (*File, error) {
 	return file, nil
 }
 
+type dirListing struct {
+	modTime time.Time
+	files   []string
+	dirs    []string
+}
+
 func (w *Workspace) ShellFiles(ctx context.Context) ([]string, error) {
 	var out []string
 	for _, root := range w.Roots() {
-		err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
-			if ctxErr := ctx.Err(); ctxErr != nil {
-				return ctxErr
+		pending := []string{root}
+		for len(pending) > 0 && len(out) < maxScanFiles {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			dir := pending[len(pending)-1]
+			pending = pending[:len(pending)-1]
+			listing, err := w.listDir(dir)
+			if errors.Is(err, fs.ErrPermission) || errors.Is(err, fs.ErrNotExist) {
+				continue
 			}
 			if err != nil {
-				if errors.Is(err, fs.ErrPermission) || errors.Is(err, fs.ErrNotExist) {
-					return nil
-				}
-				return err
+				return nil, fmt.Errorf("scanning workspace root %s: %w", root, err)
 			}
-			if entry.IsDir() {
-				if path != root && skippedDirs[entry.Name()] {
-					return filepath.SkipDir
-				}
-				return nil
-			}
-			if len(out) >= maxScanFiles {
-				return filepath.SkipAll
-			}
-			if entry.Type().IsRegular() && isShellFile(path, entry) {
-				out = append(out, path)
-			}
-			return nil
-		})
-		if err != nil {
-			return nil, fmt.Errorf("scanning workspace root %s: %w", root, err)
+			out = append(out, listing.files...)
+			pending = append(pending, listing.dirs...)
 		}
 	}
 	slices.Sort(out)
-	return slices.Compact(out), nil
+	out = slices.Compact(out)
+	return out[:min(len(out), maxScanFiles)], nil
+}
+
+func (w *Workspace) listDir(dir string) (dirListing, error) {
+	info, err := os.Stat(dir)
+	if err != nil {
+		return dirListing{}, err
+	}
+	w.mu.Lock()
+	cached, ok := w.dirs[dir]
+	w.mu.Unlock()
+	if ok && cached.modTime.Equal(info.ModTime()) {
+		return cached, nil
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return dirListing{}, err
+	}
+	listing := dirListing{modTime: info.ModTime()}
+	for _, entry := range entries {
+		path := filepath.Join(dir, entry.Name())
+		switch {
+		case entry.IsDir():
+			if !skippedDirs[entry.Name()] {
+				listing.dirs = append(listing.dirs, path)
+			}
+		case entry.Type().IsRegular() && isShellFile(path, entry):
+			listing.files = append(listing.files, path)
+		}
+	}
+	w.mu.Lock()
+	w.dirs[dir] = listing
+	w.mu.Unlock()
+	return listing, nil
 }
 
 func WatchGlobs() []string {
@@ -177,7 +250,7 @@ func WatchGlobs() []string {
 }
 
 func isShellFile(path string, entry fs.DirEntry) bool {
-	if rcFiles[entry.Name()] || slices.Contains(shellExtensions, filepath.Ext(path)) {
+	if isShellName(path) {
 		return true
 	}
 	if filepath.Ext(path) != "" {

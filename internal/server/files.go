@@ -93,7 +93,9 @@ func (s *Server) registerWatchers(ctx context.Context) {
 	}}}
 	if err := s.call(ctx, "client/registerCapability", params, nil); err != nil {
 		s.noticeOnce("register-watchers", lsp.MessageWarning, "registering file watchers failed; changes made outside the editor are picked up when files are next read: "+err.Error())
+		return
 	}
+	s.workspace.SetWatched(true)
 }
 
 func (s *Server) handleFilesChanged(_ context.Context, params json.RawMessage) error {

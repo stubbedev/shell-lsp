@@ -35,11 +35,7 @@ func (s *Server) workspaceFile(docs *docstore.View, uri string) (*workspace.File
 	if err != nil {
 		return nil, err
 	}
-	path, err := fileuri.ToPath(uri)
-	if err != nil {
-		path = ""
-	}
-	return &workspace.File{Path: path, URI: uri, Doc: snap.doc, Tree: snap.tree}, nil
+	return snap.file, nil
 }
 
 func (s *Server) navigationEnv() navigation.Env {

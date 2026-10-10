@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -271,5 +272,66 @@ func BenchmarkDocumentChange(b *testing.B) {
 func BenchmarkDetectDialect(b *testing.B) {
 	for b.Loop() {
 		dialect.Detect(nil, dialect.Input{URI: "file:///w/large", Text: text})
+	}
+}
+
+func largeWorkspace(b *testing.B) (*workspace.Workspace, *workspace.File) {
+	b.Helper()
+
+	root := b.TempDir()
+	for i := range 1500 {
+		dir := filepath.Join(root, fmt.Sprintf("pkg%02d", i%30))
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			b.Fatal(err)
+		}
+		body := fmt.Sprintf("source ../lib.sh\nhelper_%d() { shared \"$1\"; }\nhelper_%d x\n", i, i)
+		if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("f%04d.sh", i)), []byte(body), 0o600); err != nil {
+			b.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(root, "lib.sh"), []byte("shared() { echo \"$1\"; }\n"), 0o600); err != nil {
+		b.Fatal(err)
+	}
+	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, func(string) *dialect.Dialect { return nil })
+	ws.SetRoots([]string{root})
+	lib, err := ws.Load(filepath.Join(root, "lib.sh"))
+	if err != nil {
+		b.Fatal(err)
+	}
+	return ws, lib
+}
+
+func BenchmarkWorkspaceReferences(b *testing.B) {
+	ws, lib := largeWorkspace(b)
+	benchmarkReferences(b, ws, lib)
+}
+
+func BenchmarkWorkspaceReferencesWatched(b *testing.B) {
+	ws, lib := largeWorkspace(b)
+	ws.SetWatched(true)
+	benchmarkReferences(b, ws, lib)
+}
+
+func benchmarkReferences(b *testing.B, ws *workspace.Workspace, lib *workspace.File) {
+	b.Helper()
+
+	env := navigation.Env{Loader: ws, Roots: ws.Roots()}
+	if _, err := navigation.References(b.Context(), lib, 0, env, ws.ShellFiles, true); err != nil {
+		b.Fatal(err)
+	}
+	for b.Loop() {
+		refs, err := navigation.References(b.Context(), lib, 0, env, ws.ShellFiles, true)
+		if err != nil || len(refs) != 1501 {
+			b.Fatalf("references = %d, %v", len(refs), err)
+		}
+	}
+}
+
+func BenchmarkWorkspaceScan(b *testing.B) {
+	ws, _ := largeWorkspace(b)
+	for b.Loop() {
+		if _, err := ws.ShellFiles(b.Context()); err != nil {
+			b.Fatal(err)
+		}
 	}
 }

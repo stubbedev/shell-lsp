@@ -22,6 +22,7 @@ const (
 
 type Loader interface {
 	Load(path string) (*workspace.File, error)
+	Generation() uint64
 }
 
 type Env struct {
@@ -42,6 +43,11 @@ func IsSource(cmd parser.Command) bool {
 }
 
 func Sources(file *workspace.File, env Env) []SourceRef {
+	refs, _ := file.Memo("navigation.sources", env.Loader.Generation(), func() any { return resolveSources(file, env) }).([]SourceRef)
+	return refs
+}
+
+func resolveSources(file *workspace.File, env Env) []SourceRef {
 	var refs []SourceRef
 	for _, cmd := range file.Tree.Commands {
 		if !IsSource(cmd) {
