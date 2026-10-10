@@ -43,6 +43,7 @@ var families = []family{
 	redirectsFamily,
 	expansionsFamily,
 	errexitFamily,
+	structureFamily,
 }
 
 var catalog, rules, commandChecks = assemble(families)
