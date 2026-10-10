@@ -36,6 +36,7 @@ const (
 	DefLoop
 	DefArithmetic
 	DefBuiltin
+	DefDescriptor
 )
 
 type Attr uint8
@@ -57,9 +58,11 @@ type Definition struct {
 	Span     Span
 	Kind     DefinitionKind
 	Attrs    Attr
+	Cleared  Attr
 	Local    bool
 	Within   ScopeID
 	Value    *syntax.Word
+	Node     syntax.Node
 }
 
 type Reference struct {
@@ -237,7 +240,7 @@ func (b *builder) call(n *syntax.CallExpr) {
 		kind = DefCommandEnv
 	}
 	for _, assign := range n.Assigns {
-		b.assign(assign, kind, 0, false)
+		b.assign(assign, kind, declFlags{}, false)
 	}
 	if len(n.Args) == 0 {
 		return
@@ -256,7 +259,7 @@ func (b *builder) call(n *syntax.CallExpr) {
 	if variant, ok := declVariants[name]; ok {
 		b.declarationWords(variant, n.Args[1:])
 	}
-	b.builtinAssignments(name, n.Args[1:])
+	b.builtinAssignments(n, name, n.Args[1:])
 }
 
 var optionsWithArgument = map[string]string{
@@ -264,15 +267,15 @@ var optionsWithArgument = map[string]string{
 	"mapfile":   "dnOsuCc",
 	"readarray": "dnOsuCc",
 	"printf":    "v",
+	"wait":      "p",
 }
 
-func (b *builder) builtinAssignments(name string, args []*syntax.Word) {
+func (b *builder) builtinAssignments(call *syntax.CallExpr, name string, args []*syntax.Word) {
 	argOpts, known := optionsWithArgument[name]
 	if !known && name != "getopts" {
 		return
 	}
-	var names []*syntax.Word
-	var arrays []*syntax.Word
+	var names, scalars, arrays []*syntax.Word
 	for i := 0; i < len(args); i++ {
 		value, ok := Literal(args[i])
 		if !ok {
@@ -289,8 +292,8 @@ func (b *builder) builtinAssignments(name string, args []*syntax.Word) {
 				switch {
 				case name == "read" && last == 'a':
 					arrays = append(arrays, args[i])
-				case name == "printf" && last == 'v':
-					names = append(names, args[i])
+				case (name == "printf" && last == 'v') || (name == "wait" && last == 'p'):
+					scalars = append(scalars, args[i])
 				}
 			}
 			continue
@@ -300,29 +303,26 @@ func (b *builder) builtinAssignments(name string, args []*syntax.Word) {
 	switch name {
 	case "getopts":
 		if len(names) >= 2 {
-			b.wordDefinition(names[1], 0)
-		}
-	case "printf":
-		if len(names) > 0 && len(args) > 0 {
-			if first, _ := Literal(args[0]); first == "-v" {
-				b.wordDefinition(names[0], 0)
-			}
+			b.wordDefinition(call, names[1], 0)
 		}
 	case "mapfile", "readarray":
 		if len(names) > 0 {
-			b.wordDefinition(names[len(names)-1], AttrArray)
+			b.wordDefinition(call, names[len(names)-1], AttrArray)
 		}
 	case "read":
 		for _, w := range names {
-			b.wordDefinition(w, 0)
+			b.wordDefinition(call, w, 0)
 		}
 	}
+	for _, w := range scalars {
+		b.wordDefinition(call, w, 0)
+	}
 	for _, w := range arrays {
-		b.wordDefinition(w, AttrArray)
+		b.wordDefinition(call, w, AttrArray)
 	}
 }
 
-func (b *builder) wordDefinition(w *syntax.Word, attrs Attr) {
+func (b *builder) wordDefinition(call *syntax.CallExpr, w *syntax.Word, attrs Attr) {
 	value, ok := Literal(w)
 	if !ok || !isName(value) || len(w.Parts) != 1 {
 		return
@@ -335,6 +335,7 @@ func (b *builder) wordDefinition(w *syntax.Word, attrs Attr) {
 		Kind:     DefBuiltin,
 		Attrs:    attrs,
 		Within:   b.scope(),
+		Node:     call,
 	})
 }
 
@@ -363,27 +364,27 @@ func (b *builder) declaration(n *syntax.DeclClause) {
 		Span:     b.span(n),
 		Within:   b.scope(),
 	})
-	attrs, global := variant.attrs, false
+	flags := declFlags{attrs: variant.attrs}
 	for _, arg := range n.Args {
 		if arg.Name == nil {
-			if flags, ok := Literal(arg.Value); ok {
-				attrs, global = applyFlags(attrs, global, flags)
+			if word, ok := Literal(arg.Value); ok {
+				flags = flags.apply(word)
 			}
 			continue
 		}
-		b.assign(arg, DefDeclare, attrs, variant.isLocal(b.scope(), global))
+		b.assign(arg, DefDeclare, flags, variant.isLocal(b.scope(), flags.global))
 	}
 }
 
 func (b *builder) declarationWords(variant declVariant, args []*syntax.Word) {
-	attrs, global := variant.attrs, false
+	flags := declFlags{attrs: variant.attrs}
 	for _, arg := range args {
 		value, ok := Literal(arg)
 		if !ok {
 			continue
 		}
 		if strings.HasPrefix(value, "-") || strings.HasPrefix(value, "+") {
-			attrs, global = applyFlags(attrs, global, value)
+			flags = flags.apply(value)
 			continue
 		}
 		name, _, _ := strings.Cut(value, "=")
@@ -396,9 +397,11 @@ func (b *builder) declarationWords(variant declVariant, args []*syntax.Word) {
 			NameSpan: Span{Start: start, End: start + len(name)},
 			Span:     b.span(arg),
 			Kind:     DefDeclare,
-			Attrs:    attrs,
-			Local:    variant.isLocal(b.scope(), global),
+			Attrs:    flags.attrs,
+			Cleared:  flags.cleared,
+			Local:    variant.isLocal(b.scope(), flags.global),
 			Within:   b.scope(),
+			Node:     arg,
 		})
 	}
 }
@@ -410,35 +413,41 @@ func (v declVariant) isLocal(scope ScopeID, global bool) bool {
 	return v.scoped && scope != FileScope && !global
 }
 
-func applyFlags(attrs Attr, global bool, flags string) (Attr, bool) {
-	if !strings.HasPrefix(flags, "-") {
-		return attrs, global
-	}
-	for _, flag := range flags[1:] {
-		switch flag {
-		case 'a':
-			attrs |= AttrArray
-		case 'A':
-			attrs |= AttrAssoc
-		case 'x':
-			attrs |= AttrExport
-		case 'r':
-			attrs |= AttrReadonly
-		case 'i':
-			attrs |= AttrInteger
-		case 'n':
-			attrs |= AttrNameref
-		case 'g':
-			global = true
-		}
-	}
-	return attrs, global
+type declFlags struct {
+	attrs   Attr
+	cleared Attr
+	global  bool
 }
 
-func (b *builder) assign(n *syntax.Assign, kind DefinitionKind, attrs Attr, local bool) {
+var flagAttrs = map[rune]Attr{'a': AttrArray, 'A': AttrAssoc, 'x': AttrExport, 'r': AttrReadonly, 'i': AttrInteger, 'n': AttrNameref}
+
+func (f declFlags) apply(word string) declFlags {
+	set := strings.HasPrefix(word, "-")
+	if !set && !strings.HasPrefix(word, "+") {
+		return f
+	}
+	for _, flag := range word[1:] {
+		attr, isAttr := flagAttrs[flag]
+		switch {
+		case flag == 'g':
+			f.global = set
+		case !isAttr:
+		case set:
+			f.attrs |= attr
+			f.cleared &^= attr
+		default:
+			f.cleared |= attr
+			f.attrs &^= attr
+		}
+	}
+	return f
+}
+
+func (b *builder) assign(n *syntax.Assign, kind DefinitionKind, flags declFlags, local bool) {
 	if n.Name == nil || !isName(n.Name.Value) {
 		return
 	}
+	attrs := flags.attrs
 	if n.Array != nil && !attrs.Has(AttrAssoc) {
 		attrs |= AttrArray
 	}
@@ -448,9 +457,11 @@ func (b *builder) assign(n *syntax.Assign, kind DefinitionKind, attrs Attr, loca
 		Span:     b.span(n),
 		Kind:     kind,
 		Attrs:    attrs,
+		Cleared:  flags.cleared,
 		Local:    local,
 		Within:   b.scope(),
 		Value:    assignedWord(n),
+		Node:     n,
 	})
 }
 
@@ -465,6 +476,7 @@ func (b *builder) forClause(n *syntax.ForClause) {
 		Span:     b.span(iter),
 		Kind:     DefLoop,
 		Within:   b.scope(),
+		Node:     iter,
 	})
 }
 
@@ -534,6 +546,31 @@ func (b *builder) arithmeticDefinition(target syntax.ArithmExpr, expr syntax.Ari
 		Span:     b.span(expr),
 		Kind:     DefArithmetic,
 		Within:   b.scope(),
+		Node:     expr,
+	})
+}
+
+func (b *builder) descriptorVariable(n *syntax.Redirect) {
+	if n.N == nil || len(n.N.Value) < 3 || n.N.Value[0] != '{' || n.N.Value[len(n.N.Value)-1] != '}' {
+		return
+	}
+	name := n.N.Value[1 : len(n.N.Value)-1]
+	if !isName(name) {
+		return
+	}
+	start := offset(n.N.Pos()) + 1
+	span := Span{Start: start, End: start + len(name)}
+	if target, _ := Literal(n.Word); target == "-" {
+		b.reference(name, span)
+		return
+	}
+	b.index.Definitions = append(b.index.Definitions, Definition{
+		Name:     name,
+		NameSpan: span,
+		Span:     b.span(n),
+		Kind:     DefDescriptor,
+		Within:   b.scope(),
+		Node:     n,
 	})
 }
 
@@ -550,6 +587,7 @@ func (b *builder) redirect(n *syntax.Redirect) {
 		Span:   Span{Start: offset(n.Pos()), End: target.End},
 		Target: target,
 	})
+	b.descriptorVariable(n)
 	if n.Op != syntax.Hdoc && n.Op != syntax.DashHdoc {
 		return
 	}

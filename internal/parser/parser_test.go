@@ -1,6 +1,8 @@
 package parser
 
 import (
+	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -338,7 +340,7 @@ func FuzzParse(f *testing.F) {
 func TestBuiltinAssignments(t *testing.T) {
 	t.Parallel()
 
-	src := "read -r line\nread -rp 'Name: ' name rest\nread -a parts\nmapfile -t lines < f\nprintf -v out '%s' x\ngetopts 'ab:' opt\nread -r \"$dynamic\"\n"
+	src := "read -r line\nread -rp 'Name: ' name rest\nread -a parts\nmapfile -t lines < f\nprintf -v out '%s' x\ngetopts 'ab:' opt\nread -r \"$dynamic\"\nwait -n -p done %1\n"
 	tree := Parse(src, dialect.Bash)
 	got := map[string]Attr{}
 	for _, d := range tree.Definitions {
@@ -346,7 +348,7 @@ func TestBuiltinAssignments(t *testing.T) {
 			got[d.Name] = d.Attrs
 		}
 	}
-	want := map[string]Attr{"line": 0, "name": 0, "rest": 0, "parts": AttrArray, "lines": AttrArray, "out": 0, "opt": 0}
+	want := map[string]Attr{"line": 0, "name": 0, "rest": 0, "parts": AttrArray, "lines": AttrArray, "out": 0, "opt": 0, "done": 0}
 	if len(got) != len(want) {
 		t.Fatalf("builtin definitions = %v, want %v", got, want)
 	}
@@ -354,6 +356,36 @@ func TestBuiltinAssignments(t *testing.T) {
 		if a, ok := got[name]; !ok || a != attrs {
 			t.Errorf("%s: attrs = %v, %t; want %v", name, a, ok, attrs)
 		}
+	}
+}
+
+func TestDefinitionsRecordTheirWriter(t *testing.T) {
+	t.Parallel()
+
+	src := "declare -i count=1\ndeclare +i count\nexec {log}>out.txt\nexec {log}>&-\nfor item in a b; do :; done\n(( total += 2 ))\n"
+	tree := Parse(src, dialect.Bash)
+	type summary struct {
+		kind    DefinitionKind
+		attrs   Attr
+		cleared Attr
+		writer  string
+	}
+	var got []summary
+	for _, d := range tree.Definitions {
+		got = append(got, summary{kind: d.Kind, attrs: d.Attrs, cleared: d.Cleared, writer: fmt.Sprintf("%T", d.Node)})
+	}
+	want := []summary{
+		{DefDeclare, AttrInteger, 0, "*syntax.Assign"},
+		{DefDeclare, 0, AttrInteger, "*syntax.Assign"},
+		{DefDescriptor, 0, 0, "*syntax.Redirect"},
+		{DefLoop, 0, 0, "*syntax.WordIter"},
+		{DefArithmetic, 0, 0, "*syntax.BinaryArithm"},
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("definitions = %+v\nwant %+v", got, want)
+	}
+	if refs := tree.Visible("log", FileScope); refs.Len() != 1 {
+		t.Errorf("closing a descriptor defined it again: %d definitions", refs.Len())
 	}
 }
 
