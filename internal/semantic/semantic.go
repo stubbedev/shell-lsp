@@ -1,7 +1,6 @@
 package semantic
 
 import (
-	"cmp"
 	"slices"
 	"strings"
 
@@ -47,6 +46,7 @@ type Token struct {
 
 func Tokens(tree *parser.Tree, imports []parser.Import) []Token {
 	g := generator{tree: tree, imports: imports, text: tree.Text()}
+	g.tokens = make([]Token, 0, 2*(len(tree.Comments)+len(tree.Keywords)+len(tree.Definitions)+len(tree.References)+2*len(tree.Commands)))
 	g.index()
 	g.walk()
 	return g.result()
@@ -60,8 +60,18 @@ type generator struct {
 }
 
 func (g *generator) add(span parser.Span, t Type, mods Modifier) {
-	if span.End > span.Start && span.End <= len(g.text) {
-		g.tokens = append(g.tokens, Token{Span: span, Type: t, Modifiers: mods})
+	if span.End <= span.Start || span.End > len(g.text) {
+		return
+	}
+	for start := span.Start; start < span.End; {
+		end := span.End
+		if i := strings.IndexByte(g.text[start:span.End], '\n'); i >= 0 {
+			end = start + i
+		}
+		if end > start {
+			g.tokens = append(g.tokens, Token{Span: parser.Span{Start: start, End: end}, Type: t, Modifiers: mods})
+		}
+		start = end + 1
 	}
 }
 
@@ -105,18 +115,18 @@ func (g *generator) index() {
 }
 
 func (g *generator) referenceModifiers(ref parser.Reference) Modifier {
-	defs := g.tree.Visible(ref.Name, ref.Within)
-	if defs.Len() == 0 {
-		_, imported, ok := parser.ImportedGlobal(g.imports, ref.Name)
+	attrs := g.tree.VisibleAttrs(ref.Name, ref.Within)
+	if g.tree.Visible(ref.Name, ref.Within).Len() == 0 {
+		imp, _, ok := parser.ImportedGlobal(g.imports, ref.Name)
 		if !ok {
 			if _, special := shelldocs.Variable(ref.Name); special {
 				return ModDefaultLibrary
 			}
 			return 0
 		}
-		defs = imported
+		attrs = imp.Tree.VisibleAttrs(ref.Name, parser.FileScope)
 	}
-	if defs.Any(func(d *parser.Definition) bool { return d.Attrs.Has(parser.AttrReadonly) }) {
+	if attrs.Has(parser.AttrReadonly) {
 		return ModReadonly
 	}
 	return 0
@@ -253,35 +263,20 @@ func isArithmetic(node syntax.Node) bool {
 }
 
 func (g *generator) result() []Token {
-	var lines []Token
-	for _, t := range g.tokens {
-		lines = append(lines, g.splitLines(t)...)
+	order := make([]uint64, len(g.tokens))
+	for i, t := range g.tokens {
+		order[i] = uint64(t.Span.Start)<<32 | uint64(i) //nolint:gosec
 	}
-	slices.SortStableFunc(lines, func(a, b Token) int { return cmp.Compare(a.Span.Start, b.Span.Start) })
-	out := lines[:0]
+	slices.Sort(order)
+	out := make([]Token, 0, len(g.tokens))
 	end := -1
-	for _, t := range lines {
+	for _, key := range order {
+		t := g.tokens[uint32(key)] //nolint:gosec
 		if t.Span.Start < end {
 			continue
 		}
 		out = append(out, t)
 		end = t.Span.End
-	}
-	return out
-}
-
-func (g *generator) splitLines(t Token) []Token {
-	var out []Token
-	start := t.Span.Start
-	for start < t.Span.End {
-		end := t.Span.End
-		if i := strings.IndexByte(g.text[start:t.Span.End], '\n'); i >= 0 {
-			end = start + i
-		}
-		if end > start {
-			out = append(out, Token{Span: parser.Span{Start: start, End: end}, Type: t.Type, Modifiers: t.Modifiers})
-		}
-		start = end + 1
 	}
 	return out
 }

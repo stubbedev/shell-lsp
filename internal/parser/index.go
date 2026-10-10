@@ -113,6 +113,7 @@ type Index struct {
 	Keywords    []Keyword
 
 	definitionsByBinding map[binding][]int
+	attrsByBinding       map[binding]Attr
 	definitionsByScope   map[ScopeID][]int
 	localScopes          map[string]map[ScopeID]bool
 	functionsByName      map[string]int
@@ -861,6 +862,7 @@ func assignedWord(n *syntax.Assign) *syntax.Word {
 
 func (ix *Index) buildLookups() {
 	ix.definitionsByBinding = make(map[binding][]int, len(ix.Definitions))
+	ix.attrsByBinding = make(map[binding]Attr, len(ix.Definitions))
 	ix.definitionsByScope = make(map[ScopeID][]int, len(ix.Scopes))
 	ix.localScopes = map[string]map[ScopeID]bool{}
 	for i, def := range ix.Definitions {
@@ -873,6 +875,7 @@ func (ix *Index) buildLookups() {
 			ix.localScopes[def.Name][def.Within] = true
 		}
 		ix.definitionsByBinding[key] = append(ix.definitionsByBinding[key], i)
+		ix.attrsByBinding[key] |= def.Attrs
 		ix.definitionsByScope[def.Within] = append(ix.definitionsByScope[def.Within], i)
 	}
 	ix.functionsByName = make(map[string]int, len(ix.Functions))

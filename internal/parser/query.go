@@ -62,22 +62,21 @@ func (d Definitions) Backward() iter.Seq[*Definition] {
 	}
 }
 
-func (d Definitions) Any(match func(*Definition) bool) bool {
-	for def := range d.All() {
-		if match(def) {
-			return true
-		}
-	}
-	return false
-}
-
-func (ix *Index) Visible(name string, scope ScopeID) Definitions {
+func (ix *Index) visibleBinding(name string, scope ScopeID) binding {
 	bound, local := ix.Binding(name, scope)
 	key := binding{name: name}
 	if local {
 		key.scope, key.local = bound, true
 	}
-	return Definitions{all: ix.Definitions, positions: ix.definitionsByBinding[key]}
+	return key
+}
+
+func (ix *Index) Visible(name string, scope ScopeID) Definitions {
+	return Definitions{all: ix.Definitions, positions: ix.definitionsByBinding[ix.visibleBinding(name, scope)]}
+}
+
+func (ix *Index) VisibleAttrs(name string, scope ScopeID) Attr {
+	return ix.attrsByBinding[ix.visibleBinding(name, scope)]
 }
 
 func (ix *Index) DefinitionsIn(scope ScopeID) Definitions {
