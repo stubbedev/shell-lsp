@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
-	"sync"
 
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
@@ -176,26 +175,12 @@ func (s *Server) workspaceFiles(ctx context.Context, docs *docstore.View, u urge
 		seen[file.URI] = true
 		files = append(files, file)
 	}
-	loaded := make([]*workspace.File, len(paths))
-	var progress sync.Mutex
-	finished := 0
-	parallel(u, len(paths), func(i int) {
-		if ctx.Err() != nil {
-			return
-		}
-		if file, err := s.workspace.Load(paths[i]); err == nil {
-			loaded[i] = file
-		}
-		progress.Lock()
-		finished++
-		report(finished, len(paths))
-		progress.Unlock()
-	})
-	if err := ctx.Err(); err != nil {
+	loaded, err := s.workspace.LoadAll(ctx, paths, u.workers(), report)
+	if err != nil {
 		return nil, err
 	}
 	for _, file := range loaded {
-		if file == nil || seen[file.URI] {
+		if seen[file.URI] {
 			continue
 		}
 		seen[file.URI] = true

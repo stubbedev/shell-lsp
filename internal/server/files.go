@@ -150,17 +150,13 @@ func (s *Server) handleWillRenameFiles(ctx context.Context, docs *docstore.View,
 		}
 		return path, false
 	}
-	paths, err := s.candidateFiles(docs)(ctx)
+	candidates, err := s.candidateFiles(docs)(ctx)
 	if err != nil {
 		return nil, err
 	}
 	env := s.navigationEnv()
 	var files []fileEdits
-	for _, path := range paths {
-		file, err := s.loadURI(docs, fileuri.FromPath(path))
-		if err != nil {
-			continue
-		}
+	for _, file := range candidates {
 		edits := sourceRewrites(file, env, moved)
 		if newPath, ok := moved(file.Path); ok {
 			if edit, ok := shebangRewrite(file.Tree, file.Path, newPath); ok {

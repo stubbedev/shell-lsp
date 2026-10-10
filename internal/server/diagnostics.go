@@ -20,6 +20,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/navigation"
+	"github.com/stubbedev/shell-lsp/internal/parallel"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
@@ -128,7 +129,7 @@ func (s *Server) handleWorkspaceDiagnostic(ctx context.Context, docs *docstore.V
 		return nil, err
 	}
 	items := make([]lsp.WorkspaceDocumentDiagnosticReport, len(files))
-	parallel(interactive, len(files), func(i int) {
+	parallel.For(interactive.workers(), len(files), func(i int) {
 		items[i] = s.workspaceReport(docs, files[i], previous[files[i].URI])
 	})
 	if err := ctx.Err(); err != nil {

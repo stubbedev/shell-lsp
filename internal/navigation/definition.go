@@ -22,7 +22,7 @@ type Location struct {
 	Span parser.Span
 }
 
-type WorkspaceFiles func(ctx context.Context) ([]string, error)
+type WorkspaceFiles func(ctx context.Context) ([]*workspace.File, error)
 
 func Definition(ctx context.Context, file *workspace.File, offset int, env Env, files WorkspaceFiles, mode Mode) ([]Location, error) {
 	tree := file.Tree
@@ -79,16 +79,12 @@ func functionLocations(ctx context.Context, file *workspace.File, name string, e
 	if files == nil {
 		return found, nil
 	}
-	paths, err := files(ctx)
+	candidates, err := files(ctx)
 	if err != nil {
 		return nil, err
 	}
-	for _, p := range paths {
-		if slices.ContainsFunc(chain, func(f *workspace.File) bool { return f.Path == p }) {
-			continue
-		}
-		f, err := env.Loader.Load(p)
-		if err != nil {
+	for _, f := range candidates {
+		if slices.ContainsFunc(chain, func(c *workspace.File) bool { return c.Path == f.Path }) {
 			continue
 		}
 		found = append(found, functionsIn(f, name)...)

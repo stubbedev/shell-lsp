@@ -39,6 +39,14 @@ func newFixture(t *testing.T, files map[string]string) fixture {
 	}
 }
 
+func (f fixture) files(ctx context.Context) ([]*workspace.File, error) {
+	paths, err := f.ws.ShellFiles(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return f.ws.LoadAll(ctx, paths, 1, func(int, int) {})
+}
+
 func (f fixture) load(t *testing.T, name string) *workspace.File {
 	t.Helper()
 
@@ -62,7 +70,7 @@ func (f fixture) define(t *testing.T, name, needle string, nth int, mode Mode) [
 		}
 		offset += i + 1
 	}
-	locs, err := Definition(t.Context(), file, offset, f.env, f.ws.ShellFiles, mode)
+	locs, err := Definition(t.Context(), file, offset, f.env, f.files, mode)
 	if err != nil {
 		t.Fatalf("Definition error = %v", err)
 	}
@@ -217,7 +225,7 @@ func TestWorkspaceFilesError(t *testing.T) {
 
 	f := newFixture(t, map[string]string{"main.sh": "nowhere\n"})
 	file := f.load(t, "main.sh")
-	_, err := Definition(t.Context(), file, 0, f.env, func(context.Context) ([]string, error) { return nil, os.ErrPermission }, ModeDefinition)
+	_, err := Definition(t.Context(), file, 0, f.env, func(context.Context) ([]*workspace.File, error) { return nil, os.ErrPermission }, ModeDefinition)
 	if err == nil {
 		t.Error("workspace listing error swallowed")
 	}

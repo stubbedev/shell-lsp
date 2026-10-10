@@ -118,7 +118,7 @@ func workspaceRoots(params InitializeParams) []string {
 }
 
 func (s *Server) candidateFiles(docs *docstore.View) navigation.WorkspaceFiles {
-	return func(ctx context.Context) ([]string, error) {
+	return func(ctx context.Context) ([]*workspace.File, error) {
 		paths, err := s.workspace.ShellFiles(ctx)
 		if err != nil {
 			return nil, err
@@ -129,7 +129,7 @@ func (s *Server) candidateFiles(docs *docstore.View) navigation.WorkspaceFiles {
 			}
 		}
 		slices.Sort(paths)
-		return slices.Compact(paths), nil
+		return s.workspace.LoadAll(ctx, slices.Compact(paths), interactive.workers(), func(int, int) {})
 	}
 }
 

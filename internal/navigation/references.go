@@ -87,7 +87,7 @@ func Group(ctx context.Context, file *workspace.File, env Env, files WorkspaceFi
 	if files == nil {
 		return group, nil
 	}
-	paths, err := files(ctx)
+	candidates, err := files(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -95,16 +95,12 @@ func Group(ctx context.Context, file *workspace.File, env Env, files WorkspaceFi
 	for _, f := range group {
 		members[f.Path] = true
 	}
-	for _, p := range paths {
-		if members[p] {
-			continue
-		}
-		other, err := env.Loader.Load(p)
-		if err != nil {
+	for _, other := range candidates {
+		if members[other.Path] {
 			continue
 		}
 		if slices.ContainsFunc(Chain(other, env), func(f *workspace.File) bool { return f.Path == file.Path }) {
-			members[p] = true
+			members[other.Path] = true
 			group = append(group, other)
 		}
 	}

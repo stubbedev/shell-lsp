@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -333,11 +334,18 @@ func benchmarkReferences(b *testing.B, ws *workspace.Workspace, lib *workspace.F
 	b.Helper()
 
 	env := navigation.Env{Loader: ws, Roots: ws.Roots()}
-	if _, err := navigation.References(b.Context(), lib, 0, env, ws.ShellFiles, true); err != nil {
+	files := func(ctx context.Context) ([]*workspace.File, error) {
+		paths, err := ws.ShellFiles(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return ws.LoadAll(ctx, paths, runtime.GOMAXPROCS(0), func(int, int) {})
+	}
+	if _, err := navigation.References(b.Context(), lib, 0, env, files, true); err != nil {
 		b.Fatal(err)
 	}
 	for b.Loop() {
-		refs, err := navigation.References(b.Context(), lib, 0, env, ws.ShellFiles, true)
+		refs, err := navigation.References(b.Context(), lib, 0, env, files, true)
 		if err != nil || len(refs) != 1501 {
 			b.Fatalf("references = %d, %v", len(refs), err)
 		}

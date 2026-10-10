@@ -18,6 +18,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
+	"github.com/stubbedev/shell-lsp/internal/parallel"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 )
 
@@ -180,6 +181,28 @@ func (w *Workspace) Load(path string) (*File, error) {
 
 func (w *Workspace) watchedLocked(path string) bool {
 	return w.watched.Load() && isShellName(path) && slices.ContainsFunc(w.roots, func(root string) bool { return Within(path, root) })
+}
+
+func (w *Workspace) LoadAll(ctx context.Context, paths []string, workers int, report func(done, total int)) ([]*File, error) {
+	loaded := make([]*File, len(paths))
+	var progress sync.Mutex
+	finished := 0
+	parallel.For(workers, len(paths), func(i int) {
+		if ctx.Err() != nil {
+			return
+		}
+		if file, err := w.Load(paths[i]); err == nil {
+			loaded[i] = file
+		}
+		progress.Lock()
+		finished++
+		report(finished, len(paths))
+		progress.Unlock()
+	})
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return slices.DeleteFunc(loaded, func(f *File) bool { return f == nil }), nil
 }
 
 type dirListing struct {

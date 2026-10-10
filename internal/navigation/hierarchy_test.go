@@ -35,7 +35,7 @@ func TestCallHierarchy(t *testing.T) {
 	if !ok || logItem.File.Path != f.load(t, "lib.sh").Path {
 		t.Fatalf("prepare on a call of a sourced function = %+v, %t", logItem, ok)
 	}
-	incoming, err := IncomingCalls(t.Context(), logItem, f.env, f.ws.ShellFiles)
+	incoming, err := IncomingCalls(t.Context(), logItem, f.env, f.files)
 	if err != nil {
 		t.Fatal(err)
 	}

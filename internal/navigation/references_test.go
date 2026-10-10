@@ -72,7 +72,7 @@ func TestReferencesRespectShadowing(t *testing.T) {
 	t.Parallel()
 
 	f := newReferenceFixture(t)
-	global, err := References(t.Context(), f.load(t, "main.sh"), f.offset(t, "main.sh", "count=0", 0), f.env, f.ws.ShellFiles, true)
+	global, err := References(t.Context(), f.load(t, "main.sh"), f.offset(t, "main.sh", "count=0", 0), f.env, f.files, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +81,7 @@ func TestReferencesRespectShadowing(t *testing.T) {
 		t.Errorf("global count references:\n got %s\nwant %s", got, want)
 	}
 
-	local, err := References(t.Context(), f.load(t, "main.sh"), f.offset(t, "main.sh", "count++", 0), f.env, f.ws.ShellFiles, true)
+	local, err := References(t.Context(), f.load(t, "main.sh"), f.offset(t, "main.sh", "count++", 0), f.env, f.files, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +90,7 @@ func TestReferencesRespectShadowing(t *testing.T) {
 		t.Errorf("local count references:\n got %s\nwant %s", got, want)
 	}
 
-	withoutDecl, err := References(t.Context(), f.load(t, "main.sh"), f.offset(t, "main.sh", "count++", 0), f.env, f.ws.ShellFiles, false)
+	withoutDecl, err := References(t.Context(), f.load(t, "main.sh"), f.offset(t, "main.sh", "count++", 0), f.env, f.files, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +103,7 @@ func TestReferencesForFunctionsSpanSourcingFiles(t *testing.T) {
 	t.Parallel()
 
 	f := newReferenceFixture(t)
-	got, err := References(t.Context(), f.load(t, "main.sh"), f.offset(t, "main.sh", "bump() {", 0), f.env, f.ws.ShellFiles, true)
+	got, err := References(t.Context(), f.load(t, "main.sh"), f.offset(t, "main.sh", "bump() {", 0), f.env, f.files, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +118,7 @@ func TestRename(t *testing.T) {
 
 	f := newReferenceFixture(t)
 	main := f.load(t, "main.sh")
-	occs, err := Rename(t.Context(), main, f.offset(t, "main.sh", "SHARED", 0), "COMMON", f.env, f.ws.ShellFiles)
+	occs, err := Rename(t.Context(), main, f.offset(t, "main.sh", "SHARED", 0), "COMMON", f.env, f.files)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +138,7 @@ func TestRename(t *testing.T) {
 		{needle: "reset", newName: "bump", err: ErrNameConflict},
 	}
 	for _, tc := range tests {
-		_, err := Rename(t.Context(), main, f.offset(t, "main.sh", tc.needle, 0), tc.newName, f.env, f.ws.ShellFiles)
+		_, err := Rename(t.Context(), main, f.offset(t, "main.sh", tc.needle, 0), tc.newName, f.env, f.files)
 		if !errors.Is(err, tc.err) {
 			t.Errorf("rename %q -> %q error = %v, want %v", tc.needle, tc.newName, err, tc.err)
 		}
@@ -149,7 +149,7 @@ func TestPrepareRenameRejectsUndefinedVariables(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t, map[string]string{"main.sh": "echo \"$PATH\"\n"})
-	_, _, err := PrepareRename(t.Context(), f.load(t, "main.sh"), f.offset(t, "main.sh", "PATH", 0), f.env, f.ws.ShellFiles)
+	_, _, err := PrepareRename(t.Context(), f.load(t, "main.sh"), f.offset(t, "main.sh", "PATH", 0), f.env, f.files)
 	if !errors.Is(err, ErrNotRenamable) {
 		t.Errorf("PrepareRename(PATH) error = %v", err)
 	}
