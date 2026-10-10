@@ -150,6 +150,9 @@ func TestBudgets(t *testing.T) {
 	if testing.Short() {
 		t.Skip("budgets are measured in full test runs")
 	}
+	if raceDetector {
+		t.Skip("the race detector slows execution several-fold, so wall-clock budgets do not apply")
+	}
 	doc := document()
 	diagnose := p95(t, func() { diagnostics.Syntax(parser.Parse(text, dialect.Bash), doc, docstore.EncodingUTF16) })
 	if diagnose > diagnosticBudget {
