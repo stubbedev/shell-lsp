@@ -224,9 +224,11 @@ func (s *Server) clientCapabilities() ClientCapabilities {
 }
 
 func (s *Server) handleInitialized(ctx context.Context, _ json.RawMessage) error {
+	s.warmUp(ctx)
 	go func() {
 		s.loadConfiguration(ctx)
 		s.registerWatchers(ctx)
+		s.indexInBackground(ctx)
 	}()
 	return nil
 }

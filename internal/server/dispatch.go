@@ -48,6 +48,7 @@ type Server struct {
 	diagnostics *diagnosticsState
 	push        *pushScheduler
 	commandDocs commandDocs
+	prefetch    *prefetcher
 	environment shellEnvironment
 	workspace   *workspace.Workspace
 	semantic    *semanticCache
@@ -87,6 +88,7 @@ func New(conn *jsonrpc.Conn, version string) *Server {
 		diagnostics: newDiagnosticsState(),
 		settings:    config.Default(),
 		commandDocs: commandDocs{pages: pages},
+		prefetch:    newPrefetcher(pages),
 		environment: shellEnvironment{pages: pages, executables: &executableCache{}},
 		sem:         make(chan struct{}, maxConcurrency),
 		exiting:     make(chan struct{}),
