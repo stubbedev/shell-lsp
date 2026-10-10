@@ -189,7 +189,7 @@ func sourceRewrites(file *workspace.File, env navigation.Env, moved func(string)
 		if !fileMoved && !targetMoved {
 			continue
 		}
-		literal, ok := parser.Literal(ref.Command.Args[0])
+		literal, ok := parser.Literal(ref.File)
 		if !ok {
 			continue
 		}

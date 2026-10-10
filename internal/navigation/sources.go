@@ -33,16 +33,19 @@ type Env struct {
 
 type SourceRef struct {
 	Command parser.Command
+	File    *syntax.Word
 	Arg     parser.Span
 	Target  *workspace.File
 }
 
 func IsSource(cmd parser.Command) bool {
-	return (cmd.Name == "source" || cmd.Name == ".") && len(cmd.Args) > 0
+	_, ok := cmd.SourcedFile()
+	return ok
 }
 
 type resolvedSource struct {
 	command parser.Command
+	file    *syntax.Word
 	arg     parser.Span
 	path    string
 }
@@ -51,7 +54,7 @@ func Sources(file *workspace.File, env Env) []SourceRef {
 	resolved, _ := file.Memo("navigation.sources", env.Loader.Generation(), func() any { return resolveSources(file, env) }).([]resolvedSource)
 	refs := make([]SourceRef, len(resolved))
 	for i, r := range resolved {
-		refs[i] = SourceRef{Command: r.command, Arg: r.arg}
+		refs[i] = SourceRef{Command: r.command, File: r.file, Arg: r.arg}
 		if r.path == "" {
 			continue
 		}
@@ -65,15 +68,16 @@ func Sources(file *workspace.File, env Env) []SourceRef {
 func resolveSources(file *workspace.File, env Env) []resolvedSource {
 	var out []resolvedSource
 	for _, cmd := range file.Tree.Commands {
-		if !IsSource(cmd) {
-			continue
-		}
-		span, ok := file.Tree.NodeSpan(cmd.Args[0])
+		word, ok := cmd.SourcedFile()
 		if !ok {
 			continue
 		}
-		r := resolvedSource{command: cmd, arg: span}
-		if target := resolveSource(file, cmd, env); target != nil {
+		span, ok := file.Tree.NodeSpan(word)
+		if !ok {
+			continue
+		}
+		r := resolvedSource{command: cmd, file: word, arg: span}
+		if target := resolveSource(file, cmd, word, env); target != nil {
 			r.path = target.Path
 		}
 		out = append(out, r)
@@ -100,8 +104,8 @@ func Chain(file *workspace.File, env Env) []*workspace.File {
 	return chain
 }
 
-func resolveSource(file *workspace.File, cmd parser.Command, env Env) *workspace.File {
-	for _, candidate := range sourceCandidates(file, cmd, env) {
+func resolveSource(file *workspace.File, cmd parser.Command, word *syntax.Word, env Env) *workspace.File {
+	for _, candidate := range sourceCandidates(file, cmd, word, env) {
 		if target, err := env.Loader.Load(candidate); err == nil {
 			return target
 		}
@@ -109,7 +113,7 @@ func resolveSource(file *workspace.File, cmd parser.Command, env Env) *workspace
 	return nil
 }
 
-func sourceCandidates(file *workspace.File, cmd parser.Command, env Env) []string {
+func sourceCandidates(file *workspace.File, cmd parser.Command, word *syntax.Word, env Env) []string {
 	scriptDir := filepath.Dir(file.Path)
 	if target, ok := directiveTarget(file.Tree, cmd); ok {
 		if target == "/dev/null" {
@@ -121,7 +125,7 @@ func sourceCandidates(file *workspace.File, cmd parser.Command, env Env) []strin
 		return relativeCandidates(target, append(slices.Clone(env.Roots), scriptDir), nil, env.Home)
 	}
 	e := evaluator{tree: file.Tree, scriptPath: file.Path, home: env.Home}
-	value, ok := e.word(cmd.Args[0], cmd.Span.Start, 0)
+	value, ok := e.word(word, cmd.Span.Start, 0)
 	if !ok {
 		return nil
 	}

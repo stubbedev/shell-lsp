@@ -42,9 +42,15 @@ func (s *Server) findings(file *workspace.File, settings config.Settings, genera
 		return nil, 0
 	}
 	stamp := s.sourcesStamp(file.Tree)
-	opts := lint.Options{Exclude: settings.Lint.Exclude, Optional: settings.Lint.Optional, ForcedDialect: settings.Dialect != nil}
 	key := lintMemoKey + strconv.FormatUint(generation, 10)
-	findings, _ := file.Memo(key, stamp, func() any { return lint.Check(file.Tree, s.imports(file), opts) }).([]lint.Finding)
+	findings, _ := file.Memo(key, stamp, func() any {
+		return lint.Check(file.Tree, s.imports(file), lint.Options{
+			Exclude:       settings.Lint.Exclude,
+			Optional:      settings.Lint.Optional,
+			ForcedDialect: settings.Dialect != nil,
+			Sources:       s.followedSources(file),
+		})
+	}).([]lint.Finding)
 	return findings, stamp
 }
 
@@ -75,6 +81,16 @@ func (s *Server) sourcesStamp(tree *parser.Tree) uint64 {
 		return 0
 	}
 	return s.workspace.Generation()
+}
+
+func (s *Server) followedSources(file *workspace.File) []lint.Source {
+	var out []lint.Source
+	for _, ref := range navigation.Sources(file, s.navigationEnv()) {
+		if ref.Target != nil {
+			out = append(out, lint.Source{Command: ref.Command.Span, Tree: ref.Target.Tree})
+		}
+	}
+	return out
 }
 
 func (s *Server) handleDocumentDiagnostic(_ context.Context, docs *docstore.View, params json.RawMessage) (any, error) {

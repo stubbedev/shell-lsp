@@ -51,11 +51,17 @@ type Finding struct {
 	Fix      []textedit.Edit
 }
 
+type Source struct {
+	Command parser.Span
+	Tree    *parser.Tree
+}
+
 type Options struct {
 	Exclude        []Code
 	Optional       []string
 	ForcedDialect  bool
 	GuessedDialect bool
+	Sources        []Source
 }
 
 func Check(tree *parser.Tree, imports []parser.Import, opts Options) []Finding {

@@ -18,6 +18,7 @@ type rule struct {
 type pass struct {
 	tree         *parser.Tree
 	imports      []parser.Import
+	sources      []Source
 	text         string
 	dialect      dialect.Dialect
 	bats         bool
@@ -46,7 +47,7 @@ func newPass(tree *parser.Tree, imports []parser.Import, opts Options) *pass {
 	directives := parseDirectives(tree)
 	firstCommand := firstCommandStart(tree)
 	return &pass{
-		tree: tree, imports: imports, text: tree.Text(), dialect: tree.Dialect, bats: parser.IsBats(tree.Text()),
+		tree: tree, imports: imports, sources: opts.Sources, text: tree.Text(), dialect: tree.Dialect, bats: parser.IsBats(tree.Text()),
 		firstCommand: firstCommand, directives: directives, catalog: catalog, rules: rules, commands: commandChecks,
 		settings: fileWideSettings(directives, firstCommand, opts.Optional),
 	}

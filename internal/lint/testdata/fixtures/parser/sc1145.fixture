@@ -20,4 +20,5 @@ source ./lib.sh
 source ./lib.sh
 >>> SC1072 1:31
 >>+ SC1145 1:31 -- shellcheck aborts the whole script at a malformed directive value (SC1072); this linter reports the invalid value and keeps checking
+>>+ SC1091 2:8 -- shellcheck abandons the script at the malformed directive; this linter keeps checking
 >>> SC1073 1:1

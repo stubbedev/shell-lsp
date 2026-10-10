@@ -100,3 +100,18 @@ func TestLintFollowsSourcedFiles(t *testing.T) {
 		return json.Unmarshal(raw, &p) == nil && p.URI == uri && slices.Contains(codes(p.Diagnostics), "SC2086")
 	})
 }
+
+func TestLintReportsUnfollowedAndBrokenSources(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "broken.sh"), []byte("for x in; do\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	uri := fileuri.FromPath(filepath.Join(root, "main.sh"))
+	c, _ := startClient(t, `{"rootUri": "`+fileuri.FromPath(root)+`", "capabilities": {}}`)
+	c.notify("textDocument/didOpen", openParams(uri, "#!/bin/bash\nsource -- ./broken.sh\nsource ./missing.sh\n"))
+	if got := codes(awaitPublished(c, uri, 1).Diagnostics); !slices.Equal(got, []string{"SC1091", "SC1094"}) {
+		t.Errorf("diagnostics = %v, want SC1091 and SC1094", got)
+	}
+}

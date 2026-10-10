@@ -5,6 +5,7 @@ if [ -f /etc/os-release ]; then
 >>- SC1047 3:1 -- a missing fi is a parser syntax error
 >>> SC1072 3:1
 >>> SC1073 1:1
+>>+ SC1091 2:5 -- shellcheck abandons the script at its parse error; this linter parses it and keeps checking
 
 ### if with elif and else but no fi
 if [ "$1" = start ]; then
