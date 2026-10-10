@@ -23,6 +23,7 @@ type testClient struct {
 	nextID   int
 	messages []*jsonrpc.Message
 	arrived  chan struct{}
+	exited   bool
 }
 
 func startClient(t *testing.T, initializeParams string, setup ...func(*Server)) (*testClient, *Server) {
@@ -152,6 +153,16 @@ func (c *testClient) answerServerRequest(method string) json.RawMessage {
 }
 
 func (c *testClient) close() {
+	if c.exited {
+		return
+	}
+	c.shutdownAndExit()
+}
+
+func (c *testClient) shutdownAndExit() {
+	c.t.Helper()
+
+	c.exited = true
 	c.call("shutdown", "")
 	c.notify("exit", "")
 	select {

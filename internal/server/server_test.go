@@ -536,3 +536,19 @@ func TestPanicInHandlerReturnsInternalError(t *testing.T) {
 		t.Errorf("error = %+v, want internal error", msg.Error)
 	}
 }
+
+func TestExitWithUnansweredServerRequest(t *testing.T) {
+	t.Parallel()
+
+	started := make(chan struct{})
+	c, _ := startClient(t, `{}`, func(srv *Server) {
+		srv.requests["test/askClient"] = func(ctx context.Context, _ *docstore.View, _ json.RawMessage) (any, error) {
+			close(started)
+			return nil, srv.call(ctx, "client/neverAnswered", nil, nil)
+		}
+	})
+	c.start("test/askClient", "")
+	<-started
+	c.await("server request", func(m *jsonrpc.Message) bool { return m.IsRequest() && m.Method == "client/neverAnswered" })
+	c.shutdownAndExit()
+}

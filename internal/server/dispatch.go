@@ -182,6 +182,7 @@ func (s *Server) Run(ctx context.Context) error {
 		case msg.IsNotification():
 			s.traceIncoming("notification", msg.Method, nil, msg.Params)
 			if msg.Method == exitMethod {
+				cancel()
 				s.wg.Wait()
 				if s.isShutdown() {
 					return nil
