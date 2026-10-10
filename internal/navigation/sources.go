@@ -51,7 +51,7 @@ type resolvedSource struct {
 }
 
 func Sources(file *workspace.File, env Env) []SourceRef {
-	resolved, _ := file.Memo("navigation.sources", env.Loader.Generation(), func() any { return resolveSources(file, env) }).([]resolvedSource)
+	resolved := workspace.Memo(file, "navigation.sources", env.Loader.Generation(), func() []resolvedSource { return resolveSources(file, env) })
 	refs := make([]SourceRef, len(resolved))
 	for i, r := range resolved {
 		refs[i] = SourceRef{Command: r.command, File: r.file, Arg: r.arg}

@@ -60,7 +60,15 @@ type memoEntry struct {
 	ok         bool
 }
 
-func (f *File) Memo(key string, generation uint64, compute func() any) any {
+func Memo[T any](f *File, key string, generation uint64, compute func() T) T {
+	value, ok := f.memoize(key, generation, func() any { return compute() }).(T)
+	if !ok {
+		panic(fmt.Sprintf("workspace: memo %q of %s holds a value of another type", key, f.URI))
+	}
+	return value
+}
+
+func (f *File) memoize(key string, generation uint64, compute func() any) any {
 	for {
 		entry, owner := f.claim(key, generation)
 		if owner {

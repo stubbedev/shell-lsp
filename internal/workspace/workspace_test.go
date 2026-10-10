@@ -99,10 +99,10 @@ func TestFileMemoFollowsGeneration(t *testing.T) {
 
 	f := &File{}
 	calls := 0
-	compute := func() any { calls++; return calls }
-	first := f.Memo("k", 1, compute)
-	again := f.Memo("k", 1, compute)
-	next := f.Memo("k", 2, compute)
+	compute := func() int { calls++; return calls }
+	first := Memo(f, "k", 1, compute)
+	again := Memo(f, "k", 1, compute)
+	next := Memo(f, "k", 2, compute)
 	if first != 1 || again != 1 || next != 2 {
 		t.Errorf("memo results %v %v %v, want 1 1 2", first, again, next)
 	}
@@ -114,15 +114,15 @@ func TestFileMemoComputesOnceForConcurrentCallers(t *testing.T) {
 	f := &File{}
 	var calls atomic.Int32
 	release := make(chan struct{})
-	compute := func() any {
+	compute := func() string {
 		calls.Add(1)
 		<-release
 		return "result"
 	}
 	var wg sync.WaitGroup
-	results := make([]any, 8)
+	results := make([]string, 8)
 	for i := range results {
-		wg.Go(func() { results[i] = f.Memo("k", 1, compute) })
+		wg.Go(func() { results[i] = Memo(f, "k", 1, compute) })
 	}
 	for calls.Load() == 0 {
 		runtime.Gosched()
@@ -149,11 +149,24 @@ func TestFileMemoRecomputesAfterAPanic(t *testing.T) {
 				t.Error("the panic did not reach the computing caller")
 			}
 		}()
-		f.Memo("k", 1, func() any { panic("boom") })
+		Memo(f, "k", 1, func() string { panic("boom") })
 	}()
-	if got := f.Memo("k", 1, func() any { return "recovered" }); got != "recovered" {
+	if got := Memo(f, "k", 1, func() string { return "recovered" }); got != "recovered" {
 		t.Errorf("after a panic the memo returned %v, want a fresh computation", got)
 	}
+}
+
+func TestMemoRejectsAKeyReusedForAnotherType(t *testing.T) {
+	t.Parallel()
+
+	f := &File{URI: "file:///a.sh"}
+	Memo(f, "k", 1, func() int { return 1 })
+	defer func() {
+		if recover() == nil {
+			t.Error("reading an int memo as a string did not fail")
+		}
+	}()
+	Memo(f, "k", 1, func() string { return "s" })
 }
 
 func TestShellFilesCacheFollowsDirectoryChanges(t *testing.T) {

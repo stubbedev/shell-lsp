@@ -42,14 +42,14 @@ func (s *Server) findings(file *workspace.File, settings config.Settings, genera
 	}
 	stamp := s.sourcesStamp(file.Tree)
 	key := lintMemoKey + strconv.FormatUint(generation, 10)
-	findings, _ := file.Memo(key, stamp, func() any {
+	findings := workspace.Memo(file, key, stamp, func() []lint.Finding {
 		return lint.Check(file.Tree, s.imports(file), lint.Options{
 			Exclude:       settings.Lint.Exclude,
 			Optional:      settings.Lint.Optional,
 			DialectSource: dialectSource(settings),
 			Sources:       s.followedSources(file),
 		})
-	}).([]lint.Finding)
+	})
 	return findings, stamp
 }
 

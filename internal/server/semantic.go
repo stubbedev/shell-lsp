@@ -14,6 +14,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/semantic"
 	"github.com/stubbedev/shell-lsp/internal/structure"
+	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
 type semanticLegend struct {
@@ -95,6 +96,12 @@ func (s *Server) semanticSnapshot(docs *docstore.View, uri string) (*snapshot, e
 	return snap, nil
 }
 
+func (s *Server) semanticTokens(snap *snapshot) []semantic.Token {
+	return workspace.Memo(snap.file, "semantic.tokens", s.workspace.Generation(), func() []semantic.Token {
+		return semantic.Tokens(snap.tree, s.imports(snap.file))
+	})
+}
+
 func (s *Server) handleSemanticTokensFull(_ context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
 	p, err := lsp.DecodeParams[lsp.SemanticTokensParams](params)
 	if err != nil {
@@ -104,7 +111,7 @@ func (s *Server) handleSemanticTokensFull(_ context.Context, docs *docstore.View
 	if err != nil {
 		return nil, err
 	}
-	return s.semantic.remember(p.TextDocument.URI, encodeTokens(snap, semantic.Tokens(snap.tree, s.imports(snap.file)), nil)), nil
+	return s.semantic.remember(p.TextDocument.URI, encodeTokens(snap, s.semanticTokens(snap), nil)), nil
 }
 
 func (s *Server) handleSemanticTokensDelta(_ context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
@@ -116,7 +123,7 @@ func (s *Server) handleSemanticTokensDelta(_ context.Context, docs *docstore.Vie
 	if err != nil {
 		return nil, err
 	}
-	data := encodeTokens(snap, semantic.Tokens(snap.tree, s.imports(snap.file)), nil)
+	data := encodeTokens(snap, s.semanticTokens(snap), nil)
 	previous, ok := s.semantic.previous(p.TextDocument.URI, p.PreviousResultID)
 	current := s.semantic.remember(p.TextDocument.URI, data)
 	if !ok {
@@ -157,7 +164,7 @@ func (s *Server) handleSemanticTokensRange(_ context.Context, docs *docstore.Vie
 		Start: snap.doc.PositionToOffset(p.Range.Start, snap.encoding),
 		End:   snap.doc.PositionToOffset(p.Range.End, snap.encoding),
 	}
-	return lsp.SemanticTokens{Data: encodeTokens(snap, semantic.Tokens(snap.tree, s.imports(snap.file)), &within)}, nil
+	return lsp.SemanticTokens{Data: encodeTokens(snap, s.semanticTokens(snap), &within)}, nil
 }
 
 func (s *Server) handleSelectionRange(_ context.Context, docs *docstore.View, params json.RawMessage) (any, error) {

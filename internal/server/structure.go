@@ -44,7 +44,7 @@ func (s *Server) handleDocumentSymbol(_ context.Context, docs *docstore.View, pa
 	if err != nil {
 		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
 	}
-	symbols := structure.Symbols(snap.tree)
+	symbols := workspace.Memo(snap.file, "structure.symbols", 0, func() []structure.Symbol { return structure.Symbols(snap.tree) })
 	if s.clientCapabilities().TextDocument.DocumentSymbol.HierarchicalDocumentSymbolSupport {
 		return documentSymbols(snap.doc, snap.encoding, symbols), nil
 	}
