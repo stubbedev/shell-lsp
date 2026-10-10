@@ -39,6 +39,7 @@ func (offlineEnv) Executables() []string {
 }
 func (offlineEnv) ReadDir(string) ([]completion.DirEntry, error) { return nil, os.ErrNotExist }
 func (offlineEnv) Home() string                                  { return "/home/u" }
+func (offlineEnv) WorkDir() (string, error)                      { return "/work", nil }
 func (offlineEnv) EnvironmentNames() []string                    { return []string{"HOME", "PATH"} }
 func (offlineEnv) Options(context.Context, string) ([]manpage.Option, error) {
 	return nil, manpage.ErrNoPage

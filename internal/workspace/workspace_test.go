@@ -9,45 +9,85 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 )
 
-func TestWatchedEntriesSkipValidationUntilInvalidated(t *testing.T) {
-	t.Parallel()
+type clock struct{ t time.Time }
 
-	dir := t.TempDir()
-	path := filepath.Join(dir, "a.sh")
-	if err := os.WriteFile(path, []byte("one() { :; }\n"), 0o600); err != nil {
+func (c *clock) now() time.Time { return c.t }
+
+func newTestWorkspace(c *clock) *Workspace {
+	ws := New(func(string) (*File, bool) { return nil, false }, func(string) *dialect.Dialect { return nil })
+	ws.now = c.now
+	return ws
+}
+
+func rewrite(t *testing.T, path, text string, at time.Time) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(text), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	ws := New(func(string) (*File, bool) { return nil, false }, func(string) *dialect.Dialect { return nil })
-	first, err := ws.Load(path)
+	if err := os.Chtimes(path, at, at); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func firstFunction(t *testing.T, ws *Workspace, path string) string {
+	t.Helper()
+	f, err := ws.Load(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(path, []byte("two() { :; }\n"), 0o600); err != nil {
-		t.Fatal(err)
+	return f.Tree.Functions[0].Name
+}
+
+func TestUnwatchedFilesRevalidateAfterTheRecheckInterval(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "a.sh")
+	c := &clock{t: time.Now()}
+	ws := newTestWorkspace(c)
+	rewrite(t, path, "one() { :; }\n", c.t)
+	if got := firstFunction(t, ws, path); got != "one" {
+		t.Fatalf("first load = %s", got)
 	}
-	later := time.Now().Add(time.Hour)
-	if err := os.Chtimes(path, later, later); err != nil {
-		t.Fatal(err)
+	rewrite(t, path, "two() { :; }\n", c.t.Add(time.Hour))
+	c.t = c.t.Add(DiskRecheck / 2)
+	if got := firstFunction(t, ws, path); got != "one" {
+		t.Errorf("load within the recheck interval = %s, want the cached one", got)
 	}
-	unwatched, err := ws.Load(path)
-	if err != nil || unwatched == first {
-		t.Fatalf("without watchers a changed file must be reloaded: %v", err)
+	c.t = c.t.Add(DiskRecheck)
+	if got := firstFunction(t, ws, path); got != "two" {
+		t.Errorf("load after the recheck interval = %s, want the changed file", got)
 	}
+}
+
+func TestWatchedEntriesSkipValidationUntilInvalidated(t *testing.T) {
+	t.Parallel()
+
+	root, outside := t.TempDir(), t.TempDir()
+	inside, external := filepath.Join(root, "a.sh"), filepath.Join(outside, "b.sh")
+	c := &clock{t: time.Now()}
+	ws := newTestWorkspace(c)
+	ws.SetRoots([]string{root})
 	ws.SetWatched(true)
-	if err := os.WriteFile(path, []byte("three() { :; }\n"), 0o600); err != nil {
-		t.Fatal(err)
+	rewrite(t, inside, "one() { :; }\n", c.t)
+	rewrite(t, external, "one() { :; }\n", c.t)
+	firstFunction(t, ws, inside)
+	firstFunction(t, ws, external)
+	rewrite(t, inside, "two() { :; }\n", c.t.Add(time.Hour))
+	rewrite(t, external, "two() { :; }\n", c.t.Add(time.Hour))
+	c.t = c.t.Add(time.Hour)
+	if got := firstFunction(t, ws, inside); got != "one" {
+		t.Errorf("watched file = %s, want the cached one until an event invalidates it", got)
 	}
-	if trusted, _ := ws.Load(path); trusted != unwatched {
-		t.Error("watched entry was revalidated instead of trusted")
+	if got := firstFunction(t, ws, external); got != "two" {
+		t.Errorf("file outside the watched roots = %s, want it revalidated", got)
 	}
 	generation := ws.Generation()
-	ws.Invalidate(path)
+	ws.Invalidate(inside)
 	if ws.Generation() == generation {
 		t.Error("Invalidate did not advance the generation")
 	}
-	fresh, err := ws.Load(path)
-	if err != nil || fresh.Tree.Functions[0].Name != "three" {
-		t.Errorf("after invalidation = %+v, %v", fresh, err)
+	if got := firstFunction(t, ws, inside); got != "two" {
+		t.Errorf("watched file after invalidation = %s", got)
 	}
 }
 

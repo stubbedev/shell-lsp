@@ -11,6 +11,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
+	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
 func completionLabels(list lsp.CompletionList) []string {
@@ -97,19 +98,26 @@ func TestExecutableCache(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(dir, "subdir"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.Symlink(filepath.Join(dir, "tool"), filepath.Join(dir, "linked")); err != nil {
+		t.Fatal(err)
+	}
 	cache := &executableCache{}
 	path := dir + string(os.PathListSeparator) + filepath.Join(dir, "missing")
-	if got := cache.list(path); !slices.Equal(got, []string{"tool"}) {
+	start := time.Now()
+	if got := cache.list(path, start); !slices.Equal(got, []string{"linked", "tool"}) {
 		t.Errorf("executables = %v", got)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "newtool"), nil, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	later := time.Now().Add(time.Second)
+	later := start.Add(time.Second)
 	if err := os.Chtimes(dir, later, later); err != nil {
 		t.Fatal(err)
 	}
-	if got := cache.list(path); !slices.Equal(got, []string{"newtool", "tool"}) {
+	if got := cache.list(path, start.Add(workspace.DiskRecheck/2)); !slices.Equal(got, []string{"linked", "tool"}) {
+		t.Errorf("executables within the recheck interval = %v, want the cached list", got)
+	}
+	if got := cache.list(path, start.Add(workspace.DiskRecheck)); !slices.Equal(got, []string{"linked", "newtool", "tool"}) {
 		t.Errorf("executables after installing a tool = %v", got)
 	}
 }

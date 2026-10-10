@@ -21,6 +21,8 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/parser"
 )
 
+const DiskRecheck = time.Second
+
 const (
 	maxFileSize  = 4 << 20
 	maxScanFiles = 20000
@@ -70,6 +72,7 @@ type Overlay func(uri string) (*File, bool)
 type Workspace struct {
 	overlay  Overlay
 	override func(path string) *dialect.Dialect
+	now      func() time.Time
 
 	mu         sync.Mutex
 	roots      []string
@@ -85,14 +88,20 @@ func isShellName(path string) bool {
 	return rcFiles[filepath.Base(path)] || slices.Contains(shellExtensions, filepath.Ext(path))
 }
 
+func Within(path, root string) bool {
+	rel, err := filepath.Rel(root, path)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, "../")
+}
+
 type diskEntry struct {
 	size    int64
 	modTime time.Time
+	checked time.Time
 	file    *File
 }
 
 func New(overlay Overlay, override func(path string) *dialect.Dialect) *Workspace {
-	return &Workspace{overlay: overlay, override: override, files: map[string]diskEntry{}, dirs: map[string]dirListing{}}
+	return &Workspace{overlay: overlay, override: override, now: time.Now, files: map[string]diskEntry{}, dirs: map[string]dirListing{}}
 }
 
 func (w *Workspace) SetRoots(roots []string) {
@@ -131,13 +140,13 @@ func (w *Workspace) Load(path string) (*File, error) {
 	if f, ok := w.overlay(uri); ok {
 		return f, nil
 	}
-	if w.watched.Load() && isShellName(path) {
-		w.mu.Lock()
-		cached, ok := w.files[path]
-		w.mu.Unlock()
-		if ok {
-			return cached.file, nil
-		}
+	now := w.now()
+	w.mu.Lock()
+	cached, ok := w.files[path]
+	fresh := ok && (w.watchedLocked(path) || now.Sub(cached.checked) < DiskRecheck)
+	w.mu.Unlock()
+	if fresh {
+		return cached.file, nil
 	}
 	info, err := os.Stat(path)
 	if err != nil {
@@ -149,10 +158,11 @@ func (w *Workspace) Load(path string) (*File, error) {
 	if info.Size() > maxFileSize {
 		return nil, fmt.Errorf("loading %s: %d bytes exceeds the %d byte limit", path, info.Size(), maxFileSize)
 	}
-	w.mu.Lock()
-	cached, ok := w.files[path]
-	w.mu.Unlock()
 	if ok && cached.size == info.Size() && cached.modTime.Equal(info.ModTime()) {
+		cached.checked = now
+		w.mu.Lock()
+		w.files[path] = cached
+		w.mu.Unlock()
 		return cached.file, nil
 	}
 	raw, err := os.ReadFile(path) //nolint:gosec
@@ -163,9 +173,13 @@ func (w *Workspace) Load(path string) (*File, error) {
 	d := dialect.Detect(w.override(path), dialect.Input{URI: uri, Text: doc.Text()})
 	file := &File{Path: path, URI: uri, Doc: doc, Tree: parser.Parse(doc.Text(), d)}
 	w.mu.Lock()
-	w.files[path] = diskEntry{size: info.Size(), modTime: info.ModTime(), file: file}
+	w.files[path] = diskEntry{size: info.Size(), modTime: info.ModTime(), checked: now, file: file}
 	w.mu.Unlock()
 	return file, nil
+}
+
+func (w *Workspace) watchedLocked(path string) bool {
+	return w.watched.Load() && isShellName(path) && slices.ContainsFunc(w.roots, func(root string) bool { return Within(path, root) })
 }
 
 type dirListing struct {

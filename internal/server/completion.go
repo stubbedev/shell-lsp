@@ -17,6 +17,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/manpage"
+	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
 var completionKinds = map[completion.Kind]lsp.CompletionItemKind{
@@ -44,7 +45,9 @@ type shellEnvironment struct {
 	executables *executableCache
 }
 
-func (e shellEnvironment) Executables() []string { return e.executables.list(os.Getenv("PATH")) }
+func (e shellEnvironment) Executables() []string {
+	return e.executables.list(os.Getenv("PATH"), time.Now())
+}
 
 func (e shellEnvironment) ReadDir(dir string) ([]completion.DirEntry, error) {
 	entries, err := os.ReadDir(dir)
@@ -55,7 +58,7 @@ func (e shellEnvironment) ReadDir(dir string) ([]completion.DirEntry, error) {
 	for _, entry := range entries {
 		isDir := entry.IsDir()
 		if entry.Type()&fs.ModeSymlink != 0 {
-			if info, err := os.Stat(filepath.Join(dir, entry.Name())); err == nil {
+			if info, err := followedInfo(dir, entry); err == nil {
 				isDir = info.IsDir()
 			}
 		}
@@ -71,6 +74,8 @@ func (e shellEnvironment) Home() string {
 	}
 	return home
 }
+
+func (e shellEnvironment) WorkDir() (string, error) { return os.Getwd() }
 
 func (e shellEnvironment) EnvironmentNames() []string {
 	env := os.Environ()
@@ -95,11 +100,17 @@ func (e shellEnvironment) Options(ctx context.Context, command string) ([]manpag
 type executableCache struct {
 	mu       sync.Mutex
 	path     string
+	checked  time.Time
 	modTimes []time.Time
 	names    []string
 }
 
-func (c *executableCache) list(path string) []string {
+func (c *executableCache) list(path string, now time.Time) []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.names != nil && c.path == path && now.Sub(c.checked) < workspace.DiskRecheck {
+		return c.names
+	}
 	dirs := filepath.SplitList(path)
 	modTimes := make([]time.Time, len(dirs))
 	for i, dir := range dirs {
@@ -107,11 +118,15 @@ func (c *executableCache) list(path string) []string {
 			modTimes[i] = info.ModTime()
 		}
 	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.checked = now
 	if c.names != nil && c.path == path && slices.EqualFunc(c.modTimes, modTimes, time.Time.Equal) {
 		return c.names
 	}
+	c.path, c.modTimes, c.names = path, modTimes, scanExecutables(dirs)
+	return c.names
+}
+
+func scanExecutables(dirs []string) []string {
 	names := []string{}
 	for _, dir := range dirs {
 		entries, err := os.ReadDir(dir)
@@ -119,23 +134,20 @@ func (c *executableCache) list(path string) []string {
 			continue
 		}
 		for _, entry := range entries {
-			info, err := entry.Info()
-			if err != nil {
-				continue
-			}
-			if entry.Type()&fs.ModeSymlink != 0 {
-				if info, err = os.Stat(filepath.Join(dir, entry.Name())); err != nil { //nolint:gosec
-					continue
-				}
-			}
-			if !info.IsDir() && info.Mode().Perm()&0o111 != 0 {
+			if info, err := followedInfo(dir, entry); err == nil && !info.IsDir() && info.Mode().Perm()&0o111 != 0 {
 				names = append(names, entry.Name())
 			}
 		}
 	}
 	slices.Sort(names)
-	c.path, c.modTimes, c.names = path, modTimes, slices.Compact(names)
-	return c.names
+	return slices.Compact(names)
+}
+
+func followedInfo(dir string, entry fs.DirEntry) (fs.FileInfo, error) {
+	if entry.Type()&fs.ModeSymlink != 0 {
+		return os.Stat(filepath.Join(dir, entry.Name())) //nolint:gosec
+	}
+	return entry.Info()
 }
 
 func (s *Server) handleCompletion(ctx context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
@@ -147,16 +159,11 @@ func (s *Server) handleCompletion(ctx context.Context, docs *docstore.View, para
 	if err != nil {
 		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
 	}
-	workDir, err := os.Getwd()
-	if err != nil {
-		return nil, err
-	}
 	result, err := completion.Complete(ctx, completion.Input{
 		Tree:      snap.tree,
 		Imports:   s.imports(snap.file),
 		Offset:    snap.doc.PositionToOffset(completionParams.Position, snap.encoding),
 		ScriptDir: scriptDir(snap.doc.URI),
-		WorkDir:   workDir,
 		Snippets:  s.clientCapabilities().TextDocument.Completion.CompletionItem.SnippetSupport,
 		Env:       s.environment,
 	})

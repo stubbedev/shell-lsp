@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/stubbedev/shell-lsp/internal/manpage"
 	"github.com/stubbedev/shell-lsp/internal/parser"
@@ -77,7 +78,7 @@ func (s *Server) prefetchCommands(tree *parser.Tree) {
 
 func (s *Server) warmUp(ctx context.Context) {
 	s.prefetch.start(ctx)
-	go s.environment.executables.list(os.Getenv("PATH"))
+	go s.environment.executables.list(os.Getenv("PATH"), time.Now())
 }
 
 func (s *Server) indexInBackground(ctx context.Context) {

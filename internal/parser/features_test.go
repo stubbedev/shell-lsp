@@ -28,6 +28,7 @@ type offlineEnv struct{}
 func (offlineEnv) Executables() []string                         { return []string{"ls", "grep"} }
 func (offlineEnv) ReadDir(string) ([]completion.DirEntry, error) { return nil, os.ErrNotExist }
 func (offlineEnv) Home() string                                  { return "/home/u" }
+func (offlineEnv) WorkDir() (string, error)                      { return "/work", nil }
 func (offlineEnv) EnvironmentNames() []string                    { return []string{"HOME"} }
 func (offlineEnv) Options(context.Context, string) ([]manpage.Option, error) {
 	return nil, manpage.ErrNoPage

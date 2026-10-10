@@ -3,13 +3,13 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/config"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
+	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
 type configurationItem struct {
@@ -40,16 +40,11 @@ func (s *Server) settingsFor(uri string) (config.Settings, uint64) {
 func settingsForPath(global config.Settings, folders map[string]config.Settings, path string) config.Settings {
 	best, settings := "", global
 	for root, folder := range folders {
-		if within(path, root) && len(root) > len(best) {
+		if workspace.Within(path, root) && len(root) > len(best) {
 			best, settings = root, folder
 		}
 	}
 	return settings
-}
-
-func within(path, root string) bool {
-	rel, err := filepath.Rel(root, path)
-	return err == nil && rel != ".." && !strings.HasPrefix(rel, "../")
 }
 
 func (s *Server) handleDidChangeConfiguration(ctx context.Context, params json.RawMessage) error {

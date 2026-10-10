@@ -45,6 +45,7 @@ type Environment interface {
 	Executables() []string
 	ReadDir(dir string) ([]DirEntry, error)
 	Home() string
+	WorkDir() (string, error)
 	EnvironmentNames() []string
 	Options(ctx context.Context, command string) ([]manpage.Option, error)
 }
@@ -54,7 +55,6 @@ type Input struct {
 	Imports   []parser.Import
 	Offset    int
 	ScriptDir string
-	WorkDir   string
 	Snippets  bool
 	Env       Environment
 }
@@ -377,7 +377,11 @@ func (c completer) paths(dirsOnly bool) (Result, error) {
 	var items []Item
 	seen := map[string]bool{}
 	incomplete := false
-	for _, root := range c.roots(dirPart) {
+	roots, err := c.roots(dirPart)
+	if err != nil {
+		return Result{}, err
+	}
+	for _, root := range roots {
 		entries, err := c.Env.ReadDir(root)
 		if errors.Is(err, os.ErrNotExist) || errors.Is(err, os.ErrPermission) {
 			continue
@@ -413,18 +417,21 @@ func (c completer) pathItem(e DirEntry, quote, dirPart string) Item {
 	return it
 }
 
-func (c completer) roots(dirPart string) []string {
-	home := c.Env.Home()
+func (c completer) roots(dirPart string) ([]string, error) {
 	switch {
-	case dirPart == "~/" || strings.HasPrefix(dirPart, "~/"):
-		return []string{filepath.Join(home, dirPart[2:])}
+	case strings.HasPrefix(dirPart, "~/"):
+		return []string{filepath.Join(c.Env.Home(), dirPart[2:])}, nil
 	case strings.HasPrefix(dirPart, "$HOME/"):
-		return []string{filepath.Join(home, dirPart[len("$HOME/"):])}
+		return []string{filepath.Join(c.Env.Home(), dirPart[len("$HOME/"):])}, nil
 	case filepath.IsAbs(dirPart):
-		return []string{dirPart}
+		return []string{dirPart}, nil
+	}
+	workDir, err := c.Env.WorkDir()
+	if err != nil {
+		return nil, fmt.Errorf("resolving the working directory for path completion: %w", err)
 	}
 	var roots []string
-	for _, base := range []string{c.cdTarget(), c.ScriptDir, c.WorkDir} {
+	for _, base := range []string{c.cdTarget(), c.ScriptDir, workDir} {
 		if base == "" {
 			continue
 		}
@@ -433,7 +440,7 @@ func (c completer) roots(dirPart string) []string {
 			roots = append(roots, root)
 		}
 	}
-	return roots
+	return roots, nil
 }
 
 func (c completer) cdTarget() string {

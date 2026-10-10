@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"hash/fnv"
-	"os"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -266,9 +265,5 @@ func scriptDir(uri string) string {
 	if err != nil {
 		return ""
 	}
-	dir := filepath.Dir(path)
-	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
-		return ""
-	}
-	return dir
+	return filepath.Dir(path)
 }

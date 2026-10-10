@@ -30,6 +30,8 @@ func (f fakeEnv) ReadDir(dir string) ([]DirEntry, error) {
 
 func (f fakeEnv) Home() string { return "/home/u" }
 
+func (f fakeEnv) WorkDir() (string, error) { return "/work", nil }
+
 func (f fakeEnv) EnvironmentNames() []string { return []string{"EDITOR_THEME", "HOME"} }
 
 func (f fakeEnv) Options(_ context.Context, command string) ([]manpage.Option, error) {
@@ -65,7 +67,7 @@ func complete(t *testing.T, d dialect.Dialect, src string) Result {
 	}
 	text := src[:offset] + src[offset+len(cursor):]
 	got, err := Complete(t.Context(), Input{
-		Tree: parser.Parse(text, d), Offset: offset, ScriptDir: "/proj", WorkDir: "/work", Snippets: true, Env: env,
+		Tree: parser.Parse(text, d), Offset: offset, ScriptDir: "/proj", Snippets: true, Env: env,
 	})
 	if err != nil {
 		t.Fatalf("Complete(%q) error = %v", src, err)
