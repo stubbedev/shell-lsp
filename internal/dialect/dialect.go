@@ -226,3 +226,17 @@ func fromModeline(text string) (Dialect, bool) {
 	}
 	return 0, false
 }
+
+type Set uint8
+
+const All Set = 1<<Bash | 1<<Zsh | 1<<Posix | 1<<Dash | 1<<Ksh
+
+func SetOf(dialects ...Dialect) Set {
+	var s Set
+	for _, d := range dialects {
+		s |= 1 << d
+	}
+	return s
+}
+
+func (s Set) Has(d Dialect) bool { return s&(1<<d) != 0 }

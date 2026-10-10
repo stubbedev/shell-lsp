@@ -128,3 +128,17 @@ func TestFeaturesDiffer(t *testing.T) {
 		t.Error("posix sh claims local support")
 	}
 }
+
+func TestSet(t *testing.T) {
+	t.Parallel()
+
+	s := SetOf(Bash, Ksh)
+	if !s.Has(Bash) || !s.Has(Ksh) || s.Has(Zsh) || s.Has(Posix) || s.Has(Dash) {
+		t.Errorf("SetOf(Bash, Ksh) membership wrong: %08b", s)
+	}
+	for _, d := range []Dialect{Bash, Zsh, Posix, Dash, Ksh} {
+		if !All.Has(d) {
+			t.Errorf("All lacks %s", d)
+		}
+	}
+}

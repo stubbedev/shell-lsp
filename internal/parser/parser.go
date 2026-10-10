@@ -44,6 +44,7 @@ type Tree struct {
 	File    *syntax.File
 	Errors  []Error
 	Index
+	text string
 }
 
 func Parse(text string, d dialect.Dialect) *Tree {
@@ -72,7 +73,7 @@ func Parse(text string, d dialect.Dialect) *Tree {
 	}
 	index, recovered := buildIndex(file, text)
 	errs = append(errs, recovered...)
-	return &Tree{Dialect: d, File: file, Errors: sortErrors(errs), Index: index}
+	return &Tree{Dialect: d, File: file, Errors: sortErrors(errs), Index: index, text: text}
 }
 
 func language(d dialect.Dialect) syntax.LangVariant {
@@ -157,6 +158,10 @@ func sortErrors(errs []Error) []Error {
 	return slices.CompactFunc(errs, func(a, b Error) bool {
 		return a.Span.Start == b.Span.Start && a.Message == b.Message
 	})
+}
+
+func Offset(p syntax.Pos) int {
+	return offset(p)
 }
 
 func offset(p syntax.Pos) int {

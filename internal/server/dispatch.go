@@ -16,6 +16,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/config"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
+	"github.com/stubbedev/shell-lsp/internal/manpage"
 )
 
 const (
@@ -43,6 +44,7 @@ type Server struct {
 	snapshots   *snapshotCache
 	diagnostics *diagnosticsState
 	push        *pushScheduler
+	commandDocs commandDocs
 
 	mu             sync.Mutex
 	shutdown       bool
@@ -51,6 +53,7 @@ type Server struct {
 	settings       config.Settings
 	generation     uint64
 	refreshSupport bool
+	hoverFormats   []string
 
 	requests      map[string]requestHandler
 	notifications map[string]notificationHandler
@@ -72,6 +75,7 @@ func New(conn *jsonrpc.Conn, version string) *Server {
 		snapshots:   newSnapshotCache(),
 		diagnostics: newDiagnosticsState(),
 		settings:    config.Default(),
+		commandDocs: commandDocs{pages: manpage.NewLookup()},
 		sem:         make(chan struct{}, maxConcurrency),
 	}
 	s.registerHandlers()
@@ -87,6 +91,7 @@ func (s *Server) registerHandlers() {
 		"initialize":              s.handleInitialize,
 		"shutdown":                s.handleShutdown,
 		"textDocument/diagnostic": s.handleDocumentDiagnostic,
+		"textDocument/hover":      s.handleHover,
 	}
 	s.notifications = map[string]notificationHandler{
 		"$/cancelRequest":                  s.handleCancelRequest,

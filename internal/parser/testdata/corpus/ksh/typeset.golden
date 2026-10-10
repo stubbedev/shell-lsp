@@ -15,3 +15,7 @@ command 4:2-4:9 "typeset" args=0 within=1
 command 7:3-7:8 "print" args=3 within=1
 command 11:1-11:5 "main" args=1 within=0
 comment 1:1-1:11 "#!/bin/ksh"
+keyword 2:1-2:9 "function"
+keyword 6:2-6:7 "while"
+keyword 6:21-6:23 "do"
+keyword 9:2-9:6 "done"

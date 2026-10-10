@@ -35,7 +35,7 @@ func TestCorpusSnapshots(t *testing.T) {
 			if err != nil {
 				t.Fatalf("reading fixture: %v", err)
 			}
-			got := snapshot(string(src), Parse(string(src), d))
+			got := snapshot(t, string(src), Parse(string(src), d))
 			golden := strings.TrimSuffix(fixture, filepath.Ext(fixture)) + ".golden"
 			if *update {
 				if err := os.WriteFile(golden, []byte(got), 0o600); err != nil {
@@ -54,7 +54,9 @@ func TestCorpusSnapshots(t *testing.T) {
 	}
 }
 
-func snapshot(text string, tree *Tree) string {
+func snapshot(t *testing.T, text string, tree *Tree) string {
+	t.Helper()
+
 	var sb strings.Builder
 	at := func(s Span) string {
 		return fmt.Sprintf("%s-%s %q", lineCol(text, s.Start), lineCol(text, s.End), text[s.Start:s.End])
@@ -86,6 +88,12 @@ func snapshot(text string, tree *Tree) string {
 	}
 	for _, c := range tree.Comments {
 		fmt.Fprintf(&sb, "comment %s\n", at(c.Span))
+	}
+	for _, k := range tree.Keywords {
+		if text[k.Span.Start:k.Span.End] != k.Name {
+			t.Errorf("keyword %s at %s spells %q", k.Name, lineCol(text, k.Span.Start), text[k.Span.Start:k.Span.End])
+		}
+		fmt.Fprintf(&sb, "keyword %s\n", at(k.Span))
 	}
 	return sb.String()
 }

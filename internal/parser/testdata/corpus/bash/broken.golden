@@ -11,3 +11,8 @@ command 4:4-4:8 "true" args=0 within=0
 command 5:2-5:6 "echo" args=1 within=0
 command 7:2-7:6 "echo" args=1 within=0
 comment 1:1-1:12 "#!/bin/bash"
+keyword 4:1-4:3 "if"
+keyword 4:10-4:14 "then"
+keyword 6:1-6:4 "for"
+keyword 6:7-6:9 "in"
+keyword 6:15-6:17 "do"

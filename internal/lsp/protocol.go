@@ -160,3 +160,22 @@ type TextEdit struct {
 	Range   Range  `json:"range"`
 	NewText string `json:"newText"`
 }
+
+const (
+	MarkupMarkdown  = "markdown"
+	MarkupPlainText = "plaintext"
+)
+
+type MarkupContent struct {
+	Kind  string `json:"kind"`
+	Value string `json:"value"`
+}
+
+type HoverParams struct {
+	TextDocumentPositionParams
+}
+
+type Hover struct {
+	Contents MarkupContent `json:"contents"`
+	Range    *Range        `json:"range,omitempty"`
+}

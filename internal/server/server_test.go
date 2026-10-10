@@ -156,7 +156,7 @@ func TestUnknownRequestMethod(t *testing.T) {
 
 	send(t, &input,
 		request(1, "initialize", `{}`),
-		request(9, "textDocument/hover", ""),
+		request(9, "shellLsp/noSuchMethod", ""),
 		request(2, "shutdown", ""),
 		notification("exit"))
 

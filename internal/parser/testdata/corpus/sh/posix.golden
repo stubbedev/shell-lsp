@@ -18,3 +18,9 @@ command 13:13-13:16 "log" args=1 within=0
 command 14:5-14:8 "log" args=1 within=0
 redirect 4:21-4:23 ">&" target=4:23-4:24 "2"
 comment 1:1-1:10 "#!/bin/sh"
+keyword 9:1-9:6 "while"
+keyword 9:27-9:29 "do"
+keyword 11:1-11:5 "done"
+keyword 12:1-12:5 "case"
+keyword 12:11-12:13 "in"
+keyword 15:1-15:5 "esac"

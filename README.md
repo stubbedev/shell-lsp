@@ -7,7 +7,7 @@ specification.
 
 The implementation plan lives in the issue tracker. Status: protocol core,
 incremental document sync, dialect detection, an error-tolerant parser for every
-dialect, and diagnostics (syntax errors plus shellcheck, push or pull).
+dialect, diagnostics (syntax errors plus shellcheck, push or pull) and hover.
 
 ## Goals
 

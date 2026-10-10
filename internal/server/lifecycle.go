@@ -25,6 +25,9 @@ type ClientCapabilities struct {
 	} `json:"general"`
 	TextDocument struct {
 		Diagnostic *struct{} `json:"diagnostic"`
+		Hover      struct {
+			ContentFormat []string `json:"contentFormat"`
+		} `json:"hover"`
 	} `json:"textDocument"`
 	Workspace struct {
 		Diagnostics struct {
@@ -60,6 +63,7 @@ type ServerCapabilities struct {
 	PositionEncoding   string                  `json:"positionEncoding,omitempty"`
 	TextDocumentSync   TextDocumentSyncOptions `json:"textDocumentSync"`
 	DiagnosticProvider DiagnosticOptions       `json:"diagnosticProvider"`
+	HoverProvider      bool                    `json:"hoverProvider"`
 }
 
 type InitializeResult struct {
@@ -88,6 +92,7 @@ func (s *Server) handleInitialize(_ context.Context, _ *docstore.View, params js
 	s.mu.Lock()
 	s.settings = settings
 	s.refreshSupport = caps.Workspace.Diagnostics.RefreshSupport
+	s.hoverFormats = caps.TextDocument.Hover.ContentFormat
 	s.initialized = true
 	s.mu.Unlock()
 	return InitializeResult{
@@ -95,6 +100,7 @@ func (s *Server) handleInitialize(_ context.Context, _ *docstore.View, params js
 			PositionEncoding:   enc.String(),
 			TextDocumentSync:   TextDocumentSyncOptions{OpenClose: true, Change: 2},
 			DiagnosticProvider: DiagnosticOptions{},
+			HoverProvider:      true,
 		},
 		ServerInfo: ServerInfo{Name: "shell-lsp", Version: s.version},
 	}, nil

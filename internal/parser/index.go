@@ -93,6 +93,11 @@ type Comment struct {
 	Text string
 }
 
+type Keyword struct {
+	Name string
+	Span Span
+}
+
 type Index struct {
 	Scopes      []Scope
 	Functions   []Function
@@ -102,6 +107,7 @@ type Index struct {
 	Redirects   []Redirect
 	Heredocs    []Heredoc
 	Comments    []Comment
+	Keywords    []Keyword
 }
 
 type builder struct {
@@ -123,6 +129,7 @@ func buildIndex(file *syntax.File, text string) (Index, []Error) {
 		writeOnly:   map[*syntax.Word]bool{},
 	}
 	syntax.Walk(file, b.visit)
+	slices.SortStableFunc(b.index.Keywords, func(x, y Keyword) int { return x.Span.Start - y.Span.Start })
 	return b.index, b.errs
 }
 
@@ -151,6 +158,7 @@ func (b *builder) parent() syntax.Node {
 
 func (b *builder) enter(node syntax.Node) {
 	b.recoveredClosers(node)
+	b.keywords(node)
 	switch n := node.(type) {
 	case *syntax.FuncDecl:
 		b.function(n)
@@ -679,4 +687,70 @@ func docComment(text string, start int) string {
 	}
 	slices.Reverse(lines)
 	return strings.Join(lines, "\n")
+}
+
+func (b *builder) keywords(node syntax.Node) {
+	switch n := node.(type) {
+	case *syntax.IfClause:
+		switch {
+		case b.elseClauses[n] && !n.ThenPos.IsValid():
+			b.keyword("else", n.Position)
+		case b.elseClauses[n]:
+			b.keyword("elif", n.Position)
+		default:
+			b.keyword("if", n.Position)
+			b.keyword("fi", n.FiPos)
+		}
+		b.keyword("then", n.ThenPos)
+	case *syntax.WhileClause:
+		name := "while"
+		if n.Until {
+			name = "until"
+		}
+		b.keyword(name, n.WhilePos)
+		b.keyword("do", n.DoPos)
+		b.keyword("done", n.DonePos)
+	case *syntax.ForClause:
+		name := "for"
+		if n.Select {
+			name = "select"
+		}
+		b.keyword(name, n.ForPos)
+		if iter, ok := n.Loop.(*syntax.WordIter); ok {
+			b.keyword("in", iter.InPos)
+		}
+		if !n.Braces {
+			b.keyword("do", n.DoPos)
+			b.keyword("done", n.DonePos)
+		}
+	case *syntax.CaseClause:
+		b.keyword("case", n.Case)
+		if !n.Braces {
+			b.keyword("in", n.In)
+			b.keyword("esac", n.Esac)
+		}
+	case *syntax.FuncDecl:
+		if n.RsrvWord {
+			b.keyword("function", n.Position)
+		}
+	case *syntax.TestClause:
+		b.keyword("[[", n.Left)
+		b.keyword("]]", n.Right)
+	case *syntax.TimeClause:
+		b.keyword("time", n.Time)
+	case *syntax.CoprocClause:
+		b.keyword("coproc", n.Coproc)
+	case *syntax.Stmt:
+		if n.Negated && n.Position.IsValid() {
+			b.keyword("!", n.Position)
+		}
+	}
+}
+
+func (b *builder) keyword(name string, pos syntax.Pos) {
+	if !pos.IsValid() {
+		return
+	}
+	start := offset(pos)
+	b.index.Keywords = append(b.index.Keywords, Keyword{Name: name, Span: Span{Start: start, End: start + len(name)}})
 }
