@@ -98,10 +98,14 @@ func heredocDiagnosis(token string, dash bool, text string, bodyStart int) strin
 	bare := strings.TrimLeft(token, " \t")
 	lineNumber := strings.Count(text[:min(bodyStart, len(text))], "\n") + 1
 	var contains, folded string
-	containsLine, foldedLine := 0, 0
+	containsLine, foldedLine, mistakeLine := 0, 0, 0
+	var mistake EndTokenMistake
 	for i, line := range strings.Split(text[min(bodyStart, len(text)):], "\n") {
 		content := strings.TrimLeft(line, " \t")
 		indent := line[:len(line)-len(content)]
+		if nearMiss, _, ok := NearMissEndToken(content, bare); ok && mistake == 0 {
+			mistake, mistakeLine = nearMiss, lineNumber+i
+		}
 		switch {
 		case indent != "" && strings.TrimRight(content, " \t\r") == bare && !dash:
 			return fmt.Sprintf("here-document `%s` is never closed: the end token on line %d is indented; remove the indentation, or use <<- and indent with tabs", token, lineNumber+i)
@@ -114,6 +118,8 @@ func heredocDiagnosis(token string, dash bool, text string, bodyStart int) strin
 		}
 	}
 	switch {
+	case mistake != 0:
+		return fmt.Sprintf("here-document `%s` is never closed: line %d starts with the end token but %s", token, mistakeLine, mistake)
 	case contains != "":
 		return fmt.Sprintf("here-document `%s` is never closed: line %d (%q) contains the end token, but it must stand alone on its line", token, containsLine, contains)
 	case folded != "":

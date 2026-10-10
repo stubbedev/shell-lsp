@@ -2,13 +2,13 @@
 cat <<EOF
 hello
 EOF 
->>> SC1118 3:4
+>>- SC1118 3:4 -- mvdan rejects the unterminated here-document; the syntax error names this line and its trailing whitespace instead
 
 ### trailing tab after the end token
 cat <<END
 hello
 END	
->>> SC1118 3:4
+>>- SC1118 3:4 -- mvdan rejects the unterminated here-document; the syntax error names this line and its trailing whitespace instead
 
 ### end token without trailing whitespace
 cat <<EOF

@@ -10,19 +10,34 @@ var heredocsFamily = family{
 	codes: map[Code]meta{
 		1039: {severity: SeverityError},
 		1040: {severity: SeverityError},
+		1118: {severity: SeverityError},
+		1119: {severity: SeverityError},
+		1120: {severity: SeverityError},
+		1121: {severity: SeverityError},
+		1122: {severity: SeverityError},
 	},
 	rules: []rule{
-		{finish: checkIndentedHeredocEnds},
+		{finish: checkHeredocEnds},
 	},
 }
 
-func checkIndentedHeredocEnds(p *pass) {
+var endTokenCodes = map[parser.EndTokenMistake]Code{
+	parser.TrailingWhitespace: 1118,
+	parser.ClosingParenthesis: 1119,
+	parser.TrailingComment:    1120,
+	parser.TrailingOperator:   1121,
+	parser.TrailingText:       1122,
+}
+
+func checkHeredocEnds(p *pass) {
 	for _, h := range p.tree.Heredocs {
 		token := strings.TrimLeft(h.Delimiter, " \t")
 		start := h.Body.Start
 		for line := range strings.Lines(p.text[h.Body.Start:h.Body.End]) {
-			p.indentedHeredocEnd(h, token, start, strings.TrimSuffix(line, "\n"))
-			start += len(line)
+			line = strings.TrimSuffix(line, "\n")
+			p.indentedHeredocEnd(h, token, start, line)
+			p.nearMissHeredocEnd(h, start, line)
+			start += len(line) + 1
 		}
 	}
 }
@@ -40,4 +55,17 @@ func (p *pass) indentedHeredocEnd(h parser.Heredoc, token string, start int, lin
 	case strings.Contains(indent, " "):
 		p.report(1040, at, "This line is not the end of the here-document because <<- strips only leading tabs, not spaces; indent "+h.Delimiter+" with tabs.")
 	}
+}
+
+func (p *pass) nearMissHeredocEnd(h parser.Heredoc, start int, line string) {
+	indent := 0
+	if h.StripTabs {
+		indent = len(line) - len(strings.TrimLeft(line, "\t"))
+	}
+	mistake, at, ok := parser.NearMissEndToken(line[indent:], h.Delimiter)
+	if !ok {
+		return
+	}
+	span := parser.Span{Start: start + indent + at, End: start + len(line)}
+	p.report(endTokenCodes[mistake], span, "This line does not end the here-document: "+h.Delimiter+" "+mistake.String()+". The end token must stand alone on its line.")
 }
