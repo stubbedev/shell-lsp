@@ -79,7 +79,8 @@ func (ix *Index) VisibleAttrs(name string, scope ScopeID) Attr {
 }
 
 func (ix *Index) Defines(name string) bool {
-	return len(ix.definitionsByBinding[binding{name: name}]) > 0 || len(ix.localScopes[name]) > 0
+	_, ok := ix.attrsByName[name]
+	return ok
 }
 
 func (ix *Index) AttrsAnywhere(name string) Attr {

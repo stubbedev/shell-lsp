@@ -4,6 +4,8 @@ import (
 	"strconv"
 
 	"mvdan.cc/sh/v3/syntax"
+
+	"github.com/stubbedev/shell-lsp/internal/parser"
 )
 
 var subshellFamily = family{
@@ -34,7 +36,11 @@ func checkLostModification(p *pass, n syntax.Node) {
 		}
 		name = n.Param.Value
 	case *syntax.Word:
-		name = n.Lit()
+		read, ok := parser.ArithmeticRead(p.parent(), n)
+		if !ok {
+			return
+		}
+		name = read
 	default:
 		return
 	}
