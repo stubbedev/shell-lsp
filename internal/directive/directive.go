@@ -64,16 +64,27 @@ func Parse(comment string) (Directive, bool) {
 	for {
 		i = skipBlanks(comment, i)
 		if i == len(comment) || comment[i] == '#' {
-			return d, true
+			return d, len(d.Pairs) > 0
 		}
 		pair, end, problem := scanPair(comment, i)
 		if problem != nil {
+			if len(d.Pairs) == 0 && !startsWithKey(comment[i:]) {
+				return Directive{}, false
+			}
 			d.Problem = problem
 			return d, true
 		}
 		d.Pairs = append(d.Pairs, pair)
 		i = end
 	}
+}
+
+func startsWithKey(s string) bool {
+	end := 0
+	for end < len(s) && isKeyChar(s[end]) {
+		end++
+	}
+	return knownKeys[s[:end]]
 }
 
 func scanPair(s string, start int) (Pair, int, *Problem) {

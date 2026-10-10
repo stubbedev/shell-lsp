@@ -81,18 +81,20 @@ func staticSourceName(word *syntax.Word) (string, bool) {
 	if name, ok := parser.Literal(word); ok {
 		return name, true
 	}
-	parts := word.Parts
-	if len(parts) == 1 {
-		if dq, ok := parts[0].(*syntax.DblQuoted); ok && !dq.Dollar {
-			parts = dq.Parts
-		}
-	}
+	parts := slices.Collect(unquotedParts(word))
 	if len(parts) < 2 || !isExpansion(parts[0]) {
 		return "", false
 	}
-	rest, ok := parser.Literal(&syntax.Word{Parts: parts[1:]})
-	if !ok || !strings.HasPrefix(rest, "/") {
+	var rest strings.Builder
+	for _, part := range parts[1:] {
+		lit, ok := part.(*syntax.Lit)
+		if !ok {
+			return "", false
+		}
+		rest.WriteString(lit.Value)
+	}
+	if !strings.HasPrefix(rest.String(), "/") {
 		return "", false
 	}
-	return "." + rest, true
+	return "." + rest.String(), true
 }
