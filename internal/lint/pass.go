@@ -16,20 +16,21 @@ type rule struct {
 }
 
 type pass struct {
-	tree     *parser.Tree
-	imports  []parser.Import
-	text     string
-	dialect  dialect.Dialect
-	bats     bool
-	stack    []syntax.Node
-	stmts    []parser.Span
-	flow     *flowResult
-	catalog  map[Code]meta
-	rules    []rule
-	commands commandDispatch
-	settings fileWide
-	findings []Finding
-	aliases  map[string]aliasDefinition
+	tree       *parser.Tree
+	imports    []parser.Import
+	text       string
+	dialect    dialect.Dialect
+	bats       bool
+	stack      []syntax.Node
+	stmts      []parser.Span
+	flow       *flowResult
+	catalog    map[Code]meta
+	rules      []rule
+	commands   commandDispatch
+	settings   fileWide
+	findings   []Finding
+	aliases    map[string]aliasDefinition
+	quoteTaint map[string]parser.Span
 
 	shellChosen    bool
 	shellOptions   *shellOptions

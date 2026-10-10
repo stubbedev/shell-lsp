@@ -76,6 +76,19 @@ func LiteralChars(w *syntax.Word) string {
 	return text
 }
 
+func UnescapeLit(value string, doubleQuoted bool) string {
+	if !strings.Contains(value, `\`) {
+		return value
+	}
+	escapable := func(byte) bool { return true }
+	if doubleQuoted {
+		escapable = isDoubleQuoteEscapable
+	}
+	var sb strings.Builder
+	unescape(&sb, value, escapable)
+	return sb.String()
+}
+
 func isDoubleQuoteEscapable(c byte) bool {
 	return c == '$' || c == '`' || c == '"' || c == '\\' || c == '\n'
 }
