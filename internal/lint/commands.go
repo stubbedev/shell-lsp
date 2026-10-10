@@ -88,6 +88,13 @@ func declarationOf(decl *syntax.DeclClause) command {
 	return c
 }
 
+func (c command) nameNode() syntax.Node {
+	if c.decl != nil {
+		return c.decl.Variant
+	}
+	return c.word
+}
+
 func commandOf(call *syntax.CallExpr) (command, bool) {
 	if len(call.Args) == 0 {
 		return command{}, false
@@ -285,6 +292,25 @@ func isSeveralWordsInQuotes(part syntax.WordPart) bool {
 	return ok && (kindOf(pe) == expandsElements || pe.Excl)
 }
 
+func solePart(w *syntax.Word) syntax.WordPart {
+	if len(w.Parts) != 1 {
+		return nil
+	}
+	if dq, ok := w.Parts[0].(*syntax.DblQuoted); ok && len(dq.Parts) == 1 {
+		return dq.Parts[0]
+	}
+	return w.Parts[0]
+}
+
+func soleBareExpansion(w *syntax.Word) (*syntax.ParamExp, bool) {
+	pe, ok := solePart(w).(*syntax.ParamExp)
+	if !ok || pe.Param == nil || pe.Excl || pe.Length || pe.Width || pe.Index != nil ||
+		pe.Slice != nil || pe.Repl != nil || pe.Names != 0 || pe.Exp != nil {
+		return nil, false
+	}
+	return pe, true
+}
+
 func hasBraceExpansion(w *syntax.Word) bool {
 	split := *w
 	return syntax.SplitBraces(&split)
@@ -326,19 +352,25 @@ func (p *pass) effectiveCommandWord(call *syntax.CallExpr) *syntax.Word {
 	return nil
 }
 
-func isGlob(w *syntax.Word) bool {
+func isGlob(w *syntax.Word) bool { return scanGlob(w, true) }
+
+func hasBracketGlob(w *syntax.Word) bool { return scanGlob(w, false) }
+
+func scanGlob(w *syntax.Word, wildcards bool) bool {
 	sawOpen := false
 	for _, part := range w.Parts {
 		switch p := part.(type) {
 		case *syntax.ExtGlob:
-			return true
+			return wildcards
 		case *syntax.Lit:
 			for i := 0; i < len(p.Value); i++ {
 				switch p.Value[i] {
 				case '\\':
 					i++
 				case '*', '?':
-					return true
+					if wildcards {
+						return true
+					}
 				case '[':
 					sawOpen = true
 				case ']':

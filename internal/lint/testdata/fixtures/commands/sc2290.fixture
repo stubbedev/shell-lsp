@@ -10,13 +10,13 @@ declare region =eu-west
 
 ### export with a space before plus-equals
 export PATH +=:/opt/bin
->>> SC2290 1:13
+>>- SC2290 1:13 -- mvdan rejects a word starting with += after a declaration name; the line is reported as a syntax error instead
 
 ### let with spaces around equals
 let retries = 0
 >>> SC2154 1:5
->>> SC2219 1:1
->>> SC2290 1:13
+>>- SC2219 1:1 -- mvdan rejects let with spaces around =; the line is reported as a syntax error instead
+>>- SC2290 1:13 -- mvdan rejects let with spaces around =; the line is reported as a syntax error instead
 
 ### alias with a space before equals
 alias ll =0

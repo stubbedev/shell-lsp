@@ -32,6 +32,10 @@ var families = []family{
 	grepFamily,
 	findFamily,
 	exprFamily,
+	declarationFamily,
+	builtinFamily,
+	keywordFamily,
+	getoptsFamily,
 }
 
 var catalog, rules, commandChecks = assemble(families)

@@ -33,23 +33,11 @@ func checkUselessEcho(p *pass, c command) {
 	if len(c.args) != 1 {
 		return
 	}
-	cs, ok := soleSubstitution(c.args[0])
+	cs, ok := solePart(c.args[0]).(*syntax.CmdSubst)
 	if !ok || cs.TempFile || cs.ReplyVar || len(cs.Stmts) != 1 || cs.Stmts[0].Cmd == nil {
 		return
 	}
 	p.reportNode(2005, c.args[0], "This echo only repeats the output of the command substitution; run the command directly instead.")
-}
-
-func soleSubstitution(w *syntax.Word) (*syntax.CmdSubst, bool) {
-	if len(w.Parts) != 1 {
-		return nil, false
-	}
-	part := w.Parts[0]
-	if dq, ok := part.(*syntax.DblQuoted); ok && len(dq.Parts) == 1 {
-		part = dq.Parts[0]
-	}
-	cs, ok := part.(*syntax.CmdSubst)
-	return cs, ok
 }
 
 var echoEscape = regexp.MustCompile(`\\([rntabefv\\']|[0-7]{1,3}|x[0-9A-Fa-f]{1,2})`)
