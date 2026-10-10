@@ -142,18 +142,23 @@ func literalIn(w *syntax.Word, set map[string]bool) bool {
 	return ok && set[lit]
 }
 
+type shortFlags [4]uint64
+
+func (s *shortFlags) add(c byte)          { s[c/64] |= 1 << (c % 64) }
+func (s shortFlags) contains(c byte) bool { return s[c/64]&(1<<(c%64)) != 0 }
+
 type flagSet struct {
-	short    map[byte]bool
-	long     map[string]bool
+	short    shortFlags
+	long     []string
 	operands []*syntax.Word
 }
 
 func (f flagSet) has(short byte, long string) bool {
-	return (short != 0 && f.short[short]) || (long != "" && f.long[long])
+	return (short != 0 && f.short.contains(short)) || (long != "" && slices.Contains(f.long, long))
 }
 
 func parseFlags(args []*syntax.Word, withArgument string) flagSet {
-	f := flagSet{short: map[byte]bool{}, long: map[string]bool{}}
+	var f flagSet
 	for i := 0; i < len(args); i++ {
 		lit, ok := parser.Literal(args[i])
 		switch {
@@ -164,10 +169,10 @@ func parseFlags(args []*syntax.Word, withArgument string) flagSet {
 			return f
 		case strings.HasPrefix(lit, "--"):
 			name, _, _ := strings.Cut(lit[2:], "=")
-			f.long[name] = true
+			f.long = append(f.long, name)
 		default:
 			for j := 1; j < len(lit); j++ {
-				f.short[lit[j]] = true
+				f.short.add(lit[j])
 				if strings.IndexByte(withArgument, lit[j]) >= 0 {
 					if j == len(lit)-1 {
 						i++

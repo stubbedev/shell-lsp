@@ -2,6 +2,7 @@ package lint
 
 import (
 	"regexp"
+	"slices"
 	"strings"
 
 	"mvdan.cc/sh/v3/expand"
@@ -142,16 +143,16 @@ func checkMkdirMode(p *pass, c command) {
 func checkMissingDestination(code Code, hint string) func(p *pass, c command) {
 	return func(p *pass, c command) {
 		flags := parseFlags(c.args, "")
-		if len(flags.operands) != 1 || flags.short['t'] || mayExpandToSeveralWords(flags.operands[0]) {
+		if len(flags.operands) != 1 || flags.has('t', "") || mayExpandToSeveralWords(flags.operands[0]) ||
+			slices.ContainsFunc(flags.long, abbreviatesTargetDirectory) {
 			return
-		}
-		for long := range flags.long {
-			if long != "" && strings.HasPrefix("target-directory", long) {
-				return
-			}
 		}
 		p.reportNode(code, c.call, c.name+" is given only one path and no destination."+hint)
 	}
+}
+
+func abbreviatesTargetDirectory(long string) bool {
+	return long != "" && strings.HasPrefix("target-directory", long)
 }
 
 func checkChmodLowerR(p *pass, c command) {

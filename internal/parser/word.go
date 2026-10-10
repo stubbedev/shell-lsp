@@ -13,6 +13,11 @@ func Literal(w *syntax.Word) (string, bool) {
 	if w == nil || slices.ContainsFunc(w.Parts, isExpandedOrDollarQuoted) {
 		return "", false
 	}
+	if len(w.Parts) == 1 {
+		if lit, ok := w.Parts[0].(*syntax.Lit); ok && !strings.Contains(lit.Value, `\`) {
+			return lit.Value, true
+		}
+	}
 	text, _ := Text(w, "")
 	return text, true
 }
