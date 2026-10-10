@@ -329,7 +329,7 @@ func (p *pass) collectArithmetic(expr syntax.ArithmExpr, base int) {
 		start := base + parser.Offset(pos)
 		return parser.Span{Start: start, End: start + length}
 	}
-	syntax.Walk(expr, func(n syntax.Node) bool {
+	parser.Walk(expr, func(n syntax.Node) bool {
 		if n == nil {
 			stack = stack[:len(stack)-1]
 			return true

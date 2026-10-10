@@ -117,7 +117,7 @@ func endAtEndOfFile(src []byte, delimiter string) []byte {
 func closeAtEndOfText(file *syntax.File, text string) map[*syntax.Redirect]bool {
 	end := uint(len(text))
 	closed := map[*syntax.Redirect]bool{}
-	syntax.Walk(file, func(n syntax.Node) bool {
+	Walk(file, func(n syntax.Node) bool {
 		r, ok := n.(*syntax.Redirect)
 		if !ok || r.Hdoc == nil || r.Hdoc.End().Offset() <= end {
 			return true

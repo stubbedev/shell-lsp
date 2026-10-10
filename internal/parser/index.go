@@ -147,7 +147,7 @@ func buildIndex(file *syntax.File, text string, closedAtEnd map[*syntax.Redirect
 		scopes:      []ScopeID{FileScope},
 		elseClauses: map[*syntax.IfClause]bool{},
 	}
-	syntax.Walk(file, b.visit)
+	Walk(file, b.visit)
 	slices.SortStableFunc(b.index.Keywords, func(x, y Keyword) int { return x.Span.Start - y.Span.Start })
 	b.index.buildLookups()
 	return b.index, b.errs

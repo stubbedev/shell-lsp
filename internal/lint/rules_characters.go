@@ -94,7 +94,7 @@ func checkCarriageReturns(p *pass) {
 
 func (p *pass) verbatimRegions() []parser.Span {
 	var out []parser.Span
-	syntax.Walk(p.tree.File, func(n syntax.Node) bool {
+	parser.Walk(p.tree.File, func(n syntax.Node) bool {
 		switch n.(type) {
 		case *syntax.SglQuoted, *syntax.DblQuoted:
 			if span, ok := p.span(n); ok {

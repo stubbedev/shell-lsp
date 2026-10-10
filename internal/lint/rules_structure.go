@@ -154,7 +154,7 @@ func aliasUsesIn(unit []*syntax.Stmt) []aliasUse {
 	defined := map[string]aliasDefinition{}
 	var uses []aliasUse
 	for _, stmt := range unit {
-		syntax.Walk(stmt, func(n syntax.Node) bool {
+		parser.Walk(stmt, func(n syntax.Node) bool {
 			call, ok := n.(*syntax.CallExpr)
 			if !ok || len(call.Args) == 0 {
 				return true

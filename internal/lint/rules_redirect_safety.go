@@ -122,7 +122,7 @@ func sameDirection(a, b fileReference) bool {
 
 func (p *pass) collectFileReferences(stage *syntax.Stmt, refs []fileReference) []fileReference {
 	var stack []syntax.Node
-	syntax.Walk(stage, func(n syntax.Node) bool {
+	parser.Walk(stage, func(n syntax.Node) bool {
 		if n == nil {
 			stack = stack[:len(stack)-1]
 			return true

@@ -15,7 +15,7 @@ func lostReads(t *testing.T, src string, d dialect.Dialect) []string {
 	tree := parser.Parse(src, d)
 	result := analyzeFlow(tree, nil, parser.IsBats(src))
 	var out []string
-	syntax.Walk(tree.File, func(n syntax.Node) bool {
+	parser.Walk(tree.File, func(n syntax.Node) bool {
 		if _, ok := result.lostRead(n); ok {
 			span, _ := tree.NodeSpan(n)
 			out = append(out, src[span.Start:span.End])

@@ -148,7 +148,7 @@ func (g *generator) commandModifiers(name string) Modifier {
 func (g *generator) walk() {
 	tree := g.tree
 	var stack []syntax.Node
-	syntax.Walk(tree.File, func(node syntax.Node) bool {
+	parser.Walk(tree.File, func(node syntax.Node) bool {
 		if node == nil {
 			stack = stack[:len(stack)-1]
 			return true

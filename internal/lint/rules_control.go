@@ -407,10 +407,10 @@ func (p *pass) substitutionConsumers(stmt *syntax.Stmt, loop parser.Span) {
 		return true
 	}
 	for _, a := range call.Assigns {
-		syntax.Walk(a, visit)
+		parser.Walk(a, visit)
 	}
 	for _, w := range call.Args {
-		syntax.Walk(w, visit)
+		parser.Walk(w, visit)
 	}
 }
 
@@ -481,7 +481,7 @@ func readsPositionals(fn *syntax.FuncDecl) bool {
 		return false
 	}
 	reads, assigns := false, false
-	syntax.Walk(fn.Body, func(n syntax.Node) bool {
+	parser.Walk(fn.Body, func(n syntax.Node) bool {
 		switch n := n.(type) {
 		case *syntax.FuncDecl:
 			return false

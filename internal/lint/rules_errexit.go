@@ -160,7 +160,7 @@ func (p *pass) losesErrexit(cs *syntax.CmdSubst) bool {
 		return false
 	}
 	enables := false
-	syntax.Walk(cs, func(n syntax.Node) bool {
+	parser.Walk(cs, func(n syntax.Node) bool {
 		if call, ok := n.(*syntax.CallExpr); ok {
 			if c, ok := commandOf(call); ok && c.is("set") && setsErrexit(c.args) {
 				enables = true
@@ -267,7 +267,7 @@ func allButLastWithCommand[T any](items []T, node func(T) syntax.Node) []syntax.
 
 func containsCommand(root syntax.Node) bool {
 	found := false
-	syntax.Walk(root, func(n syntax.Node) bool {
+	parser.Walk(root, func(n syntax.Node) bool {
 		switch n := n.(type) {
 		case *syntax.CallExpr:
 			found = found || len(n.Args) > 0
@@ -281,7 +281,7 @@ func containsCommand(root syntax.Node) bool {
 
 func (p *pass) reportMaskedIn(context, unit syntax.Node) {
 	stack := append(slices.Clone(p.stack), context)
-	syntax.Walk(unit, func(n syntax.Node) bool {
+	parser.Walk(unit, func(n syntax.Node) bool {
 		if n == nil {
 			stack = stack[:len(stack)-1]
 			return true

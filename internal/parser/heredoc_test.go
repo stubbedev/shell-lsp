@@ -64,7 +64,7 @@ func TestUnclosedHeredocRunsToTheEndOfTheText(t *testing.T) {
 			continue
 		}
 		var hdoc *syntax.Word
-		syntax.Walk(last, func(n syntax.Node) bool {
+		Walk(last, func(n syntax.Node) bool {
 			if r, ok := n.(*syntax.Redirect); ok && r.Hdoc != nil {
 				hdoc = r.Hdoc
 			}
@@ -84,7 +84,7 @@ func TestUnclosableHeredocStopsRecovering(t *testing.T) {
 	if len(tree.Errors) == 0 {
 		t.Fatal("want the unclosed here-document reported")
 	}
-	syntax.Walk(tree.File, func(n syntax.Node) bool {
+	Walk(tree.File, func(n syntax.Node) bool {
 		if n == nil {
 			return true
 		}

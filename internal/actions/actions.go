@@ -301,7 +301,7 @@ func selectedStatements(tree *parser.Tree, sel parser.Span) ([]parser.Span, bool
 	var stmts []parser.Span
 	var parent syntax.Node
 	var stack []syntax.Node
-	syntax.Walk(tree.File, func(node syntax.Node) bool {
+	parser.Walk(tree.File, func(node syntax.Node) bool {
 		if node == nil {
 			stack = stack[:len(stack)-1]
 			return true
@@ -349,7 +349,7 @@ func usesControlFlow(tree *parser.Tree, span parser.Span) bool {
 
 func usesPositional(tree *parser.Tree, span parser.Span) bool {
 	found := false
-	syntax.Walk(tree.File, func(node syntax.Node) bool {
+	parser.Walk(tree.File, func(node syntax.Node) bool {
 		if node == nil {
 			return !found
 		}

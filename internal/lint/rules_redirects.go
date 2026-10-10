@@ -242,7 +242,7 @@ func descriptorName(fd int) string {
 
 func containsConsumer(root syntax.Node) bool {
 	found := false
-	syntax.Walk(root, func(n syntax.Node) bool {
+	parser.Walk(root, func(n syntax.Node) bool {
 		switch n := n.(type) {
 		case *syntax.CmdSubst:
 			found = found || (!n.TempFile && !n.ReplyVar)
@@ -256,7 +256,7 @@ func containsConsumer(root syntax.Node) bool {
 
 func hasProcSubst(root syntax.Node, op syntax.ProcOperator) bool {
 	found := false
-	syntax.Walk(root, func(n syntax.Node) bool {
+	parser.Walk(root, func(n syntax.Node) bool {
 		if ps, ok := n.(*syntax.ProcSubst); ok && ps.Op == op {
 			found = true
 		}

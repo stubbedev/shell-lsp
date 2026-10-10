@@ -348,7 +348,7 @@ func isTestStructure(stmt *syntax.Stmt) bool {
 
 func hasSideEffects(root syntax.Node) bool {
 	found := false
-	syntax.Walk(root, func(n syntax.Node) bool {
+	parser.Walk(root, func(n syntax.Node) bool {
 		switch n := n.(type) {
 		case *syntax.ParamExp:
 			found = found || isDefaultAssignment(n)

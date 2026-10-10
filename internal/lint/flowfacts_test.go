@@ -17,7 +17,7 @@ func flowOf(t *testing.T, src string) (*parser.Tree, *flowResult) {
 
 func namedCalls(tree *parser.Tree, name string) []*syntax.CallExpr {
 	var out []*syntax.CallExpr
-	syntax.Walk(tree.File, func(n syntax.Node) bool {
+	parser.Walk(tree.File, func(n syntax.Node) bool {
 		if call, ok := n.(*syntax.CallExpr); ok && len(call.Args) > 0 && call.Args[0].Lit() == name {
 			out = append(out, call)
 		}
@@ -85,7 +85,7 @@ func TestFlowStatusReads(t *testing.T) {
 
 	tree, flow := flowOf(t, "a\nif b; then c; else d; fi\necho $?\n")
 	var read *syntax.ParamExp
-	syntax.Walk(tree.File, func(n syntax.Node) bool {
+	parser.Walk(tree.File, func(n syntax.Node) bool {
 		if pe, ok := n.(*syntax.ParamExp); ok && pe.Param.Value == "?" {
 			read = pe
 		}
@@ -117,7 +117,7 @@ func TestFlowNumericAppends(t *testing.T) {
 	} {
 		tree, flow := flowOf(t, tc.src)
 		var fact appendFact
-		syntax.Walk(tree.File, func(n syntax.Node) bool {
+		parser.Walk(tree.File, func(n syntax.Node) bool {
 			if a, ok := n.(*syntax.Assign); ok && a.Append {
 				fact = flow.appends[a]
 			}
@@ -145,7 +145,7 @@ func TestFlowReachability(t *testing.T) {
 	} {
 		tree, flow := flowOf(t, tc.src)
 		var probe *syntax.Stmt
-		syntax.Walk(tree.File, func(n syntax.Node) bool {
+		parser.Walk(tree.File, func(n syntax.Node) bool {
 			if stmt, ok := n.(*syntax.Stmt); ok {
 				if call, ok := stmt.Cmd.(*syntax.CallExpr); ok && len(call.Args) > 0 && call.Args[0].Lit() == "probe" {
 					probe = stmt

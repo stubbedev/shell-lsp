@@ -108,7 +108,7 @@ func (ix *Index) EnclosingFunction(scope ScopeID) (Function, bool) {
 
 func (t *Tree) PathAt(offset int) []syntax.Node {
 	var path []syntax.Node
-	syntax.Walk(t.File, func(node syntax.Node) bool {
+	Walk(t.File, func(node syntax.Node) bool {
 		if node == nil {
 			return false
 		}

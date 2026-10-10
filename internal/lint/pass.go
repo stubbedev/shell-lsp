@@ -59,7 +59,7 @@ func newPass(tree *parser.Tree, imports []parser.Import, opts Options) *pass {
 
 func (p *pass) run() {
 	flow := p.startFlow()
-	syntax.Walk(p.tree.File, func(n syntax.Node) bool {
+	parser.Walk(p.tree.File, func(n syntax.Node) bool {
 		if n == nil {
 			p.stack = p.stack[:len(p.stack)-1]
 			return true

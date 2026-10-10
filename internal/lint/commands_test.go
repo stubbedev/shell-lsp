@@ -14,7 +14,7 @@ import (
 func calls(t *testing.T, src string) []*syntax.CallExpr {
 	t.Helper()
 	var out []*syntax.CallExpr
-	syntax.Walk(parser.Parse(src, dialect.Bash).File, func(n syntax.Node) bool {
+	parser.Walk(parser.Parse(src, dialect.Bash).File, func(n syntax.Node) bool {
 		if c, ok := n.(*syntax.CallExpr); ok {
 			out = append(out, c)
 		}
@@ -120,7 +120,7 @@ func TestEnclosingPipeline(t *testing.T) {
 	tree := parser.Parse("cat log | grep err | wc -l\necho alone\n", dialect.Bash)
 	p := newPass(tree, nil, Options{})
 	got := map[string][2]int{}
-	syntax.Walk(tree.File, func(n syntax.Node) bool {
+	parser.Walk(tree.File, func(n syntax.Node) bool {
 		if n == nil {
 			p.stack = p.stack[:len(p.stack)-1]
 			return true
@@ -160,7 +160,7 @@ func TestCommandDispatch(t *testing.T) {
 		"f() { local x; }\n": {"exact:local"},
 	} {
 		seen = nil
-		syntax.Walk(parser.Parse(src, dialect.Bash).File, func(n syntax.Node) bool {
+		parser.Walk(parser.Parse(src, dialect.Bash).File, func(n syntax.Node) bool {
 			d.visit(nil, n)
 			return true
 		})

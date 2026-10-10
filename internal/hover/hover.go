@@ -361,7 +361,7 @@ func positionalUse(fn parser.Function) (int, bool) {
 	if fn.Decl == nil || fn.Decl.Body == nil {
 		return 0, false
 	}
-	syntax.Walk(fn.Decl.Body, func(node syntax.Node) bool {
+	parser.Walk(fn.Decl.Body, func(node syntax.Node) bool {
 		if _, nested := node.(*syntax.FuncDecl); nested {
 			return false
 		}

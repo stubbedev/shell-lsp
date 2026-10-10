@@ -169,7 +169,7 @@ func arithmeticOperandRead(expr syntax.ArithmExpr, read func(name string)) {
 }
 
 func variableReads(root syntax.Node, read func(name string)) {
-	syntax.Walk(root, func(n syntax.Node) bool {
+	parser.Walk(root, func(n syntax.Node) bool {
 		switch n := n.(type) {
 		case *syntax.ParamExp:
 			if n.Param != nil {

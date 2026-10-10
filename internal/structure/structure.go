@@ -138,7 +138,7 @@ func Folds(tree *parser.Tree, lineOf func(offset int) int) []Fold {
 			add(lineOf(parser.Offset(open)), lineOf(parser.Offset(close))-1)
 		}
 	}
-	syntax.Walk(tree.File, func(node syntax.Node) bool {
+	parser.Walk(tree.File, func(node syntax.Node) bool {
 		switch n := node.(type) {
 		case *syntax.IfClause:
 			block(n.Position, n.FiPos)

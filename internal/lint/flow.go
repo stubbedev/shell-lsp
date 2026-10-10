@@ -626,7 +626,7 @@ type evaluation struct {
 func (in *interpreter) evaluate(node syntax.Node, s *state) *state {
 	saved := in.eval
 	in.eval = evaluation{s: s, base: len(in.walk), deferredBase: len(in.deferred)}
-	syntax.Walk(node, in.visitor)
+	parser.Walk(node, in.visitor)
 	s = in.eval.s
 	in.walk, in.deferred = in.walk[:in.eval.base], in.deferred[:in.eval.deferredBase]
 	in.eval = saved
