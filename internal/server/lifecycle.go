@@ -102,6 +102,9 @@ type ServerCapabilities struct {
 	RenameProvider                  RenameOptions           `json:"renameProvider"`
 	SemanticTokensProvider          SemanticTokensOptions   `json:"semanticTokensProvider"`
 	SelectionRangeProvider          bool                    `json:"selectionRangeProvider"`
+	SignatureHelpProvider           SignatureHelpOptions    `json:"signatureHelpProvider"`
+	InlayHintProvider               InlayHintOptions        `json:"inlayHintProvider"`
+	DocumentLinkProvider            DocumentLinkOptions     `json:"documentLinkProvider"`
 }
 
 type RenameOptions struct {
@@ -174,6 +177,9 @@ func (s *Server) handleInitialize(_ context.Context, _ *docstore.View, params js
 			RenameProvider:                  RenameOptions{PrepareProvider: true},
 			SemanticTokensProvider:          semanticTokensOptions,
 			SelectionRangeProvider:          true,
+			SignatureHelpProvider:           SignatureHelpOptions{TriggerCharacters: []string{" "}, RetriggerCharacters: []string{" "}},
+			InlayHintProvider:               InlayHintOptions{ResolveProvider: true},
+			DocumentLinkProvider:            DocumentLinkOptions{},
 		},
 		ServerInfo: ServerInfo{Name: "shell-lsp", Version: s.version},
 	}, nil

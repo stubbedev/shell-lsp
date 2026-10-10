@@ -122,6 +122,10 @@ func (s *Server) registerHandlers() {
 		"textDocument/semanticTokens/full/delta": s.handleSemanticTokensDelta,
 		"textDocument/semanticTokens/range":      s.handleSemanticTokensRange,
 		"textDocument/selectionRange":            s.handleSelectionRange,
+		"textDocument/signatureHelp":             s.handleSignatureHelp,
+		"textDocument/inlayHint":                 s.handleInlayHint,
+		"inlayHint/resolve":                      s.handleInlayHintResolve,
+		"textDocument/documentLink":              s.handleDocumentLink,
 	}
 	s.notifications = map[string]notificationHandler{
 		"$/cancelRequest":                  s.handleCancelRequest,

@@ -169,3 +169,17 @@ func TestHoverNothing(t *testing.T) {
 		t.Errorf("Hover(whitespace) = %t, %v; want nothing", ok, err)
 	}
 }
+
+func TestFunctionSignature(t *testing.T) {
+	t.Parallel()
+
+	src := "# Copies a file.\n# $1 - source path\n# dest: where to copy\ncopy() {\n\tlocal src=\"$1\" dest=${2:-.}\n\tshift 2\n\tcp \"$src\" \"$dest\" \"$@\"\n}\n"
+	tree := parser.Parse(src, dialect.Bash)
+	sig := FunctionSignature(tree, tree.Functions[0])
+	if sig.Label() != "copy src dest [args...]" || sig.Doc != "Copies a file." {
+		t.Errorf("signature = %q, doc %q", sig.Label(), sig.Doc)
+	}
+	if len(sig.Params) != 2 || sig.Params[0].Doc != "source path" || sig.Params[1].Doc != "where to copy" {
+		t.Errorf("params = %+v", sig.Params)
+	}
+}

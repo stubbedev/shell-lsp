@@ -209,3 +209,11 @@ func logicalLineStart(text string, offset int) int {
 	}
 	return start
 }
+
+func CommandAt(tree *parser.Tree, offset int) (string, int, bool) {
+	st := analyze(tree, offset)
+	if st.position != positionArgument {
+		return "", 0, false
+	}
+	return st.command, len(st.previous), true
+}

@@ -3,6 +3,7 @@ package hover
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -208,9 +209,15 @@ func newHoverer(in Input) hoverer {
 
 func (h hoverer) function(fn parser.Function) string {
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "```%s\n%s\n```", fence(h.dialect), signature(h.Tree, fn))
-	if fn.Doc != "" {
-		fmt.Fprintf(&sb, "\n\n%s", fn.Doc)
+	sig := FunctionSignature(h.Tree, fn)
+	fmt.Fprintf(&sb, "```%s\n%s\n```", fence(h.dialect), sig.Label())
+	if sig.Doc != "" {
+		fmt.Fprintf(&sb, "\n\n%s", sig.Doc)
+	}
+	for _, p := range sig.Params {
+		if p.Doc != "" {
+			fmt.Fprintf(&sb, "\n\n`%s`: %s", p.Name, p.Doc)
+		}
 	}
 	fmt.Fprintf(&sb, "\n\nFunction defined on line %d.", h.line(fn.Span.Start))
 	return sb.String()
@@ -242,16 +249,96 @@ func (h hoverer) command(ctx context.Context) (Result, bool, error) {
 	return Result{}, false, nil
 }
 
-func signature(tree *parser.Tree, fn parser.Function) string {
-	highest, variadic := positionalUse(tree, fn)
-	parts := []string{fn.Name}
-	for i := 1; i <= highest; i++ {
-		parts = append(parts, "$"+strconv.Itoa(i))
+type Parameter struct {
+	Index int
+	Name  string
+	Doc   string
+}
+
+type Signature struct {
+	Name     string
+	Params   []Parameter
+	Variadic bool
+	Doc      string
+}
+
+func (s Signature) Label() string {
+	parts := []string{s.Name}
+	for _, p := range s.Params {
+		parts = append(parts, p.Name)
 	}
-	if variadic {
+	if s.Variadic {
 		parts = append(parts, "[args...]")
 	}
 	return strings.Join(parts, " ")
+}
+
+var paramDocLine = regexp.MustCompile(`^\$?([0-9]+|[A-Za-z_][A-Za-z0-9_]*)\s*(?:-|:)\s+(.+)$`)
+
+func FunctionSignature(tree *parser.Tree, fn parser.Function) Signature {
+	highest, variadic := positionalUse(tree, fn)
+	names := parameterNames(tree, fn)
+	for index := range names {
+		highest = max(highest, index)
+	}
+	sig := Signature{Name: fn.Name, Variadic: variadic}
+	for i := 1; i <= highest; i++ {
+		name, ok := names[i]
+		if !ok {
+			name = "$" + strconv.Itoa(i)
+		}
+		sig.Params = append(sig.Params, Parameter{Index: i, Name: name})
+	}
+	var docLines []string
+	for line := range strings.SplitSeq(fn.Doc, "\n") {
+		m := paramDocLine.FindStringSubmatch(line)
+		if m == nil {
+			docLines = append(docLines, line)
+			continue
+		}
+		i := slices.IndexFunc(sig.Params, func(p Parameter) bool { return strconv.Itoa(p.Index) == m[1] || p.Name == m[1] })
+		if i < 0 {
+			docLines = append(docLines, line)
+			continue
+		}
+		sig.Params[i].Doc = m[2]
+	}
+	sig.Doc = strings.TrimSpace(strings.Join(docLines, "\n"))
+	return sig
+}
+
+func parameterNames(tree *parser.Tree, fn parser.Function) map[int]string {
+	names := map[int]string{}
+	for _, def := range tree.Definitions {
+		if def.Within != fn.Body || def.Value == nil {
+			continue
+		}
+		if index, ok := positionalValue(def.Value); ok {
+			if _, taken := names[index]; !taken {
+				names[index] = def.Name
+			}
+		}
+	}
+	return names
+}
+
+func positionalValue(w *syntax.Word) (int, bool) {
+	if len(w.Parts) != 1 {
+		return 0, false
+	}
+	part := w.Parts[0]
+	if dq, ok := part.(*syntax.DblQuoted); ok && len(dq.Parts) == 1 {
+		part = dq.Parts[0]
+	}
+	exp, ok := part.(*syntax.ParamExp)
+	if !ok || exp.Param == nil || !isDigits(exp.Param.Value) || exp.Param.Value == "0" || exp.Length || exp.Excl || exp.Slice != nil || exp.Repl != nil {
+		return 0, false
+	}
+	if exp.Exp != nil && exp.Exp.Op != syntax.DefaultUnset && exp.Exp.Op != syntax.DefaultUnsetOrNull {
+		return 0, false
+	}
+	n, err := strconv.Atoi(exp.Param.Value)
+	return n, err == nil
 }
 
 func positionalUse(tree *parser.Tree, fn parser.Function) (int, bool) {

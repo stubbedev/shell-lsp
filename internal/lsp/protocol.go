@@ -436,3 +436,52 @@ type SelectionRange struct {
 	Range  Range           `json:"range"`
 	Parent *SelectionRange `json:"parent,omitempty"`
 }
+
+type ParameterInformation struct {
+	Label         [2]uint32      `json:"label"`
+	Documentation *MarkupContent `json:"documentation,omitempty"`
+}
+
+type SignatureInformation struct {
+	Label           string                 `json:"label"`
+	Documentation   *MarkupContent         `json:"documentation,omitempty"`
+	Parameters      []ParameterInformation `json:"parameters"`
+	ActiveParameter *uint32                `json:"activeParameter,omitempty"`
+}
+
+type SignatureHelp struct {
+	Signatures      []SignatureInformation `json:"signatures"`
+	ActiveSignature uint32                 `json:"activeSignature"`
+	ActiveParameter *uint32                `json:"activeParameter,omitempty"`
+}
+
+type InlayHintParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Range        Range                  `json:"range"`
+}
+
+type InlayHintKind uint8
+
+const (
+	InlayHintType      InlayHintKind = 1
+	InlayHintParameter InlayHintKind = 2
+)
+
+type InlayHint struct {
+	Position     Position        `json:"position"`
+	Label        string          `json:"label"`
+	Kind         InlayHintKind   `json:"kind,omitempty"`
+	Tooltip      *MarkupContent  `json:"tooltip,omitempty"`
+	PaddingLeft  bool            `json:"paddingLeft,omitempty"`
+	PaddingRight bool            `json:"paddingRight,omitempty"`
+	Data         json.RawMessage `json:"data,omitempty"`
+}
+
+type DocumentLinkParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+}
+
+type DocumentLink struct {
+	Range  Range  `json:"range"`
+	Target string `json:"target"`
+}
