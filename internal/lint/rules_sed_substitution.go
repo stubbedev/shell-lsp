@@ -90,8 +90,7 @@ func isSimpleSedSubstitution(call *syntax.CallExpr) bool {
 	if flag, _ := parser.Literal(call.Args[1]); len(call.Args) == 3 && flag != "-e" {
 		return false
 	}
-	expr, ok := parser.Literal(call.Args[len(call.Args)-1])
-	return ok && isSimpleSubstitute(expr)
+	return isSimpleSubstitute(parser.LiteralChars(call.Args[len(call.Args)-1]))
 }
 
 func isSimpleSubstitute(expr string) bool {

@@ -1,6 +1,7 @@
 package lint
 
 import (
+	"slices"
 	"strings"
 
 	"mvdan.cc/sh/v3/syntax"
@@ -32,13 +33,12 @@ var portableExpansionsFamily = family{
 }
 
 var (
-	dynamicBashVariables = setOf("BASH_MONOSECONDS", "EPOCHREALTIME", "EPOCHSECONDS", "RANDOM", "SECONDS", "SRANDOM")
+	dynamicBashVariables = setOf("RANDOM", "SECONDS")
 	staticBashVariables  = setOf(
 		"OSTYPE", "MACHTYPE", "HOSTTYPE", "HOSTNAME", "DIRSTACK", "EUID", "UID", "SHLVL", "PIPESTATUS", "SHELLOPTS", "_",
-		"BASH", "BASHOPTS", "BASHPID", "BASH_ALIASES", "BASH_ARGC", "BASH_ARGV", "BASH_ARGV0", "BASH_CMDS", "BASH_COMMAND",
-		"BASH_EXECUTION_STRING", "BASH_LINENO", "BASH_LOADABLES_PATH", "BASH_REMATCH", "BASH_SOURCE", "BASH_SUBSHELL",
-		"BASH_VERSINFO", "COMP_CWORD", "COMP_KEY", "COMP_LINE", "COMP_POINT", "COMP_TYPE", "COMP_WORDBREAKS", "COMP_WORDS",
-		"COPROC", "FUNCNAME", "GROUPS", "HISTCMD", "MAPFILE",
+		"BASHOPTS", "BASHPID", "BASH_ALIASES", "BASH_ARGC", "BASH_ARGV", "BASH_ARGV0", "BASH_CMDS", "BASH_COMMAND",
+		"BASH_EXECUTION_STRING", "BASH_LINENO", "BASH_REMATCH", "BASH_SOURCE", "BASH_SUBSHELL", "BASH_VERSINFO",
+		"EPOCHREALTIME", "EPOCHSECONDS", "FUNCNAME", "GROUPS", "MAPFILE",
 	)
 )
 
@@ -154,7 +154,7 @@ func checkBashParamExp(p *pass, pe *syntax.ParamExp) {
 			p.nonPortable(portabilityIssue{code: 3058, shells: posixOrDash, feature: "Taking the length of " + text + " (a positional parameter list)", alternative: "$#"}, span)
 		}
 	case pe.Slice != nil:
-		if pe.Index == nil && listOrName {
+		if pe.Index == nil && listOrName && !isEmptyQuotes(pe.Slice.Offset) {
 			p.nonPortable(portabilityIssue{code: 3057, shells: posixOrDash, feature: "The substring expansion " + text}, span)
 		}
 	case pe.Repl != nil:
@@ -179,6 +179,19 @@ func checkIndirectExpansion(p *pass, pe *syntax.ParamExp, span parser.Span, text
 	case isAllSubscript(pe):
 		p.nonPortable(portabilityIssue{code: 3055, shells: strictShells, feature: "Listing array keys with " + text}, span)
 	}
+}
+
+func isEmptyQuotes(offset syntax.ArithmExpr) bool {
+	w, ok := offset.(*syntax.Word)
+	return ok && parser.LiteralChars(w) == "" && !slices.ContainsFunc(w.Parts, func(part syntax.WordPart) bool {
+		switch part := part.(type) {
+		case *syntax.SglQuoted:
+			return false
+		case *syntax.DblQuoted:
+			return len(part.Parts) > 0
+		}
+		return true
+	})
 }
 
 func isAllSubscript(pe *syntax.ParamExp) bool {

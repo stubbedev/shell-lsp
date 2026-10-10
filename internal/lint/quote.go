@@ -108,8 +108,10 @@ func isDefaultAssignment(pe *syntax.ParamExp) bool {
 
 func (p *pass) parsesGlobs(w *syntax.Word) bool {
 	switch parent := p.parent().(type) {
-	case *syntax.CallExpr, *syntax.CaseItem, *syntax.WordIter, *syntax.BinaryTest:
+	case *syntax.CallExpr, *syntax.CaseItem, *syntax.WordIter:
 		return true
+	case *syntax.BinaryTest:
+		return parent.Op != syntax.TsReMatch
 	case *syntax.Assign:
 		return parent.Value == w
 	case *syntax.ArrayElem:
