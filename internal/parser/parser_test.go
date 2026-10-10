@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -548,5 +549,15 @@ func TestLine(t *testing.T) {
 		if got := tree.Line(offset); got != want {
 			t.Errorf("Line(%d) = %d, want %d", offset, got, want)
 		}
+	}
+}
+
+func TestErrorsWithoutPositionAreKept(t *testing.T) {
+	t.Parallel()
+
+	err := errors.New("reader failed")
+	got, located := convertError(err, "echo\n", dialect.Bash)
+	if located || got.Message != "reader failed" || got.Kind != ErrSyntax {
+		t.Errorf("convertError = %+v, %t", got, located)
 	}
 }

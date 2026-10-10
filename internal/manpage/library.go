@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"compress/bzip2"
 	"compress/gzip"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -22,9 +24,10 @@ var (
 )
 
 type library struct {
-	dirs  []string
-	once  sync.Once
-	pages map[string]string
+	dirs       []string
+	once       sync.Once
+	pages      map[string]string
+	unreadable []error
 }
 
 func newLibrary(manpath, path string) *library {
@@ -72,6 +75,9 @@ func (l *library) index() map[string]string {
 			for _, dir := range l.dirs {
 				entries, err := os.ReadDir(filepath.Join(dir, "man"+sec))
 				if err != nil {
+					if !errors.Is(err, fs.ErrNotExist) {
+						l.unreadable = append(l.unreadable, err)
+					}
 					continue
 				}
 				for _, e := range entries {
@@ -92,10 +98,11 @@ func (l *library) index() map[string]string {
 func (l *library) source(name string) ([]byte, error) {
 	path, ok := l.index()[name]
 	if !ok {
-		return nil, fmt.Errorf("%w for %s in %s", ErrNoPage, name, strings.Join(l.dirs, ":"))
+		missing := fmt.Errorf("%w for %s in %s", ErrNoPage, name, strings.Join(l.dirs, ":"))
+		return nil, errors.Join(append([]error{missing}, l.unreadable...)...)
 	}
+	src, err := readPage(path)
 	for range maxRedirects {
-		src, err := readPage(path)
 		if err != nil {
 			return nil, err
 		}
@@ -103,9 +110,7 @@ func (l *library) source(name string) ([]byte, error) {
 		if !redirected {
 			return src, nil
 		}
-		if path, err = resolveRedirect([]string{filepath.Dir(filepath.Dir(path)), filepath.Dir(path)}, target); err != nil {
-			return nil, err
-		}
+		src, path, err = readRedirect([]string{filepath.Dir(filepath.Dir(path)), filepath.Dir(path)}, target)
 	}
 	return nil, fmt.Errorf("%w for %s: more than %d .so redirections", ErrNoPage, name, maxRedirects)
 }
@@ -153,17 +158,19 @@ func redirect(src []byte) (string, bool) {
 	return "", false
 }
 
-func resolveRedirect(roots []string, target string) (string, error) {
+func readRedirect(roots []string, target string) ([]byte, string, error) {
 	if !filepath.IsLocal(target) {
-		return "", fmt.Errorf("%w: .so target %s leaves the manual page tree", ErrNoPage, target)
+		return nil, "", fmt.Errorf("%w: .so target %s leaves the manual page tree", ErrNoPage, target)
 	}
 	for _, root := range roots {
 		for _, suffix := range readableSuffixes {
 			candidate := filepath.Join(root, target+suffix)
-			if _, err := os.Stat(candidate); err == nil { //nolint:gosec
-				return candidate, nil
+			src, err := readPage(candidate)
+			if errors.Is(err, fs.ErrNotExist) {
+				continue
 			}
+			return src, candidate, err
 		}
 	}
-	return "", fmt.Errorf("%w: .so target %s not found under %s", ErrNoPage, target, strings.Join(roots, " or "))
+	return nil, "", fmt.Errorf("%w: .so target %s not found under %s", ErrNoPage, target, strings.Join(roots, " or "))
 }

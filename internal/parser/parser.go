@@ -73,11 +73,11 @@ func Parse(text string, d dialect.Dialect) *Tree {
 		if err == nil {
 			break
 		}
-		parseErr, ok := convertError(err, text, d)
-		if !ok {
+		parseErr, located := convertError(err, text, d)
+		errs = append(errs, parseErr)
+		if !located {
 			break
 		}
-		errs = append(errs, parseErr)
 		at := parseErr.Span.Start
 		if delimiter, unclosed := unclosedHeredocDelimiter(err); unclosed {
 			if at == closedAt {
@@ -176,7 +176,7 @@ func convertError(err error, text string, d dialect.Dialect) (Error, bool) {
 	if langErr, ok := errors.AsType[syntax.LangError](err); ok && langErr.Pos.IsValid() {
 		return refine(Error{Span: tokenSpan(text, offset(langErr.Pos)), Kind: ErrDialect, Message: dialectMessage(langErr, d)}, text, d), true
 	}
-	return Error{}, false
+	return Error{Span: tokenSpan(text, 0), Kind: ErrSyntax, Message: err.Error()}, false
 }
 
 func dialectMessage(err syntax.LangError, d dialect.Dialect) string {

@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"encoding/base64"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -184,6 +185,35 @@ func TestRenderMdocPage(t *testing.T) {
 	}
 	if !slices.EqualFunc(page.Options(), want, sameOption) {
 		t.Errorf("Options() = %+v", page.Options())
+	}
+}
+
+func TestRenderKeepsUnknownEscapesVisible(t *testing.T) {
+	t.Parallel()
+
+	page, err := Render([]byte(".TH X 1\n.SH NAME\nx \\- a \\(zz glyph and \\N'bad' code\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.Summary != "x - a zz glyph and \\N'bad' code" {
+		t.Errorf("Summary = %q", page.Summary)
+	}
+}
+
+func TestLookupReportsUnreadableDirectories(t *testing.T) {
+	t.Parallel()
+
+	if os.Geteuid() == 0 {
+		t.Skip("root reads directories regardless of permissions")
+	}
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "man1"), 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(filepath.Join(dir, "man1"), 0o755) })
+	_, err := NewLookup(dir, "").Page(t.Context(), "anything")
+	if !errors.Is(err, ErrNoPage) || !errors.Is(err, fs.ErrPermission) {
+		t.Errorf("Page error = %v, want ErrNoPage joined with the permission failure", err)
 	}
 }
 

@@ -504,8 +504,7 @@ func (p *pass) namesUnassignedVariable(w *syntax.Word) bool {
 	if !parser.IsName(name) || hasQuotes(w) {
 		return true
 	}
-	span, _ := p.span(w)
-	return p.tree.Visible(name, p.tree.ScopeAt(span.Start)).Len() == 0
+	return p.tree.Visible(name, p.tree.ScopeAt(parser.Offset(w.Pos()))).Len() == 0
 }
 
 func hasQuotes(w *syntax.Word) bool {

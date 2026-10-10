@@ -1136,11 +1136,13 @@ func (in *interpreter) forClause(cmd *syntax.ForClause, s *state) *state {
 				}
 			}
 		}
-		site, _ := in.tree.NodeSpan(cmd)
+		site, located := in.tree.NodeSpan(cmd)
 		assign := func(head *state) *state {
 			if loop.Name != nil && items != 0 {
 				in.assign(head, loop.Name.Value, value{space: items.normalize(), integer: integerNo, holdsInteger: holdsInteger})
-				in.noteWrite(loop.Name.Value, site)
+				if located {
+					in.noteWrite(loop.Name.Value, site)
+				}
 			}
 			return head
 		}

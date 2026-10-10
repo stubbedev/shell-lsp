@@ -112,6 +112,8 @@ func (st *roffState) inline(s string) string {
 			arg, next := delimited(s, i)
 			if n, err := strconv.Atoi(arg); err == nil && n > 0 && n < utf8.MaxRune {
 				out.WriteRune(rune(n))
+			} else {
+				out.WriteString(s[i-1 : next+1])
 			}
 			i = next
 		case strings.IndexByte(escapesTakingDelimitedArgument, e) >= 0:
@@ -132,10 +134,7 @@ func special(name string) string {
 			return string(rune(n))
 		}
 	}
-	if len(name) == 1 {
-		return name
-	}
-	return ""
+	return name
 }
 
 func (st *roffState) lookupString(name string) string {

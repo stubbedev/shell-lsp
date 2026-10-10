@@ -2,7 +2,6 @@ package lint
 
 import (
 	"slices"
-	"strconv"
 	"strings"
 
 	"mvdan.cc/sh/v3/syntax"
@@ -229,18 +228,28 @@ func decodeANSIC(s string) string {
 }
 
 func escapedNumber(s string, base, width int) (byte, int) {
+	var code uint
 	end := 0
-	for end < min(width, len(s)) {
-		if _, err := strconv.ParseUint(s[end:end+1], base, 8); err != nil {
+	for ; end < min(width, len(s)); end++ {
+		digit, ok := digitValue(s[end])
+		if !ok || digit >= uint(base) {
 			break
 		}
-		end++
+		code = code*uint(base) + digit
 	}
-	if end == 0 {
-		return 0, 0
-	}
-	code, _ := strconv.ParseUint(s[:end], base, 8)
 	return byte(code), end
+}
+
+func digitValue(c byte) (uint, bool) {
+	switch {
+	case c >= '0' && c <= '9':
+		return uint(c - '0'), true
+	case c >= 'a' && c <= 'f':
+		return uint(c-'a') + 10, true
+	case c >= 'A' && c <= 'F':
+		return uint(c-'A') + 10, true
+	}
+	return 0, false
 }
 
 func checkArrayLiteral(p *pass, n syntax.Node) {
