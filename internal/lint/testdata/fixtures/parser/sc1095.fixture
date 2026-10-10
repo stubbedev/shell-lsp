@@ -2,7 +2,7 @@
 function greet{
   echo hello
 }
->>> SC1095 1:15
+>>- SC1095 1:15 -- mvdan rejects this input, so it is reported as a syntax error, not as a lint code at the closing brace
 
 ### function name with a space before the brace
 function greet {

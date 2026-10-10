@@ -1,10 +1,10 @@
 ### space between the opening parentheses
 for ( (i=0; i<3; i++)); do echo "$i"; done
->>> SC1138 1:6
+>>- SC1138 1:6 -- mvdan rejects this input, so it is reported as a syntax error, not as a lint code whose message asks for parentheses without spaces
 
 ### space between the closing parentheses
 for ((i=0; i<3; i++) ); do echo "$i"; done
->>> SC1138 1:21
+>>- SC1138 1:21 -- mvdan rejects this input, so it is reported as a syntax error, not as a lint code whose message asks for parentheses without spaces
 
 ### adjacent parentheses
 for ((i=0; i<3; i++)); do echo "$i"; done

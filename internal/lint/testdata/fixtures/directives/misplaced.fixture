@@ -101,7 +101,7 @@ esac
 >>> SC1009 2:1
 >>> SC1072 4:5
 >>> SC1073 4:3
->>> SC1085 4:5
+>>- SC1085 4:5 -- mvdan accepts a comment in front of a case pattern, so nothing stops parsing; the misplaced directive is reported as SC1124
 >>> SC1124 4:3
 
 ### directive before a closing parenthesis
@@ -137,7 +137,7 @@ esac
 >>> SC1009 2:1
 >>> SC1072 4:5
 >>> SC1073 4:3
->>> SC1085 4:5
+>>- SC1085 4:5 -- mvdan accepts a comment in front of a case pattern, so nothing stops parsing; the misplaced directive is reported as SC1124
 >>> SC1124 4:3
 >>+ SC2086 5:19 -- shellcheck abandons the script at its parse error; this linter keeps checking and a directive in front of a case pattern has no effect
 

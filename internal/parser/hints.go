@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/stubbedev/shell-lsp/internal/dialect"
 )
 
 type hint func(e Error, text string) (Error, bool)
@@ -20,11 +22,14 @@ var hints = []hint{
 	doubleBracketOperand,
 }
 
-func refine(e Error, text string) Error {
+func refine(e Error, text string, d dialect.Dialect) Error {
 	for _, h := range hints {
 		if refined, ok := h(e, text); ok {
 			return refined
 		}
+	}
+	if e.Kind == ErrSyntax {
+		e.Message += typoHint(text, e.Span.Start, d)
 	}
 	return e
 }

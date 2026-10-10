@@ -1,13 +1,13 @@
 ### arithmetic fails but a nested subshell parses
 echo $(((1)) && true)
->>> SC1102 1:6
+>>- SC1102 1:6 -- mvdan rejects this input, so it is reported as a syntax error, not as a lint code at the point where the arithmetic reading fails
 >>- SC2005 1:6 -- mvdan reads the leading $(( as arithmetic and reports a syntax error instead of retrying as a subshell
 >>- SC2046 1:6 -- mvdan reads the leading $(( as arithmetic and reports a syntax error instead of retrying as a subshell
 
 ### backgrounded expansion inside a dollar double parenthesis
 x=$(("$@" &); echo started;)
 echo "$x"
->>> SC1102 1:3
+>>- SC1102 1:3 -- mvdan rejects this input, so it is reported as a syntax error, not as a lint code at the point where the arithmetic reading fails
 
 ### valid arithmetic with a parenthesised number
 echo $(( (1) && 1 ))

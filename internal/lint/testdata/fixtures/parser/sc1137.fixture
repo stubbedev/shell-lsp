@@ -3,14 +3,14 @@ for (i=0; i<3; i++)); do echo "$i"; done
 >>> SC1009 1:1
 >>> SC1072 1:6
 >>> SC1073 1:5
->>> SC1137 1:6
+>>- SC1137 1:6 -- mvdan rejects this input, so it is reported as a syntax error, not as a lint code whose message asks for double parentheses
 
 ### missing second closing parenthesis
 for ((i=0; i<3; i++); do echo "$i"; done
 >>> SC1009 1:1
 >>> SC1072 1:21
 >>> SC1073 1:5
->>> SC1137 1:21
+>>- SC1137 1:21 -- mvdan rejects this input, so it is reported as a syntax error, not as a lint code whose message asks for double parentheses
 
 ### both parentheses present
 for ((i=0; i<3; i++)); do echo "$i"; done

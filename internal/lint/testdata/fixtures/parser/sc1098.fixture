@@ -1,8 +1,8 @@
 ### unquoted array assignment passed to eval
 eval items=(a b c)
 >>- SC1036 1:12 -- bash rejects the unquoted parenthesis, so this is reported as a parser syntax error
->>> SC1088 1:12
->>> SC1098 1:12
+>>- SC1088 1:12 -- mvdan rejects this input, so it is reported as a syntax error, not as a lint code; the error stops at the same parenthesis
+>>- SC1098 1:12 -- mvdan rejects this input, so it is reported as a syntax error, not as a lint code whose message says to quote the arguments of eval
 
 ### quoted array assignment
 eval "items=(a b c)"

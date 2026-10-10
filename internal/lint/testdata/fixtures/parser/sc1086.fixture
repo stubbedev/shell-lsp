@@ -2,7 +2,7 @@
 for $f in *.txt; do
   echo "$f"
 done
->>> SC1086 1:5
+>>- SC1086 1:5 -- mvdan rejects this input, so it is reported as a syntax error, not as a lint code whose message says to drop the dollar from the loop variable
 
 ### bare loop variable
 for f in *.txt; do

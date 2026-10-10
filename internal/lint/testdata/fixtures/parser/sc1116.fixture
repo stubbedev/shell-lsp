@@ -1,6 +1,6 @@
 ### assignment value starting with double parentheses
 total=((3 + 4))
->>> SC1116 1:7
+>>- SC1116 1:7 -- mvdan rejects this input, so it is reported as a syntax error, not as a lint code whose message suggests $((...))
 >>- SC2034 1:1 -- mvdan rejects the double parentheses as a syntax error, and whole-script variable checks are skipped for scripts that do not parse completely
 
 ### nested array with a space between the parentheses

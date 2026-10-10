@@ -2,7 +2,7 @@
 $fruits=(apple pear)
 >>- SC1036 1:9 -- bash rejects the unquoted parenthesis, so this is reported as a parser syntax error
 >>- SC1066 1:1 -- bash rejects $name=(...), so this is a parser syntax error whose message says to remove the $
->>> SC1088 1:9
+>>- SC1088 1:9 -- mvdan rejects this input, so it is reported as a syntax error, not as a lint code; the error stops at the same parenthesis
 >>- SC2154 1:1 -- mvdan rejects the dollar-prefixed assignment as a syntax error, and whole-script variable checks are skipped for scripts that do not parse completely
 >>- SC2281 1:1 -- mvdan rejects a dollar-prefixed array assignment; the line is reported as a syntax error instead
 
@@ -11,7 +11,7 @@ $queue[1]+=(job)
 >>- SC1036 1:12 -- bash rejects the unquoted parenthesis, so this is reported as a parser syntax error
 >>- SC1066 1:1 -- bash rejects $name=(...), so this is a parser syntax error whose message says to remove the $
 >>- SC1087 1:1 -- mvdan rejects this line (invalid function name), so no tree is built for it; the syntax error is reported instead
->>> SC1088 1:12
+>>- SC1088 1:12 -- mvdan rejects this input, so it is reported as a syntax error, not as a lint code; the error stops at the same parenthesis
 >>- SC2086 1:1 -- mvdan rejects a dollar-prefixed indexed array append; the line is reported as a syntax error instead
 >>- SC2154 1:1 -- mvdan rejects the dollar-prefixed assignment as a syntax error, and whole-script variable checks are skipped for scripts that do not parse completely
 >>- SC2211 1:1 -- mvdan rejects a dollar-prefixed indexed array append; the line is reported as a syntax error instead
@@ -25,5 +25,5 @@ $fruits=apple
 ### no dollar but a space before the equals sign
 fruits =(apple pear)
 >>- SC1036 1:9 -- bash rejects the unquoted parenthesis; the parser reports =( as a syntax error
->>> SC1088 1:9
+>>- SC1088 1:9 -- mvdan rejects this input, so it is reported as a syntax error, not as a lint code; the error stops at the same parenthesis
 >>- SC2283 1:8 -- mvdan rejects =( after a command word as a syntax error, so the line is not linted

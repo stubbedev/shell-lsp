@@ -7,7 +7,7 @@ esac
 >>> SC1009 1:1
 >>> SC1072 3:8
 >>> SC1073 3:3
->>> SC1085 3:8
+>>- SC1085 3:8 -- mvdan rejects this input, so it is reported as a syntax error, not as a lint code at the misread case pattern
 
 ### patterns properly closed
 case "$1" in

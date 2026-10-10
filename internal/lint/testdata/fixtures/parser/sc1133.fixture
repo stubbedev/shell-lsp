@@ -1,20 +1,20 @@
 ### line starting with a pipe
 cat app.log
 | grep error
->>> SC1070 2:1
->>> SC1133 2:1
+>>- SC1070 2:1 -- mvdan rejects this input, so it is reported as a syntax error, not as a lint code; the error stops at the same place
+>>- SC1133 2:1 -- mvdan rejects this input, so it is reported as a syntax error, not as a lint code whose message says to move the operator to the end of the previous line
 
 ### line starting with a logical or
 make all
 || echo failed
->>> SC1070 2:1
->>> SC1133 2:1
+>>- SC1070 2:1 -- mvdan rejects this input, so it is reported as a syntax error, not as a lint code; the error stops at the same place
+>>- SC1133 2:1 -- mvdan rejects this input, so it is reported as a syntax error, not as a lint code whose message says to move the operator to the end of the previous line
 
 ### line starting with a logical and
 make all
 && make install
->>> SC1070 2:1
->>> SC1133 2:1
+>>- SC1070 2:1 -- mvdan rejects this input, so it is reported as a syntax error, not as a lint code; the error stops at the same place
+>>- SC1133 2:1 -- mvdan rejects this input, so it is reported as a syntax error, not as a lint code whose message says to move the operator to the end of the previous line
 
 ### line starting with the both-streams redirection
 &>/dev/null ls /tmp

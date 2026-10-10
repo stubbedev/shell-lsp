@@ -6,7 +6,7 @@ esac
 >>> SC1009 1:1
 >>> SC1072 3:7
 >>> SC1073 2:3
->>> SC1074 3:7
+>>- SC1074 3:7 -- mvdan rejects this input, so it is reported as a syntax error, not as a lint code at the pattern of the next case branch
 
 ### every branch terminated
 case $1 in

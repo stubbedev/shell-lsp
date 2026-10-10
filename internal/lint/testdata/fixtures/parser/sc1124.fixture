@@ -7,7 +7,7 @@ esac
 >>> SC1009 1:1
 >>> SC1072 3:5
 >>> SC1073 3:3
->>> SC1085 3:5
+>>- SC1085 3:5 -- mvdan accepts a comment in front of a case pattern, so nothing stops parsing; the misplaced directive is reported as SC1124
 >>> SC1124 3:3
 >>+ SC2086 4:14 -- shellcheck abandons the script at its parse error; this linter keeps checking and a directive in front of a case pattern has no effect
 

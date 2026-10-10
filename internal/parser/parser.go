@@ -105,10 +105,10 @@ func IsBats(text string) bool {
 
 func convertError(err error, text string, d dialect.Dialect) (Error, bool) {
 	if parseErr, ok := errors.AsType[syntax.ParseError](err); ok && parseErr.Pos.IsValid() {
-		return refine(Error{Span: tokenSpan(text, offset(parseErr.Pos)), Kind: ErrSyntax, Message: parseErr.Text}, text), true
+		return refine(Error{Span: tokenSpan(text, offset(parseErr.Pos)), Kind: ErrSyntax, Message: parseErr.Text}, text, d), true
 	}
 	if langErr, ok := errors.AsType[syntax.LangError](err); ok && langErr.Pos.IsValid() {
-		return refine(Error{Span: tokenSpan(text, offset(langErr.Pos)), Kind: ErrDialect, Message: dialectMessage(langErr, d)}, text), true
+		return refine(Error{Span: tokenSpan(text, offset(langErr.Pos)), Kind: ErrDialect, Message: dialectMessage(langErr, d)}, text, d), true
 	}
 	return Error{}, false
 }

@@ -1,32 +1,32 @@
 ### stray fi after a complete script
 if [ -f a ]; then echo a; fi
 fi
->>> SC1089 2:1
+>>- SC1089 2:1 -- mvdan rejects this input, so it is reported as a syntax error, not as a lint code; the error names the stray keyword
 
 ### stray done
 echo working
 done
->>> SC1089 2:1
+>>- SC1089 2:1 -- mvdan rejects this input, so it is reported as a syntax error, not as a lint code; the error names the stray keyword
 
 ### stray closing brace
 echo hi
 }
->>> SC1089 2:1
+>>- SC1089 2:1 -- mvdan rejects this input, so it is reported as a syntax error, not as a lint code; the error names the stray keyword
 
 ### stray closing parenthesis
 echo hi
 )
->>> SC1089 2:1
+>>- SC1089 2:1 -- mvdan rejects this input, so it is reported as a syntax error, not as a lint code; the error names the stray keyword
 
 ### stray double semicolon
 echo hi
 ;;
->>> SC1089 2:1
+>>- SC1089 2:1 -- mvdan rejects this input, so it is reported as a syntax error, not as a lint code; the error names the stray keyword
 
 ### stray then
 echo hi
 then echo more
->>> SC1089 2:1
+>>- SC1089 2:1 -- mvdan rejects this input, so it is reported as a syntax error, not as a lint code; the error names the stray keyword
 
 ### balanced keywords
 if [ -f a ]; then echo a; fi

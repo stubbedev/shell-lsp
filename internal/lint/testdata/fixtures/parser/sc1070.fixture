@@ -1,16 +1,16 @@
 ### line starting with a logical and
 make all
 && make install
->>> SC1070 2:1
->>> SC1133 2:1
+>>- SC1070 2:1 -- mvdan rejects this input, so it is reported as a syntax error, not as a lint code; the error stops at the same place
+>>- SC1133 2:1 -- mvdan rejects this input, so it is reported as a syntax error, not as a lint code whose message says to move the operator to the end of the previous line
 
 ### leftover starting with a parenthesis reports SC1088 instead
 echo start
 (echo a) (echo b)
 >>- SC1036 2:10 -- bash rejects the unquoted parenthesis, so this is reported as a parser syntax error
->>> SC1088 2:10
+>>- SC1088 2:10 -- mvdan rejects this input, so it is reported as a syntax error, not as a lint code; the error stops at the same parenthesis
 
 ### leftover starting with a keyword reports SC1089 instead
 echo start
 fi
->>> SC1089 2:1
+>>- SC1089 2:1 -- mvdan rejects this input, so it is reported as a syntax error, not as a lint code; the error names the stray keyword

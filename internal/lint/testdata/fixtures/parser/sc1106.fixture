@@ -1,13 +1,13 @@
 ### test-style greater-than inside an arithmetic command
 if (( count -gt 3 )); then echo big; fi
->>> SC1105 1:4
->>> SC1106 1:13
+>>- SC1105 1:4 -- mvdan rejects this input, so it is reported as a syntax error, not as a lint code at the point where the arithmetic reading fails
+>>- SC1106 1:13 -- mvdan rejects this input, so it is reported as a syntax error, not as a lint code whose message names the arithmetic comparison operator to use
 >>- SC2205 1:5 -- mvdan rejects -gt inside arithmetic and reports a syntax error instead of reparsing (( as nested subshells
 
 ### test-style less-than inside an arithmetic expansion
 echo $(( count -lt 3 ))
->>> SC1102 1:6
->>> SC1106 1:16
+>>- SC1102 1:6 -- mvdan rejects this input, so it is reported as a syntax error, not as a lint code at the point where the arithmetic reading fails
+>>- SC1106 1:16 -- mvdan rejects this input, so it is reported as a syntax error, not as a lint code whose message names the arithmetic comparison operator to use
 >>- SC2005 1:6 -- mvdan rejects -lt inside arithmetic and reports a syntax error
 >>- SC2046 1:6 -- mvdan rejects -lt inside arithmetic and reports a syntax error
 >>- SC2205 1:8 -- mvdan rejects -lt inside arithmetic and reports a syntax error instead of reparsing $(( as a subshell inside a substitution

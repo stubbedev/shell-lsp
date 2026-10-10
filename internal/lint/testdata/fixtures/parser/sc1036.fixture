@@ -1,12 +1,12 @@
 ### parenthesis in the middle of arguments
 echo Disk usage (approx)
 >>- SC1036 1:17 -- bash rejects the unquoted parenthesis, so this is reported as a parser syntax error
->>> SC1088 1:17
+>>- SC1088 1:17 -- mvdan rejects this input, so it is reported as a syntax error, not as a lint code; the error stops at the same parenthesis
 
 ### parenthesis glued inside a word
 mv draft(1).txt final.txt
 >>- SC1036 1:9 -- bash rejects the unquoted parenthesis, so this is reported as a parser syntax error
->>> SC1088 1:9
+>>- SC1088 1:9 -- mvdan rejects this input, so it is reported as a syntax error, not as a lint code; the error stops at the same parenthesis
 >>- SC2224 1:1 -- mvdan rejects a parenthesis inside a word; the line is reported as a syntax error instead
 
 ### subshell and function definition

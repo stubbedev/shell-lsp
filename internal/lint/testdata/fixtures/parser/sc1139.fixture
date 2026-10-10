@@ -28,7 +28,7 @@ if [[ -f a.conf ]] and [[ -f b.conf ]]; then echo found; fi
 
 ### word that merely starts with or
 [ -n "$fruit" ] orange
->>> SC1070 1:17
+>>- SC1070 1:17 -- mvdan reads the extra word as an argument of [, so nothing stops parsing; the word is reported as SC1139
 >>> SC1139 1:17
 
 ### shell logical operators between tests
