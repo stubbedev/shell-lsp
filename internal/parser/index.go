@@ -24,6 +24,7 @@ type Function struct {
 	Body     ScopeID
 	Within   ScopeID
 	Doc      string
+	Decl     *syntax.FuncDecl
 }
 
 type DefinitionKind uint8
@@ -110,6 +111,16 @@ type Index struct {
 	Heredocs    []Heredoc
 	Comments    []Comment
 	Keywords    []Keyword
+
+	definitionsByBinding map[binding][]int
+	localScopes          map[string]map[ScopeID]bool
+	functionsByName      map[string]int
+}
+
+type binding struct {
+	name  string
+	scope ScopeID
+	local bool
 }
 
 type builder struct {
@@ -132,6 +143,7 @@ func buildIndex(file *syntax.File, text string) (Index, []Error) {
 	}
 	syntax.Walk(file, b.visit)
 	slices.SortStableFunc(b.index.Keywords, func(x, y Keyword) int { return x.Span.Start - y.Span.Start })
+	b.index.buildLookups()
 	return b.index, b.errs
 }
 
@@ -211,6 +223,7 @@ func (b *builder) function(n *syntax.FuncDecl) {
 			Body:     body,
 			Within:   within,
 			Doc:      docComment(b.text, offset(n.Pos())),
+			Decl:     n,
 		})
 	}
 	b.scopes = append(b.scopes, body)
@@ -843,4 +856,26 @@ func assignedWord(n *syntax.Assign) *syntax.Word {
 		return nil
 	}
 	return n.Value
+}
+
+func (ix *Index) buildLookups() {
+	ix.definitionsByBinding = make(map[binding][]int, len(ix.Definitions))
+	ix.localScopes = map[string]map[ScopeID]bool{}
+	for i, def := range ix.Definitions {
+		key := binding{name: def.Name}
+		if def.Local {
+			key.scope, key.local = def.Within, true
+			if ix.localScopes[def.Name] == nil {
+				ix.localScopes[def.Name] = map[ScopeID]bool{}
+			}
+			ix.localScopes[def.Name][def.Within] = true
+		}
+		ix.definitionsByBinding[key] = append(ix.definitionsByBinding[key], i)
+	}
+	ix.functionsByName = make(map[string]int, len(ix.Functions))
+	for i, fn := range ix.Functions {
+		if _, seen := ix.functionsByName[fn.Name]; !seen {
+			ix.functionsByName[fn.Name] = i
+		}
+	}
 }

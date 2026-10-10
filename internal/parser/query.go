@@ -2,6 +2,7 @@ package parser
 
 import (
 	"slices"
+	"sort"
 
 	"mvdan.cc/sh/v3/syntax"
 )
@@ -20,8 +21,9 @@ func (ix *Index) ScopeAt(offset int) ScopeID {
 }
 
 func (ix *Index) Binding(name string, scope ScopeID) (ScopeID, bool) {
+	locals := ix.localScopes[name]
 	for s := scope; ; s = ix.Scopes[s].Parent {
-		if slices.ContainsFunc(ix.Definitions, func(d Definition) bool { return d.Name == name && d.Local && d.Within == s }) {
+		if locals[s] {
 			return s, true
 		}
 		if s == FileScope {
@@ -31,22 +33,22 @@ func (ix *Index) Binding(name string, scope ScopeID) (ScopeID, bool) {
 }
 
 func (ix *Index) Visible(name string, scope ScopeID) []Definition {
-	binding, local := ix.Binding(name, scope)
-	var defs []Definition
-	for _, def := range ix.Definitions {
-		if def.Name != name {
-			continue
-		}
-		if local && def.Local && def.Within == binding || !local && !def.Local {
-			defs = append(defs, def)
-		}
+	bound, local := ix.Binding(name, scope)
+	key := binding{name: name}
+	if local {
+		key.scope, key.local = bound, true
+	}
+	indices := ix.definitionsByBinding[key]
+	defs := make([]Definition, len(indices))
+	for i, index := range indices {
+		defs[i] = ix.Definitions[index]
 	}
 	return defs
 }
 
 func (ix *Index) FunctionNamed(name string) (Function, bool) {
-	i := slices.IndexFunc(ix.Functions, func(f Function) bool { return f.Name == name })
-	if i < 0 {
+	i, ok := ix.functionsByName[name]
+	if !ok {
 		return Function{}, false
 	}
 	return ix.Functions[i], true
@@ -78,6 +80,10 @@ func (t *Tree) PathAt(offset int) []syntax.Node {
 }
 
 func (t *Tree) Text() string { return t.text }
+
+func (t *Tree) Line(offset int) int {
+	return sort.SearchInts(t.lineStarts, offset+1)
+}
 
 func (t *Tree) NodeSpan(node syntax.Node) (Span, bool) {
 	if w, ok := node.(*syntax.Word); ok && len(w.Parts) == 0 {

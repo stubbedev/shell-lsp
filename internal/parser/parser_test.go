@@ -327,3 +327,14 @@ func TestBuiltinAssignments(t *testing.T) {
 		}
 	}
 }
+
+func TestLine(t *testing.T) {
+	t.Parallel()
+
+	tree := Parse("a\nbb\n\nc", dialect.Bash)
+	for offset, want := range map[int]int{0: 1, 1: 1, 2: 2, 4: 2, 5: 3, 6: 4, 7: 4} {
+		if got := tree.Line(offset); got != want {
+			t.Errorf("Line(%d) = %d, want %d", offset, got, want)
+		}
+	}
+}
