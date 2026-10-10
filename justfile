@@ -46,3 +46,16 @@ smoke:
     trap 'rm -rf "$bin"' EXIT
     go build -o "$bin/shell-lsp" .
     nvim --headless -l scripts/nvim-smoke.lua "$bin/shell-lsp"
+
+# Build release binaries for every supported platform into dist/, stamped with the git version.
+dist version=`git describe --tags --always --dirty`:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    tag="{{version}}"
+    rm -rf dist
+    mkdir -p dist
+    for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
+        GOOS="${target%/*}" GOARCH="${target#*/}" go build -trimpath -ldflags "-s -w -X main.version=${tag#v}" \
+            -o "dist/shell-lsp-{{version}}-${target%/*}-${target#*/}" .
+    done
+    (cd dist && sha256sum shell-lsp-* > SHA256SUMS)

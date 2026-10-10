@@ -1,3 +1,4 @@
 /shell-lsp
 /result
 *.test
+/dist/

@@ -30,11 +30,8 @@ shell-lsp            # serve LSP over stdio
 shell-lsp --version
 ```
 
-Editor wiring (any LSP client):
-
-```json
-{"languages": {"sh": "shell-lsp", "bash": "shell-lsp", "zsh": "shell-lsp"}}
-```
+Editor wiring for Neovim, Helix, Zed and VS Code is in
+[docs/editors.md](docs/editors.md).
 
 ## Configuration
 
@@ -100,6 +97,9 @@ installed.
 | `just test` | `go test ./...` |
 | `just build` | Compile-check every package |
 | `just fmt` | Format every Go source in place |
+| `just smoke` | Drive the server from headless Neovim |
+| `just crosscheck` | Compare with bash-language-server into `docs/crosscheck.md` |
+| `just dist` | Build static release binaries for Linux and macOS into `dist/` |
 
 Every dev tool (Go toolchain pinned to the version go.mod declares, gopls,
 golangci-lint, delve, just, shellcheck, shfmt, git, gh) comes from
@@ -107,8 +107,9 @@ the flake: `direnv allow` on entry, or `nix develop` explicitly.
 
 ## Nix
 
-- `nix build` builds the package; update `vendorHash` in `package.nix` whenever
-  go.mod dependencies change
+- `nix build` builds the package, stamped with the commit date, and runs the
+  test suite; update `vendorHash` in `package.nix` whenever go.mod
+  dependencies change
 - `nix run` runs it
 - `nix fmt` formats the nix files with alejandra
 

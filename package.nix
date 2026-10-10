@@ -13,7 +13,8 @@ buildGo127Module {
 
   env.CGO_ENABLED = 0;
 
-  # The test suite is pure Go and safe to run in the sandbox.
+  ldflags = ["-s" "-w" "-X main.version=${version}"];
+
   doCheck = true;
 
   meta = {

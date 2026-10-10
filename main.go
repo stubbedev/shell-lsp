@@ -1,5 +1,3 @@
-// Command shell-lsp is a Language Server Protocol server for shell scripts:
-// bash, zsh and POSIX sh, with dialect auto-detection.
 package main
 
 import (
