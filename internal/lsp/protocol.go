@@ -62,7 +62,6 @@ type DidCloseTextDocumentParams struct {
 
 type DidSaveTextDocumentParams struct {
 	TextDocument TextDocumentIdentifier `json:"textDocument"`
-	Text         *string                `json:"text,omitempty"`
 }
 
 func DecodeParams[T any](raw json.RawMessage) (T, error) {

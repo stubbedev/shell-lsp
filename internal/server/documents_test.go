@@ -133,3 +133,28 @@ func TestStaleChangeIsIgnored(t *testing.T) {
 		t.Errorf("version = %d, want 3", doc.Version)
 	}
 }
+
+func TestDidSaveKeepsVersionSequence(t *testing.T) {
+	t.Parallel()
+
+	srv := New(jsonrpc.NewConn(nil, nil), "test")
+	open := json.RawMessage(`{"textDocument": {"uri": "file:///t.sh", "languageId": "shellscript", "version": 1, "text": "one"}}`)
+	if err := srv.handleDidOpen(t.Context(), open); err != nil {
+		t.Fatalf("didOpen: %v", err)
+	}
+	save := json.RawMessage(`{"textDocument": {"uri": "file:///t.sh"}, "text": "one"}`)
+	if err := srv.handleDidSave(t.Context(), save); err != nil {
+		t.Fatalf("didSave: %v", err)
+	}
+	change := json.RawMessage(`{"textDocument": {"uri": "file:///t.sh", "version": 2}, "contentChanges": [{"text": "two"}]}`)
+	if err := srv.handleDidChange(t.Context(), change); err != nil {
+		t.Fatalf("didChange: %v", err)
+	}
+	doc, ok := srv.docs.Document("file:///t.sh")
+	if !ok {
+		t.Fatal("document missing")
+	}
+	if doc.Text() != "two" || doc.Version != 2 {
+		t.Errorf("after save then change: text=%q version=%d, want two/2", doc.Text(), doc.Version)
+	}
+}

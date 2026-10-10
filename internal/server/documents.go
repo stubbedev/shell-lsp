@@ -92,16 +92,8 @@ func (s *Server) handleDidSave(_ context.Context, params json.RawMessage) error 
 	if err != nil {
 		return err
 	}
-	if saveParams.Text != nil {
-		uri := saveParams.TextDocument.URI
-		doc, ok := s.docs.Document(uri)
-		if !ok {
-			s.logger.Warn("didSave for unopened document", "uri", uri)
-			return nil
-		}
-		if err := s.docs.Change(uri, doc.Version+1, []lsp.TextDocumentContentChangeEvent{{Text: *saveParams.Text}}); err != nil {
-			s.logger.Warn("didSave text rejected", "err", err)
-		}
+	if _, ok := s.docs.Document(saveParams.TextDocument.URI); !ok {
+		s.logger.Warn("didSave for unopened document", "uri", saveParams.TextDocument.URI)
 	}
 	return nil
 }
