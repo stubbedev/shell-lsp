@@ -36,8 +36,11 @@ func (c Code) String() string { return "SC" + strconv.Itoa(int(c)) }
 func ParseCode(s string) (Code, error) {
 	digits := strings.TrimPrefix(strings.ToUpper(strings.TrimSpace(s)), "SC")
 	n, err := strconv.ParseUint(digits, 10, 16)
-	if err != nil || n == 0 {
-		return 0, fmt.Errorf("expected a check code like SC2034, got %q", s)
+	if err != nil {
+		return 0, fmt.Errorf("expected a check code like SC2034, got %q: %w", s, err)
+	}
+	if n == 0 {
+		return 0, fmt.Errorf("expected a check code like SC2034, got %q: codes start at 1", s)
 	}
 	return Code(n), nil
 }
