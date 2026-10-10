@@ -3,7 +3,6 @@ package lint
 import (
 	"fmt"
 	"maps"
-	"reflect"
 
 	"mvdan.cc/sh/v3/syntax"
 )
@@ -77,12 +76,15 @@ var families = []family{
 	testSyntaxFamily,
 }
 
-type nodeDispatch map[reflect.Type][]func(p *pass, n syntax.Node)
+type nodeDispatch [][]func(p *pass, n syntax.Node)
 
-func nodes(prototypes ...syntax.Node) []reflect.Type {
-	out := make([]reflect.Type, len(prototypes))
+func nodes(prototypes ...syntax.Node) []nodeKind {
+	out := make([]nodeKind, len(prototypes))
 	for i, prototype := range prototypes {
-		out[i] = reflect.TypeOf(prototype)
+		out[i] = nodeKindOf(prototype)
+		if out[i] == kindUnknown {
+			panic(fmt.Sprintf("lint: %T is not a dispatchable syntax node", prototype))
+		}
 	}
 	return out
 }
@@ -92,7 +94,7 @@ var catalog, rules, nodeChecks, commandChecks = assemble(families)
 func assemble(fs []family) (map[Code]meta, []rule, nodeDispatch, commandDispatch) {
 	codes := map[Code]meta{}
 	var all []rule
-	dispatch := nodeDispatch{}
+	dispatch := make(nodeDispatch, nodeKinds)
 	var commands []commandRule
 	for _, f := range fs {
 		for code := range f.codes {
