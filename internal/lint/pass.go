@@ -108,3 +108,10 @@ func (p *pass) meta(code Code) meta {
 	}
 	return m
 }
+
+func (p *pass) rootParseError() (parser.Error, bool) {
+	if len(p.tree.Errors) == 0 {
+		return parser.Error{}, false
+	}
+	return p.tree.Errors[0], true
+}

@@ -5,7 +5,7 @@
 
 ### greater or equal against a command substitution
 [[ 5 >= $(nproc) ]] && echo "small machine"
->>> SC2071 1:6
+>>- SC2071 1:6 -- mvdan.cc/sh rejects >= inside [[ ]] as a syntax error, so no test expression exists to inspect
 
 ### integer variable compared with greater than
 limit=3

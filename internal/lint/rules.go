@@ -53,6 +53,7 @@ var families = []family{
 	caseFamily,
 	controlFamily,
 	shebangFamily,
+	comparisonsFamily,
 }
 
 var catalog, rules, commandChecks = assemble(families)

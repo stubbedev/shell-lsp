@@ -24,6 +24,7 @@ type testCommand struct {
 	expr  syntax.TestExpr
 
 	unterminated bool
+	malformed    bool
 }
 
 func (t testCommand) bracketed() bool { return t.style != testBuiltin }
@@ -47,9 +48,11 @@ func testCommandOf(cmd syntax.Command) (testCommand, bool) {
 			if closed {
 				args = args[:len(args)-1]
 			}
-			return testCommand{style: singleBracket, name: name, node: cmd, args: args, expr: parseTestArgs(args), unterminated: !closed}, true
+			expr, wellFormed := parseTestArgs(args)
+			return testCommand{style: singleBracket, name: name, node: cmd, args: args, expr: expr, unterminated: !closed, malformed: !wellFormed}, true
 		case name == "test" || (path.Base(name) == "test" && path.Dir(name) != "."):
-			return testCommand{style: testBuiltin, name: name, node: cmd, args: args, expr: parseTestArgs(args)}, true
+			expr, wellFormed := parseTestArgs(args)
+			return testCommand{style: testBuiltin, name: name, node: cmd, args: args, expr: expr, malformed: !wellFormed}, true
 		}
 	}
 	return testCommand{}, false
@@ -85,16 +88,18 @@ func binaryTestOpTable() map[string]syntax.BinTestOperator {
 }
 
 type testArgParser struct {
-	words []*syntax.Word
-	pos   int
+	words    []*syntax.Word
+	pos      int
+	unclosed bool
 }
 
-func parseTestArgs(words []*syntax.Word) syntax.TestExpr {
+func parseTestArgs(words []*syntax.Word) (syntax.TestExpr, bool) {
 	if len(words) == 0 {
-		return nil
+		return nil, true
 	}
 	tp := &testArgParser{words: words}
-	return tp.or()
+	expr := tp.or()
+	return expr, tp.pos == len(words) && !tp.unclosed
 }
 
 func (tp *testArgParser) peek(ahead int) (string, bool) {
@@ -172,6 +177,8 @@ func (tp *testArgParser) primary() syntax.TestExpr {
 		paren := &syntax.ParenTest{Lparen: open.Pos(), X: x}
 		if closing, _ := tp.peek(0); closing == ")" {
 			paren.Rparen = tp.take().Pos()
+		} else {
+			tp.unclosed = true
 		}
 		return paren
 	}

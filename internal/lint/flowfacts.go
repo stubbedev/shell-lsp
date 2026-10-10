@@ -97,6 +97,7 @@ type flowFacts struct {
 	escaped       map[*syntax.CallExpr]bool
 	appends       map[*syntax.Assign]appendFact
 	deadFunctions map[*syntax.FuncDecl]bool
+	integerReads  map[*syntax.ParamExp]bool
 }
 
 func newFlowFacts() flowFacts {
@@ -107,6 +108,7 @@ func newFlowFacts() flowFacts {
 		escaped:       map[*syntax.CallExpr]bool{},
 		appends:       map[*syntax.Assign]appendFact{},
 		deadFunctions: map[*syntax.FuncDecl]bool{},
+		integerReads:  map[*syntax.ParamExp]bool{},
 	}
 }
 
@@ -240,4 +242,14 @@ func (in *interpreter) recordAppend(a *syntax.Assign, target value, s *state) {
 
 func (r *flowResult) forwardCall(call *syntax.CallExpr) bool {
 	return r != nil && r.forwardCalls[call] && !r.escaped[call]
+}
+
+func (in *interpreter) recordIntegerRead(pe *syntax.ParamExp, s *state) {
+	if pe.Param != nil && s.get(pe.Param.Value).holdsInteger&integerYes != 0 {
+		in.result.integerReads[pe] = true
+	}
+}
+
+func (r *flowResult) mayHoldInteger(pe *syntax.ParamExp) bool {
+	return r != nil && r.integerReads[pe]
 }

@@ -4,7 +4,7 @@ if [ "$a" = 1
 >>> SC1080 1:15
 >>> SC2154 1:7
 >>> SC2154 2:7
->>> SC2166 2:3
+>>- SC2166 2:3 -- mvdan.cc/sh ends the [ command at the unescaped newline, so the -o line is a separate command
 
 ### newline right after the opening single bracket
 if [

@@ -22,6 +22,7 @@ if [ -f"$config" ]; then
   echo found
 fi
 >>> SC1035 2:8
+>>+ SC2157 2:6 -- without the space the test sees the single word -f"$config", a non-empty string, so the test is always true
 
 ### no space after a binary operator
 limit=$1
@@ -41,14 +42,14 @@ if [ -n "$1" -a-n "$2" ]; then
   echo both
 fi
 >>> SC1035 1:16
->>> SC2166 1:14
+>>- SC2166 1:14 -- without the space -a-n is one operand, not the -a conjunction; the missing space itself is SC1035
 
 ### no space after the -o conjunction
 if [ -z "$1" -o-z "$2" ]; then
   echo either
 fi
 >>> SC1035 1:16
->>> SC2166 1:14
+>>- SC2166 1:14 -- without the space -o-z is one operand, not the -o conjunction; the missing space itself is SC1035
 
 ### negated pipeline with a space
 ! grep -q error build.log | sort -k 2

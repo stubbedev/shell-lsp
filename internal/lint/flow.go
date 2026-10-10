@@ -573,6 +573,7 @@ func (in *interpreter) recordExpansion(pe *syntax.ParamExp, s *state) {
 		got |= prev
 	}
 	in.result.expansions[pe] = got
+	in.recordIntegerRead(pe, s)
 }
 
 func (in *interpreter) applyWrites(n syntax.Node, s *state) {
@@ -987,16 +988,20 @@ func (in *interpreter) forClause(cmd *syntax.ForClause, s *state) *state {
 	switch loop := cmd.Loop.(type) {
 	case *syntax.WordIter:
 		items := spaceDirty
+		var holdsInteger integerAttr
 		if loop.InPos.IsValid() {
 			items = 0
 			for _, w := range loop.Items {
 				s = in.evaluate(w, s)
 				items |= in.itemSpace(w)
+				if in.numericWord(w, s) {
+					holdsInteger = integerYes
+				}
 			}
 		}
 		assign := func(head *state) *state {
 			if loop.Name != nil && items != 0 {
-				in.assign(head, loop.Name.Value, value{space: items.normalize(), integer: integerNo})
+				in.assign(head, loop.Name.Value, value{space: items.normalize(), integer: integerNo, holdsInteger: holdsInteger})
 			}
 			return head
 		}

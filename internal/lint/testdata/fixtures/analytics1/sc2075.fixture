@@ -1,7 +1,7 @@
 ### escaped less than in double brackets
 [[ 3 \< 5 ]] && echo "smaller"
->>> SC2050 1:6
->>> SC2071 1:6
+>>- SC2050 1:6 -- mvdan.cc/sh rejects an escaped < inside [[ ]] as a syntax error; only SC2075 is recovered from that error
+>>- SC2071 1:6 -- mvdan.cc/sh rejects an escaped < inside [[ ]] as a syntax error; only SC2075 is recovered from that error
 >>> SC2075 1:6
 
 ### quoted greater than in double brackets
