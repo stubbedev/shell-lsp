@@ -1,0 +1,32 @@
+### test with a stray greater-than redirection
+if test 3 > 1; then
+  echo bigger
+fi
+>>> SC2065 1:11
+>>> SC2210 1:11
+
+### absolute path test with redirection to a variable
+/usr/bin/test $count > $limit && echo over
+>>> SC2065 1:22
+>>> SC2086 1:15
+>>> SC2086 1:24
+>>> SC2154 1:15
+>>> SC2154 1:24
+
+### test with a less-than redirection
+test "$a" < "$b" && echo sorted
+>>> SC2065 1:11
+>>> SC2154 1:14
+>>> SC2154 1:7
+
+### escaped greater-than is an argument
+test 3 \> 1 && echo bigger
+>>> none
+
+### stderr redirection after numeric comparison is fine
+test "$used" -gt 90 2> /dev/null && echo full
+>>> SC2154 1:7
+
+### append redirection is ignored
+test -f "$lock" >> /tmp/check.log
+>>> SC2154 1:10

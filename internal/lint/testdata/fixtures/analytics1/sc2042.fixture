@@ -1,0 +1,11 @@
+### numbers separated by commas
+for port in 80,443,8080; do
+  echo "$port"
+done
+>>> SC2042 1:13
+
+### brace expansion with commas is fine
+for node in web{1,2,3}; do
+  echo "$node"
+done
+>>> none

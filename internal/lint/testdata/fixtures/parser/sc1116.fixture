@@ -1,0 +1,8 @@
+### assignment value starting with double parentheses
+total=((3 + 4))
+>>> SC1116 1:7
+>>> SC2034 1:1
+
+### nested array with a space between the parentheses
+grid=( (1 2) (3 4) )
+>>> SC2034 1:1

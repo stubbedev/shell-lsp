@@ -1,0 +1,12 @@
+### unquoted name glob in find
+find / -name *.php
+>>> SC2035 1:14
+>>> SC2061 1:14
+
+### unquoted extended glob after ipath
+find / -type d -ipath *(cache)
+>>> SC2061 1:23
+
+### starting point glob with quoted name pattern is fine
+find * -name '*.bak'
+>>> SC2035 1:6

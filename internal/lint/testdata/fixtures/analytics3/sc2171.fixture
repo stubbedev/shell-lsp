@@ -1,0 +1,26 @@
+### missing opening double bracket in an if condition
+if -z "$name" ]]; then
+  echo "name missing"
+fi
+>>> SC2154 1:8
+>>> SC2171 1:15
+>>> SC2215 1:4
+
+### middle command of an and-list ends with a stray bracket
+mkdir -p out && -d out ] && echo ready
+>>> SC2171 1:24
+>>> SC2215 1:17
+
+### properly written double-bracket test
+if [[ -z "$name" ]]; then
+  echo "name missing"
+fi
+>>> none
+
+### command receives an opening bracket among its words
+echo [ "$name" ]
+>>> SC2154 1:9
+
+### closing bracket is single-quoted
+echo "done" ']'
+>>> none

@@ -1,0 +1,10 @@
+### leftover input starting with a parenthesis
+echo start
+(echo a) (echo b)
+>>> SC1036 2:10
+>>> SC1088 2:10
+
+### input fully consumed
+echo start
+(echo a); (echo b)
+>>> none

@@ -1,0 +1,190 @@
+### positional parameter passed to a command
+echo $1
+>>> SC2086 1:6
+
+### spaceless literal assignment stays clean
+name=widget
+echo $name
+>>> none
+
+### literal with a space is dirty
+greeting="hello world"
+printf '%s\n' $greeting
+>>> SC2086 2:15
+
+### command substitution result is dirty
+stamp=$(date +%s)
+touch $stamp
+>>> SC2086 2:7
+
+### arithmetic result is clean
+n=4
+m=$((n * 2))
+echo $m
+>>> none
+
+### environment variables may contain spaces
+cd $HOME
+>>> SC2086 1:4
+>>> SC2164 1:1
+
+### special parameters never contain spaces
+echo $# $? $$ ${#PATH}
+>>> none
+
+### redirection target
+log=$(mktemp)
+echo hi > $log
+>>> SC2086 2:11
+
+### here-string
+cat <<< $1
+>>> SC2086 1:9
+
+### variables assigned by read
+read -r answer
+echo $answer
+>>> SC2086 2:6
+
+### loop over literal words is clean
+for color in red green blue; do
+  echo $color
+done
+>>> none
+
+### loop over a glob is dirty
+for f in *.txt; do
+  rm $f
+done
+>>> SC2086 2:6
+
+### reassignment to a clean value on every path
+path="a b"
+path=c
+echo $path
+>>> none
+
+### one branch leaves the value dirty
+if true; then
+  v=1
+else
+  v="x y"
+fi
+echo $v
+>>> SC2086 6:6
+
+### early exit removes the dirty branch
+v=1
+if [ -n "$1" ]; then
+  v="x y"
+  exit 1
+fi
+echo $v
+>>> none
+
+### function call applies its assignments
+s="a b"
+reset() { s=1; }
+reset
+echo $s
+>>> none
+
+### local in a function does not leak
+s=1
+f() { local s="a b"; }
+f
+echo $s
+>>> none
+
+### integer attribute keeps values clean
+declare -i count=0
+count=$(wc -l < /etc/hosts)
+echo $count
+>>> none
+
+### double quotes prevent splitting
+echo "$1" "${HOME}"
+>>> none
+
+### test brackets do not split
+[[ $1 == x ]] && echo ok
+>>> none
+
+### arithmetic context does not split
+(( $1 > 3 )) && echo big
+>>> none
+
+### assignment values do not split
+copy=$1
+local_copy=$copy
+echo "$local_copy"
+>>> none
+
+### expansion used as the command name
+$1 --help
+>>> none
+
+### quoted alternative value
+echo ${1:+"$1"}
+>>> none
+
+### length of a parameter
+echo ${#1}
+>>> none
+
+### default assignment through the colon builtin
+: ${TARGET:=build}
+>>> SC2223 1:3
+
+### unquoted all-arguments
+printf '%s\n' $@
+>>> SC2068 1:15
+
+### unquoted star
+printf '%s\n' $*
+>>> SC2048 1:15
+>>> SC2086 1:15
+
+### array expansion
+items=(a b)
+printf '%s\n' ${items[@]}
+>>> SC2068 2:15
+
+### array built from an unquoted variable
+parts=( $1 )
+echo "${parts[@]}"
+>>> SC2206 1:9
+
+### array built from command output
+lines=( $(ls) )
+echo "${lines[@]}"
+>>> SC2207 1:9
+
+### unquoted command substitution argument
+rm $(find . -name '*.tmp')
+>>> SC2046 1:4
+
+### command substitution in a for loop is left alone
+for x in $(seq 3); do echo "$x"; done
+>>> none
+
+### backticks
+when=`date`
+echo "$when"
+>>> SC2006 1:6
+
+### all-arguments in a for loop
+for a in $@; do echo "$a"; done
+>>> SC2068 1:10
+
+### pipeline last element runs in a subshell in bash
+v=1
+echo "a b" | read -r v
+echo $v
+>>> SC2030 2:22
+>>> SC2031 3:6
+
+### zsh does not split unquoted parameters
+#!/bin/zsh
+echo $1
+>>- SC1071 1:1 -- shellcheck refuses zsh; zsh does not split unquoted parameters, so there is nothing to report

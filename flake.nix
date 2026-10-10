@@ -44,7 +44,7 @@
             just # Task runner
 
             # Cross-checking the language server under development
-            shellcheck # Reference diagnostics for shell scripts
+            shellcheck # Reference oracle that labels the linter's test fixtures
             shfmt # Reference formatter for shell scripts
             bash-language-server # Comparison server behind `just crosscheck`
             neovim # Headless editor smoke test behind `just smoke`

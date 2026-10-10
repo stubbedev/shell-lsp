@@ -1,0 +1,42 @@
+### escape-interpreting flag in dash
+#!/bin/dash
+echo -e "name\tvalue"
+>>> SC3036 2:6
+
+### no-newline plus escapes cluster in dash
+#!/bin/dash
+echo -ne "loading"
+>>> SC3036 2:6
+
+### uppercase E flag in dash
+#!/bin/dash
+echo -E "raw\n"
+>>> SC3036 2:6
+
+### repeated n cluster in dash
+#!/bin/dash
+echo -nn "prompt"
+>>> SC3036 2:6
+
+### uppercase E flag in busybox
+#!/bin/busybox sh
+# shellcheck shell=busybox
+echo -E "raw\n"
+>>> SC3036 3:6
+
+### s flag in busybox
+#!/bin/busybox sh
+# shellcheck shell=busybox
+echo -s "spaced"
+>>> SC3036 3:6
+
+### plain no-newline flag is accepted in dash
+#!/bin/dash
+echo -n done
+>>> SC1010 2:9
+
+### no-newline plus escapes cluster is accepted in busybox
+#!/bin/busybox sh
+# shellcheck shell=busybox
+echo -ne done
+>>> SC1010 3:10

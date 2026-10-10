@@ -18,7 +18,7 @@ const (
 	QuickFix        Kind = "quickfix"
 	RefactorExtract Kind = "refactor.extract"
 	RefactorRewrite Kind = "refactor.rewrite"
-	SourceFixAll    Kind = "source.fixAll.shellcheck"
+	SourceFixAll    Kind = "source.fixAll.shellLsp"
 )
 
 type Diagnostic struct {
@@ -78,7 +78,7 @@ func Actions(in Input) []Action {
 		out = append(out, Action{Title: title, Kind: refactorKinds[kind], Edits: edits, Refactor: &r})
 	}
 	if fixAll := FixAll(in.AllDiagnostics); len(fixAll) > 0 {
-		out = append(out, Action{Title: "Apply all shellcheck fixes", Kind: SourceFixAll, Edits: fixAll})
+		out = append(out, Action{Title: "Apply all automatic fixes", Kind: SourceFixAll, Edits: fixAll})
 	}
 	return out
 }

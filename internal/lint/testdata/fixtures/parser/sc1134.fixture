@@ -1,0 +1,4 @@
+### no configuration file is read
+# shellcheck disable=SC2086
+echo $1
+>>> none

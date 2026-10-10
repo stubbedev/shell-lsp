@@ -1,0 +1,21 @@
+### tenth positional without braces
+echo $10
+>>> SC1037 1:6
+>>> SC2086 1:6
+
+### tenth positional without braces inside double quotes
+printf '%s\n' "last: $10"
+>>> SC1037 1:22
+
+### all-arguments special parameter
+for arg in "$@"; do echo "$arg"; done
+>>> none
+
+### exit status followed by a bang
+false
+echo "status $?!"
+>>> none
+
+### braced tenth positional
+echo "${10}"
+>>> none

@@ -1,0 +1,35 @@
+### variable expands when the trap is set
+trap "echo Interrupted after $num" INT
+>>> SC2064 1:30
+>>> SC2154 1:30
+
+### backtick substitution runs when the trap is set
+trap "echo Files: `ls`" INT
+>>> SC2006 1:19
+>>> SC2064 1:19
+
+### arithmetic expands when the trap is set
+trap "echo $((1 + num))" EXIT DEBUG
+>>> SC2064 1:12
+>>> SC2154 1:19
+
+### several expansions each get reported
+trap "rm -f $tmpfile ${lockfile}" EXIT
+>>> SC2064 1:13
+>>> SC2064 1:22
+>>> SC2154 1:13
+>>> SC2154 1:22
+
+### single-quoted handler expands later
+trap 'echo Interrupted after $num' INT
+>>> SC2154 1:6
+
+### mixed quoting is not examined
+trap "rm -f "$tmpfile EXIT
+>>> SC2086 1:14
+>>> SC2154 1:14
+
+### unquoted handler is not examined
+trap $cleanup_cmd EXIT
+>>> SC2086 1:6
+>>> SC2154 1:6

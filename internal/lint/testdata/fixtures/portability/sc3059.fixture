@@ -1,0 +1,24 @@
+### lowercasing the first letter in sh
+#!/bin/sh
+echo "${title,}"
+>>> SC2154 2:7
+>>> SC3059 2:7
+
+### uppercasing everything in sh
+#!/bin/sh
+echo "${title^^}"
+>>> SC2154 2:7
+>>> SC3059 2:7
+
+### bare uppercase with a pattern in busybox
+#!/bin/busybox sh
+# shellcheck shell=busybox
+flavor=vanilla
+${flavor^^[v]}
+>>> SC3059 4:1
+
+### uppercasing everything in dash
+#!/bin/dash
+echo "${title^^}"
+>>> SC2154 2:7
+>>> SC3059 2:7

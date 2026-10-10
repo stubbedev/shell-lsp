@@ -1,0 +1,22 @@
+### local at top level
+local foo=3
+>>> SC2034 1:7
+>>> SC2168 1:1
+
+### local inside a function
+setup() {
+  local foo=3
+}
+>>> SC2034 2:9
+
+### dash also rejects top-level local
+#!/bin/dash
+local foo=3
+>>> SC2034 2:7
+>>> SC2168 2:1
+
+### plain sh is not checked
+#!/bin/sh
+local foo=3
+>>> SC2034 2:7
+>>> SC3043 2:1

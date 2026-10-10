@@ -1,0 +1,17 @@
+### comma-list brace expansion in a single-bracket comparison
+[ "$ext" = {jpg,png} ] && echo image
+>>> SC2154 1:4
+>>> SC2200 1:12
+
+### sequence brace expansion in a single-bracket nullary test
+[ file{1..3} ] && echo ok
+>>> SC2157 1:3
+>>> SC2200 1:3
+
+### quoted braces
+[ "$ext" = "{jpg,png}" ] && echo literal
+>>> SC2154 1:4
+
+### no braces at all
+[ "$ext" = jpg ] && echo image
+>>> SC2154 1:4

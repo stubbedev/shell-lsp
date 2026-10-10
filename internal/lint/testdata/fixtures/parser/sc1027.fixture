@@ -1,0 +1,26 @@
+### string comparison with nothing on the right
+answer=$1
+if [ "$answer" = ]; then
+  echo empty
+fi
+>>> SC1009 2:1
+>>> SC1027 2:16
+>>> SC1072 2:19
+>>> SC1073 2:4
+
+### numeric comparison with nothing on the right in double brackets
+retries=$1
+if [[ $retries -lt ]]; then
+  echo again
+fi
+>>> SC1009 2:1
+>>> SC1027 2:16
+>>> SC1072 2:21
+>>> SC1073 2:4
+
+### comparison with a right operand
+answer=$1
+if [ "$answer" != "" ]; then
+  echo given
+fi
+>>> none

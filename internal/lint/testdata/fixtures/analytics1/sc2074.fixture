@@ -1,0 +1,16 @@
+### regex match in single brackets
+[ "$tag" =~ ^v[0-9] ] && echo "release"
+>>> SC2074 1:10
+>>> SC2154 1:4
+
+### ksh also reports it
+#!/bin/ksh
+[ "$tag" =~ ^v[0-9] ] && echo "release"
+>>> SC2074 2:10
+>>> SC2154 2:4
+
+### dash is not bash or ksh
+#!/bin/dash
+[ "$tag" =~ ^v[0-9] ] && echo "release"
+>>> SC2154 2:4
+>>> SC3015 2:10

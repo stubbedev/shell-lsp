@@ -1,0 +1,32 @@
+### parenthesis in the middle of arguments
+echo Disk usage (approx)
+>>> SC1036 1:17
+>>> SC1088 1:17
+
+### parenthesis glued inside a word
+mv draft(1).txt final.txt
+>>> SC1036 1:9
+>>> SC1088 1:9
+>>> SC2224 1:1
+
+### subshell and function definition
+cleanup() { rm -f "$tmp"; }
+(cd /tmp && cleanup)
+>>> SC2154 1:20
+
+### array value and arithmetic
+ports=(80 443)
+total=$(( ${#ports[@]} * 2 ))
+echo "$total"
+>>> none
+
+### command and process substitution
+today=$(date +%F)
+diff <(sort a.txt) <(sort b.txt) > "diff-$today.txt"
+>>> none
+
+### extglob and test group
+shopt -s extglob
+rm -f !(keep).log
+if [[ ( -f a ) || ( -f b ) ]]; then echo either; fi
+>>> none

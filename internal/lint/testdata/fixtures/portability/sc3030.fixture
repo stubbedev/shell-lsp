@@ -1,0 +1,13 @@
+### array literal in sh
+#!/bin/sh
+targets=(alpha beta)
+echo "$targets"
+>>> SC2128 3:7
+>>> SC3030 2:9
+
+### array literal in dash
+#!/bin/dash
+targets=(alpha beta)
+echo "$targets"
+>>> SC2128 3:7
+>>> SC3030 2:9

@@ -1,0 +1,24 @@
+### greater than with a decimal on the right
+[[ $version > 1.5 ]] && echo "new"
+>>> SC2072 1:15
+>>> SC2154 1:4
+
+### -le with a decimal on the right
+[[ $load -le 2.5 ]] && echo "idle"
+>>> SC2072 1:14
+>>> SC2154 1:4
+
+### -eq with a decimal on the left
+[[ 3.14 -eq $pi ]] && echo "pi"
+>>> SC2072 1:4
+>>> SC2154 1:13
+
+### string equality with a decimal is fine
+[[ 1.0 == $release ]] && echo "first"
+>>> SC2053 1:11
+>>> SC2154 1:11
+
+### ksh supports floating point
+#!/bin/ksh
+[[ $load -le 2.5 ]] && echo "idle"
+>>> SC2154 2:4

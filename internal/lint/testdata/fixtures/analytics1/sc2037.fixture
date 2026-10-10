@@ -1,0 +1,19 @@
+### assigning ls followed by a dash flag
+files=ls -l
+>>> SC2037 1:1
+
+### long option carrying a variable after the assignment
+mode=rsync --dest=$target
+>>> SC2037 1:1
+>>> SC2086 1:19
+>>> SC2154 1:19
+
+### lone glob after the assignment
+pattern=find *
+>>> SC2037 1:1
+>>> SC2099 1:14
+>>> SC2211 1:14
+
+### ordinary command name after the assignment is fine
+EDITOR=vim git commit
+>>> none

@@ -1,0 +1,13 @@
+### package pin typed with double equals
+pkg-name==1.2.3
+>>> SC2272 1:1
+
+### variable followed by double equals
+$mode==debug
+>>> SC2154 1:1
+>>> SC2272 1:1
+
+
+### long option with double equals left to flag check
+--level==3
+>>> SC2215 1:1

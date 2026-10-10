@@ -1,0 +1,16 @@
+### escaped less than in double brackets
+[[ 3 \< 5 ]] && echo "smaller"
+>>> SC2050 1:6
+>>> SC2071 1:6
+>>> SC2075 1:6
+
+### quoted greater than in double brackets
+[[ $a ">" $b ]] && echo "larger"
+>>> SC2075 1:7
+>>> SC2154 1:11
+>>> SC2154 1:4
+
+### unescaped less than in double brackets is fine
+[[ $a < $b ]] && echo "smaller"
+>>> SC2154 1:4
+>>> SC2154 1:9

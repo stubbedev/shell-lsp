@@ -1,0 +1,25 @@
+### elsif with an argument
+if [ -f a ]; then echo a
+elsif [ -f b ]; then echo b
+fi
+>>> SC1046 1:1
+>>> SC1047 2:17
+>>> SC1072 2:22
+>>> SC1073 1:1
+>>> SC1131 2:1
+
+### mixed-case elseif
+ElseIf true
+>>> SC1131 1:1
+
+### elseif glued to a test
+elseif[ $x=1 ]
+>>> SC1131 1:1
+>>- SC2086 1:9 -- mvdan rejects elseif[ as a command word and reports a syntax error
+>>> SC2154 1:9
+>>> SC2171 1:14
+>>> SC2288 1:1
+
+### command name starting with other letters
+elsewhere --now
+>>> none

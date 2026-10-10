@@ -1,0 +1,24 @@
+### tr with unquoted words repeating a letter
+tr foo bar < story.txt
+>>> SC2020 1:4
+
+### tr with single-quoted words repeating a letter
+tr 'hello' 'world' < greeting.txt
+>>> SC2020 1:4
+
+### mapping vowels to underscores has no repeated letters
+tr aeiou _____ < sentence.txt
+>>> none
+
+### squeeze option with two-letter sets is fine
+tr --squeeze-repeats rl lr < input.txt
+>>> none
+
+### non-literal tr sets are skipped
+tr "$from_chars" "$to_chars" < data.txt
+>>> SC2154 1:19
+>>> SC2154 1:5
+
+### posix class names are not words
+tr '[:upper:]' '[:lower:]' < shout.txt
+>>> none

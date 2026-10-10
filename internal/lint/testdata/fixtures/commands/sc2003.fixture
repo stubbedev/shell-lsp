@@ -1,0 +1,38 @@
+### arithmetic expr in an assignment substitution is outdated
+total=$(expr 3 + 2)
+echo "$total"
+>>> SC2003 1:9
+
+### arithmetic expr nested in escaped backticks inside backticks
+report=`echo "sum: \`expr 3 + 2\`"`
+echo "$report"
+>>> SC2003 1:21
+>>> SC2006 1:20
+>>> SC2006 1:8
+>>> SC2116 1:8
+
+### expr with only expansions as arguments is still outdated
+result=$(expr "$lhs" "$operator" "$rhs")
+echo "$result"
+>>> SC2003 1:10
+>>> SC2154 1:16
+>>> SC2154 1:23
+>>> SC2154 1:35
+
+### expr multiplying a counter is outdated
+pages=$(expr "$chapters" \* 12)
+echo "$pages"
+>>> SC2003 1:9
+>>> SC2154 1:15
+
+### expr regex match with colon has no simple replacement
+version=$(expr "$tag" : 'v\([0-9.]*\)')
+echo "$version"
+>>> SC2154 1:17
+
+### expr escaped less-than comparison is excepted
+if expr "$used" \< "$quota" > /dev/null; then
+  echo "within quota"
+fi
+>>> SC2154 1:10
+>>> SC2154 1:21

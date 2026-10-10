@@ -1,0 +1,23 @@
+### escaped closing parenthesis glued to a comparison operand
+if [ \( "$mode" = fast\) -o "$force" = 1 ]; then
+  echo go
+fi
+>>> SC1009 1:1
+>>> SC1021 1:25
+>>> SC1072 1:25
+>>> SC1073 1:4
+
+### escaped closing parenthesis glued to the last operand
+if [ \( "$count" -gt 0\) ]; then
+  echo positive
+fi
+>>> SC1009 1:1
+>>> SC1021 1:25
+>>> SC1072 1:25
+>>> SC1073 1:4
+
+### double brackets with a glued parenthesis
+if [[ ( -f a.conf ) || ( -f b.conf) ]]; then
+  echo configured
+fi
+>>> none

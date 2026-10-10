@@ -1,0 +1,43 @@
+### if condition followed directly by fi
+if grep -q ready status.txt
+fi
+>>> SC1049 1:1
+>>> SC1050 2:1
+>>> SC1072 2:3
+>>> SC1073 1:1
+
+### if condition followed directly by else
+if grep -q ready status.txt
+else
+  echo "not ready"
+fi
+>>> SC1049 1:1
+>>> SC1050 2:1
+>>> SC1072 2:5
+>>> SC1073 1:1
+
+### elif condition followed directly by fi
+if [ "$1" = a ]; then
+  echo a
+elif [ "$1" = b ]
+fi
+>>> SC1009 1:1
+>>> SC1049 3:1
+>>> SC1072 4:3
+>>> SC1073 3:1
+
+### if with then
+if grep -q ready status.txt; then
+  echo ready
+fi
+>>> none
+
+### if condition followed directly by elif
+if [ "$1" = a ]
+elif [ "$1" = b ]; then
+  echo b
+fi
+>>> SC1049 1:1
+>>> SC1050 2:1
+>>> SC1072 2:6
+>>> SC1073 1:1

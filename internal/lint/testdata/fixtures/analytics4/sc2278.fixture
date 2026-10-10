@@ -1,0 +1,14 @@
+### ksh script assigning dollar zero
+#!/bin/ksh 
+$0='daemon'
+>>> SC2278 2:1
+
+### ksh bare zero assigned
+#!/bin/ksh
+0='daemon'
+>>> SC2278 2:1
+
+### bash uses another code
+#!/bin/bash
+$0='daemon'
+>>> SC2277 2:1

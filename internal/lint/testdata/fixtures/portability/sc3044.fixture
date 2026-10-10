@@ -1,0 +1,11 @@
+### readarray from a file in sh
+#!/bin/sh
+readarray hosts < /etc/hosts
+>>> SC2034 2:11
+>>> SC3044 2:1
+
+### readarray from a file in dash
+#!/bin/dash
+readarray hosts < /etc/hosts
+>>> SC2034 2:11
+>>> SC3044 2:1

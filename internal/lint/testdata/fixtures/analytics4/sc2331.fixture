@@ -1,0 +1,18 @@
+### unary -a in single brackets
+[ -a /etc/passwd ] && echo "exists"
+>>> SC2331 1:3
+
+### negated unary -a
+[ ! -a "$pidfile" ] && echo "not running"
+>>> SC2154 1:9
+>>> SC2331 1:5
+>>> SC2332 1:3
+
+### unary -a in double brackets
+[[ -a $config ]] && echo "configured"
+>>> SC2154 1:7
+>>> SC2331 1:4
+
+### -a as binary and
+[ "$x" -a "$y" ] && echo "both set"
+>>> SC2166 1:8

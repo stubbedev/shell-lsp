@@ -1,0 +1,17 @@
+### two tests joined by a single ampersand
+[ -f "$cfg" ] & [ -r "$cfg" ]
+>>> SC2154 1:7
+>>> SC2265 1:15
+
+### test command then bracket test with one ampersand
+test -e "$pidfile" & [ -s "$pidfile" ]
+>>> SC2154 1:10
+>>> SC2265 1:20
+
+### rightmost of an or-list is a test
+make || [ -d build ] &
+>>> SC2265 1:22
+
+### backgrounded command that is not a test
+sleep 30 &
+>>> none

@@ -11,8 +11,8 @@ reference 9:11-9:16 "count" within=0
 reference 10:11-10:16 "count" within=0
 command 2:1-2:4 "set" args=1 within=0
 command 4:2-4:8 "printf" args=2 within=1
-command 6:1-6:9 "readonly" args=1 within=0
-command 7:1-7:7 "export" args=2 within=0
+command 6:1-6:9 "readonly" args=0 within=0
+command 7:1-7:7 "export" args=0 within=0
 command 9:7-9:8 "[" args=4 within=0
 command 13:13-13:16 "log" args=1 within=0
 command 14:5-14:8 "log" args=1 within=0

@@ -1,0 +1,11 @@
+### appending a word to an array
+targets=(build test)
+targets+=lint
+echo "${targets[@]}"
+>>> SC2179 2:1
+
+### appending an element in parentheses is fine
+targets=(build test)
+targets+=(lint)
+echo "${targets[@]}"
+>>> none

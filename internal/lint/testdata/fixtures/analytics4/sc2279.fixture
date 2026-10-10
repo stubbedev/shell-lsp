@@ -1,0 +1,10 @@
+### dash script assigning braced zero
+#!/bin/dash
+${0}='service'
+>>> SC2279 2:1
+
+
+### sh uses another code
+#!/bin/sh
+${0}='service'
+>>> SC2280 2:1

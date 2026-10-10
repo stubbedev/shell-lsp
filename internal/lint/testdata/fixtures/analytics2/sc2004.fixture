@@ -1,0 +1,98 @@
+### dollar on variable inside arithmetic expansion
+retries=2
+echo "next attempt: $(($retries + 3))"
+>>> SC2004 2:24
+
+### dollar on right side of compound add in arithmetic command
+chunk=14
+total=0
+(( total += $chunk ))
+echo "$total"
+>>> SC2004 3:13
+
+### dollar in array subscript inside arithmetic command
+slots=(4 8 15)
+idx=1
+(( slots[$idx] > 5 )) && echo big
+>>> SC2004 3:10
+
+### dollar in subscript of plain array element assignment
+column=2
+row[$column]="filled"
+echo "${row[@]}"
+>>> SC2004 2:5
+
+### dollar in condition of c-style for loop
+for ((pass = 0; $pass < 3; pass++)); do
+  echo "pass $pass"
+done
+>>> SC2004 1:17
+
+### braced array element with numeric index still flagged
+weights=(3 5 7)
+echo $(( ${weights[1]} * 2 ))
+>>> SC2004 2:10
+
+### suffix-removal modifier contains exempt characters
+release="v2/beta"
+count=0
+(( count += ${release%%/*} ))
+echo "$count"
+>>> none
+
+### negating exit status special parameter is fine
+grep -q root /etc/passwd
+(( ! $? )) && echo found
+>>> SC2181 2:6
+
+### positional parameter in arithmetic is fine
+(( $1 )) && echo "first argument is nonzero"
+>>> none
+
+### base prefix before the expansion is not a lone operand
+octet=ff
+(( value = 16#$octet ))
+echo "$value"
+>>> none
+
+### let argument is a simple command so no warning
+attempt=0
+let attempt=$attempt+1
+echo "$attempt"
+>>> SC2219 2:1
+
+### bare name subscript has no expansion
+queue=(1 2 3)
+head=0
+(( queue[head] ))
+>>> none
+
+### escaped dollar in subscript is not an expansion
+(( lookup[\$key] ))
+>>> SC2154 1:4
+
+### associative array subscripts are not arithmetic
+declare -A owners
+user=alice
+owners[$user]="admin"
+echo "${owners[alice]}"
+>>> none
+
+### current shell pid is fine
+(( $$ > 1 )) && echo running
+>>> none
+
+### last background pid is fine
+sleep 5 &
+(( $! ))
+>>> none
+
+### indirect expansion is fine
+pointer=depth
+depth=3
+(( ${!pointer} > 2 )) && echo deep
+>>> SC2034 2:1
+
+### alternate and default value modifiers are fine
+(( ${verbose:+1} + ${level:=42} ))
+>>> none

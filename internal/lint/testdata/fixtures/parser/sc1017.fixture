@@ -1,0 +1,37 @@
+### bash shebang saved with Windows line endings
+#!/bin/bash
+echo "build started"
+>>> SC1017 1:12
+
+### here document written with Windows line endings
+cat <<EOF
+hello from windows
+EOF
+>>> SC1017 1:10
+
+### every line ending reported separately
+cd /srv/app
+make
+>>> SC1017 1:12
+>>> SC1017 2:5
+>>> SC2164 1:1
+
+### carriage return after a comment
+# configure the build
+make
+>>> SC1017 1:22
+
+### carriage return inside double quotes
+printf "%s\n" "col1col2"
+>>> none
+
+### carriage return inside single quotes
+sep=''
+echo "$sep"
+>>> none
+
+### carriage return inside a here document body
+cat <<'END'
+line with a carriage return
+END
+>>> none

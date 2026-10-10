@@ -1,0 +1,14 @@
+### hexadecimal base prefix in sh
+#!/bin/sh
+echo $((16#FF))
+>>> SC3052 2:9
+
+### decimal base prefix on current month in sh
+#!/bin/sh
+echo $((10#$(date +%m)))
+>>> SC3052 2:9
+
+### hexadecimal base prefix in dash
+#!/bin/dash
+echo $((16#FF))
+>>> SC3052 2:9

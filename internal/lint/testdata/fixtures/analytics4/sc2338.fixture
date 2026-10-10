@@ -1,0 +1,26 @@
+### double brackets with a single equals
+[[ "$branch" = "$default_branch" ]] && echo "on default"
+>>> SC2154 1:17
+>>> SC2154 1:5
+
+### single brackets with a single equals
+[ "$user" = "$owner" ] && echo "owner"
+>>> SC2154 1:14
+>>> SC2154 1:4
+
+### already double equals
+[[ "$branch" == "$default_branch" ]] && echo "on default"
+>>> SC2154 1:18
+>>> SC2154 1:5
+
+### sh script with a single equals
+#!/bin/sh
+[ "$user" = "$owner" ] && echo "owner"
+>>> SC2154 2:14
+>>> SC2154 2:4
+
+### ksh double brackets with single equals
+#!/bin/ksh
+[[ "$branch" = "$default_branch" ]] && echo "on default"
+>>> SC2154 2:17
+>>> SC2154 2:5

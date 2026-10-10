@@ -1,0 +1,36 @@
+### two indices in plain assignment
+#!/bin/bash
+grid[1][2]=wall
+echo "${grid[@]}"
+>>> SC2180 2:9
+
+### two keys in compound array element
+#!/bin/bash
+board=([0][0]=rook [0][1]=knight)
+echo "${board[@]}"
+>>> SC2180 2:12
+>>> SC2180 2:24
+
+### two subscripts in expansion
+#!/bin/bash
+grid[3]=floor
+echo "${grid[1][2]}"
+>>> SC2180 3:7
+
+### single index assignment is fine
+#!/bin/bash
+grid[1]=wall
+echo "${grid[@]}"
+>>> none
+
+### single key in compound array element is fine
+#!/bin/bash
+board=([0]=rook [1]=knight)
+echo "${board[@]}"
+>>> none
+
+### single subscript in expansion is fine
+#!/bin/bash
+grid[1]=wall
+echo "${grid[1]}"
+>>> none

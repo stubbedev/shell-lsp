@@ -1,0 +1,41 @@
+### second status check refers to the first test
+deploy
+[ $? -eq 1 ] || [ $? -eq 2 ]
+>>> SC2319 2:19
+
+### saving status inside an if on a status test
+deploy
+if [ $? -eq 0 ]; then
+  rc=$?
+fi
+>>> SC2034 3:3
+>>> SC2181 2:6
+>>> SC2319 3:6
+
+### saving status after an and-ed test
+deploy
+[ $? -gt 0 ] && failed=$?
+>>> SC2034 2:17
+>>> SC2181 2:3
+>>> SC2319 2:24
+
+### single test of the previous status
+deploy
+[ $? -eq 0 ]
+>>> SC2181 2:3
+
+### test of status and-ed with echo
+deploy
+[ $? -eq 0 ] && echo "Success"
+>>> SC2181 2:3
+
+### deliberately capturing a test result
+[ "$mode" = fast ]
+is_fast=$?
+>>> SC2034 2:1
+>>> SC2154 1:4
+
+### exiting with a test result
+[ "$mode" = fast ]
+exit $?
+>>> SC2154 1:4

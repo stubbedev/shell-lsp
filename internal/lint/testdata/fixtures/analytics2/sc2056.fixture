@@ -1,0 +1,13 @@
+### arithmetic or of two != with same left
+(( level != 1 || level != 2 )) && echo always
+>>> SC2056 1:15
+>>> SC2154 1:4
+
+### identical right operands still flagged
+(( retries != 3 || retries != 3 )) && echo odd
+>>> SC2056 1:17
+>>> SC2154 1:4
+
+### arithmetic and of two != is fine
+(( level != 1 && level != 2 )) && echo neither
+>>> SC2154 1:4

@@ -1,0 +1,15 @@
+### ampersand entity between commands
+make &amp; make install
+>>> SC1109 1:6
+
+### greater-than entity before a file name
+ls -l &gt;listing.txt; wc -l listing.txt
+>>> SC1109 1:7
+
+### less-than entity
+sort &lt; names.txt
+>>> SC1109 1:6
+
+### entity inside quotes
+echo "Tom &amp; Jerry"
+>>> none

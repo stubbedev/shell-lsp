@@ -1,0 +1,35 @@
+### double equals against a number in brackets
+#!/bin/sh
+[ "$status" == 0 ] && echo ok
+>>> SC2154 2:4
+>>> SC3014 2:13
+
+### double equals against a number in test command
+#!/bin/sh
+test "$status" == 0 && echo ok
+>>> SC2154 2:7
+>>> SC3014 2:1
+
+### double equals between two letters
+#!/bin/sh
+[ a == b ]
+>>> SC2050 2:5
+>>> SC3014 2:5
+
+### double equals in dash
+#!/bin/dash
+[ "$status" == 0 ] && echo ok
+>>> SC2154 2:4
+>>> SC3014 2:13
+
+### double equals is accepted in busybox
+#!/bin/busybox sh
+# shellcheck shell=busybox
+[ "$status" == "$status" ]
+>>> SC2154 3:4
+
+### shell directive switches to busybox
+#!/bin/sh
+# shellcheck shell=busybox
+[ a == b ]
+>>> SC2050 3:5

@@ -1,0 +1,11 @@
+### named descriptor duplicated to stderr in sh
+#!/bin/sh
+exec {logfd}>&2
+>>> SC2034 2:6
+>>> SC3022 2:6
+
+### named descriptor duplicated to stderr in dash
+#!/bin/dash
+exec {logfd}>&2
+>>> SC2034 2:6
+>>> SC3022 2:6

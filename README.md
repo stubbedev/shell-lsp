@@ -7,7 +7,7 @@ specification.
 
 The implementation plan lives in the issue tracker. Status: protocol core,
 incremental document sync, dialect detection, an error-tolerant parser for every
-dialect, diagnostics (syntax errors plus shellcheck, push or pull), hover, completion, navigation, symbols, folding, formatting and code actions.
+dialect, diagnostics (syntax errors plus a native linter, push or pull), hover, completion, navigation, symbols, folding, formatting and code actions.
 
 Every LSP method, in both directions, is listed with its status in
 [docs/lsp-methods.md](docs/lsp-methods.md), generated from the table the
@@ -16,7 +16,7 @@ conformance tests check the server against.
 Files pulled in with `source` or `.` act as imports: their functions and
 globals are completed, hovered, highlighted and navigated to as if they were
 defined in the document, open editor buffers win over the copy on disk, and
-shellcheck follows them (`--external-sources`). Paths built from `$0`,
+the linter follows them. Paths built from `$0`,
 `${BASH_SOURCE[0]}`, `dirname`, `cd ... && pwd` and earlier assignments are
 resolved, as are `# shellcheck source=` directives.
 
@@ -24,7 +24,7 @@ resolved, as are `# shellcheck source=` directives.
 
 - Auto-detected dialects: bash, zsh, sh, dash, ksh (shebang, extension, modeline)
 - Parity with bash-language-server: diagnostics, completion, hover, definition,
-  symbols, folding, formatting, shellcheck integration
+  symbols, folding, formatting, and linting at least as thorough as shellcheck
 - Full LSP coverage: references, rename, semantic tokens, code actions,
   signature help, inlay hints, workspace symbols, pull diagnostics, and the
   remaining capabilities where they are meaningful for shell
@@ -52,10 +52,8 @@ the offending field.
 ```json
 {
   "dialect": "bash",
-  "shellcheck": {
+  "lint": {
     "enable": true,
-    "path": "shellcheck",
-    "arguments": ["--severity=style"],
     "exclude": ["SC2034"]
   }
 }
@@ -64,10 +62,8 @@ the offending field.
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `dialect` | detected per file | Force `bash`, `zsh`, `sh`, `dash` or `ksh` for every document |
-| `shellcheck.enable` | `true` | Run shellcheck for diagnostics |
-| `shellcheck.path` | `shellcheck` | Binary name or path, resolved through `PATH` |
-| `shellcheck.arguments` | `[]` | Extra arguments; `--format`, `--shell`, `--external-sources`, `--exclude` and `-` are managed by the server |
-| `shellcheck.exclude` | `[]` | Codes to suppress, as `SC2034` or `2034` |
+| `lint.enable` | `true` | Report lint findings alongside syntax errors |
+| `lint.exclude` | `[]` | Codes to suppress, as `SC2034` or `2034` |
 | `format.enable` | `true` | Answer formatting requests |
 | `format.indent` | editor setting | Spaces per level; `0` indents with tabs |
 | `format.binaryNextLine` | `false` | Put `&&`, `\|\|` and `\|` at the start of continuation lines |
@@ -81,9 +77,15 @@ Formatting runs the same printer shfmt is built on, in-process, so no shfmt
 binary is needed. Documents with syntax errors are not formatted, and range
 formatting only changes the lines that intersect the range.
 
-shellcheck has no zsh support, so zsh documents get syntax diagnostics only; the
-server says so once via `window/logMessage`, as it does when shellcheck is not
-installed.
+## Linting
+
+The linter is built into the server; nothing else needs to be installed. It
+uses shellcheck's check codes and honours `# shellcheck disable=...`,
+`source=` and `shell=` directives, so existing scripts and annotations carry
+over unchanged. It also lints zsh, which shellcheck does not support, and it
+follows sourced files without extra flags. Quick fixes are offered where a
+check has an unambiguous repair, alongside actions that insert a `disable`
+directive for the command or the whole file.
 
 ## Commands
 
@@ -91,7 +93,7 @@ installed.
 
 | Command | Arguments | Effect |
 | --- | --- | --- |
-| `shellLsp.fixAll` | document URI | Applies every non-overlapping shellcheck autofix in the document via `workspace/applyEdit` |
+| `shellLsp.fixAll` | document URI | Applies every non-overlapping lint autofix in the document via `workspace/applyEdit` |
 | `shellLsp.applyEdit` | `WorkspaceEdit` | Applies the edit via `workspace/applyEdit`; code actions use it for clients without code action literal support |
 
 ## Recipes
@@ -106,11 +108,16 @@ installed.
 | `just fmt` | Format every Go source in place |
 | `just smoke` | Drive the server from headless Neovim |
 | `just crosscheck` | Compare with bash-language-server into `docs/crosscheck.md` |
+| `just fixtures` | Label new lint fixtures with shellcheck, then check every fixture |
+| `just lintcheck PATH...` | Per-code precision and recall of the linter against shellcheck over real scripts |
 | `just dist` | Build static release binaries for Linux and macOS into `dist/` |
 
 Every dev tool (Go toolchain pinned to the version go.mod declares, gopls,
 golangci-lint, delve, just, shellcheck, shfmt, git, gh) comes from
-the flake: `direnv allow` on entry, or `nix develop` explicitly.
+the flake: `direnv allow` on entry, or `nix develop` explicitly. shellcheck is
+only a test oracle: the lint fixtures under `internal/lint/testdata/fixtures`
+are original scripts whose expected findings were recorded from it, with
+deliberate differences marked and explained in place.
 
 ## Nix
 

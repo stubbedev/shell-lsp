@@ -1,0 +1,269 @@
+### lowercase variable expanded but never assigned
+echo "Deploying to $target_env"
+>>> SC2154 1:20
+
+### length of a never-assigned variable
+echo "${#user_input}"
+>>> SC2154 1:7
+
+### bare word subscript on an indexed array is an unassigned variable
+declare -a buckets
+buckets[primary]=10
+echo "${buckets[@]}"
+>>> SC2154 2:9
+
+### array literal with an unassigned lowercase variable
+opts=($extra_flags)
+echo "${opts[@]}"
+>>> SC2154 1:7
+>>> SC2206 1:7
+
+### uppercase variable never assigned under the optional variant
+echo "Using $DEPLOY_REGION"
+>>> none
+
+### POSIX utility name expanded as a variable
+echo "Today is $date"
+>>> SC2154 1:16
+
+### close spelling match exists
+artifact_name=release.tar
+echo "$artifact_nme"
+>>> SC2034 1:1
+>>> SC2154 2:7
+
+### variable assigned before use
+log_dir=/var/log/app
+echo "$log_dir"
+>>> none
+
+### variable assigned later inside a function
+show() { echo "$banner"; }
+setup() { banner="welcome"; }
+setup
+show
+>>> none
+
+### internal variable with a similar assigned name
+RANDON=4
+echo "$RANDOM"
+>>> SC2034 1:1
+
+### literal key of an associative array literal
+declare -A ports=([http]=80 [https]=443)
+echo "${ports[http]}"
+>>> none
+
+### use-default modifier with colon
+echo "${output_dir:-/tmp}"
+>>> none
+
+### use-default modifier without colon
+echo "${output_fmt-json}"
+>>> none
+
+### error-if-unset modifier with colon
+echo "${api_token:?token required}"
+>>> none
+
+### error-if-unset modifier without colon
+echo "${api_secret?secret required}"
+>>> none
+
+### error-if-unset modifier on an array element
+echo "${hosts[0]:?no hosts}"
+>>> none
+
+### getopts sets the variable
+while getopts "ab" flag; do
+  echo "$flag"
+done
+>>> none
+
+### single-quoted let with spaces assigns the variable
+let 'retries = 3'
+echo "$retries"
+>>> SC2219 1:1
+
+### declare -A without a value then elements expanded
+declare -A owners
+echo "${owners[@]}"
+>>> none
+
+### typeset -a without a value then elements expanded
+typeset -a queue
+echo "${queue[@]}"
+>>> none
+
+### local without a value inside a function
+fetch() {
+  local response
+  echo "$response"
+}
+fetch
+>>> none
+
+### assigned an empty value
+suffix=
+echo "file$suffix"
+>>> none
+
+### export -f names a function
+greet() { echo hi; }
+export -f greet
+>>> none
+
+### associative key with spaces is not a reference
+declare -A labels
+labels["north west"]=nw
+echo "${labels[north west]}"
+>>> none
+
+### internal USER next to a similar assigned name
+USR=admin
+echo "$USER"
+>>> SC2034 1:1
+>>> SC2209 1:1
+
+### exported with an empty value
+export proxy_host=
+echo "$proxy_host"
+>>> none
+
+### readonly assigns the variable
+readonly release_tag=v2
+echo "$release_tag"
+>>> none
+
+### printf -v plain name
+printf -v padded '%05d' 42
+echo "$padded"
+>>> none
+
+### printf -v quoted array element
+printf -v 'cells[2]' '%s' value
+echo "${cells[2]}"
+>>> none
+
+### name-prefix expansion references nothing
+for name in "${!deploy_@}"; do echo "$name"; done
+>>> none
+
+### associative array without initializer assigned by key
+declare -A colors
+colors[sky]=blue
+echo "${colors[sky]}"
+>>> none
+
+### associative array with empty initializer assigned by key
+declare -A sizes=()
+sizes[small]=1
+echo "${sizes[small]}"
+>>> none
+
+### readonly -f on a function with colons in its name
+pkg::install() { echo installing; }
+readonly -f pkg::install
+>>> none
+
+### colon-equals default assigns the variable
+echo "${cache_dir:=/var/cache}"
+>>> none
+
+### plain equals default assigns the variable
+echo "${build_kind=debug}"
+>>> none
+
+### ksh special dotted version variable
+#!/bin/ksh
+echo "${.sh.version}"
+>>> SC2296 2:9
+
+### double-bracket -v on a plain name
+[[ -v session_id ]] && echo "$session_id"
+>>> none
+
+### double-bracket -v on an element with a literal subscript
+[[ -v replicas[0] ]] && echo "${replicas[0]}"
+>>> none
+
+### double-bracket -v on an element whose subscript expands an assigned variable
+idx=1
+[[ -v nodes[$idx] ]] && echo "${nodes[$idx]}"
+>>> none
+
+### double-bracket -v on a double-quoted operand
+[[ -v "tokens[key]" ]] && echo "${tokens[key]}"
+>>> none
+
+### local -A inside a function with expanded elements
+summarize() {
+  local -A tally
+  echo "${tally[@]}"
+}
+summarize
+>>> none
+
+### associative element read by bare key in arithmetic
+declare -A limits
+(( limits[cpu] > 2 )) && echo busy
+>>> none
+
+### read -a with -r after the name from a here-string
+read -a fields -r <<< "a b c"
+echo "${fields[1]}"
+>>> none
+
+### builtin export assigns the variable
+builtin export deploy_user=ops
+echo "$deploy_user"
+>>> none
+
+### mapfile with -t before the name and a trailing argument
+mapfile -t rows extra < input.txt
+echo "${rows[@]}"
+>>> none
+
+### mapfile with the name before -t
+mapfile records -t < input.txt
+echo "${records[@]}"
+>>> none
+
+### mapfile with an unknown long option
+mapfile --weird-option chunks < input.txt
+echo "${chunks[@]}"
+>>> none
+
+### single-bracket -n on a plain operand
+if [ -n "$feature" ]; then echo "$feature"; fi
+>>> none
+
+### single-bracket -z on a braced operand
+if [ -z "${profile}" ]; then echo "no profile"; fi
+>>> none
+
+### single-bracket -n with colon-dash default
+if [ -n "${region:-}" ]; then echo "$region"; fi
+>>> none
+
+### alternative value modifier with colon
+echo "${verbose:+--verbose}"
+>>> none
+
+### alternative value modifier without colon
+echo "${quiet+-q}"
+>>> none
+
+### alternative text expands the same variable
+echo "${extra_opts:+ $extra_opts}"
+>>> none
+
+### wait -p names the variable
+sleep 1 &
+wait -n -p done_pid
+echo "$done_pid"
+>>> none
+
+### uppercase name without the optional variant
+echo "$SERVICE_ACCOUNT"
+>>> none

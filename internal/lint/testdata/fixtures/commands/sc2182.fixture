@@ -1,0 +1,16 @@
+### format without conversions and two arguments
+printf foo bar baz
+>>> SC2182 1:8
+
+### same after the end-of-options marker
+printf -- foo bar baz
+>>> SC2182 1:11
+
+### arguments that could expand still count
+printf 'Report ready\n' "${files[@]}"
+>>> SC2154 1:26
+>>> SC2182 1:8
+
+### format without conversions and no arguments
+printf foo
+>>> none

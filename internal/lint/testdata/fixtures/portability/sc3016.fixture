@@ -1,0 +1,9 @@
+### variable-is-set test in sh
+#!/bin/sh
+[ -v EDITOR ] && echo "editor chosen"
+>>> SC3016 2:3
+
+### variable-is-set test in dash
+#!/bin/dash
+[ -v EDITOR ] && echo "editor chosen"
+>>> SC3016 2:3

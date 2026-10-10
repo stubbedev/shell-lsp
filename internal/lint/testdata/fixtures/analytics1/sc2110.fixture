@@ -1,0 +1,7 @@
+### -o inside double brackets
+[[ "$mode" -o "$fallback" ]] && echo "set"
+>>> SC2110 1:12
+
+### or operator inside double brackets is fine
+[[ "$mode" || "$fallback" ]] && echo "set"
+>>> none

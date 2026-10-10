@@ -1,0 +1,9 @@
+### sticky bit test in sh
+#!/bin/sh
+[ -k /tmp ] && echo sticky
+>>> SC3065 2:3
+
+### sticky bit test command in dash is fine
+#!/bin/dash
+test -k /tmp && echo sticky
+>>> none

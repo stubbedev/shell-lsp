@@ -1,0 +1,17 @@
+### single-quoted lowercase range in tr misses accented letters
+tr 'a-z' 'A-Z' < names.txt
+>>> SC2018 1:4
+>>> SC2019 1:10
+
+### unquoted lowercase range in tr
+printf '%s\n' "$hostname" | tr a-z _
+>>> SC2018 1:32
+>>> SC2154 1:16
+
+### range text without a tr command is ignored
+a-z n-za-m
+>>> none
+
+### bracketed lowercase range gets the bracket warning instead
+tr '[a-z]' '_' < input.log
+>>> SC2021 1:4

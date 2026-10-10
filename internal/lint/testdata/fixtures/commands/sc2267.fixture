@@ -1,0 +1,19 @@
+### xargs -i with attached braces
+xargs -i{} echo {}
+>>> SC2267 1:7
+
+### xargs -e consumes a word then -i follows
+xargs -e sed -i foo
+>>> SC2267 1:14
+
+### upper-case -I is the replacement
+xargs -I{} echo {}
+>>> none
+
+### sed -i after the command operand
+xargs sed -i -e 's/http:/https:/'
+>>> none
+
+### -x then sed with -i
+xargs -x sed -i 's/foo/bar/'
+>>> none

@@ -1,0 +1,13 @@
+### hyphenated function name in sh
+#!/bin/sh
+check-deps() {
+  true
+}
+>>> SC3033 2:1
+
+### hyphenated function name in dash
+#!/bin/dash
+check-deps() {
+  true
+}
+>>> SC3033 2:1

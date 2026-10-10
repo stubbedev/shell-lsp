@@ -1,0 +1,28 @@
+### name built with arithmetic
+slot$((n+1))=ready
+>>> SC2154 1:8
+>>> SC2271 1:1
+
+### name built from a braced expansion
+host_${idx}=up
+>>> SC2086 1:6
+>>> SC2154 1:6
+>>> SC2271 1:1
+
+### arithmetic then a letter before equals
+node$((count))x='offline'
+>>> SC2154 1:8
+>>> SC2271 1:1
+
+### name produced by a command substitution
+$(make_name)='value'
+>>> SC2046 1:1
+>>> SC2271 1:1
+
+### expansion with a modifier before equals
+${prefix:-cfg}=enabled
+>>> SC2271 1:1
+
+### quoted equals after a command substitution
+$(make_name)'=value'
+>>> SC2046 1:1

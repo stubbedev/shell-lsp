@@ -1,0 +1,52 @@
+### no catch-all with an unhandled option
+while getopts 'a:b' opt; do
+  case $opt in
+    a) archive=$OPTARG ;;
+  esac
+done
+>>> SC2034 3:8
+>>> SC2213 2:3
+>>> SC2220 2:3
+
+### no catch-all with an undeclared branch
+while getopts 'a:' opt; do
+  case $opt in
+    a) archive=$OPTARG ;;
+    b) backup=1 ;;
+  esac
+done
+>>> SC2034 3:8
+>>> SC2034 4:8
+>>> SC2214 4:5
+>>> SC2220 2:3
+
+### star branch catches everything
+while getopts 'a:b' opt; do
+  case $opt in
+    a) archive=$OPTARG ;;
+    b) backup=1 ;;
+    *) usage ;;
+  esac
+done
+>>> SC2034 3:8
+>>> SC2034 4:8
+
+### escaped question mark and star branches
+while getopts 'a:' opt; do
+  case $opt in
+    a) archive=$OPTARG ;;
+    \?) usage ;;
+    *) usage ;;
+  esac
+done
+>>> SC2034 3:8
+
+### unclassifiable pattern suppresses the check
+while getopts 'a:123' opt; do
+  case $opt in
+    a) archive=$OPTARG ;;
+    [0-9]) level=$opt ;;
+  esac
+done
+>>> SC2034 3:8
+>>> SC2034 4:12

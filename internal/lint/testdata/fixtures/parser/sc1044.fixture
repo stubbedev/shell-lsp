@@ -1,0 +1,37 @@
+### end token never appears
+cat <<EOF
+config follows
+end
+>>> SC1009 1:1
+>>> SC1044 1:7
+>>> SC1072 4:1
+>>> SC1073 1:5
+
+### here-doc operator on the last line
+cat <<EOF
+>>> SC1044 1:7
+>>> SC1072 2:1
+
+### token appears with different case
+cat <<EOF
+config follows
+Eof
+>>> SC1009 1:1
+>>> SC1043 1:7
+>>> SC1072 4:1
+>>> SC1073 1:5
+
+### indentation already reported
+cat <<EOF
+config follows
+  EOF
+>>> SC1009 1:1
+>>> SC1039 3:1
+>>> SC1072 4:1
+>>> SC1073 1:5
+
+### terminated document
+cat <<EOF
+config follows
+EOF
+>>> none

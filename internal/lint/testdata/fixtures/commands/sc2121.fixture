@@ -1,0 +1,23 @@
+### set with a name and a value
+set retries 42
+>>> SC2121 1:5
+
+### set with spaced equals
+set retries = 42
+>>> SC2121 1:5
+
+### set with an assignment word
+set retries=42
+>>> SC2121 1:5
+
+### set after double dash
+set -- if=/dev/null
+>>> none
+
+### single-quoted assignment text
+set 'retries=42'
+>>> none
+
+### bare set
+set
+>>> none

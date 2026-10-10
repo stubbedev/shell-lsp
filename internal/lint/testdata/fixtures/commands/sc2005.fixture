@@ -1,0 +1,47 @@
+### echo of an unquoted date substitution is useless
+echo $(date +%F)
+>>> SC2005 1:6
+>>> SC2046 1:6
+
+### echo of an unquoted backtick date is useless
+echo `date`
+>>> SC2005 1:6
+>>> SC2006 1:6
+>>> SC2046 1:6
+
+### echo of a quoted date substitution is useless
+echo "$(date -u +%s)"
+>>> SC2005 1:6
+
+### echo of a quoted backtick date is useless
+echo "`date`"
+>>> SC2005 1:6
+>>> SC2006 1:7
+
+### echo of a single pipeline substitution is useless
+echo "$(git log --oneline | wc -l)"
+>>> SC2005 1:6
+
+### text before the substitution makes the echo meaningful
+echo "Build started at $(date)"
+>>> none
+
+### file-reading shortcut substitution is not flagged
+echo "$(< /etc/hostname)"
+>>> none
+
+### echo with two substitutions is not flagged
+echo "$(hostname)" "$(date)"
+>>> none
+
+### echo with no arguments is not flagged
+echo
+>>> none
+
+### substitution with several commands is not flagged
+echo "$(cd /var/log; ls)"
+>>> SC2164 1:9
+
+### path-qualified echo is not checked
+/bin/echo "$(date)"
+>>> none

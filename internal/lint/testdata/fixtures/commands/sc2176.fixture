@@ -1,0 +1,14 @@
+### timing a pipeline in sh
+#!/bin/sh
+time -p sort access.log | uniq -c
+>>> SC2176 2:1
+
+### timing a simple command in sh
+#!/bin/sh
+time sleep 1
+>>> none
+
+### timing a pipeline in bash is fine
+#!/bin/bash
+time sort access.log | uniq -c
+>>> none

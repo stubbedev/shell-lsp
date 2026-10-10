@@ -1,0 +1,33 @@
+### outer glob loop variable overridden by inner for-in
+for entry in /etc/*.conf; do
+  for entry in x y; do
+    echo "$entry"
+  done
+done
+>>> SC2165 2:3
+>>> SC2167 1:1
+
+### outer loop variable overridden by C-style inner loop
+for n in 10 20; do
+  for ((n = 1; n <= 3; n++)); do
+    echo "$n"
+  done
+done
+>>> SC2165 2:3
+>>> SC2167 1:1
+
+### different names do not clash
+for host in web db; do
+  for port in 80 443; do
+    echo "$host:$port"
+  done
+done
+>>> none
+
+### underscore in both loops
+for _ in 1 2; do
+  for _ in a b; do
+    echo tick
+  done
+done
+>>> none

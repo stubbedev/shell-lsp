@@ -1,0 +1,13 @@
+### ksh single-bracket -d on a glob
+#!/bin/ksh
+if [ -d backup_* ]; then
+  echo "backups exist"
+fi
+>>> SC2245 2:9
+
+### ksh single-bracket -e on a glob
+#!/bin/ksh
+if [ -e backup_* ]; then
+  echo "backups exist"
+fi
+>>> none

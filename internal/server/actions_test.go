@@ -26,9 +26,8 @@ func titled(actions []lsp.CodeAction, prefix string) (lsp.CodeAction, bool) {
 	return actions[i], true
 }
 
-func TestCodeActionsFromShellcheck(t *testing.T) {
+func TestCodeActionsFromLint(t *testing.T) {
 	t.Parallel()
-	requireShellcheck(t)
 
 	c, _ := startClient(t, `{`+actionCapabilities+`}`)
 	c.notify("textDocument/didOpen", openParams("file:///w/a.sh", "#!/bin/bash\necho $1\n"))
@@ -56,7 +55,7 @@ func TestCodeActionsFromShellcheck(t *testing.T) {
 	if _, ok := titled(got, "Ignore SC2086 in this file"); !ok {
 		t.Error("file-level ignore missing")
 	}
-	if all, ok := titled(got, "Apply all shellcheck fixes"); !ok || all.Kind != "source.fixAll.shellcheck" {
+	if all, ok := titled(got, "Apply all automatic fixes"); !ok || all.Kind != "source.fixAll.shellLsp" {
 		t.Errorf("fix all = %+v", all)
 	}
 
@@ -96,7 +95,6 @@ func TestRefactorResolvesLazily(t *testing.T) {
 
 func TestExecuteFixAllAppliesThroughClient(t *testing.T) {
 	t.Parallel()
-	requireShellcheck(t)
 
 	c, _ := startClient(t, `{`+actionCapabilities+`}`)
 	c.notify("textDocument/didOpen", openParams("file:///w/a.sh", "#!/bin/bash\necho $1 $2\n"))

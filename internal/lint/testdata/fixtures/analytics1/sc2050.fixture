@@ -1,0 +1,42 @@
+### two plain words compared
+[[ staging != production ]] && echo "differs"
+>>> SC2050 1:12
+
+### single bracket -le between a word and a number
+[ build -le 5 ] && echo "small"
+>>> SC2050 1:9
+>>> SC2170 1:3
+
+### second comparison of an and is constant
+[[ $env == dev && region != 3 ]] && echo "odd"
+>>> SC2050 1:26
+>>> SC2154 1:4
+
+### quoted tilde against a plain word
+[[ '~' == home ]] && echo "home"
+>>> SC2050 1:8
+
+### double bracket -le with a bare word is fine
+[[ build -le 5 ]] && echo "small"
+>>> SC2154 1:4
+>>> SC2309 1:4
+
+### variable against a number is fine
+[ "$size" -le 5 ] && echo "small"
+>>> SC2154 1:4
+
+### variable against itself is fine
+[ "$size" -le "$size" ] && echo "same"
+>>> SC2154 1:4
+
+### older than test in double brackets is fine
+[[ main.o -ot main.c ]] && make
+>>> none
+
+### newer than test in single brackets is fine
+[ main.c -nt main.o ] && make
+>>> none
+
+### unquoted tilde against the quoted text is fine
+[[ ~/notes == '~/notes' ]] && echo "same"
+>>> SC2088 1:15

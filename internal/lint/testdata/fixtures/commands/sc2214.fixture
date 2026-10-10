@@ -1,0 +1,36 @@
+### case branch for an option getopts does not declare
+while getopts 'a:' flag; do
+  case $flag in
+    a) address=$OPTARG ;;
+    b) bind=1 ;;
+  esac
+done
+>>> SC2034 3:8
+>>> SC2034 4:8
+>>> SC2214 4:5
+>>> SC2220 2:3
+
+### undeclared branch beside an unclassifiable pattern
+while getopts 'a:' flag; do
+  case $flag in
+    a) address=$OPTARG ;;
+    z) zone=1 ;;
+    [0-9]) digit=$flag ;;
+  esac
+done
+>>> SC2034 3:8
+>>> SC2034 4:8
+>>> SC2034 5:12
+>>> SC2214 4:5
+
+### all branches declared plus catch-alls
+while getopts 'a:v' flag; do
+  case $flag in
+    a) address=$OPTARG ;;
+    v) verbose=1 ;;
+    \?) exit 2 ;;
+    *) exit 2 ;;
+  esac
+done
+>>> SC2034 3:8
+>>> SC2034 4:8

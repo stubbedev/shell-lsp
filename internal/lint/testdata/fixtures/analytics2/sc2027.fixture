@@ -1,0 +1,18 @@
+### parameter expansion trapped between double quotes
+echo "Hello "$USER", welcome"
+>>> SC2027 1:14
+>>> SC2086 1:14
+
+### command substitution trapped between double quotes
+echo "Today is "$(date +%A)" again"
+>>> SC2027 1:17
+>>> SC2046 1:17
+
+### backtick in trapped position is not this code
+echo "Today is "`date +%A`" again"
+>>> SC2006 1:17
+>>> SC2046 1:17
+
+### arithmetic expansion in trapped position is not this code
+echo "Total "$((2 + 3))" items"
+>>> none

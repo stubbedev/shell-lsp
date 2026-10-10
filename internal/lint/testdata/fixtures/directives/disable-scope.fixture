@@ -1,0 +1,186 @@
+### baseline unquoted positional in sh
+#!/bin/sh
+touch $1
+>>> SC2086 2:7
+
+### directive right after the shebang silences the command
+#!/bin/sh
+# shellcheck disable=SC2086
+touch $1
+>>> none
+
+### file-wide directive also covers a later command
+#!/bin/sh
+# shellcheck disable=SC2086
+:
+touch $1
+>>> none
+
+### plain comment before the directive keeps it file-wide
+#!/bin/sh
+# create the lock file named by the caller
+# shellcheck disable=SC2086
+:
+touch $1
+>>> none
+
+### plain comment after the directive keeps it file-wide
+#!/bin/sh
+# shellcheck disable=SC2086
+# create the lock file named by the caller
+:
+touch $1
+>>> none
+
+### blank lines before an unspaced directive keep it file-wide
+#!/bin/sh
+
+
+
+#shellcheck disable=SC2086
+:
+touch $1
+>>> none
+
+### shell directive, comment and disable directive form one file-wide block
+# shellcheck shell=sh
+# lock helper
+# shellcheck disable=SC2086
+:
+touch $1
+>>> none
+
+### baseline status test and unquoted echo
+:
+[ $? == 0 ] && echo $1
+>>> SC2086 2:21
+>>> SC2181 2:3
+
+### several directives with comments in between all join the file-wide block
+# check the previous step
+# shellcheck disable=SC2181
+# echo the argument as-is
+# shellcheck disable=SC2086
+:
+[ $? == 0 ] && echo $1
+>>> none
+
+### directive after the first command only covers the next command
+#!/bin/sh
+echo $1
+# shellcheck disable=all
+echo `basename $1`
+>>> SC2086 2:6
+
+### directive on a redirection-only command inside a function body
+#!/bin/bash
+truncate_log() {
+  # shellcheck disable=SC2188
+  > /dev/null
+}
+truncate_log
+>>> none
+
+### command-scoped directive with a following command on the same line
+#!/bin/sh
+:
+# shellcheck disable=SC2086
+echo $1; echo $2
+>>> SC2086 4:15
+
+### command-scoped directive does not reach a backgrounded neighbour
+#!/bin/sh
+:
+# shellcheck disable=SC2086
+sleep $1 & echo $2
+>>> SC2086 4:17
+
+### command-scoped directive covers the whole and-or list
+#!/bin/sh
+:
+# shellcheck disable=SC2086
+mkdir -p $1 && cd $1 || exit 1
+>>> none
+
+### command-scoped directive covers every stage of a pipeline
+#!/bin/sh
+:
+# shellcheck disable=SC2086
+cat $1 | grep $2
+>>> none
+
+### command-scoped directive covers a whole if statement
+#!/bin/sh
+:
+# shellcheck disable=SC2086
+if [ -n "$1" ]; then
+  rm -f $1
+else
+  echo $2
+fi
+echo $3
+>>> SC2086 9:6
+
+### command-scoped directive covers a whole loop
+#!/bin/sh
+:
+# shellcheck disable=SC2086
+for pkg in "$@"; do
+  apk add $pkg
+done
+echo $1
+>>> SC2086 7:6
+
+### command-scoped directive covers a function definition
+#!/bin/sh
+:
+# shellcheck disable=SC2086
+greet() {
+  echo hello $1
+}
+greet "$USER"
+echo $1
+>>> SC2086 8:6
+
+### directive before a loop body command only covers that command
+#!/bin/sh
+for f in "$@"; do
+  # shellcheck disable=SC2086
+  gzip $f
+  ls -l $f
+done
+>>> SC2086 5:9
+
+### directive in an else branch
+#!/bin/sh
+if [ -z "$1" ]; then
+  echo "usage: $0 file"
+else
+  # shellcheck disable=SC2086
+  wc -l $1
+fi
+>>> none
+
+### directive, newline, then a single command
+#!/bin/sh
+:
+# shellcheck disable=SC2086
+wc -c $1
+>>> none
+
+### two directives separated by a comment both attach to the command
+#!/bin/sh
+:
+# shellcheck disable=SC2086
+# the dollar in the template is literal on purpose
+# shellcheck disable=SC2016
+printf '%s at $HOME\n' $1
+>>> none
+
+### command-scoped run with a blank line before the command
+#!/bin/sh
+:
+# shellcheck disable=SC2086
+
+du -sh $1
+>>> none

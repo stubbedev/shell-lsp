@@ -1,0 +1,11 @@
+### double bracket closed with a single bracket
+if [[ $1 = deploy ]; then
+  echo deploying
+fi
+>>> SC1033 1:19
+
+### matching double brackets
+if [[ $1 = deploy ]]; then
+  echo deploying
+fi
+>>> none

@@ -1,0 +1,50 @@
+### echo of an unquoted variable piped to wc -c
+payload="hello there"
+size=$(echo $payload | wc -c)
+>>> SC2000 2:8
+>>> SC2034 2:1
+>>> SC2086 2:13
+
+### echo of a quoted variable piped to wc -m
+title="Quarterly report"
+chars=$(echo "$title" | wc -m)
+>>> SC2000 2:9
+>>> SC2034 2:1
+
+### echo of a command substitution piped to wc -c
+host_len=$(echo $(hostname) | wc -c)
+>>> SC2000 1:12
+>>> SC2005 1:17
+>>> SC2034 1:1
+>>> SC2046 1:17
+
+### echo of an arithmetic expansion piped to wc -c
+digits=$(echo $((total * 3)) | wc -c)
+>>> SC2000 1:10
+>>> SC2034 1:1
+>>> SC2154 1:18
+
+### echo with -n has an extra argument so it is fine
+token_len=$(echo -n "$token" | wc -c)
+>>> SC2034 1:1
+>>> SC2154 1:22
+
+### literal text mixed into the argument is fine
+key_len=$(echo "id-$token" | wc -c)
+>>> SC2034 1:1
+>>> SC2154 1:20
+
+### wc counting lines is fine
+lines=$(echo "$blob" | wc -l)
+>>> SC2034 1:1
+>>> SC2154 1:15
+
+### wc with an additional flag is fine
+stats=$(echo "$blob" | wc -c -l)
+>>> SC2034 1:1
+>>> SC2154 1:15
+
+### a third pipeline stage is fine
+len=$(echo "$blob" | tr -d '\n' | wc -c)
+>>> SC2034 1:1
+>>> SC2154 1:13

@@ -1,0 +1,17 @@
+### unknown unary operator in single bracket
+[ -M "$logfile" ] && echo modified
+>>> SC2058 1:3
+>>> SC2154 1:7
+
+### unknown unary operator in double bracket
+[[ -q $config ]] && echo quiet
+>>> SC2058 1:4
+>>> SC2154 1:7
+
+### negated -v test is accepted
+[[ ! -v PROXY_URL ]] && echo "no proxy"
+>>> none
+
+### -N and -R are accepted
+[[ -N $mailbox ]] && echo "new mail"
+>>> SC2154 1:7

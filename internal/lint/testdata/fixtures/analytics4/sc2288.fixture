@@ -1,0 +1,42 @@
+### trailing comma on the command name
+mkdir, logs
+>>> SC2288 1:1
+
+
+### trailing period on the command name
+reboot.
+>>> SC2288 1:1
+
+
+### trailing percent sign
+progress% 50
+>>> SC2288 1:1
+
+### quoted name ending with a space
+"rsync " -a src/ dst/
+>>> SC2288 1:1
+
+
+### quoted name ending with an apostrophe
+"deploy'" now
+>>> SC2288 1:1
+
+
+### dot sourcing a script
+. ./env.sh
+>>> SC1091 1:3
+
+
+### colon no-op with an argument
+: "${HOME:?}"
+>>> none
+
+
+### interpreter with a bracket glob suffix
+/usr/bin/python[23] setup.py
+>>> SC2211 1:1
+
+
+### a single quoted space
+" " arg
+>>> none

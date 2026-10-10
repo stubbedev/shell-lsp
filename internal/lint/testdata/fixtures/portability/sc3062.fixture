@@ -1,0 +1,9 @@
+### option-is-set test in sh
+#!/bin/sh
+[ -o noclobber ] && echo protected
+>>> SC3062 2:3
+
+### option-is-set test in dash
+#!/bin/dash
+[ -o noclobber ] && echo protected
+>>> SC3062 2:3

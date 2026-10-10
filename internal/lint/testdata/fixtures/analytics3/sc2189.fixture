@@ -1,0 +1,12 @@
+### empty redirect piped into grep
+> matches.txt | grep TODO src/main.c
+>>> SC2189 1:1
+>>> SC2260 1:1
+
+### empty redirect after grep in a pipeline
+grep TODO src/main.c | > matches.txt
+>>> SC2189 1:24
+
+### grep at the end of the pipeline with its own redirect
+cat src/*.c | grep TODO > matches.txt
+>>> none

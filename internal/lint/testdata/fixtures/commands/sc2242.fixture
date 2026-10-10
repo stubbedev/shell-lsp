@@ -1,0 +1,29 @@
+### exit with a negative number
+exit -1
+>>> SC2242 1:6
+
+### exit with a value above 255
+exit 1000
+>>> SC2242 1:6
+
+### exit with a quoted phrase
+exit 'bad input'
+>>> SC2242 1:6
+
+### bare exit
+exit
+>>> none
+
+### exit with one
+exit 1
+>>> none
+
+### exit with a variable
+exit $rc
+>>> SC2086 1:6
+>>> SC2154 1:6
+
+### exit with an arithmetic expansion
+exit $((a | b))
+>>> SC2154 1:13
+>>> SC2154 1:9

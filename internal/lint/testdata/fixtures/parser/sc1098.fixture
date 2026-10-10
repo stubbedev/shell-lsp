@@ -1,0 +1,13 @@
+### unquoted array assignment passed to eval
+eval items=(a b c)
+>>> SC1036 1:12
+>>> SC1088 1:12
+>>> SC1098 1:12
+
+### quoted array assignment
+eval "items=(a b c)"
+>>> none
+
+### escaped parentheses
+eval items=\(a b c\)
+>>> none

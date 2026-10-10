@@ -1,0 +1,57 @@
+### env running ash
+#!/usr/bin/env ash
+echo "hello"
+>>> SC2187 1:1
+
+### absolute path to ash
+#!/bin/ash
+echo "hello"
+>>> SC2187 1:1
+
+### env ash with a dash directive is fine
+#!/usr/bin/env ash
+# shellcheck shell=dash
+echo "hello"
+>>> none
+
+### env ash with an sh directive is fine
+#!/usr/bin/env ash
+# shellcheck shell=sh
+echo "hello"
+>>> none
+
+### busybox sh applet is fine
+#!/bin/busybox sh
+target_shell=busybox
+echo "$target_shell"
+>>> none
+
+### busybox sh applet with an sh directive is fine
+#!/bin/busybox sh
+# shellcheck shell=sh
+echo "hello"
+>>> none
+
+### busybox sh applet with a dash directive is fine
+#!/bin/busybox sh
+# shellcheck shell=dash
+echo "hello"
+>>> none
+
+### busybox ash applet is fine
+#!/bin/busybox ash
+target_shell=busybox
+echo "$target_shell"
+>>> SC1008 1:1
+
+### busybox ash applet with a dash directive is fine
+#!/bin/busybox ash
+# shellcheck shell=dash
+echo "hello"
+>>> none
+
+### busybox ash applet with an sh directive is fine
+#!/bin/busybox ash
+# shellcheck shell=sh
+echo "hello"
+>>> none

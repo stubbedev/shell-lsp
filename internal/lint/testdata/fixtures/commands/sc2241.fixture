@@ -1,0 +1,8 @@
+### exit with two values
+exit 1 2
+>>> SC2241 1:6
+
+### exit with a variable and a literal
+exit "$status" 4
+>>> SC2154 1:7
+>>> SC2241 1:6

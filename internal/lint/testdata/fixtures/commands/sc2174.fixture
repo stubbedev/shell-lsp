@@ -1,0 +1,92 @@
+### separate -p and -m with a nested path
+mkdir -p -m 0755 a/b
+>>> SC2174 1:10
+
+### combined pm cluster with a variable path
+mkdir -pm 0755 "$dir"
+>>> SC2154 1:17
+>>> SC2174 1:7
+
+### vpm cluster with a nested path
+mkdir -vpm 0755 a/b
+>>> SC2174 1:7
+
+### pm cluster then -v then a nested path
+mkdir -pm 0755 -v a/b
+>>> SC2174 1:7
+
+### long parents and long mode in equals form
+mkdir --parents --mode=0755 a/b
+>>> SC2174 1:17
+
+### long parents and long mode with separate value
+mkdir --parents --mode 0755 a/b
+>>> SC2174 1:17
+
+### -p with long mode in equals form
+mkdir -p --mode=0755 a/b
+>>> SC2174 1:10
+
+### long parents with -m
+mkdir --parents -m 0755 a/b
+>>> SC2174 1:17
+
+### path going up one directory then two levels
+mkdir -p -m 0755 ../bin/laden
+>>> SC2174 1:10
+
+### dot-slash prefix then two levels
+mkdir -p -m 0755 ./bin/laden
+>>> SC2174 1:10
+
+### trailing slash after a single name
+mkdir -p -m 0700 cache/
+>>> SC2174 1:10
+
+### -p without a mode
+mkdir -p a/b
+>>> none
+
+### -m without -p
+mkdir -m 0755 a/b
+>>> none
+
+### nested path alone
+mkdir a/b
+>>> none
+
+### long parents only
+mkdir --parents a/b
+>>> none
+
+### long mode only
+mkdir --mode=0755 a/b
+>>> none
+
+### a differently named function with the same arguments
+mkdir_func -p -m 0755 a/b
+>>> none
+
+### single-level name
+mkdir -p -m 0755 bin
+>>> none
+
+### parent then a single name
+mkdir -p -m 0755 ../bin
+>>> none
+
+### dot-slash then a single name
+mkdir -p -m 0755 ./bin
+>>> none
+
+### dot then parent then a single name
+mkdir -p -m 0755 ./../bin
+>>> none
+
+### parent then dot then a single name
+mkdir -p -m 0755 .././bin
+>>> none
+
+### two parents then a single name
+mkdir -p -m 0755 ../../bin
+>>> none

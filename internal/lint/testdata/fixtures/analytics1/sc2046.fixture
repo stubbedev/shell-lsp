@@ -1,0 +1,72 @@
+### rm of an unquoted ls substitution
+rm $(ls)
+>>> SC2046 1:4
+
+### rm of an unquoted backtick ls
+rm `ls`
+>>> SC2006 1:4
+>>> SC2046 1:4
+
+### literal prefix glued to a date substitution
+rm backup-$(date +%F)
+>>> SC2046 1:11
+
+### single bracket comparison with a substitution
+if [ $(whoami) == root ]; then
+  echo "root"
+fi
+>>> SC2046 1:6
+
+### negated single bracket test with a substitution
+if [ ! $(git status --porcelain) ]; then
+  echo "clean"
+fi
+>>> SC2046 1:8
+
+### export of a substitution in sh
+#!/bin/sh
+export STAMP=$(date +%s)
+>>> SC2046 2:14
+>>> SC2155 2:8
+
+### redirection target is not exempt
+sort data.txt > $(mktemp)
+>>> SC2046 1:17
+
+### substitution inside double brackets is fine
+if [[ $(id -u) == 0 ]]; then
+  echo "root"
+fi
+>>> none
+
+### substitution as the for loop list is fine
+for f in $(git ls-files); do
+  echo "$f"
+done
+>>> none
+
+### substitution used as the command name is fine
+$(command -v python3) --version
+>>> none
+
+### substitution in an unquoted here document is fine
+cat <<EOF
+host: $(hostname)
+EOF
+>>> none
+
+### set with seq is fine
+set -- $(seq 1 5)
+>>> none
+
+### backticks holding only a comment are fine
+echo `# nothing here`
+>>> none
+
+### ps with pgrep is fine
+ps -p $(pgrep sshd)
+>>> none
+
+### assignment value in bash is fine
+export STAMP=$(date +%s)
+>>> SC2155 1:8

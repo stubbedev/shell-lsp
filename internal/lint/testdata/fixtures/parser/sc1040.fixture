@@ -1,0 +1,27 @@
+### dash here document indented with spaces and never terminated
+cat <<-USAGE
+    run the tool
+    USAGE
+>>> SC1009 1:1
+>>> SC1040 3:1
+>>> SC1072 4:1
+>>> SC1073 1:5
+
+### quoted end token with a leading space, one space too many
+cat <<-' STOP'
+payload
+  STOP
+ STOP
+>>> SC1040 3:1
+
+### quoted end token with a leading space, terminated exactly
+cat <<-' STOP'
+payload
+ STOP
+>>> none
+
+### dash here document indented with tabs
+cat <<-USAGE
+	run the tool
+	USAGE
+>>> none

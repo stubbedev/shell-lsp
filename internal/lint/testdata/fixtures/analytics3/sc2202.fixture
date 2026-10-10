@@ -1,0 +1,8 @@
+### single-bracket nullary test of a glob
+[ *.png ] && echo "images present"
+>>> SC2157 1:4
+>>> SC2202 1:3
+
+### operand is a plain word
+[ images ] && echo "always true"
+>>> SC2078 1:3

@@ -1,0 +1,49 @@
+### unquoted dollar at
+ls $@
+>>> SC2068 1:4
+
+### unquoted at array
+ls ${files[@]}
+>>> SC2068 1:4
+>>> SC2154 1:4
+
+### looping over an unquoted at array
+for f in ${files[@]}; do
+  echo "$f"
+done
+>>> SC2068 1:10
+>>> SC2154 1:10
+
+### length of dollar at is fine
+echo ${#@}
+>>> none
+
+### length of an at array is fine
+echo ${#files[@]}
+>>> SC2154 1:6
+
+### quoted dollar at is fine
+ls "$@"
+>>> none
+
+### substitution pattern containing an at sign is fine
+echo ${email//@/ at }
+>>> SC2086 1:6
+>>> SC2154 1:6
+
+### dollar at as an assignment value is fine
+args=$@
+>>> SC2034 1:1
+>>> SC2124 1:6
+
+### quoted alternative value with an inner unquoted array is fine
+ls "${files[@]:+${files[@]}}"
+>>> SC2154 1:17
+
+### unquoted alternative value with a quoted array is fine
+ls ${files[@]:+"${files[@]}"}
+>>> SC2154 1:17
+
+### plus alternative of dollar at is fine
+ls ${@+"$@"}
+>>> none

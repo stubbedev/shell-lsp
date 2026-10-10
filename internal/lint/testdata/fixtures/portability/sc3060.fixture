@@ -1,0 +1,18 @@
+### global pattern substitution in sh
+#!/bin/sh
+echo "${path//:/ }"
+>>> SC2154 2:7
+>>> SC3060 2:7
+
+### bare single substitution in dash
+#!/bin/dash
+code=ab12
+${code/ab/cd}
+>>> SC3060 3:1
+
+### single substitution in busybox is fine
+#!/bin/busybox sh
+# shellcheck shell=busybox
+code=ab12
+${code/ab/cd}
+>>> none

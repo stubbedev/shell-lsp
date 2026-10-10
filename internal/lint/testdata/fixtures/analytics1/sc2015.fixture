@@ -1,0 +1,49 @@
+### test and scp with rm as fallback
+[[ -f id.pub ]] && scp id.pub backup:/keys || rm id.pub
+>>> SC2015 1:17
+
+### same shape inside a then branch
+if true; then
+  mkdir -p out && cp build/* out || rm -rf out
+fi
+>>> SC2015 2:16
+
+### false as the fallback
+ping -c1 gateway && curl -fs http://gateway || false
+>>> SC2015 1:18
+
+### brace group with its own or list is fine
+[[ -d cache ]] && { rsync -a cache/ remote:cache || rm -rf cache; }
+>>> none
+
+### echo as the fallback is fine
+make && make install || echo "build failed"
+>>> none
+
+### assignment as the fallback is fine
+[[ -n $user ]] && owner=$user || owner=nobody
+>>> SC2034 1:34
+
+### printf as the fallback is fine
+make && make check || printf 'failed\n'
+>>> none
+
+### whole list as an if condition is fine
+if make && make install || make clean; then
+  echo "ok"
+fi
+>>> none
+
+### whole list as a while condition is fine
+while fetch && apply || retry; do
+  sleep 1
+done
+>>> none
+
+### single bracket test in the middle is fine
+check_disk && [ -w /data ] || abort
+>>> none
+
+### true as the fallback is fine
+grep -q token cfg && rm cfg || true
+>>> none

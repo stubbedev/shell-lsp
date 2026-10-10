@@ -1,0 +1,17 @@
+### range ending in a variable
+#!/bin/bash
+count=5
+echo {1..$count}
+>>> SC2051 3:6
+
+### range starting at a variable
+#!/bin/bash
+first=10
+echo {$first..100}
+>>> SC2051 3:6
+
+### comma list containing a variable is not a range
+#!/bin/bash
+extra=7
+echo {1,3,$extra}
+>>> none

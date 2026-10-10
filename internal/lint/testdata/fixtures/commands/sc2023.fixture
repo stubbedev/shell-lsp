@@ -1,0 +1,15 @@
+### time keyword given a format flag
+time -f '%e seconds' sleep 5
+>>> SC2023 1:1
+
+### time directly followed by a command
+time sleep 5
+>>> none
+
+### time with the portable -p flag
+time -p sleep 5
+>>> none
+
+### time invoked through command is not the keyword
+command time -f '%e seconds' sleep 5
+>>> none

@@ -1,0 +1,33 @@
+### double quoted pattern with dot star
+[[ $file =~ ".*\.txt" ]] && echo "text"
+>>> SC2076 1:13
+>>> SC2154 1:4
+
+### single quoted parenthesised alternation
+[[ $arch =~ '(arm|aarch)64' ]] && echo "arm"
+>>> SC2076 1:13
+>>> SC2154 1:4
+
+### single quoted bare alternation
+[[ $answer =~ 'yes|y' ]] && echo "agreed"
+>>> SC2076 1:15
+>>> SC2154 1:4
+
+### double quoted variable on the right
+[[ $line =~ "$pattern" ]] && echo "hit"
+>>> SC2076 1:13
+>>> SC2154 1:14
+>>> SC2154 1:4
+
+### unquoted variable on the right is fine
+[[ $line =~ $pattern ]] && echo "hit"
+>>> SC2154 1:13
+>>> SC2154 1:4
+
+### double quoted plain word is fine
+[[ $line =~ "error" ]] && echo "hit"
+>>> SC2154 1:4
+
+### single quoted words with a space are fine
+[[ $line =~ 'disk full' ]] && echo "hit"
+>>> SC2154 1:4

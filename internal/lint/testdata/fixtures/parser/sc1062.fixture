@@ -1,0 +1,13 @@
+### while loop that runs off the end of the file
+while read -r user; do
+  id "$user"
+>>> SC1061 1:21
+>>> SC1062 3:1
+>>> SC1072 3:1
+>>> SC1073 1:1
+
+### while loop closed with done
+while read -r user; do
+  id "$user"
+done
+>>> none

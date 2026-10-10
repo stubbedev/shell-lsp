@@ -1,0 +1,11 @@
+### empty quotes as the command name
+"" --help
+>>> SC2286 1:1
+
+### empty single quotes as the command
+'' start
+>>> SC2286 1:1
+
+### empty variable alone is not literal empty
+$runner start
+>>> SC2154 1:1

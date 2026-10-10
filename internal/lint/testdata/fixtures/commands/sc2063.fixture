@@ -1,0 +1,27 @@
+### leading star pattern looks like a glob
+cat playlist.txt | grep *.mp3
+>>> SC2035 1:25
+>>> SC2062 1:25
+>>> SC2063 1:25
+
+### star-wrapped pattern looks like a glob
+grep *foo* notes.txt
+>>> SC2035 1:6
+>>> SC2062 1:6
+>>> SC2063 1:6
+
+### letter then star of length two looks like a glob
+grep 'a*' notes.txt
+>>> SC2063 1:6
+
+### dot star is a valid regex
+grep '.*' notes.txt
+>>> none
+
+### bracket range followed by star is a valid regex
+grep '[0-9]*' ledger.csv
+>>> none
+
+### fixed-string flag suppresses the glob advice
+grep -F '*.log' manifest.txt
+>>> none

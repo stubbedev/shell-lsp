@@ -1,0 +1,24 @@
+### unquoted directory in a glob loop
+for report in $outdir/*.txt; do
+  wc -l "$report"
+done
+>>> SC2154 1:15
+>>> SC2231 1:15
+
+### command substitution in the glob word
+for conf in $(pwd)/conf.d/*.conf; do
+  echo "$conf"
+done
+>>> SC2231 1:13
+
+### quoted directory with unquoted glob
+for report in "$outdir"/*.txt; do
+  wc -l "$report"
+done
+>>> SC2154 1:16
+
+### plain variable without glob
+for host in $hosts; do
+  ping -c1 "$host"
+done
+>>> SC2154 1:13

@@ -1,0 +1,33 @@
+### pipe after the end token
+cat <<EOF
+hello
+EOF | tr a-z A-Z
+EOF
+>>> SC1121 3:5
+
+### semicolon after the end token
+cat <<EOF
+hello
+EOF;
+EOF
+>>> SC1121 3:4
+
+### redirect after the end token
+cat <<EOF
+hello
+EOF > out.txt
+EOF
+>>> SC1121 3:5
+
+### ampersand after the end token
+cat <<EOF
+hello
+EOF &
+EOF
+>>> SC1121 3:5
+
+### nothing after the end token
+cat <<EOF
+hello
+EOF
+>>> none

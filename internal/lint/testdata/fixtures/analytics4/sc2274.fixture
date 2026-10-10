@@ -1,0 +1,15 @@
+### banner with a title in the middle
+======= Here =======
+>>> SC2274 1:1
+
+### three equals then text
+===begin
+>>> SC2274 1:1
+
+### thirteen equals is too long for a marker
+=============
+>>> SC2274 1:1
+
+### long option is not a banner
+--sep===
+>>> SC2215 1:1

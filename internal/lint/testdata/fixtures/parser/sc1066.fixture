@@ -1,0 +1,29 @@
+### dollar on the name of an array assignment
+$fruits=(apple pear)
+>>> SC1036 1:9
+>>> SC1066 1:1
+>>> SC1088 1:9
+>>> SC2154 1:1
+>>> SC2281 1:1
+
+### dollar on an indexed append of an array
+$queue[1]+=(job)
+>>> SC1036 1:12
+>>> SC1066 1:1
+>>> SC1087 1:1
+>>> SC1088 1:12
+>>- SC2086 1:1 -- mvdan rejects a dollar-prefixed indexed array append; the line is reported as a syntax error instead
+>>> SC2154 1:1
+>>> SC2211 1:1
+>>> SC2276 1:1
+
+### dollar on a scalar assignment is left to later analysis
+$fruits=apple
+>>> SC2154 1:1
+>>> SC2281 1:1
+
+### no dollar but a space before the equals sign
+fruits =(apple pear)
+>>> SC1036 1:9
+>>> SC1088 1:9
+>>> SC2283 1:8

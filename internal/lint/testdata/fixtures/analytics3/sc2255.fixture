@@ -1,0 +1,14 @@
+### array-element-looking word in a single-bracket -eq
+[ counts[0] -eq 5 ] && echo five
+>>> SC2170 1:3
+>>> SC2255 1:3
+
+### unquoted product in a single-bracket -eq
+[ 12 -eq 3*4 ] && echo twelve
+>>> SC2255 1:10
+
+### same comparison in double brackets
+[[ counts[0] -eq 5 ]] && echo five
+[[ 12 -eq 3*4 ]] && echo twelve
+>>> SC2154 1:4
+>>> SC2309 1:4

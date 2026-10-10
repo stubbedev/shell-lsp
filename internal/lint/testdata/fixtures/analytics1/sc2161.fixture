@@ -1,0 +1,3 @@
+### single bracket one
+[ 1 ] && echo "always"
+>>> SC2161 1:3

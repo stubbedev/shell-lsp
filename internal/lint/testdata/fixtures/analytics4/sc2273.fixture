@@ -1,0 +1,13 @@
+### leftover merge conflict separator
+cp config.ini config.bak
+=======
+cp config.new config.ini
+>>> SC2273 2:1
+
+### banner line of four equals
+====
+>>> SC2273 1:1
+
+### line of equals with a word is not a marker
+======= Here =======
+>>> SC2274 1:1

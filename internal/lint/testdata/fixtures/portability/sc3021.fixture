@@ -1,0 +1,32 @@
+### duplicating output to a plain file name
+#!/bin/sh
+make all >& build.log
+>>> SC3021 2:10
+
+### duplicating output to a directory-and-name path
+#!/bin/sh
+logdir=/var/log
+logname=app.log
+make all >& $logdir/$logname
+>>> SC3021 4:10
+
+### duplicating output to a plain file name in dash
+#!/bin/dash
+make all >& build.log
+>>> SC3021 2:10
+
+### explicit stderr to stdout duplication is fine
+#!/bin/sh
+make all 2>&1
+>>> none
+
+### duplicating to stderr is fine
+#!/bin/sh
+echo "failed" >&2
+>>> none
+
+### lone variable target may be a descriptor
+#!/bin/sh
+target=2
+echo "failed" >& $target
+>>> none

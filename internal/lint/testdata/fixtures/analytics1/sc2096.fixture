@@ -1,0 +1,25 @@
+### env with an interpreter and an extra flag
+#!/usr/bin/env bash -e
+echo "starting"
+>>> SC2096 1:1
+
+### shell directive does not suppress it
+#!/usr/bin/env bash -x
+# shellcheck shell=bash
+echo "tracing"
+>>> SC2096 1:1
+
+### absolute sh with one option and trailing space is fine
+#!/bin/sh -e 
+echo "strict"
+>>> none
+
+### env -S splits the line so it is fine
+#!/usr/bin/env -S bash -e
+echo "split"
+>>> none
+
+### env --split-string is fine
+#!/usr/bin/env --split-string bash -e
+echo "split long"
+>>> none

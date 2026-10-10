@@ -1,0 +1,11 @@
+### single bracket closed with a double bracket
+if [ "$1" = deploy ]]; then
+  echo deploying
+fi
+>>> SC1034 1:4
+
+### matching single brackets
+if [ "$1" = deploy ]; then
+  echo deploying
+fi
+>>> none

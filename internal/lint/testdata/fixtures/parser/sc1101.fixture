@@ -1,0 +1,20 @@
+### escaped space before the line end in a subshell
+(cd /tmp \ 
+ ls)
+>>> SC1101 1:10
+>>> SC2164 1:2
+
+### escaped space followed by more spaces and the line end
+tar -czf out.tgz \  
+  src
+>>> SC1101 1:18
+
+### escaped space followed by a semicolon
+(cd /tmp \ ;
+ ls)
+>>> SC2164 1:2
+
+### clean line continuation
+tar -czf out.tgz \
+  src
+>>> none

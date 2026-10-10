@@ -1,0 +1,27 @@
+### nested single brackets used as grouping
+if [ [ -f app.pid ] -o [ -f app.lock ] ]; then
+  echo running
+fi
+>>> SC1026 1:6
+>>> SC1050 1:21
+>>> SC1072 1:21
+>>> SC1073 1:1
+>>> SC1139 1:21
+
+### nested brackets inside double brackets
+if [[ [ -d build ] || [ -d dist ] ]]; then
+  echo "artifacts present"
+fi
+>>> SC1026 1:7
+>>> SC1033 1:18
+>>> SC1050 1:35
+>>> SC1072 1:35
+>>> SC1073 1:1
+>>> SC1140 1:35
+
+### bracket glob on the right of a comparison
+choice=$1
+if [[ $choice = [yY]* ]]; then
+  echo accepted
+fi
+>>> none

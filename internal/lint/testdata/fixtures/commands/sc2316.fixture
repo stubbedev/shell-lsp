@@ -1,0 +1,38 @@
+### local followed by readonly as a name
+configure() {
+  local readonly retries=3
+}
+>>> SC2034 2:18
+>>> SC2034 2:9
+>>> SC2316 2:9
+
+### readonly followed by local as a name
+readonly local limit=10
+>>> SC2034 1:10
+>>> SC2034 1:16
+>>> SC2316 1:10
+
+### export followed by readonly as a name
+export readonly API_URL=https://example.com
+>>> SC2316 1:8
+
+### local with only an assignment
+configure() {
+  local retries=3
+}
+>>> SC2034 2:9
+
+### local with the readonly flag
+configure() {
+  local -r retries=3
+}
+>>> SC2034 2:12
+
+### declare with an rx cluster
+declare -rx API_URL=https://example.com
+>>> none
+
+### quoted local word
+readonly 'local' limit=10
+>>> SC2034 1:10
+>>> SC2034 1:18

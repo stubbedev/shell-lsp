@@ -1,0 +1,31 @@
+### sudo cannot change directory
+sudo cd /root
+>>> SC2232 1:1
+
+### run0 export is not flagged by shellcheck 0.11
+run0 export PATH=/opt/tools/bin
+>>> none
+
+### sudo running ls
+sudo ls /root
+>>> none
+
+### export after doas in a separate command
+doas ls /root && export SEEN=1
+>>> none
+
+### sudo running echo with a builtin name as data
+sudo echo ls
+>>> none
+
+### user named export consumed by -u
+sudo -n -u export ls
+>>> none
+
+### docker export subcommand
+sudo docker export web01
+>>> none
+
+### sudo cannot export
+sudo export PATH=/opt/tools/bin
+>>> SC2232 1:1

@@ -1,0 +1,340 @@
+### string assigned but only another variable is expanded
+greeting="hello there"
+echo "$recipient"
+>>> SC2034 1:1
+>>> SC2154 2:7
+
+### glob loop variable only appears inside single quotes
+for logfile in /var/log/*.log; do
+  echo 'rotating $logfile'
+done
+>>> SC2016 2:8
+>>> SC2034 1:1
+
+### top-level local initializes a variable nobody reads
+local retries=3
+>>> SC2034 1:7
+>>> SC2168 1:1
+
+### variable assigned twice in a row and never read
+mode=fast
+mode=slow
+>>> SC2034 2:1
+
+### bare name in single-bracket -eq is not dereferenced
+limit=10
+if [ limit -eq 10 ]; then
+  echo "at limit"
+fi
+>>> SC2034 1:1
+>>> SC2050 2:12
+>>> SC2170 2:6
+
+### unquoted let assigns an unused variable
+let width=80
+>>> SC2034 1:10
+>>> SC2219 1:1
+
+### single-quoted let assigns an unused variable
+let 'height = 24'
+>>> SC2034 1:13
+>>> SC2219 1:1
+
+### chained let leaves the middle variable unused
+let total=subtotal=base
+echo "$total"
+>>> SC2034 1:19
+>>> SC2154 1:20
+>>> SC2219 1:1
+
+### arithmetic command assigns an unused counter
+(( attempts = 5 ))
+>>> SC2034 1:13
+
+### shflags string flag is never read
+DEFINE_string 'region' 'eu-west-1' 'target region' 'r'
+echo "deploying"
+>>> SC2034 1:15
+
+### readonly scalar that is never read
+readonly api_version=2
+>>> SC2034 1:10
+
+### readonly array literal that is never read
+readonly mirrors=(alpha beta gamma)
+>>> SC2034 1:10
+
+### assignment inside a nested subscript is never read
+slots[offsets[cursor=1]]=7
+echo "${slots[@]}"
+>>> SC2034 1:21
+>>> SC2154 1:7
+
+### declare without a value never read
+declare pending_job
+>>> SC2034 1:9
+
+### typeset without a value never read
+typeset scratch_dir
+>>> SC2034 1:9
+
+### read into a variable that is never used
+read -r answer
+>>> SC2034 1:9
+
+### getopts option variable never inspected
+while getopts "vq" opt_flag; do
+  echo "parsing"
+done
+>>> SC2034 1:20
+
+### mapfile array never expanded
+mapfile -t host_lines < /etc/hosts
+>>> SC2034 1:12
+
+### readarray array never expanded
+readarray -t packages < requirements.txt
+>>> SC2034 1:14
+
+### printf -v target never read
+printf -v stamp '%(%F)T' -1
+>>> SC2034 1:11
+
+### wait -p target never read
+sleep 2 &
+wait -n -p finished_pid
+>>> SC2034 2:12
+
+### for loop variable never used
+for attempt in 1 2 3; do
+  curl -fsS https://example.org/health
+done
+>>> SC2034 1:1
+
+### select loop variable never used
+select choice in start stop; do
+  break
+done
+>>> SC2034 1:1
+
+### colon-equals default also reads the variable so it is not reported
+: "${cache_root:=/var/cache/app}"
+>>> none
+
+### plain equals default also reads the variable so it is not reported
+: "${build_type=release}"
+>>> none
+
+### named descriptor redirect never referenced
+exec {logfd}>/tmp/app.log
+>>> SC2034 1:6
+
+### unquoted expansion uses the variable
+target=/srv/www
+ls $target
+>>> none
+
+### export names the variable
+editor_choice=nano
+export editor_choice
+>>> none
+
+### empty single-quoted name given to read
+read -r ''
+>>> none
+
+### read with only a prompt
+read -p "Press enter to continue"
+>>> SC2162 1:1
+
+### variable used inside the index of an exported element
+slot=3
+export table[slot]=on
+>>> none
+
+### read variable used through indirection
+read -r pointer
+echo "${!pointer}"
+>>> none
+
+### array element referenced in arithmetic command
+scores=(4 8 15)
+(( scores[1] > 5 )) && echo high
+>>> none
+
+### bare index variable inside braced subscript
+servers=(web1 web2 web3)
+pick=1
+echo "${servers[pick]}"
+>>> none
+
+### bare index variable inside arithmetic subscript
+weights=(3 5 9)
+which=2
+(( weights[which] > 4 )) && echo heavy
+>>> none
+
+### declare -x after assignment
+proxy_url=http://proxy:3128
+declare -x proxy_url
+>>> none
+
+### local -x in a function counts as referenced
+configure() {
+  local -x build_flags
+  build_flags="-O2"
+  make all
+}
+configure
+>>> none
+
+### read with -i default text and prompt then expanded
+read -r -i "main" -e -p "Branch: " branch_name
+git checkout "$branch_name"
+>>> none
+
+### variable used in the index of an array literal element
+offset=2
+columns=([offset]=name [3]=size)
+echo "${columns[@]}"
+>>> none
+
+### variable used inside let expression whose result is expanded
+base=7
+let doubled=base*2
+echo "$doubled"
+>>> SC2219 2:1
+
+### variable mentioned in single-quoted PS1
+git_branch=main
+PS1='[$git_branch] \w $ '
+>>> none
+
+### variable mentioned in single-quoted trap action
+tmp_work=$(mktemp -d)
+trap 'rm -rf "$tmp_work"' EXIT
+>>> none
+
+### variable is the operand of single-bracket -v
+feature_toggle=on
+if [ -v feature_toggle ]; then echo enabled; fi
+>>> none
+
+### variable is the operand of single-bracket -R
+declare -n alias_ref=PATH
+[ -R alias_ref ] && echo "nameref"
+>>> none
+
+### mapfile callback is not a variable
+mapfile -C report_progress -c 100 entries < data.txt
+echo "${entries[@]}"
+>>> none
+
+### readarray array is expanded later
+readarray -t lines < notes.txt
+printf '%s\n' "${lines[@]}"
+>>> none
+
+### declare -F only lists a function
+declare -F setup_env
+>>> none
+
+### bare name in double-bracket -eq is dereferenced
+threshold=10
+if [[ threshold -eq 10 ]]; then echo exact; fi
+>>> none
+
+### array printed with declare -p
+colors=(red green blue)
+declare -p colors
+>>> none
+
+### braced variable in regex right-hand side
+version_re='^[0-9]+\.[0-9]+$'
+[[ $1 =~ ${version_re} ]] && echo semver
+>>> none
+
+### right side of arithmetic assignment feeds an expanded target
+seconds=90
+(( minutes = seconds / 60 ))
+echo "$minutes"
+>>> none
+
+### substring offset given by another variable's bare name
+commit_hash=4f2a9c1e88
+skip=2
+echo "${commit_hash:skip}"
+>>> none
+
+### only operand of double-bracket -v in an if condition
+if [[ -v debug_level ]]; then echo debugging; fi
+>>> none
+
+### descriptor variable closed on exec
+exec {outfd}>result.txt
+exec {outfd}>&-
+>>> none
+
+### declare -x -f with a function name
+declare -x -f deploy_app
+>>> none
+
+### array expanded from an offset variable
+args=(alpha beta gamma delta)
+start=1
+echo "${args[@]:start}"
+>>> none
+
+### bats test block implicitly references its variables
+@test "addition works" {
+  run expr 2 + 2
+  [ "$status" -eq 0 ]
+}
+>>> none
+
+### shflags flag expanded in double quotes
+DEFINE_string 'profile' 'default' 'aws profile' 'p'
+echo "using ${FLAGS_profile}"
+>>> none
+
+### shflags flag name built from an expansion
+DEFINE_string "${prefix}name" 'x' 'help text' 'n'
+>>> SC2154 1:16
+
+### variable mentioned in single-quoted alias body
+project_dir=/srv/project
+alias proj='cd $project_dir'
+>>> none
+
+### name with a leading underscore
+_internal_cache=/tmp/cache
+>>> none
+
+### key variable used in a -v subscript on an associative array
+declare -A owners
+key=frontend
+[[ -v owners[$key] ]] && echo owned
+>>> none
+
+### function exported with typeset -fx
+cleanup() { rm -f /tmp/lock; }
+typeset -fx cleanup
+>>> none
+
+### set -o allexport does not suppress the warning in shellcheck 0.11.0
+set -o allexport
+db_host=localhost
+db_port=5432
+>>> SC2034 2:1
+>>> SC2034 3:1
+
+### well-known variables are exempt
+IFS=:
+PATH=/usr/bin:/bin
+LANG=C.UTF-8
+>>> none
+
+### generic name rest is exempt
+read -r first rest
+echo "$first"
+>>> none

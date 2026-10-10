@@ -1,0 +1,20 @@
+### double slash comment
+// set up the environment
+export LANG=C
+>>> SC1127 1:1
+
+### slash star block comment
+/* temporary */
+>>> SC1127 1:1
+>>> SC2035 1:14
+>>> SC2211 1:1
+
+### slash followed by four stars
+/**** banner ****/
+>>> SC1127 1:1
+>>> SC2035 1:14
+>>> SC2211 1:1
+
+### escaped star after the slash
+/\*tmp
+>>> none

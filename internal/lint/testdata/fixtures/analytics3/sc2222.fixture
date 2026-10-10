@@ -1,0 +1,39 @@
+### later txt pattern is never reached
+case "$file" in
+  *.log) echo "log" ;;
+  app.log) echo "app log" ;;
+esac
+>>> SC2154 1:7
+>>> SC2221 2:3
+>>> SC2222 3:3
+
+### later alternative repeats an earlier literal
+case "$level" in
+  debug) echo "verbose" ;;
+  info|debug) echo "normal" ;;
+esac
+>>> SC2154 1:7
+>>> SC2221 2:3
+>>> SC2222 3:8
+
+### question-star before a lone star
+case "$input" in
+  ?*) echo "non-empty" ;;
+  *) echo "empty" ;;
+esac
+>>> SC2154 1:7
+
+### command substitution pattern first
+case "$user" in
+  $(whoami)) echo "me" ;;
+  *) echo "someone else" ;;
+esac
+>>> SC2154 1:7
+>>> SC2254 2:3
+
+### continue-testing terminator on the first branch
+case "$level" in
+  debug) echo "verbose" ;;&
+  info|debug) echo "normal" ;;
+esac
+>>> SC2154 1:7

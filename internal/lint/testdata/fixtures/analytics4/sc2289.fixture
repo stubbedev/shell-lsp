@@ -1,0 +1,13 @@
+### quoted tab inside the command name
+"run	tests" fast
+>>> SC2289 1:1
+
+### quoted newline inside the command name
+"build
+step" now
+>>> SC2289 1:1
+
+### newline ending with a suspicious symbol
+"build
+step." now
+>>> SC2288 1:1

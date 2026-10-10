@@ -79,12 +79,10 @@ func Parse(text string, d dialect.Dialect) *Tree {
 
 func Language(d dialect.Dialect) syntax.LangVariant {
 	switch d {
-	case dialect.Bash:
+	case dialect.Bash, dialect.Posix, dialect.Dash:
 		return syntax.LangBash
 	case dialect.Zsh:
 		return syntax.LangZsh
-	case dialect.Posix, dialect.Dash:
-		return syntax.LangPOSIX
 	case dialect.Ksh:
 		return syntax.LangMirBSDKorn
 	}

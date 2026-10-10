@@ -1,0 +1,14 @@
+### hash directly followed by an interpreter path
+#/bin/sh
+echo hello
+>>> SC1113 1:2
+
+### hash and spaces followed by an interpreter path
+# /bin/sh
+echo hello
+>>> SC1113 1:2
+
+### directive with an absolute path is not a shebang
+# shellcheck shell=/bin/sh
+echo hello
+>>> SC1103 1:20

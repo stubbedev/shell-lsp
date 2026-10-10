@@ -1,0 +1,37 @@
+### lone equals sign between key and value
+weekdays=([0] = sunday [1]=monday)
+echo "${weekdays[@]}"
+>>> SC2191 1:15
+
+### number equals value without brackets
+ports=(0=http 1=https)
+echo "${ports[@]}"
+>>> SC2191 1:15
+>>> SC2191 1:8
+
+### expansion followed by equals and value
+slot=2
+cells=($slot=filled)
+echo "${cells[@]}"
+>>> SC2191 2:13
+>>- SC2206 2:8 -- mvdan rejects an expansion followed by = inside an array literal; reported as a syntax error instead
+
+### arithmetic expansion followed by equals and value
+grid=($((1 + 1))=center)
+echo "${grid[@]}"
+>>> SC2191 1:17
+
+### undeclared array with name=value element
+settings=(debug=true level=3)
+echo "${settings[@]}"
+>>> none
+
+### correct bracketed index with a value
+levels=([0]=low [1]=high)
+echo "${levels[@]}"
+>>> none
+
+### correct bracketed index with an empty quoted value
+levels=([0]="" [1]=high)
+echo "${levels[@]}"
+>>> none

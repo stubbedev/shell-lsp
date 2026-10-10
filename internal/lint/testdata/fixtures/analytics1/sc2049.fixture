@@ -1,0 +1,34 @@
+### star word star glob
+[[ $name =~ *log* ]] && echo "log"
+>>> SC2049 1:13
+>>> SC2154 1:4
+
+### letter followed by a star
+[[ $name =~ a* ]] && echo "a"
+>>> SC2049 1:13
+>>> SC2154 1:4
+
+### variable on the right is fine
+[[ $name =~ $regex ]] && echo "match"
+>>> SC2154 1:13
+>>> SC2154 1:4
+
+### anchored dot star is fine
+[[ $name =~ ^build.* ]] && echo "build"
+>>> SC2154 1:4
+
+### escaped star is fine
+[[ $name =~ \* ]] && echo "star"
+>>> SC2154 1:4
+
+### group with a star is fine
+[[ $name =~ (ab)* ]] && echo "ab"
+>>> SC2154 1:4
+
+### escaped star followed by letters is fine
+[[ $name =~ \*tmp ]] && echo "tmp"
+>>> SC2154 1:4
+
+### letter followed by an escaped star is fine
+[[ $name =~ x\* ]] && echo "x"
+>>> SC2154 1:4

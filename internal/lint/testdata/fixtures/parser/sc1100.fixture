@@ -1,0 +1,30 @@
+### en dash before a file test
+if [ –f config.ini ]; then echo found; fi
+>>> SC1100 1:6
+
+### em dash before a numeric comparison
+if [ "$n" —gt 3 ]; then echo many; fi
+>>> SC1100 1:11
+>>> SC2154 1:7
+
+### fullwidth hyphen before a double bracket file test
+[[ －d /srv ]] && echo dir
+>>> SC1100 1:4
+
+### en dash at a conjunction position
+if [ -f a.conf –o -f b.conf ]; then echo found; fi
+>>> SC1009 1:1
+>>> SC1072 1:16
+>>> SC1073 1:4
+>>> SC1100 1:16
+
+### en dash at a conjunction position that is not a conjunction
+if [ -f a.conf –x ]; then echo found; fi
+>>> SC1009 1:1
+>>> SC1072 1:16
+>>> SC1073 1:4
+>>> SC1100 1:16
+
+### ascii hyphens
+if [ -f config.ini ] && [ "$n" -gt 3 ]; then echo found; fi
+>>> SC2154 1:28

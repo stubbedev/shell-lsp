@@ -1,0 +1,34 @@
+### shell negation of a not-equals test
+if ! [ "$status" != "ok" ]; then
+  echo "all good"
+fi
+>>> SC2154 1:9
+
+### in-test negation of a double equals
+[[ ! $env == prod ]] && echo "safe to experiment"
+>>> SC2154 1:6
+
+### in-test negation of -eq against zero
+[ ! "$exit_code" -eq 0 ] && echo "failed"
+>>> SC2154 1:6
+
+### shell negation of a -gt comparison
+! [[ $load -gt 8 ]] && echo "load fine"
+>>> SC2154 1:6
+
+### negated -le in double brackets
+[[ ! $free_mb -le 512 ]] && echo "enough memory"
+>>> SC2154 1:6
+
+### regex match has no inverse
+! [[ $version =~ ^v[0-9]+ ]] && echo "bad tag"
+>>> SC2154 1:6
+
+### string less-than has no listed inverse
+[[ ! "$a" < "$b" ]] && echo "not before"
+>>> SC2154 1:14
+>>> SC2154 1:7
+
+### file newer-than comparison
+! [ build.o -nt main.c ] && make
+>>> none

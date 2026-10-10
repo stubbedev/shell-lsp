@@ -1,0 +1,14 @@
+### double negation in sh
+#!/bin/sh
+! ! true
+>>> SC2325 2:1
+
+### double negation in dash
+#!/bin/dash
+! ! true
+>>> SC2325 2:1
+
+### single negation is fine
+#!/bin/sh
+! true
+>>> none

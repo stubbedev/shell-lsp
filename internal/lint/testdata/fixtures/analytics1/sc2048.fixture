@@ -1,0 +1,50 @@
+### looping over unquoted dollar star
+for arg in $*; do
+  echo "$arg"
+done
+>>> SC2048 1:12
+
+### looping over an unquoted star array
+for item in ${items[*]}; do
+  echo "$item"
+done
+>>> SC2048 1:13
+>>> SC2154 1:13
+
+### dollar star with a substitution modifier
+ls ${*/.txt/.md}
+>>> SC2048 1:4
+>>> SC2086 1:4
+
+### star array with a suffix removal
+ls ${files[*]%%.bak}
+>>> SC2048 1:4
+>>> SC2086 1:4
+>>> SC2154 1:4
+
+### braced dollar star
+ls ${*}
+>>> SC2048 1:4
+>>> SC2086 1:4
+
+### braced star array
+ls ${files[*]}
+>>> SC2048 1:4
+>>> SC2086 1:4
+>>> SC2154 1:4
+
+### dollar star as an assignment value is fine
+joined=$*
+>>> SC2034 1:1
+
+### dollar star in double brackets is fine
+[[ $* ]] && echo "has args"
+>>> none
+
+### length of dollar star is fine
+echo ${#*}
+>>> none
+
+### length of a star array is fine
+echo ${#files[*]}
+>>> SC2154 1:6

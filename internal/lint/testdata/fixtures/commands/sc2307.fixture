@@ -1,0 +1,29 @@
+### negative number glued to its sign leaves two arguments
+# shellcheck disable=SC2003
+expr 5 -3
+>>> SC2307 2:1
+
+### output redirection swallows the operator
+# shellcheck disable=SC2003
+expr foo > bar
+>>> SC2307 2:6
+
+### pipe splits the expression
+# shellcheck disable=SC2003
+expr 1 | 2
+>>> SC2307 2:6
+
+### unquoted greater-equals parsed as a redirection
+# shellcheck disable=SC2003
+expr "x" >= "y"
+>>> SC2307 2:1
+
+### quoted positional parameters may split
+# shellcheck disable=SC2003
+expr "$@"
+>>> none
+
+### unquoted expansion may split
+# shellcheck disable=SC2003
+expr 5 $rest
+>>> SC2086 2:8

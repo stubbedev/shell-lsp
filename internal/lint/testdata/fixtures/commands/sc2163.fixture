@@ -1,0 +1,27 @@
+### export of an unquoted expansion
+export $foo
+>>> SC2086 1:8
+>>> SC2154 1:8
+>>> SC2163 1:8
+
+### export of a quoted expansion
+export "$foo"
+>>> SC2154 1:9
+>>> SC2163 1:8
+
+### export of a positional parameter
+export $1
+>>> SC2086 1:8
+>>> SC2163 1:8
+
+### export of a plain name
+export foo
+>>> none
+
+### export with the question-mark modifier
+export ${foo?}
+>>> SC2086 1:8
+
+### export with an extra empty quoted part
+export "$foo"''
+>>> SC2154 1:9

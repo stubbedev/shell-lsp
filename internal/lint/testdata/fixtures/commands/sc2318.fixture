@@ -1,0 +1,48 @@
+### declare reads a name assigned earlier in the same command
+declare x=1 y=foo$x
+>>> SC2034 1:13
+>>> SC2318 1:9
+
+### readonly reads the name inside arithmetic
+readonly x=1 y=$((1 + x))
+>>> SC2034 1:14
+>>> SC2318 1:10
+
+### local reads the name in a command substitution
+setup() {
+  local x=1 y=$(echo "$x")
+}
+>>> SC2034 2:13
+>>> SC2116 2:15
+>>> SC2155 2:13
+>>> SC2318 2:9
+
+### local uses the name as an array index
+setup() {
+  local x=1 y[$x]=2
+}
+>>> SC2004 2:15
+>>> SC2034 2:13
+>>> SC2318 2:9
+
+### non-assignment word built from the earlier name
+declare x=var $x=1
+>>> SC2086 1:15
+>>> SC2318 1:9
+
+### same non-assignment word repeated
+declare x=var $x=1
+>>> SC2086 1:15
+>>> SC2318 1:9
+
+### value built from the earlier name
+declare x=var $k=$x
+>>> SC2086 1:15
+>>> SC2086 1:18
+>>> SC2154 1:15
+>>> SC2318 1:9
+
+### reading a name assigned in an earlier command
+x=1
+declare y=foo$x
+>>> SC2034 2:9

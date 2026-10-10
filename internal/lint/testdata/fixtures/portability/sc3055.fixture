@@ -1,0 +1,22 @@
+### array keys in sh
+#!/bin/sh
+echo "${!ports[@]}"
+>>> SC2154 2:7
+>>> SC3053 2:7
+>>> SC3055 2:7
+
+### bare array keys in busybox
+#!/bin/busybox sh
+# shellcheck shell=busybox
+ports=8080
+${!ports[@]}
+>>> SC2068 4:1
+>>> SC3053 4:1
+>>> SC3055 4:1
+
+### array keys in dash
+#!/bin/dash
+echo "${!ports[@]}"
+>>> SC2154 2:7
+>>> SC3053 2:7
+>>> SC3055 2:7

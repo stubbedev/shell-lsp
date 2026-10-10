@@ -1,0 +1,18 @@
+### leading zero number contains 9
+(( mode = 0192 ))
+echo "$mode"
+>>> SC2080 1:11
+
+### octal literal with an 8 after valid digits
+echo $(( 0758 + 1 ))
+>>> SC2080 1:10
+
+### hexadecimal number is fine
+(( mask = 0x1f ))
+echo "$mask"
+>>> none
+
+### valid octal of sevens is fine
+(( flags = 1 ^ 0777 ))
+echo "$flags"
+>>> none

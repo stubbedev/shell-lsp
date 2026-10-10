@@ -53,12 +53,13 @@ func TestConfigurationPullPerFolder(t *testing.T) {
 
 	uriA := fileuri.FromPath(filepath.Join(a, "x.sh"))
 	uriB := fileuri.FromPath(filepath.Join(b, "x.sh"))
-	c.notify("textDocument/didOpen", openParams(uriA, "print -l *(.)\n"))
-	c.notify("textDocument/didOpen", openParams(uriB, "print -l *(.)\n"))
+	c.notify("textDocument/didOpen", openParams(uriA, "echo $1\n"))
+	c.notify("textDocument/didOpen", openParams(uriB, "echo $1\n"))
+	splits := func(d lsp.Diagnostic) bool { return d.Code == "SC2086" }
 	deadline := 0
 	for {
 		reportA := decodeResult[lsp.FullDocumentDiagnosticReport](t, c.call("textDocument/diagnostic", `{"textDocument": {"uri": "`+uriA+`"}}`))
-		if slices.ContainsFunc(reportA.Items, func(d lsp.Diagnostic) bool { return d.Code == "syntax" || d.Code == "dialect" }) {
+		if slices.ContainsFunc(reportA.Items, splits) {
 			deadline++
 			if deadline > 200 {
 				t.Fatalf("folder a never switched to zsh: %+v", reportA.Items)
@@ -68,8 +69,8 @@ func TestConfigurationPullPerFolder(t *testing.T) {
 		break
 	}
 	reportB := decodeResult[lsp.FullDocumentDiagnosticReport](t, c.call("textDocument/diagnostic", `{"textDocument": {"uri": "`+uriB+`"}}`))
-	if !slices.ContainsFunc(reportB.Items, func(d lsp.Diagnostic) bool { return d.Code == "syntax" || d.Code == "dialect" }) {
-		t.Errorf("folder b (POSIX sh) accepted zsh glob qualifiers: %+v", reportB.Items)
+	if !slices.ContainsFunc(reportB.Items, splits) {
+		t.Errorf("folder b (POSIX sh) did not warn about word splitting: %+v", reportB.Items)
 	}
 }
 

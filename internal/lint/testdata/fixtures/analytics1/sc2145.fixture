@@ -1,0 +1,24 @@
+### quoted text followed by dollar at
+echo "Arguments: $@"
+>>> SC2145 1:18
+
+### at array followed by literal text
+echo ${files[@]}.bak
+>>> SC2068 1:6
+>>> SC2145 1:6
+>>> SC2154 1:6
+
+### variable glued to dollar at
+echo $prefix$@
+>>> SC2068 1:13
+>>> SC2086 1:6
+>>> SC2145 1:13
+>>> SC2154 1:6
+
+### dollar at alone is fine
+echo $@
+>>> SC2068 1:6
+
+### quoted at array alone is fine
+echo "${files[@]}"
+>>> SC2154 1:7

@@ -1,0 +1,20 @@
+### dash flag used as a command missing test brackets
+-e /etc/hosts && echo "hosts present"
+>>> SC2215 1:1
+
+### long option continued on its own line after a bad break
+curl https://example.org/api
+  --data=payload.json
+>>> SC2215 2:3
+
+### single-dash cluster as the first word
+-rf build/
+>>> SC2215 1:1
+
+### quoted dashed name used deliberately
+'--helper--' arg
+>>> none
+
+### prefix assignment before a long option word
+opts=fast --verbose
+>>> SC2037 1:1

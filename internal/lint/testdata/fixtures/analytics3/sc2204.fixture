@@ -1,0 +1,30 @@
+### subshell starting with -e
+if ( -e /etc/app.conf ); then echo configured; fi
+>>> SC2204 1:4
+>>> SC2215 1:6
+
+### subshell with -e and -x joined by and
+if ( -e ./run.sh && -x ./run.sh ); then ./run.sh; fi
+>>> SC2204 1:4
+>>> SC2215 1:21
+>>> SC2215 1:6
+
+### subshell with an and/or chain of tests
+if ( -e /dev/tty || -x /bin/tty && -t 0 ); then echo interactive; fi
+>>> SC2204 1:4
+>>> SC2215 1:21
+>>> SC2215 1:36
+>>> SC2215 1:6
+
+### subshell with a negated -d
+if ( ! -d /srv/cache ); then mkdir -p /srv/cache; fi
+>>> SC2204 1:4
+>>> SC2215 1:8
+
+### subshell runs grep
+if ( grep -qs pattern file.txt ); then echo found; fi
+>>> none
+
+### proper single-bracket test
+if [ -e /etc/app.conf ]; then echo configured; fi
+>>> none

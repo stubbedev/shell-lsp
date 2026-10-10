@@ -1,0 +1,13 @@
+### double equals in an assignment
+retries==3
+echo "$retries"
+>>> SC1097 1:9
+
+### single equals
+retries=3
+echo "$retries"
+>>> none
+
+### three equals signs are decoration
+banner===3
+>>> SC2272 1:1

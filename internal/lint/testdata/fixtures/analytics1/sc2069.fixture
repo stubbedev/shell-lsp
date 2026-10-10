@@ -1,0 +1,27 @@
+### duplication before the file redirection
+make 2>&1 > build.log
+>>> SC2069 1:6
+
+### last pipeline stage with the bad order
+dmesg | grep -i error 2>&1 >/dev/null
+>>> SC2069 1:23
+
+### file redirection first is fine
+make > build.log 2>&1
+>>> none
+
+### non last pipeline stage is fine
+make 2>&1 >/dev/null | grep -i warning
+>>> none
+
+### inside an assigned command substitution is fine
+errors=$(make 2>&1 >/dev/null)
+>>> SC2034 1:1
+
+### inside a process substitution read from is fine
+read -r first_err < <(make 2>&1 >/dev/null)
+>>> SC2034 1:9
+
+### duplication applied to a whole brace group is fine
+{ make > build.log; } 2>&1
+>>> none

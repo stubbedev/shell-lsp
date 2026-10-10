@@ -20,6 +20,7 @@ type snapshot struct {
 	tree       *parser.Tree
 	settings   config.Settings
 	generation uint64
+	lint       lintCache
 }
 
 type snapshotEntry struct {

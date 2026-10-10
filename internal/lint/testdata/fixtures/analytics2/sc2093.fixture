@@ -1,0 +1,92 @@
+### exec followed by another command
+exec /usr/sbin/nginx -g 'daemon off;'
+true
+>>> SC2093 1:1
+
+### exec not last inside a then branch
+if [ -x /opt/app/bin/start ]; then
+  exec /opt/app/bin/start
+  exec /opt/app/bin/fallback
+fi
+>>> SC2093 2:3
+
+### exec with output redirection followed by a command
+exec ./server > server.log
+rm -f server.pid
+>>> SC2093 1:1
+
+### exec as only command in a loop body
+for helper in /usr/libexec/hooks/*; do
+  exec "$helper"
+done
+>>> SC2093 2:3
+
+### execfail in dash is not honored
+#!/bin/dash
+shopt -s execfail
+exec primary-worker
+exec backup-worker
+echo "both failed"
+exit 1
+>>> SC2093 3:1
+>>> SC3044 2:1
+
+### exec with flags followed by a command
+exec -a worker ./daemon
+logger started
+>>> SC2093 1:1
+
+### exec is last after an echo
+echo "starting"
+exec ./daemon
+>>> none
+
+### only statement of an if branch
+if [ "$1" = run ]; then
+  exec ./daemon
+fi
+>>> none
+
+### exec with only a redirection
+exec > /var/log/setup.log
+echo "setup started"
+>>> none
+
+### trailing echo and exit are cleanup
+exec ./daemon
+echo "exec failed" >&2
+exit 3
+>>> none
+
+### exec with fd allocation and duplication
+exec {logfd}>> audit.log 2>&1
+echo started >&"$logfd"
+>>> none
+
+### trailing assignment printf and return are cleanup
+launch() {
+  exec ./daemon
+  rc=$?
+  printf 'launch failed\n' >&2
+  return "$rc"
+}
+launch
+>>> none
+
+### trailing colon is cleanup
+exec ./daemon
+:
+>>> none
+
+### execfail in bash disables the check
+#!/bin/bash
+shopt -s execfail
+exec primary-worker
+exec backup-worker
+echo "both failed"
+exit 1
+>>> none
+
+### exec inside a subshell is not examined
+( exec ./daemon; echo after )
+>>> none

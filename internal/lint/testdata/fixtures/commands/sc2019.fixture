@@ -1,0 +1,17 @@
+### single-quoted uppercase range in tr misses accented letters
+tr 'a-z' 'A-Z' < names.txt
+>>> SC2018 1:4
+>>> SC2019 1:10
+
+### unquoted uppercase range in tr
+printf '%s\n' "$label" | tr A-Z _
+>>> SC2019 1:29
+>>> SC2154 1:16
+
+### uppercase range text without a tr command is ignored
+A-Z N-ZA-M
+>>> none
+
+### bracketed uppercase range gets the bracket warning instead
+tr '_' '[A-Z]' < input.log
+>>> SC2021 1:8

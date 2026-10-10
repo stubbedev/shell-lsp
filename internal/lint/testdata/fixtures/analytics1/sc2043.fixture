@@ -1,0 +1,35 @@
+### single bare command word
+for tool in ls; do
+  "$tool" -la
+done
+>>> SC2043 1:13
+
+### single double quoted constant
+for env in "staging"; do
+  deploy "$env"
+done
+>>> SC2043 1:12
+
+### quoted all elements expansion is fine
+for host in "${hosts[@]}"; do
+  echo "$host"
+done
+>>> SC2154 1:14
+
+### quoted indirect expansion is fine
+for v in "${!cfg_name}"; do
+  echo "$v"
+done
+>>> SC2154 1:11
+
+### unquoted glob is fine
+for unit in *.service; do
+  echo "$unit"
+done
+>>> none
+
+### brace expansion is fine
+for size in {small,large}; do
+  echo "$size"
+done
+>>> none

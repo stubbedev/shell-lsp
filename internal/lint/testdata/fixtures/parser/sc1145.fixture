@@ -1,0 +1,22 @@
+### external-sources with an unknown word
+# shellcheck external-sources=yes
+source ./lib.sh
+>>> SC1091 2:8
+>>> SC1145 1:31
+
+### external-sources with a quoted unknown word
+# shellcheck external-sources="maybe"
+source ./lib.sh
+>>> SC1091 2:8
+>>> SC1145 1:31
+
+### external-sources with a valid value
+# shellcheck external-sources=false
+source ./lib.sh
+>>> SC1091 2:8
+
+### external-sources value starting with a digit is a directive syntax error
+# shellcheck external-sources=1
+source ./lib.sh
+>>> SC1072 1:31
+>>> SC1073 1:1

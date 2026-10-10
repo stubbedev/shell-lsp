@@ -1,0 +1,11 @@
+### lower-case -r removes read permission
+chmod -r 0755 public_html
+>>> SC2253 1:7
+
+### upper-case -R recurses
+chmod -R 0755 public_html
+>>> none
+
+### symbolic mode removing read
+chmod a-r secrets.txt
+>>> none

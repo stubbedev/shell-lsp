@@ -1,0 +1,29 @@
+### -eq against a single quoted letter
+[ $reply -eq 'y' ] && echo "yes"
+>>> SC2086 1:3
+>>> SC2154 1:3
+>>> SC2170 1:14
+
+### -gt between words with a literal x prefix
+[ x$current -gt x$previous ] && echo "grew"
+>>> SC2086 1:18
+>>> SC2086 1:4
+>>> SC2154 1:18
+>>> SC2154 1:4
+>>> SC2170 1:17
+>>> SC2170 1:3
+
+### -eq between a bare word and a quoted letter
+[ count -eq 'n' ] && echo "odd"
+>>> SC2050 1:9
+>>> SC2170 1:13
+>>> SC2170 1:3
+
+### numeric operands are fine
+[ $reply -eq 10 ] && echo "ten"
+>>> SC2086 1:3
+>>> SC2154 1:3
+
+### signs and dots are fine
+[ "$delta" -lt -5 ] && echo "dropped"
+>>> SC2154 1:4

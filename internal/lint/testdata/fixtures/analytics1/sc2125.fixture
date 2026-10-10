@@ -1,0 +1,21 @@
+### assigning an unquoted glob
+logs=*.log
+>>> SC2034 1:1
+>>> SC2125 1:6
+
+### assigning a numeric brace range
+nums={1..5}
+>>> SC2034 1:1
+>>> SC2125 1:6
+
+### single quoted glob is fine
+pattern='*.log'
+>>> SC2034 1:1
+
+### assigning dollar star is fine
+words=$*
+>>> SC2034 1:1
+
+### parenthesised array of a glob is fine
+logs=(*.log)
+>>> SC2034 1:1

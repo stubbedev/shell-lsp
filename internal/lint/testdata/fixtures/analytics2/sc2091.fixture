@@ -1,0 +1,17 @@
+### if condition is only a command substitution
+if $(true); then
+  echo ok
+fi
+>>> SC2091 1:4
+
+### statement is only a command substitution
+$(which python3)
+>>> SC2091 1:1
+
+### prefix assignment and redirection are ignored
+LANG=C $(locale -a) > /dev/null
+>>> SC2091 1:8
+
+### command substitution followed by flags is fine
+$(command -v python3) --version
+>>> none

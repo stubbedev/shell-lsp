@@ -1,0 +1,9 @@
+### reading from a tcp pseudo-device in sh
+#!/bin/sh
+cat < /dev/tcp/example.org/80
+>>> SC3025 2:5
+
+### reading from a tcp pseudo-device in dash
+#!/bin/dash
+cat < /dev/tcp/example.org/80
+>>> SC3025 2:5

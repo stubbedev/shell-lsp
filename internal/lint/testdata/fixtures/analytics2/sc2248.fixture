@@ -1,0 +1,22 @@
+### bats status in unquoted numeric test
+#!/usr/bin/env bats
+@test "succeeds" {
+  run ./build.sh
+  [ $status -eq 0 ]
+}
+>>> none
+
+### plain word echoed unquoted
+region=eu-west-1
+echo $region
+>>> none
+
+### plain word echoed inside quotes
+region=eu-west-1
+echo "$region"
+>>> none
+
+### dirty value fires SC2086 instead
+region=$(curl -s http://metadata/region)
+echo $region
+>>> SC2086 2:6

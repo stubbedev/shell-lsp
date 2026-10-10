@@ -1,0 +1,11 @@
+### braces placeholder inside an sh -c script
+find . -name '*.txt' -exec sh -c 'echo {}' \;
+>>> SC2156 1:34
+
+### quoted braces placeholder inside a bash -c script
+find . -name '*.tmp' -execdir bash -c 'rm "{}"' ';'
+>>> SC2156 1:39
+
+### files passed as positional arguments
+find . -name '*.log' -ok sh -c 'gzip "$@"' _ {} \;
+>>> none

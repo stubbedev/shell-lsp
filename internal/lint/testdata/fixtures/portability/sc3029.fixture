@@ -1,0 +1,9 @@
+### piping make output with stderr in sh
+#!/bin/sh
+make |& less
+>>> SC3029 2:6
+
+### piping make output with stderr in dash
+#!/bin/dash
+make |& less
+>>> SC3029 2:6

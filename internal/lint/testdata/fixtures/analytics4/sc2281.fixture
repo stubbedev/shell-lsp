@@ -1,0 +1,32 @@
+### dollar on the assigned name
+$target=release
+>>> SC2154 1:1
+>>> SC2281 1:1
+
+### assigning one variable to another with dollars
+$dest=$src
+>>> SC2086 1:7
+>>> SC2154 1:1
+>>> SC2154 1:7
+>>> SC2281 1:1
+
+### braced dollar on the assigned name
+${channel}=stable
+>>> SC2154 1:1
+>>> SC2281 1:1
+
+### array element with a dollar
+${ports[42]}=8080
+>>> SC2154 1:1
+>>> SC2281 1:1
+
+### append with a dollar on the name
+$flags+=-O2
+>>> SC2086 1:1
+>>> SC2154 1:1
+>>> SC2281 1:1
+
+### dollar zero is not this code
+#!/bin/bash
+$0='renamed'
+>>> SC2277 2:1

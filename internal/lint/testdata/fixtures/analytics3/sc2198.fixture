@@ -1,0 +1,19 @@
+### single-bracket -e on unquoted all-arguments
+[ -e $@ ] && echo "exists"
+>>> SC2068 1:6
+>>> SC2198 1:6
+
+### unquoted all-arguments on both sides of ==
+[ $@ == $@ ] && echo "same"
+>>> SC2068 1:3
+>>> SC2068 1:9
+>>> SC2198 1:3
+>>> SC2198 1:9
+
+### quoted all-arguments compared to empty
+[ "$@" == "" ] && echo "no args"
+>>> SC2198 1:3
+
+### single-bracket nullary test of quoted all-arguments
+[ "$@" ] && echo "has args"
+>>> none

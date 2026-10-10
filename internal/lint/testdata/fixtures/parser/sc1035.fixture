@@ -1,0 +1,75 @@
+### bang glued to the command in a pipeline
+if !grep -q "^$USER:" /etc/passwd | logger; then
+  echo missing
+fi
+>>> SC1035 1:5
+
+### no space after the opening single bracket
+if [-f /etc/hosts ]; then
+  echo hosts
+fi
+>>> SC1035 1:4
+
+### no space after the opening double bracket
+if [[-d /srv/www ]]; then
+  echo www
+fi
+>>> SC1035 1:4
+
+### no space after a unary operator
+config=$1
+if [ -f"$config" ]; then
+  echo found
+fi
+>>> SC1035 2:8
+
+### no space after a binary operator
+limit=$1
+if [ "$limit" -gt0 ]; then
+  echo positive
+fi
+>>> SC1035 2:18
+
+### no space after the negation bang inside a test
+if [ !-e /tmp/ready ]; then
+  echo waiting
+fi
+>>> SC1035 1:7
+
+### no space after the -a conjunction
+if [ -n "$1" -a-n "$2" ]; then
+  echo both
+fi
+>>> SC1035 1:16
+>>> SC2166 1:14
+
+### no space after the -o conjunction
+if [ -z "$1" -o-z "$2" ]; then
+  echo either
+fi
+>>> SC1035 1:16
+>>> SC2166 1:14
+
+### negated pipeline with a space
+! grep -q error build.log | sort -k 2
+>>> none
+
+### double negation with spaces
+! ! test -e /tmp/flag
+>>> none
+
+### negation on a later pipeline stage
+printf '%s\n' a b | ! grep -q c
+>>> SC2326 1:21
+
+### empty single-bracket test
+if [ ]; then
+  echo never
+fi
+>>> SC2212 1:4
+
+### logical operators without spaces in double brackets
+if [[ -n $1&&-n $2 ]]; then
+  echo both
+fi
+>>> none

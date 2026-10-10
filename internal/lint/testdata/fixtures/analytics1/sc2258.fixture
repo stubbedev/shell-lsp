@@ -1,0 +1,26 @@
+### bare names followed by commas
+for cmd in ls, cp, mv; do
+  command -v "$cmd"
+done
+>>> SC2258 1:12
+>>> SC2258 1:16
+
+### single quoted names followed by unquoted commas
+for cmd in 'ls', 'cp', 'mv'; do
+  command -v "$cmd"
+done
+>>> SC2258 1:12
+>>> SC2258 1:18
+
+### variable followed by a comma
+for item in $entries,; do
+  echo "$item"
+done
+>>> SC2154 1:13
+>>> SC2258 1:13
+
+### commas inside the quotes are fine
+for cmd in 'ls,' 'cp,' 'mv'; do
+  command -v "$cmd"
+done
+>>> none

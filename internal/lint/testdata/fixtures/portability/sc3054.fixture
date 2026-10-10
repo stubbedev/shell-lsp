@@ -1,0 +1,19 @@
+### array element in sh
+#!/bin/sh
+echo "${hosts[1]}"
+>>> SC2154 2:7
+>>> SC3054 2:7
+
+### bare array element in busybox
+#!/bin/busybox sh
+# shellcheck shell=busybox
+runner=make
+${runner[1]}
+>>> SC2209 3:1
+>>> SC3054 4:1
+
+### array element in dash
+#!/bin/dash
+echo "${hosts[1]}"
+>>> SC2154 2:7
+>>> SC3054 2:7

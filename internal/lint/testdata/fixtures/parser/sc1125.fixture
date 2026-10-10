@@ -1,0 +1,25 @@
+### stray number after the directive pairs
+# shellcheck disable=SC2086 42
+echo $1
+>>> SC1125 1:29
+
+### stray punctuation after the directive pairs
+# shellcheck disable=SC2086 !!
+echo $1
+>>> SC1125 1:29
+
+### trailing comment after the pairs
+# shellcheck disable=SC2086 # quoting is fine here
+echo $1
+>>> none
+
+### directive line ending cleanly
+# shellcheck disable=SC2086
+echo $1
+>>> none
+
+### leftover word without an equals sign
+# shellcheck disable=SC2086 please
+echo $1
+>>> SC1072 1:35
+>>> SC1073 1:1

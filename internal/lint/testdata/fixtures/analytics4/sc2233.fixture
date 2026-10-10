@@ -1,0 +1,26 @@
+### parenthesised test as an if condition
+if ([ -f "$lockfile" ]); then
+  echo "locked"
+fi
+>>> SC2154 1:11
+>>> SC2233 1:4
+
+### parenthesised test in a while condition
+while ([ "$retries" -lt 5 ]); do
+  retries=$((retries + 1))
+done
+>>> SC2233 1:7
+
+### parenthesised test as a statement in an until body
+until false; do
+  ([ -d "$cache" ])
+  break
+done
+>>> SC2154 2:10
+>>> SC2233 2:3
+
+### subshell with a command that is not a test
+if (cd "$repo" && git pull); then
+  echo "updated"
+fi
+>>> SC2154 1:9

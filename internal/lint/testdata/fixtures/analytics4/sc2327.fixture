@@ -1,0 +1,46 @@
+### substitution output sent to a file
+result=$(compute > out.txt)
+>>> SC2034 1:1
+>>> SC2327 1:8
+>>> SC2328 1:18
+
+### backtick substitution with fd 1 redirected
+result=`compute 1> out.txt`
+>>> SC2006 1:8
+>>> SC2034 1:1
+>>> SC2327 1:8
+>>> SC2328 1:17
+
+### brace substitution appending to a file
+result=${ compute >> out.txt; }
+>>> SC2034 1:1
+>>> SC2327 1:8
+>>> SC2328 1:19
+
+### last stage of a pipeline redirected
+result=$(compute | sort > sorted.txt)
+>>> SC2034 1:1
+>>> SC2327 1:8
+>>> SC2328 1:25
+
+### unnumbered duplication to another fd
+result=$(compute >&3)
+>>> SC2034 1:1
+>>> SC2327 1:8
+>>> SC2328 1:18
+
+### stderr captured then stdout discarded
+errors=$(compute 2>&1 > /dev/null)
+>>> SC2034 1:1
+
+### two statements second redirected
+result=$(prepare; compute > out.txt)
+>>> SC2034 1:1
+
+### two statements first redirected
+result=$(prepare > prep.log; compute)
+>>> SC2034 1:1
+
+### reading from a duplicated fd
+saved=$(cat <&3)
+>>> SC2034 1:1

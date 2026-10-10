@@ -1,0 +1,8 @@
+### unquoted array index in read
+read arr[val]
+>>> SC2162 1:1
+>>> SC2313 1:6
+
+### quoted array index in read
+read 'arr[val]'
+>>> SC2162 1:1

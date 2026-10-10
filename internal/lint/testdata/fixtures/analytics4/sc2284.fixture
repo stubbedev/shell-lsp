@@ -1,0 +1,15 @@
+### comparison written as a command with spaced double equals
+2f == $answer
+>>> SC2086 1:7
+>>> SC2154 1:7
+>>> SC2284 1:1
+
+### double equals glued to the variable
+2f ==$answer
+>>> SC2086 1:6
+>>> SC2154 1:6
+>>> SC2284 1:1
+
+### border of equals signs after a command
+printf ====
+>>> none

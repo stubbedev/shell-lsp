@@ -1,0 +1,36 @@
+### unescaped greater than between two variables
+[ $newer > $older ] && echo "after"
+>>> SC2073 1:10
+>>> SC2086 1:12
+>>> SC2086 1:3
+>>> SC2154 1:12
+>>> SC2154 1:3
+
+### dash dialect without the double bracket hint
+#!/bin/dash
+[ $newer > $older ] && echo "after"
+>>> SC2073 2:10
+>>> SC2086 2:12
+>>> SC2086 2:3
+>>> SC2154 2:12
+>>> SC2154 2:3
+
+### quoted greater than is fine
+[ "$newer" ">" "$older" ] && echo "after"
+>>> SC2154 1:17
+>>> SC2154 1:4
+
+### sh dialect is fine
+#!/bin/sh
+[ $newer > $older ] && echo "after"
+>>> SC2086 2:12
+>>> SC2086 2:3
+>>> SC2154 2:12
+>>> SC2154 2:3
+>>> SC3012 2:10
+
+### numeric side goes to SC2071 instead
+[ $newer > 5 ] && echo "after"
+>>> SC2071 1:10
+>>> SC2086 1:3
+>>> SC2154 1:3

@@ -1,0 +1,37 @@
+### classic fork bomb
+:(){ :|:& };:
+>>> SC2264 1:6
+>>> SC2264 1:8
+
+### function that only calls itself
+retry() { retry; }
+>>> SC2264 1:11
+
+### cd wrapper calling itself
+cd() { cd "$@" || exit; }
+>>> SC2264 1:8
+
+### wrapper through the command builtin
+ls() { command ls --color=auto "$@"; }
+>>> none
+
+### recursion guarded by a test
+countdown() { [ "$1" -le 0 ] || countdown $(( $1 - 1 )); }
+>>> none
+
+### recursion that is not the first statement
+walk() {
+  echo "$1"
+  walk "$(dirname "$1")"
+}
+>>> none
+
+### wrapper through the builtin builtin
+cd() { builtin cd "$@" && pwd; }
+>>> none
+
+### body is an if statement
+grep() {
+  if [ -t 1 ]; then grep --color=auto "$@"; fi
+}
+>>> none

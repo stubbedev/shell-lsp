@@ -1,0 +1,23 @@
+### double-quoted backslash-n
+IFS="\n"
+read -r -d '' -a lines < input.txt
+>>> SC2034 2:18
+>>> SC2141 1:5
+
+### single-quoted space backslash-t backslash-n
+IFS=' \t\n'
+read -r first second <<< "a b"
+>>> SC2034 2:15
+>>> SC2034 2:9
+>>> SC2141 1:5
+
+### dash script with backslash-n
+#!/bin/dash
+IFS="\n"
+>>> SC2141 2:5
+
+### dollar-single-quote tab
+IFS=$'\t'
+read -r name age < people.tsv
+>>> SC2034 2:14
+>>> SC2034 2:9

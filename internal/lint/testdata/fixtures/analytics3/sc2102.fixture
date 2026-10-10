@@ -1,0 +1,33 @@
+### numeric range with a repeated digit
+ls photo_[10-15].jpg
+>>> SC2102 1:10
+
+### two letter ranges without repeats
+ls report_[a-fx-z].txt
+>>> none
+
+### tr with a doubled letter
+tr '[aa]' x < input.txt
+tr [aa] x < input.txt
+>>> SC2020 1:4
+>>> SC2021 1:4
+>>> SC2060 2:4
+
+### negation followed by the same character in a double-bracket pattern
+[[ $input == [!!]* ]] && echo "no bang"
+>>> SC2154 1:4
+
+### array subscript in a double-bracket -v operand
+[[ -v counts[11] ]] && echo set
+>>> none
+
+### array subscript in a double-bracket -gt operand
+[[ totals[11] -gt 3 ]] && echo big
+>>> SC2154 1:4
+>>> SC2309 1:4
+
+### array subscript in a read argument
+read -r slots[11]
+echo "${slots[@]}"
+>>> SC2154 2:7
+>>> SC2313 1:9

@@ -1,0 +1,8 @@
+### unquoted bracket sets in tr can glob
+tr [a-f] [A-F] < checksum.txt
+>>> SC2060 1:10
+>>> SC2060 1:4
+
+### bracket range for ls is not a tr argument
+ls [a-f]
+>>> none

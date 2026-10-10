@@ -1,0 +1,29 @@
+### echoing a quoted tag through a global sed substitution
+#!/bin/bash
+release="v1-2-3"
+underscored=$(echo "$release" | sed 's/-/_/g')
+printf '%s\n' "$underscored"
+>>> SC2001 3:15
+
+### here-string of a quoted branch fed to a global sed substitution
+#!/bin/bash
+branch="feature/login-page"
+slug=$(sed 's/-/_/g' <<< "$branch")
+printf '%s\n' "$slug"
+>>> SC2001 3:8
+
+### removing a file named by echo piped into sed -e with comma delimiter
+#!/bin/bash
+backup=$1
+rm $(echo $backup | sed -e 's,\.bak$,,')
+>>> SC2001 3:6
+>>> SC2046 3:4
+>>> SC2086 3:11
+
+### removing a file named by sed -e reading an unquoted here-string
+#!/bin/bash
+backup=$1
+rm $(sed -e 's,\.bak$,,' <<< $backup)
+>>> SC2001 3:6
+>>> SC2046 3:4
+>>> SC2086 3:30

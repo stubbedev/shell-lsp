@@ -1,0 +1,377 @@
+### value with a space echoed unquoted
+title='quarterly report'
+echo $title
+>>> SC2086 2:6
+
+### loop variable from a glob
+for track in *.mp3; do
+  echo $track
+done
+>>> SC2086 2:8
+
+### pattern substitution makes the value unknown
+pattern='*'
+copy=$pattern
+label=v${copy//x/y}
+echo $label
+>>> SC2086 4:6
+
+### value containing a command substitution
+stamp=build-$(date +%s)
+echo $stamp
+>>> SC2086 2:6
+
+### escaped space in the value
+target=old\ logs
+rm $target
+>>> SC2086 2:4
+
+### first positional parameter
+rm $1
+>>> SC2086 1:4
+
+### braced tenth positional with substitution
+rm ${10//tmp/var}
+>>> SC2086 1:4
+
+### positional in a non-assignment word
+echo level=$1
+>>> SC2086 1:12
+
+### environment variable
+echo $PWD
+>>> SC2086 1:6
+
+### here-string is not quote-free
+query='select id from users'
+cat <<< $query
+>>> SC2086 2:9
+
+### sed expression with a bracket class
+expr='s/[0-9]//g'
+sed $expr input.txt
+>>> SC2086 2:5
+
+### variable inside a brace expansion
+extra='with space'
+echo {one,two,$extra}
+>>> SC2086 2:15
+
+### redirection target is not quote-free
+outfile='my report.txt'
+echo saved > $outfile
+>>> SC2086 2:14
+
+### for loop without in-list
+for arg; do
+  echo $arg
+done
+>>> SC2086 2:8
+
+### declare word with expansion in the name part
+declare app_$n=$1
+>>> SC2086 1:13
+>>> SC2086 1:16
+>>> SC2154 1:13
+
+### empty value still needs quotes
+suffix=
+echo $suffix
+>>> SC2086 2:6
+
+### export argument in sh is not quote-free
+#!/bin/sh
+export CONFIG_PATH=$config_path
+>>> SC2086 2:20
+>>> SC2154 2:20
+
+### loop over a list containing a glob
+for item in 1 2 *; do
+  echo $item
+done
+>>> SC2086 2:8
+
+### one path keeps the spaced value
+mode='slow mode'
+ping -c1 localhost && mode=1
+echo $mode
+>>> SC2086 3:6
+
+### conditionally defined function
+state='not ready'
+true && setready() { state=1; }
+setready
+echo $state
+>>> SC2086 4:6
+
+### local integer attribute does not leak
+tally() { declare -i hits; }
+tally
+hits=$(wc -l < access.log)
+echo $hits
+>>> SC2086 4:6
+
+### integer attribute removed again
+declare -i size
+declare +i size
+size=$(du -s .)
+echo $size
+>>> SC2086 4:6
+
+### exported name without value at top level
+declare -x EDITOR
+cmd=vi$EDITOR
+echo $cmd
+>>> SC2086 3:6
+
+### integer on only some paths
+command -v bc && declare -i sum
+sum='1 + 2'
+echo $sum
+>>> SC2086 3:6
+
+### used alone in a double-bracket test
+title='quarterly report'
+[[ -n $title ]] && echo set
+>>> none
+
+### glob-like value inside double quotes
+mask='*.log'
+echo "$mask"
+>>> none
+
+### digits-only value inside command substitution
+count=3
+count=$(echo $count)
+echo "$count"
+>>> SC2116 2:7
+
+### latest value is clean
+target=old\ logs
+target=logs
+rm $target
+>>> none
+
+### arithmetic command is quote-free
+(( total = 3 + $1 ))
+>>> SC2034 1:10
+
+### positional in double-bracket numeric test
+if [[ $2 -gt 10 ]]; then echo large; fi
+>>> none
+
+### prefix assignment before env
+LOCALE=$3 env
+>>> none
+
+### local assignment of positional
+greet() {
+  local who=$1
+  echo "$who"
+}
+>>> none
+
+### declare assignment of positional
+declare who=$1
+echo "$who"
+>>> none
+
+### positional as command name
+$1 --verbose --dry-run
+>>> none
+
+### append of a spaced literal
+note+=' and more'
+>>> none
+
+### select word list
+select choice in $options; do
+  break
+done
+>>> SC2034 1:1
+>>> SC2154 1:18
+
+### locale string
+echo $"Hello $1"
+>>> none
+
+### all elements of an array
+names=(alice)
+echo ${names[@]}
+>>> SC2068 2:6
+
+### alternate value expansion
+echo ${verbose:+'--verbose'}
+>>> none
+
+### allocated descriptor is an integer
+exec {outfd}>&1
+echo $outfd
+>>> none
+
+### closing a descriptor named by a variable
+fd=$(next_fd)
+exec {fd}>&-
+>>> none
+
+### escaped quotes inside backticks within double quotes
+echo "`echo \"$1\"`"
+>>> SC2005 1:6
+>>> SC2006 1:7
+>>> SC2116 1:7
+
+### -v test names a variable
+mirror=$1
+[ -v mirror ] && echo set
+>>> none
+
+### alternate expansion of a positional
+echo ${1+"$1"}
+>>> none
+
+### argument count is an integer
+argc=$#
+echo $argc
+>>> none
+
+### bats status is an integer
+#!/usr/bin/env bats
+@test "exits cleanly" {
+  run ./install.sh
+  [ $status -eq 0 ]
+}
+>>> none
+
+### empty quoted parts concatenate to nothing
+blank=''""''
+tag=x$blank
+echo $tag
+>>> none
+
+### arithmetic expansion value
+pages=$(( 40 / 8 ))
+echo $pages
+>>> none
+
+### exec with positional command
+exec $1 --foreground --quiet
+>>> none
+
+### bats run with positional command
+#!/usr/bin/env bats
+@test "runs given tool" {
+  run $1 --help --version
+}
+>>> none
+
+### expansion followed by equals and value
+$setting=42
+>>> SC2154 1:1
+>>> SC2281 1:1
+
+### wait -p stores an integer
+sleep 2 &
+wait -n -p finished
+echo $finished
+>>> none
+
+### arithmetic add keeps it clean
+x=0
+(( x += 1 ))
+echo $x
+>>> none
+
+### arithmetic post-decrement keeps it clean
+x=0
+(( x-- ))
+echo $x
+>>> none
+
+### arithmetic pre-increment keeps it clean
+x=0
+(( ++x ))
+echo $x
+>>> none
+
+### loop over plain literals
+for n in 1 2 3; do
+  echo $n
+done
+>>> none
+
+### dirty path ends in exit
+level=1
+if [ -f /etc/debug ]; then
+  level='very verbose'
+  exit 1
+fi
+echo $level
+>>> none
+
+### local spaced value does not leak
+depth=1
+dive() { local depth='very deep'; }
+dive
+echo $depth
+>>> none
+
+### function call overwrites global
+depth='very deep'
+dive() { depth=1; }
+dive
+echo $depth
+>>> none
+
+### process substitution is a subshell
+depth=1
+cat <(depth='very deep')
+echo $depth
+>>> none
+
+### integer declared variable stays clean
+declare -i lines=0
+lines=$(wc -l < data.csv)
+echo $lines
+>>> none
+
+### global integer from inside a function
+setup() { declare -g -i retries; }
+setup
+retries=$(cat retries.conf)
+echo $retries
+>>> none
+
+### copy of an always integer variable
+declare -i calc
+calc='2 + 3'
+result=$calc
+echo $result
+>>> none
+
+### exit status assigned and echoed in a called function
+check() {
+  rc=$?
+  echo $rc
+}
+check
+>>> none
+
+### exit status in an uncalled function
+check() {
+  rc=$?
+  echo $rc
+}
+>>> none
+
+### declaration without value in uncalled function
+helper() {
+  declare -x TOKEN
+  header=Bearer$TOKEN
+  echo $header
+}
+>>> none
+
+### star parameter is not exempt
+echo $*
+>>> SC2048 1:6
+>>> SC2086 1:6

@@ -1,0 +1,152 @@
+### sourcing the null device is accepted as an empty file
+source /dev/null
+echo "ready"
+>>> none
+
+### sourcing a missing file and using a variable it would define
+source ./settings.conf
+echo "$deploy_target"
+>>> SC1091 1:8
+>>> SC2154 2:7
+
+### actual: a literal library name is not followed without external sources
+source ./helpers.bash
+echo "$helper_version"
+>>> SC1091 1:8
+>>> SC2154 2:7
+
+### double hyphen before the file name
+source -- ./helpers.bash
+echo "ok"
+>>> SC1091 1:11
+
+### -p takes a value and the file name follows it
+source -p "$PLUGIN_PATH" helpers.bash
+echo "ok"
+>>> SC1091 1:26
+
+### dot command with a literal file name
+. ./helpers.bash
+echo "ok"
+>>> SC1091 1:3
+
+### dot command on a quoted positional parameter
+. "$1"
+echo "loaded $1"
+>>> SC1090 1:3
+
+### source of a home-relative path with a tilde
+source ~/.config/deploy/env.sh
+echo "ok"
+>>> SC1090 1:8
+
+### leading variable followed by a slash path becomes relative
+script_dir=$(dirname "$0")
+source "$script_dir/helpers.bash"
+echo "ok"
+>>> SC1091 2:8
+
+### leading command substitution followed by a slash path becomes relative
+source "$(dirname "${BASH_SOURCE[0]}")/helpers.bash"
+echo "ok"
+>>> SC1091 1:8
+
+### two leading expansions cannot be resolved
+root=/opt/app sub=lib
+source "$root$sub/helpers.bash"
+echo "ok"
+>>> SC1090 2:8
+
+### leading expansion followed by text without a slash cannot be resolved
+prefix=./
+source "${prefix}helpers.bash"
+echo "ok"
+>>> SC1090 2:8
+
+### dot command with no file argument at all
+.
+echo "ok"
+>>> SC1090 1:1
+
+### source directive naming the null device before a dynamic dot command
+# shellcheck source=/dev/null
+. "$1"
+echo "loaded"
+>>> none
+
+### source directive naming a library before a dynamic dot command
+# shellcheck source=./helpers.bash
+. "$1"
+echo "loaded"
+>>> SC1091 2:3
+
+### source directive with a quoted name containing a space
+# shellcheck source="./shared helpers.bash"
+. "$1"
+echo "loaded"
+>>> SC1091 2:3
+
+### file-wide source directive overrides a different literal name
+# shellcheck source=/dev/null
+source ./helpers.bash
+echo "ok"
+>>> none
+
+### command-scoped source directive applies to its own command only
+:
+# shellcheck source=/dev/null
+. "$1"
+. "$2"
+>>> SC1090 4:3
+
+### nearest command-scoped source directive wins over the file-wide one
+# shellcheck source=./helpers.bash
+:
+# shellcheck source=/dev/null
+. "$1"
+>>> none
+
+### source command in sh is reported even though it is followed
+#!/bin/sh
+source /dev/null
+echo "ok"
+>>> SC3046 2:1
+>>> SC3051 2:1
+
+### source-path directive is accepted
+# shellcheck source-path=lib
+source helpers.bash
+echo "ok"
+>>> SC1091 2:8
+
+### quoted source-path with a space
+# shellcheck source-path='shared lib'
+source helpers.bash
+echo "ok"
+>>> SC1091 2:8
+
+### source-path SCRIPTDIR spelling is accepted
+# shellcheck source-path=SCRIPTDIR
+source /dev/null
+echo "ok"
+>>> none
+
+### external-sources true in a script is rejected
+# shellcheck external-sources=true
+source ./helpers.bash
+echo "ok"
+>>> SC1091 2:8
+>>> SC1144 1:31
+
+### external-sources false in a script is honoured
+# shellcheck external-sources=false
+source ./helpers.bash
+echo "ok"
+>>> SC1091 2:8
+
+### source command with a here document attached
+source /dev/null <<SETTINGS
+retries=3
+SETTINGS
+echo "ok"
+>>> none

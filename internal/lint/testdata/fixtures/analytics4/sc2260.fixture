@@ -1,0 +1,20 @@
+### ls output sent to a file and a pipe
+ls > listing.txt | grep conf
+>>> SC2010 1:1
+>>> SC2260 1:4
+
+### explicit fd 1 redirect before the pipe
+du -sh /home 1> usage.txt | sort -h
+>>> SC2260 1:15
+
+### pipe-ampersand carries stderr onward
+ls > out.log 2> err.log |& grep "No space left"
+>>> SC2010 1:1
+
+### output process substitution may still write
+tar cf - src > >(gzip > src.tgz) | wc -c
+>>> none
+
+### stderr only redirected before the pipe
+make 2> build.err | tee build.log
+>>> none

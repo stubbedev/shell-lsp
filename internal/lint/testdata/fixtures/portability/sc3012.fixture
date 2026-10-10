@@ -1,0 +1,25 @@
+### single-quoted less-than in single brackets
+#!/bin/sh
+[ apple '<' banana ] && echo sorted
+>>> SC2050 2:9
+>>> SC3012 2:9
+
+### escaped greater-than in test command
+#!/bin/sh
+test zebra \> yak && echo reversed
+>>> SC3012 2:1
+
+### newer-than test in sh is fine
+#!/bin/sh
+[ build.log -nt config.mk ] && echo stale
+>>> none
+
+### newer-than test in dash is fine
+#!/bin/dash
+[ build.log -nt config.mk ] && echo stale
+>>> none
+
+### quoted less-than is accepted in dash
+#!/bin/dash
+[ apple '<' banana ] && echo sorted
+>>> SC2050 2:9

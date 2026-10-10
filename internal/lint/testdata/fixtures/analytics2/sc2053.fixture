@@ -1,0 +1,36 @@
+### unquoted variable on right of double equals
+read -r answer
+expected=$(cat /etc/expected)
+[[ $answer == $expected ]] && echo match
+>>> SC2053 3:15
+
+### unquoted variable on right of not equals
+branch=$(git rev-parse --abbrev-ref HEAD)
+[[ $branch != $DEFAULT_BRANCH ]] && echo "not on default"
+>>> SC2053 2:15
+
+### unquoted braced variable on right of single equals
+[[ "$HOSTNAME" = ${target_host} ]] && echo here
+>>> SC2053 1:18
+>>> SC2154 1:18
+
+### braced expansion with modifier on right
+[[ $suffix == ${name##*.} ]] && echo same
+>>> SC2053 1:15
+>>> SC2154 1:15
+>>> SC2154 1:4
+
+### quoted right side is fine
+[[ $answer == "$expected" ]] && echo match
+>>> SC2154 1:16
+>>> SC2154 1:4
+
+### extra text around expansion is not this check
+[[ $file == $prefix* ]] && echo prefixed
+>>> SC2154 1:13
+>>> SC2154 1:4
+
+### regex operator never triggers
+[[ $line =~ $pattern ]] && echo matched
+>>> SC2154 1:13
+>>> SC2154 1:4

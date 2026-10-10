@@ -1,0 +1,39 @@
+### star pattern shadows a narrower txt pattern
+case "$file" in
+  *.txt) echo "text" ;;
+  f??.txt) echo "short text" ;;
+esac
+>>> SC2154 1:7
+>>> SC2221 2:3
+>>> SC2222 3:3
+
+### exact literal repeated as a later alternative
+case "$cmd" in
+  start) echo "starting" ;;
+  stop|start) echo "toggling" ;;
+esac
+>>> SC2154 1:7
+>>> SC2221 2:3
+>>> SC2222 3:8
+
+### question-star does not cover a lone star
+case "$input" in
+  ?*) echo "non-empty" ;;
+  *) echo "empty" ;;
+esac
+>>> SC2154 1:7
+
+### command substitution pattern is not exact
+case "$host" in
+  $(hostname)) echo "local" ;;
+  *) echo "remote" ;;
+esac
+>>> SC2154 1:7
+>>> SC2254 2:3
+
+### first branch uses the continue-testing terminator
+case "$file" in
+  *.txt) echo "text" ;;&
+  f??.txt) echo "short text" ;;
+esac
+>>> SC2154 1:7

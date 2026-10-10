@@ -1,0 +1,9 @@
+### dollar-paren file read shortcut in sh
+#!/bin/sh
+echo "$(< /etc/hostname)"
+>>> SC3034 2:7
+
+### dollar-paren file read shortcut in dash
+#!/bin/dash
+echo "$(< /etc/hostname)"
+>>> SC3034 2:7

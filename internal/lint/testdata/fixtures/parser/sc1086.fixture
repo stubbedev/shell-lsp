@@ -1,0 +1,11 @@
+### dollar on the loop variable
+for $f in *.txt; do
+  echo "$f"
+done
+>>> SC1086 1:5
+
+### bare loop variable
+for f in *.txt; do
+  echo "$f"
+done
+>>> none

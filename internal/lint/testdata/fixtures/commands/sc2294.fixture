@@ -1,0 +1,17 @@
+### eval of unquoted positional parameters
+eval $@
+>>> SC2068 1:6
+>>> SC2294 1:6
+
+### eval of a quoted array expansion
+eval "${args[@]}"
+>>> SC2154 1:7
+>>> SC2294 1:7
+
+### eval of joined positional parameters
+eval "$*"
+>>> none
+
+### eval of an array length
+eval "echo ${#args[@]}"
+>>> SC2154 1:12

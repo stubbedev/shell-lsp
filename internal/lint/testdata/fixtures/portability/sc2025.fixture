@@ -1,0 +1,49 @@
+### bare octal colour escape in prompt
+#!/bin/bash
+PS1='\033[0;34m\w\$ '
+>>> SC2025 2:5
+
+### exported prompt with bare octal colour escape
+#!/bin/bash
+export PS1='\033[1;31m\u\$ '
+>>> SC2025 2:12
+
+### hostname prompt with unwrapped reset escape
+#!/bin/bash
+PS1='\h \e[0m\$ '
+>>> SC2025 2:5
+
+### ansi-c prompt with bare hex escape
+#!/bin/bash
+PS1=$'\x1b[1m> '
+>>> SC2025 2:5
+
+### ansi-c prompt with bare e escape
+#!/bin/bash
+PS1=$'\e[33m> '
+>>> SC2025 2:5
+
+### exported ansi-c prompt with bare e escape
+#!/bin/bash
+export PS1=$'\e[36m> '
+>>> SC2025 2:12
+
+### octal escape wrapped in non-printing brackets is fine
+#!/bin/bash
+PS1='\[\033[1;32m\]\$ '
+>>> none
+
+### two escapes inside one non-printing pair are fine
+#!/bin/bash
+PS1='\[\e[1m\e[34m\]'
+>>> none
+
+### escape letters without a backslash are plain text
+#!/bin/bash
+PS1='e033x1B> '
+>>> none
+
+### lone wrapped escape is fine
+#!/bin/bash
+PS1='\[\e\]'
+>>> none

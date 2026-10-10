@@ -1,0 +1,44 @@
+### cp with a single quoted operand
+cp 'old draft.odt'
+>>> SC2225 1:1
+
+### cp with a single unquoted operand
+cp build.log
+>>> SC2225 1:1
+
+### cp with source and destination
+cp draft.odt archive
+>>> none
+
+### brace expansion may provide the destination
+cp 'nginx.conf'{,.bak}
+>>> none
+
+### all positional parameters may be several words
+cp "$@"
+>>> none
+
+### short target directory flag
+cp -t archive draft.odt
+>>> none
+
+### long target directory option in equals form
+cp --target-directory=archive draft.odt
+>>> none
+
+### abbreviated target directory option
+cp --target-direc=archive draft.odt
+>>> none
+
+### only the version option
+cp --version
+>>> none
+
+### quoted indirect expansion may be several words
+cp "${!files}"
+>>> SC2154 1:5
+
+### unquoted variable operand may split
+cp $files
+>>> SC2086 1:4
+>>> SC2154 1:4

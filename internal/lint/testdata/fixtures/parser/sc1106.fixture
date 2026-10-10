@@ -1,0 +1,23 @@
+### test-style greater-than inside an arithmetic command
+if (( count -gt 3 )); then echo big; fi
+>>> SC1105 1:4
+>>> SC1106 1:13
+>>> SC2205 1:5
+
+### test-style less-than inside an arithmetic expansion
+echo $(( count -lt 3 ))
+>>> SC1102 1:6
+>>> SC1106 1:16
+>>> SC2005 1:6
+>>- SC2046 1:6 -- mvdan rejects -lt inside arithmetic and reports a syntax error
+>>> SC2205 1:8
+
+### letters not followed by whitespace
+echo $(( total -length ))
+>>> SC2154 1:10
+>>> SC2154 1:17
+
+### compound assignment
+(( total -= 3 ))
+echo "$total"
+>>> none

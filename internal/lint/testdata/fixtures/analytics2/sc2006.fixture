@@ -1,0 +1,16 @@
+### backtick command substitution
+echo "Built on `hostname`"
+>>> SC2006 1:16
+
+### backticks in an assignment
+today=`date +%F`
+echo "$today"
+>>> SC2006 1:7
+
+### dollar-parenthesis is fine
+echo "Built on $(hostname)"
+>>> none
+
+### backticks containing only a comment
+echo `# nothing here` finished
+>>> none

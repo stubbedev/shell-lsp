@@ -74,7 +74,7 @@ var methods = []method{
 	{"textDocument/completion", clientRequest, supported, "completionProvider", ""},
 	{"completionItem/resolve", clientRequest, supported, "completionProvider.resolveProvider", "man page documentation for commands"},
 	{"textDocument/diagnostic", clientRequest, supported, "diagnosticProvider", ""},
-	{"workspace/diagnostic", clientRequest, notAdvertised, "diagnosticProvider.workspaceDiagnostics", "diagnostics are per open document; running shellcheck over a whole workspace is left to CI"},
+	{"workspace/diagnostic", clientRequest, notAdvertised, "diagnosticProvider.workspaceDiagnostics", "diagnostics are per open document"},
 	{"textDocument/signatureHelp", clientRequest, supported, "signatureHelpProvider", ""},
 	{"textDocument/codeAction", clientRequest, supported, "codeActionProvider", ""},
 	{"codeAction/resolve", clientRequest, supported, "codeActionProvider.resolveProvider", "refactor edits are computed on resolve"},
@@ -134,7 +134,7 @@ var methods = []method{
 	{"workspace/textDocumentContent/refresh", serverRequest, notSent, "", "the server owns no virtual documents"},
 
 	{"window/showMessage", serverNotification, sent, "", "rejected configuration"},
-	{"window/logMessage", serverNotification, sent, "", "one-time notices such as a missing shellcheck"},
+	{"window/logMessage", serverNotification, sent, "", "one-time notices such as a failed file watcher registration"},
 	{"telemetry/event", serverNotification, notSent, "", "the server collects no telemetry"},
 	{"textDocument/publishDiagnostics", serverNotification, sent, "", "only for clients without pull diagnostics"},
 	{"$/progress", serverNotification, sent, "", ""},

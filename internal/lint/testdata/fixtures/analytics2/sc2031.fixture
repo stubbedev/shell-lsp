@@ -1,0 +1,190 @@
+### counter lost after piped loop
+errors=0
+grep ERROR app.log | while read -r entry; do
+  errors=$((errors + 1))
+done
+echo "errors: $errors"
+>>> SC2030 3:3
+>>> SC2031 5:15
+>>> SC2034 2:36
+
+### variable set in subshell then used
+( cache_dir=/var/cache/app )
+ls "$cache_dir"
+>>> SC2030 1:3
+>>> SC2031 2:5
+
+### read variable of piped loop used after the loop
+find . -name '*.log' | while read -r logfile; do
+  :
+done
+echo "$logfile"
+>>> SC2030 1:38
+>>> SC2031 4:7
+
+### export in subshell then used
+( export DEPLOY_TAG=$(git rev-parse HEAD) )
+echo "$DEPLOY_TAG"
+>>> SC2030 1:10
+>>> SC2031 2:7
+>>> SC2155 1:10
+
+### typeset array in a subshell then used
+( typeset -a peers=(node1 node2) )
+echo "$peers"
+>>> SC2030 1:14
+>>> SC2031 2:7
+>>> SC2128 2:7
+
+### arithmetic in piped loop then quoted use
+lines=0
+dmesg | while read -r entry; do
+  (( lines += 1 ))
+done
+echo "saw $lines lines"
+>>> SC2030 3:12
+>>> SC2031 5:11
+>>> SC2034 2:23
+
+### backgrounded assignment then arithmetic read
+workers=4 &
+echo $(( workers-- ))
+>>> SC2030 1:1
+>>> SC2031 2:10
+
+### backgrounded read then self concatenation
+read -r answer &
+answer=reply_$answer
+>>> SC2030 1:9
+>>> SC2031 2:14
+
+### backgrounded shift and or-assign
+(( flags <<= 2 )) &
+(( flags |= 1 )) &
+>>> SC2030 1:10
+>>> SC2031 2:4
+
+### let in piped loop then later echo
+hits=0
+cat access.log | while read -r entry; do
+  let hits=hits+1
+done
+echo "$hits"
+>>> SC2030 3:11
+>>> SC2031 5:7
+>>> SC2034 2:32
+>>> SC2219 3:3
+
+### let pre-increment in piped loop then later echo
+users=0
+cut -d: -f1 /etc/passwd | while read -r entry; do
+  let ++users
+done
+echo "$users"
+>>> SC2030 3:9
+>>> SC2031 5:7
+>>> SC2034 2:41
+>>> SC2219 3:3
+
+### pipeline into read in bash loses the value
+date +%s | read now
+echo "$now"
+>>> SC2030 1:17
+>>> SC2031 2:7
+>>> SC2162 1:12
+
+### named descriptor in a subshell then used
+( exec {tracefd}>&2 )
+echo "$tracefd"
+>>> SC2030 1:8
+>>> SC2031 2:7
+
+### value from an earlier bats test
+#!/usr/bin/env bats
+@test "setup token" {
+  token=abc123
+}
+@test "use token" {
+  echo "$token"
+}
+>>> SC2030 3:3
+>>> SC2031 6:9
+
+### loop reading from a file keeps its value
+while read -r entry; do
+  newest=$entry
+done < releases.txt
+echo "$newest"
+>>> none
+
+### value used inside its own subshell
+( cache_dir=/var/cache/app; ls "$cache_dir" )
+>>> none
+
+### ksh93 read at the end of a pipeline
+#!/bin/ksh
+date +%s | read now
+echo "$now"
+>>> SC2162 2:12
+
+### ksh piped loop assignment survives
+#!/bin/ksh
+cat releases.txt | while read -r entry; do
+  newest=$entry
+done
+echo "$newest"
+>>> none
+
+### set flags in subshell then all arguments
+( set -u )
+printf '%s\n' "$@"
+>>> none
+
+### brace-style substitution keeps assignments
+summary=${ { owner=$(id -un 2>&1); echo "$owner"; } }
+echo "$summary" "$owner"
+>>> none
+
+### lastpipe keeps the read value
+#!/bin/bash
+shopt -s lastpipe
+hostname | read -r myhost
+echo "$myhost"
+>>> none
+
+### double-bracket test in piped function is not a write
+check() {
+  true | if [[ -n $region ]]; then echo "$region"; fi
+}
+report() {
+  echo "$region"
+}
+>>> none
+
+### -n and -z tests in a subshell then use
+( [[ -n $left && -z $right ]] )
+echo "$left" "$right"
+>>> SC2234 1:1
+
+### bare export in a subshell
+( export PAGER )
+echo "$PAGER"
+>>> none
+
+### underscore read in a subshell is still reported by shellcheck 0.11
+( read -r key _ <<< "k v" )
+echo "$_"
+>>> SC2030 1:15
+>>> SC2031 2:7
+>>> SC2034 1:11
+
+### underscore assigned in a subshell is still reported by shellcheck 0.11
+( _=ignored )
+echo "$_"
+>>> SC2030 1:3
+>>> SC2031 2:7
+
+### IFS read after subshell change is never reported
+( IFS=, )
+printf '%s' "$IFS"
+>>> none

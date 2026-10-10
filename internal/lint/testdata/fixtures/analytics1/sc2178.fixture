@@ -1,0 +1,18 @@
+### declared array reassigned as a string
+declare -a ports
+ports=8080
+echo "${ports[@]}"
+>>> SC2178 2:1
+
+### glued prompt text is not mistaken for -a
+read -r -p"pick a slot: " slot
+slot=3
+echo "$slot"
+>>> none
+
+### PIPESTATUS assigned in sh is still treated as an array
+#!/bin/sh
+PIPESTATUS=0
+echo "$PIPESTATUS"
+>>> SC2128 3:7
+>>> SC2178 2:1

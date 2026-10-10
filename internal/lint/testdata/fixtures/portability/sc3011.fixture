@@ -1,0 +1,9 @@
+### here-string to cat in sh
+#!/bin/sh
+cat <<< hello
+>>> SC3011 2:5
+
+### here-string to cat in dash
+#!/bin/dash
+cat <<< hello
+>>> SC3011 2:5

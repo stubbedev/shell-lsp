@@ -1,0 +1,15 @@
+### else glued to the colon no-op
+if true; then echo yes; else:; fi
+>>> SC1130 1:29
+
+### then glued to the colon no-op
+if true; then:; fi
+>>> SC1049 1:1
+>>> SC1050 1:17
+>>> SC1072 1:19
+>>> SC1073 1:1
+>>> SC1130 1:14
+
+### keyword and colon separated by a space
+if true; then echo yes; else :; fi
+>>> none

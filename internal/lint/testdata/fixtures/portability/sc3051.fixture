@@ -1,0 +1,17 @@
+### sourcing the null device in sh
+#!/bin/sh
+source /dev/null
+>>> SC3046 2:1
+>>> SC3051 2:1
+
+### sourcing the null device in dash
+#!/bin/dash
+source /dev/null
+>>> SC3046 2:1
+>>> SC3051 2:1
+
+### sourcing the null device in busybox is fine
+#!/bin/busybox sh
+# shellcheck shell=busybox
+source /dev/null
+>>> none

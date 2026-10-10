@@ -1,0 +1,31 @@
+### find with a type predicate and no path
+find -type f
+>>> SC2185 1:1
+
+### bare find
+find
+>>> SC2185 1:1
+
+### find with an explicit dot path
+find . -type f
+>>> none
+
+### symlink options then a quoted path
+find -H -L "$srcdir" -print
+>>> SC2154 1:13
+
+### optimisation level then dot
+find -O3 .
+>>> none
+
+### debug option takes the next word as path
+find -D exec .
+>>> none
+
+### long help option
+find --help
+>>> none
+
+### combined option cluster then dot
+find -Hx . -print
+>>> none

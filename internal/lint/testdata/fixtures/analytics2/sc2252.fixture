@@ -1,0 +1,27 @@
+### two bracket tests with != joined by shell or
+[ $arch != amd64 ] || [ $arch != arm64 ] && echo unsupported
+>>> SC2086 1:25
+>>> SC2086 1:3
+>>> SC2154 1:3
+>>> SC2252 1:20
+
+### chain followed by a further or true
+[ $arch != amd64 ] || [ $arch != arm64 ] || true
+>>> SC2086 1:25
+>>> SC2086 1:3
+>>> SC2154 1:3
+>>> SC2252 1:20
+
+### double bracket tests with -ne joined by shell or
+[[ $code -ne 0 ]] || [[ $code -ne 1 ]] && echo weird
+>>> SC2154 1:4
+>>> SC2252 1:19
+
+### constant on the left and differing variables is fine
+[ 0 -ne $FIRST_PID ] || [ 0 -ne $SECOND_PID ] && echo running
+>>> SC2086 1:33
+>>> SC2086 1:9
+
+### test command spelled as a word is not recognized
+test "$arch" != amd64 || test "$arch" != arm64 && echo unsupported
+>>> SC2154 1:7

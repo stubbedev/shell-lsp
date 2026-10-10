@@ -1,0 +1,176 @@
+### cd into home-relative directory then removal
+cd ~/scratch
+rm -rf ./*
+>>> SC2164 1:1
+
+### cd alone in an if true branch
+if true; then
+  cd /var/tmp
+fi
+>>> SC2164 2:3
+
+### cd through builtin then removal
+builtin cd /srv/cache
+rm -f ./*.tmp
+>>> SC2164 1:1
+
+### pushd into home-relative directory then removal
+pushd ~/downloads
+rm -f ./*.part
+>>> SC2164 1:1
+
+### pushd alone in an if true branch
+if true; then
+  pushd /opt/app
+fi
+>>> SC2164 2:3
+
+### popd followed by removal
+popd
+rm -f build.lock
+>>> SC2164 1:1
+
+### popd alone in an if true branch
+if true; then
+  popd
+fi
+>>> SC2164 2:3
+
+### popd is the whole script
+popd
+>>> SC2164 1:1
+
+### cd to a path with a three-dot component
+cd ../../.../..
+ls
+>>> SC2164 1:1
+
+### cd with an exit fallback
+cd /srv/data || exit
+rm -f ./*.old
+>>> none
+
+### pushd with an exit fallback
+pushd /srv/data || exit
+ls
+>>> none
+
+### popd with an exit fallback
+popd || exit
+ls
+>>> none
+
+### set -e before cd
+set -e
+cd /srv/data
+rm -f ./*.old
+>>> none
+
+### set -e before pushd
+set -e
+pushd /srv/data
+ls
+>>> none
+
+### set -e before popd
+set -e
+popd
+ls
+>>> none
+
+### cd as an if condition
+if cd /srv/data; then
+  ls
+fi
+>>> none
+
+### pushd as an if condition
+if pushd /srv/data; then
+  ls
+fi
+>>> none
+
+### popd as an if condition
+if popd; then
+  ls
+fi
+>>> none
+
+### cd to the parent directory
+cd ..
+ls
+>>> none
+
+### pushd to the parent directory
+pushd ..
+ls
+>>> none
+
+### bash shebang with -e before cd
+#!/bin/bash -e
+cd /srv/data
+ls
+>>> none
+
+### bash shebang with -e before pushd
+#!/bin/bash -e
+pushd /srv/data
+ls
+>>> none
+
+### bash shebang with -e before popd
+#!/bin/bash -e
+popd
+ls
+>>> none
+
+### set -o errexit before cd
+set -o errexit
+cd /srv/data
+ls
+>>> none
+
+### set -o errexit before pushd
+set -o errexit
+pushd /srv/data
+ls
+>>> none
+
+### set -o errexit before popd
+set -o errexit
+popd
+ls
+>>> none
+
+### pushd -n does not change directory
+pushd -n /srv/data
+ls
+>>> none
+
+### popd -n does not change directory
+popd -n
+ls
+>>> none
+
+### cd up two parent levels
+cd ../..
+ls
+>>> none
+
+### cd through parent and current components
+cd ./../.
+ls
+>>> none
+
+### cd to the root directory
+cd /
+ls
+>>> none
+
+### function body cd is still reported by shellcheck 0.11.0
+#!/bin/bash
+goto_logs() {
+  cd /var/log
+}
+goto_logs
+>>> SC2164 3:3

@@ -1,0 +1,18 @@
+### else followed by if on the same line
+if [ -f a.conf ]; then
+  echo a
+else if [ -f b.conf ]; then
+  echo b
+fi
+fi
+>>> SC1075 3:1
+
+### nested if on its own line after else
+if [ -f a.conf ]; then
+  echo a
+else
+  if [ -f b.conf ]; then
+    echo b
+  fi
+fi
+>>> none

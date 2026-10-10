@@ -1,0 +1,26 @@
+### slash inside the name before equals
+var${x}/=value
+>>> SC2086 1:4
+>>> SC2154 1:4
+>>> SC2276 1:1
+
+### empty braced expansion before equals
+${}=value
+>>> SC2276 1:1
+
+### length expansion before equals
+${#name}=value
+>>> SC2154 1:1
+>>> SC2276 1:1
+
+### dot inside the name
+config.port=8080
+>>> SC2276 1:1
+
+### long option on its own line
+--output=report.html
+>>> SC2215 1:1
+
+### equals quoted after a command substitution
+$(get_key)'=secret'
+>>> SC2046 1:1

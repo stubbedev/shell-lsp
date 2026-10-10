@@ -1,0 +1,17 @@
+### three appends to the same file
+echo "== report ==" >> summary.txt
+date >> summary.txt
+uptime >> summary.txt
+>>> SC2129 1:1
+
+### middle command is a pipeline ending in an append
+echo "== disk ==" >> summary.txt
+df -h | grep -v tmpfs >> summary.txt
+echo "== end ==" >> summary.txt
+>>> SC2129 1:1
+
+### three reads from the same file
+wc -l < data.csv
+head -n1 < data.csv
+sort -u < data.csv
+>>> none

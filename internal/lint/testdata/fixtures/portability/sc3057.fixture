@@ -1,0 +1,23 @@
+### offset and length substring in sh
+#!/bin/sh
+echo "${commit:4:12}"
+>>> SC2154 2:7
+>>> SC3057 2:7
+
+### bare leading substring in dash
+#!/bin/dash
+revision=abcdef
+${revision:0:3}
+>>> SC3057 3:1
+
+### default value is fine
+#!/bin/sh
+echo "${width:-4}"
+>>> none
+
+### substring in busybox is fine
+#!/bin/busybox sh
+# shellcheck shell=busybox
+revision=abcdef
+${revision:0:3}
+>>> none

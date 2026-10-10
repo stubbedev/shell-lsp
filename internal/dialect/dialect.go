@@ -48,20 +48,12 @@ func FromName(name string) (Dialect, bool) {
 		return Zsh, true
 	case "sh", "posix", "posixsh":
 		return Posix, true
-	case "dash", "ash":
+	case "dash", "ash", "busybox sh", "busybox ash":
 		return Dash, true
 	case "ksh", "ksh93", "mksh":
 		return Ksh, true
 	}
 	return 0, false
-}
-
-func (d Dialect) ShellcheckName() (string, bool) {
-	switch d {
-	case Bash, Posix, Dash, Ksh:
-		return d.String(), true
-	}
-	return "", false
 }
 
 type Features struct {
@@ -75,6 +67,9 @@ type Features struct {
 	Nameref             bool
 	Local               bool
 	Select              bool
+	SplitsUnquoted      bool
+	LastPipeInShell     bool
+	DeclarationAssigns  bool
 }
 
 func (d Dialect) Features() Features {
@@ -83,23 +78,23 @@ func (d Dialect) Features() Features {
 		return Features{
 			Arrays: true, AssociativeArrays: true, DoubleBracket: true,
 			ArithmeticCommand: true, ProcessSubstitution: true, Coproc: true,
-			Nameref: true, Local: true, Select: true,
+			Nameref: true, Local: true, Select: true, SplitsUnquoted: true, DeclarationAssigns: true,
 		}
 	case Zsh:
 		return Features{
 			Arrays: true, AssociativeArrays: true, DoubleBracket: true,
 			ArithmeticCommand: true, ProcessSubstitution: true, GlobQualifiers: true,
-			Coproc: true, Nameref: true, Local: true, Select: true,
+			Coproc: true, Nameref: true, Local: true, Select: true, LastPipeInShell: true, DeclarationAssigns: true,
 		}
 	case Posix:
-		return Features{}
+		return Features{SplitsUnquoted: true}
 	case Dash:
-		return Features{Local: true}
+		return Features{Local: true, SplitsUnquoted: true, DeclarationAssigns: true}
 	case Ksh:
 		return Features{
 			Arrays: true, AssociativeArrays: true, DoubleBracket: true,
 			ArithmeticCommand: true, ProcessSubstitution: true, Coproc: true,
-			Nameref: true, Local: true, Select: true,
+			Nameref: true, Local: true, Select: true, SplitsUnquoted: true, LastPipeInShell: true, DeclarationAssigns: true,
 		}
 	}
 	return Features{}
@@ -140,29 +135,37 @@ func Detect(override *Dialect, in Input) Dialect {
 	return Bash
 }
 
-// FromShebang parses the first line of a script. The interpreter is
-// resolved through PATH, so `#!/usr/bin/env zsh` and custom install
-// prefixes both work; interpreter flags are ignored.
 func FromShebang(text string) (Dialect, bool) {
+	name, ok := Interpreter(text)
+	if !ok {
+		return 0, false
+	}
+	return FromName(name)
+}
+
+func Interpreter(text string) (string, bool) {
 	first, _, _ := strings.Cut(text, "\n")
-	if !strings.HasPrefix(first, "#!") {
-		return 0, false
+	rest, ok := strings.CutPrefix(first, "#!")
+	if !ok {
+		return "", false
 	}
-	fields := strings.Fields(strings.TrimPrefix(first, "#!"))
+	fields := strings.Fields(rest)
 	if len(fields) == 0 {
-		return 0, false
+		return "", false
 	}
-	interpreter := filepath.Base(fields[0])
-	if interpreter == "env" && len(fields) > 1 {
-		for _, flag := range fields[1:] {
-			if strings.HasPrefix(flag, "-") {
-				continue
+	name := filepath.Base(fields[0])
+	switch {
+	case name == "env":
+		for _, field := range fields[1:] {
+			if !strings.HasPrefix(field, "-") && !strings.Contains(field, "=") {
+				return filepath.Base(field), true
 			}
-			interpreter = filepath.Base(flag)
-			break
 		}
+		return "", false
+	case name == "busybox" && len(fields) > 1:
+		return name + " " + fields[1], true
 	}
-	return FromName(interpreter)
+	return name, true
 }
 
 func FromFileName(path string) (Dialect, bool) {

@@ -1,0 +1,7 @@
+### curly single quote inside single quotes
+echo 'it‘s fine'
+>>> SC1112 1:9
+
+### curly double quote inside single quotes
+echo 'say “ hi'
+>>> none

@@ -1,0 +1,20 @@
+### while loop with an empty body
+while pgrep -x rsync; do
+done
+>>> SC1060 1:23
+>>> SC1072 2:5
+>>> SC1073 1:1
+
+### empty body after do and a semicolon
+until [ -e /tmp/ready ]; do;
+done
+>>> SC1059 1:28
+>>> SC1060 1:26
+>>> SC1072 2:5
+>>> SC1073 1:1
+
+### loop body with a no-op command
+while pgrep -x rsync; do
+  sleep 2
+done
+>>> none

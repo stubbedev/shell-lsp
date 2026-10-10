@@ -1,0 +1,9 @@
+### prefix assignment and expansion on the same line
+LANG=C printf '%s\n' "$LANG"
+>>> SC2097 1:1
+>>> SC2098 1:23
+
+### prefix value comes from a substitution that expands the variable
+total=0
+total=$(echo "$total") sort data.txt
+>>> SC2116 2:7

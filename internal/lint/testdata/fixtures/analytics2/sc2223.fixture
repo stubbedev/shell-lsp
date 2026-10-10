@@ -1,0 +1,15 @@
+### default assignment through colon builtin
+: ${OUTPUT_DIR:=/tmp/out}
+>>> SC2223 1:3
+
+### default assignment without colon
+: ${CACHE_TTL=300}
+>>> SC2223 1:3
+
+### quoted default assignment is fine
+: "${OUTPUT_DIR:=/tmp/out}"
+>>> none
+
+### default assignment outside colon is SC2086
+echo ${OUTPUT_DIR:=/tmp/out}
+>>> SC2086 1:6

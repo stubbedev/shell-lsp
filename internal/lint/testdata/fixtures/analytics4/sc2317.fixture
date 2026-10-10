@@ -1,0 +1,27 @@
+### command after an unconditional exit
+prepare
+compile
+exit 0
+publish
+>>> SC2317 4:1
+
+### command after calling a function that always exits
+die() { echo "fatal: $*" >&2; exit 1; }
+prepare
+compile
+die "broken build"
+publish
+>>> SC2317 5:1
+
+### only the outermost unreachable construct is reported
+exit 1
+if true; then
+  echo "never"
+fi
+>>> SC2317 2:1
+
+### conditional exit
+prepare
+compile || exit 1
+publish
+>>> none

@@ -1,0 +1,3 @@
+### -a inside double brackets
+[[ -f config.yml -a -r config.yml ]] && echo "ok"
+>>> SC2108 1:18

@@ -1,0 +1,24 @@
+### brackets around both tr ranges are literal
+tr '[a-z]' '[A-Z]' < mixed.txt
+>>> SC2021 1:12
+>>> SC2021 1:4
+
+### deleting the lowercase posix class is fine
+tr -d '[:lower:]' < codes.txt
+>>> none
+
+### deleting the uppercase posix class is fine
+tr -d '[:upper:]' < codes.txt
+>>> none
+
+### set starting with punctuation and containing a class is fine
+tr -d '|/_[:upper:]' < paths.txt
+>>> none
+
+### repetition syntax with a star is fine
+tr abc '[d*]' < letters.txt
+>>> none
+
+### equivalence class is fine
+tr '[=e=]' e < accents.txt
+>>> none

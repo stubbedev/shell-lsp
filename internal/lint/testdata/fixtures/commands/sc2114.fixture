@@ -1,0 +1,19 @@
+### recursive removal of the home root
+rm -rf /home
+>>> SC2114 1:8
+
+### recursive removal of usr among other paths
+rm -rf /usr /lib/modules/5.10.0/kernel
+>>> SC2114 1:8
+
+### recursive removal of var with a trailing slash
+rm -r /var/
+>>> SC2114 1:7
+
+### brace expansion reaching etc
+rm -rf /{etc,opt}
+>>> SC2114 1:8
+
+### non-recursive removal is not flagged
+rm -f /etc
+>>> none

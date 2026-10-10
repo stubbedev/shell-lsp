@@ -1,0 +1,27 @@
+### closing parenthesis on the end token line
+msg=$(cat <<EOF
+hello
+EOF)
+echo "$msg"
+>>> SC1009 1:7
+>>> SC1072 5:1
+>>> SC1073 1:11
+>>> SC1119 3:4
+
+### closing parenthesis after spaces on the end token line
+msg=$(cat <<EOF
+hello
+EOF  )
+echo "$msg"
+>>> SC1009 1:7
+>>> SC1072 5:1
+>>> SC1073 1:11
+>>> SC1119 3:6
+
+### closing parenthesis on the next line
+msg=$(cat <<EOF
+hello
+EOF
+)
+echo "$msg"
+>>> none

@@ -1,0 +1,25 @@
+### brace-expansion flag in sh
+#!/bin/sh
+set -B
+>>> SC3041 2:5
+
+### mixed posix short and long options are fine
+#!/bin/sh
+set -v +o allexport -o errexit -C
+>>> none
+
+### bare double dash is fine
+#!/bin/sh
+set --
+>>> none
+
+### words after double dash are positional
+#!/bin/sh
+set -- curl -o index.html 'https://example.org/'
+>>> none
+
+### restoring saved flags from a variable is not checked
+#!/bin/sh
+saved=$-
+set -"$saved"
+>>> none

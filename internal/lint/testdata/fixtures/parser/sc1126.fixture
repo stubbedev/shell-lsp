@@ -1,0 +1,37 @@
+### directive after the arguments of a command
+echo $1 # shellcheck disable=SC2086
+>>> SC1072 1:36
+>>> SC1073 1:1
+>>> SC1126 1:9
+
+### directive after an assignment-only prefix
+name=widget # shellcheck disable=SC2034
+>>> SC1126 1:13
+>>> SC2034 1:1
+
+### directive directly after for-in
+for f in # shellcheck disable=SC2034
+do echo hi; done
+>>> SC1126 1:10
+>>> SC2034 1:1
+
+### directive at the start of a pipeline stage
+ls |
+  # shellcheck disable=SC2010
+  grep foo
+>>> SC1072 2:30
+>>> SC1073 2:3
+>>> SC1126 2:3
+
+### directive at the start of an and-or operand
+true &&
+  # shellcheck disable=SC2086
+  echo $1
+>>> SC1072 2:30
+>>> SC1073 2:3
+>>> SC1126 2:3
+
+### directive on its own line before the command
+# shellcheck disable=SC2086
+echo $1
+>>> none

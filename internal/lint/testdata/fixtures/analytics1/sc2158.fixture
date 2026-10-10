@@ -1,0 +1,7 @@
+### single bracket false
+[ false ] && echo "runs anyway"
+>>> SC2158 1:3
+
+### quoted false counts too
+[ "false" ] && echo "runs anyway"
+>>> SC2158 1:3

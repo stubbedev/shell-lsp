@@ -1,0 +1,9 @@
+### removing everything except logs with negated extglob in sh
+#!/bin/sh
+rm -- !(*.log)
+>>> SC3002 2:7
+
+### removing everything except logs with negated extglob in dash
+#!/bin/dash
+rm -- !(*.log)
+>>> SC3002 2:7

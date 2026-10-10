@@ -1,0 +1,11 @@
+### post-increment in arithmetic expansion in sh
+#!/bin/sh
+page=1
+echo $((page++))
+>>> SC3018 3:13
+
+### post-increment in arithmetic expansion in dash
+#!/bin/dash
+page=1
+echo $((page++))
+>>> SC3018 3:13

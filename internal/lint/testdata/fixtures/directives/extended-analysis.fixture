@@ -1,0 +1,37 @@
+### unreachable command after exit is found by default
+#!/bin/sh
+exit 0; echo "never printed"
+>>> SC2317 2:9
+
+### file-wide extended-analysis false skips data-flow findings
+#!/bin/sh
+# shellcheck extended-analysis=false
+exit 0; echo "never printed"
+>>> none
+
+### file-wide extended-analysis true keeps data-flow findings
+#!/bin/sh
+# shellcheck extended-analysis=true
+exit 0; echo "never printed"
+>>> SC2317 3:9
+
+### extended-analysis after the first command is ignored
+#!/bin/sh
+:
+# shellcheck extended-analysis=false
+exit 0; echo "never printed"
+>>> SC2317 4:9
+
+### first file-wide extended-analysis directive wins
+#!/bin/sh
+# shellcheck extended-analysis=false
+# shellcheck extended-analysis=true
+exit 0; echo "never printed"
+>>> none
+
+### invalid extended-analysis value is ignored
+#!/bin/sh
+# shellcheck extended-analysis=off
+exit 0; echo "never printed"
+>>> SC1146 2:32
+>>> SC2317 3:9

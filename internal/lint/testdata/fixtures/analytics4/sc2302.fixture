@@ -1,0 +1,69 @@
+### value used as a bare index
+for svc in ${services[@]}; do
+  echo "${services[svc]}"
+done
+>>> SC2068 1:12
+>>> SC2154 1:12
+>>> SC2302 1:12
+>>> SC2303 2:9
+
+### value used as a dollar index
+for svc in "${services[@]}"; do
+  echo "${services[$svc]}"
+done
+>>> SC2154 1:13
+>>> SC2302 1:12
+>>> SC2303 2:20
+
+### value used as an index in arithmetic
+for n in "${counts[@]}"; do
+  echo $(( counts[n] + 1 ))
+done
+>>> SC2154 1:11
+>>> SC2302 1:10
+>>> SC2303 2:12
+
+### two arrays indexing the first
+for item in "${left[@]}" "${right[@]}"; do
+  echo "${left[$item]}"
+done
+>>> SC2154 1:14
+>>> SC2154 1:27
+>>> SC2302 1:13
+>>> SC2303 2:16
+
+### two arrays indexing the second
+for item in "${left[@]}" "${right[@]}"; do
+  echo "${right[$item]}"
+done
+>>> SC2154 1:14
+>>> SC2154 1:27
+>>> SC2302 1:26
+>>> SC2303 2:17
+
+### a different index name
+for svc in "${services[@]}"; do
+  echo "${services[K]}"
+done
+>>> SC2034 1:1
+>>> SC2154 1:13
+
+### loop variable reassigned before use
+for svc in "${services[@]}"; do
+  svc=0
+  echo "${services[svc]}"
+done
+>>> SC2154 1:13
+
+### index into a different array
+for svc in "${services[@]}"; do
+  echo "${ports[$svc]}"
+done
+>>> SC2154 1:13
+>>> SC2154 2:9
+
+### iterating over keys is correct
+for svc in "${!services[@]}"; do
+  echo "${services[$svc]}"
+done
+>>> SC2154 1:13

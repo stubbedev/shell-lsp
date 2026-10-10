@@ -1,0 +1,26 @@
+### busybox double bracket glob match
+# shellcheck shell=busybox
+image=$1
+[[ $image == *alpine* ]] && echo "alpine based"
+>>> SC2330 3:14
+
+### busybox double bracket not equals glob
+# shellcheck shell=busybox
+[[ "$1" != /tmp/* ]] && echo outside
+>>> SC2330 2:12
+
+### bash double bracket glob is fine
+#!/bin/bash
+[[ $1 == *alpine* ]] && echo "alpine based"
+>>> none
+
+### busybox literal right side is fine
+# shellcheck shell=busybox
+[[ "$1" == alpine ]] && echo exact
+>>> none
+
+### busybox lone expansion is reported as SC2053 instead
+# shellcheck shell=busybox
+[[ "$1" == $wanted ]] && echo same
+>>> SC2053 2:12
+>>> SC2154 2:12

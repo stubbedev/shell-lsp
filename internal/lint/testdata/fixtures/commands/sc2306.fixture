@@ -1,0 +1,11 @@
+### unescaped star among several expr arguments
+# shellcheck disable=SC2003
+expr 2 + 3 * 4
+>>> SC2035 2:12
+>>> SC2306 2:12
+
+### three-argument shape is handled elsewhere
+# shellcheck disable=SC2003
+expr 3 * 4
+>>> SC2035 2:8
+>>> SC2304 2:8

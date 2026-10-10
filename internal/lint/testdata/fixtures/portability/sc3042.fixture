@@ -1,0 +1,4 @@
+### gnu-style long option to set in sh
+#!/bin/sh
+set --posix
+>>> SC3042 2:5

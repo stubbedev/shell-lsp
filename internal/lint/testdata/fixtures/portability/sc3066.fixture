@@ -1,0 +1,15 @@
+### group ownership test in sh
+#!/bin/sh
+[ -G shared.db ] && echo "our group"
+>>> SC3066 2:3
+
+### group ownership test in dash is fine
+#!/bin/dash
+[ -G shared.db ] && echo "our group"
+>>> none
+
+### group ownership test in busybox is fine
+#!/bin/busybox sh
+# shellcheck shell=busybox
+[ -G shared.db ] && echo "our group"
+>>> none

@@ -1,0 +1,44 @@
+### looping over ls of a glob
+for track in $(ls *.mp3); do
+  echo "$track"
+done
+>>> SC2035 1:19
+>>> SC2045 1:14
+
+### looping over ls of a glob in backticks
+for track in `ls *.mp3`; do
+  echo "$track"
+done
+>>> SC2006 1:14
+>>> SC2035 1:18
+>>> SC2045 1:14
+
+### looping over ls with a flag
+for log in $(ls -t ./*.log); do
+  gzip "$log"
+done
+>>> SC2045 1:12
+
+### ls piped into another stage is fine
+for log in $(ls ./*.log | sort); do
+  gzip "$log"
+done
+>>> SC2012 1:14
+
+### several statements in the substitution are fine
+for log in $(cd /var/log; ls); do
+  echo "$log"
+done
+>>> SC2164 1:14
+
+### extra text next to the substitution is fine
+for log in dir-$(ls); do
+  echo "$log"
+done
+>>> none
+
+### ls given by path is fine
+for log in $(/bin/ls); do
+  echo "$log"
+done
+>>> none

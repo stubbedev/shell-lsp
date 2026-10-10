@@ -1,0 +1,9 @@
+### unquoted glob regex in expr match
+# shellcheck disable=SC2003
+expr foo : fo*
+>>> SC2305 2:12
+
+### plain word regex
+# shellcheck disable=SC2003
+expr "$branch" : release
+>>> SC2154 2:7

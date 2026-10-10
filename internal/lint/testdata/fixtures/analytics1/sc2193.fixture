@@ -1,0 +1,16 @@
+### glob with extension against a one character class
+[[ *.txt == [abc] ]] && echo "never"
+>>> SC2193 1:10
+>>> SC2203 1:4
+
+### tilde user against tilde plus is fine
+[[ ~alice == ~+ ]] && echo "home"
+>>> none
+
+### bare tilde against tilde plus is fine
+[[ ~ == ~+ ]] && echo "home"
+>>> none
+
+### tilde path against the same text quoted is fine
+[[ ~/bin == "~/bin" ]] && echo "same"
+>>> SC2088 1:14

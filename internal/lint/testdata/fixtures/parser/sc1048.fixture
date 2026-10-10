@@ -1,0 +1,65 @@
+### empty then branch before fi
+if [ -n "$DEBUG" ]; then
+fi
+>>> SC1009 1:1
+>>> SC1048 2:1
+>>> SC1072 2:3
+>>> SC1073 1:21
+
+### empty then branch after a semicolon
+if [ -n "$DEBUG" ]; then ; else echo quiet; fi
+>>> SC1009 1:1
+>>> SC1048 1:28
+>>> SC1051 1:26
+>>> SC1072 1:33
+>>> SC1073 1:21
+
+### empty then branch before else
+if [ -n "$DEBUG" ]; then
+else
+  echo quiet
+fi
+>>> SC1009 1:1
+>>> SC1048 2:1
+>>> SC1072 2:5
+>>> SC1073 1:21
+
+### empty then branch of an elif before else
+if [ "$1" = a ]; then
+  echo a
+elif [ "$1" = b ]; then
+else
+  echo other
+fi
+>>> SC1009 1:1
+>>> SC1048 4:1
+>>> SC1072 4:5
+>>> SC1073 3:1
+
+### empty else branch
+if [ -n "$DEBUG" ]; then
+  set -x
+else
+fi
+>>> SC1009 1:1
+>>> SC1048 4:1
+>>> SC1072 4:3
+>>> SC1073 3:1
+
+### branches with commands
+if [ -n "$DEBUG" ]; then
+  set -x
+else
+  :
+fi
+>>> none
+
+### empty then branch before elif
+if [ "$1" = a ]; then
+elif [ "$1" = b ]; then
+  echo b
+fi
+>>> SC1009 1:1
+>>> SC1048 2:1
+>>> SC1072 2:6
+>>> SC1073 1:18

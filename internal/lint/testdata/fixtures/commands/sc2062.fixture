@@ -1,0 +1,50 @@
+### piped grep with an unquoted leading-star pattern
+cat playlist.txt | grep *.mp3
+>>> SC2035 1:25
+>>> SC2062 1:25
+>>> SC2063 1:25
+
+### inverted extended grep with an unquoted star pattern
+grep -Ev cow*test barn.txt
+>>> SC2022 1:10
+>>> SC2062 1:10
+
+### regex option in equals form with an unquoted glob
+grep --regex=*.mp3 playlist.m3u
+>>> SC2062 1:6
+
+### unquoted star-wrapped pattern
+grep *foo* notes.txt
+>>> SC2035 1:6
+>>> SC2062 1:6
+>>> SC2063 1:6
+
+### ls piped into grep with an unquoted pattern
+ls | grep foo*.jpg
+>>> SC2010 1:1
+>>> SC2022 1:11
+>>> SC2062 1:11
+
+### glob as file argument is fine
+grep foo *.txt
+>>> SC2035 1:10
+
+### a command named grep-v is not grep
+grep-v --regex *.mp3
+>>> SC2035 1:16
+
+### escaped star in the pattern is literal
+grep foo\*.mp3 library.txt
+>>> SC2022 1:6
+
+### pattern after double dash and glob file
+grep -- -verbose bar*
+>>> none
+
+### pattern after -e and glob file
+grep -e -verbose bar*
+>>> none
+
+### pattern after separate regex option and glob file
+grep --regex -verbose bar*
+>>> none

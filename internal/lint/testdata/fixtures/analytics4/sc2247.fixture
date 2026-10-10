@@ -1,0 +1,16 @@
+### dollar and quote swapped before a substitution
+today=$"(date +%F)"
+>>> SC2034 1:1
+>>> SC2247 1:7
+
+### dollar and quote swapped before a braced expansion
+echo $"{prefix}_backup"
+>>> SC2247 1:6
+
+### normal quoted substitution
+today="$(date +%F)"
+>>> SC2034 1:1
+
+### translated string starting with dots
+echo $"..loading"
+>>> none

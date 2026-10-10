@@ -1,0 +1,17 @@
+### division before multiplication by 100
+pct=$(( done_count / total * 100 ))
+>>> SC2017 1:20
+>>> SC2034 1:1
+>>> SC2154 1:22
+>>> SC2154 1:9
+
+### multiplication first is fine
+pct=$(( done_count * 100 / total ))
+>>> SC2034 1:1
+>>> SC2154 1:28
+>>> SC2154 1:9
+
+### same divisor and multiplier is fine
+rounded=$(( value / 10 * 10 ))
+>>> SC2034 1:1
+>>> SC2154 1:13

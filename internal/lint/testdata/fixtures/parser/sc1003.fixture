@@ -1,0 +1,16 @@
+### trying to escape a quote inside single quotes
+echo 'It\''s late'
+>>> SC1003 1:9
+
+### value ending in an escaped quote
+greeting='hello world\'
+echo "$greeting"
+>>> SC1003 1:22
+
+### backslash followed by a letter in single quotes
+echo 'C:\Users\guest'
+>>> none
+
+### backslash followed by a digit in single quotes
+sed 's/\(x\)/\1/' input.txt
+>>> none

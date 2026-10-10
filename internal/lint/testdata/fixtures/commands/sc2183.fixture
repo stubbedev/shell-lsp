@@ -1,0 +1,92 @@
+### three conversions and two arguments
+printf '%s %s %s' "$first" "$second"
+>>> SC2154 1:20
+>>> SC2154 1:29
+>>> SC2183 1:8
+
+### two conversions and three arguments
+printf '%s=%s\n' "$key" "$value" "$extra"
+>>> SC2154 1:19
+>>> SC2154 1:26
+>>> SC2154 1:35
+>>> SC2183 1:8
+
+### star width needs an extra argument
+printf '%*s\n' "$label"
+>>> SC2154 1:17
+>>> SC2183 1:8
+
+### left-justified star width needs an extra argument
+printf '%-*s\n' "$label"
+>>> SC2154 1:18
+>>> SC2183 1:8
+
+### decimal then time conversion without arguments
+printf '%d at %(%H:%M)T\n'
+>>> SC2183 1:8
+
+### conversions separated by a real newline with one argument
+printf '%s
+%s' "$header"
+>>> SC2154 2:6
+>>> SC2183 1:8
+
+### all-elements array may become several words
+printf '%s %s %s' "${parts[@]}"
+>>> SC2154 1:20
+
+### glob may become several words
+printf '%s -> %s\n' *.png
+>>> none
+
+### three conversions and three arguments
+printf '%s %s %s' "$a" "$b" "$c"
+>>> SC2154 1:20
+>>> SC2154 1:25
+>>> SC2154 1:30
+
+### time conversion containing percent-s in its format
+printf '%(%s %s)T' -1
+>>> none
+
+### two conversions and four arguments
+printf '%s=%s\n' "$k1" "$v1" "$k2" "$v2"
+>>> SC2154 1:19
+>>> SC2154 1:25
+>>> SC2154 1:31
+>>> SC2154 1:37
+
+### star width with two arguments
+printf '%*s\n' 12 "$label"
+>>> SC2154 1:20
+
+### left-justified star width with two arguments
+printf '%-*s|\n' 12 "$label"
+>>> SC2154 1:22
+
+### lone time conversion defaults to now
+printf '%(%F)T\n'
+>>> none
+
+### decimal filled and trailing time conversion unfilled
+printf '%d at %(%H:%M)T\n' "$count"
+>>> SC2154 1:29
+
+### attached -v name with a lone time conversion
+printf -vnow '%(%s)T'
+>>> SC2182 1:8
+
+### long decimal conversions counted once each
+printf '%ld %lld\n' "$big"
+>>> SC2154 1:22
+>>> SC2183 1:8
+
+### Q conversion counted
+printf '%Q %s\n' "$arg"
+>>> SC2154 1:19
+>>> SC2183 1:8
+
+### escaped percent is not a conversion
+printf '%d%% done\n' "$pct" "$extra"
+>>> SC2154 1:23
+>>> SC2154 1:30

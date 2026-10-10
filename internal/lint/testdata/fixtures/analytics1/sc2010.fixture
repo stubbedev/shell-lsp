@@ -1,0 +1,11 @@
+### ls piped into an inverted grep
+ls | grep -v '\.bak$'
+>>> SC2010 1:1
+
+### ls with arguments piped into grep
+ls -a /etc | grep rc
+>>> SC2010 1:1
+
+### ls given by path is not matched
+/bin/ls | grep -v '\.bak$'
+>>> none

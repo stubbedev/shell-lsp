@@ -1,0 +1,9 @@
+### exec with clean environment in sh
+#!/bin/sh
+exec -c env
+>>> SC3038 2:6
+
+### exec with clean environment in dash
+#!/bin/dash
+exec -c env
+>>> SC3038 2:6

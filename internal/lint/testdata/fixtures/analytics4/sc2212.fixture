@@ -1,0 +1,17 @@
+### empty single brackets in an if
+if [ ]; then
+  echo "never"
+fi
+>>> SC2212 1:4
+
+### empty double brackets
+if [[ ]]; then
+  echo "never"
+fi
+>>> SC2212 1:4
+
+### brackets with content joined by -o
+if [ "$mode" -o "$fallback" ]; then
+  echo "configured"
+fi
+>>> SC2166 1:14

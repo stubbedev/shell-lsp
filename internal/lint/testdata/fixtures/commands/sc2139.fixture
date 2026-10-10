@@ -1,0 +1,11 @@
+### alias body expands the directory at definition
+alias here="echo $PWD"
+>>> SC2139 1:18
+
+### alias print flag
+alias -p
+>>> none
+
+### single-quoted body with a brace range
+alias countdown='echo {10..1}'
+>>> none

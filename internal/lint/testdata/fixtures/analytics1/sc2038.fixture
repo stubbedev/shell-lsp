@@ -1,0 +1,27 @@
+### find piped straight into xargs
+find . | xargs rm
+>>> SC2038 1:1
+
+### find with a filter piped into xargs grep
+find src -name '*.go' | xargs grep -l TODO
+>>> SC2038 1:1
+
+### print0 with xargs -0 is fine
+find . -name '*.tmp' -print0 | xargs -0 rm
+>>> none
+
+### printf format is fine
+find . -type f -printf '%p\n' | xargs echo
+>>> none
+
+### combined r0 cluster is fine
+find . -name '*.o' -print0 | xargs -r0 rm -f
+>>> none
+
+### a numeric option containing zero suppresses it
+find . -type f | xargs -n10 md5sum
+>>> none
+
+### find given by path is not matched
+/usr/bin/find . | xargs wc -l
+>>> none

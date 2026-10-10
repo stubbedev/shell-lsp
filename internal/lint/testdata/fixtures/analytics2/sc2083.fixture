@@ -1,0 +1,8 @@
+### space after dot-slash
+./ configure --prefix=/usr
+>>> SC2083 1:1
+>>> SC2287 1:1
+
+### dot-slash file as one word is fine
+./configure --prefix=/usr
+>>> none

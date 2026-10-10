@@ -1,0 +1,191 @@
+### directive before elif
+#!/bin/sh
+if [ "$1" = start ]; then
+  echo starting
+# shellcheck disable=SC2086
+elif [ "$1" = stop ]; then
+  echo stopping $2
+fi
+>>> SC1009 2:1
+>>> SC1072 5:6
+>>> SC1073 2:22
+>>> SC1123 4:1
+>>+ SC2086 6:17 -- shellcheck abandons the script at its parse error; this linter parses it and keeps checking
+
+### directive before fi
+#!/bin/sh
+if [ -n "$1" ]; then
+  echo "$1"
+  # shellcheck disable=SC2086
+fi
+>>> SC1009 2:1
+>>> SC1072 5:3
+>>> SC1073 2:17
+>>> SC1123 4:3
+
+### directive before done
+#!/bin/sh
+while read -r line; do
+  echo "$line"
+  # shellcheck disable=SC2086
+done < /etc/hosts
+>>> SC1072 5:6
+>>> SC1073 2:1
+>>> SC1123 4:3
+
+### directive before a closing brace
+#!/bin/sh
+show() {
+  echo "$1"
+  # shellcheck disable=SC2086
+}
+show x
+>>> SC1009 2:1
+>>> SC1072 5:2
+>>> SC1073 2:8
+>>> SC1123 4:3
+
+### directive before then
+#!/bin/sh
+if [ -n "$1" ]
+# shellcheck disable=SC2086
+then
+  echo $1
+fi
+>>> SC1072 4:5
+>>> SC1073 2:1
+>>> SC1123 3:1
+
+### directive before else
+#!/bin/sh
+if [ -n "$1" ]; then
+  echo "$1"
+# shellcheck disable=SC2086
+else
+  echo $2
+fi
+>>> SC1009 2:1
+>>> SC1072 5:5
+>>> SC1073 2:17
+>>> SC1123 4:1
+
+### directive before do
+#!/bin/sh
+while read -r line
+# shellcheck disable=SC2086
+do
+  echo $line
+done
+>>> SC1072 4:3
+>>> SC1073 2:1
+>>> SC1123 3:1
+
+### actual: directive before do after a for list reports a missing do instead
+#!/bin/sh
+for host in alpha beta
+# shellcheck disable=SC2086
+do
+  ping -c1 $host
+done
+>>> SC1058 3:1
+>>> SC1072 3:13
+>>> SC1073 2:1
+
+### directive before esac
+#!/bin/sh
+case "$1" in
+  start) echo up ;;
+  # shellcheck disable=SC2086
+esac
+>>> SC1009 2:1
+>>> SC1072 4:5
+>>> SC1073 4:3
+>>> SC1085 4:5
+>>> SC1124 4:3
+
+### directive before a closing parenthesis
+#!/bin/sh
+(
+  cd /tmp && ls
+  # shellcheck disable=SC2086
+)
+>>> SC1072 5:2
+>>> SC1073 2:1
+>>> SC1123 4:3
+
+### directive before a double semicolon
+#!/bin/sh
+case "$1" in
+  start)
+    echo up
+    # shellcheck disable=SC2086
+    ;;
+esac
+>>> SC1009 2:1
+>>> SC1072 6:7
+>>> SC1073 3:3
+>>> SC1123 5:5
+
+### directive placed as the first thing of a case branch
+#!/bin/sh
+case "$1" in
+  start) echo up ;;
+  # shellcheck disable=SC2086
+  stop) echo down $2 ;;
+esac
+>>> SC1009 2:1
+>>> SC1072 4:5
+>>> SC1073 4:3
+>>> SC1085 4:5
+>>> SC1124 4:3
+
+### directive before the whole case statement
+#!/bin/sh
+:
+# shellcheck disable=SC2086
+case "$1" in
+  start) echo up ;;
+  stop) echo down $2 ;;
+esac
+>>> none
+
+### directive after a command's arguments
+#!/bin/sh
+echo starting \
+  # shellcheck disable=SC2086
+  $1
+>>> SC1072 3:30
+>>> SC1073 2:1
+>>> SC1126 3:3
+
+### directive after an assignment-only prefix
+#!/bin/sh
+LANG=C # shellcheck disable=SC2086
+echo "$LANG"
+>>> SC1126 2:8
+
+### directive directly after the in of a for loop
+#!/bin/sh
+for name in # shellcheck disable=SC2086
+do
+  echo "$name"
+done
+>>> SC1126 2:13
+
+### directive at the start of a continued pipeline stage
+#!/bin/sh
+ps aux |
+  # shellcheck disable=SC2086
+  grep $1
+>>> SC1072 3:30
+>>> SC1073 3:3
+>>> SC1126 3:3
+
+### directive after a logical and that continues on the next line
+#!/bin/sh
+test -d "$1" &&
+  # shellcheck disable=SC2086
+  ls $1
+>>> SC1072 3:30
+>>> SC1073 3:3
+>>> SC1126 3:3

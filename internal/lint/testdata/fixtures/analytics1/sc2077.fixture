@@ -1,0 +1,17 @@
+### letter double equals variable without spaces
+[[ a==$mode ]] && echo "a"
+>>> SC2077 1:4
+
+### variable equals a number without spaces
+[ $count=1 ] && echo "one"
+>>> SC2077 1:9
+>>> SC2086 1:3
+
+### variable not equals a number without spaces
+[ $count!=1 ] && echo "not one"
+>>> SC2077 1:10
+>>> SC2086 1:3
+
+### constant word is left to SC2078
+[ mode=fast ] && echo "fast"
+>>> SC2078 1:3

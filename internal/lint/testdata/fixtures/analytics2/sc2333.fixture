@@ -1,0 +1,76 @@
+### single bracket test-level and of two equalities
+[ "$tier" = gold && "$tier" = silver ] && echo impossible
+>>> SC2107 1:18
+>>> SC2154 1:4
+>>> SC2333 1:18
+
+### single bracket -a of two equalities
+[ "$tier" = gold -a "$tier" = silver ] && echo impossible
+>>> SC2154 1:4
+>>> SC2166 1:18
+>>> SC2333 1:18
+
+### two bracket tests joined by shell and
+[ $fmt = json ] && [ $fmt = yaml ] && echo both
+>>> SC2086 1:22
+>>> SC2086 1:3
+>>> SC2154 1:3
+>>> SC2333 1:17
+
+### shell and chain followed by or true
+[ $fmt = json ] && [ $fmt = yaml ] || true
+>>> SC2086 1:22
+>>> SC2086 1:3
+>>> SC2154 1:3
+>>> SC2333 1:17
+
+### two -eq tests against different numbers
+[ $retries -eq 1 ] && [ $retries -eq 2 ] && echo never
+>>> SC2086 1:25
+>>> SC2086 1:3
+>>> SC2154 1:3
+>>> SC2333 1:20
+
+### constant on left in the first test is reoriented
+[ 1 -eq $retries ] && [ $retries -eq 2 ] && echo never
+>>> SC2086 1:25
+>>> SC2086 1:9
+>>> SC2154 1:9
+>>> SC2333 1:20
+
+### -eq against bare words is not numeric
+low=0
+high=0
+[[ $depth -eq low && $depth -eq high ]] && echo flat
+>>> SC2154 3:4
+
+### literal left sides with expansion right sides are fine
+[ a = "$first" -a b = "$second" ] && echo ok
+>>> SC2154 1:24
+>>> SC2154 1:8
+>>> SC2166 1:16
+
+### glob on one side is not literal
+[[ $dir = /home && $dir = /home/* ]] && echo nested
+>>> SC2154 1:4
+
+### identical comparisons are fine
+[[ $tier = gold && $tier = gold ]] && echo gold
+>>> SC2154 1:4
+
+### constant left and differing variables is fine
+[ 0 -eq $FIRST_RC ] && [ 0 -eq $SECOND_RC ] && echo clean
+>>> SC2086 1:32
+>>> SC2086 1:9
+
+### reoriented constants are equal
+[ 1 -eq $retries ] && [ $retries -eq 1 ] && echo once
+>>> SC2086 1:25
+>>> SC2086 1:9
+>>> SC2154 1:9
+
+### no constant on either side
+[ "$src" = "$dst" ] && [ "$src" = "$backup" ] && echo same
+>>> SC2154 1:13
+>>> SC2154 1:36
+>>> SC2154 1:4

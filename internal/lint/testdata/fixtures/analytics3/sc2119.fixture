@@ -1,0 +1,41 @@
+### single call without arguments
+greet() {
+  echo "Hello, $1"
+}
+greet
+>>> SC2119 4:1
+>>> SC2120 1:1
+
+### two calls without arguments
+greet() {
+  echo "Hello, $1"
+}
+greet
+greet
+>>> SC2119 4:1
+>>> SC2119 5:1
+>>> SC2120 1:1
+
+### argument count with an argumentless call
+count_args() {
+  echo "got $# args"
+}
+count_args
+>>> SC2119 4:1
+>>> SC2120 1:1
+
+### mixed calls with and without arguments
+log_msg() {
+  echo "[log] $1"
+}
+log_msg
+log_msg "started"
+>>> none
+
+### directive on the function suppresses the call finding
+# shellcheck disable=SC2120
+greet() {
+  echo "Hello, $1"
+}
+greet
+>>> none

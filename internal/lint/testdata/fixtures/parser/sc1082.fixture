@@ -1,0 +1,15 @@
+### byte order mark before the shebang
+﻿#!/bin/sh
+echo hello
+>>> SC1082 1:1
+
+### byte order mark disabled file-wide
+﻿#!/bin/sh
+# shellcheck disable=SC1082
+echo hello
+>>> none
+
+### no byte order mark
+#!/bin/sh
+echo hello
+>>> none

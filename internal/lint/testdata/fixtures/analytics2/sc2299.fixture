@@ -1,0 +1,8 @@
+### nested modified expansion
+archive=backup.tar.gz
+echo "${${archive%.*}##*/}"
+>>> SC2299 2:9
+
+### nested default expansion
+echo "${${OUTDIR:-/tmp}%/}"
+>>> SC2299 1:9

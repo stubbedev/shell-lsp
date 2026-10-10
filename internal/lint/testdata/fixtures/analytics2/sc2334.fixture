@@ -1,0 +1,15 @@
+### arithmetic and of two equalities with numbers
+(( shard == 1 && shard == 2 )) && echo never
+>>> SC2154 1:4
+>>> SC2334 1:15
+
+### identical numbers still flagged
+(( shard == 4 && shard == 4 )) && echo four
+>>> SC2154 1:4
+>>> SC2334 1:15
+
+### comparisons against names are fine
+low=0
+high=0
+(( shard == low && shard == high )) && echo bounded
+>>> SC2154 3:4

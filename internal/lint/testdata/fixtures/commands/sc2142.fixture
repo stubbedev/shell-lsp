@@ -1,0 +1,12 @@
+### alias copying the first positional parameter
+alias stash='cp "$1" ~/stash/'
+>>> SC2142 1:7
+
+### escaped dollar with braced at-sign in a double-quoted alias
+alias runall="nice \${@}"
+>>> SC2142 1:7
+
+### alias named by a positional parameter
+alias $1='pwd'
+>>> SC2086 1:7
+>>> SC2139 1:7

@@ -1,0 +1,23 @@
+### word wrapped in curly double quotes
+echo “hello”
+>>> SC1110 1:12
+>>> SC1110 1:6
+
+### word wrapped in curly single quotes
+echo ‘hello’
+>>> SC1110 1:12
+>>> SC1110 1:6
+
+### word followed by a curly single quote
+echo hello‘
+>>> SC1110 1:11
+
+### double prime characters around a word
+echo ″hello‶
+>>> SC1110 1:12
+>>> SC1110 1:6
+
+### curly quotes inside ascii double quotes
+echo "“hello”"
+>>> SC1111 1:13
+>>> SC1111 1:7

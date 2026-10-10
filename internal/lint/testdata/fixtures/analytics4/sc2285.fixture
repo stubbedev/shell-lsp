@@ -1,0 +1,9 @@
+### spaced append operator
+log += $(date)
+>>> SC2046 1:8
+>>> SC2285 1:1
+
+### append operator glued to a substitution
+history +=$(tail -n1 cmds.txt)
+>>> SC2046 1:11
+>>> SC2285 1:1

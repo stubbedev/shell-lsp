@@ -1,0 +1,44 @@
+### ln with a single quoted operand
+ln '/opt/app current'
+>>> SC2226 1:1
+
+### ln with a single unquoted operand
+ln /usr/lib/libfoo.so.1
+>>> SC2226 1:1
+
+### ln with source and destination
+ln libfoo.so.1 libfoo.so
+>>> none
+
+### brace expansion may provide the destination
+ln 'profile'{,.bak}
+>>> none
+
+### all positional parameters may be several words
+ln "$@"
+>>> none
+
+### short target directory flag
+ln -t bin tool
+>>> none
+
+### long target directory option in equals form
+ln --target-directory=bin tool
+>>> none
+
+### abbreviated target directory option
+ln --target-direc=bin tool
+>>> none
+
+### only the version option
+ln --version
+>>> none
+
+### quoted indirect expansion may be several words
+ln "${!targets}"
+>>> SC2154 1:5
+
+### unquoted variable operand may split
+ln $targets
+>>> SC2086 1:4
+>>> SC2154 1:4

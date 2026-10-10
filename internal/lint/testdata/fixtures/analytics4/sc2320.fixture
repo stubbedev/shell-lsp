@@ -1,0 +1,17 @@
+### status checked after echoing it
+deploy
+echo "deploy returned $?"
+[ $? -eq 0 ]
+>>> SC2181 3:3
+>>> SC2320 3:3
+
+### status saved after printf
+backup
+printf 'done\n'
+rc=$?
+>>> SC2034 3:1
+
+### status checked after an ordinary command
+backup
+[ $? -eq 0 ]
+>>> SC2181 2:3

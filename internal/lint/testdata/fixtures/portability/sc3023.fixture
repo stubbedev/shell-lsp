@@ -1,0 +1,9 @@
+### two-digit descriptor in dash
+#!/bin/dash
+echo hush 42> /dev/null
+>>> SC3023 2:11
+
+### two-digit descriptor in sh
+#!/bin/sh
+echo hush 42> /dev/null
+>>> SC3023 2:11

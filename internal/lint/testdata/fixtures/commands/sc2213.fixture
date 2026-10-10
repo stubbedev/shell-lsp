@@ -1,0 +1,48 @@
+### option b is declared but never handled
+while getopts 'a:b' opt; do
+  case $opt in
+    a) archive=$OPTARG ;;
+  esac
+done
+>>> SC2034 3:8
+>>> SC2213 2:3
+>>> SC2220 2:3
+
+### digit range pattern cannot be classified
+while getopts 'a:123' opt; do
+  case $opt in
+    a) archive=$OPTARG ;;
+    [0-9]) level=$opt ;;
+  esac
+done
+>>> SC2034 3:8
+>>> SC2034 4:12
+
+### case on a different variable
+while getopts 'a:b' opt; do
+  case $mode in
+    a) archive=$OPTARG ;;
+  esac
+done
+>>> SC2034 1:21
+>>> SC2034 3:8
+>>> SC2154 2:8
+
+### case word is not a single expansion
+while getopts 'a:b' opt; do
+  case "x$opt" in
+    xa) archive=$OPTARG ;;
+    xb) backup=1 ;;
+  esac
+done
+>>> SC2034 3:9
+>>> SC2034 4:9
+
+### body assigns the getopts variable before the case
+while getopts 'a:b' opt; do
+  opt=${opt#-}
+  case $opt in
+    a) archive=$OPTARG ;;
+  esac
+done
+>>> SC2034 4:8

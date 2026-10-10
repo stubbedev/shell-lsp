@@ -1,0 +1,18 @@
+### indirect expansion of a reference in sh
+#!/bin/sh
+echo "${!pointer}"
+>>> SC2154 2:7
+>>> SC3053 2:7
+
+### bare indirect expansion in busybox
+#!/bin/busybox sh
+# shellcheck shell=busybox
+handler=cleanup
+${!handler}
+>>> SC3053 4:1
+
+### indirect expansion of a reference in dash
+#!/bin/dash
+echo "${!pointer}"
+>>> SC2154 2:7
+>>> SC3053 2:7

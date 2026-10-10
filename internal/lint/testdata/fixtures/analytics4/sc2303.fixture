@@ -1,0 +1,63 @@
+### bare value index
+for pkg in ${packages[@]}; do
+  echo "${packages[pkg]}"
+done
+>>> SC2068 1:12
+>>> SC2154 1:12
+>>> SC2302 1:12
+>>> SC2303 2:9
+
+### dollar value index
+for pkg in "${packages[@]}"; do
+  printf '%s\n' "${packages[$pkg]}"
+done
+>>> SC2154 1:13
+>>> SC2302 1:12
+>>> SC2303 2:29
+
+### arithmetic value index
+for w in "${weights[@]}"; do
+  echo $(( weights[w] * 2 ))
+done
+>>> SC2154 1:11
+>>> SC2302 1:10
+>>> SC2303 2:12
+
+### two arrays first indexed
+for e in "${old[@]}" "${new[@]}"; do
+  echo "${old[$e]}"
+done
+>>> SC2154 1:11
+>>> SC2154 1:23
+>>> SC2302 1:10
+>>> SC2303 2:15
+
+### two arrays second indexed
+for e in "${old[@]}" "${new[@]}"; do
+  echo "${new[$e]}"
+done
+>>> SC2154 1:11
+>>> SC2154 1:23
+>>> SC2302 1:22
+>>> SC2303 2:15
+
+### unrelated index name
+for pkg in "${packages[@]}"; do
+  echo "${packages[K]}"
+done
+>>> SC2034 1:1
+>>> SC2154 1:13
+
+### reassigned loop variable
+for pkg in "${packages[@]}"; do
+  pkg=1
+  echo "${packages[pkg]}"
+done
+>>> SC2154 1:13
+
+### indexing another array
+for pkg in "${packages[@]}"; do
+  echo "${versions[$pkg]}"
+done
+>>> SC2154 1:13
+>>> SC2154 2:9

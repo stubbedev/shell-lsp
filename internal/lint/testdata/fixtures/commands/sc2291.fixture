@@ -1,0 +1,24 @@
+### wide gap between echo arguments collapses
+echo Name         Size
+>>> SC2291 1:1
+
+### wide gap after the command name only
+echo            centered
+>>> none
+
+### two spaces between arguments
+echo Name  Size
+>>> none
+
+### spaces inside quotes are kept
+echo 'Name         Size'
+>>> none
+
+### redirection between the arguments
+echo left     > columns.txt     right
+>>> none
+
+### arguments on separate continued lines
+    echo first \
+         second
+>>> none

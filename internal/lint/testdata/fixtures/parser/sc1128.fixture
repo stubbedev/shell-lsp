@@ -1,0 +1,25 @@
+### empty first line before the shebang
+
+#!/bin/sh
+echo hello
+>>> SC1128 2:1
+
+### indented comment then a reversed shebang
+  # build helper
+!# /bin/bash
+echo hello
+>>> SC1084 2:1
+>>> SC1128 2:1
+
+### comment and command before a shebang line
+# build helper
+echo start
+#!/bin/sh
+echo hello
+>>> none
+
+### missing-bang form on a later line
+# notes
+#/bin/sh
+echo hello
+>>> none

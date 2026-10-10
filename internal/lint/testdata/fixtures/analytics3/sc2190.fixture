@@ -1,0 +1,30 @@
+### associative array literal with a plain element
+declare -A mime
+mime=(text/html)
+echo "${mime[@]}"
+>>> SC2190 2:7
+
+### typeset -A then append a plain element
+typeset -A owners
+owners+=(alice)
+echo "${owners[@]}"
+>>> SC2190 2:10
+
+### associative array literal with name=value element
+declare -A limits
+limits=(cpu=2 memory=512)
+echo "${limits[@]}"
+>>> SC2190 2:15
+>>> SC2190 2:9
+
+### indexed array declared with -a
+declare -a queue
+queue=(first second)
+echo "${queue[@]}"
+>>> none
+
+### associative array with bracketed keys
+declare -A limits
+limits=([cpu]=2 [memory]=512)
+echo "${limits[@]}"
+>>> none

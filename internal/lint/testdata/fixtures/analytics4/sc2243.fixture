@@ -1,0 +1,17 @@
+### bare command substitution in double brackets
+if [[ $(git status --porcelain) ]]; then
+  echo "dirty tree"
+fi
+>>> none
+
+### bare backtick substitution in double brackets
+[[ `pgrep nginx` ]] && echo "nginx running"
+>>> SC2006 1:4
+
+### quoted substitution in single brackets
+[ "$(ls -A "$inbox")" ] && echo "mail waiting"
+>>> SC2154 1:13
+
+### explicit -n with the substitution
+[[ -n $(git status --porcelain) ]] && echo "dirty tree"
+>>> none

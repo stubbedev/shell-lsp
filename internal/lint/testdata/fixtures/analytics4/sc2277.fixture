@@ -1,0 +1,19 @@
+### bash script renaming itself
+#!/bin/bash
+0='worker'
+>>> SC2277 2:1
+
+### bash braced zero expansion assigned
+#!/bin/bash
+${0}='worker'
+>>> SC2277 2:1
+
+### ksh gets its own code
+#!/bin/ksh
+0='worker'
+>>> SC2278 2:1
+
+### plain sh gets its own code
+#!/bin/sh
+0='worker'
+>>> SC2280 2:1

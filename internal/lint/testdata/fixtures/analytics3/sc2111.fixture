@@ -1,0 +1,31 @@
+### ksh function with keyword and parentheses
+#!/bin/ksh
+function cleanup() {
+  rm -f /tmp/lock
+}
+cleanup
+>>> SC2111 2:1
+
+### bash accepts keyword and parentheses
+#!/bin/bash
+function cleanup() {
+  rm -f /tmp/lock
+}
+cleanup
+>>> none
+
+### ksh function with only the keyword
+#!/bin/ksh
+function cleanup {
+  rm -f /tmp/lock
+}
+cleanup
+>>> none
+
+### ksh function with only parentheses
+#!/bin/ksh
+cleanup() {
+  rm -f /tmp/lock
+}
+cleanup
+>>> none

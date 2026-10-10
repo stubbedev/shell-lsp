@@ -1,0 +1,28 @@
+### break inside a subshell in a for loop
+for file in *.csv; do
+  (
+    [ -s "$file" ] || break
+    wc -l "$file"
+  )
+done
+>>> SC2106 3:23
+
+### break in a brace group at the end of a pipeline
+while true; do
+  true | { break; }
+done
+>>> SC2106 2:12
+
+### break directly in a while loop body
+while true; do
+  read -r reply
+  [ "$reply" = quit ] && break
+done
+>>> none
+
+### ksh runs the last pipeline element in the current shell
+#!/bin/ksh
+while true; do
+  true | { break; }
+done
+>>> none

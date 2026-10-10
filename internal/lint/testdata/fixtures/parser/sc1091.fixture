@@ -1,0 +1,12 @@
+### sourced file not given as input
+source ./does-not-exist.sh
+>>> SC1091 1:8
+
+### external sources explicitly disabled by directive
+# shellcheck external-sources=false
+source ./lib/common.sh
+>>> SC1091 2:8
+
+### null device is always accepted
+. /dev/null
+>>> none

@@ -1,0 +1,3 @@
+### or operator inside single brackets
+[ "$verbose" || "$debug" ] && set -x
+>>> SC2109 1:14

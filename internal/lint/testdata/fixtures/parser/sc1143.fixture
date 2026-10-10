@@ -1,0 +1,23 @@
+### commented-out option inside a continuation
+rsync -a \
+  # --delete \
+  src/ dest/
+>>> SC1143 2:15
+>>> SC2287 3:3
+
+### comment without a trailing backslash inside a continuation
+rsync -a  \
+  # the source tree
+  src/ dest/
+>>> SC2287 3:3
+
+### trailing backslash on a comment that is not inside a continuation
+rsync -a src/ dest/  # trailing \
+echo next
+>>> none
+
+### backslash glued to the word
+rsync -a\
+  # --delete \
+  src/ dest/
+>>> SC2287 3:3

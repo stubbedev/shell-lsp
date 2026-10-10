@@ -1,0 +1,9 @@
+### shell-quoting printf format in sh
+#!/bin/sh
+printf '%q\n' "$1"
+>>> SC3050 2:8
+
+### shell-quoting printf format in dash
+#!/bin/dash
+printf '%q\n' "$1"
+>>> SC3050 2:8

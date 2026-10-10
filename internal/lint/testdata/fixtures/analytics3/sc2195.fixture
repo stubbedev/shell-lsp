@@ -1,0 +1,20 @@
+### two-character pattern can never match
+case "build-$target" in
+  ??|build-*) echo "matched" ;;
+esac
+>>> SC2154 1:13
+>>> SC2195 2:3
+
+### every pattern overlaps the word
+case "build-$target" in
+  build*) echo "prefix" ;;
+  *-release) echo "suffix" ;;
+  *ild-*) echo "middle" ;;
+esac
+>>> SC2154 1:13
+
+### word is a single expansion
+case $answer in
+  ??) echo "two letters" ;;
+esac
+>>> SC2154 1:6

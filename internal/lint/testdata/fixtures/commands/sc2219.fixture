@@ -1,0 +1,8 @@
+### let assignment
+let a=1
+>>> SC2034 1:6
+>>> SC2219 1:1
+
+### arithmetic compound command
+(( a = 1 ))
+>>> SC2034 1:6

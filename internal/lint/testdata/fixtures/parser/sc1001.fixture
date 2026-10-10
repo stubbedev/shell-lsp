@@ -1,0 +1,67 @@
+### backslash before a letter in an argument
+grep -r \foo src/
+>>> SC1001 1:9
+
+### backslash before a digit
+printf '%s\n' version\2
+>>> SC1001 1:22
+
+### backslash before slash, hyphen and equals
+mkdir -p build\/out
+ls \-l
+export FLAGS\=fast
+>>> SC1001 1:15
+>>> SC1001 2:4
+>>> SC1001 3:13
+
+### backslash before colon and percent
+echo host\:8080 load\%
+>>> SC1001 1:10
+>>> SC1001 1:21
+
+### escaped metacharacters are meaningful
+echo a\|b c\&d e\;f g\<h i\>j k\(l m\)n
+>>> none
+
+### escaped backslash and quotes
+echo back\\slash it\'s say\"hi
+>>> none
+
+### escaped dollar and backtick
+echo cost\$5 tick\`s
+>>> none
+
+### escaped glob and extglob characters
+ls file\? data\* user\@host wow\! one\+two
+>>> none
+
+### escaped brackets and braces
+echo \[draft\] \{set\}
+>>> none
+
+### escaped dot, comma, tilde and hash
+echo name\.ext a\,b \~home \#tag
+>>> none
+
+### escaped space keeps one argument
+touch my\ notes.txt
+>>> none
+
+### escaped no-break space is not an ordinary character
+mkdir backup\ copy
+>>> SC1018 1:14
+
+### alias-suppressing backslash before a command name
+\ls -la
+\rm -f stale.lock
+>>> none
+
+### alias-suppressing backslash before underscore and dot names
+_cleanup() { :; }
+\_cleanup
+\. /dev/null
+>>> none
+
+### backslash n is a different code
+echo first\nsecond
+>>> SC1012 1:11

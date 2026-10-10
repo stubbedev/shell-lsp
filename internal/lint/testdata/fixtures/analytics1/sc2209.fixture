@@ -1,0 +1,20 @@
+### cat assigned before more words at the head of a pipeline
+viewer=cat notes.txt | grep todo
+>>> SC2209 1:1
+
+### PAGER prefix set to bare cat before grep
+PAGER=cat grep error app.log
+>>> SC2209 1:1
+
+### standalone assignment of pwd
+here=pwd
+echo "$here"
+>>> SC2209 1:1
+
+### value that is not a command name is fine
+mode=fast ls -l
+>>> none
+
+### quoted command name is fine
+PAGER="cat" grep error app.log
+>>> none

@@ -1,0 +1,14 @@
+### sh script assigning zero
+#!/bin/sh  
+0='runner'
+>>> SC2280 2:1
+
+### sh unbraced zero expansion assigned
+#!/bin/sh
+$0='runner'
+>>> SC2280 2:1
+
+### dash uses another code
+#!/bin/dash
+0='runner'
+>>> SC2279 2:1

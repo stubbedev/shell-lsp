@@ -1,0 +1,18 @@
+### suspicious end of a multi-line double quote
+echo "first
+second"third
+>>> SC1078 1:6
+>>> SC1079 2:7
+
+### suspicious end of a multi-line single quote followed by digits
+pattern='line one
+line two'2
+echo "$pattern"
+>>> SC1078 1:9
+>>> SC1079 2:9
+>>> SC2026 2:10
+
+### multi-line string followed by a space
+echo "first
+second" third
+>>> none

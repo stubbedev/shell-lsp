@@ -1,0 +1,23 @@
+### variable assigned its own value
+PATH=$PATH
+>>> SC2269 1:1
+
+### braced self assignment
+retries=${retries}
+>>> SC2269 1:1
+
+### quoted self assignment
+name="$name"
+>>> SC2269 1:1
+
+### prefix assignment to a command
+LANG=$LANG mycmd --report
+>>> none
+
+### self assignment with a default modifier
+timeout=${timeout:-30}
+>>> none
+
+### append to itself
+args+=$args
+>>> none

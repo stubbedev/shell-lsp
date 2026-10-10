@@ -1,0 +1,17 @@
+### break inside a function without any loop
+stop_early() {
+  echo "stopping"
+  break
+}
+stop_early
+>>> SC2104 3:3
+
+### break inside a loop inside a function
+drain() {
+  for job in a b c; do
+    [ "$job" = b ] && break
+    echo "$job"
+  done
+}
+drain
+>>> none

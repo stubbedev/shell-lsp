@@ -1,0 +1,8 @@
+### literal prefix with comma-list brace on the right of ==
+[[ $file == report.{csv,tsv} ]] && echo table
+>>> SC2154 1:4
+>>> SC2201 1:13
+
+### regex with counted repetition on the right of =~
+[[ $zip =~ ^[0-9]{5}$ ]] && echo valid
+>>> SC2154 1:4

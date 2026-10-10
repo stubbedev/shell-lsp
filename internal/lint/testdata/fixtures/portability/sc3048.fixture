@@ -1,0 +1,16 @@
+### lowercase sig-prefixed interrupt in sh
+#!/bin/sh
+trap 'echo bye' sigint
+>>> SC3048 2:17
+>>> SC3049 2:17
+
+### uppercase SIG-prefixed interrupt in dash
+#!/bin/dash
+trap 'echo bye' SIGINT
+>>> SC3048 2:17
+
+### SIG-prefixed name in busybox is fine
+#!/bin/busybox sh
+# shellcheck shell=busybox
+trap 'echo bye' EXIT SIGTERM
+>>> none

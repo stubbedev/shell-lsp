@@ -1,0 +1,48 @@
+### file redirect inside a substitution
+checksum=$(sha256sum app.tar > sums.txt)
+>>> SC2034 1:1
+>>> SC2327 1:10
+>>> SC2328 1:30
+
+### fd 1 redirect inside backticks
+checksum=`sha256sum app.tar 1> sums.txt`
+>>> SC2006 1:10
+>>> SC2034 1:1
+>>> SC2327 1:10
+>>> SC2328 1:29
+
+### append inside a brace substitution
+checksum=${ sha256sum app.tar >> sums.txt; }
+>>> SC2034 1:1
+>>> SC2327 1:10
+>>> SC2328 1:31
+
+### redirect on the last pipeline stage
+checksum=$(sha256sum app.tar | cut -d' ' -f1 > sum.txt)
+>>> SC2034 1:1
+>>> SC2327 1:10
+>>> SC2328 1:46
+
+### redirect to the null device
+checksum=$(sha256sum app.tar > /dev/null)
+>>> SC2034 1:1
+>>> SC2327 1:10
+>>> SC2328 1:30
+
+### stderr captured then stdout discarded
+warnings=$(make 2>&1 >/dev/null)
+>>> SC2034 1:1
+
+### two statements second redirected
+checksum=$(cd dist; sha256sum app.tar > sums.txt)
+>>> SC2034 1:1
+>>> SC2164 1:12
+
+### two statements first redirected
+checksum=$(cd dist > /dev/null; sha256sum app.tar)
+>>> SC2034 1:1
+>>> SC2164 1:12
+
+### input duplication
+line=$(head -n1 <&3)
+>>> SC2034 1:1

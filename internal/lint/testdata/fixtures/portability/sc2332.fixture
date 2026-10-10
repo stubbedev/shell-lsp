@@ -1,0 +1,35 @@
+### negated option test in single brackets
+#!/bin/bash
+if [ ! -o noclobber ]; then
+  echo "clobbering allowed"
+fi
+>>> SC2332 2:6
+
+### negated unary -a file test in single brackets
+#!/bin/bash
+if [ ! -a /etc/hosts ]; then
+  echo "no hosts file"
+fi
+>>> SC2331 2:8
+>>> SC2332 2:6
+
+### option test without negation is fine
+#!/bin/bash
+if [ -o noclobber ]; then
+  echo "noclobber on"
+fi
+>>> none
+
+### negated option test in double brackets is fine
+#!/bin/bash
+if [[ ! -o noclobber ]]; then
+  echo "clobbering allowed"
+fi
+>>> none
+
+### negating the whole test command is fine
+#!/bin/bash
+if ! [ -o noclobber ]; then
+  echo "clobbering allowed"
+fi
+>>> none

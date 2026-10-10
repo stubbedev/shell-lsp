@@ -1,0 +1,966 @@
+### trailing comment between words
+ls -l # show the long listing
+>>> none
+
+### indented comment lines followed by a flush comment
+  # prepare the workspace
+    # nothing to do yet
+# end of preamble
+true
+>>> none
+
+### three consecutive comment lines
+# build helper
+# usage: build.sh
+# exits non-zero on failure
+make
+>>> none
+
+### single comment line
+# just a note to the reader
+>>> none
+
+### postfix and prefix increments around a plus
+hits=1
+misses=2
+(( hits++ + ++misses ))
+echo "$hits $misses"
+>>> none
+
+### positional times number minus comma sequence
+echo $(( $1 * 4 - (1, 2) ))
+>>> none
+
+### or-assign of a shift without spaces
+mask=0
+(( mask|=mask<<2 ))
+echo "$mask"
+>>> none
+
+### and-assign of a power with spaces
+flags=7
+(( flags &= flags ** 2 ))
+echo "$flags"
+>>> none
+
+### number with chained compound assignments and logical and
+lo=1
+hi=8
+echo $(( 1 |= lo && hi >>= 2 ))
+>>> none
+
+### mixed bitwise and logical or with odd spacing
+a=1 b=2 c=3 d=4
+echo $(( a | b||c |d ))
+>>> none
+
+### multiplication with a power on the right
+base=3
+echo $(( base * base ** 2 ))
+>>> none
+
+### lone number in arithmetic
+(( 42 ))
+>>> none
+
+### xor with stacked unary operators
+x=5 y=6
+echo $(( x ^ !-y ))
+>>> none
+
+### logical not of the exit status
+grep -q root /etc/passwd
+missing=$(( !$? ))
+echo "$missing"
+>>> none
+
+### based integer literals multiplied
+echo $(( 010#42 * 16#ff ))
+>>> none
+
+### quoted arithmetic expansion plus a quoted number
+echo $(( "$(( 1 + 2 ))" + '3' ))
+>>> none
+
+### array element with arithmetic index incremented
+slots=(0 0 0)
+i=0
+(( slots[i+1]++ ))
+echo "${slots[@]}"
+>>> none
+
+### number plus a backtick substitution
+# shellcheck disable=SC2006
+echo $(( 5 + `date +%s` ))
+>>> none
+
+### array element indexed by a backtick pipeline
+table=(4 5 6)
+# shellcheck disable=SC2006
+echo $(( table[`echo 3 | sed 's/3/1/'`] * 2 + 1 ))
+>>> none
+
+### two adjacent positional expansions as one operand
+echo $(( $1$2 + 1 ))
+>>> none
+
+### less-than against nested sums
+n=4
+(( n < ((1 + 2) + (3 + 4)) )) && echo small
+>>> none
+
+### ternary with single letters
+p=1 q=2 r=3
+echo $(( p ? q : r ))
+>>> none
+
+### line continuations inside arithmetic
+base=2 extra=3
+(( \
+  total = \
+  base + \
+  extra ))
+echo "$total"
+>>> none
+
+### ternary nested in the true branch
+a=1 b=0 c=2 d=3 e=4
+echo $(( a ? b ? c : d : e ))
+>>> none
+
+### ternary nested in the false branch
+a=0 b=1 c=1 d=2 e=3
+echo $(( a ? b : c ? d : e ))
+>>> none
+
+### double logical not
+enabled=3
+echo $(( !!enabled ))
+>>> none
+
+### bitwise complement of zero
+echo $(( ~0 ))
+>>> none
+
+### regex pattern starting and ending with a star
+file=app.log
+# shellcheck disable=SC2049
+[[ $file =~ *log* ]] && echo match
+>>> none
+
+### double closing bracket inside a regex group
+line="x ]]"
+[[ $line =~ ( ]])* ]] && echo ok
+>>> none
+
+### regex with a parenthesised letter
+word=ab
+[[ $word =~ a(b) ]] && echo ok
+>>> none
+
+### nested regex group holding a variable and brackets
+sep=:
+input="a:]]"
+[[ $input =~ (a($sep]])) ]] && echo ok
+>>> none
+
+### anchored yes class
+read -r answer
+[[ $answer =~ ^[yY] ]] && echo yes
+>>> none
+
+### braced variable against a comment-line regex
+read -r line
+[[ ${line} =~ ^[[:space:]]*# ]] && echo comment
+>>> none
+
+### regex alternation between two words
+read -r action
+[[ $action =~ start|stop ]] && echo valid
+>>> none
+
+### interval quantifier with end anchor
+read -r code
+[[ $code =~ [0-9]{3}$ ]] && echo three
+>>> none
+
+### anchored group with an escaped space
+[[ $1 =~ ^(foo\ bar) ]] && echo hit
+>>> none
+
+### escaped dots and parentheses in a regex
+[[ $1 =~ v1\.2\.\(beta\) ]] && echo hit
+>>> none
+
+### word and file test joined with -a
+target=/etc/hosts
+# shellcheck disable=SC2166
+[ "$target" -a -f "$target" ] && echo present
+>>> none
+
+### single-quoted greater-than comparison
+a=pear b=apple
+[ "$a" '>' "$b" ] && echo later
+>>> none
+
+### double-quoted greater-or-equal comparison
+a=pear b=apple
+# shellcheck disable=SC2122
+[ "$a" ">=" "$b" ] && echo later
+>>> none
+
+### escaped less-than comparison
+a=apple b=pear
+[ "$a" \< "$b" ] && echo earlier
+>>> none
+
+### substring compared with a bracket set of punctuation
+s="-flag"
+[[ ${s:0:1} == [-.\|/\\] ]] && echo punct
+>>> none
+
+### older-than comparison of two files
+[[ backup.tar -ot archive.tar ]] && echo stale
+>>> none
+
+### word made of quotes, a range, a literal and a substitution
+# shellcheck disable=SC2046
+touch 'log'"-"{1..3}.txt$(date +%s)
+>>> none
+
+### word with star-star, bang and nested at groups
+shopt -s extglob
+ls report**(.bak)!(tmp)!(@(old))
+>>> none
+
+### word ending in a hash
+echo issue#
+>>> none
+
+### locale string followed by a C string with a real newline
+printf '%s\n' $"Greeting"$'line one
+line two'
+>>> none
+
+### word split by a line continuation
+echo hel\
+lo
+>>> none
+
+### process substitution with a pipeline
+diff <(sort names.txt | uniq) reference.txt
+>>> none
+
+### spaced process substitution holding an if
+cat <(  if true; then echo yes; fi  )
+>>> none
+
+### process substitution holding only a comment
+cat <(# nothing here
+)
+>>> none
+
+### two-word single-quoted string
+echo 'hello world'
+>>> none
+
+### backtick holding only a comment
+# shellcheck disable=SC2006,SC2092
+`# placeholder`
+>>> none
+
+### echo of a comment backtick then continued arguments
+# shellcheck disable=SC2006
+echo `# nothing` \
+  first second
+>>> none
+
+### double-quoted variable
+echo "$HOME"
+>>> none
+
+### dollar then single quote inside double quotes
+echo "price: $'"
+>>> none
+
+### ksh brace substitution in double quotes
+#!/bin/ksh
+echo "${ date; }"
+>>> none
+
+### ksh brace substitution without trailing space and with text after
+#!/bin/ksh
+echo "${ date;}suffix"
+>>> none
+
+### escaped backslash before n in double quotes
+printf '%s\n' "\\n"
+>>> none
+
+### lone star glob
+echo *
+>>> none
+
+### negated digit range glob
+echo [^0-9]*
+>>> none
+
+### letter and alpha class glob
+echo [a[:alpha:]]
+>>> none
+
+### alnum class glob
+echo [[:alnum:]]
+>>> none
+
+### negated class with a digit range
+echo [^[:space:]0-9]
+>>> none
+
+### bracket with an escaped pipe
+echo [\|]
+>>> none
+
+### negated opening bracket
+echo [^[]
+>>> none
+
+### bracket holding star and question mark
+echo [*?]
+>>> none
+
+### bang-negated closing bracket then caret
+echo [!]^]
+>>> none
+
+### bracket holding only a closing bracket
+echo []]
+>>> none
+
+### negated star-suffix extglob
+shopt -s extglob
+rm -- !(*.log)
+>>> none
+
+### negated alternation extglob
+shopt -s extglob
+ls !(build|dist)
+>>> none
+
+### plus group with an escaped paren and spaces
+shopt -s extglob
+ls +(name\)  )
+>>> none
+
+### plus group around a bang group with a star group
+shopt -s extglob
+ls +(!(cache*(.d)))
+>>> none
+
+### star group with empty nested groups
+shopt -s extglob
+ls *(|()|(|))
+>>> none
+
+### star group with angle brackets
+shopt -s extglob
+ls *(<>)
+>>> none
+
+### at group with an empty alternative and empty star group
+shopt -s extglob
+ls @(|*())
+>>> none
+
+### numeric brace range
+echo {1..5}
+>>> none
+
+### brace list with a quoted spaced element
+echo {alpha,"beta gamma"}
+>>> none
+
+### brace element with an escaped closing brace
+echo {x\},y}
+>>> none
+
+### nested brace expansion
+echo {red,{green,blue}}
+>>> none
+
+### two elements with optional nested suffixes
+echo {pre{,x},post{,y}}
+>>> none
+
+### brace element that is an arithmetic expansion
+n=2
+# shellcheck disable=SC2004
+echo {$((${n}+1)),z}
+>>> none
+
+### actual: empty braces are a plain literal word in a script
+find . -name '*.tmp' -exec rm {} \;
+>>> none
+
+### actual: single-element braces in a script are a literal
+echo {solo}
+>>> SC1083 1:11
+>>> SC1083 1:6
+
+### C string with an escaped single quote
+echo $'it\'s here'
+>>> none
+
+### locale-translated string
+echo $"Welcome"
+>>> none
+
+### spaced arithmetic expansion with mixed operators
+a=7 b=3 c=9
+echo $(( a + b * 2 - c / 3 ))
+>>> none
+
+### deeply parenthesised arithmetic expansion
+# shellcheck disable=SC2323
+echo $(( ((1 + (2 * 3)) - 4) ))
+>>> none
+
+### arithmetic command with a ternary
+x=-4
+(( y = x > 0 ? x : -x ))
+echo "$y"
+>>> none
+
+### ksh brace substitution with spaces
+#!/bin/ksh
+now=${ date; }
+echo "$now"
+>>> none
+
+### ksh brace substitution with newlines
+#!/bin/ksh
+now=${
+date
+}
+echo "$now"
+>>> none
+
+### ksh value substitution assigning REPLY
+#!/bin/ksh
+greeting=${| REPLY=hello; }
+echo "$greeting"
+>>> none
+
+### global pattern replacement
+path=/usr/local/bin
+echo "${path//\//:}"
+>>> none
+
+### replacement with single-quoted braces
+s=axb
+echo "${s/x/'{y}'}"
+>>> none
+
+### suffix removal by a substitution with an escaped brace
+f="name}"
+# shellcheck disable=SC2295
+echo "${f%%$(printf %s \})}"
+>>> none
+
+### prefix removal of an escaped brace
+s="}tail"
+echo "${s#\}}"
+>>> none
+
+### command substitution with newline before close
+listing=$(cd /tmp || exit; ls
+)
+echo "$listing"
+>>> none
+
+### command substitution of only spaces
+empty=$(   )
+echo "$empty"
+>>> none
+
+### command substitution with a trailing comment line
+stamp=$(date
+# formatted later
+)
+echo "$stamp"
+>>> none
+
+### actual: here document closed on the last line (newline always added)
+cat <<EOF
+first line
+second line
+EOF
+>>> none
+
+### dollar before a double quote in an unquoted here document
+cat <<EOF
+cost: $"
+EOF
+>>> none
+
+### rejected: lone backtick in an unquoted here document
+cat <<EOF
+run ` now
+EOF
+>>> SC1009 1:5
+>>> SC1072 3:1
+>>> SC1073 2:5
+>>+ SC2006 2:5 -- mvdan accepts a lone backtick inside an unquoted here document as a command substitution
+>>+ SC2046 2:5 -- mvdan accepts a lone backtick inside an unquoted here document as a command substitution
+
+### dash here document with a bang token
+cat <<-!END
+	hello
+	!END
+>>> none
+
+### end token with an escaped space
+cat <<end\ here
+body $text
+end here
+>>> none
+
+### escaped dollar before parentheses in a body
+cat <<EOF
+cost \$5 (approx)
+EOF
+>>> none
+
+### end token glued to an append redirect
+cat <<EOF>>log.txt
+entry
+EOF
+>>> none
+
+### here document inside a one-line if
+if true; then cat <<EOF; fi
+inside if
+EOF
+>>> none
+
+### two here documents on one command inside a one-line if
+# shellcheck disable=SC2261
+if true; then cat <<ONE <<TWO; fi
+first
+ONE
+second
+TWO
+>>> none
+
+### command substitution after the operator starting with the token
+cat <<EOF; result=$(
+EOF
+date
+)
+echo "$result"
+>>> none
+
+### end token glued to a pipe
+cat <<EOF|wc -l
+one
+two
+EOF
+>>> none
+
+### quoted hash-bang end token
+cat <<'#!'
+body
+#!
+echo after
+>>> none
+
+### quoted end token starting with a double quote
+cat <<'"quote'
+body
+"quote
+>>> none
+
+### append to a quoted date substitution
+echo started >> "$(date +%F).log"
+>>> none
+
+### duplicate stderr onto descriptor 3
+exec 3>&1
+ls 2>&3
+>>> none
+
+### stderr to a file with a space
+find / -name core 2> errors.txt
+>>> none
+
+### close descriptor 4
+exec 4>&-
+>>> none
+
+### both streams to a file
+make &> build.log
+>>> none
+
+### named descriptor duplicated onto stderr
+exec {logfd}>&2
+echo hi >&"$logfd"
+>>> none
+
+### named descriptor closed for input
+exec {infd}<settings.conf
+exec {infd}<&-
+>>> none
+
+### named descriptor moved from stdout
+exec {outfd}>&1-
+echo hi >&"$outfd"
+>>> none
+
+### here-string with a quoted variable
+name=world
+cat <<< "hello $name"
+>>> none
+
+### echo with an output redirect
+echo finished > status.txt
+>>> none
+
+### command with both-streams redirect
+./configure &> configure.log
+>>> none
+
+### export with an array value
+export langs=(en de fr)
+echo "${langs[@]}"
+>>> none
+
+### typeset array with values
+typeset -a nums=(1 2 3)
+echo "${nums[@]}"
+>>> none
+
+### time before a one-line if
+time if true; then echo hi; fi
+>>> none
+
+### time with portable format before a subshell
+time -p ( sleep 1 )
+>>> none
+
+### backslash before a command name
+\ls -la
+>>> none
+
+### backslash before the colon command
+\: noop
+>>> none
+
+### for loop without a list piped at done
+for f; do echo "$f"; done| sort
+>>> none
+
+### grep or exit
+grep -qs needle haystack.txt || exit 1
+>>> none
+
+### time before a subshell with terminated commands
+time ( make; make install; )
+>>> none
+
+### spaced subshell with cd and tar
+( cd /src || exit; tar cf ../out.tar ./* )
+>>> none
+
+### bats test block with a quoted name
+#!/usr/bin/env bats
+@test 'adds numbers' {
+  run echo 3
+}
+>>> none
+
+### bats test name made of symbols
+#!/usr/bin/env bats
+@test !#$%^&*-=+ {
+  true
+}
+>>> none
+
+### bats name with several space-brace sequences
+#!/usr/bin/env bats
+@test a { b { c {
+  true
+}
+>>> none
+
+### rejected: bats brace on the next line
+#!/usr/bin/env bats
+@test 'brace below'
+{
+  true
+}
+>>> SC1072 2:7
+>>> SC1073 2:1
+
+### while loop on an existence test
+while [[ -e /tmp/build.lock ]]; do sleep 1; done
+>>> none
+
+### until loop on kill zero
+pid=$!
+until kill -0 "$pid"; do sleep 1; done
+>>> none
+
+### for over a glob removing each file
+for f in *.tmp; do rm "$f"; done
+>>> none
+
+### for with a brace body
+for x in a b; { echo "$x"; }
+>>> none
+
+### for without a list and with a semicolon
+for arg; do echo "$arg"; done
+>>> none
+
+### arithmetic for without a space after for
+for((i=0;i<3;i++)); do echo "$i"; done
+>>> none
+
+### arithmetic for with compound condition and comma increment
+for (( i=0, j=9; i<j && j>0; i++, j-- ))
+do
+  echo "$i $j"
+done
+>>> none
+
+### arithmetic for with empty sections and newline before do
+for ((;;))
+do
+  break
+done
+>>> none
+
+### arithmetic for with empty sections and do on the same line
+for ((;;)) do break; done
+>>> none
+
+### arithmetic for with a spaced semicolon
+for ((;;)) ; do break; done
+>>> none
+
+### for name followed directly by do
+for x do echo "$x"; done
+>>> none
+
+### arithmetic for with a brace body
+for ((i=0;i<3;i++)) { echo "$i"; }
+>>> none
+
+### for with in on the next line and continued values
+for name
+in alpha \
+   beta \
+   gamma
+do
+  echo "$name"
+done
+>>> none
+
+### select over a glob
+select opt in *; do echo "$opt"; break; done
+>>> none
+
+### select without a list
+select opt; do echo "$opt"; break; done
+>>> none
+
+### case with an unterminated last item before esac
+case $1 in
+  start) echo starting; run=1 ;;
+  stop|halt) echo stopping; run=0
+esac
+echo "$run"
+>>> none
+
+### case with in on the next line
+case $1
+in
+  *) echo any ;;
+esac
+>>> none
+
+### case item backgrounded before the double semicolon
+case $1 in
+  serve) sleep 10 & ;;
+esac
+>>> none
+
+### case fall-through terminator
+case $1 in
+  a) echo a ;&
+  b) echo b ;;
+esac
+>>> none
+
+### case continue-matching terminator
+case $1 in
+  a*) echo prefix ;;&
+  *z) echo suffix ;;
+esac
+>>> none
+
+### case patterns that are reserved words
+case $1 in
+  if) echo keyword ;;
+  done) echo finished ;;
+esac
+>>> none
+
+### function with a long flag and quoted arguments
+ll() { ls --color=auto "$@"; }
+ll /var/log
+>>> none
+
+### spaced parentheses before a glued brace
+greet (){ echo hi; }
+greet
+>>> none
+
+### colon function piping colon into colon
+# shellcheck disable=SC2264
+:() { : | :; }
+>>> none
+
+### question mark function name
+?() { echo help; }
+>>> none
+
+### double-dot function name
+..() { cd ..; }
+>>> none
+
+### function with a subshell body
+inside_tmp() ( cd /tmp && ls )
+inside_tmp
+>>> none
+
+### function keyword with spaced parentheses
+function cleanup ( ) { rm -f /tmp/x; }
+cleanup
+>>> none
+
+### function keyword with a bracket and bang name
+function [!] { echo odd; }
+>>> none
+
+### function name starting with an at sign
+@setup() { echo ready; }
+>>> none
+
+### function name with a hash inside
+a#b() { echo odd; }
+>>> none
+
+### actual: hash-led function name is just a comment in a script
+#hidden() { echo never; }
+>>> none
+
+### coproc with a name and brace body
+# shellcheck disable=SC2034
+coproc reader { cat; }
+>>> none
+
+### coproc with a brace body and no name
+coproc { cat; }
+>>> none
+
+### coproc of a simple command
+coproc cat
+>>> none
+
+### coproc with an assignment prefix
+coproc LC_ALL=C sort
+>>> none
+
+### coproc with a single-quoted name
+# shellcheck disable=SC2034
+coproc 'worker' { cat; }
+>>> none
+
+### coproc with a double-quoted pid name
+coproc "job$$" { cat; }
+>>> none
+
+### coproc single-quoted name with a subshell
+# shellcheck disable=SC2034
+coproc 'sub' ( cat )
+>>> none
+
+### coproc double-quoted name with a while loop
+# shellcheck disable=SC2034
+coproc "loop" while read -r l; do echo "$l"; done
+>>> none
+
+### numeric assignment
+count=5
+echo "$count"
+>>> none
+
+### array of three numbers
+nums=(1 2 3)
+echo "${nums[@]}"
+>>> none
+
+### append assignment
+PATH+=:/opt/bin
+>>> none
+
+### index with a variable and an empty quote
+i=0
+arr[1$i'']=x
+echo "${arr[@]}"
+>>> none
+
+### index with an empty quote and a substitution
+arr[2''$(date +%d)]=y
+echo "${arr[@]}"
+>>> none
+
+### array value with odd bracketed elements
+# shellcheck disable=SC2192
+opts=([0]=x [y] [3]= [z w)
+echo "${opts[@]}"
+>>> none
+
+### index containing a shift-assign and a sum
+i=1
+arr[i<<=1+2]='v'
+echo "${arr[@]}"
+>>> none
+
+### array value with two parenthesised sub-lists
+grid=( (a b) (c d) )
+echo "${grid[@]}"
+>>> none
+
+### indexed element holding a list, with spaces
+m=( x [1]=(y z) )
+echo "${m[@]}"
+>>> none
+
+### indexed element holding a list, without outer spaces
+m=(x [1]=(y z))
+echo "${m[@]}"
+>>> none
+
+### bash shebang and echo
+#!/bin/bash
+echo hello
+>>> none
+
+### bash shebang with a comment and blank lines
+#!/bin/bash
+# nothing else here
+>>> none
+
+

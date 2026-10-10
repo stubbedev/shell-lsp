@@ -1,0 +1,142 @@
+### echo of a variable in single quotes
+echo 'Hello $USER'
+>>> SC2016 1:6
+
+### dollar digit inside other text
+echo 'Price: $5 total'
+>>> SC2016 1:6
+
+### sed script with a braced variable
+sed -i 's/VERSION/${version}/' setup.cfg
+>>> SC2016 1:8
+
+### sed script with a command substitution
+sed 's/DATE/$(date)/' template.txt
+>>> SC2016 1:5
+
+### sed script with an arithmetic expansion
+sed 's/N/$((n + 1))/' counter.txt
+>>> SC2016 1:5
+
+### sed -n with a dollar and a word starting with p
+sed -n '$prefix' names.txt
+>>> SC2016 1:8
+
+### find exec echo with a positional parameter
+find . -name '*.c' -exec echo '$1' {} +
+>>> SC2016 1:31
+
+### echo of backticks around a command
+echo 'Run `make` first'
+>>> SC2016 1:6
+
+### git with a variable in single quotes
+git commit -m 'Bump to $release'
+>>> SC2016 1:15
+
+### plain assignment of a single quoted variable
+banner='Welcome $USER'
+>>> SC2016 1:8
+>>> SC2034 1:1
+
+### sed end anchor before a slash is fine
+sed 's/foo$/bar/' input.txt
+>>> none
+
+### awk field reference is fine
+awk '{print $2}' table.txt
+>>> none
+
+### trap handler is fine
+trap 'rm -f "$tmpfile"' EXIT
+>>> SC2154 1:6
+
+### sed print of the last line is fine
+sed -n '$p' history.txt
+>>> none
+
+### sed last line address with a spaced group is fine
+sed -n -e '$ { p; }' history.txt
+>>> none
+
+### sed append with continuation across two scripts is fine
+sed -e '${ a\
+trailer' -e '}' notes.txt
+>>> none
+
+### sed range to the last line with an open brace is fine
+sed -n -e '/start/,${' -e 'p' -e '}' notes.txt
+>>> none
+
+### PS1 assignment is fine
+PS1='$PWD> '
+>>> none
+
+### find exec awk is fine
+find . -name '*.tsv' -exec awk '{print $3}' {} +
+>>> none
+
+### sed last line delete group is fine
+sed '${/^$/d}' notes.txt
+>>> none
+
+### eval with a positional parameter is fine
+eval 'echo $1'
+>>> none
+
+### busybox awk is fine
+busybox awk '{print $1}' table.txt
+>>> none
+
+### test -v on an indexed name is fine
+[ -v 'seen[$key]' ]
+>>> none
+
+### git filter-branch is fine
+git filter-branch --tree-filter 'rm -f $secret' HEAD
+>>> none
+
+### rename perl expression is fine
+rename 's/(.*)\.txt/$1.md/' *.txt
+>>> SC2035 1:29
+
+### two backticks with nothing between are fine
+echo '``'
+>>> none
+
+### three backticks are fine
+echo '```'
+>>> none
+
+### mumps XCMD routine is fine
+mumps -run %XCMD 'write $horolog'
+>>> none
+
+### mumps LOOP XCMD routine is fine
+mumps -run LOOP%XCMD --xec 'write $zversion'
+>>> none
+
+### jq program variable is fine
+jq '$ENV.HOME' config.json
+>>> none
+
+### jq behind command is fine
+command jq '$ENV.HOME' config.json
+>>> none
+
+### jq behind exec is fine
+exec jq '$ENV.HOME' config.json
+>>> none
+
+### jq behind exec with options is fine
+exec -c -a jqtool jq '$ENV.HOME' config.json
+>>> none
+
+### brace glued to the append command is still reported
+sed -e '${a\
+trailer' -e '}' notes.txt
+>>> SC2016 1:8
+
+### brace glued to the print command is still reported
+sed -n '${p}' notes.txt
+>>> SC2016 1:8

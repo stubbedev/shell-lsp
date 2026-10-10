@@ -1,0 +1,26 @@
+### for list followed by do on the same line
+for host in alpha beta gamma do
+  ping -c1 "$host"
+done
+>>> SC1063 1:30
+
+### select list followed by do on the same line
+select opt in start stop do
+  echo "$opt"
+done
+>>> SC1063 1:26
+
+### semicolon before do
+for host in alpha beta gamma; do
+  ping -c1 "$host"
+done
+>>> none
+
+### loop without a word list
+show_args() {
+  for arg do
+    echo "$arg"
+  done
+}
+show_args a b
+>>> none

@@ -1,0 +1,7 @@
+### ls piped into xargs rm
+ls | xargs rm
+>>> SC2011 1:1
+
+### ls of a glob piped into xargs
+ls ./*.tmp | xargs -n1 basename
+>>> SC2011 1:1

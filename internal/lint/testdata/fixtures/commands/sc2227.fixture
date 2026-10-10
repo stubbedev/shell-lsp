@@ -1,0 +1,11 @@
+### redirection placed inside the exec action
+find . -name '*.md' -exec echo {} > listing.txt \;
+>>> SC2227 1:35
+
+### redirection after the terminator applies to find
+find . -name '*.md' -exec echo {} \; > listing.txt
+>>> none
+
+### redirection inside the sh -c script
+find . -name '*.md' -execdir sh -c 'wc -l "$1" > counts.txt' _ {} \;
+>>> none

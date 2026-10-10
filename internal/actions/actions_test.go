@@ -134,7 +134,7 @@ func TestQuickFixes(t *testing.T) {
 		"Ignore SC2164 in this file":     "#!/bin/bash\n# shellcheck disable=SC2164\nf() {\n\t# shellcheck disable=SC2034\n\tcd /tmp\n}\necho $x\n",
 		"Fix SC2086: Double quote":       "#!/bin/bash\nf() {\n\t# shellcheck disable=SC2034\n\tcd /tmp\n}\necho \"$x\"\n",
 		"Ignore SC2086 for this command": "#!/bin/bash\nf() {\n\t# shellcheck disable=SC2034\n\tcd /tmp\n}\n# shellcheck disable=SC2086\necho $x\n",
-		"Apply all shellcheck fixes":     "#!/bin/bash\nf() {\n\t# shellcheck disable=SC2034\n\tcd /tmp\n}\necho \"$x\"\n",
+		"Apply all automatic fixes":      "#!/bin/bash\nf() {\n\t# shellcheck disable=SC2034\n\tcd /tmp\n}\necho \"$x\"\n",
 	}
 	for title, want := range expect {
 		a, ok := byTitle[title]
@@ -147,9 +147,9 @@ func TestQuickFixes(t *testing.T) {
 		}
 	}
 	if a := byTitle["Fix SC2086: Double quote"]; !a.Preferred || a.Kind != QuickFix {
-		t.Errorf("shellcheck fix = %+v", a)
+		t.Errorf("lint fix = %+v", a)
 	}
-	if a := byTitle["Apply all shellcheck fixes"]; a.Kind != SourceFixAll {
+	if a := byTitle["Apply all automatic fixes"]; a.Kind != SourceFixAll {
 		t.Errorf("fix all kind = %q", a.Kind)
 	}
 }

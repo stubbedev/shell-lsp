@@ -1,0 +1,22 @@
+### extra word after a double bracket test
+[[ "$ready" ]] yes
+>>> SC1070 1:16
+>>> SC1140 1:16
+
+### redirections after a double bracket test
+[[ -f lock ]] >out.log 2>&1
+>>> none
+
+### continuation then a logical and
+[[ -f lock ]] \
+  && echo locked
+>>> none
+
+### keyword after the test
+if [[ -f lock ]] then echo locked; fi
+>>> SC1010 1:18
+
+### conjunction after the test reports SC1139 instead
+[[ -f a.lock ]] -o [[ -f b.lock ]]
+>>> SC1070 1:17
+>>> SC1139 1:17

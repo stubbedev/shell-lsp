@@ -1,0 +1,47 @@
+### bare color escape in single-quoted PS1
+PS1='\033[1;35m\$ '
+>>> SC2025 1:5
+
+### bare color escape exported
+export PS1='\033[1;35m\$ '
+>>> SC2025 1:12
+
+### reset escape after hostname
+PS1='\h\e[0m\$ '
+>>> SC2025 1:5
+
+### hex escape in dollar-single-quoted PS1
+PS1=$'\x1b[c'
+>>> SC2025 1:5
+
+### backslash-e escape in dollar-single-quoted PS1
+PS1=$'\e[3m;'
+>>> SC2025 1:5
+
+### dollar-single-quoted value exported
+export PS1=$'\e[3m;'
+>>> SC2025 1:12
+
+### color escape wrapped in brackets is fine
+PS1='\[\033[1;35m\]\$ '
+>>> none
+
+### two escapes inside one bracket pair are fine
+PS1='\[\033[1;3\e[0m\]\u\$ '
+>>> none
+
+### text without backslashes is fine
+PS1='e033 x1B \$ '
+>>> none
+
+### lone backslash-e wrapped is fine
+PS1='\[\e\]\w\$ '
+>>> none
+
+### PS2 is not checked
+PS2='\033[1;35m> '
+>>> none
+
+### uppercase backslash-E is not detected
+PS1='\E[1m\$ '
+>>> none

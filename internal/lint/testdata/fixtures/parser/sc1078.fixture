@@ -1,0 +1,47 @@
+### single quote spanning lines then letters
+msg='hello
+world 'there
+echo "$msg"
+>>> SC1078 1:5
+>>> SC1079 2:7
+>>> SC2026 2:8
+
+### backtick spanning lines then letters
+echo `date
+uptime`now
+>>> SC1078 1:6
+>>> SC1079 2:7
+>>> SC2006 1:6
+>>> SC2046 1:6
+
+### double quote spanning lines then letters
+echo "first
+second"third
+>>> SC1078 1:6
+>>> SC1079 2:7
+
+### single quote on one line then letters
+msg='hello world 'there
+echo "$msg"
+>>> SC2026 1:19
+
+### multi-line backticks with nothing after
+`date
+uptime`
+>>> SC2006 1:1
+>>> SC2092 1:1
+
+### one-line backticks then letters
+echo `date`now
+>>> SC2006 1:6
+>>> SC2046 1:6
+
+### multi-line double quote then a space and argument
+printf '%s\n' "one
+two" three
+>>> none
+
+### quoted text starting with a newline
+echo "
+second"third
+>>> none

@@ -1,0 +1,55 @@
+### return of a negative number
+abort() {
+  return -1
+}
+>>> SC2152 2:10
+
+### return of a value above 255
+overflow() {
+  return 1000
+}
+>>> SC2152 2:10
+
+### return of a quoted phrase
+explain() {
+  return 'not found'
+}
+>>> SC2152 2:10
+
+### return of an empty string
+blank() {
+  return ""
+}
+>>> SC2152 2:10
+
+### return with too many leading zeros
+padded() {
+  return 000001
+}
+>>> SC2152 2:10
+
+### bare return
+noop() {
+  return
+}
+>>> none
+
+### return of one
+fail() {
+  return 1
+}
+>>> none
+
+### return of a variable
+relay() {
+  return $status_code
+}
+>>> SC2086 2:10
+>>> SC2154 2:10
+
+### return of an arithmetic expansion
+combine() {
+  return $((a | b))
+}
+>>> SC2154 2:13
+>>> SC2154 2:17

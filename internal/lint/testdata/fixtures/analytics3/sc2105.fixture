@@ -1,0 +1,22 @@
+### continue with a level at top level
+continue 2
+>>> SC2105 1:1
+
+### continue inside an if with no loop
+if [ -f /tmp/skip ]; then
+  continue
+fi
+>>> SC2105 2:3
+
+### break inside an if with no loop
+if [ -f /tmp/stop ]; then
+  break
+fi
+>>> SC2105 2:3
+
+### break directly in a while loop body
+while read -r line; do
+  [ -z "$line" ] && break
+  echo "$line"
+done < input.txt
+>>> none

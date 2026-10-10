@@ -1,0 +1,19 @@
+### comma brace list in sh
+#!/bin/sh
+echo {x,y}
+>>> SC3009 2:6
+
+### numeric brace range in sh
+#!/bin/sh
+echo {1..3}
+>>> SC3009 2:6
+
+### comma brace list in dash
+#!/bin/dash
+echo {x,y}
+>>> SC3009 2:6
+
+### numeric brace range in dash
+#!/bin/dash
+echo {1..3}
+>>> SC3009 2:6

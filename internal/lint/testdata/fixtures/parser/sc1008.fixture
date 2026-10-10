@@ -1,0 +1,81 @@
+### custom interpreter in the shebang
+#!/opt/tools/runner
+login_shell=/bin/sh
+echo "$login_shell"
+>>> SC1008 1:1
+
+### env with split-string flag and an assignment before bash
+#!/usr/bin/env -S LANG=C bash
+# nightly maintenance entry point
+>>> none
+
+### env split-string shebang with code that disables the default shell
+#!/usr/bin/env -S LANG=C bash
+login_shell=$(getent passwd root)
+echo "$login_shell"
+>>> none
+
+### no shebang at all
+echo "starting"
+>>> none
+
+### shell directive overrides an odd shebang
+#!/opt/tools/runner
+# shellcheck shell=bash
+echo "starting"
+>>> none
+
+### interpreter name merely starting with bash
+#!/usr/local/bin/bashful
+login_shell=/bin/bash
+echo "$login_shell"
+>>> none
+
+### interpreter name starting with sh
+#!/usr/bin/shtool
+login_shell=/bin/sh
+echo "$login_shell"
+>>> none
+
+### interpreter name starting with dash
+#!/bin/dashboard
+login_shell=/bin/dash
+echo "$login_shell"
+>>> none
+
+### interpreter name starting with ash
+#!/bin/ashen
+login_shell=/bin/ash
+echo "$login_shell"
+>>> none
+
+### interpreter name starting with bats
+#!/usr/bin/batsman
+login_shell=/bin/bash
+echo "$login_shell"
+>>> none
+
+### interpreter name starting with ksh
+#!/bin/kshell
+login_shell=/bin/ksh
+echo "$login_shell"
+>>> none
+
+### interpreter name starting with oksh
+#!/usr/bin/okshell
+login_shell=/bin/oksh
+echo "$login_shell"
+>>> none
+
+### busybox running sh
+#!/bin/busybox sh
+login_shell=/bin/sh
+echo "$login_shell"
+>>> none
+
+### file-wide directive disables the unrecognised shebang
+#!/opt/tools/runner
+# shellcheck disable=SC1008
+login_shell=/bin/sh
+echo "$login_shell"
+>>> none

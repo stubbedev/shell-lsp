@@ -1,0 +1,33 @@
+### no-newline prompt in sh
+#!/bin/sh
+echo -n "Username: "
+read -r login
+>>> SC2034 3:9
+>>> SC3037 2:6
+
+### no-newline flag with a word in sh
+#!/bin/sh
+echo -n done
+>>> SC1010 2:9
+>>> SC3037 2:6
+
+### combined n and e flags in sh
+#!/bin/sh
+echo -ne done
+>>> SC1010 2:10
+>>> SC3037 2:6
+
+### flag text inside a quoted argument is not a flag
+#!/bin/sh
+echo "-n done"
+>>> none
+
+### combined flag text inside a quoted argument is not a flag
+#!/bin/sh
+echo "-ne done"
+>>> none
+
+### unknown letter is not an echo flag
+#!/bin/sh
+echo -Q done
+>>> SC1010 2:9

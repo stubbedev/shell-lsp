@@ -1,0 +1,7 @@
+### fgrep is deprecated
+fgrep '*' files
+>>> SC2197 1:1
+
+### grep -F is fine
+grep -F '*' files
+>>> none

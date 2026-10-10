@@ -1,0 +1,23 @@
+### unquoted backslash n
+echo Done\nNext
+>>> SC1012 1:10
+
+### unquoted backslash t
+printf '%s\n' col1\tcol2
+>>> SC1012 1:19
+
+### unquoted backslash r
+echo line\r
+>>> SC1012 1:10
+
+### single-quoted backslash sequences
+printf 'a\tb\n'
+>>> none
+
+### double-quoted backslash sequences
+printf "a\tb\r\n"
+>>> none
+
+### dollar-single-quoted backslash sequences
+echo $'tab\there\n'
+>>> none

@@ -1,0 +1,52 @@
+### less than against a literal integer
+[[ $count < 10 ]] && echo "few"
+>>> SC2071 1:11
+>>> SC2154 1:4
+
+### greater or equal against a command substitution
+[[ 5 >= $(nproc) ]] && echo "small machine"
+>>> SC2071 1:6
+
+### integer variable compared with greater than
+limit=3
+[[ $limit > $current ]] && echo "under"
+>>> SC2071 2:11
+>>> SC2154 2:13
+
+### possibly numeric variable in a single bracket loop
+retries=0
+if [ -n "$override" ]; then
+  retries=$override
+fi
+while [ $retries > $max ]; do
+  retries=$((retries - 1))
+done
+>>> SC2071 5:18
+>>> SC2086 5:20
+>>> SC2086 5:9
+>>> SC2154 5:20
+
+### variable copied from RANDOM is not treated as numeric
+roll=$RANDOM
+[ $roll \> $threshold ] && echo "win"
+>>> SC2086 2:12
+>>> SC2154 2:12
+
+### arithmetic expansion with post increment
+[[ $((tries++)) > 3 ]] && echo "too many"
+>>> SC2071 1:17
+
+### string comparison of plain words is fine
+[[ apple < banana ]] && echo "sorted"
+>>> SC2050 1:10
+
+### greater than outside the brackets is a redirection
+[ -n "$name" ] > check.log
+>>> none
+
+### arithmetic on RANDOM makes the variable numeric
+roll=$((RANDOM % 6))
+[ $roll > $threshold ] && echo "win"
+>>> SC2071 2:9
+>>> SC2086 2:11
+>>> SC2154 2:11

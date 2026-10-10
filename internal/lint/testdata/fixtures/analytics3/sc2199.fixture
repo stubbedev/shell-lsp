@@ -1,0 +1,21 @@
+### double-bracket nullary test of unquoted all-arguments
+[[ $@ ]] && echo "has args"
+>>> SC2199 1:4
+
+### unquoted all-arguments on both sides of =
+[[ $@ = $@ ]] && echo "same"
+>>> SC2053 1:9
+>>> SC2199 1:4
+>>> SC2199 1:9
+
+### double-bracket nullary test of quoted all-arguments
+[[ "$@" ]] && echo "has args"
+>>> SC2199 1:4
+
+### quoted all-arguments compared to empty
+[[ "$@" == "" ]] && echo "no args"
+>>> SC2199 1:4
+
+### quoted star form compared to empty
+[[ "$*" == "" ]] && echo "no args"
+>>> none

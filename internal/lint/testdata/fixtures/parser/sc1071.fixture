@@ -1,0 +1,21 @@
+### perl script with an unclosed list
+#!/usr/bin/perl
+my @flags = ("--login-shell=bash",
+>>> SC1071 1:1
+
+### zsh script with the code disabled
+#!/bin/zsh
+# shellcheck disable=SC1071
+for f (*.txt) print $f
+>>> none
+
+### shell directive overrides a python shebang
+#!/usr/bin/python3
+# shellcheck shell=sh
+echo $1
+>>> SC2086 3:6
+
+### shell forced on the command line overrides a python shebang
+#!/usr/bin/python3
+echo $1
+>>> SC2086 2:6

@@ -1,0 +1,20 @@
+### doubled parentheses in an expansion
+echo $(( ((1+1)) ))
+>>> SC2322 1:11
+>>> SC2323 1:10
+
+### doubled parentheses in an array index
+grid[((1+1))+1]=x
+>>> SC2034 1:1
+>>> SC2322 1:7
+
+### doubled parentheses inside a larger expression
+total=$(( ((a+b)) * 2 ))
+>>> SC2034 1:1
+>>> SC2154 1:13
+>>> SC2154 1:15
+>>> SC2322 1:12
+
+### single layer of parentheses in a larger index
+grid[(1+1)+1]=x
+>>> SC2034 1:1

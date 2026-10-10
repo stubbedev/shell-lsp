@@ -1,0 +1,36 @@
+### -o between test commands
+if [ -f a.conf ] -o [ -f b.conf ]; then echo found; fi
+>>> SC1050 1:18
+>>> SC1072 1:18
+>>> SC1073 1:1
+>>> SC1139 1:18
+
+### -a between test commands
+if [ -f a.conf ] -a [ -f b.conf ]; then echo found; fi
+>>> SC1050 1:18
+>>> SC1072 1:18
+>>> SC1073 1:1
+>>> SC1139 1:18
+
+### or between test commands
+if [[ -f a.conf ]] or [[ -f b.conf ]]; then echo found; fi
+>>> SC1050 1:20
+>>> SC1072 1:20
+>>> SC1073 1:1
+>>> SC1139 1:20
+
+### and between test commands
+if [[ -f a.conf ]] and [[ -f b.conf ]]; then echo found; fi
+>>> SC1050 1:20
+>>> SC1072 1:20
+>>> SC1073 1:1
+>>> SC1139 1:20
+
+### word that merely starts with or
+[ -n "$fruit" ] orange
+>>> SC1070 1:17
+>>> SC1139 1:17
+
+### shell logical operators between tests
+if [ -f a.conf ] || [ -f b.conf ]; then echo found; fi
+>>> none

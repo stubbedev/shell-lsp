@@ -1,0 +1,31 @@
+### declare with spaces around equals
+declare region = eu-west
+>>> SC2034 1:9
+>>> SC2290 1:16
+
+### declare with a space before equals
+declare region =eu-west
+>>> SC2034 1:9
+>>> SC2290 1:16
+
+### export with a space before plus-equals
+export PATH +=:/opt/bin
+>>> SC2290 1:13
+
+### let with spaces around equals
+let retries = 0
+>>> SC2154 1:5
+>>> SC2219 1:1
+>>> SC2290 1:13
+
+### alias with a space before equals
+alias ll =0
+>>> SC2290 1:10
+
+### well-formed declaration
+declare region=eu-west
+>>> SC2034 1:9
+
+### attribute removal flag is not an assignment
+declare -a +i names
+>>> SC2034 1:15

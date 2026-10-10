@@ -1,0 +1,15 @@
+### dot command with an extra argument in sh
+#!/bin/sh
+. ./lib/common.sh --quiet
+>>> SC1091 2:3
+>>> SC2240 2:19
+
+### dot command with only a script in sh
+#!/bin/sh
+. ./lib/common.sh
+>>> SC1091 2:3
+
+### dot command with an argument in bash
+#!/bin/bash
+. ./lib/common.sh --quiet
+>>> SC1091 2:3

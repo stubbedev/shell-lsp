@@ -1,0 +1,167 @@
+### cat from a process substitution of ls
+cat < <(ls)
+>>> none
+
+### read from a process substitution argument
+read -ra entries <(ls)
+>>> SC2034 1:10
+
+### ls given an output process substitution
+ls >(cat)
+>>> none
+
+### false piped into true
+false | true
+>>> none
+
+### substitution used as an argument
+true $(false)
+>>> SC2046 1:6
+
+### two adjacent substitutions in an assignment
+both=$(false)$(true)
+>>> SC2034 1:1
+
+### two adjacent backtick substitutions
+pair=`false``false`
+>>> SC2006 1:13
+>>> SC2006 1:6
+>>> SC2034 1:1
+
+### two substitutions in one quoted string
+line="$(false) and $(true)"
+>>> SC2034 1:1
+
+### two quoted strings each with a substitution
+line="$(false)""$(true)"
+>>> SC2034 1:1
+
+### here-string with a substitution
+true <<< "$(false)"
+>>> none
+
+### readarray from a process substitution
+readarray -t files < <(ls)
+>>> SC2034 1:14
+
+### array literal with two substitutions
+parts=($(false) $(false))
+>>> SC2034 1:1
+>>> SC2207 1:17
+>>> SC2207 1:8
+
+### array literal with an indexed substitution element
+parts=($(false) [4]=$(false))
+>>> SC2034 1:1
+>>> SC2207 1:8
+
+### heredoc body with a substitution
+cat <<EOT
+value: $(false)
+EOT
+>>> none
+
+### double bracket test of a substitution
+[[ $(false) ]]
+>>> none
+
+### arithmetic with a date substitution
+echo $(( $(date +%s) - 60 ))
+>>> none
+
+### prefix assignment from a substitution
+token=$(false) false
+>>> none
+
+### two assignments each from a substitution
+first=$(false) second=$(false)
+>>> SC2034 1:1
+>>> SC2034 1:16
+
+### local -r inside a function
+load() {
+  local -r data=$(false)
+}
+>>> SC2034 2:12
+
+### nested time words
+x=$(time time time false) time $(time false)
+>>> SC2091 1:32
+
+### pipefail set
+set -o pipefail
+false | true
+>>> none
+
+### deliberate masking with or true
+false | true || true
+>>> none
+
+### substitution followed by literal text
+label=$(false)true
+>>> SC2034 1:1
+
+### echo first in a pipeline
+echo hello | false
+>>> none
+
+### readonly assignment
+readonly cfg=$(false)
+>>> SC2034 1:10
+>>> SC2155 1:10
+
+### array literal with one substitution and a literal
+parts=($(false) false)
+>>> SC2034 1:1
+>>> SC2207 1:8
+
+### indexed literal element after a substitution
+parts=($(false) [4]=false)
+>>> SC2034 1:1
+>>> SC2207 1:8
+
+### substitution followed by a literal assignment
+x=$(false) y=z
+>>> SC2034 1:1
+>>> SC2034 1:12
+
+### single arithmetic assignment
+ts=$(( $(date +%s) + 5 ))
+>>> SC2034 1:1
+
+### array literal with a single substitution
+parts=($(false))
+>>> SC2034 1:1
+>>> SC2207 1:8
+
+### process substitution running set
+false < <(set -e)
+>>> none
+
+### process substitution running shopt
+false < <(shopt -s cdspell)
+>>> none
+
+### process substitution running dirname
+false < <(dirname "${BASH_SOURCE[0]}")
+>>> none
+
+### process substitution running basename
+false < <(basename "${BASH_SOURCE[0]}")
+>>> none
+
+### brace group or true piped onward
+{ false || true; } | true
+>>> none
+
+### brace group or colon piped onward
+{ false || :; } | true
+>>> none
+
+### time prefix only
+time false
+>>> none
+
+### time with a substitution argument
+time $(time false)
+>>> SC2091 1:6

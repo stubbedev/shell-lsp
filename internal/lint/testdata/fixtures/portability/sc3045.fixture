@@ -1,0 +1,154 @@
+### read into an array
+#!/bin/sh
+read -ra fields
+>>> SC2034 2:10
+>>> SC3045 2:6
+
+### printf into a variable
+#!/bin/sh
+printf -v padded '%05d' "$1"
+>>> SC2034 2:11
+>>> SC3045 2:8
+
+### ulimit with unknown resource letter
+#!/bin/sh
+ulimit -x unlimited
+>>> SC3045 2:8
+
+### jobs stopped filter
+#!/bin/sh
+jobs -s
+>>> SC3045 2:6
+
+### exporting a function
+#!/bin/sh
+export -f helper
+>>> SC3045 2:8
+
+### readonly arrays
+#!/bin/sh
+readonly -a
+>>> SC3045 2:10
+
+### cd with physical and error flags
+#!/bin/sh
+cd -P -e .
+>>> SC2164 2:1
+>>> SC3045 2:7
+
+### umask printable form
+#!/bin/sh
+umask -p
+>>> SC3045 2:7
+
+### trap listing signals
+#!/bin/sh
+trap -l
+>>> SC3045 2:6
+
+### type listing all matches
+#!/bin/sh
+type -a ls
+>>> SC3045 2:6
+
+### unset nameref
+#!/bin/sh
+unset -n target
+>>> SC3045 2:7
+
+### hash listing
+#!/bin/sh
+hash -l
+>>> SC3045 2:6
+
+### wait for next job
+#!/bin/sh
+wait -n
+>>> SC3045 2:6
+
+### type path lookup in dash
+#!/bin/dash
+type -p gzip
+>>> SC3045 2:6
+
+### type path lookup in dash again
+#!/bin/dash
+type -p tar
+>>> SC3045 2:6
+
+### read prompt in dash is fine
+#!/bin/dash
+read -p Continue? -r answer
+>>> SC2034 2:22
+
+### printf after double dash is fine
+#!/bin/sh
+printf -- -f
+>>> none
+
+### ulimit memory in dash is fine
+#!/bin/dash
+ulimit -m unlimited
+>>> none
+
+### jobs pids is fine
+#!/bin/sh
+jobs -p
+>>> none
+
+### jobs long with pids is fine
+#!/bin/sh
+jobs -lp
+>>> none
+
+### export listing is fine
+#!/bin/sh
+export -p
+>>> none
+
+### readonly listing is fine
+#!/bin/sh
+readonly -p
+>>> none
+
+### cd physical is fine
+#!/bin/sh
+cd -P .
+>>> SC2164 2:1
+
+### umask symbolic is fine
+#!/bin/sh
+umask -S
+>>> none
+
+### type without flags is fine
+#!/bin/sh
+type ls
+>>> none
+
+### unset function is fine
+#!/bin/sh
+unset -f helper
+>>> none
+
+### hash reset is fine
+#!/bin/sh
+hash -r
+>>> none
+
+### hash verbose in dash is fine
+#!/bin/dash
+hash -v
+>>> none
+
+### type path lookup in busybox is fine
+#!/bin/busybox sh
+# shellcheck shell=busybox
+type -p gzip
+>>> none
+
+### read prompt in busybox is fine
+#!/bin/busybox sh
+# shellcheck shell=busybox
+read -p Continue? -r answer
+>>> SC2034 3:22

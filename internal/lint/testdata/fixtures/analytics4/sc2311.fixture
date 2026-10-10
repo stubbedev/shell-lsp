@@ -1,0 +1,44 @@
+### function output captured under set -e
+set -e
+version() { :; }
+current=$(version)
+>>> SC2034 3:1
+
+### backtick capture under set -e
+set -e
+version() { :; }
+current=`version`
+>>> SC2006 3:9
+>>> SC2034 3:1
+
+### no errexit in the script
+version() { :; }
+current=$(version)
+>>> SC2034 2:1
+
+### substitution enables errexit itself
+set -e
+version() { :; }
+current=$(set -e; version)
+>>> SC2034 3:1
+
+### inherit_errexit enabled
+set -e
+shopt -s inherit_errexit
+version() { :; }
+current=$(version)
+>>> SC2034 4:1
+
+### any set -o counts as inherit_errexit
+set -e
+set -o posix
+version() { :; }
+current=$(version)
+>>> SC2034 4:1
+
+### sh assumes inherited errexit
+#!/bin/sh
+set -e
+version() { :; }
+current=$(version)
+>>> SC2034 4:1

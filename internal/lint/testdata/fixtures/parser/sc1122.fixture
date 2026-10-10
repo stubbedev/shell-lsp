@@ -1,0 +1,13 @@
+### text after the end token and a space
+cat <<EOF
+hello
+EOF now
+EOF
+>>> SC1122 3:5
+
+### token directly followed by more characters is body text
+cat <<EOF
+hello
+EOFX
+EOF
+>>> none

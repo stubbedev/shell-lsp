@@ -1,0 +1,110 @@
+### ssh with a remote command in a while-read loop
+while read -r host; do
+  ssh "$host" uptime
+done < hosts.txt
+>>> SC2095 1:1
+>>> SC2095 2:3
+
+### ssh nested in an if block
+while read -r host; do
+  if ping -c1 "$host" >/dev/null; then
+    ssh "$host" df -h
+  fi
+done < hosts.txt
+>>> SC2095 1:1
+>>> SC2095 3:5
+
+### ffmpeg without -nostdin
+while read -r clip; do
+  ffmpeg -i "$clip" -an "${clip%.*}.mute.mp4"
+done < clips.txt
+>>> SC2095 1:1
+>>> SC2095 2:3
+
+### mplayer with only a stdout redirect
+while read -r track; do
+  mplayer "$track" > /dev/null
+done < playlist.txt
+>>> SC2095 1:1
+>>> SC2095 2:3
+
+### ssh inside a command substitution assignment
+while read -r host; do
+  load=$(ssh "$host" cat /proc/loadavg)
+  echo "$host $load"
+done < hosts.txt
+>>> SC2095 1:1
+>>> SC2095 2:10
+
+### ssh in a substitution under an echo with stdin redirect
+while read -r host; do
+  echo "$(ssh "$host" hostname)" < /dev/null
+done < hosts.txt
+>>> SC2005 2:8
+>>> SC2095 1:1
+>>> SC2095 2:11
+
+### backgrounded ssh
+while read -r host; do
+  ssh "$host" reboot &
+done < hosts.txt
+>>> SC2095 1:1
+>>> SC2095 2:3
+
+### read uses -u with its own descriptor
+while read -r -u 3 host; do
+  ssh "$host" uptime
+done 3< hosts.txt
+>>> none
+
+### loop condition is not a read
+while true; do
+  ssh backup.example.org rsync-status
+  sleep 60
+done
+>>> none
+
+### ssh stdin from /dev/null
+while read -r host; do
+  ssh "$host" uptime < /dev/null
+done < hosts.txt
+>>> none
+
+### ssh receives piped input
+while read -r host; do
+  echo "uptime" | ssh "$host" bash
+done < hosts.txt
+>>> none
+
+### read takes stdin from a duplicated descriptor
+exec 4< hosts.txt
+while read -r host <&4; do
+  ssh "$host" uptime
+done
+>>> none
+
+### ssh with -n
+while read -r host; do
+  ssh -n "$host" uptime
+done < hosts.txt
+>>> none
+
+### ssh with a flag cluster containing n
+while read -r host; do
+  ssh -tn "$host" uptime
+done < hosts.txt
+>>> none
+
+### mplayer from a here-string
+while read -r track; do
+  mplayer "$track" <<< "q"
+done < playlist.txt
+>>> none
+
+### mplayer from a here-document
+while read -r track; do
+  mplayer "$track" <<END
+q
+END
+done < playlist.txt
+>>> none

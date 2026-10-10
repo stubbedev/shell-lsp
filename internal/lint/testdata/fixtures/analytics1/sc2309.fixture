@@ -1,0 +1,24 @@
+### single quoted word against a quoted number
+[[ 'total' -eq "3" ]] && echo "three"
+>>> SC2154 1:4
+>>> SC2309 1:4
+
+### unassigned bare word against a number
+[[ retries -eq 3 ]] && echo "three"
+>>> SC2154 1:4
+>>> SC2309 1:4
+
+### lone slash against a number
+[[ 4 -eq / ]] && echo "odd"
+>>> SC2309 1:10
+
+### unassigned bare word against itself
+[[ attempts -eq attempts ]] && echo "same"
+>>> SC2154 1:4
+>>> SC2309 1:17
+>>> SC2309 1:4
+
+### bare word assigned earlier is fine
+retries=0
+[[ retries -eq 3 ]] && echo "three"
+>>> none

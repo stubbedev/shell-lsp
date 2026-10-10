@@ -1,0 +1,44 @@
+### spaced equals between word and variable
+timeout = $limit
+>>> SC2086 1:11
+>>> SC2154 1:11
+>>> SC2283 1:9
+
+### variable command with spaced equals
+$target = $source
+>>> SC2086 1:11
+>>> SC2154 1:1
+>>> SC2154 1:11
+>>> SC2283 1:9
+
+### quoted name then equals glued to a variable
+'level' =$default_level
+>>> SC2086 1:10
+>>> SC2154 1:10
+>>> SC2283 1:9
+
+### equals glued to a single-quoted dollar string
+greeting ='$USER'
+>>> SC2016 1:11
+>>> SC2283 1:10
+
+### variable command then equals glued to an expansion
+$count =$next
+>>> SC2086 1:9
+>>> SC2154 1:1
+>>> SC2154 1:9
+>>> SC2283 1:8
+
+### echo with an equals argument
+echo = sign
+>>> SC2283 1:6
+
+### border of equals after echo
+echo ====
+>>> none
+
+### double equals is a different code
+total == $sum
+>>> SC2086 1:10
+>>> SC2154 1:10
+>>> SC2284 1:1

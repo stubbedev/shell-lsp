@@ -1,0 +1,9 @@
+### tempfile command is deprecated
+scratch=$(tempfile)
+echo "$scratch"
+>>> SC2186 1:11
+
+### variable named tempfile assigned from mktemp
+tempfile=$(mktemp)
+echo "$tempfile"
+>>> none

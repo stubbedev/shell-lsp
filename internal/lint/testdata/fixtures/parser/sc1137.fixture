@@ -1,0 +1,17 @@
+### missing second opening parenthesis
+for (i=0; i<3; i++)); do echo "$i"; done
+>>> SC1009 1:1
+>>> SC1072 1:6
+>>> SC1073 1:5
+>>> SC1137 1:6
+
+### missing second closing parenthesis
+for ((i=0; i<3; i++); do echo "$i"; done
+>>> SC1009 1:1
+>>> SC1072 1:21
+>>> SC1073 1:5
+>>> SC1137 1:21
+
+### both parentheses present
+for ((i=0; i<3; i++)); do echo "$i"; done
+>>> none

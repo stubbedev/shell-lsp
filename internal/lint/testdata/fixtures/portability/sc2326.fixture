@@ -1,0 +1,16 @@
+### negated grep after a pipe
+#!/bin/sh
+ls /etc | ! grep -q passwd
+>>> SC2012 2:1
+>>> SC2326 2:11
+
+### negation inside subshell stage is fine
+#!/bin/sh
+ls /etc | ( ! grep -q passwd )
+>>> SC2012 2:1
+
+### leading bangs negate the whole pipeline
+#!/bin/sh
+! ! ls /etc | grep -q passwd
+>>> SC2010 2:5
+>>> SC2325 2:1

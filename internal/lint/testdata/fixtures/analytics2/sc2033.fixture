@@ -1,0 +1,75 @@
+### function passed to sudo
+rotate_logs() {
+  find /var/log -name '*.gz' -mtime +30 -delete
+}
+sudo rotate_logs
+>>> SC2032 1:1
+>>> SC2033 4:6
+
+### alias run through xargs
+alias compress='gzip -9'
+find . -name '*.log' -print0 | xargs -0 compress
+>>> SC2032 1:7
+>>> SC2033 2:41
+
+### alias used with find -exec
+alias scrub='sed -i s/secret//'
+find . -type f -exec scrub {} +
+>>> SC2032 1:7
+>>> SC2033 2:22
+
+### function run over ssh
+deploy() {
+  git pull && systemctl restart app
+}
+ssh web1 deploy
+>>> SC2032 1:1
+>>> SC2033 4:10
+
+### function via command builtin and sudo
+backup() { tar czf /tmp/home.tgz /home; }
+command sudo backup
+>>> SC2032 1:1
+>>> SC2033 2:14
+
+### function via exec with doas
+maintain() { apt-get update; }
+exec -c doas maintain
+>>> SC2032 1:1
+>>> SC2033 2:14
+
+### function given to timeout is not reported by shellcheck 0.11
+probe() { curl -sf http://localhost/health; }
+timeout -p 10 probe
+>>> none
+
+### find with a type filter but no exec
+alias f='ls -l'
+find . -type f
+>>> none
+
+### function name as plain echo argument
+f() { :; }
+echo f
+>>> none
+
+### unquoted function name for run0
+cleanup() { rm -rf /tmp/build; }
+run0 cleanup
+>>> SC2032 1:1
+>>> SC2033 2:6
+
+### quoted function name for run0 is fine
+cleanup() { rm -rf /tmp/build; }
+run0 "cleanup"
+>>> none
+
+### function name as argument of remote echo
+greet() { echo hi; }
+ssh web1 echo greet
+>>> none
+
+### function name as argument of apt-get
+install() { cp app /usr/local/bin; }
+sudo apt-get install curl
+>>> none

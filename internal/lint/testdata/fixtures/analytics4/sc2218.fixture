@@ -1,0 +1,40 @@
+### call before the definition on the same line
+greet; greet() { echo "hi"; }
+>>> SC2218 1:1
+
+### or-list call before an unconditional definition
+false || mycmd
+mycmd() { echo "real"; }
+>>> SC2218 1:10
+
+### definition first then call
+cleanup() { rm -f "$tmpfile"; }
+cleanup
+>>> SC2154 1:20
+
+### conditional definition in an if branch
+if ! mycmd --version; then
+  mycmd() { echo "shim"; }
+fi
+>>> none
+
+### conditional definition on the or side
+mycmd || mycmd() { echo "fallback"; }
+>>> none
+
+### redefinition after a call
+render() { echo v1; }
+render
+render() { echo v2; }
+render
+>>> none
+
+### calls after a top level return
+helper() { echo "x"; }
+return
+echo "$(helper)"
+echo "$(helper)"
+>>> SC2005 3:6
+>>> SC2005 4:6
+>>> SC2317 3:1
+>>> SC2317 4:1

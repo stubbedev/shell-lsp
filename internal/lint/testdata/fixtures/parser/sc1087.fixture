@@ -1,0 +1,21 @@
+### all-elements subscript without braces
+hosts=(web db)
+echo "$hosts[@]"
+>>> SC1087 2:7
+>>> SC2128 2:7
+
+### unterminated subscript without braces
+hosts=(web db)
+echo $hosts[x
+>>> SC1087 2:6
+>>> SC2086 2:6
+>>> SC2128 2:6
+
+### positional and special parameters followed by brackets
+echo "$1[0]" "$#[x]"
+>>> none
+
+### braced array expansion
+hosts=(web db)
+echo "${hosts[@]}"
+>>> none

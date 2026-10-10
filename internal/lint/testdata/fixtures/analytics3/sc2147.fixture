@@ -1,0 +1,11 @@
+### double-quoted tilde appended to PATH
+PATH="$PATH:~/.local/bin"
+>>> SC2147 1:1
+
+### single-quoted tilde with a user name
+PATH='~deploy/bin:/usr/bin'
+>>> SC2147 1:1
+
+### unquoted tilde path
+PATH=$PATH:~/.local/bin
+>>> none

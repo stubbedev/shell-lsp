@@ -1,0 +1,10 @@
+### empty brace group
+cleanup() { }
+>>> SC1009 1:1
+>>> SC1055 1:13
+>>> SC1072 1:14
+>>> SC1073 1:11
+
+### brace group holding a no-op
+cleanup() { :; }
+>>> none

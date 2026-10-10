@@ -1,0 +1,14 @@
+### semicolon glued after then
+if [ -d "$HOME/.cache" ]; then; rm -rf "$HOME/.cache/thumbs"; fi
+>>> SC1051 1:31
+
+### if elif else without stray semicolons
+if [ "$mode" = fast ]; then
+  speed=10
+elif [ "$mode" = slow ]; then
+  speed=1; echo "crawling"
+else
+  speed=5
+fi
+echo "$speed"
+>>> SC2154 1:7

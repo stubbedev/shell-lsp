@@ -1,11 +1,12 @@
 dialect sh
-error kind=1 5:5-5:7 "(1": arrays are a bash/mksh/zsh feature, not available in sh
 scope 0 parent=0 1:1-7:1
+definition 5:1-5:4 "arr" kind=0 attrs=000001 local=false within=0
 reference 2:8-2:9 "x" within=0
-command 2:4-2:6 "[[" args=4 within=0
 command 3:2-3:6 "echo" args=1 within=0
 command 6:1-6:5 "echo" args=1 within=0
 comment 1:1-1:10 "#!/bin/sh"
 keyword 2:1-2:3 "if"
+keyword 2:4-2:6 "[["
+keyword 2:15-2:17 "]]"
 keyword 2:19-2:23 "then"
 keyword 4:1-4:3 "fi"

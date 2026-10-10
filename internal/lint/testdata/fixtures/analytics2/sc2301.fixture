@@ -1,0 +1,14 @@
+### single-quoted name inside braces
+echo "${'user'}"
+>>> SC2154 1:7
+>>> SC2301 1:9
+
+### double quotes with a space inside braces
+echo "${"two words"}"
+>>> SC2154 1:7
+>>> SC2301 1:9
+
+### extglob as first part
+echo ${@(a|b)}
+>>- SC2086 1:6 -- mvdan rejects an extglob as the name inside ${}; reported as a syntax error instead
+>>> SC2301 1:8

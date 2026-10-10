@@ -1,0 +1,18 @@
+### if glued to a bang
+if! grep -q admin /etc/group; then echo missing; fi
+>>> SC1089 1:31
+>>> SC1129 1:3
+
+### while glued to a bang
+while! ping -c1 gateway; do sleep 1; done
+>>> SC1089 1:26
+>>> SC1129 1:6
+
+### until glued to a bang
+until! test -e /tmp/ready; do sleep 1; done
+>>> SC1089 1:28
+>>> SC1129 1:6
+
+### keyword and bang separated by a space
+if ! grep -q admin /etc/group; then echo missing; fi
+>>> none

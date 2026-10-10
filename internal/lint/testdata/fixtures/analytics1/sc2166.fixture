@@ -1,0 +1,9 @@
+### -a inside single brackets
+[ "$user" -a "$pass" ] && login
+>>> SC2166 1:11
+
+### -z on a number or a string comparison
+[ -z 0 -o "$mode" = fast ] && echo "fast"
+>>> SC2154 1:12
+>>> SC2157 1:6
+>>> SC2166 1:8

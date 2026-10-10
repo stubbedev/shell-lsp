@@ -1,0 +1,20 @@
+### unterminated double quote inside a command
+if [ -d "$cache" ]; then
+  echo "clearing cache
+fi
+>>> SC1009 2:3
+>>> SC1072 4:1
+>>> SC1073 2:8
+
+### unterminated single quote in an echo
+echo 'cannot finish
+>>> SC1009 1:1
+>>> SC1072 2:1
+>>> SC1073 1:6
+
+### only one construct open gives no context note
+{
+  make install
+>>> SC1056 3:1
+>>> SC1072 3:1
+>>> SC1073 1:1

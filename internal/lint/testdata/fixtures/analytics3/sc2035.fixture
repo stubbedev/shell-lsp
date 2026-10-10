@@ -1,0 +1,33 @@
+### rm with a leading star glob
+rm *.tmp
+>>> SC2035 1:4
+
+### ls with a leading question-mark glob
+ls ?.log
+>>> SC2035 1:4
+
+### glob after end-of-options marker
+rm -- *.tmp
+>>> none
+
+### glob is the command word itself
+*.sh
+>>> SC2211 1:1
+
+### echo with a quoted literal before the glob
+echo "files:" *.txt
+>>> none
+
+### printf with a format string before the glob
+printf '%s\n' *.csv
+>>> none
+
+### set -f noglob does not suppress the warning in shellcheck 0.11.0
+set -f
+rm *.bak
+>>> SC2035 2:4
+
+### set -o noglob does not suppress the warning in shellcheck 0.11.0
+set -o noglob
+cp *.conf /etc/app/
+>>> SC2035 2:4

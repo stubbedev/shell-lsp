@@ -1,0 +1,15 @@
+### timing a subshell in dash
+#!/bin/dash
+time ( make clean; make all )
+>>> SC2177 2:6
+
+### timing a compound first stage of a pipeline in sh
+#!/bin/sh
+time { cat a.log b.log; } | wc -l
+>>> SC2176 2:1
+>>> SC2177 2:6
+
+### timing a simple command in sh
+#!/bin/sh
+time sleep 1
+>>> none

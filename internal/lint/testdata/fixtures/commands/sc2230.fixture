@@ -1,0 +1,11 @@
+### which with a quoted pattern
+which '.+'
+>>> none
+
+### which javac
+which javac
+>>> none
+
+### command -v javac
+command -v javac
+>>> none

@@ -1,0 +1,31 @@
+### unquoted here-doc to ssh with an expansion
+ssh deploy@web1 << REMOTE
+echo $PATH
+REMOTE
+>>> SC2087 1:20
+
+### ssh by path with command substitution in body
+/usr/bin/ssh backup@db1 <<END
+tar czf /tmp/db-$(date +%F).tgz /var/lib/db
+END
+>>> SC2087 1:27
+
+### tab-stripping here-doc to ssh
+ssh "$host" <<-SCRIPT
+cd $remote_dir
+SCRIPT
+>>> SC2087 1:16
+>>> SC2154 1:6
+>>> SC2154 2:4
+
+### single-quoted delimiter is fine
+ssh deploy@web1 << 'REMOTE'
+echo $PATH
+REMOTE
+>>> none
+
+### literal-only body is fine
+ssh deploy@web1 << REMOTE
+uptime
+REMOTE
+>>> none

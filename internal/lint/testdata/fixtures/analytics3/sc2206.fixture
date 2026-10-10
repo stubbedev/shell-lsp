@@ -1,0 +1,52 @@
+### unquoted variable in array literal splits
+packages="curl git jq"
+deps=($packages)
+echo "${deps[@]}"
+>>> SC2206 2:7
+
+### unquoted positional list in array literal
+files=($@)
+echo "${files[@]}"
+>>> SC2206 1:8
+
+### unquoted braced variable in array literal
+search_path="/usr/lib /opt/lib"
+dirs=(${search_path})
+echo "${dirs[@]}"
+>>> SC2206 2:7
+
+### ksh array literal with unquoted variable
+#!/bin/ksh
+words="one two three"
+set -A parts $words
+list=($words)
+echo "${list[@]}"
+>>> SC2086 3:14
+>>> SC2206 4:7
+
+### double-quoted expansion stays one element
+title="Annual Report"
+items=("$title" "$HOME")
+echo "${items[@]}"
+>>> none
+
+### special parameters without spaces
+info=($! $$ $#)
+echo "${info[@]}"
+>>> none
+
+### element count of another array
+names=(ann bob cid)
+counts=(${#names[@]})
+echo "${counts[@]}"
+>>> none
+
+### brace expansion literal
+envs=(stage-{a,b,c})
+echo "${envs[@]}"
+>>> none
+
+### bare star glob
+entries=(*)
+echo "${entries[@]}"
+>>> none

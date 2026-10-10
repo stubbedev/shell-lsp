@@ -1,0 +1,26 @@
+### unquoted command substitution in array literal
+branches=($(git branch --format='%(refname:short)'))
+echo "${branches[@]}"
+>>> SC2207 1:11
+
+### unquoted backtick substitution in array literal
+users=(`cut -d: -f1 /etc/passwd`)
+echo "${users[@]}"
+>>> SC2006 1:8
+>>> SC2207 1:8
+
+### unquoted brace command substitution in array literal
+pids=(${ pgrep nginx; })
+echo "${pids[@]}"
+>>> SC2207 1:7
+
+### ksh array literal with unquoted command substitution
+#!/bin/ksh
+mounts=($(df -P | awk 'NR>1 {print $6}'))
+echo "${mounts[@]}"
+>>> SC2207 2:9
+
+### double-quoted command substitution is one element
+today=("$(date +%F)")
+echo "${today[@]}"
+>>> none

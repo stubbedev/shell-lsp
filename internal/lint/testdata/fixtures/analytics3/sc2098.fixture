@@ -1,0 +1,10 @@
+### expansion cannot see the prefix assignment
+build_dir=/tmp/out make -C "$build_dir"
+>>> SC2097 1:1
+>>> SC2098 1:29
+>>> SC2154 1:29
+
+### substitution in the prefix value expands the variable
+retries=1
+retries=$(expr "$retries" + 1) ./run-job.sh
+>>> SC2003 2:11

@@ -1,0 +1,30 @@
+### prefix removal with an unquoted variable pattern
+echo "${path#$root}"
+>>> SC2154 1:7
+>>> SC2295 1:14
+
+### suffix removal with a command substitution pattern
+echo "${filename%%$(get_ext)}"
+>>> SC2154 1:7
+>>> SC2295 1:19
+
+### backtick substitution in the pattern
+base="${archive%`suffix`}"
+>>> SC2006 1:17
+>>> SC2034 1:1
+>>> SC2154 1:7
+>>> SC2295 1:17
+
+### unquoted outer expansion still fires
+rel=${file##$prefix}
+>>> SC2034 1:1
+>>> SC2154 1:5
+>>> SC2295 1:13
+
+### array index containing a hash and variable
+echo "${files[#$i]}"
+>>> SC2154 1:7
+
+### quoted pattern variable
+echo "${path#"$root"}"
+>>> SC2154 1:7

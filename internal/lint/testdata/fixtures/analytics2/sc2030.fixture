@@ -1,0 +1,197 @@
+### assignment in piped while loop read afterwards
+last=""
+cat servers.txt | while read -r line; do
+  last=$line
+done
+echo "last server: $last"
+>>> SC2030 3:3
+>>> SC2031 5:20
+
+### assignment in parenthesized subshell used later
+( TMPDIR=/var/tmp/build )
+rm -rf $TMPDIR
+>>> SC2030 1:3
+>>> SC2031 2:8
+>>> SC2086 2:8
+
+### read target of piped while loop used afterwards
+cat names.txt | while read -r name; do
+  true
+done
+echo $name
+>>> SC2030 1:31
+>>> SC2031 4:6
+>>> SC2086 4:6
+
+### export with command substitution in subshell
+( export BUILD_ID=$(date +%s) )
+echo $BUILD_ID
+>>> SC2030 1:10
+>>> SC2031 2:6
+>>> SC2086 2:6
+>>> SC2155 1:10
+
+### typeset array in subshell
+( typeset -a mirrors=(eu us) )
+echo $mirrors
+>>> SC2030 1:14
+>>> SC2031 2:6
+>>> SC2086 2:6
+>>> SC2128 2:6
+
+### arithmetic increment in piped while loop
+count=0
+ls /etc | while read -r entry; do
+  (( count++ ))
+done
+echo "found $count entries"
+>>> SC2012 2:1
+>>> SC2030 3:6
+>>> SC2031 5:13
+>>> SC2034 2:25
+
+### backgrounded assignment then arithmetic use
+jobs_left=3 &
+echo $(( jobs_left++ ))
+>>> SC2030 1:1
+>>> SC2031 2:10
+
+### backgrounded read then reassignment from itself
+read -r token &
+token=prefix_$token
+>>> SC2030 1:9
+>>> SC2031 2:14
+
+### two backgrounded compound arithmetic assignments
+(( bits <<= 1 )) &
+(( bits |= 4 )) &
+>>> SC2030 1:9
+>>> SC2031 2:4
+
+### let in piped loop then use on a later line
+total=0
+cat /etc/passwd | while read -r entry; do
+  let total=total+1
+done
+echo $total
+>>> SC2030 3:12
+>>> SC2031 5:6
+>>> SC2034 2:33
+>>> SC2219 3:3
+
+### let pre-increment in piped loop
+seen=0
+cat /etc/passwd | while read -r entry; do
+  let ++seen
+done
+echo $seen
+>>> SC2030 3:9
+>>> SC2031 5:6
+>>> SC2034 2:33
+>>> SC2219 3:3
+
+### bash pipeline into read
+echo "v1.4.2" | read release
+echo $release
+>>> SC2030 1:22
+>>> SC2031 2:6
+>>> SC2086 2:6
+>>> SC2162 1:17
+
+### named descriptor allocated in a subshell
+( exec {logfd}>&2 )
+echo $logfd
+>>> SC2030 1:8
+>>> SC2031 2:6
+>>> SC2086 2:6
+
+### bats test blocks are separate subshells
+#!/usr/bin/env bats
+@test "creates workspace" {
+  workspace=/tmp/ws
+}
+@test "uses workspace" {
+  echo $workspace
+}
+>>> SC2030 3:3
+>>> SC2031 6:8
+
+### while read with input redirection is fine
+while read -r line; do
+  last=$line
+done < servers.txt
+echo "$last"
+>>> none
+
+### subshell assignment used inside the same subshell
+( TMPDIR=/var/tmp/build; rm -rf "$TMPDIR" )
+>>> none
+
+### ksh93 runs the last pipeline element in the current shell
+#!/bin/ksh
+echo "v1.4.2" | read release
+echo "$release"
+>>> SC2162 2:17
+
+### ksh piped while loop keeps assignments
+#!/bin/ksh
+cat servers.txt | while read -r line; do
+  last=$line
+done
+echo "$last"
+>>> none
+
+### set -e in a subshell does not assign positionals
+( set -e )
+echo "$@"
+>>> none
+
+### brace-style substitution is not a subshell
+version=${ { tag=$(git describe 2>&1); echo "$tag"; } }
+echo "$version" "$tag"
+>>> none
+
+### bash with lastpipe enabled
+#!/bin/bash
+shopt -s lastpipe
+echo "main" | read -r branch
+echo "$branch"
+>>> none
+
+### testing a variable in a piped function is not a modification
+show() {
+  echo hi | if [[ -n $greeting ]]; then echo "$greeting"; fi
+}
+again() {
+  echo "$greeting"
+}
+>>> none
+
+### -n and -z tests in a subshell are not modifications
+( [[ -n $src || -z $dst ]] )
+echo "$src" "$dst"
+>>> SC2234 1:1
+
+### export without a value in a subshell
+( export EDITOR )
+echo "$EDITOR"
+>>> none
+
+### read into underscore in a subshell is still reported by shellcheck 0.11
+( read -r first _ third <<< "a b c" )
+echo "$_"
+>>> SC2030 1:17
+>>> SC2031 2:7
+>>> SC2034 1:11
+>>> SC2034 1:19
+
+### assigning underscore in a subshell is still reported by shellcheck 0.11
+( _=placeholder )
+echo "$_"
+>>> SC2030 1:3
+>>> SC2031 2:7
+
+### IFS changed in a subshell is never reported
+( IFS=: )
+echo "$IFS"
+>>> none

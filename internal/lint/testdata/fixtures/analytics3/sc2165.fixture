@@ -1,0 +1,33 @@
+### nested for-in reuses the glob loop variable
+for item in *.json; do
+  for item in a b; do
+    echo "$item"
+  done
+done
+>>> SC2165 2:3
+>>> SC2167 1:1
+
+### C-style inner loop reuses the variable
+for i in 1 2 3; do
+  for ((i = 0; i < 5; i++)); do
+    echo "$i"
+  done
+done
+>>> SC2165 2:3
+>>> SC2167 1:1
+
+### nested loops use different names
+for dir in */; do
+  for file in "$dir"*; do
+    echo "$file"
+  done
+done
+>>> none
+
+### both loops use the underscore variable
+for _ in 1 2; do
+  for _ in a b; do
+    echo tick
+  done
+done
+>>> none

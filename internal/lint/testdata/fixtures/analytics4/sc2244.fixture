@@ -1,0 +1,19 @@
+### bare variable in double brackets
+[[ $DEBUG ]] && set -x
+>>> none
+
+### two adjacent expansions quoted together
+[[ "$first$last" ]] && echo "has a name"
+>>> none
+
+### bare quoted variable in single brackets
+[ "$api_key" ] || exit 1
+>>> none
+
+### empty quoted string
+[ "" ] && echo "never"
+>>> SC2078 1:3
+
+### variable glued to equals one
+[[ $verbose=1 ]] && echo "always true"
+>>> SC2077 1:12

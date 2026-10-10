@@ -1,0 +1,16 @@
+### line starting with a logical and
+make all
+&& make install
+>>> SC1070 2:1
+>>> SC1133 2:1
+
+### leftover starting with a parenthesis reports SC1088 instead
+echo start
+(echo a) (echo b)
+>>> SC1036 2:10
+>>> SC1088 2:10
+
+### leftover starting with a keyword reports SC1089 instead
+echo start
+fi
+>>> SC1089 2:1

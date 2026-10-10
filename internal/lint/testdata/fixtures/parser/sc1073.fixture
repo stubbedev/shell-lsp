@@ -1,0 +1,11 @@
+### string left open inside a loop body
+while true; do
+  echo "waiting
+done
+>>> SC1009 2:3
+>>> SC1072 4:1
+>>> SC1073 2:8
+
+### pipeline missing its second stage
+ls |
+>>> SC1072 2:1

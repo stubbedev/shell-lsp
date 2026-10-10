@@ -1,0 +1,989 @@
+package lint
+
+import (
+	"maps"
+	"strings"
+
+	"mvdan.cc/sh/v3/syntax"
+
+	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/parser"
+)
+
+const (
+	maxLoopRounds     = 3
+	maxFunctionRounds = 2
+	batsStatus        = "status"
+)
+
+type space uint8
+
+const (
+	spaceEmpty space = 1 << iota
+	spaceClean
+	spaceDirty
+	spaceEntry
+)
+
+func (s space) clean() bool { return s == spaceClean }
+
+func (s space) normalize() space {
+	entry := s & spaceEntry
+	switch {
+	case s&spaceDirty != 0:
+		return spaceDirty | entry
+	case s&spaceClean != 0:
+		return spaceClean | entry
+	}
+	return s
+}
+
+func appendSpace(a, b space) space {
+	switch {
+	case a == 0:
+		return b
+	case b == 0:
+		return a
+	}
+	var out space
+	for _, x := range []space{spaceEmpty, spaceClean, spaceDirty, spaceEntry} {
+		if a&x == 0 {
+			continue
+		}
+		for _, y := range []space{spaceEmpty, spaceClean, spaceDirty, spaceEntry} {
+			if b&y != 0 {
+				out |= appendOne(x, y)
+			}
+		}
+	}
+	return out
+}
+
+func appendOne(a, b space) space {
+	switch {
+	case a == spaceEmpty:
+		return b
+	case b == spaceEmpty:
+		return a
+	case a == spaceClean && b == spaceClean:
+		return spaceClean
+	}
+	return spaceDirty
+}
+
+type integerAttr uint8
+
+const (
+	integerYes integerAttr = 1 << iota
+	integerNo
+	integerEntry
+)
+
+type value struct {
+	space   space
+	integer integerAttr
+}
+
+func (v value) join(o value) value {
+	return value{space: (v.space | o.space).normalize(), integer: v.integer | o.integer}
+}
+
+func (v value) substitute(entry value) value {
+	out := value{space: v.space &^ spaceEntry, integer: v.integer &^ integerEntry}
+	if v.space&spaceEntry != 0 {
+		out.space = (out.space | entry.space).normalize()
+	}
+	if v.integer&integerEntry != 0 {
+		out.integer |= entry.integer
+	}
+	return out
+}
+
+func (v value) expands() space {
+	switch {
+	case v.integer == integerYes:
+		return spaceClean
+	case v.space == 0:
+		return spaceDirty
+	}
+	return v.space
+}
+
+type funcRef struct {
+	decl  *syntax.FuncDecl
+	maybe bool
+}
+
+type state struct {
+	live     bool
+	symbolic bool
+	vars     map[string]value
+	funcs    map[string]funcRef
+}
+
+func newState(symbolic bool) *state {
+	return &state{live: true, symbolic: symbolic, vars: map[string]value{}, funcs: map[string]funcRef{}}
+}
+
+func deadState(symbolic bool) *state {
+	s := newState(symbolic)
+	s.live = false
+	return s
+}
+
+func (s *state) clone() *state {
+	return &state{live: s.live, symbolic: s.symbolic, vars: maps.Clone(s.vars), funcs: maps.Clone(s.funcs)}
+}
+
+func (s *state) get(name string) value {
+	if v, ok := s.vars[name]; ok {
+		return v
+	}
+	if s.symbolic {
+		return value{space: spaceEntry, integer: integerEntry}
+	}
+	return environment(name)
+}
+
+func (s *state) set(name string, v value) { s.vars[name] = v }
+
+func join(a, b *state) *state {
+	switch {
+	case !a.live:
+		return b.clone()
+	case !b.live:
+		return a.clone()
+	}
+	out := a.clone()
+	for name, v := range b.vars {
+		out.vars[name] = out.get(name).join(v)
+	}
+	for name := range a.vars {
+		if _, ok := b.vars[name]; !ok {
+			out.vars[name] = a.vars[name].join(b.get(name))
+		}
+	}
+	for name, ref := range b.funcs {
+		mine, ok := out.funcs[name]
+		switch {
+		case !ok:
+			out.funcs[name] = funcRef{decl: ref.decl, maybe: true}
+		case mine.decl != ref.decl:
+			out.funcs[name] = funcRef{decl: ref.decl, maybe: true}
+		default:
+			out.funcs[name] = funcRef{decl: ref.decl, maybe: mine.maybe || ref.maybe}
+		}
+	}
+	for name, ref := range a.funcs {
+		if _, ok := b.funcs[name]; !ok {
+			out.funcs[name] = funcRef{decl: ref.decl, maybe: true}
+		}
+	}
+	return out
+}
+
+func (s *state) equal(o *state) bool {
+	return s.live == o.live && maps.Equal(s.vars, o.vars) && maps.Equal(s.funcs, o.funcs)
+}
+
+func environment(name string) value {
+	if spacelessVariables[name] {
+		return value{space: spaceClean, integer: integerNo}
+	}
+	return value{integer: integerNo}
+}
+
+var spacelessVariables = setOf(
+	"$", "?", "!", "#", "-",
+	"BASHPID", "BASH_ARGC", "BASH_LINENO", "BASH_SUBSHELL", "EUID", "EPOCHREALTIME", "EPOCHSECONDS",
+	"LINENO", "OPTIND", "PPID", "RANDOM", "READLINE_ARGUMENT", "READLINE_MARK", "READLINE_POINT",
+	"SECONDS", "SHELLOPTS", "SHLVL", "SRANDOM", "UID", "COLUMNS", "HISTFILESIZE", "HISTSIZE", "LINES",
+	"BASH_MONOSECONDS", "BASH_TRAPSIG",
+)
+
+func setOf(names ...string) map[string]bool {
+	out := make(map[string]bool, len(names))
+	for _, n := range names {
+		out[n] = true
+	}
+	return out
+}
+
+type flowResult struct {
+	expansions map[*syntax.ParamExp]space
+	reached    map[*syntax.Stmt]bool
+	called     map[*syntax.FuncDecl]bool
+}
+
+func (r *flowResult) expansion(pe *syntax.ParamExp) space {
+	if s, ok := r.expansions[pe]; ok {
+		return s
+	}
+	return spaceDirty
+}
+
+type loopFrame struct {
+	breaks    *state
+	continues *state
+}
+
+type funcFrame struct {
+	locals  map[string]*value
+	returns *state
+}
+
+type summary struct {
+	exit *state
+}
+
+type interpreter struct {
+	tree       *parser.Tree
+	dialect    dialect.Dialect
+	writes     map[syntax.Node][]*parser.Definition
+	imported   map[string]value
+	result     *flowResult
+	record     bool
+	loops      []*loopFrame
+	frames     []*funcFrame
+	summaries  map[*syntax.FuncDecl]*summary
+	computing  map[*syntax.FuncDecl]bool
+	entries    map[*syntax.FuncDecl]*state
+	definedAt  map[*syntax.FuncDecl]*state
+	staticFunc map[string]*syntax.FuncDecl
+	final      *state
+	bats       bool
+}
+
+func analyzeFlow(tree *parser.Tree, imports []parser.Import, bats bool) *flowResult {
+	in := &interpreter{
+		bats:       bats,
+		tree:       tree,
+		dialect:    tree.Dialect,
+		writes:     map[syntax.Node][]*parser.Definition{},
+		imported:   importedGlobals(imports),
+		result:     &flowResult{expansions: map[*syntax.ParamExp]space{}, reached: map[*syntax.Stmt]bool{}, called: map[*syntax.FuncDecl]bool{}},
+		summaries:  map[*syntax.FuncDecl]*summary{},
+		computing:  map[*syntax.FuncDecl]bool{},
+		entries:    map[*syntax.FuncDecl]*state{},
+		definedAt:  map[*syntax.FuncDecl]*state{},
+		staticFunc: map[string]*syntax.FuncDecl{},
+	}
+	for i := range tree.Definitions {
+		def := &tree.Definitions[i]
+		if def.Node != nil {
+			in.writes[def.Node] = append(in.writes[def.Node], def)
+		}
+	}
+	for _, fn := range tree.Functions {
+		if _, seen := in.staticFunc[fn.Name]; !seen && fn.Decl != nil {
+			in.staticFunc[fn.Name] = fn.Decl
+		}
+	}
+	in.record = true
+	in.final = in.stmts(tree.File.Stmts, newState(false))
+	for range maxFunctionRounds {
+		for _, fn := range tree.Functions {
+			if fn.Decl == nil || fn.Decl.Body == nil {
+				continue
+			}
+			entry := in.entryFor(fn.Decl)
+			in.runBody(fn.Decl, entry)
+		}
+	}
+	return in.result
+}
+
+func importedGlobals(imports []parser.Import) map[string]value {
+	out := map[string]value{}
+	for _, imp := range imports {
+		for _, def := range imp.Tree.Definitions {
+			if def.Local {
+				continue
+			}
+			v := value{space: spaceDirty, integer: integerNo}
+			if def.Value != nil {
+				v = value{space: literalWordSpace(def.Value), integer: integerNo}
+			}
+			if prev, ok := out[def.Name]; ok {
+				v = prev.join(v)
+			}
+			out[def.Name] = v
+		}
+	}
+	return out
+}
+
+func literalWordSpace(w *syntax.Word) space {
+	lit, ok := parser.Literal(w)
+	if !ok {
+		return spaceDirty
+	}
+	return literalSpace(lit)
+}
+
+func literalSpace(s string) space {
+	switch {
+	case s == "":
+		return spaceEmpty
+	case strings.ContainsAny(s, " \t\n*?["):
+		return spaceDirty
+	}
+	return spaceClean
+}
+
+func (in *interpreter) entryFor(decl *syntax.FuncDecl) *state {
+	entry := in.final.clone()
+	entry.live = true
+	if called, ok := in.entries[decl]; ok {
+		entry = join(entry, called)
+	}
+	if defined, ok := in.definedAt[decl]; ok {
+		entry = join(entry, defined)
+	}
+	return entry
+}
+
+func (in *interpreter) stmts(list []*syntax.Stmt, s *state) *state {
+	for _, stmt := range list {
+		s = in.stmt(stmt, s)
+	}
+	return s
+}
+
+func (in *interpreter) stmt(stmt *syntax.Stmt, s *state) *state {
+	if !s.live {
+		return s
+	}
+	if in.record && !s.symbolic {
+		in.result.reached[stmt] = true
+	}
+	if stmt.Background || stmt.Coprocess {
+		in.subshell(func(sub *state) *state { return in.command(stmt, sub) }, s)
+		return s
+	}
+	return in.command(stmt, s)
+}
+
+func (in *interpreter) subshell(run func(*state) *state, s *state) {
+	saved := in.loops
+	in.loops = nil
+	run(s.clone())
+	in.loops = saved
+}
+
+func (in *interpreter) command(stmt *syntax.Stmt, s *state) *state {
+	switch cmd := stmt.Cmd.(type) {
+	case nil:
+		s = in.evaluate(stmt, s)
+	case *syntax.CallExpr:
+		s = in.call(stmt, cmd, s)
+	case *syntax.DeclClause:
+		s = in.evaluate(stmt, s)
+	case *syntax.IfClause:
+		s = in.ifClause(cmd, s)
+		s = in.redirects(stmt, s)
+	case *syntax.WhileClause:
+		s = in.whileClause(cmd, s)
+		s = in.redirects(stmt, s)
+	case *syntax.ForClause:
+		s = in.forClause(cmd, s)
+		s = in.redirects(stmt, s)
+	case *syntax.CaseClause:
+		s = in.caseClause(cmd, s)
+		s = in.redirects(stmt, s)
+	case *syntax.Block:
+		s = in.stmts(cmd.Stmts, s)
+		s = in.redirects(stmt, s)
+	case *syntax.Subshell:
+		in.subshell(func(sub *state) *state { return in.stmts(cmd.Stmts, sub) }, s)
+		s = in.redirects(stmt, s)
+	case *syntax.BinaryCmd:
+		s = in.binary(cmd, s)
+	case *syntax.FuncDecl:
+		s = in.define(cmd, s)
+	case *syntax.TimeClause:
+		if cmd.Stmt != nil {
+			s = in.stmt(cmd.Stmt, s)
+		}
+	case *syntax.CoprocClause:
+		in.subshell(func(sub *state) *state { return in.stmt(cmd.Stmt, sub) }, s)
+	case *syntax.TestDecl:
+		in.subshell(func(sub *state) *state { return in.stmt(cmd.Body, sub) }, s)
+	default:
+		s = in.evaluate(stmt, s)
+	}
+	return s
+}
+
+func (in *interpreter) redirects(stmt *syntax.Stmt, s *state) *state {
+	for _, r := range stmt.Redirs {
+		s = in.evaluate(r, s)
+	}
+	return s
+}
+
+func (in *interpreter) evaluate(node syntax.Node, s *state) *state {
+	var stack []syntax.Node
+	var deferred []syntax.Node
+	syntax.Walk(node, func(n syntax.Node) bool {
+		if n == nil {
+			done := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			switch {
+			case len(stack) > 0 && isDeclaration(stack[len(stack)-1]):
+				deferred = append(deferred, done)
+			case isDeclaration(done):
+				for _, d := range deferred {
+					in.applyWrites(d, s)
+				}
+				deferred = deferred[:0]
+				in.applyWrites(done, s)
+			default:
+				in.applyWrites(done, s)
+			}
+			return true
+		}
+		switch n := n.(type) {
+		case *syntax.CmdSubst:
+			in.subshell(func(sub *state) *state { return in.stmts(n.Stmts, sub) }, s)
+			return false
+		case *syntax.ProcSubst:
+			in.subshell(func(sub *state) *state { return in.stmts(n.Stmts, sub) }, s)
+			return false
+		case *syntax.ParamExp:
+			in.recordExpansion(n, s)
+		}
+		stack = append(stack, n)
+		return true
+	})
+	return s
+}
+
+func isDeclaration(n syntax.Node) bool {
+	_, ok := n.(*syntax.DeclClause)
+	return ok
+}
+
+func (in *interpreter) recordExpansion(pe *syntax.ParamExp, s *state) {
+	if !in.record || s.symbolic {
+		return
+	}
+	got := in.readSpace(pe, s)
+	if prev, ok := in.result.expansions[pe]; ok {
+		got |= prev
+	}
+	in.result.expansions[pe] = got
+}
+
+func (in *interpreter) applyWrites(n syntax.Node, s *state) {
+	for _, def := range in.writes[n] {
+		in.write(def, s)
+	}
+}
+
+func (in *interpreter) write(def *parser.Definition, s *state) {
+	switch def.Kind {
+	case parser.DefCommandEnv, parser.DefLoop:
+		return
+	case parser.DefArithmetic, parser.DefDescriptor:
+		in.assignVar(def, s, value{space: spaceClean, integer: s.get(def.Name).integer})
+		return
+	case parser.DefBuiltin:
+		in.assignVar(def, s, value{space: builtinSpace(def), integer: s.get(def.Name).integer})
+		return
+	}
+	prev := s.get(def.Name)
+	v := value{space: prev.space, integer: prev.integer}
+	switch node := def.Node.(type) {
+	case *syntax.Assign:
+		v.space = in.assignSpace(node, prev, s)
+	case *syntax.Word:
+		v.space = in.declarationWordSpace(node, s)
+	}
+	if def.Kind == parser.DefDeclare {
+		v.integer = declaredInteger(def, prev.integer)
+		if def.Local && !hasValue(def.Node) {
+			v.space = spaceEmpty
+		}
+	}
+	in.assignVar(def, s, v)
+}
+
+func hasValue(n syntax.Node) bool {
+	switch n := n.(type) {
+	case *syntax.Assign:
+		return !n.Naked
+	case *syntax.Word:
+		lit, _ := parser.Literal(n)
+		return strings.Contains(lit, "=")
+	}
+	return true
+}
+
+func declaredInteger(def *parser.Definition, prev integerAttr) integerAttr {
+	switch {
+	case def.Attrs.Has(parser.AttrInteger):
+		return integerYes
+	case def.Cleared.Has(parser.AttrInteger), def.Local:
+		return integerNo
+	}
+	return prev
+}
+
+func builtinSpace(def *parser.Definition) space {
+	if call, ok := def.Node.(*syntax.CallExpr); ok && len(call.Args) > 0 {
+		switch call.Args[0].Lit() {
+		case "getopts", "wait":
+			return spaceClean
+		}
+	}
+	return spaceDirty
+}
+
+func (in *interpreter) assignVar(def *parser.Definition, s *state, v value) {
+	if def.Local {
+		in.declareLocal(def.Name, s)
+	}
+	s.set(def.Name, v)
+}
+
+func (in *interpreter) declareLocal(name string, s *state) {
+	if len(in.frames) == 0 {
+		return
+	}
+	frame := in.frames[len(in.frames)-1]
+	if _, seen := frame.locals[name]; seen {
+		return
+	}
+	if prev, ok := s.vars[name]; ok {
+		frame.locals[name] = &prev
+		return
+	}
+	frame.locals[name] = nil
+}
+
+func (in *interpreter) assignSpace(a *syntax.Assign, prev value, s *state) space {
+	var assigned space
+	switch {
+	case a.Array != nil || a.Index != nil:
+		return spaceDirty
+	case a.Naked:
+		return prev.space
+	case a.Value == nil:
+		assigned = spaceEmpty
+	default:
+		assigned = in.wordSpace(a.Value, s)
+	}
+	if a.Append {
+		return appendSpace(prev.expands(), assigned)
+	}
+	return assigned
+}
+
+func (in *interpreter) declarationWordSpace(w *syntax.Word, s *state) space {
+	for i, part := range w.Parts {
+		lit, ok := part.(*syntax.Lit)
+		if !ok {
+			continue
+		}
+		_, after, found := strings.Cut(lit.Value, "=")
+		if !found {
+			continue
+		}
+		rest := &syntax.Word{Parts: append([]syntax.WordPart{&syntax.Lit{Value: after}}, w.Parts[i+1:]...)}
+		return in.wordSpace(rest, s)
+	}
+	return spaceEmpty
+}
+
+func (in *interpreter) wordSpace(w *syntax.Word, s *state) space {
+	var out space
+	for _, part := range w.Parts {
+		out = appendSpace(out, in.partSpace(part, s))
+	}
+	if out == 0 {
+		return spaceEmpty
+	}
+	return out
+}
+
+func (in *interpreter) partSpace(part syntax.WordPart, s *state) space {
+	switch p := part.(type) {
+	case *syntax.Lit:
+		return literalSpace(p.Value)
+	case *syntax.SglQuoted:
+		return literalSpace(p.Value)
+	case *syntax.DblQuoted:
+		var out space
+		for _, inner := range p.Parts {
+			out = appendSpace(out, in.partSpace(inner, s))
+		}
+		if out == 0 {
+			return spaceEmpty
+		}
+		return out
+	case *syntax.ParamExp:
+		return in.expansionSpace(p, s)
+	case *syntax.ArithmExp:
+		return spaceClean
+	case *syntax.ProcSubst:
+		return spaceClean
+	}
+	return spaceDirty
+}
+
+func (in *interpreter) readSpace(pe *syntax.ParamExp, s *state) space {
+	if pe.Param == nil {
+		return spaceDirty
+	}
+	return in.variable(pe.Param.Value, s)
+}
+
+func (in *interpreter) expansionSpace(pe *syntax.ParamExp, s *state) space {
+	switch {
+	case pe.Length:
+		return spaceClean
+	case pe.Excl, pe.Names != 0, pe.Param == nil:
+		return spaceDirty
+	}
+	if pe.Index != nil || pe.Repl != nil || pe.Slice != nil || len(pe.Modifiers) > 0 {
+		return spaceDirty
+	}
+	base := in.variable(pe.Param.Value, s)
+	if pe.Exp == nil {
+		return base
+	}
+	alternative := spaceEmpty
+	if pe.Exp.Word != nil {
+		alternative = in.wordSpace(pe.Exp.Word, s)
+	}
+	switch pe.Exp.Op {
+	case syntax.DefaultUnset, syntax.DefaultUnsetOrNull, syntax.AssignUnset, syntax.AssignUnsetOrNull:
+		return (base | alternative).normalize()
+	case syntax.AlternateUnset, syntax.AlternateUnsetOrNull:
+		return alternative
+	case syntax.ErrorUnset, syntax.ErrorUnsetOrNull:
+		return base
+	}
+	return spaceDirty
+}
+
+func (in *interpreter) variable(name string, s *state) space {
+	switch {
+	case isPositional(name):
+		return spaceDirty
+	case in.bats && name == batsStatus:
+		return spaceClean
+	}
+	return s.get(name).expands()
+}
+
+func isPositional(name string) bool {
+	if name == "@" || name == "*" {
+		return true
+	}
+	return name != "" && strings.Trim(name, "0123456789") == ""
+}
+
+func (in *interpreter) call(stmt *syntax.Stmt, call *syntax.CallExpr, s *state) *state {
+	s = in.evaluate(stmt, s)
+	if len(call.Args) == 0 {
+		return s
+	}
+	name, ok := parser.Literal(call.Args[0])
+	if !ok {
+		return s
+	}
+	switch name {
+	case "exit":
+		return deadState(s.symbolic)
+	case "return":
+		if len(in.frames) > 0 {
+			frame := in.frames[len(in.frames)-1]
+			frame.returns = join(frame.returns, s)
+		}
+		return deadState(s.symbolic)
+	case "exec":
+		if len(call.Args) > 1 {
+			return deadState(s.symbolic)
+		}
+	case "break", "continue":
+		return in.jump(name, call, s)
+	case "unset":
+		for _, arg := range call.Args[1:] {
+			if v, ok := parser.Literal(arg); ok && !strings.HasPrefix(v, "-") {
+				s.set(v, value{space: spaceEmpty, integer: integerNo})
+			}
+		}
+	case "source", ".":
+		for name, v := range in.imported {
+			s.set(name, v)
+		}
+	}
+	return in.invoke(name, s)
+}
+
+func (in *interpreter) jump(name string, call *syntax.CallExpr, s *state) *state {
+	if len(in.loops) == 0 {
+		return deadState(s.symbolic)
+	}
+	depth := 1
+	if len(call.Args) > 1 {
+		if lit, ok := parser.Literal(call.Args[1]); ok && len(lit) == 1 && lit[0] >= '1' && lit[0] <= '9' {
+			depth = int(lit[0] - '0')
+		}
+	}
+	frame := in.loops[max(len(in.loops)-depth, 0)]
+	if name == "break" {
+		frame.breaks = join(frame.breaks, s)
+	} else {
+		frame.continues = join(frame.continues, s)
+	}
+	return deadState(s.symbolic)
+}
+
+func (in *interpreter) invoke(name string, s *state) *state {
+	ref, ok := s.funcs[name]
+	if !ok {
+		decl, static := in.staticFunc[name]
+		if !static {
+			return s
+		}
+		ref = funcRef{decl: decl, maybe: s.symbolic}
+	}
+	in.result.called[ref.decl] = true
+	if in.record && !s.symbolic {
+		if prev, ok := in.entries[ref.decl]; ok {
+			in.entries[ref.decl] = join(prev, s)
+		} else {
+			in.entries[ref.decl] = s.clone()
+		}
+	}
+	sum := in.summary(ref.decl)
+	after := apply(sum, s)
+	if ref.maybe {
+		return join(after, s)
+	}
+	return after
+}
+
+func apply(sum *summary, s *state) *state {
+	if !sum.exit.live {
+		return deadState(s.symbolic)
+	}
+	out := s.clone()
+	for name, v := range sum.exit.vars {
+		out.set(name, v.substitute(s.get(name)))
+	}
+	maps.Copy(out.funcs, sum.exit.funcs)
+	return out
+}
+
+func (in *interpreter) summary(decl *syntax.FuncDecl) *summary {
+	if sum, ok := in.summaries[decl]; ok {
+		return sum
+	}
+	if in.computing[decl] || decl.Body == nil {
+		return &summary{exit: newState(true)}
+	}
+	in.computing[decl] = true
+	saved := in.record
+	in.record = false
+	exit := in.runBody(decl, newState(true))
+	in.record = saved
+	delete(in.computing, decl)
+	sum := &summary{exit: exit}
+	in.summaries[decl] = sum
+	return sum
+}
+
+func (in *interpreter) runBody(decl *syntax.FuncDecl, entry *state) *state {
+	frame := &funcFrame{locals: map[string]*value{}, returns: deadState(entry.symbolic)}
+	in.frames = append(in.frames, frame)
+	savedLoops := in.loops
+	in.loops = nil
+	exit := in.stmt(decl.Body, entry)
+	in.loops = savedLoops
+	in.frames = in.frames[:len(in.frames)-1]
+	exit = join(exit, frame.returns)
+	if !exit.live {
+		return exit
+	}
+	for name, prev := range frame.locals {
+		if prev == nil {
+			delete(exit.vars, name)
+			continue
+		}
+		exit.vars[name] = *prev
+	}
+	return exit
+}
+
+func (in *interpreter) define(decl *syntax.FuncDecl, s *state) *state {
+	names := decl.Names
+	if decl.Name != nil {
+		names = []*syntax.Lit{decl.Name}
+	}
+	for _, name := range names {
+		s.funcs[name.Value] = funcRef{decl: decl}
+	}
+	if in.record && !s.symbolic {
+		if prev, ok := in.definedAt[decl]; ok {
+			in.definedAt[decl] = join(prev, s)
+		} else {
+			in.definedAt[decl] = s.clone()
+		}
+	}
+	return s
+}
+
+func (in *interpreter) binary(cmd *syntax.BinaryCmd, s *state) *state {
+	switch cmd.Op {
+	case syntax.AndStmt, syntax.OrStmt:
+		left := in.stmt(cmd.X, s)
+		right := in.stmt(cmd.Y, left.clone())
+		return join(left, right)
+	}
+	in.subshell(func(sub *state) *state { return in.stmt(cmd.X, sub) }, s)
+	if in.dialect.Features().LastPipeInShell {
+		return in.stmt(cmd.Y, s)
+	}
+	in.subshell(func(sub *state) *state { return in.stmt(cmd.Y, sub) }, s)
+	return s
+}
+
+func (in *interpreter) ifClause(cmd *syntax.IfClause, s *state) *state {
+	cond := in.stmts(cmd.Cond, s)
+	then := in.stmts(cmd.Then, cond.clone())
+	switch {
+	case cmd.Else == nil:
+		return join(then, cond)
+	case len(cmd.Else.Cond) == 0:
+		return join(then, in.stmts(cmd.Else.Then, cond.clone()))
+	}
+	return join(then, in.ifClause(cmd.Else, cond.clone()))
+}
+
+func (in *interpreter) loop(s *state, round func(head *state) *state, exitFrom func(head *state) *state, endless bool) *state {
+	frame := &loopFrame{breaks: deadState(s.symbolic), continues: deadState(s.symbolic)}
+	in.loops = append(in.loops, frame)
+	head := s
+	for range maxLoopRounds {
+		next := join(head, join(round(head.clone()), frame.continues))
+		if next.equal(head) {
+			break
+		}
+		head = next
+	}
+	exit := frame.breaks
+	if !endless {
+		exit = join(exitFrom(head.clone()), exit)
+	}
+	in.loops = in.loops[:len(in.loops)-1]
+	return exit
+}
+
+func (in *interpreter) whileClause(cmd *syntax.WhileClause, s *state) *state {
+	return in.loop(s,
+		func(head *state) *state { return in.stmts(cmd.Do, in.stmts(cmd.Cond, head)) },
+		func(head *state) *state { return in.stmts(cmd.Cond, head) },
+		!cmd.Until && alwaysTrue(cmd.Cond))
+}
+
+func alwaysTrue(cond []*syntax.Stmt) bool {
+	if len(cond) != 1 {
+		return false
+	}
+	call, ok := cond[0].Cmd.(*syntax.CallExpr)
+	if !ok || len(call.Args) != 1 || cond[0].Negated {
+		return false
+	}
+	name := call.Args[0].Lit()
+	return name == "true" || name == ":"
+}
+
+func (in *interpreter) forClause(cmd *syntax.ForClause, s *state) *state {
+	switch loop := cmd.Loop.(type) {
+	case *syntax.WordIter:
+		items := spaceDirty
+		if loop.InPos.IsValid() {
+			items = 0
+			for _, w := range loop.Items {
+				s = in.evaluate(w, s)
+				items |= in.itemSpace(w)
+			}
+		}
+		assign := func(head *state) *state {
+			if loop.Name != nil && items != 0 {
+				head.set(loop.Name.Value, value{space: items.normalize(), integer: integerNo})
+			}
+			return head
+		}
+		return in.loop(s,
+			func(head *state) *state { return in.stmts(cmd.Do, assign(head)) },
+			func(head *state) *state { return head },
+			false)
+	case *syntax.CStyleLoop:
+		for _, expr := range []syntax.ArithmExpr{loop.Init} {
+			if expr != nil {
+				s = in.evaluate(expr, s)
+			}
+		}
+		return in.loop(s,
+			func(head *state) *state {
+				if loop.Cond != nil {
+					head = in.evaluate(loop.Cond, head)
+				}
+				head = in.stmts(cmd.Do, head)
+				if loop.Post != nil && head.live {
+					head = in.evaluate(loop.Post, head)
+				}
+				return head
+			},
+			func(head *state) *state {
+				if loop.Cond != nil {
+					head = in.evaluate(loop.Cond, head)
+				}
+				return head
+			},
+			loop.Cond == nil)
+	}
+	return s
+}
+
+func (in *interpreter) itemSpace(w *syntax.Word) space {
+	lit, ok := parser.Literal(w)
+	if !ok {
+		return spaceDirty
+	}
+	return literalSpace(lit)
+}
+
+func (in *interpreter) caseClause(cmd *syntax.CaseClause, s *state) *state {
+	s = in.evaluate(cmd.Word, s)
+	exit := deadState(s.symbolic)
+	carry := deadState(s.symbolic)
+	catchAll := false
+	for _, item := range cmd.Items {
+		entry := s.clone()
+		for _, pattern := range item.Patterns {
+			entry = in.evaluate(pattern, entry)
+			if lit, ok := parser.Literal(pattern); ok && lit == "*" {
+				catchAll = true
+			}
+		}
+		body := in.stmts(item.Stmts, join(entry, carry))
+		switch item.Op {
+		case syntax.Fallthrough, syntax.Resume, syntax.ResumeKorn:
+			carry = body
+		default:
+			carry = deadState(s.symbolic)
+			exit = join(exit, body)
+		}
+	}
+	exit = join(exit, carry)
+	if !catchAll {
+		exit = join(exit, s)
+	}
+	return exit
+}

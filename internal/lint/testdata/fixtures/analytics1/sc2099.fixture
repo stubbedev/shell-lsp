@@ -1,0 +1,17 @@
+### variable assigned its own name then plus one
+count=count + 1
+>>> SC2099 1:13
+
+### literal assigned then a star and a number
+total=size * 2
+>>> SC2037 1:1
+>>> SC2099 1:12
+>>> SC2211 1:12
+
+### quoted operator word still counts
+offset=base "-" 4
+>>> SC2099 1:13
+
+### command whose first argument is a plus sign is fine
+echo + done
+>>> SC1010 1:8

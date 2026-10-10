@@ -1,0 +1,15 @@
+### trapping SIGKILL
+trap shutdown SIGKILL
+>>> SC2173 1:15
+
+### trapping signal 9
+trap shutdown 9
+>>> SC2173 1:15
+
+### trapping lower-case stop
+trap pause_jobs stop
+>>> SC2173 1:17
+
+### handler named stop for the int signal
+trap 'stop' int
+>>> none

@@ -1,0 +1,13 @@
+### lone test wrapped in a subshell
+([ -n "$token" ])
+>>> SC2234 1:1
+
+### parenthesised test followed by and-list command
+([ -r "$config" ]) && source "$config"
+>>> SC1090 1:30
+>>> SC2154 1:8
+>>> SC2234 1:1
+
+### function body that is a parenthesised test
+is_root() ([ "$(id -u)" -eq 0 ])
+>>> SC2235 1:11

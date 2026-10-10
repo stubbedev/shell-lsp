@@ -1,0 +1,19 @@
+### trapping signal number 8
+trap on_fpe 8
+>>> SC2172 1:13
+
+### trapping the exit pseudo-signal 0
+trap cleanup 0
+>>> none
+
+### trapping portable number 14
+trap on_alarm 14
+>>> none
+
+### leading double dash disables the signal checks
+trap -- on_fpe 8
+>>> none
+
+### leading -p disables the signal checks
+trap -p 8
+>>> none

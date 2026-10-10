@@ -1,0 +1,10 @@
+### if condition is only a backtick substitution
+if `grep -q admin /etc/group`; then
+  echo present
+fi
+>>> SC2006 1:4
+>>> SC2092 1:4
+
+### backtick word followed by arguments is fine
+`command -v python3` --version
+>>> SC2006 1:1

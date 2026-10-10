@@ -1,0 +1,53 @@
+### two empty positional parameters leave the root
+rm -r "$1/$2"
+>>> SC2115 1:7
+
+### empty user leaves the home root
+rm -r /home/$user
+>>> SC2086 1:13
+>>> SC2115 1:7
+>>> SC2154 1:13
+
+### empty substitution leaves everything under home
+rm -fr /home/$(whoami)/*
+>>> SC2046 1:14
+>>> SC2115 1:8
+
+### empty config leaves everything under etc
+rm --recursive /etc/*$config*
+>>> SC2086 1:22
+>>> SC2115 1:16
+>>> SC2154 1:22
+
+### brace alternative reaches bin
+rm -r /{bin,sbin}/$exe
+>>> SC2086 1:19
+>>> SC2115 1:7
+>>> SC2154 1:19
+
+### nested brace alternatives reach usr and the root
+rm -r /{usr/{bin,sbin},}/$exe
+>>> SC2086 1:26
+>>> SC2115 1:7
+>>> SC2154 1:26
+
+### empty steam root leaves everything at the root
+rm -rf "$STEAMROOT/"*
+>>> SC2115 1:8
+
+### colon-question modifier guards the variable
+rm -rf /home/${USER:?}/*
+>>> SC2086 1:14
+
+### colon-hyphen default guards the variable
+rm -rf /home/${USER:-nobody}/*
+>>> SC2086 1:14
+
+### brace list of dotfiles under a directory is fine
+rm -rf "$DIR"/{.gitignore,.editorconfig,ci}
+>>> none
+
+### nested braces of meaningless names are fine
+rm -r /{{a,b},{c,d}}/$exe
+>>> SC2086 1:22
+>>> SC2154 1:22

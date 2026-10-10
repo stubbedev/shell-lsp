@@ -1,0 +1,35 @@
+### end token followed by a space and Windows line endings
+cat <<DONE 
+building
+DONE
+>>> SC1009 1:1
+>>> SC1017 1:12
+>>> SC1041 1:7
+>>> SC1042 1:7
+>>> SC1072 4:1
+>>> SC1073 1:5
+
+### two body lines containing the token
+cat <<STOP
+please STOP now
+do not STOP
+>>> SC1009 1:1
+>>> SC1041 1:7
+>>> SC1042 1:7
+>>> SC1072 4:1
+>>> SC1073 1:5
+
+### properly terminated document
+cat <<STOP
+please continue
+STOP
+>>> none
+
+### token not in the body at all
+cat <<STOP
+please continue
+finished
+>>> SC1009 1:1
+>>> SC1044 1:7
+>>> SC1072 4:1
+>>> SC1073 1:5

@@ -1,0 +1,21 @@
+### name followed by a nested expansion
+slot=2
+echo "${server$slot}"
+>>> SC2082 2:7
+>>> SC2154 2:7
+
+### dollar-hash nested as the name
+echo "${$#}"
+>>> SC2082 1:7
+
+### name with nested braced and arithmetic expansions
+n=1
+echo "${cfg${n}_$((n + 1))}"
+>>> SC2082 2:7
+>>> SC2154 2:7
+
+### pattern substitution with an expansion is fine
+needle=o
+greeting="hello world"
+echo "${greeting//$needle/0}"
+>>> none

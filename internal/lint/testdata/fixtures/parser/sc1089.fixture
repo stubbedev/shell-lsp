@@ -1,0 +1,33 @@
+### stray fi after a complete script
+if [ -f a ]; then echo a; fi
+fi
+>>> SC1089 2:1
+
+### stray done
+echo working
+done
+>>> SC1089 2:1
+
+### stray closing brace
+echo hi
+}
+>>> SC1089 2:1
+
+### stray closing parenthesis
+echo hi
+)
+>>> SC1089 2:1
+
+### stray double semicolon
+echo hi
+;;
+>>> SC1089 2:1
+
+### stray then
+echo hi
+then echo more
+>>> SC1089 2:1
+
+### balanced keywords
+if [ -f a ]; then echo a; fi
+>>> none

@@ -1,0 +1,13 @@
+### done glued to a comment
+for f in *; do echo "$f"; done# loop over files
+>>> SC1099 1:31
+
+### else glued to a comment
+if true; then echo a; else# fallback
+  echo b; fi
+>>> SC1099 1:27
+
+### space before the comment
+if true; then echo a; else # fallback
+  echo b; fi
+>>> none

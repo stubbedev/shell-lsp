@@ -1,0 +1,52 @@
+### for loop over echo of unquoted variable
+targets="alpha beta"
+for target in $(echo $targets); do
+  echo "deploying $target"
+done
+>>> SC2086 2:22
+>>> SC2116 2:15
+
+### date format built from backtick echo
+format="%Y-%m-%d"
+date +`echo "$format"`
+>>> SC2006 2:7
+>>> SC2046 2:7
+>>> SC2116 2:7
+
+### double-quoted substitution echoing two arguments
+summary="$(echo "host $(hostname) ready" $status)"
+printf '%s\n' "$summary"
+>>> SC2086 1:42
+>>> SC2116 1:10
+>>> SC2154 1:42
+
+### echo of read-file shortcut substitution
+motd=$(echo $(< /etc/motd))
+printf '%s\n' "$motd"
+>>> SC2046 1:13
+>>> SC2116 1:6
+
+### echo with -e flag is fine
+banner="$(echo -e "\tWelcome")"
+printf '%s\n' "$banner"
+>>> none
+
+### plain echo without substitution is fine
+echo $PATH
+>>> SC2086 1:6
+
+### echo with a glob argument is fine
+listing=$(echo files: *.png)
+printf '%s\n' "$listing"
+>>> none
+
+### echo of a single command substitution is left to SC2005
+kernel=$(echo "$(uname -r)")
+printf '%s\n' "$kernel"
+>>> SC2005 1:15
+
+### echo with no arguments in sh is fine
+#!/bin/sh
+blank=$(echo)
+printf '[%s]\n' "$blank"
+>>> none

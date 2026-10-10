@@ -1,0 +1,55 @@
+### piping into echo with an argument
+ls /var/log | echo "listing done"
+>>> SC2012 1:1
+>>> SC2216 1:15
+
+### piping into rm by full path
+find . -name '*.tmp' | /bin/rm
+>>> SC2216 1:24
+
+### piping into touch through command wrapper
+cat manifest.txt | command touch
+>>> SC2216 1:20
+
+### pipe-ampersand into sleep
+make all |& sleep 1
+>>> SC2216 1:13
+
+### xargs runs du so stdin is read
+find /srv -maxdepth 1 | xargs du -sh
+>>> SC2038 1:1
+
+### echo whose argument reads stdin through cat
+grep ERROR app.log | echo $(cat)
+>>> SC2005 1:27
+>>> SC2046 1:27
+
+### ls with a prefix assignment consuming stdin
+printf '%s\n' etc | dirs=$(cat) ls
+>>> none
+
+### cat heredoc with a stdin consuming substitution
+printf 'alpha\n' | cat <<EOT
+first: $(cat)
+EOT
+>>> none
+
+### du reading file list from stdin device
+find . -type f -print0 | du --files0-from=/dev/stdin -ch
+>>> none
+
+### du exclude list from fd 0
+find . -name '*.bak' | du --exclude-from=/dev/fd/0 -s .
+>>> none
+
+### yes into interactive recursive copy
+yes | cp -ri templates/ project/
+>>> none
+
+### yes into rm with the interactive long flag
+yes | rm --interactive *.log
+>>> SC2035 1:24
+
+### process substitution in the stage counts as a consumer
+dmesg | chmod 644 <(cat)
+>>> none

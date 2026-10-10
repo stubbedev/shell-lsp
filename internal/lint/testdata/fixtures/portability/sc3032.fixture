@@ -1,0 +1,11 @@
+### named coprocess in sh
+#!/bin/sh
+coproc worker { :; }
+>>> SC2034 2:1
+>>> SC3032 2:1
+
+### named coprocess in dash
+#!/bin/dash
+coproc worker { :; }
+>>> SC2034 2:1
+>>> SC3032 2:1

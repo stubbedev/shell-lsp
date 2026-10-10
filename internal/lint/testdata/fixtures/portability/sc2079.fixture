@@ -1,0 +1,25 @@
+### pi literal in arithmetic command
+#!/bin/bash
+radius=4
+(( area = 3.14 * radius ))
+echo "$area"
+>>> SC2079 3:11
+
+### decimal index into indexed array
+#!/bin/bash
+weights[1.2]=heavy
+echo "${weights[@]}"
+>>> SC2079 2:9
+
+### decimal key into associative array is text
+#!/bin/bash
+declare -A weights
+weights[1.2]=heavy
+echo "${weights[@]}"
+>>> none
+
+### decimal literal in arithmetic expansion in dash
+#!/bin/dash
+step=2
+echo $(( 1.5 + step ))
+>>> SC2079 3:10

@@ -1,0 +1,97 @@
+### quiet grep after a pipe with long-form pipefail is not flagged by shellcheck 0.11
+set -o pipefail
+cat server.log | grep -q ERROR
+>>> none
+
+### long quiet option after a pipe is not flagged by shellcheck 0.11
+set -o pipefail
+cat server.log | grep --quiet ERROR
+>>> none
+
+### iq cluster after a pipe is not flagged by shellcheck 0.11
+set -o pipefail
+cat server.log | grep -iq error
+>>> none
+
+### quiet grep at the end of a three-stage pipeline is not flagged by shellcheck 0.11
+set -o pipefail
+journalctl -u nginx | tail -n 100 | grep -q 'upstream timed out'
+>>> none
+
+### pipefail from an euo cluster is not flagged by shellcheck 0.11
+set -euo pipefail
+ps aux | grep -q '[s]shd'
+>>> SC2009 2:1
+
+### max-count grep in the middle of a pipeline is not flagged by shellcheck 0.11
+set -o pipefail
+dmesg | grep -m 1 usb | cut -c1-40
+>>> none
+
+### files-without-match grep in the middle of a pipeline is not flagged by shellcheck 0.11
+set -o pipefail
+find . -name '*.go' | grep -L TODO | sort
+>>> none
+
+### egrep with -q after a pipe is not flagged by shellcheck 0.11
+set -o pipefail
+cat server.log | egrep -q 'ERROR|FATAL'
+>>> SC2196 2:18
+
+### fgrep with -q after a pipe is not flagged by shellcheck 0.11
+set -o pipefail
+cat server.log | fgrep -q '[warn]'
+>>> SC2197 2:18
+
+### no pipefail anywhere
+cat server.log | grep -q ERROR
+>>> none
+
+### quiet grep on a file without a pipeline
+set -o pipefail
+grep -q ERROR server.log
+>>> none
+
+### grep without an early-exit flag
+set -o pipefail
+cat server.log | grep ERROR
+>>> none
+
+### quiet grep as the first stage
+set -o pipefail
+grep -q ERROR server.log | cat
+>>> none
+
+### no pipefail and grep on a file
+grep -q ERROR server.log
+>>> none
+
+### quiet grep only inside a bash -c string
+set -o pipefail
+cat server.log | bash -c 'grep -q ERROR'
+>>> none
+
+### -e takes -q as the pattern
+set -o pipefail
+cat server.log | grep -e -q
+>>> none
+
+### eq cluster attaches q as the pattern
+set -o pipefail
+cat server.log | grep -eq server.log
+>>> none
+
+### long regexp option takes -q as its argument
+set -o pipefail
+cat server.log | grep --regexp -q
+>>> none
+
+### double dash makes -q an operand
+set -o pipefail
+cat server.log | grep -- -q
+>>> none
+
+### long silent option is not counted
+set -o pipefail
+cat server.log | grep --silent ERROR
+>>> none

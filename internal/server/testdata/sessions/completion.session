@@ -1,5 +1,5 @@
 # completion of variables, keywords with snippets, signature help
--> {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{"textDocument":{"diagnostic":{},"completion":{"completionItem":{"snippetSupport":true}}}},"initializationOptions":{"shellcheck":{"enable":false}}}}
+-> {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{"textDocument":{"diagnostic":{},"completion":{"completionItem":{"snippetSupport":true}}}},"initializationOptions":{"lint":{"enable":false}}}}
 <- {"jsonrpc":"2.0","id":1}
 -> {"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///w/a.bash","languageId":"shellscript","version":1,"text":"greeting_text=hi\ngreet() { local who=\"$1\"; echo \"$who\"; }\necho \"$greeting_\"\nwhil\ngreet \n"}}}
 -> {"jsonrpc":"2.0","id":2,"method":"textDocument/completion","params":{"textDocument":{"uri":"file:///w/a.bash"},"position":{"line":2,"character":16}}}

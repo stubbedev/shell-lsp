@@ -1,0 +1,65 @@
+### cd into loop variable and back to parent
+for project in services/*; do
+  cd $project
+  make test
+  cd ..
+done
+>>> SC2086 2:6
+>>> SC2103 4:3
+>>> SC2164 2:3
+
+### cd into a variable then back with dash
+cd "$build_root"
+cmake --build .
+cd -
+>>> SC2103 3:1
+>>> SC2154 1:5
+>>> SC2164 1:1
+>>> SC2164 3:1
+
+### cd into quoted loop variable then back to parent
+for repo in */; do
+  cd "$repo"
+  git pull --ff-only
+  cd ..
+done
+>>> SC2103 4:3
+>>> SC2164 2:3
+
+### first cd guarded with an or-list
+for project in services/*; do
+  cd "$project" || continue
+  make test
+  cd ..
+done
+>>> none
+
+### while loop containing only a cd to the parent
+while [ "$PWD" != "/" ]; do
+  cd ..
+done
+>>> none
+
+### leading cd is itself a revert
+cd ..
+ls -la
+cd ..
+>>> none
+
+### errexit set at the start of the script
+set -e
+for project in services/*; do
+  cd "$project"
+  make lint
+  cd ..
+done
+>>> none
+
+### directive disables the check on the reverting cd
+for project in services/*; do
+  cd "$project"
+  make docs
+  # shellcheck disable=SC2103
+  cd ..
+done
+>>> SC2164 2:3

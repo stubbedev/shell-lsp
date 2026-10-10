@@ -38,6 +38,15 @@ crosscheck:
     go build -o "$bin/shell-lsp" .
     go run ./cmd/crosscheck -ours "$bin/shell-lsp"
 
+# Label new lint fixtures with shellcheck's findings, then check every fixture against it.
+fixtures:
+    go test ./internal/lint -run Shellcheck -update
+    go test ./internal/lint
+
+# Compare the linter with shellcheck, code by code, over every shell script under the given paths.
+lintcheck +paths:
+    go run ./cmd/lintcheck {{paths}}
+
 # Drive the server from headless Neovim: diagnostics, hover, definition, completion.
 smoke:
     #!/usr/bin/env bash

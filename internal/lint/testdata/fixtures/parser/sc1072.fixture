@@ -1,0 +1,20 @@
+### trap handler with an unbalanced double quote
+trap 'echo "bye' EXIT
+>>> SC1009 1:6
+>>> SC1072 1:15
+>>> SC1073 1:11
+
+### unterminated double quote in the script
+echo "unterminated
+>>> SC1009 1:1
+>>> SC1072 2:1
+>>> SC1073 1:6
+
+### trap handler that is not a plain literal
+handler='echo "bye'
+trap "$handler" EXIT
+>>> SC2064 2:7
+
+### trap with a leading double hyphen
+trap -- 'echo "bye' EXIT
+>>> none

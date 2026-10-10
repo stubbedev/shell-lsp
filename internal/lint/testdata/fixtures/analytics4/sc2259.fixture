@@ -1,0 +1,28 @@
+### grep fed from both a pipe and a file
+ls /etc | grep conf < filelist.txt
+>>> SC2010 1:1
+>>> SC2259 1:21
+
+### quoted heredoc body has no real consumer
+date | cat <<'EOT'
+literal $(cat) here
+EOT
+>>> SC2259 1:14
+
+### here-string on a piped stage
+uptime | grep load <<< "load average"
+>>> SC2259 1:20
+
+### unquoted heredoc with a substitution consumer
+date | cat <<EOT
+captured: $(cat)
+EOT
+>>> none
+
+### fd duplication makes the stage undeterminable
+journalctl | grep fail 2>&1 < saved.log
+>>> none
+
+### plain pipeline without input redirection
+ps aux | grep sshd
+>>> SC2009 1:1

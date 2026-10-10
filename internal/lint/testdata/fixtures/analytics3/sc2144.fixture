@@ -1,0 +1,16 @@
+### single-bracket -e on a glob
+if [ -e *.mp3 ]; then
+  echo "music found"
+fi
+>>> SC2144 1:9
+
+### ksh single-bracket -e on a glob
+#!/bin/ksh
+if [ -e *.mp3 ]; then
+  echo "music found"
+fi
+>>> none
+
+### -v on an array element in double brackets
+[[ -v playlist[0] ]] && echo "has first"
+>>> none

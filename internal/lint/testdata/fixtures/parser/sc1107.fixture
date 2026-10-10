@@ -1,0 +1,9 @@
+### unknown key before a valid disable
+# shellcheck severity=error disable=SC2086
+echo $1
+>>> SC1107 1:14
+
+### only known keys
+# shellcheck disable=SC2086
+echo $1
+>>> none

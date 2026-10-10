@@ -1,0 +1,8 @@
+### expansion applied to dollar-parenthesis
+echo "${$(whoami)//a/b}"
+>>> SC2300 1:9
+
+### expansion applied to backticks
+echo "${`uname`%x}"
+>>- SC2006 1:9 -- mvdan rejects a command substitution as the name inside ${}; reported as a syntax error instead
+>>> SC2300 1:9

@@ -1,0 +1,34 @@
+### double bracket or of two -ne on same variable
+if [[ $status -ne $ok_code || $status -ne $retry_code ]]; then
+  echo failed
+fi
+>>> SC2055 1:28
+>>> SC2154 1:19
+>>> SC2154 1:43
+>>> SC2154 1:7
+
+### single bracket or of two != on same quoted variable
+[ "$answer" != yes || "$answer" != y ] && echo "not confirmed"
+>>> SC2055 1:20
+>>> SC2109 1:20
+>>> SC2154 1:4
+
+### single bracket -o of two != comparisons
+[ "$env" != prod -o "$env" != staging ] && echo dev
+>>> SC2055 1:18
+>>> SC2154 1:4
+>>> SC2166 1:18
+
+### different left sides are fine
+[ prod != "$primary" -o staging != "$secondary" ] && echo mismatch
+>>> SC2154 1:12
+>>> SC2154 1:37
+>>> SC2166 1:22
+
+### second right side is a glob
+[[ $dir != /home || $dir != /home/*/* ]] && echo elsewhere
+>>> SC2154 1:4
+
+### identical comparisons are fine
+[[ $mode != fast || $mode != fast ]] && echo slow
+>>> SC2154 1:4

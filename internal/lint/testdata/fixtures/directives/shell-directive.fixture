@@ -1,0 +1,184 @@
+### sh shebang selects POSIX sh
+#!/bin/sh
+[[ -d "$1" ]] && echo "directory"
+>>> SC3010 2:1
+
+### env running ksh selects ksh
+#!/usr/bin/env ksh
+(( ratio = 2.5 ))
+echo "$ratio"
+>>> none
+
+### no shebang and no shell anywhere defaults to bash
+login_shell=/bin/bash
+(( ratio = 2.5 ))
+echo "$ratio $login_shell"
+>>> SC2079 2:12
+>>> SC2148 1:1
+
+### sh shebang with an extra flag still selects sh
+#!/bin/sh -eu
+[[ -d "$1" ]] && echo "directory"
+>>> SC3010 2:1
+
+### file-wide shell directive overrides a ksh shebang
+#!/bin/ksh
+# shellcheck shell=sh
+[[ -d "$1" ]] && echo "directory"
+>>> SC3010 3:1
+
+### shell directive without a shebang
+# shellcheck shell=sh
+[[ -d "$1" ]] && echo "directory"
+>>> SC3010 2:1
+
+### space between hash-bang and the sh path
+#! /bin/sh
+[[ -d "$1" ]] && echo "directory"
+>>> SC3010 2:1
+
+### space between hash-bang and the ash path selects dash (ash note included)
+#! /bin/ash
+count() { local n=$#; echo "$n"; }
+count "$@"
+[[ -d "$1" ]] && echo "directory"
+>>> SC2187 1:1
+>>> SC3010 4:1
+
+### env with the short split-string flag, dash and a further flag
+#!/usr/bin/env -S dash -e
+count() { local n=$#; echo "$n"; }
+count "$@"
+[[ -d "$1" ]] && echo "directory"
+>>> SC3010 4:1
+
+### env with the long split-string flag and an empty equals, then dash
+#!/usr/bin/env --split-string= dash -x
+count() { local n=$#; echo "$n"; }
+count "$@"
+[[ -d "$1" ]] && echo "directory"
+>>> SC3010 4:1
+
+### busybox sh is distinct from plain sh
+#!/bin/busybox sh
+login_shell=/bin/busybox
+[[ -d "$1" ]] && echo "$login_shell"
+items=(a b)
+>>> SC2034 4:1
+>>> SC3030 4:7
+
+### busybox ash selects busybox sh but is not a recognised shebang prefix
+#!/bin/busybox ash
+login_shell=/bin/busybox
+[[ -d "$1" ]] && echo "$login_shell"
+items=(a b)
+>>> SC1008 1:1
+>>> SC2034 4:1
+>>> SC3030 4:7
+
+### python shebang skips the body entirely
+#!/usr/bin/python3
+default_shell=/bin/sh
+echo $1
+>>> SC1071 1:1
+
+### command-line shell (the harness passes --shell=bash) parses a python-shebang body
+#!/usr/bin/python3
+echo "$1"
+>>> none
+
+### python shebang with a file-wide shell directive parses the body
+#!/usr/bin/python3
+# shellcheck shell=sh
+echo "$1"
+>>> none
+
+### zsh shebang with a shell directive is parsed as that shell
+#!/usr/bin/zsh
+# shellcheck shell=bash
+names=(one two)
+echo "${names[@]}"
+>>> none
+
+### unknown shell directive still suppresses the unsupported-shell check
+#!/usr/bin/perl
+# shellcheck shell=perl
+echo "$1"
+>>> SC1103 2:20
+
+### unknown shell directive does not fall back to the shebang
+#!/bin/sh
+# shellcheck shell=fish
+[[ -d "$1" ]] && echo "directory"
+>>> SC1103 2:20
+
+### unknown shell directive alone falls back to bash
+# shellcheck shell=tcsh
+(( ratio = 2.5 ))
+echo "$ratio"
+>>> SC1103 1:20
+>>> SC2079 2:12
+
+### shell directive after the first command is ignored
+#!/bin/sh
+:
+# shellcheck shell=bash
+[[ -d "$1" ]] && echo "directory"
+>>> SC3010 4:1
+
+### first file-wide shell directive wins
+# shellcheck shell=sh
+# shellcheck shell=bash
+[[ -d "$1" ]] && echo "directory"
+>>> SC3010 3:1
+
+### bats maps to bash
+# shellcheck shell=bats
+(( ratio = 2.5 ))
+echo "$ratio"
+>>> SC2079 2:12
+
+### ksh88 maps to ksh
+# shellcheck shell=ksh88
+(( ratio = 2.5 ))
+echo "$ratio"
+>>> none
+
+### ksh93 maps to ksh
+# shellcheck shell=ksh93
+(( ratio = 2.5 ))
+echo "$ratio"
+>>> none
+
+### oksh maps to ksh
+# shellcheck shell=oksh
+(( ratio = 2.5 ))
+echo "$ratio"
+>>> none
+
+### busybox directive maps to busybox sh
+# shellcheck shell=busybox
+[[ -d "$1" ]] && echo "directory"
+items=(a b)
+>>> SC2034 3:1
+>>> SC3030 3:7
+
+### quoted busybox sh directive
+# shellcheck shell='busybox sh'
+[[ -d "$1" ]] && echo "directory"
+items=(a b)
+>>> SC2034 3:1
+>>> SC3030 3:7
+
+### ash directive maps to dash
+# shellcheck shell=ash
+count() { local n=$#; echo "$n"; }
+count "$@"
+[[ -d "$1" ]] && echo "directory"
+>>> SC3010 4:1
+
+### bash shebang reports fractional arithmetic
+#!/bin/bash
+(( ratio = 2.5 ))
+echo "$ratio"
+>>> SC2079 2:12

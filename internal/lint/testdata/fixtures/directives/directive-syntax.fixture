@@ -1,0 +1,215 @@
+### directive with no space after the hash is recognised
+#!/bin/sh
+#shellcheck disable=SC2086
+mkdir -p $1
+>>> none
+
+### tabs between hash, keyword and pair are allowed
+#!/bin/sh
+#	shellcheck	disable=SC2086
+mkdir -p $1
+>>> none
+
+### indented directive inside a function body
+#!/bin/sh
+backup() {
+    # shellcheck disable=SC2086
+    cp -r $1 /var/backups/
+}
+backup "$HOME"
+>>> none
+
+### keyword in other letter case is just a comment
+#!/bin/sh
+# ShellCheck disable=SC2086
+mkdir -p $1
+>>> SC2086 3:10
+
+### two plain numeric codes separated by a comma
+#!/bin/sh
+# shellcheck disable=2086,2034
+unused_flag=1
+rm -f $1
+>>> none
+
+### two separate disable keys on one line
+#!/bin/sh
+# shellcheck disable=SC2086 disable=SC2034
+unused_flag=1
+rm -f $1
+>>> none
+
+### disable, source of the null device and another disable together
+#!/bin/sh
+# shellcheck disable=SC2086 source=/dev/null disable=SC2034
+retries=3
+. "$1"
+rm -f $1
+>>> none
+
+### trailing plain-english comment after the pairs
+#!/bin/sh
+# shellcheck disable=SC2086 # the caller passes a single safe token
+rm -f $1
+>>> none
+
+### trailing comment that looks like a directive with an unknown key is ignored
+#!/bin/sh
+# shellcheck disable=SC2086 # shellcheck frobnicate=yes
+rm -f $1
+>>> none
+
+### list mixing a single code, an SC range and another code
+#!/bin/sh
+# shellcheck disable=SC2034,SC2080-SC2090,SC2154
+leftover=1
+echo "$undefined_thing" $1
+>>> none
+
+### disable all
+#!/bin/sh
+# shellcheck disable=all
+leftover=1
+echo "$undefined_thing" $1
+>>> none
+
+### quoted source and quoted source-path containing spaces
+#!/bin/bash
+# shellcheck source='/dev/null' source-path="lib dir"
+. "$1"
+echo "loaded"
+>>> none
+
+### single-quoted disable list, double-quoted enable and single-quoted shell
+# shellcheck disable='SC2086,SC2034' enable="require-variable-braces" shell='sh'
+spare=1
+echo $1
+>>> none
+
+### word without an equals sign breaks the parse
+#!/bin/sh
+# shellcheck please ignore the next line
+echo $1
+>>> SC1072 2:20
+>>> SC1073 2:1
+>>+ SC2086 3:6 -- shellcheck abandons the script at its parse error; this linter parses it and keeps checking
+
+### keyword followed by more letters breaks the parse
+#!/bin/sh
+# shellchecker disable=SC2086
+echo $1
+>>> SC1072 2:13
+>>> SC1073 2:1
+>>+ SC2086 3:6 -- shellcheck abandons the script at its parse error; this linter parses it and keeps checking
+
+### SC prefix without digits is a syntax error
+#!/bin/sh
+# shellcheck disable=SC
+echo $1
+>>> SC1072 2:24
+>>> SC1073 2:1
+>>+ SC2086 3:6 -- shellcheck abandons the script at its parse error; this linter parses it and keeps checking
+
+### range missing its second code is a syntax error
+#!/bin/sh
+# shellcheck disable=2086-
+echo $1
+>>> SC1072 2:27
+>>> SC1073 2:1
+>>+ SC2086 3:6 -- shellcheck abandons the script at its parse error; this linter parses it and keeps checking
+
+### empty disable value gives an empty list without error
+#!/bin/sh
+# shellcheck disable=
+echo $1
+>>> SC2086 3:6
+
+### stray number after the pairs is leftover text
+#!/bin/sh
+# shellcheck disable=SC2086 42
+echo $1
+>>> SC1125 2:29
+
+### leftover punctuation after the pairs
+#!/bin/sh
+# shellcheck disable=SC2086 ,
+echo $1
+>>> SC1125 2:29
+
+### unknown key warns and the following disable still applies
+#!/bin/sh
+# shellcheck frobnicate=yes disable=SC2086
+echo $1
+>>> SC1107 2:14
+
+### unknown key value is skipped up to the next blank
+#!/bin/sh
+# shellcheck colour=always,never disable=SC2086
+echo $1
+>>> SC1107 2:14
+
+### unknown enable names are ignored silently
+#!/bin/sh
+# shellcheck enable=no-such-check
+[ "$1" ] && echo "argument given"
+>>> none
+
+### enable all turns on every optional check
+#!/bin/sh
+# shellcheck enable=all
+[ "$1" ] && echo "argument given"
+>>> SC2244 3:3
+
+### unknown shell name in a directive
+# shellcheck shell=fish
+echo "$1"
+>>> SC1103 1:20
+
+### absolute interpreter path in a shell directive is unknown
+# shellcheck shell=/bin/bash
+echo "$1"
+>>> SC1103 1:20
+
+### external-sources false is accepted in a script
+#!/bin/sh
+# shellcheck external-sources=false
+echo "$1"
+>>> none
+
+### external-sources true is rejected in a script
+#!/bin/sh
+# shellcheck external-sources=true
+echo "$1"
+>>> SC1144 2:31
+
+### external-sources with a word other than true or false
+#!/bin/sh
+# shellcheck external-sources=maybe
+echo "$1"
+>>> SC1145 2:31
+
+### external-sources with a quoted value
+#!/bin/sh
+# shellcheck external-sources='false'
+echo "$1"
+>>> none
+
+### extended-analysis with a word other than true or false
+#!/bin/sh
+# shellcheck extended-analysis=sometimes
+echo "$1"
+>>> SC1146 2:32
+
+### extended-analysis with a quoted value
+#!/bin/sh
+# shellcheck extended-analysis="false"
+echo "$1"
+>>> none
+
+### disable key repeated across two directives accumulates
+#!/bin/sh
+# shellcheck disable=SC2086
+# shellcheck disable=SC2034
+scratch=1
+echo $1
+>>> none

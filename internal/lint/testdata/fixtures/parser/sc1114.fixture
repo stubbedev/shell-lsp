@@ -1,0 +1,20 @@
+### spaces before the shebang
+  #!/bin/sh
+echo hello
+>>> SC1114 1:1
+
+### tab before the shebang
+	#!/bin/sh
+echo hello
+>>> SC1114 1:1
+
+### spaces before a shebang that also has a space after the hash
+  # !/bin/sh
+echo hello
+>>> SC1114 1:1
+>>> SC1115 1:4
+
+### shebang at column one
+#!/bin/sh
+echo hello
+>>> none

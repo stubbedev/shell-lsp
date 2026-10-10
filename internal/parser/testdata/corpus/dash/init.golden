@@ -17,7 +17,7 @@ reference 12:13-12:17 "NAME" within=1
 reference 16:9-16:16 "PIDFILE" within=2
 reference 17:16-17:23 "PIDFILE" within=2
 reference 17:38-17:45 "PIDFILE" within=2
-command 6:2-6:7 "local" args=1 within=1
+command 6:2-6:7 "local" args=0 within=1
 command 7:5-7:6 "[" args=3 within=1
 command 8:3-8:7 "read" args=2 within=1
 command 9:3-9:7 "echo" args=1 within=1

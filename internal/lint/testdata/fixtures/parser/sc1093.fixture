@@ -1,0 +1,8 @@
+### file not on the source chain
+source /dev/null
+echo ready
+>>> none
+
+### harness cannot follow sources so recursion is never seen
+. ./lib/recursive.sh
+>>> SC1091 1:3

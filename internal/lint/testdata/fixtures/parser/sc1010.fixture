@@ -1,0 +1,40 @@
+### done glued onto a command line
+for host in alpha beta; do ssh "$host" uptime done
+done
+>>> SC1010 1:47
+
+### then and fi used as plain arguments
+echo then fi
+>>> SC1010 1:11
+>>> SC1010 1:6
+
+### do and esac used as plain arguments
+printf '%s\n' do esac
+>>> SC1010 1:15
+>>> SC1010 1:18
+
+### esac as an alternative in a case pattern
+action=$1
+case $action in
+  halt|esac) echo stopping ;;
+esac
+>>> SC1010 3:8
+
+### other closing keywords in a case pattern are not checked
+action=$1
+case $action in
+  then|done|fi) echo odd ;;
+esac
+>>> none
+
+### quoted keyword is fine
+echo "done" 'fi'
+>>> none
+
+### keyword with extra characters is fine
+echo done2 fiddle thenceforth
+>>> none
+
+### keyword with different case is fine
+echo Done FI
+>>> none

@@ -1,0 +1,95 @@
+### function on the left of and
+set -e
+migrate() { :; }
+migrate && echo "migrated"
+>>> none
+
+### function on the left of or
+set -e
+migrate() { :; }
+migrate || echo "migration failed"
+>>> none
+
+### negated function call
+set -e
+is_locked() { :; }
+! is_locked
+>>> none
+
+### function as an if condition
+set -e
+healthy() { :; }
+if healthy; then
+  echo "up"
+fi
+>>> none
+
+### function after set -e in an if condition list
+set -e
+healthy() { :; }
+if set -e; healthy; then
+  echo "up"
+fi
+>>> none
+
+### function as a while condition
+set -e
+pending() { :; }
+while pending; do
+  sleep 1
+done
+>>> none
+
+### function after set -e in a while condition list
+set -e
+pending() { :; }
+while set -e; pending; do
+  sleep 1
+done
+>>> none
+
+### function as an until condition
+set -e
+ready() { :; }
+until ready; do
+  sleep 1
+done
+>>> none
+
+### function after set -e in an until condition list
+set -e
+ready() { :; }
+until set -e; ready; do
+  sleep 1
+done
+>>> none
+
+### substitution with errexit inside an or-ed assignment
+set -e
+fetch() { :; }
+body=$(set -e; fetch) || :
+>>> SC2034 3:1
+
+### function on the right side of or
+set -e
+notify() { :; }
+false || notify
+>>> none
+
+### function passed as an argument
+set -e
+step() { :; }
+wrap() { "$@"; }
+wrap step
+>>> none
+
+### no errexit in the script
+migrate() { :; }
+migrate || echo "migration failed"
+>>> none
+
+### or-ed assignment without any function
+set -e
+reply=$(echo "") || :
+>>> SC2034 2:1
+>>> SC2116 2:7

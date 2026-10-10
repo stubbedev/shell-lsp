@@ -1,0 +1,17 @@
+### single quoted command as the whole list
+for conf in 'find /etc -name *.conf'; do
+  echo "$conf"
+done
+>>> SC2041 1:13
+
+### more than one single quoted word is fine
+for svc in 'nginx' 'redis'; do
+  systemctl restart "$svc"
+done
+>>> none
+
+### word only partly single quoted is fine
+for svc in 'web'$suffix; do
+  echo "$svc"
+done
+>>> SC2154 1:17

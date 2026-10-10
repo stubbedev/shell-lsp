@@ -1,0 +1,11 @@
+### subshell with two numbers and -gt
+if ( 5 -gt 3 ); then echo bigger; fi
+>>> SC2205 1:4
+
+### subshell runs grep -c
+if ( grep -c pattern file.txt ); then echo counted; fi
+>>> none
+
+### single-bracket comparison
+if [ 5 -gt 3 ]; then echo bigger; fi
+>>> SC2050 1:8

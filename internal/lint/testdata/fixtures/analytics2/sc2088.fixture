@@ -1,0 +1,26 @@
+### double-quoted tilde path in assignment
+config="~/.config/app.toml"
+cat "$config"
+>>> SC2088 1:9
+
+### single-quoted tilde path as redirection target
+date > '~/last-run.txt'
+>>> SC2088 1:8
+
+### unquoted tilde path is fine
+config=~/.config/app.toml
+cat "$config"
+>>> none
+
+### tilde after a leading slash is fine
+ls '/srv/~backup'
+>>> none
+
+### awk tilde operator is fine
+awk '$1 ~ /error/ { print }' app.log
+>>> none
+
+### quoted tilde without slash is fine
+owner="~deploy"
+echo "$owner"
+>>> none

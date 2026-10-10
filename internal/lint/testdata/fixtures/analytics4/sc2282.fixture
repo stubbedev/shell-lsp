@@ -1,0 +1,11 @@
+### variable name starting with digits
+411toppm=true
+>>> SC2282 1:1
+
+### single digit then letters
+2fa_enabled=yes
+>>> SC2282 1:1
+
+### all digits is a positional instead
+42=answer
+>>> SC2270 1:1

@@ -1,0 +1,43 @@
+### comma then space between elements
+ports=(80, 443)
+echo "${ports[@]}"
+>>> SC2054 1:7
+
+### append with commas and no spaces
+hosts=()
+hosts+=(web1,web2,web3)
+echo "${hosts[@]}"
+>>> SC2054 2:8
+
+### index-style elements separated by comma and space
+declare -A colors
+colors=([ok]=green, [fail]=red)
+echo "${colors[ok]}"
+>>> SC2054 2:8
+
+### index-style elements joined by commas
+declare -A limits
+limits=([cpu]=2,[mem]=512,[disk]=10)
+echo "${limits[cpu]}"
+>>> SC2054 2:8
+>>> SC2102 2:17
+
+### single word with a comma
+pair=(left,right)
+echo "${pair[0]}"
+>>> SC2054 1:6
+
+### comma inside double-quoted element is fine
+fields=(id "name,email" created)
+echo "${fields[@]}"
+>>> none
+
+### commas inside single-quoted elements are fine
+csv=('a,' 'b,c')
+echo "${csv[@]}"
+>>> none
+
+### brace expansion with commas is fine
+files=(report.{csv,json})
+echo "${files[@]}"
+>>> none

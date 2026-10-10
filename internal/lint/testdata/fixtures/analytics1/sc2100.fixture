@@ -1,0 +1,49 @@
+### self referencing increment without spaces
+retries=retries+1
+>>> SC2034 1:1
+>>> SC2100 1:9
+
+### variable multiplied by a number without spaces
+n=3
+width=n*4
+>>> SC2034 1:1
+>>> SC2034 2:1
+>>> SC2100 2:7
+>>> SC2125 2:7
+
+### hyphenated word whose prefix is an assigned variable
+build=1
+target=build-release
+echo "$target"
+>>> SC2034 1:1
+>>> SC2100 2:8
+
+### quoted part in the value is fine
+n=3
+tag=n+"1"
+echo "$tag"
+>>> SC2034 1:1
+
+### expansion in the value is fine
+n=3
+next=n+$step
+echo "$next"
+>>> SC2034 1:1
+>>> SC2154 2:8
+
+### leading identifier never assigned is fine
+release=nightly-2
+echo "$release"
+>>> none
+
+### division is not recognised
+n=8
+half=n/2
+echo "$half"
+>>> SC2034 1:1
+
+### nothing after the operator is fine
+n=1
+trail=n+
+echo "$trail"
+>>> SC2034 1:1

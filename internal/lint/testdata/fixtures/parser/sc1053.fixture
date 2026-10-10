@@ -1,0 +1,16 @@
+### semicolon right after else
+if [ -w /var/log ]; then
+  logdir=/var/log
+else; logdir=/tmp
+fi
+echo "$logdir"
+>>> SC1053 3:5
+
+### else followed by a newline
+if [ -w /var/log ]; then
+  logdir=/var/log
+else
+  logdir=/tmp
+fi
+echo "$logdir"
+>>> none

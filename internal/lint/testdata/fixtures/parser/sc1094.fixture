@@ -1,0 +1,10 @@
+### harness cannot follow sources so a broken file is never parsed
+source ./lib/broken.sh
+echo $1
+>>> SC1091 1:8
+>>> SC2086 2:6
+
+### null device parses trivially
+source /dev/null
+echo "$1"
+>>> none

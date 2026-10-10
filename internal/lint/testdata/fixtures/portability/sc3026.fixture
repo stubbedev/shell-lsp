@@ -1,0 +1,9 @@
+### caret-negated digit class between stars in sh
+#!/bin/sh
+echo *[^0-9]*
+>>> SC3026 2:7
+
+### caret-negated letter class at word start in dash
+#!/bin/dash
+echo [^a]bc
+>>> SC3026 2:6

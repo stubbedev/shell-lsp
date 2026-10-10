@@ -1,0 +1,9 @@
+### redirecting into a star glob in sh
+#!/bin/sh
+date > *.txt
+>>> SC3031 2:6
+
+### redirecting into a star glob in dash
+#!/bin/dash
+date > *.txt
+>>> SC3031 2:6

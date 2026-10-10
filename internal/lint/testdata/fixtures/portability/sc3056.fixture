@@ -1,0 +1,20 @@
+### variable names by prefix in sh
+#!/bin/sh
+echo "${!BUILD_*}"
+>>> SC3053 2:7
+>>> SC3056 2:7
+
+### bare variable names by prefix in busybox
+#!/bin/busybox sh
+# shellcheck shell=busybox
+deploy_target=prod
+${!dep*}
+>>> SC2034 3:1
+>>> SC3053 4:1
+>>> SC3056 4:1
+
+### variable names by prefix in dash
+#!/bin/dash
+echo "${!BUILD_*}"
+>>> SC3053 2:7
+>>> SC3056 2:7

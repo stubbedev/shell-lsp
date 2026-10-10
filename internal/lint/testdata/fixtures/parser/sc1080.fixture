@@ -1,0 +1,43 @@
+### -o conjunction on the next line of a single bracket test
+if [ "$a" = 1 
+  -o "$b" = 2 ]; then echo yes; fi
+>>> SC1080 1:15
+>>> SC2154 1:7
+>>> SC2154 2:7
+>>> SC2166 2:3
+
+### newline right after the opening single bracket
+if [
+  -d /srv/data ]; then echo yes; fi
+>>> SC1080 1:5
+
+### escaped newline inside a single bracket test
+if [ "$a" = 1 \
+  -o "$b" = 2 ]; then echo yes; fi
+>>> SC2154 1:7
+>>> SC2154 2:7
+>>> SC2166 2:3
+
+### double brackets with the or operator alone on a line
+if [[
+  -d /srv/data
+  ||
+  -d /mnt/data ]]; then echo yes; fi
+>>> none
+
+### double brackets with a newline after the opening and the or operator at a line end
+if [[
+  -d /srv/data   ||
+  -d /mnt/data ]]; then echo yes; fi
+>>> none
+
+### double brackets with the or operator on its own line between comparisons
+if [[ -d /srv/data
+  ||
+  -d /mnt/data ]]; then echo yes; fi
+>>> none
+
+### double brackets with the second comparison on the next line
+if [[ -d /srv/data ||
+  -d /mnt/data ]]; then echo yes; fi
+>>> none

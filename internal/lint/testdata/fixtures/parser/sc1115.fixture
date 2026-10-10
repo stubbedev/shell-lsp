@@ -1,0 +1,14 @@
+### space between hash and bang
+# !/bin/sh
+echo hello
+>>> SC1115 1:2
+
+### tab between hash and bang
+#	!/bin/bash
+echo hello
+>>> SC1115 1:2
+
+### hash and bang adjacent
+#!/bin/sh
+echo hello
+>>> none

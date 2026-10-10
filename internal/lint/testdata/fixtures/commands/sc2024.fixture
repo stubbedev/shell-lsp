@@ -1,0 +1,35 @@
+### sudo does not cover writing to proc
+sudo echo 3 > /proc/sys/vm/drop_caches
+>>> SC2024 1:13
+
+### doas stdin redirection is not flagged by shellcheck 0.11
+doas mysql inventory < /root/schema.sql
+>>> none
+
+### run0 append redirection is not flagged by shellcheck 0.11
+run0 echo "nameserver 1.1.1.1" >> /etc/resolv.conf
+>>> none
+
+### sudo does not cover the combined output redirection
+sudo apt-get update &> /var/log/apt-refresh.log
+>>> SC2024 1:22
+
+### duplicating stderr onto stdout is fine
+sudo make install 2>&1
+>>> none
+
+### explicit stderr descriptor to a log is fine
+doas rc-service nginx reload 2> reload.log
+>>> none
+
+### discarding output to the null device is fine
+run0 systemctl restart sshd > /dev/null 2>&1
+>>> none
+
+### sudo does not cover reading the input file
+sudo mysql inventory < /root/schema.sql
+>>> SC2024 1:22
+
+### sudo does not cover appending to a protected file
+sudo echo "nameserver 1.1.1.1" >> /etc/resolv.conf
+>>> SC2024 1:32

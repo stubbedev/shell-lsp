@@ -1,0 +1,41 @@
+### appending one to a counter
+retries+=1
+>>> SC2324 1:1
+
+### appending a larger number
+offset+=42
+>>> SC2324 1:1
+
+### appending a numeric variable name
+step=4
+pos+=step
+>>> SC2034 1:1
+>>> SC2324 2:1
+
+### appending a numeric variable expansion
+step=4
+pos+=$step
+>>> SC2324 2:1
+
+### arithmetic command increment
+(( retries += 1 ))
+>>> none
+
+### integer declared variable
+declare -i total=0
+total+=1
+>>> none
+
+### quoted digit is text on purpose
+version+='1'
+>>> none
+
+### variable holding a word
+suffix=foo
+name+=suffix
+>>> SC2034 1:1
+
+### integer array element
+declare -ia counts
+counts[2]+=1
+>>> none

@@ -76,9 +76,8 @@ func TestSourcedFilesActAsImports(t *testing.T) {
 	}
 }
 
-func TestShellcheckFollowsSourcedFiles(t *testing.T) {
+func TestLintFollowsSourcedFiles(t *testing.T) {
 	t.Parallel()
-	requireShellcheck(t)
 
 	root := t.TempDir()
 	lib := filepath.Join(root, "lib.sh")
@@ -87,29 +86,17 @@ func TestShellcheckFollowsSourcedFiles(t *testing.T) {
 	}
 	uri := fileuri.FromPath(filepath.Join(root, "main.sh"))
 	c, _ := startClient(t, `{"rootUri": "`+fileuri.FromPath(root)+`", "capabilities": {}}`)
-	c.notify("textDocument/didOpen", openParams(uri, "#!/bin/bash\nsource ./lib.sh\necho \"$lib_name\"\n"))
-	publishedWith := func(want func([]string) bool) []string {
-		t.Helper()
-		var got []string
-		c.awaitNotification("textDocument/publishDiagnostics", func(raw json.RawMessage) bool {
-			var p lsp.PublishDiagnosticsParams
-			if err := json.Unmarshal(raw, &p); err != nil || p.URI != uri {
-				return false
-			}
-			got = codes(p.Diagnostics)
-			return want(got)
-		})
-		return got
-	}
-
-	awaitPublished(c, uri, 1)
+	c.notify("textDocument/didOpen", openParams(uri, "#!/bin/bash\nsource ./lib.sh\necho $lib_name\n"))
 	if got := awaitPublished(c, uri, 1); len(got.Diagnostics) != 0 {
-		t.Errorf("diagnostics with a resolvable source = %v, want none", codes(got.Diagnostics))
+		t.Errorf("diagnostics with a spaceless imported value = %v, want none", codes(got.Diagnostics))
 	}
 
-	if err := os.WriteFile(lib, nil, 0o600); err != nil {
+	if err := os.WriteFile(lib, []byte("lib_name='hello world'\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	c.notify("workspace/didChangeWatchedFiles", `{"changes": [{"uri": "`+fileuri.FromPath(lib)+`", "type": 2}]}`)
-	publishedWith(func(codes []string) bool { return slices.Contains(codes, "SC2154") })
+	c.awaitNotification("textDocument/publishDiagnostics", func(raw json.RawMessage) bool {
+		var p lsp.PublishDiagnosticsParams
+		return json.Unmarshal(raw, &p) == nil && p.URI == uri && slices.Contains(codes(p.Diagnostics), "SC2086")
+	})
 }

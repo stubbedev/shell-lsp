@@ -1,0 +1,16 @@
+### exec given a quoted pipeline
+find . -type f -exec 'cat {} | wc -l' \;
+>>> SC2150 1:16
+
+### execdir given a quoted pipeline
+find . -type f -execdir 'cat {} | wc -l' +
+>>> SC2150 1:16
+
+### quoted variable as the whole exec command
+find . -type f -exec "$handler" \;
+>>> SC2150 1:16
+>>> SC2154 1:23
+
+### exec with separate words
+find . -type f -exec wc -l {} \;
+>>> none

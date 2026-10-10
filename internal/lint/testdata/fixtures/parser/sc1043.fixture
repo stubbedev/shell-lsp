@@ -1,0 +1,36 @@
+### end token written in lower case
+cat <<EOF
+config follows
+eof
+>>> SC1009 1:1
+>>> SC1043 1:7
+>>> SC1072 4:1
+>>> SC1073 1:5
+
+### end token with mixed case
+cat <<Banner
+welcome
+BANNER
+>>> SC1009 1:1
+>>> SC1043 1:7
+>>> SC1072 4:1
+>>> SC1073 1:5
+
+### end token found as a substring instead
+cat <<EOF
+config follows
+EOF.
+>>> SC1009 1:1
+>>> SC1041 1:7
+>>> SC1042 1:7
+>>> SC1072 4:1
+>>> SC1073 1:5
+
+### no case-insensitive match
+cat <<EOF
+config follows
+end
+>>> SC1009 1:1
+>>> SC1044 1:7
+>>> SC1072 4:1
+>>> SC1073 1:5

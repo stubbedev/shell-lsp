@@ -1,0 +1,14 @@
+### bracketed key followed by a separate value word
+tiers=([0]= bronze [1]=silver)
+echo "${tiers[@]}"
+>>> SC2192 1:12
+
+### value directly after the equals sign
+tiers=([0]=bronze [1]=silver)
+echo "${tiers[@]}"
+>>> none
+
+### explicit empty double-quoted value
+tiers=([0]="" [1]=silver)
+echo "${tiers[@]}"
+>>> none

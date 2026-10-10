@@ -1,0 +1,14 @@
+### dash function with keyword and no parentheses
+#!/bin/dash
+function notify {
+  echo "done" >&2
+}
+notify
+>>> SC2113 2:1
+
+### bash plain name-parentheses form
+notify() {
+  echo "done" >&2
+}
+notify
+>>> none

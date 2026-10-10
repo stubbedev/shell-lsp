@@ -1,0 +1,15 @@
+### select over positional parameters in sh
+#!/bin/sh
+select choice; do
+  :
+done
+>>> SC2034 2:1
+>>> SC3008 2:1
+
+### select over positional parameters in dash
+#!/bin/dash
+select choice; do
+  :
+done
+>>> SC2034 2:1
+>>> SC3008 2:1

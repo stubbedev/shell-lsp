@@ -1,0 +1,8 @@
+### curly double quotes inside double quotes
+echo "“hello”"
+>>> SC1111 1:13
+>>> SC1111 1:7
+
+### curly single quotes inside double quotes
+echo "‘hello’"
+>>> none

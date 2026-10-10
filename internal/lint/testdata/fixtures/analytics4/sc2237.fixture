@@ -1,0 +1,13 @@
+### shell negation in front of a -n test
+! [[ -n $branch ]] && echo "detached"
+>>> none
+
+### shell negation in front of single bracket -z
+if ! [ -z "$payload" ]; then
+  echo "has payload"
+fi
+>>> none
+
+### shell negation of an executable check
+! [ -x /usr/bin/jq ] && echo "install jq"
+>>> none

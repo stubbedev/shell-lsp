@@ -41,7 +41,7 @@ advertised capability, and that nothing else is handled or advertised.
 | `textDocument/completion` | implemented | `completionProvider` |  |
 | `completionItem/resolve` | implemented | `completionProvider.resolveProvider` | man page documentation for commands |
 | `textDocument/diagnostic` | implemented | `diagnosticProvider` |  |
-| `workspace/diagnostic` | not advertised | `diagnosticProvider.workspaceDiagnostics` | diagnostics are per open document; running shellcheck over a whole workspace is left to CI |
+| `workspace/diagnostic` | not advertised | `diagnosticProvider.workspaceDiagnostics` | diagnostics are per open document |
 | `textDocument/signatureHelp` | implemented | `signatureHelpProvider` |  |
 | `textDocument/codeAction` | implemented | `codeActionProvider` |  |
 | `codeAction/resolve` | implemented | `codeActionProvider.resolveProvider` | refactor edits are computed on resolve |
@@ -113,7 +113,7 @@ advertised capability, and that nothing else is handled or advertised.
 | Method | Status | Capability | Notes |
 | --- | --- | --- | --- |
 | `window/showMessage` | sent |  | rejected configuration |
-| `window/logMessage` | sent |  | one-time notices such as a missing shellcheck |
+| `window/logMessage` | sent |  | one-time notices such as a failed file watcher registration |
 | `telemetry/event` | never sent |  | the server collects no telemetry |
 | `textDocument/publishDiagnostics` | sent |  | only for clients without pull diagnostics |
 | `$/progress` | sent |  |  |

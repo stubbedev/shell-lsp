@@ -1,0 +1,25 @@
+### bare su and su with a user variable
+su
+rm stale.pid
+su $USER
+>>> SC2086 3:4
+>>> SC2117 1:1
+>>> SC2117 3:1
+
+### su to a user followed by more commands
+su deploy
+git pull
+exit
+>>> SC2117 1:1
+
+### su fed from a pipe
+echo whoami | su admin
+>>> none
+
+### su with stdin from a script
+su root < provision.sh
+>>> none
+
+### su with a command to run
+su -c 'systemctl restart nginx' root
+>>> none

@@ -1,0 +1,48 @@
+### cat reading and writing the same file
+cat notes.txt > notes.txt
+>>> SC2094 1:17
+>>> SC2094 1:5
+
+### cat piped through sed back into the source
+cat config.ini | sed -e 's/debug/info/' > config.ini
+>>> SC2094 1:43
+>>> SC2094 1:5
+
+### writing a temp file then moving it is fine
+sed 's/a/b/' config.ini > config.ini.tmp && mv config.ini.tmp config.ini
+>>> none
+
+### null device on both sides is fine
+grep pattern /dev/null > /dev/null
+>>> none
+
+### stdout and stderr to the same file is fine
+make > build.log 2> build.log
+>>> none
+
+### echo naming the target file is fine
+echo build.log > build.log
+>>> none
+
+### sponge with the same file is fine
+sed 's/ *$//' list.txt | sponge list.txt
+>>> none
+
+### assignment in a read loop referencing the input is fine
+while read -r line; do
+  source_file="$input"
+done < "$input"
+>>> SC2034 1:15
+>>> SC2034 2:3
+>>> SC2154 3:9
+
+### cat reading the same input inside a read loop is fine
+while read -r line; do
+  cat < "$input"
+done < "$input"
+>>> SC2034 1:15
+>>> SC2154 3:9
+
+### mapfile reading a file named like its array is fine
+mapfile -t lines < lines
+>>> SC2034 1:12

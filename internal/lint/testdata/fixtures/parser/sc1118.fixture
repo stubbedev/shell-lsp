@@ -1,0 +1,17 @@
+### trailing space after the end token
+cat <<EOF
+hello
+EOF 
+>>> SC1118 3:4
+
+### trailing tab after the end token
+cat <<END
+hello
+END	
+>>> SC1118 3:4
+
+### end token without trailing whitespace
+cat <<EOF
+hello
+EOF
+>>> none

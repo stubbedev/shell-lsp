@@ -1,0 +1,20 @@
+### ampersand inside an unquoted query string
+curl -s https://example.com/api?user=bob&page=2
+>>> SC1132 1:41
+>>> SC2034 1:42
+
+### ampersand followed by a space
+sleep 5 & wait
+>>> none
+
+### double ampersand
+true&&echo ok
+>>> none
+
+### ampersand-greater-than redirection
+make &>build.log
+>>> none
+
+### html entity reports SC1109 instead
+make &amp; make install
+>>> SC1109 1:6

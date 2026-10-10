@@ -1,0 +1,13 @@
+### comment after the end token
+cat <<EOF
+hello
+EOF # done
+EOF
+>>> SC1120 3:5
+
+### comment on the next line
+cat <<EOF
+hello
+EOF
+# done
+>>> none

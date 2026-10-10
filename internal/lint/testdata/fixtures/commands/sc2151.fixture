@@ -1,0 +1,12 @@
+### return with two values
+finish() {
+  return 1 2
+}
+>>> SC2151 2:10
+
+### return with an expansion and a literal
+bail() {
+  return "$code" 3
+}
+>>> SC2151 2:10
+>>> SC2154 2:11

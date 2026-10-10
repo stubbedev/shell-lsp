@@ -1,0 +1,67 @@
+### function invoked through sudo is reported at the definition
+flush_cache() {
+  rm -rf /var/cache/app/*
+}
+sudo flush_cache
+>>> SC2032 1:1
+>>> SC2033 4:6
+
+### alias invoked through xargs is reported at the alias
+alias shrink='xz -9'
+printf '%s\0' *.tar | xargs -0 shrink
+>>> SC2032 1:7
+>>> SC2033 2:32
+
+### alias used with find -execdir
+alias tidy='chmod 644'
+find . -name '*.conf' -execdir tidy {} \;
+>>> SC2032 1:7
+>>> SC2033 2:32
+
+### function via ssh with a flag
+restart() { systemctl restart nginx; }
+ssh -t web2 restart
+>>> SC2032 1:1
+>>> SC2033 2:13
+
+### chroot candidate is the directory not the function
+init_root() { mkdir -p /proc; }
+chroot /mnt/target init_root
+>>> none
+
+### function via tmux
+monitor() { top -b; }
+tmux monitor
+>>> SC2032 1:1
+>>> SC2033 2:6
+
+### function via busybox wrapper and sudo
+reset_net() { ip link set eth0 down; }
+busybox sudo reset_net
+>>> SC2032 1:1
+>>> SC2033 2:14
+
+### alias without exec style action
+alias ll='ls -l'
+find . -name ll
+>>> none
+
+### function name as echo argument
+prepare() { :; }
+echo prepare
+>>> none
+
+### quoted function name
+teardown() { :; }
+run0 "teardown"
+>>> none
+
+### function name as argument of a remote command
+status() { :; }
+ssh web1 systemctl status
+>>> none
+
+### function name as package argument
+upgrade() { :; }
+sudo apt-get upgrade
+>>> none

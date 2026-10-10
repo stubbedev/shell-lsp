@@ -1,0 +1,46 @@
+### read into an unquoted expansion
+read $var
+>>> SC2086 1:6
+>>> SC2154 1:6
+>>> SC2162 1:1
+>>> SC2229 1:6
+
+### read -r into an expansion
+read -r $var
+>>> SC2086 1:9
+>>> SC2154 1:9
+>>> SC2229 1:9
+
+### read into a quoted expansion
+read "$var"
+>>> SC2154 1:7
+>>> SC2162 1:1
+>>> SC2229 1:6
+
+### read -a into an expansion
+read -a $var
+>>> SC2086 1:9
+>>> SC2154 1:9
+>>> SC2162 1:1
+>>> SC2229 1:9
+
+### prompt expansion is not a target
+read -p "$prompt" answer
+>>> SC2034 1:19
+>>> SC2154 1:10
+>>> SC2162 1:1
+
+### delimiter option with an expansion
+read -rd "$delim" record
+>>> SC2034 1:19
+>>> SC2154 1:11
+
+### positional parameter is not a variable name
+read $1
+>>> SC2086 1:6
+>>> SC2162 1:1
+
+### question-mark modifier silences the warning
+read ${var?}
+>>> SC2086 1:6
+>>> SC2162 1:1

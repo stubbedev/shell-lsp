@@ -1,0 +1,23 @@
+### arithmetic expansion as array index
+slots[$((1+1))]=reserved
+>>> SC2034 1:1
+>>> SC2321 1:7
+
+### append with arithmetic expansion index
+log[$((n * 2))]+=" more"
+>>> SC2154 1:8
+>>> SC2321 1:5
+
+### bare arithmetic index
+slots[1+1]=reserved
+>>> SC2034 1:1
+
+### command substitution index
+slots[$(echo $((1+1)))]=reserved
+>>> SC2034 1:1
+>>> SC2116 1:7
+
+### associative array index is a string
+declare -A meta
+meta[$((1+1))]=two
+>>> SC2034 2:1

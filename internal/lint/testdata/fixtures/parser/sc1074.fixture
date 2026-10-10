@@ -1,0 +1,18 @@
+### case branch missing its double semicolon
+case $1 in
+  start) echo starting
+  stop) echo stopping ;;
+esac
+>>> SC1009 1:1
+>>> SC1072 3:7
+>>> SC1073 2:3
+>>> SC1074 3:7
+
+### every branch terminated
+case $1 in
+  start) echo starting ;;
+  reload) echo reloading ;&
+  restart) echo restarting ;;&
+  stop) echo stopping
+esac
+>>> none

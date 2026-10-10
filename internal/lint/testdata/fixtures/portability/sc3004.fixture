@@ -1,0 +1,20 @@
+### locale-translated greeting in sh
+#!/bin/sh
+echo $"Welcome back"
+>>> SC3004 2:6
+
+### locale-translated greeting in dash
+#!/bin/dash
+echo $"Welcome back"
+>>> SC3004 2:6
+
+### ansi-c quoted bare word is accepted in dash
+#!/bin/dash
+$'clear'
+>>> SC3003 2:1
+
+### ansi-c quoted bare word is accepted in busybox
+#!/bin/busybox sh
+# shellcheck shell=busybox
+$'clear'
+>>> none

@@ -1,0 +1,72 @@
+### double quotes inside a single-quoted option
+flags='--title="Monthly Summary"'
+pandoc $flags report.md
+>>> SC2086 2:8
+>>> SC2089 1:7
+>>> SC2090 2:8
+
+### single quotes after an equals sign
+flags="--filter='status=open'"
+tracker $flags
+>>> SC2089 1:8
+>>> SC2090 2:9
+
+### taint propagates into another variable
+target='old\ logs'
+cleanup="rm -rf $target"
+$cleanup
+>>> SC2089 1:8
+>>> SC2090 3:1
+
+### escaped space in a single-quoted value
+target='old\ logs'
+rm $target
+>>> SC2086 2:4
+>>> SC2089 1:8
+>>> SC2090 2:4
+
+### single-quoted segment between slashes
+backup="/mnt/'usb drive'/backups"
+rm -r $backup
+>>> SC2086 2:7
+>>> SC2089 1:9
+>>> SC2090 2:7
+
+### tainted value passed double-quoted is fine
+flags='--title="Monthly Summary"'
+pandoc "$flags" report.md
+>>> none
+
+### array with quote in element passed quoted
+flags=('--define=')
+pandoc "${flags[@]}" report.md
+>>> none
+
+### apostrophe between letters is fine
+message="it's done now"
+notify $message
+>>> SC2086 2:8
+
+### tainted value given to eval is fine
+flags='--title="Monthly Summary"'
+eval pandoc $flags report.md
+>>> SC2086 2:13
+
+### length expansion does not propagate taint
+target='old\ logs'
+cleanup="rm -rf ${#target}"
+$cleanup
+>>> none
+
+### length expansion of tainted path
+backup="/mnt/'usb drive'/backups"
+rm -r ${#backup}
+>>> none
+
+### sh dialect suggests positional parameters
+#!/bin/sh
+flags='--title="Monthly Summary"'
+pandoc $flags report.md
+>>> SC2086 3:8
+>>> SC2089 2:7
+>>> SC2090 3:8

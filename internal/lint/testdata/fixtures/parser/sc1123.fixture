@@ -1,0 +1,37 @@
+### directive just before an elif branch
+if [ -f a.conf ]; then
+  echo a
+# shellcheck disable=SC2086
+elif [ -f b.conf ]; then
+  echo $b
+fi
+>>> SC1009 1:1
+>>> SC1072 4:6
+>>> SC1073 1:19
+>>> SC1123 3:1
+>>+ SC2086 5:8 -- shellcheck abandons the script at its parse error; this linter parses it and keeps checking
+
+### directive just before done
+for f in *; do
+  echo "$f"
+  # shellcheck disable=SC2086
+done
+>>> SC1072 4:5
+>>> SC1073 1:1
+>>> SC1123 3:3
+
+### directive just before a closing brace
+{
+  echo start
+  # shellcheck disable=SC2034
+}
+>>> SC1072 4:2
+>>> SC1073 1:1
+>>> SC1123 3:3
+
+### directive before a complete command
+if [ -f a.conf ]; then
+  # shellcheck disable=SC2086
+  echo $a
+fi
+>>> SC2154 3:8

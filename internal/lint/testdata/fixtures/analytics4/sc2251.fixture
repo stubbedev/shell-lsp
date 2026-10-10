@@ -1,0 +1,76 @@
+### negated true between commands under set -e
+set -e
+! true
+echo "continuing"
+>>> SC2251 2:1
+
+### negation in an endless while body
+set -e
+while :; do
+  ! true
+done
+>>> SC2251 3:3
+
+### negation inside a trailing brace group
+set -e
+{
+  ! true
+}
+>>> SC2251 3:3
+
+### shellcheck word used as a command before the negation
+set -e
+shellcheck deploy.sh
+! true
+echo "after"
+>>> SC2251 3:1
+
+### errexit option word in the shebang
+#!/bin/bash -e
+! grep -q failed result.log
+echo "checked"
+>>> SC2251 2:1
+
+### no errexit in the script
+! true
+echo "fine"
+>>> none
+
+### negation as an if condition
+set -e
+if ! true; then
+  echo "unreachable"
+fi
+echo "done"
+>>> none
+
+### negation ending a subshell
+set -e
+( cd /srv; ! true )
+echo "done"
+>>> none
+
+### negation returned from a function
+set -e
+not_ready() {
+  ! test -f /run/ready
+}
+not_ready
+echo "done"
+>>> none
+
+### negation inside a brace group used as if condition
+set -e
+if { ! true; }; then
+  echo "never"
+fi
+echo "done"
+>>> none
+
+### negation as a while condition
+set -e
+while ! test -f /run/ready; do
+  sleep 1
+done
+echo "ready"
+>>> none

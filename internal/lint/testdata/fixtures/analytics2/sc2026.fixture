@@ -1,0 +1,20 @@
+### bare word between single-quoted parts
+echo 'export TIMEOUT='30';'
+>>> SC2026 1:23
+
+### alphanumeric word between quoted sed fragments
+sed 's/old/'new'/g' config.ini
+>>> SC2026 1:13
+
+### star after single quote is a glob
+ls 'report'*
+>>> none
+
+### single-quoted value at end of word
+wget --header='Accept: text/html' https://example.com
+>>> none
+
+### line continuation between single-quoted strings
+printf '%s\n' 'first line' \
+  'second line'
+>>> none

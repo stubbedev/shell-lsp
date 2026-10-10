@@ -1,0 +1,9 @@
+### arithmetic expansion as a statement
+counter=0
+$((counter++))
+echo "$counter"
+>>> SC2084 2:1
+
+### arithmetic expansion with further words is fine
+echo $((counter++))
+>>> none

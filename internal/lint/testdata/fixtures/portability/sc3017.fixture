@@ -1,0 +1,23 @@
+### unary -a file test in brackets
+#!/bin/sh
+[ -a /etc/fstab ] && echo present
+>>> SC2331 2:3
+>>> SC3017 2:3
+
+### unary -a file test in test command
+#!/bin/sh
+test -a /etc/fstab && echo present
+>>> SC3017 2:1
+
+### unary -a file test in dash
+#!/bin/dash
+[ -a /etc/fstab ] && echo present
+>>> SC2331 2:3
+>>> SC3017 2:3
+
+### binary -a conjunction is fine
+#!/bin/sh
+[ alpha -a beta ] && echo both
+>>> SC2078 2:12
+>>> SC2078 2:3
+>>> SC2166 2:9

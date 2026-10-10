@@ -22,7 +22,7 @@ local client_id = vim.lsp.start({
   name = "shell-lsp",
   cmd = { server },
   root_dir = dir,
-  init_options = { shellcheck = { enable = false } },
+  init_options = { lint = { enable = false } },
 })
 if not client_id then
   fail("vim.lsp.start returned no client")

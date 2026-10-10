@@ -1,0 +1,15 @@
+### owner test in sh
+#!/bin/sh
+[ -O secrets.env ] && echo mine
+>>> SC3067 2:3
+
+### owner test in dash is fine
+#!/bin/dash
+[ -O secrets.env ] && echo mine
+>>> none
+
+### owner test in busybox is fine
+#!/bin/busybox sh
+# shellcheck shell=busybox
+[ -O secrets.env ] && echo mine
+>>> none

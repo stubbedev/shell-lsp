@@ -1,0 +1,16 @@
+### regex match in single brackets
+#!/bin/sh
+[ version =~ ver ]
+>>> SC2050 2:11
+>>> SC3015 2:11
+
+### regex match in test command
+#!/bin/sh
+test version =~ ver
+>>> SC3015 2:1
+
+### regex match in dash
+#!/bin/dash
+[ version =~ ver ]
+>>> SC2050 2:11
+>>> SC3015 2:11

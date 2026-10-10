@@ -1,0 +1,15 @@
+### if glued to the opening bracket
+if[ -d /tmp ]; then echo ok; fi
+>>> SC1069 1:3
+
+### while glued to the opening bracket
+while[ -e /run/backup.lock ]; do sleep 1; done
+>>> SC1069 1:6
+
+### until glued to the opening bracket
+until[ -s /tmp/out ]; do sleep 1; done
+>>> SC1069 1:6
+
+### keyword and bracket separated by a space
+if [ -d /tmp ]; then echo ok; fi
+>>> none

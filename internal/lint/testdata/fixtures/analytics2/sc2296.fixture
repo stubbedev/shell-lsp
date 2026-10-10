@@ -1,0 +1,17 @@
+### expansion starting with a second brace
+echo "${{config}"
+>>> SC2296 1:9
+
+### expansion starting with a dot
+echo "${.config}"
+>>> SC2296 1:9
+
+### plain braced expansion is fine
+release=1.2
+echo "${release}"
+>>> none
+
+### special parameters and operators are fine
+sleep 1 &
+echo $# ${#} $! ${!} ${!#} ${#!}
+>>> none

@@ -1,0 +1,15 @@
+### double-quoted name inside braces
+target=prod
+echo ${"target"}
+>>> SC2297 2:8
+
+### double-quoted single digit inside braces
+echo ${"1"}
+>>- SC2086 1:6 -- mvdan rejects a quoted name inside ${}; reported as a syntax error instead
+>>> SC2297 1:8
+
+### double quotes with a space fall to SC2301
+echo ${"two words"}
+>>- SC2086 1:6 -- mvdan rejects a quoted name inside ${}; reported as a syntax error instead
+>>> SC2154 1:6
+>>> SC2301 1:8

@@ -12,7 +12,7 @@ import (
 func BenchmarkEditCycle(b *testing.B) {
 	root := b.TempDir()
 	uri := fileuri.FromPath(filepath.Join(root, "big.sh"))
-	c, _ := startClient(b, `{"rootUri": "`+fileuri.FromPath(root)+`", "initializationOptions": {"shellcheck": {"enable": false}}, "capabilities": {"textDocument": {"diagnostic": {}, "semanticTokens": {"requests": {"full": {"delta": true}}}}}}`)
+	c, _ := startClient(b, `{"rootUri": "`+fileuri.FromPath(root)+`", "capabilities": {"textDocument": {"diagnostic": {}, "semanticTokens": {"requests": {"full": {"delta": true}}}}}}`)
 	c.notify("textDocument/didOpen", openParams(uri, perf.LargeScript(10000)))
 	doc := `{"textDocument": {"uri": "` + uri + `"}}`
 	tokens := decodeResult[struct {

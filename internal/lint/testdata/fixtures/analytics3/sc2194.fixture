@@ -1,0 +1,17 @@
+### constant word that does not match its pattern
+case production in
+  staging) echo "staging deploy" ;;
+esac
+>>> SC2194 1:6
+
+### constant word that matches its pattern
+case linux in
+  linux) echo "native build" ;;
+esac
+>>> SC2194 1:6
+
+### word contains an expansion
+case "$(uname -s)" in
+  Linux) echo "native build" ;;
+esac
+>>> none

@@ -1,0 +1,35 @@
+### literal followed by unquoted expansion in case pattern
+read -r version
+major=3
+case $version in
+  v$major) echo "current major" ;;
+  *) echo other ;;
+esac
+>>> SC2254 4:3
+
+### pattern is only a command substitution
+case "$1" in
+  $(hostname)) echo "local host" ;;
+esac
+>>> SC2254 2:3
+
+### one alternative of a pipe-separated pattern is unquoted
+case "$choice" in
+  quit|$escape_word) exit 0 ;;
+esac
+>>> SC2154 1:7
+>>> SC2154 2:8
+>>> SC2254 2:8
+
+### pattern already globbed around expansion is intentional
+case "$logline" in
+  *$needle*) echo hit ;;
+esac
+>>> SC2154 1:7
+>>> SC2154 2:4
+
+### expansion inside double quotes is fine
+case "$1" in
+  "$expected") echo same ;;
+esac
+>>> SC2154 2:4

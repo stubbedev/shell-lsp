@@ -1,0 +1,13 @@
+### dollar-bracket sum in sh
+#!/bin/sh
+total=$[3 + 4]
+echo "$total"
+>>> SC2007 2:7
+>>> SC3007 2:7
+
+### dollar-bracket sum in dash
+#!/bin/dash
+total=$[3 + 4]
+echo "$total"
+>>> SC2007 2:7
+>>> SC3007 2:7

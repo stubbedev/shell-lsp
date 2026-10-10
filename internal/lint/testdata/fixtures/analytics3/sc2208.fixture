@@ -1,0 +1,11 @@
+### single-bracket -v on an unquoted array element
+if [ -v servers[0] ]; then
+  echo "first server set"
+fi
+>>> SC2208 1:9
+
+### double-bracket -v on an unquoted array element
+if [[ -v servers[0] ]]; then
+  echo "first server set"
+fi
+>>> none

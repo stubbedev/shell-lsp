@@ -1,0 +1,21 @@
+### local with empty assignment in sh function
+#!/bin/sh
+cleanup() {
+  local tmpdir=
+  rm -rf "$tmpdir"
+}
+>>> SC3043 3:3
+
+### local with a name in dash
+#!/bin/dash
+local scratch
+>>> SC2034 2:7
+>>> SC2168 2:1
+
+### local with empty assignment in dash function
+#!/bin/dash
+cleanup() {
+  local tmpdir=
+  rm -rf "$tmpdir"
+}
+>>> none

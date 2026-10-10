@@ -1,0 +1,27 @@
+### command name with a trailing star
+deploy*
+>>> SC2211 1:1
+
+### array index written as a bracket glob in a substitution
+current=$(slots[idx])
+>>> SC2034 1:1
+>>> SC2211 1:11
+
+### question mark glob as command name
+build-v? --release
+>>> SC2211 1:1
+
+### bracket range split by an expansion
+run[$stage]x
+>>- SC2086 1:5 -- mvdan requires = after name[...] in command position; reported as a syntax error instead
+>>> SC2154 1:5
+>>> SC2211 1:1
+
+### prefix assignment before a globbed command name
+LANG=C report* --summary
+>>> SC2037 1:1
+>>> SC2211 1:8
+
+### glob only in the argument
+echo backups/*
+>>> none

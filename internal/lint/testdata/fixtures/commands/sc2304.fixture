@@ -1,0 +1,16 @@
+### unescaped star in expr multiplication
+# shellcheck disable=SC2003
+area=$(expr 4 * 2)
+>>> SC2034 2:1
+>>> SC2035 2:15
+>>> SC2304 2:15
+
+### escaped star is literal
+# shellcheck disable=SC2003
+area=$(expr 4 \* 2)
+>>> SC2034 2:1
+
+### quoted star is literal
+# shellcheck disable=SC2003
+area=$(expr 4 '*' 2)
+>>> SC2034 2:1

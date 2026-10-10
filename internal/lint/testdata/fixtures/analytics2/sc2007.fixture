@@ -1,0 +1,13 @@
+### deprecated dollar bracket arithmetic
+echo $[1 + 2]
+>>> SC2007 1:6
+
+### deprecated form in assignment
+pages=$[total / 20]
+echo "$pages"
+>>> SC2007 1:7
+>>> SC2154 1:9
+
+### standard arithmetic expansion is fine
+echo $((1 + 2))
+>>> none

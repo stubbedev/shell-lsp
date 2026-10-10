@@ -45,7 +45,6 @@ type Server struct {
 	docs        *docstore.Store
 	snapshots   *snapshotCache
 	warmer      *warmer
-	diagnostics *diagnosticsState
 	push        *pushScheduler
 	commandDocs commandDocs
 	prefetch    *prefetcher
@@ -85,7 +84,6 @@ func New(conn *jsonrpc.Conn, version string) *Server {
 		snapshots:   newSnapshotCache(),
 		warmer:      newWarmer(),
 		semantic:    newSemanticCache(),
-		diagnostics: newDiagnosticsState(),
 		settings:    config.Default(),
 		commandDocs: commandDocs{pages: pages},
 		prefetch:    newPrefetcher(pages),

@@ -1,0 +1,28 @@
+### bare semicolon eaten by the shell
+find . -name '*.tmp' -exec rm {} ;
+>>> SC2067 1:31
+
+### escaped semicolon belongs to the next command
+find . -type f -exec touch {} && echo done \;
+>>> SC1010 1:39
+>>> SC2067 1:28
+
+### plus belongs to grep after a pipe
+find . -execdir cat {} | grep needle +
+>>> SC2067 1:21
+
+### ok action without a terminator
+find /srv -name core -ok rm {}
+>>> none
+
+### plus terminator is fine
+find . -name '*.sh' -exec chmod 755 {} +
+>>> none
+
+### escaped semicolon after a bash script is fine
+find . -name '*.md' -execdir bash -c 'test -s "$1" && echo "$1"' _ {} \;
+>>> none
+
+### quoted semicolon is fine
+find . -name '*.log' -exec gzip {} ';'
+>>> none

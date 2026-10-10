@@ -1,0 +1,18 @@
+### acute accents around an escaped quote
+stamp=´echo \"today\"´
+echo "$stamp"
+>>> SC1077 1:22
+>>> SC1077 1:7
+>>- SC2006 1:7 -- an acute accent is a literal character to the shell; SC1077 reports the likely typo instead of treating it as a backtick
+>>> SC2116 1:7
+
+### backticks around a listing
+files=`ls *.txt`
+echo "$files"
+>>> SC2006 1:7
+>>> SC2035 1:11
+
+### backticks around grep with an escaped quote
+hits=`grep "say \"hi\"" notes.txt`
+echo "$hits"
+>>> SC2006 1:6

@@ -1,0 +1,14 @@
+### lowercase interrupt name in sh
+#!/bin/sh
+trap 'echo bye' int
+>>> SC3049 2:17
+
+### lowercase interrupt name in dash is fine
+#!/bin/dash
+trap 'echo bye' int
+>>> none
+
+### uppercase interrupt name in dash is fine
+#!/bin/dash
+trap 'echo bye' INT
+>>> none

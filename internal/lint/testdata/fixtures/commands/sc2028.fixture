@@ -1,0 +1,53 @@
+### single-quoted newline escapes in echo
+echo 'Usage:\n  deploy.sh <env>\n'
+>>> SC2028 1:6
+
+### double-quoted tab escape in echo
+echo "n:\t42"
+>>> SC2028 1:6
+
+### three-digit octal escape
+echo 'bullet \506 item'
+>>> SC2028 1:6
+
+### one-digit octal escape
+echo 'bell \5a'
+>>> SC2028 1:6
+
+### hex escape with two digits
+echo 'letter \x4a'
+>>> SC2028 1:6
+
+### hex escape with one digit
+echo 'value \xat'
+>>> SC2028 1:6
+
+### echo with -e interprets escapes deliberately
+echo -e 'first\nsecond'
+>>> none
+
+### plain word echo
+echo lol
+>>> none
+
+### echo -n -e with a real newline
+echo -n -e 'line one
+line two'
+>>> none
+
+### backslash eight is not octal
+echo 'version \8a'
+>>> none
+
+### backslash d is not an escape
+echo 'regex \d5a'
+>>> none
+
+### backslash x without hex digits
+echo 'path \xth'
+>>> none
+
+### dash echo is not checked
+#!/bin/dash
+echo 'col1\tcol2'
+>>> none

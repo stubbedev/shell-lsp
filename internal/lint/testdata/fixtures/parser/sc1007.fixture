@@ -1,0 +1,53 @@
+### space after equals before a command name
+PATH= /usr/local/bin/deploy --dry-run
+>>> SC1007 1:6
+
+### tab after equals before a word
+LC_ALL=	sort names.txt
+>>> SC1007 1:8
+
+### IFS with a trailing space and nothing else
+IFS= 
+>>> none
+
+### bare assignment of nothing
+buffer=
+echo "$buffer"
+>>> none
+
+### assignment followed by two spaces and end of line
+buffer=  
+echo "$buffer"
+>>> none
+
+### assignment followed by spaces and a comment
+buffer=  # reset before the loop
+echo "$buffer"
+>>> none
+
+### IFS with a space before the command is exempt
+IFS= read -r header < data.csv
+echo "$header"
+>>> none
+
+### spaces then a semicolon
+count=  ; echo "$count"
+>>> none
+
+### spaces then an ampersand
+job=  & wait
+>>> SC2034 1:1
+
+### spaces then a pipe
+mode=  | cat
+>>> SC2034 1:1
+>>> SC2036 1:1
+
+### spaces then a closing parenthesis
+( token=  )
+>>> SC2034 1:3
+
+### spaces then a carriage return
+stamp=  
+echo "$stamp"
+>>> SC1017 1:9

@@ -1,0 +1,51 @@
+### letter followed by star in an inverted extended grep
+grep -Ev cow*test *.log
+>>> SC2022 1:10
+>>> SC2035 1:19
+>>> SC2062 1:10
+
+### piped grep pattern with letter star
+ls | grep foo*.jpg
+>>> SC2010 1:1
+>>> SC2022 1:11
+>>> SC2062 1:11
+
+### quoted pattern after end of options with letter star
+grep -- 'Foo*' inventory.txt
+>>> SC2022 1:9
+
+### caret in the pattern shows regex knowledge
+grep '^aa*' words.txt
+>>> none
+
+### fixed-string flag makes star literal
+grep -F 'Foo*' inventory.txt
+>>> none
+
+### include option suppresses the star advice
+grep -r --include 'Foo*' src
+>>> none
+
+### exclude option suppresses the star advice
+grep -r --exclude 'Foo*' src
+>>> none
+
+### exclude-dir option suppresses the star advice
+grep -r --exclude-dir 'Foo*' src
+>>> none
+
+### long fixed-strings option makes star literal
+grep --fixed-strings 'Foo*' inventory.txt
+>>> none
+
+### only-matching flag suppresses the star advice
+grep -o 'x*' samples.txt
+>>> none
+
+### long only-matching option suppresses the star advice
+grep --only-matching 'x*' samples.txt
+>>> none
+
+### attached include glob is skipped and the pattern is clean
+grep -r --include=*.png foo assets
+>>> none

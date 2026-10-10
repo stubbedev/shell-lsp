@@ -1,0 +1,13 @@
+### ampersand followed by a semicolon
+./server --port 8080 &; echo "server started"
+>>> SC1045 1:23
+
+### ampersand separating two commands
+./server --port 8080 & echo "server started"
+>>> none
+
+### backgrounded command ending a case branch
+case $1 in
+  serve) ./server &;;
+esac
+>>> none

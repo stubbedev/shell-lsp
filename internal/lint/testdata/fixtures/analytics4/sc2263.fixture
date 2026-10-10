@@ -1,0 +1,30 @@
+### alias used on its own definition line
+alias k='kubectl'; k get pods
+>>> SC2262 1:7
+>>> SC2263 1:20
+
+### alias used later in a brace group
+{
+  alias dc='docker compose'
+  dc up -d
+}
+>>> SC2262 2:9
+>>> SC2263 3:3
+
+### alias used on the following top level line
+alias k='kubectl'
+k get pods
+>>> none
+
+### quoted use of the alias name
+alias k='kubectl'; 'k' get pods
+>>> none
+
+### suppressed on the definition
+true
+{
+  # shellcheck disable=SC2262
+  alias dc='docker compose'
+  dc up -d
+}
+>>> none

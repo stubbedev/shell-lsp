@@ -1,0 +1,54 @@
+### output file named by a post increment
+ls > $((i++))
+>>> SC2257 1:10
+
+
+
+### input file name with an increment in quotes
+cat < "chunk-$((i++)).dat"
+>>> SC2257 1:18
+
+
+
+### here-string with an increment
+cat <<< $((counter++))
+>>> SC2257 1:19
+
+
+
+### heredoc body with an increment
+cat <<EOF2
+row $((row++))
+EOF2
+>>> SC2257 2:11
+
+
+
+### pre decrement in redirection under ksh
+#!/bin/ksh
+date > "stamp-$((--n))"
+>>> SC2257 2:18
+
+
+
+### compound assignment inside a quoted redirection target
+echo hi > "out$((total += 5)).txt"
+>>> SC2257 1:24
+
+
+### compound command redirection
+while read -r line; do echo "$line"; done > "$((i++)).log"
+>>> none
+
+
+
+### dash assignment form
+#!/bin/dash
+ls > $((i = i + 1))
+>>> none
+
+
+
+### read only arithmetic in a redirection
+ls > "part$((i + 1))"
+>>> SC2154 1:14

@@ -1,0 +1,34 @@
+### single bracket glob around word
+if [ $filename = *backup* ]; then
+  echo "skipping backup"
+fi
+>>> SC2081 1:18
+>>> SC2086 1:6
+>>> SC2154 1:6
+
+### single bracket not equals with slash star
+[ $path != /* ] && echo relative
+>>> SC2081 1:12
+>>> SC2086 1:3
+>>> SC2154 1:3
+
+### single bracket glob in sh suggests case
+#!/bin/sh
+[ "$answer" = y* ] && echo yes
+>>> SC2081 2:15
+>>> SC2154 2:4
+
+### single bracket question mark glob
+[ "$code" == ?? ] && echo "two chars"
+>>> SC2081 1:14
+>>> SC2154 1:4
+
+### bracket class split by an expansion
+[ "$grade" = [A"$low"] ] && echo ok
+>>> SC2081 1:14
+>>> SC2154 1:17
+>>> SC2154 1:4
+
+### plain word on right is fine
+[ "$mode" = release ] && echo shipping
+>>> SC2154 1:4

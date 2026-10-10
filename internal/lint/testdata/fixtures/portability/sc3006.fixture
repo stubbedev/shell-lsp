@@ -1,0 +1,11 @@
+### arithmetic command testing a counter in sh
+#!/bin/sh
+retries=3
+(( retries ))
+>>> SC3006 3:1
+
+### arithmetic command testing a counter in dash
+#!/bin/dash
+retries=3
+(( retries ))
+>>> SC3006 3:1

@@ -1,0 +1,27 @@
+### unknown binary operator in double bracket
+[[ $src -xz $dst ]] && echo odd
+>>> SC2057 1:9
+>>> SC2154 1:13
+>>> SC2154 1:4
+
+### misspelled -nt operator
+[ "$archive" -newer "$source" ] && echo stale
+>>> SC2057 1:14
+>>> SC2154 1:22
+>>> SC2154 1:4
+
+### escaped greater than is accepted
+[ 3 \> 2 ] && echo bigger
+>>> SC2050 1:5
+>>> SC2071 1:5
+
+### equality and -ge combined with -a are accepted
+[ "$user" = root -a "$uid" -ge 0 ] && echo admin
+>>> SC2154 1:22
+>>> SC2154 1:4
+>>> SC2166 1:18
+
+### newer-than operator is accepted
+[[ $archive -nt $source ]] && echo fresh
+>>> SC2154 1:17
+>>> SC2154 1:4

@@ -6,7 +6,7 @@ definition 3:8-3:9 "a" kind=2 attrs=000000 local=true within=1
 definition 3:12-3:13 "b" kind=2 attrs=000000 local=true within=1
 reference 4:9-4:10 "a" within=1
 reference 4:11-4:12 "b" within=1
-command 3:2-3:7 "local" args=2 within=1
+command 3:2-3:7 "local" args=0 within=1
 command 4:2-4:6 "echo" args=1 within=1
 command 6:1-6:2 "f" args=0 within=0
 comment 1:1-1:16 "#!/usr/bin/dash"

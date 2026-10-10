@@ -1,0 +1,14 @@
+### extended-analysis with an unknown word
+# shellcheck extended-analysis=on
+echo hi
+>>> SC1146 1:32
+
+### extended-analysis false
+# shellcheck extended-analysis=false
+echo hi
+>>> none
+
+### extended-analysis true
+# shellcheck extended-analysis=true
+echo hi
+>>> none

@@ -1,0 +1,49 @@
+### quoted ls substitution as the whole list
+for entry in "$(ls)"; do
+  echo "$entry"
+done
+>>> SC2066 1:14
+
+### quoted star pattern as the whole list
+for doc in "*.txt"; do
+  wc -l "$doc"
+done
+>>> SC2066 1:12
+
+### quoted plain variable as the whole list
+for host in "$hosts"; do
+  ping -c1 "$host"
+done
+>>> SC2066 1:13
+>>> SC2154 1:14
+
+### quoted backtick substitution as the whole list
+for pkg in "`cat packages.list`"; do
+  echo "$pkg"
+done
+>>> SC2006 1:13
+>>> SC2066 1:12
+
+### quoted positional parameters are fine
+for arg in "$@"; do
+  echo "$arg"
+done
+>>> none
+
+### unquoted glob with an extension is fine
+for doc in *.txt; do
+  wc -l "$doc"
+done
+>>> none
+
+### quoted indirect expansion is fine
+for item in "${!list_name}"; do
+  echo "$item"
+done
+>>> SC2154 1:14
+
+### quoted constant text without a star goes to SC2043
+for word in "alpha beta"; do
+  echo "$word"
+done
+>>> SC2043 1:13

@@ -15,9 +15,6 @@ vim.lsp.config("shell_lsp", {
   cmd = { "shell-lsp" },
   filetypes = { "sh", "bash", "zsh", "ksh" },
   root_markers = { ".git" },
-  init_options = {
-    shellcheck = { enable = true },
-  },
 })
 vim.lsp.enable("shell_lsp")
 ```
@@ -49,9 +46,6 @@ The repository's `scripts/nvim-smoke.lua` exercises the 0.9 form in CI.
 [language-server.shell-lsp]
 command = "shell-lsp"
 
-[language-server.shell-lsp.config]
-shellcheck = { enable = true }
-
 [[language]]
 name = "bash"
 language-servers = ["shell-lsp"]
@@ -69,8 +63,7 @@ binary in `settings.json`:
 {
   "lsp": {
     "bash-language-server": {
-      "binary": { "path": "shell-lsp", "arguments": [] },
-      "initialization_options": { "shellcheck": { "enable": true } }
+      "binary": { "path": "shell-lsp", "arguments": [] }
     }
   }
 }

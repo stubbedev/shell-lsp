@@ -1,0 +1,27 @@
+### loop inside an if that is never closed
+if command -v rsync >/dev/null; then
+  for dir in docs assets; do
+    rsync -a "$dir/" "backup/$dir/"
+  done
+>>> SC1046 1:1
+>>> SC1047 5:1
+>>> SC1072 5:1
+>>> SC1073 1:1
+
+### else branch at the end of the file
+if [ -w /var/log ]; then
+  logdir=/var/log
+else
+  logdir=$HOME/logs
+echo "$logdir"
+>>> SC1046 1:1
+>>> SC1047 6:1
+>>> SC1072 6:1
+>>> SC1073 1:1
+
+### closed if
+if [ -w /var/log ]; then
+  logdir=/var/log
+fi
+echo "${logdir:-none}"
+>>> none

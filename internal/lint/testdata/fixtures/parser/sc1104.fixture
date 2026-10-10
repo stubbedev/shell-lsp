@@ -1,0 +1,9 @@
+### bang without the hash
+! /bin/sh
+echo hello
+>>> SC1104 1:1
+
+### bang followed by something other than a slash
+!true
+echo hello
+>>> SC1035 1:2

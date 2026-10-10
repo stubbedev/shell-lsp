@@ -1,0 +1,12 @@
+### brace glued to the command name
+{date; } > stamp.txt
+>>> SC1054 1:2
+
+### brace group with spaces and a pipeline
+{ cd /srv/app; git log --oneline | grep fix | wc -l; }
+>>> SC2126 1:36
+>>> SC2164 1:3
+
+### brace directly followed by a subshell
+{(cd /srv/app && make)}
+>>> none

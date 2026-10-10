@@ -1,0 +1,9 @@
+### modified-since-read test in sh
+#!/bin/sh
+[ -N inbox.mbox ] && echo "new mail"
+>>> SC3064 2:3
+
+### modified-since-read test in dash
+#!/bin/dash
+[ -N inbox.mbox ] && echo "new mail"
+>>> SC3064 2:3

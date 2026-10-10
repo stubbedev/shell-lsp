@@ -1,0 +1,20 @@
+### two tests joined by a single pipe
+[ -z "$user" ] | [ -z "$group" ]
+>>> SC2266 1:16
+
+### test piped into a command
+[ -n "$verbose" ] | tee log.txt
+>>> SC2266 1:19
+
+### command piped into a test
+ls | [ -d out ]
+>>> SC2012 1:1
+>>> SC2266 1:4
+
+### pipe-ampersand next to a test
+[ -f lock ] |& cat
+>>> none
+
+### pipeline without any test
+ps aux | grep cron
+>>> SC2009 1:1

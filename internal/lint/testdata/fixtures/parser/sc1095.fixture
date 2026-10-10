@@ -1,0 +1,17 @@
+### function name glued to the brace
+function greet{
+  echo hello
+}
+>>> SC1095 1:15
+
+### function name with a space before the brace
+function greet {
+  echo hello
+}
+>>> none
+
+### function name followed by parentheses
+function greet() {
+  echo hello
+}
+>>> none

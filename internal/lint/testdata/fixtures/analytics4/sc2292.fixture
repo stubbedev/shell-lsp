@@ -1,0 +1,20 @@
+### single bracket executable test in bash
+[ -x ./configure ] && ./configure
+>>> none
+
+### single bracket with -o combination
+[ "$force" -o "$yes" ] && rm -rf cache
+>>> SC2166 1:12
+
+### sh script cannot use double brackets
+#!/bin/sh
+[ -x ./configure ] && ./configure
+>>> none
+
+### already using double brackets
+[[ -x ./configure ]] && ./configure
+>>> none
+
+### test command is not flagged
+test -x ./configure && ./configure
+>>> none

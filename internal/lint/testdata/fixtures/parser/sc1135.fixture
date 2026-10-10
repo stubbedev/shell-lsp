@@ -1,0 +1,24 @@
+### lone dollar then an unquoted name
+echo "Price: $"USD
+>>> SC1135 1:14
+
+### lone dollar then a second double-quoted string
+echo "Price: $""USD"
+>>> SC1135 1:14
+
+### lone dollar then a digit
+echo "Cost: $"5
+>>> SC1135 1:13
+
+### lone dollar then a dollar variable
+echo "$"$amount
+>>> SC2086 1:9
+>>> SC2154 1:9
+
+### lone dollar then a star
+echo "$"*
+>>> none
+
+### locale-translated string
+echo $"Hello world"
+>>> none

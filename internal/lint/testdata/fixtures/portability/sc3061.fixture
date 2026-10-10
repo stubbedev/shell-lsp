@@ -1,0 +1,31 @@
+### raw read without a variable
+#!/bin/sh
+read -r
+>>> SC3061 2:1
+
+### read with no arguments
+#!/bin/sh
+read
+>>> SC2162 2:1
+>>> SC3061 2:1
+
+### raw read without a variable in dash
+#!/bin/dash
+read -r
+>>> SC3061 2:1
+
+### raw read into a variable is fine
+#!/bin/sh
+read -r answer
+>>> SC2034 2:9
+
+### read into a variable is fine
+#!/bin/sh
+read answer
+>>> SC2034 2:6
+>>> SC2162 2:1
+
+### empty quoted operand counts as a name
+#!/bin/sh
+read ''
+>>> SC2162 2:1

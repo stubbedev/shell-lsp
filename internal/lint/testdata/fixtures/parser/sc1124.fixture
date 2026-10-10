@@ -1,0 +1,19 @@
+### directive in front of a case branch
+case $1 in
+  start) echo up ;;
+  # shellcheck disable=SC2086
+  stop) echo $2 ;;
+esac
+>>> SC1009 1:1
+>>> SC1072 3:5
+>>> SC1073 3:3
+>>> SC1085 3:5
+>>> SC1124 3:3
+
+### directive in front of the whole case statement
+# shellcheck disable=SC2086
+case $1 in
+  start) echo up ;;
+  stop) echo $2 ;;
+esac
+>>> none

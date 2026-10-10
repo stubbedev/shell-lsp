@@ -1,0 +1,25 @@
+### if with -n on an unquoted variable
+if [ -n $branch ]; then
+  git checkout "$branch"
+fi
+>>> SC2070 1:9
+>>> SC2086 1:9
+
+### standalone -n on an unquoted variable
+[ -n $answer ] && echo "answered"
+>>> SC2070 1:6
+>>> SC2086 1:6
+
+### -n combined with -o and a terminal test
+[ -n $DISPLAY -o -t 1 ] && echo "interactive"
+>>> SC2070 1:6
+>>> SC2086 1:6
+>>> SC2166 1:15
+
+### double brackets are fine
+[[ -n $branch ]] && echo "set"
+>>> none
+
+### quoted dollar at is left to another check
+[ -n "$@" ] && echo "args"
+>>> SC2198 1:6

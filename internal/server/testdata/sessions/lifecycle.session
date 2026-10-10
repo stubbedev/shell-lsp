@@ -1,5 +1,5 @@
 # initialize, a rejected second initialize, shutdown, a rejected request after shutdown, exit
--> {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{"textDocument":{"diagnostic":{}}},"initializationOptions":{"shellcheck":{"enable":false}}}}
+-> {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{"textDocument":{"diagnostic":{}}},"initializationOptions":{"lint":{"enable":false}}}}
 <- {"jsonrpc":"2.0","id":1,"result":{"capabilities":{"positionEncoding":"utf-16","textDocumentSync":{"openClose":true,"change":2},"hoverProvider":true,"renameProvider":{"prepareProvider":true}},"serverInfo":{"name":"shell-lsp","version":"test"}}}
 -> {"jsonrpc":"2.0","method":"initialized","params":{}}
 -> {"jsonrpc":"2.0","id":2,"method":"initialize","params":{}}

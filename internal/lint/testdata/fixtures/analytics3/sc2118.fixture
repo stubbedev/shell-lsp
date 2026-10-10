@@ -1,0 +1,9 @@
+### ksh script uses pipe-stderr operator
+#!/bin/ksh
+make all |& tee build.log
+>>> SC2118 2:10
+
+### bash script uses pipe-stderr operator
+#!/bin/bash
+make all |& tee build.log
+>>> none

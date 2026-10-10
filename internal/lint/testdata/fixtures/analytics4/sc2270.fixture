@@ -1,0 +1,19 @@
+### digit one assigned like a variable
+1='first argument'
+>>> SC2270 1:1
+
+### braced positional two assigned
+${2}='second'
+>>> SC2270 1:1
+
+### two digit positional assigned
+12=last
+>>> SC2270 1:1
+
+### unbraced positional assigned
+$3=override
+>>> SC2270 1:1
+
+### long option is left to another check
+--prefix=/usr/local
+>>> SC2215 1:1

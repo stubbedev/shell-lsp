@@ -1,0 +1,22 @@
+### equals glued to the left operand
+if [ "$a"= "$b" ]; then echo same; fi
+>>> SC1009 1:1
+>>> SC1072 1:13
+>>> SC1073 1:4
+>>> SC1108 1:10
+
+### numeric comparison glued to the left operand
+if [[ $count-gt 3 ]]; then echo big; fi
+>>> SC1009 1:1
+>>> SC1072 1:17
+>>> SC1073 1:4
+>>> SC1108 1:13
+
+### explicit operator
+if [ "$a" = "$b" ]; then echo same; fi
+>>> SC2154 1:14
+>>> SC2154 1:7
+
+### trailing operator text is quoted
+if [ "$a""=" ]; then echo set; fi
+>>> SC2077 1:10

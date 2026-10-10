@@ -1,0 +1,62 @@
+### grep wrapped in single brackets
+if [ grep -q root /etc/passwd ]; then
+  echo "root exists"
+fi
+>>> SC1009 1:1
+>>> SC1014 1:6
+>>> SC1072 1:19
+>>> SC1073 1:4
+>>> SC1076 1:19
+
+### echo wrapped in double brackets
+if [[ echo "$reply" ]]; then
+  echo ok
+fi
+>>> SC1009 1:1
+>>> SC1014 1:7
+>>> SC1072 1:13
+>>> SC1073 1:4
+
+### test command name alone in brackets
+if [ cat ]; then
+  echo meow
+fi
+>>> SC1014 1:6
+>>> SC2078 1:6
+
+### identifier that only starts with a command name
+grep_count=$(grep -c error app.log)
+if [[ grep_count -eq 0 ]]; then
+  echo clean
+fi
+>>> none
+
+### first token is a variable expansion
+if [ "$tool" = grep ]; then
+  echo searching
+fi
+>>> SC2154 1:7
+
+### first token is quoted
+if [ "grep" = "$tool" ]; then
+  echo searching
+fi
+>>> SC2154 1:16
+
+### first token is a negation
+if [ ! -e /etc/motd ]; then
+  echo "no motd"
+fi
+>>> none
+
+### first token is a parenthesised group
+if [ \( -f a.txt \) -o \( -f b.txt \) ]; then
+  echo found
+fi
+>>> SC2166 1:21
+
+### command name later in the expression is not checked
+if [ -n "$1" -a echo = "$2" ]; then
+  echo match
+fi
+>>> SC2166 1:14

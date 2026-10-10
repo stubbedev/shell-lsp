@@ -1,0 +1,20 @@
+### shebang path ends in a slash
+#!/bin/sh/
+echo "dir"
+>>> SC2246 1:1
+
+### trailing slash followed by flags
+#!/bin/sh/ -eu
+echo "dir"
+>>> SC2246 1:1
+
+### plain path with flags is fine
+#!/bin/sh -eu
+echo "file"
+>>> none
+
+### shell directive suppresses it
+#!/bin/sh/
+# shellcheck shell=sh
+echo "dir"
+>>> none

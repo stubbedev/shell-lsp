@@ -1,0 +1,13 @@
+### endless c-style for loop in sh
+#!/bin/sh
+for ((;;)); do
+  break
+done
+>>> SC3005 2:1
+
+### endless c-style for loop in dash
+#!/bin/dash
+for ((;;)); do
+  break
+done
+>>> SC3005 2:1

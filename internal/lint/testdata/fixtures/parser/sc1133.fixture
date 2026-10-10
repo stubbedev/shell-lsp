@@ -1,0 +1,21 @@
+### line starting with a pipe
+cat app.log
+| grep error
+>>> SC1070 2:1
+>>> SC1133 2:1
+
+### line starting with a logical or
+make all
+|| echo failed
+>>> SC1070 2:1
+>>> SC1133 2:1
+
+### line starting with a logical and
+make all
+&& make install
+>>> SC1070 2:1
+>>> SC1133 2:1
+
+### line starting with the both-streams redirection
+&>/dev/null ls /tmp
+>>> none

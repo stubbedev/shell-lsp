@@ -1,0 +1,11 @@
+### exec binds only to the second name branch
+find . -name '*.wav' -o -name '*.au' -exec rm {} +
+>>> SC2146 1:38
+
+### grouped second branch with the action
+find . -name '*.wav' -o \( -name '*.au' -exec rm {} + \)
+>>> none
+
+### alternation without an action
+find . -name '*.wav' -o -name '*.au'
+>>> none

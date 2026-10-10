@@ -1,0 +1,18 @@
+### assigning unquoted dollar at
+all_args=$@
+>>> SC2034 1:1
+>>> SC2124 1:10
+
+### assigning a quoted at array
+joined="${files[@]}"
+>>> SC2034 1:1
+>>> SC2124 1:8
+>>> SC2154 1:9
+
+### assigning dollar star is fine
+all_args=$*
+>>> SC2034 1:1
+
+### array assignment with dollar at is fine
+arg_list=("$@")
+>>> SC2034 1:1

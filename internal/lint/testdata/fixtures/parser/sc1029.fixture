@@ -1,0 +1,19 @@
+### backslash-escaped parentheses in double brackets
+if [[ \( $1 = start \) ]]; then
+  echo starting
+fi
+>>> SC1029 1:21
+>>> SC1029 1:7
+
+### quoted parentheses in double brackets
+if [[ '(' $1 = stop ')' ]]; then
+  echo stopping
+fi
+>>> SC1029 1:21
+>>> SC1029 1:7
+
+### bare parentheses around two comparisons joined by or
+if [[ ( $1 = start ) || ( $1 = restart ) ]]; then
+  echo launching
+fi
+>>> none

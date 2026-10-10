@@ -3,20 +3,18 @@ package config
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"strconv"
-	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/lint"
 )
 
 const Section = "shellLsp"
 
 type Settings struct {
-	Dialect    *dialect.Dialect
-	Shellcheck Shellcheck
-	Format     Format
+	Dialect *dialect.Dialect
+	Lint    Lint
+	Format  Format
 }
 
 type Format struct {
@@ -30,24 +28,22 @@ type Format struct {
 	Minify           bool
 }
 
-type Shellcheck struct {
-	Enabled   bool
-	Path      string
-	Arguments []string
-	Exclude   []int
+type Lint struct {
+	Enabled bool
+	Exclude []lint.Code
 }
 
 func Default() Settings {
 	return Settings{
-		Shellcheck: Shellcheck{Enabled: true, Path: "shellcheck"},
-		Format:     Format{Enabled: true},
+		Lint:   Lint{Enabled: true},
+		Format: Format{Enabled: true},
 	}
 }
 
 type rawSettings struct {
-	Dialect    *string        `json:"dialect"`
-	Shellcheck *rawShellcheck `json:"shellcheck"`
-	Format     *rawFormat     `json:"format"`
+	Dialect *string    `json:"dialect"`
+	Lint    *rawLint   `json:"lint"`
+	Format  *rawFormat `json:"format"`
 }
 
 type rawFormat struct {
@@ -61,11 +57,9 @@ type rawFormat struct {
 	Minify           *bool `json:"minify"`
 }
 
-type rawShellcheck struct {
-	Enable    *bool    `json:"enable"`
-	Path      *string  `json:"path"`
-	Arguments []string `json:"arguments"`
-	Exclude   []string `json:"exclude"`
+type rawLint struct {
+	Enable  *bool    `json:"enable"`
+	Exclude []string `json:"exclude"`
 }
 
 func Parse(raw json.RawMessage) (Settings, error) {
@@ -89,14 +83,14 @@ func Parse(raw json.RawMessage) (Settings, error) {
 	if parsed.Format != nil {
 		settings.Format = parseFormat(*parsed.Format, settings.Format)
 	}
-	if parsed.Shellcheck == nil {
+	if parsed.Lint == nil {
 		return settings, nil
 	}
-	sc, err := parseShellcheck(*parsed.Shellcheck, settings.Shellcheck)
+	l, err := parseLint(*parsed.Lint, settings.Lint)
 	if err != nil {
 		return Settings{}, err
 	}
-	settings.Shellcheck = sc
+	settings.Lint = l
 	return settings, nil
 }
 
@@ -135,55 +129,19 @@ func ParseSection(raw json.RawMessage) (Settings, bool, error) {
 	return settings, true, err
 }
 
-func parseShellcheck(raw rawShellcheck, sc Shellcheck) (Shellcheck, error) {
+func parseLint(raw rawLint, l Lint) (Lint, error) {
 	if raw.Enable != nil {
-		sc.Enabled = *raw.Enable
+		l.Enabled = *raw.Enable
 	}
-	if raw.Path != nil {
-		if strings.TrimSpace(*raw.Path) == "" {
-			return Shellcheck{}, fmt.Errorf("%s.shellcheck.path: must not be empty", Section)
-		}
-		sc.Path = *raw.Path
-	}
-	for i, arg := range raw.Arguments {
-		if reserved := reservedFlag(arg); reserved != "" {
-			return Shellcheck{}, fmt.Errorf("%s.shellcheck.arguments[%d]: %q is set by the server (%s)", Section, i, arg, reserved)
-		}
-	}
-	sc.Arguments = raw.Arguments
-	sc.Exclude = make([]int, 0, len(raw.Exclude))
+	l.Exclude = make([]lint.Code, 0, len(raw.Exclude))
 	for i, code := range raw.Exclude {
-		n, err := parseCode(code)
+		c, err := lint.ParseCode(code)
 		if err != nil {
-			return Shellcheck{}, fmt.Errorf("%s.shellcheck.exclude[%d]: %w", Section, i, err)
+			return Lint{}, fmt.Errorf("%s.lint.exclude[%d]: %w", Section, i, err)
 		}
-		sc.Exclude = append(sc.Exclude, n)
+		l.Exclude = append(l.Exclude, c)
 	}
-	return sc, nil
-}
-
-func reservedFlag(arg string) string {
-	name, _, _ := strings.Cut(arg, "=")
-	switch {
-	case name == "--format" || strings.HasPrefix(name, "-f"):
-		return "output is always json1"
-	case name == "--shell" || strings.HasPrefix(name, "-s"):
-		return fmt.Sprintf("the dialect is detected per file; set %s.dialect to override it", Section)
-	case name == "--exclude" || strings.HasPrefix(name, "-e"):
-		return fmt.Sprintf("use %s.shellcheck.exclude", Section)
-	case arg == "-":
-		return "the document is passed on stdin"
-	}
-	return ""
-}
-
-func parseCode(code string) (int, error) {
-	digits := strings.TrimPrefix(strings.ToUpper(strings.TrimSpace(code)), "SC")
-	n, err := strconv.Atoi(digits)
-	if err != nil || n <= 0 {
-		return 0, errors.New("expected a shellcheck code like SC2034, got " + strconv.Quote(code))
-	}
-	return n, nil
+	return l, nil
 }
 
 func isAbsent(raw json.RawMessage) bool {

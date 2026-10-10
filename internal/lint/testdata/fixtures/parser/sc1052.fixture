@@ -1,0 +1,15 @@
+### semicolon after the then of an elif
+if [ -n "$primary" ]; then
+  echo "$primary"
+elif [ -n "$backup" ]; then;
+  echo "$backup"
+fi
+>>> SC1052 3:28
+
+### elif then followed by a newline
+if [ -n "$primary" ]; then
+  echo "$primary"
+elif [ -n "$backup" ]; then
+  echo "$backup"
+fi
+>>> none

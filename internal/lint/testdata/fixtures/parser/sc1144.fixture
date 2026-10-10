@@ -1,0 +1,10 @@
+### external-sources true in a script
+# shellcheck external-sources=true
+source ./lib.sh
+>>> SC1091 2:8
+>>> SC1144 1:31
+
+### external-sources false in a script
+# shellcheck external-sources=false
+source ./lib.sh
+>>> SC1091 2:8

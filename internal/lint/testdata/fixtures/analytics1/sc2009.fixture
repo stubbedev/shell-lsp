@@ -1,0 +1,19 @@
+### grepping ps aux output
+ps aux | grep nginx
+>>> SC2009 1:1
+
+### ps restricted by pgrep pids is fine
+ps -o pid=,comm= -p $(pgrep -d, nginx) | grep -F nginx
+>>> none
+
+### clustered short flag containing p is fine
+ps -fp 1234 | grep java
+>>> none
+
+### long pid option is fine
+ps --pid=4321 | grep java
+>>> none
+
+### quick-pid long option is fine
+ps --quick-pid 4321 | grep java
+>>> none

@@ -1,0 +1,38 @@
+### inner quotes meant to be escaped
+echo "INSERT INTO users VALUES ("id")"
+>>> SC2140 1:34
+
+### bare word between two quoted strings
+logger "service "nginx" restarted"
+>>> SC2140 1:18
+
+### quoted expansions joined by slash are fine
+cp "$src" "$dir"/"$file"
+>>> SC2154 1:12
+>>> SC2154 1:19
+>>> SC2154 1:5
+
+### quoted expansions joined by a word are fine
+mv "$prefix"_backup_"$stamp" /archive
+>>> SC2154 1:22
+>>> SC2154 1:5
+
+### pattern substitution inside parameter expansion
+echo "${dir//"foo"/"bar"}"
+>>> SC2154 1:7
+
+### regex metacharacters between quoted parts
+[[ $choice =~ "start"("stop"|"restart") ]] && echo service
+>>> SC2154 1:4
+
+### alternate value with quoted option values
+curl ${token:+--header "Authorization: $token" --user "$user"} https://example.com
+>>> none
+
+### slash between literal quoted parts is fine
+echo "usr"/"local"
+>>> none
+
+### equals sign between quoted parts in declare
+declare "mode"="fast"
+>>> none

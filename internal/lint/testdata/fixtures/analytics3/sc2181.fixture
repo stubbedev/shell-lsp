@@ -1,0 +1,125 @@
+### single-bracket $? -eq 0
+make build
+if [ $? -eq 0 ]; then echo ok; fi
+>>> SC2181 2:6
+
+### double-bracket quoted $? -gt 0
+make build
+if [[ "$?" -gt 0 ]]; then echo failed; fi
+>>> SC2181 2:7
+
+### double-bracket 0 -ne $?
+make build
+if [[ 0 -ne $? ]]; then echo failed; fi
+>>> SC2181 2:13
+
+### double-bracket 0 -eq $?
+make build
+if [[ 0 -eq $? ]]; then echo ok; fi
+>>> SC2181 2:13
+
+### arithmetic $? == 0
+make build
+if (( $? == 0 )); then echo ok; fi
+>>> SC2181 2:7
+
+### arithmetic with only $?
+make build
+if (( $? )); then echo failed; fi
+>>> SC2181 2:7
+
+### arithmetic negation of $?
+make build
+if (( ! $? )); then echo ok; fi
+>>> SC2181 2:9
+
+### arithmetic triple negation of $?
+make build
+if (( !!! $? )); then echo ok; fi
+>>> SC2181 2:11
+
+### test negation of a $? comparison
+make build
+if [ ! $? -eq 0 ]; then echo failed; fi
+>>> SC2181 2:8
+
+### later command in a function with a no-op if condition
+deploy() {
+  rsync -a dist/ server:/srv/
+  if :; then
+    [ $? -eq 0 ] && exit
+  fi
+}
+deploy
+>>> SC2181 4:7
+
+### arithmetic parenthesized $?
+make build
+if (( ($?) )); then echo failed; fi
+>>> SC2181 2:8
+>>> SC2323 2:7
+
+### parenthesized comparison in double brackets
+make build
+if [[ ( $? -eq 0 ) ]]; then echo ok; fi
+>>> SC2181 2:9
+
+### compared to a nonzero number
+grep -q needle haystack.txt
+if [ $? -eq 2 ]; then echo "grep error"; fi
+>>> none
+
+### another variable compared to zero
+count=$(wc -l < list.txt)
+if [ "$count" -eq 0 ]; then echo empty; fi
+>>> none
+
+### comparison inside an arithmetic expansion assignment
+make build
+failed=$(( $? != 0 ))
+echo "$failed"
+>>> none
+
+### negation combined with another $? comparison
+make build
+if (( ! $? && $? == 0 )); then echo odd; fi
+>>> none
+
+### file test or-ed with a $? comparison
+make build
+if [[ -f build.ok || $? -eq 0 ]]; then echo ok; fi
+>>> none
+
+### comma sequence with an assignment
+make build
+(( $?, status = 1 ))
+echo "$status"
+>>> none
+
+### $? or-ed with a comparison to 4
+diff a.txt b.txt
+if (( $? || $? == 4 )); then echo differs; fi
+>>> none
+
+### adding zero to $?
+make build
+if (( $? + 0 )); then echo failed; fi
+>>> none
+
+### first command of a brace-bodied function
+check_previous() {
+  if [ $? -eq 0 ]; then
+    echo "caller succeeded"
+  fi
+}
+false
+check_previous
+>>> none
+
+### first command of a subshell-bodied function
+bail_on_error() (
+  [ $? -eq 0 ] || exit 1
+)
+false
+bail_on_error
+>>> none

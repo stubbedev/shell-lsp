@@ -1,0 +1,12 @@
+### eval of Q-quoted array with at-sign
+eval "${args[@]@Q}"
+>>> SC2154 1:7
+>>> SC2293 1:7
+
+### eval of Q-quoted positional parameters with at-sign
+eval "${@@Q}"
+>>> SC2293 1:7
+
+### eval of Q-quoted array with star
+eval "${args[*]@Q}"
+>>> SC2154 1:7

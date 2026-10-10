@@ -47,7 +47,6 @@ func (s *Server) handleDidClose(_ context.Context, params json.RawMessage) error
 	uri := closeParams.TextDocument.URI
 	s.docs.Close(uri)
 	s.snapshots.forget(uri)
-	s.diagnostics.forget(uri)
 	s.semantic.forget(uri)
 	if s.push != nil {
 		s.push.cancel(uri)

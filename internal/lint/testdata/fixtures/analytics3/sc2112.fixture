@@ -1,0 +1,22 @@
+### sh function with keyword and parentheses
+#!/bin/sh
+function backup() {
+  tar czf /tmp/home.tgz "$HOME"
+}
+backup
+>>> SC2112 2:1
+
+### plain name with parentheses in sh
+#!/bin/sh
+backup() {
+  tar czf /tmp/home.tgz "$HOME"
+}
+backup
+>>> none
+
+### plain definition in the default shell
+backup() {
+  tar czf /tmp/home.tgz "$HOME"
+}
+backup
+>>> none

@@ -1,0 +1,27 @@
+### lone slash as a command
+/
+>>> SC2287 1:1
+
+### another lone slash with an argument
+/ tmp
+>>> SC2287 1:1
+
+### directory path run as a command
+/usr/local/bin/ /etc/app.conf
+>>> SC2287 1:1
+
+### slash followed by a glob
+/* -v
+>>> SC1127 1:1
+>>> SC2211 1:1
+
+### two expansions joined by a slash
+$prefix/$tool --version
+>>> SC2086 1:1
+>>> SC2086 1:9
+>>> SC2154 1:1
+>>> SC2154 1:9
+
+### exactly two slashes
+//
+>>> SC1127 1:1

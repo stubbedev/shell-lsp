@@ -1,0 +1,28 @@
+### ls piped into head
+newest=$(ls -t | head -n 1)
+echo "$newest"
+>>> SC2012 1:10
+
+### ls piped into a while loop
+ls /srv/backups | while read -r entry; do echo "$entry"; done
+>>> SC2012 1:1
+
+### ls with -N piped onward is fine
+ls -N | sort -r
+>>> none
+
+### flag cluster containing N is fine
+ls -lN /tmp | sort
+>>> none
+
+### ls as the last stage is fine
+printf 'x\n' | ls
+>>> SC2216 1:16
+
+### ls piped into grep reports SC2010 instead
+ls | grep -c log
+>>> SC2010 1:1
+
+### ls piped into xargs reports SC2011 instead
+ls | xargs du -sh
+>>> SC2011 1:1

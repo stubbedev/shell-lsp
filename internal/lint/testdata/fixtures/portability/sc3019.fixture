@@ -1,0 +1,9 @@
+### exponentiation in sh
+#!/bin/sh
+echo $((2**3))
+>>> SC3019 2:10
+
+### exponentiation in dash
+#!/bin/dash
+echo $((2**3))
+>>> SC3019 2:10

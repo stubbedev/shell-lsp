@@ -1,0 +1,11 @@
+### appending to a path variable in sh
+#!/bin/sh
+PATH+=:/opt/tools/bin
+export PATH
+>>> SC3024 2:1
+
+### appending to a path variable in dash
+#!/bin/dash
+PATH+=:/opt/tools/bin
+export PATH
+>>> SC3024 2:1

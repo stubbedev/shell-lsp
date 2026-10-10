@@ -1,0 +1,44 @@
+### mv with a single quoted operand
+mv 'quarterly report.pdf'
+>>> SC2224 1:1
+
+### mv with a single unquoted operand
+mv notes.txt
+>>> SC2224 1:1
+
+### mv with source and destination
+mv foo bar
+>>> none
+
+### brace expansion may provide the destination
+mv 'settings.conf'{,.bak}
+>>> none
+
+### all positional parameters may be several words
+mv "$@"
+>>> none
+
+### short target directory flag
+mv -t foo bar
+>>> none
+
+### long target directory option in equals form
+mv --target-directory=foo bar
+>>> none
+
+### abbreviated target directory option
+mv --target-direc=foo bar
+>>> none
+
+### only the version option
+mv --version
+>>> none
+
+### quoted indirect expansion may be several words
+mv "${!sources}"
+>>> SC2154 1:5
+
+### unquoted variable operand may split
+mv $sources
+>>> SC2086 1:4
+>>> SC2154 1:4

@@ -1,0 +1,13 @@
+### glob on the left of == compared to empty
+[[ *.log == "" ]] && echo "no logs"
+>>> SC2193 1:10
+>>> SC2203 1:4
+
+### glob pattern on the right side
+[[ $filename == *.log ]] && echo "log file"
+>>> SC2154 1:4
+
+### array element and product in an arithmetic comparison
+[[ sizes[2] -eq 4*1024 ]] && echo "four kilobytes"
+>>> SC2154 1:4
+>>> SC2309 1:4

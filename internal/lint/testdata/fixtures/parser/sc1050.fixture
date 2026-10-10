@@ -1,0 +1,22 @@
+### if condition runs straight into a command without then
+if [ -f /etc/motd ]
+  cat /etc/motd
+fi
+>>> SC1049 1:1
+>>> SC1050 3:1
+>>> SC1072 3:3
+>>> SC1073 1:1
+
+### if condition followed by do instead of then
+if grep -q root /etc/passwd; do
+  echo found
+done
+>>> SC1050 1:30
+>>> SC1072 1:32
+>>> SC1073 1:1
+
+### then present after the condition
+if [ -f /etc/motd ]; then
+  cat /etc/motd
+fi
+>>> none

@@ -1,0 +1,18 @@
+### unused function in a script ending with exit
+rotate_logs() { gzip /var/log/app.log; }
+echo "nothing to do"
+exit 0
+# end of script
+>>> SC2329 1:1
+
+### unused function in a script that may be sourced
+rotate_logs() { gzip /var/log/app.log; }
+echo "loaded"
+# end of script
+>>> none
+
+### called function before exit
+rotate_logs() { gzip /var/log/app.log; }
+rotate_logs
+exit 0
+>>> none

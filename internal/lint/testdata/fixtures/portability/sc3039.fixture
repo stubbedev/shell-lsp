@@ -1,0 +1,13 @@
+### let post-increment in sh
+#!/bin/sh
+attempt=0
+let attempt++
+>>> SC3018 3:12
+>>> SC3039 3:1
+
+### let post-increment in dash
+#!/bin/dash
+attempt=0
+let attempt++
+>>> SC3018 3:12
+>>> SC3039 3:1

@@ -1,0 +1,13 @@
+### loop body never closed with done
+for f in *.log; do
+  gzip "$f"
+>>> SC1061 1:17
+>>> SC1062 3:1
+>>> SC1072 3:1
+>>> SC1073 1:1
+
+### loop closed with done
+for f in *.log; do
+  gzip "$f"
+done
+>>> none

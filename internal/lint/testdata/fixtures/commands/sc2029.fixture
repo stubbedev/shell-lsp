@@ -1,0 +1,15 @@
+### prompt variable expands on the client side
+ssh backup01 "echo $PS1"
+>>> SC2029 1:20
+
+### pure literal remote command is fine
+ssh backup01 "ls foo"
+>>> none
+
+### only a host argument
+ssh "$target_host"
+>>> SC2154 1:6
+
+### an identity option disables the check
+ssh -i ~/.ssh/deploy_ed25519 "$target_host"
+>>> SC2154 1:31

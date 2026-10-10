@@ -1,0 +1,59 @@
+### grep piped into wc -l
+dmesg | grep usb | wc -l
+>>> SC2126 1:9
+
+### grep with only-matching and wc -l is fine
+grep -o 'id=[0-9]*' trace.log | wc -l
+>>> none
+
+### grep with only-matching and bare wc is fine
+grep -o error app.log | wc
+>>> none
+
+### plain grep and bare wc is fine
+grep error app.log | wc
+>>> none
+
+### grep with only-matching and wc -c is fine
+grep -o error app.log | wc -c
+>>> none
+
+### plain grep and wc -c is fine
+grep error app.log | wc -c
+>>> none
+
+### grep with only-matching and a combined wc cluster is fine
+grep -o error app.log | wc -cmwL
+>>> none
+
+### plain grep and a combined wc cluster is fine
+grep error app.log | wc -cmwL
+>>> none
+
+### recursive grep counting lines is fine
+grep -r deprecated src | wc -l
+>>> none
+
+### files with matches counted by lines is fine
+grep -l main ./*.c | wc -l
+>>> none
+
+### files without matches counted by lines is fine
+grep -L license ./*.c | wc -l
+>>> none
+
+### after context glued to its number is fine
+grep -A3 panic kern.log | wc -l
+>>> none
+
+### before context glued to a large number is fine
+grep -B250 panic kern.log | wc -l
+>>> none
+
+### long after context option with a separate number is fine
+grep --after-context 4 panic kern.log | wc -l
+>>> none
+
+### short before context and long after context is fine
+grep -B 2 --after-context=1 panic kern.log | wc -l
+>>> none

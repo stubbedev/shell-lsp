@@ -1,0 +1,3 @@
+### and operator inside single brackets
+[ "$ready" && "$armed" ] && launch
+>>> SC2107 1:12

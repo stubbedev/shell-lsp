@@ -1,0 +1,43 @@
+### negated command before another command
+#!/usr/bin/env bats
+@test "service rejects bad input" {
+  ! true
+  false
+}
+>>> SC2314 3:3
+
+### negated command as the last statement
+#!/usr/bin/env bats
+@test "nothing listens on 9000" {
+  ! true
+}
+>>> SC2314 3:3
+
+### negated pipeline in the middle
+#!/usr/bin/env bats
+@test "no errors logged" {
+  ! grep -q ERROR app.log
+  echo "checked"
+}
+>>> SC2314 3:3
+
+### using the run helper
+#!/usr/bin/env bats
+@test "handles negation" {
+  run ! true
+}
+>>> none
+
+### negated double bracket or false
+#!/usr/bin/env bats
+@test "file is absent" {
+  ! [[ -e out.txt ]] || false
+}
+>>> none
+
+### negated single bracket or false
+#!/usr/bin/env bats
+@test "file is absent" {
+  ! [ -e out.txt ] || false
+}
+>>> none

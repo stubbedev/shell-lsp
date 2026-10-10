@@ -7,9 +7,9 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/actions"
-	"github.com/stubbedev/shell-lsp/internal/diagnostics"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
+	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
@@ -51,15 +51,11 @@ func (s *Server) handleCodeAction(ctx context.Context, docs *docstore.View, para
 			Start: snap.doc.PositionToOffset(actionParams.Range.Start, snap.encoding),
 			End:   snap.doc.PositionToOffset(actionParams.Range.End, snap.encoding),
 		},
-		Diagnostics:    toActionDiagnostics(snap, actionParams.Context.Diagnostics),
+		Diagnostics:    s.toActionDiagnostics(snap, actionParams.Context.Diagnostics),
 		LocalSupported: snap.dialect.Features().Local,
 	}
 	if wants(only, string(actions.SourceFixAll)) {
-		report, err := s.diagnose(ctx, snap, true)
-		if err != nil {
-			return nil, err
-		}
-		in.AllDiagnostics = toActionDiagnostics(snap, report.items)
+		in.AllDiagnostics = s.lintActionDiagnostics(snap)
 	}
 	caps := s.clientCapabilities()
 	literal := caps.TextDocument.CodeAction.CodeActionLiteralSupport != nil
@@ -149,11 +145,7 @@ func (s *Server) handleExecuteCommand(ctx context.Context, docs *docstore.View, 
 		if err != nil {
 			return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
 		}
-		report, err := s.diagnose(ctx, snap, true)
-		if err != nil {
-			return nil, err
-		}
-		edits := actions.FixAll(toActionDiagnostics(snap, report.items))
+		edits := actions.FixAll(s.lintActionDiagnostics(snap))
 		if len(edits) == 0 {
 			return nil, nil
 		}
@@ -220,7 +212,8 @@ func (s *Server) multiFileEdit(enc docstore.Encoding, files []fileEdits) lsp.Wor
 	return out
 }
 
-func toActionDiagnostics(snap *snapshot, diags []lsp.Diagnostic) []actions.Diagnostic {
+func (s *Server) toActionDiagnostics(snap *snapshot, diags []lsp.Diagnostic) []actions.Diagnostic {
+	findings, _ := s.findings(snap)
 	out := make([]actions.Diagnostic, 0, len(diags))
 	for i, d := range diags {
 		ad := actions.Diagnostic{
@@ -232,19 +225,19 @@ func toActionDiagnostics(snap *snapshot, diags []lsp.Diagnostic) []actions.Diagn
 				End:   snap.doc.PositionToOffset(d.Range.End, snap.encoding),
 			},
 		}
-		if d.Source == diagnostics.ShellcheckSource && len(d.Data) > 0 {
-			var fix diagnostics.FixData
-			if err := json.Unmarshal(d.Data, &fix); err == nil {
-				for _, e := range fix.Edits {
-					ad.Fix = append(ad.Fix, textedit.Edit{
-						Start:   snap.doc.PositionToOffset(e.Range.Start, snap.encoding),
-						End:     snap.doc.PositionToOffset(e.Range.End, snap.encoding),
-						NewText: e.NewText,
-					})
-				}
-			}
+		if j := slices.IndexFunc(findings, func(f lint.Finding) bool { return f.Code.String() == d.Code && f.Span == ad.Span }); j >= 0 {
+			ad.Fix = findings[j].Fix
 		}
 		out = append(out, ad)
+	}
+	return out
+}
+
+func (s *Server) lintActionDiagnostics(snap *snapshot) []actions.Diagnostic {
+	findings, _ := s.findings(snap)
+	out := make([]actions.Diagnostic, len(findings))
+	for i, f := range findings {
+		out[i] = actions.Diagnostic{Index: i, Code: f.Code.String(), Message: f.Message, Span: f.Span, Fix: f.Fix}
 	}
 	return out
 }

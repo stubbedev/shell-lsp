@@ -1,0 +1,11 @@
+### eval of padded frame range ending in variable
+#!/bin/bash
+last=120
+eval echo frame{001..$last}.png
+>>> SC2175 3:16
+
+### eval of comma list with a variable is fine
+#!/bin/bash
+ext=jpg
+eval echo frame.{png,gif,$ext}
+>>> none

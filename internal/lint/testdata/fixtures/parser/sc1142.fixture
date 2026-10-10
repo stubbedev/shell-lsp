@@ -1,0 +1,9 @@
+### process substitution glued to done
+while read -r l; do echo "$l"; done <(ls)
+>>> SC1070 1:37
+>>> SC1141 1:37
+>>> SC1142 1:37
+
+### redirect operator before the process substitution
+while read -r l; do echo "$l"; done < <(ls)
+>>> none

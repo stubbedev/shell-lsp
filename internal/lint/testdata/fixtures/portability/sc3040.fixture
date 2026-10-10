@@ -1,0 +1,31 @@
+### emacs editing mode in sh
+#!/bin/sh
+set -o emacs
+>>> SC3040 2:8
+
+### pipefail is still reported in sh
+#!/bin/sh
+set -o pipefail
+>>> SC3040 2:8
+
+### emacs editing mode is not checked in dash
+#!/bin/dash
+set -o emacs
+>>> none
+
+### non-literal option name stops the check
+#!/bin/sh
+wanted=emacs
+set -o "$wanted"
+>>> none
+
+### pipefail in busybox is fine
+#!/bin/busybox sh
+# shellcheck shell=busybox
+set -o pipefail
+>>> none
+
+### vi editing mode is accepted in sh
+#!/bin/sh
+set -o vi
+>>> none

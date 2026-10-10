@@ -1,0 +1,14 @@
+### while loop body without do
+while read -r line
+  echo "$line"
+done
+>>> SC1057 1:1
+>>> SC1058 3:1
+>>> SC1072 3:5
+>>> SC1073 1:1
+
+### while loop with do
+while read -r line; do
+  echo "$line"
+done
+>>> none

@@ -1,0 +1,24 @@
+### looping over find in backticks
+for stale in `find . -name '*.bak'`; do
+  rm "$stale"
+done
+>>> SC2006 1:14
+>>> SC2044 1:14
+
+### looping over find in a dollar paren substitution
+for f in $(find /var/log -type f); do
+  echo "$f"
+done
+>>> SC2044 1:10
+
+### find piped into sort is fine
+for f in $(find . -type f | sort); do
+  echo "$f"
+done
+>>> none
+
+### extra text next to the substitution is fine
+for f in prefix$(find . -type f); do
+  echo "$f"
+done
+>>> none

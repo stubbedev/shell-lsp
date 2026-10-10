@@ -1,0 +1,24 @@
+### implicit test of a substitution with a trailing space
+[ "$(git status --porcelain) " ] && echo "dirty"
+>>> SC2157 1:29
+
+### -n of a substitution with a trailing space
+[ -n "$(pidof sshd) " ] && echo "running"
+>>> SC2157 1:20
+
+### -z of a substitution glued to a letter
+[ -z $(uname)x ] && echo "empty"
+>>> SC2046 1:6
+>>> SC2157 1:14
+
+### -z of a plain word
+[ -z word ] && echo "empty"
+>>> SC2157 1:6
+
+### -z of a lone substitution is fine
+[ -z "$(ls -A cache)" ] && echo "empty"
+>>> none
+
+### two adjacent substitutions are fine
+[ "$(cat a.txt)$(cat b.txt)" ] && echo "content"
+>>> none

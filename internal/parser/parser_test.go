@@ -94,15 +94,17 @@ func TestUnrecoverableErrorsKeepParsingLaterLines(t *testing.T) {
 func TestDialectErrorsAreTyped(t *testing.T) {
 	t.Parallel()
 
-	tree := Parse("arr=(1 2)\n", dialect.Posix)
+	tree := Parse("echo ${name^^}\n", dialect.Ksh)
 	if len(tree.Errors) == 0 {
-		t.Fatal("no errors for arrays in POSIX sh")
+		t.Fatal("no errors for bash case conversion in ksh")
 	}
 	if tree.Errors[0].Kind != ErrDialect {
 		t.Errorf("Kind = %d, want ErrDialect: %s", tree.Errors[0].Kind, tree.Errors[0].Message)
 	}
-	if got := Parse("arr=(1 2)\n", dialect.Bash); len(got.Errors) != 0 {
-		t.Errorf("bash rejected arrays: %v", messages(got))
+	for _, d := range []dialect.Dialect{dialect.Bash, dialect.Posix, dialect.Dash} {
+		if got := Parse("arr=(1 2)\n[[ -n $x ]]\n", d); len(got.Errors) != 0 {
+			t.Errorf("%s rejected bash syntax that linting reports instead: %v", d, messages(got))
+		}
 	}
 }
 

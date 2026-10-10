@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/lint"
 )
 
 func TestParseDefaults(t *testing.T) {
@@ -17,7 +18,7 @@ func TestParseDefaults(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Parse(%q) error = %v", raw, err)
 		}
-		if got.Dialect != nil || !got.Shellcheck.Enabled || got.Shellcheck.Path != "shellcheck" {
+		if got.Dialect != nil || !got.Lint.Enabled || len(got.Lint.Exclude) != 0 {
 			t.Errorf("Parse(%q) = %+v, want defaults", raw, got)
 		}
 	}
@@ -26,21 +27,18 @@ func TestParseDefaults(t *testing.T) {
 func TestParseFull(t *testing.T) {
 	t.Parallel()
 
-	got, err := Parse(json.RawMessage(`{"dialect":"zsh","shellcheck":{"enable":false,"path":"/opt/sc","arguments":["--severity=style","-x"],"exclude":["SC2034","sc1090","2154"]}}`))
+	got, err := Parse(json.RawMessage(`{"dialect":"zsh","lint":{"enable":false,"exclude":["SC2034","sc1090","2154"]}}`))
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
 	if got.Dialect == nil || *got.Dialect != dialect.Zsh {
 		t.Errorf("Dialect = %v, want zsh", got.Dialect)
 	}
-	if got.Shellcheck.Enabled || got.Shellcheck.Path != "/opt/sc" {
-		t.Errorf("Shellcheck = %+v", got.Shellcheck)
+	if got.Lint.Enabled {
+		t.Errorf("Lint = %+v, want disabled", got.Lint)
 	}
-	if !slices.Equal(got.Shellcheck.Exclude, []int{2034, 1090, 2154}) {
-		t.Errorf("Exclude = %v", got.Shellcheck.Exclude)
-	}
-	if !slices.Equal(got.Shellcheck.Arguments, []string{"--severity=style", "-x"}) {
-		t.Errorf("Arguments = %v", got.Shellcheck.Arguments)
+	if !slices.Equal(got.Lint.Exclude, []lint.Code{2034, 1090, 2154}) {
+		t.Errorf("Exclude = %v", got.Lint.Exclude)
 	}
 }
 
@@ -48,13 +46,12 @@ func TestParseRejects(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]string{
-		`{"dialect":"fish"}`:                            "unknown dialect",
-		`{"shellcheck":{"path":" "}}`:                   "must not be empty",
-		`{"shellcheck":{"exclude":["nope"]}}`:           "exclude[0]",
-		`{"shellcheck":{"arguments":["--format=gcc"]}}`: "json1",
-		`{"shellcheck":{"arguments":["-s","bash"]}}`:    "dialect",
-		`{"unknownKey":1}`:                              "unknown field",
-		`[1]`:                                           "parsing",
+		`{"dialect":"fish"}`:              "unknown dialect",
+		`{"lint":{"exclude":["nope"]}}`:   "exclude[0]",
+		`{"shellcheck":{"enable":false}}`: "unknown field",
+		`{"lint":{"path":"/opt/linter"}}`: "unknown field",
+		`{"unknownKey":1}`:                "unknown field",
+		`[1]`:                             "parsing",
 	}
 	for raw, want := range tests {
 		_, err := Parse(json.RawMessage(raw))

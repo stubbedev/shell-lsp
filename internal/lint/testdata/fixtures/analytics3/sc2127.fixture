@@ -1,0 +1,27 @@
+### sh case branch with fall-through terminator
+#!/bin/sh
+case "$1" in
+  start) echo "starting" ;&
+  run) echo "running" ;;
+esac
+>>> SC2127 2:1
+
+### ksh case branch with continue-testing terminator
+#!/bin/ksh
+case "$1" in
+  -v) echo "verbose" ;;&
+  -*) echo "option" ;;
+esac
+>>> SC2127 2:1
+
+### ash script with a brace command substitution
+#!/bin/ash
+stamp=${ date +%s; }
+echo "$stamp"
+>>> SC2127 2:7
+>>> SC2187 1:1
+
+### bash brace command substitution in double quotes
+#!/bin/bash
+echo "now: ${ date +%T; }"
+>>> none

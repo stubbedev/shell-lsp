@@ -1,0 +1,28 @@
+### read into an array without -r
+read -a columns <<< "id name email"
+echo "${columns[0]}"
+>>> SC2162 1:1
+
+### clustered flags containing r
+read -ra columns <<< "id name email"
+echo "${columns[0]}"
+>>> none
+
+### poll with -t 0 and no variable
+if read -t 0; then echo "input waiting"; fi
+>>> none
+
+### poll then read with a long delimiter option
+read -t 0 && read --delim '' -r payload
+echo "$payload"
+>>> none
+
+### poll with a variable and stdin from a file
+read -t 0 line < queue.txt
+echo "$line"
+>>> none
+
+### poll a descriptor with -u
+exec 5< events.log
+read -u 5 -t 0 && echo "events pending"
+>>> none

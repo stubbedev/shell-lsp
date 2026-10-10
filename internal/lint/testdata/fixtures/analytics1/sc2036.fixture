@@ -1,0 +1,24 @@
+### assignment of a command name piped into grep
+listing=ls | grep conf
+>>> SC2034 1:1
+>>> SC2036 1:1
+>>> SC2209 1:1
+
+### assignment with a redirection piped into a filter
+report=summary >/dev/null | sort
+>>> SC2034 1:1
+>>> SC2036 1:1
+>>> SC2260 1:16
+
+### prefix assignment before a real command is fine
+LC_ALL=C ls | grep conf
+>>> SC2010 1:10
+
+### standalone assignment outside a pipeline is fine
+listing=ls
+>>> SC2034 1:1
+>>> SC2209 1:1
+
+### assignment in a later stage is not inspected
+printf '%s\n' a b | marker=seen
+>>> SC2034 1:21

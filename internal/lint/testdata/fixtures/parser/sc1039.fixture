@@ -1,0 +1,22 @@
+### indented end token in a plain here document
+cat <<END
+Usage: tool [options]
+  END
+Options (see manual)
+END
+>>> SC1039 3:1
+
+### indented end token with no proper terminator
+cat <<END
+Usage: tool [options]
+  END
+>>> SC1009 1:1
+>>> SC1039 3:1
+>>> SC1072 4:1
+>>> SC1073 1:5
+
+### dash form indented with tabs only
+cat <<-END
+	Usage: tool [options]
+	END
+>>> none

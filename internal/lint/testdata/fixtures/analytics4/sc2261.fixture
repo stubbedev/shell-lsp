@@ -1,0 +1,28 @@
+### two output files for ls
+ls > first.txt > second.txt
+>>> SC2261 1:16
+>>> SC2261 1:4
+
+### stdout targeted twice with stderr in between
+ls > a.out 2> a.err > b.out
+>>> SC2261 1:21
+>>> SC2261 1:4
+
+### plain output and ampersand-greater both hit stdout
+ls > listing.txt &> everything.txt
+>>> SC2261 1:19
+>>> SC2261 1:4
+
+### two stdin sources inside a pipeline
+echo ok | sort < one.txt < two.txt
+>>> SC2259 1:26
+>>> SC2261 1:16
+>>> SC2261 1:26
+
+### fd juggling is undeterminable
+ls 3>&1 1>&3 3>&- | wc -l
+>>> SC2012 1:1
+
+### separate fds for stdout and stderr
+make > build.log 2> build.err
+>>> none

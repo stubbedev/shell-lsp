@@ -1,0 +1,19 @@
+### reading lines from an input process substitution in sh
+#!/bin/sh
+while read -r entry; do
+  echo "$entry"
+done < <(ls /etc)
+>>> SC3001 4:8
+
+### reading lines from an input process substitution in dash
+#!/bin/dash
+while read -r entry; do
+  echo "$entry"
+done < <(ls /etc)
+>>> SC3001 4:8
+
+### output process substitution is still reported in busybox
+#!/bin/busybox sh
+# shellcheck shell=busybox
+pwd | tee >(gzip > cwd.gz)
+>>> SC3001 3:11

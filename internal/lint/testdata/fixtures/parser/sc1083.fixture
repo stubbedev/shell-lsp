@@ -1,0 +1,16 @@
+### extra closing brace after a braced expansion
+echo ${HOME}}
+>>> SC1083 1:13
+>>> SC2086 1:6
+
+### empty brace pair used as a placeholder
+find build/{} -name '*.o'
+>>> none
+
+### comma brace expansion
+cp settings.{conf,bak}
+>>> none
+
+### range brace expansion
+echo {1..5}
+>>> none

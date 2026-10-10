@@ -1,0 +1,17 @@
+### unquoted glob after execdir
+find . -type d -execdir rm *.orig \;
+>>> SC2014 1:28
+>>> SC2035 1:28
+
+### command substitution after exec
+find . -name '*.gz' -exec cp {} /backup/$(date +%F) \;
+>>> SC2014 1:41
+>>> SC2046 1:41
+
+### glob before the exec action is fine
+find ./*.c -exec gzip {} \;
+>>> none
+
+### quoted glob after exec is fine
+find . -type d -execdir rm '*.orig' \;
+>>> none

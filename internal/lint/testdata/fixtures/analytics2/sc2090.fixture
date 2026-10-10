@@ -1,0 +1,70 @@
+### double quotes inside single-quoted value then unquoted use
+opts='--label="release candidate"'
+gh pr create $opts
+>>> SC2086 2:14
+>>> SC2089 1:6
+>>> SC2090 2:14
+
+### single quotes after equals in double-quoted value
+opts="--where='id=7'"
+query-tool $opts
+>>> SC2089 1:7
+>>> SC2090 2:12
+
+### propagated taint executed as command
+dest='My\ Files'
+copy_cmd="cp -r $dest"
+$copy_cmd
+>>> SC2089 1:6
+>>> SC2090 3:1
+
+### escaped space passed to rm
+dest='My\ Files'
+rm -r $dest
+>>> SC2086 2:7
+>>> SC2089 1:6
+>>> SC2090 2:7
+
+### quoted path segment with a space
+mount_point="/media/'external disk'/photos"
+ls $mount_point
+>>> SC2086 2:4
+>>> SC2089 1:14
+>>> SC2090 2:4
+
+### quoted reference is fine
+opts='--label="release candidate"'
+gh pr create "$opts"
+>>> none
+
+### array expansion quoted is fine
+opts=('--label=')
+gh pr create "${opts[@]}"
+>>> none
+
+### apostrophe inside words is fine
+status_line="we're live"
+logger $status_line
+>>> SC2086 2:8
+
+### eval argument is fine
+opts='--label="release candidate"'
+eval gh pr create $opts
+>>> SC2086 2:19
+
+### length expansion then executed command is fine
+dest='My\ Files'
+copy_cmd="cp -r ${#dest}"
+$copy_cmd
+>>> none
+
+### length expansion of quoted path is fine
+mount_point="/media/'external disk'/photos"
+echo ${#mount_point}
+>>> none
+
+### later plain reassignment clears the taint
+opts='--label="release candidate"'
+opts=--draft
+gh pr create $opts
+>>> none

@@ -1,0 +1,25 @@
+### unbraced variable reference
+code='123'
+echo $code
+>>> none
+
+### braced variable reference is fine
+code='123'
+echo ${code}
+>>> none
+
+### dollar inside single quotes is not an expansion
+# shellcheck disable=SC2016
+echo 'cost: $code'
+>>> none
+
+### special parameters and single digits are exempt
+echo $* $1 $? $#
+>>> SC2048 1:6
+>>> SC2086 1:6
+>>> SC2086 1:9
+
+### expansion followed by equals and value
+$option=42
+>>> SC2154 1:1
+>>> SC2281 1:1

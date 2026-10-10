@@ -1,0 +1,33 @@
+### single literal branch on the first argument
+case "$1" in
+  a) echo "alpha" ;;
+esac
+>>> none
+
+### patterns needing at least one or two characters
+case "$code" in
+  ?*?) echo "long" ;;
+  *?) echo "short" ;;
+esac
+>>> SC2154 1:7
+
+### bracket expression is not a catch-all
+case "$answer" in
+  y) echo yes ;;
+  [a-z]*) echo other ;;
+esac
+>>> SC2154 1:7
+
+### alternative with a bare star
+case "$cmd" in
+  start) run_server ;;
+  x|*) usage ;;
+esac
+>>> SC2154 1:7
+
+### double star is still a catch-all
+case "$arch" in
+  x86_64) echo "amd64" ;;
+  **) echo "$arch" ;;
+esac
+>>> SC2154 1:7

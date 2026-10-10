@@ -1,0 +1,7 @@
+### semicolon right after do
+for f in *.log; do; gzip "$f"; done
+>>> SC1059 1:19
+
+### do followed by a command
+for f in *.log; do gzip "$f"; done
+>>> none

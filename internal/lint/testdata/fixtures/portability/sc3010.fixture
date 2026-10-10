@@ -1,0 +1,20 @@
+### double-bracket empty test in sh
+#!/bin/sh
+if [[ -z $USERNAME ]]; then
+  echo "no user"
+fi
+>>> SC3010 2:4
+
+### double-bracket empty test in dash
+#!/bin/dash
+if [[ -z $USERNAME ]]; then
+  echo "no user"
+fi
+>>> SC3010 2:4
+
+### double-bracket string equality is accepted in busybox
+#!/bin/busybox sh
+# shellcheck shell=busybox
+mode=fast
+[[ "$mode" = "$mode" ]]
+>>> none

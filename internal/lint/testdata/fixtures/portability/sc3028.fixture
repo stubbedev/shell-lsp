@@ -1,0 +1,43 @@
+### echoing RANDOM
+#!/bin/sh
+echo $RANDOM
+>>> SC3028 2:6
+
+### dice roll from bare RANDOM in arithmetic
+#!/bin/sh
+echo $((RANDOM % 6 + 1))
+>>> SC3028 2:9
+
+### seeding RANDOM still fires
+#!/bin/sh
+RANDOM=42
+echo $RANDOM
+>>> SC3028 3:6
+
+### echoing MACHTYPE in dash
+#!/bin/dash
+echo $MACHTYPE
+>>> SC2086 2:6
+>>> SC3028 2:6
+
+### echoing last-argument special in sh
+#!/bin/sh
+echo $_
+>>> SC2086 2:6
+>>> SC3028 2:6
+
+### HOSTNAME assigned before use is fine
+#!/bin/sh
+HOSTNAME=buildbox
+echo $HOSTNAME
+>>> none
+
+### LINENO is not on the list
+#!/bin/sh
+echo $LINENO
+>>> none
+
+### last-argument special is accepted in dash
+#!/bin/dash
+echo $_
+>>> SC2086 2:6

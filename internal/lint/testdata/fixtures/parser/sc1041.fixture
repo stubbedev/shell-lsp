@@ -1,0 +1,44 @@
+### end token followed by a space and Windows line endings
+cat <<DONE 
+building
+DONE
+>>> SC1009 1:1
+>>> SC1017 1:12
+>>> SC1041 1:7
+>>> SC1042 1:7
+>>> SC1072 4:1
+>>> SC1073 1:5
+
+### end token with a suffix on its line
+cat <<EOF
+results below
+EOF2
+>>> SC1009 1:1
+>>> SC1041 1:7
+>>> SC1042 1:7
+>>> SC1072 4:1
+>>> SC1073 1:5
+
+### end token in the middle of a body line
+mail -s report admin <<END
+see the END of the log
+>>> SC1009 1:1
+>>> SC1041 1:24
+>>> SC1042 1:24
+>>> SC1072 3:1
+>>> SC1073 1:22
+
+### terminator line present
+cat <<EOF
+results below
+EOF
+>>> none
+
+### indentation already reported
+cat <<EOF
+results below
+  EOF
+>>> SC1009 1:1
+>>> SC1039 3:1
+>>> SC1072 4:1
+>>> SC1073 1:5

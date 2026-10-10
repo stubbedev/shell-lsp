@@ -1,0 +1,23 @@
+### variable inside a double-quoted printf format
+printf "Hello, $s"
+>>> SC2059 1:8
+>>> SC2154 1:16
+
+### command substitution as the format after -v
+printf -v banner $(cat motd.txt)
+>>> SC2034 1:11
+>>> SC2046 1:18
+>>> SC2059 1:18
+
+### same text single-quoted is literal
+printf 'Hello, $s'
+>>> SC2016 1:8
+
+### format with a percent sign and a width expansion
+printf "%${count}s" "$label"
+>>> SC2154 1:10
+>>> SC2154 1:22
+
+### dollar-single-quoted format is literal
+printf $'Done.\n'
+>>> none

@@ -1,0 +1,21 @@
+### relative path to sh
+#!bin/sh
+echo "relative"
+>>> SC2239 1:1
+
+### interpreter without any slash
+#!sh
+uname -a
+>>> SC2239 1:1
+
+### shell directive that also ignores the code is fine
+#!bin/sh
+# shellcheck shell=sh disable=SC2239
+echo "relative"
+>>> none
+
+### shell directive alone is fine
+#!bin/sh
+# shellcheck shell=sh
+echo "relative"
+>>> none

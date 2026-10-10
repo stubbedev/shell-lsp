@@ -1,0 +1,32 @@
+### translated string naming an assigned variable
+build_dir=/tmp/build
+echo $"build_dir"
+>>> SC2034 1:1
+>>> SC2256 2:6
+
+### variable assigned after the translated string
+printf '%s\n' $"log_level2"
+log_level2=debug
+>>> SC2034 2:1
+>>> SC2256 1:15
+
+### name that is never assigned
+echo $"unknown_setting"
+>>> none
+
+### translated string with two dots
+release=1.2
+echo $"..release"
+>>> SC2034 1:1
+
+### translated string containing an expansion
+release=1.2
+echo $"$release"
+>>> none
+
+### two names separated by a space
+first=Ada
+last=Lovelace
+echo $"first last"
+>>> SC2034 1:1
+>>> SC2034 2:1

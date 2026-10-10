@@ -1,0 +1,9 @@
+### bang and hash swapped
+!# /bin/sh
+echo hello
+>>> SC1084 1:1
+
+### correct shebang
+#!/bin/sh
+echo hello
+>>> none

@@ -1,5 +1,5 @@
 # hover, definition, references, highlights and rename on one bash document
--> {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{"textDocument":{"diagnostic":{}}},"initializationOptions":{"shellcheck":{"enable":false}}}}
+-> {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{"textDocument":{"diagnostic":{}}},"initializationOptions":{"lint":{"enable":false}}}}
 <- {"jsonrpc":"2.0","id":1}
 -> {"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///w/deploy.bash","languageId":"shellscript","version":1,"text":"#!/usr/bin/env bash\n# Deploys a target.\n# $1 - target name\ndeploy() {\n\tlocal target=\"$1\"\n\techo \"deploying $target\"\n}\ndeploy prod\ndeploy staging\n"}}}
 -> {"jsonrpc":"2.0","id":2,"method":"textDocument/hover","params":{"textDocument":{"uri":"file:///w/deploy.bash"},"position":{"line":7,"character":1}}}

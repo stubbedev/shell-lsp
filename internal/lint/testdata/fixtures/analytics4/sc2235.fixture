@@ -1,0 +1,37 @@
+### subshell with or-ed tests after a command
+check_env && ([ -z "$HOME" ] || ! [ -d "$HOME" ])
+>>> SC2235 1:14
+
+### subshell with and-ed tests and a test command
+([ -f "$src" ] && [ -r "$src" ] || test -L "$src")
+>>> SC2154 1:8
+>>> SC2235 1:1
+
+### subshell holding a brace group of tests
+([ -n "$user" ] && { [ -n "$pass" ] && [ -n "$host" ]; })
+>>> SC2235 1:1
+
+### function body with a double bracket test
+# shellcheck disable=SC2234
+has_name() ([[ -n "$name" ]])
+>>> SC2235 2:12
+
+### default assignment inside would be lost
+([[ ${region:=eu-west-1} == eu-* ]])
+>>> none
+
+### post increment inside would be lost
+([[ $((attempt++)) -lt 3 ]])
+>>> none
+
+### compound arithmetic assignment inside would be lost
+([[ $((total += step)) -gt 100 ]])
+>>> SC2154 1:17
+
+### plain default-assign without colon
+([[ ${zone=default} == default ]])
+>>> none
+
+### brace command substitution inside
+([[ ${ hostname; } == build* ]])
+>>> none

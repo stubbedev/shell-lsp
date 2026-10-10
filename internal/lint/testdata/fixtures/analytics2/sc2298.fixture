@@ -1,0 +1,12 @@
+### nested dollar name followed by a modifier
+ref=version
+echo "${$ref:-unset}"
+>>> SC2298 2:9
+
+### nested braced name followed by a modifier
+echo "${${ref}%%.*}"
+>>> SC2298 1:9
+
+### nested unmodified expansion alone is indirection
+echo "${$ref}"
+>>> SC2082 1:7

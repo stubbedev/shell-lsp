@@ -1,0 +1,8 @@
+### single-bracketed digit class in an ls glob
+ls *[:digit:].log
+>>> SC2035 1:4
+>>> SC2101 1:5
+
+### correctly double-bracketed class
+ls *[[:digit:]].log
+>>> SC2035 1:4

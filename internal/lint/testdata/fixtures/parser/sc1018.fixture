@@ -1,0 +1,36 @@
+### no-break space between command and argument
+#!/bin/bash
+echo hello
+>>> SC1018 2:5
+
+### no-break space between two arguments
+cp notes.txt /tmp/
+>>> SC1018 1:13
+
+### actual: escaped no-break space is still reported
+touch my\ file
+>>> SC1018 1:10
+
+### no-break space inside double quotes
+echo "total: 42"
+>>> none
+
+### no-break space inside single quotes
+echo 'total: 42'
+>>> none
+
+### actual: thin space is not reported
+echo hi there
+>>> none
+
+### actual: narrow no-break space is not reported
+echo 10 kg
+>>> none
+
+### actual: zero-width space is not reported
+echo hi​there
+>>> none
+
+### hair space is not in the set
+echo hi there
+>>> none

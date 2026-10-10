@@ -1,0 +1,7 @@
+### egrep is deprecated
+egrep '.+' access.log
+>>> SC2196 1:1
+
+### grep -E is fine
+grep -E '.+' access.log
+>>> none

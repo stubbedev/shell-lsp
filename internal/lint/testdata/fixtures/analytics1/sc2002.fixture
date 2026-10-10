@@ -1,0 +1,62 @@
+### cat of a plain file piped into grep
+# shellcheck enable=useless-use-of-cat
+cat access.log | grep 404
+>>> SC2002 2:5
+
+### cat of a quoted variable piped into grep
+# shellcheck enable=useless-use-of-cat
+cat "$logfile" | grep -c ERROR
+>>> SC2002 2:5
+>>> SC2154 2:6
+
+### enabled through the all keyword
+# shellcheck enable=all
+cat /etc/hosts | grep localhost
+>>> SC2002 2:5
+>>> SC2312 2:1
+
+### cat given by path is still matched
+# shellcheck enable=useless-use-of-cat
+/bin/cat inventory.csv | grep widget
+>>> SC2002 2:10
+
+### the check is off unless enabled
+cat access.log | grep 404
+>>> none
+
+### wrapper words count as extra arguments
+# shellcheck enable=useless-use-of-cat
+command cat access.log | grep 404
+>>> none
+
+### unquoted glob argument may be several files
+# shellcheck enable=useless-use-of-cat
+cat *.log | grep timeout
+>>> SC2035 2:5
+
+### unquoted variable argument may split
+# shellcheck enable=useless-use-of-cat
+cat $logfile | grep timeout
+>>> SC2086 2:5
+>>> SC2154 2:5
+
+### quoted indirect expansion may be several words
+# shellcheck enable=useless-use-of-cat
+cat "${!source_var}" | grep timeout
+>>> SC2154 2:6
+
+### unquoted variable outside a pipeline is fine
+# shellcheck enable=useless-use-of-cat
+cat $logfile
+>>> SC2086 2:5
+>>> SC2154 2:5
+
+### quoted positional parameters outside a pipeline are fine
+# shellcheck enable=useless-use-of-cat
+cat "$@"
+>>> none
+
+### dash option as the only argument is fine
+# shellcheck enable=useless-use-of-cat
+cat -n | grep TODO
+>>> none

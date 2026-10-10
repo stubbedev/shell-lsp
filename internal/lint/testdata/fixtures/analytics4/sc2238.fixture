@@ -1,0 +1,23 @@
+### ls output into a file named rm
+ls > rm
+>>> SC2238 1:6
+
+### reading from a file called cat
+sort < cat
+>>> SC2238 1:8
+
+### appending to a file called grep
+date >> grep
+>>> SC2238 1:9
+
+### quoted rm target is intentional
+ls > 'rm'
+>>> none
+
+### ordinary file name
+ls > inventory.txt
+>>> none
+
+### the word file is excluded
+ls > file
+>>> none

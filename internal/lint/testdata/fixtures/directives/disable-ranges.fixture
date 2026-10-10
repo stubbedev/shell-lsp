@@ -1,0 +1,58 @@
+### range starting at the code disables it
+#!/bin/sh
+# shellcheck disable=SC2086-SC2087
+cp $1 /srv/www/
+>>> none
+
+### range ending at the code does not disable it
+#!/bin/sh
+# shellcheck disable=SC2080-SC2086
+cp $1 /srv/www/
+>>> SC2086 3:4
+
+### wide numeric range without prefixes
+#!/bin/sh
+# shellcheck disable=2000-3000
+unused_dir=/tmp
+cp $1 /srv/www/
+>>> none
+
+### range up to 3000 leaves 3000-series codes alone
+#!/bin/sh
+# shellcheck disable=2000-3000
+[[ -n $1 ]] && cp $1 /srv/www/
+>>> SC3010 3:1
+
+### all disables codes from every series
+#!/bin/sh
+# shellcheck disable=all
+[[ -n $1 ]] && cp $1 /srv/www/
+>>> none
+
+### range written with the prefix on the first code only
+#!/bin/sh
+# shellcheck disable=SC2086-2087
+cp $1 /srv/www/
+>>> none
+
+### single code in a list applies next to a range that misses the finding
+#!/bin/sh
+# shellcheck disable=SC2034,SC2000-SC2010
+spare=1
+cp $1 /srv/www/
+>>> SC2086 4:4
+
+### quoted list with a range
+#!/bin/sh
+# shellcheck disable="SC2030-SC2040,SC2086"
+spare=1
+cp $1 /srv/www/
+>>> none
+
+### command-scoped range
+#!/bin/sh
+:
+# shellcheck disable=SC2080-SC2090
+cp $1 /srv/www/
+cp $2 /srv/www/
+>>> SC2086 5:4

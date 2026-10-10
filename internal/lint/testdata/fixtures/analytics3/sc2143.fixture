@@ -1,0 +1,36 @@
+### double-bracket nullary test of a grep pipeline
+if [[ $(ps aux | grep nginx) ]]; then
+  echo "nginx running"
+fi
+>>> SC2009 1:9
+>>> SC2143 1:7
+
+### single-bracket -z of fgrep
+if [ -z $(fgrep -i error build.log) ]; then
+  echo "clean build"
+fi
+>>> SC2046 1:9
+>>> SC2143 1:6
+>>> SC2197 1:11
+
+### single-bracket -n of a quoted zgrep pipeline
+if [ -n "$(cat archives.list | zgrep -l secret)" ]; then
+  echo "found secrets"
+fi
+>>> SC2143 1:6
+
+### grep is not the last command of the pipeline
+if [[ $(grep -c TODO notes.txt | tr -d ' ') ]]; then
+  echo "has todos"
+fi
+>>> none
+
+### substitution is an argument to an ordinary command
+rm $(grep -l obsolete ./*.cfg)
+>>> SC2046 1:4
+
+### pgrep is not a grep family member
+if [[ $(pgrep -f worker) ]]; then
+  echo "workers alive"
+fi
+>>> none

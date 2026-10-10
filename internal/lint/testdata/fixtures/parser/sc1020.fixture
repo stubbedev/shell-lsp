@@ -1,0 +1,52 @@
+### closing single bracket glued to the operand
+answer=$1
+if [ "$answer" = "yes"]; then
+  echo confirmed
+fi
+>>> SC1009 2:1
+>>> SC1020 2:24
+>>> SC1072 2:24
+>>> SC1073 2:4
+
+### closing double bracket glued to the operand
+branch=$(git branch --show-current)
+if [[ $branch == main]]; then
+  echo "on main"
+fi
+>>> SC1009 2:1
+>>> SC1020 2:24
+>>> SC1072 2:24
+>>> SC1073 2:4
+
+### regex bracket expression with a character class
+tag=$1
+if [[ $tag =~ [[:alnum:].~-] ]]; then
+  echo valid
+fi
+>>> none
+
+### variable-is-set test on an indexed array element
+slots=(a b c)
+i=1
+if [[ -v slots[$i] ]]; then
+  echo set
+fi
+>>> none
+
+### glob bracket containing a quoted positional
+if [[ x == ["$1"] ]]; then
+  echo match
+fi
+>>> SC2193 1:9
+
+### glob bracket containing only a star
+if [[ $1 == [*] ]]; then
+  echo star
+fi
+>>> none
+
+### word ending in a bracket that opens earlier
+if [[ $1 == *[0-9] ]]; then
+  echo numeric suffix
+fi
+>>> none

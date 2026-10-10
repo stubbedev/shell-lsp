@@ -1,0 +1,45 @@
+### alias defined and used on the same line
+alias ll='ls -l'; ll
+>>> SC2262 1:7
+>>> SC2263 1:19
+
+### alias inside a multi-line brace group
+{
+  alias gs='git status'
+  gs
+}
+>>> SC2262 2:9
+>>> SC2263 3:3
+
+### same line with an ampersand separator
+alias up='uptime' & up
+>>> SC2262 1:7
+>>> SC2263 1:21
+
+### alias defined and used on separate lines
+alias ll='ls -l'
+ll
+>>> none
+
+### single-quoted command name
+alias ll='ls -l'; 'll'
+>>> none
+
+### directive on the alias definition suppresses it
+true
+{
+  # shellcheck disable=SC2262
+  alias gs='git status'
+  gs
+}
+>>> none
+
+### second unsuppressed definition after a suppressed one
+true
+{
+  # shellcheck disable=SC2262
+  alias gs='git status'
+  alias gs='git status -s'
+  gs
+}
+>>> none

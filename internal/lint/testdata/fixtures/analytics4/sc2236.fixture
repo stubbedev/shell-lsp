@@ -1,0 +1,17 @@
+### negated -z in single brackets
+if [ ! -z $answer ]; then
+  echo "answered"
+fi
+>>> SC2086 1:11
+
+### negated -n in double brackets
+[[ ! -n "$target" ]] && echo "no target"
+>>> none
+
+### negated file test is left alone
+[[ ! -w "$logfile" ]] && echo "read only"
+>>> SC2154 1:10
+
+### plain -z test
+[ -z "$answer" ] && echo "empty"
+>>> none

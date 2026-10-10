@@ -1,0 +1,11 @@
+### nameref test in sh
+#!/bin/sh
+[ -R alias ] && echo reference
+>>> SC2154 2:6
+>>> SC3063 2:3
+
+### nameref test in dash
+#!/bin/dash
+[ -R alias ] && echo reference
+>>> SC2154 2:6
+>>> SC3063 2:3

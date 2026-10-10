@@ -1,0 +1,24 @@
+### trapping ERR and INT
+#!/bin/sh
+on_fail() { echo failed; }
+trap on_fail ERR INT
+>>> SC3047 3:14
+
+### trapping ERR and SIGTERM
+#!/bin/sh
+on_fail() { echo failed; }
+trap on_fail ERR SIGTERM
+>>> SC3047 3:14
+>>> SC3048 3:18
+
+### trapping ERR in dash
+#!/bin/dash
+on_fail() { echo failed; }
+trap on_fail ERR INT
+>>> SC3047 3:14
+
+### trapping INT and TERM is fine
+#!/bin/sh
+on_stop() { echo stopping; }
+trap on_stop INT TERM
+>>> none

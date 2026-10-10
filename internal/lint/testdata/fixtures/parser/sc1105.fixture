@@ -1,0 +1,7 @@
+### nested subshells written as double parentheses
+((cd /tmp && ls) || echo failed)
+>>> SC1105 1:1
+
+### arithmetic command that parses
+(( (count + 1) > 3 )) && echo big
+>>> SC2154 1:5

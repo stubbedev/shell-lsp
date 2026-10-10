@@ -1,0 +1,33 @@
+### file test with nothing before the closing bracket
+if [ -f ]; then
+  echo present
+fi
+>>> SC1009 1:1
+>>> SC1019 1:9
+>>> SC1072 1:10
+>>> SC1073 1:4
+
+### string length test with no operand in double brackets
+if [[ -z ]]; then
+  echo empty
+fi
+>>> SC1009 1:1
+>>> SC1019 1:10
+>>> SC1072 1:11
+>>> SC1073 1:4
+
+### unary operator followed by a logical and
+if [[ -d && -w /tmp ]]; then
+  echo writable
+fi
+>>> SC1009 1:1
+>>> SC1019 1:10
+>>> SC1072 1:10
+>>> SC1073 1:4
+
+### unary operator with an operand
+config=$1
+if [ -r "$config" ]; then
+  echo readable
+fi
+>>> none

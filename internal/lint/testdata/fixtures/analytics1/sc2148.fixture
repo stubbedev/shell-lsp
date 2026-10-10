@@ -1,0 +1,30 @@
+### no shebang at all
+default_shell=/bin/zsh
+ls "$default_shell"
+>>> SC2148 1:1
+
+### empty shebang marker
+#!
+login_shell=zsh
+echo "$login_shell"
+>>> SC2148 1:1
+
+### shell directive selecting sh
+# shellcheck shell=sh
+ls /opt
+>>> none
+
+### shell directive without a space after the hash
+#shellcheck shell=sh
+ls /opt
+>>> none
+
+### any shebang is enough
+#!/bin/sh
+default_shell=/bin/zsh
+ls "$default_shell"
+>>> none
+
+### shell given on the command line
+ls /opt
+>>> none

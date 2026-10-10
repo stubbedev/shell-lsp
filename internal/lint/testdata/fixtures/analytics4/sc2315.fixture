@@ -1,0 +1,43 @@
+### negated double bracket before another command
+#!/usr/bin/env bats
+@test "cache cleared" {
+  ! [[ -e /tmp/cache ]]
+  false
+}
+>>> SC2315 3:3
+
+### negated single bracket before another command
+#!/usr/bin/env bats
+@test "cache cleared" {
+  ! [ -e /tmp/cache ]
+  false
+}
+>>> SC2315 3:3
+
+### only a negated double bracket test
+#!/usr/bin/env bats
+@test "no lock left" {
+  ! [[ -e /run/app.lock ]]
+}
+>>> SC2315 3:3
+
+### only a negated single bracket test
+#!/usr/bin/env bats
+@test "no lock left" {
+  ! [ -e /run/app.lock ]
+}
+>>> SC2315 3:3
+
+### negated double bracket or false
+#!/usr/bin/env bats
+@test "no lock left" {
+  ! [[ -e /run/app.lock ]] || false
+}
+>>> none
+
+### negated single bracket or false
+#!/usr/bin/env bats
+@test "no lock left" {
+  ! [ -e /run/app.lock ] || false
+}
+>>> none

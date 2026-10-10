@@ -1,0 +1,38 @@
+### underscore dropped from an assigned uppercase name
+LOG_LEVEL=debug
+echo "$LOGLEVEL"
+>>> SC2034 1:1
+>>> SC2153 2:7
+
+### differs only in letter case
+Retry_Count=3
+echo "$RETRY_COUNT"
+>>> SC2034 1:1
+>>> SC2153 2:7
+
+### long name with two edits
+DATABASE_URL=postgres://db
+echo "$DATABSE_URI"
+>>> SC2034 1:1
+>>> SC2153 2:7
+
+### no assigned name is close enough
+CONFIG_PATH=/etc/app.conf
+echo "$CONFIG_PATH $HOSTNAME_OVERRIDE"
+>>> none
+
+### guarded by a default modifier
+CACHE_DIR=/var/cache
+echo "${CACHEDIR:-/tmp}"
+>>> SC2034 1:1
+
+### internal variable is exempt
+HOMEDIR=/srv
+echo "$HOME"
+>>> SC2034 1:1
+
+### reference inside another variable's subscript
+NODE_IDS=(a b)
+NODEID=0
+echo "${NODE_IDS[NODE_ID]}"
+>>> SC2034 2:1

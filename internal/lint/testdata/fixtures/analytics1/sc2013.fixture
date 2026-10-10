@@ -1,0 +1,43 @@
+### looping over cat output
+for host in $(cat hosts.txt); do
+  ssh "$host" uptime
+done
+>>> SC2013 1:13
+
+### looping over cat output in backticks
+for host in `cat hosts.txt`; do
+  ssh "$host" uptime
+done
+>>> SC2006 1:13
+>>> SC2013 1:13
+
+### looping over cat piped into grep
+for user in $(cat users.txt | grep -v '^#'); do
+  id "$user"
+done
+>>> SC2013 1:13
+
+### looping over cat piped into grep in backticks
+for user in `cat users.txt | grep -v '^#'`; do
+  id "$user"
+done
+>>> SC2006 1:13
+>>> SC2013 1:13
+
+### looping over awk given by path
+for field in $(/usr/bin/awk '{print $1}' table.txt); do
+  echo "$field"
+done
+>>> SC2013 1:14
+
+### pipeline ending in a line count is fine
+for total in $(cat users.txt | wc -l); do
+  echo "$total"
+done
+>>> none
+
+### quoted substitution is not inspected
+for blob in "$(sort names.txt)"; do
+  echo "$blob"
+done
+>>> SC2066 1:13

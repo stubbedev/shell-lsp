@@ -3,7 +3,6 @@ package server
 import (
 	"encoding/json"
 	"errors"
-	"os/exec"
 	"slices"
 	"strings"
 	"testing"
@@ -13,14 +12,6 @@ import (
 )
 
 const pullCapabilities = `"capabilities": {"textDocument": {"diagnostic": {}}, "workspace": {"diagnostics": {"refreshSupport": true}}}`
-
-func requireShellcheck(t *testing.T) {
-	t.Helper()
-
-	if _, err := exec.LookPath("shellcheck"); err != nil {
-		t.Skip("shellcheck not installed")
-	}
-}
 
 func openParams(uri, text string) string {
 	encoded, err := json.Marshal(lsp.DidOpenTextDocumentParams{TextDocument: lsp.TextDocumentItem{
@@ -72,33 +63,13 @@ func awaitPublished(c *testClient, uri string, version int32) lsp.PublishDiagnos
 	return published
 }
 
-func isShellcheck(code string) bool { return strings.HasPrefix(code, "SC") }
-
-func pullSettled(c *testClient, uri, previous string) lsp.FullDocumentDiagnosticReport {
-	c.t.Helper()
-
-	params := `{"textDocument": {"uri": "` + uri + `"}, "previousResultId": "` + previous + `"}`
-	report := decodeResult[lsp.FullDocumentDiagnosticReport](c.t, c.call("textDocument/diagnostic", params))
-	if strings.Contains(report.ResultID, "/pending-") {
-		c.answerServerRequest("workspace/diagnostic/refresh")
-		report = decodeResult[lsp.FullDocumentDiagnosticReport](c.t, c.call("textDocument/diagnostic", params))
-	}
-	return report
-}
-
-func TestPushDiagnosticsSyntaxAndShellcheck(t *testing.T) {
+func TestPushDiagnosticsSyntaxAndLint(t *testing.T) {
 	t.Parallel()
-	requireShellcheck(t)
 
 	c, _ := startClient(t, `{"capabilities": {}}`)
 	c.notify("textDocument/didOpen", openParams("file:///w/a.sh", "#!/bin/bash\necho $1\nif true; then\n"))
-	quick := awaitPublished(c, "file:///w/a.sh", 1)
-	if got := codes(quick.Diagnostics); !slices.Contains(got, "syntax") || slices.ContainsFunc(got, isShellcheck) {
-		t.Errorf("first publication = %v, want syntax errors before shellcheck finishes", got)
-	}
-	full := awaitPublished(c, "file:///w/a.sh", 1)
-	if got := codes(full.Diagnostics); !slices.Contains(got, "syntax") || !slices.ContainsFunc(got, isShellcheck) {
-		t.Errorf("second publication = %v, want our syntax error plus shellcheck findings", got)
+	if got := codes(awaitPublished(c, "file:///w/a.sh", 1).Diagnostics); !slices.Contains(got, "syntax") || !slices.Contains(got, "SC2086") {
+		t.Errorf("publication = %v, want the syntax error and the unquoted expansion together", got)
 	}
 
 	c.notify("textDocument/didChange", `{"textDocument": {"uri": "file:///w/a.sh", "version": 2},
@@ -119,27 +90,19 @@ func TestPushDiagnosticsSyntaxAndShellcheck(t *testing.T) {
 
 func TestPullDiagnosticsMatchesPushAndReportsUnchanged(t *testing.T) {
 	t.Parallel()
-	requireShellcheck(t)
 
-	text := "#!/bin/sh\necho $1\narr=(1)\n"
+	text := "#!/bin/bash\necho $1 `date`\n"
 	pull, _ := startClient(t, `{`+pullCapabilities+`}`)
 	pull.notify("textDocument/didOpen", openParams("file:///w/p.sh", text))
-	quick := decodeResult[lsp.FullDocumentDiagnosticReport](t,
+	first := decodeResult[lsp.FullDocumentDiagnosticReport](t,
 		pull.call("textDocument/diagnostic", `{"textDocument": {"uri": "file:///w/p.sh"}}`))
-	if !strings.Contains(quick.ResultID, "/pending-") || slices.ContainsFunc(codes(quick.Items), isShellcheck) {
-		t.Fatalf("first report = %+v, want syntax diagnostics while shellcheck runs", quick)
-	}
-	pull.answerServerRequest("workspace/diagnostic/refresh")
-	first := pullSettled(pull, "file:///w/p.sh", quick.ResultID)
-	if first.Kind != lsp.ReportFull || !slices.ContainsFunc(codes(first.Items), isShellcheck) {
-		t.Fatalf("report after refresh = %+v", first)
+	if first.Kind != lsp.ReportFull || !slices.Equal(codes(first.Items), []string{"SC2006", "SC2046", "SC2086"}) {
+		t.Fatalf("first report = %+v", first)
 	}
 
 	push, _ := startClient(t, `{"capabilities": {}}`)
 	push.notify("textDocument/didOpen", openParams("file:///w/p.sh", text))
-	awaitPublished(push, "file:///w/p.sh", 1)
-	published := awaitPublished(push, "file:///w/p.sh", 1)
-	if !slices.Equal(codes(first.Items), codes(published.Diagnostics)) {
+	if published := awaitPublished(push, "file:///w/p.sh", 1); !slices.Equal(codes(first.Items), codes(published.Diagnostics)) {
 		t.Errorf("pull codes %v != push codes %v", codes(first.Items), codes(published.Diagnostics))
 	}
 
@@ -149,69 +112,36 @@ func TestPullDiagnosticsMatchesPushAndReportsUnchanged(t *testing.T) {
 		t.Errorf("second report = %+v, want unchanged", again)
 	}
 
-	pull.notify("workspace/didChangeConfiguration", `{"settings": {"shellLsp": {"shellcheck": {"exclude": ["SC2086"]}}}}`)
+	pull.notify("workspace/didChangeConfiguration", `{"settings": {"shellLsp": {"lint": {"exclude": ["SC2086"]}}}}`)
 	pull.answerServerRequest("workspace/diagnostic/refresh")
-	after := pullSettled(pull, "file:///w/p.sh", first.ResultID)
-	if after.Kind != lsp.ReportFull || slices.Contains(codes(after.Items), "SC2086") || !slices.ContainsFunc(codes(after.Items), isShellcheck) {
+	after := decodeResult[lsp.FullDocumentDiagnosticReport](t, pull.call("textDocument/diagnostic",
+		`{"textDocument": {"uri": "file:///w/p.sh"}, "previousResultId": "`+first.ResultID+`"}`))
+	if after.Kind != lsp.ReportFull || !slices.Equal(codes(after.Items), []string{"SC2006", "SC2046"}) {
 		t.Errorf("report after excluding SC2086 = %+v", after)
 	}
-	if !slices.Contains(codes(after.Items), "dialect") {
-		t.Errorf("dialect error lost after configuration change: %v", codes(after.Items))
-	}
 }
 
-func TestMissingShellcheckIsAnnouncedOnce(t *testing.T) {
-	t.Parallel()
-
-	c, _ := startClient(t, `{`+pullCapabilities+`, "initializationOptions": {"shellcheck": {"path": "shellcheck-not-installed-anywhere"}}}`)
-	c.notify("textDocument/didOpen", openParams("file:///w/a.sh", "echo $1\nif\n"))
-	for range 2 {
-		report := decodeResult[lsp.FullDocumentDiagnosticReport](t,
-			c.call("textDocument/diagnostic", `{"textDocument": {"uri": "file:///w/a.sh"}}`))
-		if got := codes(report.Items); len(got) == 0 || slices.ContainsFunc(got, func(code string) bool { return code != "syntax" }) {
-			t.Errorf("codes = %v, want syntax errors only", got)
-		}
-	}
-	notice := c.awaitNotification("window/logMessage", func(raw json.RawMessage) bool {
-		return strings.Contains(string(raw), "shellcheck-not-installed-anywhere")
-	})
-	var params lsp.LogMessageParams
-	if err := json.Unmarshal(notice, &params); err != nil || params.Type != lsp.MessageWarning {
-		t.Errorf("notice = %s", notice)
-	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	for _, m := range c.messages {
-		if m.Method == "window/logMessage" && strings.Contains(string(m.Params), "shellcheck-not-installed-anywhere") {
-			t.Errorf("missing shellcheck announced more than once: %s", m.Params)
-		}
-	}
-}
-
-func TestZshSkipsShellcheckWithNotice(t *testing.T) {
+func TestZshIsLintedNatively(t *testing.T) {
 	t.Parallel()
 
 	c, _ := startClient(t, `{`+pullCapabilities+`}`)
-	c.notify("textDocument/didOpen", openParams("file:///w/rc.zsh", "print -l *(.)\necho $1\n"))
+	c.notify("textDocument/didOpen", openParams("file:///w/rc.zsh", "print -l *(.)\necho $1 `date`\n"))
 	report := decodeResult[lsp.FullDocumentDiagnosticReport](t,
 		c.call("textDocument/diagnostic", `{"textDocument": {"uri": "file:///w/rc.zsh"}}`))
-	if len(report.Items) != 0 {
-		t.Errorf("zsh diagnostics = %+v, want none", report.Items)
+	if got := codes(report.Items); !slices.Equal(got, []string{"SC2006", "SC2046"}) {
+		t.Errorf("zsh codes = %v, want the backticks and the split substitution flagged but not the parameter", got)
 	}
-	c.awaitNotification("window/logMessage", func(raw json.RawMessage) bool {
-		return strings.Contains(string(raw), "does not support zsh")
-	})
 }
 
 func TestDialectSettingOverridesDetection(t *testing.T) {
 	t.Parallel()
 
-	c, _ := startClient(t, `{`+pullCapabilities+`, "initializationOptions": {"dialect": "sh", "shellcheck": {"enable": false}}}`)
-	c.notify("textDocument/didOpen", openParams("file:///w/a.bash", "arr=(1 2)\n"))
+	c, _ := startClient(t, `{`+pullCapabilities+`, "initializationOptions": {"dialect": "zsh"}}`)
+	c.notify("textDocument/didOpen", openParams("file:///w/a.bash", "echo $1\n"))
 	report := decodeResult[lsp.FullDocumentDiagnosticReport](t,
 		c.call("textDocument/diagnostic", `{"textDocument": {"uri": "file:///w/a.bash"}}`))
-	if got := codes(report.Items); !slices.Equal(got, []string{"dialect"}) {
-		t.Errorf("codes = %v, want the POSIX dialect error", got)
+	if len(report.Items) != 0 {
+		t.Errorf("diagnostics = %+v, want none because zsh does not split unquoted parameters", report.Items)
 	}
 }
 

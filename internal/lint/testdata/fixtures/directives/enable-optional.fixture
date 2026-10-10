@@ -1,0 +1,55 @@
+### nullary test is quiet by default
+#!/bin/sh
+[ "$1" ] && echo "got an argument"
+>>> none
+
+### file-wide enable turns on the nullary-condition check
+#!/bin/sh
+# shellcheck enable=avoid-nullary-conditions
+[ "$1" ] && echo "got an argument"
+>>> SC2244 3:3
+
+### enable after the first command is ignored
+#!/bin/sh
+:
+# shellcheck enable=avoid-nullary-conditions
+[ "$1" ] && echo "got an argument"
+>>> none
+
+### enable all turns on every optional check
+#!/bin/sh
+# shellcheck enable=all
+[ "$1" ] && echo "got an argument: $1"
+>>> SC2244 3:3
+
+### enable list with two names
+#!/bin/sh
+# shellcheck enable=avoid-nullary-conditions,require-variable-braces
+[ "$1" ] && echo "got an argument: $1"
+>>> SC2244 3:3
+
+### quoted enable list
+#!/bin/sh
+# shellcheck enable="avoid-nullary-conditions"
+[ "$1" ] && echo "got an argument"
+>>> SC2244 3:3
+
+### unknown enable name is ignored and a known one still applies
+#!/bin/sh
+# shellcheck enable=frobnicate,avoid-nullary-conditions
+[ "$1" ] && echo "got an argument"
+>>> SC2244 3:3
+
+### enable directives in the file-wide block accumulate
+#!/bin/sh
+# shellcheck enable=avoid-nullary-conditions
+# shellcheck enable=deprecate-which
+[ "$1" ] && which git
+>>> SC2230 4:13
+>>> SC2244 4:3
+
+### disable wins over enable for the same optional finding
+#!/bin/sh
+# shellcheck enable=avoid-nullary-conditions disable=SC2244
+[ "$1" ] && echo "got an argument"
+>>> none

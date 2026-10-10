@@ -1,0 +1,19 @@
+### parameter names inside the function parentheses
+add(a, b) {
+  echo "$((a + b))"
+}
+>>> SC1065 1:5
+>>> SC2154 2:12
+>>> SC2154 2:16
+
+### empty parentheses
+add() {
+  echo "$(($1 + $2))"
+}
+>>> none
+
+### parentheses with only a space inside
+add( ) {
+  echo "$(($1 + $2))"
+}
+>>> none

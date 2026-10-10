@@ -1,0 +1,35 @@
+### basename given a file on stdin
+basename < paths.txt
+>>> SC2217 1:1
+
+### printf with a here-string
+printf '%s\n' <<< "$greeting"
+>>> SC2154 1:20
+>>> SC2183 1:8
+>>> SC2217 1:1
+
+### printf with a here-document
+printf 'header\n' <<END
+ignored body
+END
+>>> SC2217 1:1
+
+### explicit fd 0 redirection into ls
+ls 0< dirs.list
+>>> SC2217 1:1
+
+### echo reading a file
+echo < notes.txt
+>>> SC2217 1:1
+
+### interactive move reading confirmations
+mv -i draft.txt final.txt < /dev/stdin
+>>> none
+
+### command substitution in the arguments consumes stdin
+echo "$(cat)" < input.txt
+>>> SC2005 1:6
+
+### consumer only inside the redirection still fires
+echo hello < <(cat)
+>>> SC2217 1:1

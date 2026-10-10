@@ -1,0 +1,17 @@
+### command added after a branch terminator
+case "$1" in
+  start) echo up ;;
+  echo extra
+  stop) echo down ;;
+esac
+>>> SC1009 1:1
+>>> SC1072 3:8
+>>> SC1073 3:3
+>>> SC1085 3:8
+
+### patterns properly closed
+case "$1" in
+  start) echo up ;;
+  stop) echo down ;;
+esac
+>>> none

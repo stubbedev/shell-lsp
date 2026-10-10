@@ -1,0 +1,29 @@
+### subshell compares one to two with a redirection
+( 1 > 2 )
+>>> SC2210 1:5
+
+### stdout redirected to a file literally named 2
+logger 1>2
+>>> SC2210 1:9
+
+### appending to a numeric file name
+printf '%s\n' "$summary" >> 404
+>>> SC2154 1:16
+>>> SC2210 1:26
+
+### reading from a numeric file name
+sort < 2024
+>>> SC2210 1:6
+
+### clobbering into a numeric file name
+set -C
+date >| 7
+>>> SC2210 2:6
+
+### quoted numeric target is intentional
+backup_tool > '2'
+>>> none
+
+### fd duplication to stderr is fine
+echo "disk almost full" >&2
+>>> none

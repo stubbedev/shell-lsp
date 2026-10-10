@@ -1,0 +1,3 @@
+### single bracket zero
+[ 0 ] && echo "runs anyway"
+>>> SC2159 1:3

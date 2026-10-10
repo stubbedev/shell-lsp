@@ -1,0 +1,138 @@
+### first positional printed and called once without arguments
+greet() {
+  echo "Hello, $1"
+}
+greet
+>>> SC2119 4:1
+>>> SC2120 1:1
+
+### called twice without arguments
+greet() {
+  echo "Hello, $1"
+}
+greet
+greet
+>>> SC2119 4:1
+>>> SC2119 5:1
+>>> SC2120 1:1
+
+### argument count printed and called without arguments
+count_args() {
+  echo "got $# args"
+}
+count_args
+>>> SC2119 4:1
+>>> SC2120 1:1
+
+### never called
+show_usage() {
+  echo "usage: $1 <file>"
+}
+>>> none
+
+### only an ordinary named variable
+report() {
+  echo "status: $state"
+}
+state=ok
+report
+>>> none
+
+### only the script name
+whoami_script() {
+  echo "running $0"
+}
+whoami_script
+>>> none
+
+### one call with an argument and one without
+log_msg() {
+  echo "[log] $1"
+}
+log_msg
+log_msg "started"
+>>> none
+
+### set -- with a glob before the positional reference
+first_match() {
+  set -- *.conf
+  echo "$1"
+}
+first_match
+>>> none
+
+### arithmetic of a constant
+answer() {
+  echo $(( 6 * 7 ))
+}
+answer
+>>> none
+
+### arithmetic of a named variable
+double() {
+  echo $(( value * 2 ))
+}
+value=4
+double
+>>> none
+
+### only the last background PID
+last_job() {
+  echo "$!"
+}
+last_job
+>>> none
+
+### inner function owns the positional reference
+outer() {
+  inner() {
+    echo "inner got $1"
+  }
+  inner "payload"
+}
+outer
+>>> none
+
+### name-prefix indirect expansion
+list_vars() {
+  echo "${!BASH*}"
+}
+list_vars
+>>> none
+
+### directive disables the check
+# shellcheck disable=SC2120
+greet() {
+  echo "Hello, $1"
+}
+greet
+>>> none
+
+### default with dash modifier
+banner() {
+  echo "${1-default}"
+}
+banner
+>>> none
+
+### default with colon-dash modifier
+banner() {
+  echo "${1:-default}"
+}
+banner
+>>> none
+
+### alternative modifier passes an optional flag
+search_logs() {
+  grep ${1+-i} error /var/log/syslog
+}
+search_logs
+>>> none
+
+### error modifier with a recursive call
+countdown() {
+  n=${1?need a number}
+  [ "$n" -gt 0 ] && countdown $(( n - 1 ))
+}
+countdown
+>>> none

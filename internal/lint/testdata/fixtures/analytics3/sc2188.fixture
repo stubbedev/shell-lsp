@@ -1,0 +1,22 @@
+### line with only an output redirect
+> build.log
+>>> SC2188 1:1
+
+### redirect attached to grep
+grep ERROR app.log > errors.txt
+>>> none
+
+### assignment from substitution with a stderr redirect
+version=$(git describe --tags) 2> /dev/null
+echo "$version"
+>>> none
+
+### file-reading idiom with dollar-paren
+contents=$(< README.md)
+echo "$contents"
+>>> none
+
+### file-reading idiom with backticks
+contents=`< README.md`
+echo "$contents"
+>>> SC2006 1:10

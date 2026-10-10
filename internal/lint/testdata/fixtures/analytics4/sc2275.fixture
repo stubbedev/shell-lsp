@@ -1,0 +1,12 @@
+### assignment split by a bad line break
+answer
+=42
+>>> SC2275 2:1
+
+### double equals start
+==done
+>>> SC2275 1:1
+
+### three equals is a different code
+===section
+>>> SC2274 1:1

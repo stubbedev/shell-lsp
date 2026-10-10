@@ -1,0 +1,37 @@
+### two expansions joined by a slash
+PATH="$prefix/$subdir"
+>>> SC2123 1:1
+>>> SC2154 1:15
+>>> SC2154 1:7
+
+### quoted plain directory name
+PATH="tools"
+>>> SC2123 1:1
+
+### unquoted absolute path without a bin component
+PATH=/opt/tools
+>>> SC2123 1:1
+
+### empty literal assignment
+PATH=
+>>> SC2123 1:1
+
+### absolute path ending in bin
+PATH=/opt/tools/bin
+>>> none
+
+### single-quoted bin and sbin list
+PATH='/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin'
+>>> none
+
+### prefix assignment for a command
+PATH=/opt/tools make install
+>>> none
+
+### value is another variable alone
+PATH=$saved_path
+>>> SC2154 1:6
+
+### old PATH extended with a directory
+PATH=$PATH:/opt/tools/bin
+>>> none

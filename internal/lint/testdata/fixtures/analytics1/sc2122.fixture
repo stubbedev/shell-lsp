@@ -1,0 +1,23 @@
+### less or equal between two words
+[ "$left" <= "$right" ] && echo "ordered"
+>>> SC2122 1:11
+>>> SC2154 1:15
+>>> SC2154 1:4
+
+### escaped greater or equal between two words
+[ "$left" \>= "$right" ] && echo "ordered"
+>>> SC2122 1:11
+>>> SC2154 1:16
+>>> SC2154 1:4
+
+### sh dialect is fine
+#!/bin/sh
+[ "$left" \>= "$right" ] && echo "ordered"
+>>> SC2154 2:16
+>>> SC2154 2:4
+>>> SC3012 2:11
+
+### numeric side goes to SC2071 instead
+[ "$left" \>= 10 ] && echo "big"
+>>> SC2071 1:11
+>>> SC2154 1:4

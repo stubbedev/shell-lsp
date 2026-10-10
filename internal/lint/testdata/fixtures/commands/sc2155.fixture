@@ -1,0 +1,90 @@
+### local masks the substitution status
+probe() {
+  local result=$(false)
+}
+>>> SC2034 2:9
+>>> SC2155 2:9
+
+### top-level declare masks the substitution status
+declare result=$(false)
+>>> SC2034 1:9
+>>> SC2155 1:9
+
+### declare with a quoted backtick substitution
+declare result="`false`"
+>>> SC2006 1:17
+>>> SC2034 1:9
+>>> SC2155 1:9
+
+### readonly masks the substitution status
+readonly stamp=$(false)
+>>> SC2034 1:10
+>>> SC2155 1:10
+
+### readonly with a quoted backtick substitution
+readonly stamp="`false`"
+>>> SC2006 1:17
+>>> SC2034 1:10
+>>> SC2155 1:10
+
+### ksh paren function typeset -r is not local
+#!/bin/ksh
+setup() {
+  typeset -r token=$(false)
+}
+>>> SC2034 3:14
+>>> SC2155 3:14
+
+### top-level typeset -r with a trailing semicolon
+typeset -r token=$(false);
+>>> SC2034 1:12
+>>> SC2155 1:12
+
+### typeset -g in a function is global
+init() {
+  typeset -g cache_dir=$(mktemp -d)
+}
+>>> SC2034 2:14
+>>> SC2155 2:14
+
+### declare with a current-shell brace substitution
+declare answer=${ false; }
+>>> SC2034 1:9
+>>> SC2155 1:9
+
+### declare in a function masks the status
+load() {
+  declare config=$(cat app.conf)
+}
+>>> SC2034 2:11
+>>> SC2155 2:11
+
+### declare without value then separate assignment
+declare result
+result=$(false)
+>>> SC2034 2:1
+
+### local readonly in a function is exempt
+probe() {
+  local -r result=$(false)
+}
+>>> SC2034 2:12
+
+### plain assignment then separate readonly
+stamp=$(false)
+readonly stamp
+>>> SC2034 2:10
+
+### ksh function keyword with typeset -r is exempt
+#!/bin/ksh
+function setup {
+  typeset -r token=$(false)
+}
+>>> SC2034 3:14
+
+### bash paren function with typeset -r is exempt
+#!/bin/bash
+setup() {
+  typeset -r token=$(false)
+}
+>>> SC2034 3:14

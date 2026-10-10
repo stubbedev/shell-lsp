@@ -1,0 +1,15 @@
+### silencing both streams in sh
+#!/bin/sh
+ping -c1 localhost &> /dev/null
+>>> SC3020 2:20
+
+### silencing both streams in dash
+#!/bin/dash
+ping -c1 localhost &> /dev/null
+>>> SC3020 2:20
+
+### silencing both streams is accepted in busybox
+#!/bin/busybox sh
+# shellcheck shell=busybox
+echo probe &> /dev/null
+>>> none

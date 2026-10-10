@@ -1,0 +1,14 @@
+### stripping a suffix from every argument in sh
+#!/bin/sh
+echo "${@%.txt}"
+>>> SC3058 2:7
+
+### stripping a suffix from every argument in dash
+#!/bin/dash
+echo "${@%.txt}"
+>>> SC3058 2:7
+
+### length of the argument count is fine
+#!/bin/sh
+echo "${##}"
+>>> none

@@ -1,0 +1,19 @@
+### bare parentheses around a single-bracket comparison
+mode=$1
+if [ ( "$mode" = debug ) ]; then
+  set -x
+fi
+>>> SC1028 2:24
+>>> SC1028 2:6
+
+### escaped parentheses around two groups joined with -a
+if [ \( "$1" = start \) -a \( "$2" = now \) ]; then
+  echo launching
+fi
+>>> SC2166 1:25
+
+### quoted parentheses count as escaped
+if [ '(' "$1" ")" ]; then
+  echo nonempty
+fi
+>>> none

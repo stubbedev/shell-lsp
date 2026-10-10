@@ -1,0 +1,27 @@
+### contraction inside single quotes
+echo 'we'd better hurry
+>>> SC1011 1:9
+>>> SC2026 1:10
+
+### short quoted word followed by a letter
+printf '%s\n' 'it'd
+>>> SC1011 1:18
+>>> SC2026 1:19
+
+### empty quotes followed by a letter
+echo ''s
+>>> SC2026 1:8
+
+### quoted text ending in a digit followed by a letter
+echo 'v1'x
+>>> SC2026 1:10
+
+### character after the closing quote is not a letter
+echo 'ab'_ 'cd'9
+>>> SC2026 1:16
+
+### multi-line string ending in a contraction takes priority over the unclosed-quote warning
+echo 'first line
+second'd
+>>> SC1011 2:7
+>>> SC2026 2:8

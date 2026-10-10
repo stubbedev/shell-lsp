@@ -1,0 +1,23 @@
+### unset of an unquoted literal index
+unset hosts[1]
+>>> SC2184 1:7
+
+### unset of an unquoted variable index
+unset hosts[$i]
+>>> SC2086 1:13
+>>> SC2154 1:13
+>>> SC2184 1:7
+
+### unset of an index mixing text and an expansion
+unset hosts[x${i}y]
+>>> SC2086 1:14
+>>> SC2154 1:14
+>>> SC2184 1:7
+
+### unset of a plain name
+unset hosts
+>>> none
+
+### reversed brackets are not a range
+unset hosts][
+>>> none
