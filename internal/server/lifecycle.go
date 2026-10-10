@@ -28,6 +28,11 @@ type ClientCapabilities struct {
 		Hover      struct {
 			ContentFormat []string `json:"contentFormat"`
 		} `json:"hover"`
+		Completion struct {
+			CompletionItem struct {
+				SnippetSupport bool `json:"snippetSupport"`
+			} `json:"completionItem"`
+		} `json:"completion"`
 	} `json:"textDocument"`
 	Workspace struct {
 		Diagnostics struct {
@@ -64,6 +69,12 @@ type ServerCapabilities struct {
 	TextDocumentSync   TextDocumentSyncOptions `json:"textDocumentSync"`
 	DiagnosticProvider DiagnosticOptions       `json:"diagnosticProvider"`
 	HoverProvider      bool                    `json:"hoverProvider"`
+	CompletionProvider CompletionOptions       `json:"completionProvider"`
+}
+
+type CompletionOptions struct {
+	TriggerCharacters []string `json:"triggerCharacters"`
+	ResolveProvider   bool     `json:"resolveProvider"`
 }
 
 type InitializeResult struct {
@@ -91,8 +102,7 @@ func (s *Server) handleInitialize(_ context.Context, _ *docstore.View, params js
 	}
 	s.mu.Lock()
 	s.settings = settings
-	s.refreshSupport = caps.Workspace.Diagnostics.RefreshSupport
-	s.hoverFormats = caps.TextDocument.Hover.ContentFormat
+	s.client = caps
 	s.initialized = true
 	s.mu.Unlock()
 	return InitializeResult{
@@ -101,9 +111,16 @@ func (s *Server) handleInitialize(_ context.Context, _ *docstore.View, params js
 			TextDocumentSync:   TextDocumentSyncOptions{OpenClose: true, Change: 2},
 			DiagnosticProvider: DiagnosticOptions{},
 			HoverProvider:      true,
+			CompletionProvider: CompletionOptions{TriggerCharacters: []string{"$", "{", "/", "-"}, ResolveProvider: true},
 		},
 		ServerInfo: ServerInfo{Name: "shell-lsp", Version: s.version},
 	}, nil
+}
+
+func (s *Server) clientCapabilities() ClientCapabilities {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.client
 }
 
 func (s *Server) handleInitialized(_ context.Context, _ json.RawMessage) error {

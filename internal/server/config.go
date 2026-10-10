@@ -33,7 +33,7 @@ func (s *Server) handleDidChangeConfiguration(ctx context.Context, params json.R
 	s.mu.Lock()
 	s.settings = settings
 	s.generation++
-	refresh := s.refreshSupport
+	refresh := s.client.Workspace.Diagnostics.RefreshSupport
 	s.mu.Unlock()
 	s.refreshDiagnostics(ctx, refresh)
 	return nil

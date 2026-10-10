@@ -56,9 +56,8 @@ func (s *Server) handleHover(ctx context.Context, docs *docstore.View, params js
 }
 
 func (s *Server) hoverFormat() string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if len(s.hoverFormats) == 0 || slices.Contains(s.hoverFormats, lsp.MarkupMarkdown) {
+	formats := s.clientCapabilities().TextDocument.Hover.ContentFormat
+	if len(formats) == 0 || slices.Contains(formats, lsp.MarkupMarkdown) {
 		return lsp.MarkupMarkdown
 	}
 	return lsp.MarkupPlainText

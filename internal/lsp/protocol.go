@@ -179,3 +179,45 @@ type Hover struct {
 	Contents MarkupContent `json:"contents"`
 	Range    *Range        `json:"range,omitempty"`
 }
+
+type CompletionItemKind uint8
+
+const (
+	CompletionMethod   CompletionItemKind = 2
+	CompletionFunction CompletionItemKind = 3
+	CompletionVariable CompletionItemKind = 6
+	CompletionModule   CompletionItemKind = 9
+	CompletionProperty CompletionItemKind = 10
+	CompletionValue    CompletionItemKind = 12
+	CompletionKeyword  CompletionItemKind = 14
+	CompletionFile     CompletionItemKind = 17
+	CompletionFolder   CompletionItemKind = 19
+)
+
+type InsertTextFormat uint8
+
+const (
+	InsertPlainText InsertTextFormat = 1
+	InsertSnippet   InsertTextFormat = 2
+)
+
+type CompletionParams struct {
+	TextDocumentPositionParams
+}
+
+type CompletionItem struct {
+	Label            string             `json:"label"`
+	Kind             CompletionItemKind `json:"kind"`
+	Detail           string             `json:"detail,omitempty"`
+	Documentation    *MarkupContent     `json:"documentation,omitempty"`
+	SortText         string             `json:"sortText,omitempty"`
+	FilterText       string             `json:"filterText,omitempty"`
+	InsertTextFormat InsertTextFormat   `json:"insertTextFormat"`
+	TextEdit         *TextEdit          `json:"textEdit,omitempty"`
+	Data             json.RawMessage    `json:"data,omitempty"`
+}
+
+type CompletionList struct {
+	IsIncomplete bool             `json:"isIncomplete"`
+	Items        []CompletionItem `json:"items"`
+}

@@ -32,7 +32,7 @@ type Result struct {
 }
 
 func Hover(ctx context.Context, in Input) (Result, bool, error) {
-	h := hoverer{Input: in, text: in.Tree.Text(), dialect: in.Tree.Dialect, scope: in.Tree.ScopeAt(in.Offset)}
+	h := newHoverer(in)
 	if r, ok := h.keyword(); ok {
 		return r, true, nil
 	}
@@ -192,6 +192,18 @@ func (h hoverer) functionName() (Result, bool) {
 		}
 	}
 	return Result{}, false
+}
+
+func FunctionDoc(tree *parser.Tree, fn parser.Function) string {
+	return newHoverer(Input{Tree: tree, Offset: fn.NameSpan.Start}).function(fn)
+}
+
+func VariableDoc(tree *parser.Tree, offset int, name string) string {
+	return newHoverer(Input{Tree: tree, Offset: offset}).variable(name)
+}
+
+func newHoverer(in Input) hoverer {
+	return hoverer{Input: in, text: in.Tree.Text(), dialect: in.Tree.Dialect, scope: in.Tree.ScopeAt(in.Offset)}
 }
 
 func (h hoverer) function(fn parser.Function) string {

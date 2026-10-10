@@ -103,3 +103,34 @@ func TestRealManPage(t *testing.T) {
 		t.Errorf("Summary = %q", page.Summary)
 	}
 }
+
+const grepPage = "NAME\n     grep - print lines\n\nOPTIONS\n   Generic Program Information\n     --help\n            Output a usage message and exit.\n\n" +
+	"     -E, --extended-regexp\n            Interpret PATTERNS as extended regular expressions (EREs, see be‐\n            low).\n\n" +
+	"     -e PATTERNS, --regexp=PATTERNS\n            Use PATTERNS as the patterns.\n\n" +
+	"     -n     Number lines.\n\n" +
+	"     -E, --extended-regexp\n            duplicate entry from another section\n\n" +
+	"     - this is prose, not an option\n"
+
+func TestOptions(t *testing.T) {
+	t.Parallel()
+
+	page, err := Parse([]byte(grepPage))
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	got := page.Options()
+	want := []Option{
+		{Names: []string{"--help"}, Doc: "Output a usage message and exit."},
+		{Names: []string{"-E", "--extended-regexp"}, Doc: "Interpret PATTERNS as extended regular expressions (EREs, see below)."},
+		{Names: []string{"-e", "--regexp"}, Doc: "Use PATTERNS as the patterns."},
+		{Names: []string{"-n"}, Doc: "Number lines."},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("Options() = %+v", got)
+	}
+	for i := range want {
+		if strings.Join(got[i].Names, " ") != strings.Join(want[i].Names, " ") || got[i].Doc != want[i].Doc {
+			t.Errorf("option %d = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+}

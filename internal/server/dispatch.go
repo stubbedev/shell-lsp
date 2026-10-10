@@ -45,15 +45,15 @@ type Server struct {
 	diagnostics *diagnosticsState
 	push        *pushScheduler
 	commandDocs commandDocs
+	environment shellEnvironment
 
-	mu             sync.Mutex
-	shutdown       bool
-	initialized    bool
-	trace          TraceValue
-	settings       config.Settings
-	generation     uint64
-	refreshSupport bool
-	hoverFormats   []string
+	mu          sync.Mutex
+	shutdown    bool
+	initialized bool
+	trace       TraceValue
+	settings    config.Settings
+	generation  uint64
+	client      ClientCapabilities
 
 	requests      map[string]requestHandler
 	notifications map[string]notificationHandler
@@ -67,6 +67,7 @@ type Server struct {
 }
 
 func New(conn *jsonrpc.Conn, version string) *Server {
+	pages := manpage.NewLookup()
 	s := &Server{
 		conn:        conn,
 		version:     version,
@@ -75,7 +76,8 @@ func New(conn *jsonrpc.Conn, version string) *Server {
 		snapshots:   newSnapshotCache(),
 		diagnostics: newDiagnosticsState(),
 		settings:    config.Default(),
-		commandDocs: commandDocs{pages: manpage.NewLookup()},
+		commandDocs: commandDocs{pages: pages},
+		environment: shellEnvironment{pages: pages, executables: &executableCache{}},
 		sem:         make(chan struct{}, maxConcurrency),
 	}
 	s.registerHandlers()
@@ -92,6 +94,8 @@ func (s *Server) registerHandlers() {
 		"shutdown":                s.handleShutdown,
 		"textDocument/diagnostic": s.handleDocumentDiagnostic,
 		"textDocument/hover":      s.handleHover,
+		"textDocument/completion": s.handleCompletion,
+		"completionItem/resolve":  s.handleCompletionResolve,
 	}
 	s.notifications = map[string]notificationHandler{
 		"$/cancelRequest":                  s.handleCancelRequest,
