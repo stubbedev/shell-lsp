@@ -42,3 +42,7 @@ mv "${!sources}"
 mv $sources
 >>> SC2086 1:4
 >>> SC2154 1:4
+
+### end-of-options marker leaves a single operand
+mv -- draft.txt
+>>+ SC2224 1:1 -- after -- only one operand remains; shellcheck 0.11 mistakes -- for an abbreviation of --target-directory

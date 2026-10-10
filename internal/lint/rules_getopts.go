@@ -20,10 +20,18 @@ var getoptsFamily = family{
 	},
 }
 
+type patternKind uint8
+
+const (
+	patternUnknown patternKind = iota
+	patternWildcard
+	patternLiteral
+)
+
 type casePattern struct {
 	word  *syntax.Word
+	kind  patternKind
 	value string
-	known bool
 }
 
 func checkGetoptsCase(p *pass, c command) {
@@ -45,13 +53,14 @@ func checkGetoptsCase(p *pass, c command) {
 	}
 	letters := strings.ReplaceAll(optstring, ":", "")
 	patterns := caseItemPatterns(cc)
-	complete := true
-	catchAll := false
+	complete, wildcard, catchAll := true, false, false
 	for _, pat := range patterns {
 		switch {
-		case !pat.known:
+		case pat.kind == patternUnknown:
 			complete = false
-		case pat.value == "*" || pat.value == "?":
+		case pat.kind == patternWildcard:
+			wildcard, catchAll = true, true
+		case pat.value == "?":
 			catchAll = true
 		case pat.value != ":" && (len(pat.value) != 1 || !strings.Contains(letters, pat.value)):
 			p.reportNode(2214, pat.word, "This case branch handles "+pat.value+", which is not an option in the getopts string '"+optstring+"'.")
@@ -60,13 +69,19 @@ func checkGetoptsCase(p *pass, c command) {
 	if !complete {
 		return
 	}
+	if !wildcard {
+		reportUnhandledOptions(p, cc, letters, patterns)
+	}
+	if !catchAll {
+		p.reportNode(2220, cc, "Add a *) branch to this case to handle invalid options reported by getopts.")
+	}
+}
+
+func reportUnhandledOptions(p *pass, cc *syntax.CaseClause, letters string, patterns []casePattern) {
 	for _, letter := range letters {
 		if !slices.ContainsFunc(patterns, func(pat casePattern) bool { return pat.value == string(letter) }) {
 			p.reportNode(2213, cc, "getopts accepts -"+string(letter)+", but this case has no branch for it.")
 		}
-	}
-	if !catchAll {
-		p.reportNode(2220, cc, "Add a *) branch to this case to handle invalid options reported by getopts.")
 	}
 }
 
@@ -107,25 +122,27 @@ func caseItemPatterns(cc *syntax.CaseClause) []casePattern {
 	var out []casePattern
 	for _, item := range cc.Items {
 		for _, w := range item.Patterns {
-			value, known := classifyPattern(w)
-			out = append(out, casePattern{word: w, value: value, known: known})
+			kind, value := classifyPattern(w)
+			out = append(out, casePattern{word: w, kind: kind, value: value})
 		}
 	}
 	return out
 }
 
-func classifyPattern(w *syntax.Word) (string, bool) {
+func classifyPattern(w *syntax.Word) (patternKind, string) {
 	if isUnquotedLiteral(w, "*") || isUnquotedLiteral(w, "?") {
-		lit, _ := parser.Literal(w)
-		return lit, true
+		return patternWildcard, ""
 	}
 	if len(w.Parts) == 1 {
 		if lit, ok := w.Parts[0].(*syntax.Lit); ok && len(lit.Value) == 3 && lit.Value[0] == '[' && lit.Value[2] == ']' {
-			return lit.Value[1:2], true
+			return patternLiteral, lit.Value[1:2]
 		}
 	}
 	if isGlob(w) {
-		return "", false
+		return patternUnknown, ""
 	}
-	return parser.Literal(w)
+	if lit, ok := parser.Literal(w); ok {
+		return patternLiteral, lit
+	}
+	return patternUnknown, ""
 }

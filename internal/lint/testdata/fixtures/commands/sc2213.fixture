@@ -46,3 +46,31 @@ while getopts 'a:b' opt; do
   esac
 done
 >>> SC2034 4:8
+
+### star branch covers an option without its own branch
+while getopts 'hv' opt; do
+  case $opt in
+    v) verbose=1 ;;
+    *) usage ;;
+  esac
+done
+>>> SC2034 3:8
+
+### unquoted question-mark branch covers an option without its own branch
+while getopts 'hv' opt; do
+  case $opt in
+    v) verbose=1 ;;
+    ?) usage ;;
+  esac
+done
+>>> SC2034 3:8
+
+### escaped question-mark branch does not cover an unhandled option
+while getopts 'hv' opt; do
+  case $opt in
+    v) verbose=1 ;;
+    \?) usage ;;
+  esac
+done
+>>> SC2034 3:8
+>>> SC2213 2:3
