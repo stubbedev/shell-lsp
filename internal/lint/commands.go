@@ -320,6 +320,11 @@ func isPlainParam(pe *syntax.ParamExp) bool {
 		pe.Index == nil && len(pe.Modifiers) == 0 && pe.Slice == nil && pe.Repl == nil && pe.Names == 0 && pe.Exp == nil
 }
 
+func soleCommandOutput(w *syntax.Word) bool {
+	cs, ok := solePart(w).(*syntax.CmdSubst)
+	return ok && !cs.TempFile && !cs.ReplyVar && len(cs.Stmts) == 1 && cs.Stmts[0].Cmd != nil
+}
+
 func hasBraceExpansion(w *syntax.Word) bool {
 	split := &syntax.Word{Parts: w.Parts}
 	if !syntax.SplitBraces(split) {

@@ -455,20 +455,7 @@ func runsLastPipeInShell(tree *parser.Tree) bool {
 	if tree.Dialect.Features().LastPipeInShell {
 		return true
 	}
-	if tree.Dialect != dialect.Bash {
-		return false
-	}
-	for _, c := range tree.Commands {
-		if c.Name != "shopt" && c.Name != "set" {
-			continue
-		}
-		for _, arg := range c.Args {
-			if lit, _ := parser.Literal(arg); lit == "lastpipe" {
-				return true
-			}
-		}
-	}
-	return false
+	return tree.Dialect == dialect.Bash && scanShellOptions(tree).lastpipe
 }
 
 func (in *interpreter) entry() *state {

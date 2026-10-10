@@ -659,7 +659,7 @@ func (b *builder) redirect(n *syntax.Redirect) {
 	if n.Op != syntax.Hdoc && n.Op != syntax.DashHdoc {
 		return
 	}
-	delimiter, quoted := heredocDelimiter(n.Word)
+	delimiter, quoted := HeredocDelimiter(n.Word)
 	body := Span{Start: target.End, End: target.End}
 	if n.Hdoc != nil && len(n.Hdoc.Parts) > 0 {
 		body = b.span(n.Hdoc)
@@ -674,7 +674,7 @@ func (b *builder) redirect(n *syntax.Redirect) {
 	})
 }
 
-func heredocDelimiter(w *syntax.Word) (string, bool) {
+func HeredocDelimiter(w *syntax.Word) (string, bool) {
 	if w == nil {
 		return "", false
 	}

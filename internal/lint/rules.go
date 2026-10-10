@@ -66,6 +66,7 @@ var families = []family{
 	parameterSyntaxFamily,
 	subshellFamily,
 	wordsFamily,
+	executionFamily,
 }
 
 var catalog, rules, commandChecks = assemble(families)

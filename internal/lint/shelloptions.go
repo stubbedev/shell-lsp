@@ -12,6 +12,8 @@ type shellOptions struct {
 	errexit        bool
 	pipefail       bool
 	inheritErrexit bool
+	lastpipe       bool
+	execfail       bool
 }
 
 func (p *pass) options() shellOptions {
@@ -25,6 +27,10 @@ func (p *pass) options() shellOptions {
 func scanShellOptions(tree *parser.Tree) shellOptions {
 	opts := shellOptions{errexit: shebangErrexit(tree.Text())}
 	for _, c := range tree.Commands {
+		if c.Name == "set" || c.Name == "shopt" {
+			opts.lastpipe = opts.lastpipe || mentions(c.Args, "lastpipe")
+			opts.execfail = opts.execfail || mentions(c.Args, "execfail")
+		}
 		switch c.Name {
 		case "set":
 			opts.errexit = opts.errexit || setsErrexit(c.Args)

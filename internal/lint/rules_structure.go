@@ -124,6 +124,19 @@ func checkAliasesInParsingUnit(p *pass) {
 	}
 }
 
+func (p *pass) alias(name string) (aliasDefinition, bool) {
+	if p.aliases == nil {
+		p.aliases = map[string]aliasDefinition{}
+		for _, c := range p.tree.Commands {
+			if c.Name == "alias" {
+				registerAliases(c.Args, p.aliases)
+			}
+		}
+	}
+	def, ok := p.aliases[name]
+	return def, ok
+}
+
 func (p *pass) hasCommand(name string) bool {
 	for _, c := range p.tree.Commands {
 		if c.Name == name {

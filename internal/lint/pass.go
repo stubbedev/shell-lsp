@@ -29,6 +29,7 @@ type pass struct {
 	commands commandDispatch
 	settings fileWide
 	findings []Finding
+	aliases  map[string]aliasDefinition
 
 	shellChosen    bool
 	shellOptions   *shellOptions

@@ -33,8 +33,7 @@ func checkUselessEcho(p *pass, c command) {
 	if len(c.args) != 1 {
 		return
 	}
-	cs, ok := solePart(c.args[0]).(*syntax.CmdSubst)
-	if !ok || cs.TempFile || cs.ReplyVar || len(cs.Stmts) != 1 || cs.Stmts[0].Cmd == nil {
+	if !soleCommandOutput(c.args[0]) {
 		return
 	}
 	p.reportNode(2005, c.args[0], "This echo only repeats the output of the command substitution; run the command directly instead.")
