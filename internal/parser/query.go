@@ -9,16 +9,15 @@ import (
 )
 
 func (ix *Index) ScopeAt(offset int) ScopeID {
-	best := FileScope
-	for i, scope := range ix.Scopes {
-		if i == int(FileScope) || !scope.Span.Contains(offset) {
-			continue
-		}
-		if scope.Span.End-scope.Span.Start <= ix.Scopes[best].Span.End-ix.Scopes[best].Span.Start {
-			best = ScopeID(i)
-		}
+	last := sort.Search(len(ix.Scopes), func(i int) bool { return ix.Scopes[i].Span.Start > offset }) - 1
+	if last <= int(FileScope) {
+		return FileScope
 	}
-	return best
+	s := ScopeID(last)
+	for s != FileScope && !ix.Scopes[s].Span.Contains(offset) {
+		s = ix.Scopes[s].Parent
+	}
+	return s
 }
 
 func (ix *Index) Binding(name string, scope ScopeID) (ScopeID, bool) {

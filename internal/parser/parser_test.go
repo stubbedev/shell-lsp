@@ -158,6 +158,35 @@ func TestScopesAndLocals(t *testing.T) {
 	}
 }
 
+func TestScopeAt(t *testing.T) {
+	t.Parallel()
+
+	src := "a=1\nouter() {\n  inner() { echo in; }\n  echo mid\n}\nb=2\nnext() { echo nx; }\nc=3\n"
+	tree := Parse(src, dialect.Bash)
+	body := map[string]ScopeID{}
+	for _, fn := range tree.Functions {
+		body[fn.Name] = fn.Body
+	}
+	for _, tc := range []struct {
+		at   string
+		want ScopeID
+	}{
+		{"a=1", FileScope},
+		{"in;", body["inner"]},
+		{"mid", body["outer"]},
+		{"b=2", FileScope},
+		{"nx", body["next"]},
+		{"c=3", FileScope},
+	} {
+		if got := tree.ScopeAt(strings.Index(src, tc.at)); got != tc.want {
+			t.Errorf("ScopeAt(%q) = %d, want %d", tc.at, got, tc.want)
+		}
+	}
+	if got := tree.ScopeAt(-1); got != FileScope {
+		t.Errorf("ScopeAt(-1) = %d, want FileScope", got)
+	}
+}
+
 func TestArithmeticDefinitionsAndReferences(t *testing.T) {
 	t.Parallel()
 
