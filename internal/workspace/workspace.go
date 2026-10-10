@@ -49,23 +49,59 @@ type File struct {
 	Doc  *docstore.Document
 	Tree *parser.Tree
 
-	memo sync.Map
+	memoMu sync.Mutex
+	memo   map[string]*memoEntry
 }
 
 type memoEntry struct {
 	generation uint64
+	done       chan struct{}
 	value      any
+	ok         bool
 }
 
 func (f *File) Memo(key string, generation uint64, compute func() any) any {
-	if cached, ok := f.memo.Load(key); ok {
-		if entry, ok := cached.(memoEntry); ok && entry.generation == generation {
+	for {
+		entry, owner := f.claim(key, generation)
+		if owner {
+			return f.fill(key, entry, compute)
+		}
+		<-entry.done
+		if entry.ok {
 			return entry.value
 		}
 	}
-	value := compute()
-	f.memo.Store(key, memoEntry{generation: generation, value: value})
-	return value
+}
+
+func (f *File) claim(key string, generation uint64) (*memoEntry, bool) {
+	f.memoMu.Lock()
+	defer f.memoMu.Unlock()
+	if existing, ok := f.memo[key]; ok && existing.generation == generation {
+		return existing, false
+	}
+	if f.memo == nil {
+		f.memo = map[string]*memoEntry{}
+	}
+	fresh := &memoEntry{generation: generation, done: make(chan struct{})}
+	f.memo[key] = fresh
+	return fresh, true
+}
+
+func (f *File) fill(key string, entry *memoEntry, compute func() any) any {
+	defer close(entry.done)
+	defer func() {
+		if entry.ok {
+			return
+		}
+		f.memoMu.Lock()
+		if f.memo[key] == entry {
+			delete(f.memo, key)
+		}
+		f.memoMu.Unlock()
+	}()
+	entry.value = compute()
+	entry.ok = true
+	return entry.value
 }
 
 type Overlay func(uri string) (*File, bool)

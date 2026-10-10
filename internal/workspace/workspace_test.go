@@ -3,6 +3,9 @@ package workspace
 import (
 	"os"
 	"path/filepath"
+	"runtime"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -102,6 +105,54 @@ func TestFileMemoFollowsGeneration(t *testing.T) {
 	next := f.Memo("k", 2, compute)
 	if first != 1 || again != 1 || next != 2 {
 		t.Errorf("memo results %v %v %v, want 1 1 2", first, again, next)
+	}
+}
+
+func TestFileMemoComputesOnceForConcurrentCallers(t *testing.T) {
+	t.Parallel()
+
+	f := &File{}
+	var calls atomic.Int32
+	release := make(chan struct{})
+	compute := func() any {
+		calls.Add(1)
+		<-release
+		return "result"
+	}
+	var wg sync.WaitGroup
+	results := make([]any, 8)
+	for i := range results {
+		wg.Go(func() { results[i] = f.Memo("k", 1, compute) })
+	}
+	for calls.Load() == 0 {
+		runtime.Gosched()
+	}
+	close(release)
+	wg.Wait()
+	if calls.Load() != 1 {
+		t.Errorf("computed %d times, want once", calls.Load())
+	}
+	for i, r := range results {
+		if r != "result" {
+			t.Errorf("caller %d got %v", i, r)
+		}
+	}
+}
+
+func TestFileMemoRecomputesAfterAPanic(t *testing.T) {
+	t.Parallel()
+
+	f := &File{}
+	func() {
+		defer func() {
+			if recover() == nil {
+				t.Error("the panic did not reach the computing caller")
+			}
+		}()
+		f.Memo("k", 1, func() any { panic("boom") })
+	}()
+	if got := f.Memo("k", 1, func() any { return "recovered" }); got != "recovered" {
+		t.Errorf("after a panic the memo returned %v, want a fresh computation", got)
 	}
 }
 
