@@ -20,7 +20,7 @@ const (
 	commandApplyEdit = "shellLsp.applyEdit"
 )
 
-var serverCommands = []string{commandFixAll, commandApplyEdit}
+var serverCommands = []string{commandFixAll, commandApplyEdit, commandShowReferences}
 
 var codeActionKinds = []string{
 	string(actions.QuickFix),
@@ -162,6 +162,12 @@ func (s *Server) handleExecuteCommand(ctx context.Context, docs *docstore.View, 
 		if len(exec.Arguments) != 1 || json.Unmarshal(exec.Arguments[0], &edit) != nil {
 			return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%s takes one WorkspaceEdit argument", commandApplyEdit)
 		}
+	case commandShowReferences:
+		var data lensData
+		if len(exec.Arguments) != 1 || json.Unmarshal(exec.Arguments[0], &data) != nil {
+			return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%s takes one {uri, position} argument", commandShowReferences)
+		}
+		return s.referenceLocations(ctx, docs, data.URI, data.Position)
 	default:
 		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "unknown command %q; this server provides %s", exec.Command, strings.Join(serverCommands, ", "))
 	}

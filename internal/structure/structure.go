@@ -261,3 +261,40 @@ func SelectionPath(tree *parser.Tree, offset int) []parser.Span {
 	}
 	return spans
 }
+
+func LinkedDelimiters(tree *parser.Tree, offset int) ([]parser.Span, bool) {
+	text := tree.Text()
+	for _, h := range tree.Heredocs {
+		if h.Delimiter == "" || h.Body.End >= len(text) {
+			continue
+		}
+		opening, ok := delimiterSpan(text, h)
+		if !ok {
+			continue
+		}
+		lineEnd := strings.IndexByte(text[h.Body.End:], '\n')
+		if lineEnd < 0 {
+			lineEnd = len(text) - h.Body.End
+		}
+		closingLine := text[h.Body.End : h.Body.End+lineEnd]
+		indent := len(closingLine) - len(strings.TrimLeft(closingLine, "\t"))
+		closing := parser.Span{Start: h.Body.End + indent, End: h.Body.End + indent + len(h.Delimiter)}
+		if text[closing.Start:closing.End] != h.Delimiter {
+			continue
+		}
+		if opening.Covers(offset) || closing.Covers(offset) || offset == opening.End || offset == closing.End {
+			return []parser.Span{opening, closing}, true
+		}
+	}
+	return nil, false
+}
+
+func delimiterSpan(text string, h parser.Heredoc) (parser.Span, bool) {
+	word := text[h.Span.Start:h.Span.End]
+	at := strings.Index(word, h.Delimiter)
+	if at < 0 || strings.Count(word, h.Delimiter) != 1 {
+		return parser.Span{}, false
+	}
+	start := h.Span.Start + at
+	return parser.Span{Start: start, End: start + len(h.Delimiter)}, true
+}

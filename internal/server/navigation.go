@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
@@ -64,7 +65,7 @@ func (s *Server) navigationHandler(mode navigation.Mode) requestHandler {
 			return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
 		}
 		offset := file.Doc.PositionToOffset(position.Position, docs.Encoding())
-		locations, err := navigation.Definition(ctx, file, offset, s.navigationEnv(), s.workspace.ShellFiles, mode)
+		locations, err := navigation.Definition(ctx, file, offset, s.navigationEnv(), s.candidateFiles(docs), mode)
 		if err != nil {
 			return nil, err
 		}
@@ -114,4 +115,20 @@ func workspaceRoots(params InitializeParams) []string {
 		roots = append(roots, params.RootPath)
 	}
 	return roots
+}
+
+func (s *Server) candidateFiles(docs *docstore.View) navigation.WorkspaceFiles {
+	return func(ctx context.Context) ([]string, error) {
+		paths, err := s.workspace.ShellFiles(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for _, doc := range docs.Documents() {
+			if path, err := fileuri.ToPath(doc.URI); err == nil {
+				paths = append(paths, path)
+			}
+		}
+		slices.Sort(paths)
+		return slices.Compact(paths), nil
+	}
 }

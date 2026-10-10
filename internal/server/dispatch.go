@@ -126,6 +126,14 @@ func (s *Server) registerHandlers() {
 		"textDocument/inlayHint":                 s.handleInlayHint,
 		"inlayHint/resolve":                      s.handleInlayHintResolve,
 		"textDocument/documentLink":              s.handleDocumentLink,
+		"textDocument/codeLens":                  s.handleCodeLens,
+		"codeLens/resolve":                       s.handleCodeLensResolve,
+		"textDocument/prepareCallHierarchy":      s.handlePrepareCallHierarchy,
+		"callHierarchy/incomingCalls":            s.handleIncomingCalls,
+		"callHierarchy/outgoingCalls":            s.handleOutgoingCalls,
+		"textDocument/inlineValue":               s.handleInlineValue,
+		"textDocument/moniker":                   s.handleMoniker,
+		"textDocument/linkedEditingRange":        s.handleLinkedEditingRange,
 	}
 	s.notifications = map[string]notificationHandler{
 		"$/cancelRequest":                  s.handleCancelRequest,

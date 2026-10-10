@@ -485,3 +485,63 @@ type DocumentLink struct {
 	Range  Range  `json:"range"`
 	Target string `json:"target"`
 }
+
+type CodeLensParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+}
+
+type CodeLens struct {
+	Range   Range           `json:"range"`
+	Command *Command        `json:"command,omitempty"`
+	Data    json.RawMessage `json:"data,omitempty"`
+}
+
+type CallHierarchyItem struct {
+	Name           string          `json:"name"`
+	Kind           SymbolKind      `json:"kind"`
+	Detail         string          `json:"detail,omitempty"`
+	URI            string          `json:"uri"`
+	Range          Range           `json:"range"`
+	SelectionRange Range           `json:"selectionRange"`
+	Data           json.RawMessage `json:"data,omitempty"`
+}
+
+type CallHierarchyCallsParams struct {
+	Item CallHierarchyItem `json:"item"`
+}
+
+type CallHierarchyIncomingCall struct {
+	From       CallHierarchyItem `json:"from"`
+	FromRanges []Range           `json:"fromRanges"`
+}
+
+type CallHierarchyOutgoingCall struct {
+	To         CallHierarchyItem `json:"to"`
+	FromRanges []Range           `json:"fromRanges"`
+}
+
+type InlineValueParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Range        Range                  `json:"range"`
+	Context      struct {
+		StoppedLocation Range `json:"stoppedLocation"`
+	} `json:"context"`
+}
+
+type InlineValueVariableLookup struct {
+	Range               Range  `json:"range"`
+	VariableName        string `json:"variableName"`
+	CaseSensitiveLookup bool   `json:"caseSensitiveLookup"`
+}
+
+type Moniker struct {
+	Scheme     string `json:"scheme"`
+	Identifier string `json:"identifier"`
+	Unique     string `json:"unique"`
+	Kind       string `json:"kind"`
+}
+
+type LinkedEditingRanges struct {
+	Ranges      []Range `json:"ranges"`
+	WordPattern string  `json:"wordPattern,omitempty"`
+}

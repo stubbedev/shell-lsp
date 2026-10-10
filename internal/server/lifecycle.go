@@ -105,6 +105,11 @@ type ServerCapabilities struct {
 	SignatureHelpProvider           SignatureHelpOptions    `json:"signatureHelpProvider"`
 	InlayHintProvider               InlayHintOptions        `json:"inlayHintProvider"`
 	DocumentLinkProvider            DocumentLinkOptions     `json:"documentLinkProvider"`
+	CodeLensProvider                CodeLensOptions         `json:"codeLensProvider"`
+	CallHierarchyProvider           bool                    `json:"callHierarchyProvider"`
+	InlineValueProvider             bool                    `json:"inlineValueProvider"`
+	MonikerProvider                 bool                    `json:"monikerProvider"`
+	LinkedEditingRangeProvider      bool                    `json:"linkedEditingRangeProvider"`
 }
 
 type RenameOptions struct {
@@ -180,6 +185,11 @@ func (s *Server) handleInitialize(_ context.Context, _ *docstore.View, params js
 			SignatureHelpProvider:           SignatureHelpOptions{TriggerCharacters: []string{" "}, RetriggerCharacters: []string{" "}},
 			InlayHintProvider:               InlayHintOptions{ResolveProvider: true},
 			DocumentLinkProvider:            DocumentLinkOptions{},
+			CodeLensProvider:                CodeLensOptions{ResolveProvider: true},
+			CallHierarchyProvider:           true,
+			InlineValueProvider:             true,
+			MonikerProvider:                 true,
+			LinkedEditingRangeProvider:      true,
 		},
 		ServerInfo: ServerInfo{Name: "shell-lsp", Version: s.version},
 	}, nil

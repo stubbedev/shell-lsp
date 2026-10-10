@@ -123,3 +123,23 @@ func TestFolds(t *testing.T) {
 		t.Errorf("folds = %v\nwant    %v", got, want)
 	}
 }
+
+func TestLinkedDelimiters(t *testing.T) {
+	t.Parallel()
+
+	text := "cat <<EOF\nbody\nEOF\ncat <<-'END'\n\tx\n\tEND\n"
+	tree := parser.Parse(text, dialect.Bash)
+	for _, at := range []int{strings.Index(text, "EOF"), strings.LastIndex(text, "EOF") + 1} {
+		spans, ok := LinkedDelimiters(tree, at)
+		if !ok || len(spans) != 2 || text[spans[0].Start:spans[0].End] != "EOF" || text[spans[1].Start:spans[1].End] != "EOF" || spans[0] == spans[1] {
+			t.Errorf("at %d: spans = %+v, %t", at, spans, ok)
+		}
+	}
+	quoted, ok := LinkedDelimiters(tree, strings.Index(text, "END"))
+	if !ok || text[quoted[0].Start:quoted[0].End] != "END" || text[quoted[1].Start:quoted[1].End] != "END" {
+		t.Errorf("quoted dash heredoc spans = %+v, %t", quoted, ok)
+	}
+	if _, ok := LinkedDelimiters(tree, strings.Index(text, "body")); ok {
+		t.Error("linked editing offered inside a heredoc body")
+	}
+}

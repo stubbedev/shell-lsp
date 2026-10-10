@@ -30,7 +30,7 @@ func (s *Server) handleReferences(ctx context.Context, docs *docstore.View, para
 	if err != nil {
 		return nil, err
 	}
-	occs, err := navigation.References(ctx, file, offset, s.navigationEnv(), s.workspace.ShellFiles, refParams.Context.IncludeDeclaration)
+	occs, err := navigation.References(ctx, file, offset, s.navigationEnv(), s.candidateFiles(docs), refParams.Context.IncludeDeclaration)
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +75,7 @@ func (s *Server) handlePrepareRename(ctx context.Context, docs *docstore.View, p
 	if err != nil {
 		return nil, err
 	}
-	sym, _, err := navigation.PrepareRename(ctx, file, offset, s.navigationEnv(), s.workspace.ShellFiles)
+	sym, _, err := navigation.PrepareRename(ctx, file, offset, s.navigationEnv(), s.candidateFiles(docs))
 	if errors.Is(err, navigation.ErrNoSymbol) {
 		return nil, nil
 	}
@@ -94,7 +94,7 @@ func (s *Server) handleRename(ctx context.Context, docs *docstore.View, params j
 	if err != nil {
 		return nil, err
 	}
-	occs, err := navigation.Rename(ctx, file, offset, renameParams.NewName, s.navigationEnv(), s.workspace.ShellFiles)
+	occs, err := navigation.Rename(ctx, file, offset, renameParams.NewName, s.navigationEnv(), s.candidateFiles(docs))
 	if err != nil {
 		return nil, renameError(err)
 	}
