@@ -63,6 +63,7 @@ var families = []family{
 	arithmeticFamily,
 	testLogicFamily,
 	arithmeticStyleFamily,
+	parameterSyntaxFamily,
 }
 
 var catalog, rules, commandChecks = assemble(families)

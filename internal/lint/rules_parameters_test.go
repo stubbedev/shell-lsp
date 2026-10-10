@@ -1,0 +1,81 @@
+package lint
+
+import (
+	"slices"
+	"testing"
+
+	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/textedit"
+)
+
+func findingsWith(t *testing.T, src string, code Code, optional ...string) []Finding {
+	t.Helper()
+	var out []Finding
+	for _, f := range Check(parser.Parse(src, dialect.Bash), nil, Options{Optional: optional}) {
+		if f.Code == code {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+func TestRequireVariableBracesFix(t *testing.T) {
+	t.Parallel()
+
+	src := "name=x\necho \"$name\" $1 $name.txt\n"
+	got := findingsWith(t, src, 2250, "require-variable-braces")
+	if len(got) != 2 {
+		t.Fatalf("SC2250 findings = %+v, want two", got)
+	}
+	fixed := src
+	for _, f := range slices.Backward(got) {
+		fixed = textedit.Apply(fixed, f.Fix)
+	}
+	if want := "name=x\necho \"${name}\" $1 ${name}.txt\n"; fixed != want {
+		t.Errorf("fixed = %q, want %q", fixed, want)
+	}
+	if off := findingsWith(t, src, 2250); len(off) != 0 {
+		t.Errorf("SC2250 reported without being enabled: %+v", off)
+	}
+}
+
+func TestScanBracedClassifiesFirstPart(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		src   string
+		kinds []bracePartKind
+		plain bool
+	}{
+		{"${name}", []bracePartKind{braceLiteral}, false},
+		{"${${x}%.*}", []bracePartKind{braceNested, braceLiteral}, true},
+		{"${${x%.*}#a}", []bracePartKind{braceNested, braceLiteral}, false},
+		{"${$(a ')' b)//x/y}", []bracePartKind{braceCommand, braceLiteral}, false},
+		{"${$((1 + (2)))}", []bracePartKind{braceArithmetic}, false},
+		{"${\"a b\"}", []bracePartKind{braceDouble}, false},
+		{"${a\\}b}", []bracePartKind{braceLiteral}, false},
+		{"${@(a|b)}", []bracePartKind{braceExtGlob}, false},
+		{"${x$y}", []bracePartKind{braceLiteral, braceVariable}, false},
+	}
+	for _, c := range cases {
+		body, end, ok := scanBraced(c.src, 0)
+		if !ok || end != len(c.src) {
+			t.Errorf("scanBraced(%q) = end %d, ok %t", c.src, end, ok)
+			continue
+		}
+		kinds := make([]bracePartKind, len(body))
+		for i, part := range body {
+			kinds[i] = part.kind
+		}
+		if !slices.Equal(kinds, c.kinds) {
+			t.Errorf("scanBraced(%q) kinds = %v, want %v", c.src, kinds, c.kinds)
+		}
+		if body[0].plain != c.plain {
+			t.Errorf("scanBraced(%q) plain = %t, want %t", c.src, body[0].plain, c.plain)
+		}
+	}
+	if _, _, ok := scanBraced("${unterminated", 0); ok {
+		t.Error("an unterminated expansion was accepted")
+	}
+}
