@@ -50,6 +50,7 @@ var families = []family{
 	argumentsFamily,
 	assignmentsFamily,
 	constructsFamily,
+	caseFamily,
 }
 
 var catalog, rules, commandChecks = assemble(families)
