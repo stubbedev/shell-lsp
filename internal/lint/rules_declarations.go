@@ -33,6 +33,7 @@ var (
 	declaringCommands  = []string{"local", "declare", "export", "readonly", "typeset"}
 	declaringOrLet     = setOf("local", "declare", "export", "readonly", "typeset", "let")
 	scopedDeclarations = setOf("local", "declare", "typeset")
+	localCheckedShells = dialect.SetOf(dialect.Bash, dialect.Dash, dialect.Busybox)
 )
 
 func (p *pass) inFunction() bool {
@@ -113,7 +114,7 @@ func checkSpacedEquals(p *pass, c command) {
 }
 
 func checkLocalOutsideFunction(p *pass, c command) {
-	if (p.dialect != dialect.Bash && p.dialect != dialect.Dash) || p.inFunction() {
+	if !localCheckedShells.Has(p.dialect) || p.inFunction() {
 		return
 	}
 	p.reportNode(2168, c.nameNode(), "local is only valid inside a function.")

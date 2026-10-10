@@ -24,6 +24,11 @@ var keywordFamily = family{
 
 const timeKeyword = "time"
 
+var (
+	timeFlagShells = dialect.SetOf(dialect.Bash, dialect.Posix)
+	letShells      = dialect.SetOf(dialect.Bash, dialect.Ksh)
+)
+
 func checkTimeClause(p *pass, n syntax.Node) {
 	tc, ok := n.(*syntax.TimeClause)
 	if !ok || tc.Stmt == nil {
@@ -31,15 +36,10 @@ func checkTimeClause(p *pass, n syntax.Node) {
 	}
 	at := parser.Offset(tc.Time)
 	keyword := parser.Span{Start: at, End: at + len(timeKeyword)}
-	switch p.dialect {
-	case dialect.Bash, dialect.Posix:
-		if call, ok := tc.Stmt.Cmd.(*syntax.CallExpr); ok && !tc.PosixFormat && len(call.Args) > 0 {
-			if first, _ := parser.Text(call.Args[0], "_"); strings.HasPrefix(first, "-") {
-				p.report(2023, keyword, "The shell keyword time only accepts -p; run /usr/bin/time explicitly to use "+first+".")
-			}
-		}
+	if timeFlagShells.Has(p.dialect) && !tc.PosixFormat {
+		checkTimeFlag(p, tc, keyword)
 	}
-	if p.dialect != dialect.Posix && p.dialect != dialect.Dash {
+	if !strictShells.Has(p.dialect) {
 		return
 	}
 	stages := pipelineStages(tc.Stmt, nil)
@@ -51,8 +51,18 @@ func checkTimeClause(p *pass, n syntax.Node) {
 	}
 }
 
+func checkTimeFlag(p *pass, tc *syntax.TimeClause, keyword parser.Span) {
+	call, ok := tc.Stmt.Cmd.(*syntax.CallExpr)
+	if !ok || len(call.Args) == 0 {
+		return
+	}
+	if first, _ := parser.Text(call.Args[0], "_"); strings.HasPrefix(first, "-") {
+		p.report(2023, keyword, "The shell keyword time only accepts -p; run /usr/bin/time explicitly to use "+first+".")
+	}
+}
+
 func checkLet(p *pass, n syntax.Node) {
-	if _, ok := n.(*syntax.LetClause); !ok || (p.dialect != dialect.Bash && p.dialect != dialect.Ksh) {
+	if _, ok := n.(*syntax.LetClause); !ok || !letShells.Has(p.dialect) {
 		return
 	}
 	p.reportNode(2219, n, "Use an arithmetic command such as (( a = 1 )) instead of let; it needs no quoting.")

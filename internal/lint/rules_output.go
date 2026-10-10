@@ -40,10 +40,12 @@ func checkUselessEcho(p *pass, c command) {
 	p.reportNode(2005, c.args[0], "This echo only repeats the output of the command substitution; run the command directly instead.")
 }
 
+var echoEscapeShells = dialect.SetOf(dialect.Bash, dialect.Posix, dialect.Ksh)
+
 var echoEscape = regexp.MustCompile(`\\([rntabefv\\']|[0-7]{1,3}|x[0-9A-Fa-f]{1,2})`)
 
 func checkEchoEscapes(p *pass, c command) {
-	if p.dialect != dialect.Bash && p.dialect != dialect.Posix && p.dialect != dialect.Ksh {
+	if !echoEscapeShells.Has(p.dialect) {
 		return
 	}
 	if parseFlags(c.args, "").has('e', "") {
