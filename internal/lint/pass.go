@@ -30,7 +30,8 @@ type pass struct {
 	settings fileWide
 	findings []Finding
 
-	shellChosen bool
+	shellChosen  bool
+	shellOptions *shellOptions
 }
 
 func newPass(tree *parser.Tree, imports []parser.Import, settings fileWide) *pass {

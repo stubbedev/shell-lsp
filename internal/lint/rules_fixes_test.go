@@ -36,6 +36,7 @@ func TestAutofixes(t *testing.T) {
 		{2321, "slots[$((1+1))]=x\n", "slots[1+1]=x\n"},
 		{2322, "echo $(( ((1+1)) + 2 ))\n", "echo $(( (1+1) + 2 ))\n"},
 		{2323, "(( (count) ))\n", "(( count ))\n"},
+		{2251, "set -e\n! grep -q x log\necho done\n", "set -e\n grep -q x log && exit 1\necho done\n"},
 		{2314, "#!/usr/bin/env bats\n@test \"t\" {\n  ! true\n}\n", "#!/usr/bin/env bats\n@test \"t\" {\n  run ! true\n}\n"},
 	} {
 		t.Run(tc.code.String()+" "+tc.script, func(t *testing.T) {
