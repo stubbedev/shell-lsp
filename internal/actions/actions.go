@@ -15,11 +15,12 @@ import (
 type Kind string
 
 const (
-	QuickFix        Kind = "quickfix"
-	RefactorExtract Kind = "refactor.extract"
-	RefactorInline  Kind = "refactor.inline"
-	RefactorRewrite Kind = "refactor.rewrite"
-	SourceFixAll    Kind = "source.fixAll.shellLsp"
+	QuickFix         Kind = "quickfix"
+	RefactorExtract  Kind = "refactor.extract"
+	RefactorInline   Kind = "refactor.inline"
+	RefactorRewrite  Kind = "refactor.rewrite"
+	SourceFixAll     Kind = "source.fixAll.shellLsp"
+	SourceStrictMode Kind = "source.strictMode"
 )
 
 type Diagnostic struct {
@@ -41,6 +42,7 @@ const (
 	DoubleBrackets   RefactorKind = "doubleBrackets"
 	InlineVariable   RefactorKind = "inlineVariable"
 	FunctionKeyword  RefactorKind = "functionKeyword"
+	StrictMode       RefactorKind = "strictMode"
 )
 
 type Refactor struct {
@@ -89,6 +91,7 @@ var refactorings = []refactoring{
 	{DoubleBrackets, RefactorRewrite, doubleBrackets},
 	{InlineVariable, RefactorInline, inlineVariable},
 	{FunctionKeyword, RefactorRewrite, toggleFunctionKeyword},
+	{StrictMode, SourceStrictMode, strictMode},
 }
 
 func Refactorings() []RefactorKind {

@@ -28,6 +28,7 @@ var codeActionKinds = []string{
 	string(actions.RefactorInline),
 	string(actions.RefactorRewrite),
 	string(actions.SourceFixAll),
+	string(actions.SourceStrictMode),
 }
 
 type actionData struct {

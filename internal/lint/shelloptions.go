@@ -24,8 +24,31 @@ func (p *pass) options() shellOptions {
 	return *p.shellOptions
 }
 
+type StrictMode struct {
+	Errexit  bool
+	Nounset  bool
+	Pipefail bool
+}
+
+func StrictModeOf(tree *parser.Tree) StrictMode {
+	text := tree.Text()
+	m := StrictMode{Errexit: shebangFlag(text, 'e'), Nounset: shebangFlag(text, 'u')}
+	for _, c := range tree.Commands {
+		if m.Errexit && m.Nounset && m.Pipefail {
+			break
+		}
+		if c.Name != "set" {
+			continue
+		}
+		m.Errexit = m.Errexit || setsErrexit(c.Args)
+		m.Nounset = m.Nounset || mentions(c.Args, "nounset") || hasShortFlag(c.Args, 'u')
+		m.Pipefail = m.Pipefail || mentions(c.Args, "pipefail")
+	}
+	return m
+}
+
 func scanShellOptions(tree *parser.Tree) shellOptions {
-	opts := shellOptions{errexit: shebangErrexit(tree.Text())}
+	opts := shellOptions{errexit: shebangFlag(tree.Text(), 'e')}
 	for _, c := range tree.Commands {
 		if c.Name == "set" || c.Name == "shopt" {
 			opts.lastpipe = opts.lastpipe || mentions(c.Args, "lastpipe")
@@ -46,13 +69,13 @@ func scanShellOptions(tree *parser.Tree) shellOptions {
 	return opts
 }
 
-func shebangErrexit(text string) bool {
+func shebangFlag(text string, flag byte) bool {
 	first, _, _ := strings.Cut(text, "\n")
 	if !strings.HasPrefix(first, "#!") {
 		return false
 	}
 	for _, field := range strings.Fields(first)[1:] {
-		if strings.HasPrefix(field, "-") && !strings.HasPrefix(field, "--") && strings.Contains(field, "e") {
+		if strings.HasPrefix(field, "-") && !strings.HasPrefix(field, "--") && strings.IndexByte(field, flag) > 0 {
 			return true
 		}
 	}
