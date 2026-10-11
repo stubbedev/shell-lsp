@@ -542,6 +542,9 @@ type Parser struct {
 
 	parsingDoc bool // true if using [Parser.Document]
 
+	// nesting is how deeply the node being parsed sits in the syntax tree.
+	nesting int
+
 	// openNodes tracks how many entire statements or words we're currently parsing.
 	// A non-zero number means that we require certain tokens or words before
 	// reaching EOF, used for [Parser.Incomplete].
@@ -599,6 +602,7 @@ func (p *Parser) reset() {
 	p.err, p.readErr, p.readEOF = nil, nil, false
 	p.quote, p.forbidNested = noState, false
 	p.openNodes = 0
+	p.nesting = 0
 	p.recoveredErrors = 0
 	p.heredocs, p.buriedHdocs = p.heredocs[:0], 0
 	p.hdocStops = nil
@@ -739,6 +743,26 @@ type saveState struct {
 	quote       quoteState
 	buriedHdocs int
 	wordCont    bool
+}
+
+// maxNesting is how deeply the syntax tree may nest. Deeper input, such as
+// thousands of nested command substitutions or a list of thousands of
+// commands joined by "&&", is rejected with an error, so that neither
+// parsing it nor walking the resulting tree recursively can exhaust the
+// stack.
+const maxNesting = 1000
+
+// nest records that the node being parsed sits one level deeper in the
+// syntax tree, and reports an error past [maxNesting]. Each call is undone
+// by [Parser.unnest].
+func (p *Parser) nest() {
+	if p.nesting++; p.nesting > maxNesting {
+		p.curErr("syntax nests more than %d levels deep", maxNesting)
+	}
+}
+
+func (p *Parser) unnest(levels int) {
+	p.nesting -= levels
 }
 
 func (p *Parser) preNested(quote quoteState) (s saveState) {
@@ -1252,7 +1276,9 @@ func (p *Parser) wordParts(wps []WordPart) []WordPart {
 	defer func() { p.wordCont = wordCont }()
 	for {
 		p.openNodes++
+		p.nest()
 		n := p.wordPart()
+		p.unnest(1)
 		p.openNodes--
 		if n == nil {
 			if len(wps) == 0 {
@@ -1896,6 +1922,7 @@ func (p *Parser) paramExpParameter(pe *ParamExp) *ParamExp {
 	// Check for Zsh nested parameter expressions like ${(f)"$(foo)"}.
 	if left, quotePos := p.nestedParameterStart(pe); left != illegalTok {
 		var wp WordPart
+		p.nest()
 		switch p.tok = left; p.tok {
 		case dollBrace: // ${#${nested parameter}}
 			p.tok = dollBrace
@@ -1905,6 +1932,7 @@ func (p *Parser) paramExpParameter(pe *ParamExp) *ParamExp {
 		default: // dollar
 			p.posErr(pe.Pos(), "invalid nested parameter expansion")
 		}
+		p.unnest(1)
 		if quotePos.IsValid() {
 			if p.r != '"' {
 				p.tok = p.paramToken(p.r)
@@ -2301,7 +2329,10 @@ func (p *Parser) arrayExpr() *ArrayExpr {
 			}
 		}
 		if p.lang.in(LangKsh93) && p.tok == leftParen {
-			if el.Array = p.arrayExpr(); el.Array == nil {
+			p.nest()
+			el.Array = p.arrayExpr()
+			p.unnest(1)
+			if el.Array == nil {
 				return nil
 			}
 		} else if el.Value = p.getWord(); el.Value == nil {
@@ -2422,6 +2453,9 @@ func (p *Parser) doRedirect(s *Stmt) {
 }
 
 func (p *Parser) getStmt(readEnd, binCmd, fnBody bool) *Stmt {
+	levels := 1
+	p.nest()
+	defer func() { p.unnest(levels) }()
 	pos, ok := p.gotRsrv("!")
 	s := &Stmt{Position: pos}
 	if ok {
@@ -2448,6 +2482,8 @@ func (p *Parser) getStmt(readEnd, binCmd, fnBody bool) *Stmt {
 			Op:    BinCmdOperator(p.tok),
 			X:     s,
 		}
+		levels++
+		p.nest()
 		p.next()
 		p.got(_Newl)
 		b.Y = p.getStmt(false, true, false)
@@ -2662,6 +2698,8 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
 	for p.peekRedir() {
 		p.doRedirect(s)
 	}
+	levels := 0
+	defer func() { p.unnest(levels) }()
 	// instead of using recursion, iterate manually
 	for p.tok == or || p.tok == orAnd {
 		if binCmd {
@@ -2675,6 +2713,8 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
 			break
 		}
 		b := &BinaryCmd{OpPos: p.pos, Op: BinCmdOperator(p.tok), X: s}
+		levels++
+		p.nest()
 		p.next()
 		p.got(_Newl)
 		if b.Y = p.gotStmtPipe(&Stmt{Position: p.pos}, true); b.Y == nil || p.err != nil {
@@ -2755,7 +2795,11 @@ func (p *Parser) ifClause(s *Stmt) {
 	p.next()
 	p.ifBranch(rootIf, "if")
 	curIf := rootIf
+	levels := 0
+	defer func() { p.unnest(levels) }()
 	for !curIf.Short && p.tok == _LitWord && p.val == "elif" {
+		levels++
+		p.nest()
 		elf := &IfClause{Position: p.pos}
 		curIf.Last = p.accComs
 		p.accComs = nil
@@ -3298,7 +3342,10 @@ func (p *Parser) testExprBinary(pastAndOr bool) TestExpr {
 	switch b.Op {
 	case AndTest, OrTest:
 		p.next()
-		if b.Y = p.testExprBinary(false); b.Y == nil {
+		p.nest()
+		b.Y = p.testExprBinary(false)
+		p.unnest(1)
+		if b.Y == nil {
 			p.followErrExp(b.OpPos, b.Op)
 		}
 	case TsReMatch:
@@ -3345,7 +3392,10 @@ func (p *Parser) testExprUnary() TestExpr {
 	case exclMark:
 		u := &UnaryTest{OpPos: p.pos, Op: TsNot}
 		p.next()
-		if u.X = p.testExprBinary(false); u.X == nil {
+		p.nest()
+		u.X = p.testExprBinary(false)
+		p.unnest(1)
+		if u.X == nil {
 			p.followErrExp(u.OpPos, u.Op)
 		}
 		return u
@@ -3360,7 +3410,10 @@ func (p *Parser) testExprUnary() TestExpr {
 	case leftParen:
 		pe := &ParenTest{Lparen: p.pos}
 		p.next()
-		if pe.X = p.testExprBinary(false); pe.X == nil {
+		p.nest()
+		pe.X = p.testExprBinary(false)
+		p.unnest(1)
+		if pe.X == nil {
 			p.followErrExp(pe.Lparen, leftParen)
 		}
 		pe.Rparen = p.matched(pe.Lparen, leftParen, rightParen)

@@ -3,6 +3,8 @@ package syntax
 // compact specifies whether we allow spaces between expressions.
 // This is true for let
 func (p *Parser) arithmExpr(compact bool) ArithmExpr {
+	p.nest()
+	defer p.unnest(1)
 	return p.arithmExprComma(compact)
 }
 
@@ -29,7 +31,9 @@ func (p *Parser) arithmExprAssign(compact bool) ArithmExpr {
 		pos := p.pos
 		tok := p.tok
 		p.nextArithOp(compact)
+		p.nest()
 		y := p.arithmExprAssign(compact)
+		p.unnest(1)
 		if y == nil {
 			p.followErrExp(pos, tok)
 		}
@@ -169,7 +173,10 @@ func (p *Parser) arithmExprUnary(compact bool) ArithmExpr {
 	case Not, BitNegation, Plus, Minus:
 		ue := &UnaryArithm{OpPos: p.pos, Op: UnAritOperator(p.tok)}
 		p.nextArithOp(compact)
-		if ue.X = p.arithmExprUnary(compact); ue.X == nil {
+		p.nest()
+		ue.X = p.arithmExprUnary(compact)
+		p.unnest(1)
+		if ue.X == nil {
 			p.followErrExp(ue.OpPos, ue.Op)
 		}
 		return ue
@@ -320,6 +327,8 @@ func (p *Parser) nextArithOp(compact bool) {
 // arithmExprBinary is used for all left-associative binary operators
 func (p *Parser) arithmExprBinary(compact bool, nextOp func(bool) ArithmExpr, operators ...BinAritOperator) ArithmExpr {
 	value := nextOp(compact)
+	levels := 0
+	defer func() { p.unnest(levels) }()
 	for {
 		var foundOp BinAritOperator
 		for _, op := range operators {
@@ -338,6 +347,8 @@ func (p *Parser) arithmExprBinary(compact bool, nextOp func(bool) ArithmExpr, op
 		}
 
 		pos := p.pos
+		levels++
+		p.nest()
 		p.nextArithOp(compact)
 		y := nextOp(compact)
 		if y == nil {

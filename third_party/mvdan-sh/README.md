@@ -42,6 +42,7 @@ reproducer so that it can be sent upstream as it is.
 | 0010 | syntax: any literal `@` expansion operator parses (`${a@bar}`), as with `bash -n`; bash rejects unknown ones only when it expands a set parameter | — |
 | 0011 | syntax: a `#` right after a word part continues the word inside `$(...)`, backquotes and `${ ...;}` too (`$(nix eval "$dir"#attr)`), instead of starting a comment | — |
 | 0012 | syntax: a declaration argument whose name is not valid (`export a-b=1`, `declare 0=x`) parses as a word, as with `bash -n`, instead of failing with "invalid var name" | — |
+| 0013 | syntax: input nesting more than 1000 levels deep (nested substitutions, expansions, blocks, arithmetic and test expressions, long `&&`, `||` and `|` lists, elif chains) fails with a syntax error, so parsing and walking the tree use bounded stack | — |
 
 ## Tests
 
