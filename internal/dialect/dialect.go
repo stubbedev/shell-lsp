@@ -79,6 +79,7 @@ type Features struct {
 	ArithmeticStatus    bool
 	AssignsPositionals  bool
 	AssociativePairs    bool
+	GlobsUnquoted       bool
 }
 
 func (d Dialect) Features() Features {
@@ -87,7 +88,7 @@ func (d Dialect) Features() Features {
 		return Features{
 			Arrays: true, AssociativeArrays: true, DoubleBracket: true,
 			ArithmeticCommand: true, ProcessSubstitution: true, Coproc: true,
-			Nameref: true, Local: true, Select: true, SplitsUnquoted: true, DeclarationAssigns: true,
+			Nameref: true, Local: true, Select: true, SplitsUnquoted: true, GlobsUnquoted: true, DeclarationAssigns: true,
 		}
 	case Zsh:
 		return Features{
@@ -97,16 +98,17 @@ func (d Dialect) Features() Features {
 			ArithmeticStatus: true, AssignsPositionals: true, AssociativePairs: true,
 		}
 	case Posix:
-		return Features{SplitsUnquoted: true}
+		return Features{SplitsUnquoted: true, GlobsUnquoted: true}
 	case Dash:
-		return Features{Local: true, SplitsUnquoted: true, DeclarationAssigns: true}
+		return Features{Local: true, SplitsUnquoted: true, GlobsUnquoted: true, DeclarationAssigns: true}
 	case Busybox:
-		return Features{DoubleBracket: true, Local: true, SplitsUnquoted: true, DeclarationAssigns: true}
+		return Features{DoubleBracket: true, Local: true, SplitsUnquoted: true, GlobsUnquoted: true, DeclarationAssigns: true}
 	case Ksh:
 		return Features{
 			Arrays: true, AssociativeArrays: true, DoubleBracket: true,
 			ArithmeticCommand: true, ProcessSubstitution: true, Coproc: true,
-			Nameref: true, Local: true, Select: true, SplitsUnquoted: true, LastPipeInShell: true, DeclarationAssigns: true,
+			Nameref: true, Local: true, Select: true, SplitsUnquoted: true, GlobsUnquoted: true, LastPipeInShell: true,
+			DeclarationAssigns: true,
 		}
 	}
 	return Features{}

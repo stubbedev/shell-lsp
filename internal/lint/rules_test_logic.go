@@ -144,7 +144,7 @@ func (p *pass) checkPatternOperand(style bracketStyle, c comparison) {
 	text := p.text[span.Start:span.End]
 	switch style {
 	case doubleBracket:
-		if _, ok := solePartUnquoted(c.right).(*syntax.ParamExp); ok {
+		if pe, ok := solePartUnquoted(c.right).(*syntax.ParamExp); ok && p.implicitlyGlobbed(pe) {
 			p.report(2053, span, "The unquoted "+text+" on the right of "+c.op+" is matched as a glob pattern; quote it to compare literally, or keep it unquoted only when it deliberately holds a pattern.")
 		}
 	case singleBracket:

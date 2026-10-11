@@ -13,6 +13,8 @@ type shellOptions struct {
 	inheritErrexit bool
 	lastpipe       bool
 	execfail       bool
+	globSubst      bool
+	shWordSplit    bool
 }
 
 func (p *pass) options() shellOptions {
@@ -95,9 +97,39 @@ func scanShellOptions(tree *parser.Tree) shellOptions {
 		case "shopt":
 			opts.pipefail = opts.pipefail || mentions(c.Args, "pipefail")
 			opts.inheritErrexit = opts.inheritErrexit || mentions(c.Args, "inherit_errexit")
+		case "emulate":
+			emulated := mentions(c.Args, "sh") || mentions(c.Args, "ksh")
+			opts.globSubst = opts.globSubst || emulated
+			opts.shWordSplit = opts.shWordSplit || emulated
+		}
+		for _, name := range zshOptionsSetBy(c) {
+			opts.globSubst = opts.globSubst || name == "globsubst"
+			opts.shWordSplit = opts.shWordSplit || name == "shwordsplit"
 		}
 	}
 	return opts
+}
+
+func zshOptionsSetBy(c parser.Command) []string {
+	var names []string
+	switch c.Name {
+	case "setopt", "unsetopt":
+		for _, a := range c.Args {
+			if lit, ok := parser.Literal(a); ok && !strings.HasPrefix(lit, "-") {
+				names = append(names, zshOption(lit, c.Name == "unsetopt"))
+			}
+		}
+	case "set":
+		for i, a := range c.Args[:max(len(c.Args)-1, 0)] {
+			if a.Lit() != "-o" {
+				continue
+			}
+			if lit, ok := parser.Literal(c.Args[i+1]); ok {
+				names = append(names, zshOption(lit, false))
+			}
+		}
+	}
+	return names
 }
 
 func shebangFlag(text string, flag byte) bool {
@@ -136,4 +168,16 @@ func mentions(args []*syntax.Word, word string) bool {
 		}
 	}
 	return false
+}
+
+func (p *pass) implicitlySplit(pe *syntax.ParamExp) bool {
+	return p.dialect.Features().SplitsUnquoted || pe.Split == syntax.OptUnset && p.options().shWordSplit
+}
+
+func (p *pass) implicitlyGlobbed(pe *syntax.ParamExp) bool {
+	return p.dialect.Features().GlobsUnquoted || pe.GlobSubst == syntax.OptUnset && p.options().globSubst
+}
+
+func (p *pass) substitutionGlobbed() bool {
+	return p.dialect.Features().GlobsUnquoted || p.options().globSubst
 }

@@ -1,0 +1,112 @@
+### zsh neither splits nor globs a parameter inside a loop glob
+#!/bin/zsh
+dir=$1
+for f in $dir/*.zsh ${dir}/*.sh; do
+  print -r -- $f
+done
+>>- SC1071 1:1 -- shellcheck refuses zsh; without GLOB_SUBST and SH_WORD_SPLIT the value of dir is used as it is
+
+### zsh still splits a command substitution inside a loop glob
+#!/bin/zsh
+for f in $(pwd)/*.zsh; do
+  print -r -- $f
+done
+>>- SC1071 1:1 -- shellcheck refuses zsh
+>>+ SC2231 2:10 -- zsh splits unquoted command substitutions on IFS
+
+### a tilde asks for the value to be globbed on purpose
+#!/bin/zsh
+dir=$1
+for f in ${~dir}/*.zsh ${=dir}/*.sh; do
+  print -r -- $f
+done
+>>- SC1071 1:1 -- shellcheck refuses zsh; ${~dir} and ${=dir} glob and split the value deliberately
+
+### glob_subst makes zsh glob the value of a parameter
+#!/bin/zsh
+setopt glob_subst
+dir=$1
+for f in $dir/*.zsh; do
+  print -r -- $f
+done
+>>- SC1071 1:1 -- shellcheck refuses zsh
+>>+ SC2231 4:10 -- with GLOB_SUBST the value of dir is globbed
+
+### sh_word_split makes zsh split the value of a parameter
+#!/bin/zsh
+unsetopt no_sh_word_split
+dir=$1
+for f in $dir/*.zsh; do
+  print -r -- $f
+done
+>>- SC1071 1:1 -- shellcheck refuses zsh
+>>+ SC2231 4:10 -- with SH_WORD_SPLIT the value of dir is split
+
+### sh emulation globs and splits values
+#!/bin/zsh
+emulate -L sh
+dir=$1
+for f in $dir/*.zsh; do
+  print -r -- $f
+done
+>>- SC1071 1:1 -- shellcheck refuses zsh
+>>+ SC2231 4:10 -- emulating sh sets GLOB_SUBST and SH_WORD_SPLIT
+
+### bash splits and globs a parameter inside a loop glob
+#!/bin/bash
+dir=$1
+for f in $dir/*.sh; do
+  echo "$f"
+done
+>>> SC2231 3:10
+
+### zsh compares with the value of a parameter, not a pattern
+#!/bin/zsh
+a=$1 b=$2
+[[ $a == $b ]] && print -r -- same
+[[ $a == ${~b} ]] && print -r -- matches
+>>- SC1071 1:1 -- shellcheck refuses zsh; without GLOB_SUBST $b is compared literally, and ${~b} is a pattern on purpose
+
+### glob_subst makes the right side of == a pattern
+#!/bin/zsh
+setopt globsubst
+a=$1 b=$2
+[[ $a == $b ]] && print -r -- matches
+>>- SC1071 1:1 -- shellcheck refuses zsh
+>>+ SC2053 4:10 -- with GLOB_SUBST the value of b is a pattern
+
+### bash matches the right side of == as a pattern
+#!/bin/bash
+a=$1 b=$2
+[[ $a == "$b" ]] && echo same
+[[ $a == $b ]] && echo matches
+>>> SC2053 4:10
+
+### zsh removes the value of a parameter literally
+#!/bin/zsh
+f() {
+  local original=$1 buffer=$2
+  print -r -- ${buffer#$original} ${buffer%$(print -r -- x)} ${buffer#${~original}}
+}
+f "$@"
+>>- SC1071 1:1 -- shellcheck refuses zsh; without GLOB_SUBST expansions inside a removal pattern match literally
+
+### glob_subst makes a parameter inside a removal pattern a pattern
+#!/bin/zsh
+set -o GLOB_SUBST
+f() {
+  local original=$1 buffer=$2
+  print -r -- ${buffer#$original}
+}
+f "$@"
+>>- SC1071 1:1 -- shellcheck refuses zsh
+>>+ SC2295 5:24 -- with GLOB_SUBST the value of original is a pattern
+
+### bash removes a pattern
+#!/bin/bash
+f() {
+  local original=$1 buffer=$2
+  echo "${buffer#$original}"
+}
+f "$@"
+>>> SC2295 4:18

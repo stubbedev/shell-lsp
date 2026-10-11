@@ -38,12 +38,28 @@ func checkLoopGlob(p *pass, n syntax.Node) {
 			continue
 		}
 		for _, part := range w.Parts {
-			switch part.(type) {
-			case *syntax.ParamExp, *syntax.CmdSubst:
-				p.reportNode(2231, part, "Quote this expansion so only the glob around it is expanded; its own value would otherwise be split and globbed too.")
+			var split, globbed bool
+			switch part := part.(type) {
+			case *syntax.ParamExp:
+				split, globbed = p.implicitlySplit(part), p.implicitlyGlobbed(part)
+			case *syntax.CmdSubst:
+				split, globbed = true, p.substitutionGlobbed()
+			}
+			if split || globbed {
+				p.reportNode(2231, part, "Quote this expansion so only the glob around it is expanded; its own value would otherwise be "+expansionFate(split, globbed)+" too.")
 			}
 		}
 	}
+}
+
+func expansionFate(split, globbed bool) string {
+	switch {
+	case split && globbed:
+		return "split and globbed"
+	case split:
+		return "split"
+	}
+	return "globbed"
 }
 
 func checkTranslatedString(p *pass, n syntax.Node) {
@@ -89,14 +105,21 @@ func checkRemovalPattern(p *pass, n syntax.Node) {
 	}
 	for _, part := range pe.Exp.Word.Parts {
 		switch part := part.(type) {
-		case *syntax.ParamExp, *syntax.CmdSubst:
-			if cs, ok := part.(*syntax.CmdSubst); ok && (cs.TempFile || cs.ReplyVar) {
-				continue
+		case *syntax.ParamExp:
+			if p.implicitlyGlobbed(part) {
+				p.reportLiteralPattern(part)
 			}
-			if span, ok := p.span(part); ok {
-				p.report(2295, span, "Quote "+p.text[span.Start:span.End]+" inside the pattern so its value is matched literally rather than as a glob.", quoteFix(span)...)
+		case *syntax.CmdSubst:
+			if !part.TempFile && !part.ReplyVar && p.substitutionGlobbed() {
+				p.reportLiteralPattern(part)
 			}
 		}
+	}
+}
+
+func (p *pass) reportLiteralPattern(part syntax.WordPart) {
+	if span, ok := p.span(part); ok {
+		p.report(2295, span, "Quote "+p.text[span.Start:span.End]+" inside the pattern so its value is matched literally rather than as a glob.", quoteFix(span)...)
 	}
 }
 
