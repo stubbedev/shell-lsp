@@ -5,9 +5,24 @@ sh, dash and ksh, with dialect auto-detection. Aims to cover everything
 bash-language-server does, for every dialect, and to implement the full LSP
 specification.
 
-The implementation plan lives in the issue tracker. Status: protocol core,
-incremental document sync, dialect detection, an error-tolerant parser for every
-dialect, diagnostics (syntax errors plus a native linter, push or pull), hover, completion, navigation, symbols, folding, formatting and code actions.
+Everything runs inside one static binary with no runtime dependencies: the
+linter, the formatter, the manual-page reader behind hover and completion, and
+the `.editorconfig` reader are all native. Highlights:
+
+- An error-tolerant parser for every dialect, with incremental document sync.
+- Diagnostics from a native linter that reuses ShellCheck's check codes and
+  directives, lints zsh, follows sourced files, and adds checks of its own,
+  such as untrusted data reaching `eval`, `sh -c` or `source`
+  ([docs/rules.md](docs/rules.md)).
+- Completion and hover for builtins, keywords, functions, variables, paths,
+  and the options and subcommands of installed commands, read from their
+  manual pages.
+- Navigation, references, rename, call hierarchy, symbols, semantic tokens,
+  inlay hints, signature help, folding, selection ranges and code lenses.
+- Formatting with the printer shfmt is built on, honouring `.editorconfig`.
+- Quick fixes, refactorings and a fix-all source action.
+- Bats support: tests in the outline, and "Run" lenses that report
+  failures as diagnostics.
 
 Every LSP method, in both directions, is listed with its status in
 [docs/lsp-methods.md](docs/lsp-methods.md), generated from the table the
@@ -104,6 +119,11 @@ follows sourced files without extra flags. Quick fixes are offered where a
 check has an unambiguous repair, alongside actions that insert a `disable`
 directive for the command or the whole file.
 
+Checks that go beyond ShellCheck use `SL` codes and are documented in
+[docs/rules.md](docs/rules.md): untrusted data pasted into code run by
+`eval`, `sh -c` or `source`, arithmetic injection (opt-in), and functions a
+script never calls. They are configured exactly like the `SC` checks.
+
 ## Commands
 
 `workspace/executeCommand` accepts:
@@ -112,6 +132,7 @@ directive for the command or the whole file.
 | --- | --- | --- |
 | `shellLsp.fixAll` | document URI | Applies every non-overlapping lint autofix in the document via `workspace/applyEdit` |
 | `shellLsp.applyEdit` | `WorkspaceEdit` | Applies the edit via `workspace/applyEdit`; code actions use it for clients without code action literal support |
+| `shellLsp.showReferences` | `{uri, position}` | Returns the reference locations a reference-count code lens stands for |
 | `shellLsp.runBats` | `{uri, test?}` | Runs the Bats file, or only the named test, and reports the results |
 
 ## Bats
