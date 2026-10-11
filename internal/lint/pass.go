@@ -50,6 +50,8 @@ type pass struct {
 	maskWalked     map[syntax.Node]bool
 	braceScan      *braceScanner
 	quotedHeredocs map[int]bool
+
+	carriageReturns []int
 }
 
 func newPass(tree *parser.Tree, imports []parser.Import, opts Options) *pass {
@@ -62,6 +64,8 @@ func newPass(tree *parser.Tree, imports []parser.Import, opts Options) *pass {
 		stmts:      make([]parser.Span, 0, len(tree.Commands)),
 		variables:  variableUsage{reads: make([]variableRead, 0, len(tree.References))},
 		parameters: shelldocs.KnownParameters(tree.Dialect),
+
+		carriageReturns: opts.CarriageReturns,
 	}
 }
 

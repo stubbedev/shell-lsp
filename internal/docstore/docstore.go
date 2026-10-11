@@ -186,6 +186,16 @@ func (d *Document) replace(start, end int, text string) {
 
 func (d *Document) Text() string { return d.text }
 
+func (d *Document) CarriageReturns() []int {
+	var out []int
+	for line, end := range d.lineEnds {
+		if end != endLF {
+			out = append(out, d.lineStart[line+1]-1)
+		}
+	}
+	return out
+}
+
 func (d *Document) LineCount() int { return len(d.lineStart) }
 
 func (d *Document) LineBounds(line int) (int, int) {

@@ -147,6 +147,8 @@ type Options struct {
 	Sources       []Source
 	RCFile        bool
 
+	CarriageReturns []int
+
 	NoExtendedAnalysis bool
 }
 

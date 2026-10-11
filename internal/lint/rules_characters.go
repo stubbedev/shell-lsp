@@ -72,13 +72,14 @@ func checkUnicodeSpaces(p *pass, n syntax.Node) {
 }
 
 func checkCarriageReturns(p *pass) {
-	if !strings.Contains(p.text, "\r") {
+	offsets := p.carriageReturnOffsets()
+	if len(offsets) == 0 {
 		return
 	}
 	verbatim := p.verbatimRegions()
 	next := 0
-	for i := range len(p.text) {
-		if p.text[i] != '\r' || i > 0 && p.text[i-1] == '\\' {
+	for _, i := range offsets {
+		if i > 0 && p.text[i-1] == '\\' {
 			continue
 		}
 		for next < len(verbatim) && verbatim[next].End <= i {
@@ -89,6 +90,17 @@ func checkCarriageReturns(p *pass) {
 		}
 		p.report(1017, parser.Span{Start: i, End: i + 1}, "Literal carriage return, typically from Windows line endings; convert the file to Unix line endings (for example with dos2unix).")
 	}
+}
+
+func (p *pass) carriageReturnOffsets() []int {
+	offsets := slices.Clone(p.carriageReturns)
+	for i := range len(p.text) {
+		if p.text[i] == '\r' {
+			offsets = append(offsets, i)
+		}
+	}
+	slices.Sort(offsets)
+	return slices.Compact(offsets)
 }
 
 func (p *pass) verbatimRegions() []parser.Span {

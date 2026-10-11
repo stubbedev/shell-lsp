@@ -69,6 +69,25 @@ func TestOpenNormalizesContent(t *testing.T) {
 	}
 }
 
+func TestCarriageReturnsFollowEdits(t *testing.T) {
+	t.Parallel()
+
+	store := openDoc(t, "a\r\nb\rc\nd")
+	if got := mustDoc(t, store).CarriageReturns(); !slices.Equal(got, []int{1, 3}) {
+		t.Fatalf("CarriageReturns() = %v, want the ends of the CRLF and CR lines", got)
+	}
+	err := store.Change("file:///t.sh", 2, []lsp.TextDocumentContentChangeEvent{{
+		Range: &lsp.Range{Start: lsp.Position{Line: 1, Character: 1}, End: lsp.Position{Line: 2, Character: 0}},
+		Text:  "\n",
+	}})
+	if err != nil {
+		t.Fatalf("Change() error = %v", err)
+	}
+	if got := mustDoc(t, store).CarriageReturns(); !slices.Equal(got, []int{1}) {
+		t.Errorf("CarriageReturns() after replacing the CR = %v, want only the CRLF", got)
+	}
+}
+
 func TestLineCount(t *testing.T) {
 	t.Parallel()
 

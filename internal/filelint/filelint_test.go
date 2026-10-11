@@ -56,3 +56,27 @@ func TestCheckFollowsSourcedFilesAndHonoursOptions(t *testing.T) {
 		t.Errorf("an optional check was not enabled: %v", got)
 	}
 }
+
+func TestCheckReportsWindowsLineEndings(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "crlf.sh")
+	if err := os.WriteFile(path, []byte("#!/bin/bash\r\necho hi\r\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.DetectDialect)
+	file, err := ws.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ends []int
+	for _, f := range Check(file, navigation.Env{Loader: loader{ws}, Roots: []string{dir}}, Options{}) {
+		if f.Code == 1017 {
+			ends = append(ends, f.Span.Start)
+		}
+	}
+	if want := []int{11, 19}; !slices.Equal(ends, want) {
+		t.Errorf("SC1017 at %v, want the end of each CRLF line %v", ends, want)
+	}
+}
