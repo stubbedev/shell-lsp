@@ -31,3 +31,9 @@ su - deploy -c "cd /srv && git checkout $1"
 env -i PATH=/bin bash -c "ls $1"
 >>> none
 >>+ SL1002 2:30 -- shell-lsp native injection check; shellcheck has no taint analysis
+
+### setsid and timeout with a duration
+#!/bin/bash
+timeout 5 setsid bash -c "ls $1"
+>>> none
+>>+ SL1002 2:30 -- shell-lsp native injection check; shellcheck has no taint analysis

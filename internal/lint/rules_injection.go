@@ -308,12 +308,15 @@ func checkInjectedCommand(p *pass, n syntax.Node) {
 	if !ok {
 		return
 	}
-	word := p.effectiveCommandWord(call)
-	name, ok := parser.Literal(word)
+	start := parser.Wrappers{Bats: p.bats, Programs: true}.Start(call.Args)
+	if start < 0 {
+		return
+	}
+	name, ok := parser.Literal(call.Args[start])
 	if !ok {
 		return
 	}
-	args := call.Args[slices.Index(call.Args, word)+1:]
+	args := call.Args[start+1:]
 	scope := p.tree.ScopeAt(parser.Offset(call.Pos()))
 	switch name {
 	case "eval":
@@ -339,29 +342,15 @@ func wholeExpansion(w *syntax.Word) bool {
 	return ok
 }
 
-var commandRunners = setOf("sudo", "doas", "env", "nohup", "nice", "timeout", "setsid")
-
 func shellScript(name string, args []*syntax.Word) (string, *syntax.Word, bool) {
 	base := path.Base(name)
 	if _, isShell := dialect.FromName(base); isShell {
 		script, ok := shellCommandString(args)
 		return base, script, ok
 	}
-	switch {
-	case base == "su":
+	if base == "su" {
 		script, ok := optionArgument(args, "-c", "--command")
 		return base, script, ok
-	case commandRunners[base]:
-		for i, arg := range args {
-			lit, ok := parser.Literal(arg)
-			if !ok {
-				return "", nil, false
-			}
-			if _, isShell := dialect.FromName(path.Base(lit)); isShell {
-				script, ok := shellCommandString(args[i+1:])
-				return path.Base(lit), script, ok
-			}
-		}
 	}
 	return "", nil, false
 }

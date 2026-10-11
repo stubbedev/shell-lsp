@@ -30,6 +30,7 @@ var commandWrappers = map[string]wrapper{
 	"env":     {program: true, assignments: true, valued: []string{"-a", "-C", "-P", "-S", "-u", "--argv0", "--chdir", "--split-string", "--unset"}},
 	"nice":    {program: true, valued: []string{"-n", "--adjustment"}},
 	"nohup":   {program: true},
+	"setsid":  {program: true},
 	"timeout": {program: true, operands: 1, valued: []string{"-k", "-s", "--kill-after", "--signal"}},
 	"watch":   {program: true, valued: []string{"-n", "-q", "--interval", "--equexit"}},
 	"xargs": {program: true, valued: []string{
