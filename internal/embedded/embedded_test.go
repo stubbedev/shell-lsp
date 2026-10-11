@@ -219,6 +219,27 @@ func TestSpansCoverEscapes(t *testing.T) {
 	}
 }
 
+func TestSedReadsRegularExpressionsAsItsOptionsSay(t *testing.T) {
+	t.Parallel()
+
+	for src, want := range map[string]int{
+		"sed 's/(a)/\\1/' f\n":                       1,
+		"sed -E 's/(a)/\\1/' f\n":                    0,
+		"sed -r 's/(a)/\\1/' f\n":                    0,
+		"sed --regexp-extended 's/(a)/\\1/' f\n":     0,
+		"sed -nE 's/(a)/\\1/p' f\n":                  0,
+		"sed -Ee 's/(a)/\\1/' f\n":                   0,
+		"sed -E -f - <<'EOF'\ns/(a)/\\1/\nEOF\n":     0,
+		"sed -E 's/\\(a\\)/\\1/' f\n":                1,
+		"gsed -i -E -e 's/(a)/x/' -e 's/b/\\1/' f\n": 1,
+	} {
+		programs := find(t, src)
+		if len(programs) != 1 || len(programs[0].Result.Errors) != want {
+			t.Errorf("Find(%q) = %+v, want one program with %d errors", src, programs, want)
+		}
+	}
+}
+
 func TestHover(t *testing.T) {
 	t.Parallel()
 

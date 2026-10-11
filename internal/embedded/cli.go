@@ -19,6 +19,7 @@ const (
 	source
 	file
 	unsupported
+	extended
 )
 
 type cli struct {
@@ -33,18 +34,20 @@ type script struct {
 }
 
 type invocation struct {
-	scripts []script
-	stdin   bool
+	scripts  []script
+	stdin    bool
+	extended bool
 }
 
 type scanner struct {
-	cli     *cli
-	args    []*syntax.Word
-	at      int
-	scripts []script
-	files   int
-	stdin   bool
-	operand *syntax.Word
+	cli      *cli
+	args     []*syntax.Word
+	at       int
+	scripts  []script
+	files    int
+	stdin    bool
+	extended bool
+	operand  *syntax.Word
 }
 
 const expansion = "\x00"
@@ -94,6 +97,10 @@ func (s *scanner) option(text string, complete bool) bool {
 			return false
 		}
 		opt := s.cli.short[text[i]]
+		if opt == extended {
+			s.extended = true
+			continue
+		}
 		if opt != flag {
 			return s.apply(opt, i+1, i+1 < len(text) || !complete, text[i+1:], complete)
 		}
@@ -104,6 +111,9 @@ func (s *scanner) option(text string, complete bool) bool {
 func (s *scanner) apply(opt option, at int, attached bool, value string, complete bool) bool {
 	switch opt {
 	case flag, glued:
+		return true
+	case extended:
+		s.extended = true
 		return true
 	case valued:
 		return attached || s.take()
@@ -140,13 +150,13 @@ func (s *scanner) take() bool {
 
 func (s *scanner) finish() (invocation, bool) {
 	if s.files > 0 {
-		return invocation{stdin: true}, s.files == 1 && s.stdin && len(s.scripts) == 0
+		return invocation{stdin: true, extended: s.extended}, s.files == 1 && s.stdin && len(s.scripts) == 0
 	}
 	if len(s.scripts) > 0 {
-		return invocation{scripts: s.scripts}, true
+		return invocation{scripts: s.scripts, extended: s.extended}, true
 	}
 	if s.operand == nil {
 		return invocation{}, false
 	}
-	return invocation{scripts: []script{{word: s.operand}}}, true
+	return invocation{scripts: []script{{word: s.operand}}, extended: s.extended}, true
 }

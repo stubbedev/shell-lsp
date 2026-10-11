@@ -20,7 +20,7 @@ const (
 type language struct {
 	name     string
 	commands []string
-	parse    func(string) lang.Result
+	parse    func(string, invocation) lang.Result
 	doc      func(string, lang.Kind) (lang.Doc, bool)
 	cli      cli
 }
@@ -31,7 +31,7 @@ var languages = [...]language{
 	Awk: {
 		name:     "awk",
 		commands: []string{"awk", "gawk", "mawk", "nawk", "original-awk"},
-		parse:    awk.Parse,
+		parse:    func(text string, _ invocation) lang.Result { return awk.Parse(text) },
 		doc:      awk.Doc,
 		cli: cli{
 			short: [128]option{
@@ -54,17 +54,17 @@ var languages = [...]language{
 	Sed: {
 		name:     "sed",
 		commands: []string{"sed", "gsed"},
-		parse:    sed.Parse,
+		parse:    parseSed,
 		doc:      undocumented,
 		cli: cli{
 			short: [128]option{
 				'e': source, 'f': file, 'l': valued,
-				'n': flag, 'E': flag, 'r': flag, 's': flag, 'u': flag, 'z': flag, 'b': flag,
+				'n': flag, 'E': extended, 'r': extended, 's': flag, 'u': flag, 'z': flag, 'b': flag,
 				'i': glued,
 			},
 			long: map[string]option{
 				"expression": source, "file": file, "line-length": valued,
-				"quiet": flag, "silent": flag, "regexp-extended": flag, "separate": flag, "unbuffered": flag,
+				"quiet": flag, "silent": flag, "regexp-extended": extended, "separate": flag, "unbuffered": flag,
 				"null-data": flag, "zero-terminated": flag, "posix": flag, "sandbox": flag, "debug": flag,
 				"follow-symlinks": flag, "binary": flag, "help": flag, "version": flag,
 				"in-place": flag,
@@ -75,7 +75,7 @@ var languages = [...]language{
 	Jq: {
 		name:     "jq",
 		commands: []string{"jq", "gojq", "jaq"},
-		parse:    jq.Parse,
+		parse:    func(text string, _ invocation) lang.Result { return jq.Parse(text) },
 		doc:      jq.Doc,
 		cli: cli{
 			short: [128]option{
@@ -95,6 +95,13 @@ var languages = [...]language{
 			permute: true,
 		},
 	},
+}
+
+func parseSed(text string, inv invocation) lang.Result {
+	if inv.extended {
+		return sed.Parse(text, sed.Extended)
+	}
+	return sed.Parse(text, sed.Basic)
 }
 
 func (l Language) String() string { return languages[l].name }

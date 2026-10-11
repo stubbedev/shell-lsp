@@ -122,8 +122,18 @@ awk '{ print $1 ' file.txt    # SL3001: `{` is never closed
 syntax error, so sed refuses to run it. GNU extensions such as `0,/re/`,
 `first~step`, `addr,+N`, `T`, `e`, `F` and `z` are accepted.
 
+The regular expressions of addresses and `s` commands are read as POSIX
+basic expressions, or extended ones under `-E`, `-r` or `--regexp-extended`,
+and only definite mistakes are reported: a group, bracket expression or
+`\{` interval that is never closed, a `\)` without its `\(`, an unknown
+character class, an empty range such as `[z-a]`, an interval whose minimum
+is above its maximum, a quantifier with nothing to repeat in an extended
+expression, and a back-reference such as `\2` to a group the expression
+does not have, in the expression or in the replacement of `s`.
+
 ```bash
 sed 's/a/b/x' file.txt    # SL3002: unknown option to `s`
+sed 's/\(.*\)=\(.*\)/\2=\3/' conf    # SL3002: there is no group 3
 ```
 
 ## SL3003

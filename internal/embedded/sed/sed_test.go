@@ -125,16 +125,60 @@ b/`,
 	":loop  \nN\nb loop\t",
 }
 
+func parseBasic(src string) lang.Result { return Parse(src, Basic) }
+
+func parseExtended(src string) lang.Result { return Parse(src, Extended) }
+
+func TestRegularExpressions(t *testing.T) {
+	t.Parallel()
+
+	langtest.CheckValid(t, parseBasic, []string{
+		`s/\(a\)\(b\)/\2\1/`, `s/(a)/x/;s/x/\\1/`, `/^*/d`, `s/a)/x/`, `s|a\|b|x|`, `s,a\,b,x,`,
+		`s//\1/`, `/[[:space:]]*$/d`, `s/[/]/x/`, `/[/]/d`, `s^.*/env[ ]*\(py\|pypy\)[^ ]*^#!@x@^`, `s/[]/]/x/`, `s/x\{2,3\}/y/`, `\,a\(b\),s,,\1,`, `sxa\(b\)x\1x`, `s1a\(b\)1\21`,
+	})
+	langtest.CheckValid(t, parseExtended, []string{
+		`s/(a)(b)/\2\1/`, `s/a)/x/`, `s/a{2,3}/b/`, `s/(x|y)+/z/g`, `s|a\|b|x|`,
+	})
+	langtest.CheckInvalid(t, parseBasic, []langtest.Case{
+		{`s/\(a/x/`, `\(`, "`\\(` is never closed in the regular expression"},
+		{`s/a\)/x/`, `\)`, "`\\)` has no matching opening parenthesis in the regular expression"},
+		{`/[abc/d`, `[`, "`[` is never closed in the regular expression"},
+		{`/[[:alhpa:]]/d`, `[:`, "unknown character class `[:alhpa:]`"},
+		{`s/[z-a]//`, `z-a`, "the range `z-a` is empty because `z` sorts after `a`"},
+		{`s/a\{3,1\}//`, `\{`, "the interval `\\{3,1\\}` has a minimum above its maximum"},
+		{`s/\(a\)/\2/`, `\2`, "`\\2` refers to group 2, but the regular expression has only 1 group"},
+		{`s/a/\1/`, `\1`, "`\\1` refers to group 1, but the regular expression has no groups"},
+		{`s/a\1/x/`, `\1`, "`\\1` refers to group 1, but the regular expression has no groups"},
+		{`\,a\(,d`, `\(`, "`\\(` is never closed in the regular expression"},
+		{`s|\(a\|b|x|`, `\(`, "`\\(` is never closed in the regular expression"},
+	})
+	langtest.CheckInvalid(t, parseExtended, []langtest.Case{
+		{`s/(a/x/`, `(`, "`(` is never closed in the regular expression"},
+		{`s/*a/x/`, `*`, "`*` has nothing to repeat"},
+		{`s/(a)/\2/`, `\2`, "`\\2` refers to group 2, but the regular expression has only 1 group"},
+		{`s(a\(b(x(`, `\(`, "`(` is never closed in the regular expression"},
+	})
+	langtest.CheckInvalid(t, parseBasic, []langtest.Case{
+		{`/(/s/\(//q`, `q`, "unknown option to `s`"},
+		{`s/[/x/`, `[`, "`[` is never closed in the regular expression"},
+	})
+	langtest.CheckErrors(t, parseBasic, `s/\(a/\1\2/`,
+		[2]string{`\(`, "`\\(` is never closed in the regular expression"})
+	langtest.CheckErrors(t, parseBasic, `s/a/\1\2/`,
+		[2]string{`\1`, "`\\1` refers to group 1, but the regular expression has no groups"},
+		[2]string{`\2`, "`\\2` refers to group 2, but the regular expression has no groups"})
+}
+
 func TestValidScripts(t *testing.T) {
 	t.Parallel()
 
-	langtest.CheckValid(t, Parse, validScripts)
+	langtest.CheckValid(t, parseBasic, validScripts)
 }
 
 func TestInvalidScripts(t *testing.T) {
 	t.Parallel()
 
-	langtest.CheckInvalid(t, Parse, []langtest.Case{
+	langtest.CheckInvalid(t, parseBasic, []langtest.Case{
 		{`$prefix`, `refix`, "extra characters after command"},
 		{`s/a/b`, `s`, "unterminated `s` command"},
 		{`s/a`, `s`, "unterminated `s` command"},
@@ -176,12 +220,12 @@ func TestInvalidScripts(t *testing.T) {
 func TestReportsAnErrorPerCommand(t *testing.T) {
 	t.Parallel()
 
-	langtest.CheckErrors(t, Parse, "s/a/b/x\nk\np;y/ab/c/",
+	langtest.CheckErrors(t, parseBasic, "s/a/b/x\nk\np;y/ab/c/",
 		[2]string{"x", "unknown option to `s`"}, [2]string{"k", "unknown command `k`"},
 		[2]string{"y/", "the strings of `y` have different lengths"})
-	langtest.CheckErrors(t, Parse, "p;s/a/b/x;q\nb nowhere",
+	langtest.CheckErrors(t, parseBasic, "p;s/a/b/x;q\nb nowhere",
 		[2]string{"x;", "unknown option to `s`"}, [2]string{"nowhere", "no label named `nowhere`"})
-	langtest.CheckErrors(t, Parse, "1,2q\n0p\n$!!d\n/x/",
+	langtest.CheckErrors(t, parseBasic, "1,2q\n0p\n$!!d\n/x/",
 		[2]string{"q", "`q` takes at most one address"}, [2]string{"0", "line address 0 is only valid as `0,/regexp/`"},
 		[2]string{"!d", "multiple `!`s"}, [2]string{"/x/", "missing command"})
 }
@@ -189,18 +233,18 @@ func TestReportsAnErrorPerCommand(t *testing.T) {
 func TestStopsWhereRecoveryIsUnreliable(t *testing.T) {
 	t.Parallel()
 
-	langtest.CheckErrors(t, Parse, "/x/{ s/a/b/q }\np", [2]string{"q", "unknown option to `s`"})
-	langtest.CheckErrors(t, Parse, "1:a\nb a", [2]string{":", "`:` doesn't take an address"})
-	langtest.CheckErrors(t, Parse, "}\n}\np", [2]string{"}", "unexpected `}`"})
-	langtest.CheckErrors(t, Parse, "s/a/b\n/;k", [2]string{"s", "unterminated `s` command"})
-	langtest.CheckErrors(t, Parse, "y/ab/\nk", [2]string{"y", "unterminated `y` command"})
-	langtest.CheckErrors(t, Parse, "/ab\nk", [2]string{"/ab", "unterminated address regex"})
+	langtest.CheckErrors(t, parseBasic, "/x/{ s/a/b/q }\np", [2]string{"q", "unknown option to `s`"})
+	langtest.CheckErrors(t, parseBasic, "1:a\nb a", [2]string{":", "`:` doesn't take an address"})
+	langtest.CheckErrors(t, parseBasic, "}\n}\np", [2]string{"}", "unexpected `}`"})
+	langtest.CheckErrors(t, parseBasic, "s/a/b\n/;k", [2]string{"s", "unterminated `s` command"})
+	langtest.CheckErrors(t, parseBasic, "y/ab/\nk", [2]string{"y", "unterminated `y` command"})
+	langtest.CheckErrors(t, parseBasic, "/ab\nk", [2]string{"/ab", "unterminated address regex"})
 }
 
 func TestCapsErrors(t *testing.T) {
 	t.Parallel()
 
-	if got := len(Parse(strings.Repeat("k\n", lang.MaxErrors+3)).Errors); got != lang.MaxErrors {
+	if got := len(parseBasic(strings.Repeat("k\n", lang.MaxErrors+3)).Errors); got != lang.MaxErrors {
 		t.Errorf("%d errors, want %d", got, lang.MaxErrors)
 	}
 }
@@ -208,7 +252,7 @@ func TestCapsErrors(t *testing.T) {
 func TestTokens(t *testing.T) {
 	t.Parallel()
 
-	langtest.CheckTokens(t, Parse, "/^#/!s/a/b/g;1,$y/ab/cd/ # done\n:top\nb top\n$a\\\nbye",
+	langtest.CheckTokens(t, parseBasic, "/^#/!s/a/b/g;1,$y/ab/cd/ # done\n:top\nb top\n$a\\\nbye",
 		"/^#/:regexp", "!:operator", "s:keyword", "/a/:regexp", "b/:string", "g:keyword",
 		"1:number", ",:operator", "$:operator", "y:keyword", "ab:string", "cd:string",
 		"# done:comment", "::keyword", "top:property", "b:keyword", "top:property",
@@ -217,7 +261,7 @@ func TestTokens(t *testing.T) {
 }
 
 func FuzzParse(f *testing.F) {
-	langtest.Fuzz(f, Parse, validScripts)
+	langtest.Fuzz(f, parseBasic, validScripts)
 }
 
 func BenchmarkParse(b *testing.B) {
@@ -225,6 +269,6 @@ func BenchmarkParse(b *testing.B) {
 	b.SetBytes(int64(len(src)))
 	b.ReportAllocs()
 	for b.Loop() {
-		Parse(src)
+		parseBasic(src)
 	}
 }

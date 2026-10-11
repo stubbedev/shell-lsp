@@ -5,7 +5,25 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/embedded/lang"
+	"github.com/stubbedev/shell-lsp/internal/embedded/regex"
 )
+
+type Syntax uint8
+
+const (
+	Basic Syntax = iota
+	Extended
+)
+
+var flavors = [...]regex.Flavor{Basic: regex.Basic, Extended: regex.Extended}
+
+type expression struct {
+	start, end  int
+	delimiter   byte
+	replacement bool
+}
+
+const maxExpressions = 4
 
 type (
 	bailout struct{}
@@ -25,11 +43,14 @@ type parser struct {
 	marks     []label
 	jumps     []label
 	structure bool
+	flavor    regex.Flavor
+	pending   [maxExpressions]expression
+	queued    int
 	commandAt int
 }
 
-func Parse(src string) lang.Result {
-	p := &parser{src: src, res: lang.NewResult(src), structure: true}
+func Parse(src string, syntax Syntax) lang.Result {
+	p := &parser{src: src, res: lang.NewResult(src), structure: true, flavor: flavors[syntax]}
 	p.run()
 	return p.res
 }
@@ -80,7 +101,9 @@ func (p *parser) attempt() (done bool) {
 			return true
 		}
 		p.commandAt = p.pos
+		p.queued = 0
 		p.parseCommand()
+		p.checkExpressions()
 	}
 }
 
@@ -377,9 +400,11 @@ func (p *parser) step() {
 
 func (p *parser) regexpAddress(start int, delimiter byte) {
 	p.pos++
-	if !p.delimited(delimiter) {
+	from := p.pos
+	if !p.delimitedRegex(delimiter) {
 		p.unterminated(start, p.pos, "unterminated address regex")
 	}
+	p.queue(expression{start: from, end: p.pos, delimiter: delimiter})
 	p.pos++
 	p.emit(start, lang.Regexp)
 	flags := p.pos
@@ -387,16 +412,25 @@ func (p *parser) regexpAddress(start int, delimiter byte) {
 	p.emit(flags, lang.Keyword)
 }
 
-func (p *parser) delimited(delimiter byte) bool {
+func (p *parser) delimited(delimiter byte) bool { return p.scanTo(delimiter, false) }
+
+func (p *parser) delimitedRegex(delimiter byte) bool { return p.scanTo(delimiter, true) }
+
+func (p *parser) scanTo(delimiter byte, brackets bool) bool {
 	for !p.eof() {
-		switch p.src[p.pos] {
-		case '\\':
+		switch c := p.src[p.pos]; {
+		case c == '\\':
 			p.pos += 2
 			continue
-		case '\n':
+		case c == '\n':
 			return false
-		case delimiter:
+		case c == delimiter:
 			return true
+		case brackets && c == '[':
+			if end, ok := regex.BracketEnd(p.src[:lineEnd(p.src, p.pos)], p.pos); ok {
+				p.pos = end
+				continue
+			}
 		}
 		p.pos++
 	}
@@ -415,18 +449,81 @@ func (p *parser) substitution() bool {
 	delimiter := p.src[p.pos]
 	start := p.pos
 	p.pos++
-	if !p.delimited(delimiter) {
+	if !p.delimitedRegex(delimiter) {
 		return false
 	}
+	p.queue(expression{start: start + 1, end: p.pos, delimiter: delimiter})
 	p.pos++
 	p.emit(start, lang.Regexp)
 	start = p.pos
 	if !p.delimited(delimiter) {
 		return false
 	}
+	p.queue(expression{start: start, end: p.pos, delimiter: delimiter, replacement: true})
 	p.pos++
 	p.emit(start, lang.String)
 	return true
+}
+
+func (p *parser) queue(e expression) {
+	p.pending[p.queued] = e
+	p.queued++
+}
+
+func (p *parser) checkExpressions() {
+	var pattern regex.Pattern
+	for _, e := range p.pending[:p.queued] {
+		if e.replacement {
+			p.references(e, pattern)
+			continue
+		}
+		pattern = p.regex(e)
+	}
+}
+
+func (p *parser) regex(e expression) regex.Pattern {
+	if e.start == e.end || lang.IsNameChar(e.delimiter) {
+		return regex.Pattern{}
+	}
+	return p.res.CheckRegex(p.excerpt(e.start, e.end, e.delimiter), p.flavor)
+}
+
+func (p *parser) excerpt(start, end int, delimiter byte) lang.Excerpt {
+	escaped := string([]byte{'\\', delimiter})
+	if !strings.Contains(p.src[start:end], escaped) {
+		return lang.Verbatim(p.src, start, end)
+	}
+	b := lang.NewExcerptBuilder(end - start)
+	for i := start; i < end; i++ {
+		switch {
+		case strings.HasPrefix(p.src[i:end], escaped):
+			b.Add(escaped[1:], i, i+2)
+			i++
+		case p.src[i] == '\\' && i+1 < end:
+			b.Add(p.src[i:i+1], i, i+1)
+			b.Add(p.src[i+1:i+2], i+1, i+2)
+			i++
+		default:
+			b.Add(p.src[i:i+1], i, i+1)
+		}
+	}
+	return b.Excerpt()
+}
+
+func (p *parser) references(e expression, pattern regex.Pattern) {
+	groups, known := pattern.Groups()
+	if !known || lang.IsDigit(e.delimiter) {
+		return
+	}
+	for i := e.start; i+1 < e.end; i++ {
+		if p.src[i] != '\\' {
+			continue
+		}
+		i++
+		if c := p.src[i]; c >= '1' && c <= '9' && int(c-'0') > groups {
+			p.res.Fail(i-1, i+1, "`"+p.src[i-1:i+1]+"` refers to group "+string(c)+", but the regular expression has "+regex.GroupCount(groups))
+		}
+	}
 }
 
 type substituteFlag uint8

@@ -53,7 +53,6 @@ func appendPrograms(programs []Program, tree *parser.Tree, stmt *syntax.Stmt) []
 	}
 	for run := range wrappers.Invocations(call.Args) {
 		if program, ok := embeddedIn(tree, stmt, run); ok {
-			program.Result = languages[program.Language].parse(program.Text)
 			programs = append(programs, program)
 		}
 	}
@@ -92,10 +91,11 @@ func embeddedIn(tree *parser.Tree, stmt *syntax.Stmt, run parser.Invocation) (Pr
 	default:
 		return Program{}, false
 	}
-	if run.Placeholder != "" && strings.Contains(program.Text, run.Placeholder) {
+	if !ok || len(program.pieces) == 0 || (run.Placeholder != "" && strings.Contains(program.Text, run.Placeholder)) {
 		return Program{}, false
 	}
-	return program, ok && len(program.pieces) > 0
+	program.Result = languages[language].parse(program.Text, inv)
+	return program, true
 }
 
 func heredocProgram(tree *parser.Tree, stmt *syntax.Stmt) (string, []piece, bool) {
