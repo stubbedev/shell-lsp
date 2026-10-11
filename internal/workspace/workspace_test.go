@@ -8,8 +8,6 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"github.com/stubbedev/shell-lsp/internal/dialect"
 )
 
 type clock struct{ t time.Time }
@@ -17,7 +15,7 @@ type clock struct{ t time.Time }
 func (c *clock) now() time.Time { return c.t }
 
 func newTestWorkspace(c *clock) *Workspace {
-	ws := New(func(string) (*File, bool) { return nil, false }, func(string) *dialect.Dialect { return nil })
+	ws := New(func(string) (*File, bool) { return nil, false }, DetectDialect)
 	ws.now = c.now
 	return ws
 }
@@ -183,7 +181,7 @@ func TestShellFilesCacheFollowsDirectoryChanges(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	ws := New(func(string) (*File, bool) { return nil, false }, func(string) *dialect.Dialect { return nil })
+	ws := New(func(string) (*File, bool) { return nil, false }, DetectDialect)
 	ws.SetRoots([]string{root})
 	rel := func() []string {
 		paths, err := ws.ShellFiles(t.Context())

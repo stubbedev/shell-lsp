@@ -115,9 +115,9 @@ func (f *File) fill(key string, entry *memoEntry, compute func() any) any {
 type Overlay func(uri string) (*File, bool)
 
 type Workspace struct {
-	overlay  Overlay
-	override func(path string) *dialect.Dialect
-	now      func() time.Time
+	overlay   Overlay
+	dialectOf func(path string, in dialect.Input) dialect.Dialect
+	now       func() time.Time
 
 	mu         sync.Mutex
 	roots      []string
@@ -149,8 +149,12 @@ type diskEntry struct {
 	file    *File
 }
 
-func New(overlay Overlay, override func(path string) *dialect.Dialect) *Workspace {
-	return &Workspace{overlay: overlay, override: override, now: time.Now, files: map[string]diskEntry{}, dirs: map[string]dirListing{}}
+func DetectDialect(_ string, in dialect.Input) dialect.Dialect {
+	return dialect.Detect(nil, in)
+}
+
+func New(overlay Overlay, dialectOf func(path string, in dialect.Input) dialect.Dialect) *Workspace {
+	return &Workspace{overlay: overlay, dialectOf: dialectOf, now: time.Now, files: map[string]diskEntry{}, dirs: map[string]dirListing{}}
 }
 
 func (w *Workspace) SetRoots(roots []string) {
@@ -227,7 +231,7 @@ func (w *Workspace) Load(path string) (*File, error) {
 		return nil, fmt.Errorf("loading %s: %w", path, err)
 	}
 	doc := docstore.NewDocument(uri, "", 0, string(raw))
-	d := dialect.Detect(w.override(path), dialect.Input{URI: uri, Text: doc.Text()})
+	d := w.dialectOf(path, dialect.Input{URI: uri, Text: doc.Text()})
 	file := &File{Path: path, URI: uri, Doc: doc, Tree: parser.Parse(doc.Text(), d)}
 	w.mu.Lock()
 	w.files[path] = diskEntry{size: info.Size(), modTime: info.ModTime(), checked: now, file: file}

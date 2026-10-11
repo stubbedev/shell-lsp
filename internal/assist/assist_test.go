@@ -37,7 +37,7 @@ func setup(t *testing.T) (*workspace.File, navigation.Env, FunctionLookup) {
 			t.Fatal(err)
 		}
 	}
-	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, func(string) *dialect.Dialect { return nil })
+	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.DetectDialect)
 	file, err := ws.Load(filepath.Join(root, "main.sh"))
 	if err != nil {
 		t.Fatal(err)

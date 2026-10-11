@@ -12,9 +12,11 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/stubbedev/shell-lsp/internal/config"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
+	"github.com/stubbedev/shell-lsp/internal/editorconfig"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/manpage"
 	"github.com/stubbedev/shell-lsp/internal/navigation"
@@ -69,27 +71,30 @@ type Server struct {
 	cancels  sync.Map
 	progress sync.Map
 	notices  sync.Map
-	sem      chan struct{}
-	exiting  chan struct{}
-	wg       sync.WaitGroup
+
+	editorconfig *editorconfig.Resolver
+	sem          chan struct{}
+	exiting      chan struct{}
+	wg           sync.WaitGroup
 }
 
 func New(conn *jsonrpc.Conn, version string) *Server {
 	pages := manpage.NewLookup(os.Getenv("MANPATH"), os.Getenv("PATH"))
 	s := &Server{
-		conn:        conn,
-		version:     version,
-		logger:      slog.New(slog.NewTextHandler(os.Stderr, nil)),
-		docs:        docstore.NewStore(),
-		snapshots:   newSnapshotCache(),
-		warmer:      newWarmer(),
-		semantic:    newSemanticCache(),
-		settings:    config.Default(),
-		commandDocs: commandDocs{pages: pages},
-		prefetch:    newPrefetcher(pages),
-		environment: shellEnvironment{pages: pages, executables: &executableCache{}},
-		sem:         make(chan struct{}, maxConcurrency),
-		exiting:     make(chan struct{}),
+		conn:         conn,
+		version:      version,
+		logger:       slog.New(slog.NewTextHandler(os.Stderr, nil)),
+		docs:         docstore.NewStore(),
+		snapshots:    newSnapshotCache(),
+		warmer:       newWarmer(),
+		semantic:     newSemanticCache(),
+		settings:     config.Default(),
+		commandDocs:  commandDocs{pages: pages},
+		editorconfig: editorconfig.NewResolver(os.ReadFile, time.Now, workspace.DiskRecheck),
+		prefetch:     newPrefetcher(pages),
+		environment:  shellEnvironment{pages: pages, executables: &executableCache{}},
+		sem:          make(chan struct{}, maxConcurrency),
+		exiting:      make(chan struct{}),
 	}
 	s.workspace = newWorkspace(s)
 	s.registerHandlers()

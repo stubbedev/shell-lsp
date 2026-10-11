@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/format"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 )
 
@@ -18,14 +19,8 @@ type Settings struct {
 }
 
 type Format struct {
-	Enabled          bool
-	Indent           *uint
-	BinaryNextLine   bool
-	SwitchCaseIndent bool
-	SpaceRedirects   bool
-	FunctionNextLine bool
-	Simplify         bool
-	Minify           bool
+	Enabled bool
+	Style   format.Style
 }
 
 type Lint struct {
@@ -97,21 +92,18 @@ func Parse(raw json.RawMessage) (Settings, error) {
 }
 
 func parseFormat(raw rawFormat, f Format) Format {
-	set := func(dst *bool, src *bool) {
-		if src != nil {
-			*dst = *src
-		}
+	if raw.Enable != nil {
+		f.Enabled = *raw.Enable
 	}
-	set(&f.Enabled, raw.Enable)
-	set(&f.BinaryNextLine, raw.BinaryNextLine)
-	set(&f.SwitchCaseIndent, raw.SwitchCaseIndent)
-	set(&f.SpaceRedirects, raw.SpaceRedirects)
-	set(&f.FunctionNextLine, raw.FunctionNextLine)
-	set(&f.Simplify, raw.Simplify)
-	set(&f.Minify, raw.Minify)
-	if raw.Indent != nil {
-		f.Indent = raw.Indent
-	}
+	f.Style = format.Style{
+		Indent:           raw.Indent,
+		BinaryNextLine:   raw.BinaryNextLine,
+		SwitchCaseIndent: raw.SwitchCaseIndent,
+		SpaceRedirects:   raw.SpaceRedirects,
+		FunctionNextLine: raw.FunctionNextLine,
+		Simplify:         raw.Simplify,
+		Minify:           raw.Minify,
+	}.Over(f.Style)
 	return f
 }
 

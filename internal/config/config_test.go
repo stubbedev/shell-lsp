@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/format"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 )
 
@@ -86,10 +87,10 @@ func TestParseFormat(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
-	if got.Format.Enabled || got.Format.Indent == nil || *got.Format.Indent != 2 || !got.Format.SwitchCaseIndent || got.Format.Simplify {
+	if style := got.Format.Style; got.Format.Enabled || style.Indent == nil || *style.Indent != 2 || style.SwitchCaseIndent == nil || !*style.SwitchCaseIndent || style.Simplify != nil {
 		t.Errorf("Format = %+v", got.Format)
 	}
-	if def := Default().Format; !def.Enabled || def.Indent != nil {
+	if def := Default().Format; !def.Enabled || def.Style != (format.Style{}) {
 		t.Errorf("default Format = %+v", def)
 	}
 	if _, err := Parse(json.RawMessage(`{"format": {"indent": -1}}`)); err == nil {

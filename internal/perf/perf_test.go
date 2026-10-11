@@ -183,7 +183,7 @@ func benchFile() *workspace.File {
 }
 
 func benchEnv() navigation.Env {
-	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, func(string) *dialect.Dialect { return nil })
+	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.DetectDialect)
 	return navigation.Env{Loader: ws}
 }
 
@@ -313,7 +313,7 @@ func largeWorkspace(b *testing.B) (*workspace.Workspace, *workspace.File) {
 	if err := os.WriteFile(filepath.Join(root, "lib.sh"), []byte("shared() { echo \"$1\"; }\n"), 0o600); err != nil {
 		b.Fatal(err)
 	}
-	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, func(string) *dialect.Dialect { return nil })
+	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.DetectDialect)
 	ws.SetRoots([]string{root})
 	lib, err := ws.Load(filepath.Join(root, "lib.sh"))
 	if err != nil {

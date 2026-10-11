@@ -10,6 +10,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
+	"github.com/stubbedev/shell-lsp/internal/editorconfig"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
@@ -24,10 +25,15 @@ func newWorkspace(s *Server) *workspace.Workspace {
 			file, err := s.workspaceFile(s.docs.View(), uri)
 			return file, err == nil
 		},
-		func(path string) *dialect.Dialect {
+		func(path string, in dialect.Input) dialect.Dialect {
 			s.mu.Lock()
-			defer s.mu.Unlock()
-			return settingsForPath(s.settings, s.folderSettings, path).Dialect
+			forced := settingsForPath(s.settings, s.folderSettings, path).Dialect
+			s.mu.Unlock()
+			d, _, err := s.resolveDialect(path, forced, in)
+			if err != nil {
+				s.noticeOnce("editorconfig:"+err.Error(), lsp.MessageWarning, err.Error())
+			}
+			return d
 		},
 	)
 }
@@ -85,13 +91,23 @@ func (s *Server) handleDidChangeWatchedFiles(ctx context.Context, params json.Ra
 	if err != nil {
 		return err
 	}
+	projectChanged := false
 	for _, change := range watched.Changes {
 		path, err := fileuri.ToPath(change.URI)
 		if err != nil {
 			s.logger.Warn("ignoring watched file event", "uri", change.URI, "err", err)
 			continue
 		}
+		if filepath.Base(path) == editorconfig.FileName {
+			s.editorconfig.Invalidate(path)
+			projectChanged = true
+			continue
+		}
 		s.workspace.Invalidate(path)
+	}
+	if projectChanged {
+		s.applySettings(ctx, func() {})
+		return nil
 	}
 	s.refreshDiagnostics(ctx, s.clientCapabilities().Workspace.Diagnostics.RefreshSupport)
 	return nil

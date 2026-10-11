@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"slices"
 
-	"github.com/stubbedev/shell-lsp/internal/config"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
+	"github.com/stubbedev/shell-lsp/internal/editorconfig"
 	"github.com/stubbedev/shell-lsp/internal/format"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
@@ -48,8 +48,15 @@ func (s *Server) format(docs *docstore.View, uri string, opts lsp.FormattingOpti
 	if !snap.settings.Format.Enabled {
 		return nil, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "formatting is disabled by shellLsp.format.enable")
 	}
+	if snap.projectErr != nil {
+		return nil, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "%v", snap.projectErr)
+	}
+	if snap.project.ignore {
+		s.noticeOnce("editorconfig-ignore:"+uri, lsp.MessageInfo, "Not formatting "+snap.file.Path+": "+editorconfig.FileName+" marks it ignore = true.")
+		return []lsp.TextEdit{}, nil
+	}
 	text := snap.doc.Text()
-	formatted, err := format.Format(snap.tree, formatOptions(snap.settings.Format, opts))
+	formatted, err := format.Format(snap.tree, snap.settings.Format.Style.Over(snap.project.style).Over(clientStyle(opts)).Options())
 	if err != nil {
 		return nil, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "%v", err)
 	}
@@ -72,21 +79,10 @@ func (s *Server) format(docs *docstore.View, uri string, opts lsp.FormattingOpti
 	return out, nil
 }
 
-func formatOptions(settings config.Format, client lsp.FormattingOptions) format.Options {
+func clientStyle(client lsp.FormattingOptions) format.Style {
 	indent := uint(0)
 	if client.InsertSpaces {
 		indent = client.TabSize
 	}
-	if settings.Indent != nil {
-		indent = *settings.Indent
-	}
-	return format.Options{
-		Indent:           indent,
-		BinaryNextLine:   settings.BinaryNextLine,
-		SwitchCaseIndent: settings.SwitchCaseIndent,
-		SpaceRedirects:   settings.SpaceRedirects,
-		FunctionNextLine: settings.FunctionNextLine,
-		Simplify:         settings.Simplify,
-		Minify:           settings.Minify,
-	}
+	return format.Style{Indent: &indent}
 }

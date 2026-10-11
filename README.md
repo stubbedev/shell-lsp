@@ -81,6 +81,16 @@ through `MANPATH` (or next to every `PATH` entry), decompresses and renders
 itself; neither `man` nor groff is involved. Documents with syntax errors are not formatted, and range
 formatting only changes the lines that intersect the range.
 
+Projects formatted with shfmt keep working unchanged: `.editorconfig` files are
+read the way shfmt reads them (`indent_style`, `indent_size`, `binary_next_line`,
+`switch_case_indent`, `space_redirects`, `keep_padding`, `function_next_line`,
+`simplify`, `minify`, `ignore`, and the `[[shell]]`, `[[bash]]` and `[[zsh]]`
+sections), and `shell_variant` selects the dialect. A `format.*` setting wins
+over `.editorconfig`, which wins over the editor's tab size; an explicit
+`dialect` setting wins over `shell_variant`. A malformed `.editorconfig` fails
+formatting with an error naming the key, and changes to it apply as soon as the
+editor reports them.
+
 ## Linting
 
 The linter is built into the server; nothing else needs to be installed. It

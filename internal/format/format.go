@@ -19,9 +19,62 @@ type Options struct {
 	BinaryNextLine   bool
 	SwitchCaseIndent bool
 	SpaceRedirects   bool
+	KeepPadding      bool
 	FunctionNextLine bool
 	Simplify         bool
 	Minify           bool
+}
+
+type Style struct {
+	Indent           *uint
+	BinaryNextLine   *bool
+	SwitchCaseIndent *bool
+	SpaceRedirects   *bool
+	KeepPadding      *bool
+	FunctionNextLine *bool
+	Simplify         *bool
+	Minify           *bool
+}
+
+func (s Style) Over(base Style) Style {
+	return Style{
+		Indent:           firstSet(s.Indent, base.Indent),
+		BinaryNextLine:   firstSet(s.BinaryNextLine, base.BinaryNextLine),
+		SwitchCaseIndent: firstSet(s.SwitchCaseIndent, base.SwitchCaseIndent),
+		SpaceRedirects:   firstSet(s.SpaceRedirects, base.SpaceRedirects),
+		KeepPadding:      firstSet(s.KeepPadding, base.KeepPadding),
+		FunctionNextLine: firstSet(s.FunctionNextLine, base.FunctionNextLine),
+		Simplify:         firstSet(s.Simplify, base.Simplify),
+		Minify:           firstSet(s.Minify, base.Minify),
+	}
+}
+
+func (s Style) Options() Options {
+	return Options{
+		Indent:           valueOf(s.Indent),
+		BinaryNextLine:   valueOf(s.BinaryNextLine),
+		SwitchCaseIndent: valueOf(s.SwitchCaseIndent),
+		SpaceRedirects:   valueOf(s.SpaceRedirects),
+		KeepPadding:      valueOf(s.KeepPadding),
+		FunctionNextLine: valueOf(s.FunctionNextLine),
+		Simplify:         valueOf(s.Simplify),
+		Minify:           valueOf(s.Minify),
+	}
+}
+
+func firstSet[T any](preferred, fallback *T) *T {
+	if preferred != nil {
+		return preferred
+	}
+	return fallback
+}
+
+func valueOf[T any](p *T) T {
+	if p == nil {
+		var zero T
+		return zero
+	}
+	return *p
 }
 
 func Format(tree *parser.Tree, opts Options) (string, error) {
@@ -75,6 +128,7 @@ func render(file *syntax.File, d dialect.Dialect, opts Options, sizeHint int) (s
 		syntax.BinaryNextLine(opts.BinaryNextLine),
 		syntax.SwitchCaseIndent(opts.SwitchCaseIndent),
 		syntax.SpaceRedirects(opts.SpaceRedirects),
+		syntax.KeepPadding(opts.KeepPadding), //nolint:staticcheck // shfmt still honours keep_padding from .editorconfig, so matching its output needs it
 		syntax.FunctionNextLine(opts.FunctionNextLine),
 		syntax.Minify(opts.Minify),
 	)

@@ -8,6 +8,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
+	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
@@ -20,6 +21,8 @@ type snapshot struct {
 	tree       *parser.Tree
 	settings   config.Settings
 	generation uint64
+	project    projectFormat
+	projectErr error
 }
 
 type snapshotEntry struct {
@@ -102,16 +105,19 @@ func (s *Server) snapshot(docs *docstore.View, uri string) (*snapshot, error) {
 	}
 	settings, generation := s.settingsFor(uri)
 	return s.snapshots.get(uri, doc, generation, func(previous *snapshot) *snapshot {
-		d := dialect.Detect(settings.Dialect, dialect.Input{URI: uri, LanguageID: doc.Language, Text: doc.Text()})
+		path, err := fileuri.ToPath(uri)
+		if err != nil {
+			path = ""
+		}
+		d, project, projectErr := s.resolveDialect(path, settings.Dialect, dialect.Input{URI: uri, LanguageID: doc.Language, Text: doc.Text()})
+		if projectErr != nil {
+			s.noticeOnce("editorconfig:"+projectErr.Error(), lsp.MessageWarning, projectErr.Error())
+		}
 		var like *parser.Tree
 		if previous != nil {
 			like = previous.tree
 		}
 		tree := parser.ParseEdit(like, doc.Text(), d)
-		path, err := fileuri.ToPath(uri)
-		if err != nil {
-			path = ""
-		}
 		return &snapshot{
 			file:       &workspace.File{Path: path, URI: uri, Doc: doc, Tree: tree},
 			doc:        doc,
@@ -120,6 +126,8 @@ func (s *Server) snapshot(docs *docstore.View, uri string) (*snapshot, error) {
 			tree:       tree,
 			settings:   settings,
 			generation: generation,
+			project:    project,
+			projectErr: projectErr,
 		}
 	}), nil
 }

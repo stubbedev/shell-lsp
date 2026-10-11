@@ -9,6 +9,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
+	"github.com/stubbedev/shell-lsp/internal/editorconfig"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
@@ -81,7 +82,7 @@ func (s *Server) registerWatchers(ctx context.Context) {
 	if !s.clientCapabilities().Workspace.DidChangeWatchedFiles.DynamicRegistration {
 		return
 	}
-	globs := workspace.WatchGlobs()
+	globs := append(workspace.WatchGlobs(), "**/"+editorconfig.FileName)
 	watchers := make([]fileWatcher, len(globs))
 	for i, glob := range globs {
 		watchers[i] = fileWatcher{GlobPattern: glob}
