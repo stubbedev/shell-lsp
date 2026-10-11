@@ -7,6 +7,8 @@ import (
 	"io"
 	"io/fs"
 	"os"
+
+	"github.com/stubbedev/shell-lsp/internal/platform"
 )
 
 const configLimit = 1 << 20
@@ -17,6 +19,9 @@ var (
 )
 
 func Open(path string) (*os.File, fs.FileInfo, error) {
+	if platform.Native.IsDevicePath(path) {
+		return nil, nil, fmt.Errorf("%s names a device: %w", path, ErrNotRegular)
+	}
 	named, err := os.Stat(path)
 	if err != nil {
 		return nil, nil, err
