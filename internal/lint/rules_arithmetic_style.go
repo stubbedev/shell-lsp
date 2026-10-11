@@ -70,9 +70,15 @@ func checkBracketArithmetic(p *pass, n syntax.Node) {
 	if !ok || !exp.Bracket {
 		return
 	}
-	if span, ok := p.span(exp); ok {
-		p.report(2007, span, "$[ ] is an obsolete arithmetic form; use $(( )) instead.")
+	span, ok := p.span(exp)
+	if !ok {
+		return
 	}
+	var fixes []Fix
+	if strings.HasPrefix(p.text[span.Start:], "$[") && strings.HasSuffix(p.text[:span.End], "]") {
+		fixes = append(fixes, safeFix("Rewrite as $(( ))", textedit.Edit{Start: span.Start, End: span.Start + len("$["), NewText: "$(("}, textedit.Edit{Start: span.End - 1, End: span.End, NewText: "))"}))
+	}
+	p.report(2007, span, "$[ ] is an obsolete arithmetic form; use $(( )) instead.", fixes...)
 }
 
 func checkOctalLiteral(p *pass, n syntax.Node) {

@@ -93,6 +93,9 @@ func TestAutofixes(t *testing.T) {
 		{2185, "find -L\n", "find -L .\n", Safe},
 		{2188, "> log\n", ": > log\n", Safe},
 		{1001, "echo a\\:b\n", "echo a:b\n", Safe},
+		{2007, "echo $[1 + 2]\n", "echo $((1 + 2))\n", Safe},
+		{2003, "n=$(expr $n + 1)\n", "n=$(($n + 1))\n", Review},
+		{2003, "n=`expr \"$a\" \\* 3 - -2`\n", "n=$(($a * 3 - -2))\n", Review},
 		{2197, "/usr/bin/fgrep -x a f\n", "/usr/bin/grep -F -x a f\n", Safe},
 		{2250, "x=`echo \"s%$libdir\\$%%\"`\n", "x=`echo \"s%${libdir}\\$%%\"`\n", Safe},
 		{2250, "echo ${list[1]}$list[2]\n", "echo ${list[1]}${list}[2]\n", Safe},
@@ -153,6 +156,9 @@ func TestUnsafeRewritesOfferNoFix(t *testing.T) {
 		{2164, "! cd /tmp\nls\n"},
 		{2265, "make || [ -d build ] &\nls\n"},
 		{2219, "let \"${name} |= 1\" 1\n"},
+		{2003, "n=$(expr $n + 1 2>/dev/null)\n"},
+		{2003, "expr $n + 1\n"},
+		{2003, "n=$(expr $n + $(id -u))\n"},
 		{2265, "[ -f a ] & # [ -f b ]\n"},
 	} {
 		t.Run(tc.code.String()+" "+tc.script, func(t *testing.T) {

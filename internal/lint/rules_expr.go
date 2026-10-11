@@ -2,8 +2,10 @@ package lint
 
 import (
 	"slices"
+	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -36,7 +38,45 @@ func checkExprOutdated(p *pass, c command) {
 	if slices.ContainsFunc(c.args, func(w *syntax.Word) bool { return literalIn(w, exprWithoutReplacement) }) {
 		return
 	}
-	p.reportNode(2003, c.word, "expr is an antiquated way to do arithmetic; use $((...)) instead.")
+	p.reportNode(2003, c.word, "expr is an antiquated way to do arithmetic; use $((...)) instead.", p.arithmeticExpansionFix(c)...)
+}
+
+var exprArithmetic = setOf("+", "-", "*", "/", "%")
+
+func (p *pass) arithmeticExpansionFix(c command) []Fix {
+	stmt, ok := p.parent().(*syntax.Stmt)
+	cs, csOK := p.ancestor(1).(*syntax.CmdSubst)
+	if !ok || !csOK || len(cs.Stmts) != 1 || c.call == nil || stmt.Cmd != c.call || c.call.Args[0] != c.word || len(c.call.Assigns) > 0 || len(stmt.Redirs) > 0 || stmt.Negated || len(c.args)%2 == 0 {
+		return nil
+	}
+	terms := make([]string, len(c.args))
+	for i, arg := range c.args {
+		term, ok := p.exprTerm(arg, i%2 == 1)
+		if !ok {
+			return nil
+		}
+		terms[i] = term
+	}
+	span, ok := p.span(cs)
+	if !ok {
+		return nil
+	}
+	return []Fix{reviewFix("Rewrite as $(( ))", textedit.Edit{Start: span.Start, End: span.End, NewText: "$((" + strings.Join(terms, " ") + "))"})}
+}
+
+func (p *pass) exprTerm(w *syntax.Word, operator bool) (string, bool) {
+	if lit, ok := parser.Literal(w); ok {
+		if operator {
+			return lit, exprArithmetic[lit]
+		}
+		digits := strings.TrimPrefix(lit, "-")
+		return lit, digits != "" && parser.IsDigits(digits)
+	}
+	pe, ok := solePart(w).(*syntax.ParamExp)
+	if operator || !ok || pe.Param == nil || !parser.IsName(pe.Param.Value) || !parser.IsPlainParam(pe) {
+		return "", false
+	}
+	return "$" + pe.Param.Value, true
 }
 
 func checkExprShape(p *pass, c command) {
