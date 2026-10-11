@@ -50,6 +50,10 @@ func IsOptionalCheck(name string) bool {
 	return slices.ContainsFunc(OptionalChecks(), func(check OptionalCheck) bool { return check.Name == name })
 }
 
+func EnablesOptional(name string) bool {
+	return name == allCodes || IsOptionalCheck(name)
+}
+
 func Codes() []Code {
 	out := make([]Code, 0, len(catalog))
 	for code := range catalog {

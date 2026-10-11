@@ -127,6 +127,11 @@ func parseLint(raw rawLint, l Lint) (Lint, error) {
 	if raw.Enable != nil {
 		l.Enabled = *raw.Enable
 	}
+	for i, name := range raw.Optional {
+		if !lint.EnablesOptional(name) {
+			return Lint{}, fmt.Errorf("%s.lint.optional[%d]: %q is not an optional check; use all or a name such as require-variable-braces", Section, i, name)
+		}
+	}
 	l.Optional = raw.Optional
 	l.Exclude = make([]lint.Code, 0, len(raw.Exclude))
 	for i, code := range raw.Exclude {

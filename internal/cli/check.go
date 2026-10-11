@@ -100,7 +100,7 @@ func writeOptionalChecks(out io.Writer) {
 
 func warnUnknownOptional(stderr io.Writer, names []string, from string) {
 	for _, name := range names {
-		if name != allCodes && !lint.IsOptionalCheck(name) {
+		if !lint.EnablesOptional(name) {
 			fmt.Fprintf(stderr, "%s check: %s names %q, which is not an optional check of shell-lsp (see --list-optional); it is ignored\n", programName, from, name)
 		}
 	}

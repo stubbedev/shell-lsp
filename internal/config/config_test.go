@@ -50,12 +50,13 @@ func TestParseRejects(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]string{
-		`{"dialect":"fish"}`:              "unknown dialect",
-		`{"lint":{"exclude":["nope"]}}`:   "exclude[0]",
-		`{"shellcheck":{"enable":false}}`: "unknown field",
-		`{"lint":{"path":"/opt/linter"}}`: "unknown field",
-		`{"unknownKey":1}`:                "unknown field",
-		`[1]`:                             "parsing",
+		`{"dialect":"fish"}`:                                     "unknown dialect",
+		`{"lint":{"exclude":["nope"]}}`:                          "exclude[0]",
+		`{"lint":{"optional":["all","require-varible-braces"]}}`: "optional[1]",
+		`{"shellcheck":{"enable":false}}`:                        "unknown field",
+		`{"lint":{"path":"/opt/linter"}}`:                        "unknown field",
+		`{"unknownKey":1}`:                                       "unknown field",
+		`[1]`:                                                    "parsing",
 	}
 	for raw, want := range tests {
 		_, err := Parse(json.RawMessage(raw))
