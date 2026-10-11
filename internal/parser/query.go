@@ -147,3 +147,51 @@ func (t *Tree) NodeSpan(node syntax.Node) (Span, bool) {
 	}
 	return Span{Start: offset(start), End: max(offset(start), offset(end))}, true
 }
+
+func (t *Tree) LiteralKeys(name string) []string {
+	pairs := t.Dialect.Features().AssociativePairs && t.associative(name)
+	var keys []string
+	add := func(index syntax.ArithmExpr) {
+		w, ok := index.(*syntax.Word)
+		if !ok {
+			return
+		}
+		if key, ok := Literal(w); ok && key != "" && key != "@" && key != "*" && !slices.Contains(keys, key) {
+			keys = append(keys, key)
+		}
+	}
+	Walk(t.File, func(node syntax.Node) bool {
+		switch n := node.(type) {
+		case *syntax.Assign:
+			if n.Name == nil || n.Name.Value != name {
+				return true
+			}
+			if n.Index != nil {
+				add(n.Index)
+			}
+			if n.Array == nil {
+				return true
+			}
+			for i, elem := range n.Array.Elems {
+				switch {
+				case elem.Index != nil:
+					add(elem.Index)
+				case pairs && i%2 == 0 && elem.Value != nil:
+					add(elem.Value)
+				}
+			}
+		case *syntax.ParamExp:
+			if n.Param != nil && n.Param.Value == name && n.Index != nil {
+				add(n.Index)
+			}
+		}
+		return true
+	})
+	return keys
+}
+
+func (t *Tree) associative(name string) bool {
+	return slices.ContainsFunc(t.Definitions, func(d Definition) bool {
+		return d.Name == name && d.Attrs.Has(AttrAssoc)
+	})
+}

@@ -33,6 +33,11 @@ var completionKinds = map[completion.Kind]lsp.CompletionItemKind{
 	completion.KindFlag:       lsp.CompletionProperty,
 	completion.KindOption:     lsp.CompletionValue,
 	completion.KindSubcommand: lsp.CompletionMethod,
+	completion.KindOperator:   lsp.CompletionOperator,
+	completion.KindSignal:     lsp.CompletionConstant,
+	completion.KindValue:      lsp.CompletionEnumMember,
+	completion.KindKey:        lsp.CompletionField,
+	completion.KindSnippet:    lsp.CompletionSnippet,
 }
 
 type completionData struct {
@@ -206,7 +211,10 @@ func (s *Server) completionItem(snap *snapshot, it completion.Item) (lsp.Complet
 		InsertTextFormat: format,
 		TextEdit:         &lsp.TextEdit{Range: snap.doc.RangeFor(it.Replace.Start, it.Replace.End, snap.encoding), NewText: it.InsertText},
 	}
-	if it.Snippet {
+	switch {
+	case it.FilterText != "":
+		item.FilterText = it.FilterText
+	case it.Snippet:
 		item.FilterText = it.Label
 	}
 	if it.Documentation != "" {

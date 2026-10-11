@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
@@ -35,6 +37,11 @@ const (
 	KindFlag
 	KindOption
 	KindSubcommand
+	KindOperator
+	KindSignal
+	KindValue
+	KindKey
+	KindSnippet
 )
 
 type DirEntry struct {
@@ -68,6 +75,7 @@ type Item struct {
 	Documentation string
 	SortText      string
 	InsertText    string
+	FilterText    string
 	Snippet       bool
 	Replace       parser.Span
 	Resolve       ResolveKind
@@ -115,8 +123,103 @@ func Complete(ctx context.Context, in Input) (Result, error) {
 		return c.commands(true), nil
 	case positionArgument:
 		return c.argument(ctx)
+	case positionExpansionOperator:
+		return Result{Items: c.terms(shelldocs.ExpansionOperators, KindOperator)}, nil
+	case positionParameterFlags:
+		return Result{Items: c.letters(shelldocs.ZshParameterFlags)}, nil
+	case positionGlobQualifier:
+		return Result{Items: c.letters(shelldocs.ZshGlobQualifiers)}, nil
+	case positionArrayKey:
+		return Result{Items: c.arrayKeys()}, nil
+	case positionCasePattern:
+		return Result{Items: c.casePatterns()}, nil
 	}
 	return Result{}, nil
+}
+
+func formatArgument(args []string) bool {
+	for len(args) > 0 {
+		switch args[0] {
+		case "--":
+			return len(args) == 1
+		case "-v":
+			if len(args) < 2 {
+				return false
+			}
+			args = args[2:]
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+var conversionSpec = regexp.MustCompile(`^[-+ #0]*([0-9]+|\*)?(\.([0-9]+|\*)?)?$`)
+
+func (c completer) printfDirectives() []Item {
+	prefix := c.site.prefix
+	i := strings.LastIndexByte(prefix, '%')
+	if i < 0 || !conversionSpec.MatchString(prefix[i+1:]) {
+		return nil
+	}
+	run := 1
+	for j := i - 1; j >= 0 && prefix[j] == '%'; j-- {
+		run++
+	}
+	if run%2 == 0 {
+		return nil
+	}
+	at := parser.Span{Start: c.Offset, End: c.Offset}
+	var items []Item
+	for e := range shelldocs.Terms(shelldocs.PrintfDirectives, c.dialect) {
+		label := e.Name
+		if e.Synopsis != "" {
+			label = e.Synopsis
+		}
+		it := c.item(label, KindValue, "1")
+		it.InsertText = label[1:]
+		it.Replace = at
+		it.Documentation = e.Doc
+		items = append(items, it)
+	}
+	return items
+}
+
+func (c completer) letters(v shelldocs.Vocabulary) []Item {
+	var items []Item
+	for e := range shelldocs.Terms(v, c.dialect) {
+		if len(e.Name) == 1 && strings.Contains(c.site.typed, e.Name) && !repeatable(v, e.Name) {
+			continue
+		}
+		it := c.item(e.Name, KindFlag, "1")
+		it.Documentation = e.Doc
+		items = append(items, it)
+	}
+	return items
+}
+
+func repeatable(v shelldocs.Vocabulary, name string) bool {
+	return (v == shelldocs.ZshParameterFlags && name == "q") || v == shelldocs.ZshGlobQualifiers
+}
+
+func (c completer) arrayKeys() []Item {
+	var items []Item
+	seen := map[string]bool{}
+	add := func(key, detail, sort string) {
+		if seen[key] || !strings.HasPrefix(key, c.site.prefix) {
+			return
+		}
+		seen[key] = true
+		it := c.item(key, KindKey, sort)
+		it.Detail = detail
+		items = append(items, it)
+	}
+	for _, key := range c.Tree.LiteralKeys(c.site.name) {
+		add(key, "key of "+c.site.name, "0")
+	}
+	add("@", "every element, as separate words when quoted", "1")
+	add("*", "every element, joined with the first character of IFS when quoted", "1")
+	return items
 }
 
 type completer struct {
@@ -268,9 +371,26 @@ func (c completer) argumentOf(ctx context.Context, command string, args []string
 	if n := len(args); n > 0 {
 		last = args[n-1]
 	}
+	if command == "[[" || command == "[" || command == "test" {
+		if items, ok := c.testExpression(command, args); ok {
+			return Result{Items: items}, nil
+		}
+	}
 	switch {
 	case command == "set" && (last == "-o" || last == "+o"):
 		return Result{Items: c.options(shelldocs.SetOptions)}, nil
+	case command == "kill" && last == "-s":
+		return Result{Items: c.signals("", shelldocs.Signals)}, nil
+	case command == "kill" && strings.HasPrefix(c.site.prefix, "-"):
+		flags, err := c.flags(ctx, command, args)
+		flags.Items = append(flags.Items, c.signals("-", shelldocs.Signals)...)
+		return flags, err
+	case command == "trap" && len(args) > 0 && !strings.HasPrefix(c.site.prefix, "-"):
+		return Result{Items: c.signals("", shelldocs.TrapConditions, shelldocs.Signals)}, nil
+	case command == "printf" && formatArgument(args):
+		return Result{Items: c.printfDirectives()}, nil
+	case command == "emulate" && !strings.HasPrefix(c.site.prefix, "-"):
+		return Result{Items: c.terms(shelldocs.EmulateModes, KindValue)}, nil
 	case strings.HasPrefix(c.site.prefix, "-"):
 		return c.flags(ctx, command, args)
 	case command == "shopt":
@@ -309,6 +429,135 @@ func (c completer) positional(ctx context.Context, command string, args []string
 	paths, err := c.paths(false)
 	paths.Incomplete = paths.Incomplete || incomplete
 	return paths, err
+}
+
+type testState uint8
+
+const (
+	testStart testState = iota
+	testAfterUnary
+	testAfterOperand
+	testAfterBinary
+	testDone
+)
+
+func (c completer) testExpression(command string, args []string) ([]Item, bool) {
+	state, last := testPosition(command, args)
+	switch state {
+	case testStart:
+		if !strings.HasPrefix(c.site.prefix, "-") {
+			return nil, false
+		}
+		return c.terms(shelldocs.TestUnaryOperators, KindOperator), true
+	case testAfterOperand:
+		items := c.terms(shelldocs.TestBinaryOperators, KindOperator)
+		if command == "[[" {
+			items = append(items, c.terms(shelldocs.CondOperators, KindOperator)...)
+		}
+		return items, true
+	case testAfterUnary:
+		switch last {
+		case "-v", "-R":
+			return c.variables(), true
+		case "-o":
+			if command == "[[" {
+				return c.options(shelldocs.SetOptions), true
+			}
+		}
+		return nil, false
+	case testDone:
+		return nil, true
+	}
+	return nil, false
+}
+
+func testPosition(command string, args []string) (testState, string) {
+	connector := func(w string) bool {
+		if command == "[[" {
+			return w == "&&" || w == "||"
+		}
+		return w == "-a" || w == "-o"
+	}
+	state, last := testStart, ""
+	for _, w := range args {
+		last = w
+		switch {
+		case w == "]]" || w == "]" || w == ")":
+			state = testDone
+			continue
+		case state == testStart && (w == "!" || w == "("):
+			continue
+		}
+		switch state {
+		case testStart:
+			state = testAfterOperand
+			if _, ok := shelldocs.Term(shelldocs.TestUnaryOperators, w); ok {
+				state = testAfterUnary
+			}
+		case testAfterOperand:
+			switch {
+			case connector(w):
+				state = testStart
+			case isTestBinary(w):
+				state = testAfterBinary
+			default:
+				state = testDone
+			}
+		case testAfterUnary, testAfterBinary:
+			state = testDone
+		case testDone:
+			if connector(w) {
+				state = testStart
+			}
+		}
+	}
+	return state, last
+}
+
+func isTestBinary(w string) bool {
+	if _, ok := shelldocs.Term(shelldocs.TestBinaryOperators, w); ok {
+		return true
+	}
+	_, ok := shelldocs.Term(shelldocs.CondOperators, w)
+	return ok && w != "&&" && w != "||"
+}
+
+func (c completer) terms(v shelldocs.Vocabulary, kind Kind) []Item {
+	var items []Item
+	for e := range shelldocs.Terms(v, c.dialect) {
+		if !strings.HasPrefix(e.Name, c.site.prefix) {
+			continue
+		}
+		it := c.item(e.Name, kind, "1")
+		it.Detail = e.Synopsis
+		it.Documentation = e.Doc
+		items = append(items, it)
+	}
+	return items
+}
+
+func (c completer) signals(labelPrefix string, vocabularies ...shelldocs.Vocabulary) []Item {
+	typed := strings.ToUpper(strings.TrimPrefix(c.site.prefix, labelPrefix))
+	typed, spelledSIG := strings.CutPrefix(typed, "SIG")
+	var items []Item
+	for i, v := range vocabularies {
+		for e := range shelldocs.Terms(v, c.dialect) {
+			if !strings.HasPrefix(e.Name, typed) {
+				continue
+			}
+			it := c.item(labelPrefix+e.Name, KindSignal, strconv.Itoa(i))
+			if v == shelldocs.Signals {
+				it.Detail = "SIG" + e.Name
+			}
+			it.Documentation = e.Doc
+			it.FilterText = labelPrefix + e.Name
+			if spelledSIG && v == shelldocs.Signals {
+				it.FilterText = labelPrefix + "SIG" + e.Name
+			}
+			items = append(items, it)
+		}
+	}
+	return items
 }
 
 func (c completer) options(set shelldocs.Vocabulary) []Item {

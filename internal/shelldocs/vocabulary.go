@@ -326,7 +326,7 @@ var printfDirectives = []Entry{
 	{Name: "%e", Dialects: extended, Doc: "The argument in scientific notation, such as `1.5e+03`."},
 	{Name: "%g", Dialects: extended, Doc: "The argument as `%f` or `%e`, whichever is shorter."},
 	{Name: "%q", Dialects: bashZshKsh, Doc: "The argument quoted so that the shell can read it back as one word."},
-	{Name: "%(", Dialects: bashKsh, Synopsis: "%(datefmt)T", Doc: "The argument, seconds since the epoch, formatted as a date with `strftime`; `-1` means now, as in `printf '%(%F)T' -1`."},
+	{Name: "%(", Dialects: bashKsh, Synopsis: "%(%F)T", Doc: "The argument, seconds since the epoch, formatted as a date with the `strftime` format between the parentheses; `-1` means now."},
 	{Name: "%%", Dialects: every, Doc: "A literal `%`."},
 }
 

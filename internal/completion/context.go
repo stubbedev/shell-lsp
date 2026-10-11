@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 )
 
@@ -14,6 +15,11 @@ const (
 	positionVariable
 	positionCommand
 	positionArgument
+	positionExpansionOperator
+	positionParameterFlags
+	positionArrayKey
+	positionGlobQualifier
+	positionCasePattern
 )
 
 type site struct {
@@ -23,11 +29,18 @@ type site struct {
 	command   string
 	previous  []string
 	paramForm string
+	name      string
+	typed     string
 }
 
 var (
-	variablePrefix = regexp.MustCompile(`\$(\{[#!]?)?([A-Za-z_][A-Za-z0-9_]*)?$`)
-	assignmentWord = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(\[[^]]*\])?\+?=`)
+	variablePrefix    = regexp.MustCompile(`\$(\{[#!]?)?([A-Za-z_][A-Za-z0-9_]*)?$`)
+	assignmentWord    = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(\[[^]]*\])?\+?=`)
+	expansionOperator = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*|[0-9]+|[@*#?$!-])(\[[^]]*\])?([-:=?+#%/^,@|*]+)$`)
+	parameterFlags    = regexp.MustCompile(`\$\{\(([^()]*)$`)
+	arrayKey          = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\[([^]"'$\s]*)$`)
+	caseBoundary      = regexp.MustCompile(`\bcase\s+("?\$\{?([A-Za-z_][A-Za-z0-9_]*|[0-9]+)\}?"?|\S+)\s+in\b|\besac\b`)
+	globQualifier     = regexp.MustCompile(`(?:^|[\s;|&])[^\s;|&()'"]*[*?\]][^\s;|&()'"]*\(([^()\s'"]*)$`)
 )
 
 var commandOpeners = map[string]bool{
@@ -53,8 +66,16 @@ func analyze(tree *parser.Tree, offset int) site {
 		return site{}
 	}
 	if !lx.singleQuoted {
+		if st, ok := expansionContext(tree, text[start:offset], offset); ok {
+			return st
+		}
 		if st := variableContext(text, start, offset); st.position == positionVariable {
 			return st
+		}
+	}
+	if tree.Dialect == dialect.Zsh && !lx.singleQuoted && !lx.doubleQuoted {
+		if m := globQualifier.FindStringSubmatch(text[start:offset]); m != nil {
+			return site{position: positionGlobQualifier, typed: m[1], replace: parser.Span{Start: offset, End: offset}}
 		}
 	}
 	if lx.arithmetic {
@@ -77,12 +98,82 @@ func analyze(tree *parser.Tree, offset int) site {
 	}
 	if len(words) == 0 {
 		st.position = positionCommand
+		if subject, ok := casePatternSubject(text, st.replace.Start); ok {
+			st.position, st.name = positionCasePattern, subject
+		}
 		return st
 	}
 	st.position = positionArgument
 	st.command = words[0]
 	st.previous = words[1:]
 	return st
+}
+
+func expansionContext(tree *parser.Tree, line string, offset int) (site, bool) {
+	if m := expansionOperator.FindStringSubmatchIndex(line); m != nil && !escapedAt(line, m[0]) {
+		return site{
+			position: positionExpansionOperator,
+			name:     line[m[2]:m[3]],
+			prefix:   line[m[6]:m[7]],
+			replace:  parser.Span{Start: offset - (m[7] - m[6]), End: offset},
+		}, true
+	}
+	if m := arrayKey.FindStringSubmatchIndex(line); m != nil && !escapedAt(line, m[0]) {
+		return site{
+			position: positionArrayKey,
+			name:     line[m[2]:m[3]],
+			prefix:   line[m[4]:m[5]],
+			replace:  parser.Span{Start: offset - (m[5] - m[4]), End: offset},
+		}, true
+	}
+	if tree.Dialect != dialect.Zsh {
+		return site{}, false
+	}
+	if m := parameterFlags.FindStringSubmatchIndex(line); m != nil && !escapedAt(line, m[0]) {
+		return site{position: positionParameterFlags, typed: line[m[2]:m[3]], replace: parser.Span{Start: offset, End: offset}}, true
+	}
+	return site{}, false
+}
+
+func escapedAt(line string, i int) bool {
+	return i > 0 && line[i-1] == '\\'
+}
+
+func casePatternSubject(text string, at int) (string, bool) {
+	before := strings.TrimRight(text[:at], " \t\n(")
+	for strings.HasSuffix(before, "|") {
+		before = strings.TrimRight(before[:len(before)-1], " \t\n")
+		before = strings.TrimRightFunc(before, func(r rune) bool { return !strings.ContainsRune(" \t\n;()|", r) })
+		before = strings.TrimRight(before, " \t\n(")
+	}
+	type openCase struct {
+		subject string
+		end     int
+	}
+	var open []openCase
+	for _, m := range caseBoundary.FindAllStringSubmatchIndex(text[:at], -1) {
+		if text[m[0]:m[1]] == "esac" {
+			if len(open) > 0 {
+				open = open[:len(open)-1]
+			}
+			continue
+		}
+		subject := ""
+		if m[4] >= 0 {
+			subject = text[m[4]:m[5]]
+		}
+		open = append(open, openCase{subject: subject, end: m[1]})
+	}
+	if len(open) == 0 {
+		return "", false
+	}
+	inner := open[len(open)-1]
+	afterHeader := inner.end == len(before)
+	afterItem := strings.HasSuffix(before, ";;") || strings.HasSuffix(before, ";&") || strings.HasSuffix(before, ";|")
+	if inner.subject == "" || (!afterHeader && !afterItem) {
+		return "", false
+	}
+	return inner.subject, true
 }
 
 func startsQuoted(word string) bool {
@@ -132,6 +223,19 @@ type frame struct {
 	words []string
 	cur   strings.Builder
 	depth int
+	cond  bool
+}
+
+func (f *frame) opensCondition() bool {
+	if len(f.words) == 0 || f.words[len(f.words)-1] != "[[" {
+		return false
+	}
+	for _, w := range f.words[:len(f.words)-1] {
+		if !commandOpeners[w] && !assignmentWord.MatchString(w) {
+			return false
+		}
+	}
+	return true
 }
 
 func lexLine(line string) lexed {
@@ -145,9 +249,16 @@ func lexLine(line string) lexed {
 	}
 	endWord := func() {
 		f := top()
-		if f.cur.Len() > 0 {
-			f.words = append(f.words, f.cur.String())
-			f.cur.Reset()
+		if f.cur.Len() == 0 {
+			return
+		}
+		f.words = append(f.words, f.cur.String())
+		f.cur.Reset()
+		switch {
+		case f.opensCondition():
+			f.cond = true
+		case f.cond && f.words[len(f.words)-1] == "]]":
+			f.cond = false
 		}
 	}
 	singleQuoted := false
@@ -216,6 +327,14 @@ func lexLine(line string) lexed {
 		case c == '(' && next == '(' && f.cur.Len() == 0 && len(f.words) == 0:
 			push(frameArithmetic)
 			i++
+		case f.cond && (c == '&' || c == '|' || c == '(' || c == ')'):
+			endWord()
+			f.cur.WriteByte(c)
+			if (c == '&' || c == '|') && next == c {
+				f.cur.WriteByte(c)
+				i++
+			}
+			endWord()
 		case c == ')' && len(stack) > 1:
 			pop()
 		case c == ';' || c == '&' || c == '|' || c == '(' || c == ')' || c == '`':

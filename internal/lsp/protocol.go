@@ -225,15 +225,20 @@ type Hover struct {
 type CompletionItemKind uint8
 
 const (
-	CompletionMethod   CompletionItemKind = 2
-	CompletionFunction CompletionItemKind = 3
-	CompletionVariable CompletionItemKind = 6
-	CompletionModule   CompletionItemKind = 9
-	CompletionProperty CompletionItemKind = 10
-	CompletionValue    CompletionItemKind = 12
-	CompletionKeyword  CompletionItemKind = 14
-	CompletionFile     CompletionItemKind = 17
-	CompletionFolder   CompletionItemKind = 19
+	CompletionMethod     CompletionItemKind = 2
+	CompletionFunction   CompletionItemKind = 3
+	CompletionField      CompletionItemKind = 5
+	CompletionVariable   CompletionItemKind = 6
+	CompletionModule     CompletionItemKind = 9
+	CompletionProperty   CompletionItemKind = 10
+	CompletionValue      CompletionItemKind = 12
+	CompletionKeyword    CompletionItemKind = 14
+	CompletionSnippet    CompletionItemKind = 15
+	CompletionFile       CompletionItemKind = 17
+	CompletionFolder     CompletionItemKind = 19
+	CompletionEnumMember CompletionItemKind = 20
+	CompletionConstant   CompletionItemKind = 21
+	CompletionOperator   CompletionItemKind = 24
 )
 
 type InsertTextFormat uint8
