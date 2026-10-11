@@ -77,7 +77,7 @@ func (s *Server) report(file *workspace.File, settings config.Settings, generati
 	items := diagnostics.Syntax(file.Tree, file.Doc, encoding)
 	items = append(items, diagnostics.Embedded(embeddedPrograms(file), file.Doc, encoding)...)
 	items = append(items, diagnostics.Lint(findings, file.Doc, encoding)...)
-	items = append(items, diagnostics.Bats(tests.failures, file.Doc, encoding)...)
+	items = append(items, diagnostics.Bats(tests.placedOn(file.Tree), file.Doc, encoding)...)
 	return diagnosticReport{
 		version:  file.Doc.Version,
 		resultID: fmt.Sprintf("%s/%d/%d/%d", identity, generation, stamp, tests.revision),

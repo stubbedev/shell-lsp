@@ -196,3 +196,35 @@ func TestRunBatsWithProjectRunnerPushesDiagnostics(t *testing.T) {
 		return err == nil && len(batsDiagnostics(params.Diagnostics)) == 1 && batsDiagnostics(params.Diagnostics)[0].Range.Start.Line == 6
 	})
 }
+
+func TestBatsFailuresFollowTheirTest(t *testing.T) {
+	bin := t.TempDir()
+	writeRunner(t, filepath.Join(bin, "bats"))
+	t.Setenv("PATH", bin)
+	root, uri := batsSuiteOnDisk(t)
+	c, _ := startClient(t, `{"rootUri": "`+fileuri.FromPath(root)+`", "capabilities": {"textDocument": {"diagnostic": {}}}}`)
+	unsaved := strings.Replace(batsFile, "@test \"adds\"", "# an unsaved note\n@test \"adds\"", 1)
+	c.notify("textDocument/didOpen", openParams(uri, unsaved))
+	c.call("workspace/executeCommand", `{"command": "`+commandRunBats+`", "arguments": [{"uri": "`+uri+`"}]}`)
+
+	failureLine := func() []uint32 {
+		report := decodeResult[lsp.FullDocumentDiagnosticReport](t, c.call("textDocument/diagnostic", `{"textDocument": {"uri": "`+uri+`"}}`))
+		var lines []uint32
+		for _, d := range batsDiagnostics(report.Items) {
+			lines = append(lines, d.Range.Start.Line)
+		}
+		return lines
+	}
+	if got := failureLine(); !slices.Equal(got, []uint32{7}) {
+		t.Fatalf("failure lines = %v, want the assertion's line in the unsaved buffer (bats ran the file on disk)", got)
+	}
+	c.notify("textDocument/didChange", `{"textDocument": {"uri": "`+uri+`", "version": 2}, "contentChanges": [{"range": {"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 0}}, "text": "\n\n"}]}`)
+	if got := failureLine(); !slices.Equal(got, []uint32{9}) {
+		t.Errorf("after inserting two lines above: failure lines = %v, want the assertion to keep its diagnostic", got)
+	}
+	removed := strings.Replace(unsaved, "@test \"compares\" {\n\t[ \"$x\" = 2 ]\n}\n", "", 1)
+	c.notify("textDocument/didChange", fmt.Sprintf(`{"textDocument": {"uri": %q, "version": 3}, "contentChanges": [{"text": %q}]}`, uri, removed))
+	if got := failureLine(); len(got) != 0 {
+		t.Errorf("after deleting the failed test: failure lines = %v, want none", got)
+	}
+}

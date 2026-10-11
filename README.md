@@ -183,7 +183,8 @@ folder, then `bats` on `PATH`. It runs with `--tap` (and an anchored
 test, shows a passed/failed/skipped summary, and turns each failure into an
 error diagnostic with source `bats` on the failing line, or on the test when
 the output names no line in the file. Those diagnostics stay until the file
-or that test runs again. A run is stopped when cancelled and after 30
+or that test runs again, and they move with their test (or helper function)
+as the buffer is edited, even when bats ran an older saved copy. A run is stopped when cancelled and after 30
 minutes.
 
 ## Recipes

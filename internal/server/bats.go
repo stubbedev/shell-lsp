@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"sync"
@@ -36,7 +37,71 @@ type batsRunResult struct {
 
 type batsRecord struct {
 	revision uint64
-	failures []bats.Failure
+	failures []placedFailure
+}
+
+type failureAnchor struct {
+	test     bool
+	name     string
+	relative int
+}
+
+type placedFailure struct {
+	bats.Failure
+	anchor *failureAnchor
+}
+
+func anchorFailure(tree *parser.Tree, f bats.Failure) placedFailure {
+	for _, t := range tree.Tests {
+		if relative, ok := lineWithin(tree, t.Span, f.Line); ok {
+			return placedFailure{Failure: f, anchor: &failureAnchor{test: true, name: t.Name, relative: relative}}
+		}
+	}
+	for _, fn := range tree.Functions {
+		if relative, ok := lineWithin(tree, fn.Span, f.Line); ok {
+			return placedFailure{Failure: f, anchor: &failureAnchor{name: fn.Name, relative: relative}}
+		}
+	}
+	return placedFailure{Failure: f}
+}
+
+func lineWithin(tree *parser.Tree, span parser.Span, line int) (int, bool) {
+	first, last := tree.Line(span.Start), tree.Line(max(span.End-1, span.Start))
+	if line < first || line > last {
+		return 0, false
+	}
+	return line - first, true
+}
+
+func (p placedFailure) on(tree *parser.Tree) (bats.Failure, bool) {
+	if p.anchor == nil {
+		return p.Failure, true
+	}
+	var span parser.Span
+	found := false
+	if p.anchor.test {
+		test, ok := namedTest(tree, p.anchor.name)
+		span, found = test.Span, ok
+	} else {
+		fn, ok := tree.FunctionNamed(p.anchor.name)
+		span, found = fn.Span, ok
+	}
+	if !found {
+		return bats.Failure{}, false
+	}
+	f := p.Failure
+	f.Line = tree.Line(span.Start) + p.anchor.relative
+	return f, true
+}
+
+func (r batsRecord) placedOn(tree *parser.Tree) []bats.Failure {
+	out := make([]bats.Failure, 0, len(r.failures))
+	for _, p := range r.failures {
+		if f, ok := p.on(tree); ok {
+			out = append(out, f)
+		}
+	}
+	return out
 }
 
 type batsResults struct {
@@ -49,12 +114,12 @@ func newBatsResults() *batsResults {
 	return &batsResults{byURI: map[string]batsRecord{}}
 }
 
-func (b *batsResults) record(uri string, selected []string, failures []bats.Failure) {
+func (b *batsResults) record(uri string, selected []string, failures []placedFailure) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	var kept []bats.Failure
+	var kept []placedFailure
 	if selected != nil {
-		kept = slices.DeleteFunc(slices.Clone(b.byURI[uri].failures), func(f bats.Failure) bool { return bats.Matches(selected, f.Test) })
+		kept = slices.DeleteFunc(slices.Clone(b.byURI[uri].failures), func(f placedFailure) bool { return bats.Matches(selected, f.Test) })
 	}
 	b.revision++
 	b.byURI[uri] = batsRecord{revision: b.revision, failures: append(kept, failures...)}
@@ -135,6 +200,11 @@ func (s *Server) runBats(ctx context.Context, docs *docstore.View, args batsRunA
 	if err != nil {
 		return batsRunResult{}, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "%v", err)
 	}
+	disk, err := os.ReadFile(path) //nolint:gosec // G304: the path is the open Bats file the user asked to run
+	if err != nil {
+		return batsRunResult{}, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "reading %s before running it: %v", path, err)
+	}
+	ran := parser.ParseEdit(nil, string(disk), file.Tree.Dialect, true)
 	inv := bats.Invocation{Executable: executable, Dir: dir, File: path, Test: selected}
 	label := "bats " + filepath.Base(path)
 	ctx, cancel := context.WithTimeout(ctx, batsTimeout)
@@ -155,10 +225,15 @@ func (s *Server) runBats(ctx context.Context, docs *docstore.View, args batsRunA
 		return batsRunResult{}, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "%v", err)
 	}
 	outcome = report.Summary()
-	s.bats.record(file.URI, selected, bats.Failures(report, path, dir, func(name string) (int, bool) {
-		test, ok := testRunning(file.Tree, name)
-		return file.Tree.Line(test.Span.Start), ok
-	}))
+	failures := bats.Failures(report, path, dir, func(name string) (int, bool) {
+		test, ok := testRunning(ran, name)
+		return ran.Line(test.Span.Start), ok
+	})
+	placed := make([]placedFailure, len(failures))
+	for i, f := range failures {
+		placed[i] = anchorFailure(ran, f)
+	}
+	s.bats.record(file.URI, selected, placed)
 	s.refreshDiagnosticsOf(context.WithoutCancel(ctx), s.clientCapabilities().Workspace.Diagnostics.RefreshSupport, []string{file.URI})
 	kind := lsp.MessageInfo
 	if !report.OK() {
