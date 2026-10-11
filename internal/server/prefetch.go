@@ -61,19 +61,29 @@ func (p *prefetcher) enqueue(name string) bool {
 func (s *Server) prefetchCommands(tree *parser.Tree) {
 	queued := 0
 	for _, cmd := range tree.Commands {
-		if queued == prefetchPerDocument {
-			return
-		}
 		if _, isFunction := tree.FunctionNamed(cmd.Name); isFunction {
 			continue
 		}
 		if _, isBuiltin := shelldocs.Builtin(cmd.Name); isBuiltin {
 			continue
 		}
-		if s.prefetch.enqueue(cmd.Name) {
-			queued++
+		for _, page := range s.commandPages(cmd) {
+			if queued == prefetchPerDocument {
+				return
+			}
+			if s.prefetch.enqueue(page) {
+				queued++
+			}
 		}
 	}
+}
+
+func (s *Server) commandPages(cmd parser.Command) []string {
+	sub, ok := manpage.SubcommandWord(parser.ArgumentTexts(cmd.Args))
+	if page := cmd.Name + "-" + sub; ok && s.environment.pages.Has(page) {
+		return []string{cmd.Name, page}
+	}
+	return []string{cmd.Name}
 }
 
 func (s *Server) warmUp(ctx context.Context) {

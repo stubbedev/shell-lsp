@@ -80,7 +80,6 @@ type Server struct {
 }
 
 func New(conn *jsonrpc.Conn, version string) *Server {
-	pages := manpage.NewLookup(os.Getenv("MANPATH"), os.Getenv("PATH"))
 	s := &Server{
 		conn:         conn,
 		version:      version,
@@ -91,16 +90,20 @@ func New(conn *jsonrpc.Conn, version string) *Server {
 		semantic:     newSemanticCache(),
 		bats:         newBatsResults(),
 		settings:     config.Default(),
-		commandDocs:  commandDocs{pages: pages},
 		editorconfig: editorconfig.NewResolver(os.ReadFile, time.Now, workspace.DiskRecheck),
-		prefetch:     newPrefetcher(pages),
-		environment:  shellEnvironment{pages: pages, executables: &executableCache{}},
 		sem:          make(chan struct{}, maxConcurrency),
 		exiting:      make(chan struct{}),
 	}
+	s.usePages(manpage.NewLookup(os.Getenv("MANPATH"), os.Getenv("PATH")))
 	s.workspace = newWorkspace(s)
 	s.registerHandlers()
 	return s
+}
+
+func (s *Server) usePages(pages *manpage.Lookup) {
+	s.prefetch = newPrefetcher(pages)
+	s.commandDocs = commandDocs{pages: pages}
+	s.environment = shellEnvironment{pages: pages, executables: &executableCache{}, prefetch: s.prefetch}
 }
 
 func (s *Server) SetLogger(logger *slog.Logger) {

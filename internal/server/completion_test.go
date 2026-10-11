@@ -11,6 +11,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
+	"github.com/stubbedev/shell-lsp/internal/manpage"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
@@ -64,6 +65,93 @@ func TestCompletionRequest(t *testing.T) {
 	i := slices.IndexFunc(keywords.Items, func(it lsp.CompletionItem) bool { return it.Label == "while" })
 	if i < 0 || keywords.Items[i].InsertTextFormat != lsp.InsertSnippet {
 		t.Errorf("while completion = %v", completionLabels(keywords))
+	}
+}
+
+const (
+	toolPage = `.TH TOOL 1
+.SH NAME
+tool \- manage widgets
+.SH SYNOPSIS
+.B tool
+[\fB\-v\fR] \fICOMMAND\fR
+.SH COMMANDS
+.TP
+\fBstart\fR \fIUNIT\fR...
+Start units. They start in parallel.
+.TP
+\fBstop\fR \fIUNIT\fR...
+Stop units.
+.RS
+.TP
+.B \-\-force
+kill them
+.RE
+.SH OPTIONS
+.TP
+.B \-v
+be verbose
+`
+	toolExtraPage = `.TH TOOL-EXTRA 1
+.SH NAME
+tool-extra \- extra widget tricks
+.SH SYNOPSIS
+.B tool extra
+[\fB\-x\fR]
+.SH OPTIONS
+.TP
+.B \-x
+do the extra trick
+`
+)
+
+func withToolPages(t testing.TB) func(*Server) {
+	t.Helper()
+	dir := t.TempDir()
+	for name, page := range map[string]string{"tool.1": toolPage, "tool-extra.1": toolExtraPage} {
+		if err := os.MkdirAll(filepath.Join(dir, "man1"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "man1", name), []byte(page), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return func(s *Server) { s.usePages(manpage.NewLookup(dir, "")) }
+}
+
+func TestCompletionOffersSubcommandsAndTheirFlags(t *testing.T) {
+	t.Parallel()
+
+	c, _ := startClient(t, `{"capabilities": {"textDocument": {"diagnostic": {}}}}`, withToolPages(t))
+	c.notify("initialized", `{}`)
+	c.notify("textDocument/didOpen", openParams("file:///w/a.sh", "tool \ntool stop -\ntool extra -\n"))
+
+	var subcommands lsp.CompletionList
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		subcommands = decodeResult[lsp.CompletionList](t, c.call("textDocument/completion", positionParams("file:///w/a.sh", 0, 5, "")))
+		if !subcommands.IsIncomplete {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("subcommands still loading: %v", completionLabels(subcommands))
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if got := completionLabels(subcommands); !slices.Equal(got, []string{"extra", "start", "stop"}) {
+		t.Fatalf("subcommands = %v", got)
+	}
+	start := subcommands.Items[1]
+	if start.Kind != lsp.CompletionMethod || start.Detail != "Start units." || start.Documentation == nil || !strings.Contains(start.Documentation.Value, "tool start UNIT...") {
+		t.Errorf("start item = %+v", start)
+	}
+	stop := decodeResult[lsp.CompletionList](t, c.call("textDocument/completion", positionParams("file:///w/a.sh", 1, 11, "")))
+	if got := completionLabels(stop); !slices.Equal(got, []string{"--force"}) {
+		t.Errorf("tool stop flags = %v", got)
+	}
+	extra := decodeResult[lsp.CompletionList](t, c.call("textDocument/completion", positionParams("file:///w/a.sh", 2, 12, "")))
+	if got := completionLabels(extra); !slices.Equal(got, []string{"-x"}) {
+		t.Errorf("tool extra flags = %v", got)
 	}
 }
 

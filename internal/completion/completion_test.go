@@ -14,8 +14,9 @@ import (
 )
 
 type fakeEnv struct {
-	dirs    map[string][]DirEntry
-	options map[string][]manpage.Option
+	dirs        map[string][]DirEntry
+	options     map[string][]manpage.Option
+	subcommands map[string]manpage.Listing
 }
 
 func (f fakeEnv) Executables() []string { return []string{"git", "grep", "gzip", "ls"} }
@@ -34,12 +35,18 @@ func (f fakeEnv) WorkDir() (string, error) { return "/work", nil }
 
 func (f fakeEnv) EnvironmentNames() []string { return []string{"EDITOR_THEME", "HOME"} }
 
-func (f fakeEnv) Options(_ context.Context, command string) ([]manpage.Option, error) {
-	opts, ok := f.options[command]
-	if !ok {
-		return nil, manpage.ErrNoPage
+func (f fakeEnv) Options(_ context.Context, command string, args []string) ([]manpage.Option, error) {
+	if opts, ok := f.options[strings.Join(append([]string{command}, args...), " ")]; ok {
+		return opts, nil
 	}
-	return opts, nil
+	if opts, ok := f.options[command]; ok {
+		return opts, nil
+	}
+	return nil, manpage.ErrNoPage
+}
+
+func (f fakeEnv) Subcommands(_ context.Context, command string) (manpage.Listing, error) {
+	return f.subcommands[command], nil
 }
 
 var env = fakeEnv{
@@ -52,7 +59,15 @@ var env = fakeEnv{
 		"/home/u/scripts": {{Name: "x.sh"}},
 	},
 	options: map[string][]manpage.Option{
-		"grep": {{Names: []string{"-E", "--extended-regexp"}, Doc: "Extended regexps."}, {Names: []string{"-i", "--ignore-case"}, Doc: "Ignore case."}},
+		"grep":            {{Names: []string{"-E", "--extended-regexp"}, Doc: "Extended regexps."}, {Names: []string{"-i", "--ignore-case"}, Doc: "Ignore case."}},
+		"git -q checkout": {{Names: []string{"-b"}, Doc: "Create a branch."}},
+	},
+	subcommands: map[string]manpage.Listing{
+		"git": {Subcommands: []manpage.Subcommand{
+			{Name: "checkout", Summary: "Switch branches.", Doc: "**git-checkout**"},
+			{Name: "commit", Summary: "Record changes.", Doc: "**git-commit**"},
+		}},
+		"docker": {Unloaded: []string{"docker-run"}},
 	},
 }
 
@@ -217,6 +232,37 @@ func TestFlags(t *testing.T) {
 	}
 	if got := complete(t, dialect.Bash, "nopage -‸"); len(got.Items) != 0 {
 		t.Errorf("flags for command without a page = %v", labels(got))
+	}
+}
+
+func TestSubcommands(t *testing.T) {
+	t.Parallel()
+
+	got := complete(t, dialect.Bash, "git ‸")
+	if !slices.Equal(labels(got), []string{"checkout", "commit"}) || got.Incomplete {
+		t.Fatalf("git subcommands = %v, incomplete %t", labels(got), got.Incomplete)
+	}
+	if it := got.Items[0]; it.Kind != KindSubcommand || it.Detail != "Switch branches." || it.Documentation != "**git-checkout**" || it.SortText != "0checkout" {
+		t.Errorf("checkout item = %+v", it)
+	}
+	if got := labels(complete(t, dialect.Bash, "git -q ch‸")); !slices.Equal(got, []string{"checkout"}) {
+		t.Errorf("subcommands after a flag = %v", got)
+	}
+	if got := labels(complete(t, dialect.Bash, "git -q checkout -‸")); !slices.Equal(got, []string{"-b"}) {
+		t.Errorf("flags after a subcommand = %v, want the subcommand's options", got)
+	}
+	if got := labels(complete(t, dialect.Bash, "git checkout ‸")); slices.Contains(got, "commit") || !slices.Contains(got, "lib/") {
+		t.Errorf("arguments after a subcommand = %v, want paths", got)
+	}
+	if got := labels(complete(t, dialect.Bash, "git zz‸")); len(got) != 0 {
+		t.Errorf("unknown subcommand prefix = %v, want the (empty) path completion", got)
+	}
+	pending := complete(t, dialect.Bash, "docker ‸")
+	if !pending.Incomplete || !slices.Contains(labels(pending), "lib/") {
+		t.Errorf("subcommands still loading = %v, incomplete %t; want paths marked incomplete", labels(pending), pending.Incomplete)
+	}
+	if plain := complete(t, dialect.Bash, "ls ‸"); plain.Incomplete || !slices.Contains(labels(plain), "lib/") {
+		t.Errorf("command without subcommands = %v, incomplete %t", labels(plain), plain.Incomplete)
 	}
 }
 

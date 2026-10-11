@@ -9,6 +9,8 @@ import (
 	"mvdan.cc/sh/v3/syntax"
 )
 
+const expansionPlaceholder = "$"
+
 func Literal(w *syntax.Word) (string, bool) {
 	if w == nil || slices.ContainsFunc(w.Parts, isExpandedOrDollarQuoted) {
 		return "", false
@@ -54,6 +56,14 @@ func Text(w *syntax.Word, placeholder string) (string, bool) {
 		}
 	}
 	return sb.String(), literal
+}
+
+func ArgumentTexts(args []*syntax.Word) []string {
+	texts := make([]string, len(args))
+	for i, arg := range args {
+		texts[i], _ = Text(arg, expansionPlaceholder)
+	}
+	return texts
 }
 
 func isExpandedOrDollarQuoted(part syntax.WordPart) bool {

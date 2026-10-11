@@ -42,8 +42,12 @@ func (offlineEnv) ReadDir(string) ([]completion.DirEntry, error) { return nil, o
 func (offlineEnv) Home() string                                  { return "/home/u" }
 func (offlineEnv) WorkDir() (string, error)                      { return "/work", nil }
 func (offlineEnv) EnvironmentNames() []string                    { return []string{"HOME", "PATH"} }
-func (offlineEnv) Options(context.Context, string) ([]manpage.Option, error) {
+func (offlineEnv) Options(context.Context, string, []string) ([]manpage.Option, error) {
 	return nil, manpage.ErrNoPage
+}
+
+func (offlineEnv) Subcommands(context.Context, string) (manpage.Listing, error) {
+	return manpage.Listing{}, nil
 }
 
 type offlineCommands struct{}

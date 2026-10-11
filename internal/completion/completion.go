@@ -34,6 +34,7 @@ const (
 	KindFolder
 	KindFlag
 	KindOption
+	KindSubcommand
 )
 
 type DirEntry struct {
@@ -47,7 +48,8 @@ type Environment interface {
 	Home() string
 	WorkDir() (string, error)
 	EnvironmentNames() []string
-	Options(ctx context.Context, command string) ([]manpage.Option, error)
+	Options(ctx context.Context, command string, args []string) ([]manpage.Option, error)
+	Subcommands(ctx context.Context, command string) (manpage.Listing, error)
 }
 
 type Input struct {
@@ -259,7 +261,38 @@ func (c completer) argument(ctx context.Context) (Result, error) {
 	case c.site.command == "cd" || c.site.command == "pushd":
 		return c.paths(true)
 	}
-	return c.paths(false)
+	return c.positional(ctx)
+}
+
+func (c completer) positional(ctx context.Context) (Result, error) {
+	if _, chosen := manpage.SubcommandWord(c.site.previous); chosen {
+		return c.paths(false)
+	}
+	subcommands, err := c.subcommands(ctx)
+	if err != nil || len(subcommands.Items) > 0 {
+		return subcommands, err
+	}
+	paths, err := c.paths(false)
+	paths.Incomplete = paths.Incomplete || subcommands.Incomplete
+	return paths, err
+}
+
+func (c completer) subcommands(ctx context.Context) (Result, error) {
+	listing, err := c.Env.Subcommands(ctx, c.site.command)
+	if err != nil {
+		return Result{}, err
+	}
+	var items []Item
+	for _, sub := range listing.Subcommands {
+		if !strings.HasPrefix(sub.Name, c.site.prefix) {
+			continue
+		}
+		it := c.item(sub.Name, KindSubcommand, "0")
+		it.Detail = sub.Summary
+		it.Documentation = sub.Doc
+		items = append(items, it)
+	}
+	return Result{Items: items, Incomplete: len(listing.Unloaded) > 0}, nil
 }
 
 func (c completer) options(set shelldocs.OptionSet) []Item {
@@ -276,7 +309,7 @@ func (c completer) options(set shelldocs.OptionSet) []Item {
 }
 
 func (c completer) flags(ctx context.Context) (Result, error) {
-	options, err := c.Env.Options(ctx, c.site.command)
+	options, err := c.Env.Options(ctx, c.site.command, c.site.previous)
 	if errors.Is(err, manpage.ErrNoPage) {
 		return Result{}, nil
 	}

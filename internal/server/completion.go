@@ -21,16 +21,17 @@ import (
 )
 
 var completionKinds = map[completion.Kind]lsp.CompletionItemKind{
-	completion.KindKeyword:  lsp.CompletionKeyword,
-	completion.KindBuiltin:  lsp.CompletionMethod,
-	completion.KindFunction: lsp.CompletionFunction,
-	completion.KindAlias:    lsp.CompletionFunction,
-	completion.KindCommand:  lsp.CompletionModule,
-	completion.KindVariable: lsp.CompletionVariable,
-	completion.KindFile:     lsp.CompletionFile,
-	completion.KindFolder:   lsp.CompletionFolder,
-	completion.KindFlag:     lsp.CompletionProperty,
-	completion.KindOption:   lsp.CompletionValue,
+	completion.KindKeyword:    lsp.CompletionKeyword,
+	completion.KindBuiltin:    lsp.CompletionMethod,
+	completion.KindFunction:   lsp.CompletionFunction,
+	completion.KindAlias:      lsp.CompletionFunction,
+	completion.KindCommand:    lsp.CompletionModule,
+	completion.KindVariable:   lsp.CompletionVariable,
+	completion.KindFile:       lsp.CompletionFile,
+	completion.KindFolder:     lsp.CompletionFolder,
+	completion.KindFlag:       lsp.CompletionProperty,
+	completion.KindOption:     lsp.CompletionValue,
+	completion.KindSubcommand: lsp.CompletionMethod,
 }
 
 type completionData struct {
@@ -43,6 +44,7 @@ type completionData struct {
 type shellEnvironment struct {
 	pages       *manpage.Lookup
 	executables *executableCache
+	prefetch    *prefetcher
 }
 
 func (e shellEnvironment) Executables() []string {
@@ -89,12 +91,16 @@ func (e shellEnvironment) EnvironmentNames() []string {
 	return slices.Compact(names)
 }
 
-func (e shellEnvironment) Options(ctx context.Context, command string) ([]manpage.Option, error) {
-	page, err := e.pages.Page(ctx, command)
-	if err != nil {
-		return nil, err
+func (e shellEnvironment) Options(ctx context.Context, command string, args []string) ([]manpage.Option, error) {
+	return e.pages.Options(ctx, command, args)
+}
+
+func (e shellEnvironment) Subcommands(ctx context.Context, command string) (manpage.Listing, error) {
+	listing, err := e.pages.Subcommands(ctx, command)
+	for _, name := range listing.Unloaded {
+		e.prefetch.enqueue(name)
 	}
-	return page.Options(), nil
+	return listing, err
 }
 
 type executableCache struct {

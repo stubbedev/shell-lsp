@@ -443,6 +443,16 @@ func TestText(t *testing.T) {
 	}
 }
 
+func TestArgumentTexts(t *testing.T) {
+	t.Parallel()
+
+	tree := Parse(`tool -v 'sub' "$x" --to=$HOME`+"\n", dialect.Bash)
+	got := ArgumentTexts(tree.Commands[0].Args)
+	if want := []string{"-v", "sub", "$", "--to=$"}; !slices.Equal(got, want) {
+		t.Errorf("ArgumentTexts = %q, want %q", got, want)
+	}
+}
+
 func FuzzParse(f *testing.F) {
 	for _, seed := range []string{
 		"echo ${bad\n", "if true; then\n", "f() {", "cat <<EOF\n", "echo \"x", "(( a = ",

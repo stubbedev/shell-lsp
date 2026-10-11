@@ -14,6 +14,40 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/parser"
 )
 
+func TestPrefetchesSubcommandPages(t *testing.T) {
+	t.Parallel()
+
+	srv := New(jsonrpc.NewConn(nil, nil), "test")
+	withToolPages(t)(srv)
+	var mu sync.Mutex
+	var fetched []string
+	srv.prefetch.fetch = func(_ context.Context, name string) {
+		mu.Lock()
+		defer mu.Unlock()
+		fetched = append(fetched, name)
+	}
+	srv.prefetch.start(t.Context())
+	srv.prefetchCommands(parser.Parse("tool -v extra\ntool start web\n", dialect.Bash))
+
+	deadline := time.After(5 * time.Second)
+	for {
+		mu.Lock()
+		got := slices.Clone(fetched)
+		mu.Unlock()
+		if len(got) >= 2 {
+			if !slices.Equal(got, []string{"tool", "tool-extra"}) {
+				t.Errorf("fetched %v, want the command and its documented subcommand page only", got)
+			}
+			return
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("fetched %v", got)
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+}
+
 func TestPrefetchesExternalCommandsOnce(t *testing.T) {
 	t.Parallel()
 
