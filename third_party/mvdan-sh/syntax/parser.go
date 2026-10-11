@@ -3098,6 +3098,7 @@ func (p *Parser) unexpectedInCallExpr(ce *CallExpr) {
 
 func (p *Parser) callExpr(s *Stmt, w *Word, assign bool) {
 	ce := p.call(w)
+	redirsStart := len(s.Redirs)
 	if w == nil {
 		ce.Args = ce.Args[:0]
 	}
@@ -3151,6 +3152,15 @@ loop:
 				ce.Args = append(ce.Args, p.wordAnyNumber())
 				break
 			}
+			if p.lang.in(LangZsh) && len(ce.Assigns) == 0 && len(s.Redirs) == redirsStart {
+				// Zsh defines many functions at once with `foo bar () { ... }`.
+				if names, ok := funcNames(ce.Args); ok {
+					p.next()
+					p.follow(names[0].ValuePos, "foo(", rightParen)
+					p.funcDecl(s, names[0].ValuePos, false, true, names...)
+					return
+				}
+			}
 			p.unexpectedInCallExpr(ce)
 		case rightParen:
 			if p.quote == subCmd {
@@ -3188,10 +3198,55 @@ func (p *Parser) funcDecl(s *Stmt, pos Pos, long, withParens bool, names ...*Lit
 	} else {
 		fd.Names = names
 	}
+	if p.lang.in(LangZsh) {
+		// Zsh allows a separator before the body, as in `function f; cmd`.
+		p.got(semicolon)
+	}
 	p.got(_Newl)
 	// TODO: reject any body which isn't a compound command, like a quoted word
 	if fd.Body = p.getStmt(false, false, true); fd.Body == nil {
 		p.followErr(fd.Pos(), "foo()", noQuote("a statement"))
 	}
+	if len(names) == 0 && p.lang.in(LangZsh) {
+		// Zsh runs an anonymous function right away,
+		// passing it any words which follow its body.
+		p.funcArgs(s, fd)
+	}
 	s.Cmd = fd
+}
+
+// funcArgs parses the arguments which follow the body of an anonymous
+// function with [LangZsh], adding any redirects among them to s.
+func (p *Parser) funcArgs(s *Stmt, fd *FuncDecl) {
+	for {
+		if p.peekRedir() {
+			p.doRedirect(s)
+			continue
+		}
+		if p.tok == _LitWord && p.val == "}" {
+			return // closes an enclosing block
+		}
+		w := p.getWord()
+		if w == nil {
+			return
+		}
+		fd.Args = append(fd.Args, w)
+	}
+}
+
+// funcNames returns the names of the words before `()` in a zsh function
+// declaration such as `foo bar () { ... }`, if they are all literal.
+func funcNames(words []*Word) ([]*Lit, bool) {
+	names := make([]*Lit, 0, len(words))
+	for _, w := range words {
+		if len(w.Parts) != 1 {
+			return nil, false
+		}
+		lit, ok := w.Parts[0].(*Lit)
+		if !ok {
+			return nil, false
+		}
+		names = append(names, lit)
+	}
+	return names, true
 }

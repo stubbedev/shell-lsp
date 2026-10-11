@@ -1,6 +1,7 @@
 package lint
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
@@ -62,5 +63,20 @@ func TestZshLoopFormsAreLoops(t *testing.T) {
 				t.Errorf("%q: break or continue reported outside a loop: %s", src, f.Message)
 			}
 		}
+	}
+}
+
+func TestZshAnonymousFunctionsRunInPlace(t *testing.T) {
+	t.Parallel()
+
+	src := "() {\n  return 0\n  print never\n} arg\nprint after\n"
+	var unreachable []int
+	for _, f := range Check(parser.Parse(src, dialect.Zsh), nil, Options{}) {
+		if f.Code == 2317 {
+			unreachable = append(unreachable, f.Span.Start)
+		}
+	}
+	if want := strings.Index(src, "print never"); len(unreachable) != 1 || unreachable[0] != want {
+		t.Errorf("unreachable commands at %v, want only the one after return at %d", unreachable, want)
 	}
 }

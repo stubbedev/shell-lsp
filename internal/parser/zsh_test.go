@@ -70,3 +70,47 @@ func TestZshLoopVariablesAreReferencedInShortBodies(t *testing.T) {
 		t.Errorf("definitions visible from the reference = %v, want the loop variable", kinds)
 	}
 }
+
+func TestZshAnonymousFunctionArgumentsBelongToTheCaller(t *testing.T) {
+	t.Parallel()
+
+	tree := Parse("() {\n  local x=$1\n  print $x\n} $y z\n", dialect.Zsh)
+	if len(tree.Errors) != 0 {
+		t.Fatalf("errors = %v, want none", messages(tree))
+	}
+	if len(tree.Scopes) != 2 {
+		t.Fatalf("scopes = %v, want the file and the anonymous function body", tree.Scopes)
+	}
+	within := map[string]ScopeID{}
+	for _, r := range tree.References {
+		within[r.Name] = r.Within
+	}
+	if within["x"] != 1 || within["y"] != FileScope {
+		t.Errorf("reference scopes = %v, want x in the body and y in the file", within)
+	}
+	if len(tree.Definitions) != 1 || !tree.Definitions[0].Local || tree.Definitions[0].Within != 1 {
+		t.Errorf("definitions = %+v, want x local to the body", tree.Definitions)
+	}
+}
+
+func TestZshFunctionsWithSeveralNames(t *testing.T) {
+	t.Parallel()
+
+	for _, src := range []string{
+		"start stop () { print $0 }\n",
+		"function start stop { print $0 }\n",
+		"function start stop; print $0\n",
+	} {
+		tree := Parse(src, dialect.Zsh)
+		if len(tree.Errors) != 0 {
+			t.Fatalf("%q: errors = %v, want none", src, messages(tree))
+		}
+		var names []string
+		for _, f := range tree.Functions {
+			names = append(names, f.Name)
+		}
+		if !slices.Equal(names, []string{"start", "stop"}) {
+			t.Errorf("%q: functions = %v, want start and stop", src, names)
+		}
+	}
+}

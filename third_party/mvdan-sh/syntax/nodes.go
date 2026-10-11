@@ -596,10 +596,19 @@ type FuncDecl struct {
 	Names []*Lit // When declaring many func names with [LangZsh].
 
 	Body *Stmt
+
+	// Args are the arguments to an anonymous function with [LangZsh],
+	// which runs right away, such as `() { echo $1 } arg`.
+	Args []*Word
 }
 
 func (f *FuncDecl) Pos() Pos { return f.Position }
-func (f *FuncDecl) End() Pos { return f.Body.End() }
+func (f *FuncDecl) End() Pos {
+	if len(f.Args) > 0 {
+		return wordLastEnd(f.Args)
+	}
+	return f.Body.End()
+}
 
 // Word represents a shell word, containing one or more word parts contiguous to
 // each other. The word is delimited by word boundaries, such as spaces,

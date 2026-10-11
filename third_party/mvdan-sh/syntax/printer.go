@@ -1333,6 +1333,10 @@ func (p *Printer) command(cmd Command, redirs []*Redirect) (startRedirs int) {
 		if !cmd.RsrvWord || cmd.Parens {
 			p.w.WriteString("()")
 			p.wantSpace = spaceNotRequired
+		} else if startsWithWord(cmd.Body) {
+			// With zsh's `function f; cmd`, a body which starts with a word
+			// would otherwise be read as one more function name.
+			p.w.WriteByte(';')
 		}
 		if p.funcNextLine {
 			p.newline(Pos{})
@@ -1343,6 +1347,7 @@ func (p *Printer) command(cmd Command, redirs []*Redirect) (startRedirs int) {
 		p.advanceLine(cmd.Body.Pos().Line())
 		p.comments(cmd.Body.Comments...)
 		p.stmt(cmd.Body)
+		p.wordJoin(cmd.Args)
 	case *CaseClause:
 		p.w.WriteString("case ")
 		p.word(cmd.Word)
@@ -1709,6 +1714,17 @@ func (e *extraIndenter) Write(b []byte) (int, error) {
 		e.WriteByte(b[i])
 	}
 	return len(b), nil
+}
+
+// startsWithWord reports whether a statement starts with a word, as opposed
+// to a reserved word or operator which cannot be read as part of a list of
+// names, like "{", "(", or "((".
+func startsWithWord(s *Stmt) bool {
+	switch s.Cmd.(type) {
+	case *Block, *Subshell, *ArithmCmd:
+		return s.Negated
+	}
+	return true
 }
 
 func startsWithLparen(node Node) bool {

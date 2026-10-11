@@ -87,6 +87,7 @@ func Walk(node syntax.Node, f func(syntax.Node) bool) {
 			Walk(name, f)
 		}
 		Walk(n.Body, f)
+		walkWords(n.Args, f)
 	case *syntax.Word:
 		walkParts(n.Parts, f)
 	case *syntax.DblQuoted:

@@ -1,7 +1,7 @@
 dialect zsh
-error kind=0 15:26-15:29 "arg": statements must be separated by &, ; or a newline
 scope 0 parent=0 1:1-16:1
 scope 1 parent=0 11:1-14:2
+scope 2 parent=0 15:1-15:25
 function 11:10-11:22 "prompt_setup" body=1 within=0 doc=""
 definition 3:12-3:16 "opts" kind=2 attrs=000010 local=false within=0
 definition 4:1-4:5 "opts" kind=0 attrs=000001 local=false within=0
@@ -21,6 +21,7 @@ command 9:8-9:12 "sort" args=1 within=0
 command 9:18-9:22 "sort" args=1 within=0
 command 10:10-10:14 "echo" args=1 within=0
 command 12:2-12:7 "local" args=0 within=1
+command 15:6-15:10 "echo" args=2 within=2
 comment 1:1-1:19 "#!/usr/bin/env zsh"
 keyword 6:1-6:4 "for"
 keyword 6:7-6:9 "in"

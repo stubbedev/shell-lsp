@@ -1241,9 +1241,79 @@ var fileTests = []fileTestCase{
 		}, LangZsh),
 		langErr2("1:1: anonymous functions are a zsh feature; tried parsing as LANG", LangBash|LangMirBSDKorn),
 	),
-	// Note that zsh also supports `f1 f2 f3 () { body; }`,
-	// but it seems rare and hard to implement well,
-	// so leave it out for now.
+	fileTest(
+		[]string{"f1 f2 f3() {\n\ta\n}", "f1 f2 f3 () {\n\ta\n}"},
+		langFile(&FuncDecl{
+			Parens: true,
+			Names:  lits("f1", "f2", "f3"),
+			Body:   stmt(block(litStmt("a"))),
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"f1 f2() a b"},
+		langFile(&FuncDecl{
+			Parens: true,
+			Names:  lits("f1", "f2"),
+			Body:   litStmt("a", "b"),
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"function f1 f2; a b", "function f1 f2\na b"},
+		langFile(&FuncDecl{
+			RsrvWord: true,
+			Names:    lits("f1", "f2"),
+			Body:     litStmt("a", "b"),
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"function f1; if a; then b; fi"},
+		langFile(&FuncDecl{
+			RsrvWord: true,
+			Name:     lit("f1"),
+			Body:     stmt(&IfClause{Cond: litStmts("a"), Then: litStmts("b")}),
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"() { a $1; } b c", "() { a $1 } b c", "() {\n\ta $1\n} b c"},
+		printsAs("() { a $1; } b c"),
+		langFile(&FuncDecl{
+			Parens: true,
+			Body:   stmt(block(stmt(call(litWord("a"), word(litParamExp("1")))))),
+			Args:   litWords("b", "c"),
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"function { a; } b >c"},
+		langFile(&Stmt{
+			Cmd: &FuncDecl{
+				RsrvWord: true,
+				Body:     stmt(block(litStmt("a"))),
+				Args:     litWords("b"),
+			},
+			Redirs: []*Redirect{{Op: RdrOut, Word: litWord("c")}},
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"() (a) b && c"},
+		langFile(&BinaryCmd{
+			Op: AndStmt,
+			X: stmt(&FuncDecl{
+				Parens: true,
+				Body:   stmt(subshell(litStmt("a"))),
+				Args:   litWords("b"),
+			}),
+			Y: litStmt("c"),
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"a $(() { b; } c)", "a $(() { b } c)"},
+		printsAs("a $(() { b; } c)"),
+		langFile(call(litWord("a"), word(cmdSubst(stmt(&FuncDecl{
+			Parens: true,
+			Body:   stmt(block(litStmt("b"))),
+			Args:   litWords("c"),
+		})))), LangZsh),
+	),
 	fileTest(
 		[]string{"() {\n\ta\n}"},
 		langFile(&FuncDecl{

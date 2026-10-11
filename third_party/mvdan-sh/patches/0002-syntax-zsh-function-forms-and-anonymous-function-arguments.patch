@@ -1,0 +1,345 @@
+syntax: parse zsh's anonymous function arguments and function forms
+
+Zsh runs an anonymous function right away and passes it the words which
+follow its body, it declares several functions at once without the
+function keyword, and it allows a separator between the names and the
+body (zshmisc(1), "SHELL GRAMMAR" and "ALTERNATE FORMS FOR COMPLEX
+COMMANDS"):
+
+	() { echo $1 } arg1 arg2
+	function { echo $1 } arg
+	start stop () { echo $0 }
+	function start stop; echo $0
+	echo $(() { echo $1 } arg)
+
+Reproducer, before this change:
+
+	$ printf '() { echo $1 } arg\n' | shfmt -ln zsh
+	<standard input>:1:16: statements must be separated by &, ; or a newline
+	$ printf 'start stop () { echo $0 }\n' | shfmt -ln zsh
+	<standard input>:1:12: a command can only contain words and redirects; encountered `(`
+	$ printf 'echo $(() { echo hi })\n' | shfmt -ln zsh
+	<standard input>:1:6: `$((` must be followed by an expression
+
+FuncDecl gains an Args field for the arguments of an anonymous function,
+a list of literal words followed by `()` now declares a function with
+Names, and `$((` or `((` followed by `)` and another character is lexed
+as the start of an anonymous function rather than of arithmetic. The
+printer writes a semicolon between `function` names and a body which
+starts with a word, which would otherwise read as one more name.
+
+Part of https://github.com/mvdan/sh/issues/120.
+
+diff --git a/syntax/filetests_test.go b/syntax/filetests_test.go
+index 9b8bf54..0c78b0b 100644
+--- a/syntax/filetests_test.go
++++ b/syntax/filetests_test.go
+@@ -1241,9 +1241,79 @@ var fileTests = []fileTestCase{
+ 		}, LangZsh),
+ 		langErr2("1:1: anonymous functions are a zsh feature; tried parsing as LANG", LangBash|LangMirBSDKorn),
+ 	),
+-	// Note that zsh also supports `f1 f2 f3 () { body; }`,
+-	// but it seems rare and hard to implement well,
+-	// so leave it out for now.
++	fileTest(
++		[]string{"f1 f2 f3() {\n\ta\n}", "f1 f2 f3 () {\n\ta\n}"},
++		langFile(&FuncDecl{
++			Parens: true,
++			Names:  lits("f1", "f2", "f3"),
++			Body:   stmt(block(litStmt("a"))),
++		}, LangZsh),
++	),
++	fileTest(
++		[]string{"f1 f2() a b"},
++		langFile(&FuncDecl{
++			Parens: true,
++			Names:  lits("f1", "f2"),
++			Body:   litStmt("a", "b"),
++		}, LangZsh),
++	),
++	fileTest(
++		[]string{"function f1 f2; a b", "function f1 f2\na b"},
++		langFile(&FuncDecl{
++			RsrvWord: true,
++			Names:    lits("f1", "f2"),
++			Body:     litStmt("a", "b"),
++		}, LangZsh),
++	),
++	fileTest(
++		[]string{"function f1; if a; then b; fi"},
++		langFile(&FuncDecl{
++			RsrvWord: true,
++			Name:     lit("f1"),
++			Body:     stmt(&IfClause{Cond: litStmts("a"), Then: litStmts("b")}),
++		}, LangZsh),
++	),
++	fileTest(
++		[]string{"() { a $1; } b c", "() { a $1 } b c", "() {\n\ta $1\n} b c"},
++		printsAs("() { a $1; } b c"),
++		langFile(&FuncDecl{
++			Parens: true,
++			Body:   stmt(block(stmt(call(litWord("a"), word(litParamExp("1")))))),
++			Args:   litWords("b", "c"),
++		}, LangZsh),
++	),
++	fileTest(
++		[]string{"function { a; } b >c"},
++		langFile(&Stmt{
++			Cmd: &FuncDecl{
++				RsrvWord: true,
++				Body:     stmt(block(litStmt("a"))),
++				Args:     litWords("b"),
++			},
++			Redirs: []*Redirect{{Op: RdrOut, Word: litWord("c")}},
++		}, LangZsh),
++	),
++	fileTest(
++		[]string{"() (a) b && c"},
++		langFile(&BinaryCmd{
++			Op: AndStmt,
++			X: stmt(&FuncDecl{
++				Parens: true,
++				Body:   stmt(subshell(litStmt("a"))),
++				Args:   litWords("b"),
++			}),
++			Y: litStmt("c"),
++		}, LangZsh),
++	),
++	fileTest(
++		[]string{"a $(() { b; } c)", "a $(() { b } c)"},
++		printsAs("a $(() { b; } c)"),
++		langFile(call(litWord("a"), word(cmdSubst(stmt(&FuncDecl{
++			Parens: true,
++			Body:   stmt(block(litStmt("b"))),
++			Args:   litWords("c"),
++		})))), LangZsh),
++	),
+ 	fileTest(
+ 		[]string{"() {\n\ta\n}"},
+ 		langFile(&FuncDecl{
+diff --git a/syntax/lexer.go b/syntax/lexer.go
+index 82a5c0c..743b71a 100644
+--- a/syntax/lexer.go
++++ b/syntax/lexer.go
+@@ -444,6 +444,18 @@ func (p *Parser) extendedGlob() bool {
+ 	return false
+ }
+ 
++// anonFuncAhead reports whether the current '(' rune, following another '(',
++// starts a zsh anonymous function like in `$(() { echo hi })` rather than
++// an arithmetic expression. An arithmetic expression cannot start with ')',
++// but `(())` and `$(())` are empty ones.
++func (p *Parser) anonFuncAhead() bool {
++	if !p.lang.in(LangZsh) {
++		return false
++	}
++	next, after := p.peekTwo()
++	return next == ')' && after != ')'
++}
++
+ func (p *Parser) peek() byte {
+ 	if int(p.bsp) >= len(p.bs) {
+ 		p.fill()
+@@ -560,7 +572,7 @@ func (p *Parser) regToken(r rune) token {
+ 			p.rune()
+ 			return dollBrack
+ 		case '(':
+-			if p.rune() == '(' {
++			if p.rune() == '(' && !p.anonFuncAhead() {
+ 				p.rune()
+ 				return dollDblParen
+ 			}
+@@ -568,7 +580,7 @@ func (p *Parser) regToken(r rune) token {
+ 		}
+ 		return dollar
+ 	case '(':
+-		if p.rune() == '(' && p.lang.in(langBashLike|LangMirBSDKorn|LangZsh) && p.quote != testExpr {
++		if p.rune() == '(' && p.lang.in(langBashLike|LangMirBSDKorn|LangZsh) && p.quote != testExpr && !p.anonFuncAhead() {
+ 			p.rune()
+ 			return dblLeftParen
+ 		}
+@@ -705,7 +717,7 @@ func (p *Parser) dqToken(r rune) token {
+ 			p.rune()
+ 			return dollBrack
+ 		case '(':
+-			if p.rune() == '(' {
++			if p.rune() == '(' && !p.anonFuncAhead() {
+ 				p.rune()
+ 				return dollDblParen
+ 			}
+diff --git a/syntax/nodes.go b/syntax/nodes.go
+index 67174c4..96b8dc3 100644
+--- a/syntax/nodes.go
++++ b/syntax/nodes.go
+@@ -596,10 +596,19 @@ type FuncDecl struct {
+ 	Names []*Lit // When declaring many func names with [LangZsh].
+ 
+ 	Body *Stmt
++
++	// Args are the arguments to an anonymous function with [LangZsh],
++	// which runs right away, such as `() { echo $1 } arg`.
++	Args []*Word
+ }
+ 
+ func (f *FuncDecl) Pos() Pos { return f.Position }
+-func (f *FuncDecl) End() Pos { return f.Body.End() }
++func (f *FuncDecl) End() Pos {
++	if len(f.Args) > 0 {
++		return wordLastEnd(f.Args)
++	}
++	return f.Body.End()
++}
+ 
+ // Word represents a shell word, containing one or more word parts contiguous to
+ // each other. The word is delimited by word boundaries, such as spaces,
+diff --git a/syntax/parser.go b/syntax/parser.go
+index 0be4f79..d995445 100644
+--- a/syntax/parser.go
++++ b/syntax/parser.go
+@@ -3098,6 +3098,7 @@ func (p *Parser) unexpectedInCallExpr(ce *CallExpr) {
+ 
+ func (p *Parser) callExpr(s *Stmt, w *Word, assign bool) {
+ 	ce := p.call(w)
++	redirsStart := len(s.Redirs)
+ 	if w == nil {
+ 		ce.Args = ce.Args[:0]
+ 	}
+@@ -3151,6 +3152,15 @@ loop:
+ 				ce.Args = append(ce.Args, p.wordAnyNumber())
+ 				break
+ 			}
++			if p.lang.in(LangZsh) && len(ce.Assigns) == 0 && len(s.Redirs) == redirsStart {
++				// Zsh defines many functions at once with `foo bar () { ... }`.
++				if names, ok := funcNames(ce.Args); ok {
++					p.next()
++					p.follow(names[0].ValuePos, "foo(", rightParen)
++					p.funcDecl(s, names[0].ValuePos, false, true, names...)
++					return
++				}
++			}
+ 			p.unexpectedInCallExpr(ce)
+ 		case rightParen:
+ 			if p.quote == subCmd {
+@@ -3188,10 +3198,55 @@ func (p *Parser) funcDecl(s *Stmt, pos Pos, long, withParens bool, names ...*Lit
+ 	} else {
+ 		fd.Names = names
+ 	}
++	if p.lang.in(LangZsh) {
++		// Zsh allows a separator before the body, as in `function f; cmd`.
++		p.got(semicolon)
++	}
+ 	p.got(_Newl)
+ 	// TODO: reject any body which isn't a compound command, like a quoted word
+ 	if fd.Body = p.getStmt(false, false, true); fd.Body == nil {
+ 		p.followErr(fd.Pos(), "foo()", noQuote("a statement"))
+ 	}
++	if len(names) == 0 && p.lang.in(LangZsh) {
++		// Zsh runs an anonymous function right away,
++		// passing it any words which follow its body.
++		p.funcArgs(s, fd)
++	}
+ 	s.Cmd = fd
+ }
++
++// funcArgs parses the arguments which follow the body of an anonymous
++// function with [LangZsh], adding any redirects among them to s.
++func (p *Parser) funcArgs(s *Stmt, fd *FuncDecl) {
++	for {
++		if p.peekRedir() {
++			p.doRedirect(s)
++			continue
++		}
++		if p.tok == _LitWord && p.val == "}" {
++			return // closes an enclosing block
++		}
++		w := p.getWord()
++		if w == nil {
++			return
++		}
++		fd.Args = append(fd.Args, w)
++	}
++}
++
++// funcNames returns the names of the words before `()` in a zsh function
++// declaration such as `foo bar () { ... }`, if they are all literal.
++func funcNames(words []*Word) ([]*Lit, bool) {
++	names := make([]*Lit, 0, len(words))
++	for _, w := range words {
++		if len(w.Parts) != 1 {
++			return nil, false
++		}
++		lit, ok := w.Parts[0].(*Lit)
++		if !ok {
++			return nil, false
++		}
++		names = append(names, lit)
++	}
++	return names, true
++}
+diff --git a/syntax/parser_test.go b/syntax/parser_test.go
+index e658cd9..3b74cd4 100644
+--- a/syntax/parser_test.go
++++ b/syntax/parser_test.go
+@@ -1176,7 +1176,8 @@ var errorCases = []errorCase{
+ 	// ),
+ 	errCase(
+ 		"<<EOF\n$(()a",
+-		langErr("2:1: `$((` must be followed by an expression"),
++		langErr("2:1: `$((` must be followed by an expression", langBashLike|LangPOSIX|LangMirBSDKorn),
++		langErr("2:1: reached EOF without matching `$(` with `)`", LangZsh),
+ 	),
+ 	errCase(
+ 		"<<EOF\n`))",
+diff --git a/syntax/printer.go b/syntax/printer.go
+index 41a7868..2fddb15 100644
+--- a/syntax/printer.go
++++ b/syntax/printer.go
+@@ -1333,6 +1333,10 @@ func (p *Printer) command(cmd Command, redirs []*Redirect) (startRedirs int) {
+ 		if !cmd.RsrvWord || cmd.Parens {
+ 			p.w.WriteString("()")
+ 			p.wantSpace = spaceNotRequired
++		} else if startsWithWord(cmd.Body) {
++			// With zsh's `function f; cmd`, a body which starts with a word
++			// would otherwise be read as one more function name.
++			p.w.WriteByte(';')
+ 		}
+ 		if p.funcNextLine {
+ 			p.newline(Pos{})
+@@ -1343,6 +1347,7 @@ func (p *Printer) command(cmd Command, redirs []*Redirect) (startRedirs int) {
+ 		p.advanceLine(cmd.Body.Pos().Line())
+ 		p.comments(cmd.Body.Comments...)
+ 		p.stmt(cmd.Body)
++		p.wordJoin(cmd.Args)
+ 	case *CaseClause:
+ 		p.w.WriteString("case ")
+ 		p.word(cmd.Word)
+@@ -1711,6 +1716,17 @@ func (e *extraIndenter) Write(b []byte) (int, error) {
+ 	return len(b), nil
+ }
+ 
++// startsWithWord reports whether a statement starts with a word, as opposed
++// to a reserved word or operator which cannot be read as part of a list of
++// names, like "{", "(", or "((".
++func startsWithWord(s *Stmt) bool {
++	switch s.Cmd.(type) {
++	case *Block, *Subshell, *ArithmCmd:
++		return s.Negated
++	}
++	return true
++}
++
+ func startsWithLparen(node Node) bool {
+ 	switch node := node.(type) {
+ 	case *Stmt:
+diff --git a/syntax/walk.go b/syntax/walk.go
+index 850a2b2..40a63a5 100644
+--- a/syntax/walk.go
++++ b/syntax/walk.go
+@@ -89,6 +89,7 @@ func Walk(node Node, f func(Node) bool) {
+ 		walkNilable(node.Name, f)
+ 		walkList(node.Names, f)
+ 		Walk(node.Body, f)
++		walkList(node.Args, f)
+ 	case *Word:
+ 		walkList(node.Parts, f)
+ 	case *Lit:

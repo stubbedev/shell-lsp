@@ -194,7 +194,7 @@ func (b *builder) visit(node syntax.Node) bool {
 	if node == nil {
 		top := b.stack[len(b.stack)-1]
 		b.stack = b.stack[:len(b.stack)-1]
-		if _, ok := top.(*syntax.FuncDecl); ok {
+		if decl, ok := b.parent().(*syntax.FuncDecl); ok && decl.Body == top {
 			b.scopes = b.scopes[:len(b.scopes)-1]
 		}
 		return true
@@ -258,7 +258,7 @@ func (b *builder) enter(node syntax.Node) {
 func (b *builder) function(n *syntax.FuncDecl) {
 	within := b.scope()
 	body := ScopeID(len(b.index.Scopes))
-	b.index.Scopes = append(b.index.Scopes, Scope{Span: b.span(n), Parent: within})
+	b.index.Scopes = append(b.index.Scopes, Scope{Span: Span{Start: offset(n.Pos()), End: b.span(n.Body).End}, Parent: within})
 	names := n.Names
 	if n.Name != nil {
 		names = []*syntax.Lit{n.Name}

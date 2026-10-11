@@ -444,6 +444,18 @@ func (p *Parser) extendedGlob() bool {
 	return false
 }
 
+// anonFuncAhead reports whether the current '(' rune, following another '(',
+// starts a zsh anonymous function like in `$(() { echo hi })` rather than
+// an arithmetic expression. An arithmetic expression cannot start with ')',
+// but `(())` and `$(())` are empty ones.
+func (p *Parser) anonFuncAhead() bool {
+	if !p.lang.in(LangZsh) {
+		return false
+	}
+	next, after := p.peekTwo()
+	return next == ')' && after != ')'
+}
+
 func (p *Parser) peek() byte {
 	if int(p.bsp) >= len(p.bs) {
 		p.fill()
@@ -560,7 +572,7 @@ func (p *Parser) regToken(r rune) token {
 			p.rune()
 			return dollBrack
 		case '(':
-			if p.rune() == '(' {
+			if p.rune() == '(' && !p.anonFuncAhead() {
 				p.rune()
 				return dollDblParen
 			}
@@ -568,7 +580,7 @@ func (p *Parser) regToken(r rune) token {
 		}
 		return dollar
 	case '(':
-		if p.rune() == '(' && p.lang.in(langBashLike|LangMirBSDKorn|LangZsh) && p.quote != testExpr {
+		if p.rune() == '(' && p.lang.in(langBashLike|LangMirBSDKorn|LangZsh) && p.quote != testExpr && !p.anonFuncAhead() {
 			p.rune()
 			return dblLeftParen
 		}
@@ -705,7 +717,7 @@ func (p *Parser) dqToken(r rune) token {
 			p.rune()
 			return dollBrack
 		case '(':
-			if p.rune() == '(' {
+			if p.rune() == '(' && !p.anonFuncAhead() {
 				p.rune()
 				return dollDblParen
 			}

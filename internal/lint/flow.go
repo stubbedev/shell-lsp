@@ -583,7 +583,11 @@ func (in *interpreter) command(stmt *syntax.Stmt, s *state) *state {
 	case *syntax.BinaryCmd:
 		s = in.binary(cmd, s)
 	case *syntax.FuncDecl:
-		s = in.define(cmd, s)
+		if len(declaredNames(cmd)) == 0 {
+			s = in.anonymousFunction(stmt, cmd, s)
+		} else {
+			s = in.define(cmd, s)
+		}
 	case *syntax.TimeClause:
 		if cmd.Stmt != nil {
 			s = in.stmt(cmd.Stmt, s)
@@ -1104,6 +1108,14 @@ func (in *interpreter) define(decl *syntax.FuncDecl, s *state) *state {
 		in.definitions[decl] = true
 	}
 	return s
+}
+
+func (in *interpreter) anonymousFunction(stmt *syntax.Stmt, decl *syntax.FuncDecl, s *state) *state {
+	for _, arg := range decl.Args {
+		s = in.evaluate(arg, s)
+	}
+	s = in.runBody(decl, s)
+	return in.redirects(stmt, s)
 }
 
 func (in *interpreter) binary(cmd *syntax.BinaryCmd, s *state) *state {

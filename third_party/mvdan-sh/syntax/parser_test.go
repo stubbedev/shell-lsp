@@ -1176,7 +1176,8 @@ var errorCases = []errorCase{
 	// ),
 	errCase(
 		"<<EOF\n$(()a",
-		langErr("2:1: `$((` must be followed by an expression"),
+		langErr("2:1: `$((` must be followed by an expression", langBashLike|LangPOSIX|LangMirBSDKorn),
+		langErr("2:1: reached EOF without matching `$(` with `)`", LangZsh),
 	),
 	errCase(
 		"<<EOF\n`))",
