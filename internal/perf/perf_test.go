@@ -17,6 +17,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/diagnostics"
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
+	"github.com/stubbedev/shell-lsp/internal/embedded"
 	"github.com/stubbedev/shell-lsp/internal/format"
 	"github.com/stubbedev/shell-lsp/internal/hover"
 	"github.com/stubbedev/shell-lsp/internal/lint"
@@ -62,7 +63,10 @@ func (offlineCommands) Options(context.Context, string, []string) ([]manpage.Opt
 	return nil, manpage.ErrNoPage
 }
 
-var text = LargeScript(10000)
+var (
+	text         = LargeScript(10000)
+	embeddedText = EmbeddedScript(2000)
+)
 
 func document() *docstore.Document {
 	return docstore.NewDocument("file:///large.bash", "shellscript", 1, text)
@@ -111,7 +115,14 @@ func BenchmarkHover(b *testing.B) {
 func BenchmarkSemanticTokens(b *testing.B) {
 	tree := parser.Parse(text, dialect.Bash)
 	for b.Loop() {
-		semantic.Tokens(tree, nil)
+		semantic.Tokens(tree, nil, embedded.Find(tree))
+	}
+}
+
+func BenchmarkEmbeddedPrograms(b *testing.B) {
+	tree := parser.Parse(embeddedText, dialect.Bash)
+	for b.Loop() {
+		semantic.Tokens(tree, nil, embedded.Find(tree))
 	}
 }
 

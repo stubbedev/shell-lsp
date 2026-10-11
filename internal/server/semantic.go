@@ -98,7 +98,7 @@ func (s *Server) semanticSnapshot(docs *docstore.View, uri string) (*snapshot, e
 
 func (s *Server) semanticTokens(snap *snapshot) []semantic.Token {
 	return workspace.Memo(snap.file, "semantic.tokens", s.workspace.Generation(), func() []semantic.Token {
-		return semantic.Tokens(snap.tree, s.imports(snap.file))
+		return semantic.Tokens(snap.tree, s.imports(snap.file), embeddedPrograms(snap.file))
 	})
 }
 

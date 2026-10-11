@@ -1,10 +1,15 @@
 package semantic
 
 import (
+	"cmp"
+	"slices"
+	"sort"
 	"strings"
 
 	"mvdan.cc/sh/v3/syntax"
 
+	"github.com/stubbedev/shell-lsp/internal/embedded"
+	"github.com/stubbedev/shell-lsp/internal/embedded/lang"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/shelldocs"
 )
@@ -21,9 +26,10 @@ const (
 	TypeComment
 	TypeOperator
 	TypeProperty
+	TypeRegexp
 )
 
-var TypeNames = []string{"variable", "parameter", "function", "keyword", "string", "number", "comment", "operator", "property"}
+var TypeNames = []string{"variable", "parameter", "function", "keyword", "string", "number", "comment", "operator", "property", "regexp"}
 
 type Modifier uint32
 
@@ -43,11 +49,12 @@ type Token struct {
 	Modifiers Modifier
 }
 
-func Tokens(tree *parser.Tree, imports []parser.Import) []Token {
+func Tokens(tree *parser.Tree, imports []parser.Import, programs []embedded.Program) []Token {
 	g := generator{tree: tree, imports: imports, text: tree.Text()}
-	g.tokens = make([]Token, 0, 2*(len(tree.Comments)+len(tree.Keywords)+len(tree.Definitions)+len(tree.References)+2*len(tree.Commands)))
+	g.tokens = make([]Token, 0, 2*(len(tree.Comments)+len(tree.Keywords)+len(tree.Definitions)+len(tree.References)+2*len(tree.Commands))+embeddedTokens(programs))
 	g.index()
 	g.walk()
+	g.embed(programs)
 	return g.result()
 }
 
@@ -251,6 +258,82 @@ func (g *generator) operator(pos syntax.Pos, op string) {
 		start := parser.Offset(pos)
 		g.add(parser.Span{Start: start, End: start + len(op)}, TypeOperator, 0)
 	}
+}
+
+var embeddedTypes = [...]Type{
+	lang.Keyword:   TypeKeyword,
+	lang.String:    TypeString,
+	lang.Number:    TypeNumber,
+	lang.Regexp:    TypeRegexp,
+	lang.Variable:  TypeVariable,
+	lang.Parameter: TypeParameter,
+	lang.Function:  TypeFunction,
+	lang.Property:  TypeProperty,
+	lang.Operator:  TypeOperator,
+	lang.Comment:   TypeComment,
+}
+
+func embeddedModifiers(mods lang.Modifier) Modifier {
+	var out Modifier
+	if mods&lang.Builtin != 0 {
+		out |= ModDefaultLibrary
+	}
+	if mods&lang.Declaration != 0 {
+		out |= ModDeclaration
+	}
+	return out
+}
+
+func embeddedTokens(programs []embedded.Program) int {
+	n := 0
+	for i := range programs {
+		n += len(programs[i].Result.Tokens)
+	}
+	return n
+}
+
+func (g *generator) embed(programs []embedded.Program) {
+	if len(programs) == 0 {
+		return
+	}
+	var regions []parser.Span
+	for i := range programs {
+		programs[i].Regions(func(s parser.Span) { regions = append(regions, s) })
+	}
+	slices.SortFunc(regions, func(a, b parser.Span) int { return cmp.Compare(a.Start, b.Start) })
+	g.tokens = clip(g.tokens, regions)
+	for i := range programs {
+		p := &programs[i]
+		for _, t := range p.Result.Tokens {
+			kind, mods := embeddedTypes[t.Kind], embeddedModifiers(t.Modifiers)
+			p.Spans(t.Start, t.End, func(s parser.Span) { g.add(s, kind, mods) })
+		}
+	}
+}
+
+func clip(tokens []Token, regions []parser.Span) []Token {
+	out := tokens[:0]
+	var pieces []Token
+	for _, t := range tokens {
+		first := sort.Search(len(regions), func(i int) bool { return regions[i].End > t.Span.Start })
+		if first == len(regions) || regions[first].Start >= t.Span.End {
+			out = append(out, t)
+			continue
+		}
+		for _, r := range regions[first:] {
+			if r.Start >= t.Span.End {
+				break
+			}
+			if t.Span.Start < r.Start {
+				pieces = append(pieces, Token{Span: parser.Span{Start: t.Span.Start, End: r.Start}, Type: t.Type, Modifiers: t.Modifiers})
+			}
+			t.Span.Start = max(t.Span.Start, r.End)
+		}
+		if t.Span.Start < t.Span.End {
+			pieces = append(pieces, t)
+		}
+	}
+	return append(out, pieces...)
 }
 
 func (g *generator) result() []Token {

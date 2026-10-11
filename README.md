@@ -144,6 +144,18 @@ and keeps the script's meaning; their edits are computed on
 | Convert to case | `refactor.rewrite` | Rewrites an `if`/`elif` chain whose every condition compares the same expansion for equality (`[ "$x" = lit ]`, `test`, `[[ $x == pattern ]]`, joined with `\|\|` or `-o`) into `case`, keeping each body and the `else` branch |
 | Move function to a sourced file | `refactor.move` | Moves a top-level function, with its doc comment, to the end of a workspace file this script sources before defining the function, as one edit across both files |
 
+## Embedded languages
+
+awk, sed and jq programs passed as literal arguments (`awk '...'`, `sed -e
+'...'`, `jq -r '...'`, also behind `command`, `exec` and `busybox`) or fed as
+a quoted here-document to `awk -f -` and `sed -f -` are parsed by built-in
+parsers; no awk, sed or jq binary is run. Syntax errors are reported at their
+exact position inside the shell string with the codes `awk-syntax`,
+`sed-syntax` and `jq-syntax`, the programs are highlighted through semantic
+tokens, and hovering an awk or jq builtin shows its documentation. Programs
+that contain shell expansions, or come from files, are skipped rather than
+guessed at, and common GNU and gawk extensions are accepted.
+
 ## Commands
 
 `workspace/executeCommand` accepts:

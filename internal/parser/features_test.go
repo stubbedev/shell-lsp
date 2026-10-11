@@ -10,6 +10,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/actions"
 	"github.com/stubbedev/shell-lsp/internal/completion"
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/embedded"
 	"github.com/stubbedev/shell-lsp/internal/format"
 	"github.com/stubbedev/shell-lsp/internal/hover"
 	"github.com/stubbedev/shell-lsp/internal/manpage"
@@ -76,7 +77,7 @@ func TestFeaturesOverCorpus(t *testing.T) {
 					t.Errorf("%s span %+v out of bounds (%d bytes)", what, s, len(text))
 				}
 			}
-			for _, tok := range semantic.Tokens(tree, nil) {
+			for _, tok := range semantic.Tokens(tree, nil, embedded.Find(tree)) {
 				inBounds("token", tok.Span)
 			}
 			var walk func([]structure.Symbol)

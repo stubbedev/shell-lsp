@@ -33,3 +33,16 @@ step_%[1]d "arg%[1]d"
 	}
 	return sb.String()
 }
+
+func EmbeddedScript(lines int) string {
+	var sb strings.Builder
+	sb.WriteString("#!/usr/bin/env bash\n")
+	for i := 0; strings.Count(sb.String(), "\n") < lines; i++ {
+		fmt.Fprintf(&sb, `awk -F: '$3 >= %[1]d && $7 !~ /nologin/ { users[$1]++ } END { for (u in users) printf "%%s %%d\n", u, users[u] }' /etc/passwd
+sed -n -e '/^start_%[1]d/,/^end/{' -e 's/[[:space:]]*$//;s/^#\(.*\)/\1/p' -e '}' notes.txt
+jq -r --arg id "$id" '.items[] | select(.id == $id or .n > %[1]d) | "\(.name)\t\(.tags | join(","))"' items.json
+total_%[1]d=$(awk '{ s += $NF } END { print s / NR }' sizes.txt | sed 's/\.[0-9]*$//')
+`, i)
+	}
+	return sb.String()
+}

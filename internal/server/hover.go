@@ -9,10 +9,12 @@ import (
 	"slices"
 
 	"github.com/stubbedev/shell-lsp/internal/docstore"
+	"github.com/stubbedev/shell-lsp/internal/embedded"
 	"github.com/stubbedev/shell-lsp/internal/hover"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/manpage"
+	"github.com/stubbedev/shell-lsp/internal/parser"
 )
 
 type commandDocs struct {
@@ -44,6 +46,9 @@ func (s *Server) handleHover(ctx context.Context, docs *docstore.View, params js
 		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
 	}
 	offset := snap.doc.PositionToOffset(hoverParams.Position, snap.encoding)
+	if h, ok := embedded.HoverAt(embeddedPrograms(snap.file), offset); ok {
+		return s.hoverResult(snap, h.Markdown, h.Span), nil
+	}
 	result, ok, err := hover.Hover(ctx, hover.Input{Tree: snap.tree, Imports: s.imports(snap.file), Offset: offset, Commands: s.commandDocs})
 	if err != nil {
 		return nil, err
@@ -51,8 +56,12 @@ func (s *Server) handleHover(ctx context.Context, docs *docstore.View, params js
 	if !ok {
 		return nil, nil
 	}
-	r := snap.doc.RangeFor(result.Span.Start, result.Span.End, snap.encoding)
-	return lsp.Hover{Contents: lsp.MarkupContent{Kind: s.hoverFormat(), Value: result.Markdown}, Range: &r}, nil
+	return s.hoverResult(snap, result.Markdown, result.Span), nil
+}
+
+func (s *Server) hoverResult(snap *snapshot, markdown string, span parser.Span) lsp.Hover {
+	r := snap.doc.RangeFor(span.Start, span.End, snap.encoding)
+	return lsp.Hover{Contents: lsp.MarkupContent{Kind: s.hoverFormat(), Value: markdown}, Range: &r}
 }
 
 func (s *Server) hoverFormat() string {

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/embedded"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/structure"
 )
@@ -31,7 +32,7 @@ func TestTokens(t *testing.T) {
 	t.Parallel()
 
 	text := "#!/bin/bash\nreadonly MAX=3\ngreet() {\n\tlocal who=\"$1\"\n\techo \"hi $who\" 'raw' >&2\n}\nif (( MAX > 2 )); then greet -v \"$HOME\" | grep x; fi\ncat <<EOF\nbody $MAX\nEOF\n"
-	got := describe(text, Tokens(parser.Parse(text, dialect.Bash), nil))
+	got := describe(text, Tokens(parser.Parse(text, dialect.Bash), nil, nil))
 	want := []string{
 		"#!/bin/bash:comment",
 		"readonly:function+defaultLibrary",
@@ -73,11 +74,44 @@ func TestTokens(t *testing.T) {
 	}
 }
 
+func TestEmbeddedProgramTokensReplaceTheirString(t *testing.T) {
+	t.Parallel()
+
+	text := "awk '{ print $1 }' f\njq \".a | length\" x\nsed -f - <<'EOF'\ns/a/b/\nEOF\n"
+	tree := parser.Parse(text, dialect.Bash)
+	got := describe(text, Tokens(tree, nil, embedded.Find(tree)))
+	want := []string{
+		"awk:function+external", "':string", "print:keyword", "$:operator", "1:number", "':string",
+		"jq:function+external", "\":string", ".a:property", "|:operator", "length:function+defaultLibrary", "\":string",
+		"sed:function+external", "-f:property", "<<:operator", "'EOF':string",
+		"s:keyword", "/a/:regexp", "b/:string",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("tokens:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+func TestEmbeddedTokensAcrossEscapesAndScripts(t *testing.T) {
+	t.Parallel()
+
+	text := "awk \"{ print \\\"a\\\" }\"\nsed -e 'a\\' -e 'appended' f\n"
+	tree := parser.Parse(text, dialect.Bash)
+	got := describe(text, Tokens(tree, nil, embedded.Find(tree)))
+	want := []string{
+		"awk:function+external", "\":string", "print:keyword", "\\\"a\\\":string", "\":string",
+		"sed:function+external", "-e:property", "':string", "a:keyword", "':string",
+		"-e:property", "':string", "appended:string", "':string",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("tokens:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
 func TestTokensAreSingleLineAndOrdered(t *testing.T) {
 	t.Parallel()
 
 	text := "echo 'multi\nline\nstring' \"a\nb\"\n"
-	tokens := Tokens(parser.Parse(text, dialect.Bash), nil)
+	tokens := Tokens(parser.Parse(text, dialect.Bash), nil, nil)
 	last := -1
 	for _, tok := range tokens {
 		if strings.Contains(text[tok.Span.Start:tok.Span.End], "\n") {
@@ -97,7 +131,7 @@ func TestNumbersInZshSubscriptFlagsAreNumbers(t *testing.T) {
 	t.Parallel()
 
 	text := "echo ${items[(r)42]}\n"
-	got := strings.Join(describe(text, Tokens(parser.Parse(text, dialect.Zsh), nil)), " ")
+	got := strings.Join(describe(text, Tokens(parser.Parse(text, dialect.Zsh), nil, nil)), " ")
 	if want := "42:number"; !strings.Contains(got, want) {
 		t.Errorf("tokens = %s, want %s", got, want)
 	}
@@ -109,8 +143,8 @@ func TestTokensUseImports(t *testing.T) {
 	text := "test\necho \"$LIMIT\"\n"
 	tree := parser.Parse(text, dialect.Bash)
 	lib := parser.Import{Name: "lib.sh", Tree: parser.Parse("readonly LIMIT=3\ntest() { :; }\n", dialect.Bash)}
-	without := strings.Join(describe(text, Tokens(tree, nil)), " ")
-	with := strings.Join(describe(text, Tokens(tree, []parser.Import{lib})), " ")
+	without := strings.Join(describe(text, Tokens(tree, nil, nil)), " ")
+	with := strings.Join(describe(text, Tokens(tree, []parser.Import{lib}, nil)), " ")
 	if want := "test:function+defaultLibrary"; !strings.Contains(without, want) {
 		t.Errorf("tokens without imports = %s, want %s", without, want)
 	}

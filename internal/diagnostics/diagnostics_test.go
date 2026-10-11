@@ -8,6 +8,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/bats"
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
+	"github.com/stubbedev/shell-lsp/internal/embedded"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/parser"
@@ -79,5 +80,26 @@ func TestBatsDiagnosticsCoverTheFailingLine(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("diagnostics = %+v\nwant         %+v", got, want)
+	}
+}
+
+func TestEmbeddedDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	text := "# 😀\nawk '{ print \"x }' f\njq '.a' f\nsed -e 's/a/b/q' f\n"
+	doc := document(t, text)
+	got := Embedded(embedded.Find(parser.Parse(text, dialect.Bash)), doc, docstore.EncodingUTF16)
+	want := []lsp.Diagnostic{
+		{
+			Range:    lsp.Range{Start: lsp.Position{Line: 1, Character: 13}, End: lsp.Position{Line: 1, Character: 17}},
+			Severity: lsp.SeverityError, Code: "awk-syntax", Source: Source, Message: "awk: unterminated string",
+		},
+		{
+			Range:    lsp.Range{Start: lsp.Position{Line: 3, Character: 14}, End: lsp.Position{Line: 3, Character: 15}},
+			Severity: lsp.SeverityError, Code: "sed-syntax", Source: Source, Message: "sed: unknown option to `s`",
+		},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("diagnostics = %+v\nwant %+v", got, want)
 	}
 }
