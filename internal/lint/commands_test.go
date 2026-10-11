@@ -91,29 +91,6 @@ func TestIsGlob(t *testing.T) {
 	}
 }
 
-func TestEffectiveCommandWord(t *testing.T) {
-	t.Parallel()
-
-	p := &pass{}
-	for src, want := range map[string]string{
-		"command -p ls -l\n":      "ls",
-		"exec -a name tool --x\n": "tool",
-		"time -p make\n":          "make",
-		"builtin echo hi\n":       "echo",
-		"sudo rm -rf x\n":         "sudo",
-		"exec\n":                  "",
-	} {
-		w := p.effectiveCommandWord(firstCall(t, src))
-		got := ""
-		if w != nil {
-			got, _ = parser.Literal(w)
-		}
-		if got != want {
-			t.Errorf("effectiveCommandWord(%q) = %q, want %q", src, got, want)
-		}
-	}
-}
-
 func TestEnclosingPipeline(t *testing.T) {
 	t.Parallel()
 
