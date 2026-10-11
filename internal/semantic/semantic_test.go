@@ -253,3 +253,33 @@ func TestOrderByStartIsAStableSortByStart(t *testing.T) {
 		}
 	}
 }
+
+func TestResultKeepsTheFirstOfOverlappingTokensInStartOrder(t *testing.T) {
+	t.Parallel()
+
+	for seed, maxStart := range []int{0, 1, 255, 256, 70000, 1 << 24} {
+		rng := rand.New(rand.NewPCG(uint64(seed), 11))
+		tokens := make([]Token, 5000)
+		for i := range tokens {
+			start := rng.IntN(maxStart + 1)
+			tokens[i] = Token{Span: parser.Span{Start: start, End: start + rng.IntN(3)}, Type: Type(i % 7)}
+		}
+		order := make([]int, len(tokens))
+		for i := range order {
+			order[i] = i
+		}
+		slices.SortStableFunc(order, func(a, b int) int { return cmp.Compare(tokens[a].Span.Start, tokens[b].Span.Start) })
+		var want []Token
+		end := -1
+		for _, i := range order {
+			if tokens[i].Span.Start >= end {
+				want = append(want, tokens[i])
+				end = tokens[i].Span.End
+			}
+		}
+		g := generator{tokens: slices.Clone(tokens), text: strings.Repeat(" ", maxStart+3)}
+		if got := g.result(); !slices.Equal(got, want) {
+			t.Fatalf("max start %d: result differs from a stable sort by start that drops overlaps", maxStart)
+		}
+	}
+}

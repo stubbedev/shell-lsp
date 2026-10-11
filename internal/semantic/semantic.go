@@ -369,11 +369,10 @@ func clip(tokens []Token, regions []parser.Span) []Token {
 }
 
 func (g *generator) result() []Token {
-	order := orderByStart(g.tokens, len(g.text))
-	out := make([]Token, 0, len(g.tokens))
+	permute(g.tokens, orderByStart(g.tokens, len(g.text)))
+	out := g.tokens[:0]
 	end := -1
-	for _, key := range order {
-		t := g.tokens[uint32(key)] //nolint:gosec
+	for _, t := range g.tokens {
 		if t.Span.Start < end {
 			continue
 		}
@@ -381,6 +380,28 @@ func (g *generator) result() []Token {
 		end = t.Span.End
 	}
 	return out
+}
+
+const placed = ^uint64(0)
+
+func permute(tokens []Token, order []uint64) {
+	for i := range order {
+		if order[i] == placed {
+			continue
+		}
+		held := tokens[i]
+		at := i
+		for {
+			from := int(uint32(order[at])) //nolint:gosec
+			order[at] = placed
+			if from == i {
+				tokens[at] = held
+				break
+			}
+			tokens[at] = tokens[from]
+			at = from
+		}
+	}
 }
 
 func orderByStart(tokens []Token, maxStart int) []uint64 {
