@@ -37,4 +37,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ github.ref_name }}
-        run: gh release create "$VERSION" dist/* --repo "$GITHUB_REPOSITORY" --title "$VERSION" --generate-notes --verify-tag
+        run: |
+          set -euo pipefail
+          notes="docs/releases/${VERSION}.md"
+          if [[ ! -f "$notes" ]]; then
+            echo "missing release notes: $notes" >&2
+            exit 1
+          fi
+          gh release create "$VERSION" dist/* --repo "$GITHUB_REPOSITORY" --title "$VERSION" --notes-file "$notes" --verify-tag
