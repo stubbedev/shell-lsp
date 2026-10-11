@@ -59,6 +59,40 @@ func (p *Progress) notify(value progressValue) error {
 	return p.server.conn.Notify("$/progress", progressParams{Token: p.token, Value: value})
 }
 
+type workDone struct {
+	server   *Server
+	progress *Progress
+}
+
+func (s *Server) beginWorkDone(ctx context.Context, title string) (*workDone, context.Context, error) {
+	if !s.clientCapabilities().Window.WorkDoneProgress {
+		return &workDone{server: s}, ctx, nil
+	}
+	progress, err := s.StartProgress(ctx, title)
+	if err != nil {
+		return nil, nil, err
+	}
+	return &workDone{server: s, progress: progress}, progress.Context(), nil
+}
+
+func (w *workDone) report(message string, percentage int) {
+	if w.progress == nil {
+		return
+	}
+	if err := w.progress.Report(message, percentage); err != nil {
+		w.server.logger.Warn("reporting progress", "err", err)
+	}
+}
+
+func (w *workDone) end(message string) {
+	if w.progress == nil {
+		return
+	}
+	if err := w.progress.End(message); err != nil {
+		w.server.logger.Warn("ending progress", "err", err)
+	}
+}
+
 func (s *Server) handleWorkDoneProgressCancel(_ context.Context, params json.RawMessage) error {
 	cancelParams, err := lsp.DecodeParams[progressCreateParams](params)
 	if err != nil {

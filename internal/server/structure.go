@@ -142,28 +142,16 @@ func workspaceSymbol(file *workspace.File, enc docstore.Encoding, name string, k
 }
 
 func (s *Server) indexWorkspace(ctx context.Context, docs *docstore.View, u urgency) ([]*workspace.File, error) {
-	report := func(int, int) {}
-	if s.clientCapabilities().Window.WorkDoneProgress {
-		progress, err := s.StartProgress(ctx, "Indexing shell files")
-		if err != nil {
-			return nil, err
-		}
-		ctx = progress.Context()
-		defer func() {
-			if err := progress.End("done"); err != nil {
-				s.logger.Warn("ending progress", "err", err)
-			}
-		}()
-		report = func(done, total int) {
-			if done%progressStep != 0 {
-				return
-			}
-			if err := progress.Report(fmt.Sprintf("%d/%d files", done, total), done*100/max(total, 1)); err != nil {
-				s.logger.Warn("reporting progress", "err", err)
-			}
-		}
+	progress, ctx, err := s.beginWorkDone(ctx, "Indexing shell files")
+	if err != nil {
+		return nil, err
 	}
-	return s.workspaceFiles(ctx, docs, u, report)
+	defer progress.end("done")
+	return s.workspaceFiles(ctx, docs, u, func(done, total int) {
+		if done%progressStep == 0 {
+			progress.report(fmt.Sprintf("%d/%d files", done, total), done*100/max(total, 1))
+		}
+	})
 }
 
 func (s *Server) workspaceFiles(ctx context.Context, docs *docstore.View, u urgency, report func(done, total int)) ([]*workspace.File, error) {
