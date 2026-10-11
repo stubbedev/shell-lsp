@@ -8,9 +8,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
+	"github.com/stubbedev/shell-lsp/internal/parser"
 )
 
 func writeFiles(t *testing.T, root string, files map[string]string) {
@@ -71,6 +73,16 @@ func TestConfigurationPullPerFolder(t *testing.T) {
 	reportB := decodeResult[lsp.FullDocumentDiagnosticReport](t, c.call("textDocument/diagnostic", `{"textDocument": {"uri": "`+uriB+`"}}`))
 	if !slices.ContainsFunc(reportB.Items, splits) {
 		t.Errorf("folder b (POSIX sh) did not warn about word splitting: %+v", reportB.Items)
+	}
+}
+
+func TestShebangRewriteKeepsSlashes(t *testing.T) {
+	t.Parallel()
+
+	tree := parser.Parse("#!/bin/sh -e\necho\n", dialect.Posix)
+	edit, ok := shebangRewrite(tree, filepath.Join("lib", "x.sh"), filepath.Join("lib", "x.bash"))
+	if !ok || edit.NewText != "#!/bin/bash -e" {
+		t.Errorf("shebangRewrite = %+v, %v; want #!/bin/bash -e", edit, ok)
 	}
 }
 

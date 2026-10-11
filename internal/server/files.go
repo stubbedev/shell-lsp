@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -247,9 +248,9 @@ func shebangRewrite(tree *parser.Tree, oldPath, newPath string) (textedit.Edit, 
 	}
 	fields := strings.Fields(strings.TrimPrefix(firstLine, "#!"))
 	target := 0
-	if filepath.Base(fields[0]) == "env" {
+	if path.Base(fields[0]) == "env" {
 		target = slices.IndexFunc(fields[1:], func(f string) bool { return !strings.HasPrefix(f, "-") }) + 1
 	}
-	fields[target] = filepath.Join(filepath.Dir(fields[target]), newDialect.String())
+	fields[target] = path.Join(path.Dir(fields[target]), newDialect.String())
 	return textedit.Edit{Start: 0, End: len(firstLine), NewText: "#!" + strings.Join(fields, " ")}, true
 }
