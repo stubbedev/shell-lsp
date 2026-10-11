@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/stubbedev/shell-lsp/internal/actions"
 	"github.com/stubbedev/shell-lsp/internal/config"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
@@ -138,8 +139,8 @@ type RangeFormattingOptions struct {
 }
 
 type CodeActionOptions struct {
-	CodeActionKinds []string `json:"codeActionKinds"`
-	ResolveProvider bool     `json:"resolveProvider"`
+	CodeActionKinds []actions.Kind `json:"codeActionKinds"`
+	ResolveProvider bool           `json:"resolveProvider"`
 }
 
 type ExecuteCommandOptions struct {
@@ -196,7 +197,7 @@ func (s *Server) handleInitialize(_ context.Context, _ *docstore.View, params js
 			WorkspaceSymbolProvider:         true,
 			DocumentFormattingProvider:      true,
 			DocumentRangeFormattingProvider: RangeFormattingOptions{RangesSupport: true},
-			CodeActionProvider:              CodeActionOptions{CodeActionKinds: codeActionKinds, ResolveProvider: true},
+			CodeActionProvider:              CodeActionOptions{CodeActionKinds: actions.Kinds(), ResolveProvider: true},
 			ExecuteCommandProvider:          ExecuteCommandOptions{Commands: serverCommands},
 			ReferencesProvider:              true,
 			DocumentHighlightProvider:       true,

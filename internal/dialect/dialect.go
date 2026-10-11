@@ -173,7 +173,7 @@ func DetectNamed(override *Dialect, in Input) (Dialect, bool) {
 	if d, ok := FromShebang(in.Text); ok {
 		return d, true
 	}
-	if completionTag(in.Text) {
+	if CompletionFile(in.Text) {
 		return Zsh, true
 	}
 	if d, ok := FromFileName(in.URI); ok {
@@ -248,7 +248,7 @@ func nixShellInterpreter(text string) (string, bool) {
 
 var completionTags = []string{"#compdef", "#autoload"}
 
-func completionTag(text string) bool {
+func CompletionFile(text string) bool {
 	first, _, _ := strings.Cut(text, "\n")
 	tag, _, _ := strings.Cut(strings.TrimRight(first, "\r"), " ")
 	return slices.Contains(completionTags, tag)

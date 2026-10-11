@@ -26,16 +26,6 @@ const (
 
 var serverCommands = []string{commandFixAll, commandApplyEdit, commandShowReferences, commandRunBats}
 
-var codeActionKinds = []string{
-	string(actions.QuickFix),
-	string(actions.RefactorExtract),
-	string(actions.RefactorInline),
-	string(actions.RefactorMove),
-	string(actions.RefactorRewrite),
-	string(actions.SourceFixAll),
-	string(actions.SourceStrictMode),
-}
-
 type actionData struct {
 	URI      string           `json:"uri"`
 	Version  int32            `json:"version"`

@@ -2,6 +2,7 @@ package actions
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -23,6 +24,7 @@ const (
 	RefactorRewrite  Kind = "refactor.rewrite"
 	SourceFixAll     Kind = "source.fixAll.shellLsp"
 	SourceStrictMode Kind = "source.strictMode"
+	SourceShebang    Kind = "source.shebang"
 )
 
 type Diagnostic struct {
@@ -39,6 +41,8 @@ const (
 	ExtractVariable  RefactorKind = "extractVariable"
 	ExtractFunction  RefactorKind = "extractFunction"
 	ToggleQuotes     RefactorKind = "toggleQuotes"
+	RemoveQuotes     RefactorKind = "removeQuotes"
+	AddShebang       RefactorKind = "addShebang"
 	DeclareLocal     RefactorKind = "declareLocal"
 	ConvertBackticks RefactorKind = "convertBackticks"
 	DoubleBrackets   RefactorKind = "doubleBrackets"
@@ -109,12 +113,14 @@ var refactorings = []refactoring{
 	{ExtractVariable, RefactorExtract, extractVariable, nil},
 	{ExtractFunction, RefactorExtract, extractFunction, nil},
 	{ToggleQuotes, RefactorRewrite, toggleQuotes, nil},
+	{RemoveQuotes, RefactorRewrite, removeQuotes, nil},
 	{DeclareLocal, RefactorRewrite, declareLocal, nil},
 	{ConvertBackticks, RefactorRewrite, convertBackticks, nil},
 	{DoubleBrackets, RefactorRewrite, doubleBrackets, nil},
 	{InlineVariable, RefactorInline, inlineVariable, nil},
 	{FunctionKeyword, RefactorRewrite, toggleFunctionKeyword, nil},
 	{StrictMode, SourceStrictMode, strictMode, nil},
+	{AddShebang, SourceShebang, addShebang, nil},
 	{IfToCase, RefactorRewrite, ifToCase, nil},
 	{MoveFunction, RefactorMove, moveFunction, moveTargets},
 }
@@ -124,6 +130,16 @@ func (r refactoring) targetsAt(s *site) []string {
 		return []string{""}
 	}
 	return r.targets(s)
+}
+
+func Kinds() []Kind {
+	kinds := []Kind{QuickFix, SourceFixAll}
+	for _, r := range refactorings {
+		if !slices.Contains(kinds, r.action) {
+			kinds = append(kinds, r.action)
+		}
+	}
+	return kinds
 }
 
 func Refactorings() []RefactorKind {
@@ -505,6 +521,55 @@ func toggleQuotes(s *site) (Change, bool) {
 		}
 	}
 	return Change{}, false
+}
+
+var bareWord = regexp.MustCompile(`^[A-Za-z0-9_./:@%+-]+$`)
+
+func removeQuotes(s *site) (Change, bool) {
+	path := s.pathAt()
+	for i, node := range slices.Backward(path) {
+		var value string
+		switch q := node.(type) {
+		case *syntax.SglQuoted:
+			if q.Dollar || !q.Right.IsValid() {
+				return Change{}, false
+			}
+			value = q.Value
+		case *syntax.DblQuoted:
+			literal, ok := parser.Literal(&syntax.Word{Parts: []syntax.WordPart{q}})
+			if q.Dollar || !q.Right.IsValid() || !ok {
+				return Change{}, false
+			}
+			value = literal
+		default:
+			continue
+		}
+		if !bareWord.MatchString(value) || quotingMatters(path[:i]) {
+			return Change{}, false
+		}
+		span, _ := s.Tree.NodeSpan(node)
+		return Change{Title: "Remove the quotes", Edits: []textedit.Edit{{Start: span.Start, End: span.End, NewText: value}}}, true
+	}
+	return Change{}, false
+}
+
+func quotingMatters(ancestors []syntax.Node) bool {
+	for i, node := range ancestors {
+		switch n := node.(type) {
+		case *syntax.Redirect:
+			if parser.IsHeredoc(n.Op) {
+				return true
+			}
+		case *syntax.CallExpr:
+			if i+1 < len(ancestors) && len(n.Args) > 0 && ancestors[i+1] == n.Args[0] {
+				return true
+			}
+		}
+		if parser.IsArithmetic(node) {
+			return true
+		}
+	}
+	return false
 }
 
 func singleQuoted(s string) string {
