@@ -34,6 +34,14 @@ func toggleFunctionKeyword(s *site) (Change, bool) {
 	}
 	text := s.Tree.Text()
 	name := litSpan(fn.Name)
+	parens, hasParens := emptyParens(text, name.End)
+	header := parser.Span{Start: parser.Offset(fn.Position), End: name.End}
+	if hasParens && fn.Parens {
+		header.End = parens
+	}
+	if s.sel.Start < header.Start || s.sel.End > header.End {
+		return Change{}, false
+	}
 	if fn.RsrvWord {
 		edits := []textedit.Edit{{Start: parser.Offset(fn.Position), End: name.Start}}
 		if !fn.Parens {
@@ -45,8 +53,7 @@ func toggleFunctionKeyword(s *site) (Change, bool) {
 	if _, block := fn.Body.Cmd.(*syntax.Block); !block || !known || !keyword.Dialects.Has(d) {
 		return Change{}, false
 	}
-	parens, ok := emptyParens(text, name.End)
-	if !ok {
+	if !hasParens {
 		return Change{}, false
 	}
 	removal := textedit.Edit{Start: name.End, End: parens}

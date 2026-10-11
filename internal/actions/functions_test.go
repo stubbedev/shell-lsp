@@ -23,6 +23,9 @@ func TestToggleFunctionKeyword(t *testing.T) {
 		{dialect.Zsh, "function «greet» {\n\techo hi\n}\n", "greet() {\n\techo hi\n}\n", "Declare greet() without the function keyword"},
 		{dialect.Bash, "greet«(»){\n\techo hi\n}\n", "function greet {\n\techo hi\n}\n", "Declare greet with the function keyword"},
 		{dialect.Bash, "if true; then\n\t«f»() { :; }\nfi\n", "if true; then\n\tfunction f { :; }\nfi\n", "Declare f with the function keyword"},
+		{dialect.Bash, "«greet()» {\n\techo hi\n}\n", "function greet {\n\techo hi\n}\n", "Declare greet with the function keyword"},
+		{dialect.Bash, "«function greet» {\n\techo hi\n}\n", "greet() {\n\techo hi\n}\n", "Declare greet() without the function keyword"},
+		{dialect.Bash, "function«» greet {\n\techo hi\n}\n", "greet() {\n\techo hi\n}\n", "Declare greet() without the function keyword"},
 	}
 	for _, tc := range tests {
 		got, title, ok := refactorIn(t, tc.d, FunctionKeyword, tc.src)
@@ -40,6 +43,12 @@ func TestToggleFunctionKeyword(t *testing.T) {
 		{dialect.Ksh, "«greet»() {\n\techo hi\n}\n"},
 		{dialect.Ksh, "function «greet» {\n\techo hi\n}\n"},
 		{dialect.Bash, "greet() {\n\t«echo» hi\n}\n"},
+		{dialect.Bash, "greet() «»{\n\techo hi\n}\n"},
+		{dialect.Bash, "greet() «{»\n\techo hi\n}\n"},
+		{dialect.Bash, "«greet() {\n\techo» hi\n}\n"},
+		{dialect.Bash, "function greet «»{\n\techo hi\n}\n"},
+		{dialect.Bash, "greet() {\n\techo hi\n«}»\n"},
+		{dialect.Bash, "greet() { echo «hi»; }\n"},
 		{dialect.Bash, "«greet»() ( echo hi )\n"},
 		{dialect.Zsh, "function «a» b {\n\techo hi\n}\n"},
 		{dialect.Bash, "«echo» hi\n"},
