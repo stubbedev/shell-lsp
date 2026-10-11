@@ -95,7 +95,12 @@ func (c *fixAllClient) fixAll(uri, text string) string {
 	}
 	var edits []lsp.TextEdit
 	c.call("workspace/executeCommand", lsp.ExecuteCommandParams{Command: "shellLsp.fixAll", Arguments: []json.RawMessage{mustJSON(c.t, uri)}}, func(edit lsp.WorkspaceEdit) {
-		edits = append(edits, edit.Changes[uri]...)
+		if len(edit.Changes) != 1 {
+			c.t.Fatalf("fix-all edited %d documents, want only %s", len(edit.Changes), uri)
+		}
+		for _, changes := range edit.Changes {
+			edits = append(edits, changes...)
+		}
 	})
 	doc := docstore.NewDocument(uri, "shellscript", 1, text)
 	offsets := make([]textedit.Edit, len(edits))
