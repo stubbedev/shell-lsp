@@ -19,6 +19,9 @@ func Describe(src string, tokens []lang.Token) string {
 		if t.Modifiers&lang.Declaration != 0 {
 			name += "+declaration"
 		}
+		if t.Modifiers&lang.Option != 0 {
+			name += "+option"
+		}
 		out[i] = name
 	}
 	return strings.Join(out, " ")

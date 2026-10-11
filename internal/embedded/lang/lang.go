@@ -32,6 +32,7 @@ type Modifier uint8
 const (
 	Builtin Modifier = 1 << iota
 	Declaration
+	Option
 )
 
 type Token struct {

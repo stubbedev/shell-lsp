@@ -84,7 +84,7 @@ func TestEmbeddedProgramTokensReplaceTheirString(t *testing.T) {
 		"awk:function+external", "':string", "print:keyword", "$:operator", "1:number", "':string",
 		"jq:function+external", "\":string", ".a:property", "|:operator", "length:function+defaultLibrary", "\":string",
 		"sed:function+external", "-f:property", "<<:operator", "'EOF':string",
-		"s:keyword", "/a/:regexp", "b/:string",
+		"s:keyword+defaultLibrary", "/a/:regexp", "b/:string",
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Errorf("tokens:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
@@ -99,7 +99,7 @@ func TestEmbeddedTokensAcrossEscapesAndScripts(t *testing.T) {
 	got := describe(text, Tokens(tree, nil, embedded.Find(tree)))
 	want := []string{
 		"awk:function+external", "\":string", "print:keyword", "\\\"a\\\":string", "\":string",
-		"sed:function+external", "-e:property", "':string", "a:keyword", "':string",
+		"sed:function+external", "-e:property", "':string", "a:keyword+defaultLibrary", "':string",
 		"-e:property", "':string", "appended:string", "':string",
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {

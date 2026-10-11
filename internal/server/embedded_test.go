@@ -104,7 +104,7 @@ func TestEmbeddedProgramHover(t *testing.T) {
 	t.Parallel()
 
 	c, _ := startClient(t, `{"capabilities": {"textDocument": {"diagnostic": {}}}}`)
-	c.notify("textDocument/didOpen", openParams("file:///w/h.bash", "awk '{ print length($0) }' f | jq 'map(.a)'\n"))
+	c.notify("textDocument/didOpen", openParams("file:///w/h.bash", "awk '{ print length($0) }' f | jq 'map(.a)' | sed -n p\n"))
 	for _, tt := range []struct {
 		character  uint32
 		want       string
@@ -112,6 +112,7 @@ func TestEmbeddedProgramHover(t *testing.T) {
 	}{
 		{15, "length([s])", 13, 19},
 		{36, "map(f)", 35, 38},
+		{53, "Prints the pattern space.", 53, 54},
 	} {
 		got := decodeResult[lsp.Hover](t, c.call("textDocument/hover", `{"textDocument": {"uri": "file:///w/h.bash"}, "position": {"line": 0, "character": `+strconv.FormatUint(uint64(tt.character), 10)+`}}`))
 		if !strings.Contains(got.Contents.Value, tt.want) || got.Range == nil || got.Range.Start.Character != tt.start || got.Range.End.Character != tt.end {

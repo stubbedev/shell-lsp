@@ -253,11 +253,46 @@ func TestTokens(t *testing.T) {
 	t.Parallel()
 
 	langtest.CheckTokens(t, parseBasic, "/^#/!s/a/b/g;1,$y/ab/cd/ # done\n:top\nb top\n$a\\\nbye",
-		"/^#/:regexp", "!:operator", "s:keyword", "/a/:regexp", "b/:string", "g:keyword",
-		"1:number", ",:operator", "$:operator", "y:keyword", "ab:string", "cd:string",
-		"# done:comment", "::keyword", "top:property", "b:keyword", "top:property",
-		"$:operator", "a:keyword", "bye:string",
+		"/^#/:regexp", "!:operator", "s:keyword+builtin", "/a/:regexp", "b/:string", "g:keyword+builtin+option",
+		"1:number", ",:operator", "$:operator", "y:keyword+builtin", "ab:string", "cd:string",
+		"# done:comment", "::keyword+builtin", "top:property", "b:keyword+builtin", "top:property",
+		"$:operator", "a:keyword+builtin", "bye:string",
 	)
+}
+
+func TestOptionTokens(t *testing.T) {
+	t.Parallel()
+
+	langtest.CheckTokens(t, parseBasic, "/x/I,/y/Ms/a/b/2gpw out",
+		"/x/:regexp", "I:keyword+builtin+option", ",:operator", "/y/:regexp", "M:keyword+builtin+option",
+		"s:keyword+builtin", "/a/:regexp", "b/:string", "2:number+builtin+option", "g:keyword+builtin+option",
+		"p:keyword+builtin+option", "w:keyword+builtin+option", "out:string",
+	)
+}
+
+func TestDocs(t *testing.T) {
+	t.Parallel()
+
+	for _, name := range []string{"s", "y", "p", "d", "a", "i", "c", "n", "N", "P", "D", "h", "H", "g", "G", "x", "b", "t", "T", "q", "Q", "r", "R", "w", "W", "e", "F", "z", "l", "=", ":", "v"} {
+		if doc, ok := Doc(name, lang.Builtin); !ok || doc.Signature == "" || doc.Summary == "" {
+			t.Errorf("Doc(%q) = %+v, %t, want documentation", name, doc, ok)
+		}
+	}
+	for _, name := range []string{"g", "p", "w", "e", "i", "I", "m", "M", "3", "12"} {
+		doc, ok := Doc(name, lang.Builtin|lang.Option)
+		if !ok || !strings.Contains(doc.Signature, "regexp") || doc.Summary == "" {
+			t.Errorf("Doc(%q, option) = %+v, %t, want documentation", name, doc, ok)
+		}
+	}
+	command, _ := Doc("p", lang.Builtin)
+	if flag, _ := Doc("p", lang.Builtin|lang.Option); command == flag {
+		t.Error("the p command and the p flag share documentation")
+	}
+	for _, name := range []string{"k", "L", "", "}"} {
+		if _, ok := Doc(name, lang.Builtin); ok {
+			t.Errorf("Doc(%q) found documentation", name)
+		}
+	}
 }
 
 func FuzzParse(f *testing.F) {

@@ -353,7 +353,7 @@ func HoverAt(programs []Program, source int) (Hover, bool) {
 		if !ok || tok.Modifiers&lang.Builtin == 0 {
 			return Hover{}, false
 		}
-		doc, ok := languages[p.Language].doc(p.Text[tok.Start:tok.End], tok.Kind)
+		doc, ok := languages[p.Language].doc(p.Text[tok.Start:tok.End], tok)
 		if !ok {
 			return Hover{}, false
 		}

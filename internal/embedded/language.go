@@ -21,18 +21,16 @@ type language struct {
 	name     string
 	commands []string
 	parse    func(string, invocation) lang.Result
-	doc      func(string, lang.Kind) (lang.Doc, bool)
+	doc      func(string, lang.Token) (lang.Doc, bool)
 	cli      cli
 }
-
-func undocumented(string, lang.Kind) (lang.Doc, bool) { return lang.Doc{}, false }
 
 var languages = [...]language{
 	Awk: {
 		name:     "awk",
 		commands: []string{"awk", "gawk", "mawk", "nawk", "original-awk"},
 		parse:    func(text string, _ invocation) lang.Result { return awk.Parse(text) },
-		doc:      awk.Doc,
+		doc:      func(name string, tok lang.Token) (lang.Doc, bool) { return awk.Doc(name, tok.Kind) },
 		cli: cli{
 			short: [128]option{
 				'F': valued, 'v': valued, 'f': file, 'e': source, 'E': file, 'i': valued, 'l': valued, 'W': valued,
@@ -55,7 +53,7 @@ var languages = [...]language{
 		name:     "sed",
 		commands: []string{"sed", "gsed"},
 		parse:    parseSed,
-		doc:      undocumented,
+		doc:      func(name string, tok lang.Token) (lang.Doc, bool) { return sed.Doc(name, tok.Modifiers) },
 		cli: cli{
 			short: [128]option{
 				'e': source, 'f': file, 'l': valued,
@@ -76,7 +74,7 @@ var languages = [...]language{
 		name:     "jq",
 		commands: []string{"jq", "gojq", "jaq"},
 		parse:    func(text string, _ invocation) lang.Result { return jq.Parse(text) },
-		doc:      jq.Doc,
+		doc:      func(name string, tok lang.Token) (lang.Doc, bool) { return jq.Doc(name, tok.Kind) },
 		cli: cli{
 			short: [128]option{
 				'L': valued, 'f': unsupported,

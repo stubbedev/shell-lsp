@@ -240,6 +240,35 @@ func TestSedReadsRegularExpressionsAsItsOptionsSay(t *testing.T) {
 	}
 }
 
+func TestSedHover(t *testing.T) {
+	t.Parallel()
+
+	src := "sed -n -e '/x/I{s/a/b/3gp' -e 'h;$!d}' f\n"
+	programs := find(t, src)
+	for _, tt := range []struct {
+		at, want string
+	}{
+		{"I{", "regardless of case"},
+		{"s/a", "Replaces the text matching"},
+		{"3g", "Replaces only the Nth match"},
+		{"gp'", "every match"},
+		{"p'", "Prints the pattern space when a replacement was made"},
+		{"h;", "Copies the pattern space into the hold space"},
+		{"d}", "Deletes the pattern space and starts the next cycle"},
+	} {
+		at := strings.Index(src, tt.at)
+		h, ok := HoverAt(programs, at)
+		if !ok || !strings.Contains(h.Markdown, tt.want) || h.Span != (parser.Span{Start: at, End: at + 1}) {
+			t.Errorf("HoverAt(%q) = %+v, %v, want %q over one character", tt.at, h, ok, tt.want)
+		}
+	}
+	for _, word := range []string{"/x/", "a/b", "$!", "{s"} {
+		if h, ok := HoverAt(programs, strings.Index(src, word)); ok {
+			t.Errorf("HoverAt(%q) = %+v, want nothing", word, h)
+		}
+	}
+}
+
 func TestHover(t *testing.T) {
 	t.Parallel()
 
@@ -257,7 +286,7 @@ func TestHover(t *testing.T) {
 			t.Errorf("HoverAt(%q) = %+v, %v, want %q", word, h, ok, want)
 		}
 	}
-	for _, word := range []string{"print", "x }", ".a", "p\n", "| jq"} {
+	for _, word := range []string{"print", "x }", ".a", "| jq"} {
 		if h, ok := HoverAt(programs, strings.Index(src, word)); ok {
 			t.Errorf("HoverAt(%q) = %+v, want nothing", word, h)
 		}

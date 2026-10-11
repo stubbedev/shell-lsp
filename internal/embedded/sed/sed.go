@@ -181,7 +181,7 @@ func (p *parser) parseCommand() {
 		p.emit(at, lang.Comment)
 		return
 	}
-	p.emit(at, lang.Keyword)
+	p.res.Emit(at, p.pos, lang.Keyword, lang.Builtin)
 	switch c {
 	case ':':
 		name := p.label()
@@ -407,9 +407,14 @@ func (p *parser) regexpAddress(start int, delimiter byte) {
 	p.queue(expression{start: from, end: p.pos, delimiter: delimiter})
 	p.pos++
 	p.emit(start, lang.Regexp)
-	flags := p.pos
-	p.skip("IM")
-	p.emit(flags, lang.Keyword)
+	for p.peekIs("IM") {
+		p.pos++
+		p.option(p.pos-1, lang.Keyword)
+	}
+}
+
+func (p *parser) option(start int, kind lang.Kind) {
+	p.res.Emit(start, p.pos, kind, lang.Builtin|lang.Option)
 }
 
 func (p *parser) delimited(delimiter byte) bool { return p.scanTo(delimiter, false) }
@@ -543,7 +548,6 @@ func (p *parser) once(seen *substituteFlag, flag substituteFlag, message string)
 
 func (p *parser) substituteFlags() {
 	var seen substituteFlag
-	start := p.pos
 	for !p.eof() {
 		switch c := p.src[p.pos]; {
 		case c == 'g':
@@ -554,6 +558,7 @@ func (p *parser) substituteFlags() {
 			p.once(&seen, countFlag, "multiple number options to `s`")
 			digits := p.pos
 			p.skip("0123456789")
+			p.option(digits, lang.Number)
 			if strings.Trim(p.src[digits:p.pos], "0") == "" {
 				p.fail(digits, p.pos, "the number option to `s` may not be zero")
 			}
@@ -561,17 +566,16 @@ func (p *parser) substituteFlags() {
 		case c == 'i' || c == 'I' || c == 'm' || c == 'M' || c == 'e':
 		case c == 'w':
 			p.pos++
-			p.emit(start, lang.Keyword)
+			p.option(p.pos-1, lang.Keyword)
 			p.filename(p.pos - 1)
 			return
 		default:
-			p.emit(start, lang.Keyword)
 			p.end("unknown option to `s`")
 			return
 		}
 		p.pos++
+		p.option(p.pos-1, lang.Keyword)
 	}
-	p.emit(start, lang.Keyword)
 }
 
 func (p *parser) transliterate(command int) {

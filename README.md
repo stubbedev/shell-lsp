@@ -161,14 +161,17 @@ The command is also found behind the shell and program wrappers
 `find ... -exec`, `-execdir`, `-ok` or `-okdir`; a program containing the
 `{}` or `xargs -I` placeholder those substitute at run time is skipped, and
 `xargs` does not hand its command the statement's here-document. Syntax
-errors are reported as lint findings at their exact position inside the
+errors, and definite mistakes in their regular expressions (sed addresses and
+`s`, awk `/re/` and `~ "re"`, the patterns of jq's `test`, `match`, `sub` and
+friends), are reported as lint findings at their exact position inside the
 shell string with the native codes [`SL3001`](docs/rules.md#sl3001) (awk),
 [`SL3002`](docs/rules.md#sl3002) (sed) and [`SL3003`](docs/rules.md#sl3003)
-(jq), so `lint.enable`, `lint.exclude` and `# shellcheck disable=` apply to
-them like to any other check. The programs are highlighted through semantic
-tokens, and hovering an awk or jq builtin shows its documentation. Programs
-that contain shell expansions, or come from files, are skipped rather than
-guessed at, and common GNU and gawk extensions are accepted.
+(jq), up to ten per program, so `lint.enable`, `lint.exclude` and
+`# shellcheck disable=` apply to them like to any other check. The programs
+are highlighted through semantic tokens, and hovering an awk or jq builtin, or
+a sed command or flag, shows its documentation. Programs that contain shell
+expansions, or come from files, are skipped rather than guessed at, and
+common GNU and gawk extensions are accepted.
 
 ## Commands
 
