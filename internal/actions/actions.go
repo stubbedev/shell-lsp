@@ -362,7 +362,7 @@ func extractFunction(s *site) (Change, bool) {
 		return Change{}, false
 	}
 	first, last := stmts[0], stmts[len(stmts)-1]
-	body := text[lineStart(text, first.Start):lineEnd(text, last.End)]
+	body := parser.Span{Start: lineStart(text, first.Start), End: lineEnd(text, last.End)}
 	if usesControlFlow(tree, parser.Span{Start: first.Start, End: last.End}) {
 		return Change{}, false
 	}
@@ -374,7 +374,7 @@ func extractFunction(s *site) (Change, bool) {
 	indent := leadingSpace(text, lineStart(text, first.Start))
 	outer := topLevelStart(tree, first.Start)
 	insertAt := lineStart(text, outer)
-	fn := leadingSpace(text, insertAt) + name + "() {\n" + reindent(body, leadingSpace(text, insertAt)+"\t") + leadingSpace(text, insertAt) + "}\n\n"
+	fn := leadingSpace(text, insertAt) + name + "() {\n" + reindent(tree, body, leadingSpace(text, insertAt)+"\t") + leadingSpace(text, insertAt) + "}\n\n"
 	return Change{Title: "Extract to function " + name, Edits: []textedit.Edit{
 		{Start: insertAt, End: insertAt, NewText: fn},
 		{Start: lineStart(text, first.Start), End: lineEnd(text, last.End), NewText: indent + call},
@@ -576,29 +576,6 @@ func uniqueName(tree *parser.Tree, base string) string {
 		name = base + strconv.Itoa(i)
 	}
 	return name
-}
-
-func reindent(body, indent string) string {
-	lines := strings.Split(strings.TrimSuffix(body, "\n"), "\n")
-	common := -1
-	for _, l := range lines {
-		if strings.TrimSpace(l) == "" {
-			continue
-		}
-		n := len(l) - len(strings.TrimLeft(l, " \t"))
-		if common < 0 || n < common {
-			common = n
-		}
-	}
-	var sb strings.Builder
-	for _, l := range lines {
-		if strings.TrimSpace(l) != "" {
-			sb.WriteString(indent)
-			sb.WriteString(l[max(common, 0):])
-		}
-		sb.WriteByte('\n')
-	}
-	return sb.String()
 }
 
 func trimSpan(text string, s parser.Span) parser.Span {

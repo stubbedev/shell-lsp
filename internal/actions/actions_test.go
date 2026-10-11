@@ -83,6 +83,10 @@ func TestExtractFunction(t *testing.T) {
 			t.Errorf("extract function %q offered: %q", src, got)
 		}
 	}
+	heredoc, _, ok := refactor(t, ExtractFunction, "f() {\n«\tcat <<EOF\n  kept\nEOF\n\techo \"a\n  b\"»\n}\n")
+	if want := "extracted() {\n\tcat <<EOF\n  kept\nEOF\n\techo \"a\n  b\"\n}\n\nf() {\n\textracted\n}\n"; !ok || heredoc != want {
+		t.Errorf("extract around a heredoc and a multi-line string = %q (%t)\nwant %q", heredoc, ok, want)
+	}
 	top, _, ok := refactor(t, ExtractFunction, "«echo a\necho b»\necho c\n")
 	if !ok || top != "extracted() {\n\techo a\n\techo b\n}\n\nextracted\necho c\n" {
 		t.Errorf("top-level extract = %q", top)
