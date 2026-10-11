@@ -2,7 +2,6 @@ package assist
 
 import (
 	"cmp"
-	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -124,7 +123,7 @@ func InlayHints(file *workspace.File, within parser.Span, lookup FunctionLookup,
 		if _, literal := parser.Literal(ref.Command.Args[0]); literal {
 			continue
 		}
-		hints = append(hints, Hint{Offset: ref.Arg.End, Label: "→ " + displayPath(file.Path, ref.Target.Path), Kind: HintPath, Tooltip: ref.Target.Path})
+		hints = append(hints, Hint{Offset: ref.Arg.End, Label: "→ " + navigation.RelativeName(file.Path, ref.Target.Path), Kind: HintPath, Tooltip: ref.Target.Path})
 	}
 	slices.SortStableFunc(hints, func(a, b Hint) int { return cmp.Compare(a.Offset, b.Offset) })
 	return hints
@@ -151,13 +150,6 @@ func attributeLabel(def parser.Definition) string {
 func redundant(arg, name string) bool {
 	arg = strings.Trim(arg, `"'`)
 	return arg == name || arg == "$"+name || arg == "${"+name+"}"
-}
-
-func displayPath(from, target string) string {
-	if rel, err := filepath.Rel(filepath.Dir(from), target); err == nil && !strings.HasPrefix(rel, "..") {
-		return rel
-	}
-	return target
 }
 
 type Link struct {

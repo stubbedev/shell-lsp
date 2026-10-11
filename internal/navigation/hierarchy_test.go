@@ -1,6 +1,7 @@
 package navigation
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -14,6 +15,23 @@ func callNames(calls []Call) []string {
 		out[i] = c.Item.Name + "x" + string(rune('0'+len(c.Spans)))
 	}
 	return out
+}
+
+func TestRelativeNamesUseSlashes(t *testing.T) {
+	t.Parallel()
+
+	root := filepath.FromSlash("/proj")
+	script := filepath.Join(root, "bin", "run.sh")
+	tests := map[string]string{
+		filepath.Join(root, "bin", "lib", "util.sh"): "lib/util.sh",
+		filepath.Join(root, "bin", "..x.sh"):         "..x.sh",
+		filepath.Join(root, "shared", "util.sh"):     filepath.ToSlash(filepath.Join(root, "shared", "util.sh")),
+	}
+	for target, want := range tests {
+		if got := RelativeName(script, target); got != want {
+			t.Errorf("RelativeName(%q, %q) = %q, want %q", script, target, got, want)
+		}
+	}
 }
 
 func TestCallHierarchy(t *testing.T) {

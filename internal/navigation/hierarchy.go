@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"slices"
-	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
@@ -170,8 +169,8 @@ func MonikerAt(file *workspace.File, offset int, env Env) (Moniker, bool) {
 
 func relativeID(path string, roots []string) string {
 	for _, root := range roots {
-		if rel, err := filepath.Rel(root, path); err == nil && !strings.HasPrefix(rel, "..") {
-			return filepath.ToSlash(rel)
+		if rel, ok := relativeTo(root, path); ok {
+			return rel
 		}
 	}
 	return filepath.ToSlash(path)

@@ -94,10 +94,16 @@ func Imports(file *workspace.File, env Env) []parser.Import {
 }
 
 func RelativeName(from, to string) string {
-	if rel, err := filepath.Rel(filepath.Dir(from), to); err == nil && !strings.HasPrefix(rel, "..") {
-		return rel
+	name, _ := relativeTo(filepath.Dir(from), to)
+	return name
+}
+
+func relativeTo(dir, path string) (string, bool) {
+	rel, err := filepath.Rel(dir, path)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return filepath.ToSlash(path), false
 	}
-	return to
+	return filepath.ToSlash(rel), true
 }
 
 func Chain(file *workspace.File, env Env) []*workspace.File {
