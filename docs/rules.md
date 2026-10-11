@@ -206,6 +206,20 @@ build() {
 }
 ```
 
+## SL2008
+
+**A `${…}` the shell rejects when it runs it.** Bash, sh and mksh accept some
+malformed expansions when they read the script, such as `${}` or a template
+placeholder like `${@name@}`, and only fail with "bad substitution" when the
+line runs, so the script stops there. Forms with a more specific explanation
+are reported under their own codes instead: SC2082 for `${$x}`, SC2296 for a
+name that starts with a character no parameter can start with.
+
+```bash
+#!/bin/bash
+echo "${}"    # SL2008
+```
+
 The embedded-language rules check awk, sed and jq programs written inside the
 script with built-in parsers; no awk, sed or jq binary is run. A program is
 checked when it is a literal argument (`awk '...'`, `sed -e '...'`,

@@ -1,0 +1,17 @@
+### expansions bash parses but rejects when it runs them
+#!/bin/bash
+echo "${}"
+echo "${@word@}"
+echo "${!}"
+>>> none
+>>+ SL2008 2:7 -- shell-lsp native check; bash runs into "bad substitution" here and shellcheck 0.11 does not report it
+>>+ SL2008 3:7 -- shell-lsp native check; bash runs into "bad substitution" here and shellcheck 0.11 does not report it
+
+### expansions other checks already explain are not reported twice
+#!/bin/bash
+x=1
+echo "${$x}"
+echo "${:-word}"
+>>> SC2082 3:7
+>>+ SC2034 2:1 -- ${$x} never reads x: bash stops with "bad substitution" before expanding anything
+>>+ SC2296 4:9 -- shellcheck 0.11 accepts ${:-word}, which bash rejects with "bad substitution"

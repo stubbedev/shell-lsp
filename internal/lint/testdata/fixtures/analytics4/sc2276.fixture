@@ -7,6 +7,7 @@ var${x}/=value
 ### empty braced expansion before equals
 ${}=value
 >>> SC2276 1:1
+>>+ SL2008 1:1 -- bash runs into "bad substitution" on ${} before it could treat the word as a command name
 
 ### length expansion before equals
 ${#name}=value

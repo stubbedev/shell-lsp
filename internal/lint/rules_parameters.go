@@ -9,16 +9,19 @@ import (
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
+const codeBadSubstitution = nativeBase + 2008
+
 var parameterSyntaxFamily = family{
 	codes: map[Code]meta{
-		2082: {severity: SeverityError},
-		2250: {severity: SeverityStyle, optional: "require-variable-braces"},
-		2296: {severity: SeverityError},
-		2297: {severity: SeverityError},
-		2298: {severity: SeverityError},
-		2299: {severity: SeverityError},
-		2300: {severity: SeverityError},
-		2301: {severity: SeverityError},
+		codeBadSubstitution: {severity: SeverityError},
+		2082:                {severity: SeverityError},
+		2250:                {severity: SeverityStyle, optional: "require-variable-braces"},
+		2296:                {severity: SeverityError},
+		2297:                {severity: SeverityError},
+		2298:                {severity: SeverityError},
+		2299:                {severity: SeverityError},
+		2300:                {severity: SeverityError},
+		2301:                {severity: SeverityError},
 	},
 	rules: []rule{
 		{on: nodes(&syntax.ParamExp{}, &syntax.Lit{}), node: checkBracedExpansion, finish: checkUnparsedBracedExpansions},
@@ -38,8 +41,11 @@ func checkBracedExpansion(p *pass, n syntax.Node) {
 			p.checkBracedAt(parser.Offset(n.Dollar))
 		}
 	case *syntax.Lit:
-		if p.tree.Unexpandable(n) {
-			p.checkBracedAt(parser.Offset(n.ValuePos))
+		if !p.tree.Unexpandable(n) {
+			return
+		}
+		if _, reported := p.reportBraced(parser.Offset(n.ValuePos)); !reported {
+			p.reportNode(codeBadSubstitution, n, n.Value+" is not a valid parameter expansion, so the shell stops with \"bad substitution\" when it reaches this line.")
 		}
 	}
 }
@@ -97,32 +103,38 @@ func (p *pass) braces() *braceScanner {
 }
 
 func (p *pass) checkBracedAt(dollar int) int {
+	end, _ := p.reportBraced(dollar)
+	return end
+}
+
+func (p *pass) reportBraced(dollar int) (int, bool) {
 	if dollar+2 < len(p.text) && strings.IndexByte(" \t\n|", p.text[dollar+2]) >= 0 {
-		return dollar + 2
+		return dollar + 2, false
 	}
 	body, end, ok := p.braces().braced(dollar)
 	if !ok {
-		return dollar + 2
+		return dollar + 2, false
 	}
 	if isIndirection(p.text, body) {
 		p.report(2082, parser.Span{Start: dollar, End: end}, "To expand a variable whose name is computed, use ${!name} or an associative array; "+p.text[dollar:end]+" nests expansions inside the name.")
-		return end
+		return end, true
 	}
 	if len(body) == 0 {
-		return end
+		return end, false
 	}
 	first := body[0]
 	span := parser.Span{Start: first.start, End: first.end}
 	text := p.text[first.start:first.end]
 	switch first.kind {
 	case braceLiteral:
-		if c := text[0]; !p.startsParameter(c) {
-			p.report(2296, span, "A parameter expansion cannot start with '"+text[:1]+"'; ${ must be followed by a variable name or special parameter.")
+		if p.startsParameter(text[0]) {
+			return end, false
 		}
+		p.report(2296, span, "A parameter expansion cannot start with '"+text[:1]+"'; ${ must be followed by a variable name or special parameter.")
 	case braceDouble:
 		if inner := strings.Trim(strings.TrimPrefix(text, "$"), `"`); isQuotableName(inner) {
 			p.report(2297, span, "Double quotes are not allowed inside ${ }; write ${"+inner+"} and quote the whole expansion instead.")
-			return end
+			return end, true
 		}
 		p.report(2301, span, "This parameter expansion starts with unexpected quotes; ${ must be followed by a variable name.")
 	case braceSingle:
@@ -132,7 +144,7 @@ func (p *pass) checkBracedAt(dollar int) int {
 	case braceNested:
 		if first.plain {
 			p.report(2298, span, "${"+text+"...} is invalid: an expansion cannot be used as the name; drop the inner ${ } or use ${!name} for indirection.")
-			return end
+			return end, true
 		}
 		p.report(2299, span, "Parameter expansions cannot be nested; store the result of "+text+" in a variable first and expand that.")
 	case braceCommand:
@@ -140,7 +152,7 @@ func (p *pass) checkBracedAt(dollar int) int {
 	default:
 		p.report(2301, span, "This parameter expansion starts with unexpected syntax; ${ must be followed by a variable name.")
 	}
-	return end
+	return end, true
 }
 
 func isQuotableName(s string) bool {
