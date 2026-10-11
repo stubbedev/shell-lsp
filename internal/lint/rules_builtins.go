@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -51,12 +52,36 @@ func checkTrapHandler(p *pass, c command) {
 	if !ok {
 		return
 	}
+	fixes := p.singleQuoteFix(dq)
 	for _, part := range dq.Parts {
 		switch part.(type) {
 		case *syntax.CmdSubst, *syntax.ParamExp, *syntax.ArithmExp:
-			p.reportNode(2064, part, "This expands when the trap is set, not when it fires; single-quote the handler to expand it later.")
+			p.reportNode(2064, part, "This expands when the trap is set, not when it fires; single-quote the handler to expand it later.", fixes...)
 		}
 	}
+}
+
+func (p *pass) singleQuoteFix(dq *syntax.DblQuoted) []Fix {
+	span, ok := p.span(dq)
+	if !ok || dq.Dollar || !dq.Right.IsValid() {
+		return nil
+	}
+	raw := p.text[span.Start+1 : span.End-1]
+	var sb strings.Builder
+	for i := 0; i < len(raw); i++ {
+		if raw[i] == '\\' && i+1 < len(raw) && strings.IndexByte("\\\"$`\n", raw[i+1]) >= 0 {
+			i++
+			if raw[i] == '\n' {
+				continue
+			}
+		}
+		sb.WriteByte(raw[i])
+	}
+	value := sb.String()
+	if strings.Contains(value, "'") {
+		return nil
+	}
+	return []Fix{reviewFix("Single-quote the handler", textedit.Edit{Start: span.Start, End: span.End, NewText: "'" + value + "'"})}
 }
 
 var (

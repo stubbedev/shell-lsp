@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -43,7 +44,8 @@ func checkArithmeticDollar(p *pass, n syntax.Node) {
 	if inner == "" || strings.ContainsAny(inner, dollarExemptChars) || parser.IsDigits(inner[:1]) {
 		return
 	}
-	p.report(2004, span, "Arithmetic already expands variable names, so the $ in "+text+" is unnecessary; write "+inner+" instead.")
+	p.report(2004, span, "Arithmetic already expands variable names, so the $ in "+text+" is unnecessary; write "+inner+" instead.",
+		reviewFix("Write "+inner, textedit.Edit{Start: span.Start, End: span.End, NewText: inner}))
 }
 
 func (p *pass) inArithmeticContext() bool {

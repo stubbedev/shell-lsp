@@ -238,7 +238,7 @@ func checkCasePatterns(p *pass, n syntax.Node) {
 			continue
 		}
 		if span, ok := p.span(pattern); ok {
-			p.report(2254, span, "The unquoted expansion in case pattern "+p.text[span.Start:span.End]+" is matched as a glob; quote it to match its value literally.")
+			p.report(2254, span, "The unquoted expansion in case pattern "+p.text[span.Start:span.End]+" is matched as a glob; quote it to match its value literally.", p.soleExpansionQuoteFix(pattern, span)...)
 		}
 	}
 }

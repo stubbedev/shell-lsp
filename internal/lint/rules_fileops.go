@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/expand"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
@@ -60,6 +61,24 @@ func checkRecursiveRemoval(p *pass, c command) {
 	}
 }
 
+func (p *pass) emptyGuardFix(arg *syntax.Word) []Fix {
+	var edits []textedit.Edit
+	syntax.Walk(arg, func(n syntax.Node) bool {
+		pe, ok := n.(*syntax.ParamExp)
+		if !ok {
+			return true
+		}
+		if span, ok := p.span(pe); ok && pe.Param != nil && parser.IsName(pe.Param.Value) && parser.IsPlainParam(pe) {
+			edits = append(edits, textedit.Edit{Start: span.Start, End: span.End, NewText: "${" + pe.Param.Value + ":?}"})
+		}
+		return false
+	})
+	if len(edits) == 0 {
+		return nil
+	}
+	return []Fix{reviewFix("Abort when the variable is empty with ${var:?}", edits...)}
+}
+
 func checkRemovedPath(p *pass, arg *syntax.Word) {
 	split := *arg
 	syntax.SplitBraces(&split)
@@ -76,7 +95,7 @@ func checkRemovedPath(p *pass, arg *syntax.Word) {
 			p.reportNode(2114, arg, "This removes "+path+" recursively; make sure that is intended, or guard the path.")
 			return
 		case !guardsEmpty(alternative):
-			p.reportNode(2115, arg, "If the expansions here are empty, this removes "+path+"; use ${var:?} so an empty variable aborts instead.")
+			p.reportNode(2115, arg, "If the expansions here are empty, this removes "+path+"; use ${var:?} so an empty variable aborts instead.", p.emptyGuardFix(arg)...)
 			return
 		}
 	}
@@ -167,7 +186,12 @@ func checkTempfile(p *pass, c command) {
 }
 
 func checkWhich(p *pass, c command) {
-	p.reportNode(2230, c.word, "which is not standard and behaves differently between systems; use command -v instead.")
+	var fixes []Fix
+	span, ok := p.span(c.word)
+	if ok && c.word.Lit() == "which" && len(c.args) > 0 && !slices.ContainsFunc(c.args, func(w *syntax.Word) bool { return strings.HasPrefix(roughText(w), "-") }) {
+		fixes = append(fixes, reviewFix("Replace which with command -v", textedit.Edit{Start: span.Start, End: span.End, NewText: "command -v"}))
+	}
+	p.reportNode(2230, c.word, "which is not standard and behaves differently between systems; use command -v instead.", fixes...)
 }
 
 var xargsOptions = optionGrammar{short: "0oprtxa:d:R:S:J:L:l:n:P:s:e:E:i:I:", stopAtOperand: true}

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -95,16 +96,24 @@ func checkFindStartingPoint(p *pass, c command) {
 	if parseFlags(c.args, "").has(0, "help") {
 		return
 	}
+	insert := parser.Offset(c.word.End())
+	path := " ."
 	for _, arg := range c.args {
 		text, _ := parser.Text(arg, "_")
 		if !strings.HasPrefix(text, "-") {
 			return
 		}
 		if len(text) > 2 && strings.Trim(text, findOptionLetters) != "" {
+			insert, path = parser.Offset(arg.Pos()), ". "
 			break
 		}
+		insert = parser.Offset(arg.End())
 	}
-	p.reportNode(2185, c.word, "Give find an explicit starting path such as . ; some versions of find require one.")
+	var fixes []Fix
+	if !slices.ContainsFunc(c.args, func(w *syntax.Word) bool { return w.Lit() == "-D" }) {
+		fixes = append(fixes, safeFix("Search from .", textedit.Edit{Start: insert, End: insert, NewText: path}))
+	}
+	p.reportNode(2185, c.word, "Give find an explicit starting path such as . ; some versions of find require one.", fixes...)
 }
 
 func checkFindRedirection(p *pass, c command) {

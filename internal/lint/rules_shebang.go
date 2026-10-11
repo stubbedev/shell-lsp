@@ -6,6 +6,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/textedit"
 )
 
 const byteOrderMark = "\xef\xbb\xbf"
@@ -97,18 +98,22 @@ func (p *pass) checkShebangLine(start int, line string, first bool) bool {
 		switch after := rest[1+gap:]; {
 		case strings.HasPrefix(after, "!"):
 			if indent > 0 {
-				p.report(1114, parser.Span{Start: start, End: start + indent}, "Remove the whitespace before #!; the shebang must start at the beginning of the line.")
+				p.report(1114, parser.Span{Start: start, End: start + indent}, "Remove the whitespace before #!; the shebang must start at the beginning of the line.",
+					reviewFix("Remove the whitespace before #!", textedit.Edit{Start: start, End: start + indent}))
 			}
 			if gap > 0 {
-				p.report(1115, parser.Span{Start: start + indent + 1, End: start + indent + 1 + gap}, "Remove the whitespace between # and !; the shebang must start with #! exactly.")
+				p.report(1115, parser.Span{Start: start + indent + 1, End: start + indent + 1 + gap}, "Remove the whitespace between # and !; the shebang must start with #! exactly.",
+					reviewFix("Remove the whitespace between # and !", textedit.Edit{Start: start + indent + 1, End: start + indent + 1 + gap}))
 			}
 			return true
 		case first && indent == 0 && strings.HasPrefix(after, "/"):
-			p.report(1113, parser.Span{Start: start + 1, End: start + 1 + gap}, "This looks like a shebang missing its !; write #!"+strings.TrimSpace(after)+".")
+			p.report(1113, parser.Span{Start: start + 1, End: start + 1 + gap}, "This looks like a shebang missing its !; write #!"+strings.TrimSpace(after)+".",
+				reviewFix("Add the !", textedit.Edit{Start: start + 1, End: start + 1 + gap, NewText: "!"}))
 			return true
 		}
 	case indent == 0 && strings.HasPrefix(rest, "!#"):
-		p.report(1084, parser.Span{Start: start, End: start + 2}, "The shebang is written !# instead of #!; swap the two characters.")
+		p.report(1084, parser.Span{Start: start, End: start + 2}, "The shebang is written !# instead of #!; swap the two characters.",
+			reviewFix("Swap !# to #!", textedit.Edit{Start: start, End: start + 2, NewText: "#!"}))
 		return true
 	case indent == 0 && strings.HasPrefix(rest, "!") && strings.HasPrefix(strings.TrimLeft(rest[1:], " \t"), "/"):
 		p.report(1104, parser.Span{Start: start, End: start + 1}, "This looks like a shebang missing its #; start the line with #!.")

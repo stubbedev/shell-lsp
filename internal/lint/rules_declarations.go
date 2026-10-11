@@ -6,6 +6,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -58,9 +59,46 @@ func checkMaskedStatus(p *pass, c command) {
 	}
 	for _, a := range c.decl.Args {
 		if !a.Naked && a.Value != nil && substitutes(a.Value) {
-			p.reportNode(2155, a, "Declare and assign "+a.Name.Value+" separately; "+c.name+" returns its own status and masks the status of the command substitution.")
+			p.reportNode(2155, a, "Declare and assign "+a.Name.Value+" separately; "+c.name+" returns its own status and masks the status of the command substitution.", p.separateDeclarationFix(c, flags, a)...)
 		}
 	}
+}
+
+func (p *pass) separateDeclarationFix(c command, flags flagSet, a *syntax.Assign) []Fix {
+	assignments := 0
+	for _, arg := range c.decl.Args {
+		if !arg.Naked {
+			assignments++
+		}
+	}
+	stmt, ok := p.parent().(*syntax.Stmt)
+	if !ok || stmt.Cmd != c.decl || assignments != 1 || a.Append || a.Index != nil || a.Array != nil || stmt.Negated || stmt.Background || len(stmt.Redirs) > 0 {
+		return nil
+	}
+	if _, chained := p.ancestor(1).(*syntax.BinaryCmd); chained {
+		return nil
+	}
+	declSpan, ok := p.span(c.decl)
+	assignSpan, assignOK := p.span(a)
+	if !ok || !assignOK || !onlyBlanksBefore(p.text, declSpan.Start) {
+		return nil
+	}
+	indent := p.text[lineStart(p.text, declSpan.Start):declSpan.Start]
+	assignment := p.text[assignSpan.Start:assignSpan.End]
+	name := a.Name.Value
+	switch c.name {
+	case "export", "readonly":
+		if len(c.decl.Args) != 1 {
+			return nil
+		}
+		return []Fix{reviewFix("Assign "+name+" before "+c.name+" it", textedit.Edit{Start: declSpan.Start, End: declSpan.End, NewText: assignment + "\n" + indent + c.name + " " + name})}
+	case "local", "declare", "typeset":
+		if flags.has('r', "") || flags.has('n', "") {
+			return nil
+		}
+		return []Fix{reviewFix("Declare "+name+" and assign it separately", textedit.Edit{Start: assignSpan.Start, End: assignSpan.End, NewText: name + "\n" + indent + assignment})}
+	}
+	return nil
 }
 
 func substitutes(w *syntax.Word) bool {

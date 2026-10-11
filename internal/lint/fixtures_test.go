@@ -156,8 +156,8 @@ func fixtureDialect(script string) (dialect.Dialect, DialectSource) {
 
 func position(text string, offset int) string {
 	line := strings.Count(text[:offset], "\n") + 1
-	lineStart := strings.LastIndexByte(text[:offset], '\n') + 1
-	return fmt.Sprintf("%d:%d", line, utf8.RuneCountInString(text[lineStart:offset])+1)
+	start := lineStart(text, offset)
+	return fmt.Sprintf("%d:%d", line, utf8.RuneCountInString(text[start:offset])+1)
 }
 
 func ours(script string) []string {

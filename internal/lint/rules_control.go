@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
@@ -331,7 +332,12 @@ func checkEmptyRedirection(p *pass, n syntax.Node) {
 	if cs, ok := p.parent().(*syntax.CmdSubst); ok && len(cs.Stmts) == 1 {
 		return
 	}
-	p.report(2188, span, "This redirection has no command; use : > file or true > file to make the intent explicit.")
+	at := parser.Offset(stmt.Pos())
+	fix := safeFix("Redirect the output of :", textedit.Edit{Start: at, End: at, NewText: ": "})
+	if p.dialect == dialect.Zsh || stmt.Negated {
+		fix.Safety = Review
+	}
+	p.report(2188, span, "This redirection has no command; use : > file or true > file to make the intent explicit.", fix)
 }
 
 var stdinConsumers = map[string]string{"ssh": " -n", "ffmpeg": " -nostdin", "mplayer": " -noconsolecontrols", "HandBrakeCLI": " < /dev/null"}

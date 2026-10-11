@@ -7,6 +7,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -76,7 +77,7 @@ func checkComparisons(p *pass, n syntax.Node) {
 	if t.malformed() {
 		return
 	}
-	walkTest(t.expr, func(e syntax.TestExpr, _ *syntax.UnaryTest) { p.checkTestNode(double, e) })
+	walkTest(t.expr, func(e syntax.TestExpr, _ *syntax.UnaryTest) { p.checkTestNode(t, e) })
 }
 
 type ordering struct {
@@ -132,7 +133,8 @@ func redirectedOrdering(args []*syntax.Word, r *syntax.Redirect) (ordering, bool
 	return ordering{op: op, x: x, y: y}, x != nil && y != nil
 }
 
-func (p *pass) checkTestNode(double bool, e syntax.TestExpr) {
+func (p *pass) checkTestNode(t testCommand, e syntax.TestExpr) {
+	double := t.style == doubleBracket
 	switch e := e.(type) {
 	case *syntax.Word:
 		p.recordEmptinessTest(e)
@@ -151,7 +153,7 @@ func (p *pass) checkTestNode(double bool, e syntax.TestExpr) {
 	case *syntax.BinaryTest:
 		if e.Op == syntax.AndTest || e.Op == syntax.OrTest {
 			if !double {
-				p.checkLogicalTest(posSpan(e.OpPos, 2), e.Op)
+				p.checkLogicalTest(t, posSpan(e.OpPos, 2), e.Op)
 			}
 			return
 		}
@@ -163,12 +165,85 @@ func (p *pass) checkTestNode(double bool, e syntax.TestExpr) {
 	}
 }
 
-func (p *pass) checkLogicalTest(at parser.Span, op syntax.BinTestOperator) {
+func (p *pass) checkLogicalTest(t testCommand, at parser.Span, op syntax.BinTestOperator) {
 	if op == syntax.AndTest {
-		p.report(2166, at, "-a inside [ ] is ambiguous and obsolescent; write [ p ] && [ q ] instead.")
+		p.report(2166, at, "-a inside [ ] is ambiguous and obsolescent; write [ p ] && [ q ] instead.", p.splitTestFix(t)...)
 		return
 	}
-	p.report(2166, at, "-o inside [ ] is ambiguous and obsolescent; write [ p ] || [ q ] instead.")
+	p.report(2166, at, "-o inside [ ] is ambiguous and obsolescent; write [ p ] || [ q ] instead.", p.splitTestFix(t)...)
+}
+
+func (p *pass) splitTestFix(t testCommand) []Fix {
+	root, ok := t.expr.(*syntax.BinaryTest)
+	if !ok || t.malformed() || !p.standsAlone(t.node) {
+		return nil
+	}
+	operands, ok := connectiveOperands(root, root.Op)
+	if !ok {
+		return nil
+	}
+	span, ok := p.span(t.node)
+	if !ok {
+		return nil
+	}
+	joiner := " && "
+	if root.Op == syntax.OrTest {
+		joiner = " || "
+	}
+	tests := make([]string, len(operands))
+	safety := Safe
+	for i, operand := range operands {
+		s, ok := p.span(operand)
+		if !ok {
+			return nil
+		}
+		tests[i] = "[ " + p.text[s.Start:s.End] + " ]"
+		walkTest(operand, func(e syntax.TestExpr, _ *syntax.UnaryTest) {
+			if mayVanish(e) {
+				safety = Review
+			}
+		})
+		syntax.Walk(operand, func(n syntax.Node) bool {
+			if w, ok := n.(*syntax.Word); ok && mayVanish(w) {
+				safety = Review
+			}
+			return true
+		})
+	}
+	return []Fix{{Title: "Split into" + joiner + "joined tests", Safety: safety, Edits: []textedit.Edit{{Start: span.Start, End: span.End, NewText: strings.Join(tests, joiner)}}}}
+}
+
+func connectiveOperands(e syntax.TestExpr, op syntax.BinTestOperator) ([]syntax.TestExpr, bool) {
+	switch e := e.(type) {
+	case *syntax.ParenTest:
+		return nil, false
+	case *syntax.BinaryTest:
+		if e.Op != syntax.AndTest && e.Op != syntax.OrTest {
+			return []syntax.TestExpr{e}, true
+		}
+		if e.Op != op {
+			return nil, false
+		}
+		left, ok := connectiveOperands(e.X, op)
+		if !ok {
+			return nil, false
+		}
+		right, ok := connectiveOperands(e.Y, op)
+		if !ok {
+			return nil, false
+		}
+		return append(left, right...), true
+	}
+	return []syntax.TestExpr{e}, true
+}
+
+func (p *pass) standsAlone(cmd syntax.Command) bool {
+	stmt, ok := p.parent().(*syntax.Stmt)
+	if !ok || stmt.Cmd != cmd || stmt.Negated || stmt.Background || stmt.Coprocess || len(stmt.Redirs) > 0 {
+		return false
+	}
+	bin, ok := p.ancestor(1).(*syntax.BinaryCmd)
+	return !ok || (bin.X == stmt && (bin.Op == syntax.AndStmt || bin.Op == syntax.OrStmt))
 }
 
 var constantTestCodes = map[string]Code{"false": 2158, "0": 2159, "true": 2160, "1": 2161}
@@ -196,12 +271,31 @@ func (p *pass) checkNullaryTest(w *syntax.Word) {
 		return
 	}
 	if at, ok := p.equalsWithoutSpaces(w); ok {
-		p.report(2077, at, "A comparison needs spaces around its operator; as one word this only tests that the string is non-empty.")
+		p.report(2077, at, "A comparison needs spaces around its operator; as one word this only tests that the string is non-empty.", p.spaceOperatorFix(w, at)...)
 		return
 	}
 	if at, ok := p.firstLiteralText(w); ok {
 		p.report(2157, at, "This word always contains the literal text here, so the implicit non-empty test is always true; did you mean to compare it with something?")
 	}
+}
+
+func (p *pass) spaceOperatorFix(w *syntax.Word, at parser.Span) []Fix {
+	word, ok := p.span(w)
+	if !ok {
+		return nil
+	}
+	start, op := at.Start, "="
+	switch {
+	case start > word.Start && p.text[start-1] == '!':
+		start, op = start-1, "!="
+	case strings.HasPrefix(p.text[start:], "=="):
+		op = "=="
+	}
+	end := start + len(op)
+	if start <= word.Start || end >= word.End || p.text[start:end] != op || strings.ContainsAny(p.text[word.Start:word.End], `"'\\`) {
+		return nil
+	}
+	return []Fix{reviewFix("Put spaces around "+op, textedit.Edit{Start: start, End: end, NewText: " " + op + " "})}
 }
 
 func (p *pass) equalsWithoutSpaces(w *syntax.Word) (parser.Span, bool) {
@@ -334,7 +428,7 @@ func unquotedParts(w *syntax.Word) iter.Seq[syntax.WordPart] {
 func (p *pass) checkUnaryTest(double bool, op testOp, w *syntax.Word) {
 	if !double && op.name == "-n" && willSplit(w) && !hasArrayExpansion(w) {
 		if span, ok := p.span(w); ok {
-			p.report(2070, span, "-n with an unquoted operand inside [ ] is true even when the value is empty; quote the operand or use [[ ]].")
+			p.report(2070, span, "-n with an unquoted operand inside [ ] is true even when the value is empty; quote the operand or use [[ ]].", p.soleExpansionQuoteFix(w, span)...)
 		}
 	}
 	if op.name != "-n" && op.name != "-z" || qualifiedGlob(w, !double) {

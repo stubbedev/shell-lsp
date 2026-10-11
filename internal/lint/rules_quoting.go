@@ -36,6 +36,14 @@ func (p *pass) quoteFix(span parser.Span, safety Safety) Fix {
 	}}
 }
 
+func (p *pass) soleExpansionQuoteFix(w *syntax.Word, span parser.Span) []Fix {
+	switch solePart(w).(type) {
+	case *syntax.ParamExp, *syntax.CmdSubst:
+		return []Fix{p.quoteFix(span, Review)}
+	}
+	return nil
+}
+
 func checkUnquotedExpansion(p *pass, n syntax.Node) {
 	pe, ok := n.(*syntax.ParamExp)
 	if !ok || pe.Param == nil || !p.dialect.Features().SplitsUnquoted {
@@ -64,7 +72,8 @@ func checkUnquotedExpansion(p *pass, n syntax.Node) {
 		return
 	case expandsJoined:
 		if p.soleWordPart(pe) {
-			p.report(2048, span, "Unquoted "+text+" joins the elements and splits them again; use \"$@\" or \"${array[@]}\" to keep them intact.")
+			p.report(2048, span, "Unquoted "+text+" joins the elements and splits them again; use \"$@\" or \"${array[@]}\" to keep them intact.",
+				reviewFix("Expand each element: \""+strings.Replace(text, "*", "@", 1)+"\"", textedit.Edit{Start: span.Start, End: span.End, NewText: `"` + strings.Replace(text, "*", "@", 1) + `"`}))
 		}
 	}
 	if context != contextSplit || spacelessSpecials[pe.Param.Value] || p.namesAssignment(pe) {
@@ -140,8 +149,34 @@ func checkUnquotedSubstitution(p *pass, n syntax.Node) {
 		if p.dialect == dialect.Zsh {
 			advice = `split it explicitly instead, such as into lines with ${(f)"$(...)"}`
 		}
-		p.report(2207, span, "Command output is "+p.substitutionFate("split on whitespace")+" when building this array; "+advice+".")
+		p.report(2207, span, "Command output is "+p.substitutionFate("split on whitespace")+" when building this array; "+advice+".", p.lineArrayFix(cs, span)...)
 	}
+}
+
+func (p *pass) lineArrayFix(cs *syntax.CmdSubst, span parser.Span) []Fix {
+	word, ok := p.parent().(*syntax.Word)
+	if !ok || len(word.Parts) != 1 || cs.Backquotes || cs.TempFile || cs.ReplyVar {
+		return nil
+	}
+	elem, ok := p.ancestor(1).(*syntax.ArrayElem)
+	array, arrayOK := p.ancestor(2).(*syntax.ArrayExpr)
+	assign, assignOK := p.ancestor(3).(*syntax.Assign)
+	call, callOK := p.ancestor(4).(*syntax.CallExpr)
+	if !ok || !arrayOK || !assignOK || !callOK || elem.Index != nil || len(array.Elems) != 1 || assign.Append || assign.Index != nil || len(call.Args) > 0 || len(call.Assigns) != 1 {
+		return nil
+	}
+	inner := p.text[parser.Offset(cs.Left)+len("$(") : parser.Offset(cs.Right)]
+	switch p.dialect {
+	case dialect.Bash:
+		callSpan, ok := p.span(call)
+		if !ok {
+			return nil
+		}
+		return []Fix{reviewFix("Read the lines with mapfile", textedit.Edit{Start: callSpan.Start, End: callSpan.End, NewText: "mapfile -t " + assign.Name.Value + " < <(" + inner + ")"})}
+	case dialect.Zsh:
+		return []Fix{reviewFix("Split the output into lines", textedit.Edit{Start: span.Start, End: span.End, NewText: `${(f)"` + p.text[span.Start:span.End] + `"}`})}
+	}
+	return nil
 }
 
 func (p *pass) substitutionFate(split string) string {

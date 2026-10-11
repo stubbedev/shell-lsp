@@ -8,6 +8,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -28,6 +29,24 @@ var outputFamily = family{
 	},
 }
 
+func (p *pass) unwrapEchoFix(c command) []Fix {
+	cs, csOK := solePart(c.args[0]).(*syntax.CmdSubst)
+	if !csOK {
+		return nil
+	}
+	call, ok := cs.Stmts[0].Cmd.(*syntax.CallExpr)
+	start, startOK := p.span(c.word)
+	end, endOK := p.span(c.args[0])
+	if !ok || !startOK || !endOK || cs.Backquotes || c.word.Lit() != "echo" || len(cs.Stmts[0].Redirs) > 0 || cs.Stmts[0].Negated || cs.Stmts[0].Background {
+		return nil
+	}
+	inner, ok := p.span(call)
+	if !ok {
+		return nil
+	}
+	return []Fix{reviewFix("Run the command directly", textedit.Edit{Start: start.Start, End: end.End, NewText: p.text[inner.Start:inner.End]})}
+}
+
 func checkUselessEcho(p *pass, c command) {
 	if len(c.args) != 1 {
 		return
@@ -35,7 +54,7 @@ func checkUselessEcho(p *pass, c command) {
 	if !soleCommandOutput(c.args[0]) {
 		return
 	}
-	p.reportNode(2005, c.args[0], "This echo only repeats the output of the command substitution; run the command directly instead.")
+	p.reportNode(2005, c.args[0], "This echo only repeats the output of the command substitution; run the command directly instead.", p.unwrapEchoFix(c)...)
 }
 
 var echoEscapeShells = dialect.SetOf(dialect.Bash, dialect.Posix, dialect.Ksh)
@@ -77,8 +96,8 @@ func visualWidth(text string, from, to int) int {
 	if !strings.ContainsRune(text[from:to], '\t') {
 		return to - from
 	}
-	lineStart := strings.LastIndexByte(text[:from], '\n') + 1
-	return visualColumn(text[lineStart:to]) - visualColumn(text[lineStart:from])
+	start := lineStart(text, from)
+	return visualColumn(text[start:to]) - visualColumn(text[start:from])
 }
 
 const tabStop = 8
@@ -132,7 +151,11 @@ func checkPrintfArguments(p *pass, c command) {
 	text, literal := parser.Text(call.format, "_")
 	if !literal {
 		if !strings.Contains(text, "%") {
-			p.reportNode(2059, call.format, "This printf format contains an expansion; pass the data as an argument to a fixed format such as '%s'.")
+			var fixes []Fix
+			if span, ok := p.span(call.format); ok && len(call.data) == 0 {
+				fixes = append(fixes, reviewFix("Print it with the format '%s'", textedit.Edit{Start: span.Start, End: span.Start, NewText: "'%s' "}))
+			}
+			p.reportNode(2059, call.format, "This printf format contains an expansion; pass the data as an argument to a fixed format such as '%s'.", fixes...)
 		}
 		return
 	}

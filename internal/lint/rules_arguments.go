@@ -195,7 +195,8 @@ func checkReadWithoutRaw(p *pass, n syntax.Node) {
 		return
 	}
 	if span, ok := p.span(word); ok {
-		p.report(2162, span, "read without -r treats backslashes as escapes and drops them; use read -r unless that is intended.")
+		p.report(2162, span, "read without -r treats backslashes as escapes and drops them; use read -r unless that is intended.",
+			reviewFix("Add -r", textedit.Edit{Start: span.End, End: span.End, NewText: " -r"}))
 	}
 }
 

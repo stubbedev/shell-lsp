@@ -114,6 +114,14 @@ func (p *pass) verbatimRegions() []parser.Span {
 	return out
 }
 
+func lineStart(text string, offset int) int {
+	return strings.LastIndexByte(text[:offset], '\n') + 1
+}
+
+func onlyBlanksBefore(text string, offset int) bool {
+	return strings.TrimLeft(text[lineStart(text, offset):offset], " \t") == ""
+}
+
 func lineEnd(text string, from int) int {
 	from = min(from, len(text))
 	if i := strings.IndexByte(text[from:], '\n'); i >= 0 {
@@ -298,8 +306,7 @@ func hasLiteralBrace(w *syntax.Word) bool {
 
 func (p *pass) onBatsTestLine(w *syntax.Word) bool {
 	start := parser.Offset(w.Pos())
-	lineStart := strings.LastIndexByte(p.text[:start], '\n') + 1
-	return strings.HasPrefix(strings.TrimLeft(p.text[lineStart:start], " \t"), batsTest+" ")
+	return strings.HasPrefix(strings.TrimLeft(p.text[lineStart(p.text, start):start], " \t"), batsTest+" ")
 }
 
 func (p *pass) reportLiteralBrace(at int) {

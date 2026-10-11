@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -72,7 +73,7 @@ func checkPipeline(p *pass, n syntax.Node) {
 	}
 	stages := stagesOf(stmts)
 	p.checkStringLength(top, stages)
-	p.checkUselessCat(stages[0])
+	p.checkUselessCat(stages)
 	p.checkAssignmentStage(stages[0])
 	listingReported := false
 	for i := range len(stages) - 1 {
@@ -179,7 +180,8 @@ func (p *pass) checkStringLength(top *syntax.Stmt, stages []stage) {
 	}
 }
 
-func (p *pass) checkUselessCat(first stage) {
+func (p *pass) checkUselessCat(stages []stage) {
+	first := stages[0]
 	if first.call == nil || len(first.call.Args) != 2 || path.Base(first.name) != "cat" {
 		return
 	}
@@ -187,7 +189,31 @@ func (p *pass) checkUselessCat(first stage) {
 	if mayExpandToSeveralWords(file) || strings.HasPrefix(roughText(file), "-") {
 		return
 	}
-	p.reportNode(2002, file, "Useless cat: pass the file to the next command directly, or redirect it with < file.")
+	p.reportNode(2002, file, "Useless cat: pass the file to the next command directly, or redirect it with < file.", p.redirectInsteadOfCat(first, stages[1], file)...)
+}
+
+func (p *pass) redirectInsteadOfCat(cat, next stage, file *syntax.Word) []Fix {
+	catSpan, ok := p.span(cat.stmt)
+	fileSpan, fileOK := p.span(file)
+	nextStart := parser.Offset(next.stmt.Pos())
+	if !ok || !fileOK || len(cat.stmt.Redirs) > 0 || len(cat.call.Assigns) > 0 || strings.TrimSpace(p.text[catSpan.End:nextStart]) != "|" {
+		return nil
+	}
+	if next.stmt.Negated || next.stmt.Background || slices.ContainsFunc(next.stmt.Redirs, readsInput) {
+		return nil
+	}
+	end := commandEnd(next.stmt)
+	return []Fix{reviewFix("Redirect the file instead of using cat",
+		textedit.Edit{Start: catSpan.Start, End: nextStart},
+		textedit.Edit{Start: end, End: end, NewText: " < " + p.text[fileSpan.Start:fileSpan.End]})}
+}
+
+func readsInput(r *syntax.Redirect) bool {
+	switch r.Op {
+	case syntax.RdrIn, syntax.RdrInOut, syntax.DplIn, syntax.Hdoc, syntax.DashHdoc, syntax.WordHdoc:
+		return r.N == nil || r.N.Value == "0"
+	}
+	return false
 }
 
 func (p *pass) checkAssignmentStage(first stage) {

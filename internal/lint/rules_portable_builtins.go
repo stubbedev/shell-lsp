@@ -119,7 +119,7 @@ func checkPortableCall(p *pass, call *syntax.CallExpr) {
 	name, args := path.Base(literal), call.Args[1:]
 	switch name {
 	case "echo":
-		checkEchoFlags(p, args)
+		checkEchoFlags(p, call.Args[0], args)
 	case "set":
 		checkSetOptions(p, args)
 	case "trap":
@@ -188,7 +188,7 @@ func (p *pass) followsSource(call *syntax.CallExpr, word *syntax.Word) bool {
 	})
 }
 
-func checkEchoFlags(p *pass, args []*syntax.Word) {
+func checkEchoFlags(p *pass, word *syntax.Word, args []*syntax.Word) {
 	if len(args) == 0 {
 		return
 	}
@@ -198,7 +198,13 @@ func checkEchoFlags(p *pass, args []*syntax.Word) {
 	}
 	switch p.dialect {
 	case dialect.Posix:
-		p.nonPortableNode(portabilityIssue{code: 3037, shells: posixOnly, feature: "echo " + flag, alternative: "printf"}, args[0])
+		var fixes []Fix
+		start, ok := p.span(word)
+		end, endOK := p.span(args[0])
+		if ok && endOK && flag == "-n" && len(args) == 2 && word.Lit() == "echo" {
+			fixes = append(fixes, reviewFix("Print with printf '%s'", textedit.Edit{Start: start.Start, End: end.End, NewText: "printf '%s'"}))
+		}
+		p.nonPortableNode(portabilityIssue{code: 3037, shells: posixOnly, feature: "echo " + flag, alternative: "printf"}, args[0], fixes...)
 	case dialect.Dash:
 		if flag != "-n" {
 			p.nonPortableNode(portabilityIssue{code: 3036, shells: ashShells, feature: "echo " + flag + " (only -n is)", alternative: "printf"}, args[0])

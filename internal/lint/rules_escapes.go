@@ -6,6 +6,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -58,7 +59,8 @@ func checkUnquotedEscapes(p *pass, n syntax.Node) {
 			p.report(1012, escape, message)
 		case strings.ContainsRune(meaningfulEscapes, r):
 		default:
-			p.report(1001, escape, "This backslash does nothing: outside quotes \\"+string(r)+" is just "+string(r)+".")
+			p.report(1001, escape, "This backslash does nothing: outside quotes \\"+string(r)+" is just "+string(r)+".",
+				safeFix("Remove the backslash", textedit.Edit{Start: escape.Start, End: escape.Start + 1}))
 		}
 	}
 }

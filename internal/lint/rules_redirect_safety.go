@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -32,9 +33,15 @@ func checkRedirectOrder(p *pass, n syntax.Node) {
 	if (file.Op != syntax.RdrOut && file.Op != syntax.AppOut) || p.outputCaptured(stmt) {
 		return
 	}
-	if span, ok := p.span(dup); ok {
-		p.report(2069, span, "Redirections apply left to right, so 2>&1 here still points stderr at the terminal; put it after the file redirection: > file 2>&1.")
+	span, ok := p.span(dup)
+	target, targetOK := p.span(file)
+	if !ok || !targetOK {
+		return
 	}
+	p.report(2069, span, "Redirections apply left to right, so 2>&1 here still points stderr at the terminal; put it after the file redirection: > file 2>&1.",
+		reviewFix("Move 2>&1 after the file redirection",
+			textedit.Edit{Start: span.Start, End: span.End, NewText: p.text[target.Start:target.End]},
+			textedit.Edit{Start: target.Start, End: target.End, NewText: p.text[span.Start:span.End]}))
 }
 
 func (p *pass) outputCaptured(stmt *syntax.Stmt) bool {

@@ -46,7 +46,9 @@ func checkLoopGlob(p *pass, n syntax.Node) {
 				split, globbed = true, p.substitutionGlobbed()
 			}
 			if split || globbed {
-				p.reportNode(2231, part, "Quote this expansion so only the glob around it is expanded; its own value would otherwise be "+expansionFate(split, globbed)+" too.")
+				if span, ok := p.span(part); ok {
+					p.report(2231, span, "Quote this expansion so only the glob around it is expanded; its own value would otherwise be "+expansionFate(split, globbed)+" too.", p.quoteFix(span, Review))
+				}
 			}
 		}
 	}

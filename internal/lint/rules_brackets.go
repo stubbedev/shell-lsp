@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -208,7 +209,8 @@ func (t *bracketTest) operand() bool {
 	text := t.text(w)
 	switch {
 	case strings.HasSuffix(text, "]") && !strings.HasSuffix(text, `\]`) && !strings.Contains(text, "["):
-		t.p.report(1020, parser.Span{Start: w.end, End: w.end}, "Put a space before the closing ]; glued to "+text[:len(text)-1]+" it is part of that word and does not end the test.")
+		t.p.report(1020, parser.Span{Start: w.end, End: w.end}, "Put a space before the closing ]; glued to "+text[:len(text)-1]+" it is part of that word and does not end the test.",
+			reviewFix("Add a space before ]", textedit.Edit{Start: w.end - 1, End: w.end - 1, NewText: " "}))
 		return false
 	case strings.HasSuffix(text, `\)`):
 		t.p.report(1021, parser.Span{Start: w.end, End: w.end}, `Put a space before the escaped \); glued to the word it is part of that word and does not close the group.`)

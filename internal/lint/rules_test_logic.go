@@ -326,8 +326,8 @@ func checkRejectedUnknownOperators(p *pass) {
 		p.report(2057, e.Span, token+" is not a comparison operator that [[ ]] understands; check the spelling (see help test).")
 		return
 	}
-	lineStart := strings.LastIndexByte(p.text[:e.Span.Start], '\n') + 1
-	fields := strings.Fields(p.text[lineStart:e.Span.Start])
+	start := lineStart(p.text, e.Span.Start)
+	fields := strings.Fields(p.text[start:e.Span.Start])
 	if len(fields) == 0 {
 		return
 	}
@@ -335,6 +335,6 @@ func checkRejectedUnknownOperators(p *pass) {
 	if !isOperatorShaped(previous) || isUnaryTestOperator(previous) {
 		return
 	}
-	start := strings.LastIndex(p.text[lineStart:e.Span.Start], previous) + lineStart
-	p.report(2058, parser.Span{Start: start, End: start + len(previous)}, previous+" is not a test operator, so [[ ]] cannot evaluate this condition; check the spelling (see help test).")
+	at := strings.LastIndex(p.text[start:e.Span.Start], previous) + start
+	p.report(2058, parser.Span{Start: at, End: at + len(previous)}, previous+" is not a test operator, so [[ ]] cannot evaluate this condition; check the spelling (see help test).")
 }

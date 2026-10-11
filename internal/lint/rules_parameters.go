@@ -47,7 +47,7 @@ func checkUnparsedBracedExpansions(p *pass) {
 			continue
 		}
 		lastLine = line
-		start := strings.LastIndexByte(p.text[:min(e.Span.Start, len(p.text))], '\n') + 1
+		start := lineStart(p.text, min(e.Span.Start, len(p.text)))
 		end := len(p.text)
 		if i := strings.IndexByte(p.text[start:], '\n'); i >= 0 {
 			end = start + i

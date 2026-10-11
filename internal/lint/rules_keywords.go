@@ -5,6 +5,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -61,8 +62,34 @@ func checkTimeFlag(p *pass, tc *syntax.TimeClause, keyword parser.Span) {
 }
 
 func checkLet(p *pass, n syntax.Node) {
-	if _, ok := n.(*syntax.LetClause); !ok || !letShells.Has(p.dialect) {
+	let, ok := n.(*syntax.LetClause)
+	if !ok || !letShells.Has(p.dialect) {
 		return
 	}
-	p.reportNode(2219, n, "Use an arithmetic command such as (( a = 1 )) instead of let; it needs no quoting.")
+	p.reportNode(2219, n, "Use an arithmetic command such as (( a = 1 )) instead of let; it needs no quoting.", p.arithmeticCommandFix(let)...)
+}
+
+func unquoted(text string) string {
+	for _, quote := range []string{`"`, "'"} {
+		if len(text) >= 2 && strings.HasPrefix(text, quote) && strings.HasSuffix(text, quote) && !strings.Contains(text[1:len(text)-1], quote) {
+			return text[1 : len(text)-1]
+		}
+	}
+	return text
+}
+
+func (p *pass) arithmeticCommandFix(let *syntax.LetClause) []Fix {
+	span, ok := p.span(let)
+	if !ok || strings.ContainsAny(p.text[span.Start:span.End], "$`\\") {
+		return nil
+	}
+	exprs := make([]string, len(let.Exprs))
+	for i, e := range let.Exprs {
+		s, ok := p.span(e)
+		if !ok {
+			return nil
+		}
+		exprs[i] = unquoted(p.text[s.Start:s.End])
+	}
+	return []Fix{safeFix("Rewrite as (( ))", textedit.Edit{Start: span.Start, End: span.End, NewText: "(( " + strings.Join(exprs, ", ") + " ))"})}
 }

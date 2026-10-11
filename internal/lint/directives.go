@@ -60,9 +60,9 @@ func lexicalPlacement(tree *parser.Tree, comment parser.Span) placement {
 
 func logicalLineStart(tree *parser.Tree, offset int) int {
 	text := tree.Text()
-	start := strings.LastIndexByte(text[:offset], '\n') + 1
+	start := lineStart(text, offset)
 	for start > 1 && text[start-2] == '\\' && !escaped(text, start-2) && !insideComment(tree, start-2) {
-		start = strings.LastIndexByte(text[:start-1], '\n') + 1
+		start = lineStart(text, start-1)
 	}
 	return start
 }
