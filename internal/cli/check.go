@@ -328,6 +328,7 @@ func (c *checker) lint(t target) linted {
 	env := c.navigationEnv(s.roots)
 	report := filelint.Check(file, env, filelint.Options{
 		Optional:           s.optional,
+		Profile:            c.opts.profile,
 		DialectSource:      s.source,
 		NoExtendedAnalysis: !s.extended,
 	})

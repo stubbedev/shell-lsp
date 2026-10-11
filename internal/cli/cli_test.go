@@ -99,6 +99,7 @@ func TestCheckExitStatuses(t *testing.T) {
 		{[]string{"check", "-f", "bogus", "clean.sh"}, checkStatusOptions},
 		{[]string{"check", "-s", "fish", "clean.sh"}, checkStatusOptions},
 		{[]string{"check", "-S", "loud", "clean.sh"}, checkStatusOptions},
+		{[]string{"check", "--profile", "loud", "clean.sh"}, checkStatusOptions},
 		{[]string{"check", "rc/x.sh"}, checkStatusOptions},
 		{[]string{"check", "--rcfile", "missing-rc", "clean.sh"}, checkStatusOptions},
 		{[]string{"check", "-f", "quiet", "bad.sh"}, checkStatusFindings},
@@ -307,5 +308,31 @@ func TestGNUOptionParsing(t *testing.T) {
 		if _, err := parseCheckArgs(bad); checkStatusOf(err) != checkStatusSyntax {
 			t.Errorf("%v = %v, want a syntax error", bad, err)
 		}
+	}
+}
+
+func TestCheckProfile(t *testing.T) {
+	t.Parallel()
+
+	script := "#!/bin/bash\nx=`date`\necho $x\n"
+	codes := func(profile string) []string {
+		args := []string{"check", "-f", "gcc"}
+		if profile != "" {
+			args = append(args, "--profile="+profile)
+		}
+		var out []string
+		for _, finding := range findings(t, run(t, t.TempDir(), script, append(args, "-")...).stdout) {
+			out = append(out, finding[strings.LastIndexByte(finding, ' ')+1:])
+		}
+		return out
+	}
+	if got := codes(""); !slices.Equal(got, []string{"SC2006", "SC2086"}) {
+		t.Errorf("default profile = %v, want the style note and the quoting finding", got)
+	}
+	if got := codes("minimal"); !slices.Equal(got, []string{"SC2086"}) {
+		t.Errorf("minimal profile = %v, want only the quoting finding", got)
+	}
+	if got := codes("strict"); !slices.Contains(got, "SC2250") {
+		t.Errorf("strict profile = %v, want the optional SC2250 too", got)
 	}
 }

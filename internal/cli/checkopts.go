@@ -34,6 +34,7 @@ and exit codes. Directories are searched for shell scripts.
                       --norc                     Don't look for .shellcheckrc files
                       --rcfile=RCFILE            Prefer the specified configuration file over searching for one
   -o check1,check2..  --enable=check1,check2..   List of optional checks to enable (or 'all')
+                      --profile=PROFILE          Lint profile (minimal, recommended, strict; default recommended)
   -P SOURCEPATHS      --source-path=SOURCEPATHS  Specify path when looking for sourced files ("SCRIPTDIR" for script's dir)
   -s SHELLNAME        --shell=SHELLNAME          Specify dialect (sh, bash, dash, ksh, busybox, zsh)
   -S SEVERITY         --severity=SEVERITY        Minimum severity of errors to consider (error, warning, info, style)
@@ -117,6 +118,7 @@ type checkOptions struct {
 	exclude      codeSet
 	include      *codeSet
 	enable       []string
+	profile      lint.Profile
 	extended     *bool
 	sourcePaths  []string
 	checkSourced bool
@@ -195,6 +197,14 @@ var checkOptionTable = []option[checkOptions]{
 	}},
 	{'o', "enable", requiredArg, func(o *checkOptions, v string) error {
 		o.enable = append(o.enable, splitList(v)...)
+		return nil
+	}},
+	{0, "profile", requiredArg, func(o *checkOptions, v string) error {
+		profile, ok := lint.ProfileNamed(v)
+		if !ok {
+			return badValue("unknown profile %q; supported profiles are %s", v, strings.Join(lint.ProfileNames(), ", "))
+		}
+		o.profile = profile
 		return nil
 	}},
 	{'P', "source-path", requiredArg, func(o *checkOptions, v string) error {

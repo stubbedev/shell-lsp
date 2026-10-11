@@ -35,6 +35,7 @@ position, so it is the same on every run.
 | `-e`, `--exclude=CODES` | Drop these codes, such as `SC2034,2086` or `SL1001`; repeatable |
 | `-i`, `--include=CODES` | Report only these codes; repeatable |
 | `-o`, `--enable=CHECKS` | Enable optional checks by name, or `all`; `--list-optional` lists them with the checks each turns on |
+| `--profile=PROFILE` | `recommended` (default), `minimal` or `strict`, as described under [Profiles](../README.md#profiles); `--enable`, `--exclude` and directives apply on top |
 | `--extended-analysis=BOOL` | Turn the data-flow checks off with `false` |
 | `-P`, `--source-path=DIRS` | Also look for sourced files in these directories (`SCRIPTDIR` is the script's own) |
 | `-a`, `--check-sourced` | Also report the findings in the files the scripts source |
@@ -85,6 +86,10 @@ the rc file and, like `--source-path`, separated by `:` (`;` on Windows, as in
 status 4 and names the file and line; ShellCheck would instead report
 SC1134 in every script.
 
+A `.shellcheckrc` has no profile setting, so the same file keeps working with
+ShellCheck; choose a profile with `--profile` or the editor's
+`lint.profile` setting instead.
+
 ### Output formats
 
 `tty`, `gcc`, `checkstyle`, `json`, `json1` and `diff` follow ShellCheck's
@@ -119,6 +124,7 @@ parse failure, with the parser's message.
 - Sourced files are always followed (`-x` is implied), from the script's
   directory, the working directory and the `-P` directories.
 - Directories on the command line are searched instead of rejected.
+- `--profile` has no ShellCheck counterpart.
 - A broken `.shellcheckrc`, an unreadable `--rcfile` and an unknown optional
   check name are reported instead of ignored; unknown optional names only
   warn, so an rc file written for ShellCheck keeps working.
