@@ -148,6 +148,17 @@ func TestExecutable(t *testing.T) {
 	}
 }
 
+func TestMayExecute(t *testing.T) {
+	t.Parallel()
+
+	if POSIX.MayExecute(0o644) || !POSIX.MayExecute(0o700) || POSIX.MayExecute(fs.ModeDir|0o755) {
+		t.Error("POSIX.MayExecute does not follow the execute bits of regular files")
+	}
+	if !Windows.MayExecute(0o644) || Windows.MayExecute(fs.ModeDir|0o755) {
+		t.Error("Windows.MayExecute does not accept every regular file")
+	}
+}
+
 func TestPathExt(t *testing.T) {
 	t.Parallel()
 

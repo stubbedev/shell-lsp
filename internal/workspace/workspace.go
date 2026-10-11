@@ -395,7 +395,7 @@ func isShellFile(path string, entry fs.DirEntry) bool {
 		return false
 	}
 	info, err := entry.Info()
-	if err != nil || info.Mode().Perm()&0o111 == 0 {
+	if err != nil || !platform.Native.MayExecute(info.Mode()) {
 		return false
 	}
 	return hasShellShebang(path)

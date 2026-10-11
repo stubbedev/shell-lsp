@@ -92,14 +92,15 @@ func (f Flavour) Within(p, root string) bool {
 	return ok && (rest == "" || rest[0] == sep || root[len(root)-1] == sep)
 }
 
+func (f Flavour) MayExecute(mode fs.FileMode) bool {
+	return mode.IsRegular() && (f == Windows || mode.Perm()&0o111 != 0)
+}
+
 func (f Flavour) Executable(name string, mode fs.FileMode, pathExt []string) (string, bool) {
-	if !mode.IsRegular() {
+	if !f.MayExecute(mode) {
 		return "", false
 	}
 	if f == POSIX {
-		if mode.Perm()&0o111 == 0 {
-			return "", false
-		}
 		return name, true
 	}
 	ext := path.Ext(name)
