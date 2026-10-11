@@ -11,12 +11,12 @@ import (
 
 const libURI = "file:///w/lib.sh"
 
-func moveDocument(t *testing.T, src, lib string) (string, parser.Span, Document) {
+func moveDocument(t *testing.T, src, lib string, libDialect dialect.Dialect) (string, parser.Span, Document) {
 	t.Helper()
 
 	text, sel := selection(t, src)
 	tree := parser.Parse(text, dialect.Bash)
-	libTree := parser.Parse(lib, dialect.Bash)
+	libTree := parser.Parse(lib, libDialect)
 	sources := func() []Source {
 		var out []Source
 		for _, c := range tree.Commands {
@@ -34,6 +34,7 @@ func TestMoveFunction(t *testing.T) {
 
 	tests := []struct {
 		src, lib, want, wantLib, title string
+		libDialect                     dialect.Dialect
 	}{
 		{
 			src:     "#!/bin/bash\n. ./lib.sh\n\n# Greets.\n«greet»() {\n\techo hi\n}\n\ngreet\n",
@@ -63,9 +64,41 @@ func TestMoveFunction(t *testing.T) {
 			wantLib: "g() { echo hi; }\n",
 			title:   "Move g to lib.sh",
 		},
+		{
+			src:        "#!/bin/bash\n. ./lib.sh\n# Section notes.\n\n# Greets.\n«greet»() {\n\tprintf '%s\\n' \"hi $1\"\n}\n",
+			lib:        "helper() { :; }\n",
+			want:       "#!/bin/bash\n. ./lib.sh\n# Section notes.\n\n",
+			wantLib:    "helper() { :; }\n\n# Greets.\ngreet() {\n\tprintf '%s\\n' \"hi $1\"\n}\n",
+			title:      "Move greet to lib.sh",
+			libDialect: dialect.Posix,
+		},
+		{
+			src:        "source lib.sh\n# Counts.\n«count»() {\n\tlocal n=$#\n\techo \"$n\"\n}\n",
+			lib:        "",
+			want:       "source lib.sh\n",
+			wantLib:    "# Counts.\ncount() {\n\tlocal n=$#\n\techo \"$n\"\n}\n",
+			title:      "Move count to lib.sh",
+			libDialect: dialect.Dash,
+		},
+		{
+			src:        "source lib.sh\n# shellcheck disable=SC3043\n«count»() {\n\tlocal n=$#\n}\n",
+			lib:        "",
+			want:       "source lib.sh\n",
+			wantLib:    "# shellcheck disable=SC3043\ncount() {\n\tlocal n=$#\n}\n",
+			title:      "Move count to lib.sh",
+			libDialect: dialect.Posix,
+		},
+		{
+			src:        "source lib.sh\n«g»() {\n\t[[ -n $1 ]] && echo \"${1,,}\"\n}\n",
+			lib:        "",
+			want:       "source lib.sh\n",
+			wantLib:    "g() {\n\t[[ -n $1 ]] && echo \"${1,,}\"\n}\n",
+			title:      "Move g to lib.sh",
+			libDialect: dialect.Bash,
+		},
 	}
 	for _, tc := range tests {
-		text, sel, doc := moveDocument(t, tc.src, tc.lib)
+		text, sel, doc := moveDocument(t, tc.src, tc.lib, tc.libDialect)
 		in := Input{Document: doc, Selection: sel}
 		i := slices.IndexFunc(Actions(in), func(a Action) bool { return a.Kind == RefactorMove })
 		if i < 0 {
@@ -87,26 +120,34 @@ func TestMoveFunction(t *testing.T) {
 			t.Errorf("move %q made lib %q, want %q", tc.src, got, tc.wantLib)
 		}
 	}
-	for _, tc := range []struct{ src, lib string }{
-		{"«greet»() { :; }\nsource lib.sh\n", ""},
-		{"if true; then source lib.sh; fi\n«greet»() { :; }\n", ""},
-		{"source lib.sh &\n«greet»() { :; }\n", ""},
-		{"source lib.sh\n«greet»() { :; }\n", "greet() { :; }\n"},
-		{"source lib.sh\nf() {\n\t«g»() { :; }\n}\n", ""},
-		{"source lib.sh\n«g»() { :; }\ng() { echo; }\n", ""},
-		{"source lib.sh\n«g»() { :; }; g\n", ""},
-		{"source lib.sh\ng() {\n\t«echo» hi\n}\n", ""},
-		{"«g»() { :; }\n", ""},
-		{"f() { source lib.sh; }\n«g»() { :; }\n", ""},
+	for _, tc := range []struct {
+		src, lib   string
+		libDialect dialect.Dialect
+	}{
+		{"source lib.sh\n«greet»() {\n\tlocal x=1\n\techo \"$x\"\n}\n", "", dialect.Posix},
+		{"source lib.sh\n«greet»() {\n\t[[ -n $1 ]] && echo hi\n}\n", "", dialect.Dash},
+		{"source lib.sh\n«greet»() {\n\techo {a,b}\n}\n", "", dialect.Busybox},
+		{"source lib.sh\n«greet»() {\n\tmapfile -t lines <f\n}\n", "", dialect.Posix},
+		{"source lib.sh\n«greet»() {\n\tcoproc cat\n}\n", "", dialect.Posix},
+		{"«greet»() { :; }\nsource lib.sh\n", "", dialect.Bash},
+		{"if true; then source lib.sh; fi\n«greet»() { :; }\n", "", dialect.Bash},
+		{"source lib.sh &\n«greet»() { :; }\n", "", dialect.Bash},
+		{"source lib.sh\n«greet»() { :; }\n", "greet() { :; }\n", dialect.Bash},
+		{"source lib.sh\nf() {\n\t«g»() { :; }\n}\n", "", dialect.Bash},
+		{"source lib.sh\n«g»() { :; }\ng() { echo; }\n", "", dialect.Bash},
+		{"source lib.sh\n«g»() { :; }; g\n", "", dialect.Bash},
+		{"source lib.sh\ng() {\n\t«echo» hi\n}\n", "", dialect.Bash},
+		{"«g»() { :; }\n", "", dialect.Bash},
+		{"f() { source lib.sh; }\n«g»() { :; }\n", "", dialect.Bash},
 	} {
-		_, sel, doc := moveDocument(t, tc.src, tc.lib)
+		_, sel, doc := moveDocument(t, tc.src, tc.lib, tc.libDialect)
 		for _, a := range Actions(Input{Document: doc, Selection: sel}) {
 			if a.Kind == RefactorMove {
 				t.Errorf("move %q offered: %+v", tc.src, a)
 			}
 		}
 	}
-	_, sel, doc := moveDocument(t, "source lib.sh\n«g»() { :; }\n", "")
+	_, sel, doc := moveDocument(t, "source lib.sh\n«g»() { :; }\n", "", dialect.Bash)
 	if _, ok := Compute(doc, Refactor{Kind: MoveFunction, Start: sel.Start, End: sel.End, Target: "file:///w/other.sh"}); ok {
 		t.Error("move resolved for a file the document does not source")
 	}

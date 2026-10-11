@@ -39,6 +39,8 @@ const (
 
 func (c Code) Native() bool { return c >= nativeBase }
 
+func (c Code) Portability() bool { return c >= 3000 && c < 4000 }
+
 func (c Code) String() string {
 	if c.Native() {
 		return nativePrefix + strconv.Itoa(int(c-nativeBase))

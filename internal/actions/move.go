@@ -6,6 +6,8 @@ import (
 
 	"mvdan.cc/sh/v3/syntax"
 
+	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 )
@@ -71,6 +73,9 @@ func moveFunction(s *site) (Change, bool) {
 	text := s.Tree.Text()
 	start := parser.CommentBlockStart(text, lineStart(text, m.stmt.Start))
 	end := lineEnd(text, m.stmt.End)
+	if !runsIn(src.Tree.Dialect, s.Tree.Dialect, text[start:end]) {
+		return Change{}, false
+	}
 	removeEnd := min(end+1, len(text))
 	if blankLineAt(text, removeEnd) && (start == 0 || blankLineAt(text, lineStart(text, start-1))) {
 		removeEnd = min(lineEnd(text, removeEnd)+1, len(text))
@@ -88,6 +93,17 @@ func moveFunction(s *site) (Change, bool) {
 		Edits:  []textedit.Edit{{Start: start, End: removeEnd}},
 		Others: []FileEdits{{URI: src.URI, Edits: []textedit.Edit{{Start: len(target), End: len(target), NewText: insert}}}},
 	}, true
+}
+
+func runsIn(target, from dialect.Dialect, code string) bool {
+	if target == from {
+		return true
+	}
+	tree := parser.Parse(code, target)
+	if len(tree.Errors) > 0 {
+		return false
+	}
+	return !slices.ContainsFunc(lint.Check(tree, nil, lint.Options{DialectSource: lint.DialectForced}), func(f lint.Finding) bool { return f.Code.Portability() })
 }
 
 func blankLineAt(text string, at int) bool {
