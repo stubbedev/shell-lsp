@@ -150,14 +150,11 @@ func producesSafeWords(cs *syntax.CmdSubst) bool {
 }
 
 func backtickFix(p *pass, cs *syntax.CmdSubst, span parser.Span) []textedit.Edit {
-	if !cs.Left.IsValid() || !cs.Right.IsValid() {
+	replacement, ok := parser.DollarSubstitution(p.text, cs, p.stack)
+	if !ok {
 		return nil
 	}
-	right := parser.Offset(cs.Right)
-	if strings.ContainsRune(p.text[span.Start+1:right], '\\') {
-		return nil
-	}
-	return []textedit.Edit{{Start: span.Start, End: span.Start + 1, NewText: "$("}, {Start: right, End: right + 1, NewText: ")"}}
+	return []textedit.Edit{{Start: span.Start, End: span.End, NewText: replacement}}
 }
 
 func (p *pass) isArgumentOf(name string) bool {

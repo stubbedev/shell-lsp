@@ -32,10 +32,11 @@ type Diagnostic struct {
 type RefactorKind string
 
 const (
-	ExtractVariable RefactorKind = "extractVariable"
-	ExtractFunction RefactorKind = "extractFunction"
-	ToggleQuotes    RefactorKind = "toggleQuotes"
-	DeclareLocal    RefactorKind = "declareLocal"
+	ExtractVariable  RefactorKind = "extractVariable"
+	ExtractFunction  RefactorKind = "extractFunction"
+	ToggleQuotes     RefactorKind = "toggleQuotes"
+	DeclareLocal     RefactorKind = "declareLocal"
+	ConvertBackticks RefactorKind = "convertBackticks"
 )
 
 type Refactor struct {
@@ -80,6 +81,7 @@ var refactorings = []refactoring{
 	{ExtractFunction, RefactorExtract, extractFunction},
 	{ToggleQuotes, RefactorRewrite, toggleQuotes},
 	{DeclareLocal, RefactorRewrite, declareLocal},
+	{ConvertBackticks, RefactorRewrite, convertBackticks},
 }
 
 func Refactorings() []RefactorKind {

@@ -16,6 +16,10 @@ func TestAutofixes(t *testing.T) {
 		script string
 		want   string
 	}{
+		{2006, "now=`date`\n", "now=$(date)\n"},
+		{2006, "x=`echo \\$HOME \\\\ \\`id -u\\``\n", "x=$(echo $HOME \\ `id -u`)\n"},
+		{2006, "echo \"`echo \\\"hi\\\" \\n`\"\n", "echo \"$(echo \"hi\" \\n)\"\n"},
+		{2006, "x=`(cd /tmp; pwd)`\n", "x=$( (cd /tmp; pwd))\n"},
 		{2281, "$target=release\n", "target=release\n"},
 		{2281, "${ports[42]}=8080\n", "ports[42]=8080\n"},
 		{2281, "$flags+=-O2\n", "flags+=-O2\n"},

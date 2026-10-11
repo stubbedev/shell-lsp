@@ -124,6 +124,20 @@ Checks that go beyond ShellCheck use `SL` codes and are documented in
 `eval`, `sh -c` or `source`, arithmetic injection (opt-in), and functions a
 script never calls. They are configured exactly like the `SC` checks.
 
+## Refactorings
+
+Code actions offered at the cursor or selection, each only where it applies
+and keeps the script's meaning; their edits are computed on
+`codeAction/resolve` when the client supports it.
+
+| Action | Kind | What it does |
+| --- | --- | --- |
+| Extract to variable | `refactor.extract` | Moves the selected word or part of a word into a variable |
+| Extract to function | `refactor.extract` | Moves the selected statements into a new function |
+| Toggle quotes | `refactor.rewrite` | Converts between single and double quotes |
+| Declare as local | `refactor.rewrite` | Adds `local` to an assignment inside a function |
+| Convert backticks | `refactor.rewrite` | Rewrites `` `cmd` `` as `$(cmd)`, undoing the backquote escaping |
+
 ## Commands
 
 `workspace/executeCommand` accepts:
