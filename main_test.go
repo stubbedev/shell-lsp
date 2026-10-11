@@ -17,7 +17,11 @@ func TestReleaseBinary(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds the release binary")
 	}
-	bin := filepath.Join(t.TempDir(), "shell-lsp")
+	name := "shell-lsp"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	bin := filepath.Join(t.TempDir(), name)
 	build := exec.CommandContext(t.Context(), "go", "build", "-trimpath", "-ldflags", "-s -w -X main.version=9.9.9-test", "-o", bin, ".")
 	build.Env = append(os.Environ(), "CGO_ENABLED=0")
 	if out, err := build.CombinedOutput(); err != nil {
