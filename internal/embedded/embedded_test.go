@@ -96,6 +96,20 @@ func TestSkipsProgramsItCannotSee(t *testing.T) {
 	}
 }
 
+func TestSkipsUnclosedQuotes(t *testing.T) {
+	t.Parallel()
+
+	for _, src := range []string{
+		"awk '{print $1\necho hi\n",
+		"jq \".a | \necho x\n",
+		"sed -e 'p' -e 's/a/b/\n",
+	} {
+		if programs := Find(parser.Parse(src, dialect.Bash)); len(programs) != 0 {
+			t.Errorf("Find(%q) = %+v, want nothing while the quote is open", src, programs)
+		}
+	}
+}
+
 func errorAt(t *testing.T, src string) (string, parser.Span) {
 	t.Helper()
 

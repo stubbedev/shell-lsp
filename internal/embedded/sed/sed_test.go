@@ -183,6 +183,10 @@ func TestTokens(t *testing.T) {
 	)
 }
 
+func FuzzParse(f *testing.F) {
+	langtest.Fuzz(f, Parse, validScripts)
+}
+
 func BenchmarkParse(b *testing.B) {
 	src := strings.Join(validScripts, "\n")
 	b.SetBytes(int64(len(src)))

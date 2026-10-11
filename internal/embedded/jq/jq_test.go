@@ -215,6 +215,10 @@ func TestDocs(t *testing.T) {
 	}
 }
 
+func FuzzParse(f *testing.F) {
+	langtest.Fuzz(f, Parse, validFilters)
+}
+
 func BenchmarkParse(b *testing.B) {
 	src := strings.Join(validFilters[1:], " | ")
 	b.SetBytes(int64(len(src)))

@@ -90,6 +90,38 @@ func ownScripts(t *testing.T) []corpusScript {
 	return []corpusScript{{name: ownCorpus, text: string(raw), dialect: dialect.Bash}}
 }
 
+func FuzzFind(f *testing.F) {
+	raw, err := os.ReadFile(filepath.Join("testdata", ownCorpus))
+	if err != nil {
+		f.Fatalf("reading the embedded-language corpus: %v", err)
+	}
+	for line := range strings.Lines(string(raw)) {
+		f.Add(line)
+	}
+	f.Add("awk -f - <<'EOF'\n{ print\nEOF\n")
+	f.Add("sed -f - <<-'EOF'\n\t\ts/a/b\n\tEOF\n")
+	f.Add("sed -e 'a\\' -e \"x\\\"y\" -es/a/b/ f\n")
+	f.Fuzz(func(t *testing.T, text string) {
+		for _, p := range Find(parser.Parse(text, dialect.Bash)) {
+			inBounds := func(what string, s parser.Span) {
+				if s.Start < 0 || s.Start > s.End || s.End > len(text) {
+					t.Fatalf("%s span %+v out of bounds in %q", what, s, text)
+				}
+			}
+			p.Regions(func(s parser.Span) { inBounds("region", s) })
+			for _, tok := range p.Result.Tokens {
+				p.Spans(tok.Start, tok.End, func(s parser.Span) { inBounds("token", s) })
+				if _, ok := HoverAt([]Program{p}, p.Span(tok.Start, tok.End).Start); ok && tok.Modifiers == 0 {
+					t.Fatalf("hover on a non-builtin token %+v in %q", tok, text)
+				}
+			}
+			if e := p.Result.Error; e != nil {
+				inBounds("error", p.Span(e.Start, e.End))
+			}
+		}
+	})
+}
+
 func TestCorpusProgramsParse(t *testing.T) {
 	t.Parallel()
 

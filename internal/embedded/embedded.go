@@ -119,16 +119,12 @@ func heredocProgram(tree *parser.Tree, stmt *syntax.Stmt) (string, []piece, bool
 
 func decode(scripts []script) (string, []piece, bool) {
 	if len(scripts) == 1 && scripts[0].skip == 0 && len(scripts[0].word.Parts) == 1 {
-		if q, ok := scripts[0].word.Parts[0].(*syntax.SglQuoted); ok && !q.Dollar && q.Value != "" {
+		if q, ok := scripts[0].word.Parts[0].(*syntax.SglQuoted); ok && !q.Dollar && closed(q.Right) && q.Value != "" {
 			return q.Value, []piece{{source: parser.Offset(q.Left) + 1, length: len(q.Value)}}, true
 		}
 	}
 	var d decoder
-	size := 0
-	for _, s := range scripts {
-		size += int(s.word.End().Offset() - s.word.Pos().Offset())
-	}
-	d.text.Grow(size)
+	d.text.Grow(decodedSize(scripts))
 	for i, s := range scripts {
 		if i > 0 {
 			d.text.WriteByte('\n')
@@ -140,6 +136,29 @@ func decode(scripts []script) (string, []piece, bool) {
 	}
 	return d.text.String(), d.pieces, true
 }
+
+func decodedSize(scripts []script) int {
+	size := len(scripts)
+	for _, s := range scripts {
+		for _, part := range s.word.Parts {
+			switch p := part.(type) {
+			case *syntax.SglQuoted:
+				size += len(p.Value)
+			case *syntax.Lit:
+				size += len(p.Value)
+			case *syntax.DblQuoted:
+				for _, inner := range p.Parts {
+					if lit, ok := inner.(*syntax.Lit); ok {
+						size += len(lit.Value)
+					}
+				}
+			}
+		}
+	}
+	return size
+}
+
+func closed(right syntax.Pos) bool { return right.IsValid() && !right.IsRecovered() }
 
 type decoder struct {
 	text    strings.Builder
@@ -171,7 +190,7 @@ func (d *decoder) word(w *syntax.Word) bool {
 		d.partial = false
 		switch p := part.(type) {
 		case *syntax.SglQuoted:
-			if p.Dollar {
+			if p.Dollar || !closed(p.Right) {
 				return false
 			}
 			start := parser.Offset(p.Left) + 1
@@ -179,7 +198,7 @@ func (d *decoder) word(w *syntax.Word) bool {
 				d.emit(p.Value[j], start+j)
 			}
 		case *syntax.DblQuoted:
-			if p.Dollar {
+			if p.Dollar || !closed(p.Right) {
 				return false
 			}
 			for _, inner := range p.Parts {

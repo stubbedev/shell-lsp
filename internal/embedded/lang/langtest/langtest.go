@@ -67,3 +67,27 @@ func CheckTokens(t *testing.T, parse func(string) lang.Result, src string, want 
 		t.Errorf("tokens of %q\n got %s\nwant %s", src, got, strings.Join(want, " "))
 	}
 }
+
+func CheckInvariants(t *testing.T, src string, res lang.Result) {
+	t.Helper()
+
+	end := 0
+	for _, tok := range res.Tokens {
+		if tok.Start < end || tok.End <= tok.Start || tok.End > len(src) {
+			t.Fatalf("token %+v of %q overlaps the previous one, is empty or out of bounds", tok, src)
+		}
+		end = tok.End
+	}
+	if e := res.Error; e != nil && (e.Start < 0 || e.Start > e.End || e.End > len(src) || e.Message == "") {
+		t.Fatalf("error %+v of %q is out of bounds or empty", e, src)
+	}
+}
+
+func Fuzz(f *testing.F, parse func(string) lang.Result, seeds []string) {
+	for _, seed := range seeds {
+		f.Add(seed)
+	}
+	f.Fuzz(func(t *testing.T, src string) {
+		CheckInvariants(t, src, parse(src))
+	})
+}
