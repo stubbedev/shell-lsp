@@ -215,6 +215,14 @@ func parsedOptions(args []*syntax.Word) nameOperands {
 	return n
 }
 
+func systemRead(args []*syntax.Word) nameOperands {
+	n := assignedOptions("ciost", map[byte]Attr{'c': 0})(args)
+	if _, rest := splitOptions(args, "ciost"); len(rest) > 0 {
+		n.assign(rest[0], 0)
+	}
+	return n
+}
+
 var dialectNameCommands = map[dialect.Dialect]map[string]func(args []*syntax.Word) nameOperands{
 	dialect.Zsh: {
 		"_describe":    describedArrays,
@@ -230,5 +238,9 @@ var dialectNameCommands = map[dialect.Dialect]map[string]func(args []*syntax.Wor
 		"print":        assignedOptions("uvfCxX", map[byte]Attr{'v': 0}),
 		"strftime":     assignedOptions("s", map[byte]Attr{'s': 0}),
 		"zparseopts":   parsedOptions,
+		"zformat":      assignedOptions("fFa", map[byte]Attr{'f': 0, 'F': 0, 'a': AttrArray}),
+		"zstat":        assignedOptions("fHAF", map[byte]Attr{'H': AttrAssoc, 'A': AttrArray}),
+		"zselect":      assignedOptions("taA", map[byte]Attr{'a': AttrArray, 'A': AttrAssoc}),
+		"sysread":      systemRead,
 	},
 }

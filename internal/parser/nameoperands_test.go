@@ -19,10 +19,18 @@ func TestZshNameOperands(t *testing.T) {
 		"print -v greeting -r -- hi\n" +
 		"strftime -s today '%F'\n" +
 		"zparseopts -D -a all -- h=help -out:=output\n" +
-		"vared -p 'name? ' name\n"
+		"vared -p 'name? ' name\n" +
+		"zformat -f line '%n' n:x\n" +
+		"zformat -a pairs : a:1\n" +
+		"zstat -H info -A times file\n" +
+		"zselect -t 10 -a ready 3\n" +
+		"sysread -c count -i 3 chunk\n"
 	for d, want := range map[dialect.Dialect]struct{ defs, refs []string }{
 		dialect.Zsh: {
-			defs: []string{"out", "expl", "value", "names", "greeting", "today", "all", "help", "output", "name"},
+			defs: []string{
+				"out", "expl", "value", "names", "greeting", "today", "all", "help", "output", "name",
+				"line", "pairs", "info", "times", "ready", "count", "chunk",
+			},
 			refs: []string{"cmds", "extra", "more", "first", "second", "expl", "hosts", "one", "two", "name"},
 		},
 		dialect.Bash: {},
