@@ -68,7 +68,7 @@ func checkBracketGlobs(p *pass, n syntax.Node) {
 	if !ok || !p.expandsGlobs(w) {
 		return
 	}
-	for _, part := range w.Parts {
+	for _, part := range w.Parts[:p.globQualifiers(w, true)] {
 		lit, ok := part.(*syntax.Lit)
 		if !ok {
 			continue
@@ -156,6 +156,17 @@ func bracketEnd(s string, open int) int {
 		}
 	}
 	return -1
+}
+
+func (p *pass) globQualifiers(w *syntax.Word, bare bool) int {
+	if !p.dialect.Features().GlobQualifiers {
+		return len(w.Parts)
+	}
+	return parser.GlobQualifiers(w, bare)
+}
+
+func (p *pass) qualifiedGlob(w *syntax.Word, bare bool) bool {
+	return p.globQualifiers(w, bare) < len(w.Parts)
 }
 
 func (p *pass) expandsGlobs(w *syntax.Word) bool {

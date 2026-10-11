@@ -1,0 +1,31 @@
+### a (#q) qualifier makes [[ ]] glob, so the operand may be empty
+#!/bin/zsh
+dump=${ZDOTDIR:-$HOME}/.zcompdump
+if [[ -n $dump(#qN.mh+24) ]]; then
+  print -r -- stale
+fi
+[[ $dump(#qN) ]] && print -r -- exists
+>>- SC1071 1:1 -- shellcheck refuses zsh; with (#qN) the word expands to nothing when no file matches
+
+### a bare qualifier stays literal text inside [[ ]]
+#!/bin/zsh
+dump=$1
+[[ -n $dump(N) ]] && print -r -- set
+>>- SC1071 1:1 -- shellcheck refuses zsh
+>>+ SC2157 3:12 -- [[ ]] does not glob, so (N) is literal text unless written as (#qN)
+
+### a subscript in glob qualifiers is a range, not a bracket expression
+#!/bin/zsh
+print -rl -- **/*(.DOL[1,${1:-10}]) *(om[1,11]) *(#qN.om[1,11])(.)
+>>- SC1071 1:1 -- shellcheck refuses zsh; [1,11] in a qualifier list selects matches 1 to 11
+
+### a bracket expression before the qualifiers is still checked
+#!/bin/zsh
+print -rl -- [1,11]*(N)
+>>- SC1071 1:1 -- shellcheck refuses zsh
+>>+ SC2102 2:14 -- before the qualifiers [1,11] is a bracket expression with 1 twice
+
+### a bracket expression in bash
+#!/bin/bash
+ls [1,11]
+>>> SC2102 2:4

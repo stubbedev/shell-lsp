@@ -136,7 +136,9 @@ func (p *pass) checkTestNode(double bool, e syntax.TestExpr) {
 	switch e := e.(type) {
 	case *syntax.Word:
 		p.recordEmptinessTest(e)
-		p.checkNullaryTest(e)
+		if !p.qualifiedGlob(e, !double) {
+			p.checkNullaryTest(e)
+		}
 	case *syntax.UnaryTest:
 		operand, ok := e.X.(*syntax.Word)
 		if !ok {
@@ -335,7 +337,7 @@ func (p *pass) checkUnaryTest(double bool, op testOp, w *syntax.Word) {
 			p.report(2070, span, "-n with an unquoted operand inside [ ] is true even when the value is empty; quote the operand or use [[ ]].")
 		}
 	}
-	if op.name != "-n" && op.name != "-z" {
+	if op.name != "-n" && op.name != "-z" || p.qualifiedGlob(w, !double) {
 		return
 	}
 	at, ok := p.firstLiteralText(w)
