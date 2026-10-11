@@ -258,7 +258,7 @@ func (t *untrustedValues) param(name string, scope parser.ScopeID) (untrustedSou
 		return fromOption, true
 	case name == "@" || name == "*":
 		return t.positional(everyPosition, scope)
-	case name != "0" && parser.IsDigits(name):
+	case name != "0" && isPositional(name):
 		n, err := strconv.Atoi(name)
 		if err != nil {
 			return 0, false

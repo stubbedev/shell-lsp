@@ -1,0 +1,68 @@
+### a helper nothing calls
+#!/bin/bash
+helper() { echo help; }
+main() { echo "$1"; }
+main "$@"
+>>> none
+>>+ SL2001 2:1 -- shell-lsp native check; shellcheck does not report uncalled functions
+
+### only called from an unused function
+#!/bin/bash
+inner() { echo in; }
+outer() { inner; }
+run() { echo "$@"; }
+run "$@"
+>>> none
+>>+ SL2001 2:1 -- shell-lsp native check; only an uncalled function calls inner
+>>+ SL2001 3:1 -- shell-lsp native check; shellcheck does not report uncalled functions
+
+### dispatch by argument
+#!/bin/bash
+start() { echo start; }
+stop() { echo stop; }
+"$@"
+>>> none
+
+### dispatch by prefix
+#!/bin/bash
+cmd_start() { echo start; }
+cmd_stop() { echo stop; }
+other() { echo other; }
+"cmd_$1" "${@:2}"
+>>> none
+
+### called from a trap string
+#!/bin/bash
+cleanup() { rm -f "$tmp"; }
+trap 'cleanup; exit' EXIT
+tmp=$(mktemp)
+echo "$tmp" "$1"
+>>> none
+
+### a library of functions
+#!/bin/bash
+export LIB_VERSION=1
+lib_a() { echo a; }
+lib_b() { echo b; }
+>>> none
+
+### a script that can also be sourced
+#!/bin/bash
+api() { echo api; }
+main() { echo "$1"; }
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then main "$@"; fi
+>>> none
+
+### functions are listed at run time
+#!/bin/bash
+task_a() { echo a; }
+for f in $(compgen -A function task_); do "$f"; done
+echo "$1"
+>>> none
+
+### shell hooks
+#!/bin/zsh
+precmd() { print -n "\e]0;$PWD\a"; }
+TRAPINT() { return 128; }
+print "$1"
+>>- SC1071 1:1 -- shellcheck refuses zsh; shell-lsp lints it, and these are hooks zsh calls itself

@@ -65,3 +65,26 @@ absolute path can make it run any file.
 ```bash
 . "/etc/app/$1.conf"    # SL1004: $1=../../tmp/evil
 ```
+
+## SL2001
+
+**A function in a script is never called.** Nothing in the script, in the
+files it sources, or in functions those call ever runs the function, so it is
+dead code. Only executed scripts are checked: files with a `#!` line whose top
+level does real work. Libraries that only define functions and settings, and
+scripts that detect being sourced (through `BASH_SOURCE`, `$0` or a top-level
+`return`), are left alone because their functions are meant for other files.
+The name counts as used wherever it appears as a word, including inside
+strings such as `trap 'cleanup' EXIT`. A command name built at run time, like
+`"cmd_$1"`, counts as a use of every function that starts with `cmd_`; running
+`"$@"` as a command, `eval`, or listing functions with `compgen -A function`
+or `declare -F` turns the check off for the file. Hook functions the shell
+calls itself, such as `command_not_found_handle`, `precmd` or `TRAPINT`, are
+never reported.
+
+```bash
+#!/bin/bash
+helper() { echo help; }    # SL2001
+main() { echo "$1"; }
+main "$@"
+```
