@@ -312,9 +312,10 @@ skipSpace:
 			p.tok = p.regToken(r)
 		case '#':
 			// If we're parsing $foo#bar, ${foo}#bar, 'foo'#bar, or "foo"#bar,
-			// #bar is a continuation of the same word, not a comment.
+			// #bar is a continuation of the same word, not a comment,
+			// also inside $(...) where the quote state stays subCmd.
 			// The same applies inside [[ ]] tests, where '#' has no comment meaning.
-			if !p.spaced && (p.quote == unquotedWordCont || p.quote == testExpr) {
+			if !p.spaced && (p.quote == unquotedWordCont || p.wordCont || p.quote == testExpr) {
 				p.advanceLitNone(r)
 				return
 			}

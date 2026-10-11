@@ -2762,6 +2762,16 @@ var fileTests = []fileTestCase{
 		)),
 	),
 	fileTest(
+		[]string{`$(foo "a"#b $c#d)`, "`foo \"a\"#b $c#d`"},
+		langFile(call(
+			word(cmdSubst(stmt(call(
+				litWord("foo"),
+				word(dblQuoted(lit("a")), lit("#b")),
+				word(litParamExp("c"), lit("#d")),
+			)))),
+		)),
+	),
+	fileTest(
 		[]string{"{ foo } }; }"},
 		langFile(block(litStmt("foo", "}", "}"))),
 		// TODO: turn these nil files into error tests

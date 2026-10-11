@@ -1,0 +1,104 @@
+syntax: keep '#' after a word part inside command substitutions
+
+A '#' starts a comment only at the beginning of a word, so in
+
+	x="$(nix eval "$dir"#attr)"
+
+the #attr belongs to the argument. The lexer knew this at the top level,
+where words are parsed with the unquotedWordCont quote state, but inside
+$(...), backquotes and ${ ...;} the quote state stays subCmd, so the '#'
+after a closing quote began a comment that swallowed the rest of the
+line, and the substitution and the outer quotes were never closed.
+
+The parser now tracks that it is in the middle of a word independently
+of the quote state, resetting it for nested commands so that a '#' at
+the start of a word inside $( still starts a comment.
+
+Reproducer, before this change: `x=$(echo "a"#b)` failed with
+"reached EOF without matching `$(` with `)`".
+
+diff --git a/syntax/filetests_test.go b/syntax/filetests_test.go
+index fec54ea..0feeae8 100644
+--- a/syntax/filetests_test.go
++++ b/syntax/filetests_test.go
+@@ -2761,6 +2761,16 @@ var fileTests = []fileTestCase{
+ 			word(cmdSubst(litStmt("foo")), lit("#bar")),
+ 		)),
+ 	),
++	fileTest(
++		[]string{`$(foo "a"#b $c#d)`, "`foo \"a\"#b $c#d`"},
++		langFile(call(
++			word(cmdSubst(stmt(call(
++				litWord("foo"),
++				word(dblQuoted(lit("a")), lit("#b")),
++				word(litParamExp("c"), lit("#d")),
++			)))),
++		)),
++	),
+ 	fileTest(
+ 		[]string{"{ foo } }; }"},
+ 		langFile(block(litStmt("foo", "}", "}"))),
+diff --git a/syntax/lexer.go b/syntax/lexer.go
+index fecd6e1..ab44452 100644
+--- a/syntax/lexer.go
++++ b/syntax/lexer.go
+@@ -312,9 +312,10 @@ skipSpace:
+ 			p.tok = p.regToken(r)
+ 		case '#':
+ 			// If we're parsing $foo#bar, ${foo}#bar, 'foo'#bar, or "foo"#bar,
+-			// #bar is a continuation of the same word, not a comment.
++			// #bar is a continuation of the same word, not a comment,
++			// also inside $(...) where the quote state stays subCmd.
+ 			// The same applies inside [[ ]] tests, where '#' has no comment meaning.
+-			if !p.spaced && (p.quote == unquotedWordCont || p.quote == testExpr) {
++			if !p.spaced && (p.quote == unquotedWordCont || p.wordCont || p.quote == testExpr) {
+ 				p.advanceLitNone(r)
+ 				return
+ 			}
+diff --git a/syntax/parser.go b/syntax/parser.go
+index 650fd60..123d05f 100644
+--- a/syntax/parser.go
++++ b/syntax/parser.go
+@@ -529,6 +529,11 @@ type Parser struct {
+ 
+ 	forbidNested bool
+ 
++	// wordCont is set while the parts of a word are being parsed, so that
++	// a '#' right after one of them continues the word instead of starting
++	// a comment, also inside command substitutions.
++	wordCont bool
++
+ 	// list of pending heredoc bodies
+ 	buriedHdocs int
+ 	heredocs    []*Redirect
+@@ -733,16 +738,17 @@ const (
+ type saveState struct {
+ 	quote       quoteState
+ 	buriedHdocs int
++	wordCont    bool
+ }
+ 
+ func (p *Parser) preNested(quote quoteState) (s saveState) {
+-	s.quote, s.buriedHdocs = p.quote, p.buriedHdocs
+-	p.buriedHdocs, p.quote = len(p.heredocs), quote
++	s.quote, s.buriedHdocs, s.wordCont = p.quote, p.buriedHdocs, p.wordCont
++	p.buriedHdocs, p.quote, p.wordCont = len(p.heredocs), quote, false
+ 	return s
+ }
+ 
+ func (p *Parser) postNested(s saveState) {
+-	p.quote, p.buriedHdocs = s.quote, s.buriedHdocs
++	p.quote, p.buriedHdocs, p.wordCont = s.quote, s.buriedHdocs, s.wordCont
+ }
+ 
+ func (p *Parser) unquotedWordBytes(w *Word) ([]byte, bool) {
+@@ -1241,6 +1247,9 @@ func (p *Parser) wordParts(wps []WordPart) []WordPart {
+ 		p.quote = unquotedWordCont
+ 		defer func() { p.quote = noState }()
+ 	}
++	wordCont := p.wordCont
++	p.wordCont = true
++	defer func() { p.wordCont = wordCont }()
+ 	for {
+ 		p.openNodes++
+ 		n := p.wordPart()

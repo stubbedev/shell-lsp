@@ -40,6 +40,7 @@ reproducer so that it can be sent upstream as it is.
 | 0008 | zsh: every digit of a short positional parameter (`$10` is the tenth argument, not `$1` followed by `0`) | [mvdan/sh#120](https://github.com/mvdan/sh/issues/120) |
 | 0009 | expand: arithmetic in `int64` throughout (upstream's `TODO(v4)`), bounded integer conversions for slices, subscripts and `\x`/`\u`/`\U` escapes, and brace sequences that stop at an endpoint or step near the `int64` limits instead of looping forever | — |
 | 0010 | syntax: any literal `@` expansion operator parses (`${a@bar}`), as with `bash -n`; bash rejects unknown ones only when it expands a set parameter | — |
+| 0011 | syntax: a `#` right after a word part continues the word inside `$(...)`, backquotes and `${ ...;}` too (`$(nix eval "$dir"#attr)`), instead of starting a comment | — |
 
 ## Tests
 

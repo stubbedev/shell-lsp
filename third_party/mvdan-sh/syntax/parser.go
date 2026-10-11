@@ -529,6 +529,11 @@ type Parser struct {
 
 	forbidNested bool
 
+	// wordCont is set while the parts of a word are being parsed, so that
+	// a '#' right after one of them continues the word instead of starting
+	// a comment, also inside command substitutions.
+	wordCont bool
+
 	// list of pending heredoc bodies
 	buriedHdocs int
 	heredocs    []*Redirect
@@ -733,16 +738,17 @@ const (
 type saveState struct {
 	quote       quoteState
 	buriedHdocs int
+	wordCont    bool
 }
 
 func (p *Parser) preNested(quote quoteState) (s saveState) {
-	s.quote, s.buriedHdocs = p.quote, p.buriedHdocs
-	p.buriedHdocs, p.quote = len(p.heredocs), quote
+	s.quote, s.buriedHdocs, s.wordCont = p.quote, p.buriedHdocs, p.wordCont
+	p.buriedHdocs, p.quote, p.wordCont = len(p.heredocs), quote, false
 	return s
 }
 
 func (p *Parser) postNested(s saveState) {
-	p.quote, p.buriedHdocs = s.quote, s.buriedHdocs
+	p.quote, p.buriedHdocs, p.wordCont = s.quote, s.buriedHdocs, s.wordCont
 }
 
 func (p *Parser) unquotedWordBytes(w *Word) ([]byte, bool) {
@@ -1241,6 +1247,9 @@ func (p *Parser) wordParts(wps []WordPart) []WordPart {
 		p.quote = unquotedWordCont
 		defer func() { p.quote = noState }()
 	}
+	wordCont := p.wordCont
+	p.wordCont = true
+	defer func() { p.wordCont = wordCont }()
 	for {
 		p.openNodes++
 		n := p.wordPart()

@@ -33,6 +33,29 @@ func TestValidScriptHasNoErrors(t *testing.T) {
 	}
 }
 
+func TestHashContinuesAWordInsideCommandSubstitutions(t *testing.T) {
+	t.Parallel()
+
+	src := "x=\"$(nix eval \"$dir\"#attr)\"\ny=$(#a comment\necho \"$dir\"#b) `echo \"$dir\"#c`\n"
+	tree := Parse(src, dialect.Bash)
+	if len(tree.Errors) != 0 {
+		t.Fatalf("Errors = %v, want none", messages(tree))
+	}
+	if len(tree.File.Stmts) != 2 {
+		t.Errorf("statements = %d, want 2", len(tree.File.Stmts))
+	}
+	var comments []string
+	Walk(tree.File, func(n syntax.Node) bool {
+		if c, ok := n.(*syntax.Comment); ok {
+			comments = append(comments, c.Text)
+		}
+		return true
+	})
+	if len(comments) != 1 || comments[0] != "a comment" {
+		t.Errorf("comments = %q, want only the one after $(", comments)
+	}
+}
+
 func TestByteOrderMarkIsNotPartOfTheShebang(t *testing.T) {
 	t.Parallel()
 
