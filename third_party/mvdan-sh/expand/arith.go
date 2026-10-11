@@ -11,10 +11,7 @@ import (
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
-// TODO(v4): the arithmetic APIs should return int64 for portability with 32-bit systems,
-// even if Bash only supports native int sizes.
-
-func Arithm(cfg *Config, expr syntax.ArithmExpr) (int, error) {
+func Arithm(cfg *Config, expr syntax.ArithmExpr) (int64, error) {
 	switch expr := expr.(type) {
 	case *syntax.Word:
 		str, err := Literal(cfg, expr)
@@ -34,7 +31,7 @@ func Arithm(cfg *Config, expr syntax.ArithmExpr) (int, error) {
 			str = val
 		}
 		// default to 0
-		return int(atoi(str)), nil
+		return atoi(str), nil
 	case *syntax.ParenArithm:
 		return Arithm(cfg, expr.X)
 	case *syntax.UnaryArithm:
@@ -52,9 +49,9 @@ func Arithm(cfg *Config, expr syntax.ArithmExpr) (int, error) {
 				return 0, err
 			}
 			if expr.Post {
-				return int(old), nil
+				return old, nil
 			}
-			return int(val), nil
+			return val, nil
 		}
 		val, err := Arithm(cfg, expr.X)
 		if err != nil {
@@ -128,7 +125,7 @@ func Arithm(cfg *Config, expr syntax.ArithmExpr) (int, error) {
 	}
 }
 
-func oneIf(b bool) int {
+func oneIf(b bool) int64 {
 	if b {
 		return 1
 	}
@@ -211,14 +208,13 @@ func atoiLargeBase(s string, base int64) int64 {
 	return n
 }
 
-func (cfg *Config) assgnArit(b *syntax.BinaryArithm) (int, error) {
+func (cfg *Config) assgnArit(b *syntax.BinaryArithm) (int64, error) {
 	name := b.X.(*syntax.Word).Lit()
 	val := atoi(cfg.envGet(name))
-	arg_, err := Arithm(cfg, b.Y)
+	arg, err := Arithm(cfg, b.Y)
 	if err != nil {
 		return 0, err
 	}
-	arg := int64(arg_)
 	switch b.Op {
 	case syntax.Assgn:
 		val = arg
@@ -252,11 +248,11 @@ func (cfg *Config) assgnArit(b *syntax.BinaryArithm) (int, error) {
 	if err := cfg.envSet(name, strconv.FormatInt(val, 10)); err != nil {
 		return 0, err
 	}
-	return int(val), nil
+	return val, nil
 }
 
-func intPow(a, b int) int {
-	p := 1
+func intPow(a, b int64) int64 {
+	p := int64(1)
 	for b > 0 {
 		if b&1 != 0 {
 			p *= a
@@ -267,7 +263,7 @@ func intPow(a, b int) int {
 	return p
 }
 
-func binArit(op syntax.BinAritOperator, x, y int) (int, error) {
+func binArit(op syntax.BinAritOperator, x, y int64) (int64, error) {
 	switch op {
 	case syntax.Add:
 		return x + y, nil

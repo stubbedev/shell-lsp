@@ -38,6 +38,7 @@ reproducer so that it can be sent upstream as it is.
 | 0006 | ksh93: a new `LangKsh93` variant with dotted variable names, compound variables and types (`ArrayExpr.Stmts`, nested values, members and further subscripts), arithmetic functions (`FuncDecl.Params`), `namespace` (new `NamespaceClause` node), `<<#` and the replacing and seeking redirections, `${@a}` and `${#prefix@}`, and the features ksh93 shares with mksh or bash | [mvdan/sh#614](https://github.com/mvdan/sh/issues/614) |
 | 0007 | zsh: the argument after subscript flags (`${a[(r)$x*]}`) as a word with expansions and quotes, ending at a `,` or `]` outside brackets | [mvdan/sh#120](https://github.com/mvdan/sh/issues/120) |
 | 0008 | zsh: every digit of a short positional parameter (`$10` is the tenth argument, not `$1` followed by `0`) | [mvdan/sh#120](https://github.com/mvdan/sh/issues/120) |
+| 0009 | expand: arithmetic in `int64` throughout (upstream's `TODO(v4)`), bounded integer conversions for slices, subscripts and `\x`/`\u`/`\U` escapes, and brace sequences that stop at an endpoint or step near the `int64` limits instead of looping forever | — |
 
 ## Tests
 

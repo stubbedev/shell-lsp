@@ -77,51 +77,9 @@ func bracesSeqRec(word *syntax.Word, yield func(*syntax.Word) bool) bool {
 			})
 		}
 		if br.Sequence {
-			fromLit := br.Elems[0].Lit()
-			toLit := br.Elems[1].Lit()
-
-			chars := false
-			// ParseInt with bit size 64 to ensure consistent behavior on 32-bit platforms.
-			from, err1 := strconv.ParseInt(fromLit, 10, 64)
-			to, err2 := strconv.ParseInt(toLit, 10, 64)
-			if err1 != nil || err2 != nil {
-				chars = true
-				from = int64(fromLit[0])
-				to = int64(toLit[0])
-			}
-			// Endpoints with leading zeros pad all results to the
-			// widest endpoint, e.g. {01..10} gives 01 02 [...] 09 10.
-			width := 0
-			if !chars && (hasLeadingZeros(fromLit) || hasLeadingZeros(toLit)) {
-				width = max(len(fromLit), len(toLit))
-			}
-			upward := from <= to
-			incr := int64(1)
-			if len(br.Elems) > 2 {
-				// ParseInt with bit size 64 to ensure consistent behavior on 32-bit platforms.
-				n, _ := strconv.ParseInt(br.Elems[2].Lit(), 10, 64)
-				if n < 0 {
-					n = -n // only the absolute value of the step matters
-				}
-				if n != 0 {
-					incr = n
-				}
-			}
-			if !upward {
-				incr = -incr
-			}
-			for n := from; (upward && n <= to) || (!upward && n >= to); n += incr {
+			for value := range braceSeqValues(br.Elems) {
 				next := *word
-				lit := &syntax.Lit{}
-				switch {
-				case chars:
-					lit.Value = string(rune(n))
-				case width > 0:
-					lit.Value = fmt.Sprintf("%0*d", width, n)
-				default:
-					lit.Value = strconv.FormatInt(n, 10)
-				}
-				next.Parts = append([]syntax.WordPart{lit}, rest...)
+				next.Parts = append([]syntax.WordPart{&syntax.Lit{Value: value}}, rest...)
 				if !expand(&next) {
 					return false
 				}
@@ -138,6 +96,88 @@ func bracesSeqRec(word *syntax.Word, yield func(*syntax.Word) bool) bool {
 		return true
 	}
 	return yield(&syntax.Word{Parts: left})
+}
+
+// braceSeqValues yields the values of a sequence brace expansion such as
+// {1..10..2} or {a..z}, given its endpoints and optional step.
+func braceSeqValues(elems []*syntax.Word) iter.Seq[string] {
+	fromLit := elems[0].Lit()
+	toLit := elems[1].Lit()
+	step := uint64(1)
+	if len(elems) > 2 {
+		// ParseInt with bit size 64 to ensure consistent behavior on 32-bit platforms.
+		n, _ := strconv.ParseInt(elems[2].Lit(), 10, 64)
+		// Only the absolute value of the step matters.
+		switch {
+		case n < 0:
+			step = uint64(-n)
+		case n > 0:
+			step = uint64(n)
+		}
+	}
+	// ParseInt with bit size 64 to ensure consistent behavior on 32-bit platforms.
+	from, err1 := strconv.ParseInt(fromLit, 10, 64)
+	to, err2 := strconv.ParseInt(toLit, 10, 64)
+	if err1 != nil || err2 != nil {
+		return charSeq(fromLit[0], toLit[0], step)
+	}
+	// Endpoints with leading zeros pad all results to the
+	// widest endpoint, e.g. {01..10} gives 01 02 [...] 09 10.
+	width := 0
+	if hasLeadingZeros(fromLit) || hasLeadingZeros(toLit) {
+		width = max(len(fromLit), len(toLit))
+	}
+	return func(yield func(string) bool) {
+		for n := range intSeq(from, to, step) {
+			value := strconv.FormatInt(n, 10)
+			if width > 0 {
+				value = fmt.Sprintf("%0*d", width, n)
+			}
+			if !yield(value) {
+				return
+			}
+		}
+	}
+}
+
+// intSeq yields from, then every step towards to, stopping at to without
+// overflowing past it.
+func intSeq(from, to int64, step uint64) iter.Seq[int64] {
+	return func(yield func(int64) bool) {
+		upward := from <= to
+		span := uint64(to) - uint64(from)
+		if !upward {
+			span = uint64(from) - uint64(to)
+		}
+		for offset := uint64(0); ; offset += step {
+			n := int64(uint64(from) + offset)
+			if !upward {
+				n = int64(uint64(from) - offset)
+			}
+			if !yield(n) || span-offset < step {
+				return
+			}
+		}
+	}
+}
+
+// charSeq yields the characters from from to to, every step characters.
+func charSeq(from, to byte, step uint64) iter.Seq[string] {
+	return func(yield func(string) bool) {
+		for c, i := from, uint64(0); ; i++ {
+			if i%step == 0 && !yield(string(rune(c))) {
+				return
+			}
+			if c == to {
+				return
+			}
+			if from < to {
+				c++
+			} else {
+				c--
+			}
+		}
+	}
 }
 
 func hasLeadingZeros(s string) bool {

@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/internal"
@@ -327,11 +328,15 @@ func formatInto(sb *strings.Builder, format string, args []string) (int, error) 
 				digits := readDigits(max, true)
 				if len(digits) > 0 {
 					// can't error
-					n, _ := strconv.ParseUint(digits, 16, 32)
 					if c == 'x' {
 						// always as a single byte
+						n, _ := strconv.ParseUint(digits, 16, 8)
 						sb.WriteByte(byte(n))
 					} else {
+						n, _ := strconv.ParseInt(digits, 16, 32)
+						if n > unicode.MaxRune {
+							n = utf8.RuneError
+						}
 						sb.WriteRune(rune(n))
 					}
 					break
@@ -611,7 +616,7 @@ func (cfg *Config) wordField(wps []syntax.WordPart, ql quoteLevel) ([]fieldPart,
 			if err != nil {
 				return nil, err
 			}
-			field = append(field, fieldPart{val: strconv.Itoa(n)})
+			field = append(field, fieldPart{val: strconv.FormatInt(n, 10)})
 		case *syntax.ProcSubst:
 			path, err := cfg.ProcSubst(wp)
 			if err != nil {
@@ -766,7 +771,7 @@ func (cfg *Config) wordFields(wps []syntax.WordPart) ([][]fieldPart, error) {
 			if err != nil {
 				return nil, err
 			}
-			curField = append(curField, fieldPart{val: strconv.Itoa(n)})
+			curField = append(curField, fieldPart{val: strconv.FormatInt(n, 10)})
 		case *syntax.ProcSubst:
 			path, err := cfg.ProcSubst(wp)
 			if err != nil {
@@ -887,17 +892,6 @@ func (cfg *Config) sliceElems(pe *syntax.ParamExp, elems []string, indexes []int
 	if positional {
 		elems = append([]string{cfg.Env.Get("0").Str}, elems...)
 	}
-	slicePos := func(n int) int {
-		if n < 0 {
-			n = len(elems) + n
-			if n < 0 {
-				n = len(elems)
-			}
-		} else if n > len(elems) {
-			n = len(elems)
-		}
-		return n
-	}
 	if pe.Slice.Offset != nil {
 		offset, err := Arithm(cfg, pe.Slice.Offset)
 		if err != nil {
@@ -907,16 +901,19 @@ func (cfg *Config) sliceElems(pe *syntax.ParamExp, elems []string, indexes []int
 			// Sparse arrays slice by index: a negative offset counts
 			// from one past the maximum index, and the result begins
 			// with the first element whose index is at least the offset.
+			end := int64(indexes[len(indexes)-1]) + 1
 			if offset < 0 {
-				offset += indexes[len(indexes)-1] + 1
+				offset += end
 				if offset < 0 {
-					offset = indexes[len(indexes)-1] + 1
+					offset = end
 				}
 			}
-			pos, _ := slices.BinarySearch(indexes, offset)
+			pos, _ := slices.BinarySearchFunc(indexes, offset, func(index int, target int64) int {
+				return cmp.Compare(int64(index), target)
+			})
 			elems = elems[pos:]
 		} else {
-			elems = elems[slicePos(offset):]
+			elems = elems[clampSlicePos(offset, len(elems)):]
 		}
 	}
 	if pe.Slice.Length != nil {
@@ -924,9 +921,23 @@ func (cfg *Config) sliceElems(pe *syntax.ParamExp, elems []string, indexes []int
 		if err != nil {
 			return elems
 		}
-		elems = elems[:slicePos(length)]
+		elems = elems[:clampSlicePos(length, len(elems))]
 	}
 	return elems
+}
+
+// clampSlicePos resolves the slice offset or length n against a sequence of
+// size elements, counting negative values from the end.
+func clampSlicePos(n int64, size int) int64 {
+	if n < 0 {
+		n += int64(size)
+		if n < 0 {
+			return int64(size)
+		}
+	} else if n > int64(size) {
+		return int64(size)
+	}
+	return n
 }
 
 func (cfg *Config) expandUser(field string, moreFields bool) (prefix, rest string) {

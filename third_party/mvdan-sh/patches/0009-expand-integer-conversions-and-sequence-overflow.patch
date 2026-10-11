@@ -1,0 +1,578 @@
+expand: keep arithmetic in int64 and stop brace sequences at their end
+
+Arithm returned int, converting from the int64 that atoi parses, which
+truncates on 32-bit platforms (the TODO(v4) in arith.go). Arithmetic is
+now int64 throughout; slice offsets and lengths are clamped in int64
+before indexing, and array subscripts that do not fit in an int are an
+error instead of silently wrapping.
+
+Brace sequences stepped with n += incr and compared against the end, so
+an endpoint near the int64 limits, or a step of -9223372036854775808,
+overflowed past the end and never terminated. Braces then allocated
+without bound, and BracesSeq only stopped at its element limit:
+
+	{9223372036854775806..9223372036854775807}
+	{1..3..-9223372036854775808}
+
+Sequences now walk unsigned offsets that stop at the end, and character
+sequences step a byte, so no converted value can fall outside its type.
+
+\x escapes are parsed as 8 bits and \u and \U escapes above
+unicode.MaxRune give U+FFFD explicitly rather than through an unchecked
+conversion; the output is unchanged.
+
+diff --git a/expand/arith.go b/expand/arith.go
+index 0178742..eed5825 100644
+--- a/expand/arith.go
++++ b/expand/arith.go
+@@ -11,10 +11,7 @@ import (
+ 	"mvdan.cc/sh/v3/syntax"
+ )
+ 
+-// TODO(v4): the arithmetic APIs should return int64 for portability with 32-bit systems,
+-// even if Bash only supports native int sizes.
+-
+-func Arithm(cfg *Config, expr syntax.ArithmExpr) (int, error) {
++func Arithm(cfg *Config, expr syntax.ArithmExpr) (int64, error) {
+ 	switch expr := expr.(type) {
+ 	case *syntax.Word:
+ 		str, err := Literal(cfg, expr)
+@@ -34,7 +31,7 @@ func Arithm(cfg *Config, expr syntax.ArithmExpr) (int, error) {
+ 			str = val
+ 		}
+ 		// default to 0
+-		return int(atoi(str)), nil
++		return atoi(str), nil
+ 	case *syntax.ParenArithm:
+ 		return Arithm(cfg, expr.X)
+ 	case *syntax.UnaryArithm:
+@@ -52,9 +49,9 @@ func Arithm(cfg *Config, expr syntax.ArithmExpr) (int, error) {
+ 				return 0, err
+ 			}
+ 			if expr.Post {
+-				return int(old), nil
++				return old, nil
+ 			}
+-			return int(val), nil
++			return val, nil
+ 		}
+ 		val, err := Arithm(cfg, expr.X)
+ 		if err != nil {
+@@ -128,7 +125,7 @@ func Arithm(cfg *Config, expr syntax.ArithmExpr) (int, error) {
+ 	}
+ }
+ 
+-func oneIf(b bool) int {
++func oneIf(b bool) int64 {
+ 	if b {
+ 		return 1
+ 	}
+@@ -211,14 +208,13 @@ func atoiLargeBase(s string, base int64) int64 {
+ 	return n
+ }
+ 
+-func (cfg *Config) assgnArit(b *syntax.BinaryArithm) (int, error) {
++func (cfg *Config) assgnArit(b *syntax.BinaryArithm) (int64, error) {
+ 	name := b.X.(*syntax.Word).Lit()
+ 	val := atoi(cfg.envGet(name))
+-	arg_, err := Arithm(cfg, b.Y)
++	arg, err := Arithm(cfg, b.Y)
+ 	if err != nil {
+ 		return 0, err
+ 	}
+-	arg := int64(arg_)
+ 	switch b.Op {
+ 	case syntax.Assgn:
+ 		val = arg
+@@ -252,11 +248,11 @@ func (cfg *Config) assgnArit(b *syntax.BinaryArithm) (int, error) {
+ 	if err := cfg.envSet(name, strconv.FormatInt(val, 10)); err != nil {
+ 		return 0, err
+ 	}
+-	return int(val), nil
++	return val, nil
+ }
+ 
+-func intPow(a, b int) int {
+-	p := 1
++func intPow(a, b int64) int64 {
++	p := int64(1)
+ 	for b > 0 {
+ 		if b&1 != 0 {
+ 			p *= a
+@@ -267,7 +263,7 @@ func intPow(a, b int) int {
+ 	return p
+ }
+ 
+-func binArit(op syntax.BinAritOperator, x, y int) (int, error) {
++func binArit(op syntax.BinAritOperator, x, y int64) (int64, error) {
+ 	switch op {
+ 	case syntax.Add:
+ 		return x + y, nil
+diff --git a/expand/braces.go b/expand/braces.go
+index b7158ff..bba2c6a 100644
+--- a/expand/braces.go
++++ b/expand/braces.go
+@@ -77,51 +77,9 @@ func bracesSeqRec(word *syntax.Word, yield func(*syntax.Word) bool) bool {
+ 			})
+ 		}
+ 		if br.Sequence {
+-			fromLit := br.Elems[0].Lit()
+-			toLit := br.Elems[1].Lit()
+-
+-			chars := false
+-			// ParseInt with bit size 64 to ensure consistent behavior on 32-bit platforms.
+-			from, err1 := strconv.ParseInt(fromLit, 10, 64)
+-			to, err2 := strconv.ParseInt(toLit, 10, 64)
+-			if err1 != nil || err2 != nil {
+-				chars = true
+-				from = int64(fromLit[0])
+-				to = int64(toLit[0])
+-			}
+-			// Endpoints with leading zeros pad all results to the
+-			// widest endpoint, e.g. {01..10} gives 01 02 [...] 09 10.
+-			width := 0
+-			if !chars && (hasLeadingZeros(fromLit) || hasLeadingZeros(toLit)) {
+-				width = max(len(fromLit), len(toLit))
+-			}
+-			upward := from <= to
+-			incr := int64(1)
+-			if len(br.Elems) > 2 {
+-				// ParseInt with bit size 64 to ensure consistent behavior on 32-bit platforms.
+-				n, _ := strconv.ParseInt(br.Elems[2].Lit(), 10, 64)
+-				if n < 0 {
+-					n = -n // only the absolute value of the step matters
+-				}
+-				if n != 0 {
+-					incr = n
+-				}
+-			}
+-			if !upward {
+-				incr = -incr
+-			}
+-			for n := from; (upward && n <= to) || (!upward && n >= to); n += incr {
++			for value := range braceSeqValues(br.Elems) {
+ 				next := *word
+-				lit := &syntax.Lit{}
+-				switch {
+-				case chars:
+-					lit.Value = string(rune(n))
+-				case width > 0:
+-					lit.Value = fmt.Sprintf("%0*d", width, n)
+-				default:
+-					lit.Value = strconv.FormatInt(n, 10)
+-				}
+-				next.Parts = append([]syntax.WordPart{lit}, rest...)
++				next.Parts = append([]syntax.WordPart{&syntax.Lit{Value: value}}, rest...)
+ 				if !expand(&next) {
+ 					return false
+ 				}
+@@ -140,6 +98,88 @@ func bracesSeqRec(word *syntax.Word, yield func(*syntax.Word) bool) bool {
+ 	return yield(&syntax.Word{Parts: left})
+ }
+ 
++// braceSeqValues yields the values of a sequence brace expansion such as
++// {1..10..2} or {a..z}, given its endpoints and optional step.
++func braceSeqValues(elems []*syntax.Word) iter.Seq[string] {
++	fromLit := elems[0].Lit()
++	toLit := elems[1].Lit()
++	step := uint64(1)
++	if len(elems) > 2 {
++		// ParseInt with bit size 64 to ensure consistent behavior on 32-bit platforms.
++		n, _ := strconv.ParseInt(elems[2].Lit(), 10, 64)
++		// Only the absolute value of the step matters.
++		switch {
++		case n < 0:
++			step = uint64(-n)
++		case n > 0:
++			step = uint64(n)
++		}
++	}
++	// ParseInt with bit size 64 to ensure consistent behavior on 32-bit platforms.
++	from, err1 := strconv.ParseInt(fromLit, 10, 64)
++	to, err2 := strconv.ParseInt(toLit, 10, 64)
++	if err1 != nil || err2 != nil {
++		return charSeq(fromLit[0], toLit[0], step)
++	}
++	// Endpoints with leading zeros pad all results to the
++	// widest endpoint, e.g. {01..10} gives 01 02 [...] 09 10.
++	width := 0
++	if hasLeadingZeros(fromLit) || hasLeadingZeros(toLit) {
++		width = max(len(fromLit), len(toLit))
++	}
++	return func(yield func(string) bool) {
++		for n := range intSeq(from, to, step) {
++			value := strconv.FormatInt(n, 10)
++			if width > 0 {
++				value = fmt.Sprintf("%0*d", width, n)
++			}
++			if !yield(value) {
++				return
++			}
++		}
++	}
++}
++
++// intSeq yields from, then every step towards to, stopping at to without
++// overflowing past it.
++func intSeq(from, to int64, step uint64) iter.Seq[int64] {
++	return func(yield func(int64) bool) {
++		upward := from <= to
++		span := uint64(to) - uint64(from)
++		if !upward {
++			span = uint64(from) - uint64(to)
++		}
++		for offset := uint64(0); ; offset += step {
++			n := int64(uint64(from) + offset)
++			if !upward {
++				n = int64(uint64(from) - offset)
++			}
++			if !yield(n) || span-offset < step {
++				return
++			}
++		}
++	}
++}
++
++// charSeq yields the characters from from to to, every step characters.
++func charSeq(from, to byte, step uint64) iter.Seq[string] {
++	return func(yield func(string) bool) {
++		for c, i := from, uint64(0); ; i++ {
++			if i%step == 0 && !yield(string(rune(c))) {
++				return
++			}
++			if c == to {
++				return
++			}
++			if from < to {
++				c++
++			} else {
++				c--
++			}
++		}
++	}
++}
++
+ func hasLeadingZeros(s string) bool {
+ 	s = strings.TrimPrefix(s, "-")
+ 	return len(s) > 1 && s[0] == '0'
+diff --git a/expand/braces_test.go b/expand/braces_test.go
+index 5fbe4f2..abeeafe 100644
+--- a/expand/braces_test.go
++++ b/expand/braces_test.go
+@@ -197,6 +197,30 @@ var braceTests = []struct {
+ 		litWord("a{1..2..3..4}"),
+ 		litWords("a{1..2..3..4}"),
+ 	},
++	{
++		litWord("{9223372036854775806..9223372036854775807}"),
++		litWords("9223372036854775806", "9223372036854775807"),
++	},
++	{
++		litWord("{-9223372036854775807..-9223372036854775808}"),
++		litWords("-9223372036854775807", "-9223372036854775808"),
++	},
++	{
++		litWord("{1..3..-9223372036854775808}"),
++		litWords("1"),
++	},
++	{
++		litWord("{-9223372036854775808..9223372036854775807..9223372036854775807}"),
++		litWords("-9223372036854775808", "-1", "9223372036854775806"),
++	},
++	{
++		litWord("{a..c..256}"),
++		litWords("a"),
++	},
++	{
++		litWord("{z..x}"),
++		litWords("z", "y", "x"),
++	},
+ }
+ 
+ func TestBraces(t *testing.T) {
+diff --git a/expand/expand.go b/expand/expand.go
+index 75b3dcb..262e742 100644
+--- a/expand/expand.go
++++ b/expand/expand.go
+@@ -20,6 +20,7 @@ import (
+ 	"strconv"
+ 	"strings"
+ 	"syscall"
++	"unicode"
+ 	"unicode/utf8"
+ 
+ 	"mvdan.cc/sh/v3/internal"
+@@ -327,11 +328,15 @@ func formatInto(sb *strings.Builder, format string, args []string) (int, error)
+ 				digits := readDigits(max, true)
+ 				if len(digits) > 0 {
+ 					// can't error
+-					n, _ := strconv.ParseUint(digits, 16, 32)
+ 					if c == 'x' {
+ 						// always as a single byte
++						n, _ := strconv.ParseUint(digits, 16, 8)
+ 						sb.WriteByte(byte(n))
+ 					} else {
++						n, _ := strconv.ParseInt(digits, 16, 32)
++						if n > unicode.MaxRune {
++							n = utf8.RuneError
++						}
+ 						sb.WriteRune(rune(n))
+ 					}
+ 					break
+@@ -611,7 +616,7 @@ func (cfg *Config) wordField(wps []syntax.WordPart, ql quoteLevel) ([]fieldPart,
+ 			if err != nil {
+ 				return nil, err
+ 			}
+-			field = append(field, fieldPart{val: strconv.Itoa(n)})
++			field = append(field, fieldPart{val: strconv.FormatInt(n, 10)})
+ 		case *syntax.ProcSubst:
+ 			path, err := cfg.ProcSubst(wp)
+ 			if err != nil {
+@@ -766,7 +771,7 @@ func (cfg *Config) wordFields(wps []syntax.WordPart) ([][]fieldPart, error) {
+ 			if err != nil {
+ 				return nil, err
+ 			}
+-			curField = append(curField, fieldPart{val: strconv.Itoa(n)})
++			curField = append(curField, fieldPart{val: strconv.FormatInt(n, 10)})
+ 		case *syntax.ProcSubst:
+ 			path, err := cfg.ProcSubst(wp)
+ 			if err != nil {
+@@ -887,17 +892,6 @@ func (cfg *Config) sliceElems(pe *syntax.ParamExp, elems []string, indexes []int
+ 	if positional {
+ 		elems = append([]string{cfg.Env.Get("0").Str}, elems...)
+ 	}
+-	slicePos := func(n int) int {
+-		if n < 0 {
+-			n = len(elems) + n
+-			if n < 0 {
+-				n = len(elems)
+-			}
+-		} else if n > len(elems) {
+-			n = len(elems)
+-		}
+-		return n
+-	}
+ 	if pe.Slice.Offset != nil {
+ 		offset, err := Arithm(cfg, pe.Slice.Offset)
+ 		if err != nil {
+@@ -907,16 +901,19 @@ func (cfg *Config) sliceElems(pe *syntax.ParamExp, elems []string, indexes []int
+ 			// Sparse arrays slice by index: a negative offset counts
+ 			// from one past the maximum index, and the result begins
+ 			// with the first element whose index is at least the offset.
++			end := int64(indexes[len(indexes)-1]) + 1
+ 			if offset < 0 {
+-				offset += indexes[len(indexes)-1] + 1
++				offset += end
+ 				if offset < 0 {
+-					offset = indexes[len(indexes)-1] + 1
++					offset = end
+ 				}
+ 			}
+-			pos, _ := slices.BinarySearch(indexes, offset)
++			pos, _ := slices.BinarySearchFunc(indexes, offset, func(index int, target int64) int {
++				return cmp.Compare(int64(index), target)
++			})
+ 			elems = elems[pos:]
+ 		} else {
+-			elems = elems[slicePos(offset):]
++			elems = elems[clampSlicePos(offset, len(elems)):]
+ 		}
+ 	}
+ 	if pe.Slice.Length != nil {
+@@ -924,11 +921,25 @@ func (cfg *Config) sliceElems(pe *syntax.ParamExp, elems []string, indexes []int
+ 		if err != nil {
+ 			return elems
+ 		}
+-		elems = elems[:slicePos(length)]
++		elems = elems[:clampSlicePos(length, len(elems))]
+ 	}
+ 	return elems
+ }
+ 
++// clampSlicePos resolves the slice offset or length n against a sequence of
++// size elements, counting negative values from the end.
++func clampSlicePos(n int64, size int) int64 {
++	if n < 0 {
++		n += int64(size)
++		if n < 0 {
++			return int64(size)
++		}
++	} else if n > int64(size) {
++		return int64(size)
++	}
++	return n
++}
++
+ func (cfg *Config) expandUser(field string, moreFields bool) (prefix, rest string) {
+ 	name, ok := strings.CutPrefix(field, "~")
+ 	if !ok {
+diff --git a/expand/expand_test.go b/expand/expand_test.go
+index 4fa9eec..0898bf0 100644
+--- a/expand/expand_test.go
++++ b/expand/expand_test.go
+@@ -208,3 +208,58 @@ func TestZshWholeReplaceAndAssignAlways(t *testing.T) {
+ 	qt.Assert(t, qt.IsNil(err))
+ 	qt.Assert(t, qt.Equals(got, "x foo new new"))
+ }
++
++func literalWithEnv(t *testing.T, in string) (string, error) {
++	t.Helper()
++	word, err := syntax.NewParser().Document(strings.NewReader(in))
++	qt.Assert(t, qt.IsNil(err))
++	env := mapEnviron{
++		"s": {Set: true, Kind: String, Str: "abc"},
++		"a": {Set: true, Kind: Indexed, List: []string{"x", "y"}},
++	}
++	return Literal(&Config{Env: env}, word)
++}
++
++func TestIntegerConversionBounds(t *testing.T) {
++	t.Parallel()
++	tests := []struct {
++		in, want string
++	}{
++		{"$(( 9223372036854775807 + 1 ))", "-9223372036854775808"},
++		{"$(( 2 ** 63 ))", "-9223372036854775808"},
++		{"$(( x = 9223372036854775807, x += 1 ))", "-9223372036854775808"},
++		{"${s:9223372036854775807}", ""},
++		{"${s: -9223372036854775808}", ""},
++		{"${s:1:-9223372036854775808}", "bc"},
++		{"${a[@]:9223372036854775807}", ""},
++		{"${a[@]: -9223372036854775808}", ""},
++		{"${a[@]:1:9223372036854775807}", "y"},
++		{"${a[9223372036854775807]}", ""},
++	}
++	for _, tc := range tests {
++		t.Run(tc.in, func(t *testing.T) {
++			got, err := literalWithEnv(t, tc.in)
++			qt.Assert(t, qt.IsNil(err))
++			qt.Assert(t, qt.Equals(got, tc.want))
++		})
++	}
++	escapes := []struct {
++		in, want string
++	}{
++		{`\xff`, "\xff"},
++		{`\U0010ffff`, "\U0010ffff"},
++		{`\U00110000`, "\ufffd"},
++		{`\Uffffffff`, "\ufffd"},
++	}
++	for _, tc := range escapes {
++		t.Run(tc.in, func(t *testing.T) {
++			got, _, err := Format(nil, tc.in, nil)
++			qt.Assert(t, qt.IsNil(err))
++			qt.Assert(t, qt.Equals(got, tc.want))
++		})
++	}
++	t.Run("negative index below the array", func(t *testing.T) {
++		_, err := literalWithEnv(t, "${a[-9223372036854775808]}")
++		qt.Assert(t, qt.ErrorMatches(err, "negative array index"))
++	})
++}
+diff --git a/expand/param.go b/expand/param.go
+index 759627e..fc460a4 100644
+--- a/expand/param.go
++++ b/expand/param.go
+@@ -6,6 +6,7 @@ package expand
+ import (
+ 	"fmt"
+ 	"maps"
++	"math"
+ 	"regexp"
+ 	"slices"
+ 	"strconv"
+@@ -95,7 +96,7 @@ func (cfg *Config) paramExp(pe *syntax.ParamExp) (string, error) {
+ 		}
+ 	}
+ 
+-	var sliceOffset, sliceLen int
++	var sliceOffset, sliceLen int64
+ 	if pe.Slice != nil {
+ 		var err error
+ 		if pe.Slice.Offset != nil {
+@@ -182,22 +183,11 @@ func (cfg *Config) paramExp(pe *syntax.ParamExp) (string, error) {
+ 		if callVarInd {
+ 			// The offset and length are in characters, not bytes.
+ 			rs := []rune(str)
+-			slicePos := func(n int) int {
+-				if n < 0 {
+-					n = len(rs) + n
+-					if n < 0 {
+-						n = len(rs)
+-					}
+-				} else if n > len(rs) {
+-					n = len(rs)
+-				}
+-				return n
+-			}
+ 			if pe.Slice.Offset != nil {
+-				rs = rs[slicePos(sliceOffset):]
++				rs = rs[clampSlicePos(sliceOffset, len(rs)):]
+ 			}
+ 			if pe.Slice.Length != nil {
+-				rs = rs[:slicePos(sliceLen)]
++				rs = rs[:clampSlicePos(sliceLen, len(rs))]
+ 			}
+ 			str = string(rs)
+ 		} // else, elems are already sliced
+@@ -459,6 +449,25 @@ func (cfg *Config) caseConvElems(op syntax.ParExpOperator, arg string, elems []s
+ 	return out
+ }
+ 
++// arrayIndex evaluates idx as an index into the indexed array vr.
++// Negative indices count from one past the maximum index.
++func (cfg *Config) arrayIndex(vr Variable, idx syntax.ArithmExpr) (int, error) {
++	n, err := Arithm(cfg, idx)
++	if err != nil {
++		return 0, err
++	}
++	if n < math.MinInt || n > math.MaxInt {
++		return 0, fmt.Errorf("array index out of range: %d", n)
++	}
++	i := int(n)
++	if i < 0 {
++		if i += internal.IndexedMax(vr.List, vr.Indexes) + 1; i < 0 {
++			return 0, fmt.Errorf("negative array index")
++		}
++	}
++	return i, nil
++}
++
+ // varInd expands an indexed variable expansion like ${a[i]}, also reporting
+ // whether the resulting element is set, which may be false for missing array
+ // elements such as the holes in a sparse array.
+@@ -489,16 +498,10 @@ func (cfg *Config) varInd(vr Variable, idx syntax.ArithmExpr) (string, bool, err
+ 		case "*", "@":
+ 			return strings.Join(vr.List, " "), vr.IsSet(), nil
+ 		}
+-		i, err := Arithm(cfg, idx)
++		i, err := cfg.arrayIndex(vr, idx)
+ 		if err != nil {
+ 			return "", false, err
+ 		}
+-		if i < 0 {
+-			// Negative indices count from one past the maximum index.
+-			if i += internal.IndexedMax(vr.List, vr.Indexes) + 1; i < 0 {
+-				return "", false, fmt.Errorf("negative array index")
+-			}
+-		}
+ 		if str, ok := vr.indexedVal(i); ok {
+ 			return str, true, nil
+ 		}
+@@ -558,15 +561,9 @@ func (cfg *Config) assignElem(name string, vr Variable, idx syntax.ArithmExpr, v
+ 		i := 0
+ 		if idx != nil {
+ 			var err error
+-			if i, err = Arithm(cfg, idx); err != nil {
++			if i, err = cfg.arrayIndex(vr, idx); err != nil {
+ 				return err
+ 			}
+-			if i < 0 {
+-				// Negative indices count from one past the maximum index.
+-				if i += internal.IndexedMax(vr.List, vr.Indexes) + 1; i < 0 {
+-					return fmt.Errorf("negative array index")
+-				}
+-			}
+ 		}
+ 		list, indexes := slices.Clone(vr.List), slices.Clone(vr.Indexes)
+ 		if vr.Kind == String {

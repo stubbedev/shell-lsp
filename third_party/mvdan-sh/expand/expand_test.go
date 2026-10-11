@@ -208,3 +208,58 @@ func TestZshWholeReplaceAndAssignAlways(t *testing.T) {
 	qt.Assert(t, qt.IsNil(err))
 	qt.Assert(t, qt.Equals(got, "x foo new new"))
 }
+
+func literalWithEnv(t *testing.T, in string) (string, error) {
+	t.Helper()
+	word, err := syntax.NewParser().Document(strings.NewReader(in))
+	qt.Assert(t, qt.IsNil(err))
+	env := mapEnviron{
+		"s": {Set: true, Kind: String, Str: "abc"},
+		"a": {Set: true, Kind: Indexed, List: []string{"x", "y"}},
+	}
+	return Literal(&Config{Env: env}, word)
+}
+
+func TestIntegerConversionBounds(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		in, want string
+	}{
+		{"$(( 9223372036854775807 + 1 ))", "-9223372036854775808"},
+		{"$(( 2 ** 63 ))", "-9223372036854775808"},
+		{"$(( x = 9223372036854775807, x += 1 ))", "-9223372036854775808"},
+		{"${s:9223372036854775807}", ""},
+		{"${s: -9223372036854775808}", ""},
+		{"${s:1:-9223372036854775808}", "bc"},
+		{"${a[@]:9223372036854775807}", ""},
+		{"${a[@]: -9223372036854775808}", ""},
+		{"${a[@]:1:9223372036854775807}", "y"},
+		{"${a[9223372036854775807]}", ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.in, func(t *testing.T) {
+			got, err := literalWithEnv(t, tc.in)
+			qt.Assert(t, qt.IsNil(err))
+			qt.Assert(t, qt.Equals(got, tc.want))
+		})
+	}
+	escapes := []struct {
+		in, want string
+	}{
+		{`\xff`, "\xff"},
+		{`\U0010ffff`, "\U0010ffff"},
+		{`\U00110000`, "\ufffd"},
+		{`\Uffffffff`, "\ufffd"},
+	}
+	for _, tc := range escapes {
+		t.Run(tc.in, func(t *testing.T) {
+			got, _, err := Format(nil, tc.in, nil)
+			qt.Assert(t, qt.IsNil(err))
+			qt.Assert(t, qt.Equals(got, tc.want))
+		})
+	}
+	t.Run("negative index below the array", func(t *testing.T) {
+		_, err := literalWithEnv(t, "${a[-9223372036854775808]}")
+		qt.Assert(t, qt.ErrorMatches(err, "negative array index"))
+	})
+}

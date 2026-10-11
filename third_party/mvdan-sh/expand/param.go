@@ -6,6 +6,7 @@ package expand
 import (
 	"fmt"
 	"maps"
+	"math"
 	"regexp"
 	"slices"
 	"strconv"
@@ -95,7 +96,7 @@ func (cfg *Config) paramExp(pe *syntax.ParamExp) (string, error) {
 		}
 	}
 
-	var sliceOffset, sliceLen int
+	var sliceOffset, sliceLen int64
 	if pe.Slice != nil {
 		var err error
 		if pe.Slice.Offset != nil {
@@ -182,22 +183,11 @@ func (cfg *Config) paramExp(pe *syntax.ParamExp) (string, error) {
 		if callVarInd {
 			// The offset and length are in characters, not bytes.
 			rs := []rune(str)
-			slicePos := func(n int) int {
-				if n < 0 {
-					n = len(rs) + n
-					if n < 0 {
-						n = len(rs)
-					}
-				} else if n > len(rs) {
-					n = len(rs)
-				}
-				return n
-			}
 			if pe.Slice.Offset != nil {
-				rs = rs[slicePos(sliceOffset):]
+				rs = rs[clampSlicePos(sliceOffset, len(rs)):]
 			}
 			if pe.Slice.Length != nil {
-				rs = rs[:slicePos(sliceLen)]
+				rs = rs[:clampSlicePos(sliceLen, len(rs))]
 			}
 			str = string(rs)
 		} // else, elems are already sliced
@@ -459,6 +449,25 @@ func (cfg *Config) caseConvElems(op syntax.ParExpOperator, arg string, elems []s
 	return out
 }
 
+// arrayIndex evaluates idx as an index into the indexed array vr.
+// Negative indices count from one past the maximum index.
+func (cfg *Config) arrayIndex(vr Variable, idx syntax.ArithmExpr) (int, error) {
+	n, err := Arithm(cfg, idx)
+	if err != nil {
+		return 0, err
+	}
+	if n < math.MinInt || n > math.MaxInt {
+		return 0, fmt.Errorf("array index out of range: %d", n)
+	}
+	i := int(n)
+	if i < 0 {
+		if i += internal.IndexedMax(vr.List, vr.Indexes) + 1; i < 0 {
+			return 0, fmt.Errorf("negative array index")
+		}
+	}
+	return i, nil
+}
+
 // varInd expands an indexed variable expansion like ${a[i]}, also reporting
 // whether the resulting element is set, which may be false for missing array
 // elements such as the holes in a sparse array.
@@ -489,15 +498,9 @@ func (cfg *Config) varInd(vr Variable, idx syntax.ArithmExpr) (string, bool, err
 		case "*", "@":
 			return strings.Join(vr.List, " "), vr.IsSet(), nil
 		}
-		i, err := Arithm(cfg, idx)
+		i, err := cfg.arrayIndex(vr, idx)
 		if err != nil {
 			return "", false, err
-		}
-		if i < 0 {
-			// Negative indices count from one past the maximum index.
-			if i += internal.IndexedMax(vr.List, vr.Indexes) + 1; i < 0 {
-				return "", false, fmt.Errorf("negative array index")
-			}
 		}
 		if str, ok := vr.indexedVal(i); ok {
 			return str, true, nil
@@ -558,14 +561,8 @@ func (cfg *Config) assignElem(name string, vr Variable, idx syntax.ArithmExpr, v
 		i := 0
 		if idx != nil {
 			var err error
-			if i, err = Arithm(cfg, idx); err != nil {
+			if i, err = cfg.arrayIndex(vr, idx); err != nil {
 				return err
-			}
-			if i < 0 {
-				// Negative indices count from one past the maximum index.
-				if i += internal.IndexedMax(vr.List, vr.Indexes) + 1; i < 0 {
-					return fmt.Errorf("negative array index")
-				}
 			}
 		}
 		list, indexes := slices.Clone(vr.List), slices.Clone(vr.Indexes)
