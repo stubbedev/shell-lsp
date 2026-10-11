@@ -1,6 +1,7 @@
 package lint
 
 import (
+	"bytes"
 	"slices"
 	"strings"
 
@@ -26,16 +27,16 @@ const (
 
 type braceGroup struct {
 	span     parser.Span
-	elements []string
+	elements [][]byte
 }
 
 func (g braceGroup) expands() bool {
-	return len(g.elements) > 1 || strings.Contains(g.elements[0], "..")
+	return len(g.elements) > 1 || bytes.Contains(g.elements[0], []byte(".."))
 }
 
 func (g braceGroup) rangesOverExpansion() bool {
-	return slices.ContainsFunc(g.elements, func(e string) bool {
-		return strings.Contains(e, "..$") || strings.Contains(e, "$..")
+	return slices.ContainsFunc(g.elements, func(e []byte) bool {
+		return bytes.Contains(e, []byte("..$")) || bytes.Contains(e, []byte("$.."))
 	})
 }
 
@@ -48,7 +49,7 @@ func checkBraceExpansions(p *pass, n syntax.Node) {
 		if !g.expands() {
 			continue
 		}
-		p.nonPortable(portabilityIssue{code: 3009, shells: strictShells, feature: "Brace expansion " + p.text[g.span.Start:g.span.End], alternative: "a loop or separate words"}, g.span)
+		p.nonPortable(portabilityIssue{code: 3009, shells: strictShells, feature: "Brace expansion " + p.excerpt(g.span), alternative: "a loop or separate words"}, g.span)
 		if p.dialect == dialect.Bash && g.rangesOverExpansion() {
 			p.reportBraceRangeVariable(g)
 		}
@@ -56,7 +57,7 @@ func checkBraceExpansions(p *pass, n syntax.Node) {
 }
 
 func (p *pass) reportBraceRangeVariable(g braceGroup) {
-	text := p.text[g.span.Start:g.span.End]
+	text := p.excerpt(g.span)
 	if call, ok := p.parent().(*syntax.CallExpr); ok {
 		if name, _ := parser.Literal(call.Args[0]); name == "eval" {
 			p.report(2175, g.span, "Quote "+text+" so eval receives it literally and expands the range after the variable is substituted.")
@@ -113,9 +114,9 @@ func braceGroups(w *syntax.Word) []braceGroup {
 			f := stack[len(stack)-1]
 			stack = stack[:len(stack)-1]
 			bounds := append(append([]int{f.open}, f.commas...), i)
-			elements := make([]string, len(bounds)-1)
+			elements := make([][]byte, len(bounds)-1)
 			for j := range elements {
-				elements[j] = string(rendered[bounds[j]+1 : bounds[j+1]])
+				elements[j] = rendered[bounds[j]+1 : bounds[j+1]]
 			}
 			groups = append(groups, braceGroup{span: parser.Span{Start: offsets[f.open], End: offsets[i] + 1}, elements: elements})
 		}

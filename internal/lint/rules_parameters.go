@@ -81,11 +81,18 @@ func (p *pass) startsParameter(c byte) bool {
 	return parser.IsNameChar(c) || strings.IndexByte(specialParameterChars, c) >= 0 || c == '.' && p.tree.Lang == syntax.LangKsh93
 }
 
+func (p *pass) braces() *braceScanner {
+	if p.braceScan == nil {
+		p.braceScan = &braceScanner{text: p.text}
+	}
+	return p.braceScan
+}
+
 func (p *pass) checkBracedAt(dollar int) int {
 	if dollar+2 < len(p.text) && strings.IndexByte(" \t\n|", p.text[dollar+2]) >= 0 {
 		return dollar + 2
 	}
-	body, end, ok := scanBraced(p.text, dollar)
+	body, end, ok := p.braces().braced(dollar)
 	if !ok {
 		return dollar + 2
 	}
@@ -193,7 +200,20 @@ type bracePart struct {
 	plain      bool
 }
 
-func scanBraced(text string, dollar int) ([]bracePart, int, bool) {
+type braceScanner struct {
+	text    string
+	depth   int
+	scanned map[int]scannedPart
+}
+
+type scannedPart struct {
+	part bracePart
+	ok   bool
+}
+
+const maxBraceScanDepth = 1000
+
+func (s *braceScanner) braced(dollar int) ([]bracePart, int, bool) {
 	var parts []bracePart
 	literal := -1
 	flush := func(at int) {
@@ -202,12 +222,12 @@ func scanBraced(text string, dollar int) ([]bracePart, int, bool) {
 			literal = -1
 		}
 	}
-	for i := dollar + 2; i < len(text); {
-		if text[i] == '}' {
+	for i := dollar + 2; i < len(s.text); {
+		if s.text[i] == '}' {
 			flush(i)
 			return parts, i + 1, true
 		}
-		part, ok := scanBracePart(text, i)
+		part, ok := s.part(i)
 		if !ok {
 			return nil, 0, false
 		}
@@ -225,7 +245,27 @@ func scanBraced(text string, dollar int) ([]bracePart, int, bool) {
 	return nil, 0, false
 }
 
-func scanBracePart(text string, i int) (bracePart, bool) {
+func (s *braceScanner) part(i int) (bracePart, bool) {
+	if done, ok := s.scanned[i]; ok {
+		return done.part, done.ok
+	}
+	if s.depth >= maxBraceScanDepth {
+		return bracePart{}, false
+	}
+	s.depth++
+	part, ok := s.scanPart(i)
+	s.depth--
+	if !ok || part.kind != braceLiteral {
+		if s.scanned == nil {
+			s.scanned = map[int]scannedPart{}
+		}
+		s.scanned[i] = scannedPart{part: part, ok: ok}
+	}
+	return part, ok
+}
+
+func (s *braceScanner) scanPart(i int) (bracePart, bool) {
+	text := s.text
 	c := text[i]
 	next := byte(0)
 	if i+1 < len(text) {
@@ -237,31 +277,31 @@ func scanBracePart(text string, i int) (bracePart, bool) {
 	case c == '\'':
 		return closeAt(braceSingle, text, i, i+1, "'")
 	case c == '"':
-		return scanDoubleQuoted(text, i, i+1)
+		return s.doubleQuoted(i, i+1)
 	case c == '`':
 		return closeAt(braceCommand, text, i, i+1, "`")
 	case strings.IndexByte("@!*+?", c) >= 0 && next == '(':
-		return closeParens(braceExtGlob, text, i, i+2, 1)
+		return s.closeParens(braceExtGlob, i, i+2, 1)
 	case c != '$':
 		return bracePart{kind: braceLiteral, start: i, end: i + 1}, true
 	}
 	switch {
 	case next == '{':
-		body, end, ok := scanBraced(text, i)
+		body, end, ok := s.braced(i)
 		if !ok {
 			return bracePart{}, false
 		}
 		return bracePart{kind: braceNested, start: i, end: end, plain: isPlainBody(text, body)}, true
 	case next == '(' && i+2 < len(text) && text[i+2] == '(':
-		return closeParens(braceArithmetic, text, i, i+3, 2)
+		return s.closeParens(braceArithmetic, i, i+3, 2)
 	case next == '(':
-		return closeParens(braceCommand, text, i, i+2, 1)
+		return s.closeParens(braceCommand, i, i+2, 1)
 	case next == '[':
 		return closeAt(braceArithmetic, text, i, i+2, "]")
 	case next == '\'':
 		return closeAt(braceSingle, text, i, i+2, "'")
 	case next == '"':
-		return scanDoubleQuoted(text, i, i+2)
+		return s.doubleQuoted(i, i+2)
 	case next != 0 && strings.IndexByte(specialParameterChars, next) >= 0, next >= '0' && next <= '9':
 		return bracePart{kind: braceVariable, start: i, end: i + 2}, true
 	case next != 0 && parser.IsNameChar(next):
@@ -294,16 +334,16 @@ func closeAt(kind bracePartKind, text string, start, from int, closer string) (b
 	return bracePart{}, false
 }
 
-func scanDoubleQuoted(text string, start, from int) (bracePart, bool) {
-	for i := from; i < len(text); {
-		switch text[i] {
+func (s *braceScanner) doubleQuoted(start, from int) (bracePart, bool) {
+	for i := from; i < len(s.text); {
+		switch s.text[i] {
 		case '\\':
 			i += 2
 			continue
 		case '"':
 			return bracePart{kind: braceDouble, start: start, end: i + 1}, true
 		case '$', '`':
-			part, ok := scanBracePart(text, i)
+			part, ok := s.part(i)
 			if !ok {
 				return bracePart{}, false
 			}
@@ -315,14 +355,14 @@ func scanDoubleQuoted(text string, start, from int) (bracePart, bool) {
 	return bracePart{}, false
 }
 
-func closeParens(kind bracePartKind, text string, start, from, depth int) (bracePart, bool) {
-	for i := from; i < len(text); {
-		switch text[i] {
+func (s *braceScanner) closeParens(kind bracePartKind, start, from, depth int) (bracePart, bool) {
+	for i := from; i < len(s.text); {
+		switch s.text[i] {
 		case '\\':
 			i += 2
 			continue
 		case '\'', '"', '`', '$':
-			part, ok := scanBracePart(text, i)
+			part, ok := s.part(i)
 			if !ok {
 				return bracePart{}, false
 			}

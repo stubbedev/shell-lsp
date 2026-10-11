@@ -3,6 +3,7 @@ package lint
 import (
 	"fmt"
 	"runtime/debug"
+	"unicode/utf8"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
@@ -46,6 +47,8 @@ type pass struct {
 	parameters     shelldocs.ParameterTable
 	dialectGuessed bool
 	emptinessTests map[int]bool
+	maskWalked     map[syntax.Node]bool
+	braceScan      *braceScanner
 }
 
 func newPass(tree *parser.Tree, imports []parser.Import, opts Options) *pass {
@@ -137,6 +140,20 @@ func (p *pass) ancestor(depth int) syntax.Node {
 }
 
 func (p *pass) span(n syntax.Node) (parser.Span, bool) { return p.tree.NodeSpan(n) }
+
+const maxExcerpt = 120
+
+func (p *pass) excerpt(span parser.Span) string {
+	text := p.text[span.Start:span.End]
+	if len(text) <= maxExcerpt {
+		return text
+	}
+	cut := maxExcerpt
+	for !utf8.RuneStart(text[cut]) {
+		cut--
+	}
+	return text[:cut] + "…"
+}
 
 func (p *pass) reportNode(code Code, n syntax.Node, message string, fixes ...Fix) {
 	if span, ok := p.span(n); ok {

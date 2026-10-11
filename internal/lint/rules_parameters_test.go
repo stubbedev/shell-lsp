@@ -85,7 +85,7 @@ func TestScanBracedClassifiesFirstPart(t *testing.T) {
 		{"${x$y}", []bracePartKind{braceLiteral, braceVariable}, false},
 	}
 	for _, c := range cases {
-		body, end, ok := scanBraced(c.src, 0)
+		body, end, ok := (&braceScanner{text: c.src}).braced(0)
 		if !ok || end != len(c.src) {
 			t.Errorf("scanBraced(%q) = end %d, ok %t", c.src, end, ok)
 			continue
@@ -101,7 +101,7 @@ func TestScanBracedClassifiesFirstPart(t *testing.T) {
 			t.Errorf("scanBraced(%q) plain = %t, want %t", c.src, body[0].plain, c.plain)
 		}
 	}
-	if _, _, ok := scanBraced("${unterminated", 0); ok {
+	if _, _, ok := (&braceScanner{text: "${unterminated"}).braced(0); ok {
 		t.Error("an unterminated expansion was accepted")
 	}
 }

@@ -285,35 +285,70 @@ func containsCommand(root syntax.Node) bool {
 }
 
 func (p *pass) reportMaskedIn(context, unit syntax.Node) {
-	stack := append(slices.Clone(p.stack), context)
+	if p.maskWalked[unit] {
+		return
+	}
+	if p.maskWalked == nil {
+		p.maskWalked = map[syntax.Node]bool{}
+	}
+	var guards maskGuards
+	for _, n := range p.stack {
+		guards.push(n)
+	}
+	guards.push(context)
 	parser.Walk(unit, func(n syntax.Node) bool {
 		if n == nil {
-			stack = stack[:len(stack)-1]
+			guards.pop()
 			return true
 		}
-		if p.isMaskedCommand(n, stack) {
+		p.maskWalked[n] = true
+		if isMaskableCommand(n) && guards.declaring == 0 && guards.ignoring == 0 && !ignoresFailure(n) {
 			p.reportNode(2312, n, "This command's exit status is masked by its context; run it separately or append || true if failure does not matter.")
 		}
-		stack = append(stack, n)
+		guards.push(n)
 		return true
 	})
 }
 
-func (p *pass) isMaskedCommand(n syntax.Node, ancestors []syntax.Node) bool {
+type maskGuards struct {
+	pushed    []maskGuard
+	declaring int
+	ignoring  int
+}
+
+type maskGuard struct{ declaring, ignoring bool }
+
+func (g *maskGuards) push(n syntax.Node) {
+	guard := maskGuard{declaring: isDeclaringCommand(n), ignoring: ignoresFailure(n)}
+	g.pushed = append(g.pushed, guard)
+	g.count(guard, 1)
+}
+
+func (g *maskGuards) pop() {
+	last := len(g.pushed) - 1
+	g.count(g.pushed[last], -1)
+	g.pushed = g.pushed[:last]
+}
+
+func (g *maskGuards) count(guard maskGuard, delta int) {
+	if guard.declaring {
+		g.declaring += delta
+	}
+	if guard.ignoring {
+		g.ignoring += delta
+	}
+}
+
+func isMaskableCommand(n syntax.Node) bool {
 	switch n := n.(type) {
 	case *syntax.TestClause:
+		return true
 	case *syntax.TimeClause:
-		if n.Stmt == nil || isHarmless(n.Stmt.Cmd) {
-			return false
-		}
+		return n.Stmt != nil && !isHarmless(n.Stmt.Cmd)
 	case *syntax.CallExpr:
-		if isHarmless(n) {
-			return false
-		}
-	default:
-		return false
+		return !isHarmless(n)
 	}
-	return !slices.ContainsFunc(ancestors, isDeclaringCommand) && !slices.ContainsFunc(append(ancestors, n), ignoresFailure)
+	return false
 }
 
 func isHarmless(cmd syntax.Command) bool {
