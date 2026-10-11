@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/stubbedev/shell-lsp/internal/directive"
 	"github.com/stubbedev/shell-lsp/internal/embedded"
 	"github.com/stubbedev/shell-lsp/internal/embedded/lang"
 	"github.com/stubbedev/shell-lsp/internal/parser"
@@ -83,7 +84,7 @@ func (g *generator) add(span parser.Span, t Type, mods Modifier) {
 func (g *generator) index() {
 	tree := g.tree
 	for _, c := range tree.Comments {
-		g.add(c.Span, TypeComment, 0)
+		g.comment(c.Span)
 	}
 	for _, k := range tree.Keywords {
 		g.add(k.Span, TypeKeyword, 0)
@@ -116,6 +117,38 @@ func (g *generator) index() {
 	}
 	for _, r := range tree.Redirects {
 		g.add(r.OpSpan, TypeOperator, 0)
+	}
+}
+
+func (g *generator) comment(span parser.Span) {
+	text := g.text[span.Start:span.End]
+	d, ok := directive.Parse(text)
+	if !ok {
+		g.add(span, TypeComment, 0)
+		return
+	}
+	end, _ := directive.Header(text)
+	parts := []Token{{Span: parser.Span{Start: end - len(directive.Word), End: end}, Type: TypeKeyword}}
+	for _, pair := range d.Pairs {
+		equals := pair.KeyOffset + len(pair.Key)
+		parts = append(parts,
+			Token{Span: parser.Span{Start: pair.KeyOffset, End: equals}, Type: TypeProperty},
+			Token{Span: parser.Span{Start: equals, End: equals + 1}, Type: TypeOperator},
+			Token{Span: parser.Span{Start: pair.ValueOffset, End: pair.ValueEnd}, Type: TypeString},
+		)
+	}
+	at := 0
+	for _, part := range parts {
+		g.commentGap(span.Start, text[at:part.Span.Start], at)
+		g.add(parser.Span{Start: span.Start + part.Span.Start, End: span.Start + part.Span.End}, part.Type, 0)
+		at = part.Span.End
+	}
+	g.commentGap(span.Start, text[at:], at)
+}
+
+func (g *generator) commentGap(base int, gap string, at int) {
+	if strings.TrimSpace(gap) != "" {
+		g.add(parser.Span{Start: base + at, End: base + at + len(gap)}, TypeComment, 0)
 	}
 }
 

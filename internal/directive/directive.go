@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-const word = "shellcheck"
+const Word = "shellcheck"
 
 const (
 	Disable          = "disable"
@@ -60,23 +60,23 @@ type Directive struct {
 }
 
 func Parse(comment string) (Directive, bool) {
-	i, ok := header(comment)
+	i, ok := Header(comment)
 	if !ok {
 		return Directive{}, false
 	}
 	return parsePairs(comment, i)
 }
 
-func header(comment string) (int, bool) {
+func Header(comment string) (int, bool) {
 	i := skipBlanks(comment, 0)
 	if i == len(comment) || comment[i] != '#' {
 		return 0, false
 	}
 	i = skipBlanks(comment, i+1)
-	if !strings.HasPrefix(comment[i:], word) {
+	if !strings.HasPrefix(comment[i:], Word) {
 		return 0, false
 	}
-	i += len(word)
+	i += len(Word)
 	if i < len(comment) && !isBlank(comment[i]) {
 		return 0, false
 	}
@@ -99,7 +99,7 @@ type Cursor struct {
 }
 
 func CursorAt(comment string, offset int) (Cursor, bool) {
-	i, ok := header(comment)
+	i, ok := Header(comment)
 	if !ok || offset <= i || offset > len(comment) {
 		return Cursor{}, false
 	}

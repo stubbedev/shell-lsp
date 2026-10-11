@@ -127,6 +127,33 @@ func TestTokensAreSingleLineAndOrdered(t *testing.T) {
 	}
 }
 
+func TestDirectiveTokens(t *testing.T) {
+	t.Parallel()
+
+	text := "  # shellcheck disable=SC2086,SC2034 source=lib.sh # quoting is deliberate\necho $1 # just a comment\n"
+	var got []string
+	for _, d := range describe(text, Tokens(parser.Parse(text, dialect.Bash), nil, nil)) {
+		if !strings.HasPrefix(d, "echo") && !strings.HasPrefix(d, "1:") {
+			got = append(got, d)
+		}
+	}
+	want := []string{
+		"# :comment",
+		"shellcheck:keyword",
+		"disable:property",
+		"=:operator",
+		"SC2086,SC2034:string",
+		"source:property",
+		"=:operator",
+		"lib.sh:string",
+		" # quoting is deliberate:comment",
+		"# just a comment:comment",
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("tokens:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
 func TestNumbersInZshSubscriptFlagsAreNumbers(t *testing.T) {
 	t.Parallel()
 
