@@ -43,3 +43,14 @@ echo "${table[one]}"
 >>> SC2190 2:23
 >>> SC2190 2:25
 >>> SC2190 2:29
+
+### integer and float declare variables whatever their value
+#!/bin/zsh
+f() {
+  local -a verbose=(-v -v)
+  integer level=$#verbose
+  float ratio=$1
+  (( level > 1 )) && print -r -- $ratio
+}
+f "$@"
+>>- SC1071 1:1 -- shellcheck refuses zsh; integer and float assign level and ratio like typeset does

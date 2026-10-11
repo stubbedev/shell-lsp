@@ -602,12 +602,16 @@ func (b *builder) declarationWords(variant declVariant, args []*syntax.Word) {
 }
 
 func (b *builder) declarationWord(variant declVariant, flags declFlags, arg *syntax.Word) declFlags {
-	value, ok := Literal(arg)
-	if !ok {
-		return flags
-	}
-	if strings.HasPrefix(value, "-") || strings.HasPrefix(value, "+") {
+	value, literal := Literal(arg)
+	if literal && (strings.HasPrefix(value, "-") || strings.HasPrefix(value, "+")) {
 		return b.applyFlags(flags, value)
+	}
+	if !literal {
+		lead, ok := arg.Parts[0].(*syntax.Lit)
+		if !ok || !strings.Contains(lead.Value, "=") {
+			return flags
+		}
+		value = lead.Value
 	}
 	name, _, _ := strings.Cut(value, "=")
 	if !flags.namesVariables() || !IsName(name) {

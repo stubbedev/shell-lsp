@@ -9,6 +9,8 @@ definition 2:27-2:28 "y" kind=2 attrs=100000 local=true within=1
 definition 5:25-5:26 "v" kind=2 attrs=100000 local=true within=2
 definition 5:27-5:29 "lo" kind=2 attrs=100000 local=true within=2
 definition 5:30-5:32 "hi" kind=2 attrs=100000 local=true within=2
+definition 9:7-9:8 "r" kind=2 attrs=000000 local=false within=0
+definition 10:9-10:10 "n" kind=2 attrs=010000 local=false within=0
 definition 11:13-11:14 "e" kind=2 attrs=000000 local=false within=0
 definition 12:13-12:18 "money" kind=2 attrs=000000 local=false within=0
 definition 13:13-13:17 "bits" kind=2 attrs=010000 local=false within=0
