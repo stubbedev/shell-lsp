@@ -39,8 +39,8 @@ binaries exist for Linux and macOS on x64 and arm64; Windows is not supported
 yet.
 
 To install the server yourself instead, use the release binaries,
-`nix profile install github:stubbedev/shell-lsp` or
-`go install github.com/stubbedev/shell-lsp@latest`.
+`nix profile install github:stubbedev/shell-lsp` or `go install .` in a clone
+of the repository.
 
 ## Settings
 

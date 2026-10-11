@@ -9,7 +9,8 @@ Everything runs inside one static binary with no runtime dependencies: the
 linter, the formatter, the manual-page reader behind hover and completion, and
 the `.editorconfig` reader are all native. Highlights:
 
-- An error-tolerant parser for every dialect, with incremental document sync.
+- An error-tolerant parser for every dialect, with incremental document sync,
+  that knows the whole zsh and ksh93 grammar ([Parser](#parser)).
 - Diagnostics from a native linter that reuses ShellCheck's check codes and
   directives, lints zsh, follows sourced files, and adds checks of its own,
   such as untrusted data reaching `eval`, `sh -c` or `source`
@@ -44,7 +45,10 @@ shell-lsp is one static binary with no runtime dependencies. Pick one:
   together with a `SHA256SUMS` file. Download the one for your platform,
   check it with `sha256sum --check --ignore-missing SHA256SUMS`, make it
   executable and put it on `PATH` as `shell-lsp`.
-- **Go**: `go install github.com/stubbedev/shell-lsp@latest`
+- **Go**: `go install .` in a clone of this repository. `go install
+  github.com/stubbedev/shell-lsp@latest` does not work, because Go refuses
+  modules whose go.mod replaces a dependency, and shell-lsp replaces
+  mvdan.cc/sh with [its fork](#parser).
 - **Nix**: `nix profile install github:stubbedev/shell-lsp`, or try it with
   `nix run github:stubbedev/shell-lsp -- --version`
 - **VS Code**: the [Shell LSP extension](editors/vscode)
@@ -225,14 +229,31 @@ or that test runs again, and they move with their test (or helper function)
 as the buffer is edited, even when bats ran an older saved copy. A run is stopped when cancelled and after 30
 minutes.
 
+## Parser
+
+Scripts are parsed with a fork of [mvdan.cc/sh](https://github.com/mvdan/sh)
+v3.14.1 in [third_party/mvdan-sh](third_party/mvdan-sh), which `go.mod`
+substitutes for the upstream module. Upstream treats zsh as experimental and
+parses ksh as mksh, so the fork adds the rest of the zsh grammar (short and
+brace forms of loops and `if`, `foreach`, `repeat`, `{ } always { }`,
+anonymous functions with arguments, case groups, `coproc` without a name,
+expansion operators such as `${a::=w}` and `${a:^b}`, math functions and
+glob groups and qualifiers) and a ksh93 variant (compound variables and
+types, `namespace`, `.sh.math` functions, dotted names, `<<#` and the seek
+redirections). A ksh script is parsed as ksh93 unless its shebang, shell
+directive or file name says mksh. Every change is a patch with a reproducer
+under [third_party/mvdan-sh/patches](third_party/mvdan-sh/patches), listed in
+the fork's [README](third_party/mvdan-sh/README.md), so it can be sent
+upstream.
+
 ## Recipes
 
 | Recipe | What it does |
 | --- | --- |
 | `just check` | Every release gate in order: vet, lint, test, build |
-| `just vet` | Static analysis with `go vet` |
+| `just vet` | Static analysis with `go vet`, also over the forked parser |
 | `just lint` | `golangci-lint run` against the strict config in `.golangci.yml` |
-| `just test` | `go test ./...` |
+| `just test` | `go test ./...`, also over the forked parser |
 | `just build` | Compile-check every package |
 | `just fmt` | Format every Go source in place |
 | `just smoke` | Drive the server from headless Neovim |

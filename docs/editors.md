@@ -2,7 +2,7 @@
 
 shell-lsp speaks LSP over stdio and needs no arguments. Put the binary on
 `PATH` (release binaries, `nix profile install github:stubbedev/shell-lsp`, or
-`go install github.com/stubbedev/shell-lsp@latest`) and point your editor at
+`go install .` in a clone of the repository) and point your editor at
 `shell-lsp`; the VS Code extension can also download it for you. Settings go into `initializationOptions` or the `shellLsp`
 configuration section; see the README for the keys.
 
