@@ -16,16 +16,28 @@ import (
 var extensionOnlySettings = []string{Section + ".path", Section + ".trace.server"}
 
 type contributedSetting struct {
-	Type    json.RawMessage   `json:"type"`
-	Default json.RawMessage   `json:"default"`
-	Enum    []json.RawMessage `json:"enum"`
-	Minimum *float64          `json:"minimum"`
-	Items   *struct {
+	Type        json.RawMessage   `json:"type"`
+	Default     json.RawMessage   `json:"default"`
+	Scope       string            `json:"scope"`
+	Description string            `json:"markdownDescription"`
+	Enum        []json.RawMessage `json:"enum"`
+	Minimum     *float64          `json:"minimum"`
+	Items       *struct {
 		Type string `json:"type"`
 	} `json:"items"`
 }
 
 func contributedSettings(t *testing.T) map[string]contributedSetting {
+	t.Helper()
+
+	settings := allContributedSettings(t)
+	for _, key := range extensionOnlySettings {
+		delete(settings, key)
+	}
+	return settings
+}
+
+func allContributedSettings(t *testing.T) map[string]contributedSetting {
 	t.Helper()
 
 	raw, err := os.ReadFile(filepath.Join("..", "..", "editors", "vscode", "package.json"))
@@ -44,12 +56,7 @@ func contributedSettings(t *testing.T) map[string]contributedSetting {
 	}
 	settings := map[string]contributedSetting{}
 	for _, category := range manifest.Contributes.Configuration {
-		for key, setting := range category.Properties {
-			if slices.Contains(extensionOnlySettings, key) {
-				continue
-			}
-			settings[key] = setting
-		}
+		maps.Copy(settings, category.Properties)
 	}
 	return settings
 }
@@ -179,5 +186,94 @@ func TestVSCodeExtensionDefaultsMatchTheServer(t *testing.T) {
 	}
 	if got.Format.Style.Indent != nil {
 		t.Errorf("format.indent defaults to %d, want unset so the editor's tab size applies", *got.Format.Style.Indent)
+	}
+}
+
+type documentedSetting struct {
+	key, defaultValue, meaning string
+}
+
+func settingsTable(t *testing.T, path string) []documentedSetting {
+	t.Helper()
+
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, table, found := strings.Cut(string(raw), "| Default | Meaning |\n")
+	if !found {
+		t.Fatalf("%s has no settings table", path)
+	}
+	table, _, _ = strings.Cut(table, "\n\n")
+	var out []documentedSetting
+	for row := range strings.SplitSeq(table, "\n") {
+		if strings.HasPrefix(row, "| ---") {
+			continue
+		}
+		cells := strings.Split(strings.ReplaceAll(strings.Trim(row, "| "), `\|`, "\x00"), " | ")
+		if len(cells) != 3 {
+			t.Fatalf("%s: settings row %q does not have three cells", path, row)
+		}
+		unescape := func(s string) string { return strings.ReplaceAll(s, "\x00", "|") }
+		out = append(out, documentedSetting{key: strings.Trim(cells[0], "`"), defaultValue: unescape(cells[1]), meaning: unescape(cells[2])})
+	}
+	return out
+}
+
+func describes(description, meaning string) bool {
+	rest, ok := strings.CutPrefix(description, meaning)
+	return ok && (rest == "." || strings.HasPrefix(rest, ". ") || strings.HasPrefix(rest, "; "))
+}
+
+func checkSettingsTable(t *testing.T, path, prefix string, want map[string]contributedSetting) {
+	t.Helper()
+
+	documented := settingsTable(t, path)
+	keys := make([]string, 0, len(documented))
+	for _, row := range documented {
+		key := prefix + row.key
+		keys = append(keys, key)
+		setting, ok := want[key]
+		if !ok {
+			continue
+		}
+		if !describes(setting.Description, row.meaning) {
+			t.Errorf("%s describes %s as %q, but the extension says %q", path, row.key, row.meaning, setting.Description)
+		}
+		defaultValue := compactJSON(t, setting.Default)
+		var plain string
+		if json.Unmarshal(setting.Default, &plain) == nil && "`"+plain+"`" == row.defaultValue {
+			continue
+		}
+		if defaultValue == "null" {
+			if strings.HasPrefix(row.defaultValue, "`") {
+				t.Errorf("%s gives %s the default %s, but it is unset by default", path, row.key, row.defaultValue)
+			}
+			continue
+		}
+		if row.defaultValue != "`"+defaultValue+"`" {
+			t.Errorf("%s gives %s the default %s, the extension %s", path, row.key, row.defaultValue, defaultValue)
+		}
+	}
+	if got, all := slices.Sorted(slices.Values(keys)), slices.Sorted(maps.Keys(want)); !slices.Equal(got, all) {
+		t.Errorf("%s documents %v, the settings are %v", path, got, all)
+	}
+}
+
+func TestReadmesDocumentEverySettingAsTheExtensionDoes(t *testing.T) {
+	t.Parallel()
+
+	checkSettingsTable(t, filepath.Join("..", "..", "README.md"), Section+".", contributedSettings(t))
+	checkSettingsTable(t, filepath.Join("..", "..", "editors", "vscode", "README.md"), "", allContributedSettings(t))
+}
+
+func TestServerSettingsCanDifferPerWorkspaceFolder(t *testing.T) {
+	t.Parallel()
+
+	for key, setting := range allContributedSettings(t) {
+		perFolder := setting.Scope == "resource"
+		if perFolder == slices.Contains(extensionOnlySettings, key) {
+			t.Errorf("%s has scope %q; server settings are per folder (resource) and extension-only ones are not", key, setting.Scope)
+		}
 	}
 }

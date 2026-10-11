@@ -97,7 +97,7 @@
             "type": "string",
             "default": "",
             "scope": "machine",
-            "markdownDescription": "Absolute path of the `shell-lsp` binary. When empty, `shell-lsp` is looked up on `PATH`, then among the binaries this extension downloaded."
+            "markdownDescription": "Absolute path of the `shell-lsp` binary; user settings only. When empty, `shell-lsp` is looked up on `PATH`, then among the binaries this extension downloaded."
           },
           "shellLsp.dialect": {
             "type": [
