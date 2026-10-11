@@ -60,6 +60,8 @@ func (c Code) Native() bool { return c >= nativeBase }
 
 func (c Code) Portability() bool { return c >= 3000 && c < 4000 }
 
+func (c Code) parseFailure() bool { return c >= 1000 && c < 2000 }
+
 func (c Code) String() string {
 	if c.Native() {
 		return nativePrefix + strconv.Itoa(int(c-nativeBase))
@@ -175,29 +177,71 @@ type Options struct {
 	NoExtendedAnalysis bool
 }
 
+type Report struct {
+	Findings   []Finding
+	Suppressed []Finding
+	Disabled   []DisabledCode
+}
+
+type DisabledCode struct {
+	Span       parser.Span
+	Text       string
+	Suppressed []int
+}
+
 func Check(tree *parser.Tree, imports []parser.Import, opts Options) []Finding {
+	return Run(tree, imports, opts).Findings
+}
+
+func Run(tree *parser.Tree, imports []parser.Import, opts Options) Report {
 	p := newPass(tree, imports, opts)
 	p.shellChosen = opts.DialectSource == DialectForced || p.settings.shell
 	p.dialectGuessed = opts.DialectSource == DialectGuessed && !p.settings.shell
-	if name, foreign := foreignInterpreter(p.text, p.shellChosen); foreign {
+	name, foreign := foreignInterpreter(p.text, p.shellChosen)
+	if foreign {
 		first, _, _ := strings.Cut(p.text, "\n")
 		p.report(1071, parser.Span{Start: 0, End: len(first)}, name+" is not a shell, so this file is not linted.")
 	} else {
 		p.run()
 	}
+	sortFindings(p.findings)
+	found := slices.CompactFunc(p.findings, sameFinding)
 	suppressed := p.suppressions()
-	out := p.findings[:0]
-	for _, f := range p.findings {
-		if slices.Contains(opts.Exclude, f.Code) || suppressed.covers(f) {
-			continue
-		}
-		out = append(out, f)
+	for _, f := range p.probes {
+		suppressed.cover(f, -1)
 	}
-	slices.SortStableFunc(out, func(a, b Finding) int {
+	var report Report
+	keep := func(f Finding) {
+		if len(suppressed.cover(f, len(report.Suppressed))) > 0 {
+			report.Suppressed = append(report.Suppressed, f)
+			return
+		}
+		if !slices.Contains(opts.Exclude, f.Code) {
+			report.Findings = append(report.Findings, f)
+		}
+	}
+	for _, f := range found {
+		keep(f)
+	}
+	if !foreign {
+		p.findings = p.findings[:0]
+		p.reportUnusedDirectives(suppressed)
+		for _, f := range p.findings {
+			keep(f)
+		}
+		sortFindings(report.Findings)
+	}
+	report.Disabled = suppressed.disabledCodes()
+	return report
+}
+
+func sortFindings(findings []Finding) {
+	slices.SortStableFunc(findings, func(a, b Finding) int {
 		return cmp.Or(cmp.Compare(a.Span.Start, b.Span.Start), cmp.Compare(a.Code, b.Code), cmp.Compare(a.Span.End, b.Span.End))
 	})
-	return slices.CompactFunc(out, func(a, b Finding) bool { return a.Code == b.Code && a.Span == b.Span })
 }
+
+func sameFinding(a, b Finding) bool { return a.Code == b.Code && a.Span == b.Span }
 
 var foreignFamily = family{codes: map[Code]meta{1071: {severity: SeverityError}}}
 

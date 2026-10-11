@@ -52,6 +52,7 @@ type pass struct {
 	quotedHeredocs map[int]bool
 
 	normalized Normalized
+	probes     []Finding
 }
 
 func newPass(tree *parser.Tree, imports []parser.Import, opts Options) *pass {

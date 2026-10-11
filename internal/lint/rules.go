@@ -71,6 +71,7 @@ var families = []family{
 	executionFamily,
 	taintFamily,
 	directivesFamily,
+	unusedDirectivesFamily,
 	sourcesFamily,
 	typosFamily,
 	testSyntaxFamily,

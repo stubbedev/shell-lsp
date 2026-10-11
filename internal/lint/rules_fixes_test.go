@@ -109,6 +109,12 @@ func TestAutofixes(t *testing.T) {
 		{2164, "f() {\n\tcd /tmp; ls\n}\n", "f() {\n\tcd /tmp || return; ls\n}\n", Review},
 		{codeLeakedTempFile, "#!/bin/bash\nwork=$(mktemp -d)\ncp a \"$work\"\n", "#!/bin/bash\nwork=$(mktemp -d)\ntrap 'rm -rf -- \"$work\"' EXIT\ncp a \"$work\"\n", Review},
 		{codeLeakedTempFile, "#!/bin/sh\nlog=`mktemp`\ndate > \"$log\"\n", "#!/bin/sh\nlog=`mktemp`\ntrap 'rm -f -- \"$log\"' EXIT\ndate > \"$log\"\n", Review},
+		{codeUnusedDirective, "#!/bin/bash\n# shellcheck disable=SC2086\necho \"$1\"\n", "#!/bin/bash\necho \"$1\"\n", Safe},
+		{codeUnusedDirective, "#!/bin/bash\n  # shellcheck disable=SC2086\necho \"$1\"\n", "#!/bin/bash\necho \"$1\"\n", Safe},
+		{codeUnusedDirective, "#!/bin/bash\n# shellcheck disable=SC2086,SC2034\nx=1\n", "#!/bin/bash\n# shellcheck disable=SC2034\nx=1\n", Safe},
+		{codeUnusedDirective, "#!/bin/bash\n# shellcheck disable=SC2034,SC2086\nx=1\n", "#!/bin/bash\n# shellcheck disable=SC2034\nx=1\n", Safe},
+		{codeUnusedDirective, "#!/bin/bash\n# shellcheck shell=bash disable=SC2086\necho \"$1\"\n", "#!/bin/bash\n# shellcheck shell=bash\necho \"$1\"\n", Safe},
+		{codeUnusedDirective, "#!/bin/bash\n# shellcheck disable=SC2034 disable=SC2086\nx=1\n", "#!/bin/bash\n# shellcheck disable=SC2034\nx=1\n", Safe},
 	} {
 		t.Run(tc.code.String()+" "+tc.script, func(t *testing.T) {
 			t.Parallel()

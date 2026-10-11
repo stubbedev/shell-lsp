@@ -1,0 +1,65 @@
+### a directive for a finding that is no longer there
+#!/bin/bash
+# shellcheck enable=unused-directives
+x=$1
+# shellcheck disable=SC2086
+echo "$x"
+>>> none
+>>+ SL2009 4:22 -- shell-lsp native check for directives that silence nothing; shellcheck has no such check
+
+### one code of a list is unused
+#!/bin/bash
+# shellcheck enable=unused-directives
+x=$1
+# shellcheck disable=SC2086,SC2116
+echo $x
+>>> none
+>>+ SL2009 4:29 -- shell-lsp native check for directives that silence nothing; shellcheck has no such check
+
+### a range and an unknown code that silence nothing
+#!/bin/bash
+# shellcheck enable=unused-directives
+x=$1
+# shellcheck disable=SC2000-SC2010,SC9999
+echo "$x"
+>>> none
+>>+ SL2009 4:22 -- shell-lsp native check for directives that silence nothing; shellcheck has no such check
+>>+ SL2009 4:36 -- shellcheck has no SC9999 either, and shell-lsp reports disabling a code it does not run
+
+### used directives, all, sourced-file codes and optional checks that are off
+#!/bin/bash
+# shellcheck enable=unused-directives
+x=$1
+# shellcheck disable=SC2086
+echo $x
+# shellcheck disable=all
+echo "$x"
+# shellcheck disable=SC1091,SC2154
+. ./lib.sh
+# shellcheck disable=SC2250
+echo "$x"
+>>> none
+
+### a check another rule consults before reporting counts as used
+#!/bin/bash
+# shellcheck enable=unused-directives
+# shellcheck disable=SC2120
+greet() { echo "hello $1"; }
+greet
+>>> none
+
+### misplaced directives are left to the placement checks
+#!/bin/bash
+# shellcheck enable=unused-directives
+x=$1
+echo "$x" # shellcheck disable=SC2086
+>>> SC1072 4:38
+>>> SC1073 4:1
+>>> SC1126 4:11
+
+### off unless enabled
+#!/bin/bash
+x=$1
+# shellcheck disable=SC2086
+echo "$x"
+>>> none

@@ -115,7 +115,7 @@ func checkAliasesInParsingUnit(p *pass) {
 	suppressed := p.suppressions()
 	for _, use := range uses {
 		span, ok := p.span(use.def.word)
-		if !ok || suppressed.covers(Finding{Code: 2262, Span: span}) {
+		if !ok || p.silenced(suppressed, Finding{Code: 2262, Span: span}) {
 			continue
 		}
 		p.report(2262, span, "The alias "+use.def.name+" is used in the same parsing unit that defines it, where it does not take effect yet; define it on an earlier line or use a function.")

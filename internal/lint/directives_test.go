@@ -42,3 +42,41 @@ func TestDirectivePlacement(t *testing.T) {
 		}
 	}
 }
+
+func TestRunReportsWhatEachDisabledCodeSilenced(t *testing.T) {
+	t.Parallel()
+
+	script := "#!/bin/bash\nx=$1\n# shellcheck disable=SC2086,SC2116\necho $x $x\n"
+	report := Run(parser.Parse(script, dialect.Bash), nil, Options{})
+	if len(report.Findings) != 0 {
+		t.Errorf("findings = %+v", report.Findings)
+	}
+	if len(report.Disabled) != 2 {
+		t.Fatalf("disabled = %+v", report.Disabled)
+	}
+	used, unused := report.Disabled[0], report.Disabled[1]
+	if used.Text != "SC2086" || script[used.Span.Start:used.Span.End] != "SC2086" || len(used.Suppressed) != 2 {
+		t.Errorf("SC2086 = %+v", used)
+	}
+	for _, i := range used.Suppressed {
+		if report.Suppressed[i].Code != 2086 {
+			t.Errorf("SC2086 points at a %s finding", report.Suppressed[i].Code)
+		}
+	}
+	if unused.Text != "SC2116" || len(unused.Suppressed) != 0 {
+		t.Errorf("SC2116 = %+v", unused)
+	}
+}
+
+func TestUnusedDirectivesSilencedInTheirOwnDirective(t *testing.T) {
+	t.Parallel()
+
+	script := "#!/bin/bash\n# shellcheck enable=unused-directives\nx=$1\n# shellcheck disable=SL2009,SC2086\necho \"$x\"\n"
+	if got := Check(parser.Parse(script, dialect.Bash), nil, Options{}); len(got) != 0 {
+		t.Errorf("a directive that also disables SL2009 still got %+v", got)
+	}
+	script = "#!/bin/bash\n# shellcheck enable=unused-directives disable=SL2009\nx=$1\n# shellcheck disable=SC2086\necho \"$x\"\n"
+	if got := Check(parser.Parse(script, dialect.Bash), nil, Options{}); len(got) != 0 {
+		t.Errorf("a file-wide disable=SL2009 still got %+v", got)
+	}
+}

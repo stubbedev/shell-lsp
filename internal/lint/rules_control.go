@@ -484,7 +484,7 @@ func checkFunctionArguments(p *pass) {
 		if slices.ContainsFunc(uses, func(cmd parser.Command) bool { return len(cmd.Args) > 0 }) {
 			continue
 		}
-		if suppressed().covers(Finding{Code: 2120, Span: fn.Span}) {
+		if p.silenced(suppressed(), Finding{Code: 2120, Span: fn.Span}) {
 			continue
 		}
 		p.report(2120, fn.Span, fn.Name+" reads positional parameters, but no call passes any arguments.")

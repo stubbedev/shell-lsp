@@ -165,7 +165,7 @@ func TestQuickFixes(t *testing.T) {
 
 	text := "#!/bin/bash\nf() {\n\t# shellcheck disable=SC2034\n\tcd /tmp\n}\necho $1\n"
 	tree := parser.Parse(text, dialect.Bash)
-	all := lintDiagnostics(tree)
+	all := slices.DeleteFunc(lintDiagnostics(tree), func(d Diagnostic) bool { return d.Code == "SL2009" })
 	var diags []Diagnostic
 	for _, d := range all {
 		if d.Code == "SC2164" || d.Code == "SC2086" {

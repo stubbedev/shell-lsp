@@ -152,43 +152,57 @@ type codeRange struct {
 	from, to Code
 }
 
-type suppression struct {
-	span   parser.Span
-	all    bool
-	ranges []codeRange
+func (r codeRange) has(code Code) bool { return r.from <= code && code < r.to }
+
+type itemPlace struct {
+	directive, pair, item int
 }
 
-func (s suppression) matches(code Code, at int) bool {
-	if at < s.span.Start || at > s.span.End {
-		return false
-	}
-	if s.all {
-		return true
-	}
-	for _, r := range s.ranges {
-		if r.from <= code && code < r.to {
-			return true
-		}
-	}
-	return false
+type disabledItem struct {
+	scope    parser.Span
+	span     parser.Span
+	text     string
+	all      bool
+	codes    codeRange
+	place    itemPlace
+	hits     int
+	findings []int
+}
+
+func (d disabledItem) matches(code Code, at int) bool {
+	return at >= d.scope.Start && at <= d.scope.End && (d.all || d.codes.has(code))
 }
 
 type suppressions struct {
-	list     []suppression
+	items    []disabledItem
 	heredocs []parser.Heredoc
 }
 
-func (s suppressions) covers(f Finding) bool {
-	at := s.anchor(f.Span.Start)
-	for _, one := range s.list {
-		if one.matches(f.Code, at) {
-			return true
-		}
-	}
-	return false
+func (s *suppressions) covers(f Finding) bool {
+	return len(s.cover(f, -1)) > 0
 }
 
-func (s suppressions) anchor(offset int) int {
+func (s *suppressions) cover(f Finding, index int) []int {
+	if len(s.items) == 0 {
+		return nil
+	}
+	at := s.anchor(f.Span.Start)
+	var matched []int
+	for i := range s.items {
+		item := &s.items[i]
+		if !item.matches(f.Code, at) {
+			continue
+		}
+		item.hits++
+		if index >= 0 {
+			item.findings = append(item.findings, index)
+		}
+		matched = append(matched, i)
+	}
+	return matched
+}
+
+func (s *suppressions) anchor(offset int) int {
 	i := sort.Search(len(s.heredocs), func(i int) bool { return s.heredocs[i].Body.End > offset })
 	if i < len(s.heredocs) && s.heredocs[i].Body.Start <= offset {
 		return s.heredocs[i].Span.Start
@@ -208,32 +222,54 @@ func outermostHeredocs(all []parser.Heredoc) []parser.Heredoc {
 	return out
 }
 
-func (p *pass) suppressions() suppressions {
-	var list []suppression
-	for _, d := range p.directives {
-		s := suppression{}
-		for _, value := range d.parsed.Values(directive.Disable) {
-			for item := range strings.SplitSeq(value, ",") {
-				if all, r, ok := parseDisabled(item); ok {
-					s.all = s.all || all
-					s.ranges = append(s.ranges, r)
-				}
-			}
-		}
-		if !s.all && len(s.ranges) == 0 {
-			continue
-		}
+func (p *pass) silenced(s *suppressions, f Finding) bool {
+	p.probes = append(p.probes, f)
+	return s.covers(f)
+}
+
+func (p *pass) suppressions() *suppressions {
+	out := &suppressions{}
+	for di, d := range p.directives {
 		scope, ok := p.directiveScope(d)
 		if !ok {
 			continue
 		}
-		s.span = scope
-		list = append(list, s)
+		for pi, pair := range d.parsed.Pairs {
+			if pair.Key == directive.Disable {
+				out.items = append(out.items, disabledItems(d, pair, scope, itemPlace{directive: di, pair: pi})...)
+			}
+		}
 	}
-	if len(list) == 0 {
-		return suppressions{}
+	if len(out.items) > 0 {
+		out.heredocs = outermostHeredocs(p.tree.Heredocs)
 	}
-	return suppressions{list: list, heredocs: outermostHeredocs(p.tree.Heredocs)}
+	return out
+}
+
+func disabledItems(d directiveComment, pair directive.Pair, scope parser.Span, place itemPlace) []disabledItem {
+	items := directive.Items(pair)
+	if items == nil {
+		place.item = -1
+		for text := range strings.SplitSeq(pair.Value, ",") {
+			items = append(items, directive.Item{Text: text, Offset: pair.ValueOffset, End: pair.ValueEnd})
+		}
+	}
+	var out []disabledItem
+	for i, item := range items {
+		all, codes, ok := parseDisabled(item.Text)
+		if !ok {
+			continue
+		}
+		at := place
+		if at.item >= 0 {
+			at.item = i
+		}
+		out = append(out, disabledItem{
+			scope: scope, span: parser.Span{Start: d.at(item.Offset), End: d.at(item.End)}, text: item.Text,
+			all: all, codes: codes, place: at,
+		})
+	}
+	return out
 }
 
 func parseDisabled(item string) (bool, codeRange, bool) {

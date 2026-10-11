@@ -220,6 +220,23 @@ name that starts with a character no parameter can start with.
 echo "${}"    # SL2008
 ```
 
+## SL2009
+
+**A disabled check that nothing here reports.** A `# shellcheck disable=`
+directive lists a code, or a range of codes, that no finding in the lines it
+covers has, so it silences nothing; often the problem was fixed and the
+directive stayed behind. Codes the linter does not have at all are reported
+too. `disable=all`, optional checks that are not turned on, and the checks
+whose findings depend on whether sourced files can be found (SC1090, SC1091,
+SC1094 and SC2154) are left alone. The quick fix removes the code, or the
+whole directive when nothing in it is used.
+
+```bash
+#!/bin/bash
+# shellcheck disable=SC2086
+echo "$1"    # SL2009 on SC2086: the argument is already quoted
+```
+
 The embedded-language rules check awk, sed and jq programs written inside the
 script with built-in parsers; no awk, sed or jq binary is run. A program is
 checked when it is a literal argument (`awk '...'`, `sed -e '...'`,
