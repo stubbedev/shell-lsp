@@ -41,6 +41,15 @@ type Result struct {
 func Hover(ctx context.Context, in Input) (Result, bool, error) {
 	h := newHoverer(in)
 	h.path = in.Tree.PathAt(in.Offset)
+	r, ok, err := h.hover(ctx)
+	if err != nil {
+		return Result{}, false, err
+	}
+	r, ok = h.withFindings(r, ok)
+	return r, ok, nil
+}
+
+func (h hoverer) hover(ctx context.Context) (Result, bool, error) {
 	if r, ok := h.directive(); ok {
 		return r, true, nil
 	}

@@ -15,7 +15,8 @@ the `.editorconfig` reader are all native. Highlights:
   directives, lints zsh, follows sourced files, and adds checks of its own,
   such as untrusted data reaching `eval`, `sh -c` or `source`
   ([docs/rules.md](docs/rules.md)). Every check is listed with its severity
-  in [docs/checks.md](docs/checks.md).
+  in [docs/checks.md](docs/checks.md), and hovering a diagnostic explains it
+  with a preview of its fix ([Linting](#linting)).
 - Completion and hover for builtins, keywords, functions, variables, paths,
   and the options and subcommands of installed commands, read from their
   manual pages ([Completion and hover](#completion-and-hover)).
@@ -211,6 +212,13 @@ way the finding asks for (quoting `$1`, adding `|| exit`). The first fix of a
 finding is the preferred one; the fix-all source action and the
 `shellLsp.fixAll` command apply only safe fixes, so running them on save never
 changes what a script does.
+
+Hovering a diagnostic explains it in place: its one-line summary and
+severity, whether it is optional, a before-and-after preview of its preferred
+fix marked safe or for review, an example for `SL` checks, the `disable`
+directive that silences it, and links to [docs/checks.md](docs/checks.md) or
+[docs/rules.md](docs/rules.md) and the ShellCheck wiki. Clients that support
+it also get the documentation link on the diagnostic's code.
 
 ### Profiles
 
