@@ -46,7 +46,8 @@ type Server struct {
 	logger      *slog.Logger
 	docs        *docstore.Store
 	snapshots   *snapshotCache
-	warmer      *warmer
+	warming     *coalescer
+	outbound    *coalescer
 	push        *pushScheduler
 	commandDocs commandDocs
 	prefetch    *prefetcher
@@ -87,7 +88,8 @@ func New(conn *jsonrpc.Conn, version string) *Server {
 		logger:       slog.New(slog.NewTextHandler(os.Stderr, nil)),
 		docs:         docs,
 		snapshots:    newSnapshotCache(docs.Has),
-		warmer:       newWarmer(),
+		warming:      newCoalescer(),
+		outbound:     newCoalescer(),
 		semantic:     newSemanticCache(docs.Has),
 		bats:         newBatsResults(),
 		settings:     config.Default(),

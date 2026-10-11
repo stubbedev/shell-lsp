@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -49,6 +50,23 @@ func TestPushSchedulerForgetsJobsThatRan(t *testing.T) {
 	defer p.mu.Unlock()
 	if len(p.jobs) != 0 {
 		t.Errorf("jobs kept after they ran: %v", p.jobs)
+	}
+}
+
+func TestUnansweredRefreshesDoNotPileUp(t *testing.T) {
+	t.Parallel()
+
+	c, srv := startClient(t, `{"capabilities": {"textDocument": {"diagnostic": {}}, "workspace": {"diagnostics": {"refreshSupport": true}, "semanticTokens": {"refreshSupport": true}}}}`)
+	c.notify("initialized", `{}`)
+	for i := range 50 {
+		c.notify("workspace/didChangeConfiguration", fmt.Sprintf(`{"settings": {"shellLsp": {"lint": {"exclude": ["SC%d"]}}}}`, 2000+i))
+	}
+	for _, method := range []string{"workspace/diagnostic/refresh", "workspace/semanticTokens/refresh"} {
+		c.await("server request "+method, func(m *jsonrpc.Message) bool { return m.IsRequest() && m.Method == method })
+	}
+	time.Sleep(100 * time.Millisecond)
+	if n := syncMapLen(&srv.pending); n > 2 {
+		t.Errorf("%d server requests wait for an answer, want at most one per refresh method", n)
 	}
 }
 

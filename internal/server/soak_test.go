@@ -171,9 +171,12 @@ func (s *Server) cacheSizes() map[string]int {
 	s.semantic.mu.Lock()
 	semantic := len(s.semantic.results)
 	s.semantic.mu.Unlock()
-	s.warmer.mu.Lock()
-	warming := len(s.warmer.running) + len(s.warmer.again)
-	s.warmer.mu.Unlock()
+	s.warming.mu.Lock()
+	warming := len(s.warming.running) + len(s.warming.again)
+	s.warming.mu.Unlock()
+	s.outbound.mu.Lock()
+	outbound := len(s.outbound.running) + len(s.outbound.again)
+	s.outbound.mu.Unlock()
 	pushJobs := 0
 	if s.push != nil {
 		s.push.mu.Lock()
@@ -185,6 +188,7 @@ func (s *Server) cacheSizes() map[string]int {
 		"snapshots": snapshots,
 		"semantic":  semantic,
 		"warming":   warming,
+		"outbound":  outbound,
 		"push jobs": pushJobs,
 		"cancels":   syncMapLen(&s.cancels),
 		"pending":   syncMapLen(&s.pending),

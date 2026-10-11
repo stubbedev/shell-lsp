@@ -123,7 +123,7 @@ var methods = []method{
 	{"client/registerCapability", serverRequest, sent, "", "file watchers"},
 	{"client/unregisterCapability", serverRequest, notSent, "", "registrations live for the whole session"},
 	{"workspace/workspaceFolders", serverRequest, notSent, "", "folders come from initialize and change notifications"},
-	{"workspace/configuration", serverRequest, sent, "", ""},
+	{configurationMethod, serverRequest, sent, "", ""},
 	{"workspace/applyEdit", serverRequest, sent, "", ""},
 	{"workspace/codeLens/refresh", serverRequest, sent, "", "after settings change"},
 	{"workspace/semanticTokens/refresh", serverRequest, sent, "", "after settings change"},

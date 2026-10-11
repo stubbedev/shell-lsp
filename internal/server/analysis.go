@@ -144,39 +144,10 @@ func (s *Server) snapshot(docs *docstore.View, uri string) (*snapshot, error) {
 	}), nil
 }
 
-type warmer struct {
-	mu      sync.Mutex
-	running map[string]bool
-	again   map[string]bool
-}
-
-func newWarmer() *warmer {
-	return &warmer{running: map[string]bool{}, again: map[string]bool{}}
-}
-
 func (s *Server) warm(uri string) {
-	w := s.warmer
-	w.mu.Lock()
-	if w.running[uri] {
-		w.again[uri] = true
-		w.mu.Unlock()
-		return
-	}
-	w.running[uri] = true
-	w.mu.Unlock()
-	go func() {
-		for {
-			if _, err := s.snapshot(s.docs.View(), uri); err != nil {
-				s.logger.Debug("warming closed document", "uri", uri)
-			}
-			w.mu.Lock()
-			if !w.again[uri] {
-				delete(w.running, uri)
-				w.mu.Unlock()
-				return
-			}
-			delete(w.again, uri)
-			w.mu.Unlock()
+	s.warming.run(uri, func() {
+		if _, err := s.snapshot(s.docs.View(), uri); err != nil {
+			s.logger.Debug("warming closed document", "uri", uri)
 		}
-	}()
+	})
 }

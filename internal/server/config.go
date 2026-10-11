@@ -12,6 +12,8 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
+const configurationMethod = "workspace/configuration"
+
 type configurationItem struct {
 	ScopeURI string `json:"scopeUri,omitempty"`
 	Section  string `json:"section"`
@@ -95,15 +97,15 @@ func (s *Server) applySettings(ctx context.Context, update func()) {
 }
 
 func (s *Server) requestRefresh(ctx context.Context, method string) {
-	go func() {
+	s.outbound.run(method, func() {
 		if err := s.call(ctx, method, nil, nil); err != nil {
 			s.logger.Warn("requesting refresh", "method", method, "err", err)
 		}
-	}()
+	})
 }
 
 func (s *Server) pullConfiguration(ctx context.Context) {
-	go s.loadConfiguration(ctx)
+	s.outbound.run(configurationMethod, func() { s.loadConfiguration(ctx) })
 }
 
 func (s *Server) loadConfiguration(ctx context.Context) {
@@ -116,12 +118,12 @@ func (s *Server) loadConfiguration(ctx context.Context) {
 		items = append(items, configurationItem{ScopeURI: fileuri.FromPath(root), Section: config.Section})
 	}
 	var results []json.RawMessage
-	if err := s.call(ctx, "workspace/configuration", configurationParams{Items: items}, &results); err != nil {
-		s.logger.Warn("requesting workspace/configuration", "err", err)
+	if err := s.call(ctx, configurationMethod, configurationParams{Items: items}, &results); err != nil {
+		s.logger.Warn("requesting "+configurationMethod, "err", err)
 		return
 	}
 	if len(results) != len(items) {
-		s.logger.Warn("workspace/configuration answered the wrong number of items", "want", len(items), "got", len(results))
+		s.logger.Warn(configurationMethod+" answered the wrong number of items", "want", len(items), "got", len(results))
 		return
 	}
 	folders := map[string]config.Settings{}
