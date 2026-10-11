@@ -3,6 +3,7 @@ package lint
 import (
 	"strings"
 
+	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
@@ -129,11 +130,22 @@ func checkUnquotedSubstitution(p *pass, n syntax.Node) {
 	switch p.contextOf(cs) {
 	case contextSplit:
 		if !producesSafeWords(cs) {
-			p.report(2046, span, "The output of this command substitution is split into words and globbed; quote it.", quoteFix(span)...)
+			p.report(2046, span, "The output of this command substitution is "+p.substitutionFate("split into words")+"; quote it.", quoteFix(span)...)
 		}
 	case contextArrayElement:
-		p.report(2207, span, "Command output is split on whitespace and globbed when building this array; read it with mapfile or read -a instead.")
+		advice := "read it with mapfile or read -a instead"
+		if p.dialect == dialect.Zsh {
+			advice = `split it explicitly instead, such as into lines with ${(f)"$(...)"}`
+		}
+		p.report(2207, span, "Command output is "+p.substitutionFate("split on whitespace")+" when building this array; "+advice+".")
 	}
+}
+
+func (p *pass) substitutionFate(split string) string {
+	if p.substitutionGlobbed() {
+		return split + " and globbed"
+	}
+	return split
 }
 
 func producesSafeWords(cs *syntax.CmdSubst) bool {
