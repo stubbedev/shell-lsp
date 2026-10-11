@@ -52,7 +52,7 @@ func (p *pass) inArithmeticContext() bool {
 		case nil, *syntax.LetClause, *syntax.CallExpr:
 			return false
 		case *syntax.ParamExp:
-			if n.Dollar.IsValid() {
+			if n.Dollar.IsValid() || n.Param != nil && n.Index != nil && p.associativeArray(n.Param.Value) {
 				return false
 			}
 		case *syntax.Assign:

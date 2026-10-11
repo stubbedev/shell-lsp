@@ -26,3 +26,30 @@ version=5.9.1
 print -r -- $version[(s:.:w)n]
 >>- SC1071 1:1 -- shellcheck refuses zsh
 >>+ SC2154 3:29 -- after only (s) and (w) the subscript is arithmetic, so n is a variable that is never assigned
+
+### the key of an associative array in arithmetic needs its $
+#!/bin/zsh
+typeset -A counts
+for ext in zsh sh zsh; do
+  (( counts[$ext]++ ))
+done
+print -r -- ${(kv)counts}
+>>- SC1071 1:1 -- shellcheck refuses zsh; counts[ext] would count the literal key ext
+
+### the key of an associative array in bash arithmetic
+#!/bin/bash
+declare -A counts
+for ext in bash sh bash; do
+  (( counts[$ext]++ ))
+done
+echo "${!counts[@]}"
+>>> none
+
+### the index of an indexed array in arithmetic needs no $
+#!/bin/bash
+declare -a counts
+for i in 1 2 1; do
+  (( counts[$i]++ ))
+done
+echo "${counts[@]}"
+>>> SC2004 4:13
