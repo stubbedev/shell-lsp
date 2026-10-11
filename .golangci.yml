@@ -39,6 +39,8 @@ linters:
           disabled: true
   exclusions:
     generated: lax
+    paths:
+      - third_party
     rules:
       - path: _test\.go
         linters:
