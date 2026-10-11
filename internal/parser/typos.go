@@ -100,19 +100,25 @@ var typoHints = []typo{
 	},
 }
 
-func typoHint(text string, at int, d dialect.Dialect) string {
-	at = min(at, len(text))
-	start := strings.LastIndexByte(text[:at], '\n') + 1
-	end := strings.IndexByte(text[at:], '\n')
-	if end < 0 {
-		end = len(text)
-	} else {
-		end += at
+const (
+	hintWindow  = 2 << 10
+	clippedLine = "x"
+)
+
+func hintLine(text string, at int) (string, int) {
+	lineStart, lineEnd := lineOf(text, at)
+	from, to := max(lineStart, at-hintWindow), min(lineEnd, at+hintWindow)
+	if from == lineStart {
+		return text[from:to], at - from
 	}
-	line := text[start:end]
+	return clippedLine + text[from:to], at - from + len(clippedLine)
+}
+
+func typoHint(text string, at int, d dialect.Dialect) string {
+	line, errorAt := hintLine(text, min(at, len(text)))
 	for _, h := range typoHints {
 		for _, indexes := range h.pattern.FindAllStringSubmatchIndex(line, -1) {
-			if (h.atError && indexes[len(indexes)-2] != at-start) || (h.notZsh && d == dialect.Zsh) {
+			if (h.atError && indexes[len(indexes)-2] != errorAt) || (h.notZsh && d == dialect.Zsh) {
 				continue
 			}
 			match := make([]string, len(indexes)/2)

@@ -33,6 +33,21 @@ func TestTypoHints(t *testing.T) {
 	}
 }
 
+func TestTypoHintsOnALongLineLookNearTheError(t *testing.T) {
+	t.Parallel()
+
+	text := "true " + strings.Repeat("&&", 2000) + " { echo a; } extra\n"
+	hint := typoHint(text, strings.Index(text, "extra"), dialect.Bash)
+	if !strings.Contains(hint, "`extra` cannot follow `}` directly") || strings.Contains(hint, "cannot start") {
+		t.Errorf("hint %q, want only the one for extra", hint)
+	}
+
+	far := "for $f in *; do :; done; " + strings.Repeat("echo a; ", 100_000) + ")\n"
+	if hint := typoHint(far, strings.LastIndexByte(far, ')'), dialect.Bash); hint != "" {
+		t.Errorf("hint %q describes text 800 KB before the error", hint)
+	}
+}
+
 func TestNoTypoHintForTheErrorItself(t *testing.T) {
 	t.Parallel()
 
