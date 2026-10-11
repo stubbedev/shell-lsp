@@ -1,0 +1,15 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<checkstyle version='4.3'>
+<file name='a.sh' >
+<error line='2' column='6' severity='info' message='Quote &#36;1 &#38; friends &#60;now&#62;.' source='ShellCheck.SC2086' />
+<error line='2' column='6' severity='error' message='Untrusted data reaches eval.' source='ShellCheck.SL1001' />
+<error line='3' column='1' severity='warning' message='foo appears unused. Verify use &#40;or export if used externally&#41;.' source='ShellCheck.SC2034' />
+<error line='4' column='2' severity='warning' message='Use &#39;cd ... &#124;&#124; exit&#39; in case cd fails.' source='ShellCheck.SC2164' />
+<error line='5' column='1' severity='error' message='A clause spanning lines.' source='ShellCheck.SC1072' />
+</file>
+<file name='b.sh' >
+<error line='1' column='8' severity='info' message='Use &#36;&#40;...&#41; notation instead of legacy backticks &#96;...&#96;.' source='ShellCheck.SC2006' />
+</file>
+<file name='clean.sh' >
+</file>
+</checkstyle>

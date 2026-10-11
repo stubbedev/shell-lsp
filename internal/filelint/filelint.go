@@ -11,6 +11,8 @@ type Options struct {
 	Exclude       []lint.Code
 	Optional      []string
 	DialectSource lint.DialectSource
+
+	NoExtendedAnalysis bool
 }
 
 func Check(file *workspace.File, env navigation.Env, opts Options) []lint.Finding {
@@ -20,6 +22,8 @@ func Check(file *workspace.File, env navigation.Env, opts Options) []lint.Findin
 		DialectSource: opts.DialectSource,
 		Sources:       followed(file, env),
 		RCFile:        dialect.IsRCFile(file.Path),
+
+		NoExtendedAnalysis: opts.NoExtendedAnalysis,
 	})
 }
 

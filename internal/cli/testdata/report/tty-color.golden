@@ -1,0 +1,39 @@
+
+[1mIn a.sh line 2:[0m
+[0mecho $1 "(it's)"[0m
+[32m     ^-- SC2086 (info): Quote $1 & friends <now>.[0m
+[31m     ^-- SL1001 (error): Untrusted data reaches eval.[0m
+
+[1mDid you mean:[0m
+echo "$1" "(it's)"
+
+
+[1mIn a.sh line 3:[0m
+[0mfoo=bar[0m
+[33m^-^ SC2034 (warning): foo appears unused. Verify use (or export if used externally).[0m
+
+
+[1mIn a.sh line 4:[0m
+[0m	cd /tmp[0m
+[33m        ^-----^ SC2164 (warning): Use 'cd ... || exit' in case cd fails.[0m
+
+[1mDid you mean:[0m
+	cd /tmp || exit
+
+
+[1mIn a.sh line 5:[0m
+[0mif true; then[0m
+[31m^-- SC1072 (error): A clause spanning lines.[0m
+
+
+[1mIn b.sh line 1:[0m
+[0mecho é `date`[0m
+[32m       ^----^ SC2006 (style): Use $(...) notation instead of legacy backticks `...`.[0m
+
+[1mDid you mean:[0m
+echo é $(date)
+
+For more information:
+  https://www.shellcheck.net/wiki/SC1072 -- A clause spanning lines.
+  https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl1001 -- Untrusted data reaches eval.
+  https://www.shellcheck.net/wiki/SC2034 -- foo appears unused. Verify use (o...

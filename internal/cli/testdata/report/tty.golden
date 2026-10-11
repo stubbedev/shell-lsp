@@ -1,0 +1,39 @@
+
+In a.sh line 2:
+echo $1 "(it's)"
+     ^-- SC2086 (info): Quote $1 & friends <now>.
+     ^-- SL1001 (error): Untrusted data reaches eval.
+
+Did you mean:
+echo "$1" "(it's)"
+
+
+In a.sh line 3:
+foo=bar
+^-^ SC2034 (warning): foo appears unused. Verify use (or export if used externally).
+
+
+In a.sh line 4:
+	cd /tmp
+        ^-----^ SC2164 (warning): Use 'cd ... || exit' in case cd fails.
+
+Did you mean:
+	cd /tmp || exit
+
+
+In a.sh line 5:
+if true; then
+^-- SC1072 (error): A clause spanning lines.
+
+
+In b.sh line 1:
+echo é `date`
+       ^----^ SC2006 (style): Use $(...) notation instead of legacy backticks `...`.
+
+Did you mean:
+echo é $(date)
+
+For more information:
+  https://www.shellcheck.net/wiki/SC1072 -- A clause spanning lines.
+  https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl1001 -- Untrusted data reaches eval.
+  https://www.shellcheck.net/wiki/SC2034 -- foo appears unused. Verify use (o...

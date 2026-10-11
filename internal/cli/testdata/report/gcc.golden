@@ -1,0 +1,6 @@
+a.sh:2:6: note: Quote $1 & friends <now>. [SC2086]
+a.sh:2:6: error: Untrusted data reaches eval. [SL1001]
+a.sh:3:1: warning: foo appears unused. Verify use (or export if used externally). [SC2034]
+a.sh:4:2: warning: Use 'cd ... || exit' in case cd fails. [SC2164]
+a.sh:5:1: error: A clause spanning lines. [SC1072]
+b.sh:1:8: note: Use $(...) notation instead of legacy backticks `...`. [SC2006]
