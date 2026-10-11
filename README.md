@@ -24,6 +24,8 @@ the `.editorconfig` reader are all native. Highlights:
 - Quick fixes, refactorings and a fix-all source action.
 - Bats support: tests in the outline, and "Run" lenses that report
   failures as diagnostics.
+- `shell-lsp check` and `shell-lsp fmt` for CI and pre-commit, compatible
+  with the `shellcheck` and `shfmt` command lines ([docs/cli.md](docs/cli.md)).
 
 Every LSP method, in both directions, is listed with its status in
 [docs/lsp-methods.md](docs/lsp-methods.md), generated from the table the
@@ -71,12 +73,22 @@ any other client.
 ## Usage
 
 ```
-shell-lsp            # serve LSP over stdio
+shell-lsp                        # serve LSP over stdio
+shell-lsp check [OPTIONS] PATH   # lint, like shellcheck
+shell-lsp fmt [FLAGS] [PATH]     # format, like shfmt
 shell-lsp --version
 ```
 
 Editor wiring for Neovim, Helix, Zed and VS Code is in
 [docs/editors.md](docs/editors.md).
+
+`shell-lsp check` takes ShellCheck's options, `.shellcheckrc` files, output
+formats (plus SARIF for code scanning) and exit codes, and `shell-lsp fmt`
+takes shfmt's flags, so both drop into CI and pre-commit hooks where
+`shellcheck` and `shfmt` ran before, and report exactly what the editor
+shows. Checking the 2579 scripts of a Nixpkgs corpus takes 0.6 s on 12 cores,
+against two minutes for `shellcheck`. Flags, formats, CI and pre-commit
+recipes are in [docs/cli.md](docs/cli.md).
 
 ## Configuration
 

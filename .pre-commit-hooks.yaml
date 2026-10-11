@@ -1,0 +1,12 @@
+- id: shell-lsp-check
+  name: shell-lsp check
+  description: Lint shell scripts with shell-lsp's ShellCheck-compatible checks.
+  entry: shell-lsp check
+  language: golang
+  types: [shell]
+- id: shell-lsp-fmt
+  name: shell-lsp fmt
+  description: Format shell scripts in place with shell-lsp's shfmt-compatible formatter.
+  entry: shell-lsp fmt -w
+  language: golang
+  types: [shell]
