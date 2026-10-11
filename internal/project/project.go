@@ -17,18 +17,16 @@ type Settings struct {
 }
 
 type Resolution struct {
-	Dialect  dialect.Dialect
-	Named    bool
+	dialect.Detection
 	Settings Settings
 }
 
 func Resolve(resolver *editorconfig.Resolver, path string, forced *dialect.Dialect, in dialect.Input) (Resolution, error) {
-	detected, named := dialect.DetectNamed(forced, in)
-	r := Resolution{Dialect: detected, Named: named}
+	r := Resolution{Detection: dialect.Resolve(forced, in)}
 	if path == "" {
 		return r, nil
 	}
-	props, err := resolver.Properties(path, []string{"shell", detected.String()})
+	props, err := resolver.Properties(path, []string{"shell", r.Dialect.String()})
 	if err != nil {
 		return r, err
 	}
@@ -38,7 +36,7 @@ func Resolve(resolver *editorconfig.Resolver, path string, forced *dialect.Diale
 	}
 	r.Settings = settings
 	if forced == nil && settings.Dialect != nil {
-		r.Dialect, r.Named = *settings.Dialect, true
+		r.Detection = dialect.Detection{Dialect: *settings.Dialect, Source: dialect.SourceEditorConfig, Evidence: props["shell_variant"]}
 	}
 	return r, nil
 }

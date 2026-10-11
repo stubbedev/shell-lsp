@@ -367,7 +367,7 @@ func (c *checker) load(t target) (*workspace.File, loadedSettings, error) {
 	switch {
 	case s.forced != nil:
 		loaded.source = lint.DialectForced
-	case !r.Named:
+	case !r.Named():
 		loaded.source = lint.DialectGuessed
 	}
 	return file, loaded, nil

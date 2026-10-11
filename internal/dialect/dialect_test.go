@@ -96,26 +96,58 @@ func TestOverrideNilMeansDetect(t *testing.T) {
 	}
 }
 
-func TestDetectNamedReportsTheDefault(t *testing.T) {
+func TestResolveReportsWhatDecided(t *testing.T) {
 	t.Parallel()
 
 	ksh := Ksh
 	for _, c := range []struct {
 		override *Dialect
 		in       Input
-		want     Dialect
-		named    bool
+		want     Detection
+		guessed  bool
 	}{
-		{nil, Input{Text: "echo\n"}, Bash, false},
-		{nil, Input{URI: "file:///w/run", Text: "echo\n"}, Bash, false},
-		{nil, Input{Text: "#!/bin/sh\necho\n"}, Posix, true},
-		{nil, Input{Text: "# shellcheck shell=fish\necho\n"}, Bash, true},
-		{nil, Input{URI: "file:///w/a.zsh", Text: "echo\n"}, Zsh, true},
-		{nil, Input{LanguageID: "bash", Text: "echo\n"}, Bash, true},
-		{&ksh, Input{Text: "echo\n"}, Ksh, true},
+		{nil, Input{Text: "echo\n"}, Detection{Dialect: Bash, Source: SourceDefault}, true},
+		{nil, Input{URI: "file:///w/run", Text: "echo\n"}, Detection{Dialect: Bash, Source: SourceDefault}, true},
+		{nil, Input{Text: "#!/usr/bin/env -S sh -e\r\necho\n"}, Detection{Dialect: Posix, Source: SourceShebang, Evidence: "#!/usr/bin/env -S sh -e"}, false},
+		{nil, Input{Text: "#!/usr/bin/python3\n", URI: "file:///w/a.sh"}, Detection{Dialect: Posix, Source: SourceExtension, Evidence: ".sh"}, true},
+		{nil, Input{Text: "# shellcheck shell=fish\necho\n"}, Detection{Dialect: Bash, Source: SourceDirective, Evidence: "fish"}, false},
+		{nil, Input{Text: "#!/bin/bash\n# shellcheck shell=dash\necho\n"}, Detection{Dialect: Dash, Source: SourceDirective, Evidence: "dash"}, false},
+		{nil, Input{Text: "#compdef git\n"}, Detection{Dialect: Zsh, Source: SourceCompletionTag, Evidence: "#compdef"}, false},
+		{nil, Input{URI: "file:///w/a.zsh", Text: "echo\n"}, Detection{Dialect: Zsh, Source: SourceExtension, Evidence: ".zsh"}, true},
+		{nil, Input{URI: "file:///home/u/.zshrc", Text: "echo\n"}, Detection{Dialect: Zsh, Source: SourceFileName, Evidence: ".zshrc"}, false},
+		{nil, Input{URI: "file:///home/u/.bash_local", Text: "echo\n"}, Detection{Dialect: Bash, Source: SourceFileName, Evidence: ".bash_local"}, false},
+		{nil, Input{LanguageID: "bash", Text: "echo\n"}, Detection{Dialect: Bash, Source: SourceLanguageID, Evidence: "bash"}, false},
+		{nil, Input{Text: "echo\n# vim: set ft=zsh:\n"}, Detection{Dialect: Zsh, Source: SourceModeline, Evidence: "zsh"}, false},
+		{&ksh, Input{Text: "#!/bin/bash\necho\n"}, Detection{Dialect: Ksh, Source: SourceOverride, Evidence: "ksh"}, false},
 	} {
-		if d, named := DetectNamed(c.override, c.in); d != c.want || named != c.named {
-			t.Errorf("DetectNamed(%v, %+v) = %s, %v; want %s, %v", c.override, c.in, d, named, c.want, c.named)
+		got := Resolve(c.override, c.in)
+		if got != c.want || got.Guessed() != c.guessed || got.Named() != (c.want.Source != SourceDefault) {
+			t.Errorf("Resolve(%v, %+v) = %+v (guessed %t); want %+v (guessed %t)", c.override, c.in, got, got.Guessed(), c.want, c.guessed)
+		}
+	}
+}
+
+func TestDescribeSaysWhyAndWhenItGuessed(t *testing.T) {
+	t.Parallel()
+
+	for _, c := range []struct {
+		d    Detection
+		want string
+	}{
+		{Detection{Dialect: Bash, Source: SourceShebang, Evidence: "#!/usr/bin/env bash"}, "from the shebang #!/usr/bin/env bash"},
+		{Detection{Dialect: Posix, Source: SourceExtension, Evidence: ".sh"}, "guessed from the .sh extension"},
+		{Detection{Dialect: Bash, Source: SourceDefault}, "guessed: nothing names the shell, so bash is assumed"},
+		{Detection{Dialect: Bash, Source: SourceDirective, Evidence: "fish"}, "from the directive # shellcheck shell=fish; fish is not a shell shell-lsp knows, so it is checked as bash"},
+		{Detection{Dialect: Posix, Source: SourceDirective, Evidence: "posix"}, "from the directive # shellcheck shell=posix"},
+		{Detection{Dialect: Posix, Source: SourceEditorConfig, Evidence: "posix"}, "from shell_variant = posix in .editorconfig"},
+	} {
+		if got := c.d.Describe(); got != c.want {
+			t.Errorf("%+v.Describe() = %q, want %q", c.d, got, c.want)
+		}
+	}
+	for s := SourceDefault; s <= SourceModeline; s++ {
+		if s.String() == "unknown" {
+			t.Errorf("source %d has no name", s)
 		}
 	}
 }

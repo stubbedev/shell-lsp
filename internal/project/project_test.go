@@ -57,7 +57,7 @@ func TestShellVariantRanksBelowTheForcedDialect(t *testing.T) {
 	script := filepath.Join(dir, "a.sh")
 	in := dialect.Input{URI: fileuri.FromPath(script), Text: "#!/bin/bash\necho\n"}
 	r, err := Resolve(resolver, script, nil, in)
-	if err != nil || r.Dialect != dialect.Zsh || !r.Named {
+	if err != nil || r.Dialect != dialect.Zsh || r.Source != dialect.SourceEditorConfig || r.Evidence != "zsh" {
 		t.Errorf("resolution = %+v, %v; want zsh from shell_variant", r, err)
 	}
 	if r.Settings.Style.Minify != nil {
@@ -77,7 +77,7 @@ func TestResolveReportsWhetherAnythingNamedTheShell(t *testing.T) {
 	for name, want := range map[string]bool{"script": false, "script.bash": true} {
 		path := filepath.Join(dir, name)
 		r, err := Resolve(resolver, path, nil, dialect.Input{URI: fileuri.FromPath(path), Text: "echo hi\n"})
-		if err != nil || r.Named != want || r.Dialect != dialect.Bash {
+		if err != nil || r.Named() != want || r.Dialect != dialect.Bash {
 			t.Errorf("%s: resolution = %+v, %v; want named=%v", name, r, err, want)
 		}
 	}

@@ -153,40 +153,43 @@ func (in Input) Mksh() bool {
 // shellcheck), shebang (with interpreter resolved through PATH so
 // `#!/usr/bin/env bash` works, flags like `#!/bin/sh -e` tolerated),
 // a zsh completion system tag (`#compdef`, `#autoload`) on the first
-// line, file extension, editor languageId, vim modeline. The default is
-// bash, matching the common editor setup where shellscript buffers
-// are bash; DetectNamed also reports whether anything named the shell.
+// line, file name or extension, editor languageId, vim modeline. The
+// default is bash, matching the common editor setup where shellscript
+// buffers are bash; Resolve also reports what decided it.
 func Detect(override *Dialect, in Input) Dialect {
-	d, _ := DetectNamed(override, in)
-	return d
+	return Resolve(override, in).Dialect
 }
 
-func DetectNamed(override *Dialect, in Input) (Dialect, bool) {
+func Resolve(override *Dialect, in Input) Detection {
 	if override != nil {
-		return *override, true
+		return Detection{Dialect: *override, Source: SourceOverride, Evidence: override.String()}
 	}
 	if name, ok := headerShellDirective(in.Text); ok {
-		if d, known := FromName(name); known {
-			return d, true
+		d, known := FromName(name)
+		if !known {
+			d = Bash
 		}
-		return Bash, true
+		return Detection{Dialect: d, Source: SourceDirective, Evidence: name}
 	}
-	if d, ok := FromShebang(in.Text); ok {
-		return d, true
+	if name, ok := Interpreter(in.Text); ok {
+		if d, known := FromName(name); known {
+			first, _, _ := strings.Cut(in.Text, "\n")
+			return Detection{Dialect: d, Source: SourceShebang, Evidence: strings.TrimSpace(first)}
+		}
 	}
-	if CompletionFile(in.Text) {
-		return Zsh, true
+	if tag, ok := completionTag(in.Text); ok {
+		return Detection{Dialect: Zsh, Source: SourceCompletionTag, Evidence: tag}
 	}
-	if d, ok := FromFileName(in.URI); ok {
-		return d, true
+	if found, ok := fromFileName(in.URI); ok {
+		return found
 	}
 	if d, ok := FromName(in.LanguageID); ok {
-		return d, true
+		return Detection{Dialect: d, Source: SourceLanguageID, Evidence: in.LanguageID}
 	}
-	if d, ok := fromModeline(in.Text); ok {
-		return d, true
+	if d, value, ok := fromModeline(in.Text); ok {
+		return Detection{Dialect: d, Source: SourceModeline, Evidence: value}
 	}
-	return Bash, false
+	return Detection{Dialect: Bash, Source: SourceDefault}
 }
 
 func FromShebang(text string) (Dialect, bool) {
@@ -250,9 +253,14 @@ func nixShellInterpreter(text string) (string, bool) {
 var completionTags = []string{"#compdef", "#autoload"}
 
 func CompletionFile(text string) bool {
+	_, ok := completionTag(text)
+	return ok
+}
+
+func completionTag(text string) (string, bool) {
 	first, _, _ := strings.Cut(text, "\n")
 	tag, _, _ := strings.Cut(strings.TrimRight(first, "\r"), " ")
-	return slices.Contains(completionTags, tag)
+	return tag, slices.Contains(completionTags, tag)
 }
 
 var rcFiles = map[string]Dialect{
@@ -271,23 +279,31 @@ func RCFileNames() []string {
 }
 
 func FromFileName(path string) (Dialect, bool) {
+	found, ok := fromFileName(path)
+	return found.Dialect, ok
+}
+
+var extensions = []struct {
+	suffix  string
+	dialect Dialect
+}{
+	{".bash", Bash}, {".bats", Bash}, {".zsh", Zsh}, {".dash", Dash}, {".sh", Posix}, {".ksh", Ksh},
+}
+
+func fromFileName(path string) (Detection, bool) {
 	base := filepath.Base(path)
 	if d, ok := rcFiles[base]; ok {
-		return d, true
+		return Detection{Dialect: d, Source: SourceFileName, Evidence: base}, true
 	}
-	switch {
-	case strings.HasPrefix(base, ".bash"), strings.HasSuffix(base, ".bash"), strings.HasSuffix(base, ".bats"):
-		return Bash, true
-	case strings.HasSuffix(base, ".zsh"):
-		return Zsh, true
-	case strings.HasSuffix(base, ".dash"):
-		return Dash, true
-	case strings.HasSuffix(base, ".sh"):
-		return Posix, true
-	case strings.HasSuffix(base, ".ksh"):
-		return Ksh, true
+	if strings.HasPrefix(base, ".bash") {
+		return Detection{Dialect: Bash, Source: SourceFileName, Evidence: base}, true
 	}
-	return 0, false
+	for _, ext := range extensions {
+		if strings.HasSuffix(base, ext.suffix) {
+			return Detection{Dialect: ext.dialect, Source: SourceExtension, Evidence: ext.suffix}, true
+		}
+	}
+	return Detection{}, false
 }
 
 func headerShellDirective(text string) (string, bool) {
@@ -308,7 +324,7 @@ func headerShellDirective(text string) (string, bool) {
 	return "", false
 }
 
-func fromModeline(text string) (Dialect, bool) {
+func fromModeline(text string) (Dialect, string, bool) {
 	for line := range strings.SplitSeq(text, "\n") {
 		trimmed := strings.TrimSpace(line)
 		modeline, ok := strings.CutPrefix(trimmed, "# vim:")
@@ -326,12 +342,13 @@ func fromModeline(text string) (Dialect, bool) {
 					continue
 				}
 			}
-			if d, ok := FromName(strings.TrimSuffix(value, ":")); ok {
-				return d, true
+			value = strings.TrimSuffix(value, ":")
+			if d, ok := FromName(value); ok {
+				return d, value, true
 			}
 		}
 	}
-	return 0, false
+	return 0, "", false
 }
 
 type Set uint8
