@@ -435,10 +435,81 @@ type TextDocumentEdit struct {
 	Edits        []TextEdit                              `json:"edits"`
 }
 
+type CreateFile struct {
+	URI          string `json:"uri"`
+	AnnotationID string `json:"annotationId,omitempty"`
+}
+
 type WorkspaceEdit struct {
+	Changes           map[string][]TextEdit
+	CreateFiles       []CreateFile
+	DocumentChanges   []TextDocumentEdit
+	ChangeAnnotations map[string]ChangeAnnotation
+}
+
+const createKind = "create"
+
+type createFileOperation struct {
+	Kind string `json:"kind"`
+	CreateFile
+}
+
+type workspaceEditJSON struct {
 	Changes           map[string][]TextEdit       `json:"changes,omitempty"`
-	DocumentChanges   []TextDocumentEdit          `json:"documentChanges,omitempty"`
+	DocumentChanges   []json.RawMessage           `json:"documentChanges,omitempty"`
 	ChangeAnnotations map[string]ChangeAnnotation `json:"changeAnnotations,omitempty"`
+}
+
+func (e WorkspaceEdit) MarshalJSON() ([]byte, error) {
+	out := workspaceEditJSON{Changes: e.Changes, ChangeAnnotations: e.ChangeAnnotations}
+	for _, c := range e.CreateFiles {
+		raw, err := json.Marshal(createFileOperation{Kind: createKind, CreateFile: c})
+		if err != nil {
+			return nil, err
+		}
+		out.DocumentChanges = append(out.DocumentChanges, raw)
+	}
+	for _, c := range e.DocumentChanges {
+		raw, err := json.Marshal(c)
+		if err != nil {
+			return nil, err
+		}
+		out.DocumentChanges = append(out.DocumentChanges, raw)
+	}
+	return json.Marshal(out)
+}
+
+func (e *WorkspaceEdit) UnmarshalJSON(data []byte) error {
+	var raw workspaceEditJSON
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*e = WorkspaceEdit{Changes: raw.Changes, ChangeAnnotations: raw.ChangeAnnotations}
+	for _, change := range raw.DocumentChanges {
+		var kind struct {
+			Kind string `json:"kind"`
+		}
+		if err := json.Unmarshal(change, &kind); err != nil {
+			return err
+		}
+		switch kind.Kind {
+		case "":
+			var edit TextDocumentEdit
+			if err := json.Unmarshal(change, &edit); err != nil {
+				return err
+			}
+			e.DocumentChanges = append(e.DocumentChanges, edit)
+		case createKind:
+			var create createFileOperation
+			if err := json.Unmarshal(change, &create); err != nil {
+				return err
+			}
+			e.CreateFiles = append(e.CreateFiles, create.CreateFile)
+		default:
+			return fmt.Errorf("workspace edit has a %q resource operation, which this server does not use", kind.Kind)
+		}
+	}
+	return nil
 }
 
 type Command struct {

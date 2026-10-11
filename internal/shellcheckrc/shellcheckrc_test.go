@@ -63,7 +63,7 @@ func TestNearestWalksUpThenFallsBack(t *testing.T) {
 
 	root := filepath.FromSlash("/w")
 	disk := fakeDisk{
-		filepath.Join(root, "a", "shellcheckrc"):      "disable=SC2034\n",
+		filepath.Join(root, "a", "shellcheckrc"):     "disable=SC2034\n",
 		filepath.Join("/home", "u", ".shellcheckrc"): "disable=SC2086\n",
 	}
 	now := time.Unix(0, 0)

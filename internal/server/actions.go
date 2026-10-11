@@ -3,18 +3,21 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
 
 	"github.com/stubbedev/shell-lsp/internal/actions"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
+	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/navigation"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/platform"
+	"github.com/stubbedev/shell-lsp/internal/shellcheckrc"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
@@ -27,9 +30,10 @@ const (
 var serverCommands = []string{commandFixAll, commandApplyEdit, commandShowReferences, commandRunBats}
 
 type actionData struct {
-	URI      string           `json:"uri"`
-	Version  int32            `json:"version"`
-	Refactor actions.Refactor `json:"refactor"`
+	URI      string            `json:"uri"`
+	Version  int32             `json:"version"`
+	Refactor *actions.Refactor `json:"refactor,omitempty"`
+	FixAll   string            `json:"fixAll,omitempty"`
 }
 
 func (s *Server) handleCodeAction(ctx context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
@@ -49,11 +53,11 @@ func (s *Server) handleCodeAction(ctx context.Context, docs *docstore.View, para
 			Start: snap.doc.PositionToOffset(actionParams.Range.Start, snap.encoding),
 			End:   snap.doc.PositionToOffset(actionParams.Range.End, snap.encoding),
 		},
-		Diagnostics: s.toActionDiagnostics(snap, actionParams.Context.Diagnostics),
+		Diagnostics:    s.toActionDiagnostics(snap, actionParams.Context.Diagnostics),
+		AllDiagnostics: s.lintActionDiagnostics(snap),
 	}
-	if wants(only, string(actions.SourceFixAll)) {
-		in.AllDiagnostics = s.lintActionDiagnostics(snap)
-	}
+	settings := sync.OnceValues(func() (actions.SettingsFile, bool) { return s.settingsFileFor(snap.file.Path) })
+	in.Settings = settings
 	caps := s.clientCapabilities()
 	literal := caps.TextDocument.CodeAction.CodeActionLiteralSupport != nil
 	lazy := slices.Contains(caps.TextDocument.CodeAction.ResolveSupport.Properties, "edit")
@@ -62,7 +66,7 @@ func (s *Server) handleCodeAction(ctx context.Context, docs *docstore.View, para
 		if !wants(only, string(a.Kind)) {
 			continue
 		}
-		action, err := s.codeAction(docs, snap, sources, actionParams.Context.Diagnostics, a, lazy)
+		action, err := s.codeAction(docs, snap, sources, settings, actionParams.Context.Diagnostics, a, lazy)
 		if err != nil {
 			return nil, err
 		}
@@ -79,17 +83,23 @@ func (s *Server) handleCodeAction(ctx context.Context, docs *docstore.View, para
 	return out, nil
 }
 
-func (s *Server) codeAction(docs *docstore.View, snap *snapshot, sources func() actionSources, contextDiags []lsp.Diagnostic, a actions.Action, lazy bool) (lsp.CodeAction, error) {
+func (s *Server) codeAction(docs *docstore.View, snap *snapshot, sources func() actionSources, settings func() (actions.SettingsFile, bool), contextDiags []lsp.Diagnostic, a actions.Action, lazy bool) (lsp.CodeAction, error) {
 	action := lsp.CodeAction{Title: a.Title, Kind: string(a.Kind), IsPreferred: a.Preferred}
 	for _, i := range a.Diagnostics {
 		action.Diagnostics = append(action.Diagnostics, contextDiags[i])
 	}
-	if lazy && a.Refactor != nil {
-		data, err := json.Marshal(actionData{URI: snap.doc.URI, Version: snap.doc.Version, Refactor: *a.Refactor})
+	if lazy && (a.Refactor != nil || a.FixAllCode != "") {
+		data, err := json.Marshal(actionData{URI: snap.doc.URI, Version: snap.doc.Version, Refactor: a.Refactor, FixAll: a.FixAllCode})
 		if err != nil {
 			return lsp.CodeAction{}, err
 		}
 		action.Data = data
+		return action, nil
+	}
+	if a.Settings != nil {
+		file, _ := settings()
+		edit := s.settingsEdit(snap.encoding, a.Title, file, *a.Settings)
+		action.Edit = &edit
 		return action, nil
 	}
 	edit, err := s.changeEdit(docs, snap, sources, a.Title, a.Edits, a.Others)
@@ -155,11 +165,46 @@ func (s *Server) annotateForConfirmation(edit *lsp.WorkspaceEdit, label string) 
 		return
 	}
 	edit.ChangeAnnotations = map[string]lsp.ChangeAnnotation{crossFileAnnotation: {Label: label, NeedsConfirmation: true}}
+	for i := range edit.CreateFiles {
+		edit.CreateFiles[i].AnnotationID = crossFileAnnotation
+	}
 	for i := range edit.DocumentChanges {
 		for j := range edit.DocumentChanges[i].Edits {
 			edit.DocumentChanges[i].Edits[j].AnnotationID = crossFileAnnotation
 		}
 	}
+}
+
+func (s *Server) settingsFileFor(path string) (actions.SettingsFile, bool) {
+	root, ok := s.workspace.RootOf(path)
+	if !ok {
+		return actions.SettingsFile{}, false
+	}
+	rc, found, err := s.shellcheckrc.Nearest(filepath.Dir(path))
+	if err != nil {
+		return actions.SettingsFile{}, false
+	}
+	if found && platform.Native.Within(rc.Path, root) {
+		return actions.SettingsFile{URI: fileuri.FromPath(rc.Path), Text: rc.Text, Exists: true}, true
+	}
+	caps := s.clientCapabilities().Workspace.WorkspaceEdit
+	if !caps.DocumentChanges || !slices.Contains(caps.ResourceOperations, "create") || !rc.Relocatable() {
+		return actions.SettingsFile{}, false
+	}
+	return actions.SettingsFile{URI: fileuri.FromPath(filepath.Join(root, shellcheckrc.FileName)), Text: rc.Text}, true
+}
+
+func (s *Server) settingsEdit(enc docstore.Encoding, title string, file actions.SettingsFile, change actions.SettingsEdit) lsp.WorkspaceEdit {
+	doc := docstore.NewDocument(change.URI, "", 0, file.Text)
+	if change.Create {
+		doc = docstore.NewDocument(change.URI, "", 0, "")
+	}
+	edit := s.multiFileEdit(enc, []fileEdits{{doc: doc, edits: change.Edits}})
+	if change.Create {
+		edit.CreateFiles = []lsp.CreateFile{{URI: change.URI}}
+	}
+	s.annotateForConfirmation(&edit, title)
+	return edit
 }
 
 func (s *Server) handleCodeActionResolve(_ context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
@@ -182,9 +227,9 @@ func (s *Server) handleCodeActionResolve(_ context.Context, docs *docstore.View,
 		return nil, jsonrpc.NewError(jsonrpc.CodeContentModified, "%s changed since the action was offered", data.URI)
 	}
 	doc, sources := s.actionDocument(snap)
-	change, ok := actions.Compute(doc, data.Refactor)
-	if !ok {
-		return nil, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "the %s refactoring no longer applies", data.Refactor.Kind)
+	change, err := s.deferredChange(snap, doc, data)
+	if err != nil {
+		return nil, err
 	}
 	edit, err := s.changeEdit(docs, snap, sources, action.Title, change.Edits, change.Others)
 	if err != nil {
@@ -193,6 +238,24 @@ func (s *Server) handleCodeActionResolve(_ context.Context, docs *docstore.View,
 	action.Edit = &edit
 	action.Data = nil
 	return action, nil
+}
+
+func (s *Server) deferredChange(snap *snapshot, doc actions.Document, data actionData) (actions.Change, error) {
+	switch {
+	case data.Refactor != nil:
+		change, ok := actions.Compute(doc, *data.Refactor)
+		if !ok {
+			return actions.Change{}, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "the %s refactoring no longer applies", data.Refactor.Kind)
+		}
+		return change, nil
+	case data.FixAll != "":
+		change, ok := actions.FixAllOf(data.FixAll, s.lintActionDiagnostics(snap))
+		if !ok {
+			return actions.Change{}, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "%s no longer has several findings to fix", data.FixAll)
+		}
+		return change, nil
+	}
+	return actions.Change{}, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "code action data for %s names nothing to compute", data.URI)
 }
 
 func (s *Server) handleExecuteCommand(ctx context.Context, docs *docstore.View, params json.RawMessage) (any, error) {

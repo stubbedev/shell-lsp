@@ -7,9 +7,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/stubbedev/shell-lsp/internal/directive"
 	"github.com/stubbedev/shell-lsp/internal/format"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/shellcheckrc"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
@@ -68,6 +70,20 @@ type Action struct {
 	Edits       []textedit.Edit
 	Others      []FileEdits
 	Refactor    *Refactor
+	FixAllCode  string
+	Settings    *SettingsEdit
+}
+
+type SettingsFile struct {
+	URI    string
+	Text   string
+	Exists bool
+}
+
+type SettingsEdit struct {
+	URI    string
+	Create bool
+	Edits  []textedit.Edit
 }
 
 type Source struct {
@@ -89,6 +105,7 @@ type Input struct {
 	Selection      parser.Span
 	Diagnostics    []Diagnostic
 	AllDiagnostics []Diagnostic
+	Settings       func() (SettingsFile, bool)
 }
 
 type FileEdits struct {
@@ -153,7 +170,7 @@ func Refactorings() []RefactorKind {
 func Actions(in Input) []Action {
 	var out []Action
 	for _, d := range in.Diagnostics {
-		out = append(out, quickFixes(in.Tree, d)...)
+		out = append(out, quickFixes(in, d)...)
 	}
 	s := newSite(in.Document, in.Selection)
 	for _, ref := range refactorings {
@@ -189,19 +206,67 @@ func FixAll(diags []Diagnostic) []textedit.Edit {
 	return lint.SafeEdits(fixSets)
 }
 
-func quickFixes(tree *parser.Tree, d Diagnostic) []Action {
-	out := make([]Action, 0, len(d.Fixes)+2)
+func quickFixes(in Input, d Diagnostic) []Action {
+	out := make([]Action, 0, len(d.Fixes)+4)
 	for i, f := range d.Fixes {
 		out = append(out, Action{Title: f.Title, Kind: QuickFix, Diagnostics: []int{d.Index}, Preferred: i == 0, Edits: f.Edits})
 	}
 	if _, err := lint.ParseCode(d.Code); err != nil {
 		return out
 	}
-	if edit, ok := disableForStatement(tree, d); ok {
+	if len(d.Fixes) > 0 {
+		if fixAll, ok := FixAllOf(d.Code, in.AllDiagnostics); ok {
+			out = append(out, Action{Title: fixAll.Title, Kind: QuickFix, Diagnostics: []int{d.Index}, Edits: fixAll.Edits, FixAllCode: d.Code})
+		}
+	}
+	if edit, ok := disableForStatement(in.Tree, d); ok {
 		out = append(out, Action{Title: fmt.Sprintf("Ignore %s for this command", d.Code), Kind: QuickFix, Diagnostics: []int{d.Index}, Edits: []textedit.Edit{edit}})
 	}
-	out = append(out, Action{Title: fmt.Sprintf("Ignore %s in this file", d.Code), Kind: QuickFix, Diagnostics: []int{d.Index}, Edits: []textedit.Edit{disableForFile(tree, d.Code)}})
+	if edit, ok := disableForFile(in.Tree, d.Code); ok {
+		out = append(out, Action{Title: fmt.Sprintf("Ignore %s in this file", d.Code), Kind: QuickFix, Diagnostics: []int{d.Index}, Edits: []textedit.Edit{edit}})
+	}
+	if edit, ok := disableForWorkspace(in.Settings, d.Code); ok {
+		out = append(out, Action{Title: fmt.Sprintf("Ignore %s in this workspace", d.Code), Kind: QuickFix, Diagnostics: []int{d.Index}, Settings: &edit})
+	}
 	return out
+}
+
+func FixAllOf(code string, all []Diagnostic) (Change, bool) {
+	var chosen []lint.Fix
+	safe := true
+	for _, d := range all {
+		if d.Code != code || len(d.Fixes) == 0 {
+			continue
+		}
+		chosen = append(chosen, d.Fixes[0])
+		safe = safe && d.Fixes[0].Safety == lint.Safe
+	}
+	if len(chosen) < 2 {
+		return Change{}, false
+	}
+	title := fmt.Sprintf("Fix all %s in this file (%d)", code, len(chosen))
+	if !safe {
+		title = fmt.Sprintf("Fix all %s in this file (%d, review)", code, len(chosen))
+	}
+	return Change{Title: title, Edits: lint.MergedEdits(chosen)}, true
+}
+
+func disableForWorkspace(settings func() (SettingsFile, bool), code string) (SettingsEdit, bool) {
+	if settings == nil {
+		return SettingsEdit{}, false
+	}
+	file, ok := settings()
+	if !ok {
+		return SettingsEdit{}, false
+	}
+	edit, ok := shellcheckrc.DisableEdit(file.Text, code)
+	if !ok {
+		return SettingsEdit{}, false
+	}
+	if file.Exists {
+		return SettingsEdit{URI: file.URI, Edits: []textedit.Edit{edit}}, true
+	}
+	return SettingsEdit{URI: file.URI, Create: true, Edits: []textedit.Edit{{NewText: textedit.Apply(file.Text, []textedit.Edit{edit})}}}, true
 }
 
 const directivePrefix = "# shellcheck disable="
@@ -216,14 +281,57 @@ func disableForStatement(tree *parser.Tree, d Diagnostic) (textedit.Edit, bool) 
 	return directiveEdit(text, start, leadingSpace(text, start), d.Code), true
 }
 
-func disableForFile(tree *parser.Tree, code string) textedit.Edit {
-	text := tree.Text()
-	at := 0
-	if strings.HasPrefix(text, "#!") {
-		at = lineEnd(text, 0) + 1
-		at = min(at, len(text))
+func disableForFile(tree *parser.Tree, code string) (textedit.Edit, bool) {
+	parsed, err := lint.ParseCode(code)
+	if err != nil {
+		return textedit.Edit{}, false
 	}
-	return directiveEdit(text, at, "", code)
+	text := tree.Text()
+	header := firstStatementStart(tree)
+	after := 0
+	if strings.HasPrefix(text, "#!") {
+		after = min(lineEnd(text, 0)+1, len(text))
+	}
+	var merge *textedit.Edit
+	for _, c := range tree.Comments {
+		if c.Span.End > header || !startsLine(text, c.Span.Start) {
+			continue
+		}
+		comment := text[c.Span.Start:lineEnd(text, c.Span.Start)]
+		d, ok := directive.Parse(comment)
+		if !ok {
+			continue
+		}
+		after = max(after, min(lineEnd(text, c.Span.Start)+1, len(text)))
+		for _, pair := range d.Pairs {
+			if pair.Key != directive.Disable {
+				continue
+			}
+			if set, err := shellcheckrc.ParseCodeSet(pair.Value); err == nil && set.Has(parsed) {
+				return textedit.Edit{}, false
+			}
+			if merge == nil && pair.ValueEnd-pair.ValueOffset == len(pair.Value) {
+				at := c.Span.Start + pair.ValueEnd
+				merge = &textedit.Edit{Start: at, End: at, NewText: "," + code}
+			}
+		}
+	}
+	if merge != nil {
+		return *merge, true
+	}
+	if after == len(text) && text != "" && !strings.HasSuffix(text, "\n") {
+		return textedit.Edit{Start: after, End: after, NewText: "\n" + directivePrefix + code + "\n"}, true
+	}
+	return textedit.Edit{Start: after, End: after, NewText: directivePrefix + code + "\n"}, true
+}
+
+func firstStatementStart(tree *parser.Tree) int {
+	if len(tree.File.Stmts) > 0 {
+		if span, ok := tree.NodeSpan(tree.File.Stmts[0]); ok {
+			return span.Start
+		}
+	}
+	return len(tree.Text())
 }
 
 func directiveEdit(text string, lineAt int, indent, code string) textedit.Edit {

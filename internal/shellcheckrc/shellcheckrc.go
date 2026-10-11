@@ -83,7 +83,11 @@ type File struct {
 	Shell       *dialect.Dialect
 	SourcePaths []string
 	Extended    *bool
+
+	relativePaths bool
 }
+
+func (f File) Relocatable() bool { return !f.relativePaths }
 
 func Parse(path, text string) (File, error) {
 	rc := File{Path: path, Text: text}
@@ -132,6 +136,7 @@ func (rc *File) set(pair directive.Pair) error {
 		for _, dir := range filepath.SplitList(pair.Value) {
 			if dir != ScriptDir && !filepath.IsAbs(dir) {
 				dir = filepath.Join(filepath.Dir(rc.Path), dir)
+				rc.relativePaths = true
 			}
 			rc.SourcePaths = append(rc.SourcePaths, dir)
 		}

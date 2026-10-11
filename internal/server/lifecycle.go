@@ -64,6 +64,7 @@ type ClientCapabilities struct {
 		} `json:"diagnostics"`
 		WorkspaceEdit struct {
 			DocumentChanges         bool      `json:"documentChanges"`
+			ResourceOperations      []string  `json:"resourceOperations"`
 			ChangeAnnotationSupport *struct{} `json:"changeAnnotationSupport"`
 		} `json:"workspaceEdit"`
 		Configuration  bool `json:"configuration"`

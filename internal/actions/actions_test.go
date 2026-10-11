@@ -235,9 +235,141 @@ func TestFixAllAppliesOnlySafeFixes(t *testing.T) {
 func TestDisableForFileWithoutShebang(t *testing.T) {
 	t.Parallel()
 
-	edit := disableForFile(parser.Parse("echo $x", dialect.Bash), "SC2086")
+	edit, _ := disableForFile(parser.Parse("echo $x", dialect.Bash), "SC2086")
 	if got := textedit.Apply("echo $x", []textedit.Edit{edit}); got != "# shellcheck disable=SC2086\necho $x" {
 		t.Errorf("disable for file = %q", got)
+	}
+}
+
+func actionsFor(t *testing.T, text, code string, settings func() (SettingsFile, bool)) (map[string]Action, []string) {
+	t.Helper()
+
+	tree := parser.Parse(text, dialect.Bash)
+	all := lintDiagnostics(tree)
+	i := slices.IndexFunc(all, func(d Diagnostic) bool { return d.Code == code })
+	if i < 0 {
+		t.Fatalf("no %s in %q", code, text)
+	}
+	byTitle := map[string]Action{}
+	var titles []string
+	for _, a := range Actions(Input{Tree: tree, Diagnostics: all[i : i+1], AllDiagnostics: all, Settings: settings}) {
+		byTitle[a.Title] = a
+		titles = append(titles, a.Title)
+	}
+	return byTitle, titles
+}
+
+func TestFixAllOfACode(t *testing.T) {
+	t.Parallel()
+
+	text := "#!/bin/bash\na=`date`\nb=`id -u`\nc=`pwd`\necho \"$a$b$c\"\n"
+	byTitle, _ := actionsFor(t, text, "SC2006", nil)
+	safe, ok := byTitle["Fix all SC2006 in this file (3)"]
+	if !ok {
+		t.Fatalf("missing the SC2006 fix-all (have %v)", keys(byTitle))
+	}
+	if got, want := textedit.Apply(text, safe.Edits), "#!/bin/bash\na=$(date)\nb=$(id -u)\nc=$(pwd)\necho \"$a$b$c\"\n"; got != want || safe.FixAllCode != "SC2006" || safe.Kind != QuickFix || safe.Preferred {
+		t.Errorf("fix all = %q (%+v), want %q", got, safe, want)
+	}
+
+	review := "#!/bin/bash\necho $1 $2\n"
+	byTitle, _ = actionsFor(t, review, "SC2086", nil)
+	a, ok := byTitle["Fix all SC2086 in this file (2, review)"]
+	if !ok || textedit.Apply(review, a.Edits) != "#!/bin/bash\necho \"$1\" \"$2\"\n" {
+		t.Errorf("review fix-all = %+v (have %v)", a, keys(byTitle))
+	}
+
+	single, _ := actionsFor(t, "#!/bin/bash\necho $1\n", "SC2086", nil)
+	for title := range single {
+		if strings.HasPrefix(title, "Fix all") {
+			t.Errorf("fix-all offered for a single finding: %q", title)
+		}
+	}
+}
+
+func TestIgnoreInFileUsesTheHeader(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct{ text, want string }{
+		{
+			"#!/bin/bash\n# shellcheck disable=SC2034 # unused on purpose\n# shellcheck source=lib.sh\n. ./lib.sh\necho $1\n",
+			"#!/bin/bash\n# shellcheck disable=SC2034,SC2086 # unused on purpose\n# shellcheck source=lib.sh\n. ./lib.sh\necho $1\n",
+		},
+		{
+			"#!/bin/bash\n# shellcheck shell=bash\n# Copyright someone\necho $1\n",
+			"#!/bin/bash\n# shellcheck shell=bash\n# shellcheck disable=SC2086\n# Copyright someone\necho $1\n",
+		},
+		{
+			"# Copyright someone\necho $1\n",
+			"# shellcheck disable=SC2086\n# Copyright someone\necho $1\n",
+		},
+	} {
+		byTitle, _ := actionsFor(t, tc.text, "SC2086", nil)
+		a, ok := byTitle["Ignore SC2086 in this file"]
+		if !ok {
+			t.Errorf("%q: no file ignore (have %v)", tc.text, keys(byTitle))
+			continue
+		}
+		got := textedit.Apply(tc.text, a.Edits)
+		if got != tc.want {
+			t.Errorf("ignore in file %q = %q, want %q", tc.text, got, tc.want)
+		}
+		if _, again := disableForFile(parser.Parse(got, dialect.Bash), "SC2086"); again {
+			t.Errorf("ignoring SC2086 twice would edit %q again", got)
+		}
+	}
+	if _, ok := disableForFile(parser.Parse("#!/bin/bash\n# shellcheck disable=SC2000-SC2100\necho $1\n", dialect.Bash), "SC2086"); ok {
+		t.Error("offered to ignore a code the header already disables through a range")
+	}
+}
+
+func TestIgnoreInWorkspaceEditsTheSettingsFile(t *testing.T) {
+	t.Parallel()
+
+	text := "#!/bin/bash\necho $1\n"
+	existing := func() (SettingsFile, bool) {
+		return SettingsFile{URI: "file:///w/.shellcheckrc", Text: "shell=bash\ndisable=SC2034\n", Exists: true}, true
+	}
+	byTitle, _ := actionsFor(t, text, "SC2086", existing)
+	a, ok := byTitle["Ignore SC2086 in this workspace"]
+	if !ok || a.Settings == nil || a.Settings.Create || a.Settings.URI != "file:///w/.shellcheckrc" {
+		t.Fatalf("workspace ignore = %+v (have %v)", a, keys(byTitle))
+	}
+	if got := textedit.Apply("shell=bash\ndisable=SC2034\n", a.Settings.Edits); got != "shell=bash\ndisable=SC2034,SC2086\n" {
+		t.Errorf("rc after the edit = %q", got)
+	}
+
+	inherited := func() (SettingsFile, bool) {
+		return SettingsFile{URI: "file:///w/.shellcheckrc", Text: "enable=require-variable-braces"}, true
+	}
+	byTitle, _ = actionsFor(t, text, "SC2086", inherited)
+	a = byTitle["Ignore SC2086 in this workspace"]
+	if a.Settings == nil || !a.Settings.Create || textedit.Apply("", a.Settings.Edits) != "enable=require-variable-braces\ndisable=SC2086\n" {
+		t.Errorf("new rc = %+v, want the inherited settings plus the disable", a.Settings)
+	}
+
+	covered := func() (SettingsFile, bool) {
+		return SettingsFile{URI: "file:///w/.shellcheckrc", Text: "disable=all\n", Exists: true}, true
+	}
+	if byTitle, _ := actionsFor(t, text, "SC2086", covered); byTitle["Ignore SC2086 in this workspace"].Settings != nil {
+		t.Error("offered to ignore a code the settings file already disables")
+	}
+}
+
+func TestDiagnosticActionOrder(t *testing.T) {
+	t.Parallel()
+
+	settings := func() (SettingsFile, bool) { return SettingsFile{URI: "file:///w/.shellcheckrc"}, true }
+	_, titles := actionsFor(t, "#!/bin/bash\necho $1 $2\n", "SC2086", settings)
+	want := []string{
+		"Double-quote $1",
+		"Fix all SC2086 in this file (2, review)",
+		"Ignore SC2086 for this command",
+		"Ignore SC2086 in this file",
+		"Ignore SC2086 in this workspace",
+	}
+	if len(titles) < len(want) || !slices.Equal(titles[:len(want)], want) {
+		t.Errorf("titles = %q, want them to start with %q", titles, want)
 	}
 }
 

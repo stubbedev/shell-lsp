@@ -138,11 +138,19 @@ func AutoFix(fixes []Fix) (Fix, bool) {
 }
 
 func SafeEdits(fixSets [][]Fix) []textedit.Edit {
-	groups := make([][]textedit.Edit, 0, len(fixSets))
+	chosen := make([]Fix, 0, len(fixSets))
 	for _, fixes := range fixSets {
 		if fix, ok := AutoFix(fixes); ok {
-			groups = append(groups, fix.Edits)
+			chosen = append(chosen, fix)
 		}
+	}
+	return MergedEdits(chosen)
+}
+
+func MergedEdits(fixes []Fix) []textedit.Edit {
+	groups := make([][]textedit.Edit, len(fixes))
+	for i, fix := range fixes {
+		groups[i] = fix.Edits
 	}
 	return textedit.NonOverlapping(groups)
 }
