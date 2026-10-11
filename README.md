@@ -1,17 +1,20 @@
 # shell-lsp
 
-A Language Server Protocol implementation for shell scripts: bash, zsh, POSIX
-sh, dash and ksh, with dialect auto-detection. Aims to cover everything
-bash-language-server does, for every dialect, and to implement the full LSP
-specification.
+shell-lsp is a language server and linter for shell scripts: bash, zsh,
+POSIX sh, dash and ksh, with the dialect detected per file. It gives any
+editor that speaks the Language Server Protocol diagnostics, completion,
+hover, navigation, refactorings and formatting for shell, and the same
+binary lints and formats scripts from the command line for CI and
+pre-commit.
 
-Everything runs inside one static binary with no runtime dependencies: the
-linter, the formatter, the manual-page reader behind hover and completion, and
-the `.editorconfig` reader are all native. Highlights:
+It is one static binary with no runtime dependencies. The linter, the
+formatter, the manual-page reader behind hover and completion, and the
+`.editorconfig` reader are all built in, so neither shellcheck, shfmt, man
+nor groff needs to be installed.
 
-- An error-tolerant parser for every dialect, with incremental document sync,
-  that knows the whole zsh and ksh93 grammar ([Parser](#parser)).
-- Diagnostics from a native linter that reuses ShellCheck's check codes and
+- An error-tolerant parser for every dialect, with incremental document
+  sync, that knows the whole zsh and ksh93 grammar.
+- Diagnostics from a built-in linter that uses ShellCheck's check codes and
   directives, lints zsh, follows sourced files, and adds checks of its own,
   such as untrusted data reaching `eval`, `sh -c` or `source`
   ([docs/rules.md](docs/rules.md)). Every check is listed with its severity
@@ -21,28 +24,24 @@ the `.editorconfig` reader are all native. Highlights:
   and the options and subcommands of installed commands, read from their
   manual pages ([Completion and hover](#completion-and-hover)).
 - Navigation, references, rename, call hierarchy, symbols, semantic tokens,
-  inlay hints, signature help, folding, selection ranges and code lenses.
-- Formatting with the printer shfmt is built on, honouring `.editorconfig`.
-- Quick fixes, refactorings and a fix-all source action.
-- Bats support: tests in the outline, and "Run" lenses that report
+  inlay hints, signature help, folding, selection ranges and code lenses,
+  across the files a script sources ([Sourced files](#sourced-files)).
+- Formatting with the printer shfmt is built on, honouring `.editorconfig`
+  ([Configuration](#configuration)).
+- Quick fixes, [refactorings](#refactorings) and a fix-all source action.
+- Checks for awk, sed and jq programs embedded in scripts
+  ([Embedded languages](#embedded-languages)).
+- [Bats](#bats) support: tests in the outline, and "Run" lenses that report
   failures as diagnostics.
 - `shell-lsp check` and `shell-lsp fmt` for CI and pre-commit, compatible
   with the `shellcheck` and `shfmt` command lines ([docs/cli.md](docs/cli.md)).
 
 Every LSP method, in both directions, is listed with its status in
-[docs/lsp-methods.md](docs/lsp-methods.md), generated from the table the
-conformance tests check the server against.
-
-Files pulled in with `source` or `.` act as imports: their functions and
-globals are completed, hovered, highlighted and navigated to as if they were
-defined in the document, open editor buffers win over the copy on disk, and
-the linter follows them. Paths built from `$0`,
-`${BASH_SOURCE[0]}`, `dirname`, `cd ... && pwd` and earlier assignments are
-resolved, as are `# shellcheck source=` directives.
+[docs/lsp-methods.md](docs/lsp-methods.md).
 
 ## Installation
 
-shell-lsp is one static binary with no runtime dependencies. Pick one:
+Pick one:
 
 - **Release binaries** for Linux, macOS and Windows (amd64 and arm64) are
   attached to every [GitHub release](https://github.com/stubbedev/shell-lsp/releases),
@@ -60,20 +59,7 @@ shell-lsp is one static binary with no runtime dependencies. Pick one:
   a `.vsix` on every release) runs the server, exposes its settings, and
   offers to download and verify the release binary when none is installed.
 
-`shell-lsp --version` prints the installed version. Then point your editor at
-it: [docs/editors.md](docs/editors.md) covers Neovim, Helix, Zed, VS Code and
-any other client.
-
-## Goals
-
-- Auto-detected dialects: bash, zsh, sh, dash, ksh (shebang, zsh completion
-  `#compdef` and `#autoload` tags, extension, modeline)
-- Parity with bash-language-server: diagnostics, completion, hover, definition,
-  symbols, folding, formatting, and linting at least as thorough as shellcheck
-- Full LSP coverage: references, rename, semantic tokens, code actions,
-  signature help, inlay hints, workspace symbols, pull diagnostics, and the
-  remaining capabilities where they are meaningful for shell
-- Single static Go binary; stdio transport; no runtime dependencies
+`shell-lsp --version` prints the installed version.
 
 ## Usage
 
@@ -84,18 +70,33 @@ shell-lsp fmt [FLAGS] [PATH]     # format, like shfmt
 shell-lsp --version
 ```
 
-Editor wiring for Neovim, Helix, Zed and VS Code is in
-[docs/editors.md](docs/editors.md).
+### In an editor
+
+The server speaks LSP over stdio and needs no arguments: point your editor
+at `shell-lsp`. [docs/editors.md](docs/editors.md) has the setup for Neovim,
+Helix, Zed, VS Code and any other client. Settings are described under
+[Configuration](#configuration).
+
+### On the command line
 
 `shell-lsp check` takes ShellCheck's options, `.shellcheckrc` files, output
 formats (plus SARIF for code scanning) and exit codes, and `shell-lsp fmt`
 takes shfmt's flags, so both drop into CI and pre-commit hooks where
 `shellcheck` and `shfmt` ran before, and report exactly what the editor
-shows. Checking the 2579 scripts of a Nixpkgs corpus takes 0.6 s on 12 cores;
-one `shellcheck` process over the same files takes about two minutes. The
-rule sets differ, so read that as an order of magnitude, not a like-for-like
-benchmark. Flags, formats, CI and pre-commit
-recipes are in [docs/cli.md](docs/cli.md).
+shows:
+
+```sh
+shell-lsp check .                        # lint every shell script below .
+shell-lsp check -f sarif . > out.sarif   # for GitHub code scanning
+shell-lsp fmt -d .                       # show what formatting would change
+shell-lsp fmt -w script.sh               # format in place
+```
+
+Checking the 2579 scripts of a Nixpkgs corpus takes 0.6 s on 12 cores; one
+`shellcheck` process over the same files takes about two minutes. The rule
+sets differ, so read that as an order of magnitude, not a like-for-like
+benchmark. Flags, formats, CI and pre-commit recipes are in
+[docs/cli.md](docs/cli.md).
 
 ## Dialects
 
@@ -125,6 +126,13 @@ requests:
 | --- | --- | --- |
 | `shellLsp/documentDialect` | `{textDocument}` | `{dialect, source, evidence, guessed, description, directive, dialects}`: the shell, what decided it (`default`, `override`, `editorconfig`, `directive`, `shebang`, `completionTag`, `fileName`, `extension`, `languageId` or `modeline`), the text that did, whether that is a guess, a sentence to show, whether a header shell directive exists, and the shells that can be chosen |
 | `shellLsp/setDialect` | `{textDocument, dialect}` | The `WorkspaceEdit` that adds or updates the header directive for `dialect`, or removes it when `dialect` is `null`; `null` when nothing changes |
+
+The parser understands the whole grammar of each shell, including zsh's
+short and brace forms of loops and `if`, `foreach`, `repeat`,
+`{ } always { }`, anonymous functions with arguments and glob qualifiers,
+and ksh93's compound variables and types, `namespace` and dotted names. A
+ksh script is parsed as ksh93 unless its shebang, shell directive or file
+name says mksh.
 
 ## Configuration
 
@@ -162,23 +170,7 @@ the offending field.
 | `format.minify` | `false` | Minify the script (like `shfmt -mn`) |
 
 Formatting runs the same printer shfmt is built on, in-process, so no shfmt
-binary is needed. Likewise, hover and completion documentation for external
-commands comes from the installed manual pages, which the server locates
-through `MANPATH` (where it is unset or has an empty entry, in the `share/man`
-and `man` directories next to every `PATH` entry and in `/usr/share/man`,
-`/usr/local/share/man`, `/usr/local/man` and `/opt/homebrew/share/man`),
-decompresses and renders
-itself; neither `man` nor groff is involved. Subcommands come from the same
-pages: after `git`, `systemctl` or `docker` completion offers the documented
-subcommands, and the flags completed and hovered after `git checkout` are those
-of git-checkout(1), falling back to the command's own page. Nested subcommands
-such as `git remote add`, `kubectl config set-context` or `ip link set` resolve
-as deep as the pages document them, global options before a subcommand are
-skipped with their values (`git -C dir checkout`, `kubectl -n ns get`), and
-commands behind the wrappers `builtin`, `busybox`, `command`, `doas`, `env`,
-`exec`, `nice`, `nohup`, `setsid`, `sudo`, `time`, `timeout`, `watch` and
-`xargs` complete and hover as if typed directly.
-Documents with syntax errors are not formatted, and range
+binary is needed. Documents with syntax errors are not formatted, and range
 formatting only changes the lines that intersect the range.
 
 Projects formatted with shfmt keep working unchanged: `.editorconfig` files are
@@ -212,12 +204,40 @@ vocabulary, filtered by the dialect of the document:
   such as a `getopts` loop, a cleanup trap, `mktemp` with cleanup, strict
   mode and the script's own directory, written for the document's dialect.
 
+Documentation for external commands comes from the installed manual pages,
+which the server locates through `MANPATH` (where it is unset or has an
+empty entry, in the `share/man` and `man` directories next to every `PATH`
+entry and in `/usr/share/man`, `/usr/local/share/man`, `/usr/local/man` and
+`/opt/homebrew/share/man`), decompresses and renders itself; neither `man`
+nor groff is involved. Subcommands come from the same pages: after `git`,
+`systemctl` or `docker` completion offers the documented subcommands, and
+the flags completed and hovered after `git checkout` are those of
+git-checkout(1), falling back to the command's own page. Nested subcommands
+such as `git remote add`, `kubectl config set-context` or `ip link set`
+resolve as deep as the pages document them, global options before a
+subcommand are skipped with their values (`git -C dir checkout`,
+`kubectl -n ns get`), and commands behind the wrappers `builtin`, `busybox`,
+`command`, `doas`, `env`, `exec`, `nice`, `nohup`, `setsid`, `sudo`, `time`,
+`timeout`, `watch` and `xargs` complete and hover as if typed directly.
+
 Completing inside a word can replace the rest of it (for clients with
 insert-replace support). Hover explains the same vocabulary where it is
 used: builtin flags (also combined, as in `read -rs`), test, arithmetic,
 list and `case` operators, redirections and whether a here-document body is
 expanded, signals, option names, expansion operators, and every letter that
 `$-` can contain.
+
+## Sourced files
+
+Files pulled in with `source` or `.` act as imports: their functions and
+globals are completed, hovered, highlighted and navigated to as if they were
+defined in the document, open editor buffers win over the copy on disk, and
+the linter follows them. Paths built from `$0`, `${BASH_SOURCE[0]}`,
+`dirname`, `cd ... && pwd` and earlier assignments are resolved, as are
+`# shellcheck source=` directives. Renaming or moving a script in the editor
+rewrites the `source` paths that point at it, and a rename that changes its
+extension from one shell to another (`.sh` to `.bash`) updates its shebang
+to match.
 
 ## Linting
 
@@ -397,24 +417,13 @@ as the buffer is edited, even when bats ran an older saved copy. A run is stoppe
 minutes, and stopping it ends every process the suite started, not only
 bats itself.
 
-## Parser
+## Development
 
-Scripts are parsed with a fork of [mvdan.cc/sh](https://github.com/mvdan/sh)
-v3.14.1 in [third_party/mvdan-sh](third_party/mvdan-sh), built as part of
-this module, so the server has no external Go dependencies at all. Upstream treats zsh as experimental and
-parses ksh as mksh, so the fork adds the rest of the zsh grammar (short and
-brace forms of loops and `if`, `foreach`, `repeat`, `{ } always { }`,
-anonymous functions with arguments, case groups, `coproc` without a name,
-expansion operators such as `${a::=w}` and `${a:^b}`, math functions and
-glob groups and qualifiers) and a ksh93 variant (compound variables and
-types, `namespace`, `.sh.math` functions, dotted names, `<<#` and the seek
-redirections). A ksh script is parsed as ksh93 unless its shebang, shell
-directive or file name says mksh. Every change is a patch with a reproducer
-under [third_party/mvdan-sh/patches](third_party/mvdan-sh/patches), listed in
-the fork's [README](third_party/mvdan-sh/README.md), so it can be sent
-upstream.
-
-## Recipes
+Every dev tool (Go toolchain pinned to the version go.mod declares, gopls,
+golangci-lint, delve, just, shellcheck, shfmt, git, gh, Node.js for the
+VS Code extension, and bats, bash-language-server and Neovim for the Bats,
+`crosscheck` and `smoke` tests) comes from the flake: `direnv allow` on
+entry, or `nix develop` explicitly.
 
 | Recipe | What it does |
 | --- | --- |
@@ -430,22 +439,57 @@ upstream.
 | `just lintcheck PATH...` | Per-code precision and recall of the linter against shellcheck over real scripts |
 | `just dist` | Build static release binaries for Linux, macOS and Windows into `dist/` |
 
-Every dev tool (Go toolchain pinned to the version go.mod declares, gopls,
-golangci-lint, delve, just, shellcheck, shfmt, git, gh, Node.js for the
-VS Code extension, and bats, bash-language-server and Neovim for the Bats,
-`crosscheck` and `smoke` tests) comes from
-the flake: `direnv allow` on entry, or `nix develop` explicitly. shellcheck is
-only a test oracle: the lint fixtures under `internal/lint/testdata/fixtures`
-are original scripts whose expected findings were recorded from it, with
-deliberate differences marked and explained in place.
-
-## Nix
+With Nix:
 
 - `nix build` builds the package, stamped with the commit date, and runs the
   test suite; update `vendorHash` in `package.nix` whenever go.mod
   dependencies change
 - `nix run` runs it
 - `nix fmt` formats the nix files with alejandra
+
+Building and publishing the VS Code extension is described in
+[docs/vscode-publishing.md](docs/vscode-publishing.md).
+
+## Inspiration
+
+shell-lsp exists because of two projects:
+
+- [bash-language-server](https://github.com/bash-lsp/bash-language-server)
+  set the baseline for what a shell language server offers: diagnostics,
+  completion, hover, definition, symbols and formatting. shell-lsp covers
+  that ground for every dialect, not only bash, and goes on to the rest of
+  the LSP specification.
+- [ShellCheck](https://github.com/koalaman/shellcheck) defined what linting
+  a shell script means: its check codes, `# shellcheck` directives,
+  `.shellcheckrc` files and command line are what scripts and CI pipelines
+  already rely on.
+
+Both were reimplemented clean-room, without reference to their source code.
+Each was treated as a black box whose observable behaviour served as the
+specification:
+
+- ShellCheck is only a test oracle. The lint fixtures under
+  `internal/lint/testdata/fixtures` are original scripts whose expected
+  findings were recorded by running it (`just fixtures`), with deliberate
+  differences marked and explained in place, and `just lintcheck` measures
+  the linter's precision and recall against it, code by code, over real
+  scripts.
+- bash-language-server is compared from the outside: `just crosscheck` runs
+  both servers over the same corpus and records their diagnostics and
+  completion recall in [docs/crosscheck.md](docs/crosscheck.md).
+
+What carries over is the interface, so existing scripts, annotations and
+configuration keep working: the `SC` check codes and their numbering, the
+directive and `.shellcheckrc` syntax, and the options, output formats and
+exit codes of the `shellcheck` command line. Every message, summary, fix
+and line of the implementation is shell-lsp's own.
+
+Parsing and formatting build on code that is reused, not reimplemented: a
+fork of [mvdan.cc/sh](https://github.com/mvdan/sh) v3.14.1, the library
+shfmt is built on, lives in [third_party/mvdan-sh](third_party/mvdan-sh)
+under its own BSD license. The fork adds the rest of the zsh grammar and a
+ksh93 variant; every change is a patch with a reproducer, listed in its
+[README](third_party/mvdan-sh/README.md) so it can be sent upstream.
 
 ## License
 
