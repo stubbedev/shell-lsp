@@ -1,9 +1,12 @@
 package workspace
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -240,6 +243,49 @@ func TestLoadForgetsFilesDeletedFromDisk(t *testing.T) {
 	}
 	if len(ws.files) != 0 {
 		t.Errorf("cache kept the deleted file: %v", ws.files)
+	}
+}
+
+func TestMissingFilesAreRecheckedOnlyAfterTheIntervalOrAnInvalidation(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "lib.sh")
+	c := &clock{t: time.Now()}
+	ws := newTestWorkspace(c)
+	if _, err := ws.Load(path); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("loading a missing file = %v, want not-exist", err)
+	}
+	rewrite(t, path, "one() { :; }\n", c.t)
+	c.t = c.t.Add(DiskRecheck / 2)
+	if _, err := ws.Load(path); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("load within the recheck interval = %v, want the remembered miss", err)
+	}
+	ws.Invalidate(path)
+	if got := firstFunction(t, ws, path); got != "one" {
+		t.Errorf("load after an invalidation = %s, want the created file", got)
+	}
+	other := filepath.Join(filepath.Dir(path), "other.sh")
+	if _, err := ws.Load(other); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("loading a missing file = %v, want not-exist", err)
+	}
+	rewrite(t, other, "two() { :; }\n", c.t)
+	c.t = c.t.Add(DiskRecheck)
+	if got := firstFunction(t, ws, other); got != "two" {
+		t.Errorf("load after the recheck interval = %s, want the created file", got)
+	}
+}
+
+func TestMissingFileMemoryIsBounded(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	c := &clock{t: time.Now()}
+	ws := newTestWorkspace(c)
+	for i := range maxMissing + 10 {
+		_, _ = ws.Load(filepath.Join(dir, strconv.Itoa(i)+".sh"))
+	}
+	if len(ws.missing) > maxMissing {
+		t.Errorf("remembered %d missing paths, want at most %d", len(ws.missing), maxMissing)
 	}
 }
 

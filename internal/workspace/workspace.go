@@ -120,6 +120,7 @@ type Workspace struct {
 	roots      []string
 	files      map[string]diskEntry
 	dirs       map[string]dirListing
+	missing    map[string]time.Time
 	generation atomic.Uint64
 	watched    atomic.Bool
 }
@@ -142,7 +143,7 @@ func DetectDialect(_ string, in dialect.Input) dialect.Dialect {
 }
 
 func New(overlay Overlay, dialectOf func(path string, in dialect.Input) dialect.Dialect) *Workspace {
-	return &Workspace{overlay: overlay, dialectOf: dialectOf, now: time.Now, files: map[string]diskEntry{}, dirs: map[string]dirListing{}}
+	return &Workspace{overlay: overlay, dialectOf: dialectOf, now: time.Now, files: map[string]diskEntry{}, dirs: map[string]dirListing{}, missing: map[string]time.Time{}}
 }
 
 func (w *Workspace) SetRoots(roots []string) {
@@ -179,6 +180,7 @@ func (w *Workspace) Invalidate(path string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	delete(w.files, platform.Native.Fold(path))
+	delete(w.missing, platform.Native.Fold(path))
 	delete(w.dirs, platform.Native.Fold(filepath.Dir(path)))
 	w.generation.Add(1)
 }
@@ -188,6 +190,7 @@ func (w *Workspace) InvalidateAll() {
 	defer w.mu.Unlock()
 	clear(w.files)
 	clear(w.dirs)
+	clear(w.missing)
 	w.generation.Add(1)
 }
 
@@ -209,10 +212,20 @@ func (w *Workspace) Load(path string) (*File, error) {
 	if fresh {
 		return cached.file, nil
 	}
-	info, err := os.Stat(path)
+	key := platform.Native.Fold(path)
+	w.mu.Lock()
+	missingSince, missing := w.missing[key]
+	w.mu.Unlock()
+	if missing && now.Sub(missingSince) < DiskRecheck {
+		return nil, fmt.Errorf("loading %s: %w", path, fs.ErrNotExist)
+	}
+	info, err := regularfile.Stat(path)
 	if err != nil {
 		w.mu.Lock()
-		delete(w.files, platform.Native.Fold(path))
+		delete(w.files, key)
+		if errors.Is(err, fs.ErrNotExist) {
+			w.rememberMissingLocked(key, now)
+		}
 		w.mu.Unlock()
 		return nil, fmt.Errorf("loading %s: %w", path, err)
 	}
@@ -223,7 +236,7 @@ func (w *Workspace) Load(path string) (*File, error) {
 		w.mu.Unlock()
 		return cached.file, nil
 	}
-	raw, info, err := ReadDisk(path)
+	raw, info, err := regularfile.ReadStat(path, info, maxFileSize)
 	if err != nil {
 		return nil, fmt.Errorf("loading %s: %w", path, err)
 	}
@@ -235,6 +248,22 @@ func (w *Workspace) Load(path string) (*File, error) {
 	w.files[platform.Native.Fold(path)] = diskEntry{size: info.Size(), modTime: info.ModTime(), checked: now, file: file}
 	w.mu.Unlock()
 	return file, nil
+}
+
+const maxMissing = 4096
+
+func (w *Workspace) rememberMissingLocked(key string, now time.Time) {
+	if len(w.missing) >= maxMissing {
+		for missingKey, since := range w.missing {
+			if now.Sub(since) >= DiskRecheck {
+				delete(w.missing, missingKey)
+			}
+		}
+		if len(w.missing) >= maxMissing {
+			clear(w.missing)
+		}
+	}
+	w.missing[key] = now
 }
 
 func ReadDisk(path string) ([]byte, fs.FileInfo, error) {

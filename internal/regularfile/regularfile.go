@@ -18,17 +18,29 @@ var (
 	ErrTooLarge   = errors.New("over the size limit")
 )
 
-func Open(path string) (*os.File, fs.FileInfo, error) {
+func Stat(path string) (fs.FileInfo, error) {
 	if platform.Native.IsDevicePath(path) {
-		return nil, nil, fmt.Errorf("%s names a device: %w", path, ErrNotRegular)
+		return nil, fmt.Errorf("%s names a device: %w", path, ErrNotRegular)
 	}
 	named, err := os.Stat(path)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if !named.Mode().IsRegular() {
-		return nil, nil, fmt.Errorf("%s is a %s: %w", path, named.Mode().Type(), ErrNotRegular)
+		return nil, fmt.Errorf("%s is a %s: %w", path, named.Mode().Type(), ErrNotRegular)
 	}
+	return named, nil
+}
+
+func Open(path string) (*os.File, fs.FileInfo, error) {
+	named, err := Stat(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	return OpenStat(path, named)
+}
+
+func OpenStat(path string, named fs.FileInfo) (*os.File, fs.FileInfo, error) {
 	f, err := os.OpenFile(path, os.O_RDONLY|openFlags, 0) //nolint:gosec // callers pass paths they mean to read; this package only constrains what kind of file they get
 	if err != nil {
 		return nil, nil, err
@@ -46,7 +58,15 @@ func Open(path string) (*os.File, fs.FileInfo, error) {
 }
 
 func Read(path string, limit int64) ([]byte, fs.FileInfo, error) {
-	f, info, err := Open(path)
+	named, err := Stat(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	return ReadStat(path, named, limit)
+}
+
+func ReadStat(path string, named fs.FileInfo, limit int64) ([]byte, fs.FileInfo, error) {
+	f, info, err := OpenStat(path, named)
 	if err != nil {
 		return nil, nil, err
 	}
