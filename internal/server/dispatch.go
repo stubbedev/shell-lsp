@@ -20,6 +20,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/manpage"
 	"github.com/stubbedev/shell-lsp/internal/navigation"
+	"github.com/stubbedev/shell-lsp/internal/regularfile"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
@@ -93,7 +94,7 @@ func New(conn *jsonrpc.Conn, version string) *Server {
 		semantic:     newSemanticCache(docs.Has),
 		bats:         newBatsResults(),
 		settings:     config.Default(),
-		editorconfig: editorconfig.NewResolver(os.ReadFile, time.Now, workspace.DiskRecheck),
+		editorconfig: editorconfig.NewResolver(regularfile.ReadConfig, time.Now, workspace.DiskRecheck),
 		sem:          make(chan struct{}, maxConcurrency),
 		exiting:      make(chan struct{}),
 	}

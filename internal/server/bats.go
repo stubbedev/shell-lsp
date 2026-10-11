@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"slices"
 	"sync"
@@ -200,7 +199,7 @@ func (s *Server) runBats(ctx context.Context, docs *docstore.View, args batsRunA
 	if err != nil {
 		return batsRunResult{}, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "%v", err)
 	}
-	disk, err := os.ReadFile(path) //nolint:gosec // G304: the path is the open Bats file the user asked to run
+	disk, _, err := workspace.ReadDisk(path)
 	if err != nil {
 		return batsRunResult{}, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "reading %s before running it: %v", path, err)
 	}

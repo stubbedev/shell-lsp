@@ -21,6 +21,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/parallel"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/regularfile"
 )
 
 const DiskRecheck = time.Second
@@ -223,12 +224,6 @@ func (w *Workspace) Load(path string) (*File, error) {
 		w.mu.Unlock()
 		return nil, fmt.Errorf("loading %s: %w", path, err)
 	}
-	if info.IsDir() {
-		return nil, fmt.Errorf("loading %s: %w", path, fs.ErrInvalid)
-	}
-	if info.Size() > maxFileSize {
-		return nil, fmt.Errorf("loading %s: %d bytes exceeds the %d byte limit", path, info.Size(), maxFileSize)
-	}
 	if ok && cached.size == info.Size() && cached.modTime.Equal(info.ModTime()) {
 		cached.checked = now
 		w.mu.Lock()
@@ -236,7 +231,7 @@ func (w *Workspace) Load(path string) (*File, error) {
 		w.mu.Unlock()
 		return cached.file, nil
 	}
-	raw, err := os.ReadFile(path) //nolint:gosec
+	raw, info, err := ReadDisk(path)
 	if err != nil {
 		return nil, fmt.Errorf("loading %s: %w", path, err)
 	}
@@ -248,6 +243,10 @@ func (w *Workspace) Load(path string) (*File, error) {
 	w.files[path] = diskEntry{size: info.Size(), modTime: info.ModTime(), checked: now, file: file}
 	w.mu.Unlock()
 	return file, nil
+}
+
+func ReadDisk(path string) ([]byte, fs.FileInfo, error) {
+	return regularfile.Read(path, maxFileSize)
 }
 
 func (w *Workspace) watchedLocked(path string) bool {
