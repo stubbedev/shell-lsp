@@ -211,6 +211,25 @@ Checks that go beyond ShellCheck use `SL` codes and are documented in
 `eval`, `sh -c` or `source`, arithmetic injection (opt-in), and functions a
 script never calls. They are configured exactly like the `SC` checks.
 
+`# shellcheck` directives are edited like code:
+
+- Completion offers the keys after `# shellcheck `, every `SC` and `SL` code
+  with its severity after `disable=` (also after a comma, after the dash of a
+  range and for a bare number such as `2086`, never a code already listed),
+  optional check names after `enable=`, shell names after `shell=`, and paths
+  after `source=` and `source-path=`. Typing `=` or `,` opens it, since
+  editors do not suggest inside comments on their own.
+- Hovering a code shows its severity, whether it is optional and how to turn
+  it on, a link to its documentation, and which findings it silences in the
+  file; keys and optional check names explain themselves too.
+- The optional `unused-directives` check (`SL2009`) reports disabled codes
+  that silence nothing, with a quick fix that removes them.
+- The path in `source=` opens with go-to-definition and is a document link,
+  and directive keys and values are highlighted.
+
+Completion and hover inside a `.shellcheckrc` file are not available: editors
+do not send that file to a shell language server.
+
 ## Refactorings
 
 Code actions offered at the cursor or selection, each only where it applies
