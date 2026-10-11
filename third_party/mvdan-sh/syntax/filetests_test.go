@@ -891,6 +891,94 @@ var fileTests = []fileTestCase{
 		}, LangZsh),
 	),
 	fileTest(
+		[]string{"case i in (a|b)*) foo ;; esac"},
+		langFile(&CaseClause{
+			Word: litWord("i"),
+			Items: []*CaseItem{{
+				Op:       Break,
+				Patterns: []*Word{word(lit("("), lit("a"), lit("|"), lit("b"), lit(")"), lit("*"))},
+				Stmts:    litStmts("foo"),
+			}},
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"case i in ((a|b) | c) foo ;; esac", "case i in (a|b)|c) foo ;; esac"},
+		langFile(&CaseClause{
+			Word: litWord("i"),
+			Items: []*CaseItem{{
+				Op: Break,
+				Patterns: []*Word{
+					word(lit("("), lit("a"), lit("|"), lit("b"), lit(")")),
+					litWord("c"),
+				},
+				Stmts: litStmts("foo"),
+			}},
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"case i in (#i)a) foo ;; esac"},
+		langFile(&CaseClause{
+			Word: litWord("i"),
+			Items: []*CaseItem{{
+				Op:       Break,
+				Patterns: []*Word{word(lit("("), lit("#i"), lit(")"), lit("a"))},
+				Stmts:    litStmts("foo"),
+			}},
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"case i in ((a|b)|c)) foo ;; esac"},
+		langFile(&CaseClause{
+			Word: litWord("i"),
+			Items: []*CaseItem{{
+				Op: Break,
+				Patterns: []*Word{word(
+					lit("("), lit("("), lit("a"), lit("|"), lit("b"), lit(")"),
+					lit("|"), lit("c"), lit(")"),
+				)},
+				Stmts: litStmts("foo"),
+			}},
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"case i in a | b) foo ;; esac", "case i in (a|b) foo ;; esac", "case i in ( a | b ) foo ;; esac"},
+		langFile(&CaseClause{
+			Word: litWord("i"),
+			Items: []*CaseItem{{
+				Op:       Break,
+				Patterns: litWords("a", "b"),
+				Stmts:    litStmts("foo"),
+			}},
+		}),
+	),
+	fileTest(
+		[]string{"coproc { foo; }", "coproc { foo }"},
+		printsAs("coproc { foo; }"),
+		langFile(&CoprocClause{Stmt: stmt(block(litStmt("foo")))}, LangZsh),
+	),
+	fileTest(
+		[]string{"{ local a; }", "{ local a }"},
+		printsAs("{ local a; }"),
+		langFile(block(stmt(&DeclClause{
+			Variant: lit("local"),
+			Args:    []*Assign{{Naked: true, Name: lit("a")}},
+		})), LangZsh),
+	),
+	fileTest(
+		[]string{"{ let a=1; }", "{ let a=1 }"},
+		printsAs("{ let a=1; }"),
+		langFile(block(stmt(letClause(&BinaryArithm{
+			Op: Assgn,
+			X:  litWord("a"),
+			Y:  litWord("1"),
+		}))), LangZsh),
+	),
+	fileTest(
+		[]string{"{ time; }", "{ time }"},
+		printsAs("{ time; }"),
+		langFile(block(stmt(&TimeClause{})), LangZsh),
+	),
+	fileTest(
 		[]string{"repeat 3 { foo }"},
 		printsAs("repeat 3; do foo; done"),
 		langFile(&RepeatClause{
@@ -4338,7 +4426,7 @@ var fileTests = []fileTestCase{
 				Patterns: litWords("1"),
 				Stmts:    litStmts("a"),
 			}},
-		}, LangMirBSDKorn),
+		}, LangMirBSDKorn|LangZsh),
 	),
 	fileTest(
 		[]string{"case i in 1) a ;;& 2) b ;; esac"},
@@ -4799,7 +4887,7 @@ var fileTests = []fileTestCase{
 			Op: AndTest,
 			X:  &UnaryTest{Op: TsSticky, X: litWord("a")},
 			Y:  &UnaryTest{Op: TsModif, X: litWord("b")},
-		}}, LangBash),
+		}}, LangBash|LangZsh),
 	),
 	fileTest(
 		[]string{"[[ -G a && -O b ]]"},
@@ -5203,7 +5291,7 @@ var fileTests = []fileTestCase{
 	fileTest(
 		[]string{"coproc foo bar"},
 		langFile(litStmt("coproc", "foo", "bar")),
-		langFile(&CoprocClause{Stmt: litStmt("foo", "bar")}, langBashLike),
+		langFile(&CoprocClause{Stmt: litStmt("foo", "bar")}, langBashLike|LangZsh),
 	),
 	fileTest(
 		[]string{"coproc name { foo; }"},

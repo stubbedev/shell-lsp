@@ -1387,12 +1387,12 @@ var errorCases = []errorCase{
 	),
 	errCase(
 		"case i {",
-		langErr("1:1: `case i {` is a mksh feature; tried parsing as LANG"),
-		langErr("1:1: `case` statement must end with `}`", LangMirBSDKorn),
+		langErr("1:1: `case i {` is a mksh/zsh feature; tried parsing as LANG"),
+		langErr("1:1: `case` statement must end with `}`", LangMirBSDKorn|LangZsh),
 	),
 	errCase(
 		"case i { x) y ;;",
-		langErr("1:1: `case` statement must end with `}`", LangMirBSDKorn),
+		langErr("1:1: `case` statement must end with `}`", LangMirBSDKorn|LangZsh),
 	),
 	errCase(
 		"\"`\"",

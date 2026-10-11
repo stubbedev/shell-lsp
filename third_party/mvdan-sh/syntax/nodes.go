@@ -1158,7 +1158,8 @@ func (c *TimeClause) End() Pos {
 
 // CoprocClause represents a Bash coproc clause.
 //
-// This node will only appear with [LangBash].
+// This node will only appear with [LangBash] and [LangZsh],
+// where Name is always nil.
 type CoprocClause struct {
 	Coproc Pos
 	Name   *Word

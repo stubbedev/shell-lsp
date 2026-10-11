@@ -1065,12 +1065,21 @@ func (p *Printer) wordJoin(ws []*Word) {
 	}
 }
 
-func (p *Printer) casePatternJoin(pats []*Word) {
+// casePatternJoin prints the patterns of a case item, and reports whether it
+// opened them with a parenthesis to tell apart a leading zsh group.
+func (p *Printer) casePatternJoin(pats []*Word) (opened bool) {
 	anyNewline := false
 	for i, w := range pats {
 		// Only valid situation for a literal 'esac' here is with a preceding left paran.
 		if i == 0 && w.Lit() == "esac" {
 			p.w.WriteString("(")
+		}
+		// With zsh, a first pattern which starts with a group, like (a|b)
+		// in `(a|b) | c)`, would otherwise read as the opening parenthesis
+		// of the pattern list itself.
+		if i == 0 && len(pats) > 1 && startsWithGroup(w) {
+			p.w.WriteString("(")
+			opened = true
 		}
 		if i > 0 {
 			p.spacedToken("|", Pos{})
@@ -1089,6 +1098,13 @@ func (p *Printer) casePatternJoin(pats []*Word) {
 	if anyNewline {
 		p.decLevel()
 	}
+	return opened
+}
+
+// startsWithGroup reports whether a word starts with a parenthesized group.
+func startsWithGroup(w *Word) bool {
+	lit, ok := w.Parts[0].(*Lit)
+	return ok && strings.HasPrefix(lit.Value, "(")
 }
 
 func (p *Printer) elemJoin(elems []*ArrayElem, last []Comment) {
@@ -1370,9 +1386,11 @@ func (p *Printer) command(cmd Command, redirs []*Redirect) (startRedirs int) {
 			}
 			p.newlines(ci.Pos())
 			p.spacePad(ci.Pos())
-			p.casePatternJoin(ci.Patterns)
+			opened := p.casePatternJoin(ci.Patterns)
 			p.w.WriteByte(')')
-			if !p.minify {
+			// After an opening parenthesis, zsh would read a word right
+			// after the closing one as part of the first pattern.
+			if !p.minify || opened {
 				p.wantSpace = spaceRequired
 			} else {
 				p.wantSpace = spaceNotRequired

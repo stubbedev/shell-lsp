@@ -1888,6 +1888,13 @@ func (p *Parser) zshSubFlags() *FlagsArithm {
 	return zf
 }
 
+// closesBlock reports whether the current token is a "}" which closes a block
+// with [LangZsh], which unlike other shells does not require a separator
+// before it, as in `{ local x }`.
+func (p *Parser) closesBlock() bool {
+	return p.lang.in(LangZsh) && p.tok == _LitWord && p.val == "}"
+}
+
 func (p *Parser) stopToken() bool {
 	switch p.tok {
 	case _EOF, _Newl, semicolon, and, or, andAnd, orOr, orAnd, andPipe, andBang,
@@ -2279,8 +2286,11 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
 				p.timeClause(s)
 			}
 		case "coproc":
-			if p.lang.in(langBashLike) { // Note that mksh lacks this one.
+			switch {
+			case p.lang.in(langBashLike): // Note that mksh lacks this one.
 				p.coprocClause(s)
+			case p.lang.in(LangZsh):
+				p.zshCoprocClause(s)
 			}
 		case "select":
 			if p.lang.in(langBashLike | LangMirBSDKorn | LangZsh) {
@@ -2764,7 +2774,7 @@ func (p *Parser) caseClause(s *Stmt) {
 	if pos, ok := p.gotRsrv("{"); ok {
 		cc.In = pos
 		cc.Braces = true
-		p.checkLang(cc.Pos(), LangMirBSDKorn, "`case i {`")
+		p.checkLang(cc.Pos(), LangMirBSDKorn|LangZsh, "`case i {`")
 		end = "}"
 	} else {
 		cc.In = p.followRsrv(cc.Case, "case x", "in")
@@ -2775,23 +2785,129 @@ func (p *Parser) caseClause(s *Stmt) {
 	s.Cmd = cc
 }
 
+// zshCasePatterns parses the patterns of a case item with [LangZsh], up to the
+// ")" which ends them, left as the current token. A leading "(" either opens
+// the list of patterns, as in `(a|b) cmd`, or starts a parenthesized group
+// which is part of the first pattern, as in `(a|b)*) cmd`; zsh tells them
+// apart by what follows the matching ")".
+func (p *Parser) zshCasePatterns() []*Word {
+	var pats []*Word
+	switch p.tok {
+	case leftParen, dblLeftParen:
+		lparen := p.pos
+		group, bars, rparen := p.zshPatternGroup(lparen, p.tok == dblLeftParen)
+		if p.err != nil {
+			return nil
+		}
+		switch p.r {
+		case ' ', '\t', '\r', '\n', escNewl, ';', '&', runeEOF:
+			return group // the optional "(" before the patterns
+		}
+		pats = append(pats, p.zshGroupWord(lparen, group, bars, rparen))
+	default:
+		pats = append(pats, p.zshCasePattern())
+	}
+	for p.tok == or {
+		p.next()
+		pats = append(pats, p.zshCasePattern())
+	}
+	if p.tok != rightParen {
+		p.curErr("case patterns must be separated with %#q", or)
+	}
+	return pats
+}
+
+// zshCasePattern parses a single zsh case pattern, which may start with a
+// parenthesized group of patterns.
+func (p *Parser) zshCasePattern() *Word {
+	switch p.tok {
+	case leftParen, dblLeftParen:
+		lparen := p.pos
+		group, bars, rparen := p.zshPatternGroup(lparen, p.tok == dblLeftParen)
+		return p.zshGroupWord(lparen, group, bars, rparen)
+	}
+	w := p.getWord()
+	if w == nil {
+		p.curErr("case patterns must consist of words")
+	}
+	return w
+}
+
+// zshPatternGroup parses the patterns of a parenthesized group, separated by
+// "|", after its "(" at lparen, and returns them with the positions of the
+// "|" and of the closing ")", which is left as the current token. If nested
+// is set, the "(" was lexed as part of "((", so the first pattern starts with
+// another group, as in `((a|b)|c)`.
+func (p *Parser) zshPatternGroup(lparen Pos, nested bool) (pats []*Word, bars []Pos, rparen Pos) {
+	// A '#' directly after '(' is part of the pattern, like in `(#i)foo`.
+	old := p.quote
+	p.quote = unquotedWordCont
+	defer func() { p.quote = old }()
+	if nested {
+		inner := posAddCol(lparen, 1)
+		group, innerBars, innerRparen := p.zshPatternGroup(inner, false)
+		pats = append(pats, p.zshGroupWord(inner, group, innerBars, innerRparen))
+	} else {
+		p.next()
+		pats = append(pats, p.zshCasePattern())
+	}
+	for p.err == nil && p.tok == or {
+		bars = append(bars, p.pos)
+		p.next()
+		pats = append(pats, p.zshCasePattern())
+	}
+	rparen = p.pos
+	if p.err == nil && p.tok != rightParen {
+		p.matchingErr(lparen, leftParen, rightParen)
+	}
+	return pats, bars, rparen
+}
+
+// zshGroupWord builds the word for a pattern starting with a parenthesized
+// group, consuming the closing ")" and whatever continues the word after it.
+func (p *Parser) zshGroupWord(lparen Pos, group []*Word, bars []Pos, rparen Pos) *Word {
+	if p.err != nil {
+		return nil
+	}
+	punct := func(pos Pos, val string) *Lit {
+		return &Lit{ValuePos: pos, ValueEnd: posAddCol(pos, len(val)), Value: val}
+	}
+	parts := []WordPart{punct(lparen, "(")}
+	for i, w := range group {
+		if i > 0 {
+			parts = append(parts, punct(bars[i-1], "|"))
+		}
+		parts = append(parts, w.Parts...)
+	}
+	parts = append(parts, punct(rparen, ")"))
+	p.next()
+	if !p.spaced {
+		parts = p.wordParts(parts)
+	}
+	return &Word{Parts: parts}
+}
+
 func (p *Parser) caseItems(stop string) (items []*CaseItem) {
 	p.got(_Newl)
 	for p.tok != _EOF && (p.tok != _LitWord || p.val != stop) {
 		ci := &CaseItem{}
 		ci.Comments, p.accComs = p.accComs, nil
-		p.got(leftParen)
-		for p.tok != _EOF {
-			if w := p.getWord(); w == nil {
-				p.curErr("case patterns must consist of words")
-			} else {
-				ci.Patterns = append(ci.Patterns, w)
-			}
-			if p.tok == rightParen {
-				break
-			}
-			if !p.got(or) {
-				p.curErr("case patterns must be separated with %#q", or)
+		if p.lang.in(LangZsh) {
+			ci.Patterns = p.zshCasePatterns()
+		} else {
+			p.got(leftParen)
+			for p.tok != _EOF {
+				if w := p.getWord(); w == nil {
+					p.curErr("case patterns must consist of words")
+				} else {
+					ci.Patterns = append(ci.Patterns, w)
+				}
+				if p.tok == rightParen {
+					break
+				}
+				if !p.got(or) {
+					p.curErr("case patterns must be separated with %#q", or)
+				}
 			}
 		}
 		old := p.preNested(switchCase)
@@ -2920,8 +3036,12 @@ func (p *Parser) testExprUnary() TestExpr {
 		op := token(testUnaryOp(p.val))
 		switch op {
 		case illegalTok:
-		case tsRefVar, tsModif: // not available in mksh
+		case tsRefVar: // not available in mksh nor zsh
 			if p.lang.in(langBashLike) {
+				p.tok = op
+			}
+		case tsModif: // not available in mksh
+			if p.lang.in(langBashLike | LangZsh) {
 				p.tok = op
 			}
 		default:
@@ -2969,7 +3089,7 @@ func (p *Parser) testExprUnary() TestExpr {
 func (p *Parser) declClause(s *Stmt) {
 	ds := &DeclClause{Variant: p.lit(p.pos, p.val)}
 	p.next()
-	for !p.stopToken() && !p.peekRedir() {
+	for !p.stopToken() && !p.peekRedir() && !p.closesBlock() {
 		if p.hasValidIdent() {
 			ds.Args = append(ds.Args, p.getAssign(false))
 		} else if p.tok.isLit() && p.eqlOffs > 0 && !strings.Contains(p.val[:p.eqlOffs], "{") {
@@ -3012,7 +3132,9 @@ func (p *Parser) timeClause(s *Stmt) {
 	if _, ok := p.gotRsrv("-p"); ok {
 		tc.PosixFormat = true
 	}
-	tc.Stmt = p.gotStmtPipe(&Stmt{Position: p.pos}, false)
+	if !p.closesBlock() {
+		tc.Stmt = p.gotStmtPipe(&Stmt{Position: p.pos}, false)
+	}
 	s.Cmd = tc
 }
 
@@ -3045,11 +3167,22 @@ func (p *Parser) coprocClause(s *Stmt) {
 	s.Cmd = cc
 }
 
+// zshCoprocClause parses a zsh coproc clause, which unlike bash's takes no
+// name: the rest of the pipeline is the coprocess.
+func (p *Parser) zshCoprocClause(s *Stmt) {
+	cc := &CoprocClause{Coproc: p.pos}
+	p.next()
+	if cc.Stmt = p.gotStmtPipe(&Stmt{Position: p.pos}, false); cc.Stmt == nil {
+		p.posErr(cc.Coproc, "coproc clause requires a command")
+	}
+	s.Cmd = cc
+}
+
 func (p *Parser) letClause(s *Stmt) {
 	lc := &LetClause{Let: p.pos}
 	old := p.preNested(arithmExprLet)
 	p.next()
-	for !p.stopToken() && !p.peekRedir() {
+	for !p.stopToken() && !p.peekRedir() && !p.closesBlock() {
 		x := p.arithmExpr(true)
 		if x == nil {
 			break
@@ -3240,8 +3373,8 @@ func (p *Parser) funcArgs(s *Stmt, fd *FuncDecl) {
 			p.doRedirect(s)
 			continue
 		}
-		if p.tok == _LitWord && p.val == "}" {
-			return // closes an enclosing block
+		if p.closesBlock() {
+			return
 		}
 		w := p.getWord()
 		if w == nil {

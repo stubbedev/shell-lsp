@@ -9,7 +9,7 @@ buildGo127Module {
 
   src = lib.cleanSource ./.;
 
-  vendorHash = "sha256-AF0vRPWHYxTi87kL3Wci9VsUV13eHi2wvrkSlzrwS4I=";
+  vendorHash = "sha256-aLzVzp+3dzWEaDNlTdrAh8MqPZ4PNlH6XVi5WfPA+Pc=";
 
   excludedPackages = ["third_party"];
 

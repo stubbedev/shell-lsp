@@ -128,3 +128,27 @@ func TestZshTryAlwaysIsIndexed(t *testing.T) {
 		t.Errorf("definitions %v, commands %v, keywords %v; want x, two prints and always", defs, commands, keywords)
 	}
 }
+
+func TestZshCoprocCaseGroupsAndClosingBracesAreIndexed(t *testing.T) {
+	t.Parallel()
+
+	src := "coproc cat -u\n" +
+		"case $x in (a|b)*) print $x ;; ((#i)c) print c ;; esac\n" +
+		"f() { local y=1 }\n" +
+		"case $x { (d) print d ;; }\n" +
+		"[[ -N $file ]]\n"
+	tree := Parse(src, dialect.Zsh)
+	if len(tree.Errors) != 0 {
+		t.Fatalf("errors = %v, want none", messages(tree))
+	}
+	defs, commands, keywords := indexedNames(tree)
+	if !slices.Equal(defs, []string{"y"}) {
+		t.Errorf("definitions = %v, want y", defs)
+	}
+	if want := []string{"cat", "print", "print", "local", "print"}; !slices.Equal(commands, want) {
+		t.Errorf("commands = %v, want %v", commands, want)
+	}
+	if want := []string{"coproc", "case", "in", "esac", "case", "[[", "]]"}; !slices.Equal(keywords, want) {
+		t.Errorf("keywords = %v, want %v", keywords, want)
+	}
+}
