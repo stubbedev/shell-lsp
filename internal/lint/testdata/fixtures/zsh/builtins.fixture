@@ -1,0 +1,19 @@
+### reading an answer, keys or the buffer stack involves no escapes
+#!/bin/zsh
+read -q 'REPLY?continue? ' && print -r -- yes
+read -k key && print -r -- $key
+read -sk2 pair && print -r -- $pair
+read -z buffered && print -r -- $buffered
+>>- SC1071 1:1 -- shellcheck refuses zsh; -q, -k and -z do not read a line, so backslashes are not processed
+
+### reading a line in zsh still processes backslashes
+#!/bin/zsh
+read line && print -r -- $line
+>>- SC1071 1:1 -- shellcheck refuses zsh
+>>+ SC2162 2:1 -- without -r zsh's read removes backslashes from the line as well
+
+### reading characters in bash processes backslashes
+#!/bin/bash
+read -n 1 key
+echo "$key"
+>>> SC2162 2:1

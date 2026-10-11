@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
@@ -189,12 +190,24 @@ func checkReadWithoutRaw(p *pass, n syntax.Node) {
 		return
 	}
 	args := call.Args[slices.Index(call.Args, word)+1:]
-	if parseFlags(args, "adinNptu").has('r', "") || pollsInput(args) {
+	flags := parseFlags(args, "adinNptu")
+	if flags.has('r', "") || pollsInput(args) || p.readsWithoutEscapes(flags) {
 		return
 	}
 	if span, ok := p.span(word); ok {
 		p.report(2162, span, "read without -r treats backslashes as escapes and drops them; use read -r unless that is intended.")
 	}
+}
+
+var dialectUnescapedReads = map[dialect.Dialect]string{dialect.Zsh: "qkzecl"}
+
+func (p *pass) readsWithoutEscapes(flags flagSet) bool {
+	for _, letter := range []byte(dialectUnescapedReads[p.dialect]) {
+		if flags.has(letter, "") {
+			return true
+		}
+	}
+	return false
 }
 
 func pollsInput(args []*syntax.Word) bool {
