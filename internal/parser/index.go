@@ -597,17 +597,22 @@ func (b *builder) assign(n *syntax.Assign, kind DefinitionKind, flags declFlags,
 
 func (b *builder) forClause(n *syntax.ForClause) {
 	iter, ok := n.Loop.(*syntax.WordIter)
-	if !ok || iter.Name == nil || !IsName(iter.Name.Value) {
+	if !ok {
 		return
 	}
-	b.index.Definitions = append(b.index.Definitions, Definition{
-		Name:     iter.Name.Value,
-		NameSpan: b.span(iter.Name),
-		Span:     b.span(iter),
-		Kind:     DefLoop,
-		Within:   b.scope(),
-		Node:     iter,
-	})
+	for _, name := range LoopNames(iter) {
+		if name == nil || !IsName(name.Value) {
+			continue
+		}
+		b.index.Definitions = append(b.index.Definitions, Definition{
+			Name:     name.Value,
+			NameSpan: b.span(name),
+			Span:     b.span(iter),
+			Kind:     DefLoop,
+			Within:   b.scope(),
+			Node:     iter,
+		})
+	}
 }
 
 func (b *builder) coproc(n *syntax.CoprocClause) {
@@ -790,16 +795,25 @@ func (b *builder) recoveredStmt(n *syntax.Stmt) {
 		return
 	case *syntax.IfClause:
 		keyword, name := p.ThenPos, "then"
-		if b.isElseBranch(p) {
+		switch {
+		case b.isElseBranch(p):
 			keyword, name = p.Position, "else"
+		case p.Braces:
+			name = "{"
 		}
 		b.emptyBody(keyword, p.Position, name)
 		return
 	case *syntax.WhileClause:
-		b.emptyBody(p.DoPos, p.WhilePos, "do")
+		open, _ := loopDelimiters(p.Braces)
+		b.emptyBody(p.DoPos, p.WhilePos, open)
 		return
 	case *syntax.ForClause:
-		b.emptyBody(p.DoPos, p.ForPos, "do")
+		open, _ := loopDelimiters(p.Braces)
+		b.emptyBody(p.DoPos, p.ForPos, open)
+		return
+	case *syntax.RepeatClause:
+		open, _ := loopDelimiters(p.Braces)
+		b.emptyBody(p.DoPos, p.RepeatPos, open)
 		return
 	case *syntax.Block:
 		b.emptyBody(p.Lbrace, p.Lbrace, "{")
@@ -859,6 +873,9 @@ func (b *builder) recoveredClosers(node syntax.Node) {
 			b.elseClauses[n.Else] = true
 		}
 		b.missing(n.Position, n.ThenPos, opener, "then")
+		if n.Braces {
+			b.missing(n.Position, n.Rbrace, opener, "}")
+		}
 		if !b.elseClauses[n] {
 			b.missing(n.Position, n.FiPos, opener, "fi")
 		}
@@ -867,17 +884,23 @@ func (b *builder) recoveredClosers(node syntax.Node) {
 		if n.Until {
 			opener = "until"
 		}
-		b.missing(n.WhilePos, n.DoPos, opener, "do")
-		b.missing(n.WhilePos, n.DonePos, opener, "done")
+		open, closer := loopDelimiters(n.Braces)
+		b.missing(n.WhilePos, n.DoPos, opener, open)
+		b.missing(n.WhilePos, n.DonePos, opener, closer)
+	case *syntax.RepeatClause:
+		open, closer := loopDelimiters(n.Braces)
+		b.missing(n.RepeatPos, n.DoPos, "repeat", open)
+		b.missing(n.RepeatPos, n.DonePos, "repeat", closer)
 	case *syntax.ForClause:
 		opener := "for"
-		if n.Select {
+		switch {
+		case n.Select:
 			opener = "select"
+		case n.Foreach:
+			b.missing(n.ForPos, n.DonePos, "foreach", "end")
+			return
 		}
-		open, closer := "do", "done"
-		if n.Braces {
-			open, closer = "{", "}"
-		}
+		open, closer := loopDelimiters(n.Braces)
 		if stray := listedDo(n); stray != nil && n.DoPos.IsRecovered() {
 			b.errorAt(stray.Pos(), "`do` needs a `;` or line break before it; here it is read as one more word of the list")
 		} else {
@@ -1019,7 +1042,7 @@ func CommentBlockStart(text string, lineStart int) int {
 }
 
 func (b *builder) isElseBranch(n *syntax.IfClause) bool {
-	return b.elseClauses[n] && !n.ThenPos.IsValid() && !n.ThenPos.IsRecovered()
+	return b.elseClauses[n] && IsElse(n)
 }
 
 func (b *builder) keywords(node syntax.Node) {
@@ -1034,27 +1057,35 @@ func (b *builder) keywords(node syntax.Node) {
 			b.keyword("if", n.Position)
 			b.keyword("fi", n.FiPos)
 		}
-		b.keyword("then", n.ThenPos)
+		if !n.Braces {
+			b.keyword("then", n.ThenPos)
+		}
 	case *syntax.WhileClause:
 		name := "while"
 		if n.Until {
 			name = "until"
 		}
 		b.keyword(name, n.WhilePos)
-		b.keyword("do", n.DoPos)
-		b.keyword("done", n.DonePos)
+		b.loopKeywords(n.Braces, n.DoPos, n.DonePos)
+	case *syntax.RepeatClause:
+		b.keyword("repeat", n.RepeatPos)
+		b.loopKeywords(n.Braces, n.DoPos, n.DonePos)
 	case *syntax.ForClause:
 		name := "for"
-		if n.Select {
+		switch {
+		case n.Select:
 			name = "select"
+		case n.Foreach:
+			name = "foreach"
 		}
 		b.keyword(name, n.ForPos)
 		if iter, ok := n.Loop.(*syntax.WordIter); ok {
 			b.keyword("in", iter.InPos)
 		}
-		if !n.Braces {
-			b.keyword("do", n.DoPos)
-			b.keyword("done", n.DonePos)
+		if n.Foreach {
+			b.keyword("end", n.DonePos)
+		} else {
+			b.loopKeywords(n.Braces, n.DoPos, n.DonePos)
 		}
 	case *syntax.CaseClause:
 		b.keyword("case", n.Case)
@@ -1078,6 +1109,14 @@ func (b *builder) keywords(node syntax.Node) {
 			b.keyword("!", n.Position)
 		}
 	}
+}
+
+func (b *builder) loopKeywords(braces bool, doPos, donePos syntax.Pos) {
+	if braces {
+		return
+	}
+	b.keyword("do", doPos)
+	b.keyword("done", donePos)
 }
 
 func (b *builder) keyword(name string, pos syntax.Pos) {

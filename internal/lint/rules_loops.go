@@ -31,7 +31,7 @@ func checkForLoop(p *pass, n syntax.Node) {
 		return
 	}
 	iter, ok := loop.Loop.(*syntax.WordIter)
-	if !ok || !iter.InPos.IsValid() || len(iter.Items) == 0 {
+	if !ok || !parser.ListsWords(iter) || len(iter.Items) == 0 {
 		return
 	}
 	if len(iter.Items) == 1 {

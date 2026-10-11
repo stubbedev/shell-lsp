@@ -46,3 +46,21 @@ func TestStdinConsumerSeverities(t *testing.T) {
 		t.Errorf("SC2095 severities = %v, want one info on the loop and one warning on ssh", got)
 	}
 }
+
+func TestZshLoopFormsAreLoops(t *testing.T) {
+	t.Parallel()
+
+	for _, src := range []string{
+		"repeat 3 { break }\n",
+		"repeat 3 do continue; done\n",
+		"for f (a b) { break }\n",
+		"foreach f (a b)\n\tbreak\nend\n",
+		"while (( 1 )) { break }\n",
+	} {
+		for _, f := range Check(parser.Parse(src, dialect.Zsh), nil, Options{}) {
+			if f.Code == 2105 {
+				t.Errorf("%q: break or continue reported outside a loop: %s", src, f.Message)
+			}
+		}
+	}
+}

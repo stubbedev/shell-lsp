@@ -20,6 +20,8 @@ func stmtLists(n syntax.Node) [][]*syntax.Stmt {
 		return [][]*syntax.Stmt{n.Cond, n.Do}
 	case *syntax.ForClause:
 		return [][]*syntax.Stmt{n.Do}
+	case *syntax.RepeatClause:
+		return [][]*syntax.Stmt{n.Do}
 	case *syntax.CaseItem:
 		return [][]*syntax.Stmt{n.Stmts}
 	case *syntax.CmdSubst:

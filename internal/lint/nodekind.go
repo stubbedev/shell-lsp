@@ -38,6 +38,7 @@ const (
 	kindParenTest
 	kindProcSubst
 	kindRedirect
+	kindRepeatClause
 	kindSglQuoted
 	kindStmt
 	kindSubshell
@@ -118,6 +119,8 @@ func nodeKindOf(n syntax.Node) nodeKind {
 		return kindProcSubst
 	case *syntax.Redirect:
 		return kindRedirect
+	case *syntax.RepeatClause:
+		return kindRepeatClause
 	case *syntax.SglQuoted:
 		return kindSglQuoted
 	case *syntax.Stmt:

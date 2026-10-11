@@ -262,7 +262,7 @@ func (s *Stmt) End() Pos {
 //
 // These are [*CallExpr], [*IfClause], [*WhileClause], [*ForClause], [*CaseClause],
 // [*Block], [*Subshell], [*BinaryCmd], [*FuncDecl], [*ArithmCmd], [*TestClause],
-// [*DeclClause], [*LetClause], [*TimeClause], and [*CoprocClause].
+// [*DeclClause], [*LetClause], [*TimeClause], [*CoprocClause], and [*RepeatClause].
 type Command interface {
 	Node
 	commandNode()
@@ -284,6 +284,7 @@ func (*LetClause) commandNode()    {}
 func (*TimeClause) commandNode()   {}
 func (*CoprocClause) commandNode() {}
 func (*TestDecl) commandNode()     {}
+func (*RepeatClause) commandNode() {}
 
 // Assign represents an assignment to a variable.
 //
@@ -403,10 +404,19 @@ func (b *Block) Pos() Pos { return b.Lbrace }
 func (b *Block) End() Pos { return posAddCol(b.Rbrace, 1) }
 
 // IfClause represents an if statement.
+//
+// With [LangZsh], each branch may use one of the alternate forms instead of
+// "then": a body in braces, as in `if cond { body }`, or a single sublist, as
+// in `if cond body`. An if statement whose last branch uses either of them
+// does not end with "fi".
 type IfClause struct {
 	Position Pos // position of the starting "if", "elif", or "else" token
-	ThenPos  Pos // position of "then", empty if this is an "else"
-	FiPos    Pos // position of "fi", shared with .Else if non-nil
+	ThenPos  Pos // position of "then", or of "{" with Braces; empty with Short or if this is an "else"
+	FiPos    Pos // position of "fi", shared with .Else if non-nil; empty without "fi"
+	Rbrace   Pos // position of "}" with Braces
+
+	Braces bool // zsh's alternate form with { } instead of "then"
+	Short  bool // zsh's short form, where Then is a single sublist
 
 	Cond     []*Stmt
 	CondLast []Comment
@@ -419,12 +429,26 @@ type IfClause struct {
 }
 
 func (c *IfClause) Pos() Pos { return c.Position }
-func (c *IfClause) End() Pos { return posAddCol(c.FiPos, 2) }
+func (c *IfClause) End() Pos {
+	last := c
+	for last.Else != nil {
+		last = last.Else
+	}
+	switch {
+	case last.Braces:
+		return posAddCol(last.Rbrace, len("}"))
+	case last.Short:
+		return stmtLastEnd(last.Then)
+	}
+	return posAddCol(c.FiPos, len("fi"))
+}
 
 // WhileClause represents a while or an until clause.
 type WhileClause struct {
 	WhilePos, DoPos, DonePos Pos
 	Until                    bool
+	Braces                   bool // zsh's form with { } instead of do/done
+	Short                    bool // zsh's short form, where Do is a single sublist
 
 	Cond     []*Stmt
 	CondLast []Comment
@@ -433,14 +457,32 @@ type WhileClause struct {
 }
 
 func (w *WhileClause) Pos() Pos { return w.WhilePos }
-func (w *WhileClause) End() Pos { return posAddCol(w.DonePos, 4) }
+func (w *WhileClause) End() Pos { return loopEnd(w.DonePos, w.Braces, w.Short, w.Do) }
+
+// loopEnd returns the end position of a loop body which ends with "done" at
+// donePos, or with "}" there if braces is set, or which is a single sublist
+// if short is set.
+func loopEnd(donePos Pos, braces, short bool, do []*Stmt) Pos {
+	switch {
+	case braces:
+		return posAddCol(donePos, len("}"))
+	case short:
+		return stmtLastEnd(do)
+	}
+	return posAddCol(donePos, len("done"))
+}
 
 // ForClause represents a for or a select clause. The latter is only present in
-// Bash.
+// Bash, [LangMirBSDKorn], and [LangZsh].
+//
+// With [LangZsh], the body may also be a single sublist without do/done,
+// and the loop may be written as `foreach name ... (word ...) list end`.
 type ForClause struct {
-	ForPos, DoPos, DonePos Pos
+	ForPos, DoPos, DonePos Pos // DonePos is the position of "end" with Foreach
 	Select                 bool
 	Braces                 bool // deprecated form with { } instead of do/done
+	Short                  bool // zsh's short form, where Do is a single sublist
+	Foreach                bool // zsh's foreach form, ending with "end"
 	Loop                   Loop
 
 	Do     []*Stmt
@@ -449,11 +491,28 @@ type ForClause struct {
 
 func (f *ForClause) Pos() Pos { return f.ForPos }
 func (f *ForClause) End() Pos {
-	if f.Braces {
-		return posAddCol(f.DonePos, len("}"))
+	if f.Foreach {
+		return posAddCol(f.DonePos, len("end"))
 	}
-	return posAddCol(f.DonePos, len("done"))
+	return loopEnd(f.DonePos, f.Braces, f.Short, f.Do)
 }
+
+// RepeatClause represents a zsh repeat loop, which runs its body as many
+// times as Count evaluates to.
+//
+// This node will only appear with [LangZsh].
+type RepeatClause struct {
+	RepeatPos, DoPos, DonePos Pos
+	Braces                    bool // form with { } instead of do/done
+	Short                     bool // short form, where Do is a single sublist
+
+	Count  *Word
+	Do     []*Stmt
+	DoLast []Comment
+}
+
+func (r *RepeatClause) Pos() Pos { return r.RepeatPos }
+func (r *RepeatClause) End() Pos { return loopEnd(r.DonePos, r.Braces, r.Short, r.Do) }
 
 // Loop holds either [*WordIter] or [*CStyleLoop].
 type Loop interface {
@@ -465,20 +524,40 @@ func (*WordIter) loopNode()   {}
 func (*CStyleLoop) loopNode() {}
 
 // WordIter represents the iteration of a variable over a series of words in a
-// for clause. If InPos is an invalid position, the "in" token was missing, so
-// the iteration is over the shell's positional parameters.
+// for clause. If both InPos and Lparen are invalid positions, the "in" token
+// was missing, so the iteration is over the shell's positional parameters.
 type WordIter struct {
+	// Only one of these is set at a time.
 	Name  *Lit
+	Names []*Lit // When iterating over many names at once with [LangZsh].
+
 	InPos Pos // position of "in"
+
+	// With [LangZsh], the words may be in parentheses instead of after "in".
+	Lparen, Rparen Pos
+
 	Items []*Word
 }
 
-func (w *WordIter) Pos() Pos { return w.Name.Pos() }
+func (w *WordIter) Pos() Pos {
+	if w.Name != nil {
+		return w.Name.Pos()
+	}
+	return w.Names[0].Pos()
+}
+
 func (w *WordIter) End() Pos {
+	if w.Lparen.IsValid() {
+		return posAddCol(w.Rparen, 1)
+	}
 	if len(w.Items) > 0 {
 		return wordLastEnd(w.Items)
 	}
-	return posMax(w.Name.End(), posAddCol(w.InPos, 2))
+	name := w.Name
+	if name == nil {
+		name = w.Names[len(w.Names)-1]
+	}
+	return posMax(name.End(), posAddCol(w.InPos, 2))
 }
 
 // CStyleLoop represents the behavior of a for clause similar to the C
@@ -1107,4 +1186,11 @@ func wordLastEnd(ws []*Word) Pos {
 		return Pos{}
 	}
 	return ws[len(ws)-1].End()
+}
+
+func stmtLastEnd(stmts []*Stmt) Pos {
+	if len(stmts) == 0 {
+		return Pos{}
+	}
+	return stmts[len(stmts)-1].End()
 }

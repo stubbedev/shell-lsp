@@ -70,8 +70,13 @@ func Walk(node Node, f func(Node) bool) {
 		Walk(node.Loop, f)
 		walkList(node.Do, f)
 		walkComments(node.DoLast, f)
+	case *RepeatClause:
+		Walk(node.Count, f)
+		walkList(node.Do, f)
+		walkComments(node.DoLast, f)
 	case *WordIter:
-		Walk(node.Name, f)
+		walkNilable(node.Name, f)
+		walkList(node.Names, f)
 		walkList(node.Items, f)
 	case *CStyleLoop:
 		walkNilable(node.Init, f)

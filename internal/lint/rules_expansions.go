@@ -133,7 +133,7 @@ func allValuesOf(w *syntax.Word) (string, bool) {
 }
 
 func (p *pass) reassignedIn(loop *syntax.ForClause, name string, read int) bool {
-	body := parser.Offset(loop.DoPos)
+	body := parser.Offset(loop.Loop.End())
 	scope := p.tree.ScopeAt(body)
 	for def := range p.tree.Visible(name, scope).All() {
 		if def.Kind != parser.DefLoop && def.NameSpan.Start > body && def.NameSpan.Start < read {

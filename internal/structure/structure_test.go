@@ -190,3 +190,21 @@ func TestLinkedDelimiters(t *testing.T) {
 		t.Error("linked editing offered inside a heredoc body")
 	}
 }
+
+func TestZshAlternateFormsFold(t *testing.T) {
+	t.Parallel()
+
+	src := "if [[ -n $a ]] {\n\tprint a\n} elif [[ -n $b ]] {\n\tprint b\n} else {\n\tprint c\n}\n" +
+		"repeat 3 do\n\tprint r\ndone\n" +
+		"foreach f (x y)\n\tprint $f\nend\n" +
+		"while (( i < 3 )) {\n\t(( i++ ))\n}\n"
+	lineOf := func(offset int) int { return strings.Count(src[:offset], "\n") }
+	var got []string
+	for _, f := range Folds(parser.Parse(src, dialect.Zsh), lineOf) {
+		got = append(got, fmt.Sprintf("%d-%d:%d", f.StartLine, f.EndLine, f.Kind))
+	}
+	want := []string{"0-1:0", "2-3:0", "4-5:0", "7-8:0", "10-11:0", "13-14:0"}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Errorf("folds = %v\nwant    %v", got, want)
+	}
+}

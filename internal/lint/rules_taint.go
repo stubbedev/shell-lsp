@@ -25,8 +25,13 @@ func trackQuoteTaint(p *pass, n syntax.Node) {
 			p.taintFrom(n.Name.Value, n.Value, n.Append)
 		}
 	case *syntax.WordIter:
-		if n.Name != nil && n.InPos.IsValid() {
-			p.taintFromItems(n.Name.Value, n.Items)
+		if !parser.ListsWords(n) {
+			break
+		}
+		for _, name := range parser.LoopNames(n) {
+			if name != nil {
+				p.taintFromItems(name.Value, n.Items)
+			}
 		}
 	case *syntax.ParamExp:
 		p.checkTaintedReference(n)

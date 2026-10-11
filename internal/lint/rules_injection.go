@@ -202,7 +202,7 @@ func (t *untrustedValues) definitionSource(def *parser.Definition) (untrustedSou
 		if !ok {
 			return 0, false
 		}
-		if !iter.InPos.IsValid() {
+		if !parser.ListsWords(iter) {
 			return t.positional(everyPosition, def.Within)
 		}
 		for _, item := range iter.Items {

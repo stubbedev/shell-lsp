@@ -135,6 +135,8 @@ func (p *pass) setupStatement(stmt *syntax.Stmt) bool {
 		return true
 	case *syntax.ForClause:
 		return p.setupStatements(cmd.Do)
+	case *syntax.RepeatClause:
+		return p.setupStatements(cmd.Do)
 	case *syntax.CaseClause:
 		return !slices.ContainsFunc(cmd.Items, func(item *syntax.CaseItem) bool { return !p.setupStatements(item.Stmts) })
 	}

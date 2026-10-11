@@ -31,7 +31,7 @@ var executionFamily = family{
 		{on: nodes(&syntax.CallExpr{}), node: checkExpansionAsCommand},
 		{on: nodes(&syntax.CallExpr{}), node: checkSpacedDotSlash},
 		{on: nodes(&syntax.CallExpr{}), node: checkFunctionViaExternal},
-		{on: nodes(&syntax.File{}, &syntax.Block{}, &syntax.IfClause{}, &syntax.WhileClause{}, &syntax.ForClause{}), node: checkExecNotLast},
+		{on: nodes(&syntax.File{}, &syntax.Block{}, &syntax.IfClause{}, &syntax.WhileClause{}, &syntax.ForClause{}, &syntax.RepeatClause{}), node: checkExecNotLast},
 		{on: nodes(&syntax.CmdSubst{}), node: checkEchoSubstitution},
 	},
 }
@@ -193,6 +193,8 @@ func checkExecNotLast(p *pass, n syntax.Node) {
 	case *syntax.WhileClause:
 		list, inLoop = n.Do, true
 	case *syntax.ForClause:
+		list, inLoop = n.Do, true
+	case *syntax.RepeatClause:
 		list, inLoop = n.Do, true
 	default:
 		return

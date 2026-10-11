@@ -890,8 +890,18 @@ func (p *Printer) cmdSubst(cs *CmdSubst) {
 func (p *Printer) loop(loop Loop) {
 	switch loop := loop.(type) {
 	case *WordIter:
-		p.writeLit(loop.Name.Value)
-		if loop.InPos.IsValid() {
+		if loop.Name != nil {
+			p.writeLit(loop.Name.Value)
+		} else {
+			for i, name := range loop.Names {
+				if i > 0 {
+					p.w.WriteByte(' ')
+				}
+				p.writeLit(name.Value)
+			}
+		}
+		// zsh's `(word ...)` form is printed as `in word ...`.
+		if loop.InPos.IsValid() || loop.Lparen.IsValid() {
 			p.spacedString(" in", Pos{})
 			p.wordJoin(loop.Items)
 		}
@@ -1262,6 +1272,13 @@ func (p *Printer) command(cmd Command, redirs []*Redirect) (startRedirs int) {
 		p.semiOrNewl("do", cmd.DoPos)
 		p.nestedStmts(cmd.Do, cmd.DoLast, cmd.DonePos)
 		p.semiRsrv("done", cmd.DonePos)
+	case *RepeatClause:
+		p.spacedString("repeat", cmd.Pos())
+		p.space()
+		p.word(cmd.Count)
+		p.semiOrNewl("do", cmd.DoPos)
+		p.nestedStmts(cmd.Do, cmd.DoLast, cmd.DonePos)
+		p.semiRsrv("done", cmd.DonePos)
 	case *BinaryCmd:
 		p.stmt(cmd.X)
 		if p.minify || p.singleLine || cmd.Y.Pos().Line() <= p.line {
@@ -1430,20 +1447,36 @@ func (p *Printer) command(cmd Command, redirs []*Redirect) (startRedirs int) {
 	return startRedirs
 }
 
+// ifFiPos returns the position at which an if statement ends: its "fi", or
+// with zsh's alternate forms, the "}" of its last branch, if any.
+func ifFiPos(ic *IfClause) Pos {
+	if ic.FiPos.IsValid() {
+		return ic.FiPos
+	}
+	last := ic
+	for last.Else != nil {
+		last = last.Else
+	}
+	return last.Rbrace
+}
+
+// ifClause prints an if statement with "then" and "fi", even if it was
+// written in one of zsh's alternate forms.
 func (p *Printer) ifClause(ic *IfClause, elif bool) {
 	if !elif {
 		p.spacedString("if", ic.Pos())
 	}
 	p.nestedStmts(ic.Cond, ic.CondLast, Pos{})
 	p.semiOrNewl("then", ic.ThenPos)
-	thenEnd := ic.FiPos
+	fiPos := ifFiPos(ic)
+	thenEnd := fiPos
 	el := ic.Else
 	if el != nil {
 		thenEnd = el.Position
 	}
 	p.nestedStmts(ic.Then, ic.ThenLast, thenEnd)
 
-	if el != nil && el.ThenPos.IsValid() {
+	if el != nil && (el.ThenPos.IsValid() || el.Short) {
 		p.comments(ic.Last...)
 		p.semiRsrv("elif", el.Position)
 		p.ifClause(el, true)
@@ -1462,10 +1495,10 @@ func (p *Printer) ifClause(ic *IfClause, elif bool) {
 		}
 		p.semiRsrv("else", el.Position)
 		p.comments(left...)
-		p.nestedStmts(el.Then, el.ThenLast, ic.FiPos)
+		p.nestedStmts(el.Then, el.ThenLast, fiPos)
 		p.comments(el.Last...)
 	}
-	p.semiRsrv("fi", ic.FiPos)
+	p.semiRsrv("fi", fiPos)
 }
 
 func (p *Printer) stmtList(stmts []*Stmt, last []Comment) {

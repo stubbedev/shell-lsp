@@ -45,7 +45,7 @@ var gluedKeywordCodes = map[byte]Code{'#': 1099, '!': 1129, ':': 1130}
 
 func checkElseIf(p *pass, n syntax.Node) {
 	clause, ok := n.(*syntax.IfClause)
-	if !ok || clause.Else == nil || clause.Else.ThenPos.IsValid() || len(clause.Else.Then) == 0 {
+	if !ok || clause.Else == nil || !parser.IsElse(clause.Else) || clause.Else.Braces || len(clause.Else.Then) == 0 {
 		return
 	}
 	elseClause := clause.Else

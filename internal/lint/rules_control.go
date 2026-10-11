@@ -30,7 +30,7 @@ var controlFamily = family{
 		2189: {severity: SeverityError},
 	},
 	rules: []rule{
-		{on: nodes(&syntax.File{}, &syntax.Block{}, &syntax.Subshell{}, &syntax.IfClause{}, &syntax.WhileClause{}, &syntax.ForClause{}, &syntax.CaseItem{}, &syntax.CmdSubst{}, &syntax.ProcSubst{}), node: checkStatementLists},
+		{on: nodes(&syntax.File{}, &syntax.Block{}, &syntax.Subshell{}, &syntax.IfClause{}, &syntax.WhileClause{}, &syntax.ForClause{}, &syntax.RepeatClause{}, &syntax.CaseItem{}, &syntax.CmdSubst{}, &syntax.ProcSubst{}), node: checkStatementLists},
 		{on: nodes(&syntax.CallExpr{}), node: checkLoopJump},
 		{on: nodes(&syntax.CallExpr{}), node: checkUncheckedDirectoryChange},
 		{on: nodes(&syntax.ForClause{}), node: checkReusedLoopVariable},
@@ -169,7 +169,7 @@ func (p *pass) jumpScopes() (bool, string, bool) {
 
 func isLoop(n syntax.Node) bool {
 	switch n.(type) {
-	case *syntax.WhileClause, *syntax.ForClause:
+	case *syntax.WhileClause, *syntax.ForClause, *syntax.RepeatClause:
 		return true
 	}
 	return false

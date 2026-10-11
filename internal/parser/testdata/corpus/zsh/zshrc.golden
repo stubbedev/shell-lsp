@@ -19,11 +19,12 @@ command 7:2-7:7 "print" args=3 within=0
 command 9:1-9:5 "diff" args=2 within=0
 command 9:8-9:12 "sort" args=1 within=0
 command 9:18-9:22 "sort" args=1 within=0
-command 10:1-10:7 "repeat" args=3 within=0
+command 10:10-10:14 "echo" args=1 within=0
 command 12:2-12:7 "local" args=0 within=1
 comment 1:1-1:19 "#!/usr/bin/env zsh"
 keyword 6:1-6:4 "for"
 keyword 6:7-6:9 "in"
 keyword 6:26-6:28 "do"
 keyword 8:1-8:5 "done"
+keyword 10:1-10:7 "repeat"
 keyword 11:1-11:9 "function"

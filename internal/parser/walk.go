@@ -64,8 +64,15 @@ func Walk(node syntax.Node, f func(syntax.Node) bool) {
 		Walk(n.Loop, f)
 		walkStmts(n.Do, f)
 		walkComments(n.DoLast, f)
+	case *syntax.RepeatClause:
+		Walk(n.Count, f)
+		walkStmts(n.Do, f)
+		walkComments(n.DoLast, f)
 	case *syntax.WordIter:
-		Walk(n.Name, f)
+		walkLit(n.Name, f)
+		for _, name := range n.Names {
+			Walk(name, f)
+		}
 		walkWords(n.Items, f)
 	case *syntax.CStyleLoop:
 		walkArithm(n.Init, f)

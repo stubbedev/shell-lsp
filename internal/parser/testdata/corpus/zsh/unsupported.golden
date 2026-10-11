@@ -1,5 +1,14 @@
 dialect zsh
-error kind=0 1:1-1:4 "for": `for foo` must be followed by `in`, `do`, `;`, or a newline
-error kind=0 2:16-2:17 "{": statements must be separated by &, ; or a newline
 scope 0 parent=0 1:1-4:1
+definition 1:5-1:6 "f" kind=3 attrs=000000 local=false within=0
+reference 1:25-1:26 "f" within=0
+reference 2:11-2:12 "x" within=0
+command 1:19-1:23 "echo" args=1 within=0
+command 2:18-2:22 "echo" args=1 within=0
 command 3:1-3:5 "echo" args=1 within=0
+keyword 1:1-1:4 "for"
+keyword 1:16-1:18 "do"
+keyword 1:28-1:32 "done"
+keyword 2:1-2:3 "if"
+keyword 2:4-2:6 "[["
+keyword 2:13-2:15 "]]"

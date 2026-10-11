@@ -1006,7 +1006,7 @@ var errorCases = []errorCase{
 	),
 	errCase(
 		"for i in 1 2 3; echo $i;",
-		langErr("1:1: `for foo [in words]` must be followed by `do`"),
+		langErr("1:1: `for foo [in words]` must be followed by `do`", langBashLike|LangPOSIX|LangMirBSDKorn),
 	),
 	errCase(
 		"for 'i' in 1 2 3; do echo $i; done",
@@ -1014,7 +1014,7 @@ var errorCases = []errorCase{
 	),
 	errCase(
 		"for in 1 2 3; do echo $i; done",
-		langErr("1:1: `for foo` must be followed by `in`, `do`, `;`, or a newline"),
+		langErr("1:1: `for foo` must be followed by `in`, `do`, `;`, or a newline", langBashLike|LangPOSIX|LangMirBSDKorn),
 	),
 	errCase(
 		"select",
@@ -1038,7 +1038,7 @@ var errorCases = []errorCase{
 	),
 	errCase(
 		"select i in 1 2 3; echo $i;",
-		langErr("1:1: `select foo [in words]` must be followed by `do`", LangBash|LangMirBSDKorn|LangZsh),
+		langErr("1:1: `select foo [in words]` must be followed by `do`", LangBash|LangMirBSDKorn),
 	),
 	errCase(
 		"select 'i' in 1 2 3; do echo $i; done",
@@ -2000,7 +2000,7 @@ var errorCases = []errorCase{
 	),
 	errCase(
 		"for i in 1 2 3; { echo; }",
-		langErr("1:17: for loops with braces are a bash/mksh feature; tried parsing as LANG", LangPOSIX),
+		langErr("1:17: for loops with braces are a bash/mksh/zsh feature; tried parsing as LANG", LangPOSIX),
 	),
 	errCase(
 		"echo !(a)",

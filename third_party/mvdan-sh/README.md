@@ -21,8 +21,16 @@ producing syntax errors, so the gaps are closed here first.
 
 ## Changes
 
-None yet: this is the pristine v3.14.1 source, minus the `typedjson` package
-and the `go:generate` tool dependency, which shell-lsp does not use.
+Besides leaving out the `typedjson` package and the `go:generate` tool
+dependency, which shell-lsp does not use, the fork differs from v3.14.1 by the
+patches in [patches/](patches). Each one is a `git diff` against the module
+root, applies on top of the previous ones starting from pristine v3.14.1
+(`git apply patches/*.patch`), and starts with a description and a minimal
+reproducer so that it can be sent upstream as it is.
+
+| Patch | Change | Upstream issue |
+| --- | --- | --- |
+| 0001 | zsh: alternate forms of `for`, `foreach`, `select`, `while`, `until` and `if` (`for f (*.txt) cmd`, `if [[ c ]] { cmd }`, `while (( c )) cmd`, loops over several names), and `repeat` loops as a new `RepeatClause` node | [mvdan/sh#120](https://github.com/mvdan/sh/issues/120) |
 
 ## Tests
 

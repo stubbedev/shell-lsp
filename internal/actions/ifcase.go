@@ -24,7 +24,7 @@ type comparison struct {
 
 func ifToCase(s *site) (Change, bool) {
 	root, ok := ifChainAt(s)
-	if !ok || !root.FiPos.IsValid() {
+	if !ok || !root.FiPos.IsValid() || alternateForm(root) {
 		return Change{}, false
 	}
 	tree := s.Tree
@@ -82,6 +82,15 @@ func ifToCase(s *site) (Change, bool) {
 	}
 	sb.WriteString(indent + "esac")
 	return Change{Title: "Convert to case", Edits: []textedit.Edit{{Start: start, End: parser.Offset(root.FiPos) + len("fi"), NewText: sb.String()}}}, true
+}
+
+func alternateForm(root *syntax.IfClause) bool {
+	for clause := root; clause != nil; clause = clause.Else {
+		if clause.Braces || clause.Short {
+			return true
+		}
+	}
+	return false
 }
 
 func ifChainAt(s *site) (*syntax.IfClause, bool) {

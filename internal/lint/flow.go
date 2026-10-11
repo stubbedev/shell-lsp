@@ -566,6 +566,9 @@ func (in *interpreter) command(stmt *syntax.Stmt, s *state) *state {
 	case *syntax.ForClause:
 		s = in.forClause(cmd, s)
 		s = in.redirects(stmt, s)
+	case *syntax.RepeatClause:
+		s = in.repeatClause(cmd, s)
+		s = in.redirects(stmt, s)
 	case *syntax.CaseClause:
 		s = in.caseClause(cmd, s)
 		s = in.redirects(stmt, s)
@@ -1162,7 +1165,7 @@ func (in *interpreter) forClause(cmd *syntax.ForClause, s *state) *state {
 	case *syntax.WordIter:
 		items := spaceDirty
 		var holdsInteger integerAttr
-		if loop.InPos.IsValid() {
+		if parser.ListsWords(loop) {
 			items = 0
 			for _, w := range loop.Items {
 				s = in.evaluate(w, s)
@@ -1174,10 +1177,16 @@ func (in *interpreter) forClause(cmd *syntax.ForClause, s *state) *state {
 		}
 		site, located := in.tree.NodeSpan(cmd)
 		assign := func(head *state) *state {
-			if loop.Name != nil && items != 0 {
-				in.assign(head, loop.Name.Value, value{space: items.normalize(), integer: integerNo, holdsInteger: holdsInteger})
+			if items == 0 {
+				return head
+			}
+			for _, name := range parser.LoopNames(loop) {
+				if name == nil {
+					continue
+				}
+				in.assign(head, name.Value, value{space: items.normalize(), integer: integerNo, holdsInteger: holdsInteger})
 				if located {
-					in.noteWrite(loop.Name.Value, site)
+					in.noteWrite(name.Value, site)
 				}
 			}
 			return head
@@ -1210,6 +1219,13 @@ func (in *interpreter) forClause(cmd *syntax.ForClause, s *state) *state {
 			})
 	}
 	return s
+}
+
+func (in *interpreter) repeatClause(cmd *syntax.RepeatClause, s *state) *state {
+	s = in.evaluate(cmd.Count, s)
+	return in.loop(s,
+		func(head *state) *state { return in.stmts(cmd.Do, head) },
+		func(head *state) *state { return head })
 }
 
 func (in *interpreter) caseClause(cmd *syntax.CaseClause, s *state) *state {

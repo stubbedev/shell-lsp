@@ -178,11 +178,13 @@ func Folds(tree *parser.Tree, lineOf func(offset int) int) []Fold {
 	parser.Walk(tree.File, func(node syntax.Node) bool {
 		switch n := node.(type) {
 		case *syntax.IfClause:
-			block(n.Position, n.FiPos)
+			block(n.Position, ifBranchEnd(n))
 		case *syntax.WhileClause:
 			block(n.WhilePos, n.DonePos)
 		case *syntax.ForClause:
 			block(n.ForPos, n.DonePos)
+		case *syntax.RepeatClause:
+			block(n.RepeatPos, n.DonePos)
 		case *syntax.CaseClause:
 			block(n.Case, n.Esac)
 		case *syntax.CaseItem:
@@ -336,4 +338,14 @@ func delimiterSpan(text string, h parser.Heredoc) (parser.Span, bool) {
 	}
 	start := h.Span.Start + at
 	return parser.Span{Start: start, End: start + len(h.Delimiter)}, true
+}
+
+func ifBranchEnd(n *syntax.IfClause) syntax.Pos {
+	switch {
+	case n.Braces:
+		return n.Rbrace
+	case !n.FiPos.IsValid() && n.Else != nil:
+		return n.Else.Position
+	}
+	return n.FiPos
 }

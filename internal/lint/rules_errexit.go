@@ -57,7 +57,7 @@ func (p *pass) statusIgnored(stmt *syntax.Stmt) bool {
 		return !isLast(owner.Cond, stmt)
 	case *syntax.IfClause:
 		return !isLast(owner.Cond, stmt)
-	case *syntax.ForClause:
+	case *syntax.ForClause, *syntax.RepeatClause:
 		return true
 	}
 	return false

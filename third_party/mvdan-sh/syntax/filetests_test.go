@@ -637,6 +637,338 @@ var fileTests = []fileTestCase{
 		langFile(litStmt("select", "foo", "bar"), LangPOSIX),
 	),
 	fileTest(
+		[]string{
+			"for i (1 2 3) echo $i",
+			"for i (1 2 3); echo $i",
+			"for i (\n\t1\n\t2 3\n) echo $i",
+		},
+		printsAs("for i in 1 2 3; do echo $i; done"),
+		langFile(&ForClause{
+			Short: true,
+			Loop:  &WordIter{Name: lit("i"), Items: litWords("1", "2", "3")},
+			Do:    stmts(call(litWord("echo"), word(litParamExp("i")))),
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{
+			"for i (1 2 3); do echo $i; done",
+			"for i (1 2 3) do echo $i; done",
+			"for i (1 2 3) { echo $i }",
+			"for i (1 2 3); { echo $i; }",
+		},
+		printsAs("for i in 1 2 3; do echo $i; done"),
+		langFile(&ForClause{
+			Loop: &WordIter{Name: lit("i"), Items: litWords("1", "2", "3")},
+			Do:   stmts(call(litWord("echo"), word(litParamExp("i")))),
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{
+			"for i in 1 2 3; echo $i",
+			"for i in 1 2 3\necho $i",
+		},
+		printsAs("for i in 1 2 3; do echo $i; done"),
+		langFile(&ForClause{
+			Short: true,
+			Loop:  &WordIter{Name: lit("i"), Items: litWords("1", "2", "3")},
+			Do:    stmts(call(litWord("echo"), word(litParamExp("i")))),
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{
+			"for i; foo",
+			"for i\nfoo",
+		},
+		printsAs("for i; do foo; done"),
+		langFile(&ForClause{
+			Short: true,
+			Loop:  &WordIter{Name: lit("i")},
+			Do:    litStmts("foo"),
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"for k v (a 1 b 2) echo $k $v"},
+		printsAs("for k v in a 1 b 2; do echo $k $v; done"),
+		langFile(&ForClause{
+			Short: true,
+			Loop: &WordIter{
+				Names: lits("k", "v"),
+				Items: litWords("a", "1", "b", "2"),
+			},
+			Do: stmts(call(litWord("echo"), word(litParamExp("k")), word(litParamExp("v")))),
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{
+			"for k v in a 1; do foo; done",
+			"for k v in a 1\ndo foo\ndone",
+		},
+		langFile(&ForClause{
+			Loop: &WordIter{Names: lits("k", "v"), Items: litWords("a", "1")},
+			Do:   litStmts("foo"),
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"for in 1 2; do foo; done"},
+		langFile(&ForClause{
+			Loop: &WordIter{Names: lits("in", "1", "2")},
+			Do:   litStmts("foo"),
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"for ((;;)) foo"},
+		printsAs("for (( ; ; )); do foo; done"),
+		langFile(&ForClause{
+			Short: true,
+			Loop:  &CStyleLoop{},
+			Do:    litStmts("foo"),
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"for ((;;)) { foo }"},
+		printsAs("for (( ; ; )); do foo; done"),
+		langFile(&ForClause{
+			Loop: &CStyleLoop{},
+			Do:   litStmts("foo"),
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"for i (a b) for j (c d) foo"},
+		printsAs("for i in a b; do for j in c d; do foo; done; done"),
+		langFile(&ForClause{
+			Short: true,
+			Loop:  &WordIter{Name: lit("i"), Items: litWords("a", "b")},
+			Do: stmts(&ForClause{
+				Short: true,
+				Loop:  &WordIter{Name: lit("j"), Items: litWords("c", "d")},
+				Do:    litStmts("foo"),
+			}),
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"for i (a b) foo && bar &"},
+		printsAs("for i in a b; do foo && bar; done &"),
+		langFile(&Stmt{
+			Cmd: &ForClause{
+				Short: true,
+				Loop:  &WordIter{Name: lit("i"), Items: litWords("a", "b")},
+				Do: stmts(&BinaryCmd{
+					Op: AndStmt,
+					X:  litStmt("foo"),
+					Y:  litStmt("bar"),
+				}),
+			},
+			Background: true,
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{
+			"foreach i (1 2 3) foo; end",
+			"foreach i (1 2 3)\n\tfoo\nend",
+			"foreach i in 1 2 3; foo; end",
+		},
+		printsAs("for i in 1 2 3; do foo; done"),
+		langFile(&ForClause{
+			Foreach: true,
+			Loop:    &WordIter{Name: lit("i"), Items: litWords("1", "2", "3")},
+			Do:      litStmts("foo"),
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"foreach i\nend"},
+		langFile(stmts(litCall("foreach", "i"), litCall("end")), LangBash|LangPOSIX|LangMirBSDKorn),
+	),
+	fileTest(
+		[]string{"foreach k v (a 1)\nend"},
+		printsAs("for k v in a 1; do\ndone"),
+		langFile(&ForClause{
+			Foreach: true,
+			Loop:    &WordIter{Names: lits("k", "v"), Items: litWords("a", "1")},
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{
+			"select i (a b) foo",
+			"select i in a b; foo",
+		},
+		printsAs("select i in a b; do foo; done"),
+		langFile(&ForClause{
+			Select: true,
+			Short:  true,
+			Loop:   &WordIter{Name: lit("i"), Items: litWords("a", "b")},
+			Do:     litStmts("foo"),
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"select i (a b) { foo }"},
+		printsAs("select i in a b; do foo; done"),
+		langFile(&ForClause{
+			Select: true,
+			Loop:   &WordIter{Name: lit("i"), Items: litWords("a", "b")},
+			Do:     litStmts("foo"),
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{
+			"while [[ a ]] { foo }",
+			"while [[ a ]] {\n\tfoo\n}",
+		},
+		printsAs("while [[ a ]]; do foo; done"),
+		langFile(&WhileClause{
+			Braces: true,
+			Cond:   stmts(&TestClause{X: litWord("a")}),
+			Do:     litStmts("foo"),
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"until ((a)) foo"},
+		printsAs("until ((a)); do foo; done"),
+		langFile(&WhileClause{
+			Until: true,
+			Short: true,
+			Cond:  stmts(arithmCmd(litWord("a"))),
+			Do:    litStmts("foo"),
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{
+			"repeat 3; do foo; done",
+			"repeat 3 do foo; done",
+			"repeat 3\ndo\n\tfoo\ndone",
+		},
+		langFile(&RepeatClause{
+			Count: litWord("3"),
+			Do:    litStmts("foo"),
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"repeat 3 foo"},
+		langFile(litStmt("repeat", "3", "foo"), LangBash|LangPOSIX|LangMirBSDKorn),
+	),
+	fileTest(
+		[]string{
+			"repeat $n foo bar",
+			"repeat $n; foo bar",
+			"repeat $n\nfoo bar",
+		},
+		printsAs("repeat $n; do foo bar; done"),
+		langFile(&RepeatClause{
+			Short: true,
+			Count: word(litParamExp("n")),
+			Do:    stmts(litCall("foo", "bar")),
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"repeat 3 { foo }"},
+		printsAs("repeat 3; do foo; done"),
+		langFile(&RepeatClause{
+			Braces: true,
+			Count:  litWord("3"),
+			Do:     litStmts("foo"),
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{
+			"if [[ a ]] { foo }\n",
+			"if [[ a ]] {\n\tfoo\n}\n",
+		},
+		printsAs("if [[ a ]]; then foo; fi"),
+		langFile(&IfClause{
+			Braces: true,
+			Cond:   stmts(&TestClause{X: litWord("a")}),
+			Then:   litStmts("foo"),
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"if ((a)) foo && bar"},
+		printsAs("if ((a)); then foo && bar; fi"),
+		langFile(&IfClause{
+			Short: true,
+			Cond:  stmts(arithmCmd(litWord("a"))),
+			Then: stmts(&BinaryCmd{
+				Op: AndStmt,
+				X:  litStmt("foo"),
+				Y:  litStmt("bar"),
+			}),
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"if [[ a ]] foo elif bar"},
+		printsAs("if [[ a ]]; then foo elif bar; fi"),
+		langFile(&IfClause{
+			Short: true,
+			Cond:  stmts(&TestClause{X: litWord("a")}),
+			Then:  stmts(litCall("foo", "elif", "bar")),
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{
+			"if [[ a ]] { foo } elif [[ b ]] { bar } else { baz }\n",
+			"if [[ a ]] {\n\tfoo\n} elif [[ b ]] {\n\tbar\n} else {\n\tbaz\n}\n",
+		},
+		printsAs("if [[ a ]]; then foo; elif [[ b ]]; then bar; else baz; fi"),
+		langFile(&IfClause{
+			Braces: true,
+			Cond:   stmts(&TestClause{X: litWord("a")}),
+			Then:   litStmts("foo"),
+			Else: &IfClause{
+				Braces: true,
+				Cond:   stmts(&TestClause{X: litWord("b")}),
+				Then:   litStmts("bar"),
+				Else: &IfClause{
+					Braces: true,
+					Then:   litStmts("baz"),
+				},
+			},
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"if [[ a ]] { foo } elif [[ b ]] bar"},
+		printsAs("if [[ a ]]; then foo; elif [[ b ]]; then bar; fi"),
+		langFile(&IfClause{
+			Braces: true,
+			Cond:   stmts(&TestClause{X: litWord("a")}),
+			Then:   litStmts("foo"),
+			Else: &IfClause{
+				Short: true,
+				Cond:  stmts(&TestClause{X: litWord("b")}),
+				Then:  litStmts("bar"),
+			},
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"if [[ a ]] { foo } else bar; fi"},
+		printsAs("if [[ a ]]; then foo; else bar; fi"),
+		langFile(&IfClause{
+			Braces: true,
+			Cond:   stmts(&TestClause{X: litWord("a")}),
+			Then:   litStmts("foo"),
+			Else:   &IfClause{Then: litStmts("bar")},
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"if a; then foo; elif [[ b ]] { bar }\n"},
+		printsAs("if a; then foo; elif [[ b ]]; then bar; fi"),
+		langFile(&IfClause{
+			Cond: litStmts("a"),
+			Then: litStmts("foo"),
+			Else: &IfClause{
+				Braces: true,
+				Cond:   stmts(&TestClause{X: litWord("b")}),
+				Then:   litStmts("bar"),
+			},
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"if a; then foo; else { bar; } fi"},
+		printsAs("if a; then foo; else { bar; }; fi"),
+		langFile(&IfClause{
+			Cond: litStmts("a"),
+			Then: litStmts("foo"),
+			Else: &IfClause{Then: stmts(block(litStmt("bar")))},
+		}, LangZsh),
+	),
+	fileTest(
 		[]string{`' ' "foo bar"`},
 		langFile(call(
 			word(sglQuoted(" ")),
@@ -5619,6 +5951,22 @@ func (c sanityChecker) checkPos(node Node, pos Pos, strs ...string) {
 		strs, pos, c.src, gotErr)
 }
 
+// checkLoopBody checks the positions delimiting the body of a loop clause.
+func (c sanityChecker) checkLoopBody(node Node, doPos, donePos Pos, braces, short bool) {
+	switch {
+	case braces:
+		c.checkPos(node, doPos, "{")
+		c.checkPos(node, donePos, "}")
+	case short:
+		if doPos.IsValid() || donePos.IsValid() {
+			c.tb.Errorf("Found DoPos or DonePos in a short %T", node)
+		}
+	default:
+		c.checkPos(node, doPos, "do")
+		c.checkPos(node, donePos, "done")
+	}
+}
+
 func (c sanityChecker) visit(node Node) bool {
 	if node == nil {
 		return true
@@ -5719,40 +6067,67 @@ func (c sanityChecker) visit(node Node) bool {
 		c.checkPos(node, node.Lbrace, "{")
 		c.checkPos(node, node.Rbrace, "}")
 	case *IfClause:
-		if node.ThenPos.IsValid() {
+		switch {
+		case node.Short:
+			c.checkPos(node, node.Position, "if", "elif")
+		case node.ThenPos.IsValid() && node.Braces:
+			c.checkPos(node, node.Position, "if", "elif")
+			c.checkPos(node, node.ThenPos, "{")
+		case node.ThenPos.IsValid():
 			c.checkPos(node, node.Position, "if", "elif")
 			c.checkPos(node, node.ThenPos, "then")
-		} else {
+		default:
 			c.checkPos(node, node.Position, "else")
 		}
-		c.checkPos(node, node.FiPos, "fi")
+		if node.Braces {
+			c.checkPos(node, node.Rbrace, "}")
+		}
+		last := node
+		for last.Else != nil {
+			last = last.Else
+		}
+		if !last.Braces && !last.Short {
+			c.checkPos(node, node.FiPos, "fi")
+		} else if node.FiPos.IsValid() {
+			c.tb.Errorf("Found FiPos in an if clause which ends without fi")
+		}
 	case *WhileClause:
 		rsrv := "while"
 		if node.Until {
 			rsrv = "until"
 		}
 		c.checkPos(node, node.WhilePos, rsrv)
-		c.checkPos(node, node.DoPos, "do")
-		c.checkPos(node, node.DonePos, "done")
+		c.checkLoopBody(node, node.DoPos, node.DonePos, node.Braces, node.Short)
+	case *RepeatClause:
+		c.checkPos(node, node.RepeatPos, "repeat")
+		c.checkLoopBody(node, node.DoPos, node.DonePos, node.Braces, node.Short)
 	case *ForClause:
-		if node.Select {
+		switch {
+		case node.Select:
 			c.checkPos(node, node.ForPos, "select")
-		} else {
+		case node.Foreach:
+			c.checkPos(node, node.ForPos, "foreach")
+		default:
 			c.checkPos(node, node.ForPos, "for")
 		}
-		if node.Braces {
-			c.checkPos(node, node.DoPos, "{")
-			c.checkPos(node, node.DonePos, "}")
-			// Zero out Braces, to not duplicate all the test cases.
-			// The printer ignores the field anyway.
-			node.Braces = false
+		if node.Foreach {
+			c.checkPos(node, node.DonePos, "end")
 		} else {
-			c.checkPos(node, node.DoPos, "do")
-			c.checkPos(node, node.DonePos, "done")
+			c.checkLoopBody(node, node.DoPos, node.DonePos, node.Braces, node.Short)
 		}
+		// Zero out Braces, to not duplicate all the test cases.
+		// The printer ignores the field anyway.
+		node.Braces = false
 	case *WordIter:
 		if node.InPos.IsValid() {
 			c.checkPos(node, node.InPos, "in")
+		}
+		if node.Lparen.IsValid() {
+			c.checkPos(node, node.Lparen, "(")
+			c.checkPos(node, node.Rparen, ")")
+		}
+		if (node.Name == nil) == (len(node.Names) == 0) {
+			c.tb.Errorf("WordIter must have either Name or Names")
 		}
 	case *CStyleLoop:
 		c.checkPos(node, node.Lparen, "((")
