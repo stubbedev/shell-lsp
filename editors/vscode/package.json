@@ -1,0 +1,254 @@
+{
+  "name": "shell-lsp",
+  "displayName": "Shell LSP",
+  "description": "Language server for bash, zsh, POSIX sh, dash and ksh: diagnostics, completion, hover, navigation, refactorings and formatting.",
+  "version": "0.0.0",
+  "publisher": "stubbedev",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "icon": "icon.png",
+  "homepage": "https://github.com/stubbedev/shell-lsp/tree/main/editors/vscode",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/stubbedev/shell-lsp.git",
+    "directory": "editors/vscode"
+  },
+  "bugs": {
+    "url": "https://github.com/stubbedev/shell-lsp/issues"
+  },
+  "engines": {
+    "vscode": "^1.91.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters",
+    "Formatters"
+  ],
+  "keywords": [
+    "bash",
+    "shell",
+    "zsh",
+    "sh",
+    "ksh",
+    "bats",
+    "lsp"
+  ],
+  "main": "./dist/extension.cjs",
+  "activationEvents": [
+    "onLanguage:shellscript",
+    "onLanguage:bats"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "Running Bats tests is disabled in Restricted Mode because it executes code from the workspace."
+    }
+  },
+  "contributes": {
+    "languages": [
+      {
+        "id": "shellscript",
+        "extensions": [
+          ".bats"
+        ],
+        "firstLine": "^#!.*\\bbats\\b"
+      }
+    ],
+    "commands": [
+      {
+        "command": "shellLsp.restart",
+        "title": "Restart Server",
+        "category": "Shell LSP"
+      },
+      {
+        "command": "shellLsp.showOutput",
+        "title": "Show Output",
+        "category": "Shell LSP"
+      },
+      {
+        "command": "shellLsp.fixAll",
+        "title": "Fix All Auto-Fixable Problems",
+        "category": "Shell LSP"
+      },
+      {
+        "command": "shellLsp.runBats",
+        "title": "Run Bats File",
+        "category": "Shell LSP"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "shellLsp.fixAll",
+          "when": "shellLsp.running && (editorLangId == shellscript || editorLangId == bats)"
+        },
+        {
+          "command": "shellLsp.runBats",
+          "when": "shellLsp.running && isWorkspaceTrusted && (editorLangId == shellscript || editorLangId == bats)"
+        }
+      ]
+    },
+    "configuration": [
+      {
+        "title": "Shell LSP",
+        "properties": {
+          "shellLsp.path": {
+            "type": "string",
+            "default": "",
+            "scope": "machine",
+            "markdownDescription": "Absolute path of the `shell-lsp` binary. When empty, `shell-lsp` is looked up on `PATH`, then among the binaries this extension downloaded."
+          },
+          "shellLsp.dialect": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              null,
+              "bash",
+              "zsh",
+              "sh",
+              "dash",
+              "ksh",
+              "busybox"
+            ],
+            "markdownEnumDescriptions": [
+              "Detected per file from the shebang, extension, directives and modelines",
+              "GNU bash",
+              "zsh",
+              "POSIX sh",
+              "dash",
+              "KornShell",
+              "BusyBox ash"
+            ],
+            "default": null,
+            "scope": "resource",
+            "markdownDescription": "Force `bash`, `zsh`, `sh`, `dash`, `ksh` or `busybox` for every document; detected per file when unset."
+          },
+          "shellLsp.trace.server": {
+            "type": "string",
+            "enum": [
+              "off",
+              "messages",
+              "verbose"
+            ],
+            "default": "off",
+            "scope": "window",
+            "markdownDescription": "Log the messages exchanged with the server to the Shell LSP output."
+          }
+        }
+      },
+      {
+        "title": "Lint",
+        "properties": {
+          "shellLsp.lint.enable": {
+            "type": "boolean",
+            "default": true,
+            "scope": "resource",
+            "markdownDescription": "Report lint findings alongside syntax errors."
+          },
+          "shellLsp.lint.exclude": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": [],
+            "scope": "resource",
+            "markdownDescription": "Codes to suppress, as `SC2034` or `2034`."
+          },
+          "shellLsp.lint.optional": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": [],
+            "scope": "resource",
+            "markdownDescription": "Opt-in checks to enable by name, such as `require-variable-braces`, or `all`."
+          }
+        }
+      },
+      {
+        "title": "Format",
+        "properties": {
+          "shellLsp.format.enable": {
+            "type": "boolean",
+            "default": true,
+            "scope": "resource",
+            "markdownDescription": "Answer formatting requests."
+          },
+          "shellLsp.format.indent": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "default": null,
+            "scope": "resource",
+            "markdownDescription": "Spaces per level; `0` indents with tabs. Uses the editor setting when unset."
+          },
+          "shellLsp.format.binaryNextLine": {
+            "type": "boolean",
+            "default": false,
+            "scope": "resource",
+            "markdownDescription": "Put `&&`, `||` and `|` at the start of continuation lines."
+          },
+          "shellLsp.format.switchCaseIndent": {
+            "type": "boolean",
+            "default": false,
+            "scope": "resource",
+            "markdownDescription": "Indent `case` arms inside `case ... esac`."
+          },
+          "shellLsp.format.spaceRedirects": {
+            "type": "boolean",
+            "default": false,
+            "scope": "resource",
+            "markdownDescription": "Write `> file` instead of `>file`."
+          },
+          "shellLsp.format.functionNextLine": {
+            "type": "boolean",
+            "default": false,
+            "scope": "resource",
+            "markdownDescription": "Put the opening brace of a function on its own line."
+          },
+          "shellLsp.format.simplify": {
+            "type": "boolean",
+            "default": false,
+            "scope": "resource",
+            "markdownDescription": "Apply shfmt's simplifications (like `shfmt -s`)."
+          },
+          "shellLsp.format.minify": {
+            "type": "boolean",
+            "default": false,
+            "scope": "resource",
+            "markdownDescription": "Minify the script (like `shfmt -mn`)."
+          }
+        }
+      }
+    ]
+  },
+  "scripts": {
+    "build": "node scripts/build.ts",
+    "lint": "eslint --max-warnings 0 .",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test 'test/unit/*.test.ts'",
+    "test:integration": "node scripts/build.ts --tests && go -C ../.. build -o editors/vscode/out/shell-lsp . && node test/integration/run.ts out/shell-lsp",
+    "package": "vsce package --no-dependencies",
+    "vscode:prepublish": "node scripts/build.ts --production"
+  },
+  "dependencies": {
+    "vscode-languageclient": "10.1.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "20.19.43",
+    "@types/vscode": "1.91.0",
+    "@vscode/test-electron": "3.1.0",
+    "@vscode/vsce": "4.0.0",
+    "esbuild": "0.28.2",
+    "eslint": "10.12.0",
+    "ovsx": "1.2.0",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.71.1"
+  }
+}

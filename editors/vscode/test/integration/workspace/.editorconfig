@@ -1,0 +1,4 @@
+root = true
+
+[*.sh]
+switch_case_indent = true
