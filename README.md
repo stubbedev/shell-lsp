@@ -96,7 +96,13 @@ through `MANPATH` (or next to every `PATH` entry), decompresses and renders
 itself; neither `man` nor groff is involved. Subcommands come from the same
 pages: after `git`, `systemctl` or `docker` completion offers the documented
 subcommands, and the flags completed and hovered after `git checkout` are those
-of git-checkout(1), falling back to the command's own page. Documents with syntax errors are not formatted, and range
+of git-checkout(1), falling back to the command's own page. Nested subcommands
+such as `git remote add`, `kubectl config set-context` or `ip link set` resolve
+as deep as the pages document them, global options before a subcommand are
+skipped with their values (`git -C dir checkout`, `kubectl -n ns get`), and
+commands behind `sudo`, `doas`, `env`, `nice`, `nohup`, `time`, `command`,
+`exec`, `timeout`, `watch` or `xargs` complete and hover as if typed directly.
+Documents with syntax errors are not formatted, and range
 formatting only changes the lines that intersect the range.
 
 Projects formatted with shfmt keep working unchanged: `.editorconfig` files are
