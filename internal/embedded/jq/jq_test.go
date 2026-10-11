@@ -178,6 +178,41 @@ func TestInvalidFilters(t *testing.T) {
 	})
 }
 
+func TestReportsAnErrorPerPipeStage(t *testing.T) {
+	t.Parallel()
+
+	langtest.CheckErrors(t, Parse, `.a & .b | .c | .d ) | .e`,
+		[2]string{"&", "unexpected character `&`"}, [2]string{")", "unexpected `)`"})
+	langtest.CheckErrors(t, Parse, `if . then & else 1 end | .x | map(&)`,
+		[2]string{"&", "unexpected character `&`"}, [2]string{"&)", "unexpected character `&`"})
+	langtest.CheckErrors(t, Parse, `def f: & ; .a | .b &`,
+		[2]string{"&", "unexpected character `&`"}, [2]string{"&", "unexpected character `&`"})
+	langtest.CheckErrors(t, Parse, `{a: "x\q", b: "\w"}`,
+		[2]string{`\q`, "invalid escape `\\q`"}, [2]string{`\w`, "invalid escape `\\w`"})
+	langtest.CheckErrors(t, Parse, `import "a" as ; .a | .b |`,
+		[2]string{";", "unexpected `;`"}, [2]string{"", "unexpected end of program"})
+	langtest.CheckErrors(t, Parse, `"\(1 +)" | [1,] | {a:}`,
+		[2]string{"\" |", "unexpected `\"`"}, [2]string{"]", "unexpected `]`"}, [2]string{"}", "unexpected `}`"})
+}
+
+func TestStopsWhereRecoveryIsUnreliable(t *testing.T) {
+	t.Parallel()
+
+	langtest.CheckErrors(t, Parse, `.a | "abc | &`, [2]string{`"abc`, "unterminated string"})
+	langtest.CheckErrors(t, Parse, `[.a | & | .b]`, [2]string{"&", "unexpected character `&`"})
+	langtest.CheckErrors(t, Parse, `{a: &, if: 1} | .b &`, [2]string{"&", "unexpected character `&`"})
+	langtest.CheckErrors(t, Parse, `(.a | & ] | .b &`, [2]string{"&", "unexpected character `&`"})
+	langtest.CheckErrors(t, Parse, `if . then 1 | .b`, [2]string{"if", "`if` is never closed"})
+}
+
+func TestCapsErrors(t *testing.T) {
+	t.Parallel()
+
+	if got := len(Parse(strings.Repeat(".a & | ", lang.MaxErrors+3)).Errors); got != lang.MaxErrors {
+		t.Errorf("%d errors, want %d", got, lang.MaxErrors)
+	}
+}
+
 func TestTokens(t *testing.T) {
 	t.Parallel()
 
@@ -193,7 +228,7 @@ func TestTokensAfterAnError(t *testing.T) {
 
 	src := `.a | ) | map(.b)`
 	res := Parse(src)
-	if res.Error == nil {
+	if len(res.Errors) == 0 {
 		t.Fatal("want an error")
 	}
 	if got := langtest.Describe(src, res.Tokens); !strings.HasSuffix(got, ".b:property") {

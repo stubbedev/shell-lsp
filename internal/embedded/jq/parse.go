@@ -9,19 +9,24 @@ const (
 	noBinding
 )
 
-type bailout struct{}
+type (
+	bailout struct{}
+	abort   struct{}
+)
 
 type parser struct {
-	lex lexer
-	tok token
+	lex  lexer
+	tok  token
+	open lang.Nesting[kind]
 }
 
 func Parse(src string) lang.Result {
 	res := lang.NewResult(src)
 	p := &parser{lex: lexer{src: src, res: &res}}
 	p.run()
+	p.lex.quiet = true
 	for p.tok.kind != tEOF {
-		p.advance()
+		p.tok = p.lex.next()
 	}
 	return res
 }
@@ -29,16 +34,92 @@ func Parse(src string) lang.Result {
 func (p *parser) run() {
 	defer func() {
 		if r := recover(); r != nil {
-			if _, ok := r.(bailout); !ok {
+			if _, ok := r.(abort); !ok {
 				panic(r)
 			}
 		}
 	}()
 	p.advance()
-	p.program()
+	if !p.attempt(p.directives) && !p.resync() {
+		return
+	}
+	for p.tok.kind != tEOF {
+		if !p.attempt(p.filter) && !p.resync() {
+			return
+		}
+	}
 }
 
-func (p *parser) advance() { p.tok = p.lex.next() }
+func (p *parser) attempt(parse func()) (ok bool) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			return
+		}
+		if _, isBailout := r.(bailout); !isBailout {
+			panic(r)
+		}
+		ok = false
+	}()
+	parse()
+	return true
+}
+
+func (p *parser) resync() bool {
+	p.lex.quiet = true
+	defer func() { p.lex.quiet = false }()
+	for {
+		k := p.tok.kind
+		top, _ := p.open.Top()
+		switch {
+		case k == tEOF || k == tUnterminated || !p.open.Tracked():
+			return false
+		case k == tPipe && p.open.Depth() == 0:
+			p.advance()
+			return true
+		case k == tIf:
+			p.push(tEnd)
+		case k == tDef:
+			p.push(tSemicolon)
+		case k == tSemicolon && top == tSemicolon, k == tEnd && top == tEnd:
+			p.pop(k)
+		case p.open.Depth() == 0 && (isCloser(k) || k == tEnd):
+			p.tok = p.lex.next()
+			continue
+		case k == tEnd:
+			return false
+		}
+		p.advance()
+	}
+}
+
+func isCloser(k kind) bool {
+	return k == tRParen || k == tRBracket || k == tRBrace || k == tStringTail
+}
+
+func (p *parser) push(closer kind) { p.open.Push(closer) }
+
+func (p *parser) pop(closer kind) {
+	if !p.open.Pop(closer) {
+		panic(abort{})
+	}
+}
+
+func (p *parser) advance() {
+	switch k := p.tok.kind; k {
+	case tLParen:
+		p.push(tRParen)
+	case tLBracket:
+		p.push(tRBracket)
+	case tLBrace:
+		p.push(tRBrace)
+	case tStringHead:
+		p.push(tStringTail)
+	case tRParen, tRBracket, tRBrace, tStringTail:
+		p.pop(k)
+	}
+	p.tok = p.lex.next()
+}
 
 func (p *parser) failAt(t token, message string) {
 	p.lex.res.Fail(t.start, t.end, message)
@@ -72,7 +153,14 @@ func (p *parser) reclassify(t token, k lang.Kind, mods lang.Modifier) {
 	}
 }
 
-func (p *parser) program() {
+func (p *parser) filter() {
+	p.pipe(0)
+	if p.tok.kind != tEOF {
+		p.unexpected()
+	}
+}
+
+func (p *parser) directives() {
 	if p.tok.kind == tModule {
 		p.advance()
 		p.object()
@@ -93,13 +181,6 @@ func (p *parser) program() {
 			p.object()
 		}
 		p.expect(tSemicolon)
-	}
-	if p.tok.kind == tEOF {
-		return
-	}
-	p.pipe(0)
-	if p.tok.kind != tEOF {
-		p.unexpected()
 	}
 }
 
@@ -143,6 +224,7 @@ func (p *parser) binding() {
 
 func (p *parser) definition() {
 	p.advance()
+	p.push(tSemicolon)
 	if p.tok.kind != tIdent {
 		p.unexpected()
 	}
@@ -171,6 +253,7 @@ func (p *parser) definition() {
 	p.expect(tColon)
 	p.pipe(0)
 	p.expect(tSemicolon)
+	p.pop(tSemicolon)
 }
 
 func (p *parser) comma(ctx context) {
@@ -425,6 +508,7 @@ func (p *parser) fold() {
 func (p *parser) conditional() {
 	open := p.tok
 	p.advance()
+	p.push(tEnd)
 	p.pipe(0)
 	p.expect(tThen)
 	p.pipe(0)
@@ -439,6 +523,7 @@ func (p *parser) conditional() {
 		p.pipe(0)
 	}
 	p.closing(tEnd, open)
+	p.pop(tEnd)
 }
 
 func (p *parser) patterns() {

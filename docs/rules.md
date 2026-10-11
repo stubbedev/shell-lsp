@@ -96,8 +96,14 @@ checked when it is a literal argument (`awk '...'`, `sed -e '...'`,
 also when the command runs behind `sudo`, `env`, `nice`, `timeout`, `xargs`,
 `find -exec` and the other wrappers. Programs that contain shell expansions,
 come from files, or contain the `{}` or `xargs -I` placeholder substituted
-at run time are skipped rather than guessed at. Each error is reported at its exact position inside
-the shell string.
+at run time are skipped rather than guessed at.
+
+Each error is reported at its exact position inside the shell string. After
+an error the parser resumes at the next line of a sed script, the next
+statement of an awk program or the next top-level `|` stage of a jq filter,
+so up to ten errors are reported per program; where it cannot tell how the
+program continues, such as after a string that is never closed, it stops
+rather than report follow-on errors.
 
 ## SL3001
 

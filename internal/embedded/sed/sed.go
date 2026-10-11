@@ -7,7 +7,10 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/embedded/lang"
 )
 
-type bailout struct{}
+type (
+	bailout struct{}
+	abort   struct{}
+)
 
 type label struct {
 	name       string
@@ -15,16 +18,18 @@ type label struct {
 }
 
 type parser struct {
-	src    string
-	pos    int
-	res    lang.Result
-	blocks []int
-	marks  []label
-	jumps  []label
+	src       string
+	pos       int
+	res       lang.Result
+	blocks    []int
+	marks     []label
+	jumps     []label
+	structure bool
+	commandAt int
 }
 
 func Parse(src string) lang.Result {
-	p := &parser{src: src, res: lang.NewResult(src)}
+	p := &parser{src: src, res: lang.NewResult(src), structure: true}
 	p.run()
 	return p.res
 }
@@ -32,32 +37,61 @@ func Parse(src string) lang.Result {
 func (p *parser) run() {
 	defer func() {
 		if r := recover(); r != nil {
-			if _, ok := r.(bailout); !ok {
+			if _, ok := r.(abort); !ok {
 				panic(r)
 			}
 		}
 	}()
-	for {
-		p.skip(" \t\r\n;")
-		if p.eof() {
-			break
-		}
-		p.command()
+	for !p.attempt() {
+	}
+	if !p.structure {
+		return
 	}
 	if len(p.blocks) > 0 {
 		open := p.blocks[len(p.blocks)-1]
-		p.fail(open, open+1, lang.Unclosed(p.src, open, open+1))
+		p.res.Fail(open, open+1, lang.Unclosed(p.src, open, open+1))
 	}
 	for _, jump := range p.jumps {
 		if !slices.ContainsFunc(p.marks, func(m label) bool { return m.name == jump.name }) {
-			p.fail(jump.start, jump.end, "no label named "+lang.Quote(p.src, jump.start, jump.end))
+			p.res.Fail(jump.start, jump.end, "no label named "+lang.Quote(p.src, jump.start, jump.end))
 		}
+	}
+}
+
+func (p *parser) attempt() (done bool) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			return
+		}
+		if _, ok := r.(bailout); !ok {
+			panic(r)
+		}
+		end := lineEnd(p.src, max(p.commandAt, min(p.pos, len(p.src))))
+		if strings.ContainsAny(p.src[p.commandAt:end], "{}:") {
+			p.structure = false
+		}
+		p.pos = end
+		done = false
+	}()
+	for {
+		p.skip(" \t\r\n;")
+		if p.eof() {
+			return true
+		}
+		p.commandAt = p.pos
+		p.parseCommand()
 	}
 }
 
 func (p *parser) fail(start, end int, message string) {
 	p.res.Fail(start, end, message)
 	panic(bailout{})
+}
+
+func (p *parser) unterminated(start, end int, message string) {
+	p.res.Fail(start, end, message)
+	panic(abort{})
 }
 
 func (p *parser) eof() bool { return p.pos >= len(p.src) }
@@ -78,7 +112,7 @@ func (p *parser) emit(start int, kind lang.Kind) {
 	p.res.Emit(start, p.pos, kind, 0)
 }
 
-func (p *parser) command() {
+func (p *parser) parseCommand() {
 	start := p.pos
 	addresses := p.addresses()
 	p.blanks()
@@ -113,10 +147,11 @@ func (p *parser) command() {
 	p.pos++
 	switch c {
 	case '}':
-		if len(p.blocks) == 0 {
+		if len(p.blocks) > 0 {
+			p.blocks = p.blocks[:len(p.blocks)-1]
+		} else if p.structure {
 			p.fail(at, at+1, lang.Unexpected(p.src, at, at+1))
 		}
-		p.blocks = p.blocks[:len(p.blocks)-1]
 		return
 	case '#':
 		p.pos = lineEnd(p.src, at)
@@ -318,7 +353,7 @@ func (p *parser) address(second bool) address {
 	case c == '\\':
 		p.pos++
 		if p.eof() || p.peekIs("\n\\") {
-			p.fail(start, p.pos, "unterminated address regex")
+			p.unterminated(start, p.pos, "unterminated address regex")
 		}
 		p.regexpAddress(start, p.src[p.pos])
 		return regexpAddress
@@ -343,7 +378,7 @@ func (p *parser) step() {
 func (p *parser) regexpAddress(start int, delimiter byte) {
 	p.pos++
 	if !p.delimited(delimiter) {
-		p.fail(start, p.pos, "unterminated address regex")
+		p.unterminated(start, p.pos, "unterminated address regex")
 	}
 	p.pos++
 	p.emit(start, lang.Regexp)
@@ -371,7 +406,7 @@ func (p *parser) delimited(delimiter byte) bool {
 
 func (p *parser) substitute(command int) {
 	if p.eof() || p.peekIs("\n\\") || !p.substitution() {
-		p.fail(command, command+1, "unterminated `s` command")
+		p.unterminated(command, command+1, "unterminated `s` command")
 	}
 	p.substituteFlags()
 }
@@ -444,7 +479,7 @@ func (p *parser) substituteFlags() {
 
 func (p *parser) transliterate(command int) {
 	if p.eof() || p.peekIs("\n\\") {
-		p.fail(command, command+1, "unterminated `y` command")
+		p.unterminated(command, command+1, "unterminated `y` command")
 	}
 	delimiter := p.src[p.pos]
 	p.pos++
@@ -460,7 +495,7 @@ func (p *parser) transliteration(command int, delimiter byte) (int, bool) {
 	length, exact := 0, true
 	for {
 		if p.eof() || p.src[p.pos] == '\n' {
-			p.fail(command, command+1, "unterminated `y` command")
+			p.unterminated(command, command+1, "unterminated `y` command")
 		}
 		c := p.src[p.pos]
 		if c == delimiter {

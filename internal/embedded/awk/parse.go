@@ -20,29 +20,31 @@ const (
 	membership
 )
 
-type bailout struct{}
+type (
+	bailout struct{}
+	abort   struct{}
+)
 
 type parser struct {
 	lex    lexer
 	tok    token
 	peeked *token
 	params []string
+	open   lang.Nesting[kind]
 }
 
 func Parse(src string) lang.Result {
 	res := lang.NewResult(src)
 	p := &parser{lex: lexer{src: src, prev: tNewline, res: &res}}
 	p.run()
-	for p.tok.kind != tEOF {
-		p.advance()
-	}
+	p.drain()
 	return res
 }
 
 func (p *parser) run() {
 	defer func() {
 		if r := recover(); r != nil {
-			if _, ok := r.(bailout); !ok {
+			if _, ok := r.(abort); !ok {
 				panic(r)
 			}
 		}
@@ -51,12 +53,76 @@ func (p *parser) run() {
 	p.program()
 }
 
-func (p *parser) advance() {
-	if p.peeked != nil {
-		p.tok, p.peeked = *p.peeked, nil
-		return
+func (p *parser) drain() {
+	p.lex.quiet = true
+	for p.tok.kind != tEOF {
+		p.tok = p.next()
 	}
-	p.tok = p.lex.next()
+}
+
+func (p *parser) attempt(base int, parse func()) (ok bool) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			return
+		}
+		if _, isBailout := r.(bailout); !isBailout {
+			panic(r)
+		}
+		p.resync(base)
+		ok = false
+	}()
+	parse()
+	return true
+}
+
+func (p *parser) resync(base int) {
+	p.lex.quiet = true
+	defer func() { p.lex.quiet = false }()
+	for {
+		k := p.tok.kind
+		switch {
+		case k == tEOF || k == tUnterminated || !p.open.Tracked():
+			panic(abort{})
+		case p.open.Depth() == base && (k == tNewline || k == tSemicolon || (k == tRBrace && base > 0)):
+			return
+		case p.open.Depth() == base && isCloser(k):
+			p.tok = p.next()
+			continue
+		}
+		p.advance()
+	}
+}
+
+func isCloser(k kind) bool { return k == tRBrace || k == tRParen || k == tRBracket }
+
+func (p *parser) track(k kind) {
+	switch k {
+	case tLBrace:
+		p.open.Push(tRBrace)
+	case tLParen:
+		p.open.Push(tRParen)
+	case tLBracket:
+		p.open.Push(tRBracket)
+	case tRBrace, tRParen, tRBracket:
+		if !p.open.Pop(k) {
+			panic(abort{})
+		}
+	}
+}
+
+func (p *parser) advance() {
+	p.track(p.tok.kind)
+	p.tok = p.next()
+}
+
+func (p *parser) next() token {
+	if p.peeked != nil {
+		next := *p.peeked
+		p.peeked = nil
+		return next
+	}
+	return p.lex.next()
 }
 
 func (p *parser) peek() token {
@@ -112,6 +178,12 @@ func (p *parser) terminators() {
 }
 
 func (p *parser) program() {
+	for !p.attempt(0, p.items) {
+		p.params = p.params[:0]
+	}
+}
+
+func (p *parser) items() {
 	p.terminators()
 	for p.tok.kind != tEOF {
 		p.item()
@@ -223,16 +295,22 @@ func (p *parser) function() {
 
 func (p *parser) block() {
 	open := p.expect(tLBrace)
+	base := p.open.Depth()
+	for !p.attempt(base, func() { p.blockBody(open, p.statement) }) {
+	}
+}
+
+func (p *parser) blockBody(open token, parse func()) {
 	for {
 		p.terminators()
-		if p.tok.kind == tRBrace {
+		switch p.tok.kind {
+		case tRBrace:
 			p.advance()
 			return
-		}
-		if p.tok.kind == tEOF {
+		case tEOF:
 			p.failAt(open, lang.Unclosed(p.lex.src, open.start, open.end))
 		}
-		p.statement()
+		parse()
 	}
 }
 
@@ -330,32 +408,30 @@ func (p *parser) switchStatement() {
 	p.condition()
 	p.newlines()
 	open := p.expect(tLBrace)
-	for {
-		p.terminators()
-		switch {
-		case p.tok.kind == tRBrace:
+	base := p.open.Depth()
+	for !p.attempt(base, func() { p.blockBody(open, p.switchItem) }) {
+	}
+}
+
+func (p *parser) switchItem() {
+	switch {
+	case p.is("case"):
+		p.contextual()
+		if p.tok.kind == tSub || p.tok.kind == tAdd {
 			p.advance()
-			return
-		case p.tok.kind == tEOF:
-			p.failAt(open, lang.Unclosed(p.lex.src, open.start, open.end))
-		case p.is("case"):
-			p.contextual()
-			if p.tok.kind == tSub || p.tok.kind == tAdd {
-				p.advance()
-			}
-			switch p.tok.kind {
-			case tNumber, tString, tRegexp:
-				p.advance()
-			default:
-				p.unexpected()
-			}
-			p.expect(tColon)
-		case p.is("default"):
-			p.contextual()
-			p.expect(tColon)
-		default:
-			p.statement()
 		}
+		switch p.tok.kind {
+		case tNumber, tString, tRegexp:
+			p.advance()
+		default:
+			p.unexpected()
+		}
+		p.expect(tColon)
+	case p.is("default"):
+		p.contextual()
+		p.expect(tColon)
+	default:
+		p.statement()
 	}
 }
 

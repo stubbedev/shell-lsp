@@ -1,6 +1,8 @@
 package lang
 
 import (
+	"cmp"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -43,9 +45,11 @@ type Error struct {
 	Message    string
 }
 
+const MaxErrors = 10
+
 type Result struct {
 	Tokens []Token
-	Error  *Error
+	Errors []Error
 }
 
 func NewResult(src string) Result {
@@ -61,10 +65,16 @@ func (r *Result) Emit(start, end int, kind Kind, mods Modifier) int {
 }
 
 func (r *Result) Fail(start, end int, message string) {
-	if r.Error != nil {
+	e := Error{Start: start, End: max(end, start), Message: message}
+	if len(r.Errors) == MaxErrors || slices.ContainsFunc(r.Errors, e.overlaps) {
 		return
 	}
-	r.Error = &Error{Start: start, End: max(end, start), Message: message}
+	at, _ := slices.BinarySearchFunc(r.Errors, e, func(a, b Error) int { return cmp.Compare(a.Start, b.Start) })
+	r.Errors = slices.Insert(r.Errors, at, e)
+}
+
+func (e Error) overlaps(other Error) bool {
+	return e.Start < max(other.End, other.Start+1) && other.Start < max(e.End, e.Start+1)
 }
 
 func (r *Result) TokenAt(offset int) (Token, bool) {

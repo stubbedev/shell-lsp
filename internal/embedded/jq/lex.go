@@ -11,6 +11,7 @@ type kind uint8
 const (
 	tEOF kind = iota
 	tIllegal
+	tUnterminated
 	tIdent
 	tField
 	tVar
@@ -129,6 +130,13 @@ type lexer struct {
 	pos    int
 	res    *lang.Result
 	nested []int
+	quiet  bool
+}
+
+func (l *lexer) fail(start, end int, message string) {
+	if !l.quiet {
+		l.res.Fail(start, end, message)
+	}
 }
 
 func (l *lexer) next() token {
@@ -183,7 +191,7 @@ func (l *lexer) token(c byte) token {
 		}
 	}
 	l.pos = lang.RuneEnd(l.src, start)
-	l.res.Fail(start, l.pos, lang.Illegal(l.src, start, l.pos))
+	l.fail(start, l.pos, lang.Illegal(l.src, start, l.pos))
 	return token{kind: tIllegal, start: start, end: l.pos, sem: -1}
 }
 
@@ -225,8 +233,8 @@ func (l *lexer) stringPart(start int, closed, interpolated kind) token {
 		l.pos++
 	}
 	l.res.Emit(textStart-boolInt(closed == tString), l.pos, lang.String, 0)
-	l.res.Fail(start, l.pos, "unterminated string")
-	return token{kind: closed, start: start, end: l.pos, sem: -1}
+	l.fail(start, l.pos, "unterminated string")
+	return token{kind: tUnterminated, start: start, end: l.pos, sem: -1}
 }
 
 func boolInt(b bool) int {
@@ -249,14 +257,14 @@ func (l *lexer) escape() {
 		l.pos++
 		for range 4 {
 			if l.pos >= len(l.src) || !lang.IsHexDigit(l.src[l.pos]) {
-				l.res.Fail(at, l.pos, "invalid escape "+lang.Quote(l.src, at, l.pos)+" needs four hexadecimal digits")
+				l.fail(at, l.pos, "invalid escape "+lang.Quote(l.src, at, l.pos)+" needs four hexadecimal digits")
 				return
 			}
 			l.pos++
 		}
 	default:
 		end := lang.RuneEnd(l.src, l.pos)
-		l.res.Fail(at, end, "invalid escape "+lang.Quote(l.src, at, end))
+		l.fail(at, end, "invalid escape "+lang.Quote(l.src, at, end))
 		l.pos = end
 	}
 }
@@ -303,7 +311,7 @@ func (l *lexer) sigil(c byte) token {
 	start := l.pos
 	l.pos++
 	if l.pos >= len(l.src) || !lang.IsNameStart(l.src[l.pos]) {
-		l.res.Fail(start, l.pos, lang.Quote(l.src, start, l.pos)+" needs a name")
+		l.fail(start, l.pos, lang.Quote(l.src, start, l.pos)+" needs a name")
 		return token{kind: tIllegal, start: start, end: l.pos, sem: -1}
 	}
 	l.qualifiedName()

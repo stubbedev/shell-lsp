@@ -1,15 +1,39 @@
 package lang
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
-func TestFailKeepsTheFirstError(t *testing.T) {
+func TestFailKeepsDistinctErrorsInOrder(t *testing.T) {
 	t.Parallel()
 
 	var r Result
-	r.Fail(5, 6, "first")
-	r.Fail(1, 2, "second")
-	if r.Error == nil || r.Error.Message != "first" || r.Error.Start != 5 {
-		t.Errorf("error = %+v, want the first one reported", r.Error)
+	r.Fail(5, 6, "second")
+	r.Fail(1, 2, "first")
+	r.Fail(5, 5, "same place")
+	r.Fail(1, 4, "overlapping")
+	r.Fail(9, 9, "at the end")
+	r.Fail(9, 12, "starting at the end")
+	r.Fail(6, 8, "after the second")
+	var got []string
+	for _, e := range r.Errors {
+		got = append(got, e.Message)
+	}
+	if want := []string{"first", "second", "after the second", "at the end"}; !slices.Equal(got, want) {
+		t.Errorf("errors = %q, want %q", got, want)
+	}
+}
+
+func TestFailStopsAtMaxErrors(t *testing.T) {
+	t.Parallel()
+
+	var r Result
+	for i := range MaxErrors + 5 {
+		r.Fail(i*2, i*2+1, "error")
+	}
+	if len(r.Errors) != MaxErrors || r.Errors[MaxErrors-1].Start != (MaxErrors-1)*2 {
+		t.Errorf("errors = %+v, want the first %d", r.Errors, MaxErrors)
 	}
 }
 

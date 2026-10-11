@@ -29,7 +29,7 @@ func checkEmbeddedPrograms(p *pass, n syntax.Node) {
 		return
 	}
 	for _, program := range embedded.In(p.tree, stmt) {
-		if e := program.Result.Error; e != nil {
+		for _, e := range program.Result.Errors {
 			p.report(embeddedSyntaxCodes[program.Language], program.Span(e.Start, e.End), program.Language.String()+": "+e.Message)
 		}
 	}

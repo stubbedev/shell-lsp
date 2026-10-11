@@ -11,6 +11,7 @@ type kind uint8
 const (
 	tEOF kind = iota
 	tIllegal
+	tUnterminated
 	tNewline
 	tSemicolon
 	tLBrace
@@ -164,10 +165,17 @@ type token struct {
 }
 
 type lexer struct {
-	src  string
-	pos  int
-	prev kind
-	res  *lang.Result
+	src   string
+	pos   int
+	prev  kind
+	res   *lang.Result
+	quiet bool
+}
+
+func (l *lexer) fail(start, end int, message string) {
+	if !l.quiet {
+		l.res.Fail(start, end, message)
+	}
 }
 
 func (l *lexer) next() token {
@@ -241,7 +249,7 @@ func (l *lexer) token(c byte) token {
 		}
 	}
 	l.pos = lang.RuneEnd(l.src, start)
-	l.res.Fail(start, l.pos, lang.Illegal(l.src, start, l.pos))
+	l.fail(start, l.pos, lang.Illegal(l.src, start, l.pos))
 	return token{kind: tIllegal, start: start, end: l.pos, sem: -1}
 }
 
@@ -261,7 +269,7 @@ func (l *lexer) quoted(k kind, sem lang.Kind, closer byte, unterminated string) 
 		c := l.src[l.pos]
 		switch {
 		case c == '\n':
-			return l.unterminated(k, sem, start, unterminated)
+			return l.unterminated(sem, start, unterminated)
 		case c == '\\':
 			l.pos += 2
 			continue
@@ -283,7 +291,7 @@ func (l *lexer) quoted(k kind, sem lang.Kind, closer byte, unterminated string) 
 		l.pos++
 	}
 	l.pos = len(l.src)
-	return l.unterminated(k, sem, start, unterminated)
+	return l.unterminated(sem, start, unterminated)
 }
 
 func bracketBody(src string, at int) int {
@@ -296,10 +304,10 @@ func bracketBody(src string, at int) int {
 	return at
 }
 
-func (l *lexer) unterminated(k kind, sem lang.Kind, start int, message string) token {
+func (l *lexer) unterminated(sem lang.Kind, start int, message string) token {
 	l.pos = min(l.pos, len(l.src))
-	l.res.Fail(start, l.pos, message)
-	return token{kind: k, start: start, end: l.pos, sem: l.res.Emit(start, l.pos, sem, 0)}
+	l.fail(start, l.pos, message)
+	return token{kind: tUnterminated, start: start, end: l.pos, sem: l.res.Emit(start, l.pos, sem, 0)}
 }
 
 func (l *lexer) number() {

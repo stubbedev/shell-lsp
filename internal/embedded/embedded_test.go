@@ -141,11 +141,12 @@ func errorAt(t *testing.T, src string) (string, parser.Span) {
 	t.Helper()
 
 	programs := find(t, src)
-	if len(programs) != 1 || programs[0].Result.Error == nil {
-		t.Fatalf("Find(%q) = %+v, want one program with an error", src, programs)
+	if len(programs) != 1 || len(programs[0].Result.Errors) != 1 {
+		t.Fatalf("Find(%q) = %+v, want one program with one error", src, programs)
 	}
 	p := programs[0]
-	return p.Result.Error.Message, p.Span(p.Result.Error.Start, p.Result.Error.End)
+	e := p.Result.Errors[0]
+	return e.Message, p.Span(e.Start, e.End)
 }
 
 func TestErrorPositionsMapToTheShellSource(t *testing.T) {

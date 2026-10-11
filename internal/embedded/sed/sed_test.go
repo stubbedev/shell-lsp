@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stubbedev/shell-lsp/internal/embedded/lang"
 	"github.com/stubbedev/shell-lsp/internal/embedded/lang/langtest"
 )
 
@@ -170,6 +171,38 @@ func TestInvalidScripts(t *testing.T) {
 		{`/x/!!p`, `!p`, "multiple `!`s"},
 		{`1~d`, `~`, "expected a number after `~`"},
 	})
+}
+
+func TestReportsAnErrorPerCommand(t *testing.T) {
+	t.Parallel()
+
+	langtest.CheckErrors(t, Parse, "s/a/b/x\nk\np;y/ab/c/",
+		[2]string{"x", "unknown option to `s`"}, [2]string{"k", "unknown command `k`"},
+		[2]string{"y/", "the strings of `y` have different lengths"})
+	langtest.CheckErrors(t, Parse, "p;s/a/b/x;q\nb nowhere",
+		[2]string{"x;", "unknown option to `s`"}, [2]string{"nowhere", "no label named `nowhere`"})
+	langtest.CheckErrors(t, Parse, "1,2q\n0p\n$!!d\n/x/",
+		[2]string{"q", "`q` takes at most one address"}, [2]string{"0", "line address 0 is only valid as `0,/regexp/`"},
+		[2]string{"!d", "multiple `!`s"}, [2]string{"/x/", "missing command"})
+}
+
+func TestStopsWhereRecoveryIsUnreliable(t *testing.T) {
+	t.Parallel()
+
+	langtest.CheckErrors(t, Parse, "/x/{ s/a/b/q }\np", [2]string{"q", "unknown option to `s`"})
+	langtest.CheckErrors(t, Parse, "1:a\nb a", [2]string{":", "`:` doesn't take an address"})
+	langtest.CheckErrors(t, Parse, "}\n}\np", [2]string{"}", "unexpected `}`"})
+	langtest.CheckErrors(t, Parse, "s/a/b\n/;k", [2]string{"s", "unterminated `s` command"})
+	langtest.CheckErrors(t, Parse, "y/ab/\nk", [2]string{"y", "unterminated `y` command"})
+	langtest.CheckErrors(t, Parse, "/ab\nk", [2]string{"/ab", "unterminated address regex"})
+}
+
+func TestCapsErrors(t *testing.T) {
+	t.Parallel()
+
+	if got := len(Parse(strings.Repeat("k\n", lang.MaxErrors+3)).Errors); got != lang.MaxErrors {
+		t.Errorf("%d errors, want %d", got, lang.MaxErrors)
+	}
 }
 
 func TestTokens(t *testing.T) {

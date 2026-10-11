@@ -196,6 +196,47 @@ func TestInvalidPrograms(t *testing.T) {
 	})
 }
 
+func TestReportsEveryStatementError(t *testing.T) {
+	t.Parallel()
+
+	langtest.CheckErrors(t, Parse, "{ x = 1 +* 2; y = 3; z = (4 & 5) }",
+		[2]string{"*", "unexpected `*`"}, [2]string{"&", "unexpected character `&`"})
+	langtest.CheckErrors(t, Parse, "{ print ) }\n{ x = = 1 }\nBEGIN { y = ( }\nEND { z = 1 + }",
+		[2]string{") }", "unexpected `)`"}, [2]string{"= 1", "unexpected `=`"}, [2]string{"}\nEND", "unexpected `}`"})
+	langtest.CheckErrors(t, Parse, "{ if (x) { a = ) } ; b = * }",
+		[2]string{") }", "unexpected `)`"}, [2]string{"*", "unexpected `*`"})
+	langtest.CheckErrors(t, Parse, "function length(s) { return 1 }\nfunction f(a) { return a }\n{ x = ) }",
+		[2]string{"length", "`length` is a built-in function and cannot be redefined"}, [2]string{") }", "unexpected `)`"})
+	langtest.CheckErrors(t, Parse, "{ print 'x' }\n{ y = ) }",
+		[2]string{"'", "unexpected character `'`"}, [2]string{") }", "unexpected `)`"})
+	langtest.CheckErrors(t, Parse, "{ switch (x) { case 1: y = ); case 2: z = * } }",
+		[2]string{");", "unexpected `)`"}, [2]string{"*", "unexpected `*`"})
+	langtest.CheckErrors(t, Parse, "$1 == & { print }\n/x/ { print \"a\" }\nNR > { n++ }",
+		[2]string{"&", "unexpected character `&`"}, [2]string{"{ n++", "unexpected `{`"})
+	langtest.CheckErrors(t, Parse, "{ x = 1 } }\n{ y = ) }",
+		[2]string{"}\n", "unexpected `}`"}, [2]string{") }", "unexpected `)`"})
+	langtest.CheckErrors(t, Parse, "{ x = (1 + 2)) ; y = ) }",
+		[2]string{") ;", "unexpected `)`"}, [2]string{") }", "unexpected `)`"})
+}
+
+func TestStopsWhereRecoveryIsUnreliable(t *testing.T) {
+	t.Parallel()
+
+	langtest.CheckErrors(t, Parse, "{ {\n { z", [2]string{"{ z", "`{` is never closed"})
+	langtest.CheckErrors(t, Parse, "{ if (x &) print 1; y = 2 }", [2]string{"&", "unexpected character `&`"})
+	langtest.CheckErrors(t, Parse, "{ print \"x }\n{ y = ) }", [2]string{`"x }`, "unterminated string"})
+	langtest.CheckErrors(t, Parse, "{ x = /a\n{ y = ) }", [2]string{"/a", "unterminated regular expression"})
+	langtest.CheckErrors(t, Parse, "{ f(a]; b = ) }", [2]string{"]", "unexpected `]`"})
+}
+
+func TestCapsErrors(t *testing.T) {
+	t.Parallel()
+
+	if got := len(Parse(strings.Repeat("{ x = ) }\n", lang.MaxErrors+3)).Errors); got != lang.MaxErrors {
+		t.Errorf("%d errors, want %d", got, lang.MaxErrors)
+	}
+}
+
 func TestTokens(t *testing.T) {
 	t.Parallel()
 
@@ -216,7 +257,7 @@ func TestTokensAfterAnError(t *testing.T) {
 
 	src := `{ print ) } { x = "s" }`
 	res := Parse(src)
-	if res.Error == nil {
+	if len(res.Errors) == 0 {
 		t.Fatal("want an error")
 	}
 	if got := langtest.Describe(src, res.Tokens); !strings.HasSuffix(got, `"s":string`) {

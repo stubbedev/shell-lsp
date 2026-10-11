@@ -1,6 +1,8 @@
 package langtest
 
 import (
+	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -39,8 +41,8 @@ func CheckValid(t *testing.T, parse func(string) lang.Result, sources []string) 
 	t.Helper()
 
 	for _, src := range sources {
-		if res := parse(src); res.Error != nil {
-			t.Errorf("Parse(%q) = error %q at %d", src, res.Error.Message, res.Error.Start)
+		if res := parse(src); len(res.Errors) > 0 {
+			t.Errorf("Parse(%q) = errors %+v", src, res.Errors)
 		}
 	}
 }
@@ -50,13 +52,36 @@ func CheckInvalid(t *testing.T, parse func(string) lang.Result, cases []Case) {
 
 	for _, c := range cases {
 		res := parse(c.Src())
-		if res.Error == nil {
-			t.Errorf("Parse(%q) = no error, want %q", c.Src(), c.Message())
-			continue
+		want := lang.Error{Start: c.Offset(), Message: c.Message()}
+		if len(res.Errors) != 1 || res.Errors[0].Start != want.Start || res.Errors[0].Message != want.Message {
+			t.Errorf("Parse(%q) = errors %+v, want only %q at %d", c.Src(), res.Errors, want.Message, want.Start)
 		}
-		if at := c.Offset(); res.Error.Start != at || res.Error.Message != c.Message() {
-			t.Errorf("Parse(%q) = %q at %d, want %q at %d", c.Src(), res.Error.Message, res.Error.Start, c.Message(), at)
+	}
+}
+
+func CheckErrors(t *testing.T, parse func(string) lang.Result, src string, want ...[2]string) {
+	t.Helper()
+
+	var got, expected []string
+	for _, e := range parse(src).Errors {
+		got = append(got, fmt.Sprintf("%d %s", e.Start, e.Message))
+	}
+	from := 0
+	for _, w := range want {
+		at := strings.Index(src[from:], w[0])
+		switch {
+		case w[0] == "":
+			from = len(src)
+		case at < 0:
+			t.Fatalf("%q does not occur in %q after offset %d", w[0], src, from)
+		default:
+			from += at
 		}
+		expected = append(expected, fmt.Sprintf("%d %s", from, w[1]))
+		from++
+	}
+	if !slices.Equal(got, expected) {
+		t.Errorf("errors of %q\n got %q\nwant %q", src, got, expected)
 	}
 }
 
@@ -78,8 +103,16 @@ func CheckInvariants(t *testing.T, src string, res lang.Result) {
 		}
 		end = tok.End
 	}
-	if e := res.Error; e != nil && (e.Start < 0 || e.Start > e.End || e.End > len(src) || e.Message == "") {
-		t.Fatalf("error %+v of %q is out of bounds or empty", e, src)
+	if len(res.Errors) > lang.MaxErrors {
+		t.Fatalf("%d errors in %q, want at most %d", len(res.Errors), src, lang.MaxErrors)
+	}
+	for i, e := range res.Errors {
+		if e.Start < 0 || e.Start > e.End || e.End > len(src) || e.Message == "" {
+			t.Fatalf("error %+v of %q is out of bounds or empty", e, src)
+		}
+		if i > 0 && res.Errors[i-1].Start >= e.Start {
+			t.Fatalf("errors %+v of %q are not ordered by position", res.Errors, src)
+		}
 	}
 }
 

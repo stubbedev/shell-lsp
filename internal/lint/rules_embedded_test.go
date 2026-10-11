@@ -40,6 +40,21 @@ func TestEmbeddedProgramFindings(t *testing.T) {
 	}
 }
 
+func TestEveryEmbeddedProgramErrorIsAFinding(t *testing.T) {
+	t.Parallel()
+
+	src := "#!/bin/bash\nsed -e 's/a/b/x' -e 'k' f\njq '.a & .b | .c | ]' f\n"
+	want := []embeddedFinding{
+		{"SL3002", SeverityError, "x", "sed: unknown option to `s`"},
+		{"SL3002", SeverityError, "k", "sed: unknown command `k`"},
+		{"SL3003", SeverityError, "&", "jq: unexpected character `&`"},
+		{"SL3003", SeverityError, "]", "jq: unexpected `]`"},
+	}
+	if got := embeddedFindings(src, Options{}); !slices.Equal(got, want) {
+		t.Errorf("findings = %+v\nwant %+v", got, want)
+	}
+}
+
 func TestEmbeddedProgramFindingsAreConfigurable(t *testing.T) {
 	t.Parallel()
 

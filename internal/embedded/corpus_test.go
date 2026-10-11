@@ -116,7 +116,7 @@ func FuzzFind(f *testing.F) {
 					t.Fatalf("hover on a non-builtin token %+v in %q", tok, text)
 				}
 			}
-			if e := p.Result.Error; e != nil {
+			for _, e := range p.Result.Errors {
 				inBounds("error", p.Span(e.Start, e.End))
 			}
 		}
@@ -137,10 +137,10 @@ func TestCorpusProgramsParse(t *testing.T) {
 			checked++
 			want, invalid := knownInvalid[p.Text]
 			switch {
-			case p.Result.Error == nil && invalid:
+			case len(p.Result.Errors) == 0 && invalid:
 				t.Errorf("%s: %s program %q parses, want %q", script.name, p.Language, p.Text, want)
-			case p.Result.Error != nil && p.Result.Error.Message != want:
-				t.Errorf("%s: %s program %q: unexpected error %q at %d", script.name, p.Language, p.Text, p.Result.Error.Message, p.Result.Error.Start)
+			case len(p.Result.Errors) > 0 && (len(p.Result.Errors) > 1 || p.Result.Errors[0].Message != want):
+				t.Errorf("%s: %s program %q: unexpected errors %+v", script.name, p.Language, p.Text, p.Result.Errors)
 			}
 		}
 	}
