@@ -8,6 +8,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/directive"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/platform"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
@@ -99,8 +100,8 @@ func RelativeName(from, to string) string {
 }
 
 func relativeTo(dir, path string) (string, bool) {
-	rel, err := filepath.Rel(dir, path)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+	rel, ok := platform.RelativeWithin(dir, path)
+	if !ok {
 		return filepath.ToSlash(path), false
 	}
 	return filepath.ToSlash(rel), true

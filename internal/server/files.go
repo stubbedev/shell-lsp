@@ -16,6 +16,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/navigation"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/platform"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
@@ -121,13 +122,11 @@ type move struct {
 }
 
 func (m move) apply(path string) (string, bool) {
-	if path == m.from {
-		return m.to, true
+	rel, ok := platform.RelativeWithin(m.from, path)
+	if !ok {
+		return path, false
 	}
-	if rel, err := filepath.Rel(m.from, path); err == nil && !strings.HasPrefix(rel, "..") && rel != "." {
-		return filepath.Join(m.to, rel), true
-	}
-	return path, false
+	return filepath.Join(m.to, rel), true
 }
 
 func (s *Server) handleWillRenameFiles(ctx context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
@@ -206,7 +205,7 @@ func rewritePath(original, newDir, newTarget, home string) string {
 	case filepath.IsAbs(original):
 		return newTarget
 	case strings.HasPrefix(original, "~/") && home != "":
-		if rel, err := filepath.Rel(home, newTarget); err == nil && !strings.HasPrefix(rel, "..") {
+		if rel, ok := platform.RelativeWithin(home, newTarget); ok {
 			return "~/" + filepath.ToSlash(rel)
 		}
 		return newTarget
