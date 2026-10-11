@@ -89,7 +89,7 @@ func (p *pass) checkTestOperand(o testOperand) {
 	if !ok {
 		return
 	}
-	glob := isGlob(o.word)
+	glob := isGlob(o.word) && (!o.double || !qualifiedGlob(o.word, false))
 	switch o.shape {
 	case shapeUnary:
 		if glob {

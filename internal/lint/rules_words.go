@@ -3,6 +3,7 @@ package lint
 import (
 	"strings"
 
+	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -201,7 +202,7 @@ func checkArrayCommas(p *pass, n syntax.Node) {
 
 func hasUnbracedComma(w *syntax.Word) bool {
 	found := false
-	for _, part := range w.Parts {
+	for _, part := range w.Parts[:parser.GlobQualifiers(w, true)] {
 		if lit, ok := part.(*syntax.Lit); ok {
 			braceDepth(0, lit.Value, func() { found = true })
 		}

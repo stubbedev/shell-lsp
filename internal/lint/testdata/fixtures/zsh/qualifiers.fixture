@@ -37,3 +37,20 @@ for dump in ~/.zcompdump(N.mh+24); do
   compinit -d $dump
 done
 >>- SC1071 1:1 -- shellcheck refuses zsh; the qualifiers make the word a glob, so the loop runs once per match
+
+### a comma in a qualifier range does not separate array elements
+#!/bin/zsh
+local -a recent=( *(om[1,5]N) )
+print -rl -- $recent
+>>- SC1071 1:1 -- shellcheck refuses zsh; [1,5] selects the first five matches
+
+### (#q) makes [[ ]] glob and join the matches into one word
+#!/bin/zsh
+[[ -n file*(#qN) ]] && print -r -- some
+>>- SC1071 1:1 -- shellcheck refuses zsh; this is the manual's own example of testing whether a glob matches
+
+### a glob without (#q) is not expanded by [[ ]]
+#!/bin/zsh
+[[ -e *.log ]] && print -r -- logs
+>>- SC1071 1:1 -- shellcheck refuses zsh
+>>+ SC2144 2:7 -- [[ ]] does not glob, so this tests for a file named *.log
