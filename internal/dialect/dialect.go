@@ -138,7 +138,8 @@ func (in Input) Mksh() bool {
 // the first command (an unrecognised shell there means bash, as in
 // shellcheck), shebang (with interpreter resolved through PATH so
 // `#!/usr/bin/env bash` works, flags like `#!/bin/sh -e` tolerated),
-// file extension, editor languageId, vim modeline. The default is
+// a zsh completion system tag (`#compdef`, `#autoload`) on the first
+// line, file extension, editor languageId, vim modeline. The default is
 // bash, matching the common editor setup where shellscript buffers
 // are bash.
 func Detect(override *Dialect, in Input) Dialect {
@@ -153,6 +154,9 @@ func Detect(override *Dialect, in Input) Dialect {
 	}
 	if d, ok := FromShebang(in.Text); ok {
 		return d
+	}
+	if completionTag(in.Text) {
+		return Zsh
 	}
 	if d, ok := FromFileName(in.URI); ok {
 		return d
@@ -198,6 +202,14 @@ func Interpreter(text string) (string, bool) {
 		return name + " " + fields[1], true
 	}
 	return name, true
+}
+
+var completionTags = []string{"#compdef", "#autoload"}
+
+func completionTag(text string) bool {
+	first, _, _ := strings.Cut(text, "\n")
+	tag, _, _ := strings.Cut(strings.TrimRight(first, "\r"), " ")
+	return slices.Contains(completionTags, tag)
 }
 
 func FromFileName(path string) (Dialect, bool) {

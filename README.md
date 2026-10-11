@@ -59,7 +59,8 @@ any other client.
 
 ## Goals
 
-- Auto-detected dialects: bash, zsh, sh, dash, ksh (shebang, extension, modeline)
+- Auto-detected dialects: bash, zsh, sh, dash, ksh (shebang, zsh completion
+  `#compdef` and `#autoload` tags, extension, modeline)
 - Parity with bash-language-server: diagnostics, completion, hover, definition,
   symbols, folding, formatting, and linting at least as thorough as shellcheck
 - Full LSP coverage: references, rename, semantic tokens, code actions,
