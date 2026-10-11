@@ -53,12 +53,41 @@ type Action struct {
 	Refactor    *Refactor
 }
 
+type Document struct {
+	Tree *parser.Tree
+}
+
 type Input struct {
-	Tree           *parser.Tree
+	Document
 	Selection      parser.Span
 	Diagnostics    []Diagnostic
 	AllDiagnostics []Diagnostic
-	LocalSupported bool
+}
+
+type Change struct {
+	Title string
+	Edits []textedit.Edit
+}
+
+type refactoring struct {
+	kind    RefactorKind
+	action  Kind
+	compute func(*site) (Change, bool)
+}
+
+var refactorings = []refactoring{
+	{ExtractVariable, RefactorExtract, extractVariable},
+	{ExtractFunction, RefactorExtract, extractFunction},
+	{ToggleQuotes, RefactorRewrite, toggleQuotes},
+	{DeclareLocal, RefactorRewrite, declareLocal},
+}
+
+func Refactorings() []RefactorKind {
+	kinds := make([]RefactorKind, len(refactorings))
+	for i, r := range refactorings {
+		kinds[i] = r.kind
+	}
+	return kinds
 }
 
 func Actions(in Input) []Action {
@@ -66,28 +95,19 @@ func Actions(in Input) []Action {
 	for _, d := range in.Diagnostics {
 		out = append(out, quickFixes(in.Tree, d)...)
 	}
-	for _, kind := range []RefactorKind{ExtractVariable, ExtractFunction, ToggleQuotes, DeclareLocal} {
-		r := Refactor{Kind: kind, Start: in.Selection.Start, End: in.Selection.End}
-		if kind == DeclareLocal && !in.LocalSupported {
-			continue
-		}
-		edits, title, ok := Compute(in.Tree, r)
+	s := newSite(in.Document, in.Selection)
+	for _, ref := range refactorings {
+		change, ok := ref.compute(s)
 		if !ok {
 			continue
 		}
-		out = append(out, Action{Title: title, Kind: refactorKinds[kind], Edits: edits, Refactor: &r})
+		r := Refactor{Kind: ref.kind, Start: in.Selection.Start, End: in.Selection.End}
+		out = append(out, Action{Title: change.Title, Kind: ref.action, Edits: change.Edits, Refactor: &r})
 	}
 	if fixAll := FixAll(in.AllDiagnostics); len(fixAll) > 0 {
 		out = append(out, Action{Title: "Apply all automatic fixes", Kind: SourceFixAll, Edits: fixAll})
 	}
 	return out
-}
-
-var refactorKinds = map[RefactorKind]Kind{
-	ExtractVariable: RefactorExtract,
-	ExtractFunction: RefactorExtract,
-	ToggleQuotes:    RefactorRewrite,
-	DeclareLocal:    RefactorRewrite,
 }
 
 func FixAll(diags []Diagnostic) []textedit.Edit {
@@ -169,34 +189,46 @@ func directiveEdit(text string, lineAt int, indent, code string) textedit.Edit {
 	return textedit.Edit{Start: lineAt, End: lineAt, NewText: indent + directivePrefix + code + "\n"}
 }
 
-func Compute(tree *parser.Tree, r Refactor) ([]textedit.Edit, string, bool) {
-	sel := parser.Span{Start: r.Start, End: r.End}
-	switch r.Kind {
-	case ExtractVariable:
-		return extractVariable(tree, sel)
-	case ExtractFunction:
-		return extractFunction(tree, sel)
-	case ToggleQuotes:
-		return toggleQuotes(tree, sel.Start)
-	case DeclareLocal:
-		return declareLocal(tree, sel.Start)
-	}
-	return nil, "", false
+type site struct {
+	Document
+	sel    parser.Span
+	path   []syntax.Node
+	walked bool
 }
 
-func extractVariable(tree *parser.Tree, sel parser.Span) ([]textedit.Edit, string, bool) {
+func newSite(doc Document, sel parser.Span) *site {
+	return &site{Document: doc, sel: sel}
+}
+
+func (s *site) pathAt() []syntax.Node {
+	if !s.walked {
+		s.path, s.walked = s.Tree.PathAt(s.sel.Start), true
+	}
+	return s.path
+}
+
+func Compute(doc Document, r Refactor) (Change, bool) {
+	i := slices.IndexFunc(refactorings, func(ref refactoring) bool { return ref.kind == r.Kind })
+	if i < 0 {
+		return Change{}, false
+	}
+	return refactorings[i].compute(newSite(doc, parser.Span{Start: r.Start, End: r.End}))
+}
+
+func extractVariable(s *site) (Change, bool) {
+	tree, sel := s.Tree, s.sel
 	text := tree.Text()
 	if sel.End <= sel.Start || strings.ContainsRune(text[sel.Start:sel.End], '\n') || inHeredoc(tree, sel) {
-		return nil, "", false
+		return Change{}, false
 	}
-	path := tree.PathAt(sel.Start)
+	path := s.pathAt()
 	word, inQuotes, ok := selectedWord(tree, path, sel)
 	if !ok {
-		return nil, "", false
+		return Change{}, false
 	}
 	stmt, ok := innermostStmt(tree, path)
 	if !ok || !startsLine(text, stmt.Start) {
-		return nil, "", false
+		return Change{}, false
 	}
 	name := uniqueName(tree, "value")
 	selected := text[sel.Start:sel.End]
@@ -209,10 +241,10 @@ func extractVariable(tree *parser.Tree, sel parser.Span) ([]textedit.Edit, strin
 	}
 	lineAt := lineStart(text, stmt.Start)
 	indent := leadingSpace(text, lineAt)
-	return []textedit.Edit{
+	return Change{Title: "Extract to variable " + name, Edits: []textedit.Edit{
 		{Start: lineAt, End: lineAt, NewText: indent + name + "=" + rhs + "\n"},
 		{Start: sel.Start, End: sel.End, NewText: replacement},
-	}, "Extract to variable " + name, true
+	}}, true
 }
 
 func inHeredoc(tree *parser.Tree, sel parser.Span) bool {
@@ -266,16 +298,17 @@ func partsAligned(tree *parser.Tree, parts []syntax.WordPart, sel parser.Span) b
 	return startOK && endOK
 }
 
-func extractFunction(tree *parser.Tree, sel parser.Span) ([]textedit.Edit, string, bool) {
+func extractFunction(s *site) (Change, bool) {
+	tree, sel := s.Tree, s.sel
 	text := tree.Text()
 	stmts, ok := selectedStatements(tree, sel)
 	if !ok {
-		return nil, "", false
+		return Change{}, false
 	}
 	first, last := stmts[0], stmts[len(stmts)-1]
 	body := text[lineStart(text, first.Start):lineEnd(text, last.End)]
 	if usesControlFlow(tree, parser.Span{Start: first.Start, End: last.End}) {
-		return nil, "", false
+		return Change{}, false
 	}
 	name := uniqueName(tree, "extracted")
 	call := name
@@ -286,10 +319,10 @@ func extractFunction(tree *parser.Tree, sel parser.Span) ([]textedit.Edit, strin
 	outer := topLevelStart(tree, first.Start)
 	insertAt := lineStart(text, outer)
 	fn := leadingSpace(text, insertAt) + name + "() {\n" + reindent(body, leadingSpace(text, insertAt)+"\t") + leadingSpace(text, insertAt) + "}\n\n"
-	return []textedit.Edit{
+	return Change{Title: "Extract to function " + name, Edits: []textedit.Edit{
 		{Start: insertAt, End: insertAt, NewText: fn},
 		{Start: lineStart(text, first.Start), End: lineEnd(text, last.End), NewText: indent + call},
-	}, "Extract to function " + name, true
+	}}, true
 }
 
 func selectedStatements(tree *parser.Tree, sel parser.Span) ([]parser.Span, bool) {
@@ -380,28 +413,32 @@ func topLevelStart(tree *parser.Tree, offset int) int {
 	return offset
 }
 
-func toggleQuotes(tree *parser.Tree, at int) ([]textedit.Edit, string, bool) {
-	for _, node := range slices.Backward(tree.PathAt(at)) {
+func toggleQuotes(s *site) (Change, bool) {
+	for _, node := range slices.Backward(s.pathAt()) {
 		switch q := node.(type) {
 		case *syntax.SglQuoted:
 			if q.Dollar || !q.Right.IsValid() {
-				return nil, "", false
+				return Change{}, false
 			}
-			span, _ := tree.NodeSpan(q)
-			return []textedit.Edit{{Start: span.Start, End: span.End, NewText: `"` + escapeDouble(q.Value) + `"`}}, "Convert to double quotes", true
+			span, _ := s.Tree.NodeSpan(q)
+			return Change{Title: "Convert to double quotes", Edits: []textedit.Edit{{Start: span.Start, End: span.End, NewText: `"` + escapeDouble(q.Value) + `"`}}}, true
 		case *syntax.DblQuoted:
 			if q.Dollar || !q.Right.IsValid() {
-				return nil, "", false
+				return Change{}, false
 			}
 			value, ok := parser.Literal(&syntax.Word{Parts: []syntax.WordPart{q}})
 			if !ok {
-				return nil, "", false
+				return Change{}, false
 			}
-			span, _ := tree.NodeSpan(q)
-			return []textedit.Edit{{Start: span.Start, End: span.End, NewText: "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"}}, "Convert to single quotes", true
+			span, _ := s.Tree.NodeSpan(q)
+			return Change{Title: "Convert to single quotes", Edits: []textedit.Edit{{Start: span.Start, End: span.End, NewText: singleQuoted(value)}}}, true
 		}
 	}
-	return nil, "", false
+	return Change{}, false
+}
+
+func singleQuoted(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 func escapeDouble(s string) string {
@@ -415,17 +452,21 @@ func escapeDouble(s string) string {
 	return sb.String()
 }
 
-func declareLocal(tree *parser.Tree, at int) ([]textedit.Edit, string, bool) {
+func declareLocal(s *site) (Change, bool) {
+	tree, at := s.Tree, s.sel.Start
+	if !tree.Dialect.Features().Local {
+		return Change{}, false
+	}
 	for _, def := range tree.Definitions {
 		if !def.NameSpan.Covers(at) || def.Kind != parser.DefAssign || def.Local || def.Within == parser.FileScope {
 			continue
 		}
 		if !startsLine(tree.Text(), def.Span.Start) {
-			return nil, "", false
+			return Change{}, false
 		}
-		return []textedit.Edit{{Start: def.Span.Start, End: def.Span.Start, NewText: "local "}}, fmt.Sprintf("Declare %s as local", def.Name), true
+		return Change{Title: fmt.Sprintf("Declare %s as local", def.Name), Edits: []textedit.Edit{{Start: def.Span.Start, End: def.Span.Start, NewText: "local "}}}, true
 	}
-	return nil, "", false
+	return Change{}, false
 }
 
 func innermostStmt(tree *parser.Tree, path []syntax.Node) (parser.Span, bool) {

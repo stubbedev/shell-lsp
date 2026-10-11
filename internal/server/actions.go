@@ -51,8 +51,7 @@ func (s *Server) handleCodeAction(ctx context.Context, docs *docstore.View, para
 			Start: snap.doc.PositionToOffset(actionParams.Range.Start, snap.encoding),
 			End:   snap.doc.PositionToOffset(actionParams.Range.End, snap.encoding),
 		},
-		Diagnostics:    s.toActionDiagnostics(snap, actionParams.Context.Diagnostics),
-		LocalSupported: snap.dialect.Features().Local,
+		Diagnostics: s.toActionDiagnostics(snap, actionParams.Context.Diagnostics),
 	}
 	if wants(only, string(actions.SourceFixAll)) {
 		in.AllDiagnostics = s.lintActionDiagnostics(snap)
@@ -119,11 +118,11 @@ func (s *Server) handleCodeActionResolve(_ context.Context, docs *docstore.View,
 	if snap.doc.Version != data.Version {
 		return nil, jsonrpc.NewError(jsonrpc.CodeContentModified, "%s changed since the action was offered", data.URI)
 	}
-	edits, _, ok := actions.Compute(snap.tree, data.Refactor)
+	change, ok := actions.Compute(actions.Document{Tree: snap.tree}, data.Refactor)
 	if !ok {
 		return nil, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "the %s refactoring no longer applies", data.Refactor.Kind)
 	}
-	edit := s.workspaceEdit(snap.doc, snap.encoding, edits)
+	edit := s.workspaceEdit(snap.doc, snap.encoding, change.Edits)
 	action.Edit = &edit
 	action.Data = nil
 	return action, nil

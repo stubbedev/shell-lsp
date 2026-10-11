@@ -24,12 +24,18 @@ func selection(t *testing.T, src string) (string, parser.Span) {
 func refactor(t *testing.T, kind RefactorKind, src string) (string, string, bool) {
 	t.Helper()
 
+	return refactorIn(t, dialect.Bash, kind, src)
+}
+
+func refactorIn(t *testing.T, d dialect.Dialect, kind RefactorKind, src string) (string, string, bool) {
+	t.Helper()
+
 	text, sel := selection(t, src)
-	edits, title, ok := Compute(parser.Parse(text, dialect.Bash), Refactor{Kind: kind, Start: sel.Start, End: sel.End})
+	change, ok := Compute(Document{Tree: parser.Parse(text, d)}, Refactor{Kind: kind, Start: sel.Start, End: sel.End})
 	if !ok {
 		return "", "", false
 	}
-	return textedit.Apply(text, edits), title, true
+	return textedit.Apply(text, change.Edits), change.Title, true
 }
 
 func TestExtractVariable(t *testing.T) {
@@ -110,6 +116,9 @@ func TestDeclareLocal(t *testing.T) {
 		if got, _, ok := refactor(t, DeclareLocal, src); ok {
 			t.Errorf("declare local %q offered: %q", src, got)
 		}
+	}
+	if got, _, ok := refactorIn(t, dialect.Posix, DeclareLocal, "f() {\n\t«count»=1\n}\n"); ok {
+		t.Errorf("declare local offered in POSIX sh, which has no local: %q", got)
 	}
 }
 

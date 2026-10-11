@@ -109,15 +109,15 @@ func TestFeaturesOverCorpus(t *testing.T) {
 				for _, s := range structure.SelectionPath(tree, offset) {
 					inBounds("selection", s)
 				}
-				for _, kind := range []actions.RefactorKind{actions.ExtractVariable, actions.ExtractFunction, actions.ToggleQuotes, actions.DeclareLocal} {
-					edits, _, ok := actions.Compute(tree, actions.Refactor{Kind: kind, Start: offset, End: min(offset+5, len(text))})
+				for _, kind := range actions.Refactorings() {
+					change, ok := actions.Compute(actions.Document{Tree: tree}, actions.Refactor{Kind: kind, Start: offset, End: min(offset+5, len(text))})
 					if !ok {
 						continue
 					}
-					for _, e := range edits {
+					for _, e := range change.Edits {
 						inBounds("refactor edit", parser.Span{Start: e.Start, End: e.End})
 					}
-					if refactored := textedit.Apply(text, edits); len(parser.Parse(refactored, d).Errors) > len(tree.Errors) {
+					if refactored := textedit.Apply(text, change.Edits); len(parser.Parse(refactored, d).Errors) > len(tree.Errors) {
 						t.Errorf("%s at %d introduced syntax errors:\n%s", kind, offset, refactored)
 					}
 				}

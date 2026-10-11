@@ -251,7 +251,7 @@ func BenchmarkCodeActions(b *testing.B) {
 	tree := parser.Parse(text, dialect.Bash)
 	offset := strings.LastIndex(text, "count=0")
 	for b.Loop() {
-		actions.Actions(actions.Input{Tree: tree, Selection: parser.Span{Start: offset, End: offset + 5}, LocalSupported: true})
+		actions.Actions(actions.Input{Tree: tree, Selection: parser.Span{Start: offset, End: offset + 5}})
 	}
 }
 
