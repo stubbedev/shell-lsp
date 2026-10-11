@@ -93,7 +93,7 @@ the offending field.
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `dialect` | detected per file | Force `bash`, `zsh`, `sh`, `dash` or `ksh` for every document |
+| `dialect` | detected per file | Force `bash`, `zsh`, `sh`, `dash`, `ksh` or `busybox` for every document |
 | `lint.enable` | `true` | Report lint findings alongside syntax errors |
 | `lint.exclude` | `[]` | Codes to suppress, as `SC2034` or `2034` |
 | `lint.optional` | `[]` | Opt-in checks to enable by name, such as `require-variable-braces`, or `all` |
