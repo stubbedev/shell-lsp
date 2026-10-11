@@ -343,7 +343,7 @@ func analyzeFlow(tree *parser.Tree, imports []parser.Import, bats bool) *flowRes
 		dialect:    tree.Dialect,
 		writes:     indexWrites(tree),
 		imported:   importedGlobals(imports),
-		result:     &flowResult{expansions: map[*syntax.ParamExp]space{}, reached: map[*syntax.Stmt]bool{}, called: map[*syntax.FuncDecl]bool{}, lostReads: map[syntax.Node]lostWrite{}, flowFacts: newFlowFacts()},
+		result:     &flowResult{expansions: map[*syntax.ParamExp]space{}, reached: make(map[*syntax.Stmt]bool, tree.Statements), called: map[*syntax.FuncDecl]bool{}, lostReads: map[syntax.Node]lostWrite{}, flowFacts: newFlowFacts()},
 		summaries:  map[*syntax.FuncDecl]*summary{},
 		computing:  map[*syntax.FuncDecl]bool{},
 		staticFunc: map[string]*syntax.FuncDecl{},

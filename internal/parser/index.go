@@ -164,6 +164,7 @@ type Index struct {
 	Comments    []Comment
 	Keywords    []Keyword
 	Tests       []Test
+	Statements  int
 
 	definitionsByBinding map[binding][]int
 	attrsByBinding       map[binding]Attr
@@ -321,6 +322,7 @@ func (b *builder) enter(node syntax.Node) {
 	case *syntax.Comment:
 		b.index.Comments = append(b.index.Comments, Comment{Span: b.span(n), Text: n.Text})
 	case *syntax.Stmt:
+		b.index.Statements++
 		liftFunctionList(n)
 		b.recoveredStmt(n)
 	case *syntax.Lit:

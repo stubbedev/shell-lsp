@@ -36,7 +36,7 @@ func checkUnreachable(p *pass, n syntax.Node) {
 		return
 	}
 	if p.statements == nil {
-		p.statements = make([]nestedStmt, 0, len(p.tree.Commands)+1)
+		p.statements = make([]nestedStmt, 0, p.tree.Statements)
 		p.withFlow(p.reportUnreachable)
 	}
 	outer, _ := p.enclosingStmt()
