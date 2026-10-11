@@ -13,6 +13,8 @@ import (
 
 const FileName = ".editorconfig"
 
+const minSweep = 256
+
 const (
 	unset         = "unset"
 	byteOrderMark = "\uFEFF"
@@ -101,8 +103,9 @@ type Resolver struct {
 	now     func() time.Time
 	recheck time.Duration
 
-	mu    sync.Mutex
-	files map[string]cachedFile
+	mu      sync.Mutex
+	files   map[string]cachedFile
+	sweepAt int
 }
 
 type cachedFile struct {
@@ -112,7 +115,7 @@ type cachedFile struct {
 }
 
 func NewResolver(read ReadFile, now func() time.Time, recheck time.Duration) *Resolver {
-	return &Resolver{read: read, now: now, recheck: recheck, files: map[string]cachedFile{}}
+	return &Resolver{read: read, now: now, recheck: recheck, files: map[string]cachedFile{}, sweepAt: minSweep}
 }
 
 func (r *Resolver) Properties(path string, languages []string) (Properties, error) {
@@ -170,6 +173,18 @@ func (r *Resolver) load(path, dir string) (File, bool, error) {
 	}
 	r.mu.Lock()
 	r.files[path] = entry
+	if len(r.files) >= r.sweepAt {
+		r.sweepLocked(now)
+	}
 	r.mu.Unlock()
 	return entry.file, entry.present, nil
+}
+
+func (r *Resolver) sweepLocked(now time.Time) {
+	for path, cached := range r.files {
+		if now.Sub(cached.checked) >= r.recheck {
+			delete(r.files, path)
+		}
+	}
+	r.sweepAt = max(minSweep, 2*len(r.files))
 }
