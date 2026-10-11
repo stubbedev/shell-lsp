@@ -1,6 +1,9 @@
 package lint
 
-import "slices"
+import (
+	"slices"
+	"strings"
+)
 
 type meta struct {
 	severity Severity
@@ -9,17 +12,42 @@ type meta struct {
 	summary  string
 }
 
-var behaviourOptionals = []string{uppercaseOptional}
+type OptionalCheck struct {
+	Name    string
+	Summary string
+	Codes   []Code
+}
 
-func OptionalChecks() []string {
-	names := slices.Clone(behaviourOptionals)
-	for _, m := range catalog {
-		if m.optional != "" {
-			names = append(names, m.optional)
-		}
+var behaviourOptionals = []OptionalCheck{{
+	Name:    uppercaseOptional,
+	Summary: "SC2154 also reports unassigned variables with all-uppercase names, which are otherwise taken to come from the environment.",
+}}
+
+func OptionalChecks() []OptionalCheck {
+	out := slices.Clone(behaviourOptionals)
+	index := make(map[string]int, len(out))
+	for i, check := range out {
+		index[check.Name] = i
 	}
-	slices.Sort(names)
-	return slices.Compact(names)
+	for _, code := range Codes() {
+		name := catalog[code].optional
+		if name == "" {
+			continue
+		}
+		i, ok := index[name]
+		if !ok {
+			i = len(out)
+			index[name] = i
+			out = append(out, OptionalCheck{Name: name})
+		}
+		out[i].Codes = append(out[i].Codes, code)
+	}
+	slices.SortFunc(out, func(a, b OptionalCheck) int { return strings.Compare(a.Name, b.Name) })
+	return out
+}
+
+func IsOptionalCheck(name string) bool {
+	return slices.ContainsFunc(OptionalChecks(), func(check OptionalCheck) bool { return check.Name == name })
 }
 
 func Codes() []Code {

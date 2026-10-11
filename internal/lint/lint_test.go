@@ -26,17 +26,24 @@ func TestCodesRoundTripThroughText(t *testing.T) {
 func TestOptionalChecksNameEveryOptIn(t *testing.T) {
 	t.Parallel()
 
-	names := OptionalChecks()
+	checks := OptionalChecks()
+	names := make([]string, len(checks))
+	for i, check := range checks {
+		names[i] = check.Name
+		if (len(check.Codes) == 0) == (check.Summary == "") {
+			t.Errorf("%s needs either the codes it turns on or a summary of what it changes: %+v", check.Name, check)
+		}
+	}
 	if !slices.IsSorted(names) || len(slices.Compact(slices.Clone(names))) != len(names) {
 		t.Errorf("OptionalChecks() = %v, want sorted unique names", names)
 	}
 	for _, want := range []string{uppercaseOptional, "require-variable-braces", "arithmetic-injection"} {
-		if !slices.Contains(names, want) {
+		if !IsOptionalCheck(want) {
 			t.Errorf("OptionalChecks() lacks %s", want)
 		}
 	}
 	for code, m := range catalog {
-		if m.optional != "" && !slices.Contains(names, m.optional) {
+		if m.optional != "" && !IsOptionalCheck(m.optional) {
 			t.Errorf("%s is gated by %s, which OptionalChecks() lacks", code, m.optional)
 		}
 	}

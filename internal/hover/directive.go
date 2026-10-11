@@ -2,6 +2,7 @@ package hover
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -28,14 +29,18 @@ func OptionalCheckDoc(name string) string {
 	if name == directive.All {
 		return "Every optional check."
 	}
-	var codes []string
-	for _, info := range lint.Catalog() {
-		if info.Optional == name {
-			codes = append(codes, "`"+info.Code.String()+"`")
-		}
+	checks := lint.OptionalChecks()
+	i := slices.IndexFunc(checks, func(check lint.OptionalCheck) bool { return check.Name == name })
+	if i < 0 {
+		return ""
 	}
-	if len(codes) == 0 {
-		return "Changes how other checks behave rather than adding findings of its own."
+	check := checks[i]
+	if len(check.Codes) == 0 {
+		return check.Summary
+	}
+	codes := make([]string, len(check.Codes))
+	for j, code := range check.Codes {
+		codes[j] = "`" + code.String() + "`"
 	}
 	return "Turns on " + strings.Join(codes, ", ") + "."
 }

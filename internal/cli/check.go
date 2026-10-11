@@ -50,9 +50,7 @@ func runCheck(env Env, args []string) int {
 		fmt.Fprintln(env.Stdout, versionPrefix+env.Version)
 		return statusOK
 	case opts.listOptional:
-		for _, name := range lint.OptionalChecks() {
-			fmt.Fprintln(env.Stdout, name)
-		}
+		writeOptionalChecks(env.Stdout)
 		return statusOK
 	case len(opts.operands) == 0:
 		fmt.Fprintf(env.Stderr, "%s check: no files specified\n\n%s", programName, checkUsage)
@@ -87,10 +85,22 @@ func runCheck(env Env, args []string) int {
 	return statusOK
 }
 
+func writeOptionalChecks(out io.Writer) {
+	for _, check := range lint.OptionalChecks() {
+		fmt.Fprintln(out, check.Name)
+		if check.Summary != "" {
+			fmt.Fprintln(out, "    "+check.Summary)
+		}
+		for _, code := range check.Codes {
+			info, _ := lint.Describe(code)
+			fmt.Fprintf(out, "    %s  %s\n", code, info.Summary)
+		}
+	}
+}
+
 func warnUnknownOptional(stderr io.Writer, names []string, from string) {
-	known := lint.OptionalChecks()
 	for _, name := range names {
-		if name != allCodes && !slices.Contains(known, name) {
+		if name != allCodes && !lint.IsOptionalCheck(name) {
 			fmt.Fprintf(stderr, "%s check: %s names %q, which is not an optional check of shell-lsp (see --list-optional); it is ignored\n", programName, from, name)
 		}
 	}

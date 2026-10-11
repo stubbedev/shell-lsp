@@ -132,7 +132,11 @@ func codeLabelDetail(info lint.CodeInfo) string {
 
 func (c completer) optionalChecks(listed []string) []Item {
 	var items []Item
-	for i, name := range append([]string{directive.All}, lint.OptionalChecks()...) {
+	names := []string{directive.All}
+	for _, check := range lint.OptionalChecks() {
+		names = append(names, check.Name)
+	}
+	for i, name := range names {
 		if slices.Contains(listed, name) || !strings.HasPrefix(name, c.site.prefix) {
 			continue
 		}

@@ -244,7 +244,7 @@ func TestCheckWarnsAboutUnknownOptionalChecks(t *testing.T) {
 		t.Errorf("unknown optional check = %+v", got)
 	}
 	list := run(t, t.TempDir(), "", "check", "--list-optional")
-	if !strings.Contains(list.stdout, "require-variable-braces\n") || list.status != statusOK {
+	if !strings.Contains(list.stdout, "require-variable-braces\n    SC2250  A variable is expanded without braces.\n") || list.status != statusOK {
 		t.Errorf("--list-optional = %+v", list)
 	}
 }

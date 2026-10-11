@@ -34,7 +34,7 @@ position, so it is the same on every run.
 | `-S`, `--severity=LEVEL` | Report only findings at least this severe: `error`, `warning`, `info` or `style` |
 | `-e`, `--exclude=CODES` | Drop these codes, such as `SC2034,2086` or `SL1001`; repeatable |
 | `-i`, `--include=CODES` | Report only these codes; repeatable |
-| `-o`, `--enable=CHECKS` | Enable optional checks by name, or `all`; `--list-optional` lists them |
+| `-o`, `--enable=CHECKS` | Enable optional checks by name, or `all`; `--list-optional` lists them with the checks each turns on |
 | `--extended-analysis=BOOL` | Turn the data-flow checks off with `false` |
 | `-P`, `--source-path=DIRS` | Also look for sourced files in these directories (`SCRIPTDIR` is the script's own) |
 | `-a`, `--check-sourced` | Also report the findings in the files the scripts source |
