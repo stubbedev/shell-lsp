@@ -17,7 +17,7 @@ the `.editorconfig` reader are all native. Highlights:
   ([docs/rules.md](docs/rules.md)).
 - Completion and hover for builtins, keywords, functions, variables, paths,
   and the options and subcommands of installed commands, read from their
-  manual pages.
+  manual pages ([Completion and hover](#completion-and-hover)).
 - Navigation, references, rename, call hierarchy, symbols, semantic tokens,
   inlay hints, signature help, folding, selection ranges and code lenses.
 - Formatting with the printer shfmt is built on, honouring `.editorconfig`.
@@ -154,6 +154,34 @@ over `.editorconfig`, which wins over the editor's tab size; an explicit
 `dialect` setting wins over `shell_variant`. A malformed `.editorconfig` fails
 formatting with an error naming the key, and changes to it apply as soon as the
 editor reports them.
+
+## Completion and hover
+
+Besides commands, variables and paths, completion follows the shell's own
+vocabulary, filtered by the dialect of the document:
+
+- Builtin flags (`read -`, `declare -`, `kill -`, `mapfile -`...) from a table
+  per shell, so zsh offers `read -A` and dash offers only `read -r`.
+- Test expressions in `[[ ]]`, `[ ]` and `test`: unary operators at the start,
+  binary ones after an operand (`=~` and `<` only inside `[[ ]]`), variable
+  names after `-v` and option names after `-o`.
+- Option names after `set -o`, `shopt`, `setopt` and `unsetopt`, `emulate`
+  modes, and trap conditions and signal names after `trap` and `kill`.
+- Expansion operators after `${name` (`:-`, `##`, `//`, `@Q`...), zsh
+  parameter flags after `${(` and glob qualifiers after `*(`, associative
+  array keys inside `${name[`, and `printf` conversions in the format.
+- `case` patterns: the letters of the matching `getopts` optstring, or the
+  values the subject is compared against elsewhere in the file.
+- Snippets, for clients that support them: keyword skeletons, and idioms
+  such as a `getopts` loop, a cleanup trap, `mktemp` with cleanup, strict
+  mode and the script's own directory, written for the document's dialect.
+
+Completing inside a word can replace the rest of it (for clients with
+insert-replace support). Hover explains the same vocabulary where it is
+used: builtin flags (also combined, as in `read -rs`), test, arithmetic,
+list and `case` operators, redirections and whether a here-document body is
+expanded, signals, option names, expansion operators, and every letter that
+`$-` can contain.
 
 ## Linting
 
