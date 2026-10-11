@@ -4,12 +4,11 @@ import (
 	"slices"
 	"strings"
 
-	"mvdan.cc/sh/v3/syntax"
-
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/shelldocs"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
+	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
 type useContext uint8

@@ -1,6 +1,6 @@
 package lint
 
-import "mvdan.cc/sh/v3/syntax"
+import "github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 
 type nodeKind uint8
 

@@ -1,9 +1,8 @@
 package lint
 
 import (
-	"mvdan.cc/sh/v3/syntax"
-
 	"github.com/stubbedev/shell-lsp/internal/embedded"
+	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
 var embeddedSyntaxCodes = [...]Code{

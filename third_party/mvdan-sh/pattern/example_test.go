@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"regexp"
 
-	"mvdan.cc/sh/v3/pattern"
+	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/pattern"
 )
 
 func ExampleRegexp() {

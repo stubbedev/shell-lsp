@@ -3,7 +3,7 @@ package parser
 import (
 	"fmt"
 
-	"mvdan.cc/sh/v3/syntax"
+	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
 func Walk(node syntax.Node, f func(syntax.Node) bool) {

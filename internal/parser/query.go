@@ -5,7 +5,7 @@ import (
 	"slices"
 	"sort"
 
-	"mvdan.cc/sh/v3/syntax"
+	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
 func (ix *Index) ScopeAt(offset int) ScopeID {

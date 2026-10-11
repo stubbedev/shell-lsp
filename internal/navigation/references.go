@@ -8,10 +8,9 @@ import (
 	"regexp"
 	"slices"
 
-	"mvdan.cc/sh/v3/syntax"
-
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
+	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
 var (

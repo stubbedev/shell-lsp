@@ -1,6 +1,6 @@
 package parser
 
-import "mvdan.cc/sh/v3/syntax"
+import "github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 
 func liftFunctionList(stmt *syntax.Stmt) {
 	decl, ok := stmt.Cmd.(*syntax.FuncDecl)

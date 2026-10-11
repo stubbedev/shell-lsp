@@ -45,10 +45,7 @@ shell-lsp is one static binary with no runtime dependencies. Pick one:
   together with a `SHA256SUMS` file. Download the one for your platform,
   check it with `sha256sum --check --ignore-missing SHA256SUMS`, make it
   executable and put it on `PATH` as `shell-lsp`.
-- **Go**: `go install .` in a clone of this repository. `go install
-  github.com/stubbedev/shell-lsp@latest` does not work, because Go refuses
-  modules whose go.mod replaces a dependency, and shell-lsp replaces
-  mvdan.cc/sh with [its fork](#parser).
+- **Go**: `go install github.com/stubbedev/shell-lsp@latest`
 - **Nix**: `nix profile install github:stubbedev/shell-lsp`, or try it with
   `nix run github:stubbedev/shell-lsp -- --version`
 - **VS Code**: the [Shell LSP extension](editors/vscode)
@@ -232,8 +229,8 @@ minutes.
 ## Parser
 
 Scripts are parsed with a fork of [mvdan.cc/sh](https://github.com/mvdan/sh)
-v3.14.1 in [third_party/mvdan-sh](third_party/mvdan-sh), which `go.mod`
-substitutes for the upstream module. Upstream treats zsh as experimental and
+v3.14.1 in [third_party/mvdan-sh](third_party/mvdan-sh), built as part of
+this module, so the server has no external Go dependencies at all. Upstream treats zsh as experimental and
 parses ksh as mksh, so the fork adds the rest of the zsh grammar (short and
 brace forms of loops and `if`, `foreach`, `repeat`, `{ } always { }`,
 anonymous functions with arguments, case groups, `coproc` without a name,

@@ -2,12 +2,12 @@
 
 This directory holds a fork of [mvdan.cc/sh](https://github.com/mvdan/sh) at
 **v3.14.1**, limited to the packages shell-lsp builds against (`syntax`,
-`expand`, `pattern`, `fileutil` and `internal`). The repository's `go.mod`
-points the module path at it with
-
-    replace mvdan.cc/sh/v3 => ./third_party/mvdan-sh
-
-so every import path stays `mvdan.cc/sh/v3/...`. The upstream `LICENSE` applies
+`expand`, `pattern`, `fileutil` and `internal`). It is part of the
+`github.com/stubbedev/shell-lsp` module and imported as
+`github.com/stubbedev/shell-lsp/third_party/mvdan-sh/...`; a `replace`
+directive would keep the upstream import paths, but Go refuses
+`go install module@version` for modules that replace a dependency. The
+patches below are written against upstream's paths. The upstream `LICENSE` applies
 to everything in this directory. Upstream style is kept on purpose, comments
 included, so that the changes below can be sent upstream as they are.
 
