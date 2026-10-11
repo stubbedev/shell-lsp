@@ -21,3 +21,25 @@ print -r -- $1
 echo "$0" "$1"
 >>> SC2270 3:1
 >>> SC2277 2:1
+
+### zsh assigns associative arrays from alternating keys and values
+#!/bin/zsh
+typeset -A table=(one 1 two 2)
+typeset -A keys=(
+  Home "${terminfo[khome]}"
+  End "${terminfo[kend]}"
+)
+typeset -A opts
+opts=(a 1 b 2)
+typeset -A subscripted=([a]=1 [b]=2)
+print -r -- $table[one] $keys[Home] $opts[a] $subscripted[b]
+>>- SC1071 1:1 -- shellcheck refuses zsh; zsh takes alternating keys and values
+
+### bash needs keys for associative array elements
+#!/bin/bash
+declare -A table=(one 1 two 2)
+echo "${table[one]}"
+>>> SC2190 2:19
+>>> SC2190 2:23
+>>> SC2190 2:25
+>>> SC2190 2:29

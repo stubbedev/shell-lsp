@@ -78,6 +78,7 @@ type Features struct {
 	DeclarationAssigns  bool
 	ArithmeticStatus    bool
 	AssignsPositionals  bool
+	AssociativePairs    bool
 }
 
 func (d Dialect) Features() Features {
@@ -93,7 +94,7 @@ func (d Dialect) Features() Features {
 			Arrays: true, AssociativeArrays: true, DoubleBracket: true,
 			ArithmeticCommand: true, ProcessSubstitution: true, GlobQualifiers: true,
 			Coproc: true, Nameref: true, Local: true, Select: true, LastPipeInShell: true, DeclarationAssigns: true,
-			ArithmeticStatus: true, AssignsPositionals: true,
+			ArithmeticStatus: true, AssignsPositionals: true, AssociativePairs: true,
 		}
 	case Posix:
 		return Features{SplitsUnquoted: true}
