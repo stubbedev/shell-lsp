@@ -46,13 +46,6 @@ func checkArithmeticDollar(p *pass, n syntax.Node) {
 	p.report(2004, span, "Arithmetic already expands variable names, so the $ in "+text+" is unnecessary; write "+inner+" instead.")
 }
 
-func (p *pass) isAssociative(a *syntax.Assign) bool {
-	if a.Name == nil {
-		return false
-	}
-	return p.tree.AttrsAnywhere(a.Name.Value).Has(parser.AttrAssoc)
-}
-
 func (p *pass) inArithmeticContext() bool {
 	for depth := 1; ; depth++ {
 		switch n := p.ancestor(depth).(type) {
@@ -63,7 +56,7 @@ func (p *pass) inArithmeticContext() bool {
 				return false
 			}
 		case *syntax.Assign:
-			return !p.isAssociative(n)
+			return n.Name == nil || !p.associativeArray(n.Name.Value)
 		case *syntax.ArithmCmd, *syntax.ArithmExp, *syntax.CStyleLoop:
 			return true
 		}

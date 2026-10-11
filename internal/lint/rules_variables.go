@@ -20,28 +20,6 @@ var variablesFamily = family{
 	rules: []rule{{on: nodes(&syntax.ParamExp{}, &syntax.Word{}, &syntax.Assign{}, &syntax.ArrayElem{}, &syntax.ForClause{}, &syntax.LetClause{}, &syntax.DeclClause{}, &syntax.CallExpr{}, &syntax.TestClause{}, &syntax.TestDecl{}), node: collectVariables, finish: reportVariables}},
 }
 
-var presetVariables = setOf(
-	"_", "BASH", "BASHOPTS", "BASHPID", "BASH_ALIASES", "BASH_ARGC", "BASH_ARGV", "BASH_ARGV0", "BASH_CMDS",
-	"BASH_COMMAND", "BASH_COMPAT", "BASH_ENV", "BASH_EXECUTION_STRING", "BASH_LINENO", "BASH_LOADABLES_PATH",
-	"BASH_MONOSECONDS", "BASH_REMATCH", "BASH_SOURCE", "BASH_SUBSHELL", "BASH_TRAPSIG", "BASH_VERSINFO",
-	"BASH_VERSION", "BASH_XTRACEFD", "CDPATH", "CHILD_MAX", "COLUMNS", "COMP_CWORD", "COMP_KEY", "COMP_LINE",
-	"COMP_POINT", "COMP_TYPE", "COMP_WORDBREAKS", "COMP_WORDS", "COMPREPLY", "COPROC", "DIRSTACK", "DISPLAY",
-	"EMACS", "ENV", "EPOCHREALTIME", "EPOCHSECONDS", "EUID", "EXECIGNORE", "FCEDIT", "FIGNORE", "FUNCNAME",
-	"FUNCNEST", "GLOBIGNORE", "GLOBSORT", "GROUPS", "HISTCMD", "HISTCONTROL", "HISTFILE", "HISTFILESIZE",
-	"HISTIGNORE", "HISTSIZE", "HISTTIMEFORMAT", "HOME", "HOSTFILE", "HOSTNAME", "HOSTTYPE", "IFS", "IGNOREEOF",
-	"INPUTRC", "INSIDE_EMACS", "LANG", "LANGUAGE", "LC_ALL", "LC_COLLATE", "LC_CTYPE", "LC_MESSAGES",
-	"LC_MONETARY", "LC_NUMERIC", "LC_TIME", "LINENO", "LINES", "LOGNAME", "MACHTYPE", "MAIL", "MAILCHECK",
-	"MAILPATH", "MAPFILE", "OLDPWD", "OPTARG", "OPTERR", "OPTIND", "OSTYPE", "PATH", "PIPESTATUS",
-	"POSIXLY_CORRECT", "PPID", "PROMPT_COMMAND", "PROMPT_DIRTRIM", "PS0", "PS1", "PS2", "PS3", "PS4", "PWD",
-	"RANDOM", "READLINE_ARGUMENT", "READLINE_LINE", "READLINE_MARK", "READLINE_POINT", "REPLY", "SECONDS",
-	"SHELL", "SHELLOPTS", "SHLVL", "SRANDOM", "TERM", "TIMEFORMAT", "TMOUT", "TMPDIR", "TZ", "UID", "USER",
-	"XAUTHORITY", "auto_resume", "histchars", "rest", "REST",
-	"FLAGS_ARGV", "FLAGS_ERROR", "FLAGS_FALSE", "FLAGS_HELP", "FLAGS_PARENT", "FLAGS_RESERVED", "FLAGS_TRUE",
-	"FLAGS_VERSION",
-)
-
-var promptVariables = setOf("PS1", "PS2", "PS3", "PS4", "PROMPT_COMMAND")
-
 var batsVariables = []string{"status", "output", "lines", "stderr", "stderr_lines"}
 
 var shflagsDefiners = setOf("DEFINE_string", "DEFINE_boolean", "DEFINE_integer", "DEFINE_float")
@@ -230,6 +208,9 @@ func alternativeOnName(pe *syntax.ParamExp) bool {
 }
 
 func guarded(pe *syntax.ParamExp) bool {
+	if pe.IsSet {
+		return true
+	}
 	if pe.Exp == nil {
 		return false
 	}
@@ -259,7 +240,7 @@ func (p *pass) collectAssign(a *syntax.Assign) {
 		p.variables.use(name)
 	}
 	p.subscript(a.Index, name, true)
-	if promptVariables[name] && a.Value != nil {
+	if p.parameters.is(name, parameterPrompt) && a.Value != nil {
 		if span, ok := p.span(a); ok {
 			p.scanWord(a.Value, span)
 		}
@@ -514,13 +495,12 @@ func (p *pass) comparedName(w *syntax.Word) {
 type variableFacts struct {
 	assigned map[string]bool
 	used     map[string]bool
-	assoc    map[string]bool
 	last     map[string]parser.Span
 }
 
 func (p *pass) variableFacts() variableFacts {
 	u := &p.variables
-	f := variableFacts{assigned: map[string]bool{}, used: map[string]bool{}, assoc: p.associativeArrays(), last: map[string]parser.Span{}}
+	f := variableFacts{assigned: map[string]bool{}, used: map[string]bool{}, last: map[string]parser.Span{}}
 	site := func(name string, span parser.Span) {
 		f.assigned[name] = true
 		if prev, ok := f.last[name]; !ok || span.Start >= prev.Start {
@@ -567,16 +547,20 @@ func (p *pass) variableFacts() variableFacts {
 	return f
 }
 
-func (p *pass) associativeArrays() map[string]bool {
-	if p.associative == nil {
-		p.associative = map[string]bool{}
-		for _, def := range p.tree.Definitions {
-			if def.Attrs.Has(parser.AttrAssoc) {
-				p.associative[def.Name] = true
-			}
+func (p *pass) associativeArray(name string) bool {
+	if p.tree.AttrsAnywhere(name).Has(parser.AttrAssoc) {
+		return true
+	}
+	return p.parameters.is(name, parameterAssociative) && !p.declares(name)
+}
+
+func (p *pass) declares(name string) bool {
+	for i := range p.tree.Definitions {
+		if def := &p.tree.Definitions[i]; def.Kind == parser.DefDeclare && def.Name == name {
+			return true
 		}
 	}
-	return p.associative
+	return false
 }
 
 func (p *pass) definitionSite(def *parser.Definition) parser.Span {
@@ -604,7 +588,7 @@ func reportVariables(p *pass) {
 func (p *pass) reportUnused(f variableFacts) {
 	names := make([]string, 0, len(f.last))
 	for name := range f.last {
-		if !f.used[name] && !strings.HasPrefix(name, "_") && !presetVariables[name] {
+		if !f.used[name] && !strings.HasPrefix(name, "_") && !p.parameters.has(name) {
 			names = append(names, name)
 		}
 	}
@@ -621,7 +605,7 @@ func (p *pass) reportUnassigned(f variableFacts) {
 	})
 	seen := map[string]bool{}
 	for _, r := range reads {
-		if seen[r.name] || f.assigned[r.name] || presetVariables[r.name] || (r.array != "" && f.assoc[r.array]) {
+		if seen[r.name] || f.assigned[r.name] || p.parameters.has(r.name) || (r.array != "" && p.associativeArray(r.array)) {
 			continue
 		}
 		seen[r.name] = true

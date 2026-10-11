@@ -50,7 +50,7 @@ func (p *pass) quotesPromptOrVariableName() bool {
 	for depth := range 2 {
 		switch a := p.ancestor(depth).(type) {
 		case *syntax.Assign:
-			if a.Name != nil && promptVariables[a.Name.Value] {
+			if a.Name != nil && p.parameters.is(a.Name.Value, parameterPrompt) {
 				return true
 			}
 		case *syntax.UnaryTest:

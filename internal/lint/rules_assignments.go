@@ -256,7 +256,7 @@ func checkArrayLiteral(p *pass, n syntax.Node) {
 	if !ok || a.Array == nil || a.Index != nil || a.Name == nil {
 		return
 	}
-	associative := p.associativeArrays()[a.Name.Value]
+	associative := p.associativeArray(a.Name.Value)
 	for _, elem := range a.Array.Elems {
 		switch {
 		case elem.Index != nil:

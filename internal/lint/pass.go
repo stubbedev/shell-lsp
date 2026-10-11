@@ -42,7 +42,7 @@ type pass struct {
 	shellChosen    bool
 	shellOptions   *shellOptions
 	variables      variableUsage
-	associative    map[string]bool
+	parameters     parameterTable
 	dialectGuessed bool
 	emptinessTests map[int]bool
 }
@@ -53,9 +53,10 @@ func newPass(tree *parser.Tree, imports []parser.Import, opts Options) *pass {
 	return &pass{
 		tree: tree, imports: imports, sources: opts.Sources, text: tree.Text(), dialect: tree.Dialect, bats: tree.Bats(),
 		firstCommand: firstCommand, directives: directives, catalog: catalog, rules: rules, nodeChecks: nodeChecks, commands: commandChecks,
-		settings:  fileWideSettings(directives, firstCommand, opts.Optional),
-		stmts:     make([]parser.Span, 0, len(tree.Commands)),
-		variables: variableUsage{reads: make([]variableRead, 0, len(tree.References))},
+		settings:   fileWideSettings(directives, firstCommand, opts.Optional),
+		stmts:      make([]parser.Span, 0, len(tree.Commands)),
+		variables:  variableUsage{reads: make([]variableRead, 0, len(tree.References))},
+		parameters: parametersOf(tree.Dialect),
 	}
 }
 

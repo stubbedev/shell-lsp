@@ -1,0 +1,103 @@
+### parameters the shell reads are not unused
+#!/bin/zsh
+PROMPT='%~ %# '
+RPROMPT='%D{%H:%M}'
+SAVEHIST=1000
+WORDCHARS=${WORDCHARS//\/}
+KEYTIMEOUT=1
+fpath=(~/.zfunc $fpath)
+cdpath=(~ ~/src)
+psvar=(one)
+typeset -ga precmd_functions
+precmd_functions+=(_title)
+reply=(a b)
+>>- SC1071 1:1 -- shellcheck refuses zsh; zsh reads every one of these parameters itself
+
+### line editor parameters in a widget
+#!/bin/zsh
+_accept() {
+  BUFFER+=$POSTDISPLAY
+  POSTDISPLAY=
+  (( CURSOR = $#BUFFER ))
+  region_highlight=()
+  print -r -- $WIDGET $KEYS $LBUFFER $RBUFFER
+}
+zle -N accept _accept
+>>- SC1071 1:1 -- shellcheck refuses zsh; zle sets and reads these parameters around every widget
+
+### completion parameters in a completion function
+#!/bin/zsh
+_tool() {
+  local curcontext=$curcontext state state_descr line ret=1
+  typeset -A opt_args
+  _arguments -C '1: :->cmd' && ret=0
+  print -r -- $words[CURRENT] $opt_args[-v] $context
+  return $ret
+}
+compdef _tool tool
+>>- SC1071 1:1 -- shellcheck refuses zsh; _arguments sets these parameters and the completion system reads them
+
+### parameters the shell and its modules set are assigned
+#!/bin/zsh
+print -r -- $ZSH_VERSION $ZSH_ARGZERO $argv $status $pipestatus $match $MATCH $EPOCHSECONDS
+print -r -- ${#history} $funcstack $functrace ${#widgets} $terminfo[khome] $fg[red]$reset_color
+print -r -- ${vcs_info_msg_0_} ${vcs_info_msg_12_}
+>>- SC1071 1:1 -- shellcheck refuses zsh; zsh, its modules and the vcs_info and colors functions set these
+
+### a key of an associative special parameter is not a variable
+#!/bin/zsh
+(( $+commands[git] )) && print -r -- $commands[git]
+print -r -- ${functions[prompt_setup]} ${aliases[ll]} ${options[extendedglob]}
+>>- SC1071 1:1 -- shellcheck refuses zsh; these specials are associative arrays, so the subscripts are keys
+
+### testing whether a parameter is set does not read it
+#!/bin/zsh
+(( ${+unset_thing} )) || print -r -- missing
+>>- SC1071 1:1 -- shellcheck refuses zsh; ${+name} tests whether name is set
+
+### a numbered vcs_info message needs digits
+#!/bin/zsh
+print -r -- ${vcs_info_msg_x_}
+>>- SC1071 1:1 -- shellcheck refuses zsh
+>>+ SC2154 2:13 -- vcs_info only sets vcs_info_msg_ followed by a number and an underscore
+
+### a misspelt zsh parameter is still unassigned
+#!/bin/zsh
+print -r -- $funcstak
+>>- SC1071 1:1 -- shellcheck refuses zsh
+>>+ SC2154 2:13 -- funcstak is not one of zsh's parameters
+
+### a single-quoted zsh prompt is expanded later
+#!/bin/zsh
+setopt prompt_subst
+mood=ok
+RPROMPT='${mood} %~'
+>>- SC1071 1:1 -- shellcheck refuses zsh; RPROMPT is prompt-expanded, so the single quotes are deliberate and mood is read
+
+### environment variables are not reported in zsh
+#!/bin/zsh
+print -r -- $LS_COLORS
+>>- SC1071 1:1 -- shellcheck refuses zsh; like in bash, an unassigned all-uppercase variable is assumed to come from the environment
+
+### environment variables are not reported in bash
+#!/bin/bash
+echo "$LS_COLORS"
+>>> none
+
+### zsh parameters are ordinary variables in bash
+#!/bin/bash
+PROMPT='%~ %# '
+fpath=(~/.zfunc)
+echo "${commands[git]}" "${functions[x]}"
+>>> SC2034 2:1
+>>> SC2034 3:1
+>>> SC2154 4:26
+>>> SC2154 4:7
+
+### a single-quoted zsh prompt in bash
+#!/bin/bash
+mood=ok
+RPROMPT='${mood} %~'
+export RPROMPT
+>>> SC2016 3:9
+>>> SC2034 2:1
