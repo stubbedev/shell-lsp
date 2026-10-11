@@ -23,7 +23,7 @@ import (
 )
 
 var (
-	update  = flag.Bool("update", false, "label unlabeled fixture cases with shellcheck's findings")
+	update  = flag.Bool("update", false, "label unlabeled fixture cases with shellcheck's findings and rewrite docs/checks.md")
 	fixture = flag.String("fixture", "*/*.fixture", "glob, relative to testdata/fixtures, of the fixture files to load")
 )
 

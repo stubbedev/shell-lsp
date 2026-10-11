@@ -14,7 +14,8 @@ the `.editorconfig` reader are all native. Highlights:
 - Diagnostics from a native linter that reuses ShellCheck's check codes and
   directives, lints zsh, follows sourced files, and adds checks of its own,
   such as untrusted data reaching `eval`, `sh -c` or `source`
-  ([docs/rules.md](docs/rules.md)).
+  ([docs/rules.md](docs/rules.md)). Every check is listed with its severity
+  in [docs/checks.md](docs/checks.md).
 - Completion and hover for builtins, keywords, functions, variables, paths,
   and the options and subcommands of installed commands, read from their
   manual pages ([Completion and hover](#completion-and-hover)).

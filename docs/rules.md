@@ -4,7 +4,8 @@ Besides ShellCheck's checks, which keep their `SC` codes, shell-lsp has rules
 of its own. Their codes start with `SL`, and they are configured the same way:
 `# shellcheck disable=SL1001` silences one, `lint.exclude` drops one for a
 workspace, and optional rules are switched on with `enable=` or
-`lint.optional`.
+`lint.optional`. [checks.md](checks.md) lists every check, `SC` and `SL`, with
+its severity and a one-line summary.
 
 The injection rules follow values that come from outside the script—its
 command-line arguments, `getopts` option values (`OPTARG`) and input taken with
