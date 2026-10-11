@@ -14,6 +14,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/config"
 	"github.com/stubbedev/shell-lsp/internal/diagnostics"
+	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
@@ -48,6 +49,7 @@ func (s *Server) findings(file *workspace.File, settings config.Settings, genera
 			Optional:      settings.Lint.Optional,
 			DialectSource: dialectSource(settings),
 			Sources:       s.followedSources(file),
+			RCFile:        dialect.IsRCFile(file.Path),
 		})
 	})
 	return findings, stamp

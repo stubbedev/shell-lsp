@@ -72,8 +72,12 @@ absolute path can make it run any file.
 files it sources, or in functions those call ever runs the function, so it is
 dead code. Only executed scripts are checked: files with a `#!` line whose top
 level does real work. Libraries that only define functions and settings, and
-scripts that detect being sourced (through `BASH_SOURCE`, `$0` or a top-level
-`return`), are left alone because their functions are meant for other files.
+scripts that detect being sourced (through `BASH_SOURCE`, `ZSH_EVAL_CONTEXT`,
+zsh's `${(%):-%x}`, `$0` or a top-level `return`), are left alone because
+their functions are meant for other files. So are startup files such as
+`.zshrc` or `.bashrc` and files that set up an interactive shell (with
+`compinit`, `promptinit`, `compdef`, `add-zsh-hook`, `bindkey`, `bind` or
+`complete`), whose functions are commands for the user to type.
 The name counts as used wherever it appears as a word, including inside
 strings such as `trap 'cleanup' EXIT`. A command name built at run time, like
 `"cmd_$1"`, counts as a use of every function that starts with `cmd_`; running

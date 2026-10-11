@@ -202,3 +202,21 @@ func TestInputMksh(t *testing.T) {
 		}
 	}
 }
+
+func TestRCFiles(t *testing.T) {
+	t.Parallel()
+
+	for path, want := range map[string]bool{
+		"/home/u/.zshrc": true, "/home/u/.bashrc": true, "/home/u/.profile": true, "/home/u/.mkshrc": true,
+		"/home/u/zshrc.zsh": false, "/home/u/.bash_history": false, "": false,
+	} {
+		if got := IsRCFile(path); got != want {
+			t.Errorf("IsRCFile(%q) = %v, want %v", path, got, want)
+		}
+	}
+	for _, name := range RCFileNames() {
+		if _, ok := FromFileName(name); !ok {
+			t.Errorf("rc file %s has no dialect", name)
+		}
+	}
+}

@@ -66,3 +66,33 @@ precmd() { print -n "\e]0;$PWD\a"; }
 TRAPINT() { return 128; }
 print "$1"
 >>- SC1071 1:1 -- shellcheck refuses zsh; shell-lsp lints it, and these are hooks zsh calls itself
+
+### a zsh script that sets up completion configures an interactive shell
+#!/usr/bin/env zsh
+autoload -Uz compinit && compinit
+function prompt_setup {
+  PROMPT='%~ %# '
+}
+print -r -- ready
+>>- SC1071 1:1 -- shellcheck refuses zsh; compinit only makes sense in an interactive shell, whose user calls prompt_setup
+
+### key bindings configure an interactive bash
+#!/bin/bash
+bind '"\C-g": abort'
+greet() { echo "hello $1"; }
+echo ready
+>>> none
+
+### a zsh script that checks whether it is sourced
+#!/bin/zsh
+helper() { print -r -- help; }
+[[ $ZSH_EVAL_CONTEXT == *:file ]] && return
+print -r -- run
+>>- SC1071 1:1 -- shellcheck refuses zsh; a sourced file defines helper for its caller
+
+### a zsh script whose helper nothing calls
+#!/bin/zsh
+helper() { print -r -- help; }
+print -r -- "$1"
+>>- SC1071 1:1 -- shellcheck refuses zsh
+>>+ SL2001 2:1 -- shell-lsp native check; nothing calls helper and nothing marks the file as sourced or interactive

@@ -32,12 +32,6 @@ const (
 
 var shellExtensions = []string{".sh", ".bash", ".zsh", ".ksh", ".dash", ".bats"}
 
-var rcFiles = map[string]bool{
-	".bashrc": true, ".bash_profile": true, ".bash_login": true, ".bash_logout": true, ".bash_aliases": true,
-	".profile": true, ".zshrc": true, ".zprofile": true, ".zshenv": true, ".zlogin": true, ".zlogout": true,
-	".kshrc": true, ".mkshrc": true,
-}
-
 var skippedDirs = map[string]bool{
 	".git": true, ".hg": true, ".svn": true, "node_modules": true, ".direnv": true, ".venv": true,
 	"vendor": true, "__pycache__": true, ".cache": true, "result": true,
@@ -130,7 +124,7 @@ type Workspace struct {
 func (w *Workspace) SetWatched(watched bool) { w.watched.Store(watched) }
 
 func isShellName(path string) bool {
-	return rcFiles[filepath.Base(path)] || slices.Contains(shellExtensions, filepath.Ext(path))
+	return dialect.IsRCFile(path) || slices.Contains(shellExtensions, filepath.Ext(path))
 }
 
 func Within(path, root string) bool {
@@ -348,11 +342,10 @@ func WatchGlobs() []string {
 	for i, ext := range shellExtensions {
 		extensions[i] = strings.TrimPrefix(ext, ".")
 	}
-	names := make([]string, 0, len(rcFiles))
-	for name := range rcFiles {
-		names = append(names, strings.TrimPrefix(name, "."))
+	names := dialect.RCFileNames()
+	for i, name := range names {
+		names[i] = strings.TrimPrefix(name, ".")
 	}
-	slices.Sort(names)
 	return []string{
 		"**/*.{" + strings.Join(extensions, ",") + "}",
 		"**/.{" + strings.Join(names, ",") + "}",

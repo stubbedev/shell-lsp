@@ -4,6 +4,7 @@
 package dialect
 
 import (
+	"maps"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -218,18 +219,36 @@ func completionTag(text string) bool {
 	return slices.Contains(completionTags, tag)
 }
 
+var rcFiles = map[string]Dialect{
+	".bashrc": Bash, ".bash_profile": Bash, ".bash_login": Bash, ".bash_logout": Bash, ".bash_aliases": Bash,
+	".profile": Posix, ".zshrc": Zsh, ".zprofile": Zsh, ".zshenv": Zsh, ".zlogin": Zsh, ".zlogout": Zsh,
+	".kshrc": Ksh, ".mkshrc": Ksh,
+}
+
+func IsRCFile(path string) bool {
+	_, ok := rcFiles[filepath.Base(path)]
+	return ok
+}
+
+func RCFileNames() []string {
+	return slices.Sorted(maps.Keys(rcFiles))
+}
+
 func FromFileName(path string) (Dialect, bool) {
 	base := filepath.Base(path)
+	if d, ok := rcFiles[base]; ok {
+		return d, true
+	}
 	switch {
 	case strings.HasPrefix(base, ".bash"), strings.HasSuffix(base, ".bash"), strings.HasSuffix(base, ".bats"):
 		return Bash, true
-	case strings.HasSuffix(base, ".zsh"), base == ".zshrc", base == ".zprofile", base == ".zshenv", base == ".zlogin", base == ".zlogout":
+	case strings.HasSuffix(base, ".zsh"):
 		return Zsh, true
 	case strings.HasSuffix(base, ".dash"):
 		return Dash, true
-	case strings.HasSuffix(base, ".sh"), base == ".profile":
+	case strings.HasSuffix(base, ".sh"):
 		return Posix, true
-	case strings.HasSuffix(base, ".ksh"), base == ".kshrc", base == ".mkshrc":
+	case strings.HasSuffix(base, ".ksh"):
 		return Ksh, true
 	}
 	return 0, false

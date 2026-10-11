@@ -44,8 +44,10 @@ type functionUsage struct {
 	bodies map[*syntax.FuncDecl]*usageRegion
 }
 
+var interactiveCommands = setOf("bind", "bindkey", "compdef", "compinit", "complete", "promptinit", "add-zsh-hook")
+
 func checkUnusedFunctions(p *pass) {
-	if len(p.tree.Functions) == 0 || p.bats || p.sourceable() || p.libraryShaped() {
+	if len(p.tree.Functions) == 0 || p.bats || p.rcFile || p.sourceable() || p.libraryShaped() || p.configuresInteractiveShell() {
 		return
 	}
 	if _, executable := dialect.Interpreter(p.text); !executable {
@@ -71,8 +73,10 @@ func kshDiscipline(name string) bool {
 	return strings.Contains(name, ".") && !strings.HasPrefix(name, kshMathFunctions)
 }
 
+var sourcedMarkers = []string{"BASH_SOURCE", "ZSH_EVAL_CONTEXT", "zsh_eval_context", "(%):-%N", "(%):-%x"}
+
 func (p *pass) sourceable() bool {
-	if strings.Contains(p.text, "BASH_SOURCE") {
+	if slices.ContainsFunc(sourcedMarkers, func(marker string) bool { return strings.Contains(p.text, marker) }) {
 		return true
 	}
 	for _, stmt := range p.tree.File.Stmts {
@@ -81,6 +85,10 @@ func (p *pass) sourceable() bool {
 		}
 	}
 	return comparesScriptName(p.tree.File)
+}
+
+func (p *pass) configuresInteractiveShell() bool {
+	return slices.ContainsFunc(p.tree.Commands, func(c parser.Command) bool { return interactiveCommands[c.Name] })
 }
 
 func comparesScriptName(root syntax.Node) bool {

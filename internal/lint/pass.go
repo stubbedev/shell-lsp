@@ -39,6 +39,7 @@ type pass struct {
 	firstCommand    int
 	directives      []directiveComment
 
+	rcFile         bool
 	shellChosen    bool
 	shellOptions   *shellOptions
 	variables      variableUsage
@@ -51,7 +52,7 @@ func newPass(tree *parser.Tree, imports []parser.Import, opts Options) *pass {
 	directives := parseDirectives(tree)
 	firstCommand := firstCommandStart(tree)
 	return &pass{
-		tree: tree, imports: imports, sources: opts.Sources, text: tree.Text(), dialect: tree.Dialect, bats: tree.Bats(),
+		tree: tree, imports: imports, sources: opts.Sources, rcFile: opts.RCFile, text: tree.Text(), dialect: tree.Dialect, bats: tree.Bats(),
 		firstCommand: firstCommand, directives: directives, catalog: catalog, rules: rules, nodeChecks: nodeChecks, commands: commandChecks,
 		settings:   fileWideSettings(directives, firstCommand, opts.Optional),
 		stmts:      make([]parser.Span, 0, len(tree.Commands)),

@@ -94,6 +94,7 @@ type Options struct {
 	Optional      []string
 	DialectSource DialectSource
 	Sources       []Source
+	RCFile        bool
 }
 
 func Check(tree *parser.Tree, imports []parser.Import, opts Options) []Finding {
