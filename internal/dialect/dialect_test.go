@@ -220,3 +220,21 @@ func TestRCFiles(t *testing.T) {
 		}
 	}
 }
+
+func TestNixShellShebangsNameTheirInterpreter(t *testing.T) {
+	t.Parallel()
+
+	for text, want := range map[string]string{
+		"#!/usr/bin/env nix-shell\n#! nix-shell -i bash -p jq\necho\n":             "bash",
+		"#!/usr/bin/env nix-shell\n#!nix-shell -I nixpkgs=. -i zsh -p jq\n":        "zsh",
+		"#!/usr/bin/env nix-shell\n#! nix-shell -p jq\n#! nix-shell -i dash\n":     "dash",
+		"#!/usr/bin/env nix-shell\n#! nix-shell -p jq\necho\n#! nix-shell -i sh\n": "nix-shell",
+	} {
+		if got, ok := Interpreter(text); !ok || got != want {
+			t.Errorf("Interpreter(%q) = %q, %v; want %q", text, got, ok, want)
+		}
+	}
+	if d := Detect(nil, Input{URI: "file:///x/update.sh", Text: "#!/usr/bin/env nix-shell\n#! nix-shell -i bash -p jq\n"}); d != Bash {
+		t.Errorf("a nix-shell bash script named .sh is detected as %v, want bash", d)
+	}
+}

@@ -214,7 +214,31 @@ func Interpreter(text string) (string, bool) {
 	if name == "busybox" && len(fields) > 1 {
 		return name + " " + fields[1], true
 	}
+	if name == nixShell {
+		if interpreter, ok := nixShellInterpreter(text); ok {
+			return interpreter, true
+		}
+	}
 	return name, true
+}
+
+const nixShell = "nix-shell"
+
+func nixShellInterpreter(text string) (string, bool) {
+	for line := range strings.SplitSeq(text, "\n") {
+		rest, ok := strings.CutPrefix(line, "#!")
+		if !ok {
+			return "", false
+		}
+		fields := strings.Fields(rest)
+		if len(fields) == 0 || filepath.Base(fields[0]) != nixShell {
+			continue
+		}
+		if i := slices.Index(fields, "-i"); i >= 0 && i+1 < len(fields) {
+			return filepath.Base(fields[i+1]), true
+		}
+	}
+	return "", false
 }
 
 var completionTags = []string{"#compdef", "#autoload"}
