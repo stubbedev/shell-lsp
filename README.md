@@ -86,8 +86,10 @@ Editor wiring for Neovim, Helix, Zed and VS Code is in
 formats (plus SARIF for code scanning) and exit codes, and `shell-lsp fmt`
 takes shfmt's flags, so both drop into CI and pre-commit hooks where
 `shellcheck` and `shfmt` ran before, and report exactly what the editor
-shows. Checking the 2579 scripts of a Nixpkgs corpus takes 0.6 s on 12 cores,
-against two minutes for `shellcheck`. Flags, formats, CI and pre-commit
+shows. Checking the 2579 scripts of a Nixpkgs corpus takes 0.6 s on 12 cores;
+one `shellcheck` process over the same files takes about two minutes. The
+rule sets differ, so read that as an order of magnitude, not a like-for-like
+benchmark. Flags, formats, CI and pre-commit
 recipes are in [docs/cli.md](docs/cli.md).
 
 ## Configuration
