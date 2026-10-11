@@ -19,6 +19,7 @@ func TestShellDirectiveEdits(t *testing.T) {
 		{"inserted after the shebang", "#!/bin/sh\necho hi\n", &dash, "#!/bin/sh\n# shellcheck shell=dash\necho hi\n"},
 		{"inserted after a lone shebang", "#!/bin/sh", &dash, "#!/bin/sh\n# shellcheck shell=dash\n"},
 		{"inserted at the top without a shebang", "echo hi\n", &zsh, "# shellcheck shell=zsh\necho hi\n"},
+		{"inserted after the other header directives", "#!/bin/sh\n# shellcheck disable=SC2086\necho hi\n", &dash, "#!/bin/sh\n# shellcheck disable=SC2086\n# shellcheck shell=dash\necho hi\n"},
 		{"value replaced in place", "#!/bin/sh\n# shellcheck shell=sh disable=SC2086\necho\n", &bash, "#!/bin/sh\n# shellcheck shell=bash disable=SC2086\necho\n"},
 		{"quoted value replaced", "# shellcheck shell=\"sh\"\necho\n", &bash, "# shellcheck shell=bash\necho\n"},
 		{"same shell left alone", "# shellcheck shell=bash\necho\n", &bash, "# shellcheck shell=bash\necho\n"},

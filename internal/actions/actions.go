@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/stubbedev/shell-lsp/internal/directive"
 	"github.com/stubbedev/shell-lsp/internal/format"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/parser"
@@ -282,56 +281,7 @@ func disableForStatement(tree *parser.Tree, d Diagnostic) (textedit.Edit, bool) 
 }
 
 func disableForFile(tree *parser.Tree, code string) (textedit.Edit, bool) {
-	parsed, err := lint.ParseCode(code)
-	if err != nil {
-		return textedit.Edit{}, false
-	}
-	text := tree.Text()
-	header := firstStatementStart(tree)
-	after := 0
-	if strings.HasPrefix(text, "#!") {
-		after = min(lineEnd(text, 0)+1, len(text))
-	}
-	var merge *textedit.Edit
-	for _, c := range tree.Comments {
-		if c.Span.End > header || !startsLine(text, c.Span.Start) {
-			continue
-		}
-		comment := text[c.Span.Start:lineEnd(text, c.Span.Start)]
-		d, ok := directive.Parse(comment)
-		if !ok {
-			continue
-		}
-		after = max(after, min(lineEnd(text, c.Span.Start)+1, len(text)))
-		for _, pair := range d.Pairs {
-			if pair.Key != directive.Disable {
-				continue
-			}
-			if set, err := shellcheckrc.ParseCodeSet(pair.Value); err == nil && set.Has(parsed) {
-				return textedit.Edit{}, false
-			}
-			if merge == nil && pair.ValueEnd-pair.ValueOffset == len(pair.Value) {
-				at := c.Span.Start + pair.ValueEnd
-				merge = &textedit.Edit{Start: at, End: at, NewText: "," + code}
-			}
-		}
-	}
-	if merge != nil {
-		return *merge, true
-	}
-	if after == len(text) && text != "" && !strings.HasSuffix(text, "\n") {
-		return textedit.Edit{Start: after, End: after, NewText: "\n" + directivePrefix + code + "\n"}, true
-	}
-	return textedit.Edit{Start: after, End: after, NewText: directivePrefix + code + "\n"}, true
-}
-
-func firstStatementStart(tree *parser.Tree) int {
-	if len(tree.File.Stmts) > 0 {
-		if span, ok := tree.NodeSpan(tree.File.Stmts[0]); ok {
-			return span.Start
-		}
-	}
-	return len(tree.Text())
+	return shellcheckrc.HeaderDisableEdit(tree.Text(), code)
 }
 
 func directiveEdit(text string, lineAt int, indent, code string) textedit.Edit {

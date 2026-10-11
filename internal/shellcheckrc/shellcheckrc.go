@@ -157,45 +157,47 @@ func (rc *File) set(pair directive.Pair) error {
 }
 
 func DisableEdit(text, code string) (textedit.Edit, bool) {
-	parsed, err := lint.ParseCode(code)
-	if err != nil {
-		return textedit.Edit{}, false
-	}
-	var appendAt int
-	found := false
-	for start := 0; start <= len(text); {
-		end := strings.IndexByte(text[start:], '\n')
-		if end < 0 {
-			end = len(text)
-		} else {
-			end += start
-		}
-		line := text[start:end]
-		if d, ok := directive.ParseSettings(line); ok && d.Problem == nil {
-			for _, pair := range d.Pairs {
-				if pair.Key != directive.Disable {
-					continue
-				}
-				set, err := ParseCodeSet(pair.Value)
-				if err == nil && set.Has(parsed) {
-					return textedit.Edit{}, false
-				}
-				if !found && pair.ValueEnd-pair.ValueOffset == len(pair.Value) {
-					appendAt, found = start+pair.ValueEnd, true
-				}
-			}
-		}
-		if end == len(text) {
-			break
-		}
-		start = end + 1
-	}
-	if found {
-		return textedit.Edit{Start: appendAt, End: appendAt, NewText: "," + code}, true
+	edit, merged, ok := mergeDisable(directive.SettingsLines(text), code)
+	if !ok || merged {
+		return edit, ok
 	}
 	line := directive.Disable + "=" + code + "\n"
 	if text != "" && !strings.HasSuffix(text, "\n") {
 		line = "\n" + line
 	}
 	return textedit.Edit{Start: len(text), End: len(text), NewText: line}, true
+}
+
+func HeaderDisableEdit(text, code string) (textedit.Edit, bool) {
+	edit, merged, ok := mergeDisable(directive.HeaderLines(text), code)
+	if !ok || merged {
+		return edit, ok
+	}
+	return directive.HeaderInsert(text, directive.Disable+"="+code), true
+}
+
+func mergeDisable(lines []directive.Line, code string) (textedit.Edit, bool, bool) {
+	parsed, err := lint.ParseCode(code)
+	if err != nil {
+		return textedit.Edit{}, false, false
+	}
+	var merge *textedit.Edit
+	for _, line := range lines {
+		for _, pair := range line.Directive.Pairs {
+			if pair.Key != directive.Disable {
+				continue
+			}
+			if set, err := ParseCodeSet(pair.Value); err == nil && set.Has(parsed) {
+				return textedit.Edit{}, false, false
+			}
+			if merge == nil && pair.ValueEnd-pair.ValueOffset == len(pair.Value) {
+				at := line.Start + pair.ValueEnd
+				merge = &textedit.Edit{Start: at, End: at, NewText: "," + code}
+			}
+		}
+	}
+	if merge != nil {
+		return *merge, true, true
+	}
+	return textedit.Edit{}, false, true
 }

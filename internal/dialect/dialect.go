@@ -314,36 +314,15 @@ func headerShellDirective(text string) (string, bool) {
 }
 
 type shellDirective struct {
-	line      int
-	lineEnd   int
-	directive directive.Directive
-	pair      directive.Pair
+	line directive.Line
+	pair directive.Pair
 }
 
 func findShellDirective(text string) (shellDirective, bool) {
-	for start := 0; start < len(text); {
-		end := strings.IndexByte(text[start:], '\n')
-		next := len(text)
-		if end < 0 {
-			end = len(text)
-		} else {
-			end += start
-			next = end + 1
+	for _, line := range directive.HeaderLines(text) {
+		if pair, ok := line.Pair(directive.Shell); ok {
+			return shellDirective{line: line, pair: pair}, true
 		}
-		line := text[start:end]
-		trimmed := strings.TrimSpace(line)
-		switch {
-		case trimmed == "":
-		case !strings.HasPrefix(trimmed, "#"):
-			return shellDirective{}, false
-		default:
-			if d, ok := directive.Parse(line); ok {
-				if i := slices.IndexFunc(d.Pairs, func(p directive.Pair) bool { return p.Key == directive.Shell }); i >= 0 {
-					return shellDirective{line: start, lineEnd: next, directive: d, pair: d.Pairs[i]}, true
-				}
-			}
-		}
-		start = next
 	}
 	return shellDirective{}, false
 }
