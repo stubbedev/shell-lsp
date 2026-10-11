@@ -553,6 +553,10 @@ type Parser struct {
 	rxOpenParens int
 	rxFirstPart  bool
 
+	// subFlagsBrackets is how many brackets are open in the current
+	// [paramExpSubFlagsArg] word.
+	subFlagsBrackets int
+
 	// kshTypes holds the names of the types defined so far with enum or
 	// typeset -T, whose commands are declarations with [LangKsh93].
 	kshTypes map[string]bool
@@ -596,6 +600,7 @@ func (p *Parser) reset() {
 	p.parsingDoc = false
 	p.openBquotes = 0
 	p.openBquoteDbls = 0
+	p.subFlagsBrackets = 0
 	p.accComs = nil
 	p.accComs, p.curComs = nil, &p.accComs
 	p.litBatch = nil
@@ -709,10 +714,15 @@ const (
 	paramExpSlice
 	paramExpRepl
 	paramExpExp
+	// paramExpSubFlagsArg is the argument after zsh subscript flags, such as
+	// the pattern in ${a[(r)pattern]}, which ends at a ',' or ']' outside of
+	// any brackets within it.
+	paramExpSubFlagsArg
 	arrayElems
 
 	allKeepSpaces = runeByRune | paramExpRepl | dblQuotes | hdocBody |
-		hdocBodyTabs | hdocBodyBlanks | paramExpRepl | paramExpExp
+		hdocBodyTabs | hdocBodyBlanks | paramExpRepl | paramExpExp |
+		paramExpSubFlagsArg
 	allRegTokens = noState | unquotedWordCont | subCmd | subCmdBckquo | subCmdBraces |
 		hdocWord | switchCase | arrayElems | testExpr
 	allArithmExpr = arithmExpr | arithmExprLet | arithmExprCmd |
@@ -2021,17 +2031,33 @@ func (p *Parser) zshSubFlags() *FlagsArithm {
 	}
 	zf.Flags = p.lit(p.pos, p.val)
 	p.rune()
-	// Lex the argument as a raw pattern, stopping at ',' or ']',
-	// since zsh treats it as a pattern rather than an arithmetic expression.
-	argPos := p.nextPos()
-	for p.newLit(p.r); p.r != runeEOF && p.r != ',' && p.r != ']'; p.rune() {
-	}
-	if val := p.endLit(); val != "" {
-		zf.X = p.wordOne(p.lit(argPos, val))
-	}
-	p.quote = old
+	// Parse the argument as a word rather than an arithmetic expression,
+	// since zsh treats it as a pattern which undergoes parameter expansion,
+	// command substitution and quote removal. It ends at the ',' or ']' token
+	// which the arithmetic expression continues with.
+	oldBrackets := p.subFlagsBrackets
+	p.quote, p.subFlagsBrackets = paramExpSubFlagsArg, 0
 	p.next()
+	if w := p.getWord(); w != nil {
+		zf.X = w
+	}
+	p.quote, p.subFlagsBrackets = old, oldBrackets
 	return zf
+}
+
+// subFlagsBracket tracks the brackets in a [paramExpSubFlagsArg] word, such as
+// the bracket expression in ${a[(r)[ab]*]}, and reports whether r still
+// belongs to the word.
+func (p *Parser) subFlagsBracket(r rune) bool {
+	switch {
+	case r == '[':
+		p.subFlagsBrackets++
+	case p.subFlagsBrackets == 0:
+		return false
+	default:
+		p.subFlagsBrackets--
+	}
+	return true
 }
 
 // closesBlock reports whether the current token is a "}" which closes a block

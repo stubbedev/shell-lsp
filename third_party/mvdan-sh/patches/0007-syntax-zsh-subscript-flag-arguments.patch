@@ -1,0 +1,228 @@
+syntax: parse the argument of zsh subscript flags as a word
+
+After subscript flags such as (r), (R), (i), (I), (k) and (K), zsh treats
+the rest of the subscript as a pattern which undergoes parameter
+expansion, command substitution and quote removal (zshparam(1),
+"Subscript Flags"), as in the common
+
+	${history[(R)${(b)prefix}*]}
+	$commands[(I)$cmd*]
+
+The argument was lexed as one raw literal ending at the first ',' or ']',
+so expansions and quotes in it were not parsed, a ',' or ']' inside them
+ended the subscript early, and so did the ']' of a bracket expression.
+It is now parsed as a word, which ends at a ',' or ']' outside of any
+brackets within it: the same tokens the arithmetic expression of the
+subscript continues with.
+
+Reproducer, before this change:
+
+	$ printf 'echo ${a[(r)$(f x,y)]}\n' | shfmt -ln zsh
+	<standard input>:1:9: reached `)` without matching `[` with `]`
+
+and ${a[(r)$x*]} parsed into a FlagsArithm whose argument was the single
+literal "$x*".
+
+Part of https://github.com/mvdan/sh/issues/120.
+
+diff --git a/syntax/filetests_test.go b/syntax/filetests_test.go
+index 8902da4..03cde68 100644
+--- a/syntax/filetests_test.go
++++ b/syntax/filetests_test.go
+@@ -3665,6 +3665,62 @@ var fileTests = []fileTestCase{
+ 			},
+ 		}, LangZsh),
+ 	),
++	fileTest(
++		[]string{`${history[(R)${(b)prefix}*]}`},
++		langFile(&ParamExp{
++			Param: lit("history"),
++			Index: &FlagsArithm{
++				Flags: lit("R"),
++				X: word(
++					&ParamExp{Flags: lit("b"), Param: lit("prefix")},
++					lit("*"),
++				),
++			},
++		}, LangZsh),
++	),
++	fileTest(
++		[]string{`$foo[(r)$x/*]`},
++		langFile(&ParamExp{
++			Short: true,
++			Param: lit("foo"),
++			Index: &FlagsArithm{
++				Flags: lit("r"),
++				X:     word(litParamExp("x"), lit("/*")),
++			},
++		}, LangZsh),
++	),
++	fileTest(
++		[]string{`${foo[(i)"a" 'b,c'$(d)]}`},
++		langFile(&ParamExp{
++			Param: lit("foo"),
++			Index: &FlagsArithm{
++				Flags: lit("i"),
++				X: word(
++					dblQuoted(lit("a")),
++					lit(" "),
++					sglQuoted("b,c"),
++					cmdSubst(litStmt("d")),
++				),
++			},
++		}, LangZsh),
++	),
++	fileTest(
++		[]string{`${foo[(r)[a,b]*,-1]}`},
++		langFile(&ParamExp{
++			Param: lit("foo"),
++			Index: &BinaryArithm{
++				Op: Comma,
++				X: &FlagsArithm{
++					Flags: lit("r"),
++					X:     litWord("[a,b]*"),
++				},
++				Y: &UnaryArithm{
++					Op: Minus,
++					X:  litWord("1"),
++				},
++			},
++		}, LangZsh),
++	),
+ 	fileTest(
+ 		[]string{`${foo[(r)ab,(r)cd]}`},
+ 		langFile(&ParamExp{
+diff --git a/syntax/lexer.go b/syntax/lexer.go
+index e0dc7b0..fecd6e1 100644
+--- a/syntax/lexer.go
++++ b/syntax/lexer.go
+@@ -216,6 +216,15 @@ func (p *Parser) nextKeepSpaces() {
+ 		default:
+ 			p.advanceLitHdoc(r)
+ 		}
++	case paramExpSubFlagsArg:
++		switch {
++		case (r == ',' || r == ']') && p.subFlagsBrackets == 0:
++			p.tok = p.arithmToken(r)
++		case r == '`' || r == '"' || r == '$' || r == '\'':
++			p.tok = p.regToken(r)
++		default:
++			p.advanceLitOther(r)
++		}
+ 	case paramExpRepl:
+ 		if r == '/' {
+ 			p.rune()
+@@ -1133,18 +1142,27 @@ loop:
+ 				break loop
+ 			}
+ 		case '/':
+-			if p.quote != paramExpExp {
++			if p.quote != paramExpExp && p.quote != paramExpSubFlagsArg {
+ 				break loop
+ 			}
+ 		case ':', '=', '%', '^', ',', '?', '!', '~', '*':
+ 			if p.quote&allArithmExpr != 0 {
+ 				break loop
+ 			}
++			if r == ',' && p.quote == paramExpSubFlagsArg && p.subFlagsBrackets == 0 {
++				break loop
++			}
+ 		case '.':
+ 			if !p.lang.in(LangZsh|LangKsh93) && p.quote&allArithmExpr != 0 {
+ 				break loop
+ 			}
+ 		case '[', ']':
++			if p.quote == paramExpSubFlagsArg {
++				if !p.subFlagsBracket(r) {
++					break loop
++				}
++				continue
++			}
+ 			if p.lang.in(langBashLike|langKshLike|LangZsh) && p.quote&allArithmExpr != 0 {
+ 				break loop
+ 			}
+diff --git a/syntax/parser.go b/syntax/parser.go
+index 2893daa..dba83e8 100644
+--- a/syntax/parser.go
++++ b/syntax/parser.go
+@@ -553,6 +553,10 @@ type Parser struct {
+ 	rxOpenParens int
+ 	rxFirstPart  bool
+ 
++	// subFlagsBrackets is how many brackets are open in the current
++	// [paramExpSubFlagsArg] word.
++	subFlagsBrackets int
++
+ 	// kshTypes holds the names of the types defined so far with enum or
+ 	// typeset -T, whose commands are declarations with [LangKsh93].
+ 	kshTypes map[string]bool
+@@ -596,6 +600,7 @@ func (p *Parser) reset() {
+ 	p.parsingDoc = false
+ 	p.openBquotes = 0
+ 	p.openBquoteDbls = 0
++	p.subFlagsBrackets = 0
+ 	p.accComs = nil
+ 	p.accComs, p.curComs = nil, &p.accComs
+ 	p.litBatch = nil
+@@ -709,10 +714,15 @@ const (
+ 	paramExpSlice
+ 	paramExpRepl
+ 	paramExpExp
++	// paramExpSubFlagsArg is the argument after zsh subscript flags, such as
++	// the pattern in ${a[(r)pattern]}, which ends at a ',' or ']' outside of
++	// any brackets within it.
++	paramExpSubFlagsArg
+ 	arrayElems
+ 
+ 	allKeepSpaces = runeByRune | paramExpRepl | dblQuotes | hdocBody |
+-		hdocBodyTabs | hdocBodyBlanks | paramExpRepl | paramExpExp
++		hdocBodyTabs | hdocBodyBlanks | paramExpRepl | paramExpExp |
++		paramExpSubFlagsArg
+ 	allRegTokens = noState | unquotedWordCont | subCmd | subCmdBckquo | subCmdBraces |
+ 		hdocWord | switchCase | arrayElems | testExpr
+ 	allArithmExpr = arithmExpr | arithmExprLet | arithmExprCmd |
+@@ -2021,19 +2031,35 @@ func (p *Parser) zshSubFlags() *FlagsArithm {
+ 	}
+ 	zf.Flags = p.lit(p.pos, p.val)
+ 	p.rune()
+-	// Lex the argument as a raw pattern, stopping at ',' or ']',
+-	// since zsh treats it as a pattern rather than an arithmetic expression.
+-	argPos := p.nextPos()
+-	for p.newLit(p.r); p.r != runeEOF && p.r != ',' && p.r != ']'; p.rune() {
+-	}
+-	if val := p.endLit(); val != "" {
+-		zf.X = p.wordOne(p.lit(argPos, val))
+-	}
+-	p.quote = old
++	// Parse the argument as a word rather than an arithmetic expression,
++	// since zsh treats it as a pattern which undergoes parameter expansion,
++	// command substitution and quote removal. It ends at the ',' or ']' token
++	// which the arithmetic expression continues with.
++	oldBrackets := p.subFlagsBrackets
++	p.quote, p.subFlagsBrackets = paramExpSubFlagsArg, 0
+ 	p.next()
++	if w := p.getWord(); w != nil {
++		zf.X = w
++	}
++	p.quote, p.subFlagsBrackets = old, oldBrackets
+ 	return zf
+ }
+ 
++// subFlagsBracket tracks the brackets in a [paramExpSubFlagsArg] word, such as
++// the bracket expression in ${a[(r)[ab]*]}, and reports whether r still
++// belongs to the word.
++func (p *Parser) subFlagsBracket(r rune) bool {
++	switch {
++	case r == '[':
++		p.subFlagsBrackets++
++	case p.subFlagsBrackets == 0:
++		return false
++	default:
++		p.subFlagsBrackets--
++	}
++	return true
++}
++
+ // closesBlock reports whether the current token is a "}" which closes a block
+ // with [LangZsh], which unlike other shells does not require a separator
+ // before it, as in `{ local x }`.

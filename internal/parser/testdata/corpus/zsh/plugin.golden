@@ -43,6 +43,7 @@ reference 8:32-8:48 "SUGGEST_MAX_SIZE" within=0
 reference 9:10-9:28 "SUGGEST_PLUGIN_DIR" within=0
 reference 9:44-9:49 "fpath" within=0
 reference 22:30-22:37 "history" within=1
+reference 22:46-22:52 "prefix" within=1
 reference 22:60-22:76 "SUGGEST_MAX_SIZE" within=1
 reference 23:10-23:25 "history_matches" within=1
 reference 24:29-24:34 "match" within=1

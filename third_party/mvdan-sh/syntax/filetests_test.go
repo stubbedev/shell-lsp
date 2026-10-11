@@ -3666,6 +3666,62 @@ var fileTests = []fileTestCase{
 		}, LangZsh),
 	),
 	fileTest(
+		[]string{`${history[(R)${(b)prefix}*]}`},
+		langFile(&ParamExp{
+			Param: lit("history"),
+			Index: &FlagsArithm{
+				Flags: lit("R"),
+				X: word(
+					&ParamExp{Flags: lit("b"), Param: lit("prefix")},
+					lit("*"),
+				),
+			},
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{`$foo[(r)$x/*]`},
+		langFile(&ParamExp{
+			Short: true,
+			Param: lit("foo"),
+			Index: &FlagsArithm{
+				Flags: lit("r"),
+				X:     word(litParamExp("x"), lit("/*")),
+			},
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{`${foo[(i)"a" 'b,c'$(d)]}`},
+		langFile(&ParamExp{
+			Param: lit("foo"),
+			Index: &FlagsArithm{
+				Flags: lit("i"),
+				X: word(
+					dblQuoted(lit("a")),
+					lit(" "),
+					sglQuoted("b,c"),
+					cmdSubst(litStmt("d")),
+				),
+			},
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{`${foo[(r)[a,b]*,-1]}`},
+		langFile(&ParamExp{
+			Param: lit("foo"),
+			Index: &BinaryArithm{
+				Op: Comma,
+				X: &FlagsArithm{
+					Flags: lit("r"),
+					X:     litWord("[a,b]*"),
+				},
+				Y: &UnaryArithm{
+					Op: Minus,
+					X:  litWord("1"),
+				},
+			},
+		}, LangZsh),
+	),
+	fileTest(
 		[]string{`${foo[(r)ab,(r)cd]}`},
 		langFile(&ParamExp{
 			Param: lit("foo"),

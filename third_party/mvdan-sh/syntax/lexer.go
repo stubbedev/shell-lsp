@@ -216,6 +216,15 @@ func (p *Parser) nextKeepSpaces() {
 		default:
 			p.advanceLitHdoc(r)
 		}
+	case paramExpSubFlagsArg:
+		switch {
+		case (r == ',' || r == ']') && p.subFlagsBrackets == 0:
+			p.tok = p.arithmToken(r)
+		case r == '`' || r == '"' || r == '$' || r == '\'':
+			p.tok = p.regToken(r)
+		default:
+			p.advanceLitOther(r)
+		}
 	case paramExpRepl:
 		if r == '/' {
 			p.rune()
@@ -1133,11 +1142,14 @@ loop:
 				break loop
 			}
 		case '/':
-			if p.quote != paramExpExp {
+			if p.quote != paramExpExp && p.quote != paramExpSubFlagsArg {
 				break loop
 			}
 		case ':', '=', '%', '^', ',', '?', '!', '~', '*':
 			if p.quote&allArithmExpr != 0 {
+				break loop
+			}
+			if r == ',' && p.quote == paramExpSubFlagsArg && p.subFlagsBrackets == 0 {
 				break loop
 			}
 		case '.':
@@ -1145,6 +1157,12 @@ loop:
 				break loop
 			}
 		case '[', ']':
+			if p.quote == paramExpSubFlagsArg {
+				if !p.subFlagsBracket(r) {
+					break loop
+				}
+				continue
+			}
 			if p.lang.in(langBashLike|langKshLike|LangZsh) && p.quote&allArithmExpr != 0 {
 				break loop
 			}
