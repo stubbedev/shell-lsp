@@ -200,7 +200,7 @@ func shellcheck(ctx context.Context, shell, text string) ([]finding, error) {
 }
 
 func report(results []fileResult, examples int, only string) {
-	implemented := lint.Codes()
+	implemented := slices.DeleteFunc(lint.Codes(), lint.Code.Native)
 	tallies := map[lint.Code]*tally{}
 	for _, code := range implemented {
 		tallies[code] = &tally{}

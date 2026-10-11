@@ -31,16 +31,36 @@ const (
 
 type Code uint16
 
-func (c Code) String() string { return "SC" + strconv.Itoa(int(c)) }
+const (
+	nativeBase   Code = 10000
+	compatPrefix      = "SC"
+	nativePrefix      = "SL"
+)
+
+func (c Code) Native() bool { return c >= nativeBase }
+
+func (c Code) String() string {
+	if c.Native() {
+		return nativePrefix + strconv.Itoa(int(c-nativeBase))
+	}
+	return compatPrefix + strconv.Itoa(int(c))
+}
 
 func ParseCode(s string) (Code, error) {
-	digits := strings.TrimPrefix(strings.ToUpper(strings.TrimSpace(s)), "SC")
+	upper := strings.ToUpper(strings.TrimSpace(s))
+	digits, native := strings.CutPrefix(upper, nativePrefix)
+	if !native {
+		digits = strings.TrimPrefix(upper, compatPrefix)
+	}
 	n, err := strconv.ParseUint(digits, 10, 16)
 	if err != nil {
-		return 0, fmt.Errorf("expected a check code like SC2034, got %q: %w", s, err)
+		return 0, fmt.Errorf("expected a check code like SC2034 or SL1001, got %q: %w", s, err)
 	}
-	if n == 0 {
-		return 0, fmt.Errorf("expected a check code like SC2034, got %q: codes start at 1", s)
+	if n == 0 || Code(n) >= nativeBase {
+		return 0, fmt.Errorf("expected a check code like SC2034 or SL1001, got %q: the number must be between 1 and %d", s, nativeBase-1)
+	}
+	if native {
+		return nativeBase + Code(n), nil
 	}
 	return Code(n), nil
 }
