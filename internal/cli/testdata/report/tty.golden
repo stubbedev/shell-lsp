@@ -17,9 +17,6 @@ In a.sh line 4:
 	cd /tmp
         ^-----^ SC2164 (warning): Use 'cd ... || exit' in case cd fails.
 
-Did you mean:
-	cd /tmp || exit
-
 
 In a.sh line 5:
 if true; then

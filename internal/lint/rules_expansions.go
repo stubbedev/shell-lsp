@@ -75,7 +75,7 @@ func checkTranslatedString(p *pass, n syntax.Node) {
 	if !ok {
 		return
 	}
-	swap := textedit.Edit{Start: span.Start, End: span.Start + 2, NewText: `"$`}
+	swap := reviewFix("Move the $ inside the quotes", textedit.Edit{Start: span.Start, End: span.Start + 2, NewText: `"$`})
 	switch {
 	case lit.Value[0] == '(' || lit.Value[0] == '{':
 		p.report(2247, span, `$" starts a translated string; to quote a substitution, write "$`+lit.Value[:1]+` instead.`, swap)
@@ -119,7 +119,7 @@ func checkRemovalPattern(p *pass, n syntax.Node) {
 
 func (p *pass) reportLiteralPattern(part syntax.WordPart) {
 	if span, ok := p.span(part); ok {
-		p.report(2295, span, "Quote "+p.text[span.Start:span.End]+" inside the pattern so its value is matched literally rather than as a glob.", quoteFix(span)...)
+		p.report(2295, span, "Quote "+p.text[span.Start:span.End]+" inside the pattern so its value is matched literally rather than as a glob.", p.quoteFix(span, Review))
 	}
 }
 
@@ -216,7 +216,7 @@ func checkArithmeticIndex(p *pass, n syntax.Node) {
 		return
 	}
 	p.report(2321, span, "Array indices are already arithmetic; drop the $(( )) around this index.",
-		textedit.Edit{Start: span.Start, End: span.Start + 3}, textedit.Edit{Start: span.End - 2, End: span.End})
+		safeFix("Remove the $(( ))", textedit.Edit{Start: span.Start, End: span.Start + 3}, textedit.Edit{Start: span.End - 2, End: span.End}))
 }
 
 func checkRedundantParentheses(p *pass, n syntax.Node) {
@@ -261,5 +261,5 @@ func (p *pass) reportParentheses(code Code, paren *syntax.ParenArithm, message s
 	if !ok {
 		return
 	}
-	p.report(code, span, message, textedit.Edit{Start: span.Start, End: span.Start + 1}, textedit.Edit{Start: span.End - 1, End: span.End})
+	p.report(code, span, message, safeFix("Remove the redundant parentheses", textedit.Edit{Start: span.Start, End: span.Start + 1}, textedit.Edit{Start: span.End - 1, End: span.End}))
 }

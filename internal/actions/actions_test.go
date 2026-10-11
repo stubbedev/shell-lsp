@@ -1,11 +1,13 @@
 package actions
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/format"
+	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 )
@@ -154,28 +156,33 @@ func TestDeclareLocal(t *testing.T) {
 	}
 }
 
+func lintDiagnostics(tree *parser.Tree) []Diagnostic {
+	return FindingDiagnostics(lint.Check(tree, nil, lint.Options{Optional: []string{"all"}}))
+}
+
 func TestQuickFixes(t *testing.T) {
 	t.Parallel()
 
-	text := "#!/bin/bash\nf() {\n\t# shellcheck disable=SC2034\n\tcd /tmp\n}\necho $x\n"
+	text := "#!/bin/bash\nf() {\n\t# shellcheck disable=SC2034\n\tcd /tmp\n}\necho $1\n"
 	tree := parser.Parse(text, dialect.Bash)
-	cd := strings.Index(text, "cd /tmp")
-	echo := strings.Index(text, "$x")
-	diags := []Diagnostic{
-		{Index: 0, Code: "SC2164", Message: "Use cd ... || exit", Span: parser.Span{Start: cd, End: cd + 7}},
-		{Index: 1, Code: "SC2086", Message: "Double quote", Span: parser.Span{Start: echo, End: echo + 2}, Fix: []textedit.Edit{{Start: echo, End: echo, NewText: `"`}, {Start: echo + 2, End: echo + 2, NewText: `"`}}},
+	all := lintDiagnostics(tree)
+	var diags []Diagnostic
+	for _, d := range all {
+		if d.Code == "SC2164" || d.Code == "SC2086" {
+			diags = append(diags, d)
+		}
 	}
 	byTitle := map[string]Action{}
-	for _, a := range Actions(Input{Tree: tree, Selection: parser.Span{Start: cd, End: cd}, Diagnostics: diags, AllDiagnostics: diags}) {
+	for _, a := range Actions(Input{Tree: tree, Diagnostics: diags, AllDiagnostics: all}) {
 		byTitle[a.Title] = a
 	}
 	expect := map[string]string{
-		"Exit when cd fails":             "#!/bin/bash\nf() {\n\t# shellcheck disable=SC2034\n\tcd /tmp || exit\n}\necho $x\n",
-		"Ignore SC2164 for this command": "#!/bin/bash\nf() {\n\t# shellcheck disable=SC2034,SC2164\n\tcd /tmp\n}\necho $x\n",
-		"Ignore SC2164 in this file":     "#!/bin/bash\n# shellcheck disable=SC2164\nf() {\n\t# shellcheck disable=SC2034\n\tcd /tmp\n}\necho $x\n",
-		"Fix SC2086: Double quote":       "#!/bin/bash\nf() {\n\t# shellcheck disable=SC2034\n\tcd /tmp\n}\necho \"$x\"\n",
-		"Ignore SC2086 for this command": "#!/bin/bash\nf() {\n\t# shellcheck disable=SC2034\n\tcd /tmp\n}\n# shellcheck disable=SC2086\necho $x\n",
-		"Apply all automatic fixes":      "#!/bin/bash\nf() {\n\t# shellcheck disable=SC2034\n\tcd /tmp\n}\necho \"$x\"\n",
+		"Add || return":                  "#!/bin/bash\nf() {\n\t# shellcheck disable=SC2034\n\tcd /tmp || return\n}\necho $1\n",
+		"Add || exit":                    "#!/bin/bash\nf() {\n\t# shellcheck disable=SC2034\n\tcd /tmp || exit\n}\necho $1\n",
+		"Ignore SC2164 for this command": "#!/bin/bash\nf() {\n\t# shellcheck disable=SC2034,SC2164\n\tcd /tmp\n}\necho $1\n",
+		"Ignore SC2164 in this file":     "#!/bin/bash\n# shellcheck disable=SC2164\nf() {\n\t# shellcheck disable=SC2034\n\tcd /tmp\n}\necho $1\n",
+		"Double-quote $1":                "#!/bin/bash\nf() {\n\t# shellcheck disable=SC2034\n\tcd /tmp\n}\necho \"$1\"\n",
+		"Ignore SC2086 for this command": "#!/bin/bash\nf() {\n\t# shellcheck disable=SC2034\n\tcd /tmp\n}\n# shellcheck disable=SC2086\necho $1\n",
 	}
 	for title, want := range expect {
 		a, ok := byTitle[title]
@@ -186,12 +193,42 @@ func TestQuickFixes(t *testing.T) {
 		if got := textedit.Apply(text, a.Edits); got != want {
 			t.Errorf("%s:\n got %q\nwant %q", title, got, want)
 		}
+		if a.Kind != QuickFix || len(a.Diagnostics) != 1 {
+			t.Errorf("%s = %+v, want a quick fix for one diagnostic", title, a)
+		}
 	}
-	if a := byTitle["Fix SC2086: Double quote"]; !a.Preferred || a.Kind != QuickFix {
-		t.Errorf("lint fix = %+v", a)
+	for title, preferred := range map[string]bool{"Add || return": true, "Add || exit": false, "Double-quote $1": true, "Ignore SC2164 in this file": false} {
+		if byTitle[title].Preferred != preferred {
+			t.Errorf("%s preferred = %v, want %v", title, byTitle[title].Preferred, preferred)
+		}
 	}
-	if a := byTitle["Apply all automatic fixes"]; a.Kind != SourceFixAll {
-		t.Errorf("fix all kind = %q", a.Kind)
+	if _, ok := byTitle["Apply all automatic fixes"]; ok {
+		t.Errorf("fix all offered although no fix is safe to apply unattended: %v", keys(byTitle))
+	}
+}
+
+func TestQuickFixesForNativeCodes(t *testing.T) {
+	t.Parallel()
+
+	text := "#!/bin/bash\nname=$1\neval \"echo hello $name\"\n"
+	tree := parser.Parse(text, dialect.Bash)
+	var titles []string
+	for _, a := range Actions(Input{Tree: tree, Diagnostics: lintDiagnostics(tree)}) {
+		titles = append(titles, a.Title)
+	}
+	if !slices.Contains(titles, "Ignore SL1001 for this command") || !slices.Contains(titles, "Ignore SL1001 in this file") {
+		t.Errorf("titles = %q, want the SL1001 disable actions", titles)
+	}
+}
+
+func TestFixAllAppliesOnlySafeFixes(t *testing.T) {
+	t.Parallel()
+
+	text := "#!/bin/bash\nname=x\necho $name `date` $1\n"
+	tree := parser.Parse(text, dialect.Bash)
+	got := textedit.Apply(text, FixAll(lintDiagnostics(tree)))
+	if want := "#!/bin/bash\nname=x\necho \"$name\" $(date) $1\n"; got != want {
+		t.Errorf("fix all = %q, want %q", got, want)
 	}
 }
 

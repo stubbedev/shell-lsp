@@ -6,6 +6,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -282,7 +283,12 @@ func (p *pass) checkIndexedElement(elem *syntax.ArrayElem) {
 	}
 	at := parser.Span{Start: equals, End: equals + 1}
 	if equals > closing+1 {
-		p.report(2191, at, "This = stands alone, so it is literal text rather than part of [index]=value; remove the spaces around it.", quoteFix(at)...)
+		edits := []textedit.Edit{{Start: closing + 1, End: equals}}
+		value := equals + 1 + len(p.text[equals+1:]) - len(strings.TrimLeft(p.text[equals+1:], " \t"))
+		if value > equals+1 && value < len(p.text) && !strings.ContainsRune(")\n#", rune(p.text[value])) {
+			edits = append(edits, textedit.Edit{Start: equals + 1, End: value})
+		}
+		p.report(2191, at, "This = stands alone, so it is literal text rather than part of [index]=value; remove the spaces around it.", reviewFix("Remove the spaces around =", edits...))
 		return
 	}
 	if start, ok := elementValueStart(elem); !ok || start != equals+1 {
@@ -317,7 +323,7 @@ func (p *pass) numberedElement(w *syntax.Word) bool {
 		if !ok {
 			continue
 		}
-		p.report(2191, span, "This = is literal text in an array element; to set an index write [index]=value, otherwise quote it.", quoteFix(span)...)
+		p.report(2191, span, "This = is literal text in an array element; to set an index write [index]=value, otherwise quote it.", p.quoteFix(span, Safe))
 	}
 	return found
 }

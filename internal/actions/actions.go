@@ -30,7 +30,7 @@ type Diagnostic struct {
 	Code    string
 	Message string
 	Span    parser.Span
-	Fix     []textedit.Edit
+	Fixes   []lint.Fix
 }
 
 type RefactorKind string
@@ -160,32 +160,25 @@ func Actions(in Input) []Action {
 func FindingDiagnostics(findings []lint.Finding) []Diagnostic {
 	out := make([]Diagnostic, len(findings))
 	for i, f := range findings {
-		out[i] = Diagnostic{Index: i, Code: f.Code.String(), Message: f.Message, Span: f.Span, Fix: f.Fix}
+		out[i] = Diagnostic{Index: i, Code: f.Code.String(), Message: f.Message, Span: f.Span, Fixes: f.Fixes}
 	}
 	return out
 }
 
 func FixAll(diags []Diagnostic) []textedit.Edit {
-	var groups [][]textedit.Edit
-	for _, d := range diags {
-		if len(d.Fix) > 0 {
-			groups = append(groups, d.Fix)
-		}
+	fixSets := make([][]lint.Fix, len(diags))
+	for i, d := range diags {
+		fixSets[i] = d.Fixes
 	}
-	return textedit.NonOverlapping(groups)
+	return lint.SafeEdits(fixSets)
 }
 
 func quickFixes(tree *parser.Tree, d Diagnostic) []Action {
-	var out []Action
-	if len(d.Fix) > 0 {
-		out = append(out, Action{Title: fmt.Sprintf("Fix %s: %s", d.Code, d.Message), Kind: QuickFix, Diagnostics: []int{d.Index}, Preferred: true, Edits: d.Fix})
+	out := make([]Action, 0, len(d.Fixes)+2)
+	for i, f := range d.Fixes {
+		out = append(out, Action{Title: f.Title, Kind: QuickFix, Diagnostics: []int{d.Index}, Preferred: i == 0, Edits: f.Edits})
 	}
-	if d.Code == "SC2164" {
-		if edit, ok := exitOnFailedCd(tree, d.Span); ok {
-			out = append(out, Action{Title: "Exit when cd fails", Kind: QuickFix, Diagnostics: []int{d.Index}, Preferred: len(d.Fix) == 0, Edits: []textedit.Edit{edit}})
-		}
-	}
-	if !strings.HasPrefix(d.Code, "SC") {
+	if _, err := lint.ParseCode(d.Code); err != nil {
 		return out
 	}
 	if edit, ok := disableForStatement(tree, d); ok {
@@ -193,15 +186,6 @@ func quickFixes(tree *parser.Tree, d Diagnostic) []Action {
 	}
 	out = append(out, Action{Title: fmt.Sprintf("Ignore %s in this file", d.Code), Kind: QuickFix, Diagnostics: []int{d.Index}, Edits: []textedit.Edit{disableForFile(tree, d.Code)}})
 	return out
-}
-
-func exitOnFailedCd(tree *parser.Tree, at parser.Span) (textedit.Edit, bool) {
-	for _, cmd := range tree.Commands {
-		if cmd.Name == "cd" && cmd.Span.Start <= at.Start && at.Start <= cmd.Span.End {
-			return textedit.Edit{Start: cmd.Span.End, End: cmd.Span.End, NewText: " || exit"}, true
-		}
-	}
-	return textedit.Edit{}, false
 }
 
 const directivePrefix = "# shellcheck disable="

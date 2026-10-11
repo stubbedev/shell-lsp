@@ -29,8 +29,11 @@ var quotingFamily = family{
 
 var spacelessSpecials = setOf("-", "$", "?", "!", "#")
 
-func quoteFix(span parser.Span) []textedit.Edit {
-	return []textedit.Edit{{Start: span.Start, End: span.Start, NewText: `"`}, {Start: span.End, End: span.End, NewText: `"`}}
+func (p *pass) quoteFix(span parser.Span, safety Safety) Fix {
+	return Fix{Title: "Double-quote " + snippet(p.text[span.Start:span.End]), Safety: safety, Edits: []textedit.Edit{
+		{Start: span.Start, End: span.Start, NewText: `"`},
+		{Start: span.End, End: span.End, NewText: `"`},
+	}}
 }
 
 func checkUnquotedExpansion(p *pass, n syntax.Node) {
@@ -56,7 +59,7 @@ func checkUnquotedExpansion(p *pass, n syntax.Node) {
 	switch kindOf(pe) {
 	case expandsElements:
 		if p.firstArrayPart(pe) {
-			p.report(2068, span, "Quote this array expansion so each element stays one word: \""+text+"\".", quoteFix(span)...)
+			p.report(2068, span, "Quote this array expansion so each element stays one word: \""+text+"\".", p.quoteFix(span, Safe))
 		}
 		return
 	case expandsJoined:
@@ -71,11 +74,11 @@ func checkUnquotedExpansion(p *pass, n syntax.Node) {
 	p.withFlow(func(flow *flowResult) {
 		switch {
 		case flow.expansion(pe).clean():
-			p.report(2248, span, text+" holds no spaces or globs today, but quoting it keeps it safe if that changes: \""+text+"\".", quoteFix(span)...)
+			p.report(2248, span, text+" holds no spaces or globs today, but quoting it keeps it safe if that changes: \""+text+"\".", p.quoteFix(span, Safe))
 		case defaultAssignment:
-			p.report(2223, span, "This default assignment is expanded unquoted, so its value is globbed on every run; quote it.", quoteFix(span)...)
+			p.report(2223, span, "This default assignment is expanded unquoted, so its value is globbed on every run; quote it.", p.quoteFix(span, Safe))
 		default:
-			p.report(2086, span, "Unquoted "+text+" is split on whitespace and expanded as a glob; double-quote it.", quoteFix(span)...)
+			p.report(2086, span, "Unquoted "+text+" is split on whitespace and expanded as a glob; double-quote it.", p.quoteFix(span, Review))
 		}
 	})
 }
@@ -130,7 +133,7 @@ func checkUnquotedSubstitution(p *pass, n syntax.Node) {
 	switch p.contextOf(cs) {
 	case contextSplit:
 		if !producesSafeWords(cs) {
-			p.report(2046, span, "The output of this command substitution is "+p.substitutionFate("split into words")+"; quote it.", quoteFix(span)...)
+			p.report(2046, span, "The output of this command substitution is "+p.substitutionFate("split into words")+"; quote it.", p.quoteFix(span, Review))
 		}
 	case contextArrayElement:
 		advice := "read it with mapfile or read -a instead"
@@ -160,12 +163,12 @@ func producesSafeWords(cs *syntax.CmdSubst) bool {
 	return ok && c.isBase("seq", "pgrep")
 }
 
-func backtickFix(p *pass, cs *syntax.CmdSubst, span parser.Span) []textedit.Edit {
+func backtickFix(p *pass, cs *syntax.CmdSubst, span parser.Span) []Fix {
 	replacement, ok := parser.DollarSubstitution(p.text, cs, p.stack)
 	if !ok {
 		return nil
 	}
-	return []textedit.Edit{{Start: span.Start, End: span.End, NewText: replacement}}
+	return []Fix{safeFix("Replace the backticks with $(...)", textedit.Edit{Start: span.Start, End: span.End, NewText: replacement})}
 }
 
 func (p *pass) isArgumentOf(name string) bool {

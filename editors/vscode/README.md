@@ -73,8 +73,8 @@ restarts the server.
 - **Shell LSP: Restart Server** stops the server, looks for the binary again
   and starts it.
 - **Shell LSP: Show Output** opens the server's log.
-- **Shell LSP: Fix All Auto-Fixable Problems** applies every non-overlapping
-  lint fix in the active script.
+- **Shell LSP: Fix All Auto-Fixable Problems** applies every non-overlapping safe
+  lint fix in the active script, the ones that keep its behaviour.
 - **Shell LSP: Run Bats File** runs the active Bats file and reports failures
   as diagnostics. Running tests executes workspace code, so it is disabled in
   Restricted Mode.

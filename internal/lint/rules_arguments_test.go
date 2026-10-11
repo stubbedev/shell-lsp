@@ -12,7 +12,7 @@ func fixed(t *testing.T, src string, code Code) string {
 	t.Helper()
 	for _, f := range Check(parser.Parse(src, dialect.Bash), nil, Options{}) {
 		if f.Code == code {
-			return textedit.Apply(src, f.Fix)
+			return textedit.Apply(src, fixEdits(f))
 		}
 	}
 	t.Fatalf("no %s finding in %q", code, src)

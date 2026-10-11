@@ -1,15 +1,12 @@
 --- a/a.sh
 +++ b/a.sh
-@@ -1,7 +1,7 @@
+@@ -1,5 +1,5 @@
  #!/bin/bash
 -echo $1 "(it's)"
 +echo "$1" "(it's)"
  foo=bar
--	cd /tmp
-+	cd /tmp || exit
+ 	cd /tmp
  if true; then
-   :
- fi
 
 --- a/b.sh
 +++ b/b.sh

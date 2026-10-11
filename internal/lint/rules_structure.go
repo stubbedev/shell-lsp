@@ -63,7 +63,7 @@ func checkSelfRecursion(p *pass, n syntax.Node) {
 		}
 		start := parser.Offset(name.Pos())
 		p.reportNode(2264, name, decl.Name.Value+" calls itself unconditionally, which recurses forever; use command "+decl.Name.Value+" to run the real command.",
-			textedit.Edit{Start: start, End: start, NewText: "command "})
+			reviewFix("Call the command with command "+decl.Name.Value, textedit.Edit{Start: start, End: start, NewText: "command "}))
 	}
 }
 

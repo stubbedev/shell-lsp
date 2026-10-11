@@ -30,19 +30,20 @@ func TestCodeActionsFromLint(t *testing.T) {
 	t.Parallel()
 
 	c, _ := startClient(t, `{`+actionCapabilities+`}`)
-	c.notify("textDocument/didOpen", openParams("file:///w/a.sh", "#!/bin/bash\necho $1\n"))
+	c.notify("textDocument/didOpen", openParams("file:///w/a.sh", "#!/bin/bash\necho $1 `date`\n"))
 	report := decodeResult[lsp.FullDocumentDiagnosticReport](t, c.call("textDocument/diagnostic", `{"textDocument": {"uri": "file:///w/a.sh"}}`))
-	if len(report.Items) != 1 {
+	i := slices.IndexFunc(report.Items, func(d lsp.Diagnostic) bool { return d.Code == "SC2086" })
+	if i < 0 {
 		t.Fatalf("diagnostics = %+v", report.Items)
 	}
-	diag, err := json.Marshal(report.Items)
+	diag, err := json.Marshal(report.Items[i : i+1])
 	if err != nil {
 		t.Fatal(err)
 	}
 	params := `{"textDocument": {"uri": "file:///w/a.sh"}, "range": {"start": {"line": 1, "character": 5}, "end": {"line": 1, "character": 5}}, "context": {"diagnostics": ` + string(diag) + `}}`
 	got := codeActions(t, c, params)
 
-	fix, ok := titled(got, "Fix SC2086")
+	fix, ok := titled(got, "Double-quote $1")
 	if !ok || !fix.IsPreferred || fix.Edit == nil || len(fix.Edit.DocumentChanges) != 1 || *fix.Edit.DocumentChanges[0].TextDocument.Version != 1 {
 		t.Fatalf("fix action = %+v (all: %+v)", fix, got)
 	}
@@ -97,14 +98,14 @@ func TestExecuteFixAllAppliesThroughClient(t *testing.T) {
 	t.Parallel()
 
 	c, _ := startClient(t, `{`+actionCapabilities+`}`)
-	c.notify("textDocument/didOpen", openParams("file:///w/a.sh", "#!/bin/bash\necho $1 $2\n"))
+	c.notify("textDocument/didOpen", openParams("file:///w/a.sh", "#!/bin/bash\necho \"`date`\" \"`id -u`\"\n"))
 	id := c.start("workspace/executeCommand", `{"command": "shellLsp.fixAll", "arguments": ["file:///w/a.sh"]}`)
 	applied := c.await("workspace/applyEdit", func(m *jsonrpc.Message) bool { return m.IsRequest() && m.Method == "workspace/applyEdit" })
 	var params lsp.ApplyWorkspaceEditParams
 	if err := json.Unmarshal(applied.Params, &params); err != nil {
 		t.Fatal(err)
 	}
-	if len(params.Edit.DocumentChanges) != 1 || len(params.Edit.DocumentChanges[0].Edits) != 4 {
+	if len(params.Edit.DocumentChanges) != 1 || len(params.Edit.DocumentChanges[0].Edits) != 2 {
 		t.Errorf("applyEdit = %+v", params)
 	}
 	if err := c.conn.Reply(applied.ID, lsp.ApplyWorkspaceEditResult{Applied: true}, nil); err != nil {

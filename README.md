@@ -165,9 +165,18 @@ zsh's own rules: unquoted parameters are neither split nor globbed unless
 `SH_WORD_SPLIT` or `GLOB_SUBST` is set, glob qualifiers, parameter and
 subscript flags are understood, and the parameters zsh, its line editor,
 completion system and modules set or read count as assigned and used. It
-follows sourced files without extra flags. Quick fixes are offered where a
-check has an unambiguous repair, alongside actions that insert a `disable`
-directive for the command or the whole file.
+follows sourced files without extra flags.
+
+Quick fixes are offered where a check has an unambiguous repair, each titled
+by what it does (`Double-quote $1`, `Replace -a with -e`, `Add || return`),
+alongside actions that insert a `disable` directive for the command or the
+whole file, for `SC` and `SL` codes alike. A fix is either safe, meaning it
+keeps the script's behaviour (adding `-n`, bracing `$var`, quoting a value
+known to hold no spaces or globs), or a suggestion that changes behaviour the
+way the finding asks for (quoting `$1`, adding `|| exit`). The first fix of a
+finding is the preferred one; the fix-all source action and the
+`shellLsp.fixAll` command apply only safe fixes, so running them on save never
+changes what a script does.
 
 Checks that go beyond ShellCheck use `SL` codes and are documented in
 [docs/rules.md](docs/rules.md): untrusted data pasted into code run by
@@ -223,7 +232,7 @@ common GNU and gawk extensions are accepted.
 
 | Command | Arguments | Effect |
 | --- | --- | --- |
-| `shellLsp.fixAll` | document URI | Applies every non-overlapping lint autofix in the document via `workspace/applyEdit` |
+| `shellLsp.fixAll` | document URI | Applies every non-overlapping safe lint fix in the document via `workspace/applyEdit` |
 | `shellLsp.applyEdit` | `WorkspaceEdit` | Applies the edit via `workspace/applyEdit`; code actions use it for clients without code action literal support |
 | `shellLsp.showReferences` | `{uri, position}` | Returns the reference locations a reference-count code lens stands for |
 | `shellLsp.runBats` | `{uri, test?}` | Runs the Bats file, or only the named test, and reports the results |

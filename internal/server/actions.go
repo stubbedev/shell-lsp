@@ -289,7 +289,7 @@ func (s *Server) toActionDiagnostics(snap *snapshot, diags []lsp.Diagnostic) []a
 			},
 		}
 		if j := slices.IndexFunc(findings, func(f lint.Finding) bool { return f.Code.String() == d.Code && f.Span == ad.Span }); j >= 0 {
-			ad.Fix = findings[j].Fix
+			ad.Fixes = findings[j].Fixes
 		}
 		out = append(out, ad)
 	}

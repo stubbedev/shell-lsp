@@ -2,6 +2,7 @@ package lint
 
 import (
 	"slices"
+	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
@@ -72,7 +73,7 @@ func checkTestExpressions(p *pass, n syntax.Node) {
 	}
 	if !t.bracketed() {
 		if bin, ok := t.expr.(*syntax.BinaryTest); ok && len(t.args) == 3 && t.name == "test" && bin.Op != syntax.TsMatch {
-			p.checkLegacyPrefix(bin)
+			p.checkLegacyPrefix(t.style, bin)
 		}
 		return
 	}
@@ -83,39 +84,84 @@ func checkTestExpressions(p *pass, n syntax.Node) {
 		p.reportNode(2212, t.node, "This test is empty and always false; write false if that is intended.")
 		return
 	}
-	walkTest(t.expr, func(e syntax.TestExpr, _ *syntax.UnaryTest) { p.checkTestExpression(e) })
+	walkTest(t.expr, func(e syntax.TestExpr, _ *syntax.UnaryTest) { p.checkTestExpression(t, e) })
 }
 
-func (p *pass) checkTestExpression(e syntax.TestExpr) {
+func (p *pass) checkTestExpression(t testCommand, e syntax.TestExpr) {
 	switch e := e.(type) {
 	case *syntax.UnaryTest:
-		p.checkNegatedOperand(e)
+		p.checkNegatedOperand(t, e)
 		p.checkLegacyExists(e)
 	case *syntax.BinaryTest:
-		p.checkLegacyPrefix(e)
+		p.checkLegacyPrefix(t.style, e)
 		if e.Op == syntax.TsMatchShort && p.dialect == dialect.Bash {
-			p.reportNode(2338, e, "In bash tests, prefer == over = for string comparison.")
+			at := parser.Offset(e.OpPos)
+			p.reportNode(2338, e, "In bash tests, prefer == over = for string comparison.", safeFix("Replace = with ==", textedit.Edit{Start: at, End: at + 1, NewText: "=="}))
 		}
 	case *syntax.Word:
 		p.checkImplicitNonEmpty(e)
 	}
 }
 
-func (p *pass) checkNegatedOperand(e *syntax.UnaryTest) {
+func (p *pass) checkNegatedOperand(t testCommand, e *syntax.UnaryTest) {
 	if e.Op != syntax.TsNot {
 		return
 	}
 	at := posSpan(e.OpPos, 1)
+	negation := parser.Span{Start: at.Start, End: parser.Offset(e.X.Pos())}
 	switch inner := e.X.(type) {
 	case *syntax.UnaryTest:
 		if opposite, ok := oppositeStringTests[inner.Op]; ok {
-			p.report(2236, at, "Use "+opposite.String()+" instead of ! "+inner.Op.String()+".")
+			p.report(2236, at, "Use "+opposite.String()+" instead of ! "+inner.Op.String()+".", p.negationFix(t, negation, inner)...)
 		}
 	case *syntax.BinaryTest:
 		if inverted, ok := invertedComparisons[inner.Op]; ok {
-			p.report(2335, at, "Use a "+inverted.String()+" b instead of ! a "+inner.Op.String()+" b.")
+			p.report(2335, at, "Use a "+inverted.String()+" b instead of ! a "+inner.Op.String()+" b.", p.negationFix(t, negation, inner)...)
 		}
 	}
+}
+
+func (p *pass) negationFix(t testCommand, negation parser.Span, test syntax.TestExpr) []Fix {
+	if t.malformed() {
+		return nil
+	}
+	var at syntax.Pos
+	var from, to string
+	var operands []syntax.TestExpr
+	switch e := test.(type) {
+	case *syntax.UnaryTest:
+		opposite, ok := oppositeStringTests[e.Op]
+		if !ok {
+			return nil
+		}
+		at, from, to, operands = e.OpPos, e.Op.String(), opposite.String(), []syntax.TestExpr{e.X}
+	case *syntax.BinaryTest:
+		inverted, ok := invertedComparisons[e.Op]
+		if !ok {
+			return nil
+		}
+		at, from, to, operands = e.OpPos, e.Op.String(), inverted.String(), []syntax.TestExpr{e.X, e.Y}
+	default:
+		return nil
+	}
+	start := parser.Offset(at)
+	if !strings.HasPrefix(p.text[start:], from) || (t.style != doubleBracket && slices.ContainsFunc(operands, mayVanish)) {
+		return nil
+	}
+	return []Fix{safeFix("Replace ! "+from+" with "+to,
+		textedit.Edit{Start: negation.Start, End: negation.End},
+		textedit.Edit{Start: start, End: start + len(from), NewText: to})}
+}
+
+func mayVanish(e syntax.TestExpr) bool {
+	w, ok := e.(*syntax.Word)
+	return ok && !slices.ContainsFunc(w.Parts, func(part syntax.WordPart) bool {
+		switch part.(type) {
+		case *syntax.ParamExp, *syntax.CmdSubst:
+			return false
+		}
+		return true
+	})
 }
 
 func (p *pass) checkLegacyExists(e *syntax.UnaryTest) {
@@ -127,7 +173,7 @@ func (p *pass) checkLegacyExists(e *syntax.UnaryTest) {
 	if !ok {
 		return
 	}
-	p.report(2331, span, "-a as a file test is a legacy synonym that is easily confused with the -a conjunction; use -e.", textedit.Edit{Start: start, End: start + 2, NewText: "-e"})
+	p.report(2331, span, "-a as a file test is a legacy synonym that is easily confused with the -a conjunction; use -e.", safeFix("Replace -a with -e", textedit.Edit{Start: start, End: start + 2, NewText: "-e"}))
 }
 
 func (p *pass) preferDoubleBrackets(t testCommand) {
@@ -138,26 +184,28 @@ func (p *pass) preferDoubleBrackets(t testCommand) {
 	if !ok {
 		return
 	}
-	var fix []textedit.Edit
+	var fixes []Fix
 	if stmt, ok := p.parent().(*syntax.Stmt); ok {
-		fix, _ = DoubleBrackets(p.text, stmt)
+		if edits, ok := DoubleBrackets(p.text, stmt); ok {
+			fixes = append(fixes, safeFix("Convert to [[ ]]", edits...))
+		}
 	}
-	p.report(2292, span, "Prefer [[ ]] over [ ] for tests in this shell.", fix...)
+	p.report(2292, span, "Prefer [[ ]] over [ ] for tests in this shell.", fixes...)
 }
 
 func (p *pass) checkImplicitNonEmpty(w *syntax.Word) {
 	parts := flattenQuotes(w.Parts)
-	insert := []textedit.Edit{{Start: parser.Offset(w.Pos()), End: parser.Offset(w.Pos()), NewText: "-n "}}
+	insert := safeFix("Add -n", textedit.Edit{Start: parser.Offset(w.Pos()), End: parser.Offset(w.Pos()), NewText: "-n "})
 	if len(parts) == 1 {
 		if _, ok := parts[0].(*syntax.CmdSubst); ok {
-			p.reportNode(2243, w, "Use -n to test that the command printed something, or run the command directly to test its exit status.", insert...)
+			p.reportNode(2243, w, "Use -n to test that the command printed something, or run the command directly to test its exit status.", insert)
 			return
 		}
 	}
 	if slices.ContainsFunc(parts, isConstantPart) {
 		return
 	}
-	p.reportNode(2244, w, "Use -n to make the non-empty string test explicit.", insert...)
+	p.reportNode(2244, w, "Use -n to make the non-empty string test explicit.", insert)
 }
 
 func flattenQuotes(parts []syntax.WordPart) []syntax.WordPart {
@@ -183,7 +231,7 @@ func isConstantPart(part syntax.WordPart) bool {
 	return false
 }
 
-func (p *pass) checkLegacyPrefix(e *syntax.BinaryTest) {
+func (p *pass) checkLegacyPrefix(style bracketStyle, e *syntax.BinaryTest) {
 	if e.Op != syntax.TsMatchShort && e.Op != syntax.TsMatch && e.Op != syntax.TsNoMatch {
 		return
 	}
@@ -203,7 +251,7 @@ func (p *pass) checkLegacyPrefix(e *syntax.BinaryTest) {
 	if !ok {
 		return
 	}
-	p.reportNode(2268, left, "The x prefix in comparisons is an obsolete workaround; compare the values directly.", leftFix, rightFix)
+	p.reportNode(2268, left, "The x prefix in comparisons is an obsolete workaround; compare the values directly.", Fix{Title: "Remove the x prefixes", Safety: xPrefixSafety(style, left, right), Edits: []textedit.Edit{leftFix, rightFix}})
 }
 
 func xPrefixRemoval(w *syntax.Word) (textedit.Edit, bool) {
@@ -237,6 +285,19 @@ func xPrefixRemoval(w *syntax.Word) (textedit.Edit, bool) {
 
 func startsWithX(s string) bool { return s != "" && (s[0] == 'x' || s[0] == 'X') }
 
+func xPrefixSafety(style bracketStyle, words ...*syntax.Word) Safety {
+	if style == doubleBracket {
+		return Safe
+	}
+	for _, w := range words {
+		lit, ok := w.Parts[0].(*syntax.Lit)
+		if ok && len(lit.Value) == 1 && len(w.Parts) > 1 && mayVanish(&syntax.Word{Parts: w.Parts[1:]}) {
+			return Review
+		}
+	}
+	return Safe
+}
+
 func checkNegatedTestCommand(p *pass, n syntax.Node) {
 	stmt, ok := n.(*syntax.Stmt)
 	if !ok || !stmt.Negated {
@@ -247,6 +308,7 @@ func checkNegatedTestCommand(p *pass, n syntax.Node) {
 		return
 	}
 	at := posSpan(stmt.Pos(), 1)
+	negation := parser.Span{Start: at.Start, End: parser.Offset(stmt.Cmd.Pos())}
 	open, closing := "[ ", " ]"
 	if t.style == doubleBracket {
 		open, closing = "[[ ", " ]]"
@@ -254,11 +316,11 @@ func checkNegatedTestCommand(p *pass, n syntax.Node) {
 	switch e := t.expr.(type) {
 	case *syntax.UnaryTest:
 		if opposite, ok := oppositeStringTests[e.Op]; ok {
-			p.report(2237, at, "Use "+open+opposite.String()+" .."+closing+" instead of ! "+open+e.Op.String()+" .."+closing+".")
+			p.report(2237, at, "Use "+open+opposite.String()+" .."+closing+" instead of ! "+open+e.Op.String()+" .."+closing+".", p.negationFix(t, negation, e)...)
 		}
 	case *syntax.BinaryTest:
 		if inverted, ok := invertedComparisons[e.Op]; ok {
-			p.report(2335, at, "Use "+open+"a "+inverted.String()+" b"+closing+" instead of ! "+open+"a "+e.Op.String()+" b"+closing+".")
+			p.report(2335, at, "Use "+open+"a "+inverted.String()+" b"+closing+" instead of ! "+open+"a "+e.Op.String()+" b"+closing+".", p.negationFix(t, negation, e)...)
 		}
 	}
 }
@@ -269,8 +331,11 @@ func checkBackgroundedTest(p *pass, n syntax.Node) {
 		return
 	}
 	at := parser.Offset(stmt.Semicolon)
-	p.report(2265, posSpan(stmt.Semicolon, 1), "A single & runs the test in the background instead of combining it; use && for a logical AND.",
-		textedit.Edit{Start: at + 1, End: at + 1, NewText: "&"})
+	var fixes []Fix
+	if rest := strings.TrimLeft(p.text[at+1:lineEnd(p.text, at)], " \t"); rest != "" && !strings.HasPrefix(rest, "#") {
+		fixes = append(fixes, reviewFix("Replace & with &&", textedit.Edit{Start: at + 1, End: at + 1, NewText: "&"}))
+	}
+	p.report(2265, posSpan(stmt.Semicolon, 1), "A single & runs the test in the background instead of combining it; use && for a logical AND.", fixes...)
 }
 
 func checkPipedTest(p *pass, n syntax.Node) {
@@ -280,7 +345,7 @@ func checkPipedTest(p *pass, n syntax.Node) {
 	}
 	at := parser.Offset(bin.OpPos)
 	p.report(2266, posSpan(bin.OpPos, 1), "A single | pipes between commands instead of combining tests; use || for a logical OR.",
-		textedit.Edit{Start: at + 1, End: at + 1, NewText: "|"})
+		reviewFix("Replace | with ||", textedit.Edit{Start: at + 1, End: at + 1, NewText: "|"}))
 }
 
 func checkSubshellTest(p *pass, n syntax.Node) {
@@ -374,7 +439,7 @@ func checkBatsNegation(p *pass, n syntax.Node) {
 			continue
 		}
 		p.reportWithSeverity(2314, severity, at, batsNegationMessage(last, "use run ! command so bats checks the status"),
-			textedit.Edit{Start: start, End: start, NewText: "run "})
+			reviewFix("Run the negation with run !", textedit.Edit{Start: start, End: start, NewText: "run "}))
 	}
 }
 

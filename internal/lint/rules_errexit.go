@@ -35,12 +35,18 @@ func checkNegationUnderErrexit(p *pass, n syntax.Node) {
 		return
 	}
 	start := parser.Offset(stmt.Pos())
+	command := parser.Offset(stmt.Cmd.Pos())
+	end := commandEnd(stmt)
+	p.report(2251, posSpan(stmt.Pos(), 1), "A negated command never triggers set -e, so this check has no effect; make it fail explicitly, e.g. with && exit 1.",
+		reviewFix("Replace the ! with && exit 1", textedit.Edit{Start: start, End: command}, textedit.Edit{Start: end, End: end, NewText: " && exit 1"}))
+}
+
+func commandEnd(stmt *syntax.Stmt) int {
 	end := parser.Offset(stmt.Cmd.End())
 	for _, r := range stmt.Redirs {
 		end = max(end, parser.Offset(r.End()))
 	}
-	p.report(2251, posSpan(stmt.Pos(), 1), "A negated command never triggers set -e, so this check has no effect; make it fail explicitly, e.g. with && exit 1.",
-		textedit.Edit{Start: start, End: start + 1}, textedit.Edit{Start: end, End: end, NewText: " && exit 1"})
+	return end
 }
 
 func (p *pass) statusIgnored(stmt *syntax.Stmt) bool {

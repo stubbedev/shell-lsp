@@ -35,20 +35,20 @@ func sampleReports(t *testing.T) []fileReport {
 	native, _ := lint.ParseCode("SL1001")
 	return []fileReport{
 		{name: "a.sh", doc: docstore.NewDocument("", "", 0, a), findings: []lint.Finding{
-			{Code: 2086, Severity: lint.SeverityInfo, Span: dollar, Message: "Quote $1 & friends <now>.", Fix: []textedit.Edit{
+			{Code: 2086, Severity: lint.SeverityInfo, Span: dollar, Message: "Quote $1 & friends <now>.", Fixes: []lint.Fix{{Title: "Double-quote $1", Safety: lint.Safe, Edits: []textedit.Edit{
 				{Start: dollar.Start, End: dollar.Start, NewText: `"`}, {Start: dollar.End, End: dollar.End, NewText: `"`},
-			}},
+			}}}},
 			{Code: native, Severity: lint.SeverityError, Span: dollar, Message: "Untrusted data reaches eval."},
 			{Code: 2034, Severity: lint.SeverityWarning, Span: spanOf(t, a, "foo"), Message: "foo appears unused. Verify use (or export if used externally)."},
-			{Code: 2164, Severity: lint.SeverityWarning, Span: spanOf(t, a, "cd /tmp"), Message: "Use 'cd ... || exit' in case cd fails.", Fix: []textedit.Edit{
+			{Code: 2164, Severity: lint.SeverityWarning, Span: spanOf(t, a, "cd /tmp"), Message: "Use 'cd ... || exit' in case cd fails.", Fixes: []lint.Fix{{Title: "Add || exit", Safety: lint.Review, Edits: []textedit.Edit{
 				{Start: spanOf(t, a, "cd /tmp").End, End: spanOf(t, a, "cd /tmp").End, NewText: " || exit"},
-			}},
+			}}}},
 			{Code: 1072, Severity: lint.SeverityError, Span: spanOf(t, a, "if true; then\n  :\nfi"), Message: "A clause spanning lines."},
 		}},
 		{name: "b.sh", doc: docstore.NewDocument("", "", 0, b), findings: []lint.Finding{
-			{Code: 2006, Severity: lint.SeverityStyle, Span: backticks, Message: "Use $(...) notation instead of legacy backticks `...`.", Fix: []textedit.Edit{
+			{Code: 2006, Severity: lint.SeverityStyle, Span: backticks, Message: "Use $(...) notation instead of legacy backticks `...`.", Fixes: []lint.Fix{{Title: "Replace the backticks with $(...)", Safety: lint.Safe, Edits: []textedit.Edit{
 				{Start: backticks.Start, End: backticks.End, NewText: "$(date)"},
-			}},
+			}}}},
 		}},
 		{name: "clean.sh", doc: docstore.NewDocument("", "", 0, "echo hi\n")},
 	}

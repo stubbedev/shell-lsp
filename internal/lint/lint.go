@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
@@ -73,7 +74,57 @@ type Finding struct {
 	Tag      Tag
 	Span     parser.Span
 	Message  string
-	Fix      []textedit.Edit
+	Fixes    []Fix
+}
+
+type Safety uint8
+
+const (
+	Safe Safety = iota + 1
+	Review
+)
+
+type Fix struct {
+	Title  string
+	Safety Safety
+	Edits  []textedit.Edit
+}
+
+const snippetLimit = 40
+
+func snippet(text string) string {
+	line, _, multiline := strings.Cut(text, "\n")
+	if !multiline && utf8.RuneCountInString(line) <= snippetLimit {
+		return line
+	}
+	runes := []rune(line)
+	return string(runes[:min(len(runes), snippetLimit)]) + "…"
+}
+
+func safeFix(title string, edits ...textedit.Edit) Fix {
+	return Fix{Title: title, Safety: Safe, Edits: edits}
+}
+
+func reviewFix(title string, edits ...textedit.Edit) Fix {
+	return Fix{Title: title, Safety: Review, Edits: edits}
+}
+
+func AutoFix(fixes []Fix) (Fix, bool) {
+	i := slices.IndexFunc(fixes, func(f Fix) bool { return f.Safety == Safe })
+	if i < 0 {
+		return Fix{}, false
+	}
+	return fixes[i], true
+}
+
+func SafeEdits(fixSets [][]Fix) []textedit.Edit {
+	groups := make([][]textedit.Edit, 0, len(fixSets))
+	for _, fixes := range fixSets {
+		if fix, ok := AutoFix(fixes); ok {
+			groups = append(groups, fix.Edits)
+		}
+	}
+	return textedit.NonOverlapping(groups)
 }
 
 type Source struct {

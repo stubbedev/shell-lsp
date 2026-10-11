@@ -7,7 +7,6 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/shelldocs"
-	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -139,21 +138,21 @@ func (p *pass) ancestor(depth int) syntax.Node {
 
 func (p *pass) span(n syntax.Node) (parser.Span, bool) { return p.tree.NodeSpan(n) }
 
-func (p *pass) reportNode(code Code, n syntax.Node, message string, fix ...textedit.Edit) {
+func (p *pass) reportNode(code Code, n syntax.Node, message string, fixes ...Fix) {
 	if span, ok := p.span(n); ok {
-		p.report(code, span, message, fix...)
+		p.report(code, span, message, fixes...)
 	}
 }
 
-func (p *pass) report(code Code, span parser.Span, message string, fix ...textedit.Edit) {
-	p.reportWithSeverity(code, p.meta(code).severity, span, message, fix...)
+func (p *pass) report(code Code, span parser.Span, message string, fixes ...Fix) {
+	p.reportWithSeverity(code, p.meta(code).severity, span, message, fixes...)
 }
 
-func (p *pass) reportWithSeverity(code Code, severity Severity, span parser.Span, message string, fix ...textedit.Edit) {
+func (p *pass) reportWithSeverity(code Code, severity Severity, span parser.Span, message string, fixes ...Fix) {
 	if !p.active(code) {
 		return
 	}
-	p.findings = append(p.findings, Finding{Code: code, Severity: severity, Tag: p.meta(code).tag, Span: span, Message: message, Fix: fix})
+	p.findings = append(p.findings, Finding{Code: code, Severity: severity, Tag: p.meta(code).tag, Span: span, Message: message, Fixes: fixes})
 }
 
 func (p *pass) active(code Code) bool {

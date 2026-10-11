@@ -126,9 +126,9 @@ func jsonComments(reports []fileReport) []jsonComment {
 				File: r.name, Line: start.line, EndLine: end.line, Column: start.column, EndColumn: end.column,
 				Level: levels[f.Severity].name, Code: int(f.Code), Message: f.Message,
 			}
-			if len(f.Fix) > 0 {
-				c.Fix = &jsonFix{Replacements: make([]jsonReplacement, len(f.Fix))}
-				for i, e := range f.Fix {
+			if fix, ok := lint.AutoFix(f.Fixes); ok {
+				c.Fix = &jsonFix{Replacements: make([]jsonReplacement, len(fix.Edits))}
+				for i, e := range fix.Edits {
 					from, to := placeOf(r.doc, e.Start), placeOf(r.doc, e.End)
 					point := "beforeStart"
 					if e.Start == f.Span.Start {
@@ -284,7 +284,7 @@ func caret(text string, span parser.Span) string {
 func didYouMean(text string, lineAt int, group []lint.Finding) (string, bool) {
 	fixes := make([]lint.Finding, 0, len(group))
 	for _, f := range group {
-		if len(f.Fix) > 0 {
+		if len(f.Fixes) > 0 {
 			fixes = append(fixes, f)
 		}
 	}
@@ -445,12 +445,12 @@ func writeSARIF(out *bytes.Buffer, reports []fileReport, opts reportOptions) {
 				RuleID: f.Code.String(), RuleIndex: index, Level: levels[f.Severity].sarif, Message: sarifMessage{Text: f.Message},
 				Locations: []sarifLocation{{PhysicalLocation: sarifPhysicalLocation{ArtifactLocation: artifact, Region: region(f.Span.Start, f.Span.End)}}},
 			}
-			if len(f.Fix) > 0 {
-				change := sarifArtifactChange{ArtifactLocation: artifact, Replacements: make([]sarifReplacement, len(f.Fix))}
-				for i, e := range f.Fix {
+			for _, fix := range f.Fixes {
+				change := sarifArtifactChange{ArtifactLocation: artifact, Replacements: make([]sarifReplacement, len(fix.Edits))}
+				for i, e := range fix.Edits {
 					change.Replacements[i] = sarifReplacement{DeletedRegion: region(e.Start, e.End), InsertedContent: sarifMessage{Text: e.NewText}}
 				}
-				result.Fixes = []sarifFix{{Description: sarifMessage{Text: "Apply the suggested fix for " + f.Code.String()}, ArtifactChanges: []sarifArtifactChange{change}}}
+				result.Fixes = append(result.Fixes, sarifFix{Description: sarifMessage{Text: fix.Title}, ArtifactChanges: []sarifArtifactChange{change}})
 			}
 			results = append(results, result)
 		}

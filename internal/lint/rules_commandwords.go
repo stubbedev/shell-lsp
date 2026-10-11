@@ -232,15 +232,15 @@ func (p *pass) assignedName(pe *syntax.ParamExp) string {
 	return strings.TrimSuffix(strings.TrimPrefix(text, "${"), "}")
 }
 
-func dollarRemoval(p *pass, pe *syntax.ParamExp) []textedit.Edit {
+func dollarRemoval(p *pass, pe *syntax.ParamExp) []Fix {
 	span, ok := p.span(pe)
 	if !ok {
 		return nil
 	}
 	if pe.Short {
-		return []textedit.Edit{{Start: span.Start, End: span.Start + 1}}
+		return []Fix{reviewFix("Remove the $", textedit.Edit{Start: span.Start, End: span.Start + 1})}
 	}
-	return []textedit.Edit{{Start: span.Start, End: span.Start + 2}, {Start: span.End - 1, End: span.End}}
+	return []Fix{reviewFix("Remove the $", textedit.Edit{Start: span.Start, End: span.Start + 2}, textedit.Edit{Start: span.End - 1, End: span.End})}
 }
 
 func isIndexedParam(pe *syntax.ParamExp) bool {
@@ -263,7 +263,7 @@ func (p *pass) reportDollarZero(at syntax.Node) {
 		if _, literal := at.(*syntax.Lit); literal {
 			replace.End = replace.Start + 1
 		}
-		p.report(2277, span, "$0 cannot be assigned like a variable; in bash, assign BASH_ARGV0 to change it.", textedit.Edit{Start: replace.Start, End: replace.End, NewText: "BASH_ARGV0"})
+		p.report(2277, span, "$0 cannot be assigned like a variable; in bash, assign BASH_ARGV0 to change it.", reviewFix("Assign BASH_ARGV0", textedit.Edit{Start: replace.Start, End: replace.End, NewText: "BASH_ARGV0"}))
 	case dialect.Ksh:
 		p.reportNode(2278, at, "$0 cannot be assigned in ksh.")
 	case dialect.Dash, dialect.Busybox:

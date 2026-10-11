@@ -23,8 +23,8 @@ func TestStdinConsumerFixes(t *testing.T) {
 		src := loop(body)
 		var got []string
 		for _, f := range Check(parser.Parse(src, dialect.Bash), nil, Options{}) {
-			if f.Code == 2095 && len(f.Fix) > 0 {
-				got = append(got, textedit.Apply(src, f.Fix))
+			if f.Code == 2095 && len(f.Fixes) > 0 {
+				got = append(got, textedit.Apply(src, fixEdits(f)))
 			}
 		}
 		if len(got) != 1 || got[0] != loop(want) {

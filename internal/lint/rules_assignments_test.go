@@ -2,13 +2,15 @@ package lint
 
 import "testing"
 
-func TestLiteralEqualsFixQuotesThePart(t *testing.T) {
+func TestLiteralEqualsFixes(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]string{
-		"ports=(0=http)\n":           "ports=(\"0=http\")\n",
-		"days=([0] = sunday)\n":      "days=([0] \"=\" sunday)\n",
-		"declare -a q=(1=one two)\n": "declare -a q=(\"1=one\" two)\n",
+		"ports=(0=http)\n":                "ports=(\"0=http\")\n",
+		"days=([0] = sunday)\n":           "days=([0]=sunday)\n",
+		"days=([0] =sunday [1]=monday)\n": "days=([0]=sunday [1]=monday)\n",
+		"days=([0]  =  sunday)\n":         "days=([0]=sunday)\n",
+		"declare -a q=(1=one two)\n":      "declare -a q=(\"1=one\" two)\n",
 	}
 	for src, want := range tests {
 		if got := fixed(t, src, 2191); got != want {

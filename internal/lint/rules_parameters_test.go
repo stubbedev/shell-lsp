@@ -30,7 +30,7 @@ func TestRequireVariableBracesFix(t *testing.T) {
 	}
 	fixed := src
 	for _, f := range slices.Backward(got) {
-		fixed = textedit.Apply(fixed, f.Fix)
+		fixed = textedit.Apply(fixed, fixEdits(f))
 	}
 	if want := "name=x\necho \"${name}\" $1 ${name}.txt\n"; fixed != want {
 		t.Errorf("fixed = %q, want %q", fixed, want)
@@ -50,7 +50,7 @@ func TestRequireVariableBracesNamesZshForms(t *testing.T) {
 	for _, f := range slices.Backward(findings) {
 		if f.Code == 2250 {
 			messages = append(messages, f.Message)
-			fixed = textedit.Apply(fixed, f.Fix)
+			fixed = textedit.Apply(fixed, fixEdits(f))
 		}
 	}
 	want := []string{

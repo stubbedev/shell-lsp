@@ -205,9 +205,9 @@ func TestCheckDiffAppliesTheFixAllEdits(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	writeFiles(t, dir, map[string]string{"a.sh": unquoted, "b.sh": "#!/bin/bash\nfoo=bar\n"})
+	writeFiles(t, dir, map[string]string{"a.sh": "#!/bin/bash\necho \"`date`\" $1\n", "b.sh": unquoted})
 	got := run(t, dir, "", "check", "-f", "diff", "a.sh")
-	want := "--- a/a.sh\n+++ b/a.sh\n@@ -1,2 +1,2 @@\n #!/bin/bash\n-echo $1\n+echo \"$1\"\n\n"
+	want := "--- a/a.sh\n+++ b/a.sh\n@@ -1,2 +1,2 @@\n #!/bin/bash\n-echo \"`date`\" $1\n+echo \"$(date)\" $1\n\n"
 	if got.stdout != want || got.status != checkStatusFindings {
 		t.Errorf("diff = %d %q, want %q", got.status, got.stdout, want)
 	}

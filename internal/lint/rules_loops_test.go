@@ -15,7 +15,7 @@ func TestTrailingCommaFixRemovesEachComma(t *testing.T) {
 	var edits []textedit.Edit
 	for _, f := range Check(parser.Parse(text, dialect.Bash), nil, Options{}) {
 		if f.Code == 2258 {
-			edits = append(edits, f.Fix...)
+			edits = append(edits, fixEdits(f)...)
 		}
 	}
 	want := "for cmd in ls 'cp' mv; do command -v \"$cmd\"; done\n"

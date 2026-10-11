@@ -17,7 +17,7 @@ func TestQuoteSafeVariables(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("SC2248 findings = %+v, want one for the clean variable", got)
 	}
-	if fixed, want := textedit.Apply(src, got[0].Fix), "region=eu-west-1\necho \"$region\"\ndirty=$(date)\necho $dirty\n"; fixed != want {
+	if fixed, want := textedit.Apply(src, fixEdits(got[0])), "region=eu-west-1\necho \"$region\"\ndirty=$(date)\necho $dirty\n"; fixed != want {
 		t.Errorf("fixed = %q, want %q", fixed, want)
 	}
 	if off := findingsWith(t, src, 2248); len(off) != 0 {

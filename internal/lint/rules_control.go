@@ -236,7 +236,8 @@ func checkUncheckedDirectoryChange(p *pass, n syntax.Node) {
 		return
 	}
 	args := call.Args[slices.Index(call.Args, word)+1:]
-	if stmt, ok := p.parent().(*syntax.Stmt); !ok || p.options().errexit || p.inCondition(stmt) {
+	stmt, ok := p.parent().(*syntax.Stmt)
+	if !ok || p.options().errexit || p.inCondition(stmt) {
 		return
 	}
 	if name != "cd" && parseFlags(args, "").has('n', "") {
@@ -248,8 +249,22 @@ func checkUncheckedDirectoryChange(p *pass, n syntax.Node) {
 		}
 	}
 	if span, ok := p.span(call); ok {
-		p.report(2164, span, "If "+name+" fails, the following commands run in the wrong directory; add || exit (or || return in a function).")
+		p.report(2164, span, "If "+name+" fails, the following commands run in the wrong directory; add || exit (or || return in a function).", p.leaveOnFailure(stmt)...)
 	}
+}
+
+func (p *pass) leaveOnFailure(stmt *syntax.Stmt) []Fix {
+	if stmt.Negated || stmt.Background || stmt.Coprocess || stmt.Disown {
+		return nil
+	}
+	at := commandEnd(stmt)
+	leave := func(keyword string) Fix {
+		return reviewFix("Add || "+keyword, textedit.Edit{Start: at, End: at, NewText: " || " + keyword})
+	}
+	if p.bats || slices.ContainsFunc(p.stack, func(n syntax.Node) bool { _, ok := n.(*syntax.FuncDecl); return ok }) {
+		return []Fix{leave("return"), leave("exit")}
+	}
+	return []Fix{leave("exit")}
 }
 
 func loopVariable(f *syntax.ForClause) (string, bool) {
@@ -442,7 +457,7 @@ func (p *pass) stdinConsumer(call *syntax.CallExpr, loop parser.Span) {
 		at = span.End
 	}
 	p.reportWithSeverity(2095, SeverityInfo, loop, "This loop reads its input from stdin, and "+name+" inside it can swallow that input; see the command below.")
-	p.report(2095, span, name+" reads stdin and may consume the input of the surrounding while read loop; add "+strings.TrimSpace(insert)+".", textedit.Edit{Start: at, End: at, NewText: insert})
+	p.report(2095, span, name+" reads stdin and may consume the input of the surrounding while read loop; add "+strings.TrimSpace(insert)+".", reviewFix("Add "+strings.TrimSpace(insert), textedit.Edit{Start: at, End: at, NewText: insert}))
 }
 
 func checkFunctionArguments(p *pass) {

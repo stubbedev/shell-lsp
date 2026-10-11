@@ -159,6 +159,6 @@ func (p *pass) checkTrailingComma(item *syntax.Word) {
 	if !ok || !litOK {
 		return
 	}
-	fix := textedit.Edit{Start: lit.End - 1, End: lit.End}
+	fix := reviewFix("Remove the trailing comma", textedit.Edit{Start: lit.End - 1, End: lit.End})
 	p.report(2258, span, "The trailing comma becomes part of this loop item; separate items with spaces only.", fix)
 }

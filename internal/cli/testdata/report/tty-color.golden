@@ -17,9 +17,6 @@ echo "$1" "(it's)"
 [0m	cd /tmp[0m
 [33m        ^-----^ SC2164 (warning): Use 'cd ... || exit' in case cd fails.[0m
 
-[1mDid you mean:[0m
-	cd /tmp || exit
-
 
 [1mIn a.sh line 5:[0m
 [0mif true; then[0m

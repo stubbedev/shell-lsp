@@ -269,7 +269,7 @@ func checkRecursiveCopy(p *pass, n syntax.Node) {
 			return
 		}
 		at := span.Start + strings.IndexByte(p.text[span.Start:span.End], 'r')
-		p.report(2336, span, "cp -r is implementation-defined for special files; use the portable -R.", textedit.Edit{Start: at, End: at + 1, NewText: "R"})
+		p.report(2336, span, "cp -r is implementation-defined for special files; use the portable -R.", safeFix("Replace -r with -R", textedit.Edit{Start: at, End: at + 1, NewText: "R"}))
 		return
 	}
 }
