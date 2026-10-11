@@ -132,8 +132,10 @@ func (l *Lookup) Page(ctx context.Context, name string) (Page, error) {
 	if err == nil {
 		page, err = Render(src)
 	}
-	l.mu.Lock()
-	l.cache[name] = cached{page: page, err: err}
-	l.mu.Unlock()
+	if l.Has(name) {
+		l.mu.Lock()
+		l.cache[strings.Clone(name)] = cached{page: page, err: err}
+		l.mu.Unlock()
+	}
 	return page, err
 }

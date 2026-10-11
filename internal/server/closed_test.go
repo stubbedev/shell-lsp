@@ -6,8 +6,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/shell-lsp/internal/bats"
+	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
+	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/perf"
 )
 
 func TestCachesDropWorkFinishingAfterClose(t *testing.T) {
@@ -45,5 +49,22 @@ func TestPushSchedulerForgetsJobsThatRan(t *testing.T) {
 	defer p.mu.Unlock()
 	if len(p.jobs) != 0 {
 		t.Errorf("jobs kept after they ran: %v", p.jobs)
+	}
+}
+
+func TestBatsResultsDoNotPinTheDocument(t *testing.T) {
+	t.Parallel()
+
+	const uri = "file:///t.bats"
+	results := newBatsResults()
+	pinned := perf.PinsSource("helper() {\n  false\n}\n", func(src string) {
+		tree := parser.Parse(src, dialect.Bash)
+		results.record(uri, nil, []placedFailure{anchorFailure(tree, bats.Failure{Line: tree.Line(len(src) / 2)})})
+	})
+	if pinned {
+		t.Error("a recorded failure keeps the document text its anchor was named from alive")
+	}
+	if failures := results.of(uri).failures; len(failures) != 1 || failures[0].anchor == nil {
+		t.Errorf("failures = %+v, want one anchored to helper", failures)
 	}
 }

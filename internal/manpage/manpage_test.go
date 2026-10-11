@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"io/fs"
 	"maps"
 	"os"
@@ -12,6 +13,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/stubbedev/shell-lsp/internal/perf"
 )
 
 const listPage = `.\" Generated for tests.
@@ -360,6 +363,30 @@ func TestLookupReadsInstalledPages(t *testing.T) {
 		if _, err := l.Page(t.Context(), name); !errors.Is(err, ErrNoPage) {
 			t.Errorf("Page(%q) error = %v, want ErrNoPage", name, err)
 		}
+	}
+}
+
+func TestLookupCachesOnlyInstalledPagesUnderTheirOwnKeys(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "man1", "list.1.gz"), gzipped(t, listPage))
+	l := NewLookup(dir, "")
+	for i := range 1000 {
+		if _, err := l.Page(t.Context(), fmt.Sprintf("missing%d", i)); !errors.Is(err, ErrNoPage) {
+			t.Fatalf("Page(missing%d) error = %v, want ErrNoPage", i, err)
+		}
+	}
+	pinned := perf.PinsSource("list", func(name string) {
+		if _, err := l.Page(t.Context(), name); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if pinned {
+		t.Error("the cached name keeps the text it was sliced from alive")
+	}
+	if len(l.cache) != 1 {
+		t.Errorf("cache holds %d entries, want only the installed page", len(l.cache))
 	}
 }
 

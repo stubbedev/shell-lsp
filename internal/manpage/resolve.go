@@ -190,7 +190,7 @@ func (r *resolver) listing(lv *level) ([]Subcommand, error) {
 	slices.SortFunc(subs, bySubcommandName)
 	if len(r.unloaded) == 0 {
 		l.mu.Lock()
-		l.listings[lv.page] = subs
+		l.listings[strings.Clone(lv.page)] = subs
 		l.mu.Unlock()
 	}
 	return subs, nil

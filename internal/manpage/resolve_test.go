@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/stubbedev/shell-lsp/internal/perf"
 )
 
 const vcsPage = `.TH VCS 1
@@ -291,6 +293,24 @@ func TestLookupListsNestedSubcommands(t *testing.T) {
 		if err != nil || len(listing.Unloaded) != 0 || !slices.Equal(subcommandNames(listing.Subcommands), tc.want) {
 			t.Errorf("Subcommands(%s %q) = %v (unloaded %v), %v; want %v", tc.command, tc.args, subcommandNames(listing.Subcommands), listing.Unloaded, err, tc.want)
 		}
+	}
+}
+
+func TestLookupListingsDoNotPinTheCallersText(t *testing.T) {
+	t.Parallel()
+
+	l := nestedLookup(t)
+	loadAll(t, l)
+	pinned := perf.PinsSource("vcs", func(command string) {
+		if _, err := l.Subcommands(t.Context(), command, nil); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if pinned {
+		t.Error("the listing cache keeps the text the command name was sliced from alive")
+	}
+	if len(l.listings) != 1 {
+		t.Errorf("listings = %v, want the one listed command", l.listings)
 	}
 }
 

@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -46,6 +47,10 @@ func (p *prefetcher) start(ctx context.Context) {
 }
 
 func (p *prefetcher) enqueue(name string) bool {
+	if _, queued := p.seen.Load(name); queued {
+		return false
+	}
+	name = strings.Clone(name)
 	if _, queued := p.seen.LoadOrStore(name, struct{}{}); queued {
 		return false
 	}

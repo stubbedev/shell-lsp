@@ -11,7 +11,9 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
+	"github.com/stubbedev/shell-lsp/internal/manpage"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/perf"
 )
 
 func TestPrefetchesSubcommandPages(t *testing.T) {
@@ -81,6 +83,18 @@ func TestPrefetchesThroughWrappers(t *testing.T) {
 
 	if got := fetched.await(t, 3); !slices.Equal(got, []string{"sudo", "tool", "tool-extra"}) {
 		t.Errorf("fetched %v, want the wrapper and the pages of the wrapped invocation", got)
+	}
+}
+
+func TestPrefetchQueueDoesNotPinTheDocument(t *testing.T) {
+	t.Parallel()
+
+	p := newPrefetcher(manpage.NewLookup(t.TempDir(), ""))
+	if perf.PinsSource("tool", func(name string) { p.enqueue(name) }) {
+		t.Error("the queued name keeps the document text it was sliced from alive")
+	}
+	if p.enqueue("tool") {
+		t.Error("a queued name was queued again")
 	}
 }
 
