@@ -24,6 +24,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/parallel"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/project"
+	"github.com/stubbedev/shell-lsp/internal/regularfile"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
@@ -123,8 +124,8 @@ func newChecker(env Env, opts checkOptions) *checker {
 	c := &checker{
 		env:    env,
 		opts:   opts,
-		editor: editorconfig.NewResolver(os.ReadFile, time.Now, time.Hour),
-		rcs:    newRCFinder(opts.rc, os.ReadFile, env.Home, env.ConfigHome),
+		editor: editorconfig.NewResolver(regularfile.ReadConfig, time.Now, time.Hour),
+		rcs:    newRCFinder(opts.rc, regularfile.ReadConfig, env.Home, env.ConfigHome),
 		stdin:  sync.OnceValues(func() ([]byte, error) { return io.ReadAll(env.Stdin) }),
 	}
 	c.ws = workspace.New(func(string) (*workspace.File, bool) { return nil, false }, c.dialectOf)

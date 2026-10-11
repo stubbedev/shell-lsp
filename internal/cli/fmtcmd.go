@@ -20,6 +20,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/parallel"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/project"
+	"github.com/stubbedev/shell-lsp/internal/regularfile"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
@@ -228,7 +229,7 @@ func runFmt(env Env, args []string) int {
 		fmt.Fprintln(env.Stdout, versionPrefix+env.Version)
 		return statusOK
 	}
-	f := &formatter{env: env, opts: opts, editor: editorconfig.NewResolver(os.ReadFile, time.Now, time.Hour)}
+	f := &formatter{env: env, opts: opts, editor: editorconfig.NewResolver(regularfile.ReadConfig, time.Now, time.Hour)}
 	if len(opts.paths) == 0 || (len(opts.paths) == 1 && opts.paths[0] == stdinName) {
 		return f.stdin()
 	}
@@ -303,7 +304,7 @@ func (f *formatter) files() int {
 	results := make([]formatted, len(targets))
 	parallel.For(runtime.GOMAXPROCS(0), len(targets), func(i int) {
 		t := targets[i]
-		raw, err := os.ReadFile(t.path)
+		raw, _, err := workspace.ReadDisk(t.path)
 		if err != nil {
 			results[i] = formatted{name: t.name, err: err}
 			return
