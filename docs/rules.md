@@ -143,6 +143,20 @@ alone, since the shell expands them before checking.
 export my-var=1    # SL2003: write my_var
 ```
 
+## SL2004
+
+**A trap is set inside a subshell.** A command substitution and every
+pipeline stage that runs in a subshell (all but the last in bash without
+`lastpipe`) get their own copy of the traps, so a `trap` set there only fires
+for that subshell and is gone once it ends. Saving traps with `$(trap -p)`,
+resetting one with `trap - SIG`, and traps inside an explicit `( … )` subshell,
+which are usually meant for that subshell, are not reported.
+
+```bash
+#!/bin/bash
+seq 3 | while read -r n; do trap 'echo bye' EXIT; done    # SL2004
+```
+
 The embedded-language rules check awk, sed and jq programs written inside the
 script with built-in parsers; no awk, sed or jq binary is run. A program is
 checked when it is a literal argument (`awk '...'`, `sed -e '...'`,

@@ -1,0 +1,19 @@
+### a trap set inside a command substitution or pipeline stage
+#!/bin/bash
+tmp=$(trap 'rm -f x' EXIT; mktemp)
+seq 3 | while read -r n; do trap 'echo bye' EXIT; done
+echo "$tmp $n"
+>>> SC2030 3:23
+>>> SC2031 4:12
+>>+ SL2004 2:7 -- shell-lsp native check; shellcheck does not flag a trap that only lives in a subshell
+>>+ SL2004 3:29 -- shell-lsp native check; shellcheck does not flag a trap that only lives in a subshell
+
+### saving, resetting and subshell-scoped traps are fine
+#!/bin/bash
+old=$(trap -p EXIT)
+( trap 'rm -f y' EXIT; echo sub )
+out=$(trap - EXIT; echo z)
+f() { trap 'echo f' RETURN; }
+f
+echo "$old $out"
+>>> none
