@@ -40,10 +40,11 @@ func Walk(node Node, f func(Node) bool) {
 		walkNilable(node.Name, f)
 		walkNilable(node.Value, f)
 		walkNilable(node.Index, f)
+		walkRefElems(node.Elems, f)
 		walkNilable(node.Array, f)
 	case *Redirect:
 		walkNilable(node.N, f)
-		Walk(node.Word, f)
+		walkNilable(node.Word, f)
 		walkNilable(node.Hdoc, f)
 	case *CallExpr:
 		walkList(node.Assigns, f)
@@ -73,6 +74,9 @@ func Walk(node Node, f func(Node) bool) {
 	case *TryClause:
 		Walk(node.Try, f)
 		Walk(node.Always, f)
+	case *NamespaceClause:
+		Walk(node.Name, f)
+		Walk(node.Body, f)
 	case *RepeatClause:
 		Walk(node.Count, f)
 		walkList(node.Do, f)
@@ -91,6 +95,7 @@ func Walk(node Node, f func(Node) bool) {
 	case *FuncDecl:
 		walkNilable(node.Name, f)
 		walkList(node.Names, f)
+		walkList(node.Params, f)
 		Walk(node.Body, f)
 		walkList(node.Args, f)
 	case *Word:
@@ -107,6 +112,7 @@ func Walk(node Node, f func(Node) bool) {
 		walkNilable(node.Param, f)
 		walkNilable(node.NestedParam, f)
 		walkNilable(node.Index, f)
+		walkRefElems(node.Elems, f)
 		if node.Slice != nil {
 			walkNilable(node.Slice.Offset, f)
 			walkNilable(node.Slice.Length, f)
@@ -165,6 +171,7 @@ func Walk(node Node, f func(Node) bool) {
 		walkList(node.Args, f)
 	case *ArrayExpr:
 		walkList(node.Elems, f)
+		walkList(node.Stmts, f)
 		walkComments(node.Last, f)
 	case *ArrayElem:
 		for _, c := range node.Comments {
@@ -176,6 +183,7 @@ func Walk(node Node, f func(Node) bool) {
 		}
 		walkNilable(node.Index, f)
 		walkNilable(node.Value, f)
+		walkNilable(node.Array, f)
 	case *ExtGlob:
 		Walk(node.Pattern, f)
 	case *ProcSubst:
@@ -219,6 +227,13 @@ func Preorder(node Node) iter.Seq[Node] {
 type nilableNode interface {
 	Node
 	comparable // pointer nodes, which can be compared to nil
+}
+
+func walkRefElems(elems []RefElem, f func(Node) bool) {
+	for _, el := range elems {
+		walkNilable(el.Index, f)
+		walkNilable(el.Member, f)
+	}
 }
 
 func walkNilable[N nilableNode](node N, f func(Node) bool) {

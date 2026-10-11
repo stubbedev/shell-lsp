@@ -177,7 +177,7 @@ echo "${build_kind=debug}"
 ### ksh special dotted version variable
 #!/bin/ksh
 echo "${.sh.version}"
->>> SC2296 2:9
+>>- SC2296 2:9 -- ksh93 names variables with dots, like .sh.version (sh(1) of ksh93u+m, Parameter Expansion)
 
 ### double-bracket -v on a plain name
 [[ -v session_id ]] && echo "$session_id"

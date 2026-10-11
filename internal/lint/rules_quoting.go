@@ -67,7 +67,7 @@ func checkUnquotedExpansion(p *pass, n syntax.Node) {
 	if context != contextSplit || spacelessSpecials[pe.Param.Value] || p.namesAssignment(pe) {
 		return
 	}
-	defaultAssignment := isDefaultAssignment(pe) && p.isArgumentOf(":")
+	defaultAssignment := assignsParameter(pe) && p.isArgumentOf(":")
 	p.withFlow(func(flow *flowResult) {
 		switch {
 		case flow.expansion(pe).clean():

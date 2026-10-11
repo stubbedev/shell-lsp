@@ -270,7 +270,7 @@ func (h hoverer) argument(ctx context.Context, cmd parser.Command) (Result, bool
 	args := parser.ArgumentTexts(cmd.Args)
 	args[at] = word
 	command := cmd.Name
-	wrappers := parser.Wrappers{Bats: h.Tree.Bats, Programs: true}
+	wrappers := parser.Wrappers{Bats: h.Tree.Bats(), Programs: true}
 	for {
 		wrap, wrapped := wrappers.Unwrap(command, args)
 		if !wrapped || at < wrap.Command {

@@ -35,7 +35,7 @@ func trackQuoteTaint(p *pass, n syntax.Node) {
 		}
 	case *syntax.ParamExp:
 		p.checkTaintedReference(n)
-		if n.Param != nil && isDefaultAssignment(n) && n.Exp.Word != nil {
+		if n.Param != nil && assignsParameter(n) && n.Exp.Word != nil {
 			p.taintFrom(n.Param.Value, n.Exp.Word, false)
 		}
 	}

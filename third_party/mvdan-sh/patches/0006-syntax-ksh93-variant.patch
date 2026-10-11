@@ -1,0 +1,2841 @@
+syntax: add a ksh93 language variant
+
+ksh93 (ksh93u+m sh(1)) shares most syntax with mksh, but LangMirBSDKorn
+rejects much of it, and parsing a ksh93 script as bash or mksh both fail
+on its own forms:
+
+	print -r -- ${.sh.version}          # variable names with dots
+	point=(x=1 y=(z=2))                 # compound variables
+	print ${point.y.z} ${a[1][2].name}  # members and further subscripts
+	typeset -T Pt_t=(integer len=0; get() { :; })
+	Pt_t p=(len=2) q                    # declaration commands made by types
+	enum Color_t=(red green); Color_t c=red
+	function .sh.math.hypot x y { .sh.value=$(( sqrt(x*x + y*y) )); }
+	(( .sh.value = _.len++ ))           # variable names with dots in arithmetic
+	print $(( hypot(3, 4) ))            # arithmetic function calls
+	namespace geo { origin=0; }
+	cat <<# EOF                         # strip leading blanks
+	print x >; out                      # replace the file on success
+	tr a-z A-Z <>; f; exec 3<#((EOF)) 3<#pat 3<##pat 3>#((CUR+10))
+	print $(3<#)                        # the offset of a file descriptor
+	print ${@x} ${#prefix@} ${!prefix*} ${!point.*}
+	print @(a|b) ~(E)a.*                # pattern groups
+	case $x in a) ;;& esac
+
+Reproducer, before this change:
+
+	$ printf 'print -r -- ${.sh.version}\n' | shfmt -ln mksh
+	<standard input>:1:15: invalid parameter name
+	$ printf 'point=(x=1 y=(z=2))\n' | shfmt -ln mksh
+	<standard input>:1:14: array element values must be words
+	$ printf 'function .sh.math.hypot x y { :; }\n' | shfmt -ln mksh
+	<standard input>:1:1: multi-name functions are a zsh feature; tried parsing as mksh
+	$ printf 'namespace geo { :; }\n' | shfmt -ln mksh
+	<standard input>:1:20: `}` can only be used to close a block
+	$ printf 'print $(( hypot(3, 4) ))\n' | shfmt -ln mksh
+	<standard input>:1:16: not a valid arithmetic operator: `(`
+	$ printf 'cat <<# EOF\n' | shfmt -ln mksh
+	<standard input>:1:5: `<<` must be followed by a word
+	$ printf 'print x >; out\n' | shfmt -ln mksh
+	<standard input>:1:9: `>` must be followed by a word
+	$ printf 'print ${@x}\n' | shfmt -ln mksh
+	<standard input>:1:10: `@` cannot be followed by a word
+	$ printf 'print ${#pre@}\n' | shfmt -ln mksh
+	<standard input>:1:13: cannot combine multiple parameter expansion operators
+
+LangKsh93 is a new variant, accepted by LangVariant.Set as "ksh93" or
+"ksh". The features which mksh and ksh93 share are now checked against
+both. ArrayExpr gains Stmts for compound assignments, which hold a list of
+commands; ArrayElem and Assign gain Array for nested values; Assign and
+ParamExp gain Elems for further subscripts and members; ParamExp gains
+Attributes for ${@a}; ArithmExp gains Bare for the expression of a seek
+redirection; FuncDecl gains Params for the arguments of an arithmetic
+function; and the new NamespaceClause node represents a name space. A
+command which assigns a compound or array value, such as Pt_t p=(len=2),
+is a DeclClause, and so is any command named after a type which an
+earlier enum or typeset -T defined in the same file. The new redirection
+operators are HashHdoc, RdrOutReplace, RdrInOutTrunc, SeekIn, SeekInCopy
+and SeekOut, with their tokens; a seek redirection without an operand has
+a nil Word.
+
+The ksh93 shell for TestParseConfirm is only used when `ksh --version`
+reports ksh93u+m, and the expectations of the existing tests for mksh
+also apply to ksh93 unless a test sets them separately.
+
+token_string.go was regenerated with `go run
+golang.org/x/tools/cmd/stringer@v0.52.0 -type token -linecomment
+-trimprefix _`, and tokens_parse.go with `go run gen_token_parse.go`.
+
+Upstream: https://github.com/mvdan/sh/issues/614
+
+diff --git a/syntax/example_test.go b/syntax/example_test.go
+index b5770c8..707eb08 100644
+--- a/syntax/example_test.go
++++ b/syntax/example_test.go
+@@ -92,7 +92,7 @@ func ExampleNewParser_options() {
+ 
+ 	// Output:
+ 	// <nil>
+-	// 1:5: c-style fors are a bash/zsh feature; tried parsing as posix
++	// 1:5: c-style fors are a bash/zsh/ksh93 feature; tried parsing as posix
+ 	// for ((i = 0; i < 5; i++)); do echo $i >f; done
+ 	// for ((i = 0; i < 5; i++)); do echo $i > f; done
+ }
+diff --git a/syntax/filetests_test.go b/syntax/filetests_test.go
+index 7cf7e55..8902da4 100644
+--- a/syntax/filetests_test.go
++++ b/syntax/filetests_test.go
+@@ -136,6 +136,9 @@ type fileTestCase struct {
+ 
+ 	// The real shells where testing the input succeeds or fails in the opposite way.
+ 	flipConfirmSet LangVariant
++
++	// The languages with an explicit entry in byLangIndex.
++	langsSet LangVariant
+ }
+ 
+ func flipConfirm2(langSet LangVariant) func(*fileTestCase) {
+@@ -146,11 +149,13 @@ func (c *fileTestCase) setForLangs(val any, langSets ...LangVariant) {
+ 	// The parameter is a slice to allow omitting the argument.
+ 	switch len(langSets) {
+ 	case 0:
++		c.langsSet = langResolvedVariants
+ 		for i := range c.byLangIndex {
+ 			c.byLangIndex[i] = val
+ 		}
+ 		return
+ 	case 1:
++		c.langsSet |= langSets[0]
+ 		for lang := range langSets[0].bits() {
+ 			c.byLangIndex[lang.index()] = val
+ 		}
+@@ -164,6 +169,11 @@ func fileTest(in []string, opts ...func(*fileTestCase)) fileTestCase {
+ 	for _, o := range opts {
+ 		o(&c)
+ 	}
++	// ksh93 shares nearly all of its syntax with mksh,
++	// so it is expected to parse like mksh unless a case says otherwise.
++	if c.langsSet&LangKsh93 == 0 {
++		c.byLangIndex[LangKsh93.index()] = c.byLangIndex[LangMirBSDKorn.index()]
++	}
+ 	return c
+ }
+ 
+@@ -400,6 +410,7 @@ var fileTests = []fileTestCase{
+ 			Unsigned: true,
+ 		}, LangMirBSDKorn),
+ 		langErr2("1:1: unsigned expressions are a mksh feature; tried parsing as LANG", LangBash),
++		langErr2("1:1: unsigned expressions are a mksh feature; tried parsing as LANG", LangKsh93),
+ 	),
+ 	fileTest(
+ 		[]string{"$((# 1 + 2))", "$(( # 1 + 2 ))"},
+@@ -412,6 +423,7 @@ var fileTests = []fileTestCase{
+ 			Unsigned: true,
+ 		}, LangMirBSDKorn),
+ 		langErr2("1:1: unsigned expressions are a mksh feature; tried parsing as LANG", LangBash),
++		langErr2("1:1: unsigned expressions are a mksh feature; tried parsing as LANG", LangKsh93),
+ 	),
+ 	fileTest(
+ 		[]string{"((3#20))"},
+@@ -423,8 +435,8 @@ var fileTests = []fileTestCase{
+ 			Op: Gtr,
+ 			X:  litWord("1.2"),
+ 			Y:  litWord("0.3"),
+-		}), LangZsh),
+-		langErr2("1:4: floating point arithmetic is a zsh feature; tried parsing as LANG", LangBash|LangMirBSDKorn),
++		}), LangZsh|LangKsh93),
++		langErr2("1:4: floating point arithmetic is a zsh/ksh93 feature; tried parsing as LANG", LangBash|LangMirBSDKorn),
+ 	),
+ 	fileTest(
+ 		[]string{
+@@ -574,8 +586,8 @@ var fileTests = []fileTestCase{
+ 				litWord("echo"),
+ 				word(litParamExp("i")),
+ 			)),
+-		}, LangBash|LangZsh),
+-		langErr2("1:5: c-style fors are a bash/zsh feature; tried parsing as LANG", LangPOSIX|LangMirBSDKorn),
++		}, LangBash|LangZsh|LangKsh93),
++		langErr2("1:5: c-style fors are a bash/zsh/ksh93 feature; tried parsing as LANG", LangPOSIX|LangMirBSDKorn),
+ 	),
+ 	fileTest(
+ 		[]string{
+@@ -1045,6 +1057,183 @@ var fileTests = []fileTestCase{
+ 			word(lit("(a|(b|c))"), lit("x")),
+ 		), LangZsh),
+ 	),
++	fileTest(
++		[]string{"${.sh.version} ${a.b[1]} ${@a} ${#a@} ${!a*}"},
++		langFile(call(
++			word(&ParamExp{Param: lit(".sh.version")}),
++			word(&ParamExp{Param: lit("a.b"), Index: litWord("1")}),
++			word(&ParamExp{Attributes: true, Param: lit("a")}),
++			word(&ParamExp{Length: true, Param: lit("a"), Names: NamesPrefixWords}),
++			word(&ParamExp{Excl: true, Param: lit("a"), Names: NamesPrefix}),
++		), LangKsh93),
++	),
++	fileTest(
++		[]string{"${!a.b.*} ${!.sh.@} ${#a.@}"},
++		langFile(call(
++			word(&ParamExp{Excl: true, Param: lit("a.b."), Names: NamesPrefix}),
++			word(&ParamExp{Excl: true, Param: lit(".sh."), Names: NamesPrefixWords}),
++			word(&ParamExp{Length: true, Param: lit("a."), Names: NamesPrefixWords}),
++		), LangKsh93),
++	),
++	fileTest(
++		[]string{"((.sh.value = _.x++ + .5))", "(( .sh.value=_.x++ + .5 ))"},
++		printsAs("((.sh.value = _.x++ + .5))"),
++		langFile(arithmCmd(&BinaryArithm{
++			Op: Assgn,
++			X:  litWord(".sh.value"),
++			Y: &BinaryArithm{
++				Op: Add,
++				X:  &UnaryArithm{Op: Inc, Post: true, X: litWord("_.x")},
++				Y:  litWord(".5"),
++			},
++		}), LangKsh93),
++	),
++	fileTest(
++		[]string{"a.b=1 .sh.value=2 c[1].d[2]=3"},
++		langFile(&CallExpr{Assigns: []*Assign{
++			{Name: lit("a.b"), Value: litWord("1")},
++			{Name: lit(".sh.value"), Value: litWord("2")},
++			{
++				Name:  lit("c"),
++				Index: litWord("1"),
++				Elems: []RefElem{{Member: lit("d")}, {Index: litWord("2")}},
++				Value: litWord("3"),
++			},
++		}}, LangKsh93),
++	),
++	fileTest(
++		[]string{"${a[1][2].b}"},
++		langFile(word(&ParamExp{
++			Param: lit("a"),
++			Index: litWord("1"),
++			Elems: []RefElem{{Index: litWord("2")}, {Member: lit("b")}},
++		}), LangKsh93),
++	),
++	fileTest(
++		[]string{"x=(a=1 b=(c=2))", "x=(\n\ta=1 b=(c=2)\n)"},
++		printsAs("x=(a=1 b=(c=2))"),
++		langFile(&CallExpr{Assigns: []*Assign{{
++			Name: lit("x"),
++			Array: &ArrayExpr{Stmts: stmts(&CallExpr{Assigns: []*Assign{
++				{Name: lit("a"), Value: litWord("1")},
++				{Name: lit("b"), Array: &ArrayExpr{Stmts: stmts(&CallExpr{Assigns: []*Assign{
++					{Name: lit("c"), Value: litWord("2")},
++				}})}},
++			}})},
++		}}}, LangKsh93),
++	),
++	fileTest(
++		[]string{"x=(typeset -i a=1; f() { b; })"},
++		printsAs("x=(\n\ttypeset -i a=1\n\tf() { b; }\n)"),
++		langFile(&CallExpr{Assigns: []*Assign{{
++			Name: lit("x"),
++			Array: &ArrayExpr{Stmts: []*Stmt{
++				stmt(&DeclClause{Variant: lit("typeset"), Args: []*Assign{
++					{Naked: true, Value: litWord("-i")},
++					{Name: lit("a"), Value: litWord("1")},
++				}}),
++				stmt(&FuncDecl{Parens: true, Name: lit("f"), Body: stmt(block(litStmt("b")))}),
++			}},
++		}}}, LangKsh93),
++	),
++	fileTest(
++		[]string{"x=( (a=1) [k]=(b) )"},
++		langFile(&CallExpr{Assigns: []*Assign{{
++			Name: lit("x"),
++			Array: &ArrayExpr{Elems: []*ArrayElem{
++				{Array: &ArrayExpr{Stmts: stmts(&CallExpr{Assigns: []*Assign{{Name: lit("a"), Value: litWord("1")}}})}},
++				{Index: litWord("k"), Array: arrValues(litWord("b"))},
++			}},
++		}}}, LangKsh93),
++	),
++	fileTest(
++		[]string{"Pt_t p=(x=1) q"},
++		langFile(&DeclClause{Variant: lit("Pt_t"), Args: []*Assign{
++			{Name: lit("p"), Array: &ArrayExpr{Stmts: stmts(&CallExpr{Assigns: []*Assign{{Name: lit("x"), Value: litWord("1")}}})}},
++			{Naked: true, Name: lit("q")},
++		}}, LangKsh93),
++	),
++	fileTest(
++		[]string{"enum C=(a b)\nC x=a y\ntypeset -T P=(z=0)\nP p\nQ q=r"},
++		langFile([]Command{
++			&DeclClause{Variant: lit("enum"), Args: []*Assign{
++				{Name: lit("C"), Array: arrValues(litWord("a"), litWord("b"))},
++			}},
++			&DeclClause{Variant: lit("C"), Args: []*Assign{
++				{Name: lit("x"), Value: litWord("a")},
++				{Naked: true, Name: lit("y")},
++			}},
++			&DeclClause{Variant: lit("typeset"), Args: []*Assign{
++				{Naked: true, Value: litWord("-T")},
++				{Name: lit("P"), Array: &ArrayExpr{Stmts: stmts(&CallExpr{Assigns: []*Assign{{Name: lit("z"), Value: litWord("0")}}})}},
++			}},
++			&DeclClause{Variant: lit("P"), Args: []*Assign{{Naked: true, Name: lit("p")}}},
++			litCall("Q", "q=r"),
++		}, LangKsh93),
++	),
++	fileTest(
++		[]string{"function .sh.math.f x y { a; }"},
++		langFile(&FuncDecl{
++			RsrvWord: true,
++			Name:     lit(".sh.math.f"),
++			Params:   lits("x", "y"),
++			Body:     stmt(block(litStmt("a"))),
++		}, LangKsh93),
++	),
++	fileTest(
++		[]string{"namespace n { a; }", "namespace n {\n\ta\n}"},
++		printsAs("namespace n { a; }"),
++		langFile(&NamespaceClause{Name: lit("n"), Body: block(litStmt("a"))}, LangKsh93),
++	),
++	fileTest(
++		[]string{"$((sqrt(1.5) * 2))"},
++		langFile(arithmExp(&BinaryArithm{
++			Op: Mul,
++			X:  &FuncArithm{Name: lit("sqrt"), X: litWord("1.5")},
++			Y:  litWord("2"),
++		}), LangKsh93),
++	),
++	fileTest(
++		[]string{"a >;b <>;c <#d 3<##e >#((f + 1))"},
++		langFile(&Stmt{
++			Cmd: litCall("a"),
++			Redirs: []*Redirect{
++				{Op: RdrOutReplace, Word: litWord("b")},
++				{Op: RdrInOutTrunc, Word: litWord("c")},
++				{Op: SeekIn, Word: litWord("d")},
++				{Op: SeekInCopy, N: lit("3"), Word: litWord("e")},
++				{Op: SeekOut, Word: word(&ArithmExp{Bare: true, X: &BinaryArithm{
++					Op: Add,
++					X:  litWord("f"),
++					Y:  litWord("1"),
++				}})},
++			},
++		}, LangKsh93),
++	),
++	fileTest(
++		[]string{"$(3<#)"},
++		langFile(cmdSubst(&Stmt{Redirs: []*Redirect{{N: lit("3"), Op: SeekIn}}}), LangKsh93),
++	),
++	fileTest(
++		[]string{"a <<#EOF\n\tb\n  EOF"},
++		langFile(&Stmt{
++			Cmd: litCall("a"),
++			Redirs: []*Redirect{{
++				Op:   HashHdoc,
++				Word: litWord("EOF"),
++				Hdoc: litWord("\tb\n  "),
++			}},
++		}, LangKsh93),
++	),
++	fileTest(
++		[]string{"a ~(E)b+ {2}(c) *-(d)"},
++		langFile(call(
++			litWord("a"),
++			word(lit("~"), lit("(E)"), lit("b+")),
++			word(lit("{2}"), lit("(c)")),
++			word(lit("*-"), lit("(d)")),
++		), LangKsh93),
++	),
+ 	fileTest(
+ 		[]string{"repeat 3 { foo }"},
+ 		printsAs("repeat 3; do foo; done"),
+@@ -2262,7 +2451,7 @@ var fileTests = []fileTestCase{
+ 				{Op: RdrAll, Word: litWord("a")},
+ 			},
+ 		}, LangBash|LangMirBSDKorn|LangZsh),
+-		langErr2("1:6: `&>` redirects are a bash/mksh/zsh feature; tried parsing as LANG", LangPOSIX),
++		langErr2("1:6: `&>` redirects are a bash/mksh/zsh/ksh93 feature; tried parsing as LANG", LangPOSIX),
+ 		flipConfirm2(LangPOSIX), // POSIX shells tend to parse &> as & > hence it runs as two commands
+ 	),
+ 	fileTest(
+@@ -2273,7 +2462,7 @@ var fileTests = []fileTestCase{
+ 				{Op: AppAll, Word: litWord("b")},
+ 			},
+ 		}, LangBash|LangMirBSDKorn|LangZsh),
+-		langErr2("1:6: `&>>` redirects are a bash/mksh/zsh feature; tried parsing as LANG", LangPOSIX),
++		langErr2("1:6: `&>>` redirects are a bash/mksh/zsh/ksh93 feature; tried parsing as LANG", LangPOSIX),
+ 		flipConfirm2(LangPOSIX), // POSIX shells tend to parse &> as & > hence it runs as two commands
+ 	),
+ 	fileTest(
+@@ -2362,7 +2551,7 @@ var fileTests = []fileTestCase{
+ 				Word: litWord("input"),
+ 			}},
+ 		}, LangBash|LangMirBSDKorn|LangZsh),
+-		langErr2("1:5: herestrings are a bash/mksh/zsh feature; tried parsing as LANG", LangPOSIX),
++		langErr2("1:5: herestrings are a bash/mksh/zsh/ksh93 feature; tried parsing as LANG", LangPOSIX),
+ 	),
+ 	fileTest(
+ 		[]string{
+@@ -2843,7 +3032,7 @@ var fileTests = []fileTestCase{
+ 			Stmts:    litStmts("foo"),
+ 			TempFile: true,
+ 		}, LangBash|LangMirBSDKorn),
+-		langErr2("1:1: `${ stmts;}` is a bash/mksh feature; tried parsing as LANG", LangPOSIX),
++		langErr2("1:1: `${ stmts;}` is a bash/mksh/ksh93 feature; tried parsing as LANG", LangPOSIX),
+ 	),
+ 	fileTest(
+ 		[]string{"${\n\tfoo\n\tbar\n}", "${ foo; bar;}"},
+@@ -2859,6 +3048,7 @@ var fileTests = []fileTestCase{
+ 			ReplyVar: true,
+ 		}, LangBash|LangMirBSDKorn),
+ 		langErr2("1:1: `${|stmts;}` is a bash/mksh feature; tried parsing as LANG", LangPOSIX),
++		langErr2("1:1: `${|stmts;}` is a bash/mksh feature; tried parsing as LANG", LangKsh93),
+ 	),
+ 	fileTest(
+ 		[]string{"${|\n\tfoo\n\tbar\n}", "${|foo; bar;}"},
+@@ -2866,6 +3056,7 @@ var fileTests = []fileTestCase{
+ 			Stmts:    litStmts("foo", "bar"),
+ 			ReplyVar: true,
+ 		}, LangBash|LangMirBSDKorn),
++		langErr2("1:1: `${|stmts;}` is a bash/mksh feature; tried parsing as LANG", LangKsh93),
+ 	),
+ 	fileTest(
+ 		[]string{`"${ foo;}"`, `"${ foo; }"`},
+@@ -2873,7 +3064,7 @@ var fileTests = []fileTestCase{
+ 			Stmts:    litStmts("foo"),
+ 			TempFile: true,
+ 		}), LangBash|LangMirBSDKorn),
+-		langErr2("1:2: `${ stmts;}` is a bash/mksh feature; tried parsing as LANG", LangPOSIX),
++		langErr2("1:2: `${ stmts;}` is a bash/mksh/ksh93 feature; tried parsing as LANG", LangPOSIX),
+ 	),
+ 	fileTest(
+ 		[]string{`"${|foo;}"`, `"${| foo; }"`},
+@@ -2882,6 +3073,7 @@ var fileTests = []fileTestCase{
+ 			ReplyVar: true,
+ 		}), LangBash|LangMirBSDKorn),
+ 		langErr2("1:2: `${|stmts;}` is a bash/mksh feature; tried parsing as LANG", LangPOSIX),
++		langErr2("1:2: `${|stmts;}` is a bash/mksh feature; tried parsing as LANG", LangKsh93),
+ 	),
+ 	fileTest(
+ 		[]string{`${ foo;}bar`},
+@@ -2889,7 +3081,7 @@ var fileTests = []fileTestCase{
+ 			Stmts:    litStmts("foo"),
+ 			TempFile: true,
+ 		}, lit("bar")), LangBash|LangMirBSDKorn),
+-		langErr2("1:1: `${ stmts;}` is a bash/mksh feature; tried parsing as LANG", LangPOSIX),
++		langErr2("1:1: `${ stmts;}` is a bash/mksh/ksh93 feature; tried parsing as LANG", LangPOSIX),
+ 	),
+ 	fileTest(
+ 		[]string{`"$foo"`},
+@@ -3285,7 +3477,7 @@ var fileTests = []fileTestCase{
+ 			Param: lit("foo"),
+ 			Index: litWord("1"),
+ 		}, LangBash|LangMirBSDKorn|LangZsh),
+-		langErr2("1:6: arrays are a bash/mksh/zsh feature; tried parsing as LANG", LangPOSIX),
++		langErr2("1:6: arrays are a bash/mksh/zsh/ksh93 feature; tried parsing as LANG", LangPOSIX),
+ 	),
+ 	fileTest(
+ 		[]string{`$foo[1]`},
+@@ -3330,7 +3522,7 @@ var fileTests = []fileTestCase{
+ 				Y:  litWord("3"),
+ 			},
+ 		}, LangBash|LangMirBSDKorn|LangZsh),
+-		langErr2("1:6: arrays are a bash/mksh/zsh feature; tried parsing as LANG", LangPOSIX),
++		langErr2("1:6: arrays are a bash/mksh/zsh/ksh93 feature; tried parsing as LANG", LangPOSIX),
+ 	),
+ 	fileTest(
+ 		[]string{`${a:(1):(2)}`},
+@@ -3341,7 +3533,7 @@ var fileTests = []fileTestCase{
+ 				Length: parenArit(litWord("2")),
+ 			},
+ 		}, LangBash|LangMirBSDKorn|LangZsh),
+-		langErr2("1:4: slicing is a bash/mksh/zsh feature; tried parsing as LANG", LangPOSIX),
++		langErr2("1:4: slicing is a bash/mksh/zsh/ksh93 feature; tried parsing as LANG", LangPOSIX),
+ 	),
+ 	fileTest(
+ 		[]string{`${args[cmd,#]}`},
+@@ -3353,7 +3545,7 @@ var fileTests = []fileTestCase{
+ 				Y:  litWord("#"),
+ 			},
+ 		}, LangBash|LangMirBSDKorn|LangZsh),
+-		langErr2("1:7: arrays are a bash/mksh/zsh feature; tried parsing as LANG", LangPOSIX),
++		langErr2("1:7: arrays are a bash/mksh/zsh/ksh93 feature; tried parsing as LANG", LangPOSIX),
+ 	),
+ 	fileTest(
+ 		[]string{`${foo[1,-1]}`},
+@@ -3368,7 +3560,7 @@ var fileTests = []fileTestCase{
+ 				},
+ 			},
+ 		}, LangBash|LangMirBSDKorn|LangZsh),
+-		langErr2("1:6: arrays are a bash/mksh/zsh feature; tried parsing as LANG", LangPOSIX),
++		langErr2("1:6: arrays are a bash/mksh/zsh/ksh93 feature; tried parsing as LANG", LangPOSIX),
+ 	),
+ 	fileTest(
+ 		[]string{`${@[-1]}`},
+@@ -3545,7 +3737,7 @@ var fileTests = []fileTestCase{
+ 			Param: lit("foo"),
+ 			Slice: &Slice{Offset: litWord("1")},
+ 		}, LangBash|LangMirBSDKorn|LangZsh),
+-		langErr2("1:6: slicing is a bash/mksh/zsh feature; tried parsing as LANG", LangPOSIX),
++		langErr2("1:6: slicing is a bash/mksh/zsh/ksh93 feature; tried parsing as LANG", LangPOSIX),
+ 	),
+ 	fileTest(
+ 		[]string{`${foo:1:2}`, `${foo: 1 : 2 }`},
+@@ -3632,7 +3824,7 @@ var fileTests = []fileTestCase{
+ 			Param: lit("foo"),
+ 			Repl:  &Replace{Orig: litWord("a"), With: litWord("b")},
+ 		}, LangBash|LangMirBSDKorn|LangZsh),
+-		langErr2("1:6: search and replace is a bash/mksh/zsh feature; tried parsing as LANG", LangPOSIX),
++		langErr2("1:6: search and replace is a bash/mksh/zsh/ksh93 feature; tried parsing as LANG", LangPOSIX),
+ 	),
+ 	fileTest(
+ 		[]string{"${foo/ /\t}"},
+@@ -3811,6 +4003,7 @@ var fileTests = []fileTestCase{
+ 				},
+ 			}),
+ 		), LangMirBSDKorn),
++		langErr2("1:4: this expansion operator is a bash/mksh feature; tried parsing as LANG", LangKsh93),
+ 	),
+ 	fileTest(
+ 		[]string{`${#foo}`},
+@@ -3825,6 +4018,7 @@ var fileTests = []fileTestCase{
+ 			Width: true,
+ 			Param: lit("foo"),
+ 		}, LangMirBSDKorn),
++		langErr2("1:1: `${%foo}` is a mksh feature; tried parsing as LANG", LangKsh93),
+ 	),
+ 	fileTest(
+ 		[]string{`${!foo} ${!bar[@]}`},
+@@ -3839,7 +4033,7 @@ var fileTests = []fileTestCase{
+ 				Index: litWord("@"),
+ 			}),
+ 		), LangBash|LangMirBSDKorn),
+-		langErr2("1:1: `${!foo}` is a bash/mksh feature; tried parsing as LANG", LangPOSIX),
++		langErr2("1:1: `${!foo}` is a bash/mksh/ksh93 feature; tried parsing as LANG", LangPOSIX),
+ 	),
+ 	fileTest(
+ 		[]string{`${!foo*} ${!bar@}`},
+@@ -3854,9 +4048,9 @@ var fileTests = []fileTestCase{
+ 				Param: lit("bar"),
+ 				Names: NamesPrefixWords,
+ 			}),
+-		), LangBash),
+-		langErr2("1:1: `${!foo}` is a bash/mksh feature; tried parsing as LANG", LangPOSIX),
+-		langErr2("1:1: `${!foo*}` is a bash feature; tried parsing as LANG", LangMirBSDKorn),
++		), LangBash|LangKsh93),
++		langErr2("1:1: `${!foo}` is a bash/mksh/ksh93 feature; tried parsing as LANG", LangPOSIX),
++		langErr2("1:1: `${!foo*}` is a bash/ksh93 feature; tried parsing as LANG", LangMirBSDKorn),
+ 	),
+ 	fileTest(
+ 		[]string{`${#?}`},
+@@ -4494,6 +4688,7 @@ var fileTests = []fileTestCase{
+ 				Stmts:    litStmts("a"),
+ 			}},
+ 		}, LangMirBSDKorn|LangZsh),
++		langSkip(LangKsh93),
+ 	),
+ 	fileTest(
+ 		[]string{"case i in 1) a ;;& 2) b ;; esac"},
+@@ -4511,7 +4706,7 @@ var fileTests = []fileTestCase{
+ 					Stmts:    litStmts("b"),
+ 				},
+ 			},
+-		}, LangBash),
++		}, LangBash|LangKsh93),
+ 	),
+ 	fileTest(
+ 		[]string{"case i in 1) a ;| 2) b ;; esac"},
+@@ -4530,6 +4725,7 @@ var fileTests = []fileTestCase{
+ 				},
+ 			},
+ 		}, LangMirBSDKorn|LangZsh),
++		langErr2("1:17: `|` can only immediately follow a statement", LangKsh93),
+ 	),
+ 	fileTest(
+ 		[]string{"case $i in 1) cat <<EOF ;;\nfoo\nEOF\nesac"},
+@@ -4954,7 +5150,7 @@ var fileTests = []fileTestCase{
+ 			Op: AndTest,
+ 			X:  &UnaryTest{Op: TsSticky, X: litWord("a")},
+ 			Y:  &UnaryTest{Op: TsModif, X: litWord("b")},
+-		}}, LangBash|LangZsh),
++		}}, LangBash|LangZsh|LangKsh93),
+ 	),
+ 	fileTest(
+ 		[]string{"[[ -G a && -O b ]]"},
+@@ -5119,7 +5315,7 @@ var fileTests = []fileTestCase{
+ 			Variant: lit("local"),
+ 			Args:    litAssigns("bar"),
+ 		})), LangBash|LangMirBSDKorn|LangZsh),
+-		langFile(subshell(litStmt("local", "bar")), LangPOSIX),
++		langFile(subshell(litStmt("local", "bar")), LangPOSIX|LangKsh93),
+ 	),
+ 	fileTest(
+ 		[]string{"local {a,b}_c=1"},
+@@ -5127,7 +5323,7 @@ var fileTests = []fileTestCase{
+ 			Variant: lit("local"),
+ 			Args:    []*Assign{{Naked: true, Value: litWord("{a,b}_c=1")}},
+ 		}, LangBash|LangMirBSDKorn|LangZsh),
+-		langFile(litStmt("local", "{a,b}_c=1"), LangPOSIX),
++		langFile(litStmt("local", "{a,b}_c=1"), LangPOSIX|LangKsh93),
+ 	),
+ 	fileTest(
+ 		[]string{"typeset"},
+@@ -5270,6 +5466,7 @@ var fileTests = []fileTestCase{
+ 			Name:  lit("foo"),
+ 			Array: arrValues(litWord("[")),
+ 		}}}, LangMirBSDKorn),
++		langErr2("1:6: `[` must be followed by an expression", LangKsh93),
+ 	),
+ 	fileTest(
+ 		[]string{
+@@ -6357,6 +6554,8 @@ func (c sanityChecker) visit(node Node) bool {
+ 		c.checkLoopBody(node, node.DoPos, node.DonePos, node.Braces, node.Short)
+ 	case *TryClause:
+ 		c.checkPos(node, node.AlwaysPos, "always")
++	case *NamespaceClause:
++		c.checkPos(node, node.Namespace, "namespace")
+ 	case *RepeatClause:
+ 		c.checkPos(node, node.RepeatPos, "repeat")
+ 		c.checkLoopBody(node, node.DoPos, node.DonePos, node.Braces, node.Short)
+@@ -6469,7 +6668,11 @@ func (c sanityChecker) visit(node Node) bool {
+ 			c.checkPos(node, node.Left, "$[")
+ 			c.checkPos(node, node.Right, "]")
+ 		} else {
+-			c.checkPos(node, node.Left, "$((")
++			left := "$(("
++			if node.Bare {
++				left = "(("
++			}
++			c.checkPos(node, node.Left, left)
+ 			c.checkPos(node, node.Right, "))")
+ 		}
+ 	case *ArithmCmd:
+diff --git a/syntax/lexer.go b/syntax/lexer.go
+index 261dbba..e0dc7b0 100644
+--- a/syntax/lexer.go
++++ b/syntax/lexer.go
+@@ -192,7 +192,7 @@ readAgain:
+ 
+ func (p *Parser) nextKeepSpaces() {
+ 	r := p.r
+-	if p.quote != hdocBody && p.quote != hdocBodyTabs {
++	if p.quote&(hdocBody|hdocBodyTabs|hdocBodyBlanks) == 0 {
+ 		// Heredocs handle escaped newlines in a special way, but others do not.
+ 		for r == escNewl {
+ 			r = p.rune()
+@@ -209,7 +209,7 @@ func (p *Parser) nextKeepSpaces() {
+ 		default:
+ 			p.advanceLitDquote(r)
+ 		}
+-	case hdocBody, hdocBodyTabs:
++	case hdocBody, hdocBodyTabs, hdocBodyBlanks:
+ 		switch r {
+ 		case '`', '$':
+ 			p.tok = p.dqToken(r)
+@@ -382,6 +382,9 @@ skipSpace:
+ 		// can represent, so in a subscript it starts a literal instead;
+ 		// it can be part of an associative array key, like in ${args[cmd,#]}.
+ 		p.advanceLitOther(r)
++	case p.quote&allArithmExpr != 0 && r == '.' && p.lang.in(LangKsh93) && paramNameStartRune(p.peek()):
++		// A ksh93 vname like .sh.value, rather than a float like .5.
++		p.advanceLitOther(r)
+ 	case p.quote&allArithmExpr != 0 && arithmOps(r):
+ 		p.tok = p.arithmToken(r)
+ 	case p.quote&allParamExp != 0 && paramOps(r):
+@@ -540,7 +543,7 @@ func (p *Parser) regToken(r rune) token {
+ 			p.rune()
+ 			return orOr
+ 		case '&':
+-			if !p.lang.in(langBashLike | LangMirBSDKorn | LangZsh) {
++			if !p.lang.in(langBashLike | langKshLike | LangZsh) {
+ 				break
+ 			}
+ 			p.rune()
+@@ -550,13 +553,13 @@ func (p *Parser) regToken(r rune) token {
+ 	case '$':
+ 		switch p.rune() {
+ 		case '\'':
+-			if !p.lang.in(langBashLike | LangMirBSDKorn | LangZsh) {
++			if !p.lang.in(langBashLike | langKshLike | LangZsh) {
+ 				break
+ 			}
+ 			p.rune()
+ 			return dollSglQuote
+ 		case '"':
+-			if !p.lang.in(langBashLike | LangMirBSDKorn) {
++			if !p.lang.in(langBashLike | langKshLike) {
+ 				break
+ 			}
+ 			p.rune()
+@@ -580,7 +583,7 @@ func (p *Parser) regToken(r rune) token {
+ 		}
+ 		return dollar
+ 	case '(':
+-		if p.rune() == '(' && p.lang.in(langBashLike|LangMirBSDKorn|LangZsh) && p.quote != testExpr && !p.anonFuncAhead() {
++		if p.rune() == '(' && p.lang.in(langBashLike|langKshLike|LangZsh) && p.quote != testExpr && !p.anonFuncAhead() {
+ 			p.rune()
+ 			return dblLeftParen
+ 		}
+@@ -591,13 +594,13 @@ func (p *Parser) regToken(r rune) token {
+ 	case ';':
+ 		switch p.rune() {
+ 		case ';':
+-			if p.rune() == '&' && p.lang.in(langBashLike) {
++			if p.rune() == '&' && p.lang.in(langBashLike|LangKsh93) {
+ 				p.rune()
+ 				return dblSemiAnd
+ 			}
+ 			return dblSemicolon
+ 		case '&':
+-			if !p.lang.in(langBashLike | LangMirBSDKorn | LangZsh) {
++			if !p.lang.in(langBashLike | langKshLike | LangZsh) {
+ 				break
+ 			}
+ 			p.rune()
+@@ -620,16 +623,33 @@ func (p *Parser) regToken(r rune) token {
+ 			case '<':
+ 				p.rune()
+ 				return wordHdoc
++			case '#':
++				if p.lang.in(LangKsh93) {
++					p.rune()
++					return hashHdoc
++				}
+ 			}
+ 			return hdoc
+ 		case '>':
+-			p.rune()
++			if p.rune() == ';' && p.lang.in(LangKsh93) {
++				p.rune()
++				return rdrInOutTr
++			}
+ 			return rdrInOut
++		case '#':
++			if !p.lang.in(LangKsh93) {
++				break
++			}
++			if p.rune() == '#' {
++				p.rune()
++				return seekInCopy
++			}
++			return seekIn
+ 		case '&':
+ 			p.rune()
+ 			return dplIn
+ 		case '(':
+-			if !p.lang.in(langBashLike | LangZsh) {
++			if !p.lang.in(langBashLike | LangZsh | LangKsh93) {
+ 				break
+ 			}
+ 			p.rune()
+@@ -684,8 +704,18 @@ func (p *Parser) regToken(r rune) token {
+ 				p.rune()
+ 				return rdrClob
+ 			}
++		case ';':
++			if p.lang.in(LangKsh93) {
++				p.rune()
++				return rdrOutRepl
++			}
++		case '#':
++			if p.lang.in(LangKsh93) {
++				p.rune()
++				return seekOut
++			}
+ 		case '(':
+-			if !p.lang.in(langBashLike | LangZsh) {
++			if !p.lang.in(langBashLike | LangZsh | LangKsh93) {
+ 				break
+ 			}
+ 			p.rune()
+@@ -1111,11 +1141,11 @@ loop:
+ 				break loop
+ 			}
+ 		case '.':
+-			if !p.lang.in(LangZsh) && p.quote&allArithmExpr != 0 {
++			if !p.lang.in(LangZsh|LangKsh93) && p.quote&allArithmExpr != 0 {
+ 				break loop
+ 			}
+ 		case '[', ']':
+-			if p.lang.in(langBashLike|LangMirBSDKorn|LangZsh) && p.quote&allArithmExpr != 0 {
++			if p.lang.in(langBashLike|langKshLike|LangZsh) && p.quote&allArithmExpr != 0 {
+ 				break loop
+ 			}
+ 			fallthrough
+@@ -1210,7 +1240,7 @@ loop:
+ 				// operator below.
+ 				break
+ 			}
+-			if p.lang.in(langBashLike|LangMirBSDKorn|LangZsh) && len(p.litBs) > 1 && p.litBs[0] != '[' {
++			if p.lang.in(langBashLike|langKshLike|LangZsh) && len(p.litBs) > 1 && p.litBs[0] != '[' {
+ 				tok = _Lit
+ 				break loop
+ 			}
+@@ -1236,6 +1266,18 @@ loop:
+ 	p.tok, p.val = tok, p.endLit()
+ }
+ 
++// hdocIndent reports whether r is indentation to skip at the start of a line
++// of a here-document: tabs with <<-, and with ksh93's <<#, spaces as well.
++func (p *Parser) hdocIndent(r rune) bool {
++	switch p.quote {
++	case hdocBodyTabs:
++		return r == '\t'
++	case hdocBodyBlanks:
++		return r == '\t' || r == ' '
++	}
++	return false
++}
++
+ func (p *Parser) advanceLitHdoc(r rune) {
+ 	// Unlike the rest of nextKeepSpaces quote states, we handle escaped
+ 	// newlines here. If lastTok==_Lit, then we know we're following an
+@@ -1249,7 +1291,7 @@ func (p *Parser) advanceLitHdoc(r rune) {
+ 
+ 	p.tok = _Lit
+ 	p.newLit(r)
+-	for p.quote == hdocBodyTabs && r == '\t' {
++	for p.hdocIndent(r) {
+ 		r = p.rune()
+ 	}
+ 	lStart := len(p.litBs) - 1
+@@ -1296,7 +1338,7 @@ func (p *Parser) advanceLitHdoc(r rune) {
+ 			if r != '\n' {
+ 				return // hit an unexpected EOF or closing backquote
+ 			}
+-			for p.quote == hdocBodyTabs && p.peek() == '\t' {
++			for p.hdocIndent(rune(p.peek())) {
+ 				p.rune()
+ 			}
+ 			lStart = len(p.litBs)
+@@ -1313,7 +1355,7 @@ func (p *Parser) quotedHdocWord() *Word {
+ 		if r == runeEOF {
+ 			return nil
+ 		}
+-		for p.quote == hdocBodyTabs && r == '\t' {
++		for p.hdocIndent(r) {
+ 			r = p.rune()
+ 		}
+ 		lStart := len(p.litBs) - 1
+diff --git a/syntax/nodes.go b/syntax/nodes.go
+index 23f4d28..bd29c67 100644
+--- a/syntax/nodes.go
++++ b/syntax/nodes.go
+@@ -262,30 +262,31 @@ func (s *Stmt) End() Pos {
+ //
+ // These are [*CallExpr], [*IfClause], [*WhileClause], [*ForClause], [*CaseClause],
+ // [*Block], [*Subshell], [*BinaryCmd], [*FuncDecl], [*ArithmCmd], [*TestClause],
+-// [*DeclClause], [*LetClause], [*TimeClause], [*CoprocClause], [*RepeatClause], and [*TryClause].
++// [*DeclClause], [*LetClause], [*TimeClause], [*CoprocClause], [*RepeatClause], [*TryClause], and [*NamespaceClause].
+ type Command interface {
+ 	Node
+ 	commandNode()
+ }
+ 
+-func (*CallExpr) commandNode()     {}
+-func (*IfClause) commandNode()     {}
+-func (*WhileClause) commandNode()  {}
+-func (*ForClause) commandNode()    {}
+-func (*CaseClause) commandNode()   {}
+-func (*Block) commandNode()        {}
+-func (*Subshell) commandNode()     {}
+-func (*BinaryCmd) commandNode()    {}
+-func (*FuncDecl) commandNode()     {}
+-func (*ArithmCmd) commandNode()    {}
+-func (*TestClause) commandNode()   {}
+-func (*DeclClause) commandNode()   {}
+-func (*LetClause) commandNode()    {}
+-func (*TimeClause) commandNode()   {}
+-func (*CoprocClause) commandNode() {}
+-func (*TestDecl) commandNode()     {}
+-func (*RepeatClause) commandNode() {}
+-func (*TryClause) commandNode()    {}
++func (*CallExpr) commandNode()        {}
++func (*IfClause) commandNode()        {}
++func (*WhileClause) commandNode()     {}
++func (*ForClause) commandNode()       {}
++func (*CaseClause) commandNode()      {}
++func (*Block) commandNode()           {}
++func (*Subshell) commandNode()        {}
++func (*BinaryCmd) commandNode()       {}
++func (*FuncDecl) commandNode()        {}
++func (*ArithmCmd) commandNode()       {}
++func (*TestClause) commandNode()      {}
++func (*DeclClause) commandNode()      {}
++func (*LetClause) commandNode()       {}
++func (*TimeClause) commandNode()      {}
++func (*CoprocClause) commandNode()    {}
++func (*TestDecl) commandNode()        {}
++func (*RepeatClause) commandNode()    {}
++func (*TryClause) commandNode()       {}
++func (*NamespaceClause) commandNode() {}
+ 
+ // Assign represents an assignment to a variable.
+ //
+@@ -303,6 +304,7 @@ type Assign struct {
+ 	Naked  bool       // without '='
+ 	Name   *Lit       // must be a valid name
+ 	Index  ArithmExpr // [i], ["k"]
++	Elems  []RefElem  // [j] and .name in a[i][j].name=x with [LangKsh93]
+ 	Value  *Word      // =val
+ 	Array  *ArrayExpr // =(arr)
+ }
+@@ -322,10 +324,11 @@ func (a *Assign) End() Pos {
+ 		return a.Array.End()
+ 	}
+ 	if a.Index != nil {
++		end := refEnd(a.Index, a.Elems)
+ 		if a.Naked {
+-			return posAddCol(a.Index.End(), len("]"))
++			return end
+ 		}
+-		return posAddCol(a.Index.End(), len("]="))
++		return posAddCol(end, len("="))
+ 	}
+ 	if a.Naked {
+ 		return a.Name.End()
+@@ -338,7 +341,7 @@ type Redirect struct {
+ 	OpPos Pos
+ 	Op    RedirOperator
+ 	N     *Lit  // fd>, or {varname}> with [LangBash] or [LangZsh]
+-	Word  *Word // >word
++	Word  *Word // >word; nil only for ksh93's $(n<#)
+ 	Hdoc  *Word // here-document body
+ }
+ 
+@@ -353,6 +356,9 @@ func (r *Redirect) End() Pos {
+ 	if r.Hdoc != nil {
+ 		return r.Hdoc.End()
+ 	}
++	if r.Word == nil {
++		return posAddCol(r.OpPos, len(r.Op.String()))
++	}
+ 	return r.Word.End()
+ }
+ 
+@@ -418,6 +424,19 @@ type TryClause struct {
+ func (t *TryClause) Pos() Pos { return t.Try.Pos() }
+ func (t *TryClause) End() Pos { return t.Always.End() }
+ 
++// NamespaceClause represents a ksh93 name space, whose commands create variables
++// and functions within it, such as `namespace foo { bar=1; }`.
++//
++// This node will only appear with [LangKsh93].
++type NamespaceClause struct {
++	Namespace Pos
++	Name      *Lit
++	Body      *Block
++}
++
++func (n *NamespaceClause) Pos() Pos { return n.Namespace }
++func (n *NamespaceClause) End() Pos { return n.Body.End() }
++
+ // IfClause represents an if statement.
+ //
+ // With [LangZsh], each branch may use one of the alternate forms instead of
+@@ -610,6 +629,10 @@ type FuncDecl struct {
+ 	Name  *Lit
+ 	Names []*Lit // When declaring many func names with [LangZsh].
+ 
++	// Params name the arguments of a ksh93 arithmetic function with
++	// [LangKsh93], such as x and y in `function .sh.math.hypot x y { ... }`.
++	Params []*Lit
++
+ 	Body *Stmt
+ 
+ 	// Args are the arguments to an anonymous function with [LangZsh],
+@@ -753,6 +776,10 @@ type ParamExp struct {
+ 	Width  bool // mksh's ${%a}
+ 	IsSet  bool // ${+a} with [LangZsh]
+ 
++	// Attributes is set for ksh93's ${@a}, which expands to the type or the
++	// attributes of a, with [LangKsh93].
++	Attributes bool
++
+ 	// Zsh expansion prefixes that override shell options for this expansion.
+ 	// They can stack with one another and with the operators above.
+ 	// The doubled forms (${==a}, ${~~a}, ${^^a}) force the option off.
+@@ -772,6 +799,7 @@ type ParamExp struct {
+ 	// TODO(v4): rename Index to Subscript, which better matches bash and zsh terminology
+ 
+ 	Index ArithmExpr // ${a[i]}, ${a["k"]}, or a ${a[i,j]} slice with [LangZsh]
++	Elems []RefElem  // [j] and .name in ${a[i][j].name} with [LangKsh93]
+ 
+ 	// Only one of these is set at a time.
+ 	// TODO(v4): consider joining these in a single "expansion" field/type,
+@@ -788,9 +816,9 @@ type ParamExp struct {
+ // only expanding a name without any further logic.
+ func (p *ParamExp) simple() bool {
+ 	return p.Param != nil && p.Flags == nil &&
+-		!p.Excl && !p.Length && !p.Width && !p.IsSet &&
++		!p.Excl && !p.Length && !p.Width && !p.IsSet && !p.Attributes &&
+ 		p.Split == OptUnset && p.GlobSubst == OptUnset && p.RcExpand == OptUnset &&
+-		p.NestedParam == nil && p.Index == nil &&
++		p.NestedParam == nil && p.Index == nil && len(p.Elems) == 0 &&
+ 		len(p.Modifiers) == 0 && p.Slice == nil &&
+ 		p.Repl == nil && p.Names == 0 && p.Exp == nil
+ }
+@@ -819,6 +847,27 @@ func (p *ParamExp) nakedIndex() bool {
+ 	return p.Short && p.Index != nil && !p.Dollar.IsValid()
+ }
+ 
++// RefElem is a further subscript or member after the first subscript of a
++// ksh93 variable reference, such as [j] or .name in ${a[i][j].name}.
++// Only one of its fields is set.
++type RefElem struct {
++	Index  ArithmExpr
++	Member *Lit
++}
++
++// refEnd returns the end position of a variable reference which ends with
++// the subscript index, closed by "]", and the further elements elems.
++func refEnd(index ArithmExpr, elems []RefElem) Pos {
++	if len(elems) == 0 {
++		return posAddCol(index.End(), len("]"))
++	}
++	last := elems[len(elems)-1]
++	if last.Member != nil {
++		return last.Member.End()
++	}
++	return posAddCol(last.Index.End(), len("]"))
++}
++
+ // Slice represents a character slicing expression inside a [ParamExp].
+ //
+ // This node will only appear with [LangBash] and [LangMirBSDKorn].
+@@ -845,6 +894,7 @@ type Expansion struct {
+ type ArithmExp struct {
+ 	Left, Right Pos
+ 	Bracket     bool // deprecated $[expr] form
++	Bare        bool // ((expr)) without $, in ksh93's <#((expr)) seek redirections
+ 	Unsigned    bool // mksh's $((# expr))
+ 
+ 	X ArithmExpr
+@@ -1073,7 +1123,8 @@ func (p *ParenTest) End() Pos { return posAddCol(p.Rparen, 1) }
+ // This node will only appear with [LangBash].
+ type DeclClause struct {
+ 	// Variant is one of "declare", "local", "export", "readonly",
+-	// "typeset", or "nameref".
++	// "typeset", or "nameref", or with [LangKsh93], a declaration command
++	// created by enum or typeset -T and given a compound or array value.
+ 	Variant *Lit
+ 	Args    []*Assign
+ }
+@@ -1093,7 +1144,12 @@ type ArrayExpr struct {
+ 	Lparen, Rparen Pos
+ 
+ 	Elems []*ArrayElem
+-	Last  []Comment
++
++	// Stmts holds the list of a compound assignment with [LangKsh93], such as
++	// `(a=1 b=2)` or `(typeset -i a=1; b=2)`, instead of Elems.
++	Stmts []*Stmt
++
++	Last []Comment
+ }
+ 
+ func (a *ArrayExpr) Pos() Pos { return a.Lparen }
+@@ -1104,22 +1160,32 @@ func (a *ArrayExpr) End() Pos { return posAddCol(a.Rparen, 1) }
+ // Index can be nil; for example, declare -a x=(value).
+ // Value can be nil; for example, declare -A x=([index]=).
+ // Finally, neither can be nil; for example, declare -A x=([index]=value)
++//
++// With [LangKsh93], Array may hold a nested compound or array value instead
++// of Value; for example, x=( (a=1) ) or x=([index]=(a=1)).
+ type ArrayElem struct {
+ 	Index    ArithmExpr
+ 	Value    *Word
++	Array    *ArrayExpr
+ 	Comments []Comment
+ }
+ 
+ func (a *ArrayElem) Pos() Pos {
+-	if a.Index != nil {
++	switch {
++	case a.Index != nil:
+ 		return a.Index.Pos()
++	case a.Array != nil:
++		return a.Array.Pos()
+ 	}
+ 	return a.Value.Pos()
+ }
+ 
+ func (a *ArrayElem) End() Pos {
+-	if a.Value != nil {
++	switch {
++	case a.Value != nil:
+ 		return a.Value.End()
++	case a.Array != nil:
++		return a.Array.End()
+ 	}
+ 	return posAddCol(a.Index.End(), len("]="))
+ }
+diff --git a/syntax/parser.go b/syntax/parser.go
+index 0a49c51..2893daa 100644
+--- a/syntax/parser.go
++++ b/syntax/parser.go
+@@ -76,6 +76,16 @@ const (
+ 	// Its string representation is "zsh".
+ 	LangZsh
+ 
++	// LangKsh93 corresponds to the AT&T Korn Shell 93, as described in its
++	// manual at https://github.com/ksh93/ksh/blob/dev/src/cmd/ksh93/sh.1.
++	// It shares most of its features with [LangMirBSDKorn], given their
++	// shared ancestry, and adds its own, such as compound variables.
++	//
++	// We currently follow ksh 93u+m.
++	//
++	// Its string representation is "ksh93".
++	LangKsh93
++
+ 	// langResolvedVariantsCount is the number of variants declared above,
+ 	// that is, langResolvedVariants.count() as a constant.
+ 	langResolvedVariantsCount = iota
+@@ -93,7 +103,10 @@ const (
+ 
+ 	// langResolvedVariants contains all known variants except [LangAuto],
+ 	// which is meant to resolve to another variant.
+-	langResolvedVariants = LangBash | LangPOSIX | LangMirBSDKorn | LangBats | LangZsh
++	langResolvedVariants = LangBash | LangPOSIX | LangMirBSDKorn | LangBats | LangZsh | LangKsh93
++
++	// langKshLike contains the Korn shell variants.
++	langKshLike = LangMirBSDKorn | LangKsh93
+ 
+ 	// langBashLike contains Bash plus all variants which are extensions of it.
+ 	langBashLike = LangBash | LangBats
+@@ -108,7 +121,7 @@ func Variant(l LangVariant) ParserOption {
+ 	switch l {
+ 	case langBashLegacy:
+ 		l = LangBash
+-	case LangBash, LangPOSIX, LangMirBSDKorn, LangBats, LangZsh:
++	case LangBash, LangPOSIX, LangMirBSDKorn, LangBats, LangZsh, LangKsh93:
+ 	case LangAuto:
+ 		panic("LangAuto is not supported by the parser at this time")
+ 	default:
+@@ -129,6 +142,8 @@ func (l LangVariant) String() string {
+ 		return "bats"
+ 	case LangZsh:
+ 		return "zsh"
++	case LangKsh93:
++		return "ksh93"
+ 	case LangAuto:
+ 		return "auto"
+ 	}
+@@ -147,6 +162,8 @@ func (l *LangVariant) Set(s string) error {
+ 		*l = LangBats
+ 	case "zsh":
+ 		*l = LangZsh
++	case "ksh", "ksh93":
++		*l = LangKsh93
+ 	case "auto":
+ 		*l = LangAuto
+ 	default:
+@@ -536,6 +553,10 @@ type Parser struct {
+ 	rxOpenParens int
+ 	rxFirstPart  bool
+ 
++	// kshTypes holds the names of the types defined so far with enum or
++	// typeset -T, whose commands are declarations with [LangKsh93].
++	kshTypes map[string]bool
++
+ 	accComs []Comment
+ 	curComs *[]Comment
+ 
+@@ -580,6 +601,7 @@ func (p *Parser) reset() {
+ 	p.litBatch = nil
+ 	p.wordBatch = nil
+ 	p.litBs = nil
++	clear(p.kshTypes)
+ }
+ 
+ // nextPos returns the position of the next rune, [Parser.r].
+@@ -671,6 +693,9 @@ const (
+ 	hdocWord
+ 	hdocBody
+ 	hdocBodyTabs
++	// hdocBodyBlanks is like hdocBodyTabs, but for ksh93's <<# here-documents,
++	// whose lines may be indented with spaces too.
++	hdocBodyBlanks
+ 	arithmExpr
+ 	arithmExprLet
+ 	arithmExprCmd
+@@ -687,7 +712,7 @@ const (
+ 	arrayElems
+ 
+ 	allKeepSpaces = runeByRune | paramExpRepl | dblQuotes | hdocBody |
+-		hdocBodyTabs | paramExpRepl | paramExpExp
++		hdocBodyTabs | hdocBodyBlanks | paramExpRepl | paramExpExp
+ 	allRegTokens = noState | unquotedWordCont | subCmd | subCmdBckquo | subCmdBraces |
+ 		hdocWord | switchCase | arrayElems | testExpr
+ 	allArithmExpr = arithmExpr | arithmExprLet | arithmExprCmd |
+@@ -758,8 +783,11 @@ func (p *Parser) doHeredocs() {
+ 			break
+ 		}
+ 		p.quote = hdocBody
+-		if r.Op == DashHdoc {
++		switch r.Op {
++		case DashHdoc:
+ 			p.quote = hdocBodyTabs
++		case HashHdoc:
++			p.quote = hdocBodyBlanks
+ 		}
+ 		stop, quoted := p.unquotedWordBytes(r.Word)
+ 		p.hdocStops = append(p.hdocStops, stop)
+@@ -1239,7 +1267,7 @@ func (p *Parser) wordPart() WordPart {
+ 			p.checkLang(p.pos, langBashLike|LangMirBSDKorn, "`${|stmts;}`")
+ 			fallthrough
+ 		case ' ', '\t', '\n':
+-			p.checkLang(p.pos, langBashLike|LangMirBSDKorn, "`${ stmts;}`")
++			p.checkLang(p.pos, langBashLike|langKshLike, "`${ stmts;}`")
+ 			cs := &CmdSubst{
+ 				Left:     p.pos,
+ 				TempFile: p.r != '|',
+@@ -1261,30 +1289,7 @@ func (p *Parser) wordPart() WordPart {
+ 		}
+ 	case dollDblParen, dollBrack:
+ 		p.ensureNoNested(p.pos)
+-		left := p.tok
+-		ar := &ArithmExp{Left: p.pos, Bracket: left == dollBrack}
+-		old := p.preNested(arithmExpr)
+-		p.next()
+-		if !p.lang.in(LangZsh) && p.got(hash) {
+-			p.checkLang(ar.Pos(), LangMirBSDKorn, "unsigned expressions")
+-			ar.Unsigned = true
+-		}
+-		ar.X = p.followArithm(left, ar.Left)
+-		if ar.Bracket {
+-			if p.tok != rightBrack {
+-				if p.recoverError() {
+-					ar.Right = recoveredPos
+-					return ar
+-				}
+-				p.arithmMatchingErr(ar.Left, dollBrack, rightBrack)
+-			}
+-			p.postNested(old)
+-			ar.Right = p.pos
+-			p.next()
+-		} else {
+-			ar.Right = p.arithmEnd(dollDblParen, ar.Left, old)
+-		}
+-		return ar
++		return p.arithmExp(p.tok)
+ 	case dollParen:
+ 		p.ensureNoNested(p.pos)
+ 		return p.cmdSubst()
+@@ -1384,21 +1389,22 @@ func (p *Parser) wordPart() WordPart {
+ 		}
+ 		return cs
+ 	case leftParen:
+-		if p.lang.in(LangZsh) && p.r != ')' {
+-			// Zsh glob qualifier like *(N) or .(:a); the only case where
+-			// ( immediately after a word is not a glob qualifier is ()
+-			// for a function declaration, which the parser handles earlier.
+-			return p.zshGroupLit(1)
++		if (p.lang.in(LangZsh) || p.kshPatternGroup()) && p.r != ')' {
++			// Zsh glob qualifier like *(N) or .(:a), or a ksh93 pattern group
++			// like ~(E)re or {2}(ab); the only case where ( immediately after
++			// a word is not one is () for a function declaration, which the
++			// parser handles earlier.
++			return p.groupLit(1)
+ 		}
+ 		return nil
+ 	case dblLeftParen:
+ 		if p.lang.in(LangZsh) {
+ 			// A group which starts with another one, like ((a|b)|c)*.
+-			return p.zshGroupLit(2)
++			return p.groupLit(2)
+ 		}
+ 		return nil
+ 	case globQuest, globStar, globPlus, globAt, globExcl:
+-		p.checkLang(p.pos, langBashLike|LangMirBSDKorn, "extended globs")
++		p.checkLang(p.pos, langBashLike|langKshLike, "extended globs")
+ 		eg := &ExtGlob{Op: GlobOperator(p.tok), OpPos: p.pos}
+ 		lparens := 1
+ 		r := p.r
+@@ -1427,11 +1433,26 @@ func (p *Parser) wordPart() WordPart {
+ 	}
+ }
+ 
+-// zshGroupLit lexes a zsh glob qualifier or parenthesized group as a literal,
+-// like (N) or (a|(b|c)), after its opening parentheses, of which there are
++// kshPatternGroup reports whether the current "(" token, right after a literal
++// word part, starts one of the ksh93 pattern groups whose prefix is not one
++// of the extended globs, like {2}(ab), {1,3}(ab), ~(E)re, %(pairs) or *-(x).
++func (p *Parser) kshPatternGroup() bool {
++	if !p.lang.in(LangKsh93) || p.tok != leftParen || p.spaced || p.val == "" {
++		return false
++	}
++	switch p.val[len(p.val)-1] {
++	case '}', '~', '%', '-':
++		return true
++	}
++	return false
++}
++
++// groupLit lexes a zsh glob qualifier, a zsh or ksh93 parenthesized group, or
++// a ksh93 pattern group as a literal, like (N), (a|(b|c)) or the (E) in
++// ~(E)re, after its opening parentheses, of which there are
+ // depth. Nested groups and quoted strings, which glob qualifiers like
+ // (e:'...':) use, may contain closing parentheses.
+-func (p *Parser) zshGroupLit(depth int) *Lit {
++func (p *Parser) groupLit(depth int) *Lit {
+ 	pos := p.pos
+ 	opening := strings.Repeat("(", depth)
+ 	p.pos = p.nextPos()
+@@ -1470,6 +1491,35 @@ loop:
+ 	return l
+ }
+ 
++// arithmExp parses an arithmetic expansion starting at the current left
++// token: "$((", "$[", or "((" for the bare ((expr)) of ksh93's seek
++// redirections.
++func (p *Parser) arithmExp(left token) *ArithmExp {
++	ar := &ArithmExp{Left: p.pos, Bracket: left == dollBrack, Bare: left == dblLeftParen}
++	old := p.preNested(arithmExpr)
++	p.next()
++	if !p.lang.in(LangZsh) && p.got(hash) {
++		p.checkLang(ar.Pos(), LangMirBSDKorn, "unsigned expressions")
++		ar.Unsigned = true
++	}
++	ar.X = p.followArithm(left, ar.Left)
++	if ar.Bracket {
++		if p.tok != rightBrack {
++			if p.recoverError() {
++				ar.Right = recoveredPos
++				return ar
++			}
++			p.arithmMatchingErr(ar.Left, dollBrack, rightBrack)
++		}
++		p.postNested(old)
++		ar.Right = p.pos
++		p.next()
++	} else {
++		ar.Right = p.arithmEnd(left, ar.Left, old)
++	}
++	return ar
++}
++
+ func (p *Parser) cmdSubst() *CmdSubst {
+ 	cs := &CmdSubst{Left: p.pos}
+ 	old := p.preNested(subCmd)
+@@ -1588,7 +1638,7 @@ zshPrefixLoop:
+ 			}
+ 		case '!':
+ 			if !pe.Short && p.paramNameStart(pe) {
+-				p.checkLang(pe.Pos(), langBashLike|LangMirBSDKorn, "`${!foo}`")
++				p.checkLang(pe.Pos(), langBashLike|langKshLike, "`${!foo}`")
+ 				pe.Excl = true
+ 			}
+ 		case '+':
+@@ -1596,6 +1646,10 @@ zshPrefixLoop:
+ 				p.checkLang(pe.Pos(), LangZsh, "`${+foo}`")
+ 				pe.IsSet = true
+ 			}
++		case '@':
++			if p.lang.in(LangKsh93) && !pe.Short && p.paramNameStart(pe) {
++				pe.Attributes = true
++			}
+ 		}
+ 	}
+ 	if pe = p.paramExpParameter(pe); pe == nil {
+@@ -1617,15 +1671,16 @@ zshPrefixLoop:
+ 	// Index expressions like ${foo[1]}. Note that expansion suffixes can be combined,
+ 	// like ${foo[@]//replace/with}.
+ 	if p.r == '[' {
+-		p.checkLang(p.nextPos(), langBashLike|LangMirBSDKorn|LangZsh, "arrays")
++		p.checkLang(p.nextPos(), langBashLike|langKshLike|LangZsh, "arrays")
+ 		// In zsh some of these like ${@[-1]} or ${*[1,3]} work,
+ 		// so we don't do this sort of check at all.
+-		if !p.lang.in(LangZsh) && pe.Param != nil && !ValidName(pe.Param.Value) {
++		if !p.lang.in(LangZsh) && pe.Param != nil && !p.validVarName(pe.Param.Value) {
+ 			p.posErr(p.nextPos(), "cannot index a special parameter name")
+ 		}
+ 		p.pos = p.nextPos()
+ 		p.rune()
+ 		pe.Index = p.eitherIndex()
++		pe.Elems = p.kshRefElems()
+ 	}
+ 	tokRune := p.r
+ 	p.pos = p.nextPos()
+@@ -1636,12 +1691,12 @@ zshPrefixLoop:
+ 		p.next()
+ 		return pe
+ 	}
+-	if p.tok != _EOF && (pe.Length || pe.Width || pe.IsSet) {
++	if p.tok != _EOF && (pe.Length || pe.Width || pe.IsSet || pe.Attributes) && !p.kshCountNames(pe) {
+ 		p.curErr("cannot combine multiple parameter expansion operators")
+ 	}
+ 	switch p.tok {
+ 	case slash, dblSlash: // pattern search and replace
+-		p.checkLang(p.pos, langBashLike|LangMirBSDKorn|LangZsh, "search and replace")
++		p.checkLang(p.pos, langBashLike|langKshLike|LangZsh, "search and replace")
+ 		pe.Repl = &Replace{All: p.tok == dblSlash}
+ 		p.paramExpReplace(pe.Repl)
+ 	case colon: // slicing
+@@ -1676,7 +1731,7 @@ zshPrefixLoop:
+ 			p.next()
+ 			return pe
+ 		}
+-		p.checkLang(p.pos, langBashLike|LangMirBSDKorn|LangZsh, "slicing")
++		p.checkLang(p.pos, langBashLike|langKshLike|LangZsh, "slicing")
+ 		pe.Slice = &Slice{}
+ 		colonPos := p.pos
+ 		p.quote = paramExpSlice
+@@ -1694,14 +1749,17 @@ zshPrefixLoop:
+ 		p.matchedArithm(pe.Dollar, dollBrace, rightBrace)
+ 		return pe
+ 	case caret, dblCaret, comma, dblComma: // upper/lower case
+-		p.checkLang(p.pos, langBashLike, "this expansion operator")
++		p.checkLang(p.pos, langBashLike|LangKsh93, "this expansion operator")
+ 		pe.Exp = p.paramExpExp()
+ 	case at, star:
+ 		switch {
++		case p.kshCountNames(pe):
++			pe.Names = ParNamesOperator(p.tok)
++			p.next()
+ 		case p.tok == star && !pe.Excl:
+ 			p.curErr("not a valid parameter expansion operator: %#q", p.tok)
+ 		case pe.Excl && p.r == '}':
+-			p.checkLang(pe.Pos(), langBashLike, "`${!foo%s}`", p.tok)
++			p.checkLang(pe.Pos(), langBashLike|LangKsh93, "`${!foo%s}`", p.tok)
+ 			pe.Names = ParNamesOperator(p.tok)
+ 			p.next()
+ 		case p.tok == at:
+@@ -1734,13 +1792,49 @@ zshPrefixLoop:
+ 	return pe
+ }
+ 
++// kshRefElems parses the further subscripts and members which may follow the
++// first subscript of a variable reference with [LangKsh93], like [j] and
++// .name in a[i][j].name, while lexing rune by rune.
++func (p *Parser) kshRefElems() []RefElem {
++	var elems []RefElem
++	for p.lang.in(LangKsh93) {
++		switch p.r {
++		case '[':
++			p.pos = p.nextPos()
++			p.rune()
++			elems = append(elems, RefElem{Index: p.eitherIndex()})
++		case '.':
++			p.rune()
++			pos := p.nextPos()
++			for p.newLit(p.r); paramNameRune(p.r); p.rune() {
++			}
++			name := p.endLit()
++			if !ValidName(name) {
++				p.posErr(pos, "invalid parameter name")
++				return elems
++			}
++			elems = append(elems, RefElem{Member: p.lit(pos, name)})
++		default:
++			return elems
++		}
++	}
++	return elems
++}
++
++// kshCountNames reports whether the current token is the "@" or "*" of
++// ksh93's ${#prefix@} or ${#prefix*}, which count the variables whose names
++// start with prefix.
++func (p *Parser) kshCountNames(pe *ParamExp) bool {
++	return p.lang.in(LangKsh93) && pe.Length && (p.tok == at || p.tok == star) && p.r == '}'
++}
++
+ // paramNameStart reports whether a parameter name can begin after a prefix rune
+ // such as the '#' in ${#foo}, consuming the prefix rune if so.
+ // Only the long form allows a quoted nested expansion like ${#"$(foo)"} or EOF;
+ // in the short form the prefix rune is the parameter itself, as in "$#" or $#"$foo".
+ func (p *Parser) paramNameStart(pe *ParamExp) bool {
+ 	r := p.peek()
+-	if paramNameStartRune(r) || (!pe.Short && (r == '"' || r == utf8.RuneSelf)) {
++	if paramNameStartRune(r) || (r == '.' && !pe.Short && p.lang.in(LangKsh93)) || (!pe.Short && (r == '"' || r == utf8.RuneSelf)) {
+ 		p.rune()
+ 		return true
+ 	}
+@@ -1836,13 +1930,15 @@ func (p *Parser) paramExpParameter(pe *ParamExp) *ParamExp {
+ 			p.val = string(p.r)
+ 			p.rune()
+ 		} else {
++			// With ksh93, ${a.b} and ${.sh.version} name variables too.
++			dots := !pe.Short && p.lang.in(LangKsh93)
+ 			for p.newLit(p.r); p.r != runeEOF; p.rune() {
+-				if !paramNameRune(p.r) && p.r != escNewl {
++				if !paramNameRune(p.r) && p.r != escNewl && (!dots || p.r != '.') {
+ 					break
+ 				}
+ 			}
+ 			p.val = p.endLit()
+-			if !numberLiteral(p.val) && !ValidName(p.val) {
++			if !numberLiteral(p.val) && !p.validVarName(p.val) && !p.kshNamePrefix(pe, p.val) {
+ 				if pe.Short {
+ 					return nil // just "$"
+ 				}
+@@ -1976,6 +2072,35 @@ func ValidName(val string) bool {
+ 	return true
+ }
+ 
++// kshNamePrefix reports whether val is the prefix ending with a dot of
++// ksh93's ${!prefix@} or ${#prefix@}, like config. in ${!config.@}, followed
++// by the @ or * which ends the parameter expansion.
++func (p *Parser) kshNamePrefix(pe *ParamExp, val string) bool {
++	prefix, found := strings.CutSuffix(val, ".")
++	return p.lang.in(LangKsh93) && (pe.Excl || pe.Length) && found &&
++		p.validVarName(prefix) && (p.r == '@' || p.r == '*') && p.peek() == '}'
++}
++
++// validVarName reports whether val is a valid variable name in the language
++// variant. With [LangKsh93], it may be a vname: identifiers separated by
++// dots and optionally starting with one, like a.b or .sh.version.
++func (p *Parser) validVarName(val string) bool {
++	if !p.lang.in(LangKsh93) {
++		return ValidName(val)
++	}
++	rest := strings.TrimPrefix(val, ".")
++	for {
++		ident, after, found := strings.Cut(rest, ".")
++		if !ValidName(ident) {
++			return false
++		}
++		if !found {
++			return true
++		}
++		rest = after
++	}
++}
++
+ func numberLiteral[T string | []byte](val T) bool {
+ 	if len(val) == 0 {
+ 		return false
+@@ -1993,13 +2118,13 @@ func (p *Parser) hasValidIdent() bool {
+ 		return false
+ 	}
+ 	if end := p.eqlOffs; end > 0 {
+-		if p.val[end-1] == '+' && p.lang.in(langBashLike|LangMirBSDKorn|LangZsh) {
++		if p.val[end-1] == '+' && p.lang.in(langBashLike|langKshLike|LangZsh) {
+ 			end-- // a+=x
+ 		}
+-		if ValidName(p.val[:end]) {
++		if p.validVarName(p.val[:end]) {
+ 			return true
+ 		}
+-	} else if !ValidName(p.val) {
++	} else if !p.validVarName(p.val) {
+ 		return false // *[i]=x
+ 	}
+ 	return p.r == '[' // a[i]=x
+@@ -2009,7 +2134,7 @@ func (p *Parser) getAssign(needEqual bool) *Assign {
+ 	as := &Assign{}
+ 	if p.eqlOffs > 0 { // foo=bar
+ 		nameEnd := p.eqlOffs
+-		if p.lang.in(langBashLike|LangMirBSDKorn|LangZsh) && p.val[p.eqlOffs-1] == '+' {
++		if p.lang.in(langBashLike|langKshLike|LangZsh) && p.val[p.eqlOffs-1] == '+' {
+ 			// a+=b
+ 			as.Append = true
+ 			nameEnd--
+@@ -2028,7 +2153,17 @@ func (p *Parser) getAssign(needEqual bool) *Assign {
+ 		// hasValidIdent already checks p.r is '['
+ 		p.rune()
+ 		p.pos = posAddCol(p.pos, 1)
+-		as.Index = p.eitherIndex()
++		if p.lang.in(LangKsh93) {
++			// Lex rune by rune to see any further subscripts or members.
++			old := p.quote
++			p.quote = runeByRune
++			as.Index = p.eitherIndex()
++			as.Elems = p.kshRefElems()
++			p.quote = old
++			p.next()
++		} else {
++			as.Index = p.eitherIndex()
++		}
+ 		if p.spaced || p.stopToken() {
+ 			if needEqual {
+ 				p.followErr(as.Pos(), "a[b]", assgn)
+@@ -2072,49 +2207,10 @@ func (p *Parser) getAssign(needEqual bool) *Assign {
+ 		return as
+ 	}
+ 	if as.Value == nil && p.tok == leftParen {
+-		p.checkLang(p.pos, langBashLike|LangMirBSDKorn|LangZsh, "arrays")
+-		as.Array = &ArrayExpr{Lparen: p.pos}
+-		newQuote := p.quote
+-		if p.lang.in(langBashLike | LangZsh) {
+-			newQuote = arrayElems
+-		}
+-		old := p.preNested(newQuote)
+-		p.next()
+-		p.got(_Newl)
+-		for p.tok != _EOF && p.tok != rightParen {
+-			ae := &ArrayElem{}
+-			ae.Comments, p.accComs = p.accComs, nil
+-			if p.tok == leftBrack {
+-				left := p.pos
+-				ae.Index = p.eitherIndex()
+-				if p.tok == assgnParen {
+-					p.curErr("arrays cannot be nested")
+-					return nil
+-				}
+-				p.follow(left, `[x]`, assgn)
+-			}
+-			if ae.Value = p.getWord(); ae.Value == nil {
+-				switch p.tok {
+-				case _Newl, rightParen, leftBrack:
+-					// TODO: support [index]=[
+-				default:
+-					p.curErr("array element values must be words")
+-					return nil
+-				}
+-			}
+-			if len(p.accComs) > 0 {
+-				c := p.accComs[0]
+-				if c.Pos().Line() == ae.End().Line() {
+-					ae.Comments = append(ae.Comments, c)
+-					p.accComs = p.accComs[1:]
+-				}
+-			}
+-			as.Array.Elems = append(as.Array.Elems, ae)
+-			p.got(_Newl)
++		p.checkLang(p.pos, langBashLike|langKshLike|LangZsh, "arrays")
++		if as.Array = p.arrayExpr(); as.Array == nil {
++			return nil
+ 		}
+-		as.Array.Last, p.accComs = p.accComs, nil
+-		p.postNested(old)
+-		as.Array.Rparen = p.matched(as.Array.Lparen, leftParen, rightParen)
+ 	} else if w := p.getWord(); w != nil {
+ 		if as.Value == nil {
+ 			as.Value = w
+@@ -2125,11 +2221,102 @@ func (p *Parser) getAssign(needEqual bool) *Assign {
+ 	return as
+ }
+ 
++// arrayExpr parses an array expression, starting at its "(". With
++// [LangKsh93], it may instead hold the list of a compound assignment, like
++// `(a=1 b=2)` or `(typeset -i a=1; b=2)`, and its elements may themselves be
++// compound or array values, like in `( (a=1) (a=2) )` or `([k]=(a=1))`.
++// It returns nil if the elements are not valid.
++func (p *Parser) arrayExpr() *ArrayExpr {
++	ae := &ArrayExpr{Lparen: p.pos}
++	newQuote := p.quote
++	if p.lang.in(langBashLike | LangZsh | LangKsh93) {
++		newQuote = arrayElems
++	}
++	old := p.preNested(newQuote)
++	p.next()
++	p.got(_Newl)
++	if p.lang.in(LangKsh93) && p.kshCompoundStart() {
++		p.quote = subCmd
++		ae.Stmts, ae.Last = p.stmtList()
++		p.postNested(old)
++		ae.Rparen = p.matched(ae.Lparen, leftParen, rightParen)
++		return ae
++	}
++	for p.tok != _EOF && p.tok != rightParen {
++		el := &ArrayElem{}
++		el.Comments, p.accComs = p.accComs, nil
++		if p.tok == leftBrack {
++			left := p.pos
++			el.Index = p.eitherIndex()
++			switch {
++			case p.tok != assgnParen:
++				p.follow(left, `[x]`, assgn)
++			case p.lang.in(LangKsh93):
++				// ksh93 allows [k]=(values...), like zsh's a[i]=(values...).
++				// assgnParen consumed both '=' and '(',
++				// so rewrite as leftParen for the nested array below.
++				p.tok = leftParen
++				p.pos = posAddCol(p.pos, 1)
++			default:
++				p.curErr("arrays cannot be nested")
++				return nil
++			}
++		}
++		if p.lang.in(LangKsh93) && p.tok == leftParen {
++			if el.Array = p.arrayExpr(); el.Array == nil {
++				return nil
++			}
++		} else if el.Value = p.getWord(); el.Value == nil {
++			switch p.tok {
++			case _Newl, rightParen, leftBrack:
++				// TODO: support [index]=[
++			default:
++				p.curErr("array element values must be words")
++				return nil
++			}
++		}
++		if len(p.accComs) > 0 {
++			c := p.accComs[0]
++			if c.Pos().Line() == el.End().Line() {
++				el.Comments = append(el.Comments, c)
++				p.accComs = p.accComs[1:]
++			}
++		}
++		ae.Elems = append(ae.Elems, el)
++		p.got(_Newl)
++	}
++	ae.Last, p.accComs = p.accComs, nil
++	p.postNested(old)
++	ae.Rparen = p.matched(ae.Lparen, leftParen, rightParen)
++	return ae
++}
++
++// kshCompoundStart reports whether the current token starts the list of a
++// ksh93 compound assignment, like `a=1` in `x=(a=1 b=2)` or `typeset` in
++// `x=(typeset -i a=1)`, rather than the first element of an array.
++func (p *Parser) kshCompoundStart() bool {
++	if !p.tok.isLit() {
++		return false
++	}
++	if p.eqlOffs > 0 && p.hasValidIdent() {
++		return true
++	}
++	if p.tok != _LitWord {
++		return false
++	}
++	switch p.val {
++	case "typeset", "integer", "float", "compound", "nameref", "readonly", "export", "enum", "function", ".":
++		return true
++	}
++	return false
++}
++
+ func (p *Parser) peekRedir() bool {
+ 	switch p.tok {
+ 	case _LitRedir, rdrOut, appOut, rdrIn, rdrInOut, dplIn, dplOut,
+ 		rdrClob, appClob, hdoc, dashHdoc, wordHdoc,
+-		rdrAll, rdrAllClob, appAll, appAllClob:
++		rdrAll, rdrAllClob, appAll, appAllClob,
++		hashHdoc, rdrOutRepl, rdrInOutTr, seekIn, seekInCopy, seekOut:
+ 		return true
+ 	}
+ 	return false
+@@ -2151,18 +2338,18 @@ func (p *Parser) doRedirect(s *Stmt) {
+ 	}
+ 	r.N = p.getLit()
+ 	if r.N != nil && r.N.Value[0] == '{' {
+-		p.checkLang(r.N.Pos(), langBashLike|LangZsh, "`{varname}` redirects")
++		p.checkLang(r.N.Pos(), langBashLike|LangZsh|LangKsh93, "`{varname}` redirects")
+ 	}
+ 	r.Op, r.OpPos = RedirOperator(p.tok), p.pos
+ 	switch r.Op {
+ 	case RdrAll, AppAll:
+-		p.checkLang(p.pos, langBashLike|LangMirBSDKorn|LangZsh, "%#q redirects", r.Op)
++		p.checkLang(p.pos, langBashLike|langKshLike|LangZsh, "%#q redirects", r.Op)
+ 	case AppClob, RdrAllClob, AppAllClob:
+ 		p.checkLang(p.pos, LangZsh, "%#q redirects", r.Op)
+ 	}
+ 	p.next()
+ 	switch r.Op {
+-	case Hdoc, DashHdoc:
++	case Hdoc, DashHdoc, HashHdoc:
+ 		old := p.quote
+ 		p.quote, p.forbidNested = hdocWord, true
+ 		p.heredocs = append(p.heredocs, r)
+@@ -2179,8 +2366,18 @@ func (p *Parser) doRedirect(s *Stmt) {
+ 			p.doHeredocs()
+ 		}
+ 	case WordHdoc:
+-		p.checkLang(r.OpPos, langBashLike|LangMirBSDKorn|LangZsh, "herestrings")
+-		fallthrough
++		p.checkLang(r.OpPos, langBashLike|langKshLike|LangZsh, "herestrings")
++		r.Word = p.followWordTok(token(r.Op), r.OpPos)
++	case SeekIn, SeekOut:
++		switch {
++		case p.tok == dblLeftParen:
++			// ksh93's <#((expr)) seeks to the offset that expr evaluates to.
++			r.Word = p.wordOne(p.arithmExp(dblLeftParen))
++		case r.Op == SeekIn && p.tok == rightParen && p.quote == subCmd:
++			// ksh93's $(n<#) expands to the offset of file descriptor n.
++		default:
++			r.Word = p.followWordTok(token(r.Op), r.OpPos)
++		}
+ 	default:
+ 		r.Word = p.followWordTok(token(r.Op), r.OpPos)
+ 	}
+@@ -2308,33 +2505,41 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
+ 				break
+ 			}
+ 		case "[[":
+-			if p.lang.in(langBashLike | LangMirBSDKorn | LangZsh) {
++			if p.lang.in(langBashLike | langKshLike | LangZsh) {
+ 				p.testClause(s)
+ 			}
+ 		case "]]":
+-			if p.lang.in(langBashLike | LangMirBSDKorn | LangZsh) {
++			if p.lang.in(langBashLike | langKshLike | LangZsh) {
+ 				p.curErr(`%#q can only be used to close a test`, dblRightBrack)
+ 			}
+ 		case "let":
+-			if p.lang.in(langBashLike | LangMirBSDKorn | LangZsh) {
++			if p.lang.in(langBashLike | langKshLike | LangZsh) {
+ 				p.letClause(s)
+ 			}
+ 		case "function":
+-			if p.lang.in(langBashLike | LangMirBSDKorn | LangZsh) {
++			if p.lang.in(langBashLike | langKshLike | LangZsh) {
+ 				p.bashFuncDecl(s)
+ 			}
+ 		case "declare":
+ 			if p.lang.in(langBashLike | LangZsh) { // Note that mksh lacks this one.
+ 				p.declClause(s)
+ 			}
+-		case "local", "export", "readonly", "typeset", "nameref":
++		case "local": // Note that ksh93 lacks this one.
+ 			if p.lang.in(langBashLike | LangMirBSDKorn | LangZsh) {
+ 				p.declClause(s)
+ 			}
++		case "export", "readonly", "typeset", "nameref":
++			if p.lang.in(langBashLike | langKshLike | LangZsh) {
++				p.declClause(s)
++			}
+ 		case "time":
+-			if p.lang.in(langBashLike | LangMirBSDKorn | LangZsh) {
++			if p.lang.in(langBashLike | langKshLike | LangZsh) {
+ 				p.timeClause(s)
+ 			}
++		case "namespace":
++			if p.lang.in(LangKsh93) {
++				p.namespaceClause(s)
++			}
+ 		case "coproc":
+ 			switch {
+ 			case p.lang.in(langBashLike): // Note that mksh lacks this one.
+@@ -2343,7 +2548,7 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
+ 				p.zshCoprocClause(s)
+ 			}
+ 		case "select":
+-			if p.lang.in(langBashLike | LangMirBSDKorn | LangZsh) {
++			if p.lang.in(langBashLike | langKshLike | LangZsh) {
+ 				p.selectClause(s)
+ 			}
+ 		case "@test":
+@@ -2371,7 +2576,7 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
+ 			p.funcDecl(s, name.ValuePos, false, true, name)
+ 		} else {
+ 			w := p.wordOne(name)
+-			if p.lang.in(LangZsh) && !p.spaced {
++			if (p.lang.in(LangZsh) || p.kshPatternGroup()) && !p.spaced {
+ 				w.Parts = append(w.Parts, p.wordParts(nil)...)
+ 			}
+ 			p.callExpr(s, w, false)
+@@ -2426,7 +2631,7 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
+ 			// right recursion should only read a single element
+ 			return s
+ 		}
+-		if p.tok == orAnd && p.lang.in(LangMirBSDKorn) {
++		if p.tok == orAnd && p.lang.in(langKshLike) {
+ 			// No need to check for LangPOSIX, as on that language
+ 			// we parse |& as two tokens.
+ 			break
+@@ -2693,7 +2898,7 @@ func (p *Parser) forClause(s *Stmt) {
+ 	fc := &ForClause{ForPos: p.pos}
+ 	p.next()
+ 	fc.Loop = p.loop(fc.ForPos)
+-	b := p.loopBody(fc, "for", "for foo [in words]", fc.ForPos, langBashLike|LangMirBSDKorn|LangZsh, "for loops with braces", s)
++	b := p.loopBody(fc, "for", "for foo [in words]", fc.ForPos, langBashLike|langKshLike|LangZsh, "for loops with braces", s)
+ 	fc.DoPos, fc.DonePos, fc.Braces, fc.Short, fc.Do, fc.DoLast = b.doPos, b.donePos, b.braces, b.short, b.stmts, b.last
+ 	s.Cmd = fc
+ }
+@@ -2712,7 +2917,7 @@ func (p *Parser) foreachClause(s *Stmt) {
+ func (p *Parser) loop(fpos Pos) Loop {
+ 	switch p.tok {
+ 	case leftParen, dblLeftParen:
+-		p.checkLang(p.pos, langBashLike|LangZsh, "c-style fors")
++		p.checkLang(p.pos, langBashLike|LangZsh|LangKsh93, "c-style fors")
+ 	}
+ 	if p.tok == dblLeftParen {
+ 		cl := &CStyleLoop{Lparen: p.pos}
+@@ -3059,7 +3264,7 @@ func (p *Parser) testExprBinary(pastAndOr bool) TestExpr {
+ 			p.followErrExp(b.OpPos, b.Op)
+ 		}
+ 	case TsReMatch:
+-		p.checkLang(p.pos, langBashLike|LangZsh, "regex tests")
++		p.checkLang(p.pos, langBashLike|LangZsh|LangKsh93, "regex tests")
+ 		p.rxOpenParens = 0
+ 		p.rxFirstPart = true
+ 		// TODO(mvdan): Using nested states within a regex will break in
+@@ -3087,11 +3292,11 @@ func (p *Parser) testExprUnary() TestExpr {
+ 		switch op {
+ 		case illegalTok:
+ 		case tsRefVar: // not available in mksh nor zsh
+-			if p.lang.in(langBashLike) {
++			if p.lang.in(langBashLike | LangKsh93) {
+ 				p.tok = op
+ 			}
+ 		case tsModif: // not available in mksh
+-			if p.lang.in(langBashLike | LangZsh) {
++			if p.lang.in(langBashLike | LangZsh | LangKsh93) {
+ 				p.tok = op
+ 			}
+ 		default:
+@@ -3139,12 +3344,53 @@ func (p *Parser) testExprUnary() TestExpr {
+ func (p *Parser) declClause(s *Stmt) {
+ 	ds := &DeclClause{Variant: p.lit(p.pos, p.val)}
+ 	p.next()
++	p.declArgs(ds)
++	p.recordKshTypes(ds)
++	s.Cmd = ds
++}
++
++// recordKshTypes remembers the types which a declaration clause defines with
++// [LangKsh93], like Pt_t in `typeset -T Pt_t=(x=0)` or Color_t in
++// `enum Color_t=(red green)`, so that later commands named after them are
++// parsed as declarations.
++func (p *Parser) recordKshTypes(ds *DeclClause) {
++	if !p.lang.in(LangKsh93) {
++		return
++	}
++	switch ds.Variant.Value {
++	case "enum":
++	case "typeset":
++		if !slices.ContainsFunc(ds.Args, func(as *Assign) bool {
++			if as == nil || !as.Naked || as.Value == nil {
++				return false
++			}
++			flags := as.Value.Lit()
++			return strings.HasPrefix(flags, "-") && strings.ContainsRune(flags, 'T')
++		}) {
++			return
++		}
++	default:
++		return
++	}
++	for _, as := range ds.Args {
++		if as == nil || as.Name == nil || as.Array == nil {
++			continue
++		}
++		if p.kshTypes == nil {
++			p.kshTypes = make(map[string]bool)
++		}
++		p.kshTypes[as.Name.Value] = true
++	}
++}
++
++// declArgs parses the arguments of a declaration clause.
++func (p *Parser) declArgs(ds *DeclClause) {
+ 	for !p.stopToken() && !p.peekRedir() && !p.closesBlock() {
+ 		if p.hasValidIdent() {
+ 			ds.Args = append(ds.Args, p.getAssign(false))
+ 		} else if p.tok.isLit() && p.eqlOffs > 0 && !strings.Contains(p.val[:p.eqlOffs], "{") {
+ 			p.curErr("invalid var name")
+-		} else if p.tok == _LitWord && ValidName(p.val) {
++		} else if p.tok == _LitWord && p.validVarName(p.val) {
+ 			ds.Args = append(ds.Args, &Assign{
+ 				Naked: true,
+ 				Name:  p.getLit(),
+@@ -3158,7 +3404,38 @@ func (p *Parser) declClause(s *Stmt) {
+ 			p.followErr(p.pos, ds.Variant.Value, noQuote("names or assignments"))
+ 		}
+ 	}
++}
++
++// kshTypeDecl turns a call with [LangKsh93] into a declaration clause when
++// it is named after a type defined earlier with enum or typeset -T, or when
++// one of its arguments, the current token, is an assignment of a compound or
++// array value. Such a command is a declaration command created by enum or
++// typeset -T, as in `Pt_t p=(x=1 y=2)`, which ksh93 parses as one once its
++// type is defined, even if the type is defined in another file. It reports
++// whether it did so.
++func (p *Parser) kshTypeDecl(s *Stmt, ce *CallExpr) bool {
++	if !p.lang.in(LangKsh93) || len(ce.Assigns) > 0 || len(ce.Args) == 0 {
++		return false
++	}
++	names, ok := funcNames(ce.Args[:1])
++	if !ok {
++		return false
++	}
++	if !p.kshTypes[names[0].Value] && (p.r != '(' || p.eqlOffs != len(p.val)-1 || !p.hasValidIdent()) {
++		return false
++	}
++	ds := &DeclClause{Variant: names[0]}
++	for _, w := range ce.Args[1:] {
++		if lits, ok := funcNames([]*Word{w}); ok && p.validVarName(lits[0].Value) {
++			ds.Args = append(ds.Args, &Assign{Naked: true, Name: lits[0]})
++		} else {
++			ds.Args = append(ds.Args, &Assign{Naked: true, Value: w})
++		}
++	}
++	p.declArgs(ds)
++	p.recordKshTypes(ds)
+ 	s.Cmd = ds
++	return true
+ }
+ 
+ func isBashCompoundCommand(tok token, val string) bool {
+@@ -3219,6 +3496,19 @@ func (p *Parser) coprocClause(s *Stmt) {
+ 
+ // zshCoprocClause parses a zsh coproc clause, which unlike bash's takes no
+ // name: the rest of the pipeline is the coprocess.
++func (p *Parser) namespaceClause(s *Stmt) {
++	nc := &NamespaceClause{Namespace: p.pos}
++	p.next()
++	if nc.Name = p.getLit(); nc.Name == nil {
++		p.followErr(nc.Namespace, "namespace", noQuote("a name"))
++	}
++	if p.tok != _LitWord || p.val != "{" {
++		p.followErr(nc.Namespace, "namespace foo", leftBrace)
++	}
++	nc.Body = p.braceGroup()
++	s.Cmd = nc
++}
++
+ func (p *Parser) zshCoprocClause(s *Stmt) {
+ 	cc := &CoprocClause{Coproc: p.pos}
+ 	p.next()
+@@ -3250,6 +3540,7 @@ func (p *Parser) bashFuncDecl(s *Stmt) {
+ 	fpos := p.pos
+ 	p.next()
+ 	names := make([]*Lit, 0, 1)
++	var params []*Lit
+ 	for p.tok == _LitWord && p.val != "{" {
+ 		names = append(names, p.lit(p.pos, p.val))
+ 		p.next()
+@@ -3266,12 +3557,18 @@ func (p *Parser) bashFuncDecl(s *Stmt) {
+ 	case 1:
+ 		// allowed in all variants
+ 	default:
++		if p.lang.in(LangKsh93) && strings.HasPrefix(names[0].Value, ".sh.math.") {
++			// The other words name the arguments of an arithmetic function.
++			params = names[1:]
++			names = names[:1]
++			break
++		}
+ 		p.checkLang(fpos, LangZsh, "multi-name functions")
+ 	}
+ 	if hasParens {
+ 		p.follow(fpos, "function foo(", rightParen)
+ 	}
+-	p.funcDecl(s, fpos, true, hasParens, names...)
++	p.funcDecl(s, fpos, true, hasParens, names...).Params = params
+ }
+ 
+ func (p *Parser) testDecl(s *Stmt) {
+@@ -3312,6 +3609,9 @@ loop:
+ 			dblSemicolon, semiAnd, dblSemiAnd, semiOr:
+ 			break loop
+ 		case _LitWord:
++			if p.kshTypeDecl(s, ce) {
++				return
++			}
+ 			if len(ce.Args) == 0 && p.hasValidIdent() {
+ 				ce.Assigns = append(ce.Assigns, p.getAssign(true))
+ 				break
+@@ -3326,7 +3626,7 @@ loop:
+ 			}
+ 			w := p.wordOne(p.lit(p.pos, p.val))
+ 			p.next()
+-			if p.lang.in(LangZsh) && !p.spaced {
++			if (p.lang.in(LangZsh) || p.kshPatternGroup()) && !p.spaced {
+ 				w.Parts = append(w.Parts, p.wordParts(nil)...)
+ 			}
+ 			ce.Args = append(ce.Args, w)
+@@ -3391,7 +3691,7 @@ loop:
+ 	s.Cmd = ce
+ }
+ 
+-func (p *Parser) funcDecl(s *Stmt, pos Pos, long, withParens bool, names ...*Lit) {
++func (p *Parser) funcDecl(s *Stmt, pos Pos, long, withParens bool, names ...*Lit) *FuncDecl {
+ 	fd := &FuncDecl{
+ 		Position: pos,
+ 		RsrvWord: long,
+@@ -3417,6 +3717,7 @@ func (p *Parser) funcDecl(s *Stmt, pos Pos, long, withParens bool, names ...*Lit
+ 		p.funcArgs(s, fd)
+ 	}
+ 	s.Cmd = fd
++	return fd
+ }
+ 
+ // funcArgs parses the arguments which follow the body of an anonymous
+diff --git a/syntax/parser_arithm.go b/syntax/parser_arithm.go
+index daa9938..ceb2691 100644
+--- a/syntax/parser_arithm.go
++++ b/syntax/parser_arithm.go
+@@ -23,7 +23,7 @@ func (p *Parser) arithmExprAssign(compact bool) ArithmExpr {
+ 		if compact && p.spaced {
+ 			return value
+ 		}
+-		if !isArithName(value) {
++		if !p.isArithName(value) {
+ 			p.posErr(p.pos, "%#q must follow a name", p.tok)
+ 		}
+ 		pos := p.pos
+@@ -210,7 +210,7 @@ func (p *Parser) arithmExprValue(compact bool) ArithmExpr {
+ 		p.curErr("ternary operator missing %#q before %#q", quest, colon)
+ 	case _LitWord:
+ 		l := p.getLit()
+-		if p.lang.in(LangZsh) && p.tok == leftParen && !p.spaced {
++		if p.lang.in(LangZsh|LangKsh93) && p.tok == leftParen && !p.spaced && ValidName(l.Value) {
+ 			x = p.arithmCall(l)
+ 			break
+ 		}
+@@ -244,7 +244,7 @@ func (p *Parser) arithmExprValue(compact bool) ArithmExpr {
+ 	// we want real nil, not (*Word)(nil) as that
+ 	// sets the type to non-nil and then x != nil
+ 	if p.tok == addAdd || p.tok == subSub {
+-		if !isArithName(x) {
++		if !p.isArithName(x) {
+ 			p.curErr("%#q must follow a name", p.tok)
+ 		}
+ 		u := &UnaryArithm{
+@@ -353,14 +353,14 @@ func (p *Parser) arithmExprBinary(compact bool, nextOp func(bool) ArithmExpr, op
+ 	}
+ }
+ 
+-func isArithName(left ArithmExpr) bool {
++func (p *Parser) isArithName(left ArithmExpr) bool {
+ 	w, ok := left.(*Word)
+ 	if !ok || len(w.Parts) != 1 {
+ 		return false
+ 	}
+ 	switch wp := w.Parts[0].(type) {
+ 	case *Lit:
+-		return ValidName(wp.Value)
++		return p.validVarName(wp.Value)
+ 	case *ParamExp:
+ 		return wp.nakedIndex()
+ 	default:
+@@ -391,7 +391,7 @@ func (p *Parser) arithmMatchingErr(pos Pos, left, right token) {
+ 	case rightParen, _EOF:
+ 		p.matchingErr(pos, left, right)
+ 	case period:
+-		p.checkLang(p.pos, LangZsh, `floating point arithmetic`)
++		p.checkLang(p.pos, LangZsh|LangKsh93, `floating point arithmetic`)
+ 	default:
+ 		if p.quote&allArithmExpr != 0 {
+ 			p.curErr("not a valid arithmetic operator: %#q", p.tok)
+diff --git a/syntax/parser_test.go b/syntax/parser_test.go
+index 40ef6a6..54eca90 100644
+--- a/syntax/parser_test.go
++++ b/syntax/parser_test.go
+@@ -235,6 +235,10 @@ var (
+ 	onceHasZsh59 = sync.OnceValue(func() bool {
+ 		return cmdContains("zsh 5.9", "zsh", "--version")
+ 	})
++
++	onceHasKsh93um = sync.OnceValue(func() bool {
++		return cmdContains("93u+m", "ksh", "--version")
++	})
+ )
+ 
+ type externalShell struct {
+@@ -278,6 +282,11 @@ var externalShells = map[LangVariant]externalShell{
+ 			skipExternal(tb, "zsh 5.9 required to run")
+ 		}
+ 	}},
++	LangKsh93: {"ksh", func(tb testing.TB) {
++		if !onceHasKsh93um() {
++			skipExternal(tb, "ksh 93u+m required to run")
++		}
++	}},
+ }
+ 
+ func cmdContains(substr, cmd string, args ...string) bool {
+@@ -379,6 +388,9 @@ type errorCase struct {
+ 
+ 	byLangIndex [langResolvedVariantsCount]string
+ 
++	// The languages with an explicit entry in byLangIndex.
++	langsSet LangVariant
++
+ 	// The real shells where testing the input succeeds rather than failing as expected.
+ 	flipConfirmSet LangVariant
+ }
+@@ -388,6 +400,11 @@ func errCase(in string, opts ...func(*errorCase)) errorCase {
+ 	for _, o := range opts {
+ 		o(&c)
+ 	}
++	// ksh93 shares nearly all of its syntax with mksh,
++	// so it is expected to fail like mksh unless a case says otherwise.
++	if c.langsSet&LangKsh93 == 0 {
++		c.byLangIndex[LangKsh93.index()] = c.byLangIndex[LangMirBSDKorn.index()]
++	}
+ 	return c
+ }
+ 
+@@ -396,6 +413,7 @@ func langErr(want string, langSets ...LangVariant) func(*errorCase) {
+ 		// The parameter is a slice to allow omitting the argument.
+ 		switch len(langSets) {
+ 		case 0:
++			c.langsSet = langResolvedVariants
+ 			for i := range c.byLangIndex {
+ 				c.byLangIndex[i] = want
+ 			}
+@@ -405,6 +423,7 @@ func langErr(want string, langSets ...LangVariant) func(*errorCase) {
+ 		default:
+ 			panic("use a LangVariant bitset")
+ 		}
++		c.langsSet |= langSets[0]
+ 		for lang := range langSets[0].bits() {
+ 			c.byLangIndex[lang.index()] = want
+ 		}
+@@ -490,14 +509,17 @@ var errorCases = []errorCase{
+ 	errCase(
+ 		`${|`,
+ 		langErr("1:1: reached EOF without matching `${` with `}`", LangMirBSDKorn),
++		langErr("1:1: `${|stmts;}` is a bash/mksh feature; tried parsing as LANG", LangKsh93),
+ 	),
+ 	errCase(
+ 		`${|foo;`,
+ 		langErr("1:1: reached EOF without matching `${` with `}`", LangMirBSDKorn),
++		langErr("1:1: `${|stmts;}` is a bash/mksh feature; tried parsing as LANG", LangKsh93),
+ 	),
+ 	errCase(
+ 		`${|foo }`,
+ 		langErr("1:1: reached EOF without matching `${` with `}`", LangMirBSDKorn),
++		langErr("1:1: `${|stmts;}` is a bash/mksh feature; tried parsing as LANG", LangKsh93),
+ 	),
+ 	errCase(
+ 		`${ { foo; }bar; }`,
+@@ -764,6 +786,7 @@ var errorCases = []errorCase{
+ 		"echo foo(",
+ 		langErr("1:9: a command can only contain words and redirects; encountered `(`", LangPOSIX|LangBash|LangMirBSDKorn|LangBats),
+ 		langErr("1:9: reached EOF without matching `(` with `)`", LangZsh),
++		langErr("1:9: a command can only contain words and redirects; encountered `(`", LangKsh93),
+ 	),
+ 	errCase(
+ 		"echo &&",
+@@ -1255,7 +1278,8 @@ var errorCases = []errorCase{
+ 	),
+ 	errCase(
+ 		"echo ${@foo}",
+-		langErr("1:9: `@` cannot be followed by a word"),
++		langErr("1:9: `@` cannot be followed by a word", langBashLike|LangPOSIX|LangMirBSDKorn|LangZsh),
++		langErr("", LangKsh93),
+ 	),
+ 	errCase(
+ 		"echo ${$needbraces}",
+@@ -1336,6 +1360,7 @@ var errorCases = []errorCase{
+ 	errCase(
+ 		"echo ${%foo:1:3}",
+ 		langErr("1:12: cannot combine multiple parameter expansion operators", LangMirBSDKorn),
++		langErr("1:6: `${%foo}` is a mksh feature; tried parsing as LANG", LangKsh93),
+ 	),
+ 	errCase(
+ 		"echo ${#foo%x}",
+@@ -1393,6 +1418,7 @@ var errorCases = []errorCase{
+ 	errCase(
+ 		"case i { x) y ;;",
+ 		langErr("1:1: `case` statement must end with `}`", LangMirBSDKorn|LangZsh),
++		langErr("1:1: `case i {` is a mksh/zsh feature; tried parsing as LANG", LangKsh93),
+ 	),
+ 	errCase(
+ 		"\"`\"",
+@@ -1583,7 +1609,8 @@ var errorCases = []errorCase{
+ 	errCase(
+ 		"[[ a =~",
+ 		langErr("1:6: `=~` must be followed by a word", LangBash|LangZsh),
+-		langErr("1:6: regex tests are a bash/zsh feature; tried parsing as LANG", LangMirBSDKorn),
++		langErr("1:6: regex tests are a bash/zsh/ksh93 feature; tried parsing as LANG", LangMirBSDKorn),
++		langErr("1:6: `=~` must be followed by a word", LangKsh93),
+ 	),
+ 	errCase(
+ 		"[[ -f a",
+@@ -1974,17 +2001,20 @@ var errorCases = []errorCase{
+ 	errCase(
+ 		"echo <(",
+ 		langErr("1:6: `<` must be followed by a word", LangPOSIX|LangMirBSDKorn),
++		langErr("1:6: reached EOF without matching `<(` with `)`", LangKsh93),
+ 	),
+ 	errCase(
+ 		"echo >(",
+ 		langErr("1:6: `>` must be followed by a word", LangPOSIX|LangMirBSDKorn),
++		langErr("1:6: reached EOF without matching `>(` with `)`", LangKsh93),
+ 	),
+ 	errCase(
+ 		"echo {var}>foo",
+-		langErr("1:6: `{varname}` redirects are a bash/zsh feature; tried parsing as LANG", LangPOSIX|LangMirBSDKorn),
++		langErr("1:6: `{varname}` redirects are a bash/zsh/ksh93 feature; tried parsing as LANG", LangPOSIX|LangMirBSDKorn),
+ 		// shells treat {var} as an argument, but we are a bit stricter
+ 		// so that users won't think this will work like they expect in POSIX shell.
+ 		flipConfirmAll,
++		langErr("", LangKsh93),
+ 	),
+ 	errCase(
+ 		"echo ;&",
+@@ -1994,27 +2024,29 @@ var errorCases = []errorCase{
+ 	errCase(
+ 		"echo ;;&",
+ 		langErr("1:6: `;;` can only be used in a case clause", LangPOSIX|LangMirBSDKorn),
++		langErr("1:6: `;;&` can only be used in a case clause", LangKsh93),
+ 	),
+ 	errCase(
+ 		"echo ;|",
+ 		langErr("1:7: `|` can only immediately follow a statement", LangPOSIX|LangBash),
+ 		langErr("1:6: `;|` can only be used in a case clause", LangMirBSDKorn|LangZsh),
++		langErr("1:7: `|` can only immediately follow a statement", LangKsh93),
+ 	),
+ 	errCase(
+ 		"for i in 1 2 3; { echo; }",
+-		langErr("1:17: for loops with braces are a bash/mksh/zsh feature; tried parsing as LANG", LangPOSIX),
++		langErr("1:17: for loops with braces are a bash/mksh/zsh/ksh93 feature; tried parsing as LANG", LangPOSIX),
+ 	),
+ 	errCase(
+ 		"echo !(a)",
+-		langErr("1:6: extended globs are a bash/mksh feature; tried parsing as LANG", LangPOSIX),
++		langErr("1:6: extended globs are a bash/mksh/ksh93 feature; tried parsing as LANG", LangPOSIX),
+ 	),
+ 	errCase(
+ 		"echo $a@(b)",
+-		langErr("1:8: extended globs are a bash/mksh feature; tried parsing as LANG", LangPOSIX),
++		langErr("1:8: extended globs are a bash/mksh/ksh93 feature; tried parsing as LANG", LangPOSIX),
+ 	),
+ 	errCase(
+ 		"foo=(1 2)",
+-		langErr("1:5: arrays are a bash/mksh/zsh feature; tried parsing as LANG", LangPOSIX),
++		langErr("1:5: arrays are a bash/mksh/zsh/ksh93 feature; tried parsing as LANG", LangPOSIX),
+ 	),
+ 	errCase(
+ 		"a=$c\n'",
+@@ -2022,7 +2054,7 @@ var errorCases = []errorCase{
+ 	),
+ 	errCase(
+ 		"echo ${!foo[@]}",
+-		langErr("1:6: `${!foo}` is a bash/mksh feature; tried parsing as LANG", LangPOSIX),
++		langErr("1:6: `${!foo}` is a bash/mksh/ksh93 feature; tried parsing as LANG", LangPOSIX),
+ 	),
+ 	errCase(
+ 		"foo << < bar",
+@@ -2030,7 +2062,16 @@ var errorCases = []errorCase{
+ 	),
+ 	errCase(
+ 		"echo ${foo,bar}",
+-		langErr("1:11: this expansion operator is a bash feature; tried parsing as LANG", LangPOSIX|LangMirBSDKorn),
++		langErr("1:11: this expansion operator is a bash/ksh93 feature; tried parsing as LANG", LangPOSIX|LangMirBSDKorn),
++		langErr("", LangKsh93),
++	),
++	errCase(
++		"echo ${!a.}",
++		langErr("1:9: invalid parameter name", LangKsh93),
++	),
++	errCase(
++		"echo ${a.*}",
++		langErr("1:8: invalid parameter name", LangKsh93),
+ 	),
+ 	errCase(
+ 		"echo ${foo@Q}",
+@@ -2039,38 +2080,47 @@ var errorCases = []errorCase{
+ 	errCase(
+ 		"echo ${foo@a}",
+ 		langErr("1:12: this expansion operator is a bash feature; tried parsing as LANG", LangMirBSDKorn),
++		langErr("1:11: this expansion operator is a bash/mksh feature; tried parsing as LANG", LangKsh93),
+ 	),
+ 	errCase(
+ 		"echo ${foo@u}",
+ 		langErr("1:12: this expansion operator is a bash feature; tried parsing as LANG", LangMirBSDKorn),
++		langErr("1:11: this expansion operator is a bash/mksh feature; tried parsing as LANG", LangKsh93),
+ 	),
+ 	errCase(
+ 		"echo ${foo@A}",
+ 		langErr("1:12: this expansion operator is a bash feature; tried parsing as LANG", LangMirBSDKorn),
++		langErr("1:11: this expansion operator is a bash/mksh feature; tried parsing as LANG", LangKsh93),
+ 	),
+ 	errCase(
+ 		"echo ${foo@E}",
+ 		langErr("1:12: this expansion operator is a bash feature; tried parsing as LANG", LangMirBSDKorn),
++		langErr("1:11: this expansion operator is a bash/mksh feature; tried parsing as LANG", LangKsh93),
+ 	),
+ 	errCase(
+ 		"echo ${foo@K}",
+ 		langErr("1:12: this expansion operator is a bash feature; tried parsing as LANG", LangMirBSDKorn),
++		langErr("1:11: this expansion operator is a bash/mksh feature; tried parsing as LANG", LangKsh93),
+ 	),
+ 	errCase(
+ 		"echo ${foo@k}",
+ 		langErr("1:12: this expansion operator is a bash feature; tried parsing as LANG", LangMirBSDKorn),
++		langErr("1:11: this expansion operator is a bash/mksh feature; tried parsing as LANG", LangKsh93),
+ 	),
+ 	errCase(
+ 		"echo ${foo@L}",
+ 		langErr("1:12: this expansion operator is a bash feature; tried parsing as LANG", LangMirBSDKorn),
++		langErr("1:11: this expansion operator is a bash/mksh feature; tried parsing as LANG", LangKsh93),
+ 	),
+ 	errCase(
+ 		"echo ${foo@P}",
+ 		langErr("1:12: this expansion operator is a bash feature; tried parsing as LANG", LangMirBSDKorn),
++		langErr("1:11: this expansion operator is a bash/mksh feature; tried parsing as LANG", LangKsh93),
+ 	),
+ 	errCase(
+ 		"echo ${foo@U}",
+ 		langErr("1:12: this expansion operator is a bash feature; tried parsing as LANG", LangMirBSDKorn),
++		langErr("1:11: this expansion operator is a bash/mksh feature; tried parsing as LANG", LangKsh93),
+ 	),
+ 	errCase(
+ 		"foo=force_expansion; echo ${foo@#}",
+diff --git a/syntax/printer.go b/syntax/printer.go
+index 057b21d..c07fb42 100644
+--- a/syntax/printer.go
++++ b/syntax/printer.go
+@@ -714,7 +714,10 @@ func (p *Printer) wordPart(wp, next WordPart) {
+ 		}
+ 		p.paramExp(wp)
+ 	case *ArithmExp:
+-		p.w.WriteString("$((")
++		if !wp.Bare {
++			p.w.WriteByte('$')
++		}
++		p.w.WriteString("((")
+ 		if wp.Unsigned {
+ 			p.w.WriteString("# ")
+ 		}
+@@ -765,6 +768,17 @@ func (p *Printer) wroteIndex(index ArithmExpr) bool {
+ 	return true
+ }
+ 
++func (p *Printer) refElems(elems []RefElem) {
++	for _, el := range elems {
++		if el.Member != nil {
++			p.w.WriteByte('.')
++			p.writeLit(el.Member.Value)
++		} else {
++			p.wroteIndex(el.Index)
++		}
++	}
++}
++
+ func (p *Printer) paramExp(pe *ParamExp) {
+ 	if pe.nakedIndex() { // arr[x]
+ 		p.writeLit(pe.Param.Value)
+@@ -789,6 +803,8 @@ func (p *Printer) paramExp(pe *ParamExp) {
+ 		p.w.WriteByte('+')
+ 	case pe.Excl:
+ 		p.w.WriteByte('!')
++	case pe.Attributes:
++		p.w.WriteByte('@')
+ 	}
+ 	for _, pre := range [...]struct {
+ 		c     byte
+@@ -818,6 +834,7 @@ func (p *Printer) paramExp(pe *ParamExp) {
+ 		p.minify = saved
+ 	}
+ 	p.wroteIndex(pe.Index)
++	p.refElems(pe.Elems)
+ 	switch {
+ 	case len(pe.Modifiers) > 0:
+ 		for _, lit := range pe.Modifiers {
+@@ -1126,6 +1143,27 @@ func startsWithGroup(w *Word) bool {
+ 	return ok && strings.HasPrefix(lit.Value, "(")
+ }
+ 
++func (p *Printer) arrayExpr(ae *ArrayExpr) {
++	p.wantSpace = spaceNotRequired
++	p.w.WriteByte('(')
++	if len(ae.Stmts) > 0 {
++		p.nestedStmts(ae.Stmts, ae.Last, ae.Rparen)
++		p.rightParen(ae.Rparen)
++		return
++	}
++	// Avoid `((`, which would start an arithmetic command,
++	// when the first element is a nested compound or array value.
++	nested := len(ae.Elems) > 0 && ae.Elems[0].Index == nil && ae.Elems[0].Array != nil
++	if nested {
++		p.wantSpace = spaceRequired
++	}
++	p.elemJoin(ae.Elems, ae.Last)
++	if nested && ae.Rparen.Line() <= p.line {
++		p.space()
++	}
++	p.rightParen(ae.Rparen)
++}
++
+ func (p *Printer) elemJoin(elems []*ArrayElem, last []Comment) {
+ 	p.incLevel()
+ 	for _, el := range elems {
+@@ -1147,8 +1185,11 @@ func (p *Printer) elemJoin(elems []*ArrayElem, last []Comment) {
+ 		if p.wroteIndex(el.Index) {
+ 			p.w.WriteByte('=')
+ 		}
+-		if el.Value != nil {
++		switch {
++		case el.Value != nil:
+ 			p.word(el.Value)
++		case el.Array != nil:
++			p.arrayExpr(el.Array)
+ 		}
+ 		p.comments(left...)
+ 	}
+@@ -1185,8 +1226,10 @@ func (p *Printer) stmt(s *Stmt) {
+ 		} else {
+ 			p.wantSpace = spaceRequired
+ 		}
+-		p.word(r.Word)
+-		if r.Op == Hdoc || r.Op == DashHdoc {
++		if r.Word != nil {
++			p.word(r.Word)
++		}
++		if r.Op == Hdoc || r.Op == DashHdoc || r.Op == HashHdoc {
+ 			p.pendingHdocs = append(p.pendingHdocs, r)
+ 		}
+ 	}
+@@ -1214,7 +1257,7 @@ func (p *Printer) stmt(s *Stmt) {
+ 
+ func (p *Printer) printRedirsUntil(redirs []*Redirect, startRedirs int, pos Pos) int {
+ 	for _, r := range redirs[startRedirs:] {
+-		if r.Pos().After(pos) || r.Op == Hdoc || r.Op == DashHdoc {
++		if r.Pos().After(pos) || r.Op == Hdoc || r.Op == DashHdoc || r.Op == HashHdoc {
+ 			break
+ 		}
+ 		if p.wantSpace == spaceRequired {
+@@ -1229,7 +1272,9 @@ func (p *Printer) printRedirsUntil(redirs []*Redirect, startRedirs int, pos Pos)
+ 		} else {
+ 			p.wantSpace = spaceRequired
+ 		}
+-		p.word(r.Word)
++		if r.Word != nil {
++			p.word(r.Word)
++		}
+ 		startRedirs++
+ 	}
+ 	return startRedirs
+@@ -1258,6 +1303,11 @@ func (p *Printer) command(cmd Command, redirs []*Redirect) (startRedirs int) {
+ 		p.space()
+ 		p.w.WriteString("always ")
+ 		p.braceGroup(cmd.Always)
++	case *NamespaceClause:
++		p.spacedString("namespace", cmd.Pos())
++		p.spacedString(cmd.Name.Value, Pos{})
++		p.space()
++		p.braceGroup(cmd.Body)
+ 	case *IfClause:
+ 		p.ifClause(cmd, false)
+ 	case *Subshell:
+@@ -1363,6 +1413,9 @@ func (p *Printer) command(cmd Command, redirs []*Redirect) (startRedirs int) {
+ 				p.spacedString(name.Value, Pos{})
+ 			}
+ 		}
++		for _, param := range cmd.Params {
++			p.spacedString(param.Value, Pos{})
++		}
+ 		if !cmd.RsrvWord || cmd.Parens {
+ 			p.w.WriteString("()")
+ 			p.wantSpace = spaceNotRequired
+@@ -1632,6 +1685,7 @@ func (p *Printer) assigns(assigns []*Assign) {
+ 		if a.Name != nil {
+ 			p.writeLit(a.Name.Value)
+ 			p.wroteIndex(a.Index)
++			p.refElems(a.Elems)
+ 			if a.Append {
+ 				p.w.WriteByte('+')
+ 			}
+@@ -1646,10 +1700,7 @@ func (p *Printer) assigns(assigns []*Assign) {
+ 			p.advanceLine(a.Value.Pos().Line())
+ 			p.word(a.Value)
+ 		} else if a.Array != nil {
+-			p.wantSpace = spaceNotRequired
+-			p.w.WriteByte('(')
+-			p.elemJoin(a.Array.Elems, a.Array.Last)
+-			p.rightParen(a.Array.Rparen)
++			p.arrayExpr(a.Array)
+ 		}
+ 		p.wantSpace = spaceRequired
+ 	}
+diff --git a/syntax/token_string.go b/syntax/token_string.go
+index 942981f..fd8f3de 100644
+--- a/syntax/token_string.go
++++ b/syntax/token_string.go
+@@ -86,80 +86,86 @@ func _() {
+ 	_ = x[rdrAllClob-75]
+ 	_ = x[appAll-76]
+ 	_ = x[appAllClob-77]
+-	_ = x[cmdIn-78]
+-	_ = x[assgnParen-79]
+-	_ = x[cmdOut-80]
+-	_ = x[plus-81]
+-	_ = x[colPlus-82]
+-	_ = x[minus-83]
+-	_ = x[colMinus-84]
+-	_ = x[quest-85]
+-	_ = x[colQuest-86]
+-	_ = x[assgn-87]
+-	_ = x[colAssgn-88]
+-	_ = x[perc-89]
+-	_ = x[dblPerc-90]
+-	_ = x[hash-91]
+-	_ = x[dblHash-92]
+-	_ = x[colHash-93]
+-	_ = x[colPipe-94]
+-	_ = x[colStar-95]
+-	_ = x[colColAssgn-96]
+-	_ = x[colCaret-97]
+-	_ = x[colDblCaret-98]
+-	_ = x[caret-99]
+-	_ = x[dblCaret-100]
+-	_ = x[comma-101]
+-	_ = x[dblComma-102]
+-	_ = x[at-103]
+-	_ = x[slash-104]
+-	_ = x[dblSlash-105]
+-	_ = x[period-106]
+-	_ = x[colon-107]
+-	_ = x[tsExists-108]
+-	_ = x[tsRegFile-109]
+-	_ = x[tsDirect-110]
+-	_ = x[tsCharSp-111]
+-	_ = x[tsBlckSp-112]
+-	_ = x[tsNmPipe-113]
+-	_ = x[tsSocket-114]
+-	_ = x[tsSmbLink-115]
+-	_ = x[tsSticky-116]
+-	_ = x[tsGIDSet-117]
+-	_ = x[tsUIDSet-118]
+-	_ = x[tsGrpOwn-119]
+-	_ = x[tsUsrOwn-120]
+-	_ = x[tsModif-121]
+-	_ = x[tsRead-122]
+-	_ = x[tsWrite-123]
+-	_ = x[tsExec-124]
+-	_ = x[tsNoEmpty-125]
+-	_ = x[tsFdTerm-126]
+-	_ = x[tsEmpStr-127]
+-	_ = x[tsNempStr-128]
+-	_ = x[tsOptSet-129]
+-	_ = x[tsVarSet-130]
+-	_ = x[tsRefVar-131]
+-	_ = x[tsReMatch-132]
+-	_ = x[tsNewer-133]
+-	_ = x[tsOlder-134]
+-	_ = x[tsDevIno-135]
+-	_ = x[tsEql-136]
+-	_ = x[tsNeq-137]
+-	_ = x[tsLeq-138]
+-	_ = x[tsGeq-139]
+-	_ = x[tsLss-140]
+-	_ = x[tsGtr-141]
+-	_ = x[globQuest-142]
+-	_ = x[globStar-143]
+-	_ = x[globPlus-144]
+-	_ = x[globAt-145]
+-	_ = x[globExcl-146]
++	_ = x[hashHdoc-78]
++	_ = x[rdrOutRepl-79]
++	_ = x[rdrInOutTr-80]
++	_ = x[seekIn-81]
++	_ = x[seekInCopy-82]
++	_ = x[seekOut-83]
++	_ = x[cmdIn-84]
++	_ = x[assgnParen-85]
++	_ = x[cmdOut-86]
++	_ = x[plus-87]
++	_ = x[colPlus-88]
++	_ = x[minus-89]
++	_ = x[colMinus-90]
++	_ = x[quest-91]
++	_ = x[colQuest-92]
++	_ = x[assgn-93]
++	_ = x[colAssgn-94]
++	_ = x[perc-95]
++	_ = x[dblPerc-96]
++	_ = x[hash-97]
++	_ = x[dblHash-98]
++	_ = x[colHash-99]
++	_ = x[colPipe-100]
++	_ = x[colStar-101]
++	_ = x[colColAssgn-102]
++	_ = x[colCaret-103]
++	_ = x[colDblCaret-104]
++	_ = x[caret-105]
++	_ = x[dblCaret-106]
++	_ = x[comma-107]
++	_ = x[dblComma-108]
++	_ = x[at-109]
++	_ = x[slash-110]
++	_ = x[dblSlash-111]
++	_ = x[period-112]
++	_ = x[colon-113]
++	_ = x[tsExists-114]
++	_ = x[tsRegFile-115]
++	_ = x[tsDirect-116]
++	_ = x[tsCharSp-117]
++	_ = x[tsBlckSp-118]
++	_ = x[tsNmPipe-119]
++	_ = x[tsSocket-120]
++	_ = x[tsSmbLink-121]
++	_ = x[tsSticky-122]
++	_ = x[tsGIDSet-123]
++	_ = x[tsUIDSet-124]
++	_ = x[tsGrpOwn-125]
++	_ = x[tsUsrOwn-126]
++	_ = x[tsModif-127]
++	_ = x[tsRead-128]
++	_ = x[tsWrite-129]
++	_ = x[tsExec-130]
++	_ = x[tsNoEmpty-131]
++	_ = x[tsFdTerm-132]
++	_ = x[tsEmpStr-133]
++	_ = x[tsNempStr-134]
++	_ = x[tsOptSet-135]
++	_ = x[tsVarSet-136]
++	_ = x[tsRefVar-137]
++	_ = x[tsReMatch-138]
++	_ = x[tsNewer-139]
++	_ = x[tsOlder-140]
++	_ = x[tsDevIno-141]
++	_ = x[tsEql-142]
++	_ = x[tsNeq-143]
++	_ = x[tsLeq-144]
++	_ = x[tsGeq-145]
++	_ = x[tsLss-146]
++	_ = x[tsGtr-147]
++	_ = x[globQuest-148]
++	_ = x[globStar-149]
++	_ = x[globPlus-150]
++	_ = x[globAt-151]
++	_ = x[globExcl-152]
+ }
+ 
+-const _token_name = "illegalTokEOFNewlLitLitWordLitRedirrealTokenBoundary'\"`&&&||||&&|&!$$'$\"${$[$($(({[[[(((}]]])));;;;&;;&;|!~++--***==!=<=>=+=-=*=/=%=&=|=^=<<=>>=&&=||=^^=**=>>><<><&>&>|>>|<<<<-<<<&>&>|&>>&>>|<(=(>(+:+-:-?:?=:=%%%###:#:|:*::=:^:^^^^^,,,@///.:-e-f-d-c-b-p-S-L-k-g-u-G-O-N-r-w-x-s-t-z-n-o-v-R=~-nt-ot-ef-eq-ne-le-ge-lt-gt?(*(+(@(!("
++const _token_name = "illegalTokEOFNewlLitLitWordLitRedirrealTokenBoundary'\"`&&&||||&&|&!$$'$\"${$[$($(({[[[(((}]]])));;;;&;;&;|!~++--***==!=<=>=+=-=*=/=%=&=|=^=<<=>>=&&=||=^^=**=>>><<><&>&>|>>|<<<<-<<<&>&>|&>>&>>|<<#>;<>;<#<##>#<(=(>(+:+-:-?:?=:=%%%###:#:|:*::=:^:^^^^^,,,@///.:-e-f-d-c-b-p-S-L-k-g-u-G-O-N-r-w-x-s-t-z-n-o-v-R=~-nt-ot-ef-eq-ne-le-ge-lt-gt?(*(+(@(!("
+ 
+-var _token_index = [...]uint16{0, 10, 13, 17, 20, 27, 35, 52, 53, 54, 55, 56, 58, 60, 61, 63, 65, 67, 68, 70, 72, 74, 76, 78, 81, 82, 83, 85, 86, 88, 89, 90, 92, 93, 95, 96, 98, 100, 103, 105, 106, 107, 109, 111, 112, 114, 116, 118, 120, 122, 124, 126, 128, 130, 132, 134, 136, 138, 141, 144, 147, 150, 153, 156, 157, 159, 160, 162, 164, 166, 168, 171, 173, 176, 179, 181, 184, 187, 191, 193, 195, 197, 198, 200, 201, 203, 204, 206, 207, 209, 210, 212, 213, 215, 217, 219, 221, 224, 226, 229, 230, 232, 233, 235, 236, 237, 239, 240, 241, 243, 245, 247, 249, 251, 253, 255, 257, 259, 261, 263, 265, 267, 269, 271, 273, 275, 277, 279, 281, 283, 285, 287, 289, 291, 294, 297, 300, 303, 306, 309, 312, 315, 318, 320, 322, 324, 326, 328}
++var _token_index = [...]uint16{0, 10, 13, 17, 20, 27, 35, 52, 53, 54, 55, 56, 58, 60, 61, 63, 65, 67, 68, 70, 72, 74, 76, 78, 81, 82, 83, 85, 86, 88, 89, 90, 92, 93, 95, 96, 98, 100, 103, 105, 106, 107, 109, 111, 112, 114, 116, 118, 120, 122, 124, 126, 128, 130, 132, 134, 136, 138, 141, 144, 147, 150, 153, 156, 157, 159, 160, 162, 164, 166, 168, 171, 173, 176, 179, 181, 184, 187, 191, 194, 196, 199, 201, 204, 206, 208, 210, 212, 213, 215, 216, 218, 219, 221, 222, 224, 225, 227, 228, 230, 232, 234, 236, 239, 241, 244, 245, 247, 248, 250, 251, 252, 254, 255, 256, 258, 260, 262, 264, 266, 268, 270, 272, 274, 276, 278, 280, 282, 284, 286, 288, 290, 292, 294, 296, 298, 300, 302, 304, 306, 309, 312, 315, 318, 321, 324, 327, 330, 333, 335, 337, 339, 341, 343}
+ 
+ func (i token) String() string {
+ 	idx := int(i) - 0
+diff --git a/syntax/tokens.go b/syntax/tokens.go
+index da1e8e1..c268b22 100644
+--- a/syntax/tokens.go
++++ b/syntax/tokens.go
+@@ -99,6 +99,12 @@ const (
+ 	rdrAllClob // &>|
+ 	appAll     // &>>
+ 	appAllClob // &>>|
++	hashHdoc   // <<#
++	rdrOutRepl // >;
++	rdrInOutTr // <>;
++	seekIn     // <#
++	seekInCopy // <##
++	seekOut    // >#
+ 
+ 	cmdIn      // <(
+ 	assgnParen // =(
+@@ -182,21 +188,27 @@ func (t token) isLit() bool {
+ type RedirOperator token
+ 
+ const (
+-	RdrOut     = RedirOperator(rdrOut) + iota // >
+-	AppOut                                    // >>
+-	RdrIn                                     // <
+-	RdrInOut                                  // <>
+-	DplIn                                     // <&
+-	DplOut                                    // >&
+-	RdrClob                                   // >|
+-	AppClob                                   // >>| with [LangZsh]
+-	Hdoc                                      // <<
+-	DashHdoc                                  // <<-
+-	WordHdoc                                  // <<<
+-	RdrAll                                    // &>
+-	RdrAllClob                                // &>| with [LangZsh]
+-	AppAll                                    // &>>
+-	AppAllClob                                // &>>| with [LangZsh]
++	RdrOut        = RedirOperator(rdrOut) + iota // >
++	AppOut                                       // >>
++	RdrIn                                        // <
++	RdrInOut                                     // <>
++	DplIn                                        // <&
++	DplOut                                       // >&
++	RdrClob                                      // >|
++	AppClob                                      // >>| with [LangZsh]
++	Hdoc                                         // <<
++	DashHdoc                                     // <<-
++	WordHdoc                                     // <<<
++	RdrAll                                       // &>
++	RdrAllClob                                   // &>| with [LangZsh]
++	AppAll                                       // &>>
++	AppAllClob                                   // &>>| with [LangZsh]
++	HashHdoc                                     // <<# with [LangKsh93]
++	RdrOutReplace                                // >; with [LangKsh93]
++	RdrInOutTrunc                                // <>; with [LangKsh93]
++	SeekIn                                       // <# with [LangKsh93]
++	SeekInCopy                                   // <## with [LangKsh93]
++	SeekOut                                      // ># with [LangKsh93]
+ 
+ 	// Deprecated: use [RdrClob]
+ 	//
+diff --git a/syntax/tokens_parse.go b/syntax/tokens_parse.go
+index 6715c3d..bdbf9c3 100644
+--- a/syntax/tokens_parse.go
++++ b/syntax/tokens_parse.go
+@@ -36,6 +36,18 @@ func (o *RedirOperator) UnmarshalText(text []byte) error {
+ 		*o = AppAll
+ 	case "&>>|":
+ 		*o = AppAllClob
++	case "<<#":
++		*o = HashHdoc
++	case ">;":
++		*o = RdrOutReplace
++	case "<>;":
++		*o = RdrInOutTrunc
++	case "<#":
++		*o = SeekIn
++	case "<##":
++		*o = SeekInCopy
++	case ">#":
++		*o = SeekOut
+ 	default:
+ 		return fmt.Errorf("invalid RedirOperator: %q", text)
+ 	}
+diff --git a/syntax/walk.go b/syntax/walk.go
+index 2914403..e2ce6bd 100644
+--- a/syntax/walk.go
++++ b/syntax/walk.go
+@@ -40,10 +40,11 @@ func Walk(node Node, f func(Node) bool) {
+ 		walkNilable(node.Name, f)
+ 		walkNilable(node.Value, f)
+ 		walkNilable(node.Index, f)
++		walkRefElems(node.Elems, f)
+ 		walkNilable(node.Array, f)
+ 	case *Redirect:
+ 		walkNilable(node.N, f)
+-		Walk(node.Word, f)
++		walkNilable(node.Word, f)
+ 		walkNilable(node.Hdoc, f)
+ 	case *CallExpr:
+ 		walkList(node.Assigns, f)
+@@ -73,6 +74,9 @@ func Walk(node Node, f func(Node) bool) {
+ 	case *TryClause:
+ 		Walk(node.Try, f)
+ 		Walk(node.Always, f)
++	case *NamespaceClause:
++		Walk(node.Name, f)
++		Walk(node.Body, f)
+ 	case *RepeatClause:
+ 		Walk(node.Count, f)
+ 		walkList(node.Do, f)
+@@ -91,6 +95,7 @@ func Walk(node Node, f func(Node) bool) {
+ 	case *FuncDecl:
+ 		walkNilable(node.Name, f)
+ 		walkList(node.Names, f)
++		walkList(node.Params, f)
+ 		Walk(node.Body, f)
+ 		walkList(node.Args, f)
+ 	case *Word:
+@@ -107,6 +112,7 @@ func Walk(node Node, f func(Node) bool) {
+ 		walkNilable(node.Param, f)
+ 		walkNilable(node.NestedParam, f)
+ 		walkNilable(node.Index, f)
++		walkRefElems(node.Elems, f)
+ 		if node.Slice != nil {
+ 			walkNilable(node.Slice.Offset, f)
+ 			walkNilable(node.Slice.Length, f)
+@@ -165,6 +171,7 @@ func Walk(node Node, f func(Node) bool) {
+ 		walkList(node.Args, f)
+ 	case *ArrayExpr:
+ 		walkList(node.Elems, f)
++		walkList(node.Stmts, f)
+ 		walkComments(node.Last, f)
+ 	case *ArrayElem:
+ 		for _, c := range node.Comments {
+@@ -176,6 +183,7 @@ func Walk(node Node, f func(Node) bool) {
+ 		}
+ 		walkNilable(node.Index, f)
+ 		walkNilable(node.Value, f)
++		walkNilable(node.Array, f)
+ 	case *ExtGlob:
+ 		Walk(node.Pattern, f)
+ 	case *ProcSubst:
+@@ -221,6 +229,13 @@ type nilableNode interface {
+ 	comparable // pointer nodes, which can be compared to nil
+ }
+ 
++func walkRefElems(elems []RefElem, f func(Node) bool) {
++	for _, el := range elems {
++		walkNilable(el.Index, f)
++		walkNilable(el.Member, f)
++	}
++}
++
+ func walkNilable[N nilableNode](node N, f func(Node) bool) {
+ 	var zero N // nil
+ 	if node != zero {

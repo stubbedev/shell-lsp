@@ -34,6 +34,7 @@ const (
 	kindIfClause
 	kindLetClause
 	kindLit
+	kindNamespaceClause
 	kindParamExp
 	kindParenArithm
 	kindParenTest
@@ -113,6 +114,8 @@ func nodeKindOf(n syntax.Node) nodeKind {
 		return kindLetClause
 	case *syntax.Lit:
 		return kindLit
+	case *syntax.NamespaceClause:
+		return kindNamespaceClause
 	case *syntax.ParamExp:
 		return kindParamExp
 	case *syntax.ParenArithm:

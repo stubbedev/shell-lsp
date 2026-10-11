@@ -192,7 +192,7 @@ readAgain:
 
 func (p *Parser) nextKeepSpaces() {
 	r := p.r
-	if p.quote != hdocBody && p.quote != hdocBodyTabs {
+	if p.quote&(hdocBody|hdocBodyTabs|hdocBodyBlanks) == 0 {
 		// Heredocs handle escaped newlines in a special way, but others do not.
 		for r == escNewl {
 			r = p.rune()
@@ -209,7 +209,7 @@ func (p *Parser) nextKeepSpaces() {
 		default:
 			p.advanceLitDquote(r)
 		}
-	case hdocBody, hdocBodyTabs:
+	case hdocBody, hdocBodyTabs, hdocBodyBlanks:
 		switch r {
 		case '`', '$':
 			p.tok = p.dqToken(r)
@@ -382,6 +382,9 @@ skipSpace:
 		// can represent, so in a subscript it starts a literal instead;
 		// it can be part of an associative array key, like in ${args[cmd,#]}.
 		p.advanceLitOther(r)
+	case p.quote&allArithmExpr != 0 && r == '.' && p.lang.in(LangKsh93) && paramNameStartRune(p.peek()):
+		// A ksh93 vname like .sh.value, rather than a float like .5.
+		p.advanceLitOther(r)
 	case p.quote&allArithmExpr != 0 && arithmOps(r):
 		p.tok = p.arithmToken(r)
 	case p.quote&allParamExp != 0 && paramOps(r):
@@ -540,7 +543,7 @@ func (p *Parser) regToken(r rune) token {
 			p.rune()
 			return orOr
 		case '&':
-			if !p.lang.in(langBashLike | LangMirBSDKorn | LangZsh) {
+			if !p.lang.in(langBashLike | langKshLike | LangZsh) {
 				break
 			}
 			p.rune()
@@ -550,13 +553,13 @@ func (p *Parser) regToken(r rune) token {
 	case '$':
 		switch p.rune() {
 		case '\'':
-			if !p.lang.in(langBashLike | LangMirBSDKorn | LangZsh) {
+			if !p.lang.in(langBashLike | langKshLike | LangZsh) {
 				break
 			}
 			p.rune()
 			return dollSglQuote
 		case '"':
-			if !p.lang.in(langBashLike | LangMirBSDKorn) {
+			if !p.lang.in(langBashLike | langKshLike) {
 				break
 			}
 			p.rune()
@@ -580,7 +583,7 @@ func (p *Parser) regToken(r rune) token {
 		}
 		return dollar
 	case '(':
-		if p.rune() == '(' && p.lang.in(langBashLike|LangMirBSDKorn|LangZsh) && p.quote != testExpr && !p.anonFuncAhead() {
+		if p.rune() == '(' && p.lang.in(langBashLike|langKshLike|LangZsh) && p.quote != testExpr && !p.anonFuncAhead() {
 			p.rune()
 			return dblLeftParen
 		}
@@ -591,13 +594,13 @@ func (p *Parser) regToken(r rune) token {
 	case ';':
 		switch p.rune() {
 		case ';':
-			if p.rune() == '&' && p.lang.in(langBashLike) {
+			if p.rune() == '&' && p.lang.in(langBashLike|LangKsh93) {
 				p.rune()
 				return dblSemiAnd
 			}
 			return dblSemicolon
 		case '&':
-			if !p.lang.in(langBashLike | LangMirBSDKorn | LangZsh) {
+			if !p.lang.in(langBashLike | langKshLike | LangZsh) {
 				break
 			}
 			p.rune()
@@ -620,16 +623,33 @@ func (p *Parser) regToken(r rune) token {
 			case '<':
 				p.rune()
 				return wordHdoc
+			case '#':
+				if p.lang.in(LangKsh93) {
+					p.rune()
+					return hashHdoc
+				}
 			}
 			return hdoc
 		case '>':
-			p.rune()
+			if p.rune() == ';' && p.lang.in(LangKsh93) {
+				p.rune()
+				return rdrInOutTr
+			}
 			return rdrInOut
+		case '#':
+			if !p.lang.in(LangKsh93) {
+				break
+			}
+			if p.rune() == '#' {
+				p.rune()
+				return seekInCopy
+			}
+			return seekIn
 		case '&':
 			p.rune()
 			return dplIn
 		case '(':
-			if !p.lang.in(langBashLike | LangZsh) {
+			if !p.lang.in(langBashLike | LangZsh | LangKsh93) {
 				break
 			}
 			p.rune()
@@ -684,8 +704,18 @@ func (p *Parser) regToken(r rune) token {
 				p.rune()
 				return rdrClob
 			}
+		case ';':
+			if p.lang.in(LangKsh93) {
+				p.rune()
+				return rdrOutRepl
+			}
+		case '#':
+			if p.lang.in(LangKsh93) {
+				p.rune()
+				return seekOut
+			}
 		case '(':
-			if !p.lang.in(langBashLike | LangZsh) {
+			if !p.lang.in(langBashLike | LangZsh | LangKsh93) {
 				break
 			}
 			p.rune()
@@ -1111,11 +1141,11 @@ loop:
 				break loop
 			}
 		case '.':
-			if !p.lang.in(LangZsh) && p.quote&allArithmExpr != 0 {
+			if !p.lang.in(LangZsh|LangKsh93) && p.quote&allArithmExpr != 0 {
 				break loop
 			}
 		case '[', ']':
-			if p.lang.in(langBashLike|LangMirBSDKorn|LangZsh) && p.quote&allArithmExpr != 0 {
+			if p.lang.in(langBashLike|langKshLike|LangZsh) && p.quote&allArithmExpr != 0 {
 				break loop
 			}
 			fallthrough
@@ -1210,7 +1240,7 @@ loop:
 				// operator below.
 				break
 			}
-			if p.lang.in(langBashLike|LangMirBSDKorn|LangZsh) && len(p.litBs) > 1 && p.litBs[0] != '[' {
+			if p.lang.in(langBashLike|langKshLike|LangZsh) && len(p.litBs) > 1 && p.litBs[0] != '[' {
 				tok = _Lit
 				break loop
 			}
@@ -1236,6 +1266,18 @@ loop:
 	p.tok, p.val = tok, p.endLit()
 }
 
+// hdocIndent reports whether r is indentation to skip at the start of a line
+// of a here-document: tabs with <<-, and with ksh93's <<#, spaces as well.
+func (p *Parser) hdocIndent(r rune) bool {
+	switch p.quote {
+	case hdocBodyTabs:
+		return r == '\t'
+	case hdocBodyBlanks:
+		return r == '\t' || r == ' '
+	}
+	return false
+}
+
 func (p *Parser) advanceLitHdoc(r rune) {
 	// Unlike the rest of nextKeepSpaces quote states, we handle escaped
 	// newlines here. If lastTok==_Lit, then we know we're following an
@@ -1249,7 +1291,7 @@ func (p *Parser) advanceLitHdoc(r rune) {
 
 	p.tok = _Lit
 	p.newLit(r)
-	for p.quote == hdocBodyTabs && r == '\t' {
+	for p.hdocIndent(r) {
 		r = p.rune()
 	}
 	lStart := len(p.litBs) - 1
@@ -1296,7 +1338,7 @@ func (p *Parser) advanceLitHdoc(r rune) {
 			if r != '\n' {
 				return // hit an unexpected EOF or closing backquote
 			}
-			for p.quote == hdocBodyTabs && p.peek() == '\t' {
+			for p.hdocIndent(rune(p.peek())) {
 				p.rune()
 			}
 			lStart = len(p.litBs)
@@ -1313,7 +1355,7 @@ func (p *Parser) quotedHdocWord() *Word {
 		if r == runeEOF {
 			return nil
 		}
-		for p.quote == hdocBodyTabs && r == '\t' {
+		for p.hdocIndent(r) {
 			r = p.rune()
 		}
 		lStart := len(p.litBs) - 1

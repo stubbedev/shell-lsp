@@ -239,7 +239,7 @@ var commandTakers = map[string]bool{
 }
 
 func (c completer) argument(ctx context.Context) (Result, error) {
-	wrappers := parser.Wrappers{Bats: c.Tree.Bats, Programs: true}
+	wrappers := parser.Wrappers{Bats: c.Tree.Bats(), Programs: true}
 	command, args := c.site.command, c.site.previous
 	for {
 		wrap, wrapped := wrappers.Unwrap(command, args)

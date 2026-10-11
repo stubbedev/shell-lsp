@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"mvdan.cc/sh/v3/syntax"
+
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/manpage"
 	"github.com/stubbedev/shell-lsp/internal/parser"
@@ -293,8 +295,11 @@ func TestHoverLooksThroughWrappers(t *testing.T) {
 		for range nth + 1 {
 			offset += strings.Index(src[offset+1:], needle) + 1
 		}
-		tree := parser.Parse(src, dialect.Bash)
-		tree.Bats = bats
+		lang := syntax.LangBash
+		if bats {
+			lang = syntax.LangBats
+		}
+		tree := parser.ParseEdit(nil, src, dialect.Bash, lang)
 		got, ok, err := Hover(t.Context(), Input{Tree: tree, Offset: offset + 1, Commands: commands})
 		if err != nil {
 			t.Fatalf("Hover(%q #%d) error = %v", needle, nth, err)

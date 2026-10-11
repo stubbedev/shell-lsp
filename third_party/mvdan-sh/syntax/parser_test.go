@@ -235,6 +235,10 @@ var (
 	onceHasZsh59 = sync.OnceValue(func() bool {
 		return cmdContains("zsh 5.9", "zsh", "--version")
 	})
+
+	onceHasKsh93um = sync.OnceValue(func() bool {
+		return cmdContains("93u+m", "ksh", "--version")
+	})
 )
 
 type externalShell struct {
@@ -276,6 +280,11 @@ var externalShells = map[LangVariant]externalShell{
 	LangZsh: {"zsh", func(tb testing.TB) {
 		if !onceHasZsh59() {
 			skipExternal(tb, "zsh 5.9 required to run")
+		}
+	}},
+	LangKsh93: {"ksh", func(tb testing.TB) {
+		if !onceHasKsh93um() {
+			skipExternal(tb, "ksh 93u+m required to run")
 		}
 	}},
 }
@@ -379,6 +388,9 @@ type errorCase struct {
 
 	byLangIndex [langResolvedVariantsCount]string
 
+	// The languages with an explicit entry in byLangIndex.
+	langsSet LangVariant
+
 	// The real shells where testing the input succeeds rather than failing as expected.
 	flipConfirmSet LangVariant
 }
@@ -388,6 +400,11 @@ func errCase(in string, opts ...func(*errorCase)) errorCase {
 	for _, o := range opts {
 		o(&c)
 	}
+	// ksh93 shares nearly all of its syntax with mksh,
+	// so it is expected to fail like mksh unless a case says otherwise.
+	if c.langsSet&LangKsh93 == 0 {
+		c.byLangIndex[LangKsh93.index()] = c.byLangIndex[LangMirBSDKorn.index()]
+	}
 	return c
 }
 
@@ -396,6 +413,7 @@ func langErr(want string, langSets ...LangVariant) func(*errorCase) {
 		// The parameter is a slice to allow omitting the argument.
 		switch len(langSets) {
 		case 0:
+			c.langsSet = langResolvedVariants
 			for i := range c.byLangIndex {
 				c.byLangIndex[i] = want
 			}
@@ -405,6 +423,7 @@ func langErr(want string, langSets ...LangVariant) func(*errorCase) {
 		default:
 			panic("use a LangVariant bitset")
 		}
+		c.langsSet |= langSets[0]
 		for lang := range langSets[0].bits() {
 			c.byLangIndex[lang.index()] = want
 		}
@@ -490,14 +509,17 @@ var errorCases = []errorCase{
 	errCase(
 		`${|`,
 		langErr("1:1: reached EOF without matching `${` with `}`", LangMirBSDKorn),
+		langErr("1:1: `${|stmts;}` is a bash/mksh feature; tried parsing as LANG", LangKsh93),
 	),
 	errCase(
 		`${|foo;`,
 		langErr("1:1: reached EOF without matching `${` with `}`", LangMirBSDKorn),
+		langErr("1:1: `${|stmts;}` is a bash/mksh feature; tried parsing as LANG", LangKsh93),
 	),
 	errCase(
 		`${|foo }`,
 		langErr("1:1: reached EOF without matching `${` with `}`", LangMirBSDKorn),
+		langErr("1:1: `${|stmts;}` is a bash/mksh feature; tried parsing as LANG", LangKsh93),
 	),
 	errCase(
 		`${ { foo; }bar; }`,
@@ -764,6 +786,7 @@ var errorCases = []errorCase{
 		"echo foo(",
 		langErr("1:9: a command can only contain words and redirects; encountered `(`", LangPOSIX|LangBash|LangMirBSDKorn|LangBats),
 		langErr("1:9: reached EOF without matching `(` with `)`", LangZsh),
+		langErr("1:9: a command can only contain words and redirects; encountered `(`", LangKsh93),
 	),
 	errCase(
 		"echo &&",
@@ -1255,7 +1278,8 @@ var errorCases = []errorCase{
 	),
 	errCase(
 		"echo ${@foo}",
-		langErr("1:9: `@` cannot be followed by a word"),
+		langErr("1:9: `@` cannot be followed by a word", langBashLike|LangPOSIX|LangMirBSDKorn|LangZsh),
+		langErr("", LangKsh93),
 	),
 	errCase(
 		"echo ${$needbraces}",
@@ -1336,6 +1360,7 @@ var errorCases = []errorCase{
 	errCase(
 		"echo ${%foo:1:3}",
 		langErr("1:12: cannot combine multiple parameter expansion operators", LangMirBSDKorn),
+		langErr("1:6: `${%foo}` is a mksh feature; tried parsing as LANG", LangKsh93),
 	),
 	errCase(
 		"echo ${#foo%x}",
@@ -1393,6 +1418,7 @@ var errorCases = []errorCase{
 	errCase(
 		"case i { x) y ;;",
 		langErr("1:1: `case` statement must end with `}`", LangMirBSDKorn|LangZsh),
+		langErr("1:1: `case i {` is a mksh/zsh feature; tried parsing as LANG", LangKsh93),
 	),
 	errCase(
 		"\"`\"",
@@ -1583,7 +1609,8 @@ var errorCases = []errorCase{
 	errCase(
 		"[[ a =~",
 		langErr("1:6: `=~` must be followed by a word", LangBash|LangZsh),
-		langErr("1:6: regex tests are a bash/zsh feature; tried parsing as LANG", LangMirBSDKorn),
+		langErr("1:6: regex tests are a bash/zsh/ksh93 feature; tried parsing as LANG", LangMirBSDKorn),
+		langErr("1:6: `=~` must be followed by a word", LangKsh93),
 	),
 	errCase(
 		"[[ -f a",
@@ -1974,17 +2001,20 @@ var errorCases = []errorCase{
 	errCase(
 		"echo <(",
 		langErr("1:6: `<` must be followed by a word", LangPOSIX|LangMirBSDKorn),
+		langErr("1:6: reached EOF without matching `<(` with `)`", LangKsh93),
 	),
 	errCase(
 		"echo >(",
 		langErr("1:6: `>` must be followed by a word", LangPOSIX|LangMirBSDKorn),
+		langErr("1:6: reached EOF without matching `>(` with `)`", LangKsh93),
 	),
 	errCase(
 		"echo {var}>foo",
-		langErr("1:6: `{varname}` redirects are a bash/zsh feature; tried parsing as LANG", LangPOSIX|LangMirBSDKorn),
+		langErr("1:6: `{varname}` redirects are a bash/zsh/ksh93 feature; tried parsing as LANG", LangPOSIX|LangMirBSDKorn),
 		// shells treat {var} as an argument, but we are a bit stricter
 		// so that users won't think this will work like they expect in POSIX shell.
 		flipConfirmAll,
+		langErr("", LangKsh93),
 	),
 	errCase(
 		"echo ;&",
@@ -1994,27 +2024,29 @@ var errorCases = []errorCase{
 	errCase(
 		"echo ;;&",
 		langErr("1:6: `;;` can only be used in a case clause", LangPOSIX|LangMirBSDKorn),
+		langErr("1:6: `;;&` can only be used in a case clause", LangKsh93),
 	),
 	errCase(
 		"echo ;|",
 		langErr("1:7: `|` can only immediately follow a statement", LangPOSIX|LangBash),
 		langErr("1:6: `;|` can only be used in a case clause", LangMirBSDKorn|LangZsh),
+		langErr("1:7: `|` can only immediately follow a statement", LangKsh93),
 	),
 	errCase(
 		"for i in 1 2 3; { echo; }",
-		langErr("1:17: for loops with braces are a bash/mksh/zsh feature; tried parsing as LANG", LangPOSIX),
+		langErr("1:17: for loops with braces are a bash/mksh/zsh/ksh93 feature; tried parsing as LANG", LangPOSIX),
 	),
 	errCase(
 		"echo !(a)",
-		langErr("1:6: extended globs are a bash/mksh feature; tried parsing as LANG", LangPOSIX),
+		langErr("1:6: extended globs are a bash/mksh/ksh93 feature; tried parsing as LANG", LangPOSIX),
 	),
 	errCase(
 		"echo $a@(b)",
-		langErr("1:8: extended globs are a bash/mksh feature; tried parsing as LANG", LangPOSIX),
+		langErr("1:8: extended globs are a bash/mksh/ksh93 feature; tried parsing as LANG", LangPOSIX),
 	),
 	errCase(
 		"foo=(1 2)",
-		langErr("1:5: arrays are a bash/mksh/zsh feature; tried parsing as LANG", LangPOSIX),
+		langErr("1:5: arrays are a bash/mksh/zsh/ksh93 feature; tried parsing as LANG", LangPOSIX),
 	),
 	errCase(
 		"a=$c\n'",
@@ -2022,7 +2054,7 @@ var errorCases = []errorCase{
 	),
 	errCase(
 		"echo ${!foo[@]}",
-		langErr("1:6: `${!foo}` is a bash/mksh feature; tried parsing as LANG", LangPOSIX),
+		langErr("1:6: `${!foo}` is a bash/mksh/ksh93 feature; tried parsing as LANG", LangPOSIX),
 	),
 	errCase(
 		"foo << < bar",
@@ -2030,7 +2062,16 @@ var errorCases = []errorCase{
 	),
 	errCase(
 		"echo ${foo,bar}",
-		langErr("1:11: this expansion operator is a bash feature; tried parsing as LANG", LangPOSIX|LangMirBSDKorn),
+		langErr("1:11: this expansion operator is a bash/ksh93 feature; tried parsing as LANG", LangPOSIX|LangMirBSDKorn),
+		langErr("", LangKsh93),
+	),
+	errCase(
+		"echo ${!a.}",
+		langErr("1:9: invalid parameter name", LangKsh93),
+	),
+	errCase(
+		"echo ${a.*}",
+		langErr("1:8: invalid parameter name", LangKsh93),
 	),
 	errCase(
 		"echo ${foo@Q}",
@@ -2039,38 +2080,47 @@ var errorCases = []errorCase{
 	errCase(
 		"echo ${foo@a}",
 		langErr("1:12: this expansion operator is a bash feature; tried parsing as LANG", LangMirBSDKorn),
+		langErr("1:11: this expansion operator is a bash/mksh feature; tried parsing as LANG", LangKsh93),
 	),
 	errCase(
 		"echo ${foo@u}",
 		langErr("1:12: this expansion operator is a bash feature; tried parsing as LANG", LangMirBSDKorn),
+		langErr("1:11: this expansion operator is a bash/mksh feature; tried parsing as LANG", LangKsh93),
 	),
 	errCase(
 		"echo ${foo@A}",
 		langErr("1:12: this expansion operator is a bash feature; tried parsing as LANG", LangMirBSDKorn),
+		langErr("1:11: this expansion operator is a bash/mksh feature; tried parsing as LANG", LangKsh93),
 	),
 	errCase(
 		"echo ${foo@E}",
 		langErr("1:12: this expansion operator is a bash feature; tried parsing as LANG", LangMirBSDKorn),
+		langErr("1:11: this expansion operator is a bash/mksh feature; tried parsing as LANG", LangKsh93),
 	),
 	errCase(
 		"echo ${foo@K}",
 		langErr("1:12: this expansion operator is a bash feature; tried parsing as LANG", LangMirBSDKorn),
+		langErr("1:11: this expansion operator is a bash/mksh feature; tried parsing as LANG", LangKsh93),
 	),
 	errCase(
 		"echo ${foo@k}",
 		langErr("1:12: this expansion operator is a bash feature; tried parsing as LANG", LangMirBSDKorn),
+		langErr("1:11: this expansion operator is a bash/mksh feature; tried parsing as LANG", LangKsh93),
 	),
 	errCase(
 		"echo ${foo@L}",
 		langErr("1:12: this expansion operator is a bash feature; tried parsing as LANG", LangMirBSDKorn),
+		langErr("1:11: this expansion operator is a bash/mksh feature; tried parsing as LANG", LangKsh93),
 	),
 	errCase(
 		"echo ${foo@P}",
 		langErr("1:12: this expansion operator is a bash feature; tried parsing as LANG", LangMirBSDKorn),
+		langErr("1:11: this expansion operator is a bash/mksh feature; tried parsing as LANG", LangKsh93),
 	),
 	errCase(
 		"echo ${foo@U}",
 		langErr("1:12: this expansion operator is a bash feature; tried parsing as LANG", LangMirBSDKorn),
+		langErr("1:11: this expansion operator is a bash/mksh feature; tried parsing as LANG", LangKsh93),
 	),
 	errCase(
 		"foo=force_expansion; echo ${foo@#}",

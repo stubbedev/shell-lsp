@@ -84,7 +84,7 @@ func Format(tree *parser.Tree, opts Options) (string, error) {
 	}
 	file := tree.File
 	if opts.Simplify {
-		fresh, err := parse(tree.Text(), tree.Dialect, true)
+		fresh, err := parse(tree.Text(), tree.Lang, true)
 		if err != nil {
 			return "", err
 		}
@@ -97,7 +97,7 @@ func Format(tree *parser.Tree, opts Options) (string, error) {
 	if once == tree.Text() {
 		return once, nil
 	}
-	reparsed, err := parse(once, tree.Dialect, opts.Simplify)
+	reparsed, err := parse(once, tree.Lang, opts.Simplify)
 	if err != nil {
 		return "", fmt.Errorf("%w: the formatted %s no longer parses: %w", ErrNotIdempotent, tree.Dialect, err)
 	}
@@ -111,10 +111,10 @@ func Format(tree *parser.Tree, opts Options) (string, error) {
 	return once, nil
 }
 
-func parse(text string, d dialect.Dialect, simplify bool) (*syntax.File, error) {
-	file, err := syntax.NewParser(syntax.Variant(parser.Language(d)), syntax.KeepComments(true)).Parse(strings.NewReader(text), "")
+func parse(text string, lang syntax.LangVariant, simplify bool) (*syntax.File, error) {
+	file, err := syntax.NewParser(syntax.Variant(lang), syntax.KeepComments(true)).Parse(strings.NewReader(text), "")
 	if err != nil {
-		return nil, fmt.Errorf("parsing %s for formatting: %w", d, err)
+		return nil, fmt.Errorf("parsing %s for formatting: %w", lang, err)
 	}
 	if simplify {
 		syntax.Simplify(file)

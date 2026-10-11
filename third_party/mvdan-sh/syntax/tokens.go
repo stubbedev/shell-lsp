@@ -99,6 +99,12 @@ const (
 	rdrAllClob // &>|
 	appAll     // &>>
 	appAllClob // &>>|
+	hashHdoc   // <<#
+	rdrOutRepl // >;
+	rdrInOutTr // <>;
+	seekIn     // <#
+	seekInCopy // <##
+	seekOut    // >#
 
 	cmdIn      // <(
 	assgnParen // =(
@@ -182,21 +188,27 @@ func (t token) isLit() bool {
 type RedirOperator token
 
 const (
-	RdrOut     = RedirOperator(rdrOut) + iota // >
-	AppOut                                    // >>
-	RdrIn                                     // <
-	RdrInOut                                  // <>
-	DplIn                                     // <&
-	DplOut                                    // >&
-	RdrClob                                   // >|
-	AppClob                                   // >>| with [LangZsh]
-	Hdoc                                      // <<
-	DashHdoc                                  // <<-
-	WordHdoc                                  // <<<
-	RdrAll                                    // &>
-	RdrAllClob                                // &>| with [LangZsh]
-	AppAll                                    // &>>
-	AppAllClob                                // &>>| with [LangZsh]
+	RdrOut        = RedirOperator(rdrOut) + iota // >
+	AppOut                                       // >>
+	RdrIn                                        // <
+	RdrInOut                                     // <>
+	DplIn                                        // <&
+	DplOut                                       // >&
+	RdrClob                                      // >|
+	AppClob                                      // >>| with [LangZsh]
+	Hdoc                                         // <<
+	DashHdoc                                     // <<-
+	WordHdoc                                     // <<<
+	RdrAll                                       // &>
+	RdrAllClob                                   // &>| with [LangZsh]
+	AppAll                                       // &>>
+	AppAllClob                                   // &>>| with [LangZsh]
+	HashHdoc                                     // <<# with [LangKsh93]
+	RdrOutReplace                                // >; with [LangKsh93]
+	RdrInOutTrunc                                // <>; with [LangKsh93]
+	SeekIn                                       // <# with [LangKsh93]
+	SeekInCopy                                   // <## with [LangKsh93]
+	SeekOut                                      // ># with [LangKsh93]
 
 	// Deprecated: use [RdrClob]
 	//

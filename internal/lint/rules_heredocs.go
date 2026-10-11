@@ -50,17 +50,20 @@ func (p *pass) indentedHeredocEnd(h parser.Heredoc, token string, start int, lin
 	}
 	at := parser.Span{Start: start, End: start + len(line)}
 	switch {
-	case !h.StripTabs:
+	case h.Strip == parser.StripNone:
 		p.report(1039, at, "This line is not the end of the here-document because "+h.Delimiter+" is indented; remove the indentation, or use <<- and indent with tabs only.")
-	case strings.Contains(indent, " "):
+	case h.Strip == parser.StripTabs && strings.Contains(indent, " "):
 		p.report(1040, at, "This line is not the end of the here-document because <<- strips only leading tabs, not spaces; indent "+h.Delimiter+" with tabs.")
 	}
 }
 
 func (p *pass) nearMissHeredocEnd(h parser.Heredoc, start int, line string) {
 	indent := 0
-	if h.StripTabs {
+	switch h.Strip {
+	case parser.StripTabs:
 		indent = len(line) - len(strings.TrimLeft(line, "\t"))
+	case parser.StripBlanks:
+		indent = len(line) - len(strings.TrimLeft(line, " \t"))
 	}
 	mistake, at, ok := parser.NearMissEndToken(line[indent:], h.Delimiter)
 	if !ok {

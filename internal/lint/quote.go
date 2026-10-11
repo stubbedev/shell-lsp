@@ -4,6 +4,8 @@ import (
 	"slices"
 
 	"mvdan.cc/sh/v3/syntax"
+
+	"github.com/stubbedev/shell-lsp/internal/parser"
 )
 
 type expansionContext uint8
@@ -70,7 +72,7 @@ func (p *pass) enclosingShellWord() (*syntax.Word, bool) {
 	case *syntax.ArrayElem:
 		return word, owner.Value == word
 	case *syntax.Redirect:
-		return word, owner.Word == word && owner.Op != syntax.Hdoc && owner.Op != syntax.DashHdoc
+		return word, owner.Word == word && !parser.IsHeredoc(owner.Op)
 	}
 	return nil, false
 }
@@ -123,8 +125,15 @@ func isAlternativeExpansion(pe *syntax.ParamExp) bool {
 	return pe.Exp != nil && (pe.Exp.Op == syntax.AlternateUnset || pe.Exp.Op == syntax.AlternateUnsetOrNull)
 }
 
-func isDefaultAssignment(pe *syntax.ParamExp) bool {
-	return pe.Exp != nil && (pe.Exp.Op == syntax.AssignUnset || pe.Exp.Op == syntax.AssignUnsetOrNull)
+func assignsParameter(pe *syntax.ParamExp) bool {
+	if pe.Exp == nil {
+		return false
+	}
+	switch pe.Exp.Op {
+	case syntax.AssignUnset, syntax.AssignUnsetOrNull, syntax.AssignAlways:
+		return true
+	}
+	return false
 }
 
 func (p *pass) parsesGlobs(w *syntax.Word) bool {

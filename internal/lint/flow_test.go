@@ -13,7 +13,7 @@ import (
 func lostReads(t *testing.T, src string, d dialect.Dialect) []string {
 	t.Helper()
 	tree := parser.Parse(src, d)
-	result := analyzeFlow(tree, nil, tree.Bats)
+	result := analyzeFlow(tree, nil, tree.Bats())
 	var out []string
 	parser.Walk(tree.File, func(n syntax.Node) bool {
 		if _, ok := result.lostRead(n); ok {

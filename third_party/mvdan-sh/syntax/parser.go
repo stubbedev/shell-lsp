@@ -76,6 +76,16 @@ const (
 	// Its string representation is "zsh".
 	LangZsh
 
+	// LangKsh93 corresponds to the AT&T Korn Shell 93, as described in its
+	// manual at https://github.com/ksh93/ksh/blob/dev/src/cmd/ksh93/sh.1.
+	// It shares most of its features with [LangMirBSDKorn], given their
+	// shared ancestry, and adds its own, such as compound variables.
+	//
+	// We currently follow ksh 93u+m.
+	//
+	// Its string representation is "ksh93".
+	LangKsh93
+
 	// langResolvedVariantsCount is the number of variants declared above,
 	// that is, langResolvedVariants.count() as a constant.
 	langResolvedVariantsCount = iota
@@ -93,7 +103,10 @@ const (
 
 	// langResolvedVariants contains all known variants except [LangAuto],
 	// which is meant to resolve to another variant.
-	langResolvedVariants = LangBash | LangPOSIX | LangMirBSDKorn | LangBats | LangZsh
+	langResolvedVariants = LangBash | LangPOSIX | LangMirBSDKorn | LangBats | LangZsh | LangKsh93
+
+	// langKshLike contains the Korn shell variants.
+	langKshLike = LangMirBSDKorn | LangKsh93
 
 	// langBashLike contains Bash plus all variants which are extensions of it.
 	langBashLike = LangBash | LangBats
@@ -108,7 +121,7 @@ func Variant(l LangVariant) ParserOption {
 	switch l {
 	case langBashLegacy:
 		l = LangBash
-	case LangBash, LangPOSIX, LangMirBSDKorn, LangBats, LangZsh:
+	case LangBash, LangPOSIX, LangMirBSDKorn, LangBats, LangZsh, LangKsh93:
 	case LangAuto:
 		panic("LangAuto is not supported by the parser at this time")
 	default:
@@ -129,6 +142,8 @@ func (l LangVariant) String() string {
 		return "bats"
 	case LangZsh:
 		return "zsh"
+	case LangKsh93:
+		return "ksh93"
 	case LangAuto:
 		return "auto"
 	}
@@ -147,6 +162,8 @@ func (l *LangVariant) Set(s string) error {
 		*l = LangBats
 	case "zsh":
 		*l = LangZsh
+	case "ksh", "ksh93":
+		*l = LangKsh93
 	case "auto":
 		*l = LangAuto
 	default:
@@ -536,6 +553,10 @@ type Parser struct {
 	rxOpenParens int
 	rxFirstPart  bool
 
+	// kshTypes holds the names of the types defined so far with enum or
+	// typeset -T, whose commands are declarations with [LangKsh93].
+	kshTypes map[string]bool
+
 	accComs []Comment
 	curComs *[]Comment
 
@@ -580,6 +601,7 @@ func (p *Parser) reset() {
 	p.litBatch = nil
 	p.wordBatch = nil
 	p.litBs = nil
+	clear(p.kshTypes)
 }
 
 // nextPos returns the position of the next rune, [Parser.r].
@@ -671,6 +693,9 @@ const (
 	hdocWord
 	hdocBody
 	hdocBodyTabs
+	// hdocBodyBlanks is like hdocBodyTabs, but for ksh93's <<# here-documents,
+	// whose lines may be indented with spaces too.
+	hdocBodyBlanks
 	arithmExpr
 	arithmExprLet
 	arithmExprCmd
@@ -687,7 +712,7 @@ const (
 	arrayElems
 
 	allKeepSpaces = runeByRune | paramExpRepl | dblQuotes | hdocBody |
-		hdocBodyTabs | paramExpRepl | paramExpExp
+		hdocBodyTabs | hdocBodyBlanks | paramExpRepl | paramExpExp
 	allRegTokens = noState | unquotedWordCont | subCmd | subCmdBckquo | subCmdBraces |
 		hdocWord | switchCase | arrayElems | testExpr
 	allArithmExpr = arithmExpr | arithmExprLet | arithmExprCmd |
@@ -758,8 +783,11 @@ func (p *Parser) doHeredocs() {
 			break
 		}
 		p.quote = hdocBody
-		if r.Op == DashHdoc {
+		switch r.Op {
+		case DashHdoc:
 			p.quote = hdocBodyTabs
+		case HashHdoc:
+			p.quote = hdocBodyBlanks
 		}
 		stop, quoted := p.unquotedWordBytes(r.Word)
 		p.hdocStops = append(p.hdocStops, stop)
@@ -1239,7 +1267,7 @@ func (p *Parser) wordPart() WordPart {
 			p.checkLang(p.pos, langBashLike|LangMirBSDKorn, "`${|stmts;}`")
 			fallthrough
 		case ' ', '\t', '\n':
-			p.checkLang(p.pos, langBashLike|LangMirBSDKorn, "`${ stmts;}`")
+			p.checkLang(p.pos, langBashLike|langKshLike, "`${ stmts;}`")
 			cs := &CmdSubst{
 				Left:     p.pos,
 				TempFile: p.r != '|',
@@ -1261,30 +1289,7 @@ func (p *Parser) wordPart() WordPart {
 		}
 	case dollDblParen, dollBrack:
 		p.ensureNoNested(p.pos)
-		left := p.tok
-		ar := &ArithmExp{Left: p.pos, Bracket: left == dollBrack}
-		old := p.preNested(arithmExpr)
-		p.next()
-		if !p.lang.in(LangZsh) && p.got(hash) {
-			p.checkLang(ar.Pos(), LangMirBSDKorn, "unsigned expressions")
-			ar.Unsigned = true
-		}
-		ar.X = p.followArithm(left, ar.Left)
-		if ar.Bracket {
-			if p.tok != rightBrack {
-				if p.recoverError() {
-					ar.Right = recoveredPos
-					return ar
-				}
-				p.arithmMatchingErr(ar.Left, dollBrack, rightBrack)
-			}
-			p.postNested(old)
-			ar.Right = p.pos
-			p.next()
-		} else {
-			ar.Right = p.arithmEnd(dollDblParen, ar.Left, old)
-		}
-		return ar
+		return p.arithmExp(p.tok)
 	case dollParen:
 		p.ensureNoNested(p.pos)
 		return p.cmdSubst()
@@ -1384,21 +1389,22 @@ func (p *Parser) wordPart() WordPart {
 		}
 		return cs
 	case leftParen:
-		if p.lang.in(LangZsh) && p.r != ')' {
-			// Zsh glob qualifier like *(N) or .(:a); the only case where
-			// ( immediately after a word is not a glob qualifier is ()
-			// for a function declaration, which the parser handles earlier.
-			return p.zshGroupLit(1)
+		if (p.lang.in(LangZsh) || p.kshPatternGroup()) && p.r != ')' {
+			// Zsh glob qualifier like *(N) or .(:a), or a ksh93 pattern group
+			// like ~(E)re or {2}(ab); the only case where ( immediately after
+			// a word is not one is () for a function declaration, which the
+			// parser handles earlier.
+			return p.groupLit(1)
 		}
 		return nil
 	case dblLeftParen:
 		if p.lang.in(LangZsh) {
 			// A group which starts with another one, like ((a|b)|c)*.
-			return p.zshGroupLit(2)
+			return p.groupLit(2)
 		}
 		return nil
 	case globQuest, globStar, globPlus, globAt, globExcl:
-		p.checkLang(p.pos, langBashLike|LangMirBSDKorn, "extended globs")
+		p.checkLang(p.pos, langBashLike|langKshLike, "extended globs")
 		eg := &ExtGlob{Op: GlobOperator(p.tok), OpPos: p.pos}
 		lparens := 1
 		r := p.r
@@ -1427,11 +1433,26 @@ func (p *Parser) wordPart() WordPart {
 	}
 }
 
-// zshGroupLit lexes a zsh glob qualifier or parenthesized group as a literal,
-// like (N) or (a|(b|c)), after its opening parentheses, of which there are
+// kshPatternGroup reports whether the current "(" token, right after a literal
+// word part, starts one of the ksh93 pattern groups whose prefix is not one
+// of the extended globs, like {2}(ab), {1,3}(ab), ~(E)re, %(pairs) or *-(x).
+func (p *Parser) kshPatternGroup() bool {
+	if !p.lang.in(LangKsh93) || p.tok != leftParen || p.spaced || p.val == "" {
+		return false
+	}
+	switch p.val[len(p.val)-1] {
+	case '}', '~', '%', '-':
+		return true
+	}
+	return false
+}
+
+// groupLit lexes a zsh glob qualifier, a zsh or ksh93 parenthesized group, or
+// a ksh93 pattern group as a literal, like (N), (a|(b|c)) or the (E) in
+// ~(E)re, after its opening parentheses, of which there are
 // depth. Nested groups and quoted strings, which glob qualifiers like
 // (e:'...':) use, may contain closing parentheses.
-func (p *Parser) zshGroupLit(depth int) *Lit {
+func (p *Parser) groupLit(depth int) *Lit {
 	pos := p.pos
 	opening := strings.Repeat("(", depth)
 	p.pos = p.nextPos()
@@ -1468,6 +1489,35 @@ loop:
 	l := p.lit(pos, opening+p.val)
 	p.next()
 	return l
+}
+
+// arithmExp parses an arithmetic expansion starting at the current left
+// token: "$((", "$[", or "((" for the bare ((expr)) of ksh93's seek
+// redirections.
+func (p *Parser) arithmExp(left token) *ArithmExp {
+	ar := &ArithmExp{Left: p.pos, Bracket: left == dollBrack, Bare: left == dblLeftParen}
+	old := p.preNested(arithmExpr)
+	p.next()
+	if !p.lang.in(LangZsh) && p.got(hash) {
+		p.checkLang(ar.Pos(), LangMirBSDKorn, "unsigned expressions")
+		ar.Unsigned = true
+	}
+	ar.X = p.followArithm(left, ar.Left)
+	if ar.Bracket {
+		if p.tok != rightBrack {
+			if p.recoverError() {
+				ar.Right = recoveredPos
+				return ar
+			}
+			p.arithmMatchingErr(ar.Left, dollBrack, rightBrack)
+		}
+		p.postNested(old)
+		ar.Right = p.pos
+		p.next()
+	} else {
+		ar.Right = p.arithmEnd(left, ar.Left, old)
+	}
+	return ar
 }
 
 func (p *Parser) cmdSubst() *CmdSubst {
@@ -1588,13 +1638,17 @@ zshPrefixLoop:
 			}
 		case '!':
 			if !pe.Short && p.paramNameStart(pe) {
-				p.checkLang(pe.Pos(), langBashLike|LangMirBSDKorn, "`${!foo}`")
+				p.checkLang(pe.Pos(), langBashLike|langKshLike, "`${!foo}`")
 				pe.Excl = true
 			}
 		case '+':
 			if p.paramNameStart(pe) {
 				p.checkLang(pe.Pos(), LangZsh, "`${+foo}`")
 				pe.IsSet = true
+			}
+		case '@':
+			if p.lang.in(LangKsh93) && !pe.Short && p.paramNameStart(pe) {
+				pe.Attributes = true
 			}
 		}
 	}
@@ -1617,15 +1671,16 @@ zshPrefixLoop:
 	// Index expressions like ${foo[1]}. Note that expansion suffixes can be combined,
 	// like ${foo[@]//replace/with}.
 	if p.r == '[' {
-		p.checkLang(p.nextPos(), langBashLike|LangMirBSDKorn|LangZsh, "arrays")
+		p.checkLang(p.nextPos(), langBashLike|langKshLike|LangZsh, "arrays")
 		// In zsh some of these like ${@[-1]} or ${*[1,3]} work,
 		// so we don't do this sort of check at all.
-		if !p.lang.in(LangZsh) && pe.Param != nil && !ValidName(pe.Param.Value) {
+		if !p.lang.in(LangZsh) && pe.Param != nil && !p.validVarName(pe.Param.Value) {
 			p.posErr(p.nextPos(), "cannot index a special parameter name")
 		}
 		p.pos = p.nextPos()
 		p.rune()
 		pe.Index = p.eitherIndex()
+		pe.Elems = p.kshRefElems()
 	}
 	tokRune := p.r
 	p.pos = p.nextPos()
@@ -1636,12 +1691,12 @@ zshPrefixLoop:
 		p.next()
 		return pe
 	}
-	if p.tok != _EOF && (pe.Length || pe.Width || pe.IsSet) {
+	if p.tok != _EOF && (pe.Length || pe.Width || pe.IsSet || pe.Attributes) && !p.kshCountNames(pe) {
 		p.curErr("cannot combine multiple parameter expansion operators")
 	}
 	switch p.tok {
 	case slash, dblSlash: // pattern search and replace
-		p.checkLang(p.pos, langBashLike|LangMirBSDKorn|LangZsh, "search and replace")
+		p.checkLang(p.pos, langBashLike|langKshLike|LangZsh, "search and replace")
 		pe.Repl = &Replace{All: p.tok == dblSlash}
 		p.paramExpReplace(pe.Repl)
 	case colon: // slicing
@@ -1676,7 +1731,7 @@ zshPrefixLoop:
 			p.next()
 			return pe
 		}
-		p.checkLang(p.pos, langBashLike|LangMirBSDKorn|LangZsh, "slicing")
+		p.checkLang(p.pos, langBashLike|langKshLike|LangZsh, "slicing")
 		pe.Slice = &Slice{}
 		colonPos := p.pos
 		p.quote = paramExpSlice
@@ -1694,14 +1749,17 @@ zshPrefixLoop:
 		p.matchedArithm(pe.Dollar, dollBrace, rightBrace)
 		return pe
 	case caret, dblCaret, comma, dblComma: // upper/lower case
-		p.checkLang(p.pos, langBashLike, "this expansion operator")
+		p.checkLang(p.pos, langBashLike|LangKsh93, "this expansion operator")
 		pe.Exp = p.paramExpExp()
 	case at, star:
 		switch {
+		case p.kshCountNames(pe):
+			pe.Names = ParNamesOperator(p.tok)
+			p.next()
 		case p.tok == star && !pe.Excl:
 			p.curErr("not a valid parameter expansion operator: %#q", p.tok)
 		case pe.Excl && p.r == '}':
-			p.checkLang(pe.Pos(), langBashLike, "`${!foo%s}`", p.tok)
+			p.checkLang(pe.Pos(), langBashLike|LangKsh93, "`${!foo%s}`", p.tok)
 			pe.Names = ParNamesOperator(p.tok)
 			p.next()
 		case p.tok == at:
@@ -1734,13 +1792,49 @@ zshPrefixLoop:
 	return pe
 }
 
+// kshRefElems parses the further subscripts and members which may follow the
+// first subscript of a variable reference with [LangKsh93], like [j] and
+// .name in a[i][j].name, while lexing rune by rune.
+func (p *Parser) kshRefElems() []RefElem {
+	var elems []RefElem
+	for p.lang.in(LangKsh93) {
+		switch p.r {
+		case '[':
+			p.pos = p.nextPos()
+			p.rune()
+			elems = append(elems, RefElem{Index: p.eitherIndex()})
+		case '.':
+			p.rune()
+			pos := p.nextPos()
+			for p.newLit(p.r); paramNameRune(p.r); p.rune() {
+			}
+			name := p.endLit()
+			if !ValidName(name) {
+				p.posErr(pos, "invalid parameter name")
+				return elems
+			}
+			elems = append(elems, RefElem{Member: p.lit(pos, name)})
+		default:
+			return elems
+		}
+	}
+	return elems
+}
+
+// kshCountNames reports whether the current token is the "@" or "*" of
+// ksh93's ${#prefix@} or ${#prefix*}, which count the variables whose names
+// start with prefix.
+func (p *Parser) kshCountNames(pe *ParamExp) bool {
+	return p.lang.in(LangKsh93) && pe.Length && (p.tok == at || p.tok == star) && p.r == '}'
+}
+
 // paramNameStart reports whether a parameter name can begin after a prefix rune
 // such as the '#' in ${#foo}, consuming the prefix rune if so.
 // Only the long form allows a quoted nested expansion like ${#"$(foo)"} or EOF;
 // in the short form the prefix rune is the parameter itself, as in "$#" or $#"$foo".
 func (p *Parser) paramNameStart(pe *ParamExp) bool {
 	r := p.peek()
-	if paramNameStartRune(r) || (!pe.Short && (r == '"' || r == utf8.RuneSelf)) {
+	if paramNameStartRune(r) || (r == '.' && !pe.Short && p.lang.in(LangKsh93)) || (!pe.Short && (r == '"' || r == utf8.RuneSelf)) {
 		p.rune()
 		return true
 	}
@@ -1836,13 +1930,15 @@ func (p *Parser) paramExpParameter(pe *ParamExp) *ParamExp {
 			p.val = string(p.r)
 			p.rune()
 		} else {
+			// With ksh93, ${a.b} and ${.sh.version} name variables too.
+			dots := !pe.Short && p.lang.in(LangKsh93)
 			for p.newLit(p.r); p.r != runeEOF; p.rune() {
-				if !paramNameRune(p.r) && p.r != escNewl {
+				if !paramNameRune(p.r) && p.r != escNewl && (!dots || p.r != '.') {
 					break
 				}
 			}
 			p.val = p.endLit()
-			if !numberLiteral(p.val) && !ValidName(p.val) {
+			if !numberLiteral(p.val) && !p.validVarName(p.val) && !p.kshNamePrefix(pe, p.val) {
 				if pe.Short {
 					return nil // just "$"
 				}
@@ -1976,6 +2072,35 @@ func ValidName(val string) bool {
 	return true
 }
 
+// kshNamePrefix reports whether val is the prefix ending with a dot of
+// ksh93's ${!prefix@} or ${#prefix@}, like config. in ${!config.@}, followed
+// by the @ or * which ends the parameter expansion.
+func (p *Parser) kshNamePrefix(pe *ParamExp, val string) bool {
+	prefix, found := strings.CutSuffix(val, ".")
+	return p.lang.in(LangKsh93) && (pe.Excl || pe.Length) && found &&
+		p.validVarName(prefix) && (p.r == '@' || p.r == '*') && p.peek() == '}'
+}
+
+// validVarName reports whether val is a valid variable name in the language
+// variant. With [LangKsh93], it may be a vname: identifiers separated by
+// dots and optionally starting with one, like a.b or .sh.version.
+func (p *Parser) validVarName(val string) bool {
+	if !p.lang.in(LangKsh93) {
+		return ValidName(val)
+	}
+	rest := strings.TrimPrefix(val, ".")
+	for {
+		ident, after, found := strings.Cut(rest, ".")
+		if !ValidName(ident) {
+			return false
+		}
+		if !found {
+			return true
+		}
+		rest = after
+	}
+}
+
 func numberLiteral[T string | []byte](val T) bool {
 	if len(val) == 0 {
 		return false
@@ -1993,13 +2118,13 @@ func (p *Parser) hasValidIdent() bool {
 		return false
 	}
 	if end := p.eqlOffs; end > 0 {
-		if p.val[end-1] == '+' && p.lang.in(langBashLike|LangMirBSDKorn|LangZsh) {
+		if p.val[end-1] == '+' && p.lang.in(langBashLike|langKshLike|LangZsh) {
 			end-- // a+=x
 		}
-		if ValidName(p.val[:end]) {
+		if p.validVarName(p.val[:end]) {
 			return true
 		}
-	} else if !ValidName(p.val) {
+	} else if !p.validVarName(p.val) {
 		return false // *[i]=x
 	}
 	return p.r == '[' // a[i]=x
@@ -2009,7 +2134,7 @@ func (p *Parser) getAssign(needEqual bool) *Assign {
 	as := &Assign{}
 	if p.eqlOffs > 0 { // foo=bar
 		nameEnd := p.eqlOffs
-		if p.lang.in(langBashLike|LangMirBSDKorn|LangZsh) && p.val[p.eqlOffs-1] == '+' {
+		if p.lang.in(langBashLike|langKshLike|LangZsh) && p.val[p.eqlOffs-1] == '+' {
 			// a+=b
 			as.Append = true
 			nameEnd--
@@ -2028,7 +2153,17 @@ func (p *Parser) getAssign(needEqual bool) *Assign {
 		// hasValidIdent already checks p.r is '['
 		p.rune()
 		p.pos = posAddCol(p.pos, 1)
-		as.Index = p.eitherIndex()
+		if p.lang.in(LangKsh93) {
+			// Lex rune by rune to see any further subscripts or members.
+			old := p.quote
+			p.quote = runeByRune
+			as.Index = p.eitherIndex()
+			as.Elems = p.kshRefElems()
+			p.quote = old
+			p.next()
+		} else {
+			as.Index = p.eitherIndex()
+		}
 		if p.spaced || p.stopToken() {
 			if needEqual {
 				p.followErr(as.Pos(), "a[b]", assgn)
@@ -2072,49 +2207,10 @@ func (p *Parser) getAssign(needEqual bool) *Assign {
 		return as
 	}
 	if as.Value == nil && p.tok == leftParen {
-		p.checkLang(p.pos, langBashLike|LangMirBSDKorn|LangZsh, "arrays")
-		as.Array = &ArrayExpr{Lparen: p.pos}
-		newQuote := p.quote
-		if p.lang.in(langBashLike | LangZsh) {
-			newQuote = arrayElems
+		p.checkLang(p.pos, langBashLike|langKshLike|LangZsh, "arrays")
+		if as.Array = p.arrayExpr(); as.Array == nil {
+			return nil
 		}
-		old := p.preNested(newQuote)
-		p.next()
-		p.got(_Newl)
-		for p.tok != _EOF && p.tok != rightParen {
-			ae := &ArrayElem{}
-			ae.Comments, p.accComs = p.accComs, nil
-			if p.tok == leftBrack {
-				left := p.pos
-				ae.Index = p.eitherIndex()
-				if p.tok == assgnParen {
-					p.curErr("arrays cannot be nested")
-					return nil
-				}
-				p.follow(left, `[x]`, assgn)
-			}
-			if ae.Value = p.getWord(); ae.Value == nil {
-				switch p.tok {
-				case _Newl, rightParen, leftBrack:
-					// TODO: support [index]=[
-				default:
-					p.curErr("array element values must be words")
-					return nil
-				}
-			}
-			if len(p.accComs) > 0 {
-				c := p.accComs[0]
-				if c.Pos().Line() == ae.End().Line() {
-					ae.Comments = append(ae.Comments, c)
-					p.accComs = p.accComs[1:]
-				}
-			}
-			as.Array.Elems = append(as.Array.Elems, ae)
-			p.got(_Newl)
-		}
-		as.Array.Last, p.accComs = p.accComs, nil
-		p.postNested(old)
-		as.Array.Rparen = p.matched(as.Array.Lparen, leftParen, rightParen)
 	} else if w := p.getWord(); w != nil {
 		if as.Value == nil {
 			as.Value = w
@@ -2125,11 +2221,102 @@ func (p *Parser) getAssign(needEqual bool) *Assign {
 	return as
 }
 
+// arrayExpr parses an array expression, starting at its "(". With
+// [LangKsh93], it may instead hold the list of a compound assignment, like
+// `(a=1 b=2)` or `(typeset -i a=1; b=2)`, and its elements may themselves be
+// compound or array values, like in `( (a=1) (a=2) )` or `([k]=(a=1))`.
+// It returns nil if the elements are not valid.
+func (p *Parser) arrayExpr() *ArrayExpr {
+	ae := &ArrayExpr{Lparen: p.pos}
+	newQuote := p.quote
+	if p.lang.in(langBashLike | LangZsh | LangKsh93) {
+		newQuote = arrayElems
+	}
+	old := p.preNested(newQuote)
+	p.next()
+	p.got(_Newl)
+	if p.lang.in(LangKsh93) && p.kshCompoundStart() {
+		p.quote = subCmd
+		ae.Stmts, ae.Last = p.stmtList()
+		p.postNested(old)
+		ae.Rparen = p.matched(ae.Lparen, leftParen, rightParen)
+		return ae
+	}
+	for p.tok != _EOF && p.tok != rightParen {
+		el := &ArrayElem{}
+		el.Comments, p.accComs = p.accComs, nil
+		if p.tok == leftBrack {
+			left := p.pos
+			el.Index = p.eitherIndex()
+			switch {
+			case p.tok != assgnParen:
+				p.follow(left, `[x]`, assgn)
+			case p.lang.in(LangKsh93):
+				// ksh93 allows [k]=(values...), like zsh's a[i]=(values...).
+				// assgnParen consumed both '=' and '(',
+				// so rewrite as leftParen for the nested array below.
+				p.tok = leftParen
+				p.pos = posAddCol(p.pos, 1)
+			default:
+				p.curErr("arrays cannot be nested")
+				return nil
+			}
+		}
+		if p.lang.in(LangKsh93) && p.tok == leftParen {
+			if el.Array = p.arrayExpr(); el.Array == nil {
+				return nil
+			}
+		} else if el.Value = p.getWord(); el.Value == nil {
+			switch p.tok {
+			case _Newl, rightParen, leftBrack:
+				// TODO: support [index]=[
+			default:
+				p.curErr("array element values must be words")
+				return nil
+			}
+		}
+		if len(p.accComs) > 0 {
+			c := p.accComs[0]
+			if c.Pos().Line() == el.End().Line() {
+				el.Comments = append(el.Comments, c)
+				p.accComs = p.accComs[1:]
+			}
+		}
+		ae.Elems = append(ae.Elems, el)
+		p.got(_Newl)
+	}
+	ae.Last, p.accComs = p.accComs, nil
+	p.postNested(old)
+	ae.Rparen = p.matched(ae.Lparen, leftParen, rightParen)
+	return ae
+}
+
+// kshCompoundStart reports whether the current token starts the list of a
+// ksh93 compound assignment, like `a=1` in `x=(a=1 b=2)` or `typeset` in
+// `x=(typeset -i a=1)`, rather than the first element of an array.
+func (p *Parser) kshCompoundStart() bool {
+	if !p.tok.isLit() {
+		return false
+	}
+	if p.eqlOffs > 0 && p.hasValidIdent() {
+		return true
+	}
+	if p.tok != _LitWord {
+		return false
+	}
+	switch p.val {
+	case "typeset", "integer", "float", "compound", "nameref", "readonly", "export", "enum", "function", ".":
+		return true
+	}
+	return false
+}
+
 func (p *Parser) peekRedir() bool {
 	switch p.tok {
 	case _LitRedir, rdrOut, appOut, rdrIn, rdrInOut, dplIn, dplOut,
 		rdrClob, appClob, hdoc, dashHdoc, wordHdoc,
-		rdrAll, rdrAllClob, appAll, appAllClob:
+		rdrAll, rdrAllClob, appAll, appAllClob,
+		hashHdoc, rdrOutRepl, rdrInOutTr, seekIn, seekInCopy, seekOut:
 		return true
 	}
 	return false
@@ -2151,18 +2338,18 @@ func (p *Parser) doRedirect(s *Stmt) {
 	}
 	r.N = p.getLit()
 	if r.N != nil && r.N.Value[0] == '{' {
-		p.checkLang(r.N.Pos(), langBashLike|LangZsh, "`{varname}` redirects")
+		p.checkLang(r.N.Pos(), langBashLike|LangZsh|LangKsh93, "`{varname}` redirects")
 	}
 	r.Op, r.OpPos = RedirOperator(p.tok), p.pos
 	switch r.Op {
 	case RdrAll, AppAll:
-		p.checkLang(p.pos, langBashLike|LangMirBSDKorn|LangZsh, "%#q redirects", r.Op)
+		p.checkLang(p.pos, langBashLike|langKshLike|LangZsh, "%#q redirects", r.Op)
 	case AppClob, RdrAllClob, AppAllClob:
 		p.checkLang(p.pos, LangZsh, "%#q redirects", r.Op)
 	}
 	p.next()
 	switch r.Op {
-	case Hdoc, DashHdoc:
+	case Hdoc, DashHdoc, HashHdoc:
 		old := p.quote
 		p.quote, p.forbidNested = hdocWord, true
 		p.heredocs = append(p.heredocs, r)
@@ -2179,8 +2366,18 @@ func (p *Parser) doRedirect(s *Stmt) {
 			p.doHeredocs()
 		}
 	case WordHdoc:
-		p.checkLang(r.OpPos, langBashLike|LangMirBSDKorn|LangZsh, "herestrings")
-		fallthrough
+		p.checkLang(r.OpPos, langBashLike|langKshLike|LangZsh, "herestrings")
+		r.Word = p.followWordTok(token(r.Op), r.OpPos)
+	case SeekIn, SeekOut:
+		switch {
+		case p.tok == dblLeftParen:
+			// ksh93's <#((expr)) seeks to the offset that expr evaluates to.
+			r.Word = p.wordOne(p.arithmExp(dblLeftParen))
+		case r.Op == SeekIn && p.tok == rightParen && p.quote == subCmd:
+			// ksh93's $(n<#) expands to the offset of file descriptor n.
+		default:
+			r.Word = p.followWordTok(token(r.Op), r.OpPos)
+		}
 	default:
 		r.Word = p.followWordTok(token(r.Op), r.OpPos)
 	}
@@ -2308,32 +2505,40 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
 				break
 			}
 		case "[[":
-			if p.lang.in(langBashLike | LangMirBSDKorn | LangZsh) {
+			if p.lang.in(langBashLike | langKshLike | LangZsh) {
 				p.testClause(s)
 			}
 		case "]]":
-			if p.lang.in(langBashLike | LangMirBSDKorn | LangZsh) {
+			if p.lang.in(langBashLike | langKshLike | LangZsh) {
 				p.curErr(`%#q can only be used to close a test`, dblRightBrack)
 			}
 		case "let":
-			if p.lang.in(langBashLike | LangMirBSDKorn | LangZsh) {
+			if p.lang.in(langBashLike | langKshLike | LangZsh) {
 				p.letClause(s)
 			}
 		case "function":
-			if p.lang.in(langBashLike | LangMirBSDKorn | LangZsh) {
+			if p.lang.in(langBashLike | langKshLike | LangZsh) {
 				p.bashFuncDecl(s)
 			}
 		case "declare":
 			if p.lang.in(langBashLike | LangZsh) { // Note that mksh lacks this one.
 				p.declClause(s)
 			}
-		case "local", "export", "readonly", "typeset", "nameref":
+		case "local": // Note that ksh93 lacks this one.
 			if p.lang.in(langBashLike | LangMirBSDKorn | LangZsh) {
 				p.declClause(s)
 			}
+		case "export", "readonly", "typeset", "nameref":
+			if p.lang.in(langBashLike | langKshLike | LangZsh) {
+				p.declClause(s)
+			}
 		case "time":
-			if p.lang.in(langBashLike | LangMirBSDKorn | LangZsh) {
+			if p.lang.in(langBashLike | langKshLike | LangZsh) {
 				p.timeClause(s)
+			}
+		case "namespace":
+			if p.lang.in(LangKsh93) {
+				p.namespaceClause(s)
 			}
 		case "coproc":
 			switch {
@@ -2343,7 +2548,7 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
 				p.zshCoprocClause(s)
 			}
 		case "select":
-			if p.lang.in(langBashLike | LangMirBSDKorn | LangZsh) {
+			if p.lang.in(langBashLike | langKshLike | LangZsh) {
 				p.selectClause(s)
 			}
 		case "@test":
@@ -2371,7 +2576,7 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
 			p.funcDecl(s, name.ValuePos, false, true, name)
 		} else {
 			w := p.wordOne(name)
-			if p.lang.in(LangZsh) && !p.spaced {
+			if (p.lang.in(LangZsh) || p.kshPatternGroup()) && !p.spaced {
 				w.Parts = append(w.Parts, p.wordParts(nil)...)
 			}
 			p.callExpr(s, w, false)
@@ -2426,7 +2631,7 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
 			// right recursion should only read a single element
 			return s
 		}
-		if p.tok == orAnd && p.lang.in(LangMirBSDKorn) {
+		if p.tok == orAnd && p.lang.in(langKshLike) {
 			// No need to check for LangPOSIX, as on that language
 			// we parse |& as two tokens.
 			break
@@ -2693,7 +2898,7 @@ func (p *Parser) forClause(s *Stmt) {
 	fc := &ForClause{ForPos: p.pos}
 	p.next()
 	fc.Loop = p.loop(fc.ForPos)
-	b := p.loopBody(fc, "for", "for foo [in words]", fc.ForPos, langBashLike|LangMirBSDKorn|LangZsh, "for loops with braces", s)
+	b := p.loopBody(fc, "for", "for foo [in words]", fc.ForPos, langBashLike|langKshLike|LangZsh, "for loops with braces", s)
 	fc.DoPos, fc.DonePos, fc.Braces, fc.Short, fc.Do, fc.DoLast = b.doPos, b.donePos, b.braces, b.short, b.stmts, b.last
 	s.Cmd = fc
 }
@@ -2712,7 +2917,7 @@ func (p *Parser) foreachClause(s *Stmt) {
 func (p *Parser) loop(fpos Pos) Loop {
 	switch p.tok {
 	case leftParen, dblLeftParen:
-		p.checkLang(p.pos, langBashLike|LangZsh, "c-style fors")
+		p.checkLang(p.pos, langBashLike|LangZsh|LangKsh93, "c-style fors")
 	}
 	if p.tok == dblLeftParen {
 		cl := &CStyleLoop{Lparen: p.pos}
@@ -3059,7 +3264,7 @@ func (p *Parser) testExprBinary(pastAndOr bool) TestExpr {
 			p.followErrExp(b.OpPos, b.Op)
 		}
 	case TsReMatch:
-		p.checkLang(p.pos, langBashLike|LangZsh, "regex tests")
+		p.checkLang(p.pos, langBashLike|LangZsh|LangKsh93, "regex tests")
 		p.rxOpenParens = 0
 		p.rxFirstPart = true
 		// TODO(mvdan): Using nested states within a regex will break in
@@ -3087,11 +3292,11 @@ func (p *Parser) testExprUnary() TestExpr {
 		switch op {
 		case illegalTok:
 		case tsRefVar: // not available in mksh nor zsh
-			if p.lang.in(langBashLike) {
+			if p.lang.in(langBashLike | LangKsh93) {
 				p.tok = op
 			}
 		case tsModif: // not available in mksh
-			if p.lang.in(langBashLike | LangZsh) {
+			if p.lang.in(langBashLike | LangZsh | LangKsh93) {
 				p.tok = op
 			}
 		default:
@@ -3139,12 +3344,53 @@ func (p *Parser) testExprUnary() TestExpr {
 func (p *Parser) declClause(s *Stmt) {
 	ds := &DeclClause{Variant: p.lit(p.pos, p.val)}
 	p.next()
+	p.declArgs(ds)
+	p.recordKshTypes(ds)
+	s.Cmd = ds
+}
+
+// recordKshTypes remembers the types which a declaration clause defines with
+// [LangKsh93], like Pt_t in `typeset -T Pt_t=(x=0)` or Color_t in
+// `enum Color_t=(red green)`, so that later commands named after them are
+// parsed as declarations.
+func (p *Parser) recordKshTypes(ds *DeclClause) {
+	if !p.lang.in(LangKsh93) {
+		return
+	}
+	switch ds.Variant.Value {
+	case "enum":
+	case "typeset":
+		if !slices.ContainsFunc(ds.Args, func(as *Assign) bool {
+			if as == nil || !as.Naked || as.Value == nil {
+				return false
+			}
+			flags := as.Value.Lit()
+			return strings.HasPrefix(flags, "-") && strings.ContainsRune(flags, 'T')
+		}) {
+			return
+		}
+	default:
+		return
+	}
+	for _, as := range ds.Args {
+		if as == nil || as.Name == nil || as.Array == nil {
+			continue
+		}
+		if p.kshTypes == nil {
+			p.kshTypes = make(map[string]bool)
+		}
+		p.kshTypes[as.Name.Value] = true
+	}
+}
+
+// declArgs parses the arguments of a declaration clause.
+func (p *Parser) declArgs(ds *DeclClause) {
 	for !p.stopToken() && !p.peekRedir() && !p.closesBlock() {
 		if p.hasValidIdent() {
 			ds.Args = append(ds.Args, p.getAssign(false))
 		} else if p.tok.isLit() && p.eqlOffs > 0 && !strings.Contains(p.val[:p.eqlOffs], "{") {
 			p.curErr("invalid var name")
-		} else if p.tok == _LitWord && ValidName(p.val) {
+		} else if p.tok == _LitWord && p.validVarName(p.val) {
 			ds.Args = append(ds.Args, &Assign{
 				Naked: true,
 				Name:  p.getLit(),
@@ -3158,7 +3404,38 @@ func (p *Parser) declClause(s *Stmt) {
 			p.followErr(p.pos, ds.Variant.Value, noQuote("names or assignments"))
 		}
 	}
+}
+
+// kshTypeDecl turns a call with [LangKsh93] into a declaration clause when
+// it is named after a type defined earlier with enum or typeset -T, or when
+// one of its arguments, the current token, is an assignment of a compound or
+// array value. Such a command is a declaration command created by enum or
+// typeset -T, as in `Pt_t p=(x=1 y=2)`, which ksh93 parses as one once its
+// type is defined, even if the type is defined in another file. It reports
+// whether it did so.
+func (p *Parser) kshTypeDecl(s *Stmt, ce *CallExpr) bool {
+	if !p.lang.in(LangKsh93) || len(ce.Assigns) > 0 || len(ce.Args) == 0 {
+		return false
+	}
+	names, ok := funcNames(ce.Args[:1])
+	if !ok {
+		return false
+	}
+	if !p.kshTypes[names[0].Value] && (p.r != '(' || p.eqlOffs != len(p.val)-1 || !p.hasValidIdent()) {
+		return false
+	}
+	ds := &DeclClause{Variant: names[0]}
+	for _, w := range ce.Args[1:] {
+		if lits, ok := funcNames([]*Word{w}); ok && p.validVarName(lits[0].Value) {
+			ds.Args = append(ds.Args, &Assign{Naked: true, Name: lits[0]})
+		} else {
+			ds.Args = append(ds.Args, &Assign{Naked: true, Value: w})
+		}
+	}
+	p.declArgs(ds)
+	p.recordKshTypes(ds)
 	s.Cmd = ds
+	return true
 }
 
 func isBashCompoundCommand(tok token, val string) bool {
@@ -3219,6 +3496,19 @@ func (p *Parser) coprocClause(s *Stmt) {
 
 // zshCoprocClause parses a zsh coproc clause, which unlike bash's takes no
 // name: the rest of the pipeline is the coprocess.
+func (p *Parser) namespaceClause(s *Stmt) {
+	nc := &NamespaceClause{Namespace: p.pos}
+	p.next()
+	if nc.Name = p.getLit(); nc.Name == nil {
+		p.followErr(nc.Namespace, "namespace", noQuote("a name"))
+	}
+	if p.tok != _LitWord || p.val != "{" {
+		p.followErr(nc.Namespace, "namespace foo", leftBrace)
+	}
+	nc.Body = p.braceGroup()
+	s.Cmd = nc
+}
+
 func (p *Parser) zshCoprocClause(s *Stmt) {
 	cc := &CoprocClause{Coproc: p.pos}
 	p.next()
@@ -3250,6 +3540,7 @@ func (p *Parser) bashFuncDecl(s *Stmt) {
 	fpos := p.pos
 	p.next()
 	names := make([]*Lit, 0, 1)
+	var params []*Lit
 	for p.tok == _LitWord && p.val != "{" {
 		names = append(names, p.lit(p.pos, p.val))
 		p.next()
@@ -3266,12 +3557,18 @@ func (p *Parser) bashFuncDecl(s *Stmt) {
 	case 1:
 		// allowed in all variants
 	default:
+		if p.lang.in(LangKsh93) && strings.HasPrefix(names[0].Value, ".sh.math.") {
+			// The other words name the arguments of an arithmetic function.
+			params = names[1:]
+			names = names[:1]
+			break
+		}
 		p.checkLang(fpos, LangZsh, "multi-name functions")
 	}
 	if hasParens {
 		p.follow(fpos, "function foo(", rightParen)
 	}
-	p.funcDecl(s, fpos, true, hasParens, names...)
+	p.funcDecl(s, fpos, true, hasParens, names...).Params = params
 }
 
 func (p *Parser) testDecl(s *Stmt) {
@@ -3312,6 +3609,9 @@ loop:
 			dblSemicolon, semiAnd, dblSemiAnd, semiOr:
 			break loop
 		case _LitWord:
+			if p.kshTypeDecl(s, ce) {
+				return
+			}
 			if len(ce.Args) == 0 && p.hasValidIdent() {
 				ce.Assigns = append(ce.Assigns, p.getAssign(true))
 				break
@@ -3326,7 +3626,7 @@ loop:
 			}
 			w := p.wordOne(p.lit(p.pos, p.val))
 			p.next()
-			if p.lang.in(LangZsh) && !p.spaced {
+			if (p.lang.in(LangZsh) || p.kshPatternGroup()) && !p.spaced {
 				w.Parts = append(w.Parts, p.wordParts(nil)...)
 			}
 			ce.Args = append(ce.Args, w)
@@ -3391,7 +3691,7 @@ loop:
 	s.Cmd = ce
 }
 
-func (p *Parser) funcDecl(s *Stmt, pos Pos, long, withParens bool, names ...*Lit) {
+func (p *Parser) funcDecl(s *Stmt, pos Pos, long, withParens bool, names ...*Lit) *FuncDecl {
 	fd := &FuncDecl{
 		Position: pos,
 		RsrvWord: long,
@@ -3417,6 +3717,7 @@ func (p *Parser) funcDecl(s *Stmt, pos Pos, long, withParens bool, names ...*Lit
 		p.funcArgs(s, fd)
 	}
 	s.Cmd = fd
+	return fd
 }
 
 // funcArgs parses the arguments which follow the body of an anonymous

@@ -78,6 +78,10 @@ func (p *pass) checkBracedOnLine(start, end int) {
 
 func isBlankByte(c byte) bool { return c == ' ' || c == '\t' }
 
+func (p *pass) startsParameter(c byte) bool {
+	return parser.IsNameChar(c) || strings.IndexByte(specialParameterChars, c) >= 0 || c == '.' && p.tree.Lang == syntax.LangKsh93
+}
+
 func (p *pass) checkBracedAt(dollar int) int {
 	if dollar+2 < len(p.text) && strings.IndexByte(" \t\n|", p.text[dollar+2]) >= 0 {
 		return dollar + 2
@@ -98,7 +102,7 @@ func (p *pass) checkBracedAt(dollar int) int {
 	text := p.text[first.start:first.end]
 	switch first.kind {
 	case braceLiteral:
-		if c := text[0]; !parser.IsNameChar(c) && strings.IndexByte(specialParameterChars, c) < 0 {
+		if c := text[0]; !p.startsParameter(c) {
 			p.report(2296, span, "A parameter expansion cannot start with '"+text[:1]+"'; ${ must be followed by a variable name or special parameter.")
 		}
 	case braceDouble:

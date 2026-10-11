@@ -12,7 +12,7 @@ case "$1" in
   -v) echo "verbose" ;;&
   -*) echo "option" ;;
 esac
->>- SC2127 2:1 -- mvdan's ksh grammar rejects ;;& and reports a syntax error instead
+>>- SC2127 2:1 -- ksh93 accepts ;;& (sh(1) of ksh93u+m, Compound Commands), and mksh scripts reject it as a syntax error
 
 ### ash script with a brace command substitution
 #!/bin/ash

@@ -23,7 +23,7 @@ func (p *Parser) arithmExprAssign(compact bool) ArithmExpr {
 		if compact && p.spaced {
 			return value
 		}
-		if !isArithName(value) {
+		if !p.isArithName(value) {
 			p.posErr(p.pos, "%#q must follow a name", p.tok)
 		}
 		pos := p.pos
@@ -210,7 +210,7 @@ func (p *Parser) arithmExprValue(compact bool) ArithmExpr {
 		p.curErr("ternary operator missing %#q before %#q", quest, colon)
 	case _LitWord:
 		l := p.getLit()
-		if p.lang.in(LangZsh) && p.tok == leftParen && !p.spaced {
+		if p.lang.in(LangZsh|LangKsh93) && p.tok == leftParen && !p.spaced && ValidName(l.Value) {
 			x = p.arithmCall(l)
 			break
 		}
@@ -244,7 +244,7 @@ func (p *Parser) arithmExprValue(compact bool) ArithmExpr {
 	// we want real nil, not (*Word)(nil) as that
 	// sets the type to non-nil and then x != nil
 	if p.tok == addAdd || p.tok == subSub {
-		if !isArithName(x) {
+		if !p.isArithName(x) {
 			p.curErr("%#q must follow a name", p.tok)
 		}
 		u := &UnaryArithm{
@@ -353,14 +353,14 @@ func (p *Parser) arithmExprBinary(compact bool, nextOp func(bool) ArithmExpr, op
 	}
 }
 
-func isArithName(left ArithmExpr) bool {
+func (p *Parser) isArithName(left ArithmExpr) bool {
 	w, ok := left.(*Word)
 	if !ok || len(w.Parts) != 1 {
 		return false
 	}
 	switch wp := w.Parts[0].(type) {
 	case *Lit:
-		return ValidName(wp.Value)
+		return p.validVarName(wp.Value)
 	case *ParamExp:
 		return wp.nakedIndex()
 	default:
@@ -391,7 +391,7 @@ func (p *Parser) arithmMatchingErr(pos Pos, left, right token) {
 	case rightParen, _EOF:
 		p.matchingErr(pos, left, right)
 	case period:
-		p.checkLang(p.pos, LangZsh, `floating point arithmetic`)
+		p.checkLang(p.pos, LangZsh|LangKsh93, `floating point arithmetic`)
 	default:
 		if p.quote&allArithmExpr != 0 {
 			p.curErr("not a valid arithmetic operator: %#q", p.tok)

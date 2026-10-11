@@ -262,30 +262,31 @@ func (s *Stmt) End() Pos {
 //
 // These are [*CallExpr], [*IfClause], [*WhileClause], [*ForClause], [*CaseClause],
 // [*Block], [*Subshell], [*BinaryCmd], [*FuncDecl], [*ArithmCmd], [*TestClause],
-// [*DeclClause], [*LetClause], [*TimeClause], [*CoprocClause], [*RepeatClause], and [*TryClause].
+// [*DeclClause], [*LetClause], [*TimeClause], [*CoprocClause], [*RepeatClause], [*TryClause], and [*NamespaceClause].
 type Command interface {
 	Node
 	commandNode()
 }
 
-func (*CallExpr) commandNode()     {}
-func (*IfClause) commandNode()     {}
-func (*WhileClause) commandNode()  {}
-func (*ForClause) commandNode()    {}
-func (*CaseClause) commandNode()   {}
-func (*Block) commandNode()        {}
-func (*Subshell) commandNode()     {}
-func (*BinaryCmd) commandNode()    {}
-func (*FuncDecl) commandNode()     {}
-func (*ArithmCmd) commandNode()    {}
-func (*TestClause) commandNode()   {}
-func (*DeclClause) commandNode()   {}
-func (*LetClause) commandNode()    {}
-func (*TimeClause) commandNode()   {}
-func (*CoprocClause) commandNode() {}
-func (*TestDecl) commandNode()     {}
-func (*RepeatClause) commandNode() {}
-func (*TryClause) commandNode()    {}
+func (*CallExpr) commandNode()        {}
+func (*IfClause) commandNode()        {}
+func (*WhileClause) commandNode()     {}
+func (*ForClause) commandNode()       {}
+func (*CaseClause) commandNode()      {}
+func (*Block) commandNode()           {}
+func (*Subshell) commandNode()        {}
+func (*BinaryCmd) commandNode()       {}
+func (*FuncDecl) commandNode()        {}
+func (*ArithmCmd) commandNode()       {}
+func (*TestClause) commandNode()      {}
+func (*DeclClause) commandNode()      {}
+func (*LetClause) commandNode()       {}
+func (*TimeClause) commandNode()      {}
+func (*CoprocClause) commandNode()    {}
+func (*TestDecl) commandNode()        {}
+func (*RepeatClause) commandNode()    {}
+func (*TryClause) commandNode()       {}
+func (*NamespaceClause) commandNode() {}
 
 // Assign represents an assignment to a variable.
 //
@@ -303,6 +304,7 @@ type Assign struct {
 	Naked  bool       // without '='
 	Name   *Lit       // must be a valid name
 	Index  ArithmExpr // [i], ["k"]
+	Elems  []RefElem  // [j] and .name in a[i][j].name=x with [LangKsh93]
 	Value  *Word      // =val
 	Array  *ArrayExpr // =(arr)
 }
@@ -322,10 +324,11 @@ func (a *Assign) End() Pos {
 		return a.Array.End()
 	}
 	if a.Index != nil {
+		end := refEnd(a.Index, a.Elems)
 		if a.Naked {
-			return posAddCol(a.Index.End(), len("]"))
+			return end
 		}
-		return posAddCol(a.Index.End(), len("]="))
+		return posAddCol(end, len("="))
 	}
 	if a.Naked {
 		return a.Name.End()
@@ -338,7 +341,7 @@ type Redirect struct {
 	OpPos Pos
 	Op    RedirOperator
 	N     *Lit  // fd>, or {varname}> with [LangBash] or [LangZsh]
-	Word  *Word // >word
+	Word  *Word // >word; nil only for ksh93's $(n<#)
 	Hdoc  *Word // here-document body
 }
 
@@ -352,6 +355,9 @@ func (r *Redirect) Pos() Pos {
 func (r *Redirect) End() Pos {
 	if r.Hdoc != nil {
 		return r.Hdoc.End()
+	}
+	if r.Word == nil {
+		return posAddCol(r.OpPos, len(r.Op.String()))
 	}
 	return r.Word.End()
 }
@@ -417,6 +423,19 @@ type TryClause struct {
 
 func (t *TryClause) Pos() Pos { return t.Try.Pos() }
 func (t *TryClause) End() Pos { return t.Always.End() }
+
+// NamespaceClause represents a ksh93 name space, whose commands create variables
+// and functions within it, such as `namespace foo { bar=1; }`.
+//
+// This node will only appear with [LangKsh93].
+type NamespaceClause struct {
+	Namespace Pos
+	Name      *Lit
+	Body      *Block
+}
+
+func (n *NamespaceClause) Pos() Pos { return n.Namespace }
+func (n *NamespaceClause) End() Pos { return n.Body.End() }
 
 // IfClause represents an if statement.
 //
@@ -610,6 +629,10 @@ type FuncDecl struct {
 	Name  *Lit
 	Names []*Lit // When declaring many func names with [LangZsh].
 
+	// Params name the arguments of a ksh93 arithmetic function with
+	// [LangKsh93], such as x and y in `function .sh.math.hypot x y { ... }`.
+	Params []*Lit
+
 	Body *Stmt
 
 	// Args are the arguments to an anonymous function with [LangZsh],
@@ -753,6 +776,10 @@ type ParamExp struct {
 	Width  bool // mksh's ${%a}
 	IsSet  bool // ${+a} with [LangZsh]
 
+	// Attributes is set for ksh93's ${@a}, which expands to the type or the
+	// attributes of a, with [LangKsh93].
+	Attributes bool
+
 	// Zsh expansion prefixes that override shell options for this expansion.
 	// They can stack with one another and with the operators above.
 	// The doubled forms (${==a}, ${~~a}, ${^^a}) force the option off.
@@ -772,6 +799,7 @@ type ParamExp struct {
 	// TODO(v4): rename Index to Subscript, which better matches bash and zsh terminology
 
 	Index ArithmExpr // ${a[i]}, ${a["k"]}, or a ${a[i,j]} slice with [LangZsh]
+	Elems []RefElem  // [j] and .name in ${a[i][j].name} with [LangKsh93]
 
 	// Only one of these is set at a time.
 	// TODO(v4): consider joining these in a single "expansion" field/type,
@@ -788,9 +816,9 @@ type ParamExp struct {
 // only expanding a name without any further logic.
 func (p *ParamExp) simple() bool {
 	return p.Param != nil && p.Flags == nil &&
-		!p.Excl && !p.Length && !p.Width && !p.IsSet &&
+		!p.Excl && !p.Length && !p.Width && !p.IsSet && !p.Attributes &&
 		p.Split == OptUnset && p.GlobSubst == OptUnset && p.RcExpand == OptUnset &&
-		p.NestedParam == nil && p.Index == nil &&
+		p.NestedParam == nil && p.Index == nil && len(p.Elems) == 0 &&
 		len(p.Modifiers) == 0 && p.Slice == nil &&
 		p.Repl == nil && p.Names == 0 && p.Exp == nil
 }
@@ -819,6 +847,27 @@ func (p *ParamExp) nakedIndex() bool {
 	return p.Short && p.Index != nil && !p.Dollar.IsValid()
 }
 
+// RefElem is a further subscript or member after the first subscript of a
+// ksh93 variable reference, such as [j] or .name in ${a[i][j].name}.
+// Only one of its fields is set.
+type RefElem struct {
+	Index  ArithmExpr
+	Member *Lit
+}
+
+// refEnd returns the end position of a variable reference which ends with
+// the subscript index, closed by "]", and the further elements elems.
+func refEnd(index ArithmExpr, elems []RefElem) Pos {
+	if len(elems) == 0 {
+		return posAddCol(index.End(), len("]"))
+	}
+	last := elems[len(elems)-1]
+	if last.Member != nil {
+		return last.Member.End()
+	}
+	return posAddCol(last.Index.End(), len("]"))
+}
+
 // Slice represents a character slicing expression inside a [ParamExp].
 //
 // This node will only appear with [LangBash] and [LangMirBSDKorn].
@@ -845,6 +894,7 @@ type Expansion struct {
 type ArithmExp struct {
 	Left, Right Pos
 	Bracket     bool // deprecated $[expr] form
+	Bare        bool // ((expr)) without $, in ksh93's <#((expr)) seek redirections
 	Unsigned    bool // mksh's $((# expr))
 
 	X ArithmExpr
@@ -1073,7 +1123,8 @@ func (p *ParenTest) End() Pos { return posAddCol(p.Rparen, 1) }
 // This node will only appear with [LangBash].
 type DeclClause struct {
 	// Variant is one of "declare", "local", "export", "readonly",
-	// "typeset", or "nameref".
+	// "typeset", or "nameref", or with [LangKsh93], a declaration command
+	// created by enum or typeset -T and given a compound or array value.
 	Variant *Lit
 	Args    []*Assign
 }
@@ -1093,7 +1144,12 @@ type ArrayExpr struct {
 	Lparen, Rparen Pos
 
 	Elems []*ArrayElem
-	Last  []Comment
+
+	// Stmts holds the list of a compound assignment with [LangKsh93], such as
+	// `(a=1 b=2)` or `(typeset -i a=1; b=2)`, instead of Elems.
+	Stmts []*Stmt
+
+	Last []Comment
 }
 
 func (a *ArrayExpr) Pos() Pos { return a.Lparen }
@@ -1104,22 +1160,32 @@ func (a *ArrayExpr) End() Pos { return posAddCol(a.Rparen, 1) }
 // Index can be nil; for example, declare -a x=(value).
 // Value can be nil; for example, declare -A x=([index]=).
 // Finally, neither can be nil; for example, declare -A x=([index]=value)
+//
+// With [LangKsh93], Array may hold a nested compound or array value instead
+// of Value; for example, x=( (a=1) ) or x=([index]=(a=1)).
 type ArrayElem struct {
 	Index    ArithmExpr
 	Value    *Word
+	Array    *ArrayExpr
 	Comments []Comment
 }
 
 func (a *ArrayElem) Pos() Pos {
-	if a.Index != nil {
+	switch {
+	case a.Index != nil:
 		return a.Index.Pos()
+	case a.Array != nil:
+		return a.Array.Pos()
 	}
 	return a.Value.Pos()
 }
 
 func (a *ArrayElem) End() Pos {
-	if a.Value != nil {
+	switch {
+	case a.Value != nil:
 		return a.Value.End()
+	case a.Array != nil:
+		return a.Array.End()
 	}
 	return posAddCol(a.Index.End(), len("]="))
 }

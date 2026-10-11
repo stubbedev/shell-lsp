@@ -123,7 +123,7 @@ func (p *pass) collectExpansion(pe *syntax.ParamExp) {
 		return
 	}
 	name := pe.Param.Value
-	if isDefaultAssignment(pe) {
+	if assignsParameter(pe) {
 		p.variables.assign(name)
 	}
 	p.subscript(pe.Index, name, pe.Short)
@@ -404,6 +404,10 @@ func (p *pass) collectCall(call *syntax.CallExpr) {
 			if span, ok := p.span(arg); ok {
 				p.scanAlias(arg, span)
 			}
+		}
+	case p.tree.Lang == syntax.LangKsh93 && strings.Contains(c.name, "."):
+		if root, _, _ := strings.Cut(c.name, "."); parser.IsName(root) {
+			p.variables.use(root)
 		}
 	case shflagsDefiners[c.name] && len(c.args) > 0:
 		if flag, ok := parser.Literal(c.args[0]); ok && parser.IsName(flag) {

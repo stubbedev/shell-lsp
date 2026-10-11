@@ -83,7 +83,7 @@ func (p *pass) checkCaseTerminators(c *syntax.CaseClause) {
 		return
 	}
 	switch {
-	case resume && (strictShells.Has(p.dialect) || p.dialect == dialect.Ksh):
+	case resume && strictShells.Has(p.dialect):
 		p.report(2127, span, "The ;;& case terminator needs bash; use a bash shebang or restructure the branches.")
 	case falls && strictShells.Has(p.dialect):
 		p.report(2127, span, "The ;& case terminator needs bash or ksh; use a bash or ksh shebang or restructure the branches.")

@@ -337,7 +337,7 @@ func hasSideEffects(root syntax.Node) bool {
 	parser.Walk(root, func(n syntax.Node) bool {
 		switch n := n.(type) {
 		case *syntax.ParamExp:
-			found = found || isDefaultAssignment(n)
+			found = found || assignsParameter(n)
 		case *syntax.UnaryArithm:
 			found = found || n.Op == syntax.Inc || n.Op == syntax.Dec
 		case *syntax.BinaryArithm:

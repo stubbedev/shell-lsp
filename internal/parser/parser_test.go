@@ -107,9 +107,9 @@ func TestUnrecoverableErrorsKeepParsingLaterLines(t *testing.T) {
 func TestDialectErrorsAreTyped(t *testing.T) {
 	t.Parallel()
 
-	tree := Parse("echo ${name^^}\n", dialect.Ksh)
+	tree := Parse("echo ${name@Q}\n", dialect.Ksh)
 	if len(tree.Errors) == 0 {
-		t.Fatal("no errors for bash case conversion in ksh")
+		t.Fatal("no errors for a bash expansion operator in ksh")
 	}
 	if tree.Errors[0].Kind != ErrDialect {
 		t.Errorf("Kind = %d, want ErrDialect: %s", tree.Errors[0].Kind, tree.Errors[0].Message)
@@ -242,8 +242,8 @@ func TestBatsFilesParseTestBlocks(t *testing.T) {
 	if _, ok := tree.File.Stmts[0].Cmd.(*syntax.TestDecl); !ok {
 		t.Errorf("first statement = %T, want a Bats test block", tree.File.Stmts[0].Cmd)
 	}
-	if !tree.Bats || Parse("#!/bin/bash\necho\n", dialect.Bash).Bats {
-		t.Errorf("Bats = %t for a Bats file, want only Bats files flagged", tree.Bats)
+	if !tree.Bats() || Parse("#!/bin/bash\necho\n", dialect.Bash).Bats() {
+		t.Errorf("Bats() = %t for a Bats file, want only Bats files flagged", tree.Bats())
 	}
 }
 
@@ -341,7 +341,7 @@ func TestHeredocs(t *testing.T) {
 	if first.Delimiter != "EOF" || first.Quoted || src[first.Body.Start:first.Body.End] != "$x\n" {
 		t.Errorf("first heredoc = %+v", first)
 	}
-	if second.Delimiter != "Q" || !second.Quoted || !second.StripTabs {
+	if second.Delimiter != "Q" || !second.Quoted || second.Strip != StripTabs {
 		t.Errorf("second heredoc = %+v", second)
 	}
 	if empty.Body.Start != empty.Body.End {

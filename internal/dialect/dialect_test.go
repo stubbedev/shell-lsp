@@ -166,3 +166,25 @@ func TestInputBats(t *testing.T) {
 		}
 	}
 }
+
+func TestInputMksh(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		in   Input
+		want bool
+	}{
+		{Input{Text: "#!/bin/mksh\n"}, true},
+		{Input{Text: "#!/usr/bin/env mksh\n"}, true},
+		{Input{URI: "file:///home/u/.mkshrc"}, true},
+		{Input{Text: "#!/bin/sh\n# shellcheck shell=mksh\n"}, true},
+		{Input{Text: "#!/bin/mksh\n# shellcheck shell=ksh\n"}, false},
+		{Input{Text: "#!/bin/ksh\n"}, false},
+		{Input{Text: "#!/bin/ksh93\n"}, false},
+		{Input{URI: "file:///w/old.ksh"}, false},
+	} {
+		if got := tc.in.Mksh(); got != tc.want {
+			t.Errorf("%+v Mksh() = %v, want %v", tc.in, got, tc.want)
+		}
+	}
+}

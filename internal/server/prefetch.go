@@ -77,7 +77,7 @@ func (s *Server) prefetchCommands(tree *parser.Tree) {
 }
 
 func (s *Server) commandPages(tree *parser.Tree, cmd parser.Command) ([]string, error) {
-	wrappers := parser.Wrappers{Bats: tree.Bats, Programs: true}
+	wrappers := parser.Wrappers{Bats: tree.Bats(), Programs: true}
 	command, args := cmd.Name, parser.ArgumentTexts(cmd.Args)
 	var pages []string
 	for {

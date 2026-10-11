@@ -90,7 +90,7 @@ func Symbols(tree *parser.Tree) []Symbol {
 }
 
 func functionDetail(tree *parser.Tree, fn parser.Function) string {
-	if hook, ok := batsHooks[fn.Name]; ok && tree.Bats && fn.Within == parser.FileScope {
+	if hook, ok := batsHooks[fn.Name]; ok && tree.Bats() && fn.Within == parser.FileScope {
 		return hook
 	}
 	return "function"

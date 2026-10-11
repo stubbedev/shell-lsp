@@ -32,7 +32,8 @@ func checkUnreachable(p *pass, n syntax.Node) {
 	if !ok || !p.settings.extended {
 		return
 	}
-	if _, body := p.parent().(*syntax.FuncDecl); body {
+	switch p.parent().(type) {
+	case *syntax.FuncDecl, *syntax.ArrayExpr:
 		return
 	}
 	if len(p.statements) == 0 {

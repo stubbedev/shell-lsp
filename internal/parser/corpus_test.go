@@ -84,7 +84,7 @@ func snapshot(t *testing.T, text string, tree *Tree) string {
 		fmt.Fprintf(&sb, "redirect %s target=%s\n", at(r.OpSpan), at(r.Target))
 	}
 	for _, h := range tree.Heredocs {
-		fmt.Fprintf(&sb, "heredoc %q quoted=%t striptabs=%t body=%s\n", h.Delimiter, h.Quoted, h.StripTabs, at(h.Body))
+		fmt.Fprintf(&sb, "heredoc %q quoted=%t strip=%s body=%s\n", h.Delimiter, h.Quoted, h.Strip, at(h.Body))
 	}
 	for _, c := range tree.Comments {
 		fmt.Fprintf(&sb, "comment %s\n", at(c.Span))

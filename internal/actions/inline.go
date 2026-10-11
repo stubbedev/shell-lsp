@@ -304,7 +304,7 @@ func (v variableScan) usesIn(tree *parser.Tree) ([]use, bool) {
 }
 
 func (v variableScan) evaluatedBy(tree *parser.Tree, call *syntax.CallExpr) bool {
-	k := parser.Wrappers{Bats: tree.Bats}.Start(call.Args)
+	k := parser.Wrappers{Bats: tree.Bats()}.Start(call.Args)
 	if k < 0 {
 		return false
 	}
@@ -328,7 +328,7 @@ func (v variableScan) inertOperand(tree *parser.Tree, parent syntax.Node, w *syn
 		return p.Word == w
 	case *syntax.CallExpr:
 		i := slices.Index(p.Args, w)
-		k := parser.Wrappers{Bats: tree.Bats}.Start(p.Args)
+		k := parser.Wrappers{Bats: tree.Bats()}.Start(p.Args)
 		if i < 0 {
 			return false
 		}

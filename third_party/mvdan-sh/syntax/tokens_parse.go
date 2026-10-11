@@ -36,6 +36,18 @@ func (o *RedirOperator) UnmarshalText(text []byte) error {
 		*o = AppAll
 	case "&>>|":
 		*o = AppAllClob
+	case "<<#":
+		*o = HashHdoc
+	case ">;":
+		*o = RdrOutReplace
+	case "<>;":
+		*o = RdrInOutTrunc
+	case "<#":
+		*o = SeekIn
+	case "<##":
+		*o = SeekInCopy
+	case ">#":
+		*o = SeekOut
 	default:
 		return fmt.Errorf("invalid RedirOperator: %q", text)
 	}

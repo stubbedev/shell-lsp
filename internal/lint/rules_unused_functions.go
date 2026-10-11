@@ -19,6 +19,8 @@ var unusedFunctionsFamily = family{
 	rules: []rule{{finish: checkUnusedFunctions}},
 }
 
+const kshMathFunctions = ".sh.math."
+
 var shellHooks = setOf(
 	"command_not_found_handle", "command_not_found_handler",
 	"precmd", "preexec", "chpwd", "periodic", "zshaddhistory", "zshexit",
@@ -59,11 +61,15 @@ func checkUnusedFunctions(p *pass) {
 		return
 	}
 	for _, fn := range p.tree.Functions {
-		if fn.Decl == nil || used[fn.Decl] || shellHooks[fn.Name] || strings.HasPrefix(fn.Name, "TRAP") {
+		if fn.Decl == nil || used[fn.Decl] || shellHooks[fn.Name] || strings.HasPrefix(fn.Name, "TRAP") || kshDiscipline(fn.Name) {
 			continue
 		}
 		p.report(codeUnusedFunction, fn.NameSpan, fn.Name+" is never called: nothing in this script, or in the files it sources, runs it.")
 	}
+}
+
+func kshDiscipline(name string) bool {
+	return strings.Contains(name, ".") && !strings.HasPrefix(name, kshMathFunctions)
 }
 
 func (p *pass) sourceable() bool {
@@ -213,6 +219,9 @@ func (p *pass) collectUsage(root syntax.Node, attributeBodies bool) functionUsag
 			}
 		case *syntax.CallExpr:
 			p.noteCommand(current(), n)
+		case *syntax.FuncArithm:
+			current().words[n.Name.Value] = true
+			current().words[kshMathFunctions+n.Name.Value] = true
 		case *syntax.Word:
 			for token := range literalTokens(n) {
 				current().words[token] = true
@@ -299,8 +308,13 @@ func isTokenBoundary(r rune) bool {
 func reachableFunctions(functions []parser.Function, usage functionUsage) (map[*syntax.FuncDecl]bool, bool) {
 	byName := map[string][]*syntax.FuncDecl{}
 	for _, fn := range functions {
-		if fn.Decl != nil {
-			byName[fn.Name] = append(byName[fn.Name], fn.Decl)
+		if fn.Decl == nil {
+			continue
+		}
+		byName[fn.Name] = append(byName[fn.Name], fn.Decl)
+		if fn.Namespace != "" {
+			qualified := "." + fn.Namespace + "." + fn.Name
+			byName[qualified] = append(byName[qualified], fn.Decl)
 		}
 	}
 	used := map[*syntax.FuncDecl]bool{}

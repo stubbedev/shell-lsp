@@ -28,7 +28,7 @@ func document(t *testing.T, text string) *docstore.Document {
 func TestSyntaxDiagnostics(t *testing.T) {
 	t.Parallel()
 
-	text := "if true; then\n  echo x\necho ${name^^}\n"
+	text := "if true; then\n  echo x\necho ${name@Q}\n"
 	doc := document(t, text)
 	got := Syntax(parser.Parse(text, dialect.Ksh), doc, docstore.EncodingUTF16)
 	if len(got) != 2 {

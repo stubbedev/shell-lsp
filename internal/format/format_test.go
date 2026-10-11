@@ -115,8 +115,8 @@ func TestFormatRefusesBrokenInput(t *testing.T) {
 	if _, err := Format(parser.Parse("if true; then\n", dialect.Bash), Options{}); err == nil || !strings.Contains(err.Error(), "syntax errors") {
 		t.Errorf("Format(broken) error = %v", err)
 	}
-	if _, err := Format(parser.Parse("echo ${name^^}\n", dialect.Ksh), Options{}); err == nil {
-		t.Error("Format accepted bash case conversion in ksh")
+	if _, err := Format(parser.Parse("echo ${name@Q}\n", dialect.Ksh), Options{}); err == nil {
+		t.Error("Format accepted a bash expansion operator in ksh")
 	}
 }
 

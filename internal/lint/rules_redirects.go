@@ -104,7 +104,7 @@ type descriptors struct {
 func redirectDescriptors(r *syntax.Redirect) descriptors {
 	var fds []int
 	switch r.Op {
-	case syntax.RdrIn, syntax.Hdoc, syntax.DashHdoc, syntax.WordHdoc:
+	case syntax.RdrIn, syntax.Hdoc, syntax.DashHdoc, syntax.HashHdoc, syntax.WordHdoc:
 		fds = []int{0}
 	case syntax.RdrOut, syntax.AppOut, syntax.RdrClob:
 		fds = []int{1}
@@ -181,7 +181,7 @@ func checkPipedRedirections(p *pass, n syntax.Node) {
 }
 
 func (p *pass) inputOverrideSpan(r *syntax.Redirect) parser.Span {
-	if r.Op == syntax.Hdoc || r.Op == syntax.DashHdoc {
+	if parser.IsHeredoc(r.Op) {
 		if span, ok := p.span(r.Word); ok {
 			return span
 		}
@@ -331,7 +331,7 @@ func checkRedirectedInput(p *pass, n syntax.Node) {
 
 func readsIntoStdin(r *syntax.Redirect) bool {
 	switch r.Op {
-	case syntax.RdrIn, syntax.Hdoc, syntax.DashHdoc, syntax.WordHdoc:
+	case syntax.RdrIn, syntax.Hdoc, syntax.DashHdoc, syntax.HashHdoc, syntax.WordHdoc:
 		return r.N == nil || r.N.Value == "0"
 	}
 	return false

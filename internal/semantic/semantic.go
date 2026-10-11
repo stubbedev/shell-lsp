@@ -229,7 +229,7 @@ func (g *generator) doubleQuoted(q *syntax.DblQuoted) {
 }
 
 func (g *generator) heredoc(r *syntax.Redirect) {
-	if r.Hdoc == nil || (r.Op != syntax.Hdoc && r.Op != syntax.DashHdoc) {
+	if r.Hdoc == nil || !parser.IsHeredoc(r.Op) {
 		return
 	}
 	body, ok := g.tree.NodeSpan(r.Hdoc)

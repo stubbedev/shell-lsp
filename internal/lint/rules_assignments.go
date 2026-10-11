@@ -286,10 +286,20 @@ func (p *pass) checkIndexedElement(elem *syntax.ArrayElem) {
 		p.report(2191, at, "This = stands alone, so it is literal text rather than part of [index]=value; remove the spaces around it.", quoteFix(at)...)
 		return
 	}
-	if elem.Value == nil || parser.Offset(elem.Value.Pos()) != equals+1 {
+	if start, ok := elementValueStart(elem); !ok || start != equals+1 {
 		empty := parser.Span{Start: equals + 1, End: equals + 1}
 		p.report(2192, empty, "This array element has an index but no value; remove the space after = or quote an empty value.")
 	}
+}
+
+func elementValueStart(elem *syntax.ArrayElem) (int, bool) {
+	switch {
+	case elem.Value != nil:
+		return parser.Offset(elem.Value.Pos()), true
+	case elem.Array != nil:
+		return parser.Offset(elem.Array.Pos()), true
+	}
+	return 0, false
 }
 
 func (p *pass) numberedElement(w *syntax.Word) bool {

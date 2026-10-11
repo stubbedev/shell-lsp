@@ -18,13 +18,14 @@ type Scope struct {
 }
 
 type Function struct {
-	Name     string
-	NameSpan Span
-	Span     Span
-	Body     ScopeID
-	Within   ScopeID
-	Doc      string
-	Decl     *syntax.FuncDecl
+	Name      string
+	NameSpan  Span
+	Span      Span
+	Body      ScopeID
+	Within    ScopeID
+	Namespace string
+	Doc       string
+	Decl      *syntax.FuncDecl
 }
 
 type DefinitionKind uint8
@@ -86,10 +87,48 @@ type Redirect struct {
 	Target Span
 }
 
+type HeredocStrip uint8
+
+const (
+	StripNone HeredocStrip = iota
+	StripTabs
+	StripBlanks
+)
+
+func (s HeredocStrip) String() string {
+	switch s {
+	case StripNone:
+		return "none"
+	case StripTabs:
+		return "tabs"
+	case StripBlanks:
+		return "blanks"
+	}
+	panic(fmt.Sprintf("parser: unknown here-document strip %d", s))
+}
+
+func IsHeredoc(op syntax.RedirOperator) bool {
+	switch op {
+	case syntax.Hdoc, syntax.DashHdoc, syntax.HashHdoc:
+		return true
+	}
+	return false
+}
+
+func heredocStrip(op syntax.RedirOperator) HeredocStrip {
+	switch op {
+	case syntax.DashHdoc:
+		return StripTabs
+	case syntax.HashHdoc:
+		return StripBlanks
+	}
+	return StripNone
+}
+
 type Heredoc struct {
 	Delimiter string
 	Quoted    bool
-	StripTabs bool
+	Strip     HeredocStrip
 	Span      Span
 	Body      Span
 }
@@ -147,10 +186,14 @@ type builder struct {
 	scopes      []ScopeID
 	elseClauses map[*syntax.IfClause]bool
 	closedAtEnd map[*syntax.Redirect]bool
+	compounds   int
+	namespaces  []string
+	lang        syntax.LangVariant
 }
 
-func buildIndex(file *syntax.File, text string, closedAtEnd map[*syntax.Redirect]bool, previous *Tree) (Index, []Error) {
+func buildIndex(file *syntax.File, lang syntax.LangVariant, text string, closedAtEnd map[*syntax.Redirect]bool, previous *Tree) (Index, []Error) {
 	b := &builder{
+		lang:        lang,
 		text:        text,
 		closedAtEnd: closedAtEnd,
 		index:       presized(previous),
@@ -197,11 +240,35 @@ func (b *builder) visit(node syntax.Node) bool {
 		if decl, ok := b.parent().(*syntax.FuncDecl); ok && decl.Body == top {
 			b.scopes = b.scopes[:len(b.scopes)-1]
 		}
+		switch {
+		case compound(top):
+			b.compounds--
+		case isNamespace(top):
+			b.namespaces = b.namespaces[:len(b.namespaces)-1]
+		}
 		return true
 	}
 	b.enter(node)
+	switch n := node.(type) {
+	case *syntax.ArrayExpr:
+		if compound(n) {
+			b.compounds++
+		}
+	case *syntax.NamespaceClause:
+		b.namespaces = append(b.namespaces, n.Name.Value)
+	}
 	b.stack = append(b.stack, node)
 	return true
+}
+
+func compound(node syntax.Node) bool {
+	array, ok := node.(*syntax.ArrayExpr)
+	return ok && len(array.Stmts) > 0
+}
+
+func isNamespace(node syntax.Node) bool {
+	_, ok := node.(*syntax.NamespaceClause)
+	return ok
 }
 
 func (b *builder) scope() ScopeID { return b.scopes[len(b.scopes)-1] }
@@ -263,18 +330,34 @@ func (b *builder) function(n *syntax.FuncDecl) {
 	if n.Name != nil {
 		names = []*syntax.Lit{n.Name}
 	}
+	if b.compounds > 0 {
+		names = nil
+	}
 	for _, name := range names {
 		b.index.Functions = append(b.index.Functions, Function{
-			Name:     name.Value,
-			NameSpan: b.span(name),
-			Span:     b.span(n),
-			Body:     body,
-			Within:   within,
-			Doc:      docComment(b.text, offset(n.Pos())),
-			Decl:     n,
+			Name:      name.Value,
+			NameSpan:  b.span(name),
+			Span:      b.span(n),
+			Body:      body,
+			Within:    within,
+			Namespace: strings.Join(b.namespaces, "."),
+			Doc:       docComment(b.text, offset(n.Pos())),
+			Decl:      n,
 		})
 	}
 	b.scopes = append(b.scopes, body)
+	for _, param := range n.Params {
+		b.index.Definitions = append(b.index.Definitions, Definition{
+			Name:     param.Value,
+			NameSpan: b.span(param),
+			Span:     b.span(param),
+			Kind:     DefDeclare,
+			Attrs:    AttrNameref,
+			Local:    true,
+			Within:   body,
+			Node:     n,
+		})
+	}
 }
 
 func (b *builder) test(n *syntax.TestDecl) {
@@ -329,8 +412,10 @@ func (b *builder) call(n *syntax.CallExpr) {
 	if len(n.Args) > 0 {
 		kind = DefCommandEnv
 	}
-	for _, assign := range n.Assigns {
-		b.assign(assign, kind, declFlags{}, false)
+	if b.compounds == 0 {
+		for _, assign := range n.Assigns {
+			b.assign(assign, kind, declFlags{}, false)
+		}
 	}
 	if len(n.Args) == 0 {
 		return
@@ -346,6 +431,9 @@ func (b *builder) call(n *syntax.CallExpr) {
 		Args:     n.Args[1:],
 		Within:   b.scope(),
 	})
+	if b.compounds > 0 {
+		return
+	}
 	name, args := unwrapBuiltin(name, n.Args[1:])
 	if variant, ok := declVariants[name]; ok {
 		b.declarationWords(variant, args)
@@ -456,6 +544,7 @@ type declVariant struct {
 	attrs  Attr
 	local  bool
 	scoped bool
+	types  bool
 }
 
 var declVariants = map[string]declVariant{
@@ -467,6 +556,7 @@ var declVariants = map[string]declVariant{
 	"nameref":  {attrs: AttrNameref, scoped: true},
 	"integer":  {attrs: AttrInteger, scoped: true},
 	"float":    {scoped: true},
+	"enum":     {types: true},
 }
 
 func (b *builder) declaration(n *syntax.DeclClause) {
@@ -477,13 +567,16 @@ func (b *builder) declaration(n *syntax.DeclClause) {
 		Span:     b.span(n),
 		Within:   b.scope(),
 	})
-	flags := declFlags{attrs: variant.attrs}
+	if b.compounds > 0 {
+		return
+	}
+	flags := variant.flags()
 	for _, arg := range n.Args {
 		if arg.Name == nil {
 			flags = b.declarationWord(variant, flags, arg.Value)
 			continue
 		}
-		if flags.inspects {
+		if !flags.namesVariables() {
 			continue
 		}
 		b.assign(arg, DefDeclare, flags, variant.isLocal(b.scope(), flags.global))
@@ -491,7 +584,7 @@ func (b *builder) declaration(n *syntax.DeclClause) {
 }
 
 func (b *builder) declarationWords(variant declVariant, args []*syntax.Word) {
-	flags := declFlags{attrs: variant.attrs}
+	flags := variant.flags()
 	for _, arg := range args {
 		flags = b.declarationWord(variant, flags, arg)
 	}
@@ -503,10 +596,10 @@ func (b *builder) declarationWord(variant declVariant, flags declFlags, arg *syn
 		return flags
 	}
 	if strings.HasPrefix(value, "-") || strings.HasPrefix(value, "+") {
-		return flags.apply(value)
+		return b.applyFlags(flags, value)
 	}
 	name, _, _ := strings.Cut(value, "=")
-	if flags.inspects || !IsName(name) {
+	if !flags.namesVariables() || !IsName(name) {
 		return flags
 	}
 	start := nameStart(arg)
@@ -533,6 +626,10 @@ func nameStart(w *syntax.Word) int {
 	return start
 }
 
+func (v declVariant) flags() declFlags {
+	return declFlags{attrs: v.attrs, definesType: v.types}
+}
+
 func (v declVariant) isLocal(scope ScopeID, global bool) bool {
 	if v.local {
 		return true
@@ -541,15 +638,18 @@ func (v declVariant) isLocal(scope ScopeID, global bool) bool {
 }
 
 type declFlags struct {
-	attrs    Attr
-	cleared  Attr
-	global   bool
-	inspects bool
+	attrs       Attr
+	cleared     Attr
+	global      bool
+	inspects    bool
+	definesType bool
 }
+
+func (f declFlags) namesVariables() bool { return !f.inspects && !f.definesType }
 
 var flagAttrs = map[rune]Attr{'a': AttrArray, 'A': AttrAssoc, 'x': AttrExport, 'r': AttrReadonly, 'i': AttrInteger, 'n': AttrNameref}
 
-func (f declFlags) apply(word string) declFlags {
+func (b *builder) applyFlags(f declFlags, word string) declFlags {
 	set := strings.HasPrefix(word, "-")
 	if !set && !strings.HasPrefix(word, "+") {
 		return f
@@ -559,8 +659,10 @@ func (f declFlags) apply(word string) declFlags {
 		switch {
 		case flag == 'g':
 			f.global = set
-		case flag == 'f' || flag == 'F' || flag == 'p':
+		case flag == 'f' || flag == 'p' || flag == 'F' && (b.lang == syntax.LangBash || b.lang == syntax.LangBats):
 			f.inspects = set
+		case flag == 'T' && b.lang == syntax.LangKsh93:
+			f.definesType = set
 		case !isAttr:
 		case set:
 			f.attrs |= attr
@@ -574,11 +676,18 @@ func (f declFlags) apply(word string) declFlags {
 }
 
 func (b *builder) assign(n *syntax.Assign, kind DefinitionKind, flags declFlags, local bool) {
-	if n.Name == nil || !IsName(n.Name.Value) {
+	if n.Name == nil {
+		return
+	}
+	if root, _, member := strings.Cut(n.Name.Value, "."); member && IsName(root) {
+		b.referenceStart(n.Name, root)
+		return
+	}
+	if !IsName(n.Name.Value) {
 		return
 	}
 	attrs := flags.attrs
-	if n.Array != nil && !attrs.Has(AttrAssoc) {
+	if n.Array != nil && !compound(n.Array) && !attrs.Has(AttrAssoc) {
 		attrs |= AttrArray
 	}
 	b.index.Definitions = append(b.index.Definitions, Definition{
@@ -633,10 +742,19 @@ func (b *builder) coproc(n *syntax.CoprocClause) {
 }
 
 func (b *builder) paramExp(n *syntax.ParamExp) {
-	if n.Param == nil || n.Names != 0 || !IsName(n.Param.Value) || !n.Param.ValuePos.IsValid() {
+	if n.Param == nil || n.Names != 0 || !n.Param.ValuePos.IsValid() {
 		return
 	}
-	b.reference(n.Param.Value, b.span(n.Param))
+	name, _, _ := strings.Cut(n.Param.Value, ".")
+	if !IsName(name) {
+		return
+	}
+	b.referenceStart(n.Param, name)
+}
+
+func (b *builder) referenceStart(lit *syntax.Lit, name string) {
+	start := offset(lit.Pos())
+	b.reference(name, Span{Start: start, End: start + len(name)})
 }
 
 func (b *builder) reference(name string, span Span) {
@@ -749,7 +867,7 @@ func (b *builder) redirect(n *syntax.Redirect) {
 		Target: target,
 	})
 	b.descriptorVariable(n)
-	if n.Op != syntax.Hdoc && n.Op != syntax.DashHdoc {
+	if !IsHeredoc(n.Op) {
 		return
 	}
 	delimiter, quoted := HeredocDelimiter(n.Word)
@@ -763,7 +881,7 @@ func (b *builder) redirect(n *syntax.Redirect) {
 	b.index.Heredocs = append(b.index.Heredocs, Heredoc{
 		Delimiter: delimiter,
 		Quoted:    quoted,
-		StripTabs: n.Op == syntax.DashHdoc,
+		Strip:     heredocStrip(n.Op),
 		Span:      Span{Start: opSpan.Start, End: target.End},
 		Body:      body,
 	})
@@ -1069,6 +1187,8 @@ func (b *builder) keywords(node syntax.Node) {
 		b.loopKeywords(n.Braces, n.DoPos, n.DonePos)
 	case *syntax.TryClause:
 		b.keyword("always", n.AlwaysPos)
+	case *syntax.NamespaceClause:
+		b.keyword("namespace", n.Namespace)
 	case *syntax.RepeatClause:
 		b.keyword("repeat", n.RepeatPos)
 		b.loopKeywords(n.Braces, n.DoPos, n.DonePos)

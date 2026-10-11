@@ -43,7 +43,7 @@ type Error struct {
 
 type Tree struct {
 	Dialect dialect.Dialect
-	Bats    bool
+	Lang    syntax.LangVariant
 	File    *syntax.File
 	Errors  []Error
 	Index
@@ -52,14 +52,12 @@ type Tree struct {
 }
 
 func Parse(text string, d dialect.Dialect) *Tree {
-	return ParseEdit(nil, text, d, dialect.Input{Text: text}.Bats())
+	return ParseEdit(nil, text, d, Variant(d, dialect.Input{Text: text}))
 }
 
-func ParseEdit(previous *Tree, text string, d dialect.Dialect, bats bool) *Tree {
-	lang := Language(d)
-	if d == dialect.Bash && bats {
-		lang = syntax.LangBats
-	}
+func (t *Tree) Bats() bool { return t.Lang == syntax.LangBats }
+
+func ParseEdit(previous *Tree, text string, d dialect.Dialect, lang syntax.LangVariant) *Tree {
 	parser := syntax.NewParser(
 		syntax.Variant(lang),
 		syntax.KeepComments(true),
@@ -99,9 +97,9 @@ func ParseEdit(previous *Tree, text string, d dialect.Dialect, bats bool) *Tree 
 	if len(src) > len(text) {
 		closedAtEnd = closeAtEndOfText(file, text)
 	}
-	index, recovered := buildIndex(file, text, closedAtEnd, previous)
+	index, recovered := buildIndex(file, lang, text, closedAtEnd, previous)
 	errs = append(errs, recovered...)
-	return &Tree{Dialect: d, Bats: lang == syntax.LangBats, File: file, Errors: sortErrors(errs), Index: index, text: text, lineStarts: lineStarts(text)}
+	return &Tree{Dialect: d, Lang: lang, File: file, Errors: sortErrors(errs), Index: index, text: text, lineStarts: lineStarts(text)}
 }
 
 func unclosedHeredocDelimiter(err error) (string, bool) {
@@ -164,9 +162,19 @@ func Language(d dialect.Dialect) syntax.LangVariant {
 	case dialect.Zsh:
 		return syntax.LangZsh
 	case dialect.Ksh:
-		return syntax.LangMirBSDKorn
+		return syntax.LangKsh93
 	}
 	panic(fmt.Sprintf("parser: no language variant for dialect %d", d))
+}
+
+func Variant(d dialect.Dialect, in dialect.Input) syntax.LangVariant {
+	switch {
+	case d == dialect.Bash && in.Bats():
+		return syntax.LangBats
+	case d == dialect.Ksh && in.Mksh():
+		return syntax.LangMirBSDKorn
+	}
+	return Language(d)
 }
 
 func convertError(err error, text string, d dialect.Dialect) (Error, bool) {

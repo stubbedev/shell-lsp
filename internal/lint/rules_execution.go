@@ -155,7 +155,7 @@ func checkRemoteHeredoc(p *pass, _ command) {
 		return
 	}
 	for _, r := range stmt.Redirs {
-		if (r.Op != syntax.Hdoc && r.Op != syntax.DashHdoc) || r.Hdoc == nil || !expandsLocally(r.Hdoc) {
+		if !parser.IsHeredoc(r.Op) || r.Hdoc == nil || !expandsLocally(r.Hdoc) {
 			continue
 		}
 		delimiter, quoted := parser.HeredocDelimiter(r.Word)

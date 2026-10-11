@@ -35,6 +35,7 @@ reproducer so that it can be sent upstream as it is.
 | 0003 | zsh: `{ try-list } always { always-list }` as a new `TryClause` node | [mvdan/sh#120](https://github.com/mvdan/sh/issues/120) |
 | 0004 | zsh: case patterns starting with a group (`(a|b)*)`) or globbing flags, `case x { ... }`, `coproc` without a name, `}` closing a block right after `local`, `let` or `time`, and `[[ -N file ]]` | [mvdan/sh#120](https://github.com/mvdan/sh/issues/120) |
 | 0005 | zsh: `${a::=w}`, `${a:/p/r}`, `${a:^b}` and `${a:^^b}`; `#name`, `##c`, `[#16]` and math function calls (new `FuncArithm` node) in arithmetic; glob groups and qualifiers that nest or quote parentheses | [mvdan/sh#120](https://github.com/mvdan/sh/issues/120) |
+| 0006 | ksh93: a new `LangKsh93` variant with dotted variable names, compound variables and types (`ArrayExpr.Stmts`, nested values, members and further subscripts), arithmetic functions (`FuncDecl.Params`), `namespace` (new `NamespaceClause` node), `<<#` and the replacing and seeking redirections, `${@a}` and `${#prefix@}`, and the features ksh93 shares with mksh or bash | [mvdan/sh#614](https://github.com/mvdan/sh/issues/614) |
 
 ## Tests
 
@@ -43,5 +44,10 @@ them with
 
     go -C third_party/mvdan-sh test ./...
 
-With zsh 5.9, bash 5.3 and mksh R59 on `PATH`, `TestParseConfirm` also checks
-every parse test against the real shells.
+With zsh 5.9, bash 5.3, mksh R59 and ksh93u+m on `PATH`, `TestParseConfirm` also
+checks every parse test against the real shells.
+
+After changing the tokens in `syntax/tokens.go`, regenerate `token_string.go`
+with `go run golang.org/x/tools/cmd/stringer@v0.52.0 -type token -linecomment
+-trimprefix _` (the v0.38.0 pinned upstream fails with Go 1.27) and
+`tokens_parse.go` with `go run gen_token_parse.go`, both from `syntax/`.

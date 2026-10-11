@@ -15,7 +15,7 @@ var pipefailShells = dialect.SetOf(dialect.Bash, dialect.Zsh, dialect.Ksh)
 
 func strictMode(s *site) (Change, bool) {
 	text := s.Tree.Text()
-	if !strings.HasPrefix(text, "#!") || s.Tree.Bats {
+	if !strings.HasPrefix(text, "#!") || s.Tree.Bats() {
 		return Change{}, false
 	}
 	have := lint.StrictModeOf(s.Tree)

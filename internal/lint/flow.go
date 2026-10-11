@@ -572,6 +572,9 @@ func (in *interpreter) command(stmt *syntax.Stmt, s *state) *state {
 	case *syntax.TryClause:
 		s = in.tryClause(cmd, s)
 		s = in.redirects(stmt, s)
+	case *syntax.NamespaceClause:
+		s = in.stmts(cmd.Body.Stmts, s)
+		s = in.redirects(stmt, s)
 	case *syntax.CaseClause:
 		s = in.caseClause(cmd, s)
 		s = in.redirects(stmt, s)
@@ -945,7 +948,7 @@ func (in *interpreter) expansionSpace(pe *syntax.ParamExp, s *state) space {
 	switch pe.Exp.Op {
 	case syntax.DefaultUnset, syntax.DefaultUnsetOrNull, syntax.AssignUnset, syntax.AssignUnsetOrNull:
 		return (base | alternative).normalize()
-	case syntax.AlternateUnset, syntax.AlternateUnsetOrNull:
+	case syntax.AlternateUnset, syntax.AlternateUnsetOrNull, syntax.AssignAlways:
 		return alternative
 	case syntax.ErrorUnset, syntax.ErrorUnsetOrNull:
 		return base

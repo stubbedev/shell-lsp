@@ -28,12 +28,13 @@ func Walk(node syntax.Node, f func(syntax.Node) bool) {
 		walkLit(n.Name, f)
 		walkWord(n.Value, f)
 		walkArithm(n.Index, f)
+		walkRefElems(n.Elems, f)
 		if n.Array != nil {
 			Walk(n.Array, f)
 		}
 	case *syntax.Redirect:
 		walkLit(n.N, f)
-		Walk(n.Word, f)
+		walkWord(n.Word, f)
 		walkWord(n.Hdoc, f)
 	case *syntax.CallExpr:
 		for _, a := range n.Assigns {
@@ -67,6 +68,9 @@ func Walk(node syntax.Node, f func(syntax.Node) bool) {
 	case *syntax.TryClause:
 		Walk(n.Try, f)
 		Walk(n.Always, f)
+	case *syntax.NamespaceClause:
+		Walk(n.Name, f)
+		Walk(n.Body, f)
 	case *syntax.RepeatClause:
 		Walk(n.Count, f)
 		walkStmts(n.Do, f)
@@ -88,6 +92,9 @@ func Walk(node syntax.Node, f func(syntax.Node) bool) {
 		walkLit(n.Name, f)
 		for _, name := range n.Names {
 			Walk(name, f)
+		}
+		for _, param := range n.Params {
+			Walk(param, f)
 		}
 		Walk(n.Body, f)
 		walkWords(n.Args, f)
@@ -147,11 +154,15 @@ func Walk(node syntax.Node, f func(syntax.Node) bool) {
 		for _, e := range n.Elems {
 			Walk(e, f)
 		}
+		walkStmts(n.Stmts, f)
 		walkComments(n.Last, f)
 	case *syntax.ArrayElem:
 		trailing = walkLeadingComments(n.Comments, func(c *syntax.Comment) bool { return c.Pos().After(n.Pos()) }, f)
 		walkArithm(n.Index, f)
 		walkWord(n.Value, f)
+		if n.Array != nil {
+			Walk(n.Array, f)
+		}
 	case *syntax.ExtGlob:
 		Walk(n.Pattern, f)
 	case *syntax.ProcSubst:
@@ -200,6 +211,7 @@ func walkParamExp(n *syntax.ParamExp, f func(syntax.Node) bool) {
 		Walk(n.NestedParam, f)
 	}
 	walkArithm(n.Index, f)
+	walkRefElems(n.Elems, f)
 	if n.Slice != nil {
 		walkArithm(n.Slice.Offset, f)
 		walkArithm(n.Slice.Length, f)
@@ -210,6 +222,13 @@ func walkParamExp(n *syntax.ParamExp, f func(syntax.Node) bool) {
 	}
 	if n.Exp != nil {
 		walkWord(n.Exp.Word, f)
+	}
+}
+
+func walkRefElems(elems []syntax.RefElem, f func(syntax.Node) bool) {
+	for _, el := range elems {
+		walkArithm(el.Index, f)
+		walkLit(el.Member, f)
 	}
 }
 

@@ -132,7 +132,7 @@ func (b *batsResults) of(uri string) batsRecord {
 }
 
 func appendBatsLenses(out []lsp.CodeLens, file *workspace.File, enc docstore.Encoding) ([]lsp.CodeLens, error) {
-	if !file.Tree.Bats || len(file.Tree.Tests) == 0 {
+	if !file.Tree.Bats() || len(file.Tree.Tests) == 0 {
 		return out, nil
 	}
 	lens := func(r lsp.Range, title string, args batsRunArgs) error {
@@ -204,7 +204,7 @@ func (s *Server) runBats(ctx context.Context, docs *docstore.View, args batsRunA
 	if err != nil {
 		return batsRunResult{}, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "reading %s before running it: %v", path, err)
 	}
-	ran := parser.ParseEdit(nil, string(disk), file.Tree.Dialect, true)
+	ran := parser.ParseEdit(nil, string(disk), file.Tree.Dialect, file.Tree.Lang)
 	inv := bats.Invocation{Executable: executable, Dir: dir, File: path, Test: selected}
 	label := "bats " + filepath.Base(path)
 	ctx, cancel := context.WithTimeout(ctx, batsTimeout)

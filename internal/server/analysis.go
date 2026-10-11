@@ -123,7 +123,7 @@ func (s *Server) snapshot(docs *docstore.View, uri string) (*snapshot, error) {
 		if previous != nil {
 			like = previous.tree
 		}
-		tree := parser.ParseEdit(like, doc.Text(), d, in.Bats())
+		tree := parser.ParseEdit(like, doc.Text(), d, parser.Variant(d, in))
 		return &snapshot{
 			file:       &workspace.File{Path: path, URI: uri, Doc: doc, Tree: tree},
 			doc:        doc,

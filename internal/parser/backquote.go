@@ -43,7 +43,7 @@ func hasCommentOrHeredoc(cs *syntax.CmdSubst) bool {
 		case *syntax.Comment:
 			found = true
 		case *syntax.Redirect:
-			found = found || n.Op == syntax.Hdoc || n.Op == syntax.DashHdoc
+			found = found || IsHeredoc(n.Op)
 		}
 		return !found
 	})

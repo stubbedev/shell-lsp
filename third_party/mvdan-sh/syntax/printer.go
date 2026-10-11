@@ -714,7 +714,10 @@ func (p *Printer) wordPart(wp, next WordPart) {
 		}
 		p.paramExp(wp)
 	case *ArithmExp:
-		p.w.WriteString("$((")
+		if !wp.Bare {
+			p.w.WriteByte('$')
+		}
+		p.w.WriteString("((")
 		if wp.Unsigned {
 			p.w.WriteString("# ")
 		}
@@ -765,6 +768,17 @@ func (p *Printer) wroteIndex(index ArithmExpr) bool {
 	return true
 }
 
+func (p *Printer) refElems(elems []RefElem) {
+	for _, el := range elems {
+		if el.Member != nil {
+			p.w.WriteByte('.')
+			p.writeLit(el.Member.Value)
+		} else {
+			p.wroteIndex(el.Index)
+		}
+	}
+}
+
 func (p *Printer) paramExp(pe *ParamExp) {
 	if pe.nakedIndex() { // arr[x]
 		p.writeLit(pe.Param.Value)
@@ -789,6 +803,8 @@ func (p *Printer) paramExp(pe *ParamExp) {
 		p.w.WriteByte('+')
 	case pe.Excl:
 		p.w.WriteByte('!')
+	case pe.Attributes:
+		p.w.WriteByte('@')
 	}
 	for _, pre := range [...]struct {
 		c     byte
@@ -818,6 +834,7 @@ func (p *Printer) paramExp(pe *ParamExp) {
 		p.minify = saved
 	}
 	p.wroteIndex(pe.Index)
+	p.refElems(pe.Elems)
 	switch {
 	case len(pe.Modifiers) > 0:
 		for _, lit := range pe.Modifiers {
@@ -1126,6 +1143,27 @@ func startsWithGroup(w *Word) bool {
 	return ok && strings.HasPrefix(lit.Value, "(")
 }
 
+func (p *Printer) arrayExpr(ae *ArrayExpr) {
+	p.wantSpace = spaceNotRequired
+	p.w.WriteByte('(')
+	if len(ae.Stmts) > 0 {
+		p.nestedStmts(ae.Stmts, ae.Last, ae.Rparen)
+		p.rightParen(ae.Rparen)
+		return
+	}
+	// Avoid `((`, which would start an arithmetic command,
+	// when the first element is a nested compound or array value.
+	nested := len(ae.Elems) > 0 && ae.Elems[0].Index == nil && ae.Elems[0].Array != nil
+	if nested {
+		p.wantSpace = spaceRequired
+	}
+	p.elemJoin(ae.Elems, ae.Last)
+	if nested && ae.Rparen.Line() <= p.line {
+		p.space()
+	}
+	p.rightParen(ae.Rparen)
+}
+
 func (p *Printer) elemJoin(elems []*ArrayElem, last []Comment) {
 	p.incLevel()
 	for _, el := range elems {
@@ -1147,8 +1185,11 @@ func (p *Printer) elemJoin(elems []*ArrayElem, last []Comment) {
 		if p.wroteIndex(el.Index) {
 			p.w.WriteByte('=')
 		}
-		if el.Value != nil {
+		switch {
+		case el.Value != nil:
 			p.word(el.Value)
+		case el.Array != nil:
+			p.arrayExpr(el.Array)
 		}
 		p.comments(left...)
 	}
@@ -1185,8 +1226,10 @@ func (p *Printer) stmt(s *Stmt) {
 		} else {
 			p.wantSpace = spaceRequired
 		}
-		p.word(r.Word)
-		if r.Op == Hdoc || r.Op == DashHdoc {
+		if r.Word != nil {
+			p.word(r.Word)
+		}
+		if r.Op == Hdoc || r.Op == DashHdoc || r.Op == HashHdoc {
 			p.pendingHdocs = append(p.pendingHdocs, r)
 		}
 	}
@@ -1214,7 +1257,7 @@ func (p *Printer) stmt(s *Stmt) {
 
 func (p *Printer) printRedirsUntil(redirs []*Redirect, startRedirs int, pos Pos) int {
 	for _, r := range redirs[startRedirs:] {
-		if r.Pos().After(pos) || r.Op == Hdoc || r.Op == DashHdoc {
+		if r.Pos().After(pos) || r.Op == Hdoc || r.Op == DashHdoc || r.Op == HashHdoc {
 			break
 		}
 		if p.wantSpace == spaceRequired {
@@ -1229,7 +1272,9 @@ func (p *Printer) printRedirsUntil(redirs []*Redirect, startRedirs int, pos Pos)
 		} else {
 			p.wantSpace = spaceRequired
 		}
-		p.word(r.Word)
+		if r.Word != nil {
+			p.word(r.Word)
+		}
 		startRedirs++
 	}
 	return startRedirs
@@ -1258,6 +1303,11 @@ func (p *Printer) command(cmd Command, redirs []*Redirect) (startRedirs int) {
 		p.space()
 		p.w.WriteString("always ")
 		p.braceGroup(cmd.Always)
+	case *NamespaceClause:
+		p.spacedString("namespace", cmd.Pos())
+		p.spacedString(cmd.Name.Value, Pos{})
+		p.space()
+		p.braceGroup(cmd.Body)
 	case *IfClause:
 		p.ifClause(cmd, false)
 	case *Subshell:
@@ -1362,6 +1412,9 @@ func (p *Printer) command(cmd Command, redirs []*Redirect) (startRedirs int) {
 			for _, name := range cmd.Names {
 				p.spacedString(name.Value, Pos{})
 			}
+		}
+		for _, param := range cmd.Params {
+			p.spacedString(param.Value, Pos{})
 		}
 		if !cmd.RsrvWord || cmd.Parens {
 			p.w.WriteString("()")
@@ -1632,6 +1685,7 @@ func (p *Printer) assigns(assigns []*Assign) {
 		if a.Name != nil {
 			p.writeLit(a.Name.Value)
 			p.wroteIndex(a.Index)
+			p.refElems(a.Elems)
 			if a.Append {
 				p.w.WriteByte('+')
 			}
@@ -1646,10 +1700,7 @@ func (p *Printer) assigns(assigns []*Assign) {
 			p.advanceLine(a.Value.Pos().Line())
 			p.word(a.Value)
 		} else if a.Array != nil {
-			p.wantSpace = spaceNotRequired
-			p.w.WriteByte('(')
-			p.elemJoin(a.Array.Elems, a.Array.Last)
-			p.rightParen(a.Array.Rparen)
+			p.arrayExpr(a.Array)
 		}
 		p.wantSpace = spaceRequired
 	}

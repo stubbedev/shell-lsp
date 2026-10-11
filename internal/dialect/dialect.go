@@ -123,6 +123,16 @@ func (in Input) Bats() bool {
 	return ok && name == "bats"
 }
 
+func (in Input) Mksh() bool {
+	if name, ok := headerShellDirective(in.Text); ok {
+		return name == "mksh"
+	}
+	if name, ok := Interpreter(in.Text); ok {
+		return name == "mksh"
+	}
+	return filepath.Base(in.URI) == ".mkshrc"
+}
+
 // Detect resolves the dialect of a document. Precedence: explicit
 // override, a shellcheck shell directive in the comment header before
 // the first command (an unrecognised shell there means bash, as in

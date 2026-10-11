@@ -350,7 +350,7 @@ func hasStdinRedirect(stmt *syntax.Stmt) bool {
 			return r.N.Value == "0"
 		}
 		switch r.Op {
-		case syntax.RdrIn, syntax.DplIn, syntax.Hdoc, syntax.DashHdoc, syntax.WordHdoc:
+		case syntax.RdrIn, syntax.DplIn, syntax.Hdoc, syntax.DashHdoc, syntax.HashHdoc, syntax.WordHdoc:
 			return true
 		}
 		return false
