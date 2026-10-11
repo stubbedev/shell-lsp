@@ -106,10 +106,12 @@ type Keyword struct {
 
 type Test struct {
 	Name     string
-	Literal  bool
+	Segments []string
 	NameSpan Span
 	Span     Span
 }
+
+func (t Test) Literal() bool { return len(t.Segments) == 1 }
 
 type Index struct {
 	Scopes      []Scope
@@ -277,11 +279,49 @@ func (b *builder) function(n *syntax.FuncDecl) {
 
 func (b *builder) test(n *syntax.TestDecl) {
 	nameSpan := b.span(n.Description)
-	name, literal := Literal(n.Description)
-	if !literal {
-		name = b.text[nameSpan.Start:nameSpan.End]
+	test := Test{NameSpan: nameSpan, Span: b.span(n)}
+	if name, literal := Literal(n.Description); literal {
+		test.Name, test.Segments = name, []string{name}
+	} else {
+		test.Name, test.Segments = b.text[nameSpan.Start:nameSpan.End], nameSegments(n.Description)
 	}
-	b.index.Tests = append(b.index.Tests, Test{Name: name, Literal: literal, NameSpan: nameSpan, Span: b.span(n)})
+	b.index.Tests = append(b.index.Tests, test)
+}
+
+func nameSegments(w *syntax.Word) []string {
+	segments := []string{""}
+	var run []syntax.WordPart
+	flush := func(quoted bool) {
+		if len(run) == 0 {
+			return
+		}
+		parts := run
+		if quoted {
+			parts = []syntax.WordPart{&syntax.DblQuoted{Parts: run}}
+		}
+		text, _ := Literal(&syntax.Word{Parts: parts})
+		segments[len(segments)-1] += text
+		run = nil
+	}
+	var visit func(parts []syntax.WordPart, quoted bool)
+	visit = func(parts []syntax.WordPart, quoted bool) {
+		for _, part := range parts {
+			switch part := part.(type) {
+			case *syntax.Lit, *syntax.SglQuoted:
+				run = append(run, part)
+			case *syntax.DblQuoted:
+				flush(quoted)
+				visit(part.Parts, true)
+				flush(true)
+			default:
+				flush(quoted)
+				segments = append(segments, "")
+			}
+		}
+	}
+	visit(w.Parts, false)
+	flush(false)
+	return segments
 }
 
 func (b *builder) call(n *syntax.CallExpr) {

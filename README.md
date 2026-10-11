@@ -172,7 +172,9 @@ guessed at, and common GNU and gawk extensions are accepted.
 In files with a `bats` shebang, every `@test` appears in the outline and in
 workspace symbols, and `setup`, `teardown`, `setup_file` and `teardown_file`
 are marked as hooks. Code lenses offer "Run file" at the top of the file and
-"Run test" above each test whose name is a plain string.
+"Run test" above each test. A test whose name contains an expansion gets
+"Run matching tests" instead: the literal parts of its name, with anything
+in between, select it (and any sibling that happens to match).
 
 Running uses the project's own bats: `test/bats/bin/bats`,
 `node_modules/.bin/bats` or `test/libs/bats/bin/bats` under the workspace

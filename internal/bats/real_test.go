@@ -29,6 +29,10 @@ check() {
 @test "is skipped" {
   skip "not today"
 }
+
+@test "named at run time ${BASH_VERSINFO[0]:+by bash}" {
+  true
+}
 `
 
 func TestRealBats(t *testing.T) {
@@ -45,7 +49,7 @@ func TestRealBats(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if got := report.Tally(); got != (Tally{Passed: 1, Failed: 2, Skipped: 1}) || report.PlanMismatch() {
+	if got := report.Tally(); got != (Tally{Passed: 2, Failed: 2, Skipped: 1}) || report.PlanMismatch() {
 		t.Fatalf("tally = %+v, plan mismatch %v, report %+v", got, report.PlanMismatch(), report)
 	}
 	lines := map[string]int{"passes": 7, "fails in a helper (x|y)": 11, "fails directly": 15, "is skipped": 19}
@@ -63,11 +67,20 @@ func TestRealBats(t *testing.T) {
 	}
 
 	name := "fails in a helper (x|y)"
-	single, err := Run(t.Context(), Invocation{Executable: exe, Dir: dir, File: file, Test: &name}, func(Report) {})
+	single, err := Run(t.Context(), Invocation{Executable: exe, Dir: dir, File: file, Test: []string{name}}, func(Report) {})
 	if err != nil {
 		t.Fatalf("Run(single) error = %v", err)
 	}
 	if got := single.Tally(); got != (Tally{Failed: 1}) {
 		t.Errorf("filtered run tally = %+v, want only the named test", got)
+	}
+
+	segments := []string{"named at run time ", ""}
+	dynamic, err := Run(t.Context(), Invocation{Executable: exe, Dir: dir, File: file, Test: segments}, func(Report) {})
+	if err != nil {
+		t.Fatalf("Run(dynamic) error = %v", err)
+	}
+	if got := dynamic.Tally(); got != (Tally{Passed: 1}) || !Matches(segments, dynamic.Results[0].Name) {
+		t.Errorf("run of the dynamically named test = %+v", dynamic)
 	}
 }

@@ -37,7 +37,7 @@ echo '# (in test file suite.bats, line 3)'
 exit 1
 `)
 	name := "second (x|y)"
-	inv := Invocation{Executable: exe, Dir: dir, File: filepath.Join(dir, "suite.bats"), Test: &name}
+	inv := Invocation{Executable: exe, Dir: dir, File: filepath.Join(dir, "suite.bats"), Test: []string{name}}
 	var progress []int
 	report, err := Run(t.Context(), inv, func(r Report) { progress = append(progress, len(r.Results)) })
 	if err != nil {
@@ -117,5 +117,31 @@ func TestLocateSearchesPath(t *testing.T) {
 	_, err := Locate(dir)
 	if err == nil || err.Error() != "bats not found: looked for test/bats/bin/bats, node_modules/.bin/bats, test/libs/bats/bin/bats under "+dir+", then for bats on PATH" {
 		t.Errorf("Locate() error = %v", err)
+	}
+}
+
+func TestSegmentsMatchResolvedNames(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		segments []string
+		name     string
+		want     bool
+	}{
+		{[]string{"exact (x|y)"}, "exact (x|y)", true},
+		{[]string{"exact"}, "exactly", false},
+		{[]string{"uses ", ""}, "uses /home/u", true},
+		{[]string{"uses ", ""}, "abuses x", false},
+		{[]string{"", " then ", "!"}, "a then b!", true},
+		{[]string{"", " then ", "!"}, "a then b", false},
+		{[]string{"ab", "b"}, "ab", false},
+		{[]string{"ab", "b"}, "abb", true},
+	} {
+		if got := Matches(tc.segments, tc.name); got != tc.want {
+			t.Errorf("Matches(%q, %q) = %v, want %v", tc.segments, tc.name, got, tc.want)
+		}
+	}
+	if got := Filter([]string{"run ", " (fast)"}); got != `^run .* \(fast\)$` {
+		t.Errorf("Filter = %q", got)
 	}
 }

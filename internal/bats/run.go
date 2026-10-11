@@ -21,17 +21,40 @@ type Invocation struct {
 	Executable string
 	Dir        string
 	File       string
-	Test       *string
+	Test       []string
 }
 
-func Filter(name string) string {
-	return "^" + regexp.QuoteMeta(name) + "$"
+func Filter(segments []string) string {
+	quoted := make([]string, len(segments))
+	for i, segment := range segments {
+		quoted[i] = regexp.QuoteMeta(segment)
+	}
+	return "^" + strings.Join(quoted, ".*") + "$"
+}
+
+func Matches(segments []string, name string) bool {
+	if len(segments) == 1 {
+		return name == segments[0]
+	}
+	rest, ok := strings.CutPrefix(name, segments[0])
+	if !ok {
+		return false
+	}
+	last := segments[len(segments)-1]
+	for _, segment := range segments[1 : len(segments)-1] {
+		i := strings.Index(rest, segment)
+		if i < 0 {
+			return false
+		}
+		rest = rest[i+len(segment):]
+	}
+	return strings.HasSuffix(rest, last)
 }
 
 func (inv Invocation) Args() []string {
 	args := []string{"--tap"}
 	if inv.Test != nil {
-		args = append(args, "--filter", Filter(*inv.Test))
+		args = append(args, "--filter", Filter(inv.Test))
 	}
 	return append(args, inv.File)
 }

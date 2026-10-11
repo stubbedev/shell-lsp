@@ -89,7 +89,7 @@ func TestBatsCodeLenses(t *testing.T) {
 			titles = append(titles, fmt.Sprintf("%s@%d", lens.Command.Title, lens.Range.Start.Line))
 		}
 	}
-	if strings.Join(titles, " ") != "▶ Run file@0 ▶ Run test@4 ▶ Run test@5 ▶ Run test@8" || len(lenses) != 5 || lenses[4].Data == nil {
+	if strings.Join(titles, " ") != "▶ Run file@0 ▶ Run test@4 ▶ Run test@5 ▶ Run test@8 ▶ Run matching tests@9" || len(lenses) != 6 || lenses[5].Data == nil {
 		t.Fatalf("lenses = %v (%d in all)", titles, len(lenses))
 	}
 	var args batsRunArgs

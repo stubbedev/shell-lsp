@@ -256,11 +256,15 @@ func TestBatsTestsAreIndexed(t *testing.T) {
 		t.Fatalf("tests = %+v, want two", tree.Tests)
 	}
 	first, second := tree.Tests[0], tree.Tests[1]
-	if first.Name != "adds 'one'" || !first.Literal || src[first.NameSpan.Start:first.NameSpan.End] != `"adds 'one'"` || src[first.Span.Start:first.Span.End] != "@test \"adds 'one'\" {\n  run true\n}" {
+	if first.Name != "adds 'one'" || !first.Literal() || src[first.NameSpan.Start:first.NameSpan.End] != `"adds 'one'"` || src[first.Span.Start:first.Span.End] != "@test \"adds 'one'\" {\n  run true\n}" {
 		t.Errorf("first test = %+v", first)
 	}
-	if second.Name != `"uses $HOME"` || second.Literal {
-		t.Errorf("a test name with an expansion = %+v, want its source text and not literal", second)
+	if second.Name != `"uses $HOME"` || second.Literal() || !slices.Equal(second.Segments, []string{"uses ", ""}) {
+		t.Errorf("a test name with an expansion = %+v, want its source text and the literal segments around the expansion", second)
+	}
+	mixed := Parse("#!/usr/bin/env bats\n"+`@test 'it'\''s '"${kind} \"x\""-$(date)-end { :; }`+"\n", dialect.Bash).Tests[0]
+	if !slices.Equal(mixed.Segments, []string{"it's ", ` "x"-`, "-end"}) {
+		t.Errorf("segments = %q", mixed.Segments)
 	}
 }
 

@@ -49,12 +49,12 @@ func newBatsResults() *batsResults {
 	return &batsResults{byURI: map[string]batsRecord{}}
 }
 
-func (b *batsResults) record(uri string, test *string, failures []bats.Failure) {
+func (b *batsResults) record(uri string, selected []string, failures []bats.Failure) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	var kept []bats.Failure
-	if test != nil {
-		kept = slices.DeleteFunc(slices.Clone(b.byURI[uri].failures), func(f bats.Failure) bool { return f.Test == *test })
+	if selected != nil {
+		kept = slices.DeleteFunc(slices.Clone(b.byURI[uri].failures), func(f bats.Failure) bool { return bats.Matches(selected, f.Test) })
 	}
 	b.revision++
 	b.byURI[uri] = batsRecord{revision: b.revision, failures: append(kept, failures...)}
@@ -82,19 +82,28 @@ func appendBatsLenses(out []lsp.CodeLens, file *workspace.File, enc docstore.Enc
 		return nil, err
 	}
 	for _, test := range file.Tree.Tests {
-		if !test.Literal {
-			continue
+		title := "▶ Run test"
+		if !test.Literal() {
+			title = "▶ Run matching tests"
 		}
 		name := test.Name
-		if err := lens(file.Doc.RangeFor(test.Span.Start, test.NameSpan.End, enc), "▶ Run test", batsRunArgs{URI: file.URI, Test: &name}); err != nil {
+		if err := lens(file.Doc.RangeFor(test.Span.Start, test.NameSpan.End, enc), title, batsRunArgs{URI: file.URI, Test: &name}); err != nil {
 			return nil, err
 		}
 	}
 	return out, nil
 }
 
-func runnableTest(tree *parser.Tree, name string) (parser.Test, bool) {
-	i := slices.IndexFunc(tree.Tests, func(t parser.Test) bool { return t.Literal && t.Name == name })
+func namedTest(tree *parser.Tree, name string) (parser.Test, bool) {
+	i := slices.IndexFunc(tree.Tests, func(t parser.Test) bool { return t.Name == name })
+	if i < 0 {
+		return parser.Test{}, false
+	}
+	return tree.Tests[i], true
+}
+
+func testRunning(tree *parser.Tree, resolved string) (parser.Test, bool) {
+	i := slices.IndexFunc(tree.Tests, func(t parser.Test) bool { return bats.Matches(t.Segments, resolved) })
 	if i < 0 {
 		return parser.Test{}, false
 	}
@@ -110,10 +119,13 @@ func (s *Server) runBats(ctx context.Context, docs *docstore.View, args batsRunA
 	if err != nil {
 		return batsRunResult{}, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%s: %v", commandRunBats, err)
 	}
+	var selected []string
 	if args.Test != nil {
-		if _, ok := runnableTest(file.Tree, *args.Test); !ok {
+		test, ok := namedTest(file.Tree, *args.Test)
+		if !ok {
 			return batsRunResult{}, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%s has no @test named %q", file.URI, *args.Test)
 		}
+		selected = test.Segments
 	}
 	dir := filepath.Dir(path)
 	if root, ok := s.workspace.RootOf(path); ok {
@@ -123,7 +135,7 @@ func (s *Server) runBats(ctx context.Context, docs *docstore.View, args batsRunA
 	if err != nil {
 		return batsRunResult{}, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "%v", err)
 	}
-	inv := bats.Invocation{Executable: executable, Dir: dir, File: path, Test: args.Test}
+	inv := bats.Invocation{Executable: executable, Dir: dir, File: path, Test: selected}
 	label := "bats " + filepath.Base(path)
 	ctx, cancel := context.WithTimeout(ctx, batsTimeout)
 	defer cancel()
@@ -143,8 +155,8 @@ func (s *Server) runBats(ctx context.Context, docs *docstore.View, args batsRunA
 		return batsRunResult{}, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "%v", err)
 	}
 	outcome = report.Summary()
-	s.bats.record(file.URI, args.Test, bats.Failures(report, path, dir, func(name string) (int, bool) {
-		test, ok := runnableTest(file.Tree, name)
+	s.bats.record(file.URI, selected, bats.Failures(report, path, dir, func(name string) (int, bool) {
+		test, ok := testRunning(file.Tree, name)
 		return file.Tree.Line(test.Span.Start), ok
 	}))
 	s.refreshDiagnosticsOf(context.WithoutCancel(ctx), s.clientCapabilities().Workspace.Diagnostics.RefreshSupport, []string{file.URI})
