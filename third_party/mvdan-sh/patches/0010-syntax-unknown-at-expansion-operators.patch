@@ -1,0 +1,77 @@
+syntax: parse unknown @ expansion operators as bash does
+
+Bash checks the operator of ${name@op} only when it expands the
+parameter, not when it parses the script: bash -n accepts any operator,
+an unset parameter expands to nothing, and only a set one fails with
+"bad substitution". The parser rejected every operator outside the known
+set, so a typo or a template placeholder such as
+
+	if [ -z "${FLAGS_SET_@suffix@:-}" ]; then
+
+stopped the parse, and tools that keep parsing after errors lost the
+rest of the file. An unknown operator now parses into an Expansion like
+any other, leaving its validation to tools that know which shell will
+run the script; a non-literal operator is still an error.
+
+Reproducer, before this change: `echo ${a@bar}` with LangBash failed
+with "invalid @ expansion operator `bar`".
+
+diff --git a/syntax/filetests_test.go b/syntax/filetests_test.go
+index 0f8cdfe..fec54ea 100644
+--- a/syntax/filetests_test.go
++++ b/syntax/filetests_test.go
+@@ -4035,6 +4035,25 @@ var fileTests = []fileTestCase{
+ 			}),
+ 		), LangBash),
+ 	),
++	fileTest(
++		[]string{`${a@bar} ${b_@x@:-}`},
++		langFile(call(
++			word(&ParamExp{
++				Param: lit("a"),
++				Exp: &Expansion{
++					Op:   OtherParamOps,
++					Word: litWord("bar"),
++				},
++			}),
++			word(&ParamExp{
++				Param: lit("b_"),
++				Exp: &Expansion{
++					Op:   OtherParamOps,
++					Word: litWord("x@:-"),
++				},
++			}),
++		), LangBash),
++	),
+ 	fileTest(
+ 		[]string{`${a@K} ${b@k}`},
+ 		langFile(call(
+diff --git a/syntax/parser.go b/syntax/parser.go
+index fc319d8..650fd60 100644
+--- a/syntax/parser.go
++++ b/syntax/parser.go
+@@ -1999,9 +1999,6 @@ func (p *Parser) paramExpExp() *Expansion {
+ 			p.checkLang(p.pos, langBashLike, "this expansion operator")
+ 		case "#":
+ 			p.checkLang(p.pos, LangMirBSDKorn, "this expansion operator")
+-		case "Q":
+-		default:
+-			p.curErr("invalid @ expansion operator %#q", p.val)
+ 		}
+ 	}
+ 	return &Expansion{Op: op, Word: p.getWord()}
+diff --git a/syntax/parser_test.go b/syntax/parser_test.go
+index d7aa8b0..ce086d0 100644
+--- a/syntax/parser_test.go
++++ b/syntax/parser_test.go
+@@ -1973,10 +1973,6 @@ var errorCases = []errorCase{
+ 		"echo ${foo@Q",
+ 		langErr("1:6: reached EOF without matching `${` with `}`", LangBash),
+ 	),
+-	errCase(
+-		"foo=force_expansion; echo ${foo@bar}",
+-		langErr("1:33: invalid @ expansion operator `bar`", LangBash),
+-	),
+ 	errCase(
+ 		"foo=force_expansion; echo ${foo@'Q'}",
+ 		langErr("1:33: @ expansion operator requires a literal", LangBash),

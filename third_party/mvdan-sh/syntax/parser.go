@@ -1999,9 +1999,6 @@ func (p *Parser) paramExpExp() *Expansion {
 			p.checkLang(p.pos, langBashLike, "this expansion operator")
 		case "#":
 			p.checkLang(p.pos, LangMirBSDKorn, "this expansion operator")
-		case "Q":
-		default:
-			p.curErr("invalid @ expansion operator %#q", p.val)
 		}
 	}
 	return &Expansion{Op: op, Word: p.getWord()}

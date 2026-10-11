@@ -4036,6 +4036,25 @@ var fileTests = []fileTestCase{
 		), LangBash),
 	),
 	fileTest(
+		[]string{`${a@bar} ${b_@x@:-}`},
+		langFile(call(
+			word(&ParamExp{
+				Param: lit("a"),
+				Exp: &Expansion{
+					Op:   OtherParamOps,
+					Word: litWord("bar"),
+				},
+			}),
+			word(&ParamExp{
+				Param: lit("b_"),
+				Exp: &Expansion{
+					Op:   OtherParamOps,
+					Word: litWord("x@:-"),
+				},
+			}),
+		), LangBash),
+	),
+	fileTest(
 		[]string{`${a@K} ${b@k}`},
 		langFile(call(
 			word(&ParamExp{

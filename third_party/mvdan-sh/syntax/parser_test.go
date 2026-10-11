@@ -1974,10 +1974,6 @@ var errorCases = []errorCase{
 		langErr("1:6: reached EOF without matching `${` with `}`", LangBash),
 	),
 	errCase(
-		"foo=force_expansion; echo ${foo@bar}",
-		langErr("1:33: invalid @ expansion operator `bar`", LangBash),
-	),
-	errCase(
 		"foo=force_expansion; echo ${foo@'Q'}",
 		langErr("1:33: @ expansion operator requires a literal", LangBash),
 	),
