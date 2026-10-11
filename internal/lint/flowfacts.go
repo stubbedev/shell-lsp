@@ -119,12 +119,7 @@ func (in *interpreter) setStatus(s *state, stmt *syntax.Stmt) {
 	if !in.trackStatus || !s.live {
 		return
 	}
-	set, ok := in.singletons[stmt]
-	if !ok {
-		set = statusSet{stmt}
-		in.singletons[stmt] = set
-	}
-	s.status = set
+	s.status = statusSet{stmt}
 }
 
 func (in *interpreter) markConditional(stmt *syntax.Stmt, from, to syntax.Pos) {

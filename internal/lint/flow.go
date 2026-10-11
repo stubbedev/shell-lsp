@@ -329,7 +329,6 @@ type interpreter struct {
 	trackStatus   bool
 	trackCalls    bool
 	unreachable   bool
-	singletons    map[*syntax.Stmt]statusSet
 	definitions   map[*syntax.FuncDecl]bool
 	subshellExits []pmap[*callList]
 	subshellDepth int
@@ -357,9 +356,6 @@ func analyzeFlow(tree *parser.Tree, imports []parser.Import, bats bool) *flowRes
 	}
 	in.trackStatus = readsStatus(tree.Text())
 	in.trackCalls = len(tree.Functions) > 0
-	if in.trackStatus {
-		in.singletons = make(map[*syntax.Stmt]statusSet, len(tree.Commands))
-	}
 	in.definitions = map[*syntax.FuncDecl]bool{}
 	in.record = true
 	in.sourceReturns = deadState(false)
