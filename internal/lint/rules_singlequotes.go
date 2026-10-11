@@ -82,8 +82,7 @@ func (p *pass) quotesPromptOrVariableName() bool {
 			}
 		case *syntax.CallExpr:
 			word, ok := p.ancestor(0).(*syntax.Word)
-			i := slices.Index(a.Args, word)
-			return ok && i > 0 && a.Args[0].Lit() == "[" && a.Args[i-1].Lit() == "-v"
+			return ok && p.namesTestedVariable(a, word)
 		}
 	}
 	return false

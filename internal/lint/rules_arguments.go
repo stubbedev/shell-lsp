@@ -1,6 +1,7 @@
 package lint
 
 import (
+	"cmp"
 	"path"
 	"slices"
 	"strings"
@@ -38,6 +39,25 @@ func (p *pass) commandArguments(call *syntax.CallExpr) (string, []*syntax.Word, 
 	}
 	name, _ := parser.Literal(word)
 	return name, call.Args[slices.Index(call.Args, word)+1:], true
+}
+
+func (p *pass) namesTestedVariable(call *syntax.CallExpr, w *syntax.Word) bool {
+	previous, ok := previousArgument(call, w)
+	if !ok || previous.Lit() != "-v" {
+		return false
+	}
+	command := p.effectiveCommandWord(call)
+	return command != nil && command.Lit() == "["
+}
+
+func previousArgument(call *syntax.CallExpr, w *syntax.Word) (*syntax.Word, bool) {
+	i, found := slices.BinarySearchFunc(call.Args, w.Pos().Offset(), func(arg *syntax.Word, offset uint) int {
+		return cmp.Compare(arg.Pos().Offset(), offset)
+	})
+	if !found || i == 0 || call.Args[i] != w {
+		return nil, false
+	}
+	return call.Args[i-1], true
 }
 
 func checkLeadingGlobArguments(p *pass, n syntax.Node) {
@@ -166,8 +186,7 @@ func (p *pass) expandsGlobs(w *syntax.Word) bool {
 		if ok && (name == "tr" || name == "read") {
 			return false
 		}
-		i := slices.Index(owner.Args, w)
-		return i < 1 || name != "[" || owner.Args[i-1].Lit() != "-v"
+		return !p.namesTestedVariable(owner, w)
 	case *syntax.UnaryTest:
 		return owner.Op != syntax.TsVarSet
 	case *syntax.BinaryTest:
