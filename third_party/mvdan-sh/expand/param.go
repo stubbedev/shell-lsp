@@ -44,7 +44,7 @@ func overridingUnset(pe *syntax.ParamExp) bool {
 	case syntax.AlternateUnset, syntax.AlternateUnsetOrNull,
 		syntax.DefaultUnset, syntax.DefaultUnsetOrNull,
 		syntax.ErrorUnset, syntax.ErrorUnsetOrNull,
-		syntax.AssignUnset, syntax.AssignUnsetOrNull:
+		syntax.AssignUnset, syntax.AssignUnsetOrNull, syntax.AssignAlways:
 		return true
 	}
 	return false
@@ -255,6 +255,11 @@ func (cfg *Config) paramExp(pe *syntax.ParamExp) (string, error) {
 				}
 				str = arg
 			}
+		case syntax.AssignAlways:
+			if err := cfg.assignElem(name, vr, index, arg); err != nil {
+				return "", err
+			}
+			str = arg
 		case syntax.RemSmallPrefix, syntax.RemLargePrefix,
 			syntax.RemSmallSuffix, syntax.RemLargeSuffix:
 			str = join(cfg.removePatternElems(op, arg, elems))
@@ -391,6 +396,13 @@ func (cfg *Config) replaceElems(repl *syntax.Replace, elems []string) ([]string,
 	}
 	out := make([]string, len(elems))
 	for i, elem := range elems {
+		if repl.Whole {
+			out[i] = elem
+			if matchesWhole(orig, elem) {
+				out[i] = with
+			}
+			continue
+		}
 		locs := findAllIndex(orig, elem, n)
 		sb := cfg.strBuilder()
 		last := 0

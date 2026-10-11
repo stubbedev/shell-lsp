@@ -1265,7 +1265,7 @@ func (p *Parser) wordPart() WordPart {
 		ar := &ArithmExp{Left: p.pos, Bracket: left == dollBrack}
 		old := p.preNested(arithmExpr)
 		p.next()
-		if p.got(hash) {
+		if !p.lang.in(LangZsh) && p.got(hash) {
 			p.checkLang(ar.Pos(), LangMirBSDKorn, "unsigned expressions")
 			ar.Unsigned = true
 		}
@@ -1388,19 +1388,13 @@ func (p *Parser) wordPart() WordPart {
 			// Zsh glob qualifier like *(N) or .(:a); the only case where
 			// ( immediately after a word is not a glob qualifier is ()
 			// for a function declaration, which the parser handles earlier.
-			pos := p.pos
-			p.pos = p.nextPos()
-			for p.newLit(p.r); p.r != runeEOF && p.r != ')'; p.rune() {
-			}
-			if p.r != ')' {
-				p.tok = _EOF // we can only get here due to EOF
-				p.matchingErr(pos, leftParen, rightParen)
-			}
-			p.rune()
-			p.val = p.endLit()
-			l := p.lit(pos, "("+p.val)
-			p.next()
-			return l
+			return p.zshGroupLit(1)
+		}
+		return nil
+	case dblLeftParen:
+		if p.lang.in(LangZsh) {
+			// A group which starts with another one, like ((a|b)|c)*.
+			return p.zshGroupLit(2)
 		}
 		return nil
 	case globQuest, globStar, globPlus, globAt, globExcl:
@@ -1431,6 +1425,49 @@ func (p *Parser) wordPart() WordPart {
 	default:
 		return nil
 	}
+}
+
+// zshGroupLit lexes a zsh glob qualifier or parenthesized group as a literal,
+// like (N) or (a|(b|c)), after its opening parentheses, of which there are
+// depth. Nested groups and quoted strings, which glob qualifiers like
+// (e:'...':) use, may contain closing parentheses.
+func (p *Parser) zshGroupLit(depth int) *Lit {
+	pos := p.pos
+	opening := strings.Repeat("(", depth)
+	p.pos = p.nextPos()
+	var quote rune
+loop:
+	for p.newLit(p.r); p.r != runeEOF; p.rune() {
+		switch {
+		case quote == '\'':
+			if p.r == '\'' {
+				quote = 0
+			}
+		case p.r == '\\':
+			p.rune()
+		case quote == '"':
+			if p.r == '"' {
+				quote = 0
+			}
+		case p.r == '\'', p.r == '"':
+			quote = p.r
+		case p.r == '(':
+			depth++
+		case p.r == ')':
+			if depth--; depth == 0 {
+				break loop
+			}
+		}
+	}
+	if p.r != ')' {
+		p.tok = _EOF // we can only get here due to EOF
+		p.matchingErr(pos, leftParen, rightParen)
+	}
+	p.rune()
+	p.val = p.endLit()
+	l := p.lit(pos, opening+p.val)
+	p.next()
+	return l
 }
 
 func (p *Parser) cmdSubst() *CmdSubst {
@@ -1606,14 +1643,14 @@ zshPrefixLoop:
 	case slash, dblSlash: // pattern search and replace
 		p.checkLang(p.pos, langBashLike|LangMirBSDKorn|LangZsh, "search and replace")
 		pe.Repl = &Replace{All: p.tok == dblSlash}
-		p.quote = paramExpRepl
-		p.next()
-		pe.Repl.Orig = p.getWord()
-		p.quote = paramExpExp
-		if p.got(slash) {
-			pe.Repl.With = p.getWord()
-		}
+		p.paramExpReplace(pe.Repl)
 	case colon: // slicing
+		if p.lang.in(LangZsh) && p.r == '/' {
+			p.rune()
+			pe.Repl = &Replace{Whole: true}
+			p.paramExpReplace(pe.Repl)
+			break
+		}
 		if p.lang.in(LangZsh) && (p.r == '&' || asciiLetter(p.r)) {
 			pos := p.pos
 		loop:
@@ -1674,7 +1711,8 @@ zshPrefixLoop:
 			pe.Exp = p.paramExpExp()
 		}
 	case plus, colPlus, minus, colMinus, quest, colQuest, assgn, colAssgn,
-		perc, dblPerc, hash, dblHash, colHash, colPipe, colStar:
+		perc, dblPerc, hash, dblHash, colHash, colPipe, colStar,
+		colColAssgn, colCaret, colDblCaret:
 		pe.Exp = p.paramExpExp()
 	case _EOF:
 	default:
@@ -1820,10 +1858,22 @@ func (p *Parser) paramExpParameter(pe *ParamExp) *ParamExp {
 	return pe
 }
 
+// paramExpReplace parses the pattern and replacement of a search and replace
+// parameter expansion, after the slash which starts them.
+func (p *Parser) paramExpReplace(repl *Replace) {
+	p.quote = paramExpRepl
+	p.next()
+	repl.Orig = p.getWord()
+	p.quote = paramExpExp
+	if p.got(slash) {
+		repl.With = p.getWord()
+	}
+}
+
 func (p *Parser) paramExpExp() *Expansion {
 	op := ParExpOperator(p.tok)
 	switch op {
-	case MatchEmpty, ArrayExclude, ArrayIntersect:
+	case MatchEmpty, ArrayExclude, ArrayIntersect, AssignAlways, ArrayZip, ArrayZipLongest:
 		p.checkLang(p.pos, LangZsh, "${name%sarg}", op)
 	}
 	p.quote = paramExpExp
@@ -2416,7 +2466,7 @@ func (p *Parser) arithmExpCmd(s *Stmt) {
 	ar := &ArithmCmd{Left: p.pos}
 	old := p.preNested(arithmExprCmd)
 	p.next()
-	if p.got(hash) {
+	if !p.lang.in(LangZsh) && p.got(hash) {
 		p.checkLang(ar.Pos(), LangMirBSDKorn, "unsigned expressions")
 		ar.Unsigned = true
 	}
@@ -3296,6 +3346,10 @@ loop:
 			globQuest, globStar, globPlus, globAt, globExcl:
 			ce.Args = append(ce.Args, p.wordAnyNumber())
 		case dblLeftParen:
+			if p.lang.in(LangZsh) {
+				ce.Args = append(ce.Args, p.wordAnyNumber())
+				break
+			}
 			p.curErr("%#q can only be used to open an arithmetic cmd", p.tok)
 		case leftParen:
 			if p.lang.in(LangZsh) && p.r != ')' {

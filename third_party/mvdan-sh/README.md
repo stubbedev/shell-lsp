@@ -34,6 +34,7 @@ reproducer so that it can be sent upstream as it is.
 | 0002 | zsh: arguments after the body of an anonymous function (`() { ... } arg`), several names before `()`, a separator between `function` names and the body, and `$(() { ... })` lexed as a command substitution | [mvdan/sh#120](https://github.com/mvdan/sh/issues/120) |
 | 0003 | zsh: `{ try-list } always { always-list }` as a new `TryClause` node | [mvdan/sh#120](https://github.com/mvdan/sh/issues/120) |
 | 0004 | zsh: case patterns starting with a group (`(a|b)*)`) or globbing flags, `case x { ... }`, `coproc` without a name, `}` closing a block right after `local`, `let` or `time`, and `[[ -N file ]]` | [mvdan/sh#120](https://github.com/mvdan/sh/issues/120) |
+| 0005 | zsh: `${a::=w}`, `${a:/p/r}`, `${a:^b}` and `${a:^^b}`; `#name`, `##c`, `[#16]` and math function calls (new `FuncArithm` node) in arithmetic; glob groups and qualifiers that nest or quote parentheses | [mvdan/sh#120](https://github.com/mvdan/sh/issues/120) |
 
 ## Tests
 

@@ -121,6 +121,9 @@ func Walk(node syntax.Node, f func(syntax.Node) bool) {
 		if n.X != nil {
 			Walk(n.X, f)
 		}
+	case *syntax.FuncArithm:
+		Walk(n.Name, f)
+		walkArithm(n.X, f)
 	case *syntax.ParenTest:
 		Walk(n.X, f)
 	case *syntax.CaseClause:

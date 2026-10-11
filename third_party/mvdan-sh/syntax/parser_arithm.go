@@ -154,7 +154,18 @@ func (p *Parser) arithmExprUnary(compact bool) ArithmExpr {
 		p.got(_Newl)
 	}
 
-	switch UnAritOperator(p.tok) {
+	switch op := UnAritOperator(p.tok); op {
+	case CharCode:
+		if !p.lang.in(LangZsh) {
+			break
+		}
+		// Zsh's #name is the code of the first character of the value of name.
+		ue := &UnaryArithm{OpPos: p.pos, Op: op}
+		p.nextArith(compact)
+		if ue.X = p.arithmExprValue(compact); ue.X == nil {
+			p.followErr(ue.OpPos, ue.Op, noQuote("a name"))
+		}
+		return ue
 	case Not, BitNegation, Plus, Minus:
 		ue := &UnaryArithm{OpPos: p.pos, Op: UnAritOperator(p.tok)}
 		p.nextArithOp(compact)
@@ -191,11 +202,18 @@ func (p *Parser) arithmExprValue(compact bool) ArithmExpr {
 		}
 		x = pe
 	case leftBrack:
+		if p.lang.in(LangZsh) && p.quote&(arithmExpr|arithmExprLet|arithmExprCmd) != 0 {
+			return p.zshOutputBase(compact)
+		}
 		p.curErr("%#q must follow a name like a[i]", p.tok)
 	case colon:
 		p.curErr("ternary operator missing %#q before %#q", quest, colon)
 	case _LitWord:
 		l := p.getLit()
+		if p.lang.in(LangZsh) && p.tok == leftParen && !p.spaced {
+			x = p.arithmCall(l)
+			break
+		}
 		if p.tok != leftBrack {
 			x = p.wordOne(l)
 			break
@@ -239,6 +257,43 @@ func (p *Parser) arithmExprValue(compact bool) ArithmExpr {
 		return u
 	}
 	return x
+}
+
+// zshOutputBase parses zsh's output base for an arithmetic expression, like
+// `[#16]` in `$(( [#16] x + 1 ))`, followed by the expression it applies to.
+func (p *Parser) zshOutputBase(compact bool) ArithmExpr {
+	fa := &FlagsArithm{Brackets: true}
+	lbrack := p.pos
+	old := p.quote
+	p.quote = runeByRune
+	p.pos = p.nextPos()
+	for p.newLit(p.r); p.r != runeEOF && p.r != ']'; p.rune() {
+	}
+	p.val = p.endLit()
+	if p.r != ']' {
+		p.tok = _EOF // we can only get here due to EOF
+		p.matchingErr(lbrack, leftBrack, rightBrack)
+	}
+	fa.Flags = p.lit(p.pos, p.val)
+	p.rune()
+	p.quote = old
+	p.nextArith(compact)
+	if fa.X = p.arithmExpr(compact); fa.X == nil {
+		p.followErrExp(lbrack, leftBrack)
+	}
+	return fa
+}
+
+// arithmCall parses a call to a math function, like `sqrt(x)` or
+// `atan2(y, x)`, after its name.
+func (p *Parser) arithmCall(name *Lit) *FuncArithm {
+	fa := &FuncArithm{Name: name, Lparen: p.pos}
+	p.nextArith(false)
+	if p.tok != rightParen {
+		fa.X = p.followArithm(leftParen, fa.Lparen)
+	}
+	fa.Rparen = p.matched(fa.Lparen, leftParen, rightParen)
+	return fa
 }
 
 // nextArith consumes a token.

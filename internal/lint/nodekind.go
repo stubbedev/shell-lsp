@@ -28,6 +28,7 @@ const (
 	kindExtGlob
 	kindFile
 	kindFlagsArithm
+	kindFuncArithm
 	kindForClause
 	kindFuncDecl
 	kindIfClause
@@ -100,6 +101,8 @@ func nodeKindOf(n syntax.Node) nodeKind {
 		return kindFile
 	case *syntax.FlagsArithm:
 		return kindFlagsArithm
+	case *syntax.FuncArithm:
+		return kindFuncArithm
 	case *syntax.ForClause:
 		return kindForClause
 	case *syntax.FuncDecl:

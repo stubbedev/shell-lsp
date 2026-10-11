@@ -832,6 +832,9 @@ func (p *Printer) paramExp(pe *ParamExp) {
 			p.arithmExpr(pe.Slice.Length, true, false)
 		}
 	case pe.Repl != nil:
+		if pe.Repl.Whole {
+			p.w.WriteByte(':')
+		}
 		if pe.Repl.All {
 			p.w.WriteByte('/')
 		}
@@ -968,12 +971,28 @@ func (p *Printer) arithmExprRecurse(expr ArithmExpr, compact, spacePlusMinus boo
 		p.arithmExprRecurse(expr.X, false, false)
 		p.w.WriteByte(')')
 	case *FlagsArithm:
-		p.w.WriteByte('(')
-		p.w.WriteString(expr.Flags.Value)
-		p.w.WriteByte(')')
+		if expr.Brackets {
+			p.w.WriteByte('[')
+			p.w.WriteString(expr.Flags.Value)
+			p.w.WriteByte(']')
+			if !compact {
+				p.space()
+			}
+		} else {
+			p.w.WriteByte('(')
+			p.w.WriteString(expr.Flags.Value)
+			p.w.WriteByte(')')
+		}
 		if expr.X != nil {
 			p.arithmExprRecurse(expr.X, compact, false)
 		}
+	case *FuncArithm:
+		p.writeLit(expr.Name.Value)
+		p.w.WriteByte('(')
+		if expr.X != nil {
+			p.arithmExprRecurse(expr.X, false, false)
+		}
+		p.w.WriteByte(')')
 	}
 }
 

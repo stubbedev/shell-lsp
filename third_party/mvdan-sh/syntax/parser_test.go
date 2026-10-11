@@ -1471,7 +1471,8 @@ var errorCases = []errorCase{
 	),
 	errCase(
 		"echo ((foo",
-		langErr("1:6: `((` can only be used to open an arithmetic cmd", LangBash|LangMirBSDKorn|LangZsh),
+		langErr("1:6: `((` can only be used to open an arithmetic cmd", LangBash|LangMirBSDKorn),
+		langErr("1:6: reached EOF without matching `(` with `)`", LangZsh),
 		langErr("1:1: `foo(` must be followed by `)`", LangPOSIX),
 	),
 	errCase(
@@ -1921,7 +1922,7 @@ var errorCases = []errorCase{
 	errCase(
 		// A slice is always arithmetic, unlike a subscript such as ${foo[1,#]}.
 		"echo ${foo:1:#2}",
-		langErr("1:13: `:` must be followed by an expression", LangBash|LangMirBSDKorn|LangZsh),
+		langErr("1:13: `:` must be followed by an expression", LangBash|LangMirBSDKorn), // zsh reads #2 as a character code
 		flipConfirmAll, // the shells only fail at expansion time
 	),
 	errCase(

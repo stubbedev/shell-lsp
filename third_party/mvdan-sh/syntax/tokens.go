@@ -104,30 +104,33 @@ const (
 	assgnParen // =(
 	cmdOut     // >(
 
-	plus     // +
-	colPlus  // :+
-	minus    // -
-	colMinus // :-
-	quest    // ?
-	colQuest // :?
-	assgn    // =
-	colAssgn // :=
-	perc     // %
-	dblPerc  // %%
-	hash     // #
-	dblHash  // ##
-	colHash  // :#
-	colPipe  // :|
-	colStar  // :*
-	caret    // ^
-	dblCaret // ^^
-	comma    // ,
-	dblComma // ,,
-	at       // @
-	slash    // /
-	dblSlash // //
-	period   // .
-	colon    // :
+	plus        // +
+	colPlus     // :+
+	minus       // -
+	colMinus    // :-
+	quest       // ?
+	colQuest    // :?
+	assgn       // =
+	colAssgn    // :=
+	perc        // %
+	dblPerc     // %%
+	hash        // #
+	dblHash     // ##
+	colHash     // :#
+	colPipe     // :|
+	colStar     // :*
+	colColAssgn // ::=
+	colCaret    // :^
+	colDblCaret // :^^
+	caret       // ^
+	dblCaret    // ^^
+	comma       // ,
+	dblComma    // ,,
+	at          // @
+	slash       // /
+	dblSlash    // //
+	period      // .
+	colon       // :
 
 	tsExists  // -e
 	tsRegFile // -f
@@ -262,6 +265,9 @@ const (
 	MatchEmpty                                         // :# with [LangZsh]
 	ArrayExclude                                       // :| with [LangZsh]
 	ArrayIntersect                                     // :* with [LangZsh]
+	AssignAlways                                       // ::= with [LangZsh]
+	ArrayZip                                           // :^ with [LangZsh]
+	ArrayZipLongest                                    // :^^ with [LangZsh]
 	UpperFirst                                         // ^
 	UpperAll                                           // ^^
 	LowerFirst                                         // ,
@@ -278,6 +284,7 @@ const (
 	Dec                                           // --
 	Plus        = UnAritOperator(plus)            // +
 	Minus       = UnAritOperator(minus)           // -
+	CharCode    = UnAritOperator(hash)            // # with [LangZsh]
 )
 
 type BinAritOperator token

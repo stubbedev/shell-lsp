@@ -176,3 +176,34 @@ var _ fs.DirEntry = (*mockFileInfo)(nil)
 
 func (fi *mockFileInfo) Name() string      { return fi.name }
 func (fi *mockFileInfo) Type() fs.FileMode { return fi.typ }
+
+// mapEnviron is a writable environment for tests.
+type mapEnviron map[string]Variable
+
+func (m mapEnviron) Get(name string) Variable { return m[name] }
+
+func (m mapEnviron) Each(fn func(name string, vr Variable) bool) {
+	for name, vr := range m {
+		if !fn(name, vr) {
+			return
+		}
+	}
+}
+
+func (m mapEnviron) Set(name string, vr Variable) error {
+	m[name] = vr
+	return nil
+}
+
+func TestZshWholeReplaceAndAssignAlways(t *testing.T) {
+	p := syntax.NewParser(syntax.Variant(syntax.LangZsh))
+	word, err := p.Document(strings.NewReader("${a:/f*/x} ${b:/f/x} ${c::=new} $c"))
+	qt.Assert(t, qt.IsNil(err))
+	env := mapEnviron{}
+	for name, value := range map[string]string{"a": "foo", "b": "foo", "c": "old"} {
+		env[name] = Variable{Set: true, Kind: String, Str: value}
+	}
+	got, err := Literal(&Config{Env: env}, word)
+	qt.Assert(t, qt.IsNil(err))
+	qt.Assert(t, qt.Equals(got, "x foo new new"))
+}

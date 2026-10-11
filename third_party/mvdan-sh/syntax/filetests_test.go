@@ -979,6 +979,73 @@ var fileTests = []fileTestCase{
 		langFile(block(stmt(&TimeClause{})), LangZsh),
 	),
 	fileTest(
+		[]string{"${a::=b} ${a:/b/c} ${a:^b} ${a:^^b}"},
+		langFile(call(
+			word(&ParamExp{Param: lit("a"), Exp: &Expansion{Op: AssignAlways, Word: litWord("b")}}),
+			word(&ParamExp{Param: lit("a"), Repl: &Replace{Whole: true, Orig: litWord("b"), With: litWord("c")}}),
+			word(&ParamExp{Param: lit("a"), Exp: &Expansion{Op: ArrayZip, Word: litWord("b")}}),
+			word(&ParamExp{Param: lit("a"), Exp: &Expansion{Op: ArrayZipLongest, Word: litWord("b")}}),
+		), LangZsh),
+	),
+	fileTest(
+		[]string{"$((#a + ##b + ##\\n + ##\\M-\\C-x + ##^A))"},
+		langFile(arithmExp(&BinaryArithm{
+			Op: Add,
+			X: &BinaryArithm{
+				Op: Add,
+				X: &BinaryArithm{
+					Op: Add,
+					X: &BinaryArithm{
+						Op: Add,
+						X:  &UnaryArithm{Op: CharCode, X: litWord("a")},
+						Y:  litWord("##b"),
+					},
+					Y: litWord(`##\n`),
+				},
+				Y: litWord(`##\M-\C-x`),
+			},
+			Y: litWord("##^A"),
+		}), LangZsh),
+	),
+	fileTest(
+		[]string{"$(([#16] a + 1))", "$(( [#16]a+1 ))"},
+		printsAs("$(([#16] a + 1))"),
+		langFile(arithmExp(&FlagsArithm{
+			Brackets: true,
+			Flags:    lit("#16"),
+			X:        &BinaryArithm{Op: Add, X: litWord("a"), Y: litWord("1")},
+		}), LangZsh),
+	),
+	fileTest(
+		[]string{"((a = sqrt(2) * atan2(b, 1) + rand48()))"},
+		langFile(arithmCmd(&BinaryArithm{
+			Op: Assgn,
+			X:  litWord("a"),
+			Y: &BinaryArithm{
+				Op: Add,
+				X: &BinaryArithm{
+					Op: Mul,
+					X:  &FuncArithm{Name: lit("sqrt"), X: litWord("2")},
+					Y: &FuncArithm{Name: lit("atan2"), X: &BinaryArithm{
+						Op: Comma,
+						X:  litWord("b"),
+						Y:  litWord("1"),
+					}},
+				},
+				Y: &FuncArithm{Name: lit("rand48")},
+			},
+		}), LangZsh),
+	),
+	fileTest(
+		[]string{"ls *(e:'(( 1 ))':) ((a|b)|c)* (a|(b|c))x"},
+		langFile(call(
+			litWord("ls"),
+			word(lit("*"), lit("(e:'(( 1 ))':)")),
+			word(lit("((a|b)|c)"), lit("*")),
+			word(lit("(a|(b|c))"), lit("x")),
+		), LangZsh),
+	),
+	fileTest(
 		[]string{"repeat 3 { foo }"},
 		printsAs("repeat 3; do foo; done"),
 		langFile(&RepeatClause{

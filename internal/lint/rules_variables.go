@@ -180,7 +180,7 @@ func (p *pass) record(r variableRead) {
 func (p *pass) subscriptOwner() string {
 	for i, n := range slices.Backward(p.stack) {
 		switch n := n.(type) {
-		case *syntax.BinaryArithm, *syntax.UnaryArithm, *syntax.ParenArithm:
+		case *syntax.BinaryArithm, *syntax.UnaryArithm, *syntax.ParenArithm, *syntax.FuncArithm:
 			continue
 		case *syntax.ArrayElem:
 			if owner, ok := p.ancestor(len(p.stack) - i + 1).(*syntax.Assign); ok && owner.Name != nil {

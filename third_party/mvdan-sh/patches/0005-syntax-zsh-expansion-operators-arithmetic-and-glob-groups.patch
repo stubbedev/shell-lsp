@@ -1,0 +1,936 @@
+syntax: parse more zsh expansion operators, arithmetic, and glob groups
+
+These are valid zsh (zshexpn(1), "PARAMETER EXPANSION" and "FILENAME
+GENERATION"; zshmisc(1), "ARITHMETIC EVALUATION"; zshmodules(1),
+zsh/mathfunc) but were rejected:
+
+	${name::=word}          # assign unconditionally
+	${name:/pattern/repl}   # replace only a match of the whole value
+	${name:^array}          # zip two arrays
+	${name:^^array}         # zip, repeating the shorter array
+	$(( #name ))            # code of the first character of $name
+	$(( ##a ))              # code of a character, also ##\n, ##^A, ##\M-\C-x
+	$(( [#16] x ))          # output base
+	$(( sqrt(x) + atan2(y, x) ))
+	ls ((a|b)|c)*           # groups which start with or contain groups
+	ls *(e:'(( 1 ))':)      # glob qualifiers with ")" in quotes
+
+Reproducer, before this change:
+
+	$ printf 'echo ${x::=word}\n' | shfmt -ln zsh
+	<standard input>:1:10: `=` must follow a name
+	$ printf 'echo $(( [#16] 255 ))\n' | shfmt -ln zsh
+	<standard input>:1:10: `[` must follow a name like a[i]
+	$ printf 'echo $(( sqrt(2) ))\n' | shfmt -ln zsh
+	<standard input>:1:9: not a valid arithmetic operator: `(`
+	$ printf "ls *(e:'(( 1 ))':)\n" | shfmt -ln zsh
+	<standard input>:1:15: a command can only contain words and redirects; encountered `)`
+
+The new operators are AssignAlways, ArrayZip and ArrayZipLongest, with
+their tokens; Replace gains Whole; UnaryArithm gains the CharCode operator
+while ##x is lexed as a literal constant; FlagsArithm gains Brackets for
+the output base; and the new FuncArithm node represents a math function
+call. A zsh glob qualifier or group is still kept as an opaque literal,
+but it now ends at its matching parenthesis, skipping quoted strings. The
+expand package implements ::= and the whole-value replacement and
+evaluates an expression with an output base; math functions stay
+unsupported there, like zsh's other array operators.
+
+token_string.go was regenerated with `go run
+golang.org/x/tools/cmd/stringer@v0.52.0 -type token -linecomment
+-trimprefix _`, as the pinned v0.38.0 fails with Go 1.27, and
+tokens_parse.go with `go run gen_token_parse.go`.
+
+Part of https://github.com/mvdan/sh/issues/120.
+
+diff --git a/expand/arith.go b/expand/arith.go
+index 535a3d0..3dee746 100644
+--- a/expand/arith.go
++++ b/expand/arith.go
+@@ -117,7 +117,12 @@ func Arithm(cfg *Config, expr syntax.ArithmExpr) (int, error) {
+ 		}
+ 		return binArit(expr.Op, left, right)
+ 	case *syntax.FlagsArithm: // e.g. zsh's ${a[(r)b]}
++		if expr.Brackets { // zsh's output base only affects how the value is printed
++			return Arithm(cfg, expr.X)
++		}
+ 		return 0, fmt.Errorf("unsupported")
++	case *syntax.FuncArithm:
++		return 0, fmt.Errorf("unsupported math function: %q", expr.Name.Value)
+ 	default:
+ 		panic(fmt.Sprintf("unexpected arithm expr: %T", expr))
+ 	}
+diff --git a/expand/expand.go b/expand/expand.go
+index b595860..b45173f 100644
+--- a/expand/expand.go
++++ b/expand/expand.go
+@@ -977,6 +977,14 @@ func (cfg *Config) expandUser(field string, moreFields bool) (prefix, rest strin
+ 	return u.HomeDir, rest
+ }
+ 
++func matchesWhole(pat, name string) bool {
++	expr, err := pattern.Regexp(pat, pattern.EntireString)
++	if err != nil {
++		return false
++	}
++	return regexp.MustCompile(expr).MatchString(name)
++}
++
+ func findAllIndex(pat, name string, n int) [][]int {
+ 	expr, err := pattern.Regexp(pat, 0)
+ 	if err != nil {
+diff --git a/expand/expand_test.go b/expand/expand_test.go
+index 16c5570..e2f82b1 100644
+--- a/expand/expand_test.go
++++ b/expand/expand_test.go
+@@ -176,3 +176,34 @@ var _ fs.DirEntry = (*mockFileInfo)(nil)
+ 
+ func (fi *mockFileInfo) Name() string      { return fi.name }
+ func (fi *mockFileInfo) Type() fs.FileMode { return fi.typ }
++
++// mapEnviron is a writable environment for tests.
++type mapEnviron map[string]Variable
++
++func (m mapEnviron) Get(name string) Variable { return m[name] }
++
++func (m mapEnviron) Each(fn func(name string, vr Variable) bool) {
++	for name, vr := range m {
++		if !fn(name, vr) {
++			return
++		}
++	}
++}
++
++func (m mapEnviron) Set(name string, vr Variable) error {
++	m[name] = vr
++	return nil
++}
++
++func TestZshWholeReplaceAndAssignAlways(t *testing.T) {
++	p := syntax.NewParser(syntax.Variant(syntax.LangZsh))
++	word, err := p.Document(strings.NewReader("${a:/f*/x} ${b:/f/x} ${c::=new} $c"))
++	qt.Assert(t, qt.IsNil(err))
++	env := mapEnviron{}
++	for name, value := range map[string]string{"a": "foo", "b": "foo", "c": "old"} {
++		env[name] = Variable{Set: true, Kind: String, Str: value}
++	}
++	got, err := Literal(&Config{Env: env}, word)
++	qt.Assert(t, qt.IsNil(err))
++	qt.Assert(t, qt.Equals(got, "x foo new new"))
++}
+diff --git a/expand/param.go b/expand/param.go
+index 37c7ec3..5fdd57f 100644
+--- a/expand/param.go
++++ b/expand/param.go
+@@ -44,7 +44,7 @@ func overridingUnset(pe *syntax.ParamExp) bool {
+ 	case syntax.AlternateUnset, syntax.AlternateUnsetOrNull,
+ 		syntax.DefaultUnset, syntax.DefaultUnsetOrNull,
+ 		syntax.ErrorUnset, syntax.ErrorUnsetOrNull,
+-		syntax.AssignUnset, syntax.AssignUnsetOrNull:
++		syntax.AssignUnset, syntax.AssignUnsetOrNull, syntax.AssignAlways:
+ 		return true
+ 	}
+ 	return false
+@@ -255,6 +255,11 @@ func (cfg *Config) paramExp(pe *syntax.ParamExp) (string, error) {
+ 				}
+ 				str = arg
+ 			}
++		case syntax.AssignAlways:
++			if err := cfg.assignElem(name, vr, index, arg); err != nil {
++				return "", err
++			}
++			str = arg
+ 		case syntax.RemSmallPrefix, syntax.RemLargePrefix,
+ 			syntax.RemSmallSuffix, syntax.RemLargeSuffix:
+ 			str = join(cfg.removePatternElems(op, arg, elems))
+@@ -391,6 +396,13 @@ func (cfg *Config) replaceElems(repl *syntax.Replace, elems []string) ([]string,
+ 	}
+ 	out := make([]string, len(elems))
+ 	for i, elem := range elems {
++		if repl.Whole {
++			out[i] = elem
++			if matchesWhole(orig, elem) {
++				out[i] = with
++			}
++			continue
++		}
+ 		locs := findAllIndex(orig, elem, n)
+ 		sb := cfg.strBuilder()
+ 		last := 0
+diff --git a/syntax/filetests_test.go b/syntax/filetests_test.go
+index 2e1265d..7cf7e55 100644
+--- a/syntax/filetests_test.go
++++ b/syntax/filetests_test.go
+@@ -978,6 +978,73 @@ var fileTests = []fileTestCase{
+ 		printsAs("{ time; }"),
+ 		langFile(block(stmt(&TimeClause{})), LangZsh),
+ 	),
++	fileTest(
++		[]string{"${a::=b} ${a:/b/c} ${a:^b} ${a:^^b}"},
++		langFile(call(
++			word(&ParamExp{Param: lit("a"), Exp: &Expansion{Op: AssignAlways, Word: litWord("b")}}),
++			word(&ParamExp{Param: lit("a"), Repl: &Replace{Whole: true, Orig: litWord("b"), With: litWord("c")}}),
++			word(&ParamExp{Param: lit("a"), Exp: &Expansion{Op: ArrayZip, Word: litWord("b")}}),
++			word(&ParamExp{Param: lit("a"), Exp: &Expansion{Op: ArrayZipLongest, Word: litWord("b")}}),
++		), LangZsh),
++	),
++	fileTest(
++		[]string{"$((#a + ##b + ##\\n + ##\\M-\\C-x + ##^A))"},
++		langFile(arithmExp(&BinaryArithm{
++			Op: Add,
++			X: &BinaryArithm{
++				Op: Add,
++				X: &BinaryArithm{
++					Op: Add,
++					X: &BinaryArithm{
++						Op: Add,
++						X:  &UnaryArithm{Op: CharCode, X: litWord("a")},
++						Y:  litWord("##b"),
++					},
++					Y: litWord(`##\n`),
++				},
++				Y: litWord(`##\M-\C-x`),
++			},
++			Y: litWord("##^A"),
++		}), LangZsh),
++	),
++	fileTest(
++		[]string{"$(([#16] a + 1))", "$(( [#16]a+1 ))"},
++		printsAs("$(([#16] a + 1))"),
++		langFile(arithmExp(&FlagsArithm{
++			Brackets: true,
++			Flags:    lit("#16"),
++			X:        &BinaryArithm{Op: Add, X: litWord("a"), Y: litWord("1")},
++		}), LangZsh),
++	),
++	fileTest(
++		[]string{"((a = sqrt(2) * atan2(b, 1) + rand48()))"},
++		langFile(arithmCmd(&BinaryArithm{
++			Op: Assgn,
++			X:  litWord("a"),
++			Y: &BinaryArithm{
++				Op: Add,
++				X: &BinaryArithm{
++					Op: Mul,
++					X:  &FuncArithm{Name: lit("sqrt"), X: litWord("2")},
++					Y: &FuncArithm{Name: lit("atan2"), X: &BinaryArithm{
++						Op: Comma,
++						X:  litWord("b"),
++						Y:  litWord("1"),
++					}},
++				},
++				Y: &FuncArithm{Name: lit("rand48")},
++			},
++		}), LangZsh),
++	),
++	fileTest(
++		[]string{"ls *(e:'(( 1 ))':) ((a|b)|c)* (a|(b|c))x"},
++		langFile(call(
++			litWord("ls"),
++			word(lit("*"), lit("(e:'(( 1 ))':)")),
++			word(lit("((a|b)|c)"), lit("*")),
++			word(lit("(a|(b|c))"), lit("x")),
++		), LangZsh),
++	),
+ 	fileTest(
+ 		[]string{"repeat 3 { foo }"},
+ 		printsAs("repeat 3; do foo; done"),
+diff --git a/syntax/lexer.go b/syntax/lexer.go
+index 743b71a..261dbba 100644
+--- a/syntax/lexer.go
++++ b/syntax/lexer.go
+@@ -756,6 +756,21 @@ func (p *Parser) paramToken(r rune) token {
+ 		case '*':
+ 			p.rune()
+ 			return colStar
++		case '^':
++			if !p.lang.in(LangZsh) {
++				break
++			}
++			if p.rune() == '^' {
++				p.rune()
++				return colDblCaret
++			}
++			return colCaret
++		case ':':
++			if p.lang.in(LangZsh) && p.peek() == '=' {
++				p.rune()
++				p.rune()
++				return colColAssgn
++			}
+ 		}
+ 		return colon
+ 	case '+':
+@@ -971,6 +986,10 @@ func (p *Parser) arithmToken(r rune) token {
+ 		p.rune()
+ 		return colon
+ 	case '#':
++		if p.lang.in(LangZsh) && p.peek() == '#' {
++			p.val = p.arithmCharCode()
++			return _LitWord
++		}
+ 		p.rune()
+ 		return hash
+ 	case '.':
+@@ -980,6 +999,30 @@ func (p *Parser) arithmToken(r rune) token {
+ 	panic("unreachable")
+ }
+ 
++// arithmCharCode lexes a zsh character code constant in an arithmetic
++// expression, like ##a, starting at its first '#'. The character may be
++// written as an escape sequence like \n or \M-\C-x, or as ^x for a control
++// character.
++func (p *Parser) arithmCharCode() string {
++	p.newLit(p.r)
++	p.rune() // the second '#'
++	r := p.rune()
++	for r == '\\' {
++		if n1, n2 := p.peekTwo(); (n1 != 'M' && n1 != 'C') || n2 != '-' {
++			p.rune() // the escaped character
++			break
++		}
++		p.rune()
++		p.rune()
++		r = p.rune()
++	}
++	if r == '^' {
++		p.rune()
++	}
++	p.rune()
++	return p.endLit()
++}
++
+ func (p *Parser) newLit(r rune) {
+ 	switch {
+ 	case r < utf8.RuneSelf:
+diff --git a/syntax/nodes.go b/syntax/nodes.go
+index 3a92213..23f4d28 100644
+--- a/syntax/nodes.go
++++ b/syntax/nodes.go
+@@ -830,6 +830,7 @@ type Slice struct {
+ // Replace represents a search and replace expression inside a [ParamExp].
+ type Replace struct {
+ 	All        bool
++	Whole      bool // ${a:/x/y} with [LangZsh], replacing only a match of the whole value
+ 	Orig, With *Word
+ }
+ 
+@@ -872,7 +873,7 @@ func (a *ArithmCmd) End() Pos { return posAddCol(a.Right, 2) }
+ 
+ // ArithmExpr represents all nodes that form arithmetic expressions.
+ //
+-// These are [*BinaryArithm], [*UnaryArithm], [*ParenArithm], [*FlagsArithm], and [*Word].
++// These are [*BinaryArithm], [*UnaryArithm], [*ParenArithm], [*FlagsArithm], [*FuncArithm], and [*Word].
+ type ArithmExpr interface {
+ 	Node
+ 	arithmExprNode()
+@@ -881,6 +882,7 @@ type ArithmExpr interface {
+ func (*BinaryArithm) arithmExprNode() {}
+ func (*UnaryArithm) arithmExprNode()  {}
+ func (*ParenArithm) arithmExprNode()  {}
++func (*FuncArithm) arithmExprNode()   {}
+ func (*FlagsArithm) arithmExprNode()  {}
+ func (*Word) arithmExprNode()         {}
+ 
+@@ -938,12 +940,14 @@ func (p *ParenArithm) Pos() Pos { return p.Lparen }
+ func (p *ParenArithm) End() Pos { return posAddCol(p.Rparen, 1) }
+ 
+ // FlagsArithm represents zsh subscript flags attached to an arithmetic expression,
+-// such as ${array[(flags)expr]}.
++// such as ${array[(flags)expr]}, or with Brackets, the output base of an
++// arithmetic expression, such as $(( [#16] expr )).
+ //
+ // This node will only appear with [LangZsh].
+ type FlagsArithm struct {
+-	Flags *Lit
+-	X     ArithmExpr
++	Flags    *Lit
++	Brackets bool // [flags] instead of (flags)
++	X        ArithmExpr
+ }
+ 
+ func (z *FlagsArithm) Pos() Pos { return posAddCol(z.Flags.Pos(), -1) }
+@@ -951,9 +955,23 @@ func (z *FlagsArithm) End() Pos {
+ 	if z.X != nil {
+ 		return z.X.End()
+ 	}
+-	return posAddCol(z.Flags.End(), 1) // closing paren
++	return posAddCol(z.Flags.End(), 1) // closing paren or bracket
++}
++
++// FuncArithm represents a call to a math function in an arithmetic expression,
++// such as `sqrt(x)` or `atan2(y, x)`.
++//
++// This node will only appear with [LangZsh].
++type FuncArithm struct {
++	Name           *Lit
++	Lparen, Rparen Pos
++
++	X ArithmExpr // the arguments, joined by [Comma]; nil without any
+ }
+ 
++func (f *FuncArithm) Pos() Pos { return f.Name.Pos() }
++func (f *FuncArithm) End() Pos { return posAddCol(f.Rparen, 1) }
++
+ // CaseClause represents a case (switch) clause.
+ type CaseClause struct {
+ 	Case, In, Esac Pos
+diff --git a/syntax/parser.go b/syntax/parser.go
+index 6552658..0a49c51 100644
+--- a/syntax/parser.go
++++ b/syntax/parser.go
+@@ -1265,7 +1265,7 @@ func (p *Parser) wordPart() WordPart {
+ 		ar := &ArithmExp{Left: p.pos, Bracket: left == dollBrack}
+ 		old := p.preNested(arithmExpr)
+ 		p.next()
+-		if p.got(hash) {
++		if !p.lang.in(LangZsh) && p.got(hash) {
+ 			p.checkLang(ar.Pos(), LangMirBSDKorn, "unsigned expressions")
+ 			ar.Unsigned = true
+ 		}
+@@ -1388,19 +1388,13 @@ func (p *Parser) wordPart() WordPart {
+ 			// Zsh glob qualifier like *(N) or .(:a); the only case where
+ 			// ( immediately after a word is not a glob qualifier is ()
+ 			// for a function declaration, which the parser handles earlier.
+-			pos := p.pos
+-			p.pos = p.nextPos()
+-			for p.newLit(p.r); p.r != runeEOF && p.r != ')'; p.rune() {
+-			}
+-			if p.r != ')' {
+-				p.tok = _EOF // we can only get here due to EOF
+-				p.matchingErr(pos, leftParen, rightParen)
+-			}
+-			p.rune()
+-			p.val = p.endLit()
+-			l := p.lit(pos, "("+p.val)
+-			p.next()
+-			return l
++			return p.zshGroupLit(1)
++		}
++		return nil
++	case dblLeftParen:
++		if p.lang.in(LangZsh) {
++			// A group which starts with another one, like ((a|b)|c)*.
++			return p.zshGroupLit(2)
+ 		}
+ 		return nil
+ 	case globQuest, globStar, globPlus, globAt, globExcl:
+@@ -1433,6 +1427,49 @@ func (p *Parser) wordPart() WordPart {
+ 	}
+ }
+ 
++// zshGroupLit lexes a zsh glob qualifier or parenthesized group as a literal,
++// like (N) or (a|(b|c)), after its opening parentheses, of which there are
++// depth. Nested groups and quoted strings, which glob qualifiers like
++// (e:'...':) use, may contain closing parentheses.
++func (p *Parser) zshGroupLit(depth int) *Lit {
++	pos := p.pos
++	opening := strings.Repeat("(", depth)
++	p.pos = p.nextPos()
++	var quote rune
++loop:
++	for p.newLit(p.r); p.r != runeEOF; p.rune() {
++		switch {
++		case quote == '\'':
++			if p.r == '\'' {
++				quote = 0
++			}
++		case p.r == '\\':
++			p.rune()
++		case quote == '"':
++			if p.r == '"' {
++				quote = 0
++			}
++		case p.r == '\'', p.r == '"':
++			quote = p.r
++		case p.r == '(':
++			depth++
++		case p.r == ')':
++			if depth--; depth == 0 {
++				break loop
++			}
++		}
++	}
++	if p.r != ')' {
++		p.tok = _EOF // we can only get here due to EOF
++		p.matchingErr(pos, leftParen, rightParen)
++	}
++	p.rune()
++	p.val = p.endLit()
++	l := p.lit(pos, opening+p.val)
++	p.next()
++	return l
++}
++
+ func (p *Parser) cmdSubst() *CmdSubst {
+ 	cs := &CmdSubst{Left: p.pos}
+ 	old := p.preNested(subCmd)
+@@ -1606,14 +1643,14 @@ zshPrefixLoop:
+ 	case slash, dblSlash: // pattern search and replace
+ 		p.checkLang(p.pos, langBashLike|LangMirBSDKorn|LangZsh, "search and replace")
+ 		pe.Repl = &Replace{All: p.tok == dblSlash}
+-		p.quote = paramExpRepl
+-		p.next()
+-		pe.Repl.Orig = p.getWord()
+-		p.quote = paramExpExp
+-		if p.got(slash) {
+-			pe.Repl.With = p.getWord()
+-		}
++		p.paramExpReplace(pe.Repl)
+ 	case colon: // slicing
++		if p.lang.in(LangZsh) && p.r == '/' {
++			p.rune()
++			pe.Repl = &Replace{Whole: true}
++			p.paramExpReplace(pe.Repl)
++			break
++		}
+ 		if p.lang.in(LangZsh) && (p.r == '&' || asciiLetter(p.r)) {
+ 			pos := p.pos
+ 		loop:
+@@ -1674,7 +1711,8 @@ zshPrefixLoop:
+ 			pe.Exp = p.paramExpExp()
+ 		}
+ 	case plus, colPlus, minus, colMinus, quest, colQuest, assgn, colAssgn,
+-		perc, dblPerc, hash, dblHash, colHash, colPipe, colStar:
++		perc, dblPerc, hash, dblHash, colHash, colPipe, colStar,
++		colColAssgn, colCaret, colDblCaret:
+ 		pe.Exp = p.paramExpExp()
+ 	case _EOF:
+ 	default:
+@@ -1820,10 +1858,22 @@ func (p *Parser) paramExpParameter(pe *ParamExp) *ParamExp {
+ 	return pe
+ }
+ 
++// paramExpReplace parses the pattern and replacement of a search and replace
++// parameter expansion, after the slash which starts them.
++func (p *Parser) paramExpReplace(repl *Replace) {
++	p.quote = paramExpRepl
++	p.next()
++	repl.Orig = p.getWord()
++	p.quote = paramExpExp
++	if p.got(slash) {
++		repl.With = p.getWord()
++	}
++}
++
+ func (p *Parser) paramExpExp() *Expansion {
+ 	op := ParExpOperator(p.tok)
+ 	switch op {
+-	case MatchEmpty, ArrayExclude, ArrayIntersect:
++	case MatchEmpty, ArrayExclude, ArrayIntersect, AssignAlways, ArrayZip, ArrayZipLongest:
+ 		p.checkLang(p.pos, LangZsh, "${name%sarg}", op)
+ 	}
+ 	p.quote = paramExpExp
+@@ -2416,7 +2466,7 @@ func (p *Parser) arithmExpCmd(s *Stmt) {
+ 	ar := &ArithmCmd{Left: p.pos}
+ 	old := p.preNested(arithmExprCmd)
+ 	p.next()
+-	if p.got(hash) {
++	if !p.lang.in(LangZsh) && p.got(hash) {
+ 		p.checkLang(ar.Pos(), LangMirBSDKorn, "unsigned expressions")
+ 		ar.Unsigned = true
+ 	}
+@@ -3296,6 +3346,10 @@ loop:
+ 			globQuest, globStar, globPlus, globAt, globExcl:
+ 			ce.Args = append(ce.Args, p.wordAnyNumber())
+ 		case dblLeftParen:
++			if p.lang.in(LangZsh) {
++				ce.Args = append(ce.Args, p.wordAnyNumber())
++				break
++			}
+ 			p.curErr("%#q can only be used to open an arithmetic cmd", p.tok)
+ 		case leftParen:
+ 			if p.lang.in(LangZsh) && p.r != ')' {
+diff --git a/syntax/parser_arithm.go b/syntax/parser_arithm.go
+index 6062dac..daa9938 100644
+--- a/syntax/parser_arithm.go
++++ b/syntax/parser_arithm.go
+@@ -154,7 +154,18 @@ func (p *Parser) arithmExprUnary(compact bool) ArithmExpr {
+ 		p.got(_Newl)
+ 	}
+ 
+-	switch UnAritOperator(p.tok) {
++	switch op := UnAritOperator(p.tok); op {
++	case CharCode:
++		if !p.lang.in(LangZsh) {
++			break
++		}
++		// Zsh's #name is the code of the first character of the value of name.
++		ue := &UnaryArithm{OpPos: p.pos, Op: op}
++		p.nextArith(compact)
++		if ue.X = p.arithmExprValue(compact); ue.X == nil {
++			p.followErr(ue.OpPos, ue.Op, noQuote("a name"))
++		}
++		return ue
+ 	case Not, BitNegation, Plus, Minus:
+ 		ue := &UnaryArithm{OpPos: p.pos, Op: UnAritOperator(p.tok)}
+ 		p.nextArithOp(compact)
+@@ -191,11 +202,18 @@ func (p *Parser) arithmExprValue(compact bool) ArithmExpr {
+ 		}
+ 		x = pe
+ 	case leftBrack:
++		if p.lang.in(LangZsh) && p.quote&(arithmExpr|arithmExprLet|arithmExprCmd) != 0 {
++			return p.zshOutputBase(compact)
++		}
+ 		p.curErr("%#q must follow a name like a[i]", p.tok)
+ 	case colon:
+ 		p.curErr("ternary operator missing %#q before %#q", quest, colon)
+ 	case _LitWord:
+ 		l := p.getLit()
++		if p.lang.in(LangZsh) && p.tok == leftParen && !p.spaced {
++			x = p.arithmCall(l)
++			break
++		}
+ 		if p.tok != leftBrack {
+ 			x = p.wordOne(l)
+ 			break
+@@ -241,6 +259,43 @@ func (p *Parser) arithmExprValue(compact bool) ArithmExpr {
+ 	return x
+ }
+ 
++// zshOutputBase parses zsh's output base for an arithmetic expression, like
++// `[#16]` in `$(( [#16] x + 1 ))`, followed by the expression it applies to.
++func (p *Parser) zshOutputBase(compact bool) ArithmExpr {
++	fa := &FlagsArithm{Brackets: true}
++	lbrack := p.pos
++	old := p.quote
++	p.quote = runeByRune
++	p.pos = p.nextPos()
++	for p.newLit(p.r); p.r != runeEOF && p.r != ']'; p.rune() {
++	}
++	p.val = p.endLit()
++	if p.r != ']' {
++		p.tok = _EOF // we can only get here due to EOF
++		p.matchingErr(lbrack, leftBrack, rightBrack)
++	}
++	fa.Flags = p.lit(p.pos, p.val)
++	p.rune()
++	p.quote = old
++	p.nextArith(compact)
++	if fa.X = p.arithmExpr(compact); fa.X == nil {
++		p.followErrExp(lbrack, leftBrack)
++	}
++	return fa
++}
++
++// arithmCall parses a call to a math function, like `sqrt(x)` or
++// `atan2(y, x)`, after its name.
++func (p *Parser) arithmCall(name *Lit) *FuncArithm {
++	fa := &FuncArithm{Name: name, Lparen: p.pos}
++	p.nextArith(false)
++	if p.tok != rightParen {
++		fa.X = p.followArithm(leftParen, fa.Lparen)
++	}
++	fa.Rparen = p.matched(fa.Lparen, leftParen, rightParen)
++	return fa
++}
++
+ // nextArith consumes a token.
+ // It returns true if compact and the token was followed by spaces
+ func (p *Parser) nextArith(compact bool) bool {
+diff --git a/syntax/parser_test.go b/syntax/parser_test.go
+index cde5014..40ef6a6 100644
+--- a/syntax/parser_test.go
++++ b/syntax/parser_test.go
+@@ -1471,7 +1471,8 @@ var errorCases = []errorCase{
+ 	),
+ 	errCase(
+ 		"echo ((foo",
+-		langErr("1:6: `((` can only be used to open an arithmetic cmd", LangBash|LangMirBSDKorn|LangZsh),
++		langErr("1:6: `((` can only be used to open an arithmetic cmd", LangBash|LangMirBSDKorn),
++		langErr("1:6: reached EOF without matching `(` with `)`", LangZsh),
+ 		langErr("1:1: `foo(` must be followed by `)`", LangPOSIX),
+ 	),
+ 	errCase(
+@@ -1921,7 +1922,7 @@ var errorCases = []errorCase{
+ 	errCase(
+ 		// A slice is always arithmetic, unlike a subscript such as ${foo[1,#]}.
+ 		"echo ${foo:1:#2}",
+-		langErr("1:13: `:` must be followed by an expression", LangBash|LangMirBSDKorn|LangZsh),
++		langErr("1:13: `:` must be followed by an expression", LangBash|LangMirBSDKorn), // zsh reads #2 as a character code
+ 		flipConfirmAll, // the shells only fail at expansion time
+ 	),
+ 	errCase(
+diff --git a/syntax/printer.go b/syntax/printer.go
+index 45d98db..057b21d 100644
+--- a/syntax/printer.go
++++ b/syntax/printer.go
+@@ -832,6 +832,9 @@ func (p *Printer) paramExp(pe *ParamExp) {
+ 			p.arithmExpr(pe.Slice.Length, true, false)
+ 		}
+ 	case pe.Repl != nil:
++		if pe.Repl.Whole {
++			p.w.WriteByte(':')
++		}
+ 		if pe.Repl.All {
+ 			p.w.WriteByte('/')
+ 		}
+@@ -968,12 +971,28 @@ func (p *Printer) arithmExprRecurse(expr ArithmExpr, compact, spacePlusMinus boo
+ 		p.arithmExprRecurse(expr.X, false, false)
+ 		p.w.WriteByte(')')
+ 	case *FlagsArithm:
+-		p.w.WriteByte('(')
+-		p.w.WriteString(expr.Flags.Value)
+-		p.w.WriteByte(')')
++		if expr.Brackets {
++			p.w.WriteByte('[')
++			p.w.WriteString(expr.Flags.Value)
++			p.w.WriteByte(']')
++			if !compact {
++				p.space()
++			}
++		} else {
++			p.w.WriteByte('(')
++			p.w.WriteString(expr.Flags.Value)
++			p.w.WriteByte(')')
++		}
+ 		if expr.X != nil {
+ 			p.arithmExprRecurse(expr.X, compact, false)
+ 		}
++	case *FuncArithm:
++		p.writeLit(expr.Name.Value)
++		p.w.WriteByte('(')
++		if expr.X != nil {
++			p.arithmExprRecurse(expr.X, false, false)
++		}
++		p.w.WriteByte(')')
+ 	}
+ }
+ 
+diff --git a/syntax/token_string.go b/syntax/token_string.go
+index ef5c8c6..942981f 100644
+--- a/syntax/token_string.go
++++ b/syntax/token_string.go
+@@ -104,59 +104,62 @@ func _() {
+ 	_ = x[colHash-93]
+ 	_ = x[colPipe-94]
+ 	_ = x[colStar-95]
+-	_ = x[caret-96]
+-	_ = x[dblCaret-97]
+-	_ = x[comma-98]
+-	_ = x[dblComma-99]
+-	_ = x[at-100]
+-	_ = x[slash-101]
+-	_ = x[dblSlash-102]
+-	_ = x[period-103]
+-	_ = x[colon-104]
+-	_ = x[tsExists-105]
+-	_ = x[tsRegFile-106]
+-	_ = x[tsDirect-107]
+-	_ = x[tsCharSp-108]
+-	_ = x[tsBlckSp-109]
+-	_ = x[tsNmPipe-110]
+-	_ = x[tsSocket-111]
+-	_ = x[tsSmbLink-112]
+-	_ = x[tsSticky-113]
+-	_ = x[tsGIDSet-114]
+-	_ = x[tsUIDSet-115]
+-	_ = x[tsGrpOwn-116]
+-	_ = x[tsUsrOwn-117]
+-	_ = x[tsModif-118]
+-	_ = x[tsRead-119]
+-	_ = x[tsWrite-120]
+-	_ = x[tsExec-121]
+-	_ = x[tsNoEmpty-122]
+-	_ = x[tsFdTerm-123]
+-	_ = x[tsEmpStr-124]
+-	_ = x[tsNempStr-125]
+-	_ = x[tsOptSet-126]
+-	_ = x[tsVarSet-127]
+-	_ = x[tsRefVar-128]
+-	_ = x[tsReMatch-129]
+-	_ = x[tsNewer-130]
+-	_ = x[tsOlder-131]
+-	_ = x[tsDevIno-132]
+-	_ = x[tsEql-133]
+-	_ = x[tsNeq-134]
+-	_ = x[tsLeq-135]
+-	_ = x[tsGeq-136]
+-	_ = x[tsLss-137]
+-	_ = x[tsGtr-138]
+-	_ = x[globQuest-139]
+-	_ = x[globStar-140]
+-	_ = x[globPlus-141]
+-	_ = x[globAt-142]
+-	_ = x[globExcl-143]
++	_ = x[colColAssgn-96]
++	_ = x[colCaret-97]
++	_ = x[colDblCaret-98]
++	_ = x[caret-99]
++	_ = x[dblCaret-100]
++	_ = x[comma-101]
++	_ = x[dblComma-102]
++	_ = x[at-103]
++	_ = x[slash-104]
++	_ = x[dblSlash-105]
++	_ = x[period-106]
++	_ = x[colon-107]
++	_ = x[tsExists-108]
++	_ = x[tsRegFile-109]
++	_ = x[tsDirect-110]
++	_ = x[tsCharSp-111]
++	_ = x[tsBlckSp-112]
++	_ = x[tsNmPipe-113]
++	_ = x[tsSocket-114]
++	_ = x[tsSmbLink-115]
++	_ = x[tsSticky-116]
++	_ = x[tsGIDSet-117]
++	_ = x[tsUIDSet-118]
++	_ = x[tsGrpOwn-119]
++	_ = x[tsUsrOwn-120]
++	_ = x[tsModif-121]
++	_ = x[tsRead-122]
++	_ = x[tsWrite-123]
++	_ = x[tsExec-124]
++	_ = x[tsNoEmpty-125]
++	_ = x[tsFdTerm-126]
++	_ = x[tsEmpStr-127]
++	_ = x[tsNempStr-128]
++	_ = x[tsOptSet-129]
++	_ = x[tsVarSet-130]
++	_ = x[tsRefVar-131]
++	_ = x[tsReMatch-132]
++	_ = x[tsNewer-133]
++	_ = x[tsOlder-134]
++	_ = x[tsDevIno-135]
++	_ = x[tsEql-136]
++	_ = x[tsNeq-137]
++	_ = x[tsLeq-138]
++	_ = x[tsGeq-139]
++	_ = x[tsLss-140]
++	_ = x[tsGtr-141]
++	_ = x[globQuest-142]
++	_ = x[globStar-143]
++	_ = x[globPlus-144]
++	_ = x[globAt-145]
++	_ = x[globExcl-146]
+ }
+ 
+-const _token_name = "illegalTokEOFNewlLitLitWordLitRedirrealTokenBoundary'\"`&&&||||&&|&!$$'$\"${$[$($(({[[[(((}]]])));;;;&;;&;|!~++--***==!=<=>=+=-=*=/=%=&=|=^=<<=>>=&&=||=^^=**=>>><<><&>&>|>>|<<<<-<<<&>&>|&>>&>>|<(=(>(+:+-:-?:?=:=%%%###:#:|:*^^^,,,@///.:-e-f-d-c-b-p-S-L-k-g-u-G-O-N-r-w-x-s-t-z-n-o-v-R=~-nt-ot-ef-eq-ne-le-ge-lt-gt?(*(+(@(!("
++const _token_name = "illegalTokEOFNewlLitLitWordLitRedirrealTokenBoundary'\"`&&&||||&&|&!$$'$\"${$[$($(({[[[(((}]]])));;;;&;;&;|!~++--***==!=<=>=+=-=*=/=%=&=|=^=<<=>>=&&=||=^^=**=>>><<><&>&>|>>|<<<<-<<<&>&>|&>>&>>|<(=(>(+:+-:-?:?=:=%%%###:#:|:*::=:^:^^^^^,,,@///.:-e-f-d-c-b-p-S-L-k-g-u-G-O-N-r-w-x-s-t-z-n-o-v-R=~-nt-ot-ef-eq-ne-le-ge-lt-gt?(*(+(@(!("
+ 
+-var _token_index = [...]uint16{0, 10, 13, 17, 20, 27, 35, 52, 53, 54, 55, 56, 58, 60, 61, 63, 65, 67, 68, 70, 72, 74, 76, 78, 81, 82, 83, 85, 86, 88, 89, 90, 92, 93, 95, 96, 98, 100, 103, 105, 106, 107, 109, 111, 112, 114, 116, 118, 120, 122, 124, 126, 128, 130, 132, 134, 136, 138, 141, 144, 147, 150, 153, 156, 157, 159, 160, 162, 164, 166, 168, 171, 173, 176, 179, 181, 184, 187, 191, 193, 195, 197, 198, 200, 201, 203, 204, 206, 207, 209, 210, 212, 213, 215, 217, 219, 221, 222, 224, 225, 227, 228, 229, 231, 232, 233, 235, 237, 239, 241, 243, 245, 247, 249, 251, 253, 255, 257, 259, 261, 263, 265, 267, 269, 271, 273, 275, 277, 279, 281, 283, 286, 289, 292, 295, 298, 301, 304, 307, 310, 312, 314, 316, 318, 320}
++var _token_index = [...]uint16{0, 10, 13, 17, 20, 27, 35, 52, 53, 54, 55, 56, 58, 60, 61, 63, 65, 67, 68, 70, 72, 74, 76, 78, 81, 82, 83, 85, 86, 88, 89, 90, 92, 93, 95, 96, 98, 100, 103, 105, 106, 107, 109, 111, 112, 114, 116, 118, 120, 122, 124, 126, 128, 130, 132, 134, 136, 138, 141, 144, 147, 150, 153, 156, 157, 159, 160, 162, 164, 166, 168, 171, 173, 176, 179, 181, 184, 187, 191, 193, 195, 197, 198, 200, 201, 203, 204, 206, 207, 209, 210, 212, 213, 215, 217, 219, 221, 224, 226, 229, 230, 232, 233, 235, 236, 237, 239, 240, 241, 243, 245, 247, 249, 251, 253, 255, 257, 259, 261, 263, 265, 267, 269, 271, 273, 275, 277, 279, 281, 283, 285, 287, 289, 291, 294, 297, 300, 303, 306, 309, 312, 315, 318, 320, 322, 324, 326, 328}
+ 
+ func (i token) String() string {
+ 	idx := int(i) - 0
+diff --git a/syntax/tokens.go b/syntax/tokens.go
+index f18c054..da1e8e1 100644
+--- a/syntax/tokens.go
++++ b/syntax/tokens.go
+@@ -104,30 +104,33 @@ const (
+ 	assgnParen // =(
+ 	cmdOut     // >(
+ 
+-	plus     // +
+-	colPlus  // :+
+-	minus    // -
+-	colMinus // :-
+-	quest    // ?
+-	colQuest // :?
+-	assgn    // =
+-	colAssgn // :=
+-	perc     // %
+-	dblPerc  // %%
+-	hash     // #
+-	dblHash  // ##
+-	colHash  // :#
+-	colPipe  // :|
+-	colStar  // :*
+-	caret    // ^
+-	dblCaret // ^^
+-	comma    // ,
+-	dblComma // ,,
+-	at       // @
+-	slash    // /
+-	dblSlash // //
+-	period   // .
+-	colon    // :
++	plus        // +
++	colPlus     // :+
++	minus       // -
++	colMinus    // :-
++	quest       // ?
++	colQuest    // :?
++	assgn       // =
++	colAssgn    // :=
++	perc        // %
++	dblPerc     // %%
++	hash        // #
++	dblHash     // ##
++	colHash     // :#
++	colPipe     // :|
++	colStar     // :*
++	colColAssgn // ::=
++	colCaret    // :^
++	colDblCaret // :^^
++	caret       // ^
++	dblCaret    // ^^
++	comma       // ,
++	dblComma    // ,,
++	at          // @
++	slash       // /
++	dblSlash    // //
++	period      // .
++	colon       // :
+ 
+ 	tsExists  // -e
+ 	tsRegFile // -f
+@@ -262,6 +265,9 @@ const (
+ 	MatchEmpty                                         // :# with [LangZsh]
+ 	ArrayExclude                                       // :| with [LangZsh]
+ 	ArrayIntersect                                     // :* with [LangZsh]
++	AssignAlways                                       // ::= with [LangZsh]
++	ArrayZip                                           // :^ with [LangZsh]
++	ArrayZipLongest                                    // :^^ with [LangZsh]
+ 	UpperFirst                                         // ^
+ 	UpperAll                                           // ^^
+ 	LowerFirst                                         // ,
+@@ -278,6 +284,7 @@ const (
+ 	Dec                                           // --
+ 	Plus        = UnAritOperator(plus)            // +
+ 	Minus       = UnAritOperator(minus)           // -
++	CharCode    = UnAritOperator(hash)            // # with [LangZsh]
+ )
+ 
+ type BinAritOperator token
+diff --git a/syntax/tokens_parse.go b/syntax/tokens_parse.go
+index e53f7af..6715c3d 100644
+--- a/syntax/tokens_parse.go
++++ b/syntax/tokens_parse.go
+@@ -150,6 +150,12 @@ func (o *ParExpOperator) UnmarshalText(text []byte) error {
+ 		*o = ArrayExclude
+ 	case ":*":
+ 		*o = ArrayIntersect
++	case "::=":
++		*o = AssignAlways
++	case ":^":
++		*o = ArrayZip
++	case ":^^":
++		*o = ArrayZipLongest
+ 	case "^":
+ 		*o = UpperFirst
+ 	case "^^":
+@@ -180,6 +186,8 @@ func (o *UnAritOperator) UnmarshalText(text []byte) error {
+ 		*o = Plus
+ 	case "-":
+ 		*o = Minus
++	case "#":
++		*o = CharCode
+ 	default:
+ 		return fmt.Errorf("invalid UnAritOperator: %q", text)
+ 	}
+diff --git a/syntax/walk.go b/syntax/walk.go
+index 3912988..2914403 100644
+--- a/syntax/walk.go
++++ b/syntax/walk.go
+@@ -139,6 +139,9 @@ func Walk(node Node, f func(Node) bool) {
+ 		if node.X != nil {
+ 			Walk(node.X, f)
+ 		}
++	case *FuncArithm:
++		Walk(node.Name, f)
++		walkNilable(node.X, f)
+ 	case *ParenTest:
+ 		Walk(node.X, f)
+ 	case *CaseClause:

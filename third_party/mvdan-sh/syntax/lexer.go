@@ -756,6 +756,21 @@ func (p *Parser) paramToken(r rune) token {
 		case '*':
 			p.rune()
 			return colStar
+		case '^':
+			if !p.lang.in(LangZsh) {
+				break
+			}
+			if p.rune() == '^' {
+				p.rune()
+				return colDblCaret
+			}
+			return colCaret
+		case ':':
+			if p.lang.in(LangZsh) && p.peek() == '=' {
+				p.rune()
+				p.rune()
+				return colColAssgn
+			}
 		}
 		return colon
 	case '+':
@@ -971,6 +986,10 @@ func (p *Parser) arithmToken(r rune) token {
 		p.rune()
 		return colon
 	case '#':
+		if p.lang.in(LangZsh) && p.peek() == '#' {
+			p.val = p.arithmCharCode()
+			return _LitWord
+		}
 		p.rune()
 		return hash
 	case '.':
@@ -978,6 +997,30 @@ func (p *Parser) arithmToken(r rune) token {
 		return period
 	}
 	panic("unreachable")
+}
+
+// arithmCharCode lexes a zsh character code constant in an arithmetic
+// expression, like ##a, starting at its first '#'. The character may be
+// written as an escape sequence like \n or \M-\C-x, or as ^x for a control
+// character.
+func (p *Parser) arithmCharCode() string {
+	p.newLit(p.r)
+	p.rune() // the second '#'
+	r := p.rune()
+	for r == '\\' {
+		if n1, n2 := p.peekTwo(); (n1 != 'M' && n1 != 'C') || n2 != '-' {
+			p.rune() // the escaped character
+			break
+		}
+		p.rune()
+		p.rune()
+		r = p.rune()
+	}
+	if r == '^' {
+		p.rune()
+	}
+	p.rune()
+	return p.endLit()
 }
 
 func (p *Parser) newLit(r rune) {

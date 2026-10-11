@@ -977,6 +977,14 @@ func (cfg *Config) expandUser(field string, moreFields bool) (prefix, rest strin
 	return u.HomeDir, rest
 }
 
+func matchesWhole(pat, name string) bool {
+	expr, err := pattern.Regexp(pat, pattern.EntireString)
+	if err != nil {
+		return false
+	}
+	return regexp.MustCompile(expr).MatchString(name)
+}
+
 func findAllIndex(pat, name string, n int) [][]int {
 	expr, err := pattern.Regexp(pat, 0)
 	if err != nil {

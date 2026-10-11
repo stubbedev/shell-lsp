@@ -219,7 +219,7 @@ func checkRedundantParentheses(p *pass, n syntax.Node) {
 func (p *pass) inExpansionIndex() bool {
 	for depth := 0; ; depth++ {
 		switch p.ancestor(depth).(type) {
-		case *syntax.ParenArithm, *syntax.BinaryArithm, *syntax.UnaryArithm, *syntax.Word:
+		case *syntax.ParenArithm, *syntax.BinaryArithm, *syntax.UnaryArithm, *syntax.FuncArithm, *syntax.Word:
 			continue
 		case *syntax.ParamExp:
 			return true

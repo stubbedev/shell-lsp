@@ -184,6 +184,12 @@ func variableReads(root syntax.Node, read func(name string)) {
 			arithmeticOperandRead(n.X, read)
 		case *syntax.ParenArithm:
 			arithmeticOperandRead(n.X, read)
+		case *syntax.FuncArithm:
+			arithmeticOperandRead(n.X, read)
+		case *syntax.FlagsArithm:
+			if n.Brackets {
+				arithmeticOperandRead(n.X, read)
+			}
 		}
 		return true
 	})

@@ -152,3 +152,23 @@ func TestZshCoprocCaseGroupsAndClosingBracesAreIndexed(t *testing.T) {
 		t.Errorf("keywords = %v, want %v", keywords, want)
 	}
 }
+
+func TestZshArithmeticFormsAreIndexed(t *testing.T) {
+	t.Parallel()
+
+	tree := Parse("(( y = sqrt(x) + #c + ##d ))\nprint $(( [#16] n )) ${s:/a/b} ${s::=v} ${s:^t}\n", dialect.Zsh)
+	if len(tree.Errors) != 0 {
+		t.Fatalf("errors = %v, want none", messages(tree))
+	}
+	defs, _, _ := indexedNames(tree)
+	if !slices.Equal(defs, []string{"y"}) {
+		t.Errorf("definitions = %v, want y", defs)
+	}
+	var refs []string
+	for _, r := range tree.References {
+		refs = append(refs, r.Name)
+	}
+	if want := []string{"x", "c", "n", "s", "s", "s"}; !slices.Equal(refs, want) {
+		t.Errorf("references = %v, want %v", refs, want)
+	}
+}

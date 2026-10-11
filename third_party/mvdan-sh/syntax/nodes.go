@@ -830,6 +830,7 @@ type Slice struct {
 // Replace represents a search and replace expression inside a [ParamExp].
 type Replace struct {
 	All        bool
+	Whole      bool // ${a:/x/y} with [LangZsh], replacing only a match of the whole value
 	Orig, With *Word
 }
 
@@ -872,7 +873,7 @@ func (a *ArithmCmd) End() Pos { return posAddCol(a.Right, 2) }
 
 // ArithmExpr represents all nodes that form arithmetic expressions.
 //
-// These are [*BinaryArithm], [*UnaryArithm], [*ParenArithm], [*FlagsArithm], and [*Word].
+// These are [*BinaryArithm], [*UnaryArithm], [*ParenArithm], [*FlagsArithm], [*FuncArithm], and [*Word].
 type ArithmExpr interface {
 	Node
 	arithmExprNode()
@@ -881,6 +882,7 @@ type ArithmExpr interface {
 func (*BinaryArithm) arithmExprNode() {}
 func (*UnaryArithm) arithmExprNode()  {}
 func (*ParenArithm) arithmExprNode()  {}
+func (*FuncArithm) arithmExprNode()   {}
 func (*FlagsArithm) arithmExprNode()  {}
 func (*Word) arithmExprNode()         {}
 
@@ -938,12 +940,14 @@ func (p *ParenArithm) Pos() Pos { return p.Lparen }
 func (p *ParenArithm) End() Pos { return posAddCol(p.Rparen, 1) }
 
 // FlagsArithm represents zsh subscript flags attached to an arithmetic expression,
-// such as ${array[(flags)expr]}.
+// such as ${array[(flags)expr]}, or with Brackets, the output base of an
+// arithmetic expression, such as $(( [#16] expr )).
 //
 // This node will only appear with [LangZsh].
 type FlagsArithm struct {
-	Flags *Lit
-	X     ArithmExpr
+	Flags    *Lit
+	Brackets bool // [flags] instead of (flags)
+	X        ArithmExpr
 }
 
 func (z *FlagsArithm) Pos() Pos { return posAddCol(z.Flags.Pos(), -1) }
@@ -951,8 +955,22 @@ func (z *FlagsArithm) End() Pos {
 	if z.X != nil {
 		return z.X.End()
 	}
-	return posAddCol(z.Flags.End(), 1) // closing paren
+	return posAddCol(z.Flags.End(), 1) // closing paren or bracket
 }
+
+// FuncArithm represents a call to a math function in an arithmetic expression,
+// such as `sqrt(x)` or `atan2(y, x)`.
+//
+// This node will only appear with [LangZsh].
+type FuncArithm struct {
+	Name           *Lit
+	Lparen, Rparen Pos
+
+	X ArithmExpr // the arguments, joined by [Comma]; nil without any
+}
+
+func (f *FuncArithm) Pos() Pos { return f.Name.Pos() }
+func (f *FuncArithm) End() Pos { return posAddCol(f.Rparen, 1) }
 
 // CaseClause represents a case (switch) clause.
 type CaseClause struct {

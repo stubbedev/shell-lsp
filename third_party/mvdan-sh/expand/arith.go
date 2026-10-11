@@ -117,7 +117,12 @@ func Arithm(cfg *Config, expr syntax.ArithmExpr) (int, error) {
 		}
 		return binArit(expr.Op, left, right)
 	case *syntax.FlagsArithm: // e.g. zsh's ${a[(r)b]}
+		if expr.Brackets { // zsh's output base only affects how the value is printed
+			return Arithm(cfg, expr.X)
+		}
 		return 0, fmt.Errorf("unsupported")
+	case *syntax.FuncArithm:
+		return 0, fmt.Errorf("unsupported math function: %q", expr.Name.Value)
 	default:
 		panic(fmt.Sprintf("unexpected arithm expr: %T", expr))
 	}
