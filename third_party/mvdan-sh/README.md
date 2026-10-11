@@ -42,10 +42,9 @@ reproducer so that it can be sent upstream as it is.
 
 ## Tests
 
-The upstream tests are kept and extended. They are a separate module, so run
-them with
+The upstream tests are kept and extended, and run with the rest of the module:
 
-    go -C third_party/mvdan-sh test ./...
+    go test ./third_party/mvdan-sh/...
 
 With zsh 5.9, bash 5.3, mksh R59 and ksh93u+m on `PATH`, `TestParseConfirm` also
 checks every parse test against the real shells.

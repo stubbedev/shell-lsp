@@ -12,7 +12,6 @@ check: vet lint test build
 # Static analysis of every package with go vet, the forked parser included.
 vet:
     go vet ./...
-    go -C third_party/mvdan-sh vet ./...
 
 # Lint every package; settings live in .golangci.yml.
 lint:
@@ -21,7 +20,6 @@ lint:
 # Run the test suite for every package, the forked parser included.
 test:
     go test ./...
-    go -C third_party/mvdan-sh test ./...
 
 # Compile-check every package; the output is discarded.
 build:
