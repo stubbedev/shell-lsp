@@ -152,6 +152,12 @@ func (c *testClient) answerServerRequest(method string) json.RawMessage {
 	return msg.Params
 }
 
+func (c *testClient) drain() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.messages = nil
+}
+
 func (c *testClient) close() {
 	if c.exited {
 		return

@@ -2,4 +2,4 @@
 
 package perf
 
-const raceDetector = false
+const RaceDetector = false

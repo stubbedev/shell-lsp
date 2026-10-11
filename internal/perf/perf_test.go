@@ -173,7 +173,7 @@ func TestBudgets(t *testing.T) {
 	if testing.Short() {
 		t.Skip("budgets are measured in full test runs")
 	}
-	if raceDetector {
+	if RaceDetector {
 		t.Skip("the race detector slows execution several-fold, so wall-clock budgets do not apply")
 	}
 	doc := document()
