@@ -3426,8 +3426,6 @@ func (p *Parser) declArgs(ds *DeclClause) {
 	for !p.stopToken() && !p.peekRedir() && !p.closesBlock() {
 		if p.hasValidIdent() {
 			ds.Args = append(ds.Args, p.getAssign(false))
-		} else if p.tok.isLit() && p.eqlOffs > 0 && !strings.Contains(p.val[:p.eqlOffs], "{") {
-			p.curErr("invalid var name")
 		} else if p.tok == _LitWord && p.validVarName(p.val) {
 			ds.Args = append(ds.Args, &Assign{
 				Naked: true,

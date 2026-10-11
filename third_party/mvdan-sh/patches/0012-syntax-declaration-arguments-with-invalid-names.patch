@@ -1,0 +1,67 @@
+syntax: parse declaration arguments with invalid names as words
+
+Bash decides whether a declaration argument such as `export a-b=1` is an
+assignment by checking the name when it parses it, and treats an invalid
+name as an ordinary word: bash -n accepts it and the builtin fails at run
+time with "not a valid identifier". The parser rejected the script with
+"invalid var name", so tools lost everything after a typo like
+`local 1st=a` or a template placeholder like
+
+	export FLAGS_SET_@suffix@=1
+
+Such an argument now becomes a naked Assign holding the word, like any
+other non-assignment argument, so tools can point at the bad name.
+
+Reproducer, before this change: `declare 0=x` with LangBash failed with
+"invalid var name".
+
+diff --git a/syntax/filetests_test.go b/syntax/filetests_test.go
+index 0feeae8..772d634 100644
+--- a/syntax/filetests_test.go
++++ b/syntax/filetests_test.go
+@@ -5396,6 +5396,17 @@ var fileTests = []fileTestCase{
+ 		// TODO: reject floating point here, just like with arithmetic expressions
+ 		// langErr2(``, LangBash|LangMirBSDKorn),
+ 	),
++	fileTest(
++		[]string{"declare 0=x a-b=y"},
++		langFile(litStmt("declare", "0=x", "a-b=y")),
++		langFile(&DeclClause{
++			Variant: lit("declare"),
++			Args: []*Assign{
++				{Naked: true, Value: litWord("0=x")},
++				{Naked: true, Value: litWord("a-b=y")},
++			},
++		}, langBashLike|LangZsh),
++	),
+ 	fileTest(
+ 		[]string{"declare -f func"},
+ 		langFile(litStmt("declare", "-f", "func")),
+diff --git a/syntax/parser.go b/syntax/parser.go
+index 123d05f..3e45c9b 100644
+--- a/syntax/parser.go
++++ b/syntax/parser.go
+@@ -3426,8 +3426,6 @@ func (p *Parser) declArgs(ds *DeclClause) {
+ 	for !p.stopToken() && !p.peekRedir() && !p.closesBlock() {
+ 		if p.hasValidIdent() {
+ 			ds.Args = append(ds.Args, p.getAssign(false))
+-		} else if p.tok.isLit() && p.eqlOffs > 0 && !strings.Contains(p.val[:p.eqlOffs], "{") {
+-			p.curErr("invalid var name")
+ 		} else if p.tok == _LitWord && p.validVarName(p.val) {
+ 			ds.Args = append(ds.Args, &Assign{
+ 				Naked: true,
+diff --git a/syntax/parser_test.go b/syntax/parser_test.go
+index ce086d0..c887fc3 100644
+--- a/syntax/parser_test.go
++++ b/syntax/parser_test.go
+@@ -1698,10 +1698,6 @@ var errorCases = []errorCase{
+ 		langErr("1:7: `local` must be followed by names or assignments", LangBash),
+ 		langErr("1:7: reached EOF without matching `(` with `)`", LangZsh),
+ 	),
+-	errCase(
+-		"declare 0=${o}",
+-		langErr("1:9: invalid var name", LangBash|LangZsh),
+-	),
+ 	errCase(
+ 		"declare ab=${o})",
+ 		langErr("1:16: statements must be separated by &, ; or a newline", LangBash|LangZsh),

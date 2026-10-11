@@ -5397,6 +5397,17 @@ var fileTests = []fileTestCase{
 		// langErr2(``, LangBash|LangMirBSDKorn),
 	),
 	fileTest(
+		[]string{"declare 0=x a-b=y"},
+		langFile(litStmt("declare", "0=x", "a-b=y")),
+		langFile(&DeclClause{
+			Variant: lit("declare"),
+			Args: []*Assign{
+				{Naked: true, Value: litWord("0=x")},
+				{Naked: true, Value: litWord("a-b=y")},
+			},
+		}, langBashLike|LangZsh),
+	),
+	fileTest(
 		[]string{"declare -f func"},
 		langFile(litStmt("declare", "-f", "func")),
 		langFile(&DeclClause{

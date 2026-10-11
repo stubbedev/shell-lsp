@@ -1699,10 +1699,6 @@ var errorCases = []errorCase{
 		langErr("1:7: reached EOF without matching `(` with `)`", LangZsh),
 	),
 	errCase(
-		"declare 0=${o}",
-		langErr("1:9: invalid var name", LangBash|LangZsh),
-	),
-	errCase(
 		"declare ab=${o})",
 		langErr("1:16: statements must be separated by &, ; or a newline", LangBash|LangZsh),
 	),
