@@ -37,14 +37,46 @@ func StrictModeOf(tree *parser.Tree) StrictMode {
 		if m.Errexit && m.Nounset && m.Pipefail {
 			break
 		}
-		if c.Name != "set" {
-			continue
-		}
-		m.Errexit = m.Errexit || setsErrexit(c.Args)
-		m.Nounset = m.Nounset || mentions(c.Args, "nounset") || hasShortFlag(c.Args, 'u')
-		m.Pipefail = m.Pipefail || mentions(c.Args, "pipefail")
+		set := StrictModeSetBy(c)
+		m = StrictMode{Errexit: m.Errexit || set.Errexit, Nounset: m.Nounset || set.Nounset, Pipefail: m.Pipefail || set.Pipefail}
 	}
 	return m
+}
+
+func StrictModeSetBy(c parser.Command) StrictMode {
+	switch c.Name {
+	case "set":
+		return StrictMode{Errexit: setsErrexit(c.Args), Nounset: mentions(c.Args, "nounset") || hasShortFlag(c.Args, 'u'), Pipefail: mentions(c.Args, "pipefail")}
+	case "setopt", "unsetopt":
+		var m StrictMode
+		for _, a := range c.Args {
+			lit, ok := parser.Literal(a)
+			if !ok {
+				continue
+			}
+			switch zshOption(lit, c.Name == "unsetopt") {
+			case "errexit":
+				m.Errexit = true
+			case "nounset":
+				m.Nounset = true
+			case "pipefail":
+				m.Pipefail = true
+			}
+		}
+		return m
+	}
+	return StrictMode{}
+}
+
+func zshOption(word string, unset bool) string {
+	name := strings.ToLower(strings.ReplaceAll(word, "_", ""))
+	if !unset {
+		return name
+	}
+	if rest, ok := strings.CutPrefix(name, "no"); ok {
+		return rest
+	}
+	return "no" + name
 }
 
 func scanShellOptions(tree *parser.Tree) shellOptions {
