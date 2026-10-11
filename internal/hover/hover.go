@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/manpage"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/shelldocs"
@@ -29,6 +30,7 @@ type Input struct {
 	Imports  []parser.Import
 	Offset   int
 	Commands Commands
+	Lint     func() (lint.Report, bool)
 }
 
 type Result struct {
@@ -39,6 +41,9 @@ type Result struct {
 func Hover(ctx context.Context, in Input) (Result, bool, error) {
 	h := newHoverer(in)
 	h.path = in.Tree.PathAt(in.Offset)
+	if r, ok := h.directive(); ok {
+		return r, true, nil
+	}
 	if r, ok := h.keyword(); ok {
 		return r, true, nil
 	}

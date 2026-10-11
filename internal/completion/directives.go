@@ -14,19 +14,8 @@ import (
 
 const (
 	directiveTriggers = "=,"
-	allChecks         = "all"
 	scriptDirectory   = "SCRIPTDIR"
 )
-
-var directiveKeyDocs = map[string]string{
-	directive.Disable:          "Silence the listed checks for the next command, or for the whole file when the directive comes before the first command. Takes codes such as `SC2086`, ranges such as `SC2000-SC2099`, or `all`, separated by commas.",
-	directive.Enable:           "Turn on optional checks by name, or every optional check with `all`. Only honoured before the first command.",
-	directive.Source:           "The file the following `source` or `.` command loads, for when its path is computed at run time. `/dev/null` skips it.",
-	directive.SourcePath:       "A directory to look for sourced files in. `SCRIPTDIR` stands for the directory of the script itself.",
-	directive.Shell:            "Lint the file as this shell, whatever its shebang says.",
-	directive.ExternalSources:  "Whether sourced files outside the ones being checked may be followed. Only honoured in a `.shellcheckrc` file.",
-	directive.ExtendedAnalysis: "Turn the checks that follow values through the script on (`true`) or off (`false`) for this file.",
-}
 
 func directiveTrigger(trigger string) bool {
 	return trigger != "" && strings.Contains(directiveTriggers, trigger)
@@ -90,7 +79,7 @@ func (c completer) directiveKeys(hasEquals bool) []Item {
 		if !hasEquals {
 			it.InsertText = key + "="
 		}
-		it.Documentation = directiveKeyDocs[key]
+		it.Documentation = hover.DirectiveKeyDoc(key)
 		items = append(items, it)
 	}
 	return items
@@ -100,8 +89,8 @@ func (c completer) checkCodes(listed []string) []Item {
 	typed := strings.ToUpper(c.site.prefix)
 	digits := typed != "" && parser.IsDigits(typed)
 	var items []Item
-	if !slices.Contains(listed, allChecks) && strings.HasPrefix(allChecks, c.site.prefix) {
-		it := c.item(allChecks, KindValue, "0")
+	if !slices.Contains(listed, directive.All) && strings.HasPrefix(directive.All, c.site.prefix) {
+		it := c.item(directive.All, KindValue, "0")
 		it.Documentation = "Every check."
 		items = append(items, it)
 	}
@@ -143,7 +132,7 @@ func codeLabelDetail(info lint.CodeInfo) string {
 
 func (c completer) optionalChecks(listed []string) []Item {
 	var items []Item
-	for i, name := range append([]string{allChecks}, lint.OptionalChecks()...) {
+	for i, name := range append([]string{directive.All}, lint.OptionalChecks()...) {
 		if slices.Contains(listed, name) || !strings.HasPrefix(name, c.site.prefix) {
 			continue
 		}
@@ -152,26 +141,10 @@ func (c completer) optionalChecks(listed []string) []Item {
 			sort = "0"
 		}
 		it := c.item(name, KindOption, sort)
-		it.Documentation = optionalCheckDoc(name)
+		it.Documentation = hover.OptionalCheckDoc(name)
 		items = append(items, it)
 	}
 	return items
-}
-
-func optionalCheckDoc(name string) string {
-	if name == allChecks {
-		return "Every optional check."
-	}
-	var codes []string
-	for _, info := range lint.Catalog() {
-		if info.Optional == name {
-			codes = append(codes, "`"+info.Code.String()+"`")
-		}
-	}
-	if len(codes) == 0 {
-		return "Changes how other checks behave rather than adding findings of its own."
-	}
-	return "Turns on " + strings.Join(codes, ", ") + "."
 }
 
 func (c completer) shellNames() []Item {

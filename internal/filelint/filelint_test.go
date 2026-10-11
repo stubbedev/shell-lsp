@@ -45,14 +45,14 @@ func TestCheckFollowsSourcedFilesAndHonoursOptions(t *testing.T) {
 		t.Fatal(err)
 	}
 	env := navigation.Env{Loader: loader{ws}, Roots: []string{dir}}
-	got := codes(Check(file, env, Options{}))
+	got := codes(Check(file, env, Options{}).Findings)
 	if !slices.Equal(got, []lint.Code{2086}) {
 		t.Errorf("findings = %v; the sourced file defines LIBVAR, so only SC2086 remains", got)
 	}
-	if got := codes(Check(file, env, Options{Exclude: []lint.Code{2086}})); len(got) != 0 {
+	if got := codes(Check(file, env, Options{Exclude: []lint.Code{2086}}).Findings); len(got) != 0 {
 		t.Errorf("Exclude kept %v", got)
 	}
-	if got := codes(Check(file, env, Options{Optional: []string{"require-variable-braces"}})); !slices.Contains(got, 2250) {
+	if got := codes(Check(file, env, Options{Optional: []string{"require-variable-braces"}}).Findings); !slices.Contains(got, 2250) {
 		t.Errorf("an optional check was not enabled: %v", got)
 	}
 }
@@ -71,7 +71,7 @@ func TestCheckReportsWindowsLineEndings(t *testing.T) {
 		t.Fatal(err)
 	}
 	var ends []int
-	for _, f := range Check(file, navigation.Env{Loader: loader{ws}, Roots: []string{dir}}, Options{}) {
+	for _, f := range Check(file, navigation.Env{Loader: loader{ws}, Roots: []string{dir}}, Options{}).Findings {
 		if f.Code == 1017 {
 			ends = append(ends, f.Span.Start)
 		}
@@ -94,7 +94,7 @@ func TestCheckReportsAByteOrderMark(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := codes(Check(file, navigation.Env{Loader: loader{ws}, Roots: []string{dir}}, Options{})); !slices.Contains(got, 1082) {
+	if got := codes(Check(file, navigation.Env{Loader: loader{ws}, Roots: []string{dir}}, Options{}).Findings); !slices.Contains(got, 1082) {
 		t.Errorf("findings = %v, want SC1082 for the byte order mark the store strips", got)
 	}
 }

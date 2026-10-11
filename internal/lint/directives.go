@@ -10,7 +10,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/parser"
 )
 
-const allCodes = "all"
+const allCodes = directive.All
 
 type placement uint8
 

@@ -17,6 +17,8 @@ const (
 	ExtendedAnalysis = "extended-analysis"
 )
 
+const All = "all"
+
 var keys = []string{Disable, Enable, Source, SourcePath, Shell, ExternalSources, ExtendedAnalysis}
 
 func Keys() []string { return slices.Clone(keys) }

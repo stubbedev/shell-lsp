@@ -15,8 +15,8 @@ type Options struct {
 	NoExtendedAnalysis bool
 }
 
-func Check(file *workspace.File, env navigation.Env, opts Options) []lint.Finding {
-	return lint.Check(file.Tree, navigation.Imports(file, env), lint.Options{
+func Check(file *workspace.File, env navigation.Env, opts Options) lint.Report {
+	return lint.Run(file.Tree, navigation.Imports(file, env), lint.Options{
 		Exclude:       opts.Exclude,
 		Optional:      opts.Optional,
 		DialectSource: opts.DialectSource,

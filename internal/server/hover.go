@@ -12,6 +12,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/embedded"
 	"github.com/stubbedev/shell-lsp/internal/hover"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
+	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/manpage"
 	"github.com/stubbedev/shell-lsp/internal/parser"
@@ -49,7 +50,13 @@ func (s *Server) handleHover(ctx context.Context, docs *docstore.View, params js
 	if h, ok := embedded.HoverAt(embeddedPrograms(snap.file), offset); ok {
 		return s.hoverResult(snap, h.Markdown, h.Span), nil
 	}
-	result, ok, err := hover.Hover(ctx, hover.Input{Tree: snap.tree, Imports: s.imports(snap.file), Offset: offset, Commands: s.commandDocs})
+	result, ok, err := hover.Hover(ctx, hover.Input{
+		Tree: snap.tree, Imports: s.imports(snap.file), Offset: offset, Commands: s.commandDocs,
+		Lint: func() (lint.Report, bool) {
+			report, _ := s.lintReport(snap.file, snap.settings, snap.generation)
+			return report, snap.settings.Lint.Enabled
+		},
+	})
 	if err != nil {
 		return nil, err
 	}

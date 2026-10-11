@@ -28,7 +28,7 @@ import (
 
 const (
 	diagnosticsDebounce = 200 * time.Millisecond
-	lintMemoKey         = "lint.findings/"
+	lintMemoKey         = "lint.report/"
 )
 
 type diagnosticReport struct {
@@ -38,19 +38,24 @@ type diagnosticReport struct {
 }
 
 func (s *Server) findings(file *workspace.File, settings config.Settings, generation uint64) ([]lint.Finding, uint64) {
+	report, stamp := s.lintReport(file, settings, generation)
+	return report.Findings, stamp
+}
+
+func (s *Server) lintReport(file *workspace.File, settings config.Settings, generation uint64) (lint.Report, uint64) {
 	if !settings.Lint.Enabled {
-		return nil, 0
+		return lint.Report{}, 0
 	}
 	stamp := s.sourcesStamp(file.Tree)
 	key := lintMemoKey + strconv.FormatUint(generation, 10)
-	findings := workspace.Memo(file, key, stamp, func() []lint.Finding {
+	report := workspace.Memo(file, key, stamp, func() lint.Report {
 		return filelint.Check(file, s.navigationEnv(), filelint.Options{
 			Exclude:       settings.Lint.Exclude,
 			Optional:      settings.Lint.Optional,
 			DialectSource: dialectSource(settings),
 		})
 	})
-	return findings, stamp
+	return report, stamp
 }
 
 func dialectSource(settings config.Settings) lint.DialectSource {

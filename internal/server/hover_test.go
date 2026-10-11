@@ -32,6 +32,25 @@ func TestHoverRequest(t *testing.T) {
 	}
 }
 
+func TestHoverOnADisabledCodeCountsWhatItSilences(t *testing.T) {
+	t.Parallel()
+
+	c, _ := startClient(t, `{"capabilities": {"textDocument": {"diagnostic": {}, "hover": {"contentFormat": ["markdown"]}}}}`)
+	c.notify("textDocument/didOpen", openParams("file:///w/a.sh", "#!/bin/bash\nx=$1\n# shellcheck disable=SC2086\necho $x\n"))
+	got := decodeResult[lsp.Hover](t, c.call("textDocument/hover", positionParams("file:///w/a.sh", 2, 23, "")))
+	for _, want := range []string{"**SC2086** · info", "Silences 1 finding here:", "line 4"} {
+		if !strings.Contains(got.Contents.Value, want) {
+			t.Errorf("hover lacks %q:\n%s", want, got.Contents.Value)
+		}
+	}
+
+	off, _ := startClient(t, `{"capabilities": {"textDocument": {"diagnostic": {}, "hover": {"contentFormat": ["markdown"]}}}, "initializationOptions": {"lint": {"enable": false}}}`)
+	off.notify("textDocument/didOpen", openParams("file:///w/a.sh", "#!/bin/bash\nx=$1\n# shellcheck disable=SC2086\necho $x\n"))
+	if got := decodeResult[lsp.Hover](t, off.call("textDocument/hover", positionParams("file:///w/a.sh", 2, 23, ""))); strings.Contains(got.Contents.Value, "Silences") {
+		t.Errorf("with lint off the hover still claims what the code silences:\n%s", got.Contents.Value)
+	}
+}
+
 func TestHoverPlainTextClient(t *testing.T) {
 	t.Parallel()
 

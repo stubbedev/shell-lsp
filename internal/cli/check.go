@@ -316,13 +316,13 @@ func (c *checker) lint(t target) linted {
 		return linted{failure: fmt.Sprintf("%s: %v", t.name, err)}
 	}
 	env := c.navigationEnv(s.roots)
-	findings := filelint.Check(file, env, filelint.Options{
+	report := filelint.Check(file, env, filelint.Options{
 		Optional:           s.optional,
 		DialectSource:      s.source,
 		NoExtendedAnalysis: !s.extended,
 	})
 	return linted{
-		report: fileReport{name: t.name, doc: file.Doc, findings: c.filter(s.exclude, append(syntaxFindings(file.Tree, s.source), findings...))},
+		report: fileReport{name: t.name, doc: file.Doc, findings: c.filter(s.exclude, append(syntaxFindings(file.Tree, s.source), report.Findings...))},
 		file:   file,
 		env:    env,
 	}
