@@ -35,7 +35,7 @@ func TestRefactoringsOfferedAndResolved(t *testing.T) {
 
 	root := t.TempDir()
 	lib := "helper() { :; }\n"
-	writeFiles(t, root, map[string]string{"lib.sh": lib})
+	writeFiles(t, root, map[string]string{"lib.sh": lib, "reader.sh": "greet() { echo \"$name\"; }\n"})
 	mainURI := fileuri.FromPath(filepath.Join(root, "main.bash"))
 	libURI := fileuri.FromPath(filepath.Join(root, "lib.sh"))
 	main := "#!/bin/bash\n. ./lib.sh\n\ngreet() {\n\tnow=`date`\n\tif [ \"$now\" = a ]; then\n\t\techo a\n\telif [ \"$now\" = b ]; then\n\t\techo b\n\tfi\n}\n\nfunction bye {\n\tname=world\n\techo \"bye $name\"\n}\n"
@@ -86,8 +86,22 @@ func TestRefactoringsOfferedAndResolved(t *testing.T) {
 		}
 	}
 
-	if _, ok := titled(codeActions(t, c, rangeParams(mainURI, 13, 2, "refactor.inline")), "Inline variable name"); ok {
-		t.Error("inline offered in a file that sources another, which could read the variable")
+	sourcing, ok := titled(codeActions(t, c, rangeParams(mainURI, 13, 2, "refactor.inline")), "Inline variable name")
+	if !ok {
+		t.Fatal("inline not offered although the sourced lib.sh never mentions the variable")
+	}
+	if got, want := single("Inline variable name", resolve(sourcing)), "#!/bin/bash\n. ./lib.sh\n\ngreet() {\n\tnow=`date`\n\tif [ \"$now\" = a ]; then\n\t\techo a\n\telif [ \"$now\" = b ]; then\n\t\techo b\n\tfi\n}\n\nfunction bye {\n\techo \"bye world\"\n}\n"; got != want {
+		t.Errorf("inline next to a source:\n got %q\nwant %q", got, want)
+	}
+	for file, src := range map[string]string{
+		"reads.bash":   ". ./reader.sh\nname=world\ngreet\necho \"$name\"\n",
+		"dynamic.bash": ". \"$PLUGIN\"\nname=world\necho \"$name\"\n",
+	} {
+		uri := fileuri.FromPath(filepath.Join(root, file))
+		c.notify("textDocument/didOpen", openParams(uri, src))
+		if _, ok := titled(codeActions(t, c, rangeParams(uri, 1, 1, "refactor.inline")), "Inline variable name"); ok {
+			t.Errorf("inline offered in %s, whose sourced code could read the variable", file)
+		}
 	}
 	otherURI := fileuri.FromPath(filepath.Join(root, "other.bash"))
 	other := "name=world\necho \"bye $name\"\n"

@@ -86,14 +86,24 @@ func resolveSources(file *workspace.File, env Env) []resolvedSource {
 }
 
 func Chain(file *workspace.File, env Env) []*workspace.File {
+	chain, _ := Closure(file, env)
+	return chain
+}
+
+func Closure(file *workspace.File, env Env) ([]*workspace.File, bool) {
 	visited := map[string]bool{file.Path: true}
 	queue := []*workspace.File{file}
 	var chain []*workspace.File
+	complete := true
 	for len(queue) > 0 && len(chain) < maxChain {
 		current := queue[0]
 		queue = queue[1:]
 		for _, ref := range Sources(current, env) {
-			if ref.Target == nil || visited[ref.Target.Path] {
+			if ref.Target == nil {
+				complete = false
+				continue
+			}
+			if visited[ref.Target.Path] {
 				continue
 			}
 			visited[ref.Target.Path] = true
@@ -101,7 +111,7 @@ func Chain(file *workspace.File, env Env) []*workspace.File {
 			queue = append(queue, ref.Target)
 		}
 	}
-	return chain
+	return chain, complete && len(queue) == 0
 }
 
 func resolveSource(file *workspace.File, cmd parser.Command, word *syntax.Word, env Env) *workspace.File {

@@ -1,6 +1,12 @@
 package actions
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/textedit"
+)
 
 func TestInlineVariable(t *testing.T) {
 	t.Parallel()
@@ -24,6 +30,12 @@ func TestInlineVariable(t *testing.T) {
 		{src: "p=abc\n[[ $«p» == a* ]]\n", want: "[[ abc == a* ]]\n"},
 		{src: "x=a\\ b\necho \"$«x»\"\n", want: "echo \"a b\"\n"},
 		{src: "x=1\nif true; then\n\techo \"$«x»\"\nfi\n", want: "if true; then\n\techo \"1\"\nfi\n"},
+		{src: "«x»=1\necho x \"$x\"\n", want: "echo x \"1\"\n"},
+		{src: "«x»=1\nls -l x >x 2>>x <x\necho \"$x\"\n", want: "ls -l x >x 2>>x <x\necho \"1\"\n"},
+		{src: "«x»=1\ncommand -v x && type x\necho \"$x\"\n", want: "command -v x && type x\necho \"1\"\n"},
+		{src: "«x»=1\ngrep -q x f && x\necho \"$x\"\n", want: "grep -q x f && x\necho \"1\"\n"},
+		{src: "«x»=1\neval 'echo hi'\ntrap 'rm -f \"$xy\"' EXIT\necho \"$x\"\n", want: "eval 'echo hi'\ntrap 'rm -f \"$xy\"' EXIT\necho \"1\"\n"},
+		{src: "«x»=1\necho \"$x\"\nf() { echo x; }\n", want: "echo \"1\"\nf() { echo x; }\n"},
 	}
 	for _, tc := range tests {
 		got, title, ok := refactor(t, InlineVariable, tc.src)
@@ -75,9 +87,75 @@ func TestInlineVariable(t *testing.T) {
 		"f() {\n\tlocal «n»=1\n\t(( n++ ))\n\techo \"$n\"\n}\n",
 		"f() {\n\tlocal «n»=1\n\tread -r n\n\techo \"$n\"\n}\n",
 		"«n»=1\ng() { local n=2; }\necho \"$n\"\n",
+		"«x»=1\necho \"$x\"\nunset x\n",
+		"«x»=1\necho \"$x\"\nunset -v x\n",
+		"«x»=1\necho \"$x\"\ntrap 'echo $x' EXIT\n",
+		"«x»=1\ntrap \"$handler\" EXIT\necho \"$x\"\n",
+		"«x»=1\neval \"$cmd\"\necho \"$x\"\n",
+		"«x»=1\neval \"echo \\$x\"\necho \"$x\"\n",
+		"«x»=1\ncommand eval 'echo $x'\necho \"$x\"\n",
+		"«x»=1\nalias show='echo $x'\necho \"$x\"\n",
+		"«x»=1\nalias u=unset\nu x\necho \"$x\"\n",
+		"«x»=1\nf x\necho \"$x\"\nf() { local -n r=$1; r=2; }\n",
+		"«x»=1\nprintf '%d' x\necho \"$x\"\n",
+		"«x»=1\ny=x\necho \"$x\"\n",
+		"«x»=1\ndeclare -n r=x\necho \"$x\"\n",
+		"«x»=1\ntest -v x && echo \"$x\"\n",
+		"«x»=1\nfor v in x; do echo \"$v\"; done\necho \"$x\"\n",
+		"«x»=1\n\"$run\" x\necho \"$x\"\n",
+		"«x»=1\n$run 'echo $x'\necho \"$x\"\n",
 	} {
 		if got, _, ok := refactor(t, InlineVariable, src); ok {
 			t.Errorf("inline %q offered: %q", src, got)
+		}
+	}
+}
+
+func TestInlineVariableInZshTreatsUnknownCommandsAsBuiltins(t *testing.T) {
+	t.Parallel()
+
+	if got, _, ok := refactorIn(t, dialect.Zsh, InlineVariable, "«x»=1\nzstat -A x f\necho \"$x\"\n"); ok {
+		t.Errorf("inline offered past a zsh module builtin that may assign x: %q", got)
+	}
+	if got, _, ok := refactorIn(t, dialect.Zsh, InlineVariable, "«x»=1\necho x \"$x\"\n"); !ok || got != "echo x \"1\"\n" {
+		t.Errorf("inline next to echo x in zsh = %q (%t)", got, ok)
+	}
+}
+
+func TestInlineVariableNextToSourcedFiles(t *testing.T) {
+	t.Parallel()
+
+	const src = "«x»=1\n. ./lib.sh\necho \"$x\"\n"
+	tests := []struct {
+		libs     []string
+		complete bool
+		offered  bool
+	}{
+		{[]string{"helper() { echo hi; }\n"}, true, true},
+		{[]string{"helper() { local x=2; echo \"$x\"; }\n"}, true, true},
+		{[]string{"# x is documented here\nhelper() { :; }\n"}, true, true},
+		{[]string{"helper() { :; }\n", "show() { echo \"$x\"; }\n"}, true, false},
+		{[]string{"x=2\n"}, true, false},
+		{[]string{"reset() { x=; }\n"}, true, false},
+		{[]string{"unset x\n"}, true, false},
+		{[]string{"eval \"$1\"\n"}, true, false},
+		{[]string{"echo \"${x:-none}\"\n"}, true, false},
+		{[]string{"helper() { :; }\n"}, false, false},
+	}
+	for _, tc := range tests {
+		text, sel := selection(t, src)
+		trees := make([]*parser.Tree, len(tc.libs))
+		for i, lib := range tc.libs {
+			trees[i] = parser.Parse(lib, dialect.Bash)
+		}
+		doc := Document{Tree: parser.Parse(text, dialect.Bash), SourcedTrees: func() ([]*parser.Tree, bool) { return trees, tc.complete }}
+		change, ok := Compute(doc, Refactor{Kind: InlineVariable, Start: sel.Start, End: sel.End})
+		if ok != tc.offered {
+			t.Errorf("inline with sourced %q (complete %t) offered = %t, want %t", tc.libs, tc.complete, ok, tc.offered)
+			continue
+		}
+		if got := textedit.Apply(text, change.Edits); ok && got != ". ./lib.sh\necho \"1\"\n" {
+			t.Errorf("inline with sourced %q = %q", tc.libs, got)
 		}
 	}
 }

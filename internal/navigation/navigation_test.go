@@ -141,6 +141,22 @@ func TestChainIsTransitiveAndCycleSafe(t *testing.T) {
 	if len(chain) != 2 || filepath.Base(chain[0].Path) != "one.sh" || filepath.Base(chain[1].Path) != "two.sh" {
 		t.Errorf("Chain() = %v", chain)
 	}
+	if _, complete := Closure(f.load(t, "main.sh"), f.env); !complete {
+		t.Error("Closure() is incomplete although every source resolves")
+	}
+}
+
+func TestClosureIsIncompleteWhenASourceDoesNotResolve(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, map[string]string{
+		"main.sh": "source ./one.sh\n",
+		"one.sh":  "source \"$PLUGIN\"\n",
+	})
+	files, complete := Closure(f.load(t, "main.sh"), f.env)
+	if complete || len(files) != 1 || filepath.Base(files[0].Path) != "one.sh" {
+		t.Errorf("Closure() = %v, %t; want one.sh and incomplete", files, complete)
+	}
 }
 
 func TestDefinitions(t *testing.T) {

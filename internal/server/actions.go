@@ -128,7 +128,15 @@ func (s *Server) actionDocument(snap *snapshot) (actions.Document, func() action
 		}
 		return out
 	})
-	return actions.Document{Tree: snap.tree, Sources: func() []actions.Source { return resolve().list }}, resolve
+	closure := sync.OnceValues(func() ([]*parser.Tree, bool) {
+		files, complete := navigation.Closure(snap.file, s.navigationEnv())
+		trees := make([]*parser.Tree, len(files))
+		for i, f := range files {
+			trees[i] = f.Tree
+		}
+		return trees, complete
+	})
+	return actions.Document{Tree: snap.tree, Sources: func() []actions.Source { return resolve().list }, SourcedTrees: closure}, resolve
 }
 
 func (s *Server) changeEdit(docs *docstore.View, snap *snapshot, sources func() actionSources, edits []textedit.Edit, others []actions.FileEdits) (lsp.WorkspaceEdit, error) {

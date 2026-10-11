@@ -73,8 +73,9 @@ type Source struct {
 }
 
 type Document struct {
-	Tree    *parser.Tree
-	Sources func() []Source
+	Tree         *parser.Tree
+	Sources      func() []Source
+	SourcedTrees func() ([]*parser.Tree, bool)
 }
 
 type Input struct {

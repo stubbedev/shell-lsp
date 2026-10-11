@@ -6,6 +6,7 @@ import (
 
 	"mvdan.cc/sh/v3/syntax"
 
+	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/shelldocs"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
@@ -40,15 +41,27 @@ func inlineVariable(s *site) (Change, bool) {
 		return Change{}, false
 	}
 	value, ok := inlinableValue(def)
-	if !ok || !readsFollow(tree, def) || slices.ContainsFunc(tree.Commands, sharesVariables) {
+	if !ok {
+		return Change{}, false
+	}
+	reads, ok := readsFollowing(tree, def)
+	if !ok {
+		return Change{}, false
+	}
+	sourced, ok := sourcedTrees(s.Document)
+	if !ok {
+		return Change{}, false
+	}
+	v := variableScan{name: name, callables: callables(tree, sourced)}
+	if slices.ContainsFunc(sourced, v.touchedBy) {
 		return Change{}, false
 	}
 	removal, ok := assignmentRemoval(tree, def)
 	if !ok {
 		return Change{}, false
 	}
-	uses, ok := usesOf(tree, def)
-	if !ok {
+	uses, ok := v.usesIn(tree)
+	if !ok || len(uses) != reads {
 		return Change{}, false
 	}
 	edits := []textedit.Edit{removal}
@@ -127,22 +140,49 @@ func inlinableValue(def *parser.Definition) (string, bool) {
 	return parser.Literal(assign.Value)
 }
 
-func sharesVariables(c parser.Command) bool {
-	return c.IsSource() || c.Name == "eval"
+func sourcedTrees(doc Document) ([]*parser.Tree, bool) {
+	if !slices.ContainsFunc(doc.Tree.Commands, parser.Command.IsSource) {
+		return nil, true
+	}
+	if doc.SourcedTrees == nil {
+		return nil, false
+	}
+	return doc.SourcedTrees()
 }
 
-func readsFollow(tree *parser.Tree, def *parser.Definition) bool {
+func callables(tree *parser.Tree, sourced []*parser.Tree) map[string]bool {
+	out := map[string]bool{}
+	for _, t := range append([]*parser.Tree{tree}, sourced...) {
+		for _, fn := range t.Functions {
+			out[fn.Name] = true
+		}
+		for _, c := range t.Commands {
+			if c.Name != "alias" {
+				continue
+			}
+			for _, arg := range c.Args {
+				if lit, ok := parser.Literal(arg); ok {
+					name, _, _ := strings.Cut(lit, "=")
+					out[name] = true
+				}
+			}
+		}
+	}
+	return out
+}
+
+func readsFollowing(tree *parser.Tree, def *parser.Definition) (int, bool) {
 	reads := 0
 	for _, ref := range tree.References {
 		if ref.Name != def.Name {
 			continue
 		}
 		if ref.Within != def.Within || ref.Span.Start < def.Span.End {
-			return false
+			return 0, false
 		}
 		reads++
 	}
-	return reads > 0
+	return reads, reads > 0
 }
 
 func assignmentRemoval(tree *parser.Tree, def *parser.Definition) (textedit.Edit, bool) {
@@ -193,7 +233,36 @@ func ownsScopeBody(tree *parser.Tree, scope parser.ScopeID, parent syntax.Node) 
 	return ok && fn.Decl.Body.Cmd == parent
 }
 
-func usesOf(tree *parser.Tree, def *parser.Definition) ([]use, bool) {
+type variableScan struct {
+	name      string
+	callables map[string]bool
+}
+
+var (
+	evaluatingCommands = map[string]bool{"eval": true, "trap": true, "alias": true}
+	inertBuiltins      = map[string]bool{"echo": true, "cd": true, "pwd": true, "true": true, "false": true, ":": true, "type": true}
+	inertExternals     = dialect.SetOf(dialect.Bash, dialect.Posix, dialect.Dash, dialect.Busybox)
+)
+
+func (v variableScan) touchedBy(tree *parser.Tree) bool {
+	for _, d := range tree.Definitions {
+		if d.Name == v.name && !d.Local {
+			return true
+		}
+	}
+	for _, r := range tree.References {
+		if r.Name != v.name {
+			continue
+		}
+		if _, local := tree.Binding(r.Name, r.Within); !local {
+			return true
+		}
+	}
+	_, ok := v.usesIn(tree)
+	return !ok
+}
+
+func (v variableScan) usesIn(tree *parser.Tree) ([]use, bool) {
 	var uses []use
 	var stack []syntax.Node
 	ok := true
@@ -207,34 +276,95 @@ func usesOf(tree *parser.Tree, def *parser.Definition) ([]use, bool) {
 		}
 		switch n := node.(type) {
 		case *syntax.ParamExp:
-			if n.Param != nil && n.Param.Value == def.Name && n.Names == 0 {
+			if n.Param != nil && n.Param.Value == v.name && n.Names == 0 {
 				context, known := useContextOf(stack)
 				span, _ := tree.NodeSpan(n)
 				ok = known && parser.IsPlainParam(n)
 				uses = append(uses, use{span: span, context: context})
 			}
+		case *syntax.CallExpr:
+			ok = !v.evaluatedBy(tree, n)
 		case *syntax.Word:
-			if name, read := parser.ArithmeticRead(stack[len(stack)-1], n); read {
-				if name == def.Name {
+			parent := stack[len(stack)-1]
+			if name, read := parser.ArithmeticRead(parent, n); read {
+				if name == v.name {
 					span, _ := tree.NodeSpan(n)
 					uses = append(uses, use{span: span, context: arithmeticUse})
 				}
 				break
 			}
-			if lit, literal := parser.Literal(n); literal && namesVariable(lit, def.Name) {
+			if lit, literal := parser.Literal(n); literal && namesVariable(lit, v.name) && !v.inertOperand(tree, parent, n) {
 				ok = false
 			}
 		}
 		stack = append(stack, node)
 		return true
 	})
-	reads := 0
-	for _, ref := range tree.References {
-		if ref.Name == def.Name {
-			reads++
+	return uses, ok
+}
+
+func (v variableScan) evaluatedBy(tree *parser.Tree, call *syntax.CallExpr) bool {
+	k := parser.CommandStart(call.Args, tree.Bats)
+	if k < 0 {
+		return false
+	}
+	command, literal := parser.Literal(call.Args[k])
+	evaluating := evaluatingCommands[command]
+	if literal && !evaluating {
+		return false
+	}
+	for _, arg := range call.Args[k+1:] {
+		lit, ok := parser.Literal(arg)
+		if (!ok && evaluating) || (ok && mentions(lit, v.name)) {
+			return true
 		}
 	}
-	return uses, ok && len(uses) == reads
+	return false
+}
+
+func (v variableScan) inertOperand(tree *parser.Tree, parent syntax.Node, w *syntax.Word) bool {
+	switch p := parent.(type) {
+	case *syntax.Redirect:
+		return p.Word == w
+	case *syntax.CallExpr:
+		i := slices.Index(p.Args, w)
+		k := parser.CommandStart(p.Args, tree.Bats)
+		if i < 0 {
+			return false
+		}
+		if k < 0 || i <= k {
+			return true
+		}
+		command, ok := parser.Literal(p.Args[k])
+		return ok && v.inertCommand(command, tree.Dialect)
+	}
+	return false
+}
+
+func (v variableScan) inertCommand(command string, d dialect.Dialect) bool {
+	if v.callables[command] {
+		return false
+	}
+	if inertBuiltins[command] {
+		return true
+	}
+	_, builtin := shelldocs.Builtin(command)
+	_, keyword := shelldocs.Keyword(command)
+	return !builtin && !keyword && inertExternals.Has(d)
+}
+
+func mentions(text, name string) bool {
+	for at := 0; ; {
+		i := strings.Index(text[at:], name)
+		if i < 0 {
+			return false
+		}
+		start, end := at+i, at+i+len(name)
+		if (start == 0 || !parser.IsNameChar(text[start-1])) && (end == len(text) || !parser.IsNameChar(text[end])) {
+			return true
+		}
+		at = start + 1
+	}
 }
 
 func namesVariable(word, name string) bool {
