@@ -209,29 +209,6 @@ func TestShellFilesCacheFollowsDirectoryChanges(t *testing.T) {
 	}
 }
 
-func TestWithin(t *testing.T) {
-	t.Parallel()
-
-	for _, tc := range []struct {
-		path, root string
-		want       bool
-	}{
-		{"/a/b/c.sh", "/a/b", true},
-		{"/a/b", "/a/b", true},
-		{"/a/b/", "/a/b", true},
-		{"/a/bc/d.sh", "/a/b", false},
-		{"/a/b/../c/d.sh", "/a/b", false},
-		{"/a/./b/c.sh", "/a/b/", true},
-		{"/x.sh", "/", true},
-		{"/a", "/a/b", false},
-		{"rel/x.sh", "/a", false},
-	} {
-		if got := Within(tc.path, tc.root); got != tc.want {
-			t.Errorf("Within(%q, %q) = %v, want %v", tc.path, tc.root, got, tc.want)
-		}
-	}
-}
-
 func TestRootOfPicksTheInnermostRoot(t *testing.T) {
 	t.Parallel()
 

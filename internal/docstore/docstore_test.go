@@ -28,6 +28,26 @@ func mustDoc(t *testing.T, store *Store) *Document {
 	return doc
 }
 
+func TestEquivalentFileURIsNameOneDocument(t *testing.T) {
+	t.Parallel()
+
+	const opened, spelled = "file:///home/u/a%2Bb.sh", "file:///home/u/./a+b.sh"
+	store := NewStore()
+	store.Open(lsp.TextDocumentItem{URI: opened, Version: 1, Text: "a\n"})
+	err := store.Change(spelled, 2, []lsp.TextDocumentContentChangeEvent{{Text: "b\n"}})
+	if err != nil {
+		t.Fatalf("Change(%q) error = %v", spelled, err)
+	}
+	doc, ok := store.View().Document(spelled)
+	if !ok || doc.URI != opened || doc.Text() != "b\n" {
+		t.Fatalf("Document(%q) = %+v, %v; want the document opened as %q with the change applied", spelled, doc, ok, opened)
+	}
+	store.Close(spelled)
+	if _, ok := store.View().Document(opened); ok {
+		t.Errorf("Document(%q) still open after Close(%q)", opened, spelled)
+	}
+}
+
 func TestNormalizeStripsBOMAndCRLF(t *testing.T) {
 	t.Parallel()
 

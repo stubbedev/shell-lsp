@@ -21,6 +21,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/parallel"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/platform"
 	"github.com/stubbedev/shell-lsp/internal/regularfile"
 )
 
@@ -129,15 +130,6 @@ func isShellName(path string) bool {
 	return dialect.IsRCFile(path) || slices.Contains(shellExtensions, filepath.Ext(path))
 }
 
-func Within(path, root string) bool {
-	return under(filepath.Clean(path), filepath.Clean(root))
-}
-
-func under(path, root string) bool {
-	rest, ok := strings.CutPrefix(path, root)
-	return ok && (rest == "" || rest[0] == filepath.Separator || strings.HasSuffix(root, string(filepath.Separator)))
-}
-
 type diskEntry struct {
 	size    int64
 	modTime time.Time
@@ -176,7 +168,7 @@ func (w *Workspace) RootOf(path string) (string, bool) {
 	defer w.mu.Unlock()
 	best := ""
 	for _, root := range w.roots {
-		if Within(path, root) && len(root) > len(best) {
+		if platform.Native.Within(path, root) && len(root) > len(best) {
 			best = root
 		}
 	}
@@ -186,8 +178,8 @@ func (w *Workspace) RootOf(path string) (string, bool) {
 func (w *Workspace) Invalidate(path string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	delete(w.files, path)
-	delete(w.dirs, filepath.Dir(path))
+	delete(w.files, platform.Native.Fold(path))
+	delete(w.dirs, platform.Native.Fold(filepath.Dir(path)))
 	w.generation.Add(1)
 }
 
@@ -202,7 +194,7 @@ func (w *Workspace) InvalidateAll() {
 func (w *Workspace) Load(path string) (*File, error) {
 	now := w.now()
 	w.mu.Lock()
-	cached, ok := w.files[path]
+	cached, ok := w.files[platform.Native.Fold(path)]
 	fresh := ok && (w.watchedLocked(path) || now.Sub(cached.checked) < DiskRecheck)
 	w.mu.Unlock()
 	var uri string
@@ -220,14 +212,14 @@ func (w *Workspace) Load(path string) (*File, error) {
 	info, err := os.Stat(path)
 	if err != nil {
 		w.mu.Lock()
-		delete(w.files, path)
+		delete(w.files, platform.Native.Fold(path))
 		w.mu.Unlock()
 		return nil, fmt.Errorf("loading %s: %w", path, err)
 	}
 	if ok && cached.size == info.Size() && cached.modTime.Equal(info.ModTime()) {
 		cached.checked = now
 		w.mu.Lock()
-		w.files[path] = cached
+		w.files[platform.Native.Fold(path)] = cached
 		w.mu.Unlock()
 		return cached.file, nil
 	}
@@ -240,7 +232,7 @@ func (w *Workspace) Load(path string) (*File, error) {
 	d := w.dialectOf(path, in)
 	file := &File{Path: path, URI: uri, Doc: doc, Tree: parser.ParseEdit(nil, doc.Text(), d, parser.Variant(d, in))}
 	w.mu.Lock()
-	w.files[path] = diskEntry{size: info.Size(), modTime: info.ModTime(), checked: now, file: file}
+	w.files[platform.Native.Fold(path)] = diskEntry{size: info.Size(), modTime: info.ModTime(), checked: now, file: file}
 	w.mu.Unlock()
 	return file, nil
 }
@@ -250,7 +242,7 @@ func ReadDisk(path string) ([]byte, fs.FileInfo, error) {
 }
 
 func (w *Workspace) watchedLocked(path string) bool {
-	return w.watched.Load() && isShellName(path) && slices.ContainsFunc(w.roots, func(root string) bool { return under(path, root) })
+	return w.watched.Load() && isShellName(path) && slices.ContainsFunc(w.roots, func(root string) bool { return platform.Native.Within(path, root) })
 }
 
 func (w *Workspace) LoadAll(ctx context.Context, paths []string, workers int, report func(done, total int)) ([]*File, error) {
@@ -324,7 +316,7 @@ func (w *Workspace) listDir(dir string) (dirListing, error) {
 		return dirListing{}, err
 	}
 	w.mu.Lock()
-	cached, ok := w.dirs[dir]
+	cached, ok := w.dirs[platform.Native.Fold(dir)]
 	w.mu.Unlock()
 	if ok && cached.modTime.Equal(info.ModTime()) {
 		return cached, nil
@@ -346,10 +338,10 @@ func (w *Workspace) listDir(dir string) (dirListing, error) {
 		}
 	}
 	w.mu.Lock()
-	if previous, ok := w.dirs[dir]; ok {
+	if previous, ok := w.dirs[platform.Native.Fold(dir)]; ok {
 		w.forgetRemovedLocked(previous, listing)
 	}
-	w.dirs[dir] = listing
+	w.dirs[platform.Native.Fold(dir)] = listing
 	w.mu.Unlock()
 	return listing, nil
 }
@@ -357,7 +349,7 @@ func (w *Workspace) listDir(dir string) (dirListing, error) {
 func (w *Workspace) forgetRemovedLocked(previous, current dirListing) {
 	for _, file := range previous.files {
 		if _, kept := slices.BinarySearch(current.files, file); !kept {
-			delete(w.files, file)
+			delete(w.files, platform.Native.Fold(file))
 		}
 	}
 	for _, dir := range previous.dirs {
@@ -368,14 +360,14 @@ func (w *Workspace) forgetRemovedLocked(previous, current dirListing) {
 }
 
 func (w *Workspace) forgetTreeLocked(dir string) {
-	for path := range w.dirs {
-		if under(path, dir) {
-			delete(w.dirs, path)
+	for key := range w.dirs {
+		if platform.Native.Within(key, dir) {
+			delete(w.dirs, key)
 		}
 	}
-	for path := range w.files {
-		if under(path, dir) {
-			delete(w.files, path)
+	for key := range w.files {
+		if platform.Native.Within(key, dir) {
+			delete(w.files, key)
 		}
 	}
 }

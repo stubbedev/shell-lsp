@@ -113,6 +113,7 @@ func (s *Server) snapshot(docs *docstore.View, uri string) (*snapshot, error) {
 	if !ok {
 		return nil, fmt.Errorf("document %s is not open", uri)
 	}
+	uri = doc.URI
 	settings, generation := s.settingsFor(uri)
 	return s.snapshots.get(uri, doc, generation, func(previous *snapshot) *snapshot {
 		path, err := fileuri.ToPath(uri)

@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"unicode/utf8"
 
+	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 )
 
@@ -222,7 +223,7 @@ type View struct {
 func (v *View) Encoding() Encoding { return v.encoding }
 
 func (v *View) Document(uri string) (*Document, bool) {
-	d, ok := v.docs[uri]
+	d, ok := v.docs[fileuri.Key(uri)]
 	return d, ok
 }
 
@@ -274,21 +275,22 @@ func (s *Store) SetEncoding(enc Encoding) {
 
 func (s *Store) Open(item lsp.TextDocumentItem) {
 	_ = s.update(func(next *View) error {
-		next.docs[item.URI] = NewDocument(item.URI, item.LanguageID, item.Version, item.Text)
+		next.docs[fileuri.Key(item.URI)] = NewDocument(item.URI, item.LanguageID, item.Version, item.Text)
 		return nil
 	})
 }
 
 func (s *Store) Close(uri string) {
 	_ = s.update(func(next *View) error {
-		delete(next.docs, uri)
+		delete(next.docs, fileuri.Key(uri))
 		return nil
 	})
 }
 
 func (s *Store) Change(uri string, version int32, changes []lsp.TextDocumentContentChangeEvent) error {
 	return s.update(func(next *View) error {
-		d, ok := next.docs[uri]
+		k := fileuri.Key(uri)
+		d, ok := next.docs[k]
 		if !ok {
 			return fmt.Errorf("didChange for unopened document %s", uri)
 		}
@@ -298,7 +300,7 @@ func (s *Store) Change(uri string, version int32, changes []lsp.TextDocumentCont
 		updated := *d
 		updated.Version = version
 		updated.applyChanges(changes, next.encoding)
-		next.docs[uri] = &updated
+		next.docs[k] = &updated
 		return nil
 	})
 }

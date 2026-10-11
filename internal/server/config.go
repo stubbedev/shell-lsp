@@ -9,7 +9,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/config"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
-	"github.com/stubbedev/shell-lsp/internal/workspace"
+	"github.com/stubbedev/shell-lsp/internal/platform"
 )
 
 const configurationMethod = "workspace/configuration"
@@ -42,7 +42,7 @@ func (s *Server) settingsFor(uri string) (config.Settings, uint64) {
 func settingsForPath(global config.Settings, folders map[string]config.Settings, path string) config.Settings {
 	best, settings := "", global
 	for root, folder := range folders {
-		if workspace.Within(path, root) && len(root) > len(best) {
+		if platform.Native.Within(path, root) && len(root) > len(best) {
 			best, settings = root, folder
 		}
 	}

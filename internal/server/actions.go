@@ -14,6 +14,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/navigation"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/platform"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
@@ -120,7 +121,7 @@ func (s *Server) actionDocument(snap *snapshot) (actions.Document, func() action
 		out := actionSources{files: map[string]*workspace.File{}}
 		for _, ref := range navigation.Sources(snap.file, s.navigationEnv()) {
 			target := ref.Target
-			if target == nil || target.URI == snap.file.URI || !slices.ContainsFunc(roots, func(root string) bool { return workspace.Within(target.Path, root) }) {
+			if target == nil || target.URI == snap.file.URI || !slices.ContainsFunc(roots, func(root string) bool { return platform.Native.Within(target.Path, root) }) {
 				continue
 			}
 			out.files[target.URI] = target
