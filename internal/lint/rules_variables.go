@@ -17,7 +17,7 @@ var variablesFamily = family{
 		2153: {severity: SeverityInfo},
 		2154: {severity: SeverityWarning},
 	},
-	rules: []rule{{on: nodes(&syntax.ParamExp{}, &syntax.Word{}, &syntax.Assign{}, &syntax.ArrayElem{}, &syntax.ForClause{}, &syntax.LetClause{}, &syntax.DeclClause{}, &syntax.CallExpr{}, &syntax.TestClause{}, &syntax.TestDecl{}, &syntax.FlagsArithm{}, &syntax.RepeatClause{}), node: collectVariables, finish: reportVariables}},
+	rules: []rule{{on: nodes(&syntax.ParamExp{}, &syntax.Word{}, &syntax.Assign{}, &syntax.ArrayElem{}, &syntax.ForClause{}, &syntax.LetClause{}, &syntax.DeclClause{}, &syntax.CallExpr{}, &syntax.TestClause{}, &syntax.TestDecl{}, &syntax.FlagsArithm{}, &syntax.RepeatClause{}, &syntax.SglQuoted{}), node: collectVariables, finish: reportVariables}},
 }
 
 var batsVariables = []string{"status", "output", "lines", "stderr", "stderr_lines"}
@@ -68,6 +68,13 @@ func collectVariables(p *pass, n syntax.Node) {
 		p.readNames(parser.ZshReads(n))
 	case *syntax.RepeatClause:
 		p.readLiteralArithmetic(n.Count)
+	case *syntax.SglQuoted:
+		if !p.evaluatedByExpansion() {
+			return
+		}
+		if span, ok := p.span(n); ok {
+			p.scanText(n.Value, span)
+		}
 	case *syntax.Word:
 		p.collectWord(n)
 	case *syntax.Assign:

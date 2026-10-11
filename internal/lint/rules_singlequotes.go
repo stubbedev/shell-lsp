@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
@@ -25,11 +26,19 @@ var (
 		"podman", "oc", "dpkg-query", "jq", "rename", "rg", "unset", "git filter-branch", "mumps -run %XCMD",
 		"mumps -run LOOP%XCMD",
 	)
+	dialectLiteralArguments = map[dialect.Dialect]map[string]bool{
+		dialect.Zsh: setOf(
+			"zstyle", "zmv", "zcp", "zln", "bindkey", "sched", "emulate",
+			"_arguments", "_alternative", "_values", "_call_program",
+		),
+	}
 )
+
+const evaluatingFlag = 'e'
 
 func checkSingleQuotedExpansion(p *pass, n syntax.Node) {
 	sq, ok := n.(*syntax.SglQuoted)
-	if !ok || sq.Dollar || !expansionSyntax.MatchString(sq.Value) || p.quotesPromptOrVariableName() {
+	if !ok || sq.Dollar || !expansionSyntax.MatchString(sq.Value) || p.quotesPromptOrVariableName() || p.evaluatedByExpansion() {
 		return
 	}
 	name := p.quotingCommand()
@@ -38,12 +47,25 @@ func checkSingleQuotedExpansion(p *pass, n syntax.Node) {
 		if sedLastLine.MatchString(sq.Value) {
 			return
 		}
-	case literalArguments[name], strings.HasSuffix(name, "awk"), strings.HasPrefix(name, "perl"):
+	case literalArguments[name], dialectLiteralArguments[p.dialect][name], strings.HasSuffix(name, "awk"), strings.HasPrefix(name, "perl"):
 		return
 	}
 	if span, ok := p.span(sq); ok {
 		p.report(2016, span, "Single quotes keep $ and backticks literal, so nothing is expanded here; use double quotes if expansion is intended.")
 	}
+}
+
+func (p *pass) evaluatedByExpansion() bool {
+	for _, n := range p.stack {
+		pe, ok := n.(*syntax.ParamExp)
+		if !ok || pe.Flags == nil {
+			continue
+		}
+		if slices.ContainsFunc(parser.ParameterFlags(pe.Flags), func(f parser.ZshFlag) bool { return f.Name == evaluatingFlag }) {
+			return true
+		}
+	}
+	return false
 }
 
 func (p *pass) quotesPromptOrVariableName() bool {

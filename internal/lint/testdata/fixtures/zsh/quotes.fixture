@@ -1,0 +1,39 @@
+### zsh commands that expand their arguments later
+#!/bin/zsh
+autoload -Uz zmv
+zstyle ':completion:*:*:kill:*:processes' command 'ps -u $USER -o pid,cmd'
+zstyle -e ':completion:*' hosts 'reply=($hosts_cache)'
+zmv -W '*.(conf|ini)' '*.$1.bak'
+zmv '(*).txt' '$1.bak'
+bindkey -s '^Xp' 'print -r -- $PWD\n'
+sched +0:10 'print -r -- $SECONDS'
+emulate sh -c 'echo $1'
+>>- SC1071 1:1 -- shellcheck refuses zsh; zstyle, zmv, bindkey -s, sched and emulate -c evaluate these strings later
+
+### completion specs whose actions are evaluated
+#!/bin/zsh
+_tool() {
+  _arguments '1:file:{_files -W $root}' '2:host:_hosts' && return
+  _alternative 'files:file:_files -W $root'
+  _call_program commands 'tool list --root $root'
+}
+compdef _tool tool
+>>- SC1071 1:1 -- shellcheck refuses zsh; _arguments, _alternative and _call_program evaluate their actions
+
+### the e flag expands a single-quoted value
+#!/bin/zsh
+name=world
+print -r -- ${(e)${:-'$name'}} ${(e):-'$name'}
+>>- SC1071 1:1 -- shellcheck refuses zsh; the (e) flag performs parameter expansion on the result
+
+### other single-quoted expansions are still reported in zsh
+#!/bin/zsh
+print -r -- '$HOME' ${(U):-'$HOME'}
+>>- SC1071 1:1 -- shellcheck refuses zsh
+>>+ SC2016 2:13 -- print does not expand its arguments again
+>>+ SC2016 2:28 -- the U flag does not expand the value
+
+### zsh commands are ordinary commands in bash
+#!/bin/bash
+zstyle ':completion:*' command 'ps -u $USER'
+>>> SC2016 2:32
