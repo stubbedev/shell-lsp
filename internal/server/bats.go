@@ -215,7 +215,9 @@ func (s *Server) runBats(ctx context.Context, docs *docstore.View, args batsRunA
 	}
 	outcome := "stopped"
 	defer func() { progress.end(outcome) }()
-	report, err := bats.Run(ctx, inv, func(r bats.Report) { progress.report(batsProgress(r)) })
+	report, err := yieldSlot(ctx, func() (bats.Report, error) {
+		return bats.Run(ctx, inv, func(r bats.Report) { progress.report(batsProgress(r)) })
+	})
 	switch {
 	case errors.Is(err, context.DeadlineExceeded):
 		return batsRunResult{}, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "%s timed out after %s", inv, batsTimeout)

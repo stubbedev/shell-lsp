@@ -281,6 +281,7 @@ func (s *Server) dispatchRequest(ctx context.Context, msg *jsonrpc.Message) {
 		defer func() { <-s.sem }()
 		defer cancel()
 		defer s.cancels.Delete(string(msg.ID))
+		rctx := context.WithValue(rctx, requestSlotKey{}, s.sem)
 
 		result, err := s.invoke(rctx, handler, docs, msg)
 		if errors.Is(err, context.Canceled) && rctx.Err() != nil {
