@@ -77,3 +77,10 @@ done
 for f in "$@"; do eval "$hook" "$f"; done
 >>> SC2154 2:25
 >>+ SL1001 2:33 -- shell-lsp native injection check; shellcheck has no taint analysis
+
+### a value cleaned by pattern substitution
+#!/bin/bash
+read -r opt
+opt=${opt//[^a-zA-Z0-9_]/}
+eval "flag_$opt=1"
+>>> none

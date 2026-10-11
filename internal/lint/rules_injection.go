@@ -103,6 +103,10 @@ func (t *untrustedValues) collectValidations() {
 			}
 		case *syntax.CaseClause:
 			subject = n.Word
+		case *syntax.Assign:
+			if n.Name != nil && n.Value != nil && rewritesItself(n) {
+				subject = n.Value
+			}
 		}
 		if subject == nil {
 			return true
@@ -114,6 +118,11 @@ func (t *untrustedValues) collectValidations() {
 		}
 		return true
 	})
+}
+
+func rewritesItself(a *syntax.Assign) bool {
+	pe, ok := solePart(a.Value).(*syntax.ParamExp)
+	return ok && pe.Param != nil && pe.Param.Value == a.Name.Value && pe.Repl != nil
 }
 
 var validatingTestOperators = map[syntax.BinTestOperator]bool{
