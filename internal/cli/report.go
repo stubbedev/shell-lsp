@@ -22,7 +22,6 @@ import (
 )
 
 type level struct {
-	name       string
 	gcc        string
 	checkstyle string
 	sarif      string
@@ -30,10 +29,10 @@ type level struct {
 }
 
 var levels = [...]level{
-	lint.SeverityError:   {name: "error", gcc: "error", checkstyle: "error", sarif: "error", color: "\x1b[31m"},
-	lint.SeverityWarning: {name: "warning", gcc: "warning", checkstyle: "warning", sarif: "warning", color: "\x1b[33m"},
-	lint.SeverityInfo:    {name: "info", gcc: "note", checkstyle: "info", sarif: "note", color: "\x1b[32m"},
-	lint.SeverityStyle:   {name: "style", gcc: "note", checkstyle: "info", sarif: "note", color: "\x1b[32m"},
+	lint.SeverityError:   {gcc: "error", checkstyle: "error", sarif: "error", color: "\x1b[31m"},
+	lint.SeverityWarning: {gcc: "warning", checkstyle: "warning", sarif: "warning", color: "\x1b[33m"},
+	lint.SeverityInfo:    {gcc: "note", checkstyle: "info", sarif: "note", color: "\x1b[32m"},
+	lint.SeverityStyle:   {gcc: "note", checkstyle: "info", sarif: "note", color: "\x1b[32m"},
 }
 
 const (
@@ -124,7 +123,7 @@ func jsonComments(reports []fileReport) []jsonComment {
 			start, end := placeOf(r.doc, f.Span.Start), placeOf(r.doc, f.Span.End)
 			c := jsonComment{
 				File: r.name, Line: start.line, EndLine: end.line, Column: start.column, EndColumn: end.column,
-				Level: levels[f.Severity].name, Code: int(f.Code), Message: f.Message,
+				Level: f.Severity.String(), Code: int(f.Code), Message: f.Message,
 			}
 			if fix, ok := lint.AutoFix(f.Fixes); ok {
 				c.Fix = &jsonFix{Replacements: make([]jsonReplacement, len(fix.Edits))}
@@ -231,7 +230,7 @@ func writeTTY(out *bytes.Buffer, reports []fileReport, opts reportOptions) {
 			fmt.Fprintf(out, "\n%s\n%s\n", paint(ansiBold, fmt.Sprintf("In %s line %d:", r.name, placeOf(r.doc, first.Span.Start).line)), paint(ansiReset, source))
 			for _, f := range group {
 				indent := strings.Repeat(" ", visualWidth(text[lineAt:f.Span.Start]))
-				out.WriteString(paint(levels[f.Severity].color, indent+caret(text, f.Span)+" "+f.Code.String()+" ("+levels[f.Severity].name+"): "+f.Message) + "\n")
+				out.WriteString(paint(levels[f.Severity].color, indent+caret(text, f.Span)+" "+f.Code.String()+" ("+f.Severity.String()+"): "+f.Message) + "\n")
 			}
 			if suggestion, ok := didYouMean(text, lineAt, group); ok {
 				fmt.Fprintf(out, "\n%s\n%s\n", paint(ansiBold, "Did you mean:"), suggestion)

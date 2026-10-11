@@ -132,15 +132,6 @@ type checkOptions struct {
 
 const defaultWikiLinks = 3
 
-func severityNamed(name string) (lint.Severity, bool) {
-	for severity, l := range levels {
-		if l.name == name && name != "" {
-			return lint.Severity(severity), true
-		}
-	}
-	return 0, false
-}
-
 var checkOptionTable = []option[checkOptions]{
 	{'a', "check-sourced", noArg, func(o *checkOptions, _ string) error { o.checkSourced = true; return nil }},
 	{'C', "color", optionalArg, func(o *checkOptions, v string) error {
@@ -220,7 +211,7 @@ var checkOptionTable = []option[checkOptions]{
 		return nil
 	}},
 	{'S', "severity", requiredArg, func(o *checkOptions, v string) error {
-		severity, ok := severityNamed(v)
+		severity, ok := lint.SeverityNamed(v)
 		if !ok {
 			return badValue("unknown value for --severity: %q. Valid options are: error, warning, info, style", v)
 		}

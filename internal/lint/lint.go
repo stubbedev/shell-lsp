@@ -22,6 +22,24 @@ const (
 	SeverityStyle
 )
 
+var severityNames = [...]string{SeverityError: "error", SeverityWarning: "warning", SeverityInfo: "info", SeverityStyle: "style"}
+
+func (s Severity) String() string {
+	if int(s) < len(severityNames) && severityNames[s] != "" {
+		return severityNames[s]
+	}
+	return "unknown"
+}
+
+func SeverityNamed(name string) (Severity, bool) {
+	for severity, n := range severityNames {
+		if n == name && n != "" {
+			return Severity(severity), true
+		}
+	}
+	return 0, false
+}
+
 type Tag uint8
 
 const (
