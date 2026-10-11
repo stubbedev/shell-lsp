@@ -175,7 +175,7 @@ func checkFunctionBody(p *pass, n syntax.Node) {
 		body = list.X
 	}
 	switch body.Cmd.(type) {
-	case *syntax.Block, *syntax.Subshell, *syntax.IfClause, *syntax.WhileClause, *syntax.ForClause, *syntax.RepeatClause,
+	case *syntax.Block, *syntax.Subshell, *syntax.IfClause, *syntax.WhileClause, *syntax.ForClause, *syntax.RepeatClause, *syntax.TryClause,
 		*syntax.CaseClause, *syntax.TestClause, *syntax.ArithmCmd:
 		return
 	}

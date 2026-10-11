@@ -1067,6 +1067,8 @@ func (b *builder) keywords(node syntax.Node) {
 		}
 		b.keyword(name, n.WhilePos)
 		b.loopKeywords(n.Braces, n.DoPos, n.DonePos)
+	case *syntax.TryClause:
+		b.keyword("always", n.AlwaysPos)
 	case *syntax.RepeatClause:
 		b.keyword("repeat", n.RepeatPos)
 		b.loopKeywords(n.Braces, n.DoPos, n.DonePos)

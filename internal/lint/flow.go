@@ -569,6 +569,9 @@ func (in *interpreter) command(stmt *syntax.Stmt, s *state) *state {
 	case *syntax.RepeatClause:
 		s = in.repeatClause(cmd, s)
 		s = in.redirects(stmt, s)
+	case *syntax.TryClause:
+		s = in.tryClause(cmd, s)
+		s = in.redirects(stmt, s)
 	case *syntax.CaseClause:
 		s = in.caseClause(cmd, s)
 		s = in.redirects(stmt, s)
@@ -1238,6 +1241,16 @@ func (in *interpreter) repeatClause(cmd *syntax.RepeatClause, s *state) *state {
 	return in.loop(s,
 		func(head *state) *state { return in.stmts(cmd.Do, head) },
 		func(head *state) *state { return head })
+}
+
+func (in *interpreter) tryClause(cmd *syntax.TryClause, s *state) *state {
+	entry := s.clone()
+	tried := in.stmts(cmd.Try.Stmts, s)
+	finished := in.stmts(cmd.Always.Stmts, join(tried, entry))
+	if !tried.live {
+		return deadState(finished.symbolic)
+	}
+	return finished
 }
 
 func (in *interpreter) caseClause(cmd *syntax.CaseClause, s *state) *state {

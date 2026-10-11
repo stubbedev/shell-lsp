@@ -1,0 +1,217 @@
+syntax: parse zsh's try-always blocks
+
+Zsh runs the always list after the try list, however that one ends
+(zshmisc(1), "COMPLEX COMMANDS"):
+
+	{ try-list } always { always-list }
+
+Reproducer, before this change:
+
+	$ printf '{ cmd } always { cleanup }\n' | shfmt -ln zsh
+	<standard input>:1:9: statements must be separated by &, ; or a newline
+
+The new TryClause node holds both blocks and the position of "always".
+The parser recognizes "always" right after the closing brace of a block,
+on the same line, and the printer keeps the form, since it has no
+equivalent.
+
+This resolves the `TODO(zsh): { try-list } "always" { always-list }`.
+Part of https://github.com/mvdan/sh/issues/120.
+
+diff --git a/syntax/filetests_test.go b/syntax/filetests_test.go
+index 0c78b0b..0a50bc1 100644
+--- a/syntax/filetests_test.go
++++ b/syntax/filetests_test.go
+@@ -858,6 +858,38 @@ var fileTests = []fileTestCase{
+ 			Do:    stmts(litCall("foo", "bar")),
+ 		}, LangZsh),
+ 	),
++	fileTest(
++		[]string{
++			"{ foo; } always { bar; }",
++			"{ foo } always { bar }",
++			"{\n\tfoo\n} always {\n\tbar\n}",
++		},
++		printsAs("{ foo; } always { bar; }"),
++		langFile(&TryClause{
++			Try:    block(litStmt("foo")),
++			Always: block(litStmt("bar")),
++		}, LangZsh),
++	),
++	fileTest(
++		[]string{"{ foo; } always { bar; }"},
++		langErr2("1:10: statements must be separated by &, ; or a newline", LangBash|LangMirBSDKorn),
++	),
++	fileTest(
++		[]string{"{ foo; } always { bar; } >baz | qux"},
++		langFile(&Stmt{
++			Cmd: &BinaryCmd{
++				Op: Pipe,
++				X: &Stmt{
++					Cmd: &TryClause{
++						Try:    block(litStmt("foo")),
++						Always: block(litStmt("bar")),
++					},
++					Redirs: []*Redirect{{Op: RdrOut, Word: litWord("baz")}},
++				},
++				Y: litStmt("qux"),
++			},
++		}, LangZsh),
++	),
+ 	fileTest(
+ 		[]string{"repeat 3 { foo }"},
+ 		printsAs("repeat 3; do foo; done"),
+@@ -6168,6 +6200,8 @@ func (c sanityChecker) visit(node Node) bool {
+ 		}
+ 		c.checkPos(node, node.WhilePos, rsrv)
+ 		c.checkLoopBody(node, node.DoPos, node.DonePos, node.Braces, node.Short)
++	case *TryClause:
++		c.checkPos(node, node.AlwaysPos, "always")
+ 	case *RepeatClause:
+ 		c.checkPos(node, node.RepeatPos, "repeat")
+ 		c.checkLoopBody(node, node.DoPos, node.DonePos, node.Braces, node.Short)
+diff --git a/syntax/nodes.go b/syntax/nodes.go
+index 96b8dc3..b06a367 100644
+--- a/syntax/nodes.go
++++ b/syntax/nodes.go
+@@ -262,7 +262,7 @@ func (s *Stmt) End() Pos {
+ //
+ // These are [*CallExpr], [*IfClause], [*WhileClause], [*ForClause], [*CaseClause],
+ // [*Block], [*Subshell], [*BinaryCmd], [*FuncDecl], [*ArithmCmd], [*TestClause],
+-// [*DeclClause], [*LetClause], [*TimeClause], [*CoprocClause], and [*RepeatClause].
++// [*DeclClause], [*LetClause], [*TimeClause], [*CoprocClause], [*RepeatClause], and [*TryClause].
+ type Command interface {
+ 	Node
+ 	commandNode()
+@@ -285,6 +285,7 @@ func (*TimeClause) commandNode()   {}
+ func (*CoprocClause) commandNode() {}
+ func (*TestDecl) commandNode()     {}
+ func (*RepeatClause) commandNode() {}
++func (*TryClause) commandNode()    {}
+ 
+ // Assign represents an assignment to a variable.
+ //
+@@ -403,6 +404,20 @@ type Block struct {
+ func (b *Block) Pos() Pos { return b.Lbrace }
+ func (b *Block) End() Pos { return posAddCol(b.Rbrace, 1) }
+ 
++// TryClause represents a zsh `{ try-list } always { always-list }` clause, which
++// runs the always list after the try list even if that one fails, breaks out
++// of a loop, or returns from a function.
++//
++// This node will only appear with [LangZsh].
++type TryClause struct {
++	Try       *Block
++	AlwaysPos Pos // position of "always"
++	Always    *Block
++}
++
++func (t *TryClause) Pos() Pos { return t.Try.Pos() }
++func (t *TryClause) End() Pos { return t.Always.End() }
++
+ // IfClause represents an if statement.
+ //
+ // With [LangZsh], each branch may use one of the alternate forms instead of
+diff --git a/syntax/parser.go b/syntax/parser.go
+index d995445..70c63dd 100644
+--- a/syntax/parser.go
++++ b/syntax/parser.go
+@@ -2233,7 +2233,6 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
+ 			}
+ 		case "case":
+ 			p.caseClause(s)
+-		// TODO(zsh): { try-list } "always" { always-list }
+ 		case "}":
+ 			p.curErr(`%#q can only be used to close a block`, rightBrace)
+ 		case "then", "elif":
+@@ -2417,6 +2416,24 @@ func (p *Parser) arithmExpCmd(s *Stmt) {
+ }
+ 
+ func (p *Parser) block(s *Stmt) {
++	b := p.braceGroup()
++	if !p.lang.in(LangZsh) || p.tok != _LitWord || p.val != "always" {
++		s.Cmd = b
++		return
++	}
++	// Zsh runs the always list after the try list, however that one ends.
++	tc := &TryClause{Try: b, AlwaysPos: p.pos}
++	p.next()
++	if p.tok != _LitWord || p.val != "{" {
++		p.followErr(tc.AlwaysPos, "always", leftBrace)
++	}
++	tc.Always = p.braceGroup()
++	s.Cmd = tc
++}
++
++// braceGroup parses a list of statements in braces, starting at the current
++// "{" token.
++func (p *Parser) braceGroup() *Block {
+ 	b := &Block{Lbrace: p.pos}
+ 	p.next()
+ 	b.Stmts, b.Last = p.followStmts("{", b.Lbrace, "}")
+@@ -2427,7 +2444,7 @@ func (p *Parser) block(s *Stmt) {
+ 	} else {
+ 		p.matchingErr(b.Lbrace, leftBrace, rightBrace)
+ 	}
+-	s.Cmd = b
++	return b
+ }
+ 
+ func (p *Parser) ifClause(s *Stmt) {
+diff --git a/syntax/printer.go b/syntax/printer.go
+index 2fddb15..8ad9515 100644
+--- a/syntax/printer.go
++++ b/syntax/printer.go
+@@ -1217,14 +1217,12 @@ func (p *Printer) command(cmd Command, redirs []*Redirect) (startRedirs int) {
+ 		startRedirs = p.printRedirsUntil(redirs, startRedirs, cmd.Args[1].Pos())
+ 		p.wordJoin(cmd.Args[1:])
+ 	case *Block:
+-		p.w.WriteByte('{')
+-		// avoid ; in an empty block
+-		p.wroteSemi = true
+-		p.wantSpace = spaceRequired
+-		// Forbid "foo()\n{ bar; }"
+-		p.wantNewline = p.wantNewline || p.funcNextLine
+-		p.nestedStmts(cmd.Stmts, cmd.Last, cmd.Rbrace)
+-		p.semiRsrv("}", cmd.Rbrace)
++		p.braceGroup(cmd)
++	case *TryClause:
++		p.braceGroup(cmd.Try)
++		p.space()
++		p.w.WriteString("always ")
++		p.braceGroup(cmd.Always)
+ 	case *IfClause:
+ 		p.ifClause(cmd, false)
+ 	case *Subshell:
+@@ -1465,6 +1463,17 @@ func ifFiPos(ic *IfClause) Pos {
+ 	return last.Rbrace
+ }
+ 
++func (p *Printer) braceGroup(b *Block) {
++	p.w.WriteByte('{')
++	// avoid ; in an empty block
++	p.wroteSemi = true
++	p.wantSpace = spaceRequired
++	// Forbid "foo()\n{ bar; }"
++	p.wantNewline = p.wantNewline || p.funcNextLine
++	p.nestedStmts(b.Stmts, b.Last, b.Rbrace)
++	p.semiRsrv("}", b.Rbrace)
++}
++
+ // ifClause prints an if statement with "then" and "fi", even if it was
+ // written in one of zsh's alternate forms.
+ func (p *Printer) ifClause(ic *IfClause, elif bool) {
+diff --git a/syntax/walk.go b/syntax/walk.go
+index 40a63a5..3912988 100644
+--- a/syntax/walk.go
++++ b/syntax/walk.go
+@@ -70,6 +70,9 @@ func Walk(node Node, f func(Node) bool) {
+ 		Walk(node.Loop, f)
+ 		walkList(node.Do, f)
+ 		walkComments(node.DoLast, f)
++	case *TryClause:
++		Walk(node.Try, f)
++		Walk(node.Always, f)
+ 	case *RepeatClause:
+ 		Walk(node.Count, f)
+ 		walkList(node.Do, f)

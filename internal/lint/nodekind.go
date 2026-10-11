@@ -45,6 +45,7 @@ const (
 	kindTestClause
 	kindTestDecl
 	kindTimeClause
+	kindTryClause
 	kindUnaryArithm
 	kindUnaryTest
 	kindWhileClause
@@ -133,6 +134,8 @@ func nodeKindOf(n syntax.Node) nodeKind {
 		return kindTestDecl
 	case *syntax.TimeClause:
 		return kindTimeClause
+	case *syntax.TryClause:
+		return kindTryClause
 	case *syntax.UnaryArithm:
 		return kindUnaryArithm
 	case *syntax.UnaryTest:

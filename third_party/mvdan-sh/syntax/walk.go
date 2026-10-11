@@ -70,6 +70,9 @@ func Walk(node Node, f func(Node) bool) {
 		Walk(node.Loop, f)
 		walkList(node.Do, f)
 		walkComments(node.DoLast, f)
+	case *TryClause:
+		Walk(node.Try, f)
+		Walk(node.Always, f)
 	case *RepeatClause:
 		Walk(node.Count, f)
 		walkList(node.Do, f)

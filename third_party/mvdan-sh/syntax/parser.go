@@ -2233,7 +2233,6 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
 			}
 		case "case":
 			p.caseClause(s)
-		// TODO(zsh): { try-list } "always" { always-list }
 		case "}":
 			p.curErr(`%#q can only be used to close a block`, rightBrace)
 		case "then", "elif":
@@ -2417,6 +2416,24 @@ func (p *Parser) arithmExpCmd(s *Stmt) {
 }
 
 func (p *Parser) block(s *Stmt) {
+	b := p.braceGroup()
+	if !p.lang.in(LangZsh) || p.tok != _LitWord || p.val != "always" {
+		s.Cmd = b
+		return
+	}
+	// Zsh runs the always list after the try list, however that one ends.
+	tc := &TryClause{Try: b, AlwaysPos: p.pos}
+	p.next()
+	if p.tok != _LitWord || p.val != "{" {
+		p.followErr(tc.AlwaysPos, "always", leftBrace)
+	}
+	tc.Always = p.braceGroup()
+	s.Cmd = tc
+}
+
+// braceGroup parses a list of statements in braces, starting at the current
+// "{" token.
+func (p *Parser) braceGroup() *Block {
 	b := &Block{Lbrace: p.pos}
 	p.next()
 	b.Stmts, b.Last = p.followStmts("{", b.Lbrace, "}")
@@ -2427,7 +2444,7 @@ func (p *Parser) block(s *Stmt) {
 	} else {
 		p.matchingErr(b.Lbrace, leftBrace, rightBrace)
 	}
-	s.Cmd = b
+	return b
 }
 
 func (p *Parser) ifClause(s *Stmt) {

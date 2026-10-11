@@ -859,6 +859,38 @@ var fileTests = []fileTestCase{
 		}, LangZsh),
 	),
 	fileTest(
+		[]string{
+			"{ foo; } always { bar; }",
+			"{ foo } always { bar }",
+			"{\n\tfoo\n} always {\n\tbar\n}",
+		},
+		printsAs("{ foo; } always { bar; }"),
+		langFile(&TryClause{
+			Try:    block(litStmt("foo")),
+			Always: block(litStmt("bar")),
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"{ foo; } always { bar; }"},
+		langErr2("1:10: statements must be separated by &, ; or a newline", LangBash|LangMirBSDKorn),
+	),
+	fileTest(
+		[]string{"{ foo; } always { bar; } >baz | qux"},
+		langFile(&Stmt{
+			Cmd: &BinaryCmd{
+				Op: Pipe,
+				X: &Stmt{
+					Cmd: &TryClause{
+						Try:    block(litStmt("foo")),
+						Always: block(litStmt("bar")),
+					},
+					Redirs: []*Redirect{{Op: RdrOut, Word: litWord("baz")}},
+				},
+				Y: litStmt("qux"),
+			},
+		}, LangZsh),
+	),
+	fileTest(
 		[]string{"repeat 3 { foo }"},
 		printsAs("repeat 3; do foo; done"),
 		langFile(&RepeatClause{
@@ -6168,6 +6200,8 @@ func (c sanityChecker) visit(node Node) bool {
 		}
 		c.checkPos(node, node.WhilePos, rsrv)
 		c.checkLoopBody(node, node.DoPos, node.DonePos, node.Braces, node.Short)
+	case *TryClause:
+		c.checkPos(node, node.AlwaysPos, "always")
 	case *RepeatClause:
 		c.checkPos(node, node.RepeatPos, "repeat")
 		c.checkLoopBody(node, node.DoPos, node.DonePos, node.Braces, node.Short)

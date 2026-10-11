@@ -80,3 +80,18 @@ func TestZshAnonymousFunctionsRunInPlace(t *testing.T) {
 		t.Errorf("unreachable commands at %v, want only the one after return at %d", unreachable, want)
 	}
 }
+
+func TestZshAlwaysListRunsAfterTheTryListEnds(t *testing.T) {
+	t.Parallel()
+
+	src := "f() {\n  { return 1 } always { print cleanup }\n  print after\n}\nf\n"
+	var unreachable []string
+	for _, f := range Check(parser.Parse(src, dialect.Zsh), nil, Options{}) {
+		if f.Code == 2317 {
+			unreachable = append(unreachable, src[f.Span.Start:f.Span.End])
+		}
+	}
+	if len(unreachable) != 1 || unreachable[0] != "print after" {
+		t.Errorf("unreachable commands = %q, want only the one after the always list", unreachable)
+	}
+}

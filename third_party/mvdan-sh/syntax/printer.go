@@ -1217,14 +1217,12 @@ func (p *Printer) command(cmd Command, redirs []*Redirect) (startRedirs int) {
 		startRedirs = p.printRedirsUntil(redirs, startRedirs, cmd.Args[1].Pos())
 		p.wordJoin(cmd.Args[1:])
 	case *Block:
-		p.w.WriteByte('{')
-		// avoid ; in an empty block
-		p.wroteSemi = true
-		p.wantSpace = spaceRequired
-		// Forbid "foo()\n{ bar; }"
-		p.wantNewline = p.wantNewline || p.funcNextLine
-		p.nestedStmts(cmd.Stmts, cmd.Last, cmd.Rbrace)
-		p.semiRsrv("}", cmd.Rbrace)
+		p.braceGroup(cmd)
+	case *TryClause:
+		p.braceGroup(cmd.Try)
+		p.space()
+		p.w.WriteString("always ")
+		p.braceGroup(cmd.Always)
 	case *IfClause:
 		p.ifClause(cmd, false)
 	case *Subshell:
@@ -1463,6 +1461,17 @@ func ifFiPos(ic *IfClause) Pos {
 		last = last.Else
 	}
 	return last.Rbrace
+}
+
+func (p *Printer) braceGroup(b *Block) {
+	p.w.WriteByte('{')
+	// avoid ; in an empty block
+	p.wroteSemi = true
+	p.wantSpace = spaceRequired
+	// Forbid "foo()\n{ bar; }"
+	p.wantNewline = p.wantNewline || p.funcNextLine
+	p.nestedStmts(b.Stmts, b.Last, b.Rbrace)
+	p.semiRsrv("}", b.Rbrace)
 }
 
 // ifClause prints an if statement with "then" and "fi", even if it was

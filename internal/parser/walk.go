@@ -64,6 +64,9 @@ func Walk(node syntax.Node, f func(syntax.Node) bool) {
 		Walk(n.Loop, f)
 		walkStmts(n.Do, f)
 		walkComments(n.DoLast, f)
+	case *syntax.TryClause:
+		Walk(n.Try, f)
+		Walk(n.Always, f)
 	case *syntax.RepeatClause:
 		Walk(n.Count, f)
 		walkStmts(n.Do, f)

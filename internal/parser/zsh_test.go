@@ -114,3 +114,17 @@ func TestZshFunctionsWithSeveralNames(t *testing.T) {
 		}
 	}
 }
+
+func TestZshTryAlwaysIsIndexed(t *testing.T) {
+	t.Parallel()
+
+	src := "{\n  x=1\n  print try\n} always {\n  print $x\n}\n"
+	tree := Parse(src, dialect.Zsh)
+	if len(tree.Errors) != 0 {
+		t.Fatalf("errors = %v, want none", messages(tree))
+	}
+	defs, commands, keywords := indexedNames(tree)
+	if !slices.Equal(defs, []string{"x"}) || !slices.Equal(commands, []string{"print", "print"}) || !slices.Equal(keywords, []string{"always"}) {
+		t.Errorf("definitions %v, commands %v, keywords %v; want x, two prints and always", defs, commands, keywords)
+	}
+}
