@@ -1,9 +1,11 @@
 package lint
 
 import (
+	"path"
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -26,7 +28,13 @@ var grepFamily = family{
 
 func deprecatedGrep(code Code, replacement string) func(p *pass, c command) {
 	return func(p *pass, c command) {
-		p.reportNode(code, c.word, c.name+" is deprecated and missing from some systems; use "+replacement+" instead.")
+		var fixes []Fix
+		if lit, ok := c.word.Parts[0].(*syntax.Lit); ok && len(c.word.Parts) == 1 {
+			base := path.Base(lit.Value)
+			end := parser.Offset(lit.ValueEnd)
+			fixes = append(fixes, safeFix("Replace "+base+" with "+replacement, textedit.Edit{Start: end - len(base), End: end, NewText: replacement}))
+		}
+		p.reportNode(code, c.word, c.name+" is deprecated and missing from some systems; use "+replacement+" instead.", fixes...)
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -48,10 +49,19 @@ func (p *pass) checkFunctionKeyword(fn *syntax.FuncDecl) {
 	case p.dialect == dialect.Ksh && fn.Parens:
 		p.report(2111, span, "ksh does not accept both the function keyword and (); use either 'function name' or 'name()'.")
 	case strictShells.Has(p.dialect) && fn.Parens:
-		p.report(2112, span, "The function keyword is not POSIX; drop it and keep 'name()'.")
+		p.report(2112, span, "The function keyword is not POSIX; drop it and keep 'name()'.", safeFix("Drop the function keyword", FunctionKeywordRemoval(fn)...))
 	case strictShells.Has(p.dialect):
-		p.report(2113, span, "The function keyword is not POSIX; write 'name()' instead.")
+		p.report(2113, span, "The function keyword is not POSIX; write 'name()' instead.", safeFix("Write "+fn.Name.Value+"()", FunctionKeywordRemoval(fn)...))
 	}
+}
+
+func FunctionKeywordRemoval(fn *syntax.FuncDecl) []textedit.Edit {
+	edits := []textedit.Edit{{Start: parser.Offset(fn.Position), End: parser.Offset(fn.Name.ValuePos)}}
+	if !fn.Parens {
+		end := parser.Offset(fn.Name.ValueEnd)
+		edits = append(edits, textedit.Edit{Start: end, End: end, NewText: "()"})
+	}
+	return edits
 }
 
 func (p *pass) checkKshPipeStderr(stmt *syntax.Stmt) {

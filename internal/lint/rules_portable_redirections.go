@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -39,7 +40,9 @@ func checkPortableRedirection(p *pass, n syntax.Node) {
 		p.nonPortable(portabilityIssue{code: 3011, shells: strictShells, feature: "The here-string <<<", alternative: "a here-document or printf ... |"}, posSpan(r.OpPos, len("<<<")))
 		return
 	case syntax.RdrAll:
-		p.nonPortable(portabilityIssue{code: 3020, shells: posixOrDash, feature: "Redirecting both streams with &>", alternative: ">file 2>&1"}, span)
+		op, end := parser.Offset(r.OpPos), parser.Offset(r.Word.End())
+		p.nonPortable(portabilityIssue{code: 3020, shells: posixOrDash, feature: "Redirecting both streams with &>", alternative: ">file 2>&1"}, span,
+			safeFix("Replace &> with > and 2>&1", textedit.Edit{Start: op, End: op + len("&>"), NewText: ">"}, textedit.Edit{Start: end, End: end, NewText: " 2>&1"}))
 	case syntax.DplOut:
 		if r.N == nil && !isDescriptorTarget(r.Word) {
 			p.nonPortable(portabilityIssue{code: 3021, shells: strictShells, feature: "Redirecting both streams to a file with >&", alternative: ">file 2>&1"}, span)

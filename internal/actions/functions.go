@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/shelldocs"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
@@ -42,11 +43,7 @@ func toggleFunctionKeyword(s *site) (Change, bool) {
 		return Change{}, false
 	}
 	if fn.RsrvWord {
-		edits := []textedit.Edit{{Start: parser.Offset(fn.Position), End: name.Start}}
-		if !fn.Parens {
-			edits = append(edits, textedit.Edit{Start: name.End, End: name.End, NewText: "()"})
-		}
-		return Change{Title: "Declare " + fn.Name.Value + "() without the function keyword", Edits: edits}, true
+		return Change{Title: "Declare " + fn.Name.Value + "() without the function keyword", Edits: lint.FunctionKeywordRemoval(fn)}, true
 	}
 	keyword, known := shelldocs.Keyword("function")
 	if _, block := fn.Body.Cmd.(*syntax.Block); !block || !known || !keyword.Dialects.Has(d) {

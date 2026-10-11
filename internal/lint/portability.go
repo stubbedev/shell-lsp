@@ -3,6 +3,7 @@ package lint
 import (
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -18,9 +19,17 @@ type portabilityIssue struct {
 	shells      dialect.Set
 	feature     string
 	alternative string
+	replacement string
 }
 
-func (p *pass) nonPortable(issue portabilityIssue, span parser.Span) {
+func (p *pass) replacementFix(issue portabilityIssue, span parser.Span) []Fix {
+	if issue.replacement == "" {
+		return nil
+	}
+	return []Fix{safeFix("Replace "+p.text[span.Start:span.End]+" with "+issue.replacement, textedit.Edit{Start: span.Start, End: span.End, NewText: issue.replacement})}
+}
+
+func (p *pass) nonPortable(issue portabilityIssue, span parser.Span, fixes ...Fix) {
 	if !issue.shells.Has(p.dialect) {
 		return
 	}
@@ -31,15 +40,15 @@ func (p *pass) nonPortable(issue portabilityIssue, span parser.Span) {
 	if issue.alternative != "" {
 		message += " Use " + issue.alternative + " instead."
 	}
-	p.reportWithSeverity(issue.code, severity, span, message)
+	p.reportWithSeverity(issue.code, severity, span, message, fixes...)
 }
 
-func (p *pass) nonPortableNode(issue portabilityIssue, n syntax.Node) {
+func (p *pass) nonPortableNode(issue portabilityIssue, n syntax.Node, fixes ...Fix) {
 	if !issue.shells.Has(p.dialect) {
 		return
 	}
 	if span, ok := p.span(n); ok {
-		p.nonPortable(issue, span)
+		p.nonPortable(issue, span, fixes...)
 	}
 }
 

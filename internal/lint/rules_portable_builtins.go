@@ -7,6 +7,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -159,7 +160,11 @@ func checkResolvedBuiltin(p *pass, call *syntax.CallExpr) {
 		p.nonPortableNode(portabilityIssue{code: 3043, shells: posixOnly, feature: "local"}, call)
 	case name == "source":
 		issue := portabilityIssue{code: 3046, shells: posixOrDash, feature: "source", alternative: "."}
-		p.nonPortableNode(issue, call)
+		var fixes []Fix
+		if span, ok := p.span(word); ok && word.Lit() == name {
+			fixes = append(fixes, safeFix("Replace source with .", textedit.Edit{Start: span.Start, End: span.End, NewText: "."}))
+		}
+		p.nonPortableNode(issue, call, fixes...)
 		if p.followsSource(call, word) {
 			issue.code = 3051
 			p.nonPortableNode(issue, call)
@@ -252,11 +257,17 @@ func checkTrapSignals(p *pass, args []*syntax.Word) {
 		if bashTrapSignals[upper] {
 			p.nonPortableNode(portabilityIssue{code: 3047, shells: strictShells, feature: "Trapping " + upper}, arg)
 		}
+		span, spanned := p.span(arg)
+		if !spanned {
+			continue
+		}
 		if strings.HasPrefix(upper, "SIG") {
-			p.nonPortableNode(portabilityIssue{code: 3048, shells: posixOrDash, feature: "The SIG prefix in " + signal, alternative: upper[len("SIG"):]}, arg)
+			issue := portabilityIssue{code: 3048, shells: posixOrDash, feature: "The SIG prefix in " + signal, alternative: upper[len("SIG"):], replacement: upper[len("SIG"):]}
+			p.nonPortable(issue, span, p.replacementFix(issue, span)...)
 		}
 		if signal != upper {
-			p.nonPortableNode(portabilityIssue{code: 3049, shells: posixOnly, feature: "The lowercase signal name " + signal, alternative: upper}, arg)
+			issue := portabilityIssue{code: 3049, shells: posixOnly, feature: "The lowercase signal name " + signal, alternative: upper, replacement: upper}
+			p.nonPortable(issue, span, p.replacementFix(issue, span)...)
 		}
 	}
 }

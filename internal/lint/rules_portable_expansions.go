@@ -6,6 +6,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -87,7 +88,12 @@ func checkCaretBracket(p *pass, w *syntax.Word) {
 			continue
 		}
 		offset := parser.Offset(lit.ValuePos)
-		p.nonPortable(portabilityIssue{code: 3026, shells: strictShells, feature: "Negating a bracket expression with ^", alternative: "[!...]"}, parser.Span{Start: offset + start, End: offset + end})
+		caret := offset + start + 1
+		var fixes []Fix
+		if caret < len(p.text) && p.text[caret] == '^' {
+			fixes = append(fixes, safeFix("Replace [^ with [!", textedit.Edit{Start: caret, End: caret + 1, NewText: "!"}))
+		}
+		p.nonPortable(portabilityIssue{code: 3026, shells: strictShells, feature: "Negating a bracket expression with ^", alternative: "[!...]"}, parser.Span{Start: offset + start, End: offset + end}, fixes...)
 	}
 }
 

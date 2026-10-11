@@ -28,7 +28,7 @@ var portableTestsFamily = family{
 var (
 	unaryTestIssues = map[string]portabilityIssue{
 		"-v": {code: 3016, shells: strictShells, feature: "test -v", alternative: `[ -n "${name+set}" ]`},
-		"-a": {code: 3017, shells: strictShells, feature: "The unary test -a", alternative: "-e"},
+		"-a": {code: 3017, shells: strictShells, feature: "The unary test -a", alternative: "-e", replacement: "-e"},
 		"-o": {code: 3062, shells: strictShells, feature: "Checking a shell option with test -o", alternative: `case $- in *x*) ... esac`},
 		"-R": {code: 3063, shells: strictShells, feature: "test -R, like namerefs in general,"},
 		"-N": {code: 3064, shells: strictShells, feature: "test -N"},
@@ -41,7 +41,7 @@ var (
 		">":  {code: 3012, shells: posixOnly, feature: "Lexicographic comparison with >"},
 		"<=": {code: 3012, shells: posixOnly, feature: "Lexicographic comparison with <="},
 		">=": {code: 3012, shells: posixOnly, feature: "Lexicographic comparison with >="},
-		"==": {code: 3014, shells: posixOrDash, feature: "Comparing with ==", alternative: "="},
+		"==": {code: 3014, shells: posixOrDash, feature: "Comparing with ==", alternative: "=", replacement: "="},
 		"=~": {code: 3015, shells: strictShells, feature: "Regex matching with =~", alternative: "expr or a case pattern"},
 	}
 )
@@ -86,7 +86,7 @@ func (p *pass) checkPortableOperators(t testCommand) {
 			return
 		}
 		if issue, ok := issues[o.op]; ok {
-			p.nonPortable(issue, o.opSpan)
+			p.nonPortable(issue, o.opSpan, p.replacementFix(issue, o.opSpan)...)
 		}
 		if o.negated && !o.double && p.dialect == dialect.Bash && (o.op == "-o" || o.op == "-a") {
 			p.reportNegatedConnective(o)

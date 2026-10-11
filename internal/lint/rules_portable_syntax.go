@@ -2,6 +2,7 @@ package lint
 
 import (
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -72,9 +73,13 @@ func checkFileReadShortcut(p *pass, cs *syntax.CmdSubst) {
 	if stmt.Cmd != nil || len(stmt.Redirs) == 0 {
 		return
 	}
+	var fixes []Fix
+	if r := stmt.Redirs[0]; len(stmt.Redirs) == 1 && r.Op == syntax.RdrIn && r.N == nil {
+		fixes = append(fixes, safeFix("Read the file with cat", textedit.Edit{Start: parser.Offset(r.OpPos), End: parser.Offset(r.Word.Pos()), NewText: "cat "}))
+	}
 	if cs.Backquotes {
-		p.nonPortableNode(portabilityIssue{code: 3035, shells: strictShells, feature: "Reading a file with `< file`", alternative: "`cat file`"}, cs)
+		p.nonPortableNode(portabilityIssue{code: 3035, shells: strictShells, feature: "Reading a file with `< file`", alternative: "`cat file`"}, cs, fixes...)
 		return
 	}
-	p.nonPortableNode(portabilityIssue{code: 3034, shells: strictShells, feature: "Reading a file with $(< file)", alternative: "$(cat file)"}, cs)
+	p.nonPortableNode(portabilityIssue{code: 3034, shells: strictShells, feature: "Reading a file with $(< file)", alternative: "$(cat file)"}, cs, fixes...)
 }
