@@ -320,7 +320,7 @@ upstream.
 | `just crosscheck` | Compare with bash-language-server into `docs/crosscheck.md` |
 | `just fixtures` | Label new lint fixtures with shellcheck, then check every fixture |
 | `just lintcheck PATH...` | Per-code precision and recall of the linter against shellcheck over real scripts |
-| `just dist` | Build static release binaries for Linux and macOS into `dist/` |
+| `just dist` | Build static release binaries for Linux, macOS and Windows into `dist/` |
 
 Every dev tool (Go toolchain pinned to the version go.mod declares, gopls,
 golangci-lint, delve, just, shellcheck, shfmt, git, gh, and Node.js for the
