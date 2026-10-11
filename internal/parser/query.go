@@ -138,14 +138,14 @@ func (t *Tree) NodeSpan(node syntax.Node) (Span, bool) {
 		return Span{}, false
 	}
 	start := node.Pos()
-	if !start.IsValid() {
+	if !start.IsValid() || offset(start) > len(t.text) {
 		return Span{}, false
 	}
 	end := node.End()
 	if !end.IsValid() {
 		return Span{Start: offset(start), End: len(t.text)}, true
 	}
-	return Span{Start: offset(start), End: max(offset(start), offset(end))}, true
+	return Span{Start: offset(start), End: min(max(offset(start), offset(end)), len(t.text))}, true
 }
 
 func (t *Tree) LiteralKeys(name string) []string {
