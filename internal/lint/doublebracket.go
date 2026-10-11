@@ -11,13 +11,44 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 )
 
+func TestExpression(cmd syntax.Command) (syntax.TestExpr, bool) {
+	t, ok := wellFormedTest(cmd)
+	return t.expr, ok
+}
+
+func wellFormedTest(cmd syntax.Command) (testCommand, bool) {
+	t, ok := testCommandOf(cmd)
+	if !ok || (t.name != "[" && t.name != "test" && t.name != "[[") || t.unterminated || t.malformed() || t.expr == nil {
+		return testCommand{}, false
+	}
+	return t, true
+}
+
+func ReadsVerbatim(w *syntax.Word) bool {
+	if isPattern(w) {
+		return false
+	}
+	for _, part := range w.Parts {
+		switch p := part.(type) {
+		case *syntax.Lit, *syntax.SglQuoted, *syntax.DblQuoted, *syntax.ArithmExp:
+		case *syntax.ParamExp:
+			if !parser.IsPlainParam(p) || !spacelessSpecials[p.Param.Value] {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 func DoubleBrackets(text string, stmt *syntax.Stmt) ([]textedit.Edit, bool) {
 	call, ok := stmt.Cmd.(*syntax.CallExpr)
 	if !ok || len(call.Assigns) > 0 || slices.ContainsFunc(stmt.Redirs, func(r *syntax.Redirect) bool { return isWithin(call, r) }) {
 		return nil, false
 	}
-	t, ok := testCommandOf(call)
-	if !ok || (t.name != "[" && t.name != "test") || t.unterminated || t.malformed() || t.expr == nil {
+	t, ok := wellFormedTest(call)
+	if !ok {
 		return nil, false
 	}
 	c := bracketConversion{text: text, args: t.args}
@@ -41,14 +72,14 @@ type bracketConversion struct {
 func (c *bracketConversion) expr(e syntax.TestExpr) bool {
 	switch e := e.(type) {
 	case *syntax.Word:
-		return c.operand(e) && !readsAsOperator(e)
+		return ReadsVerbatim(e) && !readsAsOperator(e)
 	case *syntax.UnaryTest:
 		if e.Op == syntax.TsNot {
 			c.operator(e.OpPos, "!")
 			return c.expr(e.X)
 		}
 		w, ok := e.X.(*syntax.Word)
-		return ok && c.spelledOperator(e.OpPos) && c.operand(w)
+		return ok && c.spelledOperator(e.OpPos) && ReadsVerbatim(w)
 	case *syntax.BinaryTest:
 		switch e.Op {
 		case syntax.AndTest:
@@ -62,7 +93,7 @@ func (c *bracketConversion) expr(e syntax.TestExpr) bool {
 		}
 		x, okX := e.X.(*syntax.Word)
 		y, okY := e.Y.(*syntax.Word)
-		return okX && okY && c.spelledOperator(e.OpPos) && c.operand(x) && c.operand(y)
+		return okX && okY && c.spelledOperator(e.OpPos) && ReadsVerbatim(x) && ReadsVerbatim(y)
 	case *syntax.ParenTest:
 		c.operator(e.Lparen, "(")
 		c.operator(e.Rparen, ")")
@@ -89,24 +120,6 @@ func (c *bracketConversion) spelledOperator(pos syntax.Pos) bool {
 func (c *bracketConversion) argAt(pos syntax.Pos) *syntax.Word {
 	i, _ := slices.BinarySearchFunc(c.args, pos.Offset(), func(w *syntax.Word, offset uint) int { return cmp.Compare(w.Pos().Offset(), offset) })
 	return c.args[i]
-}
-
-func (c *bracketConversion) operand(w *syntax.Word) bool {
-	if isPattern(w) {
-		return false
-	}
-	for _, part := range w.Parts {
-		switch p := part.(type) {
-		case *syntax.Lit, *syntax.SglQuoted, *syntax.DblQuoted, *syntax.ArithmExp:
-		case *syntax.ParamExp:
-			if !parser.IsPlainParam(p) || !spacelessSpecials[p.Param.Value] {
-				return false
-			}
-		default:
-			return false
-		}
-	}
-	return true
 }
 
 func readsAsOperator(w *syntax.Word) bool {

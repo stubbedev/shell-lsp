@@ -141,6 +141,7 @@ and keeps the script's meaning; their edits are computed on
 | Inline variable | `refactor.inline` | Replaces the reads of a variable assigned once to a literal with the value, quoted for each place it is read, and removes the assignment; only when nothing else writes, exports, unsets or could read the variable before the assignment or from another scope |
 | Toggle the function keyword | `refactor.rewrite` | Switches between `function f { ... }` and `f() { ... }`; the keyword form is only offered in bash and zsh, and ksh is left alone because there the two forms scope variables differently |
 | Add strict mode | `source.strictMode` | Inserts `set -euo pipefail` (`set -eu` in sh, dash and busybox) after the shebang and leading comments of a script that does not already enable all of them |
+| Convert to case | `refactor.rewrite` | Rewrites an `if`/`elif` chain whose every condition compares the same expansion for equality (`[ "$x" = lit ]`, `test`, `[[ $x == pattern ]]`, joined with `\|\|` or `-o`) into `case`, keeping each body and the `else` branch |
 
 ## Commands
 

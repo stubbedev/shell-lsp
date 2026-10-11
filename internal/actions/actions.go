@@ -43,6 +43,7 @@ const (
 	InlineVariable   RefactorKind = "inlineVariable"
 	FunctionKeyword  RefactorKind = "functionKeyword"
 	StrictMode       RefactorKind = "strictMode"
+	IfToCase         RefactorKind = "ifToCase"
 )
 
 type Refactor struct {
@@ -92,6 +93,7 @@ var refactorings = []refactoring{
 	{InlineVariable, RefactorInline, inlineVariable},
 	{FunctionKeyword, RefactorRewrite, toggleFunctionKeyword},
 	{StrictMode, SourceStrictMode, strictMode},
+	{IfToCase, RefactorRewrite, ifToCase},
 }
 
 func Refactorings() []RefactorKind {
