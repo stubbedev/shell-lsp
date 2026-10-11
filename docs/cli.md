@@ -195,7 +195,7 @@ shell-lsp from source:
 ```yaml
 repos:
   - repo: https://github.com/stubbedev/shell-lsp
-    rev: v0.2.0
+    rev: v0.3.0
     hooks:
       - id: shell-lsp-check
       - id: shell-lsp-fmt
