@@ -45,3 +45,63 @@ jobs:
             exit 1
           fi
           gh release create "$VERSION" dist/* --repo "$GITHUB_REPOSITORY" --title "$VERSION" --notes-file "$notes" --verify-tag
+
+  vscode:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: editors/vscode
+    env:
+      VERSION: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: editors/vscode/package-lock.json
+      - run: npm ci
+      - run: npm version --no-git-tag-version "${VERSION#v}"
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run package
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$VERSION" "shell-lsp-${VERSION#v}.vsix" --repo "$GITHUB_REPOSITORY"
+      - name: Decide where to publish
+        id: registries
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: |
+          set -euo pipefail
+          if [[ "$VERSION" == *-* ]]; then
+            echo "::notice::$VERSION is a pre-release; not publishing it to the extension registries"
+            exit 0
+          fi
+          if [ -n "$VSCE_PAT" ]; then
+            echo "marketplace=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::VSCE_PAT is not set; not publishing to the Visual Studio Marketplace"
+          fi
+          if [ -n "$OVSX_PAT" ]; then
+            echo "openvsx=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::OVSX_PAT is not set; not publishing to Open VSX"
+          fi
+      - name: Publish to the Visual Studio Marketplace
+        if: steps.registries.outputs.marketplace == 'true'
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: npx vsce publish --packagePath "shell-lsp-${VERSION#v}.vsix"
+      - name: Publish to Open VSX
+        if: steps.registries.outputs.openvsx == 'true'
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: npx ovsx publish --packagePath "shell-lsp-${VERSION#v}.vsix"
