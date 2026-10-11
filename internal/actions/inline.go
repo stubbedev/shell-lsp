@@ -32,7 +32,7 @@ func inlineVariable(s *site) (Change, bool) {
 	if !ok || strings.HasPrefix(name, "LC_") || tree.AttrsAnywhere(name) != 0 {
 		return Change{}, false
 	}
-	if _, special := shelldocs.Variable(name); special {
+	if shelldocs.KnownParameters(tree.Dialect).Has(name) {
 		return Change{}, false
 	}
 	def, ok := soleDefinition(tree, name)

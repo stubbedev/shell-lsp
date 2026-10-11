@@ -1,4 +1,4 @@
-package lint
+package shelldocs
 
 import (
 	"slices"
@@ -8,27 +8,27 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/parser"
 )
 
-type parameterTraits uint8
+type ParameterTraits uint8
 
 const (
-	parameterPrompt parameterTraits = 1 << iota
-	parameterAssociative
+	PromptParameter ParameterTraits = 1 << iota
+	AssociativeParameter
 )
 
-type parameterGroup struct {
-	traits parameterTraits
+type knownGroup struct {
+	traits ParameterTraits
 	names  []string
 }
 
-type numberedParameter struct{ prefix, suffix string }
+type numberedName struct{ prefix, suffix string }
 
-type parameterTable struct {
-	names    map[string]parameterTraits
-	numbered []numberedParameter
+type ParameterTable struct {
+	names    map[string]ParameterTraits
+	numbered []numberedName
 }
 
-func newParameterTable(numbered []numberedParameter, groups ...parameterGroup) parameterTable {
-	t := parameterTable{names: map[string]parameterTraits{}, numbered: numbered}
+func newKnownParameters(numbered []numberedName, groups ...knownGroup) ParameterTable {
+	t := ParameterTable{names: map[string]ParameterTraits{}, numbered: numbered}
 	for _, g := range groups {
 		for _, name := range g.names {
 			t.names[name] |= g.traits
@@ -37,7 +37,7 @@ func newParameterTable(numbered []numberedParameter, groups ...parameterGroup) p
 	return t
 }
 
-func (t parameterTable) has(name string) bool {
+func (t ParameterTable) Has(name string) bool {
 	if _, ok := t.names[name]; ok {
 		return true
 	}
@@ -53,11 +53,11 @@ func (t parameterTable) has(name string) bool {
 	return false
 }
 
-func (t parameterTable) is(name string, traits parameterTraits) bool {
+func (t ParameterTable) Is(name string, traits ParameterTraits) bool {
 	return t.names[name]&traits != 0
 }
 
-var shellParameterGroups = []parameterGroup{
+var knownShellGroups = []knownGroup{
 	{names: []string{
 		"_", "BASH", "BASHOPTS", "BASHPID", "BASH_ALIASES", "BASH_ARGC", "BASH_ARGV", "BASH_ARGV0", "BASH_CMDS",
 		"BASH_COMMAND", "BASH_COMPAT", "BASH_ENV", "BASH_EXECUTION_STRING", "BASH_LINENO", "BASH_LOADABLES_PATH",
@@ -73,16 +73,16 @@ var shellParameterGroups = []parameterGroup{
 		"POSIXLY_CORRECT", "PPID", "PROMPT_DIRTRIM", "PS0", "PWD",
 		"RANDOM", "READLINE_ARGUMENT", "READLINE_LINE", "READLINE_MARK", "READLINE_POINT", "REPLY", "SECONDS",
 		"SHELL", "SHELLOPTS", "SHLVL", "SRANDOM", "TERM", "TIMEFORMAT", "TMOUT", "TMPDIR", "TZ", "UID", "USER",
-		"XAUTHORITY", "auto_resume", "histchars", "rest", "REST",
+		"XAUTHORITY", "auto_resume", "histchars", "rest", "REST", "EDITOR", "VISUAL", "PAGER",
 		"FLAGS_ARGV", "FLAGS_ERROR", "FLAGS_FALSE", "FLAGS_HELP", "FLAGS_PARENT", "FLAGS_RESERVED", "FLAGS_TRUE",
 		"FLAGS_VERSION",
 	}},
-	{traits: parameterPrompt, names: []string{"PS1", "PS2", "PS3", "PS4", "PROMPT_COMMAND"}},
+	{traits: PromptParameter, names: []string{"PS1", "PS2", "PS3", "PS4", "PROMPT_COMMAND"}},
 }
 
-var shellParameters = newParameterTable(nil, shellParameterGroups...)
+var knownShell = newKnownParameters(nil, knownShellGroups...)
 
-var zshParameters = newParameterTable([]numberedParameter{{prefix: "vcs_info_msg_", suffix: "_"}}, slices.Concat(shellParameterGroups, []parameterGroup{
+var knownZsh = newKnownParameters([]numberedName{{prefix: "vcs_info_msg_", suffix: "_"}}, slices.Concat(knownShellGroups, []knownGroup{
 	{names: []string{
 		"ARGC", "argv", "status", "pipestatus", "CPUTYPE", "EGID", "ERRNO", "GID", "HOST", "signals",
 		"TRY_BLOCK_ERROR", "TRY_BLOCK_INTERRUPT", "TTY", "TTYIDLE", "USERNAME", "VENDOR", "zsh_eval_context",
@@ -115,11 +115,11 @@ var zshParameters = newParameterTable([]numberedParameter{{prefix: "vcs_info_msg
 		"ZFTP_PWD", "ZFTP_CODE", "ZFTP_REPLY", "ZFTP_SESSION", "ZFTP_PREFS", "ZFTP_VERBOSE",
 		"reset_color", "bold_color", "prompt_opts",
 	}},
-	{traits: parameterPrompt, names: []string{
+	{traits: PromptParameter, names: []string{
 		"PROMPT", "PROMPT2", "PROMPT3", "PROMPT4", "prompt", "RPROMPT", "RPS1", "RPROMPT2", "RPS2", "SPROMPT",
 		"PROMPT_EOL_MARK",
 	}},
-	{traits: parameterAssociative, names: []string{
+	{traits: AssociativeParameter, names: []string{
 		"registers", "compstate", "opt_args",
 		"options", "commands", "functions", "dis_functions", "functions_source", "dis_functions_source",
 		"builtins", "dis_builtins", "aliases", "dis_aliases", "galiases", "dis_galiases", "saliases",
@@ -130,11 +130,22 @@ var zshParameters = newParameterTable([]numberedParameter{{prefix: "vcs_info_msg
 	}},
 })...)
 
-var dialectParameters = map[dialect.Dialect]parameterTable{dialect.Zsh: zshParameters}
+var knownKsh = newKnownParameters(nil, slices.Concat(knownShellGroups, []knownGroup{
+	{names: []string{
+		"KSH_VERSION", "FPATH", "HISTEDIT", "ENV", "PS4", "SECONDS", "RANDOM", "REPLY", "TMOUT",
+		"PATHSEP", "USER_ID", "KSHEGID", "KSHGID", "KSHUID", "EPOCHREALTIME", "BASHPID", "PIPESTATUS",
+		".sh.command", ".sh.dollar", ".sh.edchar", ".sh.edcol", ".sh.edmode", ".sh.edtext", ".sh.file",
+		".sh.fun", ".sh.level", ".sh.lineno", ".sh.match", ".sh.math", ".sh.name", ".sh.pid", ".sh.pool",
+		".sh.ppid", ".sh.pwdfd", ".sh.sig", ".sh.stats", ".sh.subscript", ".sh.subshell", ".sh.value",
+		".sh.version",
+	}},
+})...)
 
-func parametersOf(d dialect.Dialect) parameterTable {
-	if t, ok := dialectParameters[d]; ok {
+var knownByDialect = map[dialect.Dialect]ParameterTable{dialect.Zsh: knownZsh, dialect.Ksh: knownKsh}
+
+func KnownParameters(d dialect.Dialect) ParameterTable {
+	if t, ok := knownByDialect[d]; ok {
 		return t
 	}
-	return shellParameters
+	return knownShell
 }

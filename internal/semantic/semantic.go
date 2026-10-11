@@ -124,7 +124,7 @@ func (g *generator) referenceModifiers(ref parser.Reference) Modifier {
 	if g.tree.Visible(ref.Name, ref.Within).Len() == 0 {
 		imp, _, ok := parser.ImportedGlobal(g.imports, ref.Name)
 		if !ok {
-			if _, special := shelldocs.Variable(ref.Name); special {
+			if shelldocs.KnownParameters(g.tree.Dialect).Has(ref.Name) {
 				return ModDefaultLibrary
 			}
 			return 0

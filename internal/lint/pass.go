@@ -6,6 +6,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/shelldocs"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
@@ -43,7 +44,7 @@ type pass struct {
 	shellChosen    bool
 	shellOptions   *shellOptions
 	variables      variableUsage
-	parameters     parameterTable
+	parameters     shelldocs.ParameterTable
 	dialectGuessed bool
 	emptinessTests map[int]bool
 }
@@ -57,7 +58,7 @@ func newPass(tree *parser.Tree, imports []parser.Import, opts Options) *pass {
 		settings:   fileWideSettings(directives, firstCommand, opts.Optional),
 		stmts:      make([]parser.Span, 0, len(tree.Commands)),
 		variables:  variableUsage{reads: make([]variableRead, 0, len(tree.References))},
-		parameters: parametersOf(tree.Dialect),
+		parameters: shelldocs.KnownParameters(tree.Dialect),
 	}
 }
 

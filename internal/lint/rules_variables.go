@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/shelldocs"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -265,7 +266,7 @@ func (p *pass) collectAssign(a *syntax.Assign) {
 		p.variables.use(name)
 	}
 	p.subscript(a.Index, name, true)
-	if p.parameters.is(name, parameterPrompt) && a.Value != nil {
+	if p.parameters.Is(name, shelldocs.PromptParameter) && a.Value != nil {
 		if span, ok := p.span(a); ok {
 			p.scanWord(a.Value, span)
 		}
@@ -578,7 +579,7 @@ func (p *pass) associativeArray(name string) bool {
 	if p.tree.AttrsAnywhere(name).Has(parser.AttrAssoc) {
 		return true
 	}
-	return p.parameters.is(name, parameterAssociative) && !p.declares(name)
+	return p.parameters.Is(name, shelldocs.AssociativeParameter) && !p.declares(name)
 }
 
 func (p *pass) declares(name string) bool {
@@ -615,7 +616,7 @@ func reportVariables(p *pass) {
 func (p *pass) reportUnused(f variableFacts) {
 	names := make([]string, 0, len(f.last))
 	for name := range f.last {
-		if !f.used[name] && !strings.HasPrefix(name, "_") && !p.parameters.has(name) {
+		if !f.used[name] && !strings.HasPrefix(name, "_") && !p.parameters.Has(name) {
 			names = append(names, name)
 		}
 	}
@@ -632,7 +633,7 @@ func (p *pass) reportUnassigned(f variableFacts) {
 	})
 	seen := map[string]bool{}
 	for _, r := range reads {
-		if seen[r.name] || f.assigned[r.name] || p.parameters.has(r.name) || (r.array != "" && p.associativeArray(r.array)) {
+		if seen[r.name] || f.assigned[r.name] || p.parameters.Has(r.name) || (r.array != "" && p.associativeArray(r.array)) {
 			continue
 		}
 		seen[r.name] = true

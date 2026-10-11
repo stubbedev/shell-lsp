@@ -8,6 +8,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/shelldocs"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -72,7 +73,7 @@ func (p *pass) quotesPromptOrVariableName() bool {
 	for depth := range 2 {
 		switch a := p.ancestor(depth).(type) {
 		case *syntax.Assign:
-			if a.Name != nil && p.parameters.is(a.Name.Value, parameterPrompt) {
+			if a.Name != nil && p.parameters.Is(a.Name.Value, shelldocs.PromptParameter) {
 				return true
 			}
 		case *syntax.UnaryTest:
