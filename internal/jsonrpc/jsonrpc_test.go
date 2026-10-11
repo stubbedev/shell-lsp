@@ -212,3 +212,26 @@ func TestReplyReportsUnencodableResults(t *testing.T) {
 		t.Errorf("frame after a failed one = %q, %v", w.String(), err)
 	}
 }
+
+func TestLargeMessagesDoNotKeepTheirBuffers(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	conn := NewConn(&buf, &buf)
+	large := json.RawMessage(`"` + strings.Repeat("x", 4*retainedBufferSize) + `"`)
+	if err := conn.Notify("big", large); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.Read(); err != nil {
+		t.Fatal(err)
+	}
+	if conn.frame.Cap() > retainedBufferSize || cap(conn.body) > retainedBufferSize {
+		t.Errorf("buffers kept after a %d byte message: frame %d, body %d", len(large), conn.frame.Cap(), cap(conn.body))
+	}
+	if err := conn.Notify("small", json.RawMessage(`1`)); err != nil {
+		t.Fatal(err)
+	}
+	if msg, err := conn.Read(); err != nil || msg.Method != "small" {
+		t.Errorf("read after a large message = %+v, %v", msg, err)
+	}
+}

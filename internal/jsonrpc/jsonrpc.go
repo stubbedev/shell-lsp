@@ -58,11 +58,12 @@ func NewError(code int, format string, args ...any) *Error {
 }
 
 const (
-	readBufferSize = 64 << 10
-	lengthName     = "Content-Length"
-	lengthHeader   = lengthName + ": "
-	headerEnd      = "\r\n\r\n"
-	headerReserve  = len(lengthHeader) + 20 + len(headerEnd)
+	readBufferSize     = 64 << 10
+	retainedBufferSize = 1 << 20
+	lengthName         = "Content-Length"
+	lengthHeader       = lengthName + ": "
+	headerEnd          = "\r\n\r\n"
+	headerReserve      = len(lengthHeader) + 20 + len(headerEnd)
 )
 
 type Conn struct {
@@ -109,6 +110,7 @@ func (c *Conn) Read() (*Message, error) {
 	if contentLength < 0 {
 		return nil, errors.New("missing Content-Length header")
 	}
+	defer c.releaseLargeBody()
 	c.body = slices.Grow(c.body[:0], contentLength)[:contentLength]
 	if _, err := io.ReadFull(c.reader, c.body); err != nil {
 		return nil, fmt.Errorf("reading %d byte body: %w", contentLength, err)
@@ -179,9 +181,22 @@ func (c *Conn) encode(v any) error {
 	return jsonv2.MarshalWrite(&c.frame, v, json.DefaultOptionsV1())
 }
 
+func (c *Conn) releaseLargeBody() {
+	if cap(c.body) > retainedBufferSize {
+		c.body = nil
+	}
+}
+
+func (c *Conn) releaseLargeFrame() {
+	if c.frame.Cap() > retainedBufferSize {
+		c.frame = bytes.Buffer{}
+	}
+}
+
 func (c *Conn) send(body func() error) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	defer c.releaseLargeFrame()
 	c.frame.Reset()
 	var reserve [headerReserve]byte
 	c.frame.Write(reserve[:])
