@@ -200,7 +200,7 @@ func (in *interpreter) numericWord(w *syntax.Word, s *state) bool {
 	case *syntax.ArithmExp:
 		return true
 	case *syntax.ParamExp:
-		return isPlainParam(part) && s.get(part.Param.Value).holdsInteger&integerYes != 0
+		return parser.IsPlainParam(part) && s.get(part.Param.Value).holdsInteger&integerYes != 0
 	}
 	return false
 }
@@ -234,7 +234,7 @@ func (in *interpreter) recordAppend(a *syntax.Assign, target value, s *state) {
 	case *syntax.Lit:
 		numeric = parser.IsDigits(part.Value) || (parser.IsName(part.Value) && s.get(part.Value).holdsInteger&integerYes != 0)
 	case *syntax.ParamExp:
-		numeric = isPlainParam(part) && s.get(part.Param.Value).holdsInteger&integerYes != 0
+		numeric = parser.IsPlainParam(part) && s.get(part.Param.Value).holdsInteger&integerYes != 0
 	}
 	prev := in.result.appends[a]
 	in.result.appends[a] = appendFact{numeric: prev.numeric || numeric, integer: prev.integer || target.integer&integerYes != 0}

@@ -309,15 +309,10 @@ func solePart(w *syntax.Word) syntax.WordPart {
 
 func soleBareExpansion(w *syntax.Word) (*syntax.ParamExp, bool) {
 	pe, ok := solePart(w).(*syntax.ParamExp)
-	if !ok || !isPlainParam(pe) {
+	if !ok || !parser.IsPlainParam(pe) {
 		return nil, false
 	}
 	return pe, true
-}
-
-func isPlainParam(pe *syntax.ParamExp) bool {
-	return pe.Param != nil && !pe.Excl && !pe.Length && !pe.Width && pe.Flags == nil && pe.NestedParam == nil &&
-		pe.Index == nil && len(pe.Modifiers) == 0 && pe.Slice == nil && pe.Repl == nil && pe.Names == 0 && pe.Exp == nil
 }
 
 func soleCommandOutput(w *syntax.Word) bool {

@@ -99,7 +99,7 @@ func (c *bracketConversion) operand(w *syntax.Word) bool {
 		switch p := part.(type) {
 		case *syntax.Lit, *syntax.SglQuoted, *syntax.DblQuoted, *syntax.ArithmExp:
 		case *syntax.ParamExp:
-			if !isPlainParam(p) || !spacelessSpecials[p.Param.Value] {
+			if !parser.IsPlainParam(p) || !spacelessSpecials[p.Param.Value] {
 				return false
 			}
 		default:

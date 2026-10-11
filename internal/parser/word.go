@@ -66,6 +66,11 @@ func ArgumentTexts(args []*syntax.Word) []string {
 	return texts
 }
 
+func IsPlainParam(pe *syntax.ParamExp) bool {
+	return pe.Param != nil && !pe.Excl && !pe.Length && !pe.Width && pe.Flags == nil && pe.NestedParam == nil &&
+		pe.Index == nil && len(pe.Modifiers) == 0 && pe.Slice == nil && pe.Repl == nil && pe.Names == 0 && pe.Exp == nil
+}
+
 func isExpandedOrDollarQuoted(part syntax.WordPart) bool {
 	switch p := part.(type) {
 	case *syntax.Lit:

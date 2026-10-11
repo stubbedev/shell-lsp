@@ -25,6 +25,7 @@ var serverCommands = []string{commandFixAll, commandApplyEdit, commandShowRefere
 var codeActionKinds = []string{
 	string(actions.QuickFix),
 	string(actions.RefactorExtract),
+	string(actions.RefactorInline),
 	string(actions.RefactorRewrite),
 	string(actions.SourceFixAll),
 }

@@ -212,11 +212,11 @@ func (p *pass) checkDollarAssignment(e equalsName, pe *syntax.ParamExp) {
 	switch {
 	case pe.Param == nil || pe.Length:
 		p.reportEqualsGeneric(e)
-	case pe.Param.Value == "0" && isPlainParam(pe):
+	case pe.Param.Value == "0" && parser.IsPlainParam(pe):
 		p.reportDollarZero(pe)
-	case isPositional(pe.Param.Value) && pe.Param.Value != "@" && pe.Param.Value != "*" && isPlainParam(pe):
+	case isPositional(pe.Param.Value) && pe.Param.Value != "@" && pe.Param.Value != "*" && parser.IsPlainParam(pe):
 		p.reportNode(2270, pe, "Positional parameters cannot be assigned with =; use set -- to replace them.")
-	case parser.IsName(pe.Param.Value) && (isPlainParam(pe) || isIndexedParam(pe)):
+	case parser.IsName(pe.Param.Value) && (parser.IsPlainParam(pe) || isIndexedParam(pe)):
 		p.reportNode(2281, pe, "Drop the $ on the left side of an assignment: write "+p.assignedName(pe)+"=value, not "+p.nodeText(pe)+"=value.", dollarRemoval(p, pe)...)
 	default:
 		p.reportNode(2271, pe, "Variable names cannot be computed like this; use declare \"name=value\", printf -v, or an associative array.")
@@ -248,7 +248,7 @@ func isIndexedParam(pe *syntax.ParamExp) bool {
 	}
 	bare := *pe
 	bare.Index = nil
-	return isPlainParam(&bare)
+	return parser.IsPlainParam(&bare)
 }
 
 func (p *pass) reportDollarZero(at syntax.Node) {

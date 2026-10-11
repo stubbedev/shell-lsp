@@ -100,7 +100,7 @@ func (p *pass) quoteOrigin(w *syntax.Word) (parser.Span, bool) {
 }
 
 func (p *pass) plainTaint(pe *syntax.ParamExp) (parser.Span, bool) {
-	if !isPlainParam(pe) {
+	if !parser.IsPlainParam(pe) {
 		return parser.Span{}, false
 	}
 	origin, ok := p.quoteTaint[pe.Param.Value]

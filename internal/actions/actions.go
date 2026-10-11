@@ -17,6 +17,7 @@ type Kind string
 const (
 	QuickFix        Kind = "quickfix"
 	RefactorExtract Kind = "refactor.extract"
+	RefactorInline  Kind = "refactor.inline"
 	RefactorRewrite Kind = "refactor.rewrite"
 	SourceFixAll    Kind = "source.fixAll.shellLsp"
 )
@@ -38,6 +39,7 @@ const (
 	DeclareLocal     RefactorKind = "declareLocal"
 	ConvertBackticks RefactorKind = "convertBackticks"
 	DoubleBrackets   RefactorKind = "doubleBrackets"
+	InlineVariable   RefactorKind = "inlineVariable"
 )
 
 type Refactor struct {
@@ -84,6 +86,7 @@ var refactorings = []refactoring{
 	{DeclareLocal, RefactorRewrite, declareLocal},
 	{ConvertBackticks, RefactorRewrite, convertBackticks},
 	{DoubleBrackets, RefactorRewrite, doubleBrackets},
+	{InlineVariable, RefactorInline, inlineVariable},
 }
 
 func Refactorings() []RefactorKind {
@@ -425,7 +428,7 @@ func toggleQuotes(s *site) (Change, bool) {
 				return Change{}, false
 			}
 			span, _ := s.Tree.NodeSpan(q)
-			return Change{Title: "Convert to double quotes", Edits: []textedit.Edit{{Start: span.Start, End: span.End, NewText: `"` + escapeDouble(q.Value) + `"`}}}, true
+			return Change{Title: "Convert to double quotes", Edits: []textedit.Edit{{Start: span.Start, End: span.End, NewText: `"` + backslashEscaped(q.Value, doubleQuoteSpecials) + `"`}}}, true
 		case *syntax.DblQuoted:
 			if q.Dollar || !q.Right.IsValid() {
 				return Change{}, false
@@ -445,10 +448,15 @@ func singleQuoted(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
-func escapeDouble(s string) string {
+const (
+	doubleQuoteSpecials = "\\\"$`"
+	heredocSpecials     = "\\$`"
+)
+
+func backslashEscaped(s, specials string) string {
 	var sb strings.Builder
 	for _, r := range s {
-		if strings.ContainsRune("\\\"$`", r) {
+		if strings.ContainsRune(specials, r) {
 			sb.WriteByte('\\')
 		}
 		sb.WriteRune(r)

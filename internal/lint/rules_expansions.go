@@ -158,7 +158,7 @@ func checkValueAsKey(p *pass, n syntax.Node) {
 	case *syntax.Lit:
 		key = part.Value
 	case *syntax.ParamExp:
-		if !isPlainParam(part) {
+		if !parser.IsPlainParam(part) {
 			return
 		}
 		key = part.Param.Value
