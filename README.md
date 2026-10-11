@@ -143,7 +143,11 @@ editor reports them.
 The linter is built into the server; nothing else needs to be installed. It
 uses shellcheck's check codes and honours `# shellcheck disable=...`,
 `source=` and `shell=` directives, so existing scripts and annotations carry
-over unchanged. It also lints zsh, which shellcheck does not support, and it
+over unchanged. It also lints zsh, which shellcheck does not support, by
+zsh's own rules: unquoted parameters are neither split nor globbed unless
+`SH_WORD_SPLIT` or `GLOB_SUBST` is set, glob qualifiers, parameter and
+subscript flags are understood, and the parameters zsh, its line editor,
+completion system and modules set or read count as assigned and used. It
 follows sourced files without extra flags. Quick fixes are offered where a
 check has an unambiguous repair, alongside actions that insert a `disable`
 directive for the command or the whole file.
