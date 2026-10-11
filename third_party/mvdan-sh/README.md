@@ -44,6 +44,7 @@ reproducer so that it can be sent upstream as it is.
 | 0012 | syntax: a declaration argument whose name is not valid (`export a-b=1`, `declare 0=x`) parses as a word, as with `bash -n`, instead of failing with "invalid var name" | — |
 | 0013 | syntax: input nesting more than 1000 levels deep (nested substitutions, expansions, blocks, arithmetic and test expressions, long `&&`, `||` and `|` lists, elif chains) fails with a syntax error, so parsing and walking the tree use bounded stack | — |
 | 0014 | pattern: invalid UTF-8 is an error instead of an expression that `regexp.MustCompile` panics on; fuzz targets for `Regexp`, `BracesSeq` and `Format` | — |
+| 0015 | syntax: the subscripts of arrays declared associative (`declare -A`, `local -A`, `typeset -A`) parse as string keys (`[e/]=0`, `${m[a.b]}`, `[foo bar]=1`), as with `bash -n` and `zsh -n`, instead of as arithmetic | — |
 
 ## Tests
 

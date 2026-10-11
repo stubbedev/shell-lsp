@@ -216,9 +216,9 @@ func (p *Parser) nextKeepSpaces() {
 		default:
 			p.advanceLitHdoc(r)
 		}
-	case paramExpSubFlagsArg:
+	case paramExpSubFlagsArg, paramExpKey:
 		switch {
-		case (r == ',' || r == ']') && p.subFlagsBrackets == 0:
+		case (r == ']' || (r == ',' && p.quote == paramExpSubFlagsArg)) && p.subFlagsBrackets == 0:
 			p.tok = p.arithmToken(r)
 		case r == '`' || r == '"' || r == '$' || r == '\'':
 			p.tok = p.regToken(r)
@@ -1143,7 +1143,7 @@ loop:
 				break loop
 			}
 		case '/':
-			if p.quote != paramExpExp && p.quote != paramExpSubFlagsArg {
+			if p.quote&(paramExpExp|paramExpSubFlagsArg|paramExpKey) == 0 {
 				break loop
 			}
 		case ':', '=', '%', '^', ',', '?', '!', '~', '*':
@@ -1158,7 +1158,7 @@ loop:
 				break loop
 			}
 		case '[', ']':
-			if p.quote == paramExpSubFlagsArg {
+			if p.quote&(paramExpSubFlagsArg|paramExpKey) != 0 {
 				if !p.subFlagsBracket(r) {
 					break loop
 				}

@@ -12,4 +12,4 @@ weights[0.5]=light
 ### associative array key is fine
 declare -A weights
 weights[0.5]=light
->>- SC2034 2:1 -- mvdan rejects the decimal subscript as a syntax error, and whole-script variable checks are skipped for scripts that do not parse completely
+>>> SC2034 2:1

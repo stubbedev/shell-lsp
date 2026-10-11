@@ -5527,6 +5527,44 @@ var fileTests = []fileTestCase{
 		}, LangBash),
 	),
 	fileTest(
+		[]string{"declare -A m=([e/]=0 [a.b c]=1 [^x?]=2)"},
+		langFile(&DeclClause{
+			Variant: lit("declare"),
+			Args: []*Assign{
+				{Naked: true, Value: litWord("-A")},
+				{
+					Name: lit("m"),
+					Array: &ArrayExpr{Elems: []*ArrayElem{
+						{Index: litWord("e/"), Value: litWord("0")},
+						{Index: litWord("a.b c"), Value: litWord("1")},
+						{Index: litWord("^x?"), Value: litWord("2")},
+					}},
+				},
+			},
+		}, LangBash|LangZsh),
+	),
+	fileTest(
+		[]string{"declare -A m\nm[a/b]=1\necho ${m[x.y]}"},
+		langFile([]*Stmt{
+			stmt(&DeclClause{
+				Variant: lit("declare"),
+				Args: []*Assign{
+					{Naked: true, Value: litWord("-A")},
+					{Naked: true, Name: lit("m")},
+				},
+			}),
+			stmt(&CallExpr{Assigns: []*Assign{{
+				Name:  lit("m"),
+				Index: litWord("a/b"),
+				Value: litWord("1"),
+			}}}),
+			stmt(call(litWord("echo"), word(&ParamExp{
+				Param: lit("m"),
+				Index: litWord("x.y"),
+			}))),
+		}, LangBash|LangZsh),
+	),
+	fileTest(
 		[]string{"declare foo[a]="},
 		langFile(&DeclClause{
 			Variant: lit("declare"),

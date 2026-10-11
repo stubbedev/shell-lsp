@@ -562,12 +562,16 @@ type Parser struct {
 	rxFirstPart  bool
 
 	// subFlagsBrackets is how many brackets are open in the current
-	// [paramExpSubFlagsArg] word.
+	// [paramExpSubFlagsArg] or [paramExpKey] word.
 	subFlagsBrackets int
 
 	// kshTypes holds the names of the types defined so far with enum or
 	// typeset -T, whose commands are declarations with [LangKsh93].
 	kshTypes map[string]bool
+
+	// assocArrays holds the names declared so far as associative arrays,
+	// like with `declare -A name`, whose subscripts are string keys.
+	assocArrays map[string]bool
 
 	accComs []Comment
 	curComs *[]Comment
@@ -616,6 +620,7 @@ func (p *Parser) reset() {
 	p.wordBatch = nil
 	p.litBs = nil
 	clear(p.kshTypes)
+	clear(p.assocArrays)
 }
 
 // nextPos returns the position of the next rune, [Parser.r].
@@ -727,11 +732,15 @@ const (
 	// the pattern in ${a[(r)pattern]}, which ends at a ',' or ']' outside of
 	// any brackets within it.
 	paramExpSubFlagsArg
+	// paramExpKey is the subscript of an associative array, like the `e/`
+	// in ${tree[e/]}, which is a string key ending at a ']' outside of any
+	// brackets within it.
+	paramExpKey
 	arrayElems
 
 	allKeepSpaces = runeByRune | paramExpRepl | dblQuotes | hdocBody |
 		hdocBodyTabs | hdocBodyBlanks | paramExpRepl | paramExpExp |
-		paramExpSubFlagsArg
+		paramExpSubFlagsArg | paramExpKey
 	allRegTokens = noState | unquotedWordCont | subCmd | subCmdBckquo | subCmdBraces |
 		hdocWord | switchCase | arrayElems | testExpr
 	allArithmExpr = arithmExpr | arithmExprLet | arithmExprCmd |
@@ -1724,7 +1733,7 @@ zshPrefixLoop:
 		}
 		p.pos = p.nextPos()
 		p.rune()
-		pe.Index = p.eitherIndex()
+		pe.Index = p.subscript(pe.Param)
 		pe.Elems = p.kshRefElems()
 	}
 	tokRune := p.r
@@ -2041,6 +2050,36 @@ func (p *Parser) paramExpExp() *Expansion {
 	return &Expansion{Op: op, Word: p.getWord()}
 }
 
+// subscript parses the subscript of the array named by name, after its '['.
+// The subscript of an array declared associative earlier, like with
+// `declare -A name`, is a string key, so it is parsed as a word rather than
+// as an arithmetic expression; zsh subscript flags, like the `(r)` in
+// ${name[(r)pattern]}, still apply to it.
+func (p *Parser) subscript(name *Lit) ArithmExpr {
+	if name != nil && p.assocArrays[name.Value] && !(p.lang.in(LangZsh) && p.r == '(') {
+		return p.keyIndex()
+	}
+	return p.eitherIndex()
+}
+
+// keyIndex parses the subscript of an associative array as a word, which
+// may hold any characters, like `e/` or `a.b`, up to the ']' which closes it.
+func (p *Parser) keyIndex() ArithmExpr {
+	old, oldBrackets := p.quote, p.subFlagsBrackets
+	lpos := p.pos
+	p.quote, p.subFlagsBrackets = paramExpKey, 0
+	p.next()
+	var key ArithmExpr
+	if w := p.getWord(); w != nil {
+		key = w
+	} else {
+		p.followErrExp(lpos, leftBrack)
+	}
+	p.quote, p.subFlagsBrackets = old, oldBrackets
+	p.matchedArithm(lpos, leftBrack, rightBrack)
+	return key
+}
+
 func (p *Parser) eitherIndex() ArithmExpr {
 	old := p.quote
 	lpos := p.pos
@@ -2223,12 +2262,12 @@ func (p *Parser) getAssign(needEqual bool) *Assign {
 			// Lex rune by rune to see any further subscripts or members.
 			old := p.quote
 			p.quote = runeByRune
-			as.Index = p.eitherIndex()
+			as.Index = p.subscript(as.Name)
 			as.Elems = p.kshRefElems()
 			p.quote = old
 			p.next()
 		} else {
-			as.Index = p.eitherIndex()
+			as.Index = p.subscript(as.Name)
 		}
 		if p.spaced || p.stopToken() {
 			if needEqual {
@@ -2274,7 +2313,7 @@ func (p *Parser) getAssign(needEqual bool) *Assign {
 	}
 	if as.Value == nil && p.tok == leftParen {
 		p.checkLang(p.pos, langBashLike|langKshLike|LangZsh, "arrays")
-		if as.Array = p.arrayExpr(); as.Array == nil {
+		if as.Array = p.arrayExpr(as.Name); as.Array == nil {
 			return nil
 		}
 	} else if w := p.getWord(); w != nil {
@@ -2292,7 +2331,7 @@ func (p *Parser) getAssign(needEqual bool) *Assign {
 // `(a=1 b=2)` or `(typeset -i a=1; b=2)`, and its elements may themselves be
 // compound or array values, like in `( (a=1) (a=2) )` or `([k]=(a=1))`.
 // It returns nil if the elements are not valid.
-func (p *Parser) arrayExpr() *ArrayExpr {
+func (p *Parser) arrayExpr(name *Lit) *ArrayExpr {
 	ae := &ArrayExpr{Lparen: p.pos}
 	newQuote := p.quote
 	if p.lang.in(langBashLike | LangZsh | LangKsh93) {
@@ -2313,7 +2352,7 @@ func (p *Parser) arrayExpr() *ArrayExpr {
 		el.Comments, p.accComs = p.accComs, nil
 		if p.tok == leftBrack {
 			left := p.pos
-			el.Index = p.eitherIndex()
+			el.Index = p.subscript(name)
 			switch {
 			case p.tok != assgnParen:
 				p.follow(left, `[x]`, assgn)
@@ -2330,7 +2369,7 @@ func (p *Parser) arrayExpr() *ArrayExpr {
 		}
 		if p.lang.in(LangKsh93) && p.tok == leftParen {
 			p.nest()
-			el.Array = p.arrayExpr()
+			el.Array = p.arrayExpr(nil)
 			p.unnest(1)
 			if el.Array == nil {
 				return nil
@@ -3474,17 +3513,29 @@ func (p *Parser) recordKshTypes(ds *DeclClause) {
 	}
 }
 
-// declArgs parses the arguments of a declaration clause.
+// declArgs parses the arguments of a declaration clause. The names it
+// declares after an option like -A are recorded as associative arrays
+// before their values are parsed, as in `declare -A m=([k/]=v)`.
 func (p *Parser) declArgs(ds *DeclClause) {
+	assoc := false
 	for !p.stopToken() && !p.peekRedir() && !p.closesBlock() {
 		if p.hasValidIdent() {
+			if assoc {
+				p.recordAssocArray(p.assignedName())
+			}
 			ds.Args = append(ds.Args, p.getAssign(false))
 		} else if p.tok == _LitWord && p.validVarName(p.val) {
+			if assoc {
+				p.recordAssocArray(p.val)
+			}
 			ds.Args = append(ds.Args, &Assign{
 				Naked: true,
 				Name:  p.getLit(),
 			})
 		} else if w := p.getWord(); w != nil {
+			if flags := w.Lit(); len(flags) > 1 && flags[0] == '-' && strings.ContainsRune(flags[1:], 'A') {
+				assoc = true
+			}
 			ds.Args = append(ds.Args, &Assign{
 				Naked: true,
 				Value: w,
@@ -3493,6 +3544,22 @@ func (p *Parser) declArgs(ds *DeclClause) {
 			p.followErr(p.pos, ds.Variant.Value, noQuote("names or assignments"))
 		}
 	}
+}
+
+// assignedName returns the name assigned by the current token, which
+// [Parser.hasValidIdent] has accepted, like the `a` in `a=1`, `a+=1` or `a[i]=1`.
+func (p *Parser) assignedName() string {
+	if p.eqlOffs > 0 {
+		return strings.TrimSuffix(p.val[:p.eqlOffs], "+")
+	}
+	return p.val
+}
+
+func (p *Parser) recordAssocArray(name string) {
+	if p.assocArrays == nil {
+		p.assocArrays = make(map[string]bool)
+	}
+	p.assocArrays[name] = true
 }
 
 // kshTypeDecl turns a call with [LangKsh93] into a declaration clause when
