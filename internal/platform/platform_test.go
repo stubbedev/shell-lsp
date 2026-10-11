@@ -18,6 +18,8 @@ func TestClean(t *testing.T) {
 		{POSIX, "", "."},
 		{Windows, `c:\a\.\b\..\c`, `C:\a\c`},
 		{Windows, "C:/a//b/", `C:\a\b`},
+		{Windows, `.\A:`, `.\A:`},
+		{Windows, `x\..\c:b`, `.\c:b`},
 		{Windows, `C:\..\..`, `C:\`},
 		{Windows, `C:`, `C:.`},
 		{Windows, `\\host\share\a\..\..\b`, `\\host\share\b`},

@@ -36,7 +36,11 @@ func (f Flavour) Clean(p string) string {
 	if rest == "" {
 		return volume + "."
 	}
-	return volume + strings.ReplaceAll(path.Clean(rest), "/", `\`)
+	cleaned := volume + strings.ReplaceAll(path.Clean(rest), "/", `\`)
+	if volume == "" && HasDrive(cleaned) {
+		return `.\` + cleaned
+	}
+	return cleaned
 }
 
 func windowsVolume(slashed string) (string, string) {
