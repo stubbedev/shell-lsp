@@ -493,7 +493,7 @@ func expansionDocs(exp *syntax.ParamExp) []string {
 		add(exp.Exp.Op.String())
 	}
 	if exp.Flags != nil {
-		if flags := zshFlagDocs(exp.Flags.Value); flags != "" {
+		if flags := zshFlagDocs(exp.Flags); flags != "" {
 			docs = append(docs, flags)
 		}
 	}
@@ -512,41 +512,17 @@ func isAllIndex(index syntax.ArithmExpr) bool {
 	return lit == "@" || lit == "*"
 }
 
-var zshDelimitedFlags = "jslrZgI_"
-
-func zshFlagDocs(flags string) string {
+func zshFlagDocs(flags *syntax.Lit) string {
 	var lines []string
-	for i := 0; i < len(flags); i++ {
-		c := flags[i]
-		doc, ok := shelldocs.ZshFlag(c)
-		if ok {
-			lines = append(lines, fmt.Sprintf("- `%c`: %s", c, doc))
-		}
-		if strings.IndexByte(zshDelimitedFlags, c) >= 0 && i+1 < len(flags) {
-			delim := closing(flags[i+1])
-			if end := strings.IndexByte(flags[i+2:], delim); end >= 0 {
-				i += end + 2
-			}
+	for _, flag := range parser.ParameterFlags(flags) {
+		if doc, ok := shelldocs.ZshFlag(flag.Name); ok {
+			lines = append(lines, fmt.Sprintf("- `%c`: %s", flag.Name, doc))
 		}
 	}
 	if len(lines) == 0 {
 		return ""
 	}
 	return "zsh expansion flags:\n" + strings.Join(lines, "\n")
-}
-
-func closing(open byte) byte {
-	switch open {
-	case '(':
-		return ')'
-	case '[':
-		return ']'
-	case '{':
-		return '}'
-	case '<':
-		return '>'
-	}
-	return open
 }
 
 func zshModifierDocs(modifiers []*syntax.Lit) string {

@@ -1,0 +1,28 @@
+### the argument of a pattern subscript flag is not a variable
+#!/bin/zsh
+words=(alpha beta)
+print -r -- ${words[(r)gamma]} $words[(i)b*] ${words[(Ie)delta]}
+>>- SC1071 1:1 -- shellcheck refuses zsh; after (r), (i) and (I) the subscript is a pattern, so gamma and delta are not variables
+
+### a variable expanded in a subscript pattern is read
+#!/bin/zsh
+f() {
+  local prefix=$1
+  local -a seen=(alpha beta)
+  print -r -- ${seen[(R)${(b)prefix}*]}
+}
+f "$@"
+>>- SC1071 1:1 -- shellcheck refuses zsh; prefix is read by the expansion inside the subscript pattern
+
+### a number in a subscript pattern is not an octal literal
+#!/bin/zsh
+codes=(08 09)
+print -r -- ${codes[(i)08]}
+>>- SC1071 1:1 -- shellcheck refuses zsh; 08 is a pattern here, not an arithmetic number
+
+### a word subscript is still arithmetic
+#!/bin/zsh
+version=5.9.1
+print -r -- $version[(s:.:w)n]
+>>- SC1071 1:1 -- shellcheck refuses zsh
+>>+ SC2154 3:29 -- after only (s) and (w) the subscript is arithmetic, so n is a variable that is never assigned

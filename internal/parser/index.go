@@ -778,10 +778,12 @@ func ArithmeticRead(parent syntax.Node, w *syntax.Word) (string, bool) {
 }
 
 func IsArithmetic(node syntax.Node) bool {
-	switch node.(type) {
-	case *syntax.BinaryArithm, *syntax.UnaryArithm, *syntax.ParenArithm, *syntax.FlagsArithm, *syntax.FuncArithm,
+	switch node := node.(type) {
+	case *syntax.BinaryArithm, *syntax.UnaryArithm, *syntax.ParenArithm, *syntax.FuncArithm,
 		*syntax.ArithmExp, *syntax.ArithmCmd, *syntax.CStyleLoop, *syntax.LetClause:
 		return true
+	case *syntax.FlagsArithm:
+		return !SubscriptPattern(node)
 	}
 	return false
 }

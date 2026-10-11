@@ -130,10 +130,20 @@ func TestTokensAreSingleLineAndOrdered(t *testing.T) {
 func TestNumbersInZshSubscriptFlagsAreNumbers(t *testing.T) {
 	t.Parallel()
 
-	text := "echo ${items[(r)42]}\n"
+	text := "echo ${words[(w)42]}\n"
 	got := strings.Join(describe(text, Tokens(parser.Parse(text, dialect.Zsh), nil, nil)), " ")
 	if want := "42:number"; !strings.Contains(got, want) {
 		t.Errorf("tokens = %s, want %s", got, want)
+	}
+}
+
+func TestPatternsInZshSubscriptFlagsAreNotNumbers(t *testing.T) {
+	t.Parallel()
+
+	text := "echo ${items[(r)42]}\n"
+	got := strings.Join(describe(text, Tokens(parser.Parse(text, dialect.Zsh), nil, nil)), " ")
+	if strings.Contains(got, "42:number") {
+		t.Errorf("tokens = %s, want the pattern 42 not to be a number", got)
 	}
 }
 
