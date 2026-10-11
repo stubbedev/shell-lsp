@@ -242,6 +242,20 @@ finding is the preferred one; the fix-all source action and the
 `shellLsp.fixAll` command apply only safe fixes, so running them on save never
 changes what a script does.
 
+On a diagnostic, the actions come in this order: its fixes; `Fix all SC2086
+in this file (3)`, which applies the preferred fix of every finding of that
+code and is titled `(3, review)` when any of those fixes changes behaviour;
+`Ignore SC2086 for this command`; `Ignore SC2086 in this file`, which extends
+a `disable` directive in the file's leading `# shellcheck` comments or adds
+one after the shebang and those comments; and `Ignore SC2086 in this
+workspace`, which adds the code to the `disable=` line of the nearest
+`.shellcheckrc` in the workspace folder. When there is none, it creates one at
+the folder root, carrying over the settings of a `.shellcheckrc` that applied
+from outside the folder, and only for clients that can create files. Edits
+to `.shellcheckrc` ask the editor for confirmation where it supports change
+annotations. An ignore action is not offered for a code that is already
+disabled there.
+
 Hovering a diagnostic explains it in place: its one-line summary and
 severity, whether it is optional, a before-and-after preview of its preferred
 fix marked safe or for review, an example for `SL` checks, the `disable`
