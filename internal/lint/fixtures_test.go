@@ -202,12 +202,32 @@ func TestFixtures(t *testing.T) {
 	}
 }
 
+const oracleVersion = "0.11.0"
+
+func shellcheckVersion(t *testing.T) string {
+	t.Helper()
+	out, err := exec.CommandContext(t.Context(), "shellcheck", "--version").Output()
+	if err != nil {
+		t.Fatalf("shellcheck --version: %v", err)
+	}
+	for line := range strings.SplitSeq(string(out), "\n") {
+		if version, ok := strings.CutPrefix(line, "version: "); ok {
+			return strings.TrimSpace(version)
+		}
+	}
+	t.Fatalf("shellcheck --version printed no version line:\n%s", out)
+	return ""
+}
+
 func TestFixturesAgreeWithShellcheck(t *testing.T) {
 	if testing.Short() {
 		t.Skip("runs shellcheck for every fixture")
 	}
 	if _, err := exec.LookPath("shellcheck"); err != nil {
 		t.Skip("shellcheck is not installed; it is only used as a reference oracle")
+	}
+	if version := shellcheckVersion(t); version != oracleVersion {
+		t.Skipf("the fixtures are labeled with shellcheck %s, but %s is installed; run the oracle from the nix dev shell", oracleVersion, version)
 	}
 	cases := loadFixtures(t)
 	results := make([][]string, len(cases))
