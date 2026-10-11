@@ -15,10 +15,11 @@ type wrapper struct {
 	assignments bool
 	replace     []string
 	closesStdin bool
+	queries     string
 }
 
 var commandWrappers = map[string]wrapper{
-	"command": {},
+	"command": {queries: "vV"},
 	"builtin": {},
 	"busybox": {},
 	"exec":    {valued: []string{"-a"}},
@@ -53,6 +54,7 @@ type Wrappers struct {
 type Wrap struct {
 	Command int
 	Pending bool
+	Query   bool
 }
 
 func (w Wrappers) Has(name string) bool {
@@ -97,11 +99,15 @@ func (w Wrappers) step(args []*syntax.Word, i int) (wrapper, int, bool) {
 		return wrapper{}, i, false
 	}
 	rest := args[i+1:]
-	return spec, i + 1 + spec.skip(len(rest), func(j int) (string, bool) { return Literal(rest[j]) }).Command, true
+	wrap := spec.skip(len(rest), func(j int) (string, bool) { return Literal(rest[j]) })
+	if wrap.Query {
+		return wrapper{}, i, false
+	}
+	return spec, i + 1 + wrap.Command, true
 }
 
 func (s wrapper) skip(n int, word func(int) (string, bool)) Wrap {
-	operands, options := s.operands, true
+	operands, options, query := s.operands, true, false
 	for i := 0; i < n; {
 		lit, literal := word(i)
 		switch {
@@ -109,9 +115,10 @@ func (s wrapper) skip(n int, word func(int) (string, bool)) Wrap {
 			options = false
 			i++
 		case literal && options && getopt.IsOption(lit):
+			query = query || s.queriesWith(lit)
 			words, _ := getopt.Words(lit, s.arity)
 			if i += words; i > n {
-				return Wrap{Command: n, Pending: true}
+				return Wrap{Command: n, Pending: true, Query: query}
 			}
 		case operands > 0:
 			operands--
@@ -121,10 +128,14 @@ func (s wrapper) skip(n int, word func(int) (string, bool)) Wrap {
 			options = false
 			i++
 		default:
-			return Wrap{Command: i}
+			return Wrap{Command: i, Query: query}
 		}
 	}
-	return Wrap{Command: n, Pending: operands > 0}
+	return Wrap{Command: n, Pending: operands > 0, Query: query}
+}
+
+func (s wrapper) queriesWith(option string) bool {
+	return s.queries != "" && !strings.HasPrefix(option, "--") && strings.ContainsAny(option[1:], s.queries)
 }
 
 func (s wrapper) arity(name string) getopt.Arity {

@@ -188,3 +188,12 @@ echo $v
 #!/bin/zsh
 echo $1
 >>- SC1071 1:1 -- shellcheck refuses zsh; zsh does not split unquoted parameters, so there is nothing to report
+
+### an unquoted name looked up with command -v is still split and globbed
+#!/bin/bash
+AR=$1
+command -v $AR
+command -V $AR
+command $AR x
+>>> SC2086 3:12
+>>> SC2086 4:12

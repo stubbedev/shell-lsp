@@ -239,7 +239,7 @@ type variableScan struct {
 
 var (
 	evaluatingCommands = map[string]bool{"eval": true, "trap": true, "alias": true}
-	inertBuiltins      = map[string]bool{"echo": true, "cd": true, "pwd": true, "true": true, "false": true, ":": true, "type": true}
+	inertBuiltins      = map[string]bool{"echo": true, "cd": true, "pwd": true, "true": true, "false": true, ":": true, "type": true, "command": true}
 	inertExternals     = dialect.SetOf(dialect.Bash, dialect.Posix, dialect.Dash, dialect.Busybox)
 )
 
