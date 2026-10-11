@@ -25,6 +25,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/platform"
 	"github.com/stubbedev/shell-lsp/internal/project"
 	"github.com/stubbedev/shell-lsp/internal/regularfile"
+	"github.com/stubbedev/shell-lsp/internal/shellcheckrc"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
@@ -153,9 +154,9 @@ func (c *checker) color() bool {
 }
 
 type fileSettings struct {
-	rc       rcFile
+	rc       shellcheckrc.File
 	forced   *dialect.Dialect
-	exclude  codeSet
+	exclude  shellcheckrc.CodeSet
 	optional []string
 	extended bool
 	roots    []string
@@ -166,20 +167,20 @@ func (c *checker) settings(dir string) (fileSettings, error) {
 	if err != nil {
 		return fileSettings{}, err
 	}
-	if rc.path != "" {
-		if _, warned := c.warned.LoadOrStore(rc.path, true); !warned {
-			warnUnknownOptional(c.env.Stderr, rc.enabled, rc.path)
+	if rc.Path != "" {
+		if _, warned := c.warned.LoadOrStore(rc.Path, true); !warned {
+			warnUnknownOptional(c.env.Stderr, rc.Enabled, rc.Path)
 		}
 	}
 	s := fileSettings{
 		rc:       rc,
-		forced:   cmp.Or(c.opts.shell, rc.shell),
-		exclude:  c.opts.exclude.union(rc.disabled),
-		optional: slices.Concat(c.opts.enable, rc.enabled),
-		extended: *cmp.Or(c.opts.extended, rc.extended, new(true)),
+		forced:   cmp.Or(c.opts.shell, rc.Shell),
+		exclude:  c.opts.exclude.Union(rc.Disabled),
+		optional: slices.Concat(c.opts.enable, rc.Enabled),
+		extended: *cmp.Or(c.opts.extended, rc.Extended, new(true)),
 	}
-	for _, p := range slices.Concat(c.opts.sourcePaths, rc.sourcePaths) {
-		if p == scriptDir {
+	for _, p := range slices.Concat(c.opts.sourcePaths, rc.SourcePaths) {
+		if p == shellcheckrc.ScriptDir {
 			continue
 		}
 		if !filepath.IsAbs(p) {
@@ -413,9 +414,9 @@ func syntaxFindings(tree *parser.Tree, source lint.DialectSource) []lint.Finding
 	return out
 }
 
-func (c *checker) filter(exclude codeSet, findings []lint.Finding) []lint.Finding {
+func (c *checker) filter(exclude shellcheckrc.CodeSet, findings []lint.Finding) []lint.Finding {
 	kept := slices.DeleteFunc(findings, func(f lint.Finding) bool {
-		return f.Severity > c.opts.severity || exclude.has(f.Code) || (c.opts.include != nil && !c.opts.include.has(f.Code))
+		return f.Severity > c.opts.severity || exclude.Has(f.Code) || (c.opts.include != nil && !c.opts.include.Has(f.Code))
 	})
 	slices.SortStableFunc(kept, func(a, b lint.Finding) int {
 		return cmp.Or(cmp.Compare(a.Span.Start, b.Span.Start), cmp.Compare(a.Code, b.Code), cmp.Compare(a.Span.End, b.Span.End))

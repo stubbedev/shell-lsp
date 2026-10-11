@@ -5,6 +5,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/stubbedev/shell-lsp/internal/shellcheckrc"
 )
 
 func FuzzParseCheckArgs(f *testing.F) {
@@ -43,8 +45,8 @@ func FuzzParseRC(f *testing.F) {
 		f.Add(seed)
 	}
 	f.Fuzz(func(t *testing.T, text string) {
-		if _, err := parseRC("/home/u/.shellcheckrc", text); err != nil && !strings.HasPrefix(err.Error(), "/home/u/.shellcheckrc:") {
-			t.Fatalf("parseRC error %q does not name the file", err)
+		if _, err := shellcheckrc.Parse("/home/u/.shellcheckrc", text); err != nil && !strings.HasPrefix(err.Error(), "/home/u/.shellcheckrc:") {
+			t.Fatalf("Parse error %q does not name the file", err)
 		}
 	})
 }

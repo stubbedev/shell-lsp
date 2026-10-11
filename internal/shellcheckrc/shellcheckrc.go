@@ -1,0 +1,196 @@
+package shellcheckrc
+
+import (
+	"fmt"
+	"path/filepath"
+	"slices"
+	"strconv"
+	"strings"
+
+	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/directive"
+	"github.com/stubbedev/shell-lsp/internal/lint"
+	"github.com/stubbedev/shell-lsp/internal/textedit"
+)
+
+const (
+	FileName  = ".shellcheckrc"
+	ScriptDir = "SCRIPTDIR"
+)
+
+var Names = []string{FileName, "shellcheckrc"}
+
+type codeRange struct {
+	from, to lint.Code
+}
+
+type CodeSet struct {
+	all    bool
+	ranges []codeRange
+}
+
+func (s CodeSet) Has(code lint.Code) bool {
+	return s.all || slices.ContainsFunc(s.ranges, func(r codeRange) bool { return r.from <= code && code <= r.to })
+}
+
+func (s CodeSet) Union(other CodeSet) CodeSet {
+	return CodeSet{all: s.all || other.all, ranges: slices.Concat(s.ranges, other.ranges)}
+}
+
+func (s CodeSet) Known() []lint.Code {
+	return slices.DeleteFunc(lint.Codes(), func(code lint.Code) bool { return !s.Has(code) })
+}
+
+func ParseCodeSet(list string) (CodeSet, error) {
+	var set CodeSet
+	for item := range strings.SplitSeq(list, ",") {
+		item = strings.TrimSpace(item)
+		if item == directive.All {
+			set.all = true
+			continue
+		}
+		from, to, isRange := strings.Cut(item, "-")
+		first, err := lint.ParseCode(from)
+		if err != nil {
+			return CodeSet{}, err
+		}
+		last := first
+		if isRange {
+			if last, err = lint.ParseCode(to); err != nil {
+				return CodeSet{}, err
+			}
+		}
+		set.ranges = append(set.ranges, codeRange{from: first, to: last})
+	}
+	return set, nil
+}
+
+func SplitList(v string) []string {
+	var out []string
+	for item := range strings.SplitSeq(v, ",") {
+		if item = strings.TrimSpace(item); item != "" {
+			out = append(out, item)
+		}
+	}
+	return out
+}
+
+type File struct {
+	Path        string
+	Text        string
+	Disabled    CodeSet
+	Enabled     []string
+	Shell       *dialect.Dialect
+	SourcePaths []string
+	Extended    *bool
+}
+
+func Parse(path, text string) (File, error) {
+	rc := File{Path: path, Text: text}
+	for i, line := range strings.Split(text, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if err := rc.apply(line); err != nil {
+			return File{}, fmt.Errorf("%s:%d: %w", path, i+1, err)
+		}
+	}
+	return rc, nil
+}
+
+func (rc *File) apply(line string) error {
+	d, ok := directive.ParseSettings(line)
+	if !ok || d.Problem != nil {
+		return fmt.Errorf("expected key=value settings such as disable=SC2034, got %q", line)
+	}
+	for _, pair := range d.Pairs {
+		if err := rc.set(pair); err != nil {
+			return fmt.Errorf("%s=%s: %w", pair.Key, pair.Value, err)
+		}
+	}
+	return nil
+}
+
+func (rc *File) set(pair directive.Pair) error {
+	switch pair.Key {
+	case directive.Disable:
+		set, err := ParseCodeSet(pair.Value)
+		if err != nil {
+			return err
+		}
+		rc.Disabled = rc.Disabled.Union(set)
+	case directive.Enable:
+		rc.Enabled = append(rc.Enabled, SplitList(pair.Value)...)
+	case directive.Shell:
+		d, ok := dialect.FromName(pair.Value)
+		if !ok {
+			return fmt.Errorf("unknown shell %q", pair.Value)
+		}
+		rc.Shell = &d
+	case directive.SourcePath:
+		for _, dir := range filepath.SplitList(pair.Value) {
+			if dir != ScriptDir && !filepath.IsAbs(dir) {
+				dir = filepath.Join(filepath.Dir(rc.Path), dir)
+			}
+			rc.SourcePaths = append(rc.SourcePaths, dir)
+		}
+	case directive.ExternalSources:
+		if _, err := strconv.ParseBool(pair.Value); err != nil {
+			return fmt.Errorf("want true or false: %w", err)
+		}
+	case directive.ExtendedAnalysis:
+		b, err := strconv.ParseBool(pair.Value)
+		if err != nil {
+			return fmt.Errorf("want true or false: %w", err)
+		}
+		rc.Extended = &b
+	default:
+		return fmt.Errorf("%q is not a .shellcheckrc key; known keys are disable, enable, shell, source-path, external-sources and extended-analysis", pair.Key)
+	}
+	return nil
+}
+
+func DisableEdit(text, code string) (textedit.Edit, bool) {
+	parsed, err := lint.ParseCode(code)
+	if err != nil {
+		return textedit.Edit{}, false
+	}
+	var appendAt int
+	found := false
+	for start := 0; start <= len(text); {
+		end := strings.IndexByte(text[start:], '\n')
+		if end < 0 {
+			end = len(text)
+		} else {
+			end += start
+		}
+		line := text[start:end]
+		if d, ok := directive.ParseSettings(line); ok && d.Problem == nil {
+			for _, pair := range d.Pairs {
+				if pair.Key != directive.Disable {
+					continue
+				}
+				set, err := ParseCodeSet(pair.Value)
+				if err == nil && set.Has(parsed) {
+					return textedit.Edit{}, false
+				}
+				if !found && pair.ValueEnd-pair.ValueOffset == len(pair.Value) {
+					appendAt, found = start+pair.ValueEnd, true
+				}
+			}
+		}
+		if end == len(text) {
+			break
+		}
+		start = end + 1
+	}
+	if found {
+		return textedit.Edit{Start: appendAt, End: appendAt, NewText: "," + code}, true
+	}
+	line := directive.Disable + "=" + code + "\n"
+	if text != "" && !strings.HasSuffix(text, "\n") {
+		line = "\n" + line
+	}
+	return textedit.Edit{Start: len(text), End: len(text), NewText: line}, true
+}

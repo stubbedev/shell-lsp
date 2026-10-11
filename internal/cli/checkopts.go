@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
-	"github.com/stubbedev/shell-lsp/internal/directive"
 	"github.com/stubbedev/shell-lsp/internal/lint"
+	"github.com/stubbedev/shell-lsp/internal/shellcheckrc"
 )
 
 const (
@@ -70,53 +70,12 @@ type rcChoice struct {
 	path string
 }
 
-type codeRange struct {
-	from, to lint.Code
-}
-
-type codeSet struct {
-	all    bool
-	ranges []codeRange
-}
-
-func (s codeSet) has(code lint.Code) bool {
-	return s.all || slices.ContainsFunc(s.ranges, func(r codeRange) bool { return r.from <= code && code <= r.to })
-}
-
-func (s codeSet) union(other codeSet) codeSet {
-	return codeSet{all: s.all || other.all, ranges: slices.Concat(s.ranges, other.ranges)}
-}
-
-func parseCodeSet(list string) (codeSet, error) {
-	var set codeSet
-	for item := range strings.SplitSeq(list, ",") {
-		item = strings.TrimSpace(item)
-		if item == directive.All {
-			set.all = true
-			continue
-		}
-		from, to, isRange := strings.Cut(item, "-")
-		first, err := lint.ParseCode(from)
-		if err != nil {
-			return codeSet{}, err
-		}
-		last := first
-		if isRange {
-			if last, err = lint.ParseCode(to); err != nil {
-				return codeSet{}, err
-			}
-		}
-		set.ranges = append(set.ranges, codeRange{from: first, to: last})
-	}
-	return set, nil
-}
-
 type checkOptions struct {
 	format       outputFormat
 	shell        *dialect.Dialect
 	severity     lint.Severity
-	exclude      codeSet
-	include      *codeSet
+	exclude      shellcheckrc.CodeSet
+	include      *shellcheckrc.CodeSet
 	enable       []string
 	profile      lint.Profile
 	extended     *bool
@@ -148,22 +107,22 @@ var checkOptionTable = []option[checkOptions]{
 		return nil
 	}},
 	{'i', "include", requiredArg, func(o *checkOptions, v string) error {
-		set, err := parseCodeSet(v)
+		set, err := shellcheckrc.ParseCodeSet(v)
 		if err != nil {
 			return badSyntax("--include: %w", err)
 		}
 		if o.include != nil {
-			set = o.include.union(set)
+			set = o.include.Union(set)
 		}
 		o.include = &set
 		return nil
 	}},
 	{'e', "exclude", requiredArg, func(o *checkOptions, v string) error {
-		set, err := parseCodeSet(v)
+		set, err := shellcheckrc.ParseCodeSet(v)
 		if err != nil {
 			return badSyntax("--exclude: %w", err)
 		}
-		o.exclude = o.exclude.union(set)
+		o.exclude = o.exclude.Union(set)
 		return nil
 	}},
 	{0, "extended-analysis", requiredArg, func(o *checkOptions, v string) error {
@@ -196,7 +155,7 @@ var checkOptionTable = []option[checkOptions]{
 		return nil
 	}},
 	{'o', "enable", requiredArg, func(o *checkOptions, v string) error {
-		o.enable = append(o.enable, splitList(v)...)
+		o.enable = append(o.enable, shellcheckrc.SplitList(v)...)
 		return nil
 	}},
 	{0, "profile", requiredArg, func(o *checkOptions, v string) error {
@@ -238,16 +197,6 @@ var checkOptionTable = []option[checkOptions]{
 	}},
 	{'x', "external-sources", noArg, func(*checkOptions, string) error { return nil }},
 	{0, "help", noArg, func(o *checkOptions, _ string) error { o.help = true; return nil }},
-}
-
-func splitList(v string) []string {
-	var out []string
-	for item := range strings.SplitSeq(v, ",") {
-		if item = strings.TrimSpace(item); item != "" {
-			out = append(out, item)
-		}
-	}
-	return out
 }
 
 func parseCheckArgs(args []string) (checkOptions, error) {

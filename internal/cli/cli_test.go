@@ -301,7 +301,7 @@ func TestGNUOptionParsing(t *testing.T) {
 		t.Fatal(err)
 	}
 	if opts.format.name != "gcc" || !opts.checkSourced || opts.severity != 1 || opts.color != colorAlways ||
-		!opts.exclude.has(1) || !opts.exclude.has(3) || opts.exclude.has(4) || !slices.Equal(opts.operands, []string{"a.sh", "-b.sh"}) {
+		!opts.exclude.Has(1) || !opts.exclude.Has(3) || opts.exclude.Has(4) || !slices.Equal(opts.operands, []string{"a.sh", "-b.sh"}) {
 		t.Errorf("parsed options = %+v", opts)
 	}
 	for _, bad := range [][]string{{"-f"}, {"--format"}, {"-q"}, {"--ex", "x"}, {"--norc=yes"}, {"-W", "many"}} {
