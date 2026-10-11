@@ -16,11 +16,11 @@ import (
 )
 
 type commandDocs struct {
-	pages *manpage.Lookup
+	*manpage.Lookup
 }
 
 func (c commandDocs) Describe(ctx context.Context, name string) (string, error) {
-	page, err := c.pages.Page(ctx, name)
+	page, err := c.Page(ctx, name)
 	if err == nil {
 		return page.Markdown(), nil
 	}

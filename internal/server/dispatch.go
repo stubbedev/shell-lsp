@@ -102,7 +102,7 @@ func New(conn *jsonrpc.Conn, version string) *Server {
 
 func (s *Server) usePages(pages *manpage.Lookup) {
 	s.prefetch = newPrefetcher(pages)
-	s.commandDocs = commandDocs{pages: pages}
+	s.commandDocs = commandDocs{Lookup: pages}
 	s.environment = shellEnvironment{pages: pages, executables: &executableCache{}, prefetch: s.prefetch}
 }
 

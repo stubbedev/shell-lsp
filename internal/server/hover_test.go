@@ -42,3 +42,24 @@ func TestHoverPlainTextClient(t *testing.T) {
 		t.Errorf("hover = %+v", got)
 	}
 }
+
+func TestHoverDocumentsSubcommandsAndTheirFlags(t *testing.T) {
+	t.Parallel()
+
+	c, _ := startClient(t, `{"capabilities": {"textDocument": {"diagnostic": {}, "hover": {"contentFormat": ["markdown"]}}}}`, withToolPages(t))
+	c.notify("textDocument/didOpen", openParams("file:///w/a.sh", "tool stop --force\ntool extra -x\n"))
+	for _, tc := range []struct {
+		line, character int
+		want            string
+	}{
+		{0, 6, "Stop units."},
+		{0, 12, "kill them"},
+		{1, 6, "tool-extra - extra widget tricks"},
+		{1, 12, "do the extra trick"},
+	} {
+		got := decodeResult[lsp.Hover](t, c.call("textDocument/hover", positionParams("file:///w/a.sh", tc.line, tc.character, "")))
+		if !strings.Contains(got.Contents.Value, tc.want) {
+			t.Errorf("hover at %d:%d = %q, want %q", tc.line, tc.character, got.Contents.Value, tc.want)
+		}
+	}
+}

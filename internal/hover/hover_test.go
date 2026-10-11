@@ -7,17 +7,44 @@ import (
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/manpage"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 )
 
-type fakeCommands map[string]string
+type fakeCommands struct {
+	docs        map[string]string
+	subcommands map[string]manpage.Subcommand
+	options     map[string][]manpage.Option
+	err         error
+}
 
 func (f fakeCommands) Describe(_ context.Context, name string) (string, error) {
-	doc, ok := f[name]
+	doc, ok := f.docs[name]
 	if !ok {
 		return "", errors.New("no such command " + name)
 	}
 	return doc, nil
+}
+
+func (f fakeCommands) Subcommand(_ context.Context, command, name string) (manpage.Subcommand, error) {
+	sub, ok := f.subcommands[command+" "+name]
+	if !ok {
+		return manpage.Subcommand{}, manpage.ErrNoPage
+	}
+	return sub, nil
+}
+
+func (f fakeCommands) Options(_ context.Context, command string, args []string) ([]manpage.Option, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	if options, ok := f.options[strings.Join(append([]string{command}, args...), " ")]; ok {
+		return options, nil
+	}
+	if options, ok := f.options[command]; ok {
+		return options, nil
+	}
+	return nil, manpage.ErrNoPage
 }
 
 const script = `#!/bin/bash
@@ -50,7 +77,7 @@ func hoverAt(t *testing.T, src string, d dialect.Dialect, needle string, nth int
 	got, ok, err := Hover(t.Context(), Input{
 		Tree:     parser.Parse(src, d),
 		Offset:   offset,
-		Commands: fakeCommands{"ls": "**ls - list directory contents**"},
+		Commands: fakeCommands{docs: map[string]string{"ls": "**ls - list directory contents**"}},
 	})
 	if err != nil {
 		t.Fatalf("Hover(%q) error = %v", needle, err)
@@ -158,6 +185,63 @@ func TestHoverCommandLookupError(t *testing.T) {
 	})
 	if err == nil {
 		t.Error("Hover() swallowed the command lookup error")
+	}
+}
+
+func TestHoverSubcommandsAndFlags(t *testing.T) {
+	t.Parallel()
+
+	commands := fakeCommands{
+		subcommands: map[string]manpage.Subcommand{"tool stop": {Name: "stop", Doc: "**tool-stop**"}},
+		options: map[string][]manpage.Option{
+			"tool":         {{Names: []string{"-v", "--verbose"}, Doc: "be verbose"}, {Names: []string{"--width"}, Doc: "set the width"}},
+			"tool -v stop": {{Names: []string{"-f", "--force"}, Doc: "kill them"}},
+		},
+	}
+	src := "tool -v stop --force web\ntool --width=80 '-v'\nf() { :; }\nf stop\ntool $(tool -v)\n"
+	at := func(needle string, nth int) (Result, bool) {
+		t.Helper()
+		offset := -1
+		for range nth + 1 {
+			offset += strings.Index(src[offset+1:], needle) + 1
+		}
+		got, ok, err := Hover(t.Context(), Input{Tree: parser.Parse(src, dialect.Bash), Offset: offset + 1, Commands: commands})
+		if err != nil {
+			t.Fatalf("Hover(%q #%d) error = %v", needle, nth, err)
+		}
+		return got, ok
+	}
+	if got, ok := at("stop", 0); !ok || got.Markdown != "**tool-stop**" || got.Span != (parser.Span{Start: 8, End: 12}) {
+		t.Errorf("subcommand hover = %+v, %t", got, ok)
+	}
+	if got, ok := at("--force", 0); !ok || got.Markdown != "**-f, --force**\n\nkill them" {
+		t.Errorf("subcommand flag hover = %+v, %t", got, ok)
+	}
+	if got, ok := at("-v", 0); !ok || !strings.Contains(got.Markdown, "be verbose") {
+		t.Errorf("command flag hover = %+v, %t", got, ok)
+	}
+	if got, ok := at("--width", 0); !ok || !strings.Contains(got.Markdown, "set the width") {
+		t.Errorf("flag with a value hover = %+v, %t", got, ok)
+	}
+	if got, ok := at("-v", 1); !ok || !strings.Contains(got.Markdown, "be verbose") {
+		t.Errorf("quoted flag hover = %+v, %t", got, ok)
+	}
+	if got, ok := at("-v", 2); !ok || !strings.Contains(got.Markdown, "be verbose") {
+		t.Errorf("flag of a command inside a substitution = %+v, %t", got, ok)
+	}
+	for _, needle := range []struct {
+		text string
+		nth  int
+	}{{"web", 0}, {"stop", 1}} {
+		if got, ok := at(needle.text, needle.nth); ok {
+			t.Errorf("Hover(%q #%d) = %+v, want nothing", needle.text, needle.nth, got)
+		}
+	}
+
+	failing := commands
+	failing.err = errors.New("unreadable page")
+	if _, _, err := Hover(t.Context(), Input{Tree: parser.Parse("tool -v\n", dialect.Bash), Offset: 6, Commands: failing}); err == nil {
+		t.Error("Hover() swallowed the option lookup error")
 	}
 }
 

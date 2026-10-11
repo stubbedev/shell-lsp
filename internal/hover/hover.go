@@ -2,6 +2,7 @@ package hover
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"slices"
@@ -11,6 +12,7 @@ import (
 	"mvdan.cc/sh/v3/syntax"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/manpage"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/shelldocs"
 )
@@ -19,6 +21,8 @@ const snippetWidth = 80
 
 type Commands interface {
 	Describe(ctx context.Context, name string) (string, error)
+	Subcommand(ctx context.Context, command, name string) (manpage.Subcommand, error)
+	Options(ctx context.Context, command string, args []string) ([]manpage.Option, error)
 }
 
 type Input struct {
@@ -237,31 +241,94 @@ func (h hoverer) function(fn parser.Function) string {
 
 func (h hoverer) command(ctx context.Context) (Result, bool, error) {
 	for _, cmd := range h.Tree.Commands {
-		if !cmd.NameSpan.Covers(h.Offset) {
-			continue
+		if cmd.NameSpan.Covers(h.Offset) {
+			return h.commandName(ctx, cmd)
 		}
-		if fn, ok := h.Tree.FunctionNamed(cmd.Name); ok {
-			return Result{Markdown: h.function(fn), Span: cmd.NameSpan}, true, nil
+		if r, ok, err := h.argument(ctx, cmd); ok || err != nil {
+			return r, ok, err
 		}
-		if imp, fn, ok := parser.ImportedFunction(h.Imports, cmd.Name); ok {
-			return Result{Markdown: ImportedFunctionDoc(imp, fn), Span: cmd.NameSpan}, true, nil
-		}
-		if entry, ok := shelldocs.Builtin(cmd.Name); ok {
-			return Result{Markdown: entry.Markdown(h.dialect), Span: cmd.NameSpan}, true, nil
-		}
-		if entry, ok := shelldocs.Keyword(cmd.Name); ok {
-			return Result{Markdown: entry.Markdown(h.dialect), Span: cmd.NameSpan}, true, nil
-		}
-		if h.Commands == nil {
-			return Result{}, false, nil
-		}
-		doc, err := h.Commands.Describe(ctx, cmd.Name)
-		if err != nil {
-			return Result{}, false, err
-		}
-		return Result{Markdown: doc, Span: cmd.NameSpan}, true, nil
 	}
 	return Result{}, false, nil
+}
+
+func (h hoverer) argument(ctx context.Context, cmd parser.Command) (Result, bool, error) {
+	if h.Commands == nil || !cmd.Span.Covers(h.Offset) || h.isFunction(cmd.Name) {
+		return Result{}, false, nil
+	}
+	for i, arg := range cmd.Args {
+		span, ok := h.Tree.NodeSpan(arg)
+		if !ok || !span.Covers(h.Offset) {
+			continue
+		}
+		word, literal := parser.Literal(arg)
+		if !literal {
+			return Result{}, false, nil
+		}
+		before := parser.ArgumentTexts(cmd.Args[:i])
+		if strings.HasPrefix(word, "-") {
+			return h.flag(ctx, cmd.Name, before, word, span)
+		}
+		if _, chosen := manpage.SubcommandWord(before); chosen {
+			return Result{}, false, nil
+		}
+		sub, err := h.Commands.Subcommand(ctx, cmd.Name, word)
+		return found(Result{Markdown: sub.Doc, Span: span}, err)
+	}
+	return Result{}, false, nil
+}
+
+func (h hoverer) flag(ctx context.Context, command string, before []string, word string, span parser.Span) (Result, bool, error) {
+	options, err := h.Commands.Options(ctx, command, before)
+	if err != nil {
+		return found(Result{}, err)
+	}
+	name, _, _ := strings.Cut(word, "=")
+	i := slices.IndexFunc(options, func(o manpage.Option) bool { return slices.Contains(o.Names, name) })
+	if i < 0 {
+		return Result{}, false, nil
+	}
+	return Result{Markdown: fmt.Sprintf("**%s**\n\n%s", strings.Join(options[i].Names, ", "), options[i].Doc), Span: span}, true, nil
+}
+
+func found(r Result, err error) (Result, bool, error) {
+	switch {
+	case errors.Is(err, manpage.ErrNoPage):
+		return Result{}, false, nil
+	case err != nil:
+		return Result{}, false, err
+	}
+	return r, true, nil
+}
+
+func (h hoverer) isFunction(name string) bool {
+	if _, ok := h.Tree.FunctionNamed(name); ok {
+		return true
+	}
+	_, _, ok := parser.ImportedFunction(h.Imports, name)
+	return ok
+}
+
+func (h hoverer) commandName(ctx context.Context, cmd parser.Command) (Result, bool, error) {
+	if fn, ok := h.Tree.FunctionNamed(cmd.Name); ok {
+		return Result{Markdown: h.function(fn), Span: cmd.NameSpan}, true, nil
+	}
+	if imp, fn, ok := parser.ImportedFunction(h.Imports, cmd.Name); ok {
+		return Result{Markdown: ImportedFunctionDoc(imp, fn), Span: cmd.NameSpan}, true, nil
+	}
+	if entry, ok := shelldocs.Builtin(cmd.Name); ok {
+		return Result{Markdown: entry.Markdown(h.dialect), Span: cmd.NameSpan}, true, nil
+	}
+	if entry, ok := shelldocs.Keyword(cmd.Name); ok {
+		return Result{Markdown: entry.Markdown(h.dialect), Span: cmd.NameSpan}, true, nil
+	}
+	if h.Commands == nil {
+		return Result{}, false, nil
+	}
+	doc, err := h.Commands.Describe(ctx, cmd.Name)
+	if err != nil {
+		return Result{}, false, err
+	}
+	return Result{Markdown: doc, Span: cmd.NameSpan}, true, nil
 }
 
 type Parameter struct {

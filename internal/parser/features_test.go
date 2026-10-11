@@ -23,6 +23,14 @@ type offlineCommands struct{}
 
 func (offlineCommands) Describe(context.Context, string) (string, error) { return "external", nil }
 
+func (offlineCommands) Subcommand(context.Context, string, string) (manpage.Subcommand, error) {
+	return manpage.Subcommand{}, manpage.ErrNoPage
+}
+
+func (offlineCommands) Options(context.Context, string, []string) ([]manpage.Option, error) {
+	return nil, manpage.ErrNoPage
+}
+
 type offlineEnv struct{}
 
 func (offlineEnv) Executables() []string                         { return []string{"ls", "grep"} }
