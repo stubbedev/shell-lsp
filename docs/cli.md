@@ -90,15 +90,19 @@ SC1134 in every script.
 `tty`, `gcc`, `checkstyle`, `json`, `json1` and `diff` follow ShellCheck's
 layout, so tools that parse ShellCheck's output read these too:
 
-- `json` and `json1` carry each finding's fix as ShellCheck's `replacements`.
+- `json` and `json1` carry each finding's safe fix, the one fix-all would
+  apply, as ShellCheck's `replacements`.
   Codes are numbers as in ShellCheck; shell-lsp's own `SL` codes appear as
   10000 plus their number, so SL1001 is `11001` and never collides with an
   `SC` code.
-- `diff` prints a unified diff of every automatic fix, the same edits the
+- `diff` prints a unified diff of every safe fix, the same edits the
   editor's "Apply all automatic fixes" action makes; pipe it to `git apply`
-  or `patch -p1`.
+  or `patch -p1`. Fixes that change what a script does, such as quoting
+  `$1` or adding `|| exit`, are left out; the editor offers them as quick
+  fixes.
 - `sarif` writes SARIF 2.1.0, with a rule per code that links to its
-  documentation, columns in Unicode code points, and fixes as SARIF fixes.
+  documentation, columns in Unicode code points, and every fix of a finding,
+  safe or not, as a SARIF fix titled by what it changes.
   GitHub code scanning reads it directly.
 
 A script that fails to parse is reported as SC1072, ShellCheck's code for a
