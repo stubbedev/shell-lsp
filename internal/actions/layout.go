@@ -1,6 +1,7 @@
 package actions
 
 import (
+	"cmp"
 	"slices"
 	"strings"
 
@@ -31,11 +32,26 @@ func verbatimLinesOf(tree *parser.Tree) verbatimLines {
 		}
 		return true
 	})
-	return out
+	slices.SortFunc(out, func(a, b parser.Span) int { return cmp.Compare(a.Start, b.Start) })
+	merged := out[:0]
+	for _, span := range out {
+		if n := len(merged); n > 0 && span.Start <= merged[n-1].End+1 {
+			merged[n-1].End = max(merged[n-1].End, span.End)
+			continue
+		}
+		merged = append(merged, span)
+	}
+	return merged
 }
 
 func (v verbatimLines) has(lineAt int) bool {
-	return slices.ContainsFunc(v, func(s parser.Span) bool { return s.Contains(lineAt) })
+	i, _ := slices.BinarySearchFunc(v, lineAt, func(s parser.Span, at int) int {
+		if s.Start <= at {
+			return -1
+		}
+		return 1
+	})
+	return i > 0 && v[i-1].Contains(lineAt)
 }
 
 func heredocBody(text string, h parser.Heredoc) parser.Span {
