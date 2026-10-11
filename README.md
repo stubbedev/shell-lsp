@@ -47,6 +47,10 @@ shell-lsp is one static binary with no runtime dependencies. Pick one:
 - **Go**: `go install github.com/stubbedev/shell-lsp@latest`
 - **Nix**: `nix profile install github:stubbedev/shell-lsp`, or try it with
   `nix run github:stubbedev/shell-lsp -- --version`
+- **VS Code**: the [Shell LSP extension](editors/vscode)
+  (`stubbedev.shell-lsp` on the Visual Studio Marketplace and Open VSX, and
+  a `.vsix` on every release) runs the server, exposes its settings, and
+  offers to download and verify the release binary when none is installed.
 
 `shell-lsp --version` prints the installed version. Then point your editor at
 it: [docs/editors.md](docs/editors.md) covers Neovim, Helix, Zed, VS Code and
