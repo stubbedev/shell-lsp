@@ -17,6 +17,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/manpage"
+	"github.com/stubbedev/shell-lsp/internal/platform"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
@@ -128,11 +129,11 @@ func (c *executableCache) list(path string, now time.Time) []string {
 	if c.names != nil && c.path == path && slices.EqualFunc(c.modTimes, modTimes, time.Time.Equal) {
 		return c.names
 	}
-	c.path, c.modTimes, c.names = path, modTimes, scanExecutables(dirs)
+	c.path, c.modTimes, c.names = path, modTimes, scanExecutables(dirs, platform.Native.PathExt(os.Getenv("PATHEXT")))
 	return c.names
 }
 
-func scanExecutables(dirs []string) []string {
+func scanExecutables(dirs, pathExt []string) []string {
 	names := []string{}
 	for _, dir := range dirs {
 		entries, err := os.ReadDir(dir)
@@ -140,8 +141,12 @@ func scanExecutables(dirs []string) []string {
 			continue
 		}
 		for _, entry := range entries {
-			if info, err := followedInfo(dir, entry); err == nil && !info.IsDir() && info.Mode().Perm()&0o111 != 0 {
-				names = append(names, entry.Name())
+			info, err := followedInfo(dir, entry)
+			if err != nil {
+				continue
+			}
+			if name, ok := platform.Native.Executable(entry.Name(), info.Mode(), pathExt); ok {
+				names = append(names, name)
 			}
 		}
 	}

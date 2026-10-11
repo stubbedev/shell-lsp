@@ -12,6 +12,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/manpage"
+	"github.com/stubbedev/shell-lsp/internal/platform"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
@@ -254,19 +255,26 @@ func TestCompletionResolveDescribesCommands(t *testing.T) {
 	}
 }
 
+func executableName(name string) string {
+	if platform.Native == platform.Windows {
+		return name + ".exe"
+	}
+	return name
+}
+
 func TestExecutableCache(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	for name, mode := range map[string]os.FileMode{"tool": 0o755, "data.txt": 0o644} {
+	for name, mode := range map[string]os.FileMode{executableName("tool"): 0o755, "data.txt": 0o644} {
 		if err := os.WriteFile(filepath.Join(dir, name), nil, mode); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := os.Mkdir(filepath.Join(dir, "subdir"), 0o755); err != nil {
+	if err := os.Mkdir(filepath.Join(dir, executableName("subdir")), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Symlink(filepath.Join(dir, "tool"), filepath.Join(dir, "linked")); err != nil {
+	if err := os.Symlink(filepath.Join(dir, executableName("tool")), filepath.Join(dir, executableName("linked"))); err != nil {
 		t.Fatal(err)
 	}
 	cache := &executableCache{}
@@ -275,7 +283,7 @@ func TestExecutableCache(t *testing.T) {
 	if got := cache.list(path, start); !slices.Equal(got, []string{"linked", "tool"}) {
 		t.Errorf("executables = %v", got)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "newtool"), nil, 0o755); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, executableName("newtool")), nil, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	later := start.Add(time.Second)
