@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"testing"
 )
@@ -44,5 +45,28 @@ func TestReleaseBinary(t *testing.T) {
 	}
 	if libs, err := f.ImportedLibraries(); err == nil && len(libs) > 0 {
 		t.Errorf("binary links shared libraries %v", libs)
+	}
+}
+
+func TestResolvedVersion(t *testing.T) {
+	t.Parallel()
+
+	info := func(v string) func() (*debug.BuildInfo, bool) {
+		return func() (*debug.BuildInfo, bool) { return &debug.BuildInfo{Main: debug.Module{Version: v}}, true }
+	}
+	missing := func() (*debug.BuildInfo, bool) { return nil, false }
+	for _, tc := range []struct {
+		stamped string
+		info    func() (*debug.BuildInfo, bool)
+		want    string
+	}{
+		{"1.2.3", info("v9.9.9"), "1.2.3"},
+		{"", info("v0.1.0"), "0.1.0"},
+		{"", info("(devel)"), "dev"},
+		{"", missing, "dev"},
+	} {
+		if got := resolvedVersion(tc.stamped, tc.info); got != tc.want {
+			t.Errorf("resolvedVersion(%q) = %q, want %q", tc.stamped, got, tc.want)
+		}
 	}
 }
