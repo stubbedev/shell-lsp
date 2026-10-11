@@ -5,51 +5,11 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/stubbedev/shell-lsp/internal/clienttext"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 )
 
 var fuzzInsertions = []string{"a", "é", "😀", "中", " ", "\n", "\r\n", "\r", "\uFEFF"}
-
-type clientLine struct{ start, end int }
-
-func clientLines(text string) []clientLine {
-	var lines []clientLine
-	start := 0
-	for i := 0; i < len(text); i++ {
-		switch text[i] {
-		case '\r':
-			lines = append(lines, clientLine{start, i})
-			if i+1 < len(text) && text[i+1] == '\n' {
-				i++
-			}
-			start = i + 1
-		case '\n':
-			lines = append(lines, clientLine{start, i})
-			start = i + 1
-		}
-	}
-	return append(lines, clientLine{start, len(text)})
-}
-
-func clientOffset(text string, pos lsp.Position, enc Encoding) int {
-	lines := clientLines(text)
-	if int(pos.Line) >= len(lines) {
-		return len(text)
-	}
-	line := lines[pos.Line]
-	offset := line.start
-	var units uint32
-	for offset < line.end {
-		r, size := utf8.DecodeRuneInString(text[offset:line.end])
-		next := units + codeUnits(r, size, enc)
-		if next > pos.Character {
-			break
-		}
-		units = next
-		offset += size
-	}
-	return offset
-}
 
 func FuzzChangesMatchClientText(f *testing.F) {
 	f.Add("echo hi\r\nx=1\n", []byte{0, 2, 1, 0, 2, 0, 1})
@@ -73,7 +33,9 @@ func FuzzChangesMatchClientText(f *testing.F) {
 				insert.WriteString(fuzzInsertions[int(script[0])%len(fuzzInsertions)])
 				script = script[1:]
 			}
-			from, to := clientOffset(client, start, enc), clientOffset(client, end, enc)
+			units := func(r rune, size int) uint32 { return codeUnits(r, size, enc) }
+			lines := clienttext.Lines(client)
+			from, to := clienttext.Offset(client, lines, start, units), clienttext.Offset(client, lines, end, units)
 			if to < from {
 				from, to = to, from
 			}
@@ -83,8 +45,8 @@ func FuzzChangesMatchClientText(f *testing.F) {
 			if doc.Text() != want {
 				t.Fatalf("after replacing %+v-%+v (%v) with %q: document %q, client %q", start, end, enc, insert.String(), doc.Text(), want)
 			}
-			if doc.LineCount() != len(clientLines(client)) {
-				t.Fatalf("document has %d lines, client %d", doc.LineCount(), len(clientLines(client)))
+			if doc.LineCount() != len(clienttext.Lines(client)) {
+				t.Fatalf("document has %d lines, client %d", doc.LineCount(), len(clienttext.Lines(client)))
 			}
 		}
 	})

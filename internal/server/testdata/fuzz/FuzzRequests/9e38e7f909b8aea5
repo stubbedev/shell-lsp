@@ -1,0 +1,4 @@
+go test fuzz v1
+string("#\nfunction .sh.math.ot x y {\n\t.sh.value=$(( sqrt(x*x  y*y) ))\n}\nfunction .sh.math.clamp v lo hi {\n\t(( .sh.value = v < lo ? lo : v > hi ? hi : v ))\n}\n\nfloat r=$(( hypot(3, 4) ))\ninteger n=$(( clamp(15, 0, 10) ))\ntypeset -E3 e=1.0e-3\ntypeset -F2 money=19.999\ntypeset -i2 bits=10\ntypeset -X x=255\ntypeset -lu big=4294967296\n\nprint -r -- \"$r $n $e $money $bits $x $big\"\nprint -r -- $(( sin(0) + cos(0) + exp(0) + log(1) + pow(2, 3) + fmod(7, 3) ))\nprint -r -- $(( floor(2.7) + ceil(2.1) + trunc(-1.5) + round(2.5) + int(9.9) ))\nprint -r -- $(( 16#ff + 2#1010 + 0x10 + 1_000 ))\nprint -r -- $(( r > 4.9 && r < 5.1 ? 1 : 0 )) $(( -2 ** 2 )) $(( 5 % 3 ))\n(( n++, r /= 2, bits <<= 1 ))\nlet \"n += 2\" \"r *= 3\"\nprintf '%.3f %d\\n' \"$r\" \"$n\"\nfor (( i = 0; i < 3; i++ )); do\n\tprint -r -- \"$(( i * 1.5 ))\"\ndone\n")
+byte('\x03')
+[]byte("\x13\x85\xf7\xf7M\x01")
