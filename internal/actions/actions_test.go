@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/format"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 )
@@ -86,6 +87,15 @@ func TestExtractFunction(t *testing.T) {
 	heredoc, _, ok := refactor(t, ExtractFunction, "f() {\n«\tcat <<EOF\n  kept\nEOF\n\techo \"a\n  b\"»\n}\n")
 	if want := "extracted() {\n\tcat <<EOF\n  kept\nEOF\n\techo \"a\n  b\"\n}\n\nf() {\n\textracted\n}\n"; !ok || heredoc != want {
 		t.Errorf("extract around a heredoc and a multi-line string = %q (%t)\nwant %q", heredoc, ok, want)
+	}
+	spaced, _, ok := refactor(t, ExtractFunction, "main() {\n  echo start\n«  if true; then\n    echo yes\n  fi»\n}\n")
+	if want := "extracted() {\n  if true; then\n    echo yes\n  fi\n}\n\nmain() {\n  echo start\n  extracted\n}\n"; !ok || spaced != want {
+		t.Errorf("extract in a two-space document = %q (%t)\nwant %q", spaced, ok, want)
+	}
+	text, sel := selection(t, "«echo a»\n")
+	change, ok := Compute(Document{Tree: parser.Parse(text, dialect.Bash), Format: format.Options{Indent: 3}}, Refactor{Kind: ExtractFunction, Start: sel.Start, End: sel.End})
+	if got, want := textedit.Apply(text, change.Edits), "extracted() {\n   echo a\n}\n\nextracted\n"; !ok || got != want {
+		t.Errorf("extract in an unindented document with indent 3 = %q (%t), want %q", got, ok, want)
 	}
 	top, _, ok := refactor(t, ExtractFunction, "«echo a\necho b»\necho c\n")
 	if !ok || top != "extracted() {\n\techo a\n\techo b\n}\n\nextracted\necho c\n" {

@@ -377,7 +377,9 @@ func extractFunction(s *site) (Change, bool) {
 	indent := leadingSpace(text, lineStart(text, first.Start))
 	outer := topLevelStart(tree, first.Start)
 	insertAt := lineStart(text, outer)
-	fn := leadingSpace(text, insertAt) + name + "() {\n" + reindent(tree, verbatimLinesOf(tree), body, leadingSpace(text, insertAt)+"\t") + leadingSpace(text, insertAt) + "}\n\n"
+	verbatim := verbatimLinesOf(tree)
+	outerIndent := leadingSpace(text, insertAt)
+	fn := outerIndent + name + "() {\n" + reindent(tree, verbatim, body, outerIndent+indentUnit(tree, verbatim, s.Format.Indent)) + outerIndent + "}\n\n"
 	return Change{Title: "Extract to function " + name, Edits: []textedit.Edit{
 		{Start: insertAt, End: insertAt, NewText: fn},
 		{Start: lineStart(text, first.Start), End: lineEnd(text, last.End), NewText: indent + call},
