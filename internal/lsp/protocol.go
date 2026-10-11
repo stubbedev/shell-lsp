@@ -253,6 +253,12 @@ const (
 
 type CompletionParams struct {
 	TextDocumentPositionParams
+	Context *CompletionContext `json:"context,omitempty"`
+}
+
+type CompletionContext struct {
+	TriggerKind      int    `json:"triggerKind"`
+	TriggerCharacter string `json:"triggerCharacter,omitempty"`
 }
 
 type CompletionItem struct {

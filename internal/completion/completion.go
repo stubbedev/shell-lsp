@@ -65,6 +65,7 @@ type Input struct {
 	Offset    int
 	ScriptDir string
 	Snippets  bool
+	Trigger   string
 	Env       Environment
 }
 
@@ -114,6 +115,12 @@ type Result struct {
 }
 
 func Complete(ctx context.Context, in Input) (Result, error) {
+	if result, ok, err := directiveCompletion(in); ok {
+		return result, err
+	}
+	if directiveTrigger(in.Trigger) {
+		return Result{}, nil
+	}
 	c := completer{Input: in, dialect: in.Tree.Dialect, site: analyze(in.Tree, in.Offset)}
 	c.site.wordEnd = tokenEnd(in.Tree.Text(), c.site)
 	switch c.site.position {

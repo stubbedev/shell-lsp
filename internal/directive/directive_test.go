@@ -3,6 +3,7 @@ package directive
 import (
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -86,5 +87,52 @@ func TestKnown(t *testing.T) {
 	d, _ := Parse("# shellcheck severity=error disable=SC2086")
 	if d.Pairs[0].Known() || !d.Pairs[1].Known() {
 		t.Errorf("Known() = %t, %t; want false, true", d.Pairs[0].Known(), d.Pairs[1].Known())
+	}
+}
+
+func TestCursorAt(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		comment string
+		ok      bool
+		want    Cursor
+	}{
+		{"# shellcheck |", true, Cursor{Slot: SlotKey, Start: 13, End: 13}},
+		{"# shellcheck dis|", true, Cursor{Slot: SlotKey, Start: 13, End: 16}},
+		{"# shellcheck di|sable=SC1", true, Cursor{Slot: SlotKey, Start: 13, End: 20}},
+		{"# shellcheck disable=|", true, Cursor{Slot: SlotValue, Key: "disable", Start: 21, End: 21}},
+		{"# shellcheck disable=SC20|", true, Cursor{Slot: SlotValue, Key: "disable", Start: 21, End: 25}},
+		{"# shellcheck disable=SC1,SC2|,SC3", true, Cursor{Slot: SlotValue, Key: "disable", Start: 25, End: 28, Others: []string{"SC1", "SC3"}}},
+		{"# shellcheck disable=SC1,|", true, Cursor{Slot: SlotValue, Key: "disable", Start: 25, End: 25, Others: []string{"SC1"}}},
+		{"# shellcheck shell=ba|sh", true, Cursor{Slot: SlotValue, Key: "shell", Start: 19, End: 23}},
+		{"# shellcheck shell=bash |", true, Cursor{Slot: SlotKey, Start: 24, End: 24}},
+		{"# shellcheck shell=bash | disable=SC1", true, Cursor{Slot: SlotKey, Start: 24, End: 24}},
+		{"# shellcheck source=\"a b|\"", false, Cursor{}},
+		{"# shellcheck disable=SC1 # why|", false, Cursor{}},
+		{"# shellcheck disable SC|", false, Cursor{}},
+		{"# shellcheck|", false, Cursor{}},
+		{"# not a directive|", false, Cursor{}},
+	} {
+		at := strings.IndexByte(tc.comment, '|')
+		comment := tc.comment[:at] + tc.comment[at+1:]
+		got, ok := CursorAt(comment, at)
+		if ok != tc.ok || !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("CursorAt(%q) = %+v, %t; want %+v, %t", tc.comment, got, ok, tc.want, tc.ok)
+		}
+	}
+}
+
+func TestItems(t *testing.T) {
+	t.Parallel()
+
+	d, _ := Parse("# shellcheck disable=SC1,SC2000-SC2099,all")
+	want := []Item{{Text: "SC1", Offset: 21, End: 24}, {Text: "SC2000-SC2099", Offset: 25, End: 38}, {Text: "all", Offset: 39, End: 42}}
+	if got := Items(d.Pairs[0]); !reflect.DeepEqual(got, want) {
+		t.Errorf("Items = %+v, want %+v", got, want)
+	}
+	quoted, _ := Parse(`# shellcheck disable="SC1,SC2"`)
+	if got := Items(quoted.Pairs[0]); got != nil {
+		t.Errorf("Items of a quoted value = %+v, want none: offsets inside quotes are not the value's", got)
 	}
 }

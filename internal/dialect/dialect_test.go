@@ -1,6 +1,9 @@
 package dialect
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
 func TestDetectPrecedence(t *testing.T) {
 	t.Parallel()
@@ -179,10 +182,17 @@ func TestSet(t *testing.T) {
 	if !s.Has(Bash) || !s.Has(Ksh) || s.Has(Zsh) || s.Has(Posix) || s.Has(Dash) {
 		t.Errorf("SetOf(Bash, Ksh) membership wrong: %08b", s)
 	}
-	for _, d := range []Dialect{Bash, Zsh, Posix, Dash, Ksh, Busybox} {
+	every := []Dialect{Bash, Zsh, Posix, Dash, Ksh, Busybox}
+	for _, d := range every {
 		if !All.Has(d) {
 			t.Errorf("All lacks %s", d)
 		}
+	}
+	if got := slices.Collect(All.Members()); !slices.Equal(got, every) {
+		t.Errorf("All.Members() = %v, want %v", got, every)
+	}
+	if got := slices.Collect(s.Members()); !slices.Equal(got, []Dialect{Bash, Ksh}) {
+		t.Errorf("SetOf(Bash, Ksh).Members() = %v", got)
 	}
 }
 

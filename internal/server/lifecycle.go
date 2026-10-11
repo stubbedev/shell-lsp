@@ -192,7 +192,7 @@ func (s *Server) handleInitialize(_ context.Context, _ *docstore.View, params js
 			TextDocumentSync:                TextDocumentSyncOptions{OpenClose: true, Change: 2},
 			DiagnosticProvider:              DiagnosticOptions{InterFileDependencies: true, WorkspaceDiagnostics: true},
 			HoverProvider:                   true,
-			CompletionProvider:              CompletionOptions{TriggerCharacters: []string{"$", "{", "/", "-", ":", "@", "[", "%"}, ResolveProvider: true},
+			CompletionProvider:              CompletionOptions{TriggerCharacters: []string{"$", "{", "/", "-", ":", "@", "[", "%", "=", ","}, ResolveProvider: true},
 			DefinitionProvider:              true,
 			DeclarationProvider:             true,
 			TypeDefinitionProvider:          true,

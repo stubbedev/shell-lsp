@@ -182,6 +182,7 @@ func (s *Server) handleCompletion(ctx context.Context, docs *docstore.View, para
 		Offset:    snap.doc.PositionToOffset(completionParams.Position, snap.encoding),
 		ScriptDir: scriptDir(snap.doc.URI),
 		Snippets:  caps.SnippetSupport,
+		Trigger:   completionTrigger(completionParams.Context),
 		Env:       s.environment,
 	})
 	if err != nil {
@@ -196,6 +197,13 @@ func (s *Server) handleCompletion(ctx context.Context, docs *docstore.View, para
 		items = append(items, item)
 	}
 	return lsp.CompletionList{IsIncomplete: result.Incomplete, Items: items}, nil
+}
+
+func completionTrigger(ctx *lsp.CompletionContext) string {
+	if ctx == nil {
+		return ""
+	}
+	return ctx.TriggerCharacter
 }
 
 func completionItem(snap *snapshot, caps CompletionItemCapabilities, it completion.Item) (lsp.CompletionItem, error) {

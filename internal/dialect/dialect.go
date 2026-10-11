@@ -4,6 +4,7 @@
 package dialect
 
 import (
+	"iter"
 	"maps"
 	"path/filepath"
 	"slices"
@@ -346,3 +347,13 @@ func SetOf(dialects ...Dialect) Set {
 }
 
 func (s Set) Has(d Dialect) bool { return s&(1<<d) != 0 }
+
+func (s Set) Members() iter.Seq[Dialect] {
+	return func(yield func(Dialect) bool) {
+		for d := Bash; s>>d != 0; d++ {
+			if s.Has(d) && !yield(d) {
+				return
+			}
+		}
+	}
+}

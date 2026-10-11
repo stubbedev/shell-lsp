@@ -69,6 +69,32 @@ func TestCompletionRequest(t *testing.T) {
 	}
 }
 
+func TestCompletionTriggeredInADirective(t *testing.T) {
+	t.Parallel()
+
+	uri := fileuri.FromPath(filepath.Join(t.TempDir(), "main.sh"))
+	c, _ := startClient(t, `{"capabilities": {"textDocument": {"diagnostic": {}}}}`)
+	c.notify("textDocument/didOpen", openParams(uri, "# shellcheck disable=\nx=\n"))
+	triggered := func(line, character int) lsp.CompletionList {
+		t.Helper()
+		params, err := json.Marshal(lsp.CompletionParams{
+			TextDocument: lsp.TextDocumentIdentifier{URI: uri},
+			Position:     lsp.Position{Line: uint32(line), Character: uint32(character)},
+			Context:      &lsp.CompletionContext{TriggerKind: 2, TriggerCharacter: "="},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return decodeResult[lsp.CompletionList](t, c.call("textDocument/completion", string(params)))
+	}
+	if codes := triggered(0, 21); !slices.Contains(completionLabels(codes), "SC2086") {
+		t.Errorf("= in a disable directive offered %d items without SC2086", len(codes.Items))
+	}
+	if assignment := triggered(1, 2); len(assignment.Items) != 0 {
+		t.Errorf("= after an assignment offered %v", completionLabels(assignment))
+	}
+}
+
 const (
 	toolPage = `.TH TOOL 1
 .SH NAME
