@@ -1,0 +1,23 @@
+### zsh assigns $0 and positional parameters
+#!/bin/zsh
+0=${(%):-%N}
+0=${${0:#$ZSH_ARGZERO}:-${(%):-%N}}
+1=first
+2=second
+print -r -- $0 $1 $2
+>>- SC1071 1:1 -- shellcheck refuses zsh; zsh assigns $0 and the positional parameters with n=value
+
+### a dollar on the left of a positional assignment in zsh
+#!/bin/zsh
+$1=first
+print -r -- $1
+>>- SC1071 1:1 -- shellcheck refuses zsh
+>>+ SC2281 2:1 -- zsh assigns positional parameters with 1=value, so only the $ is wrong
+
+### bash cannot assign $0 or positional parameters
+#!/bin/bash
+0=name
+1=first
+echo "$0" "$1"
+>>> SC2270 3:1
+>>> SC2277 2:1

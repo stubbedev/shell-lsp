@@ -211,6 +211,8 @@ func (p *pass) checkDollarAssignment(e equalsName, pe *syntax.ParamExp) {
 	switch {
 	case pe.Param == nil || pe.Length:
 		p.reportEqualsGeneric(e)
+	case parser.IsDigits(pe.Param.Value) && parser.IsPlainParam(pe) && p.dialect.Features().AssignsPositionals:
+		p.reportNode(2281, pe, "Drop the $ on the left side of an assignment: write "+pe.Param.Value+"=value, not "+p.nodeText(pe)+"=value.", dollarRemoval(p, pe)...)
 	case pe.Param.Value == "0" && parser.IsPlainParam(pe):
 		p.reportDollarZero(pe)
 	case isPositional(pe.Param.Value) && pe.Param.Value != "@" && pe.Param.Value != "*" && parser.IsPlainParam(pe):
@@ -274,6 +276,7 @@ func (p *pass) reportDollarZero(at syntax.Node) {
 func (p *pass) checkLiteralAssignment(e equalsName) {
 	digits := len(e.before) - len(strings.TrimLeft(e.before, "0123456789"))
 	switch {
+	case digits > 0 && digits == len(e.before) && p.dialect.Features().AssignsPositionals:
 	case e.before == "0":
 		p.reportDollarZero(e.lit)
 	case digits > 0 && digits == len(e.before) && digits <= 2:
