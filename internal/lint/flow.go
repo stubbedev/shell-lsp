@@ -357,7 +357,9 @@ func analyzeFlow(tree *parser.Tree, imports []parser.Import, bats bool) *flowRes
 	}
 	in.trackStatus = readsStatus(tree.Text())
 	in.trackCalls = len(tree.Functions) > 0
-	in.singletons = map[*syntax.Stmt]statusSet{}
+	if in.trackStatus {
+		in.singletons = make(map[*syntax.Stmt]statusSet, len(tree.Commands))
+	}
 	in.definitions = map[*syntax.FuncDecl]bool{}
 	in.record = true
 	in.sourceReturns = deadState(false)
@@ -733,7 +735,7 @@ type nodeWrites struct {
 }
 
 func indexWrites(tree *parser.Tree) nodeWrites {
-	w := nodeWrites{starts: make([]uint64, len(tree.Text())/64+1), defs: map[syntax.Node][]*parser.Definition{}}
+	w := nodeWrites{starts: make([]uint64, len(tree.Text())/64+1), defs: make(map[syntax.Node][]*parser.Definition, len(tree.Definitions))}
 	for i := range tree.Definitions {
 		def := &tree.Definitions[i]
 		if def.Node == nil {

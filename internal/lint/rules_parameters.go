@@ -181,7 +181,7 @@ func isIndirection(text string, body []bracePart) bool {
 
 func checkUnbracedVariable(p *pass, n syntax.Node) {
 	pe, ok := n.(*syntax.ParamExp)
-	if !ok || !pe.Short || !pe.Dollar.IsValid() || pe.Param == nil || !parser.IsName(pe.Param.Value) || p.namesAssignment(pe) {
+	if !ok || !p.active(2250) || !pe.Short || !pe.Dollar.IsValid() || pe.Param == nil || !parser.IsName(pe.Param.Value) || p.namesAssignment(pe) {
 		return
 	}
 	span, ok := p.span(pe)
