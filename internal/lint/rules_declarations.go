@@ -10,14 +10,17 @@ import (
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
+const codeInvalidDeclaredName = nativeBase + 2003
+
 var declarationFamily = family{
 	codes: map[Code]meta{
-		2155: {severity: SeverityWarning},
-		2163: {severity: SeverityWarning},
-		2168: {severity: SeverityError},
-		2290: {severity: SeverityError},
-		2316: {severity: SeverityError},
-		2318: {severity: SeverityWarning},
+		codeInvalidDeclaredName: {severity: SeverityError},
+		2155:                    {severity: SeverityWarning},
+		2163:                    {severity: SeverityWarning},
+		2168:                    {severity: SeverityError},
+		2290:                    {severity: SeverityError},
+		2316:                    {severity: SeverityError},
+		2318:                    {severity: SeverityWarning},
 	},
 	commands: []commandRule{
 		{match: matchExact, names: declaringCommands, check: checkMaskedStatus},
@@ -26,7 +29,40 @@ var declarationFamily = family{
 		{match: matchExact, names: append([]string{"alias"}, declaringCommands...), check: checkSpacedEquals},
 		{match: matchExact, names: []string{"local"}, check: checkLocalOutsideFunction},
 		{match: matchExact, names: []string{"export"}, check: checkExportedExpansion},
+		{match: matchExact, names: declaringCommands, check: checkInvalidDeclaredName},
 	},
+}
+
+func checkInvalidDeclaredName(p *pass, c command) {
+	for _, arg := range c.args {
+		lead, ok := arg.Parts[0].(*syntax.Lit)
+		if !ok {
+			continue
+		}
+		name, _, assigns := strings.Cut(lead.Value, "=")
+		name = strings.TrimSuffix(name, "+")
+		if !assigns || name == "" || strings.HasPrefix(name, "-") || strings.ContainsRune(name, '\\') || p.declarableName(name) {
+			continue
+		}
+		p.reportNode(codeInvalidDeclaredName, lead, name+" is not a valid variable name, so "+c.name+" fails with \"not a valid identifier\" instead of assigning it.")
+	}
+}
+
+func (p *pass) declarableName(name string) bool {
+	if p.dialect.Features().Arrays {
+		if open := strings.IndexByte(name, '['); open > 0 && strings.HasSuffix(name, "]") {
+			name = name[:open]
+		}
+	}
+	if p.dialect != dialect.Ksh {
+		return syntax.ValidName(name)
+	}
+	for segment := range strings.SplitSeq(strings.TrimPrefix(name, "."), ".") {
+		if !syntax.ValidName(segment) {
+			return false
+		}
+	}
+	return true
 }
 
 var (

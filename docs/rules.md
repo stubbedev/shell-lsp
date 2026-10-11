@@ -112,6 +112,21 @@ name=world
 echo "${name@q}"    # SL2002: the operator is Q
 ```
 
+## SL2003
+
+**A declaration assigns a name that is not a variable name.** `export`,
+`declare`, `local`, `readonly` and `typeset` take `name=value` arguments, but
+the shell parses an argument like `my-var=1` or `1st=a` as an ordinary word
+and the command fails at run time with "not a valid identifier", so nothing
+is assigned and, under `set -e`, the script stops. Arguments whose name comes
+from an expansion (`export "$name=value"`) or contains a backslash are left
+alone, since the shell expands them before checking.
+
+```bash
+#!/bin/bash
+export my-var=1    # SL2003: write my_var
+```
+
 The embedded-language rules check awk, sed and jq programs written inside the
 script with built-in parsers; no awk, sed or jq binary is run. A program is
 checked when it is a literal argument (`awk '...'`, `sed -e '...'`,

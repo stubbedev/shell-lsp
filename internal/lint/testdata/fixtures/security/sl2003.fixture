@@ -1,0 +1,46 @@
+### a dash in an exported name
+#!/bin/bash
+export my-var=1
+>>> none
+>>+ SL2003 2:8 -- shell-lsp native check; shellcheck does not check the names declaration commands assign
+
+### a name starting with a digit in a function
+#!/bin/bash
+f() {
+  local 1st=a
+  echo "$1st"
+}
+f
+>>> SC2119 6:1
+>>> SC2120 2:1
+>>+ SL2003 3:9 -- shell-lsp native check; shellcheck does not check the names declaration commands assign
+
+### a template placeholder in an exported name
+#!/bin/bash
+export FLAGS_SET_@suffix@=1
+>>> none
+>>+ SL2003 2:8 -- shell-lsp native check; shellcheck does not check the names declaration commands assign
+
+### names built from expansions are expanded first
+#!/bin/bash
+name=MODE
+export "$name=fast" "${name}_LEVEL=2"
+>>> none
+
+### valid names, appends, subscripts and options
+#!/bin/bash
+declare -a list
+declare -A map
+declare count=1 list[0]=x map[key]=y
+count+=1
+export -n count
+readonly LIMIT=10
+echo "${list[0]} ${map[key]} $LIMIT"
+>>> SC2324 5:1
+
+### ksh93 compound member names
+#!/bin/ksh
+typeset -C point
+typeset point.x=1 .sh.value=2
+print "${point.x}"
+>>> none
