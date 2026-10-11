@@ -4,6 +4,7 @@ import (
 	"iter"
 	"slices"
 	"sort"
+	"strings"
 
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
@@ -125,6 +126,14 @@ func (t *Tree) PathAt(offset int) []syntax.Node {
 }
 
 func (t *Tree) Text() string { return t.text }
+
+func (t *Tree) Unexpandable(l *syntax.Lit) bool {
+	if !strings.HasPrefix(l.Value, "${") || !strings.HasSuffix(l.Value, "}") {
+		return false
+	}
+	start, end := Offset(l.ValuePos), Offset(l.ValueEnd)
+	return start <= end && end <= len(t.text) && t.text[start:end] == l.Value
+}
 
 func (t *Tree) Line(offset int) int {
 	return sort.SearchInts(t.lineStarts, offset+1)

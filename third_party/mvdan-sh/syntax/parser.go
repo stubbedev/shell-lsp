@@ -110,6 +110,11 @@ const (
 
 	// langBashLike contains Bash plus all variants which are extensions of it.
 	langBashLike = LangBash | LangBats
+
+	// langLazyParamExp contains the variants whose shells only check what
+	// follows ${ when the expansion runs, so that a script with an expansion
+	// like ${.sh.file} or ${(f)x} parses, and fails only if it runs it.
+	langLazyParamExp = langBashLike | LangPOSIX | LangMirBSDKorn
 )
 
 // Variant changes the shell language variant that the parser will
@@ -1339,6 +1344,9 @@ func (p *Parser) wordPart() WordPart {
 			cs.Right = pos
 			return cs
 		default:
+			if p.unexpandableStart() {
+				return p.unexpandableParamExp()
+			}
 			return p.paramExp()
 		}
 	case dollDblParen, dollBrack:
@@ -1606,6 +1614,71 @@ func (p *Parser) dblQuoted() *DblQuoted {
 		}
 	}
 	return q
+}
+
+// unexpandableStart reports whether the ${ token just lexed starts an
+// expansion that bash, POSIX shells and mksh can never expand, but which
+// they only reject with "bad substitution" when the expansion runs: one that
+// starts with a rune that cannot begin a parameter, like ${(%):-%x} or
+// ${.sh.file}, or a special parameter followed by a word, like ${@name@}.
+// Such expansions are common in scripts which run them only under zsh or
+// ksh93, and in templates whose placeholders are filled in later.
+func (p *Parser) unexpandableStart() bool {
+	if !p.lang.in(langLazyParamExp) {
+		return false
+	}
+	switch r := p.r; {
+	case r == runeEOF || r == escNewl || paramNameRune(r) || r == '#' || r == '!':
+		return false
+	case r == '%':
+		return !p.lang.in(LangMirBSDKorn)
+	case singleRuneParam(r):
+		next := p.peek()
+		return paramNameRune(next) || next == '{' || next == '('
+	}
+	return true
+}
+
+// unexpandableParamExp parses an expansion which [Parser.unexpandableStart]
+// accepted as a literal holding its text, up to the '}' that closes it
+// outside of quotes and nested braces, like the shells do.
+func (p *Parser) unexpandableParamExp() *Lit {
+	pos := p.pos
+	var text strings.Builder
+	text.WriteString("${")
+	depth, quote, escaped := 0, rune(0), false
+	for ; ; p.rune() {
+		r := p.r
+		switch {
+		case r == runeEOF:
+			p.tok = _EOF
+			p.matchingErr(pos, dollBrace, rightBrace)
+			return p.lit(pos, text.String())
+		case r == escNewl:
+			continue
+		case escaped:
+			escaped = false
+		case r == '\\' && quote != '\'':
+			escaped = true
+		case quote != 0:
+			if r == quote {
+				quote = 0
+			}
+		case r == '\'' || r == '"' || r == '`':
+			quote = r
+		case r == '{':
+			depth++
+		case r == '}' && depth == 0:
+			text.WriteRune(r)
+			p.rune()
+			l := p.lit(pos, text.String())
+			p.next()
+			return l
+		case r == '}':
+			depth--
+		}
+		text.WriteRune(r)
+	}
 }
 
 // paramExp parses a short or full parameter expansion, depending on whether

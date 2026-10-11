@@ -21,6 +21,28 @@ func messages(tree *Tree) []string {
 	return out
 }
 
+func TestUnexpandableExpansionsParseAsTheirText(t *testing.T) {
+	t.Parallel()
+
+	src := "#!/bin/sh\necho ${.sh.file} \"${(%):-%x}\"y ${@tpl@} ${x} '${q}' \\${e}\ncat <<'EOF'\n${body}\nEOF\n"
+	for _, d := range []dialect.Dialect{dialect.Bash, dialect.Posix, dialect.Dash} {
+		tree := Parse(src, d)
+		if len(tree.Errors) != 0 {
+			t.Errorf("%s: errors = %v, want none", d, messages(tree))
+		}
+		var got []string
+		Walk(tree.File, func(n syntax.Node) bool {
+			if lit, ok := n.(*syntax.Lit); ok && tree.Unexpandable(lit) {
+				got = append(got, lit.Value)
+			}
+			return true
+		})
+		if want := []string{"${.sh.file}", "${(%):-%x}", "${@tpl@}"}; !slices.Equal(got, want) {
+			t.Errorf("%s: unexpandable = %q, want %q", d, got, want)
+		}
+	}
+}
+
 func TestValidScriptHasNoErrors(t *testing.T) {
 	t.Parallel()
 

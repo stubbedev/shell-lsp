@@ -1215,6 +1215,7 @@ var errorCases = []errorCase{
 		"echo ${à}",
 		langErr("1:8: invalid parameter name"),
 		langErr("1:8: not a valid parameter expansion operator: `à`", LangZsh), // not great, but seems like an edge case
+		langErr("", langLazyParamExp),
 	),
 	errCase(
 		"echo ${1a}",
@@ -1236,11 +1237,12 @@ var errorCases = []errorCase{
 		"echo ${%",
 		langErr("1:6: `${%foo}` is a mksh feature; tried parsing as LANG"),
 		langErr("1:9: invalid parameter name", LangMirBSDKorn),
+		langErr("1:6: reached EOF without matching `${` with `}`", langBashLike|LangPOSIX),
 	),
 	errCase(
 		"echo ${+",
 		langErr("1:6: `${+foo}` is a zsh feature; tried parsing as LANG"),
-		langErr("1:6: reached EOF without matching `${` with `}`", LangZsh),
+		langErr("1:6: reached EOF without matching `${` with `}`", LangZsh|langLazyParamExp),
 	),
 	errCase(
 		"echo ${#${",
@@ -1256,6 +1258,7 @@ var errorCases = []errorCase{
 		"echo ${(",
 		langErr("1:6: parameter expansion flags are a zsh feature; tried parsing as LANG"),
 		langErr("1:8: reached EOF without matching `(` with `)`", LangZsh),
+		langErr("1:6: reached EOF without matching `${` with `}`", langLazyParamExp),
 	),
 	errCase(
 		"echo $$(foo)",
@@ -1279,20 +1282,27 @@ var errorCases = []errorCase{
 	),
 	errCase(
 		"echo ${@foo}",
-		langErr("1:9: `@` cannot be followed by a word", langBashLike|LangPOSIX|LangMirBSDKorn|LangZsh),
-		langErr("", LangKsh93),
+		langErr("1:9: `@` cannot be followed by a word", LangZsh),
+		langErr("", LangKsh93|langLazyParamExp),
 	),
 	errCase(
 		"echo ${$needbraces}",
 		langErr("1:9: `$` cannot be followed by a word"),
+		langErr("", langLazyParamExp),
 	),
 	errCase(
 		"echo ${?foo}",
 		langErr("1:9: `?` cannot be followed by a word"),
+		langErr("", langLazyParamExp),
 	),
 	errCase(
 		"echo ${-foo}",
 		langErr("1:9: `-` cannot be followed by a word"),
+		langErr("", langLazyParamExp),
+	),
+	errCase(
+		"echo ${.a",
+		langErr("1:6: reached EOF without matching `${` with `}`", langLazyParamExp),
 	),
 	errCase(
 		`echo ${"bad"}`,

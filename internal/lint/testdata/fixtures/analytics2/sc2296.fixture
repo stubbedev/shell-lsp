@@ -15,3 +15,15 @@ echo "${release}"
 sleep 1 &
 echo $# ${#} $! ${!} ${!#} ${#!}
 >>> none
+
+### the rest of a branch is linted after an expansion meant for another shell
+#!/bin/sh
+if [ -n "${ZSH_VERSION:-}" ]; then
+  name="${(%):-%x}"
+  echo $name
+elif [ -n "${KSH_VERSION:-}" ]; then
+  name="${.sh.file}"
+fi
+>>> SC2086 4:8
+>>> SC2296 3:11
+>>> SC2296 6:11

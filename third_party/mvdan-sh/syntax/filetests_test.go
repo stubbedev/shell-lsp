@@ -3209,6 +3209,32 @@ var fileTests = []fileTestCase{
 		[]string{`${}`},
 		langErr2("1:3: invalid parameter name"),
 		langFile(&ParamExp{}, LangZsh),
+		langFile(litWord(`${}`), langLazyParamExp),
+	),
+	fileTest(
+		[]string{`echo ${(%):-%x} "${.sh.file}"y ${@a@} ${$x}`},
+		langFile(call(
+			litWord("echo"),
+			litWord(`${(%):-%x}`),
+			word(dblQuoted(lit(`${.sh.file}`)), lit("y")),
+			litWord(`${@a@}`),
+			litWord(`${$x}`),
+		), langLazyParamExp),
+		langSkip(LangKsh93),
+	),
+	fileTest(
+		[]string{"if true; then x=${.sh.file}; fi\necho ok"},
+		langFile([]*Stmt{
+			stmt(&IfClause{
+				Cond: litStmts("true"),
+				Then: []*Stmt{stmt(&CallExpr{Assigns: []*Assign{{
+					Name:  lit("x"),
+					Value: litWord(`${.sh.file}`),
+				}}})},
+			}),
+			litStmt("echo", "ok"),
+		}, langLazyParamExp),
+		langSkip(LangKsh93),
 	),
 	fileTest(
 		[]string{`${foo}"bar"`},
@@ -6417,6 +6443,7 @@ var fileTests = []fileTestCase{
 	fileTest(
 		[]string{`${:-word}`},
 		langErr2("1:3: invalid parameter name"),
+		langFile(litWord(`${:-word}`), langLazyParamExp),
 		langFile(&ParamExp{
 			Exp: &Expansion{
 				Op:   DefaultUnsetOrNull,
@@ -6427,6 +6454,7 @@ var fileTests = []fileTestCase{
 	fileTest(
 		[]string{`${:+word}`},
 		langErr2("1:3: invalid parameter name"),
+		langFile(litWord(`${:+word}`), langLazyParamExp),
 		langFile(&ParamExp{
 			Exp: &Expansion{
 				Op:   AlternateUnsetOrNull,

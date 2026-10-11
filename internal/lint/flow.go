@@ -901,6 +901,9 @@ func (in *interpreter) wordSpace(w *syntax.Word, s *state) space {
 func (in *interpreter) partSpace(part syntax.WordPart, s *state) space {
 	switch p := part.(type) {
 	case *syntax.Lit:
+		if in.tree.Unexpandable(p) {
+			return spaceDirty
+		}
 		return literalSpace(p.Value)
 	case *syntax.SglQuoted:
 		return literalSpace(p.Value)

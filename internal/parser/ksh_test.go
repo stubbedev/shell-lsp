@@ -19,7 +19,7 @@ func TestKshParsesKsh93UnlessTheScriptIsMksh(t *testing.T) {
 		{"#!/bin/ksh\nprint -r -- \"${.sh.version}\"\n", syntax.LangKsh93, true},
 		{"#!/bin/ksh\nprint -r -- ${|REPLY=1;}\n", syntax.LangKsh93, false},
 		{"#!/bin/mksh\nprint -r -- ${|REPLY=1;}\n", syntax.LangMirBSDKorn, true},
-		{"#!/bin/mksh\nprint -r -- \"${.sh.version}\"\n", syntax.LangMirBSDKorn, false},
+		{"#!/bin/mksh\nprint -r -- \"${.sh.version}\"\n", syntax.LangMirBSDKorn, true},
 	} {
 		tree := Parse(tc.src, dialect.Ksh)
 		if tree.Lang != tc.lang || (len(tree.Errors) == 0) != tc.ok {

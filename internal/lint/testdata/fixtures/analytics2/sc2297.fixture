@@ -2,6 +2,7 @@
 target=prod
 echo ${"target"}
 >>> SC2297 2:8
+>>+ SC2034 1:1 -- the only read sits inside an expansion bash rejects with "bad substitution" whenever it runs, so the variable is never used
 
 ### double-quoted single digit inside braces
 echo ${"1"}

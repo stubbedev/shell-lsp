@@ -268,7 +268,7 @@ func checkLiteralBraces(p *pass, n syntax.Node) {
 	default:
 		return
 	}
-	if !hasLiteralBrace(w) || p.onBatsTestLine(w) {
+	if !p.hasLiteralBrace(w) || p.onBatsTestLine(w) {
 		return
 	}
 	shape, offsets := braceShape(p, w)
@@ -295,13 +295,18 @@ func checkLiteralBraces(p *pass, n syntax.Node) {
 	}
 }
 
-func hasLiteralBrace(w *syntax.Word) bool {
+func (p *pass) hasLiteralBrace(w *syntax.Word) bool {
 	for _, part := range w.Parts {
-		if lit, ok := part.(*syntax.Lit); ok && strings.ContainsAny(lit.Value, "{}") {
+		if lit, ok := p.literalPart(part); ok && strings.ContainsAny(lit.Value, "{}") {
 			return true
 		}
 	}
 	return false
+}
+
+func (p *pass) literalPart(part syntax.WordPart) (*syntax.Lit, bool) {
+	lit, ok := part.(*syntax.Lit)
+	return lit, ok && !p.tree.Unexpandable(lit)
 }
 
 func (p *pass) onBatsTestLine(w *syntax.Word) bool {
@@ -321,7 +326,7 @@ func braceShape(p *pass, w *syntax.Word) ([]byte, []int) {
 		if !ok {
 			continue
 		}
-		lit, isLit := part.(*syntax.Lit)
+		lit, isLit := p.literalPart(part)
 		if !isLit {
 			shape, offsets = append(shape, 'x'), append(offsets, span.Start)
 			continue

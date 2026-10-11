@@ -2,6 +2,7 @@
 archive=backup.tar.gz
 echo "${${archive%.*}##*/}"
 >>> SC2299 2:9
+>>+ SC2034 1:1 -- the only read sits inside an expansion bash rejects with "bad substitution" whenever it runs, so the variable is never used
 
 ### nested default expansion
 echo "${${OUTDIR:-/tmp}%/}"

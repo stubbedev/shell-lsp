@@ -21,7 +21,7 @@ var parameterSyntaxFamily = family{
 		2301: {severity: SeverityError},
 	},
 	rules: []rule{
-		{on: nodes(&syntax.ParamExp{}), node: checkBracedExpansion, finish: checkUnparsedBracedExpansions},
+		{on: nodes(&syntax.ParamExp{}, &syntax.Lit{}), node: checkBracedExpansion, finish: checkUnparsedBracedExpansions},
 		{on: nodes(&syntax.ParamExp{}), node: checkUnbracedVariable},
 	},
 }
@@ -29,11 +29,19 @@ var parameterSyntaxFamily = family{
 const specialParameterChars = "*@#?-$!"
 
 func checkBracedExpansion(p *pass, n syntax.Node) {
-	pe, ok := n.(*syntax.ParamExp)
-	if !ok || pe.Short || !pe.Dollar.IsValid() || p.dialect == dialect.Zsh {
+	if p.dialect == dialect.Zsh {
 		return
 	}
-	p.checkBracedAt(parser.Offset(pe.Dollar))
+	switch n := n.(type) {
+	case *syntax.ParamExp:
+		if !n.Short && n.Dollar.IsValid() {
+			p.checkBracedAt(parser.Offset(n.Dollar))
+		}
+	case *syntax.Lit:
+		if p.tree.Unexpandable(n) {
+			p.checkBracedAt(parser.Offset(n.ValuePos))
+		}
+	}
 }
 
 func checkUnparsedBracedExpansions(p *pass) {

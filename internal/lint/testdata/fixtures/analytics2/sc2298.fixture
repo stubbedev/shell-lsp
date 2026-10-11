@@ -2,6 +2,7 @@
 ref=version
 echo "${$ref:-unset}"
 >>> SC2298 2:9
+>>+ SC2034 1:1 -- the only read sits inside an expansion bash rejects with "bad substitution" whenever it runs, so the variable is never used
 
 ### nested braced name followed by a modifier
 echo "${${ref}%%.*}"
