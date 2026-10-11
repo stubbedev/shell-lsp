@@ -40,6 +40,32 @@ func TestRequireVariableBracesFix(t *testing.T) {
 	}
 }
 
+func TestRequireVariableBracesNamesZshForms(t *testing.T) {
+	t.Parallel()
+
+	src := "print -r -- $#BUFFER $fg[red] $+commands[git]\n"
+	var messages []string
+	fixed := src
+	findings := Check(parser.Parse(src, dialect.Zsh), nil, Options{Optional: []string{"require-variable-braces"}})
+	for _, f := range slices.Backward(findings) {
+		if f.Code == 2250 {
+			messages = append(messages, f.Message)
+			fixed = textedit.Apply(fixed, f.Fix)
+		}
+	}
+	want := []string{
+		"Write ${+commands[git]} instead of $+commands[git] to make the end of the variable name explicit.",
+		"Write ${fg[red]} instead of $fg[red] to make the end of the variable name explicit.",
+		"Write ${#BUFFER} instead of $#BUFFER to make the end of the variable name explicit.",
+	}
+	if !slices.Equal(messages, want) {
+		t.Errorf("messages = %q, want %q", messages, want)
+	}
+	if want := "print -r -- ${#BUFFER} ${fg[red]} ${+commands[git]}\n"; fixed != want {
+		t.Errorf("fixed = %q, want %q", fixed, want)
+	}
+}
+
 func TestScanBracedClassifiesFirstPart(t *testing.T) {
 	t.Parallel()
 

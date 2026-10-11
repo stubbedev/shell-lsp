@@ -161,9 +161,12 @@ func checkUnbracedVariable(p *pass, n syntax.Node) {
 	if !ok {
 		return
 	}
-	name := pe.Param.Value
+	text := p.text[span.Start:parser.Offset(pe.Param.Pos())] + pe.Param.Value
+	if pe.Index != nil {
+		text += p.text[parser.Offset(pe.Param.Pos())+len(pe.Param.Value) : parser.Offset(pe.Index.End())+len("]")]
+	}
 	fix := []textedit.Edit{{Start: span.Start, End: span.Start + 1, NewText: "${"}, {Start: span.End, End: span.End, NewText: "}"}}
-	p.report(2250, span, "Write ${"+name+"} instead of $"+name+" to make the end of the variable name explicit.", fix...)
+	p.report(2250, span, "Write ${"+text[1:]+"} instead of "+text+" to make the end of the variable name explicit.", fix...)
 }
 
 type bracePartKind uint8
