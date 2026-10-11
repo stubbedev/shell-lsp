@@ -1,0 +1,34 @@
+### pushd in a function without popd
+#!/bin/bash
+build() {
+  pushd "$1" >/dev/null || return
+  make
+}
+build src
+>>> none
+>>+ SL2007 3:3 -- shell-lsp native check; shellcheck does not pair pushd with popd
+
+### balanced, isolated and stack-only uses
+#!/bin/bash
+balanced() {
+  pushd "$1" >/dev/null || return
+  make
+  popd >/dev/null || return
+}
+isolated() {
+  ( pushd "$1" && make )
+}
+swap() { pushd; }
+balanced src
+isolated src
+swap
+>>> SC2164 10:10
+
+### an enter function paired with a leave function
+#!/bin/bash
+enter() { pushd "$1" >/dev/null || return; }
+leave() { popd >/dev/null || return; }
+enter src
+make
+leave
+>>> none

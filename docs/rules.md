@@ -190,6 +190,22 @@ work=$(mktemp -d)    # SL2006
 trap 'rm -rf -- "$work"' EXIT
 ```
 
+## SL2007
+
+**A function runs pushd but never popd.** Every call leaves its caller in
+another directory with one more entry on the directory stack. `pushd` inside a
+subshell, `pushd` without a directory, `pushd -n`, stack rotations, and
+scripts that pop the stack outside the function (a `leave` function or a
+`popd` at the call site) are not reported.
+
+```bash
+#!/bin/bash
+build() {
+  pushd "$1" >/dev/null || return    # SL2007
+  make
+}
+```
+
 The embedded-language rules check awk, sed and jq programs written inside the
 script with built-in parsers; no awk, sed or jq binary is run. A program is
 checked when it is a literal argument (`awk '...'`, `sed -e '...'`,

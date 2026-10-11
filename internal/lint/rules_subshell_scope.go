@@ -10,19 +10,82 @@ import (
 )
 
 const (
-	codeSubshellTrap = nativeBase + 2004
-	codeSubshellExit = nativeBase + 2005
+	codeSubshellTrap   = nativeBase + 2004
+	codeSubshellExit   = nativeBase + 2005
+	codeUnbalancedPush = nativeBase + 2007
 )
 
 var subshellScopeFamily = family{
 	codes: map[Code]meta{
-		codeSubshellTrap: {severity: SeverityWarning},
-		codeSubshellExit: {severity: SeverityWarning},
+		codeSubshellTrap:   {severity: SeverityWarning},
+		codeSubshellExit:   {severity: SeverityWarning},
+		codeUnbalancedPush: {severity: SeverityInfo},
 	},
 	commands: []commandRule{
 		{match: matchExact, names: []string{"trap"}, check: checkSubshellTrap},
 		{match: matchExact, names: []string{"exit"}, check: checkSubshellExit},
+		{match: matchExact, names: []string{"pushd"}, check: checkUnbalancedPush},
 	},
+}
+
+func checkUnbalancedPush(p *pass, c command) {
+	if !changesDirectory(c.args) {
+		return
+	}
+	kind, depth := p.enclosingSubshell()
+	if kind != "" || depth < 0 {
+		return
+	}
+	fn, ok := p.ancestor(depth).(*syntax.FuncDecl)
+	if !ok || callsCommand(fn.Body, "popd") || popsElsewhere(p.tree.File) {
+		return
+	}
+	p.reportNode(codeUnbalancedPush, c.word, fn.Name.Value+" runs pushd but never popd, so every call leaves its caller in another directory with one more entry on the directory stack.")
+}
+
+func changesDirectory(args []*syntax.Word) bool {
+	for _, arg := range args {
+		lit, ok := parser.Literal(arg)
+		switch {
+		case !ok:
+			return true
+		case lit == "-n" || ((strings.HasPrefix(lit, "+") || strings.HasPrefix(lit, "-")) && len(lit) > 1 && parser.IsDigits(lit[1:])):
+			return false
+		case lit == getopt.EndOfOptions:
+		default:
+			return true
+		}
+	}
+	return false
+}
+
+func popsElsewhere(file *syntax.File) bool {
+	pops := false
+	parser.Walk(file, func(n syntax.Node) bool {
+		switch n := n.(type) {
+		case *syntax.FuncDecl:
+			return !callsCommand(n.Body, "pushd")
+		case *syntax.CallExpr:
+			if _, _, command, ok := runCommand(n.Args); ok && command == "popd" {
+				pops = true
+			}
+		}
+		return !pops
+	})
+	return pops
+}
+
+func callsCommand(root syntax.Node, name string) bool {
+	calls := false
+	parser.Walk(root, func(n syntax.Node) bool {
+		if call, ok := n.(*syntax.CallExpr); ok {
+			if _, _, command, ok := runCommand(call.Args); ok && command == name {
+				calls = true
+			}
+		}
+		return !calls
+	})
+	return calls
 }
 
 var (
