@@ -38,6 +38,7 @@ definition 55:8-55:14 "widget" kind=2 attrs=000000 local=true within=5
 definition 56:6-56:12 "widget" kind=3 attrs=000000 local=false within=5
 definition 81:8-81:12 "file" kind=2 attrs=000000 local=true within=8
 definition 82:6-82:10 "file" kind=3 attrs=000000 local=false within=8
+definition 88:33-88:38 "REPLY" kind=5 attrs=000000 local=false within=0
 reference 2:11-2:22 "ZSH_ARGZERO" within=0
 reference 8:32-8:48 "SUGGEST_MAX_SIZE" within=0
 reference 9:10-9:28 "SUGGEST_PLUGIN_DIR" within=0

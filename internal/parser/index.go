@@ -190,13 +190,15 @@ type builder struct {
 	compounds   int
 	namespaces  []string
 	lang        syntax.LangVariant
+	dialect     dialect.Dialect
 	features    dialect.Features
 }
 
-func buildIndex(file *syntax.File, lang syntax.LangVariant, features dialect.Features, text string, closedAtEnd map[*syntax.Redirect]bool, previous *Tree) (Index, []Error) {
+func buildIndex(file *syntax.File, lang syntax.LangVariant, d dialect.Dialect, text string, closedAtEnd map[*syntax.Redirect]bool, previous *Tree) (Index, []Error) {
 	b := &builder{
 		lang:        lang,
-		features:    features,
+		dialect:     d,
+		features:    d.Features(),
 		text:        text,
 		closedAtEnd: closedAtEnd,
 		index:       presized(previous),
@@ -447,6 +449,7 @@ func (b *builder) call(n *syntax.CallExpr) {
 		b.declarationWords(variant, args)
 	}
 	b.builtinAssignments(n, name, args)
+	b.namedOperands(n, name, args)
 	if b.features.ArithmeticStatus && ArithmeticStatusBuiltin(name) && len(args) == 1 {
 		b.literalArithmetic(args[0])
 	}
@@ -531,24 +534,41 @@ func (b *builder) wordDefinition(call *syntax.CallExpr, w *syntax.Word, attrs At
 	if !ok || len(w.Parts) != 1 {
 		return
 	}
-	name := value
-	if base, subscript, found := strings.Cut(value, "["); found && strings.HasSuffix(subscript, "]") {
-		name = base
-		attrs |= AttrArray
+	if p, ok := parameterAt(value, nameStart(w), attrs); ok {
+		b.builtinDefinition(call, p, b.span(w))
 	}
-	if !IsName(name) {
-		return
-	}
-	start := nameStart(w)
+}
+
+func (b *builder) builtinDefinition(call *syntax.CallExpr, p namedParameter, span Span) {
 	b.index.Definitions = append(b.index.Definitions, Definition{
-		Name:     name,
-		NameSpan: Span{Start: start, End: start + len(name)},
-		Span:     b.span(w),
+		Name:     p.name,
+		NameSpan: p.span,
+		Span:     span,
 		Kind:     DefBuiltin,
-		Attrs:    attrs,
+		Attrs:    p.attrs,
 		Within:   b.scope(),
 		Node:     call,
 	})
+}
+
+func (b *builder) namedOperands(call *syntax.CallExpr, name string, args []*syntax.Word) {
+	parse, ok := dialectNameCommands[b.dialect][name]
+	if !ok {
+		return
+	}
+	operands := parse(args)
+	for _, p := range operands.reads {
+		b.reference(p.name, p.span)
+	}
+	for _, p := range operands.assigns {
+		b.builtinDefinition(call, p, p.span)
+	}
+	if len(operands.command) == 0 {
+		return
+	}
+	if inner, ok := Literal(operands.command[0]); ok {
+		b.namedOperands(call, inner, operands.command[1:])
+	}
 }
 
 type declVariant struct {

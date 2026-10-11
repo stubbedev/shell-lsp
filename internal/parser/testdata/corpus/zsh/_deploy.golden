@@ -24,8 +24,12 @@ definition 48:36-48:39 "ret" kind=0 attrs=000000 local=false within=0
 definition 51:32-51:35 "ret" kind=0 attrs=000000 local=false within=0
 definition 54:17-54:20 "ret" kind=0 attrs=000000 local=false within=0
 reference 3:19-3:29 "curcontext" within=0
+reference 11:31-11:37 "cached" within=1
+reference 13:39-13:45 "cached" within=1
 reference 16:6-16:15 "functions" within=0
+reference 19:30-19:37 "regions" within=2
 reference 32:7-32:12 "state" within=0
+reference 40:42-40:50 "commands" within=0
 reference 43:16-43:26 "curcontext" within=0
 reference 43:41-43:46 "words" within=0
 reference 44:9-44:14 "words" within=0

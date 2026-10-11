@@ -1,0 +1,56 @@
+### completion helpers read the arrays they are given by name
+#!/bin/zsh
+_tool() {
+  local -a commands targets cached
+  commands=('build:compile' 'test:run the tests')
+  _describe -t commands 'tool command' commands
+  targets=(a b)
+  compadd -a targets
+  if ! _retrieve_cache tool-targets; then
+    cached=(c d)
+    _store_cache tool-targets cached
+  fi
+}
+compdef _tool tool
+>>- SC1071 1:1 -- shellcheck refuses zsh; _describe, compadd -a and _store_cache take array names
+
+### label helpers set the array they are given and pass it on
+#!/bin/zsh
+_tool_files() {
+  local expl
+  _wanted files expl 'file' compadd -a ${(@f)"$(print -l a b)"}
+}
+_tool_hosts() {
+  local expl
+  local -a hosts=(alpha beta)
+  _wanted hosts expl 'host' compadd -a hosts
+}
+compdef _tool_files tool
+compdef _tool_hosts tool-host
+>>- SC1071 1:1 -- shellcheck refuses zsh; _wanted fills expl for compadd and reads hosts through compadd -a
+
+### zsh builtins that assign the parameter they are given
+#!/bin/zsh
+zstyle -s ':tool:*' theme theme
+zstyle -a ':tool:*' paths paths
+zstyle -g styles
+print -v greeting -r -- hello
+zmodload zsh/datetime
+strftime -s today '%Y-%m-%d' $EPOCHSECONDS
+local -a help
+zparseopts -D -E -- h=help v+=verbose -output:=output
+vared -p 'name? ' name
+print -r -- $theme $paths $styles $greeting $today $help $verbose $output $name
+>>- SC1071 1:1 -- shellcheck refuses zsh; zstyle -s, -a and -g, print -v, strftime -s, zparseopts and vared assign these
+
+### a parameter that zstyle assigns but nothing reads
+#!/bin/zsh
+zstyle -s ':tool:*' theme theme
+>>- SC1071 1:1 -- shellcheck refuses zsh
+>>+ SC2034 2:27 -- zstyle -s assigns theme, which is never read
+
+### zsh helpers are ordinary commands in bash
+#!/bin/bash
+targets=(a b)
+compadd -a targets
+>>> SC2034 2:1
