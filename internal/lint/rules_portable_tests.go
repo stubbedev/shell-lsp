@@ -1,6 +1,8 @@
 package lint
 
 import (
+	"strings"
+
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
@@ -101,9 +103,21 @@ func checkRedirectedComparison(p *pass, call *syntax.CallExpr) {
 	}
 	for _, r := range stmt.Redirs {
 		if isComparisonRedirect(r) && isWithin(call, r) {
-			p.nonPortable(binaryTestIssues[r.Op.String()], posSpan(r.OpPos, 1))
+			op := redirectedOperator(r)
+			p.nonPortable(binaryTestIssues[op], posSpan(r.OpPos, len(op)))
 		}
 	}
+}
+
+func redirectedOperator(r *syntax.Redirect) string {
+	op := r.Op.String()
+	if r.Word == nil || parser.Offset(r.Word.Pos()) != parser.Offset(r.OpPos)+len(op) {
+		return op
+	}
+	if lit, ok := r.Word.Parts[0].(*syntax.Lit); ok && strings.HasPrefix(lit.Value, "=") {
+		return op + "="
+	}
+	return op
 }
 
 func (p *pass) reportNegatedConnective(op testOperand) {
