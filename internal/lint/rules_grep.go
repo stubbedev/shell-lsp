@@ -11,12 +11,12 @@ import (
 
 var grepFamily = family{
 	codes: map[Code]meta{
-		2022: {severity: SeverityInfo},
-		2062: {severity: SeverityWarning},
-		2063: {severity: SeverityWarning},
-		2196: {severity: SeverityInfo, tag: TagDeprecated},
-		2197: {severity: SeverityInfo, tag: TagDeprecated},
-		2337: {severity: SeverityWarning},
+		2022: {severity: SeverityInfo, summary: "In a regex, x* repeats the character before it rather than matching anything after it."},
+		2062: {severity: SeverityWarning, summary: "An unquoted grep pattern may be expanded as a glob before grep sees it."},
+		2063: {severity: SeverityWarning, summary: "grep is given a glob, but it takes a regular expression."},
+		2196: {severity: SeverityInfo, tag: TagDeprecated, summary: "egrep is deprecated and missing from some systems."},
+		2197: {severity: SeverityInfo, tag: TagDeprecated, summary: "fgrep is deprecated and missing from some systems."},
+		2337: {severity: SeverityWarning, summary: "A command that may exit before reading all its input can make the writer upstream fail with SIGPIPE under pipefail."},
 	},
 	commands: []commandRule{
 		{match: matchBase, names: []string{"grep"}, check: checkGrepPattern},

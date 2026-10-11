@@ -8,17 +8,17 @@ import (
 
 var portableSyntaxFamily = family{
 	codes: map[Code]meta{
-		3001: {severity: SeverityWarning},
-		3005: {severity: SeverityWarning},
-		3006: {severity: SeverityWarning},
-		3008: {severity: SeverityWarning},
-		3024: {severity: SeverityWarning},
-		3029: {severity: SeverityWarning},
-		3030: {severity: SeverityWarning},
-		3032: {severity: SeverityWarning},
-		3033: {severity: SeverityWarning},
-		3034: {severity: SeverityWarning},
-		3035: {severity: SeverityWarning},
+		3001: {severity: SeverityWarning, summary: "Process substitution is undefined in POSIX sh."},
+		3005: {severity: SeverityWarning, summary: "C-style for ((...)) loops are undefined in POSIX sh."},
+		3006: {severity: SeverityWarning, summary: "The arithmetic command ((...)) is undefined in POSIX sh."},
+		3008: {severity: SeverityWarning, summary: "select loops are undefined in POSIX sh."},
+		3024: {severity: SeverityWarning, summary: "Appending with += is undefined in POSIX sh."},
+		3029: {severity: SeverityWarning, summary: "The |& operator is undefined in POSIX sh."},
+		3030: {severity: SeverityWarning, summary: "Arrays are undefined in POSIX sh."},
+		3032: {severity: SeverityWarning, summary: "coproc is undefined in POSIX sh."},
+		3033: {severity: SeverityWarning, summary: "A function name that is not a valid identifier is undefined in POSIX sh."},
+		3034: {severity: SeverityWarning, summary: "Reading a file with $(< file) is undefined in POSIX sh."},
+		3035: {severity: SeverityWarning, summary: "Reading a file with `< file` is undefined in POSIX sh."},
 	},
 	rules: []rule{{on: nodes(&syntax.ProcSubst{}, &syntax.ForClause{}, &syntax.ArithmCmd{}, &syntax.Assign{}, &syntax.BinaryCmd{}, &syntax.ArrayExpr{}, &syntax.CoprocClause{}, &syntax.FuncDecl{}, &syntax.CmdSubst{}), node: checkPortableSyntax}},
 }

@@ -9,12 +9,12 @@ import (
 
 var testSyntaxFamily = family{
 	codes: map[Code]meta{
-		1076: {severity: SeverityError},
-		1080: {severity: SeverityError},
-		1100: {severity: SeverityError},
-		1108: {severity: SeverityError},
-		1139: {severity: SeverityError},
-		1140: {severity: SeverityError},
+		1076: {severity: SeverityError, summary: "[ ] does not evaluate arithmetic, so an operator there is part of a word."},
+		1080: {severity: SeverityError, summary: "A [ test continues on the next line without a backslash before the line break."},
+		1100: {severity: SeverityError, summary: "A Unicode dash is used where a hyphen-minus test operator was meant."},
+		1108: {severity: SeverityError, summary: "A test operator glued to its operand is part of the word, not a comparison."},
+		1139: {severity: SeverityError, summary: "-a or -o joins test commands outside [ ], where it is just another word."},
+		1140: {severity: SeverityError, summary: "Words after the closing ] become arguments of the test."},
 	},
 	rules: []rule{
 		{on: nodes(&syntax.CallExpr{}), node: checkTestCommandSyntax},

@@ -12,16 +12,16 @@ import (
 
 var redirectsFamily = family{
 	codes: map[Code]meta{
-		2210: {severity: SeverityWarning},
-		2216: {severity: SeverityWarning},
-		2217: {severity: SeverityWarning},
-		2238: {severity: SeverityWarning},
-		2257: {severity: SeverityWarning},
-		2259: {severity: SeverityError},
-		2260: {severity: SeverityError},
-		2261: {severity: SeverityError},
-		2327: {severity: SeverityWarning},
-		2328: {severity: SeverityError},
+		2210: {severity: SeverityWarning, summary: "A redirection to a number writes to or reads from a file with that name."},
+		2216: {severity: SeverityWarning, summary: "A command that does not read standard input is piped data."},
+		2217: {severity: SeverityWarning, summary: "A command that does not read standard input is given redirected input."},
+		2238: {severity: SeverityWarning, summary: "A redirection names a file that is also a command, which suggests a pipe was meant."},
+		2257: {severity: SeverityWarning, summary: "Arithmetic that modifies a variable in a redirection may run in a subshell or not at all."},
+		2259: {severity: SeverityError, summary: "An input redirection replaces the piped input, discarding the previous command's output."},
+		2260: {severity: SeverityError, summary: "An output redirection takes the output away from the pipe, so the next command reads nothing."},
+		2261: {severity: SeverityError, summary: "Several redirections compete for the same file descriptor, and only the last takes effect."},
+		2327: {severity: SeverityWarning, summary: "A command substitution is always empty because the command's output is redirected elsewhere."},
+		2328: {severity: SeverityError, summary: "A redirection takes the output away from the command substitution it is in."},
 	},
 	rules: []rule{
 		{on: nodes(&syntax.Redirect{}), node: checkRedirectTargets},

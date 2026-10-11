@@ -10,16 +10,16 @@ import (
 
 var testLogicFamily = family{
 	codes: map[Code]meta{
-		2053: {severity: SeverityWarning},
-		2055: {severity: SeverityWarning},
-		2056: {severity: SeverityWarning},
-		2057: {severity: SeverityWarning},
-		2058: {severity: SeverityWarning},
-		2065: {severity: SeverityWarning},
-		2081: {severity: SeverityError},
-		2252: {severity: SeverityWarning},
-		2333: {severity: SeverityWarning},
-		2334: {severity: SeverityWarning},
+		2053: {severity: SeverityWarning, summary: "An unquoted right-hand side of == or != in [[ ]] is matched as a glob pattern."},
+		2055: {severity: SeverityWarning, summary: "A value always differs from at least one of two others, so a != ... -o != ... test is always true."},
+		2056: {severity: SeverityWarning, summary: "A value always differs from at least one of two others, so a != ... || != ... list is always true."},
+		2057: {severity: SeverityWarning, summary: "A comparison uses an operator that test does not understand."},
+		2058: {severity: SeverityWarning, summary: "A test uses an operator that does not exist."},
+		2065: {severity: SeverityWarning, summary: "> or < inside test is a file redirection, not a comparison."},
+		2081: {severity: SeverityError, summary: "[ ] compares a glob pattern as literal text and never matches it."},
+		2252: {severity: SeverityWarning, summary: "A value always differs from at least one of several constants, so a || chain of != tests is always true."},
+		2333: {severity: SeverityWarning, summary: "A value cannot equal two different constants at once, so the condition is always false."},
+		2334: {severity: SeverityWarning, summary: "A value cannot equal two different numbers at once, so the && is always false."},
 	},
 	commands: []commandRule{
 		{match: matchBase, names: []string{"test"}, check: checkTestRedirect},

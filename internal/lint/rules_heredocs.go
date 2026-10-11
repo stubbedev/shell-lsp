@@ -8,13 +8,13 @@ import (
 
 var heredocsFamily = family{
 	codes: map[Code]meta{
-		1039: {severity: SeverityError},
-		1040: {severity: SeverityError},
-		1118: {severity: SeverityError},
-		1119: {severity: SeverityError},
-		1120: {severity: SeverityError},
-		1121: {severity: SeverityError},
-		1122: {severity: SeverityError},
+		1039: {severity: SeverityError, summary: "An indented terminator does not end the here-document."},
+		1040: {severity: SeverityError, summary: "A terminator indented with spaces does not end a <<- here-document, which strips only tabs."},
+		1118: {severity: SeverityError, summary: "A here-document terminator followed by whitespace does not end the here-document."},
+		1119: {severity: SeverityError, summary: "A here-document terminator followed by ) does not end the here-document."},
+		1120: {severity: SeverityError, summary: "A here-document terminator followed by a comment does not end the here-document."},
+		1121: {severity: SeverityError, summary: "A here-document terminator followed by an operator does not end the here-document."},
+		1122: {severity: SeverityError, summary: "A here-document terminator followed by more text does not end the here-document."},
 	},
 	rules: []rule{
 		{finish: checkHeredocEnds},

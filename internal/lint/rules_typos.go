@@ -11,14 +11,14 @@ import (
 
 var typosFamily = family{
 	codes: map[Code]meta{
-		1075: {severity: SeverityError},
-		1081: {severity: SeverityError},
-		1097: {severity: SeverityError},
-		1099: {severity: SeverityError},
-		1127: {severity: SeverityError},
-		1129: {severity: SeverityError},
-		1130: {severity: SeverityError},
-		1131: {severity: SeverityError},
+		1075: {severity: SeverityError, summary: "else if starts a nested if that needs its own fi; elif was probably meant."},
+		1081: {severity: SeverityError, summary: "Keywords are case sensitive, so a capitalised keyword runs as a command."},
+		1097: {severity: SeverityError, summary: "== in an assignment assigns a value starting with = instead of comparing."},
+		1099: {severity: SeverityError, summary: "A # glued to a keyword makes one word, so the keyword is not recognised."},
+		1127: {severity: SeverityError, summary: "A comment starts with // or a similar marker instead of #, so the line runs as a command."},
+		1129: {severity: SeverityError, summary: "A ! glued to a keyword makes one word, so the keyword is not recognised."},
+		1130: {severity: SeverityError, summary: "A : glued to a keyword makes one word, so the keyword is not recognised."},
+		1131: {severity: SeverityError, summary: "elsif, elseif or a similar spelling is not a keyword; the shell only has elif."},
 	},
 	rules: []rule{
 		{on: nodes(&syntax.IfClause{}), node: checkElseIf},

@@ -12,14 +12,14 @@ import (
 
 var loopsFamily = family{
 	codes: map[Code]meta{
-		2013: {severity: SeverityInfo},
-		2041: {severity: SeverityWarning},
-		2042: {severity: SeverityWarning},
-		2043: {severity: SeverityWarning},
-		2044: {severity: SeverityWarning},
-		2045: {severity: SeverityError},
-		2066: {severity: SeverityError},
-		2258: {severity: SeverityWarning},
+		2013: {severity: SeverityInfo, summary: "A for loop over command output splits it into words, not lines."},
+		2041: {severity: SeverityWarning, summary: "A single-quoted loop item is one literal word, not a command whose output is iterated."},
+		2042: {severity: SeverityWarning, summary: "Loop items are separated by spaces, not commas."},
+		2043: {severity: SeverityWarning, summary: "A loop over a single constant item runs exactly once."},
+		2044: {severity: SeverityWarning, summary: "Iterating over find output breaks on file names with spaces or newlines."},
+		2045: {severity: SeverityError, summary: "Iterating over ls output breaks on file names with spaces or newlines."},
+		2066: {severity: SeverityError, summary: "Double quotes make a loop list a single item, so the loop runs once."},
+		2258: {severity: SeverityWarning, summary: "A trailing comma becomes part of a loop item."},
 	},
 	rules: []rule{{on: nodes(&syntax.ForClause{}), node: checkForLoop}},
 }

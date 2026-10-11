@@ -10,9 +10,9 @@ import (
 
 var arithmeticStyleFamily = family{
 	codes: map[Code]meta{
-		2004: {severity: SeverityStyle},
-		2007: {severity: SeverityStyle, tag: TagDeprecated},
-		2080: {severity: SeverityError},
+		2004: {severity: SeverityStyle, summary: "The $ on a variable inside arithmetic is unnecessary."},
+		2007: {severity: SeverityStyle, tag: TagDeprecated, summary: "$[ ] is an obsolete arithmetic form."},
+		2080: {severity: SeverityError, summary: "A leading 0 makes a number octal, where 8 and 9 are not valid digits."},
 	},
 	rules: []rule{
 		{on: nodes(&syntax.ParamExp{}), node: checkArithmeticDollar},

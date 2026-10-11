@@ -11,10 +11,10 @@ import (
 
 var keywordFamily = family{
 	codes: map[Code]meta{
-		2023: {severity: SeverityInfo},
-		2176: {severity: SeverityWarning},
-		2177: {severity: SeverityWarning},
-		2219: {severity: SeverityStyle},
+		2023: {severity: SeverityInfo, summary: "The time keyword only accepts -p, so other options need /usr/bin/time."},
+		2176: {severity: SeverityWarning, summary: "time on a pipeline is undefined in POSIX sh."},
+		2177: {severity: SeverityWarning, summary: "time on a compound command is undefined in POSIX sh."},
+		2219: {severity: SeverityStyle, summary: "let is used where an arithmetic command needs no quoting."},
 	},
 	rules: []rule{
 		{on: nodes(&syntax.TimeClause{}), node: checkTimeClause},

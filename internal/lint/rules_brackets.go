@@ -10,14 +10,14 @@ import (
 
 var bracketsFamily = family{
 	codes: map[Code]meta{
-		1014: {severity: SeverityWarning},
-		1019: {severity: SeverityError},
-		1020: {severity: SeverityError},
-		1021: {severity: SeverityError},
-		1026: {severity: SeverityError},
-		1027: {severity: SeverityError},
-		1034: {severity: SeverityError},
-		1035: {severity: SeverityError},
+		1014: {severity: SeverityWarning, summary: "Brackets around a command test the command's name as a string instead of running it."},
+		1019: {severity: SeverityError, summary: "A unary test operator has no operand."},
+		1020: {severity: SeverityError, summary: "A ] glued to the previous word is part of that word and does not end the test."},
+		1021: {severity: SeverityError, summary: "An escaped \\) glued to the previous word does not close the group."},
+		1026: {severity: SeverityError, summary: "A nested [ does not group conditions inside [ ]."},
+		1027: {severity: SeverityError, summary: "A comparison operator has no right-hand operand."},
+		1034: {severity: SeverityError, summary: "A test opens with a single [ but closes with ]]."},
+		1035: {severity: SeverityError, summary: "A test bracket needs a space between it and the next word."},
 	},
 	rules: []rule{
 		{on: nodes(&syntax.CallExpr{}), node: checkSingleBracketTest},

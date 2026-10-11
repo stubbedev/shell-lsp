@@ -19,7 +19,14 @@ func Describe(code Code) (CodeInfo, bool) {
 	if !ok {
 		return CodeInfo{}, false
 	}
-	return CodeInfo{Code: code, Severity: m.severity, Optional: m.optional, Summary: nativeSummaries()[code]}, true
+	return CodeInfo{Code: code, Severity: m.severity, Optional: m.optional, Summary: summaryOf(code, m)}, true
+}
+
+func summaryOf(code Code, m meta) string {
+	if code.Native() {
+		return nativeSummaries()[code]
+	}
+	return m.summary
 }
 
 func Catalog() []CodeInfo {

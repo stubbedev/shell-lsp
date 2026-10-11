@@ -13,15 +13,15 @@ import (
 
 var executionFamily = family{
 	codes: map[Code]meta{
-		2032: {severity: SeverityInfo},
-		2033: {severity: SeverityWarning},
-		2083: {severity: SeverityError},
-		2084: {severity: SeverityError},
-		2087: {severity: SeverityWarning},
-		2091: {severity: SeverityWarning},
-		2092: {severity: SeverityWarning},
-		2093: {severity: SeverityWarning},
-		2116: {severity: SeverityStyle},
+		2032: {severity: SeverityInfo, summary: "A command that runs external programs is given a function this script defines."},
+		2033: {severity: SeverityWarning, summary: "A command that runs external programs cannot see a shell function or alias."},
+		2083: {severity: SeverityError, summary: "A space after ./ runs the current directory instead of the intended file."},
+		2084: {severity: SeverityError, summary: "The result of an arithmetic expansion is run as a command."},
+		2087: {severity: SeverityWarning, summary: "A here-document sent to ssh is expanded locally before it is sent."},
+		2091: {severity: SeverityWarning, summary: "The output of a $( ) command substitution is run as a command."},
+		2092: {severity: SeverityWarning, summary: "The output of a backtick command substitution is run as a command."},
+		2093: {severity: SeverityWarning, summary: "exec replaces the shell, so the commands after it only run if exec fails."},
+		2116: {severity: SeverityStyle, summary: "echo only passes its arguments through to a command substitution."},
 	},
 	commands: []commandRule{
 		{match: matchBase, names: []string{"ssh"}, check: checkRemoteHeredoc},

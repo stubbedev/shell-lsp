@@ -13,16 +13,16 @@ import (
 
 var fileOpsFamily = family{
 	codes: map[Code]meta{
-		2114: {severity: SeverityWarning},
-		2115: {severity: SeverityWarning},
-		2174: {severity: SeverityWarning},
-		2186: {severity: SeverityWarning, tag: TagDeprecated},
-		2224: {severity: SeverityError},
-		2225: {severity: SeverityError},
-		2226: {severity: SeverityWarning},
-		2230: {severity: SeverityInfo, optional: "deprecate-which"},
-		2253: {severity: SeverityWarning},
-		2267: {severity: SeverityInfo, tag: TagDeprecated},
+		2114: {severity: SeverityWarning, summary: "A command removes a path recursively."},
+		2115: {severity: SeverityWarning, summary: "A removal path built from expansions removes a top-level path if they are empty."},
+		2174: {severity: SeverityWarning, summary: "mkdir -p with -m only sets the mode of the deepest directory."},
+		2186: {severity: SeverityWarning, tag: TagDeprecated, summary: "tempfile is deprecated and missing from many systems."},
+		2224: {severity: SeverityError, summary: "mv is given only one path and no destination."},
+		2225: {severity: SeverityError, summary: "cp is given only one path and no destination."},
+		2226: {severity: SeverityWarning, summary: "ln is given only one path and no link name."},
+		2230: {severity: SeverityInfo, optional: "deprecate-which", summary: "which is not standard and behaves differently between systems."},
+		2253: {severity: SeverityWarning, summary: "chmod -r removes read permission instead of changing modes recursively."},
+		2267: {severity: SeverityInfo, tag: TagDeprecated, summary: "xargs -i is deprecated."},
 	},
 	commands: []commandRule{
 		{match: matchBase, names: []string{"rm"}, check: checkRecursiveRemoval},

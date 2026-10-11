@@ -11,9 +11,9 @@ import (
 
 var arraysFamily = family{
 	codes: map[Code]meta{
-		2128: {severity: SeverityWarning},
-		2178: {severity: SeverityWarning},
-		2179: {severity: SeverityWarning},
+		2128: {severity: SeverityWarning, summary: "Expanding an array without an index gives only its first element."},
+		2178: {severity: SeverityWarning, summary: "Assigning a plain string to an array only replaces its first element."},
+		2179: {severity: SeverityWarning, summary: "Appending a string to an array changes its first element instead of adding one."},
 	},
 	rules: []rule{{finish: checkArrayUse}},
 }

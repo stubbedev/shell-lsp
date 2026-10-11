@@ -17,10 +17,10 @@ const (
 
 var errexitFamily = family{
 	codes: map[Code]meta{
-		2251: {severity: SeverityInfo},
-		2310: {severity: SeverityInfo, optional: optionalSetESuppressed},
-		2311: {severity: SeverityInfo, optional: optionalSetESuppressed},
-		2312: {severity: SeverityInfo, optional: optionalMaskedReturns},
+		2251: {severity: SeverityInfo, summary: "A negated command never triggers set -e."},
+		2310: {severity: SeverityInfo, optional: optionalSetESuppressed, summary: "set -e has no effect inside a function invoked as a condition."},
+		2311: {severity: SeverityInfo, optional: optionalSetESuppressed, summary: "set -e has no effect inside a command substitution that does not inherit it."},
+		2312: {severity: SeverityInfo, optional: optionalMaskedReturns, summary: "A command's exit status is masked by its context."},
 	},
 	rules: []rule{
 		{on: nodes(&syntax.Stmt{}), node: checkNegationUnderErrexit},

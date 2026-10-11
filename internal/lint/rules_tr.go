@@ -9,11 +9,11 @@ import (
 
 var trFamily = family{
 	codes: map[Code]meta{
-		2018: {severity: SeverityInfo},
-		2019: {severity: SeverityInfo},
-		2020: {severity: SeverityInfo},
-		2021: {severity: SeverityInfo},
-		2060: {severity: SeverityWarning},
+		2018: {severity: SeverityInfo, summary: "The range a-z misses accented and other non-ASCII lowercase letters."},
+		2019: {severity: SeverityInfo, summary: "The range A-Z misses accented and other non-ASCII uppercase letters."},
+		2020: {severity: SeverityInfo, summary: "tr maps single characters, not words, so a repeated letter only uses its last mapping."},
+		2021: {severity: SeverityInfo, summary: "Brackets around a tr range are matched as literal characters."},
+		2060: {severity: SeverityWarning, summary: "An unquoted tr set may be expanded as a glob before tr sees it."},
 	},
 	commands: []commandRule{
 		{match: matchBase, names: []string{"tr"}, check: checkTr},

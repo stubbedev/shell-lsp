@@ -15,12 +15,12 @@ const codeInvalidDeclaredName = nativeBase + 2003
 var declarationFamily = family{
 	codes: map[Code]meta{
 		codeInvalidDeclaredName: {severity: SeverityError},
-		2155:                    {severity: SeverityWarning},
-		2163:                    {severity: SeverityWarning},
-		2168:                    {severity: SeverityError},
-		2290:                    {severity: SeverityError},
-		2316:                    {severity: SeverityError},
-		2318:                    {severity: SeverityWarning},
+		2155:                    {severity: SeverityWarning, summary: "Declaring and assigning in one command masks the status of the command substitution."},
+		2163:                    {severity: SeverityWarning, summary: "export of $name exports the variable named by its value, not the variable itself."},
+		2168:                    {severity: SeverityError, summary: "local is used outside a function."},
+		2290:                    {severity: SeverityError, summary: "A space before = or += in a declaration turns the assignment into a separate word."},
+		2316:                    {severity: SeverityError, summary: "A word given to a declaration command is parsed as a variable name, not as a modifier."},
+		2318:                    {severity: SeverityWarning, summary: "A variable assigned in a declaration is read again in the same declaration before it takes effect."},
 	},
 	commands: []commandRule{
 		{match: matchExact, names: declaringCommands, check: checkMaskedStatus},

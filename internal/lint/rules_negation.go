@@ -9,8 +9,8 @@ import (
 
 var negationFamily = family{
 	codes: map[Code]meta{
-		2325: {severity: SeverityError},
-		2326: {severity: SeverityError},
+		2325: {severity: SeverityError, summary: "sh allows only one ! before a pipeline."},
+		2326: {severity: SeverityError, summary: "! cannot negate a single stage after a |."},
 	},
 	rules: []rule{{finish: checkRejectedNegations}},
 }

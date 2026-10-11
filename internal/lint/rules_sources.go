@@ -14,9 +14,9 @@ const nullDevice = "/dev/null"
 
 var sourcesFamily = family{
 	codes: map[Code]meta{
-		1090: {severity: SeverityWarning},
-		1091: {severity: SeverityInfo},
-		1094: {severity: SeverityWarning},
+		1090: {severity: SeverityWarning, summary: "A sourced file is only known at run time, so it cannot be followed."},
+		1091: {severity: SeverityInfo, summary: "A sourced file was not found, so it is not followed."},
+		1094: {severity: SeverityWarning, summary: "A sourced file has syntax errors, so what it defines may be missing."},
 	},
 	rules: []rule{
 		{finish: checkSources},

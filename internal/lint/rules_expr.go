@@ -11,12 +11,12 @@ import (
 
 var exprFamily = family{
 	codes: map[Code]meta{
-		2003: {severity: SeverityStyle},
-		2304: {severity: SeverityError},
-		2305: {severity: SeverityWarning},
-		2306: {severity: SeverityWarning},
-		2307: {severity: SeverityWarning},
-		2308: {severity: SeverityInfo},
+		2003: {severity: SeverityStyle, summary: "expr is an antiquated way to do arithmetic."},
+		2304: {severity: SeverityError, summary: "An unescaped * given to expr is expanded as a glob."},
+		2305: {severity: SeverityWarning, summary: "An unquoted expr regex may be expanded as a glob."},
+		2306: {severity: SeverityWarning, summary: "Unescaped glob characters in expr arguments may be expanded by the shell."},
+		2307: {severity: SeverityWarning, summary: "expr is given too few arguments to form an expression."},
+		2308: {severity: SeverityInfo, summary: "An expr keyword is not specified by POSIX."},
 	},
 	commands: []commandRule{
 		{match: matchBase, names: []string{"expr"}, check: checkExprOutdated},

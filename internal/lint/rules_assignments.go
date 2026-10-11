@@ -12,14 +12,14 @@ import (
 
 var assignmentsFamily = family{
 	codes: map[Code]meta{
-		2097: {severity: SeverityWarning},
-		2098: {severity: SeverityWarning},
-		2123: {severity: SeverityWarning},
-		2141: {severity: SeverityWarning},
-		2147: {severity: SeverityWarning},
-		2190: {severity: SeverityWarning},
-		2191: {severity: SeverityWarning},
-		2192: {severity: SeverityWarning},
+		2097: {severity: SeverityWarning, summary: "A prefix assignment only affects the command's environment, not expansions on the same line."},
+		2098: {severity: SeverityWarning, summary: "An expansion runs before a prefix assignment on the same line takes effect."},
+		2123: {severity: SeverityWarning, summary: "PATH is replaced with something that is not a list of directories."},
+		2141: {severity: SeverityWarning, summary: "An escape like \\n inside a quoted IFS value is a literal backslash and letter, not a control character."},
+		2147: {severity: SeverityWarning, summary: "A quoted ~ in PATH is not expanded."},
+		2190: {severity: SeverityWarning, summary: "An element of an associative array has no key."},
+		2191: {severity: SeverityWarning, summary: "An = in an array element is literal text rather than part of [index]=value."},
+		2192: {severity: SeverityWarning, summary: "An array element has an index but no value."},
 	},
 	rules: []rule{
 		{on: nodes(&syntax.ParamExp{}), node: checkPrefixAssignmentUse},

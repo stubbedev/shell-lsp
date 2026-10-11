@@ -11,15 +11,15 @@ import (
 
 var quotingFamily = family{
 	codes: map[Code]meta{
-		2006: {severity: SeverityStyle, tag: TagDeprecated},
-		2046: {severity: SeverityWarning},
-		2048: {severity: SeverityWarning},
-		2068: {severity: SeverityError},
-		2086: {severity: SeverityInfo},
-		2206: {severity: SeverityWarning},
-		2207: {severity: SeverityWarning},
-		2223: {severity: SeverityInfo},
-		2248: {severity: SeverityStyle, optional: "quote-safe-variables"},
+		2006: {severity: SeverityStyle, tag: TagDeprecated, summary: "Backtick command substitution is legacy syntax that nests and escapes poorly."},
+		2046: {severity: SeverityWarning, summary: "An unquoted command substitution is split into words and expanded as a glob."},
+		2048: {severity: SeverityWarning, summary: "An unquoted $@ or ${array[@]} joins the elements and splits them again."},
+		2068: {severity: SeverityError, summary: "An unquoted array expansion splits its elements again."},
+		2086: {severity: SeverityInfo, summary: "An unquoted expansion is split on whitespace and expanded as a glob."},
+		2206: {severity: SeverityWarning, summary: "An unquoted expansion is split into words and globbed when building an array."},
+		2207: {severity: SeverityWarning, summary: "Command output is split on whitespace and globbed when building an array."},
+		2223: {severity: SeverityInfo, summary: "An unquoted ${var:=default} is globbed on every run."},
+		2248: {severity: SeverityStyle, optional: "quote-safe-variables", summary: "A variable that holds no spaces or globs today is expanded unquoted."},
 	},
 	rules: []rule{
 		{on: nodes(&syntax.ParamExp{}), node: checkUnquotedExpansion},

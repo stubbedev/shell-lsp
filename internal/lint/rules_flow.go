@@ -10,12 +10,12 @@ import (
 
 var flowFamily = family{
 	codes: map[Code]meta{
-		2218: {severity: SeverityError},
-		2317: {severity: SeverityInfo},
-		2319: {severity: SeverityWarning},
-		2320: {severity: SeverityWarning},
-		2324: {severity: SeverityWarning},
-		2329: {severity: SeverityInfo},
+		2218: {severity: SeverityError, summary: "A function is called before the line that defines it runs."},
+		2317: {severity: SeverityInfo, summary: "A command can never run, because every path to it exits, returns or loops forever first."},
+		2319: {severity: SeverityWarning, summary: "$? after a test is the status of that test, not of the command it checked."},
+		2320: {severity: SeverityWarning, summary: "$? after echo is the status of echo, not of the command before it."},
+		2324: {severity: SeverityWarning, summary: "+= on a plain variable appends text instead of adding a number."},
+		2329: {severity: SeverityInfo, summary: "A function is never invoked, and the script always exits before it could be sourced and called."},
 	},
 	rules: []rule{
 		{on: nodes(&syntax.Stmt{}), node: checkUnreachable},

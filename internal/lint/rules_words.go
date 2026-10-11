@@ -9,13 +9,13 @@ import (
 
 var wordsFamily = family{
 	codes: map[Code]meta{
-		2025: {severity: SeverityInfo},
-		2026: {severity: SeverityInfo},
-		2027: {severity: SeverityWarning},
-		2054: {severity: SeverityWarning},
-		2088: {severity: SeverityWarning},
-		2140: {severity: SeverityWarning},
-		2254: {severity: SeverityWarning},
+		2025: {severity: SeverityInfo, summary: "Terminal escape sequences in PS1 are not wrapped in \\[ \\], so bash miscounts the prompt's width."},
+		2026: {severity: SeverityInfo, summary: "A word between single-quoted strings is not quoted."},
+		2027: {severity: SeverityWarning, summary: "Quotes inside a string close and reopen it, leaving the inner part unquoted."},
+		2054: {severity: SeverityWarning, summary: "Array elements are separated by whitespace, so commas become part of the values."},
+		2088: {severity: SeverityWarning, summary: "A quoted ~ is not expanded to the home directory."},
+		2140: {severity: SeverityWarning, summary: "Quotes inside a double-quoted word end one string and start another."},
+		2254: {severity: SeverityWarning, summary: "An unquoted expansion in a case pattern is matched as a glob."},
 	},
 	rules: []rule{
 		{on: nodes(&syntax.Word{}), node: checkWordQuoting},

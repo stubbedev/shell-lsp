@@ -12,8 +12,8 @@ import (
 
 var redirectSafetyFamily = family{
 	codes: map[Code]meta{
-		2069: {severity: SeverityWarning},
-		2094: {severity: SeverityInfo},
+		2069: {severity: SeverityWarning, summary: "2>&1 placed before a file redirection still points stderr at the old target."},
+		2094: {severity: SeverityInfo, summary: "A pipeline reads and writes the same file, which the output redirection truncates first."},
 	},
 	rules: []rule{
 		{on: nodes(&syntax.Stmt{}), node: checkRedirectOrder},

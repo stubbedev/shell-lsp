@@ -13,15 +13,15 @@ import (
 
 var directivesFamily = family{
 	codes: map[Code]meta{
-		1103: {severity: SeverityError},
-		1107: {severity: SeverityWarning},
-		1123: {severity: SeverityError},
-		1124: {severity: SeverityError},
-		1125: {severity: SeverityError},
-		1126: {severity: SeverityError},
-		1144: {severity: SeverityError},
-		1145: {severity: SeverityError},
-		1146: {severity: SeverityError},
+		1103: {severity: SeverityError, summary: "A shell directive names a shell this linter does not know."},
+		1107: {severity: SeverityWarning, summary: "A directive uses a key that does not exist."},
+		1123: {severity: SeverityError, summary: "A directive stands in front of a keyword where it has no command to apply to."},
+		1124: {severity: SeverityError, summary: "A directive in front of a case branch pattern has no effect."},
+		1125: {severity: SeverityError, summary: "A disable list contains something that is not a check code or range."},
+		1126: {severity: SeverityError, summary: "A directive placed after a command's words or inside a continued list is rejected by ShellCheck."},
+		1144: {severity: SeverityError, summary: "external-sources=true only takes effect in a .shellcheckrc file."},
+		1145: {severity: SeverityError, summary: "external-sources is set to something other than true or false."},
+		1146: {severity: SeverityError, summary: "extended-analysis is set to something other than true or false."},
 	},
 	rules: []rule{
 		{on: nodes(&syntax.CaseClause{}, &syntax.BinaryCmd{}), node: placeDirectivesInGaps},

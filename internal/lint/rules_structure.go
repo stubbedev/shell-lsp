@@ -10,10 +10,10 @@ import (
 
 var structureFamily = family{
 	codes: map[Code]meta{
-		2249: {severity: SeverityInfo, optional: "add-default-case"},
-		2262: {severity: SeverityWarning},
-		2263: {severity: SeverityInfo},
-		2264: {severity: SeverityError},
+		2249: {severity: SeverityInfo, optional: "add-default-case", summary: "A case statement has no *) branch for unexpected values."},
+		2262: {severity: SeverityWarning, summary: "An alias is used in the same parsing unit that defines it, where it does not take effect yet."},
+		2263: {severity: SeverityInfo, summary: "A command runs as a program instead of the alias defined in the same parsing unit."},
+		2264: {severity: SeverityError, summary: "A function that wraps a command calls itself unconditionally and recurses forever."},
 	},
 	rules: []rule{
 		{on: nodes(&syntax.CaseClause{}), node: checkDefaultCase},

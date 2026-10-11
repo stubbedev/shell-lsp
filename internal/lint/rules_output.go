@@ -14,12 +14,12 @@ import (
 
 var outputFamily = family{
 	codes: map[Code]meta{
-		2005: {severity: SeverityStyle},
-		2028: {severity: SeverityInfo},
-		2059: {severity: SeverityInfo},
-		2182: {severity: SeverityError},
-		2183: {severity: SeverityWarning},
-		2291: {severity: SeverityInfo},
+		2005: {severity: SeverityStyle, summary: "echo only repeats the output of a command substitution."},
+		2028: {severity: SeverityInfo, summary: "echo does not reliably interpret backslash escapes."},
+		2059: {severity: SeverityInfo, summary: "A printf format contains an expansion, so data can be read as format directives."},
+		2182: {severity: SeverityError, summary: "A printf format has no conversion specifiers, so its arguments are ignored."},
+		2183: {severity: SeverityWarning, summary: "A printf format expects a different number of arguments than it is given."},
+		2291: {severity: SeverityInfo, summary: "Unquoted runs of spaces between echo arguments collapse to a single space."},
 	},
 	commands: []commandRule{
 		{match: matchExact, names: []string{"echo"}, check: checkUselessEcho},

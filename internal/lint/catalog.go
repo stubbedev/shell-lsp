@@ -6,6 +6,7 @@ type meta struct {
 	severity Severity
 	tag      Tag
 	optional string
+	summary  string
 }
 
 var behaviourOptionals = []string{uppercaseOptional}

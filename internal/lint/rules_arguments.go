@@ -14,11 +14,11 @@ import (
 
 var argumentsFamily = family{
 	codes: map[Code]meta{
-		2035: {severity: SeverityInfo},
-		2101: {severity: SeverityWarning},
-		2102: {severity: SeverityInfo},
-		2162: {severity: SeverityInfo},
-		2336: {severity: SeverityWarning},
+		2035: {severity: SeverityInfo, summary: "A file matched by a glob may start with a dash and be read as an option."},
+		2101: {severity: SeverityWarning, summary: "A character class like [:digit:] is not inside a second pair of brackets."},
+		2102: {severity: SeverityInfo, summary: "A bracket expression lists the same character twice, which suggests it was meant to match numbers."},
+		2162: {severity: SeverityInfo, summary: "read without -r treats backslashes as escapes and drops them."},
+		2336: {severity: SeverityWarning, summary: "cp -r is implementation-defined for special files."},
 	},
 	rules: []rule{
 		{on: nodes(&syntax.CallExpr{}), node: checkLeadingGlobArguments},

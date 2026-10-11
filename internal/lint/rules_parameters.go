@@ -14,14 +14,14 @@ const codeBadSubstitution = nativeBase + 2008
 var parameterSyntaxFamily = family{
 	codes: map[Code]meta{
 		codeBadSubstitution: {severity: SeverityError},
-		2082:                {severity: SeverityError},
-		2250:                {severity: SeverityStyle, optional: "require-variable-braces"},
-		2296:                {severity: SeverityError},
-		2297:                {severity: SeverityError},
-		2298:                {severity: SeverityError},
-		2299:                {severity: SeverityError},
-		2300:                {severity: SeverityError},
-		2301:                {severity: SeverityError},
+		2082:                {severity: SeverityError, summary: "An expansion nested inside a parameter name does not compute the variable to expand."},
+		2250:                {severity: SeverityStyle, optional: "require-variable-braces", summary: "A variable is expanded without braces."},
+		2296:                {severity: SeverityError, summary: "A parameter expansion starts with a character no parameter name can start with."},
+		2297:                {severity: SeverityError, summary: "Double quotes are used inside ${ }."},
+		2298:                {severity: SeverityError, summary: "An expansion is used as the name in ${ }."},
+		2299:                {severity: SeverityError, summary: "Parameter expansions cannot be nested."},
+		2300:                {severity: SeverityError, summary: "Parameter expansion cannot operate on a command substitution."},
+		2301:                {severity: SeverityError, summary: "A parameter expansion starts with quotes or other unexpected syntax."},
 	},
 	rules: []rule{
 		{on: nodes(&syntax.ParamExp{}, &syntax.Lit{}), node: checkBracedExpansion, finish: checkUnparsedBracedExpansions},

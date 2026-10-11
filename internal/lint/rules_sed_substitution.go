@@ -10,7 +10,7 @@ import (
 
 var sedSubstitutionFamily = family{
 	codes: map[Code]meta{
-		2001: {severity: SeverityStyle},
+		2001: {severity: SeverityStyle, summary: "sed runs on a single value that a ${var//pattern/replacement} expansion could handle."},
 	},
 	rules: []rule{{on: nodes(&syntax.BinaryCmd{}, &syntax.Stmt{}), node: checkSedSubstitution}},
 }

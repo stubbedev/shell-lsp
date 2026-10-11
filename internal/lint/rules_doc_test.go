@@ -35,7 +35,7 @@ func TestDescribe(t *testing.T) {
 		t.Errorf("Reference() = %q", info.Reference())
 	}
 	optional, _ := Describe(2250)
-	if optional.Optional != "require-variable-braces" || optional.Summary != "" || optional.Reference() != "https://www.shellcheck.net/wiki/SC2250" {
+	if optional.Optional != "require-variable-braces" || optional.Summary != "A variable is expanded without braces." || optional.Reference() != "https://www.shellcheck.net/wiki/SC2250" {
 		t.Errorf("Describe(SC2250) = %+v", optional)
 	}
 	if _, ok := Describe(9999); ok {
@@ -43,5 +43,25 @@ func TestDescribe(t *testing.T) {
 	}
 	if got := len(Catalog()); got != len(Codes()) {
 		t.Errorf("Catalog() has %d entries for %d codes", got, len(Codes()))
+	}
+}
+
+const maxSummaryLength = 120
+
+func TestEveryCodeHasASummary(t *testing.T) {
+	t.Parallel()
+
+	for _, info := range Catalog() {
+		switch {
+		case info.Summary == "":
+			t.Errorf("%s has no summary", info.Code)
+		case len(info.Summary) > maxSummaryLength:
+			t.Errorf("the summary of %s is %d bytes, over %d: %q", info.Code, len(info.Summary), maxSummaryLength, info.Summary)
+		case !strings.HasSuffix(info.Summary, ".") || strings.ContainsRune(info.Summary, '\n'):
+			t.Errorf("the summary of %s is not one sentence ending in a period: %q", info.Code, info.Summary)
+		}
+		if info.Code.Native() && catalog[info.Code].summary != "" {
+			t.Errorf("%s has a catalog summary, but native codes take theirs from docs/rules.md", info.Code)
+		}
 	}
 }

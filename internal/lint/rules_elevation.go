@@ -9,10 +9,10 @@ import (
 
 var elevationFamily = family{
 	codes: map[Code]meta{
-		2024: {severity: SeverityWarning},
-		2029: {severity: SeverityInfo},
-		2117: {severity: SeverityInfo},
-		2232: {severity: SeverityWarning},
+		2024: {severity: SeverityWarning, summary: "sudo or doas does not apply to a redirection, which the shell opens with the caller's permissions."},
+		2029: {severity: SeverityInfo, summary: "An expansion in an ssh command runs on the client, not on the server."},
+		2117: {severity: SeverityInfo, summary: "su starts an interactive shell, so the rest of the script waits until it exits."},
+		2232: {severity: SeverityWarning, summary: "sudo or doas is given a shell builtin, which has no program to run."},
 	},
 	commands: []commandRule{
 		{match: matchBase, names: elevationCommands, check: checkElevatedRedirection},

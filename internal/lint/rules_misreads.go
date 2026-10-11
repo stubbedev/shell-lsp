@@ -10,11 +10,11 @@ import (
 
 var misreadsFamily = family{
 	codes: map[Code]meta{
-		1007: {severity: SeverityWarning},
-		1008: {severity: SeverityError},
-		1010: {severity: SeverityWarning},
-		1037: {severity: SeverityError},
-		1064: {severity: SeverityError},
+		1007: {severity: SeverityWarning, summary: "A space after = ends the assignment, so the variable is set to empty for the next command only."},
+		1008: {severity: SeverityError, summary: "The shebang names an interpreter that is not a shell this linter recognises."},
+		1010: {severity: SeverityWarning, summary: "A keyword is read as a plain word because no ; or line break comes before it."},
+		1037: {severity: SeverityError, summary: "$ followed by several digits expands only the first digit as a positional parameter."},
+		1064: {severity: SeverityError, summary: "A function body is not a compound command."},
 	},
 	rules: []rule{
 		{on: nodes(&syntax.Assign{}), node: checkSpaceAfterEquals},

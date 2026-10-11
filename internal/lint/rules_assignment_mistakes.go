@@ -9,13 +9,13 @@ import (
 
 var assignmentMistakesFamily = family{
 	codes: map[Code]meta{
-		2037: {severity: SeverityError},
-		2099: {severity: SeverityWarning},
-		2100: {severity: SeverityWarning},
-		2124: {severity: SeverityWarning},
-		2125: {severity: SeverityWarning},
-		2145: {severity: SeverityError},
-		2209: {severity: SeverityWarning},
+		2037: {severity: SeverityError, summary: "A command's output is meant to be assigned, but the value is a prefix assignment for the next word."},
+		2099: {severity: SeverityWarning, summary: "Arithmetic written as separate words in an assignment is not evaluated."},
+		2100: {severity: SeverityWarning, summary: "An arithmetic-looking value is assigned as a literal string."},
+		2124: {severity: SeverityWarning, summary: "Assigning an array to a string joins its elements."},
+		2125: {severity: SeverityWarning, summary: "Globs and brace expansions are not expanded in assignments."},
+		2145: {severity: SeverityError, summary: "Joining text with an array attaches the text only to its first and last elements."},
+		2209: {severity: SeverityWarning, summary: "A command name is assigned as a string instead of its output."},
 	},
 	rules: []rule{
 		{on: nodes(&syntax.CallExpr{}), node: checkAssignmentCommand},

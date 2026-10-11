@@ -14,7 +14,7 @@ import (
 
 var singleQuotesFamily = family{
 	codes: map[Code]meta{
-		2016: {severity: SeverityInfo},
+		2016: {severity: SeverityInfo, summary: "Single quotes keep $ and backticks literal, so nothing in them is expanded."},
 	},
 	rules: []rule{{on: nodes(&syntax.SglQuoted{}), node: checkSingleQuotedExpansion}},
 }

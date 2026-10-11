@@ -11,14 +11,14 @@ import (
 
 var findFamily = family{
 	codes: map[Code]meta{
-		2014: {severity: SeverityInfo},
-		2061: {severity: SeverityWarning},
-		2067: {severity: SeverityError},
-		2146: {severity: SeverityWarning},
-		2150: {severity: SeverityWarning},
-		2156: {severity: SeverityWarning},
-		2185: {severity: SeverityInfo},
-		2227: {severity: SeverityWarning},
+		2014: {severity: SeverityInfo, summary: "An expansion in a find -exec command runs once before find starts, not once per file."},
+		2061: {severity: SeverityWarning, summary: "An unquoted find pattern may be expanded by the shell before find sees it."},
+		2067: {severity: SeverityError, summary: "A find -exec action has no separate ; or + argument to end it."},
+		2146: {severity: SeverityWarning, summary: "A find action only applies to the last -o branch."},
+		2150: {severity: SeverityWarning, summary: "find -exec runs a program directly, not a shell command line."},
+		2156: {severity: SeverityWarning, summary: "find's {} is injected into the text of an inline script."},
+		2185: {severity: SeverityInfo, summary: "find has no explicit starting path, which some versions require."},
+		2227: {severity: SeverityWarning, summary: "A redirection on find applies to find itself, not to the command run by -exec."},
 	},
 	commands: []commandRule{
 		{match: matchBase, names: []string{"find"}, check: checkFindPatterns},

@@ -10,10 +10,10 @@ import (
 
 var caseFamily = family{
 	codes: map[Code]meta{
-		2194: {severity: SeverityWarning},
-		2195: {severity: SeverityWarning},
-		2221: {severity: SeverityWarning},
-		2222: {severity: SeverityWarning},
+		2194: {severity: SeverityWarning, summary: "The case word is a constant, so the same branch is taken every time."},
+		2195: {severity: SeverityWarning, summary: "A case pattern can never match the case word."},
+		2221: {severity: SeverityWarning, summary: "A case pattern also matches everything a later pattern matches, so that one is never reached."},
+		2222: {severity: SeverityWarning, summary: "A case pattern never matches because an earlier pattern catches everything it would."},
 	},
 	rules: []rule{{on: nodes(&syntax.CaseClause{}), node: checkCaseClause}},
 }

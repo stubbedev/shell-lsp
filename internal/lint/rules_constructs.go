@@ -11,11 +11,11 @@ import (
 
 var constructsFamily = family{
 	codes: map[Code]meta{
-		2111: {severity: SeverityError},
-		2112: {severity: SeverityWarning},
-		2113: {severity: SeverityWarning},
-		2118: {severity: SeverityError},
-		2127: {severity: SeverityError},
+		2111: {severity: SeverityError, summary: "ksh does not accept both the function keyword and () in one definition."},
+		2112: {severity: SeverityWarning, summary: "The function keyword is not POSIX."},
+		2113: {severity: SeverityWarning, summary: "The function keyword is not POSIX."},
+		2118: {severity: SeverityError, summary: "ksh reads |& as starting a coprocess, not as a pipe of stdout and stderr."},
+		2127: {severity: SeverityError, summary: "A construct is used that only bash or ksh supports."},
 	},
 	rules: []rule{{on: nodes(&syntax.FuncDecl{}, &syntax.Stmt{}, &syntax.CaseClause{}, &syntax.CmdSubst{}), node: checkShellConstructs}},
 }

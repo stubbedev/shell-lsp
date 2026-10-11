@@ -243,7 +243,7 @@ func sortFindings(findings []Finding) {
 
 func sameFinding(a, b Finding) bool { return a.Code == b.Code && a.Span == b.Span }
 
-var foreignFamily = family{codes: map[Code]meta{1071: {severity: SeverityError}}}
+var foreignFamily = family{codes: map[Code]meta{1071: {severity: SeverityError, summary: "A file run by an interpreter that is not a shell is not linted."}}}
 
 var foreignInterpreters = []string{"awk", "csh", "expect", "fish", "perl", "python", "ruby", "tcsh"}
 

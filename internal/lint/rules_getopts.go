@@ -10,9 +10,9 @@ import (
 
 var getoptsFamily = family{
 	codes: map[Code]meta{
-		2213: {severity: SeverityWarning},
-		2214: {severity: SeverityWarning},
-		2220: {severity: SeverityWarning},
+		2213: {severity: SeverityWarning, summary: "getopts accepts an option that the case statement has no branch for."},
+		2214: {severity: SeverityWarning, summary: "A case branch handles an option that is not in the getopts string."},
+		2220: {severity: SeverityWarning, summary: "A case statement handling getopts options has no *) branch for invalid options."},
 	},
 	commands: []commandRule{
 		{match: matchExact, names: []string{"getopts"}, check: checkGetoptsCase},
