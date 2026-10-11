@@ -33,23 +33,55 @@ func byPosition(a, b Edit) int {
 func NonOverlapping(groups [][]Edit) []Edit {
 	var kept []Edit
 	for _, group := range groups {
-		if slices.ContainsFunc(group, func(e Edit) bool { return overlapsAny(e, kept) }) {
+		if selfOverlapping(group) || slices.ContainsFunc(group, func(e Edit) bool { return overlapsKept(e, kept) }) {
 			continue
 		}
-		kept = append(kept, group...)
+		for _, e := range group {
+			kept = slices.Insert(kept, insertionPoint(kept, e), e)
+		}
 	}
-	slices.SortStableFunc(kept, byPosition)
 	return kept
 }
 
-func overlapsAny(e Edit, others []Edit) bool {
-	for _, o := range others {
-		if e.Start < o.End && o.Start < e.End {
-			return true
+func insertionPoint(kept []Edit, e Edit) int {
+	if n := len(kept); n == 0 || byPosition(kept[n-1], e) <= 0 {
+		return n
+	}
+	i, _ := slices.BinarySearchFunc(kept, e, func(k, e Edit) int {
+		if byPosition(k, e) <= 0 {
+			return -1
 		}
-		if e.Start == e.End && o.Start == o.End && e.Start == o.Start {
+		return 1
+	})
+	return i
+}
+
+func selfOverlapping(group []Edit) bool {
+	sorted := slices.SortedStableFunc(slices.Values(group), byPosition)
+	for i := 1; i < len(sorted); i++ {
+		if sorted[i].Start < sorted[i-1].End {
 			return true
 		}
 	}
 	return false
+}
+
+func overlapsKept(e Edit, kept []Edit) bool {
+	i, _ := slices.BinarySearchFunc(kept, e.Start, func(k Edit, start int) int {
+		if k.End <= start {
+			return -1
+		}
+		return 1
+	})
+	if i < len(kept) && overlaps(e, kept[i]) {
+		return true
+	}
+	return i > 0 && overlaps(e, kept[i-1])
+}
+
+func overlaps(e, o Edit) bool {
+	if e.Start < o.End && o.Start < e.End {
+		return true
+	}
+	return e.Start == e.End && o.Start == o.End && e.Start == o.Start
 }

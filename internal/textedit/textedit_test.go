@@ -1,6 +1,25 @@
 package textedit
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
+
+func TestNonOverlappingTakesLinearTimeForEditsInOrder(t *testing.T) {
+	t.Parallel()
+
+	groups := make([][]Edit, 200_000)
+	for i := range groups {
+		groups[i] = []Edit{{Start: 2 * i, End: 2*i + 1, NewText: "x"}, {Start: 2*i + 1, End: 2*i + 1, NewText: "y"}}
+	}
+	start := time.Now()
+	if got := NonOverlapping(groups); len(got) != 2*len(groups) {
+		t.Fatalf("kept %d edits, want %d", len(got), 2*len(groups))
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Errorf("NonOverlapping took %v for %d groups", elapsed, len(groups))
+	}
+}
 
 func TestApplySortsEdits(t *testing.T) {
 	t.Parallel()
