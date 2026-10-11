@@ -132,9 +132,7 @@ func (p *pass) checkLegacyExists(e *syntax.UnaryTest) {
 }
 
 func (p *pass) preferDoubleBrackets(t testCommand) {
-	switch p.dialect {
-	case dialect.Bash, dialect.Ksh, dialect.Zsh, dialect.Busybox:
-	default:
+	if !p.dialect.Features().DoubleBracket {
 		return
 	}
 	span, ok := p.span(t.node)
@@ -142,22 +140,10 @@ func (p *pass) preferDoubleBrackets(t testCommand) {
 		return
 	}
 	var fix []textedit.Edit
-	if convertible(t.expr) {
-		fix = []textedit.Edit{{Start: span.Start, End: span.Start, NewText: "["}, {Start: span.End, End: span.End, NewText: "]"}}
+	if stmt, ok := p.parent().(*syntax.Stmt); ok {
+		fix, _ = DoubleBrackets(p.text, stmt)
 	}
 	p.report(2292, span, "Prefer [[ ]] over [ ] for tests in this shell.", fix...)
-}
-
-func convertible(expr syntax.TestExpr) bool {
-	switch e := expr.(type) {
-	case *syntax.Word:
-		return true
-	case *syntax.UnaryTest:
-		return e.Op != syntax.TsNot
-	case *syntax.BinaryTest:
-		return e.Op != syntax.AndTest && e.Op != syntax.OrTest && e.Op != syntax.TsBefore && e.Op != syntax.TsAfter
-	}
-	return false
 }
 
 func (p *pass) checkImplicitNonEmpty(w *syntax.Word) {

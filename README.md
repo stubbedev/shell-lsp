@@ -137,6 +137,7 @@ and keeps the script's meaning; their edits are computed on
 | Toggle quotes | `refactor.rewrite` | Converts between single and double quotes |
 | Declare as local | `refactor.rewrite` | Adds `local` to an assignment inside a function |
 | Convert backticks | `refactor.rewrite` | Rewrites `` `cmd` `` as `$(cmd)`, undoing the backquote escaping |
+| Convert to `[[ ]]` | `refactor.rewrite` | Rewrites `[ ... ]` or `test ...` in bash, zsh and ksh, turning `-a`, `-o`, `\(`, `\)`, `\<` and `\>` into `&&`, `\|\|`, `(`, `)`, `<` and `>`; skipped when globs or unquoted expansions would be read differently |
 
 ## Commands
 

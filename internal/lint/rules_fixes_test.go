@@ -30,6 +30,7 @@ func TestAutofixes(t *testing.T) {
 		{2268, "[ x = x$mode ]\n", "[ \"\" = $mode ]\n"},
 		{2331, "[ ! -a foo ]\n", "[ ! -e foo ]\n"},
 		{2292, "[ -x ./configure ]\n", "[[ -x ./configure ]]\n"},
+		{2292, "[ -n \"$a\" -a \\( \"$b\" \\< c -o ! -f x \\) ]\n", "[[ -n \"$a\" && ( \"$b\" < c || ! -f x ) ]]\n"},
 		{2243, "[[ $(pending) ]]\n", "[[ -n $(pending) ]]\n"},
 		{2244, "[ \"$name\" ]\n", "[ -n \"$name\" ]\n"},
 		{2265, "[ -f a ] & [ -f b ]\n", "[ -f a ] && [ -f b ]\n"},

@@ -37,6 +37,7 @@ const (
 	ToggleQuotes     RefactorKind = "toggleQuotes"
 	DeclareLocal     RefactorKind = "declareLocal"
 	ConvertBackticks RefactorKind = "convertBackticks"
+	DoubleBrackets   RefactorKind = "doubleBrackets"
 )
 
 type Refactor struct {
@@ -82,6 +83,7 @@ var refactorings = []refactoring{
 	{ToggleQuotes, RefactorRewrite, toggleQuotes},
 	{DeclareLocal, RefactorRewrite, declareLocal},
 	{ConvertBackticks, RefactorRewrite, convertBackticks},
+	{DoubleBrackets, RefactorRewrite, doubleBrackets},
 }
 
 func Refactorings() []RefactorKind {
