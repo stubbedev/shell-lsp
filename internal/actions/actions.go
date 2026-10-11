@@ -40,6 +40,7 @@ const (
 	ConvertBackticks RefactorKind = "convertBackticks"
 	DoubleBrackets   RefactorKind = "doubleBrackets"
 	InlineVariable   RefactorKind = "inlineVariable"
+	FunctionKeyword  RefactorKind = "functionKeyword"
 )
 
 type Refactor struct {
@@ -87,6 +88,7 @@ var refactorings = []refactoring{
 	{ConvertBackticks, RefactorRewrite, convertBackticks},
 	{DoubleBrackets, RefactorRewrite, doubleBrackets},
 	{InlineVariable, RefactorInline, inlineVariable},
+	{FunctionKeyword, RefactorRewrite, toggleFunctionKeyword},
 }
 
 func Refactorings() []RefactorKind {
