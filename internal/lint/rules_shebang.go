@@ -38,13 +38,13 @@ func checkShebang(p *pass) {
 	if shebang, ok := strings.CutPrefix(first, "#!"); ok {
 		command = strings.TrimLeft(shebang, " \t")
 	}
-	if command == "" {
+	fields := strings.Fields(command)
+	if len(fields) == 0 {
 		if p.dialectGuessed {
 			p.report(2148, line, "Nothing names the shell this script targets; add a shebang such as #!/bin/sh or #!/usr/bin/env bash, or a '# shellcheck shell=' directive.")
 		}
 		return
 	}
-	fields := strings.Fields(command)
 	if len(fields) > 2 && !envSplitsArguments.MatchString(command) {
 		p.report(2096, line, "The kernel passes everything after "+fields[0]+" as one argument, so "+strings.Join(fields[1:], " ")+" arrives as a single word; use 'env -S' or set options in the script.")
 	}

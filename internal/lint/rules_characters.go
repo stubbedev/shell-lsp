@@ -463,7 +463,9 @@ func checkCommentedContinuation(p *pass, n syntax.Node) {
 		if i+1 < len(call.Args) {
 			end = parser.Offset(call.Args[i+1].Pos())
 		}
-		p.checkContinuedComment(span.End, end)
+		if span.End <= end {
+			p.checkContinuedComment(span.End, end)
+		}
 	}
 }
 

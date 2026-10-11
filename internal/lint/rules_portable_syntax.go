@@ -75,7 +75,9 @@ func checkFileReadShortcut(p *pass, cs *syntax.CmdSubst) {
 	}
 	var fixes []Fix
 	if r := stmt.Redirs[0]; len(stmt.Redirs) == 1 && r.Op == syntax.RdrIn && r.N == nil {
-		fixes = append(fixes, safeFix("Read the file with cat", textedit.Edit{Start: parser.Offset(r.OpPos), End: parser.Offset(r.Word.Pos()), NewText: "cat "}))
+		if file, ok := p.span(r.Word); ok {
+			fixes = append(fixes, safeFix("Read the file with cat", textedit.Edit{Start: parser.Offset(r.OpPos), End: file.Start, NewText: "cat "}))
+		}
 	}
 	if cs.Backquotes {
 		p.nonPortableNode(portabilityIssue{code: 3035, shells: strictShells, feature: "Reading a file with `< file`", alternative: "`cat file`"}, cs, fixes...)
