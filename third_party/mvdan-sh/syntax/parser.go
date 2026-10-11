@@ -1936,7 +1936,13 @@ func (p *Parser) paramExpParameter(pe *ParamExp) *ParamExp {
 		// Note that $1a is equivalent to ${1}a, but ${1a} is not.
 		// POSIX Shell says the latter is unspecified behavior, so match Bash's behavior.
 		pos := p.nextPos()
-		if pe.Short && singleRuneParam(p.r) {
+		if pe.Short && p.lang.in(LangZsh) && asciiDigit(p.r) {
+			// Zsh reads every digit of a short positional parameter,
+			// so $10 is ${10} rather than ${1}0.
+			for p.newLit(p.r); asciiDigit(p.r); p.rune() {
+			}
+			p.val = p.endLit()
+		} else if pe.Short && singleRuneParam(p.r) {
 			p.val = string(p.r)
 			p.rune()
 		} else {

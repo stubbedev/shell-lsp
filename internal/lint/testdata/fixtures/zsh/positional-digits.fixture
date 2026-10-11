@@ -1,0 +1,9 @@
+### zsh reads every digit of a positional parameter
+#!/bin/zsh
+print -r -- $10 $11
+>>- SC1071 1:1 -- shellcheck refuses zsh; zsh reads $10 as the tenth argument, so there is nothing to brace
+
+### bash reads $10 as $1 followed by 0
+#!/bin/bash
+echo "$10"
+>>> SC1037 2:7

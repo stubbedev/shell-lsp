@@ -787,6 +787,19 @@ var fileTests = []fileTestCase{
 		}, LangZsh),
 	),
 	fileTest(
+		[]string{"echo $10 $123x"},
+		langFile(call(
+			litWord("echo"),
+			word(litParamExp("10")),
+			word(litParamExp("123"), lit("x")),
+		), LangZsh),
+		langFile(call(
+			litWord("echo"),
+			word(litParamExp("1"), lit("0")),
+			word(litParamExp("1"), lit("23x")),
+		), LangBash|LangPOSIX|LangMirBSDKorn),
+	),
+	fileTest(
 		[]string{"foreach i\nend"},
 		langFile(stmts(litCall("foreach", "i"), litCall("end")), LangBash|LangPOSIX|LangMirBSDKorn),
 	),

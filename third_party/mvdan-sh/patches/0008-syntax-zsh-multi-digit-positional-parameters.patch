@@ -1,0 +1,61 @@
+syntax: read every digit of a short zsh positional parameter
+
+zsh reads $10 as the tenth positional parameter, and $123x as ${123}x,
+unlike POSIX shells, bash and mksh, where only the first digit belongs to
+the parameter (zshparam(1), "Positional Parameters"):
+
+	$ zsh -c 'echo $10' _ a b c d e f g h i j
+	j
+	$ bash -c 'echo $10' _ a b c d e f g h i j
+	a0
+
+LangZsh parsed $10 as $1 followed by the literal 0, so tools saw the
+wrong parameter. With LangZsh, a short parameter expansion starting with
+a digit now takes all following digits.
+
+Reproducer, before this change: `echo $10` with LangZsh parsed into a
+ParamExp for "1" followed by the literal "0".
+
+diff --git a/syntax/filetests_test.go b/syntax/filetests_test.go
+index 03cde68..0f8cdfe 100644
+--- a/syntax/filetests_test.go
++++ b/syntax/filetests_test.go
+@@ -786,6 +786,19 @@ var fileTests = []fileTestCase{
+ 			Do:      litStmts("foo"),
+ 		}, LangZsh),
+ 	),
++	fileTest(
++		[]string{"echo $10 $123x"},
++		langFile(call(
++			litWord("echo"),
++			word(litParamExp("10")),
++			word(litParamExp("123"), lit("x")),
++		), LangZsh),
++		langFile(call(
++			litWord("echo"),
++			word(litParamExp("1"), lit("0")),
++			word(litParamExp("1"), lit("23x")),
++		), LangBash|LangPOSIX|LangMirBSDKorn),
++	),
+ 	fileTest(
+ 		[]string{"foreach i\nend"},
+ 		langFile(stmts(litCall("foreach", "i"), litCall("end")), LangBash|LangPOSIX|LangMirBSDKorn),
+diff --git a/syntax/parser.go b/syntax/parser.go
+index dba83e8..fc319d8 100644
+--- a/syntax/parser.go
++++ b/syntax/parser.go
+@@ -1936,7 +1936,13 @@ func (p *Parser) paramExpParameter(pe *ParamExp) *ParamExp {
+ 		// Note that $1a is equivalent to ${1}a, but ${1a} is not.
+ 		// POSIX Shell says the latter is unspecified behavior, so match Bash's behavior.
+ 		pos := p.nextPos()
+-		if pe.Short && singleRuneParam(p.r) {
++		if pe.Short && p.lang.in(LangZsh) && asciiDigit(p.r) {
++			// Zsh reads every digit of a short positional parameter,
++			// so $10 is ${10} rather than ${1}0.
++			for p.newLit(p.r); asciiDigit(p.r); p.rune() {
++			}
++			p.val = p.endLit()
++		} else if pe.Short && singleRuneParam(p.r) {
+ 			p.val = string(p.r)
+ 			p.rune()
+ 		} else {
