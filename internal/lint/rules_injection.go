@@ -420,7 +420,7 @@ func (p *pass) restrictedByCase(pe *syntax.ParamExp) bool {
 }
 
 func checkInjectedArithmetic(p *pass, n syntax.Node) {
-	if !p.active(codeArithmeticInjection) {
+	if !p.active(codeArithmeticInjection) || !p.dialect.Features().SubscriptsRunCode {
 		return
 	}
 	scope := p.tree.ScopeAt(parser.Offset(n.Pos()))
@@ -476,16 +476,18 @@ var arithmeticTestOperators = map[syntax.BinTestOperator]bool{
 	syntax.TsEql: true, syntax.TsNeq: true, syntax.TsLss: true, syntax.TsLeq: true, syntax.TsGtr: true, syntax.TsGeq: true,
 }
 
-const arithmeticRisk = " is evaluated as an arithmetic expression, and bash runs any command substitution inside an array subscript such as a[$(cmd)]; check that it is a plain number first."
+func (p *pass) arithmeticRisk() string {
+	return " is evaluated as an arithmetic expression, and " + p.dialect.String() + " runs any command substitution inside an array subscript such as a[$(cmd)]; check that it is a plain number first."
+}
 
 func (p *pass) reportArithmeticInjection(pe *syntax.ParamExp, src untrustedSource) {
 	if span, ok := p.span(pe); ok {
-		p.report(codeArithmeticInjection, span, p.text[span.Start:span.End]+" comes from "+src.String()+" and"+arithmeticRisk)
+		p.report(codeArithmeticInjection, span, p.text[span.Start:span.End]+" comes from "+src.String()+" and"+p.arithmeticRisk())
 	}
 }
 
 func (p *pass) reportArithmeticNameInjection(w *syntax.Word, name string, src untrustedSource) {
 	if span, ok := p.span(w); ok {
-		p.report(codeArithmeticInjection, span, "The value of "+name+" comes from "+src.String()+" and"+arithmeticRisk)
+		p.report(codeArithmeticInjection, span, "The value of "+name+" comes from "+src.String()+" and"+p.arithmeticRisk())
 	}
 }

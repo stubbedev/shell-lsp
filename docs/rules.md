@@ -44,9 +44,11 @@ sudo sh -c 'echo "$1" > /etc/motd' _ "$1"    # safe: $1 stays an argument
 ## SL1003
 
 **Untrusted data is evaluated as arithmetic** (optional:
-`arithmetic-injection`). Bash evaluates array subscripts inside arithmetic,
-so a value like `a[$(reboot)]` runs a command in `(( n > 3 ))`,
-`$(( n + 1 ))` and `[[ $n -eq 3 ]]`. `[ "$n" -eq 3 ]` is safe because `test`
+`arithmetic-injection`). Bash and ksh evaluate array subscripts inside
+arithmetic, so a value like `a[$(reboot)]` runs a command in `(( n > 3 ))`,
+`$(( n + 1 ))` and `[[ $n -eq 3 ]]`. zsh evaluates the subscript without
+running the command, and POSIX sh, dash and busybox sh have no arrays, so the
+rule only applies to bash and ksh scripts. `[ "$n" -eq 3 ]` is safe because `test`
 only accepts plain integers.
 
 ```bash

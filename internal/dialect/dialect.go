@@ -82,6 +82,7 @@ type Features struct {
 	AssociativePairs    bool
 	GlobsUnquoted       bool
 	QuotedRegexLiteral  bool
+	SubscriptsRunCode   bool
 }
 
 func (d Dialect) Features() Features {
@@ -91,7 +92,7 @@ func (d Dialect) Features() Features {
 			Arrays: true, AssociativeArrays: true, DoubleBracket: true,
 			ArithmeticCommand: true, ProcessSubstitution: true, Coproc: true,
 			Nameref: true, Local: true, Select: true, SplitsUnquoted: true, GlobsUnquoted: true, DeclarationAssigns: true,
-			QuotedRegexLiteral: true,
+			QuotedRegexLiteral: true, SubscriptsRunCode: true,
 		}
 	case Zsh:
 		return Features{
@@ -114,7 +115,7 @@ func (d Dialect) Features() Features {
 			Arrays: true, AssociativeArrays: true, DoubleBracket: true,
 			ArithmeticCommand: true, ProcessSubstitution: true, Coproc: true,
 			Nameref: true, Local: true, Select: true, SplitsUnquoted: true, GlobsUnquoted: true, LastPipeInShell: true,
-			DeclarationAssigns: true, QuotedRegexLiteral: true,
+			DeclarationAssigns: true, QuotedRegexLiteral: true, SubscriptsRunCode: true,
 		}
 	}
 	return Features{}

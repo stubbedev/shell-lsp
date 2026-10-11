@@ -23,3 +23,19 @@ echo $(( $1 + 1 ))
 n=$1
 if (( n > 3 )); then echo big; fi
 >>> none
+
+### zsh does not run code in arithmetic subscripts
+#!/bin/zsh
+# shellcheck enable=arithmetic-injection
+n=$1
+if (( n > 3 )); then print big; fi
+print $(( $1 + 1 ))
+>>- SC1071 1:1 -- shellcheck refuses zsh; zsh evaluates a[$(cmd)] in arithmetic without running the command
+
+### ksh runs code in arithmetic subscripts too
+#!/bin/ksh
+# shellcheck enable=arithmetic-injection
+n=$1
+if (( n > 3 )); then print big; fi
+>>> none
+>>+ SL1003 4:7 -- shell-lsp native injection check; ksh93 evaluates array subscripts in arithmetic like bash
