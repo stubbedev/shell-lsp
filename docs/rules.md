@@ -112,8 +112,17 @@ rather than report follow-on errors.
 it. Common gawk extensions (`BEGINFILE`, `switch`, `@include`, `**`, `|&`)
 are accepted.
 
+Regular expression constants (`/re/`) and string literals on the right of
+`~` or `!~` are read as extended regular expressions after awk's own string
+escapes, and only mistakes every awk rejects are reported: a group or
+bracket expression that is never closed, an unknown character class, an
+empty range such as `[z-a]` and a trailing lone `\`. Constructs that awks
+read differently, such as a leading `*`, an unmatched `)` or braces, are
+left alone.
+
 ```bash
 awk '{ print $1 ' file.txt    # SL3001: `{` is never closed
+awk '$2 ~ /^(GET|POST/' log    # SL3001: `(` is never closed
 ```
 
 ## SL3002

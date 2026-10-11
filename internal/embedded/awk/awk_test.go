@@ -196,6 +196,23 @@ func TestInvalidPrograms(t *testing.T) {
 	})
 }
 
+func TestRegularExpressions(t *testing.T) {
+	t.Parallel()
+
+	langtest.CheckValid(t, Parse, []string{
+		`/+/`, `/*x/`, `/a)/`, `/[\]]/`, `/[/]/`, `/a{3,2}/`, `$1 ~ "^[0-9]+$"`, `$0 ~ "\\("`, `$0 ~ "(" "x)"`,
+		`$0 ~ "\q("`, `{ n = a / b / c }`, `$0 ~ x "("`, `$0 !~ /^#/`, `/\.(gz|bz2)$/`, `{ sub("(", "x") }`,
+	})
+	langtest.CheckInvalid(t, Parse, []langtest.Case{
+		{`/(a/ { print }`, `(`, "`(` is never closed in the regular expression"},
+		{`/[[:alhpa:]]/`, `[:`, "unknown character class `[:alhpa:]`"},
+		{`$1 ~ /[9-0]/`, `9-0`, "the range `9-0` is empty because `9` sorts after `0`"},
+		{`$0 ~ "[abc"`, `[`, "`[` is never closed in the regular expression"},
+		{`$0 !~ "a\n(b"`, `(`, "`(` is never closed in the regular expression"},
+		{`$0 ~ "a\\"`, `\\`, "the regular expression ends with a lone `\\`"},
+	})
+}
+
 func TestReportsEveryStatementError(t *testing.T) {
 	t.Parallel()
 

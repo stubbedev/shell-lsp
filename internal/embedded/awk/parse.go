@@ -2,8 +2,10 @@ package awk
 
 import (
 	"slices"
+	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/embedded/lang"
+	"github.com/stubbedev/shell-lsp/internal/embedded/regex"
 )
 
 type context uint8
@@ -28,6 +30,7 @@ type (
 type parser struct {
 	lex    lexer
 	tok    token
+	last   token
 	peeked *token
 	params []string
 	open   lang.Nesting[kind]
@@ -113,6 +116,7 @@ func (p *parser) track(k kind) {
 
 func (p *parser) advance() {
 	p.track(p.tok.kind)
+	p.last = p.tok
 	p.tok = p.next()
 }
 
@@ -586,10 +590,40 @@ func (p *parser) match(ctx context) value {
 	left := p.comparison(ctx)
 	for p.tok.kind == tMatch || p.tok.kind == tNoMatch {
 		p.advance()
+		operand := p.tok
 		p.comparison(ctx)
+		if operand.kind == tString && p.last == operand {
+			p.dynamicRegex(operand)
+		}
 		left = plain
 	}
 	return left
+}
+
+var stringEscapes = map[byte]string{
+	'\\': `\`, '"': `"`, '/': "/", 'a': "\a", 'b': "\b", 'f': "\f", 'n': "\n", 'r': "\r", 't': "\t", 'v': "\v",
+}
+
+func (p *parser) dynamicRegex(t token) {
+	src, start, end := p.lex.src, t.start+1, t.end-1
+	if !strings.Contains(src[start:end], `\`) {
+		p.lex.res.CheckRegex(lang.Verbatim(src, start, end), regex.Awk)
+		return
+	}
+	b := lang.NewExcerptBuilder(end - start)
+	for i := start; i < end; i++ {
+		if src[i] != '\\' {
+			b.Add(src[i:i+1], i, i+1)
+			continue
+		}
+		decoded, known := stringEscapes[src[i+1]]
+		if !known {
+			return
+		}
+		b.Add(decoded, i, i+2)
+		i++
+	}
+	p.lex.res.CheckRegex(b.Excerpt(), regex.Awk)
 }
 
 func (p *parser) comparison(ctx context) value {

@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/embedded/lang"
+	"github.com/stubbedev/shell-lsp/internal/embedded/regex"
 )
 
 type kind uint8
@@ -286,6 +287,9 @@ func (l *lexer) quoted(k kind, sem lang.Kind, closer byte, unterminated string) 
 			inBracket = false
 		case c == closer && !inBracket:
 			l.pos++
+			if k == tRegexp && !l.quiet {
+				l.res.CheckRegex(lang.Verbatim(l.src, start+1, l.pos-1), regex.Awk)
+			}
 			return token{kind: k, start: start, end: l.pos, sem: l.res.Emit(start, l.pos, sem, 0)}
 		}
 		l.pos++
