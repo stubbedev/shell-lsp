@@ -14,9 +14,14 @@ import (
 	"slices"
 	"strings"
 	"sync"
+
+	"github.com/stubbedev/shell-lsp/internal/regularfile"
 )
 
-const maxRedirects = 4
+const (
+	maxRedirects = 4
+	maxPageSize  = 16 << 20
+)
 
 var (
 	commandSections  = []string{"1", "8", "6"}
@@ -131,7 +136,7 @@ func (l *library) source(name string) ([]byte, error) {
 }
 
 func readPage(path string) ([]byte, error) {
-	f, err := os.Open(path) //nolint:gosec
+	f, info, err := regularfile.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("opening manual page %s: %w", path, err)
 	}
@@ -143,7 +148,7 @@ func readPage(path string) ([]byte, error) {
 		if err != nil {
 			return nil, fmt.Errorf("decompressing manual page %s: %w", path, err)
 		}
-		src, err := io.ReadAll(gz)
+		src, err := regularfile.ReadLimited(gz, maxPageSize, info.Size())
 		if err == nil {
 			err = gz.Close()
 		}
@@ -154,7 +159,7 @@ func readPage(path string) ([]byte, error) {
 	case ".bz2":
 		r = bzip2.NewReader(f)
 	}
-	src, err := io.ReadAll(r)
+	src, err := regularfile.ReadLimited(r, maxPageSize, info.Size())
 	if err != nil {
 		return nil, fmt.Errorf("reading manual page %s: %w", path, err)
 	}

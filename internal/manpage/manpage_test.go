@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/perf"
+	"github.com/stubbedev/shell-lsp/internal/regularfile"
 )
 
 const listPage = `.\" Generated for tests.
@@ -387,6 +388,21 @@ func TestLookupCachesOnlyInstalledPagesUnderTheirOwnKeys(t *testing.T) {
 	}
 	if len(l.cache) != 1 {
 		t.Errorf("cache holds %d entries, want only the installed page", len(l.cache))
+	}
+}
+
+func TestLookupRefusesPagesThatDecompressPastTheLimit(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "man1", "bomb.1.gz"), gzipped(t, listPage+strings.Repeat("\n", 4*maxPageSize)))
+	writeFile(t, filepath.Join(dir, "man1", "list.1.gz"), gzipped(t, listPage))
+	l := NewLookup(dir, "")
+	if _, err := l.Page(t.Context(), "bomb"); !errors.Is(err, regularfile.ErrTooLarge) {
+		t.Errorf("Page(bomb) error = %v, want the size limit", err)
+	}
+	if page, err := l.Page(t.Context(), "list"); err != nil || page.Summary != "list - show directory entries" {
+		t.Errorf("Page(list) = %q, %v", page.Summary, err)
 	}
 }
 
