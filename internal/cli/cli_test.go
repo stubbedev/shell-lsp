@@ -211,6 +211,10 @@ func TestCheckDiffAppliesTheFixAllEdits(t *testing.T) {
 	if got.stdout != want || got.status != checkStatusFindings {
 		t.Errorf("diff = %d %q, want %q", got.status, got.stdout, want)
 	}
+	absolute := filepath.Join(dir, "a.sh")
+	if got := run(t, dir, "", "check", "-f", "diff", absolute); !strings.HasPrefix(got.stdout, "--- "+absolute+"\n+++ "+absolute+"\n") {
+		t.Errorf("diff of an absolute path = %q, want the path without a/ and b/ prefixes", got.stdout)
+	}
 	unfixable := run(t, dir, "", "check", "-f", "diff", "b.sh")
 	if unfixable.stdout != "" || !strings.Contains(unfixable.stderr, "none were auto-fixable") || unfixable.status != checkStatusFindings {
 		t.Errorf("unfixable diff = %+v", unfixable)

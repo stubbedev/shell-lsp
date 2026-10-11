@@ -200,11 +200,19 @@ func fixedText(r fileReport) string {
 
 func writeDiff(out *bytes.Buffer, reports []fileReport, _ reportOptions) {
 	for _, r := range reports {
-		if patch := format.Unified("a/"+r.name, "b/"+r.name, r.doc.Text(), fixedText(r)); patch != "" {
+		from, to := diffNames(r.name)
+		if patch := format.Unified(from, to, r.doc.Text(), fixedText(r)); patch != "" {
 			out.WriteString(patch)
 			out.WriteByte('\n')
 		}
 	}
+}
+
+func diffNames(name string) (from, to string) {
+	if filepath.IsAbs(name) {
+		return name, name
+	}
+	return "a/" + name, "b/" + name
 }
 
 func writeTTY(out *bytes.Buffer, reports []fileReport, opts reportOptions) {
