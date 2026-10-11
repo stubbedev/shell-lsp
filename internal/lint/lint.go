@@ -210,7 +210,7 @@ func Run(tree *parser.Tree, imports []parser.Import, opts Options) Report {
 	for _, f := range p.probes {
 		suppressed.cover(f, -1)
 	}
-	var report Report
+	report := Report{Findings: found[:0]}
 	keep := func(f Finding) {
 		if len(suppressed.cover(f, len(report.Suppressed))) > 0 {
 			report.Suppressed = append(report.Suppressed, f)
@@ -224,7 +224,7 @@ func Run(tree *parser.Tree, imports []parser.Import, opts Options) Report {
 		keep(f)
 	}
 	if !foreign {
-		p.findings = p.findings[:0]
+		p.findings = nil
 		p.reportUnusedDirectives(suppressed)
 		for _, f := range p.findings {
 			keep(f)
