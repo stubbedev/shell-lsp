@@ -243,3 +243,61 @@ func TestRootOfPicksTheInnermostRoot(t *testing.T) {
 		}
 	}
 }
+
+func TestLoadForgetsFilesDeletedFromDisk(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "a.sh")
+	c := &clock{t: time.Now()}
+	ws := newTestWorkspace(c)
+	rewrite(t, path, "one() { :; }\n", c.t)
+	firstFunction(t, ws, path)
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	c.t = c.t.Add(DiskRecheck)
+	if _, err := ws.Load(path); err == nil {
+		t.Fatal("loading a deleted file succeeded")
+	}
+	if len(ws.files) != 0 {
+		t.Errorf("cache kept the deleted file: %v", ws.files)
+	}
+}
+
+func TestShellFilesForgetsRemovedDirectories(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "sub", "deep"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	c := &clock{t: time.Now()}
+	ws := newTestWorkspace(c)
+	ws.SetRoots([]string{root})
+	for _, name := range []string{"a.sh", "sub/b.sh", "sub/deep/c.sh"} {
+		rewrite(t, filepath.Join(root, name), "f() { :; }\n", c.t)
+	}
+	paths, err := ws.ShellFiles(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range paths {
+		firstFunction(t, ws, path)
+	}
+	if err := os.RemoveAll(filepath.Join(root, "sub")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(root, "a.sh")); err != nil {
+		t.Fatal(err)
+	}
+	later := time.Now().Add(time.Hour)
+	if err := os.Chtimes(root, later, later); err != nil {
+		t.Fatal(err)
+	}
+	if paths, err := ws.ShellFiles(t.Context()); err != nil || len(paths) != 0 {
+		t.Fatalf("ShellFiles after removing everything = %v, %v", paths, err)
+	}
+	if len(ws.dirs) != 1 || len(ws.files) != 0 {
+		t.Errorf("cache kept removed entries: dirs %v, files %v", ws.dirs, ws.files)
+	}
+}

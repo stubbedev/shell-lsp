@@ -218,6 +218,9 @@ func (w *Workspace) Load(path string) (*File, error) {
 	}
 	info, err := os.Stat(path)
 	if err != nil {
+		w.mu.Lock()
+		delete(w.files, path)
+		w.mu.Unlock()
 		return nil, fmt.Errorf("loading %s: %w", path, err)
 	}
 	if info.IsDir() {
@@ -316,6 +319,9 @@ func (w *Workspace) scan(ctx context.Context, limit int) ([]string, error) {
 func (w *Workspace) listDir(dir string) (dirListing, error) {
 	info, err := os.Stat(dir)
 	if err != nil {
+		w.mu.Lock()
+		w.forgetTreeLocked(dir)
+		w.mu.Unlock()
 		return dirListing{}, err
 	}
 	w.mu.Lock()
@@ -341,9 +347,38 @@ func (w *Workspace) listDir(dir string) (dirListing, error) {
 		}
 	}
 	w.mu.Lock()
+	if previous, ok := w.dirs[dir]; ok {
+		w.forgetRemovedLocked(previous, listing)
+	}
 	w.dirs[dir] = listing
 	w.mu.Unlock()
 	return listing, nil
+}
+
+func (w *Workspace) forgetRemovedLocked(previous, current dirListing) {
+	for _, file := range previous.files {
+		if _, kept := slices.BinarySearch(current.files, file); !kept {
+			delete(w.files, file)
+		}
+	}
+	for _, dir := range previous.dirs {
+		if _, kept := slices.BinarySearch(current.dirs, dir); !kept {
+			w.forgetTreeLocked(dir)
+		}
+	}
+}
+
+func (w *Workspace) forgetTreeLocked(dir string) {
+	for path := range w.dirs {
+		if under(path, dir) {
+			delete(w.dirs, path)
+		}
+	}
+	for path := range w.files {
+		if under(path, dir) {
+			delete(w.files, path)
+		}
+	}
 }
 
 func WatchGlobs() []string {
