@@ -53,6 +53,7 @@ rule only applies to bash and ksh scripts. `[ "$n" -eq 3 ]` is safe because `tes
 only accepts plain integers.
 
 ```bash
+#!/bin/bash
 # shellcheck enable=arithmetic-injection
 n=$1
 (( n > 3 ))    # SL1003
@@ -188,8 +189,10 @@ it, when the script has no `EXIT` trap yet.
 ```bash
 #!/bin/bash
 work=$(mktemp -d)    # SL2006
-trap 'rm -rf -- "$work"' EXIT
+cp -R src "$work"
 ```
+
+The fix inserts `trap 'rm -rf -- "$work"' EXIT` after the assignment.
 
 ## SL2007
 
@@ -234,8 +237,9 @@ whole directive when nothing in it is used.
 
 ```bash
 #!/bin/bash
-# shellcheck disable=SC2086
-echo "$1"    # SL2009 on SC2086: the argument is already quoted
+# shellcheck enable=unused-directives
+# shellcheck disable=SC2086    # SL2009: the argument below is already quoted
+echo "$1"
 ```
 
 The embedded-language rules check awk, sed and jq programs written inside the

@@ -1,10 +1,14 @@
 package lint
 
 import (
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/docs"
+	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/parser"
 )
 
 func TestNativeRulesAreDocumented(t *testing.T) {
@@ -20,6 +24,38 @@ func TestNativeRulesAreDocumented(t *testing.T) {
 		}
 		if info, _ := Describe(code); info.Summary == "" {
 			t.Errorf("the docs/rules.md section for %s does not open with a **bold** summary sentence", code)
+		}
+	}
+}
+
+var (
+	documentedCode = regexp.MustCompile(`#\s+(SL\d{4})\b`)
+	documentedSafe = regexp.MustCompile(`#\s+(?:safe|validated)\b`)
+)
+
+func TestRulesDocExamplesReportTheirCodes(t *testing.T) {
+	t.Parallel()
+
+	for _, section := range strings.Split(docs.Rules, "\n## ")[1:] {
+		heading, body, _ := strings.Cut(section, "\n")
+		for i, block := range strings.Split(body, "```bash\n")[1:] {
+			example, _, _ := strings.Cut(block, "```")
+			d := dialect.Detect(nil, dialect.Input{URI: "file:///example.sh", Text: example})
+			tree := parser.Parse(example, d)
+			found := map[int][]string{}
+			for _, f := range Check(tree, nil, Options{DialectSource: DialectDetected, Optional: []string{allCodes}}) {
+				line := tree.Line(f.Span.Start)
+				found[line] = append(found[line], f.Code.String())
+			}
+			for n, line := range strings.Split(example, "\n") {
+				reported := found[n+1]
+				if m := documentedCode.FindStringSubmatch(line); m != nil && !slices.Contains(reported, m[1]) {
+					t.Errorf("%s example %d line %d %q reports %v, not %s", heading, i+1, n+1, line, reported, m[1])
+				}
+				if documentedSafe.MatchString(line) && slices.Contains(reported, heading) {
+					t.Errorf("%s example %d line %d %q is documented as safe but reports %s", heading, i+1, n+1, line, heading)
+				}
+			}
 		}
 	}
 }
