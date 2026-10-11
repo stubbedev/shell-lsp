@@ -75,18 +75,3 @@ func available(entries []Entry, d dialect.Dialect) []Entry {
 	}
 	return out
 }
-
-func Expansion(key string) (string, bool) {
-	doc, ok := expansions[key]
-	return doc, ok
-}
-
-func ZshFlag(flag byte) (string, bool) {
-	doc, ok := zshFlags[flag]
-	return doc, ok
-}
-
-func ZshModifier(modifier string) (string, bool) {
-	doc, ok := zshModifiers[modifier]
-	return doc, ok
-}

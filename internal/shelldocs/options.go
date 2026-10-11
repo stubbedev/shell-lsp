@@ -2,21 +2,7 @@ package shelldocs
 
 import "github.com/stubbedev/shell-lsp/internal/dialect"
 
-type OptionSet uint8
-
-const (
-	SetOptions OptionSet = iota
-	Shopt
-	Setopt
-)
-
-type ShellOption struct {
-	Name     string
-	Dialects dialect.Set
-	Doc      string
-}
-
-var setOptions = []ShellOption{
+var setOptions = []Entry{
 	{Name: "allexport", Dialects: every, Doc: "Export every variable that is assigned (`-a`)."},
 	{Name: "errexit", Dialects: every, Doc: "Exit when a command fails (`-e`)."},
 	{Name: "noclobber", Dialects: every, Doc: "Do not overwrite existing files with `>` (`-C`)."},
@@ -40,7 +26,7 @@ var setOptions = []ShellOption{
 	{Name: "privileged", Dialects: bashOnly, Doc: "Do not read startup files or inherit functions from the environment (`-p`)."},
 }
 
-var shoptOptions = []ShellOption{
+var shoptOptions = []Entry{
 	{Name: "autocd", Dialects: bashOnly, Doc: "A command that names a directory changes into it."},
 	{Name: "cdspell", Dialects: bashOnly, Doc: "Correct minor spelling errors in `cd` arguments."},
 	{Name: "checkwinsize", Dialects: bashOnly, Doc: "Update `LINES` and `COLUMNS` after each command."},
@@ -61,7 +47,7 @@ var shoptOptions = []ShellOption{
 	{Name: "xpg_echo", Dialects: bashOnly, Doc: "Make `echo` expand backslash escapes by default."},
 }
 
-var setoptOptions = []ShellOption{
+var setoptOptions = []Entry{
 	{Name: "auto_cd", Dialects: zshOnly, Doc: "A command that names a directory changes into it."},
 	{Name: "auto_pushd", Dialects: zshOnly, Doc: "Make `cd` push the old directory onto the stack."},
 	{Name: "bash_rematch", Dialects: zshOnly, Doc: "Fill `BASH_REMATCH` instead of `MATCH`/`match` for `=~`."},
@@ -86,23 +72,4 @@ var setoptOptions = []ShellOption{
 	{Name: "share_history", Dialects: zshOnly, Doc: "Share the history between running shells."},
 	{Name: "warn_create_global", Dialects: zshOnly, Doc: "Warn when a function creates a global variable."},
 	{Name: "xtrace", Dialects: zshOnly, Doc: "Print each command before executing it."},
-}
-
-func Options(set OptionSet, d dialect.Dialect) []ShellOption {
-	var source []ShellOption
-	switch set {
-	case SetOptions:
-		source = setOptions
-	case Shopt:
-		source = shoptOptions
-	case Setopt:
-		source = setoptOptions
-	}
-	out := make([]ShellOption, 0, len(source))
-	for _, o := range source {
-		if o.Dialects.Has(d) {
-			out = append(out, o)
-		}
-	}
-	return out
 }

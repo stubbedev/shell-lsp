@@ -70,18 +70,60 @@ func TestMarkdownCarriesNotesAndAvailability(t *testing.T) {
 	}
 }
 
-func TestOperatorDocs(t *testing.T) {
+func TestVocabularies(t *testing.T) {
 	t.Parallel()
 
-	for _, key := range []string{":-", "##", "length", "replace", ":#"} {
-		if _, ok := Expansion(key); !ok {
-			t.Errorf("expansion %q undocumented", key)
+	for v, entries := range vocabularies {
+		if len(entries) == 0 {
+			t.Errorf("vocabulary %d is empty", v)
+		}
+		for _, e := range entries {
+			if e.Name == "" || e.Doc == "" || e.Dialects == 0 {
+				t.Errorf("vocabulary %d has an incomplete entry %+v", v, e)
+			}
 		}
 	}
-	if _, ok := ZshFlag('j'); !ok {
-		t.Error("zsh flag j undocumented")
+	for _, tc := range []struct {
+		v    Vocabulary
+		name string
+	}{
+		{ExpansionOperators, ":-"},
+		{ExpansionOperators, "##"},
+		{ExpansionOperators, "//"},
+		{ExpansionOperators, ":#"},
+		{ExpansionForms, "length"},
+		{ZshParameterFlags, "j"},
+		{ZshModifiers, "t"},
+		{TestUnaryOperators, "-f"},
+		{TestBinaryOperators, "-nt"},
+		{CondOperators, "=~"},
+		{Signals, "TERM"},
+		{TrapConditions, "EXIT"},
+	} {
+		if _, ok := Term(tc.v, tc.name); !ok {
+			t.Errorf("%q missing from vocabulary %d", tc.name, tc.v)
+		}
 	}
-	if _, ok := ZshModifier("t"); !ok {
-		t.Error("zsh modifier t undocumented")
+}
+
+func TestTermsFollowTheDialect(t *testing.T) {
+	t.Parallel()
+
+	has := func(v Vocabulary, d dialect.Dialect, name string) bool {
+		for e := range Terms(v, d) {
+			if e.Name == name {
+				return true
+			}
+		}
+		return false
+	}
+	if has(ExpansionOperators, dialect.Dash, "//") || !has(ExpansionOperators, dialect.Bash, "//") {
+		t.Error("pattern replacement should be offered in bash and not in dash")
+	}
+	if has(TrapConditions, dialect.Posix, "ERR") || !has(TrapConditions, dialect.Bash, "ERR") {
+		t.Error("ERR should be a bash trap condition and not a POSIX one")
+	}
+	if has(CondOperators, dialect.Dash, "=~") {
+		t.Error("=~ offered in dash")
 	}
 }

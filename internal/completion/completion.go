@@ -272,9 +272,9 @@ func (c completer) argumentOf(ctx context.Context, command string, args []string
 	case command == "set" && (last == "-o" || last == "+o"):
 		return Result{Items: c.options(shelldocs.SetOptions)}, nil
 	case command == "shopt":
-		return Result{Items: c.options(shelldocs.Shopt)}, nil
+		return Result{Items: c.options(shelldocs.ShoptOptions)}, nil
 	case command == "setopt" || command == "unsetopt":
-		return Result{Items: c.options(shelldocs.Setopt)}, nil
+		return Result{Items: c.options(shelldocs.SetoptOptions)}, nil
 	case strings.HasPrefix(c.site.prefix, "-"):
 		return c.flags(ctx, command, args)
 	case command == "unset" || command == "export" || command == "readonly":
@@ -311,9 +311,9 @@ func (c completer) positional(ctx context.Context, command string, args []string
 	return paths, err
 }
 
-func (c completer) options(set shelldocs.OptionSet) []Item {
+func (c completer) options(set shelldocs.Vocabulary) []Item {
 	var items []Item
-	for _, o := range shelldocs.Options(set, c.dialect) {
+	for o := range shelldocs.Terms(set, c.dialect) {
 		if !strings.HasPrefix(o.Name, c.site.prefix) {
 			continue
 		}

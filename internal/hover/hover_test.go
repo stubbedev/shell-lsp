@@ -102,7 +102,7 @@ func TestHover(t *testing.T) {
 		{needle: "greet \"$f\"", want: []string{"greet $1 $2 [args...]"}, span: "greet"},
 		{needle: "local", want: []string{"local [option] name", "**bash:**"}, span: "local"},
 		{needle: "names[@]", want: []string{"local array in `greet`", "Declared on line 4", "local -a names"}, span: "${names[@]}"},
-		{needle: "#names", want: []string{"`${#name}`: length"}, span: "${#names}"},
+		{needle: "#names", want: []string{"`${#name}`: Length"}, span: "${#names}"},
 		{needle: "name:-", want: []string{"not assigned in this file", "`${name:-word}`"}, span: "${name:-anon}"},
 		{needle: "$1\"", want: []string{"argument 1 of function `greet`"}, span: "$1"},
 		{needle: "$@", want: []string{"All positional parameters"}, span: "$@"},
@@ -149,16 +149,36 @@ func TestHoverZshFlagsAndModifiers(t *testing.T) {
 
 	src := "print -r -- ${(j:,:)parts} ${(U)name} ${file:t:r}\n"
 	got := hoverAt(t, src, dialect.Zsh, "j:,:", 0)
-	if !strings.Contains(got.Markdown, "- `j`: join") || strings.Contains(got.Markdown, "`,`") {
+	if !strings.Contains(got.Markdown, "- `j`: Join") || strings.Contains(got.Markdown, "`,`") {
 		t.Errorf("flags hover = %q", got.Markdown)
 	}
 	got = hoverAt(t, src, dialect.Zsh, "(U)", 0)
-	if !strings.Contains(got.Markdown, "- `U`: convert to uppercase") {
+	if !strings.Contains(got.Markdown, "- `U`: Convert to uppercase") {
 		t.Errorf("U flag hover = %q", got.Markdown)
 	}
 	got = hoverAt(t, src, dialect.Zsh, "file:t", 0)
-	if !strings.Contains(got.Markdown, "- `:t`: tail") || !strings.Contains(got.Markdown, "- `:r`: root") {
+	if !strings.Contains(got.Markdown, "- `:t`: Tail") || !strings.Contains(got.Markdown, "- `:r`: Root") {
 		t.Errorf("modifier hover = %q", got.Markdown)
+	}
+}
+
+func TestHoverExpansionOperators(t *testing.T) {
+	t.Parallel()
+
+	src := "echo \"${a/x/y}\" \"${b//x/y}\" \"${c/#x/y}\" \"${d/%x/y}\" \"${e@Q}\" \"${f:1:2}\" \"${g^^}\"\n"
+	for _, tc := range []struct{ needle, want string }{
+		{"a/", "`${name/pattern/string}`: Replaces the first match"},
+		{"b//", "`${name//pattern/string}`: Replaces every match"},
+		{"c/#", "`${name/#pattern/string}`"},
+		{"d/%", "`${name/%pattern/string}`"},
+		{"e@", "`${name@Q}`: Quotes the value"},
+		{"f:", "`${name:offset:length}`"},
+		{"g^", "`${name^^pattern}`"},
+	} {
+		got := hoverAt(t, src, dialect.Bash, tc.needle, 0)
+		if !strings.Contains(got.Markdown, tc.want) {
+			t.Errorf("hover %q = %q, want it to contain %q", tc.needle, got.Markdown, tc.want)
+		}
 	}
 }
 

@@ -465,32 +465,34 @@ func positionalUse(fn parser.Function) (int, bool) {
 
 func expansionDocs(exp *syntax.ParamExp) []string {
 	var docs []string
-	add := func(key string) {
-		if doc, ok := shelldocs.Expansion(key); ok {
-			docs = append(docs, doc)
+	add := func(v shelldocs.Vocabulary, key string) {
+		if e, ok := shelldocs.Term(v, key); ok {
+			docs = append(docs, termDoc(e))
 		}
 	}
 	switch {
 	case exp.Length:
-		add("length")
+		add(shelldocs.ExpansionForms, "length")
 	case exp.Excl && exp.Index != nil && isAllIndex(exp.Index):
-		add("keys")
+		add(shelldocs.ExpansionForms, "keys")
 	case exp.Excl:
-		add("indirect")
+		add(shelldocs.ExpansionForms, "indirect")
 	case exp.Names != 0:
-		add("names")
+		add(shelldocs.ExpansionForms, "names")
 	case exp.Width:
-		add("width")
+		add(shelldocs.ExpansionForms, "width")
 	case exp.IsSet:
-		add("isset")
+		add(shelldocs.ExpansionForms, "isset")
 	}
 	switch {
 	case exp.Slice != nil:
-		add("slice")
+		add(shelldocs.ExpansionOperators, ":")
 	case exp.Repl != nil:
-		add("replace")
+		add(shelldocs.ExpansionOperators, replaceOperator(exp.Repl))
+	case exp.Exp != nil && exp.Exp.Op == syntax.OtherParamOps && exp.Exp.Word != nil:
+		add(shelldocs.ExpansionOperators, "@"+exp.Exp.Word.Lit())
 	case exp.Exp != nil:
-		add(exp.Exp.Op.String())
+		add(shelldocs.ExpansionOperators, exp.Exp.Op.String())
 	}
 	if exp.Flags != nil {
 		if flags := zshFlagDocs(exp.Flags); flags != "" {
@@ -501,6 +503,25 @@ func expansionDocs(exp *syntax.ParamExp) []string {
 		docs = append(docs, zshModifierDocs(exp.Modifiers))
 	}
 	return docs
+}
+
+func termDoc(e shelldocs.Entry) string {
+	if e.Synopsis == "" {
+		return e.Doc
+	}
+	return fmt.Sprintf("`%s`: %s", e.Synopsis, e.Doc)
+}
+
+func replaceOperator(r *syntax.Replace) string {
+	if r.All {
+		return "//"
+	}
+	if r.Orig != nil {
+		if lit := r.Orig.Lit(); strings.HasPrefix(lit, "#") || strings.HasPrefix(lit, "%") {
+			return "/" + lit[:1]
+		}
+	}
+	return "/"
 }
 
 func isAllIndex(index syntax.ArithmExpr) bool {
@@ -515,8 +536,8 @@ func isAllIndex(index syntax.ArithmExpr) bool {
 func zshFlagDocs(flags *syntax.Lit) string {
 	var lines []string
 	for _, flag := range parser.ParameterFlags(flags) {
-		if doc, ok := shelldocs.ZshFlag(flag.Name); ok {
-			lines = append(lines, fmt.Sprintf("- `%c`: %s", flag.Name, doc))
+		if e, ok := shelldocs.Term(shelldocs.ZshParameterFlags, string(flag.Name)); ok {
+			lines = append(lines, fmt.Sprintf("- `%c`: %s", flag.Name, e.Doc))
 		}
 	}
 	if len(lines) == 0 {
@@ -534,8 +555,8 @@ func zshModifierDocs(modifiers []*syntax.Lit) string {
 		} else if key != "" {
 			key = key[:1]
 		}
-		if doc, ok := shelldocs.ZshModifier(key); ok {
-			lines = append(lines, fmt.Sprintf("- `:%s`: %s", m.Value, doc))
+		if e, ok := shelldocs.Term(shelldocs.ZshModifiers, key); ok {
+			lines = append(lines, fmt.Sprintf("- `:%s`: %s", m.Value, e.Doc))
 		}
 	}
 	return "zsh modifiers:\n" + strings.Join(lines, "\n")
