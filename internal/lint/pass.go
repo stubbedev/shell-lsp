@@ -51,7 +51,7 @@ type pass struct {
 	braceScan      *braceScanner
 	quotedHeredocs map[int]bool
 
-	carriageReturns []int
+	normalized Normalized
 }
 
 func newPass(tree *parser.Tree, imports []parser.Import, opts Options) *pass {
@@ -65,7 +65,7 @@ func newPass(tree *parser.Tree, imports []parser.Import, opts Options) *pass {
 		variables:  variableUsage{reads: make([]variableRead, 0, len(tree.References))},
 		parameters: shelldocs.KnownParameters(tree.Dialect),
 
-		carriageReturns: opts.CarriageReturns,
+		normalized: opts.Normalized,
 	}
 }
 

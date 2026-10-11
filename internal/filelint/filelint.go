@@ -23,7 +23,10 @@ func Check(file *workspace.File, env navigation.Env, opts Options) []lint.Findin
 		Sources:       followed(file, env),
 		RCFile:        dialect.IsRCFile(file.Path),
 
-		CarriageReturns: file.Doc.CarriageReturns(),
+		Normalized: lint.Normalized{
+			ByteOrderMark:   file.Doc.ByteOrderMark(),
+			CarriageReturns: file.Doc.CarriageReturns(),
+		},
 
 		NoExtendedAnalysis: opts.NoExtendedAnalysis,
 	})

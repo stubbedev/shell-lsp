@@ -66,6 +66,8 @@ func checkShebangShape(p *pass) {
 	start := 0
 	if strings.HasPrefix(p.text, byteOrderMark) {
 		start = len(byteOrderMark)
+	}
+	if start > 0 || p.normalized.ByteOrderMark {
 		p.report(1082, parser.Span{Start: 0, End: start}, "The file starts with a UTF-8 byte order mark, which makes the shell misread the first line; save the file without it.")
 	}
 	for first := true; start < len(p.text); first = false {

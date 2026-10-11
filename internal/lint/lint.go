@@ -140,6 +140,11 @@ const (
 	DialectGuessed
 )
 
+type Normalized struct {
+	ByteOrderMark   bool
+	CarriageReturns []int
+}
+
 type Options struct {
 	Exclude       []Code
 	Optional      []string
@@ -147,7 +152,7 @@ type Options struct {
 	Sources       []Source
 	RCFile        bool
 
-	CarriageReturns []int
+	Normalized Normalized
 
 	NoExtendedAnalysis bool
 }

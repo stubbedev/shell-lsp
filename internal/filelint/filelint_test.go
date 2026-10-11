@@ -80,3 +80,21 @@ func TestCheckReportsWindowsLineEndings(t *testing.T) {
 		t.Errorf("SC1017 at %v, want the end of each CRLF line %v", ends, want)
 	}
 }
+
+func TestCheckReportsAByteOrderMark(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "bom.sh")
+	if err := os.WriteFile(path, []byte("\uFEFF#!/bin/bash\necho hi\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.DetectDialect)
+	file, err := ws.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := codes(Check(file, navigation.Env{Loader: loader{ws}, Roots: []string{dir}}, Options{})); !slices.Contains(got, 1082) {
+		t.Errorf("findings = %v, want SC1082 for the byte order mark the store strips", got)
+	}
+}

@@ -93,7 +93,7 @@ func checkCarriageReturns(p *pass) {
 }
 
 func (p *pass) carriageReturnOffsets() []int {
-	offsets := slices.Clone(p.carriageReturns)
+	offsets := slices.Clone(p.normalized.CarriageReturns)
 	for i := range len(p.text) {
 		if p.text[i] == '\r' {
 			offsets = append(offsets, i)

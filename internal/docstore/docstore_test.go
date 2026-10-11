@@ -60,6 +60,21 @@ func TestNormalizeStripsBOMAndCRLF(t *testing.T) {
 	}
 }
 
+func TestByteOrderMarkIsRemembered(t *testing.T) {
+	t.Parallel()
+
+	store := openDoc(t, "\ufeffecho hi\n")
+	if doc := mustDoc(t, store); !doc.ByteOrderMark() || doc.Text() != "echo hi\n" {
+		t.Fatalf("ByteOrderMark() = %t, Text() = %q", doc.ByteOrderMark(), doc.Text())
+	}
+	if err := store.Change("file:///t.sh", 2, []lsp.TextDocumentContentChangeEvent{{Text: "echo bye\n"}}); err != nil {
+		t.Fatalf("Change() error = %v", err)
+	}
+	if mustDoc(t, store).ByteOrderMark() {
+		t.Error("ByteOrderMark() stayed true after the whole text was replaced without one")
+	}
+}
+
 func TestOpenNormalizesContent(t *testing.T) {
 	t.Parallel()
 

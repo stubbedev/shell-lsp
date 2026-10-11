@@ -47,7 +47,7 @@ func EncodingFromName(name string) (Encoding, error) {
 }
 
 func NormalizeCanonical(text string) string {
-	normalized, _ := splitLineEnds(strings.TrimPrefix(text, "\uFEFF"))
+	normalized, _ := splitLineEnds(strings.TrimPrefix(text, byteOrderMark))
 	return normalized
 }
 
@@ -86,10 +86,13 @@ func splitLineEnds(raw string) (string, []lineEnd) {
 	return sb.String(), ends
 }
 
+const byteOrderMark = "\uFEFF"
+
 type Document struct {
 	URI       string
 	Language  string
 	Version   int32
+	bom       bool
 	text      string
 	lineStart []int
 	lineEnds  []lineEnd
@@ -98,11 +101,12 @@ type Document struct {
 
 func NewDocument(uri, language string, version int32, text string) *Document {
 	d := &Document{URI: uri, Language: language, Version: version}
-	d.setText(strings.TrimPrefix(text, "\uFEFF"))
+	d.setText(text)
 	return d
 }
 
 func (d *Document) setText(raw string) {
+	raw, d.bom = strings.CutPrefix(raw, byteOrderMark)
 	text, ends := splitLineEnds(raw)
 	d.text = text
 	d.lineEnds = ends
@@ -185,6 +189,8 @@ func (d *Document) replace(start, end int, text string) {
 }
 
 func (d *Document) Text() string { return d.text }
+
+func (d *Document) ByteOrderMark() bool { return d.bom }
 
 func (d *Document) CarriageReturns() []int {
 	var out []int
@@ -270,7 +276,7 @@ func (d *Document) RangeFor(start, end int, enc Encoding) lsp.Range {
 func (d *Document) applyChanges(changes []lsp.TextDocumentContentChangeEvent, enc Encoding) {
 	for _, change := range changes {
 		if change.Range == nil {
-			d.setText(strings.TrimPrefix(change.Text, "\uFEFF"))
+			d.setText(change.Text)
 			continue
 		}
 		start := d.PositionToOffset(change.Range.Start, enc)
