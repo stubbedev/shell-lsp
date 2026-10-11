@@ -117,6 +117,9 @@ func (b *builder) line(line string) {
 }
 
 func (b *builder) textLine(line string) {
+	if !b.nofill && b.tagLines == 0 && !b.headingDue && (line[0] == ' ' || line[0] == '\t') {
+		b.promoteHeading()
+	}
 	b.appendRendered(b.st.inline(line))
 }
 

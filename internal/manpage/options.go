@@ -9,8 +9,9 @@ import (
 var optionName = regexp.MustCompile(`^--?[A-Za-z0-9?#@][A-Za-z0-9_-]*`)
 
 type Option struct {
-	Names []string
-	Doc   string
+	Names  []string
+	Doc    string
+	Valued bool
 }
 
 func collectOptions(doc document) []Option {
@@ -26,41 +27,49 @@ func collectOptions(doc document) []Option {
 }
 
 func appendOptions(options []Option, blocks []block, seen map[string]bool) []Option {
-	var grouped []string
+	var grouped Option
 	for _, b := range blocks {
 		if b.kind != taggedBlock || !strings.HasPrefix(b.tag, "-") {
-			grouped = nil
+			grouped = Option{}
 			continue
 		}
-		names := grouped
-		for _, n := range optionNames(b.tag) {
-			if !slices.Contains(names, n) {
-				names = append(names, n)
-			}
-		}
+		option := grouped
+		option.addNames(b.tag)
 		if b.text == "" {
-			grouped = names
+			grouped = option
 			continue
 		}
-		grouped = nil
-		if len(names) == 0 || slices.ContainsFunc(names, func(n string) bool { return seen[n] }) {
+		grouped = Option{}
+		if len(option.Names) == 0 || slices.ContainsFunc(option.Names, func(n string) bool { return seen[n] }) {
 			continue
 		}
-		for _, n := range names {
+		for _, n := range option.Names {
 			seen[n] = true
 		}
-		options = append(options, Option{Names: names, Doc: b.text})
+		option.Doc = b.text
+		options = append(options, option)
 	}
 	return options
 }
 
-func optionNames(tag string) []string {
-	var names []string
+func (o *Option) addNames(tag string) {
 	for part := range strings.SplitSeq(tag, ",") {
-		name := optionName.FindString(strings.TrimSpace(part))
-		if name != "" && name != "-" && name != "--" && !slices.Contains(names, name) {
-			names = append(names, name)
+		part = strings.TrimSpace(part)
+		name := optionName.FindString(part)
+		if name == "" || name == "-" || name == "--" {
+			continue
+		}
+		o.Valued = o.Valued || takesValue(part[len(name):])
+		if !slices.Contains(o.Names, name) {
+			o.Names = append(o.Names, name)
 		}
 	}
-	return names
+}
+
+func takesValue(syntax string) bool {
+	if strings.HasPrefix(syntax, "=") {
+		return true
+	}
+	value := strings.TrimLeft(syntax, " ")
+	return len(value) < len(syntax) && value != "" && !strings.ContainsAny(value[:1], "-[|")
 }

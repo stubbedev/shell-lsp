@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -127,7 +128,7 @@ func TestRenderManPage(t *testing.T) {
 	}
 	wantOptions := []Option{
 		{Names: []string{"-a", "--all"}, Doc: "include entries whose names start with ."},
-		{Names: []string{"--width"}, Doc: "wrap output at COLUMNS characters"},
+		{Names: []string{"--width"}, Doc: "wrap output at COLUMNS characters", Valued: true},
 	}
 	if !slices.EqualFunc(page.Options(), wantOptions, sameOption) {
 		t.Errorf("Options() = %+v", page.Options())
@@ -140,7 +141,9 @@ func TestRenderManPage(t *testing.T) {
 	}
 }
 
-func sameOption(a, b Option) bool { return slices.Equal(a.Names, b.Names) && a.Doc == b.Doc }
+func sameOption(a, b Option) bool {
+	return slices.Equal(a.Names, b.Names) && a.Doc == b.Doc && a.Valued == b.Valued
+}
 
 func TestRenderPodManPage(t *testing.T) {
 	t.Parallel()
@@ -180,11 +183,74 @@ func TestRenderMdocPage(t *testing.T) {
 		t.Errorf("Description = %q", page.Description)
 	}
 	want := []Option{
-		{Names: []string{"-o", "--output"}, Doc: "Write to output instead of standard output, see curl(1)."},
+		{Names: []string{"-o", "--output"}, Doc: "Write to output instead of standard output, see curl(1).", Valued: true},
 		{Names: []string{"-q"}, Doc: "Run quietly."},
 	}
 	if !slices.EqualFunc(page.Options(), want, sameOption) {
 		t.Errorf("Options() = %+v", page.Options())
+	}
+}
+
+func TestRenderReadsWhichOptionsTakeAValue(t *testing.T) {
+	t.Parallel()
+
+	src := `.TH VALUES 1
+.SH NAME
+values \- options with and without values
+.SH OPTIONS
+.TP
+\fB\-C\fR \fI<path>\fR
+run in path
+.TP
+\fB\-c\fR \fI<name>\fR=\fI<value>\fR
+set a variable
+.TP
+\fB\-\-exec\-path\fR[=\fI<path>\fR]
+print or set the path
+.TP
+\fB\-p\fR, \fB\-\-paginate\fR
+page the output
+.TP
+\fB\-t\fR, \fB\-\-type=\fR
+filter by type
+.TP
+\fB\-n\fR, \fB\-\-namespace\fR=""
+pick a namespace
+.TP
+\fB\-\-all\-namespaces\fR[=false]
+use every namespace
+.TP
+\fB\-x\fR | \fB\-\-exclude\fR
+exclude things
+.TP
+\fB\-o\fR \fIfile\fR
+.TQ
+\fB\-\-output\fR
+write to file
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--context\fP=""
+	Name of the context to use
+
+.PP
+\fB--debug\fP[=false]
+	Enable debug mode
+`
+	page, err := Render([]byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	valued := map[string]bool{}
+	for _, o := range page.Options() {
+		valued[strings.Join(o.Names, ",")] = o.Valued
+	}
+	want := map[string]bool{
+		"-C": true, "-c": true, "--exec-path": false, "-p,--paginate": false, "-t,--type": true,
+		"-n,--namespace": true, "--all-namespaces": false, "-x": false, "-o,--output": true,
+		"--context": true, "--debug": false,
+	}
+	if !maps.Equal(valued, want) {
+		t.Errorf("valued options = %v, want %v", valued, want)
 	}
 }
 
