@@ -18,10 +18,12 @@ describe("releaseTarget", () => {
     assert.deepEqual(releaseTarget("linux", "arm64"), { os: "linux", arch: "arm64" });
     assert.deepEqual(releaseTarget("darwin", "x64"), { os: "darwin", arch: "amd64" });
     assert.deepEqual(releaseTarget("darwin", "arm64"), { os: "darwin", arch: "arm64" });
+    assert.deepEqual(releaseTarget("win32", "x64"), { os: "windows", arch: "amd64" });
+    assert.deepEqual(releaseTarget("win32", "arm64"), { os: "windows", arch: "arm64" });
   });
 
   test("has no target for platforms without release binaries", () => {
-    assert.equal(releaseTarget("win32", "x64"), undefined);
+    assert.equal(releaseTarget("win32", "ia32"), undefined);
     assert.equal(releaseTarget("linux", "ia32"), undefined);
     assert.equal(releaseTarget("freebsd", "x64"), undefined);
   });
@@ -34,6 +36,10 @@ describe("releaseAsset", () => {
       url: "https://github.com/stubbedev/shell-lsp/releases/download/v1.2.3/shell-lsp-v1.2.3-darwin-arm64",
       checksumsUrl: "https://github.com/stubbedev/shell-lsp/releases/download/v1.2.3/SHA256SUMS",
     });
+  });
+
+  test("gives Windows assets the .exe suffix", () => {
+    assert.equal(releaseAsset("1.2.3", { os: "windows", arch: "amd64" }).name, "shell-lsp-v1.2.3-windows-amd64.exe");
   });
 
   test("recognises release asset names of any version", () => {

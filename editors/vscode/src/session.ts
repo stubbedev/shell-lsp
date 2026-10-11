@@ -55,6 +55,7 @@ export class Session {
   private async launch(): Promise<void> {
     const binary = await findServer(
       {
+        platform: process.platform,
         configuredPath: configuredPath(),
         pathEnv: process.env["PATH"],
         downloaded: this.asset === undefined ? undefined : join(this.storageDir, this.asset.name),
@@ -90,7 +91,7 @@ export class Session {
     const settings = "Open Settings";
     if (this.asset === undefined) {
       const choice = await window.showErrorMessage(
-        `There is no prebuilt ${serverName} for ${process.platform}-${process.arch} (Windows is not supported yet). Install ${serverName} manually and set ${pathSetting}.`,
+        `There is no prebuilt ${serverName} for ${process.platform}-${process.arch}. Install ${serverName} manually and set ${pathSetting}.`,
         settings,
       );
       if (choice === settings) {

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Windows: finds `shell-lsp.exe` on `PATH` and downloads the Windows release
+  binary.
 - First release of the extension: runs shell-lsp for shell scripts and Bats
   files, finds the server through `shellLsp.path`, `PATH` or a checksum-verified
   download of the matching release binary, exposes the server's settings, and

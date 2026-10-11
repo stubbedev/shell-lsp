@@ -4,7 +4,7 @@ import { serverName } from "./serverBinary.ts";
 const repository = "https://github.com/stubbedev/shell-lsp";
 const assetPrefix = `${serverName}-v`;
 
-export type Os = "linux" | "darwin";
+export type Os = "linux" | "darwin" | "windows";
 export type Arch = "amd64" | "arm64";
 
 export interface ReleaseTarget {
@@ -18,7 +18,7 @@ export interface ReleaseAsset {
   readonly checksumsUrl: string;
 }
 
-const oses: Readonly<Partial<Record<string, Os>>> = { linux: "linux", darwin: "darwin" };
+const oses: Readonly<Partial<Record<string, Os>>> = { linux: "linux", darwin: "darwin", win32: "windows" };
 const arches: Readonly<Partial<Record<string, Arch>>> = { x64: "amd64", arm64: "arm64" };
 
 export function releaseTarget(platform: string, arch: string): ReleaseTarget | undefined {
@@ -42,7 +42,8 @@ export function extensionVersion(manifest: unknown): string {
 
 export function releaseAsset(version: string, target: ReleaseTarget): ReleaseAsset {
   const base = `${repository}/releases/download/v${version}`;
-  const name = `${assetPrefix}${version}-${target.os}-${target.arch}`;
+  const suffix = target.os === "windows" ? ".exe" : "";
+  const name = `${assetPrefix}${version}-${target.os}-${target.arch}${suffix}`;
   return { name, url: `${base}/${name}`, checksumsUrl: `${base}/SHA256SUMS` };
 }
 

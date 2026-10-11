@@ -16,7 +16,7 @@ function probeOf(executables: readonly string[]): { probe: (path: string) => Pro
   };
 }
 
-const none: Lookup = { configuredPath: "", pathEnv: undefined, downloaded: undefined };
+const none: Lookup = { platform: "linux", configuredPath: "", pathEnv: undefined, downloaded: undefined };
 
 describe("findServer", () => {
   test("uses the configured path without searching PATH", async () => {
@@ -70,6 +70,19 @@ describe("findServer", () => {
       probe,
     );
     assert.deepEqual(found, { path: "/storage/shell-lsp-v1.0.0-linux-amd64", source: "download" });
+  });
+
+  test("looks for shell-lsp.exe in Windows PATH entries", async () => {
+    const { probe, probed } = probeOf(["C:\\tools\\shell-lsp.exe"]);
+    const found = await findServer({ ...none, platform: "win32", pathEnv: "relative;C:\\bin;C:\\tools" }, probe);
+    assert.deepEqual(found, { path: "C:\\tools\\shell-lsp.exe", source: "PATH" });
+    assert.deepEqual(probed, ["C:\\bin\\shell-lsp.exe", "C:\\tools\\shell-lsp.exe"]);
+  });
+
+  test("accepts an absolute Windows path in the setting", async () => {
+    const { probe } = probeOf(["D:\\shell-lsp.exe"]);
+    const found = await findServer({ ...none, platform: "win32", configuredPath: "D:\\shell-lsp.exe" }, probe);
+    assert.deepEqual(found, { path: "D:\\shell-lsp.exe", source: "setting" });
   });
 
   test("finds nothing when no candidate is executable", async () => {
