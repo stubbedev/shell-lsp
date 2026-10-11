@@ -47,7 +47,7 @@ func (offlineEnv) Options(context.Context, string, []string) ([]manpage.Option, 
 	return nil, manpage.ErrNoPage
 }
 
-func (offlineEnv) Subcommands(context.Context, string) (manpage.Listing, error) {
+func (offlineEnv) Subcommands(context.Context, string, []string) (manpage.Listing, error) {
 	return manpage.Listing{}, nil
 }
 
@@ -55,7 +55,7 @@ type offlineCommands struct{}
 
 func (offlineCommands) Describe(context.Context, string) (string, error) { return "external", nil }
 
-func (offlineCommands) Subcommand(context.Context, string, string) (manpage.Subcommand, error) {
+func (offlineCommands) Subcommand(context.Context, string, []string) (manpage.Subcommand, error) {
 	return manpage.Subcommand{}, manpage.ErrNoPage
 }
 

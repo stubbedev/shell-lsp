@@ -107,16 +107,25 @@ do the extra trick
 
 func withToolPages(t testing.TB) func(*Server) {
 	t.Helper()
-	dir := t.TempDir()
-	for name, page := range map[string]string{"tool.1": toolPage, "tool-extra.1": toolExtraPage} {
-		if err := os.MkdirAll(filepath.Join(dir, "man1"), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(dir, "man1", name), []byte(page), 0o600); err != nil {
+	return withPages(t, map[string]string{"tool": toolPage, "tool-extra": toolExtraPage})
+}
+
+func withPages(t testing.TB, pages map[string]string) func(*Server) {
+	t.Helper()
+	dir := filepath.Join(t.TempDir(), "man1")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, page := range pages {
+		if err := os.WriteFile(filepath.Join(dir, name+".1"), []byte(page), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
-	return func(s *Server) { s.usePages(manpage.NewLookup(dir, "")) }
+	return func(s *Server) { s.usePages(manpage.NewLookup(filepath.Dir(dir), "")) }
+}
+
+func stubPage(name string) string {
+	return ".TH " + strings.ToUpper(name) + " 1\n.SH NAME\n" + name + " \\- a test command\n"
 }
 
 func TestCompletionOffersSubcommandsAndTheirFlags(t *testing.T) {
@@ -152,6 +161,69 @@ func TestCompletionOffersSubcommandsAndTheirFlags(t *testing.T) {
 	extra := decodeResult[lsp.CompletionList](t, c.call("textDocument/completion", positionParams("file:///w/a.sh", 2, 12, "")))
 	if got := completionLabels(extra); !slices.Equal(got, []string{"-x"}) {
 		t.Errorf("tool extra flags = %v", got)
+	}
+}
+
+const (
+	boxPage = `.TH BOX 1
+.SH NAME
+box \- keep things in boxes
+.SH SYNOPSIS
+.B box
+[\fB\-C\fR \fIdir\fR] \fICOMMAND\fR
+.SH OPTIONS
+.TP
+\fB\-C\fR \fIdir\fR
+run in dir
+.SH COMMANDS
+.TP
+.BR box-remote (1)
+manage remotes
+`
+	boxRemotePage = `.TH BOX-REMOTE 1
+.SH NAME
+box-remote \- manage remote boxes
+.SH SYNOPSIS
+.B box remote add
+\fIname\fR
+.br
+.B box remote rename
+\fIold\fR \fInew\fR
+.SH COMMANDS
+.TP
+.B add \fIname\fR
+Add a remote box.
+.TP
+.B rename \fIold\fR \fInew\fR
+Rename a remote box.
+`
+)
+
+func TestCompletionAndHoverFollowNestedSubcommands(t *testing.T) {
+	t.Parallel()
+
+	c, _ := startClient(t, `{"capabilities": {"textDocument": {"diagnostic": {}}}}`, withPages(t, map[string]string{"box": boxPage, "box-remote": boxRemotePage}))
+	c.notify("initialized", `{}`)
+	c.notify("textDocument/didOpen", openParams("file:///w/a.sh", "box -C remote remote \nbox -C dir remote add origin\n"))
+
+	var nested lsp.CompletionList
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		nested = decodeResult[lsp.CompletionList](t, c.call("textDocument/completion", positionParams("file:///w/a.sh", 0, 21, "")))
+		if !nested.IsIncomplete {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("subcommands still loading: %v", completionLabels(nested))
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if got := completionLabels(nested); !slices.Equal(got, []string{"add", "rename"}) {
+		t.Fatalf("box remote subcommands = %v", got)
+	}
+	hover := decodeResult[lsp.Hover](t, c.call("textDocument/hover", positionParams("file:///w/a.sh", 1, 19, "")))
+	if !strings.Contains(hover.Contents.Value, "box remote add name") || !strings.Contains(hover.Contents.Value, "Add a remote box.") {
+		t.Errorf("hover over box remote add = %q", hover.Contents.Value)
 	}
 }
 

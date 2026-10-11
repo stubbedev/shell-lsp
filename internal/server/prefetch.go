@@ -61,13 +61,11 @@ func (p *prefetcher) enqueue(name string) bool {
 func (s *Server) prefetchCommands(tree *parser.Tree) {
 	queued := 0
 	for _, cmd := range tree.Commands {
-		if _, isFunction := tree.FunctionNamed(cmd.Name); isFunction {
-			continue
+		pages, err := s.commandPages(tree, cmd)
+		if err != nil {
+			s.logger.Warn("prefetching manual pages", "command", cmd.Name, "err", err)
 		}
-		if _, isBuiltin := shelldocs.Builtin(cmd.Name); isBuiltin {
-			continue
-		}
-		for _, page := range s.commandPages(cmd) {
+		for _, page := range pages {
 			if queued == prefetchPerDocument {
 				return
 			}
@@ -78,12 +76,19 @@ func (s *Server) prefetchCommands(tree *parser.Tree) {
 	}
 }
 
-func (s *Server) commandPages(cmd parser.Command) []string {
-	sub, ok := manpage.SubcommandWord(parser.ArgumentTexts(cmd.Args))
-	if page := cmd.Name + "-" + sub; ok && s.environment.pages.Has(page) {
-		return []string{cmd.Name, page}
+func (s *Server) commandPages(tree *parser.Tree, cmd parser.Command) ([]string, error) {
+	if shellOnly(tree, cmd.Name) {
+		return nil, nil
 	}
-	return []string{cmd.Name}
+	return s.environment.pages.Unloaded(cmd.Name, parser.ArgumentTexts(cmd.Args))
+}
+
+func shellOnly(tree *parser.Tree, name string) bool {
+	if _, isFunction := tree.FunctionNamed(name); isFunction {
+		return true
+	}
+	_, isBuiltin := shelldocs.Builtin(name)
+	return isBuiltin
 }
 
 func (s *Server) warmUp(ctx context.Context) {

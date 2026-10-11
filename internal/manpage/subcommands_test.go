@@ -175,17 +175,17 @@ func TestRenderCollectsSubcommands(t *testing.T) {
 	if got := subcommandNames(page.subcommands); !slices.Equal(got, []string{"start", "stop", "sync", "sync-all"}) {
 		t.Errorf("subcommands = %v", got)
 	}
-	start, _ := page.subcommand("start")
+	start, _ := findSubcommand(page.subcommands, "start")
 	if start.Summary != "Start one or more units." || start.Doc != "```\ntool start UNIT...\n```\n\nStart one or more units. Units are started in parallel." {
 		t.Errorf("start = %+v", start)
 	}
 	if !slices.Equal(optionLabels(start.Options), []string{"--force", "-v,--verbose"}) {
 		t.Errorf("start options = %v, want the parent page's options", optionLabels(start.Options))
 	}
-	if stop, _ := page.subcommand("stop"); !slices.Equal(optionLabels(stop.Options), []string{"--force"}) {
+	if stop, _ := findSubcommand(page.subcommands, "stop"); !slices.Equal(optionLabels(stop.Options), []string{"--force"}) {
 		t.Errorf("stop options = %v, want only the options nested under its entry", optionLabels(stop.Options))
 	}
-	if all, _ := page.subcommand("sync-all"); all.Doc != "```\ntool sync-all\n```\n\nSynchronise everything." {
+	if all, _ := findSubcommand(page.subcommands, "sync-all"); all.Doc != "```\ntool sync-all\n```\n\nSynchronise everything." {
 		t.Errorf("sync-all = %+v", all)
 	}
 	if !slices.Equal(page.Description, []string{"Run this:"}) {
@@ -203,12 +203,87 @@ func TestRenderCollectsMdocSubcommands(t *testing.T) {
 	if got := subcommandNames(page.subcommands); !slices.Equal(got, []string{"add", "list"}) {
 		t.Fatalf("subcommands = %v", got)
 	}
-	add, _ := page.subcommand("add")
+	add, _ := findSubcommand(page.subcommands, "add")
 	if add.Summary != "Add files to the archive." || !strings.Contains(add.Doc, "archive add [-f] file ...") {
 		t.Errorf("add = %+v", add)
 	}
 	if !slices.Equal(optionLabels(add.Options), []string{"-f"}) {
 		t.Errorf("add options = %v", optionLabels(add.Options))
+	}
+}
+
+const pkgPage = `.TH PKG 1
+.SH NAME
+pkg \- manage packages
+.SH SYNOPSIS
+.B pkg
+\fICOMMAND\fR [\fIargs\fR]
+.SH COMMANDS
+.TP
+.B repo \fICOMMAND\fR
+Manage repositories.
+.RS
+.TP
+.B add \fIname\fR \fIurl\fR
+Add a repository.
+.TP
+.B remove \fIname\fR
+Remove a repository.
+.RE
+.TP
+.B install \fIpackage\fR
+Install a package.
+.RS
+.TP
+.B true
+A value, not a command.
+.TP
+.B false
+Another value.
+.RE
+.SH OPTIONS
+.TP
+.B \-q
+be quiet
+`
+
+func TestRenderCollectsSubcommandsNestedInAnEntry(t *testing.T) {
+	t.Parallel()
+
+	page, err := Render([]byte(pkgPage))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := subcommandNames(page.subcommands); !slices.Equal(got, []string{"install", "repo"}) {
+		t.Fatalf("subcommands = %v", got)
+	}
+	repo, _ := findSubcommand(page.subcommands, "repo")
+	if got := subcommandNames(repo.Subcommands); !slices.Equal(got, []string{"add", "remove"}) {
+		t.Errorf("repo subcommands = %v", got)
+	}
+	if add, _ := findSubcommand(repo.Subcommands, "add"); add.Doc != "```\npkg repo add name url\n```\n\nAdd a repository." || !slices.Equal(optionLabels(add.Options), []string{"-q"}) {
+		t.Errorf("repo add = %+v", add)
+	}
+	if install, _ := findSubcommand(page.subcommands, "install"); len(install.Subcommands) != 0 {
+		t.Errorf("values listed under install became subcommands: %v", subcommandNames(install.Subcommands))
+	}
+}
+
+func TestRenderCollectsSubcommandsFromSubsectionHeadings(t *testing.T) {
+	t.Parallel()
+
+	page, err := Render([]byte(netLinkPage))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := subcommandNames(page.subcommands); !slices.Equal(got, []string{"add", "set", "show"}) {
+		t.Fatalf("subcommands = %v, want the headings that run net link", got)
+	}
+	if show, _ := findSubcommand(page.subcommands, "show"); show.Summary != "display device attributes" {
+		t.Errorf("show = %+v", show)
+	}
+	if !slices.Equal(page.Description, []string(nil)) {
+		t.Errorf("Description = %q, want the headings kept out of the prose", page.Description)
 	}
 }
 
@@ -239,21 +314,21 @@ func TestLookupListsSubcommandsLazily(t *testing.T) {
 	t.Parallel()
 
 	l := toolLookup(t)
-	listing, err := l.Subcommands(t.Context(), "tool")
+	listing, err := l.Subcommands(t.Context(), "tool", nil)
 	if err != nil || len(listing.Subcommands) != 0 || !slices.Equal(listing.Unloaded, []string{"tool"}) {
 		t.Fatalf("Subcommands before loading = %+v, %v; want the parent page requested", listing, err)
 	}
 	if _, err := l.Page(t.Context(), "tool"); err != nil {
 		t.Fatal(err)
 	}
-	listing, err = l.Subcommands(t.Context(), "tool")
+	listing, err = l.Subcommands(t.Context(), "tool", nil)
 	if err != nil || !slices.Equal(listing.Unloaded, []string{"tool-extra", "tool-helper"}) {
 		t.Fatalf("Subcommands = %+v, %v; want the unlisted pages requested", listing, err)
 	}
 	for _, name := range listing.Unloaded {
 		_, _ = l.Page(t.Context(), name)
 	}
-	listing, err = l.Subcommands(t.Context(), "tool")
+	listing, err = l.Subcommands(t.Context(), "tool", nil)
 	if err != nil || len(listing.Unloaded) != 0 {
 		t.Fatalf("Subcommands after loading = %+v, %v", listing, err)
 	}
@@ -264,7 +339,7 @@ func TestLookupListsSubcommandsLazily(t *testing.T) {
 	if extra.Summary != "extra widget tricks" || !strings.HasPrefix(extra.Doc, "**tool-extra - extra widget tricks**") {
 		t.Errorf("extra = %+v", extra)
 	}
-	if listing, _ := l.Subcommands(t.Context(), "nonexistent"); len(listing.Subcommands)+len(listing.Unloaded) != 0 {
+	if listing, _ := l.Subcommands(t.Context(), "nonexistent", nil); len(listing.Subcommands)+len(listing.Unloaded) != 0 {
 		t.Errorf("Subcommands(nonexistent) = %+v", listing)
 	}
 }
@@ -273,23 +348,23 @@ func TestLookupResolvesSubcommands(t *testing.T) {
 	t.Parallel()
 
 	l := toolLookup(t)
-	start, err := l.Subcommand(t.Context(), "tool", "start")
+	start, err := l.Subcommand(t.Context(), "tool", []string{"start"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if start.Summary != "start widget units" || !strings.Contains(start.Doc, "tool start [-w] UNIT...") || !slices.Equal(optionLabels(start.Options), []string{"-w,--wait"}) {
 		t.Errorf("start = %+v, want its own page", start)
 	}
-	stop, err := l.Subcommand(t.Context(), "tool", "stop")
+	stop, err := l.Subcommand(t.Context(), "tool", []string{"stop"})
 	if err != nil || stop.Summary != "Stop units." || !slices.Equal(optionLabels(stop.Options), []string{"--force"}) {
 		t.Errorf("stop = %+v, %v; want the parent's entry", stop, err)
 	}
-	extra, err := l.Subcommand(t.Context(), "tool", "extra")
+	extra, err := l.Subcommand(t.Context(), "tool", []string{"extra"})
 	if err != nil || !slices.Equal(optionLabels(extra.Options), []string{"-x"}) {
 		t.Errorf("extra = %+v, %v; want the verified unlisted page", extra, err)
 	}
 	for _, name := range []string{"helper", "Mixed", "missing", "-v", ""} {
-		if _, err := l.Subcommand(t.Context(), "tool", name); !errors.Is(err, ErrNoPage) {
+		if _, err := l.Subcommand(t.Context(), "tool", []string{name}); !errors.Is(err, ErrNoPage) {
 			t.Errorf("Subcommand(tool, %q) error = %v, want ErrNoPage", name, err)
 		}
 	}
@@ -319,24 +394,6 @@ func TestLookupOptionsFollowTheSubcommand(t *testing.T) {
 	}
 }
 
-func TestSubcommandWord(t *testing.T) {
-	t.Parallel()
-
-	for _, tc := range []struct {
-		args []string
-		want string
-		ok   bool
-	}{
-		{nil, "", false},
-		{[]string{"-v", "--all"}, "", false},
-		{[]string{"-v", "checkout", "-b"}, "checkout", true},
-	} {
-		if got, ok := SubcommandWord(tc.args); got != tc.want || ok != tc.ok {
-			t.Errorf("SubcommandWord(%q) = %q, %t", tc.args, got, ok)
-		}
-	}
-}
-
 func TestRealSubcommands(t *testing.T) {
 	t.Parallel()
 
@@ -347,7 +404,7 @@ func TestRealSubcommands(t *testing.T) {
 	if _, err := l.Page(t.Context(), "systemctl"); err != nil {
 		t.Fatal(err)
 	}
-	listing, err := l.Subcommands(t.Context(), "systemctl")
+	listing, err := l.Subcommands(t.Context(), "systemctl", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -369,7 +426,7 @@ func TestRealSubcommandPage(t *testing.T) {
 	if !l.Has("git-checkout") {
 		t.Skip("no git-checkout manual page installed")
 	}
-	checkout, err := l.Subcommand(t.Context(), "git", "checkout")
+	checkout, err := l.Subcommand(t.Context(), "git", []string{"checkout"})
 	if err != nil {
 		t.Fatal(err)
 	}

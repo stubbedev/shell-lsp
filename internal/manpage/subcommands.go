@@ -1,11 +1,10 @@
 package manpage
 
 import (
-	"context"
-	"errors"
-	"fmt"
 	"slices"
 	"strings"
+
+	"github.com/stubbedev/shell-lsp/internal/getopt"
 )
 
 const (
@@ -19,25 +18,35 @@ var (
 )
 
 type Subcommand struct {
-	Name    string
-	Summary string
-	Doc     string
-	Options []Option
-}
-
-type Listing struct {
+	Name        string
+	Summary     string
+	Doc         string
+	Options     []Option
 	Subcommands []Subcommand
-	Unloaded    []string
 }
 
-func SubcommandWord(args []string) (string, bool) {
-	for _, arg := range args {
-		if !strings.HasPrefix(arg, "-") {
-			return arg, true
+func (s *Subcommand) arity(name string) getopt.Arity {
+	for _, o := range s.Options {
+		if !slices.Contains(o.Names, name) {
+			continue
 		}
+		if o.Valued {
+			return getopt.Valued
+		}
+		return getopt.Flag
 	}
-	return "", false
+	return getopt.Unknown
 }
+
+func findSubcommand(subs []Subcommand, name string) (Subcommand, bool) {
+	i, found := slices.BinarySearchFunc(subs, name, func(s Subcommand, name string) int { return strings.Compare(s.Name, name) })
+	if !found {
+		return Subcommand{}, false
+	}
+	return subs[i], true
+}
+
+func bySubcommandName(a, b Subcommand) int { return strings.Compare(a.Name, b.Name) }
 
 func splitName(line string) ([]string, string) {
 	cut, tagline := len(line), ""
@@ -55,31 +64,77 @@ func splitName(line string) ([]string, string) {
 	return names, tagline
 }
 
+type entryScope struct {
+	names      []string
+	invocation string
+	fallback   []Option
+}
+
+type collected struct {
+	subs []Subcommand
+	seen map[string]bool
+}
+
+func (c *collected) add(subs []Subcommand) {
+	for _, sub := range subs {
+		if !c.seen[sub.Name] {
+			c.seen[sub.Name] = true
+			c.subs = append(c.subs, sub)
+		}
+	}
+}
+
+func (c *collected) sorted(usage []string) []Subcommand {
+	if !takesSubcommand(usage, c.seen) {
+		return nil
+	}
+	slices.SortFunc(c.subs, bySubcommandName)
+	return c.subs
+}
+
 func collectSubcommands(doc document, names, synopsis []string, fallback []Option) []Subcommand {
 	if len(names) == 0 {
 		return nil
 	}
-	var subs []Subcommand
-	seen := map[string]bool{}
+	scope := entryScope{names: names, invocation: invocation(names[0], synopsis), fallback: fallback}
+	found := collected{seen: map[string]bool{}}
 	for _, s := range doc.sections {
-		if !strings.Contains(s.name, commandSection) {
-			continue
+		if strings.Contains(s.name, commandSection) {
+			found.add(scope.listed(s.blocks))
 		}
-		for _, sub := range sectionSubcommands(s.blocks, names, fallback) {
-			if !seen[sub.Name] {
-				seen[sub.Name] = true
-				subs = append(subs, sub)
-			}
-		}
+		found.add(scope.headed(s.blocks))
 	}
-	if !takesSubcommand(synopsis, seen) {
-		return nil
-	}
-	slices.SortFunc(subs, bySubcommandName)
-	return subs
+	return found.sorted(synopsis)
 }
 
-func sectionSubcommands(blocks []block, names []string, fallback []Option) []Subcommand {
+func invocation(name string, synopsis []string) string {
+	for _, line := range synopsis {
+		fields := strings.Fields(line)
+		if n := dashedPrefix(fields, name); n > 0 {
+			return strings.Join(fields[:n], " ")
+		}
+	}
+	return name
+}
+
+func dashedPrefix(fields []string, name string) int {
+	rest := name
+	for i, field := range fields {
+		after, ok := strings.CutPrefix(rest, field)
+		if !ok {
+			return 0
+		}
+		if after == "" {
+			return i + 1
+		}
+		if rest, ok = strings.CutPrefix(after, "-"); !ok {
+			return 0
+		}
+	}
+	return 0
+}
+
+func (s entryScope) listed(blocks []block) []Subcommand {
 	level := -1
 	for _, b := range blocks {
 		if b.kind == taggedBlock && (level < 0 || b.depth < level) {
@@ -88,41 +143,87 @@ func sectionSubcommands(blocks []block, names []string, fallback []Option) []Sub
 	}
 	var subs []Subcommand
 	for i, b := range blocks {
-		name, usage, ok := commandHead(b, names)
-		if !ok || b.depth != level {
+		if b.kind != taggedBlock || b.depth != level {
 			continue
 		}
-		subs = append(subs, Subcommand{
+		name, usage, ok := s.head(b.tag, false)
+		if !ok {
+			continue
+		}
+		body := entryBody(blocks[i+1:], level)
+		sub := Subcommand{
 			Name:    name,
 			Summary: firstSentence(b.text),
 			Doc:     entryDoc(usage, b.text),
-			Options: firstOptions(appendOptions(nil, entryBody(blocks[i+1:], level), map[string]bool{}), fallback),
+			Options: first(appendOptions(nil, body, map[string]bool{}), s.fallback),
+		}
+		sub.Subcommands = s.within(sub).nested(body, usage)
+		subs = append(subs, sub)
+	}
+	return subs
+}
+
+func (s entryScope) within(sub Subcommand) entryScope {
+	return entryScope{names: []string{s.names[0] + "-" + sub.Name, sub.Name}, invocation: s.invocation + " " + sub.Name, fallback: sub.Options}
+}
+
+func (s entryScope) nested(body []block, usage string) []Subcommand {
+	found := collected{seen: map[string]bool{}}
+	found.add(s.listed(body))
+	return found.sorted([]string{usage})
+}
+
+func (s entryScope) headed(blocks []block) []Subcommand {
+	var subs []Subcommand
+	for i, b := range blocks {
+		if b.kind != headingBlock {
+			continue
+		}
+		heads, summary := splitName(b.text)
+		if len(heads) != 1 {
+			continue
+		}
+		name, usage, ok := s.head(heads[0], true)
+		if !ok {
+			continue
+		}
+		body := blocks[i+1:]
+		if end := slices.IndexFunc(body, func(b block) bool { return b.kind == headingBlock }); end >= 0 {
+			body = body[:end]
+		}
+		subs = append(subs, Subcommand{
+			Name:    name,
+			Summary: summary,
+			Doc:     entryDoc(usage, summary),
+			Options: first(appendOptions(nil, body, map[string]bool{}), s.fallback),
 		})
 	}
 	return subs
 }
 
-func commandHead(b block, names []string) (string, string, bool) {
-	if b.kind != taggedBlock {
-		return "", "", false
-	}
-	fields := strings.Fields(b.tag)
+func (s entryScope) head(text string, prefixed bool) (string, string, bool) {
+	fields := strings.Fields(text)
 	if len(fields) == 0 {
 		return "", "", false
 	}
-	word, referenced := splitReference(strings.TrimSuffix(fields[0], ","))
-	usage := names[0] + " " + b.tag
-	switch {
-	case referenced:
-		word = subcommandOf(word, names)
-		usage = names[0] + " " + word
-	case slices.Contains(names, word):
-		word, usage = "", b.tag
-		if len(fields) > 1 {
-			word = strings.TrimSuffix(fields[1], ",")
+	for _, name := range s.names {
+		switch n := dashedPrefix(fields, name); {
+		case n == len(fields):
+			return "", "", false
+		case n > 0:
+			word := strings.TrimSuffix(fields[n], ",")
+			return word, text, bareWord.MatchString(word)
 		}
 	}
-	return word, usage, bareWord.MatchString(word)
+	if prefixed {
+		return "", "", false
+	}
+	word, referenced := splitReference(strings.TrimSuffix(fields[0], ","))
+	if referenced {
+		word = subcommandOf(word, s.names)
+		return word, s.invocation + " " + word, bareWord.MatchString(word)
+	}
+	return word, s.invocation + " " + text, bareWord.MatchString(word)
 }
 
 func subcommandOf(page string, names []string) string {
@@ -135,16 +236,18 @@ func subcommandOf(page string, names []string) string {
 }
 
 func entryBody(blocks []block, level int) []block {
-	end := slices.IndexFunc(blocks, func(b block) bool { return b.kind == taggedBlock && b.depth <= level })
+	end := slices.IndexFunc(blocks, func(b block) bool {
+		return b.kind == headingBlock || b.kind == taggedBlock && b.depth <= level
+	})
 	if end < 0 {
 		return blocks
 	}
 	return blocks[:end]
 }
 
-func takesSubcommand(synopsis []string, names map[string]bool) bool {
+func takesSubcommand(usage []string, names map[string]bool) bool {
 	mentioned := map[string]bool{}
-	for _, line := range synopsis {
+	for _, line := range usage {
 		for field := range strings.FieldsSeq(line) {
 			word := strings.Trim(field, "[]{}<>().|,")
 			if slices.Contains(commandPlaceholders, strings.ToLower(word)) {
@@ -173,128 +276,31 @@ func entryDoc(usage, text string) string {
 	return doc + "\n\n" + text
 }
 
-func firstOptions(lists ...[]Option) []Option {
-	for _, options := range lists {
-		if len(options) > 0 {
-			return options
+func first[T any](lists ...[]T) []T {
+	for _, list := range lists {
+		if len(list) > 0 {
+			return list
 		}
 	}
 	return nil
 }
 
-func bySubcommandName(a, b Subcommand) int { return strings.Compare(a.Name, b.Name) }
-
-func (p Page) subcommand(name string) (Subcommand, bool) {
-	i, found := slices.BinarySearchFunc(p.subcommands, name, func(s Subcommand, name string) int { return strings.Compare(s.Name, name) })
-	if !found {
-		return Subcommand{}, false
-	}
-	return p.subcommands[i], true
-}
-
-func (p Page) invokes(command, sub string) bool {
+func (p Page) invokes(path []string, sub string) bool {
 	for _, line := range p.Synopsis {
 		fields := strings.Fields(line)
-		if len(fields) > 1 && fields[0] == command && slices.Contains(fields[1:], sub) {
+		if len(fields) > len(path) && slices.Equal(fields[:len(path)], path) && slices.Contains(fields[len(path):], sub) {
 			return true
 		}
 	}
 	return false
 }
 
-func fromPage(name string, page Page, listed Subcommand, parent Page) Subcommand {
+func fromPage(name string, page Page, listed, parent Subcommand) Subcommand {
 	return Subcommand{
-		Name:    name,
-		Summary: page.tagline,
-		Doc:     page.Markdown(),
-		Options: firstOptions(page.options, listed.Options, parent.options),
+		Name:        name,
+		Summary:     page.tagline,
+		Doc:         page.Markdown(),
+		Options:     first(page.options, listed.Options, parent.Options),
+		Subcommands: first(page.subcommands, listed.Subcommands),
 	}
-}
-
-func (l *Lookup) Subcommands(ctx context.Context, command string) (Listing, error) {
-	l.mu.Lock()
-	memo, ok := l.listings[command]
-	l.mu.Unlock()
-	if ok {
-		return Listing{Subcommands: memo}, nil
-	}
-	if err := ctx.Err(); err != nil {
-		return Listing{}, err
-	}
-	var parent Page
-	if l.Has(command) {
-		hit, loaded := l.cached(command)
-		if !loaded {
-			return Listing{Unloaded: []string{command}}, nil
-		}
-		if hit.err != nil && !errors.Is(hit.err, ErrNoPage) {
-			return Listing{}, hit.err
-		}
-		parent = hit.page
-	}
-	listing := Listing{Subcommands: slices.Clone(parent.subcommands)}
-	prefix := command + "-"
-	for _, pageName := range l.library.prefixed(prefix) {
-		name := pageName[len(prefix):]
-		if _, listed := parent.subcommand(name); listed || !bareWord.MatchString(name) {
-			continue
-		}
-		hit, loaded := l.cached(pageName)
-		switch {
-		case !loaded:
-			listing.Unloaded = append(listing.Unloaded, pageName)
-		case hit.err == nil && hit.page.invokes(command, name):
-			listing.Subcommands = append(listing.Subcommands, fromPage(name, hit.page, Subcommand{}, parent))
-		case hit.err != nil && !errors.Is(hit.err, ErrNoPage):
-			return Listing{}, hit.err
-		}
-	}
-	slices.SortFunc(listing.Subcommands, bySubcommandName)
-	if len(listing.Unloaded) == 0 {
-		l.mu.Lock()
-		l.listings[command] = listing.Subcommands
-		l.mu.Unlock()
-	}
-	return listing, nil
-}
-
-func (l *Lookup) Subcommand(ctx context.Context, command, name string) (Subcommand, error) {
-	if !bareWord.MatchString(name) {
-		return Subcommand{}, fmt.Errorf("%w: %q is not a subcommand name", ErrNoPage, name)
-	}
-	parent, err := l.Page(ctx, command)
-	if err != nil && !errors.Is(err, ErrNoPage) {
-		return Subcommand{}, err
-	}
-	listed, isListed := parent.subcommand(name)
-	if pageName := command + "-" + name; l.Has(pageName) {
-		page, err := l.Page(ctx, pageName)
-		if err != nil && !errors.Is(err, ErrNoPage) {
-			return Subcommand{}, err
-		}
-		if err == nil && (isListed || page.invokes(command, name)) {
-			return fromPage(name, page, listed, parent), nil
-		}
-	}
-	if isListed {
-		return listed, nil
-	}
-	return Subcommand{}, fmt.Errorf("%w: %s %s is not a documented subcommand", ErrNoPage, command, name)
-}
-
-func (l *Lookup) Options(ctx context.Context, command string, args []string) ([]Option, error) {
-	if name, ok := SubcommandWord(args); ok {
-		sub, err := l.Subcommand(ctx, command, name)
-		if err == nil {
-			return sub.Options, nil
-		}
-		if !errors.Is(err, ErrNoPage) {
-			return nil, err
-		}
-	}
-	page, err := l.Page(ctx, command)
-	if err != nil {
-		return nil, err
-	}
-	return page.Options(), nil
 }

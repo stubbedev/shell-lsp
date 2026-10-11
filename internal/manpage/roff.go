@@ -13,6 +13,7 @@ const (
 	paragraphBlock blockKind = iota
 	taggedBlock
 	literalBlock
+	headingBlock
 )
 
 type block struct {

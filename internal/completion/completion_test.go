@@ -45,8 +45,8 @@ func (f fakeEnv) Options(_ context.Context, command string, args []string) ([]ma
 	return nil, manpage.ErrNoPage
 }
 
-func (f fakeEnv) Subcommands(_ context.Context, command string) (manpage.Listing, error) {
-	return f.subcommands[command], nil
+func (f fakeEnv) Subcommands(_ context.Context, command string, args []string) (manpage.Listing, error) {
+	return f.subcommands[strings.Join(append([]string{command}, args...), " ")], nil
 }
 
 var env = fakeEnv{
@@ -59,14 +59,27 @@ var env = fakeEnv{
 		"/home/u/scripts": {{Name: "x.sh"}},
 	},
 	options: map[string][]manpage.Option{
-		"grep":            {{Names: []string{"-E", "--extended-regexp"}, Doc: "Extended regexps."}, {Names: []string{"-i", "--ignore-case"}, Doc: "Ignore case."}},
-		"git -q checkout": {{Names: []string{"-b"}, Doc: "Create a branch."}},
+		"grep":                  {{Names: []string{"-E", "--extended-regexp"}, Doc: "Extended regexps."}, {Names: []string{"-i", "--ignore-case"}, Doc: "Ignore case."}},
+		"git -q checkout":       {{Names: []string{"-b"}, Doc: "Create a branch."}},
+		"git -C dir remote add": {{Names: []string{"-t"}, Doc: "Track a branch."}},
 	},
 	subcommands: map[string]manpage.Listing{
 		"git": {Subcommands: []manpage.Subcommand{
 			{Name: "checkout", Summary: "Switch branches.", Doc: "**git-checkout**"},
 			{Name: "commit", Summary: "Record changes.", Doc: "**git-commit**"},
 		}},
+		"git -q": {Subcommands: []manpage.Subcommand{
+			{Name: "checkout", Summary: "Switch branches.", Doc: "**git-checkout**"},
+			{Name: "commit", Summary: "Record changes.", Doc: "**git-commit**"},
+		}},
+		"git -C dir remote": {Subcommands: []manpage.Subcommand{
+			{Name: "add", Summary: "Add a remote.", Doc: "**git remote add**"},
+			{Name: "rename", Summary: "Rename a remote.", Doc: "**git remote rename**"},
+		}},
+		"git remote": {
+			Subcommands: []manpage.Subcommand{{Name: "add", Summary: "Add a remote.", Doc: "**git remote add**"}},
+			Unloaded:    []string{"git-remote-ext"},
+		},
 		"docker": {Unloaded: []string{"docker-run"}},
 	},
 }
@@ -263,6 +276,21 @@ func TestSubcommands(t *testing.T) {
 	}
 	if plain := complete(t, dialect.Bash, "ls ‸"); plain.Incomplete || !slices.Contains(labels(plain), "lib/") {
 		t.Errorf("command without subcommands = %v, incomplete %t", labels(plain), plain.Incomplete)
+	}
+}
+
+func TestNestedSubcommands(t *testing.T) {
+	t.Parallel()
+
+	if got := labels(complete(t, dialect.Bash, "git -C dir remote ‸")); !slices.Equal(got, []string{"add", "rename"}) {
+		t.Errorf("subcommands of git remote after a global option = %v", got)
+	}
+	if got := labels(complete(t, dialect.Bash, "git -C dir remote add -‸")); !slices.Equal(got, []string{"-t"}) {
+		t.Errorf("flags of git remote add = %v", got)
+	}
+	loading := complete(t, dialect.Bash, "git remote a‸")
+	if !slices.Equal(labels(loading), []string{"add"}) || !loading.Incomplete {
+		t.Errorf("subcommands with pages still loading = %v, incomplete %t", labels(loading), loading.Incomplete)
 	}
 }
 

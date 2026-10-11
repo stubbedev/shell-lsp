@@ -95,8 +95,8 @@ func (e shellEnvironment) Options(ctx context.Context, command string, args []st
 	return e.pages.Options(ctx, command, args)
 }
 
-func (e shellEnvironment) Subcommands(ctx context.Context, command string) (manpage.Listing, error) {
-	listing, err := e.pages.Subcommands(ctx, command)
+func (e shellEnvironment) Subcommands(ctx context.Context, command string, args []string) (manpage.Listing, error) {
+	listing, err := e.pages.Subcommands(ctx, command, args)
 	for _, name := range listing.Unloaded {
 		e.prefetch.enqueue(name)
 	}

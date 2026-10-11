@@ -17,6 +17,14 @@ var (
 	crossReference = regexp.MustCompile(`^([^()]+)\([0-9][A-Za-z]*\)$`)
 )
 
+type headingKind uint8
+
+const (
+	noHeading headingKind = iota
+	sectionHeading
+	subsectionHeading
+)
+
 type listKind uint8
 
 const (
@@ -39,7 +47,7 @@ type builder struct {
 	mdoc       bool
 	name       string
 	lists      []listKind
-	headingDue bool
+	headingDue headingKind
 	indent     int
 	depth      int
 }
@@ -117,15 +125,19 @@ func (b *builder) line(line string) {
 }
 
 func (b *builder) textLine(line string) {
-	if !b.nofill && b.tagLines == 0 && !b.headingDue && (line[0] == ' ' || line[0] == '\t') {
+	if !b.nofill && b.tagLines == 0 && b.headingDue == noHeading && (line[0] == ' ' || line[0] == '\t') {
 		b.promoteHeading()
 	}
 	b.appendRendered(b.st.inline(line))
 }
 
 func (b *builder) appendRendered(text string) {
-	if b.headingDue {
+	switch b.headingDue {
+	case sectionHeading:
 		b.startSection(text)
+		return
+	case subsectionHeading:
+		b.startSubsection(text)
 		return
 	}
 	if b.tagLines > 0 {
@@ -179,8 +191,16 @@ func (b *builder) flush() {
 
 func (b *builder) startSection(name string) {
 	b.flush()
-	b.headingDue, b.indent = false, 0
+	b.headingDue, b.indent = noHeading, 0
 	b.doc.sections = append(b.doc.sections, section{name: strings.ToUpper(strings.TrimSpace(name))})
+}
+
+func (b *builder) startSubsection(name string) {
+	b.flush()
+	b.headingDue, b.indent = noHeading, 0
+	b.kind = headingBlock
+	b.appendWords(&b.text, name)
+	b.flush()
 }
 
 func (b *builder) promoteHeading() {
@@ -312,7 +332,7 @@ func (b *builder) manRequest(name, rest string) {
 	case "SH":
 		if len(args) == 0 {
 			b.flush()
-			b.headingDue = true
+			b.headingDue = sectionHeading
 			return
 		}
 		b.startSection(b.st.inline(strings.Join(args, " ")))
@@ -322,8 +342,12 @@ func (b *builder) manRequest(name, rest string) {
 			b.textLine(strings.Join(args, " "))
 		}
 	case "SS":
-		b.flush()
-		b.indent = 0
+		if len(args) == 0 {
+			b.flush()
+			b.headingDue, b.indent = subsectionHeading, 0
+			return
+		}
+		b.startSubsection(b.st.inline(strings.Join(args, " ")))
 	case "RE":
 		b.flush()
 		b.indent = max(b.indent-1, 0)

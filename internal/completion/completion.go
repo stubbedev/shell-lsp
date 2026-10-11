@@ -49,7 +49,7 @@ type Environment interface {
 	WorkDir() (string, error)
 	EnvironmentNames() []string
 	Options(ctx context.Context, command string, args []string) ([]manpage.Option, error)
-	Subcommands(ctx context.Context, command string) (manpage.Listing, error)
+	Subcommands(ctx context.Context, command string, args []string) (manpage.Listing, error)
 }
 
 type Input struct {
@@ -241,44 +241,35 @@ var commandTakers = map[string]bool{
 }
 
 func (c completer) argument(ctx context.Context) (Result, error) {
+	return c.argumentOf(ctx, c.site.command, c.site.previous)
+}
+
+func (c completer) argumentOf(ctx context.Context, command string, args []string) (Result, error) {
 	last := ""
-	if n := len(c.site.previous); n > 0 {
-		last = c.site.previous[n-1]
+	if n := len(args); n > 0 {
+		last = args[n-1]
 	}
 	switch {
-	case c.site.command == "set" && (last == "-o" || last == "+o"):
+	case command == "set" && (last == "-o" || last == "+o"):
 		return Result{Items: c.options(shelldocs.SetOptions)}, nil
-	case c.site.command == "shopt":
+	case command == "shopt":
 		return Result{Items: c.options(shelldocs.Shopt)}, nil
-	case c.site.command == "setopt" || c.site.command == "unsetopt":
+	case command == "setopt" || command == "unsetopt":
 		return Result{Items: c.options(shelldocs.Setopt)}, nil
 	case strings.HasPrefix(c.site.prefix, "-"):
-		return c.flags(ctx)
-	case c.site.command == "unset" || c.site.command == "export" || c.site.command == "readonly":
+		return c.flags(ctx, command, args)
+	case command == "unset" || command == "export" || command == "readonly":
 		return Result{Items: c.variables()}, nil
-	case commandTakers[c.site.command] && !strings.Contains(c.site.prefix, "/"):
+	case commandTakers[command] && !strings.Contains(c.site.prefix, "/"):
 		return c.commands(false), nil
-	case c.site.command == "cd" || c.site.command == "pushd":
+	case command == "cd" || command == "pushd":
 		return c.paths(true)
 	}
-	return c.positional(ctx)
+	return c.positional(ctx, command, args)
 }
 
-func (c completer) positional(ctx context.Context) (Result, error) {
-	if _, chosen := manpage.SubcommandWord(c.site.previous); chosen {
-		return c.paths(false)
-	}
-	subcommands, err := c.subcommands(ctx)
-	if err != nil || len(subcommands.Items) > 0 {
-		return subcommands, err
-	}
-	paths, err := c.paths(false)
-	paths.Incomplete = paths.Incomplete || subcommands.Incomplete
-	return paths, err
-}
-
-func (c completer) subcommands(ctx context.Context) (Result, error) {
-	listing, err := c.Env.Subcommands(ctx, c.site.command)
+func (c completer) positional(ctx context.Context, command string, args []string) (Result, error) {
+	listing, err := c.Env.Subcommands(ctx, command, args)
 	if err != nil {
 		return Result{}, err
 	}
@@ -292,7 +283,13 @@ func (c completer) subcommands(ctx context.Context) (Result, error) {
 		it.Documentation = sub.Doc
 		items = append(items, it)
 	}
-	return Result{Items: items, Incomplete: len(listing.Unloaded) > 0}, nil
+	incomplete := len(listing.Unloaded) > 0
+	if len(items) > 0 {
+		return Result{Items: items, Incomplete: incomplete}, nil
+	}
+	paths, err := c.paths(false)
+	paths.Incomplete = paths.Incomplete || incomplete
+	return paths, err
 }
 
 func (c completer) options(set shelldocs.OptionSet) []Item {
@@ -308,8 +305,8 @@ func (c completer) options(set shelldocs.OptionSet) []Item {
 	return items
 }
 
-func (c completer) flags(ctx context.Context) (Result, error) {
-	options, err := c.Env.Options(ctx, c.site.command, c.site.previous)
+func (c completer) flags(ctx context.Context, command string, args []string) (Result, error) {
+	options, err := c.Env.Options(ctx, command, args)
 	if errors.Is(err, manpage.ErrNoPage) {
 		return Result{}, nil
 	}

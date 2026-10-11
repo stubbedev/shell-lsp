@@ -21,7 +21,7 @@ const snippetWidth = 80
 
 type Commands interface {
 	Describe(ctx context.Context, name string) (string, error)
-	Subcommand(ctx context.Context, command, name string) (manpage.Subcommand, error)
+	Subcommand(ctx context.Context, command string, args []string) (manpage.Subcommand, error)
 	Options(ctx context.Context, command string, args []string) ([]manpage.Option, error)
 }
 
@@ -242,7 +242,7 @@ func (h hoverer) function(fn parser.Function) string {
 func (h hoverer) command(ctx context.Context) (Result, bool, error) {
 	for _, cmd := range h.Tree.Commands {
 		if cmd.NameSpan.Covers(h.Offset) {
-			return h.commandName(ctx, cmd)
+			return h.commandName(ctx, cmd.Name, cmd.NameSpan)
 		}
 		if r, ok, err := h.argument(ctx, cmd); ok || err != nil {
 			return r, ok, err
@@ -255,26 +255,25 @@ func (h hoverer) argument(ctx context.Context, cmd parser.Command) (Result, bool
 	if h.Commands == nil || !cmd.Span.Covers(h.Offset) || h.isFunction(cmd.Name) {
 		return Result{}, false, nil
 	}
-	for i, arg := range cmd.Args {
+	at := slices.IndexFunc(cmd.Args, func(arg *syntax.Word) bool {
 		span, ok := h.Tree.NodeSpan(arg)
-		if !ok || !span.Covers(h.Offset) {
-			continue
-		}
-		word, literal := parser.Literal(arg)
-		if !literal {
-			return Result{}, false, nil
-		}
-		before := parser.ArgumentTexts(cmd.Args[:i])
-		if strings.HasPrefix(word, "-") {
-			return h.flag(ctx, cmd.Name, before, word, span)
-		}
-		if _, chosen := manpage.SubcommandWord(before); chosen {
-			return Result{}, false, nil
-		}
-		sub, err := h.Commands.Subcommand(ctx, cmd.Name, word)
-		return found(Result{Markdown: sub.Doc, Span: span}, err)
+		return ok && span.Covers(h.Offset)
+	})
+	if at < 0 {
+		return Result{}, false, nil
 	}
-	return Result{}, false, nil
+	span, _ := h.Tree.NodeSpan(cmd.Args[at])
+	word, literal := parser.Literal(cmd.Args[at])
+	if !literal {
+		return Result{}, false, nil
+	}
+	args := parser.ArgumentTexts(cmd.Args[:at+1])
+	args[at] = word
+	if strings.HasPrefix(word, "-") {
+		return h.flag(ctx, cmd.Name, args[:at], word, span)
+	}
+	sub, err := h.Commands.Subcommand(ctx, cmd.Name, args)
+	return found(Result{Markdown: sub.Doc, Span: span}, err)
 }
 
 func (h hoverer) flag(ctx context.Context, command string, before []string, word string, span parser.Span) (Result, bool, error) {
@@ -308,27 +307,27 @@ func (h hoverer) isFunction(name string) bool {
 	return ok
 }
 
-func (h hoverer) commandName(ctx context.Context, cmd parser.Command) (Result, bool, error) {
-	if fn, ok := h.Tree.FunctionNamed(cmd.Name); ok {
-		return Result{Markdown: h.function(fn), Span: cmd.NameSpan}, true, nil
+func (h hoverer) commandName(ctx context.Context, name string, span parser.Span) (Result, bool, error) {
+	if fn, ok := h.Tree.FunctionNamed(name); ok {
+		return Result{Markdown: h.function(fn), Span: span}, true, nil
 	}
-	if imp, fn, ok := parser.ImportedFunction(h.Imports, cmd.Name); ok {
-		return Result{Markdown: ImportedFunctionDoc(imp, fn), Span: cmd.NameSpan}, true, nil
+	if imp, fn, ok := parser.ImportedFunction(h.Imports, name); ok {
+		return Result{Markdown: ImportedFunctionDoc(imp, fn), Span: span}, true, nil
 	}
-	if entry, ok := shelldocs.Builtin(cmd.Name); ok {
-		return Result{Markdown: entry.Markdown(h.dialect), Span: cmd.NameSpan}, true, nil
+	if entry, ok := shelldocs.Builtin(name); ok {
+		return Result{Markdown: entry.Markdown(h.dialect), Span: span}, true, nil
 	}
-	if entry, ok := shelldocs.Keyword(cmd.Name); ok {
-		return Result{Markdown: entry.Markdown(h.dialect), Span: cmd.NameSpan}, true, nil
+	if entry, ok := shelldocs.Keyword(name); ok {
+		return Result{Markdown: entry.Markdown(h.dialect), Span: span}, true, nil
 	}
 	if h.Commands == nil {
 		return Result{}, false, nil
 	}
-	doc, err := h.Commands.Describe(ctx, cmd.Name)
+	doc, err := h.Commands.Describe(ctx, name)
 	if err != nil {
 		return Result{}, false, err
 	}
-	return Result{Markdown: doc, Span: cmd.NameSpan}, true, nil
+	return Result{Markdown: doc, Span: span}, true, nil
 }
 
 type Parameter struct {

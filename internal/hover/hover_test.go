@@ -26,8 +26,8 @@ func (f fakeCommands) Describe(_ context.Context, name string) (string, error) {
 	return doc, nil
 }
 
-func (f fakeCommands) Subcommand(_ context.Context, command, name string) (manpage.Subcommand, error) {
-	sub, ok := f.subcommands[command+" "+name]
+func (f fakeCommands) Subcommand(_ context.Context, command string, args []string) (manpage.Subcommand, error) {
+	sub, ok := f.subcommands[strings.Join(append([]string{command}, args...), " ")]
 	if !ok {
 		return manpage.Subcommand{}, manpage.ErrNoPage
 	}
@@ -192,7 +192,7 @@ func TestHoverSubcommandsAndFlags(t *testing.T) {
 	t.Parallel()
 
 	commands := fakeCommands{
-		subcommands: map[string]manpage.Subcommand{"tool stop": {Name: "stop", Doc: "**tool-stop**"}},
+		subcommands: map[string]manpage.Subcommand{"tool -v stop": {Name: "stop", Doc: "**tool-stop**"}},
 		options: map[string][]manpage.Option{
 			"tool":         {{Names: []string{"-v", "--verbose"}, Doc: "be verbose"}, {Names: []string{"--width"}, Doc: "set the width"}},
 			"tool -v stop": {{Names: []string{"-f", "--force"}, Doc: "kill them"}},
@@ -242,6 +242,32 @@ func TestHoverSubcommandsAndFlags(t *testing.T) {
 	failing.err = errors.New("unreadable page")
 	if _, _, err := Hover(t.Context(), Input{Tree: parser.Parse("tool -v\n", dialect.Bash), Offset: 6, Commands: failing}); err == nil {
 		t.Error("Hover() swallowed the option lookup error")
+	}
+}
+
+func TestHoverNestedSubcommands(t *testing.T) {
+	t.Parallel()
+
+	commands := fakeCommands{
+		subcommands: map[string]manpage.Subcommand{
+			"tool -C dir remote":     {Name: "remote", Doc: "**tool-remote**"},
+			"tool -C dir remote add": {Name: "add", Doc: "**tool remote add**"},
+		},
+		options: map[string][]manpage.Option{
+			"tool -C dir remote add": {{Names: []string{"-f"}, Doc: "fetch at once"}},
+		},
+	}
+	src := "tool -C dir remote add -f origin\n"
+	for needle, want := range map[string]string{"remote": "**tool-remote**", "add": "**tool remote add**", "-f": "**-f**\n\nfetch at once"} {
+		got, ok, err := Hover(t.Context(), Input{Tree: parser.Parse(src, dialect.Bash), Offset: strings.Index(src, needle) + 1, Commands: commands})
+		if err != nil || !ok || got.Markdown != want {
+			t.Errorf("Hover(%q) = %+v, %t, %v; want %q", needle, got, ok, err, want)
+		}
+	}
+	for _, needle := range []string{"dir", "origin"} {
+		if got, ok, err := Hover(t.Context(), Input{Tree: parser.Parse(src, dialect.Bash), Offset: strings.Index(src, needle) + 1, Commands: commands}); ok || err != nil {
+			t.Errorf("Hover(%q) = %+v, %v; want nothing", needle, got, err)
+		}
 	}
 }
 

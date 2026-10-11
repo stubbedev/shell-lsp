@@ -174,7 +174,9 @@ func (b *builder) mdocRequest(name, rest string) {
 	case "Dd", "Dt", "Os":
 	case "Sh":
 		b.startSection(b.mdocText(rest))
-	case "Ss", "Pp", "Lp":
+	case "Ss":
+		b.startSubsection(b.mdocText(rest))
+	case "Pp", "Lp":
 		b.flush()
 	case "Nm":
 		if b.currentSection() == "SYNOPSIS" {
