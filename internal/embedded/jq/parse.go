@@ -1,6 +1,13 @@
 package jq
 
-import "github.com/stubbedev/shell-lsp/internal/embedded/lang"
+import (
+	"strconv"
+	"strings"
+	"unicode/utf16"
+
+	"github.com/stubbedev/shell-lsp/internal/embedded/lang"
+	"github.com/stubbedev/shell-lsp/internal/embedded/regex"
+)
 
 type context uint8
 
@@ -17,6 +24,7 @@ type (
 type parser struct {
 	lex  lexer
 	tok  token
+	last token
 	open lang.Nesting[kind]
 }
 
@@ -118,6 +126,7 @@ func (p *parser) advance() {
 	case tRParen, tRBracket, tRBrace, tStringTail:
 		p.pop(k)
 	}
+	p.last = p.tok
 	p.tok = p.lex.next()
 }
 
@@ -457,9 +466,10 @@ func (p *parser) term() {
 	case tLBrace:
 		p.object()
 	case tIdent:
+		name := p.tok
 		p.advance()
 		if p.tok.kind == tLParen {
-			p.arguments()
+			p.arguments(p.lex.src[name.start:name.end])
 		}
 	case tReduce, tForeach:
 		p.fold()
@@ -476,15 +486,86 @@ func (p *parser) term() {
 	}
 }
 
-func (p *parser) arguments() {
+type regexCall struct {
+	arguments int
+	flags     int
+}
+
+var regexCalls = map[string]regexCall{
+	"test": {1, 1}, "match": {1, 1}, "capture": {1, 1}, "scan": {1, 1}, "splits": {1, 1},
+	"split": {2, 1}, "sub": {2, 2}, "gsub": {2, 2},
+}
+
+func (p *parser) arguments(function string) {
 	open := p.tok
 	p.advance()
-	p.pipe(0)
-	for p.tok.kind == tSemicolon {
-		p.advance()
+	call, isRegex := regexCalls[function]
+	var pattern, flags token
+	literalPattern, literalFlags := false, false
+	count := 0
+	for {
+		first := p.tok
 		p.pipe(0)
+		literal := first.kind == tString && p.last == first
+		switch count {
+		case 0:
+			pattern, literalPattern = first, literal
+		case call.flags:
+			flags, literalFlags = first, literal
+		}
+		count++
+		if p.tok.kind != tSemicolon {
+			break
+		}
+		p.advance()
 	}
 	p.closing(tRParen, open)
+	if !isRegex || count < call.arguments || !literalPattern {
+		return
+	}
+	if count > call.flags && (!literalFlags || strings.Contains(p.lex.src[flags.start:flags.end], "x")) {
+		return
+	}
+	if excerpt, ok := stringExcerpt(p.lex.src, pattern.start+1, pattern.end-1); ok {
+		p.lex.res.CheckRegex(excerpt, regex.Oniguruma)
+	}
+}
+
+var stringEscapes = map[byte]string{
+	'"': `"`, '\\': `\`, '/': "/", 'b': "\b", 'f': "\f", 'n': "\n", 'r': "\r", 't': "\t",
+}
+
+const unicodeEscape = len(`\u0000`)
+
+func stringExcerpt(src string, start, end int) (lang.Excerpt, bool) {
+	if !strings.Contains(src[start:end], `\`) {
+		return lang.Verbatim(src, start, end), true
+	}
+	b := lang.NewExcerptBuilder(end - start)
+	for i := start; i < end; i++ {
+		switch {
+		case src[i] != '\\':
+			b.Add(src[i:i+1], i, i+1)
+		case src[i+1] == 'u':
+			if i+unicodeEscape > end {
+				return lang.Excerpt{}, false
+			}
+			code, err := strconv.ParseUint(src[i+2:i+unicodeEscape], 16, 16)
+			if err != nil || utf16.IsSurrogate(rune(code)) {
+				return lang.Excerpt{}, false
+			}
+			b.Add(string(rune(code)), i, i+unicodeEscape)
+			i += unicodeEscape - 1
+		default:
+			decoded, known := stringEscapes[src[i+1]]
+			if !known {
+				return lang.Excerpt{}, false
+			}
+			b.Add(decoded, i, i+2)
+			i++
+		}
+	}
+	return b.Excerpt(), true
 }
 
 func (p *parser) fold() {

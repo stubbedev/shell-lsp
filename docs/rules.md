@@ -150,6 +150,16 @@ sed 's/\(.*\)=\(.*\)/\2=\3/' conf    # SL3002: there is no group 3
 **A jq filter does not parse.** The filter given to `jq`, `gojq` or `jaq`
 has a syntax error, so jq refuses to run it.
 
+The pattern of `test`, `match`, `capture`, `scan`, `split/2`, `splits`, `sub`
+and `gsub` is checked when it is a single string literal and the flags, if
+given, are a literal without `x`. jq compiles patterns with Oniguruma only
+when the filter runs, so these are run-time errors; only clear ones are
+reported: a group or bracket expression that is never closed, a `)` without
+its `(`, a quantifier with nothing to repeat, an empty range such as
+`[z-a]`, an interval whose minimum is above its maximum and a trailing lone
+`\`.
+
 ```bash
 jq '.items[] | | .name' data.json    # SL3003: unexpected `|`
+jq '.[] | select(.id | test("^(a|b"))' data.json    # SL3003: `(` is never closed
 ```

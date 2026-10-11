@@ -178,6 +178,27 @@ func TestInvalidFilters(t *testing.T) {
 	})
 }
 
+func TestRegularExpressions(t *testing.T) {
+	t.Parallel()
+
+	langtest.CheckValid(t, Parse, []string{
+		`test("^\\d+$")`, `select(.name | test("(?i)^foo"))`, `capture("(?<y>\\d{4})")`, `split("(")`,
+		`split(", *"; null)`, `sub("(a"; "b"; $flags)`, `test("(a # (\n )"; "x")`, `test("(" + .x)`, `test($re)`,
+		`ltrimstr("(")`, `gsub("\\("; "")`, `test("(a)")`, `test("\ud83d(")`, `scan("[[:alpha:]]+")`,
+	})
+	langtest.CheckInvalid(t, Parse, []langtest.Case{
+		{`test("(a")`, `(`, "`(` is never closed in the regular expression"},
+		{`.[] | select(test("a)"; "g"))`, `)"`, "`)` has no matching opening parenthesis in the regular expression"},
+		{`match("*x")`, `*`, "`*` has nothing to repeat"},
+		{`capture("[a-z")`, `[`, "`[` is never closed in the regular expression"},
+		{`sub("[z-a]"; "")`, `z-a`, "the range `z-a` is empty because `z` sorts after `a`"},
+		{`gsub("a{3,2}"; "b"; "g")`, `{`, "the interval `{3,2}` has a minimum above its maximum"},
+		{`split("(\t"; "g")`, `(`, "`(` is never closed in the regular expression"},
+		{`splits("a\\")`, `\\`, "the regular expression ends with a lone `\\`"},
+		{`test("(a")`, `(`, "`(` is never closed in the regular expression"},
+	})
+}
+
 func TestReportsAnErrorPerPipeStage(t *testing.T) {
 	t.Parallel()
 
