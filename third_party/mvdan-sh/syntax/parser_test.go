@@ -2741,6 +2741,23 @@ func TestNodeEndPos(t *testing.T) {
 	qt.Check(t, qt.Equals(f.Stmts[0].Cmd.(*CaseClause).End().Offset(), uint(18)))
 }
 
+func TestParseRecoverErrorsAfterAssignment(t *testing.T) {
+	t.Parallel()
+
+	for _, src := range []string{
+		"v=$(( x  y ))",
+		"v=$(( f(x  y) ))",
+		".sh.value=$(( sqrt(x*x  y*y) ))",
+	} {
+		for _, lang := range []LangVariant{LangBash, LangKsh93} {
+			t.Run(src, func(t *testing.T) {
+				parser := NewParser(Variant(lang), RecoverErrors(3))
+				_, _ = parser.Parse(strings.NewReader(src), "")
+			})
+		}
+	}
+}
+
 func TestParseRecoverErrors(t *testing.T) {
 	t.Parallel()
 

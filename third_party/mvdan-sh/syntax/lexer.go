@@ -248,6 +248,7 @@ func (p *Parser) nextKeepSpaces() {
 }
 
 func (p *Parser) next() {
+	p.eqlOffs = -1
 	if p.r == runeEOF {
 		p.tok = _EOF
 		return

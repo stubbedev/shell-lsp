@@ -1,0 +1,54 @@
+syntax: reset the assignment offset for every token
+
+Parser.eqlOffs records where '=' sits in the current literal, and
+hasValidIdent and getAssign index Parser.val with it. Only the lexer path
+for unquoted words reset it, so a literal token produced on another path
+kept the offset of an earlier word. With RecoverErrors, an arithmetic
+expansion that fails to parse after an assignment reaches getAssign with
+that stale offset and panics:
+
+	NewParser(RecoverErrors(3)).Parse(strings.NewReader("v=$(( x  y ))"), "")
+	panic: runtime error: slice bounds out of range [2:1]
+
+The offset is now reset at the start of every token.
+
+diff --git a/syntax/lexer.go b/syntax/lexer.go
+index 72f850d..4586416 100644
+--- a/syntax/lexer.go
++++ b/syntax/lexer.go
+@@ -248,6 +248,7 @@ func (p *Parser) nextKeepSpaces() {
+ }
+ 
+ func (p *Parser) next() {
++	p.eqlOffs = -1
+ 	if p.r == runeEOF {
+ 		p.tok = _EOF
+ 		return
+diff --git a/syntax/parser_test.go b/syntax/parser_test.go
+index ec1f3e2..de6bac2 100644
+--- a/syntax/parser_test.go
++++ b/syntax/parser_test.go
+@@ -2741,6 +2741,23 @@ func TestNodeEndPos(t *testing.T) {
+ 	qt.Check(t, qt.Equals(f.Stmts[0].Cmd.(*CaseClause).End().Offset(), uint(18)))
+ }
+ 
++func TestParseRecoverErrorsAfterAssignment(t *testing.T) {
++	t.Parallel()
++
++	for _, src := range []string{
++		"v=$(( x  y ))",
++		"v=$(( f(x  y) ))",
++		".sh.value=$(( sqrt(x*x  y*y) ))",
++	} {
++		for _, lang := range []LangVariant{LangBash, LangKsh93} {
++			t.Run(src, func(t *testing.T) {
++				parser := NewParser(Variant(lang), RecoverErrors(3))
++				_, _ = parser.Parse(strings.NewReader(src), "")
++			})
++		}
++	}
++}
++
+ func TestParseRecoverErrors(t *testing.T) {
+ 	t.Parallel()
+ 
