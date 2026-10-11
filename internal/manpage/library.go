@@ -25,7 +25,6 @@ const (
 
 var (
 	commandSections  = []string{"1", "8", "6"}
-	defaultManDirs   = []string{"/usr/share/man", "/usr/local/share/man", "/usr/local/man", "/opt/homebrew/share/man"}
 	readableSuffixes = []string{"", ".gz", ".bz2"}
 )
 

@@ -409,16 +409,18 @@ func TestLookupRefusesPagesThatDecompressPastTheLimit(t *testing.T) {
 func TestManDirsFromPath(t *testing.T) {
 	t.Parallel()
 
-	got := manDirs("", "/opt/tool/bin"+string(os.PathListSeparator)+"/usr/bin")
+	native := filepath.FromSlash
+	list := func(dirs ...string) string { return strings.Join(dirs, string(os.PathListSeparator)) }
+	got := manDirs("", list(native("/opt/tool/bin"), native("/usr/bin")))
 	for _, want := range []string{"/opt/tool/share/man", "/opt/tool/man", "/usr/share/man"} {
-		if !slices.Contains(got, want) {
-			t.Errorf("manDirs = %v, missing %s", got, want)
+		if !slices.Contains(got, native(want)) {
+			t.Errorf("manDirs = %v, missing %s", got, native(want))
 		}
 	}
-	if got := manDirs("/custom", "/opt/tool/bin"); !slices.Equal(got, []string{"/custom"}) {
+	if got := manDirs(native("/custom"), native("/opt/tool/bin")); !slices.Equal(got, []string{native("/custom")}) {
 		t.Errorf("explicit MANPATH = %v", got)
 	}
-	if got := manDirs("/custom:", "/opt/tool/bin"); !slices.Contains(got, "/opt/tool/share/man") || got[0] != "/custom" {
+	if got := manDirs(list(native("/custom"), ""), native("/opt/tool/bin")); !slices.Contains(got, native("/opt/tool/share/man")) || got[0] != native("/custom") {
 		t.Errorf("MANPATH with an empty entry = %v, want defaults appended", got)
 	}
 }
