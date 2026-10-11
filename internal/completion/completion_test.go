@@ -128,7 +128,7 @@ func TestCommandPosition(t *testing.T) {
 
 	src := "deploy() { :; }\nalias gs='git status'\ng‸"
 	got := complete(t, dialect.Bash, src)
-	want := []string{"gs", "getopts", "git", "grep", "gzip"}
+	want := []string{"gs", "getopts loop", "getopts", "git", "grep", "gzip"}
 	if !slices.Equal(labels(got), want) {
 		t.Errorf("labels = %v, want %v", labels(got), want)
 	}
@@ -434,6 +434,39 @@ func TestCasePatterns(t *testing.T) {
 	}
 	if _, ok := find(complete(t, dialect.Bash, "case $x in\n\ta) ec‸"), "echo"); !ok {
 		t.Error("a case body lost command completion")
+	}
+}
+
+func TestIdiomSnippets(t *testing.T) {
+	t.Parallel()
+
+	got := complete(t, dialect.Bash, "‸")
+	strict, ok := find(got, "strict mode")
+	if !ok || !strict.Snippet || strict.Kind != KindSnippet || strict.InsertText != "set -euo pipefail\n$0" {
+		t.Fatalf("strict mode = %+v", strict)
+	}
+	if !strings.Contains(strict.Documentation, "```sh\nset -euo pipefail\n```") {
+		t.Errorf("strict mode preview = %q", strict.Documentation)
+	}
+	if it, _ := find(complete(t, dialect.Dash, "str‸"), "strict mode"); it.InsertText != "set -eu\n$0" {
+		t.Errorf("dash strict mode = %q", it.InsertText)
+	}
+	if it, _ := find(complete(t, dialect.Zsh, "scr‸"), "script directory"); !strings.Contains(it.InsertText, "${0:A:h}") {
+		t.Errorf("zsh script directory = %q", it.InsertText)
+	}
+	tmp, _ := find(complete(t, dialect.Bash, "mk‸"), "mktemp with cleanup")
+	if !strings.Contains(tmp.Documentation, "tmp=$(mktemp -d) || exit\ntrap 'rm -rf -- \"$tmp\"' EXIT") {
+		t.Errorf("mktemp preview = %q", tmp.Documentation)
+	}
+	if _, ok := find(complete(t, dialect.Bash, "echo stri‸"), "strict mode"); ok {
+		t.Error("idiom offered in argument position")
+	}
+	plain, err := Complete(t.Context(), Input{Tree: parser.Parse("str", dialect.Bash), Offset: 3, Env: env})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := find(plain, "strict mode"); ok {
+		t.Error("idiom offered to a client without snippet support")
 	}
 }
 

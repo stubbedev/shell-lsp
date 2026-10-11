@@ -265,6 +265,9 @@ func (c completer) commands(withKeywords bool) Result {
 		for _, e := range shelldocs.Keywords(c.dialect) {
 			add(c.keyword(e))
 		}
+		for _, it := range c.idioms() {
+			add(it)
+		}
 	}
 	for _, e := range shelldocs.Builtins(c.dialect) {
 		it := c.item(e.Name, KindBuiltin, "2")
@@ -292,21 +295,11 @@ func (c completer) commands(withKeywords bool) Result {
 	return Result{Items: items, Incomplete: incomplete}
 }
 
-var snippets = map[string]string{
-	"if":       "if ${1:condition}; then\n\t$0\nfi",
-	"for":      "for ${1:name} in ${2:words}; do\n\t$0\ndone",
-	"select":   "select ${1:name} in ${2:words}; do\n\t$0\ndone",
-	"while":    "while ${1:condition}; do\n\t$0\ndone",
-	"until":    "until ${1:condition}; do\n\t$0\ndone",
-	"case":     "case ${1:word} in\n\t${2:pattern})\n\t\t$0\n\t\t;;\nesac",
-	"function": "function ${1:name} {\n\t$0\n}",
-}
-
 func (c completer) keyword(e shelldocs.Entry) Item {
 	it := c.item(e.Name, KindKeyword, "2")
 	it.Detail = "keyword"
 	it.Documentation = e.Markdown(c.dialect)
-	if snippet, ok := snippets[e.Name]; ok && c.Snippets {
+	if snippet, ok := keywordSnippets[e.Name]; ok && c.Snippets {
 		it.InsertText = snippet
 		it.Snippet = true
 	}
