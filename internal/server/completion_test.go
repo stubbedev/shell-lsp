@@ -204,7 +204,7 @@ func TestCompletionAndHoverFollowNestedSubcommands(t *testing.T) {
 
 	c, _ := startClient(t, `{"capabilities": {"textDocument": {"diagnostic": {}}}}`, withPages(t, map[string]string{"box": boxPage, "box-remote": boxRemotePage}))
 	c.notify("initialized", `{}`)
-	c.notify("textDocument/didOpen", openParams("file:///w/a.sh", "box -C remote remote \nbox -C dir remote add origin\n"))
+	c.notify("textDocument/didOpen", openParams("file:///w/a.sh", "box -C remote remote \nbox -C dir remote add origin\nsudo -E box remote \nsudo -u root box -C dir remote add origin\n"))
 
 	var nested lsp.CompletionList
 	deadline := time.Now().Add(5 * time.Second)
@@ -224,6 +224,14 @@ func TestCompletionAndHoverFollowNestedSubcommands(t *testing.T) {
 	hover := decodeResult[lsp.Hover](t, c.call("textDocument/hover", positionParams("file:///w/a.sh", 1, 19, "")))
 	if !strings.Contains(hover.Contents.Value, "box remote add name") || !strings.Contains(hover.Contents.Value, "Add a remote box.") {
 		t.Errorf("hover over box remote add = %q", hover.Contents.Value)
+	}
+	wrapped := decodeResult[lsp.CompletionList](t, c.call("textDocument/completion", positionParams("file:///w/a.sh", 2, 19, "")))
+	if got := completionLabels(wrapped); !slices.Equal(got, []string{"add", "rename"}) {
+		t.Errorf("box remote subcommands behind sudo = %v", got)
+	}
+	hover = decodeResult[lsp.Hover](t, c.call("textDocument/hover", positionParams("file:///w/a.sh", 3, 32, "")))
+	if !strings.Contains(hover.Contents.Value, "box remote add name") {
+		t.Errorf("hover over box remote add behind sudo = %q", hover.Contents.Value)
 	}
 }
 

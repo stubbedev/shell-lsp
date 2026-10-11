@@ -77,10 +77,27 @@ func (s *Server) prefetchCommands(tree *parser.Tree) {
 }
 
 func (s *Server) commandPages(tree *parser.Tree, cmd parser.Command) ([]string, error) {
-	if shellOnly(tree, cmd.Name) {
-		return nil, nil
+	wrappers := parser.Wrappers{Bats: tree.Bats, Programs: true}
+	command, args := cmd.Name, parser.ArgumentTexts(cmd.Args)
+	var pages []string
+	for {
+		wrap, wrapped := wrappers.Unwrap(command, args)
+		own := args
+		if wrapped {
+			own = args[:wrap.Command]
+		}
+		if !shellOnly(tree, command) {
+			unloaded, err := s.environment.pages.Unloaded(command, own)
+			if err != nil {
+				return pages, err
+			}
+			pages = append(pages, unloaded...)
+		}
+		if !wrapped || wrap.Command == len(args) {
+			return pages, nil
+		}
+		command, args = args[wrap.Command], args[wrap.Command+1:]
 	}
-	return s.environment.pages.Unloaded(cmd.Name, parser.ArgumentTexts(cmd.Args))
 }
 
 func shellOnly(tree *parser.Tree, name string) bool {

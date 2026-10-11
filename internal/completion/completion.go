@@ -235,13 +235,32 @@ func (c completer) aliases() []alias {
 }
 
 var commandTakers = map[string]bool{
-	"command": true, "type": true, "which": true, "whence": true, "where": true, "sudo": true, "doas": true,
-	"exec": true, "nohup": true, "env": true, "xargs": true, "man": true, "builtin": true, "run-help": true,
-	"time": true, "noglob": true,
+	"type": true, "which": true, "whence": true, "where": true, "man": true, "run-help": true, "noglob": true,
 }
 
 func (c completer) argument(ctx context.Context) (Result, error) {
-	return c.argumentOf(ctx, c.site.command, c.site.previous)
+	wrappers := parser.Wrappers{Bats: c.Tree.Bats, Programs: true}
+	command, args := c.site.command, c.site.previous
+	for {
+		wrap, wrapped := wrappers.Unwrap(command, args)
+		if !wrapped {
+			return c.argumentOf(ctx, command, args)
+		}
+		if wrap.Command == len(args) {
+			return c.wrapperArgument(ctx, command, args, wrap)
+		}
+		command, args = args[wrap.Command], args[wrap.Command+1:]
+	}
+}
+
+func (c completer) wrapperArgument(ctx context.Context, wrapper string, args []string, wrap parser.Wrap) (Result, error) {
+	switch {
+	case strings.HasPrefix(c.site.prefix, "-"):
+		return c.flags(ctx, wrapper, args)
+	case wrap.Pending || strings.Contains(c.site.prefix, "/"):
+		return c.paths(false)
+	}
+	return c.commands(false), nil
 }
 
 func (c completer) argumentOf(ctx context.Context, command string, args []string) (Result, error) {

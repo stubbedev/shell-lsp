@@ -271,6 +271,65 @@ func TestHoverNestedSubcommands(t *testing.T) {
 	}
 }
 
+func TestHoverLooksThroughWrappers(t *testing.T) {
+	t.Parallel()
+
+	commands := fakeCommands{
+		docs: map[string]string{"tool": "**tool - manage widgets**"},
+		subcommands: map[string]manpage.Subcommand{
+			"tool -C dir remote add": {Name: "add", Doc: "**tool remote add**"},
+			"tool start":             {Name: "start", Doc: "**tool-start**"},
+		},
+		options: map[string][]manpage.Option{
+			"sudo":                   {{Names: []string{"-u", "--user"}, Doc: "run as user", Valued: true}},
+			"tool -C dir remote add": {{Names: []string{"-f"}, Doc: "fetch at once"}},
+			"tool":                   {{Names: []string{"-w"}, Doc: "wait"}},
+		},
+	}
+	src := "sudo -u root env -i A=1 tool -C dir remote add -f origin\ntimeout 5 nice -n 3 tool start -w\nhelper() { :; }\ncommand helper start\nrun tool start\n"
+	at := func(needle string, nth int, bats bool) (Result, bool) {
+		t.Helper()
+		offset := -1
+		for range nth + 1 {
+			offset += strings.Index(src[offset+1:], needle) + 1
+		}
+		tree := parser.Parse(src, dialect.Bash)
+		tree.Bats = bats
+		got, ok, err := Hover(t.Context(), Input{Tree: tree, Offset: offset + 1, Commands: commands})
+		if err != nil {
+			t.Fatalf("Hover(%q #%d) error = %v", needle, nth, err)
+		}
+		return got, ok
+	}
+	for _, tc := range []struct {
+		needle string
+		nth    int
+		bats   bool
+		want   string
+	}{
+		{"tool", 0, false, "**tool - manage widgets**"},
+		{"add", 0, false, "**tool remote add**"},
+		{"-f", 0, false, "**-f**\n\nfetch at once"},
+		{"-u", 0, false, "**-u, --user**\n\nrun as user"},
+		{"start", 0, false, "**tool-start**"},
+		{"-w", 0, false, "**-w**\n\nwait"},
+		{"start", 2, true, "**tool-start**"},
+	} {
+		got, ok := at(tc.needle, tc.nth, tc.bats)
+		if !ok || got.Markdown != tc.want {
+			t.Errorf("Hover(%q #%d) = %+v, %t; want %q", tc.needle, tc.nth, got, ok, tc.want)
+		}
+	}
+	for _, tc := range []struct {
+		needle string
+		nth    int
+	}{{"origin", 0}, {"root", 0}, {"A=1", 0}, {"start", 1}, {"start", 2}} {
+		if got, ok := at(tc.needle, tc.nth, false); ok {
+			t.Errorf("Hover(%q #%d) = %+v, want nothing", tc.needle, tc.nth, got)
+		}
+	}
+}
+
 func TestHoverNothing(t *testing.T) {
 	t.Parallel()
 

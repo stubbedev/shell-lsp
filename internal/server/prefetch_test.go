@@ -71,6 +71,19 @@ func TestPrefetchesNestedSubcommandPages(t *testing.T) {
 	}
 }
 
+func TestPrefetchesThroughWrappers(t *testing.T) {
+	t.Parallel()
+
+	srv := New(jsonrpc.NewConn(nil, nil), "test")
+	withPages(t, map[string]string{"sudo": stubPage("sudo"), "tool": toolPage, "tool-extra": toolExtraPage})(srv)
+	fetched := recordPrefetches(t, srv)
+	srv.prefetchCommands(parser.Parse("helper() { :; }\nsudo -u root command tool -v extra\nsudo helper extra\n", dialect.Bash))
+
+	if got := fetched.await(t, 3); !slices.Equal(got, []string{"sudo", "tool", "tool-extra"}) {
+		t.Errorf("fetched %v, want the wrapper and the pages of the wrapped invocation", got)
+	}
+}
+
 type prefetches struct {
 	mu   sync.Mutex
 	list []string

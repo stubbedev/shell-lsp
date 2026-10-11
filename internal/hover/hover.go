@@ -267,12 +267,27 @@ func (h hoverer) argument(ctx context.Context, cmd parser.Command) (Result, bool
 	if !literal {
 		return Result{}, false, nil
 	}
-	args := parser.ArgumentTexts(cmd.Args[:at+1])
+	args := parser.ArgumentTexts(cmd.Args)
 	args[at] = word
-	if strings.HasPrefix(word, "-") {
-		return h.flag(ctx, cmd.Name, args[:at], word, span)
+	command := cmd.Name
+	wrappers := parser.Wrappers{Bats: h.Tree.Bats, Programs: true}
+	for {
+		wrap, wrapped := wrappers.Unwrap(command, args)
+		if !wrapped || at < wrap.Command {
+			break
+		}
+		if at == wrap.Command {
+			return h.commandName(ctx, word, span)
+		}
+		command, args, at = args[wrap.Command], args[wrap.Command+1:], at-wrap.Command-1
+		if h.isFunction(command) {
+			return Result{}, false, nil
+		}
 	}
-	sub, err := h.Commands.Subcommand(ctx, cmd.Name, args)
+	if strings.HasPrefix(word, "-") {
+		return h.flag(ctx, command, args[:at], word, span)
+	}
+	sub, err := h.Commands.Subcommand(ctx, command, args[:at+1])
 	return found(Result{Markdown: sub.Doc, Span: span}, err)
 }
 

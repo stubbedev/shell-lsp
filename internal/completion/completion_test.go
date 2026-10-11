@@ -62,6 +62,7 @@ var env = fakeEnv{
 		"grep":                  {{Names: []string{"-E", "--extended-regexp"}, Doc: "Extended regexps."}, {Names: []string{"-i", "--ignore-case"}, Doc: "Ignore case."}},
 		"git -q checkout":       {{Names: []string{"-b"}, Doc: "Create a branch."}},
 		"git -C dir remote add": {{Names: []string{"-t"}, Doc: "Track a branch."}},
+		"sudo":                  {{Names: []string{"-u", "--user"}, Doc: "Run as user.", Valued: true}},
 	},
 	subcommands: map[string]manpage.Listing{
 		"git": {Subcommands: []manpage.Subcommand{
@@ -291,6 +292,42 @@ func TestNestedSubcommands(t *testing.T) {
 	loading := complete(t, dialect.Bash, "git remote a‸")
 	if !slices.Equal(labels(loading), []string{"add"}) || !loading.Incomplete {
 		t.Errorf("subcommands with pages still loading = %v, incomplete %t", labels(loading), loading.Incomplete)
+	}
+}
+
+func TestWrappedCommands(t *testing.T) {
+	t.Parallel()
+
+	for _, src := range []string{
+		"sudo git ‸", "sudo -u root -E git ‸", "doas -u admin git ‸", "env -i FOO=1 git ‸", "nice -n 5 git ‸", "nohup git ‸",
+		"timeout -s KILL 5 git ‸", "watch -n 1 git ‸", "find . | xargs -0 -n1 git ‸", "command git ‸", "exec -a name git ‸",
+		"sudo env FOO=1 nice git ‸",
+	} {
+		if got := labels(complete(t, dialect.Bash, src)); !slices.Equal(got, []string{"checkout", "commit"}) {
+			t.Errorf("%q = %v, want the subcommands of git", src, got)
+		}
+	}
+	if got := labels(complete(t, dialect.Bash, "sudo git -q checkout -‸")); !slices.Equal(got, []string{"-b"}) {
+		t.Errorf("flags of a wrapped subcommand = %v", got)
+	}
+	if got := labels(complete(t, dialect.Bash, "nice -n 5 grep --ext‸")); !slices.Equal(got, []string{"--extended-regexp"}) {
+		t.Errorf("flags of a wrapped command = %v", got)
+	}
+	if got := labels(complete(t, dialect.Bash, "sudo --u‸")); !slices.Equal(got, []string{"--user"}) {
+		t.Errorf("flags of the wrapper itself = %v", got)
+	}
+	for _, src := range []string{"sudo -u ‸", "timeout ‸", "env -C ‸"} {
+		if got := labels(complete(t, dialect.Bash, src)); !slices.Contains(got, "lib/") || slices.Contains(got, "git") {
+			t.Errorf("%q = %v, want the value of the wrapper's option completed as a path", src, got)
+		}
+	}
+	for _, src := range []string{"sudo -u root gr‸", "env FOO=1 gr‸", "timeout 5 gr‸", "command -p gr‸", "xargs -I {} gr‸"} {
+		if _, ok := find(complete(t, dialect.Bash, src), "grep"); !ok {
+			t.Errorf("%q: grep not offered as the wrapped command", src)
+		}
+	}
+	if got := labels(complete(t, dialect.Bash, "sudo ./li‸")); !slices.Equal(got, []string{"lib/"}) {
+		t.Errorf("path as the wrapped command = %v", got)
 	}
 }
 
