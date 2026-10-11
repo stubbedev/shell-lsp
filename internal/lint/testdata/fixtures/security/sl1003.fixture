@@ -1,0 +1,25 @@
+### arithmetic on an argument when enabled
+#!/bin/bash
+# shellcheck enable=arithmetic-injection
+n=$1
+if (( n > 3 )); then echo big; fi
+echo $(( $1 + 1 ))
+[[ $1 -eq 3 ]] && echo three
+[ "$1" -eq 3 ] && echo three
+>>> none
+>>+ SL1003 4:7 -- shell-lsp native injection check; shellcheck has no taint analysis
+>>+ SL1003 5:10 -- shell-lsp native injection check; shellcheck has no taint analysis
+>>+ SL1003 6:4 -- shell-lsp native injection check; shellcheck has no taint analysis
+
+### a guard validates the number
+#!/bin/bash
+# shellcheck enable=arithmetic-injection
+[[ $1 =~ ^[0-9]+$ ]] || exit 1
+echo $(( $1 + 1 ))
+>>> none
+
+### off unless enabled
+#!/bin/bash
+n=$1
+if (( n > 3 )); then echo big; fi
+>>> none

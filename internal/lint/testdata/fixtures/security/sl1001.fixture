@@ -1,0 +1,79 @@
+### argument interpolated into eval'd code
+#!/bin/bash
+name=$1
+eval "echo hello $name"
+>>> none
+>>+ SL1001 3:18 -- shell-lsp native injection check; shellcheck has no taint analysis
+
+### eval of the whole argument is deliberate
+#!/bin/bash
+eval "$1"
+>>> none
+
+### getopt output is quoted for eval
+#!/bin/bash
+TEMP=$(getopt -o ab -- "$@")
+eval set -- "$TEMP"
+>>> none
+
+### command output is not the caller's data
+#!/bin/bash
+eval -- "$("$1" --completions bash)"
+eval "$(dircolors -b)"
+>>> none
+
+### literal case arms restrict the value
+#!/bin/bash
+case $1 in
+  start|stop) eval "service_$1" ;;
+esac
+>>> none
+
+### a regex guard validates the value
+#!/bin/bash
+if [[ ! $1 =~ ^[a-z]+$ ]]; then exit 1; fi
+eval "run_$1"
+>>> none
+
+### input read at run time
+#!/bin/bash
+read -r answer
+eval "echo $answer"
+>>> none
+>>+ SL1001 3:12 -- shell-lsp native injection check; shellcheck has no taint analysis
+
+### arguments reach a function parameter
+#!/bin/bash
+greet() { eval "echo hi $1"; }
+greet "$1"
+>>> none
+>>+ SL1001 2:25 -- shell-lsp native injection check; shellcheck has no taint analysis
+
+### a function only called with constants
+#!/bin/bash
+greet() { eval "echo hi $1"; }
+greet world
+>>> none
+
+### forwarded arguments
+#!/bin/bash
+main() { eval "ls $1"; }
+main "$@"
+>>> none
+>>+ SL1001 2:19 -- shell-lsp native injection check; shellcheck has no taint analysis
+
+### option values
+#!/bin/bash
+while getopts n: opt; do
+  case $opt in
+    n) eval "x=$OPTARG" ;;
+  esac
+done
+>>> SC2220 3:3
+>>+ SL1001 4:16 -- shell-lsp native injection check; shellcheck has no taint analysis
+
+### eval joins its arguments into code
+#!/bin/bash
+for f in "$@"; do eval "$hook" "$f"; done
+>>> SC2154 2:25
+>>+ SL1001 2:33 -- shell-lsp native injection check; shellcheck has no taint analysis

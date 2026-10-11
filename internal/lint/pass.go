@@ -18,26 +18,27 @@ type rule struct {
 }
 
 type pass struct {
-	tree         *parser.Tree
-	imports      []parser.Import
-	sources      []Source
-	text         string
-	dialect      dialect.Dialect
-	bats         bool
-	stack        []syntax.Node
-	stmts        []parser.Span
-	flowChecks   []func(flow *flowResult)
-	statements   []nestedStmt
-	catalog      map[Code]meta
-	rules        []rule
-	nodeChecks   nodeDispatch
-	commands     commandDispatch
-	settings     fileWide
-	findings     []Finding
-	aliases      map[string]aliasDefinition
-	quoteTaint   map[string]parser.Span
-	firstCommand int
-	directives   []directiveComment
+	tree            *parser.Tree
+	imports         []parser.Import
+	sources         []Source
+	text            string
+	dialect         dialect.Dialect
+	bats            bool
+	stack           []syntax.Node
+	stmts           []parser.Span
+	flowChecks      []func(flow *flowResult)
+	statements      []nestedStmt
+	untrustedValues *untrustedValues
+	catalog         map[Code]meta
+	rules           []rule
+	nodeChecks      nodeDispatch
+	commands        commandDispatch
+	settings        fileWide
+	findings        []Finding
+	aliases         map[string]aliasDefinition
+	quoteTaint      map[string]parser.Span
+	firstCommand    int
+	directives      []directiveComment
 
 	shellChosen    bool
 	shellOptions   *shellOptions
@@ -147,11 +148,15 @@ func (p *pass) report(code Code, span parser.Span, message string, fix ...texted
 }
 
 func (p *pass) reportWithSeverity(code Code, severity Severity, span parser.Span, message string, fix ...textedit.Edit) {
-	m := p.meta(code)
-	if m.optional != "" && !p.settings.enabled(m.optional) {
+	if !p.active(code) {
 		return
 	}
-	p.findings = append(p.findings, Finding{Code: code, Severity: severity, Tag: m.tag, Span: span, Message: message, Fix: fix})
+	p.findings = append(p.findings, Finding{Code: code, Severity: severity, Tag: p.meta(code).tag, Span: span, Message: message, Fix: fix})
+}
+
+func (p *pass) active(code Code) bool {
+	m := p.meta(code)
+	return m.optional == "" || p.settings.enabled(m.optional)
 }
 
 func (p *pass) meta(code Code) meta {

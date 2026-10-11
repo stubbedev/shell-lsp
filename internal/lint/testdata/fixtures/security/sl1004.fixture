@@ -1,0 +1,15 @@
+### argument interpolated into a sourced path
+#!/bin/bash
+. "/etc/app/$1.conf"
+>>> SC1090 2:3
+>>+ SL1004 2:13 -- shell-lsp native injection check; shellcheck has no taint analysis
+
+### sourcing the file the caller names is deliberate
+#!/bin/bash
+. "$1"
+>>> SC1090 2:3
+
+### trusted paths
+#!/bin/bash
+. "$HOME/.bashrc"
+>>> SC1091 2:3

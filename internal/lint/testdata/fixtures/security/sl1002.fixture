@@ -1,0 +1,33 @@
+### argument interpolated into a shell -c script
+#!/bin/bash
+bash -c "tar xf $1"
+>>> none
+>>+ SL1002 2:17 -- shell-lsp native injection check; shellcheck has no taint analysis
+
+### arguments passed as data to the inline script
+#!/bin/bash
+sh -c 'echo "$1"' _ "$1"
+>>> none
+
+### through sudo
+#!/bin/bash
+sudo sh -c "echo $1 > /etc/motd"
+>>> none
+>>+ SL1002 2:18 -- shell-lsp native injection check; shellcheck has no taint analysis
+
+### a whole-argument script is deliberate
+#!/bin/bash
+bash -c "$1"
+>>> none
+
+### su runs its -c argument
+#!/bin/bash
+su - deploy -c "cd /srv && git checkout $1"
+>>> none
+>>+ SL1002 2:41 -- shell-lsp native injection check; shellcheck has no taint analysis
+
+### env in front of the shell
+#!/bin/bash
+env -i PATH=/bin bash -c "ls $1"
+>>> none
+>>+ SL1002 2:30 -- shell-lsp native injection check; shellcheck has no taint analysis
