@@ -37,3 +37,8 @@ echo "usr"/"local"
 declare "mode"="fast"
 >>> none
 >>+ SC2034 1:9 -- bash assigns mode through declare "mode"="fast", and mode is never read
+
+### a string continued on the next line after a backslash-newline
+echo "first half,"\
+" second half"
+>>- SC2140 1:19 -- deliberate: the backslash-newline between the quotes is removed before the word is formed, so nothing unquoted sits between them; this is the usual way to wrap a long string
