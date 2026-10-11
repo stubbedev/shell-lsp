@@ -11,7 +11,7 @@ import (
 
 var findFamily = family{
 	codes: map[Code]meta{
-		2014: {severity: SeverityInfo, summary: "An expansion in a find -exec command runs once before find starts, not once per file."},
+		2014: {severity: SeverityInfo, bug: true, summary: "An expansion in a find -exec command runs once before find starts, not once per file."},
 		2061: {severity: SeverityWarning, summary: "An unquoted find pattern may be expanded by the shell before find sees it."},
 		2067: {severity: SeverityError, summary: "A find -exec action has no separate ; or + argument to end it."},
 		2146: {severity: SeverityWarning, summary: "A find action only applies to the last -o branch."},

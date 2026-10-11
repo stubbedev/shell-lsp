@@ -9,8 +9,8 @@ import (
 
 var wordsFamily = family{
 	codes: map[Code]meta{
-		2025: {severity: SeverityInfo, summary: "Terminal escape sequences in PS1 are not wrapped in \\[ \\], so bash miscounts the prompt's width."},
-		2026: {severity: SeverityInfo, summary: "A word between single-quoted strings is not quoted."},
+		2025: {severity: SeverityInfo, bug: true, summary: "Terminal escape sequences in PS1 are not wrapped in \\[ \\], so bash miscounts the prompt's width."},
+		2026: {severity: SeverityInfo, bug: true, summary: "A word between single-quoted strings is not quoted."},
 		2027: {severity: SeverityWarning, summary: "Quotes inside a string close and reopen it, leaving the inner part unquoted."},
 		2054: {severity: SeverityWarning, summary: "Array elements are separated by whitespace, so commas become part of the values."},
 		2088: {severity: SeverityWarning, summary: "A quoted ~ is not expanded to the home directory."},

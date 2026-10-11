@@ -12,7 +12,7 @@ const codeLeakedTempFile = nativeBase + 2006
 
 var tempFileFamily = family{
 	codes: map[Code]meta{
-		codeLeakedTempFile: {severity: SeverityInfo},
+		codeLeakedTempFile: {severity: SeverityInfo, bug: true},
 	},
 	commands: []commandRule{
 		{match: matchExact, names: []string{"mktemp"}, check: checkLeakedTempFile},

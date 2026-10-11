@@ -16,7 +16,7 @@ var charactersFamily = family{
 		1018: {severity: SeverityError, summary: "A Unicode space is not a plain space, so the shell does not split words on it."},
 		1077: {severity: SeverityError, summary: "An acute accent is used where a backtick was meant."},
 		1078: {severity: SeverityWarning, summary: "A quote that spans several lines closes right before more text, which suggests it is unbalanced."},
-		1079: {severity: SeverityInfo, summary: "A quote that looks like it opens a new string closes an earlier multi-line one."},
+		1079: {severity: SeverityInfo, bug: true, summary: "A quote that looks like it opens a new string closes an earlier multi-line one."},
 		1083: {severity: SeverityWarning, summary: "A brace here is a literal character, not part of an expansion or a block."},
 		1087: {severity: SeverityError, summary: "$name[ expands the variable and appends a literal bracket instead of indexing the array."},
 		1101: {severity: SeverityError, summary: "A backslash escapes trailing whitespace instead of the line break, so the command ends there."},

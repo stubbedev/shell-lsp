@@ -10,7 +10,7 @@ import (
 
 var arithmeticFamily = family{
 	codes: map[Code]meta{
-		2017: {severity: SeverityInfo, summary: "Integer division truncates before a later multiplication, losing precision."},
+		2017: {severity: SeverityInfo, bug: true, summary: "Integer division truncates before a later multiplication, losing precision."},
 		2079: {severity: SeverityError, summary: "Shell arithmetic is integer only, so a decimal is not a valid number."},
 	},
 	rules: []rule{

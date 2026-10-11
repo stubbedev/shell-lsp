@@ -19,7 +19,7 @@ var subshellScopeFamily = family{
 	codes: map[Code]meta{
 		codeSubshellTrap:   {severity: SeverityWarning},
 		codeSubshellExit:   {severity: SeverityWarning},
-		codeUnbalancedPush: {severity: SeverityInfo},
+		codeUnbalancedPush: {severity: SeverityInfo, bug: true},
 	},
 	commands: []commandRule{
 		{match: matchExact, names: []string{"trap"}, check: checkSubshellTrap},

@@ -16,14 +16,19 @@ func renderChecks() string {
 	sb.WriteString("Every check the linter runs, generated from the lint catalog by\n")
 	sb.WriteString("`go test ./internal/lint -run TestChecksDoc -update`. `SC` codes reuse ShellCheck's numbering;\n")
 	sb.WriteString("`SL` codes are shell-lsp's own and are described in [rules.md](rules.md). Optional checks run only\n")
-	sb.WriteString("when switched on by name with `enable=`, `--enable` or the `lint.optional` setting.\n\n")
-	sb.WriteString("| Code | Severity | Optional | Summary |\n| --- | --- | --- | --- |\n")
+	sb.WriteString("when switched on by name with `enable=`, `--enable` or the `lint.optional` setting. The Minimal column\n")
+	sb.WriteString("marks the checks the `minimal` profile keeps; see [Profiles](../README.md#profiles).\n\n")
+	sb.WriteString("| Code | Severity | Optional | Minimal | Summary |\n| --- | --- | --- | --- | --- |\n")
 	for _, info := range Catalog() {
 		optional := ""
 		if info.Optional != "" {
 			optional = "`" + info.Optional + "`"
 		}
-		fmt.Fprintf(&sb, "| [%s](%s) | %s | %s | %s |\n", info.Code, info.Reference(), info.Severity, optional, markdownCell.Replace(info.Summary))
+		minimal := ""
+		if info.Minimal {
+			minimal = "yes"
+		}
+		fmt.Fprintf(&sb, "| [%s](%s) | %s | %s | %s | %s |\n", info.Code, info.Reference(), info.Severity, optional, minimal, markdownCell.Replace(info.Summary))
 	}
 	return sb.String()
 }

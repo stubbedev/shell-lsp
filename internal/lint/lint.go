@@ -171,6 +171,7 @@ type Options struct {
 	DialectSource DialectSource
 	Sources       []Source
 	RCFile        bool
+	Profile       Profile
 
 	Normalized Normalized
 
@@ -216,7 +217,7 @@ func Run(tree *parser.Tree, imports []parser.Import, opts Options) Report {
 			report.Suppressed = append(report.Suppressed, f)
 			return
 		}
-		if !slices.Contains(opts.Exclude, f.Code) {
+		if !slices.Contains(opts.Exclude, f.Code) && p.profileKeeps(f) {
 			report.Findings = append(report.Findings, f)
 		}
 	}

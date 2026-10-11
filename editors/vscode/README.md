@@ -48,6 +48,7 @@ To install the server yourself instead, use the release binaries,
 | `shellLsp.path` | `""` | Absolute path of the `shell-lsp` binary; user settings only |
 | `shellLsp.dialect` | detected per file | Force `bash`, `zsh`, `sh`, `dash`, `ksh` or `busybox` for every document |
 | `shellLsp.lint.enable` | `true` | Report lint findings alongside syntax errors |
+| `shellLsp.lint.profile` | `recommended` | How much to report: `recommended`, `minimal` or `strict` |
 | `shellLsp.lint.exclude` | `[]` | Codes to suppress, as `SC2034` or `2034` |
 | `shellLsp.lint.optional` | `[]` | Opt-in checks to enable by name, such as `require-variable-braces`, or `all` |
 | `shellLsp.format.enable` | `true` | Answer formatting requests |

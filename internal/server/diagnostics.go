@@ -52,6 +52,7 @@ func (s *Server) lintReport(file *workspace.File, settings config.Settings, gene
 		return filelint.Check(file, s.navigationEnv(), filelint.Options{
 			Exclude:       settings.Lint.Exclude,
 			Optional:      settings.Lint.Optional,
+			Profile:       settings.Lint.Profile,
 			DialectSource: dialectSource(settings),
 		})
 	})

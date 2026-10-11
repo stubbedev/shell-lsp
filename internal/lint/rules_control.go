@@ -20,7 +20,7 @@ var controlFamily = family{
 		2104: {severity: SeverityError, summary: "break or continue in a function does not leave the function."},
 		2105: {severity: SeverityError, summary: "break or continue is used outside a loop."},
 		2106: {severity: SeverityWarning, summary: "break or continue in a subshell only exits the subshell, not the surrounding loop."},
-		2119: {severity: SeverityInfo, summary: "A function reads positional parameters, but this call passes none."},
+		2119: {severity: SeverityInfo, bug: true, summary: "A function reads positional parameters, but this call passes none."},
 		2120: {severity: SeverityWarning, summary: "A function reads positional parameters, but no call passes any arguments."},
 		2129: {severity: SeverityStyle, summary: "Several commands in a row append to the same file, opening it each time."},
 		2164: {severity: SeverityWarning, summary: "The commands after a failed cd run in the wrong directory."},

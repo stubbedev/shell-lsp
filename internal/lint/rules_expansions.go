@@ -11,10 +11,10 @@ const codeUnknownTransformation = nativeBase + 2002
 var expansionsFamily = family{
 	codes: map[Code]meta{
 		codeUnknownTransformation: {severity: SeverityWarning},
-		2231:                      {severity: SeverityInfo, summary: "An unquoted expansion next to a glob is split and globbed along with it."},
+		2231:                      {severity: SeverityInfo, bug: true, summary: "An unquoted expansion next to a glob is split and globbed along with it."},
 		2247:                      {severity: SeverityWarning, summary: "$\" starts a translated string where a quoted substitution was meant."},
 		2256:                      {severity: SeverityWarning, summary: "$\"name\" is a translated string, not an expansion of the variable."},
-		2295:                      {severity: SeverityInfo, summary: "An unquoted expansion inside a pattern is matched as a glob."},
+		2295:                      {severity: SeverityInfo, bug: true, summary: "An unquoted expansion inside a pattern is matched as a glob."},
 		2302:                      {severity: SeverityWarning, summary: "A loop iterates over an associative array's values but uses the loop variable as a key."},
 		2303:                      {severity: SeverityWarning, summary: "A value taken from an associative array is used as a key."},
 		2321:                      {severity: SeverityStyle, summary: "$(( )) around an array index is redundant, since indices are already arithmetic."},

@@ -12,6 +12,7 @@ type meta struct {
 	tag      Tag
 	optional string
 	summary  string
+	bug      bool
 }
 
 type OptionalCheck struct {

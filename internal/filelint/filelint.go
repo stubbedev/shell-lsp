@@ -10,6 +10,7 @@ import (
 type Options struct {
 	Exclude       []lint.Code
 	Optional      []string
+	Profile       lint.Profile
 	DialectSource lint.DialectSource
 
 	NoExtendedAnalysis bool
@@ -19,6 +20,7 @@ func Check(file *workspace.File, env navigation.Env, opts Options) lint.Report {
 	return lint.Run(file.Tree, navigation.Imports(file, env), lint.Options{
 		Exclude:       opts.Exclude,
 		Optional:      opts.Optional,
+		Profile:       opts.Profile,
 		DialectSource: opts.DialectSource,
 		Sources:       followed(file, env),
 		RCFile:        dialect.IsRCFile(file.Path),

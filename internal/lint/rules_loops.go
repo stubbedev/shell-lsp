@@ -12,7 +12,7 @@ import (
 
 var loopsFamily = family{
 	codes: map[Code]meta{
-		2013: {severity: SeverityInfo, summary: "A for loop over command output splits it into words, not lines."},
+		2013: {severity: SeverityInfo, bug: true, summary: "A for loop over command output splits it into words, not lines."},
 		2041: {severity: SeverityWarning, summary: "A single-quoted loop item is one literal word, not a command whose output is iterated."},
 		2042: {severity: SeverityWarning, summary: "Loop items are separated by spaces, not commas."},
 		2043: {severity: SeverityWarning, summary: "A loop over a single constant item runs exactly once."},

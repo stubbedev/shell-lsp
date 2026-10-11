@@ -11,7 +11,7 @@ import (
 
 var grepFamily = family{
 	codes: map[Code]meta{
-		2022: {severity: SeverityInfo, summary: "In a regex, x* repeats the character before it rather than matching anything after it."},
+		2022: {severity: SeverityInfo, bug: true, summary: "In a regex, x* repeats the character before it rather than matching anything after it."},
 		2062: {severity: SeverityWarning, summary: "An unquoted grep pattern may be expanded as a glob before grep sees it."},
 		2063: {severity: SeverityWarning, summary: "grep is given a glob, but it takes a regular expression."},
 		2196: {severity: SeverityInfo, tag: TagDeprecated, summary: "egrep is deprecated and missing from some systems."},

@@ -291,12 +291,13 @@ func parseDisabled(item string) (bool, codeRange, bool) {
 
 type fileWide struct {
 	optional map[string]bool
+	profile  Profile
 	extended bool
 	shell    bool
 }
 
 func fileWideSettings(directives []directiveComment, firstCommand int, opts Options) fileWide {
-	out := fileWide{optional: setOf(opts.Optional...), extended: !opts.NoExtendedAnalysis, shell: namesShell(directives)}
+	out := fileWide{optional: setOf(opts.Optional...), profile: opts.Profile, extended: !opts.NoExtendedAnalysis, shell: namesShell(directives)}
 	extendedSet := false
 	for _, d := range directives {
 		if d.span.End > firstCommand {
@@ -333,7 +334,9 @@ func parseBool(value string) (bool, bool) {
 	return false, false
 }
 
-func (f fileWide) enabled(name string) bool { return f.optional[name] || f.optional[directive.All] }
+func (f fileWide) enabled(name string) bool { return f.chosen(name) || f.profile.enables(name) }
+
+func (f fileWide) chosen(name string) bool { return f.optional[name] || f.optional[directive.All] }
 
 func firstCommandStart(tree *parser.Tree) int {
 	if len(tree.File.Stmts) > 0 {

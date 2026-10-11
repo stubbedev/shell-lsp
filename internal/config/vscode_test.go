@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/lint"
 )
 
 var extensionOnlySettings = []string{Section + ".path", Section + ".trace.server"}
@@ -152,6 +153,22 @@ func TestVSCodeExtensionOffersEveryDialect(t *testing.T) {
 	}
 }
 
+func TestVSCodeExtensionOffersEveryProfile(t *testing.T) {
+	t.Parallel()
+
+	var got []string
+	for _, value := range contributedSettings(t)[Section+".lint.profile"].Enum {
+		var name string
+		if err := json.Unmarshal(value, &name); err != nil {
+			t.Fatal(err)
+		}
+		got = append(got, name)
+	}
+	if want := lint.ProfileNames(); !slices.Equal(slices.Sorted(slices.Values(got)), slices.Sorted(slices.Values(want))) {
+		t.Errorf("lint.profile enum = %v, want %v", got, want)
+	}
+}
+
 func TestVSCodeExtensionDefaultsMatchTheServer(t *testing.T) {
 	t.Parallel()
 
@@ -178,7 +195,7 @@ func TestVSCodeExtensionDefaultsMatchTheServer(t *testing.T) {
 		t.Fatalf("the server rejects the extension's defaults %s: %v", raw, err)
 	}
 	want := Default()
-	if got.Dialect != want.Dialect || got.Lint.Enabled != want.Lint.Enabled || len(got.Lint.Exclude) != 0 || len(got.Lint.Optional) != 0 {
+	if got.Dialect != want.Dialect || got.Lint.Enabled != want.Lint.Enabled || got.Lint.Profile != want.Lint.Profile || len(got.Lint.Exclude) != 0 || len(got.Lint.Optional) != 0 {
 		t.Errorf("defaults %s parse to %+v, want %+v", raw, got, want)
 	}
 	if got.Format.Enabled != want.Format.Enabled || got.Format.Style.Options() != want.Format.Style.Options() {

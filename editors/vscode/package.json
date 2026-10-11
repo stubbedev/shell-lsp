@@ -148,6 +148,25 @@
             "scope": "resource",
             "markdownDescription": "Report lint findings alongside syntax errors."
           },
+          "shellLsp.lint.profile": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "recommended",
+              "minimal",
+              "strict"
+            ],
+            "enumDescriptions": [
+              "Every check that is on by default.",
+              "Errors, warnings and the informational checks that point at real bugs; no style or portability notes.",
+              "Every check, including the optional ones meant for stricter linting."
+            ],
+            "default": "recommended",
+            "scope": "resource",
+            "markdownDescription": "How much to report: `recommended`, `minimal` or `strict`. `lint.optional`, `lint.exclude` and `# shellcheck` directives still apply on top."
+          },
           "shellLsp.lint.exclude": {
             "type": "array",
             "items": {

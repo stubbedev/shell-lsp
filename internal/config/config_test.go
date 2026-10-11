@@ -19,7 +19,7 @@ func TestParseDefaults(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Parse(%q) error = %v", raw, err)
 		}
-		if got.Dialect != nil || !got.Lint.Enabled || len(got.Lint.Exclude) != 0 {
+		if got.Dialect != nil || !got.Lint.Enabled || got.Lint.Profile != lint.ProfileRecommended || len(got.Lint.Exclude) != 0 {
 			t.Errorf("Parse(%q) = %+v, want defaults", raw, got)
 		}
 	}
@@ -28,15 +28,15 @@ func TestParseDefaults(t *testing.T) {
 func TestParseFull(t *testing.T) {
 	t.Parallel()
 
-	got, err := Parse(json.RawMessage(`{"dialect":"zsh","lint":{"enable":false,"exclude":["SC2034","sc1090","2154"],"optional":["require-variable-braces"]}}`))
+	got, err := Parse(json.RawMessage(`{"dialect":"zsh","lint":{"enable":false,"profile":"minimal","exclude":["SC2034","sc1090","2154"],"optional":["require-variable-braces"]}}`))
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
 	if got.Dialect == nil || *got.Dialect != dialect.Zsh {
 		t.Errorf("Dialect = %v, want zsh", got.Dialect)
 	}
-	if got.Lint.Enabled {
-		t.Errorf("Lint = %+v, want disabled", got.Lint)
+	if got.Lint.Enabled || got.Lint.Profile != lint.ProfileMinimal {
+		t.Errorf("Lint = %+v, want disabled with the minimal profile", got.Lint)
 	}
 	if !slices.Equal(got.Lint.Exclude, []lint.Code{2034, 1090, 2154}) {
 		t.Errorf("Exclude = %v", got.Lint.Exclude)
@@ -52,6 +52,7 @@ func TestParseRejects(t *testing.T) {
 	tests := map[string]string{
 		`{"dialect":"fish"}`:                                     "unknown dialect",
 		`{"lint":{"exclude":["nope"]}}`:                          "exclude[0]",
+		`{"lint":{"profile":"loud"}}`:                            "lint.profile",
 		`{"lint":{"optional":["all","require-varible-braces"]}}`: "optional[1]",
 		`{"shellcheck":{"enable":false}}`:                        "unknown field",
 		`{"lint":{"path":"/opt/linter"}}`:                        "unknown field",

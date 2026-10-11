@@ -12,6 +12,7 @@ type CodeInfo struct {
 	Severity Severity
 	Optional string
 	Summary  string
+	Minimal  bool
 }
 
 func Describe(code Code) (CodeInfo, bool) {
@@ -19,7 +20,7 @@ func Describe(code Code) (CodeInfo, bool) {
 	if !ok {
 		return CodeInfo{}, false
 	}
-	return CodeInfo{Code: code, Severity: m.severity, Optional: m.optional, Summary: summaryOf(code, m)}, true
+	return CodeInfo{Code: code, Severity: m.severity, Optional: m.optional, Summary: summaryOf(code, m), Minimal: minimalKeeps(m.severity, m.bug)}, true
 }
 
 func summaryOf(code Code, m meta) string {

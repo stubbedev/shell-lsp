@@ -180,6 +180,11 @@ func (p *pass) reportWithSeverity(code Code, severity Severity, span parser.Span
 	p.findings = append(p.findings, Finding{Code: code, Severity: severity, Tag: p.meta(code).tag, Span: span, Message: message, Fixes: fixes})
 }
 
+func (p *pass) profileKeeps(f Finding) bool {
+	m := p.meta(f.Code)
+	return p.settings.profile.keeps(f, m, m.optional != "" && p.settings.chosen(m.optional))
+}
+
 func (p *pass) active(code Code) bool {
 	m := p.meta(code)
 	return m.optional == "" || p.settings.enabled(m.optional)

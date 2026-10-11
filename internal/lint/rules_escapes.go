@@ -13,7 +13,7 @@ import (
 var escapesFamily = family{
 	codes: map[Code]meta{
 		1001: {severity: SeverityInfo, summary: "A backslash before an ordinary character outside quotes does nothing."},
-		1003: {severity: SeverityInfo, summary: "A backslash cannot escape a single quote inside single quotes, so the quote ends the string."},
+		1003: {severity: SeverityInfo, bug: true, summary: "A backslash cannot escape a single quote inside single quotes, so the quote ends the string."},
 		1011: {severity: SeverityWarning, summary: "An apostrophe inside single quotes closes the string, leaving the rest outside the quotes."},
 		1012: {severity: SeverityWarning, summary: "An escape like \\n or \\t outside quotes is just the letter, not a control character."},
 	},

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/format"
@@ -25,6 +26,7 @@ type Format struct {
 
 type Lint struct {
 	Enabled  bool
+	Profile  lint.Profile
 	Exclude  []lint.Code
 	Optional []string
 }
@@ -55,6 +57,7 @@ type rawFormat struct {
 
 type rawLint struct {
 	Enable   *bool    `json:"enable"`
+	Profile  *string  `json:"profile"`
 	Exclude  []string `json:"exclude"`
 	Optional []string `json:"optional"`
 }
@@ -126,6 +129,13 @@ func ParseSection(raw json.RawMessage) (Settings, bool, error) {
 func parseLint(raw rawLint, l Lint) (Lint, error) {
 	if raw.Enable != nil {
 		l.Enabled = *raw.Enable
+	}
+	if raw.Profile != nil {
+		profile, ok := lint.ProfileNamed(*raw.Profile)
+		if !ok {
+			return Lint{}, fmt.Errorf("%s.lint.profile: unknown profile %q; use %s", Section, *raw.Profile, strings.Join(lint.ProfileNames(), ", "))
+		}
+		l.Profile = profile
 	}
 	for i, name := range raw.Optional {
 		if !lint.EnablesOptional(name) {

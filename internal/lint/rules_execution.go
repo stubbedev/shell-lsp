@@ -13,7 +13,7 @@ import (
 
 var executionFamily = family{
 	codes: map[Code]meta{
-		2032: {severity: SeverityInfo, summary: "A command that runs external programs is given a function this script defines."},
+		2032: {severity: SeverityInfo, bug: true, summary: "A command that runs external programs is given a function this script defines."},
 		2033: {severity: SeverityWarning, summary: "A command that runs external programs cannot see a shell function or alias."},
 		2083: {severity: SeverityError, summary: "A space after ./ runs the current directory instead of the intended file."},
 		2084: {severity: SeverityError, summary: "The result of an arithmetic expansion is run as a command."},
