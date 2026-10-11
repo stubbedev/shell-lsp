@@ -171,6 +171,7 @@ var formats = lang.Docs{
 var variables = lang.Docs{
 	"$ENV":     {"$ENV", "Object of the environment variables when jq started."},
 	"$__loc__": {"$__loc__", "Object with the `file` and `line` of this location in the program."},
+	"$ARGS":    {"$ARGS", "Object of the arguments given with `--arg`, `--argjson` and friends (`named`) and after `--args` or `--jsonargs` (`positional`)."},
 }
 
 func Doc(name string, kind lang.Kind) (lang.Doc, bool) {

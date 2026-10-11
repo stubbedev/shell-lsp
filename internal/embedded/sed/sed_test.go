@@ -120,6 +120,8 @@ b/`,
 	`1~2{N;s/\n/ /}`,
 	`/a/,/b/!{/^$/d}`,
 	`5,$d`,
+	"b end # skip the rest\np\n:end",
+	":loop  \nN\nb loop\t",
 }
 
 func TestValidScripts(t *testing.T) {

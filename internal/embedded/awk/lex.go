@@ -28,8 +28,6 @@ const (
 	tBuiltinFunc
 	tBegin
 	tEnd
-	tBeginFile
-	tEndFile
 	tFunction
 	tIf
 	tElse
@@ -47,9 +45,6 @@ const (
 	tPrint
 	tPrintf
 	tIn
-	tSwitch
-	tCase
-	tDefault
 	tAdd
 	tSub
 	tMul
@@ -83,16 +78,15 @@ const (
 	tPipeBoth
 	tAppend
 	tAt
+	tContextual
 )
 
 var keywords = map[string]kind{
-	"BEGIN": tBegin, "END": tEnd, "BEGINFILE": tBeginFile, "ENDFILE": tEndFile,
-	"function": tFunction, "func": tFunction,
+	"BEGIN": tBegin, "END": tEnd, "function": tFunction,
 	"if": tIf, "else": tElse, "while": tWhile, "for": tFor, "do": tDo,
 	"break": tBreak, "continue": tContinue, "next": tNext, "nextfile": tNextFile,
 	"exit": tExit, "return": tReturn, "delete": tDelete, "getline": tGetline,
 	"print": tPrint, "printf": tPrintf, "in": tIn,
-	"switch": tSwitch, "case": tCase, "default": tDefault,
 }
 
 type operator struct {

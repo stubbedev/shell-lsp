@@ -148,6 +148,11 @@ END { print "total pay is", pay
 	`BEGIN { x = 1; y = x++ + ++x; z = -x^2; w = 2^-1 }`,
 	`{ c = substr ($0, 1, 1) }`,
 	`BEGIN { and = 1; print and }`,
+	`{ case = 1; default = 2; switch = 3; func = 4; print case + default + switch + func }`,
+	`BEGINFILE == 1 { print BEGINFILE, ENDFILE }`,
+	`{ case = $1 } case ~ /x/ { print case / 2 }`,
+	"BEGIN { switch (x) {\ncase 1:\n\tprint\n\tbreak\ndefault:\n\tprint 0\n} }",
+	`BEGIN { switch(x) { case /a/: print; case -1: print } }`,
 }
 
 func TestValidPrograms(t *testing.T) {
@@ -199,6 +204,10 @@ func TestTokens(t *testing.T) {
 		"+:operator", "NR:variable+builtin", "# note:comment",
 		"$:operator", "1:number", "~:operator", "/x/:regexp", "print:keyword", "f:function", "2:number",
 		"length:function+builtin", "\"s\":string", ">:operator", "\"out\":string",
+	)
+	langtest.CheckTokens(t, Parse, "func g() { switch (x) { case /r/: default: } } BEGINFILE { case = 1 }",
+		"func:keyword", "g:function+declaration", "switch:keyword", "x:variable", "case:keyword", "/r/:regexp",
+		"::operator", "default:keyword", "::operator", "BEGINFILE:keyword", "case:variable", "=:operator", "1:number",
 	)
 }
 

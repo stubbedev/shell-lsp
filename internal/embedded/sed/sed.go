@@ -203,7 +203,8 @@ func (p *parser) label() label {
 	p.blanks()
 	start := p.pos
 	p.pos = wordEnd(p.src, p.pos)
-	name := strings.TrimRight(p.src[start:p.pos], " \t\r")
+	name, _, _ := strings.Cut(strings.TrimRight(p.src[start:p.pos], " \t\r"), " ")
+	name, _, _ = strings.Cut(name, "\t")
 	end := start + len(name)
 	p.res.Emit(start, end, lang.Property, 0)
 	return label{name: name, start: start, end: end}

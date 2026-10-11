@@ -119,24 +119,36 @@ func (p *parser) program() {
 	}
 }
 
+func (p *parser) is(word string) bool {
+	return (p.tok.kind == tName || p.tok.kind == tFuncName) && p.lex.src[p.tok.start:p.tok.end] == word
+}
+
+func (p *parser) contextual() {
+	p.reclassify(p.tok, lang.Keyword, 0)
+	if p.peeked == nil {
+		p.lex.prev = tContextual
+	}
+	p.advance()
+}
+
 func (p *parser) item() {
-	switch p.tok.kind {
-	case tAt:
+	switch {
+	case p.tok.kind == tAt:
 		if p.directive() {
 			return
 		}
-	case tFunction:
+	case p.tok.kind == tFunction, p.is("func") && startsName(p.peek().kind):
 		p.function()
 		return
-	case tBegin, tEnd, tBeginFile, tEndFile:
+	case p.tok.kind == tBegin, p.tok.kind == tEnd, (p.is("BEGINFILE") || p.is("ENDFILE")) && p.peek().kind == tLBrace:
 		special := p.tok
-		p.advance()
+		p.contextual()
 		if p.tok.kind != tLBrace {
 			p.failAt(special, lang.Quote(p.lex.src, special.start, special.end)+" needs an action in braces on the same line")
 		}
 		p.block()
 		return
-	case tLBrace:
+	case p.tok.kind == tLBrace:
 		p.block()
 		return
 	}
@@ -174,8 +186,10 @@ func (p *parser) directive() bool {
 	return true
 }
 
+func startsName(k kind) bool { return k == tName || k == tFuncName }
+
 func (p *parser) function() {
-	p.advance()
+	p.contextual()
 	name := p.tok
 	switch name.kind {
 	case tName, tFuncName:
@@ -223,6 +237,10 @@ func (p *parser) block() {
 }
 
 func (p *parser) statement() {
+	if p.is("switch") && (p.tok.kind == tFuncName || p.peek().kind == tLParen) {
+		p.switchStatement()
+		return
+	}
 	switch p.tok.kind {
 	case tLBrace:
 		p.block()
@@ -250,8 +268,6 @@ func (p *parser) statement() {
 		p.endSimple()
 	case tFor:
 		p.forStatement()
-	case tSwitch:
-		p.switchStatement()
 	case tSemicolon:
 		p.advance()
 	default:
@@ -310,20 +326,20 @@ func (p *parser) forStatement() {
 }
 
 func (p *parser) switchStatement() {
-	p.advance()
+	p.contextual()
 	p.condition()
 	p.newlines()
 	open := p.expect(tLBrace)
 	for {
 		p.terminators()
-		switch p.tok.kind {
-		case tRBrace:
+		switch {
+		case p.tok.kind == tRBrace:
 			p.advance()
 			return
-		case tEOF:
+		case p.tok.kind == tEOF:
 			p.failAt(open, lang.Unclosed(p.lex.src, open.start, open.end))
-		case tCase:
-			p.advance()
+		case p.is("case"):
+			p.contextual()
 			if p.tok.kind == tSub || p.tok.kind == tAdd {
 				p.advance()
 			}
@@ -334,8 +350,8 @@ func (p *parser) switchStatement() {
 				p.unexpected()
 			}
 			p.expect(tColon)
-		case tDefault:
-			p.advance()
+		case p.is("default"):
+			p.contextual()
 			p.expect(tColon)
 		default:
 			p.statement()
