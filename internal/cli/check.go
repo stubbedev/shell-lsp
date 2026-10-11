@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
-	"strings"
 	"sync"
 	"time"
 
@@ -23,6 +22,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/navigation"
 	"github.com/stubbedev/shell-lsp/internal/parallel"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/platform"
 	"github.com/stubbedev/shell-lsp/internal/project"
 	"github.com/stubbedev/shell-lsp/internal/regularfile"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
@@ -276,7 +276,7 @@ func (c *checker) targets() ([]target, []string) {
 	}
 	seen := map[string]bool{}
 	return slices.DeleteFunc(out, func(t target) bool {
-		key := cmp.Or(t.path, t.name)
+		key := platform.Native.Fold(cmp.Or(t.path, t.name))
 		if seen[key] {
 			return true
 		}
@@ -293,11 +293,10 @@ func (c *checker) abs(path string) string {
 }
 
 func (c *checker) display(path string) string {
-	rel, err := filepath.Rel(c.env.Dir, path)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return path
+	if rel, ok := platform.RelativeWithin(c.env.Dir, path); ok {
+		return rel
 	}
-	return rel
+	return path
 }
 
 func (c *checker) lintAll(targets []target) []linted {

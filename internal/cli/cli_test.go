@@ -110,7 +110,7 @@ func TestCheckFindsAndShortensPaths(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := run(t, dir, "", "check", "-f", "gcc", "proj")
-	want := []string{"proj/a.sh:2:6 SC2086", "proj/sub/b.bash:2:6 SC2086", "proj/tool:2:6 SC2086"}
+	want := []string{filepath.FromSlash("proj/a.sh:2:6 SC2086"), filepath.FromSlash("proj/sub/b.bash:2:6 SC2086"), filepath.FromSlash("proj/tool:2:6 SC2086")}
 	if !slices.Equal(findings(t, got.stdout), want) || got.status != checkStatusFindings {
 		t.Errorf("checking a directory = %d %v, want %v\n%s", got.status, findings(t, got.stdout), want, got.stderr)
 	}
@@ -196,7 +196,7 @@ func TestCheckFollowsAndOptionallyReportsSourcedFiles(t *testing.T) {
 		t.Errorf("main.sh, which reads a variable its sourced file sets, = %d %q", plain.status, plain.stdout)
 	}
 	sourced := run(t, dir, "", "check", "-a", "-f", "gcc", "src/main.sh")
-	if got := findings(t, sourced.stdout); !slices.Contains(got, "src/lib.sh:3:6 SC2086") {
+	if got := findings(t, sourced.stdout); !slices.Contains(got, filepath.FromSlash("src/lib.sh:3:6 SC2086")) {
 		t.Errorf("-a did not report the sourced file: %v", got)
 	}
 }

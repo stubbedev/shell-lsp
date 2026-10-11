@@ -3,6 +3,7 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -88,8 +89,12 @@ func TestFmtWriteReplacesFilesAtomically(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := readFile(t, path); got != pretty || info.Mode().Perm() != 0o751 {
-		t.Errorf("-w wrote %q with mode %o, want the formatted text with mode 751", got, info.Mode().Perm())
+	wantMode := os.FileMode(0o751)
+	if runtime.GOOS == "windows" {
+		wantMode = 0o666
+	}
+	if got := readFile(t, path); got != pretty || info.Mode().Perm() != wantMode {
+		t.Errorf("-w wrote %q with mode %o, want the formatted text with mode %o", got, info.Mode().Perm(), wantMode)
 	}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -103,6 +108,9 @@ func TestFmtWriteReplacesFilesAtomically(t *testing.T) {
 func TestWriteAtomicLeavesTheTargetIntactOnFailure(t *testing.T) {
 	t.Parallel()
 
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows ignores Unix permission bits, so chmod cannot make a directory read-only")
+	}
 	if os.Geteuid() == 0 {
 		t.Skip("root writes into read-only directories")
 	}
