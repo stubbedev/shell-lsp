@@ -132,11 +132,6 @@ func (c command) literalArgs() ([]string, bool) {
 	return out, true
 }
 
-func literalIs(w *syntax.Word, text string) bool {
-	lit, ok := parser.Literal(w)
-	return ok && lit == text
-}
-
 func literalIn(w *syntax.Word, set map[string]bool) bool {
 	lit, ok := parser.Literal(w)
 	return ok && set[lit]

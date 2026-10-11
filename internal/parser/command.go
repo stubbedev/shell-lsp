@@ -14,6 +14,8 @@ type wrapper struct {
 	valued      []string
 	operands    int
 	assignments bool
+	replace     []string
+	closesStdin bool
 }
 
 var commandWrappers = map[string]wrapper{
@@ -33,10 +35,13 @@ var commandWrappers = map[string]wrapper{
 	"setsid":  {program: true},
 	"timeout": {program: true, operands: 1, valued: []string{"-k", "-s", "--kill-after", "--signal"}},
 	"watch":   {program: true, valued: []string{"-n", "-q", "--interval", "--equexit"}},
-	"xargs": {program: true, valued: []string{
-		"-a", "-d", "-E", "-I", "-J", "-L", "-n", "-P", "-R", "-S", "-s",
-		"--arg-file", "--delimiter", "--max-args", "--max-procs", "--max-chars", "--process-slot-var",
-	}},
+	"xargs": {
+		program: true, closesStdin: true, replace: []string{"-I", "-J", "-i", "--replace"},
+		valued: []string{
+			"-a", "-d", "-E", "-I", "-J", "-L", "-n", "-P", "-R", "-S", "-s",
+			"--arg-file", "--delimiter", "--max-args", "--max-procs", "--max-chars", "--process-slot-var",
+		},
+	},
 }
 
 const batsRun = "run"
@@ -74,18 +79,26 @@ func (w Wrappers) Unwrap(name string, args []string) (Wrap, bool) {
 
 func (w Wrappers) Start(args []*syntax.Word) int {
 	for i := 0; i < len(args); {
-		name, ok := Literal(args[i])
+		_, next, ok := w.step(args, i)
 		if !ok {
 			return i
 		}
-		spec, ok := w.lookup(name)
-		if !ok {
-			return i
-		}
-		rest := args[i+1:]
-		i += 1 + spec.skip(len(rest), func(j int) (string, bool) { return Literal(rest[j]) }).Command
+		i = next
 	}
 	return -1
+}
+
+func (w Wrappers) step(args []*syntax.Word, i int) (wrapper, int, bool) {
+	name, ok := Literal(args[i])
+	if !ok {
+		return wrapper{}, i, false
+	}
+	spec, ok := w.lookup(name)
+	if !ok {
+		return wrapper{}, i, false
+	}
+	rest := args[i+1:]
+	return spec, i + 1 + spec.skip(len(rest), func(j int) (string, bool) { return Literal(rest[j]) }).Command, true
 }
 
 func (s wrapper) skip(n int, word func(int) (string, bool)) Wrap {

@@ -52,6 +52,16 @@ func TestFindsPrograms(t *testing.T) {
 		{"x=$(awk '{print $1}' f)\n", Awk, "{print $1}"},
 		{"awk -f - <<'EOF'\n{ print $1 }\nEOF\n", Awk, "{ print $1 }\n"},
 		{"sed -f /dev/stdin f <<-\"EOF\"\n\t\ts/a/b/\n\tp\n\tEOF\n", Sed, "s/a/b/\np\n"},
+		{"sudo -u root sed -i 's/a/b/' /etc/x\n", Sed, "s/a/b/"},
+		{"doas awk 'NR==1' f\n", Awk, "NR==1"},
+		{"env LC_ALL=C awk '{print $1}' f\n", Awk, "{print $1}"},
+		{"nice -n 5 nohup jq -c . f\n", Jq, "."},
+		{"timeout 10 jq '.a' f\n", Jq, ".a"},
+		{"printf '%s\\n' a b | xargs -n1 sed 's/a/b/'\n", Sed, "s/a/b/"},
+		{"xargs -I {} sed 's/x/y/' {}\n", Sed, "s/x/y/"},
+		{"find . -name '*.log' -exec awk '{n++} END {print n}' {} +\n", Awk, "{n++} END {print n}"},
+		{"find . -type f -execdir sed -n '1p' {} \\;\n", Sed, "1p"},
+		{"sudo awk -f - <<'EOF'\n{ print }\nEOF\n", Awk, "{ print }\n"},
 	}
 	for _, tt := range tests {
 		programs := find(t, tt.src)
@@ -88,11 +98,28 @@ func TestSkipsProgramsItCannotSee(t *testing.T) {
 		"jq --arg k\n",
 		"echo awk '{x'\n",
 		"sed -i '' f\n",
-		"find . -exec awk '{x' {} +\n",
+		"find . -exec awk '{x' {}\n",
+		"find . -exec awk '/{}/' \\;\n",
+		"xargs -I % sed 's/%/x/'\n",
+		"xargs -i jq '.{}'\n",
+		"xargs awk -f - <<'EOF'\n{ print }\nEOF\n",
+		"env -S 'awk {' f\n",
 	} {
 		if programs := find(t, src); len(programs) != 0 {
 			t.Errorf("Find(%q) = %+v, want nothing", src, programs)
 		}
+	}
+}
+
+func TestFindsEveryProgramOfFindExec(t *testing.T) {
+	t.Parallel()
+
+	var got []string
+	for _, p := range find(t, "find . -exec awk '{print}' {} \\; -exec sed -n '$p' {} \\; -print\n") {
+		got = append(got, p.Language.String()+" "+p.Text)
+	}
+	if want := []string{"awk {print}", "sed $p"}; !slices.Equal(got, want) {
+		t.Errorf("programs = %q, want %q", got, want)
 	}
 }
 

@@ -52,7 +52,7 @@ func checkExprShape(p *pass, c command) {
 	case len(args) == 1 && !canWordSplit(args[0]):
 		p.reportNode(2307, args[0], "expr sees a single argument and just prints it; separate operators and operands with spaces, and escape > < | as needed.")
 		return
-	case len(args) == 2 && !literalIs(args[0], "length") && !slices.ContainsFunc(args, canWordSplit):
+	case len(args) == 2 && !parser.LiteralIs(args[0], "length") && !slices.ContainsFunc(args, canWordSplit):
 		p.reportNode(2307, c.call, "expr sees only two arguments, which is not a valid expression; separate operators and operands with spaces, and escape > < | as needed.")
 	default:
 		for _, arg := range args[1:] {

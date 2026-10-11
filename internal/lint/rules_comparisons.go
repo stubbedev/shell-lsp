@@ -124,7 +124,7 @@ func redirectedOrdering(args []*syntax.Word, r *syntax.Redirect) (ordering, bool
 			y = a
 		}
 	}
-	if literalIs(r.Word, "=") && parser.Offset(r.Word.Pos()) == op.span.End {
+	if parser.LiteralIs(r.Word, "=") && parser.Offset(r.Word.Pos()) == op.span.End {
 		op.name += "="
 		op.span.End++
 	} else {

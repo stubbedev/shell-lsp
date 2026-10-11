@@ -5,6 +5,7 @@ xargs -i{} echo {}
 ### xargs -e consumes a word then -i follows
 xargs -e sed -i foo
 >>> SC2267 1:14
+>>+ SL3002 1:17 -- shell-lsp native check; GNU xargs takes the -e end-of-file string only when attached, so it runs sed with the script foo
 
 ### upper-case -I is the replacement
 xargs -I{} echo {}

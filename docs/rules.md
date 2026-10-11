@@ -92,9 +92,11 @@ main "$@"
 The embedded-language rules check awk, sed and jq programs written inside the
 script with built-in parsers; no awk, sed or jq binary is run. A program is
 checked when it is a literal argument (`awk '...'`, `sed -e '...'`,
-`jq -r '...'`) or a quoted here-document fed to `awk -f -` or `sed -f -`.
-Programs that contain shell expansions, or come from files, are skipped
-rather than guessed at. Each error is reported at its exact position inside
+`jq -r '...'`) or a quoted here-document fed to `awk -f -` or `sed -f -`,
+also when the command runs behind `sudo`, `env`, `nice`, `timeout`, `xargs`,
+`find -exec` and the other wrappers. Programs that contain shell expansions,
+come from files, or contain the `{}` or `xargs -I` placeholder substituted
+at run time are skipped rather than guessed at. Each error is reported at its exact position inside
 the shell string.
 
 ## SL3001

@@ -31,7 +31,7 @@ func checkElevatedRedirection(p *pass, c command) {
 		return
 	}
 	for _, r := range stmt.Redirs {
-		if r.N != nil || r.Word == nil || literalIs(r.Word, "/dev/null") {
+		if r.N != nil || r.Word == nil || parser.LiteralIs(r.Word, "/dev/null") {
 			continue
 		}
 		severity, advice := p.meta(2024).severity, ""

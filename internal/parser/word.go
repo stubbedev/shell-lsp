@@ -24,6 +24,11 @@ func Literal(w *syntax.Word) (string, bool) {
 	return text, true
 }
 
+func LiteralIs(w *syntax.Word, text string) bool {
+	lit, ok := Literal(w)
+	return ok && lit == text
+}
+
 func Text(w *syntax.Word, placeholder string) (string, bool) {
 	if w == nil {
 		return "", false

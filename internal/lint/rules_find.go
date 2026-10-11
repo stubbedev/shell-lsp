@@ -82,7 +82,7 @@ func checkFindInlineScript(p *pass, c command) {
 			sawExec = true
 		case sawExec && literalIn(arg, findInlineShells):
 			sawShell = true
-		case sawShell && literalIs(arg, "-c") && i+1 < len(c.args):
+		case sawShell && parser.LiteralIs(arg, "-c") && i+1 < len(c.args):
 			if script, _ := parser.Text(c.args[i+1], ""); strings.Contains(script, "{}") {
 				p.reportNode(2156, c.args[i+1], "Pass {} to the inline script as an argument and use \"$1\"; injecting file names into the script text breaks on special characters.")
 			}

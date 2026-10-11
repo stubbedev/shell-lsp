@@ -157,7 +157,7 @@ func abbreviatesTargetDirectory(long string) bool {
 
 func checkChmodLowerR(p *pass, c command) {
 	for _, arg := range c.args {
-		if literalIs(arg, "-r") {
+		if parser.LiteralIs(arg, "-r") {
 			p.reportNode(2253, arg, "chmod -r removes read permission; use -R to change modes recursively.")
 		}
 	}

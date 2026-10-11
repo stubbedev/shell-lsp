@@ -24,8 +24,8 @@ type piece struct {
 }
 
 func Find(tree *parser.Tree) []Program {
-	bats := tree.Bats
-	if !slices.ContainsFunc(tree.Commands, func(c parser.Command) bool { return mayEmbed(c.Name, bats) }) {
+	wrappers := runners(tree.Bats)
+	if !slices.ContainsFunc(tree.Commands, func(c parser.Command) bool { return mayEmbed(wrappers, c.Name) }) {
 		return nil
 	}
 	var programs []Program
@@ -43,32 +43,35 @@ func In(tree *parser.Tree, stmt *syntax.Stmt) []Program {
 }
 
 func appendPrograms(programs []Program, tree *parser.Tree, stmt *syntax.Stmt) []Program {
-	program, ok := embeddedIn(tree, stmt, tree.Bats)
-	if !ok {
+	call, ok := stmt.Cmd.(*syntax.CallExpr)
+	if !ok || len(call.Args) == 0 {
 		return programs
 	}
-	program.Result = languages[program.Language].parse(program.Text)
-	return append(programs, program)
+	wrappers := runners(tree.Bats)
+	if name, ok := parser.Literal(call.Args[0]); !ok || !mayEmbed(wrappers, name) {
+		return programs
+	}
+	for run := range wrappers.Invocations(call.Args) {
+		if program, ok := embeddedIn(tree, stmt, run); ok {
+			program.Result = languages[program.Language].parse(program.Text)
+			programs = append(programs, program)
+		}
+	}
+	return programs
 }
 
-func mayEmbed(name string, bats bool) bool {
-	if (parser.Wrappers{Bats: bats}).Has(name) {
+func runners(bats bool) parser.Wrappers { return parser.Wrappers{Bats: bats, Programs: true} }
+
+func mayEmbed(wrappers parser.Wrappers, name string) bool {
+	if wrappers.Runs(name) {
 		return true
 	}
 	_, ok := languageOf(name)
 	return ok
 }
 
-func embeddedIn(tree *parser.Tree, stmt *syntax.Stmt, bats bool) (Program, bool) {
-	call, ok := stmt.Cmd.(*syntax.CallExpr)
-	if !ok {
-		return Program{}, false
-	}
-	at := parser.Wrappers{Bats: bats}.Start(call.Args)
-	if at < 0 {
-		return Program{}, false
-	}
-	name, ok := parser.Literal(call.Args[at])
+func embeddedIn(tree *parser.Tree, stmt *syntax.Stmt, run parser.Invocation) (Program, bool) {
+	name, ok := parser.Literal(run.Args[0])
 	if !ok {
 		return Program{}, false
 	}
@@ -76,15 +79,21 @@ func embeddedIn(tree *parser.Tree, stmt *syntax.Stmt, bats bool) (Program, bool)
 	if !ok {
 		return Program{}, false
 	}
-	inv, ok := languages[language].cli.scan(call.Args[at+1:])
+	inv, ok := languages[language].cli.scan(run.Args[1:])
 	if !ok {
 		return Program{}, false
 	}
 	program := Program{Language: language}
-	if inv.stdin {
-		program.Text, program.pieces, ok = heredocProgram(tree, stmt)
-	} else {
+	switch {
+	case !inv.stdin:
 		program.Text, program.pieces, ok = decode(inv.scripts)
+	case run.InheritsStdin:
+		program.Text, program.pieces, ok = heredocProgram(tree, stmt)
+	default:
+		return Program{}, false
+	}
+	if run.Placeholder != "" && strings.Contains(program.Text, run.Placeholder) {
+		return Program{}, false
 	}
 	return program, ok && len(program.pieces) > 0
 }
