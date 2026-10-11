@@ -1,0 +1,135 @@
+dialect zsh
+scope 0 parent=0 1:1-89:1
+scope 1 parent=0 17:1-25:2
+scope 2 parent=0 27:1-31:2
+scope 3 parent=0 33:1-45:2
+scope 4 parent=0 47:1-52:2
+scope 5 parent=0 54:1-63:2
+scope 6 parent=0 65:1-72:2
+scope 7 parent=0 76:1-78:2
+scope 8 parent=0 80:1-85:2
+function 17:1-17:15 "_suggest_fetch" body=1 within=0 doc=""
+function 27:1-27:19 "_suggest_highlight" body=2 within=0 doc=""
+function 33:1-33:16 "_suggest_modify" body=3 within=0 doc=""
+function 47:1-47:16 "_suggest_accept" body=4 within=0 doc=""
+function 54:1-54:14 "_suggest_bind" body=5 within=0 doc=""
+function 65:1-65:15 "_suggest_start" body=6 within=0 doc=""
+function 76:1-76:9 "TRAPUSR1" body=7 within=0 doc=""
+definition 3:12-3:30 "SUGGEST_PLUGIN_DIR" kind=2 attrs=000000 local=false within=0
+definition 4:13-4:27 "SUGGEST_CONFIG" kind=2 attrs=000010 local=false within=0
+definition 8:13-8:29 "SUGGEST_MAX_SIZE" kind=2 attrs=010000 local=false within=0
+definition 9:1-9:6 "fpath" kind=0 attrs=000001 local=false within=0
+definition 20:8-20:14 "prefix" kind=2 attrs=000000 local=true within=1
+definition 20:18-20:23 "match" kind=2 attrs=000000 local=true within=1
+definition 21:11-21:26 "history_matches" kind=2 attrs=000001 local=true within=1
+definition 22:2-22:17 "history_matches" kind=0 attrs=000001 local=false within=1
+definition 23:2-23:7 "match" kind=0 attrs=000000 local=false within=1
+definition 24:13-24:27 "SUGGEST_RESULT" kind=2 attrs=000000 local=false within=1
+definition 28:2-28:18 "region_highlight" kind=0 attrs=000001 local=false within=2
+definition 30:2-30:18 "region_highlight" kind=0 attrs=000001 local=false within=2
+definition 34:8-34:16 "original" kind=2 attrs=000000 local=true within=3
+definition 36:11-36:14 "ret" kind=2 attrs=010000 local=true within=3
+definition 38:2-38:13 "POSTDISPLAY" kind=0 attrs=000000 local=false within=3
+definition 41:31-41:42 "POSTDISPLAY" kind=0 attrs=000000 local=false within=3
+definition 48:2-48:8 "BUFFER" kind=0 attrs=000000 local=false within=4
+definition 49:2-49:13 "POSTDISPLAY" kind=0 attrs=000000 local=false within=4
+definition 50:5-50:11 "CURSOR" kind=4 attrs=000000 local=false within=4
+definition 55:8-55:14 "widget" kind=2 attrs=000000 local=true within=5
+definition 56:6-56:12 "widget" kind=3 attrs=000000 local=false within=5
+definition 81:8-81:12 "file" kind=2 attrs=000000 local=true within=8
+definition 82:6-82:10 "file" kind=3 attrs=000000 local=false within=8
+reference 2:11-2:22 "ZSH_ARGZERO" within=0
+reference 8:32-8:48 "SUGGEST_MAX_SIZE" within=0
+reference 9:10-9:28 "SUGGEST_PLUGIN_DIR" within=0
+reference 9:44-9:49 "fpath" within=0
+reference 22:30-22:37 "history" within=1
+reference 22:60-22:76 "SUGGEST_MAX_SIZE" within=1
+reference 23:10-23:25 "history_matches" within=1
+reference 24:29-24:34 "match" within=1
+reference 28:23-28:39 "region_highlight" within=2
+reference 29:7-29:18 "POSTDISPLAY" within=2
+reference 30:25-30:31 "BUFFER" within=2
+reference 30:38-30:44 "BUFFER" within=2
+reference 30:49-30:60 "POSTDISPLAY" within=2
+reference 30:66-30:80 "SUGGEST_CONFIG" within=2
+reference 34:18-34:24 "BUFFER" within=3
+reference 35:8-35:14 "WIDGET" within=3
+reference 37:6-37:12 "BUFFER" within=3
+reference 37:17-37:25 "original" within=3
+reference 39:10-39:16 "BUFFER" within=3
+reference 39:26-39:32 "BUFFER" within=3
+reference 39:36-39:52 "SUGGEST_MAX_SIZE" within=3
+reference 40:19-40:25 "BUFFER" within=3
+reference 41:10-41:24 "SUGGEST_RESULT" within=3
+reference 41:45-41:59 "SUGGEST_RESULT" within=3
+reference 41:61-41:67 "BUFFER" within=3
+reference 48:11-48:22 "POSTDISPLAY" within=4
+reference 50:16-50:22 "BUFFER" within=4
+reference 57:8-57:15 "widgets" within=5
+reference 57:17-57:23 "widget" within=5
+reference 58:11-58:17 "widget" within=5
+reference 82:15-82:33 "SUGGEST_PLUGIN_DIR" within=8
+reference 83:19-83:23 "file" within=8
+reference 87:38-87:52 "SUGGEST_CONFIG" within=0
+reference 88:55-88:60 "REPLY" within=0
+command 3:1-3:8 "typeset" args=0 within=0
+command 4:1-4:8 "typeset" args=0 within=0
+command 8:1-8:8 "typeset" args=0 within=0
+command 10:1-10:9 "autoload" args=3 within=0
+command 12:6-12:17 "is-at-least" args=1 within=0
+command 13:2-13:7 "print" args=4 within=0
+command 14:2-14:8 "return" args=1 within=0
+command 18:2-18:9 "emulate" args=2 within=1
+command 19:2-19:8 "setopt" args=3 within=1
+command 20:2-20:7 "local" args=0 within=1
+command 21:2-21:7 "local" args=0 within=1
+command 24:2-24:9 "typeset" args=0 within=1
+command 29:25-29:31 "return" args=1 within=2
+command 34:2-34:7 "local" args=0 within=3
+command 35:2-35:5 "zle" args=3 within=3
+command 36:2-36:7 "local" args=0 within=3
+command 37:32-37:38 "return" args=1 within=3
+command 40:3-40:17 "_suggest_fetch" args=1 within=3
+command 43:2-43:20 "_suggest_highlight" args=0 within=3
+command 44:2-44:8 "return" args=1 within=3
+command 51:2-51:20 "_suggest_highlight" args=0 within=4
+command 55:2-55:7 "local" args=0 within=5
+command 57:51-57:59 "continue" args=0 within=5
+command 58:3-58:6 "zle" args=3 within=5
+command 60:2-60:5 "zle" args=3 within=5
+command 61:2-61:9 "bindkey" args=2 within=5
+command 62:2-62:9 "bindkey" args=4 within=5
+command 66:2-66:14 "add-zsh-hook" args=3 within=6
+command 68:3-68:16 "_suggest_bind" args=0 within=6
+command 70:3-70:13 "unfunction" args=1 within=6
+command 74:1-74:13 "add-zsh-hook" args=2 within=0
+command 77:2-77:5 "zle" args=0 within=7
+command 77:9-77:12 "zle" args=1 within=7
+command 81:2-81:7 "local" args=0 within=8
+command 83:3-83:10 "builtin" args=2 within=8
+command 87:1-87:7 "zstyle" args=3 within=0
+command 88:1-88:7 "zstyle" args=4 within=0
+command 88:42-88:47 "print" args=3 within=0
+redirect 88:61-88:62 ">" target=88:62-88:71 "/dev/null"
+keyword 12:1-12:3 "if"
+keyword 12:4-12:5 "!"
+keyword 12:23-12:27 "then"
+keyword 15:1-15:3 "fi"
+keyword 37:2-37:4 "[["
+keyword 37:26-37:28 "]]"
+keyword 39:2-39:4 "if"
+keyword 39:62-39:66 "then"
+keyword 41:3-41:5 "[["
+keyword 41:25-41:27 "]]"
+keyword 42:2-42:4 "fi"
+keyword 56:2-56:5 "for"
+keyword 56:13-56:15 "in"
+keyword 56:74-56:76 "do"
+keyword 57:3-57:5 "[["
+keyword 57:45-57:47 "]]"
+keyword 59:2-59:6 "done"
+keyword 69:4-69:10 "always"
+keyword 82:2-82:5 "for"
+keyword 82:11-82:13 "in"
+keyword 82:59-82:61 "do"
+keyword 84:2-84:6 "done"

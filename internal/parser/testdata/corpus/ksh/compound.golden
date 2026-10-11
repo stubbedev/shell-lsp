@@ -1,0 +1,57 @@
+dialect ksh
+scope 0 parent=0 1:1-41:1
+scope 1 parent=0 30:1-33:2
+function 30:10-30:18 "describe" body=1 within=0 doc=""
+definition 2:10-2:16 "config" kind=2 attrs=000000 local=false within=0
+definition 11:1-11:6 "point" kind=0 attrs=000000 local=false within=0
+definition 12:1-12:7 "nested" kind=0 attrs=000001 local=false within=0
+definition 13:12-13:19 "indexed" kind=2 attrs=000010 local=false within=0
+definition 14:1-14:7 "matrix" kind=0 attrs=000001 local=false within=0
+definition 21:1-21:7 "matrix" kind=0 attrs=000000 local=false within=0
+definition 25:12-25:17 "saved" kind=2 attrs=000000 local=false within=0
+definition 26:9-26:12 "ref" kind=2 attrs=100000 local=false within=0
+definition 31:10-31:16 "target" kind=2 attrs=100000 local=true within=1
+definition 36:5-36:8 "key" kind=3 attrs=000000 local=false within=0
+reference 16:16-16:22 "config" within=0
+reference 16:31-16:37 "config" within=0
+reference 16:46-16:52 "config" within=0
+reference 16:65-16:71 "config" within=0
+reference 17:16-17:21 "point" within=0
+reference 17:27-17:32 "point" within=0
+reference 17:38-17:44 "nested" within=0
+reference 17:53-17:60 "indexed" within=0
+reference 17:75-17:81 "matrix" within=0
+reference 18:1-18:7 "config" within=0
+reference 19:1-19:7 "config" within=0
+reference 20:1-20:6 "point" within=0
+reference 23:32-23:38 "config" within=0
+reference 23:45-23:51 "config" within=0
+reference 27:1-27:4 "ref" within=0
+reference 28:16-28:21 "saved" within=0
+reference 28:39-28:45 "config" within=0
+reference 32:17-32:23 "target" within=1
+reference 32:43-32:49 "target" within=1
+reference 37:16-37:19 "key" within=0
+command 2:1-2:9 "compound" args=0 within=0
+command 4:2-4:9 "typeset" args=0 within=0
+command 5:2-5:9 "typeset" args=0 within=0
+command 13:1-13:8 "typeset" args=0 within=0
+command 16:1-16:6 "print" args=3 within=0
+command 17:1-17:6 "print" args=3 within=0
+command 22:1-22:6 "print" args=2 within=0
+command 23:1-23:6 "print" args=5 within=0
+command 25:1-25:8 "typeset" args=0 within=0
+command 26:1-26:8 "nameref" args=0 within=0
+command 28:1-28:6 "print" args=3 within=0
+command 31:2-31:9 "nameref" args=0 within=1
+command 32:2-32:7 "print" args=3 within=1
+command 34:1-34:9 "describe" args=1 within=0
+command 37:2-37:7 "print" args=3 within=0
+command 39:1-39:6 "print" args=5 within=0
+command 40:1-40:6 "unset" args=1 within=0
+comment 1:1-1:11 "#!/bin/ksh"
+keyword 30:1-30:9 "function"
+keyword 36:1-36:4 "for"
+keyword 36:9-36:11 "in"
+keyword 36:35-36:37 "do"
+keyword 38:1-38:5 "done"

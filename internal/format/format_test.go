@@ -1,9 +1,10 @@
 package format
 
 import (
-	"errors"
 	"fmt"
 	"math/rand/v2"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -124,14 +125,59 @@ func TestFormatZsh(t *testing.T) {
 	t.Parallel()
 
 	got, err := Format(parser.Parse("for f in **/*(.); do\nprint -r -- ${(U)f:t}\ndone\n", dialect.Zsh), Options{})
-	if errors.Is(err, ErrNotIdempotent) {
-		t.Skipf("zsh printing is not stable upstream yet: %v", err)
-	}
 	if err != nil {
 		t.Fatalf("Format(zsh) error = %v", err)
 	}
 	if !strings.Contains(got, "\tprint -r -- ${(U)f:t}") {
 		t.Errorf("Format(zsh) = %q", got)
+	}
+}
+
+func TestCorpusFormatsIdempotently(t *testing.T) {
+	t.Parallel()
+
+	fixtures, err := filepath.Glob(filepath.Join("..", "parser", "testdata", "corpus", "*", "*"))
+	if err != nil {
+		t.Fatalf("listing the parser corpus: %v", err)
+	}
+	styles := []Options{
+		{},
+		{Simplify: true},
+		{Minify: true},
+		{Indent: 2, BinaryNextLine: true, SwitchCaseIndent: true, SpaceRedirects: true, FunctionNextLine: true},
+	}
+	for _, fixture := range fixtures {
+		if filepath.Ext(fixture) == ".golden" {
+			continue
+		}
+		t.Run(fixture, func(t *testing.T) {
+			t.Parallel()
+
+			d, ok := dialect.FromName(filepath.Base(filepath.Dir(fixture)))
+			if !ok {
+				t.Fatalf("corpus directory %s is not a dialect name", filepath.Dir(fixture))
+			}
+			src, err := os.ReadFile(fixture)
+			if err != nil {
+				t.Fatalf("reading fixture: %v", err)
+			}
+			tree := parser.Parse(string(src), d)
+			if name := strings.TrimSuffix(filepath.Base(fixture), filepath.Ext(fixture)); name == "errors" || name == "broken" {
+				return
+			}
+			if len(tree.Errors) > 0 {
+				t.Fatalf("syntax errors %v", tree.Errors)
+			}
+			for _, opts := range styles {
+				got, err := Format(tree, opts)
+				if err != nil {
+					t.Fatalf("Format(%+v) error = %v", opts, err)
+				}
+				if reparsed := parser.Parse(got, d); len(reparsed.Errors) > 0 {
+					t.Errorf("Format(%+v) output has syntax errors %v:\n%s", opts, reparsed.Errors, got)
+				}
+			}
+		})
 	}
 }
 

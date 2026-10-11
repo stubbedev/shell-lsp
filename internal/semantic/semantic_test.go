@@ -137,6 +137,30 @@ func TestNumbersInZshSubscriptFlagsAreNumbers(t *testing.T) {
 	}
 }
 
+func TestZshAndKsh93KeywordsAreKeywords(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		d    dialect.Dialect
+		text string
+		want []string
+	}{
+		{dialect.Zsh, "repeat 2 { :; }\nforeach f (a b)\n:\nend\n{ : } always { : }\nif [[ -n $1 ]] { : }\n", []string{"repeat", "foreach", "end", "always", "if", "[[", "]]"}},
+		{dialect.Ksh, "#!/bin/ksh\nnamespace geo { :; }\nfunction .sh.math.f x { :; }\n", []string{"namespace", "function"}},
+	} {
+		var keywords []string
+		tree := parser.Parse(tc.text, tc.d)
+		for _, tok := range Tokens(tree, nil, nil) {
+			if TypeNames[tok.Type] == "keyword" {
+				keywords = append(keywords, tc.text[tok.Span.Start:tok.Span.End])
+			}
+		}
+		if !slices.Equal(keywords, tc.want) {
+			t.Errorf("%s keywords in %q = %q, want %q", tc.d, tc.text, keywords, tc.want)
+		}
+	}
+}
+
 func TestTokensUseImports(t *testing.T) {
 	t.Parallel()
 

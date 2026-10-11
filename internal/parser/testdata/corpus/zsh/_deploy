@@ -1,0 +1,61 @@
+#compdef deploy deploy-staging=deploy
+
+local curcontext=$curcontext state state_descr line ret=1
+typeset -A opt_args
+local -a targets regions
+
+_deploy_targets() {
+	local -a cached
+	if ! _retrieve_cache deploy-targets; then
+		cached=( ${(f)"$(_call_program targets deploy list --quiet 2>/dev/null)"} )
+		_store_cache deploy-targets cached
+	fi
+	_describe -t targets 'deploy target' cached
+}
+
+(( $+functions[_deploy_regions] )) ||
+_deploy_regions() {
+	regions=( eu-west:'Ireland' us-east:'Virginia' ap-south:'Mumbai' )
+	_describe -t regions region regions
+}
+
+_arguments -C -s -S \
+	'(- *)'{-h,--help}'[show help and exit]' \
+	'(-v --verbose)'{-v,--verbose}'[print every step]' \
+	'(-q --quiet)'{-q,--quiet}'[print nothing]' \
+	'--region=[deploy to a region]:region:_deploy_regions' \
+	'*--tag=[tag the release]:tag: ' \
+	'--config=[read a config file]:config file:_files -g "*.(yml|yaml)(-.)"' \
+	'1: :->command' \
+	'*:: :->args' && ret=0
+
+case $state in
+	(command)
+		local -a commands
+		commands=(
+			'push:upload and activate a release'
+			'rollback:activate the previous release'
+			'status:show the active release'
+		)
+		_describe -t commands 'deploy command' commands && ret=0
+		;;
+	(args)
+		curcontext=${curcontext%:*:*}:deploy-$words[1]:
+		case $words[1] in
+			(push|rollback)
+				_arguments \
+					'--dry-run[only show what would change]' \
+					'1:target:_deploy_targets' && ret=0
+				;;
+			(status)
+				_message 'no arguments' && ret=0
+				;;
+			(*)
+				_default && ret=0
+				;;
+		esac
+		;;
+esac
+
+zstyle -T ":completion:${curcontext}:" verbose && print -r -- verbose >/dev/null
+return ret

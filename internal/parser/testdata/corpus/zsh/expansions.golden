@@ -1,0 +1,102 @@
+dialect zsh
+scope 0 parent=0 1:1-35:1
+definition 1:12-1:17 "words" kind=2 attrs=000001 local=false within=0
+definition 1:37-1:42 "other" kind=2 attrs=000001 local=false within=0
+definition 2:12-2:17 "table" kind=2 attrs=000010 local=false within=0
+definition 3:1-3:5 "name" kind=0 attrs=000000 local=false within=0
+definition 21:15-21:18 "hex" kind=2 attrs=010000 local=false within=0
+definition 22:12-22:14 "pi" kind=2 attrs=000000 local=false within=0
+definition 23:4-23:6 "pi" kind=4 attrs=000000 local=false within=0
+definition 23:13-23:16 "hex" kind=4 attrs=000000 local=false within=0
+reference 5:18-5:22 "name" within=0
+reference 5:29-5:33 "name" within=0
+reference 5:40-5:44 "name" within=0
+reference 6:15-6:19 "name" within=0
+reference 6:25-6:29 "name" within=0
+reference 6:35-6:39 "name" within=0
+reference 6:45-6:49 "name" within=0
+reference 6:55-6:59 "name" within=0
+reference 6:65-6:69 "name" within=0
+reference 7:22-7:27 "words" within=0
+reference 7:37-7:41 "name" within=0
+reference 8:18-8:23 "words" within=0
+reference 8:30-8:35 "words" within=0
+reference 8:42-8:47 "words" within=0
+reference 8:54-8:59 "table" within=0
+reference 8:66-8:71 "table" within=0
+reference 8:79-8:84 "table" within=0
+reference 9:16-9:21 "words" within=0
+reference 9:25-9:30 "words" within=0
+reference 9:37-9:42 "words" within=0
+reference 9:50-9:55 "words" within=0
+reference 9:65-9:70 "words" within=0
+reference 9:74-9:78 "beta" within=0
+reference 9:83-9:88 "words" within=0
+reference 10:15-10:20 "table" within=0
+reference 10:32-10:37 "words" within=0
+reference 10:47-10:52 "words" within=0
+reference 10:61-10:66 "words" within=0
+reference 10:75-10:79 "name" within=0
+reference 11:15-11:20 "words" within=0
+reference 11:31-11:36 "words" within=0
+reference 11:48-11:58 "unset_name" within=0
+reference 11:73-11:83 "unset_name" within=0
+reference 12:17-12:21 "name" within=0
+reference 12:49-12:53 "name" within=0
+reference 12:61-12:65 "name" within=0
+reference 12:77-12:81 "name" within=0
+reference 13:15-13:19 "name" within=0
+reference 13:38-13:42 "name" within=0
+reference 13:65-13:70 "words" within=0
+reference 13:84-13:88 "name" within=0
+reference 14:16-14:21 "table" within=0
+reference 14:31-14:39 "commands" within=0
+reference 14:51-14:56 "table" within=0
+reference 15:16-15:20 "name" within=0
+reference 15:25-15:29 "name" within=0
+reference 15:34-15:39 "words" within=0
+reference 18:18-18:22 "name" within=0
+reference 23:4-23:6 "pi" within=0
+reference 23:13-23:16 "hex" within=0
+reference 24:14-24:17 "hex" within=0
+reference 24:19-24:21 "pi" within=0
+reference 30:19-30:24 "words" within=0
+reference 30:37-30:42 "match" within=0
+reference 30:48-30:53 "words" within=0
+reference 34:19-34:24 "words" within=0
+reference 34:41-34:46 "words" within=0
+reference 34:58-34:63 "words" within=0
+command 1:1-1:8 "typeset" args=0 within=0
+command 2:1-2:8 "typeset" args=0 within=0
+command 5:1-5:6 "print" args=5 within=0
+command 6:1-6:6 "print" args=8 within=0
+command 7:1-7:6 "print" args=5 within=0
+command 7:51-7:56 "print" args=1 within=0
+command 7:60-7:65 "print" args=1 within=0
+command 8:1-8:6 "print" args=8 within=0
+command 9:1-9:6 "print" args=8 within=0
+command 10:1-10:6 "print" args=7 within=0
+command 11:1-11:6 "print" args=6 within=0
+command 12:1-12:6 "print" args=7 within=0
+command 13:1-13:6 "print" args=6 within=0
+command 14:1-14:6 "print" args=6 within=0
+command 15:1-15:6 "print" args=5 within=0
+command 16:1-16:6 "print" args=4 within=0
+command 18:1-18:6 "print" args=7 within=0
+command 19:1-19:6 "print" args=6 within=0
+command 20:1-20:6 "print" args=5 within=0
+command 21:1-21:8 "integer" args=3 within=0
+command 22:1-22:6 "float" args=3 within=0
+command 24:1-24:6 "print" args=4 within=0
+command 26:1-26:7 "setopt" args=1 within=0
+command 27:1-27:6 "print" args=10 within=0
+command 28:1-28:6 "print" args=8 within=0
+command 29:1-29:6 "print" args=6 within=0
+command 30:1-30:6 "print" args=5 within=0
+command 32:1-32:5 "eval" args=1 within=0
+command 33:1-33:6 "print" args=5 within=0
+command 33:15-33:20 "print" args=1 within=0
+command 33:29-33:34 "print" args=1 within=0
+command 33:41-33:44 "cat" args=0 within=0
+command 34:1-34:6 "print" args=5 within=0
+redirect 33:45-33:46 ">" target=33:46-33:55 "/dev/null"

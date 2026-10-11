@@ -1,0 +1,69 @@
+dialect ksh
+scope 0 parent=0 1:1-28:1
+scope 1 parent=0 2:1-4:2
+scope 2 parent=0 5:1-7:2
+function 2:10-2:24 ".sh.math.hypot" body=1 within=0 doc=""
+function 5:10-5:24 ".sh.math.clamp" body=2 within=0 doc=""
+definition 2:25-2:26 "x" kind=2 attrs=100000 local=true within=1
+definition 2:27-2:28 "y" kind=2 attrs=100000 local=true within=1
+definition 5:25-5:26 "v" kind=2 attrs=100000 local=true within=2
+definition 5:27-5:29 "lo" kind=2 attrs=100000 local=true within=2
+definition 5:30-5:32 "hi" kind=2 attrs=100000 local=true within=2
+definition 11:13-11:14 "e" kind=2 attrs=000000 local=false within=0
+definition 12:13-12:18 "money" kind=2 attrs=000000 local=false within=0
+definition 13:13-13:17 "bits" kind=2 attrs=010000 local=false within=0
+definition 14:12-14:13 "x" kind=2 attrs=000000 local=false within=0
+definition 15:13-15:16 "big" kind=2 attrs=000000 local=false within=0
+definition 22:4-22:5 "n" kind=4 attrs=000000 local=false within=0
+definition 22:9-22:10 "r" kind=4 attrs=000000 local=false within=0
+definition 22:17-22:21 "bits" kind=4 attrs=000000 local=false within=0
+definition 25:8-25:9 "i" kind=4 attrs=000000 local=false within=0
+definition 25:22-25:23 "i" kind=4 attrs=000000 local=false within=0
+reference 3:21-3:22 "x" within=1
+reference 3:23-3:24 "x" within=1
+reference 3:27-3:28 "y" within=1
+reference 3:29-3:30 "y" within=1
+reference 6:17-6:18 "v" within=2
+reference 6:21-6:23 "lo" within=2
+reference 6:26-6:28 "lo" within=2
+reference 6:31-6:32 "v" within=2
+reference 6:35-6:37 "hi" within=2
+reference 6:40-6:42 "hi" within=2
+reference 6:45-6:46 "v" within=2
+reference 17:15-17:16 "r" within=0
+reference 17:18-17:19 "n" within=0
+reference 17:21-17:22 "e" within=0
+reference 17:24-17:29 "money" within=0
+reference 17:31-17:35 "bits" within=0
+reference 17:37-17:38 "x" within=0
+reference 17:40-17:43 "big" within=0
+reference 21:17-21:18 "r" within=0
+reference 21:28-21:29 "r" within=0
+reference 22:4-22:5 "n" within=0
+reference 22:9-22:10 "r" within=0
+reference 22:17-22:21 "bits" within=0
+reference 24:22-24:23 "r" within=0
+reference 24:27-24:28 "n" within=0
+reference 25:15-25:16 "i" within=0
+reference 25:22-25:23 "i" within=0
+reference 26:19-26:20 "i" within=0
+command 9:1-9:6 "float" args=1 within=0
+command 10:1-10:8 "integer" args=1 within=0
+command 11:1-11:8 "typeset" args=0 within=0
+command 12:1-12:8 "typeset" args=0 within=0
+command 13:1-13:8 "typeset" args=0 within=0
+command 14:1-14:8 "typeset" args=0 within=0
+command 15:1-15:8 "typeset" args=0 within=0
+command 17:1-17:6 "print" args=3 within=0
+command 18:1-18:6 "print" args=3 within=0
+command 19:1-19:6 "print" args=3 within=0
+command 20:1-20:6 "print" args=3 within=0
+command 21:1-21:6 "print" args=5 within=0
+command 24:1-24:7 "printf" args=3 within=0
+command 26:2-26:7 "print" args=3 within=0
+comment 1:1-1:11 "#!/bin/ksh"
+keyword 2:1-2:9 "function"
+keyword 5:1-5:9 "function"
+keyword 25:1-25:4 "for"
+keyword 25:30-25:32 "do"
+keyword 27:1-27:5 "done"

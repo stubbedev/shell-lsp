@@ -1,0 +1,73 @@
+dialect ksh
+scope 0 parent=0 1:1-63:1
+scope 1 parent=0 8:2-10:3
+scope 2 parent=0 11:2-14:3
+scope 3 parent=0 26:2-28:3
+scope 4 parent=0 29:2-32:3
+scope 5 parent=0 40:1-42:2
+scope 6 parent=0 43:1-45:2
+scope 7 parent=0 51:2-53:3
+scope 8 parent=0 54:2-58:3
+function 40:10-40:21 "counter.get" body=5 within=0 doc=""
+function 43:10-43:21 "counter.set" body=6 within=0 doc=""
+function 51:11-51:14 "add" body=7 within=0 doc=""
+function 54:11-54:15 "show" body=8 within=0 doc=""
+definition 3:9-3:14 "shade" kind=2 attrs=000000 local=false within=0
+definition 16:9-16:15 "origin" kind=2 attrs=000000 local=false within=0
+definition 17:9-17:15 "corner" kind=2 attrs=000000 local=false within=0
+definition 20:12-20:16 "path" kind=2 attrs=000001 local=false within=0
+definition 34:9-34:14 "stack" kind=2 attrs=000000 local=false within=0
+definition 39:1-39:8 "counter" kind=0 attrs=000000 local=false within=0
+definition 46:1-46:8 "counter" kind=0 attrs=000000 local=false within=0
+definition 50:13-50:18 "items" kind=2 attrs=000010 local=false within=0
+definition 52:3-52:8 "items" kind=0 attrs=000000 local=false within=7
+definition 55:7-55:10 "key" kind=3 attrs=000000 local=false within=8
+reference 21:17-21:23 "corner" within=0
+reference 21:29-21:33 "path" within=0
+reference 31:18-31:19 "_" within=4
+reference 47:15-47:22 "counter" within=0
+reference 47:24-47:29 "shade" within=0
+reference 55:18-55:23 "items" within=8
+reference 56:18-56:21 "key" within=8
+reference 56:24-56:29 "items" within=8
+reference 56:31-56:34 "key" within=8
+command 2:1-2:5 "enum" args=0 within=0
+command 3:1-3:8 "Color_t" args=0 within=0
+command 5:1-5:8 "typeset" args=0 within=0
+command 6:2-6:7 "float" args=1 within=0
+command 7:2-7:7 "float" args=1 within=0
+command 9:3-9:8 "print" args=3 within=1
+command 16:1-16:8 "Point_t" args=0 within=0
+command 17:1-17:8 "Point_t" args=0 within=0
+command 18:1-18:13 "corner.shift" args=2 within=0
+command 19:1-19:11 "corner.len" args=0 within=0
+command 20:1-20:8 "Point_t" args=0 within=0
+command 21:1-21:6 "print" args=4 within=0
+command 23:1-23:8 "typeset" args=0 within=0
+command 24:2-24:9 "typeset" args=0 within=0
+command 25:2-25:9 "integer" args=1 within=0
+command 30:23-30:29 "return" args=1 within=4
+command 31:3-31:8 "print" args=3 within=4
+command 34:1-34:8 "Stack_t" args=0 within=0
+command 35:1-35:11 "stack.push" args=1 within=0
+command 36:1-36:11 "stack.push" args=1 within=0
+command 37:1-37:10 "stack.pop" args=0 within=0
+command 44:2-44:7 "print" args=4 within=6
+command 47:1-47:6 "print" args=3 within=0
+command 50:2-50:9 "typeset" args=0 within=0
+command 56:4-56:9 "print" args=3 within=8
+command 60:1-60:15 ".inventory.add" args=2 within=0
+command 61:1-61:16 ".inventory.show" args=0 within=0
+command 62:1-62:6 "print" args=3 within=0
+comment 1:1-1:11 "#!/bin/ksh"
+keyword 8:2-8:10 "function"
+keyword 11:2-11:10 "function"
+keyword 40:1-40:9 "function"
+keyword 43:1-43:9 "function"
+keyword 49:1-49:10 "namespace"
+keyword 51:2-51:10 "function"
+keyword 54:2-54:10 "function"
+keyword 55:3-55:6 "for"
+keyword 55:11-55:13 "in"
+keyword 55:30-55:32 "do"
+keyword 57:3-57:7 "done"

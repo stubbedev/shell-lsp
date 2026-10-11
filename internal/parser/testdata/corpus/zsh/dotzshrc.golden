@@ -1,0 +1,156 @@
+dialect zsh
+scope 0 parent=0 1:1-104:1
+scope 1 parent=0 28:1-36:2
+scope 2 parent=0 62:1-62:38
+scope 3 parent=0 63:1-66:2
+scope 4 parent=0 67:1-77:2
+scope 5 parent=0 78:1-80:2
+scope 6 parent=0 81:1-85:2
+scope 7 parent=0 86:1-86:43
+scope 8 parent=0 88:1-88:48
+scope 9 parent=0 89:1-89:47
+function 62:1-62:5 "mkcd" body=2 within=0 doc=""
+function 63:1-63:3 "up" body=3 within=0 doc=""
+function 67:1-67:8 "extract" body=4 within=0 doc=""
+function 78:1-78:8 "largest" body=5 within=0 doc=""
+function 81:1-81:6 "since" body=6 within=0 doc=""
+function 86:1-86:4 "bak" body=7 within=0 doc=""
+function 88:1-88:13 "precmd_title" body=8 within=0 doc=""
+function 89:1-89:14 "preexec_title" body=9 within=0 doc=""
+definition 4:12-4:16 "path" kind=2 attrs=000000 local=false within=0
+definition 4:17-4:22 "fpath" kind=2 attrs=000000 local=false within=0
+definition 4:23-4:29 "cdpath" kind=2 attrs=000000 local=false within=0
+definition 5:1-5:5 "path" kind=0 attrs=000001 local=false within=0
+definition 11:1-11:7 "cdpath" kind=0 attrs=000001 local=false within=0
+definition 12:8-12:14 "EDITOR" kind=2 attrs=000100 local=false within=0
+definition 13:8-13:12 "LESS" kind=2 attrs=000100 local=false within=0
+definition 15:1-15:9 "HISTFILE" kind=0 attrs=000000 local=false within=0
+definition 16:1-16:9 "HISTSIZE" kind=0 attrs=000000 local=false within=0
+definition 17:1-17:9 "SAVEHIST" kind=0 attrs=000000 local=false within=0
+definition 30:8-30:12 "dump" kind=2 attrs=000000 local=true within=1
+definition 49:12-49:15 "key" kind=2 attrs=000010 local=false within=0
+definition 64:11-64:12 "n" kind=2 attrs=010000 local=true within=3
+definition 68:8-68:15 "archive" kind=2 attrs=000000 local=true within=4
+definition 69:6-69:13 "archive" kind=3 attrs=000000 local=false within=4
+definition 82:11-82:16 "start" kind=2 attrs=010000 local=true within=6
+definition 94:1-94:7 "PROMPT" kind=0 attrs=000000 local=false within=0
+definition 95:1-95:8 "RPROMPT" kind=0 attrs=000000 local=false within=0
+definition 97:5-97:7 "rc" kind=3 attrs=000000 local=false within=0
+reference 9:3-9:7 "path" within=0
+reference 12:17-12:25 "commands" within=0
+reference 12:35-12:43 "commands" within=0
+reference 15:12-15:26 "XDG_STATE_HOME" within=0
+reference 15:29-15:33 "HOME" within=0
+reference 17:11-17:19 "HISTSIZE" within=0
+reference 18:9-18:17 "HISTFILE" within=0
+reference 18:38-18:46 "HISTFILE" within=0
+reference 30:15-30:22 "ZDOTDIR" within=1
+reference 30:25-30:29 "HOME" within=1
+reference 31:12-31:16 "dump" within=1
+reference 32:19-32:23 "dump" within=1
+reference 34:19-34:23 "dump" within=1
+reference 41:44-41:53 "LS_COLORS" within=0
+reference 50:10-50:18 "terminfo" within=0
+reference 51:9-51:17 "terminfo" within=0
+reference 53:9-53:12 "key" within=0
+reference 53:39-53:42 "key" within=0
+reference 54:9-54:12 "key" within=0
+reference 54:38-54:41 "key" within=0
+reference 58:20-58:26 "EDITOR" within=0
+reference 60:16-60:31 "XDG_CONFIG_HOME" within=0
+reference 70:10-70:17 "archive" within=4
+reference 71:30-71:37 "archive" within=4
+reference 72:24-72:31 "archive" within=4
+reference 73:22-73:29 "archive" within=4
+reference 74:52-74:59 "archive" within=4
+reference 82:18-82:30 "EPOCHSECONDS" within=6
+reference 84:26-84:38 "EPOCHSECONDS" within=6
+reference 84:41-84:46 "start" within=6
+reference 97:13-97:20 "ZDOTDIR" within=0
+reference 97:23-97:27 "HOME" within=0
+reference 98:10-98:12 "rc" within=0
+command 2:25-2:31 "return" args=0 within=0
+command 4:1-4:8 "typeset" args=0 within=0
+command 12:1-12:7 "export" args=0 within=0
+command 13:1-13:7 "export" args=0 within=0
+command 18:27-18:32 "mkdir" args=2 within=0
+command 20:1-20:7 "setopt" args=4 within=0
+command 21:1-21:7 "setopt" args=4 within=0
+command 22:1-22:7 "setopt" args=4 within=0
+command 23:1-23:9 "unsetopt" args=1 within=0
+command 25:1-25:9 "autoload" args=5 within=0
+command 26:1-26:9 "zmodload" args=2 within=0
+command 27:1-27:9 "zmodload" args=3 within=0
+command 29:2-29:8 "setopt" args=2 within=1
+command 30:2-30:7 "local" args=0 within=1
+command 32:3-32:11 "compinit" args=3 within=1
+command 34:3-34:11 "compinit" args=3 within=1
+command 37:1-37:7 "colors" args=0 within=0
+command 39:1-39:7 "zstyle" args=3 within=0
+command 40:1-40:7 "zstyle" args=4 within=0
+command 41:1-41:7 "zstyle" args=3 within=0
+command 42:1-42:7 "zstyle" args=3 within=0
+command 43:1-43:7 "zstyle" args=3 within=0
+command 45:1-45:8 "bindkey" args=1 within=0
+command 46:1-46:4 "zle" args=2 within=0
+command 47:1-47:8 "bindkey" args=2 within=0
+command 48:1-48:8 "bindkey" args=4 within=0
+command 49:1-49:8 "typeset" args=0 within=0
+command 53:26-53:33 "bindkey" args=3 within=0
+command 54:25-54:32 "bindkey" args=3 within=0
+command 56:1-56:6 "alias" args=3 within=0
+command 57:1-57:6 "alias" args=4 within=0
+command 58:1-58:6 "alias" args=2 within=0
+command 59:1-59:5 "hash" args=2 within=0
+command 60:1-60:5 "hash" args=2 within=0
+command 62:10-62:15 "mkdir" args=3 within=2
+command 62:28-62:30 "cd" args=2 within=2
+command 64:2-64:7 "local" args=0 within=3
+command 65:2-65:4 "cd" args=1 within=3
+command 68:2-68:7 "local" args=0 within=4
+command 71:21-71:24 "tar" args=2 within=4
+command 72:15-72:18 "tar" args=2 within=4
+command 73:12-73:17 "unzip" args=2 within=4
+command 74:8-74:13 "print" args=4 within=4
+command 74:62-74:68 "return" args=1 within=4
+command 79:2-79:7 "print" args=3 within=5
+command 82:2-82:7 "local" args=0 within=6
+command 84:2-84:7 "print" args=2 within=6
+command 86:9-86:12 "zmv" args=3 within=7
+command 88:18-88:23 "print" args=2 within=8
+command 89:19-89:24 "print" args=2 within=9
+command 90:1-90:9 "autoload" args=2 within=0
+command 91:1-91:13 "add-zsh-hook" args=2 within=0
+command 92:1-92:13 "add-zsh-hook" args=2 within=0
+command 98:2-98:8 "source" args=1 within=0
+command 100:1-100:6 "unset" args=1 within=0
+command 102:28-102:34 "source" args=1 within=0
+command 103:1-103:5 "true" args=0 within=0
+comment 1:1-1:11 "# ~/.zshrc"
+keyword 2:1-2:3 "[["
+keyword 2:19-2:21 "]]"
+keyword 18:1-18:3 "[["
+keyword 18:21-18:23 "]]"
+keyword 31:2-31:4 "if"
+keyword 31:5-31:7 "[["
+keyword 31:28-31:30 "]]"
+keyword 31:32-31:36 "then"
+keyword 33:2-33:6 "else"
+keyword 35:2-35:4 "fi"
+keyword 53:1-53:3 "[["
+keyword 53:20-53:22 "]]"
+keyword 54:1-54:3 "[["
+keyword 54:19-54:21 "]]"
+keyword 69:2-69:5 "for"
+keyword 69:14-69:16 "in"
+keyword 69:23-69:25 "do"
+keyword 70:3-70:7 "case"
+keyword 70:21-70:23 "in"
+keyword 75:3-75:7 "esac"
+keyword 76:2-76:6 "done"
+keyword 97:1-97:4 "for"
+keyword 97:8-97:10 "in"
+keyword 97:50-97:52 "do"
+keyword 99:1-99:5 "done"
+keyword 102:1-102:3 "[["
+keyword 102:22-102:24 "]]"

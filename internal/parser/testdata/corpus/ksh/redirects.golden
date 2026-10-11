@@ -1,0 +1,98 @@
+dialect ksh
+scope 0 parent=0 1:1-56:1
+definition 2:1-2:4 "log" kind=0 attrs=000000 local=false within=0
+definition 21:13-21:17 "line" kind=5 attrs=000000 local=false within=0
+definition 42:12-42:18 "sorted" kind=5 attrs=000000 local=false within=0
+definition 44:7-44:9 "fd" kind=6 attrs=000000 local=false within=0
+definition 45:15-45:19 "line" kind=5 attrs=000000 local=false within=0
+reference 2:7-2:13 "TMPDIR" within=0
+reference 16:24-16:27 "log" within=0
+reference 17:24-17:27 "log" within=0
+reference 18:18-18:21 "log" within=0
+reference 19:12-19:15 "log" within=0
+reference 23:11-23:14 "EOF" within=0
+reference 26:10-26:13 "log" within=0
+reference 29:15-29:19 "line" within=0
+reference 35:15-35:18 "log" within=0
+reference 35:33-35:36 "log" within=0
+reference 43:15-43:21 "sorted" within=0
+reference 44:13-44:16 "log" within=0
+reference 45:12-45:14 "fd" within=0
+reference 46:7-46:9 "fd" within=0
+reference 49:7-49:11 "line" within=0
+reference 54:5-54:9 "line" within=0
+reference 55:5-55:9 "line" within=0
+command 3:1-3:5 "trap" args=2 within=0
+command 5:1-5:4 "cat" args=0 within=0
+command 9:1-9:4 "cat" args=0 within=0
+command 12:1-12:4 "cat" args=0 within=0
+command 16:1-16:6 "print" args=3 within=0
+command 17:1-17:6 "print" args=3 within=0
+command 18:1-18:3 "tr" args=2 within=0
+command 19:1-19:5 "exec" args=0 within=0
+command 20:1-20:5 "exec" args=0 within=0
+command 21:1-21:5 "read" args=3 within=0
+command 22:1-22:6 "print" args=3 within=0
+command 23:1-23:5 "exec" args=0 within=0
+command 24:1-24:5 "exec" args=0 within=0
+command 25:1-25:5 "exec" args=0 within=0
+command 26:1-26:5 "exec" args=0 within=0
+command 27:1-27:5 "exec" args=0 within=0
+command 28:1-28:5 "exec" args=0 within=0
+command 29:1-29:6 "print" args=3 within=0
+command 32:2-32:7 "print" args=3 within=0
+command 33:2-33:7 "print" args=4 within=0
+command 34:21-34:24 "cat" args=0 within=0
+command 35:1-35:5 "diff" args=2 within=0
+command 35:8-35:12 "sort" args=1 within=0
+command 35:23-35:27 "sort" args=2 within=0
+command 35:53-35:57 "true" args=0 within=0
+command 37:1-37:5 "sort" args=0 within=0
+command 38:1-38:6 "print" args=2 within=0
+command 39:1-39:6 "print" args=2 within=0
+command 40:1-40:5 "exec" args=0 within=0
+command 41:1-41:5 "exec" args=0 within=0
+command 42:1-42:5 "read" args=3 within=0
+command 43:1-43:6 "print" args=3 within=0
+command 44:1-44:5 "exec" args=0 within=0
+command 45:1-45:5 "read" args=3 within=0
+command 46:1-46:5 "exec" args=0 within=0
+command 48:1-48:6 "print" args=9 within=0
+command 50:19-50:24 "print" args=3 within=0
+command 51:8-51:13 "print" args=3 within=0
+command 52:5-52:10 "print" args=3 within=0
+command 54:30-54:35 "print" args=3 within=0
+command 55:29-55:34 "print" args=3 within=0
+redirect 5:5-5:8 "<<#" target=5:9-5:12 "EOF"
+redirect 9:5-9:8 "<<-" target=9:8-9:11 "EOF"
+redirect 12:5-12:7 "<<" target=12:7-12:12 "'EOF'"
+redirect 16:19-16:21 ">;" target=16:22-16:28 "\"$log\""
+redirect 17:20-17:22 ">>" target=17:22-17:28 "\"$log\""
+redirect 18:12-18:15 "<>;" target=18:16-18:22 "\"$log\""
+redirect 19:7-19:9 "<>" target=19:10-19:16 "\"$log\""
+redirect 20:7-20:9 "<#" target=20:9-20:14 "((0))"
+redirect 22:24-22:26 "<#" target=22:26-22:26 ""
+redirect 23:7-23:9 ">#" target=23:9-23:16 "((EOF))"
+redirect 24:7-24:10 "<##" target=24:10-24:16 "second"
+redirect 25:7-25:9 "<&" target=25:9-25:10 "-"
+redirect 26:7-26:8 "<" target=26:8-26:14 "\"$log\""
+redirect 27:7-27:9 "<#" target=27:9-27:17 "'second'"
+redirect 28:7-28:9 "<&" target=28:9-28:10 "-"
+redirect 34:4-34:6 ">&" target=34:6-34:7 "1"
+redirect 34:8-34:9 ">" target=34:9-34:18 "/dev/null"
+redirect 35:39-35:40 ">" target=35:40-35:49 "/dev/null"
+redirect 40:7-40:9 ">&" target=40:9-40:10 "p"
+redirect 41:7-41:9 ">&" target=41:9-41:10 "-"
+redirect 44:10-44:11 "<" target=44:11-44:17 "\"$log\""
+redirect 46:10-46:12 "<&" target=46:12-46:13 "-"
+heredoc "EOF" quoted=false strip=blanks body=6:1-8:1 "\tindented with a tab\n\t  kept relative indentation\n"
+heredoc "EOF" quoted=false strip=tabs body=10:1-11:1 "\ttabs stripped\n"
+heredoc "EOF" quoted=true strip=none body=13:1-14:1 "literal $log\n"
+comment 1:1-1:11 "#!/bin/ksh"
+keyword 49:1-49:5 "case"
+keyword 49:12-49:14 "in"
+keyword 53:1-53:5 "esac"
+keyword 54:1-54:3 "[["
+keyword 54:24-54:26 "]]"
+keyword 55:1-55:3 "[["
+keyword 55:23-55:25 "]]"

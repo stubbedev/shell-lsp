@@ -1,0 +1,96 @@
+dialect ksh
+scope 0 parent=0 1:1-62:1
+scope 1 parent=0 11:1-15:2
+scope 2 parent=0 17:1-21:2
+scope 3 parent=0 33:1-38:2
+scope 4 parent=0 41:1-45:2
+scope 5 parent=0 47:1-49:2
+scope 6 parent=0 51:1-58:2
+function 11:10-11:21 "_git_branch" body=1 within=0 doc=""
+function 17:10-17:17 "_prompt" body=2 within=0 doc=""
+function 33:10-33:20 "KEYBD_trap" body=3 within=0 doc=""
+function 41:10-41:12 "cd" body=4 within=0 doc=""
+function 47:10-47:13 "mcd" body=5 within=0 doc=""
+function 51:10-51:15 "retry" body=6 within=0 doc=""
+definition 6:1-6:9 "HISTFILE" kind=0 attrs=000000 local=false within=0
+definition 7:1-7:9 "HISTSIZE" kind=0 attrs=000000 local=false within=0
+definition 8:1-8:7 "FCEDIT" kind=0 attrs=000000 local=false within=0
+definition 9:12-9:17 "PAGER" kind=2 attrs=000100 local=false within=0
+definition 12:10-12:16 "branch" kind=2 attrs=000000 local=true within=1
+definition 13:2-13:8 "branch" kind=0 attrs=000000 local=false within=1
+definition 18:10-18:16 "status" kind=2 attrs=000000 local=true within=2
+definition 18:20-18:23 "dir" kind=2 attrs=000000 local=true within=2
+definition 22:1-22:4 "PS1" kind=0 attrs=000000 local=false within=0
+definition 24:12-24:18 "abbrev" kind=2 attrs=000010 local=false within=0
+definition 28:5-28:9 "name" kind=3 attrs=000000 local=false within=0
+definition 52:13-52:18 "tries" kind=2 attrs=010000 local=true within=6
+definition 55:8-55:13 "tries" kind=4 attrs=000000 local=false within=6
+reference 6:11-6:15 "HOME" within=0
+reference 8:10-8:16 "VISUAL" within=0
+reference 14:19-14:25 "branch" within=1
+reference 18:26-18:29 "PWD" within=2
+reference 18:32-18:36 "HOME" within=2
+reference 19:5-19:11 "status" within=2
+reference 19:34-19:40 "status" within=2
+reference 20:18-20:22 "USER" within=2
+reference 20:26-20:34 "HOSTNAME" within=2
+reference 20:42-20:45 "dir" within=2
+reference 28:17-28:23 "abbrev" within=0
+reference 29:10-29:14 "name" within=0
+reference 29:17-29:23 "abbrev" within=0
+reference 29:25-29:29 "name" within=0
+reference 43:18-43:26 "DIRSTACK" within=4
+reference 44:23-44:26 "PWD" within=4
+reference 44:31-44:39 "DIRSTACK" within=4
+reference 55:8-55:13 "tries" within=6
+command 3:20-3:26 "return" args=1 within=0
+command 5:1-5:4 "set" args=6 within=0
+command 9:1-9:8 "typeset" args=0 within=0
+command 12:2-12:9 "typeset" args=0 within=1
+command 13:11-13:14 "git" args=3 within=1
+command 13:57-13:63 "return" args=0 within=1
+command 14:2-14:7 "print" args=3 within=1
+command 18:2-18:9 "typeset" args=0 within=2
+command 19:18-19:23 "print" args=3 within=2
+command 20:2-20:7 "print" args=3 within=2
+command 20:48-20:59 "_git_branch" args=0 within=2
+command 24:1-24:8 "typeset" args=0 within=0
+command 29:2-29:7 "alias" args=1 within=0
+command 31:1-31:6 "alias" args=2 within=0
+command 39:1-39:5 "trap" args=2 within=0
+command 42:2-42:9 "command" args=2 within=4
+command 42:21-42:27 "return" args=0 within=4
+command 43:2-43:7 "print" args=3 within=4
+command 44:2-44:5 "set" args=5 within=4
+command 48:2-48:7 "mkdir" args=3 within=5
+command 48:22-48:24 "cd" args=2 within=5
+command 52:2-52:9 "typeset" args=0 within=6
+command 53:2-53:7 "shift" args=0 within=6
+command 55:24-55:30 "return" args=1 within=6
+command 56:3-56:8 "sleep" args=1 within=6
+command 60:28-60:29 "." args=1 within=0
+command 61:1-61:5 "true" args=0 within=0
+redirect 13:42-13:43 ">" target=13:43-13:52 "/dev/null"
+redirect 43:32-43:33 ">" target=43:33-43:42 "/dev/null"
+comment 1:1-1:11 "#!/bin/ksh"
+comment 2:1-2:11 "# ~/.kshrc"
+keyword 3:1-3:3 "[["
+keyword 3:14-3:16 "]]"
+keyword 11:1-11:9 "function"
+keyword 17:1-17:9 "function"
+keyword 28:1-28:4 "for"
+keyword 28:10-28:12 "in"
+keyword 28:30-28:32 "do"
+keyword 30:1-30:5 "done"
+keyword 33:1-33:9 "function"
+keyword 34:2-34:6 "case"
+keyword 34:21-34:23 "in"
+keyword 37:2-37:6 "esac"
+keyword 41:1-41:9 "function"
+keyword 47:1-47:9 "function"
+keyword 51:1-51:9 "function"
+keyword 54:2-54:7 "until"
+keyword 54:14-54:16 "do"
+keyword 57:2-57:6 "done"
+keyword 60:1-60:3 "[["
+keyword 60:22-60:24 "]]"

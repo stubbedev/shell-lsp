@@ -1,0 +1,165 @@
+dialect zsh
+scope 0 parent=0 1:1-95:1
+scope 1 parent=0 71:1-74:2
+scope 2 parent=0 75:1-75:24
+scope 3 parent=0 76:15-76:33
+scope 4 parent=0 78:1-80:2
+scope 5 parent=0 81:1-81:29
+scope 6 parent=0 82:1-82:30
+scope 7 parent=0 83:1-83:32
+function 78:10-78:13 "one" body=4 within=0 doc=""
+function 78:14-78:17 "two" body=4 within=0 doc=""
+function 81:1-81:6 "three" body=5 within=0 doc=""
+function 81:7-81:11 "four" body=5 within=0 doc=""
+function 82:10-82:14 "five" body=6 within=0 doc=""
+definition 1:5-1:6 "f" kind=3 attrs=000000 local=false within=0
+definition 5:5-5:6 "f" kind=3 attrs=000000 local=false within=0
+definition 6:5-6:6 "f" kind=3 attrs=000000 local=false within=0
+definition 7:5-7:8 "key" kind=3 attrs=000000 local=false within=0
+definition 7:9-7:14 "value" kind=3 attrs=000000 local=false within=0
+definition 10:5-10:8 "key" kind=3 attrs=000000 local=false within=0
+definition 10:9-10:14 "value" kind=3 attrs=000000 local=false within=0
+definition 13:8-13:9 "i" kind=4 attrs=000000 local=false within=0
+definition 13:22-13:23 "i" kind=4 attrs=000000 local=false within=0
+definition 16:8-16:9 "i" kind=4 attrs=000000 local=false within=0
+definition 16:22-16:23 "i" kind=4 attrs=000000 local=false within=0
+definition 17:9-17:13 "name" kind=3 attrs=000000 local=false within=0
+definition 20:9-20:13 "name" kind=3 attrs=000000 local=false within=0
+definition 25:5-25:6 "i" kind=4 attrs=000000 local=false within=0
+definition 27:23-27:24 "i" kind=4 attrs=000000 local=false within=0
+definition 29:2-29:6 "done" kind=0 attrs=000000 local=false within=0
+definition 37:8-37:14 "choice" kind=3 attrs=000000 local=false within=0
+definition 69:46-69:61 "TRY_BLOCK_ERROR" kind=4 attrs=000000 local=false within=0
+definition 72:8-72:15 "scratch" kind=2 attrs=000000 local=true within=1
+definition 92:9-92:15 "inside" kind=2 attrs=000000 local=true within=0
+definition 93:7-93:13 "inside" kind=4 attrs=000000 local=false within=0
+reference 1:25-1:26 "f" within=0
+reference 2:11-2:12 "x" within=0
+reference 5:28-5:29 "f" within=0
+reference 6:30-6:31 "f" within=0
+reference 8:16-8:19 "key" within=0
+reference 8:21-8:26 "value" within=0
+reference 11:16-11:19 "key" within=0
+reference 11:21-11:26 "value" within=0
+reference 13:15-13:16 "i" within=0
+reference 13:22-13:23 "i" within=0
+reference 14:9-14:10 "i" within=0
+reference 16:15-16:16 "i" within=0
+reference 16:22-16:23 "i" within=0
+reference 16:36-16:37 "i" within=0
+reference 18:15-18:19 "name" within=0
+reference 21:15-21:19 "name" within=0
+reference 24:10-24:11 "i" within=0
+reference 25:5-25:6 "i" within=0
+reference 27:10-27:11 "i" within=0
+reference 27:23-27:24 "i" within=0
+reference 28:14-28:18 "done" within=0
+reference 38:15-38:21 "choice" within=0
+reference 69:16-69:31 "TRY_BLOCK_ERROR" within=0
+reference 73:15-73:22 "scratch" within=1
+reference 75:31-75:35 "argv" within=0
+reference 93:7-93:13 "inside" within=0
+command 1:19-1:23 "echo" args=1 within=0
+command 2:18-2:22 "echo" args=1 within=0
+command 3:1-3:5 "echo" args=1 within=0
+command 5:15-5:20 "print" args=3 within=0
+command 6:17-6:22 "print" args=3 within=0
+command 8:2-8:7 "print" args=3 within=0
+command 11:2-11:7 "print" args=3 within=0
+command 14:2-14:7 "print" args=1 within=0
+command 16:29-16:34 "print" args=1 within=0
+command 18:2-18:7 "print" args=3 within=0
+command 21:2-21:7 "print" args=3 within=0
+command 31:10-31:15 "print" args=1 within=0
+command 33:2-33:7 "print" args=1 within=0
+command 35:25-35:30 "print" args=1 within=0
+command 38:2-38:7 "print" args=3 within=0
+command 39:2-39:7 "break" args=0 within=0
+command 43:2-43:7 "print" args=1 within=0
+command 45:2-45:7 "print" args=1 within=0
+command 47:2-47:7 "print" args=1 within=0
+command 49:13-49:18 "print" args=1 within=0
+command 50:19-50:24 "print" args=1 within=0
+command 53:14-53:19 "print" args=1 within=0
+command 54:11-54:16 "print" args=1 within=0
+command 55:6-55:11 "print" args=1 within=0
+command 58:11-58:16 "print" args=1 within=0
+command 59:17-59:22 "print" args=1 within=0
+command 64:2-64:7 "print" args=1 within=0
+command 65:2-65:7 "false" args=0 within=0
+command 67:2-67:7 "print" args=1 within=0
+command 69:3-69:8 "print" args=3 within=0
+command 72:2-72:7 "local" args=0 within=1
+command 73:2-73:7 "print" args=3 within=1
+command 75:6-75:11 "print" args=3 within=2
+command 76:1-76:6 "print" args=3 within=0
+command 76:20-76:25 "print" args=1 within=3
+command 79:2-79:7 "print" args=3 within=4
+command 81:15-81:20 "print" args=3 within=5
+command 82:16-82:21 "print" args=3 within=6
+command 83:15-83:20 "print" args=1 within=7
+command 85:8-85:11 "cat" args=0 within=0
+command 86:1-86:6 "print" args=2 within=0
+command 87:1-87:5 "read" args=2 within=0
+command 88:10-88:15 "print" args=2 within=0
+command 89:1-89:5 "read" args=2 within=0
+command 91:22-91:27 "print" args=1 within=0
+command 92:3-92:8 "local" args=0 within=0
+command 94:8-94:13 "sleep" args=1 within=0
+keyword 1:1-1:4 "for"
+keyword 1:16-1:18 "do"
+keyword 1:28-1:32 "done"
+keyword 2:1-2:3 "if"
+keyword 2:4-2:6 "[["
+keyword 2:13-2:15 "]]"
+keyword 5:1-5:4 "for"
+keyword 6:1-6:4 "for"
+keyword 6:7-6:9 "in"
+keyword 7:1-7:4 "for"
+keyword 7:15-7:17 "in"
+keyword 7:27-7:29 "do"
+keyword 9:1-9:5 "done"
+keyword 10:1-10:4 "for"
+keyword 13:1-13:4 "for"
+keyword 16:1-16:4 "for"
+keyword 17:1-17:8 "foreach"
+keyword 19:1-19:4 "end"
+keyword 20:1-20:8 "foreach"
+keyword 20:14-20:16 "in"
+keyword 22:1-22:4 "end"
+keyword 24:1-24:6 "while"
+keyword 27:1-27:6 "until"
+keyword 28:1-28:6 "while"
+keyword 28:7-28:9 "[["
+keyword 28:19-28:21 "]]"
+keyword 31:1-31:7 "repeat"
+keyword 32:1-32:7 "repeat"
+keyword 35:1-35:7 "repeat"
+keyword 35:22-35:24 "do"
+keyword 35:37-35:41 "done"
+keyword 37:1-37:7 "select"
+keyword 42:1-42:3 "if"
+keyword 42:4-42:6 "[["
+keyword 42:13-42:15 "]]"
+keyword 44:3-44:7 "elif"
+keyword 44:8-44:10 "[["
+keyword 44:17-44:19 "]]"
+keyword 46:3-46:7 "else"
+keyword 49:1-49:3 "if"
+keyword 50:1-50:3 "if"
+keyword 50:4-50:6 "[["
+keyword 50:16-50:18 "]]"
+keyword 52:1-52:5 "case"
+keyword 57:1-57:5 "case"
+keyword 57:9-57:11 "in"
+keyword 61:1-61:5 "esac"
+keyword 66:3-66:9 "always"
+keyword 69:34-69:40 "always"
+keyword 78:1-78:9 "function"
+keyword 82:1-82:9 "function"
+keyword 83:1-83:9 "function"
+keyword 85:1-85:7 "coproc"
+keyword 88:1-88:7 "coproc"
+keyword 91:1-91:3 "[["
+keyword 91:16-91:18 "]]"
+keyword 94:3-94:7 "time"
