@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -189,11 +190,13 @@ type builder struct {
 	compounds   int
 	namespaces  []string
 	lang        syntax.LangVariant
+	features    dialect.Features
 }
 
-func buildIndex(file *syntax.File, lang syntax.LangVariant, text string, closedAtEnd map[*syntax.Redirect]bool, previous *Tree) (Index, []Error) {
+func buildIndex(file *syntax.File, lang syntax.LangVariant, features dialect.Features, text string, closedAtEnd map[*syntax.Redirect]bool, previous *Tree) (Index, []Error) {
 	b := &builder{
 		lang:        lang,
+		features:    features,
 		text:        text,
 		closedAtEnd: closedAtEnd,
 		index:       presized(previous),
@@ -298,6 +301,11 @@ func (b *builder) enter(node syntax.Node) {
 		b.coproc(n)
 	case *syntax.ParamExp:
 		b.paramExp(n)
+		b.namesRead(ZshReads(n))
+	case *syntax.FlagsArithm:
+		b.namesRead(ZshReads(n))
+	case *syntax.RepeatClause:
+		b.literalArithmetic(n.Count)
 	case *syntax.Word:
 		b.arithmeticWord(n)
 	case *syntax.BinaryArithm:
@@ -439,6 +447,9 @@ func (b *builder) call(n *syntax.CallExpr) {
 		b.declarationWords(variant, args)
 	}
 	b.builtinAssignments(n, name, args)
+	if b.features.ArithmeticStatus && ArithmeticStatusBuiltin(name) && len(args) == 1 {
+		b.literalArithmetic(args[0])
+	}
 }
 
 func unwrapBuiltin(name string, args []*syntax.Word) (string, []*syntax.Word) {
@@ -759,6 +770,17 @@ func (b *builder) referenceStart(lit *syntax.Lit, name string) {
 
 func (b *builder) reference(name string, span Span) {
 	b.index.References = append(b.index.References, Reference{Name: name, Span: span, Within: b.scope()})
+}
+
+func (b *builder) namesRead(reads []NameRead) {
+	for _, r := range reads {
+		b.reference(r.Name, r.Span)
+	}
+}
+
+func (b *builder) literalArithmetic(w *syntax.Word) {
+	reads, _ := LiteralArithmeticReads(w)
+	b.namesRead(reads)
 }
 
 func (b *builder) arithmeticWord(w *syntax.Word) {

@@ -168,7 +168,7 @@ func TestZshArithmeticFormsAreIndexed(t *testing.T) {
 	for _, r := range tree.References {
 		refs = append(refs, r.Name)
 	}
-	if want := []string{"x", "c", "n", "s", "s", "s"}; !slices.Equal(refs, want) {
+	if want := []string{"x", "c", "n", "s", "s", "s", "t"}; !slices.Equal(refs, want) {
 		t.Errorf("references = %v, want %v", refs, want)
 	}
 }

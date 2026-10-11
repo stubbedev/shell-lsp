@@ -16,7 +16,10 @@ func describeFlags(text string, flags []ZshFlag) []string {
 		var sb strings.Builder
 		sb.WriteByte(f.Name)
 		for _, arg := range f.Args {
-			fmt.Fprintf(&sb, "<%s>", text[arg.Start:arg.End])
+			if text[arg.Span.Start:arg.Span.End] != arg.Value {
+				return []string{"span of " + arg.Value + " is " + text[arg.Span.Start:arg.Span.End]}
+			}
+			fmt.Fprintf(&sb, "<%s>", arg.Value)
 		}
 		out = append(out, sb.String())
 	}
@@ -107,5 +110,38 @@ func TestZshSubscriptPatternsAreNotReferences(t *testing.T) {
 	}
 	if want := []string{"words", "words", "gamma", "history", "prefix"}; !slices.Equal(refs, want) {
 		t.Errorf("references = %v, want %v", refs, want)
+	}
+}
+
+func TestZshReadsInFlagsAndOperands(t *testing.T) {
+	t.Parallel()
+
+	src := "print ${(l:w+1::.:)x} ${(ps.$sep.j.$glue.)x} ${a[(n:k:r)p]} ${a:^b} ${a:|c} ${(j.$no.)x}\nreturn r*2\nrepeat times :\n"
+	tree := Parse(src, dialect.Zsh)
+	if len(tree.Errors) != 0 {
+		t.Fatalf("errors = %v, want none", messages(tree))
+	}
+	var refs []string
+	for _, r := range tree.References {
+		refs = append(refs, src[r.Span.Start:r.Span.End])
+	}
+	want := []string{"x", "w", "x", "sep", "glue", "a", "k", "a", "b", "a", "c", "x", "r", "times"}
+	if !slices.Equal(refs, want) {
+		t.Errorf("references = %v, want %v", refs, want)
+	}
+}
+
+func TestStatusIsArithmeticOnlyInZsh(t *testing.T) {
+	t.Parallel()
+
+	for d, want := range map[dialect.Dialect][]string{dialect.Zsh: {"ret"}, dialect.Bash: nil} {
+		tree := Parse("f() { return ret; }\n", d)
+		var refs []string
+		for _, r := range tree.References {
+			refs = append(refs, r.Name)
+		}
+		if !slices.Equal(refs, want) {
+			t.Errorf("%s: references = %v, want %v", d, refs, want)
+		}
 	}
 }

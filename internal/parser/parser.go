@@ -96,7 +96,7 @@ func ParseEdit(previous *Tree, text string, d dialect.Dialect, lang syntax.LangV
 	if len(src) > len(text) {
 		closedAtEnd = closeAtEndOfText(file, text)
 	}
-	index, recovered := buildIndex(file, lang, text, closedAtEnd, previous)
+	index, recovered := buildIndex(file, lang, d.Features(), text, closedAtEnd, previous)
 	errs = append(errs, recovered...)
 	return &Tree{Dialect: d, Lang: lang, File: file, Errors: sortErrors(errs), Index: index, text: text, lineStarts: lineStarts(text)}
 }

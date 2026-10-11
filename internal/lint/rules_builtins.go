@@ -95,15 +95,19 @@ func checkStatusArgument(tooMany, outOfRange Code) func(p *pass, c command) {
 			p.reportNode(tooMany, c.args[0], c.name+" takes at most one status; use echo or printf to output other values.")
 			return
 		}
-		if !validStatus(c.args[0]) {
+		if !p.validStatus(c.args[0]) {
 			p.reportNode(outOfRange, c.args[0], c.name+" only takes an integer status from 0 to 255; use echo or printf to output other values.")
 		}
 	}
 }
 
-func validStatus(w *syntax.Word) bool {
+func (p *pass) validStatus(w *syntax.Word) bool {
 	status, _ := parser.Text(w, "0")
-	if !parser.IsDigits(status) || len(status) > 5 {
+	if !parser.IsDigits(status) {
+		_, arithmetic := parser.LiteralArithmeticReads(w)
+		return arithmetic && p.dialect.Features().ArithmeticStatus
+	}
+	if len(status) > 5 {
 		return false
 	}
 	n, err := strconv.Atoi(status)

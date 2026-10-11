@@ -1,0 +1,89 @@
+### the width of padding flags is arithmetic
+#!/bin/zsh
+up() {
+  local -i n=${1:-1}
+  cd ${(j:/:)${(s::)${(l:n::.:)}//./..}} || return
+}
+up "$@"
+>>- SC1071 1:1 -- shellcheck refuses zsh; the l flag pads to n characters, so n is read
+
+### an unset padding width is reported
+#!/bin/zsh
+print -r -- ${(r:width:)1}
+>>- SC1071 1:1 -- shellcheck refuses zsh
+>>+ SC2154 2:18 -- width is read as the padding width and never assigned
+
+### arithmetic arguments of subscript and search flags
+#!/bin/zsh
+f() {
+  local -i nth=2 which=1
+  local -a words=(alpha beta)
+  print -r -- ${words[(n:nth:r)a*]} ${(I:which:)1#a}
+}
+f "$@"
+>>- SC1071 1:1 -- shellcheck refuses zsh; the n subscript flag and the I parameter flag take arithmetic expressions
+
+### a parameter named in a flag argument after p
+#!/bin/zsh
+f() {
+  local sep=:
+  print -r -- ${(ps.$sep.)1}
+}
+f "$@"
+>>- SC1071 1:1 -- shellcheck refuses zsh; with p, the $sep argument is the value of sep
+
+### the array an expansion zips or filters with is read
+#!/bin/zsh
+f() {
+  local -a keys=(a b) values=(1 2) skip=(a) keep=(b)
+  print -r -- ${keys:^values} ${keys:|skip} ${keys:*keep}
+}
+f
+>>- SC1071 1:1 -- shellcheck refuses zsh; the operands of :^, :| and :* are array names
+
+### return and exit take arithmetic expressions
+#!/bin/zsh
+f() {
+  local -i ret=$?
+  [[ -n $1 ]] && return ret
+  return ret+1
+}
+g() {
+  local -i code=3 depth=1 times=2
+  repeat times print -r -- hi
+  for x in a b; do
+    print -r -- $x
+    break depth
+  done
+  exit code
+}
+f "$@" && g
+>>- SC1071 1:1 -- shellcheck refuses zsh; zsh evaluates the operands of return, exit, break and repeat arithmetically
+
+### a status that is no arithmetic expression is still reported in zsh
+#!/bin/zsh
+f() {
+  return "not found"
+}
+f
+>>- SC1071 1:1 -- shellcheck refuses zsh
+>>+ SC2152 3:10 -- not found is neither a number nor an arithmetic expression
+
+### an unset name in a return expression is reported
+#!/bin/zsh
+f() {
+  return missing
+}
+f
+>>- SC1071 1:1 -- shellcheck refuses zsh
+>>+ SC2154 3:10 -- missing is read as an arithmetic variable and never assigned
+
+### return takes a number in bash
+#!/bin/bash
+f() {
+  local ret=$?
+  return ret
+}
+f
+>>> SC2034 3:9
+>>> SC2152 4:10

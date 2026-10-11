@@ -17,7 +17,7 @@ var variablesFamily = family{
 		2153: {severity: SeverityInfo},
 		2154: {severity: SeverityWarning},
 	},
-	rules: []rule{{on: nodes(&syntax.ParamExp{}, &syntax.Word{}, &syntax.Assign{}, &syntax.ArrayElem{}, &syntax.ForClause{}, &syntax.LetClause{}, &syntax.DeclClause{}, &syntax.CallExpr{}, &syntax.TestClause{}, &syntax.TestDecl{}), node: collectVariables, finish: reportVariables}},
+	rules: []rule{{on: nodes(&syntax.ParamExp{}, &syntax.Word{}, &syntax.Assign{}, &syntax.ArrayElem{}, &syntax.ForClause{}, &syntax.LetClause{}, &syntax.DeclClause{}, &syntax.CallExpr{}, &syntax.TestClause{}, &syntax.TestDecl{}, &syntax.FlagsArithm{}, &syntax.RepeatClause{}), node: collectVariables, finish: reportVariables}},
 }
 
 var batsVariables = []string{"status", "output", "lines", "stderr", "stderr_lines"}
@@ -63,6 +63,11 @@ func collectVariables(p *pass, n syntax.Node) {
 	switch n := n.(type) {
 	case *syntax.ParamExp:
 		p.collectExpansion(n)
+		p.readNames(parser.ZshReads(n))
+	case *syntax.FlagsArithm:
+		p.readNames(parser.ZshReads(n))
+	case *syntax.RepeatClause:
+		p.readLiteralArithmetic(n.Count)
 	case *syntax.Word:
 		p.collectWord(n)
 	case *syntax.Assign:
@@ -114,6 +119,19 @@ func (p *pass) collectExpansion(pe *syntax.ParamExp) {
 	if span, ok := p.span(pe); ok {
 		p.record(variableRead{name: name, span: span, guard: guarded(pe)})
 	}
+}
+
+func (p *pass) readNames(reads []parser.NameRead) {
+	for _, r := range reads {
+		if !p.shielded(r.Name) {
+			p.readAt(r.Name, r.Span, "")
+		}
+	}
+}
+
+func (p *pass) readLiteralArithmetic(w *syntax.Word) {
+	reads, _ := parser.LiteralArithmeticReads(w)
+	p.readNames(reads)
 }
 
 func (p *pass) collectWord(w *syntax.Word) {
@@ -375,6 +393,8 @@ func (p *pass) collectCall(call *syntax.CallExpr) {
 	switch {
 	case c.name == "@test":
 		p.variables.bats = true
+	case p.dialect.Features().ArithmeticStatus && parser.ArithmeticStatusBuiltin(c.name) && len(c.args) == 1:
+		p.readLiteralArithmetic(c.args[0])
 	case c.is("trap") && len(c.args) > 0:
 		if span, ok := p.span(c.args[0]); ok {
 			p.scanWord(c.args[0], span)
