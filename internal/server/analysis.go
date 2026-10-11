@@ -8,6 +8,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
+	"github.com/stubbedev/shell-lsp/internal/format"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
@@ -23,6 +24,10 @@ type snapshot struct {
 	generation uint64
 	project    projectFormat
 	projectErr error
+}
+
+func (s *snapshot) formatStyle() format.Style {
+	return s.settings.Format.Style.Over(s.project.style)
 }
 
 type snapshotEntry struct {

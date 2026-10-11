@@ -24,12 +24,13 @@ type comparison struct {
 
 func ifToCase(s *site) (Change, bool) {
 	root, ok := ifChainAt(s)
-	if !ok {
+	if !ok || !root.FiPos.IsValid() {
 		return Change{}, false
 	}
-	text := s.Tree.Text()
+	tree := s.Tree
+	text := tree.Text()
 	start := parser.Offset(root.Position)
-	if !startsLine(text, start) || !root.FiPos.IsValid() || !startsLine(text, parser.Offset(root.FiPos)) {
+	if !startsLine(text, start) {
 		return Change{}, false
 	}
 	var arms []caseArm
@@ -43,19 +44,19 @@ func ifToCase(s *site) (Change, bool) {
 			if len(clause.Cond) > 0 {
 				return Change{}, false
 			}
-			body, ok := branchBody(text, clause.Position, len("else"), next)
+			body, ok := branchBody(tree, parser.Offset(clause.Position)+len("else"), parser.Offset(next), clause.Then)
 			if !ok {
 				return Change{}, false
 			}
 			arms = append(arms, caseArm{patterns: []string{"*"}, body: body})
 			break
 		}
-		cmp, ok := conditionComparison(s.Tree, clause)
-		if !ok || (len(tests) > 0 && cmp.name != tests[0].name) {
+		cmp, ok := conditionComparison(tree, clause)
+		if !ok || (len(tests) > 0 && cmp.name != tests[0].name) || commented(tree, parser.Span{Start: parser.Offset(clause.Position), End: parser.Offset(clause.ThenPos)}) {
 			return Change{}, false
 		}
 		tests = append(tests, cmp)
-		body, ok := branchBody(text, clause.ThenPos, len("then"), next)
+		body, ok := branchBody(tree, parser.Offset(clause.ThenPos)+len("then"), parser.Offset(next), clause.Then)
 		if !ok {
 			return Change{}, false
 		}
@@ -64,15 +65,20 @@ func ifToCase(s *site) (Change, bool) {
 	if len(tests) < 2 {
 		return Change{}, false
 	}
-	subject, _ := s.Tree.NodeSpan(tests[0].subject)
+	subject, _ := tree.NodeSpan(tests[0].subject)
+	verbatim := verbatimLinesOf(tree)
+	unit := indentUnit(tree, verbatim, s.Format.Indent)
 	indent := leadingSpace(text, lineStart(text, start))
+	armIndent := indent
+	if s.Format.SwitchCaseIndent {
+		armIndent += unit
+	}
 	var sb strings.Builder
 	sb.WriteString("case " + text[subject.Start:subject.End] + " in\n")
 	for _, arm := range arms {
-		body := text[arm.body.Start:arm.body.End]
-		sb.WriteString(indent + strings.Join(arm.patterns, "|") + ")\n")
-		sb.WriteString(body)
-		sb.WriteString(bodyIndent(body, indent) + ";;\n")
+		sb.WriteString(armIndent + strings.Join(arm.patterns, "|") + ")\n")
+		sb.WriteString(reindent(tree, verbatim, arm.body, armIndent+unit))
+		sb.WriteString(armIndent + unit + ";;\n")
 	}
 	sb.WriteString(indent + "esac")
 	return Change{Title: "Convert to case", Edits: []textedit.Edit{{Start: start, End: parser.Offset(root.FiPos) + len("fi"), NewText: sb.String()}}}, true
@@ -106,24 +112,38 @@ func ifChainAt(s *site) (*syntax.IfClause, bool) {
 	return nil, false
 }
 
-func branchBody(text string, keyword syntax.Pos, length int, next syntax.Pos) (parser.Span, bool) {
-	after := parser.Offset(keyword) + length
-	end := lineEnd(text, after)
-	nextAt := parser.Offset(next)
-	if strings.TrimSpace(text[after:end]) != "" || !startsLine(text, nextAt) {
+func branchBody(tree *parser.Tree, after, next int, stmts []*syntax.Stmt) (parser.Span, bool) {
+	if len(stmts) == 0 {
 		return parser.Span{}, false
 	}
-	body := parser.Span{Start: min(end+1, len(text)), End: lineStart(text, nextAt)}
-	return body, body.Start < body.End && strings.TrimSpace(text[body.Start:body.End]) != ""
-}
-
-func bodyIndent(body, fallback string) string {
-	for line := range strings.SplitSeq(body, "\n") {
-		if strings.TrimSpace(line) != "" {
-			return leadingSpace(line, 0)
+	text := tree.Text()
+	body := parser.Span{Start: after + len(leadingSpace(text, after)), End: next}
+	if lineEnd(text, after) < next && strings.TrimSpace(text[after:lineEnd(text, after)]) == "" {
+		body.Start = lineEnd(text, after) + 1
+	}
+	if startsLine(text, next) {
+		body.End = lineStart(text, next)
+	} else {
+		body.End = statementsEnd(text, body.Start, next, stmts[len(stmts)-1])
+	}
+	for _, h := range tree.Heredocs {
+		if body.Start <= h.Span.Start && h.Span.Start < body.End && heredocBody(text, h).End >= body.End {
+			return parser.Span{}, false
 		}
 	}
-	return fallback + "\t"
+	return body, body.Start < body.End
+}
+
+func statementsEnd(text string, start, next int, last *syntax.Stmt) int {
+	end := start + len(strings.TrimRight(text[start:next], " \t"))
+	if last.Semicolon.IsValid() && parser.Offset(last.Semicolon) == end-1 && text[end-1] == ';' {
+		end = start + len(strings.TrimRight(text[start:end-1], " \t"))
+	}
+	return end
+}
+
+func commented(tree *parser.Tree, span parser.Span) bool {
+	return slices.ContainsFunc(tree.Comments, func(c parser.Comment) bool { return span.Start <= c.Span.Start && c.Span.Start < span.End })
 }
 
 func conditionComparison(tree *parser.Tree, clause *syntax.IfClause) (comparison, bool) {

@@ -30,6 +30,23 @@ func rangeParams(uri string, line, character int, only string) string {
 	return `{"textDocument": {"uri": "` + uri + `"}, "range": {"start": ` + at + `, "end": ` + at + `}, "context": {"diagnostics": [], "only": ["` + only + `"]}}`
 }
 
+func resolveAction(t *testing.T, c *testClient, action lsp.CodeAction) *lsp.WorkspaceEdit {
+	t.Helper()
+
+	if action.Edit != nil || len(action.Data) == 0 {
+		t.Fatalf("%q was not deferred to resolve: %+v", action.Title, action)
+	}
+	raw, err := json.Marshal(action)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved := decodeResult[lsp.CodeAction](t, c.call("codeAction/resolve", string(raw)))
+	if resolved.Edit == nil {
+		t.Fatalf("%q resolved without an edit", action.Title)
+	}
+	return resolved.Edit
+}
+
 func TestRefactoringsOfferedAndResolved(t *testing.T) {
 	t.Parallel()
 
@@ -44,18 +61,7 @@ func TestRefactoringsOfferedAndResolved(t *testing.T) {
 
 	resolve := func(action lsp.CodeAction) *lsp.WorkspaceEdit {
 		t.Helper()
-		if action.Edit != nil || len(action.Data) == 0 {
-			t.Fatalf("%q was not deferred to resolve: %+v", action.Title, action)
-		}
-		raw, err := json.Marshal(action)
-		if err != nil {
-			t.Fatal(err)
-		}
-		resolved := decodeResult[lsp.CodeAction](t, c.call("codeAction/resolve", string(raw)))
-		if resolved.Edit == nil {
-			t.Fatalf("%q resolved without an edit", action.Title)
-		}
-		return resolved.Edit
+		return resolveAction(t, c, action)
 	}
 	single := func(title string, edit *lsp.WorkspaceEdit) string {
 		t.Helper()
@@ -150,5 +156,38 @@ func TestMoveFunctionEagerlyIntoOpenFile(t *testing.T) {
 	}
 	if got := applyLSPEdits("helper() { :; }\n", lib.Edits); got != "helper() { :; }\n\ng() { :; }\n" {
 		t.Errorf("move into the open buffer made %q", got)
+	}
+}
+
+func TestIfToCaseFollowsTheProjectStyle(t *testing.T) {
+	t.Parallel()
+
+	src := "if [ \"$1\" = a ]; then up; elif [ \"$1\" = b ]; then down; fi\n"
+	for _, tc := range []struct {
+		editorconfig, options, want string
+	}{
+		{
+			editorconfig: "root = true\n\n[*.sh]\nindent_style = space\nindent_size = 4\nswitch_case_indent = true\n",
+			want:         "case \"$1\" in\n    a)\n        up\n        ;;\n    b)\n        down\n        ;;\nesac\n",
+		},
+		{
+			editorconfig: "root = true\n\n[*.sh]\nswitch_case_indent = true\n",
+			options:      `, "initializationOptions": {"format": {"switchCaseIndent": false, "indent": 2}}`,
+			want:         "case \"$1\" in\na)\n  up\n  ;;\nb)\n  down\n  ;;\nesac\n",
+		},
+	} {
+		root := t.TempDir()
+		writeFiles(t, root, map[string]string{".editorconfig": tc.editorconfig})
+		uri := fileuri.FromPath(filepath.Join(root, "main.sh"))
+		c, _ := startClient(t, `{"rootUri": "`+fileuri.FromPath(root)+`", `+actionCapabilities+tc.options+`}`)
+		c.notify("textDocument/didOpen", openParams(uri, src))
+		action, ok := titled(codeActions(t, c, rangeParams(uri, 0, 0, "refactor.rewrite")), "Convert to case")
+		if !ok {
+			t.Fatalf("Convert to case not offered with %q%s", tc.editorconfig, tc.options)
+		}
+		edit := resolveAction(t, c, action)
+		if got := applyLSPEdits(src, edit.DocumentChanges[0].Edits); got != tc.want {
+			t.Errorf("with %q%s:\n got %q\nwant %q", tc.editorconfig, tc.options, got, tc.want)
+		}
 	}
 }

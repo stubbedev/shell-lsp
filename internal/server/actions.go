@@ -136,7 +136,7 @@ func (s *Server) actionDocument(snap *snapshot) (actions.Document, func() action
 		}
 		return trees, complete
 	})
-	return actions.Document{Tree: snap.tree, Sources: func() []actions.Source { return resolve().list }, SourcedTrees: closure}, resolve
+	return actions.Document{Tree: snap.tree, Format: snap.formatStyle().Options(), Sources: func() []actions.Source { return resolve().list }, SourcedTrees: closure}, resolve
 }
 
 func (s *Server) changeEdit(docs *docstore.View, snap *snapshot, sources func() actionSources, edits []textedit.Edit, others []actions.FileEdits) (lsp.WorkspaceEdit, error) {

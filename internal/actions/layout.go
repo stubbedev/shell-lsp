@@ -9,19 +9,83 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/parser"
 )
 
-func heredocLines(tree *parser.Tree) []parser.Span {
+const maxIndentStep = 8
+
+type verbatimLines []parser.Span
+
+func verbatimLinesOf(tree *parser.Tree) verbatimLines {
 	text := tree.Text()
-	out := make([]parser.Span, len(tree.Heredocs))
-	for i, h := range tree.Heredocs {
-		first := min(lineEnd(text, h.Span.Start)+1, len(text))
-		out[i] = parser.Span{Start: first, End: lineEnd(text, max(min(h.Body.End, len(text)), first))}
+	out := make(verbatimLines, 0, len(tree.Heredocs))
+	for _, h := range tree.Heredocs {
+		out = append(out, heredocBody(text, h))
 	}
+	parser.Walk(tree.File, func(node syntax.Node) bool {
+		switch node.(type) {
+		case *syntax.Lit, *syntax.SglQuoted:
+			span, ok := tree.NodeSpan(node)
+			if !ok {
+				return true
+			}
+			if newline := strings.IndexByte(text[span.Start:span.End], '\n'); newline >= 0 {
+				out = append(out, parser.Span{Start: span.Start + newline + 1, End: span.End})
+			}
+		}
+		return true
+	})
 	return out
 }
 
-func reindent(tree *parser.Tree, span parser.Span, indent string) string {
+func (v verbatimLines) has(lineAt int) bool {
+	return slices.ContainsFunc(v, func(s parser.Span) bool { return s.Contains(lineAt) })
+}
+
+func heredocBody(text string, h parser.Heredoc) parser.Span {
+	first := min(lineEnd(text, h.Span.Start)+1, len(text))
+	return parser.Span{Start: first, End: lineEnd(text, max(min(h.Body.End, len(text)), first))}
+}
+
+func indentUnit(tree *parser.Tree, verbatim verbatimLines, configured uint) string {
 	text := tree.Text()
-	heredocs := heredocLines(tree)
+	tabbed, spaced, previous := 0, 0, 0
+	var steps [maxIndentStep + 1]int
+	for at := 0; at < len(text); at = lineEnd(text, at) + 1 {
+		lead := leadingSpace(text, at)
+		if at+len(lead) == lineEnd(text, at) || verbatim.has(at) {
+			continue
+		}
+		switch {
+		case lead == "":
+			previous = 0
+		case lead[0] == '\t':
+			tabbed++
+		case strings.Trim(lead, " ") == "":
+			spaced++
+			if len(lead) > previous {
+				steps[min(len(lead)-previous, maxIndentStep)]++
+			}
+			previous = len(lead)
+		}
+	}
+	if tabbed > 0 && tabbed >= spaced {
+		return "\t"
+	}
+	if spaced > 0 {
+		best := 1
+		for step := 2; step <= maxIndentStep; step++ {
+			if steps[step] > steps[best] {
+				best = step
+			}
+		}
+		return strings.Repeat(" ", best)
+	}
+	if configured == 0 {
+		return "\t"
+	}
+	return strings.Repeat(" ", int(configured))
+}
+
+func reindent(tree *parser.Tree, verbatim verbatimLines, span parser.Span, indent string) string {
+	text := tree.Text()
 	type line struct {
 		text             string
 		inline, verbatim bool
@@ -30,7 +94,7 @@ func reindent(tree *parser.Tree, span parser.Span, indent string) string {
 	common := -1
 	for at := span.Start; at < span.End; at = lineEnd(text, at) + 1 {
 		l := line{text: text[at:min(lineEnd(text, at), span.End)], inline: at != lineStart(text, at)}
-		l.verbatim = !l.inline && verbatimLine(tree, heredocs, at)
+		l.verbatim = !l.inline && verbatim.has(at)
 		lines = append(lines, l)
 		if l.inline || l.verbatim || strings.TrimSpace(l.text) == "" {
 			continue
@@ -52,26 +116,4 @@ func reindent(tree *parser.Tree, span parser.Span, indent string) string {
 		sb.WriteByte('\n')
 	}
 	return sb.String()
-}
-
-func verbatimLine(tree *parser.Tree, heredocs []parser.Span, at int) bool {
-	if slices.ContainsFunc(heredocs, func(s parser.Span) bool { return s.Contains(at) }) {
-		return true
-	}
-	if at == 0 {
-		return false
-	}
-	newline := at - 1
-	for _, node := range slices.Backward(tree.PathAt(newline)) {
-		span, ok := tree.NodeSpan(node)
-		if !ok || !span.Covers(newline) {
-			continue
-		}
-		switch node.(type) {
-		case *syntax.Word, *syntax.Lit, *syntax.SglQuoted, *syntax.DblQuoted, *syntax.ParamExp, *syntax.ExtGlob, *syntax.BraceExp:
-			return true
-		}
-		return false
-	}
-	return false
 }

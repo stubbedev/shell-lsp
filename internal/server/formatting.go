@@ -56,7 +56,7 @@ func (s *Server) format(docs *docstore.View, uri string, opts lsp.FormattingOpti
 		return []lsp.TextEdit{}, nil
 	}
 	text := snap.doc.Text()
-	formatted, err := format.Format(snap.tree, snap.settings.Format.Style.Over(snap.project.style).Over(clientStyle(opts)).Options())
+	formatted, err := format.Format(snap.tree, snap.formatStyle().Over(clientStyle(opts)).Options())
 	if err != nil {
 		return nil, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "%v", err)
 	}

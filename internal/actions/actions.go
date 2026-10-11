@@ -8,6 +8,7 @@ import (
 
 	"mvdan.cc/sh/v3/syntax"
 
+	"github.com/stubbedev/shell-lsp/internal/format"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 )
@@ -74,6 +75,7 @@ type Source struct {
 
 type Document struct {
 	Tree         *parser.Tree
+	Format       format.Options
 	Sources      func() []Source
 	SourcedTrees func() ([]*parser.Tree, bool)
 }
@@ -375,7 +377,7 @@ func extractFunction(s *site) (Change, bool) {
 	indent := leadingSpace(text, lineStart(text, first.Start))
 	outer := topLevelStart(tree, first.Start)
 	insertAt := lineStart(text, outer)
-	fn := leadingSpace(text, insertAt) + name + "() {\n" + reindent(tree, body, leadingSpace(text, insertAt)+"\t") + leadingSpace(text, insertAt) + "}\n\n"
+	fn := leadingSpace(text, insertAt) + name + "() {\n" + reindent(tree, verbatimLinesOf(tree), body, leadingSpace(text, insertAt)+"\t") + leadingSpace(text, insertAt) + "}\n\n"
 	return Change{Title: "Extract to function " + name, Edits: []textedit.Edit{
 		{Start: insertAt, End: insertAt, NewText: fn},
 		{Start: lineStart(text, first.Start), End: lineEnd(text, last.End), NewText: indent + call},
