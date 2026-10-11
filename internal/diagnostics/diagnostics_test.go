@@ -50,7 +50,8 @@ func TestLintMapsFindings(t *testing.T) {
 
 	text := "#!/bin/bash\necho 😀 `date` $1\n"
 	doc := document(t, text)
-	got := Lint(lint.Check(parser.Parse(text, dialect.Bash), nil, lint.Options{}), doc, docstore.EncodingUTF16)
+	findings := lint.Check(parser.Parse(text, dialect.Bash), nil, lint.Options{})
+	got := Lint(findings, doc, docstore.EncodingUTF16, true)
 	byCode := map[string]lsp.Diagnostic{}
 	for _, d := range got {
 		byCode[d.Code] = d
@@ -63,8 +64,16 @@ func TestLintMapsFindings(t *testing.T) {
 		t.Errorf("SC2006 range = %+v, want %+v (UTF-16 after a surrogate pair)", backticks.Range, want)
 	}
 	unquoted, ok := byCode["SC2086"]
-	if !ok || unquoted.Severity != lsp.SeverityInformation || unquoted.Source != Source || unquoted.CodeDescription == nil {
+	if !ok || unquoted.Severity != lsp.SeverityInformation || unquoted.Source != Source {
 		t.Errorf("SC2086 = %+v", unquoted)
+	}
+	if unquoted.CodeDescription == nil || unquoted.CodeDescription.Href != "https://github.com/stubbedev/shell-lsp/blob/main/docs/checks.md#sc2086" {
+		t.Errorf("SC2086 codeDescription = %+v, want its docs/checks.md row", unquoted.CodeDescription)
+	}
+	for _, d := range Lint(findings, doc, docstore.EncodingUTF16, false) {
+		if d.CodeDescription != nil {
+			t.Errorf("%s has a codeDescription although the client cannot show one", d.Code)
+		}
 	}
 }
 

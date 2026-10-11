@@ -93,7 +93,7 @@ func (h hoverer) disabledDoc(value string, span parser.Span) string {
 	case err == nil:
 		info, known := lint.Describe(code)
 		if !known {
-			return "**" + code.String() + "** is not a check shell-lsp runs.\n\n[" + referenceTitle(code) + "](" + lint.CodeInfo{Code: code}.Reference() + ")"
+			return "**" + code.String() + "** is not a check shell-lsp runs.\n\n[" + referenceTitle(code) + "](" + code.Reference() + ")"
 		}
 		sb.WriteString(CodeDoc(info))
 	default:

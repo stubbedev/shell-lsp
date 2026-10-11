@@ -84,7 +84,7 @@ func (s *Server) report(file *workspace.File, settings config.Settings, generati
 	if !lint.Foreign(file.Tree, dialectSource(settings)) {
 		items = diagnostics.Syntax(file.Tree, file.Doc, encoding)
 	}
-	items = append(items, diagnostics.Lint(findings, file.Doc, encoding)...)
+	items = append(items, diagnostics.Lint(findings, file.Doc, encoding, s.clientCapabilities().TextDocument.PublishDiagnostics.CodeDescriptionSupport)...)
 	items = append(items, diagnostics.Bats(tests.placedOn(file.Tree), file.Doc, encoding)...)
 	return diagnosticReport{
 		version:  file.Doc.Version,

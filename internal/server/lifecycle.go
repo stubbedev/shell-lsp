@@ -32,8 +32,11 @@ type ClientCapabilities struct {
 		PositionEncodings []string `json:"positionEncodings"`
 	} `json:"general"`
 	TextDocument struct {
-		Diagnostic *struct{} `json:"diagnostic"`
-		Hover      struct {
+		Diagnostic         *struct{} `json:"diagnostic"`
+		PublishDiagnostics struct {
+			CodeDescriptionSupport bool `json:"codeDescriptionSupport"`
+		} `json:"publishDiagnostics"`
+		Hover struct {
 			ContentFormat []string `json:"contentFormat"`
 		} `json:"hover"`
 		Completion struct {

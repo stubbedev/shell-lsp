@@ -7,6 +7,10 @@ import (
 )
 
 func CodeDoc(info lint.CodeInfo) string {
+	return codeHeader(info) + "\n\n" + references(info.Code)
+}
+
+func codeHeader(info lint.CodeInfo) string {
 	var sb strings.Builder
 	sb.WriteString("**" + info.Code.String() + "** · " + info.Severity.String())
 	if info.Optional != "" {
@@ -15,8 +19,22 @@ func CodeDoc(info lint.CodeInfo) string {
 	if info.Summary != "" {
 		sb.WriteString("\n\n" + info.Summary)
 	}
-	sb.WriteString("\n\n[" + referenceTitle(info.Code) + "](" + info.Reference() + ")")
 	return sb.String()
+}
+
+func references(code lint.Code) string {
+	links := "[" + code.String() + " in the shell-lsp " + docsPage(code) + "](" + code.Docs() + ")"
+	if wiki, ok := code.Wiki(); ok {
+		links += " · [ShellCheck wiki](" + wiki + ")"
+	}
+	return links
+}
+
+func docsPage(code lint.Code) string {
+	if code.Native() {
+		return "rules"
+	}
+	return "checks"
 }
 
 func referenceTitle(code lint.Code) string {

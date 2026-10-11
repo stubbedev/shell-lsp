@@ -1,16 +1,9 @@
 package diagnostics
 
 import (
-	"strings"
-
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
-)
-
-const (
-	compatReferenceURL = "https://www.shellcheck.net/wiki/"
-	nativeReferenceURL = "https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#"
 )
 
 var severities = map[lint.Severity]lsp.DiagnosticSeverity{
@@ -25,23 +18,18 @@ var tags = map[lint.Tag]lsp.DiagnosticTag{
 	lint.TagDeprecated:  lsp.TagDeprecated,
 }
 
-func Reference(code lint.Code) string {
-	if code.Native() {
-		return nativeReferenceURL + strings.ToLower(code.String())
-	}
-	return compatReferenceURL + code.String()
-}
-
-func Lint(findings []lint.Finding, doc *docstore.Document, enc docstore.Encoding) []lsp.Diagnostic {
+func Lint(findings []lint.Finding, doc *docstore.Document, enc docstore.Encoding, codeDescriptions bool) []lsp.Diagnostic {
 	out := make([]lsp.Diagnostic, 0, len(findings))
 	for _, f := range findings {
 		d := lsp.Diagnostic{
-			Range:           doc.RangeFor(f.Span.Start, f.Span.End, enc),
-			Severity:        severities[f.Severity],
-			Code:            f.Code.String(),
-			CodeDescription: &lsp.CodeDescription{Href: Reference(f.Code)},
-			Source:          Source,
-			Message:         f.Message,
+			Range:    doc.RangeFor(f.Span.Start, f.Span.End, enc),
+			Severity: severities[f.Severity],
+			Code:     f.Code.String(),
+			Source:   Source,
+			Message:  f.Message,
+		}
+		if codeDescriptions {
+			d.CodeDescription = &lsp.CodeDescription{Href: f.Code.Docs()}
 		}
 		if tag, ok := tags[f.Tag]; ok {
 			d.Tags = []lsp.DiagnosticTag{tag}

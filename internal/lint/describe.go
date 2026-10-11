@@ -13,6 +13,7 @@ type CodeInfo struct {
 	Optional string
 	Summary  string
 	Minimal  bool
+	Example  string
 }
 
 func Describe(code Code) (CodeInfo, bool) {
@@ -20,14 +21,12 @@ func Describe(code Code) (CodeInfo, bool) {
 	if !ok {
 		return CodeInfo{}, false
 	}
-	return CodeInfo{Code: code, Severity: m.severity, Optional: m.optional, Summary: summaryOf(code, m), Minimal: minimalKeeps(m.severity, m.bug)}, true
-}
-
-func summaryOf(code Code, m meta) string {
+	info := CodeInfo{Code: code, Severity: m.severity, Optional: m.optional, Summary: m.summary, Minimal: minimalKeeps(m.severity, m.bug)}
 	if code.Native() {
-		return nativeSummaries()[code]
+		doc := nativeDocs()[code]
+		info.Summary, info.Example = doc.summary, doc.example
 	}
-	return m.summary
+	return info, true
 }
 
 func Catalog() []CodeInfo {
@@ -39,34 +38,70 @@ func Catalog() []CodeInfo {
 	return out
 }
 
-func (c CodeInfo) Reference() string {
-	if c.Code.Native() {
-		return "https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#" + strings.ToLower(c.Code.String())
+const (
+	docsURL           = "https://github.com/stubbedev/shell-lsp/blob/main/docs/"
+	checksPage        = "checks.md"
+	rulesPage         = "rules.md"
+	shellcheckWikiURL = "https://www.shellcheck.net/wiki/"
+)
+
+func (c Code) Anchor() string { return strings.ToLower(c.String()) }
+
+func (c Code) Docs() string {
+	if c.Native() {
+		return docsURL + rulesPage + "#" + c.Anchor()
 	}
-	return "https://www.shellcheck.net/wiki/" + c.Code.String()
+	return docsURL + checksPage + "#" + c.Anchor()
+}
+
+func (c Code) Wiki() (string, bool) {
+	if c.Native() {
+		return "", false
+	}
+	return shellcheckWikiURL + c.String(), true
+}
+
+func (c Code) Reference() string {
+	if wiki, ok := c.Wiki(); ok {
+		return wiki
+	}
+	return c.Docs()
 }
 
 const (
 	sectionPrefix = "\n## "
 	bold          = "**"
+	exampleOpen   = "```bash\n"
+	fence         = "```"
 )
 
-var nativeSummaries = sync.OnceValue(func() map[Code]string {
-	out := map[Code]string{}
+type nativeDoc struct {
+	summary string
+	example string
+}
+
+var nativeDocs = sync.OnceValue(func() map[Code]nativeDoc {
+	out := map[Code]nativeDoc{}
 	for _, section := range strings.Split(docs.Rules, sectionPrefix)[1:] {
 		heading, body, _ := strings.Cut(section, "\n")
 		code, err := ParseCode(heading)
 		if err != nil || !code.Native() {
 			continue
 		}
-		body = strings.TrimSpace(body)
-		summary, ok := strings.CutPrefix(body, bold)
+		summary, ok := strings.CutPrefix(strings.TrimSpace(body), bold)
 		if !ok {
 			continue
 		}
-		if text, _, closed := strings.Cut(summary, bold); closed {
-			out[code] = strings.TrimSpace(text)
+		text, _, closed := strings.Cut(summary, bold)
+		if !closed {
+			continue
 		}
+		doc := nativeDoc{summary: strings.TrimSpace(text)}
+		if _, block, found := strings.Cut(body, exampleOpen); found {
+			doc.example, _, _ = strings.Cut(block, fence)
+			doc.example = strings.TrimSuffix(doc.example, "\n")
+		}
+		out[code] = doc
 	}
 	return out
 })

@@ -16,6 +16,8 @@ import (
 
 const pullCapabilities = `"capabilities": {"textDocument": {"diagnostic": {}}, "workspace": {"diagnostics": {"refreshSupport": true}}}`
 
+const linkingCapabilities = `"capabilities": {"textDocument": {"diagnostic": {}, "publishDiagnostics": {"codeDescriptionSupport": true}}}`
+
 func openParams(uri, text string) string {
 	encoded, err := json.Marshal(lsp.DidOpenTextDocumentParams{TextDocument: lsp.TextDocumentItem{
 		URI: uri, LanguageID: "shellscript", Version: 1, Text: text,

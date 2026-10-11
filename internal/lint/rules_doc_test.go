@@ -68,12 +68,21 @@ func TestDescribe(t *testing.T) {
 	if !ok || info.Severity != SeverityWarning || info.Summary != "Downloaded code runs unchecked." {
 		t.Errorf("Describe(SL1005) = %+v, %t", info, ok)
 	}
-	if info.Reference() != "https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl1005" {
-		t.Errorf("Reference() = %q", info.Reference())
+	if !strings.HasPrefix(info.Example, "curl -fsSL https://example.com/install.sh | sh    # SL1005\n") {
+		t.Errorf("Describe(SL1005).Example = %q, want the docs/rules.md example", info.Example)
+	}
+	if docs, ref := info.Code.Docs(), info.Code.Reference(); docs != "https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl1005" || ref != docs {
+		t.Errorf("SL1005 Docs() = %q, Reference() = %q", docs, ref)
+	}
+	if _, ok := info.Code.Wiki(); ok {
+		t.Error("SL1005 has a ShellCheck wiki page")
 	}
 	optional, _ := Describe(2250)
-	if optional.Optional != "require-variable-braces" || optional.Summary != "A variable is expanded without braces." || optional.Reference() != "https://www.shellcheck.net/wiki/SC2250" {
+	if optional.Optional != "require-variable-braces" || optional.Summary != "A variable is expanded without braces." || optional.Example != "" {
 		t.Errorf("Describe(SC2250) = %+v", optional)
+	}
+	if docs, ref := optional.Code.Docs(), optional.Code.Reference(); docs != "https://github.com/stubbedev/shell-lsp/blob/main/docs/checks.md#sc2250" || ref != "https://www.shellcheck.net/wiki/SC2250" {
+		t.Errorf("SC2250 Docs() = %q, Reference() = %q", docs, ref)
 	}
 	if _, ok := Describe(9999); ok {
 		t.Error("Describe(SC9999) found a code the linter does not have")

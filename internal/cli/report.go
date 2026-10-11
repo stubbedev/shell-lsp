@@ -13,7 +13,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/stubbedev/shell-lsp/internal/actions"
-	"github.com/stubbedev/shell-lsp/internal/diagnostics"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/format"
 	"github.com/stubbedev/shell-lsp/internal/lint"
@@ -340,7 +339,7 @@ func writeWikiLinks(out *bytes.Buffer, reports []fileReport, limit int) {
 		if utf8.RuneCountInString(message) > wikiMessageLimit {
 			message = string([]rune(message)[:wikiMessageLimit]) + "..."
 		}
-		fmt.Fprintf(out, "  %s -- %s\n", diagnostics.Reference(f.Code), message)
+		fmt.Fprintf(out, "  %s -- %s\n", f.Code.Reference(), message)
 	}
 }
 
@@ -437,7 +436,7 @@ func writeSARIF(out *bytes.Buffer, reports []fileReport, opts reportOptions) {
 	codes = slices.Compact(codes)
 	rules := make([]sarifRule, len(codes))
 	for i, code := range codes {
-		rules[i] = sarifRule{ID: code.String(), HelpURI: diagnostics.Reference(code)}
+		rules[i] = sarifRule{ID: code.String(), HelpURI: code.Reference()}
 	}
 	results := []sarifResult{}
 	for _, r := range reports {

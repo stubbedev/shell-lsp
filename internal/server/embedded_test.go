@@ -66,7 +66,7 @@ func TestEmbeddedProgramDiagnosticsFollowLintSettings(t *testing.T) {
 		{`{"lint": {"exclude": ["SL3001"]}}`, []string{"SL3002"}},
 		{`{"lint": {"enable": false}}`, nil},
 	} {
-		c, _ := startClient(t, `{`+pullCapabilities+`, "initializationOptions": `+tt.options+`}`)
+		c, _ := startClient(t, `{`+linkingCapabilities+`, "initializationOptions": `+tt.options+`}`)
 		c.notify("textDocument/didOpen", openParams("file:///w/s.bash", text))
 		var codes []string
 		for _, d := range embeddedOnly(pullDiagnostics(t, c, "file:///w/s.bash")) {

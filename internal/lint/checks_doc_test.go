@@ -28,7 +28,7 @@ func renderChecks() string {
 		if info.Minimal {
 			minimal = "yes"
 		}
-		fmt.Fprintf(&sb, "| [%s](%s) | %s | %s | %s | %s |\n", info.Code, info.Reference(), info.Severity, optional, minimal, markdownCell.Replace(info.Summary))
+		fmt.Fprintf(&sb, "| <a name=\"%s\"></a>[%s](%s) | %s | %s | %s | %s |\n", info.Code.Anchor(), info.Code, info.Code.Reference(), info.Severity, optional, minimal, markdownCell.Replace(info.Summary))
 	}
 	return sb.String()
 }

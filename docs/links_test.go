@@ -17,6 +17,7 @@ var (
 	markdownLink  = regexp.MustCompile(`\]\(([^)\s]+)\)`)
 	inlineCode    = regexp.MustCompile("`[^`]*`")
 	heading       = regexp.MustCompile(`^#{1,6}\s+(.*)$`)
+	namedAnchor   = regexp.MustCompile(`<a name="([^"]+)"></a>`)
 	notSlug       = regexp.MustCompile(`[^\p{L}\p{N}_\- ]`)
 	ownRepository = regexp.MustCompile(`^https://github\.com/stubbedev/shell-lsp/(?:blob|tree)/main/([^#]*)(?:#(.*))?$`)
 	skippedDirs   = map[string]bool{".git": true, ".claude": true, "node_modules": true, "result": true, "out": true}
@@ -76,6 +77,9 @@ func anchors(t *testing.T, file string) map[string]bool {
 	out := map[string]bool{}
 	seen := map[string]int{}
 	for _, line := range proseLines(t, file) {
+		for _, named := range namedAnchor.FindAllStringSubmatch(line, -1) {
+			out[named[1]] = true
+		}
 		m := heading.FindStringSubmatch(line)
 		if m == nil {
 			continue
@@ -105,31 +109,57 @@ func linkTarget(from, target string) (file, anchor string, local bool) {
 	return path.Clean(path.Join(path.Dir(from), file)), anchor, true
 }
 
+type linkResolver struct {
+	t        *testing.T
+	headings map[string]map[string]bool
+}
+
+func (r linkResolver) problem(from, link string) string {
+	target, anchor, local := linkTarget(from, link)
+	if !local {
+		return ""
+	}
+	if _, err := os.Stat(filepath.Join(repoRoot, filepath.FromSlash(target))); err != nil {
+		return "links to " + link + ", which does not exist"
+	}
+	if anchor == "" || !strings.HasSuffix(target, ".md") {
+		return ""
+	}
+	if r.headings[target] == nil {
+		r.headings[target] = anchors(r.t, target)
+	}
+	if !r.headings[target][anchor] {
+		return "links to " + link + ", but " + target + " has no anchor #" + anchor
+	}
+	return ""
+}
+
 func TestMarkdownLinksResolve(t *testing.T) {
 	t.Parallel()
 
-	headings := map[string]map[string]bool{}
+	resolver := linkResolver{t: t, headings: map[string]map[string]bool{}}
 	for _, file := range markdownFiles(t) {
 		for n, line := range proseLines(t, file) {
 			for _, m := range markdownLink.FindAllStringSubmatch(inlineCode.ReplaceAllString(line, ""), -1) {
-				target, anchor, local := linkTarget(file, m[1])
-				if !local {
-					continue
-				}
-				if _, err := os.Stat(filepath.Join(repoRoot, filepath.FromSlash(target))); err != nil {
-					t.Errorf("%s:%d links to %s, which does not exist", file, n+1, m[1])
-					continue
-				}
-				if anchor == "" || !strings.HasSuffix(target, ".md") {
-					continue
-				}
-				if headings[target] == nil {
-					headings[target] = anchors(t, target)
-				}
-				if !headings[target][anchor] {
-					t.Errorf("%s:%d links to %s, but %s has no heading #%s", file, n+1, m[1], target, anchor)
+				if problem := resolver.problem(file, m[1]); problem != "" {
+					t.Errorf("%s:%d %s", file, n+1, problem)
 				}
 			}
+		}
+	}
+}
+
+func Resolves(t *testing.T, links []string) {
+	t.Helper()
+
+	resolver := linkResolver{t: t, headings: map[string]map[string]bool{}}
+	for _, link := range links {
+		if !ownRepository.MatchString(link) {
+			t.Errorf("%s is not a link into this repository's docs", link)
+			continue
+		}
+		if problem := resolver.problem("", link); problem != "" {
+			t.Error(problem)
 		}
 	}
 }
