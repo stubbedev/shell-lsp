@@ -82,7 +82,7 @@ const (
 	SeverityHint        DiagnosticSeverity = 4
 )
 
-type DiagnosticTag uint8
+type DiagnosticTag int32
 
 const (
 	TagUnnecessary DiagnosticTag = 1
