@@ -15,6 +15,8 @@ func codeHeader(info lint.CodeInfo) string {
 	sb.WriteString("**" + info.Code.String() + "** · " + info.Severity.String())
 	if info.Optional != "" {
 		sb.WriteString(" · optional, turned on with `enable=" + info.Optional + "`")
+	} else if !info.Minimal {
+		sb.WriteString(" · hidden by the `minimal` profile")
 	}
 	if info.Summary != "" {
 		sb.WriteString("\n\n" + info.Summary)

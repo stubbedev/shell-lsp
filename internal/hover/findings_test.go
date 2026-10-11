@@ -60,7 +60,7 @@ func TestHoverOnAFindingAloneUsesItsSpan(t *testing.T) {
 	if !ok || src[got.Span.Start:got.Span.End] != "`date`" {
 		t.Fatalf("hover = %+v, %t; want the SC2006 finding's span", got, ok)
 	}
-	for _, want := range []string{"**SC2006** · style", "**Fix** (safe): Replace the backticks with $(...)", "-x=`date`\n+x=$(date)"} {
+	for _, want := range []string{"**SC2006** · style · hidden by the `minimal` profile", "**Fix** (safe): Replace the backticks with $(...)", "-x=`date`\n+x=$(date)"} {
 		if !strings.Contains(got.Markdown, want) {
 			t.Errorf("SC2006 hover lacks %q:\n%s", want, got.Markdown)
 		}
