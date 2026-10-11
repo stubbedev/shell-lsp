@@ -182,6 +182,60 @@ func TestHoverExpansionOperators(t *testing.T) {
 	}
 }
 
+func TestHoverShellVocabulary(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		d           dialect.Dialect
+		src, needle string
+		nth         int
+		want, span  string
+		wantMissing string
+	}{
+		{d: dialect.Bash, src: "read -r line\n", needle: "-r", want: "**read -r**", span: "-r"},
+		{d: dialect.Bash, src: "read -rs pw\n", needle: "-rs", want: "- `-s`: In bash and zsh, do not echo", span: "-rs"},
+		{d: dialect.Zsh, src: "typeset -U path\n", needle: "-U", want: "Keep only the first occurrence", span: "-U"},
+		{d: dialect.Bash, src: "[ -f x ] && test a -nt b\n", needle: "-f", want: "```sh\n-f file\n```", span: "-f"},
+		{d: dialect.Bash, src: "[ -f x ] && test a -nt b\n", needle: "-nt", want: "modified more recently", span: "-nt"},
+		{d: dialect.Bash, src: "[[ -d $x && $y =~ ^a ]]\n", needle: "-d", want: "is a directory", span: "-d"},
+		{d: dialect.Bash, src: "[[ -d $x && $y =~ ^a ]]\n", needle: "=~", want: "extended regular expression", span: "=~"},
+		{d: dialect.Bash, src: "[[ -d $x && $y =~ ^a ]]\n", needle: "&&", want: "both expressions are true", span: "&&"},
+		{d: dialect.Bash, src: "trap cleanup EXIT INT\n", needle: "EXIT", want: "when the shell exits", span: "EXIT"},
+		{d: dialect.Bash, src: "trap cleanup EXIT INT\n", needle: "INT", want: "**SIGINT**", span: "INT"},
+		{d: dialect.Bash, src: "kill -TERM 1; kill -s HUP 2\n", needle: "-TERM", want: "**SIGTERM**", span: "-TERM"},
+		{d: dialect.Bash, src: "kill -TERM 1; kill -s HUP 2\n", needle: "HUP", want: "**SIGHUP**", span: "HUP"},
+		{d: dialect.Bash, src: "set -o pipefail\n", needle: "pipefail", want: "fail when any of its commands fails", span: "pipefail"},
+		{d: dialect.Bash, src: "shopt -s nullglob\n", needle: "nullglob", want: "expand to nothing", span: "nullglob"},
+		{d: dialect.Zsh, src: "setopt EXTENDED_GLOB NO_ERR_EXIT\n", needle: "EXTENDED", want: "**extended_glob**", span: "EXTENDED_GLOB"},
+		{d: dialect.Zsh, src: "setopt EXTENDED_GLOB NO_ERR_EXIT\n", needle: "NO_ERR", want: "negates `err_exit`", span: "NO_ERR_EXIT"},
+		{d: dialect.Zsh, src: "emulate -L zsh\n", needle: "zsh", want: "native zsh option", span: "zsh"},
+		{d: dialect.Bash, src: "cmd >> log 2>&1\n", needle: ">>", want: "appending", span: ">>"},
+		{d: dialect.Bash, src: "cmd >> log 2>&1\n", needle: ">&", want: "copy of descriptor", span: "2>&"},
+		{d: dialect.Posix, src: "cmd &> log\n", needle: "&>", want: "_Not available in sh._", span: "&>"},
+		{d: dialect.Bash, src: "cat <<'EOF'\n$x\nEOF\n", needle: "<<", want: "taken literally", span: "<<"},
+		{d: dialect.Bash, src: "cat <<EOF\n$x\nEOF\n", needle: "<<", want: "delimiter is unquoted", span: "<<"},
+		{d: dialect.Bash, src: "a && b || c | d\n", needle: "||", want: "Runs `cmd2` only if `cmd1` fails", span: "||"},
+		{d: dialect.Bash, src: "a && b || c | d\n", needle: "|", nth: 2, want: "Pipes the output", span: "|"},
+		{d: dialect.Bash, src: "echo $(( a ** 2 )); (( i++ ))\n", needle: "**", want: "Exponentiation", span: "**"},
+		{d: dialect.Bash, src: "echo $(( a ** 2 )); (( i++ ))\n", needle: "++", want: "Increment", span: "++"},
+		{d: dialect.Bash, src: "case $x in a) b ;& c) d ;; esac\n", needle: ";&", want: "falls through", span: ";&"},
+		{d: dialect.Bash, src: "echo $-\n", needle: "$-", want: "- `e`: `errexit`", span: "$-", wantMissing: "- `X`"},
+		{d: dialect.Dash, src: "echo $-\n", needle: "$-", want: "- `x`: `xtrace`", span: "$-", wantMissing: "braceexpand"},
+	}
+	for _, tc := range tests {
+		got := hoverAt(t, tc.src, tc.d, tc.needle, tc.nth)
+		if !strings.Contains(got.Markdown, tc.want) {
+			t.Errorf("%s hover %q in %q = %q, want %q", tc.d, tc.needle, tc.src, got.Markdown, tc.want)
+		}
+		if tc.wantMissing != "" && strings.Contains(got.Markdown, tc.wantMissing) {
+			t.Errorf("%s hover %q = %q, should not contain %q", tc.d, tc.needle, got.Markdown, tc.wantMissing)
+		}
+		if span := tc.src[got.Span.Start:got.Span.End]; span != tc.span {
+			t.Errorf("%s hover %q span = %q, want %q", tc.d, tc.needle, span, tc.span)
+		}
+	}
+}
+
 func TestHoverShadowingPrefersLocals(t *testing.T) {
 	t.Parallel()
 

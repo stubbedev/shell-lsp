@@ -41,6 +41,9 @@ func Hover(ctx context.Context, in Input) (Result, bool, error) {
 	if r, ok := h.keyword(); ok {
 		return r, true, nil
 	}
+	if r, ok := h.operator(); ok {
+		return r, true, nil
+	}
 	if r, ok := h.paramExp(); ok {
 		return r, true, nil
 	}
@@ -103,10 +106,23 @@ func (h hoverer) parameter(name string) string {
 		}
 		return fmt.Sprintf("**$%s**: positional parameter %s of the script", name, name)
 	}
+	if name == "-" {
+		return h.optionFlagsDoc()
+	}
 	if entry, ok := shelldocs.Parameter(name); ok {
 		return fmt.Sprintf("**$%s**: %s", name, entry.Doc)
 	}
 	return h.variable(name)
+}
+
+func (h hoverer) optionFlagsDoc() string {
+	entry, _ := shelldocs.Parameter("-")
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "**$-**: %s", entry.Doc)
+	for e := range shelldocs.Terms(shelldocs.OptionLetters, h.dialect) {
+		fmt.Fprintf(&sb, "\n- `%s`: %s", e.Name, e.Doc)
+	}
+	return sb.String()
 }
 
 func (h hoverer) variableName() (Result, bool) {
@@ -251,22 +267,23 @@ func (h hoverer) command(ctx context.Context) (Result, bool, error) {
 }
 
 func (h hoverer) argument(ctx context.Context, cmd parser.Command) (Result, bool, error) {
-	if h.Commands == nil || !cmd.Span.Covers(h.Offset) || h.isFunction(cmd.Name) {
+	if !cmd.Span.Covers(h.Offset) || h.isFunction(cmd.Name) {
 		return Result{}, false, nil
 	}
-	at := slices.IndexFunc(cmd.Args, func(arg *syntax.Word) bool {
+	words := h.commandWords(cmd)
+	at := slices.IndexFunc(words, func(arg *syntax.Word) bool {
 		span, ok := h.Tree.NodeSpan(arg)
 		return ok && span.Covers(h.Offset)
 	})
 	if at < 0 {
 		return Result{}, false, nil
 	}
-	span, _ := h.Tree.NodeSpan(cmd.Args[at])
-	word, literal := parser.Literal(cmd.Args[at])
+	span, _ := h.Tree.NodeSpan(words[at])
+	word, literal := parser.Literal(words[at])
 	if !literal {
 		return Result{}, false, nil
 	}
-	args := parser.ArgumentTexts(cmd.Args)
+	args := parser.ArgumentTexts(words)
 	args[at] = word
 	command := cmd.Name
 	wrappers := parser.Wrappers{Bats: h.Tree.Bats(), Programs: true}
@@ -283,11 +300,228 @@ func (h hoverer) argument(ctx context.Context, cmd parser.Command) (Result, bool
 			return Result{}, false, nil
 		}
 	}
+	if doc, ok := h.vocabularyArgument(command, args[:at], word); ok {
+		return Result{Markdown: doc, Span: span}, true, nil
+	}
+	if h.Commands == nil {
+		return Result{}, false, nil
+	}
 	if strings.HasPrefix(word, "-") {
 		return h.flag(ctx, command, args[:at], word, span)
 	}
 	sub, err := h.Commands.Subcommand(ctx, command, args[:at+1])
 	return found(Result{Markdown: sub.Doc, Span: span}, err)
+}
+
+func (h hoverer) commandWords(cmd parser.Command) []*syntax.Word {
+	if len(cmd.Args) > 0 {
+		return cmd.Args
+	}
+	for _, node := range h.Tree.PathAt(h.Offset) {
+		decl, ok := node.(*syntax.DeclClause)
+		if !ok || parser.Offset(decl.Variant.Pos()) != cmd.NameSpan.Start {
+			continue
+		}
+		words := make([]*syntax.Word, 0, len(decl.Args))
+		for _, arg := range decl.Args {
+			if arg.Name == nil && arg.Value != nil {
+				words = append(words, arg.Value)
+			}
+		}
+		return words
+	}
+	return nil
+}
+
+func (h hoverer) vocabularyArgument(command string, before []string, word string) (string, bool) {
+	previous := ""
+	if n := len(before); n > 0 {
+		previous = before[n-1]
+	}
+	switch {
+	case command == "[" || command == "test":
+		return h.term(word, shelldocs.TestUnaryOperators, shelldocs.TestBinaryOperators)
+	case command == "set" && (previous == "-o" || previous == "+o"):
+		return h.term(word, shelldocs.SetOptions)
+	case command == "kill" && previous == "-s":
+		return h.signal(word)
+	case command == "kill" && strings.HasPrefix(word, "-"):
+		if doc, ok := h.signal(word[1:]); ok {
+			return doc, true
+		}
+	case command == "trap" && len(before) > 0 && !strings.HasPrefix(word, "-"):
+		return h.signal(word)
+	case command == "emulate" && !strings.HasPrefix(word, "-"):
+		return h.term(word, shelldocs.EmulateModes)
+	case command == "shopt" && !strings.HasPrefix(word, "-"):
+		return h.term(word, shelldocs.ShoptOptions)
+	case (command == "setopt" || command == "unsetopt") && !strings.HasPrefix(word, "-"):
+		return h.zshOption(word)
+	}
+	if strings.HasPrefix(word, "-") {
+		return h.builtinFlag(command, word)
+	}
+	return "", false
+}
+
+func (h hoverer) term(name string, vocabularies ...shelldocs.Vocabulary) (string, bool) {
+	for _, v := range vocabularies {
+		if e, ok := shelldocs.Term(v, name); ok {
+			return fmt.Sprintf("**%s**\n\n%s", name, e.Markdown(h.dialect)), true
+		}
+	}
+	return "", false
+}
+
+func (h hoverer) signal(word string) (string, bool) {
+	name := strings.TrimPrefix(strings.ToUpper(word), "SIG")
+	if name == "0" {
+		name = "EXIT"
+	}
+	for _, v := range []shelldocs.Vocabulary{shelldocs.TrapConditions, shelldocs.Signals} {
+		if e, ok := shelldocs.Term(v, name); ok {
+			title := name
+			if v == shelldocs.Signals {
+				title = "SIG" + name
+			}
+			return fmt.Sprintf("**%s**\n\n%s", title, e.Markdown(h.dialect)), true
+		}
+	}
+	return "", false
+}
+
+func (h hoverer) zshOption(word string) (string, bool) {
+	name := zshOptionKey(word)
+	negated := false
+	e, ok := zshOptionNamed(name)
+	if !ok && strings.HasPrefix(name, "no") {
+		e, ok = zshOptionNamed(name[2:])
+		negated = true
+	}
+	if !ok {
+		return "", false
+	}
+	if negated {
+		return fmt.Sprintf("**%s** (negates `%s`)\n\n%s", word, e.Name, e.Markdown(h.dialect)), true
+	}
+	return fmt.Sprintf("**%s**\n\n%s", e.Name, e.Markdown(h.dialect)), true
+}
+
+func zshOptionKey(name string) string {
+	return strings.ToLower(strings.ReplaceAll(name, "_", ""))
+}
+
+func zshOptionNamed(key string) (shelldocs.Entry, bool) {
+	for e := range shelldocs.Terms(shelldocs.SetoptOptions, dialect.Zsh) {
+		if zshOptionKey(e.Name) == key {
+			return e, true
+		}
+	}
+	return shelldocs.Entry{}, false
+}
+
+func (h hoverer) builtinFlag(command, word string) (string, bool) {
+	name, _, _ := strings.Cut(word, "=")
+	if e, ok := shelldocs.BuiltinFlag(command, name, h.dialect); ok {
+		return fmt.Sprintf("**%s %s**\n\n%s", command, name, e.Doc), true
+	}
+	if len(name) < 3 || name[1] == '-' {
+		return "", false
+	}
+	lines := make([]string, 0, len(name)-1)
+	for _, letter := range name[1:] {
+		e, ok := shelldocs.BuiltinFlag(command, "-"+string(letter), h.dialect)
+		if !ok {
+			return "", false
+		}
+		lines = append(lines, fmt.Sprintf("- `-%c`: %s", letter, e.Doc))
+	}
+	return fmt.Sprintf("**%s %s**\n\n%s", command, name, strings.Join(lines, "\n")), true
+}
+
+func (h hoverer) operator() (Result, bool) {
+	for _, node := range slices.Backward(h.Tree.PathAt(h.Offset)) {
+		if r, ok := h.operatorOf(node); ok {
+			return r, true
+		}
+	}
+	return Result{}, false
+}
+
+func (h hoverer) operatorOf(node syntax.Node) (Result, bool) {
+	var (
+		start, end int
+		name       string
+		vocabs     []shelldocs.Vocabulary
+		extra      string
+	)
+	switch n := node.(type) {
+	case *syntax.Redirect:
+		name, vocabs = n.Op.String(), []shelldocs.Vocabulary{shelldocs.Redirections}
+		start = parser.Offset(n.OpPos)
+		end = start + len(name)
+		if n.N != nil {
+			start = parser.Offset(n.N.Pos())
+		}
+		if n.Op == syntax.Hdoc || n.Op == syntax.DashHdoc {
+			extra = heredocExpansion(n.Word)
+		}
+	case *syntax.BinaryCmd:
+		name, vocabs = n.Op.String(), []shelldocs.Vocabulary{shelldocs.ListOperators}
+		start = parser.Offset(n.OpPos)
+	case *syntax.CaseItem:
+		if !n.OpPos.IsValid() {
+			return Result{}, false
+		}
+		name, vocabs = n.Op.String(), []shelldocs.Vocabulary{shelldocs.ListOperators}
+		start = parser.Offset(n.OpPos)
+	case *syntax.BinaryArithm:
+		name, vocabs = n.Op.String(), []shelldocs.Vocabulary{shelldocs.ArithmeticOperators}
+		start = parser.Offset(n.OpPos)
+	case *syntax.UnaryArithm:
+		name, vocabs = n.Op.String(), []shelldocs.Vocabulary{shelldocs.ArithmeticOperators}
+		start = parser.Offset(n.OpPos)
+	case *syntax.BinaryTest:
+		name, vocabs = n.Op.String(), []shelldocs.Vocabulary{shelldocs.TestBinaryOperators, shelldocs.CondOperators}
+		start = parser.Offset(n.OpPos)
+	case *syntax.UnaryTest:
+		name, vocabs = n.Op.String(), []shelldocs.Vocabulary{shelldocs.TestUnaryOperators}
+		start = parser.Offset(n.OpPos)
+	default:
+		return Result{}, false
+	}
+	if end == 0 {
+		end = start + len(name)
+	}
+	span := parser.Span{Start: start, End: end}
+	if !span.Covers(h.Offset) {
+		return Result{}, false
+	}
+	doc, ok := h.term(name, vocabs...)
+	if !ok {
+		return Result{}, false
+	}
+	if extra != "" {
+		doc += "\n\n" + extra
+	}
+	return Result{Markdown: doc, Span: span}, true
+}
+
+func heredocExpansion(delim *syntax.Word) string {
+	if delim == nil {
+		return ""
+	}
+	for _, part := range delim.Parts {
+		switch p := part.(type) {
+		case *syntax.SglQuoted, *syntax.DblQuoted:
+			return "The delimiter is quoted, so the body is taken literally: no expansion happens in it."
+		case *syntax.Lit:
+			if strings.ContainsRune(p.Value, '\\') {
+				return "The delimiter is quoted, so the body is taken literally: no expansion happens in it."
+			}
+		}
+	}
+	return "The delimiter is unquoted, so `$`, backticks and `\\` are processed in the body; quote the delimiter (`<<'EOF'`) to take it literally."
 }
 
 func (h hoverer) flag(ctx context.Context, command string, before []string, word string, span parser.Span) (Result, bool, error) {

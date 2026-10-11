@@ -271,12 +271,12 @@ func (c completer) argumentOf(ctx context.Context, command string, args []string
 	switch {
 	case command == "set" && (last == "-o" || last == "+o"):
 		return Result{Items: c.options(shelldocs.SetOptions)}, nil
+	case strings.HasPrefix(c.site.prefix, "-"):
+		return c.flags(ctx, command, args)
 	case command == "shopt":
 		return Result{Items: c.options(shelldocs.ShoptOptions)}, nil
 	case command == "setopt" || command == "unsetopt":
 		return Result{Items: c.options(shelldocs.SetoptOptions)}, nil
-	case strings.HasPrefix(c.site.prefix, "-"):
-		return c.flags(ctx, command, args)
 	case command == "unset" || command == "export" || command == "readonly":
 		return Result{Items: c.variables()}, nil
 	case commandTakers[command] && !strings.Contains(c.site.prefix, "/"):
@@ -325,6 +325,19 @@ func (c completer) options(set shelldocs.Vocabulary) []Item {
 }
 
 func (c completer) flags(ctx context.Context, command string, args []string) (Result, error) {
+	if flags, ok := shelldocs.BuiltinFlags(command, c.dialect); ok {
+		var items []Item
+		for e := range flags {
+			if !strings.HasPrefix(e.Name, c.site.prefix) {
+				continue
+			}
+			it := c.item(e.Name, KindFlag, "0")
+			it.Detail = command + " " + e.Name
+			it.Documentation = e.Doc
+			items = append(items, it)
+		}
+		return Result{Items: items}, nil
+	}
 	options, err := c.Env.Options(ctx, command, args)
 	if errors.Is(err, manpage.ErrNoPage) {
 		return Result{}, nil

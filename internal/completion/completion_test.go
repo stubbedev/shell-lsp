@@ -252,6 +252,45 @@ func TestFlags(t *testing.T) {
 	}
 }
 
+func TestBuiltinFlags(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		d       dialect.Dialect
+		src     string
+		want    []string
+		missing []string
+	}{
+		{d: dialect.Bash, src: "read -‸", want: []string{"-r", "-a", "-p", "-t"}, missing: []string{"-A", "-k"}},
+		{d: dialect.Zsh, src: "read -‸", want: []string{"-r", "-A", "-k"}, missing: []string{"-a", "-i"}},
+		{d: dialect.Dash, src: "read -‸", want: []string{"-r"}, missing: []string{"-a", "-p", "-t"}},
+		{d: dialect.Bash, src: "declare -‸", want: []string{"-A", "-a", "-g", "-n", "-I"}, missing: []string{"-T"}},
+		{d: dialect.Zsh, src: "typeset -‸", want: []string{"-A", "-T", "-U", "-g"}, missing: []string{"-n", "-I"}},
+		{d: dialect.Dash, src: "f() { local -‸; }", want: nil, missing: []string{"-a", "-r"}},
+		{d: dialect.Bash, src: "shopt -‸", want: []string{"-s", "-u", "-q"}, missing: []string{"globstar"}},
+		{d: dialect.Bash, src: "kill -‸", want: []string{"-s", "-l", "-n"}},
+		{d: dialect.Posix, src: "kill -‸", want: []string{"-s", "-l"}, missing: []string{"-n"}},
+		{d: dialect.Bash, src: "mapfile -‸", want: []string{"-t", "-d"}},
+	}
+	for _, tc := range tests {
+		got := labels(complete(t, tc.d, tc.src))
+		for _, want := range tc.want {
+			if !slices.Contains(got, want) {
+				t.Errorf("%s %q: %v lacks %s", tc.d, tc.src, got, want)
+			}
+		}
+		for _, missing := range tc.missing {
+			if slices.Contains(got, missing) {
+				t.Errorf("%s %q: %v offers %s", tc.d, tc.src, got, missing)
+			}
+		}
+	}
+	it, ok := find(complete(t, dialect.Bash, "read -r‸"), "-r")
+	if !ok || !strings.Contains(it.Documentation, "Raw input") || it.Kind != KindFlag {
+		t.Errorf("read -r item = %+v", it)
+	}
+}
+
 func TestSubcommands(t *testing.T) {
 	t.Parallel()
 

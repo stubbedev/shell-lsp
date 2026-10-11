@@ -127,3 +127,34 @@ func TestTermsFollowTheDialect(t *testing.T) {
 		t.Error("=~ offered in dash")
 	}
 }
+
+func TestBuiltinFlags(t *testing.T) {
+	t.Parallel()
+
+	for name, flags := range builtinFlags {
+		b, ok := Builtin(name)
+		if !ok {
+			t.Errorf("flags documented for %q, which is not a builtin", name)
+			continue
+		}
+		seen := map[string]bool{}
+		for _, f := range flags {
+			if !strings.HasPrefix(f.Name, "-") || f.Doc == "" || seen[f.Name] {
+				t.Errorf("%s: bad or duplicate flag %+v", name, f)
+			}
+			seen[f.Name] = true
+			if f.Dialects&b.Dialects == 0 {
+				t.Errorf("%s %s is documented for shells without %s", name, f.Name, name)
+			}
+		}
+	}
+	if _, ok := BuiltinFlag("read", "-a", dialect.Zsh); ok {
+		t.Error("read -a offered in zsh, which spells it -A")
+	}
+	if _, ok := BuiltinFlag("read", "-r", dialect.Dash); !ok {
+		t.Error("read -r missing in dash")
+	}
+	if _, ok := BuiltinFlags("declare", dialect.Posix); ok {
+		t.Error("declare flags offered in POSIX sh, which has no declare")
+	}
+}
