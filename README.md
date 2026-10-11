@@ -133,7 +133,10 @@ the offending field.
 Formatting runs the same printer shfmt is built on, in-process, so no shfmt
 binary is needed. Likewise, hover and completion documentation for external
 commands comes from the installed manual pages, which the server locates
-through `MANPATH` (or next to every `PATH` entry), decompresses and renders
+through `MANPATH` (where it is unset or has an empty entry, in the `share/man`
+and `man` directories next to every `PATH` entry and in `/usr/share/man`,
+`/usr/local/share/man`, `/usr/local/man` and `/opt/homebrew/share/man`),
+decompresses and renders
 itself; neither `man` nor groff is involved. Subcommands come from the same
 pages: after `git`, `systemctl` or `docker` completion offers the documented
 subcommands, and the flags completed and hovered after `git checkout` are those

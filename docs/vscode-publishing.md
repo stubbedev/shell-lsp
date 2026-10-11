@@ -83,5 +83,6 @@ In the GitHub repository, Settings, Secrets and variables, Actions, add:
 | `VSCE_PAT` | The Azure DevOps token for the Visual Studio Marketplace |
 | `OVSX_PAT` | The Open VSX access token |
 
-The tokens are only handed to the step that publishes with them. Without
+The tokens are only handed to two steps of the `vscode` job: the one that
+checks which of them are set, and the one that publishes with each. Without
 them, releases still attach the `.vsix` to the GitHub release.
