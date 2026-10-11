@@ -1,0 +1,36 @@
+### a download piped into a shell
+#!/bin/bash
+curl -fsSL https://example.com/install.sh | sh
+wget -qO- https://example.com/i.sh | sudo bash -s -- --yes
+curl -o- https://example.com/nvm.sh | bash
+>>> none
+>>+ SL1005 2:45 -- shell-lsp native check; shellcheck does not flag downloaded code run unchecked
+>>+ SL1005 3:43 -- shell-lsp native check; shellcheck does not flag downloaded code run unchecked
+>>+ SL1005 4:39 -- shell-lsp native check; shellcheck does not flag downloaded code run unchecked
+
+### a download run through -c, process substitution, source and eval
+#!/bin/bash
+sh -c "$(curl -fsSL https://example.com/install.sh)"
+bash -o pipefail -c "$(wget -O - https://example.com/x)"
+bash <(curl -s https://example.com/i.sh)
+source <(curl -s https://example.com/env.sh)
+curl -fsSL https://example.com/i.sh | . /dev/stdin
+eval "$(curl -s https://example.com/env)"
+>>> SC1090 5:8
+>>> SC1091 6:41
+>>+ SL1005 2:7 -- shell-lsp native check; shellcheck does not flag downloaded code run unchecked
+>>+ SL1005 3:21 -- shell-lsp native check; shellcheck does not flag downloaded code run unchecked
+>>+ SL1005 4:6 -- shell-lsp native check; shellcheck does not flag downloaded code run unchecked
+>>+ SL1005 5:8 -- shell-lsp native check; shellcheck does not flag downloaded code run unchecked
+>>+ SL1005 6:39 -- shell-lsp native check; shellcheck does not flag downloaded code run unchecked
+>>+ SL1005 7:6 -- shell-lsp native check; shellcheck does not flag downloaded code run unchecked
+
+### downloads saved to a file or read as data are not run
+#!/bin/bash
+curl -fsSLo install.sh https://example.com/install.sh
+curl -fsSLO https://example.com/i.sh | sh
+curl --output out https://example.com/i.sh | sh
+wget https://example.com/i.sh | bash
+curl -s https://example.com/data.json | jq .
+curl -s https://example.com/x | bash script.sh
+>>> none

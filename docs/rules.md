@@ -68,6 +68,22 @@ absolute path can make it run any file.
 . "/etc/app/$1.conf"    # SL1004: $1=../../tmp/evil
 ```
 
+## SL1005
+
+**Downloaded code runs unchecked.** A script fetched with `curl` or `wget` is
+piped straight into a shell, run with `sh -c "$(curl …)"`, `bash <(curl …)`,
+`source <(curl …)` or `. /dev/stdin`, or passed to `eval`, so whatever the
+server or anyone on the way sends is executed, and a connection cut halfway
+can run half a script. Downloads written to a file (`curl -o file`,
+`curl -O`, `wget` without `-O -`) are not reported, because the file can be
+checked before it runs.
+
+```bash
+curl -fsSL https://example.com/install.sh | sh    # SL1005
+curl -fsSLo install.sh https://example.com/install.sh
+echo "$expected_sha256  install.sh" | sha256sum -c - && sh install.sh
+```
+
 ## SL2001
 
 **A function in a script is never called.** Nothing in the script, in the

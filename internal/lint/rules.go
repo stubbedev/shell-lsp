@@ -75,6 +75,7 @@ var families = []family{
 	typosFamily,
 	testSyntaxFamily,
 	injectionFamily,
+	downloadFamily,
 	unusedFunctionsFamily,
 	embeddedFamily,
 }
