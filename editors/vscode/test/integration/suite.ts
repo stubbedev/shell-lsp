@@ -109,7 +109,8 @@ async function formatsWithEditorconfig(folder: WorkspaceFolder): Promise<void> {
 async function fixesAll(uri: Uri): Promise<void> {
   const document = await workspace.openTextDocument(uri);
   await commands.executeCommand("shellLsp.fixAll");
-  await waitFor("fix all to quote $1", () => document.getText(), (text) => text.includes('greet "$1"'));
+  const fixed = await waitFor("fix all to rewrite the backticks", () => document.getText(), (text) => text.includes("now=$(date)"));
+  assert.ok(fixed.includes("greet $1\n"), "fix all applied a fix that changes behaviour");
 }
 
 async function outlinesBatsTests(folder: WorkspaceFolder, name: string, test: string): Promise<void> {

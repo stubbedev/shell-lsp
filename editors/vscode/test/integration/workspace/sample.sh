@@ -4,3 +4,5 @@ greet() {
 }
 greet $1
 greet world
+now=`date`
+echo "$now"
