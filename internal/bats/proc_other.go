@@ -1,7 +1,9 @@
-//go:build !unix
+//go:build !unix && !windows
 
 package bats
 
 import "os/exec"
 
-func isolate(*exec.Cmd) {}
+func startTree(cmd *exec.Cmd) (func(), error) {
+	return func() {}, cmd.Start()
+}

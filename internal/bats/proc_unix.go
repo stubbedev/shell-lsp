@@ -9,7 +9,7 @@ import (
 	"syscall"
 )
 
-func isolate(cmd *exec.Cmd) {
+func startTree(cmd *exec.Cmd) (func(), error) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error {
 		err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
@@ -18,4 +18,5 @@ func isolate(cmd *exec.Cmd) {
 		}
 		return err
 	}
+	return func() {}, cmd.Start()
 }

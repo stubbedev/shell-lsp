@@ -77,8 +77,12 @@ func Run(ctx context.Context, inv Invocation, progress func(Report)) (Report, er
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	cmd.WaitDelay = waitDelay
-	isolate(cmd)
-	err := cmd.Run()
+	release, err := startTree(cmd)
+	if err != nil {
+		return Report{}, fmt.Errorf("running %s: %w", inv, err)
+	}
+	err = cmd.Wait()
+	release()
 	stdout.flush()
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return Report{}, fmt.Errorf("running %s: %w", inv, ctxErr)
