@@ -44,7 +44,7 @@ func Find(tree *parser.Tree) []Program {
 }
 
 func mayEmbed(name string, bats bool) bool {
-	if parser.IsCommandWrapper(name, bats) {
+	if (parser.Wrappers{Bats: bats}).Has(name) {
 		return true
 	}
 	_, ok := languageOf(name)
@@ -56,7 +56,7 @@ func embeddedIn(tree *parser.Tree, stmt *syntax.Stmt, bats bool) (Program, bool)
 	if !ok {
 		return Program{}, false
 	}
-	at := parser.CommandStart(call.Args, bats)
+	at := parser.Wrappers{Bats: bats}.Start(call.Args)
 	if at < 0 {
 		return Program{}, false
 	}

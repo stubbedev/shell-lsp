@@ -332,7 +332,7 @@ func hasBraceExpansion(w *syntax.Word) bool {
 }
 
 func (p *pass) effectiveCommandWord(call *syntax.CallExpr) *syntax.Word {
-	if i := parser.CommandStart(call.Args, p.bats); i >= 0 {
+	if i := (parser.Wrappers{Bats: p.bats}).Start(call.Args); i >= 0 {
 		return call.Args[i]
 	}
 	return nil
