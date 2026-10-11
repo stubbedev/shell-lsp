@@ -29,3 +29,11 @@ print -rl -- [1,11]*(N)
 #!/bin/bash
 ls [1,11]
 >>> SC2102 2:4
+
+### a word with glob qualifiers is a glob that may match nothing
+#!/bin/zsh
+autoload -Uz compinit
+for dump in ~/.zcompdump(N.mh+24); do
+  compinit -d $dump
+done
+>>- SC1071 1:1 -- shellcheck refuses zsh; the qualifiers make the word a glob, so the loop runs once per match

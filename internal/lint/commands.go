@@ -270,7 +270,7 @@ func (g optionGrammar) shortCluster(args []*syntax.Word, i int, lit string, out 
 }
 
 func mayExpandToSeveralWords(w *syntax.Word) bool {
-	if isGlob(w) || hasBraceExpansion(w) {
+	if isGlob(w) || qualifiedGlob(w, true) || hasBraceExpansion(w) {
 		return true
 	}
 	for _, part := range w.Parts {
@@ -336,9 +336,13 @@ func isGlob(w *syntax.Word) bool { return scanGlob(w, true) }
 
 func hasBracketGlob(w *syntax.Word) bool { return scanGlob(w, false) }
 
+func qualifiedGlob(w *syntax.Word, bare bool) bool {
+	return parser.GlobQualifiers(w, bare) < len(w.Parts)
+}
+
 func scanGlob(w *syntax.Word, wildcards bool) bool {
 	sawOpen := false
-	for _, part := range w.Parts {
+	for _, part := range w.Parts[:parser.GlobQualifiers(w, true)] {
 		switch p := part.(type) {
 		case *syntax.ExtGlob:
 			return wildcards
