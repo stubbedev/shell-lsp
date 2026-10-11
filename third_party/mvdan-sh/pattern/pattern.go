@@ -71,6 +71,10 @@ const (
 // paths if Windows is supported, as the path separator on that platform is the
 // same character as the escaping character for shell patterns.
 func Regexp(pat string, mode Mode) (string, error) {
+	// Regular expressions cannot match invalid UTF-8, so neither can patterns.
+	if !utf8.ValidString(pat) {
+		return "", fmt.Errorf("invalid UTF-8 in pattern %q", pat)
+	}
 	// If there are no special pattern matching or regular expression characters,
 	// and we don't need to insert extras for the modes affecting non-special characters,
 	// we can directly return the input string as a short-cut.
