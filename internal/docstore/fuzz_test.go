@@ -8,7 +8,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 )
 
-var fuzzInsertions = []string{"a", "é", "😀", "中", " ", "\n", "\r\n", "\uFEFF"}
+var fuzzInsertions = []string{"a", "é", "😀", "中", " ", "\n", "\r\n", "\r", "\uFEFF"}
 
 type clientLine struct{ start, end int }
 
@@ -55,8 +55,9 @@ func FuzzChangesMatchClientText(f *testing.F) {
 	f.Add("echo hi\r\nx=1\n", []byte{0, 2, 1, 0, 2, 0, 1})
 	f.Add("a😀b\nc", []byte{0, 2, 0, 3, 1, 2, 7, 1, 0, 9, 9, 1, 5})
 	f.Add("", []byte{5, 5, 5, 5, 3, 7, 6, 4})
+	f.Add("a\rb\nc", []byte{1, 1, 0, 1, 0, 1, 5, 1, 0, 9, 0, 9, 1, 7})
 	f.Fuzz(func(t *testing.T, initial string, script []byte) {
-		if !utf8.ValidString(initial) || strings.Count(initial, "\r") != strings.Count(initial, "\r\n") {
+		if !utf8.ValidString(initial) {
 			return
 		}
 		client := strings.TrimPrefix(initial, "\uFEFF")

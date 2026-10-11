@@ -47,14 +47,43 @@ func EncodingFromName(name string) (Encoding, error) {
 }
 
 func NormalizeCanonical(text string) string {
-	return normalizeLineEnds(strings.TrimPrefix(text, "\uFEFF"))
+	normalized, _ := splitLineEnds(strings.TrimPrefix(text, "\uFEFF"))
+	return normalized
 }
 
-func normalizeLineEnds(text string) string {
-	if !strings.ContainsRune(text, '\r') {
-		return text
+type lineEnd uint8
+
+const (
+	endLF lineEnd = iota
+	endCR
+	endCRLF
+)
+
+func splitLineEnds(raw string) (string, []lineEnd) {
+	if !strings.ContainsRune(raw, '\r') {
+		return raw, nil
 	}
-	return strings.ReplaceAll(strings.ReplaceAll(text, "\r\n", "\n"), "\r", "\n")
+	var sb strings.Builder
+	sb.Grow(len(raw))
+	ends := make([]lineEnd, 0, strings.Count(raw, "\n")+strings.Count(raw, "\r"))
+	for i := 0; i < len(raw); i++ {
+		switch raw[i] {
+		case '\r':
+			if i+1 < len(raw) && raw[i+1] == '\n' {
+				ends = append(ends, endCRLF)
+				i++
+			} else {
+				ends = append(ends, endCR)
+			}
+			sb.WriteByte('\n')
+		case '\n':
+			ends = append(ends, endLF)
+			sb.WriteByte('\n')
+		default:
+			sb.WriteByte(raw[i])
+		}
+	}
+	return sb.String(), ends
 }
 
 type Document struct {
@@ -63,17 +92,20 @@ type Document struct {
 	Version   int32
 	text      string
 	lineStart []int
+	lineEnds  []lineEnd
 	nonASCII  int
 }
 
 func NewDocument(uri, language string, version int32, text string) *Document {
 	d := &Document{URI: uri, Language: language, Version: version}
-	d.setText(NormalizeCanonical(text))
+	d.setText(strings.TrimPrefix(text, "\uFEFF"))
 	return d
 }
 
-func (d *Document) setText(text string) {
+func (d *Document) setText(raw string) {
+	text, ends := splitLineEnds(raw)
 	d.text = text
+	d.lineEnds = ends
 	d.lineStart = appendLineStarts(make([]int, 1, strings.Count(text, "\n")+1), text, 0)
 	d.nonASCII = countNonASCII(text)
 }
@@ -98,6 +130,43 @@ func appendLineStarts(starts []int, text string, base int) []int {
 		i += next + 1
 	}
 	return starts
+}
+
+func (d *Document) replaceRaw(start, end int, raw string) {
+	if d.lineEnds == nil && !strings.ContainsRune(raw, '\r') {
+		d.replace(start, end, raw)
+		return
+	}
+	first := sort.SearchInts(d.lineStart, start+1) - 1
+	last := sort.SearchInts(d.lineStart, end+1) - 1
+	var prefix, suffix string
+	if start == d.lineStart[first] && first > 0 && d.lineEndKind(first-1) == endCR {
+		start--
+		first--
+		prefix = "\r"
+	}
+	if end == d.lineEnd(last) && last+1 < len(d.lineStart) && d.lineEndKind(last) == endLF {
+		end++
+		suffix = "\n"
+	}
+	text, ends := splitLineEnds(prefix + raw + suffix)
+	if ends == nil {
+		ends = make([]lineEnd, strings.Count(text, "\n"))
+	}
+	current := d.lineEnds
+	if current == nil {
+		current = make([]lineEnd, len(d.lineStart)-1)
+	}
+	removed := strings.Count(d.text[start:end], "\n")
+	d.lineEnds = slices.Concat(current[:first], ends, current[first+removed:])
+	d.replace(start, end, text)
+}
+
+func (d *Document) lineEndKind(line int) lineEnd {
+	if d.lineEnds == nil {
+		return endLF
+	}
+	return d.lineEnds[line]
 }
 
 func (d *Document) replace(start, end int, text string) {
@@ -191,7 +260,7 @@ func (d *Document) RangeFor(start, end int, enc Encoding) lsp.Range {
 func (d *Document) applyChanges(changes []lsp.TextDocumentContentChangeEvent, enc Encoding) {
 	for _, change := range changes {
 		if change.Range == nil {
-			d.setText(NormalizeCanonical(change.Text))
+			d.setText(strings.TrimPrefix(change.Text, "\uFEFF"))
 			continue
 		}
 		start := d.PositionToOffset(change.Range.Start, enc)
@@ -199,7 +268,7 @@ func (d *Document) applyChanges(changes []lsp.TextDocumentContentChangeEvent, en
 		if end < start {
 			start, end = end, start
 		}
-		d.replace(start, end, normalizeLineEnds(change.Text))
+		d.replaceRaw(start, end, change.Text)
 	}
 }
 
