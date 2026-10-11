@@ -316,7 +316,8 @@ func checkLiteralBraces(p *pass, n syntax.Node) {
 
 func (p *pass) hasLiteralBrace(w *syntax.Word) bool {
 	for _, part := range w.Parts {
-		if lit, ok := p.literalPart(part); ok && strings.ContainsAny(lit.Value, "{}") {
+		lit, ok := part.(*syntax.Lit)
+		if ok && (strings.IndexByte(lit.Value, '{') >= 0 || strings.IndexByte(lit.Value, '}') >= 0) && !p.tree.Unexpandable(lit) {
 			return true
 		}
 	}

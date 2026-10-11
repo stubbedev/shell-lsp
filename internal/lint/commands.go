@@ -325,11 +325,21 @@ func hasBraceExpansion(w *syntax.Word) bool {
 	})
 }
 
+type commandWord struct {
+	call *syntax.CallExpr
+	word *syntax.Word
+}
+
 func (p *pass) effectiveCommandWord(call *syntax.CallExpr) *syntax.Word {
-	if i := (parser.Wrappers{Bats: p.bats}).Start(call.Args); i >= 0 {
-		return call.Args[i]
+	if p.lastCommandWord.call == call {
+		return p.lastCommandWord.word
 	}
-	return nil
+	var word *syntax.Word
+	if i := (parser.Wrappers{Bats: p.bats}).Start(call.Args); i >= 0 {
+		word = call.Args[i]
+	}
+	p.lastCommandWord = commandWord{call: call, word: word}
+	return word
 }
 
 func isGlob(w *syntax.Word) bool { return scanGlob(w, true) }

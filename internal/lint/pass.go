@@ -40,17 +40,18 @@ type pass struct {
 	firstCommand    int
 	directives      []directiveComment
 
-	rcFile         bool
-	shellChosen    bool
-	shellOptions   *shellOptions
-	variables      variableUsage
-	parameters     shelldocs.ParameterTable
-	dialectGuessed bool
-	emptinessTests map[int]bool
-	maskWalked     map[syntax.Node]bool
-	braceScan      *braceScanner
-	executed       *bool
-	quotedHeredocs map[int]bool
+	rcFile          bool
+	shellChosen     bool
+	shellOptions    *shellOptions
+	variables       variableUsage
+	parameters      shelldocs.ParameterTable
+	dialectGuessed  bool
+	emptinessTests  map[int]bool
+	maskWalked      map[syntax.Node]bool
+	braceScan       *braceScanner
+	executed        *bool
+	lastCommandWord commandWord
+	quotedHeredocs  map[int]bool
 
 	normalized Normalized
 	probes     []Finding
