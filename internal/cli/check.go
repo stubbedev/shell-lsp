@@ -322,7 +322,7 @@ func (c *checker) lint(t target) linted {
 		NoExtendedAnalysis: !s.extended,
 	})
 	return linted{
-		report: fileReport{name: t.name, doc: file.Doc, findings: c.filter(s.exclude, append(syntaxFindings(file.Tree), findings...))},
+		report: fileReport{name: t.name, doc: file.Doc, findings: c.filter(s.exclude, append(syntaxFindings(file.Tree, s.source), findings...))},
 		file:   file,
 		env:    env,
 	}
@@ -391,7 +391,10 @@ func (c *checker) parse(t target, s fileSettings) (*workspace.File, project.Reso
 	return file, res.r, nil
 }
 
-func syntaxFindings(tree *parser.Tree) []lint.Finding {
+func syntaxFindings(tree *parser.Tree, source lint.DialectSource) []lint.Finding {
+	if lint.Foreign(tree, source) {
+		return nil
+	}
 	out := make([]lint.Finding, len(tree.Errors))
 	for i, e := range tree.Errors {
 		out[i] = lint.Finding{Code: parseFailure, Severity: lint.SeverityError, Span: e.Span, Message: e.Message}

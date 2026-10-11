@@ -136,6 +136,27 @@ func TestZshIsLintedNatively(t *testing.T) {
 	}
 }
 
+func TestForeignInterpreterGetsNoSyntaxErrors(t *testing.T) {
+	t.Parallel()
+
+	text := "#!/usr/bin/env python3\nimport sys\nCONF = Path.home() / \".conf\"\nprint(sys.argv)\n"
+	c, _ := startClient(t, `{`+pullCapabilities+`}`)
+	c.notify("textDocument/didOpen", openParams("file:///w/status.sh", text))
+	report := decodeResult[lsp.FullDocumentDiagnosticReport](t,
+		c.call("textDocument/diagnostic", `{"textDocument": {"uri": "file:///w/status.sh"}}`))
+	if got := codes(report.Items); !slices.Equal(got, []string{"SC1071"}) {
+		t.Errorf("python file codes = %v, want only SC1071", got)
+	}
+
+	forced, _ := startClient(t, `{`+pullCapabilities+`, "initializationOptions": {"dialect": "bash"}}`)
+	forced.notify("textDocument/didOpen", openParams("file:///w/status.sh", text))
+	report = decodeResult[lsp.FullDocumentDiagnosticReport](t,
+		forced.call("textDocument/diagnostic", `{"textDocument": {"uri": "file:///w/status.sh"}}`))
+	if got := codes(report.Items); !slices.Contains(got, "syntax") {
+		t.Errorf("codes with the dialect forced = %v, want the file parsed as shell", got)
+	}
+}
+
 func TestDialectSettingOverridesDetection(t *testing.T) {
 	t.Parallel()
 

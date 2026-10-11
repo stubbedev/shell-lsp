@@ -66,6 +66,21 @@ func findings(t *testing.T, gcc string) []string {
 
 const unquoted = "#!/bin/bash\necho $1\n"
 
+func TestCheckReportsOnlyTheInterpreterForForeignFiles(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeFiles(t, dir, map[string]string{"status.sh": "#!/usr/bin/env python3\nCONF = Path.home() / \".conf\"\n"})
+	got := run(t, dir, "", "check", "-f", "gcc", "status.sh")
+	if want := []string{"status.sh:1:1 SC1071"}; !slices.Equal(findings(t, got.stdout), want) {
+		t.Errorf("findings = %v, want %v", findings(t, got.stdout), want)
+	}
+	forced := run(t, dir, "", "check", "-f", "gcc", "--shell=bash", "status.sh")
+	if !slices.Contains(findings(t, forced.stdout), "status.sh:2:17 SC1072") {
+		t.Errorf("findings with --shell = %v, want the file parsed as bash", findings(t, forced.stdout))
+	}
+}
+
 func TestCheckExitStatuses(t *testing.T) {
 	t.Parallel()
 

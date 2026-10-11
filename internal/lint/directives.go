@@ -262,12 +262,9 @@ type fileWide struct {
 }
 
 func fileWideSettings(directives []directiveComment, firstCommand int, opts Options) fileWide {
-	out := fileWide{optional: setOf(opts.Optional...), extended: !opts.NoExtendedAnalysis}
+	out := fileWide{optional: setOf(opts.Optional...), extended: !opts.NoExtendedAnalysis, shell: namesShell(directives)}
 	extendedSet := false
 	for _, d := range directives {
-		if _, found := d.parsed.Value(directive.Shell); found {
-			out.shell = true
-		}
 		if d.span.End > firstCommand {
 			continue
 		}
@@ -283,6 +280,13 @@ func fileWideSettings(directives []directiveComment, firstCommand int, opts Opti
 		}
 	}
 	return out
+}
+
+func namesShell(directives []directiveComment) bool {
+	return slices.ContainsFunc(directives, func(d directiveComment) bool {
+		_, found := d.parsed.Value(directive.Shell)
+		return found
+	})
 }
 
 func parseBool(value string) (bool, bool) {

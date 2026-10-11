@@ -74,7 +74,10 @@ func (s *Server) diagnoseClosed(file *workspace.File, encoding docstore.Encoding
 func (s *Server) report(file *workspace.File, settings config.Settings, generation uint64, encoding docstore.Encoding, identity string) diagnosticReport {
 	findings, stamp := s.findings(file, settings, generation)
 	tests := s.bats.of(file.URI)
-	items := diagnostics.Syntax(file.Tree, file.Doc, encoding)
+	var items []lsp.Diagnostic
+	if !lint.Foreign(file.Tree, dialectSource(settings)) {
+		items = diagnostics.Syntax(file.Tree, file.Doc, encoding)
+	}
 	items = append(items, diagnostics.Lint(findings, file.Doc, encoding)...)
 	items = append(items, diagnostics.Bats(tests.placedOn(file.Tree), file.Doc, encoding)...)
 	return diagnosticReport{
