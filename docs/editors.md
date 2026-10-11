@@ -88,8 +88,8 @@ absolute path, set in user settings), else `shell-lsp` on `PATH`, else a
 binary it downloaded earlier. When it finds none it offers to download the
 release binary for its own version, verifies it against the release's
 `SHA256SUMS` before saving it, and keeps it in the extension's storage.
-Prebuilt binaries cover Linux and macOS on x64 and arm64; on other platforms
-install the server yourself and set `shellLsp.path`.
+Prebuilt binaries cover Linux, macOS and Windows on x64 and arm64; on other
+platforms install the server yourself and set `shellLsp.path`.
 
 The server's settings are VS Code settings under `shellLsp`
 (`shellLsp.dialect`, `shellLsp.lint.exclude`, `shellLsp.format.indent`, and
@@ -107,3 +107,22 @@ lenses open the references peek. More in the extension's
 Run `shell-lsp` over stdio for shell buffers. It negotiates UTF-8, UTF-16 or
 UTF-32 positions, uses pull diagnostics when the client supports them and
 pushes them otherwise.
+
+## Windows
+
+The Windows binary is `shell-lsp.exe`; put it on `PATH` or point the
+editor at it. Everything else works as on Linux and macOS, with these
+differences:
+
+- Document URIs may name a drive (`file:///c%3A/...`) or a UNC share
+  (`file://server/share/...`), and paths compare case-insensitively.
+- Command completion lists the programs on `PATH` whose extension is in
+  `PATHEXT`, without the extension (`git` for `git.exe`).
+- Man pages, for hover and option completion, come from `MANPATH`
+  (separated by `;`) and from the `share\man` and `man` directories next to
+  each `PATH` entry, which covers the trees MSYS2 and Git for Windows
+  install. There are no further default locations.
+- Bats tests run through the `bash.exe` of Git for Windows or MSYS2 found on
+  `PATH`. The WSL launcher in `System32` is skipped because it cannot see
+  Windows paths. A `bats.cmd` or `bats.exe` launcher, such as the one npm
+  installs, runs directly.
