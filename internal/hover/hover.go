@@ -38,6 +38,7 @@ type Result struct {
 
 func Hover(ctx context.Context, in Input) (Result, bool, error) {
 	h := newHoverer(in)
+	h.path = in.Tree.PathAt(in.Offset)
 	if r, ok := h.keyword(); ok {
 		return r, true, nil
 	}
@@ -61,6 +62,7 @@ type hoverer struct {
 	text    string
 	dialect dialect.Dialect
 	scope   parser.ScopeID
+	path    []syntax.Node
 }
 
 func (h hoverer) keyword() (Result, bool) {
@@ -78,8 +80,7 @@ func (h hoverer) keyword() (Result, bool) {
 }
 
 func (h hoverer) paramExp() (Result, bool) {
-	path := h.Tree.PathAt(h.Offset)
-	for _, node := range slices.Backward(path) {
+	for _, node := range slices.Backward(h.path) {
 		exp, ok := node.(*syntax.ParamExp)
 		if !ok || exp.Param == nil {
 			continue
@@ -317,7 +318,7 @@ func (h hoverer) commandWords(cmd parser.Command) []*syntax.Word {
 	if len(cmd.Args) > 0 {
 		return cmd.Args
 	}
-	for _, node := range h.Tree.PathAt(h.Offset) {
+	for _, node := range h.path {
 		decl, ok := node.(*syntax.DeclClause)
 		if !ok || parser.Offset(decl.Variant.Pos()) != cmd.NameSpan.Start {
 			continue
@@ -440,7 +441,7 @@ func (h hoverer) builtinFlag(command, word string) (string, bool) {
 }
 
 func (h hoverer) operator() (Result, bool) {
-	for _, node := range slices.Backward(h.Tree.PathAt(h.Offset)) {
+	for _, node := range slices.Backward(h.path) {
 		if r, ok := h.operatorOf(node); ok {
 			return r, true
 		}
