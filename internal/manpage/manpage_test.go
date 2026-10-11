@@ -188,6 +188,20 @@ func TestRenderMdocPage(t *testing.T) {
 	}
 }
 
+func TestRenderTreatsIndentedTermsAsDefinitions(t *testing.T) {
+	t.Parallel()
+
+	src := ".TH X 1\n.SH NAME\nx \\- y\n.SH DESCRIPTION\n.PP\nThe modes are:\n.RS 4\n.RE\n.PP\nfill\n.RS 4\nFill columns first.\n.RE\n" +
+		".PP\nlist-units [PATTERN\\&...]\n.RS 4\nList units.\n.RE\n.PP\nSee also.\n.RS 4\nMore prose.\n.RE\n"
+	page, err := Render([]byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"The modes are:", "See also.", "More prose."}; !slices.Equal(page.Description, want) {
+		t.Errorf("Description = %q, want %q", page.Description, want)
+	}
+}
+
 func TestRenderKeepsUnknownEscapesVisible(t *testing.T) {
 	t.Parallel()
 

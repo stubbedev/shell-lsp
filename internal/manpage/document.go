@@ -1,6 +1,7 @@
 package manpage
 
 import (
+	"regexp"
 	"strings"
 )
 
@@ -9,6 +10,11 @@ const (
 	blockOpen     = `\{`
 	blockClose    = `\}`
 	definitionEnd = ".."
+)
+
+var (
+	bareWord       = regexp.MustCompile(`^[a-z][a-z0-9_-]*[a-z0-9]$`)
+	crossReference = regexp.MustCompile(`^([^()]+)\([0-9][A-Za-z]*\)$`)
 )
 
 type listKind uint8
@@ -173,12 +179,35 @@ func (b *builder) startSection(name string) {
 
 func (b *builder) promoteHeading() {
 	text := strings.TrimSpace(b.text.String())
-	if b.kind != paragraphBlock || !strings.HasPrefix(text, "-") || strings.Contains(text, ". ") {
+	if b.kind != paragraphBlock || !isTerm(text) {
 		b.flush()
 		return
 	}
 	b.text.Reset()
 	b.kind, b.tag = taggedBlock, text
+}
+
+func isTerm(text string) bool {
+	if text == "" || strings.Contains(text, ". ") {
+		return false
+	}
+	if strings.HasPrefix(text, "-") {
+		return true
+	}
+	first, _, _ := strings.Cut(text, " ")
+	name, _ := splitReference(strings.TrimSuffix(first, ","))
+	return bareWord.MatchString(name) && !endsSentence(text)
+}
+
+func splitReference(word string) (string, bool) {
+	if m := crossReference.FindStringSubmatch(word); m != nil {
+		return m[1], true
+	}
+	return word, false
+}
+
+func endsSentence(text string) bool {
+	return strings.HasSuffix(text, ":") || strings.HasSuffix(text, ".") && !strings.HasSuffix(text, "...")
 }
 
 func (b *builder) currentSection() string {
