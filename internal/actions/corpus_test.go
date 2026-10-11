@@ -9,6 +9,7 @@ import (
 	"mvdan.cc/sh/v3/syntax"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/format"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 )
@@ -16,15 +17,19 @@ import (
 func TestRefactoringsKeepCorpusParsing(t *testing.T) {
 	t.Parallel()
 
-	fixtures, err := filepath.Glob(filepath.Join("..", "parser", "testdata", "corpus", "*", "*"))
-	if err != nil {
-		t.Fatalf("listing the parser corpus: %v", err)
+	var fixtures []string
+	for _, dir := range []string{filepath.Join("..", "parser", "testdata", "corpus"), filepath.Join("testdata", "corpus")} {
+		found, err := filepath.Glob(filepath.Join(dir, "*", "*"))
+		if err != nil {
+			t.Fatalf("listing the corpus in %s: %v", dir, err)
+		}
+		fixtures = append(fixtures, found...)
 	}
 	for _, fixture := range fixtures {
 		if filepath.Ext(fixture) == ".golden" {
 			continue
 		}
-		t.Run(filepath.Base(fixture), func(t *testing.T) {
+		t.Run(fixture, func(t *testing.T) {
 			t.Parallel()
 
 			d, ok := dialect.FromName(filepath.Base(filepath.Dir(fixture)))
@@ -40,14 +45,16 @@ func TestRefactoringsKeepCorpusParsing(t *testing.T) {
 			if len(tree.Errors) > 0 {
 				t.Skipf("%s has syntax errors by design", fixture)
 			}
-			for _, sel := range corpusSelections(tree) {
-				for _, a := range Actions(Input{Tree: tree, Selection: sel}) {
-					if a.Refactor == nil {
-						continue
-					}
-					out := textedit.Apply(text, a.Edits)
-					if errs := parser.Parse(out, d).Errors; len(errs) > 0 {
-						t.Errorf("%s at %d-%d in %s introduced %q:\n%s", a.Title, sel.Start, sel.End, fixture, errs[0].Message, out)
+			for _, style := range []format.Options{{}, {Indent: 4, SwitchCaseIndent: true}} {
+				for _, sel := range corpusSelections(tree) {
+					for _, a := range Actions(Input{Tree: tree, Format: style, Selection: sel}) {
+						if a.Refactor == nil {
+							continue
+						}
+						out := textedit.Apply(text, a.Edits)
+						if errs := parser.Parse(out, d).Errors; len(errs) > 0 {
+							t.Errorf("%s at %d-%d with %+v introduced %q:\n%s", a.Title, sel.Start, sel.End, style, errs[0].Message, out)
+						}
 					}
 				}
 			}
