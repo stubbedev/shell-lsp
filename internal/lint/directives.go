@@ -10,8 +10,6 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/parser"
 )
 
-const allCodes = directive.All
-
 type placement uint8
 
 const (
@@ -273,7 +271,7 @@ func disabledItems(d directiveComment, pair directive.Pair, scope parser.Span, p
 }
 
 func parseDisabled(item string) (bool, codeRange, bool) {
-	if item == allCodes {
+	if item == directive.All {
 		return true, codeRange{}, true
 	}
 	from, to, isRange := strings.Cut(item, "-")
@@ -335,7 +333,7 @@ func parseBool(value string) (bool, bool) {
 	return false, false
 }
 
-func (f fileWide) enabled(name string) bool { return f.optional[name] || f.optional[allCodes] }
+func (f fileWide) enabled(name string) bool { return f.optional[name] || f.optional[directive.All] }
 
 func firstCommandStart(tree *parser.Tree) int {
 	if len(tree.File.Stmts) > 0 {

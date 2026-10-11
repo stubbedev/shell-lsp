@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/directive"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 )
 
@@ -85,13 +86,11 @@ func (s codeSet) union(other codeSet) codeSet {
 	return codeSet{all: s.all || other.all, ranges: slices.Concat(s.ranges, other.ranges)}
 }
 
-const allCodes = "all"
-
 func parseCodeSet(list string) (codeSet, error) {
 	var set codeSet
 	for item := range strings.SplitSeq(list, ",") {
 		item = strings.TrimSpace(item)
-		if item == allCodes {
+		if item == directive.All {
 			set.all = true
 			continue
 		}

@@ -3,6 +3,8 @@ package lint
 import (
 	"slices"
 	"strings"
+
+	"github.com/stubbedev/shell-lsp/internal/directive"
 )
 
 type meta struct {
@@ -51,7 +53,7 @@ func IsOptionalCheck(name string) bool {
 }
 
 func EnablesOptional(name string) bool {
-	return name == allCodes || IsOptionalCheck(name)
+	return name == directive.All || IsOptionalCheck(name)
 }
 
 func Codes() []Code {

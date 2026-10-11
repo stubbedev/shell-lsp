@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/directive"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 )
@@ -20,7 +21,7 @@ func FuzzCheck(f *testing.F) {
 			return
 		}
 		for _, d := range []dialect.Dialect{dialect.Bash, dialect.Zsh, dialect.Posix, dialect.Dash, dialect.Ksh, dialect.Busybox} {
-			findings := Check(parser.Parse(src, d), nil, Options{Optional: []string{allCodes}})
+			findings := Check(parser.Parse(src, d), nil, Options{Optional: []string{directive.All}})
 			fixSets := make([][]Fix, 0, len(findings))
 			for _, finding := range findings {
 				if finding.Span.Start < 0 || finding.Span.Start > finding.Span.End || finding.Span.End > len(src) {

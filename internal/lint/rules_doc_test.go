@@ -8,6 +8,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/docs"
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/directive"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 )
 
@@ -43,7 +44,7 @@ func TestRulesDocExamplesReportTheirCodes(t *testing.T) {
 			d := dialect.Detect(nil, dialect.Input{URI: "file:///example.sh", Text: example})
 			tree := parser.Parse(example, d)
 			found := map[int][]string{}
-			for _, f := range Check(tree, nil, Options{DialectSource: DialectDetected, Optional: []string{allCodes}}) {
+			for _, f := range Check(tree, nil, Options{DialectSource: DialectDetected, Optional: []string{directive.All}}) {
 				line := tree.Line(f.Span.Start)
 				found[line] = append(found[line], f.Code.String())
 			}

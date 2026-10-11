@@ -4,6 +4,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/stubbedev/shell-lsp/internal/directive"
 	"github.com/stubbedev/shell-lsp/internal/format"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
@@ -16,7 +17,7 @@ func TestEveryFixKeepsFixturesParsing(t *testing.T) {
 
 	for _, c := range loadFixtures(t) {
 		d, source := fixtureDialect(c.script)
-		opts := Options{Optional: []string{allCodes}, DialectSource: source}
+		opts := Options{Optional: []string{directive.All}, DialectSource: source}
 		tree := parser.Parse(c.script, d)
 		baseline := len(tree.Errors)
 		for _, f := range Check(tree, nil, opts) {
@@ -47,7 +48,7 @@ func TestFixAllConvergesOnFixtures(t *testing.T) {
 
 	for _, c := range loadFixtures(t) {
 		d, source := fixtureDialect(c.script)
-		opts := Options{Optional: []string{allCodes}, DialectSource: source}
+		opts := Options{Optional: []string{directive.All}, DialectSource: source}
 		original := parser.Parse(c.script, d)
 		_, formatErr := format.Format(original, format.Options{})
 		text := c.script

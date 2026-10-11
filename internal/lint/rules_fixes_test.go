@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/directive"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 )
@@ -141,7 +142,7 @@ func applyFix(t *testing.T, script string, code Code) (string, Safety) {
 func findingOf(t *testing.T, script string, code Code) Finding {
 	t.Helper()
 	d := dialect.Detect(nil, dialect.Input{URI: "file:///fix", Text: script})
-	for _, f := range Check(parser.Parse(script, d), nil, Options{Optional: []string{allCodes}}) {
+	for _, f := range Check(parser.Parse(script, d), nil, Options{Optional: []string{directive.All}}) {
 		if f.Code == code {
 			return f
 		}
