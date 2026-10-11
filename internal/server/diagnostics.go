@@ -14,8 +14,8 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/config"
 	"github.com/stubbedev/shell-lsp/internal/diagnostics"
-	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
+	"github.com/stubbedev/shell-lsp/internal/filelint"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lint"
@@ -44,12 +44,10 @@ func (s *Server) findings(file *workspace.File, settings config.Settings, genera
 	stamp := s.sourcesStamp(file.Tree)
 	key := lintMemoKey + strconv.FormatUint(generation, 10)
 	findings := workspace.Memo(file, key, stamp, func() []lint.Finding {
-		return lint.Check(file.Tree, s.imports(file), lint.Options{
+		return filelint.Check(file, s.navigationEnv(), filelint.Options{
 			Exclude:       settings.Lint.Exclude,
 			Optional:      settings.Lint.Optional,
 			DialectSource: dialectSource(settings),
-			Sources:       s.followedSources(file),
-			RCFile:        dialect.IsRCFile(file.Path),
 		})
 	})
 	return findings, stamp
@@ -91,16 +89,6 @@ func (s *Server) sourcesStamp(tree *parser.Tree) uint64 {
 		return 0
 	}
 	return s.workspace.Generation()
-}
-
-func (s *Server) followedSources(file *workspace.File) []lint.Source {
-	var out []lint.Source
-	for _, ref := range navigation.Sources(file, s.navigationEnv()) {
-		if ref.Target != nil {
-			out = append(out, lint.Source{Command: ref.Command.Span, Tree: ref.Target.Tree})
-		}
-	}
-	return out
 }
 
 func (s *Server) handleDocumentDiagnostic(_ context.Context, docs *docstore.View, params json.RawMessage) (any, error) {

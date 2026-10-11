@@ -51,7 +51,7 @@ func (s *Server) format(docs *docstore.View, uri string, opts lsp.FormattingOpti
 	if snap.projectErr != nil {
 		return nil, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "%v", snap.projectErr)
 	}
-	if snap.project.ignore {
+	if snap.project.Ignore {
 		s.noticeOnce("editorconfig-ignore:"+uri, lsp.MessageInfo, "Not formatting "+snap.file.Path+": "+editorconfig.FileName+" marks it ignore = true.")
 		return []lsp.TextEdit{}, nil
 	}

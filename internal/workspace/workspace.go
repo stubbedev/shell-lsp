@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
@@ -279,10 +280,18 @@ type dirListing struct {
 }
 
 func (w *Workspace) ShellFiles(ctx context.Context) ([]string, error) {
+	return w.scan(ctx, maxScanFiles)
+}
+
+func (w *Workspace) AllShellFiles(ctx context.Context) ([]string, error) {
+	return w.scan(ctx, math.MaxInt)
+}
+
+func (w *Workspace) scan(ctx context.Context, limit int) ([]string, error) {
 	var out []string
 	for _, root := range w.Roots() {
 		pending := []string{root}
-		for len(pending) > 0 && len(out) < maxScanFiles {
+		for len(pending) > 0 && len(out) < limit {
 			if err := ctx.Err(); err != nil {
 				return nil, err
 			}
@@ -301,7 +310,7 @@ func (w *Workspace) ShellFiles(ctx context.Context) ([]string, error) {
 	}
 	slices.Sort(out)
 	out = slices.Compact(out)
-	return out[:min(len(out), maxScanFiles)], nil
+	return out[:min(len(out), limit)], nil
 }
 
 func (w *Workspace) listDir(dir string) (dirListing, error) {

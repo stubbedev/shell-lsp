@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/format"
+	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
@@ -152,6 +153,14 @@ func Actions(in Input) []Action {
 	}
 	if fixAll := FixAll(in.AllDiagnostics); len(fixAll) > 0 {
 		out = append(out, Action{Title: "Apply all automatic fixes", Kind: SourceFixAll, Edits: fixAll})
+	}
+	return out
+}
+
+func FindingDiagnostics(findings []lint.Finding) []Diagnostic {
+	out := make([]Diagnostic, len(findings))
+	for i, f := range findings {
+		out[i] = Diagnostic{Index: i, Code: f.Code.String(), Message: f.Message, Span: f.Span, Fix: f.Fix}
 	}
 	return out
 }

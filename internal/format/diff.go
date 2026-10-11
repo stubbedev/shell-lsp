@@ -3,6 +3,7 @@ package format
 import (
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/textedit"
@@ -186,4 +187,59 @@ func anchors(a, b []string) []pair {
 		}
 	}
 	return seq
+}
+
+const unifiedContext = 3
+
+func Unified(from, to, before, after string) string {
+	a, b := splitLines(before), splitLines(after)
+	hunks := diff(a, b)
+	if len(hunks) == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	sb.WriteString("--- " + from + "\n+++ " + to + "\n")
+	for len(hunks) > 0 {
+		n := 1
+		for n < len(hunks) && hunks[n].aStart-hunks[n-1].aEnd <= 2*unifiedContext {
+			n++
+		}
+		writeHunks(&sb, a, b, hunks[:n])
+		hunks = hunks[n:]
+	}
+	return sb.String()
+}
+
+func writeHunks(sb *strings.Builder, a, b []string, group []hunk) {
+	first, last := group[0], group[len(group)-1]
+	aFrom := max(0, first.aStart-unifiedContext)
+	aTo := min(len(a), last.aEnd+unifiedContext)
+	bFrom := first.bStart - (first.aStart - aFrom)
+	bTo := last.bEnd + (aTo - last.aEnd)
+	sb.WriteString("@@ -" + hunkRange(aFrom, aTo) + " +" + hunkRange(bFrom, bTo) + " @@\n")
+	at := aFrom
+	for _, h := range group {
+		writeLines(sb, ' ', a[at:h.aStart])
+		writeLines(sb, '-', a[h.aStart:h.aEnd])
+		writeLines(sb, '+', b[h.bStart:h.bEnd])
+		at = h.aEnd
+	}
+	writeLines(sb, ' ', a[at:aTo])
+}
+
+func hunkRange(from, to int) string {
+	if from == to {
+		return strconv.Itoa(from) + ",0"
+	}
+	return strconv.Itoa(from+1) + "," + strconv.Itoa(to-from)
+}
+
+func writeLines(sb *strings.Builder, prefix byte, lines []string) {
+	for _, line := range lines {
+		sb.WriteByte(prefix)
+		sb.WriteString(line)
+		if !strings.HasSuffix(line, "\n") {
+			sb.WriteString("\n\\ No newline at end of file\n")
+		}
+	}
 }

@@ -56,6 +56,90 @@ func TestEditsAreMinimalForLocalChanges(t *testing.T) {
 	}
 }
 
+func TestUnified(t *testing.T) {
+	t.Parallel()
+
+	for name, c := range map[string]struct{ before, after, want string }{
+		"identical": {"a\nb\n", "a\nb\n", ""},
+		"one hunk": {
+			"#!/bin/bash\necho $1\nfoo=bar\ncd /tmp\nif [ $x == y ]; then echo a; fi\n",
+			"#!/bin/bash\necho \"$1\"\nfoo=bar\ncd /tmp || exit\nif [ \"$x\" == y ]; then echo a; fi\n",
+			"--- a/x\n+++ b/x\n@@ -1,5 +1,5 @@\n #!/bin/bash\n-echo $1\n+echo \"$1\"\n foo=bar\n-cd /tmp\n-if [ $x == y ]; then echo a; fi\n+cd /tmp || exit\n+if [ \"$x\" == y ]; then echo a; fi\n",
+		},
+		"two hunks": {
+			"1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n",
+			"one\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\ntwelve\n",
+			"--- a/x\n+++ b/x\n@@ -1,4 +1,4 @@\n-1\n+one\n 2\n 3\n 4\n@@ -9,4 +9,4 @@\n 9\n 10\n 11\n-12\n+twelve\n",
+		},
+		"insertion into empty":  {"", "echo\n", "--- a/x\n+++ b/x\n@@ -0,0 +1,1 @@\n+echo\n"},
+		"missing final newline": {"a\nb", "a\nc", "--- a/x\n+++ b/x\n@@ -1,2 +1,2 @@\n a\n-b\n\\ No newline at end of file\n+c\n\\ No newline at end of file\n"},
+	} {
+		if got := Unified("a/x", "b/x", c.before, c.after); got != c.want {
+			t.Errorf("%s: Unified =\n%s\nwant\n%s", name, got, c.want)
+		}
+	}
+}
+
+func TestUnifiedHunksReproduceBothSides(t *testing.T) {
+	t.Parallel()
+
+	words := []string{"a\n", "b\n", "c\n", "d\n", "e\n"}
+	for seed := range 300 {
+		rng := rand.New(rand.NewPCG(uint64(seed), 11))
+		build := func() []string {
+			out := make([]string, rng.IntN(40))
+			for i := range out {
+				out[i] = words[rng.IntN(len(words))]
+			}
+			return out
+		}
+		a, b := build(), build()
+		patch := Unified("a", "b", strings.Join(a, ""), strings.Join(b, ""))
+		if got, want := applyUnified(t, patch, a), strings.Join(b, ""); got != want {
+			t.Fatalf("seed %d: applying\n%s\nto %q gave %q, want %q", seed, patch, a, got, want)
+		}
+	}
+}
+
+func applyUnified(t *testing.T, patch string, a []string) string {
+	t.Helper()
+	var out strings.Builder
+	at := 0
+	for line := range strings.SplitSeq(strings.TrimSuffix(patch, "\n"), "\n") {
+		switch {
+		case line == "" || strings.HasPrefix(line, "---") || strings.HasPrefix(line, "+++"):
+		case strings.HasPrefix(line, "@@"):
+			var from, count, to, toCount int
+			if _, err := fmt.Sscanf(line, "@@ -%d,%d +%d,%d @@", &from, &count, &to, &toCount); err != nil {
+				t.Fatalf("hunk header %q: %v", line, err)
+			}
+			start := max(from-1, 0)
+			if count == 0 {
+				start = from
+			}
+			for ; at < start; at++ {
+				out.WriteString(a[at])
+			}
+		case line[0] == ' ' || line[0] == '-':
+			if a[at] != line[1:]+"\n" {
+				t.Fatalf("line %d is %q, the patch expects %q", at+1, a[at], line[1:])
+			}
+			if line[0] == ' ' {
+				out.WriteString(a[at])
+			}
+			at++
+		case line[0] == '+':
+			out.WriteString(line[1:] + "\n")
+		default:
+			t.Fatalf("unexpected patch line %q", line)
+		}
+	}
+	for ; at < len(a); at++ {
+		out.WriteString(a[at])
+	}
+	return out.String()
+}
+
 func TestFormat(t *testing.T) {
 	t.Parallel()
 

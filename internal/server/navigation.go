@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
@@ -16,6 +15,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/navigation"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/project"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
@@ -29,11 +29,11 @@ func newWorkspace(s *Server) *workspace.Workspace {
 			s.mu.Lock()
 			forced := settingsForPath(s.settings, s.folderSettings, path).Dialect
 			s.mu.Unlock()
-			d, _, err := s.resolveDialect(path, forced, in)
+			resolved, err := project.Resolve(s.editorconfig, path, forced, in)
 			if err != nil {
 				s.noticeOnce("editorconfig:"+err.Error(), lsp.MessageWarning, err.Error())
 			}
-			return d
+			return resolved.Dialect
 		},
 	)
 }
@@ -150,17 +150,5 @@ func (s *Server) candidateFiles(docs *docstore.View) navigation.WorkspaceFiles {
 }
 
 func (s *Server) imports(file *workspace.File) []parser.Import {
-	chain := navigation.Chain(file, s.navigationEnv())
-	imports := make([]parser.Import, len(chain))
-	for i, f := range chain {
-		imports[i] = parser.Import{Name: relativeName(file.Path, f.Path), Tree: f.Tree}
-	}
-	return imports
-}
-
-func relativeName(from, to string) string {
-	if rel, err := filepath.Rel(filepath.Dir(from), to); err == nil && !strings.HasPrefix(rel, "..") {
-		return rel
-	}
-	return to
+	return navigation.Imports(file, s.navigationEnv())
 }

@@ -154,33 +154,38 @@ func (in Input) Mksh() bool {
 // a zsh completion system tag (`#compdef`, `#autoload`) on the first
 // line, file extension, editor languageId, vim modeline. The default is
 // bash, matching the common editor setup where shellscript buffers
-// are bash.
+// are bash; DetectNamed also reports whether anything named the shell.
 func Detect(override *Dialect, in Input) Dialect {
+	d, _ := DetectNamed(override, in)
+	return d
+}
+
+func DetectNamed(override *Dialect, in Input) (Dialect, bool) {
 	if override != nil {
-		return *override
+		return *override, true
 	}
 	if name, ok := headerShellDirective(in.Text); ok {
 		if d, known := FromName(name); known {
-			return d
+			return d, true
 		}
-		return Bash
+		return Bash, true
 	}
 	if d, ok := FromShebang(in.Text); ok {
-		return d
+		return d, true
 	}
 	if completionTag(in.Text) {
-		return Zsh
+		return Zsh, true
 	}
 	if d, ok := FromFileName(in.URI); ok {
-		return d
+		return d, true
 	}
 	if d, ok := FromName(in.LanguageID); ok {
-		return d
+		return d, true
 	}
 	if d, ok := fromModeline(in.Text); ok {
-		return d
+		return d, true
 	}
-	return Bash
+	return Bash, false
 }
 
 func FromShebang(text string) (Dialect, bool) {

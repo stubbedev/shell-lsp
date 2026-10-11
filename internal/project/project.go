@@ -1,4 +1,4 @@
-package server
+package project
 
 import (
 	"fmt"
@@ -10,44 +10,52 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/format"
 )
 
-type projectFormat struct {
-	style   format.Style
-	dialect *dialect.Dialect
-	ignore  bool
+type Settings struct {
+	Style   format.Style
+	Dialect *dialect.Dialect
+	Ignore  bool
 }
 
-func (s *Server) resolveDialect(path string, forced *dialect.Dialect, in dialect.Input) (dialect.Dialect, projectFormat, error) {
-	detected := dialect.Detect(forced, in)
+type Resolution struct {
+	Dialect  dialect.Dialect
+	Named    bool
+	Settings Settings
+}
+
+func Resolve(resolver *editorconfig.Resolver, path string, forced *dialect.Dialect, in dialect.Input) (Resolution, error) {
+	detected, named := dialect.DetectNamed(forced, in)
+	r := Resolution{Dialect: detected, Named: named}
 	if path == "" {
-		return detected, projectFormat{}, nil
+		return r, nil
 	}
-	props, err := s.editorconfig.Properties(path, []string{"shell", detected.String()})
+	props, err := resolver.Properties(path, []string{"shell", detected.String()})
 	if err != nil {
-		return detected, projectFormat{}, err
+		return r, err
 	}
-	project, err := readProjectFormat(props)
+	settings, err := FromEditorConfig(props)
 	if err != nil {
-		return detected, projectFormat{}, fmt.Errorf("%s settings for %s: %w", editorconfig.FileName, path, err)
+		return r, fmt.Errorf("%s settings for %s: %w", editorconfig.FileName, path, err)
 	}
-	if forced == nil && project.dialect != nil {
-		return *project.dialect, project, nil
+	r.Settings = settings
+	if forced == nil && settings.Dialect != nil {
+		r.Dialect, r.Named = *settings.Dialect, true
 	}
-	return detected, project, nil
+	return r, nil
 }
 
-func readProjectFormat(props editorconfig.Properties) (projectFormat, error) {
-	var p projectFormat
+func FromEditorConfig(props editorconfig.Properties) (Settings, error) {
+	var s Settings
 	for _, flag := range []struct {
 		key string
 		dst **bool
 	}{
-		{"binary_next_line", &p.style.BinaryNextLine},
-		{"switch_case_indent", &p.style.SwitchCaseIndent},
-		{"space_redirects", &p.style.SpaceRedirects},
-		{"keep_padding", &p.style.KeepPadding},
-		{"function_next_line", &p.style.FunctionNextLine},
-		{"simplify", &p.style.Simplify},
-		{"minify", &p.style.Minify},
+		{"binary_next_line", &s.Style.BinaryNextLine},
+		{"switch_case_indent", &s.Style.SwitchCaseIndent},
+		{"space_redirects", &s.Style.SpaceRedirects},
+		{"keep_padding", &s.Style.KeepPadding},
+		{"function_next_line", &s.Style.FunctionNextLine},
+		{"simplify", &s.Style.Simplify},
+		{"minify", &s.Style.Minify},
 	} {
 		value, ok := props[flag.key]
 		if !ok {
@@ -55,30 +63,30 @@ func readProjectFormat(props editorconfig.Properties) (projectFormat, error) {
 		}
 		b, err := parseFlag(flag.key, value)
 		if err != nil {
-			return projectFormat{}, err
+			return Settings{}, err
 		}
 		*flag.dst = &b
 	}
 	if value, ok := props["ignore"]; ok {
 		ignore, err := parseFlag("ignore", value)
 		if err != nil {
-			return projectFormat{}, err
+			return Settings{}, err
 		}
-		p.ignore = ignore
+		s.Ignore = ignore
 	}
 	indent, err := parseIndent(props["indent_style"], props["indent_size"])
 	if err != nil {
-		return projectFormat{}, err
+		return Settings{}, err
 	}
-	p.style.Indent = indent
+	s.Style.Indent = indent
 	if value, ok := props["shell_variant"]; ok {
 		d, known := dialect.FromName(value)
 		if !known {
-			return projectFormat{}, fmt.Errorf("shell_variant = %s: want bash, posix, mksh, bats or zsh", value)
+			return Settings{}, fmt.Errorf("shell_variant = %s: want bash, posix, mksh, bats or zsh", value)
 		}
-		p.dialect = &d
+		s.Dialect = &d
 	}
-	return p, nil
+	return s, nil
 }
 
 func parseFlag(key, value string) (bool, error) {

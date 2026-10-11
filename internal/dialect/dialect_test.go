@@ -93,6 +93,30 @@ func TestOverrideNilMeansDetect(t *testing.T) {
 	}
 }
 
+func TestDetectNamedReportsTheDefault(t *testing.T) {
+	t.Parallel()
+
+	ksh := Ksh
+	for _, c := range []struct {
+		override *Dialect
+		in       Input
+		want     Dialect
+		named    bool
+	}{
+		{nil, Input{Text: "echo\n"}, Bash, false},
+		{nil, Input{URI: "file:///w/run", Text: "echo\n"}, Bash, false},
+		{nil, Input{Text: "#!/bin/sh\necho\n"}, Posix, true},
+		{nil, Input{Text: "# shellcheck shell=fish\necho\n"}, Bash, true},
+		{nil, Input{URI: "file:///w/a.zsh", Text: "echo\n"}, Zsh, true},
+		{nil, Input{LanguageID: "bash", Text: "echo\n"}, Bash, true},
+		{&ksh, Input{Text: "echo\n"}, Ksh, true},
+	} {
+		if d, named := DetectNamed(c.override, c.in); d != c.want || named != c.named {
+			t.Errorf("DetectNamed(%v, %+v) = %s, %v; want %s, %v", c.override, c.in, d, named, c.want, c.named)
+		}
+	}
+}
+
 func TestFromNameTable(t *testing.T) {
 	t.Parallel()
 

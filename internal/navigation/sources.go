@@ -84,6 +84,22 @@ func resolveSources(file *workspace.File, env Env) []resolvedSource {
 	return out
 }
 
+func Imports(file *workspace.File, env Env) []parser.Import {
+	chain := Chain(file, env)
+	imports := make([]parser.Import, len(chain))
+	for i, f := range chain {
+		imports[i] = parser.Import{Name: RelativeName(file.Path, f.Path), Tree: f.Tree}
+	}
+	return imports
+}
+
+func RelativeName(from, to string) string {
+	if rel, err := filepath.Rel(filepath.Dir(from), to); err == nil && !strings.HasPrefix(rel, "..") {
+		return rel
+	}
+	return to
+}
+
 func Chain(file *workspace.File, env Env) []*workspace.File {
 	chain, _ := Closure(file, env)
 	return chain

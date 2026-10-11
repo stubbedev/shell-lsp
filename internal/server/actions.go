@@ -124,7 +124,7 @@ func (s *Server) actionDocument(snap *snapshot) (actions.Document, func() action
 				continue
 			}
 			out.files[target.URI] = target
-			out.list = append(out.list, actions.Source{URI: target.URI, Name: relativeName(snap.file.Path, target.Path), Tree: target.Tree, Command: ref.Command})
+			out.list = append(out.list, actions.Source{URI: target.URI, Name: navigation.RelativeName(snap.file.Path, target.Path), Tree: target.Tree, Command: ref.Command})
 		}
 		return out
 	})
@@ -297,11 +297,7 @@ func (s *Server) toActionDiagnostics(snap *snapshot, diags []lsp.Diagnostic) []a
 
 func (s *Server) lintActionDiagnostics(snap *snapshot) []actions.Diagnostic {
 	findings, _ := s.findings(snap.file, snap.settings, snap.generation)
-	out := make([]actions.Diagnostic, len(findings))
-	for i, f := range findings {
-		out[i] = actions.Diagnostic{Index: i, Code: f.Code.String(), Message: f.Message, Span: f.Span, Fix: f.Fix}
-	}
-	return out
+	return actions.FindingDiagnostics(findings)
 }
 
 func wants(only []string, kind string) bool {
