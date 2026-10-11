@@ -42,6 +42,7 @@
             golangci-lint # Linter behind `just lint`, config in .golangci.yml
             delve # Go debugger
             just # Task runner
+            nodejs_24
 
             # Cross-checking the language server under development
             shellcheck # Reference oracle that labels the linter's test fixtures

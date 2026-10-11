@@ -238,7 +238,8 @@ minutes.
 | `just dist` | Build static release binaries for Linux and macOS into `dist/` |
 
 Every dev tool (Go toolchain pinned to the version go.mod declares, gopls,
-golangci-lint, delve, just, shellcheck, shfmt, git, gh) comes from
+golangci-lint, delve, just, shellcheck, shfmt, git, gh, and Node.js for the
+VS Code extension) comes from
 the flake: `direnv allow` on entry, or `nix develop` explicitly. shellcheck is
 only a test oracle: the lint fixtures under `internal/lint/testdata/fixtures`
 are original scripts whose expected findings were recorded from it, with
