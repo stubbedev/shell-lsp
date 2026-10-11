@@ -1,7 +1,7 @@
 package embedded
 
 import (
-	"slices"
+	"path"
 
 	"github.com/stubbedev/shell-lsp/internal/embedded/awk"
 	"github.com/stubbedev/shell-lsp/internal/embedded/jq"
@@ -101,11 +101,17 @@ func (l Language) String() string { return languages[l].name }
 
 func (l Language) Code() string { return languages[l].name + "-syntax" }
 
-func languageOf(command string) (Language, bool) {
+var commandLanguages = func() map[string]Language {
+	out := map[string]Language{}
 	for l := range Language(len(languages)) {
-		if slices.Contains(languages[l].commands, command) {
-			return l, true
+		for _, name := range languages[l].commands {
+			out[name] = l
 		}
 	}
-	return 0, false
+	return out
+}()
+
+func languageOf(command string) (Language, bool) {
+	l, ok := commandLanguages[path.Base(command)]
+	return l, ok
 }

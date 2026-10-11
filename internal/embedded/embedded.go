@@ -1,7 +1,6 @@
 package embedded
 
 import (
-	"path"
 	"slices"
 	"sort"
 	"strings"
@@ -48,7 +47,7 @@ func mayEmbed(name string, bats bool) bool {
 	if parser.IsCommandWrapper(name, bats) {
 		return true
 	}
-	_, ok := languageOf(path.Base(name))
+	_, ok := languageOf(name)
 	return ok
 }
 
@@ -65,7 +64,7 @@ func embeddedIn(tree *parser.Tree, stmt *syntax.Stmt, bats bool) (Program, bool)
 	if !ok {
 		return Program{}, false
 	}
-	language, ok := languageOf(path.Base(name))
+	language, ok := languageOf(name)
 	if !ok {
 		return Program{}, false
 	}
@@ -106,7 +105,7 @@ func heredocProgram(tree *parser.Tree, stmt *syntax.Stmt) (string, []piece, bool
 		return text, []piece{{source: body.Start, length: len(text)}}, true
 	}
 	var d decoder
-	d.part()
+	d.text.Grow(len(text))
 	lineStart := true
 	for i := range len(text) {
 		if lineStart && text[i] == '\t' {
@@ -125,6 +124,11 @@ func decode(scripts []script) (string, []piece, bool) {
 		}
 	}
 	var d decoder
+	size := 0
+	for _, s := range scripts {
+		size += int(s.word.End().Offset() - s.word.Pos().Offset())
+	}
+	d.text.Grow(size)
 	for i, s := range scripts {
 		if i > 0 {
 			d.text.WriteByte('\n')
@@ -143,8 +147,6 @@ type decoder struct {
 	drop    int
 	partial bool
 }
-
-func (d *decoder) part() { d.partial = false }
 
 func (d *decoder) emit(c byte, source int) {
 	if d.drop > 0 {
@@ -166,7 +168,7 @@ func (d *decoder) emit(c byte, source int) {
 
 func (d *decoder) word(w *syntax.Word) bool {
 	for i, part := range w.Parts {
-		d.part()
+		d.partial = false
 		switch p := part.(type) {
 		case *syntax.SglQuoted:
 			if p.Dollar {
