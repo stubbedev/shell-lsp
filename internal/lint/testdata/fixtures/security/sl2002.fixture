@@ -1,0 +1,27 @@
+### lower-case q is not a transformation
+#!/bin/bash
+name=world
+echo "${name@q}"
+>>> none
+>>+ SL2002 3:14 -- shell-lsp native check; shellcheck does not validate @ transformations
+
+### every bash transformation is known
+#!/bin/bash
+name=world
+echo "${name@U}" "${name@u}" "${name@L}" "${name@Q}" "${name@E}" "${name@P}" "${name@A}" "${name@K}" "${name@a}" "${name@k}"
+>>> none
+
+### a template placeholder inside a parameter name
+#!/bin/bash
+if [ -n "${DEBUG_@suffix@:-}" ]; then
+  echo debug
+fi
+while true; do break; done
+>>> none
+>>+ SL2002 2:19 -- shell-lsp native check; shellcheck does not validate @ transformations; bash only rejects the operator when the parameter is set, so the script still parses
+
+### mksh hash transformation
+#!/bin/mksh
+name=world
+echo "${name@#}"
+>>- SC1008 1:1 -- deliberate: we recognise mksh and lint it as a ksh variant, so the shebang is not unrecognised

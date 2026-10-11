@@ -6,26 +6,53 @@ import (
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
+const codeUnknownTransformation = nativeBase + 2002
+
 var expansionsFamily = family{
 	codes: map[Code]meta{
-		2231: {severity: SeverityInfo},
-		2247: {severity: SeverityWarning},
-		2256: {severity: SeverityWarning},
-		2295: {severity: SeverityInfo},
-		2302: {severity: SeverityWarning},
-		2303: {severity: SeverityWarning},
-		2321: {severity: SeverityStyle},
-		2322: {severity: SeverityStyle},
-		2323: {severity: SeverityStyle},
+		codeUnknownTransformation: {severity: SeverityWarning},
+		2231:                      {severity: SeverityInfo},
+		2247:                      {severity: SeverityWarning},
+		2256:                      {severity: SeverityWarning},
+		2295:                      {severity: SeverityInfo},
+		2302:                      {severity: SeverityWarning},
+		2303:                      {severity: SeverityWarning},
+		2321:                      {severity: SeverityStyle},
+		2322:                      {severity: SeverityStyle},
+		2323:                      {severity: SeverityStyle},
 	},
 	rules: []rule{
 		{on: nodes(&syntax.WordIter{}), node: checkLoopGlob},
 		{on: nodes(&syntax.DblQuoted{}), node: checkTranslatedString},
 		{on: nodes(&syntax.ParamExp{}), node: checkRemovalPattern},
 		{on: nodes(&syntax.ParamExp{}), node: checkValueAsKey},
+		{on: nodes(&syntax.ParamExp{}), node: checkUnknownTransformation},
 		{on: nodes(&syntax.Assign{}), node: checkArithmeticIndex},
 		{on: nodes(&syntax.ParenArithm{}, &syntax.ArithmExp{}, &syntax.ArithmCmd{}, &syntax.CStyleLoop{}, &syntax.Assign{}), node: checkRedundantParentheses},
 	},
+}
+
+var (
+	bashTransformations = setOf("U", "u", "L", "Q", "E", "P", "A", "K", "a", "k")
+	mkshTransformations = setOf("Q", "#")
+)
+
+func checkUnknownTransformation(p *pass, n syntax.Node) {
+	pe, ok := n.(*syntax.ParamExp)
+	if !ok || pe.Param == nil || pe.Exp == nil || pe.Exp.Op != syntax.OtherParamOps || pe.Exp.Word == nil {
+		return
+	}
+	known, names := bashTransformations, "U, u, L, Q, E, P, A, K, a and k"
+	if p.tree.Lang == syntax.LangMirBSDKorn {
+		known, names = mkshTransformations, "Q and #"
+	}
+	op, literal := parser.Literal(pe.Exp.Word)
+	if !literal || known[op] {
+		return
+	}
+	if span, ok := p.span(pe.Exp.Word); ok {
+		p.report(codeUnknownTransformation, span, "@"+op+" is not a transformation the shell knows, so expanding "+pe.Param.Value+" fails with \"bad substitution\" whenever it is set; the operators are "+names+".")
+	}
 }
 
 func checkLoopGlob(p *pass, n syntax.Node) {

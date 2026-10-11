@@ -95,6 +95,23 @@ main() { echo "$1"; }
 main "$@"
 ```
 
+## SL2002
+
+**An `@` transformation the shell does not know.** `${name@op}` applies one
+of a fixed set of transformations: `U`, `u`, `L`, `Q`, `E`, `P`, `A`, `K`, `a`
+and `k` in bash, `Q` and `#` in mksh. Bash only checks the operator when it
+expands the parameter, so the script parses and an unset variable expands to
+nothing, but as soon as the variable has a value the expansion fails with
+"bad substitution" and the command does not run. The usual cause is a typo,
+or a template placeholder such as `${PREFIX_@suffix@}` left in a script
+meant to be filled in first.
+
+```bash
+#!/bin/bash
+name=world
+echo "${name@q}"    # SL2002: the operator is Q
+```
+
 The embedded-language rules check awk, sed and jq programs written inside the
 script with built-in parsers; no awk, sed or jq binary is run. A program is
 checked when it is a literal argument (`awk '...'`, `sed -e '...'`,
