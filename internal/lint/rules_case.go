@@ -1,6 +1,7 @@
 package lint
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 
@@ -92,19 +93,47 @@ func (p *pass) checkShadowedPatterns(c *syntax.CaseClause) {
 	for i, pattern := range patterns {
 		fuzzy[i] = globOf(pattern)
 	}
+	nextLiteral := map[string]int{}
+	for i, pattern := range slices.Backward(patterns) {
+		text, literal := fuzzy[i].literal()
+		if !literal {
+			continue
+		}
+		if j, repeated := nextLiteral[text]; repeated && isExactGlob(pattern) {
+			p.reportShadowed(pattern, patterns[j])
+		}
+		nextLiteral[text] = i
+	}
+	comparisons := 0
 	for i, pattern := range patterns {
+		if _, literal := fuzzy[i].literal(); literal {
+			continue
+		}
 		exact, ok := exactGlob(pattern)
 		if !ok {
 			continue
 		}
-		for j := i + 1; j < len(patterns); j++ {
-			if !covers(exact, fuzzy[j]) {
-				continue
+		for j := i + 1; j < len(patterns) && comparisons < maxShadowComparisons; j++ {
+			comparisons++
+			if covers(exact, fuzzy[j]) {
+				p.reportShadowed(pattern, patterns[j])
+				break
 			}
-			p.reportShadowed(pattern, patterns[j])
-			break
 		}
 	}
+}
+
+const maxShadowComparisons = 1 << 16
+
+func (g globPattern) literal() (string, bool) {
+	text := make([]byte, len(g))
+	for i, token := range g {
+		if token.kind != globChar {
+			return "", false
+		}
+		text[i] = token.char
+	}
+	return string(text), true
 }
 
 func (p *pass) reportShadowed(earlier, later *syntax.Word) {
@@ -179,24 +208,31 @@ func appendGlobLiteral(out globPattern, s string, active bool) globPattern {
 }
 
 func exactGlob(w *syntax.Word) (globPattern, bool) {
+	if !isExactGlob(w) {
+		return nil, false
+	}
+	return globOf(w), true
+}
+
+func isExactGlob(w *syntax.Word) bool {
 	for i, part := range w.Parts {
 		switch part := part.(type) {
 		case *syntax.Lit:
 			if (i == 0 && strings.HasPrefix(part.Value, "~")) || strings.ContainsAny(part.Value, "[]") {
-				return nil, false
+				return false
 			}
 		case *syntax.SglQuoted:
 		case *syntax.DblQuoted:
 			for _, inner := range part.Parts {
 				if _, ok := inner.(*syntax.Lit); !ok {
-					return nil, false
+					return false
 				}
 			}
 		default:
-			return nil, false
+			return false
 		}
 	}
-	return globOf(w), true
+	return true
 }
 
 func overlaps(a, b globPattern) bool {

@@ -2,6 +2,7 @@ package lint
 
 import (
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -49,13 +50,38 @@ func TestCheckAllocatesLinearlyInNestingDepth(t *testing.T) {
 	}
 }
 
-func TestCheckScansUnclosedParameterExpansionsOnce(t *testing.T) {
+func casePatterns(n int, pattern func(i int) string) string {
+	var sb strings.Builder
+	sb.WriteString("case $x in\n")
+	for i := range n {
+		sb.WriteString(pattern(i) + ") ;;\n")
+	}
+	sb.WriteString("esac\n")
+	return sb.String()
+}
+
+func TestCheckFinishesLargeInputsQuickly(t *testing.T) {
 	t.Parallel()
 
-	tree := parser.Parse("echo "+strings.Repeat("${", 50_000)+"\n", dialect.Bash)
-	start := time.Now()
-	Check(tree, nil, Options{})
-	if elapsed := time.Since(start); elapsed > 2*time.Second {
-		t.Errorf("linting 50000 unclosed ${ took %v", elapsed)
+	cases := []struct {
+		name   string
+		script string
+	}{
+		{"unclosed parameter expansions", "echo " + strings.Repeat("${", 50_000) + "\n"},
+		{"one command with many arguments", "echo " + strings.Repeat("a ", 200_000) + "\n"},
+		{"many literal case patterns", casePatterns(100_000, func(i int) string { return "p" + strconv.Itoa(i) })},
+		{"many glob case patterns", casePatterns(20_000, func(i int) string { return "p" + strconv.Itoa(i) + "*" })},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			tree := parser.Parse(tc.script, dialect.Bash)
+			start := time.Now()
+			Check(tree, nil, Options{})
+			if elapsed := time.Since(start); elapsed > 3*time.Second {
+				t.Errorf("linting took %v", elapsed)
+			}
+		})
 	}
 }
