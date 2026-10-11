@@ -183,6 +183,38 @@ func TestPullForUnopenedDocumentIsInvalidParams(t *testing.T) {
 	}
 }
 
+func TestWorkspaceDiagnosticReportsCarryItemsOnlyWhenFull(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeFiles(t, root, map[string]string{"clean.sh": "#!/bin/sh\necho \"$1\"\n"})
+	c, _ := startClient(t, `{"rootUri": "`+fileuri.FromPath(root)+`", `+pullCapabilities+`}`)
+
+	type rawReports struct {
+		Items []map[string]json.RawMessage `json:"items"`
+	}
+	first := decodeResult[rawReports](t, c.call("workspace/diagnostic", `{"previousResultIds": []}`))
+	if len(first.Items) != 1 || string(first.Items[0]["kind"]) != `"full"` || string(first.Items[0]["items"]) != "[]" {
+		t.Fatalf("first report = %s, want a full report with an empty items array", first.Items)
+	}
+
+	var resultID string
+	if err := json.Unmarshal(first.Items[0]["resultId"], &resultID); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(lsp.WorkspaceDiagnosticParams{PreviousResultIDs: []lsp.PreviousResultID{{URI: fileuri.FromPath(filepath.Join(root, "clean.sh")), Value: resultID}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second := decodeResult[rawReports](t, c.call("workspace/diagnostic", string(raw)))
+	if len(second.Items) != 1 || string(second.Items[0]["kind"]) != `"unchanged"` {
+		t.Fatalf("second report = %s, want an unchanged report", second.Items)
+	}
+	if items, ok := second.Items[0]["items"]; ok {
+		t.Errorf("unchanged report carries items %s", items)
+	}
+}
+
 func TestWorkspaceDiagnosticsCoverClosedFiles(t *testing.T) {
 	t.Parallel()
 

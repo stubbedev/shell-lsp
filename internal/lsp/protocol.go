@@ -144,7 +144,25 @@ type WorkspaceDocumentDiagnosticReport struct {
 	ResultID string       `json:"resultId"`
 	URI      string       `json:"uri"`
 	Version  *int32       `json:"version"`
-	Items    []Diagnostic `json:"items,omitempty"`
+	Items    []Diagnostic `json:"items"`
+}
+
+type workspaceUnchangedDocumentDiagnosticReport struct {
+	Kind     string `json:"kind"`
+	ResultID string `json:"resultId"`
+	URI      string `json:"uri"`
+	Version  *int32 `json:"version"`
+}
+
+func (r WorkspaceDocumentDiagnosticReport) MarshalJSON() ([]byte, error) {
+	if r.Kind == ReportUnchanged {
+		return json.Marshal(workspaceUnchangedDocumentDiagnosticReport{Kind: r.Kind, ResultID: r.ResultID, URI: r.URI, Version: r.Version})
+	}
+	type fullReport WorkspaceDocumentDiagnosticReport
+	if r.Items == nil {
+		r.Items = []Diagnostic{}
+	}
+	return json.Marshal(fullReport(r))
 }
 
 type WorkspaceDiagnosticReport struct {
