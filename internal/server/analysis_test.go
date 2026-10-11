@@ -9,10 +9,12 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 )
 
+func alwaysOpen(string) bool { return true }
+
 func TestSnapshotCacheBuildsEachVersionOnce(t *testing.T) {
 	t.Parallel()
 
-	cache := newSnapshotCache()
+	cache := newSnapshotCache(alwaysOpen)
 	doc := docstore.NewDocument("file:///a.sh", "", 1, "echo hi\n")
 	var builds atomic.Int32
 	build := func(*snapshot) *snapshot {
@@ -48,7 +50,7 @@ func TestSnapshotCacheBuildsEachVersionOnce(t *testing.T) {
 func TestSnapshotCacheRebuildsAfterAPanickedBuild(t *testing.T) {
 	t.Parallel()
 
-	cache := newSnapshotCache()
+	cache := newSnapshotCache(alwaysOpen)
 	doc := docstore.NewDocument("file:///a.sh", "", 1, "echo hi\n")
 	started, release := make(chan struct{}), make(chan struct{})
 	waiter := make(chan *snapshot)
@@ -78,7 +80,7 @@ func TestSnapshotCacheRebuildsAfterAPanickedBuild(t *testing.T) {
 func TestSnapshotCacheHandsBuildsTheReadyPreviousVersion(t *testing.T) {
 	t.Parallel()
 
-	cache := newSnapshotCache()
+	cache := newSnapshotCache(alwaysOpen)
 	v1 := docstore.NewDocument("file:///a.sh", "", 1, "echo one\n")
 	v2 := docstore.NewDocument("file:///a.sh", "", 2, "echo two\n")
 	first := cache.get("file:///a.sh", v1, 0, func(previous *snapshot) *snapshot {

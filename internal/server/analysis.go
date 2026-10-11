@@ -39,12 +39,13 @@ type snapshotEntry struct {
 }
 
 type snapshotCache struct {
+	open    func(uri string) bool
 	mu      sync.Mutex
 	entries map[string]*snapshotEntry
 }
 
-func newSnapshotCache() *snapshotCache {
-	return &snapshotCache{entries: map[string]*snapshotEntry{}}
+func newSnapshotCache(open func(uri string) bool) *snapshotCache {
+	return &snapshotCache{open: open, entries: map[string]*snapshotEntry{}}
 }
 
 func (c *snapshotCache) get(uri string, doc *docstore.Document, generation uint64, build func(previous *snapshot) *snapshot) *snapshot {
@@ -68,6 +69,9 @@ func (c *snapshotCache) claim(uri string, doc *docstore.Document, generation uin
 		return current, false, nil
 	}
 	e := &snapshotEntry{doc: doc, generation: generation, ready: make(chan struct{})}
+	if !c.open(uri) {
+		return e, true, nil
+	}
 	if !ok || current.doc.Version <= doc.Version {
 		c.entries[uri] = e
 	}

@@ -80,14 +80,15 @@ type Server struct {
 }
 
 func New(conn *jsonrpc.Conn, version string) *Server {
+	docs := docstore.NewStore()
 	s := &Server{
 		conn:         conn,
 		version:      version,
 		logger:       slog.New(slog.NewTextHandler(os.Stderr, nil)),
-		docs:         docstore.NewStore(),
-		snapshots:    newSnapshotCache(),
+		docs:         docs,
+		snapshots:    newSnapshotCache(docs.Has),
 		warmer:       newWarmer(),
-		semantic:     newSemanticCache(),
+		semantic:     newSemanticCache(docs.Has),
 		bats:         newBatsResults(),
 		settings:     config.Default(),
 		editorconfig: editorconfig.NewResolver(os.ReadFile, time.Now, workspace.DiskRecheck),

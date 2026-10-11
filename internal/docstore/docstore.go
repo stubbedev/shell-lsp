@@ -248,6 +248,11 @@ func NewStore() *Store {
 
 func (s *Store) View() *View { return s.view.Load() }
 
+func (s *Store) Has(uri string) bool {
+	_, ok := s.View().Document(uri)
+	return ok
+}
+
 func (s *Store) update(fn func(next *View) error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

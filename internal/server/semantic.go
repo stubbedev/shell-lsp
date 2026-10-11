@@ -39,20 +39,23 @@ var semanticTokensOptions = SemanticTokensOptions{
 }
 
 type semanticCache struct {
+	open    func(uri string) bool
 	mu      sync.Mutex
 	results map[string]lsp.SemanticTokens
 	next    atomic.Uint64
 }
 
-func newSemanticCache() *semanticCache {
-	return &semanticCache{results: map[string]lsp.SemanticTokens{}}
+func newSemanticCache(open func(uri string) bool) *semanticCache {
+	return &semanticCache{open: open, results: map[string]lsp.SemanticTokens{}}
 }
 
 func (c *semanticCache) remember(uri string, data []uint32) lsp.SemanticTokens {
 	tokens := lsp.SemanticTokens{ResultID: strconv.FormatUint(c.next.Add(1), 10), Data: data}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.results[uri] = tokens
+	if c.open(uri) {
+		c.results[uri] = tokens
+	}
 	return tokens
 }
 
