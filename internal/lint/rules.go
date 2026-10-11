@@ -77,6 +77,7 @@ var families = []family{
 	injectionFamily,
 	downloadFamily,
 	subshellScopeFamily,
+	tempFileFamily,
 	unusedFunctionsFamily,
 	embeddedFamily,
 }

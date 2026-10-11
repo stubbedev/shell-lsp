@@ -47,10 +47,7 @@ type functionUsage struct {
 var interactiveCommands = setOf("bind", "bindkey", "compdef", "compinit", "complete", "promptinit", "add-zsh-hook")
 
 func checkUnusedFunctions(p *pass) {
-	if len(p.tree.Functions) == 0 || p.bats || p.rcFile || p.sourceable() || p.libraryShaped() || p.configuresInteractiveShell() {
-		return
-	}
-	if _, executable := dialect.Interpreter(p.text); !executable {
+	if len(p.tree.Functions) == 0 || !p.executedScript() {
 		return
 	}
 	usage := p.collectUsage(p.tree.File, true)
@@ -67,6 +64,14 @@ func checkUnusedFunctions(p *pass) {
 		}
 		p.report(codeUnusedFunction, fn.NameSpan, fn.Name+" is never called: nothing in this script, or in the files it sources, runs it.")
 	}
+}
+
+func (p *pass) executedScript() bool {
+	if p.bats || p.rcFile || p.sourceable() || p.libraryShaped() || p.configuresInteractiveShell() {
+		return false
+	}
+	_, executable := dialect.Interpreter(p.text)
+	return executable
 }
 
 func kshDiscipline(name string) bool {

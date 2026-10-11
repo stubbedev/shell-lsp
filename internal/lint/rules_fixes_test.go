@@ -107,6 +107,8 @@ func TestAutofixes(t *testing.T) {
 		{2335, "! [ \"$a\" -lt 3 ]\n", "[ \"$a\" -ge 3 ]\n", Safe},
 		{2164, "cd /tmp 2>/dev/null\nls\n", "cd /tmp 2>/dev/null || exit\nls\n", Review},
 		{2164, "f() {\n\tcd /tmp; ls\n}\n", "f() {\n\tcd /tmp || return; ls\n}\n", Review},
+		{codeLeakedTempFile, "#!/bin/bash\nwork=$(mktemp -d)\ncp a \"$work\"\n", "#!/bin/bash\nwork=$(mktemp -d)\ntrap 'rm -rf -- \"$work\"' EXIT\ncp a \"$work\"\n", Review},
+		{codeLeakedTempFile, "#!/bin/sh\nlog=`mktemp`\ndate > \"$log\"\n", "#!/bin/sh\nlog=`mktemp`\ntrap 'rm -f -- \"$log\"' EXIT\ndate > \"$log\"\n", Review},
 	} {
 		t.Run(tc.code.String()+" "+tc.script, func(t *testing.T) {
 			t.Parallel()
@@ -160,6 +162,8 @@ func TestUnsafeRewritesOfferNoFix(t *testing.T) {
 		{2003, "expr $n + 1\n"},
 		{2003, "n=$(expr $n + $(id -u))\n"},
 		{2265, "[ -f a ] & # [ -f b ]\n"},
+		{codeLeakedTempFile, "#!/bin/bash\ntrap 'echo bye' EXIT\nt=$(mktemp)\ndate > \"$t\"\n"},
+		{codeLeakedTempFile, "#!/bin/bash\nf() { t=$(mktemp); date > \"$t\"; }\nf\ndate\n"},
 	} {
 		t.Run(tc.code.String()+" "+tc.script, func(t *testing.T) {
 			t.Parallel()

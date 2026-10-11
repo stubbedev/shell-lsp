@@ -1,0 +1,40 @@
+### temporary files and directories that are never removed
+#!/bin/bash
+leak=$(mktemp)
+echo data > "$leak"
+sort "$leak"
+work=$(mktemp -d /tmp/work.XXXXXX)
+cp /etc/hostname "$work/"
+>>> none
+>>+ SL2006 2:8 -- shell-lsp native check; shellcheck does not track temporary files
+>>+ SL2006 5:8 -- shell-lsp native check; shellcheck does not track temporary files
+
+### removed, moved, trapped, reported or handed to a cleanup function
+#!/bin/bash
+kept=$(mktemp -d)
+trap 'rm -rf "$kept"' EXIT
+cleaned=$(mktemp)
+rm -f "$cleaned"
+moved=$(mktemp)
+mv "$moved" /tmp/final
+shown=$(mktemp)
+echo "log in $shown"
+f() { local t; t=$(mktemp); cleanup "$t"; }
+cleanup() { rm -f "$1"; }
+f
+>>> none
+
+### names that create nothing or live outside the temporary directory
+#!/bin/bash
+dry=$(mktemp -u)
+here=$(mktemp -d build.XXXXXX)
+inside=$(mktemp -p "$PWD")
+echo "$dry $here $inside" > /dev/null
+>>> none
+
+### sourced libraries are not reported
+#!/bin/bash
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+scratch=$(mktemp)
+date > "$scratch"
+>>> none

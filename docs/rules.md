@@ -173,6 +173,23 @@ dir=$(cd "$1" || exit 1; pwd)    # SL2005: the script goes on with an empty $dir
 dir=$(cd "$1" && pwd) || exit 1  # checked
 ```
 
+## SL2006
+
+**A temporary file or directory is never removed.** `mktemp` creates the file
+or directory, but nothing passes the variable that holds it to `rm`, `rmdir`,
+`mv` or a cleanup function, and no `trap` names it, so every run leaves it
+behind. Only executed scripts are checked, as for SL2001. The variable counts
+as handled once it is copied into another variable or array, reassigned,
+printed or exported, and `mktemp -u`, `-p DIR` and templates outside the
+temporary directory are left alone. The fix adds an `EXIT` trap that removes
+it, when the script has no `EXIT` trap yet.
+
+```bash
+#!/bin/bash
+work=$(mktemp -d)    # SL2006
+trap 'rm -rf -- "$work"' EXIT
+```
+
 The embedded-language rules check awk, sed and jq programs written inside the
 script with built-in parsers; no awk, sed or jq binary is run. A program is
 checked when it is a literal argument (`awk '...'`, `sed -e '...'`,
