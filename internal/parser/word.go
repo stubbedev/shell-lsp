@@ -48,7 +48,7 @@ func Text(w *syntax.Word, placeholder string) (string, bool) {
 					literal = false
 					continue
 				}
-				unescape(&sb, lit.Value, isDoubleQuoteEscapable)
+				unescape(&sb, lit.Value, IsDoubleQuoteEscapable)
 			}
 		default:
 			sb.WriteString(placeholder)
@@ -97,14 +97,14 @@ func UnescapeLit(value string, doubleQuoted bool) string {
 	}
 	escapable := func(byte) bool { return true }
 	if doubleQuoted {
-		escapable = isDoubleQuoteEscapable
+		escapable = IsDoubleQuoteEscapable
 	}
 	var sb strings.Builder
 	unescape(&sb, value, escapable)
 	return sb.String()
 }
 
-func isDoubleQuoteEscapable(c byte) bool {
+func IsDoubleQuoteEscapable(c byte) bool {
 	return c == '$' || c == '`' || c == '"' || c == '\\' || c == '\n'
 }
 
