@@ -40,6 +40,8 @@ type builder struct {
 	name       string
 	lists      []listKind
 	headingDue bool
+	indent     int
+	depth      int
 }
 
 func parseDocument(src string) document {
@@ -161,10 +163,11 @@ func (b *builder) flush() {
 			b.doc.sections = append(b.doc.sections, section{})
 		}
 		last := &b.doc.sections[len(b.doc.sections)-1]
-		last.blocks = append(last.blocks, block{kind: b.kind, tag: b.tag, text: text})
+		last.blocks = append(last.blocks, block{kind: b.kind, tag: b.tag, text: text, depth: b.depth})
 	}
 	b.text.Reset()
 	b.tag = ""
+	b.depth = 0
 	b.kind = paragraphBlock
 	if b.nofill {
 		b.kind = literalBlock
@@ -173,7 +176,7 @@ func (b *builder) flush() {
 
 func (b *builder) startSection(name string) {
 	b.flush()
-	b.headingDue = false
+	b.headingDue, b.indent = false, 0
 	b.doc.sections = append(b.doc.sections, section{name: strings.ToUpper(strings.TrimSpace(name))})
 }
 
@@ -184,7 +187,7 @@ func (b *builder) promoteHeading() {
 		return
 	}
 	b.text.Reset()
-	b.kind, b.tag = taggedBlock, text
+	b.startTag(text)
 }
 
 func isTerm(text string) bool {
@@ -208,6 +211,14 @@ func splitReference(word string) (string, bool) {
 
 func endsSentence(text string) bool {
 	return strings.HasSuffix(text, ":") || strings.HasSuffix(text, ".") && !strings.HasSuffix(text, "...")
+}
+
+func (b *builder) startTag(tag string) {
+	b.kind, b.tag, b.depth = taggedBlock, tag, b.level()
+}
+
+func (b *builder) level() int {
+	return b.indent + max(len(b.lists)-1, 0)
 }
 
 func (b *builder) currentSection() string {
@@ -302,14 +313,20 @@ func (b *builder) manRequest(name, rest string) {
 			return
 		}
 		b.startSection(b.st.inline(strings.Join(args, " ")))
-	case "SS", "PP", "P", "LP", "HP", "sp", "Sp", "br", "SY", "YS", "RE":
+	case "PP", "P", "LP", "HP", "sp", "Sp", "br", "SY", "YS":
 		b.flush()
 		if name == "SY" && len(args) > 0 {
 			b.textLine(strings.Join(args, " "))
 		}
+	case "SS":
+		b.flush()
+		b.indent = 0
+	case "RE":
+		b.flush()
+		b.indent = max(b.indent-1, 0)
 	case "TP":
 		b.flush()
-		b.tagLines = 1
+		b.tagLines, b.depth = 1, b.level()
 	case "TQ":
 		b.kind, b.tagLines = taggedBlock, 1
 		b.tagText.WriteString(b.tag + ", ")
@@ -319,9 +336,10 @@ func (b *builder) manRequest(name, rest string) {
 			return
 		}
 		b.flush()
-		b.kind, b.tag = taggedBlock, b.st.inline(args[0])
+		b.startTag(b.st.inline(args[0]))
 	case "RS":
 		b.promoteHeading()
+		b.indent++
 	case "B", "I", "SM", "SB", "CW":
 		if len(args) > 0 {
 			b.textLine(strings.Join(args, " "))

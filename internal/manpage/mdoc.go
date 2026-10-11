@@ -200,7 +200,7 @@ func (b *builder) mdocRequest(name, rest string) {
 	case "It":
 		b.flush()
 		if len(b.lists) > 0 && b.lists[len(b.lists)-1] == listTagged {
-			b.kind, b.tag = taggedBlock, b.mdocText(rest)
+			b.startTag(b.mdocText(rest))
 			return
 		}
 		b.appendRendered(b.mdocText(rest))

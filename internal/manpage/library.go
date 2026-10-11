@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -27,6 +28,7 @@ type library struct {
 	dirs       []string
 	once       sync.Once
 	pages      map[string]string
+	names      []string
 	unreadable []error
 }
 
@@ -69,30 +71,43 @@ func manDirs(manpath, path string) []string {
 }
 
 func (l *library) index() map[string]string {
-	l.once.Do(func() {
-		l.pages = map[string]string{}
-		for _, sec := range commandSections {
-			for _, dir := range l.dirs {
-				entries, err := os.ReadDir(filepath.Join(dir, "man"+sec))
-				if err != nil {
-					if !errors.Is(err, fs.ErrNotExist) {
-						l.unreadable = append(l.unreadable, err)
-					}
+	l.once.Do(l.scan)
+	return l.pages
+}
+
+func (l *library) prefixed(prefix string) []string {
+	l.once.Do(l.scan)
+	start, _ := slices.BinarySearch(l.names, prefix)
+	end := start
+	for end < len(l.names) && strings.HasPrefix(l.names[end], prefix) {
+		end++
+	}
+	return l.names[start:end]
+}
+
+func (l *library) scan() {
+	l.pages = map[string]string{}
+	for _, sec := range commandSections {
+		for _, dir := range l.dirs {
+			entries, err := os.ReadDir(filepath.Join(dir, "man"+sec))
+			if err != nil {
+				if !errors.Is(err, fs.ErrNotExist) {
+					l.unreadable = append(l.unreadable, err)
+				}
+				continue
+			}
+			for _, e := range entries {
+				name, suffix, ok := strings.Cut(e.Name(), "."+sec)
+				if !ok || !slices.Contains(readableSuffixes, suffix) {
 					continue
 				}
-				for _, e := range entries {
-					name, suffix, ok := strings.Cut(e.Name(), "."+sec)
-					if !ok || !slices.Contains(readableSuffixes, suffix) {
-						continue
-					}
-					if _, seen := l.pages[name]; !seen {
-						l.pages[name] = filepath.Join(dir, "man"+sec, e.Name())
-					}
+				if _, seen := l.pages[name]; !seen {
+					l.pages[name] = filepath.Join(dir, "man"+sec, e.Name())
 				}
 			}
 		}
-	})
-	return l.pages
+	}
+	l.names = slices.Sorted(maps.Keys(l.pages))
 }
 
 func (l *library) source(name string) ([]byte, error) {

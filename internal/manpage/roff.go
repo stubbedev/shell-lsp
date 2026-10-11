@@ -16,9 +16,10 @@ const (
 )
 
 type block struct {
-	kind blockKind
-	tag  string
-	text string
+	kind  blockKind
+	tag   string
+	text  string
+	depth int
 }
 
 type section struct {

@@ -25,6 +25,8 @@ type Page struct {
 	Synopsis    []string
 	Description []string
 	options     []Option
+	tagline     string
+	subcommands []Subcommand
 }
 
 func Render(src []byte) (Page, error) {
@@ -34,9 +36,12 @@ func Render(src []byte) (Page, error) {
 		return Page{}, fmt.Errorf("%w: the page has no %s section", ErrNoPage, sectionName)
 	}
 	page := Page{Summary: strings.Join(texts(name.blocks), " "), options: collectOptions(doc)}
+	names, tagline := splitName(page.Summary)
+	page.tagline = tagline
 	if synopsis, ok := doc.section(sectionSynopsis); ok {
 		page.Synopsis = synopsisLines(synopsis)
 	}
+	page.subcommands = collectSubcommands(doc, names, page.Synopsis, page.options)
 	if description, ok := doc.section(sectionDescribe); ok {
 		for _, b := range description.blocks {
 			if b.kind == paragraphBlock && len(page.Description) < maxDescription {
@@ -85,9 +90,10 @@ func (p Page) Markdown() string {
 }
 
 type Lookup struct {
-	library *library
-	mu      sync.Mutex
-	cache   map[string]cached
+	library  *library
+	mu       sync.Mutex
+	cache    map[string]cached
+	listings map[string][]Subcommand
 }
 
 type cached struct {
@@ -96,17 +102,26 @@ type cached struct {
 }
 
 func NewLookup(manpath, path string) *Lookup {
-	return &Lookup{library: newLibrary(manpath, path), cache: map[string]cached{}}
+	return &Lookup{library: newLibrary(manpath, path), cache: map[string]cached{}, listings: map[string][]Subcommand{}}
+}
+
+func (l *Lookup) Has(name string) bool {
+	_, ok := l.library.index()[name]
+	return ok
+}
+
+func (l *Lookup) cached(name string) (cached, bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	hit, ok := l.cache[name]
+	return hit, ok
 }
 
 func (l *Lookup) Page(ctx context.Context, name string) (Page, error) {
 	if !validName.MatchString(name) {
 		return Page{}, fmt.Errorf("%w: %q is not a command name", ErrNoPage, name)
 	}
-	l.mu.Lock()
-	hit, ok := l.cache[name]
-	l.mu.Unlock()
-	if ok {
+	if hit, ok := l.cached(name); ok {
 		return hit.page, hit.err
 	}
 	if err := ctx.Err(); err != nil {

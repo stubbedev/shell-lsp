@@ -20,31 +20,36 @@ func collectOptions(doc document) []Option {
 		if s.name == sectionName || s.name == sectionSynopsis {
 			continue
 		}
-		var grouped []string
-		for _, b := range s.blocks {
-			if b.kind != taggedBlock || !strings.HasPrefix(b.tag, "-") {
-				grouped = nil
-				continue
-			}
-			names := grouped
-			for _, n := range optionNames(b.tag) {
-				if !slices.Contains(names, n) {
-					names = append(names, n)
-				}
-			}
-			if b.text == "" {
-				grouped = names
-				continue
-			}
+		options = appendOptions(options, s.blocks, seen)
+	}
+	return options
+}
+
+func appendOptions(options []Option, blocks []block, seen map[string]bool) []Option {
+	var grouped []string
+	for _, b := range blocks {
+		if b.kind != taggedBlock || !strings.HasPrefix(b.tag, "-") {
 			grouped = nil
-			if len(names) == 0 || slices.ContainsFunc(names, func(n string) bool { return seen[n] }) {
-				continue
-			}
-			for _, n := range names {
-				seen[n] = true
-			}
-			options = append(options, Option{Names: names, Doc: b.text})
+			continue
 		}
+		names := grouped
+		for _, n := range optionNames(b.tag) {
+			if !slices.Contains(names, n) {
+				names = append(names, n)
+			}
+		}
+		if b.text == "" {
+			grouped = names
+			continue
+		}
+		grouped = nil
+		if len(names) == 0 || slices.ContainsFunc(names, func(n string) bool { return seen[n] }) {
+			continue
+		}
+		for _, n := range names {
+			seen[n] = true
+		}
+		options = append(options, Option{Names: names, Doc: b.text})
 	}
 	return options
 }
