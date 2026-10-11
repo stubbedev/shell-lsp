@@ -47,7 +47,10 @@ func EncodingFromName(name string) (Encoding, error) {
 }
 
 func NormalizeCanonical(text string) string {
-	text = strings.TrimPrefix(text, "\uFEFF")
+	return normalizeLineEnds(strings.TrimPrefix(text, "\uFEFF"))
+}
+
+func normalizeLineEnds(text string) string {
 	if !strings.ContainsRune(text, '\r') {
 		return text
 	}
@@ -196,7 +199,7 @@ func (d *Document) applyChanges(changes []lsp.TextDocumentContentChangeEvent, en
 		if end < start {
 			start, end = end, start
 		}
-		d.replace(start, end, NormalizeCanonical(change.Text))
+		d.replace(start, end, normalizeLineEnds(change.Text))
 	}
 }
 
