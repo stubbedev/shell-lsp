@@ -125,7 +125,7 @@ func (c *Conn) Read() (*Message, error) {
 func (c *Conn) Write(msg *Message) error {
 	return c.send(func() error {
 		if err := c.encode(msg); err != nil {
-			return fmt.Errorf("marshaling message: %w", err)
+			return &encodeError{what: "message", err: err}
 		}
 		return nil
 	})
@@ -135,8 +135,21 @@ func (c *Conn) Reply(id json.RawMessage, result any, rpcErr *Error) error {
 	if rpcErr != nil {
 		return c.envelope(id, "", "error", rpcErr)
 	}
-	return c.envelope(id, "", "result", result)
+	err := c.envelope(id, "", "result", result)
+	if unencodable, ok := errors.AsType[*encodeError](err); ok {
+		return errors.Join(err, c.envelope(id, "", "error", NewError(CodeInternalError, "%v", unencodable)))
+	}
+	return err
 }
+
+type encodeError struct {
+	what string
+	err  error
+}
+
+func (e *encodeError) Error() string { return "marshaling " + e.what + ": " + e.err.Error() }
+
+func (e *encodeError) Unwrap() error { return e.err }
 
 func (c *Conn) Request(id json.RawMessage, method string, params any) error {
 	return c.envelope(id, method, "params", params)
@@ -156,13 +169,13 @@ func (c *Conn) envelope(id json.RawMessage, method, member string, value any) er
 		if method != "" {
 			c.frame.WriteString(`,"method":`)
 			if err := c.encode(method); err != nil {
-				return fmt.Errorf("marshaling method %q: %w", method, err)
+				return &encodeError{what: strconv.Quote(method), err: err}
 			}
 		}
 		if value != nil || member == "result" {
 			c.frame.WriteString(`,"` + member + `":`)
 			if err := c.encode(value); err != nil {
-				return fmt.Errorf("marshaling %s of %s: %w", member, describe(id, method), err)
+				return &encodeError{what: member + " of " + describe(id, method), err: err}
 			}
 		}
 		c.frame.WriteByte('}')

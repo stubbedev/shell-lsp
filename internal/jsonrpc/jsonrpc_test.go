@@ -196,20 +196,37 @@ func TestReadMessagesOutliveTheNextRead(t *testing.T) {
 	}
 }
 
-func TestReplyReportsUnencodableResults(t *testing.T) {
+func TestReplyAnswersUnencodableResultsWithAnError(t *testing.T) {
 	t.Parallel()
 
-	var w countingWriter
-	conn := NewConn(nil, &w)
-	err := conn.Reply(json.RawMessage("5"), map[string]any{"f": func() {}}, nil)
-	if err == nil || !strings.Contains(err.Error(), "result of response 5") {
-		t.Errorf("Reply error = %v, want a marshaling error naming the response", err)
+	var deep []any
+	for range 20_000 {
+		deep = []any{deep}
 	}
-	if w.writes != 0 {
-		t.Errorf("writes = %d, want nothing written for a failed frame", w.writes)
-	}
-	if err := conn.Reply(json.RawMessage("6"), nil, nil); err != nil || !strings.HasSuffix(w.String(), `{"jsonrpc":"2.0","id":6,"result":null}`) {
-		t.Errorf("frame after a failed one = %q, %v", w.String(), err)
+	for name, result := range map[string]any{"func": map[string]any{"f": func() {}}, "too deep": deep} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			var w countingWriter
+			conn := NewConn(&w.Buffer, &w)
+			err := conn.Reply(json.RawMessage("5"), result, nil)
+			if err == nil || !strings.Contains(err.Error(), "result of response 5") {
+				t.Errorf("Reply error = %v, want a marshaling error naming the response", err)
+			}
+			if w.writes != 1 {
+				t.Errorf("writes = %d, want only the error response", w.writes)
+			}
+			got, err := conn.Read()
+			if err != nil {
+				t.Fatalf("reading the reply: %v", err)
+			}
+			if string(got.ID) != "5" || got.Error == nil || got.Error.Code != CodeInternalError || !strings.Contains(got.Error.Message, "result of response 5") {
+				t.Errorf("reply = %+v %+v, want an internal error for request 5", got, got.Error)
+			}
+			if err := conn.Reply(json.RawMessage("6"), nil, nil); err != nil || !strings.HasSuffix(w.String(), `{"jsonrpc":"2.0","id":6,"result":null}`) {
+				t.Errorf("frame after a failed one = %q, %v", w.String(), err)
+			}
+		})
 	}
 }
 
