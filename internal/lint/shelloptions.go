@@ -1,6 +1,7 @@
 package lint
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/parser"
@@ -45,32 +46,102 @@ func StrictModeOf(tree *parser.Tree) StrictMode {
 }
 
 func StrictModeSetBy(c parser.Command) StrictMode {
-	switch c.Name {
+	changes := optionChanges(c.Name, c.Args)
+	return StrictMode{Errexit: turnsOn(changes, "errexit"), Nounset: turnsOn(changes, "nounset"), Pipefail: turnsOn(changes, "pipefail")}
+}
+
+type optionChange struct {
+	name string
+	on   bool
+}
+
+func turnsOn(changes []optionChange, name string) bool {
+	return slices.Contains(changes, optionChange{name: name, on: true})
+}
+
+func optionChanges(command string, args []*syntax.Word) []optionChange {
+	switch command {
 	case "set":
-		return StrictMode{Errexit: setsErrexit(c.Args), Nounset: mentions(c.Args, "nounset") || hasShortFlag(c.Args, 'u'), Pipefail: mentions(c.Args, "pipefail")}
+		return setOptionChanges(args)
+	case "shopt":
+		return shoptOptionChanges(args)
 	case "setopt", "unsetopt":
-		var m StrictMode
-		for _, a := range c.Args {
-			lit, ok := parser.Literal(a)
-			if !ok {
-				continue
-			}
-			switch zshOption(lit, c.Name == "unsetopt") {
-			case "errexit":
-				m.Errexit = true
-			case "nounset":
-				m.Nounset = true
-			case "pipefail":
-				m.Pipefail = true
+		var changes []optionChange
+		for _, a := range args {
+			if lit, ok := parser.Literal(a); ok && !strings.HasPrefix(lit, "-") {
+				changes = append(changes, optionChange{name: zshOption(lit, command == "unsetopt"), on: true})
 			}
 		}
-		return m
+		return changes
 	}
-	return StrictMode{}
+	return nil
+}
+
+var setLetterOptions = map[byte]string{'e': "errexit", 'u': "nounset"}
+
+func setOptionChanges(args []*syntax.Word) []optionChange {
+	var changes []optionChange
+	var owed []bool
+	for _, a := range args {
+		lit, ok := parser.Literal(a)
+		if !ok {
+			return changes
+		}
+		if len(owed) > 0 {
+			changes = append(changes, optionChange{name: optionName(lit), on: owed[0]})
+			owed = owed[1:]
+			continue
+		}
+		if len(lit) < 2 || (lit[0] != '-' && lit[0] != '+') || lit == "--" {
+			return changes
+		}
+		on := lit[0] == '-'
+		for i := 1; i < len(lit); i++ {
+			if lit[i] == 'o' {
+				owed = append(owed, on)
+			} else if name, ok := setLetterOptions[lit[i]]; ok {
+				changes = append(changes, optionChange{name: name, on: on})
+			}
+		}
+	}
+	return changes
+}
+
+func shoptOptionChanges(args []*syntax.Word) []optionChange {
+	var names []string
+	on, changing := false, false
+	for _, a := range args {
+		lit, ok := parser.Literal(a)
+		if !ok {
+			return nil
+		}
+		if len(lit) > 1 && lit[0] == '-' {
+			if strings.ContainsRune(lit, 's') {
+				on, changing = true, true
+			}
+			if strings.ContainsRune(lit, 'u') {
+				on, changing = false, true
+			}
+			continue
+		}
+		names = append(names, optionName(lit))
+	}
+	if !changing {
+		return nil
+	}
+	changes := make([]optionChange, len(names))
+	for i, name := range names {
+		changes[i] = optionChange{name: name, on: on}
+	}
+	return changes
+}
+
+func optionName(word string) string {
+	return strings.ToLower(strings.ReplaceAll(word, "_", ""))
 }
 
 func zshOption(word string, unset bool) string {
-	name := strings.ToLower(strings.ReplaceAll(word, "_", ""))
+	name := optionName(word)
 	if !unset {
 		return name
 	}
@@ -83,53 +154,37 @@ func zshOption(word string, unset bool) string {
 func scanShellOptions(tree *parser.Tree) shellOptions {
 	opts := shellOptions{errexit: shebangFlag(tree.Text(), 'e')}
 	for _, c := range tree.Commands {
-		if c.Name == "set" || c.Name == "shopt" {
-			opts.lastpipe = opts.lastpipe || mentions(c.Args, "lastpipe")
-			opts.execfail = opts.execfail || mentions(c.Args, "execfail")
-		}
-		switch c.Name {
-		case "set":
-			opts.errexit = opts.errexit || setsErrexit(c.Args)
-			if setsOptionFlag(c.Args) || mentions(c.Args, "pipefail") {
-				opts.pipefail = true
+		for _, change := range optionChanges(c.Name, c.Args) {
+			if !change.on {
+				continue
 			}
-			opts.inheritErrexit = opts.inheritErrexit || setsOptionFlag(c.Args)
-		case "shopt":
-			opts.pipefail = opts.pipefail || mentions(c.Args, "pipefail")
-			opts.inheritErrexit = opts.inheritErrexit || mentions(c.Args, "inherit_errexit")
-		case "emulate":
-			emulated := mentions(c.Args, "sh") || mentions(c.Args, "ksh")
+			switch change.name {
+			case "errexit":
+				opts.errexit = true
+			case "pipefail":
+				opts.pipefail = true
+			case "inheriterrexit", "posix":
+				opts.inheritErrexit = true
+			case "lastpipe":
+				opts.lastpipe = true
+			case "execfail":
+				opts.execfail = true
+			case "globsubst":
+				opts.globSubst = true
+			case "shwordsplit":
+				opts.shWordSplit = true
+			}
+		}
+		if c.Name == "emulate" {
+			emulated := slices.ContainsFunc(c.Args, func(a *syntax.Word) bool {
+				lit, ok := parser.Literal(a)
+				return ok && (lit == "sh" || lit == "ksh")
+			})
 			opts.globSubst = opts.globSubst || emulated
 			opts.shWordSplit = opts.shWordSplit || emulated
 		}
-		for _, name := range zshOptionsSetBy(c) {
-			opts.globSubst = opts.globSubst || name == "globsubst"
-			opts.shWordSplit = opts.shWordSplit || name == "shwordsplit"
-		}
 	}
 	return opts
-}
-
-func zshOptionsSetBy(c parser.Command) []string {
-	var names []string
-	switch c.Name {
-	case "setopt", "unsetopt":
-		for _, a := range c.Args {
-			if lit, ok := parser.Literal(a); ok && !strings.HasPrefix(lit, "-") {
-				names = append(names, zshOption(lit, c.Name == "unsetopt"))
-			}
-		}
-	case "set":
-		for i, a := range c.Args[:max(len(c.Args)-1, 0)] {
-			if a.Lit() != "-o" {
-				continue
-			}
-			if lit, ok := parser.Literal(c.Args[i+1]); ok {
-				names = append(names, zshOption(lit, false))
-			}
-		}
-	}
-	return names
 }
 
 func shebangFlag(text string, flag byte) bool {
@@ -139,31 +194,6 @@ func shebangFlag(text string, flag byte) bool {
 	}
 	for _, field := range strings.Fields(first)[1:] {
 		if strings.HasPrefix(field, "-") && !strings.HasPrefix(field, "--") && strings.IndexByte(field, flag) > 0 {
-			return true
-		}
-	}
-	return false
-}
-
-func setsErrexit(args []*syntax.Word) bool {
-	return mentions(args, "errexit") || hasShortFlag(args, 'e')
-}
-
-func setsOptionFlag(args []*syntax.Word) bool { return hasShortFlag(args, 'o') }
-
-func hasShortFlag(args []*syntax.Word, flag byte) bool {
-	for _, a := range args {
-		lit, ok := parser.Literal(a)
-		if ok && strings.HasPrefix(lit, "-") && !strings.HasPrefix(lit, "--") && strings.IndexByte(lit, flag) > 0 {
-			return true
-		}
-	}
-	return false
-}
-
-func mentions(args []*syntax.Word, word string) bool {
-	for _, a := range args {
-		if lit, ok := parser.Literal(a); ok && lit == word {
 			return true
 		}
 	}

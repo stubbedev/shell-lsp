@@ -216,9 +216,7 @@ func (p *pass) lastPipe() bool {
 	if p.dialect.Features().LastPipeInShell {
 		return true
 	}
-	return slices.ContainsFunc(p.tree.Commands, func(cmd parser.Command) bool {
-		return (cmd.Name == "shopt" || cmd.Name == "set") && mentions(cmd.Args, "lastpipe")
-	})
+	return p.options().lastpipe
 }
 
 var safeDirectory = regexp.MustCompile(`^/*((\.|\.\.)/+)*(\.|\.\.)?$`)

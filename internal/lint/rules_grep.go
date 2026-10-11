@@ -131,25 +131,10 @@ func checkEarlyExitGrep(p *pass, c command) {
 	if !ok || !options.has("q", "quiet", "silent", "m", "max-count", "L") {
 		return
 	}
-	if _, index := p.enclosingPipeline(); index < 1 || !pipefailEnabled(p.tree) {
+	if _, index := p.enclosingPipeline(); index < 1 || !p.options().pipefail {
 		return
 	}
 	p.reportNode(2337, c.call, c.name+" may exit before reading all its input; with pipefail set, the writer upstream can then fail with SIGPIPE and fail the whole pipeline.")
-}
-
-func pipefailEnabled(tree *parser.Tree) bool {
-	for _, cmd := range tree.Commands {
-		if cmd.Name != "set" && cmd.Name != "shopt" {
-			continue
-		}
-		for _, arg := range cmd.Args {
-			lit, ok := parser.Literal(arg)
-			if ok && (lit == "pipefail" || (cmd.Name == "set" && isShortCluster(lit) && strings.ContainsRune(lit, 'o'))) {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 func isShortCluster(lit string) bool {

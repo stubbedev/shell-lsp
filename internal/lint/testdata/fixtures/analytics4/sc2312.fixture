@@ -165,3 +165,28 @@ time false
 ### time with a substitution argument
 time $(time false)
 >>> SC2091 1:6
+
+### pipeline masked when only errexit is set
+# shellcheck enable=check-extra-masked-returns
+set -o errexit
+false | true
+>>+ SC2312 3:1 -- shellcheck assumes any set -o may enable pipefail; only pipefail stops a pipeline from masking its earlier stages
+
+### pipeline masked in posix mode
+# shellcheck enable=check-extra-masked-returns
+set -o posix
+false | true
+>>+ SC2312 3:1 -- shellcheck assumes any set -o may enable pipefail; only pipefail stops a pipeline from masking its earlier stages
+
+### pipeline not masked with pipefail
+# shellcheck enable=check-extra-masked-returns
+set -o pipefail
+false | true
+>>> none
+
+### pipefail switched back off
+# shellcheck enable=check-extra-masked-returns
+set -o pipefail
+set +o pipefail
+false | true
+>>> none

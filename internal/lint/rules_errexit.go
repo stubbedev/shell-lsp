@@ -167,7 +167,7 @@ func (p *pass) losesErrexit(cs *syntax.CmdSubst) bool {
 	enables := false
 	parser.Walk(cs, func(n syntax.Node) bool {
 		if call, ok := n.(*syntax.CallExpr); ok {
-			if c, ok := commandOf(call); ok && c.is("set") && setsErrexit(c.args) {
+			if c, ok := commandOf(call); ok && turnsOn(optionChanges(c.name, c.args), "errexit") {
 				enables = true
 			}
 		}

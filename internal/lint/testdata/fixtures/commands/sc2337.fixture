@@ -98,3 +98,13 @@ cat server.log | grep -- -q
 set -o pipefail
 cat server.log | grep --silent ERROR
 >>+ SC2337 2:18 -- --silent is the same as --quiet; 0.11 has no early-exit grep check and the newer one misses this spelling
+
+### quiet grep after a pipe with only errexit set
+set -o errexit
+cat server.log | grep -q ERROR
+>>> none
+
+### quiet grep after a pipe with pipefail named as a positional parameter
+set -- -o pipefail
+cat server.log | grep -q ERROR
+>>> none

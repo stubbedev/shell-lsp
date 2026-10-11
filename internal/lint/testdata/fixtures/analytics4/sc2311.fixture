@@ -42,3 +42,37 @@ set -e
 version() { :; }
 current=$(version)
 >>> SC2034 4:1
+
+### posix mode makes substitutions inherit errexit
+# shellcheck enable=check-set-e-suppressed
+set -e
+set -o posix
+version() { :; }
+current=$(version)
+>>> SC2034 5:1
+
+### an unrelated set -o keeps errexit off in substitutions
+# shellcheck enable=check-set-e-suppressed
+set -e
+set -o pipefail
+version() { :; }
+current=$(version)
+>>> SC2034 5:1
+>>+ SC2311 5:11 -- shellcheck treats any set -o or a mention of inherit_errexit as inheriting errexit; only shopt -s inherit_errexit and bash's posix mode make command substitutions inherit set -e
+
+### a strict-mode cluster keeps errexit off in substitutions
+# shellcheck enable=check-set-e-suppressed
+set -euo pipefail
+version() { :; }
+current=$(version)
+>>> SC2034 4:1
+>>+ SC2311 4:11 -- shellcheck treats any set -o or a mention of inherit_errexit as inheriting errexit; only shopt -s inherit_errexit and bash's posix mode make command substitutions inherit set -e
+
+### inherit_errexit switched off
+# shellcheck enable=check-set-e-suppressed
+set -e
+shopt -u inherit_errexit
+version() { :; }
+current=$(version)
+>>> SC2034 5:1
+>>+ SC2311 5:11 -- shellcheck treats any set -o or a mention of inherit_errexit as inheriting errexit; only shopt -s inherit_errexit and bash's posix mode make command substitutions inherit set -e
