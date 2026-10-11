@@ -266,6 +266,7 @@ type SymbolKind uint8
 
 const (
 	SymbolFile     SymbolKind = 1
+	SymbolMethod   SymbolKind = 6
 	SymbolFunction SymbolKind = 12
 	SymbolVariable SymbolKind = 13
 	SymbolConstant SymbolKind = 14

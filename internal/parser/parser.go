@@ -43,6 +43,7 @@ type Error struct {
 
 type Tree struct {
 	Dialect dialect.Dialect
+	Bats    bool
 	File    *syntax.File
 	Errors  []Error
 	Index
@@ -100,7 +101,7 @@ func ParseEdit(previous *Tree, text string, d dialect.Dialect) *Tree {
 	}
 	index, recovered := buildIndex(file, text, closedAtEnd, previous)
 	errs = append(errs, recovered...)
-	return &Tree{Dialect: d, File: file, Errors: sortErrors(errs), Index: index, text: text, lineStarts: lineStarts(text)}
+	return &Tree{Dialect: d, Bats: lang == syntax.LangBats, File: file, Errors: sortErrors(errs), Index: index, text: text, lineStarts: lineStarts(text)}
 }
 
 func unclosedHeredocDelimiter(err error) (string, bool) {

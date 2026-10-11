@@ -104,6 +104,13 @@ type Keyword struct {
 	Span Span
 }
 
+type Test struct {
+	Name     string
+	Literal  bool
+	NameSpan Span
+	Span     Span
+}
+
 type Index struct {
 	Scopes      []Scope
 	Functions   []Function
@@ -114,6 +121,7 @@ type Index struct {
 	Heredocs    []Heredoc
 	Comments    []Comment
 	Keywords    []Keyword
+	Tests       []Test
 
 	definitionsByBinding map[binding][]int
 	attrsByBinding       map[binding]Attr
@@ -169,6 +177,7 @@ func presized(previous *Tree) Index {
 		Heredocs:    withRoomFor(p.Heredocs),
 		Comments:    withRoomFor(p.Comments),
 		Keywords:    withRoomFor(p.Keywords),
+		Tests:       withRoomFor(p.Tests),
 	}
 }
 
@@ -208,6 +217,8 @@ func (b *builder) enter(node syntax.Node) {
 	switch n := node.(type) {
 	case *syntax.FuncDecl:
 		b.function(n)
+	case *syntax.TestDecl:
+		b.test(n)
 	case *syntax.CallExpr:
 		b.call(n)
 	case *syntax.DeclClause:
@@ -262,6 +273,15 @@ func (b *builder) function(n *syntax.FuncDecl) {
 		})
 	}
 	b.scopes = append(b.scopes, body)
+}
+
+func (b *builder) test(n *syntax.TestDecl) {
+	nameSpan := b.span(n.Description)
+	name, literal := Literal(n.Description)
+	if !literal {
+		name = b.text[nameSpan.Start:nameSpan.End]
+	}
+	b.index.Tests = append(b.index.Tests, Test{Name: name, Literal: literal, NameSpan: nameSpan, Span: b.span(n)})
 }
 
 func (b *builder) call(n *syntax.CallExpr) {

@@ -27,6 +27,7 @@ var symbolKinds = map[structure.SymbolKind]lsp.SymbolKind{
 	structure.SymbolArray:    lsp.SymbolArray,
 	structure.SymbolConstant: lsp.SymbolConstant,
 	structure.SymbolHeredoc:  lsp.SymbolString,
+	structure.SymbolTest:     lsp.SymbolMethod,
 }
 
 var foldKinds = map[structure.FoldKind]string{
@@ -119,6 +120,11 @@ func (s *Server) handleWorkspaceSymbol(ctx context.Context, docs *docstore.View,
 		for _, def := range file.Tree.Definitions {
 			if def.Within == parser.FileScope && def.Kind != parser.DefCommandEnv && structure.Matches(symbolParams.Query, def.Name) {
 				out = append(out, workspaceSymbol(file, docs.Encoding(), def.Name, lsp.SymbolVariable, def.Span))
+			}
+		}
+		for _, test := range file.Tree.Tests {
+			if structure.Matches(symbolParams.Query, test.Name) {
+				out = append(out, workspaceSymbol(file, docs.Encoding(), test.Name, symbolKinds[structure.SymbolTest], test.Span))
 			}
 		}
 	}

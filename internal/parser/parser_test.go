@@ -245,6 +245,26 @@ func TestBatsFilesParseTestBlocks(t *testing.T) {
 	if IsBats("#!/bin/bash\n@test x\n") {
 		t.Error("a bash shebang was taken for Bats")
 	}
+	if !tree.Bats || Parse("#!/bin/bash\necho\n", dialect.Bash).Bats {
+		t.Errorf("Bats = %t for a Bats file, want only Bats files flagged", tree.Bats)
+	}
+}
+
+func TestBatsTestsAreIndexed(t *testing.T) {
+	t.Parallel()
+
+	src := "#!/usr/bin/env bats\n@test \"adds 'one'\" {\n  run true\n}\n\n@test \"uses $HOME\" {\n  :\n}\n"
+	tree := Parse(src, dialect.Bash)
+	if len(tree.Tests) != 2 {
+		t.Fatalf("tests = %+v, want two", tree.Tests)
+	}
+	first, second := tree.Tests[0], tree.Tests[1]
+	if first.Name != "adds 'one'" || !first.Literal || src[first.NameSpan.Start:first.NameSpan.End] != `"adds 'one'"` || src[first.Span.Start:first.Span.End] != "@test \"adds 'one'\" {\n  run true\n}" {
+		t.Errorf("first test = %+v", first)
+	}
+	if second.Name != `"uses $HOME"` || second.Literal {
+		t.Errorf("a test name with an expansion = %+v, want its source text and not literal", second)
+	}
 }
 
 func TestAttrsAnywhereIgnoresScopes(t *testing.T) {

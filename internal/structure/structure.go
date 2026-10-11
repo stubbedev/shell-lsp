@@ -19,7 +19,15 @@ const (
 	SymbolArray
 	SymbolConstant
 	SymbolHeredoc
+	SymbolTest
 )
+
+var batsHooks = map[string]string{
+	"setup":         "bats hook, runs before each test",
+	"teardown":      "bats hook, runs after each test",
+	"setup_file":    "bats hook, runs once before the file's tests",
+	"teardown_file": "bats hook, runs once after the file's tests",
+}
 
 type Symbol struct {
 	Name      string
@@ -64,7 +72,7 @@ func Symbols(tree *parser.Tree) []Symbol {
 		for _, fn := range functionsByScope[scope] {
 			out = append(out, Symbol{
 				Name:      fn.Name,
-				Detail:    "function",
+				Detail:    functionDetail(tree, fn),
 				Kind:      SymbolFunction,
 				Span:      fn.Span,
 				Selection: fn.NameSpan,
@@ -74,7 +82,36 @@ func Symbols(tree *parser.Tree) []Symbol {
 		slices.SortStableFunc(out, func(a, b Symbol) int { return cmp.Compare(a.Span.Start, b.Span.Start) })
 		return out
 	}
-	return build(parser.FileScope)
+	top := build(parser.FileScope)
+	if len(tree.Tests) == 0 {
+		return top
+	}
+	return nestInTests(top, tree.Tests)
+}
+
+func functionDetail(tree *parser.Tree, fn parser.Function) string {
+	if hook, ok := batsHooks[fn.Name]; ok && tree.Bats && fn.Within == parser.FileScope {
+		return hook
+	}
+	return "function"
+}
+
+func nestInTests(top []Symbol, tests []parser.Test) []Symbol {
+	out := make([]Symbol, 0, len(top)+len(tests))
+	next := 0
+	for _, test := range tests {
+		for next < len(top) && top[next].Span.Start < test.Span.Start {
+			out = append(out, top[next])
+			next++
+		}
+		sym := Symbol{Name: test.Name, Detail: "test", Kind: SymbolTest, Span: test.Span, Selection: test.NameSpan}
+		for next < len(top) && top[next].Span.End <= test.Span.End {
+			sym.Children = append(sym.Children, top[next])
+			next++
+		}
+		out = append(out, sym)
+	}
+	return append(out, top[next:]...)
 }
 
 func variableSymbol(def parser.Definition) Symbol {

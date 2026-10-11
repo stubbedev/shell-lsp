@@ -79,6 +79,51 @@ arr [array] kind=3
 	}
 }
 
+const batsScript = `#!/usr/bin/env bats
+setup_file() {
+	export SHARED=1
+}
+setup() {
+	load helper
+}
+teardown() { :; }
+teardown_file() { :; }
+@test "adds numbers" {
+	local sum=3
+	run add 1 2
+}
+helper() { :; }
+@test "uses $SHARED" {
+	[ "$SHARED" = 1 ]
+}
+`
+
+func TestBatsSymbols(t *testing.T) {
+	t.Parallel()
+
+	var sb strings.Builder
+	render(Symbols(parser.Parse(batsScript, dialect.Bash)), 0, &sb)
+	want := `setup_file [bats hook, runs once before the file's tests] kind=1
+  SHARED [exported variable] kind=2
+setup [bats hook, runs before each test] kind=1
+teardown [bats hook, runs after each test] kind=1
+teardown_file [bats hook, runs once after the file's tests] kind=1
+adds numbers [test] kind=6
+  sum [local variable] kind=2
+helper [function] kind=1
+"uses $SHARED" [test] kind=6
+`
+	if sb.String() != want {
+		t.Errorf("symbols:\n%s\nwant:\n%s", sb.String(), want)
+	}
+
+	var plain strings.Builder
+	render(Symbols(parser.Parse("#!/bin/bash\nsetup() { :; }\n", dialect.Bash)), 0, &plain)
+	if plain.String() != "setup [function] kind=1\n" {
+		t.Errorf("setup outside a Bats file = %q, want a plain function", plain.String())
+	}
+}
+
 func TestSymbolSpansNestInParents(t *testing.T) {
 	t.Parallel()
 
@@ -94,7 +139,9 @@ func TestSymbolSpansNestInParents(t *testing.T) {
 			check(s.Span, s.Children)
 		}
 	}
-	check(parser.Span{Start: 0, End: len(script)}, Symbols(parser.Parse(script, dialect.Bash)))
+	for _, src := range []string{script, batsScript} {
+		check(parser.Span{Start: 0, End: len(src)}, Symbols(parser.Parse(src, dialect.Bash)))
+	}
 }
 
 func TestFolds(t *testing.T) {

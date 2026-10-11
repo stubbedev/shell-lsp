@@ -3,6 +3,7 @@ package server
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
@@ -75,6 +76,41 @@ func TestWorkspaceSymbols(t *testing.T) {
 	}
 	if len(got) != 3 || names[0] != "deploy" || names[1] != "deploy_all" || names[2] != "LIB_DEPLOY" {
 		t.Errorf("workspace symbols = %v", names)
+	}
+}
+
+const batsSuite = "#!/usr/bin/env bats\nsetup() {\n\tload helper\n}\n@test \"deploys the app\" {\n\trun deploy\n}\n"
+
+func TestBatsTestSymbols(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "other.bats"), []byte("#!/usr/bin/env bats\n@test \"deploys twice\" { :; }\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	uri := fileuri.FromPath(filepath.Join(root, "suite.bats"))
+	c, _ := startClient(t, `{"rootUri": "`+fileuri.FromPath(root)+`", "capabilities": {"textDocument": {"diagnostic": {}, "documentSymbol": {"hierarchicalDocumentSymbolSupport": true}}}}`)
+	c.notify("textDocument/didOpen", openParams(uri, batsSuite))
+
+	symbols := decodeResult[[]lsp.DocumentSymbol](t, c.call("textDocument/documentSymbol", `{"textDocument": {"uri": "`+uri+`"}}`))
+	if len(symbols) != 2 || symbols[0].Name != "setup" || symbols[0].Detail != "bats hook, runs before each test" {
+		t.Fatalf("symbols = %+v", symbols)
+	}
+	test := symbols[1]
+	want := lsp.Range{Start: lsp.Position{Line: 4, Character: 6}, End: lsp.Position{Line: 4, Character: 23}}
+	if test.Name != "deploys the app" || test.Kind != lsp.SymbolMethod || test.Detail != "test" || test.SelectionRange != want || test.Range.End.Line != 6 {
+		t.Errorf("test symbol = %+v", test)
+	}
+
+	found := decodeResult[[]lsp.SymbolInformation](t, c.call("workspace/symbol", `{"query": "deploys"}`))
+	var names []string
+	for _, s := range found {
+		if s.Kind == lsp.SymbolMethod {
+			names = append(names, s.Name)
+		}
+	}
+	if strings.Join(names, ",") != "deploys the app,deploys twice" {
+		t.Errorf("workspace test symbols = %v", names)
 	}
 }
 
