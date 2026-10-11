@@ -11,6 +11,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/manpage"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/platform"
 )
 
 type fakeEnv struct {
@@ -22,7 +23,7 @@ type fakeEnv struct {
 func (f fakeEnv) Executables() []string { return []string{"git", "grep", "gzip", "ls"} }
 
 func (f fakeEnv) ReadDir(dir string) ([]DirEntry, error) {
-	entries, ok := f.dirs[filepath.Clean(dir)]
+	entries, ok := f.dirs[filepath.ToSlash(filepath.Clean(dir))]
 	if !ok {
 		return nil, os.ErrNotExist
 	}
@@ -49,12 +50,14 @@ func (f fakeEnv) Subcommands(_ context.Context, command string, args []string) (
 	return f.subcommands[strings.Join(append([]string{command}, args...), " ")], nil
 }
 
+var absoluteApp = map[platform.Flavour]string{platform.POSIX: "/srv/app", platform.Windows: "C:/srv/app"}[platform.Native]
+
 var env = fakeEnv{
 	dirs: map[string][]DirEntry{
 		"/proj":           {{Name: "lib", Dir: true}, {Name: "main.sh"}, {Name: ".hidden"}, {Name: "my file.sh"}},
 		"/proj/lib":       {{Name: "util.sh"}, {Name: "helpers", Dir: true}},
 		"/home/u":         {{Name: "bin", Dir: true}, {Name: "notes.txt"}},
-		"/srv/app":        {{Name: "config.yml"}},
+		absoluteApp:       {{Name: "config.yml"}},
 		"/work":           {{Name: "main.sh"}, {Name: "other.sh"}},
 		"/home/u/scripts": {{Name: "x.sh"}},
 	},
@@ -395,7 +398,7 @@ func TestPaths(t *testing.T) {
 	if got := labels(complete(t, dialect.Bash, "cat ~/‸")); !slices.Equal(got, []string{"bin/", "notes.txt"}) {
 		t.Errorf("home completion = %v", got)
 	}
-	if got := labels(complete(t, dialect.Bash, "cd /srv/app\ncat ‸")); !slices.Contains(got, "config.yml") {
+	if got := labels(complete(t, dialect.Bash, "cd "+absoluteApp+"\ncat ‸")); !slices.Contains(got, "config.yml") {
 		t.Errorf("cd-tracked completion = %v", got)
 	}
 	if got := labels(complete(t, dialect.Bash, "./li‸")); !slices.Equal(got, []string{"lib/"}) {

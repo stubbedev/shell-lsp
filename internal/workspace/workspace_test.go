@@ -190,7 +190,8 @@ func TestShellFilesCacheFollowsDirectoryChanges(t *testing.T) {
 		}
 		out := make([]string, len(paths))
 		for i, p := range paths {
-			out[i], _ = filepath.Rel(root, p)
+			rel, _ := filepath.Rel(root, p)
+			out[i] = filepath.ToSlash(rel)
 		}
 		return out
 	}
@@ -213,8 +214,9 @@ func TestRootOfPicksTheInnermostRoot(t *testing.T) {
 	t.Parallel()
 
 	ws := New(nil, nil)
-	ws.SetRoots([]string{"/a", "/a/b", "/c"})
+	ws.SetRoots([]string{filepath.FromSlash("/a"), filepath.FromSlash("/a/b"), filepath.FromSlash("/c")})
 	for path, want := range map[string]string{"/a/b/x.bats": "/a/b", "/a/x.bats": "/a", "/c/d/e.bats": "/c", "/z/x.bats": ""} {
+		path, want = filepath.FromSlash(path), filepath.FromSlash(want)
 		if got, ok := ws.RootOf(path); got != want || ok != (want != "") {
 			t.Errorf("RootOf(%q) = %q, %t, want %q", path, got, ok, want)
 		}

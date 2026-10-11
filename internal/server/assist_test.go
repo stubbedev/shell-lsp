@@ -54,7 +54,7 @@ func TestInlayHintsAndLinks(t *testing.T) {
 		t.Fatal(err)
 	}
 	resolved := decodeResult[lsp.InlayHint](t, c.call("inlayHint/resolve", string(raw)))
-	if resolved.Tooltip == nil || !strings.HasSuffix(resolved.Tooltip.Value, "/lib.sh") {
+	if resolved.Tooltip == nil || !strings.HasSuffix(resolved.Tooltip.Value, string(filepath.Separator)+"lib.sh") {
 		t.Errorf("resolved hint = %+v", resolved)
 	}
 

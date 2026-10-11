@@ -10,6 +10,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -287,6 +288,9 @@ func TestRenderKeepsUnknownEscapesVisible(t *testing.T) {
 func TestLookupReportsUnreadableDirectories(t *testing.T) {
 	t.Parallel()
 
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows ignores Unix permission bits, so chmod cannot make a directory unreadable")
+	}
 	if os.Geteuid() == 0 {
 		t.Skip("root reads directories regardless of permissions")
 	}

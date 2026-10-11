@@ -80,7 +80,7 @@ func describe(f fixture, locs []Location) []string {
 	out := make([]string, len(locs))
 	for i, l := range locs {
 		rel, _ := filepath.Rel(f.root, l.File.Path)
-		out[i] = rel + ":" + l.File.Tree.Text()[l.Span.Start:l.Span.End]
+		out[i] = filepath.ToSlash(rel) + ":" + l.File.Tree.Text()[l.Span.Start:l.Span.End]
 	}
 	return out
 }
@@ -121,7 +121,8 @@ source ./lib/a.sh
 	for i, ref := range refs {
 		got := ""
 		if ref.Target != nil {
-			got, _ = filepath.Rel(f.root, ref.Target.Path)
+			rel, _ := filepath.Rel(f.root, ref.Target.Path)
+			got = filepath.ToSlash(rel)
 		}
 		if got != want[i] {
 			t.Errorf("source #%d resolved to %q, want %q", i, got, want[i])

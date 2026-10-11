@@ -93,7 +93,7 @@ func TestWillRenameFilesRewritesSources(t *testing.T) {
 	for _, change := range edit.DocumentChanges {
 		rel, _ := filepath.Rel(root, mustPath(t, change.TextDocument.URI))
 		for _, e := range change.Edits {
-			got[rel] = append(got[rel], e.NewText)
+			got[filepath.ToSlash(rel)] = append(got[filepath.ToSlash(rel)], e.NewText)
 		}
 	}
 	want := map[string][]string{
