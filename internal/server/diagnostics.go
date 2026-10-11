@@ -213,8 +213,17 @@ func (p *pushScheduler) schedule(uri string) {
 		defer p.wg.Done()
 		defer cancel()
 		p.publish(ctx, uri)
+		p.finish(uri, job)
 	})
 	p.jobs[uri] = job
+}
+
+func (p *pushScheduler) finish(uri string, job *pushJob) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.jobs[uri] == job {
+		delete(p.jobs, uri)
+	}
 }
 
 func (p *pushScheduler) cancel(uri string) {

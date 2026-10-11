@@ -1,8 +1,10 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
@@ -27,5 +29,21 @@ func TestCachesDropWorkFinishingAfterClose(t *testing.T) {
 	sizes := srv.cacheSizes()
 	if sizes["snapshots"] != 0 || sizes["semantic"] != 0 {
 		t.Errorf("caches kept a closed document: %v", sizes)
+	}
+}
+
+func TestPushSchedulerForgetsJobsThatRan(t *testing.T) {
+	t.Parallel()
+
+	published := make(chan string)
+	p := newPushScheduler(time.Millisecond, func(_ context.Context, uri string) { published <- uri })
+	defer p.close()
+	p.schedule("file:///closed.sh")
+	<-published
+	p.wg.Wait()
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if len(p.jobs) != 0 {
+		t.Errorf("jobs kept after they ran: %v", p.jobs)
 	}
 }
