@@ -97,6 +97,35 @@ rule sets differ, so read that as an order of magnitude, not a like-for-like
 benchmark. Flags, formats, CI and pre-commit
 recipes are in [docs/cli.md](docs/cli.md).
 
+## Dialects
+
+Each document is linted as one shell. The first of these that applies
+decides which:
+
+1. the `dialect` setting;
+2. `shell_variant` in `.editorconfig`;
+3. a `# shellcheck shell=` directive in the comment header before the first
+   command;
+4. the shebang, also behind `env`, `busybox` and `nix-shell -i`;
+5. a zsh completion tag (`#compdef`, `#autoload`) on the first line;
+6. the file name (`.bashrc`, `.zshrc`, `.profile` and the other rc files) or
+   its extension (`.bash`, `.bats`, `.zsh`, `.dash`, `.sh`, `.ksh`);
+7. the editor's language identifier, unless it is the generic `shellscript`;
+8. a vim modeline (`# vim: ft=zsh`);
+9. otherwise bash.
+
+An extension or the bash default is only a guess, and a wrong guess is the
+usual cause of findings that make no sense for the shell you use. The VS Code
+extension shows the shell in the status bar with what decided it, and
+clicking it records your choice as a `# shellcheck shell=` directive, which
+every editor and `shell-lsp check` then follow. Other clients can use two
+requests:
+
+| Request | Params | Result |
+| --- | --- | --- |
+| `shellLsp/documentDialect` | `{textDocument}` | `{dialect, source, evidence, guessed, description, directive, dialects}`: the shell, what decided it (`default`, `override`, `editorconfig`, `directive`, `shebang`, `completionTag`, `fileName`, `extension`, `languageId` or `modeline`), the text that did, whether that is a guess, a sentence to show, whether a header shell directive exists, and the shells that can be chosen |
+| `shellLsp/setDialect` | `{textDocument, dialect}` | The `WorkspaceEdit` that adds or updates the header directive for `dialect`, or removes it when `dialect` is `null`; `null` when nothing changes |
+
 ## Configuration
 
 Settings arrive as `initializationOptions`, as the `shellLsp` section of

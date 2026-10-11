@@ -38,6 +38,50 @@ vim.api.nvim_create_autocmd("FileType", {
 `vim.fs.dirname(vim.fs.find({ ".git" }, { upward = true })[1])`.
 The repository's `scripts/nvim-smoke.lua` exercises the 0.9 form in CI.
 
+To show which shell a buffer is linted as, and switch it, ask the server with
+the `shellLsp/documentDialect` and `shellLsp/setDialect` requests (see
+[Dialects](../README.md#dialects)). On Neovim 0.11 and later, with the
+`shell_lsp` configuration above, this keeps the shell in the statusline, marked
+with `?` when it is only guessed, and adds `:ShellDialect dash` to record a
+shell as a `# shellcheck shell=` directive and `:ShellDialect` to remove it:
+
+```lua
+local function refresh_dialect(buf)
+  for _, client in ipairs(vim.lsp.get_clients({ bufnr = buf, name = "shell_lsp" })) do
+    client:request("shellLsp/documentDialect", { textDocument = vim.lsp.util.make_text_document_params(buf) }, function(err, result)
+      if err == nil and result ~= nil then
+        vim.b[buf].shell_dialect = result.guessed and (result.dialect .. "?") or result.dialect
+        vim.b[buf].shell_dialect_why = result.description
+        vim.cmd.redrawstatus()
+      end
+    end, buf)
+  end
+end
+
+vim.api.nvim_create_autocmd({ "LspAttach", "BufEnter", "InsertLeave", "TextChanged" }, {
+  callback = function(args)
+    refresh_dialect(args.buf)
+  end,
+})
+
+vim.api.nvim_create_user_command("ShellDialect", function(opts)
+  local buf = vim.api.nvim_get_current_buf()
+  local client = vim.lsp.get_clients({ bufnr = buf, name = "shell_lsp" })[1]
+  if client == nil then
+    return
+  end
+  local dialect = opts.args ~= "" and opts.args or vim.NIL
+  local params = { textDocument = vim.lsp.util.make_text_document_params(buf), dialect = dialect }
+  client:request("shellLsp/setDialect", params, function(err, edit)
+    if err == nil and edit ~= nil then
+      vim.lsp.util.apply_workspace_edit(edit, client.offset_encoding)
+    end
+  end, buf)
+end, { nargs = "?" })
+
+vim.o.statusline = "%f %{get(b:, 'shell_dialect', '')} %m"
+```
+
 ## Helix
 
 `~/.config/helix/languages.toml`:
@@ -53,6 +97,9 @@ language-servers = ["shell-lsp"]
 
 Helix's `bash` language covers `.sh`, `.bash`, `.zsh` and the usual rc files;
 shell-lsp detects the actual dialect per file.
+Helix has no way to send the custom `shellLsp/documentDialect` request, so it
+cannot show which shell a file is linted as; write a `# shellcheck shell=`
+directive to choose one.
 
 ## Zed
 
@@ -68,6 +115,10 @@ binary in `settings.json`:
   }
 }
 ```
+
+Zed extensions cannot send custom requests to a language server they do not
+own, so Zed cannot show which shell a file is linted as either; a
+`# shellcheck shell=` directive chooses it.
 
 ## VS Code
 
@@ -97,9 +148,11 @@ so on; the keys are listed in the README) and may differ per workspace folder.
 Only values you set are sent to the server, so `.editorconfig` still decides
 whatever you leave at its default. `shellLsp.trace.server` logs the protocol
 traffic to the Shell LSP output. The commands "Shell LSP: Restart Server",
-"Shell LSP: Show Output", "Shell LSP: Fix All Auto-Fixable Problems" and
-"Shell LSP: Run Bats File" are in the command palette; reference-count code
-lenses open the references peek. More in the extension's
+"Shell LSP: Show Output", "Shell LSP: Fix All Auto-Fixable Problems",
+"Shell LSP: Run Bats File" and "Shell LSP: Choose the Shell to Lint As" are
+in the command palette; reference-count code lenses open the references peek.
+The status bar shows the shell the active script is linted as and what
+decided it, and clicking it chooses another. More in the extension's
 [README](../editors/vscode/README.md).
 
 ## Any other client

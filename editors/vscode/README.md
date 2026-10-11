@@ -79,6 +79,12 @@ restarts the server.
 - **Shell LSP: Run Bats File** runs the active Bats file and reports failures
   as diagnostics. Running tests executes workspace code, so it is disabled in
   Restricted Mode.
+- **Shell LSP: Choose the Shell to Lint As** picks the shell for the active
+  script and records it as a `# shellcheck shell=` directive after the
+  shebang, or removes that directive. Clicking the shell name in the status
+  bar runs it. The status bar shows the shell the script is linted as, marks
+  it "(guessed)" when only the extension or the bash default decided it, and
+  says in its tooltip what decided it.
 
 ## Known limitations
 
