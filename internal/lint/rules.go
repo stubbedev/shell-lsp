@@ -76,6 +76,7 @@ var families = []family{
 	testSyntaxFamily,
 	injectionFamily,
 	unusedFunctionsFamily,
+	embeddedFamily,
 }
 
 type nodeDispatch [][]func(p *pass, n syntax.Node)

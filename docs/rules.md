@@ -88,3 +88,41 @@ helper() { echo help; }    # SL2001
 main() { echo "$1"; }
 main "$@"
 ```
+
+The embedded-language rules check awk, sed and jq programs written inside the
+script with built-in parsers; no awk, sed or jq binary is run. A program is
+checked when it is a literal argument (`awk '...'`, `sed -e '...'`,
+`jq -r '...'`) or a quoted here-document fed to `awk -f -` or `sed -f -`.
+Programs that contain shell expansions, or come from files, are skipped
+rather than guessed at. Each error is reported at its exact position inside
+the shell string.
+
+## SL3001
+
+**An awk program does not parse.** The program given to `awk`, `gawk`,
+`mawk`, `nawk` or `original-awk` has a syntax error, so awk refuses to run
+it. Common gawk extensions (`BEGINFILE`, `switch`, `@include`, `**`, `|&`)
+are accepted.
+
+```bash
+awk '{ print $1 ' file.txt    # SL3001: `{` is never closed
+```
+
+## SL3002
+
+**A sed script does not parse.** The script given to `sed` or `gsed` has a
+syntax error, so sed refuses to run it. GNU extensions such as `0,/re/`,
+`first~step`, `addr,+N`, `T`, `e`, `F` and `z` are accepted.
+
+```bash
+sed 's/a/b/x' file.txt    # SL3002: unknown option to `s`
+```
+
+## SL3003
+
+**A jq filter does not parse.** The filter given to `jq`, `gojq` or `jaq`
+has a syntax error, so jq refuses to run it.
+
+```bash
+jq '.items[] | | .name' data.json    # SL3003: unexpected `|`
+```

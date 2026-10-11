@@ -17,7 +17,7 @@ func pullDiagnostics(t *testing.T, c *testClient, uri string) []lsp.Diagnostic {
 }
 
 func embeddedOnly(items []lsp.Diagnostic) []lsp.Diagnostic {
-	return slices.DeleteFunc(items, func(d lsp.Diagnostic) bool { return !strings.HasSuffix(d.Code, "-syntax") })
+	return slices.DeleteFunc(items, func(d lsp.Diagnostic) bool { return !strings.HasPrefix(d.Code, "SL300") })
 }
 
 func TestEmbeddedProgramDiagnostics(t *testing.T) {
@@ -32,10 +32,10 @@ func TestEmbeddedProgramDiagnostics(t *testing.T) {
 		line, start, endCh uint32
 	}
 	want := []located{
-		{"awk-syntax", "awk: unterminated string", 2, 13, 17},
-		{"sed-syntax", "sed: unknown command `k`", 3, 20, 21},
-		{"jq-syntax", "jq: unexpected `|`", 4, 16, 17},
-		{"awk-syntax", "awk: `{` is never closed", 6, 6, 7},
+		{"SL3001", "awk: unterminated string", 2, 13, 17},
+		{"SL3002", "sed: unknown command `k`", 3, 20, 21},
+		{"SL3003", "jq: unexpected `|`", 4, 16, 17},
+		{"SL3001", "awk: `{` is never closed", 6, 6, 7},
 	}
 	var have []located
 	for _, d := range got {
@@ -51,6 +51,33 @@ func TestEmbeddedProgramDiagnostics(t *testing.T) {
 	c.notify("textDocument/didChange", `{"textDocument": {"uri": "file:///w/e.bash", "version": 2}, "contentChanges": [{"text": "awk '{ print \"x\" }' a.txt\n"}]}`)
 	if fixed := embeddedOnly(pullDiagnostics(t, c, "file:///w/e.bash")); len(fixed) != 0 {
 		t.Errorf("diagnostics after the fix = %+v, want none", fixed)
+	}
+}
+
+func TestEmbeddedProgramDiagnosticsFollowLintSettings(t *testing.T) {
+	t.Parallel()
+
+	text := "#!/bin/bash\nawk '{' f\nsed 'k' f\n"
+	for _, tt := range []struct {
+		options string
+		want    []string
+	}{
+		{`{}`, []string{"SL3001", "SL3002"}},
+		{`{"lint": {"exclude": ["SL3001"]}}`, []string{"SL3002"}},
+		{`{"lint": {"enable": false}}`, nil},
+	} {
+		c, _ := startClient(t, `{`+pullCapabilities+`, "initializationOptions": `+tt.options+`}`)
+		c.notify("textDocument/didOpen", openParams("file:///w/s.bash", text))
+		var codes []string
+		for _, d := range embeddedOnly(pullDiagnostics(t, c, "file:///w/s.bash")) {
+			codes = append(codes, d.Code)
+			if d.CodeDescription == nil || !strings.HasSuffix(d.CodeDescription.Href, "rules.md#"+strings.ToLower(d.Code)) {
+				t.Errorf("%s links to %+v, want its docs/rules.md section", d.Code, d.CodeDescription)
+			}
+		}
+		if !slices.Equal(codes, tt.want) {
+			t.Errorf("with %s: codes = %v, want %v", tt.options, codes, tt.want)
+		}
 	}
 }
 

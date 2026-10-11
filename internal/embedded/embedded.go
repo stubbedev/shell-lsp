@@ -30,17 +30,25 @@ func Find(tree *parser.Tree) []Program {
 	}
 	var programs []Program
 	parser.Walk(tree.File, func(node syntax.Node) bool {
-		stmt, ok := node.(*syntax.Stmt)
-		if !ok {
-			return true
-		}
-		if program, ok := embeddedIn(tree, stmt, bats); ok {
-			program.Result = languages[program.Language].parse(program.Text)
-			programs = append(programs, program)
+		if stmt, ok := node.(*syntax.Stmt); ok {
+			programs = appendPrograms(programs, tree, stmt)
 		}
 		return true
 	})
 	return programs
+}
+
+func In(tree *parser.Tree, stmt *syntax.Stmt) []Program {
+	return appendPrograms(nil, tree, stmt)
+}
+
+func appendPrograms(programs []Program, tree *parser.Tree, stmt *syntax.Stmt) []Program {
+	program, ok := embeddedIn(tree, stmt, tree.Bats)
+	if !ok {
+		return programs
+	}
+	program.Result = languages[program.Language].parse(program.Text)
+	return append(programs, program)
 }
 
 func mayEmbed(name string, bats bool) bool {

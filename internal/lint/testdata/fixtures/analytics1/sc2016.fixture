@@ -21,6 +21,7 @@ sed 's/N/$((n + 1))/' counter.txt
 ### sed -n with a dollar and a word starting with p
 sed -n '$prefix' names.txt
 >>> SC2016 1:8
+>>+ SL3002 1:11 -- shell-lsp native check; sed reads the address $, the command p and then refix as extra characters
 
 ### find exec echo with a positional parameter
 find . -name '*.c' -exec echo '$1' {} +

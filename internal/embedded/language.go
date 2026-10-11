@@ -99,8 +99,6 @@ var languages = [...]language{
 
 func (l Language) String() string { return languages[l].name }
 
-func (l Language) Code() string { return languages[l].name + "-syntax" }
-
 var commandLanguages = func() map[string]Language {
 	out := map[string]Language{}
 	for l := range Language(len(languages)) {

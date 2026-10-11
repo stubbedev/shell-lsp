@@ -155,10 +155,12 @@ and keeps the script's meaning; their edits are computed on
 awk, sed and jq programs passed as literal arguments (`awk '...'`, `sed -e
 '...'`, `jq -r '...'`, also behind `command`, `exec` and `busybox`) or fed as
 a quoted here-document to `awk -f -` and `sed -f -` are parsed by built-in
-parsers; no awk, sed or jq binary is run. Syntax errors are reported at their
-exact position inside the shell string with the codes `awk-syntax`,
-`sed-syntax` and `jq-syntax`, the programs are highlighted through semantic
-tokens, and hovering an awk or jq builtin shows its documentation. Programs
+parsers; no awk, sed or jq binary is run. Syntax errors are reported as lint
+findings at their exact position inside the shell string with the native codes
+[`SL3001`](docs/rules.md#sl3001) (awk), [`SL3002`](docs/rules.md#sl3002) (sed)
+and [`SL3003`](docs/rules.md#sl3003) (jq), so `lint.enable`, `lint.exclude`
+and `# shellcheck disable=` apply to them like to any other check. The
+programs are highlighted through semantic tokens, and hovering an awk or jq builtin shows its documentation. Programs
 that contain shell expansions, or come from files, are skipped rather than
 guessed at, and common GNU and gawk extensions are accepted.
 

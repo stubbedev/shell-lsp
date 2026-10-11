@@ -214,13 +214,3 @@ func TestHover(t *testing.T) {
 		}
 	}
 }
-
-func TestLanguageNames(t *testing.T) {
-	t.Parallel()
-
-	for language, want := range map[Language]string{Awk: "awk-syntax", Sed: "sed-syntax", Jq: "jq-syntax"} {
-		if got := language.Code(); got != want {
-			t.Errorf("%s.Code() = %q, want %q", language, got, want)
-		}
-	}
-}

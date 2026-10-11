@@ -75,7 +75,6 @@ func (s *Server) report(file *workspace.File, settings config.Settings, generati
 	findings, stamp := s.findings(file, settings, generation)
 	tests := s.bats.of(file.URI)
 	items := diagnostics.Syntax(file.Tree, file.Doc, encoding)
-	items = append(items, diagnostics.Embedded(embeddedPrograms(file), file.Doc, encoding)...)
 	items = append(items, diagnostics.Lint(findings, file.Doc, encoding)...)
 	items = append(items, diagnostics.Bats(tests.placedOn(file.Tree), file.Doc, encoding)...)
 	return diagnosticReport{
