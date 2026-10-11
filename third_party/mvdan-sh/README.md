@@ -47,6 +47,7 @@ reproducer so that it can be sent upstream as it is.
 | 0015 | syntax: the subscripts of arrays declared associative (`declare -A`, `local -A`, `typeset -A`) parse as string keys (`[e/]=0`, `${m[a.b]}`, `[foo bar]=1`), as with `bash -n` and `zsh -n`, instead of as arithmetic | — |
 | 0016 | syntax: with bash, sh and mksh, a `${` that cannot start a parameter or a special parameter followed by a word (`${.sh.file}`, `${(%):-%x}`, `${@name@}`) parses as a literal holding its text, as with `bash -n`, `dash -n` and `mksh -n`, which reject it only when it runs | — |
 | 0017 | syntax: the offset of `=` in the current literal is reset for every token, so error recovery after an assignment such as `v=$(( x  y ))` no longer indexes a stale offset and panics | — |
+| 0018 | syntax tests: `TestParseConfirm` reports a shell killed by its deadline as a timeout instead of a parse error, allows ten seconds, and runs at most `GOMAXPROCS` shells at once, so slow shell startup (MSYS2 bash on Windows) no longer fails valid inputs | — |
 
 ## Tests
 

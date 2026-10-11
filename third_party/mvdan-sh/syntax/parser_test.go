@@ -301,6 +301,10 @@ func cmdContains(substr, cmd string, args ...string) bool {
 
 var extGlobRe = regexp.MustCompile(`[@?*+!]\(`)
 
+const externalShellTimeout = 10 * time.Second
+
+var externalShellSlots = make(chan struct{}, runtime.GOMAXPROCS(0))
+
 func confirmParse(in, cmd string, wantErr bool) func(*testing.T) {
 	return func(t *testing.T) {
 		t.Helper()
@@ -328,7 +332,12 @@ func confirmParse(in, cmd string, wantErr bool) func(*testing.T) {
 		// All the bits of shell we test should either finish or fail very quickly,
 		// given that they are very small. If we make a mistake with an endless loop,
 		// or we somehow trigger a bug that makes a shell hang, kill it.
-		ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+		// The deadline is generous because starting a shell is slow on some
+		// platforms, such as MSYS2 bash on Windows, and running too many at
+		// once makes it slower still, so only a few run at a time.
+		externalShellSlots <- struct{}{}
+		defer func() { <-externalShellSlots }()
+		ctx, cancel := context.WithTimeout(t.Context(), externalShellTimeout)
 		defer cancel()
 
 		cmd := exec.CommandContext(ctx, cmd, opts...)
@@ -339,6 +348,11 @@ func confirmParse(in, cmd string, wantErr bool) func(*testing.T) {
 		cmd.Stderr = &stderrBuf
 		err := cmd.Run()
 
+		// A shell killed for running past the deadline exits with status 1 on
+		// Windows rather than by a signal, so check the deadline first.
+		if ctx.Err() != nil {
+			t.Fatalf("%q did not finish within %v", strings.Join(cmd.Args, " "), externalShellTimeout)
+		}
 		if cmd.ProcessState.ExitCode() == -1 {
 			t.Fatalf("shell terminated by signal: %v", err)
 		}
