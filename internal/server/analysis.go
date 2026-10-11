@@ -19,7 +19,7 @@ type snapshot struct {
 	file       *workspace.File
 	doc        *docstore.Document
 	encoding   docstore.Encoding
-	dialect    dialect.Dialect
+	detection  dialect.Detection
 	tree       *parser.Tree
 	settings   config.Settings
 	generation uint64
@@ -135,7 +135,7 @@ func (s *Server) snapshot(docs *docstore.View, uri string) (*snapshot, error) {
 			file:       &workspace.File{Path: path, URI: uri, Doc: doc, Tree: tree},
 			doc:        doc,
 			encoding:   docs.Encoding(),
-			dialect:    d,
+			detection:  resolved.Detection,
 			tree:       tree,
 			settings:   settings,
 			generation: generation,

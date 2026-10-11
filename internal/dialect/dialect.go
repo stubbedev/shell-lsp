@@ -46,9 +46,11 @@ func (d Dialect) String() string {
 // dialect. It accepts every spelling the detectors can produce so each
 // source (shebang, languageId, shellcheck directive, modeline) funnels
 // through one table.
+const genericLanguageID = "shellscript"
+
 func FromName(name string) (Dialect, bool) {
 	switch strings.ToLower(strings.TrimSpace(name)) {
-	case "bash", "bats", "shellscript", "bashrc":
+	case "bash", "bats", genericLanguageID, "bashrc":
 		return Bash, true
 	case "zsh":
 		return Zsh, true
@@ -183,7 +185,7 @@ func Resolve(override *Dialect, in Input) Detection {
 	if found, ok := fromFileName(in.URI); ok {
 		return found
 	}
-	if d, ok := FromName(in.LanguageID); ok {
+	if d, ok := FromName(in.LanguageID); ok && in.LanguageID != genericLanguageID {
 		return Detection{Dialect: d, Source: SourceLanguageID, Evidence: in.LanguageID}
 	}
 	if d, value, ok := fromModeline(in.Text); ok {
@@ -307,21 +309,43 @@ func fromFileName(path string) (Detection, bool) {
 }
 
 func headerShellDirective(text string) (string, bool) {
-	for line := range strings.SplitSeq(text, "\n") {
+	found, ok := findShellDirective(text)
+	return found.pair.Value, ok
+}
+
+type shellDirective struct {
+	line      int
+	lineEnd   int
+	directive directive.Directive
+	pair      directive.Pair
+}
+
+func findShellDirective(text string) (shellDirective, bool) {
+	for start := 0; start < len(text); {
+		end := strings.IndexByte(text[start:], '\n')
+		next := len(text)
+		if end < 0 {
+			end = len(text)
+		} else {
+			end += start
+			next = end + 1
+		}
+		line := text[start:end]
 		trimmed := strings.TrimSpace(line)
-		if trimmed == "" {
-			continue
-		}
-		if !strings.HasPrefix(trimmed, "#") {
-			return "", false
-		}
-		if d, ok := directive.Parse(trimmed); ok {
-			if value, ok := d.Value(directive.Shell); ok {
-				return value, true
+		switch {
+		case trimmed == "":
+		case !strings.HasPrefix(trimmed, "#"):
+			return shellDirective{}, false
+		default:
+			if d, ok := directive.Parse(line); ok {
+				if i := slices.IndexFunc(d.Pairs, func(p directive.Pair) bool { return p.Key == directive.Shell }); i >= 0 {
+					return shellDirective{line: start, lineEnd: next, directive: d, pair: d.Pairs[i]}, true
+				}
 			}
 		}
+		start = next
 	}
-	return "", false
+	return shellDirective{}, false
 }
 
 func fromModeline(text string) (Dialect, string, bool) {

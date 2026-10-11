@@ -90,6 +90,8 @@ var methods = []method{
 	{"textDocument/inlineCompletion", clientRequest, notAdvertised, "inlineCompletionProvider", "completion items cover the same ground"},
 	{"workspace/symbol", clientRequest, supported, "workspaceSymbolProvider", ""},
 	{"workspaceSymbol/resolve", clientRequest, notAdvertised, "workspaceSymbolProvider.resolveProvider", "symbols carry full locations"},
+	{documentDialectMethod, clientRequest, supported, "", "shell-lsp extension: the dialect a document is linted as, what decided it, and whether that was a guess"},
+	{setDialectMethod, clientRequest, supported, "", "shell-lsp extension: the edit that sets or removes the document's # shellcheck shell= directive"},
 	{"workspace/executeCommand", clientRequest, supported, "executeCommandProvider", "shellLsp.fixAll, shellLsp.applyEdit, shellLsp.showReferences, shellLsp.runBats"},
 	{"workspace/willCreateFiles", clientRequest, notAdvertised, "workspace.fileOperations.willCreate", "nothing to edit before a file exists"},
 	{"workspace/willRenameFiles", clientRequest, supported, "workspace.fileOperations.willRename", "rewrites source paths and shebangs"},

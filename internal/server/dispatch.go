@@ -157,6 +157,8 @@ func (s *Server) registerHandlers() {
 		"textDocument/moniker":                   s.handleMoniker,
 		"textDocument/linkedEditingRange":        s.handleLinkedEditingRange,
 		"workspace/willRenameFiles":              s.handleWillRenameFiles,
+		documentDialectMethod:                    s.handleDocumentDialect,
+		setDialectMethod:                         s.handleSetDialect,
 	}
 	s.notifications = map[string]notificationHandler{
 		"$/cancelRequest":                     s.handleCancelRequest,

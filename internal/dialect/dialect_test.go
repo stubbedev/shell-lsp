@@ -118,6 +118,8 @@ func TestResolveReportsWhatDecided(t *testing.T) {
 		{nil, Input{URI: "file:///home/u/.bash_local", Text: "echo\n"}, Detection{Dialect: Bash, Source: SourceFileName, Evidence: ".bash_local"}, false},
 		{nil, Input{LanguageID: "bash", Text: "echo\n"}, Detection{Dialect: Bash, Source: SourceLanguageID, Evidence: "bash"}, false},
 		{nil, Input{Text: "echo\n# vim: set ft=zsh:\n"}, Detection{Dialect: Zsh, Source: SourceModeline, Evidence: "zsh"}, false},
+		{nil, Input{LanguageID: "shellscript", Text: "echo\n# vim: set ft=zsh:\n"}, Detection{Dialect: Zsh, Source: SourceModeline, Evidence: "zsh"}, false},
+		{nil, Input{LanguageID: "shellscript", Text: "echo\n"}, Detection{Dialect: Bash, Source: SourceDefault}, true},
 		{&ksh, Input{Text: "#!/bin/bash\necho\n"}, Detection{Dialect: Ksh, Source: SourceOverride, Evidence: "ksh"}, false},
 	} {
 		got := Resolve(c.override, c.in)
