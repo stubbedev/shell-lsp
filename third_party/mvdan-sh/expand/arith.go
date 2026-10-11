@@ -241,14 +241,32 @@ func (cfg *Config) assgnArit(b *syntax.BinaryArithm) (int64, error) {
 	case syntax.XorAssgn:
 		val ^= arg
 	case syntax.ShlAssgn:
-		val <<= uint(arg)
+		val = shl(val, arg)
 	case syntax.ShrAssgn:
-		val >>= uint(arg)
+		val = shr(val, arg)
 	}
 	if err := cfg.envSet(name, strconv.FormatInt(val, 10)); err != nil {
 		return 0, err
 	}
 	return val, nil
+}
+
+// shl shifts x left by n, giving 0 when n is negative or at least 64, as
+// the shift by uint(n) did.
+func shl(x, n int64) int64 {
+	if n < 0 || n >= 64 {
+		return 0
+	}
+	return x << n
+}
+
+// shr shifts x right by n, filling with the sign bit when n is negative or
+// at least 64, as the shift by uint(n) did.
+func shr(x, n int64) int64 {
+	if n < 0 || n >= 64 {
+		return x >> 63
+	}
+	return x >> n
 }
 
 func intPow(a, b int64) int64 {
@@ -305,9 +323,9 @@ func binArit(op syntax.BinAritOperator, x, y int64) (int64, error) {
 	case syntax.Xor:
 		return x ^ y, nil
 	case syntax.Shr:
-		return x >> uint(y), nil
+		return shr(x, y), nil
 	case syntax.Shl:
-		return x << uint(y), nil
+		return shl(x, y), nil
 	case syntax.Comma:
 		// x is executed but its result discarded
 		return y, nil

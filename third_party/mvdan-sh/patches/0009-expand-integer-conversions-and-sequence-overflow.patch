@@ -4,7 +4,9 @@ Arithm returned int, converting from the int64 that atoi parses, which
 truncates on 32-bit platforms (the TODO(v4) in arith.go). Arithmetic is
 now int64 throughout; slice offsets and lengths are clamped in int64
 before indexing, and array subscripts that do not fit in an int are an
-error instead of silently wrapping.
+error instead of silently wrapping. Shifts no longer convert the count
+to uint: a negative count or one of at least 64 still gives 0 for << and
+the sign bit for >>, as before.
 
 Brace sequences stepped with n += incr and compared against the end, so
 an endpoint near the int64 limits, or a step of -9223372036854775808,
@@ -22,7 +24,7 @@ unicode.MaxRune give U+FFFD explicitly rather than through an unchecked
 conversion; the output is unchanged.
 
 diff --git a/expand/arith.go b/expand/arith.go
-index 0178742..eed5825 100644
+index 0178742..c883e43 100644
 --- a/expand/arith.go
 +++ b/expand/arith.go
 @@ -11,10 +11,7 @@ import (
@@ -84,12 +86,39 @@ index 0178742..eed5825 100644
  	switch b.Op {
  	case syntax.Assgn:
  		val = arg
-@@ -252,11 +248,11 @@ func (cfg *Config) assgnArit(b *syntax.BinaryArithm) (int, error) {
+@@ -245,18 +241,36 @@ func (cfg *Config) assgnArit(b *syntax.BinaryArithm) (int, error) {
+ 	case syntax.XorAssgn:
+ 		val ^= arg
+ 	case syntax.ShlAssgn:
+-		val <<= uint(arg)
++		val = shl(val, arg)
+ 	case syntax.ShrAssgn:
+-		val >>= uint(arg)
++		val = shr(val, arg)
+ 	}
  	if err := cfg.envSet(name, strconv.FormatInt(val, 10)); err != nil {
  		return 0, err
  	}
 -	return int(val), nil
 +	return val, nil
++}
++
++// shl shifts x left by n, giving 0 when n is negative or at least 64, as
++// the shift by uint(n) did.
++func shl(x, n int64) int64 {
++	if n < 0 || n >= 64 {
++		return 0
++	}
++	return x << n
++}
++
++// shr shifts x right by n, filling with the sign bit when n is negative or
++// at least 64, as the shift by uint(n) did.
++func shr(x, n int64) int64 {
++	if n < 0 || n >= 64 {
++		return x >> 63
++	}
++	return x >> n
  }
  
 -func intPow(a, b int) int {
@@ -99,7 +128,7 @@ index 0178742..eed5825 100644
  	for b > 0 {
  		if b&1 != 0 {
  			p *= a
-@@ -267,7 +263,7 @@ func intPow(a, b int) int {
+@@ -267,7 +281,7 @@ func intPow(a, b int) int {
  	return p
  }
  
@@ -108,6 +137,18 @@ index 0178742..eed5825 100644
  	switch op {
  	case syntax.Add:
  		return x + y, nil
+@@ -309,9 +323,9 @@ func binArit(op syntax.BinAritOperator, x, y int) (int, error) {
+ 	case syntax.Xor:
+ 		return x ^ y, nil
+ 	case syntax.Shr:
+-		return x >> uint(y), nil
++		return shr(x, y), nil
+ 	case syntax.Shl:
+-		return x << uint(y), nil
++		return shl(x, y), nil
+ 	case syntax.Comma:
+ 		// x is executed but its result discarded
+ 		return y, nil
 diff --git a/expand/braces.go b/expand/braces.go
 index b7158ff..bba2c6a 100644
 --- a/expand/braces.go
@@ -407,10 +448,10 @@ index 75b3dcb..262e742 100644
  	name, ok := strings.CutPrefix(field, "~")
  	if !ok {
 diff --git a/expand/expand_test.go b/expand/expand_test.go
-index 4fa9eec..0898bf0 100644
+index 4fa9eec..bb47118 100644
 --- a/expand/expand_test.go
 +++ b/expand/expand_test.go
-@@ -208,3 +208,58 @@ func TestZshWholeReplaceAndAssignAlways(t *testing.T) {
+@@ -208,3 +208,66 @@ func TestZshWholeReplaceAndAssignAlways(t *testing.T) {
  	qt.Assert(t, qt.IsNil(err))
  	qt.Assert(t, qt.Equals(got, "x foo new new"))
  }
@@ -434,6 +475,14 @@ index 4fa9eec..0898bf0 100644
 +		{"$(( 9223372036854775807 + 1 ))", "-9223372036854775808"},
 +		{"$(( 2 ** 63 ))", "-9223372036854775808"},
 +		{"$(( x = 9223372036854775807, x += 1 ))", "-9223372036854775808"},
++		{"$(( 1 << 63 ))", "-9223372036854775808"},
++		{"$(( 1 << 64 ))", "0"},
++		{"$(( 1 << -1 ))", "0"},
++		{"$(( -8 >> 1 ))", "-4"},
++		{"$(( -8 >> 64 ))", "-1"},
++		{"$(( 8 >> -1 ))", "0"},
++		{"$(( x = 1, x <<= 64 ))", "0"},
++		{"$(( x = -1, x >>= -1 ))", "-1"},
 +		{"${s:9223372036854775807}", ""},
 +		{"${s: -9223372036854775808}", ""},
 +		{"${s:1:-9223372036854775808}", "bc"},
