@@ -171,7 +171,7 @@ func TestParseEditBuildsTheSameIndexAsParse(t *testing.T) {
 	for name, text := range walkScripts(t) {
 		unrelated := Parse(text[:len(text)/2], dialect.Bash)
 		want := reflect.ValueOf(Parse(text, dialect.Bash).Index)
-		got := reflect.ValueOf(ParseEdit(unrelated, text, dialect.Bash).Index)
+		got := reflect.ValueOf(ParseEdit(unrelated, text, dialect.Bash, dialect.Input{Text: text}.Bats()).Index)
 		for i := range want.NumField() {
 			field := want.Type().Field(i)
 			if !field.IsExported() || field.Type.Kind() != reflect.Slice {

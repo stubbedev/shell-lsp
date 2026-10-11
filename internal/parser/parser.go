@@ -52,12 +52,12 @@ type Tree struct {
 }
 
 func Parse(text string, d dialect.Dialect) *Tree {
-	return ParseEdit(nil, text, d)
+	return ParseEdit(nil, text, d, dialect.Input{Text: text}.Bats())
 }
 
-func ParseEdit(previous *Tree, text string, d dialect.Dialect) *Tree {
+func ParseEdit(previous *Tree, text string, d dialect.Dialect, bats bool) *Tree {
 	lang := Language(d)
-	if d == dialect.Bash && IsBats(text) {
+	if d == dialect.Bash && bats {
 		lang = syntax.LangBats
 	}
 	parser := syntax.NewParser(
@@ -167,11 +167,6 @@ func Language(d dialect.Dialect) syntax.LangVariant {
 		return syntax.LangMirBSDKorn
 	}
 	panic(fmt.Sprintf("parser: no language variant for dialect %d", d))
-}
-
-func IsBats(text string) bool {
-	first, _, _ := strings.Cut(text, "\n")
-	return strings.HasPrefix(first, "#!") && strings.Contains(first, "bats")
 }
 
 func convertError(err error, text string, d dialect.Dialect) (Error, bool) {

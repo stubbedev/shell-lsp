@@ -243,8 +243,9 @@ func (w *Workspace) Load(path string) (*File, error) {
 		return nil, fmt.Errorf("loading %s: %w", path, err)
 	}
 	doc := docstore.NewDocument(uri, "", 0, string(raw))
-	d := w.dialectOf(path, dialect.Input{URI: uri, Text: doc.Text()})
-	file := &File{Path: path, URI: uri, Doc: doc, Tree: parser.Parse(doc.Text(), d)}
+	in := dialect.Input{URI: uri, Text: doc.Text()}
+	d := w.dialectOf(path, in)
+	file := &File{Path: path, URI: uri, Doc: doc, Tree: parser.ParseEdit(nil, doc.Text(), d, in.Bats())}
 	w.mu.Lock()
 	w.files[path] = diskEntry{size: info.Size(), modTime: info.ModTime(), checked: now, file: file}
 	w.mu.Unlock()

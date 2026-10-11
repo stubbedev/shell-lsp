@@ -147,3 +147,22 @@ func TestSet(t *testing.T) {
 		}
 	}
 }
+
+func TestInputBats(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		in   Input
+		want bool
+	}{
+		{Input{Text: "#!/usr/bin/env bats\n@test x { :; }\n"}, true},
+		{Input{Text: "#!/opt/bats/bin/bats\n"}, true},
+		{Input{URI: "file:///t/unit.bats", Text: "@test x { :; }\n"}, true},
+		{Input{URI: "file:///t/run.sh", Text: "#!/bin/bash\n# uses bats helpers\n"}, false},
+		{Input{Text: "#!/bin/bash -e\n"}, false},
+	} {
+		if got := tc.in.Bats(); got != tc.want {
+			t.Errorf("%+v Bats() = %v, want %v", tc.in, got, tc.want)
+		}
+	}
+}

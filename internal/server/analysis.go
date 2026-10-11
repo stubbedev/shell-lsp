@@ -109,7 +109,8 @@ func (s *Server) snapshot(docs *docstore.View, uri string) (*snapshot, error) {
 		if err != nil {
 			path = ""
 		}
-		d, project, projectErr := s.resolveDialect(path, settings.Dialect, dialect.Input{URI: uri, LanguageID: doc.Language, Text: doc.Text()})
+		in := dialect.Input{URI: uri, LanguageID: doc.Language, Text: doc.Text()}
+		d, project, projectErr := s.resolveDialect(path, settings.Dialect, in)
 		if projectErr != nil {
 			s.noticeOnce("editorconfig:"+projectErr.Error(), lsp.MessageWarning, projectErr.Error())
 		}
@@ -117,7 +118,7 @@ func (s *Server) snapshot(docs *docstore.View, uri string) (*snapshot, error) {
 		if previous != nil {
 			like = previous.tree
 		}
-		tree := parser.ParseEdit(like, doc.Text(), d)
+		tree := parser.ParseEdit(like, doc.Text(), d, in.Bats())
 		return &snapshot{
 			file:       &workspace.File{Path: path, URI: uri, Doc: doc, Tree: tree},
 			doc:        doc,

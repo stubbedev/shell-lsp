@@ -81,11 +81,22 @@ func TestWorkspaceSymbols(t *testing.T) {
 
 const batsSuite = "#!/usr/bin/env bats\nsetup() {\n\tload helper\n}\n@test \"deploys the app\" {\n\trun deploy\n}\n"
 
+func TestBatsFilesWithoutShebangAreBats(t *testing.T) {
+	t.Parallel()
+
+	c, _ := startClient(t, `{"capabilities": {"textDocument": {"documentSymbol": {"hierarchicalDocumentSymbolSupport": true}}}}`)
+	c.notify("textDocument/didOpen", openParams("file:///w/plain.bats", "@test \"runs\" {\n  run true\n}\n"))
+	symbols := decodeResult[[]lsp.DocumentSymbol](t, c.call("textDocument/documentSymbol", `{"textDocument": {"uri": "file:///w/plain.bats"}}`))
+	if len(symbols) != 1 || symbols[0].Name != "runs" || symbols[0].Kind != lsp.SymbolMethod {
+		t.Errorf("symbols of a .bats file without a shebang = %+v", symbols)
+	}
+}
+
 func TestBatsTestSymbols(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "other.bats"), []byte("#!/usr/bin/env bats\n@test \"deploys twice\" { :; }\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "other.bats"), []byte("@test \"deploys twice\" { :; }\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	uri := fileuri.FromPath(filepath.Join(root, "suite.bats"))

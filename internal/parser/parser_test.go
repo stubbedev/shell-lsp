@@ -242,9 +242,6 @@ func TestBatsFilesParseTestBlocks(t *testing.T) {
 	if _, ok := tree.File.Stmts[0].Cmd.(*syntax.TestDecl); !ok {
 		t.Errorf("first statement = %T, want a Bats test block", tree.File.Stmts[0].Cmd)
 	}
-	if IsBats("#!/bin/bash\n@test x\n") {
-		t.Error("a bash shebang was taken for Bats")
-	}
 	if !tree.Bats || Parse("#!/bin/bash\necho\n", dialect.Bash).Bats {
 		t.Errorf("Bats = %t for a Bats file, want only Bats files flagged", tree.Bats)
 	}

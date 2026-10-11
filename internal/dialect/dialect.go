@@ -115,6 +115,14 @@ type Input struct {
 	Text       string
 }
 
+func (in Input) Bats() bool {
+	if strings.HasSuffix(in.URI, ".bats") {
+		return true
+	}
+	name, ok := Interpreter(in.Text)
+	return ok && name == "bats"
+}
+
 // Detect resolves the dialect of a document. Precedence: explicit
 // override, a shellcheck shell directive in the comment header before
 // the first command (an unrecognised shell there means bash, as in
