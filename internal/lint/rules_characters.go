@@ -176,13 +176,13 @@ func (p *pass) heredocOf(w *syntax.Word) (*syntax.Redirect, bool) {
 }
 
 func (p *pass) quotedHeredoc(r *syntax.Redirect) bool {
-	op := parser.Offset(r.OpPos)
-	for _, h := range p.tree.Heredocs {
-		if h.Span.Start == op {
-			return h.Quoted
+	if p.quotedHeredocs == nil {
+		p.quotedHeredocs = make(map[int]bool, len(p.tree.Heredocs))
+		for _, h := range p.tree.Heredocs {
+			p.quotedHeredocs[h.Span.Start] = h.Quoted
 		}
 	}
-	return false
+	return p.quotedHeredocs[parser.Offset(r.OpPos)]
 }
 
 func (p *pass) reportCharacters(code Code, start int, value, set, message string) {

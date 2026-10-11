@@ -49,6 +49,7 @@ type pass struct {
 	emptinessTests map[int]bool
 	maskWalked     map[syntax.Node]bool
 	braceScan      *braceScanner
+	quotedHeredocs map[int]bool
 }
 
 func newPass(tree *parser.Tree, imports []parser.Import, opts Options) *pass {
