@@ -60,6 +60,21 @@ func TestExtractVariable(t *testing.T) {
 			t.Errorf("extract %q offered: %q", src, got)
 		}
 	}
+	for _, tc := range []struct {
+		d   dialect.Dialect
+		src string
+	}{
+		{dialect.Bash, "[[ $x =~ ^f«(ir)s»t$ ]]\n"},
+		{dialect.Zsh, "print -l *.zsh«(N.om»[1,5])\n"},
+		{dialect.Zsh, "print -l «((a»|b)|c)*\n"},
+		{dialect.Zsh, "print -l <«1-10»>.log\n"},
+		{dialect.Zsh, "case $1 in\n«(a|b)*») ;;\nesac\n"},
+		{dialect.Ksh, "#!/bin/ksh\nprint -r -- ~(i:rea«dme)»\n"},
+	} {
+		if got, _, ok := refactorIn(t, tc.d, ExtractVariable, tc.src); ok {
+			t.Errorf("extract %q offered: %q", tc.src, got)
+		}
+	}
 	got, title, _ := refactor(t, ExtractVariable, "value=1\necho «x»\n")
 	if title != "Extract to variable value2" || !strings.Contains(got, "value2=x") {
 		t.Errorf("name collision handling = %q (%q)", got, title)
@@ -83,6 +98,9 @@ func TestExtractFunction(t *testing.T) {
 		if got, _, ok := refactor(t, ExtractFunction, src); ok {
 			t.Errorf("extract function %q offered: %q", src, got)
 		}
+	}
+	if got, _, ok := refactorIn(t, dialect.Ksh, ExtractFunction, "#!/bin/ksh\ntypeset -T P_t=(\n«\tfloat x=0»\n)\n"); ok {
+		t.Errorf("extract function from a ksh93 type body offered: %q", got)
 	}
 	heredoc, _, ok := refactor(t, ExtractFunction, "f() {\n«\tcat <<EOF\n  kept\nEOF\n\techo \"a\n  b\"»\n}\n")
 	if want := "extracted() {\n\tcat <<EOF\n  kept\nEOF\n\techo \"a\n  b\"\n}\n\nf() {\n\textracted\n}\n"; !ok || heredoc != want {

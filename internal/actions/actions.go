@@ -289,8 +289,11 @@ func extractVariable(s *site) (Change, bool) {
 	if !ok || !startsLine(text, stmt.Start) {
 		return Change{}, false
 	}
-	name := uniqueName(tree, "value")
 	selected := text[sel.Start:sel.End]
+	if !inQuotes && (strings.HasPrefix(selected, "(") || strings.HasPrefix(text[sel.End:], "(")) {
+		return Change{}, false
+	}
+	name := uniqueName(tree, "value")
 	rhs, replacement := selected, `"${`+name+`}"`
 	switch {
 	case inQuotes:
@@ -328,7 +331,7 @@ func selectedWord(tree *parser.Tree, path []syntax.Node, sel parser.Span) (parse
 			return parser.Span{}, false, false
 		}
 		if span == sel {
-			return span, false, true
+			return span, false, !literalGroups(tree, w.Parts, sel)
 		}
 		if i+1 < len(path) {
 			if dq, ok := path[i+1].(*syntax.DblQuoted); ok {
@@ -336,9 +339,20 @@ func selectedWord(tree *parser.Tree, path []syntax.Node, sel parser.Span) (parse
 				return span, true, sel.Start > dqSpan.Start && sel.End < dqSpan.End && partsAligned(tree, dq.Parts, sel)
 			}
 		}
-		return span, false, partsAligned(tree, w.Parts, sel)
+		return span, false, partsAligned(tree, w.Parts, sel) && !literalGroups(tree, w.Parts, sel)
 	}
 	return parser.Span{}, false, false
+}
+
+func literalGroups(tree *parser.Tree, parts []syntax.WordPart, sel parser.Span) bool {
+	for _, part := range parts {
+		lit, isLit := part.(*syntax.Lit)
+		span, ok := tree.NodeSpan(part)
+		if isLit && ok && span.Start < sel.End && sel.Start < span.End && strings.ContainsAny(lit.Value, "()<>") {
+			return true
+		}
+	}
+	return false
 }
 
 func partsAligned(tree *parser.Tree, parts []syntax.WordPart, sel parser.Span) bool {
@@ -349,7 +363,7 @@ func partsAligned(tree *parser.Tree, parts []syntax.WordPart, sel parser.Span) b
 			return false
 		}
 		if lit, isLit := part.(*syntax.Lit); isLit && span.Start <= sel.Start && sel.End <= span.End && lit.Value != "" {
-			return !strings.ContainsAny(tree.Text()[sel.Start:sel.End], `\`)
+			return !strings.ContainsRune(tree.Text()[sel.Start:sel.End], '\\')
 		}
 		startOK = startOK || span.Start == sel.Start
 		endOK = endOK || span.End == sel.End
@@ -421,6 +435,9 @@ func selectedStatements(tree *parser.Tree, sel parser.Span) ([]parser.Span, bool
 		return true
 	})
 	if len(stmts) == 0 || stmts[0].Start != trimmed.Start || stmts[len(stmts)-1].End != trimmed.End {
+		return nil, false
+	}
+	if _, compound := parent.(*syntax.ArrayExpr); compound {
 		return nil, false
 	}
 	if !startsLine(text, stmts[0].Start) || strings.TrimSpace(text[stmts[len(stmts)-1].End:lineEnd(text, stmts[len(stmts)-1].End)]) != "" {
