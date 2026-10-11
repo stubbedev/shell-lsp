@@ -85,7 +85,11 @@ type value struct {
 }
 
 func (v value) join(o value) value {
-	return value{space: (v.space | o.space).normalize(), integer: v.integer | o.integer, holdsInteger: v.holdsInteger | o.holdsInteger}
+	space := (v.space | o.space).normalize()
+	if v.space == 0 || o.space == 0 {
+		space = 0
+	}
+	return value{space: space, integer: v.integer | o.integer, holdsInteger: v.holdsInteger | o.holdsInteger}
 }
 
 func (v value) substitute(entry value) value {

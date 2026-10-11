@@ -20,3 +20,18 @@ echo "$region"
 region=$(curl -s http://metadata/region)
 echo $region
 >>> SC2086 2:6
+
+### a default assigned only when the caller left it empty
+[ -z "$VERSION" ] && VERSION=1.2
+echo $VERSION
+>>> SC2086 2:6
+
+### a word assigned on one branch only
+if [ -n "$1" ]; then mode=fast; fi
+echo $mode
+>>> SC2086 2:6
+
+### a word assigned on every branch
+if [ -n "$1" ]; then mode=fast; else mode=slow; fi
+echo $mode
+>>> none
