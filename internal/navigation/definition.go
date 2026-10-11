@@ -28,7 +28,7 @@ func Definition(ctx context.Context, file *workspace.File, offset int, env Env, 
 	tree := file.Tree
 	if mode != ModeTypeDefinition && mode != ModeImplementation {
 		for _, ref := range Sources(file, env) {
-			if ref.Arg.Contains(offset) && ref.Target != nil {
+			if ref.Names(offset) && ref.Target != nil {
 				return []Location{{File: ref.Target}}, nil
 			}
 		}

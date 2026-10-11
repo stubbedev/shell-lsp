@@ -32,10 +32,15 @@ type Env struct {
 }
 
 type SourceRef struct {
-	Command parser.Command
-	File    *syntax.Word
-	Arg     parser.Span
-	Target  *workspace.File
+	Command   parser.Command
+	File      *syntax.Word
+	Arg       parser.Span
+	Directive *parser.Span
+	Target    *workspace.File
+}
+
+func (r SourceRef) Names(offset int) bool {
+	return r.Arg.Contains(offset) || r.Directive != nil && r.Directive.Contains(offset)
 }
 
 func IsSource(cmd parser.Command) bool {
@@ -44,17 +49,18 @@ func IsSource(cmd parser.Command) bool {
 }
 
 type resolvedSource struct {
-	command parser.Command
-	file    *syntax.Word
-	arg     parser.Span
-	path    string
+	command   parser.Command
+	file      *syntax.Word
+	arg       parser.Span
+	directive *parser.Span
+	path      string
 }
 
 func Sources(file *workspace.File, env Env) []SourceRef {
 	resolved := workspace.Memo(file, "navigation.sources", env.Loader.Generation(), func() []resolvedSource { return resolveSources(file, env) })
 	refs := make([]SourceRef, len(resolved))
 	for i, r := range resolved {
-		refs[i] = SourceRef{Command: r.command, File: r.file, Arg: r.arg}
+		refs[i] = SourceRef{Command: r.command, File: r.file, Arg: r.arg, Directive: r.directive}
 		if r.path == "" {
 			continue
 		}
@@ -77,6 +83,9 @@ func resolveSources(file *workspace.File, env Env) []resolvedSource {
 			continue
 		}
 		r := resolvedSource{command: cmd, file: word, arg: span}
+		if d, ok := directiveTarget(file.Tree, cmd); ok {
+			r.directive = &d.span
+		}
 		if target := resolveSource(file, cmd, word, env); target != nil {
 			r.path = target.Path
 		}
@@ -147,7 +156,8 @@ func resolveSource(file *workspace.File, cmd parser.Command, word *syntax.Word, 
 
 func sourceCandidates(file *workspace.File, cmd parser.Command, word *syntax.Word, env Env) []string {
 	scriptDir := filepath.Dir(file.Path)
-	if target, ok := directiveTarget(file.Tree, cmd); ok {
+	if d, ok := directiveTarget(file.Tree, cmd); ok {
+		target := d.target
 		if target == "/dev/null" {
 			return nil
 		}
@@ -189,23 +199,32 @@ func relativeCandidates(target string, bases, pathDirs []string, home string) []
 	return out
 }
 
-func directiveTarget(tree *parser.Tree, cmd parser.Command) (string, bool) {
+type sourceDirective struct {
+	target string
+	span   parser.Span
+}
+
+func directiveTarget(tree *parser.Tree, cmd parser.Command) (sourceDirective, bool) {
 	text := tree.Text()
 	lineStart := strings.LastIndexByte(text[:cmd.Span.Start], '\n') + 1
 	for lineStart > 0 {
 		prevStart := strings.LastIndexByte(text[:lineStart-1], '\n') + 1
-		line := strings.TrimSpace(text[prevStart : lineStart-1])
+		raw := text[prevStart : lineStart-1]
+		line := strings.TrimSpace(raw)
 		if !strings.HasPrefix(line, "#") {
-			return "", false
+			return sourceDirective{}, false
 		}
 		if d, ok := directive.Parse(line); ok {
-			if target, ok := d.Value(directive.Source); ok {
-				return target, true
+			base := prevStart + len(raw) - len(strings.TrimLeft(raw, " \t"))
+			for _, pair := range d.Pairs {
+				if pair.Key == directive.Source {
+					return sourceDirective{target: pair.Value, span: parser.Span{Start: base + pair.ValueOffset, End: base + pair.ValueEnd}}, true
+				}
 			}
 		}
 		lineStart = prevStart
 	}
-	return "", false
+	return sourceDirective{}, false
 }
 
 type evaluator struct {

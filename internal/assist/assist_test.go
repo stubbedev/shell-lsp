@@ -130,3 +130,30 @@ func TestDocumentLinks(t *testing.T) {
 		t.Errorf("url link = %+v", links[1])
 	}
 }
+
+func TestDocumentLinksIncludeSourceDirectives(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	for name, text := range map[string]string{"main.sh": "#!/bin/bash\n# shellcheck source=lib.sh\nsource \"$LIB\"\n", "lib.sh": "helper() { :; }\n"} {
+		if err := os.WriteFile(filepath.Join(root, name), []byte(text), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.DetectDialect)
+	file, err := ws.Load(filepath.Join(root, "main.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := file.Tree.Text()
+	var linked []string
+	for _, l := range DocumentLinks(file, navigation.Env{Loader: ws, Roots: []string{root}}) {
+		if !strings.HasSuffix(l.Target, "/lib.sh") {
+			t.Errorf("link %+v does not lead to lib.sh", l)
+		}
+		linked = append(linked, text[l.Span.Start:l.Span.End])
+	}
+	if strings.Join(linked, " ") != `"$LIB" lib.sh` {
+		t.Errorf("linked text = %q, want the source argument and the directive value", linked)
+	}
+}

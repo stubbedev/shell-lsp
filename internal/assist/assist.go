@@ -162,8 +162,12 @@ var urlPattern = regexp.MustCompile(`https?://[^\s<>"'` + "`" + `]+`)
 func DocumentLinks(file *workspace.File, env navigation.Env) []Link {
 	var links []Link
 	for _, ref := range navigation.Sources(file, env) {
-		if ref.Target != nil {
-			links = append(links, Link{Span: ref.Arg, Target: ref.Target.URI})
+		if ref.Target == nil {
+			continue
+		}
+		links = append(links, Link{Span: ref.Arg, Target: ref.Target.URI})
+		if ref.Directive != nil {
+			links = append(links, Link{Span: *ref.Directive, Target: ref.Target.URI})
 		}
 	}
 	for _, c := range file.Tree.Comments {

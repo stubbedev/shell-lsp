@@ -130,6 +130,27 @@ source ./lib/a.sh
 	}
 }
 
+func TestSourceDirectiveValuesNavigate(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, map[string]string{
+		"main.sh":     "#!/bin/bash\n  # shellcheck source=lib/util.sh\nsource \"$LIB/util.sh\"\nsource ./lib/util.sh\n",
+		"lib/util.sh": "util() { :; }\n",
+	})
+	main := f.load(t, "main.sh")
+	refs := Sources(main, f.env)
+	if len(refs) != 2 || refs[0].Directive == nil || refs[1].Directive != nil {
+		t.Fatalf("Sources() = %+v", refs)
+	}
+	if got := main.Tree.Text()[refs[0].Directive.Start:refs[0].Directive.End]; got != "lib/util.sh" {
+		t.Errorf("directive span covers %q", got)
+	}
+	locs := f.define(t, "main.sh", "lib/util.sh", 0, ModeDefinition)
+	if len(locs) != 1 || filepath.Base(locs[0].File.Path) != "util.sh" {
+		t.Errorf("definition on the source= value = %v", describe(f, locs))
+	}
+}
+
 func TestChainIsTransitiveAndCycleSafe(t *testing.T) {
 	t.Parallel()
 
