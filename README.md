@@ -142,6 +142,7 @@ and keeps the script's meaning; their edits are computed on
 | Toggle the function keyword | `refactor.rewrite` | Switches between `function f { ... }` and `f() { ... }`; the keyword form is only offered in bash and zsh, and ksh is left alone because there the two forms scope variables differently |
 | Add strict mode | `source.strictMode` | Inserts `set -euo pipefail` (`set -eu` in sh, dash and busybox) after the shebang and leading comments of a script that does not already enable all of them |
 | Convert to case | `refactor.rewrite` | Rewrites an `if`/`elif` chain whose every condition compares the same expansion for equality (`[ "$x" = lit ]`, `test`, `[[ $x == pattern ]]`, joined with `\|\|` or `-o`) into `case`, keeping each body and the `else` branch |
+| Move function to a sourced file | `refactor.move` | Moves a top-level function, with its doc comment, to the end of a workspace file this script sources before defining the function, as one edit across both files |
 
 ## Commands
 

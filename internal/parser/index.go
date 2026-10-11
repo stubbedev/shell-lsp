@@ -957,6 +957,16 @@ func IsName(s string) bool {
 func docComment(text string, start int) string {
 	lineStart := strings.LastIndexByte(text[:start], '\n') + 1
 	var lines []string
+	for line := range strings.Lines(text[CommentBlockStart(text, lineStart):lineStart]) {
+		body := strings.TrimPrefix(strings.TrimPrefix(strings.TrimSpace(line), "#"), " ")
+		if !strings.HasPrefix(body, "shellcheck ") {
+			lines = append(lines, body)
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+func CommentBlockStart(text string, lineStart int) int {
 	for lineStart > 0 {
 		prevStart := strings.LastIndexByte(text[:lineStart-1], '\n') + 1
 		line := strings.TrimSpace(text[prevStart : lineStart-1])
@@ -964,14 +974,8 @@ func docComment(text string, start int) string {
 			break
 		}
 		lineStart = prevStart
-		body := strings.TrimPrefix(strings.TrimPrefix(line, "#"), " ")
-		if strings.HasPrefix(body, "shellcheck ") {
-			continue
-		}
-		lines = append(lines, body)
 	}
-	slices.Reverse(lines)
-	return strings.Join(lines, "\n")
+	return lineStart
 }
 
 func (b *builder) isElseBranch(n *syntax.IfClause) bool {

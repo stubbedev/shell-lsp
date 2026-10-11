@@ -5,14 +5,17 @@ import (
 	"encoding/json"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/stubbedev/shell-lsp/internal/actions"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
+	"github.com/stubbedev/shell-lsp/internal/navigation"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
+	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
 const (
@@ -26,6 +29,7 @@ var codeActionKinds = []string{
 	string(actions.QuickFix),
 	string(actions.RefactorExtract),
 	string(actions.RefactorInline),
+	string(actions.RefactorMove),
 	string(actions.RefactorRewrite),
 	string(actions.SourceFixAll),
 	string(actions.SourceStrictMode),
@@ -47,8 +51,9 @@ func (s *Server) handleCodeAction(ctx context.Context, docs *docstore.View, para
 		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
 	}
 	only := actionParams.Context.Only
+	doc, sources := s.actionDocument(snap)
 	in := actions.Input{
-		Tree: snap.tree,
+		Document: doc,
 		Selection: parser.Span{
 			Start: snap.doc.PositionToOffset(actionParams.Range.Start, snap.encoding),
 			End:   snap.doc.PositionToOffset(actionParams.Range.End, snap.encoding),
@@ -66,7 +71,7 @@ func (s *Server) handleCodeAction(ctx context.Context, docs *docstore.View, para
 		if !wants(only, string(a.Kind)) {
 			continue
 		}
-		action, err := s.codeAction(snap, actionParams.Context.Diagnostics, a, lazy)
+		action, err := s.codeAction(docs, snap, sources, actionParams.Context.Diagnostics, a, lazy)
 		if err != nil {
 			return nil, err
 		}
@@ -83,7 +88,7 @@ func (s *Server) handleCodeAction(ctx context.Context, docs *docstore.View, para
 	return out, nil
 }
 
-func (s *Server) codeAction(snap *snapshot, contextDiags []lsp.Diagnostic, a actions.Action, lazy bool) (lsp.CodeAction, error) {
+func (s *Server) codeAction(docs *docstore.View, snap *snapshot, sources func() actionSources, contextDiags []lsp.Diagnostic, a actions.Action, lazy bool) (lsp.CodeAction, error) {
 	action := lsp.CodeAction{Title: a.Title, Kind: string(a.Kind), IsPreferred: a.Preferred}
 	for _, i := range a.Diagnostics {
 		action.Diagnostics = append(action.Diagnostics, contextDiags[i])
@@ -96,9 +101,47 @@ func (s *Server) codeAction(snap *snapshot, contextDiags []lsp.Diagnostic, a act
 		action.Data = data
 		return action, nil
 	}
-	edit := s.workspaceEdit(snap.doc, snap.encoding, a.Edits)
+	edit, err := s.changeEdit(docs, snap, sources, a.Edits, a.Others)
+	if err != nil {
+		return lsp.CodeAction{}, err
+	}
 	action.Edit = &edit
 	return action, nil
+}
+
+type actionSources struct {
+	list  []actions.Source
+	files map[string]*workspace.File
+}
+
+func (s *Server) actionDocument(snap *snapshot) (actions.Document, func() actionSources) {
+	resolve := sync.OnceValue(func() actionSources {
+		roots := s.workspace.Roots()
+		out := actionSources{files: map[string]*workspace.File{}}
+		for _, ref := range navigation.Sources(snap.file, s.navigationEnv()) {
+			target := ref.Target
+			if target == nil || target.URI == snap.file.URI || !slices.ContainsFunc(roots, func(root string) bool { return workspace.Within(target.Path, root) }) {
+				continue
+			}
+			out.files[target.URI] = target
+			out.list = append(out.list, actions.Source{URI: target.URI, Name: relativeName(snap.file.Path, target.Path), Tree: target.Tree, Command: ref.Command})
+		}
+		return out
+	})
+	return actions.Document{Tree: snap.tree, Sources: func() []actions.Source { return resolve().list }}, resolve
+}
+
+func (s *Server) changeEdit(docs *docstore.View, snap *snapshot, sources func() actionSources, edits []textedit.Edit, others []actions.FileEdits) (lsp.WorkspaceEdit, error) {
+	files := []fileEdits{{doc: snap.doc, versioned: true, edits: edits}}
+	for _, o := range others {
+		target, ok := sources().files[o.URI]
+		if !ok {
+			return lsp.WorkspaceEdit{}, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "refactoring edits %s, which %s does not source", o.URI, snap.doc.URI)
+		}
+		_, open := docs.Document(o.URI)
+		files = append(files, fileEdits{doc: target.Doc, versioned: open, edits: o.Edits})
+	}
+	return s.multiFileEdit(snap.encoding, files), nil
 }
 
 func (s *Server) handleCodeActionResolve(_ context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
@@ -120,11 +163,15 @@ func (s *Server) handleCodeActionResolve(_ context.Context, docs *docstore.View,
 	if snap.doc.Version != data.Version {
 		return nil, jsonrpc.NewError(jsonrpc.CodeContentModified, "%s changed since the action was offered", data.URI)
 	}
-	change, ok := actions.Compute(actions.Document{Tree: snap.tree}, data.Refactor)
+	doc, sources := s.actionDocument(snap)
+	change, ok := actions.Compute(doc, data.Refactor)
 	if !ok {
 		return nil, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "the %s refactoring no longer applies", data.Refactor.Kind)
 	}
-	edit := s.workspaceEdit(snap.doc, snap.encoding, change.Edits)
+	edit, err := s.changeEdit(docs, snap, sources, change.Edits, change.Others)
+	if err != nil {
+		return nil, err
+	}
 	action.Edit = &edit
 	action.Data = nil
 	return action, nil

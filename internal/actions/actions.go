@@ -18,6 +18,7 @@ const (
 	QuickFix         Kind = "quickfix"
 	RefactorExtract  Kind = "refactor.extract"
 	RefactorInline   Kind = "refactor.inline"
+	RefactorMove     Kind = "refactor.move"
 	RefactorRewrite  Kind = "refactor.rewrite"
 	SourceFixAll     Kind = "source.fixAll.shellLsp"
 	SourceStrictMode Kind = "source.strictMode"
@@ -44,12 +45,14 @@ const (
 	FunctionKeyword  RefactorKind = "functionKeyword"
 	StrictMode       RefactorKind = "strictMode"
 	IfToCase         RefactorKind = "ifToCase"
+	MoveFunction     RefactorKind = "moveFunction"
 )
 
 type Refactor struct {
-	Kind  RefactorKind `json:"kind"`
-	Start int          `json:"start"`
-	End   int          `json:"end"`
+	Kind   RefactorKind `json:"kind"`
+	Start  int          `json:"start"`
+	End    int          `json:"end"`
+	Target string       `json:"target,omitempty"`
 }
 
 type Action struct {
@@ -58,11 +61,20 @@ type Action struct {
 	Diagnostics []int
 	Preferred   bool
 	Edits       []textedit.Edit
+	Others      []FileEdits
 	Refactor    *Refactor
 }
 
+type Source struct {
+	URI     string
+	Name    string
+	Tree    *parser.Tree
+	Command parser.Command
+}
+
 type Document struct {
-	Tree *parser.Tree
+	Tree    *parser.Tree
+	Sources func() []Source
 }
 
 type Input struct {
@@ -72,28 +84,43 @@ type Input struct {
 	AllDiagnostics []Diagnostic
 }
 
-type Change struct {
-	Title string
+type FileEdits struct {
+	URI   string
 	Edits []textedit.Edit
+}
+
+type Change struct {
+	Title  string
+	Edits  []textedit.Edit
+	Others []FileEdits
 }
 
 type refactoring struct {
 	kind    RefactorKind
 	action  Kind
 	compute func(*site) (Change, bool)
+	targets func(*site) []string
 }
 
 var refactorings = []refactoring{
-	{ExtractVariable, RefactorExtract, extractVariable},
-	{ExtractFunction, RefactorExtract, extractFunction},
-	{ToggleQuotes, RefactorRewrite, toggleQuotes},
-	{DeclareLocal, RefactorRewrite, declareLocal},
-	{ConvertBackticks, RefactorRewrite, convertBackticks},
-	{DoubleBrackets, RefactorRewrite, doubleBrackets},
-	{InlineVariable, RefactorInline, inlineVariable},
-	{FunctionKeyword, RefactorRewrite, toggleFunctionKeyword},
-	{StrictMode, SourceStrictMode, strictMode},
-	{IfToCase, RefactorRewrite, ifToCase},
+	{ExtractVariable, RefactorExtract, extractVariable, nil},
+	{ExtractFunction, RefactorExtract, extractFunction, nil},
+	{ToggleQuotes, RefactorRewrite, toggleQuotes, nil},
+	{DeclareLocal, RefactorRewrite, declareLocal, nil},
+	{ConvertBackticks, RefactorRewrite, convertBackticks, nil},
+	{DoubleBrackets, RefactorRewrite, doubleBrackets, nil},
+	{InlineVariable, RefactorInline, inlineVariable, nil},
+	{FunctionKeyword, RefactorRewrite, toggleFunctionKeyword, nil},
+	{StrictMode, SourceStrictMode, strictMode, nil},
+	{IfToCase, RefactorRewrite, ifToCase, nil},
+	{MoveFunction, RefactorMove, moveFunction, moveTargets},
+}
+
+func (r refactoring) targetsAt(s *site) []string {
+	if r.targets == nil {
+		return []string{""}
+	}
+	return r.targets(s)
 }
 
 func Refactorings() []RefactorKind {
@@ -111,12 +138,15 @@ func Actions(in Input) []Action {
 	}
 	s := newSite(in.Document, in.Selection)
 	for _, ref := range refactorings {
-		change, ok := ref.compute(s)
-		if !ok {
-			continue
+		for _, target := range ref.targetsAt(s) {
+			s.target = target
+			change, ok := ref.compute(s)
+			if !ok {
+				continue
+			}
+			r := Refactor{Kind: ref.kind, Start: in.Selection.Start, End: in.Selection.End, Target: target}
+			out = append(out, Action{Title: change.Title, Kind: ref.action, Edits: change.Edits, Others: change.Others, Refactor: &r})
 		}
-		r := Refactor{Kind: ref.kind, Start: in.Selection.Start, End: in.Selection.End}
-		out = append(out, Action{Title: change.Title, Kind: ref.action, Edits: change.Edits, Refactor: &r})
 	}
 	if fixAll := FixAll(in.AllDiagnostics); len(fixAll) > 0 {
 		out = append(out, Action{Title: "Apply all automatic fixes", Kind: SourceFixAll, Edits: fixAll})
@@ -205,13 +235,23 @@ func directiveEdit(text string, lineAt int, indent, code string) textedit.Edit {
 
 type site struct {
 	Document
-	sel    parser.Span
-	path   []syntax.Node
-	walked bool
+	sel     parser.Span
+	target  string
+	path    []syntax.Node
+	walked  bool
+	sourced []Source
+	listed  bool
 }
 
 func newSite(doc Document, sel parser.Span) *site {
 	return &site{Document: doc, sel: sel}
+}
+
+func (s *site) sources() []Source {
+	if s.Sources != nil && !s.listed {
+		s.sourced, s.listed = s.Sources(), true
+	}
+	return s.sourced
 }
 
 func (s *site) pathAt() []syntax.Node {
@@ -226,7 +266,9 @@ func Compute(doc Document, r Refactor) (Change, bool) {
 	if i < 0 {
 		return Change{}, false
 	}
-	return refactorings[i].compute(newSite(doc, parser.Span{Start: r.Start, End: r.End}))
+	s := newSite(doc, parser.Span{Start: r.Start, End: r.End})
+	s.target = r.Target
+	return refactorings[i].compute(s)
 }
 
 func extractVariable(s *site) (Change, bool) {

@@ -153,11 +153,14 @@ func (s *Server) imports(file *workspace.File) []parser.Import {
 	chain := navigation.Chain(file, s.navigationEnv())
 	imports := make([]parser.Import, len(chain))
 	for i, f := range chain {
-		name := f.Path
-		if rel, err := filepath.Rel(filepath.Dir(file.Path), f.Path); err == nil && !strings.HasPrefix(rel, "..") {
-			name = rel
-		}
-		imports[i] = parser.Import{Name: name, Tree: f.Tree}
+		imports[i] = parser.Import{Name: relativeName(file.Path, f.Path), Tree: f.Tree}
 	}
 	return imports
+}
+
+func relativeName(from, to string) string {
+	if rel, err := filepath.Rel(filepath.Dir(from), to); err == nil && !strings.HasPrefix(rel, "..") {
+		return rel
+	}
+	return to
 }
