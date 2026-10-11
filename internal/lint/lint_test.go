@@ -2,8 +2,12 @@ package lint
 
 import (
 	"errors"
+	"slices"
 	"strconv"
 	"testing"
+
+	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/parser"
 )
 
 func TestCodesRoundTripThroughText(t *testing.T) {
@@ -16,6 +20,47 @@ func TestCodesRoundTripThroughText(t *testing.T) {
 	}
 	if (nativeBase+1001).String() != "SL1001" || Code(2034).String() != "SC2034" {
 		t.Errorf("codes render as %s and %s", nativeBase+1001, Code(2034))
+	}
+}
+
+func TestOptionalChecksNameEveryOptIn(t *testing.T) {
+	t.Parallel()
+
+	names := OptionalChecks()
+	if !slices.IsSorted(names) || len(slices.Compact(slices.Clone(names))) != len(names) {
+		t.Errorf("OptionalChecks() = %v, want sorted unique names", names)
+	}
+	for _, want := range []string{uppercaseOptional, "require-variable-braces", "arithmetic-injection"} {
+		if !slices.Contains(names, want) {
+			t.Errorf("OptionalChecks() lacks %s", want)
+		}
+	}
+	for code, m := range catalog {
+		if m.optional != "" && !slices.Contains(names, m.optional) {
+			t.Errorf("%s is gated by %s, which OptionalChecks() lacks", code, m.optional)
+		}
+	}
+}
+
+func TestNoExtendedAnalysisDefaultsTheDirectiveOff(t *testing.T) {
+	t.Parallel()
+
+	codes := func(script string, opts Options) []Code {
+		var out []Code
+		for _, f := range Check(parser.Parse(script, dialect.Posix), nil, opts) {
+			out = append(out, f.Code)
+		}
+		return out
+	}
+	unreachable := "#!/bin/sh\nexit 0; echo never\n"
+	if got := codes(unreachable, Options{}); !slices.Contains(got, 2317) {
+		t.Fatalf("extended analysis is off by default: %v", got)
+	}
+	if got := codes(unreachable, Options{NoExtendedAnalysis: true}); slices.Contains(got, 2317) {
+		t.Errorf("NoExtendedAnalysis kept data-flow findings: %v", got)
+	}
+	if got := codes("#!/bin/sh\n# shellcheck extended-analysis=true\nexit 0; echo never\n", Options{NoExtendedAnalysis: true}); !slices.Contains(got, 2317) {
+		t.Errorf("a file-wide directive did not override NoExtendedAnalysis: %v", got)
 	}
 }
 

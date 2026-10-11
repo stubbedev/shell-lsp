@@ -95,6 +95,8 @@ type Options struct {
 	DialectSource DialectSource
 	Sources       []Source
 	RCFile        bool
+
+	NoExtendedAnalysis bool
 }
 
 func Check(tree *parser.Tree, imports []parser.Import, opts Options) []Finding {

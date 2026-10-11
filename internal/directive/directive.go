@@ -60,15 +60,23 @@ func Parse(comment string) (Directive, bool) {
 	if i < len(comment) && !isBlank(comment[i]) {
 		return Directive{}, false
 	}
+	return parsePairs(comment, i)
+}
+
+func ParseSettings(line string) (Directive, bool) {
+	return parsePairs(line, 0)
+}
+
+func parsePairs(s string, i int) (Directive, bool) {
 	var d Directive
 	for {
-		i = skipBlanks(comment, i)
-		if i == len(comment) || comment[i] == '#' {
+		i = skipBlanks(s, i)
+		if i == len(s) || s[i] == '#' {
 			return d, len(d.Pairs) > 0
 		}
-		pair, end, problem := scanPair(comment, i)
+		pair, end, problem := scanPair(s, i)
 		if problem != nil {
-			if len(d.Pairs) == 0 && !startsWithKey(comment[i:]) {
+			if len(d.Pairs) == 0 && !startsWithKey(s[i:]) {
 				return Directive{}, false
 			}
 			d.Problem = problem

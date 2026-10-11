@@ -261,8 +261,8 @@ type fileWide struct {
 	shell    bool
 }
 
-func fileWideSettings(directives []directiveComment, firstCommand int, enabled []string) fileWide {
-	out := fileWide{optional: setOf(enabled...), extended: true}
+func fileWideSettings(directives []directiveComment, firstCommand int, opts Options) fileWide {
+	out := fileWide{optional: setOf(opts.Optional...), extended: !opts.NoExtendedAnalysis}
 	extendedSet := false
 	for _, d := range directives {
 		if _, found := d.parsed.Value(directive.Shell); found {

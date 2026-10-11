@@ -61,6 +61,25 @@ func TestParse(t *testing.T) {
 	}
 }
 
+func TestParseSettings(t *testing.T) {
+	t.Parallel()
+
+	got, ok := ParseSettings("disable=SC2034,SC2086 enable=all # team default")
+	want := Directive{Pairs: []Pair{
+		{Key: "disable", Value: "SC2034,SC2086", KeyOffset: 0, ValueOffset: 8, ValueEnd: 21},
+		{Key: "enable", Value: "all", KeyOffset: 22, ValueOffset: 29, ValueEnd: 32},
+	}}
+	if !ok || !reflect.DeepEqual(got, want) {
+		t.Errorf("ParseSettings = %+v, %v; want %+v", got, ok, want)
+	}
+	if d, ok := ParseSettings("disable"); !ok || d.Problem == nil || d.Problem.Kind != MissingEquals {
+		t.Errorf("a key without a value = %+v, %v; want a missing-equals problem", d, ok)
+	}
+	if _, ok := ParseSettings("not a setting"); ok {
+		t.Error("free text parsed as a setting")
+	}
+}
+
 func TestKnown(t *testing.T) {
 	t.Parallel()
 
