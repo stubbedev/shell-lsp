@@ -49,6 +49,7 @@ type pass struct {
 	emptinessTests map[int]bool
 	maskWalked     map[syntax.Node]bool
 	braceScan      *braceScanner
+	executed       *bool
 	quotedHeredocs map[int]bool
 
 	normalized Normalized

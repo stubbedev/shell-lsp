@@ -93,11 +93,18 @@ func checkCarriageReturns(p *pass) {
 }
 
 func (p *pass) carriageReturnOffsets() []int {
+	raw := strings.IndexByte(p.text, '\r')
+	if raw < 0 {
+		return p.normalized.CarriageReturns
+	}
 	offsets := slices.Clone(p.normalized.CarriageReturns)
-	for i := range len(p.text) {
-		if p.text[i] == '\r' {
-			offsets = append(offsets, i)
+	for raw >= 0 {
+		offsets = append(offsets, raw)
+		next := strings.IndexByte(p.text[raw+1:], '\r')
+		if next < 0 {
+			break
 		}
+		raw += next + 1
 	}
 	slices.Sort(offsets)
 	return slices.Compact(offsets)

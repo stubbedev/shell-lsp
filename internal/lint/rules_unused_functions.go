@@ -67,6 +67,14 @@ func checkUnusedFunctions(p *pass) {
 }
 
 func (p *pass) executedScript() bool {
+	if p.executed == nil {
+		executed := p.runsAsScript()
+		p.executed = &executed
+	}
+	return *p.executed
+}
+
+func (p *pass) runsAsScript() bool {
 	if p.bats || p.rcFile || p.sourceable() || p.libraryShaped() || p.configuresInteractiveShell() {
 		return false
 	}
@@ -89,7 +97,13 @@ func (p *pass) sourceable() bool {
 			return true
 		}
 	}
-	return comparesScriptName(p.tree.File)
+	return mentionsScriptName(p.text) && comparesScriptName(p.tree.File)
+}
+
+var scriptNameSpellings = []string{"$0", "${0", "${!0", "${#0", "${("}
+
+func mentionsScriptName(text string) bool {
+	return slices.ContainsFunc(scriptNameSpellings, func(spelling string) bool { return strings.Contains(text, spelling) })
 }
 
 func (p *pass) configuresInteractiveShell() bool {
