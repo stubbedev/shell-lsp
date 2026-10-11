@@ -321,7 +321,7 @@ func selectedWord(tree *parser.Tree, path []syntax.Node, sel parser.Span) (parse
 			continue
 		}
 		span, ok := tree.NodeSpan(w)
-		if !ok || sel.End > span.End {
+		if !ok || sel.End > span.End || (i > 0 && parser.IsArithmetic(path[i-1])) {
 			return parser.Span{}, false, false
 		}
 		if span == sel {

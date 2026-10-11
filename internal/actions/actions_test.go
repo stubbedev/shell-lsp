@@ -54,7 +54,7 @@ func TestExtractVariable(t *testing.T) {
 			t.Errorf("extract %q = %q (%q, %t), want %q", tc.src, got, title, ok, tc.want)
 		}
 	}
-	for _, src := range []string{"echo a«b c»d\n", "for f in *; do echo «$f»; done\n", "echo «a\nb»\n", "echo \"«$x\" \"$y»\"\n", "cat <<EOF\nbody\n«EOF»\n", "cat <<«EOF»\nbody\nEOF\n", "cat <<EOF\n«body»\nEOF\n"} {
+	for _, src := range []string{"(( «n» += 1 ))\n", "echo $(( «n» * 2 ))\n", "echo a«b c»d\n", "for f in *; do echo «$f»; done\n", "echo «a\nb»\n", "echo \"«$x\" \"$y»\"\n", "cat <<EOF\nbody\n«EOF»\n", "cat <<«EOF»\nbody\nEOF\n", "cat <<EOF\n«body»\nEOF\n"} {
 		if got, _, ok := refactor(t, ExtractVariable, src); ok {
 			t.Errorf("extract %q offered: %q", src, got)
 		}
