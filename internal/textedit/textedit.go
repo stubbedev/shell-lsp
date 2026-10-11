@@ -14,7 +14,7 @@ type Edit struct {
 
 func Apply(text string, edits []Edit) string {
 	sorted := slices.Clone(edits)
-	slices.SortStableFunc(sorted, func(a, b Edit) int { return cmp.Compare(a.Start, b.Start) })
+	slices.SortStableFunc(sorted, byPosition)
 	var sb strings.Builder
 	last := 0
 	for _, e := range sorted {
@@ -26,6 +26,10 @@ func Apply(text string, edits []Edit) string {
 	return sb.String()
 }
 
+func byPosition(a, b Edit) int {
+	return cmp.Or(cmp.Compare(a.Start, b.Start), cmp.Compare(a.End, b.End))
+}
+
 func NonOverlapping(groups [][]Edit) []Edit {
 	var kept []Edit
 	for _, group := range groups {
@@ -34,7 +38,7 @@ func NonOverlapping(groups [][]Edit) []Edit {
 		}
 		kept = append(kept, group...)
 	}
-	slices.SortStableFunc(kept, func(a, b Edit) int { return cmp.Compare(a.Start, b.Start) })
+	slices.SortStableFunc(kept, byPosition)
 	return kept
 }
 
