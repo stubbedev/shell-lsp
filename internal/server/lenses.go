@@ -51,7 +51,10 @@ func (s *Server) handleCodeLens(_ context.Context, docs *docstore.View, params j
 		seen[def.Name] = true
 		spans = append(spans, def.NameSpan)
 	}
-	out := make([]lsp.CodeLens, 0, len(spans))
+	out, err := appendBatsLenses(make([]lsp.CodeLens, 0, len(file.Tree.Tests)+1+len(spans)), file, enc)
+	if err != nil {
+		return nil, err
+	}
 	for _, span := range spans {
 		r := file.Doc.RangeFor(span.Start, span.End, enc)
 		data, err := json.Marshal(lensData{URI: file.URI, Position: r.Start})
@@ -67,6 +70,9 @@ func (s *Server) handleCodeLensResolve(ctx context.Context, docs *docstore.View,
 	lens, err := lsp.DecodeParams[lsp.CodeLens](params)
 	if err != nil {
 		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing codeLens/resolve params: %v", err)
+	}
+	if lens.Command != nil {
+		return lens, nil
 	}
 	var data lensData
 	if err := json.Unmarshal(lens.Data, &data); err != nil {

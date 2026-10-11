@@ -58,6 +58,17 @@ func TestLineCount(t *testing.T) {
 	}
 }
 
+func TestLineBounds(t *testing.T) {
+	t.Parallel()
+
+	doc := mustDoc(t, openDoc(t, "a\nbb\nccc"))
+	for line, want := range map[int][2]int{0: {0, 1}, 1: {2, 4}, 2: {5, 8}, 3: {8, 8}, -1: {8, 8}} {
+		if start, end := doc.LineBounds(line); start != want[0] || end != want[1] {
+			t.Errorf("LineBounds(%d) = %d, %d, want %v", line, start, end, want)
+		}
+	}
+}
+
 func TestOffsetToPositionRoundTrip(t *testing.T) {
 	t.Parallel()
 

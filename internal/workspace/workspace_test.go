@@ -231,3 +231,15 @@ func TestWithin(t *testing.T) {
 		}
 	}
 }
+
+func TestRootOfPicksTheInnermostRoot(t *testing.T) {
+	t.Parallel()
+
+	ws := New(nil, nil)
+	ws.SetRoots([]string{"/a", "/a/b", "/c"})
+	for path, want := range map[string]string{"/a/b/x.bats": "/a/b", "/a/x.bats": "/a", "/c/d/e.bats": "/c", "/z/x.bats": ""} {
+		if got, ok := ws.RootOf(path); got != want || ok != (want != "") {
+			t.Errorf("RootOf(%q) = %q, %t, want %q", path, got, ok, want)
+		}
+	}
+}

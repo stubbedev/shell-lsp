@@ -1,9 +1,11 @@
 package diagnostics
 
 import (
+	"reflect"
 	"slices"
 	"testing"
 
+	"github.com/stubbedev/shell-lsp/internal/bats"
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/lint"
@@ -63,5 +65,19 @@ func TestLintMapsFindings(t *testing.T) {
 	unquoted, ok := byCode["SC2086"]
 	if !ok || unquoted.Severity != lsp.SeverityInformation || unquoted.Source != Source || unquoted.CodeDescription == nil {
 		t.Errorf("SC2086 = %+v", unquoted)
+	}
+}
+
+func TestBatsDiagnosticsCoverTheFailingLine(t *testing.T) {
+	t.Parallel()
+
+	doc := document(t, "#!/usr/bin/env bats\n@test \"x\" {\n\t[ 1 -eq 2 ]\n}\n")
+	got := Bats([]bats.Failure{{Test: "x", Line: 3, Message: "test failed: x"}, {Test: "gone", Line: 40, Message: "test failed: gone"}}, doc, docstore.EncodingUTF16)
+	want := []lsp.Diagnostic{
+		{Range: lsp.Range{Start: lsp.Position{Line: 2, Character: 1}, End: lsp.Position{Line: 2, Character: 12}}, Severity: lsp.SeverityError, Source: BatsSource, Message: "test failed: x"},
+		{Range: lsp.Range{Start: lsp.Position{Line: 4}, End: lsp.Position{Line: 4}}, Severity: lsp.SeverityError, Source: BatsSource, Message: "test failed: gone"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("diagnostics = %+v\nwant         %+v", got, want)
 	}
 }

@@ -53,6 +53,7 @@ type Server struct {
 	environment shellEnvironment
 	workspace   *workspace.Workspace
 	semantic    *semanticCache
+	bats        *batsResults
 
 	mu             sync.Mutex
 	shutdown       bool
@@ -88,6 +89,7 @@ func New(conn *jsonrpc.Conn, version string) *Server {
 		snapshots:    newSnapshotCache(),
 		warmer:       newWarmer(),
 		semantic:     newSemanticCache(),
+		bats:         newBatsResults(),
 		settings:     config.Default(),
 		commandDocs:  commandDocs{pages: pages},
 		editorconfig: editorconfig.NewResolver(os.ReadFile, time.Now, workspace.DiskRecheck),

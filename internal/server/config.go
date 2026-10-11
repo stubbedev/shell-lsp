@@ -177,9 +177,18 @@ func (s *Server) handleDidChangeWorkspaceFolders(ctx context.Context, params jso
 }
 
 func (s *Server) refreshDiagnostics(ctx context.Context, clientRefresh bool) {
+	docs := s.docs.View().Documents()
+	uris := make([]string, len(docs))
+	for i, doc := range docs {
+		uris[i] = doc.URI
+	}
+	s.refreshDiagnosticsOf(ctx, clientRefresh, uris)
+}
+
+func (s *Server) refreshDiagnosticsOf(ctx context.Context, clientRefresh bool, uris []string) {
 	if s.push != nil {
-		for _, doc := range s.docs.View().Documents() {
-			s.push.schedule(doc.URI)
+		for _, uri := range uris {
+			s.push.schedule(uri)
 		}
 		return
 	}

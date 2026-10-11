@@ -115,6 +115,13 @@ func (d *Document) Text() string { return d.text }
 
 func (d *Document) LineCount() int { return len(d.lineStart) }
 
+func (d *Document) LineBounds(line int) (int, int) {
+	if line < 0 || line >= len(d.lineStart) {
+		return len(d.text), len(d.text)
+	}
+	return d.lineStart[line], d.lineEnd(line)
+}
+
 func (d *Document) lineEnd(line int) int {
 	if line+1 < len(d.lineStart) {
 		return d.lineStart[line+1] - 1

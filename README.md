@@ -109,6 +109,24 @@ directive for the command or the whole file.
 | --- | --- | --- |
 | `shellLsp.fixAll` | document URI | Applies every non-overlapping lint autofix in the document via `workspace/applyEdit` |
 | `shellLsp.applyEdit` | `WorkspaceEdit` | Applies the edit via `workspace/applyEdit`; code actions use it for clients without code action literal support |
+| `shellLsp.runBats` | `{uri, test?}` | Runs the Bats file, or only the named test, and reports the results |
+
+## Bats
+
+In files with a `bats` shebang, every `@test` appears in the outline and in
+workspace symbols, and `setup`, `teardown`, `setup_file` and `teardown_file`
+are marked as hooks. Code lenses offer "Run file" at the top of the file and
+"Run test" above each test whose name is a plain string.
+
+Running uses the project's own bats: `test/bats/bin/bats`,
+`node_modules/.bin/bats` or `test/libs/bats/bin/bats` under the workspace
+folder, then `bats` on `PATH`. It runs with `--tap` (and an anchored
+`--filter` for a single test) from the workspace folder, reports progress per
+test, shows a passed/failed/skipped summary, and turns each failure into an
+error diagnostic with source `bats` on the failing line, or on the test when
+the output names no line in the file. Those diagnostics stay until the file
+or that test runs again. A run is stopped when cancelled and after 30
+minutes.
 
 ## Recipes
 

@@ -175,6 +175,18 @@ func (w *Workspace) Roots() []string {
 	return slices.Clone(w.roots)
 }
 
+func (w *Workspace) RootOf(path string) (string, bool) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	best := ""
+	for _, root := range w.roots {
+		if Within(path, root) && len(root) > len(best) {
+			best = root
+		}
+	}
+	return best, best != ""
+}
+
 func (w *Workspace) Invalidate(path string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()

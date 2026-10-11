@@ -27,7 +27,7 @@ advertised capability, and that nothing else is handled or advertised.
 | `documentLink/resolve` | not advertised | `documentLinkProvider.resolveProvider` | links are complete when returned |
 | `textDocument/hover` | implemented | `hoverProvider` |  |
 | `textDocument/codeLens` | implemented | `codeLensProvider` |  |
-| `codeLens/resolve` | implemented | `codeLensProvider.resolveProvider` | reference counts are computed on resolve |
+| `codeLens/resolve` | implemented | `codeLensProvider.resolveProvider` | reference counts are computed on resolve; Bats run lenses arrive resolved |
 | `textDocument/foldingRange` | implemented | `foldingRangeProvider` |  |
 | `textDocument/selectionRange` | implemented | `selectionRangeProvider` |  |
 | `textDocument/documentSymbol` | implemented | `documentSymbolProvider` |  |
@@ -57,7 +57,7 @@ advertised capability, and that nothing else is handled or advertised.
 | `textDocument/inlineCompletion` | not advertised | `inlineCompletionProvider` | completion items cover the same ground |
 | `workspace/symbol` | implemented | `workspaceSymbolProvider` |  |
 | `workspaceSymbol/resolve` | not advertised | `workspaceSymbolProvider.resolveProvider` | symbols carry full locations |
-| `workspace/executeCommand` | implemented | `executeCommandProvider` | shellLsp.fixAll, shellLsp.applyEdit, shellLsp.showReferences |
+| `workspace/executeCommand` | implemented | `executeCommandProvider` | shellLsp.fixAll, shellLsp.applyEdit, shellLsp.showReferences, shellLsp.runBats |
 | `workspace/willCreateFiles` | not advertised | `workspace.fileOperations.willCreate` | nothing to edit before a file exists |
 | `workspace/willRenameFiles` | implemented | `workspace.fileOperations.willRename` | rewrites source paths and shebangs |
 | `workspace/willDeleteFiles` | not advertised | `workspace.fileOperations.willDelete` | nothing to edit before a file is deleted |
@@ -92,7 +92,7 @@ advertised capability, and that nothing else is handled or advertised.
 
 | Method | Status | Capability | Notes |
 | --- | --- | --- | --- |
-| `window/workDoneProgress/create` | sent |  | workspace indexing progress |
+| `window/workDoneProgress/create` | sent |  | workspace indexing and Bats run progress |
 | `window/showMessageRequest` | never sent |  | the server never needs a decision from the user |
 | `window/showDocument` | never sent |  |  |
 | `client/registerCapability` | sent |  | file watchers |
@@ -104,7 +104,7 @@ advertised capability, and that nothing else is handled or advertised.
 | `workspace/semanticTokens/refresh` | sent |  | after settings change |
 | `workspace/inlayHint/refresh` | sent |  | after settings change |
 | `workspace/inlineValue/refresh` | never sent |  | inline values are computed per request |
-| `workspace/diagnostic/refresh` | sent |  | after settings change |
+| `workspace/diagnostic/refresh` | sent |  | after settings change and after a Bats run |
 | `workspace/foldingRange/refresh` | never sent |  | folding depends only on the document |
 | `workspace/textDocumentContent/refresh` | never sent |  | the server owns no virtual documents |
 
@@ -112,7 +112,7 @@ advertised capability, and that nothing else is handled or advertised.
 
 | Method | Status | Capability | Notes |
 | --- | --- | --- | --- |
-| `window/showMessage` | sent |  | rejected configuration |
+| `window/showMessage` | sent |  | rejected configuration and Bats run summaries |
 | `window/logMessage` | sent |  | one-time notices such as a failed file watcher registration |
 | `telemetry/event` | never sent |  | the server collects no telemetry |
 | `textDocument/publishDiagnostics` | sent |  | only for clients without pull diagnostics |
