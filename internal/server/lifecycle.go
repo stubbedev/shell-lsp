@@ -56,7 +56,8 @@ type ClientCapabilities struct {
 			RefreshSupport bool `json:"refreshSupport"`
 		} `json:"diagnostics"`
 		WorkspaceEdit struct {
-			DocumentChanges bool `json:"documentChanges"`
+			DocumentChanges         bool      `json:"documentChanges"`
+			ChangeAnnotationSupport *struct{} `json:"changeAnnotationSupport"`
 		} `json:"workspaceEdit"`
 		Configuration  bool `json:"configuration"`
 		SemanticTokens struct {

@@ -43,7 +43,7 @@ advertised capability, and that nothing else is handled or advertised.
 | `textDocument/diagnostic` | implemented | `diagnosticProvider` |  |
 | `workspace/diagnostic` | implemented | `diagnosticProvider.workspaceDiagnostics` | lints every shell file under the workspace folders, reporting unchanged files by result id |
 | `textDocument/signatureHelp` | implemented | `signatureHelpProvider` |  |
-| `textDocument/codeAction` | implemented | `codeActionProvider` |  |
+| `textDocument/codeAction` | implemented | `codeActionProvider` | edits that span files carry a needsConfirmation change annotation when the client supports them |
 | `codeAction/resolve` | implemented | `codeActionProvider.resolveProvider` | refactor edits are computed on resolve |
 | `textDocument/documentColor` | not advertised | `colorProvider` | shell has no color literals |
 | `textDocument/colorPresentation` | not advertised | `colorProvider` | shell has no color literals |

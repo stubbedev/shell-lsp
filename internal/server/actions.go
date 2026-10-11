@@ -92,7 +92,7 @@ func (s *Server) codeAction(docs *docstore.View, snap *snapshot, sources func() 
 		action.Data = data
 		return action, nil
 	}
-	edit, err := s.changeEdit(docs, snap, sources, a.Edits, a.Others)
+	edit, err := s.changeEdit(docs, snap, sources, a.Title, a.Edits, a.Others)
 	if err != nil {
 		return lsp.CodeAction{}, err
 	}
@@ -130,7 +130,7 @@ func (s *Server) actionDocument(snap *snapshot) (actions.Document, func() action
 	return actions.Document{Tree: snap.tree, Format: snap.formatStyle().Options(), Sources: func() []actions.Source { return resolve().list }, SourcedTrees: closure}, resolve
 }
 
-func (s *Server) changeEdit(docs *docstore.View, snap *snapshot, sources func() actionSources, edits []textedit.Edit, others []actions.FileEdits) (lsp.WorkspaceEdit, error) {
+func (s *Server) changeEdit(docs *docstore.View, snap *snapshot, sources func() actionSources, title string, edits []textedit.Edit, others []actions.FileEdits) (lsp.WorkspaceEdit, error) {
 	files := []fileEdits{{doc: snap.doc, versioned: true, edits: edits}}
 	for _, o := range others {
 		target, ok := sources().files[o.URI]
@@ -140,7 +140,26 @@ func (s *Server) changeEdit(docs *docstore.View, snap *snapshot, sources func() 
 		_, open := docs.Document(o.URI)
 		files = append(files, fileEdits{doc: target.Doc, versioned: open, edits: o.Edits})
 	}
-	return s.multiFileEdit(snap.encoding, files), nil
+	edit := s.multiFileEdit(snap.encoding, files)
+	if len(others) > 0 {
+		s.annotateForConfirmation(&edit, title)
+	}
+	return edit, nil
+}
+
+const crossFileAnnotation = "crossFile"
+
+func (s *Server) annotateForConfirmation(edit *lsp.WorkspaceEdit, label string) {
+	caps := s.clientCapabilities().Workspace.WorkspaceEdit
+	if caps.ChangeAnnotationSupport == nil || len(edit.DocumentChanges) == 0 {
+		return
+	}
+	edit.ChangeAnnotations = map[string]lsp.ChangeAnnotation{crossFileAnnotation: {Label: label, NeedsConfirmation: true}}
+	for i := range edit.DocumentChanges {
+		for j := range edit.DocumentChanges[i].Edits {
+			edit.DocumentChanges[i].Edits[j].AnnotationID = crossFileAnnotation
+		}
+	}
 }
 
 func (s *Server) handleCodeActionResolve(_ context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
@@ -167,7 +186,7 @@ func (s *Server) handleCodeActionResolve(_ context.Context, docs *docstore.View,
 	if !ok {
 		return nil, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "the %s refactoring no longer applies", data.Refactor.Kind)
 	}
-	edit, err := s.changeEdit(docs, snap, sources, change.Edits, change.Others)
+	edit, err := s.changeEdit(docs, snap, sources, action.Title, change.Edits, change.Others)
 	if err != nil {
 		return nil, err
 	}

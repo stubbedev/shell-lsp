@@ -157,6 +157,38 @@ func TestMoveFunctionEagerlyIntoOpenFile(t *testing.T) {
 	if got := applyLSPEdits("helper() { :; }\n", lib.Edits); got != "helper() { :; }\n\ng() { :; }\n" {
 		t.Errorf("move into the open buffer made %q", got)
 	}
+	if move.Edit.ChangeAnnotations != nil || lib.Edits[0].AnnotationID != "" {
+		t.Errorf("annotated an edit for a client without changeAnnotationSupport: %+v", move.Edit)
+	}
+}
+
+func TestCrossFileMoveAsksForConfirmation(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeFiles(t, root, map[string]string{"lib.sh": "helper() { :; }\n"})
+	mainURI := fileuri.FromPath(filepath.Join(root, "main.sh"))
+	c, _ := startClient(t, `{"rootUri": "`+fileuri.FromPath(root)+`", "capabilities": {"textDocument": {"diagnostic": {}, "codeAction": {"codeActionLiteralSupport": {}}}, "workspace": {"workspaceEdit": {"documentChanges": true, "changeAnnotationSupport": {}}}}}`)
+	c.notify("textDocument/didOpen", openParams(mainURI, ". ./lib.sh\ng() { :; }\n"))
+	move, ok := titled(codeActions(t, c, rangeParams(mainURI, 1, 0, "refactor.move")), "Move g to lib.sh")
+	if !ok || move.Edit == nil {
+		t.Fatalf("move = %+v (%t)", move, ok)
+	}
+	annotation, ok := move.Edit.ChangeAnnotations["crossFile"]
+	if !ok || annotation.Label != "Move g to lib.sh" || !annotation.NeedsConfirmation {
+		t.Errorf("annotations = %+v", move.Edit.ChangeAnnotations)
+	}
+	for _, change := range move.Edit.DocumentChanges {
+		for _, e := range change.Edits {
+			if e.AnnotationID != "crossFile" {
+				t.Errorf("edit %+v in %s is not annotated", e, change.TextDocument.URI)
+			}
+		}
+	}
+	single, ok := titled(codeActions(t, c, rangeParams(mainURI, 1, 0, "source.shebang")), "Add #!/bin/sh")
+	if !ok || single.Edit == nil || single.Edit.ChangeAnnotations != nil {
+		t.Errorf("a single-file action was annotated: %+v (%t)", single, ok)
+	}
 }
 
 func TestIfToCaseFollowsTheProjectStyle(t *testing.T) {

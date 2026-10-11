@@ -187,7 +187,9 @@ script never calls. They are configured exactly like the `SC` checks.
 
 Code actions offered at the cursor or selection, each only where it applies
 and keeps the script's meaning; their edits are computed on
-`codeAction/resolve` when the client supports it.
+`codeAction/resolve` when the client supports it, and an action that edits
+another file as well carries a change annotation asking the client to
+confirm it, so editors that support annotations show a preview first.
 
 | Action | Kind | What it does |
 | --- | --- | --- |

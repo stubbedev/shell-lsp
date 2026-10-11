@@ -76,7 +76,7 @@ var methods = []method{
 	{"textDocument/diagnostic", clientRequest, supported, "diagnosticProvider", ""},
 	{"workspace/diagnostic", clientRequest, supported, "diagnosticProvider.workspaceDiagnostics", "lints every shell file under the workspace folders, reporting unchanged files by result id"},
 	{"textDocument/signatureHelp", clientRequest, supported, "signatureHelpProvider", ""},
-	{"textDocument/codeAction", clientRequest, supported, "codeActionProvider", ""},
+	{"textDocument/codeAction", clientRequest, supported, "codeActionProvider", "edits that span files carry a needsConfirmation change annotation when the client supports them"},
 	{"codeAction/resolve", clientRequest, supported, "codeActionProvider.resolveProvider", "refactor edits are computed on resolve"},
 	{"textDocument/documentColor", clientRequest, notAdvertised, "colorProvider", "shell has no color literals"},
 	{"textDocument/colorPresentation", clientRequest, notAdvertised, "colorProvider", "shell has no color literals"},

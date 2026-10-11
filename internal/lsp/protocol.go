@@ -193,8 +193,14 @@ type ShowMessageParams struct {
 }
 
 type TextEdit struct {
-	Range   Range  `json:"range"`
-	NewText string `json:"newText"`
+	Range        Range  `json:"range"`
+	NewText      string `json:"newText"`
+	AnnotationID string `json:"annotationId,omitempty"`
+}
+
+type ChangeAnnotation struct {
+	Label             string `json:"label"`
+	NeedsConfirmation bool   `json:"needsConfirmation,omitempty"`
 }
 
 const (
@@ -370,8 +376,9 @@ type TextDocumentEdit struct {
 }
 
 type WorkspaceEdit struct {
-	Changes         map[string][]TextEdit `json:"changes,omitempty"`
-	DocumentChanges []TextDocumentEdit    `json:"documentChanges,omitempty"`
+	Changes           map[string][]TextEdit       `json:"changes,omitempty"`
+	DocumentChanges   []TextDocumentEdit          `json:"documentChanges,omitempty"`
+	ChangeAnnotations map[string]ChangeAnnotation `json:"changeAnnotations,omitempty"`
 }
 
 type Command struct {
