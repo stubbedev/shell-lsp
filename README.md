@@ -78,7 +78,10 @@ Formatting runs the same printer shfmt is built on, in-process, so no shfmt
 binary is needed. Likewise, hover and completion documentation for external
 commands comes from the installed manual pages, which the server locates
 through `MANPATH` (or next to every `PATH` entry), decompresses and renders
-itself; neither `man` nor groff is involved. Documents with syntax errors are not formatted, and range
+itself; neither `man` nor groff is involved. Subcommands come from the same
+pages: after `git`, `systemctl` or `docker` completion offers the documented
+subcommands, and the flags completed and hovered after `git checkout` are those
+of git-checkout(1), falling back to the command's own page. Documents with syntax errors are not formatted, and range
 formatting only changes the lines that intersect the range.
 
 Projects formatted with shfmt keep working unchanged: `.editorconfig` files are
