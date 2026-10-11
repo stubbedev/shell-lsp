@@ -175,12 +175,13 @@ func (s *Server) handleCompletion(ctx context.Context, docs *docstore.View, para
 	if err != nil {
 		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
 	}
+	caps := s.clientCapabilities().TextDocument.Completion.CompletionItem
 	result, err := completion.Complete(ctx, completion.Input{
 		Tree:      snap.tree,
 		Imports:   s.imports(snap.file),
 		Offset:    snap.doc.PositionToOffset(completionParams.Position, snap.encoding),
 		ScriptDir: scriptDir(snap.doc.URI),
-		Snippets:  s.clientCapabilities().TextDocument.Completion.CompletionItem.SnippetSupport,
+		Snippets:  caps.SnippetSupport,
 		Env:       s.environment,
 	})
 	if err != nil {
@@ -188,7 +189,7 @@ func (s *Server) handleCompletion(ctx context.Context, docs *docstore.View, para
 	}
 	items := make([]lsp.CompletionItem, 0, len(result.Items))
 	for _, it := range result.Items {
-		item, err := s.completionItem(snap, it)
+		item, err := completionItem(snap, caps, it)
 		if err != nil {
 			return nil, err
 		}
@@ -197,10 +198,15 @@ func (s *Server) handleCompletion(ctx context.Context, docs *docstore.View, para
 	return lsp.CompletionList{IsIncomplete: result.Incomplete, Items: items}, nil
 }
 
-func (s *Server) completionItem(snap *snapshot, it completion.Item) (lsp.CompletionItem, error) {
+func completionItem(snap *snapshot, caps CompletionItemCapabilities, it completion.Item) (lsp.CompletionItem, error) {
 	format := lsp.InsertPlainText
 	if it.Snippet {
 		format = lsp.InsertSnippet
+	}
+	edit := &lsp.CompletionEdit{NewText: it.InsertText, Insert: snap.doc.RangeFor(it.Replace.Start, it.Replace.End, snap.encoding)}
+	if caps.InsertReplaceSupport && it.Word.End > it.Replace.End {
+		word := snap.doc.RangeFor(it.Word.Start, it.Word.End, snap.encoding)
+		edit.Replace = &word
 	}
 	item := lsp.CompletionItem{
 		Label:            it.Label,
@@ -209,7 +215,10 @@ func (s *Server) completionItem(snap *snapshot, it completion.Item) (lsp.Complet
 		SortText:         it.SortText,
 		FilterText:       it.InsertText,
 		InsertTextFormat: format,
-		TextEdit:         &lsp.TextEdit{Range: snap.doc.RangeFor(it.Replace.Start, it.Replace.End, snap.encoding), NewText: it.InsertText},
+		TextEdit:         edit,
+	}
+	if caps.LabelDetailsSupport && (it.LabelDetail != "" || it.Detail != "") {
+		item.LabelDetails = &lsp.CompletionItemLabelDetails{Detail: it.LabelDetail, Description: it.Detail}
 	}
 	switch {
 	case it.FilterText != "":

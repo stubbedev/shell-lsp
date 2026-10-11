@@ -31,6 +31,7 @@ type site struct {
 	paramForm string
 	name      string
 	typed     string
+	wordEnd   int
 }
 
 var (
@@ -174,6 +175,31 @@ func casePatternSubject(text string, at int) (string, bool) {
 		return "", false
 	}
 	return inner.subject, true
+}
+
+func tokenEnd(text string, st site) int {
+	var continues func(byte) bool
+	switch st.position {
+	case positionNone, positionParameterFlags, positionGlobQualifier:
+		return st.replace.End
+	case positionVariable:
+		continues = parser.IsNameChar
+	case positionExpansionOperator:
+		continues = func(b byte) bool { return strings.IndexByte("-:=?+#%/^,@|*", b) >= 0 }
+	case positionArrayKey:
+		continues = func(b byte) bool { return b != ']' && b != '}' && wordChar(b) }
+	default:
+		continues = wordChar
+	}
+	end := st.replace.End
+	for end < len(text) && continues(text[end]) {
+		end++
+	}
+	return end
+}
+
+func wordChar(b byte) bool {
+	return strings.IndexByte(" \t\n;&|()<>`\"'", b) < 0
 }
 
 func startsQuoted(word string) bool {

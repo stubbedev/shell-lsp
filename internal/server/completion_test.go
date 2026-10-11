@@ -53,7 +53,7 @@ func TestCompletionRequest(t *testing.T) {
 	}
 	greeting := vars.Items[slices.IndexFunc(vars.Items, func(it lsp.CompletionItem) bool { return it.Label == "greeting" })]
 	want := lsp.Range{Start: lsp.Position{Line: 1, Character: 7}, End: lsp.Position{Line: 1, Character: 9}}
-	if greeting.TextEdit == nil || greeting.TextEdit.Range != want || greeting.Kind != lsp.CompletionVariable {
+	if greeting.TextEdit == nil || greeting.TextEdit.Insert != want || greeting.Kind != lsp.CompletionVariable {
 		t.Errorf("greeting item = %+v", greeting)
 	}
 

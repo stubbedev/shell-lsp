@@ -3,7 +3,10 @@
 // surface stays exactly as large as what the server implements.
 package lsp
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"fmt"
+)
 
 type Position struct {
 	Line      uint32 `json:"line"`
@@ -253,15 +256,61 @@ type CompletionParams struct {
 }
 
 type CompletionItem struct {
-	Label            string             `json:"label"`
-	Kind             CompletionItemKind `json:"kind"`
-	Detail           string             `json:"detail,omitempty"`
-	Documentation    *MarkupContent     `json:"documentation,omitempty"`
-	SortText         string             `json:"sortText,omitempty"`
-	FilterText       string             `json:"filterText,omitempty"`
-	InsertTextFormat InsertTextFormat   `json:"insertTextFormat"`
-	TextEdit         *TextEdit          `json:"textEdit,omitempty"`
-	Data             json.RawMessage    `json:"data,omitempty"`
+	Label            string                      `json:"label"`
+	LabelDetails     *CompletionItemLabelDetails `json:"labelDetails,omitempty"`
+	Kind             CompletionItemKind          `json:"kind"`
+	Detail           string                      `json:"detail,omitempty"`
+	Documentation    *MarkupContent              `json:"documentation,omitempty"`
+	SortText         string                      `json:"sortText,omitempty"`
+	FilterText       string                      `json:"filterText,omitempty"`
+	InsertTextFormat InsertTextFormat            `json:"insertTextFormat"`
+	TextEdit         *CompletionEdit             `json:"textEdit,omitempty"`
+	Data             json.RawMessage             `json:"data,omitempty"`
+}
+
+type CompletionItemLabelDetails struct {
+	Detail      string `json:"detail,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
+type CompletionEdit struct {
+	NewText string
+	Insert  Range
+	Replace *Range
+}
+
+type insertReplaceEdit struct {
+	NewText string `json:"newText"`
+	Insert  Range  `json:"insert"`
+	Replace Range  `json:"replace"`
+}
+
+func (e CompletionEdit) MarshalJSON() ([]byte, error) {
+	if e.Replace == nil {
+		return json.Marshal(TextEdit{Range: e.Insert, NewText: e.NewText})
+	}
+	return json.Marshal(insertReplaceEdit{NewText: e.NewText, Insert: e.Insert, Replace: *e.Replace})
+}
+
+func (e *CompletionEdit) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		NewText string `json:"newText"`
+		Range   *Range `json:"range"`
+		Insert  *Range `json:"insert"`
+		Replace *Range `json:"replace"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	switch {
+	case raw.Range != nil:
+		*e = CompletionEdit{NewText: raw.NewText, Insert: *raw.Range}
+	case raw.Insert != nil && raw.Replace != nil:
+		*e = CompletionEdit{NewText: raw.NewText, Insert: *raw.Insert, Replace: raw.Replace}
+	default:
+		return fmt.Errorf("completion text edit %s has neither a range nor insert and replace ranges", data)
+	}
+	return nil
 }
 
 type CompletionList struct {

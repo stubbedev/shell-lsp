@@ -21,6 +21,12 @@ type InitializeParams struct {
 	Trace                 TraceValue            `json:"trace"`
 }
 
+type CompletionItemCapabilities struct {
+	SnippetSupport       bool `json:"snippetSupport"`
+	InsertReplaceSupport bool `json:"insertReplaceSupport"`
+	LabelDetailsSupport  bool `json:"labelDetailsSupport"`
+}
+
 type ClientCapabilities struct {
 	General struct {
 		PositionEncodings []string `json:"positionEncodings"`
@@ -31,9 +37,7 @@ type ClientCapabilities struct {
 			ContentFormat []string `json:"contentFormat"`
 		} `json:"hover"`
 		Completion struct {
-			CompletionItem struct {
-				SnippetSupport bool `json:"snippetSupport"`
-			} `json:"completionItem"`
+			CompletionItem CompletionItemCapabilities `json:"completionItem"`
 		} `json:"completion"`
 		DocumentSymbol struct {
 			HierarchicalDocumentSymbolSupport bool `json:"hierarchicalDocumentSymbolSupport"`
@@ -188,7 +192,7 @@ func (s *Server) handleInitialize(_ context.Context, _ *docstore.View, params js
 			TextDocumentSync:                TextDocumentSyncOptions{OpenClose: true, Change: 2},
 			DiagnosticProvider:              DiagnosticOptions{InterFileDependencies: true, WorkspaceDiagnostics: true},
 			HoverProvider:                   true,
-			CompletionProvider:              CompletionOptions{TriggerCharacters: []string{"$", "{", "/", "-"}, ResolveProvider: true},
+			CompletionProvider:              CompletionOptions{TriggerCharacters: []string{"$", "{", "/", "-", ":", "@", "[", "%"}, ResolveProvider: true},
 			DefinitionProvider:              true,
 			DeclarationProvider:             true,
 			TypeDefinitionProvider:          true,

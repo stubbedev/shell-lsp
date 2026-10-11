@@ -78,6 +78,8 @@ type Item struct {
 	FilterText    string
 	Snippet       bool
 	Replace       parser.Span
+	Word          parser.Span
+	LabelDetail   string
 	Resolve       ResolveKind
 }
 
@@ -113,6 +115,7 @@ type Result struct {
 
 func Complete(ctx context.Context, in Input) (Result, error) {
 	c := completer{Input: in, dialect: in.Tree.Dialect, site: analyze(in.Tree, in.Offset)}
+	c.site.wordEnd = tokenEnd(in.Tree.Text(), c.site)
 	switch c.site.position {
 	case positionVariable:
 		return Result{Items: c.variables()}, nil
@@ -178,7 +181,7 @@ func (c completer) printfDirectives() []Item {
 		}
 		it := c.item(label, KindValue, "1")
 		it.InsertText = label[1:]
-		it.Replace = at
+		it.Replace, it.Word = at, at
 		it.Documentation = e.Doc
 		items = append(items, it)
 	}
@@ -229,7 +232,14 @@ type completer struct {
 }
 
 func (c completer) item(label string, kind Kind, sort string) Item {
-	return Item{Label: label, Kind: kind, SortText: sort + label, InsertText: label, Replace: c.site.replace}
+	return Item{
+		Label:      label,
+		Kind:       kind,
+		SortText:   sort + label,
+		InsertText: label,
+		Replace:    c.site.replace,
+		Word:       parser.Span{Start: c.site.replace.Start, End: c.site.wordEnd},
+	}
 }
 
 func (c completer) commands(withKeywords bool) Result {
@@ -524,6 +534,9 @@ func (c completer) terms(v shelldocs.Vocabulary, kind Kind) []Item {
 		it := c.item(e.Name, kind, "1")
 		it.Detail = e.Synopsis
 		it.Documentation = e.Doc
+		if suffix, ok := strings.CutPrefix(e.Synopsis, e.Name); ok {
+			it.LabelDetail = suffix
+		}
 		items = append(items, it)
 	}
 	return items
