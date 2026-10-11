@@ -1,4 +1,5 @@
 import { commands, window, workspace, type ExtensionContext } from "vscode";
+import { chooseShellCommand, DialectStatus } from "./dialectStatus.ts";
 import { Session } from "./session.ts";
 import { pathSetting } from "./settings.ts";
 
@@ -6,14 +7,19 @@ let session: Session | undefined;
 
 export async function activate(context: ExtensionContext): Promise<void> {
   const output = window.createOutputChannel("Shell LSP", { log: true });
-  const current = new Session(context, output);
+  const status = new DialectStatus(() => current.runningClient(), output);
+  const current = new Session(context, output, () => {
+    status.schedule();
+  });
   session = current;
   context.subscriptions.push(
     output,
+    status,
     commands.registerCommand("shellLsp.restart", () => current.restart()),
     commands.registerCommand("shellLsp.showOutput", () => {
       output.show();
     }),
+    commands.registerCommand(chooseShellCommand, (...args: unknown[]) => status.choose(args)),
     workspace.onDidChangeConfiguration((change) => {
       if (change.affectsConfiguration(pathSetting)) {
         void current.restart();

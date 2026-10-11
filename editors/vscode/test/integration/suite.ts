@@ -124,6 +124,25 @@ async function outlinesBatsTests(folder: WorkspaceFolder, name: string, test: st
   );
 }
 
+async function setsTheShell(folder: WorkspaceFolder): Promise<void> {
+  const document = await workspace.openTextDocument(fileIn(folder, "dialect.sh"));
+  await window.showTextDocument(document);
+  await waitFor(
+    "the server to accept a shell choice for dialect.sh",
+    async () => {
+      try {
+        await commands.executeCommand("shellLsp.chooseShell", "dash");
+        return document.getText();
+      } catch {
+        return "";
+      }
+    },
+    (text) => text === "#!/bin/sh\n# shellcheck shell=dash\necho hi\n",
+  );
+  await commands.executeCommand("shellLsp.chooseShell", null);
+  assert.equal(document.getText(), "#!/bin/sh\necho hi\n");
+}
+
 function fileIn(folder: WorkspaceFolder, name: string): Uri {
   return folder.uri.with({ path: `${folder.uri.path}/${name}` });
 }
@@ -145,4 +164,5 @@ export async function run(): Promise<void> {
   await appliesSettings(uri);
   await fixesAll(uri);
   await formatsWithEditorconfig(folder);
+  await setsTheShell(folder);
 }

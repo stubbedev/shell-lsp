@@ -17,16 +17,22 @@ export class Session {
   private readonly storageDir: string;
   private readonly asset: ReleaseAsset | undefined;
   private readonly settingKeys: readonly string[];
+  private readonly onStateChange: () => void;
   private client: LanguageClient | undefined;
   private queue: Promise<void> = Promise.resolve();
 
-  constructor(context: ExtensionContext, output: LogOutputChannel) {
+  constructor(context: ExtensionContext, output: LogOutputChannel, onStateChange: () => void) {
     this.output = output;
+    this.onStateChange = onStateChange;
     this.storageDir = context.globalStorageUri.fsPath;
     const manifest: unknown = context.extension.packageJSON;
     this.settingKeys = serverKeys(manifest);
     const target = releaseTarget(process.platform, process.arch);
     this.asset = target === undefined ? undefined : releaseAsset(extensionVersion(manifest), target);
+  }
+
+  runningClient(): LanguageClient | undefined {
+    return this.client?.state === State.Running ? this.client : undefined;
   }
 
   start(): Promise<void> {
@@ -72,6 +78,7 @@ export class Session {
     const client = createClient(binary.path, this.output, this.settingKeys);
     client.onDidChangeState((change) => {
       void commands.executeCommand("setContext", runningContext, change.newState === State.Running);
+      this.onStateChange();
     });
     this.client = client;
     await client.start();
@@ -83,6 +90,7 @@ export class Session {
       return;
     }
     this.client = undefined;
+    this.onStateChange();
     await commands.executeCommand("setContext", runningContext, false);
     await client.dispose();
   }

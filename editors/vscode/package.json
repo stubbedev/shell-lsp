@@ -75,6 +75,11 @@
         "command": "shellLsp.runBats",
         "title": "Run Bats File",
         "category": "Shell LSP"
+      },
+      {
+        "command": "shellLsp.chooseShell",
+        "title": "Choose the Shell to Lint As",
+        "category": "Shell LSP"
       }
     ],
     "menus": {
@@ -86,6 +91,10 @@
         {
           "command": "shellLsp.runBats",
           "when": "shellLsp.running && isWorkspaceTrusted && (editorLangId == shellscript || editorLangId == bats)"
+        },
+        {
+          "command": "shellLsp.chooseShell",
+          "when": "shellLsp.running && (editorLangId == shellscript || editorLangId == bats)"
         }
       ]
     },
