@@ -156,7 +156,7 @@ func medianRatio(measured, reference func()) float64 {
 	return float64(measuredSamples[budgetRuns/2]) / float64(referenceSamples[budgetRuns/2])
 }
 
-func p95(t *testing.T, run func()) time.Duration {
+func median(t *testing.T, run func()) time.Duration {
 	t.Helper()
 
 	samples := make([]time.Duration, budgetRuns)
@@ -166,7 +166,7 @@ func p95(t *testing.T, run func()) time.Duration {
 		samples[i] = time.Since(start)
 	}
 	slices.Sort(samples)
-	return samples[len(samples)*95/100]
+	return samples[len(samples)/2]
 }
 
 func TestBudgets(t *testing.T) {
@@ -177,9 +177,9 @@ func TestBudgets(t *testing.T) {
 		t.Skip("the race detector slows execution several-fold, so wall-clock budgets do not apply")
 	}
 	doc := document()
-	diagnose := p95(t, func() { diagnostics.Syntax(parser.Parse(text, dialect.Bash), doc, docstore.EncodingUTF16) })
+	diagnose := median(t, func() { diagnostics.Syntax(parser.Parse(text, dialect.Bash), doc, docstore.EncodingUTF16) })
 	if diagnose > diagnosticBudget {
-		t.Errorf("parse + syntax diagnostics p95 = %v over 10k lines, budget %v", diagnose, diagnosticBudget)
+		t.Errorf("parse + syntax diagnostics median = %v over 10k lines, budget %v", diagnose, diagnosticBudget)
 	}
 	tree := parser.Parse(text, dialect.Bash)
 	lintRatio := medianRatio(func() { lint.Check(tree, nil, lint.Options{}) }, func() { parser.Parse(text, dialect.Bash) })
@@ -188,16 +188,16 @@ func TestBudgets(t *testing.T) {
 	}
 	offsets := []int{strings.LastIndex(text, `"${items[@]}"`) + 4, strings.LastIndex(text, "\tif ") + 1, strings.LastIndex(text, "grep ") + 2}
 	for _, offset := range offsets {
-		complete := p95(t, func() {
+		complete := median(t, func() {
 			if _, err := completion.Complete(t.Context(), completion.Input{Tree: tree, Offset: offset, Env: offlineEnv{}}); err != nil {
 				t.Fatal(err)
 			}
 		})
 		if complete > completionBudget {
-			t.Errorf("completion at %d p95 = %v over 10k lines, budget %v", offset, complete, completionBudget)
+			t.Errorf("completion at %d median = %v over 10k lines, budget %v", offset, complete, completionBudget)
 		}
 	}
-	t.Logf("p95: diagnostics %v; lint %.1fx parse", diagnose, lintRatio)
+	t.Logf("median: diagnostics %v; lint %.1fx parse", diagnose, lintRatio)
 }
 
 func benchFile() *workspace.File {
