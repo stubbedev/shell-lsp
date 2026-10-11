@@ -23,6 +23,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/navigation"
 	"github.com/stubbedev/shell-lsp/internal/parallel"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/shellcheckrc"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
@@ -47,16 +48,27 @@ func (s *Server) lintReport(file *workspace.File, settings config.Settings, gene
 		return lint.Report{}, 0
 	}
 	stamp := s.sourcesStamp(file.Tree)
-	key := lintMemoKey + strconv.FormatUint(generation, 10)
+	rc := s.shellcheckrcFor(file.Path)
+	key := lintMemoKey + strconv.FormatUint(generation, 10) + "/" + rc.Path + "\x00" + rc.Text
 	report := workspace.Memo(file, key, stamp, func() lint.Report {
 		return filelint.Check(file, s.navigationEnv(), filelint.Options{
-			Exclude:       settings.Lint.Exclude,
-			Optional:      settings.Lint.Optional,
-			Profile:       settings.Lint.Profile,
-			DialectSource: dialectSource(settings),
+			Exclude:            slices.Concat(settings.Lint.Exclude, rc.Disabled.Known()),
+			Optional:           slices.Concat(settings.Lint.Optional, rc.Enabled),
+			Profile:            settings.Lint.Profile,
+			DialectSource:      dialectSource(settings),
+			NoExtendedAnalysis: rc.Extended != nil && !*rc.Extended,
 		})
 	})
 	return report, stamp
+}
+
+func (s *Server) shellcheckrcFor(path string) shellcheckrc.File {
+	rc, _, err := s.shellcheckrc.Nearest(filepath.Dir(path))
+	if err != nil {
+		s.noticeOnce("shellcheckrc:"+err.Error(), lsp.MessageWarning, "Ignoring the .shellcheckrc that applies to "+path+": "+err.Error())
+		return shellcheckrc.File{}
+	}
+	return rc
 }
 
 func dialectSource(settings config.Settings) lint.DialectSource {

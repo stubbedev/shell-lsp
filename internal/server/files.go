@@ -17,6 +17,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/navigation"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/platform"
+	"github.com/stubbedev/shell-lsp/internal/shellcheckrc"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
@@ -85,6 +86,9 @@ func (s *Server) registerWatchers(ctx context.Context) {
 		return
 	}
 	globs := append(workspace.WatchGlobs(), "**/"+editorconfig.FileName)
+	for _, name := range shellcheckrc.Names {
+		globs = append(globs, "**/"+name)
+	}
 	watchers := make([]fileWatcher, len(globs))
 	for i, glob := range globs {
 		watchers[i] = fileWatcher{GlobPattern: glob}

@@ -297,8 +297,13 @@ They are configured exactly like the `SC` checks.
 - The path in `source=` opens with go-to-definition and is a document link,
   and directive keys and values are highlighted.
 
-Completion and hover inside a `.shellcheckrc` file are not available: editors
-do not send that file to a shell language server.
+The nearest `.shellcheckrc` or `shellcheckrc` above a script, or the one in
+`$XDG_CONFIG_HOME` or the home directory, applies in the editor as it does to
+`shell-lsp check`: its `disable`, `enable` and `extended-analysis` settings
+add to `lint.exclude` and `lint.optional`. Its `shell` and `source-path`
+settings are only read by `shell-lsp check`. Completion and hover inside a
+`.shellcheckrc` file are not available: editors do not send that file to a
+shell language server.
 
 ## Refactorings
 

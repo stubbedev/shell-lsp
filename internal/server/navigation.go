@@ -16,6 +16,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/navigation"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/project"
+	"github.com/stubbedev/shell-lsp/internal/shellcheckrc"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
@@ -100,6 +101,11 @@ func (s *Server) handleDidChangeWatchedFiles(ctx context.Context, params json.Ra
 		}
 		if filepath.Base(path) == editorconfig.FileName {
 			s.editorconfig.Invalidate(path)
+			projectChanged = true
+			continue
+		}
+		if shellcheckrc.IsName(path) {
+			s.shellcheckrc.Invalidate(path)
 			projectChanged = true
 			continue
 		}

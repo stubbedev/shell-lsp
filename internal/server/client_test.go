@@ -32,6 +32,7 @@ func startClient(t testing.TB, initializeParams string, setup ...func(*Server)) 
 	clientReader, serverWriter := io.Pipe()
 	serverReader, clientWriter := io.Pipe()
 	srv := New(jsonrpc.NewConn(serverReader, serverWriter), "test")
+	srv.shellcheckrc = newShellcheckrcResolver(nil)
 	for _, fn := range setup {
 		fn(srv)
 	}
