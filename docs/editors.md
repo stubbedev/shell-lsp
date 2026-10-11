@@ -125,4 +125,5 @@ differences:
 - Bats tests run through the `bash.exe` of Git for Windows or MSYS2 found on
   `PATH`. The WSL launcher in `System32` is skipped because it cannot see
   Windows paths. A `bats.cmd` or `bats.exe` launcher, such as the one npm
-  installs, runs directly.
+  installs, runs directly. Each run is placed in its own job object, so
+  stopping it, or the server exiting, ends every process the suite started.

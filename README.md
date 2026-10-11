@@ -307,7 +307,8 @@ error diagnostic with source `bats` on the failing line, or on the test when
 the output names no line in the file. Those diagnostics stay until the file
 or that test runs again, and they move with their test (or helper function)
 as the buffer is edited, even when bats ran an older saved copy. A run is stopped when cancelled and after 30
-minutes.
+minutes, and stopping it ends every process the suite started, not only
+bats itself.
 
 ## Parser
 
