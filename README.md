@@ -141,8 +141,9 @@ of git-checkout(1), falling back to the command's own page. Nested subcommands
 such as `git remote add`, `kubectl config set-context` or `ip link set` resolve
 as deep as the pages document them, global options before a subcommand are
 skipped with their values (`git -C dir checkout`, `kubectl -n ns get`), and
-commands behind `sudo`, `doas`, `env`, `nice`, `nohup`, `time`, `command`,
-`exec`, `timeout`, `watch` or `xargs` complete and hover as if typed directly.
+commands behind the wrappers `builtin`, `busybox`, `command`, `doas`, `env`,
+`exec`, `nice`, `nohup`, `setsid`, `sudo`, `time`, `timeout`, `watch` and
+`xargs` complete and hover as if typed directly.
 Documents with syntax errors are not formatted, and range
 formatting only changes the lines that intersect the range.
 
@@ -208,9 +209,11 @@ finding is the preferred one; the fix-all source action and the
 changes what a script does.
 
 Checks that go beyond ShellCheck use `SL` codes and are documented in
-[docs/rules.md](docs/rules.md): untrusted data pasted into code run by
-`eval`, `sh -c` or `source`, arithmetic injection (opt-in), and functions a
-script never calls. They are configured exactly like the `SC` checks.
+[docs/rules.md](docs/rules.md), among them untrusted data pasted into code
+run by `eval`, `sh -c` or `source`, downloaded code run unchecked, functions
+a script never calls, temporary files it never removes, `trap` and `exit`
+that only affect a subshell, and syntax errors in embedded awk, sed and jq.
+They are configured exactly like the `SC` checks.
 
 `# shellcheck` directives are edited like code:
 
@@ -220,9 +223,10 @@ script never calls. They are configured exactly like the `SC` checks.
   optional check names after `enable=`, shell names after `shell=`, and paths
   after `source=` and `source-path=`. Typing `=` or `,` opens it, since
   editors do not suggest inside comments on their own.
-- Hovering a code shows its severity, whether it is optional and how to turn
-  it on, a link to its documentation, and which findings it silences in the
-  file; keys and optional check names explain themselves too.
+- Hovering a code shows its one-line summary, severity, whether it is
+  optional and how to turn it on, a link to its documentation, and which
+  findings it silences in the file; keys and optional check names explain
+  themselves too.
 - The optional `unused-directives` check (`SL2009`) reports disabled codes
   that silence nothing, with a quick fix that removes them.
 - The path in `source=` opens with go-to-definition and is a document link,
@@ -260,9 +264,8 @@ confirm it, so editors that support annotations show a preview first.
 awk, sed and jq programs passed as literal arguments (`awk '...'`, `sed -e
 '...'`, `jq -r '...'`) or fed as a quoted here-document to `awk -f -` and
 `sed -f -` are parsed by built-in parsers; no awk, sed or jq binary is run.
-The command is also found behind the shell and program wrappers
-(`command`, `exec`, `busybox`, `sudo`, `doas`, `env`, `nice`, `nohup`,
-`setsid`, `timeout`, `watch`, `xargs`) and as the command of
+The command is also found behind the same wrappers completion looks
+through and as the command of
 `find ... -exec`, `-execdir`, `-ok` or `-okdir`; a program containing the
 `{}` or `xargs -I` placeholder those substitute at run time is skipped, and
 `xargs` does not hand its command the statement's here-document. Syntax
@@ -344,8 +347,9 @@ upstream.
 | `just dist` | Build static release binaries for Linux, macOS and Windows into `dist/` |
 
 Every dev tool (Go toolchain pinned to the version go.mod declares, gopls,
-golangci-lint, delve, just, shellcheck, shfmt, git, gh, and Node.js for the
-VS Code extension) comes from
+golangci-lint, delve, just, shellcheck, shfmt, git, gh, Node.js for the
+VS Code extension, and bats, bash-language-server and Neovim for the Bats,
+`crosscheck` and `smoke` tests) comes from
 the flake: `direnv allow` on entry, or `nix develop` explicitly. shellcheck is
 only a test oracle: the lint fixtures under `internal/lint/testdata/fixtures`
 are original scripts whose expected findings were recorded from it, with

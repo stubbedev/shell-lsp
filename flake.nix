@@ -15,7 +15,7 @@
       system: let
         pkgs = nixpkgs.legacyPackages.${system};
         # Nix has no version to read from the source tree, so builds from a
-        # checkout are stamped with the commit date and hash.
+        # checkout are stamped with the commit date.
         version = "0-unstable-${self.lastModifiedDate or "0"}";
       in {
         packages = rec {
