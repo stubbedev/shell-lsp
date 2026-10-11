@@ -55,3 +55,4 @@ jobs:
       - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
       - run: nix build --print-build-logs
       - run: ./result/bin/shell-lsp --version
+      - run: nix develop --command go test -run TestRealBats -v ./internal/bats
