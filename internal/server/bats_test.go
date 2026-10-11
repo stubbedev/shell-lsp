@@ -148,7 +148,7 @@ func TestRunBatsFromPathPublishesResults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := root + "\n--tap\n" + filepath.Join(root, "suite.bats") + "\n"; string(argv) != want {
+	if want := root + "\n--tap\nsuite.bats\n"; string(argv) != want {
 		t.Errorf("cwd and argv = %q, want %q", argv, want)
 	}
 

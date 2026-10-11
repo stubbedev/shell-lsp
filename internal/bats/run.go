@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os/exec"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 )
@@ -18,10 +19,10 @@ const (
 )
 
 type Invocation struct {
-	Executable string
-	Dir        string
-	File       string
-	Test       []string
+	Runner Command
+	Dir    string
+	File   string
+	Test   []string
 }
 
 func Filter(segments []string) string {
@@ -52,7 +53,7 @@ func Matches(segments []string, name string) bool {
 }
 
 func (inv Invocation) Args() []string {
-	args := []string{"--tap"}
+	args := append(slices.Clip(inv.Runner.Args), "--tap")
 	if inv.Test != nil {
 		args = append(args, "--filter", Filter(inv.Test))
 	}
@@ -60,7 +61,7 @@ func (inv Invocation) Args() []string {
 }
 
 func (inv Invocation) String() string {
-	return strings.Join(append([]string{inv.Executable}, inv.Args()...), " ")
+	return strings.Join(append([]string{inv.Runner.Program}, inv.Args()...), " ")
 }
 
 func Run(ctx context.Context, inv Invocation, progress func(Report)) (Report, error) {
@@ -71,7 +72,7 @@ func Run(ctx context.Context, inv Invocation, progress func(Report)) (Report, er
 		}
 	}}
 	stderr := &cappedBuffer{limit: maxStderr}
-	cmd := exec.CommandContext(ctx, inv.Executable, inv.Args()...) //nolint:gosec // G204: the executable is the project's own bats runner and every argument is passed as argv, never through a shell
+	cmd := exec.CommandContext(ctx, inv.Runner.Program, inv.Args()...) //nolint:gosec // G204: the program is the project's own bats runner or the bash that runs it, and every argument is passed as argv, never through a shell
 	cmd.Dir = inv.Dir
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr

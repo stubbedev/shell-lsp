@@ -195,16 +195,20 @@ func (s *Server) runBats(ctx context.Context, docs *docstore.View, args batsRunA
 	if root, ok := s.workspace.RootOf(path); ok {
 		dir = root
 	}
-	executable, err := bats.Locate(dir)
+	runner, err := bats.Locate(dir)
 	if err != nil {
 		return batsRunResult{}, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "%v", err)
+	}
+	rel, err := filepath.Rel(dir, path)
+	if err != nil {
+		return batsRunResult{}, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "naming %s relative to %s for bats: %v", path, dir, err)
 	}
 	disk, _, err := workspace.ReadDisk(path)
 	if err != nil {
 		return batsRunResult{}, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "reading %s before running it: %v", path, err)
 	}
 	ran := parser.ParseEdit(nil, string(disk), file.Tree.Dialect, file.Tree.Lang)
-	inv := bats.Invocation{Executable: executable, Dir: dir, File: path, Test: selected}
+	inv := bats.Invocation{Runner: runner, Dir: dir, File: filepath.ToSlash(rel), Test: selected}
 	label := "bats " + filepath.Base(path)
 	ctx, cancel := context.WithTimeout(ctx, batsTimeout)
 	defer cancel()

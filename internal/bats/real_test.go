@@ -45,7 +45,7 @@ func TestRealBats(t *testing.T) {
 	if err := os.WriteFile(file, []byte(realSuite), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	report, err := Run(t.Context(), Invocation{Executable: exe, Dir: dir, File: file}, func(Report) {})
+	report, err := Run(t.Context(), Invocation{Runner: Command{Program: exe}, Dir: dir, File: file}, func(Report) {})
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
@@ -67,7 +67,7 @@ func TestRealBats(t *testing.T) {
 	}
 
 	name := "fails in a helper (x|y)"
-	single, err := Run(t.Context(), Invocation{Executable: exe, Dir: dir, File: file, Test: []string{name}}, func(Report) {})
+	single, err := Run(t.Context(), Invocation{Runner: Command{Program: exe}, Dir: dir, File: file, Test: []string{name}}, func(Report) {})
 	if err != nil {
 		t.Fatalf("Run(single) error = %v", err)
 	}
@@ -76,7 +76,7 @@ func TestRealBats(t *testing.T) {
 	}
 
 	segments := []string{"named at run time ", ""}
-	dynamic, err := Run(t.Context(), Invocation{Executable: exe, Dir: dir, File: file, Test: segments}, func(Report) {})
+	dynamic, err := Run(t.Context(), Invocation{Runner: Command{Program: exe}, Dir: dir, File: file, Test: segments}, func(Report) {})
 	if err != nil {
 		t.Fatalf("Run(dynamic) error = %v", err)
 	}

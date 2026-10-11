@@ -52,7 +52,30 @@ func windowsVolume(slashed string) (string, string) {
 }
 
 func HasDrive(p string) bool {
-	return len(p) >= 2 && p[1] == ':' && ('a' <= p[0] && p[0] <= 'z' || 'A' <= p[0] && p[0] <= 'Z')
+	return len(p) >= 2 && p[1] == ':' && isASCIILetter(p[0])
+}
+
+func isASCIILetter(c byte) bool {
+	return 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z'
+}
+
+func (f Flavour) IsAbs(p string) bool {
+	if f == POSIX {
+		return strings.HasPrefix(p, "/")
+	}
+	slashed := strings.ReplaceAll(p, `\`, "/")
+	return strings.HasPrefix(slashed, "//") || HasDrive(slashed) && len(slashed) > 2 && slashed[2] == '/'
+}
+
+func (f Flavour) Join(dir, p string) string {
+	return f.Clean(dir + string(f.Separator()) + p)
+}
+
+func (f Flavour) FromMSYS(p string) string {
+	if f == POSIX || len(p) < 2 || p[0] != '/' || !isASCIILetter(p[1]) || len(p) > 2 && p[2] != '/' {
+		return p
+	}
+	return f.Clean(p[1:2] + ":/" + strings.TrimPrefix(p[2:], "/"))
 }
 
 func (f Flavour) Fold(p string) string {

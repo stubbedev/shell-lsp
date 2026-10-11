@@ -1,8 +1,9 @@
 package bats
 
 import (
-	"path/filepath"
 	"strings"
+
+	"github.com/stubbedev/shell-lsp/internal/platform"
 )
 
 type Failure struct {
@@ -12,19 +13,24 @@ type Failure struct {
 }
 
 func Failures(report Report, file, dir string, testLine func(name string) (int, bool)) []Failure {
+	return failures(platform.Native, report, file, dir, testLine)
+}
+
+func failures(f platform.Flavour, report Report, file, dir string, testLine func(name string) (int, bool)) []Failure {
+	file = f.Fold(f.Clean(file))
 	var out []Failure
 	for _, r := range report.Results {
 		if r.Status != Failed {
 			continue
 		}
-		out = append(out, Failure{Test: r.Name, Line: failureLine(r, file, dir, testLine), Message: failureMessage(r)})
+		out = append(out, Failure{Test: r.Name, Line: failureLine(f, r, file, dir, testLine), Message: failureMessage(r)})
 	}
 	return out
 }
 
-func failureLine(r Result, file, dir string, testLine func(string) (int, bool)) int {
+func failureLine(f platform.Flavour, r Result, file, dir string, testLine func(string) (int, bool)) int {
 	for _, frame := range r.Frames {
-		if resolve(frame.File, dir) == file {
+		if resolve(f, frame.File, dir) == file {
 			return frame.Line
 		}
 	}
@@ -34,11 +40,12 @@ func failureLine(r Result, file, dir string, testLine func(string) (int, bool)) 
 	return 1
 }
 
-func resolve(path, dir string) string {
-	if filepath.IsAbs(path) {
-		return filepath.Clean(path)
+func resolve(f platform.Flavour, path, dir string) string {
+	path = f.FromMSYS(path)
+	if f.IsAbs(path) {
+		return f.Fold(f.Clean(path))
 	}
-	return filepath.Join(dir, path)
+	return f.Fold(f.Join(dir, path))
 }
 
 func failureMessage(r Result) string {

@@ -62,6 +62,63 @@ func TestWithin(t *testing.T) {
 	}
 }
 
+func TestIsAbs(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		flavour Flavour
+		in      string
+		want    bool
+	}{
+		{POSIX, "/a", true},
+		{POSIX, "a/b", false},
+		{POSIX, `C:\a`, false},
+		{Windows, `C:\a`, true},
+		{Windows, "c:/a", true},
+		{Windows, `C:a`, false},
+		{Windows, `\\host\share`, true},
+		{Windows, `\a`, false},
+		{Windows, "a", false},
+	}
+	for _, tc := range tests {
+		if got := tc.flavour.IsAbs(tc.in); got != tc.want {
+			t.Errorf("%s.IsAbs(%q) = %v, want %v", tc.flavour, tc.in, got, tc.want)
+		}
+	}
+}
+
+func TestJoin(t *testing.T) {
+	t.Parallel()
+
+	if got := POSIX.Join("/proj", "test/../a.bats"); got != "/proj/a.bats" {
+		t.Errorf("POSIX.Join = %q", got)
+	}
+	if got := Windows.Join(`C:\proj`, "test/a.bats"); got != `C:\proj\test\a.bats` {
+		t.Errorf("Windows.Join = %q", got)
+	}
+}
+
+func TestFromMSYS(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		flavour Flavour
+		in      string
+		want    string
+	}{
+		{Windows, "/c/Users/u/a.bats", `C:\Users\u\a.bats`},
+		{Windows, "/d", `D:\`},
+		{Windows, "/usr/bin/bats", "/usr/bin/bats"},
+		{Windows, "test/a.bats", "test/a.bats"},
+		{POSIX, "/c/Users/u/a.bats", "/c/Users/u/a.bats"},
+	}
+	for _, tc := range tests {
+		if got := tc.flavour.FromMSYS(tc.in); got != tc.want {
+			t.Errorf("%s.FromMSYS(%q) = %q, want %q", tc.flavour, tc.in, got, tc.want)
+		}
+	}
+}
+
 func TestExecutable(t *testing.T) {
 	t.Parallel()
 
