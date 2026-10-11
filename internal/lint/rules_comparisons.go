@@ -535,7 +535,7 @@ func (p *pass) checkRegexOperand(w *syntax.Word) {
 	if !ok {
 		return
 	}
-	if len(w.Parts) == 1 && quotesRegex(w.Parts[0]) {
+	if len(w.Parts) == 1 && quotesRegex(w.Parts[0]) && p.dialect.Features().QuotedRegexLiteral {
 		p.report(2076, span, "Quoting the right-hand side of =~ makes it match literally; leave it unquoted (or store the regex in a variable) to match as a regex.")
 	}
 	text := regexText(w)

@@ -1,0 +1,10 @@
+### zsh matches a quoted regex as a regex
+#!/bin/zsh
+[[ $1 =~ '^([a-z]+)-([0-9]+)$' ]] && print -r -- $match[1] $match[2]
+[[ $1 =~ "^v[0-9]+\.[0-9]+$" ]] && print -r -- $MATCH
+>>- SC1071 1:1 -- shellcheck refuses zsh; zsh hands the regex to regcomp after quote removal, so quotes do not make it literal
+
+### bash matches a quoted regex literally
+#!/bin/bash
+[[ $1 =~ '^[a-z]+$' ]] && echo yes
+>>> SC2076 2:10

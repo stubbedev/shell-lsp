@@ -130,11 +130,11 @@ func TestFeaturesDiffer(t *testing.T) {
 	}
 	for _, d := range []Dialect{Bash, Posix, Dash, Ksh, Busybox} {
 		f := d.Features()
-		if !f.GlobsUnquoted || !f.SplitsUnquoted || f.ArithmeticStatus || f.AssignsPositionals || f.AssociativePairs {
+		if !f.GlobsUnquoted || !f.SplitsUnquoted || !f.QuotedRegexLiteral || f.ArithmeticStatus || f.AssignsPositionals || f.AssociativePairs {
 			t.Errorf("%s claims zsh's expansion, status or assignment rules", d)
 		}
 	}
-	if z := Zsh.Features(); z.GlobsUnquoted || z.SplitsUnquoted || !z.ArithmeticStatus || !z.AssignsPositionals || !z.AssociativePairs {
+	if z := Zsh.Features(); z.GlobsUnquoted || z.SplitsUnquoted || z.QuotedRegexLiteral || !z.ArithmeticStatus || !z.AssignsPositionals || !z.AssociativePairs {
 		t.Error("zsh expansion, status or assignment rules misattributed")
 	}
 	if !Dash.Features().Local {
