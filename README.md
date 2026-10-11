@@ -35,6 +35,23 @@ the linter follows them. Paths built from `$0`,
 `${BASH_SOURCE[0]}`, `dirname`, `cd ... && pwd` and earlier assignments are
 resolved, as are `# shellcheck source=` directives.
 
+## Installation
+
+shell-lsp is one static binary with no runtime dependencies. Pick one:
+
+- **Release binaries** for Linux and macOS (amd64 and arm64) are attached to
+  every [GitHub release](https://github.com/stubbedev/shell-lsp/releases),
+  together with a `SHA256SUMS` file. Download the one for your platform,
+  check it with `sha256sum --check --ignore-missing SHA256SUMS`, make it
+  executable and put it on `PATH` as `shell-lsp`.
+- **Go**: `go install github.com/stubbedev/shell-lsp@latest`
+- **Nix**: `nix profile install github:stubbedev/shell-lsp`, or try it with
+  `nix run github:stubbedev/shell-lsp -- --version`
+
+`shell-lsp --version` prints the installed version. Then point your editor at
+it: [docs/editors.md](docs/editors.md) covers Neovim, Helix, Zed, VS Code and
+any other client.
+
 ## Goals
 
 - Auto-detected dialects: bash, zsh, sh, dash, ksh (shebang, extension, modeline)
