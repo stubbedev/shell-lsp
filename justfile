@@ -62,7 +62,22 @@ smoke:
 
 # Build release binaries for every supported platform into dist/, stamped with the git version.
 dist version=`git describe --tags --always --dirty`:
-    scripts/dist.sh "{{version}}"
+    #!/usr/bin/env bash
+    set -euo pipefail
+    version="{{ version }}"
+    rm -rf dist
+    mkdir -p dist
+    for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
+        goos="${target%/*}"
+        goarch="${target#*/}"
+        suffix=""
+        if [[ "$goos" == windows ]]; then
+            suffix=".exe"
+        fi
+        GOOS="$goos" GOARCH="$goarch" go build -trimpath -ldflags "-s -w -X main.version=${version#v}" \
+            -o "dist/shell-lsp-${version}-${goos}-${goarch}${suffix}" .
+    done
+    (cd dist && sha256sum shell-lsp-* >SHA256SUMS)
 
 # Recompute vendorHash in package.nix from go.mod and go.sum; run after any dependency change.
 sync-flake:
