@@ -21,7 +21,8 @@ options, same `.shellcheckrc` lookup, same output formats and same exit codes.
 Directories are searched for shell scripts the way the editor's workspace
 scan finds them: by extension (`.sh`, `.bash`, `.zsh`, `.ksh`, `.dash`,
 `.bats`), by rc-file name (`.bashrc`, `.zshrc`, ...), and by a shell shebang on
-executable files without an extension. `.git`, `node_modules`, `vendor` and
+executable files without an extension (on Windows, which has no execute bit,
+on every file without one). `.git`, `node_modules`, `vendor` and
 similar directories are skipped. A `-` reads the script from standard input.
 Files are linted in parallel, and the report is ordered by path, then by
 position, so it is the same on every run.
@@ -76,7 +77,9 @@ extended-analysis=false
 ```
 
 `disable` takes codes, ranges and `all`; `source-path` entries are relative to
-the rc file. Options on the command line add to the rc file's settings, and
+the rc file and, like `--source-path`, separated by `:` (`;` on Windows, as in
+`PATH`). On Windows the fallbacks are `%USERPROFILE%\.config\shellcheckrc` and
+`%USERPROFILE%\.shellcheckrc` unless `XDG_CONFIG_HOME` is set. Options on the command line add to the rc file's settings, and
 `--shell` and `--extended-analysis` win over it. A line that is not a
 `key=value` setting, an unknown key or an invalid value stops the run with
 status 4 and names the file and line; ShellCheck would instead report
@@ -148,6 +151,16 @@ Exit status 0 means success, 1 means a file could not be read or parsed or,
 with `-l` (without `-w`) or `-d`, that some formatting differs, and 2 means
 the command line is malformed.
 
+## Windows
+
+The binary is `shell-lsp.exe`, and both commands take Windows paths and print
+file names with the platform's `\` separators (SARIF always uses `/`). Paths
+compare case-insensitively, so a file named twice in different case is
+checked once. `fmt -w` writes a temporary file next to the script and
+renames it over the original, as on other platforms; it fails, leaving the
+script untouched, if the script is read-only or another program holds it open
+without sharing it.
+
 ## In CI
 
 GitHub Actions, with findings uploaded to code scanning:
@@ -166,7 +179,9 @@ GitHub Actions, with findings uploaded to code scanning:
 ```
 
 Any CI that understands `gcc`-style lines or checkstyle XML can use
-`-f gcc` or `-f checkstyle` instead.
+`-f gcc` or `-f checkstyle` instead. On a Windows runner `go install` puts
+`shell-lsp.exe` in `%USERPROFILE%\go\bin`, and the same commands work from
+any shell.
 
 ## pre-commit
 
@@ -183,4 +198,6 @@ repos:
 ```
 
 `shell-lsp-check` lints the staged shell scripts, and `shell-lsp-fmt`
-formats them in place, which fails the commit when anything changed.
+formats them in place, which fails the commit when anything changed. On
+Windows pre-commit builds `shell-lsp.exe` and finds it through `PATHEXT`, so
+the same hooks work there.
