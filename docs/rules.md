@@ -157,6 +157,22 @@ which are usually meant for that subshell, are not reported.
 seq 3 | while read -r n; do trap 'echo bye' EXIT; done    # SL2004
 ```
 
+## SL2005
+
+**exit only leaves a subshell and nobody checks its status.** `exit` inside a
+command substitution or a pipeline stage ends that subshell, not the script.
+The status it leaves behind still reaches the script when the substitution is
+the value of a plain assignment or the stage is the last of the pipeline (or
+`pipefail` is on), so the rule stays quiet when that status is checked: by
+`set -e`, `!`, `&&`, `||`, an `if` or `while` condition, a following `$?` or
+`PIPESTATUS`, or because the statement is the last one in its block.
+
+```bash
+#!/bin/bash
+dir=$(cd "$1" || exit 1; pwd)    # SL2005: the script goes on with an empty $dir
+dir=$(cd "$1" && pwd) || exit 1  # checked
+```
+
 The embedded-language rules check awk, sed and jq programs written inside the
 script with built-in parsers; no awk, sed or jq binary is run. A program is
 checked when it is a literal argument (`awk '...'`, `sed -e '...'`,

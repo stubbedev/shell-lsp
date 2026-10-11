@@ -1,0 +1,29 @@
+### exit inside a command substitution or pipeline stage nobody checks
+#!/bin/bash
+dir=$(cd "$1" || exit 1; pwd)
+echo "$dir"
+echo "$(cat "$2" || exit 1)"
+seq 3 | while read -r n; do [ "$n" = 2 ] && exit 1; done
+echo after
+>>> SC2005 4:6
+>>+ SL2005 2:18 -- shell-lsp native check; shellcheck does not flag exit lost in a subshell
+>>+ SL2005 4:21 -- shell-lsp native check; shellcheck does not flag exit lost in a subshell
+>>+ SL2005 5:45 -- shell-lsp native check; shellcheck does not flag exit lost in a subshell
+
+### the status is checked, so the exit reaches the script
+#!/bin/bash
+seq 3 | while read -r n; do exit 2; done || exit $?
+seq 3 | while read -r n; do exit 3; done
+echo "status $?"
+x=$(false || exit 4) || exit 1
+if y=$(false || exit 5); then echo "$x $y"; fi
+( exit 6 )
+seq 3 | while read -r n; do exit 7; done
+>>> SC2034 8:23
+
+### set -e stops the script when an assignment's substitution fails
+#!/bin/bash
+set -e
+dir=$(cd "$1" || exit 1; pwd)
+echo "$dir"
+>>> none

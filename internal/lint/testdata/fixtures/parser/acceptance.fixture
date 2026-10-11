@@ -477,6 +477,7 @@ listing=$(cd /tmp || exit; ls
 )
 echo "$listing"
 >>> none
+>>+ SL2005 1:22 -- shell-lsp native check; exit only leaves the command substitution and nothing checks the assignment's status
 
 ### command substitution of only spaces
 empty=$(   )
