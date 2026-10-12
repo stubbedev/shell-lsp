@@ -3470,6 +3470,9 @@ func (p *Parser) testExprBinary(pastAndOr bool) TestExpr {
 		if p.val == "]]" {
 			return left
 		}
+		if lw, ok := left.(*Word); ok && testBinaryOp(p.val) == 0 && p.zshModuleTestName(p.val) {
+			return p.zshInfixModuleTest(lw)
+		}
 		if p.tok = token(testBinaryOp(p.val)); p.tok == illegalTok {
 			p.curErr("not a valid test operator: %#q", p.val)
 		}
@@ -3572,11 +3575,73 @@ func (p *Parser) testExprUnary() TestExpr {
 		fallthrough
 	default:
 		if w := p.getWord(); w != nil {
+			if mt := p.zshPrefixModuleTest(w); mt != nil {
+				return mt
+			}
 			return w
 		}
 		// otherwise we'd return a typed nil above
 		return nil
 	}
+}
+
+// zshModuleTestName reports whether name, read where a test operator could
+// be, names a zsh condition provided by a module: zsh accepts any word
+// starting with '-' there and looks the condition up when the test runs.
+func (p *Parser) zshModuleTestName(name string) bool {
+	return p.lang.in(LangZsh) && len(name) > 1 && name[0] == '-'
+}
+
+// zshPrefixModuleTest parses the arguments of a prefix zsh condition provided
+// by a module, like [[ -prefix -c ]] or [[ -between 1 a b ]], after its name
+// w. It returns nil if w is not such a name, or if what follows is a binary
+// operator, in which case w is its left operand.
+func (p *Parser) zshPrefixModuleTest(w *Word) *ModuleTest {
+	name, ok := w.Parts[0].(*Lit)
+	if len(w.Parts) != 1 || !ok || !p.zshModuleTestName(name.Value) || testUnaryOp(name.Value) != 0 {
+		return nil
+	}
+	if p.tok == _LitWord && testBinaryOp(p.val) != 0 {
+		return nil
+	}
+	mt := &ModuleTest{Name: name}
+	for !p.testOperandsEnd() {
+		arg := p.getWord()
+		if arg == nil {
+			break
+		}
+		mt.Args = append(mt.Args, arg)
+	}
+	if len(mt.Args) == 0 {
+		return nil
+	}
+	return mt
+}
+
+// zshInfixModuleTest parses an infix zsh condition provided by a module, like
+// [[ $s -pcre-match pat ]], whose name is the current token, after its left
+// operand.
+func (p *Parser) zshInfixModuleTest(left *Word) *ModuleTest {
+	mt := &ModuleTest{Left: left, Name: p.lit(p.pos, p.val)}
+	p.next()
+	if arg := p.getWord(); arg != nil {
+		mt.Args = []*Word{arg}
+	} else {
+		p.followErr(mt.Name.Pos(), mt.Name.Value, noQuote("a word"))
+	}
+	return mt
+}
+
+// testOperandsEnd reports whether the current token ends the operands of a
+// test expression.
+func (p *Parser) testOperandsEnd() bool {
+	switch p.tok {
+	case _EOF, _Newl, andAnd, orOr, rightParen:
+		return true
+	case _LitWord:
+		return p.val == "]]"
+	}
+	return false
 }
 
 func (p *Parser) declClause(s *Stmt) {

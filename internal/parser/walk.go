@@ -121,6 +121,10 @@ func Walk(node syntax.Node, f func(syntax.Node) bool) {
 		Walk(n.X, f)
 	case *syntax.UnaryTest:
 		Walk(n.X, f)
+	case *syntax.ModuleTest:
+		walkWord(n.Left, f)
+		Walk(n.Name, f)
+		walkWords(n.Args, f)
 	case *syntax.ParenArithm:
 		Walk(n.X, f)
 	case *syntax.FlagsArithm:

@@ -5032,6 +5032,47 @@ var fileTests = []fileTestCase{
 		}}, LangBash|LangMirBSDKorn|LangZsh),
 	),
 	fileTest(
+		[]string{"[[ -prefix -c ]]"},
+		langFile(&TestClause{X: &ModuleTest{
+			Name: lit("-prefix"),
+			Args: litWords("-c"),
+		}}, LangZsh),
+	),
+	fileTest(
+		[]string{"[[ -between 1 a b || $s -pcre-match p && -suffix x ]]"},
+		langFile(&TestClause{X: &BinaryTest{
+			Op: OrTest,
+			X: &ModuleTest{
+				Name: lit("-between"),
+				Args: litWords("1", "a", "b"),
+			},
+			Y: &BinaryTest{
+				Op: AndTest,
+				X: &ModuleTest{
+					Left: word(litParamExp("s")),
+					Name: lit("-pcre-match"),
+					Args: litWords("p"),
+				},
+				Y: &ModuleTest{
+					Name: lit("-suffix"),
+					Args: litWords("x"),
+				},
+			},
+		}}, LangZsh),
+	),
+	fileTest(
+		[]string{"[[ -prefix ]]"},
+		langFile(&TestClause{X: litWord("-prefix")}, LangZsh),
+	),
+	fileTest(
+		[]string{"[[ -prefix == x ]]"},
+		langFile(&TestClause{X: &BinaryTest{
+			Op: TsMatch,
+			X:  litWord("-prefix"),
+			Y:  litWord("x"),
+		}}, LangZsh),
+	),
+	fileTest(
 		[]string{"[[ 1 -nt 2 ]]"},
 		langFile(&TestClause{X: &BinaryTest{
 			Op: TsNewer,

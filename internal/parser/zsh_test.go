@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
 func indexedNames(tree *Tree) (defs, commands, keywords []string) {
@@ -170,5 +171,26 @@ func TestZshArithmeticFormsAreIndexed(t *testing.T) {
 	}
 	if want := []string{"x", "c", "n", "s", "s", "s", "t"}; !slices.Equal(refs, want) {
 		t.Errorf("references = %v, want %v", refs, want)
+	}
+}
+
+func TestZshModuleConditionsParseAndWalk(t *testing.T) {
+	t.Parallel()
+
+	src := "if [[ -prefix $p ]] || [[ -between 1 a b && $s -pcre-match $re ]]; then print ok; fi\n"
+	tree := Parse(src, dialect.Zsh)
+	if len(tree.Errors) != 0 {
+		t.Fatalf("errors = %v, want none", messages(tree))
+	}
+	var refs []string
+	for _, r := range tree.References {
+		refs = append(refs, r.Name)
+	}
+	if want := []string{"p", "s", "re"}; !slices.Equal(refs, want) {
+		t.Errorf("references = %v, want %v", refs, want)
+	}
+	want := walkEvents(syntax.Walk, tree.File, 0)
+	if got := walkEvents(Walk, tree.File, 0); !slices.Equal(got, want) {
+		t.Errorf("walk differs from syntax.Walk\n got %v\nwant %v", got, want)
 	}
 }

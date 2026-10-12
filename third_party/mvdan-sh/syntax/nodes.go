@@ -1073,7 +1073,7 @@ func (t *TestClause) End() Pos { return posAddCol(t.Right, 2) }
 
 // TestExpr represents all nodes that form test expressions.
 //
-// These are [*BinaryTest], [*UnaryTest], [*ParenTest], and [*Word].
+// These are [*BinaryTest], [*UnaryTest], [*ParenTest], [*ModuleTest], and [*Word].
 type TestExpr interface {
 	Node
 	testExprNode()
@@ -1082,6 +1082,7 @@ type TestExpr interface {
 func (*BinaryTest) testExprNode() {}
 func (*UnaryTest) testExprNode()  {}
 func (*ParenTest) testExprNode()  {}
+func (*ModuleTest) testExprNode() {}
 func (*Word) testExprNode()       {}
 
 // BinaryTest represents a binary test expression.
@@ -1114,6 +1115,33 @@ type ParenTest struct {
 
 func (p *ParenTest) Pos() Pos { return p.Lparen }
 func (p *ParenTest) End() Pos { return posAddCol(p.Rparen, 1) }
+
+// ModuleTest represents a zsh condition which a module provides and which
+// zsh looks up by name when the test runs. A prefix condition takes any
+// number of arguments, like the completion conditions in [[ -prefix -c ]]
+// or [[ -between 1 a b ]]; an infix one has a left operand and a single
+// argument, like [[ $s -pcre-match pat ]].
+//
+// This node will only appear with [LangZsh].
+type ModuleTest struct {
+	Left *Word // nil for a prefix condition
+	Name *Lit
+	Args []*Word
+}
+
+func (m *ModuleTest) Pos() Pos {
+	if m.Left != nil {
+		return m.Left.Pos()
+	}
+	return m.Name.Pos()
+}
+
+func (m *ModuleTest) End() Pos {
+	if len(m.Args) > 0 {
+		return m.Args[len(m.Args)-1].End()
+	}
+	return m.Name.End()
+}
 
 // DeclClause represents a Bash declare clause.
 //

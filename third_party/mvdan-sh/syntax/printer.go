@@ -1045,6 +1045,16 @@ func (p *Printer) testExprSameLine(expr TestExpr) {
 		p.w.WriteString(expr.Op.String())
 		p.space()
 		p.testExprSameLine(expr.X)
+	case *ModuleTest:
+		if expr.Left != nil {
+			p.word(expr.Left)
+			p.space()
+		}
+		p.writeLit(expr.Name.Value)
+		for _, arg := range expr.Args {
+			p.space()
+			p.word(arg)
+		}
 	case *ParenTest:
 		p.w.WriteByte('(')
 		if startsWithLparen(expr.X) {

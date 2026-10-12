@@ -138,6 +138,10 @@ func Walk(node Node, f func(Node) bool) {
 		Walk(node.X, f)
 	case *UnaryTest:
 		Walk(node.X, f)
+	case *ModuleTest:
+		walkNilable(node.Left, f)
+		Walk(node.Name, f)
+		walkList(node.Args, f)
 	case *ParenArithm:
 		Walk(node.X, f)
 	case *FlagsArithm:

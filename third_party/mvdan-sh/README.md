@@ -51,6 +51,7 @@ reproducer so that it can be sent upstream as it is.
 | 0019 | syntax: a `StartAt(offset, line, col)` parser option, so a fragment of a larger file parses with the positions it has in that file instead of starting over at 1:1 | — |
 | 0020 | zsh: the length prefix combines with any further operator and counts its result (`${#x%c}`, `${#words:#-*}`, `${#a/x/y}`), as with `zsh -n`, instead of failing with "cannot combine multiple parameter expansion operators" | [mvdan/sh#120](https://github.com/mvdan/sh/issues/120) |
 | 0021 | zsh: an empty alternative in a pattern group of a case item (`(|l)server)`, `(un|)install)`), as with `zsh -n`, instead of failing with "case patterns must consist of words" | [mvdan/sh#120](https://github.com/mvdan/sh/issues/120) |
+| 0022 | zsh: conditions provided by modules, prefix with any number of arguments (`[[ -prefix -c ]]`, `[[ -between 1 a b ]]`) or infix (`[[ $s -pcre-match p ]]`), as a new `ModuleTest` node, as with `zsh -n`, instead of failing with "not a valid test operator" | [mvdan/sh#120](https://github.com/mvdan/sh/issues/120) |
 
 ## Tests
 

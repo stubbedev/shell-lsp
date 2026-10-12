@@ -1,0 +1,260 @@
+syntax: zsh conditions provided by modules, as a new ModuleTest node
+
+zsh accepts any word starting with '-' as a condition in [[ ]], with any
+number of arguments when it comes first and one argument when it stands
+between two words, and looks the condition up only when the test runs.
+Modules use this to add conditions: zsh/computil provides the completion
+conditions -prefix, -suffix, -after and -between, and zsh/pcre the infix
+-pcre-match. zsh -n accepts
+
+	[[ -prefix - ]] && return
+	if [[ -prefix 1 *@ ]] || [[ -between 1 a b ]]; then :; fi
+	[[ $line -pcre-match '^\d+$' ]]
+
+and zsh's own completion functions use the completion conditions in dozens
+of files. The parser rejected the prefix form with "not a valid test
+operator" for the first argument and the infix form for the operator.
+
+With LangZsh, a word starting with '-' that is not a known unary operator
+and is followed by more words before ]], &&, || or ) now parses as a
+ModuleTest with those words as arguments, unless the next word is a binary
+operator, as in [[ -prefix == x ]]. A word starting with '-' where a binary
+operator would be parses as an infix ModuleTest. A lone [[ -prefix ]] is
+still a word, the non-empty string test.
+
+Reproducer, before this change: `[[ -prefix -c ]]` with LangZsh failed
+with "not a valid test operator: `-c`".
+
+diff --git a/syntax/filetests_test.go b/syntax/filetests_test.go
+index b05a415..8bebf67 100644
+--- a/syntax/filetests_test.go
++++ b/syntax/filetests_test.go
+@@ -5031,6 +5031,47 @@ var fileTests = []fileTestCase{
+ 			Y:  litWord("b"),
+ 		}}, LangBash|LangMirBSDKorn|LangZsh),
+ 	),
++	fileTest(
++		[]string{"[[ -prefix -c ]]"},
++		langFile(&TestClause{X: &ModuleTest{
++			Name: lit("-prefix"),
++			Args: litWords("-c"),
++		}}, LangZsh),
++	),
++	fileTest(
++		[]string{"[[ -between 1 a b || $s -pcre-match p && -suffix x ]]"},
++		langFile(&TestClause{X: &BinaryTest{
++			Op: OrTest,
++			X: &ModuleTest{
++				Name: lit("-between"),
++				Args: litWords("1", "a", "b"),
++			},
++			Y: &BinaryTest{
++				Op: AndTest,
++				X: &ModuleTest{
++					Left: word(litParamExp("s")),
++					Name: lit("-pcre-match"),
++					Args: litWords("p"),
++				},
++				Y: &ModuleTest{
++					Name: lit("-suffix"),
++					Args: litWords("x"),
++				},
++			},
++		}}, LangZsh),
++	),
++	fileTest(
++		[]string{"[[ -prefix ]]"},
++		langFile(&TestClause{X: litWord("-prefix")}, LangZsh),
++	),
++	fileTest(
++		[]string{"[[ -prefix == x ]]"},
++		langFile(&TestClause{X: &BinaryTest{
++			Op: TsMatch,
++			X:  litWord("-prefix"),
++			Y:  litWord("x"),
++		}}, LangZsh),
++	),
+ 	fileTest(
+ 		[]string{"[[ 1 -nt 2 ]]"},
+ 		langFile(&TestClause{X: &BinaryTest{
+diff --git a/syntax/nodes.go b/syntax/nodes.go
+index bd29c67..dfdfffc 100644
+--- a/syntax/nodes.go
++++ b/syntax/nodes.go
+@@ -1073,7 +1073,7 @@ func (t *TestClause) End() Pos { return posAddCol(t.Right, 2) }
+ 
+ // TestExpr represents all nodes that form test expressions.
+ //
+-// These are [*BinaryTest], [*UnaryTest], [*ParenTest], and [*Word].
++// These are [*BinaryTest], [*UnaryTest], [*ParenTest], [*ModuleTest], and [*Word].
+ type TestExpr interface {
+ 	Node
+ 	testExprNode()
+@@ -1082,6 +1082,7 @@ type TestExpr interface {
+ func (*BinaryTest) testExprNode() {}
+ func (*UnaryTest) testExprNode()  {}
+ func (*ParenTest) testExprNode()  {}
++func (*ModuleTest) testExprNode() {}
+ func (*Word) testExprNode()       {}
+ 
+ // BinaryTest represents a binary test expression.
+@@ -1115,6 +1116,33 @@ type ParenTest struct {
+ func (p *ParenTest) Pos() Pos { return p.Lparen }
+ func (p *ParenTest) End() Pos { return posAddCol(p.Rparen, 1) }
+ 
++// ModuleTest represents a zsh condition which a module provides and which
++// zsh looks up by name when the test runs. A prefix condition takes any
++// number of arguments, like the completion conditions in [[ -prefix -c ]]
++// or [[ -between 1 a b ]]; an infix one has a left operand and a single
++// argument, like [[ $s -pcre-match pat ]].
++//
++// This node will only appear with [LangZsh].
++type ModuleTest struct {
++	Left *Word // nil for a prefix condition
++	Name *Lit
++	Args []*Word
++}
++
++func (m *ModuleTest) Pos() Pos {
++	if m.Left != nil {
++		return m.Left.Pos()
++	}
++	return m.Name.Pos()
++}
++
++func (m *ModuleTest) End() Pos {
++	if len(m.Args) > 0 {
++		return m.Args[len(m.Args)-1].End()
++	}
++	return m.Name.End()
++}
++
+ // DeclClause represents a Bash declare clause.
+ //
+ // Args can contain a mix of regular and naked assignments. The naked
+diff --git a/syntax/parser.go b/syntax/parser.go
+index 16e62ee..fa29a96 100644
+--- a/syntax/parser.go
++++ b/syntax/parser.go
+@@ -3470,6 +3470,9 @@ func (p *Parser) testExprBinary(pastAndOr bool) TestExpr {
+ 		if p.val == "]]" {
+ 			return left
+ 		}
++		if lw, ok := left.(*Word); ok && testBinaryOp(p.val) == 0 && p.zshModuleTestName(p.val) {
++			return p.zshInfixModuleTest(lw)
++		}
+ 		if p.tok = token(testBinaryOp(p.val)); p.tok == illegalTok {
+ 			p.curErr("not a valid test operator: %#q", p.val)
+ 		}
+@@ -3572,6 +3575,9 @@ func (p *Parser) testExprUnary() TestExpr {
+ 		fallthrough
+ 	default:
+ 		if w := p.getWord(); w != nil {
++			if mt := p.zshPrefixModuleTest(w); mt != nil {
++				return mt
++			}
+ 			return w
+ 		}
+ 		// otherwise we'd return a typed nil above
+@@ -3579,6 +3585,65 @@ func (p *Parser) testExprUnary() TestExpr {
+ 	}
+ }
+ 
++// zshModuleTestName reports whether name, read where a test operator could
++// be, names a zsh condition provided by a module: zsh accepts any word
++// starting with '-' there and looks the condition up when the test runs.
++func (p *Parser) zshModuleTestName(name string) bool {
++	return p.lang.in(LangZsh) && len(name) > 1 && name[0] == '-'
++}
++
++// zshPrefixModuleTest parses the arguments of a prefix zsh condition provided
++// by a module, like [[ -prefix -c ]] or [[ -between 1 a b ]], after its name
++// w. It returns nil if w is not such a name, or if what follows is a binary
++// operator, in which case w is its left operand.
++func (p *Parser) zshPrefixModuleTest(w *Word) *ModuleTest {
++	name, ok := w.Parts[0].(*Lit)
++	if len(w.Parts) != 1 || !ok || !p.zshModuleTestName(name.Value) || testUnaryOp(name.Value) != 0 {
++		return nil
++	}
++	if p.tok == _LitWord && testBinaryOp(p.val) != 0 {
++		return nil
++	}
++	mt := &ModuleTest{Name: name}
++	for !p.testOperandsEnd() {
++		arg := p.getWord()
++		if arg == nil {
++			break
++		}
++		mt.Args = append(mt.Args, arg)
++	}
++	if len(mt.Args) == 0 {
++		return nil
++	}
++	return mt
++}
++
++// zshInfixModuleTest parses an infix zsh condition provided by a module, like
++// [[ $s -pcre-match pat ]], whose name is the current token, after its left
++// operand.
++func (p *Parser) zshInfixModuleTest(left *Word) *ModuleTest {
++	mt := &ModuleTest{Left: left, Name: p.lit(p.pos, p.val)}
++	p.next()
++	if arg := p.getWord(); arg != nil {
++		mt.Args = []*Word{arg}
++	} else {
++		p.followErr(mt.Name.Pos(), mt.Name.Value, noQuote("a word"))
++	}
++	return mt
++}
++
++// testOperandsEnd reports whether the current token ends the operands of a
++// test expression.
++func (p *Parser) testOperandsEnd() bool {
++	switch p.tok {
++	case _EOF, _Newl, andAnd, orOr, rightParen:
++		return true
++	case _LitWord:
++		return p.val == "]]"
++	}
++	return false
++}
++
+ func (p *Parser) declClause(s *Stmt) {
+ 	ds := &DeclClause{Variant: p.lit(p.pos, p.val)}
+ 	p.next()
+diff --git a/syntax/printer.go b/syntax/printer.go
+index d689ed1..4bf6ea4 100644
+--- a/syntax/printer.go
++++ b/syntax/printer.go
+@@ -1045,6 +1045,16 @@ func (p *Printer) testExprSameLine(expr TestExpr) {
+ 		p.w.WriteString(expr.Op.String())
+ 		p.space()
+ 		p.testExprSameLine(expr.X)
++	case *ModuleTest:
++		if expr.Left != nil {
++			p.word(expr.Left)
++			p.space()
++		}
++		p.writeLit(expr.Name.Value)
++		for _, arg := range expr.Args {
++			p.space()
++			p.word(arg)
++		}
+ 	case *ParenTest:
+ 		p.w.WriteByte('(')
+ 		if startsWithLparen(expr.X) {
+diff --git a/syntax/walk.go b/syntax/walk.go
+index e2ce6bd..ed389b6 100644
+--- a/syntax/walk.go
++++ b/syntax/walk.go
+@@ -138,6 +138,10 @@ func Walk(node Node, f func(Node) bool) {
+ 		Walk(node.X, f)
+ 	case *UnaryTest:
+ 		Walk(node.X, f)
++	case *ModuleTest:
++		walkNilable(node.Left, f)
++		Walk(node.Name, f)
++		walkList(node.Args, f)
+ 	case *ParenArithm:
+ 		Walk(node.X, f)
+ 	case *FlagsArithm:
