@@ -20,7 +20,7 @@ func moveDocument(t *testing.T, src, lib string, libDialect dialect.Dialect) (st
 	sources := func() []Source {
 		var out []Source
 		for _, c := range tree.Commands {
-			if c.IsSource() {
+			if c.IsSourceBuiltin() {
 				out = append(out, Source{URI: libURI, Name: "lib.sh", Tree: libTree, Command: c})
 			}
 		}

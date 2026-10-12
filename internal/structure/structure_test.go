@@ -79,6 +79,16 @@ arr [array] kind=3
 	}
 }
 
+func TestSourceSymbolsNameTheSourcedFile(t *testing.T) {
+	t.Parallel()
+
+	var sb strings.Builder
+	render(Symbols(parser.Parse("source -- ./lib.sh\n. ./b.sh\nsource\n", dialect.Bash)), 0, &sb)
+	if want := "./lib.sh [source] kind=0\n./b.sh [.] kind=0\n"; sb.String() != want {
+		t.Errorf("symbols:\n%s\nwant:\n%s", sb.String(), want)
+	}
+}
+
 const batsScript = `#!/usr/bin/env bats
 setup_file() {
 	export SHARED=1

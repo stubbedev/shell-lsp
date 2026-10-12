@@ -2,10 +2,10 @@ package parser
 
 import "github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 
-func (c Command) IsSource() bool { return c.Name == "source" || c.Name == "." }
+func (c Command) IsSourceBuiltin() bool { return c.Name == "source" || c.Name == "." }
 
 func (c Command) SourcedFile() (*syntax.Word, bool) {
-	if !c.IsSource() {
+	if !c.IsSourceBuiltin() {
 		return nil, false
 	}
 	args := c.Args

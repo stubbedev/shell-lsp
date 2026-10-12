@@ -43,11 +43,6 @@ func (r SourceRef) Names(offset int) bool {
 	return r.Arg.Contains(offset) || r.Directive != nil && r.Directive.Contains(offset)
 }
 
-func IsSource(cmd parser.Command) bool {
-	_, ok := cmd.SourcedFile()
-	return ok
-}
-
 type resolvedSource struct {
 	command   parser.Command
 	file      *syntax.Word

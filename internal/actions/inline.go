@@ -140,7 +140,7 @@ func inlinableValue(def *parser.Definition) (string, bool) {
 }
 
 func sourcedTrees(doc Document) ([]*parser.Tree, bool) {
-	if !slices.ContainsFunc(doc.Tree.Commands, parser.Command.IsSource) {
+	if !slices.ContainsFunc(doc.Tree.Commands, parser.Command.IsSourceBuiltin) {
 		return nil, true
 	}
 	if doc.SourcedTrees == nil {

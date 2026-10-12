@@ -25,7 +25,7 @@ var sourcesFamily = family{
 
 func checkSources(p *pass) {
 	for _, cmd := range p.tree.Commands {
-		if cmd.IsSource() {
+		if cmd.IsSourceBuiltin() {
 			p.checkSource(cmd)
 		}
 	}

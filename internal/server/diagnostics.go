@@ -20,7 +20,6 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
-	"github.com/stubbedev/shell-lsp/internal/navigation"
 	"github.com/stubbedev/shell-lsp/internal/parallel"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/shellcheckrc"
@@ -106,7 +105,7 @@ func (s *Server) report(file *workspace.File, settings config.Settings, generati
 }
 
 func (s *Server) sourcesStamp(tree *parser.Tree) uint64 {
-	if !slices.ContainsFunc(tree.Commands, navigation.IsSource) {
+	if !slices.ContainsFunc(tree.Commands, parser.Command.IsSourceBuiltin) {
 		return 0
 	}
 	return s.workspace.Generation()

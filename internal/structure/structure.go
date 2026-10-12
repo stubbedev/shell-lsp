@@ -135,10 +135,11 @@ func variableSymbol(def parser.Definition) Symbol {
 func sources(tree *parser.Tree) []Symbol {
 	var out []Symbol
 	for _, cmd := range tree.Commands {
-		if (cmd.Name != "source" && cmd.Name != ".") || len(cmd.Args) == 0 {
+		word, ok := cmd.SourcedFile()
+		if !ok {
 			continue
 		}
-		arg, ok := tree.NodeSpan(cmd.Args[0])
+		arg, ok := tree.NodeSpan(word)
 		if !ok {
 			continue
 		}
