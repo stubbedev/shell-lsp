@@ -91,46 +91,23 @@ var keywords = map[string]kind{
 	"print": tPrint, "printf": tPrintf, "in": tIn,
 }
 
-type operator struct {
-	text string
-	kind kind
-}
-
-var operators = [256][]operator{
-	'+': {{"+=", tAddAssign}, {"++", tIncr}, {"+", tAdd}},
-	'-': {{"-=", tSubAssign}, {"--", tDecr}, {"-", tSub}},
-	'*': {{"**=", tPowAssign}, {"**", tPow}, {"*=", tMulAssign}, {"*", tMul}},
-	'/': {{"/=", tDivAssign}, {"/", tDiv}},
-	'%': {{"%=", tModAssign}, {"%", tMod}},
-	'^': {{"^=", tPowAssign}, {"^", tPow}},
-	'!': {{"!=", tNotEqual}, {"!~", tNoMatch}, {"!", tNot}},
-	'<': {{"<=", tLessEq}, {"<", tLess}},
-	'>': {{">=", tGreaterEq}, {">>", tAppend}, {">", tGreater}},
-	'=': {{"==", tEqual}, {"=", tAssign}},
-	'~': {{"~", tMatch}},
-	'&': {{"&&", tAnd}},
-	'|': {{"||", tOr}, {"|&", tPipeBoth}, {"|", tPipe}},
-	'?': {{"?", tQuestion}},
-	':': {{":", tColon}},
-	'$': {{"$", tDollar}},
-	'@': {{"@", tAt}},
-	'{': {{"{", tLBrace}},
-	'}': {{"}", tRBrace}},
-	'(': {{"(", tLParen}},
-	')': {{")", tRParen}},
-	'[': {{"[", tLBracket}},
-	']': {{"]", tRBracket}},
-	',': {{",", tComma}},
-	';': {{";", tSemicolon}},
-}
-
-func isPunctuation(k kind) bool {
-	switch k {
-	case tLBrace, tRBrace, tLParen, tRParen, tLBracket, tRBracket, tComma, tSemicolon:
-		return true
-	}
-	return false
-}
+var operators = lang.NewOperators(map[string]kind{
+	"+=": tAddAssign, "++": tIncr, "+": tAdd,
+	"-=": tSubAssign, "--": tDecr, "-": tSub,
+	"**=": tPowAssign, "**": tPow, "*=": tMulAssign, "*": tMul,
+	"/=": tDivAssign, "/": tDiv,
+	"%=": tModAssign, "%": tMod,
+	"^=": tPowAssign, "^": tPow,
+	"!=": tNotEqual, "!~": tNoMatch, "!": tNot,
+	"<=": tLessEq, "<": tLess,
+	">=": tGreaterEq, ">>": tAppend, ">": tGreater,
+	"==": tEqual, "=": tAssign,
+	"~": tMatch, "&&": tAnd,
+	"||": tOr, "|&": tPipeBoth, "|": tPipe,
+	"?": tQuestion, ":": tColon, "$": tDollar, "@": tAt,
+}, map[string]kind{
+	"{": tLBrace, "}": tRBrace, "(": tLParen, ")": tRParen, "[": tLBracket, "]": tRBracket, ",": tComma, ";": tSemicolon,
+})
 
 type class uint8
 
@@ -159,11 +136,7 @@ var words = func() map[string]word {
 	return out
 }()
 
-type token struct {
-	kind       kind
-	start, end int
-	sem        int
-}
+type token = lang.Lexeme[kind]
 
 type lexer struct {
 	src   string
@@ -181,7 +154,7 @@ func (l *lexer) fail(start, end int, message string) {
 
 func (l *lexer) next() token {
 	t := l.scan()
-	l.prev = t.kind
+	l.prev = t.Kind
 	return t
 }
 
@@ -200,7 +173,7 @@ func (l *lexer) scan() token {
 			return l.token(c)
 		}
 	}
-	return token{kind: tEOF, start: len(l.src), end: len(l.src), sem: -1}
+	return token{Kind: tEOF, Start: len(l.src), End: len(l.src)}
 }
 
 func (l *lexer) continuation() bool {
@@ -228,30 +201,28 @@ func (l *lexer) token(c byte) token {
 	switch {
 	case c == '\n':
 		l.pos++
-		return token{kind: tNewline, start: start, end: l.pos, sem: -1}
+		return token{Kind: tNewline, Start: start, End: l.pos}
 	case c == '"':
 		return l.quoted(tString, lang.String, '"', "unterminated string")
 	case c == '/' && l.regexpAllowed():
 		return l.quoted(tRegexp, lang.Regexp, '/', "unterminated regular expression")
-	case lang.IsDigit(c) || (c == '.' && start+1 < len(l.src) && lang.IsDigit(l.src[start+1])):
-		l.number()
-		return token{kind: tNumber, start: start, end: l.pos, sem: l.res.Emit(start, l.pos, lang.Number, 0)}
+	case lang.StartsNumber(l.src, start):
+		l.pos = scanNumber(l.src, start)
+		return l.emit(tNumber, start, lang.Number, 0)
 	case lang.IsNameStart(c):
 		return l.name()
 	}
-	for _, op := range operators[c] {
-		if strings.HasPrefix(l.src[start:], op.text) {
-			l.pos += len(op.text)
-			sem := -1
-			if !isPunctuation(op.kind) {
-				sem = l.res.Emit(start, l.pos, lang.Operator, 0)
-			}
-			return token{kind: op.kind, start: start, end: l.pos, sem: sem}
-		}
+	if t, ok := operators.Scan(l.res, l.src, start); ok {
+		l.pos = t.End
+		return t
 	}
 	l.pos = lang.RuneEnd(l.src, start)
 	l.fail(start, l.pos, lang.Illegal(l.src, start, l.pos))
-	return token{kind: tIllegal, start: start, end: l.pos, sem: -1}
+	return token{Kind: tIllegal, Start: start, End: l.pos}
+}
+
+func (l *lexer) emit(k kind, start int, sem lang.Kind, mods lang.Modifier) token {
+	return token{Kind: k, Start: start, End: l.pos, Sem: l.res.Emit(start, l.pos, sem, mods)}
 }
 
 func (l *lexer) regexpAllowed() bool {
@@ -290,7 +261,7 @@ func (l *lexer) quoted(k kind, sem lang.Kind, closer byte, unterminated string) 
 			if k == tRegexp && !l.quiet {
 				l.res.CheckRegex(lang.Verbatim(l.src, start+1, l.pos-1), regex.Awk)
 			}
-			return token{kind: k, start: start, end: l.pos, sem: l.res.Emit(start, l.pos, sem, 0)}
+			return l.emit(k, start, sem, 0)
 		}
 		l.pos++
 	}
@@ -311,70 +282,39 @@ func bracketBody(src string, at int) int {
 func (l *lexer) unterminated(sem lang.Kind, start int, message string) token {
 	l.pos = min(l.pos, len(l.src))
 	l.fail(start, l.pos, message)
-	return token{kind: tUnterminated, start: start, end: l.pos, sem: l.res.Emit(start, l.pos, sem, 0)}
+	return l.emit(tUnterminated, start, sem, 0)
 }
 
-func (l *lexer) number() {
-	src := l.src
-	if src[l.pos] == '0' && l.pos+2 < len(src) && src[l.pos+1]|0x20 == 'x' && lang.IsHexDigit(src[l.pos+2]) {
-		l.pos += 2
-		for l.pos < len(src) && lang.IsHexDigit(src[l.pos]) {
-			l.pos++
-		}
-		return
+func scanNumber(src string, at int) int {
+	if src[at] != '0' || at+2 >= len(src) || src[at+1]|0x20 != 'x' || !lang.IsHexDigit(src[at+2]) {
+		return lang.ScanNumber(src, at)
 	}
-	l.digits()
-	if l.pos < len(src) && src[l.pos] == '.' {
-		l.pos++
-		l.digits()
+	at += 2
+	for at < len(src) && lang.IsHexDigit(src[at]) {
+		at++
 	}
-	if l.pos < len(src) && src[l.pos]|0x20 == 'e' {
-		at := l.pos + 1
-		if at < len(src) && (src[at] == '+' || src[at] == '-') {
-			at++
-		}
-		if at < len(src) && lang.IsDigit(src[at]) {
-			l.pos = at
-			l.digits()
-		}
-	}
-}
-
-func (l *lexer) digits() {
-	for l.pos < len(l.src) && lang.IsDigit(l.src[l.pos]) {
-		l.pos++
-	}
+	return at
 }
 
 func (l *lexer) name() token {
 	start := l.pos
-	l.scanName()
-	for strings.HasPrefix(l.src[l.pos:], "::") && l.pos+2 < len(l.src) && lang.IsNameStart(l.src[l.pos+2]) {
-		l.pos += 2
-		l.scanName()
-	}
+	l.pos = lang.ScanQualifiedName(l.src, start)
 	name := l.src[start:l.pos]
 	w, known := words[name]
 	switch {
 	case known && w.class == keywordClass:
-		return token{kind: w.kind, start: start, end: l.pos, sem: l.res.Emit(start, l.pos, lang.Keyword, 0)}
+		return l.emit(w.kind, start, lang.Keyword, 0)
 	case known && w.class == functionClass && (name == "length" || l.callFollows()):
-		return token{kind: tBuiltinFunc, start: start, end: l.pos, sem: l.res.Emit(start, l.pos, lang.Function, lang.Builtin)}
+		return l.emit(tBuiltinFunc, start, lang.Function, lang.Builtin)
 	case l.pos < len(l.src) && l.src[l.pos] == '(':
-		return token{kind: tFuncName, start: start, end: l.pos, sem: l.res.Emit(start, l.pos, lang.Function, 0)}
+		return l.emit(tFuncName, start, lang.Function, 0)
 	case known && w.class == variableClass:
-		return token{kind: tName, start: start, end: l.pos, sem: l.res.Emit(start, l.pos, lang.Variable, lang.Builtin)}
+		return l.emit(tName, start, lang.Variable, lang.Builtin)
 	}
-	return token{kind: tName, start: start, end: l.pos, sem: l.res.Emit(start, l.pos, lang.Variable, 0)}
+	return l.emit(tName, start, lang.Variable, 0)
 }
 
 func (l *lexer) callFollows() bool {
 	rest := strings.TrimLeft(l.src[l.pos:], " \t")
 	return rest != "" && rest[0] == '('
-}
-
-func (l *lexer) scanName() {
-	for l.pos < len(l.src) && lang.IsNameChar(l.src[l.pos]) {
-		l.pos++
-	}
 }

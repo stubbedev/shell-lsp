@@ -41,8 +41,10 @@ func TestEmitSkipsEmptySpans(t *testing.T) {
 	t.Parallel()
 
 	var r Result
-	if i := r.Emit(3, 3, String, 0); i != -1 || len(r.Tokens) != 0 {
-		t.Errorf("Emit of an empty span = %d with tokens %v", i, r.Tokens)
+	e := r.Emit(3, 3, String, 0)
+	r.Reclassify(e, Number, Builtin)
+	if e.ok || len(r.Tokens) != 0 {
+		t.Errorf("Emit of an empty span = %+v with tokens %v", e, r.Tokens)
 	}
 }
 

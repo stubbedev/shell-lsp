@@ -57,14 +57,6 @@ func NewResult(src string) Result {
 	return Result{Tokens: make([]Token, 0, len(src)/3+1)}
 }
 
-func (r *Result) Emit(start, end int, kind Kind, mods Modifier) int {
-	if end <= start {
-		return -1
-	}
-	r.Tokens = append(r.Tokens, Token{Start: start, End: end, Kind: kind, Modifiers: mods})
-	return len(r.Tokens) - 1
-}
-
 func (r *Result) Fail(start, end int, message string) {
 	e := Error{Start: start, End: max(end, start), Message: message}
 	if len(r.Errors) == MaxErrors || slices.ContainsFunc(r.Errors, e.overlaps) {

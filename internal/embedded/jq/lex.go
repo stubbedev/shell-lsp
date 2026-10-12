@@ -83,47 +83,20 @@ var keywords = map[string]kind{
 
 var literals = map[string]bool{"true": true, "false": true, "null": true}
 
-type operator struct {
-	text string
-	kind kind
-}
+var operators = lang.NewOperators(map[string]kind{
+	"|=": tUpdate, "|": tPipe,
+	"//=": tAltAssign, "//": tAlt, "/=": tDivAssign, "/": tDiv,
+	"?//": tAltDestructure, "?": tQuestion,
+	"==": tEqual, "=": tAssign, "!=": tNotEqual,
+	"<=": tLessEq, "<": tLess, ">=": tGreaterEq, ">": tGreater,
+	"+=": tAddAssign, "+": tAdd, "-=": tSubAssign, "-": tSub,
+	"*=": tMulAssign, "*": tMul, "%=": tModAssign, "%": tMod,
+}, map[string]kind{
+	"(": tLParen, ")": tRParen, "[": tLBracket, "]": tRBracket, "{": tLBrace, "}": tRBrace,
+	":": tColon, ";": tSemicolon, ",": tComma,
+})
 
-var operators = [256][]operator{
-	'|': {{"|=", tUpdate}, {"|", tPipe}},
-	',': {{",", tComma}},
-	'/': {{"//=", tAltAssign}, {"//", tAlt}, {"/=", tDivAssign}, {"/", tDiv}},
-	'?': {{"?//", tAltDestructure}, {"?", tQuestion}},
-	'=': {{"==", tEqual}, {"=", tAssign}},
-	'!': {{"!=", tNotEqual}},
-	'<': {{"<=", tLessEq}, {"<", tLess}},
-	'>': {{">=", tGreaterEq}, {">", tGreater}},
-	'+': {{"+=", tAddAssign}, {"+", tAdd}},
-	'-': {{"-=", tSubAssign}, {"-", tSub}},
-	'*': {{"*=", tMulAssign}, {"*", tMul}},
-	'%': {{"%=", tModAssign}, {"%", tMod}},
-	'(': {{"(", tLParen}},
-	')': {{")", tRParen}},
-	'[': {{"[", tLBracket}},
-	']': {{"]", tRBracket}},
-	'{': {{"{", tLBrace}},
-	'}': {{"}", tRBrace}},
-	':': {{":", tColon}},
-	';': {{";", tSemicolon}},
-}
-
-func isPunctuation(k kind) bool {
-	switch k {
-	case tLParen, tRParen, tLBracket, tRBracket, tLBrace, tRBrace, tColon, tSemicolon, tComma:
-		return true
-	}
-	return false
-}
-
-type token struct {
-	kind       kind
-	start, end int
-	sem        int
-}
+type token = lang.Lexeme[kind]
 
 type lexer struct {
 	src    string
@@ -156,7 +129,7 @@ func (l *lexer) next() token {
 			return l.token(c)
 		}
 	}
-	return token{kind: tEOF, start: len(l.src), end: len(l.src), sem: -1}
+	return token{Kind: tEOF, Start: len(l.src), End: len(l.src)}
 }
 
 func (l *lexer) token(c byte) token {
@@ -170,8 +143,8 @@ func (l *lexer) token(c byte) token {
 		l.pos++
 		l.res.Emit(start, l.pos, lang.Operator, 0)
 		return l.stringPart(l.pos, tStringTail, tStringMiddle)
-	case lang.IsDigit(c) || (c == '.' && l.pos+1 < len(l.src) && lang.IsDigit(l.src[l.pos+1])):
-		l.number()
+	case lang.StartsNumber(l.src, start):
+		l.pos = lang.ScanNumber(l.src, start)
 		return l.emit(tNumber, start, lang.Number, 0)
 	case c == '.':
 		return l.dot()
@@ -180,23 +153,18 @@ func (l *lexer) token(c byte) token {
 	case lang.IsNameStart(c):
 		return l.ident()
 	}
-	for _, op := range operators[c] {
-		if strings.HasPrefix(l.src[start:], op.text) {
-			l.pos += len(op.text)
-			l.balance(op.kind)
-			if isPunctuation(op.kind) {
-				return token{kind: op.kind, start: start, end: l.pos, sem: -1}
-			}
-			return l.emit(op.kind, start, lang.Operator, 0)
-		}
+	if t, ok := operators.Scan(l.res, l.src, start); ok {
+		l.pos = t.End
+		l.balance(t.Kind)
+		return t
 	}
 	l.pos = lang.RuneEnd(l.src, start)
 	l.fail(start, l.pos, lang.Illegal(l.src, start, l.pos))
-	return token{kind: tIllegal, start: start, end: l.pos, sem: -1}
+	return token{Kind: tIllegal, Start: start, End: l.pos}
 }
 
 func (l *lexer) emit(k kind, start int, sem lang.Kind, mods lang.Modifier) token {
-	return token{kind: k, start: start, end: l.pos, sem: l.res.Emit(start, l.pos, sem, mods)}
+	return token{Kind: k, Start: start, End: l.pos, Sem: l.res.Emit(start, l.pos, sem, mods)}
 }
 
 func (l *lexer) balance(k kind) {
@@ -218,14 +186,14 @@ func (l *lexer) stringPart(start int, closed, interpolated kind) token {
 		case '"':
 			l.pos++
 			l.res.Emit(textStart-boolInt(closed == tString), l.pos, lang.String, 0)
-			return token{kind: closed, start: start, end: l.pos, sem: -1}
+			return token{Kind: closed, Start: start, End: l.pos}
 		case '\\':
 			if l.pos+1 < len(l.src) && l.src[l.pos+1] == '(' {
 				l.res.Emit(textStart-boolInt(closed == tString), l.pos, lang.String, 0)
 				l.pos += 2
 				l.res.Emit(l.pos-2, l.pos, lang.Operator, 0)
 				l.nested = append(l.nested, 0)
-				return token{kind: interpolated, start: start, end: l.pos, sem: -1}
+				return token{Kind: interpolated, Start: start, End: l.pos}
 			}
 			l.escape()
 			continue
@@ -234,7 +202,7 @@ func (l *lexer) stringPart(start int, closed, interpolated kind) token {
 	}
 	l.res.Emit(textStart-boolInt(closed == tString), l.pos, lang.String, 0)
 	l.fail(start, l.pos, "unterminated string")
-	return token{kind: tUnterminated, start: start, end: l.pos, sem: -1}
+	return token{Kind: tUnterminated, Start: start, End: l.pos}
 }
 
 func boolInt(b bool) int {
@@ -269,30 +237,6 @@ func (l *lexer) escape() {
 	}
 }
 
-func (l *lexer) number() {
-	l.digits()
-	if l.pos < len(l.src) && l.src[l.pos] == '.' {
-		l.pos++
-		l.digits()
-	}
-	if l.pos < len(l.src) && l.src[l.pos]|0x20 == 'e' {
-		at := l.pos + 1
-		if at < len(l.src) && (l.src[at] == '+' || l.src[at] == '-') {
-			at++
-		}
-		if at < len(l.src) && lang.IsDigit(l.src[at]) {
-			l.pos = at
-			l.digits()
-		}
-	}
-}
-
-func (l *lexer) digits() {
-	for l.pos < len(l.src) && lang.IsDigit(l.src[l.pos]) {
-		l.pos++
-	}
-}
-
 func (l *lexer) dot() token {
 	start := l.pos
 	l.pos++
@@ -301,7 +245,7 @@ func (l *lexer) dot() token {
 		return l.emit(tDotDot, start, lang.Operator, 0)
 	}
 	if l.pos < len(l.src) && lang.IsNameStart(l.src[l.pos]) {
-		l.scanName()
+		l.pos = lang.ScanName(l.src, l.pos)
 		return l.emit(tField, start, lang.Property, 0)
 	}
 	return l.emit(tDot, start, lang.Operator, 0)
@@ -312,9 +256,9 @@ func (l *lexer) sigil(c byte) token {
 	l.pos++
 	if l.pos >= len(l.src) || !lang.IsNameStart(l.src[l.pos]) {
 		l.fail(start, l.pos, lang.Quote(l.src, start, l.pos)+" needs a name")
-		return token{kind: tIllegal, start: start, end: l.pos, sem: -1}
+		return token{Kind: tIllegal, Start: start, End: l.pos}
 	}
-	l.qualifiedName()
+	l.pos = lang.ScanQualifiedName(l.src, l.pos)
 	name := l.src[start:l.pos]
 	if c == '@' {
 		_, known := formats[name]
@@ -333,7 +277,7 @@ func builtinIf(known bool) lang.Modifier {
 
 func (l *lexer) ident() token {
 	start := l.pos
-	l.qualifiedName()
+	l.pos = lang.ScanQualifiedName(l.src, start)
 	name := l.src[start:l.pos]
 	if k, ok := keywords[name]; ok {
 		return l.emit(k, start, lang.Keyword, 0)
@@ -343,18 +287,4 @@ func (l *lexer) ident() token {
 	}
 	_, known := functions[name]
 	return l.emit(tIdent, start, lang.Function, builtinIf(known))
-}
-
-func (l *lexer) qualifiedName() {
-	l.scanName()
-	for strings.HasPrefix(l.src[l.pos:], "::") && l.pos+2 < len(l.src) && lang.IsNameStart(l.src[l.pos+2]) {
-		l.pos += 2
-		l.scanName()
-	}
-}
-
-func (l *lexer) scanName() {
-	for l.pos < len(l.src) && lang.IsNameChar(l.src[l.pos]) {
-		l.pos++
-	}
 }
