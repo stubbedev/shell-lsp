@@ -79,6 +79,7 @@ var families = []family{
 	testSyntaxFamily,
 	injectionFamily,
 	downloadFamily,
+	permissionsFamily,
 	subshellScopeFamily,
 	tempFileFamily,
 	unusedFunctionsFamily,

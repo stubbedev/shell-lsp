@@ -1,0 +1,101 @@
+### octal modes on ssh files
+#!/bin/sh
+chmod 777 ~/.ssh
+chmod 666 ~/.ssh/authorized_keys
+chmod 0666 "$HOME/.ssh/id_ed25519"
+chmod -R 2777 "${HOME}"/.ssh/
+>>+ SL1006 2:11 -- shell-lsp native check; shellcheck does not look at file modes
+>>+ SL1006 3:11 -- shell-lsp native check; shellcheck does not look at file modes
+>>+ SL1006 4:12 -- shell-lsp native check; shellcheck does not look at file modes
+>>+ SL1006 5:15 -- shell-lsp native check; shellcheck does not look at file modes
+
+### symbolic modes that grant others write
+#!/bin/sh
+chmod o+w /etc/sudoers
+chmod a+rwX /etc/sudoers.d
+chmod u=rwx,g=rx,o=rwx /usr/local/bin/tool
+chmod go+w ~/.bashrc
+chmod a=rw ~/.gnupg/pubring.kbx
+>>+ SL1006 2:11 -- shell-lsp native check; shellcheck does not look at file modes
+>>+ SL1006 3:13 -- shell-lsp native check; shellcheck does not look at file modes
+>>+ SL1006 4:24 -- shell-lsp native check; shellcheck does not look at file modes
+>>+ SL1006 5:12 -- shell-lsp native check; shellcheck does not look at file modes
+>>+ SL1006 6:12 -- shell-lsp native check; shellcheck does not look at file modes
+
+### system directories and homes
+#!/bin/sh
+chmod 777 /
+chmod -R 777 /usr
+chmod 1777 /var
+chmod 777 /home/alice
+chmod 777 ~
+chmod 777 "$HOME"
+chmod 757 /root/.profile
+>>+ SL1006 2:11 -- shell-lsp native check; shellcheck does not look at file modes
+>>+ SL1006 3:14 -- shell-lsp native check; shellcheck does not look at file modes
+>>+ SL1006 4:12 -- shell-lsp native check; shellcheck does not look at file modes
+>>+ SL1006 5:11 -- shell-lsp native check; shellcheck does not look at file modes
+>>+ SL1006 6:11 -- shell-lsp native check; shellcheck does not look at file modes
+>>+ SL1006 7:11 -- shell-lsp native check; shellcheck does not look at file modes
+>>+ SL1006 8:11 -- shell-lsp native check; shellcheck does not look at file modes
+
+### behind sudo and env
+#!/bin/sh
+sudo chmod -R 777 /etc/nginx
+sudo -u root env LC_ALL=C chmod 666 /etc/passwd
+>>+ SL1006 2:19 -- shell-lsp native check; shellcheck does not look at file modes
+>>+ SL1006 3:37 -- shell-lsp native check; shellcheck does not look at file modes
+
+### mkdir and install modes
+#!/bin/sh
+mkdir -m 777 ~/.ssh
+mkdir -p --mode=0777 /etc/app
+install -m 666 key.pub ~/.ssh/authorized_keys
+install -d -m777 /usr/share/app
+install -m 00777 -t /usr/local/bin tool
+>>> SC2174 3:10
+>>+ SL1006 2:14 -- shell-lsp native check; shellcheck does not look at file modes
+>>+ SL1006 3:22 -- shell-lsp native check; shellcheck does not look at file modes
+>>+ SL1006 4:24 -- shell-lsp native check; shellcheck does not look at file modes
+>>+ SL1006 5:18 -- shell-lsp native check; shellcheck does not look at file modes
+>>+ SL1006 6:21 -- shell-lsp native check; shellcheck does not look at file modes
+
+### modes that keep others out are fine
+#!/bin/sh
+chmod 755 /usr/local/bin/tool
+chmod 600 ~/.ssh/id_rsa
+chmod 644 ~/.ssh/id_rsa.pub
+chmod o-w /etc/passwd
+chmod o+w,o-w /etc/passwd
+chmod +w ~/.bashrc
+chmod u+w,g+w ~/.bashrc
+chmod g=rwx /usr/local/share/app
+mkdir -m 700 ~/.ssh
+install -m 755 tool /usr/local/bin/tool
+>>> none
+
+### world-writable paths that are not sensitive are left alone
+#!/bin/sh
+chmod 777 /tmp/build
+chmod -R 777 /var/www/html
+chmod 666 ./output.log
+chmod 777 "$dir"
+chmod 1777 /tmp
+mkdir -m 777 /srv/share
+>>> SC2154 5:12
+
+### modes that cannot be read are left alone
+#!/bin/sh
+mode=777
+chmod "$mode" ~/.ssh
+chmod --reference=/tmp ~/.ssh
+install -m "$mode" key ~/.ssh/authorized_keys
+>>> none
+
+### rc files only count directly in the home directory
+#!/bin/sh
+chmod 666 ~/.bashrc
+chmod 666 ~/dotfiles/.bashrc
+chmod 666 /etc/skel/.bashrc
+>>+ SL1006 2:11 -- shell-lsp native check; shellcheck does not look at file modes
+>>+ SL1006 4:11 -- shell-lsp native check; shellcheck does not look at file modes

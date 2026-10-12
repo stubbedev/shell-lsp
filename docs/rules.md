@@ -88,6 +88,29 @@ curl -fsSLo install.sh https://example.com/install.sh
 echo "$expected_sha256  install.sh" | sha256sum -c - && sh install.sh
 ```
 
+## SL1006
+
+**A sensitive path is made writable by every user.** `chmod`, `mkdir -m` or
+`install -m` gives others write permission (`777`, `666`, `0777`, `2777`,
+`o+w`, `a+w`, `a=rwx` and the like) on a path that other users must not be
+able to change: the root directory, a system directory such as `/etc`,
+`/usr`, `/bin`, `/sbin`, `/boot`, `/root` or anything under them, `/var` or
+`/home` themselves, a home directory (`~`, `$HOME`, `/home/name`), a shell
+startup file in it such as `~/.bashrc`, `~/.ssh` or `~/.gnupg` and their
+contents, `authorized_keys`, or an SSH private key such as `id_ed25519`.
+Anyone on the machine can then replace a program, add a key that lets them
+log in, or put commands in a file that runs as the owner. The command is
+also found behind `sudo`, `env` and the other wrappers. Symbolic modes
+without `o` or `a`, such as `+w`, depend on the umask and are not reported;
+nor are modes that cannot be read, such as `"$mode"`, or a `umask`, which
+is not tied to any path.
+
+```bash
+sudo chmod -R 777 /etc/nginx    # SL1006
+chmod 666 ~/.ssh/authorized_keys    # SL1006
+chmod 600 ~/.ssh/authorized_keys
+```
+
 ## SL2001
 
 **A function in a script is never called.** Nothing in the script, in the

@@ -318,7 +318,8 @@ with ShellCheck.
 
 Checks that go beyond ShellCheck use `SL` codes and are documented in
 [docs/rules.md](docs/rules.md), among them untrusted data pasted into code
-run by `eval`, `sh -c` or `source`, downloaded code run unchecked, functions
+run by `eval`, `sh -c` or `source`, downloaded code run unchecked, system
+directories, home directories and SSH keys made writable by everyone, functions
 a script never calls, temporary files it never removes, `trap` and `exit`
 that only affect a subshell, and syntax errors in embedded awk, sed and jq.
 They are configured exactly like the `SC` checks.

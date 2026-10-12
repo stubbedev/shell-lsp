@@ -472,6 +472,7 @@ marks the checks the `minimal` profile keeps; see [Profiles](../README.md#profil
 | <a name="sl1003"></a>[SL1003](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl1003) | warning | `arithmetic-injection` | yes | Untrusted data is evaluated as arithmetic. |
 | <a name="sl1004"></a>[SL1004](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl1004) | warning |  | yes | A sourced path is built from untrusted data. |
 | <a name="sl1005"></a>[SL1005](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl1005) | warning |  | yes | Downloaded code runs unchecked. |
+| <a name="sl1006"></a>[SL1006](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl1006) | warning |  | yes | A sensitive path is made writable by every user. |
 | <a name="sl2001"></a>[SL2001](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl2001) | style |  |  | A function in a script is never called. |
 | <a name="sl2002"></a>[SL2002](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl2002) | warning |  | yes | An \`@\` transformation the shell does not know. |
 | <a name="sl2003"></a>[SL2003](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl2003) | error |  | yes | A declaration assigns a name that is not a variable name. |
