@@ -89,15 +89,15 @@
       "commandPalette": [
         {
           "command": "shellLsp.fixAll",
-          "when": "shellLsp.running && (editorLangId == shellscript || editorLangId == bats)"
+          "when": "shellLsp.running && (editorLangId == shellscript || editorLangId == bats || editorLangId == makefile || editorLangId == just || editorLangId == nix)"
         },
         {
           "command": "shellLsp.runBats",
-          "when": "shellLsp.running && isWorkspaceTrusted && (editorLangId == shellscript || editorLangId == bats)"
+          "when": "shellLsp.running && isWorkspaceTrusted && (editorLangId == shellscript || editorLangId == bats || editorLangId == makefile || editorLangId == just || editorLangId == nix)"
         },
         {
           "command": "shellLsp.chooseShell",
-          "when": "shellLsp.running && (editorLangId == shellscript || editorLangId == bats)"
+          "when": "shellLsp.running && (editorLangId == shellscript || editorLangId == bats || editorLangId == makefile || editorLangId == just || editorLangId == nix)"
         }
       ]
     },

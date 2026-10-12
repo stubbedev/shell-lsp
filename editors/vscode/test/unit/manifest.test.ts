@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, test } from "node:test";
+import { languageIds } from "../../src/documents.ts";
 import { isFields, type Fields } from "../../src/fields.ts";
 import { clientCommands, runningContext, serverCommands } from "../../src/ids.ts";
 
@@ -31,6 +32,15 @@ function stringOf(entry: Fields, key: string): string {
 const contributed = entries(["contributes", "commands"]).map((entry) => stringOf(entry, "command"));
 const palette = entries(["contributes", "menus", "commandPalette"]);
 
+describe("activationEvents", () => {
+  test("start the extension for every language the client attaches to", () => {
+    assert.deepEqual(
+      field(manifest, ["activationEvents"]),
+      languageIds.map((id) => `onLanguage:${id}`),
+    );
+  });
+});
+
 describe("contributes.commands", () => {
   test("lists every command the extension registers", () => {
     for (const command of Object.values(clientCommands)) {
@@ -48,6 +58,13 @@ describe("contributes.commands", () => {
 });
 
 describe("contributes.menus.commandPalette", () => {
+  test("offers each command in every language the client attaches to", () => {
+    const languages = `(${languageIds.map((id) => `editorLangId == ${id}`).join(" || ")})`;
+    for (const entry of palette) {
+      assert.ok(stringOf(entry, "when").endsWith(` && ${languages}`), `${stringOf(entry, "command")} is not offered for ${languages}`);
+    }
+  });
+
   test("names contributed commands and hides them until the server runs", () => {
     for (const entry of palette) {
       const command = stringOf(entry, "command");

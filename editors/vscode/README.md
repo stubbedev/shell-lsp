@@ -79,9 +79,11 @@ restarts the server.
   and starts it.
 - **Shell LSP: Show Output** opens the server's log.
 - **Shell LSP: Fix All Auto-Fixable Problems** applies every non-overlapping safe
-  lint fix in the active script, the ones that keep its behaviour.
+  lint fix in the active document, the ones that keep its behaviour; in a
+  Makefile, justfile or Nix file the fixes are written in that file's syntax.
 - **Shell LSP: Run Bats File** runs the active Bats file and reports failures
-  as diagnostics. Running tests executes workspace code, so it is disabled in
+  as diagnostics; on any other document it reports that the document is not
+  a Bats file. Running tests executes workspace code, so it is disabled in
   Restricted Mode.
 - **Shell LSP: Choose the Shell to Lint As** picks the shell for the active
   script and records it as a `# shellcheck shell=` directive after the

@@ -1,6 +1,5 @@
 import {
   env,
-  languages,
   StatusBarAlignment,
   Uri,
   window,
@@ -8,7 +7,6 @@ import {
   type Disposable,
   type LogOutputChannel,
   type StatusBarItem,
-  type TextDocument,
 } from "vscode";
 import type { LanguageClient } from "vscode-languageclient/node";
 import {
@@ -23,9 +21,9 @@ import {
   statusText,
   type DocumentDialect,
 } from "./dialect.ts";
-import { documentSelector } from "./documents.ts";
 import { clientCommands } from "./ids.ts";
 import { section } from "./settings.ts";
+import { activeShellDocument, requireActiveShellDocument, type ShellDocument } from "./shellDocument.ts";
 
 const chooseShellCommand = clientCommands.chooseShell;
 const refreshDelayMs = 300;
@@ -75,21 +73,21 @@ export class DialectStatus implements Disposable {
 
   async choose(args: readonly unknown[]): Promise<void> {
     const shell = shellArgument(chooseShellCommand, args);
-    const { client, document } = this.target();
+    const { client, target } = this.target();
     if (shell !== undefined) {
-      await this.apply(client, document, shell);
+      await this.apply(client, target, shell);
       return;
     }
-    const found = await this.request(client, document);
+    const found = await this.request(client, target);
     const picked = await window.showQuickPick(shellPicks(found), { placeHolder: pickPlaceholder(found) });
     switch (picked?.choice.kind) {
       case undefined:
         return;
       case "set":
-        await this.apply(client, document, picked.choice.dialect);
+        await this.apply(client, target, picked.choice.dialect);
         return;
       case "remove":
-        await this.apply(client, document, null);
+        await this.apply(client, target, null);
         return;
       case "learn":
         await env.openExternal(Uri.parse(dialectDocsUrl));
@@ -107,13 +105,13 @@ export class DialectStatus implements Disposable {
   private async refresh(): Promise<void> {
     const generation = ++this.generation;
     const client = this.client();
-    const document = window.activeTextEditor?.document;
-    if (client === undefined || document === undefined || !isShellDocument(document)) {
+    const target = client === undefined ? undefined : activeShellDocument(client);
+    if (client === undefined || target === undefined) {
       this.item.hide();
       return;
     }
     try {
-      const found = await this.request(client, document);
+      const found = await this.request(client, target);
       if (generation !== this.generation) {
         return;
       }
@@ -125,47 +123,34 @@ export class DialectStatus implements Disposable {
       if (generation === this.generation) {
         this.item.hide();
       }
-      this.output.debug(`Not showing the dialect of ${document.uri.toString()}: ${String(error)}`);
+      this.output.debug(`Not showing the dialect of ${target.document.uri.toString()}: ${String(error)}`);
     }
   }
 
-  private target(): { client: LanguageClient; document: TextDocument } {
+  private target(): { client: LanguageClient; target: ShellDocument } {
     const client = this.client();
     if (client === undefined) {
       throw new Error(`${chooseShellCommand} needs the Shell LSP server to be running`);
     }
-    const document = window.activeTextEditor?.document;
-    if (document === undefined || !isShellDocument(document)) {
-      throw new Error(`${chooseShellCommand} needs an active shell script editor`);
-    }
-    return { client, document };
+    return { client, target: requireActiveShellDocument(client, chooseShellCommand) };
   }
 
-  private async request(client: LanguageClient, document: TextDocument): Promise<DocumentDialect> {
-    const result: unknown = await client.sendRequest(documentDialectMethod, {
-      textDocument: { uri: client.code2ProtocolConverter.asUri(document.uri) },
-    });
+  private async request(client: LanguageClient, target: ShellDocument): Promise<DocumentDialect> {
+    const result: unknown = await client.sendRequest(documentDialectMethod, { textDocument: target.textDocument });
     return documentDialect(result);
   }
 
-  private async apply(client: LanguageClient, document: TextDocument, shell: string | null): Promise<void> {
+  private async apply(client: LanguageClient, target: ShellDocument, shell: string | null): Promise<void> {
     const result = directiveEdit(
-      await client.sendRequest(setDialectMethod, {
-        textDocument: { uri: client.code2ProtocolConverter.asUri(document.uri) },
-        dialect: shell,
-      }),
+      await client.sendRequest(setDialectMethod, { textDocument: target.textDocument, dialect: shell }),
     );
     if (result === null) {
       return;
     }
     const edit = await client.protocol2CodeConverter.asWorkspaceEdit(result);
     if (!(await workspace.applyEdit(edit))) {
-      throw new Error(`${chooseShellCommand} could not apply the directive edit to ${document.uri.toString()}`);
+      throw new Error(`${chooseShellCommand} could not apply the directive edit to ${target.document.uri.toString()}`);
     }
     this.schedule();
   }
-}
-
-function isShellDocument(document: TextDocument): boolean {
-  return languages.match(documentSelector, document) > 0;
 }

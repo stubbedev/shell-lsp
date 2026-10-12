@@ -11,6 +11,8 @@ export const serverCommands = {
   runBats: "shellLsp.runBats",
 } as const;
 
+export type ClientCommand = (typeof clientCommands)[keyof typeof clientCommands];
 export type ServerCommand = (typeof serverCommands)[keyof typeof serverCommands];
+export type Command = ClientCommand | ServerCommand;
 
 export const runningContext = "shellLsp.running";

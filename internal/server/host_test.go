@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 )
 
@@ -103,6 +104,31 @@ func TestMakefileQuickFixIsWrittenInMakeSyntax(t *testing.T) {
 		if e.Range.Start.Line != 5 || strings.Contains(e.NewText, "\n") {
 			t.Errorf("edit %+v reaches outside the recipe line", e)
 		}
+	}
+}
+
+func TestMakefileFixAllIsWrittenInMakeSyntax(t *testing.T) {
+	t.Parallel()
+
+	c := openMakefile(t, actionCapabilities)
+	id := c.start("workspace/executeCommand", `{"command": "`+commandFixAll+`", "arguments": ["`+makefileURI+`"]}`)
+	applied := c.await("workspace/applyEdit", func(m *jsonrpc.Message) bool { return m.IsRequest() && m.Method == "workspace/applyEdit" })
+	var params lsp.ApplyWorkspaceEditParams
+	if err := json.Unmarshal(applied.Params, &params); err != nil {
+		t.Fatal(err)
+	}
+	if len(params.Edit.DocumentChanges) != 1 || params.Edit.DocumentChanges[0].TextDocument.URI != makefileURI {
+		t.Fatalf("applyEdit = %+v, want edits to the Makefile", params)
+	}
+	want := lsp.TextEdit{Range: makefileRange(t, 5, "`date`"), NewText: "$$(date)"}
+	if edits := params.Edit.DocumentChanges[0].Edits; !slices.Contains(edits, want) {
+		t.Errorf("fix all edits = %+v, want one that is %+v", edits, want)
+	}
+	if err := c.conn.Reply(applied.ID, lsp.ApplyWorkspaceEditResult{Applied: true}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if done := c.awaitResponse(id, "workspace/executeCommand"); done.Error != nil {
+		t.Errorf("executeCommand error = %+v", done.Error)
 	}
 }
 

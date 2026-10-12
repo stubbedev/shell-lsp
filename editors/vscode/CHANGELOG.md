@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Offers Fix All, Run Bats File and Choose the Shell to Lint As in the command
+  palette for Makefiles, justfiles and Nix files too, as for shell scripts;
+  Run Bats File on a document that is not a Bats file reports so instead of
+  running it.
 - Runs shell-lsp for Makefiles too, which lints the shell in their recipes.
 - Runs shell-lsp for justfiles too, when an extension gives them the `just`
   language.
