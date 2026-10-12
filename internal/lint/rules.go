@@ -87,6 +87,7 @@ var families = []family{
 	tempFileFamily,
 	unusedFunctionsFamily,
 	embeddedFamily,
+	googleFamily,
 }
 
 type nodeDispatch [][]func(p *pass, n syntax.Node)

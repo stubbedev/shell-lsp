@@ -1,0 +1,46 @@
+### bin bash is the allowed interpreter line
+#!/bin/bash
+# shellcheck enable=google-shebang
+echo hi
+>>> none
+
+### flags after bin bash are allowed
+#!/bin/bash -e
+# shellcheck enable=google-shebang
+echo hi
+>>> none
+
+### env bash is reported
+#!/usr/bin/env bash
+# shellcheck enable=google-shebang
+echo hi
+>>+ SL4001 1:1 -- shell-lsp style guide check; shellcheck does not prescribe a shebang
+
+### another path to bash is reported
+#!/usr/local/bin/bash -e
+# shellcheck enable=google-shebang
+echo hi
+>>+ SL4001 1:1 -- shell-lsp style guide check; shellcheck does not prescribe a shebang
+
+### sh is reported
+#!/bin/sh
+# shellcheck enable=google-shebang
+echo hi
+>>+ SL4001 1:1 -- shell-lsp style guide check; shellcheck does not prescribe a shebang
+
+### zsh is reported
+#!/bin/zsh
+# shellcheck enable=google-shebang
+print hi
+>>- SC1071 1:1 -- shellcheck refuses zsh; shell-lsp lints it
+>>+ SL4001 1:1 -- shell-lsp style guide check; shellcheck does not prescribe a shebang
+
+### libraries without a shebang are not checked
+# shellcheck shell=bash enable=google-shebang
+greet() { echo hi; }
+>>> none
+
+### off unless enabled
+#!/bin/sh
+echo hi
+>>> none

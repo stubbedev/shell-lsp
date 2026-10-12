@@ -485,3 +485,27 @@ its `(`, a quantifier with nothing to repeat, an empty range such as
 jq '.items[] | | .name' data.json    # SL3003: unexpected `|`
 jq '.[] | select(.id | test("^(a|b"))' data.json    # SL3003: `(` is never closed
 ```
+
+The style guide rules, `SL4xxx`, check the rules of the
+[Google Shell Style Guide](https://google.github.io/styleguide/shellguide.html)
+that a linter can verify. Each one is optional and named with the `google-`
+prefix, so `# shellcheck enable=google-shebang` or `lint.optional` turns on a
+single rule. They follow one organisation's conventions rather than point at
+mistakes, so the `strict` profile leaves them out; `enable=all` includes
+them. Bats files, whose shape their test runner decides, are not checked.
+
+## SL4001
+
+**An executable does not start with `#!/bin/bash`.** The rule is optional
+(`google-shebang`). The guide makes bash the only shell for executables and
+asks for the exact interpreter line `#!/bin/bash`, with as few flags as
+possible, so `#!/bin/sh`, `#!/bin/zsh`, `#!/usr/bin/bash` and
+`#!/usr/bin/env bash` are all reported. Files without a `#!` line are
+libraries and are not checked. For a bash interpreter line without flags,
+the quick fix writes `#!/bin/bash`. Here the first line is reported:
+
+```bash
+#!/usr/bin/env bash
+# shellcheck enable=google-shebang
+echo "hello"
+```

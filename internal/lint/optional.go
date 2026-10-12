@@ -16,6 +16,7 @@ const (
 	optionalSetESuppressed
 	optionalUnassignedUppercase
 	optionalDeprecateWhich
+	optionalGoogleShebang
 	optionalQuoteSafeVariables
 	optionalDoubleBrackets
 	optionalDoubleEquals
@@ -48,6 +49,7 @@ var optionalSpecs = [optionalCheckCount]optionalSpec{
 		notStrict: true,
 	},
 	optionalDeprecateWhich:     {name: "deprecate-which"},
+	optionalGoogleShebang:      {name: "google-shebang", notStrict: true},
 	optionalQuoteSafeVariables: {name: "quote-safe-variables"},
 	optionalDoubleBrackets:     {name: "require-double-brackets"},
 	optionalDoubleEquals:       {name: "require-double-equals"},

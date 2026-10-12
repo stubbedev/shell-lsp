@@ -308,8 +308,8 @@ reported:
   `check-unassigned-uppercase`, which reports every all-uppercase variable a
   script reads without assigning, so it flags ordinary environment inputs
   such as `$HOME` or `$CI` rather than mistakes, and
-  `avoid-global-reassignment`, which follows one style guide's preference
-  for globals that never change rather than pointing at mistakes.
+  `avoid-global-reassignment` and the `google-` checks, which follow one
+  style guide's preferences rather than point at mistakes.
 
 The profile is the starting point, and the other settings apply on top:
 optional checks named in `lint.optional` or turned on with a `# shellcheck
@@ -323,7 +323,8 @@ Checks that go beyond ShellCheck use `SL` codes and are documented in
 run by `eval`, `sh -c` or `source`, downloaded code run unchecked, system
 directories, home directories and SSH keys made writable by everyone, functions
 a script never calls, temporary files it never removes, `trap` and `exit`
-that only affect a subshell, and syntax errors in embedded awk, sed and jq.
+that only affect a subshell, syntax errors in embedded awk, sed and jq, and
+optional rules from the Google Shell Style Guide.
 They are configured exactly like the `SC` checks.
 
 `# shellcheck` directives are edited like code:
