@@ -154,7 +154,7 @@ func TestDescribeSaysWhyAndWhenItGuessed(t *testing.T) {
 			t.Errorf("%+v counts as a guess", c.d)
 		}
 	}
-	for s := SourceDefault; s <= SourceHostDefault; s++ {
+	for s := range sourceCount {
 		if s.String() == "unknown" {
 			t.Errorf("source %d has no name", s)
 		}
@@ -271,6 +271,25 @@ func TestEveryDialectIsDescribedOnce(t *testing.T) {
 			use(Busybox + 1)
 		}()
 	}
+}
+
+func TestEverySourceHasOneName(t *testing.T) {
+	t.Parallel()
+
+	seen := map[string]Source{}
+	for s := SourceDefault; s <= SourceHostDefault; s++ {
+		name := s.String()
+		if other, dup := seen[name]; dup {
+			t.Errorf("%d and %d are both named %q", other, s, name)
+		}
+		seen[name] = s
+	}
+	defer func() {
+		if recover() == nil {
+			t.Error("String on an unknown source did not panic")
+		}
+	}()
+	_ = sourceCount.String()
 }
 
 func TestInputBats(t *testing.T) {

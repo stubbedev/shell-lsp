@@ -1,5 +1,7 @@
 package dialect
 
+import "fmt"
+
 type Source uint8
 
 const (
@@ -15,36 +17,29 @@ const (
 	SourceModeline
 	SourceHostSetting
 	SourceHostDefault
+	sourceCount
 )
 
+var sourceNames = [sourceCount]string{
+	SourceDefault:       "default",
+	SourceOverride:      "override",
+	SourceEditorConfig:  "editorconfig",
+	SourceDirective:     "directive",
+	SourceShebang:       "shebang",
+	SourceCompletionTag: "completionTag",
+	SourceFileName:      "fileName",
+	SourceExtension:     "extension",
+	SourceLanguageID:    "languageId",
+	SourceModeline:      "modeline",
+	SourceHostSetting:   "hostSetting",
+	SourceHostDefault:   "hostDefault",
+}
+
 func (s Source) String() string {
-	switch s {
-	case SourceDefault:
-		return "default"
-	case SourceOverride:
-		return "override"
-	case SourceEditorConfig:
-		return "editorconfig"
-	case SourceDirective:
-		return "directive"
-	case SourceShebang:
-		return "shebang"
-	case SourceCompletionTag:
-		return "completionTag"
-	case SourceFileName:
-		return "fileName"
-	case SourceExtension:
-		return "extension"
-	case SourceLanguageID:
-		return "languageId"
-	case SourceModeline:
-		return "modeline"
-	case SourceHostSetting:
-		return "hostSetting"
-	case SourceHostDefault:
-		return "hostDefault"
+	if s >= sourceCount || sourceNames[s] == "" {
+		panic(fmt.Sprintf("dialect: unknown detection source %d", s))
 	}
-	return "unknown"
+	return sourceNames[s]
 }
 
 type Detection struct {
