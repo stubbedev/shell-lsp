@@ -9,7 +9,6 @@ import (
 )
 
 const (
-	placeholder   = "$$"
 	defaultPrefix = '\t'
 	recipeFlags   = " \t@-+"
 	oneShell      = ".ONESHELL"
@@ -363,7 +362,7 @@ func (p *parser) content(b *projection.Builder, start, end int) {
 				i += 2
 			} else {
 				next := referenceEnd(p.text, i, end)
-				b.Opaque(i, next, placeholder)
+				b.Placeholder(i, next)
 				i = next
 			}
 			run = i

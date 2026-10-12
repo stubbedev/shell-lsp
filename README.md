@@ -428,6 +428,8 @@ A document is a Makefile when its language identifier is `makefile` or
   (`$(shell ...)`, `!=`), the recipes are not analysed.
 - A directive goes on a recipe line of its own, indented like the recipe
   (`# shellcheck disable=SC2086`), and applies to the next line.
+- A make expansion inside single quotes (`'$(VAR)'`) is still text the shell
+  cannot know, not a literal `$`.
 
 ## Commands
 

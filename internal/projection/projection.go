@@ -57,7 +57,10 @@ type Builder struct {
 	encoders []Encoder
 	starts   []int
 	at       int
+	quotes   quoting
 }
+
+const Dynamic = "$$"
 
 func NewBuilder(host string) *Builder {
 	return &Builder{host: host}
@@ -69,6 +72,15 @@ func (b *Builder) Region(encode Encoder) {
 
 func (b *Builder) Script() {
 	b.starts = append(b.starts, b.text.Len())
+	b.quotes = quoting{}
+}
+
+func (b *Builder) Placeholder(start, end int) {
+	if b.quotes.inSingle() {
+		b.Opaque(start, end, "'"+Dynamic+"'")
+		return
+	}
+	b.Opaque(start, end, Dynamic)
 }
 
 func (b *Builder) Verbatim(start, end int) {
@@ -96,6 +108,7 @@ func (b *Builder) add(k kind, start, end int, text string) {
 	}
 	s := span{kind: k, region: region, proj: b.text.Len(), projLen: len(text), host: start, hostLen: end - start}
 	b.text.WriteString(text)
+	b.quotes.feed(text)
 	b.at = end
 	if n := len(b.spans); n > 0 && k == verbatim {
 		last := &b.spans[n-1]
