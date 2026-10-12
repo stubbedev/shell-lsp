@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
@@ -36,6 +37,7 @@ type client struct {
 	incoming chan *jsonrpc.Message
 	nextID   int
 	diags    map[string][]lsp.Diagnostic
+	encoding docstore.Encoding
 }
 
 func start(ctx context.Context, name string, argv []string, root string) (*client, error) {
@@ -68,14 +70,30 @@ func start(ctx context.Context, name string, argv []string, root string) (*clien
 		"processId": os.Getpid(),
 		"rootUri":   fileuri.FromPath(root),
 		"capabilities": map[string]any{
+			"general": map[string]any{"positionEncodings": []string{"utf-32", "utf-16"}},
 			"textDocument": map[string]any{
 				"completion":         map[string]any{"completionItem": map[string]any{"snippetSupport": false}},
 				"publishDiagnostics": map[string]any{},
 			},
 		},
 	}
-	if _, err := c.request("initialize", init); err != nil {
+	raw, err := c.request("initialize", init)
+	if err != nil {
 		return nil, err
+	}
+	var result struct {
+		Capabilities struct {
+			PositionEncoding string `json:"positionEncoding"`
+		} `json:"capabilities"`
+	}
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return nil, fmt.Errorf("%s answered initialize with %s: %w", name, raw, err)
+	}
+	c.encoding = docstore.EncodingUTF16
+	if negotiated := result.Capabilities.PositionEncoding; negotiated != "" {
+		if c.encoding, err = docstore.EncodingFromName(negotiated); err != nil {
+			return nil, fmt.Errorf("%s negotiated a position encoding: %w", name, err)
+		}
 	}
 	return c, c.conn.Notify("initialized", map[string]any{})
 }
@@ -167,33 +185,23 @@ func (c *client) stop() {
 }
 
 type probe struct {
-	want     string
-	position lsp.Position
+	want   string
+	offset int
 }
 
-func probes(text string, d dialect.Dialect) []probe {
-	tree := parser.Parse(text, d)
-	doc := docPositions(text)
+func probes(tree *parser.Tree) []probe {
 	var out []probe
 	for _, cmd := range tree.Commands {
 		if len(cmd.Name) > recallPrefix && cmd.NameSpan.End-cmd.NameSpan.Start == len(cmd.Name) {
-			out = append(out, probe{want: cmd.Name, position: doc(cmd.NameSpan.Start + recallPrefix)})
+			out = append(out, probe{want: cmd.Name, offset: cmd.NameSpan.Start + recallPrefix})
 		}
 	}
 	for _, ref := range tree.References {
 		if len(ref.Name) > recallPrefix && tree.Visible(ref.Name, ref.Within).Len() > 0 {
-			out = append(out, probe{want: ref.Name, position: doc(ref.Span.Start + recallPrefix)})
+			out = append(out, probe{want: ref.Name, offset: ref.Span.Start + recallPrefix})
 		}
 	}
 	return out
-}
-
-func docPositions(text string) func(int) lsp.Position {
-	return func(offset int) lsp.Position {
-		line := strings.Count(text[:offset], "\n")
-		col := offset - (strings.LastIndexByte(text[:offset], '\n') + 1)
-		return lsp.Position{Line: uint32(line), Character: uint32(len([]rune(text[offset-col : offset])))} //nolint:gosec
-	}
 }
 
 func completionLabels(raw json.RawMessage) ([]string, error) {
@@ -259,17 +267,22 @@ func check(ours, theirs *client, path string) (fileReport, error) {
 			return fileReport{}, err
 		}
 	}
-	oursDiags, _ := ours.waitDiagnostics(uri)
+	oursDiags, oursOK := ours.waitDiagnostics(uri)
+	if !oursOK {
+		return fileReport{}, fmt.Errorf("%s published no diagnostics for %s", ours.name, uri)
+	}
 	theirDiags, theirsOK := theirs.waitDiagnostics(uri)
 	report.ours, report.theirs, report.theirsOK = diagnosticKeys(oursDiags), diagnosticKeys(theirDiags), theirsOK
-	for _, p := range probes(text, d) {
+	doc := docstore.NewDocument(uri, "", 1, text)
+	for _, p := range probes(parser.Parse(doc.Text(), d)) {
 		report.probes++
-		params := lsp.CompletionParams{TextDocument: lsp.TextDocumentIdentifier{URI: uri}, Position: p.position}
 		for _, side := range []struct {
 			c      *client
 			hit    *int
 			missed *[]string
 		}{{ours, &report.oursHit, &report.oursMissed}, {theirs, &report.theirsHit, &report.theirsMiss}} {
+			position := doc.Positions(side.c.encoding).Position(p.offset)
+			params := lsp.CompletionParams{TextDocument: lsp.TextDocumentIdentifier{URI: uri}, Position: position}
 			result, err := side.c.request("textDocument/completion", params)
 			if err != nil {
 				return fileReport{}, err
@@ -281,7 +294,7 @@ func check(ours, theirs *client, path string) (fileReport, error) {
 			if slices.Contains(labels, p.want) {
 				*side.hit++
 			} else {
-				*side.missed = append(*side.missed, fmt.Sprintf("%s@%d:%d", p.want, p.position.Line+1, p.position.Character+1))
+				*side.missed = append(*side.missed, fmt.Sprintf("%s@%d:%d", p.want, position.Line+1, position.Character+1))
 			}
 		}
 	}
@@ -293,7 +306,7 @@ func check(ours, theirs *client, path string) (fileReport, error) {
 	return report, nil
 }
 
-func render(reports []fileReport, corpus string) string {
+func render(reports []fileReport, corpus string) (string, error) {
 	var sb strings.Builder
 	sb.WriteString("# Cross-check against bash-language-server\n\n")
 	sb.WriteString("Generated by `just crosscheck` (`cmd/crosscheck`). Both servers see the same corpus file;\n")
@@ -304,7 +317,10 @@ func render(reports []fileReport, corpus string) string {
 	sb.WriteString("| File | Diagnostics (ours / bashls / shared) | Completion recall (ours / bashls) |\n| --- | --- | --- |\n")
 	totalProbes, oursHits, theirsHits := 0, 0, 0
 	for _, r := range reports {
-		rel, _ := filepath.Rel(corpus, r.path)
+		rel, err := filepath.Rel(corpus, r.path)
+		if err != nil {
+			return "", fmt.Errorf("naming %s within the corpus: %w", r.path, err)
+		}
 		shared := 0
 		for _, k := range r.ours {
 			if slices.Contains(r.theirs, k) {
@@ -323,7 +339,10 @@ func render(reports []fileReport, corpus string) string {
 	fmt.Fprintf(&sb, "\nTotal completion recall: ours %d/%d, bash-language-server %d/%d.\n", oursHits, totalProbes, theirsHits, totalProbes)
 	sb.WriteString("\n## Differences\n")
 	for _, r := range reports {
-		rel, _ := filepath.Rel(corpus, r.path)
+		rel, err := filepath.Rel(corpus, r.path)
+		if err != nil {
+			return "", fmt.Errorf("naming %s within the corpus: %w", r.path, err)
+		}
 		onlyOurs := difference(r.ours, r.theirs)
 		onlyTheirs := difference(r.theirs, r.ours)
 		if len(onlyOurs)+len(onlyTheirs)+len(r.oursMissed)+len(r.theirsMiss) == 0 {
@@ -340,7 +359,7 @@ func render(reports []fileReport, corpus string) string {
 		line("completions shell-lsp missed", r.oursMissed)
 		line("completions bash-language-server missed", r.theirsMiss)
 	}
-	return sb.String()
+	return sb.String(), nil
 }
 
 func difference(a, b []string) []string {
@@ -398,9 +417,13 @@ func run() error {
 		}
 		reports = append(reports, r)
 	}
-	tmp := *out + ".tmp"
-	if err := os.WriteFile(tmp, []byte(render(reports, root)), 0o600); err != nil {
+	text, err := render(reports, root)
+	if err != nil {
 		return err
+	}
+	tmp := *out + ".tmp"
+	if err := os.WriteFile(tmp, []byte(text), 0o600); err != nil {
+		return fmt.Errorf("writing %s: %w", tmp, err)
 	}
 	return os.Rename(tmp, *out)
 }

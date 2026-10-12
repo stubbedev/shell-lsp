@@ -22,6 +22,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/parser"
@@ -157,18 +158,13 @@ func analyze(ctx context.Context, path string) fileResult {
 		return fileResult{path: path, err: err}
 	}
 	tree := parser.Parse(text, d)
+	at := docstore.NewDocument("", "", 0, text).Positions(docstore.EncodingUTF32)
 	var ours []finding
 	for _, f := range lint.Check(tree, nil, lint.Options{DialectSource: lint.DialectDetected}) {
-		line, col := position(text, f.Span.Start)
-		ours = append(ours, finding{code: f.Code, line: line, col: col})
+		p := at.Position(f.Span.Start)
+		ours = append(ours, finding{code: f.Code, line: int(p.Line) + 1, col: int(p.Character) + 1})
 	}
 	return fileResult{path: path, text: text, ours: ours, theirs: theirs}
-}
-
-func position(text string, offset int) (int, int) {
-	line := strings.Count(text[:offset], "\n") + 1
-	start := strings.LastIndexByte(text[:offset], '\n') + 1
-	return line, utf8.RuneCountInString(text[start:offset]) + 1
 }
 
 func shellcheck(ctx context.Context, shell, text string) ([]finding, error) {
