@@ -90,7 +90,7 @@ runs the shell for that dialect with `-n`:
 | bash | `bash -O extglob -n` (bash 5.3); the parser always accepts extended globs |
 | sh, dash | `dash -n` |
 | zsh | `zsh -f -n`; only a "parse error" counts, since zsh -n also exits non-zero after `! cmd` and on some checks of constant expressions |
-| ksh | `ksh -n`, the ksh 2020.0.0 that nixpkgs packages rather than ksh93u+m |
+| ksh | `ksh -n`, ksh93u+m 1.0.10, which the flake builds from `ksh93.nix` because nixpkgs packages only the abandoned ksh 2020 |
 | mksh | `mksh -n` |
 | BusyBox | `busybox sh -n` |
 
