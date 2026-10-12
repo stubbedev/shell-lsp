@@ -525,3 +525,21 @@ describes the file is up to the reader.
 # shellcheck enable=google-file-header
 echo "hello"    # SL4002
 ```
+
+## SL4003
+
+**A TODO comment does not name an owner.** The rule is optional
+(`google-todo`). The guide writes `TODO` in capitals followed by the name,
+e-mail address or other identifier of the person with the best context, in
+parentheses: `# TODO(mrmonkey): Handle the edge cases`. A comment counts as a
+TODO when it contains the word `TODO` in capitals or starts with `todo` in
+any case, so `# todo: retry` and `# Fix this. TODO: retry` are reported
+while ordinary prose such as "things to do", or a quoted `'TODO'`, is not.
+
+```bash
+#!/bin/bash
+# shellcheck enable=google-todo
+# TODO: retry on timeouts    # SL4003
+# TODO(alice): retry on timeouts
+curl -fsS https://example.com
+```

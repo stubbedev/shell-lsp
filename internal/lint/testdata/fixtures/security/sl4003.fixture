@@ -1,0 +1,38 @@
+### todo comments with an owner
+#!/bin/bash
+# shellcheck enable=google-todo
+# TODO(alice): retry on timeouts
+# TODO(bob@example.com) handle the edge cases
+echo hi # TODO(team-infra): drop this
+>>> none
+
+### todo comments without an owner
+#!/bin/bash
+# shellcheck enable=google-todo
+# TODO: retry on timeouts
+# TODO retry on timeouts
+# todo: retry on timeouts
+#   Todo(alice) retry
+# Retry here. TODO: handle timeouts
+echo hi # TODO() empty owner
+>>+ SL4003 3:3 -- shell-lsp style guide check; shellcheck does not read TODO comments
+>>+ SL4003 4:3 -- shell-lsp style guide check; shellcheck does not read TODO comments
+>>+ SL4003 5:3 -- shell-lsp style guide check; shellcheck does not read TODO comments
+>>+ SL4003 6:5 -- shell-lsp style guide check; shellcheck does not read TODO comments
+>>+ SL4003 7:15 -- shell-lsp style guide check; shellcheck does not read TODO comments
+>>+ SL4003 8:11 -- shell-lsp style guide check; shellcheck does not read TODO comments
+
+### prose about things to do is not a todo
+#!/bin/bash
+# shellcheck enable=google-todo
+# Things to do before the release.
+# The TODOs live in the tracker.
+# TAP runners read a 'TODO' directive in test output.
+echo "TODO: not a comment"
+>>> none
+
+### off unless enabled
+#!/bin/bash
+# TODO: retry
+echo hi
+>>> none
