@@ -1,0 +1,105 @@
+syntax: zsh case pattern groups may hold empty alternatives
+
+A parenthesized group in a zsh pattern may have an empty alternative, which
+matches the empty string, so zsh -n accepts, and zsh matches,
+
+	case $cmd in
+	  (|l)server) ;;            # server or lserver
+	  (un|)install|freeze) ;;   # install, uninstall or freeze
+	  (kvm-|)buildid-list) ;;
+	esac
+
+zsh's own completion functions use the form in many case items. The parser
+read every alternative of a group as a pattern word and failed on the empty
+one with "case patterns must consist of words".
+
+With LangZsh, an alternative of a group that is part of a pattern may now be
+empty. The optional "(" before the patterns of a case item, as in
+`(a|b) cmd`, still needs a word for every pattern.
+
+Reproducer, before this change: `case i in (|l)s) ;; esac` with LangZsh
+failed with "case patterns must consist of words".
+
+diff --git a/syntax/filetests_test.go b/syntax/filetests_test.go
+index 6b4d15f..b05a415 100644
+--- a/syntax/filetests_test.go
++++ b/syntax/filetests_test.go
+@@ -940,6 +940,21 @@ var fileTests = []fileTestCase{
+ 			}},
+ 		}, LangZsh),
+ 	),
++	fileTest(
++		[]string{"case i in (|l)s|(un|)x(|y)) foo ;; esac"},
++		printsAs("case i in ((|l)s | (un|)x(|y)) foo ;; esac"),
++		langFile(&CaseClause{
++			Word: litWord("i"),
++			Items: []*CaseItem{{
++				Op: Break,
++				Patterns: []*Word{
++					word(lit("("), lit("|"), lit("l"), lit(")"), lit("s")),
++					word(lit("("), lit("un"), lit("|"), lit(")"), lit("x"), lit("(|y)")),
++				},
++				Stmts: litStmts("foo"),
++			}},
++		}, LangZsh),
++	),
+ 	fileTest(
+ 		[]string{"case i in (#i)a) foo ;; esac"},
+ 		langFile(&CaseClause{
+diff --git a/syntax/parser.go b/syntax/parser.go
+index 090ba67..16e62ee 100644
+--- a/syntax/parser.go
++++ b/syntax/parser.go
+@@ -3270,6 +3270,9 @@ func (p *Parser) zshCasePatterns() []*Word {
+ 		}
+ 		switch p.r {
+ 		case ' ', '\t', '\r', '\n', escNewl, ';', '&', runeEOF:
++			if slices.Contains(group, nil) {
++				p.posErr(lparen, "case patterns must consist of words")
++			}
+ 			return group // the optional "(" before the patterns
+ 		}
+ 		pats = append(pats, p.zshGroupWord(lparen, group, bars, rparen))
+@@ -3318,12 +3321,12 @@ func (p *Parser) zshPatternGroup(lparen Pos, nested bool) (pats []*Word, bars []
+ 		pats = append(pats, p.zshGroupWord(inner, group, innerBars, innerRparen))
+ 	} else {
+ 		p.next()
+-		pats = append(pats, p.zshCasePattern())
++		pats = append(pats, p.zshGroupAlternative())
+ 	}
+ 	for p.err == nil && p.tok == or {
+ 		bars = append(bars, p.pos)
+ 		p.next()
+-		pats = append(pats, p.zshCasePattern())
++		pats = append(pats, p.zshGroupAlternative())
+ 	}
+ 	rparen = p.pos
+ 	if p.err == nil && p.tok != rightParen {
+@@ -3332,6 +3335,16 @@ func (p *Parser) zshPatternGroup(lparen Pos, nested bool) (pats []*Word, bars []
+ 	return pats, bars, rparen
+ }
+ 
++// zshGroupAlternative parses one of the patterns separated by "|" in a
++// parenthesized group, which zsh allows to be empty, as in `(|l)server` or
++// `(un|)install`; an empty one is returned as nil.
++func (p *Parser) zshGroupAlternative() *Word {
++	if p.tok == or || p.tok == rightParen {
++		return nil
++	}
++	return p.zshCasePattern()
++}
++
+ // zshGroupWord builds the word for a pattern starting with a parenthesized
+ // group, consuming the closing ")" and whatever continues the word after it.
+ func (p *Parser) zshGroupWord(lparen Pos, group []*Word, bars []Pos, rparen Pos) *Word {
+@@ -3346,7 +3359,9 @@ func (p *Parser) zshGroupWord(lparen Pos, group []*Word, bars []Pos, rparen Pos)
+ 		if i > 0 {
+ 			parts = append(parts, punct(bars[i-1], "|"))
+ 		}
+-		parts = append(parts, w.Parts...)
++		if w != nil {
++			parts = append(parts, w.Parts...)
++		}
+ 	}
+ 	parts = append(parts, punct(rparen, ")"))
+ 	p.next()

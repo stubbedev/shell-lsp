@@ -50,6 +50,7 @@ reproducer so that it can be sent upstream as it is.
 | 0018 | syntax tests: `TestParseConfirm` reports a shell killed by its deadline as a timeout instead of a parse error, allows ten seconds, and runs at most `GOMAXPROCS` shells at once, so slow shell startup (MSYS2 bash on Windows) no longer fails valid inputs | — |
 | 0019 | syntax: a `StartAt(offset, line, col)` parser option, so a fragment of a larger file parses with the positions it has in that file instead of starting over at 1:1 | — |
 | 0020 | zsh: the length prefix combines with any further operator and counts its result (`${#x%c}`, `${#words:#-*}`, `${#a/x/y}`), as with `zsh -n`, instead of failing with "cannot combine multiple parameter expansion operators" | [mvdan/sh#120](https://github.com/mvdan/sh/issues/120) |
+| 0021 | zsh: an empty alternative in a pattern group of a case item (`(|l)server)`, `(un|)install)`), as with `zsh -n`, instead of failing with "case patterns must consist of words" | [mvdan/sh#120](https://github.com/mvdan/sh/issues/120) |
 
 ## Tests
 

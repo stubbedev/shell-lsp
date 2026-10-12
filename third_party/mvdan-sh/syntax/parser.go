@@ -3270,6 +3270,9 @@ func (p *Parser) zshCasePatterns() []*Word {
 		}
 		switch p.r {
 		case ' ', '\t', '\r', '\n', escNewl, ';', '&', runeEOF:
+			if slices.Contains(group, nil) {
+				p.posErr(lparen, "case patterns must consist of words")
+			}
 			return group // the optional "(" before the patterns
 		}
 		pats = append(pats, p.zshGroupWord(lparen, group, bars, rparen))
@@ -3318,18 +3321,28 @@ func (p *Parser) zshPatternGroup(lparen Pos, nested bool) (pats []*Word, bars []
 		pats = append(pats, p.zshGroupWord(inner, group, innerBars, innerRparen))
 	} else {
 		p.next()
-		pats = append(pats, p.zshCasePattern())
+		pats = append(pats, p.zshGroupAlternative())
 	}
 	for p.err == nil && p.tok == or {
 		bars = append(bars, p.pos)
 		p.next()
-		pats = append(pats, p.zshCasePattern())
+		pats = append(pats, p.zshGroupAlternative())
 	}
 	rparen = p.pos
 	if p.err == nil && p.tok != rightParen {
 		p.matchingErr(lparen, leftParen, rightParen)
 	}
 	return pats, bars, rparen
+}
+
+// zshGroupAlternative parses one of the patterns separated by "|" in a
+// parenthesized group, which zsh allows to be empty, as in `(|l)server` or
+// `(un|)install`; an empty one is returned as nil.
+func (p *Parser) zshGroupAlternative() *Word {
+	if p.tok == or || p.tok == rightParen {
+		return nil
+	}
+	return p.zshCasePattern()
 }
 
 // zshGroupWord builds the word for a pattern starting with a parenthesized
@@ -3346,7 +3359,9 @@ func (p *Parser) zshGroupWord(lparen Pos, group []*Word, bars []Pos, rparen Pos)
 		if i > 0 {
 			parts = append(parts, punct(bars[i-1], "|"))
 		}
-		parts = append(parts, w.Parts...)
+		if w != nil {
+			parts = append(parts, w.Parts...)
+		}
 	}
 	parts = append(parts, punct(rparen, ")"))
 	p.next()

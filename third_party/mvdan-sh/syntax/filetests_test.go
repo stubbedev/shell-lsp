@@ -941,6 +941,21 @@ var fileTests = []fileTestCase{
 		}, LangZsh),
 	),
 	fileTest(
+		[]string{"case i in (|l)s|(un|)x(|y)) foo ;; esac"},
+		printsAs("case i in ((|l)s | (un|)x(|y)) foo ;; esac"),
+		langFile(&CaseClause{
+			Word: litWord("i"),
+			Items: []*CaseItem{{
+				Op: Break,
+				Patterns: []*Word{
+					word(lit("("), lit("|"), lit("l"), lit(")"), lit("s")),
+					word(lit("("), lit("un"), lit("|"), lit(")"), lit("x"), lit("(|y)")),
+				},
+				Stmts: litStmts("foo"),
+			}},
+		}, LangZsh),
+	),
+	fileTest(
 		[]string{"case i in (#i)a) foo ;; esac"},
 		langFile(&CaseClause{
 			Word: litWord("i"),
