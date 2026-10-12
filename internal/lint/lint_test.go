@@ -94,10 +94,10 @@ func TestParseCode(t *testing.T) {
 func TestUnclosedSubstitutionInAnArray(t *testing.T) {
 	t.Parallel()
 
-	closed := "words=($(compgen -W \"a b\" -- \"$cur\"))\n"
+	closed := "words=($(grep -e \"a b\" -- \"$cur\"))\n"
 	for _, d := range []dialect.Dialect{dialect.Bash, dialect.Zsh} {
 		fixed := false
-		for _, f := range Check(parser.Parse(closed+"words=($(compgen -W \"a b -- \"$cur\"))\n", d), nil, Options{}) {
+		for _, f := range Check(parser.Parse(closed+"words=($(grep -e \"a b -- \"$cur\"))\n", d), nil, Options{}) {
 			switch {
 			case f.Code != 2207:
 			case f.Span.Start < len(closed):

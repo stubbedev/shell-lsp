@@ -62,3 +62,34 @@ func TestCommandSubstitutionMessagesFollowTheDialect(t *testing.T) {
 		}
 	}
 }
+
+func TestCompgenProducesWords(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]bool{
+		`compgen -v`:                        true,
+		`compgen -v -- "$cur"`:              true,
+		`compgen -v "$cur"`:                 true,
+		`compgen -ve -- "$cur"`:             true,
+		`compgen -A variable -A export`:     true,
+		`compgen -Avariable`:                true,
+		`compgen -W 'start stop' -- "$cur"`: true,
+		`compgen -o nosort -u -X '!a*'`:     true,
+		`compgen -P pre_ -S _post -k`:       true,
+		`compgen -o default -v`:             false,
+		`compgen -W "$words" -- "$cur"`:     false,
+		`compgen -W '*.txt'`:                false,
+		`compgen -P 'a b' -v`:               false,
+		`compgen -f -- "$cur"`:              false,
+		`compgen -A function`:               false,
+		`compgen -X`:                        false,
+		`compgen -- "$cur"`:                 false,
+		`compgen -v "$cur" extra`:           false,
+	}
+	for src, want := range tests {
+		tree := parser.Parse(src+"\n", dialect.Bash)
+		if got := compgenProducesWords(tree.Commands[0].Args); got != want {
+			t.Errorf("compgenProducesWords(%s) = %t, want %t", src, got, want)
+		}
+	}
+}

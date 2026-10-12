@@ -12,7 +12,8 @@ echo "${users[@]}"
 ### unquoted brace command substitution in array literal
 pids=(${ pgrep nginx; })
 echo "${pids[@]}"
->>> SC2207 1:7
+>>> none
+>>- SC2207 1:7 -- pgrep prints only process IDs, which splitting and globbing leave intact
 
 ### ksh array literal with unquoted command substitution
 #!/bin/ksh
@@ -24,3 +25,29 @@ echo "${mounts[@]}"
 today=("$(date +%F)")
 echo "${today[@]}"
 >>> none
+
+### compgen of names and fixed words
+_complete() {
+	local cur=${COMP_WORDS[COMP_CWORD]}
+	COMPREPLY=(
+		$(compgen -v -- "$cur")
+		$(compgen -W '-a -e -v -h' -- "$cur")
+		$(compgen -A user -u "$cur")
+	)
+	COMPREPLY=($(compgen -W "$commands" -- "$cur"))
+	COMPREPLY=($(compgen -f -- "$cur"))
+	COMPREPLY=($(compgen -W '*.txt' -- "$cur"))
+	COMPREPLY=($(compgen -o default -v -- "$cur"))
+}
+complete -F _complete tool
+echo $(compgen -v)
+>>> SC2005 14:6
+>>> SC2154 8:27
+>>> SC2207 8:13
+>>> SC2207 9:13
+>>> SC2207 10:13
+>>> SC2207 11:13
+>>- SC2207 4:3 -- compgen with these actions prints only names and fixed words, which splitting and globbing leave intact
+>>- SC2207 5:3 -- compgen with these actions prints only names and fixed words, which splitting and globbing leave intact
+>>- SC2207 6:3 -- compgen with these actions prints only names and fixed words, which splitting and globbing leave intact
+>>- SC2046 14:6 -- compgen with these actions prints only names and fixed words, which splitting and globbing leave intact

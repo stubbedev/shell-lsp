@@ -145,6 +145,9 @@ func checkUnquotedSubstitution(p *pass, n syntax.Node) {
 			p.report(2046, span, "The output of this command substitution is "+p.substitutionFate("split into words")+"; quote it.", p.quoteFix(span, Review))
 		}
 	case contextArrayElement:
+		if producesSafeWords(cs) {
+			return
+		}
 		advice := "read it with mapfile or read -a instead"
 		if p.dialect == dialect.Zsh {
 			advice = `split it explicitly instead, such as into lines with ${(f)"$(...)"}`
@@ -195,7 +198,63 @@ func producesSafeWords(cs *syntax.CmdSubst) bool {
 		return false
 	}
 	c, ok := commandOf(call)
-	return ok && c.isBase("seq", "pgrep")
+	if !ok {
+		return false
+	}
+	return c.isBase("seq", "pgrep") || c.is("compgen") && compgenProducesWords(c.args)
+}
+
+var (
+	compgenWordActions     = "bekguv"
+	compgenWordActionsLong = setOf("arrayvar", "builtin", "disabled", "enabled", "export", "group", "keyword", "setopt", "shopt", "signal", "user", "variable")
+	compgenHarmlessOptions = setOf("nosort", "nospace", "noquote", "plusdirs")
+)
+
+func compgenProducesWords(args []*syntax.Word) bool {
+	actions := 0
+	for i := 0; i < len(args); i++ {
+		flag, literal := parser.Literal(args[i])
+		if !literal || !strings.HasPrefix(flag, "-") {
+			return actions > 0 && i == len(args)-1
+		}
+		if flag == "--" {
+			return actions > 0 && i >= len(args)-2
+		}
+		for j := 1; j < len(flag); j++ {
+			letter := flag[j]
+			if strings.IndexByte(compgenWordActions, letter) >= 0 {
+				actions++
+				continue
+			}
+			value := flag[j+1:]
+			if value == "" {
+				i++
+				if i == len(args) {
+					return false
+				}
+				if value, literal = parser.Literal(args[i]); !literal {
+					return false
+				}
+			}
+			switch {
+			case letter == 'A' && compgenWordActionsLong[value]:
+				actions++
+			case letter == 'W' && plainWords(value):
+				actions++
+			case letter == 'o' && compgenHarmlessOptions[value]:
+			case letter == 'X':
+			case (letter == 'P' || letter == 'S') && plainWords(value) && !strings.ContainsAny(value, " \t\n"):
+			default:
+				return false
+			}
+			break
+		}
+	}
+	return actions > 0
+}
+
+func plainWords(s string) bool {
+	return !strings.ContainsAny(s, "$`\\'\"*?[")
 }
 
 func backtickFix(p *pass, cs *syntax.CmdSubst, span parser.Span) []Fix {
