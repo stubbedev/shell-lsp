@@ -203,18 +203,6 @@ func partsWithinText(parts []syntax.WordPart, text string) []syntax.WordPart {
 	return parts
 }
 
-func Language(d dialect.Dialect) syntax.LangVariant {
-	switch d {
-	case dialect.Bash, dialect.Posix, dialect.Dash, dialect.Busybox:
-		return syntax.LangBash
-	case dialect.Zsh:
-		return syntax.LangZsh
-	case dialect.Ksh:
-		return syntax.LangKsh93
-	}
-	panic(fmt.Sprintf("parser: no language variant for dialect %d", d))
-}
-
 func Variant(d dialect.Dialect, in dialect.Input) syntax.LangVariant {
 	switch {
 	case d == dialect.Bash && in.Bats():
@@ -222,7 +210,7 @@ func Variant(d dialect.Dialect, in dialect.Input) syntax.LangVariant {
 	case d == dialect.Ksh && in.Mksh():
 		return syntax.LangMirBSDKorn
 	}
-	return Language(d)
+	return d.Language()
 }
 
 func convertError(err error, text string, d dialect.Dialect) (Error, bool) {

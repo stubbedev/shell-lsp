@@ -80,7 +80,7 @@ func FromEditorConfig(props editorconfig.Properties) (Settings, error) {
 	if value, ok := props["shell_variant"]; ok {
 		d, known := dialect.FromName(value)
 		if !known {
-			return Settings{}, fmt.Errorf("shell_variant = %s: want bash, posix, mksh, bats or zsh", value)
+			return Settings{}, fmt.Errorf("shell_variant = %s: want one of %s", value, strings.Join(dialect.Names(), ", "))
 		}
 		s.Dialect = &d
 	}

@@ -132,7 +132,7 @@ func languageNamed(name string) (*language, error) {
 	if !ok {
 		return nil, fmt.Errorf("unknown shell language variant: %q", name)
 	}
-	return &language{dialect: d, variant: parser.Language(d)}, nil
+	return &language{dialect: d, variant: d.Language()}, nil
 }
 
 type fmtOptions struct {

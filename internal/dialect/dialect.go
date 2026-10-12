@@ -1,9 +1,7 @@
-// Package dialect identifies which shell a document is written in and
-// exposes the feature set of each shell so downstream features branch
-// on structured capabilities instead of string comparisons.
 package dialect
 
 import (
+	"fmt"
 	"iter"
 	"maps"
 	"path/filepath"
@@ -11,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/directive"
+	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
 type Dialect uint8
@@ -24,46 +23,119 @@ const (
 	Busybox
 )
 
-func (d Dialect) String() string {
-	switch d {
-	case Bash:
-		return "bash"
-	case Zsh:
-		return "zsh"
-	case Posix:
-		return "sh"
-	case Dash:
-		return "dash"
-	case Ksh:
-		return "ksh"
-	case Busybox:
-		return "busybox"
-	}
-	return "unknown"
-}
-
-// FromName maps a shell name, dialect alias or language identifier to a
-// dialect. It accepts every spelling the detectors can produce so each
-// source (shebang, languageId, shellcheck directive, modeline) funnels
-// through one table.
 const genericLanguageID = "shellscript"
 
-func FromName(name string) (Dialect, bool) {
-	switch strings.ToLower(strings.TrimSpace(name)) {
-	case "bash", "bats", genericLanguageID, "bashrc":
-		return Bash, true
-	case "zsh":
-		return Zsh, true
-	case "sh", "posix", "posixsh":
-		return Posix, true
-	case "dash", "ash":
-		return Dash, true
-	case "busybox", "busybox sh", "busybox ash":
-		return Busybox, true
-	case "ksh", "ksh88", "ksh93", "mksh", "oksh":
-		return Ksh, true
+type family uint8
+
+const (
+	posixFamily family = iota
+	zshFamily
+	kshFamily
+)
+
+type spec struct {
+	name     string
+	aliases  []string
+	family   family
+	width    uint8
+	language syntax.LangVariant
+	features Features
+}
+
+var specs = [...]spec{
+	Bash: {
+		name: "bash", aliases: []string{"bats", genericLanguageID, "bashrc"},
+		family: posixFamily, width: 3, language: syntax.LangBash,
+		features: Features{
+			Arrays: true, AssociativeArrays: true, DoubleBracket: true,
+			ArithmeticCommand: true, ProcessSubstitution: true, Coproc: true,
+			Nameref: true, Local: true, Select: true, SplitsUnquoted: true, GlobsUnquoted: true, DeclarationAssigns: true,
+			QuotedRegexLiteral: true, SubscriptsRunCode: true,
+		},
+	},
+	Zsh: {
+		name: "zsh", family: zshFamily, language: syntax.LangZsh,
+		features: Features{
+			Arrays: true, AssociativeArrays: true, DoubleBracket: true,
+			ArithmeticCommand: true, ProcessSubstitution: true, GlobQualifiers: true,
+			Coproc: true, Nameref: true, Local: true, Select: true, LastPipeInShell: true, DeclarationAssigns: true,
+			ArithmeticStatus: true, AssignsPositionals: true, AssociativePairs: true,
+		},
+	},
+	Posix: {
+		name: "sh", aliases: []string{"posix", "posixsh"},
+		family: posixFamily, width: 0, language: syntax.LangBash,
+		features: Features{SplitsUnquoted: true, GlobsUnquoted: true, QuotedRegexLiteral: true},
+	},
+	Dash: {
+		name: "dash", aliases: []string{"ash"},
+		family: posixFamily, width: 1, language: syntax.LangBash,
+		features: Features{Local: true, SplitsUnquoted: true, GlobsUnquoted: true, DeclarationAssigns: true, QuotedRegexLiteral: true},
+	},
+	Ksh: {
+		name: "ksh", aliases: []string{"ksh88", "ksh93", "mksh", "oksh"},
+		family: kshFamily, language: syntax.LangKsh93,
+		features: Features{
+			Arrays: true, AssociativeArrays: true, DoubleBracket: true,
+			ArithmeticCommand: true, ProcessSubstitution: true, Coproc: true,
+			Nameref: true, Local: true, Select: true, SplitsUnquoted: true, GlobsUnquoted: true, LastPipeInShell: true,
+			DeclarationAssigns: true, QuotedRegexLiteral: true, SubscriptsRunCode: true,
+		},
+	},
+	Busybox: {
+		name: "busybox", aliases: []string{"busybox sh", "busybox ash"},
+		family: posixFamily, width: 2, language: syntax.LangBash,
+		features: Features{
+			DoubleBracket: true, Local: true, SplitsUnquoted: true, GlobsUnquoted: true, DeclarationAssigns: true,
+			QuotedRegexLiteral: true,
+		},
+	},
+}
+
+var All = func() Set {
+	var s Set
+	for d := range specs {
+		s |= 1 << d
 	}
-	return 0, false
+	return s
+}()
+
+var byName = func() map[string]Dialect {
+	out := map[string]Dialect{}
+	for d := range All.Members() {
+		for _, name := range append([]string{d.String()}, specs[d].aliases...) {
+			out[name] = d
+		}
+	}
+	return out
+}()
+
+func (d Dialect) spec() spec {
+	if int(d) >= len(specs) {
+		panic(fmt.Sprintf("dialect: unknown dialect %d", d))
+	}
+	return specs[d]
+}
+
+func (d Dialect) String() string { return d.spec().name }
+
+func (d Dialect) Language() syntax.LangVariant { return d.spec().language }
+
+func (d Dialect) Features() Features { return d.spec().features }
+
+func (d Dialect) family() family { return d.spec().family }
+
+func Names() []string {
+	names := make([]string, 0, len(specs))
+	for d := range All.Members() {
+		names = append(names, d.String())
+	}
+	return names
+}
+
+func FromName(name string) (Dialect, bool) {
+	d, ok := byName[strings.ToLower(strings.TrimSpace(name))]
+	return d, ok
 }
 
 type Features struct {
@@ -86,42 +158,6 @@ type Features struct {
 	GlobsUnquoted       bool
 	QuotedRegexLiteral  bool
 	SubscriptsRunCode   bool
-}
-
-func (d Dialect) Features() Features {
-	switch d {
-	case Bash:
-		return Features{
-			Arrays: true, AssociativeArrays: true, DoubleBracket: true,
-			ArithmeticCommand: true, ProcessSubstitution: true, Coproc: true,
-			Nameref: true, Local: true, Select: true, SplitsUnquoted: true, GlobsUnquoted: true, DeclarationAssigns: true,
-			QuotedRegexLiteral: true, SubscriptsRunCode: true,
-		}
-	case Zsh:
-		return Features{
-			Arrays: true, AssociativeArrays: true, DoubleBracket: true,
-			ArithmeticCommand: true, ProcessSubstitution: true, GlobQualifiers: true,
-			Coproc: true, Nameref: true, Local: true, Select: true, LastPipeInShell: true, DeclarationAssigns: true,
-			ArithmeticStatus: true, AssignsPositionals: true, AssociativePairs: true,
-		}
-	case Posix:
-		return Features{SplitsUnquoted: true, GlobsUnquoted: true, QuotedRegexLiteral: true}
-	case Dash:
-		return Features{Local: true, SplitsUnquoted: true, GlobsUnquoted: true, DeclarationAssigns: true, QuotedRegexLiteral: true}
-	case Busybox:
-		return Features{
-			DoubleBracket: true, Local: true, SplitsUnquoted: true, GlobsUnquoted: true, DeclarationAssigns: true,
-			QuotedRegexLiteral: true,
-		}
-	case Ksh:
-		return Features{
-			Arrays: true, AssociativeArrays: true, DoubleBracket: true,
-			ArithmeticCommand: true, ProcessSubstitution: true, Coproc: true,
-			Nameref: true, Local: true, Select: true, SplitsUnquoted: true, GlobsUnquoted: true, LastPipeInShell: true,
-			DeclarationAssigns: true, QuotedRegexLiteral: true, SubscriptsRunCode: true,
-		}
-	}
-	return Features{}
 }
 
 // Input is everything detection may look at for one document.
@@ -356,8 +392,6 @@ func fromModeline(text string) (Dialect, string, bool) {
 
 type Set uint8
 
-const All Set = 1<<Bash | 1<<Zsh | 1<<Posix | 1<<Dash | 1<<Ksh | 1<<Busybox
-
 func SetOf(dialects ...Dialect) Set {
 	var s Set
 	for _, d := range dialects {
@@ -377,26 +411,6 @@ func (s Set) Members() iter.Seq[Dialect] {
 		}
 	}
 }
-
-type family uint8
-
-const (
-	posixFamily family = iota
-	zshFamily
-	kshFamily
-)
-
-func (d Dialect) family() family {
-	switch d {
-	case Zsh:
-		return zshFamily
-	case Ksh:
-		return kshFamily
-	}
-	return posixFamily
-}
-
-var posixWidth = []Dialect{Posix, Dash, Busybox, Bash}
 
 func Shared(dialects []Dialect) (Dialect, func(Dialect) bool) {
 	counts := map[family]int{}
@@ -418,7 +432,7 @@ func Shared(dialects []Dialect) (Dialect, func(Dialect) bool) {
 	}
 	fits := func(d Dialect) bool { return d.family() == chosen }
 	widest := slices.MaxFunc(slices.DeleteFunc(slices.Clone(dialects), func(d Dialect) bool { return !fits(d) }), func(a, b Dialect) int {
-		return slices.Index(posixWidth, a) - slices.Index(posixWidth, b)
+		return int(a.spec().width) - int(b.spec().width)
 	})
 	return widest, fits
 }

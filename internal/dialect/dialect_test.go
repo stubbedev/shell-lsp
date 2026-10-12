@@ -3,6 +3,8 @@ package dialect
 import (
 	"slices"
 	"testing"
+
+	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
 func TestDetectPrecedence(t *testing.T) {
@@ -232,6 +234,42 @@ func TestSet(t *testing.T) {
 	}
 	if got := slices.Collect(s.Members()); !slices.Equal(got, []Dialect{Bash, Ksh}) {
 		t.Errorf("SetOf(Bash, Ksh).Members() = %v", got)
+	}
+}
+
+func TestEveryDialectIsDescribedOnce(t *testing.T) {
+	t.Parallel()
+
+	if got, want := Names(), []string{"bash", "zsh", "sh", "dash", "ksh", "busybox"}; !slices.Equal(got, want) {
+		t.Errorf("Names() = %v, want %v", got, want)
+	}
+	for d := range All.Members() {
+		if got, ok := FromName(d.String()); !ok || got != d {
+			t.Errorf("FromName(%q) = %v, %t; want %v", d.String(), got, ok, d)
+		}
+	}
+	languages := map[Dialect]syntax.LangVariant{
+		Bash: syntax.LangBash, Posix: syntax.LangBash, Dash: syntax.LangBash, Busybox: syntax.LangBash,
+		Zsh: syntax.LangZsh, Ksh: syntax.LangKsh93,
+	}
+	for d, want := range languages {
+		if got := d.Language(); got != want {
+			t.Errorf("%s.Language() = %s, want %s", d, got, want)
+		}
+	}
+	for name, use := range map[string]func(Dialect){
+		"String":   func(d Dialect) { _ = d.String() },
+		"Features": func(d Dialect) { _ = d.Features() },
+		"Language": func(d Dialect) { _ = d.Language() },
+	} {
+		func() {
+			defer func() {
+				if recover() == nil {
+					t.Errorf("%s on an unknown dialect did not panic", name)
+				}
+			}()
+			use(Busybox + 1)
+		}()
 	}
 }
 

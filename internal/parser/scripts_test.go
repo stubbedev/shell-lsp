@@ -20,7 +20,7 @@ func TestScriptsParseIndependently(t *testing.T) {
 		{Start: len(first), End: len(first) + len(second)},
 		{Start: len(first) + len(second), End: len(text)},
 	}
-	tree := ParseScripts(nil, text, scripts, dialect.Bash, Language(dialect.Bash), nil)
+	tree := ParseScripts(nil, text, scripts, dialect.Bash, dialect.Bash.Language(), nil)
 	if tree.Synthetic(0) {
 		t.Error("a tree without an origin has synthetic text")
 	}
@@ -50,7 +50,7 @@ func TestScriptsReportTheirLinesInTheSource(t *testing.T) {
 	t.Parallel()
 
 	text := "(\necho a\n)\n"
-	tree := ParseScripts(nil, text, []Span{{Start: 0, End: len(text)}}, dialect.Posix, Language(dialect.Posix), offsetOrigin{})
+	tree := ParseScripts(nil, text, []Span{{Start: 0, End: len(text)}}, dialect.Posix, dialect.Posix.Language(), offsetOrigin{})
 	if got := tree.SourceLine(2); got != 42 {
 		t.Errorf("SourceLine(2) = %d, want what the source numbering says", got)
 	}
