@@ -178,10 +178,10 @@ func (s *Server) cacheSizes() map[string]int {
 	outbound := len(s.outbound.running) + len(s.outbound.again)
 	s.outbound.mu.Unlock()
 	pushJobs := 0
-	if s.push != nil {
-		s.push.mu.Lock()
-		pushJobs = len(s.push.jobs)
-		s.push.mu.Unlock()
+	if push, ok := s.delivery.(pushDelivery); ok {
+		push.scheduler.mu.Lock()
+		pushJobs = len(push.scheduler.jobs)
+		push.scheduler.mu.Unlock()
 	}
 	return map[string]int{
 		"documents": len(s.docs.View().Documents()),

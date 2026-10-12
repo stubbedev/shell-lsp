@@ -35,18 +35,13 @@ func (s *Server) handleDidClose(_ context.Context, closeParams lsp.DidCloseTextD
 	s.docs.Close(uri)
 	s.snapshots.forget(uri)
 	s.semantic.forget(uri)
-	if s.push != nil {
-		s.push.cancel(uri)
-		s.notify(publishDiagnosticsMethod, lsp.PublishDiagnosticsParams{URI: uri, Diagnostics: []lsp.Diagnostic{}})
-	}
+	s.delivery.closed(uri)
 	return nil
 }
 
 func (s *Server) documentChanged(uri string) {
 	s.warm(uri)
-	if s.push != nil {
-		s.push.schedule(uri)
-	}
+	s.delivery.changed(uri)
 }
 
 func negotiateEncoding(preferred []string) docstore.Encoding {

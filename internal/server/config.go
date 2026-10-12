@@ -75,7 +75,7 @@ func (s *Server) applySettings(ctx context.Context, update func()) {
 	caps := s.client.Workspace
 	s.mu.Unlock()
 	s.workspace.InvalidateAll()
-	s.refreshDiagnostics(ctx, caps.Diagnostics.RefreshSupport)
+	s.refreshDiagnostics(ctx)
 	for _, refresh := range []struct {
 		method    string
 		supported bool
@@ -168,24 +168,11 @@ func (s *Server) handleDidChangeWorkspaceFolders(ctx context.Context, change lsp
 	return nil
 }
 
-func (s *Server) refreshDiagnostics(ctx context.Context, clientRefresh bool) {
+func (s *Server) refreshDiagnostics(ctx context.Context) {
 	docs := s.docs.View().Documents()
 	uris := make([]string, len(docs))
 	for i, doc := range docs {
 		uris[i] = doc.URI
 	}
-	s.refreshDiagnosticsOf(ctx, clientRefresh, uris)
-}
-
-func (s *Server) refreshDiagnosticsOf(ctx context.Context, clientRefresh bool, uris []string) {
-	if s.push != nil {
-		for _, uri := range uris {
-			s.push.schedule(uri)
-		}
-		return
-	}
-	if !clientRefresh {
-		return
-	}
-	s.requestRefresh(ctx, diagnosticRefreshMethod)
+	s.delivery.refresh(ctx, uris)
 }

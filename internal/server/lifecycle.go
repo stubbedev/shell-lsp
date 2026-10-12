@@ -191,14 +191,15 @@ func (s *Server) handleInitialize(_ context.Context, _ *docstore.View, initParam
 	caps := initParams.Capabilities
 	enc := negotiateEncoding(caps.General.PositionEncodings)
 	s.docs.SetEncoding(enc)
+	s.delivery = pullDelivery{server: s, refreshSupport: caps.Workspace.Diagnostics.RefreshSupport}
 	if caps.TextDocument.Diagnostic == nil {
-		s.push = newPushScheduler(diagnosticsDebounce, s.publishDiagnostics)
+		s.delivery = pushDelivery{server: s, scheduler: newPushScheduler(diagnosticsDebounce, s.publishDiagnostics)}
 	}
 	s.workspace.SetRoots(workspaceRoots(initParams))
 	s.mu.Lock()
 	s.settings = settings
 	s.client = caps
-	s.initialized = true
+	s.phase = running
 	s.mu.Unlock()
 	advertised := s.capabilities
 	advertised.PositionEncoding = enc.String()
@@ -226,11 +227,9 @@ func (s *Server) handleInitialized(ctx context.Context, _ json.RawMessage) error
 
 func (s *Server) handleShutdown(context.Context, *docstore.View, json.RawMessage) (any, error) {
 	s.mu.Lock()
-	s.shutdown = true
+	s.phase = shutDown
 	s.mu.Unlock()
-	if s.push != nil {
-		s.push.close()
-	}
+	s.delivery.stop()
 	return nil, nil
 }
 

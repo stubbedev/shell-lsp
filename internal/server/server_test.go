@@ -258,7 +258,7 @@ func TestNotificationsProcessedInOrder(t *testing.T) {
 	var mu sync.Mutex
 	var order []string
 	srv := New(jsonrpc.NewConn(nil, nil), "test", CurrentProcess())
-	srv.initialized = true
+	srv.phase = running
 	for _, name := range []string{"a", "b", "c"} {
 		srv.notifications["test/"+name] = func(_ context.Context, _ json.RawMessage) error {
 			mu.Lock()

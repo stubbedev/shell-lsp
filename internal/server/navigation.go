@@ -95,7 +95,7 @@ func (s *Server) handleDidChangeWatchedFiles(ctx context.Context, watched lsp.Di
 		s.applySettings(ctx, func() {})
 		return nil
 	}
-	s.refreshDiagnostics(ctx, s.clientCapabilities().Workspace.Diagnostics.RefreshSupport)
+	s.refreshDiagnostics(ctx)
 	return nil
 }
 

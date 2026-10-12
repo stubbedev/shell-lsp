@@ -90,7 +90,7 @@ type Server struct {
 	snapshots   *snapshotCache
 	warming     *coalescer
 	outbound    *coalescer
-	push        *pushScheduler
+	delivery    diagnosticDelivery
 	commandDocs commandDocs
 	prefetch    *prefetcher
 	environment shellEnvironment
@@ -99,8 +99,7 @@ type Server struct {
 	bats        *batsResults
 
 	mu             sync.Mutex
-	shutdown       bool
-	initialized    bool
+	phase          phase
 	trace          TraceValue
 	settings       config.Settings
 	folderSettings map[string]config.Settings
@@ -145,6 +144,7 @@ func New(conn *jsonrpc.Conn, version string, process Process) *Server {
 		exiting:      make(chan struct{}),
 	}
 	s.usePages(manpage.NewLookup(process.ManPath, process.Path))
+	s.delivery = pullDelivery{server: s}
 	s.workspace = newWorkspace(s)
 	s.registerHandlers()
 	return s
@@ -178,9 +178,7 @@ func (s *Server) Run(ctx context.Context) error {
 	defer func() {
 		cancel()
 		s.wg.Wait()
-		if s.push != nil {
-			s.push.close()
-		}
+		s.delivery.stop()
 	}()
 	for {
 		msg, err := s.conn.Read()
@@ -390,14 +388,22 @@ func (s *Server) call(ctx context.Context, method string, params, result any) er
 	}
 }
 
+type phase uint8
+
+const (
+	starting phase = iota
+	running
+	shutDown
+)
+
 func (s *Server) isInitialized() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.initialized
+	return s.phase != starting
 }
 
 func (s *Server) isShutdown() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.shutdown
+	return s.phase == shutDown
 }

@@ -197,6 +197,50 @@ func (s *Server) notify(method string, params any) {
 	}
 }
 
+type diagnosticDelivery interface {
+	changed(uri string)
+	closed(uri string)
+	refresh(ctx context.Context, uris []string)
+	stop()
+}
+
+type pullDelivery struct {
+	server         *Server
+	refreshSupport bool
+}
+
+func (pullDelivery) changed(string) {}
+
+func (pullDelivery) closed(string) {}
+
+func (p pullDelivery) refresh(ctx context.Context, _ []string) {
+	if p.refreshSupport {
+		p.server.requestRefresh(ctx, diagnosticRefreshMethod)
+	}
+}
+
+func (pullDelivery) stop() {}
+
+type pushDelivery struct {
+	server    *Server
+	scheduler *pushScheduler
+}
+
+func (p pushDelivery) changed(uri string) { p.scheduler.schedule(uri) }
+
+func (p pushDelivery) closed(uri string) {
+	p.scheduler.cancel(uri)
+	p.server.notify(publishDiagnosticsMethod, lsp.PublishDiagnosticsParams{URI: uri, Diagnostics: []lsp.Diagnostic{}})
+}
+
+func (p pushDelivery) refresh(_ context.Context, uris []string) {
+	for _, uri := range uris {
+		p.scheduler.schedule(uri)
+	}
+}
+
+func (p pushDelivery) stop() { p.scheduler.close() }
+
 type pushScheduler struct {
 	delay   time.Duration
 	publish func(ctx context.Context, uri string)

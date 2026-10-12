@@ -248,7 +248,7 @@ func (s *Server) runBats(ctx context.Context, docs *docstore.View, args batsRunA
 		placed[i] = anchorFailure(ran, f)
 	}
 	s.bats.record(file.URI, selected, placed)
-	s.refreshDiagnosticsOf(context.WithoutCancel(ctx), s.clientCapabilities().Workspace.Diagnostics.RefreshSupport, []string{file.URI})
+	s.delivery.refresh(context.WithoutCancel(ctx), []string{file.URI})
 	kind := lsp.MessageInfo
 	if !report.OK() {
 		kind = lsp.MessageError
