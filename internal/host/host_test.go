@@ -58,7 +58,7 @@ func TestParseKeepsEachRecipeLineToItself(t *testing.T) {
 	want := []located{
 		{1, 6, "missing `\"` to match `\"`"},
 		{3, 1, "missing `fi` to match `if`"},
-		{5, 1, "missing `)` to match `(`"},
+		{5, 6, "missing `)` to match `$(`"},
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("errors\n got %+v\nwant %+v", got, want)

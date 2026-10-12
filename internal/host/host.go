@@ -134,11 +134,27 @@ func (s Script) authored(errs []parser.Error) []parser.Error {
 		byScript[i] = append(byScript[i], e)
 	}
 	out := make([]parser.Error, 0, len(errs))
-	for _, within := range byScript {
-		if slices.ContainsFunc(within, written) {
+	for i, within := range byScript {
+		switch {
+		case slices.ContainsFunc(within, written):
 			within = slices.DeleteFunc(within, func(e parser.Error) bool { return !written(e) })
+		case len(within) > 0:
+			if own := s.ownErrors(s.scripts[i]); len(own) > 0 {
+				within = own
+			}
 		}
 		out = append(out, within...)
 	}
 	return out
+}
+
+func (s Script) ownErrors(script parser.Span) []parser.Error {
+	text := []byte(s.Doc.Text())
+	for i := script.Start; i < script.End; i++ {
+		if text[i] != '\n' && s.Doc.Synthetic(i) {
+			text[i] = ' '
+		}
+	}
+	d := s.Detection.Dialect
+	return parser.ParseScripts(nil, string(text), []parser.Span{script}, d, parser.Language(d), s.Doc).Errors
 }
