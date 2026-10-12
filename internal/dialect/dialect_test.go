@@ -305,10 +305,38 @@ func TestInputBats(t *testing.T) {
 		{Input{URI: "file:///t/run.sh", Text: "#!/bin/bash\n# uses bats helpers\n"}, false},
 		{Input{Text: "#!/bin/bash -e\n"}, false},
 	} {
-		if got := tc.in.Bats(); got != tc.want {
+		if got := ShellOf(Bash, tc.in).Bats(); got != tc.want {
 			t.Errorf("%+v Bats() = %v, want %v", tc.in, got, tc.want)
 		}
 	}
+}
+
+func TestShellLanguage(t *testing.T) {
+	t.Parallel()
+
+	bats := Input{URI: "file:///t/unit.bats", Text: "#!/usr/bin/env bats\n"}
+	for _, tc := range []struct {
+		shell Shell
+		want  syntax.LangVariant
+	}{
+		{ShellOf(Bash, bats), syntax.LangBats},
+		{ShellOf(Zsh, bats), syntax.LangZsh},
+		{ShellOf(Posix, bats), syntax.LangBash},
+		{ShellOf(Ksh, Input{Text: "#!/bin/mksh\n"}), syntax.LangMirBSDKorn},
+		{ShellOf(Bash, Input{Text: "#!/bin/mksh\n"}), syntax.LangBash},
+		{FlavorBats.Shell(), syntax.LangBats},
+		{FlavorMksh.Shell(), syntax.LangMirBSDKorn},
+	} {
+		if got := tc.shell.Lang(); got != tc.want {
+			t.Errorf("%+v.Lang() = %s, want %s", tc.shell, got, tc.want)
+		}
+	}
+	defer func() {
+		if recover() == nil {
+			t.Error("a zsh shell with the bats flavor has a language")
+		}
+	}()
+	_ = Shell{Dialect: Zsh, Flavor: FlavorBats}.Lang()
 }
 
 func TestInputMksh(t *testing.T) {
@@ -327,7 +355,7 @@ func TestInputMksh(t *testing.T) {
 		{Input{Text: "#!/bin/ksh93\n"}, false},
 		{Input{URI: "file:///w/old.ksh"}, false},
 	} {
-		if got := tc.in.Mksh(); got != tc.want {
+		if got := ShellOf(Ksh, tc.in).Flavor == FlavorMksh; got != tc.want {
 			t.Errorf("%+v Mksh() = %v, want %v", tc.in, got, tc.want)
 		}
 	}

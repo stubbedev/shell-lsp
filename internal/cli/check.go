@@ -140,7 +140,7 @@ func newChecker(env Env, opts checkOptions) *checker {
 		rcs:    newRCFinder(opts.rc, regularfile.ReadConfig, env.Home, env.ConfigHome),
 		stdin:  sync.OnceValues(func() ([]byte, error) { return io.ReadAll(env.Stdin) }),
 	}
-	c.ws = workspace.New(func(string) (*workspace.File, bool) { return nil, false }, c.dialectOf)
+	c.ws = workspace.New(func(string) (*workspace.File, bool) { return nil, false }, c.shellOf)
 	return c
 }
 
@@ -193,19 +193,19 @@ func (c *checker) settings(dir string) (fileSettings, error) {
 	return s, nil
 }
 
-func (c *checker) dialectOf(path string, in dialect.Input) dialect.Dialect {
+func (c *checker) shellOf(path string, in dialect.Input) dialect.Shell {
 	s, err := c.settings(filepath.Dir(path))
 	if err != nil {
 		c.resolved.Store(path, resolution{err: &configError{err}})
-		return dialect.Detect(nil, in)
+		return dialect.Resolve(nil, in).Shell
 	}
 	r, err := project.Resolve(c.editor, path, s.forced, in)
 	if err != nil {
 		c.resolved.Store(path, resolution{err: &configError{err}})
-		return r.Dialect
+		return r.Shell
 	}
 	c.resolved.Store(path, resolution{r: r})
-	return r.Dialect
+	return r.Shell
 }
 
 func (c *checker) navigationEnv(roots []string) navigation.Env {
@@ -270,7 +270,7 @@ func (c *checker) targets() ([]target, []string) {
 		}
 	}
 	for _, dir := range dirs {
-		walker := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.DetectDialect)
+		walker := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.DetectShell)
 		walker.SetRoots([]string{c.abs(dir)})
 		paths, err := walker.AllShellFiles(context.Background())
 		if err != nil {
@@ -388,7 +388,7 @@ func (c *checker) parse(t target, s fileSettings) (*workspace.File, project.Reso
 		if err != nil {
 			return nil, project.Resolution{}, &configError{err}
 		}
-		return &workspace.File{Doc: doc, Tree: parser.ParseEdit(nil, doc.Text(), r.Dialect, parser.Variant(r.Dialect, in))}, r, nil
+		return &workspace.File{Doc: doc, Tree: parser.ParseEdit(nil, doc.Text(), r.Shell)}, r, nil
 	}
 	file, err := c.ws.Load(t.path)
 	if err != nil {

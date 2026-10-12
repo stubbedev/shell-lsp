@@ -216,7 +216,7 @@ func (s *Server) runBats(ctx context.Context, docs *docstore.View, args batsRunA
 	if err != nil {
 		return batsRunResult{}, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "reading %s before running it: %v", path, err)
 	}
-	ran := parser.ParseEdit(nil, string(disk), file.Tree.Dialect, file.Tree.Lang)
+	ran := parser.ParseEdit(nil, string(disk), file.Tree.Shell)
 	inv := bats.Invocation{Runner: runner, Dir: dir, File: filepath.ToSlash(rel), Test: selected}
 	label := "bats " + filepath.Base(path)
 	ctx, cancel := context.WithTimeout(ctx, batsTimeout)

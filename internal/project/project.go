@@ -36,7 +36,7 @@ func Resolve(resolver *editorconfig.Resolver, path string, forced *dialect.Diale
 	}
 	r.Settings = settings
 	if forced == nil && settings.Dialect != nil {
-		r.Detection = dialect.Detection{Dialect: *settings.Dialect, Source: dialect.SourceEditorConfig, Evidence: props["shell_variant"]}
+		r.Detection = dialect.Detection{Shell: dialect.ShellOf(*settings.Dialect, in), Source: dialect.SourceEditorConfig, Evidence: props["shell_variant"]}
 	}
 	return r, nil
 }

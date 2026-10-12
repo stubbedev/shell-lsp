@@ -421,7 +421,7 @@ func (p *pass) collectCall(call *syntax.CallExpr) {
 				p.scanAlias(arg, span)
 			}
 		}
-	case p.tree.Lang == syntax.LangKsh93 && strings.Contains(c.name, "."):
+	case p.tree.Lang() == syntax.LangKsh93 && strings.Contains(c.name, "."):
 		if root, _, _ := strings.Cut(c.name, "."); parser.IsName(root) {
 			p.variables.use(root)
 		}

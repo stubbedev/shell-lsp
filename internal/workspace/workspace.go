@@ -113,9 +113,9 @@ func (f *File) fill(key string, entry *memoEntry, compute func() any) any {
 type Overlay func(uri string) (*File, bool)
 
 type Workspace struct {
-	overlay   Overlay
-	dialectOf func(path string, in dialect.Input) dialect.Dialect
-	now       func() time.Time
+	overlay Overlay
+	shellOf func(path string, in dialect.Input) dialect.Shell
+	now     func() time.Time
 
 	mu         sync.Mutex
 	roots      []string
@@ -142,12 +142,12 @@ type diskEntry struct {
 	file    *File
 }
 
-func DetectDialect(_ string, in dialect.Input) dialect.Dialect {
-	return dialect.Detect(nil, in)
+func DetectShell(_ string, in dialect.Input) dialect.Shell {
+	return dialect.Resolve(nil, in).Shell
 }
 
-func New(overlay Overlay, dialectOf func(path string, in dialect.Input) dialect.Dialect) *Workspace {
-	return &Workspace{overlay: overlay, dialectOf: dialectOf, now: time.Now, files: map[string]diskEntry{}, dirs: map[string]dirListing{}, missing: map[string]time.Time{}}
+func New(overlay Overlay, shellOf func(path string, in dialect.Input) dialect.Shell) *Workspace {
+	return &Workspace{overlay: overlay, shellOf: shellOf, now: time.Now, files: map[string]diskEntry{}, dirs: map[string]dirListing{}, missing: map[string]time.Time{}}
 }
 
 func (w *Workspace) SetRoots(roots []string) {
@@ -257,8 +257,7 @@ func (w *Workspace) parse(path string, doc *docstore.Document) *File {
 		return &File{Path: path, URI: doc.URI, Doc: script.Doc, Tree: script.Parse(nil)}
 	}
 	in := dialect.Input{URI: doc.URI, Text: doc.Text()}
-	d := w.dialectOf(path, in)
-	return &File{Path: path, URI: doc.URI, Doc: doc, Tree: parser.ParseEdit(nil, doc.Text(), d, parser.Variant(d, in))}
+	return &File{Path: path, URI: doc.URI, Doc: doc, Tree: parser.ParseEdit(nil, doc.Text(), w.shellOf(path, in))}
 }
 
 const maxMissing = 4096

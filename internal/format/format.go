@@ -83,7 +83,7 @@ func Format(tree *parser.Tree, opts Options) (string, error) {
 	}
 	file := tree.File
 	if opts.Simplify {
-		fresh, err := parse(tree.Text(), tree.Lang, true)
+		fresh, err := parse(tree.Text(), tree.Lang(), true)
 		if err != nil {
 			return "", err
 		}
@@ -96,7 +96,7 @@ func Format(tree *parser.Tree, opts Options) (string, error) {
 	if once == tree.Text() {
 		return once, nil
 	}
-	reparsed, err := parse(once, tree.Lang, opts.Simplify)
+	reparsed, err := parse(once, tree.Lang(), opts.Simplify)
 	if err != nil {
 		return "", fmt.Errorf("%w: the formatted %s no longer parses: %w", ErrNotIdempotent, tree.Dialect, err)
 	}

@@ -23,7 +23,6 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/project"
 	"github.com/stubbedev/shell-lsp/internal/regularfile"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
-	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
 const fmtUsage = `usage: shell-lsp fmt [flags] [path ...]
@@ -114,25 +113,23 @@ func (m listMode) separator() string {
 	return "\n"
 }
 
-type language struct {
-	dialect dialect.Dialect
-	variant syntax.LangVariant
-}
-
-func languageNamed(name string) (*language, error) {
+func languageNamed(name string) (*dialect.Shell, error) {
+	var shell dialect.Shell
 	switch name {
 	case "auto":
 		return nil, nil
 	case "mksh":
-		return &language{dialect: dialect.Ksh, variant: syntax.LangMirBSDKorn}, nil
+		shell = dialect.FlavorMksh.Shell()
 	case "bats":
-		return &language{dialect: dialect.Bash, variant: syntax.LangBats}, nil
+		shell = dialect.FlavorBats.Shell()
+	default:
+		d, ok := dialect.FromName(name)
+		if !ok {
+			return nil, fmt.Errorf("unknown shell language variant: %q", name)
+		}
+		shell = dialect.Shell{Dialect: d}
 	}
-	d, ok := dialect.FromName(name)
-	if !ok {
-		return nil, fmt.Errorf("unknown shell language variant: %q", name)
-	}
-	return &language{dialect: d, variant: d.Language()}, nil
+	return &shell, nil
 }
 
 type fmtOptions struct {
@@ -142,7 +139,7 @@ type fmtOptions struct {
 	diff        bool
 	applyIgnore bool
 	filename    string
-	language    *language
+	language    *dialect.Shell
 	style       format.Options
 	styleFlags  bool
 	version     bool
@@ -210,7 +207,7 @@ func parseFmtArgs(args []string, stderr io.Writer) (fmtOptions, error) {
 		}
 	})
 	if posix {
-		o.language, _ = languageNamed("posix")
+		o.language = &dialect.Shell{Dialect: dialect.Posix}
 	}
 	if o.style.Minify {
 		o.style.Simplify = true
@@ -319,7 +316,7 @@ func (f *formatter) files() int {
 }
 
 func (f *formatter) walk(operand, dir string) []fmtTarget {
-	walker := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.DetectDialect)
+	walker := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.DetectShell)
 	walker.SetRoots([]string{dir})
 	paths, err := walker.AllShellFiles(context.Background())
 	if err != nil {
@@ -361,7 +358,7 @@ func (f *formatter) format(name, path, raw string, applyIgnore bool) formatted {
 	}
 	var forced *dialect.Dialect
 	if f.opts.language != nil {
-		forced = &f.opts.language.dialect
+		forced = &f.opts.language.Dialect
 	}
 	resolved, err := project.Resolve(f.editor, path, forced, in)
 	if err != nil {
@@ -372,15 +369,14 @@ func (f *formatter) format(name, path, raw string, applyIgnore bool) formatted {
 		out.skip = true
 		return out
 	}
-	d, style := resolved.Dialect, resolved.Settings.Style.Options()
+	shell, style := resolved.Shell, resolved.Settings.Style.Options()
 	if f.opts.styleFlags {
-		d, style = dialect.Detect(forced, in), f.opts.style
+		shell, style = dialect.Resolve(forced, in).Shell, f.opts.style
 	}
-	variant := parser.Variant(d, in)
 	if f.opts.language != nil {
-		variant = f.opts.language.variant
+		shell = *f.opts.language
 	}
-	tree := parser.ParseEdit(nil, doc.Text(), d, variant)
+	tree := parser.ParseEdit(nil, doc.Text(), shell)
 	if len(tree.Errors) > 0 {
 		e := tree.Errors[0]
 		out.err = &scriptError{at: placeOf(doc, e.Span.Start), message: e.Message}

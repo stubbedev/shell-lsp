@@ -43,7 +43,7 @@ func (s Source) String() string {
 }
 
 type Detection struct {
-	Dialect  Dialect
+	Shell
 	Source   Source
 	Evidence string
 }

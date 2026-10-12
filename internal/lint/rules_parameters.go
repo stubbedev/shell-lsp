@@ -90,7 +90,7 @@ func (p *pass) checkBracedOnLine(start, end int) {
 func isBlankByte(c byte) bool { return c == ' ' || c == '\t' }
 
 func (p *pass) startsParameter(c byte) bool {
-	return parser.IsNameChar(c) || strings.IndexByte(specialParameterChars, c) >= 0 || c == '.' && p.tree.Lang == syntax.LangKsh93
+	return parser.IsNameChar(c) || strings.IndexByte(specialParameterChars, c) >= 0 || c == '.' && p.tree.Lang() == syntax.LangKsh93
 }
 
 func (p *pass) braces() *braceScanner {

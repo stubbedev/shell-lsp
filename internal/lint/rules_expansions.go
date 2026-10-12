@@ -42,7 +42,7 @@ func checkUnknownTransformation(p *pass, pe *syntax.ParamExp) {
 		return
 	}
 	known, names := bashTransformations, "U, u, L, Q, E, P, A, K, a and k"
-	if p.tree.Lang == syntax.LangMirBSDKorn {
+	if p.tree.Lang() == syntax.LangMirBSDKorn {
 		known, names = mkshTransformations, "Q and #"
 	}
 	op, literal := parser.Literal(pe.Exp.Word)

@@ -37,7 +37,7 @@ func setup(t *testing.T) (*workspace.File, navigation.Env, FunctionLookup) {
 			t.Fatal(err)
 		}
 	}
-	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.DetectDialect)
+	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.DetectShell)
 	file, err := ws.Load(filepath.Join(root, "main.sh"))
 	if err != nil {
 		t.Fatal(err)
@@ -140,7 +140,7 @@ func TestDocumentLinksIncludeSourceDirectives(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.DetectDialect)
+	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.DetectShell)
 	file, err := ws.Load(filepath.Join(root, "main.sh"))
 	if err != nil {
 		t.Fatal(err)

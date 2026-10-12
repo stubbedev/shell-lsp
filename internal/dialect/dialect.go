@@ -167,24 +167,6 @@ type Input struct {
 	Text       string
 }
 
-func (in Input) Bats() bool {
-	if strings.HasSuffix(in.URI, ".bats") {
-		return true
-	}
-	name, ok := Interpreter(in.Text)
-	return ok && name == "bats"
-}
-
-func (in Input) Mksh() bool {
-	if name, ok := headerShellDirective(in.Text); ok {
-		return name == "mksh"
-	}
-	if name, ok := Interpreter(in.Text); ok {
-		return name == "mksh"
-	}
-	return filepath.Base(in.URI) == ".mkshrc"
-}
-
 // Detect resolves the dialect of a document. Precedence: explicit
 // override, a shellcheck shell directive in the comment header before
 // the first command (an unrecognised shell there means bash, as in
@@ -199,6 +181,12 @@ func Detect(override *Dialect, in Input) Dialect {
 }
 
 func Resolve(override *Dialect, in Input) Detection {
+	found := decide(override, in)
+	found.Flavor = ShellOf(found.Dialect, in).Flavor
+	return found
+}
+
+func decide(override *Dialect, in Input) Detection {
 	if override != nil {
 		return Detection{Dialect: *override, Source: SourceOverride, Evidence: override.String()}
 	}

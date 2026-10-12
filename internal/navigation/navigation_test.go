@@ -29,7 +29,7 @@ func newFixture(t *testing.T, files map[string]string) fixture {
 			t.Fatal(err)
 		}
 	}
-	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.DetectDialect)
+	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.DetectShell)
 	ws.SetRoots([]string{root})
 	return fixture{
 		root: root,

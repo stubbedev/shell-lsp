@@ -56,10 +56,9 @@ type Error struct {
 }
 
 type Tree struct {
-	Dialect dialect.Dialect
-	Lang    syntax.LangVariant
-	File    *syntax.File
-	Errors  []Error
+	dialect.Shell
+	File   *syntax.File
+	Errors []Error
 	Index
 	text       string
 	lineStarts []int
@@ -72,10 +71,8 @@ type Origin interface {
 }
 
 func Parse(text string, d dialect.Dialect) *Tree {
-	return ParseEdit(nil, text, d, Variant(d, dialect.Input{Text: text}))
+	return ParseEdit(nil, text, dialect.ShellOf(d, dialect.Input{Text: text}))
 }
-
-func (t *Tree) Bats() bool { return t.Lang == syntax.LangBats }
 
 func (t *Tree) Runners() Wrappers { return Wrappers{Bats: t.Bats(), Programs: true} }
 
@@ -87,16 +84,16 @@ func newSyntaxParser(lang syntax.LangVariant, options ...syntax.ParserOption) *s
 	}, options...)...)
 }
 
-func ParseEdit(previous *Tree, text string, d dialect.Dialect, lang syntax.LangVariant) *Tree {
+func ParseEdit(previous *Tree, text string, shell dialect.Shell) *Tree {
 	src := []byte(text)
 	if bytes.HasPrefix(src, byteOrderMark) {
 		copy(src, "   ")
 	}
-	file, errs, closedAtEnd := parseSource(newSyntaxParser(lang), src, 0, text, d)
-	return newTree(previous, file, errs, closedAtEnd, text, d, lang, nil)
+	file, errs, closedAtEnd := parseSource(newSyntaxParser(shell.Lang()), src, 0, text, shell.Dialect)
+	return newTree(previous, file, errs, closedAtEnd, text, shell, nil)
 }
 
-func ParseScripts(previous *Tree, text string, scripts []Span, d dialect.Dialect, lang syntax.LangVariant, origin Origin) *Tree {
+func ParseScripts(previous *Tree, text string, scripts []Span, shell dialect.Shell, origin Origin) *Tree {
 	starts := lineStarts(text)
 	file := &syntax.File{}
 	var errs []Error
@@ -104,19 +101,19 @@ func ParseScripts(previous *Tree, text string, scripts []Span, d dialect.Dialect
 	for _, script := range scripts {
 		line := sort.SearchInts(starts, script.Start+1)
 		at := syntax.StartAt(uint(script.Start), uint(line), uint(script.Start-starts[line-1]+1))
-		part, partErrs, closed := parseSource(newSyntaxParser(lang, at), []byte(text[script.Start:script.End]), script.Start, text[:script.End], d)
+		part, partErrs, closed := parseSource(newSyntaxParser(shell.Lang(), at), []byte(text[script.Start:script.End]), script.Start, text[:script.End], shell.Dialect)
 		file.Stmts = append(file.Stmts, part.Stmts...)
 		file.Last = append(file.Last, part.Last...)
 		errs = append(errs, partErrs...)
 		maps.Copy(closedAtEnd, closed)
 	}
-	return newTree(previous, file, errs, closedAtEnd, text, d, lang, origin)
+	return newTree(previous, file, errs, closedAtEnd, text, shell, origin)
 }
 
-func newTree(previous *Tree, file *syntax.File, errs []Error, closedAtEnd map[*syntax.Redirect]bool, text string, d dialect.Dialect, lang syntax.LangVariant, origin Origin) *Tree {
-	index, recovered := buildIndex(file, lang, d, text, closedAtEnd, previous)
+func newTree(previous *Tree, file *syntax.File, errs []Error, closedAtEnd map[*syntax.Redirect]bool, text string, shell dialect.Shell, origin Origin) *Tree {
+	index, recovered := buildIndex(file, shell.Lang(), shell.Dialect, text, closedAtEnd, previous)
 	errs = append(errs, recovered...)
-	return &Tree{Dialect: d, Lang: lang, File: file, Errors: sortErrors(errs), Index: index, text: text, lineStarts: lineStarts(text), origin: origin}
+	return &Tree{Shell: shell, File: file, Errors: sortErrors(errs), Index: index, text: text, lineStarts: lineStarts(text), origin: origin}
 }
 
 func parseSource(parser *syntax.Parser, src []byte, base int, text string, d dialect.Dialect) (*syntax.File, []Error, map[*syntax.Redirect]bool) {
@@ -204,16 +201,6 @@ func partsWithinText(parts []syntax.WordPart, text string) []syntax.WordPart {
 	}
 	last.ValueEnd = syntax.NewPos(end, uint(strings.Count(text, "\n")+1), uint(len(text)-lineStart+1))
 	return parts
-}
-
-func Variant(d dialect.Dialect, in dialect.Input) syntax.LangVariant {
-	switch {
-	case d == dialect.Bash && in.Bats():
-		return syntax.LangBats
-	case d == dialect.Ksh && in.Mksh():
-		return syntax.LangMirBSDKorn
-	}
-	return d.Language()
 }
 
 func convertError(err error, text string, d dialect.Dialect) (Error, bool) {

@@ -9,7 +9,6 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/manpage"
 	"github.com/stubbedev/shell-lsp/internal/parser"
-	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
 type fakeCommands struct {
@@ -391,11 +390,11 @@ func TestHoverLooksThroughWrappers(t *testing.T) {
 		for range nth + 1 {
 			offset += strings.Index(src[offset+1:], needle) + 1
 		}
-		lang := syntax.LangBash
+		shell := dialect.Shell{Dialect: dialect.Bash}
 		if bats {
-			lang = syntax.LangBats
+			shell = dialect.FlavorBats.Shell()
 		}
-		tree := parser.ParseEdit(nil, src, dialect.Bash, lang)
+		tree := parser.ParseEdit(nil, src, shell)
 		got, ok, err := Hover(t.Context(), Input{Tree: tree, Offset: offset + 1, Commands: commands})
 		if err != nil {
 			t.Fatalf("Hover(%q #%d) error = %v", needle, nth, err)

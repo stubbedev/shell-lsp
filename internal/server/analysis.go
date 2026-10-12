@@ -139,8 +139,7 @@ func (s *Server) snapshot(docs *docstore.View, uri string) (*snapshot, error) {
 		if projectErr != nil {
 			s.noticeOnce("editorconfig:"+projectErr.Error(), lsp.MessageWarning, projectErr.Error())
 		}
-		d := resolved.Dialect
-		tree := parser.ParseEdit(like, doc.Text(), d, parser.Variant(d, in))
+		tree := parser.ParseEdit(like, doc.Text(), resolved.Shell)
 		return &snapshot{
 			File:       &workspace.File{Path: path, URI: uri, Doc: doc, Tree: tree},
 			encoding:   docs.Encoding(),

@@ -206,7 +206,7 @@ func benchFile() *workspace.File {
 }
 
 func benchEnv() navigation.Env {
-	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.DetectDialect)
+	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.DetectShell)
 	return navigation.Env{Loader: ws}
 }
 
@@ -313,7 +313,7 @@ func BenchmarkDocumentChange(b *testing.B) {
 	}
 }
 
-func BenchmarkDetectDialect(b *testing.B) {
+func BenchmarkDetectShell(b *testing.B) {
 	for b.Loop() {
 		dialect.Detect(nil, dialect.Input{URI: "file:///w/large", Text: text})
 	}
@@ -336,7 +336,7 @@ func largeWorkspace(b *testing.B) (*workspace.Workspace, *workspace.File) {
 	if err := os.WriteFile(filepath.Join(root, "lib.sh"), []byte("shared() { echo \"$1\"; }\n"), 0o600); err != nil {
 		b.Fatal(err)
 	}
-	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.DetectDialect)
+	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.DetectShell)
 	ws.SetRoots([]string{root})
 	lib, err := ws.Load(filepath.Join(root, "lib.sh"))
 	if err != nil {

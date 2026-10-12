@@ -22,8 +22,8 @@ func TestKshParsesKsh93UnlessTheScriptIsMksh(t *testing.T) {
 		{"#!/bin/mksh\nprint -r -- \"${.sh.version}\"\n", syntax.LangMirBSDKorn, true},
 	} {
 		tree := Parse(tc.src, dialect.Ksh)
-		if tree.Lang != tc.lang || (len(tree.Errors) == 0) != tc.ok {
-			t.Errorf("Parse(%q) = %s with errors %v, want %s parsing ok=%t", tc.src, tree.Lang, messages(tree), tc.lang, tc.ok)
+		if tree.Lang() != tc.lang || (len(tree.Errors) == 0) != tc.ok {
+			t.Errorf("Parse(%q) = %s with errors %v, want %s parsing ok=%t", tc.src, tree.Lang(), messages(tree), tc.lang, tc.ok)
 		}
 	}
 }

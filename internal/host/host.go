@@ -107,8 +107,7 @@ func (l Language) Project(doc *docstore.Document) Script {
 }
 
 func (s Script) Parse(like *parser.Tree) *parser.Tree {
-	d := s.Detection.Dialect
-	tree := parser.ParseScripts(like, s.Doc.Text(), s.scripts, d, d.Language(), s.Doc)
+	tree := parser.ParseScripts(like, s.Doc.Text(), s.scripts, s.Detection.Shell, s.Doc)
 	tree.Errors = s.authored(tree.Errors)
 	return tree
 }
@@ -142,6 +141,5 @@ func (s Script) ownErrors(script parser.Span) []parser.Error {
 			text[i] = ' '
 		}
 	}
-	d := s.Detection.Dialect
-	return parser.ParseScripts(nil, string(text), []parser.Span{script}, d, d.Language(), s.Doc).Errors
+	return parser.ParseScripts(nil, string(text), []parser.Span{script}, s.Detection.Shell, s.Doc).Errors
 }
