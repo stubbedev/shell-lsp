@@ -21,12 +21,23 @@ export type ServerDownload =
   | { readonly kind: "release"; readonly asset: ReleaseAsset }
   | { readonly kind: "unsupported"; readonly platform: string };
 
-const oses: Readonly<Partial<Record<string, Os>>> = { linux: "linux", darwin: "darwin", win32: "windows" };
-const arches: Readonly<Partial<Record<string, Arch>>> = { x64: "amd64", arm64: "arm64" };
+const oses: ReadonlyMap<string, Os> = new Map([
+  ["linux", "linux"],
+  ["darwin", "darwin"],
+  ["win32", "windows"],
+]);
+const arches: ReadonlyMap<string, Arch> = new Map([
+  ["x64", "amd64"],
+  ["arm64", "arm64"],
+]);
+
+export const releaseTargets: readonly ReleaseTarget[] = [...oses.values()].flatMap((os) =>
+  [...arches.values()].map((arch) => ({ os, arch })),
+);
 
 export function serverDownload(version: string, platform: string, arch: string): ServerDownload {
-  const os = oses[platform];
-  const goArch = arches[arch];
+  const os = oses.get(platform);
+  const goArch = arches.get(arch);
   if (os === undefined || goArch === undefined) {
     return { kind: "unsupported", platform: `${platform}-${arch}` };
   }
@@ -63,6 +74,18 @@ export function parseChecksums(text: string): ReadonlyMap<string, string> {
     sums.set(name, digest);
   }
   return sums;
+}
+
+export function releaseAssetProblems(version: string, files: readonly string[], sums: string): readonly string[] {
+  const expected = releaseTargets.map((target) => releaseAsset(version, target).name);
+  const built = files.filter(isReleaseAssetName).sort();
+  const listed = [...parseChecksums(sums).keys()].sort();
+  return [
+    ...expected.filter((name) => !built.includes(name)).map((name) => `the extension downloads ${name}, which was not built`),
+    ...expected.filter((name) => !listed.includes(name)).map((name) => `the extension downloads ${name}, which SHA256SUMS does not list`),
+    ...built.filter((name) => !expected.includes(name)).map((name) => `${name} was built, but the extension never downloads it`),
+    ...listed.filter((name) => !expected.includes(name)).map((name) => `SHA256SUMS lists ${name}, which the extension never downloads`),
+  ];
 }
 
 export function expectedChecksum(text: string, name: string): string {

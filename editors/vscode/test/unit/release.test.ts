@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { expectedChecksum, isReleaseAssetName, parseChecksums, releaseAsset, serverDownload } from "../../src/release.ts";
+import {
+  expectedChecksum,
+  isReleaseAssetName,
+  parseChecksums,
+  releaseAsset,
+  releaseAssetProblems,
+  serverDownload,
+} from "../../src/release.ts";
 
 const digestA = "a".repeat(64);
 const digestB = "0123456789abcdef".repeat(4);
@@ -46,6 +53,44 @@ describe("releaseAsset", () => {
     assert.ok(isReleaseAssetName(releaseAsset("0.9.0", { os: "linux", arch: "amd64" }).name));
     assert.ok(!isReleaseAssetName("shell-lsp"));
     assert.ok(!isReleaseAssetName("notes.txt"));
+  });
+});
+
+describe("releaseAssetProblems", () => {
+  const names = [
+    "shell-lsp-v1.2.3-linux-amd64",
+    "shell-lsp-v1.2.3-linux-arm64",
+    "shell-lsp-v1.2.3-darwin-amd64",
+    "shell-lsp-v1.2.3-darwin-arm64",
+    "shell-lsp-v1.2.3-windows-amd64.exe",
+    "shell-lsp-v1.2.3-windows-arm64.exe",
+  ];
+  const sumsOf = (files: readonly string[]): string => files.map((name) => `${digestA}  ${name}\n`).join("");
+
+  test("accepts what just dist builds for every platform the extension downloads for", () => {
+    assert.deepEqual(releaseAssetProblems("1.2.3", ["SHA256SUMS", ...names].reverse(), sumsOf(names)), []);
+  });
+
+  test("names a binary the extension downloads that was not built or summed", () => {
+    const partial = names.filter((name) => !name.includes("windows-arm64"));
+    assert.deepEqual(releaseAssetProblems("1.2.3", partial, sumsOf(partial)), [
+      "the extension downloads shell-lsp-v1.2.3-windows-arm64.exe, which was not built",
+      "the extension downloads shell-lsp-v1.2.3-windows-arm64.exe, which SHA256SUMS does not list",
+    ]);
+    assert.deepEqual(releaseAssetProblems("1.2.3", names, sumsOf(partial)), [
+      "the extension downloads shell-lsp-v1.2.3-windows-arm64.exe, which SHA256SUMS does not list",
+    ]);
+  });
+
+  test("names a binary that is built under a name the extension never asks for", () => {
+    const renamed = names.map((name) => name.replace("darwin", "macos"));
+    assert.deepEqual(releaseAssetProblems("1.2.3", renamed, sumsOf(names)), [
+      "the extension downloads shell-lsp-v1.2.3-darwin-amd64, which was not built",
+      "the extension downloads shell-lsp-v1.2.3-darwin-arm64, which was not built",
+      "shell-lsp-v1.2.3-macos-amd64 was built, but the extension never downloads it",
+      "shell-lsp-v1.2.3-macos-arm64 was built, but the extension never downloads it",
+    ]);
+    assert.equal(releaseAssetProblems("1.2.4", names, sumsOf(names)).length, 24);
   });
 });
 

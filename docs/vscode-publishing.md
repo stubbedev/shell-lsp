@@ -35,7 +35,11 @@ Pushing a `v*` tag runs `.github/workflows/release.yml`. After the server
 binaries are released, the `vscode` job sets the extension version to the
 tag (without the `v`), packages `shell-lsp-<version>.vsix`, and attaches it to
 the GitHub release. The extension downloads the server from the release that
-matches its own version, so the two always ship together.
+matches its own version, so the two always ship together. Before the release
+is created, `scripts/checkReleaseAssets.ts` checks that `just dist` built and
+summed exactly the binaries the extension downloads, one per platform it
+supports; CI runs the same check on every push, so a renamed binary or a
+platform added on one side only fails there instead of as a 404 for users.
 
 It then publishes to the Visual Studio Marketplace if the repository secret
 `VSCE_PAT` is set, and to Open VSX if `OVSX_PAT` is set. A missing secret

@@ -27,6 +27,13 @@ jobs:
         env:
           VERSION: ${{ github.ref_name }}
         run: just dist "$VERSION"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: Check the binaries against what the VS Code extension downloads
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: node editors/vscode/scripts/checkReleaseAssets.ts dist "${VERSION#v}"
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
