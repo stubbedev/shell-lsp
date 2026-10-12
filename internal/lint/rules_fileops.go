@@ -103,20 +103,17 @@ func checkRemovedPath(p *pass, arg *syntax.Word) {
 }
 
 func guardsEmpty(w *syntax.Word) bool {
-	guarded := false
-	for _, part := range w.Parts {
-		parser.Walk(part, func(n syntax.Node) bool {
-			pe, ok := n.(*syntax.ParamExp)
-			if ok && pe.Exp != nil {
-				switch pe.Exp.Op {
-				case syntax.ErrorUnsetOrNull, syntax.DefaultUnsetOrNull, syntax.AssignUnsetOrNull:
-					guarded = true
-				}
-			}
-			return !guarded
-		})
-	}
-	return guarded
+	return parser.Any(w, func(n syntax.Node) bool {
+		pe, ok := n.(*syntax.ParamExp)
+		if !ok || pe.Exp == nil {
+			return false
+		}
+		switch pe.Exp.Op {
+		case syntax.ErrorUnsetOrNull, syntax.DefaultUnsetOrNull, syntax.AssignUnsetOrNull:
+			return true
+		}
+		return false
+	})
 }
 
 var (

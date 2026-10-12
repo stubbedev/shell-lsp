@@ -111,26 +111,23 @@ func (p *pass) configuresInteractiveShell() bool {
 }
 
 func comparesScriptName(root syntax.Node) bool {
-	compares := false
-	parser.Walk(root, func(n syntax.Node) bool {
+	return parser.Any(root, func(n syntax.Node) bool {
 		switch n := n.(type) {
 		case *syntax.CaseClause:
-			compares = compares || isScriptName(n.Word)
+			return isScriptName(n.Word)
 		case *syntax.BinaryTest:
 			x, _ := n.X.(*syntax.Word)
 			y, _ := n.Y.(*syntax.Word)
-			compares = compares || isScriptName(x) || isScriptName(y)
+			return isScriptName(x) || isScriptName(y)
 		case *syntax.CallExpr:
 			if len(n.Args) == 0 {
-				return true
+				return false
 			}
-			if name := n.Args[0].Lit(); name == "test" || name == "[" {
-				compares = compares || slices.ContainsFunc(n.Args[1:], isScriptName)
-			}
+			name := n.Args[0].Lit()
+			return (name == "test" || name == "[") && slices.ContainsFunc(n.Args[1:], isScriptName)
 		}
-		return !compares
+		return false
 	})
-	return compares
 }
 
 func isScriptName(w *syntax.Word) bool {
@@ -203,14 +200,10 @@ func (p *pass) setupCall(call *syntax.CallExpr) bool {
 }
 
 func forwardsArguments(w *syntax.Word) bool {
-	forwards := false
-	parser.Walk(w, func(n syntax.Node) bool {
-		if pe, ok := n.(*syntax.ParamExp); ok && readsPositional(pe) {
-			forwards = true
-		}
-		return !forwards
+	return parser.Any(w, func(n syntax.Node) bool {
+		pe, ok := n.(*syntax.ParamExp)
+		return ok && readsPositional(pe)
 	})
-	return forwards
 }
 
 func (r *usageRegion) merge(o *usageRegion) {

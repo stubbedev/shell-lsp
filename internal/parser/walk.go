@@ -191,6 +191,15 @@ func Walk(node syntax.Node, f func(syntax.Node) bool) {
 	}
 }
 
+func Any(root syntax.Node, pred func(syntax.Node) bool) bool {
+	found := false
+	Walk(root, func(n syntax.Node) bool {
+		found = found || n != nil && pred(n)
+		return !found
+	})
+	return found
+}
+
 func walkLeadingComments(comments []syntax.Comment, trails func(*syntax.Comment) bool, f func(syntax.Node) bool) *syntax.Comment {
 	for i := range comments {
 		c := &comments[i]

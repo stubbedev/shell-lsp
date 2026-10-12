@@ -1,6 +1,7 @@
 package lint
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/parser"
@@ -108,27 +109,23 @@ func (p *pass) tempFileVariable() (string, *syntax.Stmt, int, bool) {
 }
 
 func (p *pass) disposesOf(name string, creator *syntax.CallExpr) bool {
-	disposed := false
-	parser.Walk(p.tree.File, func(n syntax.Node) bool {
+	return parser.Any(p.tree.File, func(n syntax.Node) bool {
 		switch n := n.(type) {
 		case *syntax.CallExpr:
-			disposed = disposed || (n != creator && p.callDisposes(n, name))
+			return n != creator && p.callDisposes(n, name)
 		case *syntax.Assign:
 			reassigns := n.Name != nil && n.Name.Value == name && !n.Naked
-			disposed = disposed || (!assignsCreator(n, creator) && (reassigns || (n.Value != nil && copiesVariable(n.Value, name))))
-			if n.Array != nil {
-				for _, elem := range n.Array.Elems {
-					disposed = disposed || (elem.Value != nil && copiesVariable(elem.Value, name))
-				}
+			if !assignsCreator(n, creator) && (reassigns || (n.Value != nil && copiesVariable(n.Value, name))) {
+				return true
 			}
+			return n.Array != nil && slices.ContainsFunc(n.Array.Elems, func(elem *syntax.ArrayElem) bool {
+				return elem.Value != nil && copiesVariable(elem.Value, name)
+			})
 		case *syntax.WordIter:
-			for _, item := range n.Items {
-				disposed = disposed || referencesVariable(item, name)
-			}
+			return slices.ContainsFunc(n.Items, func(item *syntax.Word) bool { return referencesVariable(item, name) })
 		}
-		return !disposed
+		return false
 	})
-	return disposed
 }
 
 func (p *pass) callDisposes(call *syntax.CallExpr, name string) bool {
@@ -156,12 +153,7 @@ func assignsCreator(a *syntax.Assign, creator *syntax.CallExpr) bool {
 	if a.Value == nil {
 		return false
 	}
-	found := false
-	parser.Walk(a.Value, func(n syntax.Node) bool {
-		found = found || n == creator
-		return !found
-	})
-	return found
+	return parser.Any(a.Value, func(n syntax.Node) bool { return n == creator })
 }
 
 func referencesVariable(w *syntax.Word, name string) bool {
@@ -227,19 +219,19 @@ func (p *pass) cleanupTrapFix(stmt *syntax.Stmt, depth int, name, remove string)
 }
 
 func (p *pass) trapsExit() bool {
-	traps := false
-	parser.Walk(p.tree.File, func(n syntax.Node) bool {
-		if call, ok := n.(*syntax.CallExpr); ok {
-			if command, ok := p.runs(call.Args); ok && command.name == "trap" {
-				if _, signals, ok := trapOperands(command.args); ok {
-					for _, signal := range signals {
-						lit, literal := parser.Literal(signal)
-						traps = traps || (literal && exitSignals[strings.ToLower(lit)])
-					}
-				}
-			}
+	return parser.Any(p.tree.File, func(n syntax.Node) bool {
+		call, ok := n.(*syntax.CallExpr)
+		if !ok {
+			return false
 		}
-		return !traps
+		command, ok := p.runs(call.Args)
+		if !ok || command.name != "trap" {
+			return false
+		}
+		_, signals, ok := trapOperands(command.args)
+		return ok && slices.ContainsFunc(signals, func(signal *syntax.Word) bool {
+			lit, literal := parser.Literal(signal)
+			return literal && exitSignals[strings.ToLower(lit)]
+		})
 	})
-	return traps
 }

@@ -149,6 +149,25 @@ func TestWalkVisitsCommentsInPlace(t *testing.T) {
 	}
 }
 
+func TestAnyFindsANodeAnywhereBelowTheRoot(t *testing.T) {
+	t.Parallel()
+
+	tree := Parse(commentDenseScript, dialect.Bash)
+	isSubst := func(n syntax.Node) bool {
+		_, ok := n.(*syntax.CmdSubst)
+		return ok
+	}
+	if !Any(tree.File, isSubst) {
+		t.Error("Any missed the command substitution inside the function")
+	}
+	if Any(tree.File.Stmts[0], isSubst) {
+		t.Error("Any found a command substitution in a statement that has none")
+	}
+	if Any(tree.File, func(n syntax.Node) bool { return n == nil }) {
+		t.Error("Any passed the walk's end-of-node marker to the predicate")
+	}
+}
+
 func BenchmarkWalk(b *testing.B) {
 	tree := Parse(strings.Repeat(commentDenseScript, 200), dialect.Bash)
 	visit := func(syntax.Node) bool { return true }

@@ -76,16 +76,14 @@ func (p *pass) popsElsewhere() bool {
 }
 
 func (p *pass) callsCommand(root syntax.Node, name string) bool {
-	calls := false
-	parser.Walk(root, func(n syntax.Node) bool {
-		if call, ok := n.(*syntax.CallExpr); ok {
-			if command, ok := p.runs(call.Args); ok && command.name == name {
-				calls = true
-			}
+	return parser.Any(root, func(n syntax.Node) bool {
+		call, ok := n.(*syntax.CallExpr)
+		if !ok {
+			return false
 		}
-		return !calls
+		command, ok := p.runs(call.Args)
+		return ok && command.name == name
 	})
-	return calls
 }
 
 var (
@@ -217,14 +215,10 @@ func (p *pass) statusChecked(stmt *syntax.Stmt, depth int) bool {
 }
 
 func stmtReadsStatus(stmt *syntax.Stmt) bool {
-	reads := false
-	parser.Walk(stmt, func(n syntax.Node) bool {
-		if pe, ok := n.(*syntax.ParamExp); ok && pe.Param != nil && statusParameters[pe.Param.Value] {
-			reads = true
-		}
-		return !reads
+	return parser.Any(stmt, func(n syntax.Node) bool {
+		pe, ok := n.(*syntax.ParamExp)
+		return ok && pe.Param != nil && statusParameters[pe.Param.Value]
 	})
-	return reads
 }
 
 type enclosure struct {

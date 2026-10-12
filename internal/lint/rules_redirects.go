@@ -221,28 +221,22 @@ func descriptorName(fd int) string {
 }
 
 func containsConsumer(root syntax.Node) bool {
-	found := false
-	parser.Walk(root, func(n syntax.Node) bool {
+	return parser.Any(root, func(n syntax.Node) bool {
 		switch n := n.(type) {
 		case *syntax.CmdSubst:
-			found = found || (!n.TempFile && !n.ReplyVar)
+			return !n.TempFile && !n.ReplyVar
 		case *syntax.ProcSubst:
-			found = found || n.Op == syntax.CmdIn
+			return n.Op == syntax.CmdIn
 		}
-		return !found
+		return false
 	})
-	return found
 }
 
 func hasProcSubst(root syntax.Node, op syntax.ProcOperator) bool {
-	found := false
-	parser.Walk(root, func(n syntax.Node) bool {
-		if ps, ok := n.(*syntax.ProcSubst); ok && ps.Op == op {
-			found = true
-		}
-		return !found
+	return parser.Any(root, func(n syntax.Node) bool {
+		ps, ok := n.(*syntax.ProcSubst)
+		return ok && ps.Op == op
 	})
-	return found
 }
 
 type nonReader struct {

@@ -157,16 +157,14 @@ func (p *pass) losesErrexit(cs *syntax.CmdSubst) bool {
 	default:
 		return false
 	}
-	enables := false
-	parser.Walk(cs, func(n syntax.Node) bool {
-		if call, ok := n.(*syntax.CallExpr); ok {
-			if c, ok := commandOf(call); ok && turnsOn(optionChanges(c.name, c.args), "errexit") {
-				enables = true
-			}
+	return !parser.Any(cs, func(n syntax.Node) bool {
+		call, ok := n.(*syntax.CallExpr)
+		if !ok {
+			return false
 		}
-		return !enables
+		c, ok := commandOf(call)
+		return ok && turnsOn(optionChanges(c.name, c.args), "errexit")
 	})
-	return !enables
 }
 
 var harmlessCommands = setOf("echo", "basename", "dirname", "printf", "set", "shopt")
@@ -264,17 +262,15 @@ func allButLastWithCommand[T any](items []T, node func(T) syntax.Node) []syntax.
 }
 
 func containsCommand(root syntax.Node) bool {
-	found := false
-	parser.Walk(root, func(n syntax.Node) bool {
+	return parser.Any(root, func(n syntax.Node) bool {
 		switch n := n.(type) {
 		case *syntax.CallExpr:
-			found = found || len(n.Args) > 0
+			return len(n.Args) > 0
 		case *syntax.TestClause:
-			found = true
+			return true
 		}
-		return !found
+		return false
 	})
-	return found
 }
 
 func (p *pass) reportMaskedIn(context, unit syntax.Node) {
