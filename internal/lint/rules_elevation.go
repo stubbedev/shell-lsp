@@ -1,6 +1,7 @@
 package lint
 
 import (
+	"path"
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/parser"
@@ -51,17 +52,21 @@ func checkElevatedRedirection(p *pass, c command) {
 }
 
 var (
-	elevationOptions  = optionGrammar{short: "vAknSbEHPa:g:h:p:u:c:T:r:", stopAtOperand: true}
+	runsNothingDirectly = map[string][]string{
+		"sudo": {"-i", "--login", "-s", "--shell", "-e", "--edit", "-l", "--list"},
+		"doas": {"-s", "-C"},
+		"run0": {"-i", "--via-shell"},
+	}
 	unelevatableNames = setOf("cd", "command", "declare", "eval", "exec", "exit", "export", "hash", "history", "local", "popd",
 		"pushd", "read", "readonly", "return", "set", "source", "trap", "type", "typeset", "ulimit", "umask", "unset", "wait")
 )
 
 func checkElevatedBuiltin(p *pass, c command) {
-	options, ok := elevationOptions.parse(c.args)
-	if !ok || len(options.operands) == 0 {
+	parsed := c.options()
+	if !parsed.Complete || len(parsed.Operands) == 0 || parsed.Has(runsNothingDirectly[path.Base(c.name)]...) {
 		return
 	}
-	if builtin, ok := parser.Literal(options.operands[0]); ok && unelevatableNames[builtin] {
+	if builtin, ok := parser.Literal(parsed.Operands[0]); ok && unelevatableNames[builtin] {
 		p.reportNode(2232, c.call, c.name+" runs programs, but "+builtin+" is a shell builtin with no program to run; use "+c.name+" sh -c '...' if it must run elevated.")
 	}
 }

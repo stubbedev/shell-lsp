@@ -209,8 +209,8 @@ func checkReadWithoutRaw(p *pass, n syntax.Node) {
 		return
 	}
 	args := call.Args[slices.Index(call.Args, word)+1:]
-	flags := parseFlags(args, "adinNptu")
-	if flags.has('r', "") || pollsInput(args) || p.readsWithoutEscapes(flags) {
+	flags := parseOptions("read", args)
+	if !flags.Complete || flags.Has("-r") || pollsInput(args) || p.readsWithoutEscapes(flags) {
 		return
 	}
 	if span, ok := p.span(word); ok {
@@ -219,15 +219,10 @@ func checkReadWithoutRaw(p *pass, n syntax.Node) {
 	}
 }
 
-var dialectUnescapedReads = map[dialect.Dialect]string{dialect.Zsh: "qkzecl"}
+var dialectUnescapedReads = map[dialect.Dialect][]string{dialect.Zsh: {"-q", "-k", "-z", "-e", "-c", "-l"}}
 
-func (p *pass) readsWithoutEscapes(flags flagSet) bool {
-	for _, letter := range []byte(dialectUnescapedReads[p.dialect]) {
-		if flags.has(letter, "") {
-			return true
-		}
-	}
-	return false
+func (p *pass) readsWithoutEscapes(flags options) bool {
+	return flags.Has(dialectUnescapedReads[p.dialect]...)
 }
 
 func pollsInput(args []*syntax.Word) bool {

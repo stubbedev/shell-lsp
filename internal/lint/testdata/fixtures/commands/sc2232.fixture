@@ -29,3 +29,23 @@ sudo docker export web01
 ### sudo cannot export
 sudo export PATH=/opt/tools/bin
 >>> SC2232 1:1
+
+### sudo with a working directory still cannot change directory
+sudo -D /srv cd app
+>>+ SC2232 1:1 -- sudo -D takes a directory (sudo(8)); shellcheck 0.11 does not know -D and gives up on the options
+
+### sudo -s runs the command through the target user's shell
+sudo -s cd /root
+>>> none
+
+### sudo -i runs the command through a login shell
+sudo -i export PATH=/opt/tools/bin
+>>> none
+
+### doas as another user cannot export
+doas -u www export PATH=/opt/tools/bin
+>>+ SC2232 1:1 -- doas runs programs, so export cannot run; shellcheck 0.11 only knows sudo (newer releases add doas and run0)
+
+### doas -C only checks the configuration and runs nothing
+doas -C /etc/doas.conf export PATH=/opt/tools/bin
+>>> none

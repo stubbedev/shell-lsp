@@ -289,12 +289,11 @@ func (c nonReader) interactive() bool {
 	if c.name != "cp" && c.name != "mv" && c.name != "rm" {
 		return false
 	}
-	return parseFlags(c.args, "").has('i', "interactive")
+	return parseOptions(c.name, c.args).Has("-i", "--interactive")
 }
 
 func (c nonReader) readsFileList() bool {
-	flags := parseFlags(c.args, "")
-	return c.name == "du" && (flags.has(0, "exclude-from") || flags.has(0, "files0-from"))
+	return c.name == "du" && parseOptions(c.name, c.args).Has("--exclude-from", "--files0-from")
 }
 
 func (c nonReader) advice() string {

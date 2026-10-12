@@ -239,22 +239,20 @@ func checkUnsetIndex(p *pass, c command) {
 	}
 }
 
-var readOptions = optionGrammar{short: "sreu:n:N:i:p:a:t:d:"}
-
 func checkReadTargets(p *pass, c command) {
 	for _, arg := range c.args {
 		if hasBracketGlob(arg) {
 			p.reportNode(2313, arg, "Quote the array index in this read target so the shell does not expand the brackets as a glob.")
 		}
 	}
-	options, ok := readOptions.parse(c.args)
-	if !ok {
+	parsed := c.options()
+	if !parsed.Complete {
 		return
 	}
-	targets := options.operands
-	for _, opt := range options.options {
-		if opt.name == "a" && opt.value != opt.word {
-			targets = append(targets, opt.value)
+	targets := parsed.Operands
+	for _, opt := range parsed.Options {
+		if opt.Name == "-a" && opt.Argument != nil && opt.Argument.Word != opt.Word {
+			targets = append(targets, opt.Argument.Word)
 		}
 	}
 	for _, target := range targets {

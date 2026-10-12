@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/stubbedev/shell-lsp/internal/getopt"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/expand"
@@ -52,11 +53,11 @@ var importantPaths = func() map[string]bool {
 }()
 
 func checkRecursiveRemoval(p *pass, c command) {
-	flags := parseFlags(c.args, "")
-	if !flags.has('r', "recursive") && !flags.has('R', "") {
+	flags := c.options()
+	if !flags.Has("-r", "--recursive", "-R") {
 		return
 	}
-	for _, arg := range flags.operands {
+	for _, arg := range flags.Operands {
 		checkRemovedPath(p, arg)
 	}
 }
@@ -134,8 +135,8 @@ func normalizePath(path string) string {
 var singleRelativeName = regexp.MustCompile(`^(\.\.?/)+[^/]+$`)
 
 func checkMkdirMode(p *pass, c command) {
-	flags := parseFlags(c.args, "m")
-	if !flags.has('p', "parents") || !flags.has('m', "mode") || len(c.args) < 2 {
+	flags := c.options()
+	if !flags.Has("-p", "--parents") || !flags.Has("-m", "--mode") || len(c.args) < 2 {
 		return
 	}
 	nested := false
@@ -160,17 +161,18 @@ func checkMkdirMode(p *pass, c command) {
 
 func checkMissingDestination(code Code, hint string) func(p *pass, c command) {
 	return func(p *pass, c command) {
-		flags := parseFlags(c.args, "")
-		if len(flags.operands) != 1 || flags.has('t', "") || mayExpandToSeveralWords(flags.operands[0]) ||
-			slices.ContainsFunc(flags.long, abbreviatesTargetDirectory) {
+		flags := c.options()
+		if len(flags.Operands) != 1 || flags.Has("-t") || mayExpandToSeveralWords(flags.Operands[0]) ||
+			slices.ContainsFunc(flags.Options, abbreviatesTargetDirectory) {
 			return
 		}
 		p.reportNode(code, c.call, c.name+" is given only one path and no destination."+hint)
 	}
 }
 
-func abbreviatesTargetDirectory(long string) bool {
-	return long != "" && strings.HasPrefix("target-directory", long)
+func abbreviatesTargetDirectory(opt getopt.Option[*syntax.Word]) bool {
+	long, ok := strings.CutPrefix(opt.Name, getopt.EndOfOptions)
+	return ok && long != "" && strings.HasPrefix("target-directory", long)
 }
 
 func checkChmodLowerR(p *pass, c command) {
@@ -194,16 +196,14 @@ func checkWhich(p *pass, c command) {
 	p.reportNode(2230, c.word, "which is not standard and behaves differently between systems; use command -v instead.", fixes...)
 }
 
-var xargsOptions = optionGrammar{short: "0oprtxa:d:R:S:J:L:l:n:P:s:e:E:i:I:", stopAtOperand: true}
-
 func checkXargsReplace(p *pass, c command) {
-	options, ok := xargsOptions.parse(c.args)
-	if !ok {
+	parsed := c.options()
+	if !parsed.Complete {
 		return
 	}
-	for _, opt := range options.options {
-		if opt.name == "i" {
-			p.reportNode(2267, opt.word, "xargs -i is deprecated; use -I {} instead.")
+	for _, opt := range parsed.Options {
+		if opt.Name == "-i" {
+			p.reportNode(2267, opt.Word, "xargs -i is deprecated; use -I {} instead.")
 			return
 		}
 	}

@@ -105,7 +105,7 @@ func (p *pass) checkStagePair(left, right stage) bool {
 			p.reportStage(2038, left, "find output piped to xargs breaks on file names with spaces or newlines; use find -print0 | xargs -0, or find -exec.")
 		}
 	case "ps grep":
-		if flags := parseFlags(left.args(), ""); !flags.has('p', "pid") && !flags.has('q', "quick-pid") {
+		if !parseOptions(left.name, left.args()).Has("-p", "--pid", "-q", "--quick-pid") {
 			p.reportStage(2009, left, "Instead of grepping ps output, consider pgrep, which does not match itself.")
 		}
 	case "grep wc":
@@ -142,13 +142,11 @@ func (p *pass) countsMatchingLines(grep, wc stage) bool {
 	if len(wc.args()) == 0 {
 		return false
 	}
-	g := parseFlags(grep.args(), "")
-	if g.has('l', "files-with-matches") || g.has('L', "files-without-matches") || g.has('o', "only-matching") ||
-		g.has('r', "recursive") || g.has('R', "") || g.has('A', "after-context") || g.has('B', "before-context") {
+	if parseOptions(grep.name, grep.args()).Has("-l", "--files-with-matches", "-L", "--files-without-matches", "-o", "--only-matching",
+		"-r", "--recursive", "-R", "-A", "--after-context", "-B", "--before-context") {
 		return false
 	}
-	w := parseFlags(wc.args(), "")
-	return !w.has('m', "chars") && !w.has('w', "words") && !w.has('c', "bytes") && !w.has('L', "max-line-length")
+	return !parseOptions(wc.name, wc.args()).Has("-m", "--chars", "-w", "--words", "-c", "--bytes", "-L", "--max-line-length")
 }
 
 func hasDashWordWith(words []*syntax.Word, letters string) bool {

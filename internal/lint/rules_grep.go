@@ -63,9 +63,7 @@ func checkGrepPattern(p *pass, c command) {
 	if isGlob(pattern) {
 		p.reportNode(2062, pattern, "Quote this grep pattern so the shell does not expand it as a glob first.")
 	}
-	flags := parseFlags(c.args, "")
-	if flags.has('F', "fixed-strings") || flags.has('o', "only-matching") ||
-		flags.has(0, "include") || flags.has(0, "exclude") || flags.has(0, "exclude-dir") {
+	if c.options().Has("-F", "--fixed-strings", "-o", "--only-matching", "--include", "--exclude", "--exclude-dir") {
 		return
 	}
 	text, _ := parser.Text(pattern, "_")
@@ -117,18 +115,9 @@ func sampleWord(c byte) string {
 	return string(c) + "test"
 }
 
-var earlyExitGrep = optionGrammar{
-	short: "cilLnoqsvwxhHrRbaEFGPe:f:m:A:B:C:d:D:",
-	long: map[string]bool{
-		"regexp": true, "file": true, "max-count": true, "after-context": true, "before-context": true,
-		"context": true, "directories": true, "devices": true,
-	},
-	anyLong: true,
-}
-
 func checkEarlyExitGrep(p *pass, c command) {
-	options, ok := earlyExitGrep.parse(c.args)
-	if !ok || !options.has("q", "quiet", "silent", "m", "max-count", "L") {
+	parsed := c.options()
+	if !parsed.Complete || !parsed.Has("-q", "--quiet", "--silent", "-m", "--max-count", "-L") {
 		return
 	}
 	if _, index := p.enclosingPipeline(); index < 1 || !p.options().pipefail {

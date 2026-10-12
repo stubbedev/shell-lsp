@@ -3,7 +3,6 @@ package parser
 import (
 	"iter"
 	"slices"
-	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/getopt"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
@@ -97,35 +96,19 @@ func findActionEnd(args []*syntax.Word, from int) (int, bool) {
 
 func (s wrapper) placeholder(options []*syntax.Word) (string, bool) {
 	placeholder := ""
-	for i := 0; i < len(options); i++ {
-		option, ok := Literal(options[i])
-		if !ok || option == getopt.EndOfOptions {
+	for _, opt := range getopt.Parse(s.grammar, options, Literal).Options {
+		if !slices.Contains(s.replace, opt.Name) {
 			continue
 		}
-		for _, name := range s.replace {
-			value, attached := optionValue(option, name)
-			switch {
-			case attached:
-				placeholder = value
-			case option != name:
-				continue
-			case !slices.Contains(s.valued, name):
-				placeholder = defaultPlaceholder
-			case i+1 < len(options):
-				i++
-				if placeholder, ok = Literal(options[i]); !ok {
-					return "", false
-				}
-			}
+		if opt.Argument == nil {
+			placeholder = defaultPlaceholder
+			continue
 		}
+		value, ok := opt.Argument.Text(Literal)
+		if !ok {
+			return "", false
+		}
+		placeholder = value
 	}
 	return placeholder, true
-}
-
-func optionValue(option, name string) (string, bool) {
-	if strings.HasPrefix(name, getopt.EndOfOptions) {
-		return strings.CutPrefix(option, name+"=")
-	}
-	value, ok := strings.CutPrefix(option, name)
-	return value, ok && value != ""
 }

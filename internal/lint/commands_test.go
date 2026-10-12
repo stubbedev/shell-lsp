@@ -2,7 +2,6 @@ package lint
 
 import (
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
@@ -44,28 +43,6 @@ func TestCommandOf(t *testing.T) {
 	args, ok := c.literalArgs()
 	if !ok || !slices.Equal(args, []string{"-q", "x"}) {
 		t.Errorf("literalArgs = %v, %t", args, ok)
-	}
-}
-
-func TestParseFlags(t *testing.T) {
-	t.Parallel()
-
-	f := parseFlags(firstCall(t, "read -rp 'Name: ' -t5 --silent name -- -literal\n").Args[1:], "pt")
-	for _, flag := range []byte("rpt") {
-		if !f.has(flag, "") {
-			t.Errorf("flag -%c missing", flag)
-		}
-	}
-	if !f.has(0, "silent") || f.has('s', "") {
-		t.Errorf("long flags = %v, short = %v", f.long, f.short)
-	}
-	var operands []string
-	for _, w := range f.operands {
-		lit, _ := parser.Literal(w)
-		operands = append(operands, lit)
-	}
-	if !slices.Equal(operands, []string{"name", "-literal"}) {
-		t.Errorf("operands = %v", operands)
 	}
 }
 
@@ -142,54 +119,6 @@ func TestCommandDispatch(t *testing.T) {
 		})
 		if !slices.Equal(seen, want) {
 			t.Errorf("dispatch(%q) = %v, want %v", src, seen, want)
-		}
-	}
-}
-
-func TestOptionGrammar(t *testing.T) {
-	t.Parallel()
-
-	render := func(o parsedOptions, ok bool) string {
-		if !ok {
-			return "fail"
-		}
-		var parts []string
-		for _, opt := range o.options {
-			entry := opt.name
-			if opt.value != nil {
-				value, _ := parser.Literal(opt.value)
-				entry += "=" + value
-			}
-			parts = append(parts, entry)
-		}
-		for _, w := range o.operands {
-			lit, _ := parser.Literal(w)
-			parts = append(parts, "["+lit+"]")
-		}
-		return strings.Join(parts, " ")
-	}
-	for _, tc := range []struct {
-		grammar optionGrammar
-		args    string
-		want    string
-	}{
-		{optionGrammar{short: "f:"}, "-f x", "f=x"},
-		{optionGrammar{short: "f:"}, "-fx", "f=-fx"},
-		{optionGrammar{short: "fx"}, "-f -x", "f x"},
-		{optionGrammar{short: "f:"}, "-f -x", "f=-x"},
-		{optionGrammar{short: "fx:"}, "-fx", "fail"},
-		{optionGrammar{long: map[string]bool{"foo": true}}, "--foo=bar baz", "foo=--foo=bar [baz]"},
-		{optionGrammar{long: map[string]bool{"foo": true}}, "--foo bar baz", "foo=bar [baz]"},
-		{optionGrammar{anyLong: true}, "--foo baz", "foo [baz]"},
-		{optionGrammar{}, "--foo baz", "fail"},
-		{optionGrammar{short: "ab"}, "-a x -b", "a b [x]"},
-		{optionGrammar{short: "ab", stopAtOperand: true}, "-a x -b", "a [x] [-b]"},
-		{optionGrammar{short: "ab"}, "-a -- -b", "a [-b]"},
-		{optionGrammar{short: "a:b"}, "-a -- -b", "a=-- b"},
-	} {
-		got := render(tc.grammar.parse(firstCall(t, "cmd "+tc.args+"\n").Args[1:]))
-		if got != tc.want {
-			t.Errorf("%+v parse(%q) = %q, want %q", tc.grammar, tc.args, got, tc.want)
 		}
 	}
 }

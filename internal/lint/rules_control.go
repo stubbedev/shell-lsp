@@ -239,7 +239,7 @@ func checkUncheckedDirectoryChange(p *pass, n syntax.Node) {
 	if !ok || p.options().errexit || p.inCondition(stmt) {
 		return
 	}
-	if name != "cd" && parseFlags(args, "").has('n', "") {
+	if name != "cd" && parseOptions(name, args).Has("-n") {
 		return
 	}
 	if name != "popd" && len(args) == 1 {
@@ -444,7 +444,7 @@ func (p *pass) stdinConsumer(call *syntax.CallExpr, loop parser.Span) {
 	}
 	switch name {
 	case "ssh":
-		if parseFlags(c.args, "bcDEeFIiJLlmOopQRSWw").has('n', "") {
+		if c.options().Has("-n") {
 			return
 		}
 	case "ffmpeg", "mplayer":

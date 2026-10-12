@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/getopt"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -86,6 +87,11 @@ func TestWrappersUnwrap(t *testing.T) {
 		{"timeout", Wrap{Command: 0, Pending: true}, true},
 		{"watch -n 1 kubectl get pods", Wrap{Command: 2}, true},
 		{"xargs -0 -n1 -I {} git", Wrap{Command: 4}, true},
+		{"xargs -l1 -i -e git", Wrap{Command: 3}, true},
+		{"sudo -a bsdauth -c staff git", Wrap{Command: 4}, true},
+		{"sudo -h build1 git", Wrap{Command: 2}, true},
+		{"env -L alice -P /bin git", Wrap{Command: 4}, true},
+		{"watch -s shots -n 2 git", Wrap{Command: 4}, true},
 		{"git status", Wrap{}, false},
 		{"run git", Wrap{}, false},
 	} {
@@ -123,6 +129,17 @@ func TestWrappersTextLayers(t *testing.T) {
 		}
 		if strings.Join(got, ", ") != strings.Join(tt.want, ", ") {
 			t.Errorf("TextLayers(%q) = %q, want %q", tt.line, got, tt.want)
+		}
+	}
+}
+
+func TestEveryWrapperHasAGrammarThatStopsAtTheCommand(t *testing.T) {
+	t.Parallel()
+
+	for name := range commandWrappers {
+		grammar, ok := getopt.Commands[name]
+		if !ok || !grammar.StopAtOperand {
+			t.Errorf("%s: grammar %+v, %t; a wrapper needs one in getopt.Commands that stops at the wrapped command", name, grammar, ok)
 		}
 	}
 }

@@ -4,7 +4,7 @@ xargs -i{} echo {}
 
 ### xargs -e consumes a word then -i follows
 xargs -e sed -i foo
->>> SC2267 1:14
+>>- SC2267 1:14 -- GNU and BusyBox xargs take the -e end-of-file string only when attached, so -i belongs to sed
 >>+ SL3002 1:17 -- shell-lsp native check; GNU xargs takes the -e end-of-file string only when attached, so it runs sed with the script foo
 
 ### upper-case -I is the replacement
@@ -18,3 +18,11 @@ xargs sed -i -e 's/http:/https:/'
 ### -x then sed with -i
 xargs -x sed -i 's/foo/bar/'
 >>> none
+
+### xargs -l with an attached count then -i
+xargs -l1 -i echo {}
+>>> SC2267 1:11
+
+### xargs -i after a long option
+xargs --null -i echo {}
+>>+ SC2267 1:14 -- --null is GNU xargs' long spelling of -0; shellcheck 0.11 does not know long options and gives up on the options

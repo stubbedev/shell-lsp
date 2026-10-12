@@ -65,7 +65,7 @@ func checkEchoEscapes(p *pass, c command) {
 	if !echoEscapeShells.Has(p.dialect) {
 		return
 	}
-	if parseFlags(c.args, "").has('e', "") {
+	if c.options().Has("-e") {
 		return
 	}
 	for _, arg := range c.args {

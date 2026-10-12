@@ -88,9 +88,9 @@ func checkMaskedStatus(p *pass, c command) {
 	if c.decl == nil {
 		return
 	}
-	flags := parseFlags(c.args, "")
-	local := scopedDeclarations[c.name] && !flags.has('g', "") && p.inFunction()
-	if local && (c.name == "readonly" || flags.has('r', "")) {
+	flags := c.options()
+	local := scopedDeclarations[c.name] && !flags.Has("-g") && p.inFunction()
+	if local && (c.name == "readonly" || flags.Has("-r")) {
 		return
 	}
 	for _, a := range c.decl.Args {
@@ -100,7 +100,7 @@ func checkMaskedStatus(p *pass, c command) {
 	}
 }
 
-func (p *pass) separateDeclarationFix(c command, flags flagSet, a *syntax.Assign) []Fix {
+func (p *pass) separateDeclarationFix(c command, flags options, a *syntax.Assign) []Fix {
 	assignments := 0
 	for _, arg := range c.decl.Args {
 		if !arg.Naked {
@@ -129,7 +129,7 @@ func (p *pass) separateDeclarationFix(c command, flags flagSet, a *syntax.Assign
 		}
 		return []Fix{reviewFix("Assign "+name+" before "+c.name+" it", textedit.Edit{Start: declSpan.Start, End: declSpan.End, NewText: assignment + "\n" + indent + c.name + " " + name})}
 	case "local", "declare", "typeset":
-		if flags.has('r', "") || flags.has('n', "") {
+		if flags.Has("-r", "-n") {
 			return nil
 		}
 		return []Fix{reviewFix("Declare "+name+" and assign it separately", textedit.Edit{Start: assignSpan.Start, End: assignSpan.End, NewText: name + "\n" + indent + assignment})}

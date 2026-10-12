@@ -150,73 +150,24 @@ func downloadingStmt(stmt *syntax.Stmt) (string, bool) {
 	return "", false
 }
 
-const curlValuedShort = "AbcCdDeEFHKmPQrtTuUwxXyYz"
-
 func curlWritesStdout(args []*syntax.Word) bool {
 	stdout := true
-	for i := 0; i < len(args); i++ {
-		lit, ok := parser.Literal(args[i])
-		if !ok || !getopt.IsOption(lit) {
-			continue
-		}
-		if long, isLong := strings.CutPrefix(lit, "--"); isLong {
-			switch {
-			case long == "remote-name" || long == "remote-name-all" || long == "output-dir":
-				return false
-			case long == "output":
-				stdout = followedBy(args, i, "-")
-				i++
-			case strings.HasPrefix(long, "output="):
-				stdout = long == "output=-"
-			}
-			continue
-		}
-		cluster := lit[1:]
-		for j := 0; j < len(cluster); j++ {
-			switch letter := cluster[j]; {
-			case letter == 'O':
-				return false
-			case letter == 'o':
-				if value := cluster[j+1:]; value != "" {
-					stdout = value == "-"
-				} else {
-					stdout = followedBy(args, i, "-")
-					i++
-				}
-				j = len(cluster)
-			case strings.IndexByte(curlValuedShort, letter) >= 0:
-				if j+1 == len(cluster) {
-					i++
-				}
-				j = len(cluster)
-			}
+	for _, opt := range parseOptions("curl", args).Options {
+		switch opt.Name {
+		case "-O", "--remote-name", "--remote-name-all", "--output-dir":
+			return false
+		case "-o", "--output":
+			stdout = argumentIs(opt, "-")
 		}
 	}
 	return stdout
 }
 
 func wgetWritesStdout(args []*syntax.Word) bool {
-	for i, arg := range args {
-		lit, ok := parser.Literal(arg)
-		if !ok || !getopt.IsOption(lit) {
-			continue
-		}
-		switch {
-		case lit == "--output-document=-" || lit == "--output-document=/dev/stdout":
-			return true
-		case lit == "--output-document" || (!strings.HasPrefix(lit, "--") && strings.HasSuffix(lit, "O")):
-			return followedBy(args, i, "-") || followedBy(args, i, "/dev/stdout")
-		case !strings.HasPrefix(lit, "--") && strings.HasSuffix(lit, "O-"):
-			return true
+	for _, opt := range parseOptions("wget", args).Options {
+		if opt.Name == "-O" || opt.Name == "--output-document" {
+			return argumentIs(opt, "-", "/dev/stdout")
 		}
 	}
 	return false
-}
-
-func followedBy(args []*syntax.Word, i int, want string) bool {
-	if i+1 >= len(args) {
-		return false
-	}
-	lit, ok := parser.Literal(args[i+1])
-	return ok && lit == want
 }

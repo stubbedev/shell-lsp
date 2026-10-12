@@ -93,7 +93,7 @@ func checkFindInlineScript(p *pass, c command) {
 const findOptionLetters = "-EHLPXdfsxO0123456789"
 
 func checkFindStartingPoint(p *pass, c command) {
-	if parseFlags(c.args, "").has(0, "help") {
+	if c.options().Has("--help") {
 		return
 	}
 	insert := parser.Offset(c.word.End())
