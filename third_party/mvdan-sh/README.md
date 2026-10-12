@@ -64,8 +64,10 @@ The upstream tests are kept and extended, and run with the rest of the module:
 
     go test ./third_party/mvdan-sh/...
 
-With zsh 5.9, bash 5.3, mksh R59 and ksh93u+m on `PATH`, `TestParseConfirm` also
-checks every parse test against the real shells.
+With bash 5.3, dash 0.5.9 or later, mksh R59, zsh 5.9 and ksh93u+m on `PATH`,
+`TestParseConfirm` also checks every parse test against the real shells. The
+nix dev shell of shell-lsp provides them all, with ksh93u+m 1.0.10 built from
+source.
 
 After changing the tokens in `syntax/tokens.go`, regenerate `token_string.go`
 with `go run golang.org/x/tools/cmd/stringer@v0.52.0 -type token -linecomment

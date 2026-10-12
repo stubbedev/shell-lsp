@@ -546,9 +546,10 @@ bats itself.
 Every dev tool (Go toolchain pinned to the version go.mod declares, gopls,
 golangci-lint, delve, just, shellcheck, shfmt, git, gh, Node.js for the
 VS Code extension, bats, bash-language-server and Neovim for the Bats,
-`crosscheck` and `smoke` tests, and dash, zsh, ksh, mksh and BusyBox for
-the corpus checks) comes from the flake: `direnv allow` on entry, or
-`nix develop` explicitly.
+`crosscheck` and `smoke` tests, and dash, zsh, ksh93u+m, mksh and busybox,
+the real shells the parser conformance tests compare with) comes from the
+flake: `direnv allow` on entry, or `nix develop` explicitly. Outside it, the
+tests that compare with a reference tool skip.
 
 | Recipe | What it does |
 | --- | --- |

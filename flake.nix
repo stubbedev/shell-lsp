@@ -50,13 +50,22 @@
             bats # Real test runner behind the Bats integration test
             bash-language-server # Comparison server behind `just crosscheck`
             neovim # Headless editor smoke test behind `just smoke`
-            dash # Real shells whose -n the parser is compared with by `just corpus-shells`
+
+            # Real shells for the conformance tests and `just corpus-shells`,
+            # which check that the parser accepts and rejects what each
+            # shell does. The forked parser's TestParseConfirm wants
+            # ksh93u+m, which nixpkgs lacks: its ksh is the abandoned ksh2020.
+            dash
             zsh
-            ksh
+            (callPackage ./ksh93.nix {})
             mksh
-            # Only the busybox binary: the package's applet links (sh, grep,
-            # sed, find...) would shadow coreutils for every recipe.
-            (runCommand "busybox-only" {} "mkdir -p $out/bin && ln -s ${busybox}/bin/busybox $out/bin/busybox")
+            # busybox links an applet for every tool it bundles, which
+            # would shadow coreutils, grep and sed on PATH; only the busybox
+            # binary itself is put there, so its shell is `busybox sh`.
+            (runCommand "busybox-only" {} ''
+              mkdir -p $out/bin
+              ln -s ${busybox}/bin/busybox $out/bin/busybox
+            '')
 
             # Development workflow
             git # Version control
