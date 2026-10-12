@@ -55,13 +55,16 @@ type pass struct {
 func newPass(tree *parser.Tree, imports []parser.Import, opts Options) *pass {
 	directives := parseDirectives(tree)
 	firstCommand := firstCommandStart(tree)
+	settings := fileWideSettings(directives, firstCommand, opts)
 	return &pass{
 		tree: tree, imports: imports, sources: opts.Sources, rcFile: opts.RCFile, text: tree.Text(), dialect: tree.Dialect, bats: tree.Bats(),
 		firstCommand: firstCommand, directives: directives, catalog: catalog, finishers: finishers, nodeChecks: nodeChecks, commands: commandChecks,
-		settings:   fileWideSettings(directives, firstCommand, opts),
-		stmts:      make([]parser.Span, 0, tree.Statements),
-		variables:  variableUsage{reads: make([]variableRead, 0, len(tree.References))},
-		parameters: shelldocs.KnownParameters(tree.Dialect),
+		settings:       settings,
+		shellChosen:    shellChosen(opts.DialectSource, settings.shell),
+		dialectGuessed: opts.DialectSource == DialectGuessed && !settings.shell,
+		stmts:          make([]parser.Span, 0, tree.Statements),
+		variables:      variableUsage{reads: make([]variableRead, 0, len(tree.References))},
+		parameters:     shelldocs.KnownParameters(tree.Dialect),
 
 		normalized: opts.Normalized,
 	}

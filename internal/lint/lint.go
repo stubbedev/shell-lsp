@@ -204,8 +204,6 @@ func Check(tree *parser.Tree, imports []parser.Import, opts Options) []Finding {
 
 func Run(tree *parser.Tree, imports []parser.Import, opts Options) Report {
 	p := newPass(tree, imports, opts)
-	p.shellChosen = opts.DialectSource == DialectForced || p.settings.shell
-	p.dialectGuessed = opts.DialectSource == DialectGuessed && !p.settings.shell
 	name, foreign := foreignInterpreter(p.text, p.shellChosen)
 	if foreign {
 		first, _, _ := strings.Cut(p.text, "\n")
@@ -257,8 +255,12 @@ var foreignFamily = family{codes: map[Code]meta{1071: {severity: SeverityError, 
 var foreignInterpreters = []string{"awk", "csh", "expect", "fish", "perl", "python", "ruby", "tcsh"}
 
 func Foreign(tree *parser.Tree, source DialectSource) bool {
-	_, foreign := foreignInterpreter(tree.Text(), source == DialectForced || namesShell(parseDirectives(tree)))
+	_, foreign := foreignInterpreter(tree.Text(), shellChosen(source, namesShell(parseDirectives(tree))))
 	return foreign
+}
+
+func shellChosen(source DialectSource, namesShell bool) bool {
+	return source == DialectForced || namesShell
 }
 
 func foreignInterpreter(text string, shellChosen bool) (string, bool) {
