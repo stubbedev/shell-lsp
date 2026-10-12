@@ -16,30 +16,29 @@ const (
 	noBinding
 )
 
+var brackets = lang.NewBrackets(map[kind]kind{tLParen: tRParen, tLBracket: tRBracket, tLBrace: tRBrace, tStringHead: tStringTail})
+
 type parser struct {
-	lex  lexer
-	tok  token
-	last token
-	open lang.Nesting[kind]
+	lang.Cursor[kind]
+	lex lexer
 }
 
 func Parse(src string) lang.Result {
 	res := lang.NewResult(src)
 	p := &parser{lex: lexer{src: src, res: &res}}
+	p.Cursor = lang.NewCursor(src, &res, tEOF, brackets, p.lex.next)
 	lang.Run(p.run)
 	p.lex.quiet = true
-	for p.tok.Kind != tEOF {
-		p.tok = p.lex.next()
-	}
+	p.Drain()
 	return res
 }
 
 func (p *parser) run() {
-	p.advance()
+	p.Advance()
 	if !lang.Attempt(p.directives) && !p.resync() {
 		return
 	}
-	for p.tok.Kind != tEOF {
+	for p.Tok.Kind != tEOF {
 		if !lang.Attempt(p.filter) && !p.resync() {
 			return
 		}
@@ -50,116 +49,58 @@ func (p *parser) resync() bool {
 	p.lex.quiet = true
 	defer func() { p.lex.quiet = false }()
 	for {
-		k := p.tok.Kind
-		top, _ := p.open.Top()
+		k := p.Tok.Kind
+		top, _ := p.Open.Top()
 		switch {
-		case k == tEOF || k == tUnterminated || !p.open.Tracked():
+		case k == tEOF || k == tUnterminated || !p.Open.Tracked():
 			return false
-		case k == tPipe && p.open.Depth() == 0:
-			p.advance()
+		case k == tPipe && p.Open.Depth() == 0:
+			p.Advance()
 			return true
 		case k == tIf:
-			p.push(tEnd)
+			p.Push(tEnd)
 		case k == tDef:
-			p.push(tSemicolon)
+			p.Push(tSemicolon)
 		case k == tSemicolon && top == tSemicolon, k == tEnd && top == tEnd:
-			p.pop(k)
-		case p.open.Depth() == 0 && (isCloser(k) || k == tEnd):
-			p.tok = p.lex.next()
+			p.Pop(k)
+		case p.Open.Depth() == 0 && (p.Closes(k) || k == tEnd):
+			p.Skip()
 			continue
 		case k == tEnd:
 			return false
 		}
-		p.advance()
+		p.Advance()
 	}
-}
-
-func isCloser(k kind) bool {
-	return k == tRParen || k == tRBracket || k == tRBrace || k == tStringTail
-}
-
-func (p *parser) push(closer kind) { p.open.Push(closer) }
-
-func (p *parser) pop(closer kind) {
-	if !p.open.Pop(closer) {
-		lang.Abort()
-	}
-}
-
-func (p *parser) advance() {
-	switch k := p.tok.Kind; k {
-	case tLParen:
-		p.push(tRParen)
-	case tLBracket:
-		p.push(tRBracket)
-	case tLBrace:
-		p.push(tRBrace)
-	case tStringHead:
-		p.push(tStringTail)
-	case tRParen, tRBracket, tRBrace, tStringTail:
-		p.pop(k)
-	}
-	p.last = p.tok
-	p.tok = p.lex.next()
-}
-
-func (p *parser) failAt(t token, message string) {
-	p.lex.res.Fail(t.Start, t.End, message)
-	lang.Bail()
-}
-
-func (p *parser) unexpected() {
-	p.failAt(p.tok, lang.Unexpected(p.lex.src, p.tok.Start, p.tok.End))
-}
-
-func (p *parser) expect(k kind) token {
-	if p.tok.Kind != k {
-		p.unexpected()
-	}
-	t := p.tok
-	p.advance()
-	return t
-}
-
-func (p *parser) closing(k kind, open token) {
-	if p.tok.Kind == tEOF {
-		p.failAt(open, lang.Unclosed(p.lex.src, open.Start, open.End))
-	}
-	p.expect(k)
-}
-
-func (p *parser) reclassify(t token, k lang.Kind, mods lang.Modifier) {
-	p.lex.res.Reclassify(t.Sem, k, mods)
 }
 
 func (p *parser) filter() {
 	p.pipe(0)
-	if p.tok.Kind != tEOF {
-		p.unexpected()
+	if p.Tok.Kind != tEOF {
+		p.Unexpected()
 	}
 }
 
 func (p *parser) directives() {
-	if p.tok.Kind == tModule {
-		p.advance()
+	if p.Tok.Kind == tModule {
+		p.Advance()
 		p.object()
-		p.expect(tSemicolon)
+		p.Expect(tSemicolon)
 	}
-	for p.tok.Kind == tImport || p.tok.Kind == tInclude {
-		directive := p.tok.Kind
-		p.advance()
-		p.expect(tString)
+	for p.Tok.Kind == tImport || p.Tok.Kind == tInclude {
+		directive := p.Tok.Kind
+		p.Advance()
+		p.Expect(tString)
 		if directive == tImport {
-			p.expect(tAs)
-			if p.tok.Kind != tIdent && p.tok.Kind != tVar {
-				p.unexpected()
+			p.Expect(tAs)
+			if p.Tok.Kind != tIdent && p.Tok.Kind != tVar {
+				p.Unexpected()
 			}
-			p.advance()
+			p.Advance()
 		}
-		if p.tok.Kind == tLBrace {
+		if p.Tok.Kind == tLBrace {
 			p.object()
 		}
-		p.expect(tSemicolon)
+		p.Expect(tSemicolon)
 	}
 }
 
@@ -172,81 +113,81 @@ func endsExpression(k kind) bool {
 }
 
 func (p *parser) pipe(ctx context) {
-	switch p.tok.Kind {
+	switch p.Tok.Kind {
 	case tDef:
 		p.definition()
-		if !endsExpression(p.tok.Kind) {
+		if !endsExpression(p.Tok.Kind) {
 			p.pipe(ctx)
 		}
 		return
 	case tLabel:
-		p.advance()
+		p.Advance()
 		p.binding()
-		p.expect(tPipe)
+		p.Expect(tPipe)
 		p.pipe(ctx)
 		return
 	}
 	p.comma(ctx)
-	if p.tok.Kind == tPipe {
-		p.advance()
+	if p.Tok.Kind == tPipe {
+		p.Advance()
 		p.pipe(ctx)
 	}
 }
 
 func (p *parser) binding() {
-	if p.tok.Kind != tVar {
-		p.unexpected()
+	if p.Tok.Kind != tVar {
+		p.Unexpected()
 	}
-	p.reclassify(p.tok, lang.Variable, lang.Declaration)
-	p.advance()
+	p.Reclassify(p.Tok, lang.Variable, lang.Declaration)
+	p.Advance()
 }
 
 func (p *parser) definition() {
-	p.advance()
-	p.push(tSemicolon)
-	if p.tok.Kind != tIdent {
-		p.unexpected()
+	p.Advance()
+	p.Push(tSemicolon)
+	if p.Tok.Kind != tIdent {
+		p.Unexpected()
 	}
-	p.reclassify(p.tok, lang.Function, lang.Declaration)
-	p.advance()
-	if p.tok.Kind == tLParen {
-		open := p.tok
-		p.advance()
+	p.Reclassify(p.Tok, lang.Function, lang.Declaration)
+	p.Advance()
+	if p.Tok.Kind == tLParen {
+		open := p.Tok
+		p.Advance()
 		for {
-			if p.tok.Kind != tIdent && p.tok.Kind != tVar {
-				p.unexpected()
+			if p.Tok.Kind != tIdent && p.Tok.Kind != tVar {
+				p.Unexpected()
 			}
 			kind := lang.Parameter
-			if p.tok.Kind == tIdent {
+			if p.Tok.Kind == tIdent {
 				kind = lang.Function
 			}
-			p.reclassify(p.tok, kind, lang.Declaration)
-			p.advance()
-			if p.tok.Kind != tSemicolon {
+			p.Reclassify(p.Tok, kind, lang.Declaration)
+			p.Advance()
+			if p.Tok.Kind != tSemicolon {
 				break
 			}
-			p.advance()
+			p.Advance()
 		}
-		p.closing(tRParen, open)
+		p.Closing(tRParen, open)
 	}
-	p.expect(tColon)
+	p.Expect(tColon)
 	p.pipe(0)
-	p.expect(tSemicolon)
-	p.pop(tSemicolon)
+	p.Expect(tSemicolon)
+	p.Pop(tSemicolon)
 }
 
 func (p *parser) comma(ctx context) {
 	p.alternative(ctx)
-	for ctx&noComma == 0 && p.tok.Kind == tComma {
-		p.advance()
+	for ctx&noComma == 0 && p.Tok.Kind == tComma {
+		p.Advance()
 		p.alternative(ctx)
 	}
 }
 
 func (p *parser) alternative(ctx context) {
 	p.assignment(ctx)
-	if p.tok.Kind == tAlt || p.tok.Kind == tAltDestructure {
-		p.advance()
+	if p.Tok.Kind == tAlt || p.Tok.Kind == tAltDestructure {
+		p.Advance()
 		p.alternative(ctx)
 	}
 }
@@ -261,24 +202,24 @@ func isAssignment(k kind) bool {
 
 func (p *parser) assignment(ctx context) {
 	p.or(ctx)
-	for isAssignment(p.tok.Kind) {
-		p.advance()
+	for isAssignment(p.Tok.Kind) {
+		p.Advance()
 		p.or(ctx)
 	}
 }
 
 func (p *parser) or(ctx context) {
 	p.and(ctx)
-	for p.tok.Kind == tOr {
-		p.advance()
+	for p.Tok.Kind == tOr {
+		p.Advance()
 		p.and(ctx)
 	}
 }
 
 func (p *parser) and(ctx context) {
 	p.comparison(ctx)
-	for p.tok.Kind == tAnd {
-		p.advance()
+	for p.Tok.Kind == tAnd {
+		p.Advance()
 		p.comparison(ctx)
 	}
 }
@@ -286,9 +227,9 @@ func (p *parser) and(ctx context) {
 func (p *parser) comparison(ctx context) {
 	p.additive(ctx)
 	for {
-		switch p.tok.Kind {
+		switch p.Tok.Kind {
 		case tEqual, tNotEqual, tLess, tLessEq, tGreater, tGreaterEq:
-			p.advance()
+			p.Advance()
 			p.additive(ctx)
 		default:
 			return
@@ -298,23 +239,23 @@ func (p *parser) comparison(ctx context) {
 
 func (p *parser) additive(ctx context) {
 	p.multiplicative(ctx)
-	for p.tok.Kind == tAdd || p.tok.Kind == tSub {
-		p.advance()
+	for p.Tok.Kind == tAdd || p.Tok.Kind == tSub {
+		p.Advance()
 		p.multiplicative(ctx)
 	}
 }
 
 func (p *parser) multiplicative(ctx context) {
 	p.unary(ctx)
-	for p.tok.Kind == tMul || p.tok.Kind == tDiv || p.tok.Kind == tMod {
-		p.advance()
+	for p.Tok.Kind == tMul || p.Tok.Kind == tDiv || p.Tok.Kind == tMod {
+		p.Advance()
 		p.unary(ctx)
 	}
 }
 
 func (p *parser) unary(ctx context) {
-	if p.tok.Kind == tSub {
-		p.advance()
+	if p.Tok.Kind == tSub {
+		p.Advance()
 		p.unary(ctx)
 		return
 	}
@@ -322,38 +263,38 @@ func (p *parser) unary(ctx context) {
 }
 
 func (p *parser) postfix(ctx context) {
-	if p.tok.Kind == tTry {
-		p.advance()
+	if p.Tok.Kind == tTry {
+		p.Advance()
 		p.postfix(ctx | noBinding)
-		if p.tok.Kind == tCatch {
-			p.advance()
+		if p.Tok.Kind == tCatch {
+			p.Advance()
 			p.postfix(ctx | noBinding)
 		}
 		return
 	}
 	p.term()
 	p.suffixes()
-	if p.tok.Kind == tAs && ctx&noBinding == 0 {
-		p.advance()
+	if p.Tok.Kind == tAs && ctx&noBinding == 0 {
+		p.Advance()
 		p.patterns()
-		p.expect(tPipe)
+		p.Expect(tPipe)
 		p.pipe(ctx)
 	}
 }
 
 func (p *parser) suffixes() {
 	for {
-		switch p.tok.Kind {
+		switch p.Tok.Kind {
 		case tField, tQuestion:
-			p.advance()
+			p.Advance()
 		case tDot:
-			p.advance()
-			switch p.tok.Kind {
+			p.Advance()
+			switch p.Tok.Kind {
 			case tString, tStringHead:
 				p.str()
 			case tLBracket:
 			default:
-				p.unexpected()
+				p.Unexpected()
 			}
 		case tLBracket:
 			p.index()
@@ -364,81 +305,81 @@ func (p *parser) suffixes() {
 }
 
 func (p *parser) index() {
-	open := p.tok
-	p.advance()
-	if p.tok.Kind == tRBracket {
-		p.advance()
+	open := p.Tok
+	p.Advance()
+	if p.Tok.Kind == tRBracket {
+		p.Advance()
 		return
 	}
-	if p.tok.Kind != tColon {
+	if p.Tok.Kind != tColon {
 		p.pipe(0)
 	}
-	if p.tok.Kind == tColon {
-		p.advance()
-		if p.tok.Kind != tRBracket {
+	if p.Tok.Kind == tColon {
+		p.Advance()
+		if p.Tok.Kind != tRBracket {
 			p.pipe(0)
 		}
 	}
-	p.closing(tRBracket, open)
+	p.Closing(tRBracket, open)
 }
 
 func (p *parser) str() {
-	head := p.tok
+	head := p.Tok
 	if head.Kind == tString {
-		p.advance()
+		p.Advance()
 		return
 	}
-	p.advance()
+	p.Advance()
 	for {
 		p.pipe(0)
-		switch p.tok.Kind {
+		switch p.Tok.Kind {
 		case tStringMiddle:
-			p.advance()
+			p.Advance()
 		case tStringTail:
-			p.advance()
+			p.Advance()
 			return
 		case tEOF:
-			p.failAt(head, "unterminated string")
+			p.FailAt(head, "unterminated string")
 		default:
-			p.unexpected()
+			p.Unexpected()
 		}
 	}
 }
 
 func (p *parser) term() {
-	switch p.tok.Kind {
+	switch p.Tok.Kind {
 	case tNumber, tField, tDotDot, tVar:
-		p.advance()
+		p.Advance()
 	case tString, tStringHead:
 		p.str()
 	case tFormat:
-		p.advance()
-		if p.tok.Kind == tString || p.tok.Kind == tStringHead {
+		p.Advance()
+		if p.Tok.Kind == tString || p.Tok.Kind == tStringHead {
 			p.str()
 		}
 	case tDot:
-		p.advance()
-		if p.tok.Kind == tString || p.tok.Kind == tStringHead {
+		p.Advance()
+		if p.Tok.Kind == tString || p.Tok.Kind == tStringHead {
 			p.str()
 		}
 	case tLParen:
-		open := p.tok
-		p.advance()
+		open := p.Tok
+		p.Advance()
 		p.pipe(0)
-		p.closing(tRParen, open)
+		p.Closing(tRParen, open)
 	case tLBracket:
-		open := p.tok
-		p.advance()
-		if p.tok.Kind != tRBracket {
+		open := p.Tok
+		p.Advance()
+		if p.Tok.Kind != tRBracket {
 			p.pipe(0)
 		}
-		p.closing(tRBracket, open)
+		p.Closing(tRBracket, open)
 	case tLBrace:
 		p.object()
 	case tIdent:
-		name := p.tok
-		p.advance()
-		if p.tok.Kind == tLParen {
+		name := p.Tok
+		p.Advance()
+		if p.Tok.Kind == tLParen {
 			p.arguments(p.lex.src[name.Start:name.End])
 		}
 	case tReduce, tForeach:
@@ -446,13 +387,13 @@ func (p *parser) term() {
 	case tIf:
 		p.conditional()
 	case tBreak:
-		p.advance()
-		if p.tok.Kind != tVar {
-			p.unexpected()
+		p.Advance()
+		if p.Tok.Kind != tVar {
+			p.Unexpected()
 		}
-		p.advance()
+		p.Advance()
 	default:
-		p.unexpected()
+		p.Unexpected()
 	}
 }
 
@@ -467,16 +408,16 @@ var regexCalls = map[string]regexCall{
 }
 
 func (p *parser) arguments(function string) {
-	open := p.tok
-	p.advance()
+	open := p.Tok
+	p.Advance()
 	call, isRegex := regexCalls[function]
 	var pattern, flags token
 	literalPattern, literalFlags := false, false
 	count := 0
 	for {
-		first := p.tok
+		first := p.Tok
 		p.pipe(0)
-		literal := first.Kind == tString && p.last == first
+		literal := first.Kind == tString && p.Last == first
 		switch count {
 		case 0:
 			pattern, literalPattern = first, literal
@@ -484,12 +425,12 @@ func (p *parser) arguments(function string) {
 			flags, literalFlags = first, literal
 		}
 		count++
-		if p.tok.Kind != tSemicolon {
+		if p.Tok.Kind != tSemicolon {
 			break
 		}
-		p.advance()
+		p.Advance()
 	}
-	p.closing(tRParen, open)
+	p.Closing(tRParen, open)
 	if !isRegex || count < call.arguments || !literalPattern {
 		return
 	}
@@ -539,115 +480,115 @@ func stringExcerpt(src string, start, end int) (lang.Excerpt, bool) {
 }
 
 func (p *parser) fold() {
-	keyword := p.tok.Kind
-	p.advance()
+	keyword := p.Tok.Kind
+	p.Advance()
 	p.postfix(noBinding)
-	p.expect(tAs)
+	p.Expect(tAs)
 	p.patterns()
-	open := p.tok
-	p.expect(tLParen)
+	open := p.Tok
+	p.Expect(tLParen)
 	p.pipe(0)
-	p.expect(tSemicolon)
+	p.Expect(tSemicolon)
 	p.pipe(0)
-	if keyword == tForeach && p.tok.Kind == tSemicolon {
-		p.advance()
+	if keyword == tForeach && p.Tok.Kind == tSemicolon {
+		p.Advance()
 		p.pipe(0)
 	}
-	p.closing(tRParen, open)
+	p.Closing(tRParen, open)
 }
 
 func (p *parser) conditional() {
-	open := p.tok
-	p.advance()
-	p.push(tEnd)
+	open := p.Tok
+	p.Advance()
+	p.Push(tEnd)
 	p.pipe(0)
-	p.expect(tThen)
+	p.Expect(tThen)
 	p.pipe(0)
-	for p.tok.Kind == tElif {
-		p.advance()
+	for p.Tok.Kind == tElif {
+		p.Advance()
 		p.pipe(0)
-		p.expect(tThen)
+		p.Expect(tThen)
 		p.pipe(0)
 	}
-	if p.tok.Kind == tElse {
-		p.advance()
+	if p.Tok.Kind == tElse {
+		p.Advance()
 		p.pipe(0)
 	}
-	p.closing(tEnd, open)
-	p.pop(tEnd)
+	p.Closing(tEnd, open)
+	p.Pop(tEnd)
 }
 
 func (p *parser) patterns() {
 	p.pattern()
-	for p.tok.Kind == tAltDestructure {
-		p.advance()
+	for p.Tok.Kind == tAltDestructure {
+		p.Advance()
 		p.pattern()
 	}
 }
 
 func (p *parser) pattern() {
-	open := p.tok
-	switch p.tok.Kind {
+	open := p.Tok
+	switch p.Tok.Kind {
 	case tVar:
 		p.binding()
 	case tLBracket:
-		p.advance()
+		p.Advance()
 		p.pattern()
-		for p.tok.Kind == tComma {
-			p.advance()
+		for p.Tok.Kind == tComma {
+			p.Advance()
 			p.pattern()
 		}
-		p.closing(tRBracket, open)
+		p.Closing(tRBracket, open)
 	case tLBrace:
-		p.advance()
+		p.Advance()
 		p.objectPattern()
-		for p.tok.Kind == tComma {
-			p.advance()
+		for p.Tok.Kind == tComma {
+			p.Advance()
 			p.objectPattern()
 		}
-		p.closing(tRBrace, open)
+		p.Closing(tRBrace, open)
 	default:
-		p.unexpected()
+		p.Unexpected()
 	}
 }
 
 func (p *parser) objectPattern() {
-	if p.tok.Kind == tVar {
+	if p.Tok.Kind == tVar {
 		p.binding()
-		if p.tok.Kind != tColon {
+		if p.Tok.Kind != tColon {
 			return
 		}
-		p.advance()
+		p.Advance()
 		p.pattern()
 		return
 	}
 	p.key()
-	p.expect(tColon)
+	p.Expect(tColon)
 	p.pattern()
 }
 
 func (p *parser) key() bool {
 	switch {
-	case p.tok.Kind == tIdent || isKeyword(p.tok.Kind):
-		p.reclassify(p.tok, lang.Property, 0)
-		p.advance()
-	case p.tok.Kind == tVar:
-		p.advance()
-	case p.tok.Kind == tString || p.tok.Kind == tStringHead:
+	case p.Tok.Kind == tIdent || isKeyword(p.Tok.Kind):
+		p.Reclassify(p.Tok, lang.Property, 0)
+		p.Advance()
+	case p.Tok.Kind == tVar:
+		p.Advance()
+	case p.Tok.Kind == tString || p.Tok.Kind == tStringHead:
 		p.str()
-	case p.tok.Kind == tFormat:
-		p.advance()
-		if p.tok.Kind == tString || p.tok.Kind == tStringHead {
+	case p.Tok.Kind == tFormat:
+		p.Advance()
+		if p.Tok.Kind == tString || p.Tok.Kind == tStringHead {
 			p.str()
 		}
-	case p.tok.Kind == tLParen:
-		open := p.tok
-		p.advance()
+	case p.Tok.Kind == tLParen:
+		open := p.Tok
+		p.Advance()
 		p.pipe(0)
-		p.closing(tRParen, open)
+		p.Closing(tRParen, open)
 		return true
 	default:
-		p.unexpected()
+		p.Unexpected()
 	}
 	return false
 }
@@ -655,16 +596,16 @@ func (p *parser) key() bool {
 func isKeyword(k kind) bool { return k >= tDef && k <= tBreak }
 
 func (p *parser) object() {
-	open := p.expect(tLBrace)
-	for p.tok.Kind != tRBrace && p.tok.Kind != tEOF {
-		if computed := p.key(); computed || p.tok.Kind == tColon {
-			p.expect(tColon)
+	open := p.Expect(tLBrace)
+	for p.Tok.Kind != tRBrace && p.Tok.Kind != tEOF {
+		if computed := p.key(); computed || p.Tok.Kind == tColon {
+			p.Expect(tColon)
 			p.pipe(noComma)
 		}
-		if p.tok.Kind != tComma {
+		if p.Tok.Kind != tComma {
 			break
 		}
-		p.advance()
+		p.Advance()
 	}
-	p.closing(tRBrace, open)
+	p.Closing(tRBrace, open)
 }
