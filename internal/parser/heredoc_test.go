@@ -89,6 +89,9 @@ func TestUnclosableHeredocStopsRecovering(t *testing.T) {
 		{"<<EOF (run", dialect.Ksh},
 		{"<<$\"A", dialect.Zsh},
 		{"<<0(\n", dialect.Bash},
+		{"<<0\\", dialect.Bash},
+		{"<<&\\\x00", dialect.Bash},
+		{"<<#\\", dialect.Bash},
 	} {
 		tree := Parse(tc.src, tc.d)
 		if len(tree.Errors) == 0 {

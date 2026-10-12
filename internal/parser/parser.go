@@ -181,6 +181,12 @@ func outsideHeredocsPastText(file *syntax.File, text string) bool {
 			if bodies[n] {
 				return false
 			}
+			past = endsPast(n, end)
+		case *syntax.Comment:
+			past = endsPast(n, end)
+		}
+		if past {
+			return false
 		}
 		if pos := n.Pos(); pos.IsValid() && pos.Offset() >= end {
 			past = true
@@ -188,6 +194,11 @@ func outsideHeredocsPastText(file *syntax.File, text string) bool {
 		return !past
 	})
 	return past
+}
+
+func endsPast(n syntax.Node, end uint) bool {
+	nodeEnd := n.End()
+	return nodeEnd.IsValid() && nodeEnd.Offset() > end
 }
 
 func unclosedHeredocDelimiter(err error) (string, bool) {
