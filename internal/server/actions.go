@@ -22,13 +22,6 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
-const (
-	commandFixAll    = "shellLsp.fixAll"
-	commandApplyEdit = "shellLsp.applyEdit"
-)
-
-var serverCommands = []string{commandFixAll, commandApplyEdit, commandShowReferences, commandRunBats}
-
 type actionData struct {
 	URI      string            `json:"uri"`
 	Version  int32             `json:"version"`
@@ -276,59 +269,6 @@ func (s *Server) deferredChange(snap *snapshot, doc actions.Document, data actio
 		return change, nil
 	}
 	return actions.Change{}, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "code action data for %s names nothing to compute", data.URI)
-}
-
-func (s *Server) handleExecuteCommand(ctx context.Context, docs *docstore.View, exec lsp.ExecuteCommandParams) (any, error) {
-	var edit lsp.WorkspaceEdit
-	switch exec.Command {
-	case commandFixAll:
-		var uri string
-		if len(exec.Arguments) != 1 || json.Unmarshal(exec.Arguments[0], &uri) != nil {
-			return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%s takes one document URI argument", commandFixAll)
-		}
-		snap, err := s.snapshot(docs, uri)
-		if err != nil {
-			return nil, err
-		}
-		edits := actions.FixAll(s.lintActionDiagnostics(snap))
-		if len(edits) == 0 {
-			return nil, nil
-		}
-		edit, err = s.workspaceEdit(snap.Doc, snap.encoding, edits)
-		if err != nil {
-			return nil, err
-		}
-	case commandApplyEdit:
-		if len(exec.Arguments) != 1 || json.Unmarshal(exec.Arguments[0], &edit) != nil {
-			return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%s takes one WorkspaceEdit argument", commandApplyEdit)
-		}
-	case commandShowReferences:
-		var data lensData
-		if len(exec.Arguments) != 1 || json.Unmarshal(exec.Arguments[0], &data) != nil {
-			return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%s takes one {uri, position} argument", commandShowReferences)
-		}
-		return s.referenceLocations(ctx, docs, data.at(), false)
-	case commandRunBats:
-		var args batsRunArgs
-		if len(exec.Arguments) != 1 || json.Unmarshal(exec.Arguments[0], &args) != nil || args.URI == "" {
-			return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%s takes one {uri, test?} argument", commandRunBats)
-		}
-		return s.runBats(ctx, docs, args)
-	default:
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "unknown command %q; this server provides %s", exec.Command, strings.Join(serverCommands, ", "))
-	}
-	return nil, s.applyEdit(ctx, exec.Command, edit)
-}
-
-func (s *Server) applyEdit(ctx context.Context, label string, edit lsp.WorkspaceEdit) error {
-	var result lsp.ApplyWorkspaceEditResult
-	if err := s.call(ctx, applyEditMethod, lsp.ApplyWorkspaceEditParams{Label: label, Edit: edit}, &result); err != nil {
-		return err
-	}
-	if !result.Applied {
-		return jsonrpc.NewError(jsonrpc.CodeRequestFailed, "client did not apply the %s edit: %s", label, result.FailureReason)
-	}
-	return nil
 }
 
 type fileEdits struct {

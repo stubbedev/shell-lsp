@@ -19,10 +19,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
-const (
-	commandRunBats = "shellLsp.runBats"
-	batsTimeout    = 30 * time.Minute
-)
+const batsTimeout = 30 * time.Minute
 
 type batsRunArgs struct {
 	URI  string  `json:"uri"`

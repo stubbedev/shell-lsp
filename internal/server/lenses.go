@@ -15,10 +15,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
-const (
-	commandShowReferences = "shellLsp.showReferences"
-	monikerScheme         = "shell-lsp"
-)
+const monikerScheme = "shell-lsp"
 
 type CodeLensOptions struct {
 	ResolveProvider bool `json:"resolveProvider"`

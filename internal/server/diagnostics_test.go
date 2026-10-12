@@ -212,6 +212,23 @@ func TestMalformedParamsNameTheMethod(t *testing.T) {
 	}
 }
 
+func TestCommandArgumentsAreChecked(t *testing.T) {
+	t.Parallel()
+
+	c, _ := startClient(t, `{`+pullCapabilities+`}`)
+	for _, tc := range []struct{ arguments, want string }{
+		{`"command": "` + commandFixAll + `"`, commandFixAll + " takes one document URI argument: got 0 arguments"},
+		{`"command": "` + commandShowReferences + `", "arguments": [1]`, commandShowReferences + " takes one {uri, position} argument"},
+		{`"command": "` + commandRunBats + `", "arguments": [{}]`, commandRunBats + " takes one {uri, test?} argument: the argument names no uri"},
+		{`"command": "shellLsp.nothing", "arguments": []`, `unknown command "shellLsp.nothing"; this server provides ` + strings.Join(serverCommands, ", ")},
+	} {
+		msg := c.call("workspace/executeCommand", `{`+tc.arguments+`}`)
+		if msg.Error == nil || msg.Error.Code != jsonrpc.CodeInvalidParams || !strings.Contains(msg.Error.Message, tc.want) {
+			t.Errorf("executeCommand {%s}: error = %+v, want InvalidParams containing %q", tc.arguments, msg.Error, tc.want)
+		}
+	}
+}
+
 func TestPullForUnopenedDocumentIsInvalidParams(t *testing.T) {
 	t.Parallel()
 

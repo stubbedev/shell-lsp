@@ -1,6 +1,8 @@
 package server
 
 import (
+	"strings"
+
 	"github.com/stubbedev/shell-lsp/internal/actions"
 	"github.com/stubbedev/shell-lsp/internal/navigation"
 )
@@ -126,7 +128,7 @@ var methods = []method{
 	{setDialectMethod, clientRequest, supported, capability{}, "shell-lsp extension: the edit that sets or removes the document's # shellcheck shell= directive", onRequest((*Server).handleSetDialect)},
 	{"workspace/executeCommand", clientRequest, supported, capability{"executeCommandProvider", func(c *ServerCapabilities) {
 		c.ExecuteCommandProvider = &ExecuteCommandOptions{Commands: serverCommands}
-	}}, "shellLsp.fixAll, shellLsp.applyEdit, shellLsp.showReferences, shellLsp.runBats", onRequest((*Server).handleExecuteCommand)},
+	}}, strings.Join(serverCommands, ", "), onRequest((*Server).handleExecuteCommand)},
 	{"workspace/willCreateFiles", clientRequest, notAdvertised, capability{path: "workspace.fileOperations.willCreate"}, "nothing to edit before a file exists", nil},
 	{"workspace/willRenameFiles", clientRequest, supported, capability{"workspace.fileOperations.willRename", func(c *ServerCapabilities) { fileOperations(c).WillRename = &watchedFileOperations }}, "rewrites source paths and shebangs", onRequest((*Server).handleWillRenameFiles)},
 	{"workspace/willDeleteFiles", clientRequest, notAdvertised, capability{path: "workspace.fileOperations.willDelete"}, "nothing to edit before a file is deleted", nil},
