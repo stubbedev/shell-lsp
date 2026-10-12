@@ -43,9 +43,28 @@ func phaseHooks(stages []string, names ...string) []string {
 	return names
 }
 
+type frameKind uint8
+
+const (
+	rootFrame frameKind = iota
+	attrsFrame
+	groupFrame
+	listFrame
+)
+
+var frameOpeners = map[string]frameKind{"{": attrsFrame, "(": groupFrame, "[": listFrame}
+
+func opensFrame(t token) (frameKind, bool) {
+	if t.kind != punctToken {
+		return rootFrame, false
+	}
+	kind, ok := frameOpeners[t.text]
+	return kind, ok
+}
+
 type frame struct {
 	open    int
-	kind    string
+	kind    frameKind
 	binding string
 	path    string
 	owner   string
@@ -100,12 +119,13 @@ func groups(found []shellString) [][]shellString {
 }
 
 func (f *file) scan() {
-	frames := []frame{{open: noBrace, kind: "root"}}
+	frames := []frame{{open: noBrace, kind: rootFrame}}
 	for i, t := range f.tokens {
 		top := &frames[len(frames)-1]
+		kind, opens := opensFrame(t)
 		switch {
-		case t.is("{") || t.is("(") || t.is("["):
-			frames = append(frames, frame{open: i, kind: t.text, owner: joinPath(top.owner, top.path)})
+		case opens:
+			frames = append(frames, frame{open: i, kind: kind, owner: joinPath(top.owner, top.path)})
 		case t.is("}") || t.is(")") || t.is("]"):
 			if len(frames) > 1 {
 				f.partner[i], f.partner[top.open] = top.open, i
@@ -115,7 +135,7 @@ func (f *file) scan() {
 			top.binding, top.path = "", ""
 		case t.kind == identToken && i+1 < len(f.tokens) && f.tokens[i+1].is("="):
 			top.binding, top.path = t.name(), t.text
-			if t.name() == excludeChecks && top.kind == "{" {
+			if t.name() == excludeChecks && top.kind == attrsFrame {
 				f.excluded[top.open] = f.listStrings(i + 2)
 			}
 		case t.kind == stringToken:
@@ -138,12 +158,13 @@ func resolve(frames []frame) context {
 			c.binding, c.path = fr.binding, joinPath(fr.owner, fr.path)
 		}
 		switch fr.kind {
-		case "(":
+		case groupFrame:
 			continue
-		case "{":
+		case attrsFrame:
 			c.brace = fr.open
-		case "[":
+		case listFrame:
 			c.binding = ""
+		case rootFrame:
 		}
 		return c
 	}
