@@ -216,9 +216,14 @@ func (s *Server) Run(ctx context.Context) error {
 				continue
 			}
 			s.dispatchRequest(rootCtx, msg)
+		default:
+			s.logger.Warn("rejecting a message with neither a method nor an id")
+			s.replyError(&jsonrpc.Message{ID: nullID}, jsonrpc.NewError(jsonrpc.CodeInvalidRequest, "a message needs a method, an id or both"))
 		}
 	}
 }
+
+var nullID = json.RawMessage("null")
 
 func (s *Server) handleLifecycleRequest(msg *jsonrpc.Message) {
 	if s.isShutdown() {

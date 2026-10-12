@@ -213,6 +213,26 @@ func TestDoubleInitialize(t *testing.T) {
 	}
 }
 
+func TestMessageWithoutMethodOrIDIsAnInvalidRequest(t *testing.T) {
+	t.Parallel()
+
+	var input bytes.Buffer
+	var output bytes.Buffer
+	srv := New(jsonrpc.NewConn(&input, &output), "test", CurrentProcess())
+	send(t, &input,
+		&jsonrpc.Message{JSONRPC: jsonrpc.Version, Params: json.RawMessage(`{}`)},
+		request(1, "initialize", `{}`),
+		request(2, "shutdown", ""),
+		notification("exit"))
+	if err := srv.Run(t.Context()); err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	msg := readResponse(t, readerFor(&output))
+	if string(msg.ID) != "null" || msg.Error == nil || msg.Error.Code != jsonrpc.CodeInvalidRequest {
+		t.Errorf("reply = id %s, error %+v; want an InvalidRequest error with a null id", msg.ID, msg.Error)
+	}
+}
+
 func TestInvalidInitializeParams(t *testing.T) {
 	t.Parallel()
 
