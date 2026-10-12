@@ -5,14 +5,13 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 	"runtime"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/stubbedev/shell-lsp/internal/atomicfile"
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/editorconfig"
 	"github.com/stubbedev/shell-lsp/internal/format"
@@ -395,7 +394,7 @@ func (f *formatter) report(r formatted) {
 		}
 	}
 	if f.opts.write && changed {
-		if err := writeAtomic(r.path, []byte(r.after)); err != nil {
+		if err := atomicfile.Write(r.path, []byte(r.after)); err != nil {
 			f.fail("%s: %v", r.name, err)
 		}
 	}
@@ -406,36 +405,4 @@ func (f *formatter) report(r formatted) {
 	if f.opts.list == listOff && !f.opts.write && !f.opts.diff {
 		f.print(r.after)
 	}
-}
-
-func writeAtomic(path string, data []byte) error {
-	info, err := os.Stat(path)
-	if err != nil {
-		return err
-	}
-	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*.tmp")
-	if err != nil {
-		return fmt.Errorf("creating a temporary file next to %s: %w", path, err)
-	}
-	committed := false
-	defer func() {
-		if !committed {
-			_ = tmp.Close()
-			_ = os.Remove(tmp.Name())
-		}
-	}()
-	if _, err := tmp.Write(data); err != nil {
-		return fmt.Errorf("writing %s: %w", tmp.Name(), err)
-	}
-	if err := tmp.Chmod(info.Mode().Perm()); err != nil {
-		return fmt.Errorf("copying the mode of %s: %w", path, err)
-	}
-	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("closing %s: %w", tmp.Name(), err)
-	}
-	if err := os.Rename(tmp.Name(), path); err != nil {
-		return fmt.Errorf("replacing %s: %w", path, err)
-	}
-	committed = true
-	return nil
 }

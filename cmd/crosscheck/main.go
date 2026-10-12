@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/stubbedev/shell-lsp/internal/atomicfile"
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
@@ -421,11 +422,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	tmp := *out + ".tmp"
-	if err := os.WriteFile(tmp, []byte(text), 0o600); err != nil {
-		return fmt.Errorf("writing %s: %w", tmp, err)
-	}
-	return os.Rename(tmp, *out)
+	return atomicfile.Write(*out, []byte(text))
 }
 
 func main() {

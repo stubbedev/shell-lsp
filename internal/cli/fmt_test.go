@@ -118,32 +118,6 @@ func TestFmtWriteReplacesFilesAtomically(t *testing.T) {
 	}
 }
 
-func TestWriteAtomicLeavesTheTargetIntactOnFailure(t *testing.T) {
-	t.Parallel()
-
-	if runtime.GOOS == "windows" {
-		t.Skip("Windows ignores Unix permission bits, so chmod cannot make a directory read-only")
-	}
-	if os.Geteuid() == 0 {
-		t.Skip("root writes into read-only directories")
-	}
-	dir := t.TempDir()
-	path := filepath.Join(dir, "a.sh")
-	if err := os.WriteFile(path, []byte(ugly), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chmod(dir, 0o555); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
-	if err := writeAtomic(path, []byte(pretty)); err == nil {
-		t.Fatal("writing into a read-only directory succeeded")
-	}
-	if got := readFile(t, path); got != ugly {
-		t.Errorf("a failed write changed the file to %q", got)
-	}
-}
-
 func TestFmtHonoursEditorConfigUnlessStyleFlagsAreGiven(t *testing.T) {
 	t.Parallel()
 
