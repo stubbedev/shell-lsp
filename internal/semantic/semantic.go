@@ -2,6 +2,7 @@ package semantic
 
 import (
 	"cmp"
+	"fmt"
 	"slices"
 	"sort"
 	"strings"
@@ -29,7 +30,18 @@ const (
 	TypeRegexp
 )
 
-var TypeNames = []string{"variable", "parameter", "function", "keyword", "string", "number", "comment", "operator", "property", "regexp"}
+var TypeNames = [...]string{
+	TypeVariable:  "variable",
+	TypeParameter: "parameter",
+	TypeFunction:  "function",
+	TypeKeyword:   "keyword",
+	TypeString:    "string",
+	TypeNumber:    "number",
+	TypeComment:   "comment",
+	TypeOperator:  "operator",
+	TypeProperty:  "property",
+	TypeRegexp:    "regexp",
+}
 
 type Modifier uint32
 
@@ -41,7 +53,25 @@ const (
 	ModExternal
 )
 
-var ModifierNames = []string{"declaration", "modification", "readonly", "defaultLibrary", "external"}
+var ModifierNames = bitNames(map[Modifier]string{
+	ModDeclaration:    "declaration",
+	ModModification:   "modification",
+	ModReadonly:       "readonly",
+	ModDefaultLibrary: "defaultLibrary",
+	ModExternal:       "external",
+})
+
+func bitNames(named map[Modifier]string) []string {
+	names := make([]string, len(named))
+	for bit := range names {
+		name, ok := named[1<<bit]
+		if !ok {
+			panic(fmt.Sprintf("semantic: modifier bit %d has no name", bit))
+		}
+		names[bit] = name
+	}
+	return names
+}
 
 type Token struct {
 	Span      parser.Span

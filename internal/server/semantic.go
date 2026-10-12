@@ -33,7 +33,7 @@ type SemanticTokensOptions struct {
 }
 
 var semanticTokensOptions = SemanticTokensOptions{
-	Legend: semanticLegend{TokenTypes: semantic.TypeNames, TokenModifiers: semantic.ModifierNames},
+	Legend: semanticLegend{TokenTypes: semantic.TypeNames[:], TokenModifiers: semantic.ModifierNames},
 	Range:  true,
 	Full:   semanticFull{Delta: true},
 }
