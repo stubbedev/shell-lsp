@@ -425,7 +425,8 @@ A document is a Makefile when its language identifier is `makefile` or
   a syntax error stays on its line. With `.ONESHELL`, each recipe is one
   script.
 - The shell is the one `SHELL` names, also behind `env`; without `SHELL` it
-  is `sh`. When `SHELL` names something that is not a shell, or is computed
+  is `sh`. The options in `.SHELLFLAGS` (`-e`, `-u`, `-o pipefail`), or the
+  `-e` a `.POSIX` target implies, are set in every recipe. When `SHELL` names something that is not a shell, or is computed
   (`$(shell ...)`, `!=`), the recipes are not analysed.
 - A directive goes on a recipe line of its own, indented like the recipe
   (`# shellcheck disable=SC2086`), and applies to the next line.

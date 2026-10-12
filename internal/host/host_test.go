@@ -90,3 +90,22 @@ func TestLostChangesBlameTheShellOfTheLine(t *testing.T) {
 		t.Errorf("messages\n got %q\nwant %q", got, want)
 	}
 }
+
+func TestShellFlagsReachTheLinter(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		makefile string
+		warned   bool
+	}{
+		{"x:\n\tcd sub\n", true},
+		{".SHELLFLAGS := -ec\nx:\n\tcd sub\n", false},
+	} {
+		script := Make.Project(docstore.NewDocument("file:///w/Makefile", "makefile", 1, tt.makefile))
+		report := lint.Run(script.Parse(nil), nil, lint.Options{DialectSource: lint.DialectForced})
+		warned := slices.ContainsFunc(report.Findings, func(f lint.Finding) bool { return f.Code == 2164 })
+		if warned != tt.warned {
+			t.Errorf("%q: SC2164 reported = %v, want %v", tt.makefile, warned, tt.warned)
+		}
+	}
+}

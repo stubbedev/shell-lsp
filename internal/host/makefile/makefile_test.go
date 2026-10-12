@@ -79,6 +79,21 @@ func TestProjectText(t *testing.T) {
 			want:     "(\necho a\n)\n(\necho $$\n)\n",
 		},
 		{
+			name:     "shell flags become set options",
+			makefile: ".SHELLFLAGS := -euo pipefail -c\nx:\n\techo\n",
+			want:     "(\nset -eu -o pipefail\necho\n)\n",
+		},
+		{
+			name:     "posix makefiles run with errexit",
+			makefile: ".POSIX:\nx:\n\techo\n",
+			want:     "(\nset -e\necho\n)\n",
+		},
+		{
+			name:     "computed shell flags are unknown",
+			makefile: ".SHELLFLAGS = $(FLAGS)\nx:\n\techo\n",
+			want:     "(\necho\n)\n",
+		},
+		{
 			name:     "assignments are no rules",
 			makefile: "A := b\n\techo no\nB ::= c\nC ?= d\nD != echo e\n",
 			want:     "",

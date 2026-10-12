@@ -13,6 +13,9 @@ const (
 	defaultPrefix = '\t'
 	recipeFlags   = " \t@-+"
 	oneShell      = ".ONESHELL"
+	posixTarget   = ".POSIX"
+	defaultFlags  = "-c"
+	posixFlags    = "-ec"
 )
 
 var (
@@ -33,6 +36,8 @@ type parser struct {
 	oneShell bool
 	shell    string
 	shellSet bool
+	flags    string
+	posix    bool
 	setting  string
 	recipes  [][]recipeLine
 }
@@ -182,9 +187,9 @@ func (p *parser) rule(s string, colon, offset, end int) {
 func (p *parser) openRule(targets string) {
 	p.inRule = true
 	p.recipes = append(p.recipes, nil)
-	if slices.Contains(strings.Fields(targets), oneShell) {
-		p.oneShell = true
-	}
+	fields := strings.Fields(targets)
+	p.oneShell = p.oneShell || slices.Contains(fields, oneShell)
+	p.posix = p.posix || slices.Contains(fields, posixTarget)
 }
 
 func (p *parser) assign(s string, i int) {
@@ -200,6 +205,10 @@ func (p *parser) assign(s string, i int) {
 			p.shell, p.shellSet, p.setting = value, true, oneLine(s)
 		case '!':
 			p.shell, p.shellSet, p.setting = "$(shell)", true, oneLine(s)
+		}
+	case ".SHELLFLAGS":
+		if op == '=' || op == ':' {
+			p.flags = value
 		}
 	case ".RECIPEPREFIX":
 		switch {
@@ -284,6 +293,47 @@ func firstWord(s string) string {
 	return s
 }
 
+func (p *parser) prelude() string {
+	flags := p.flags
+	switch {
+	case flags != "":
+	case p.posix:
+		flags = posixFlags
+	default:
+		flags = defaultFlags
+	}
+	if strings.ContainsRune(flags, '$') {
+		return ""
+	}
+	words := strings.Fields(flags)
+	var options []string
+	for i := 0; i < len(words); i++ {
+		word := words[i]
+		switch {
+		case word == "-o" && i+1 < len(words):
+			options = append(options, word, words[i+1])
+			i++
+		case strings.HasPrefix(word, "-") && !strings.HasPrefix(word, "--"):
+			letters := strings.ReplaceAll(word[1:], "c", "")
+			named := strings.HasSuffix(letters, "o") && i+1 < len(words)
+			if named {
+				letters = strings.TrimSuffix(letters, "o")
+			}
+			if letters != "" {
+				options = append(options, "-"+letters)
+			}
+			if named {
+				options = append(options, "-o", words[i+1])
+				i++
+			}
+		}
+	}
+	if len(options) == 0 {
+		return ""
+	}
+	return "set " + strings.Join(options, " ") + "\n"
+}
+
 func (p *parser) commandStart(l recipeLine) int {
 	return l.end - len(strings.TrimLeft(p.text[l.start:l.end], recipeFlags))
 }
@@ -306,7 +356,7 @@ func (p *parser) line(b *projection.Builder, l recipeLine, afterComment bool) bo
 		b.Opaque(l.end, l.end, "\n")
 		return true
 	}
-	b.Opaque(start, start, "(\n")
+	b.Opaque(start, start, "(\n"+p.prelude())
 	p.content(b, start, l.end)
 	b.Opaque(l.end, l.end, "\n)\n")
 	return false
@@ -326,7 +376,7 @@ func (p *parser) script(b *projection.Builder, lines []recipeLine) {
 		}
 		b.Opaque(l.start, start, "")
 		if wrapped && !opened {
-			b.Opaque(start, start, "(\n")
+			b.Opaque(start, start, "(\n"+p.prelude())
 			opened = true
 		}
 		p.content(b, start, l.end)
