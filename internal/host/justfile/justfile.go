@@ -399,14 +399,10 @@ func (p *parser) project(b *projection.Builder, s script) {
 
 func (p *parser) logicalLength(lines []line) int {
 	n := 1
-	for n < len(lines) && continued(p.content(lines[n-1])) {
+	for n < len(lines) && scan.Continued(p.content(lines[n-1])) {
 		n++
 	}
 	return n
-}
-
-func continued(s string) bool {
-	return (len(s)-len(strings.TrimRight(s, "\\")))%2 == 1
 }
 
 func (p *parser) start(l line, indent string) int {

@@ -113,17 +113,13 @@ func (p *parser) logicalEnd(start int) int {
 		switch {
 		case nl < 0:
 			return len(p.text)
-		case !continued(p.text[pos : pos+nl]):
+		case !scan.Continued(p.text[pos : pos+nl]):
 			end = pos + nl
 			return len(p.text)
 		}
 		return pos + nl + 1
 	})
 	return end
-}
-
-func continued(line string) bool {
-	return (len(line)-len(strings.TrimRight(line, "\\")))%2 == 1
 }
 
 func (p *parser) defineBody(line string) {

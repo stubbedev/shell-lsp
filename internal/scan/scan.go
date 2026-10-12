@@ -1,6 +1,9 @@
 package scan
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 func Forward(start, end int, step func(at int) int) {
 	for at := start; at < end; {
@@ -10,4 +13,8 @@ func Forward(start, end int, step func(at int) int) {
 		}
 		at = next
 	}
+}
+
+func Continued(line string) bool {
+	return (len(line)-len(strings.TrimRight(line, `\`)))%2 == 1
 }

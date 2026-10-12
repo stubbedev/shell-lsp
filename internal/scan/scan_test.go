@@ -32,3 +32,22 @@ func TestForwardRefusesAStepThatStays(t *testing.T) {
 		}()
 	}
 }
+
+func TestContinuedCountsTrailingBackslashes(t *testing.T) {
+	t.Parallel()
+
+	for line, want := range map[string]bool{
+		``:           false,
+		`echo`:       false,
+		`echo \`:     true,
+		`echo \\`:    false,
+		`echo \\\`:   true,
+		`\`:          true,
+		`echo \ x`:   false,
+		`echo \\\\\`: true,
+	} {
+		if got := Continued(line); got != want {
+			t.Errorf("Continued(%q) = %v, want %v", line, got, want)
+		}
+	}
+}

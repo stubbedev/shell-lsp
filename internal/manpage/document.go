@@ -3,6 +3,8 @@ package manpage
 import (
 	"regexp"
 	"strings"
+
+	"github.com/stubbedev/shell-lsp/internal/scan"
 )
 
 const (
@@ -81,8 +83,7 @@ func joinContinuations(lines []string) []string {
 }
 
 func continues(line string) bool {
-	trailing := len(line) - len(strings.TrimRight(line, `\`))
-	return trailing%2 == 1 && !strings.HasPrefix(line, `.\"`)
+	return scan.Continued(line) && !strings.HasPrefix(line, `.\"`)
 }
 
 func isMdoc(src string) bool {
