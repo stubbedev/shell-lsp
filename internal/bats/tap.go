@@ -1,7 +1,6 @@
 package bats
 
 import (
-	"encoding/json"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -50,12 +49,12 @@ type Report struct {
 
 type Tally [statusCount]int
 
-func (t Tally) MarshalJSON() ([]byte, error) {
+func (t Tally) Counts() map[string]int {
 	counts := make(map[string]int, len(t))
 	for s, n := range t {
 		counts[statusNames[s]] = n
 	}
-	return json.Marshal(counts)
+	return counts
 }
 
 var (

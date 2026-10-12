@@ -30,8 +30,17 @@ type batsRunArgs struct {
 }
 
 type batsRunResult struct {
-	Tally   bats.Tally `json:"tally"`
-	Summary string     `json:"summary"`
+	Tally   bats.Tally
+	Summary string
+}
+
+func (r batsRunResult) MarshalJSON() ([]byte, error) {
+	fields := make(map[string]any, len(r.Tally)+1)
+	for name, n := range r.Tally.Counts() {
+		fields[name] = n
+	}
+	fields["summary"] = r.Summary
+	return json.Marshal(fields)
 }
 
 type batsRecord struct {
