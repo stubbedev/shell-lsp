@@ -4,6 +4,8 @@
 package expand
 
 import (
+	"math"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -37,12 +39,33 @@ func FuzzFormat(f *testing.F) {
 		f.Add(seed, "arg")
 	}
 	f.Fuzz(func(t *testing.T, format, arg string) {
-		if len(format) > 1<<10 {
-			return
+		args := strings.Fields(arg)
+		bound := formatBound(format, args)
+		if len(format) > 1<<10 || bound > 1<<24 {
+			return // printing what it asks for would take too much memory
 		}
-		out, _, err := Format(nil, format, strings.Fields(arg))
-		if err == nil && len(out) > 1<<20 {
-			t.Fatalf("Format(%q) produced %d bytes", format, len(out))
+		out, _, err := Format(nil, format, args)
+		if err == nil && len(out) > bound {
+			t.Fatalf("Format(%q, %q) produced %d bytes, more than the %d it can ask for", format, args, len(out), bound)
 		}
 	})
+}
+
+// formatBound is the most output that Format may produce for a format and
+// its arguments: every byte of both, each number in the format as the width
+// or precision of a field, and the sign, prefix and digits of each number
+// that a directive formats.
+func formatBound(format string, args []string) int {
+	bound := len(format) + 24*strings.Count(format, "%")
+	for _, arg := range args {
+		bound += len(arg)
+	}
+	for _, digits := range strings.FieldsFunc(format, func(r rune) bool { return r < '0' || r > '9' }) {
+		n, err := strconv.Atoi(digits)
+		if err != nil || n > math.MaxInt-bound {
+			return math.MaxInt
+		}
+		bound += n
+	}
+	return bound
 }
