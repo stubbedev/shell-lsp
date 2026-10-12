@@ -2,6 +2,7 @@ import { workspace, type LogOutputChannel, type Uri } from "vscode";
 import { LanguageClient, ResponseError, type LanguageClientOptions } from "vscode-languageclient/node";
 import { executeCommandMiddleware } from "./commands.ts";
 import { documentSelector } from "./documents.ts";
+import { displayName } from "./ids.ts";
 import { explicitSettings, section } from "./settings.ts";
 
 export function createClient(command: string, output: LogOutputChannel, settingKeys: readonly string[]): LanguageClient {
@@ -35,6 +36,6 @@ export function createClient(command: string, output: LogOutputChannel, settingK
       },
     },
   };
-  const client = new LanguageClient(section, "Shell LSP", { command }, options);
+  const client = new LanguageClient(section, displayName, { command }, options);
   return client;
 }

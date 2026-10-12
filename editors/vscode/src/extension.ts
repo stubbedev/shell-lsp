@@ -1,13 +1,13 @@
 import { commands, window, workspace, type ExtensionContext } from "vscode";
 import { DialectStatus } from "./dialectStatus.ts";
-import { clientCommands } from "./ids.ts";
+import { clientCommands, displayName } from "./ids.ts";
 import { Session } from "./session.ts";
 import { pathSetting } from "./settings.ts";
 
 let session: Session | undefined;
 
 export async function activate(context: ExtensionContext): Promise<void> {
-  const output = window.createOutputChannel("Shell LSP", { log: true });
+  const output = window.createOutputChannel(displayName, { log: true });
   const status = new DialectStatus(() => current.runningClient(), output);
   const current = new Session(context, output, () => {
     status.schedule();

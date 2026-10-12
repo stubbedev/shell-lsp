@@ -1,6 +1,6 @@
+import { repository } from "./ids.ts";
 import { serverName } from "./serverBinary.ts";
 
-const repository = "https://github.com/stubbedev/shell-lsp";
 const assetPrefix = `${serverName}-v`;
 
 export type Os = "linux" | "darwin" | "windows";

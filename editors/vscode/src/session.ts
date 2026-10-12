@@ -4,7 +4,7 @@ import { State, type LanguageClient } from "vscode-languageclient/node";
 import { createClient } from "./client.ts";
 import { describeError } from "./errors.ts";
 import { httpFetcher } from "./http.ts";
-import { runningContext } from "./ids.ts";
+import { displayName, runningContext } from "./ids.ts";
 import { installServer } from "./install.ts";
 import { parseManifest } from "./manifest.ts";
 import { serverDownload, type ReleaseAsset, type ServerDownload } from "./release.ts";
@@ -147,7 +147,7 @@ export class Session {
     const message = describeError(error);
     this.output.error(message);
     const show = "Show Output";
-    void window.showErrorMessage(`Shell LSP: ${message}`, show).then((choice) => {
+    void window.showErrorMessage(`${displayName}: ${message}`, show).then((choice) => {
       if (choice === show) {
         this.output.show();
       }

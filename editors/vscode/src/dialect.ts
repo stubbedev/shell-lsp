@@ -1,13 +1,14 @@
 import type { WorkspaceEdit } from "vscode-languageclient";
 import { isFields, isList, isMember, isString } from "./fields.ts";
+import { repository } from "./ids.ts";
 import { parseArgs, parseResult } from "./parse.ts";
 import { isTextWorkspaceEdit } from "./protocol.ts";
 import { dialectSetting } from "./settings.ts";
 
 export const documentDialectMethod = "shellLsp/documentDialect";
 export const setDialectMethod = "shellLsp/setDialect";
-export const dialectDocsUrl = "https://github.com/stubbedev/shell-lsp#dialects";
-export const hostShellDocsUrl = "https://github.com/stubbedev/shell-lsp#shell-in-other-files";
+export const dialectDocsUrl = `${repository}#dialects`;
+export const hostShellDocsUrl = `${repository}#shell-in-other-files`;
 export const learnLabel = "How is the shell detected?";
 
 const scriptSources = [

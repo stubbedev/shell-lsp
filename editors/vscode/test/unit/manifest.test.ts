@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { describe, test } from "node:test";
 import { languageIds } from "../../src/documents.ts";
 import { isFields, type Fields } from "../../src/fields.ts";
-import { clientCommands, runningContext, serverCommands } from "../../src/ids.ts";
+import { clientCommands, displayName, repository, runningContext, serverCommands } from "../../src/ids.ts";
 import { parseManifest } from "../../src/manifest.ts";
 
 const manifest: unknown = JSON.parse(await readFile(join(import.meta.dirname, "..", "..", "package.json"), "utf8"));
@@ -32,6 +32,22 @@ function stringOf(entry: Fields, key: string): string {
 
 const contributed = entries(["contributes", "commands"]).map((entry) => stringOf(entry, "command"));
 const palette = entries(["contributes", "menus", "commandPalette"]);
+
+describe("identity", () => {
+  test("names the extension and its repository as the code does", () => {
+    assert.equal(field(manifest, ["displayName"]), displayName);
+    assert.equal(field(manifest, ["repository", "url"]), `${repository}.git`);
+    assert.equal(field(manifest, ["bugs", "url"]), `${repository}/issues`);
+    assert.equal(field(manifest, ["homepage"]), `${repository}/tree/main/${String(field(manifest, ["repository", "directory"]))}`);
+  });
+
+  test("files every command and the first settings category under the display name", () => {
+    for (const entry of entries(["contributes", "commands"])) {
+      assert.equal(stringOf(entry, "category"), displayName, `${stringOf(entry, "command")} is not in the ${displayName} category`);
+    }
+    assert.equal(stringOf(entries(["contributes", "configuration"])[0] ?? {}, "title"), displayName);
+  });
+});
 
 describe("activationEvents", () => {
   test("start the extension for every language the client attaches to", () => {

@@ -26,7 +26,7 @@ import {
   type StatusText,
 } from "./dialect.ts";
 import { describeError } from "./errors.ts";
-import { clientCommands } from "./ids.ts";
+import { clientCommands, dialectStatusItem, displayName } from "./ids.ts";
 import { dialectSetting } from "./settings.ts";
 import { activeShellDocument, requireActiveShellDocument, type ShellDocument } from "./shellDocument.ts";
 
@@ -53,8 +53,8 @@ export class DialectStatus implements Disposable {
   constructor(client: () => LanguageClient | undefined, output: LogOutputChannel) {
     this.client = client;
     this.output = output;
-    this.item = window.createStatusBarItem("shellLsp.dialect", StatusBarAlignment.Right, 100);
-    this.item.name = "Shell LSP Dialect";
+    this.item = window.createStatusBarItem(dialectStatusItem, StatusBarAlignment.Right, 100);
+    this.item.name = `${displayName} Dialect`;
     this.item.command = chooseShellCommand;
     this.subscriptions = [
       this.item,
@@ -153,7 +153,7 @@ export class DialectStatus implements Disposable {
   private target(): { client: LanguageClient; target: ShellDocument } {
     const client = this.client();
     if (client === undefined) {
-      throw new Error(`${chooseShellCommand} needs the Shell LSP server to be running`);
+      throw new Error(`${chooseShellCommand} needs the ${displayName} server to be running`);
     }
     return { client, target: requireActiveShellDocument(client, chooseShellCommand) };
   }
