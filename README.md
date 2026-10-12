@@ -127,7 +127,7 @@ requests:
 
 | Request | Params | Result |
 | --- | --- | --- |
-| `shellLsp/documentDialect` | `{textDocument}` | `{dialect, source, evidence, guessed, description, directive, dialects}`: the shell, what decided it (`default`, `override`, `editorconfig`, `directive`, `shebang`, `completionTag`, `fileName`, `extension`, `languageId`, `modeline`, or for [shell in other files](#shell-in-other-files) `hostSetting` and `hostDefault`), the text that did, whether that is a guess, a sentence to show, whether a header shell directive exists, and the shells that can be chosen (none for shell in other files, whose host decides it) |
+| `shellLsp/documentDialect` | `{textDocument}` | `{selectable, dialect, source, evidence, guessed, description}`, plus `{directive, dialects}` when `selectable` is `true`: whether a directive can choose the shell (`false` for [shell in other files](#shell-in-other-files), whose host decides it), the shell, what decided it (`default`, `override`, `editorconfig`, `directive`, `shebang`, `completionTag`, `fileName`, `extension`, `languageId`, `modeline`, or for shell in other files `hostSetting` and `hostDefault`), the text that did, whether that is a guess, a sentence to show, whether a header shell directive exists, and the shells that can be chosen |
 | `shellLsp/setDialect` | `{textDocument, dialect}` | The `WorkspaceEdit` that adds or updates the header directive for `dialect`, or removes it when `dialect` is `null`; `null` when nothing changes; an error for shell in other files |
 
 The parser understands the whole grammar of each shell, including zsh's

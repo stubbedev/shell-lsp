@@ -1,11 +1,36 @@
 package server
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 )
+
+type dialectAnswer struct {
+	Selectable  bool     `json:"selectable"`
+	Dialect     string   `json:"dialect"`
+	Source      string   `json:"source"`
+	Evidence    string   `json:"evidence"`
+	Guessed     bool     `json:"guessed"`
+	Description string   `json:"description"`
+	Directive   *bool    `json:"directive"`
+	Dialects    []string `json:"dialects"`
+}
+
+func askDialect(t *testing.T, c *testClient, uri string) dialectAnswer {
+	t.Helper()
+
+	return decodeResult[dialectAnswer](t, c.call(documentDialectMethod, `{"textDocument": {"uri": "`+uri+`"}}`))
+}
+
+func selectable(directive bool, answer dialectAnswer) dialectAnswer {
+	answer.Selectable = true
+	answer.Directive = &directive
+	answer.Dialects = []string{"bash", "sh", "dash", "zsh", "ksh", "busybox"}
+	return answer
+}
 
 func TestDocumentDialectSaysWhatDecidedIt(t *testing.T) {
 	t.Parallel()
@@ -13,36 +38,21 @@ func TestDocumentDialectSaysWhatDecidedIt(t *testing.T) {
 	c, _ := startClient(t, `{"capabilities": {}}`)
 	for _, tc := range []struct {
 		uri, text string
-		want      documentDialect
+		want      dialectAnswer
 	}{
-		{"file:///w/a.sh", "#!/usr/bin/env bash\necho\n", documentDialect{Dialect: "bash", Source: "shebang", Evidence: "#!/usr/bin/env bash", Description: "from the shebang #!/usr/bin/env bash"}},
-		{"file:///w/b.sh", "echo\n", documentDialect{Dialect: "sh", Source: "extension", Evidence: ".sh", Guessed: true, Description: "guessed from the .sh extension"}},
-		{"file:///w/run", "echo\n", documentDialect{Dialect: "bash", Source: "default", Guessed: true, Description: "guessed: nothing names the shell, so bash is assumed"}},
-		{"file:///w/c.sh", "#!/bin/sh\n# shellcheck shell=dash\necho\n", documentDialect{Dialect: "dash", Source: "directive", Evidence: "dash", Description: "from the directive # shellcheck shell=dash", Directive: true}},
+		{"file:///w/a.sh", "#!/usr/bin/env bash\necho\n", selectable(false, dialectAnswer{Dialect: "bash", Source: "shebang", Evidence: "#!/usr/bin/env bash", Description: "from the shebang #!/usr/bin/env bash"})},
+		{"file:///w/b.sh", "echo\n", selectable(false, dialectAnswer{Dialect: "sh", Source: "extension", Evidence: ".sh", Guessed: true, Description: "guessed from the .sh extension"})},
+		{"file:///w/run", "echo\n", selectable(false, dialectAnswer{Dialect: "bash", Source: "default", Guessed: true, Description: "guessed: nothing names the shell, so bash is assumed"})},
+		{"file:///w/c.sh", "#!/bin/sh\n# shellcheck shell=dash\necho\n", selectable(true, dialectAnswer{Dialect: "dash", Source: "directive", Evidence: "dash", Description: "from the directive # shellcheck shell=dash"})},
 	} {
 		c.notify("textDocument/didOpen", openParams(tc.uri, tc.text))
-		got := decodeResult[documentDialect](t, c.call(documentDialectMethod, `{"textDocument": {"uri": "`+tc.uri+`"}}`))
-		tc.want.Dialects = []string{"bash", "sh", "dash", "zsh", "ksh", "busybox"}
-		if !equalDialect(got, tc.want) {
+		if got := askDialect(t, c, tc.uri); !reflect.DeepEqual(got, tc.want) {
 			t.Errorf("%s: %+v, want %+v", tc.uri, got, tc.want)
 		}
 	}
 	if missing := c.call(documentDialectMethod, `{"textDocument": {"uri": "file:///w/closed.sh"}}`); missing.Error == nil {
 		t.Error("a closed document got a dialect")
 	}
-}
-
-func equalDialect(a, b documentDialect) bool {
-	if len(a.Dialects) != len(b.Dialects) {
-		return false
-	}
-	for i := range a.Dialects {
-		if a.Dialects[i] != b.Dialects[i] {
-			return false
-		}
-	}
-	a.Dialects, b.Dialects = nil, nil
-	return a.Dialect == b.Dialect && a.Source == b.Source && a.Evidence == b.Evidence && a.Guessed == b.Guessed && a.Description == b.Description && a.Directive == b.Directive
 }
 
 func TestSetDialectReturnsTheDirectiveEdit(t *testing.T) {

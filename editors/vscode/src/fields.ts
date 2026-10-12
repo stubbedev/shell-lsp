@@ -11,3 +11,7 @@ export function isList<T>(value: unknown, isItem: (item: unknown) => item is T):
 export function isString(value: unknown): value is string {
   return typeof value === "string";
 }
+
+export function isMember<T extends string>(members: readonly T[], value: unknown): value is T {
+  return members.some((member) => member === value);
+}

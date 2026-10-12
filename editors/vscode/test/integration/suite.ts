@@ -143,6 +143,14 @@ async function setsTheShell(folder: WorkspaceFolder): Promise<void> {
   assert.equal(document.getText(), "#!/bin/sh\necho hi\n");
 }
 
+async function leavesTheHostShellToTheHost(folder: WorkspaceFolder): Promise<void> {
+  const document = await workspace.openTextDocument(fileIn(folder, "Makefile"));
+  assert.equal(document.languageId, "makefile");
+  await window.showTextDocument(document);
+  await assert.rejects(Promise.resolve(commands.executeCommand("shellLsp.chooseShell", "dash")), /a directive cannot choose it/);
+  assert.equal(document.getText(), "SHELL := /bin/bash\n\nall:\n\techo hi\n");
+}
+
 function fileIn(folder: WorkspaceFolder, name: string): Uri {
   return folder.uri.with({ path: `${folder.uri.path}/${name}` });
 }
@@ -165,4 +173,5 @@ export async function run(): Promise<void> {
   await fixesAll(uri);
   await formatsWithEditorconfig(folder);
   await setsTheShell(folder);
+  await leavesTheHostShellToTheHost(folder);
 }

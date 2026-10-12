@@ -90,7 +90,10 @@ restarts the server.
   shebang, or removes that directive. Clicking the shell name in the status
   bar runs it. The status bar shows the shell the script is linted as, marks
   it "(guessed)" when only the extension or the bash default decided it, and
-  says in its tooltip what decided it.
+  says in its tooltip what decided it. In a Makefile, justfile or Nix file
+  the file itself decides the shell (`SHELL` in a Makefile, `set shell` or a
+  recipe's shebang in a justfile, the writer or a `/* bash */` comment in
+  Nix), so the command explains that instead of offering shells.
 
 ## Known limitations
 

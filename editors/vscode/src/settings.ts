@@ -3,6 +3,7 @@ import { isFields } from "./fields.ts";
 export const section = "shellLsp";
 export const pathKey = "path";
 export const pathSetting = `${section}.${pathKey}`;
+export const dialectSetting = `${section}.dialect`;
 
 const clientOnlyKeys: ReadonlySet<string> = new Set([pathKey, "trace.server"]);
 

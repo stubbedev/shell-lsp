@@ -6,6 +6,9 @@
   palette for Makefiles, justfiles and Nix files too, as for shell scripts;
   Run Bats File on a document that is not a Bats file reports so instead of
   running it.
+- Choose the Shell to Lint As in a Makefile, justfile or Nix file explains
+  that the file decides the shell and where to change it, instead of offering
+  an empty list of shells.
 - Runs shell-lsp for Makefiles too, which lints the shell in their recipes.
 - Runs shell-lsp for justfiles too, when an extension gives them the `just`
   language.

@@ -18,18 +18,48 @@ const (
 
 var selectableDialects = []dialect.Dialect{dialect.Bash, dialect.Posix, dialect.Dash, dialect.Zsh, dialect.Ksh, dialect.Busybox}
 
+var selectableNames = func() []string {
+	names := make([]string, len(selectableDialects))
+	for i, choice := range selectableDialects {
+		names[i] = choice.String()
+	}
+	return names
+}()
+
 type documentDialectParams struct {
 	TextDocument lsp.TextDocumentIdentifier `json:"textDocument"`
 }
 
+type detectedDialect struct {
+	Dialect     string `json:"dialect"`
+	Source      string `json:"source"`
+	Evidence    string `json:"evidence,omitempty"`
+	Guessed     bool   `json:"guessed"`
+	Description string `json:"description"`
+}
+
+type directiveChoice struct {
+	Directive bool     `json:"directive"`
+	Dialects  []string `json:"dialects"`
+}
+
 type documentDialect struct {
-	Dialect     string   `json:"dialect"`
-	Source      string   `json:"source"`
-	Evidence    string   `json:"evidence,omitempty"`
-	Guessed     bool     `json:"guessed"`
-	Description string   `json:"description"`
-	Directive   bool     `json:"directive"`
-	Dialects    []string `json:"dialects"`
+	detected detectedDialect
+	choice   *directiveChoice
+}
+
+func (d documentDialect) MarshalJSON() ([]byte, error) {
+	if d.choice == nil {
+		return json.Marshal(struct {
+			Selectable bool `json:"selectable"`
+			detectedDialect
+		}{false, d.detected})
+	}
+	return json.Marshal(struct {
+		Selectable bool `json:"selectable"`
+		detectedDialect
+		directiveChoice
+	}{true, d.detected, *d.choice})
 }
 
 type setDialectParams struct {
@@ -47,22 +77,17 @@ func (s *Server) handleDocumentDialect(_ context.Context, docs *docstore.View, p
 		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
 	}
 	d := snap.detection
-	names := []string{}
-	if !snap.doc.Projected() {
-		names = make([]string, len(selectableDialects))
-		for i, choice := range selectableDialects {
-			names[i] = choice.String()
-		}
-	}
-	return documentDialect{
+	answer := documentDialect{detected: detectedDialect{
 		Dialect:     d.Dialect.String(),
 		Source:      d.Source.String(),
 		Evidence:    d.Evidence,
 		Guessed:     d.Guessed(),
 		Description: d.Describe(),
-		Directive:   !snap.doc.Projected() && dialect.HasShellDirective(snap.doc.Text()),
-		Dialects:    names,
-	}, nil
+	}}
+	if !snap.doc.Projected() {
+		answer.choice = &directiveChoice{Directive: dialect.HasShellDirective(snap.doc.Text()), Dialects: selectableNames}
+	}
+	return answer, nil
 }
 
 func (s *Server) handleSetDialect(_ context.Context, docs *docstore.View, params json.RawMessage) (any, error) {

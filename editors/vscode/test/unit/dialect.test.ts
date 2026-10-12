@@ -3,17 +3,20 @@ import { describe, test } from "node:test";
 import {
   directiveEdit,
   documentDialect,
+  hostExplanation,
   pickPlaceholder,
   shellArgument,
   shellPicks,
   statusText,
-  type DocumentDialect,
+  type HostDialect,
+  type ScriptDialect,
 } from "../../src/dialect.ts";
 
 const dialects = ["bash", "sh", "dash", "zsh", "ksh", "busybox"];
 const range = { start: { line: 1, character: 0 }, end: { line: 1, character: 0 } };
 
-const fromShebang: DocumentDialect = {
+const fromShebang: ScriptDialect = {
+  selectable: true,
   dialect: "bash",
   source: "shebang",
   guessed: false,
@@ -22,7 +25,8 @@ const fromShebang: DocumentDialect = {
   dialects,
 };
 
-const guessed: DocumentDialect = {
+const guessed: ScriptDialect = {
+  selectable: true,
   dialect: "sh",
   source: "extension",
   guessed: true,
@@ -31,13 +35,37 @@ const guessed: DocumentDialect = {
   dialects,
 };
 
+const fromMakefile: HostDialect = {
+  selectable: false,
+  dialect: "bash",
+  source: "hostSetting",
+  guessed: false,
+  description: "from SHELL := /bin/bash",
+};
+
 describe("documentDialect", () => {
-  test("reads the server's answer", () => {
+  test("reads the server's answer for a script", () => {
     assert.deepEqual(documentDialect({ ...fromShebang, evidence: "#!/usr/bin/env bash" }), fromShebang);
   });
 
+  test("reads the server's answer for shell whose host file decides it", () => {
+    assert.deepEqual(documentDialect({ ...fromMakefile, evidence: "SHELL := /bin/bash" }), fromMakefile);
+  });
+
   test("rejects anything else, naming the request", () => {
-    for (const result of [null, "bash", { ...fromShebang, guessed: "no" }, { ...fromShebang, dialects: [1] }, { dialect: "bash" }]) {
+    for (const result of [
+      null,
+      "bash",
+      { dialect: "bash", source: "shebang", guessed: false, description: "from the shebang", directive: false, dialects },
+      { ...fromShebang, selectable: "yes" },
+      { ...fromShebang, guessed: "no" },
+      { ...fromShebang, dialects: [1] },
+      { ...fromShebang, source: "hostSetting" },
+      { ...fromShebang, source: "somewhere" },
+      { ...fromShebang, directive: undefined },
+      { ...fromMakefile, source: "shebang" },
+      { dialect: "bash" },
+    ]) {
       assert.throws(() => documentDialect(result), /^Error: shellLsp\/documentDialect answered /);
     }
   });
@@ -103,6 +131,24 @@ describe("statusText", () => {
 
   test("marks a guess", () => {
     assert.equal(statusText(guessed).text, "sh (guessed)");
+  });
+
+  test("offers to explain a shell the host file decides", () => {
+    assert.deepEqual(statusText(fromMakefile), {
+      text: "bash",
+      tooltip: "Linted as bash: from SHELL := /bin/bash. Click to see where the shell comes from.",
+    });
+  });
+});
+
+describe("hostExplanation", () => {
+  test("says what decided the shell and where to change it", () => {
+    const explanation = hostExplanation(fromMakefile);
+    assert.match(explanation, /^Linted as bash, from SHELL := \/bin\/bash\. /);
+    assert.match(explanation, /SHELL in a Makefile/);
+    assert.match(explanation, /set shell in a justfile/);
+    assert.match(explanation, /in a Nix file/);
+    assert.match(explanation, /# shellcheck shell= directive cannot/);
   });
 });
 

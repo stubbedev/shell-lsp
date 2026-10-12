@@ -14,6 +14,9 @@ import {
   directiveEdit,
   documentDialect,
   documentDialectMethod,
+  hostExplanation,
+  hostShellDocsUrl,
+  learnLabel,
   pickPlaceholder,
   setDialectMethod,
   shellArgument,
@@ -22,12 +25,11 @@ import {
   type DocumentDialect,
 } from "./dialect.ts";
 import { clientCommands } from "./ids.ts";
-import { section } from "./settings.ts";
+import { dialectSetting } from "./settings.ts";
 import { activeShellDocument, requireActiveShellDocument, type ShellDocument } from "./shellDocument.ts";
 
 const chooseShellCommand = clientCommands.chooseShell;
 const refreshDelayMs = 300;
-const dialectSetting = `${section}.dialect`;
 
 export class DialectStatus implements Disposable {
   private readonly item: StatusBarItem;
@@ -79,6 +81,12 @@ export class DialectStatus implements Disposable {
       return;
     }
     const found = await this.request(client, target);
+    if (!found.selectable) {
+      if ((await window.showInformationMessage(hostExplanation(found), learnLabel)) === learnLabel) {
+        await env.openExternal(Uri.parse(hostShellDocsUrl));
+      }
+      return;
+    }
     const picked = await window.showQuickPick(shellPicks(found), { placeHolder: pickPlaceholder(found) });
     switch (picked?.choice.kind) {
       case undefined:

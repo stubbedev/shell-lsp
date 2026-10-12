@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -187,9 +188,9 @@ func TestMakefileDialectComesFromShell(t *testing.T) {
 	t.Parallel()
 
 	c := openMakefile(t, `"capabilities": {}`)
-	got := decodeResult[documentDialect](t, c.call(documentDialectMethod, `{"textDocument": {"uri": "`+makefileURI+`"}}`))
-	want := documentDialect{Dialect: "bash", Source: "hostSetting", Evidence: "SHELL := /bin/bash", Description: "from SHELL := /bin/bash", Dialects: []string{}}
-	if !equalDialect(got, want) {
+	got := askDialect(t, c, makefileURI)
+	want := dialectAnswer{Dialect: "bash", Source: "hostSetting", Evidence: "SHELL := /bin/bash", Description: "from SHELL := /bin/bash"}
+	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Makefile dialect = %+v, want %+v", got, want)
 	}
 	if msg := c.call(setDialectMethod, `{"textDocument": {"uri": "`+makefileURI+`"}, "dialect": "zsh"}`); msg.Error == nil {
@@ -274,8 +275,8 @@ func TestJustfileDiagnosticsAndFixes(t *testing.T) {
 	if !found {
 		t.Errorf("no action makes %+v", want)
 	}
-	dialect := decodeResult[documentDialect](t, c.call(documentDialectMethod, `{"textDocument": {"uri": "`+uri+`"}}`))
-	if dialect.Dialect != "bash" || dialect.Evidence != `set shell := ["bash", "-uc"]` {
+	dialect := askDialect(t, c, uri)
+	if dialect.Selectable || dialect.Dialect != "bash" || dialect.Evidence != `set shell := ["bash", "-uc"]` {
 		t.Errorf("justfile dialect = %+v", dialect)
 	}
 }
