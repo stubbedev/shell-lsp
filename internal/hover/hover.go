@@ -279,16 +279,16 @@ func (h hoverer) argumentOf(ctx context.Context, cmd parser.Command) (Result, bo
 	}
 	args := parser.ArgumentTexts(words)
 	args[at] = word
-	for layer := range (parser.Wrappers{Bats: h.Tree.Bats(), Programs: true}).TextLayers(cmd.Name, args) {
+	for layer := range h.Tree.Runners().Layers(cmd.Name, args) {
+		local := at - layer.Offset
 		switch {
 		case h.isFunction(layer.Name):
 			return Result{}, false, nil
-		case !layer.Wrapped || at < layer.Wrap.Command:
-			return h.ownArgument(ctx, layer.Name, layer.Args[:at], word, span)
-		case at == layer.Wrap.Command:
+		case !layer.Wraps || local < layer.Wrap.Command:
+			return h.ownArgument(ctx, layer.Name, layer.Args[:local], word, span)
+		case local == layer.Wrap.Command:
 			return h.commandName(ctx, word, span)
 		}
-		at -= layer.Wrap.Command + 1
 	}
 	return Result{}, false, nil
 }

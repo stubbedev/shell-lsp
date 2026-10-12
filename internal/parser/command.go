@@ -76,32 +76,6 @@ func (w Wrappers) Unwrap(name string, args []string) (Wrap, bool) {
 	return skip(spec, args, verbatim), true
 }
 
-type TextLayer struct {
-	Name    string
-	Args    []string
-	Wrap    Wrap
-	Wrapped bool
-}
-
-func (l TextLayer) Own() []string {
-	if !l.Wrapped {
-		return l.Args
-	}
-	return l.Args[:l.Wrap.Command]
-}
-
-func (w Wrappers) TextLayers(name string, args []string) iter.Seq[TextLayer] {
-	return func(yield func(TextLayer) bool) {
-		for {
-			wrap, wrapped := w.Unwrap(name, args)
-			if !yield(TextLayer{Name: name, Args: args, Wrap: wrap, Wrapped: wrapped}) || !wrapped || wrap.Command == len(args) {
-				return
-			}
-			name, args = args[wrap.Command], args[wrap.Command+1:]
-		}
-	}
-}
-
 func verbatim(word string) (string, bool) { return word, true }
 
 type Layer struct {
@@ -110,6 +84,13 @@ type Layer struct {
 	Offset int
 	Wrap   Wrap
 	Wraps  bool
+}
+
+func (l Layer) Own() []string {
+	if !l.Wraps {
+		return l.Args
+	}
+	return l.Args[:l.Wrap.Command]
 }
 
 func (w Wrappers) Layers(name string, args []string) iter.Seq[Layer] {

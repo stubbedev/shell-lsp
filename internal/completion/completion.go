@@ -331,10 +331,10 @@ func (c completer) aliases() []alias {
 }
 
 func (c completer) argument(ctx context.Context) (Result, error) {
-	var inner parser.TextLayer
-	for inner = range (parser.Wrappers{Bats: c.Tree.Bats(), Programs: true}).TextLayers(c.site.command, c.site.previous) {
+	var inner parser.Layer
+	for inner = range c.Tree.Runners().Layers(c.site.command, c.site.previous) {
 	}
-	if !inner.Wrapped {
+	if !inner.Wraps {
 		return c.argumentOf(ctx, inner.Name, inner.Args)
 	}
 	return c.wrapperArgument(ctx, inner.Name, inner.Args, inner.Wrap)

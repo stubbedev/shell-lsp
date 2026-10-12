@@ -111,7 +111,7 @@ func TestWrappersUnwrap(t *testing.T) {
 	}
 }
 
-func TestWrappersTextLayers(t *testing.T) {
+func TestWrappersLayersOwnArguments(t *testing.T) {
 	t.Parallel()
 
 	all := Wrappers{Programs: true}
@@ -126,11 +126,11 @@ func TestWrappersTextLayers(t *testing.T) {
 	} {
 		words := strings.Fields(tt.line)
 		var got []string
-		for layer := range all.TextLayers(words[0], words[1:]) {
+		for layer := range all.Layers(words[0], words[1:]) {
 			got = append(got, layer.Name+" ["+strings.Join(layer.Own(), " ")+"]")
 		}
 		if strings.Join(got, ", ") != strings.Join(tt.want, ", ") {
-			t.Errorf("TextLayers(%q) = %q, want %q", tt.line, got, tt.want)
+			t.Errorf("Layers(%q) own = %q, want %q", tt.line, got, tt.want)
 		}
 	}
 }

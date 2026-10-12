@@ -82,7 +82,7 @@ func (s *Server) prefetchCommands(tree *parser.Tree) {
 
 func (s *Server) commandPages(tree *parser.Tree, cmd parser.Command) ([]string, error) {
 	var pages []string
-	for layer := range (parser.Wrappers{Bats: tree.Bats(), Programs: true}).TextLayers(cmd.Name, parser.ArgumentTexts(cmd.Args)) {
+	for layer := range tree.Runners().Layers(cmd.Name, parser.ArgumentTexts(cmd.Args)) {
 		if shellOnly(tree, layer.Name) {
 			continue
 		}

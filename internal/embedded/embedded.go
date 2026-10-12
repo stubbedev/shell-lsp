@@ -24,7 +24,7 @@ type piece struct {
 }
 
 func Find(tree *parser.Tree) []Program {
-	wrappers := runners(tree.Bats())
+	wrappers := tree.Runners()
 	if !slices.ContainsFunc(tree.Commands, func(c parser.Command) bool { return mayEmbed(wrappers, c.Name) }) {
 		return nil
 	}
@@ -47,7 +47,7 @@ func appendPrograms(programs []Program, tree *parser.Tree, stmt *syntax.Stmt) []
 	if !ok || len(call.Args) == 0 {
 		return programs
 	}
-	wrappers := runners(tree.Bats())
+	wrappers := tree.Runners()
 	if name, ok := parser.Literal(call.Args[0]); !ok || !mayEmbed(wrappers, name) {
 		return programs
 	}
@@ -58,8 +58,6 @@ func appendPrograms(programs []Program, tree *parser.Tree, stmt *syntax.Stmt) []
 	}
 	return programs
 }
-
-func runners(bats bool) parser.Wrappers { return parser.Wrappers{Bats: bats, Programs: true} }
 
 func mayEmbed(wrappers parser.Wrappers, name string) bool {
 	if wrappers.Runs(name) {
