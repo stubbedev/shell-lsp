@@ -261,12 +261,12 @@ func TestDocs(t *testing.T) {
 	t.Parallel()
 
 	for name, kind := range map[string]lang.Kind{"map": lang.Function, "@base64": lang.Function, "$ENV": lang.Variable} {
-		doc, ok := Doc(name, kind)
+		doc, ok := Doc(name, lang.Token{Kind: kind})
 		if !ok || !strings.Contains(doc.Signature, name) || doc.Summary == "" {
 			t.Errorf("Doc(%q) = %+v, %v", name, doc, ok)
 		}
 	}
-	if _, ok := Doc("nosuchbuiltin", lang.Function); ok {
+	if _, ok := Doc("nosuchbuiltin", lang.Token{Kind: lang.Function}); ok {
 		t.Error("unknown names have no documentation")
 	}
 }

@@ -145,12 +145,7 @@ func (d Doc) Markdown(language string) string {
 	return "```" + language + "\n" + d.Signature + "\n```\n\n" + d.Summary
 }
 
-type Docs map[string][2]string
-
-func (d Docs) Lookup(name string) (Doc, bool) {
-	entry, ok := d[name]
-	return Doc{Signature: entry[0], Summary: entry[1]}, ok
-}
+type Docs map[string]Doc
 
 func IsDigit(c byte) bool { return c >= '0' && c <= '9' }
 

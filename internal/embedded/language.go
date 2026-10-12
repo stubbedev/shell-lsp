@@ -30,7 +30,7 @@ var languages = [...]language{
 		name:     "awk",
 		commands: []string{"awk", "gawk", "mawk", "nawk", "original-awk"},
 		parse:    func(text string, _ invocation) lang.Result { return awk.Parse(text) },
-		doc:      func(name string, tok lang.Token) (lang.Doc, bool) { return awk.Doc(name, tok.Kind) },
+		doc:      awk.Doc,
 		cli: cli{
 			short: [128]option{
 				'F': valued, 'v': valued, 'f': file, 'e': source, 'E': file, 'i': valued, 'l': valued, 'W': valued,
@@ -53,7 +53,7 @@ var languages = [...]language{
 		name:     "sed",
 		commands: []string{"sed", "gsed"},
 		parse:    parseSed,
-		doc:      func(name string, tok lang.Token) (lang.Doc, bool) { return sed.Doc(name, tok.Modifiers) },
+		doc:      sed.Doc,
 		cli: cli{
 			short: [128]option{
 				'e': source, 'f': file, 'l': valued,
@@ -74,7 +74,7 @@ var languages = [...]language{
 		name:     "jq",
 		commands: []string{"jq", "gojq", "jaq"},
 		parse:    func(text string, _ invocation) lang.Result { return jq.Parse(text) },
-		doc:      func(name string, tok lang.Token) (lang.Doc, bool) { return jq.Doc(name, tok.Kind) },
+		doc:      jq.Doc,
 		cli: cli{
 			short: [128]option{
 				'L': valued, 'f': unsupported,

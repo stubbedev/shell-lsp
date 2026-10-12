@@ -286,12 +286,12 @@ func TestDocs(t *testing.T) {
 	t.Parallel()
 
 	for name, kind := range map[string]lang.Kind{"substr": lang.Function, "NR": lang.Variable, "gensub": lang.Function} {
-		doc, ok := Doc(name, kind)
+		doc, ok := Doc(name, lang.Token{Kind: kind})
 		if !ok || !strings.Contains(doc.Signature, name) || doc.Summary == "" {
 			t.Errorf("Doc(%q) = %+v, %v", name, doc, ok)
 		}
 	}
-	if _, ok := Doc("NR", lang.Function); ok {
+	if _, ok := Doc("NR", lang.Token{Kind: lang.Function}); ok {
 		t.Error("NR is not a function")
 	}
 }

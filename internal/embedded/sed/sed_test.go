@@ -274,22 +274,22 @@ func TestDocs(t *testing.T) {
 	t.Parallel()
 
 	for _, name := range []string{"s", "y", "p", "d", "a", "i", "c", "n", "N", "P", "D", "h", "H", "g", "G", "x", "b", "t", "T", "q", "Q", "r", "R", "w", "W", "e", "F", "z", "l", "=", ":", "v"} {
-		if doc, ok := Doc(name, lang.Builtin); !ok || doc.Signature == "" || doc.Summary == "" {
+		if doc, ok := Doc(name, lang.Token{Modifiers: lang.Builtin}); !ok || doc.Signature == "" || doc.Summary == "" {
 			t.Errorf("Doc(%q) = %+v, %t, want documentation", name, doc, ok)
 		}
 	}
 	for _, name := range []string{"g", "p", "w", "e", "i", "I", "m", "M", "3", "12"} {
-		doc, ok := Doc(name, lang.Builtin|lang.Option)
+		doc, ok := Doc(name, lang.Token{Modifiers: lang.Builtin | lang.Option})
 		if !ok || !strings.Contains(doc.Signature, "regexp") || doc.Summary == "" {
 			t.Errorf("Doc(%q, option) = %+v, %t, want documentation", name, doc, ok)
 		}
 	}
-	command, _ := Doc("p", lang.Builtin)
-	if flag, _ := Doc("p", lang.Builtin|lang.Option); command == flag {
+	command, _ := Doc("p", lang.Token{Modifiers: lang.Builtin})
+	if flag, _ := Doc("p", lang.Token{Modifiers: lang.Builtin | lang.Option}); command == flag {
 		t.Error("the p command and the p flag share documentation")
 	}
 	for _, name := range []string{"k", "L", "", "}"} {
-		if _, ok := Doc(name, lang.Builtin); ok {
+		if _, ok := Doc(name, lang.Token{Modifiers: lang.Builtin}); ok {
 			t.Errorf("Doc(%q) found documentation", name)
 		}
 	}

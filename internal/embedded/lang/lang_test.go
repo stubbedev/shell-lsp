@@ -80,15 +80,11 @@ func TestQuote(t *testing.T) {
 	}
 }
 
-func TestDocs(t *testing.T) {
+func TestDocMarkdown(t *testing.T) {
 	t.Parallel()
 
-	docs := Docs{"f": {"f(x)", "Does f."}}
-	doc, ok := docs.Lookup("f")
-	if !ok || doc.Markdown("awk") != "```awk\nf(x)\n```\n\nDoes f." {
-		t.Errorf("Lookup(f) = %+v, %v", doc, ok)
-	}
-	if _, ok := docs.Lookup("g"); ok {
-		t.Error("Lookup(g) found an entry")
+	doc := Doc{Signature: "f(x)", Summary: "Does f."}
+	if got := doc.Markdown("awk"); got != "```awk\nf(x)\n```\n\nDoes f." {
+		t.Errorf("Markdown = %q", got)
 	}
 }
