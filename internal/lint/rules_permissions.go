@@ -183,10 +183,10 @@ func sensitivePath(shape string) (string, bool) {
 		switch {
 		case len(components) == 0:
 			return "the root directory", true
+		case len(components) == 1 && (systemTrees[components[0]] || systemDirs[components[0]]):
+			return "a system directory", true
 		case systemTrees[components[0]]:
-			return "a system directory", true
-		case len(components) == 1 && systemDirs[components[0]]:
-			return "a system directory", true
+			return "part of a system directory", true
 		case len(components) == 2 && components[0] == "home":
 			return "a home directory", true
 		}
