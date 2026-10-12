@@ -222,6 +222,9 @@ func (t *untrustedValues) definitionSource(def *parser.Definition) (untrustedSou
 		case "read", "mapfile", "readarray":
 			return fromInput, true
 		case "printf":
+			if printsOnlyNumbers(c.args) {
+				return 0, false
+			}
 			for _, arg := range c.args {
 				if _, src, tainted := t.expansion(arg, def.Within); tainted {
 					return src, true

@@ -15,7 +15,9 @@ code or a path. Running a whole argument (`eval "$1"`, `bash -c "$1"`,
 `. "$1"`) is treated as deliberate. A value counts as checked once it has been
 tested with `[[ … =~ … ]]`, a `[[ … == pattern ]]` match or a `case` statement
 earlier in the same function. Command output (`$(…)`) is not treated as
-outside data.
+outside data, and neither is what `printf -v` writes with a fixed format whose
+conversions are all numeric, such as `printf -v code '%d' "'$char"`, since that
+is only ever a number.
 
 ## SL1001
 

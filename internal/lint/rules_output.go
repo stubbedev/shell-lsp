@@ -188,9 +188,19 @@ func plural(n int, noun string) string {
 }
 
 const (
-	printfFlags      = "#-+ 0"
-	printfConversion = "diouxXfFeEgGaAcsbqQSC"
+	printfFlags             = "#-+ 0"
+	printfConversion        = "diouxXfFeEgGaAcsbqQSC"
+	printfNumericConversion = "diouxXfFeEgGaA*"
 )
+
+func printsOnlyNumbers(args []*syntax.Word) bool {
+	call, ok := printfArguments(args)
+	if !ok {
+		return false
+	}
+	format, ok := parser.Literal(call.format)
+	return ok && strings.Trim(string(printfConversions(format)), printfNumericConversion) == ""
+}
 
 var printfLengths = []string{"hh", "h", "ll", "l", "q", "L", "j", "z", "Z", "t"}
 
