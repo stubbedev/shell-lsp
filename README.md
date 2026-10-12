@@ -660,7 +660,9 @@ anyone can rerun, rather than on line-by-line review of the code:
   configuration, the test suite on Linux and Windows (with the seed corpora
   of its fuzz tests), headless Neovim and VS Code integration tests, a check
   that release binaries match the names the VS Code extension downloads, the
-  Nix build, and CodeQL, govulncheck and Grype scans.
+  Nix build, the test suite again in the Nix dev shell, where the lint
+  fixtures are checked against ShellCheck and the parser against bash, dash,
+  mksh, zsh and ksh93, and CodeQL, govulncheck and Grype scans.
 
 Maintenance follows the same pattern. Refactoring, for instance, starts with
 agents auditing the code for facts stated in more than one place and

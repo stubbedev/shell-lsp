@@ -67,7 +67,8 @@ The upstream tests are kept and extended, and run with the rest of the module:
 With bash 5.3, dash 0.5.9 or later, mksh R59, zsh 5.9 and ksh93u+m on `PATH`,
 `TestParseConfirm` also checks every parse test against the real shells. The
 nix dev shell of shell-lsp provides them all, with ksh93u+m 1.0.10 built from
-source.
+source, and CI runs the tests there with `REQUIRE_SHELLS=1`, which fails
+instead of skipping a shell that is missing or of another version.
 
 After changing the tokens in `syntax/tokens.go`, regenerate `token_string.go`
 with `go run golang.org/x/tools/cmd/stringer@v0.52.0 -type token -linecomment
