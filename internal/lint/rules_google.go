@@ -10,6 +10,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/internal/textline"
+	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
 const (
@@ -17,6 +18,7 @@ const (
 	codeGoogleFileHeader = nativeBase + 4002
 	codeGoogleTodo       = nativeBase + 4003
 	codeGoogleFuncHeader = nativeBase + 4004
+	codeGoogleSections   = nativeBase + 4005
 	shortFunctionLines   = 10
 	googleShebang        = "#!/bin/bash"
 )
@@ -27,8 +29,9 @@ var googleFamily = family{
 		codeGoogleFileHeader: {severity: SeverityStyle, optional: optionalGoogleFileHeader},
 		codeGoogleTodo:       {severity: SeverityStyle, optional: optionalGoogleTodo},
 		codeGoogleFuncHeader: {severity: SeverityStyle, optional: optionalGoogleFunctionComments},
+		codeGoogleSections:   {severity: SeverityStyle, optional: optionalGoogleCommentSections},
 	},
-	finish: []func(*pass){checkGoogleShebang, checkGoogleFileHeader, checkGoogleTodos, checkGoogleFunctionHeaders},
+	finish: []func(*pass){checkGoogleShebang, checkGoogleFileHeader, checkGoogleTodos, checkGoogleFunctionHeaders, checkGoogleCommentSections},
 }
 
 var (
@@ -125,4 +128,149 @@ func checkGoogleFunctionHeaders(p *pass) {
 			p.report(codeGoogleFuncHeader, fn.NameSpan, fn.Name+" is "+strconv.Itoa(lines)+" lines long, so the Google Shell Style Guide asks for a header comment above it describing what it does and how to call it.")
 		}
 	}
+}
+
+var (
+	argumentCommands    = setOf("shift", "getopts")
+	positionalNames     = setOf("@", "*", "#")
+	standardStreamFiles = setOf("/dev/stdout", "/dev/stderr")
+)
+
+type commentSection struct {
+	name string
+	used bool
+}
+
+func checkGoogleCommentSections(p *pass) {
+	if p.bats || !p.active(codeGoogleSections) {
+		return
+	}
+	globals := map[string]bool{}
+	for _, def := range p.tree.Definitions {
+		if !def.Local && def.Kind != parser.DefCommandEnv && !p.parameters.Has(def.Name) {
+			globals[def.Name] = true
+		}
+	}
+	for _, fn := range p.tree.Functions {
+		if fn.Doc == "" || fn.Decl == nil {
+			continue
+		}
+		var missing []string
+		for _, section := range []commentSection{
+			{name: "Globals", used: p.usesGlobals(fn, globals)},
+			{name: "Arguments", used: usesArguments(fn)},
+			{name: "Outputs", used: writesOutput(fn)},
+			{name: "Returns", used: returnsValue(fn)},
+		} {
+			if section.used && !documents(fn.Doc, section.name) {
+				missing = append(missing, section.name+":")
+			}
+		}
+		if len(missing) == 0 {
+			continue
+		}
+		noun := "section"
+		if len(missing) > 1 {
+			noun = "sections"
+		}
+		p.report(codeGoogleSections, fn.NameSpan, "The header comment of "+fn.Name+" has no "+strings.Join(missing, ", ")+" "+noun+"; the Google Shell Style Guide lists the globals a function uses, the arguments it takes, what it writes and the values it returns.")
+	}
+}
+
+func documents(doc, section string) bool {
+	for line := range strings.Lines(doc) {
+		if strings.HasPrefix(strings.TrimSpace(line), section+":") {
+			return true
+		}
+	}
+	return false
+}
+
+func (p *pass) usesGlobals(fn parser.Function, globals map[string]bool) bool {
+	global := func(name string) bool {
+		_, local := p.tree.Binding(name, fn.Body)
+		return globals[name] && !local
+	}
+	for _, ref := range p.tree.References {
+		if ref.Within == fn.Body && global(ref.Name) {
+			return true
+		}
+	}
+	for _, def := range p.tree.Definitions {
+		if def.Within == fn.Body && !def.Local && def.Kind != parser.DefCommandEnv && global(def.Name) {
+			return true
+		}
+	}
+	return false
+}
+
+func walkOwnBody(fn parser.Function, visit func(n syntax.Node) bool) {
+	syntax.Walk(fn.Decl.Body, func(n syntax.Node) bool {
+		if inner, ok := n.(*syntax.FuncDecl); ok && inner != fn.Decl {
+			return false
+		}
+		return n == nil || visit(n)
+	})
+}
+
+func usesArguments(fn parser.Function) bool {
+	found := false
+	walkOwnBody(fn, func(n syntax.Node) bool {
+		switch n := n.(type) {
+		case *syntax.ParamExp:
+			found = found || n.Param != nil && (positionalNames[n.Param.Value] || parser.IsDigits(n.Param.Value))
+		case *syntax.CallExpr:
+			name, _ := parser.CallName(n)
+			found = found || argumentCommands[name]
+		}
+		return !found
+	})
+	return found
+}
+
+func returnsValue(fn parser.Function) bool {
+	found := false
+	walkOwnBody(fn, func(n syntax.Node) bool {
+		if call, ok := n.(*syntax.CallExpr); ok {
+			name, _ := parser.CallName(call)
+			found = found || name == "return" && len(call.Args) > 1
+		}
+		return !found
+	})
+	return found
+}
+
+func writesOutput(fn parser.Function) bool {
+	found := false
+	walkOwnBody(fn, func(n syntax.Node) bool {
+		switch n := n.(type) {
+		case *syntax.CmdSubst, *syntax.ProcSubst:
+			return false
+		case *syntax.Stmt:
+			call, ok := n.Cmd.(*syntax.CallExpr)
+			if !ok {
+				return true
+			}
+			name, _ := parser.CallName(call)
+			found = found || outputCommands[name] && !assignsOutput(call) && !stdoutToFile(n.Redirs)
+		}
+		return !found
+	})
+	return found
+}
+
+func assignsOutput(call *syntax.CallExpr) bool {
+	return len(call.Args) > 1 && parser.LiteralIs(call.Args[1], "-v")
+}
+
+func stdoutToFile(redirs []*syntax.Redirect) bool {
+	for _, r := range redirs {
+		switch r.Op {
+		case syntax.RdrOut, syntax.AppOut, syntax.RdrAll, syntax.AppAll, syntax.RdrClob:
+			if (r.N == nil || r.N.Value == "1") && !literalIn(r.Word, standardStreamFiles) {
+				return true
+			}
+		}
+	}
+	return false
 }

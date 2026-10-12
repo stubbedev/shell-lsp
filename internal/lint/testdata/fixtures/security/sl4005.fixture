@@ -1,0 +1,125 @@
+### a complete header comment
+#!/bin/bash
+# shellcheck enable=google-comment-sections
+BACKUP_DIR=/var/backup
+
+#######################################
+# Copy a file into the backup directory.
+# Globals:
+#   BACKUP_DIR
+# Arguments:
+#   File to copy.
+# Outputs:
+#   Writes the copy's path to stdout.
+# Returns:
+#   1 if the copy failed.
+#######################################
+backup() {
+  cp "$1" "$BACKUP_DIR" || return 1
+  echo "$BACKUP_DIR/$1"
+}
+backup x
+>>> none
+
+### every section missing
+#!/bin/bash
+# shellcheck enable=google-comment-sections
+BACKUP_DIR=/var/backup
+
+# Copy a file into the backup directory.
+backup() {
+  cp "$1" "$BACKUP_DIR" || return 1
+  echo "$BACKUP_DIR/$1"
+}
+backup x
+>>+ SL4005 6:1 -- shell-lsp style guide check; shellcheck does not read function comments
+
+### arguments through shift and getopts, globals written
+#!/bin/bash
+# shellcheck enable=google-comment-sections
+verbose=0
+
+# Parse the options.
+parse() {
+  while getopts v opt; do
+    verbose=1
+  done
+  shift "$((OPTIND - 1))"
+}
+parse "$@"
+echo "$verbose $opt"
+>>+ SL4005 6:1 -- shell-lsp style guide check; shellcheck does not read function comments
+
+### output that goes elsewhere is not output
+#!/bin/bash
+# shellcheck enable=google-comment-sections
+
+# Record the time.
+stamp() {
+  local now
+  now=$(date)
+  printf -v now '%s' "$now"
+  echo "$now" > /tmp/stamp
+  echo "$now" >> /tmp/log
+  return
+}
+stamp
+>>> none
+
+### stderr is output
+#!/bin/bash
+# shellcheck enable=google-comment-sections
+
+# Complain.
+complain() {
+  local message=finished
+  echo "$message" >&2
+  printf '%s\n' "$message" > /dev/stderr
+}
+complain
+>>+ SL4005 5:1 -- shell-lsp style guide check; shellcheck does not read function comments
+
+### locals and shell variables are not globals
+#!/bin/bash
+# shellcheck enable=google-comment-sections
+
+# Split the path.
+split() {
+  local item parts
+  IFS=: read -ra parts <<< "$PATH"
+  for item in "${parts[@]}"; do :; done
+}
+split
+>>> SC2034 8:3
+
+### nested functions count for themselves
+#!/bin/bash
+# shellcheck enable=google-comment-sections
+
+# Define the helper.
+outer() {
+  # Print the first argument.
+  # Arguments:
+  #   A word.
+  # Outputs:
+  #   The word.
+  inner() { echo "$1"; }
+  inner hi
+}
+outer
+>>> none
+
+### functions without a header are left alone
+#!/bin/bash
+# shellcheck enable=google-comment-sections
+greet() { echo "hello $1"; }
+greet world
+>>> none
+
+### off unless enabled
+#!/bin/bash
+
+# Print a greeting.
+greet() { echo "hello $1"; }
+greet world
+>>> none

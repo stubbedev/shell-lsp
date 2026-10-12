@@ -565,3 +565,36 @@ backup() {    # SL4004
   tar -czf "$1.tgz" "$1"
 }
 ```
+
+## SL4005
+
+**A function header comment leaves out a section the function needs.** The
+rule is optional (`google-comment-sections`). The guide's function comments
+describe the function and then list, under `Globals:`, `Arguments:`,
+`Outputs:` and `Returns:`, the global variables it uses or changes, the
+arguments it takes, what it writes to standard output or error and the
+values it returns besides the status of its last command. Its examples only
+list the sections that apply, so for a function that already has a header
+comment the rule asks for each section the function's own body calls for:
+
+- `Globals:` when it reads or writes a variable the script assigns outside
+  any `local`, other than the shell's own variables;
+- `Arguments:` when it reads `$1`, `$@`, `$#` or another positional
+  parameter, or runs `shift` or `getopts`;
+- `Outputs:` when it runs `echo`, `printf` or `print` without sending
+  standard output to a file or into a command substitution;
+- `Returns:` when it runs `return` with a value.
+
+Nested functions count for themselves only. Functions without a header
+comment are [SL4004](#sl4004)'s concern.
+
+```bash
+#!/bin/bash
+# shellcheck enable=google-comment-sections
+
+# Print a greeting.
+greet() {    # SL4005: no Arguments: or Outputs:
+  echo "hello $1"
+}
+greet world
+```

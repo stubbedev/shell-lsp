@@ -16,6 +16,7 @@ const (
 	optionalSetESuppressed
 	optionalUnassignedUppercase
 	optionalDeprecateWhich
+	optionalGoogleCommentSections
 	optionalGoogleFileHeader
 	optionalGoogleFunctionComments
 	optionalGoogleShebang
@@ -52,6 +53,7 @@ var optionalSpecs = [optionalCheckCount]optionalSpec{
 		notStrict: true,
 	},
 	optionalDeprecateWhich:         {name: "deprecate-which"},
+	optionalGoogleCommentSections:  {name: "google-comment-sections", notStrict: true},
 	optionalGoogleFileHeader:       {name: "google-file-header", notStrict: true},
 	optionalGoogleFunctionComments: {name: "google-function-comments", notStrict: true},
 	optionalGoogleShebang:          {name: "google-shebang", notStrict: true},
