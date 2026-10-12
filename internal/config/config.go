@@ -64,7 +64,7 @@ type rawLint struct {
 
 func Parse(raw json.RawMessage) (Settings, error) {
 	settings := Default()
-	if isAbsent(raw) {
+	if IsAbsent(raw) {
 		return settings, nil
 	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
@@ -111,7 +111,7 @@ func parseFormat(raw rawFormat, f Format) Format {
 }
 
 func ParseSection(raw json.RawMessage) (Settings, bool, error) {
-	if isAbsent(raw) {
+	if IsAbsent(raw) {
 		return Settings{}, false, nil
 	}
 	var sections map[string]json.RawMessage
@@ -154,7 +154,7 @@ func parseLint(raw rawLint, l Lint) (Lint, error) {
 	return l, nil
 }
 
-func isAbsent(raw json.RawMessage) bool {
+func IsAbsent(raw json.RawMessage) bool {
 	trimmed := bytes.TrimSpace(raw)
 	return len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null"))
 }

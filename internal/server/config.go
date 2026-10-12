@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"slices"
-	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/config"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
@@ -123,7 +122,7 @@ func (s *Server) loadConfiguration(ctx context.Context) {
 	folders := map[string]config.Settings{}
 	var global *config.Settings
 	for i, raw := range results {
-		if isNull(raw) {
+		if config.IsAbsent(raw) {
 			continue
 		}
 		parsed, err := config.Parse(raw)
@@ -143,11 +142,6 @@ func (s *Server) loadConfiguration(ctx context.Context) {
 		}
 		s.folderSettings = folders
 	})
-}
-
-func isNull(raw json.RawMessage) bool {
-	trimmed := strings.TrimSpace(string(raw))
-	return trimmed == "" || trimmed == "null"
 }
 
 func (s *Server) handleDidChangeWorkspaceFolders(ctx context.Context, change lsp.DidChangeWorkspaceFoldersParams) error {
