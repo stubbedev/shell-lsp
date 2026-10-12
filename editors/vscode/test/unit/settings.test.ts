@@ -16,15 +16,25 @@ describe("serverKeys", () => {
   });
 
   test("reads every configuration category and ignores other extensions' keys", () => {
+    const resource = { scope: "resource" };
     const manifest = {
       contributes: {
         configuration: [
-          { title: "A", properties: { "shellLsp.path": {}, "shellLsp.dialect": {}, "editor.tabSize": {} } },
-          { title: "B", properties: { "shellLsp.trace.server": {}, "shellLsp.lint.enable": {} } },
+          { title: "A", properties: { "shellLsp.path": { scope: "machine" }, "shellLsp.dialect": resource, "editor.tabSize": resource } },
+          { title: "B", properties: { "shellLsp.trace.server": { scope: "window" }, "shellLsp.lint.enable": resource } },
         ],
       },
     };
     assert.deepEqual(serverKeys(manifest), ["dialect", "lint.enable"]);
+  });
+
+  test("leaves out settings that cannot differ per workspace folder, scoped or not", () => {
+    const manifest = {
+      contributes: {
+        configuration: [{ title: "A", properties: { "shellLsp.a": { scope: "application" }, "shellLsp.b": {}, "shellLsp.c": { scope: "resource" } } }],
+      },
+    };
+    assert.deepEqual(serverKeys(manifest), ["c"]);
   });
 
   test("rejects a manifest without configuration categories", () => {

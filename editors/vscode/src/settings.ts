@@ -5,7 +5,7 @@ export const pathKey = "path";
 export const pathSetting = `${section}.${pathKey}`;
 export const dialectSetting = `${section}.dialect`;
 
-const clientOnlyKeys: ReadonlySet<string> = new Set([pathKey, "trace.server"]);
+const serverScope = "resource";
 
 export function serverKeys(manifest: unknown): readonly string[] {
   const contributes = isFields(manifest) ? manifest["contributes"] : undefined;
@@ -19,10 +19,9 @@ export function serverKeys(manifest: unknown): readonly string[] {
     if (!isFields(properties)) {
       throw new Error(`contributes.configuration entry ${JSON.stringify(category)} has no properties`);
     }
-    return Object.keys(properties)
-      .filter((key) => key.startsWith(prefix))
-      .map((key) => key.slice(prefix.length))
-      .filter((key) => !clientOnlyKeys.has(key));
+    return Object.entries(properties)
+      .filter(([key, schema]) => key.startsWith(prefix) && isFields(schema) && schema["scope"] === serverScope)
+      .map(([key]) => key.slice(prefix.length));
   });
 }
 

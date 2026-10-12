@@ -290,7 +290,7 @@ func TestServerSettingsCanDifferPerWorkspaceFolder(t *testing.T) {
 	for key, setting := range allContributedSettings(t) {
 		perFolder := setting.Scope == "resource"
 		if perFolder == slices.Contains(extensionOnlySettings, key) {
-			t.Errorf("%s has scope %q; server settings are per folder (resource) and extension-only ones are not", key, setting.Scope)
+			t.Errorf("%s has scope %q; the extension sends the server exactly the per-folder (resource) settings, so server settings must have that scope and extension-only ones must not", key, setting.Scope)
 		}
 	}
 }
