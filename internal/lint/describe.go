@@ -21,7 +21,7 @@ func Describe(code Code) (CodeInfo, bool) {
 	if !ok {
 		return CodeInfo{}, false
 	}
-	info := CodeInfo{Code: code, Severity: m.severity, Optional: m.optional, Summary: m.summary, Minimal: minimalKeeps(m.severity, m.bug)}
+	info := CodeInfo{Code: code, Severity: m.severity, Optional: m.optional.String(), Summary: m.summary, Minimal: minimalKeeps(m.severity, m.bug)}
 	if code.Native() {
 		doc := nativeDocs()[code]
 		info.Summary, info.Example = doc.summary, doc.example

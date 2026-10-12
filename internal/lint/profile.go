@@ -30,12 +30,8 @@ func ProfileNamed(name string) (Profile, bool) {
 
 func ProfileNames() []string { return slices.Clone(profileNames[:]) }
 
-var strictSkips = []string{uppercaseOptional}
-
-func StrictSkips() []string { return slices.Clone(strictSkips) }
-
-func (p Profile) enables(optional string) bool {
-	return p == ProfileStrict && !slices.Contains(strictSkips, optional)
+func (p Profile) enables(optional optionalCheck) bool {
+	return p == ProfileStrict && !optionalSpecs[optional].notStrict
 }
 
 func (p Profile) keeps(f Finding, m meta, chosen bool) bool {

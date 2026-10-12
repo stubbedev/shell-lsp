@@ -15,7 +15,7 @@ var parameterSyntaxFamily = family{
 	codes: map[Code]meta{
 		codeBadSubstitution: {severity: SeverityError},
 		2082:                {severity: SeverityError, summary: "An expansion nested inside a parameter name does not compute the variable to expand."},
-		2250:                {severity: SeverityStyle, optional: "require-variable-braces", summary: "A variable is expanded without braces."},
+		2250:                {severity: SeverityStyle, optional: optionalVariableBraces, summary: "A variable is expanded without braces."},
 		2296:                {severity: SeverityError, summary: "A parameter expansion starts with a character no parameter name can start with."},
 		2297:                {severity: SeverityError, summary: "Double quotes are used inside ${ }."},
 		2298:                {severity: SeverityError, summary: "An expansion is used as the name in ${ }."},

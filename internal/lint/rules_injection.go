@@ -21,7 +21,7 @@ var injectionFamily = family{
 	codes: map[Code]meta{
 		codeEvalInjection:       {severity: SeverityWarning},
 		codeShellInjection:      {severity: SeverityWarning},
-		codeArithmeticInjection: {severity: SeverityWarning, optional: "arithmetic-injection"},
+		codeArithmeticInjection: {severity: SeverityWarning, optional: optionalArithmeticInjection},
 		codeSourceInjection:     {severity: SeverityWarning},
 	},
 	rules: []rule{

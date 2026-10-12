@@ -10,8 +10,6 @@ import (
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
-const uppercaseOptional = "check-unassigned-uppercase"
-
 var variablesFamily = family{
 	codes: map[Code]meta{
 		2034: {severity: SeverityWarning, summary: "A variable is assigned but never read."},
@@ -659,7 +657,7 @@ func (p *pass) reportUnassigned(f variableFacts) {
 
 func (p *pass) reportUnassignedRead(r variableSite, f variableFacts) {
 	similar, found := closestName(r.name, f.assigned)
-	if strings.ToUpper(r.name) == r.name && !p.settings.enabled(uppercaseOptional) {
+	if strings.ToUpper(r.name) == r.name && !p.settings.enabled(optionalUnassignedUppercase) {
 		if found {
 			p.report(2153, r.span, r.name+" is never assigned here; did you mean "+similar+"?")
 		}

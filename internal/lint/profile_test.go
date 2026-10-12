@@ -68,16 +68,6 @@ func TestOnlyInformationalChecksAreMarkedAsBugs(t *testing.T) {
 	}
 }
 
-func TestStrictSkipsNameOptionalChecks(t *testing.T) {
-	t.Parallel()
-
-	for _, name := range StrictSkips() {
-		if !IsOptionalCheck(name) {
-			t.Errorf("strict skips %q, which is not an optional check", name)
-		}
-	}
-}
-
 func TestProfileNamesRoundTrip(t *testing.T) {
 	t.Parallel()
 

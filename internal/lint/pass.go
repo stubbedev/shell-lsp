@@ -183,12 +183,11 @@ func (p *pass) reportWithSeverity(code Code, severity Severity, span parser.Span
 
 func (p *pass) profileKeeps(f Finding) bool {
 	m := p.meta(f.Code)
-	return p.settings.profile.keeps(f, m, m.optional != "" && p.settings.chosen(m.optional))
+	return p.settings.profile.keeps(f, m, m.optional != notOptional && p.settings.chosen(m.optional))
 }
 
 func (p *pass) active(code Code) bool {
-	m := p.meta(code)
-	return m.optional == "" || p.settings.enabled(m.optional)
+	return p.settings.runs(p.meta(code).optional)
 }
 
 func (p *pass) meta(code Code) meta {

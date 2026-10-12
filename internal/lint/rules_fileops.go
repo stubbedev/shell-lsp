@@ -21,7 +21,7 @@ var fileOpsFamily = family{
 		2224: {severity: SeverityError, summary: "mv is given only one path and no destination."},
 		2225: {severity: SeverityError, summary: "cp is given only one path and no destination."},
 		2226: {severity: SeverityWarning, summary: "ln is given only one path and no link name."},
-		2230: {severity: SeverityInfo, optional: "deprecate-which", summary: "which is not standard and behaves differently between systems."},
+		2230: {severity: SeverityInfo, optional: optionalDeprecateWhich, summary: "which is not standard and behaves differently between systems."},
 		2253: {severity: SeverityWarning, summary: "chmod -r removes read permission instead of changing modes recursively."},
 		2267: {severity: SeverityInfo, tag: TagDeprecated, summary: "xargs -i is deprecated."},
 	},

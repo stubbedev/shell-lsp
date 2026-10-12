@@ -10,11 +10,6 @@ import (
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
-const (
-	optionalSetESuppressed = "check-set-e-suppressed"
-	optionalMaskedReturns  = "check-extra-masked-returns"
-)
-
 var errexitFamily = family{
 	codes: map[Code]meta{
 		2251: {severity: SeverityInfo, bug: true, summary: "A negated command never triggers set -e."},

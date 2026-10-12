@@ -264,14 +264,17 @@ func disabledItems(d directiveComment, pair directive.Pair, scope parser.Span, p
 }
 
 type fileWide struct {
-	optional map[string]bool
+	optional optionalSet
 	profile  Profile
 	extended bool
 	shell    bool
 }
 
 func fileWideSettings(directives []directiveComment, firstCommand int, opts Options) fileWide {
-	out := fileWide{optional: setOf(opts.Optional...), profile: opts.Profile, extended: !opts.NoExtendedAnalysis, shell: namesShell(directives)}
+	out := fileWide{profile: opts.Profile, extended: !opts.NoExtendedAnalysis, shell: namesShell(directives)}
+	for _, name := range opts.Optional {
+		out.optional.enable(name)
+	}
 	extendedSet := false
 	for _, d := range directives {
 		if d.span.End > firstCommand {
@@ -279,7 +282,7 @@ func fileWideSettings(directives []directiveComment, firstCommand int, opts Opti
 		}
 		for _, value := range d.parsed.Values(directive.Enable) {
 			for name := range strings.SplitSeq(value, ",") {
-				out.optional[name] = true
+				out.optional.enable(name)
 			}
 		}
 		if value, found := d.parsed.Value(directive.ExtendedAnalysis); found && !extendedSet {
@@ -308,9 +311,11 @@ func parseBool(value string) (bool, bool) {
 	return false, false
 }
 
-func (f fileWide) enabled(name string) bool { return f.chosen(name) || f.profile.enables(name) }
+func (f fileWide) runs(c optionalCheck) bool { return c == notOptional || f.enabled(c) }
 
-func (f fileWide) chosen(name string) bool { return f.optional[name] || f.optional[directive.All] }
+func (f fileWide) enabled(c optionalCheck) bool { return f.chosen(c) || f.profile.enables(c) }
+
+func (f fileWide) chosen(c optionalCheck) bool { return f.optional.has(c) }
 
 func firstCommandStart(tree *parser.Tree) int {
 	if len(tree.File.Stmts) > 0 {

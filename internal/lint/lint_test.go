@@ -37,15 +37,18 @@ func TestOptionalChecksNameEveryOptIn(t *testing.T) {
 	if !slices.IsSorted(names) || len(slices.Compact(slices.Clone(names))) != len(names) {
 		t.Errorf("OptionalChecks() = %v, want sorted unique names", names)
 	}
-	for _, want := range []string{uppercaseOptional, "require-variable-braces", "arithmetic-injection"} {
-		if !IsOptionalCheck(want) {
-			t.Errorf("OptionalChecks() lacks %s", want)
+	for c := notOptional + 1; c < optionalCheckCount; c++ {
+		if found, ok := optionalNamed(c.String()); !ok || found != c {
+			t.Errorf("optional check %d has the name %q, which does not name it back", c, c)
 		}
 	}
-	for code, m := range catalog {
-		if m.optional != "" && !IsOptionalCheck(m.optional) {
-			t.Errorf("%s is gated by %s, which OptionalChecks() lacks", code, m.optional)
+	for _, name := range []string{"check-unassigned-uppercase", "require-variable-braces", "arithmetic-injection", "all"} {
+		if !EnablesOptional(name) {
+			t.Errorf("EnablesOptional(%q) = false", name)
 		}
+	}
+	if EnablesOptional("") || EnablesOptional("require-braces") {
+		t.Error("EnablesOptional accepted a name that is not an optional check")
 	}
 }
 

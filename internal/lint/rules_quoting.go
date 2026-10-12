@@ -19,7 +19,7 @@ var quotingFamily = family{
 		2206: {severity: SeverityWarning, summary: "An unquoted expansion is split into words and globbed when building an array."},
 		2207: {severity: SeverityWarning, summary: "Command output is split on whitespace and globbed when building an array."},
 		2223: {severity: SeverityInfo, bug: true, summary: "An unquoted ${var:=default} is globbed on every run."},
-		2248: {severity: SeverityStyle, optional: "quote-safe-variables", summary: "A variable that holds no spaces or globs today is expanded unquoted."},
+		2248: {severity: SeverityStyle, optional: optionalQuoteSafeVariables, summary: "A variable that holds no spaces or globs today is expanded unquoted."},
 	},
 	rules: []rule{
 		{on: nodes(&syntax.ParamExp{}), node: checkUnquotedExpansion},

@@ -13,7 +13,7 @@ const codeUnusedDirective = nativeBase + 2009
 
 var unusedDirectivesFamily = family{
 	codes: map[Code]meta{
-		codeUnusedDirective: {severity: SeverityInfo, optional: "unused-directives"},
+		codeUnusedDirective: {severity: SeverityInfo, optional: optionalUnusedDirectives},
 	},
 }
 
@@ -72,7 +72,7 @@ func (p *pass) reportableWhenUnused(item disabledItem) bool {
 	if !known {
 		return !code.parseFailure()
 	}
-	return m.optional == "" || p.settings.enabled(m.optional)
+	return p.settings.runs(m.optional)
 }
 
 func (p *pass) unusedMessage(item disabledItem) string {

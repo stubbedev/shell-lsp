@@ -10,11 +10,6 @@ import (
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
-const (
-	optionalNegatedConditions = "avoid-negated-conditions"
-	optionalNullaryConditions = "avoid-nullary-conditions"
-)
-
 var testsFamily = family{
 	codes: map[Code]meta{
 		2212: {severity: SeverityStyle, summary: "An empty test is always false."},
@@ -28,12 +23,12 @@ var testsFamily = family{
 		2265: {severity: SeverityError, summary: "A single & between tests runs the first in the background instead of combining them."},
 		2266: {severity: SeverityWarning, summary: "A single | between tests pipes between them instead of combining them."},
 		2268: {severity: SeverityStyle, summary: "The x prefix in comparisons is an obsolete workaround."},
-		2292: {severity: SeverityStyle, optional: "require-double-brackets", summary: "[ ] is used for a test where [[ ]] is available."},
+		2292: {severity: SeverityStyle, optional: optionalDoubleBrackets, summary: "[ ] is used for a test where [[ ]] is available."},
 		2314: {severity: SeverityError, summary: "Bats ignores the status of a negated command, so the line cannot fail the test."},
 		2315: {severity: SeverityError, summary: "Bats ignores the status of a negated test, so the line cannot fail the test."},
 		2331: {severity: SeverityStyle, summary: "-a as a file test is a legacy synonym of -e that is easily confused with the -a conjunction."},
 		2335: {severity: SeverityStyle, optional: optionalNegatedConditions, summary: "A negated comparison is written as ! a op b instead of using the inverted operator."},
-		2338: {severity: SeverityStyle, optional: "require-double-equals", summary: "= is used for string comparison in a bash test where == is preferred."},
+		2338: {severity: SeverityStyle, optional: optionalDoubleEquals, summary: "= is used for string comparison in a bash test where == is preferred."},
 	},
 	rules: []rule{
 		{on: nodes(&syntax.CallExpr{}, &syntax.TestClause{}), node: checkTestExpressions},

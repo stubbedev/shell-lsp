@@ -32,7 +32,7 @@ func TestCheckAllocatesLinearlyInNestingDepth(t *testing.T) {
 		script   func(depth int) string
 	}{
 		{"nested brace expansions", dialect.Posix, nil, func(depth int) string { return "echo " + nested("{a,", "b", "}", depth) + "\n" }},
-		{"masked returns in process substitutions", dialect.Bash, []string{optionalMaskedReturns}, func(depth int) string { return "cat " + nested("<(", "x", ")", depth) + "\n" }},
+		{"masked returns in process substitutions", dialect.Bash, []string{optionalMaskedReturns.String()}, func(depth int) string { return "cat " + nested("<(", "x", ")", depth) + "\n" }},
 		{"nested subscripts", dialect.Bash, nil, func(depth int) string { return "echo " + nested("${a[", "1", "]}", depth) + "\n" }},
 	}
 	const shallow, deep = 100, 300

@@ -13,7 +13,7 @@ import (
 var pipelinesFamily = family{
 	codes: map[Code]meta{
 		2000: {severity: SeverityStyle, summary: "echo piped to wc counts a string's length that ${#var} gives directly."},
-		2002: {severity: SeverityStyle, optional: "useless-use-of-cat", summary: "cat only feeds a file to the next command, which could read it directly."},
+		2002: {severity: SeverityStyle, optional: optionalUselessCat, summary: "cat only feeds a file to the next command, which could read it directly."},
 		2009: {severity: SeverityInfo, bug: true, summary: "Grepping ps output also matches the grep itself."},
 		2010: {severity: SeverityWarning, summary: "Filtering ls output with grep breaks on unusual file names."},
 		2011: {severity: SeverityWarning, summary: "Piping ls output to xargs breaks on file names with spaces."},
