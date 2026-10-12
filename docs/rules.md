@@ -509,3 +509,19 @@ the quick fix writes `#!/bin/bash`. Here the first line is reported:
 # shellcheck enable=google-shebang
 echo "hello"
 ```
+
+## SL4002
+
+**A file does not open with a comment about its contents.** The rule is
+optional (`google-file-header`). The guide asks every file, script or
+library, to start with a top-level comment giving a brief overview of what
+it holds. After the `#!` line (or a zsh `#compdef` tag), blank lines, bare
+`#` lines and `# shellcheck` directives are skipped; the next line must be a
+comment, or the first line of code is reported. Whether the comment really
+describes the file is up to the reader.
+
+```bash
+#!/bin/bash
+# shellcheck enable=google-file-header
+echo "hello"    # SL4002
+```

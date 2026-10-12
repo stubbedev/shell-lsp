@@ -22,6 +22,7 @@
 [ "$1" ] && echo "got an argument: $1"
 >>> SC2244 3:3
 >>+ SL4001 1:1 -- all also enables the Google style checks, which shellcheck does not have
+>>+ SL4002 3:1 -- all also enables the Google style checks, which shellcheck does not have
 
 ### enable list with two names
 #!/bin/sh

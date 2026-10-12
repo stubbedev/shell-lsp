@@ -492,3 +492,4 @@ marks the checks the `minimal` profile keeps; see [Profiles](../README.md#profil
 | <a name="sl3002"></a>[SL3002](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl3002) | error |  | yes | A sed script does not parse. |
 | <a name="sl3003"></a>[SL3003](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl3003) | error |  | yes | A jq filter does not parse. |
 | <a name="sl4001"></a>[SL4001](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl4001) | style | `google-shebang` |  | An executable does not start with \`#!/bin/bash\`. |
+| <a name="sl4002"></a>[SL4002](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl4002) | style | `google-file-header` |  | A file does not open with a comment about its contents. |

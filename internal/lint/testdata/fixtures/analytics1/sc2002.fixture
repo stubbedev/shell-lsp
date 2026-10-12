@@ -14,6 +14,7 @@ cat "$logfile" | grep -c ERROR
 cat /etc/hosts | grep localhost
 >>> SC2002 2:5
 >>> SC2312 2:1
+>>+ SL4002 2:1 -- all also enables the Google style checks, which shellcheck does not have
 
 ### cat given by path is still matched
 # shellcheck enable=useless-use-of-cat

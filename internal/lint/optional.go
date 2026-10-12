@@ -16,6 +16,7 @@ const (
 	optionalSetESuppressed
 	optionalUnassignedUppercase
 	optionalDeprecateWhich
+	optionalGoogleFileHeader
 	optionalGoogleShebang
 	optionalQuoteSafeVariables
 	optionalDoubleBrackets
@@ -49,6 +50,7 @@ var optionalSpecs = [optionalCheckCount]optionalSpec{
 		notStrict: true,
 	},
 	optionalDeprecateWhich:     {name: "deprecate-which"},
+	optionalGoogleFileHeader:   {name: "google-file-header", notStrict: true},
 	optionalGoogleShebang:      {name: "google-shebang", notStrict: true},
 	optionalQuoteSafeVariables: {name: "quote-safe-variables"},
 	optionalDoubleBrackets:     {name: "require-double-brackets"},

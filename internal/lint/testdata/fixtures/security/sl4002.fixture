@@ -1,0 +1,51 @@
+### a header comment after the shebang
+#!/bin/bash
+# shellcheck enable=google-file-header
+#
+# Back up the database.
+echo hi
+>>> none
+
+### a header comment after blank lines
+#!/bin/bash
+# shellcheck enable=google-file-header
+
+# Back up the database.
+
+echo hi
+>>> none
+
+### code right after the shebang
+#!/bin/bash
+# shellcheck enable=google-file-header
+echo hi
+>>+ SL4002 3:1 -- shell-lsp style guide check; shellcheck does not ask for a file header
+
+### code after blank and bare comment lines
+#!/bin/bash
+# shellcheck enable=google-file-header
+#
+
+set -e
+>>+ SL4002 5:1 -- shell-lsp style guide check; shellcheck does not ask for a file header
+
+### libraries need a header too
+# shellcheck shell=bash enable=google-file-header
+greet() { echo hi; }
+>>+ SL4002 2:1 -- shell-lsp style guide check; shellcheck does not ask for a file header
+
+### a library with a header
+# shellcheck shell=bash enable=google-file-header
+# Greeting helpers.
+greet() { echo hi; }
+>>> none
+
+### a file of comments only is not checked
+#!/bin/bash
+# shellcheck enable=google-file-header
+>>> none
+
+### off unless enabled
+#!/bin/bash
+echo hi
+>>> none

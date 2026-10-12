@@ -4,20 +4,24 @@ import (
 	"path"
 	"strings"
 
+	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
+	"github.com/stubbedev/shell-lsp/internal/textline"
 )
 
 const (
-	codeGoogleShebang = nativeBase + 4001
-	googleShebang     = "#!/bin/bash"
+	codeGoogleShebang    = nativeBase + 4001
+	codeGoogleFileHeader = nativeBase + 4002
+	googleShebang        = "#!/bin/bash"
 )
 
 var googleFamily = family{
 	codes: map[Code]meta{
-		codeGoogleShebang: {severity: SeverityStyle, optional: optionalGoogleShebang},
+		codeGoogleShebang:    {severity: SeverityStyle, optional: optionalGoogleShebang},
+		codeGoogleFileHeader: {severity: SeverityStyle, optional: optionalGoogleFileHeader},
 	},
-	finish: []func(*pass){checkGoogleShebang},
+	finish: []func(*pass){checkGoogleShebang, checkGoogleFileHeader},
 }
 
 func checkGoogleShebang(p *pass) {
@@ -40,4 +44,28 @@ func checkGoogleShebang(p *pass) {
 		fixes = append(fixes, reviewFix("Use "+googleShebang, textedit.Edit{Start: span.Start, End: span.End, NewText: googleShebang}))
 	}
 	p.report(codeGoogleShebang, span, "The Google Shell Style Guide allows only bash for executables, started with "+googleShebang+"; this script starts with "+first+".", fixes...)
+}
+
+func checkGoogleFileHeader(p *pass) {
+	if p.bats || len(p.tree.File.Stmts) == 0 {
+		return
+	}
+	for start := 0; start < len(p.text); start = textline.Next(p.text, start) {
+		end := textline.End(p.text, start)
+		line := strings.TrimSpace(p.text[start:end])
+		body, comment := strings.CutPrefix(line, "#")
+		body = strings.TrimSpace(body)
+		switch {
+		case start == 0 && (strings.HasPrefix(line, "#!") || dialect.CompletionFile(p.text)):
+		case line == "" || comment && (body == "" || strings.HasPrefix(body, "shellcheck ")):
+		case comment:
+			return
+		default:
+			p.report(codeGoogleFileHeader, parser.Span{Start: start, End: end}, "The Google Shell Style Guide asks every file to open with a comment that describes its contents; add one above this line.")
+			return
+		}
+		if end == len(p.text) {
+			return
+		}
+	}
 }
