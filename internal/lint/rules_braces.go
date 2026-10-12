@@ -58,7 +58,7 @@ func checkBraceExpansions(p *pass, w *syntax.Word) {
 func (p *pass) reportBraceRangeVariable(g braceGroup) {
 	text := p.excerpt(g.span)
 	if call, ok := p.parent().(*syntax.CallExpr); ok {
-		if name, _ := parser.Literal(call.Args[0]); name == "eval" {
+		if name, _ := parser.CallName(call); name == "eval" {
 			p.report(2175, g.span, "Quote "+text+" so eval receives it literally and expands the range after the variable is substituted.")
 			return
 		}

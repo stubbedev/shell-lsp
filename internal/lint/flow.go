@@ -859,8 +859,8 @@ func declaredInteger(def *parser.Definition, prev integerAttr) integerAttr {
 }
 
 func builtinSpace(def *parser.Definition) space {
-	if call, ok := def.Node.(*syntax.CallExpr); ok && len(call.Args) > 0 {
-		switch call.Args[0].Lit() {
+	if call, ok := def.Node.(*syntax.CallExpr); ok {
+		switch name, _ := parser.CallName(call); name {
 		case "getopts", "wait":
 			return spaceClean
 		}
@@ -1015,10 +1015,7 @@ func (in *interpreter) variable(name string, s *state) space {
 
 func (in *interpreter) call(stmt *syntax.Stmt, call *syntax.CallExpr, s *state) *state {
 	s = in.evaluate(stmt, s)
-	if len(call.Args) == 0 {
-		return s
-	}
-	name, ok := parser.Literal(call.Args[0])
+	name, ok := parser.CallName(call)
 	if !ok {
 		return s
 	}

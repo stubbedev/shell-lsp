@@ -59,7 +59,7 @@ func isEchoOfOneExpansion(call *syntax.CallExpr) bool {
 	if len(call.Args) != 2 {
 		return false
 	}
-	if name, _ := parser.Literal(call.Args[0]); name != "echo" {
+	if name, _ := parser.CallName(call); name != "echo" {
 		return false
 	}
 	parts := call.Args[1].Parts
@@ -83,7 +83,7 @@ func isSimpleSedSubstitution(call *syntax.CallExpr) bool {
 	if len(call.Args) != 2 && len(call.Args) != 3 {
 		return false
 	}
-	if name, _ := parser.Literal(call.Args[0]); name != "sed" {
+	if name, _ := parser.CallName(call); name != "sed" {
 		return false
 	}
 	if flag, _ := parser.Literal(call.Args[1]); len(call.Args) == 3 && flag != "-e" {

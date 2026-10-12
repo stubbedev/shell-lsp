@@ -90,3 +90,8 @@ exit 1
 ### exec inside a subshell is not examined
 ( exec ./daemon; echo after )
 >>> none
+
+### quoted exec followed by another command
+"exec" /usr/sbin/nginx -g 'daemon off;'
+true
+>>> SC2093 1:1

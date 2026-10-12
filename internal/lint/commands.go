@@ -96,10 +96,7 @@ func (c command) nameNode() syntax.Node {
 }
 
 func commandOf(call *syntax.CallExpr) (command, bool) {
-	if len(call.Args) == 0 {
-		return command{}, false
-	}
-	name, ok := parser.Literal(call.Args[0])
+	name, ok := parser.CallName(call)
 	if !ok {
 		return command{}, false
 	}

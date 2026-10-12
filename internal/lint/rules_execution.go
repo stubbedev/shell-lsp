@@ -64,7 +64,7 @@ func checkExpansionAsCommand(p *pass, call *syntax.CallExpr) {
 }
 
 func checkSpacedDotSlash(p *pass, call *syntax.CallExpr) {
-	if len(call.Args) < 2 || call.Args[0].Lit() != "./" {
+	if name, _ := parser.CallName(call); len(call.Args) < 2 || name != "./" {
 		return
 	}
 	if span, ok := p.span(call); ok {
@@ -195,7 +195,10 @@ func checkExecNotLast(p *pass, n syntax.Node) {
 	}
 	for _, stmt := range list {
 		call, ok := stmt.Cmd.(*syntax.CallExpr)
-		if !ok || len(call.Args) < 2 || call.Args[0].Lit() != "exec" || p.honoursExecfail() {
+		if !ok || len(call.Args) < 2 || p.honoursExecfail() {
+			continue
+		}
+		if name, _ := parser.CallName(call); name != "exec" {
 			continue
 		}
 		if span, ok := p.span(call); ok {
@@ -206,7 +209,11 @@ func checkExecNotLast(p *pass, n syntax.Node) {
 
 func isCleanupStmt(stmt *syntax.Stmt) bool {
 	call, ok := stmt.Cmd.(*syntax.CallExpr)
-	return ok && (len(call.Args) == 0 || cleanupCommands[call.Args[0].Lit()])
+	if !ok {
+		return false
+	}
+	name, named := parser.CallName(call)
+	return len(call.Args) == 0 || named && cleanupCommands[name]
 }
 
 func (p *pass) honoursExecfail() bool {
@@ -219,7 +226,10 @@ func checkEchoSubstitution(p *pass, cs *syntax.CmdSubst) {
 	}
 	stmt := cs.Stmts[0]
 	call, ok := stmt.Cmd.(*syntax.CallExpr)
-	if !ok || stmt.Negated || stmt.Background || stmt.Coprocess || len(call.Args) < 2 || call.Args[0].Lit() != "echo" {
+	if !ok || stmt.Negated || stmt.Background || stmt.Coprocess || len(call.Args) < 2 {
+		return
+	}
+	if name, _ := parser.CallName(call); name != "echo" {
 		return
 	}
 	args := call.Args[1:]

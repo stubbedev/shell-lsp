@@ -107,10 +107,7 @@ func checkPortableDeclaration(p *pass, decl *syntax.DeclClause) {
 }
 
 func checkPortableCall(p *pass, call *syntax.CallExpr) {
-	if len(call.Args) == 0 {
-		return
-	}
-	literal, ok := parser.Literal(call.Args[0])
+	literal, ok := parser.CallName(call)
 	if !ok {
 		return
 	}

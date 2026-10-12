@@ -38,9 +38,7 @@ func stagesOf(stmts []*syntax.Stmt) []stage {
 		out[i].stmt = stmt
 		if call, ok := stmt.Cmd.(*syntax.CallExpr); ok {
 			out[i].call = call
-			if len(call.Args) > 0 {
-				out[i].name, _ = parser.Literal(call.Args[0])
-			}
+			out[i].name, _ = parser.CallName(call)
 		}
 	}
 	return out

@@ -330,8 +330,12 @@ func (e evaluator) cmdSubst(c *syntax.CmdSubst, at, depth int) (string, bool) {
 	case *syntax.BinaryCmd:
 		cd, okCD := cmd.X.Cmd.(*syntax.CallExpr)
 		pwd, okPwd := cmd.Y.Cmd.(*syntax.CallExpr)
-		if cmd.Op != syntax.AndStmt || !okCD || !okPwd || len(cd.Args) != 2 || len(pwd.Args) == 0 ||
-			cd.Args[0].Lit() != "cd" || pwd.Args[0].Lit() != "pwd" {
+		if cmd.Op != syntax.AndStmt || !okCD || !okPwd || len(cd.Args) != 2 {
+			return "", false
+		}
+		cdName, _ := parser.CallName(cd)
+		pwdName, _ := parser.CallName(pwd)
+		if cdName != "cd" || pwdName != "pwd" {
 			return "", false
 		}
 		return e.word(cd.Args[1], at, depth+1)
@@ -344,7 +348,7 @@ func (e evaluator) call(call *syntax.CallExpr, at, depth int) (string, bool) {
 		return "", false
 	}
 	target := call.Args[len(call.Args)-1]
-	switch call.Args[0].Lit() {
+	switch name, _ := parser.CallName(call); name {
 	case "dirname":
 		value, ok := e.word(target, at, depth+1)
 		return dir(value), ok

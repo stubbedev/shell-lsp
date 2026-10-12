@@ -115,6 +115,13 @@ func ParamKindOf(name string) (ParamKind, bool) {
 	return 0, false
 }
 
+func CallName(call *syntax.CallExpr) (string, bool) {
+	if len(call.Args) == 0 {
+		return "", false
+	}
+	return Literal(call.Args[0])
+}
+
 func IndexLit(index syntax.ArithmExpr) (string, bool) {
 	w, ok := index.(*syntax.Word)
 	if !ok {

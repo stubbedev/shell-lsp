@@ -45,3 +45,8 @@ echo "$(cd /var/log; ls)"
 ### path-qualified echo is not checked
 /bin/echo "$(date)"
 >>> none
+
+### quoted echo of a command substitution
+stamp="$("echo" "$(date)")"
+printf '%s\n' "$stamp"
+>>> SC2005 1:17

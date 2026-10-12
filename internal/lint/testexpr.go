@@ -48,10 +48,7 @@ func (t testCommand) bracketed() bool { return t.style != testBuiltin }
 func (t testCommand) malformed() bool { return !t.complete || len(t.opaque) > 0 }
 
 func testBuiltinOf(call *syntax.CallExpr) (bracketStyle, string, bool) {
-	if len(call.Args) == 0 {
-		return 0, "", false
-	}
-	name, ok := parser.Literal(call.Args[0])
+	name, ok := parser.CallName(call)
 	switch {
 	case !ok:
 		return 0, "", false

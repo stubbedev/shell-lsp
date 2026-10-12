@@ -86,10 +86,10 @@ func checkUninvokedFunction(p *pass, decl *syntax.FuncDecl) {
 }
 
 func checkCallBeforeDefinition(p *pass, call *syntax.CallExpr) {
-	if !p.settings.extended || len(call.Args) == 0 {
+	if !p.settings.extended {
 		return
 	}
-	name, ok := parser.Literal(call.Args[0])
+	name, ok := parser.CallName(call)
 	if !ok {
 		return
 	}

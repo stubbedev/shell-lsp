@@ -53,7 +53,10 @@ func (p *pass) checkDirectoryRevert(list []*syntax.Stmt) {
 	var previous *syntax.CallExpr
 	for _, stmt := range list {
 		call, ok := stmt.Cmd.(*syntax.CallExpr)
-		if !ok || len(call.Args) == 0 || path.Base(call.Args[0].Lit()) != "cd" {
+		if !ok {
+			continue
+		}
+		if name, named := parser.CallName(call); !named || path.Base(name) != "cd" {
 			continue
 		}
 		if previous != nil && !isDirectoryRevert(previous) && isDirectoryRevert(call) {
@@ -341,7 +344,10 @@ func checkStdinConsumers(p *pass, loop *syntax.WhileClause) {
 
 func readsStdin(stmt *syntax.Stmt) bool {
 	call, ok := stmt.Cmd.(*syntax.CallExpr)
-	if !ok || len(call.Args) == 0 || call.Args[0].Lit() != "read" || hasStdinRedirect(stmt) {
+	if !ok || hasStdinRedirect(stmt) {
+		return false
+	}
+	if name, _ := parser.CallName(call); name != "read" {
 		return false
 	}
 	return !slices.ContainsFunc(call.Args, func(w *syntax.Word) bool { return w.Lit() == "-u" })
@@ -507,7 +513,7 @@ func readsPositional(pe *syntax.ParamExp) bool {
 }
 
 func setsPositionals(call *syntax.CallExpr) bool {
-	if len(call.Args) < 2 || call.Args[0].Lit() != "set" {
+	if name, _ := parser.CallName(call); len(call.Args) < 2 || name != "set" {
 		return false
 	}
 	return slices.ContainsFunc(call.Args[1:], func(w *syntax.Word) bool {

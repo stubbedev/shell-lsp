@@ -240,10 +240,8 @@ func (p *pass) commandOperands(call *syntax.CallExpr) []syntax.Node {
 }
 
 func timelessWords(call *syntax.CallExpr) []*syntax.Word {
-	if len(call.Args) > 0 {
-		if lit, ok := parser.Literal(call.Args[0]); ok && path.Base(lit) == "time" {
-			return call.Args[1:]
-		}
+	if name, ok := parser.CallName(call); ok && path.Base(name) == "time" {
+		return call.Args[1:]
 	}
 	return call.Args
 }
@@ -381,6 +379,6 @@ func ignoresFailure(n syntax.Node) bool {
 	if !ok || len(call.Args) != 1 {
 		return false
 	}
-	name := call.Args[0].Lit()
+	name, _ := parser.CallName(call)
 	return name == "true" || name == ":"
 }

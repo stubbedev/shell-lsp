@@ -93,8 +93,10 @@ func (p *pass) sourceable() bool {
 		return true
 	}
 	for _, stmt := range p.tree.File.Stmts {
-		if call, ok := stmt.Cmd.(*syntax.CallExpr); ok && len(call.Args) > 0 && call.Args[0].Lit() == "return" {
-			return true
+		if call, ok := stmt.Cmd.(*syntax.CallExpr); ok {
+			if name, _ := parser.CallName(call); name == "return" {
+				return true
+			}
 		}
 	}
 	return mentionsScriptName(p.text) && comparesScriptName(p.tree.File)
@@ -120,10 +122,7 @@ func comparesScriptName(root syntax.Node) bool {
 			y, _ := n.Y.(*syntax.Word)
 			return isScriptName(x) || isScriptName(y)
 		case *syntax.CallExpr:
-			if len(n.Args) == 0 {
-				return false
-			}
-			name := n.Args[0].Lit()
+			name, _ := parser.CallName(n)
 			return (name == "test" || name == "[") && slices.ContainsFunc(n.Args[1:], isScriptName)
 		}
 		return false

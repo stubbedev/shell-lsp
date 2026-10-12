@@ -44,11 +44,11 @@ func In(tree *parser.Tree, stmt *syntax.Stmt) []Program {
 
 func appendPrograms(programs []Program, tree *parser.Tree, stmt *syntax.Stmt) []Program {
 	call, ok := stmt.Cmd.(*syntax.CallExpr)
-	if !ok || len(call.Args) == 0 {
+	if !ok {
 		return programs
 	}
 	wrappers := tree.Runners()
-	if name, ok := parser.Literal(call.Args[0]); !ok || !mayEmbed(wrappers, name) {
+	if name, ok := parser.CallName(call); !ok || !mayEmbed(wrappers, name) {
 		return programs
 	}
 	for run := range wrappers.Invocations(call.Args) {

@@ -162,10 +162,10 @@ var harmlessReaders = setOf("echo", "mapfile", "printf", "sponge")
 
 func isHarmlessCommand(n syntax.Node) bool {
 	call, ok := n.(*syntax.CallExpr)
-	if !ok || len(call.Args) == 0 {
+	if !ok {
 		return false
 	}
-	name, ok := parser.Literal(call.Args[0])
+	name, ok := parser.CallName(call)
 	return ok && harmlessReaders[path.Base(name)]
 }
 
