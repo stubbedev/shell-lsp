@@ -31,7 +31,7 @@ const (
 
 type Diagnostic struct {
 	Index   int
-	Code    string
+	Code    lint.Code
 	Message string
 	Span    parser.Span
 	Fixes   []lint.Fix
@@ -70,7 +70,7 @@ type Action struct {
 	Edits       []textedit.Edit
 	Others      []FileEdits
 	Refactor    *Refactor
-	FixAllCode  string
+	FixAllCode  *lint.Code
 	Settings    *SettingsEdit
 }
 
@@ -193,7 +193,7 @@ func Actions(in Input) []Action {
 func FindingDiagnostics(findings []lint.Finding) []Diagnostic {
 	out := make([]Diagnostic, len(findings))
 	for i, f := range findings {
-		out[i] = Diagnostic{Index: i, Code: f.Code.String(), Message: f.Message, Span: f.Span, Fixes: f.Fixes}
+		out[i] = Diagnostic{Index: i, Code: f.Code, Message: f.Message, Span: f.Span, Fixes: f.Fixes}
 	}
 	return out
 }
@@ -211,12 +211,9 @@ func quickFixes(in Input, d Diagnostic) []Action {
 	for i, f := range d.Fixes {
 		out = append(out, Action{Title: f.Title, Kind: QuickFix, Diagnostics: []int{d.Index}, Preferred: i == 0, Edits: f.Edits})
 	}
-	if _, err := lint.ParseCode(d.Code); err != nil {
-		return out
-	}
 	if len(d.Fixes) > 0 {
 		if fixAll, ok := FixAllOf(d.Code, in.AllDiagnostics); ok {
-			out = append(out, Action{Title: fixAll.Title, Kind: QuickFix, Diagnostics: []int{d.Index}, Edits: fixAll.Edits, FixAllCode: d.Code})
+			out = append(out, Action{Title: fixAll.Title, Kind: QuickFix, Diagnostics: []int{d.Index}, Edits: fixAll.Edits, FixAllCode: &d.Code})
 		}
 	}
 	if edit, ok := disableForStatement(in.Tree, d); ok {
@@ -231,7 +228,7 @@ func quickFixes(in Input, d Diagnostic) []Action {
 	return out
 }
 
-func FixAllOf(code string, all []Diagnostic) (Change, bool) {
+func FixAllOf(code lint.Code, all []Diagnostic) (Change, bool) {
 	var chosen []lint.Fix
 	safe := true
 	for _, d := range all {
@@ -251,7 +248,7 @@ func FixAllOf(code string, all []Diagnostic) (Change, bool) {
 	return Change{Title: title, Edits: lint.MergedEdits(chosen)}, true
 }
 
-func disableForWorkspace(settings func() (SettingsFile, bool), code string) (SettingsEdit, bool) {
+func disableForWorkspace(settings func() (SettingsFile, bool), code lint.Code) (SettingsEdit, bool) {
 	if settings == nil {
 		return SettingsEdit{}, false
 	}
@@ -269,8 +266,6 @@ func disableForWorkspace(settings func() (SettingsFile, bool), code string) (Set
 	return SettingsEdit{URI: file.URI, Create: true, Edits: []textedit.Edit{{NewText: textedit.Apply(file.Text, []textedit.Edit{edit})}}}, true
 }
 
-const directivePrefix = "# shellcheck disable="
-
 func disableForStatement(tree *parser.Tree, d Diagnostic) (textedit.Edit, bool) {
 	stmt, ok := outermostStmtOnLine(tree, d.Span.Start)
 	if !ok {
@@ -278,29 +273,11 @@ func disableForStatement(tree *parser.Tree, d Diagnostic) (textedit.Edit, bool) 
 	}
 	text := tree.Text()
 	start := textline.Start(text, stmt.Start)
-	return directiveEdit(text, start, leadingSpace(text, start), d.Code), true
+	return shellcheckrc.StatementDisableEdit(text, start, leadingSpace(text, start), d.Code)
 }
 
-func disableForFile(tree *parser.Tree, code string) (textedit.Edit, bool) {
+func disableForFile(tree *parser.Tree, code lint.Code) (textedit.Edit, bool) {
 	return shellcheckrc.HeaderDisableEdit(tree.Text(), code)
-}
-
-func directiveEdit(text string, lineAt int, indent, code string) textedit.Edit {
-	if lineAt > 0 {
-		prevStart := textline.Start(text, lineAt-1)
-		prev := text[prevStart : lineAt-1]
-		if rest, ok := strings.CutPrefix(strings.TrimSpace(prev), directivePrefix); ok {
-			codes := strings.Fields(rest)
-			if len(codes) > 0 && !slices.Contains(strings.Split(codes[0], ","), code) {
-				end := prevStart + strings.Index(prev, directivePrefix) + len(directivePrefix) + len(codes[0])
-				return textedit.Edit{Start: end, End: end, NewText: "," + code}
-			}
-		}
-	}
-	if lineAt == len(text) && text != "" && !strings.HasSuffix(text, "\n") {
-		return textedit.Edit{Start: lineAt, End: lineAt, NewText: "\n" + indent + directivePrefix + code + "\n"}
-	}
-	return textedit.Edit{Start: lineAt, End: lineAt, NewText: indent + directivePrefix + code + "\n"}
 }
 
 type site struct {

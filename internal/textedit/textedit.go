@@ -12,6 +12,14 @@ type Edit struct {
 	NewText string
 }
 
+func InsertLine(text string, at int, line string) Edit {
+	line += "\n"
+	if at == len(text) && text != "" && !strings.HasSuffix(text, "\n") {
+		line = "\n" + line
+	}
+	return Edit{Start: at, End: at, NewText: line}
+}
+
 func Apply(text string, edits []Edit) string {
 	sorted := slices.Clone(edits)
 	slices.SortStableFunc(sorted, byPosition)

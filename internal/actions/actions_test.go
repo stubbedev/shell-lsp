@@ -165,10 +165,10 @@ func TestQuickFixes(t *testing.T) {
 
 	text := "#!/bin/bash\nf() {\n\t# shellcheck disable=SC2034\n\tcd /tmp\n}\necho $1\n"
 	tree := parser.Parse(text, dialect.Bash)
-	all := slices.DeleteFunc(lintDiagnostics(tree), func(d Diagnostic) bool { return d.Code == "SL2009" })
+	all := slices.DeleteFunc(lintDiagnostics(tree), func(d Diagnostic) bool { return d.Code.String() == "SL2009" })
 	var diags []Diagnostic
 	for _, d := range all {
-		if d.Code == "SC2164" || d.Code == "SC2086" {
+		if d.Code.String() == "SC2164" || d.Code.String() == "SC2086" {
 			diags = append(diags, d)
 		}
 	}
@@ -235,7 +235,7 @@ func TestFixAllAppliesOnlySafeFixes(t *testing.T) {
 func TestDisableForFileWithoutShebang(t *testing.T) {
 	t.Parallel()
 
-	edit, _ := disableForFile(parser.Parse("echo $x", dialect.Bash), "SC2086")
+	edit, _ := disableForFile(parser.Parse("echo $x", dialect.Bash), 2086)
 	if got := textedit.Apply("echo $x", []textedit.Edit{edit}); got != "# shellcheck disable=SC2086\necho $x" {
 		t.Errorf("disable for file = %q", got)
 	}
@@ -246,7 +246,7 @@ func actionsFor(t *testing.T, text, code string, settings func() (SettingsFile, 
 
 	tree := parser.Parse(text, dialect.Bash)
 	all := lintDiagnostics(tree)
-	i := slices.IndexFunc(all, func(d Diagnostic) bool { return d.Code == code })
+	i := slices.IndexFunc(all, func(d Diagnostic) bool { return d.Code.String() == code })
 	if i < 0 {
 		t.Fatalf("no %s in %q", code, text)
 	}
@@ -268,7 +268,7 @@ func TestFixAllOfACode(t *testing.T) {
 	if !ok {
 		t.Fatalf("missing the SC2006 fix-all (have %v)", keys(byTitle))
 	}
-	if got, want := textedit.Apply(text, safe.Edits), "#!/bin/bash\na=$(date)\nb=$(id -u)\nc=$(pwd)\necho \"$a$b$c\"\n"; got != want || safe.FixAllCode != "SC2006" || safe.Kind != QuickFix || safe.Preferred {
+	if got, want := textedit.Apply(text, safe.Edits), "#!/bin/bash\na=$(date)\nb=$(id -u)\nc=$(pwd)\necho \"$a$b$c\"\n"; got != want || safe.FixAllCode == nil || *safe.FixAllCode != 2006 || safe.Kind != QuickFix || safe.Preferred {
 		t.Errorf("fix all = %q (%+v), want %q", got, safe, want)
 	}
 
@@ -314,11 +314,11 @@ func TestIgnoreInFileUsesTheHeader(t *testing.T) {
 		if got != tc.want {
 			t.Errorf("ignore in file %q = %q, want %q", tc.text, got, tc.want)
 		}
-		if _, again := disableForFile(parser.Parse(got, dialect.Bash), "SC2086"); again {
+		if _, again := disableForFile(parser.Parse(got, dialect.Bash), 2086); again {
 			t.Errorf("ignoring SC2086 twice would edit %q again", got)
 		}
 	}
-	if _, ok := disableForFile(parser.Parse("#!/bin/bash\n# shellcheck disable=SC2000-SC2100\necho $1\n", dialect.Bash), "SC2086"); ok {
+	if _, ok := disableForFile(parser.Parse("#!/bin/bash\n# shellcheck disable=SC2000-SC2100\necho $1\n", dialect.Bash), 2086); ok {
 		t.Error("offered to ignore a code the header already disables through a range")
 	}
 }

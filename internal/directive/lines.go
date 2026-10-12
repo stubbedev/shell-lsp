@@ -42,6 +42,26 @@ func SettingsLines(text string) []Line {
 	return out
 }
 
+func CommentLinesAbove(text string, lineStart int) []Line {
+	var out []Line
+	for lineStart > 0 {
+		start := strings.LastIndexByte(text[:lineStart-1], '\n') + 1
+		line := text[start : lineStart-1]
+		if !strings.HasPrefix(strings.TrimLeft(line, " \t"), "#") {
+			break
+		}
+		if d, ok := Parse(line); ok {
+			out = append(out, Line{Start: start, Next: lineStart, Directive: d})
+		}
+		lineStart = start
+	}
+	return out
+}
+
+func Render(key Key, value string) string {
+	return "# " + Word + " " + key.String() + "=" + value
+}
+
 func HeaderInsert(text string, key Key, value string) textedit.Edit {
 	at := 0
 	if strings.HasPrefix(text, "#!") {
@@ -50,9 +70,5 @@ func HeaderInsert(text string, key Key, value string) textedit.Edit {
 	if lines := HeaderLines(text); len(lines) > 0 {
 		at = max(at, lines[len(lines)-1].Next)
 	}
-	line := "# " + Word + " " + key.String() + "=" + value + "\n"
-	if at == len(text) && text != "" && !strings.HasSuffix(text, "\n") {
-		line = "\n" + line
-	}
-	return textedit.Edit{Start: at, End: at, NewText: line}
+	return textedit.InsertLine(text, at, Render(key, value))
 }

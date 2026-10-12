@@ -6,14 +6,16 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/directive"
 	"github.com/stubbedev/shell-lsp/internal/projection"
 )
+
+var environment = directive.Render(directive.Disable, "SC2154") + "\n"
 
 const (
 	tool          = "nix"
 	strictMode    = "set -o errexit -o nounset -o pipefail\n"
 	phaseFunction = "nixPhase"
-	environment   = "# shellcheck disable=SC2154\n"
 	shellApp      = "writeShellApplication"
 	shellAppText  = "text"
 	excludeChecks = "excludeShellChecks"
@@ -236,7 +238,7 @@ func (f *file) classify(i int) (shellString, bool) {
 	case c.binding == shellAppText && c.brace != noBrace && f.callee(c.brace) == shellApp:
 		s.prelude = strictMode
 		if excluded := f.excluded[c.brace]; len(excluded) > 0 {
-			s.directive = "# shellcheck disable=" + strings.Join(excluded, ",") + "\n"
+			s.directive = directive.Render(directive.Disable, strings.Join(excluded, ",")) + "\n"
 		}
 	default:
 		return shellString{}, false

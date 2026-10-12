@@ -26,7 +26,7 @@ type actionData struct {
 	URI      string            `json:"uri"`
 	Version  int32             `json:"version"`
 	Refactor *actions.Refactor `json:"refactor,omitempty"`
-	FixAll   string            `json:"fixAll,omitempty"`
+	FixAll   *lint.Code        `json:"fixAll,omitempty"`
 }
 
 func (s *Server) handleCodeAction(ctx context.Context, docs *docstore.View, actionParams lsp.CodeActionParams) (any, error) {
@@ -94,7 +94,7 @@ func (s *Server) codeAction(docs *docstore.View, snap *snapshot, sources func() 
 	for _, i := range a.Diagnostics {
 		action.Diagnostics = append(action.Diagnostics, contextDiags[i])
 	}
-	if lazy && (a.Refactor != nil || a.FixAllCode != "") {
+	if lazy && (a.Refactor != nil || a.FixAllCode != nil) {
 		data, err := encodeData(actionData{URI: snap.Doc.URI, Version: snap.Doc.Version, Refactor: a.Refactor, FixAll: a.FixAllCode})
 		if err != nil {
 			return lsp.CodeAction{}, err
@@ -259,8 +259,8 @@ func (s *Server) deferredChange(snap *snapshot, doc actions.Document, data actio
 			return actions.Change{}, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "the %s refactoring no longer applies", data.Refactor.Kind)
 		}
 		return change, nil
-	case data.FixAll != "":
-		change, ok := actions.FixAllOf(data.FixAll, s.lintActionDiagnostics(snap))
+	case data.FixAll != nil:
+		change, ok := actions.FixAllOf(*data.FixAll, s.lintActionDiagnostics(snap))
 		if !ok {
 			return actions.Change{}, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "%s no longer has several findings to fix", data.FixAll)
 		}
@@ -308,12 +308,16 @@ func (s *Server) toActionDiagnostics(snap *snapshot, diags []lsp.Diagnostic) []a
 	findings, _ := s.findings(snap.File, snap.settings, snap.generation)
 	out := make([]actions.Diagnostic, 0, len(diags))
 	for i, d := range diags {
+		code, err := lint.ParseCode(d.Code)
+		if err != nil {
+			continue
+		}
 		span, inShell := snap.positions().Span(d.Range)
 		if !inShell {
 			continue
 		}
-		ad := actions.Diagnostic{Index: i, Code: d.Code, Message: d.Message, Span: span}
-		if j := slices.IndexFunc(findings, func(f lint.Finding) bool { return f.Code.String() == d.Code && f.Span == ad.Span }); j >= 0 {
+		ad := actions.Diagnostic{Index: i, Code: code, Message: d.Message, Span: span}
+		if j := slices.IndexFunc(findings, func(f lint.Finding) bool { return f.Code == code && f.Span == ad.Span }); j >= 0 {
 			ad.Fixes = findings[j].Fixes
 		}
 		out = append(out, ad)

@@ -135,6 +135,14 @@ func SafeEdits(fixSets [][]Fix) []textedit.Edit {
 	return MergedEdits(chosen)
 }
 
+func FindingsSafeEdits(findings []Finding) []textedit.Edit {
+	fixSets := make([][]Fix, len(findings))
+	for i, f := range findings {
+		fixSets[i] = f.Fixes
+	}
+	return SafeEdits(fixSets)
+}
+
 func MergedEdits(fixes []Fix) []textedit.Edit {
 	groups := make([][]textedit.Edit, len(fixes))
 	for i, fix := range fixes {

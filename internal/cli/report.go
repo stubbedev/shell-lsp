@@ -12,7 +12,6 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/stubbedev/shell-lsp/internal/actions"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/format"
 	"github.com/stubbedev/shell-lsp/internal/lint"
@@ -190,7 +189,7 @@ func xmlAttribute(s string) string {
 }
 
 func fixedText(r fileReport) string {
-	edits := actions.FixAll(actions.FindingDiagnostics(r.findings))
+	edits := lint.FindingsSafeEdits(r.findings)
 	if len(edits) == 0 {
 		return r.doc.Text()
 	}
@@ -284,7 +283,7 @@ func didYouMean(text string, lineAt int, group []lint.Finding) (string, bool) {
 			fixes = append(fixes, f)
 		}
 	}
-	edits := actions.FixAll(actions.FindingDiagnostics(fixes))
+	edits := lint.FindingsSafeEdits(fixes)
 	if len(edits) == 0 {
 		return "", false
 	}

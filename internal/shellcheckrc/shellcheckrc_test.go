@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/stubbedev/shell-lsp/internal/directive"
+	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 )
 
@@ -116,7 +117,11 @@ func TestDisableEdit(t *testing.T) {
 		{"disable=SC2086\n", "SC2086", "", false},
 		{"disable='SC2034'\n", "SC2086", "disable='SC2034'\ndisable=SC2086\n", true},
 	} {
-		edit, ok := DisableEdit(tc.text, tc.code)
+		code, err := lint.ParseCode(tc.code)
+		if err != nil {
+			t.Fatal(err)
+		}
+		edit, ok := DisableEdit(tc.text, code)
 		if ok != tc.ok {
 			t.Errorf("DisableEdit(%q, %s) ok = %t, want %t", tc.text, tc.code, ok, tc.ok)
 			continue
@@ -128,8 +133,41 @@ func TestDisableEdit(t *testing.T) {
 		if got != tc.want {
 			t.Errorf("DisableEdit(%q, %s) = %q, want %q", tc.text, tc.code, got, tc.want)
 		}
-		if _, again := DisableEdit(got, tc.code); again {
+		if _, again := DisableEdit(got, code); again {
 			t.Errorf("DisableEdit is not idempotent on %q", got)
+		}
+	}
+}
+
+func TestStatementDisableEdit(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		text, want string
+		ok         bool
+	}{
+		{"f() {\n\techo $1\n}\n", "f() {\n\t# shellcheck disable=SC2086\n\techo $1\n}\n", true},
+		{"f() {\n\t#shellcheck disable=SC2034\n\techo $1\n}\n", "f() {\n\t#shellcheck disable=SC2034,SC2086\n\techo $1\n}\n", true},
+		{"f() {\n\t# shellcheck disable=SC2034\n\t# why: it is fine\n\techo $1\n}\n", "f() {\n\t# shellcheck disable=SC2034,SC2086\n\t# why: it is fine\n\techo $1\n}\n", true},
+		{"f() {\n\t# shellcheck disable=SC2000-SC2100\n\techo $1\n}\n", "", false},
+		{"f() {\n\t# shellcheck disable=all\n\techo $1\n}\n", "", false},
+		{"f() {\n\t# shellcheck disable=SC2086\n\techo $1\n}\n", "", false},
+		{"x=1\n\n\techo $1\n}\n", "x=1\n\n\t# shellcheck disable=SC2086\n\techo $1\n}\n", true},
+	} {
+		edit, ok := StatementDisableEdit(tc.text, strings.Index(tc.text, "\techo"), "\t", 2086)
+		if ok != tc.ok {
+			t.Errorf("StatementDisableEdit(%q) ok = %t, want %t", tc.text, ok, tc.ok)
+			continue
+		}
+		if !ok {
+			continue
+		}
+		got := textedit.Apply(tc.text, []textedit.Edit{edit})
+		if got != tc.want {
+			t.Errorf("StatementDisableEdit(%q) = %q, want %q", tc.text, got, tc.want)
+		}
+		if _, again := StatementDisableEdit(got, strings.Index(got, "\techo"), "\t", 2086); again {
+			t.Errorf("StatementDisableEdit is not idempotent on %q", got)
 		}
 	}
 }
