@@ -21,3 +21,45 @@ printf "%${count}s" "$label"
 ### dollar-single-quoted format is literal
 printf $'Done.\n'
 >>> none
+
+### format held in variables assigned only fixed text
+if [[ -t 1 ]]; then
+	DIM=$'\e[2m'
+	RST=$'\e[0m'
+else
+	DIM=
+	RST=
+fi
+FMT="$DIM%s$RST %s $DIM|$RST\n"
+printf "$FMT" a b
+row() {
+	local ofmt='%s: %s\n'
+	printf "$ofmt" key "$1"
+}
+row x
+>>> none
+>>- SC2059 9:8 -- the format variable is only ever assigned fixed text, so no data can reach the format
+>>- SC2059 12:9 -- the format variable is only ever assigned fixed text, so no data can reach the format
+
+### format variables that take outside data
+read -r user_fmt
+printf "$user_fmt" a
+FMT="$FMT%s\n"
+printf "$FMT" b
+GREETING="Hello $1"
+printf "$GREETING"
+printf "$HOME"
+>>> SC2059 2:8
+>>> SC2059 4:8
+>>> SC2059 6:8
+>>> SC2059 7:8
+
+### a local format assigned from an argument after its declaration
+#!/bin/bash
+show() {
+	local fmt
+	fmt=$1
+	printf "$fmt" "$2"
+}
+show "$@"
+>>> SC2059 5:9

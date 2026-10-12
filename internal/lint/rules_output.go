@@ -150,7 +150,7 @@ func checkPrintfArguments(p *pass, c command) {
 	}
 	text, literal := parser.Text(call.format, "_")
 	if !literal {
-		if !strings.Contains(text, "%") {
+		if !strings.Contains(text, "%") && !p.constantWord(call.format) {
 			var fixes []Fix
 			if span, ok := p.span(call.format); ok && len(call.data) == 0 {
 				fixes = append(fixes, reviewFix("Print it with the format '%s'", textedit.Edit{Start: span.Start, End: span.Start, NewText: "'%s' "}))
@@ -171,6 +171,52 @@ func checkPrintfArguments(p *pass, c command) {
 	}
 	p.reportNode(2183, call.format, fmt.Sprintf("This printf format expects %s but is given %s.",
 		plural(len(conversions), "argument"), plural(len(call.data), "argument")))
+}
+
+func (p *pass) constantWord(w *syntax.Word) bool {
+	span, ok := p.span(w)
+	return ok && p.constantParts(w.Parts, p.tree.ScopeAt(span.Start), map[string]bool{})
+}
+
+func (p *pass) constantParts(parts []syntax.WordPart, scope parser.ScopeID, seen map[string]bool) bool {
+	for _, part := range parts {
+		switch part := part.(type) {
+		case *syntax.Lit, *syntax.SglQuoted:
+		case *syntax.DblQuoted:
+			if !p.constantParts(part.Parts, scope, seen) {
+				return false
+			}
+		case *syntax.ParamExp:
+			if !parser.IsPlainParam(part) || !p.constantVariable(part.Param.Value, scope, seen) {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func (p *pass) constantVariable(name string, scope parser.ScopeID, seen map[string]bool) bool {
+	if seen[name] {
+		return false
+	}
+	seen[name] = true
+	defer delete(seen, name)
+	defs := p.tree.Visible(name, scope)
+	if defs.Len() == 0 {
+		return false
+	}
+	for def := range defs.All() {
+		assign, ok := def.Node.(*syntax.Assign)
+		if !ok || assign.Array != nil || assign.Append || def.Kind != parser.DefAssign && def.Kind != parser.DefDeclare {
+			return false
+		}
+		if assign.Value != nil && !p.constantParts(assign.Value.Parts, def.Within, seen) {
+			return false
+		}
+	}
+	return true
 }
 
 func argumentsFit(conversions []byte, given int) bool {
