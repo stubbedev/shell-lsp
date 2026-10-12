@@ -245,10 +245,24 @@ func RecoverErrors(maximum int) ParserOption {
 	return func(p *Parser) { p.recoverErrorsMax = maximum }
 }
 
+// StartAt makes the positions of the parsed nodes start at the given
+// offset, line and column instead of at the beginning of the input,
+// so that a fragment of a larger file can be parsed on its own and
+// still report the positions it has in that file.
+//
+// Lines and columns are 1-based, like those of [Pos].
+func StartAt(offset, line, col uint) ParserOption {
+	return func(p *Parser) {
+		p.startOffs, p.startLine, p.startCol = int64(offset), int64(line), int64(col)
+	}
+}
+
 // NewParser allocates a new [Parser] and applies any number of options.
 func NewParser(options ...ParserOption) *Parser {
 	p := &Parser{
-		lang: LangBash,
+		lang:      LangBash,
+		startLine: 1,
+		startCol:  1,
 	}
 	for _, opt := range options {
 		opt(p)
@@ -519,6 +533,9 @@ type Parser struct {
 	// position of [Parser.r], to be converted to [Parser.pos] later
 	offs, line, col int64
 
+	// position of the first rune, as set by [StartAt]
+	startOffs, startLine, startCol int64
+
 	pos Pos // position of tok
 
 	quote   quoteState // current lexer state
@@ -606,7 +623,7 @@ func (p *Parser) reset() {
 	p.tok, p.val = illegalTok, ""
 	p.eqlOffs = 0
 	p.bs, p.bsp = nil, 0
-	p.offs, p.line, p.col = 0, 1, 1
+	p.offs, p.line, p.col = p.startOffs, p.startLine, p.startCol
 	p.r, p.w = 0, 0
 	p.err, p.readErr, p.readEOF = nil, nil, false
 	p.quote, p.forbidNested = noState, false

@@ -1,0 +1,92 @@
+syntax: StartAt parser option for fragments of a larger file
+
+A program that parses one part of a file at a time, such as the shell
+recipes of a Makefile, gets positions that start over at offset 0, line
+1 and column 1 for every part, so it either rewrites every position of
+the tree afterwards or pads each part with the text before it, which
+makes parsing all parts quadratic in the size of the file:
+
+	src := "echo one\nfoo; if true; then\n\tbar\nfi\n"
+	f, _ := NewParser().Parse(strings.NewReader(src[14:]), "")
+	fmt.Println(f.Stmts[0].Pos()) // 1:1, but the if sits at 2:6
+
+StartAt(offset, line, col) makes the positions start there instead,
+and errors report them too.
+
+diff --git a/syntax/parser.go b/syntax/parser.go
+index a6ab839..b1c56f1 100644
+--- a/syntax/parser.go
++++ b/syntax/parser.go
+@@ -245,10 +245,24 @@ func RecoverErrors(maximum int) ParserOption {
+ 	return func(p *Parser) { p.recoverErrorsMax = maximum }
+ }
+ 
++// StartAt makes the positions of the parsed nodes start at the given
++// offset, line and column instead of at the beginning of the input,
++// so that a fragment of a larger file can be parsed on its own and
++// still report the positions it has in that file.
++//
++// Lines and columns are 1-based, like those of [Pos].
++func StartAt(offset, line, col uint) ParserOption {
++	return func(p *Parser) {
++		p.startOffs, p.startLine, p.startCol = int64(offset), int64(line), int64(col)
++	}
++}
++
+ // NewParser allocates a new [Parser] and applies any number of options.
+ func NewParser(options ...ParserOption) *Parser {
+ 	p := &Parser{
+-		lang: LangBash,
++		lang:      LangBash,
++		startLine: 1,
++		startCol:  1,
+ 	}
+ 	for _, opt := range options {
+ 		opt(p)
+@@ -519,6 +533,9 @@ type Parser struct {
+ 	// position of [Parser.r], to be converted to [Parser.pos] later
+ 	offs, line, col int64
+ 
++	// position of the first rune, as set by [StartAt]
++	startOffs, startLine, startCol int64
++
+ 	pos Pos // position of tok
+ 
+ 	quote   quoteState // current lexer state
+@@ -606,7 +623,7 @@ func (p *Parser) reset() {
+ 	p.tok, p.val = illegalTok, ""
+ 	p.eqlOffs = 0
+ 	p.bs, p.bsp = nil, 0
+-	p.offs, p.line, p.col = 0, 1, 1
++	p.offs, p.line, p.col = p.startOffs, p.startLine, p.startCol
+ 	p.r, p.w = 0, 0
+ 	p.err, p.readErr, p.readEOF = nil, nil, false
+ 	p.quote, p.forbidNested = noState, false
+diff --git a/syntax/parser_test.go b/syntax/parser_test.go
+index 752e5e2..e8d6e6d 100644
+--- a/syntax/parser_test.go
++++ b/syntax/parser_test.go
+@@ -2947,3 +2947,23 @@ func countRecoveredPositions(x reflect.Value) int {
+ 	}
+ 	return 0
+ }
++
++func TestParseStartAt(t *testing.T) {
++	t.Parallel()
++	whole := "echo one\nfoo; if true; then\n\tbar\nfi\n"
++	start := strings.Index(whole, "if")
++	p := NewParser(StartAt(uint(start), 2, 6))
++	f, err := p.Parse(strings.NewReader(whole[start:]), "")
++	qt.Assert(t, qt.IsNil(err))
++	clause := f.Stmts[0].Cmd.(*IfClause)
++	qt.Assert(t, qt.Equals(clause.Pos().Offset(), uint(start)))
++	qt.Assert(t, qt.Equals(clause.Pos().Line(), uint(2)))
++	qt.Assert(t, qt.Equals(clause.Pos().Col(), uint(6)))
++	bar := clause.Then[0].Cmd.(*CallExpr).Args[0].Pos()
++	qt.Assert(t, qt.Equals(bar.Offset(), uint(strings.Index(whole, "bar"))))
++	qt.Assert(t, qt.Equals(bar.Line(), uint(3)))
++	qt.Assert(t, qt.Equals(bar.Col(), uint(2)))
++
++	_, err = p.Parse(strings.NewReader("fi"), "")
++	qt.Assert(t, qt.ErrorMatches(err, `^2:6: .*`))
++}

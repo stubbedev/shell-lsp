@@ -2947,3 +2947,23 @@ func countRecoveredPositions(x reflect.Value) int {
 	}
 	return 0
 }
+
+func TestParseStartAt(t *testing.T) {
+	t.Parallel()
+	whole := "echo one\nfoo; if true; then\n\tbar\nfi\n"
+	start := strings.Index(whole, "if")
+	p := NewParser(StartAt(uint(start), 2, 6))
+	f, err := p.Parse(strings.NewReader(whole[start:]), "")
+	qt.Assert(t, qt.IsNil(err))
+	clause := f.Stmts[0].Cmd.(*IfClause)
+	qt.Assert(t, qt.Equals(clause.Pos().Offset(), uint(start)))
+	qt.Assert(t, qt.Equals(clause.Pos().Line(), uint(2)))
+	qt.Assert(t, qt.Equals(clause.Pos().Col(), uint(6)))
+	bar := clause.Then[0].Cmd.(*CallExpr).Args[0].Pos()
+	qt.Assert(t, qt.Equals(bar.Offset(), uint(strings.Index(whole, "bar"))))
+	qt.Assert(t, qt.Equals(bar.Line(), uint(3)))
+	qt.Assert(t, qt.Equals(bar.Col(), uint(2)))
+
+	_, err = p.Parse(strings.NewReader("fi"), "")
+	qt.Assert(t, qt.ErrorMatches(err, `^2:6: .*`))
+}
