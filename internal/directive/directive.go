@@ -1,45 +1,121 @@
 package directive
 
 import (
-	"slices"
+	"fmt"
+	"iter"
 	"strings"
 )
 
-const Word = "shellcheck"
-
 const (
-	Disable          = "disable"
-	Enable           = "enable"
-	Source           = "source"
-	SourcePath       = "source-path"
-	Shell            = "shell"
-	ExternalSources  = "external-sources"
-	ExtendedAnalysis = "extended-analysis"
+	Word      = "shellcheck"
+	All       = "all"
+	ScriptDir = "SCRIPTDIR"
 )
 
-const All = "all"
+type Key uint8
 
-var keys = []string{Disable, Enable, Source, SourcePath, Shell, ExternalSources, ExtendedAnalysis}
+const (
+	Disable Key = iota + 1
+	Enable
+	Source
+	SourcePath
+	Shell
+	ExternalSources
+	ExtendedAnalysis
+)
 
-func Keys() []string { return slices.Clone(keys) }
+type ValueKind uint8
 
-var knownKeys = func() map[string]bool {
-	out := make(map[string]bool, len(keys))
-	for _, key := range keys {
-		out[key] = true
+const (
+	Codes ValueKind = iota + 1
+	OptionalChecks
+	File
+	Directory
+	ShellName
+	Boolean
+)
+
+type keySpec struct {
+	name  string
+	value ValueKind
+	doc   string
+}
+
+var keySpecs = [...]keySpec{
+	Disable:          {name: "disable", value: Codes, doc: "Silence the listed checks for the next command, or for the whole file when the directive comes before the first command. Takes codes such as `SC2086`, ranges such as `SC2000-SC2099`, or `all`, separated by commas."},
+	Enable:           {name: "enable", value: OptionalChecks, doc: "Turn on optional checks by name, or every optional check with `all`. Only honoured before the first command."},
+	Source:           {name: "source", value: File, doc: "The file the following `source` or `.` command loads, for when its path is computed at run time. `/dev/null` skips it."},
+	SourcePath:       {name: "source-path", value: Directory, doc: "A directory to look for sourced files in. `" + ScriptDir + "` stands for the directory of the script itself."},
+	Shell:            {name: "shell", value: ShellName, doc: "Lint the file as this shell, whatever its shebang says."},
+	ExternalSources:  {name: "external-sources", value: Boolean, doc: "Whether sourced files outside the ones being checked may be followed. Only honoured in a `.shellcheckrc` file."},
+	ExtendedAnalysis: {name: "extended-analysis", value: Boolean, doc: "Turn the checks that follow values through the script on (`true`) or off (`false`) for this file."},
+}
+
+var keysByName = func() map[string]Key {
+	out := make(map[string]Key, len(keySpecs))
+	for key := range Keys() {
+		out[key.String()] = key
 	}
 	return out
 }()
 
+func Keys() iter.Seq[Key] {
+	return func(yield func(Key) bool) {
+		for key := Disable; int(key) < len(keySpecs); key++ {
+			if !yield(key) {
+				return
+			}
+		}
+	}
+}
+
+func KeyNamed(name string) (Key, bool) {
+	key, ok := keysByName[name]
+	return key, ok
+}
+
+func (k Key) spec() keySpec {
+	if k < Disable || int(k) >= len(keySpecs) {
+		panic(fmt.Sprintf("directive: unknown key %d", k))
+	}
+	return keySpecs[k]
+}
+
+func (k Key) String() string { return k.spec().name }
+
+func (k Key) Value() ValueKind { return k.spec().value }
+
+func (k Key) Doc() string { return k.spec().doc }
+
+func (k Key) List() bool {
+	switch k.Value() {
+	case Codes, OptionalChecks:
+		return true
+	case File, Directory, ShellName, Boolean:
+		return false
+	}
+	panic(fmt.Sprintf("directive: key %s has no value kind", k))
+}
+
 type Pair struct {
-	Key         string
+	Name        string
 	Value       string
 	KeyOffset   int
 	ValueOffset int
 	ValueEnd    int
 }
 
-func (p Pair) Known() bool { return knownKeys[p.Key] }
+func (p Pair) Key() (Key, bool) { return KeyNamed(p.Name) }
+
+func (p Pair) Known() bool {
+	_, ok := p.Key()
+	return ok
+}
+
+func (p Pair) Is(key Key) bool {
+	k, ok := p.Key()
+	return ok && k == key
+}
 
 type ProblemKind uint8
 
@@ -92,7 +168,7 @@ const (
 
 type Cursor struct {
 	Slot   Slot
-	Key    string
+	Key    Key
 	Start  int
 	End    int
 	Others []string
@@ -133,12 +209,13 @@ func CursorAt(comment string, offset int) (Cursor, bool) {
 	}
 }
 
-func valueCursor(key, s string, start, end, offset int) (Cursor, bool) {
+func valueCursor(name, s string, start, end, offset int) (Cursor, bool) {
 	raw := s[start:end]
-	if strings.ContainsAny(raw, `'"`) {
+	key, known := KeyNamed(name)
+	if !known || strings.ContainsAny(raw, `'"`) {
 		return Cursor{}, false
 	}
-	if !ListKey(key) {
+	if !key.List() {
 		return Cursor{Slot: SlotValue, Key: key, Start: start, End: end}, true
 	}
 	itemStart := start + strings.LastIndexByte(s[start:offset], ',') + 1
@@ -147,15 +224,13 @@ func valueCursor(key, s string, start, end, offset int) (Cursor, bool) {
 		itemEnd = offset + i
 	}
 	var others []string
-	for _, item := range Items(Pair{Key: key, Value: raw, ValueOffset: start, ValueEnd: end}) {
+	for _, item := range Items(Pair{Name: name, Value: raw, ValueOffset: start, ValueEnd: end}) {
 		if item.Offset != itemStart && item.Text != "" {
 			others = append(others, item.Text)
 		}
 	}
 	return Cursor{Slot: SlotValue, Key: key, Start: itemStart, End: itemEnd, Others: others}, true
 }
-
-func ListKey(key string) bool { return key == Disable || key == Enable }
 
 type Item struct {
 	Text   string
@@ -205,7 +280,8 @@ func startsWithKey(s string) bool {
 	for end < len(s) && isKeyChar(s[end]) {
 		end++
 	}
-	return knownKeys[s[:end]]
+	_, known := KeyNamed(s[:end])
+	return known
 }
 
 func scanPair(s string, start int) (Pair, int, *Problem) {
@@ -224,7 +300,7 @@ func scanPair(s string, start int) (Pair, int, *Problem) {
 	if !ok {
 		return Pair{}, 0, &Problem{Kind: MalformedQuote, Offset: valueStart}
 	}
-	return Pair{Key: s[start:keyEnd], Value: value, KeyOffset: start, ValueOffset: valueStart, ValueEnd: end}, end, nil
+	return Pair{Name: s[start:keyEnd], Value: value, KeyOffset: start, ValueOffset: valueStart, ValueEnd: end}, end, nil
 }
 
 func scanValue(s string, start int) (string, int, bool) {
@@ -265,19 +341,24 @@ func isBlank(c byte) bool { return c == ' ' || c == '\t' || c == '\r' || c == '\
 
 func isKeyChar(c byte) bool { return c == '-' || ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') }
 
-func (d Directive) Value(key string) (string, bool) {
+func (d Directive) Pair(key Key) (Pair, bool) {
 	for _, pair := range d.Pairs {
-		if pair.Key == key {
-			return pair.Value, true
+		if pair.Is(key) {
+			return pair, true
 		}
 	}
-	return "", false
+	return Pair{}, false
 }
 
-func (d Directive) Values(key string) []string {
+func (d Directive) Value(key Key) (string, bool) {
+	pair, ok := d.Pair(key)
+	return pair.Value, ok
+}
+
+func (d Directive) Values(key Key) []string {
 	var out []string
 	for _, pair := range d.Pairs {
-		if pair.Key == key {
+		if pair.Is(key) {
 			out = append(out, pair.Value)
 		}
 	}

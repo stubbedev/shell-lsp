@@ -28,7 +28,7 @@ func ShellDirectiveEdits(text string, shell *Dialect) []textedit.Edit {
 		start := found.line.Start
 		return []textedit.Edit{{Start: start + found.pair.ValueOffset, End: start + found.pair.ValueEnd, NewText: name}}
 	}
-	return []textedit.Edit{directive.HeaderInsert(text, directive.Shell+"="+name)}
+	return []textedit.Edit{directive.HeaderInsert(text, directive.Shell, name)}
 }
 
 func (f shellDirective) removal() textedit.Edit {

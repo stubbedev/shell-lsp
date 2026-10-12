@@ -1,6 +1,7 @@
 package completion
 
 import (
+	"fmt"
 	"slices"
 	"strconv"
 	"strings"
@@ -12,10 +13,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/parser"
 )
 
-const (
-	directiveTriggers = "=,"
-	scriptDirectory   = "SCRIPTDIR"
-)
+const directiveTriggers = "=,"
 
 func directiveTrigger(trigger string) bool {
 	return trigger != "" && strings.Contains(directiveTriggers, trigger)
@@ -34,7 +32,7 @@ func directiveCompletion(in Input) (Result, bool, error) {
 		}
 		c := completer{Input: in, dialect: in.Tree.Dialect}
 		start, end := comment.Span.Start+cursor.Start, comment.Span.Start+cursor.End
-		if cursor.Slot == directive.SlotValue && directive.ListKey(cursor.Key) {
+		if cursor.Slot == directive.SlotValue && cursor.Key.List() {
 			if dash := strings.LastIndexByte(text[start:offset], '-'); dash >= 0 {
 				start += dash + 1
 			}
@@ -50,36 +48,40 @@ func (c completer) directiveItems(cursor directive.Cursor, after string) (Result
 	if cursor.Slot == directive.SlotKey {
 		return Result{Items: c.directiveKeys(strings.HasPrefix(after, "="))}, nil
 	}
-	switch cursor.Key {
-	case directive.Disable:
+	switch cursor.Key.Value() {
+	case directive.Codes:
 		return Result{Items: c.checkCodes(cursor.Others)}, nil
-	case directive.Enable:
+	case directive.OptionalChecks:
 		return Result{Items: c.optionalChecks(cursor.Others)}, nil
-	case directive.Shell:
+	case directive.ShellName:
 		return Result{Items: c.shellNames()}, nil
-	case directive.ExternalSources, directive.ExtendedAnalysis:
+	case directive.Boolean:
 		return Result{Items: c.choices("true", "false")}, nil
-	case directive.Source:
+	case directive.File:
 		return c.paths(false)
-	case directive.SourcePath:
+	case directive.Directory:
 		paths, err := c.paths(true)
-		paths.Items = append(c.choices(scriptDirectory), paths.Items...)
+		paths.Items = append(c.choices(directive.ScriptDir), paths.Items...)
 		return paths, err
 	}
-	return Result{}, nil
+	panic(fmt.Sprintf("completion: directive key %s has no value kind", cursor.Key))
 }
 
 func (c completer) directiveKeys(hasEquals bool) []Item {
 	var items []Item
-	for i, key := range directive.Keys() {
-		if !strings.HasPrefix(key, c.site.prefix) {
+	i := 0
+	for key := range directive.Keys() {
+		name := key.String()
+		sort := strconv.Itoa(i)
+		i++
+		if !strings.HasPrefix(name, c.site.prefix) {
 			continue
 		}
-		it := c.item(key, KindKey, strconv.Itoa(i))
+		it := c.item(name, KindKey, sort)
 		if !hasEquals {
-			it.InsertText = key + "="
+			it.InsertText = name + "="
 		}
-		it.Documentation = hover.DirectiveKeyDoc(key)
+		it.Documentation = key.Doc()
 		items = append(items, it)
 	}
 	return items

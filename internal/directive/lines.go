@@ -12,15 +12,6 @@ type Line struct {
 	Directive Directive
 }
 
-func (l Line) Pair(key string) (Pair, bool) {
-	for _, p := range l.Directive.Pairs {
-		if p.Key == key {
-			return p, true
-		}
-	}
-	return Pair{}, false
-}
-
 func HeaderLines(text string) []Line {
 	var out []Line
 	for start := 0; start < len(text); {
@@ -50,7 +41,7 @@ func SettingsLines(text string) []Line {
 	return out
 }
 
-func HeaderInsert(text, setting string) textedit.Edit {
+func HeaderInsert(text string, key Key, value string) textedit.Edit {
 	at := 0
 	if strings.HasPrefix(text, "#!") {
 		_, at = lineBounds(text, 0)
@@ -58,7 +49,7 @@ func HeaderInsert(text, setting string) textedit.Edit {
 	if lines := HeaderLines(text); len(lines) > 0 {
 		at = max(at, lines[len(lines)-1].Next)
 	}
-	line := "# " + Word + " " + setting + "\n"
+	line := "# " + Word + " " + key.String() + "=" + value + "\n"
 	if at == len(text) && text != "" && !strings.HasSuffix(text, "\n") {
 		line = "\n" + line
 	}

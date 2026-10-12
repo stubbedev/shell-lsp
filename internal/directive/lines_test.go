@@ -14,7 +14,7 @@ func TestHeaderLinesStopAtTheFirstCommand(t *testing.T) {
 	if len(lines) != 2 || lines[0].Start != 11 || lines[1].Next != len("#!/bin/sh\n\n# shellcheck disable=SC2086\n# note\n# shellcheck shell=dash\n") {
 		t.Fatalf("HeaderLines = %+v", lines)
 	}
-	if p, ok := lines[1].Pair(Shell); !ok || p.Value != "dash" {
+	if p, ok := lines[1].Directive.Pair(Shell); !ok || p.Value != "dash" {
 		t.Errorf("Pair(shell) = %+v, %t", p, ok)
 	}
 }
@@ -28,7 +28,7 @@ func TestHeaderInsert(t *testing.T) {
 		{"#!/bin/sh\n# shellcheck shell=dash\n# license\necho\n", "#!/bin/sh\n# shellcheck shell=dash\n# shellcheck disable=SC2086\n# license\necho\n"},
 		{"", "# shellcheck disable=SC2086\n"},
 	} {
-		if got := textedit.Apply(tc.text, []textedit.Edit{HeaderInsert(tc.text, "disable=SC2086")}); got != tc.want {
+		if got := textedit.Apply(tc.text, []textedit.Edit{HeaderInsert(tc.text, Disable, "SC2086")}); got != tc.want {
 			t.Errorf("HeaderInsert(%q) = %q, want %q", tc.text, got, tc.want)
 		}
 	}

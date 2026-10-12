@@ -16,7 +16,6 @@ import (
 const (
 	maxChain     = 64
 	maxEvalDepth = 8
-	scriptDirVar = "SCRIPTDIR"
 )
 
 type Loader interface {
@@ -156,7 +155,7 @@ func sourceCandidates(file *workspace.File, cmd parser.Command, word *syntax.Wor
 		if target == "/dev/null" {
 			return nil
 		}
-		if rest, ok := strings.CutPrefix(target, scriptDirVar+"/"); ok {
+		if rest, ok := strings.CutPrefix(target, directive.ScriptDir+"/"); ok {
 			return []string{filepath.Join(scriptDir, rest)}
 		}
 		return relativeCandidates(target, append(slices.Clone(env.Roots), scriptDir), nil, env.Home)
@@ -210,11 +209,9 @@ func directiveTarget(tree *parser.Tree, cmd parser.Command) (sourceDirective, bo
 			return sourceDirective{}, false
 		}
 		if d, ok := directive.Parse(line); ok {
-			base := prevStart + len(raw) - len(strings.TrimLeft(raw, " \t"))
-			for _, pair := range d.Pairs {
-				if pair.Key == directive.Source {
-					return sourceDirective{target: pair.Value, span: parser.Span{Start: base + pair.ValueOffset, End: base + pair.ValueEnd}}, true
-				}
+			if pair, ok := d.Pair(directive.Source); ok {
+				base := prevStart + len(raw) - len(strings.TrimLeft(raw, " \t"))
+				return sourceDirective{target: pair.Value, span: parser.Span{Start: base + pair.ValueOffset, End: base + pair.ValueEnd}}, true
 			}
 		}
 		lineStart = prevStart

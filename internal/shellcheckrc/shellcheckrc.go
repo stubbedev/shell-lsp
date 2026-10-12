@@ -13,10 +13,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 )
 
-const (
-	FileName  = ".shellcheckrc"
-	ScriptDir = "SCRIPTDIR"
-)
+const FileName = ".shellcheckrc"
 
 var Names = []string{FileName, "shellcheckrc"}
 
@@ -110,14 +107,15 @@ func (rc *File) apply(line string) error {
 	}
 	for _, pair := range d.Pairs {
 		if err := rc.set(pair); err != nil {
-			return fmt.Errorf("%s=%s: %w", pair.Key, pair.Value, err)
+			return fmt.Errorf("%s=%s: %w", pair.Name, pair.Value, err)
 		}
 	}
 	return nil
 }
 
 func (rc *File) set(pair directive.Pair) error {
-	switch pair.Key {
+	key, _ := pair.Key()
+	switch key {
 	case directive.Disable:
 		set, err := ParseCodeSet(pair.Value)
 		if err != nil {
@@ -134,7 +132,7 @@ func (rc *File) set(pair directive.Pair) error {
 		rc.Shell = &d
 	case directive.SourcePath:
 		for _, dir := range filepath.SplitList(pair.Value) {
-			if dir != ScriptDir && !filepath.IsAbs(dir) {
+			if dir != directive.ScriptDir && !filepath.IsAbs(dir) {
 				dir = filepath.Join(filepath.Dir(rc.Path), dir)
 				rc.relativePaths = true
 			}
@@ -151,7 +149,7 @@ func (rc *File) set(pair directive.Pair) error {
 		}
 		rc.Extended = &b
 	default:
-		return fmt.Errorf("%q is not a .shellcheckrc key; known keys are disable, enable, shell, source-path, external-sources and extended-analysis", pair.Key)
+		return fmt.Errorf("%q is not a .shellcheckrc key; known keys are disable, enable, shell, source-path, external-sources and extended-analysis", pair.Name)
 	}
 	return nil
 }
@@ -161,7 +159,7 @@ func DisableEdit(text, code string) (textedit.Edit, bool) {
 	if !ok || merged {
 		return edit, ok
 	}
-	line := directive.Disable + "=" + code + "\n"
+	line := directive.Disable.String() + "=" + code + "\n"
 	if text != "" && !strings.HasSuffix(text, "\n") {
 		line = "\n" + line
 	}
@@ -173,7 +171,7 @@ func HeaderDisableEdit(text, code string) (textedit.Edit, bool) {
 	if !ok || merged {
 		return edit, ok
 	}
-	return directive.HeaderInsert(text, directive.Disable+"="+code), true
+	return directive.HeaderInsert(text, directive.Disable, code), true
 }
 
 func mergeDisable(lines []directive.Line, code string) (textedit.Edit, bool, bool) {
@@ -184,7 +182,7 @@ func mergeDisable(lines []directive.Line, code string) (textedit.Edit, bool, boo
 	var merge *textedit.Edit
 	for _, line := range lines {
 		for _, pair := range line.Directive.Pairs {
-			if pair.Key != directive.Disable {
+			if !pair.Is(directive.Disable) {
 				continue
 			}
 			if set, err := ParseCodeSet(pair.Value); err == nil && set.Has(parsed) {

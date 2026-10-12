@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/directive"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/editorconfig"
 	"github.com/stubbedev/shell-lsp/internal/filelint"
@@ -180,7 +181,7 @@ func (c *checker) settings(dir string) (fileSettings, error) {
 		extended: *cmp.Or(c.opts.extended, rc.Extended, new(true)),
 	}
 	for _, p := range slices.Concat(c.opts.sourcePaths, rc.SourcePaths) {
-		if p == shellcheckrc.ScriptDir {
+		if p == directive.ScriptDir {
 			continue
 		}
 		if !filepath.IsAbs(p) {

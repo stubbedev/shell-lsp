@@ -133,7 +133,7 @@ func (g *generator) comment(span parser.Span) {
 	end, _ := directive.Header(text)
 	parts := []Token{{Span: parser.Span{Start: end - len(directive.Word), End: end}, Type: TypeKeyword}}
 	for _, pair := range d.Pairs {
-		equals := pair.KeyOffset + len(pair.Key)
+		equals := pair.KeyOffset + len(pair.Name)
 		parts = append(parts,
 			Token{Span: parser.Span{Start: pair.KeyOffset, End: equals}, Type: TypeProperty},
 			Token{Span: parser.Span{Start: equals, End: equals + 1}, Type: TypeOperator},

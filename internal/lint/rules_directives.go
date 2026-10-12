@@ -113,7 +113,8 @@ func (d directiveComment) valueSpan(pair directive.Pair) parser.Span {
 
 func (p *pass) checkDirectivePair(d directiveComment, pair directive.Pair) {
 	value := d.valueSpan(pair)
-	switch pair.Key {
+	key, _ := pair.Key()
+	switch key {
 	case directive.Disable:
 		p.checkDisabledCodes(value, pair.Value)
 	case directive.Shell:
@@ -134,8 +135,8 @@ func (p *pass) checkDirectivePair(d directiveComment, pair directive.Pair) {
 		}
 	default:
 		if !pair.Known() {
-			key := parser.Span{Start: d.at(pair.KeyOffset), End: d.at(pair.KeyOffset) + len(pair.Key)}
-			p.report(1107, key, fmt.Sprintf("%q is not a directive key, so it is ignored; known keys are disable, enable, source, source-path, shell, external-sources and extended-analysis.", pair.Key))
+			span := parser.Span{Start: d.at(pair.KeyOffset), End: d.at(pair.KeyOffset) + len(pair.Name)}
+			p.report(1107, span, fmt.Sprintf("%q is not a directive key, so it is ignored; known keys are disable, enable, source, source-path, shell, external-sources and extended-analysis.", pair.Name))
 		}
 	}
 }

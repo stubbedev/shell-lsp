@@ -10,7 +10,7 @@ func checkDirective(t *testing.T, line string, d Directive) {
 		if pair.KeyOffset < previousEnd || pair.KeyOffset >= pair.ValueOffset || pair.ValueOffset > pair.ValueEnd || pair.ValueEnd > len(line) {
 			t.Fatalf("pair %+v of %q has offsets out of order", pair, line)
 		}
-		if line[pair.KeyOffset:pair.ValueOffset-1] != pair.Key || len(pair.Value) > pair.ValueEnd-pair.ValueOffset {
+		if line[pair.KeyOffset:pair.ValueOffset-1] != pair.Name || len(pair.Value) > pair.ValueEnd-pair.ValueOffset {
 			t.Fatalf("pair %+v does not match its text in %q", pair, line)
 		}
 		previousEnd = pair.ValueEnd

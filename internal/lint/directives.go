@@ -233,7 +233,7 @@ func (p *pass) suppressions() *suppressions {
 			continue
 		}
 		for pi, pair := range d.parsed.Pairs {
-			if pair.Key == directive.Disable {
+			if pair.Is(directive.Disable) {
 				out.items = append(out.items, disabledItems(d, pair, scope, itemPlace{directive: di, pair: pi})...)
 			}
 		}

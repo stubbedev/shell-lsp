@@ -27,13 +27,23 @@ func TestDirectiveKeys(t *testing.T) {
 	t.Parallel()
 
 	got := complete(t, dialect.Bash, "# shellcheck ‸\necho hi\n")
-	if !slices.Equal(labels(got), directive.Keys()) {
-		t.Fatalf("keys = %v, want %v", labels(got), directive.Keys())
+	var keys []string
+	for key := range directive.Keys() {
+		keys = append(keys, key.String())
+	}
+	if want := []string{"disable", "enable", "source", "source-path", "shell", "external-sources", "extended-analysis"}; !slices.Equal(keys, want) {
+		t.Fatalf("directive keys = %v, want %v", keys, want)
+	}
+	if !slices.Equal(labels(got), keys) {
+		t.Fatalf("keys = %v, want %v", labels(got), keys)
 	}
 	for _, it := range got.Items {
 		if it.InsertText != it.Label+"=" || it.Kind != KindKey || it.Documentation == "" {
 			t.Errorf("key item = %+v", it)
 		}
+	}
+	if got := labels(complete(t, dialect.Bash, "# shellcheck severity=‸\necho hi\n")); len(got) != 0 {
+		t.Errorf("an unknown key's value offered %v", got)
 	}
 	mid, ok := find(complete(t, dialect.Bash, "# shellcheck dis‸able=SC2086\necho $1\n"), "disable")
 	if !ok || mid.InsertText != "disable" || mid.Replace != (parser.Span{Start: 13, End: 16}) || mid.Word != (parser.Span{Start: 13, End: 20}) {

@@ -90,7 +90,7 @@ func (p *pass) removeDisabled(items []disabledItem, unused []bool, i int) Fix {
 	d := p.directives[at.directive]
 	commentUnused := d.parsed.Problem == nil
 	for _, pair := range d.parsed.Pairs {
-		commentUnused = commentUnused && pair.Key == directive.Disable
+		commentUnused = commentUnused && pair.Is(directive.Disable)
 	}
 	pairUnused := true
 	for j, item := range items {

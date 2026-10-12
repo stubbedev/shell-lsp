@@ -13,18 +13,6 @@ import (
 
 const suppressedSampleSize = 5
 
-var directiveKeyDocs = map[string]string{
-	directive.Disable:          "Silence the listed checks for the next command, or for the whole file when the directive comes before the first command. Takes codes such as `SC2086`, ranges such as `SC2000-SC2099`, or `all`, separated by commas.",
-	directive.Enable:           "Turn on optional checks by name, or every optional check with `all`. Only honoured before the first command.",
-	directive.Source:           "The file the following `source` or `.` command loads, for when its path is computed at run time. `/dev/null` skips it.",
-	directive.SourcePath:       "A directory to look for sourced files in. `SCRIPTDIR` stands for the directory of the script itself.",
-	directive.Shell:            "Lint the file as this shell, whatever its shebang says.",
-	directive.ExternalSources:  "Whether sourced files outside the ones being checked may be followed. Only honoured in a `.shellcheckrc` file.",
-	directive.ExtendedAnalysis: "Turn the checks that follow values through the script on (`true`) or off (`false`) for this file.",
-}
-
-func DirectiveKeyDoc(key string) string { return directiveKeyDocs[key] }
-
 func OptionalCheckDoc(name string) string {
 	if name == directive.All {
 		return "Every optional check."
@@ -56,9 +44,13 @@ func (h hoverer) directive() (Result, bool) {
 		}
 		at := h.Offset - comment.Span.Start
 		for _, pair := range d.Pairs {
-			key := parser.Span{Start: comment.Span.Start + pair.KeyOffset, End: comment.Span.Start + pair.KeyOffset + len(pair.Key)}
-			if key.Covers(h.Offset) && pair.Known() {
-				return Result{Markdown: "**" + pair.Key + "**\n\n" + directiveKeyDocs[pair.Key], Span: key}, true
+			key, known := pair.Key()
+			if !known {
+				continue
+			}
+			keySpan := parser.Span{Start: comment.Span.Start + pair.KeyOffset, End: comment.Span.Start + pair.KeyOffset + len(pair.Name)}
+			if keySpan.Covers(h.Offset) {
+				return Result{Markdown: "**" + key.String() + "**\n\n" + key.Doc(), Span: keySpan}, true
 			}
 			if !(parser.Span{Start: pair.ValueOffset, End: pair.ValueEnd}).Touches(at) {
 				continue
@@ -66,7 +58,7 @@ func (h hoverer) directive() (Result, bool) {
 			for _, item := range directive.Items(pair) {
 				span := parser.Span{Start: comment.Span.Start + item.Offset, End: comment.Span.Start + item.End}
 				if span.Covers(h.Offset) {
-					return h.directiveValue(pair.Key, item.Text, span)
+					return h.directiveValue(key, item.Text, span)
 				}
 			}
 		}
@@ -75,14 +67,16 @@ func (h hoverer) directive() (Result, bool) {
 	return Result{}, false
 }
 
-func (h hoverer) directiveValue(key, value string, span parser.Span) (Result, bool) {
-	switch key {
-	case directive.Disable:
+func (h hoverer) directiveValue(key directive.Key, value string, span parser.Span) (Result, bool) {
+	switch key.Value() {
+	case directive.Codes:
 		return Result{Markdown: h.disabledDoc(value, span), Span: span}, value != ""
-	case directive.Enable:
+	case directive.OptionalChecks:
 		return Result{Markdown: "**" + value + "**\n\n" + OptionalCheckDoc(value), Span: span}, value != ""
+	case directive.File, directive.Directory, directive.ShellName, directive.Boolean:
+		return Result{}, false
 	}
-	return Result{}, false
+	panic(fmt.Sprintf("hover: directive key %s has no value kind", key))
 }
 
 func (h hoverer) disabledDoc(value string, span parser.Span) string {

@@ -320,7 +320,7 @@ type shellDirective struct {
 
 func findShellDirective(text string) (shellDirective, bool) {
 	for _, line := range directive.HeaderLines(text) {
-		if pair, ok := line.Pair(directive.Shell); ok {
+		if pair, ok := line.Directive.Pair(directive.Shell); ok {
 			return shellDirective{line: line, pair: pair}, true
 		}
 	}
