@@ -219,6 +219,27 @@ func TestVariables(t *testing.T) {
 	}
 }
 
+func TestEscapedDollarsCountBackslashes(t *testing.T) {
+	t.Parallel()
+
+	for _, src := range []string{"name=1\necho \\\\$na‸", "name=1\necho \\\\${na‸", "name=1\necho \\\\\\\\$na‸"} {
+		if _, ok := find(complete(t, dialect.Bash, src), "name"); !ok {
+			t.Errorf("%q: name not offered after an escaped backslash", src)
+		}
+	}
+	if _, ok := find(complete(t, dialect.Bash, "echo \\\\${name:‸"), ":-"); !ok {
+		t.Error("expansion operators not offered after an escaped backslash")
+	}
+	if _, ok := find(complete(t, dialect.Bash, "declare -A map=([k]=1)\necho \\\\${map[‸"), "k"); !ok {
+		t.Error("array keys not offered after an escaped backslash")
+	}
+	for _, src := range []string{"name=1\necho \\$na‸", "name=1\necho \\\\\\$na‸", "echo \\${name:‸"} {
+		if got := complete(t, dialect.Bash, src); len(got.Items) != 0 {
+			t.Errorf("%q: got %v after an escaped dollar, want nothing", src, labels(got))
+		}
+	}
+}
+
 func TestNoCompletionInCommentsAndSingleQuotes(t *testing.T) {
 	t.Parallel()
 

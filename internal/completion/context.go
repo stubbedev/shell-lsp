@@ -111,7 +111,7 @@ func analyze(tree *parser.Tree, offset int) site {
 }
 
 func expansionContext(tree *parser.Tree, line string, offset int) (site, bool) {
-	if m := expansionOperator.FindStringSubmatchIndex(line); m != nil && !escapedAt(line, m[0]) {
+	if m := expansionOperator.FindStringSubmatchIndex(line); m != nil && !parser.EscapedAt(line, m[0]) {
 		return site{
 			position: positionExpansionOperator,
 			name:     line[m[2]:m[3]],
@@ -119,7 +119,7 @@ func expansionContext(tree *parser.Tree, line string, offset int) (site, bool) {
 			replace:  parser.Span{Start: offset - (m[7] - m[6]), End: offset},
 		}, true
 	}
-	if m := arrayKey.FindStringSubmatchIndex(line); m != nil && !escapedAt(line, m[0]) {
+	if m := arrayKey.FindStringSubmatchIndex(line); m != nil && !parser.EscapedAt(line, m[0]) {
 		return site{
 			position: positionArrayKey,
 			name:     line[m[2]:m[3]],
@@ -130,14 +130,10 @@ func expansionContext(tree *parser.Tree, line string, offset int) (site, bool) {
 	if tree.Dialect != dialect.Zsh {
 		return site{}, false
 	}
-	if m := parameterFlags.FindStringSubmatchIndex(line); m != nil && !escapedAt(line, m[0]) {
+	if m := parameterFlags.FindStringSubmatchIndex(line); m != nil && !parser.EscapedAt(line, m[0]) {
 		return site{position: positionParameterFlags, typed: line[m[2]:m[3]], replace: parser.Span{Start: offset, End: offset}}, true
 	}
 	return site{}, false
-}
-
-func escapedAt(line string, i int) bool {
-	return i > 0 && line[i-1] == '\\'
 }
 
 func casePatternSubject(text string, at int) (string, bool) {
@@ -208,7 +204,7 @@ func startsQuoted(word string) bool {
 
 func variableContext(text string, from, offset int) site {
 	match := variablePrefix.FindStringSubmatchIndex(text[from:offset])
-	if match == nil || (from+match[0] > 0 && text[from+match[0]-1] == '\\') {
+	if match == nil || parser.EscapedAt(text, from+match[0]) {
 		return site{}
 	}
 	nameStart := from + match[1]

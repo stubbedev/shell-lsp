@@ -12,7 +12,7 @@ func DollarSubstitution(text string, cs *syntax.CmdSubst, ancestors []syntax.Nod
 		return "", false
 	}
 	left, right := offset(cs.Left), offset(cs.Right)
-	if escapedAt(text, left) || hasCommentOrHeredoc(cs) {
+	if EscapedAt(text, left) || hasCommentOrHeredoc(cs) {
 		return "", false
 	}
 	dq := inDoubleQuotes(ancestors)
@@ -28,7 +28,7 @@ func DollarSubstitution(text string, cs *syntax.CmdSubst, ancestors []syntax.Nod
 	return sb.String(), true
 }
 
-func escapedAt(text string, at int) bool {
+func EscapedAt(text string, at int) bool {
 	n := 0
 	for at-n > 0 && text[at-n-1] == '\\' {
 		n++
