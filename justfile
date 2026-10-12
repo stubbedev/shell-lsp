@@ -71,6 +71,16 @@ corpus-baseline: corpus-fetch
     go run ./cmd/lintcheck shellcheck -update
     go run ./cmd/lintcheck shells -update
 
+# Print every fuzz target as "package target", one per line.
+fuzz-targets:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    go test -list '^Fuzz' ./... | awk '/^Fuzz/ { names[++n] = $1; next } /^ok/ { for (i = 1; i <= n; i++) print $2, names[i]; n = 0 }'
+
+# Fuzz one target of a package for a while, as in `just fuzz ./internal/parser FuzzParse 5m`; failing inputs land in the package's testdata/fuzz.
+fuzz package target time="1m":
+    go test -run '^$' -fuzz '^{{ target }}$' -fuzztime '{{ time }}' '{{ package }}'
+
 # Drive the server from headless Neovim: diagnostics, hover, definition, completion.
 smoke:
     #!/usr/bin/env bash

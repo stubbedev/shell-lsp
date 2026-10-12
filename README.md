@@ -568,6 +568,8 @@ tests that compare with a reference tool skip.
 | `just corpus-shellcheck` | Only the shellcheck comparison, against `corpus/shellcheck.md` |
 | `just corpus-shells` | Only the comparison with bash, dash, zsh, ksh, mksh and BusyBox `-n`, against `corpus/shells.txt` |
 | `just corpus-baseline` | Rewrite both corpus baselines after a deliberate change |
+| `just fuzz-targets` | List every fuzz target with its package |
+| `just fuzz PACKAGE TARGET [TIME]` | Fuzz one target, one minute by default; failing inputs land in the package's `testdata/fuzz` |
 | `just dist` | Build static release binaries for Linux, macOS and Windows into `dist/` |
 
 The corpus checks, the manifest and how to update the baselines are
@@ -658,9 +660,10 @@ anyone can rerun, rather than on line-by-line review of the code:
   baselines that CI enforces ([docs/corpus.md](docs/corpus.md)).
 - **The same gates for every change.** `go vet`, a strict golangci-lint
   configuration, the test suite on Linux, macOS and Windows (with the seed
-  corpora of its fuzz tests), headless Neovim and VS Code integration tests, a
-  check that release binaries match the names the VS Code extension
-  downloads, the Nix build, the test suite again in the Nix dev shell, where
+  corpora of its fuzz tests, whose targets are also fuzzed every night),
+  headless Neovim and VS Code integration tests, a check that release
+  binaries match the names the VS Code extension downloads, the Nix build,
+  the test suite again in the Nix dev shell, where
   the lint fixtures are checked against ShellCheck and the parser against
   bash, dash, mksh, zsh and ksh93, and CodeQL, govulncheck and Grype scans.
 
