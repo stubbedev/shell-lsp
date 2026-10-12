@@ -206,21 +206,43 @@ func hasBraceExpansion(w *syntax.Word) bool {
 	})
 }
 
-type commandWord struct {
-	call *syntax.CallExpr
-	word *syntax.Word
+type resolvedCommand struct {
+	word    *syntax.Word
+	name    string
+	literal bool
+	args    []*syntax.Word
 }
 
-func (p *pass) effectiveCommandWord(call *syntax.CallExpr) *syntax.Word {
-	if p.lastCommandWord.call == call {
-		return p.lastCommandWord.word
+func resolveAt(words []*syntax.Word, i int) resolvedCommand {
+	name, literal := parser.Literal(words[i])
+	return resolvedCommand{word: words[i], name: name, literal: literal, args: words[i+1:]}
+}
+
+func resolveThrough(wrappers parser.Wrappers, words []*syntax.Word) (resolvedCommand, bool) {
+	i := wrappers.Start(words)
+	if i < 0 {
+		return resolvedCommand{}, false
 	}
-	var word *syntax.Word
-	if i := (parser.Wrappers{Bats: p.bats}).Start(call.Args); i >= 0 {
-		word = call.Args[i]
+	return resolveAt(words, i), true
+}
+
+type resolvedCall struct {
+	call     *syntax.CallExpr
+	command  resolvedCommand
+	resolved bool
+}
+
+func (p *pass) resolved(call *syntax.CallExpr) (resolvedCommand, bool) {
+	if p.lastResolved.call != call {
+		command, ok := resolveThrough(parser.Wrappers{Bats: p.bats}, call.Args)
+		p.lastResolved = resolvedCall{call: call, command: command, resolved: ok}
 	}
-	p.lastCommandWord = commandWord{call: call, word: word}
-	return word
+	return p.lastResolved.command, p.lastResolved.resolved
+}
+
+func (p *pass) runs(words []*syntax.Word) (resolvedCommand, bool) {
+	command, ok := resolveThrough(p.tree.Runners(), words)
+	return command, ok && command.literal
 }
 
 func isGlob(w *syntax.Word) bool { return scanGlob(w, true) }

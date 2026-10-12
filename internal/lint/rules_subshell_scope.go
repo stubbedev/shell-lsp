@@ -37,7 +37,7 @@ func checkUnbalancedPush(p *pass, c command) {
 		return
 	}
 	fn, ok := p.ancestor(depth).(*syntax.FuncDecl)
-	if !ok || callsCommand(fn.Body, "popd") || popsElsewhere(p.tree.File) {
+	if !ok || p.callsCommand(fn.Body, "popd") || p.popsElsewhere() {
 		return
 	}
 	p.reportNode(codeUnbalancedPush, c.word, fn.Name.Value+" runs pushd but never popd, so every call leaves its caller in another directory with one more entry on the directory stack.")
@@ -59,14 +59,14 @@ func changesDirectory(args []*syntax.Word) bool {
 	return false
 }
 
-func popsElsewhere(file *syntax.File) bool {
+func (p *pass) popsElsewhere() bool {
 	pops := false
-	parser.Walk(file, func(n syntax.Node) bool {
+	parser.Walk(p.tree.File, func(n syntax.Node) bool {
 		switch n := n.(type) {
 		case *syntax.FuncDecl:
-			return !callsCommand(n.Body, "pushd")
+			return !p.callsCommand(n.Body, "pushd")
 		case *syntax.CallExpr:
-			if _, _, command, ok := runCommand(n.Args); ok && command == "popd" {
+			if command, ok := p.runs(n.Args); ok && command.name == "popd" {
 				pops = true
 			}
 		}
@@ -75,11 +75,11 @@ func popsElsewhere(file *syntax.File) bool {
 	return pops
 }
 
-func callsCommand(root syntax.Node, name string) bool {
+func (p *pass) callsCommand(root syntax.Node, name string) bool {
 	calls := false
 	parser.Walk(root, func(n syntax.Node) bool {
 		if call, ok := n.(*syntax.CallExpr); ok {
-			if _, _, command, ok := runCommand(call.Args); ok && command == name {
+			if command, ok := p.runs(call.Args); ok && command.name == name {
 				calls = true
 			}
 		}

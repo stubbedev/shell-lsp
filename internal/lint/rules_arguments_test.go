@@ -34,3 +34,17 @@ func TestRecursiveCopyFixKeepsOtherFlags(t *testing.T) {
 		}
 	}
 }
+
+func TestQuotedCommandNamesResolve(t *testing.T) {
+	t.Parallel()
+
+	for src, code := range map[string]Code{
+		"\"read\" line\necho \"$line\"\n":       2162,
+		"command 'read' line\necho \"$line\"\n": 2162,
+		"\"cd\" /srv/app\nls\n":                 2164,
+	} {
+		if got := findingsWith(t, src, code); len(got) != 1 {
+			t.Errorf("%q: %v findings = %+v, want one", src, code, got)
+		}
+	}
+}

@@ -254,19 +254,15 @@ type nonReader struct {
 }
 
 func (p *pass) nonReaderOf(call *syntax.CallExpr) (nonReader, bool) {
-	word := p.effectiveCommandWord(call)
-	if word == nil {
+	command, ok := p.resolved(call)
+	if !ok || !command.literal {
 		return nonReader{}, false
 	}
-	lit, ok := parser.Literal(word)
-	if !ok {
-		return nonReader{}, false
-	}
-	name := path.Base(lit)
+	name := path.Base(command.name)
 	if !nonReadingCommands[name] {
 		return nonReader{}, false
 	}
-	return nonReader{name: name, args: call.Args[slices.Index(call.Args, word)+1:]}, true
+	return nonReader{name: name, args: command.args}, true
 }
 
 func (c nonReader) interactive() bool {

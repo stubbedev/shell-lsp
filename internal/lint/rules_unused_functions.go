@@ -262,13 +262,13 @@ func (p *pass) noteCommand(region *usageRegion, call *syntax.CallExpr) {
 	if len(call.Args) == 0 {
 		return
 	}
-	word := p.effectiveCommandWord(call)
-	if word == nil {
+	command, ok := p.resolved(call)
+	if !ok {
 		return
 	}
-	name, literal := parser.Literal(word)
-	if !literal {
-		if lit, ok := word.Parts[0].(*syntax.Lit); ok && lit.Value != "" {
+	name := command.name
+	if !command.literal {
+		if lit, ok := command.word.Parts[0].(*syntax.Lit); ok && lit.Value != "" {
 			region.prefixes = append(region.prefixes, lit.Value)
 			return
 		}

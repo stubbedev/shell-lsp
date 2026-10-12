@@ -74,7 +74,7 @@ func checkFindExec(p *pass, c command) {
 }
 
 func checkFindInlineScript(p *pass, c command) {
-	for run := range (parser.Wrappers{Programs: true}).Invocations(c.call.Args[slices.Index(c.call.Args, c.word):]) {
+	for run := range p.tree.Runners().Invocations(c.call.Args[slices.Index(c.call.Args, c.word):]) {
 		name, ok := parser.Literal(run.Args[0])
 		if !ok || run.Placeholder == "" {
 			continue

@@ -313,15 +313,11 @@ func checkInjectedCommand(p *pass, n syntax.Node) {
 	if !ok {
 		return
 	}
-	start := parser.Wrappers{Bats: p.bats, Programs: true}.Start(call.Args)
-	if start < 0 {
-		return
-	}
-	name, ok := parser.Literal(call.Args[start])
+	command, ok := p.runs(call.Args)
 	if !ok {
 		return
 	}
-	args := call.Args[start+1:]
+	name, args := command.name, command.args
 	scope := p.tree.ScopeAt(parser.Offset(call.Pos()))
 	switch {
 	case name == "eval":

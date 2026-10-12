@@ -24,7 +24,7 @@ func (p *pass) contextOf(part syntax.WordPart) expansionContext {
 	}
 	switch owner := p.ancestor(1).(type) {
 	case *syntax.CallExpr:
-		if p.effectiveCommandWord(owner) == word && len(word.Parts) == 1 && word.Parts[0] == part {
+		if command, ok := p.resolved(owner); ok && command.word == word && len(word.Parts) == 1 && word.Parts[0] == part {
 			return contextCommandName
 		}
 		if slices.Contains(owner.Args, word) {

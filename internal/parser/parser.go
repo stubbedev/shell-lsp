@@ -76,6 +76,8 @@ func Parse(text string, d dialect.Dialect) *Tree {
 
 func (t *Tree) Bats() bool { return t.Lang == syntax.LangBats }
 
+func (t *Tree) Runners() Wrappers { return Wrappers{Bats: t.Bats(), Programs: true} }
+
 func newSyntaxParser(lang syntax.LangVariant, options ...syntax.ParserOption) *syntax.Parser {
 	return syntax.NewParser(append([]syntax.ParserOption{
 		syntax.Variant(lang),

@@ -72,8 +72,8 @@ func allStagesAre(p *pass, stages []*syntax.Stmt, names []string) bool {
 		if !ok {
 			return false
 		}
-		name, ok := parser.Literal(p.effectiveCommandWord(call))
-		if !ok || !slices.Contains(names, path.Base(name)) {
+		command, ok := p.resolved(call)
+		if !ok || !command.literal || !slices.Contains(names, path.Base(command.name)) {
 			return false
 		}
 	}

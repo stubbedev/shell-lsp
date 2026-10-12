@@ -104,6 +104,27 @@ func (w Wrappers) TextLayers(name string, args []string) iter.Seq[TextLayer] {
 
 func verbatim(word string) (string, bool) { return word, true }
 
+type Layer struct {
+	Name   string
+	Args   []string
+	Offset int
+	Wrap   Wrap
+	Wraps  bool
+}
+
+func (w Wrappers) Layers(name string, args []string) iter.Seq[Layer] {
+	return func(yield func(Layer) bool) {
+		offset := 0
+		for {
+			wrap, wraps := w.Unwrap(name, args)
+			if !yield(Layer{Name: name, Args: args, Offset: offset, Wrap: wrap, Wraps: wraps}) || !wraps || wrap.Command == len(args) {
+				return
+			}
+			name, args, offset = args[wrap.Command], args[wrap.Command+1:], offset+wrap.Command+1
+		}
+	}
+}
+
 func (w Wrappers) Start(args []*syntax.Word) int {
 	for i := 0; i < len(args); {
 		_, next, ok := w.step(args, i)

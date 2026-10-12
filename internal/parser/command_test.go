@@ -1,6 +1,8 @@
 package parser
 
 import (
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -140,6 +142,34 @@ func TestEveryWrapperHasAGrammarThatStopsAtTheCommand(t *testing.T) {
 		grammar, ok := getopt.Commands[name]
 		if !ok || !grammar.StopAtOperand {
 			t.Errorf("%s: grammar %+v, %t; a wrapper needs one in getopt.Commands that stops at the wrapped command", name, grammar, ok)
+		}
+	}
+}
+
+func TestWrappersLayers(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		line string
+		want []string
+	}{
+		{"git status", []string{"git [status] at 0"}},
+		{"sudo -u root env A=1 git status", []string{"sudo wraps 2 at 0", "env wraps 1 at 3", "git [status] at 5"}},
+		{"sudo -u", []string{"sudo wraps 1 at 0"}},
+		{"command -v git", []string{"command wraps 1 at 0", "git [] at 2"}},
+		{"run nice -n 5 make", []string{"run wraps 0 at 0", "nice wraps 2 at 1", "make [] at 4"}},
+	} {
+		words := strings.Fields(tt.line)
+		var got []string
+		for layer := range (Wrappers{Bats: true, Programs: true}).Layers(words[0], words[1:]) {
+			if layer.Wraps {
+				got = append(got, layer.Name+" wraps "+strconv.Itoa(layer.Wrap.Command)+" at "+strconv.Itoa(layer.Offset))
+				continue
+			}
+			got = append(got, layer.Name+" ["+strings.Join(layer.Args, " ")+"] at "+strconv.Itoa(layer.Offset))
+		}
+		if !slices.Equal(got, tt.want) {
+			t.Errorf("Layers(%q) = %q, want %q", tt.line, got, tt.want)
 		}
 	}
 }

@@ -93,13 +93,11 @@ func (p *pass) quotingCommand() string {
 	if !ok {
 		return ""
 	}
-	word := p.effectiveCommandWord(call)
-	name, ok := parser.Literal(word)
-	if !ok {
+	command, ok := p.resolved(call)
+	if !ok || !command.literal {
 		return ""
 	}
-	name = path.Base(name)
-	rest := call.Args[slices.Index(call.Args, word)+1:]
+	name, rest := path.Base(command.name), command.args
 	switch name {
 	case "find":
 		return execActionName(rest)

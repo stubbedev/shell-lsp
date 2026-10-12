@@ -23,10 +23,11 @@ func checkDownloadedScript(p *pass, n syntax.Node) {
 	if !ok {
 		return
 	}
-	runner, args, name, ok := runCommand(call.Args)
+	command, ok := p.runs(call.Args)
 	if !ok {
 		return
 	}
+	runner, args, name := command.word, command.args, command.name
 	if inv, ok := shellInvocationOf(name, args); ok {
 		p.checkShellScriptSource(runner, inv)
 		return
@@ -34,7 +35,7 @@ func checkDownloadedScript(p *pass, n syntax.Node) {
 	switch {
 	case name == "eval":
 		for _, arg := range args {
-			if downloader, ok := downloadedOutput(arg); ok {
+			if downloader, ok := p.downloadedOutput(arg); ok {
 				p.reportDownloaded(arg, downloader, "the "+name+" command")
 				return
 			}
@@ -47,7 +48,7 @@ func checkDownloadedScript(p *pass, n syntax.Node) {
 func (p *pass) checkShellScriptSource(runner *syntax.Word, inv shellInvocation) {
 	switch inv.mode {
 	case runsCommandString:
-		if downloader, ok := downloadedOutput(inv.operand); ok {
+		if downloader, ok := p.downloadedOutput(inv.operand); ok {
 			p.reportDownloaded(inv.operand, downloader, "the shell")
 		}
 	case runsScriptFile:
@@ -66,7 +67,7 @@ func (p *pass) checkScriptOperand(at, operand *syntax.Word, runner string) {
 	if !ok || ps.Op != syntax.CmdIn || len(ps.Stmts) != 1 {
 		return
 	}
-	if downloader, ok := downloadingStmt(ps.Stmts[0]); ok {
+	if downloader, ok := p.downloadingStmt(ps.Stmts[0]); ok {
 		p.reportDownloaded(operand, downloader, runner)
 	}
 }
@@ -76,7 +77,7 @@ func (p *pass) checkPipedScript(at *syntax.Word, runner string) {
 	if index < 1 {
 		return
 	}
-	if downloader, ok := downloadingStmt(stages[index-1]); ok {
+	if downloader, ok := p.downloadingStmt(stages[index-1]); ok {
 		p.reportDownloaded(at, downloader, runner)
 	}
 }
@@ -85,37 +86,28 @@ func (p *pass) reportDownloaded(at syntax.Node, downloader, runner string) {
 	p.reportNode(codeDownloadedScript, at, "Code fetched by "+downloader+" goes straight to "+runner+", so whatever the server sends runs unchecked; save it to a file and verify its checksum or signature before running it.")
 }
 
-func runCommand(words []*syntax.Word) (*syntax.Word, []*syntax.Word, string, bool) {
-	start := parser.Wrappers{Programs: true}.Start(words)
-	if start < 0 {
-		return nil, nil, "", false
-	}
-	name, ok := parser.Literal(words[start])
-	return words[start], words[start+1:], name, ok
-}
-
-func downloadedOutput(w *syntax.Word) (string, bool) {
+func (p *pass) downloadedOutput(w *syntax.Word) (string, bool) {
 	cs, ok := solePart(w).(*syntax.CmdSubst)
 	if !ok || len(cs.Stmts) != 1 {
 		return "", false
 	}
-	return downloadingStmt(cs.Stmts[0])
+	return p.downloadingStmt(cs.Stmts[0])
 }
 
-func downloadingStmt(stmt *syntax.Stmt) (string, bool) {
+func (p *pass) downloadingStmt(stmt *syntax.Stmt) (string, bool) {
 	call, ok := stmt.Cmd.(*syntax.CallExpr)
 	if !ok || len(stmt.Redirs) > 0 {
 		return "", false
 	}
-	_, args, name, ok := runCommand(call.Args)
+	command, ok := p.runs(call.Args)
 	if !ok {
 		return "", false
 	}
-	switch name {
+	switch command.name {
 	case "curl":
-		return name, curlWritesStdout(args)
+		return command.name, curlWritesStdout(command.args)
 	case "wget":
-		return name, wgetWritesStdout(args)
+		return command.name, wgetWritesStdout(command.args)
 	}
 	return "", false
 }

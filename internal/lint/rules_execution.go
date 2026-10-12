@@ -81,16 +81,11 @@ func checkFunctionViaExternal(p *pass, n syntax.Node) {
 	if !ok {
 		return
 	}
-	word := p.effectiveCommandWord(call)
-	if word == nil {
+	command, ok := p.resolved(call)
+	if !ok || !command.literal {
 		return
 	}
-	name, ok := parser.Literal(word)
-	if !ok {
-		return
-	}
-	runner := path.Base(name)
-	args := call.Args[slices.Index(call.Args, word)+1:]
+	runner, args := path.Base(command.name), command.args
 	candidate := runnerOperand(runner, args)
 	if candidate == nil {
 		return

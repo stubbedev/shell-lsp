@@ -32,22 +32,13 @@ var optionTerminators = setOf("--", ":::", "::::")
 
 var outputCommands = setOf("echo", "printf", "print")
 
-func (p *pass) commandArguments(call *syntax.CallExpr) (string, []*syntax.Word, bool) {
-	word := p.effectiveCommandWord(call)
-	if word == nil {
-		return "", nil, false
-	}
-	name, _ := parser.Literal(word)
-	return name, call.Args[slices.Index(call.Args, word)+1:], true
-}
-
 func (p *pass) namesTestedVariable(call *syntax.CallExpr, w *syntax.Word) bool {
 	previous, ok := previousArgument(call, w)
 	if !ok || previous.Lit() != "-v" {
 		return false
 	}
-	command := p.effectiveCommandWord(call)
-	return command != nil && command.Lit() == "["
+	command, ok := p.resolved(call)
+	return ok && command.name == "["
 }
 
 func previousArgument(call *syntax.CallExpr, w *syntax.Word) (*syntax.Word, bool) {
@@ -65,11 +56,11 @@ func checkLeadingGlobArguments(p *pass, n syntax.Node) {
 	if !ok {
 		return
 	}
-	name, args, ok := p.commandArguments(call)
-	if !ok || name == "[" || outputCommands[path.Base(name)] {
+	command, ok := p.resolved(call)
+	if !ok || command.name == "[" || outputCommands[path.Base(command.name)] {
 		return
 	}
-	for _, arg := range args {
+	for _, arg := range command.args {
 		if lit, _ := parser.Literal(arg); optionTerminators[lit] {
 			return
 		}
@@ -182,8 +173,8 @@ func bracketEnd(s string, open int) int {
 func (p *pass) expandsGlobs(w *syntax.Word) bool {
 	switch owner := p.parent().(type) {
 	case *syntax.CallExpr:
-		name, _, ok := p.commandArguments(owner)
-		if ok && (name == "tr" || name == "read") {
+		command, ok := p.resolved(owner)
+		if ok && (command.name == "tr" || command.name == "read") {
 			return false
 		}
 		return !p.namesTestedVariable(owner, w)
@@ -204,16 +195,16 @@ func checkReadWithoutRaw(p *pass, n syntax.Node) {
 	if !ok {
 		return
 	}
-	word := p.effectiveCommandWord(call)
-	if word == nil || word.Lit() != "read" {
+	command, ok := p.resolved(call)
+	if !ok || command.name != "read" {
 		return
 	}
-	args := call.Args[slices.Index(call.Args, word)+1:]
+	args := command.args
 	flags := parseOptions("read", args)
 	if !flags.Complete || flags.Has("-r") || pollsInput(args) || p.readsWithoutEscapes(flags) {
 		return
 	}
-	if span, ok := p.span(word); ok {
+	if span, ok := p.span(command.word); ok {
 		p.report(2162, span, "read without -r treats backslashes as escapes and drops them; use read -r unless that is intended.",
 			reviewFix("Add -r", textedit.Edit{Start: span.End, End: span.End, NewText: " -r"}))
 	}
@@ -267,11 +258,11 @@ func checkRecursiveCopy(p *pass, n syntax.Node) {
 	if !ok {
 		return
 	}
-	word := p.effectiveCommandWord(call)
-	if word == nil || word.Lit() != "cp" {
+	command, ok := p.resolved(call)
+	if !ok || command.name != "cp" {
 		return
 	}
-	for _, arg := range call.Args[slices.Index(call.Args, word)+1:] {
+	for _, arg := range command.args {
 		lit, ok := parser.Literal(arg)
 		if !ok || lit == "--" {
 			return

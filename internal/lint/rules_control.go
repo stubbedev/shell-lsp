@@ -122,11 +122,11 @@ func checkLoopJump(p *pass, n syntax.Node) {
 	if !ok {
 		return
 	}
-	word := p.effectiveCommandWord(call)
-	if word == nil {
+	command, ok := p.resolved(call)
+	if !ok {
 		return
 	}
-	name := word.Lit()
+	name := command.name
 	if name != "break" && name != "continue" {
 		return
 	}
@@ -226,15 +226,14 @@ func checkUncheckedDirectoryChange(p *pass, n syntax.Node) {
 	if !ok {
 		return
 	}
-	word := p.effectiveCommandWord(call)
-	if word == nil {
+	command, ok := p.resolved(call)
+	if !ok {
 		return
 	}
-	name := word.Lit()
+	name, args := command.name, command.args
 	if name != "cd" && name != "pushd" && name != "popd" {
 		return
 	}
-	args := call.Args[slices.Index(call.Args, word)+1:]
 	stmt, ok := p.parent().(*syntax.Stmt)
 	if !ok || p.options().errexit || p.inCondition(stmt) {
 		return

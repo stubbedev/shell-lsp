@@ -146,15 +146,15 @@ func checkExecFlags(p *pass, call *syntax.CallExpr) bool {
 }
 
 func checkResolvedBuiltin(p *pass, call *syntax.CallExpr) {
-	word := p.effectiveCommandWord(call)
-	if word == nil {
-		word = call.Args[0]
-	}
-	literal, ok := parser.Literal(word)
+	command, ok := p.resolved(call)
 	if !ok {
+		command = resolveAt(call.Args, 0)
+	}
+	if !command.literal {
 		return
 	}
-	switch name := path.Base(literal); {
+	word := command.word
+	switch name := path.Base(command.name); {
 	case name == "let":
 		p.nonPortableNode(portabilityIssue{code: 3039, shells: strictShells, feature: "let", alternative: "$((...))"}, call)
 	case name == "local":

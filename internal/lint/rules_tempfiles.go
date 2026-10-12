@@ -132,19 +132,19 @@ func (p *pass) disposesOf(name string, creator *syntax.CallExpr) bool {
 }
 
 func (p *pass) callDisposes(call *syntax.CallExpr, name string) bool {
-	_, args, command, ok := runCommand(call.Args)
+	command, ok := p.runs(call.Args)
 	if !ok {
 		return false
 	}
-	if command == "trap" {
-		return mentionsVariable(p.wordsText(args), name)
+	if command.name == "trap" {
+		return mentionsVariable(p.wordsText(command.args), name)
 	}
-	if !disposingCommands[command] && !handOffCommands[command] {
-		if _, defined := p.tree.FunctionNamed(command); !defined {
+	if !disposingCommands[command.name] && !handOffCommands[command.name] {
+		if _, defined := p.tree.FunctionNamed(command.name); !defined {
 			return false
 		}
 	}
-	for _, arg := range args {
+	for _, arg := range command.args {
 		if referencesVariable(arg, name) {
 			return true
 		}
@@ -230,8 +230,8 @@ func (p *pass) trapsExit() bool {
 	traps := false
 	parser.Walk(p.tree.File, func(n syntax.Node) bool {
 		if call, ok := n.(*syntax.CallExpr); ok {
-			if _, args, command, ok := runCommand(call.Args); ok && command == "trap" {
-				if _, signals, ok := trapOperands(args); ok {
+			if command, ok := p.runs(call.Args); ok && command.name == "trap" {
+				if _, signals, ok := trapOperands(command.args); ok {
 					for _, signal := range signals {
 						lit, literal := parser.Literal(signal)
 						traps = traps || (literal && exitSignals[strings.ToLower(lit)])
