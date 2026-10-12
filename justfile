@@ -49,7 +49,19 @@ fixtures:
 
 # Compare the linter with shellcheck, code by code, over every shell script under the given paths.
 lintcheck +paths:
-    go run ./cmd/lintcheck {{paths}}
+    go run ./cmd/lintcheck compare {{paths}}
+
+# Fetch the repositories pinned in corpus/repos.txt into the user cache directory.
+corpus-fetch:
+    go run ./cmd/lintcheck fetch
+
+# Compare the linter with shellcheck over the corpus; fails when corpus/shellcheck.md no longer matches.
+corpus-shellcheck: corpus-fetch
+    go run ./cmd/lintcheck shellcheck
+
+# Rewrite corpus/shellcheck.md from the corpus after a deliberate change, for review like a golden file.
+corpus-baseline: corpus-fetch
+    go run ./cmd/lintcheck shellcheck -update
 
 # Drive the server from headless Neovim: diagnostics, hover, definition, completion.
 smoke:

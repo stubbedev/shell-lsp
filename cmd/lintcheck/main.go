@@ -1,290 +1,111 @@
 package main
 
 import (
-	"bufio"
-	"bytes"
-	"cmp"
 	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
-	"io/fs"
 	"os"
-	"os/exec"
+	"os/signal"
 	"path/filepath"
-	"runtime"
-	"slices"
-	"strconv"
-	"strings"
-	"sync"
-	"time"
-	"unicode/utf8"
 
-	"github.com/stubbedev/shell-lsp/internal/dialect"
-	"github.com/stubbedev/shell-lsp/internal/docstore"
-	"github.com/stubbedev/shell-lsp/internal/fileuri"
-	"github.com/stubbedev/shell-lsp/internal/lint"
-	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/corpus"
 )
 
-const (
-	maxFileSize       = 1 << 20
-	shellcheckTimeout = 60 * time.Second
-)
+const usage = `usage:
+  lintcheck compare [-examples N] [-code SCxxxx] PATH...
+  lintcheck fetch [-manifest FILE] [-cache DIR]
+  lintcheck shellcheck [-manifest FILE] [-cache DIR] [-baseline FILE] [-update]`
 
-type finding struct {
-	code      lint.Code
-	line, col int
-}
+var errUsage = errors.New(usage)
 
-type fileResult struct {
-	path   string
-	text   string
-	ours   []finding
-	theirs []finding
-	err    error
-}
-
-type tally struct {
-	agree, oursOnly, theirsOnly int
-	examples                    []string
+var subcommands = map[string]func(ctx context.Context, args []string) error{
+	"compare":    runCompare,
+	"fetch":      runFetch,
+	"shellcheck": runShellcheck,
 }
 
 func main() {
-	examples := flag.Int("examples", 5, "mismatches to print per code")
-	only := flag.String("code", "", "only report this code, e.g. SC2086")
-	flag.Parse()
-	if flag.NArg() == 0 {
-		fmt.Fprintln(os.Stderr, "usage: lintcheck [-examples N] [-code SCxxxx] PATH...")
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	err := dispatch(ctx, os.Args[1:])
+	stop()
+	switch {
+	case errors.Is(err, errUsage):
+		fmt.Fprintln(os.Stderr, usage)
 		os.Exit(2)
-	}
-	files, err := collect(flag.Args())
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+	case err != nil:
+		fmt.Fprintln(os.Stderr, "lintcheck:", err)
 		os.Exit(1)
 	}
-	results := run(context.Background(), files)
-	report(results, *examples, *only)
 }
 
-func collect(roots []string) ([]string, error) {
-	var out []string
-	for _, root := range roots {
-		err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-			if err != nil {
-				if errors.Is(err, fs.ErrPermission) {
-					return nil
-				}
-				return err
-			}
-			if !d.Type().IsRegular() {
-				return nil
-			}
-			info, err := d.Info()
-			if err != nil || info.Size() > maxFileSize || info.Size() == 0 {
-				return nil
-			}
-			if isShellScript(path) {
-				out = append(out, path)
-			}
-			return nil
-		})
-		if err != nil {
-			return nil, fmt.Errorf("walking %s: %w", root, err)
-		}
+func dispatch(ctx context.Context, args []string) error {
+	if len(args) == 0 {
+		return errUsage
 	}
-	slices.Sort(out)
-	return slices.Compact(out), nil
-}
-
-func isShellScript(path string) bool {
-	switch filepath.Ext(path) {
-	case ".sh", ".bash", ".ksh", ".dash":
-		return true
-	}
-	f, err := os.Open(path) //nolint:gosec
-	if err != nil {
-		return false
-	}
-	defer f.Close()
-	first, err := bufio.NewReader(f).ReadString('\n')
-	if err != nil && first == "" {
-		return false
-	}
-	d, ok := dialect.FromShebang(first)
-	return ok && d != dialect.Zsh
-}
-
-func shellName(d dialect.Dialect) (string, bool) {
-	switch d {
-	case dialect.Bash, dialect.Dash, dialect.Ksh, dialect.Busybox:
-		return d.String(), true
-	case dialect.Posix:
-		return "sh", true
-	case dialect.Zsh:
-	}
-	return "", false
-}
-
-func run(ctx context.Context, files []string) []fileResult {
-	results := make([]fileResult, len(files))
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, runtime.NumCPU())
-	for i, path := range files {
-		wg.Go(func() {
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			results[i] = analyze(ctx, path)
-		})
-	}
-	wg.Wait()
-	return results
-}
-
-func analyze(ctx context.Context, path string) fileResult {
-	raw, err := os.ReadFile(path) //nolint:gosec
-	if err != nil || !utf8.Valid(raw) || bytes.ContainsRune(raw, '\r') {
-		return fileResult{path: path, err: errors.New("unreadable, not UTF-8 or CRLF")}
-	}
-	text := string(raw)
-	d := dialect.Detect(nil, dialect.Input{URI: fileuri.FromPath(path), Text: text})
-	shell, ok := shellName(d)
+	sub, ok := subcommands[args[0]]
 	if !ok {
-		return fileResult{path: path, err: errors.New("dialect not supported by shellcheck")}
+		return errUsage
 	}
-	theirs, err := shellcheck(ctx, shell, text)
+	return sub(ctx, args[1:])
+}
+
+func isolatedEnv() []string {
+	return []string{"PATH=" + os.Getenv("PATH"), "LC_ALL=C.UTF-8", "HOME=/nonexistent"}
+}
+
+type corpusFlags struct {
+	manifest, cache string
+}
+
+func defaultCache() string {
+	dir, err := os.UserCacheDir()
 	if err != nil {
-		return fileResult{path: path, err: err}
+		return ""
 	}
-	tree := parser.Parse(text, d)
-	at := docstore.NewDocument("", "", 0, text).Positions(docstore.EncodingUTF32)
-	var ours []finding
-	for _, f := range lint.Check(tree, nil, lint.Options{DialectSource: lint.DialectDetected}) {
-		p := at.Position(f.Span.Start)
-		ours = append(ours, finding{code: f.Code, line: int(p.Line) + 1, col: int(p.Character) + 1})
-	}
-	return fileResult{path: path, text: text, ours: ours, theirs: theirs}
+	return filepath.Join(dir, "shell-lsp", "corpus")
 }
 
-func shellcheck(ctx context.Context, shell, text string) ([]finding, error) {
-	ctx, cancel := context.WithTimeout(ctx, shellcheckTimeout)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "shellcheck", "--format=json1", "--norc", "--shell="+shell, "-") //nolint:gosec
-	cmd.Stdin = strings.NewReader(text)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	if err := cmd.Run(); err != nil {
-		if exitErr, ok := errors.AsType[*exec.ExitError](err); !ok || exitErr.ExitCode() != 1 {
-			return nil, fmt.Errorf("shellcheck: %w: %s", err, stderr.String())
-		}
-	}
-	var parsed struct {
-		Comments []struct {
-			Code   int `json:"code"`
-			Line   int `json:"line"`
-			Column int `json:"column"`
-		} `json:"comments"`
-	}
-	if err := json.Unmarshal(stdout.Bytes(), &parsed); err != nil {
-		return nil, fmt.Errorf("decoding shellcheck output: %w", err)
-	}
-	out := make([]finding, 0, len(parsed.Comments))
-	for _, c := range parsed.Comments {
-		out = append(out, finding{code: lint.Code(c.Code), line: c.Line, col: c.Column}) //nolint:gosec
-	}
-	return out, nil
+func (c *corpusFlags) register(fs *flag.FlagSet) {
+	fs.StringVar(&c.manifest, "manifest", "corpus/repos.txt", "corpus manifest")
+	fs.StringVar(&c.cache, "cache", defaultCache(), "directory the corpus is fetched into")
 }
 
-func report(results []fileResult, examples int, only string) {
-	implemented := slices.DeleteFunc(lint.Codes(), lint.Code.Native)
-	tallies := map[lint.Code]*tally{}
-	for _, code := range implemented {
-		tallies[code] = &tally{}
+func (c corpusFlags) repos() ([]corpus.Repo, error) {
+	if c.cache == "" {
+		return nil, errors.New("no cache directory: pass -cache, or set HOME or XDG_CACHE_HOME")
 	}
-	analyzed, skipped := 0, 0
-	for _, r := range results {
-		if r.err != nil {
-			skipped++
-			continue
-		}
-		analyzed++
-		ours := set(r.ours, implemented)
-		theirs := set(r.theirs, implemented)
-		for f := range ours {
-			t := tallies[f.code]
-			if theirs[f] {
-				t.agree++
-				continue
-			}
-			t.oursOnly++
-			t.example(examples, "+", r, f)
-		}
-		for f := range theirs {
-			if !ours[f] {
-				t := tallies[f.code]
-				t.theirsOnly++
-				t.example(examples, "-", r, f)
-			}
-		}
-	}
-	fmt.Printf("%d files analyzed, %d skipped\n\n", analyzed, skipped)
-	fmt.Println("| Code | Agree | Ours only | Shellcheck only | Precision | Recall |")
-	fmt.Println("| --- | --- | --- | --- | --- | --- |")
-	for _, code := range implemented {
-		if only != "" && code.String() != only {
-			continue
-		}
-		t := tallies[code]
-		fmt.Printf("| %s | %d | %d | %d | %s | %s |\n", code, t.agree, t.oursOnly, t.theirsOnly, ratio(t.agree, t.agree+t.oursOnly), ratio(t.agree, t.agree+t.theirsOnly))
-	}
-	for _, code := range implemented {
-		if only != "" && code.String() != only {
-			continue
-		}
-		t := tallies[code]
-		if len(t.examples) == 0 {
-			continue
-		}
-		fmt.Printf("\n%s\n", code)
-		slices.SortFunc(t.examples, cmp.Compare)
-		for _, e := range t.examples {
-			fmt.Println(e)
-		}
-	}
+	return corpus.LoadManifest(c.manifest)
 }
 
-func (t *tally) example(limit int, sign string, r fileResult, f finding) {
-	shown := 0
-	for _, e := range t.examples {
-		if strings.HasPrefix(e, "  "+sign) {
-			shown++
-		}
+func (c corpusFlags) fetched() ([]corpus.Repo, error) {
+	repos, err := c.repos()
+	if err != nil {
+		return nil, err
 	}
-	if shown >= limit {
-		return
-	}
-	lines := strings.Split(r.text, "\n")
-	source := ""
-	if f.line-1 < len(lines) {
-		source = strings.TrimSpace(lines[f.line-1])
-	}
-	t.examples = append(t.examples, fmt.Sprintf("  %s %s:%d:%d  %s", sign, r.path, f.line, f.col, source))
+	return repos, corpus.Fetched(repos, c.cache)
 }
 
-func set(findings []finding, implemented []lint.Code) map[finding]bool {
-	out := map[finding]bool{}
-	for _, f := range findings {
-		if slices.Contains(implemented, f.code) {
-			out[f] = true
-		}
+func parseFlags(fs *flag.FlagSet, args []string) error {
+	if err := fs.Parse(args); err != nil {
+		return errUsage
 	}
-	return out
+	return nil
 }
 
-func ratio(n, d int) string {
-	if d == 0 {
-		return "-"
+func runFetch(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("fetch", flag.ContinueOnError)
+	var c corpusFlags
+	c.register(fs)
+	if err := parseFlags(fs, args); err != nil {
+		return err
 	}
-	return strconv.FormatFloat(100*float64(n)/float64(d), 'f', 1, 64) + "%"
+	if fs.NArg() != 0 {
+		return errUsage
+	}
+	repos, err := c.repos()
+	if err != nil {
+		return err
+	}
+	return corpus.Fetch(ctx, repos, c.cache)
 }

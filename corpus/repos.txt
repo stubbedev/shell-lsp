@@ -1,0 +1,87 @@
+acme.sh scripts GPL-3.0 https://github.com/acmesh-official/acme.sh 3688b094adffc1a52d3b994c586cd97caa2f0b85
+antigen scripts MIT https://github.com/zsh-users/antigen 235311dbd282bd18dce1e965b3e9ffb13af04da2
+asdf scripts MIT https://github.com/asdf-vm/asdf 31e8c93004abd76253d186b8896785895069749b
+bash-git-prompt scripts BSD-2-Clause https://github.com/magicmonty/bash-git-prompt 450174627cb479d918b4b8c8257de00a2b98b425
+bash-it scripts MIT https://github.com/Bash-it/bash-it ee8396b5a049ae648b9a75575507984d27a119bb
+bash-my-aws scripts MIT https://github.com/mbailey/bash-my-aws 172430a98b27595a44b3be0ba813e77a306a302d
+bash-preexec scripts MIT https://github.com/rcaloras/bash-preexec 5ae4758c36e8391fb3932e6ae68c283489fc813d
+bash-snippets scripts MIT https://github.com/alexanderepstein/Bash-Snippets 581a6b4ea681005e3f8add37dbed74aaec65479f
+bashtop scripts Apache-2.0 https://github.com/aristocratos/bashtop 60f95a1a74c8e7e589c02aa03d60141152df8337
+bats-core scripts MIT https://github.com/bats-core/bats-core 0c92eb4c418d59fcb1a1a8c1d7a015f8149689f2
+brew scripts BSD-2-Clause https://github.com/Homebrew/brew b48706cd15b74c93630ba6afea205df18f7fc214 bin Library/Homebrew/brew.sh Library/Homebrew/cmd Library/Homebrew/utils
+dehydrated scripts MIT https://github.com/dehydrated-io/dehydrated 48866b0e85b474e3971d6425a14212608c355c1c
+direnv scripts MIT https://github.com/direnv/direnv 3d0b4ae1ed83064a10ada052949596e7463a8768 stdlib.sh
+docker-install scripts Apache-2.0 https://github.com/docker/docker-install 2b32480025b223ebfddae9a3a8bef09027680f53
+docker-mysql scripts GPL-2.0 https://github.com/docker-library/mysql 2f988f198f35d25b1454fa2504a0e4c348100549
+docker-node scripts MIT https://github.com/nodejs/docker-node feeba252e1e8bec14470f5ee8f9be7fce65bf935
+docker-postgres scripts MIT https://github.com/docker-library/postgres d588a44673ea9d123c1acb1a6924de10a27fc315
+dokku scripts MIT https://github.com/dokku/dokku 80409c7c593b11684b8a5644348d68cab6e6f00b
+fff scripts MIT https://github.com/dylanaraps/fff 6f2dc6f3a003d24e8b3fd48b046241b486022ad5
+freebsd scripts BSD-2-Clause https://github.com/freebsd/freebsd-src 39d6e2226484ca434c7d980eda4aa19ed0d62c9e libexec/rc
+fzf scripts MIT https://github.com/junegunn/fzf c0a193e031f01fb50bf6f7be4381990a3753f7cf shell install uninstall
+fzf-tab scripts MIT https://github.com/Aloxaf/fzf-tab 24105b15714bfec37989ed5c5b6e60f572253019
+git scripts GPL-2.0-only https://github.com/git/git 6de20f6092dcf9bdb1c8efe03db4b70c82b423dd contrib
+git-extras scripts MIT https://github.com/tj/git-extras a754386dbfb85e23e766eccbb3885d635115d013 bin
+gitflow-avh scripts BSD-2-Clause https://github.com/petervanderdoes/gitflow-avh 40fc2df960d034cb57dd277af7501be6884f767e
+golang scripts BSD-3-Clause https://github.com/golang/go 5df35d3ce5bfb85f88d8c193441988c86e97735f src/make.bash src/all.bash src/run.bash src/race.bash src/clean.bash
+helm scripts Apache-2.0 https://github.com/helm/helm dc56a44fee5ac036807348bc48653bc93d714953 scripts
+holman-dotfiles scripts MIT https://github.com/holman/dotfiles 9a90082b61fa5659789b9d41544c19098825a3ca
+homebrew-install scripts BSD-2-Clause https://github.com/Homebrew/install 7a3f48c7e498d7df3237fd41c30f4d492857edf4
+illumos scripts CDDL-1.0 https://github.com/illumos/illumos-gate 479a4a914dc77a289d495bc55ea989762483bff6 usr/src/tools/scripts
+jenkins-docker scripts MIT https://github.com/jenkinsci/docker a92354bb17c840615bc94baf4c0b8662586dfa76
+ksh93 scripts EPL-2.0 https://github.com/ksh93/ksh 0039c5bc4610acc1087fdff39c2cf15d42b9a4d5 src/cmd/ksh93/tests src/cmd/ksh93/fun bin
+kube-ps1 scripts Apache-2.0 https://github.com/jonmosco/kube-ps1 7aaaeee5eaa29f920acd850ea63839d9f87b8ac5
+kubectx scripts Apache-2.0 https://github.com/ahmetb/kubectx 12ad6fb22e8c546ee2b54e7de38aa51c906832f7
+kubernetes scripts Apache-2.0 https://github.com/kubernetes/kubernetes 9e1cf9abaca69562685252901b4ea15b146a569d hack cluster
+linux scripts GPL-2.0-only https://github.com/torvalds/linux 24a19b953e2a3d0ea5a8c4951a0ab8f32720c907 scripts tools/testing/selftests/net
+linuxgsm scripts MIT https://github.com/GameServerManagers/LinuxGSM ab3145948f805968281236250cd3f59de5a898d9
+liquidprompt scripts AGPL-3.0 https://github.com/liquidprompt/liquidprompt afd7e833ebacef78e1ce6d1e8cf4f3c46f98a570
+mathiasbynens-dotfiles scripts MIT https://github.com/mathiasbynens/dotfiles b7c7894e7bb2de5d60bfb9a2f5e46d01a61300ea
+moby scripts Apache-2.0 https://github.com/moby/moby f40e9e46a30434c87dc3505dfcd2d605d6b55466 hack contrib
+n scripts MIT https://github.com/tj/n f52d2172f12cd76f0efe9524690723f52ab74f40
+nb scripts AGPL-3.0 https://github.com/xwmx/nb 22eaec74ad27fd5770275351dc119b5fc6f777df
+neofetch scripts MIT https://github.com/dylanaraps/neofetch ccd5d9f52609bbdcd5d8fa78c4fdb0f12954125f
+netdata scripts GPL-3.0 https://github.com/netdata/netdata 4ca8ebf9c40a2e36b42b0255269a2a97948c752b packaging
+nodenv scripts MIT https://github.com/nodenv/nodenv e56bc008d6849a64f5bb975672c0bdc3d633eddf
+nvm scripts MIT https://github.com/nvm-sh/nvm b1b3a0038c0666c7436cb5d383608b4b72c8300b
+nyr-openvpn-install scripts MIT https://github.com/Nyr/openvpn-install 7ff931a00c37a6806bd1fa8cb61bf3369d963e94
+oh-my-bash scripts MIT https://github.com/ohmybash/oh-my-bash abf846186ab0a8a41ec5888e827ece6277dfe446
+ohmyzsh scripts MIT https://github.com/ohmyzsh/ohmyzsh 083c339e0622bfc144b66ebf1a2e8dbe7d2ada0d
+openbsd scripts ISC https://github.com/openbsd/src 97aac1b75538bbb3b6940c175b6ab3c862ffb469 usr.sbin/sysupgrade usr.sbin/syspatch usr.sbin/rcctl etc/rc.d
+openvpn-install scripts MIT https://github.com/angristan/openvpn-install ad22fd9eb0c8569a885f836ef6e37576d8702e9f
+openwrt scripts GPL-2.0-only https://github.com/openwrt/openwrt 02a3d72c96f91b9195b661541b6821176b30813e package/base-files
+pfetch scripts MIT https://github.com/dylanaraps/pfetch a906ff89680c78cec9785f3ff49ca8b272a0f96b
+pi-hole scripts EUPL-1.2 https://github.com/pi-hole/pi-hole f47b8ede5a8e38f9c703202d324a074dbdba4ca9
+powerlevel10k scripts MIT https://github.com/romkatv/powerlevel10k d05a1b00f9a61f9578bf9dc19b8451942dde8734
+prezto scripts MIT https://github.com/sorin-ionescu/prezto cff2d01871425b1b80710f8ec6a475c5a53145b4
+pure scripts MIT https://github.com/sindresorhus/pure cac55d0b531a0db72294c9bba9453dfa6374c59d
+pyenv scripts MIT https://github.com/pyenv/pyenv 03ddd91404f4116cda1319a98c41a924445397f4
+pyenv-virtualenv scripts MIT https://github.com/pyenv/pyenv-virtualenv 7d821a62d6eeae21a451141c41898be1ed4ed147
+rbenv scripts MIT https://github.com/rbenv/rbenv 07e9b1e297a5977298c6aadc9971ae0e9eb7f0dc
+ruby-build scripts MIT https://github.com/rbenv/ruby-build 36d503707cdf14ad6855ca3abbc05cea1500fa17
+rustup scripts Apache-2.0 https://github.com/rust-lang/rustup 283b522fdacff0ff260f229569c096bf2259d80f rustup-init.sh
+rvm scripts Apache-2.0 https://github.com/rvm/rvm 92301cb20b61320daf407c3264d19ab413d1a7cb scripts binscripts
+sdkman scripts Apache-2.0 https://github.com/sdkman/sdkman-cli 66767dfbe0a1826accc1db815e689af85dbf0a3c
+setup-ipsec-vpn scripts CC-BY-SA-3.0 https://github.com/hwdsl2/setup-ipsec-vpn c7072c7589c148192dac23e44dae972ed797e1f1
+shellspec scripts MIT https://github.com/shellspec/shellspec f2d13f991885ef44e6b54e571e0842222251b111
+shflags scripts Apache-2.0 https://github.com/kward/shflags 96694d58ce92065fdd8f8761d930765cb9a8d066
+shunit2 scripts Apache-2.0 https://github.com/kward/shunit2 f39734a3dd56495c2fee1d4b0925bb31082e36d2
+spaceship-prompt scripts MIT https://github.com/spaceship-prompt/spaceship-prompt 109989cf3fcd6696b38445d9303e8a22fb3dbb22
+systemd scripts GPL-2.0 https://github.com/systemd/systemd 37fcd0161aa576defb302c614f080d4dc8cc6804 shell-completion
+termux-packages scripts LicenseRef-per-package https://github.com/termux/termux-packages 7915aabc853bbacbd13ae7c140108b20d1f07cf2 scripts
+tfenv scripts MIT https://github.com/tfutils/tfenv de6ce2e809c155cbc5e2cfeb3b1bef151244e045
+tmux-resurrect scripts MIT https://github.com/tmux-plugins/tmux-resurrect cff343cf9e81983d3da0c8562b01616f12e8d548
+tpm scripts MIT https://github.com/tmux-plugins/tpm e261deb1b47614eed3400089ce7197dc68acc4eb
+wireguard-tools scripts GPL-2.0 https://github.com/WireGuard/wireguard-tools a998407747005ea7e4e0258d96f105c97241e1d3 src/wg-quick contrib
+yadm scripts GPL-3.0 https://github.com/yadm-dev/yadm bbb58e6625de5d934fd49b4b81c1981e137e3057
+z scripts WTFPL https://github.com/rupa/z d37a763a6a30e1b32766fecc3b8ffd6127f8a0fd
+zimfw scripts MIT https://github.com/zimfw/zimfw 8062423f25da3ec238c5f9c584452e46c2a0efd0
+zinit scripts MIT https://github.com/zdharma-continuum/zinit 0616639b9577f8708ff664c2b157abfcefc42ffa
+zplug scripts MIT https://github.com/zplug/zplug cc6906ea7ea18a5058e8b4862d4086148434ddde
+zsh scripts LicenseRef-zsh https://github.com/zsh-users/zsh fc3cff4f8e28a0dcac7b6dfb7f21d45fd3a06250 Completion Functions
+zsh-autocomplete scripts MIT https://github.com/marlonrichert/zsh-autocomplete 77706d4cf24866bf62b865d97e9ef7d8bc38bd6e
+zsh-autosuggestions scripts MIT https://github.com/zsh-users/zsh-autosuggestions 85919cd1ffa7d2d5412f6d3fe437ebdbeeec4fc5
+zsh-completions scripts LicenseRef-zsh https://github.com/zsh-users/zsh-completions 6661b4b68173784ba31ef10ce4b5cb1c9ecfdcac
+zsh-history-substring-search scripts BSD-3-Clause https://github.com/zsh-users/zsh-history-substring-search a0bdb0d47dbaba31dba2db7af8c48a5d9c74049a
+zsh-syntax-highlighting scripts BSD-3-Clause https://github.com/zsh-users/zsh-syntax-highlighting e6683f20e5c38d3e5447f45845d04ddda75d0f23
+zsh-z scripts MIT https://github.com/agkozak/zsh-z 7f8ff4df11b50a14e3666c7cd212baa399c9b92a
