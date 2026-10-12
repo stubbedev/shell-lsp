@@ -1,0 +1,241 @@
+syntax: give && precedence over || and ! over both in [[ ]]
+
+bash, mksh, ksh93 and zsh evaluate a [[ ]] expression with ! binding
+tighter than &&, and && tighter than ||:
+
+	[[ -n "" && -n "" || -n x ]]   # true: (F && F) || T
+	[[ ! -n "" && -n "" ]]         # false: (!F) && F
+
+The parser read every && and || with the same precedence, grouping
+from the right, and let ! take everything after it, so the first test
+became -n "" && (-n "" || -n x) and the second !(-n "" && -n ""),
+which evaluate to the opposite of what the shells do. Printing was not
+affected, but any tool that interprets the tree was.
+
+Expressions are now parsed as || lists of && lists of single tests, and
+! applies to one test, such as the comparison in ! a == b. Lists of one
+operator still group from the right, so trees without a mix of
+operators are unchanged.
+
+Reproducer, before this change: `[[ a && b || c ]]` parsed as a
+BinaryTest with Op AndTest whose Y was the OrTest b || c.
+
+diff --git a/syntax/filetests_test.go b/syntax/filetests_test.go
+index f1f624a..9b35b04 100644
+--- a/syntax/filetests_test.go
++++ b/syntax/filetests_test.go
+@@ -5507,6 +5507,42 @@ var fileTests = []fileTestCase{
+ 			Y: &UnaryTest{Op: TsRegFile, X: litWord("c")},
+ 		}}, LangBash|LangMirBSDKorn|LangZsh),
+ 	),
++	fileTest(
++		[]string{"[[ a && b || c ]]"},
++		langFile(&TestClause{X: &BinaryTest{
++			Op: OrTest,
++			X:  &BinaryTest{Op: AndTest, X: litWord("a"), Y: litWord("b")},
++			Y:  litWord("c"),
++		}}, LangBash|LangMirBSDKorn|LangZsh),
++	),
++	fileTest(
++		[]string{"[[ a || b && c || d ]]"},
++		langFile(&TestClause{X: &BinaryTest{
++			Op: OrTest,
++			X:  litWord("a"),
++			Y: &BinaryTest{
++				Op: OrTest,
++				X:  &BinaryTest{Op: AndTest, X: litWord("b"), Y: litWord("c")},
++				Y:  litWord("d"),
++			},
++		}}, LangBash|LangMirBSDKorn|LangZsh),
++	),
++	fileTest(
++		[]string{"[[ ! a && ! b == c || (d || e) ]]"},
++		langFile(&TestClause{X: &BinaryTest{
++			Op: OrTest,
++			X: &BinaryTest{
++				Op: AndTest,
++				X:  &UnaryTest{Op: TsNot, X: litWord("a")},
++				Y: &UnaryTest{Op: TsNot, X: &BinaryTest{
++					Op: TsMatch,
++					X:  litWord("b"),
++					Y:  litWord("c"),
++				}},
++			},
++			Y: &ParenTest{X: &BinaryTest{Op: OrTest, X: litWord("d"), Y: litWord("e")}},
++		}}, LangBash|LangMirBSDKorn|LangZsh),
++	),
+ 	fileTest(
+ 		[]string{
+ 			"[[ -S a && -L b ]]",
+diff --git a/syntax/parser.go b/syntax/parser.go
+index 8a5cbfe..6bf029f 100644
+--- a/syntax/parser.go
++++ b/syntax/parser.go
+@@ -3580,7 +3580,7 @@ func (p *Parser) testClause(s *Stmt) {
+ 	tc := &TestClause{Left: p.pos}
+ 	old := p.preNested(testExpr)
+ 	p.next()
+-	if tc.X = p.testExprBinary(false); tc.X == nil {
++	if tc.X = p.testExprOr(); tc.X == nil {
+ 		p.followErrExp(tc.Left, dblLeftBrack)
+ 	}
+ 	tc.Right = p.pos
+@@ -3591,70 +3591,94 @@ func (p *Parser) testClause(s *Stmt) {
+ 	s.Cmd = tc
+ }
+ 
+-func (p *Parser) testExprBinary(pastAndOr bool) TestExpr {
++// testExprOr parses a test expression, in which || binds less tightly than
++// &&, like bash, mksh, ksh93 and zsh evaluate it: a && b || c is
++// (a && b) || c, and a || b && c is a || (b && c).
++func (p *Parser) testExprOr() TestExpr {
++	return p.testExprList(orOr, p.testExprAnd)
++}
++
++func (p *Parser) testExprAnd() TestExpr {
++	return p.testExprList(andAnd, p.testExprBinary)
++}
++
++// testExprList parses one or more operands joined by op, grouping them from
++// the right, like a || (b || c).
++func (p *Parser) testExprList(op token, operand func() TestExpr) TestExpr {
+ 	p.got(_Newl)
+-	var left TestExpr
+-	if pastAndOr {
+-		left = p.testExprUnary()
+-	} else {
+-		left = p.testExprBinary(true)
+-	}
++	left := operand()
+ 	if left == nil {
+ 		return left
+ 	}
+ 	p.got(_Newl)
+-	switch p.tok {
+-	case andAnd, orOr:
+-	case _LitWord:
+-		if p.val == "]]" {
+-			return left
+-		}
+-		if lw, ok := left.(*Word); ok && testBinaryOp(p.val) == 0 && p.zshModuleTestName(p.val) {
+-			return p.zshInfixModuleTest(lw)
+-		}
+-		if p.tok = token(testBinaryOp(p.val)); p.tok == illegalTok {
+-			p.curErr("not a valid test operator: %#q", p.val)
+-		}
+-	case rdrIn, rdrOut:
+-	case _EOF, rightParen:
++	if p.tok != op {
+ 		return left
+-	case _Lit:
+-		p.curErr("test operator words must consist of a single literal")
+-	default:
+-		p.curErr("not a valid test operator: %#q", p.tok)
+ 	}
+ 	b := &BinaryTest{
+ 		OpPos: p.pos,
+-		Op:    BinTestOperator(p.tok),
++		Op:    BinTestOperator(op),
+ 		X:     left,
+ 	}
+-	switch b.Op {
+-	case AndTest, OrTest:
+-		p.next()
+-		p.nest()
+-		b.Y = p.testExprBinary(false)
+-		p.unnest(1)
+-		if b.Y == nil {
+-			p.followErrExp(b.OpPos, b.Op)
+-		}
+-	case TsReMatch:
+-		p.checkLang(p.pos, langBashLike|LangZsh|LangKsh93, "regex tests")
+-		p.rxOpenParens = 0
+-		p.rxFirstPart = true
+-		// TODO(mvdan): Using nested states within a regex will break in
+-		// all sorts of ways. The better fix is likely to use a stop
+-		// token, like we do with heredocs.
+-		p.quote = testExprRegexp
+-		fallthrough
+-	default:
++	p.next()
++	p.nest()
++	b.Y = p.testExprList(op, operand)
++	p.unnest(1)
++	if b.Y == nil {
++		p.followErrExp(b.OpPos, b.Op)
++	}
++	return b
++}
++
++func (p *Parser) testExprBinary() TestExpr {
++	p.got(_Newl)
++	left := p.testExprUnary()
++	if left == nil {
++		return left
++	}
++	for {
++		p.got(_Newl)
++		switch p.tok {
++		case andAnd, orOr, _EOF, rightParen:
++			return left
++		case _LitWord:
++			if p.val == "]]" {
++				return left
++			}
++			if lw, ok := left.(*Word); ok && testBinaryOp(p.val) == 0 && p.zshModuleTestName(p.val) {
++				left = p.zshInfixModuleTest(lw)
++				continue
++			}
++			if p.tok = token(testBinaryOp(p.val)); p.tok == illegalTok {
++				p.curErr("not a valid test operator: %#q", p.val)
++			}
++		case rdrIn, rdrOut:
++		case _Lit:
++			p.curErr("test operator words must consist of a single literal")
++		default:
++			p.curErr("not a valid test operator: %#q", p.tok)
++		}
++		b := &BinaryTest{
++			OpPos: p.pos,
++			Op:    BinTestOperator(p.tok),
++			X:     left,
++		}
++		if b.Op == TsReMatch {
++			p.checkLang(p.pos, langBashLike|LangZsh|LangKsh93, "regex tests")
++			p.rxOpenParens = 0
++			p.rxFirstPart = true
++			// TODO(mvdan): Using nested states within a regex will break in
++			// all sorts of ways. The better fix is likely to use a stop
++			// token, like we do with heredocs.
++			p.quote = testExprRegexp
++		}
+ 		if _, ok := b.X.(*Word); !ok {
+ 			p.posErr(b.OpPos, "expected %#q, %#q or %#q after complex expr",
+ 				AndTest, OrTest, dblRightBrack)
+ 		}
+ 		p.next()
+ 		b.Y = p.followWordTok(token(b.Op), b.OpPos)
++		left = b
+ 	}
+-	return b
+ }
+ 
+ func (p *Parser) testExprUnary() TestExpr {
+@@ -3682,7 +3706,7 @@ func (p *Parser) testExprUnary() TestExpr {
+ 		u := &UnaryTest{OpPos: p.pos, Op: TsNot}
+ 		p.next()
+ 		p.nest()
+-		u.X = p.testExprBinary(false)
++		u.X = p.testExprBinary()
+ 		p.unnest(1)
+ 		if u.X == nil {
+ 			p.followErrExp(u.OpPos, u.Op)
+@@ -3700,7 +3724,7 @@ func (p *Parser) testExprUnary() TestExpr {
+ 		pe := &ParenTest{Lparen: p.pos}
+ 		p.next()
+ 		p.nest()
+-		pe.X = p.testExprBinary(false)
++		pe.X = p.testExprOr()
+ 		p.unnest(1)
+ 		if pe.X == nil {
+ 			p.followErrExp(pe.Lparen, leftParen)

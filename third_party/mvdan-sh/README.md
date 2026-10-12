@@ -61,6 +61,7 @@ reproducer so that it can be sent upstream as it is.
 | 0029 | expand: a backslash inside a `Format` directive (`%1\A00x`) is an invalid format character, as in bash, instead of an escape after which the directive goes on | — |
 | 0030 | syntax: here-documents pending when a subshell starts are read after its first newline, as every shell does, instead of after its closing parenthesis | — |
 | 0031 | syntax: with bash, further subscripts (`a[1][2]=x`, `${a[1][2]}`, `([1][2]=x)`) parse into `Elems`, as with `bash -n`, which rejects or misreads them only when they run; `ArrayElem` gains `Elems`, which ksh93 fills too | — |
+| 0032 | syntax: in `[[ ]]`, `!` binds tighter than `&&` and `&&` tighter than `\|\|`, as the shells evaluate them, so `[[ a && b \|\| c ]]` is `(a && b) \|\| c` and `[[ ! a && b ]]` is `(! a) && b`; before, both operators had the same precedence and `!` took the rest of the expression | — |
 
 ## Tests
 

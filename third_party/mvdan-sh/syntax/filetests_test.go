@@ -5508,6 +5508,42 @@ var fileTests = []fileTestCase{
 		}}, LangBash|LangMirBSDKorn|LangZsh),
 	),
 	fileTest(
+		[]string{"[[ a && b || c ]]"},
+		langFile(&TestClause{X: &BinaryTest{
+			Op: OrTest,
+			X:  &BinaryTest{Op: AndTest, X: litWord("a"), Y: litWord("b")},
+			Y:  litWord("c"),
+		}}, LangBash|LangMirBSDKorn|LangZsh),
+	),
+	fileTest(
+		[]string{"[[ a || b && c || d ]]"},
+		langFile(&TestClause{X: &BinaryTest{
+			Op: OrTest,
+			X:  litWord("a"),
+			Y: &BinaryTest{
+				Op: OrTest,
+				X:  &BinaryTest{Op: AndTest, X: litWord("b"), Y: litWord("c")},
+				Y:  litWord("d"),
+			},
+		}}, LangBash|LangMirBSDKorn|LangZsh),
+	),
+	fileTest(
+		[]string{"[[ ! a && ! b == c || (d || e) ]]"},
+		langFile(&TestClause{X: &BinaryTest{
+			Op: OrTest,
+			X: &BinaryTest{
+				Op: AndTest,
+				X:  &UnaryTest{Op: TsNot, X: litWord("a")},
+				Y: &UnaryTest{Op: TsNot, X: &BinaryTest{
+					Op: TsMatch,
+					X:  litWord("b"),
+					Y:  litWord("c"),
+				}},
+			},
+			Y: &ParenTest{X: &BinaryTest{Op: OrTest, X: litWord("d"), Y: litWord("e")}},
+		}}, LangBash|LangMirBSDKorn|LangZsh),
+	),
+	fileTest(
 		[]string{
 			"[[ -S a && -L b ]]",
 			"[[ -S a && -h b ]]",

@@ -32,3 +32,10 @@ fi
 ### file newer-than comparison
 ! [ build.o -nt main.c ] && make
 >>> none
+
+### negation binds to one comparison of a mixed chain
+#!/bin/bash
+# shellcheck enable=avoid-negated-conditions
+[[ ! $1 == a || ! -f $2 && ! $3 = b ]] && echo ok
+>>> SC2335 3:28
+>>> SC2335 3:4
