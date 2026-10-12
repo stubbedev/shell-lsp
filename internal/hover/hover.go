@@ -8,12 +8,14 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/manpage"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/shelldocs"
+	"github.com/stubbedev/shell-lsp/internal/textline"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -781,20 +783,14 @@ func (h hoverer) line(offset int) int {
 }
 
 func (h hoverer) snippet(offset int) string {
-	start := strings.LastIndexByte(h.text[:offset], '\n') + 1
-	end := len(h.text)
-	if i := strings.IndexByte(h.text[start:], '\n'); i >= 0 {
-		end = start + i
-	}
+	start, end := textline.Bounds(h.text, offset)
 	line := strings.TrimSpace(h.text[start:end])
 	if len(line) > snippetWidth {
 		cut := snippetWidth
-		for cut > 0 && !isRuneStart(line[cut]) {
+		for cut > 0 && !utf8.RuneStart(line[cut]) {
 			cut--
 		}
 		line = line[:cut] + "…"
 	}
 	return line
 }
-
-func isRuneStart(b byte) bool { return b&0xC0 != 0x80 }

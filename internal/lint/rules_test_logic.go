@@ -7,6 +7,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/textline"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -491,7 +492,7 @@ func checkRejectedUnknownOperators(p *pass) {
 		p.report(2057, e.Span, token+" is not a comparison operator that [[ ]] understands; check the spelling (see help test).")
 		return
 	}
-	start := lineStart(p.text, e.Span.Start)
+	start := textline.Start(p.text, e.Span.Start)
 	fields := strings.Fields(p.text[start:e.Span.Start])
 	if len(fields) == 0 {
 		return

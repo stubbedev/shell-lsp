@@ -7,6 +7,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
+	"github.com/stubbedev/shell-lsp/internal/textline"
 )
 
 const (
@@ -94,11 +95,7 @@ func changedLines(text string, edits []textedit.Edit) (before, after []string, o
 	if lo < 0 || hi > len(text) {
 		return nil, nil, false
 	}
-	start := strings.LastIndexByte(text[:lo], '\n') + 1
-	end := len(text)
-	if i := strings.IndexByte(text[hi:], '\n'); i >= 0 {
-		end = hi + i
-	}
+	start, end := textline.Start(text, lo), textline.End(text, hi)
 	shifted := make([]textedit.Edit, len(edits))
 	for i, e := range edits {
 		shifted[i] = textedit.Edit{Start: e.Start - start, End: e.End - start, NewText: e.NewText}

@@ -8,6 +8,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
+	"github.com/stubbedev/shell-lsp/internal/textline"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -37,7 +38,7 @@ func movableFunction(s *site) (movable, bool) {
 	}
 	stmt := path[i-1].Span
 	text := s.Tree.Text()
-	if defined != 1 || !startsLine(text, stmt.Start) || strings.TrimSpace(text[stmt.End:lineEnd(text, stmt.End)]) != "" {
+	if defined != 1 || !textline.Owns(text, stmt.Start, stmt.End) {
 		return movable{}, false
 	}
 	return movable{name: decl.Name.Value, stmt: stmt}, true
@@ -70,14 +71,14 @@ func moveFunction(s *site) (Change, bool) {
 	}
 	src := s.sources()[i]
 	text := s.Tree.Text()
-	start := parser.CommentBlockStart(text, lineStart(text, m.stmt.Start))
-	end := lineEnd(text, m.stmt.End)
+	start := textline.CommentBlockStart(text, textline.Start(text, m.stmt.Start))
+	end := textline.End(text, m.stmt.End)
 	if !runsIn(src.Tree.Dialect, s.Tree.Dialect, text[start:end]) {
 		return Change{}, false
 	}
-	removeEnd := min(end+1, len(text))
-	if blankLineAt(text, removeEnd) && (start == 0 || blankLineAt(text, lineStart(text, start-1))) {
-		removeEnd = min(lineEnd(text, removeEnd)+1, len(text))
+	removeEnd := textline.Next(text, end)
+	if blankLineAt(text, removeEnd) && (start == 0 || blankLineAt(text, textline.Start(text, start-1))) {
+		removeEnd = textline.Next(text, removeEnd)
 	}
 	target := src.Tree.Text()
 	insert := text[start:end] + "\n"
@@ -106,7 +107,7 @@ func runsIn(target, from dialect.Dialect, code string) bool {
 }
 
 func blankLineAt(text string, at int) bool {
-	return at < len(text) && strings.TrimSpace(text[at:lineEnd(text, at)]) == ""
+	return at < len(text) && textline.BlankAfter(text, at)
 }
 
 func sourcedBefore(tree *parser.Tree, cmd parser.Command, at int) bool {

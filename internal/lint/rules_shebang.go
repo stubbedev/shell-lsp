@@ -7,6 +7,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
+	"github.com/stubbedev/shell-lsp/internal/textline"
 )
 
 const byteOrderMark = "\xef\xbb\xbf"
@@ -71,12 +72,7 @@ func checkShebangShape(p *pass) {
 		p.report(1082, parser.Span{Start: 0, End: start}, "The file starts with a UTF-8 byte order mark, which makes the shell misread the first line; save the file without it.")
 	}
 	for first := true; start < len(p.text); first = false {
-		end := strings.IndexByte(p.text[start:], '\n')
-		if end < 0 {
-			end = len(p.text)
-		} else {
-			end += start
-		}
+		end := textline.End(p.text, start)
 		line := p.text[start:end]
 		if p.checkShebangLine(start, line, first) {
 			if !first {

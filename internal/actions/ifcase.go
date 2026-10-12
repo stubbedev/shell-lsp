@@ -7,6 +7,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
+	"github.com/stubbedev/shell-lsp/internal/textline"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -29,7 +30,7 @@ func ifToCase(s *site) (Change, bool) {
 	tree := s.Tree
 	text := tree.Text()
 	start := parser.Offset(root.Position)
-	if !startsLine(text, start) {
+	if !textline.BlankBefore(text, start) {
 		return Change{}, false
 	}
 	var arms []caseArm
@@ -67,7 +68,7 @@ func ifToCase(s *site) (Change, bool) {
 	subject, _ := tree.NodeSpan(tests[0].subject)
 	verbatim := verbatimLinesOf(tree)
 	unit := indentUnit(tree, verbatim, s.Format.Indent)
-	indent := leadingSpace(text, lineStart(text, start))
+	indent := leadingSpace(text, textline.Start(text, start))
 	armIndent := indent
 	if s.Format.SwitchCaseIndent {
 		armIndent += unit
@@ -126,11 +127,11 @@ func branchBody(tree *parser.Tree, after, next int, stmts []*syntax.Stmt) (parse
 	}
 	text := tree.Text()
 	body := parser.Span{Start: after + len(leadingSpace(text, after)), End: next}
-	if lineEnd(text, after) < next && strings.TrimSpace(text[after:lineEnd(text, after)]) == "" {
-		body.Start = lineEnd(text, after) + 1
+	if textline.End(text, after) < next && textline.BlankAfter(text, after) {
+		body.Start = textline.End(text, after) + 1
 	}
-	if startsLine(text, next) {
-		body.End = lineStart(text, next)
+	if textline.BlankBefore(text, next) {
+		body.End = textline.Start(text, next)
 	} else {
 		body.End = statementsEnd(text, body.Start, next, stmts[len(stmts)-1])
 	}

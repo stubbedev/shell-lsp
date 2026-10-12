@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/textline"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -237,8 +238,7 @@ func commentFolds(tree *parser.Tree, lineOf func(int) int) []Fold {
 				folds = append(folds, Fold{StartLine: start, EndLine: line, Kind: FoldRegion})
 			}
 		}
-		lineStart := strings.LastIndexByte(text[:c.Span.Start], '\n') + 1
-		if strings.TrimSpace(text[lineStart:c.Span.Start]) != "" || strings.HasPrefix(text[c.Span.Start:], "#!") {
+		if !textline.BlankBefore(text, c.Span.Start) || strings.HasPrefix(text[c.Span.Start:], "#!") {
 			flush()
 			continue
 		}
@@ -310,11 +310,7 @@ func LinkedDelimiters(tree *parser.Tree, offset int) ([]parser.Span, bool) {
 		if !ok {
 			continue
 		}
-		lineEnd := strings.IndexByte(text[h.Body.End:], '\n')
-		if lineEnd < 0 {
-			lineEnd = len(text) - h.Body.End
-		}
-		closingLine := text[h.Body.End : h.Body.End+lineEnd]
+		closingLine := text[h.Body.End:textline.End(text, h.Body.End)]
 		indent := len(closingLine) - len(strings.TrimLeft(closingLine, "\t"))
 		closing := parser.Span{Start: h.Body.End + indent, End: h.Body.End + indent + len(h.Delimiter)}
 		if text[closing.Start:closing.End] != h.Delimiter {

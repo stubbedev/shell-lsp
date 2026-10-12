@@ -8,6 +8,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/directive"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/textline"
 )
 
 type placement uint8
@@ -58,9 +59,9 @@ func lexicalPlacement(tree *parser.Tree, comment parser.Span) placement {
 
 func logicalLineStart(tree *parser.Tree, offset int) int {
 	text := tree.Text()
-	start := lineStart(text, offset)
+	start := textline.Start(text, offset)
 	for start > 1 && text[start-2] == '\\' && !escaped(text, start-2) && !insideComment(tree, start-2) {
-		start = lineStart(text, start-1)
+		start = textline.Start(text, start-1)
 	}
 	return start
 }
@@ -106,11 +107,7 @@ func nextToken(text string, from int) int {
 		case ' ', '\t', '\r', '\n':
 			from++
 		case '#':
-			end := strings.IndexByte(text[from:], '\n')
-			if end < 0 {
-				return len(text)
-			}
-			from += end
+			from = textline.End(text, from)
 		default:
 			return from
 		}

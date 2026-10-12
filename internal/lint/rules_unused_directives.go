@@ -7,6 +7,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/directive"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
+	"github.com/stubbedev/shell-lsp/internal/textline"
 )
 
 const codeUnusedDirective = nativeBase + 2009
@@ -124,7 +125,7 @@ func (p *pass) removeDisabled(items []disabledItem, unused []bool, i int) Fix {
 }
 
 func (p *pass) removeComment(span parser.Span) textedit.Edit {
-	start := lineStart(p.text, span.Start)
+	start := textline.Start(p.text, span.Start)
 	if strings.TrimLeft(p.text[start:span.Start], " \t") == "" {
 		end := span.End
 		if end < len(p.text) && p.text[end] == '\n' {

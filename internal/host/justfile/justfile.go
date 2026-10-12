@@ -7,6 +7,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/projection"
 	"github.com/stubbedev/shell-lsp/internal/scan"
+	"github.com/stubbedev/shell-lsp/internal/textline"
 )
 
 const (
@@ -71,13 +72,9 @@ func Project(text string) (*projection.Map, dialect.Detection) {
 func splitLines(text string) []line {
 	var out []line
 	scan.Forward(0, len(text), func(start int) int {
-		end := strings.IndexByte(text[start:], '\n')
-		if end < 0 {
-			out = append(out, line{start: start, end: len(text)})
-			return len(text)
-		}
-		out = append(out, line{start: start, end: start + end})
-		return start + end + 1
+		end := textline.End(text, start)
+		out = append(out, line{start: start, end: end})
+		return end + 1
 	})
 	return out
 }

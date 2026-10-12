@@ -1,9 +1,8 @@
 package jq
 
 import (
-	"strings"
-
 	"github.com/stubbedev/shell-lsp/internal/embedded/lang"
+	"github.com/stubbedev/shell-lsp/internal/textline"
 )
 
 type kind uint8
@@ -119,11 +118,7 @@ func (l *lexer) next() token {
 			l.pos++
 		case '#':
 			start := l.pos
-			if i := strings.IndexByte(l.src[l.pos:], '\n'); i >= 0 {
-				l.pos += i
-			} else {
-				l.pos = len(l.src)
-			}
+			l.pos = textline.End(l.src, l.pos)
 			l.res.Emit(start, l.pos, lang.Comment, 0)
 		default:
 			return l.token(c)

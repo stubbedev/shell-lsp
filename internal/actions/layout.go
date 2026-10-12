@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/textline"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -55,17 +56,17 @@ func (v verbatimLines) has(lineAt int) bool {
 }
 
 func heredocBody(text string, h parser.Heredoc) parser.Span {
-	first := min(lineEnd(text, h.Span.Start)+1, len(text))
-	return parser.Span{Start: first, End: lineEnd(text, max(min(h.Body.End, len(text)), first))}
+	first := textline.Next(text, h.Span.Start)
+	return parser.Span{Start: first, End: textline.End(text, max(min(h.Body.End, len(text)), first))}
 }
 
 func indentUnit(tree *parser.Tree, verbatim verbatimLines, configured uint) string {
 	text := tree.Text()
 	tabbed, spaced, previous := 0, 0, 0
 	var steps [maxIndentStep + 1]int
-	for at := 0; at < len(text); at = lineEnd(text, at) + 1 {
+	for at := 0; at < len(text); at = textline.End(text, at) + 1 {
 		lead := leadingSpace(text, at)
-		if at+len(lead) == lineEnd(text, at) || verbatim.has(at) {
+		if at+len(lead) == textline.End(text, at) || verbatim.has(at) {
 			continue
 		}
 		switch {
@@ -107,8 +108,8 @@ func reindent(tree *parser.Tree, verbatim verbatimLines, span parser.Span, inden
 	}
 	var lines []line
 	common := -1
-	for at := span.Start; at < span.End; at = lineEnd(text, at) + 1 {
-		l := line{text: text[at:min(lineEnd(text, at), span.End)], inline: at != lineStart(text, at)}
+	for at := span.Start; at < span.End; at = textline.End(text, at) + 1 {
+		l := line{text: text[at:min(textline.End(text, at), span.End)], inline: at != textline.Start(text, at)}
 		l.verbatim = !l.inline && verbatim.has(at)
 		lines = append(lines, l)
 		if l.inline || l.verbatim || strings.TrimSpace(l.text) == "" {

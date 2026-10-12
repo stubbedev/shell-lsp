@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/textline"
 )
 
 type typo struct {
@@ -106,7 +107,7 @@ const (
 )
 
 func hintLine(text string, at int) (string, int) {
-	lineStart, lineEnd := lineOf(text, at)
+	lineStart, lineEnd := textline.Bounds(text, at)
 	from, to := max(lineStart, at-hintWindow), min(lineEnd, at+hintWindow)
 	if from == lineStart {
 		return text[from:to], at - from

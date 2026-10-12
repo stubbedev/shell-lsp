@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/textline"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -197,7 +198,7 @@ func partsWithinText(parts []syntax.WordPart, text string) []syntax.WordPart {
 	if !ok {
 		panic(fmt.Sprintf("parser: here-document part %T runs past the end of the text", parts[len(parts)-1]))
 	}
-	lineStart := strings.LastIndexByte(text, '\n') + 1
+	lineStart := textline.Start(text, len(text))
 	if lineStart < len(text) {
 		last.Value = strings.TrimSuffix(last.Value, "\n")
 	}

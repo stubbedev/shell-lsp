@@ -7,6 +7,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
+	"github.com/stubbedev/shell-lsp/internal/textline"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -163,13 +164,13 @@ func extendSetopt(c parser.Command, missing lint.StrictMode) ([]textedit.Edit, b
 }
 
 func headerEnd(text string) int {
-	at := min(lineEnd(text, 0)+1, len(text))
+	at := textline.Next(text, 0)
 	for at < len(text) {
-		end := lineEnd(text, at)
+		end := textline.End(text, at)
 		if !strings.HasPrefix(strings.TrimSpace(text[at:end]), "#") {
 			break
 		}
-		at = min(end+1, len(text))
+		at = textline.Next(text, at)
 	}
 	return at
 }

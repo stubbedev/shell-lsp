@@ -7,6 +7,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/projection"
 	"github.com/stubbedev/shell-lsp/internal/scan"
+	"github.com/stubbedev/shell-lsp/internal/textline"
 )
 
 const (
@@ -114,15 +115,12 @@ func (p *parser) parse() {
 func (p *parser) logicalEnd(start int) int {
 	end := len(p.text)
 	scan.Forward(start, len(p.text), func(pos int) int {
-		nl := strings.IndexByte(p.text[pos:], '\n')
-		switch {
-		case nl < 0:
-			return len(p.text)
-		case !scan.Continued(p.text[pos : pos+nl]):
-			end = pos + nl
+		lineEnd := textline.End(p.text, pos)
+		if lineEnd == len(p.text) || !scan.Continued(p.text[pos:lineEnd]) {
+			end = lineEnd
 			return len(p.text)
 		}
-		return pos + nl + 1
+		return lineEnd + 1
 	})
 	return end
 }

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/textline"
 )
 
 type hint func(e Error, text string) (Error, bool)
@@ -34,17 +35,8 @@ func refine(e Error, text string, d dialect.Dialect) Error {
 	return e
 }
 
-func lineOf(text string, offset int) (start, end int) {
-	start = strings.LastIndexByte(text[:offset], '\n') + 1
-	end = len(text)
-	if i := strings.IndexByte(text[offset:], '\n'); i >= 0 {
-		end = offset + i
-	}
-	return start, end
-}
-
 func wordsBefore(text string, offset int) []string {
-	start, _ := lineOf(text, offset)
+	start := textline.Start(text, offset)
 	return strings.Fields(text[start:offset])
 }
 
@@ -68,7 +60,7 @@ func quotedToken(message, prefix string) (string, bool) {
 var bracketKeywords = []string{"if", "elif", "while", "until"}
 
 func keywordGluedToBracket(e Error, text string) (Error, bool) {
-	start, end := lineOf(text, e.Span.Start)
+	start, end := textline.Bounds(text, e.Span.Start)
 	line := text[start:end]
 	for _, keyword := range bracketKeywords {
 		for i := 0; ; {
@@ -96,7 +88,7 @@ func unclosedHeredoc(e Error, text string) (Error, bool) {
 		return Error{}, false
 	}
 	dash := strings.HasPrefix(text[e.Span.Start:], "<<-")
-	_, operatorEnd := lineOf(text, e.Span.Start)
+	operatorEnd := textline.End(text, e.Span.Start)
 	e.Message = heredocDiagnosis(token, dash, text, operatorEnd+1)
 	return e, true
 }
@@ -197,7 +189,7 @@ func heredocBeforeProcessSubstitution(e Error, text string) (Error, bool) {
 }
 
 func dollarOnAssignedName(e Error, text string) (Error, bool) {
-	start, _ := lineOf(text, e.Span.Start)
+	start := textline.Start(text, e.Span.Start)
 	wordStart := max(start, strings.LastIndexAny(text[:e.Span.Start], " \t;&|")+1)
 	word := text[wordStart:]
 	if !strings.HasPrefix(word, "$") {

@@ -12,6 +12,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/shellcheckrc"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
+	"github.com/stubbedev/shell-lsp/internal/textline"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -276,7 +277,7 @@ func disableForStatement(tree *parser.Tree, d Diagnostic) (textedit.Edit, bool) 
 		return textedit.Edit{}, false
 	}
 	text := tree.Text()
-	start := lineStart(text, stmt.Start)
+	start := textline.Start(text, stmt.Start)
 	return directiveEdit(text, start, leadingSpace(text, start), d.Code), true
 }
 
@@ -286,7 +287,7 @@ func disableForFile(tree *parser.Tree, code string) (textedit.Edit, bool) {
 
 func directiveEdit(text string, lineAt int, indent, code string) textedit.Edit {
 	if lineAt > 0 {
-		prevStart := lineStart(text, lineAt-1)
+		prevStart := textline.Start(text, lineAt-1)
 		prev := text[prevStart : lineAt-1]
 		if rest, ok := strings.CutPrefix(strings.TrimSpace(prev), directivePrefix); ok {
 			codes := strings.Fields(rest)
@@ -352,7 +353,7 @@ func extractVariable(s *site) (Change, bool) {
 		return Change{}, false
 	}
 	stmt, ok := innermostStmt(path)
-	if !ok || !startsLine(text, stmt.Start) {
+	if !ok || !textline.BlankBefore(text, stmt.Start) {
 		return Change{}, false
 	}
 	selected := text[sel.Start:sel.End]
@@ -367,7 +368,7 @@ func extractVariable(s *site) (Change, bool) {
 	case word == sel:
 		replacement = `"$` + name + `"`
 	}
-	lineAt := lineStart(text, stmt.Start)
+	lineAt := textline.Start(text, stmt.Start)
 	indent := leadingSpace(text, lineAt)
 	return Change{Title: "Extract to variable " + name, Edits: []textedit.Edit{
 		{Start: lineAt, End: lineAt, NewText: indent + name + "=" + rhs + "\n"},
@@ -378,7 +379,7 @@ func extractVariable(s *site) (Change, bool) {
 func inHeredoc(tree *parser.Tree, sel parser.Span) bool {
 	text := tree.Text()
 	for _, h := range tree.Heredocs {
-		region := parser.Span{Start: h.Span.Start, End: lineEnd(text, min(h.Body.End, len(text)))}
+		region := parser.Span{Start: h.Span.Start, End: textline.End(text, min(h.Body.End, len(text)))}
 		if sel.Start < region.End && region.Start < sel.End {
 			return true
 		}
@@ -445,7 +446,7 @@ func extractFunction(s *site) (Change, bool) {
 		return Change{}, false
 	}
 	first, last := stmts[0], stmts[len(stmts)-1]
-	body := parser.Span{Start: lineStart(text, first.Start), End: lineEnd(text, last.End)}
+	body := parser.Span{Start: textline.Start(text, first.Start), End: textline.End(text, last.End)}
 	if usesControlFlow(tree, parser.Span{Start: first.Start, End: last.End}) {
 		return Change{}, false
 	}
@@ -454,15 +455,15 @@ func extractFunction(s *site) (Change, bool) {
 	if usesPositional(tree, parser.Span{Start: first.Start, End: last.End}) {
 		call += ` "$@"`
 	}
-	indent := leadingSpace(text, lineStart(text, first.Start))
+	indent := leadingSpace(text, textline.Start(text, first.Start))
 	outer := topLevelStart(tree, first.Start)
-	insertAt := lineStart(text, outer)
+	insertAt := textline.Start(text, outer)
 	verbatim := verbatimLinesOf(tree)
 	outerIndent := leadingSpace(text, insertAt)
 	fn := outerIndent + name + "() {\n" + reindent(tree, verbatim, body, outerIndent+indentUnit(tree, verbatim, s.Format.Indent)) + outerIndent + "}\n\n"
 	return Change{Title: "Extract to function " + name, Edits: []textedit.Edit{
 		{Start: insertAt, End: insertAt, NewText: fn},
-		{Start: lineStart(text, first.Start), End: lineEnd(text, last.End), NewText: indent + call},
+		{Start: textline.Start(text, first.Start), End: textline.End(text, last.End), NewText: indent + call},
 	}}, true
 }
 
@@ -506,7 +507,7 @@ func selectedStatements(tree *parser.Tree, sel parser.Span) ([]parser.Span, bool
 	if _, compound := parent.(*syntax.ArrayExpr); compound {
 		return nil, false
 	}
-	if !startsLine(text, stmts[0].Start) || strings.TrimSpace(text[stmts[len(stmts)-1].End:lineEnd(text, stmts[len(stmts)-1].End)]) != "" {
+	if !textline.Owns(text, stmts[0].Start, stmts[len(stmts)-1].End) {
 		return nil, false
 	}
 	return stmts, true
@@ -657,7 +658,7 @@ func declareLocal(s *site) (Change, bool) {
 		if !def.NameSpan.Covers(at) || def.Kind != parser.DefAssign || def.Local || def.Within == parser.FileScope {
 			continue
 		}
-		if !startsLine(tree.Text(), def.Span.Start) {
+		if !textline.BlankBefore(tree.Text(), def.Span.Start) {
 			return Change{}, false
 		}
 		return Change{Title: fmt.Sprintf("Declare %s as local", def.Name), Edits: []textedit.Edit{{Start: def.Span.Start, End: def.Span.Start, NewText: "local "}}}, true
@@ -676,14 +677,14 @@ func innermostStmt(path []parser.Located) (parser.Span, bool) {
 
 func outermostStmtOnLine(tree *parser.Tree, offset int) (parser.Span, bool) {
 	text := tree.Text()
-	line := lineStart(text, offset)
+	line := textline.Start(text, offset)
 	var best parser.Span
 	found := false
 	for _, located := range tree.PathAt(offset) {
 		if _, ok := located.Node.(*syntax.Stmt); !ok {
 			continue
 		}
-		if lineStart(text, located.Span.Start) == line {
+		if textline.Start(text, located.Span.Start) == line {
 			return located.Span, true
 		}
 		best, found = located.Span, true
@@ -717,21 +718,6 @@ func trimSpan(text string, s parser.Span) parser.Span {
 		s.End--
 	}
 	return s
-}
-
-func lineStart(text string, offset int) int {
-	return strings.LastIndexByte(text[:offset], '\n') + 1
-}
-
-func lineEnd(text string, offset int) int {
-	if i := strings.IndexByte(text[offset:], '\n'); i >= 0 {
-		return offset + i
-	}
-	return len(text)
-}
-
-func startsLine(text string, offset int) bool {
-	return strings.TrimSpace(text[lineStart(text, offset):offset]) == ""
 }
 
 func leadingSpace(text string, lineAt int) string {

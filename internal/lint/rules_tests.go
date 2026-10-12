@@ -7,6 +7,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
+	"github.com/stubbedev/shell-lsp/internal/textline"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -327,7 +328,7 @@ func checkBackgroundedTest(p *pass, n syntax.Node) {
 	}
 	at := parser.Offset(stmt.Semicolon)
 	var fixes []Fix
-	if rest := strings.TrimLeft(p.text[at+1:lineEnd(p.text, at)], " \t"); rest != "" && !strings.HasPrefix(rest, "#") {
+	if rest := strings.TrimLeft(p.text[at+1:textline.End(p.text, at)], " \t"); rest != "" && !strings.HasPrefix(rest, "#") {
 		fixes = append(fixes, reviewFix("Replace & with &&", textedit.Edit{Start: at + 1, End: at + 1, NewText: "&"}))
 	}
 	p.report(2265, posSpan(stmt.Semicolon, 1), "A single & runs the test in the background instead of combining it; use && for a logical AND.", fixes...)

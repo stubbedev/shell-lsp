@@ -7,6 +7,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/getopt"
+	"github.com/stubbedev/shell-lsp/internal/textline"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -901,7 +902,7 @@ func (b *builder) redirect(n *syntax.Redirect) {
 	if n.Hdoc != nil && len(n.Hdoc.Parts) > 0 {
 		body = b.span(n.Hdoc)
 		if !b.closedAtEnd[n] {
-			body.End = max(body.Start, strings.LastIndexByte(b.text[:body.End], '\n')+1)
+			body.End = max(body.Start, textline.Start(b.text, body.End))
 		}
 	}
 	b.index.Heredocs = append(b.index.Heredocs, Heredoc{
@@ -1163,27 +1164,15 @@ func IsName(s string) bool {
 }
 
 func docComment(text string, start int) string {
-	lineStart := strings.LastIndexByte(text[:start], '\n') + 1
+	lineStart := textline.Start(text, start)
 	var lines []string
-	for line := range strings.Lines(text[CommentBlockStart(text, lineStart):lineStart]) {
+	for line := range strings.Lines(text[textline.CommentBlockStart(text, lineStart):lineStart]) {
 		body := strings.TrimPrefix(strings.TrimPrefix(strings.TrimSpace(line), "#"), " ")
 		if !strings.HasPrefix(body, "shellcheck ") {
 			lines = append(lines, body)
 		}
 	}
 	return strings.Join(lines, "\n")
-}
-
-func CommentBlockStart(text string, lineStart int) int {
-	for lineStart > 0 {
-		prevStart := strings.LastIndexByte(text[:lineStart-1], '\n') + 1
-		line := strings.TrimSpace(text[prevStart : lineStart-1])
-		if !strings.HasPrefix(line, "#") || strings.HasPrefix(line, "#!") {
-			break
-		}
-		lineStart = prevStart
-	}
-	return lineStart
 }
 
 func (b *builder) isElseBranch(n *syntax.IfClause) bool {

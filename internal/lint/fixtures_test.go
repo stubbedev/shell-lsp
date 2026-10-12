@@ -20,6 +20,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/textline"
 )
 
 var (
@@ -156,7 +157,7 @@ func fixtureDialect(script string) (dialect.Dialect, DialectSource) {
 
 func position(text string, offset int) string {
 	line := strings.Count(text[:offset], "\n") + 1
-	start := lineStart(text, offset)
+	start := textline.Start(text, offset)
 	return fmt.Sprintf("%d:%d", line, utf8.RuneCountInString(text[start:offset])+1)
 }
 

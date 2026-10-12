@@ -5,6 +5,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/embedded/lang"
 	"github.com/stubbedev/shell-lsp/internal/embedded/regex"
+	"github.com/stubbedev/shell-lsp/internal/textline"
 )
 
 type kind uint8
@@ -167,7 +168,7 @@ func (l *lexer) scan() token {
 		case c == '\\' && l.continuation():
 		case c == '#':
 			start := l.pos
-			l.pos = lineEnd(l.src, l.pos)
+			l.pos = textline.End(l.src, l.pos)
 			l.res.Emit(start, l.pos, lang.Comment, 0)
 		default:
 			return l.token(c)
@@ -187,13 +188,6 @@ func (l *lexer) continuation() bool {
 		return false
 	}
 	return true
-}
-
-func lineEnd(src string, from int) int {
-	if i := strings.IndexByte(src[from:], '\n'); i >= 0 {
-		return from + i
-	}
-	return len(src)
 }
 
 func (l *lexer) token(c byte) token {

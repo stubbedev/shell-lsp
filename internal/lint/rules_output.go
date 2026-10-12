@@ -9,6 +9,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
+	"github.com/stubbedev/shell-lsp/internal/textline"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -96,7 +97,7 @@ func visualWidth(text string, from, to int) int {
 	if !strings.ContainsRune(text[from:to], '\t') {
 		return to - from
 	}
-	start := lineStart(text, from)
+	start := textline.Start(text, from)
 	return visualColumn(text[start:to]) - visualColumn(text[start:from])
 }
 

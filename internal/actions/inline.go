@@ -8,6 +8,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/shelldocs"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
+	"github.com/stubbedev/shell-lsp/internal/textline"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -196,12 +197,12 @@ func assignmentRemoval(tree *parser.Tree, def *parser.Definition) (textedit.Edit
 	}
 	span := path[k].Span
 	text := tree.Text()
-	if !startsLine(text, span.Start) {
+	if !textline.BlankBefore(text, span.Start) {
 		return textedit.Edit{}, false
 	}
-	end := lineEnd(text, span.End)
+	end := textline.End(text, span.End)
 	if rest := strings.TrimSpace(text[span.End:end]); rest == "" || strings.HasPrefix(rest, "#") {
-		return textedit.Edit{Start: lineStart(text, span.Start), End: min(end+1, len(text))}, true
+		return textedit.Edit{Start: textline.Start(text, span.Start), End: textline.Next(text, end)}, true
 	}
 	if !stmt.Semicolon.IsValid() {
 		return textedit.Edit{}, false

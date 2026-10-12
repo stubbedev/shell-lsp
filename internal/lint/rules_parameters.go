@@ -6,6 +6,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
+	"github.com/stubbedev/shell-lsp/internal/textline"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -61,11 +62,7 @@ func checkUnparsedBracedExpansions(p *pass) {
 			continue
 		}
 		lastLine = line
-		start := lineStart(p.text, min(e.Span.Start, len(p.text)))
-		end := len(p.text)
-		if i := strings.IndexByte(p.text[start:], '\n'); i >= 0 {
-			end = start + i
-		}
+		start, end := textline.Bounds(p.text, min(e.Span.Start, len(p.text)))
 		p.checkBracedOnLine(start, end)
 	}
 }

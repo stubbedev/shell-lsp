@@ -8,6 +8,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
+	"github.com/stubbedev/shell-lsp/internal/textline"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -728,7 +729,7 @@ func checkRejectedTestOperators(p *pass) {
 }
 
 func (p *pass) insideDoubleBracket(offset int) bool {
-	line := p.text[strings.LastIndexByte(p.text[:offset], '\n')+1 : offset]
+	line := p.text[textline.Start(p.text, offset):offset]
 	return strings.LastIndex(line, "[[") > strings.LastIndex(line, "]]")
 }
 

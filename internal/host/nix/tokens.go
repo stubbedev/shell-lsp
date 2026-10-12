@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/scan"
+	"github.com/stubbedev/shell-lsp/internal/textline"
 )
 
 type tokenKind uint8
@@ -64,7 +65,7 @@ func (l *lexer) next(i int) int {
 	case c == ' ' || c == '\t' || c == '\n' || c == '\r':
 		return i + 1
 	case c == '#':
-		end := lineEnd(src, i)
+		end := textline.End(src, i)
 		l.comment = src[i+1 : end]
 		return end
 	case strings.HasPrefix(src[i:], "/*"):
@@ -106,13 +107,6 @@ func (l *lexer) next(i int) int {
 		end++
 	}
 	return l.emit(otherToken, i, end)
-}
-
-func lineEnd(src string, i int) int {
-	if end := strings.IndexByte(src[i:], '\n'); end >= 0 {
-		return i + end
-	}
-	return len(src)
 }
 
 func identStart(c byte) bool { return c == '_' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' }
@@ -191,7 +185,7 @@ func antiquoteEnd(src string, start int) int {
 		case strings.HasPrefix(src[i:], "''"):
 			return indentedEnd(src, i+2)
 		case c == '#':
-			return lineEnd(src, i)
+			return textline.End(src, i)
 		case strings.HasPrefix(src[i:], "/*"):
 			if closing := strings.Index(src[i+2:], "*/"); closing >= 0 {
 				return i + 2 + closing + 2

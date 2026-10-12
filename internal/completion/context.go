@@ -6,6 +6,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/textline"
 )
 
 type position uint8
@@ -58,7 +59,7 @@ func analyze(tree *parser.Tree, offset int) site {
 		if doc.Quoted {
 			return site{}
 		}
-		return variableContext(text, lineStart(text, offset), offset)
+		return variableContext(text, textline.Start(text, offset), offset)
 	}
 	start := logicalLineStart(text, offset)
 	lx := lexLine(text[start:offset])
@@ -400,14 +401,10 @@ func heredocAt(tree *parser.Tree, offset int) (parser.Heredoc, bool) {
 	return parser.Heredoc{}, false
 }
 
-func lineStart(text string, offset int) int {
-	return strings.LastIndexByte(text[:offset], '\n') + 1
-}
-
 func logicalLineStart(text string, offset int) int {
-	start := lineStart(text, offset)
+	start := textline.Start(text, offset)
 	for start >= 2 && text[start-2] == '\\' {
-		start = lineStart(text, start-1)
+		start = textline.Start(text, start-1)
 	}
 	return start
 }

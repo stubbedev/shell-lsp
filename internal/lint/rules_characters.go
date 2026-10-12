@@ -7,6 +7,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/textline"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -125,28 +126,16 @@ func (p *pass) verbatimRegions() []parser.Span {
 	for _, h := range p.tree.Heredocs {
 		start := h.Body.Start
 		if h.Body.End == h.Body.Start {
-			start = lineEnd(p.text, h.Span.End) + 1
+			start = textline.Next(p.text, h.Span.End)
 		}
-		out = append(out, parser.Span{Start: start, End: lineEnd(p.text, max(start, h.Body.End))})
+		out = append(out, parser.Span{Start: start, End: textline.End(p.text, max(start, h.Body.End))})
 	}
 	slices.SortFunc(out, func(a, b parser.Span) int { return a.Start - b.Start })
 	return out
 }
 
-func lineStart(text string, offset int) int {
-	return strings.LastIndexByte(text[:offset], '\n') + 1
-}
-
 func onlyBlanksBefore(text string, offset int) bool {
-	return strings.TrimLeft(text[lineStart(text, offset):offset], " \t") == ""
-}
-
-func lineEnd(text string, from int) int {
-	from = min(from, len(text))
-	if i := strings.IndexByte(text[from:], '\n'); i >= 0 {
-		return from + i
-	}
-	return len(text)
+	return strings.TrimLeft(text[textline.Start(text, offset):offset], " \t") == ""
 }
 
 const (
@@ -331,7 +320,7 @@ func (p *pass) literalPart(part syntax.WordPart) (*syntax.Lit, bool) {
 
 func (p *pass) onBatsTestLine(w *syntax.Word) bool {
 	start := parser.Offset(w.Pos())
-	return strings.HasPrefix(strings.TrimLeft(p.text[lineStart(p.text, start):start], " \t"), batsTest+" ")
+	return strings.HasPrefix(strings.TrimLeft(p.text[textline.Start(p.text, start):start], " \t"), batsTest+" ")
 }
 
 func (p *pass) reportLiteralBrace(at int) {

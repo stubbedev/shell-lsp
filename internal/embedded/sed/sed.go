@@ -6,6 +6,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/embedded/lang"
 	"github.com/stubbedev/shell-lsp/internal/embedded/regex"
+	"github.com/stubbedev/shell-lsp/internal/textline"
 )
 
 type Syntax uint8
@@ -69,7 +70,7 @@ func (p *parser) run() {
 }
 
 func (p *parser) skipFailedCommand() {
-	end := lineEnd(p.src, max(p.commandAt, min(p.pos, len(p.src))))
+	end := textline.End(p.src, max(p.commandAt, min(p.pos, len(p.src))))
 	if strings.ContainsAny(p.src[p.commandAt:end], "{}:") {
 		p.structure = false
 	}
@@ -159,7 +160,7 @@ func (p *parser) parseCommand() {
 		}
 		return
 	case '#':
-		p.pos = lineEnd(p.src, at)
+		p.pos = textline.End(p.src, at)
 		p.emit(at, lang.Comment)
 		return
 	}
@@ -185,7 +186,7 @@ func (p *parser) parseCommand() {
 	case 'e':
 		p.blanks()
 		textStart := p.pos
-		p.pos = lineEnd(p.src, p.pos)
+		p.pos = textline.End(p.src, p.pos)
 		p.emit(textStart, lang.String)
 		return
 	case 'v':
@@ -225,13 +226,6 @@ func (p *parser) end(message string) {
 	p.fail(p.pos, lang.RuneEnd(p.src, p.pos), message)
 }
 
-func lineEnd(src string, from int) int {
-	if i := strings.IndexByte(src[from:], '\n'); i >= 0 {
-		return from + i
-	}
-	return len(src)
-}
-
 func wordEnd(src string, from int) int {
 	if i := strings.IndexAny(src[from:], "\n;}"); i >= 0 {
 		return from + i
@@ -253,7 +247,7 @@ func (p *parser) label() label {
 func (p *parser) filename(command int) {
 	p.blanks()
 	start := p.pos
-	p.pos = lineEnd(p.src, p.pos)
+	p.pos = textline.End(p.src, p.pos)
 	if p.pos == start && (p.src[command] == 'w' || p.src[command] == 'W') {
 		p.fail(command, command+1, lang.Quote(p.src, command, command+1)+" needs a file name")
 	}
@@ -414,7 +408,7 @@ func (p *parser) scanTo(delimiter byte, brackets bool) bool {
 		case c == delimiter:
 			return true
 		case brackets && c == '[':
-			if end, ok := regex.BracketEnd(p.src[:lineEnd(p.src, p.pos)], p.pos); ok {
+			if end, ok := regex.BracketEnd(p.src[:textline.End(p.src, p.pos)], p.pos); ok {
 				p.pos = end
 				continue
 			}

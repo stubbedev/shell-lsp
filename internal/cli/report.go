@@ -18,6 +18,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
+	"github.com/stubbedev/shell-lsp/internal/textline"
 )
 
 type level struct {
@@ -224,8 +225,8 @@ func writeTTY(out *bytes.Buffer, reports []fileReport, opts reportOptions) {
 		text := r.doc.Text()
 		for _, group := range lineGroups(r) {
 			first := group[0]
-			lineAt := lineStart(text, first.Span.Start)
-			source := text[lineAt:lineEnd(text, lineAt)]
+			lineAt := textline.Start(text, first.Span.Start)
+			source := text[lineAt:textline.End(text, lineAt)]
 			fmt.Fprintf(out, "\n%s\n%s\n", paint(ansiBold, fmt.Sprintf("In %s line %d:", r.name, placeOf(r.doc, first.Span.Start).line)), paint(ansiReset, source))
 			for _, f := range group {
 				indent := strings.Repeat(" ", visualWidth(text[lineAt:f.Span.Start]))
@@ -244,24 +245,13 @@ func lineGroups(r fileReport) [][]lint.Finding {
 	var groups [][]lint.Finding
 	text := r.doc.Text()
 	for _, f := range r.findings {
-		if n := len(groups); n > 0 && lineStart(text, groups[n-1][0].Span.Start) == lineStart(text, f.Span.Start) {
+		if n := len(groups); n > 0 && textline.Start(text, groups[n-1][0].Span.Start) == textline.Start(text, f.Span.Start) {
 			groups[n-1] = append(groups[n-1], f)
 			continue
 		}
 		groups = append(groups, []lint.Finding{f})
 	}
 	return groups
-}
-
-func lineStart(text string, offset int) int {
-	return strings.LastIndexByte(text[:offset], '\n') + 1
-}
-
-func lineEnd(text string, offset int) int {
-	if i := strings.IndexByte(text[offset:], '\n'); i >= 0 {
-		return offset + i
-	}
-	return len(text)
 }
 
 func visualWidth(s string) int {
@@ -298,10 +288,10 @@ func didYouMean(text string, lineAt int, group []lint.Finding) (string, bool) {
 	if len(edits) == 0 {
 		return "", false
 	}
-	start, end := lineAt, lineEnd(text, lineAt)
+	start, end := lineAt, textline.End(text, lineAt)
 	for _, e := range edits {
-		start = min(start, lineStart(text, e.Start))
-		end = max(end, lineEnd(text, e.End))
+		start = min(start, textline.Start(text, e.Start))
+		end = max(end, textline.End(text, e.End))
 	}
 	shifted := make([]textedit.Edit, len(edits))
 	for i, e := range edits {

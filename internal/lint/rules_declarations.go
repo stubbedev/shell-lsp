@@ -7,6 +7,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
+	"github.com/stubbedev/shell-lsp/internal/textline"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -119,7 +120,7 @@ func (p *pass) separateDeclarationFix(c command, flags options, a *syntax.Assign
 	if !ok || !assignOK || !onlyBlanksBefore(p.text, declSpan.Start) {
 		return nil
 	}
-	indent := p.text[lineStart(p.text, declSpan.Start):declSpan.Start]
+	indent := p.text[textline.Start(p.text, declSpan.Start):declSpan.Start]
 	assignment := p.text[assignSpan.Start:assignSpan.End]
 	name := a.Name.Value
 	switch c.name {
