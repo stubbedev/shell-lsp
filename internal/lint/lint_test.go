@@ -111,3 +111,13 @@ func TestUnclosedSubstitutionInAnArray(t *testing.T) {
 		}
 	}
 }
+
+func TestLetWithAnEmptyQuotedExpression(t *testing.T) {
+	t.Parallel()
+
+	for _, src := range []string{"let \"", "let ''\n", "let \"\"\n"} {
+		for _, d := range []dialect.Dialect{dialect.Bash, dialect.Posix, dialect.Zsh} {
+			Check(parser.Parse(src, d), nil, Options{})
+		}
+	}
+}

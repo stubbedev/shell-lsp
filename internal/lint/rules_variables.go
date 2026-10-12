@@ -323,7 +323,7 @@ func (p *pass) collectQuotedLet(expr syntax.ArithmExpr) {
 		return
 	}
 	parsed, err := syntax.NewParser().Arithmetic(strings.NewReader(text))
-	if err != nil {
+	if err != nil || parsed == nil {
 		return
 	}
 	p.collectArithmetic(parsed, parser.Offset(start)+1)
