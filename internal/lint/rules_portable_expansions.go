@@ -237,11 +237,15 @@ func isArithmeticOperandOf(owner syntax.Node, w *syntax.Word) bool {
 	}
 	switch owner := owner.(type) {
 	case *syntax.Assign:
-		return owner.Index == syntax.ArithmExpr(w)
+		return isSubscript(owner.Index, owner.Elems, w)
 	case *syntax.ArrayElem:
-		return owner.Index == syntax.ArithmExpr(w)
+		return isSubscript(owner.Index, owner.Elems, w)
 	case *syntax.ParamExp:
 		return owner.Short && owner.Index == syntax.ArithmExpr(w)
 	}
 	return parser.IsArithmetic(owner)
+}
+
+func isSubscript(index syntax.ArithmExpr, elems []syntax.RefElem, w *syntax.Word) bool {
+	return index == syntax.ArithmExpr(w) || slices.ContainsFunc(elems, func(e syntax.RefElem) bool { return e.Index == syntax.ArithmExpr(w) })
 }

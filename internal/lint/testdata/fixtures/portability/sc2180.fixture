@@ -34,3 +34,46 @@ echo "${board[@]}"
 grid[1]=wall
 echo "${grid[1]}"
 >>> none
+
+### further subscripts in declarations, lengths and defaults
+#!/bin/bash
+declare cell[1][2]=x
+f() { local c[1][2]=x; echo "${c[@]}"; }
+echo "${#cell[1][2]}" "${cell[1][2]:-d}" "${cell[1]}[2]"
+f
+>>> SC2180 2:17
+>>> SC2180 3:18
+>>> SC2180 4:24
+>>> SC2180 4:7
+
+### three subscripts are reported once
+#!/bin/bash
+cube[1][2][3]=x
+echo "${cube[1][2][3]}"
+deep=([1][2][3]=x)
+echo "${deep[@]}"
+>>> SC2180 2:9
+>>> SC2180 3:7
+>>> SC2180 4:11
+
+### spaced and expanded second subscript
+#!/bin/bash
+i=1
+grid[ 1 ][ $i ]=y
+echo "${grid[@]}" "${grid[$i][$i]}"
+>>> SC2004 3:12
+>>> SC2180 3:12
+>>> SC2180 4:20
+
+### ksh93 has multidimensional arrays
+#!/bin/ksh
+grid[1][2]=wall
+echo "${grid[1][2]}"
+>>> none
+
+### sh leaves arrays to the portability checks
+#!/bin/sh
+grid=([1][2]=wall)
+echo "${grid[1][2]}"
+>>> SC3030 2:6
+>>> SC3054 3:7

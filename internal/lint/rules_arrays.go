@@ -14,8 +14,33 @@ var arraysFamily = family{
 		2128: {severity: SeverityWarning, summary: "Expanding an array without an index gives only its first element."},
 		2178: {severity: SeverityWarning, summary: "Assigning a plain string to an array only replaces its first element."},
 		2179: {severity: SeverityWarning, summary: "Appending a string to an array changes its first element instead of adding one."},
+		2180: {severity: SeverityWarning, summary: "Bash arrays have one dimension, so a second subscript does not index into an element."},
 	},
+	nodes:  []nodeRule{onNodes(checkMultidimensional, &syntax.Assign{}, &syntax.ArrayElem{}, &syntax.ParamExp{})},
 	finish: []func(*pass){checkArrayUse},
+}
+
+func checkMultidimensional(p *pass, n syntax.Node) {
+	if p.dialect != dialect.Bash {
+		return
+	}
+	var elems []syntax.RefElem
+	at := n
+	switch n := n.(type) {
+	case *syntax.Assign:
+		elems = n.Elems
+	case *syntax.ArrayElem:
+		elems = n.Elems
+	case *syntax.ParamExp:
+		elems = n.Elems
+	}
+	if len(elems) == 0 {
+		return
+	}
+	if _, expansion := n.(*syntax.ParamExp); !expansion {
+		at = elems[0].Index
+	}
+	p.reportNode(2180, at, "Bash arrays have one dimension, so this second subscript does not index into an element; use a flat index such as [i*width+j] or an associative key such as [$i,$j].")
 }
 
 var shellArrays = []string{

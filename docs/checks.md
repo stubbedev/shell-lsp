@@ -244,6 +244,7 @@ marks the checks the `minimal` profile keeps; see [Profiles](../README.md#profil
 | <a name="sc2177"></a>[SC2177](https://www.shellcheck.net/wiki/SC2177) | warning |  | yes | time on a compound command is undefined in POSIX sh. |
 | <a name="sc2178"></a>[SC2178](https://www.shellcheck.net/wiki/SC2178) | warning |  | yes | Assigning a plain string to an array only replaces its first element. |
 | <a name="sc2179"></a>[SC2179](https://www.shellcheck.net/wiki/SC2179) | warning |  | yes | Appending a string to an array changes its first element instead of adding one. |
+| <a name="sc2180"></a>[SC2180](https://www.shellcheck.net/wiki/SC2180) | warning |  | yes | Bash arrays have one dimension, so a second subscript does not index into an element. |
 | <a name="sc2181"></a>[SC2181](https://www.shellcheck.net/wiki/SC2181) | style |  |  | $? is inspected after a command instead of testing the command directly. |
 | <a name="sc2182"></a>[SC2182](https://www.shellcheck.net/wiki/SC2182) | error |  | yes | A printf format has no conversion specifiers, so its arguments are ignored. |
 | <a name="sc2183"></a>[SC2183](https://www.shellcheck.net/wiki/SC2183) | warning |  | yes | A printf format expects a different number of arguments than it is given. |
