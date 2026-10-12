@@ -118,6 +118,9 @@ func (g *generator) index() {
 	for _, r := range tree.Redirects {
 		g.add(r.OpSpan, TypeOperator, 0)
 	}
+	for _, doc := range tree.Heredocs {
+		g.heredoc(doc)
+	}
 }
 
 func (g *generator) comment(span parser.Span) {
@@ -210,7 +213,6 @@ func (g *generator) walk() {
 				}
 			}
 		case *syntax.Redirect:
-			g.heredoc(n)
 			if n.N != nil {
 				if span, ok := tree.NodeSpan(n.N); ok && parser.IsDigits(n.N.Value) {
 					g.add(span, TypeNumber, 0)
@@ -260,22 +262,18 @@ func (g *generator) doubleQuoted(q *syntax.DblQuoted) {
 	}
 }
 
-func (g *generator) heredoc(r *syntax.Redirect) {
-	if r.Hdoc == nil || !parser.IsHeredoc(r.Op) {
+func (g *generator) heredoc(doc parser.Heredoc) {
+	r := doc.Redirect
+	if r.Hdoc == nil {
 		return
 	}
-	body, ok := g.tree.NodeSpan(r.Hdoc)
-	if !ok {
-		return
-	}
-	bodyEnd := max(body.Start, strings.LastIndexByte(g.text[:body.End], '\n')+1)
 	for _, part := range r.Hdoc.Parts {
 		lit, ok := part.(*syntax.Lit)
 		if !ok {
 			continue
 		}
 		if span, ok := g.tree.NodeSpan(lit); ok {
-			g.add(parser.Span{Start: span.Start, End: min(span.End, bodyEnd)}, TypeString, 0)
+			g.add(parser.Span{Start: span.Start, End: min(span.End, doc.Body.End)}, TypeString, 0)
 		}
 	}
 	if r.Word != nil {

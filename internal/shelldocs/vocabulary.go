@@ -342,6 +342,7 @@ var redirections = []Entry{
 	{Name: "&>>", Dialects: bashZsh, Synopsis: "&>> file", Doc: "Appends both output and errors to `file`; the portable spelling is `>> file 2>&1`."},
 	{Name: "<<", Dialects: every, Synopsis: "<< DELIM", Doc: "Here-document: the following lines up to `DELIM` become the input. Unless the delimiter is quoted, the body undergoes parameter, command and arithmetic expansion."},
 	{Name: "<<-", Dialects: every, Synopsis: "<<- DELIM", Doc: "Here-document that strips leading tab characters (not spaces) from the body and the closing delimiter, so it can be indented with tabs."},
+	{Name: "<<#", Dialects: kshOnly, Synopsis: "<<# DELIM", Doc: "Here-document that strips leading blanks (spaces and tabs) from the body and the closing delimiter, so it can be indented with either."},
 	{Name: "<<<", Dialects: bashZshKsh, Synopsis: "<<< word", Doc: "Here-string: `word` is expanded and fed to standard input with a trailing newline."},
 }
 

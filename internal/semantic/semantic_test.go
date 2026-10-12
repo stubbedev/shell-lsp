@@ -74,6 +74,17 @@ func TestTokens(t *testing.T) {
 	}
 }
 
+func TestUnterminatedHeredocBodyIsStringToTheEnd(t *testing.T) {
+	t.Parallel()
+
+	text := "cat <<EOF\nfirst\nlast"
+	got := describe(text, Tokens(parser.Parse(text, dialect.Bash), nil, nil))
+	want := []string{"cat:function+external", "<<:operator", "EOF:string", "first:string", "last:string"}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("tokens:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
 func TestEmbeddedProgramTokensReplaceTheirString(t *testing.T) {
 	t.Parallel()
 

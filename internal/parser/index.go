@@ -132,6 +132,7 @@ type Heredoc struct {
 	Strip     HeredocStrip
 	Span      Span
 	Body      Span
+	Redirect  *syntax.Redirect
 }
 
 type Comment struct {
@@ -935,6 +936,7 @@ func (b *builder) redirect(n *syntax.Redirect) {
 		Strip:     heredocStrip(n.Op),
 		Span:      Span{Start: opSpan.Start, End: target.End},
 		Body:      body,
+		Redirect:  n,
 	})
 }
 

@@ -478,8 +478,8 @@ func (h hoverer) operatorOf(node syntax.Node) (Result, bool) {
 		if n.N != nil {
 			start = parser.Offset(n.N.Pos())
 		}
-		if n.Op == syntax.Hdoc || n.Op == syntax.DashHdoc {
-			extra = heredocExpansion(n.Word)
+		if doc, ok := h.heredoc(n); ok {
+			extra = heredocExpansion(doc)
 		}
 	case *syntax.BinaryCmd:
 		name, vocabs = n.Op.String(), []shelldocs.Vocabulary{shelldocs.ListOperators}
@@ -522,19 +522,17 @@ func (h hoverer) operatorOf(node syntax.Node) (Result, bool) {
 	return Result{Markdown: doc, Span: span}, true
 }
 
-func heredocExpansion(delim *syntax.Word) string {
-	if delim == nil {
-		return ""
+func (h hoverer) heredoc(r *syntax.Redirect) (parser.Heredoc, bool) {
+	i := slices.IndexFunc(h.Tree.Heredocs, func(doc parser.Heredoc) bool { return doc.Redirect == r })
+	if i < 0 {
+		return parser.Heredoc{}, false
 	}
-	for _, part := range delim.Parts {
-		switch p := part.(type) {
-		case *syntax.SglQuoted, *syntax.DblQuoted:
-			return "The delimiter is quoted, so the body is taken literally: no expansion happens in it."
-		case *syntax.Lit:
-			if strings.ContainsRune(p.Value, '\\') {
-				return "The delimiter is quoted, so the body is taken literally: no expansion happens in it."
-			}
-		}
+	return h.Tree.Heredocs[i], true
+}
+
+func heredocExpansion(doc parser.Heredoc) string {
+	if doc.Quoted {
+		return "The delimiter is quoted, so the body is taken literally: no expansion happens in it."
 	}
 	return "The delimiter is unquoted, so `$`, backticks and `\\` are processed in the body; quote the delimiter (`<<'EOF'`) to take it literally."
 }
