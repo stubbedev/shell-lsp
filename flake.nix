@@ -54,7 +54,9 @@
             zsh
             ksh
             mksh
-            busybox
+            # Only the busybox binary: the package's applet links (sh, grep,
+            # sed, find...) would shadow coreutils for every recipe.
+            (runCommand "busybox-only" {} "mkdir -p $out/bin && ln -s ${busybox}/bin/busybox $out/bin/busybox")
 
             # Development workflow
             git # Version control
