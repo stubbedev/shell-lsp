@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -262,10 +261,10 @@ func completionItem(snap *snapshot, caps CompletionItemCapabilities, it completi
 		item.FilterText = it.Label
 	}
 	if it.Documentation != "" {
-		item.Documentation = &lsp.MarkupContent{Kind: lsp.MarkupMarkdown, Value: it.Documentation}
+		item.Documentation = lsp.Markdown(it.Documentation)
 	}
 	if it.Resolve != completion.ResolveNone {
-		data, err := json.Marshal(completionData{Kind: it.Resolve, Name: it.Label, URI: snap.Doc.URI, Offset: it.Replace.Start})
+		data, err := encodeData(completionData{Kind: it.Resolve, Name: it.Label, URI: snap.Doc.URI, Offset: it.Replace.Start})
 		if err != nil {
 			return lsp.CompletionItem{}, false, err
 		}
@@ -278,16 +277,19 @@ func (s *Server) handleCompletionResolve(ctx context.Context, docs *docstore.Vie
 	if len(item.Data) == 0 {
 		return item, nil
 	}
-	var data completionData
-	if err := json.Unmarshal(item.Data, &data); err != nil || data.Name == "" || data.Kind == completion.ResolveNone {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "completion item data %s is not from this server", item.Data)
+	data, err := decodeData[completionData]("completion item", item.Data)
+	if err != nil {
+		return nil, err
+	}
+	if data.Name == "" || data.Kind == completion.ResolveNone {
+		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "completion item data %s is not from this server: it names nothing to resolve", item.Data)
 	}
 	if data.Kind == completion.ResolveCommand {
 		doc, err := s.commandDocs.Describe(ctx, data.Name)
 		if err != nil && !errors.Is(err, manpage.ErrNoPage) {
 			return nil, err
 		}
-		item.Documentation = &lsp.MarkupContent{Kind: lsp.MarkupMarkdown, Value: doc}
+		item.Documentation = lsp.Markdown(doc)
 		return item, nil
 	}
 	snap, err := s.snapshot(docs, data.URI)
@@ -295,7 +297,7 @@ func (s *Server) handleCompletionResolve(ctx context.Context, docs *docstore.Vie
 		return item, nil
 	}
 	if doc, ok := completion.Documentation(snap.Tree, s.imports(snap.File), data.Kind, data.Name, data.Offset); ok {
-		item.Documentation = &lsp.MarkupContent{Kind: lsp.MarkupMarkdown, Value: doc}
+		item.Documentation = lsp.Markdown(doc)
 	}
 	return item, nil
 }

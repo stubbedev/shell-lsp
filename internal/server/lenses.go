@@ -54,7 +54,7 @@ func (s *Server) handleCodeLens(_ context.Context, docs *docstore.View, p lsp.Co
 	}
 	for _, span := range spans {
 		r := at.Range(span)
-		data, err := json.Marshal(lensData{URI: file.URI, Position: r.Start})
+		data, err := encodeData(lensData{URI: file.URI, Position: r.Start})
 		if err != nil {
 			return nil, err
 		}
@@ -67,9 +67,9 @@ func (s *Server) handleCodeLensResolve(ctx context.Context, docs *docstore.View,
 	if lens.Command != nil {
 		return lens, nil
 	}
-	var data lensData
-	if err := json.Unmarshal(lens.Data, &data); err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "code lens data %s is not from this server: %v", lens.Data, err)
+	data, err := decodeData[lensData]("code lens", lens.Data)
+	if err != nil {
+		return nil, err
 	}
 	locations, err := s.referenceLocations(ctx, docs, data.at(), false)
 	if err != nil {
@@ -79,7 +79,7 @@ func (s *Server) handleCodeLensResolve(ctx context.Context, docs *docstore.View,
 	if len(locations) == 1 {
 		title = "1 reference"
 	}
-	args, err := json.Marshal(data)
+	args, err := encodeData(data)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +94,7 @@ type callItemData struct {
 }
 
 func (s *Server) callHierarchyItem(item navigation.CallItem, docs *docstore.View) (lsp.CallHierarchyItem, error) {
-	data, err := json.Marshal(callItemData{Name: item.Name, Start: item.Span.Start, TopLevel: item.TopLevel})
+	data, err := encodeData(callItemData{Name: item.Name, Start: item.Span.Start, TopLevel: item.TopLevel})
 	if err != nil {
 		return lsp.CallHierarchyItem{}, err
 	}
@@ -125,9 +125,9 @@ func (s *Server) loadURI(docs *docstore.View, uri string) (*workspace.File, erro
 }
 
 func (s *Server) callItemFromLSP(docs *docstore.View, item lsp.CallHierarchyItem) (navigation.CallItem, error) {
-	var data callItemData
-	if err := json.Unmarshal(item.Data, &data); err != nil {
-		return navigation.CallItem{}, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "call hierarchy item data %s is not from this server: %v", item.Data, err)
+	data, err := decodeData[callItemData]("call hierarchy item", item.Data)
+	if err != nil {
+		return navigation.CallItem{}, err
 	}
 	file, err := s.loadURI(docs, item.URI)
 	if err != nil {

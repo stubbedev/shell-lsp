@@ -2,11 +2,9 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/stubbedev/shell-lsp/internal/assist"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
-	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/navigation"
 	"github.com/stubbedev/shell-lsp/internal/parser"
@@ -56,12 +54,12 @@ func (s *Server) handleSignatureHelp(_ context.Context, docs *docstore.View, pos
 	}
 	info := lsp.SignatureInformation{Label: sig.Label, Parameters: []lsp.ParameterInformation{}}
 	if sig.Doc != "" {
-		info.Documentation = &lsp.MarkupContent{Kind: lsp.MarkupMarkdown, Value: sig.Doc}
+		info.Documentation = lsp.Markdown(sig.Doc)
 	}
 	for _, p := range sig.Params {
 		param := lsp.ParameterInformation{Label: [2]uint32{docs.Encoding().Units(sig.Label[:p.Start]), docs.Encoding().Units(sig.Label[:p.End])}}
 		if p.Doc != "" {
-			param.Documentation = &lsp.MarkupContent{Kind: lsp.MarkupMarkdown, Value: p.Doc}
+			param.Documentation = lsp.Markdown(p.Doc)
 		}
 		info.Parameters = append(info.Parameters, param)
 	}
@@ -101,7 +99,7 @@ func (s *Server) handleInlayHint(_ context.Context, docs *docstore.View, p lsp.I
 			hint.PaddingLeft = true
 		}
 		if h.Tooltip != "" {
-			data, err := json.Marshal(hintData{Tooltip: h.Tooltip})
+			data, err := encodeData(hintData{Tooltip: h.Tooltip})
 			if err != nil {
 				return nil, err
 			}
@@ -116,11 +114,11 @@ func (s *Server) handleInlayHintResolve(_ context.Context, _ *docstore.View, hin
 	if len(hint.Data) == 0 {
 		return hint, nil
 	}
-	var data hintData
-	if err := json.Unmarshal(hint.Data, &data); err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "inlay hint data %s is not from this server: %v", hint.Data, err)
+	data, err := decodeData[hintData]("inlay hint", hint.Data)
+	if err != nil {
+		return nil, err
 	}
-	hint.Tooltip = &lsp.MarkupContent{Kind: lsp.MarkupMarkdown, Value: data.Tooltip}
+	hint.Tooltip = lsp.Markdown(data.Tooltip)
 	hint.Data = nil
 	return hint, nil
 }

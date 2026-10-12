@@ -220,6 +220,10 @@ type MarkupContent struct {
 	Value string     `json:"value"`
 }
 
+func Markdown(value string) *MarkupContent {
+	return &MarkupContent{Kind: MarkupMarkdown, Value: value}
+}
+
 type HoverParams struct {
 	TextDocumentPositionParams
 }

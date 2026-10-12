@@ -95,7 +95,7 @@ func (s *Server) codeAction(docs *docstore.View, snap *snapshot, sources func() 
 		action.Diagnostics = append(action.Diagnostics, contextDiags[i])
 	}
 	if lazy && (a.Refactor != nil || a.FixAllCode != "") {
-		data, err := json.Marshal(actionData{URI: snap.Doc.URI, Version: snap.Doc.Version, Refactor: a.Refactor, FixAll: a.FixAllCode})
+		data, err := encodeData(actionData{URI: snap.Doc.URI, Version: snap.Doc.Version, Refactor: a.Refactor, FixAll: a.FixAllCode})
 		if err != nil {
 			return lsp.CodeAction{}, err
 		}
@@ -226,9 +226,9 @@ func (s *Server) handleCodeActionResolve(_ context.Context, docs *docstore.View,
 	if action.Edit != nil || len(action.Data) == 0 {
 		return action, nil
 	}
-	var data actionData
-	if err := json.Unmarshal(action.Data, &data); err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "code action data %s is not from this server: %v", action.Data, err)
+	data, err := decodeData[actionData]("code action", action.Data)
+	if err != nil {
+		return nil, err
 	}
 	snap, err := s.snapshot(docs, data.URI)
 	if err != nil {
