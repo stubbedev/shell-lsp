@@ -8,6 +8,7 @@ const (
 	notOptional optionalCheck = iota
 	optionalDefaultCase
 	optionalArithmeticInjection
+	optionalGlobalReassignment
 	optionalNegatedConditions
 	optionalNullaryConditions
 	optionalMaskedReturns
@@ -35,6 +36,7 @@ type optionalSpec struct {
 var optionalSpecs = [optionalCheckCount]optionalSpec{
 	optionalDefaultCase:         {name: "add-default-case"},
 	optionalArithmeticInjection: {name: "arithmetic-injection"},
+	optionalGlobalReassignment:  {name: "avoid-global-reassignment", notStrict: true},
 	optionalNegatedConditions:   {name: "avoid-negated-conditions"},
 	optionalNullaryConditions:   {name: "avoid-nullary-conditions"},
 	optionalMaskedReturns:       {name: "check-extra-masked-returns"},

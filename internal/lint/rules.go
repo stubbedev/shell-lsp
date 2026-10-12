@@ -44,6 +44,7 @@ var families = []family{
 	commandWordFamily,
 	variablesFamily,
 	localVariablesFamily,
+	globalReassignmentFamily,
 	testsFamily,
 	redirectsFamily,
 	expansionsFamily,

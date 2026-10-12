@@ -1,0 +1,140 @@
+### a global set twice at the top level
+#!/bin/bash
+# shellcheck enable=avoid-global-reassignment
+mode=fast
+echo "$mode"
+mode=slow
+declare -r mode2=1
+mode2=2
+echo "$mode $mode2"
+>>+ SL2015 5:1 -- shell-lsp native check; shellcheck does not track reassigned globals
+>>+ SL2015 7:1 -- shell-lsp native check; shellcheck does not track reassigned globals
+
+### updates build on the old value
+#!/bin/bash
+# shellcheck enable=avoid-global-reassignment
+total=0
+list=
+args=()
+for n in 1 2 3; do
+  total=$((total + n))
+  (( total += n ))
+  (( total++ ))
+  list="$list $n"
+  args+=("$n")
+  args[0]=first
+done
+echo "$total $list ${args[*]}"
+>>> none
+
+### loop variables and builtin targets are filled by the shell
+#!/bin/bash
+# shellcheck enable=avoid-global-reassignment
+for f in a b; do echo "$f"; done
+for f in c d; do echo "$f"; done
+read -r line
+read -r line
+echo "$line"
+>>> none
+
+### exclusive branches of if and case
+#!/bin/bash
+# shellcheck enable=avoid-global-reassignment
+if [ -n "$1" ]; then
+  out=$1
+elif [ -n "$2" ]; then
+  out=$2
+else
+  out=default
+fi
+case $3 in
+  a) level=1 ;;
+  b) level=2 ;;
+esac
+echo "$out $level"
+>>> none
+
+### a default overridden later is a new value
+#!/bin/bash
+# shellcheck enable=avoid-global-reassignment
+out=default
+if [ -n "$1" ]; then
+  out=$1
+fi
+found=false
+for f in *; do [ -e "$f" ] && found=true; done
+echo "$out $found"
+>>+ SL2015 5:3 -- shell-lsp native check; shellcheck does not track reassigned globals
+>>+ SL2015 8:31 -- shell-lsp native check; shellcheck does not track reassigned globals
+
+### functions that change top-level globals
+#!/bin/bash
+# shellcheck enable=avoid-global-reassignment
+count=0
+names=()
+bump() {
+  count=$((count + 1))
+  count=$((count + 1))
+  names+=("$1")
+}
+scan() {
+  for count in 1 2; do :; done
+  declare -g count=9
+}
+quiet() {
+  local count=5
+  count=6
+  echo "$count"
+}
+bump a
+scan
+quiet
+echo "$count ${names[*]}"
+>>+ SL2015 11:7 -- shell-lsp native check; shellcheck does not track reassigned globals
+>>+ SL2015 6:3 -- shell-lsp native check; shellcheck does not track reassigned globals
+>>+ SL2015 8:3 -- shell-lsp native check; shellcheck does not track reassigned globals
+
+### functions writing variables the top level never sets are left to SL2014
+#!/bin/bash
+# shellcheck enable=avoid-global-reassignment
+work() {
+  result=1
+  result=2
+}
+work
+echo "$result"
+>>> none
+
+### shell variables are fine
+#!/bin/bash
+# shellcheck enable=avoid-global-reassignment
+IFS=,
+IFS=' '
+PATH=/bin
+add_path() { PATH=$PATH:/usr/local/bin; }
+add_path
+>>> none
+
+### setup before readonly follows the style guide
+#!/bin/bash
+# shellcheck enable=avoid-global-reassignment
+VERBOSE=false
+while getopts v flag; do
+  case $flag in
+    v) VERBOSE=true ;;
+  esac
+done
+readonly VERBOSE
+MODE=a
+set_mode() { MODE=$1; }
+set_mode b
+readonly MODE
+echo "$VERBOSE $MODE"
+>>> SC2220 5:3
+
+### off unless enabled
+#!/bin/bash
+mode=fast
+mode=slow
+echo "$mode"
+>>> none

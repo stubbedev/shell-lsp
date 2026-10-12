@@ -307,7 +307,9 @@ reported:
 - `strict` also turns on every optional check except
   `check-unassigned-uppercase`, which reports every all-uppercase variable a
   script reads without assigning, so it flags ordinary environment inputs
-  such as `$HOME` or `$CI` rather than mistakes.
+  such as `$HOME` or `$CI` rather than mistakes, and
+  `avoid-global-reassignment`, which follows one style guide's preference
+  for globals that never change rather than pointing at mistakes.
 
 The profile is the starting point, and the other settings apply on top:
 optional checks named in `lint.optional` or turned on with a `# shellcheck

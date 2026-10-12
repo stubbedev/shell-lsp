@@ -359,7 +359,7 @@ function-specific variable. A variable is left alone when it is declared
 local earlier in the function or in one that encloses it; when the script
 declares it global anywhere with `export`, `readonly`, `declare -g` or a
 `declare` at the top level; when the top level assigns it too, which
-makes it a global by design; when code outside the function reads it without
+makes it a global by design and is [SL2015](#sl2015)'s concern; when code outside the function reads it without
 assigning it, which shows it is the function's output; and for the shell's
 own variables, such as `REPLY`, `OPTIND`, `IFS` or `COMPREPLY`. Each variable
 is reported once per function. POSIX sh has no `local`, so sh scripts are not
@@ -375,6 +375,40 @@ count_lines() {
   while read -r line; do total=$((total + 1)); done < "$1"
   echo "$total"
 }
+```
+
+## SL2015
+
+**A global variable is given a new value.** The rule is optional
+(`avoid-global-reassignment`). The Google Shell Style Guide prefers globals
+that are set once, ideally made `readonly`, so that a reader can trust a
+global's value anywhere in the script. Two kinds of change are reported:
+
+- At the top level, a plain assignment to a variable that an earlier
+  top-level assignment already set, unless the two sit in different branches
+  of the same `if` or `case`, where only one of them runs. Updates that
+  build on the old value are accumulation rather than a new value and are
+  left alone: `+=`, `n=$((n + 1))`, `list="$list $item"`, `(( n++ ))` and
+  assignments to one array element. So are `for` loop variables and the
+  variables `read`, `getopts` and `mapfile` fill, which the shell sets
+  rather than the script.
+- In a function, any write to a variable the top level also sets, including
+  updates and loops, unless the function declared it local first: the
+  function changes state the rest of the script depends on.
+
+Assignments before the variable is made `readonly` at the top level are the
+style guide's own pattern for settings, such as defaults that option parsing
+overrides, and are not reported; neither are function writes to a variable
+the top level makes `readonly`. Each variable is reported once per function,
+and the shell's own variables, such as `PATH` or `IFS`, are never reported. [SL2014](#sl2014) covers
+function variables the top level does not set.
+
+```bash
+#!/bin/bash
+# shellcheck enable=avoid-global-reassignment
+mode=fast
+mode=slow    # SL2015
+reset() { mode=fast; }    # SL2015
 ```
 
 The embedded-language rules check awk, sed and jq programs written inside the

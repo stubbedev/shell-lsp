@@ -43,6 +43,7 @@ type pass struct {
 	executed       *bool
 	lastResolved   resolvedCall
 	quotedHeredocs map[int]bool
+	assignmentArms map[*syntax.Assign][]branchArm
 
 	normalized Normalized
 	probes     []Finding
