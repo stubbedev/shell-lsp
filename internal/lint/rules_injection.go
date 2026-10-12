@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
@@ -350,42 +349,18 @@ func wholeExpansion(w *syntax.Word) bool {
 
 func shellScript(name string, args []*syntax.Word) (string, *syntax.Word, bool) {
 	base := path.Base(name)
-	if _, isShell := dialect.FromName(base); isShell {
-		script, ok := shellCommandString(args)
-		return base, script, ok
+	if inv, ok := shellInvocationOf(base, args); ok {
+		return base, inv.operand, inv.mode == runsCommandString
 	}
-	if base == "su" {
-		script, ok := optionArgument(args, "-c", "--command")
-		return base, script, ok
+	if base != "su" {
+		return "", nil, false
+	}
+	for _, opt := range parseOptions(base, args).Options {
+		if (opt.Name == "-c" || opt.Name == "--command") && opt.Argument != nil {
+			return base, opt.Argument.Word, true
+		}
 	}
 	return "", nil, false
-}
-
-func optionArgument(args []*syntax.Word, names ...string) (*syntax.Word, bool) {
-	for i, arg := range args[:max(len(args)-1, 0)] {
-		if lit, ok := parser.Literal(arg); ok && slices.Contains(names, lit) {
-			return args[i+1], true
-		}
-	}
-	return nil, false
-}
-
-func shellCommandString(args []*syntax.Word) (*syntax.Word, bool) {
-	commandMode := false
-	for _, arg := range args {
-		lit, literal := parser.Literal(arg)
-		switch {
-		case literal && lit == "--":
-			continue
-		case literal && strings.HasPrefix(lit, "-") && len(lit) > 1 && !strings.HasPrefix(lit, "--"):
-			commandMode = commandMode || strings.ContainsRune(lit[1:], 'c')
-		case commandMode:
-			return arg, true
-		default:
-			return nil, false
-		}
-	}
-	return nil, false
 }
 
 func (p *pass) reportInjection(code Code, w *syntax.Word, scope parser.ScopeID, sink string) {

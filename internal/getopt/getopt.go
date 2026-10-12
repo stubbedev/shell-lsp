@@ -68,13 +68,18 @@ type Grammar struct {
 	Short         string
 	Long          map[string]Arity
 	StopAtOperand bool
+	Plus          bool
+}
+
+func (g Grammar) isOption(word string) bool {
+	return IsOption(word) || g.Plus && len(word) > 1 && word[0] == '+'
 }
 
 func (g Grammar) Arity(option string) Arity {
 	if name, long := strings.CutPrefix(option, EndOfOptions); long {
 		return g.Long[name]
 	}
-	if len(option) != 2 || option[0] != '-' || option[1] == ':' {
+	if len(option) != 2 || (option[0] != '-' && option[0] != '+') || option[1] == ':' {
 		return Unknown
 	}
 	at := strings.IndexByte(g.Short, option[1])
@@ -131,7 +136,7 @@ func Parse[W any](g Grammar, words []W, literal func(W) (string, bool)) Parsed[W
 		case ok && lit == EndOfOptions:
 			out.Operands = append(out.Operands, words[i+1:]...)
 			return out
-		case !ok || !IsOption(lit):
+		case !ok || !g.isOption(lit):
 			if g.StopAtOperand {
 				out.Operands = append(out.Operands, words[i:]...)
 				return out

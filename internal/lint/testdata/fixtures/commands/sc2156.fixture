@@ -9,3 +9,11 @@ find . -name '*.tmp' -execdir bash -c 'rm "{}"' ';'
 ### files passed as positional arguments
 find . -name '*.log' -ok sh -c 'gzip "$@"' _ {} \;
 >>> none
+
+### shell option value before -c
+find . -name '*.txt' -exec sh -o errexit -c 'echo {}' \;
+>>> SC2156 1:45
+
+### zsh script behind sudo
+find . -name '*.txt' -exec sudo zsh -c 'echo {}' \;
+>>+ SC2156 1:40 -- sudo runs zsh, which pastes the file name into its script all the same; shellcheck 0.11 looks only for sh, bash, dash or ksh right after -exec

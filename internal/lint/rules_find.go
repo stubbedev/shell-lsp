@@ -38,7 +38,6 @@ var (
 	findExecActions       = setOf("-exec", "-execdir", "-ok", "-okdir")
 	findTerminatedActions = setOf("-exec", "-execdir")
 	findExecTerminators   = setOf(";", "+")
-	findInlineShells      = setOf("sh", "bash", "dash", "ksh")
 	findOr                = setOf("-o", "-or")
 )
 
@@ -75,17 +74,17 @@ func checkFindExec(p *pass, c command) {
 }
 
 func checkFindInlineScript(p *pass, c command) {
-	sawExec, sawShell := false, false
-	for i, arg := range c.args {
-		switch {
-		case literalIn(arg, findExecActions):
-			sawExec = true
-		case sawExec && literalIn(arg, findInlineShells):
-			sawShell = true
-		case sawShell && parser.LiteralIs(arg, "-c") && i+1 < len(c.args):
-			if script, _ := parser.Text(c.args[i+1], ""); strings.Contains(script, "{}") {
-				p.reportNode(2156, c.args[i+1], "Pass {} to the inline script as an argument and use \"$1\"; injecting file names into the script text breaks on special characters.")
-			}
+	for run := range (parser.Wrappers{Programs: true}).Invocations(c.call.Args[slices.Index(c.call.Args, c.word):]) {
+		name, ok := parser.Literal(run.Args[0])
+		if !ok || run.Placeholder == "" {
+			continue
+		}
+		inv, ok := shellInvocationOf(name, run.Args[1:])
+		if !ok || inv.mode != runsCommandString {
+			continue
+		}
+		if script, _ := parser.Text(inv.operand, ""); strings.Contains(script, run.Placeholder) {
+			p.reportNode(2156, inv.operand, "Pass {} to the inline script as an argument and use \"$1\"; injecting file names into the script text breaks on special characters.")
 		}
 	}
 }

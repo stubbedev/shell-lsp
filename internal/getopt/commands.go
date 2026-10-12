@@ -94,5 +94,9 @@ var Commands = map[string]Grammar{
 		longs(Valued, "output", "output-dir"),
 	)},
 	"wget": {Short: "VhbdqvFcNS46xErkKmpHLe:o:a:i:B:t:O:T:w:Q:P:U:l:A:R:D:I:X:", Long: longs(Valued, "output-document")},
-	"ssh":  {Short: "46AaCfGgKkMNnqsTtVvXxYyB:b:c:D:E:e:F:I:i:J:L:l:m:O:o:P:p:Q:R:S:W:w:"},
+	"su": {Short: "mpw:g:G:lc:fs:PThV", Long: merged(standardLongs,
+		longs(Flag, "preserve-environment", "login", "fast", "pty", "no-pty"),
+		longs(Valued, "whitelist-environment", "group", "supp-group", "command", "session-command", "shell"),
+	)},
+	"ssh": {Short: "46AaCfGgKkMNnqsTtVvXxYyB:b:c:D:E:e:F:I:i:J:L:l:m:O:o:P:p:Q:R:S:W:w:"},
 }

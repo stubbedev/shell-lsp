@@ -1,9 +1,6 @@
 package lint
 
 import (
-	"strings"
-
-	"github.com/stubbedev/shell-lsp/internal/getopt"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
@@ -19,10 +16,7 @@ var downloadFamily = family{
 	},
 }
 
-var (
-	scriptShells     = setOf("sh", "bash", "zsh", "dash", "ksh", "mksh", "ash")
-	sourcingCommands = setOf("source", ".")
-)
+var sourcingCommands = setOf("source", ".")
 
 const stdinPath = "/dev/stdin"
 
@@ -35,9 +29,11 @@ func checkDownloadedScript(p *pass, n syntax.Node) {
 	if !ok {
 		return
 	}
+	if inv, ok := shellInvocationOf(name, args); ok {
+		p.checkShellScriptSource(runner, inv)
+		return
+	}
 	switch {
-	case scriptShells[name]:
-		p.checkShellScriptSource(runner, args)
 	case name == "eval":
 		for _, arg := range args {
 			if downloader, ok := downloadedOutput(arg); ok {
@@ -50,41 +46,17 @@ func checkDownloadedScript(p *pass, n syntax.Node) {
 	}
 }
 
-func (p *pass) checkShellScriptSource(runner *syntax.Word, args []*syntax.Word) {
-	for i := 0; i < len(args); i++ {
-		lit, literal := parser.Literal(args[i])
-		switch {
-		case literal && lit == getopt.EndOfOptions:
-			if i+1 < len(args) {
-				p.checkScriptOperand(runner, args[i+1], "the shell")
-			}
-			return
-		case literal && shortOptions(lit):
-			switch {
-			case strings.ContainsRune(lit, 'c'):
-				if i+1 < len(args) {
-					if downloader, ok := downloadedOutput(args[i+1]); ok {
-						p.reportDownloaded(args[i+1], downloader, "the shell")
-					}
-				}
-				return
-			case strings.ContainsRune(lit, 's'):
-				p.checkPipedScript(runner, "the shell")
-				return
-			case strings.HasSuffix(lit, "o") || strings.HasSuffix(lit, "O"):
-				i++
-			}
-		case literal && getopt.IsOption(lit):
-		default:
-			p.checkScriptOperand(runner, args[i], "the shell")
-			return
+func (p *pass) checkShellScriptSource(runner *syntax.Word, inv shellInvocation) {
+	switch inv.mode {
+	case runsCommandString:
+		if downloader, ok := downloadedOutput(inv.operand); ok {
+			p.reportDownloaded(inv.operand, downloader, "the shell")
 		}
+	case runsScriptFile:
+		p.checkScriptOperand(runner, inv.operand, "the shell")
+	case runsStdin:
+		p.checkPipedScript(runner, "the shell")
 	}
-	p.checkPipedScript(runner, "the shell")
-}
-
-func shortOptions(word string) bool {
-	return len(word) > 1 && (word[0] == '-' || word[0] == '+') && word[1] != '-'
 }
 
 func (p *pass) checkScriptOperand(at, operand *syntax.Word, runner string) {

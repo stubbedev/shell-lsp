@@ -37,3 +37,21 @@ env -i PATH=/bin bash -c "ls $1"
 timeout 5 setsid bash -c "ls $1"
 >>> none
 >>+ SL1002 2:30 -- shell-lsp native injection check; shellcheck has no taint analysis
+
+### a shell option with its value before -c
+#!/bin/bash
+sh -o errexit -c "tar xf $1"
+>>> none
+>>+ SL1002 2:26 -- shell-lsp native injection check; shellcheck has no taint analysis
+
+### a plus option with its value before -c
+#!/bin/bash
+bash +O extglob -c "ls $1"
+>>> none
+>>+ SL1002 2:24 -- shell-lsp native injection check; shellcheck has no taint analysis
+
+### the script after the end of options
+#!/bin/bash
+zsh -c -- "ls $1"
+>>> none
+>>+ SL1002 2:15 -- shell-lsp native injection check; shellcheck has no taint analysis

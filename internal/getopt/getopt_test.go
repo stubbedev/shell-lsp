@@ -98,6 +98,8 @@ func TestParse(t *testing.T) {
 		{Grammar{Short: "ab", StopAtOperand: true}, "-a x -b", "-a [x] [-b]"},
 		{Grammar{Short: "ab"}, "-a -- -b", "-a [-b]"},
 		{Grammar{Short: "a:b"}, "-a -- -b", "-a=-- -b"},
+		{Grammar{Short: "o:c", StopAtOperand: true}, "+o x -c y", "[+o] [x] [-c] [y]"},
+		{Grammar{Short: "o:c", StopAtOperand: true, Plus: true}, "+o x -c y", "+o=x -c [y]"},
 	} {
 		got := render(Parse(tc.grammar, strings.Fields(tc.args), func(s string) (string, bool) { return s, true }))
 		if got != tc.want {
