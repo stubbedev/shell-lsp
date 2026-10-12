@@ -109,7 +109,7 @@ func (t *untrustedValues) collectValidations() {
 		if subject == nil {
 			return true
 		}
-		if pe, ok := solePart(subject).(*syntax.ParamExp); ok && pe.Param != nil {
+		if pe, ok := parser.SolePart(subject).(*syntax.ParamExp); ok && pe.Param != nil {
 			offset := parser.Offset(n.Pos())
 			key := t.key(pe.Param.Value, t.tree.ScopeAt(offset))
 			t.validated[key] = append(t.validated[key], offset)
@@ -119,7 +119,7 @@ func (t *untrustedValues) collectValidations() {
 }
 
 func rewritesItself(a *syntax.Assign) bool {
-	pe, ok := solePart(a.Value).(*syntax.ParamExp)
+	pe, ok := parser.SolePart(a.Value).(*syntax.ParamExp)
 	return ok && pe.Param != nil && pe.Param.Value == a.Name.Value && pe.Repl != nil
 }
 
@@ -177,8 +177,12 @@ func (t *untrustedValues) markArguments(cmd parser.Command) bool {
 }
 
 func expandsAllPositionals(w *syntax.Word) bool {
-	pe, ok := solePart(w).(*syntax.ParamExp)
-	return ok && pe.Param != nil && (pe.Param.Value == "@" || pe.Param.Value == "*")
+	pe, ok := parser.SoleParam(w)
+	if !ok {
+		return false
+	}
+	kind, _ := parser.ParamKindOf(pe.Param.Value)
+	return kind == parser.ParamAll
 }
 
 func (t *untrustedValues) definitionSource(def *parser.Definition) (untrustedSource, bool) {
@@ -267,12 +271,13 @@ func producesOutput(n syntax.Node) bool {
 }
 
 func (t *untrustedValues) param(name string, scope parser.ScopeID) (untrustedSource, bool) {
+	kind, _ := parser.ParamKindOf(name)
 	switch {
 	case name == "OPTARG":
 		return fromOption, true
-	case name == "@" || name == "*":
+	case kind == parser.ParamAll:
 		return t.positional(everyPosition, scope)
-	case name != "0" && isPositional(name):
+	case kind == parser.ParamPositional:
 		n, err := strconv.Atoi(name)
 		if err != nil {
 			return 0, false
@@ -339,7 +344,7 @@ func checkInjectedCommand(p *pass, n syntax.Node) {
 }
 
 func wholeExpansion(w *syntax.Word) bool {
-	_, ok := solePart(w).(*syntax.ParamExp)
+	_, ok := parser.SolePart(w).(*syntax.ParamExp)
 	return ok
 }
 
@@ -383,7 +388,7 @@ func (p *pass) restrictedByCase(pe *syntax.ParamExp) bool {
 		if !ok {
 			continue
 		}
-		subject, ok := solePart(clause.Word).(*syntax.ParamExp)
+		subject, ok := parser.SolePart(clause.Word).(*syntax.ParamExp)
 		if !ok || subject.Param == nil || subject.Param.Value != pe.Param.Value {
 			continue
 		}

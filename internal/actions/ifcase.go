@@ -222,18 +222,11 @@ func (c comparison) or(other comparison, ok bool) (comparison, bool) {
 }
 
 func subjectName(w *syntax.Word, double bool) (string, bool) {
-	parts := w.Parts
-	quoted := false
-	if len(parts) == 1 {
-		if dq, ok := parts[0].(*syntax.DblQuoted); ok && !dq.Dollar {
-			parts, quoted = dq.Parts, true
-		}
-	}
-	if len(parts) != 1 || (!quoted && !double) {
+	pe, ok := parser.SoleParam(w)
+	if !ok || !parser.IsPlainParam(pe) {
 		return "", false
 	}
-	pe, ok := parts[0].(*syntax.ParamExp)
-	if !ok || !parser.IsPlainParam(pe) {
+	if dq, quoted := w.Parts[0].(*syntax.DblQuoted); quoted && dq.Dollar || !quoted && !double {
 		return "", false
 	}
 	return pe.Param.Value, true

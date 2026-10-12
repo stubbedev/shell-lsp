@@ -516,8 +516,8 @@ func readsPositional(pe *syntax.ParamExp) bool {
 	if pe.Param == nil || pe.Names != 0 || guarded(pe) || isAlternativeExpansion(pe) {
 		return false
 	}
-	name := pe.Param.Value
-	return name == "*" || name == "@" || name == "#" || (isPositional(name) && name != "0")
+	kind, _ := parser.ParamKindOf(pe.Param.Value)
+	return kind == parser.ParamAll || kind == parser.ParamCount || kind == parser.ParamPositional
 }
 
 func setsPositionals(call *syntax.CallExpr) bool {

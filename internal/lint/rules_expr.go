@@ -72,7 +72,7 @@ func (p *pass) exprTerm(w *syntax.Word, operator bool) (string, bool) {
 		digits := strings.TrimPrefix(lit, "-")
 		return lit, digits != "" && parser.IsDigits(digits)
 	}
-	pe, ok := solePart(w).(*syntax.ParamExp)
+	pe, ok := parser.SolePart(w).(*syntax.ParamExp)
 	if operator || !ok || pe.Param == nil || !parser.IsName(pe.Param.Value) || !parser.IsPlainParam(pe) {
 		return "", false
 	}

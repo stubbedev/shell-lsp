@@ -137,8 +137,12 @@ func isScriptName(w *syntax.Word) bool {
 	if w == nil {
 		return false
 	}
-	pe, ok := solePart(w).(*syntax.ParamExp)
-	return ok && pe.Param != nil && pe.Param.Value == "0"
+	pe, ok := parser.SoleParam(w)
+	if !ok {
+		return false
+	}
+	kind, _ := parser.ParamKindOf(pe.Param.Value)
+	return kind == parser.ParamZero
 }
 
 var setupCommands = setOf(":", "true", "export", "readonly", "declare", "typeset", "local", "set", "shopt", "unset",

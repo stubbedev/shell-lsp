@@ -540,7 +540,7 @@ func usesPositional(tree *parser.Tree, span parser.Span) bool {
 		}
 		at := parser.Offset(exp.Param.ValuePos)
 		name := exp.Param.Value
-		if span.Start <= at && at < span.End && (name == "@" || name == "*" || name == "#" || (name != "0" && parser.IsDigits(name))) {
+		if kind, _ := parser.ParamKindOf(name); span.Start <= at && at < span.End && (kind == parser.ParamAll || kind == parser.ParamCount || kind == parser.ParamPositional) {
 			found = true
 		}
 		return !found

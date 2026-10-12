@@ -63,7 +63,7 @@ func (p *pass) checkScriptOperand(at, operand *syntax.Word, runner string) {
 		p.checkPipedScript(at, runner)
 		return
 	}
-	ps, ok := solePart(operand).(*syntax.ProcSubst)
+	ps, ok := parser.SolePart(operand).(*syntax.ProcSubst)
 	if !ok || ps.Op != syntax.CmdIn || len(ps.Stmts) != 1 {
 		return
 	}
@@ -87,7 +87,7 @@ func (p *pass) reportDownloaded(at syntax.Node, downloader, runner string) {
 }
 
 func (p *pass) downloadedOutput(w *syntax.Word) (string, bool) {
-	cs, ok := solePart(w).(*syntax.CmdSubst)
+	cs, ok := parser.SolePart(w).(*syntax.CmdSubst)
 	if !ok || len(cs.Stmts) != 1 {
 		return "", false
 	}

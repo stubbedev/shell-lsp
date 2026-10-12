@@ -193,7 +193,7 @@ func (p *pass) grepOutputTest(o testOperand, span parser.Span) {
 	if o.op != "" && o.op != "-n" && o.op != "-z" {
 		return
 	}
-	cs, ok := solePart(o.word).(*syntax.CmdSubst)
+	cs, ok := parser.SolePart(o.word).(*syntax.CmdSubst)
 	if !ok || cs.Backquotes || cs.TempFile || cs.ReplyVar || len(cs.Stmts) != 1 {
 		return
 	}
@@ -215,7 +215,7 @@ func (p *pass) grepOutputTest(o testOperand, span parser.Span) {
 }
 
 func isStatusWord(w *syntax.Word) bool {
-	pe, ok := solePart(w).(*syntax.ParamExp)
+	pe, ok := parser.SolePart(w).(*syntax.ParamExp)
 	return ok && pe.Param != nil && pe.Param.Value == "?" && pe.Exp == nil && pe.Index == nil && !pe.Length && !pe.Excl
 }
 

@@ -71,6 +71,50 @@ func ArgumentTexts(args []*syntax.Word) []string {
 	return texts
 }
 
+func SolePart(w *syntax.Word) syntax.WordPart {
+	if w == nil || len(w.Parts) != 1 {
+		return nil
+	}
+	if dq, ok := w.Parts[0].(*syntax.DblQuoted); ok && len(dq.Parts) == 1 {
+		return dq.Parts[0]
+	}
+	return w.Parts[0]
+}
+
+func SoleParam(w *syntax.Word) (*syntax.ParamExp, bool) {
+	pe, ok := SolePart(w).(*syntax.ParamExp)
+	return pe, ok && pe.Param != nil
+}
+
+type ParamKind uint8
+
+const (
+	ParamName ParamKind = iota + 1
+	ParamZero
+	ParamPositional
+	ParamAll
+	ParamCount
+	ParamSpecial
+)
+
+func ParamKindOf(name string) (ParamKind, bool) {
+	switch {
+	case name == "0":
+		return ParamZero, true
+	case IsDigits(name):
+		return ParamPositional, true
+	case name == "@" || name == "*":
+		return ParamAll, true
+	case name == "#":
+		return ParamCount, true
+	case name == "?" || name == "$" || name == "!" || name == "-":
+		return ParamSpecial, true
+	case IsName(name):
+		return ParamName, true
+	}
+	return 0, false
+}
+
 func IsPlainParam(pe *syntax.ParamExp) bool {
 	return pe.Param != nil && !pe.Excl && !pe.Length && !pe.Width && pe.Flags == nil && pe.NestedParam == nil &&
 		pe.Index == nil && len(pe.Modifiers) == 0 && pe.Slice == nil && pe.Repl == nil && pe.Names == 0 && pe.Exp == nil

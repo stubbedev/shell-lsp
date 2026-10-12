@@ -150,12 +150,13 @@ func checkBashParamExp(p *pass, pe *syntax.ParamExp) {
 	text := p.text[span.Start:span.End]
 	name := pe.Param.Value
 	p.checkBashVariable(name, span)
-	listOrName := name == "@" || name == "*" || isNameChars(name)
+	kind, _ := parser.ParamKindOf(name)
+	listOrName := kind == parser.ParamAll || isNameChars(name)
 	switch {
 	case pe.Excl:
 		checkIndirectExpansion(p, pe, span, text)
 	case pe.Length:
-		if name == "@" || name == "*" {
+		if kind == parser.ParamAll {
 			p.nonPortable(portabilityIssue{code: 3058, feature: "Taking the length of " + text + " (a positional parameter list)", alternative: "$#"}, span)
 		}
 	case pe.Slice != nil:
@@ -211,7 +212,7 @@ func isAllSubscript(pe *syntax.ParamExp) bool {
 func checkExpansionOperator(p *pass, pe *syntax.ParamExp, span parser.Span, text string) {
 	switch pe.Exp.Op {
 	case syntax.RemSmallSuffix, syntax.RemLargeSuffix, syntax.RemSmallPrefix, syntax.RemLargePrefix:
-		if pe.Index == nil && (pe.Param.Value == "@" || pe.Param.Value == "*") {
+		if kind, _ := parser.ParamKindOf(pe.Param.Value); pe.Index == nil && kind == parser.ParamAll {
 			p.nonPortable(portabilityIssue{code: 3058, feature: "Trimming every positional parameter with " + text, alternative: "a loop over \"$@\""}, span)
 		}
 	case syntax.UpperFirst, syntax.UpperAll, syntax.LowerFirst, syntax.LowerAll:

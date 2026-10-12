@@ -30,7 +30,7 @@ var outputFamily = family{
 }
 
 func (p *pass) unwrapEchoFix(c command) []Fix {
-	cs, csOK := solePart(c.args[0]).(*syntax.CmdSubst)
+	cs, csOK := parser.SolePart(c.args[0]).(*syntax.CmdSubst)
 	if !csOK {
 		return nil
 	}

@@ -181,14 +181,7 @@ func (in *interpreter) escape(s *state) {
 }
 
 func (in *interpreter) numericWord(w *syntax.Word, s *state) bool {
-	if w == nil || len(w.Parts) != 1 {
-		return false
-	}
-	part := w.Parts[0]
-	if dq, ok := part.(*syntax.DblQuoted); ok && len(dq.Parts) == 1 {
-		part = dq.Parts[0]
-	}
-	switch part := part.(type) {
+	switch part := parser.SolePart(w).(type) {
 	case *syntax.Lit:
 		return parser.IsDigits(part.Value)
 	case *syntax.ArithmExp:

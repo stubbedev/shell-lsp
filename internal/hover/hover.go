@@ -636,15 +636,11 @@ func parameterNames(tree *parser.Tree, fn parser.Function) map[int]string {
 }
 
 func positionalValue(w *syntax.Word) (int, bool) {
-	if len(w.Parts) != 1 {
+	exp, ok := parser.SoleParam(w)
+	if !ok {
 		return 0, false
 	}
-	part := w.Parts[0]
-	if dq, ok := part.(*syntax.DblQuoted); ok && len(dq.Parts) == 1 {
-		part = dq.Parts[0]
-	}
-	exp, ok := part.(*syntax.ParamExp)
-	if !ok || exp.Param == nil || !parser.IsDigits(exp.Param.Value) || exp.Param.Value == "0" || exp.Length || exp.Excl || exp.Slice != nil || exp.Repl != nil {
+	if kind, _ := parser.ParamKindOf(exp.Param.Value); kind != parser.ParamPositional || exp.Length || exp.Excl || exp.Slice != nil || exp.Repl != nil {
 		return 0, false
 	}
 	if exp.Exp != nil && exp.Exp.Op != syntax.DefaultUnset && exp.Exp.Op != syntax.DefaultUnsetOrNull {
@@ -667,11 +663,11 @@ func positionalUse(fn parser.Function) (int, bool) {
 		if !ok || exp.Param == nil || !exp.Param.ValuePos.IsValid() {
 			return true
 		}
-		switch name := exp.Param.Value; {
-		case name == "@" || name == "*" || name == "#":
+		switch kind, _ := parser.ParamKindOf(exp.Param.Value); kind {
+		case parser.ParamAll, parser.ParamCount:
 			variadic = true
-		case parser.IsDigits(name) && name != "0":
-			n, err := strconv.Atoi(name)
+		case parser.ParamPositional:
+			n, err := strconv.Atoi(exp.Param.Value)
 			if err == nil {
 				highest = max(highest, n)
 			}
@@ -747,8 +743,8 @@ func isAllIndex(index syntax.ArithmExpr) bool {
 	if !ok {
 		return false
 	}
-	lit := w.Lit()
-	return lit == "@" || lit == "*"
+	kind, _ := parser.ParamKindOf(w.Lit())
+	return kind == parser.ParamAll
 }
 
 func zshFlagDocs(flags *syntax.Lit) string {

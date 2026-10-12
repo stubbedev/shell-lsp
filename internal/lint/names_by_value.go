@@ -156,7 +156,7 @@ func (f *nameFlow) need(tree *parser.Tree, w *syntax.Word, scope parser.ScopeID)
 		}
 		return
 	}
-	if pe, ok := solePart(w).(*syntax.ParamExp); ok && plainOrElement(pe) {
+	if pe, ok := parser.SolePart(w).(*syntax.ParamExp); ok && plainOrElement(pe) {
 		f.param(tree, pe.Param.Value, scope)
 		return
 	}
@@ -181,17 +181,17 @@ func plainOrElement(pe *syntax.ParamExp) bool {
 }
 
 func (f *nameFlow) param(tree *parser.Tree, name string, scope parser.ScopeID) {
-	switch {
-	case name == "@" || name == "*":
+	switch kind, _ := parser.ParamKindOf(name); kind {
+	case parser.ParamAll:
 		f.positional(tree, everyPosition, scope)
-	case name != "0" && isPositional(name):
+	case parser.ParamPositional:
 		n, err := strconv.Atoi(name)
 		if err != nil {
 			f.unknown(tree, scope)
 			return
 		}
 		f.positional(tree, n, scope)
-	case parser.IsName(name):
+	case parser.ParamName:
 		f.hold(tree, name, scope)
 	default:
 		f.unknown(tree, scope)

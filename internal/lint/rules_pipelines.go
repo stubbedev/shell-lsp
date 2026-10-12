@@ -170,7 +170,7 @@ func (p *pass) checkStringLength(top *syntax.Stmt, stages []stage) {
 	if flag, _ := parser.Literal(wc.args()[0]); flag != "-c" && flag != "-m" {
 		return
 	}
-	switch solePart(echo.args()[0]).(type) {
+	switch parser.SolePart(echo.args()[0]).(type) {
 	case *syntax.ParamExp, *syntax.CmdSubst, *syntax.ArithmExp:
 		if span, ok := p.span(top); ok {
 			p.report(2000, span, "Use the ${#var} expansion to get a string's length instead of echo | wc.")

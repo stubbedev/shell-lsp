@@ -125,15 +125,8 @@ func addComparison(tree *parser.Tree, name string, x, y *syntax.Word, add func(v
 }
 
 func refersTo(w *syntax.Word, name string) bool {
-	if w == nil || len(w.Parts) != 1 {
-		return false
-	}
-	part := w.Parts[0]
-	if dq, ok := part.(*syntax.DblQuoted); ok && len(dq.Parts) == 1 {
-		part = dq.Parts[0]
-	}
-	pe, ok := part.(*syntax.ParamExp)
-	return ok && pe.Param != nil && pe.Param.Value == name && pe.Exp == nil && pe.Repl == nil && pe.Slice == nil && pe.Index == nil && !pe.Length && !pe.Excl
+	pe, ok := parser.SoleParam(w)
+	return ok && pe.Param.Value == name && pe.Exp == nil && pe.Repl == nil && pe.Slice == nil && pe.Index == nil && !pe.Length && !pe.Excl
 }
 
 func currentPatterns(tree *parser.Tree, offset int) []string {

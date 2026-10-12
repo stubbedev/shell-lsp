@@ -172,18 +172,8 @@ func isSeveralWordsInQuotes(part syntax.WordPart) bool {
 	return ok && (kindOf(pe) == expandsElements || pe.Excl)
 }
 
-func solePart(w *syntax.Word) syntax.WordPart {
-	if len(w.Parts) != 1 {
-		return nil
-	}
-	if dq, ok := w.Parts[0].(*syntax.DblQuoted); ok && len(dq.Parts) == 1 {
-		return dq.Parts[0]
-	}
-	return w.Parts[0]
-}
-
 func soleBareExpansion(w *syntax.Word) (*syntax.ParamExp, bool) {
-	pe, ok := solePart(w).(*syntax.ParamExp)
+	pe, ok := parser.SoleParam(w)
 	if !ok || !parser.IsPlainParam(pe) {
 		return nil, false
 	}
@@ -191,7 +181,7 @@ func soleBareExpansion(w *syntax.Word) (*syntax.ParamExp, bool) {
 }
 
 func soleCommandOutput(w *syntax.Word) bool {
-	cs, ok := solePart(w).(*syntax.CmdSubst)
+	cs, ok := parser.SolePart(w).(*syntax.CmdSubst)
 	return ok && !cs.TempFile && !cs.ReplyVar && len(cs.Stmts) == 1 && cs.Stmts[0].Cmd != nil
 }
 

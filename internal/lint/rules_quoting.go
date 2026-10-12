@@ -37,7 +37,7 @@ func (p *pass) quoteFix(span parser.Span, safety Safety) Fix {
 }
 
 func (p *pass) soleExpansionQuoteFix(w *syntax.Word, span parser.Span) []Fix {
-	switch solePart(w).(type) {
+	switch parser.SolePart(w).(type) {
 	case *syntax.ParamExp, *syntax.CmdSubst:
 		return []Fix{p.quoteFix(span, Review)}
 	}

@@ -172,7 +172,7 @@ func (p *pass) enclosingValueLoop(name, array string, read int) (*syntax.Word, b
 }
 
 func allValuesOf(w *syntax.Word) (string, bool) {
-	pe, ok := solePart(w).(*syntax.ParamExp)
+	pe, ok := parser.SolePart(w).(*syntax.ParamExp)
 	if !ok || pe.Short || !isIndexedParam(pe) {
 		return "", false
 	}

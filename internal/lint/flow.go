@@ -1002,20 +1002,14 @@ func (in *interpreter) expansionSpace(pe *syntax.ParamExp, s *state) space {
 }
 
 func (in *interpreter) variable(name string, s *state) space {
+	kind, _ := parser.ParamKindOf(name)
 	switch {
-	case isPositional(name):
+	case kind == parser.ParamZero || kind == parser.ParamPositional || kind == parser.ParamAll:
 		return spaceDirty
 	case in.bats && name == batsStatus:
 		return spaceClean
 	}
 	return s.get(name).expands()
-}
-
-func isPositional(name string) bool {
-	if name == "@" || name == "*" {
-		return true
-	}
-	return name != "" && strings.Trim(name, "0123456789") == ""
 }
 
 func (in *interpreter) call(stmt *syntax.Stmt, call *syntax.CallExpr, s *state) *state {

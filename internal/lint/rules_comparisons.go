@@ -612,7 +612,7 @@ func isNumericText(s string) bool {
 }
 
 func isNumericOperand(flow *flowResult, w *syntax.Word) bool {
-	switch part := solePart(w).(type) {
+	switch part := parser.SolePart(w).(type) {
 	case *syntax.ArithmExp:
 		return true
 	case *syntax.ParamExp:

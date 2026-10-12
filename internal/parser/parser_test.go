@@ -732,6 +732,24 @@ func TestSpanPredicates(t *testing.T) {
 	}
 }
 
+func TestParamKindOf(t *testing.T) {
+	t.Parallel()
+
+	for name, want := range map[string]ParamKind{
+		"0": ParamZero, "1": ParamPositional, "10": ParamPositional, "@": ParamAll, "*": ParamAll, "#": ParamCount,
+		"?": ParamSpecial, "$": ParamSpecial, "!": ParamSpecial, "-": ParamSpecial, "x": ParamName, "_": ParamName,
+	} {
+		if got, ok := ParamKindOf(name); !ok || got != want {
+			t.Errorf("ParamKindOf(%q) = %d, %t; want %d", name, got, ok, want)
+		}
+	}
+	for _, name := range []string{"", "a-b", "1x", "@@"} {
+		if got, ok := ParamKindOf(name); ok {
+			t.Errorf("ParamKindOf(%q) = %d, want no parameter", name, got)
+		}
+	}
+}
+
 func TestSymbolAt(t *testing.T) {
 	t.Parallel()
 
@@ -765,6 +783,24 @@ func TestSymbolAt(t *testing.T) {
 		}
 		if got.Kind != tc.want.Kind || got.Name != tc.want.Name || got.Span.Start != at {
 			t.Errorf("SymbolAt(%q #%d) = %+v, want %+v starting at %d", tc.needle, tc.nth, got, tc.want, at)
+		}
+	}
+}
+
+func TestSoleParam(t *testing.T) {
+	t.Parallel()
+
+	for src, want := range map[string]string{"echo $x\n": "x", "echo \"$1\"\n": "1", "echo \"${a[@]}\"\n": "a", "echo x$y\n": "", "echo \"$x y\"\n": "", "echo $(x)\n": ""} {
+		call, ok := Parse(src, dialect.Bash).File.Stmts[0].Cmd.(*syntax.CallExpr)
+		if !ok {
+			t.Fatalf("%q does not parse to a call", src)
+		}
+		got := ""
+		if pe, ok := SoleParam(call.Args[1]); ok {
+			got = pe.Param.Value
+		}
+		if got != want {
+			t.Errorf("SoleParam(%q) = %q, want %q", src, got, want)
 		}
 	}
 }
