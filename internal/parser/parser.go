@@ -25,8 +25,20 @@ type Span struct {
 	Start, End int
 }
 
-func (s Span) Contains(offset int) bool {
+func (s Span) Touches(offset int) bool {
 	return s.Start <= offset && offset <= s.End
+}
+
+func (s Span) HasByteAt(offset int) bool {
+	return s.Start <= offset && offset < s.End
+}
+
+func (s Span) HasByteBefore(offset int) bool {
+	return s.Start < offset && offset <= s.End
+}
+
+func (s Span) Covers(offset int) bool {
+	return s.HasByteAt(offset) || s.Start == s.End && offset == s.Start
 }
 
 type ErrorKind uint8
@@ -289,10 +301,6 @@ func Offset(p syntax.Pos) int {
 
 func offset(p syntax.Pos) int {
 	return int(p.Offset())
-}
-
-func (s Span) Covers(offset int) bool {
-	return s.Start <= offset && offset < max(s.End, s.Start+1)
 }
 
 func lineStarts(text string) []int {

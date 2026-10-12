@@ -84,7 +84,7 @@ func OutgoingCalls(item CallItem, env Env) []Call {
 		if item.TopLevel && inFunction {
 			continue
 		}
-		if !item.TopLevel && (!inFunction || fn.Name != item.Name || !item.Span.Contains(cmd.NameSpan.Start)) {
+		if !item.TopLevel && (!inFunction || fn.Name != item.Name || !item.Span.Touches(cmd.NameSpan.Start)) {
 			continue
 		}
 		callee, ok := findFunction(group, cmd.Name)
@@ -186,7 +186,7 @@ func InlineValues(tree *parser.Tree, within parser.Span, stopped int) []InlineVa
 	seen := map[parser.Span]bool{}
 	var out []InlineValue
 	add := func(name string, span parser.Span, at parser.ScopeID) {
-		if seen[span] || span.Start > stopped || !within.Contains(span.Start) {
+		if seen[span] || span.Start > stopped || !within.Touches(span.Start) {
 			return
 		}
 		owner, ownerInFunction := enclosingFunction(tree, at)

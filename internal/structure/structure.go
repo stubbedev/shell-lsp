@@ -323,7 +323,7 @@ func LinkedDelimiters(tree *parser.Tree, offset int) ([]parser.Span, bool) {
 		if text[closing.Start:closing.End] != h.Delimiter {
 			continue
 		}
-		if opening.Covers(offset) || closing.Covers(offset) || offset == opening.End || offset == closing.End {
+		if opening.Touches(offset) || closing.Touches(offset) {
 			return []parser.Span{opening, closing}, true
 		}
 	}

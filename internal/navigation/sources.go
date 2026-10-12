@@ -40,7 +40,7 @@ type SourceRef struct {
 }
 
 func (r SourceRef) Names(offset int) bool {
-	return r.Arg.Contains(offset) || r.Directive != nil && r.Directive.Contains(offset)
+	return r.Arg.Touches(offset) || r.Directive != nil && r.Directive.Touches(offset)
 }
 
 type resolvedSource struct {

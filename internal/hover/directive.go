@@ -60,7 +60,7 @@ func (h hoverer) directive() (Result, bool) {
 			if key.Covers(h.Offset) && pair.Known() {
 				return Result{Markdown: "**" + pair.Key + "**\n\n" + directiveKeyDocs[pair.Key], Span: key}, true
 			}
-			if at < pair.ValueOffset || at > pair.ValueEnd {
+			if !(parser.Span{Start: pair.ValueOffset, End: pair.ValueEnd}).Touches(at) {
 				continue
 			}
 			for _, item := range directive.Items(pair) {

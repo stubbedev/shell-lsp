@@ -51,7 +51,7 @@ func (v verbatimLines) has(lineAt int) bool {
 		}
 		return 1
 	})
-	return i > 0 && v[i-1].Contains(lineAt)
+	return i > 0 && v[i-1].Touches(lineAt)
 }
 
 func heredocBody(text string, h parser.Heredoc) parser.Span {

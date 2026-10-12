@@ -385,7 +385,7 @@ func lexLine(line string) lexed {
 
 func inComment(tree *parser.Tree, offset int) bool {
 	for _, c := range tree.Comments {
-		if c.Span.Start < offset && offset <= c.Span.End {
+		if c.Span.HasByteBefore(offset) {
 			return true
 		}
 	}
@@ -394,7 +394,7 @@ func inComment(tree *parser.Tree, offset int) bool {
 
 func heredocAt(tree *parser.Tree, offset int) (parser.Heredoc, bool) {
 	for _, h := range tree.Heredocs {
-		if h.Body.Start <= offset && offset < h.Body.End {
+		if h.Body.HasByteAt(offset) {
 			return h, true
 		}
 	}

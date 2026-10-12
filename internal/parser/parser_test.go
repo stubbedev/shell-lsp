@@ -690,3 +690,28 @@ func TestErrorsWithoutPositionAreKept(t *testing.T) {
 		t.Errorf("convertError = %+v, %t", got, located)
 	}
 }
+
+func TestSpanPredicates(t *testing.T) {
+	t.Parallel()
+
+	type answers struct{ touches, byteAt, byteBefore, covers bool }
+	tests := []struct {
+		span   Span
+		offset int
+		want   answers
+	}{
+		{Span{Start: 2, End: 4}, 1, answers{}},
+		{Span{Start: 2, End: 4}, 2, answers{touches: true, byteAt: true, covers: true}},
+		{Span{Start: 2, End: 4}, 3, answers{touches: true, byteAt: true, byteBefore: true, covers: true}},
+		{Span{Start: 2, End: 4}, 4, answers{touches: true, byteBefore: true}},
+		{Span{Start: 2, End: 4}, 5, answers{}},
+		{Span{Start: 2, End: 2}, 2, answers{touches: true, covers: true}},
+		{Span{Start: 2, End: 2}, 3, answers{}},
+	}
+	for _, tc := range tests {
+		got := answers{tc.span.Touches(tc.offset), tc.span.HasByteAt(tc.offset), tc.span.HasByteBefore(tc.offset), tc.span.Covers(tc.offset)}
+		if got != tc.want {
+			t.Errorf("%+v at %d = %+v, want %+v", tc.span, tc.offset, got, tc.want)
+		}
+	}
+}

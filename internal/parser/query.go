@@ -15,7 +15,7 @@ func (ix *Index) ScopeAt(offset int) ScopeID {
 		return FileScope
 	}
 	s := ScopeID(last)
-	for s != FileScope && !ix.Scopes[s].Span.Contains(offset) {
+	for s != FileScope && !ix.Scopes[s].Span.Touches(offset) {
 		s = ix.Scopes[s].Parent
 	}
 	return s
@@ -115,7 +115,7 @@ func (t *Tree) PathAt(offset int) []syntax.Node {
 			return false
 		}
 		span, ok := t.NodeSpan(node)
-		if !ok || !span.Contains(offset) {
+		if !ok || !span.Touches(offset) {
 			_, isFile := node.(*syntax.File)
 			return isFile
 		}

@@ -25,7 +25,7 @@ func directiveCompletion(in Input) (Result, bool, error) {
 	text := in.Tree.Text()
 	offset := min(max(in.Offset, 0), len(text))
 	for _, comment := range in.Tree.Comments {
-		if comment.Span.Start >= offset || offset > comment.Span.End {
+		if !comment.Span.HasByteBefore(offset) {
 			continue
 		}
 		cursor, ok := directive.CursorAt(text[comment.Span.Start:comment.Span.End], offset-comment.Span.Start)

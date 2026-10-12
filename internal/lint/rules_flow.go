@@ -126,7 +126,7 @@ func checkStatusSource(p *pass, n syntax.Node) {
 
 func (r *flowResult) controls(setter *syntax.Stmt, pe *syntax.ParamExp) bool {
 	region, ok := r.conditional[setter]
-	return ok && region.Contains(parser.Offset(pe.Pos()))
+	return ok && region.Touches(parser.Offset(pe.Pos()))
 }
 
 func isEcho(stmt *syntax.Stmt) bool {

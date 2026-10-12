@@ -69,7 +69,7 @@ func (p *pass) sourceDirective(at int) (string, bool) {
 		if !ok {
 			continue
 		}
-		if scope, ok := p.directiveScope(d); ok && scope.Contains(at) {
+		if scope, ok := p.directiveScope(d); ok && scope.Touches(at) {
 			name, found = value, true
 		}
 	}
