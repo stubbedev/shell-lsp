@@ -1,0 +1,107 @@
+### short functions in a script need no comment
+#!/bin/bash
+# shellcheck enable=google-function-comments
+greet() {
+  echo "hello $1"
+}
+greet world
+>>> none
+
+### a long function without a comment
+#!/bin/bash
+# shellcheck enable=google-function-comments
+long() {
+  echo 1
+  echo 2
+  echo 3
+  echo 4
+  echo 5
+  echo 6
+  echo 7
+  echo 8
+  echo 9
+}
+long
+>>+ SL4004 3:1 -- shell-lsp style guide check; shellcheck does not ask for function comments
+
+### a function of exactly ten lines is short
+#!/bin/bash
+# shellcheck enable=google-function-comments
+ten() {
+  echo 1
+  echo 2
+  echo 3
+  echo 4
+  echo 5
+  echo 6
+  echo 7
+  echo 8
+}
+ten
+>>> none
+
+### a long function with a header comment
+#!/bin/bash
+# shellcheck enable=google-function-comments
+
+#######################################
+# Count to nine.
+#######################################
+long() {
+  echo 1
+  echo 2
+  echo 3
+  echo 4
+  echo 5
+  echo 6
+  echo 7
+  echo 8
+  echo 9
+}
+long
+>>> none
+
+### a directive above a function is not its comment
+#!/bin/bash
+# shellcheck enable=google-function-comments
+
+# shellcheck disable=SC2086
+long() {
+  echo $1
+  echo 2
+  echo 3
+  echo 4
+  echo 5
+  echo 6
+  echo 7
+  echo 8
+  echo 9
+}
+long x
+>>+ SL4004 5:1 -- shell-lsp style guide check; shellcheck does not ask for function comments
+
+### every function of a library needs a comment
+# Greeting helpers.
+# shellcheck shell=bash enable=google-function-comments
+
+greet() { echo "hello $1"; }
+
+# Say goodbye.
+part() { echo "bye $1"; }
+>>+ SL4004 4:1 -- shell-lsp style guide check; shellcheck does not ask for function comments
+
+### off unless enabled
+#!/bin/bash
+long() {
+  echo 1
+  echo 2
+  echo 3
+  echo 4
+  echo 5
+  echo 6
+  echo 7
+  echo 8
+  echo 9
+}
+long
+>>> none

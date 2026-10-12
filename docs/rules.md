@@ -543,3 +543,25 @@ while ordinary prose such as "things to do", or a quoted `'TODO'`, is not.
 # TODO(alice): retry on timeouts
 curl -fsS https://example.com
 ```
+
+## SL4004
+
+**A function that is not short has no header comment.** The rule is
+optional (`google-function-comments`). The guide asks for a comment directly
+above every function that is not both obvious and short, and above every
+function in a library whatever its size. Whether a function is obvious is a
+judgement a linter cannot make, and the guide gives no number for short, so
+the rule takes a function of at most 10 lines, counted from its name to its
+closing brace, as short and obvious, and reports longer ones. In a file
+without a `#!` line, which the guide treats as a library, every function
+needs a comment. `# shellcheck` directives above a function do not count as
+its comment.
+
+```bash
+# Helpers for the backup scripts.
+# shellcheck shell=bash enable=google-function-comments
+
+backup() {    # SL4004
+  tar -czf "$1.tgz" "$1"
+}
+```

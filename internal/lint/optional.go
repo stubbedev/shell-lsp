@@ -17,6 +17,7 @@ const (
 	optionalUnassignedUppercase
 	optionalDeprecateWhich
 	optionalGoogleFileHeader
+	optionalGoogleFunctionComments
 	optionalGoogleShebang
 	optionalGoogleTodo
 	optionalQuoteSafeVariables
@@ -50,18 +51,19 @@ var optionalSpecs = [optionalCheckCount]optionalSpec{
 		changes:   "SC2154 also reports unassigned variables with all-uppercase names, which are otherwise taken to come from the environment.",
 		notStrict: true,
 	},
-	optionalDeprecateWhich:     {name: "deprecate-which"},
-	optionalGoogleFileHeader:   {name: "google-file-header", notStrict: true},
-	optionalGoogleShebang:      {name: "google-shebang", notStrict: true},
-	optionalGoogleTodo:         {name: "google-todo", notStrict: true},
-	optionalQuoteSafeVariables: {name: "quote-safe-variables"},
-	optionalDoubleBrackets:     {name: "require-double-brackets"},
-	optionalDoubleEquals:       {name: "require-double-equals"},
-	optionalLocalVariables:     {name: "require-local-variables"},
-	optionalTestGrouping:       {name: "require-test-grouping"},
-	optionalVariableBraces:     {name: "require-variable-braces"},
-	optionalUnusedDirectives:   {name: "unused-directives"},
-	optionalUselessCat:         {name: "useless-use-of-cat"},
+	optionalDeprecateWhich:         {name: "deprecate-which"},
+	optionalGoogleFileHeader:       {name: "google-file-header", notStrict: true},
+	optionalGoogleFunctionComments: {name: "google-function-comments", notStrict: true},
+	optionalGoogleShebang:          {name: "google-shebang", notStrict: true},
+	optionalGoogleTodo:             {name: "google-todo", notStrict: true},
+	optionalQuoteSafeVariables:     {name: "quote-safe-variables"},
+	optionalDoubleBrackets:         {name: "require-double-brackets"},
+	optionalDoubleEquals:           {name: "require-double-equals"},
+	optionalLocalVariables:         {name: "require-local-variables"},
+	optionalTestGrouping:           {name: "require-test-grouping"},
+	optionalVariableBraces:         {name: "require-variable-braces"},
+	optionalUnusedDirectives:       {name: "unused-directives"},
+	optionalUselessCat:             {name: "useless-use-of-cat"},
 }
 
 func (c optionalCheck) String() string { return optionalSpecs[c].name }

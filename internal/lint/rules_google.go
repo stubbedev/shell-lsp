@@ -3,6 +3,7 @@ package lint
 import (
 	"path"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
@@ -15,6 +16,8 @@ const (
 	codeGoogleShebang    = nativeBase + 4001
 	codeGoogleFileHeader = nativeBase + 4002
 	codeGoogleTodo       = nativeBase + 4003
+	codeGoogleFuncHeader = nativeBase + 4004
+	shortFunctionLines   = 10
 	googleShebang        = "#!/bin/bash"
 )
 
@@ -23,8 +26,9 @@ var googleFamily = family{
 		codeGoogleShebang:    {severity: SeverityStyle, optional: optionalGoogleShebang},
 		codeGoogleFileHeader: {severity: SeverityStyle, optional: optionalGoogleFileHeader},
 		codeGoogleTodo:       {severity: SeverityStyle, optional: optionalGoogleTodo},
+		codeGoogleFuncHeader: {severity: SeverityStyle, optional: optionalGoogleFunctionComments},
 	},
-	finish: []func(*pass){checkGoogleShebang, checkGoogleFileHeader, checkGoogleTodos},
+	finish: []func(*pass){checkGoogleShebang, checkGoogleFileHeader, checkGoogleTodos, checkGoogleFunctionHeaders},
 }
 
 var (
@@ -101,5 +105,24 @@ func checkGoogleTodos(p *pass) {
 		}
 		offset := c.Span.Start + len("#") + start
 		p.report(codeGoogleTodo, parser.Span{Start: offset, End: offset + len("TODO")}, "The Google Shell Style Guide writes TODO comments as TODO(owner): message, naming who can tell more about the work.")
+	}
+}
+
+func checkGoogleFunctionHeaders(p *pass) {
+	if p.bats {
+		return
+	}
+	_, executable := dialect.Interpreter(p.text)
+	for _, fn := range p.tree.Functions {
+		if fn.Doc != "" {
+			continue
+		}
+		if !executable {
+			p.report(codeGoogleFuncHeader, fn.NameSpan, "The Google Shell Style Guide asks for a header comment above every function of a library, describing what "+fn.Name+" does and how to call it.")
+			continue
+		}
+		if lines := p.tree.Line(fn.Span.End-1) - p.tree.Line(fn.Span.Start) + 1; lines > shortFunctionLines {
+			p.report(codeGoogleFuncHeader, fn.NameSpan, fn.Name+" is "+strconv.Itoa(lines)+" lines long, so the Google Shell Style Guide asks for a header comment above it describing what it does and how to call it.")
+		}
 	}
 }
