@@ -338,3 +338,95 @@ LANG=C.UTF-8
 read -r first rest
 echo "$first"
 >>> none
+
+### variables read by name through namerefs, declare -p and indirection
+#!/bin/bash
+dump() {
+	local verbose=false
+	if [[ $1 == -v ]]; then
+		verbose=true
+		shift
+	fi
+	local name=$1
+	local -n ref=$name
+	$verbose && declare -p -- "$name"
+	echo "$ref"
+}
+first=1
+second=2
+unused=3
+names=(first second)
+for var in "${names[@]}"; do
+	dump -v "$var"
+done
+declare -n alias_of=third
+third=4
+echo "$alias_of"
+pre_one=5
+echo "${!pre_@}"
+>>> SC2034 15:1
+>>- SC2034 13:1 -- dump reads its argument by name through local -n and declare -p, and is called with the names in the names array
+>>- SC2034 14:1 -- dump reads its argument by name through local -n and declare -p, and is called with the names in the names array
+>>- SC2034 21:1 -- the nameref alias_of refers to third, so reading alias_of reads third
+>>- SC2034 23:1 -- ${!pre_@} lists every variable whose name starts with pre_
+
+### names taken from the command line can name any variable
+#!/bin/bash
+show() {
+	local name
+	for name in "$@"; do
+		echo "${!name}"
+	done
+}
+anything=1
+show "$@"
+>>> none
+>>- SC2034 8:1 -- show expands the variables named by the script's arguments, so any variable may be read
+
+### a name built from a fixed prefix reads only variables with that prefix
+#!/bin/bash
+includes_linux='#include <linux/if.h>'
+includes_darwin='#include <net/if.h>'
+platform=linux
+stale=1
+indirect="includes_$platform"
+echo "${!indirect}"
+>>> SC2034 5:1
+>>- SC2034 2:1 -- ${!indirect} reads a variable whose name starts with includes_
+>>- SC2034 3:1 -- ${!indirect} reads a variable whose name starts with includes_
+
+### indirection through positional parameters and subscripted names
+#!/bin/bash
+get() { echo "${!1}"; }
+row() { local i=$1; echo "${!i}"; }
+picked=1
+column=2
+cells=(a b)
+dropped=3
+get picked
+row column
+cell="cells[1]"
+echo "${!cell}"
+>>> SC2034 7:1
+>>- SC2034 4:1 -- get expands ${!1}, and is called with picked
+>>- SC2034 5:1 -- row expands the variable named by its first argument, and is called with column
+>>- SC2034 6:1 -- ${!cell} reads cells[1]
+
+### declare -p without names prints every variable
+#!/bin/bash
+debug=1
+trace=2
+declare -p
+>>> none
+>>- SC2034 2:1 -- declare -p without names prints every variable
+>>- SC2034 3:1 -- declare -p without names prints every variable
+
+### ksh namerefs read their target, and ${!ref} only names it
+#!/bin/ksh
+target=1
+other=2
+nameref ref=target
+echo "$ref ${!ref}"
+>>> SC2034 3:1
+>>- SC2034 2:1 -- the nameref ref refers to target, so reading ref reads target
+>>- SC2154 5:7 -- nameref ref=target assigns ref

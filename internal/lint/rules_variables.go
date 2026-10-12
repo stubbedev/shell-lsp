@@ -370,23 +370,32 @@ func (p *pass) collectArithmetic(expr syntax.ArithmExpr, base int) {
 }
 
 func (p *pass) collectPrinted(d *syntax.DeclClause) {
-	if d.Variant.Value != "declare" && d.Variant.Value != "typeset" {
+	operands, printing := printedOperands(d)
+	if !printing {
 		return
 	}
-	printing := false
-	for _, arg := range d.Args {
-		if arg.Name == nil {
-			flags, _ := parser.Literal(arg.Value)
-			if strings.HasPrefix(flags, "-") {
-				printing = printing || strings.Contains(flags, "p")
-			}
-			continue
-		}
-		if printing {
+	for _, arg := range operands {
+		if arg.Name != nil {
 			p.variables.use(arg.Name.Value)
 			p.read(arg.Name.Value, arg, "")
 		}
 	}
+}
+
+func printedOperands(d *syntax.DeclClause) ([]*syntax.Assign, bool) {
+	if d.Variant.Value != "declare" && d.Variant.Value != "typeset" {
+		return nil, false
+	}
+	printing := len(d.Args) == 0
+	var operands []*syntax.Assign
+	for _, arg := range d.Args {
+		if flags, ok := parser.Literal(arg.Value); ok && arg.Name == nil && strings.HasPrefix(flags, "-") {
+			printing = printing || strings.Contains(flags, "p")
+			continue
+		}
+		operands = append(operands, arg)
+	}
+	return operands, printing
 }
 
 func (p *pass) collectCall(call *syntax.CallExpr) {
@@ -619,6 +628,10 @@ func (p *pass) reportUnused(f variableFacts) {
 		if !f.used[name] && !strings.HasPrefix(name, "_") && !p.parameters.Has(name) {
 			names = append(names, name)
 		}
+	}
+	if len(names) > 0 {
+		reads := p.namesReadByValue()
+		names = slices.DeleteFunc(names, reads.reads)
 	}
 	slices.Sort(names)
 	for _, name := range names {

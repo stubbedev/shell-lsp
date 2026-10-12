@@ -29,6 +29,7 @@ type pass struct {
 	flowChecks      []func(flow *flowResult)
 	statements      []nestedStmt
 	untrustedValues *untrustedValues
+	nameReads       *nameReads
 	catalog         map[Code]meta
 	rules           []rule
 	nodeChecks      nodeDispatch

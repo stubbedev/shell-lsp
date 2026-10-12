@@ -53,16 +53,16 @@ func (s untrustedSource) String() string {
 
 const everyPosition = 0
 
-type untrustedKey struct {
+type scopedName struct {
 	scope parser.ScopeID
 	name  string
 }
 
 type untrustedValues struct {
 	tree      *parser.Tree
-	vars      map[untrustedKey]untrustedSource
+	vars      map[scopedName]untrustedSource
 	params    map[string]map[int]untrustedSource
-	validated map[untrustedKey][]int
+	validated map[scopedName][]int
 }
 
 func (p *pass) untrusted() *untrustedValues {
@@ -73,7 +73,7 @@ func (p *pass) untrusted() *untrustedValues {
 }
 
 func analyzeUntrusted(tree *parser.Tree) *untrustedValues {
-	t := &untrustedValues{tree: tree, vars: map[untrustedKey]untrustedSource{}, params: map[string]map[int]untrustedSource{}, validated: map[untrustedKey][]int{}}
+	t := &untrustedValues{tree: tree, vars: map[scopedName]untrustedSource{}, params: map[string]map[int]untrustedSource{}, validated: map[scopedName][]int{}}
 	t.collectValidations()
 	for changed := true; changed; {
 		changed = false
@@ -132,18 +132,22 @@ func (t *untrustedValues) validatedBefore(name string, at int, scope parser.Scop
 	return slices.ContainsFunc(t.validated[t.key(name, scope)], func(offset int) bool { return offset < at })
 }
 
-func (t *untrustedValues) key(name string, scope parser.ScopeID) untrustedKey {
-	if !parser.IsName(name) {
-		return untrustedKey{scope: scope, name: name}
-	}
-	bound, local := t.tree.Binding(name, scope)
-	if !local {
-		return untrustedKey{scope: parser.FileScope, name: name}
-	}
-	return untrustedKey{scope: bound, name: name}
+func (t *untrustedValues) key(name string, scope parser.ScopeID) scopedName {
+	return bindingKey(t.tree, name, scope)
 }
 
-func (t *untrustedValues) markVar(key untrustedKey, src untrustedSource) bool {
+func bindingKey(tree *parser.Tree, name string, scope parser.ScopeID) scopedName {
+	if !parser.IsName(name) {
+		return scopedName{scope: scope, name: name}
+	}
+	bound, local := tree.Binding(name, scope)
+	if !local {
+		return scopedName{scope: parser.FileScope, name: name}
+	}
+	return scopedName{scope: bound, name: name}
+}
+
+func (t *untrustedValues) markVar(key scopedName, src untrustedSource) bool {
 	if _, known := t.vars[key]; known {
 		return false
 	}

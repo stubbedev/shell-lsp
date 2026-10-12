@@ -31,6 +31,20 @@ func TestSourcedFilesShareVariables(t *testing.T) {
 	}
 }
 
+func TestSourcedFunctionReadsItsArgumentByName(t *testing.T) {
+	t.Parallel()
+
+	src := "source ./lib.sh\ncolor=red\nsize=2\ndump color\n"
+	lib := parser.Parse("dump() { local -n ref=$1; echo \"$ref\"; }\n", dialect.Bash)
+	if got, want := variableFindings(src, []parser.Import{{Name: "./lib.sh", Tree: lib}}), []string{"SC2034 size=2"}; !slices.Equal(got, want) {
+		t.Errorf("with a function reading its argument by name = %v, want %v", got, want)
+	}
+	lib = parser.Parse("dump() { local names; readarray -t names < <(compgen -v); local -n ref=${names[0]}; echo \"$ref\"; }\n", dialect.Bash)
+	if got := variableFindings(src, []parser.Import{{Name: "./lib.sh", Tree: lib}}); len(got) != 0 {
+		t.Errorf("with a function reading every variable by name = %v, want none", got)
+	}
+}
+
 func TestNameDistance(t *testing.T) {
 	t.Parallel()
 

@@ -91,7 +91,8 @@ sleep 5 &
 pointer=depth
 depth=3
 (( ${!pointer} > 2 )) && echo deep
->>> SC2034 2:1
+>>> none
+>>- SC2034 2:1 -- ${!pointer} reads the variable named by pointer, which is depth
 
 ### alternate and default value modifiers are fine
 (( ${verbose:+1} + ${level:=42} ))
