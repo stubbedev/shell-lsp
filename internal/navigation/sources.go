@@ -1,7 +1,6 @@
 package navigation
 
 import (
-	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -14,10 +13,7 @@ import (
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
-const (
-	maxChain     = 64
-	maxEvalDepth = 8
-)
+const maxChain = 64
 
 type Loader interface {
 	Load(path string) (*workspace.File, error)
@@ -165,8 +161,7 @@ func directiveCandidates(file *workspace.File, target string, env Env) []string 
 }
 
 func evaluatedCandidates(file *workspace.File, cmd parser.Command, word *syntax.Word, env Env) []string {
-	e := evaluator{tree: file.Tree, scriptPath: file.Path, home: env.Home}
-	value, ok := e.word(word, cmd.Span.Start, 0)
+	value, ok := file.Tree.PathValue(word, cmd.Span.Start, parser.PathEnv{ScriptPath: file.Path, Home: env.Home})
 	if !ok {
 		return nil
 	}
@@ -217,150 +212,4 @@ func directiveTarget(tree *parser.Tree, cmd parser.Command) (sourceDirective, bo
 		}
 	}
 	return sourceDirective{}, false
-}
-
-type evaluator struct {
-	tree       *parser.Tree
-	scriptPath string
-	home       string
-}
-
-func (e evaluator) word(w *syntax.Word, at, depth int) (string, bool) {
-	if w == nil || depth > maxEvalDepth {
-		return "", false
-	}
-	var sb strings.Builder
-	for _, part := range w.Parts {
-		value, ok := e.part(part, at, depth)
-		if !ok {
-			return "", false
-		}
-		sb.WriteString(value)
-	}
-	return sb.String(), true
-}
-
-func (e evaluator) part(part syntax.WordPart, at, depth int) (string, bool) {
-	switch p := part.(type) {
-	case *syntax.Lit, *syntax.SglQuoted:
-		return parser.Literal(&syntax.Word{Parts: []syntax.WordPart{p}})
-	case *syntax.DblQuoted:
-		var sb strings.Builder
-		for _, inner := range p.Parts {
-			if lit, ok := inner.(*syntax.Lit); ok {
-				dq := &syntax.DblQuoted{Parts: []syntax.WordPart{lit}}
-				value, ok := parser.Literal(&syntax.Word{Parts: []syntax.WordPart{dq}})
-				if !ok {
-					return "", false
-				}
-				sb.WriteString(value)
-				continue
-			}
-			value, ok := e.part(inner, at, depth)
-			if !ok {
-				return "", false
-			}
-			sb.WriteString(value)
-		}
-		return sb.String(), true
-	case *syntax.ParamExp:
-		return e.param(p, at, depth)
-	case *syntax.CmdSubst:
-		return e.cmdSubst(p, at, depth)
-	}
-	return "", false
-}
-
-func (e evaluator) param(p *syntax.ParamExp, at, depth int) (string, bool) {
-	if p.Param == nil || p.Excl || p.Length || p.Slice != nil || p.Repl != nil || p.Names != 0 || p.Flags != nil {
-		return "", false
-	}
-	base, known := e.variable(p, at, depth)
-	if p.Exp == nil {
-		return base, known
-	}
-	switch p.Exp.Op {
-	case syntax.RemSmallSuffix:
-		if !known || p.Exp.Word == nil || p.Exp.Word.Lit() != "/*" {
-			return "", false
-		}
-		return dir(base), true
-	case syntax.DefaultUnset, syntax.DefaultUnsetOrNull:
-		if known {
-			return base, true
-		}
-		return e.word(p.Exp.Word, at, depth+1)
-	}
-	return "", false
-}
-
-func (e evaluator) variable(p *syntax.ParamExp, at, depth int) (string, bool) {
-	name := p.Param.Value
-	kind, _ := parser.ParamKindOf(name)
-	if kind == parser.ParamZero || (name == "BASH_SOURCE" && (p.Index == nil || zeroIndex(p.Index))) {
-		return e.scriptPath, true
-	}
-	if p.Index != nil {
-		return "", false
-	}
-	defs := e.tree.Visible(name, e.tree.ScopeAt(at))
-	for def := range defs.Backward() {
-		if def.Span.Start < at && def.Value != nil {
-			return e.word(def.Value, def.Span.Start, depth+1)
-		}
-	}
-	if name == "HOME" && e.home != "" {
-		return e.home, true
-	}
-	return "", false
-}
-
-func zeroIndex(index syntax.ArithmExpr) bool {
-	lit, ok := parser.IndexLit(index)
-	return ok && lit == "0"
-}
-
-func (e evaluator) cmdSubst(c *syntax.CmdSubst, at, depth int) (string, bool) {
-	if len(c.Stmts) != 1 || c.Stmts[0].Cmd == nil {
-		return "", false
-	}
-	switch cmd := c.Stmts[0].Cmd.(type) {
-	case *syntax.CallExpr:
-		return e.call(cmd, at, depth)
-	case *syntax.BinaryCmd:
-		cd, okCD := cmd.X.Cmd.(*syntax.CallExpr)
-		pwd, okPwd := cmd.Y.Cmd.(*syntax.CallExpr)
-		if cmd.Op != syntax.AndStmt || !okCD || !okPwd || len(cd.Args) != 2 {
-			return "", false
-		}
-		cdName, _ := parser.CallName(cd)
-		pwdName, _ := parser.CallName(pwd)
-		if cdName != "cd" || pwdName != "pwd" {
-			return "", false
-		}
-		return e.word(cd.Args[1], at, depth+1)
-	}
-	return "", false
-}
-
-func (e evaluator) call(call *syntax.CallExpr, at, depth int) (string, bool) {
-	if len(call.Args) < 2 {
-		return "", false
-	}
-	target := call.Args[len(call.Args)-1]
-	switch name, _ := parser.CallName(call); name {
-	case "dirname":
-		value, ok := e.word(target, at, depth+1)
-		return dir(value), ok
-	case "readlink", "realpath":
-		return e.word(target, at, depth+1)
-	}
-	return "", false
-}
-
-func dir(p string) string {
-	if !strings.Contains(p, "/") {
-		return "."
-	}
-	return path.Dir(p)
 }
