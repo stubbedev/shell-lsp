@@ -1,0 +1,193 @@
+### assignments, loops, read and arithmetic without local
+#!/bin/bash
+# shellcheck enable=require-local-variables
+work() {
+  name=$1
+  for item in a b; do echo "$item"; done
+  read -r answer
+  (( count = 0 ))
+  getopts "ab" opt
+  echo "$name $answer $count $opt"
+}
+work x
+>>+ SL2014 4:3 -- shell-lsp native check; shellcheck does not ask for local
+>>+ SL2014 5:7 -- shell-lsp native check; shellcheck does not ask for local
+>>+ SL2014 6:11 -- shell-lsp native check; shellcheck does not ask for local
+>>+ SL2014 7:6 -- shell-lsp native check; shellcheck does not ask for local
+>>+ SL2014 8:16 -- shell-lsp native check; shellcheck does not ask for local
+
+### reported once per variable and function
+#!/bin/bash
+# shellcheck enable=require-local-variables
+work() {
+  n=1
+  n=2
+  echo "$n"
+}
+other() {
+  n=3
+  echo "$n"
+}
+work
+other
+>>+ SL2014 4:3 -- shell-lsp native check; shellcheck does not ask for local
+>>+ SL2014 9:3 -- shell-lsp native check; shellcheck does not ask for local
+
+### local before the assignment is fine, after it is not
+#!/bin/bash
+# shellcheck enable=require-local-variables
+work() {
+  local a
+  a=1
+  b=2
+  local b
+  local c=3 d
+  d=4
+  echo "$a $b $c $d"
+}
+work
+>>+ SL2014 6:3 -- shell-lsp native check; shellcheck does not ask for local
+
+### enclosing function locals cover nested functions
+#!/bin/bash
+# shellcheck enable=require-local-variables
+outer() {
+  local x
+  inner() {
+    x=1
+  }
+  inner
+  echo "$x"
+}
+outer
+>>> none
+
+### explicit globals are fine
+#!/bin/bash
+# shellcheck enable=require-local-variables
+declare -A CACHE
+setup() {
+  declare -g MODE=fast
+  CONFIG=/etc/app
+  export CONFIG
+  readonly LIMIT=3
+  LIMIT2=4
+  CACHE[a]=1
+}
+setup
+echo "$MODE $CONFIG $LIMIT"
+readonly LIMIT2
+>>> SC2034 10:3
+>>> SC2034 14:10
+
+### variables the top level assigns are left to SL2015
+#!/bin/bash
+# shellcheck enable=require-local-variables
+counter=0
+bump() {
+  counter=$((counter + 1))
+}
+bump
+echo "$counter"
+>>> none
+
+### a function's output read elsewhere is fine
+#!/bin/bash
+# shellcheck enable=require-local-variables
+parse() {
+  verbose=1
+  result=$1
+}
+show() {
+  echo "$result"
+}
+parse x
+[ -n "$verbose" ] && show
+>>> none
+
+### a variable read in another function that assigns it too
+#!/bin/bash
+# shellcheck enable=require-local-variables
+first() {
+  for i in 1 2; do second; done
+}
+second() {
+  for i in a b; do echo "$i"; done
+}
+first
+>>+ SL2014 4:7 -- shell-lsp native check; shellcheck does not ask for local
+>>+ SL2014 7:7 -- shell-lsp native check; shellcheck does not ask for local
+
+### shell variables are fine
+#!/bin/bash
+# shellcheck enable=require-local-variables
+complete_it() {
+  COMPREPLY=(a b)
+  IFS=,
+  OPTIND=1
+  REPLY=x
+}
+complete -F complete_it cmd
+>>> none
+
+### top-level code is not checked
+#!/bin/bash
+# shellcheck enable=require-local-variables
+x=1
+for y in a; do echo "$x $y"; done
+>>> SC2043 4:10
+
+### sh has no local
+#!/bin/sh
+# shellcheck enable=require-local-variables
+work() {
+  name=$1
+  echo "$name"
+}
+work x
+>>> none
+
+### dash has local
+#!/bin/dash
+# shellcheck enable=require-local-variables
+work() {
+  name=$1
+  echo "$name"
+}
+work x
+>>+ SL2014 4:3 -- shell-lsp native check; shellcheck does not ask for local
+
+### ksh needs the function keyword for typeset to be local
+#!/bin/ksh
+# shellcheck enable=require-local-variables
+function keyword {
+  name=$1
+  echo "$name"
+}
+posix() {
+  other=$1
+  echo "$other"
+}
+keyword x
+posix y
+>>+ SL2014 4:3 -- shell-lsp native check; shellcheck does not ask for local
+
+### zsh
+#!/bin/zsh
+# shellcheck enable=require-local-variables
+work() {
+  name=$1
+  print -r -- $name
+}
+work x
+>>- SC1071 1:1 -- shellcheck refuses zsh; shell-lsp lints it
+>>+ SL2014 4:3 -- shell-lsp native check; shellcheck does not ask for local
+
+### off unless enabled
+#!/bin/bash
+work() {
+  name=$1
+  echo "$name"
+}
+work x
+>>> none

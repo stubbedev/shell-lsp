@@ -486,6 +486,7 @@ marks the checks the `minimal` profile keeps; see [Profiles](../README.md#profil
 | <a name="sl2011"></a>[SL2011](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl2011) | warning |  | yes | Two bounds on the same value leave no number in between. |
 | <a name="sl2012"></a>[SL2012](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl2012) | style | `require-test-grouping` |  | \`&&\` and \`\|\|\` are mixed in \`\[\[ \]\]\` without parentheses. |
 | <a name="sl2013"></a>[SL2013](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl2013) | warning | `check-relative-sources` | yes | A sourced file is found relative to where the script is run from. |
+| <a name="sl2014"></a>[SL2014](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl2014) | style | `require-local-variables` |  | A function assigns a variable it did not declare local. |
 | <a name="sl3001"></a>[SL3001](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl3001) | error |  | yes | An awk program does not parse. |
 | <a name="sl3002"></a>[SL3002](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl3002) | error |  | yes | A sed script does not parse. |
 | <a name="sl3003"></a>[SL3003](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl3003) | error |  | yes | A jq filter does not parse. |

@@ -347,6 +347,36 @@ helpers by bare name.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 ```
 
+## SL2014
+
+**A function assigns a variable it did not declare local.** The rule is
+optional (`require-local-variables`). Variables in a shell function are
+global unless declared with `local` (`typeset` in a ksh `function name`), so
+an assignment, a `for` loop, `read`, `getopts` or `(( n = 0 ))` inside the
+function changes a variable of the same name in its caller, and the value
+outlives the call. The Google Shell Style Guide asks for `local` on every
+function-specific variable. A variable is left alone when it is declared
+local earlier in the function or in one that encloses it; when the script
+declares it global anywhere with `export`, `readonly`, `declare -g` or a
+`declare` at the top level; when the top level assigns it too, which
+makes it a global by design; when code outside the function reads it without
+assigning it, which shows it is the function's output; and for the shell's
+own variables, such as `REPLY`, `OPTIND`, `IFS` or `COMPREPLY`. Each variable
+is reported once per function. POSIX sh has no `local`, so sh scripts are not
+checked, and neither are ksh functions written as `name()`, where `typeset`
+does not make a variable local.
+
+```bash
+#!/bin/bash
+# shellcheck enable=require-local-variables
+count_lines() {
+  total=0    # SL2014
+  local line
+  while read -r line; do total=$((total + 1)); done < "$1"
+  echo "$total"
+}
+```
+
 The embedded-language rules check awk, sed and jq programs written inside the
 script with built-in parsers; no awk, sed or jq binary is run. A program is
 checked when it is a literal argument (`awk '...'`, `sed -e '...'`,

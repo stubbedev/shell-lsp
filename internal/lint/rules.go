@@ -43,6 +43,7 @@ var families = []family{
 	elevationFamily,
 	commandWordFamily,
 	variablesFamily,
+	localVariablesFamily,
 	testsFamily,
 	redirectsFamily,
 	expansionsFamily,

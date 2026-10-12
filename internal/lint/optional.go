@@ -18,6 +18,7 @@ const (
 	optionalQuoteSafeVariables
 	optionalDoubleBrackets
 	optionalDoubleEquals
+	optionalLocalVariables
 	optionalTestGrouping
 	optionalVariableBraces
 	optionalUnusedDirectives
@@ -48,6 +49,7 @@ var optionalSpecs = [optionalCheckCount]optionalSpec{
 	optionalQuoteSafeVariables: {name: "quote-safe-variables"},
 	optionalDoubleBrackets:     {name: "require-double-brackets"},
 	optionalDoubleEquals:       {name: "require-double-equals"},
+	optionalLocalVariables:     {name: "require-local-variables"},
 	optionalTestGrouping:       {name: "require-test-grouping"},
 	optionalVariableBraces:     {name: "require-variable-braces"},
 	optionalUnusedDirectives:   {name: "unused-directives"},
