@@ -25,6 +25,10 @@ func TestOf(t *testing.T) {
 		{`C:\w\rules.mak`, "", Make, true},
 		{"file:///w/Makefile.sh", "", 0, false},
 		{"file:///w/run.sh", "", 0, false},
+		{"file:///w/justfile", "just", Just, true},
+		{"file:///w/Justfile", "", Just, true},
+		{"file:///w/.justfile", "", Just, true},
+		{"file:///w/tasks.just", "", Just, true},
 	} {
 		got, ok := Of(tt.uri, tt.languageID)
 		if got != tt.want || ok != tt.ok {

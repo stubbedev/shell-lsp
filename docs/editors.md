@@ -163,26 +163,31 @@ pushes them otherwise.
 
 ## Shell in other files
 
-shell-lsp also lints the shell inside Makefile recipes
+shell-lsp also lints the shell inside Makefile and justfile recipes
 ([Shell in other files](../README.md#shell-in-other-files)) when the editor
-sends it those files; it reads the language identifiers `makefile` and `make`.
-The VS Code extension attaches to Makefiles on its own. Elsewhere, add the
-file type next to the shell ones. In Neovim, add `"make"` to `filetypes` (or
-to the `FileType` pattern):
+sends it those files; it reads the language identifiers `makefile`, `make` and
+`just`. The VS Code extension attaches to Makefiles on its own, and to
+justfiles when an extension gives them the `just` language. Elsewhere, add the
+file types next to the shell ones. In Neovim, add `"make"` and `"just"` to
+`filetypes` (or to the `FileType` pattern):
 
 ```lua
 vim.lsp.config("shell_lsp", {
   cmd = { "shell-lsp" },
-  filetypes = { "sh", "bash", "zsh", "ksh", "make" },
+  filetypes = { "sh", "bash", "zsh", "ksh", "make", "just" },
   root_markers = { ".git" },
 })
 ```
 
-In Helix, list shell-lsp for the `make` language:
+In Helix, list shell-lsp for the `make` and `just` languages:
 
 ```toml
 [[language]]
 name = "make"
+language-servers = ["shell-lsp"]
+
+[[language]]
+name = "just"
 language-servers = ["shell-lsp"]
 ```
 

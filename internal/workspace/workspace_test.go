@@ -373,7 +373,7 @@ func TestMakefilesLoadAsTheShellOfTheirRecipes(t *testing.T) {
 	if len(f.Tree.Functions) != 1 || f.Tree.Functions[0].Name != "greet" {
 		t.Errorf("functions = %+v", f.Tree.Functions)
 	}
-	if globs := WatchGlobs(); !slices.Contains(globs, "**/{Makefile,makefile,GNUmakefile}") || !strings.Contains(globs[0], ",mk,mak}") {
+	if globs := WatchGlobs(); !strings.Contains(globs[2], "{Makefile,makefile,GNUmakefile,") || !strings.Contains(globs[0], ",mk,mak") {
 		t.Errorf("watch globs = %v", globs)
 	}
 }

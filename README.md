@@ -31,8 +31,9 @@ nor groff needs to be installed.
 - Quick fixes, [refactorings](#refactorings) and a fix-all source action.
 - Checks for awk, sed and jq programs embedded in scripts
   ([Embedded languages](#embedded-languages)).
-- The shell inside Makefile recipes, linted and navigated in place, with
-  fixes written back in make syntax ([Shell in other files](#shell-in-other-files)).
+- The shell inside Makefile and justfile recipes, linted and navigated in
+  place, with fixes written back in their syntax
+  ([Shell in other files](#shell-in-other-files)).
 - [Bats](#bats) support: tests in the outline, and "Run" lenses that report
   failures as diagnostics.
 - `shell-lsp check` and `shell-lsp fmt` for CI and pre-commit, compatible
@@ -430,6 +431,34 @@ A document is a Makefile when its language identifier is `makefile` or
   (`# shellcheck disable=SC2086`), and applies to the next line.
 - A make expansion inside single quotes (`'$(VAR)'`) is still text the shell
   cannot know, not a literal `$`.
+
+### justfiles
+
+A document is a justfile when its language identifier is `just`, or, without
+one, when it is named `justfile`, `Justfile`, `JUSTFILE` or `.justfile`, or
+ends in `.just`.
+
+- The recipe bodies are the shell. The settings, variables, aliases,
+  attributes and recipe headers around them are not.
+- A recipe without a shebang runs each line in a shell of its own, as just
+  runs it, after dropping the `@` and `-` sigils and joining lines that end in
+  `\`. A recipe that starts with a shebang, or has the `[script]` attribute,
+  is one script.
+- `{{expression}}` stands for text no one can know in advance, also inside
+  quotes, and `{{{{` is a literal `{{`. Fixes write `{{` back as `{{{{`, and
+  only a script recipe takes a fix that needs a new line, indented like the
+  recipe.
+- Exported variables (`export name := ...`, `set export`) and `$`
+  parameters are set when a recipe runs, so reading them is not reading an
+  unset variable.
+- A recipe's shell is the one its shebang names, else the one its
+  `[script(...)]` attribute or `set script-interpreter` names for a script
+  recipe, else the one `set shell` names, else `sh`. Recipes run by something
+  that is not a shell, and `[windows]` recipes when `set windows-shell` or
+  `set windows-powershell` is given, are not analysed. The file is checked as
+  one shell: the family most recipes use (sh, dash, busybox and bash are one
+  family, checked as the widest of them that a recipe uses), and recipes in
+  another family are not analysed.
 
 ## Commands
 

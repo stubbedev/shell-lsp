@@ -56,3 +56,18 @@ func TestFmtLeavesMakefilesAlone(t *testing.T) {
 		t.Errorf("fmt of a Makefile = %+v", got)
 	}
 }
+
+func TestCheckLintsJustfileRecipes(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeFiles(t, dir, map[string]string{"proj/justfile": "run:\n    echo $1 {{x}}\n", "proj/tasks.just": "x:\n    #!/usr/bin/env bash\n    echo $1\n"})
+	got := run(t, dir, "", "check", "-f", "gcc", "proj")
+	want := []string{filepath.FromSlash("proj/justfile:2:10 SC2086"), filepath.FromSlash("proj/tasks.just:3:10 SC2086")}
+	if !slices.Equal(findings(t, got.stdout), want) {
+		t.Errorf("checking a project with justfiles = %v, want %v\n%s", findings(t, got.stdout), want, got.stderr)
+	}
+	if got := run(t, dir, "", "fmt", "proj/justfile"); got.status == statusOK {
+		t.Errorf("fmt of a justfile = %+v", got)
+	}
+}

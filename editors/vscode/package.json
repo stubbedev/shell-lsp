@@ -38,7 +38,8 @@
   "activationEvents": [
     "onLanguage:shellscript",
     "onLanguage:bats",
-    "onLanguage:makefile"
+    "onLanguage:makefile",
+    "onLanguage:just"
   ],
   "capabilities": {
     "untrustedWorkspaces": {

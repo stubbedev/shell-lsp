@@ -199,3 +199,54 @@ func TestMakefileSemanticTokensStayInRecipes(t *testing.T) {
 		}
 	}
 }
+
+func TestJustfileDiagnosticsAndFixes(t *testing.T) {
+	t.Parallel()
+
+	const uri = "file:///w/justfile"
+	lines := []string{
+		"set shell := [\"bash\", \"-uc\"]",
+		"deploy env:",
+		"    @echo `date` {{env}} $1",
+		"    #!/not-a-shebang-after-the-first-line",
+	}
+	c, _ := startClient(t, `{`+actionCapabilities+`}`)
+	c.notify("textDocument/didOpen", openLanguageParams(uri, "just", strings.Join(lines, "\n")+"\n"))
+	at := func(line int, sub string) lsp.Range {
+		i := strings.Index(lines[line], sub)
+		return lsp.Range{Start: lsp.Position{Line: uint32(line), Character: uint32(i)}, End: lsp.Position{Line: uint32(line), Character: uint32(i + len(sub))}}
+	}
+	diags := pullDiagnostics(t, c, uri)
+	var got []string
+	for _, d := range diags {
+		got = append(got, d.Code)
+		if d.Range.Start.Line != 2 && d.Range.Start.Line != 3 {
+			t.Errorf("%s at %+v is outside the recipe", d.Code, d.Range)
+		}
+	}
+	if want := []string{"SC2006", "SC2046", "SC2086"}; !slices.Equal(got, want) {
+		t.Errorf("justfile diagnostics = %v, want %v: %+v", got, want, diags)
+	}
+	i := slices.IndexFunc(diags, func(d lsp.Diagnostic) bool { return d.Code == "SC2006" })
+	if i < 0 || diags[i].Range != at(2, "`date`") {
+		t.Fatalf("SC2006 = %+v, want it on `date`", diags)
+	}
+	encoded, err := json.Marshal(lsp.CodeActionParams{TextDocument: lsp.TextDocumentIdentifier{URI: uri}, Range: diags[i].Range, Context: lsp.CodeActionContext{Diagnostics: diags[i : i+1]}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := lsp.TextEdit{Range: at(2, "`date`"), NewText: "$(date)"}
+	found := false
+	for _, a := range codeActions(t, c, string(encoded)) {
+		for _, change := range a.Edit.DocumentChanges {
+			found = found || slices.Contains(change.Edits, want)
+		}
+	}
+	if !found {
+		t.Errorf("no action makes %+v", want)
+	}
+	dialect := decodeResult[documentDialect](t, c.call(documentDialectMethod, `{"textDocument": {"uri": "`+uri+`"}}`))
+	if dialect.Dialect != "bash" || dialect.Evidence != `set shell := ["bash", "-uc"]` {
+		t.Errorf("justfile dialect = %+v", dialect)
+	}
+}

@@ -8,6 +8,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
+	"github.com/stubbedev/shell-lsp/internal/host/justfile"
 	"github.com/stubbedev/shell-lsp/internal/host/makefile"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/projection"
@@ -17,12 +18,15 @@ type Language uint8
 
 const (
 	Make Language = iota + 1
+	Just
 )
 
 func (l Language) String() string {
 	switch l {
 	case Make:
 		return "Makefile"
+	case Just:
+		return "justfile"
 	}
 	return "unknown"
 }
@@ -42,6 +46,13 @@ var definitions = []definition{
 		names:       []string{"Makefile", "makefile", "GNUmakefile"},
 		extensions:  []string{".mk", ".mak"},
 		project:     makefile.Project,
+	},
+	{
+		language:    Just,
+		languageIDs: []string{"just"},
+		names:       []string{"justfile", "Justfile", "JUSTFILE", ".justfile"},
+		extensions:  []string{".just"},
+		project:     justfile.Project,
 	},
 }
 
