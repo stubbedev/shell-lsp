@@ -33,13 +33,27 @@ type host struct {
 	isFile     func(string) bool
 }
 
-func Locate(dir string) (Command, error) {
+type Environment struct {
+	Path       []string
+	PathExt    []string
+	SystemRoot string
+}
+
+func Locate(dir string, env Environment) (Command, error) {
 	return host{
 		flavour:    platform.Native,
-		pathDirs:   filepath.SplitList(os.Getenv("PATH")),
-		systemRoot: os.Getenv("SystemRoot"),
-		lookPath:   exec.LookPath,
-		isFile:     isFile,
+		pathDirs:   env.Path,
+		systemRoot: env.SystemRoot,
+		lookPath: func(name string) (string, error) {
+			if found, ok := platform.Native.LookPath(name, env.Path, env.PathExt, os.Stat); ok {
+				return found, nil
+			}
+			if filepath.IsAbs(name) && isFile(name) {
+				return "", fmt.Errorf("%s is not executable: %w", name, fs.ErrPermission)
+			}
+			return "", fmt.Errorf("looking for %s: %w", name, exec.ErrNotFound)
+		},
+		isFile: isFile,
 	}.locate(dir)
 }
 

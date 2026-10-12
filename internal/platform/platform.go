@@ -114,6 +114,38 @@ func (f Flavour) Executable(name string, mode fs.FileMode, pathExt []string) (st
 	return strings.TrimSuffix(name, ext), true
 }
 
+func (f Flavour) LookPath(name string, dirs, pathExt []string, stat func(string) (fs.FileInfo, error)) (string, bool) {
+	candidates := []string{name}
+	if !strings.ContainsAny(name, "/"+string(f.Separator())) {
+		candidates = make([]string, 0, len(dirs))
+		for _, dir := range dirs {
+			if dir != "" {
+				candidates = append(candidates, f.Join(dir, name))
+			}
+		}
+	}
+	for _, candidate := range candidates {
+		for _, file := range f.executableNames(candidate, pathExt) {
+			if info, err := stat(file); err == nil && f.MayExecute(info.Mode()) {
+				return file, true
+			}
+		}
+	}
+	return "", false
+}
+
+func (f Flavour) executableNames(file string, pathExt []string) []string {
+	ext := path.Ext(file)
+	if f == POSIX || ext != "" && slices.ContainsFunc(pathExt, func(e string) bool { return strings.EqualFold(e, ext) }) {
+		return []string{file}
+	}
+	out := make([]string, len(pathExt))
+	for i, e := range pathExt {
+		out[i] = file + e
+	}
+	return out
+}
+
 const defaultPathExt = ".COM;.EXE;.BAT;.CMD"
 
 func (f Flavour) PathExt(env string) []string {

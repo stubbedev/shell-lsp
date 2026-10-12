@@ -51,7 +51,7 @@ func (s *Server) navigationEnv() navigation.Env {
 		Loader:   s.workspace,
 		Roots:    s.workspace.Roots(),
 		Home:     s.process.Home,
-		PathDirs: filepath.SplitList(s.process.Path),
+		PathDirs: s.process.pathDirs(),
 	}
 }
 

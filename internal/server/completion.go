@@ -103,8 +103,8 @@ type executableCache struct {
 	names    []string
 }
 
-func newExecutableCache(path, pathExt string) *executableCache {
-	return &executableCache{dirs: filepath.SplitList(path), pathExt: platform.Native.PathExt(pathExt)}
+func newExecutableCache(dirs, pathExt []string) *executableCache {
+	return &executableCache{dirs: dirs, pathExt: pathExt}
 }
 
 func (c *executableCache) list(now time.Time) []string {

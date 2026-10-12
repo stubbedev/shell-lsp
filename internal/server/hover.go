@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os/exec"
+	"os"
 	"slices"
 
 	"github.com/stubbedev/shell-lsp/internal/docstore"
@@ -16,10 +16,13 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/manpage"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/platform"
 )
 
 type commandDocs struct {
 	*manpage.Lookup
+	path    []string
+	pathExt []string
 }
 
 func (c commandDocs) Describe(ctx context.Context, name string) (string, error) {
@@ -30,8 +33,8 @@ func (c commandDocs) Describe(ctx context.Context, name string) (string, error) 
 	if !errors.Is(err, manpage.ErrNoPage) {
 		return "", err
 	}
-	path, lookErr := exec.LookPath(name)
-	if lookErr != nil {
+	path, found := platform.Native.LookPath(name, c.path, c.pathExt, os.Stat)
+	if !found {
 		return fmt.Sprintf("`%s`: command not found in `PATH`", name), nil
 	}
 	return fmt.Sprintf("`%s`: external command at `%s` (no manual page installed)", name, path), nil

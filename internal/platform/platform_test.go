@@ -3,7 +3,9 @@ package platform
 import (
 	"io/fs"
 	"slices"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestClean(t *testing.T) {
@@ -171,3 +173,50 @@ func TestPathExt(t *testing.T) {
 		t.Errorf("POSIX.PathExt = %q, want nil", got)
 	}
 }
+
+func TestLookPathSearchesTheGivenDirectories(t *testing.T) {
+	t.Parallel()
+
+	files := map[string]fs.FileMode{
+		"/a/tool":      0o644,
+		"/b/tool":      0o755,
+		"/c/run.CMD":   0,
+		"/c/plain":     0,
+		"/opt/x/local": 0o755,
+	}
+	stat := func(name string) (fs.FileInfo, error) {
+		mode, ok := files[strings.ReplaceAll(name, `\`, "/")]
+		if !ok {
+			return nil, fs.ErrNotExist
+		}
+		return fakeInfo{mode: mode}, nil
+	}
+	for _, tt := range []struct {
+		flavour Flavour
+		name    string
+		dirs    []string
+		want    string
+		found   bool
+	}{
+		{POSIX, "tool", []string{"", "/a", "/b"}, "/b/tool", true},
+		{POSIX, "tool", []string{"/a"}, "", false},
+		{POSIX, "/opt/x/local", nil, "/opt/x/local", true},
+		{POSIX, "missing", []string{"/a", "/b"}, "", false},
+		{Windows, "run", []string{"/c"}, "/c/run.CMD", true},
+		{Windows, "plain", []string{"/c"}, "", false},
+	} {
+		got, found := tt.flavour.LookPath(tt.name, tt.dirs, tt.flavour.PathExt(""), stat)
+		if strings.ReplaceAll(got, `\`, "/") != tt.want || found != tt.found {
+			t.Errorf("%v LookPath(%q, %q) = %q, %v, want %q, %v", tt.flavour, tt.name, tt.dirs, got, found, tt.want, tt.found)
+		}
+	}
+}
+
+type fakeInfo struct{ mode fs.FileMode }
+
+func (f fakeInfo) Name() string       { return "" }
+func (f fakeInfo) Size() int64        { return 0 }
+func (f fakeInfo) Mode() fs.FileMode  { return f.mode }
+func (f fakeInfo) ModTime() time.Time { return time.Time{} }
+func (f fakeInfo) IsDir() bool        { return false }
+func (f fakeInfo) Sys() any           { return nil }

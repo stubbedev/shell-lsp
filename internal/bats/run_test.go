@@ -90,7 +90,7 @@ func TestLocatePrefersTheProjectRunner(t *testing.T) {
 	dir := t.TempDir()
 	local := filepath.Join(dir, "node_modules", ".bin", "bats")
 	writeExecutable(t, local, "exit 0\n")
-	if got, err := Locate(dir); err != nil || !reflect.DeepEqual(got, Command{Program: local}) {
+	if got, err := Locate(dir, Environment{}); err != nil || !reflect.DeepEqual(got, Command{Program: local}) {
 		t.Errorf("Locate() = %+v, %v, want %q", got, err, local)
 	}
 }
@@ -102,7 +102,7 @@ func TestLocateRejectsANonExecutableRunner(t *testing.T) {
 	if err := os.Chmod(path, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Locate(dir); err == nil || !strings.Contains(err.Error(), path) {
+	if _, err := Locate(dir, Environment{}); err == nil || !strings.Contains(err.Error(), path) {
 		t.Errorf("Locate() error = %v, want it to name %s", err, path)
 	}
 }
@@ -111,14 +111,12 @@ func TestLocateSearchesPath(t *testing.T) {
 	bin := t.TempDir()
 	onPath := filepath.Join(bin, "bats")
 	writeExecutable(t, onPath, "exit 0\n")
-	t.Setenv("PATH", bin)
-	if got, err := Locate(t.TempDir()); err != nil || !reflect.DeepEqual(got, Command{Program: onPath}) {
+	if got, err := Locate(t.TempDir(), Environment{Path: []string{"", t.TempDir(), bin}}); err != nil || !reflect.DeepEqual(got, Command{Program: onPath}) {
 		t.Errorf("Locate() = %+v, %v, want %q", got, err, onPath)
 	}
 
-	t.Setenv("PATH", t.TempDir())
 	dir := t.TempDir()
-	_, err := Locate(dir)
+	_, err := Locate(dir, Environment{Path: []string{t.TempDir()}})
 	if err == nil || err.Error() != "bats not found: looked for test/bats/bin/bats, node_modules/.bin/bats, test/libs/bats/bin/bats under "+dir+", then for bats on PATH" {
 		t.Errorf("Locate() error = %v", err)
 	}

@@ -303,7 +303,7 @@ func TestExecutableCache(t *testing.T) {
 	if err := os.Symlink(filepath.Join(dir, executableName("tool")), filepath.Join(dir, executableName("linked"))); err != nil {
 		t.Fatal(err)
 	}
-	cache := newExecutableCache(dir+string(os.PathListSeparator)+filepath.Join(dir, "missing"), "")
+	cache := newExecutableCache([]string{dir, filepath.Join(dir, "missing")}, nil)
 	start := time.Now()
 	if got := cache.list(start); !slices.Equal(got, []string{"linked", "tool"}) {
 		t.Errorf("executables = %v", got)

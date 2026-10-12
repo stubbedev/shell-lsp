@@ -3,8 +3,11 @@ package server
 import (
 	"errors"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/stubbedev/shell-lsp/internal/platform"
 )
 
 type Process struct {
@@ -14,6 +17,7 @@ type Process struct {
 	Home       string
 	ConfigHome string
 	WorkDir    string
+	SystemRoot string
 	Environ    []string
 }
 
@@ -33,9 +37,14 @@ func CurrentProcess() Process {
 		Home:       home,
 		ConfigHome: os.Getenv("XDG_CONFIG_HOME"),
 		WorkDir:    workDir,
+		SystemRoot: os.Getenv("SystemRoot"),
 		Environ:    os.Environ(),
 	}
 }
+
+func (p Process) pathDirs() []string { return filepath.SplitList(p.Path) }
+
+func (p Process) pathExt() []string { return platform.Native.PathExt(p.PathExt) }
 
 var errNoWorkDir = errors.New("the working directory of shell-lsp is unknown")
 
