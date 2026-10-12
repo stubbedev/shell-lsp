@@ -1,0 +1,132 @@
+syntax: a comment after the arguments of let
+
+A '#' that starts a word ends the arguments of let with a comment, as
+everywhere else in a command, so bash -n, mksh -n and zsh -n accept
+
+	let x=1 # one
+	let tc			#  set the return value
+
+The lexer read the arguments of let in arithmetic mode, where '#' is the
+base separator of 16#ff and mksh's unsigned prefix, so the comment became
+an arithmetic operator and the parser failed with "statements must be
+separated by &, ; or a newline".
+
+A '#' after a blank among the arguments of let now starts a comment; one
+inside an argument, as in let x=16#ff, is lexed as before. The comment
+lexing moves into a comment method that both cases use.
+
+Reproducer, before this change: `let x=1 # one` with LangBash failed with
+"statements must be separated by &, ; or a newline".
+
+diff --git a/syntax/filetests_test.go b/syntax/filetests_test.go
+index 8728f1a..356de7b 100644
+--- a/syntax/filetests_test.go
++++ b/syntax/filetests_test.go
+@@ -5967,6 +5967,20 @@ var fileTests = []fileTestCase{
+ 			litCall("bar"),
+ 		), LangBash|LangMirBSDKorn|LangZsh),
+ 	),
++	fileTest(
++		[]string{
++			"let i++ x=16#f # one\nbar",
++			"let i++ x=16#f\t# one\nbar",
++		},
++		printsAs("let i++ x=16#f # one\nbar"),
++		langFile(stmts(
++			letClause(
++				&UnaryArithm{Op: Inc, Post: true, X: litWord("i")},
++				&BinaryArithm{Op: Assgn, X: litWord("x"), Y: litWord("16#f")},
++			),
++			litCall("bar"),
++		), LangBash|LangMirBSDKorn|LangZsh),
++	),
+ 	fileTest(
+ 		[]string{
+ 			"let i++\nfoo=(bar)",
+diff --git a/syntax/lexer.go b/syntax/lexer.go
+index 4586416..90dc018 100644
+--- a/syntax/lexer.go
++++ b/syntax/lexer.go
+@@ -247,6 +247,37 @@ func (p *Parser) nextKeepSpaces() {
+ 	}
+ }
+ 
++// comment lexes a comment from its '#', the current rune, to the end of the
++// line, and then the token after it.
++func (p *Parser) comment() {
++	r := p.rune()
++	p.newLit(r)
++runeLoop:
++	for {
++		switch r {
++		case '\n', runeEOF:
++			break runeLoop
++		case escNewl:
++			p.litBs = append(p.litBs, '\\', '\n')
++			break runeLoop
++		case '`':
++			if p.backquoteEnd() {
++				break runeLoop
++			}
++		}
++		r = p.rune()
++	}
++	if p.keepComments {
++		*p.curComs = append(*p.curComs, Comment{
++			Hash: p.pos,
++			Text: p.endLit(),
++		})
++	} else {
++		p.litBs = nil
++	}
++	p.next()
++}
++
+ func (p *Parser) next() {
+ 	p.eqlOffs = -1
+ 	if p.r == runeEOF {
+@@ -320,32 +351,7 @@ skipSpace:
+ 				p.advanceLitNone(r)
+ 				return
+ 			}
+-			r = p.rune()
+-			p.newLit(r)
+-		runeLoop:
+-			for {
+-				switch r {
+-				case '\n', runeEOF:
+-					break runeLoop
+-				case escNewl:
+-					p.litBs = append(p.litBs, '\\', '\n')
+-					break runeLoop
+-				case '`':
+-					if p.backquoteEnd() {
+-						break runeLoop
+-					}
+-				}
+-				r = p.rune()
+-			}
+-			if p.keepComments {
+-				*p.curComs = append(*p.curComs, Comment{
+-					Hash: p.pos,
+-					Text: p.endLit(),
+-				})
+-			} else {
+-				p.litBs = nil
+-			}
+-			p.next()
++			p.comment()
+ 		case '[':
+ 			// `[` only starts an `[idx]=val` element when it begins a new word;
+ 			// otherwise it continues a glob like `foo[0-9]`.
+@@ -388,6 +394,10 @@ skipSpace:
+ 		default:
+ 			p.advanceLitNone(r)
+ 		}
++	case p.quote == arithmExprLet && r == '#' && p.spaced:
++		// A '#' starting a word ends the arguments of let with a comment,
++		// like in `let x=1 # one`, while `let x=16#ff` uses it as a base.
++		p.comment()
+ 	case p.quote == paramExpArithm && r == '#':
+ 		// '#' is mksh's unsigned prefix, which only [ArithmExp] and [ArithmCmd]
+ 		// can represent, so in a subscript it starts a literal instead;

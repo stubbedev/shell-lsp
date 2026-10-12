@@ -5969,6 +5969,20 @@ var fileTests = []fileTestCase{
 	),
 	fileTest(
 		[]string{
+			"let i++ x=16#f # one\nbar",
+			"let i++ x=16#f\t# one\nbar",
+		},
+		printsAs("let i++ x=16#f # one\nbar"),
+		langFile(stmts(
+			letClause(
+				&UnaryArithm{Op: Inc, Post: true, X: litWord("i")},
+				&BinaryArithm{Op: Assgn, X: litWord("x"), Y: litWord("16#f")},
+			),
+			litCall("bar"),
+		), LangBash|LangMirBSDKorn|LangZsh),
+	),
+	fileTest(
+		[]string{
 			"let i++\nfoo=(bar)",
 			"let i++; foo=(bar)",
 			"let i++; foo=(bar)\n",

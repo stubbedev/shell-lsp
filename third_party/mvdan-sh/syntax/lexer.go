@@ -247,6 +247,37 @@ func (p *Parser) nextKeepSpaces() {
 	}
 }
 
+// comment lexes a comment from its '#', the current rune, to the end of the
+// line, and then the token after it.
+func (p *Parser) comment() {
+	r := p.rune()
+	p.newLit(r)
+runeLoop:
+	for {
+		switch r {
+		case '\n', runeEOF:
+			break runeLoop
+		case escNewl:
+			p.litBs = append(p.litBs, '\\', '\n')
+			break runeLoop
+		case '`':
+			if p.backquoteEnd() {
+				break runeLoop
+			}
+		}
+		r = p.rune()
+	}
+	if p.keepComments {
+		*p.curComs = append(*p.curComs, Comment{
+			Hash: p.pos,
+			Text: p.endLit(),
+		})
+	} else {
+		p.litBs = nil
+	}
+	p.next()
+}
+
 func (p *Parser) next() {
 	p.eqlOffs = -1
 	if p.r == runeEOF {
@@ -320,32 +351,7 @@ skipSpace:
 				p.advanceLitNone(r)
 				return
 			}
-			r = p.rune()
-			p.newLit(r)
-		runeLoop:
-			for {
-				switch r {
-				case '\n', runeEOF:
-					break runeLoop
-				case escNewl:
-					p.litBs = append(p.litBs, '\\', '\n')
-					break runeLoop
-				case '`':
-					if p.backquoteEnd() {
-						break runeLoop
-					}
-				}
-				r = p.rune()
-			}
-			if p.keepComments {
-				*p.curComs = append(*p.curComs, Comment{
-					Hash: p.pos,
-					Text: p.endLit(),
-				})
-			} else {
-				p.litBs = nil
-			}
-			p.next()
+			p.comment()
 		case '[':
 			// `[` only starts an `[idx]=val` element when it begins a new word;
 			// otherwise it continues a glob like `foo[0-9]`.
@@ -388,6 +394,10 @@ skipSpace:
 		default:
 			p.advanceLitNone(r)
 		}
+	case p.quote == arithmExprLet && r == '#' && p.spaced:
+		// A '#' starting a word ends the arguments of let with a comment,
+		// like in `let x=1 # one`, while `let x=16#ff` uses it as a base.
+		p.comment()
 	case p.quote == paramExpArithm && r == '#':
 		// '#' is mksh's unsigned prefix, which only [ArithmExp] and [ArithmCmd]
 		// can represent, so in a subscript it starts a literal instead;
