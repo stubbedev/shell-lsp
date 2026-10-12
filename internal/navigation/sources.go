@@ -9,6 +9,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/directive"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/platform"
+	"github.com/stubbedev/shell-lsp/internal/textline"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
@@ -77,10 +78,14 @@ func resolveSources(file *workspace.File, env Env) []resolvedSource {
 			continue
 		}
 		r := resolvedSource{command: cmd, file: word, arg: span}
+		var candidates []string
 		if d, ok := directiveTarget(file.Tree, cmd); ok {
 			r.directive = &d.span
+			candidates = directiveCandidates(file, d.target, env)
+		} else {
+			candidates = evaluatedCandidates(file, cmd, word, env)
 		}
-		if target := resolveSource(file, cmd, word, env); target != nil {
+		if target := loadFirst(candidates, env); target != nil {
 			r.path = target.Path
 		}
 		out = append(out, r)
@@ -139,8 +144,8 @@ func Closure(file *workspace.File, env Env) ([]*workspace.File, bool) {
 	return chain, complete && len(queue) == 0
 }
 
-func resolveSource(file *workspace.File, cmd parser.Command, word *syntax.Word, env Env) *workspace.File {
-	for _, candidate := range sourceCandidates(file, cmd, word, env) {
+func loadFirst(candidates []string, env Env) *workspace.File {
+	for _, candidate := range candidates {
 		if target, err := env.Loader.Load(candidate); err == nil {
 			return target
 		}
@@ -148,24 +153,24 @@ func resolveSource(file *workspace.File, cmd parser.Command, word *syntax.Word, 
 	return nil
 }
 
-func sourceCandidates(file *workspace.File, cmd parser.Command, word *syntax.Word, env Env) []string {
-	scriptDir := filepath.Dir(file.Path)
-	if d, ok := directiveTarget(file.Tree, cmd); ok {
-		target := d.target
-		if target == "/dev/null" {
-			return nil
-		}
-		if rest, ok := strings.CutPrefix(target, directive.ScriptDir+"/"); ok {
-			return []string{filepath.Join(scriptDir, rest)}
-		}
-		return relativeCandidates(target, append(slices.Clone(env.Roots), scriptDir), nil, env.Home)
+func directiveCandidates(file *workspace.File, target string, env Env) []string {
+	if target == "/dev/null" {
+		return nil
 	}
+	scriptDir := filepath.Dir(file.Path)
+	if rest, ok := strings.CutPrefix(target, directive.ScriptDir+"/"); ok {
+		return []string{filepath.Join(scriptDir, rest)}
+	}
+	return relativeCandidates(target, append(slices.Clone(env.Roots), scriptDir), nil, env.Home)
+}
+
+func evaluatedCandidates(file *workspace.File, cmd parser.Command, word *syntax.Word, env Env) []string {
 	e := evaluator{tree: file.Tree, scriptPath: file.Path, home: env.Home}
 	value, ok := e.word(word, cmd.Span.Start, 0)
 	if !ok {
 		return nil
 	}
-	bases := append([]string{scriptDir}, env.Roots...)
+	bases := append([]string{filepath.Dir(file.Path)}, env.Roots...)
 	return relativeCandidates(value, bases, env.PathDirs, env.Home)
 }
 
@@ -200,21 +205,16 @@ type sourceDirective struct {
 
 func directiveTarget(tree *parser.Tree, cmd parser.Command) (sourceDirective, bool) {
 	text := tree.Text()
-	lineStart := strings.LastIndexByte(text[:cmd.Span.Start], '\n') + 1
-	for lineStart > 0 {
-		prevStart := strings.LastIndexByte(text[:lineStart-1], '\n') + 1
-		raw := text[prevStart : lineStart-1]
-		line := strings.TrimSpace(raw)
-		if !strings.HasPrefix(line, "#") {
-			return sourceDirective{}, false
+	for start, end := range textline.CommentsAbove(text, textline.Start(text, cmd.Span.Start)) {
+		raw := text[start:end]
+		d, ok := directive.Parse(strings.TrimSpace(raw))
+		if !ok {
+			continue
 		}
-		if d, ok := directive.Parse(line); ok {
-			if pair, ok := d.Pair(directive.Source); ok {
-				base := prevStart + len(raw) - len(strings.TrimLeft(raw, " \t"))
-				return sourceDirective{target: pair.Value, span: parser.Span{Start: base + pair.ValueOffset, End: base + pair.ValueEnd}}, true
-			}
+		if pair, ok := d.Pair(directive.Source); ok {
+			base := start + len(raw) - len(strings.TrimLeft(raw, " \t"))
+			return sourceDirective{target: pair.Value, span: parser.Span{Start: base + pair.ValueOffset, End: base + pair.ValueEnd}}, true
 		}
-		lineStart = prevStart
 	}
 	return sourceDirective{}, false
 }
