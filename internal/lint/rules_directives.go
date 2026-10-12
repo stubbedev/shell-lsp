@@ -111,6 +111,14 @@ func (d directiveComment) valueSpan(pair directive.Pair) parser.Span {
 	return parser.Span{Start: d.at(pair.ValueOffset), End: d.at(pair.ValueEnd)}
 }
 
+var knownShells = func() string {
+	var names []string
+	for d := range dialect.All.Members() {
+		names = append(names, d.String())
+	}
+	return strings.Join(names[:len(names)-1], ", ") + " or " + names[len(names)-1]
+}()
+
 func (p *pass) checkDirectivePair(d directiveComment, pair directive.Pair) {
 	value := d.valueSpan(pair)
 	key, _ := pair.Key()
@@ -119,7 +127,7 @@ func (p *pass) checkDirectivePair(d directiveComment, pair directive.Pair) {
 		p.checkDisabledCodes(value, pair.Value)
 	case directive.Shell:
 		if _, ok := dialect.FromName(pair.Value); !ok {
-			p.report(1103, value, fmt.Sprintf("%q is not a shell this linter knows, so the directive is ignored; use sh, bash, dash, ksh, zsh or busybox.", pair.Value))
+			p.report(1103, value, fmt.Sprintf("%q is not a shell this linter knows, so the directive is ignored; use %s.", pair.Value, knownShells))
 		}
 	case directive.ExternalSources:
 		switch pair.Value {

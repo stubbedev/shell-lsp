@@ -2,6 +2,7 @@ package lint
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
@@ -78,5 +79,19 @@ func TestUnusedDirectivesSilencedInTheirOwnDirective(t *testing.T) {
 	script = "#!/bin/bash\n# shellcheck enable=unused-directives disable=SL2009\nx=$1\n# shellcheck disable=SC2086\necho \"$x\"\n"
 	if got := Check(parser.Parse(script, dialect.Bash), nil, Options{}); len(got) != 0 {
 		t.Errorf("a file-wide disable=SL2009 still got %+v", got)
+	}
+}
+
+func TestUnknownShellDirectiveNamesEveryDialect(t *testing.T) {
+	t.Parallel()
+
+	got := findingsWith(t, "# shellcheck shell=fish\necho hi\n", 1103)
+	if len(got) != 1 {
+		t.Fatalf("SC1103 findings = %+v, want one", got)
+	}
+	for d := range dialect.All.Members() {
+		if !strings.Contains(got[0].Message, d.String()) {
+			t.Errorf("SC1103 message %q does not name %s", got[0].Message, d)
+		}
 	}
 }
