@@ -5,26 +5,6 @@ export const pathKey = "path";
 export const pathSetting = `${section}.${pathKey}`;
 export const dialectSetting = `${section}.dialect`;
 
-const serverScope = "resource";
-
-export function serverKeys(manifest: unknown): readonly string[] {
-  const contributes = isFields(manifest) ? manifest["contributes"] : undefined;
-  const configuration = isFields(contributes) ? contributes["configuration"] : undefined;
-  if (!Array.isArray(configuration)) {
-    throw new Error("the extension manifest has no contributes.configuration list");
-  }
-  const prefix = `${section}.`;
-  return configuration.flatMap((category: unknown) => {
-    const properties = isFields(category) ? category["properties"] : undefined;
-    if (!isFields(properties)) {
-      throw new Error(`contributes.configuration entry ${JSON.stringify(category)} has no properties`);
-    }
-    return Object.entries(properties)
-      .filter(([key, schema]) => key.startsWith(prefix) && isFields(schema) && schema["scope"] === serverScope)
-      .map(([key]) => key.slice(prefix.length));
-  });
-}
-
 export interface ScopedValues {
   readonly globalValue?: unknown;
   readonly workspaceValue?: unknown;

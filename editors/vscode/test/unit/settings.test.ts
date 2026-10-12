@@ -1,47 +1,6 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
 import { describe, test } from "node:test";
-import { explicitSettings, serverKeys, type ScopedValues } from "../../src/settings.ts";
-
-describe("serverKeys", () => {
-  test("lists the contributed settings the server reads, without the extension's own", async () => {
-    const manifest: unknown = JSON.parse(await readFile(join(import.meta.dirname, "..", "..", "package.json"), "utf8"));
-    const keys = serverKeys(manifest);
-    assert.ok(keys.includes("dialect"));
-    assert.ok(keys.includes("lint.exclude"));
-    assert.ok(keys.includes("format.binaryNextLine"));
-    assert.ok(!keys.includes("path"));
-    assert.ok(!keys.includes("trace.server"));
-  });
-
-  test("reads every configuration category and ignores other extensions' keys", () => {
-    const resource = { scope: "resource" };
-    const manifest = {
-      contributes: {
-        configuration: [
-          { title: "A", properties: { "shellLsp.path": { scope: "machine" }, "shellLsp.dialect": resource, "editor.tabSize": resource } },
-          { title: "B", properties: { "shellLsp.trace.server": { scope: "window" }, "shellLsp.lint.enable": resource } },
-        ],
-      },
-    };
-    assert.deepEqual(serverKeys(manifest), ["dialect", "lint.enable"]);
-  });
-
-  test("leaves out settings that cannot differ per workspace folder, scoped or not", () => {
-    const manifest = {
-      contributes: {
-        configuration: [{ title: "A", properties: { "shellLsp.a": { scope: "application" }, "shellLsp.b": {}, "shellLsp.c": { scope: "resource" } } }],
-      },
-    };
-    assert.deepEqual(serverKeys(manifest), ["c"]);
-  });
-
-  test("rejects a manifest without configuration categories", () => {
-    assert.throws(() => serverKeys({}), /no contributes\.configuration list/);
-    assert.throws(() => serverKeys({ contributes: { configuration: [{ title: "x" }] } }), /has no properties/);
-  });
-});
+import { explicitSettings, type ScopedValues } from "../../src/settings.ts";
 
 describe("explicitSettings", () => {
   const inspector =

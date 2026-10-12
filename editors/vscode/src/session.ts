@@ -6,16 +6,18 @@ import { describeError } from "./errors.ts";
 import { httpFetcher } from "./http.ts";
 import { runningContext } from "./ids.ts";
 import { installServer } from "./install.ts";
-import { extensionVersion, releaseAsset, releaseTarget, type ReleaseAsset } from "./release.ts";
+import { parseManifest } from "./manifest.ts";
+import { serverDownload, type ReleaseAsset, type ServerDownload } from "./release.ts";
 import { findServer, isExecutableFile, serverName } from "./serverBinary.ts";
-import { pathKey, pathSetting, section, serverKeys } from "./settings.ts";
+import { pathKey, pathSetting, section } from "./settings.ts";
 
 const downloadLimits = { timeoutMs: 300_000, maxBytes: 256 * 1024 * 1024 };
+const openSettingsLabel = "Open Settings";
 
 export class Session {
   private readonly output: LogOutputChannel;
   private readonly storageDir: string;
-  private readonly asset: ReleaseAsset | undefined;
+  private readonly download: ServerDownload;
   private readonly settingKeys: readonly string[];
   private readonly onStateChange: () => void;
   private client: LanguageClient | undefined;
@@ -25,10 +27,9 @@ export class Session {
     this.output = output;
     this.onStateChange = onStateChange;
     this.storageDir = context.globalStorageUri.fsPath;
-    const manifest: unknown = context.extension.packageJSON;
-    this.settingKeys = serverKeys(manifest);
-    const target = releaseTarget(process.platform, process.arch);
-    this.asset = target === undefined ? undefined : releaseAsset(extensionVersion(manifest), target);
+    const manifest = parseManifest(context.extension.packageJSON);
+    this.settingKeys = manifest.serverKeys;
+    this.download = serverDownload(manifest.version, process.platform, process.arch);
   }
 
   runningClient(): LanguageClient | undefined {
@@ -64,7 +65,7 @@ export class Session {
         platform: process.platform,
         configuredPath: configuredPath(),
         pathEnv: process.env["PATH"],
-        downloaded: this.asset === undefined ? undefined : join(this.storageDir, this.asset.name),
+        downloaded: this.download.kind === "release" ? join(this.storageDir, this.download.asset.name) : undefined,
       },
       isExecutableFile,
     );
@@ -96,31 +97,40 @@ export class Session {
   }
 
   private async offerDownload(): Promise<void> {
-    const settings = "Open Settings";
-    if (this.asset === undefined) {
-      const choice = await window.showErrorMessage(
-        `There is no prebuilt ${serverName} for ${process.platform}-${process.arch}. Install ${serverName} manually and set ${pathSetting}.`,
-        settings,
-      );
-      if (choice === settings) {
-        await this.openSettings();
-      }
-      return;
+    switch (this.download.kind) {
+      case "unsupported":
+        await this.offerManualInstall(this.download.platform);
+        return;
+      case "release":
+        await this.offerRelease(this.download.asset);
+        return;
     }
+  }
+
+  private async offerManualInstall(platform: string): Promise<void> {
+    const choice = await window.showErrorMessage(
+      `There is no prebuilt ${serverName} for ${platform}. Install ${serverName} manually and set ${pathSetting}.`,
+      openSettingsLabel,
+    );
+    if (choice === openSettingsLabel) {
+      await this.openSettings();
+    }
+  }
+
+  private async offerRelease(asset: ReleaseAsset): Promise<void> {
     const download = "Download";
     const choice = await window.showInformationMessage(
-      `${serverName} was not found on PATH and ${pathSetting} is not set. Download ${this.asset.name} from its GitHub release?`,
+      `${serverName} was not found on PATH and ${pathSetting} is not set. Download ${asset.name} from its GitHub release?`,
       download,
-      settings,
+      openSettingsLabel,
     );
-    if (choice === settings) {
+    if (choice === openSettingsLabel) {
       await this.openSettings();
       return;
     }
     if (choice !== download) {
       return;
     }
-    const asset = this.asset;
     const installed = await window.withProgress(
       { location: ProgressLocation.Notification, title: `Downloading ${asset.name}` },
       () => installServer(asset, this.storageDir, httpFetcher(downloadLimits)),

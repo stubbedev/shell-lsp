@@ -1,4 +1,3 @@
-import { isFields } from "./fields.ts";
 import { serverName } from "./serverBinary.ts";
 
 const repository = "https://github.com/stubbedev/shell-lsp";
@@ -18,26 +17,20 @@ export interface ReleaseAsset {
   readonly checksumsUrl: string;
 }
 
+export type ServerDownload =
+  | { readonly kind: "release"; readonly asset: ReleaseAsset }
+  | { readonly kind: "unsupported"; readonly platform: string };
+
 const oses: Readonly<Partial<Record<string, Os>>> = { linux: "linux", darwin: "darwin", win32: "windows" };
 const arches: Readonly<Partial<Record<string, Arch>>> = { x64: "amd64", arm64: "arm64" };
 
-export function releaseTarget(platform: string, arch: string): ReleaseTarget | undefined {
+export function serverDownload(version: string, platform: string, arch: string): ServerDownload {
   const os = oses[platform];
   const goArch = arches[arch];
   if (os === undefined || goArch === undefined) {
-    return undefined;
+    return { kind: "unsupported", platform: `${platform}-${arch}` };
   }
-  return { os, arch: goArch };
-}
-
-const versionPattern = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
-
-export function extensionVersion(manifest: unknown): string {
-  const version = isFields(manifest) ? manifest["version"] : undefined;
-  if (typeof version !== "string" || !versionPattern.test(version)) {
-    throw new Error(`extension version ${JSON.stringify(version)} is not a release version like 1.2.3`);
-  }
-  return version;
+  return { kind: "release", asset: releaseAsset(version, { os, arch: goArch }) };
 }
 
 export function releaseAsset(version: string, target: ReleaseTarget): ReleaseAsset {
