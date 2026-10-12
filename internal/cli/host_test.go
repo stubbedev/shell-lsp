@@ -71,3 +71,14 @@ func TestCheckLintsJustfileRecipes(t *testing.T) {
 		t.Errorf("fmt of a justfile = %+v", got)
 	}
 }
+
+func TestCheckLintsNixShellStrings(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeFiles(t, dir, map[string]string{"proj/default.nix": "{ buildPhase = ''\n  echo $1\n''; src = ~/x; }\n"})
+	got := run(t, dir, "", "check", "-f", "gcc", "proj")
+	if want := []string{filepath.FromSlash("proj/default.nix:2:8 SC2086")}; !slices.Equal(findings(t, got.stdout), want) {
+		t.Errorf("checking a project with Nix files = %v, want %v\n%s", findings(t, got.stdout), want, got.stderr)
+	}
+}

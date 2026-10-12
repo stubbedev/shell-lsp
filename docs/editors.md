@@ -163,23 +163,25 @@ pushes them otherwise.
 
 ## Shell in other files
 
-shell-lsp also lints the shell inside Makefile and justfile recipes
-([Shell in other files](../README.md#shell-in-other-files)) when the editor
-sends it those files; it reads the language identifiers `makefile`, `make` and
-`just`. The VS Code extension attaches to Makefiles on its own, and to
-justfiles when an extension gives them the `just` language. Elsewhere, add the
-file types next to the shell ones. In Neovim, add `"make"` and `"just"` to
-`filetypes` (or to the `FileType` pattern):
+shell-lsp also lints the shell inside Makefile and justfile recipes and Nix
+strings ([Shell in other files](../README.md#shell-in-other-files)) when the
+editor sends it those files; it reads the language identifiers `makefile`,
+`make`, `just` and `nix`. The VS Code extension attaches to Makefiles on its
+own, and to justfiles and Nix files when extensions give them the `just` and
+`nix` languages. Elsewhere, add the file types next to the shell ones. In
+Neovim, add `"make"`, `"just"` and `"nix"` to `filetypes` (or to the
+`FileType` pattern); shell-lsp then runs next to any Nix language server:
 
 ```lua
 vim.lsp.config("shell_lsp", {
   cmd = { "shell-lsp" },
-  filetypes = { "sh", "bash", "zsh", "ksh", "make", "just" },
+  filetypes = { "sh", "bash", "zsh", "ksh", "make", "just", "nix" },
   root_markers = { ".git" },
 })
 ```
 
-In Helix, list shell-lsp for the `make` and `just` languages:
+In Helix, list shell-lsp for the `make`, `just` and `nix` languages, next to
+the language servers they already use:
 
 ```toml
 [[language]]
@@ -189,6 +191,10 @@ language-servers = ["shell-lsp"]
 [[language]]
 name = "just"
 language-servers = ["shell-lsp"]
+
+[[language]]
+name = "nix"
+language-servers = ["nil", "shell-lsp"]
 ```
 
 ## Windows

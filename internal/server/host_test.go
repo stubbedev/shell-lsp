@@ -253,3 +253,52 @@ func TestJustfileDiagnosticsAndFixes(t *testing.T) {
 		t.Errorf("justfile dialect = %+v", dialect)
 	}
 }
+
+func TestNixShellStringsLintInPlace(t *testing.T) {
+	t.Parallel()
+
+	const uri = "file:///w/package.nix"
+	lines := []string{
+		"stdenv.mkDerivation {",
+		"  pname = \"x\";",
+		"  installPhase = ''",
+		"    cp ${src}/bin/* $out/bin/`basename $1`",
+		"  '';",
+		"}",
+	}
+	c, _ := startClient(t, `{`+actionCapabilities+`}`)
+	c.notify("textDocument/didOpen", openLanguageParams(uri, "nix", strings.Join(lines, "\n")+"\n"))
+	at := func(sub string) lsp.Range {
+		i := strings.Index(lines[3], sub)
+		return lsp.Range{Start: lsp.Position{Line: 3, Character: uint32(i)}, End: lsp.Position{Line: 3, Character: uint32(i + len(sub))}}
+	}
+	diags := pullDiagnostics(t, c, uri)
+	var got []string
+	for _, d := range diags {
+		got = append(got, d.Code)
+	}
+	if want := []string{"SC2086", "SC2006", "SC2046", "SC2086"}; !slices.Equal(got, want) {
+		t.Fatalf("Nix diagnostics = %v, want %v: %+v", got, want, diags)
+	}
+	i := slices.IndexFunc(diags, func(d lsp.Diagnostic) bool { return d.Code == "SC2006" })
+	if diags[0].Range != at("$out") || diags[i].Range != at("`basename $1`") {
+		t.Errorf("diagnostics at %+v and %+v, want on $out and the backticks", diags[0].Range, diags[i].Range)
+	}
+	encoded, err := json.Marshal(lsp.CodeActionParams{TextDocument: lsp.TextDocumentIdentifier{URI: uri}, Range: diags[i].Range, Context: lsp.CodeActionContext{Diagnostics: diags[i : i+1]}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := lsp.TextEdit{Range: at("`basename $1`"), NewText: "$(basename $1)"}
+	found := false
+	for _, a := range codeActions(t, c, string(encoded)) {
+		for _, change := range a.Edit.DocumentChanges {
+			found = found || slices.Contains(change.Edits, want)
+		}
+	}
+	if !found {
+		t.Errorf("no action makes %+v", want)
+	}
+	if hover := c.call("textDocument/hover", positionParams(uri, 3, strings.Index(lines[3], "src"), "")); string(hover.Result) != "null" {
+		t.Errorf("hover on ${src} = %s, want null", hover.Result)
+	}
+}

@@ -16,12 +16,13 @@ server for bash, zsh, POSIX sh, dash and ksh with dialect auto-detection.
 - Quick fixes, refactorings and a fix-all action.
 - Bats: tests in the outline and "Run" code lenses that report failures as
   diagnostics.
-- The shell in Makefile and justfile recipes, linted in place, with fixes
-  written back in their syntax.
+- The shell in Makefile and justfile recipes and in Nix phases, hooks and
+  script writers, linted in place, with fixes written back in their syntax.
 
 The server starts for documents VS Code identifies as Shell Script
 (`.sh`, `.bash`, `.zsh`, `.ksh`, rc files and shebang detection), as
-Makefile, or as `just` (which a justfile extension provides), and this
+Makefile, or as `just` or `nix` (which justfile and Nix extensions provide),
+and this
 extension adds `.bats` files and `bats` shebangs.
 
 ## The server binary

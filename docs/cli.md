@@ -23,8 +23,8 @@ scan finds them: by extension (`.sh`, `.bash`, `.zsh`, `.ksh`, `.dash`,
 `.bats`), by rc-file name (`.bashrc`, `.zshrc`, ...), and by a shell shebang on
 executable files without an extension (on Windows, which has no execute bit,
 on every file without one). Makefiles (`Makefile`, `makefile`, `GNUmakefile`,
-`*.mk`, `*.mak`) and justfiles (`justfile`, `Justfile`, `.justfile`, `*.just`)
-are found too, and their recipes are linted
+`*.mk`, `*.mak`), justfiles (`justfile`, `Justfile`, `.justfile`, `*.just`)
+and Nix files (`*.nix`) are found too, and the shell in them is linted
 ([Shell in other files](../README.md#shell-in-other-files)); `-s` does not
 apply to them, since the file decides their shell. `.git`, `node_modules`,
 `vendor` and similar directories are skipped. A `-` reads the script from
@@ -162,8 +162,8 @@ or a single `-`, it formats standard input.
 
 As with shfmt, `.editorconfig` settings apply unless a parser or printer flag
 is given, and files found by walking a directory honour `ignore = true`.
-Makefiles and justfiles are skipped when walking a directory and refused when
-named, since `fmt` formats only shell scripts.
+Makefiles, justfiles and Nix files are skipped when walking a directory and
+refused when named, since `fmt` formats only shell scripts.
 Exit status 0 means success, 1 means a file could not be read or parsed or,
 with `-l` (without `-w`) or `-d`, that some formatting differs, and 2 means
 the command line is malformed.

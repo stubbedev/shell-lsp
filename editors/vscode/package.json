@@ -39,7 +39,8 @@
     "onLanguage:shellscript",
     "onLanguage:bats",
     "onLanguage:makefile",
-    "onLanguage:just"
+    "onLanguage:just",
+    "onLanguage:nix"
   ],
   "capabilities": {
     "untrustedWorkspaces": {

@@ -5,6 +5,8 @@
 - Runs shell-lsp for Makefiles too, which lints the shell in their recipes.
 - Runs shell-lsp for justfiles too, when an extension gives them the `just`
   language.
+- Runs shell-lsp for Nix files too, when an extension gives them the `nix`
+  language, which lints the shell in their phases, hooks and script writers.
 - Windows: finds `shell-lsp.exe` on `PATH` and downloads the Windows release
   binary.
 - First release of the extension: runs shell-lsp for shell scripts and Bats

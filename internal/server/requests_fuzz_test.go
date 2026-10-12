@@ -38,6 +38,7 @@ var fuzzKinds = []fuzzKind{
 	{".bats", "shellscript"},
 	{"/Makefile", "makefile"},
 	{"/justfile", "just"},
+	{".nix", "nix"},
 }
 
 type fuzzDocument struct {
@@ -59,6 +60,7 @@ func FuzzRequests(f *testing.F) {
 	f.Add("SHELL := bash\nall: a ; echo `x` $$y\n\t@for f in $(F); do \\\n\t  echo $$f; \\\n\tdone\n.ONESHELL:\n", byte(6), []byte{1, 9, 2, 12, 3, 0, 4, 5})
 	f.Add("x:\n\t# shellcheck disable=SC2086\n\tgreet() { echo $$1; }; greet `date`\ndefine y\n\techo\nendef\n", byte(6), []byte{2, 20, 2, 4, 1, 3})
 	f.Add("set shell := [\"bash\", \"-uc\"]\nexport t := 'x'\n[private]\nrun $a b='{{x}}': dep\n    @echo `date` {{a}} '{{b}}' \\\n      $t\n\nscript:\n    #!/usr/bin/env bash\n    cat <<EOF\n    it's {{{{x}}\n    EOF\n", byte(7), []byte{3, 12, 4, 9, 8, 2, 5})
+	f.Add("{ src = ~/x; installPhase = attrs.installPhase or (''\n    if true; then cp ${src} $out\n  '' + lib.optionalString x ''\n    fi '''a ''${b}\n  ''); text = writeShellApplication { name = \"x\"; text = \"echo \\\"$1\\\"\"; }; }\n", byte(8), []byte{1, 8, 2, 30, 3, 6, 4})
 	seeds, err := filepath.Glob(filepath.Join("..", "parser", "testdata", "corpus", "*", "*"))
 	if err != nil {
 		f.Fatal(err)

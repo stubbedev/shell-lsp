@@ -29,6 +29,8 @@ func TestOf(t *testing.T) {
 		{"file:///w/Justfile", "", Just, true},
 		{"file:///w/.justfile", "", Just, true},
 		{"file:///w/tasks.just", "", Just, true},
+		{"file:///w/flake.nix", "", Nix, true},
+		{"file:///w/x", "nix", Nix, true},
 	} {
 		got, ok := Of(tt.uri, tt.languageID)
 		if got != tt.want || ok != tt.ok {

@@ -31,8 +31,8 @@ nor groff needs to be installed.
 - Quick fixes, [refactorings](#refactorings) and a fix-all source action.
 - Checks for awk, sed and jq programs embedded in scripts
   ([Embedded languages](#embedded-languages)).
-- The shell inside Makefile and justfile recipes, linted and navigated in
-  place, with fixes written back in their syntax
+- The shell inside Makefile and justfile recipes and Nix strings, linted and
+  navigated in place, with fixes written back in their syntax
   ([Shell in other files](#shell-in-other-files)).
 - [Bats](#bats) support: tests in the outline, and "Run" lenses that report
   failures as diagnostics.
@@ -459,6 +459,47 @@ ends in `.just`.
   one shell: the family most recipes use (sh, dash, busybox and bash are one
   family, checked as the widest of them that a recipe uses), and recipes in
   another family are not analysed.
+
+### Nix files
+
+A document is a Nix file when its language identifier is `nix`, or, without
+one, when it ends in `.nix`. A string literal there is shell when:
+
+- it is a derivation phase or hook (`buildPhase`, `installPhase`,
+  `preConfigure`, `postInstall` and the other `pre`/`post` hooks,
+  `buildCommand`), or the script of `runCommand`, `runCommandLocal`,
+  `runCommandCC`;
+- it is a `shellHook`, or the `script`, `preStart`, `postStart`, `preStop`,
+  `postStop` or `reload` of a systemd unit (an attribute under `systemd`);
+- it is the script of `writeShellScript`, `writeShellScriptBin`,
+  `writeShellApplication` (`text`), `writeBash`, `writeBashBin`, `writeDash`,
+  `writeDashBin`, or of `writeScript` and `writeScriptBin` when its shebang
+  names a shell;
+- a `/* bash */` (or `sh`, `dash`, `zsh`, `ksh`, `shell`) comment comes right
+  before it.
+
+The binding counts through `lib.optionalString`, `lib.mkIf`, `mkBefore`,
+`mkAfter`, `mkForce`, `mkDefault`, `if ... then ... else` and `or`, and the
+strings joined with `+` in one binding are one script, so an `if` may open in
+one and close in another.
+
+- Indentation is removed as Nix removes it, `'''`, `''$` and `''\x` (or `\"`,
+  `\$` and the other escapes of a `"` string) are what Nix makes of them, and
+  every `${...}` stands for text the shell cannot know. Fixes are escaped for
+  the string they land in, and new lines get its indentation.
+- A phase runs as stdenv runs it: inside a function, with `set -eu -o
+  pipefail`, in the same shell as the other phases, and with every attribute
+  of the derivation and of its setup hooks in the environment, so reading a
+  variable the phase never sets is not reported (`SC2154`). The scripts of
+  the writers and of systemd units run on their own, and
+  `writeShellApplication` adds its strict mode and honours its
+  `excludeShellChecks`.
+- The file is checked as one shell, chosen as for justfiles; phases and the
+  bash writers are bash.
+
+Shell that Nix assembles across `${...}`, such as a `case` whose patterns come
+from `lib.optionalString`, cannot be checked, since only evaluating the Nix
+code would show it, and may be reported as a syntax error.
 
 ## Commands
 

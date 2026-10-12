@@ -10,6 +10,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/host/justfile"
 	"github.com/stubbedev/shell-lsp/internal/host/makefile"
+	"github.com/stubbedev/shell-lsp/internal/host/nix"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/projection"
 )
@@ -19,6 +20,7 @@ type Language uint8
 const (
 	Make Language = iota + 1
 	Just
+	Nix
 )
 
 func (l Language) String() string {
@@ -27,6 +29,8 @@ func (l Language) String() string {
 		return "Makefile"
 	case Just:
 		return "justfile"
+	case Nix:
+		return "Nix file"
 	}
 	return "unknown"
 }
@@ -53,6 +57,12 @@ var definitions = []definition{
 		names:       []string{"justfile", "Justfile", "JUSTFILE", ".justfile"},
 		extensions:  []string{".just"},
 		project:     justfile.Project,
+	},
+	{
+		language:    Nix,
+		languageIDs: []string{"nix"},
+		extensions:  []string{".nix"},
+		project:     nix.Project,
 	},
 }
 
