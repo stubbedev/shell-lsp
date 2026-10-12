@@ -1,5 +1,7 @@
 import type { WorkspaceEdit } from "vscode-languageclient";
-import { isFields } from "./fields.ts";
+import { isFields, isList, isString } from "./fields.ts";
+import { parseArgs, parseResult } from "./parse.ts";
+import { isTextWorkspaceEdit } from "./protocol.ts";
 
 export const documentDialectMethod = "shellLsp/documentDialect";
 export const setDialectMethod = "shellLsp/setDialect";
@@ -14,52 +16,47 @@ export interface DocumentDialect {
   readonly dialects: readonly string[];
 }
 
-export function documentDialect(result: unknown): DocumentDialect {
-  if (
-    !isFields(result) ||
-    typeof result["dialect"] !== "string" ||
-    typeof result["source"] !== "string" ||
-    typeof result["guessed"] !== "boolean" ||
-    typeof result["description"] !== "string" ||
-    typeof result["directive"] !== "boolean" ||
-    !Array.isArray(result["dialects"]) ||
-    !result["dialects"].every((name) => typeof name === "string")
-  ) {
-    throw new Error(`${documentDialectMethod} answered ${JSON.stringify(result)}, not a document dialect`);
+function parseDocumentDialect(value: unknown): DocumentDialect | undefined {
+  if (!isFields(value)) {
+    return undefined;
   }
-  return {
-    dialect: result["dialect"],
-    source: result["source"],
-    guessed: result["guessed"],
-    description: result["description"],
-    directive: result["directive"],
-    dialects: result["dialects"],
-  };
+  const { dialect, source, guessed, description, directive, dialects } = value;
+  if (
+    typeof dialect !== "string" ||
+    typeof source !== "string" ||
+    typeof guessed !== "boolean" ||
+    typeof description !== "string" ||
+    typeof directive !== "boolean" ||
+    !isList(dialects, isString)
+  ) {
+    return undefined;
+  }
+  return { dialect, source, guessed, description, directive, dialects };
 }
 
-function isWorkspaceEdit(value: unknown): value is WorkspaceEdit {
-  return isFields(value) && (isFields(value["changes"]) || Array.isArray(value["documentChanges"]));
+export function documentDialect(result: unknown): DocumentDialect {
+  return parseResult(documentDialectMethod, "a document dialect", parseDocumentDialect, result);
 }
 
 export function directiveEdit(result: unknown): WorkspaceEdit | null {
-  if (result === null) {
-    return null;
-  }
-  if (!isWorkspaceEdit(result)) {
-    throw new Error(`${setDialectMethod} answered ${JSON.stringify(result)}, not a workspace edit`);
-  }
-  return result;
+  return parseResult(
+    setDialectMethod,
+    "a workspace edit of text or null",
+    (value) => (value === null || isTextWorkspaceEdit(value) ? value : undefined),
+    result,
+  );
 }
 
 export function shellArgument(command: string, args: readonly unknown[]): string | null | undefined {
   if (args.length === 0) {
     return undefined;
   }
-  const [shell] = args;
-  if (args.length !== 1 || (shell !== null && typeof shell !== "string")) {
-    throw new Error(`${command} takes no argument, a shell name, or null to remove the directive; got ${JSON.stringify(args)}`);
-  }
-  return shell;
+  return parseArgs(
+    command,
+    "no argument, a shell name, or null to remove the directive",
+    ([shell, ...rest]) => (rest.length === 0 && (shell === null || isString(shell)) ? shell : undefined),
+    args,
+  );
 }
 
 export interface StatusText {

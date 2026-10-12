@@ -11,6 +11,7 @@ import {
 } from "../../src/dialect.ts";
 
 const dialects = ["bash", "sh", "dash", "zsh", "ksh", "busybox"];
+const range = { start: { line: 1, character: 0 }, end: { line: 1, character: 0 } };
 
 const fromShebang: DocumentDialect = {
   dialect: "bash",
@@ -51,8 +52,28 @@ describe("directiveEdit", () => {
     assert.equal(directiveEdit(changes), changes);
   });
 
+  test("passes the text edits the server answers", () => {
+    const answer = {
+      documentChanges: [{ textDocument: { uri: "file:///w/a.sh", version: 3 }, edits: [{ range, newText: "# shellcheck shell=dash\n" }] }],
+    };
+    assert.equal(directiveEdit(answer), answer);
+    const unversioned = { changes: { "file:///w/a.sh": [{ range, newText: "" }] } };
+    assert.equal(directiveEdit(unversioned), unversioned);
+  });
+
   test("rejects anything else", () => {
-    for (const result of [undefined, "edit", [], { documentChanges: {} }]) {
+    for (const result of [
+      undefined,
+      "edit",
+      [],
+      {},
+      { documentChanges: {} },
+      { documentChanges: [{ textDocument: { uri: "file:///w/a.sh", version: 1 }, edits: [{ newText: "x" }] }] },
+      { documentChanges: [{ textDocument: { uri: "file:///w/a.sh", version: "1" }, edits: [] }] },
+      { documentChanges: [{ kind: "create", uri: "file:///w/b.sh" }] },
+      { changes: { "file:///w/a.sh": [{ range, newText: 1 }] } },
+      { changes: { "file:///w/a.sh": {} } },
+    ]) {
       assert.throws(() => directiveEdit(result), /^Error: shellLsp\/setDialect answered /);
     }
   });
