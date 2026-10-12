@@ -24,10 +24,6 @@ type pass struct {
 	statements      []nestedStmt
 	untrustedValues *untrustedValues
 	nameReads       *nameReads
-	catalog         map[Code]meta
-	finishers       []func(p *pass)
-	nodeChecks      nodeDispatch
-	commands        commandDispatch
 	settings        fileWide
 	findings        []Finding
 	aliases         map[string]aliasDefinition
@@ -58,7 +54,7 @@ func newPass(tree *parser.Tree, imports []parser.Import, opts Options) *pass {
 	settings := fileWideSettings(directives, firstCommand, opts)
 	return &pass{
 		tree: tree, imports: imports, sources: opts.Sources, rcFile: opts.RCFile, text: tree.Text(), dialect: tree.Dialect, bats: tree.Bats(),
-		firstCommand: firstCommand, directives: directives, catalog: catalog, finishers: finishers, nodeChecks: nodeChecks, commands: commandChecks,
+		firstCommand: firstCommand, directives: directives,
 		settings:       settings,
 		shellChosen:    shellChosen(opts.DialectSource, settings.shell),
 		dialectGuessed: opts.DialectSource == DialectGuessed && !settings.shell,
@@ -82,10 +78,10 @@ func (p *pass) run() {
 				p.stmts = append(p.stmts, span)
 			}
 		}
-		for _, check := range p.nodeChecks[nodeKindOf(n)] {
+		for _, check := range nodeChecks[nodeKindOf(n)] {
 			check(p, n)
 		}
-		p.commands.visit(p, n)
+		commandChecks.visit(p, n)
 		p.stack = append(p.stack, n)
 		return true
 	})
@@ -93,7 +89,7 @@ func (p *pass) run() {
 	for _, check := range p.flowChecks {
 		check(result)
 	}
-	for _, finish := range p.finishers {
+	for _, finish := range finishers {
 		finish(p)
 	}
 }
@@ -186,7 +182,7 @@ func (p *pass) active(code Code) bool {
 }
 
 func (p *pass) meta(code Code) meta {
-	m, ok := p.catalog[code]
+	m, ok := catalog[code]
 	if !ok {
 		panic(fmt.Sprintf("lint: %s is reported but missing from the catalog", code))
 	}

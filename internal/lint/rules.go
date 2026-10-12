@@ -116,7 +116,16 @@ func nodes(prototypes ...syntax.Node) []nodeKind {
 	return out
 }
 
-var catalog, finishers, nodeChecks, commandChecks = assemble(families)
+var (
+	catalog       map[Code]meta
+	finishers     []func(p *pass)
+	nodeChecks    nodeDispatch
+	commandChecks commandDispatch
+)
+
+func init() {
+	catalog, finishers, nodeChecks, commandChecks = assemble(families)
+}
 
 func registered(code Code, m meta) meta {
 	switch {

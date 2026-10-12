@@ -69,7 +69,7 @@ func (p *pass) reportableWhenUnused(item disabledItem) bool {
 	if !single {
 		return true
 	}
-	m, known := p.catalog[code]
+	m, known := catalog[code]
 	if !known {
 		return !code.parseFailure()
 	}
@@ -80,7 +80,7 @@ func (p *pass) unusedMessage(item disabledItem) string {
 	name := item.text
 	if code, single := item.codes.single(); single {
 		name = code.String()
-		if _, known := p.catalog[code]; !known {
+		if _, known := catalog[code]; !known {
 			return name + " is not a check shell-lsp runs, so disabling it silences nothing here."
 		}
 	}
