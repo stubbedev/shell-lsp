@@ -79,8 +79,8 @@ func encodeTokens(snap *snapshot, tokens []semantic.Token, within *parser.Span) 
 		if within != nil && (t.Span.End <= within.Start || t.Span.Start >= within.End) {
 			continue
 		}
-		start := snap.doc.OffsetToPosition(t.Span.Start, snap.encoding)
-		end := snap.doc.OffsetToPosition(t.Span.End, snap.encoding)
+		start := snap.Doc.OffsetToPosition(t.Span.Start, snap.encoding)
+		end := snap.Doc.OffsetToPosition(t.Span.End, snap.encoding)
 		if end.Line != start.Line || end.Character <= start.Character {
 			continue
 		}
@@ -103,8 +103,8 @@ func (s *Server) semanticSnapshot(docs *docstore.View, uri string) (*snapshot, e
 }
 
 func (s *Server) semanticTokens(snap *snapshot) []semantic.Token {
-	return workspace.Memo(snap.file, "semantic.tokens", s.workspace.Generation(), func() []semantic.Token {
-		return semantic.Tokens(snap.tree, s.imports(snap.file), embeddedPrograms(snap.file))
+	return workspace.Memo(snap.File, "semantic.tokens", s.workspace.Generation(), func() []semantic.Token {
+		return semantic.Tokens(snap.Tree, s.imports(snap.File), embeddedPrograms(snap.File))
 	})
 }
 
@@ -167,8 +167,8 @@ func (s *Server) handleSemanticTokensRange(_ context.Context, docs *docstore.Vie
 		return nil, err
 	}
 	within := parser.Span{
-		Start: snap.doc.PositionToOffset(p.Range.Start, snap.encoding),
-		End:   snap.doc.PositionToOffset(p.Range.End, snap.encoding),
+		Start: snap.Doc.PositionToOffset(p.Range.Start, snap.encoding),
+		End:   snap.Doc.PositionToOffset(p.Range.End, snap.encoding),
 	}
 	return lsp.SemanticTokens{Data: encodeTokens(snap, s.semanticTokens(snap), &within)}, nil
 }
@@ -184,17 +184,17 @@ func (s *Server) handleSelectionRange(_ context.Context, docs *docstore.View, pa
 	}
 	out := make([]lsp.SelectionRange, len(p.Positions))
 	for i, pos := range p.Positions {
-		offset, inside := snap.doc.Locate(pos, snap.encoding)
+		offset, inside := snap.Doc.Locate(pos, snap.encoding)
 		if !inside {
-			source := snap.doc.Source()
+			source := snap.Doc.Source()
 			at := source.OffsetToPosition(source.PositionToOffset(pos, snap.encoding), snap.encoding)
 			out[i] = lsp.SelectionRange{Range: lsp.Range{Start: at, End: at}}
 			continue
 		}
-		spans := structure.SelectionPath(snap.tree, offset)
+		spans := structure.SelectionPath(snap.Tree, offset)
 		var parent *lsp.SelectionRange
 		for _, span := range slices.Backward(spans) {
-			parent = &lsp.SelectionRange{Range: snap.doc.RangeFor(span.Start, span.End, snap.encoding), Parent: parent}
+			parent = &lsp.SelectionRange{Range: snap.Doc.RangeFor(span.Start, span.End, snap.encoding), Parent: parent}
 		}
 		out[i] = *parent
 	}

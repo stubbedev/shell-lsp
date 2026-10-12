@@ -48,7 +48,7 @@ func (s *Server) format(docs *docstore.View, uri string, opts lsp.FormattingOpti
 	if !snap.settings.Format.Enabled {
 		return nil, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "formatting is disabled by shellLsp.format.enable")
 	}
-	if snap.doc.Projected() {
+	if snap.Doc.Projected() {
 		s.noticeOnce("format-projected:"+uri, lsp.MessageInfo, "Not formatting "+uri+": shell-lsp formats shell scripts, not the shell embedded in other files.")
 		return []lsp.TextEdit{}, nil
 	}
@@ -56,11 +56,11 @@ func (s *Server) format(docs *docstore.View, uri string, opts lsp.FormattingOpti
 		return nil, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "%v", snap.projectErr)
 	}
 	if snap.project.Ignore {
-		s.noticeOnce("editorconfig-ignore:"+uri, lsp.MessageInfo, "Not formatting "+snap.file.Path+": "+editorconfig.FileName+" marks it ignore = true.")
+		s.noticeOnce("editorconfig-ignore:"+uri, lsp.MessageInfo, "Not formatting "+snap.Path+": "+editorconfig.FileName+" marks it ignore = true.")
 		return []lsp.TextEdit{}, nil
 	}
-	text := snap.doc.Text()
-	formatted, err := format.Format(snap.tree, snap.formatStyle().Over(clientStyle(opts)).Options())
+	text := snap.Doc.Text()
+	formatted, err := format.Format(snap.Tree, snap.formatStyle().Over(clientStyle(opts)).Options())
 	if err != nil {
 		return nil, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "%v", err)
 	}
@@ -69,14 +69,14 @@ func (s *Server) format(docs *docstore.View, uri string, opts lsp.FormattingOpti
 		var kept []textedit.Edit
 		for _, e := range edits {
 			if slices.ContainsFunc(within, func(r lsp.Range) bool {
-				return len(format.RangeEdits([]textedit.Edit{e}, snap.doc.PositionToOffset(r.Start, snap.encoding), snap.doc.PositionToOffset(r.End, snap.encoding))) > 0
+				return len(format.RangeEdits([]textedit.Edit{e}, snap.Doc.PositionToOffset(r.Start, snap.encoding), snap.Doc.PositionToOffset(r.End, snap.encoding))) > 0
 			}) {
 				kept = append(kept, e)
 			}
 		}
 		edits = kept
 	}
-	out, _ := snap.doc.TextEdits(edits, snap.encoding)
+	out, _ := snap.Doc.TextEdits(edits, snap.encoding)
 	return out, nil
 }
 

@@ -43,7 +43,7 @@ func (s *Server) workspaceFile(docs *docstore.View, uri string) (*workspace.File
 	if err != nil {
 		return nil, err
 	}
-	return snap.file, nil
+	return snap.File, nil
 }
 
 func (s *Server) navigationEnv() navigation.Env {

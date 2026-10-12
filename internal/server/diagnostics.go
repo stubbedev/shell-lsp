@@ -78,7 +78,7 @@ func dialectSource(file *workspace.File, settings config.Settings) lint.DialectS
 }
 
 func (s *Server) diagnose(snap *snapshot) diagnosticReport {
-	return s.report(snap.file, snap.settings, snap.generation, snap.encoding, "v"+strconv.FormatInt(int64(snap.doc.Version), 10))
+	return s.report(snap.File, snap.settings, snap.generation, snap.encoding, "v"+strconv.FormatInt(int64(snap.Doc.Version), 10))
 }
 
 func (s *Server) diagnoseClosed(file *workspace.File, encoding docstore.Encoding) diagnosticReport {

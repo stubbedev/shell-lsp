@@ -17,11 +17,9 @@ import (
 )
 
 type snapshot struct {
-	file       *workspace.File
-	doc        *docstore.Document
+	*workspace.File
 	encoding   docstore.Encoding
 	detection  dialect.Detection
-	tree       *parser.Tree
 	settings   config.Settings
 	generation uint64
 	project    project.Settings
@@ -123,17 +121,15 @@ func (s *Server) snapshot(docs *docstore.View, uri string) (*snapshot, error) {
 		}
 		var like *parser.Tree
 		if previous != nil {
-			like = previous.tree
+			like = previous.Tree
 		}
 		if language, ok := host.Of(uri, doc.Language); ok {
 			script := language.Project(doc)
 			tree := script.Parse(like)
 			return &snapshot{
-				file:       &workspace.File{Path: path, URI: uri, Doc: script.Doc, Tree: tree},
-				doc:        script.Doc,
+				File:       &workspace.File{Path: path, URI: uri, Doc: script.Doc, Tree: tree},
 				encoding:   docs.Encoding(),
 				detection:  script.Detection,
-				tree:       tree,
 				settings:   settings,
 				generation: generation,
 			}
@@ -146,11 +142,9 @@ func (s *Server) snapshot(docs *docstore.View, uri string) (*snapshot, error) {
 		d := resolved.Dialect
 		tree := parser.ParseEdit(like, doc.Text(), d, parser.Variant(d, in))
 		return &snapshot{
-			file:       &workspace.File{Path: path, URI: uri, Doc: doc, Tree: tree},
-			doc:        doc,
+			File:       &workspace.File{Path: path, URI: uri, Doc: doc, Tree: tree},
 			encoding:   docs.Encoding(),
 			detection:  resolved.Detection,
-			tree:       tree,
 			settings:   settings,
 			generation: generation,
 			project:    resolved.Settings,

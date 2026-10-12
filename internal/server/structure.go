@@ -45,11 +45,11 @@ func (s *Server) handleDocumentSymbol(_ context.Context, docs *docstore.View, pa
 	if err != nil {
 		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
 	}
-	symbols := workspace.Memo(snap.file, "structure.symbols", 0, func() []structure.Symbol { return structure.Symbols(snap.tree) })
+	symbols := workspace.Memo(snap.File, "structure.symbols", 0, func() []structure.Symbol { return structure.Symbols(snap.Tree) })
 	if s.clientCapabilities().TextDocument.DocumentSymbol.HierarchicalDocumentSymbolSupport {
-		return documentSymbols(snap.doc, snap.encoding, symbols), nil
+		return documentSymbols(snap.Doc, snap.encoding, symbols), nil
 	}
-	return appendFlatSymbols([]lsp.SymbolInformation{}, snap.doc, snap.encoding, symbols, ""), nil
+	return appendFlatSymbols([]lsp.SymbolInformation{}, snap.Doc, snap.encoding, symbols, ""), nil
 }
 
 func documentSymbols(doc *docstore.Document, enc docstore.Encoding, symbols []structure.Symbol) []lsp.DocumentSymbol {
@@ -89,8 +89,8 @@ func (s *Server) handleFoldingRange(_ context.Context, docs *docstore.View, para
 	if err != nil {
 		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
 	}
-	lineOf := func(offset int) int { return int(snap.doc.OffsetToPosition(offset, snap.encoding).Line) }
-	folds := structure.Folds(snap.tree, lineOf)
+	lineOf := func(offset int) int { return int(snap.Doc.OffsetToPosition(offset, snap.encoding).Line) }
+	folds := structure.Folds(snap.Tree, lineOf)
 	if limit := s.clientCapabilities().TextDocument.FoldingRange.RangeLimit; limit > 0 && len(folds) > limit {
 		folds = folds[:limit]
 	}

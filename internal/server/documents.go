@@ -19,7 +19,7 @@ func (s *Server) handleDidOpen(_ context.Context, params json.RawMessage) error 
 	s.documentChanged(item.URI)
 	go func() {
 		if snap, err := s.snapshot(s.docs.View(), item.URI); err == nil {
-			s.prefetchCommands(snap.tree)
+			s.prefetchCommands(snap.Tree)
 		}
 	}()
 	return nil

@@ -49,17 +49,17 @@ func (s *Server) handleHover(ctx context.Context, docs *docstore.View, params js
 	if err != nil {
 		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
 	}
-	offset, inside := snap.doc.Locate(hoverParams.Position, snap.encoding)
+	offset, inside := snap.Doc.Locate(hoverParams.Position, snap.encoding)
 	if !inside {
 		return nil, nil
 	}
-	if h, ok := embedded.HoverAt(embeddedPrograms(snap.file), offset); ok {
+	if h, ok := embedded.HoverAt(embeddedPrograms(snap.File), offset); ok {
 		return s.hoverResult(snap, h.Markdown, h.Span), nil
 	}
 	result, ok, err := hover.Hover(ctx, hover.Input{
-		Tree: snap.tree, Imports: s.imports(snap.file), Offset: offset, Commands: s.commandDocs,
+		Tree: snap.Tree, Imports: s.imports(snap.File), Offset: offset, Commands: s.commandDocs,
 		Lint: func() (lint.Report, bool) {
-			report, _ := s.lintReport(snap.file, snap.settings, snap.generation)
+			report, _ := s.lintReport(snap.File, snap.settings, snap.generation)
 			return report, snap.settings.Lint.Enabled
 		},
 	})
@@ -73,7 +73,7 @@ func (s *Server) handleHover(ctx context.Context, docs *docstore.View, params js
 }
 
 func (s *Server) hoverResult(snap *snapshot, markdown string, span parser.Span) lsp.Hover {
-	r := snap.doc.RangeFor(span.Start, span.End, snap.encoding)
+	r := snap.Doc.RangeFor(span.Start, span.End, snap.encoding)
 	return lsp.Hover{Contents: lsp.MarkupContent{Kind: s.hoverFormat(), Value: markdown}, Range: &r}
 }
 

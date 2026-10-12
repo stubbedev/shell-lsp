@@ -164,17 +164,17 @@ func (s *Server) handleCompletion(ctx context.Context, docs *docstore.View, para
 	if err != nil {
 		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
 	}
-	offset, inside := snap.doc.Locate(completionParams.Position, snap.encoding)
+	offset, inside := snap.Doc.Locate(completionParams.Position, snap.encoding)
 	if !inside {
 		return lsp.CompletionList{Items: []lsp.CompletionItem{}}, nil
 	}
 	caps := s.clientCapabilities().TextDocument.Completion.CompletionItem
 	result, err := completion.Complete(ctx, completion.Input{
-		Tree:      snap.tree,
-		Imports:   s.imports(snap.file),
+		Tree:      snap.Tree,
+		Imports:   s.imports(snap.File),
 		Offset:    offset,
-		ScriptDir: scriptDir(snap.doc.URI),
-		Snippets:  caps.SnippetSupport && !snap.doc.Projected(),
+		ScriptDir: scriptDir(snap.Doc.URI),
+		Snippets:  caps.SnippetSupport && !snap.Doc.Projected(),
 		Trigger:   completionTrigger(completionParams.Context),
 		Env:       s.environment,
 	})
@@ -206,14 +206,14 @@ func completionItem(snap *snapshot, caps CompletionItemCapabilities, it completi
 	if it.Snippet {
 		format = lsp.InsertSnippet
 	}
-	source := snap.doc.Source()
-	insert, ok := snap.doc.SourceReplacement(textedit.Edit{Start: it.Replace.Start, End: it.Replace.End, NewText: it.InsertText})
+	source := snap.Doc.Source()
+	insert, ok := snap.Doc.SourceReplacement(textedit.Edit{Start: it.Replace.Start, End: it.Replace.End, NewText: it.InsertText})
 	if !ok {
 		return lsp.CompletionItem{}, false, nil
 	}
 	edit := &lsp.CompletionEdit{NewText: insert.NewText, Insert: source.RangeFor(insert.Start, insert.End, snap.encoding)}
 	if caps.InsertReplaceSupport && it.Word.End > it.Replace.End {
-		if word, ok := snap.doc.SourceReplacement(textedit.Edit{Start: it.Word.Start, End: it.Word.End, NewText: it.InsertText}); ok {
+		if word, ok := snap.Doc.SourceReplacement(textedit.Edit{Start: it.Word.Start, End: it.Word.End, NewText: it.InsertText}); ok {
 			replace := source.RangeFor(word.Start, word.End, snap.encoding)
 			edit.Replace = &replace
 		}
@@ -232,7 +232,7 @@ func completionItem(snap *snapshot, caps CompletionItemCapabilities, it completi
 	}
 	switch {
 	case it.FilterText != "":
-		filter, ok := snap.doc.SourceReplacement(textedit.Edit{Start: it.Replace.Start, End: it.Replace.End, NewText: it.FilterText})
+		filter, ok := snap.Doc.SourceReplacement(textedit.Edit{Start: it.Replace.Start, End: it.Replace.End, NewText: it.FilterText})
 		if !ok {
 			return lsp.CompletionItem{}, false, nil
 		}
@@ -244,7 +244,7 @@ func completionItem(snap *snapshot, caps CompletionItemCapabilities, it completi
 		item.Documentation = &lsp.MarkupContent{Kind: lsp.MarkupMarkdown, Value: it.Documentation}
 	}
 	if it.Resolve != completion.ResolveNone {
-		data, err := json.Marshal(completionData{Kind: it.Resolve, Name: it.Label, URI: snap.doc.URI, Offset: it.Replace.Start})
+		data, err := json.Marshal(completionData{Kind: it.Resolve, Name: it.Label, URI: snap.Doc.URI, Offset: it.Replace.Start})
 		if err != nil {
 			return lsp.CompletionItem{}, false, err
 		}
@@ -277,7 +277,7 @@ func (s *Server) handleCompletionResolve(ctx context.Context, docs *docstore.Vie
 	if err != nil {
 		return item, nil
 	}
-	if doc, ok := completion.Documentation(snap.tree, s.imports(snap.file), data.Kind, data.Name, data.Offset); ok {
+	if doc, ok := completion.Documentation(snap.Tree, s.imports(snap.File), data.Kind, data.Name, data.Offset); ok {
 		item.Documentation = &lsp.MarkupContent{Kind: lsp.MarkupMarkdown, Value: doc}
 	}
 	return item, nil

@@ -259,12 +259,12 @@ func (s *Server) handleInlineValue(_ context.Context, docs *docstore.View, param
 	if err != nil {
 		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
 	}
-	within := parser.Span{Start: snap.doc.PositionToOffset(p.Range.Start, snap.encoding), End: snap.doc.PositionToOffset(p.Range.End, snap.encoding)}
-	stopped := snap.doc.PositionToOffset(p.Context.StoppedLocation.Start, snap.encoding)
-	values := navigation.InlineValues(snap.tree, within, stopped)
+	within := parser.Span{Start: snap.Doc.PositionToOffset(p.Range.Start, snap.encoding), End: snap.Doc.PositionToOffset(p.Range.End, snap.encoding)}
+	stopped := snap.Doc.PositionToOffset(p.Context.StoppedLocation.Start, snap.encoding)
+	values := navigation.InlineValues(snap.Tree, within, stopped)
 	out := make([]lsp.InlineValueVariableLookup, len(values))
 	for i, v := range values {
-		out[i] = lsp.InlineValueVariableLookup{Range: snap.doc.RangeFor(v.Span.Start, v.Span.End, snap.encoding), VariableName: v.Name, CaseSensitiveLookup: true}
+		out[i] = lsp.InlineValueVariableLookup{Range: snap.Doc.RangeFor(v.Span.Start, v.Span.End, snap.encoding), VariableName: v.Name, CaseSensitiveLookup: true}
 	}
 	return out, nil
 }
@@ -307,17 +307,17 @@ func (s *Server) handleLinkedEditingRange(_ context.Context, docs *docstore.View
 	if err != nil {
 		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
 	}
-	offset, inside := snap.doc.Locate(position.Position, snap.encoding)
+	offset, inside := snap.Doc.Locate(position.Position, snap.encoding)
 	if !inside {
 		return nil, nil
 	}
-	spans, ok := structure.LinkedDelimiters(snap.tree, offset)
+	spans, ok := structure.LinkedDelimiters(snap.Tree, offset)
 	if !ok {
 		return nil, nil
 	}
 	ranges := make([]lsp.Range, len(spans))
 	for i, span := range spans {
-		ranges[i] = snap.doc.RangeFor(span.Start, span.End, snap.encoding)
+		ranges[i] = snap.Doc.RangeFor(span.Start, span.End, snap.encoding)
 	}
 	return lsp.LinkedEditingRanges{Ranges: ranges, WordPattern: `[A-Za-z0-9_.-]+`}, nil
 }

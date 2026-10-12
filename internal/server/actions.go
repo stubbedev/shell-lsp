@@ -50,17 +50,17 @@ func (s *Server) handleCodeAction(ctx context.Context, docs *docstore.View, para
 	in := actions.Input{
 		Document: doc,
 		Selection: parser.Span{
-			Start: snap.doc.PositionToOffset(actionParams.Range.Start, snap.encoding),
-			End:   snap.doc.PositionToOffset(actionParams.Range.End, snap.encoding),
+			Start: snap.Doc.PositionToOffset(actionParams.Range.Start, snap.encoding),
+			End:   snap.Doc.PositionToOffset(actionParams.Range.End, snap.encoding),
 		},
 		Diagnostics:    s.toActionDiagnostics(snap, actionParams.Context.Diagnostics),
 		AllDiagnostics: s.lintActionDiagnostics(snap),
 	}
-	settings := sync.OnceValues(func() (actions.SettingsFile, bool) { return s.settingsFileFor(snap.file.Path) })
+	settings := sync.OnceValues(func() (actions.SettingsFile, bool) { return s.settingsFileFor(snap.Path) })
 	in.Settings = settings
 	caps := s.clientCapabilities()
 	literal := caps.TextDocument.CodeAction.CodeActionLiteralSupport != nil
-	lazy := slices.Contains(caps.TextDocument.CodeAction.ResolveSupport.Properties, "edit") && !snap.doc.Projected()
+	lazy := slices.Contains(caps.TextDocument.CodeAction.ResolveSupport.Properties, "edit") && !snap.Doc.Projected()
 	out := []any{}
 	for _, a := range actions.Actions(in) {
 		if !wants(only, string(a.Kind)) || !expressible(snap, sources, a) {
@@ -84,10 +84,10 @@ func (s *Server) handleCodeAction(ctx context.Context, docs *docstore.View, para
 }
 
 func expressible(snap *snapshot, sources func() actionSources, a actions.Action) bool {
-	if !snap.doc.Projected() {
+	if !snap.Doc.Projected() {
 		return true
 	}
-	if _, ok := snap.doc.SourceEdits(a.Edits); !ok {
+	if _, ok := snap.Doc.SourceEdits(a.Edits); !ok {
 		return false
 	}
 	for _, o := range a.Others {
@@ -108,7 +108,7 @@ func (s *Server) codeAction(docs *docstore.View, snap *snapshot, sources func() 
 		action.Diagnostics = append(action.Diagnostics, contextDiags[i])
 	}
 	if lazy && (a.Refactor != nil || a.FixAllCode != "") {
-		data, err := json.Marshal(actionData{URI: snap.doc.URI, Version: snap.doc.Version, Refactor: a.Refactor, FixAll: a.FixAllCode})
+		data, err := json.Marshal(actionData{URI: snap.Doc.URI, Version: snap.Doc.Version, Refactor: a.Refactor, FixAll: a.FixAllCode})
 		if err != nil {
 			return lsp.CodeAction{}, err
 		}
@@ -141,33 +141,33 @@ func (s *Server) actionDocument(snap *snapshot) (actions.Document, func() action
 	resolve := sync.OnceValue(func() actionSources {
 		roots := s.workspace.Roots()
 		out := actionSources{files: map[string]*workspace.File{}}
-		for _, ref := range navigation.Sources(snap.file, s.navigationEnv()) {
+		for _, ref := range navigation.Sources(snap.File, s.navigationEnv()) {
 			target := ref.Target
-			if target == nil || target.URI == snap.file.URI || !slices.ContainsFunc(roots, func(root string) bool { return platform.Native.Within(target.Path, root) }) {
+			if target == nil || target.URI == snap.URI || !slices.ContainsFunc(roots, func(root string) bool { return platform.Native.Within(target.Path, root) }) {
 				continue
 			}
 			out.files[target.URI] = target
-			out.list = append(out.list, actions.Source{URI: target.URI, Name: navigation.RelativeName(snap.file.Path, target.Path), Tree: target.Tree, Command: ref.Command})
+			out.list = append(out.list, actions.Source{URI: target.URI, Name: navigation.RelativeName(snap.Path, target.Path), Tree: target.Tree, Command: ref.Command})
 		}
 		return out
 	})
 	closure := sync.OnceValues(func() ([]*parser.Tree, bool) {
-		files, complete := navigation.Closure(snap.file, s.navigationEnv())
+		files, complete := navigation.Closure(snap.File, s.navigationEnv())
 		trees := make([]*parser.Tree, len(files))
 		for i, f := range files {
 			trees[i] = f.Tree
 		}
 		return trees, complete
 	})
-	return actions.Document{Tree: snap.tree, Format: snap.formatStyle().Options(), Sources: func() []actions.Source { return resolve().list }, SourcedTrees: closure}, resolve
+	return actions.Document{Tree: snap.Tree, Format: snap.formatStyle().Options(), Sources: func() []actions.Source { return resolve().list }, SourcedTrees: closure}, resolve
 }
 
 func (s *Server) changeEdit(docs *docstore.View, snap *snapshot, sources func() actionSources, title string, edits []textedit.Edit, others []actions.FileEdits) (lsp.WorkspaceEdit, error) {
-	files := []fileEdits{{doc: snap.doc, versioned: true, edits: edits}}
+	files := []fileEdits{{doc: snap.Doc, versioned: true, edits: edits}}
 	for _, o := range others {
 		target, ok := sources().files[o.URI]
 		if !ok {
-			return lsp.WorkspaceEdit{}, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "refactoring edits %s, which %s does not source", o.URI, snap.doc.URI)
+			return lsp.WorkspaceEdit{}, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "refactoring edits %s, which %s does not source", o.URI, snap.Doc.URI)
 		}
 		_, open := docs.Document(o.URI)
 		files = append(files, fileEdits{doc: target.Doc, versioned: open, edits: o.Edits})
@@ -251,7 +251,7 @@ func (s *Server) handleCodeActionResolve(_ context.Context, docs *docstore.View,
 	if err != nil {
 		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
 	}
-	if snap.doc.Version != data.Version {
+	if snap.Doc.Version != data.Version {
 		return nil, jsonrpc.NewError(jsonrpc.CodeContentModified, "%s changed since the action was offered", data.URI)
 	}
 	doc, sources := s.actionDocument(snap)
@@ -306,7 +306,7 @@ func (s *Server) handleExecuteCommand(ctx context.Context, docs *docstore.View, 
 		if len(edits) == 0 {
 			return nil, nil
 		}
-		edit, err = s.workspaceEdit(snap.doc, snap.encoding, edits)
+		edit, err = s.workspaceEdit(snap.Doc, snap.encoding, edits)
 		if err != nil {
 			return nil, err
 		}
@@ -379,7 +379,7 @@ func (s *Server) multiFileEdit(enc docstore.Encoding, files []fileEdits) (lsp.Wo
 }
 
 func (s *Server) toActionDiagnostics(snap *snapshot, diags []lsp.Diagnostic) []actions.Diagnostic {
-	findings, _ := s.findings(snap.file, snap.settings, snap.generation)
+	findings, _ := s.findings(snap.File, snap.settings, snap.generation)
 	out := make([]actions.Diagnostic, 0, len(diags))
 	for i, d := range diags {
 		ad := actions.Diagnostic{
@@ -387,8 +387,8 @@ func (s *Server) toActionDiagnostics(snap *snapshot, diags []lsp.Diagnostic) []a
 			Code:    d.Code,
 			Message: d.Message,
 			Span: parser.Span{
-				Start: snap.doc.PositionToOffset(d.Range.Start, snap.encoding),
-				End:   snap.doc.PositionToOffset(d.Range.End, snap.encoding),
+				Start: snap.Doc.PositionToOffset(d.Range.Start, snap.encoding),
+				End:   snap.Doc.PositionToOffset(d.Range.End, snap.encoding),
 			},
 		}
 		if j := slices.IndexFunc(findings, func(f lint.Finding) bool { return f.Code.String() == d.Code && f.Span == ad.Span }); j >= 0 {
@@ -400,7 +400,7 @@ func (s *Server) toActionDiagnostics(snap *snapshot, diags []lsp.Diagnostic) []a
 }
 
 func (s *Server) lintActionDiagnostics(snap *snapshot) []actions.Diagnostic {
-	findings, _ := s.findings(snap.file, snap.settings, snap.generation)
+	findings, _ := s.findings(snap.File, snap.settings, snap.generation)
 	return actions.FindingDiagnostics(findings)
 }
 
