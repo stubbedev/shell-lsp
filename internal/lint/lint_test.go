@@ -144,3 +144,18 @@ func TestShadowedPatternsNameTheOtherLine(t *testing.T) {
 		t.Errorf("%s is not reported", code)
 	}
 }
+
+func TestTrapHandlersCallTheirFunctions(t *testing.T) {
+	t.Parallel()
+
+	src := "#!/bin/sh\ncleanup() {\n  echo bye\n}\nstop() {\n  echo stop\n}\nunused() {\n  echo never\n}\ntrap 'cleanup' EXIT\ntrap -- \"echo done; stop\" INT TERM\nsleep 1\nexit 0\n"
+	var reported []int
+	for _, f := range Check(parser.Parse(src, dialect.Posix), nil, Options{}) {
+		if f.Code == 2329 {
+			reported = append(reported, parser.Parse(src, dialect.Posix).Line(f.Span.Start))
+		}
+	}
+	if !slices.Equal(reported, []int{8}) {
+		t.Errorf("SC2329 on lines %v, want only the function no trap runs, on line 8", reported)
+	}
+}

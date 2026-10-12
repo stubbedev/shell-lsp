@@ -1019,8 +1019,32 @@ func (in *interpreter) call(stmt *syntax.Stmt, call *syntax.CallExpr, s *state) 
 		for _, name := range slices.Sorted(maps.Keys(in.imported)) {
 			in.assign(s, name, in.imported[name])
 		}
+	case "trap":
+		in.trapped(call.Args[1:], s)
 	}
 	return in.invoke(name, s)
+}
+
+func (in *interpreter) trapped(args []*syntax.Word, s *state) {
+	if len(args) > 0 && parser.LiteralIs(args[0], "--") {
+		args = args[1:]
+	}
+	if len(args) < 2 {
+		return
+	}
+	handler, ok := parser.Literal(args[0])
+	if !ok {
+		return
+	}
+	for _, c := range parser.Parse(handler, in.dialect).Commands {
+		if ref, ok := s.funcs.get(c.Name); ok {
+			in.result.called[ref.decl] = true
+			continue
+		}
+		if decl, ok := in.staticFunc[c.Name]; ok {
+			in.result.called[decl] = true
+		}
+	}
 }
 
 func (in *interpreter) jump(name string, call *syntax.CallExpr, s *state) *state {
