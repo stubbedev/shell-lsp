@@ -1,6 +1,7 @@
 package lint
 
 import (
+	"fmt"
 	"maps"
 	"slices"
 	"strings"
@@ -124,15 +125,46 @@ type funcRef struct {
 type subshellKind uint8
 
 const (
-	subshellGroup subshellKind = iota + 1
+	notSubshell subshellKind = iota
+	subshellGroup
 	subshellPipeline
-	subshellExpansion
+	subshellSubstitution
+	subshellBackticks
 	subshellBackground
 	subshellCoproc
 	subshellBats
 	subshellProcess
 	subshellScript
 )
+
+func (k subshellKind) label() string {
+	switch k {
+	case subshellGroup:
+		return "( ) group"
+	case subshellPipeline:
+		return "pipeline"
+	case subshellSubstitution:
+		return "command substitution"
+	case subshellBackticks:
+		return "backtick expansion"
+	case subshellBackground:
+		return "background job"
+	case subshellCoproc:
+		return "coprocess"
+	case subshellBats:
+		return "Bats test"
+	case subshellProcess:
+		return "process substitution"
+	case subshellScript:
+		return "separate shell"
+	case notSubshell:
+	}
+	panic(fmt.Sprintf("lint: subshell kind %d has no label", k))
+}
+
+func (k subshellKind) implicit() bool {
+	return k == subshellSubstitution || k == subshellBackticks || k == subshellPipeline
+}
 
 type lostWrite struct {
 	site parser.Span
@@ -677,7 +709,11 @@ func (in *interpreter) visit(n syntax.Node) bool {
 			e.s = in.stmts(n.Stmts, e.s)
 			return false
 		}
-		in.subshell(subshellExpansion, func(sub *state) *state { return in.stmts(n.Stmts, sub) }, e.s)
+		kind := subshellSubstitution
+		if n.Backquotes {
+			kind = subshellBackticks
+		}
+		in.subshell(kind, func(sub *state) *state { return in.stmts(n.Stmts, sub) }, e.s)
 		return false
 	case *syntax.ProcSubst:
 		in.subshell(subshellProcess, func(sub *state) *state { return in.stmts(n.Stmts, sub) }, e.s)

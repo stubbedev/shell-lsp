@@ -32,11 +32,11 @@ func checkUnbalancedPush(p *pass, c command) {
 	if !changesDirectory(c.args) {
 		return
 	}
-	kind, depth := p.enclosingSubshell()
-	if kind != "" || depth < 0 {
+	at, ok := p.enclosure()
+	if !ok || at.subshell != notSubshell {
 		return
 	}
-	fn, ok := p.ancestor(depth).(*syntax.FuncDecl)
+	fn, ok := p.ancestor(at.depth).(*syntax.FuncDecl)
 	if !ok || p.callsCommand(fn.Body, "popd") || p.popsElsewhere() {
 		return
 	}
@@ -89,9 +89,8 @@ func (p *pass) callsCommand(root syntax.Node, name string) bool {
 }
 
 var (
-	implicitSubshells = setOf("command substitution", "backtick expansion", "pipeline")
-	trapQueries       = setOf("-p", "-l", "-P")
-	statusParameters  = setOf("?", "PIPESTATUS", "pipestatus")
+	trapQueries      = setOf("-p", "-l", "-P")
+	statusParameters = setOf("?", "PIPESTATUS", "pipestatus")
 )
 
 func checkSubshellTrap(p *pass, c command) {
@@ -102,11 +101,11 @@ func checkSubshellTrap(p *pass, c command) {
 	if lit, literal := parser.Literal(handler); literal && lit == "-" {
 		return
 	}
-	kind, _ := p.enclosingSubshell()
-	if !implicitSubshells[kind] {
+	at, ok := p.enclosure()
+	if !ok || !at.subshell.implicit() {
 		return
 	}
-	p.reportNode(codeSubshellTrap, c.word, "This trap is set inside a "+kind+", which runs in a subshell, so the handler only applies until that subshell ends and never to the rest of the script.")
+	p.reportNode(codeSubshellTrap, c.word, "This trap is set inside a "+at.subshell.label()+", which runs in a subshell, so the handler only applies until that subshell ends and never to the rest of the script.")
 }
 
 func trapOperands(args []*syntax.Word) (*syntax.Word, []*syntax.Word, bool) {
@@ -130,18 +129,19 @@ func trapOperands(args []*syntax.Word) (*syntax.Word, []*syntax.Word, bool) {
 }
 
 func checkSubshellExit(p *pass, c command) {
-	kind, depth := p.enclosingSubshell()
-	if !implicitSubshells[kind] {
+	at, ok := p.enclosure()
+	if !ok || !at.subshell.implicit() {
 		return
 	}
 	var lost bool
-	switch n := p.ancestor(depth).(type) {
+	switch n := p.ancestor(at.depth).(type) {
 	case *syntax.CmdSubst:
-		lost = p.substitutionExitLost(depth)
+		lost = p.substitutionExitLost(at.depth)
 	case *syntax.Stmt:
-		lost = p.pipelineExitLost(n, depth)
+		lost = p.pipelineExitLost(n, at.depth)
 	}
 	if lost {
+		kind := at.subshell.label()
 		p.reportNode(codeSubshellExit, c.word, "exit only leaves the subshell this "+kind+" runs in, and nothing checks the status it leaves behind, so the script keeps running; check the status where the "+kind+" ends or avoid the subshell.")
 	}
 }
@@ -227,15 +227,20 @@ func stmtReadsStatus(stmt *syntax.Stmt) bool {
 	return reads
 }
 
-func (p *pass) enclosingSubshell() (string, int) {
+type enclosure struct {
+	subshell subshellKind
+	depth    int
+}
+
+func (p *pass) enclosure() (enclosure, bool) {
 	for depth := 0; p.ancestor(depth) != nil; depth++ {
 		n := p.ancestor(depth)
 		if _, function := n.(*syntax.FuncDecl); function {
-			return "", depth
+			return enclosure{subshell: notSubshell, depth: depth}, true
 		}
-		if kind := p.subshellKind(n, depth); kind != "" {
-			return kind, depth
+		if kind := p.subshellKind(n, depth); kind != notSubshell {
+			return enclosure{subshell: kind, depth: depth}, true
 		}
 	}
-	return "", -1
+	return enclosure{}, false
 }

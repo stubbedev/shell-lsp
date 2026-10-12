@@ -2,6 +2,7 @@ package lint
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
@@ -67,5 +68,28 @@ func TestFlowReportsLatestLostWrite(t *testing.T) {
 	}
 	if len(got) != 1 || src[got[0].site.Start:got[0].site.End] != "x=2" || got[0].kind != subshellGroup {
 		t.Errorf("lost writes = %+v, want the second group assignment", got)
+	}
+}
+
+func TestEverySubshellKindHasALabel(t *testing.T) {
+	t.Parallel()
+
+	for k := notSubshell + 1; k <= subshellScript; k++ {
+		if k.label() == "" {
+			t.Errorf("subshell kind %d has an empty label", k)
+		}
+	}
+}
+
+func TestSubshellMessagesNameTheSameKinds(t *testing.T) {
+	t.Parallel()
+
+	lost := findingsWith(t, "x=1\n: `x=2`\necho \"$x\"\n", 2030)
+	if len(lost) != 1 || !strings.Contains(lost[0].Message, "backtick expansion") {
+		t.Errorf("SC2030 for a backtick expansion = %+v", lost)
+	}
+	jump := findingsWith(t, "for i in 1 2; do\n  (break)\ndone\n", 2106)
+	if len(jump) != 1 || !strings.Contains(jump[0].Message, "this ( ) group") {
+		t.Errorf("SC2106 in a ( ) group = %+v", jump)
 	}
 }

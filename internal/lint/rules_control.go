@@ -140,20 +140,20 @@ func checkLoopJump(p *pass, n syntax.Node) {
 		p.report(2104, span, "In a function, "+name+" does not leave the function; use return instead.")
 	case !looped:
 		p.report(2105, span, name+" is only valid inside a loop.")
-	case subshell != "":
-		p.report(2106, span, name+" only exits the subshell created by this "+subshell+", not the loop around it.")
+	case subshell != notSubshell:
+		p.report(2106, span, name+" only exits the subshell created by this "+subshell.label()+", not the loop around it.")
 	}
 }
 
-func (p *pass) jumpScopes() (bool, string, bool) {
-	inFunction, subshell, looped := false, "", false
+func (p *pass) jumpScopes() (bool, subshellKind, bool) {
+	inFunction, subshell, looped := false, notSubshell, false
 	first, decided := true, false
 	for depth := 0; p.ancestor(depth) != nil; depth++ {
 		n := p.ancestor(depth)
 		_, function := n.(*syntax.FuncDecl)
 		loop := isLoop(n)
 		kind := p.subshellKind(n, depth)
-		if !function && !loop && kind == "" {
+		if !function && !loop && kind == notSubshell {
 			continue
 		}
 		if first {
@@ -175,28 +175,28 @@ func isLoop(n syntax.Node) bool {
 	return false
 }
 
-func (p *pass) subshellKind(n syntax.Node, depth int) string {
+func (p *pass) subshellKind(n syntax.Node, depth int) subshellKind {
 	switch n := n.(type) {
 	case *syntax.CmdSubst:
 		if n.Backquotes {
-			return "backtick expansion"
+			return subshellBackticks
 		}
-		return "command substitution"
+		return subshellSubstitution
 	case *syntax.Subshell:
-		return "parenthesized group"
+		return subshellGroup
 	case *syntax.TestDecl:
-		return "bats test"
+		return subshellBats
 	case *syntax.CoprocClause:
-		return "coprocess"
+		return subshellCoproc
 	case *syntax.Stmt:
 		if n.Background {
-			return "backgrounding"
+			return subshellBackground
 		}
 		if p.pipedStatement(depth) {
-			return "pipeline"
+			return subshellPipeline
 		}
 	}
-	return ""
+	return notSubshell
 }
 
 func (p *pass) pipedStatement(depth int) bool {

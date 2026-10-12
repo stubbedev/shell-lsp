@@ -17,15 +17,6 @@ var subshellFamily = family{
 	},
 }
 
-var subshellCauses = map[subshellKind]string{
-	subshellGroup:      "a ( ) group",
-	subshellPipeline:   "a pipeline",
-	subshellExpansion:  "a command substitution",
-	subshellBackground: "running in the background",
-	subshellCoproc:     "a coprocess",
-	subshellBats:       "a separate Bats test",
-}
-
 func checkLostModification(p *pass, n syntax.Node) {
 	var name string
 	switch n := n.(type) {
@@ -61,7 +52,7 @@ func checkLostModification(p *pass, n syntax.Node) {
 			p.report(2031, span, name+" was changed on line "+line+", which runs in a shell of its own, so this still sees the value from before that change.")
 			return
 		}
-		cause := subshellCauses[lost.kind]
+		cause := "a " + lost.kind.label()
 		p.report(2030, lost.site, "This change to "+name+" happens in a subshell caused by "+cause+", so it is gone once that subshell exits.")
 		p.report(2031, span, name+" was changed in a subshell ("+cause+" on line "+line+"), so this still sees the value from before that change.")
 	})
