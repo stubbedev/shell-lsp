@@ -147,23 +147,6 @@ func Complete(ctx context.Context, in Input) (Result, error) {
 	return Result{}, nil
 }
 
-func formatArgument(args []string) bool {
-	for len(args) > 0 {
-		switch args[0] {
-		case "--":
-			return len(args) == 1
-		case "-v":
-			if len(args) < 2 {
-				return false
-			}
-			args = args[2:]
-		default:
-			return false
-		}
-	}
-	return true
-}
-
 var conversionSpec = regexp.MustCompile(`^[-+ #0]*([0-9]+|\*)?(\.([0-9]+|\*)?)?$`)
 
 func (c completer) printfDirectives() []Item {
@@ -347,10 +330,6 @@ func (c completer) aliases() []alias {
 	return out
 }
 
-var commandTakers = map[string]bool{
-	"type": true, "which": true, "whence": true, "where": true, "man": true, "run-help": true, "noglob": true,
-}
-
 func (c completer) argument(ctx context.Context) (Result, error) {
 	var inner parser.TextLayer
 	for inner = range (parser.Wrappers{Bats: c.Tree.Bats(), Programs: true}).TextLayers(c.site.command, c.site.previous) {
@@ -372,44 +351,41 @@ func (c completer) wrapperArgument(ctx context.Context, wrapper string, args []s
 }
 
 func (c completer) argumentOf(ctx context.Context, command string, args []string) (Result, error) {
-	last := ""
-	if n := len(args); n > 0 {
-		last = args[n-1]
-	}
-	if command == "[[" || command == "[" || command == "test" {
-		if items, ok := c.testExpression(command, args); ok {
-			return Result{Items: items}, nil
+	switch slot := shelldocs.ArgumentSlot(command, args, c.site.prefix).(type) {
+	case shelldocs.OperatorSlot:
+		var items []Item
+		for _, v := range slot.Vocabularies {
+			items = append(items, c.terms(v, KindOperator)...)
 		}
-	}
-	switch {
-	case command == "set" && (last == "-o" || last == "+o"):
-		return Result{Items: c.options(shelldocs.SetOptions)}, nil
-	case command == "kill" && last == "-s":
-		return Result{Items: c.signals("", shelldocs.Signals)}, nil
-	case command == "kill" && strings.HasPrefix(c.site.prefix, "-"):
+		return Result{Items: items}, nil
+	case shelldocs.OptionSlot:
+		return Result{Items: c.options(slot.Vocabulary)}, nil
+	case shelldocs.ValueSlot:
+		return Result{Items: c.terms(slot.Vocabulary, KindValue)}, nil
+	case shelldocs.SignalSlot:
+		if !slot.Dashed {
+			return Result{Items: c.signals("", slot.Vocabularies)}, nil
+		}
 		flags, err := c.flags(ctx, command, args)
-		flags.Items = append(flags.Items, c.signals("-", shelldocs.Signals)...)
+		flags.Items = append(flags.Items, c.signals("-", slot.Vocabularies)...)
 		return flags, err
-	case command == "trap" && len(args) > 0 && !strings.HasPrefix(c.site.prefix, "-"):
-		return Result{Items: c.signals("", shelldocs.TrapConditions, shelldocs.Signals)}, nil
-	case command == "printf" && formatArgument(args):
-		return Result{Items: c.printfDirectives()}, nil
-	case command == "emulate" && !strings.HasPrefix(c.site.prefix, "-"):
-		return Result{Items: c.terms(shelldocs.EmulateModes, KindValue)}, nil
-	case strings.HasPrefix(c.site.prefix, "-"):
+	case shelldocs.FlagSlot:
 		return c.flags(ctx, command, args)
-	case command == "shopt":
-		return Result{Items: c.options(shelldocs.ShoptOptions)}, nil
-	case command == "setopt" || command == "unsetopt":
-		return Result{Items: c.options(shelldocs.SetoptOptions)}, nil
-	case command == "unset" || command == "export" || command == "readonly":
+	case shelldocs.VariableSlot:
 		return Result{Items: c.variables()}, nil
-	case commandTakers[command] && !strings.Contains(c.site.prefix, "/"):
+	case shelldocs.CommandSlot:
 		return c.commands(false), nil
-	case command == "cd" || command == "pushd":
+	case shelldocs.DirectorySlot:
 		return c.paths(true)
+	case shelldocs.FormatSlot:
+		return Result{Items: c.printfDirectives()}, nil
+	case shelldocs.FinishedSlot:
+		return Result{}, nil
+	case shelldocs.OperandSlot:
+		return c.positional(ctx, command, args)
+	default:
+		panic(fmt.Sprintf("completion: unknown argument slot %T", slot))
 	}
-	return c.positional(ctx, command, args)
 }
 
 func (c completer) positional(ctx context.Context, command string, args []string) (Result, error) {
@@ -436,97 +412,6 @@ func (c completer) positional(ctx context.Context, command string, args []string
 	return paths, err
 }
 
-type testState uint8
-
-const (
-	testStart testState = iota
-	testAfterUnary
-	testAfterOperand
-	testAfterBinary
-	testDone
-)
-
-func (c completer) testExpression(command string, args []string) ([]Item, bool) {
-	state, last := testPosition(command, args)
-	switch state {
-	case testStart:
-		if !strings.HasPrefix(c.site.prefix, "-") {
-			return nil, false
-		}
-		return c.terms(shelldocs.TestUnaryOperators, KindOperator), true
-	case testAfterOperand:
-		items := c.terms(shelldocs.TestBinaryOperators, KindOperator)
-		if command == "[[" {
-			items = append(items, c.terms(shelldocs.CondOperators, KindOperator)...)
-		}
-		return items, true
-	case testAfterUnary:
-		switch last {
-		case "-v", "-R":
-			return c.variables(), true
-		case "-o":
-			if command == "[[" {
-				return c.options(shelldocs.SetOptions), true
-			}
-		}
-		return nil, false
-	case testDone:
-		return nil, true
-	}
-	return nil, false
-}
-
-func testPosition(command string, args []string) (testState, string) {
-	connector := func(w string) bool {
-		if command == "[[" {
-			return w == "&&" || w == "||"
-		}
-		return w == "-a" || w == "-o"
-	}
-	state, last := testStart, ""
-	for _, w := range args {
-		last = w
-		switch {
-		case w == "]]" || w == "]" || w == ")":
-			state = testDone
-			continue
-		case state == testStart && (w == "!" || w == "("):
-			continue
-		}
-		switch state {
-		case testStart:
-			state = testAfterOperand
-			if _, ok := shelldocs.Term(shelldocs.TestUnaryOperators, w); ok {
-				state = testAfterUnary
-			}
-		case testAfterOperand:
-			switch {
-			case connector(w):
-				state = testStart
-			case isTestBinary(w):
-				state = testAfterBinary
-			default:
-				state = testDone
-			}
-		case testAfterUnary, testAfterBinary:
-			state = testDone
-		case testDone:
-			if connector(w) {
-				state = testStart
-			}
-		}
-	}
-	return state, last
-}
-
-func isTestBinary(w string) bool {
-	if _, ok := shelldocs.Term(shelldocs.TestBinaryOperators, w); ok {
-		return true
-	}
-	_, ok := shelldocs.Term(shelldocs.CondOperators, w)
-	return ok && w != "&&" && w != "||"
-}
-
 func (c completer) terms(v shelldocs.Vocabulary, kind Kind) []Item {
 	var items []Item
 	for e := range shelldocs.Terms(v, c.dialect) {
@@ -544,9 +429,8 @@ func (c completer) terms(v shelldocs.Vocabulary, kind Kind) []Item {
 	return items
 }
 
-func (c completer) signals(labelPrefix string, vocabularies ...shelldocs.Vocabulary) []Item {
-	typed := strings.ToUpper(strings.TrimPrefix(c.site.prefix, labelPrefix))
-	typed, spelledSIG := strings.CutPrefix(typed, "SIG")
+func (c completer) signals(labelPrefix string, vocabularies []shelldocs.Vocabulary) []Item {
+	typed, spelledSIG := shelldocs.NormalizeSignal(strings.TrimPrefix(c.site.prefix, labelPrefix))
 	var items []Item
 	for i, v := range vocabularies {
 		for e := range shelldocs.Terms(v, c.dialect) {

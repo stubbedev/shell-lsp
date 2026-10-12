@@ -326,34 +326,31 @@ func (h hoverer) commandWords(cmd parser.Command) []*syntax.Word {
 }
 
 func (h hoverer) vocabularyArgument(command string, before []string, word string) (string, bool) {
-	previous := ""
-	if n := len(before); n > 0 {
-		previous = before[n-1]
-	}
-	switch {
-	case command == "[" || command == "test":
-		return h.term(word, shelldocs.TestUnaryOperators, shelldocs.TestBinaryOperators)
-	case command == "set" && (previous == "-o" || previous == "+o"):
-		return h.term(word, shelldocs.SetOptions)
-	case command == "kill" && previous == "-s":
-		return h.signal(word)
-	case command == "kill" && strings.HasPrefix(word, "-"):
-		if doc, ok := h.signal(word[1:]); ok {
+	switch slot := shelldocs.ArgumentSlot(command, before, word).(type) {
+	case shelldocs.OperatorSlot:
+		return h.term(word, slot.Vocabularies...)
+	case shelldocs.OptionSlot:
+		if slot.Vocabulary == shelldocs.SetoptOptions {
+			return h.zshOption(word)
+		}
+		return h.term(word, slot.Vocabulary)
+	case shelldocs.ValueSlot:
+		return h.term(word, slot.Vocabulary)
+	case shelldocs.SignalSlot:
+		if !slot.Dashed {
+			return h.signal(word, slot.Vocabularies)
+		}
+		if doc, ok := h.signal(word[1:], slot.Vocabularies); ok {
 			return doc, true
 		}
-	case command == "trap" && len(before) > 0 && !strings.HasPrefix(word, "-"):
-		return h.signal(word)
-	case command == "emulate" && !strings.HasPrefix(word, "-"):
-		return h.term(word, shelldocs.EmulateModes)
-	case command == "shopt" && !strings.HasPrefix(word, "-"):
-		return h.term(word, shelldocs.ShoptOptions)
-	case (command == "setopt" || command == "unsetopt") && !strings.HasPrefix(word, "-"):
-		return h.zshOption(word)
-	}
-	if strings.HasPrefix(word, "-") {
 		return h.builtinFlag(command, word)
+	case shelldocs.FlagSlot:
+		return h.builtinFlag(command, word)
+	case shelldocs.OperandSlot, shelldocs.FinishedSlot, shelldocs.VariableSlot, shelldocs.CommandSlot, shelldocs.DirectorySlot, shelldocs.FormatSlot:
+		return "", false
+	default:
+		panic(fmt.Sprintf("hover: unknown argument slot %T", slot))
 	}
-	return "", false
 }
 
 func (h hoverer) term(name string, vocabularies ...shelldocs.Vocabulary) (string, bool) {
@@ -365,12 +362,9 @@ func (h hoverer) term(name string, vocabularies ...shelldocs.Vocabulary) (string
 	return "", false
 }
 
-func (h hoverer) signal(word string) (string, bool) {
-	name := strings.TrimPrefix(strings.ToUpper(word), "SIG")
-	if name == "0" {
-		name = "EXIT"
-	}
-	for _, v := range []shelldocs.Vocabulary{shelldocs.TrapConditions, shelldocs.Signals} {
+func (h hoverer) signal(word string, vocabularies []shelldocs.Vocabulary) (string, bool) {
+	name, _ := shelldocs.NormalizeSignal(word)
+	for _, v := range vocabularies {
 		if e, ok := shelldocs.Term(v, name); ok {
 			title := name
 			if v == shelldocs.Signals {

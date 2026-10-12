@@ -196,8 +196,9 @@ vocabulary, filtered by the dialect of the document:
 - Test expressions in `[[ ]]`, `[ ]` and `test`: unary operators at the start,
   binary ones after an operand (`=~` and `<` only inside `[[ ]]`), variable
   names after `-v` and option names after `-o`.
-- Option names after `set -o`, `shopt`, `setopt` and `unsetopt`, `emulate`
-  modes, and trap conditions and signal names after `trap` and `kill`.
+- Option names after `set -o`, `shopt` (the `set -o` names after
+  `shopt -o`), `setopt` and `unsetopt`, `emulate` modes, trap conditions and
+  signal names after `trap`, and signal names alone after `kill`.
 - Expansion operators after `${name` (`:-`, `##`, `//`, `@Q`...), zsh
   parameter flags after `${(` and glob qualifiers after `*(`, associative
   array keys inside `${name[`, and `printf` conversions in the format.
@@ -225,7 +226,8 @@ subcommand are skipped with their values (`git -C dir checkout`,
 
 Completing inside a word can replace the rest of it (for clients with
 insert-replace support). Hover explains the same vocabulary where it is
-used: builtin flags (also combined, as in `read -rs`), test, arithmetic,
+used, reading each argument by its position exactly as completion does:
+builtin flags (also combined, as in `read -rs`), test, arithmetic,
 list and `case` operators, redirections and whether a here-document body is
 expanded, signals, option names, expansion operators, and every letter that
 `$-` can contain.

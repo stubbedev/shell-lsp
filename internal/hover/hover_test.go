@@ -206,6 +206,7 @@ func TestHoverShellVocabulary(t *testing.T) {
 		{d: dialect.Bash, src: "kill -TERM 1; kill -s HUP 2\n", needle: "HUP", want: "**SIGHUP**", span: "HUP"},
 		{d: dialect.Bash, src: "set -o pipefail\n", needle: "pipefail", want: "fail when any of its commands fails", span: "pipefail"},
 		{d: dialect.Bash, src: "shopt -s nullglob\n", needle: "nullglob", want: "expand to nothing", span: "nullglob"},
+		{d: dialect.Bash, src: "shopt -so pipefail\n", needle: "pipefail", want: "fail when any of its commands fails", span: "pipefail"},
 		{d: dialect.Zsh, src: "setopt EXTENDED_GLOB NO_ERR_EXIT\n", needle: "EXTENDED", want: "**extended_glob**", span: "EXTENDED_GLOB"},
 		{d: dialect.Zsh, src: "setopt EXTENDED_GLOB NO_ERR_EXIT\n", needle: "NO_ERR", want: "negates `err_exit`", span: "NO_ERR_EXIT"},
 		{d: dialect.Zsh, src: "emulate -L zsh\n", needle: "zsh", want: "native zsh option", span: "zsh"},
@@ -235,6 +236,25 @@ func TestHoverShellVocabulary(t *testing.T) {
 		}
 		if span := tc.src[got.Span.Start:got.Span.End]; span != tc.span {
 			t.Errorf("%s hover %q span = %q, want %q", tc.d, tc.needle, span, tc.span)
+		}
+	}
+}
+
+func TestHoverReadsArgumentsByTheirPosition(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct{ src, needle, unwanted string }{
+		{src: "kill -ERR 1\n", needle: "-ERR", unwanted: "command fails"},
+		{src: "kill -s EXIT 1\n", needle: "EXIT", unwanted: "shell exits"},
+		{src: "[ \"$x\" = -f ]\n", needle: "-f", unwanted: "regular file"},
+	} {
+		at := strings.Index(tc.src, tc.needle)
+		got, _, err := Hover(t.Context(), Input{Tree: parser.Parse(tc.src, dialect.Bash), Offset: at, Commands: fakeCommands{}})
+		if err != nil {
+			t.Fatalf("Hover(%q) error = %v", tc.needle, err)
+		}
+		if strings.Contains(got.Markdown, tc.unwanted) {
+			t.Errorf("hover %q in %q = %q, should not mention %q", tc.needle, tc.src, got.Markdown, tc.unwanted)
 		}
 	}
 }
