@@ -108,7 +108,7 @@ func (h hoverer) paramExp() (Result, bool) {
 
 func (h hoverer) parameter(name string) string {
 	if parser.IsDigits(name) {
-		if fn, ok := h.Tree.EnclosingFunction(h.scope); ok {
+		if fn, ok := h.Tree.FunctionOfBody(h.scope); ok {
 			return fmt.Sprintf("**$%s**: argument %s of function `%s`", name, name, fn.Name)
 		}
 		if name == "0" {
@@ -207,7 +207,7 @@ func (h hoverer) describe(first parser.Definition, defs parser.Definitions) stri
 	if first.Kind == parser.DefCommandEnv {
 		desc += " (environment of a single command)"
 	}
-	if fn, ok := h.Tree.EnclosingFunction(first.Within); ok && first.Local {
+	if fn, ok := h.Tree.FunctionOfBody(first.Within); ok && first.Local {
 		desc += fmt.Sprintf(" in `%s`", fn.Name)
 	}
 	return desc

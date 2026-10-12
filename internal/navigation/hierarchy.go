@@ -58,7 +58,7 @@ func IncomingCalls(ctx context.Context, item CallItem, env Env, files WorkspaceF
 				continue
 			}
 			caller := fileItem(f)
-			if fn, ok := enclosingFunction(f.Tree, cmd.Within); ok {
+			if fn, ok := f.Tree.EnclosingFunction(cmd.Within); ok {
 				caller = functionItem(f, fn)
 			}
 			key := caller.Name
@@ -80,7 +80,7 @@ func OutgoingCalls(item CallItem, env Env) []Call {
 	byCallee := map[string]*Call{}
 	var order []string
 	for _, cmd := range item.File.Tree.Commands {
-		fn, inFunction := enclosingFunction(item.File.Tree, cmd.Within)
+		fn, inFunction := item.File.Tree.EnclosingFunction(cmd.Within)
 		if item.TopLevel && inFunction {
 			continue
 		}
@@ -111,15 +111,6 @@ func findFunction(group []*workspace.File, name string) (CallItem, bool) {
 		}
 	}
 	return CallItem{}, false
-}
-
-func enclosingFunction(tree *parser.Tree, scope parser.ScopeID) (parser.Function, bool) {
-	for s := scope; s != parser.FileScope; s = tree.Scopes[s].Parent {
-		if fn, ok := tree.EnclosingFunction(s); ok {
-			return fn, true
-		}
-	}
-	return parser.Function{}, false
 }
 
 type MonikerKind uint8
@@ -182,14 +173,14 @@ type InlineValue struct {
 }
 
 func InlineValues(tree *parser.Tree, within parser.Span, stopped int) []InlineValue {
-	fn, inFunction := enclosingFunction(tree, tree.ScopeAt(stopped))
+	fn, inFunction := tree.EnclosingFunction(tree.ScopeAt(stopped))
 	seen := map[parser.Span]bool{}
 	var out []InlineValue
 	add := func(name string, span parser.Span, at parser.ScopeID) {
 		if seen[span] || span.Start > stopped || !within.Touches(span.Start) {
 			return
 		}
-		owner, ownerInFunction := enclosingFunction(tree, at)
+		owner, ownerInFunction := tree.EnclosingFunction(at)
 		if ownerInFunction != inFunction || (inFunction && owner.Span != fn.Span) {
 			return
 		}

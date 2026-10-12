@@ -287,7 +287,7 @@ func (t *untrustedValues) param(name string, scope parser.ScopeID) (untrustedSou
 }
 
 func (t *untrustedValues) positional(n int, scope parser.ScopeID) (untrustedSource, bool) {
-	fn, inFunction := t.tree.EnclosingFunction(scope)
+	fn, inFunction := t.tree.FunctionOfBody(scope)
 	if !inFunction {
 		return fromArguments, true
 	}

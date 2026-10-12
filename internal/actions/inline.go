@@ -228,7 +228,7 @@ func ownsScopeBody(tree *parser.Tree, scope parser.ScopeID, parent syntax.Node) 
 		_, ok := parent.(*syntax.File)
 		return ok
 	}
-	fn, ok := tree.EnclosingFunction(scope)
+	fn, ok := tree.FunctionOfBody(scope)
 	return ok && fn.Decl.Body.Cmd == parent
 }
 

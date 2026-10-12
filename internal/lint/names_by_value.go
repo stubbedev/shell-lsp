@@ -77,7 +77,7 @@ func analyzeNameReads(trees []*parser.Tree) *nameReads {
 
 func (f *nameFlow) seed(tree *parser.Tree) {
 	for _, cmd := range tree.Commands {
-		if fn, ok := tree.EnclosingFunction(cmd.Within); ok && cmd.Name == "shift" {
+		if fn, ok := tree.FunctionOfBody(cmd.Within); ok && cmd.Name == "shift" {
 			f.shifts[fn.Name] = true
 		}
 	}
@@ -199,7 +199,7 @@ func (f *nameFlow) param(tree *parser.Tree, name string, scope parser.ScopeID) {
 }
 
 func (f *nameFlow) positional(tree *parser.Tree, n int, scope parser.ScopeID) {
-	fn, ok := tree.EnclosingFunction(scope)
+	fn, ok := tree.FunctionOfBody(scope)
 	if !ok {
 		f.unknown(tree, scope)
 		return
@@ -214,7 +214,7 @@ func (f *nameFlow) positional(tree *parser.Tree, n int, scope parser.ScopeID) {
 }
 
 func (f *nameFlow) unknown(tree *parser.Tree, scope parser.ScopeID) {
-	fn, ok := tree.EnclosingFunction(scope)
+	fn, ok := tree.FunctionOfBody(scope)
 	switch {
 	case ok && !f.anyFunc[fn.Name]:
 		f.anyFunc[fn.Name] = true

@@ -122,3 +122,26 @@ func TestTypesetFloatFlagsDeclareVariablesOutsideBash(t *testing.T) {
 		}
 	}
 }
+
+func TestEnclosingFunctionWalksPastBodiesWithoutAName(t *testing.T) {
+	t.Parallel()
+
+	tree := Parse("outer() {\n\ttypeset -T Pt_t=(integer len=0; get() { :; })\n}\n", dialect.Ksh)
+	i := slices.IndexFunc(tree.Commands, func(c Command) bool { return c.Name == ":" })
+	if i < 0 {
+		t.Fatalf("commands = %+v, want the discipline's :", tree.Commands)
+	}
+	within := tree.Commands[i].Within
+	if fn, ok := tree.FunctionOfBody(within); ok {
+		t.Errorf("FunctionOfBody(discipline body) = %s, want none", fn.Name)
+	}
+	if fn, ok := tree.EnclosingFunction(within); !ok || fn.Name != "outer" {
+		t.Errorf("EnclosingFunction(discipline body) = %q, %t, want outer", fn.Name, ok)
+	}
+	if fn, ok := tree.FunctionOfBody(tree.Functions[0].Body); !ok || fn.Name != "outer" {
+		t.Errorf("FunctionOfBody(outer body) = %q, %t, want outer", fn.Name, ok)
+	}
+	if _, ok := tree.EnclosingFunction(FileScope); ok {
+		t.Error("EnclosingFunction(FileScope) found a function")
+	}
+}

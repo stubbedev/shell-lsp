@@ -100,12 +100,21 @@ func (ix *Index) FunctionNamed(name string) (Function, bool) {
 	return ix.Functions[i], true
 }
 
-func (ix *Index) EnclosingFunction(scope ScopeID) (Function, bool) {
-	i := slices.IndexFunc(ix.Functions, func(f Function) bool { return f.Body == scope })
-	if i < 0 {
+func (ix *Index) FunctionOfBody(scope ScopeID) (Function, bool) {
+	i, ok := ix.functionsByBody[scope]
+	if !ok {
 		return Function{}, false
 	}
 	return ix.Functions[i], true
+}
+
+func (ix *Index) EnclosingFunction(scope ScopeID) (Function, bool) {
+	for s := scope; s != FileScope; s = ix.Scopes[s].Parent {
+		if fn, ok := ix.FunctionOfBody(s); ok {
+			return fn, true
+		}
+	}
+	return Function{}, false
 }
 
 type Located struct {

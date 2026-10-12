@@ -173,6 +173,7 @@ type Index struct {
 	definitionsByScope   map[ScopeID][]int
 	localScopes          map[string]map[ScopeID]bool
 	functionsByName      map[string]int
+	functionsByBody      map[ScopeID]int
 }
 
 type binding struct {
@@ -1332,9 +1333,13 @@ func (ix *Index) buildLookups() {
 		ix.definitionsByScope[def.Within] = append(ix.definitionsByScope[def.Within], i)
 	}
 	ix.functionsByName = make(map[string]int, len(ix.Functions))
+	ix.functionsByBody = make(map[ScopeID]int, len(ix.Functions))
 	for i, fn := range ix.Functions {
 		if _, seen := ix.functionsByName[fn.Name]; !seen {
 			ix.functionsByName[fn.Name] = i
+		}
+		if _, seen := ix.functionsByBody[fn.Body]; !seen {
+			ix.functionsByBody[fn.Body] = i
 		}
 	}
 }
