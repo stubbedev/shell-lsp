@@ -15,18 +15,14 @@ var structureFamily = family{
 		2263: {severity: SeverityInfo, bug: true, summary: "A command runs as a program instead of the alias defined in the same parsing unit."},
 		2264: {severity: SeverityError, summary: "A function that wraps a command calls itself unconditionally and recurses forever."},
 	},
-	rules: []rule{
-		{on: nodes(&syntax.CaseClause{}), node: checkDefaultCase},
-		{on: nodes(&syntax.FuncDecl{}), node: checkSelfRecursion},
-		{finish: checkAliasesInParsingUnit},
+	nodes: []nodeRule{
+		onNode(checkDefaultCase),
+		onNode(checkSelfRecursion),
 	},
+	finish: []func(*pass){checkAliasesInParsingUnit},
 }
 
-func checkDefaultCase(p *pass, n syntax.Node) {
-	cc, ok := n.(*syntax.CaseClause)
-	if !ok {
-		return
-	}
+func checkDefaultCase(p *pass, cc *syntax.CaseClause) {
 	for _, item := range cc.Items {
 		for _, pattern := range item.Patterns {
 			if lit := pattern.Lit(); lit != "" && strings.Trim(lit, "*") == "" {
@@ -37,9 +33,8 @@ func checkDefaultCase(p *pass, n syntax.Node) {
 	p.reportNode(2249, cc, "This case statement has no *) branch; add one to handle unexpected values.")
 }
 
-func checkSelfRecursion(p *pass, n syntax.Node) {
-	decl, ok := n.(*syntax.FuncDecl)
-	if !ok || decl.Name == nil || decl.Body == nil {
+func checkSelfRecursion(p *pass, decl *syntax.FuncDecl) {
+	if decl.Name == nil || decl.Body == nil {
 		return
 	}
 	var first *syntax.Stmt

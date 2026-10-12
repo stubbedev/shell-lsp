@@ -16,9 +16,7 @@ var heredocsFamily = family{
 		1121: {severity: SeverityError, summary: "A here-document terminator followed by an operator does not end the here-document."},
 		1122: {severity: SeverityError, summary: "A here-document terminator followed by more text does not end the here-document."},
 	},
-	rules: []rule{
-		{finish: checkHeredocEnds},
-	},
+	finish: []func(*pass){checkHeredocEnds},
 }
 
 var endTokenCodes = map[parser.EndTokenMistake]Code{

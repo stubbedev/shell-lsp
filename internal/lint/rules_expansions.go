@@ -21,14 +21,14 @@ var expansionsFamily = family{
 		2322:                      {severity: SeverityStyle, summary: "Doubled parentheses in arithmetic are redundant."},
 		2323:                      {severity: SeverityStyle, summary: "Parentheses around a whole arithmetic expression are redundant."},
 	},
-	rules: []rule{
-		{on: nodes(&syntax.WordIter{}), node: checkLoopGlob},
-		{on: nodes(&syntax.DblQuoted{}), node: checkTranslatedString},
-		{on: nodes(&syntax.ParamExp{}), node: checkRemovalPattern},
-		{on: nodes(&syntax.ParamExp{}), node: checkValueAsKey},
-		{on: nodes(&syntax.ParamExp{}), node: checkUnknownTransformation},
-		{on: nodes(&syntax.Assign{}), node: checkArithmeticIndex},
-		{on: nodes(&syntax.ParenArithm{}, &syntax.ArithmExp{}, &syntax.ArithmCmd{}, &syntax.CStyleLoop{}, &syntax.Assign{}), node: checkRedundantParentheses},
+	nodes: []nodeRule{
+		onNode(checkLoopGlob),
+		onNode(checkTranslatedString),
+		onNode(checkRemovalPattern),
+		onNode(checkValueAsKey),
+		onNode(checkUnknownTransformation),
+		onNode(checkArithmeticIndex),
+		onNodes(checkRedundantParentheses, &syntax.ParenArithm{}, &syntax.ArithmExp{}, &syntax.ArithmCmd{}, &syntax.CStyleLoop{}, &syntax.Assign{}),
 	},
 }
 
@@ -37,9 +37,8 @@ var (
 	mkshTransformations = setOf("Q", "#")
 )
 
-func checkUnknownTransformation(p *pass, n syntax.Node) {
-	pe, ok := n.(*syntax.ParamExp)
-	if !ok || pe.Param == nil || pe.Exp == nil || pe.Exp.Op != syntax.OtherParamOps || pe.Exp.Word == nil {
+func checkUnknownTransformation(p *pass, pe *syntax.ParamExp) {
+	if pe.Param == nil || pe.Exp == nil || pe.Exp.Op != syntax.OtherParamOps || pe.Exp.Word == nil {
 		return
 	}
 	known, names := bashTransformations, "U, u, L, Q, E, P, A, K, a and k"
@@ -55,11 +54,7 @@ func checkUnknownTransformation(p *pass, n syntax.Node) {
 	}
 }
 
-func checkLoopGlob(p *pass, n syntax.Node) {
-	iter, ok := n.(*syntax.WordIter)
-	if !ok {
-		return
-	}
+func checkLoopGlob(p *pass, iter *syntax.WordIter) {
 	for _, w := range iter.Items {
 		if !isGlob(w) {
 			continue
@@ -91,9 +86,8 @@ func expansionFate(split, globbed bool) string {
 	return "globbed"
 }
 
-func checkTranslatedString(p *pass, n syntax.Node) {
-	dq, ok := n.(*syntax.DblQuoted)
-	if !ok || !dq.Dollar || len(dq.Parts) == 0 {
+func checkTranslatedString(p *pass, dq *syntax.DblQuoted) {
+	if !dq.Dollar || len(dq.Parts) == 0 {
 		return
 	}
 	lit, ok := dq.Parts[0].(*syntax.Lit)
@@ -122,9 +116,8 @@ func (p *pass) assigned(name string) bool {
 	return false
 }
 
-func checkRemovalPattern(p *pass, n syntax.Node) {
-	pe, ok := n.(*syntax.ParamExp)
-	if !ok || pe.Short || pe.Index != nil || pe.Exp == nil || pe.Exp.Word == nil {
+func checkRemovalPattern(p *pass, pe *syntax.ParamExp) {
+	if pe.Short || pe.Index != nil || pe.Exp == nil || pe.Exp.Word == nil {
 		return
 	}
 	switch pe.Exp.Op {
@@ -194,9 +187,8 @@ func (p *pass) reassignedIn(loop *syntax.ForClause, name string, read int) bool 
 	return false
 }
 
-func checkValueAsKey(p *pass, n syntax.Node) {
-	pe, ok := n.(*syntax.ParamExp)
-	if !ok || pe.Param == nil || !isIndexedParam(pe) {
+func checkValueAsKey(p *pass, pe *syntax.ParamExp) {
+	if pe.Param == nil || !isIndexedParam(pe) {
 		return
 	}
 	index, ok := pe.Index.(*syntax.Word)
@@ -227,9 +219,8 @@ func checkValueAsKey(p *pass, n syntax.Node) {
 	p.reportNode(2303, at, key+" holds a value of "+pe.Param.Value+", not a key; loop over \"${!"+pe.Param.Value+"[@]}\" if you need the keys.")
 }
 
-func checkArithmeticIndex(p *pass, n syntax.Node) {
-	a, ok := n.(*syntax.Assign)
-	if !ok || a.Name == nil || a.Index == nil {
+func checkArithmeticIndex(p *pass, a *syntax.Assign) {
+	if a.Name == nil || a.Index == nil {
 		return
 	}
 	w, ok := a.Index.(*syntax.Word)

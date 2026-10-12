@@ -15,15 +15,14 @@ var redirectSafetyFamily = family{
 		2069: {severity: SeverityWarning, summary: "2>&1 placed before a file redirection still points stderr at the old target."},
 		2094: {severity: SeverityInfo, bug: true, summary: "A pipeline reads and writes the same file, which the output redirection truncates first."},
 	},
-	rules: []rule{
-		{on: nodes(&syntax.Stmt{}), node: checkRedirectOrder},
-		{on: nodes(&syntax.Stmt{}), node: checkSameFileInPipeline},
+	nodes: []nodeRule{
+		onNode(checkRedirectOrder),
+		onNode(checkSameFileInPipeline),
 	},
 }
 
-func checkRedirectOrder(p *pass, n syntax.Node) {
-	stmt, ok := n.(*syntax.Stmt)
-	if !ok || len(stmt.Redirs) != 2 {
+func checkRedirectOrder(p *pass, stmt *syntax.Stmt) {
+	if len(stmt.Redirs) != 2 {
 		return
 	}
 	dup, file := stmt.Redirs[0], stmt.Redirs[1]
@@ -72,9 +71,8 @@ func readsOrWritesFile(r *syntax.Redirect) bool {
 	return r.Op == syntax.RdrIn || r.Op == syntax.RdrOut || r.Op == syntax.AppOut
 }
 
-func checkSameFileInPipeline(p *pass, n syntax.Node) {
-	top, ok := p.pipelineTop(n)
-	if !ok || (!isPipe(top) && !slices.ContainsFunc(top.Redirs, readsOrWritesFile)) {
+func checkSameFileInPipeline(p *pass, top *syntax.Stmt) {
+	if !p.topsPipeline() || (!isPipe(top) && !slices.ContainsFunc(top.Redirs, readsOrWritesFile)) {
 		return
 	}
 	stages := pipelineStages(top, nil)

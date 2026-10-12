@@ -21,12 +21,11 @@ var loopsFamily = family{
 		2066: {severity: SeverityError, summary: "Double quotes make a loop list a single item, so the loop runs once."},
 		2258: {severity: SeverityWarning, summary: "A trailing comma becomes part of a loop item."},
 	},
-	rules: []rule{{on: nodes(&syntax.ForClause{}), node: checkForLoop}},
+	nodes: []nodeRule{onNode(checkForLoop)},
 }
 
-func checkForLoop(p *pass, n syntax.Node) {
-	loop, ok := n.(*syntax.ForClause)
-	if !ok || loop.Select {
+func checkForLoop(p *pass, loop *syntax.ForClause) {
+	if loop.Select {
 		return
 	}
 	iter, ok := loop.Loop.(*syntax.WordIter)

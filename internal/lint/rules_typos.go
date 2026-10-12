@@ -20,10 +20,10 @@ var typosFamily = family{
 		1130: {severity: SeverityError, summary: "A : glued to a keyword makes one word, so the keyword is not recognised."},
 		1131: {severity: SeverityError, summary: "elsif, elseif or a similar spelling is not a keyword; the shell only has elif."},
 	},
-	rules: []rule{
-		{on: nodes(&syntax.IfClause{}), node: checkElseIf},
-		{on: nodes(&syntax.CallExpr{}), node: checkKeywordLikeCommand},
-		{on: nodes(&syntax.Assign{}), node: checkDoubleEquals},
+	nodes: []nodeRule{
+		onNode(checkElseIf),
+		onNode(checkKeywordLikeCommand),
+		onNode(checkDoubleEquals),
 	},
 }
 
@@ -42,9 +42,8 @@ func spelledKeywordsLongestFirst() []string {
 
 var gluedKeywordCodes = map[byte]Code{'#': 1099, '!': 1129, ':': 1130}
 
-func checkElseIf(p *pass, n syntax.Node) {
-	clause, ok := n.(*syntax.IfClause)
-	if !ok || clause.Else == nil || !parser.IsElse(clause.Else) || clause.Else.Braces || len(clause.Else.Then) == 0 {
+func checkElseIf(p *pass, clause *syntax.IfClause) {
+	if clause.Else == nil || !parser.IsElse(clause.Else) || clause.Else.Braces || len(clause.Else.Then) == 0 {
 		return
 	}
 	elseClause := clause.Else
@@ -56,9 +55,8 @@ func checkElseIf(p *pass, n syntax.Node) {
 	p.report(1075, parser.Span{Start: at, End: at + len("else")}, "Use elif instead of else if; as written the nested if needs its own fi.")
 }
 
-func checkKeywordLikeCommand(p *pass, n syntax.Node) {
-	call, ok := n.(*syntax.CallExpr)
-	if !ok || len(call.Args) == 0 || len(call.Args[0].Parts) != 1 {
+func checkKeywordLikeCommand(p *pass, call *syntax.CallExpr) {
+	if len(call.Args) == 0 || len(call.Args[0].Parts) != 1 {
 		return
 	}
 	lit, ok := call.Args[0].Parts[0].(*syntax.Lit)
@@ -115,9 +113,8 @@ func (p *pass) checkKeywordSpelling(name string, span parser.Span) {
 	}
 }
 
-func checkDoubleEquals(p *pass, n syntax.Node) {
-	assign, ok := n.(*syntax.Assign)
-	if !ok || assign.Name == nil || assign.Value == nil || len(assign.Value.Parts) == 0 {
+func checkDoubleEquals(p *pass, assign *syntax.Assign) {
+	if assign.Name == nil || assign.Value == nil || len(assign.Value.Parts) == 0 {
 		return
 	}
 	lit, ok := assign.Value.Parts[0].(*syntax.Lit)

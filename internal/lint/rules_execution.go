@@ -26,18 +26,17 @@ var executionFamily = family{
 	commands: []commandRule{
 		{match: matchBase, names: []string{"ssh"}, check: checkRemoteHeredoc},
 	},
-	rules: []rule{
-		{on: nodes(&syntax.CallExpr{}), node: checkExpansionAsCommand},
-		{on: nodes(&syntax.CallExpr{}), node: checkSpacedDotSlash},
-		{on: nodes(&syntax.CallExpr{}), node: checkFunctionViaExternal},
-		{on: nodes(&syntax.File{}, &syntax.Block{}, &syntax.IfClause{}, &syntax.WhileClause{}, &syntax.ForClause{}, &syntax.RepeatClause{}), node: checkExecNotLast},
-		{on: nodes(&syntax.CmdSubst{}), node: checkEchoSubstitution},
+	nodes: []nodeRule{
+		onNode(checkExpansionAsCommand),
+		onNode(checkSpacedDotSlash),
+		onNode(checkFunctionViaExternal),
+		onNodes(checkExecNotLast, &syntax.File{}, &syntax.Block{}, &syntax.IfClause{}, &syntax.WhileClause{}, &syntax.ForClause{}, &syntax.RepeatClause{}),
+		onNode(checkEchoSubstitution),
 	},
 }
 
-func checkExpansionAsCommand(p *pass, n syntax.Node) {
-	call, ok := n.(*syntax.CallExpr)
-	if !ok || len(call.Args) == 0 {
+func checkExpansionAsCommand(p *pass, call *syntax.CallExpr) {
+	if len(call.Args) == 0 {
 		return
 	}
 	last := len(call.Args) - 1
@@ -64,9 +63,8 @@ func checkExpansionAsCommand(p *pass, n syntax.Node) {
 	}
 }
 
-func checkSpacedDotSlash(p *pass, n syntax.Node) {
-	call, ok := n.(*syntax.CallExpr)
-	if !ok || len(call.Args) < 2 || call.Args[0].Lit() != "./" {
+func checkSpacedDotSlash(p *pass, call *syntax.CallExpr) {
+	if len(call.Args) < 2 || call.Args[0].Lit() != "./" {
 		return
 	}
 	if span, ok := p.span(call); ok {
@@ -76,11 +74,7 @@ func checkSpacedDotSlash(p *pass, n syntax.Node) {
 
 var externalRunners = setOf("chroot", "screen", "sudo", "doas", "run0", "xargs", "tmux")
 
-func checkFunctionViaExternal(p *pass, n syntax.Node) {
-	call, ok := n.(*syntax.CallExpr)
-	if !ok {
-		return
-	}
+func checkFunctionViaExternal(p *pass, call *syntax.CallExpr) {
 	command, ok := p.resolved(call)
 	if !ok || !command.literal {
 		return
@@ -219,9 +213,8 @@ func (p *pass) honoursExecfail() bool {
 	return p.dialect == dialect.Bash && p.options().execfail
 }
 
-func checkEchoSubstitution(p *pass, n syntax.Node) {
-	cs, ok := n.(*syntax.CmdSubst)
-	if !ok || cs.TempFile || cs.ReplyVar || len(cs.Stmts) != 1 {
+func checkEchoSubstitution(p *pass, cs *syntax.CmdSubst) {
+	if cs.TempFile || cs.ReplyVar || len(cs.Stmts) != 1 {
 		return
 	}
 	stmt := cs.Stmts[0]

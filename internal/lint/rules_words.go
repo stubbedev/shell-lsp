@@ -17,19 +17,15 @@ var wordsFamily = family{
 		2140: {severity: SeverityWarning, summary: "Quotes inside a double-quoted word end one string and start another."},
 		2254: {severity: SeverityWarning, summary: "An unquoted expansion in a case pattern is matched as a glob."},
 	},
-	rules: []rule{
-		{on: nodes(&syntax.Word{}), node: checkWordQuoting},
-		{on: nodes(&syntax.Assign{}), node: checkPromptEscapes},
-		{on: nodes(&syntax.ArrayExpr{}), node: checkArrayCommas},
-		{on: nodes(&syntax.CaseItem{}), node: checkCasePatterns},
+	nodes: []nodeRule{
+		onNode(checkWordQuoting),
+		onNode(checkPromptEscapes),
+		onNode(checkArrayCommas),
+		onNode(checkCasePatterns),
 	},
 }
 
-func checkWordQuoting(p *pass, n syntax.Node) {
-	word, ok := n.(*syntax.Word)
-	if !ok {
-		return
-	}
+func checkWordQuoting(p *pass, word *syntax.Word) {
 	checkQuotedTilde(p, word)
 	parts := word.Parts
 	for i, part := range parts {
@@ -149,9 +145,8 @@ func checkQuotedTilde(p *pass, word *syntax.Word) {
 	}
 }
 
-func checkPromptEscapes(p *pass, n syntax.Node) {
-	assign, ok := n.(*syntax.Assign)
-	if !ok || assign.Name == nil || assign.Name.Value != "PS1" || assign.Value == nil {
+func checkPromptEscapes(p *pass, assign *syntax.Assign) {
+	if assign.Name == nil || assign.Name.Value != "PS1" || assign.Value == nil {
 		return
 	}
 	var flat strings.Builder
@@ -184,11 +179,7 @@ func flattenLiteral(sb *strings.Builder, parts []syntax.WordPart) {
 	}
 }
 
-func checkArrayCommas(p *pass, n syntax.Node) {
-	array, ok := n.(*syntax.ArrayExpr)
-	if !ok {
-		return
-	}
+func checkArrayCommas(p *pass, array *syntax.ArrayExpr) {
 	for _, elem := range array.Elems {
 		if elem.Value == nil || !hasUnbracedComma(elem.Value) {
 			continue
@@ -228,11 +219,7 @@ func braceDepth(depth int, lit string, topLevelComma func()) int {
 	return depth
 }
 
-func checkCasePatterns(p *pass, n syntax.Node) {
-	item, ok := n.(*syntax.CaseItem)
-	if !ok {
-		return
-	}
+func checkCasePatterns(p *pass, item *syntax.CaseItem) {
 	for _, pattern := range item.Patterns {
 		if isGlob(pattern) || !hasUnquotedExpansion(pattern) {
 			continue

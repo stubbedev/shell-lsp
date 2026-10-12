@@ -17,18 +17,17 @@ var flowFamily = family{
 		2324: {severity: SeverityWarning, summary: "+= on a plain variable appends text instead of adding a number."},
 		2329: {severity: SeverityInfo, summary: "A function is never invoked, and the script always exits before it could be sourced and called."},
 	},
-	rules: []rule{
-		{on: nodes(&syntax.Stmt{}), node: checkUnreachable},
-		{on: nodes(&syntax.FuncDecl{}), node: checkUninvokedFunction},
-		{on: nodes(&syntax.CallExpr{}), node: checkCallBeforeDefinition},
-		{on: nodes(&syntax.ParamExp{}), node: checkStatusSource},
-		{on: nodes(&syntax.Assign{}), node: checkNumericAppend},
+	nodes: []nodeRule{
+		onNode(checkUnreachable),
+		onNode(checkUninvokedFunction),
+		onNode(checkCallBeforeDefinition),
+		onNode(checkStatusSource),
+		onNode(checkNumericAppend),
 	},
 }
 
-func checkUnreachable(p *pass, n syntax.Node) {
-	stmt, ok := n.(*syntax.Stmt)
-	if !ok || !p.settings.extended {
+func checkUnreachable(p *pass, stmt *syntax.Stmt) {
+	if !p.settings.extended {
 		return
 	}
 	switch p.parent().(type) {
@@ -68,9 +67,8 @@ func (p *pass) enclosingStmt() (*syntax.Stmt, bool) {
 	}
 }
 
-func checkUninvokedFunction(p *pass, n syntax.Node) {
-	decl, ok := n.(*syntax.FuncDecl)
-	if !ok || !p.settings.extended {
+func checkUninvokedFunction(p *pass, decl *syntax.FuncDecl) {
+	if !p.settings.extended {
 		return
 	}
 	var outers []*syntax.FuncDecl
@@ -87,9 +85,8 @@ func checkUninvokedFunction(p *pass, n syntax.Node) {
 	})
 }
 
-func checkCallBeforeDefinition(p *pass, n syntax.Node) {
-	call, ok := n.(*syntax.CallExpr)
-	if !ok || !p.settings.extended || len(call.Args) == 0 {
+func checkCallBeforeDefinition(p *pass, call *syntax.CallExpr) {
+	if !p.settings.extended || len(call.Args) == 0 {
 		return
 	}
 	name, ok := parser.Literal(call.Args[0])
@@ -106,9 +103,8 @@ func checkCallBeforeDefinition(p *pass, n syntax.Node) {
 	})
 }
 
-func checkStatusSource(p *pass, n syntax.Node) {
-	pe, ok := n.(*syntax.ParamExp)
-	if !ok || !p.settings.extended || pe.Param == nil || pe.Param.Value != "?" {
+func checkStatusSource(p *pass, pe *syntax.ParamExp) {
+	if !p.settings.extended || pe.Param == nil || pe.Param.Value != "?" {
 		return
 	}
 	p.withFlow(func(flow *flowResult) {
@@ -138,9 +134,8 @@ func isEcho(stmt *syntax.Stmt) bool {
 	return ok && path.Base(c.name) == "echo"
 }
 
-func checkNumericAppend(p *pass, n syntax.Node) {
-	a, ok := n.(*syntax.Assign)
-	if !ok || !a.Append || !p.settings.extended {
+func checkNumericAppend(p *pass, a *syntax.Assign) {
+	if !a.Append || !p.settings.extended {
 		return
 	}
 	p.withFlow(func(flow *flowResult) {

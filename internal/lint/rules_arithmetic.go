@@ -13,15 +13,12 @@ var arithmeticFamily = family{
 		2017: {severity: SeverityInfo, bug: true, summary: "Integer division truncates before a later multiplication, losing precision."},
 		2079: {severity: SeverityError, summary: "Shell arithmetic is integer only, so a decimal is not a valid number."},
 	},
-	rules: []rule{
-		{on: nodes(&syntax.BinaryArithm{}), node: checkDivisionBeforeMultiplication},
-		{finish: checkDecimalArithmetic},
-	},
+	nodes:  []nodeRule{onNode(checkDivisionBeforeMultiplication)},
+	finish: []func(*pass){checkDecimalArithmetic},
 }
 
-func checkDivisionBeforeMultiplication(p *pass, n syntax.Node) {
-	mul, ok := n.(*syntax.BinaryArithm)
-	if !ok || mul.Op != syntax.Mul || p.dialect == dialect.Ksh {
+func checkDivisionBeforeMultiplication(p *pass, mul *syntax.BinaryArithm) {
+	if mul.Op != syntax.Mul || p.dialect == dialect.Ksh {
 		return
 	}
 	div, ok := mul.X.(*syntax.BinaryArithm)

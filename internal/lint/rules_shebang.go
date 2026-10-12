@@ -27,7 +27,7 @@ var shebangFamily = family{
 		2239: {severity: SeverityError, summary: "The shebang interpreter is not an absolute path."},
 		2246: {severity: SeverityError, summary: "The shebang interpreter ends in a slash, so it names a directory."},
 	},
-	rules: []rule{{finish: checkShebangShape}, {finish: checkShebang}},
+	finish: []func(*pass){checkShebangShape, checkShebang},
 }
 
 var envSplitsArguments = regexp.MustCompile(`env +(-S|--split-string)`)

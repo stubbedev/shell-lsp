@@ -30,13 +30,13 @@ var testLogicFamily = family{
 	commands: []commandRule{
 		{match: matchBase, names: []string{"test"}, check: checkTestRedirect},
 	},
-	rules: []rule{
-		{on: nodes(&syntax.BinaryCmd{}, &syntax.CallExpr{}, &syntax.TestClause{}), node: checkTestLogic},
-		{on: nodes(&syntax.BinaryCmd{}), node: checkChainedTests},
-		{on: nodes(&syntax.BinaryArithm{}), node: checkArithmeticContradiction},
-		{on: nodes(&syntax.BinaryArithm{}), node: checkEmptyRange},
-		{finish: checkRejectedUnknownOperators},
+	nodes: []nodeRule{
+		onNodes(checkTestLogic, &syntax.BinaryCmd{}, &syntax.CallExpr{}, &syntax.TestClause{}),
+		onNode(checkChainedTests),
+		onNode(checkArithmeticContradiction),
+		onNode(checkEmptyRange),
 	},
+	finish: []func(*pass){checkRejectedUnknownOperators},
 }
 
 type comparison struct {
@@ -174,9 +174,8 @@ func solePartUnquoted(w *syntax.Word) syntax.WordPart {
 	return w.Parts[0]
 }
 
-func checkChainedTests(p *pass, n syntax.Node) {
-	cmd, ok := n.(*syntax.BinaryCmd)
-	if !ok || (cmd.Op != syntax.AndStmt && cmd.Op != syntax.OrStmt) {
+func checkChainedTests(p *pass, cmd *syntax.BinaryCmd) {
+	if cmd.Op != syntax.AndStmt && cmd.Op != syntax.OrStmt {
 		return
 	}
 	first := cmd.X
@@ -281,9 +280,8 @@ func (p *pass) sameText(a, b syntax.Node) bool {
 	return p.nodeText(a) == p.nodeText(b)
 }
 
-func checkArithmeticContradiction(p *pass, n syntax.Node) {
-	bin, ok := n.(*syntax.BinaryArithm)
-	if !ok || (bin.Op != syntax.OrArit && bin.Op != syntax.AndArit) {
+func checkArithmeticContradiction(p *pass, bin *syntax.BinaryArithm) {
+	if bin.Op != syntax.OrArit && bin.Op != syntax.AndArit {
 		return
 	}
 	left, okLeft := bin.X.(*syntax.BinaryArithm)
@@ -312,9 +310,8 @@ type arithmeticBound struct {
 	expr         syntax.ArithmExpr
 }
 
-func checkEmptyRange(p *pass, n syntax.Node) {
-	and, ok := n.(*syntax.BinaryArithm)
-	if !ok || and.Op != syntax.AndArit {
+func checkEmptyRange(p *pass, and *syntax.BinaryArithm) {
+	if and.Op != syntax.AndArit {
 		return
 	}
 	if parent, ok := p.parent().(*syntax.BinaryArithm); ok && parent.Op == syntax.AndArit {

@@ -31,13 +31,13 @@ var testsFamily = family{
 		2335: {severity: SeverityStyle, optional: optionalNegatedConditions, summary: "A negated comparison is written as ! a op b instead of using the inverted operator."},
 		2338: {severity: SeverityStyle, optional: optionalDoubleEquals, summary: "= is used for string comparison in a bash test where == is preferred."},
 	},
-	rules: []rule{
-		{on: nodes(&syntax.CallExpr{}, &syntax.TestClause{}), node: checkTestExpressions},
-		{on: nodes(&syntax.Stmt{}), node: checkNegatedTestCommand},
-		{on: nodes(&syntax.Stmt{}), node: checkBackgroundedTest},
-		{on: nodes(&syntax.BinaryCmd{}), node: checkPipedTest},
-		{on: nodes(&syntax.Subshell{}), node: checkSubshellTest},
-		{on: nodes(&syntax.TestDecl{}), node: checkBatsNegation},
+	nodes: []nodeRule{
+		onNodes(checkTestExpressions, &syntax.CallExpr{}, &syntax.TestClause{}),
+		onNode(checkNegatedTestCommand),
+		onNode(checkBackgroundedTest),
+		onNode(checkPipedTest),
+		onNode(checkSubshellTest),
+		onNode(checkBatsNegation),
 	},
 }
 
@@ -294,9 +294,8 @@ func xPrefixSafety(style bracketStyle, words ...*syntax.Word) Safety {
 	return Safe
 }
 
-func checkNegatedTestCommand(p *pass, n syntax.Node) {
-	stmt, ok := n.(*syntax.Stmt)
-	if !ok || !stmt.Negated {
+func checkNegatedTestCommand(p *pass, stmt *syntax.Stmt) {
+	if !stmt.Negated {
 		return
 	}
 	t, ok := testCommandOf(stmt.Cmd)
@@ -321,9 +320,8 @@ func checkNegatedTestCommand(p *pass, n syntax.Node) {
 	}
 }
 
-func checkBackgroundedTest(p *pass, n syntax.Node) {
-	stmt, ok := n.(*syntax.Stmt)
-	if !ok || !stmt.Background || !stmt.Semicolon.IsValid() || !isTestCommand(rightmost(stmt)) {
+func checkBackgroundedTest(p *pass, stmt *syntax.Stmt) {
+	if !stmt.Background || !stmt.Semicolon.IsValid() || !isTestCommand(rightmost(stmt)) {
 		return
 	}
 	at := parser.Offset(stmt.Semicolon)
@@ -334,9 +332,8 @@ func checkBackgroundedTest(p *pass, n syntax.Node) {
 	p.report(2265, posSpan(stmt.Semicolon, 1), "A single & runs the test in the background instead of combining it; use && for a logical AND.", fixes...)
 }
 
-func checkPipedTest(p *pass, n syntax.Node) {
-	bin, ok := n.(*syntax.BinaryCmd)
-	if !ok || bin.Op != syntax.Pipe || (!isTestCommand(rightmost(bin.X)) && !isTestCommand(leftmost(bin.Y))) {
+func checkPipedTest(p *pass, bin *syntax.BinaryCmd) {
+	if bin.Op != syntax.Pipe || (!isTestCommand(rightmost(bin.X)) && !isTestCommand(leftmost(bin.Y))) {
 		return
 	}
 	at := parser.Offset(bin.OpPos)
@@ -344,9 +341,8 @@ func checkPipedTest(p *pass, n syntax.Node) {
 		reviewFix("Replace | with ||", textedit.Edit{Start: at + 1, End: at + 1, NewText: "|"}))
 }
 
-func checkSubshellTest(p *pass, n syntax.Node) {
-	sub, ok := n.(*syntax.Subshell)
-	if !ok || !onlyTests(sub.Stmts) || hasSideEffects(sub) {
+func checkSubshellTest(p *pass, sub *syntax.Subshell) {
+	if !onlyTests(sub.Stmts) || hasSideEffects(sub) {
 		return
 	}
 	stmt, _ := p.parent().(*syntax.Stmt)
@@ -410,9 +406,8 @@ func hasSideEffects(root syntax.Node) bool {
 	return found
 }
 
-func checkBatsNegation(p *pass, n syntax.Node) {
-	decl, ok := n.(*syntax.TestDecl)
-	if !ok || decl.Body == nil {
+func checkBatsNegation(p *pass, decl *syntax.TestDecl) {
+	if decl.Body == nil {
 		return
 	}
 	block, ok := decl.Body.Cmd.(*syntax.Block)

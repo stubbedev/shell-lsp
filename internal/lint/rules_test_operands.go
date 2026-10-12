@@ -27,11 +27,11 @@ var testOperandsFamily = family{
 		2245: {severity: SeverityWarning, summary: "ksh applies a file test operator only to the first match of a glob."},
 		2255: {severity: SeverityError, summary: "A numeric operand in [ ] is an unquoted glob, not a number."},
 	},
-	rules: []rule{
-		{on: nodes(&syntax.CallExpr{}, &syntax.TestClause{}), node: checkTestOperands},
-		{on: nodes(&syntax.BinaryTest{}, &syntax.CallExpr{}, &syntax.BinaryArithm{}, &syntax.UnaryArithm{}, &syntax.ArithmCmd{}), node: checkStatusComparison},
-		{on: nodes(&syntax.CallExpr{}), node: checkStrayBracket},
-		{on: nodes(&syntax.Subshell{}), node: checkSubshellAsTest},
+	nodes: []nodeRule{
+		onNodes(checkTestOperands, &syntax.CallExpr{}, &syntax.TestClause{}),
+		onNodes(checkStatusComparison, &syntax.BinaryTest{}, &syntax.CallExpr{}, &syntax.BinaryArithm{}, &syntax.UnaryArithm{}, &syntax.ArithmCmd{}),
+		onNode(checkStrayBracket),
+		onNode(checkSubshellAsTest),
 	},
 }
 
@@ -391,9 +391,8 @@ func firstCommand(s *syntax.Stmt) syntax.Command {
 	}
 }
 
-func checkStrayBracket(p *pass, n syntax.Node) {
-	call, ok := n.(*syntax.CallExpr)
-	if !ok || len(call.Args) == 0 {
+func checkStrayBracket(p *pass, call *syntax.CallExpr) {
+	if len(call.Args) == 0 {
 		return
 	}
 	last := call.Args[len(call.Args)-1]
@@ -413,9 +412,8 @@ func checkStrayBracket(p *pass, n syntax.Node) {
 	}
 }
 
-func checkSubshellAsTest(p *pass, n syntax.Node) {
-	sub, ok := n.(*syntax.Subshell)
-	if !ok || len(sub.Stmts) != 1 {
+func checkSubshellAsTest(p *pass, sub *syntax.Subshell) {
+	if len(sub.Stmts) != 1 {
 		return
 	}
 	stmt := sub.Stmts[0]

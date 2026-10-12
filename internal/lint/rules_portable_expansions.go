@@ -29,7 +29,7 @@ var portableExpansionsFamily = family{
 		3059: {shells: strictShells, summary: "Case modification in parameter expansion is undefined in POSIX sh."},
 		3060: {shells: posixOrDash, summary: "Pattern substitution ${var/pattern/replacement} is undefined in POSIX sh and dash."},
 	},
-	rules: []rule{{on: nodes(&syntax.ExtGlob{}, &syntax.DblQuoted{}, &syntax.ArithmExp{}, &syntax.UnaryArithm{}, &syntax.BinaryArithm{}, &syntax.Word{}, &syntax.ParamExp{}), node: checkPortableExpansions}},
+	nodes: []nodeRule{onNodes(checkPortableExpansions, &syntax.ExtGlob{}, &syntax.DblQuoted{}, &syntax.ArithmExp{}, &syntax.UnaryArithm{}, &syntax.BinaryArithm{}, &syntax.Word{}, &syntax.ParamExp{})},
 }
 
 var (

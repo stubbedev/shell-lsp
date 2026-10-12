@@ -16,9 +16,9 @@ var keywordFamily = family{
 		2177: {severity: SeverityWarning, summary: "time on a compound command is undefined in POSIX sh."},
 		2219: {severity: SeverityStyle, summary: "let is used where an arithmetic command needs no quoting."},
 	},
-	rules: []rule{
-		{on: nodes(&syntax.TimeClause{}), node: checkTimeClause},
-		{on: nodes(&syntax.LetClause{}), node: checkLet},
+	nodes: []nodeRule{
+		onNode(checkTimeClause),
+		onNode(checkLet),
 	},
 }
 
@@ -29,9 +29,8 @@ var (
 	letShells      = dialect.SetOf(dialect.Bash, dialect.Ksh)
 )
 
-func checkTimeClause(p *pass, n syntax.Node) {
-	tc, ok := n.(*syntax.TimeClause)
-	if !ok || tc.Stmt == nil {
+func checkTimeClause(p *pass, tc *syntax.TimeClause) {
+	if tc.Stmt == nil {
 		return
 	}
 	at := parser.Offset(tc.Time)
@@ -61,12 +60,11 @@ func checkTimeFlag(p *pass, tc *syntax.TimeClause, keyword parser.Span) {
 	}
 }
 
-func checkLet(p *pass, n syntax.Node) {
-	let, ok := n.(*syntax.LetClause)
-	if !ok || !letShells.Has(p.dialect) {
+func checkLet(p *pass, let *syntax.LetClause) {
+	if !letShells.Has(p.dialect) {
 		return
 	}
-	p.reportNode(2219, n, "Use an arithmetic command such as (( a = 1 )) instead of let; it needs no quoting.", p.arithmeticCommandFix(let)...)
+	p.reportNode(2219, let, "Use an arithmetic command such as (( a = 1 )) instead of let; it needs no quoting.", p.arithmeticCommandFix(let)...)
 }
 
 func unquoted(text string) string {

@@ -15,7 +15,7 @@ var caseFamily = family{
 		2221: {severity: SeverityWarning, summary: "A case pattern also matches everything a later pattern matches, so that one is never reached."},
 		2222: {severity: SeverityWarning, summary: "A case pattern never matches because an earlier pattern catches everything it would."},
 	},
-	rules: []rule{{on: nodes(&syntax.CaseClause{}), node: checkCaseClause}},
+	nodes: []nodeRule{onNode(checkCaseClause)},
 }
 
 type globToken struct {
@@ -33,9 +33,8 @@ const (
 
 type globPattern []globToken
 
-func checkCaseClause(p *pass, n syntax.Node) {
-	c, ok := n.(*syntax.CaseClause)
-	if !ok || c.Word == nil {
+func checkCaseClause(p *pass, c *syntax.CaseClause) {
+	if c.Word == nil {
 		return
 	}
 	if constantWord(c.Word) {

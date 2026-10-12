@@ -12,9 +12,7 @@ var subshellFamily = family{
 		2030: {severity: SeverityInfo, bug: true, summary: "A variable changed in a subshell loses the change when the subshell exits."},
 		2031: {severity: SeverityInfo, bug: true, summary: "A variable read here still has its value from before a change made in a subshell."},
 	},
-	rules: []rule{
-		{on: nodes(&syntax.ParamExp{}, &syntax.Word{}), node: checkLostModification},
-	},
+	nodes: []nodeRule{onNodes(checkLostModification, &syntax.ParamExp{}, &syntax.Word{})},
 }
 
 func checkLostModification(p *pass, n syntax.Node) {

@@ -12,7 +12,7 @@ var sedSubstitutionFamily = family{
 	codes: map[Code]meta{
 		2001: {severity: SeverityStyle, summary: "sed runs on a single value that a ${var//pattern/replacement} expansion could handle."},
 	},
-	rules: []rule{{on: nodes(&syntax.BinaryCmd{}, &syntax.Stmt{}), node: checkSedSubstitution}},
+	nodes: []nodeRule{onNodes(checkSedSubstitution, &syntax.BinaryCmd{}, &syntax.Stmt{})},
 }
 
 var parameterSubstitutionShells = dialect.SetOf(dialect.Bash, dialect.Ksh)

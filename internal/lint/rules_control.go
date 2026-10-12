@@ -29,15 +29,15 @@ var controlFamily = family{
 		2188: {severity: SeverityWarning, summary: "A redirection stands alone without a command."},
 		2189: {severity: SeverityError, summary: "A pipeline element is only a redirection, with no command to feed."},
 	},
-	rules: []rule{
-		{on: nodes(&syntax.File{}, &syntax.Block{}, &syntax.Subshell{}, &syntax.IfClause{}, &syntax.WhileClause{}, &syntax.ForClause{}, &syntax.RepeatClause{}, &syntax.CaseItem{}, &syntax.CmdSubst{}, &syntax.ProcSubst{}), node: checkStatementLists},
-		{on: nodes(&syntax.CallExpr{}), node: checkLoopJump},
-		{on: nodes(&syntax.CallExpr{}), node: checkUncheckedDirectoryChange},
-		{on: nodes(&syntax.ForClause{}), node: checkReusedLoopVariable},
-		{on: nodes(&syntax.Stmt{}), node: checkEmptyRedirection},
-		{on: nodes(&syntax.WhileClause{}), node: checkStdinConsumers},
-		{finish: checkFunctionArguments},
+	nodes: []nodeRule{
+		onNodes(checkStatementLists, &syntax.File{}, &syntax.Block{}, &syntax.Subshell{}, &syntax.IfClause{}, &syntax.WhileClause{}, &syntax.ForClause{}, &syntax.RepeatClause{}, &syntax.CaseItem{}, &syntax.CmdSubst{}, &syntax.ProcSubst{}),
+		onNode(checkLoopJump),
+		onNode(checkUncheckedDirectoryChange),
+		onNode(checkReusedLoopVariable),
+		onNode(checkEmptyRedirection),
+		onNode(checkStdinConsumers),
 	},
+	finish: []func(*pass){checkFunctionArguments},
 }
 
 func checkStatementLists(p *pass, n syntax.Node) {
@@ -117,11 +117,7 @@ func (p *pass) appendTarget(stmt *syntax.Stmt) (*syntax.Stmt, string) {
 	return nil, ""
 }
 
-func checkLoopJump(p *pass, n syntax.Node) {
-	call, ok := n.(*syntax.CallExpr)
-	if !ok {
-		return
-	}
+func checkLoopJump(p *pass, call *syntax.CallExpr) {
 	command, ok := p.resolved(call)
 	if !ok {
 		return
@@ -221,11 +217,7 @@ func (p *pass) lastPipe() bool {
 
 var safeDirectory = regexp.MustCompile(`^/*((\.|\.\.)/+)*(\.|\.\.)?$`)
 
-func checkUncheckedDirectoryChange(p *pass, n syntax.Node) {
-	call, ok := n.(*syntax.CallExpr)
-	if !ok {
-		return
-	}
+func checkUncheckedDirectoryChange(p *pass, call *syntax.CallExpr) {
 	command, ok := p.resolved(call)
 	if !ok {
 		return
@@ -282,11 +274,7 @@ func loopVariable(f *syntax.ForClause) (string, bool) {
 	return "", false
 }
 
-func checkReusedLoopVariable(p *pass, n syntax.Node) {
-	inner, ok := n.(*syntax.ForClause)
-	if !ok {
-		return
-	}
+func checkReusedLoopVariable(p *pass, inner *syntax.ForClause) {
 	name, ok := loopVariable(inner)
 	if !ok || name == "_" {
 		return
@@ -313,9 +301,8 @@ func checkReusedLoopVariable(p *pass, n syntax.Node) {
 	}
 }
 
-func checkEmptyRedirection(p *pass, n syntax.Node) {
-	stmt, ok := n.(*syntax.Stmt)
-	if !ok || stmt.Cmd != nil || len(stmt.Redirs) == 0 {
+func checkEmptyRedirection(p *pass, stmt *syntax.Stmt) {
+	if stmt.Cmd != nil || len(stmt.Redirs) == 0 {
 		return
 	}
 	span, ok := p.span(stmt.Redirs[0])
@@ -339,9 +326,8 @@ func checkEmptyRedirection(p *pass, n syntax.Node) {
 
 var stdinConsumers = map[string]string{"ssh": " -n", "ffmpeg": " -nostdin", "mplayer": " -noconsolecontrols", "HandBrakeCLI": " < /dev/null"}
 
-func checkStdinConsumers(p *pass, n syntax.Node) {
-	loop, ok := n.(*syntax.WhileClause)
-	if !ok || loop.Until || len(loop.Cond) != 1 || !readsStdin(loop.Cond[0]) {
+func checkStdinConsumers(p *pass, loop *syntax.WhileClause) {
+	if loop.Until || len(loop.Cond) != 1 || !readsStdin(loop.Cond[0]) {
 		return
 	}
 	loopSpan, ok := p.span(loop)

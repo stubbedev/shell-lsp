@@ -16,9 +16,7 @@ var testSyntaxFamily = family{
 		1139: {severity: SeverityError, summary: "-a or -o joins test commands outside [ ], where it is just another word."},
 		1140: {severity: SeverityError, summary: "Words after the closing ] become arguments of the test."},
 	},
-	rules: []rule{
-		{on: nodes(&syntax.CallExpr{}), node: checkTestCommandSyntax},
-	},
+	nodes: []nodeRule{onNode(checkTestCommandSyntax)},
 }
 
 var (
@@ -27,11 +25,7 @@ var (
 	testConjunctions    = []struct{ prefix, replacement string }{{testOr, "||"}, {testAnd, "&&"}, {"or", "||"}, {"and", "&&"}}
 )
 
-func checkTestCommandSyntax(p *pass, n syntax.Node) {
-	call, ok := n.(*syntax.CallExpr)
-	if !ok {
-		return
-	}
+func checkTestCommandSyntax(p *pass, call *syntax.CallExpr) {
 	test, ok := testCommandOf(call)
 	if !ok {
 		return

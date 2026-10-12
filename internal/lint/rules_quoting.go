@@ -21,9 +21,9 @@ var quotingFamily = family{
 		2223: {severity: SeverityInfo, bug: true, summary: "An unquoted ${var:=default} is globbed on every run."},
 		2248: {severity: SeverityStyle, optional: optionalQuoteSafeVariables, summary: "A variable that holds no spaces or globs today is expanded unquoted."},
 	},
-	rules: []rule{
-		{on: nodes(&syntax.ParamExp{}), node: checkUnquotedExpansion},
-		{on: nodes(&syntax.CmdSubst{}), node: checkUnquotedSubstitution},
+	nodes: []nodeRule{
+		onNode(checkUnquotedExpansion),
+		onNode(checkUnquotedSubstitution),
 	},
 }
 
@@ -44,9 +44,8 @@ func (p *pass) soleExpansionQuoteFix(w *syntax.Word, span parser.Span) []Fix {
 	return nil
 }
 
-func checkUnquotedExpansion(p *pass, n syntax.Node) {
-	pe, ok := n.(*syntax.ParamExp)
-	if !ok || pe.Param == nil || !p.dialect.Features().SplitsUnquoted {
+func checkUnquotedExpansion(p *pass, pe *syntax.ParamExp) {
+	if pe.Param == nil || !p.dialect.Features().SplitsUnquoted {
 		return
 	}
 	span, ok := p.span(pe)
@@ -122,9 +121,8 @@ func (p *pass) namesAssignment(pe *syntax.ParamExp) bool {
 	return ok && strings.HasPrefix(lit.Value, "=")
 }
 
-func checkUnquotedSubstitution(p *pass, n syntax.Node) {
-	cs, ok := n.(*syntax.CmdSubst)
-	if !ok || len(cs.Stmts) == 0 {
+func checkUnquotedSubstitution(p *pass, cs *syntax.CmdSubst) {
+	if len(cs.Stmts) == 0 {
 		return
 	}
 	span, ok := p.span(cs)

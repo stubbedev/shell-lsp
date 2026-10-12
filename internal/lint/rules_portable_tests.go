@@ -24,7 +24,7 @@ var portableTestsFamily = family{
 		3066: {shells: posixOnly, summary: "test -G is undefined in POSIX sh."},
 		3067: {shells: posixOnly, summary: "test -O is undefined in POSIX sh."},
 	},
-	rules: []rule{{on: nodes(&syntax.TestClause{}, &syntax.CallExpr{}), node: checkPortableTest}},
+	nodes: []nodeRule{onNodes(checkPortableTest, &syntax.TestClause{}, &syntax.CallExpr{})},
 }
 
 var (

@@ -17,15 +17,15 @@ var misreadsFamily = family{
 		1037: {severity: SeverityError, summary: "$ followed by several digits expands only the first digit as a positional parameter."},
 		1064: {severity: SeverityError, summary: "A function body is not a compound command."},
 	},
-	rules: []rule{
-		{on: nodes(&syntax.Assign{}), node: checkSpaceAfterEquals},
-		{on: nodes(&syntax.Lit{}), node: checkKeywordAsWord},
-		{on: nodes(&syntax.Assign{}), node: checkKeywordDeclared},
-		{on: nodes(&syntax.TestClause{}), node: checkKeywordAfterTest},
-		{on: nodes(&syntax.ParamExp{}), node: checkPositionalAboveNine},
-		{on: nodes(&syntax.FuncDecl{}), node: checkFunctionBody},
-		{finish: checkUnknownInterpreter},
+	nodes: []nodeRule{
+		onNode(checkSpaceAfterEquals),
+		onNode(checkKeywordAsWord),
+		onNode(checkKeywordDeclared),
+		onNode(checkKeywordAfterTest),
+		onNode(checkPositionalAboveNine),
+		onNode(checkFunctionBody),
 	},
+	finish: []func(*pass){checkUnknownInterpreter},
 }
 
 type closingKeyword struct {
@@ -53,9 +53,8 @@ func isCase(n syntax.Node) bool {
 
 var shellPrefixes = []string{"sh", "ash", "dash", "busybox sh", "bash", "bats", "ksh", "oksh", "zsh"}
 
-func checkSpaceAfterEquals(p *pass, n syntax.Node) {
-	as, ok := n.(*syntax.Assign)
-	if !ok || as.Naked || as.Value != nil || as.Array != nil || as.Name == nil || as.Name.Value == "IFS" {
+func checkSpaceAfterEquals(p *pass, as *syntax.Assign) {
+	if as.Naked || as.Value != nil || as.Array != nil || as.Name == nil || as.Name.Value == "IFS" {
 		return
 	}
 	switch p.parent().(type) {
@@ -91,11 +90,7 @@ func checkSpaceAfterEquals(p *pass, n syntax.Node) {
 	p.report(1007, parser.Span{Start: start, End: end}, "The space after "+name+" ends the assignment, so "+as.Name.Value+" is set to empty only for what follows; remove the space to assign the value, or write "+name+"'' if empty is intended.")
 }
 
-func checkKeywordAsWord(p *pass, n syntax.Node) {
-	lit, ok := n.(*syntax.Lit)
-	if !ok {
-		return
-	}
+func checkKeywordAsWord(p *pass, lit *syntax.Lit) {
 	keyword, ok := closingKeywords[lit.Value]
 	if !ok {
 		return
@@ -121,9 +116,8 @@ func checkKeywordAsWord(p *pass, n syntax.Node) {
 	p.reportKeywordAsWord(span, lit.Value, keyword)
 }
 
-func checkKeywordDeclared(p *pass, n syntax.Node) {
-	as, ok := n.(*syntax.Assign)
-	if !ok || !as.Naked || as.Name == nil {
+func checkKeywordDeclared(p *pass, as *syntax.Assign) {
+	if !as.Naked || as.Name == nil {
 		return
 	}
 	keyword, ok := closingKeywords[as.Name.Value]
@@ -135,9 +129,8 @@ func checkKeywordDeclared(p *pass, n syntax.Node) {
 	}
 }
 
-func checkKeywordAfterTest(p *pass, n syntax.Node) {
-	tc, ok := n.(*syntax.TestClause)
-	if !ok || !tc.Right.IsValid() {
+func checkKeywordAfterTest(p *pass, tc *syntax.TestClause) {
+	if !tc.Right.IsValid() {
 		return
 	}
 	start := parser.Offset(tc.Right) + len("]]")
@@ -160,9 +153,8 @@ func (p *pass) reportKeywordAsWord(span parser.Span, word string, keyword closin
 	p.report(1010, span, "Here "+word+" is read as a plain word, not as "+keyword.role+"; put a ; or line break before it, or quote it if it is meant literally.")
 }
 
-func checkPositionalAboveNine(p *pass, n syntax.Node) {
-	pe, ok := n.(*syntax.ParamExp)
-	if !ok || !pe.Short || pe.Param == nil || len(pe.Param.Value) != 1 || !isDigit(pe.Param.Value[0]) {
+func checkPositionalAboveNine(p *pass, pe *syntax.ParamExp) {
+	if !pe.Short || pe.Param == nil || len(pe.Param.Value) != 1 || !isDigit(pe.Param.Value[0]) {
 		return
 	}
 	start, end := parser.Offset(pe.Pos()), parser.Offset(pe.End())
@@ -179,9 +171,8 @@ func checkPositionalAboveNine(p *pass, n syntax.Node) {
 
 func isDigit(c byte) bool { return '0' <= c && c <= '9' }
 
-func checkFunctionBody(p *pass, n syntax.Node) {
-	fn, ok := n.(*syntax.FuncDecl)
-	if !ok || fn.Name == nil || fn.Body == nil || p.dialect == dialect.Zsh || strings.HasSuffix(fn.Name.Value, "{") {
+func checkFunctionBody(p *pass, fn *syntax.FuncDecl) {
+	if fn.Name == nil || fn.Body == nil || p.dialect == dialect.Zsh || strings.HasSuffix(fn.Name.Value, "{") {
 		return
 	}
 	body := fn.Body

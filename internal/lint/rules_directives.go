@@ -23,10 +23,8 @@ var directivesFamily = family{
 		1145: {severity: SeverityError, summary: "external-sources is set to something other than true or false."},
 		1146: {severity: SeverityError, summary: "extended-analysis is set to something other than true or false."},
 	},
-	rules: []rule{
-		{on: nodes(&syntax.CaseClause{}, &syntax.BinaryCmd{}), node: placeDirectivesInGaps},
-		{finish: checkDirectives},
-	},
+	nodes:  []nodeRule{onNodes(placeDirectivesInGaps, &syntax.CaseClause{}, &syntax.BinaryCmd{})},
+	finish: []func(*pass){checkDirectives},
 }
 
 func placeDirectivesInGaps(p *pass, n syntax.Node) {

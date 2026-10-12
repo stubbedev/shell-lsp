@@ -11,12 +11,6 @@ import (
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
-type rule struct {
-	on     []nodeKind
-	node   func(p *pass, n syntax.Node)
-	finish func(p *pass)
-}
-
 type pass struct {
 	tree            *parser.Tree
 	imports         []parser.Import
@@ -31,7 +25,7 @@ type pass struct {
 	untrustedValues *untrustedValues
 	nameReads       *nameReads
 	catalog         map[Code]meta
-	rules           []rule
+	finishers       []func(p *pass)
 	nodeChecks      nodeDispatch
 	commands        commandDispatch
 	settings        fileWide
@@ -63,7 +57,7 @@ func newPass(tree *parser.Tree, imports []parser.Import, opts Options) *pass {
 	firstCommand := firstCommandStart(tree)
 	return &pass{
 		tree: tree, imports: imports, sources: opts.Sources, rcFile: opts.RCFile, text: tree.Text(), dialect: tree.Dialect, bats: tree.Bats(),
-		firstCommand: firstCommand, directives: directives, catalog: catalog, rules: rules, nodeChecks: nodeChecks, commands: commandChecks,
+		firstCommand: firstCommand, directives: directives, catalog: catalog, finishers: finishers, nodeChecks: nodeChecks, commands: commandChecks,
 		settings:   fileWideSettings(directives, firstCommand, opts),
 		stmts:      make([]parser.Span, 0, tree.Statements),
 		variables:  variableUsage{reads: make([]variableRead, 0, len(tree.References))},
@@ -96,10 +90,8 @@ func (p *pass) run() {
 	for _, check := range p.flowChecks {
 		check(result)
 	}
-	for _, r := range p.rules {
-		if r.finish != nil {
-			r.finish(p)
-		}
+	for _, finish := range p.finishers {
+		finish(p)
 	}
 }
 

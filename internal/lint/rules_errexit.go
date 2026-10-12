@@ -17,16 +17,15 @@ var errexitFamily = family{
 		2311: {severity: SeverityInfo, optional: optionalSetESuppressed, summary: "set -e has no effect inside a command substitution that does not inherit it."},
 		2312: {severity: SeverityInfo, optional: optionalMaskedReturns, summary: "A command's exit status is masked by its context."},
 	},
-	rules: []rule{
-		{on: nodes(&syntax.Stmt{}), node: checkNegationUnderErrexit},
-		{on: nodes(&syntax.CallExpr{}), node: checkSuppressedErrexit},
-		{on: nodes(&syntax.ArithmCmd{}, &syntax.TestClause{}, &syntax.ProcSubst{}, &syntax.ArrayExpr{}, &syntax.DblQuoted{}, &syntax.Word{}, &syntax.Redirect{}, &syntax.BinaryCmd{}, &syntax.CallExpr{}, &syntax.DeclClause{}), node: checkMaskedReturns},
+	nodes: []nodeRule{
+		onNode(checkNegationUnderErrexit),
+		onNode(checkSuppressedErrexit),
+		onNodes(checkMaskedReturns, &syntax.ArithmCmd{}, &syntax.TestClause{}, &syntax.ProcSubst{}, &syntax.ArrayExpr{}, &syntax.DblQuoted{}, &syntax.Word{}, &syntax.Redirect{}, &syntax.BinaryCmd{}, &syntax.CallExpr{}, &syntax.DeclClause{}),
 	},
 }
 
-func checkNegationUnderErrexit(p *pass, n syntax.Node) {
-	stmt, ok := n.(*syntax.Stmt)
-	if !ok || !stmt.Negated || !p.statusIgnored(stmt) || p.inCondition(stmt) || !p.options().errexit {
+func checkNegationUnderErrexit(p *pass, stmt *syntax.Stmt) {
+	if !stmt.Negated || !p.statusIgnored(stmt) || p.inCondition(stmt) || !p.options().errexit {
 		return
 	}
 	start := parser.Offset(stmt.Pos())
@@ -102,9 +101,8 @@ func containsNode(list []*syntax.Stmt, n syntax.Node) bool {
 	return ok && slices.Contains(list, stmt)
 }
 
-func checkSuppressedErrexit(p *pass, n syntax.Node) {
-	call, ok := n.(*syntax.CallExpr)
-	if !ok || len(call.Args) == 0 || !p.settings.enabled(optionalSetESuppressed) {
+func checkSuppressedErrexit(p *pass, call *syntax.CallExpr) {
+	if len(call.Args) == 0 || !p.settings.enabled(optionalSetESuppressed) {
 		return
 	}
 	name := call.Args[0]

@@ -12,7 +12,7 @@ var negationFamily = family{
 		2325: {severity: SeverityError, summary: "sh allows only one ! before a pipeline."},
 		2326: {severity: SeverityError, summary: "! cannot negate a single stage after a |."},
 	},
-	rules: []rule{{finish: checkRejectedNegations}},
+	finish: []func(*pass){checkRejectedNegations},
 }
 
 var negatedStageShells = dialect.SetOf(dialect.Bash, dialect.Posix, dialect.Dash, dialect.Busybox)

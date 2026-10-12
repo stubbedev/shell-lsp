@@ -15,7 +15,7 @@ var arraysFamily = family{
 		2178: {severity: SeverityWarning, summary: "Assigning a plain string to an array only replaces its first element."},
 		2179: {severity: SeverityWarning, summary: "Appending a string to an array changes its first element instead of adding one."},
 	},
-	rules: []rule{{finish: checkArrayUse}},
+	finish: []func(*pass){checkArrayUse},
 }
 
 var shellArrays = []string{

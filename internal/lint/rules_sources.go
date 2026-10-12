@@ -18,9 +18,7 @@ var sourcesFamily = family{
 		1091: {severity: SeverityInfo, summary: "A sourced file was not found, so it is not followed."},
 		1094: {severity: SeverityWarning, summary: "A sourced file has syntax errors, so what it defines may be missing."},
 	},
-	rules: []rule{
-		{finish: checkSources},
-	},
+	finish: []func(*pass){checkSources},
 }
 
 func checkSources(p *pass) {

@@ -21,10 +21,10 @@ var escapesFamily = family{
 		1011:              {severity: SeverityWarning, summary: "An apostrophe inside single quotes closes the string, leaving the rest outside the quotes."},
 		1012:              {severity: SeverityWarning, summary: "An escape like \\n or \\t outside quotes is just the letter, not a control character."},
 	},
-	rules: []rule{
-		{on: nodes(&syntax.Lit{}), node: checkUnquotedEscapes},
-		{on: nodes(&syntax.SglQuoted{}), node: checkSingleQuoteEnding},
-		{on: nodes(&syntax.SglQuoted{}), node: checkTruncatingNul},
+	nodes: []nodeRule{
+		onNode(checkUnquotedEscapes),
+		onNode(checkSingleQuoteEnding),
+		onNode(checkTruncatingNul),
 	},
 }
 
@@ -36,11 +36,7 @@ var controlEscapes = map[rune]string{
 	'r': "`\\r` outside quotes is just the letter r; to embed a carriage return, use \"$(printf '\\r')\".",
 }
 
-func checkUnquotedEscapes(p *pass, n syntax.Node) {
-	lit, ok := n.(*syntax.Lit)
-	if !ok {
-		return
-	}
+func checkUnquotedEscapes(p *pass, lit *syntax.Lit) {
 	word, ok := p.enclosingShellWord()
 	if !ok {
 		return
@@ -79,9 +75,8 @@ func isAliasEscaped(r rune) bool {
 	return 'a' <= r && r <= 'z' || 'A' <= r && r <= 'Z' || '0' <= r && r <= '9' || r == '_' || r == ':' || r == '.'
 }
 
-func checkSingleQuoteEnding(p *pass, n syntax.Node) {
-	sq, ok := n.(*syntax.SglQuoted)
-	if !ok || sq.Dollar || !sq.Right.IsValid() {
+func checkSingleQuoteEnding(p *pass, sq *syntax.SglQuoted) {
+	if sq.Dollar || !sq.Right.IsValid() {
 		return
 	}
 	closing := parser.Offset(sq.Right)
@@ -107,9 +102,8 @@ func endsInEscapingBackslash(value string) bool {
 	return trailing%2 == 1 && trailing < len(value)
 }
 
-func checkTruncatingNul(p *pass, n syntax.Node) {
-	sq, ok := n.(*syntax.SglQuoted)
-	if !ok || !sq.Dollar || p.dialect == dialect.Zsh {
+func checkTruncatingNul(p *pass, sq *syntax.SglQuoted) {
+	if !sq.Dollar || p.dialect == dialect.Zsh {
 		return
 	}
 	start, end, found := parser.ANSICNul(sq.Value)

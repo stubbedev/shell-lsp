@@ -20,11 +20,11 @@ var argumentsFamily = family{
 		2162: {severity: SeverityInfo, bug: true, summary: "read without -r treats backslashes as escapes and drops them."},
 		2336: {severity: SeverityWarning, summary: "cp -r is implementation-defined for special files."},
 	},
-	rules: []rule{
-		{on: nodes(&syntax.CallExpr{}), node: checkLeadingGlobArguments},
-		{on: nodes(&syntax.Word{}), node: checkBracketGlobs},
-		{on: nodes(&syntax.CallExpr{}), node: checkReadWithoutRaw},
-		{on: nodes(&syntax.CallExpr{}), node: checkRecursiveCopy},
+	nodes: []nodeRule{
+		onNode(checkLeadingGlobArguments),
+		onNode(checkBracketGlobs),
+		onNode(checkReadWithoutRaw),
+		onNode(checkRecursiveCopy),
 	},
 }
 
@@ -51,11 +51,7 @@ func previousArgument(call *syntax.CallExpr, w *syntax.Word) (*syntax.Word, bool
 	return call.Args[i-1], true
 }
 
-func checkLeadingGlobArguments(p *pass, n syntax.Node) {
-	call, ok := n.(*syntax.CallExpr)
-	if !ok {
-		return
-	}
+func checkLeadingGlobArguments(p *pass, call *syntax.CallExpr) {
 	command, ok := p.resolved(call)
 	if !ok || command.name == "[" || outputCommands[path.Base(command.name)] {
 		return
@@ -75,9 +71,8 @@ func checkLeadingGlobArguments(p *pass, n syntax.Node) {
 	}
 }
 
-func checkBracketGlobs(p *pass, n syntax.Node) {
-	w, ok := n.(*syntax.Word)
-	if !ok || !p.expandsGlobs(w) {
+func checkBracketGlobs(p *pass, w *syntax.Word) {
+	if !p.expandsGlobs(w) {
 		return
 	}
 	for _, part := range w.Parts[:parser.GlobQualifiers(w, true)] {
@@ -190,11 +185,7 @@ func (p *pass) expandsGlobs(w *syntax.Word) bool {
 	return true
 }
 
-func checkReadWithoutRaw(p *pass, n syntax.Node) {
-	call, ok := n.(*syntax.CallExpr)
-	if !ok {
-		return
-	}
+func checkReadWithoutRaw(p *pass, call *syntax.CallExpr) {
 	command, ok := p.resolved(call)
 	if !ok || command.name != "read" {
 		return
@@ -253,11 +244,7 @@ func pollsInput(args []*syntax.Word) bool {
 	return polls
 }
 
-func checkRecursiveCopy(p *pass, n syntax.Node) {
-	call, ok := n.(*syntax.CallExpr)
-	if !ok {
-		return
-	}
+func checkRecursiveCopy(p *pass, call *syntax.CallExpr) {
 	command, ok := p.resolved(call)
 	if !ok || command.name != "cp" {
 		return

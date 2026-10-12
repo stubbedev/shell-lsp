@@ -11,18 +11,12 @@ var downloadFamily = family{
 	codes: map[Code]meta{
 		codeDownloadedScript: {severity: SeverityWarning},
 	},
-	rules: []rule{
-		{on: nodes(&syntax.CallExpr{}), node: checkDownloadedScript},
-	},
+	nodes: []nodeRule{onNode(checkDownloadedScript)},
 }
 
 const stdinPath = "/dev/stdin"
 
-func checkDownloadedScript(p *pass, n syntax.Node) {
-	call, ok := n.(*syntax.CallExpr)
-	if !ok {
-		return
-	}
+func checkDownloadedScript(p *pass, call *syntax.CallExpr) {
 	command, ok := p.runs(call.Args)
 	if !ok {
 		return

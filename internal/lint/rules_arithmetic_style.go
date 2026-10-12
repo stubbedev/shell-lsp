@@ -14,18 +14,17 @@ var arithmeticStyleFamily = family{
 		2007: {severity: SeverityStyle, tag: TagDeprecated, summary: "$[ ] is an obsolete arithmetic form."},
 		2080: {severity: SeverityError, summary: "A leading 0 makes a number octal, where 8 and 9 are not valid digits."},
 	},
-	rules: []rule{
-		{on: nodes(&syntax.ParamExp{}), node: checkArithmeticDollar},
-		{on: nodes(&syntax.ArithmExp{}), node: checkBracketArithmetic},
-		{on: nodes(&syntax.Word{}), node: checkOctalLiteral},
+	nodes: []nodeRule{
+		onNode(checkArithmeticDollar),
+		onNode(checkBracketArithmetic),
+		onNode(checkOctalLiteral),
 	},
 }
 
 const dollarExemptChars = "/.:#%?*@$-!+=^,"
 
-func checkArithmeticDollar(p *pass, n syntax.Node) {
-	pe, ok := n.(*syntax.ParamExp)
-	if !ok || !pe.Dollar.IsValid() {
+func checkArithmeticDollar(p *pass, pe *syntax.ParamExp) {
+	if !pe.Dollar.IsValid() {
 		return
 	}
 	word, ok := p.parent().(*syntax.Word)
@@ -65,9 +64,8 @@ func (p *pass) inArithmeticContext() bool {
 	}
 }
 
-func checkBracketArithmetic(p *pass, n syntax.Node) {
-	exp, ok := n.(*syntax.ArithmExp)
-	if !ok || !exp.Bracket {
+func checkBracketArithmetic(p *pass, exp *syntax.ArithmExp) {
+	if !exp.Bracket {
 		return
 	}
 	span, ok := p.span(exp)
@@ -81,9 +79,8 @@ func checkBracketArithmetic(p *pass, n syntax.Node) {
 	p.report(2007, span, "$[ ] is an obsolete arithmetic form; use $(( )) instead.", fixes...)
 }
 
-func checkOctalLiteral(p *pass, n syntax.Node) {
-	word, ok := n.(*syntax.Word)
-	if !ok || !parser.IsArithmetic(p.parent()) {
+func checkOctalLiteral(p *pass, word *syntax.Word) {
+	if !parser.IsArithmetic(p.parent()) {
 		return
 	}
 	lit := word.Lit()

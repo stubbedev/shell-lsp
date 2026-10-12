@@ -12,9 +12,7 @@ var taintFamily = family{
 		2089: {severity: SeverityWarning, summary: "Quotes or backslashes stored in a value do not group words when it is expanded."},
 		2090: {severity: SeverityWarning, summary: "Quotes or backslashes stored in a variable are passed on literally when it is expanded."},
 	},
-	rules: []rule{
-		{on: nodes(&syntax.Assign{}, &syntax.WordIter{}, &syntax.ParamExp{}), node: trackQuoteTaint},
-	},
+	nodes: []nodeRule{onNodes(trackQuoteTaint, &syntax.Assign{}, &syntax.WordIter{}, &syntax.ParamExp{})},
 }
 
 func trackQuoteTaint(p *pass, n syntax.Node) {

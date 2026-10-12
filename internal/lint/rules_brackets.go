@@ -19,10 +19,10 @@ var bracketsFamily = family{
 		1034: {severity: SeverityError, summary: "A test opens with a single [ but closes with ]]."},
 		1035: {severity: SeverityError, summary: "A test bracket needs a space between it and the next word."},
 	},
-	rules: []rule{
-		{on: nodes(&syntax.CallExpr{}), node: checkSingleBracketTest},
-		{on: nodes(&syntax.TestClause{}), node: checkDoubleBracketTest},
-		{on: nodes(&syntax.CallExpr{}), node: checkGluedNegation},
+	nodes: []nodeRule{
+		onNode(checkSingleBracketTest),
+		onNode(checkDoubleBracketTest),
+		onNode(checkGluedNegation),
 	},
 }
 
@@ -58,9 +58,8 @@ type bracketTest struct {
 	close int
 }
 
-func checkSingleBracketTest(p *pass, n syntax.Node) {
-	call, ok := n.(*syntax.CallExpr)
-	if !ok || len(call.Args) == 0 {
+func checkSingleBracketTest(p *pass, call *syntax.CallExpr) {
+	if len(call.Args) == 0 {
 		return
 	}
 	if first, ok := p.span(call.Args[0]); !ok || !strings.HasPrefix(p.text[first.Start:], "[") {
@@ -273,11 +272,7 @@ func isTestGroupClose(text string) bool {
 	return text == `\)` || text == `')'` || text == `")"`
 }
 
-func checkDoubleBracketTest(p *pass, n syntax.Node) {
-	tc, ok := n.(*syntax.TestClause)
-	if !ok {
-		return
-	}
+func checkDoubleBracketTest(p *pass, tc *syntax.TestClause) {
 	if w := leftmostTestWord(tc.X); w != nil {
 		if name, ok := parser.Literal(w); ok && namesUtility(name) && w.Lit() == name {
 			if span, ok := p.span(w); ok {
@@ -324,9 +319,8 @@ func (p *pass) gluedTestTerm(w *syntax.Word) {
 	p.report(1035, parser.Span{Start: at, End: at}, "Put a space after "+after+"; the test reads it as glued to the next word.")
 }
 
-func checkGluedNegation(p *pass, n syntax.Node) {
-	call, ok := n.(*syntax.CallExpr)
-	if !ok || len(call.Args) == 0 {
+func checkGluedNegation(p *pass, call *syntax.CallExpr) {
+	if len(call.Args) == 0 {
 		return
 	}
 	span, ok := p.span(call.Args[0])

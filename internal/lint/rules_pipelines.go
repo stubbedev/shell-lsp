@@ -23,7 +23,7 @@ var pipelinesFamily = family{
 		2038: {severity: SeverityWarning, summary: "Piping find output to xargs breaks on file names with spaces or newlines."},
 		2126: {severity: SeverityStyle, summary: "grep piped to wc -l counts matching lines that grep -c counts directly."},
 	},
-	rules: []rule{{on: nodes(&syntax.Stmt{}), node: checkPipeline}, {on: nodes(&syntax.BinaryCmd{}), node: checkAndOrFallback}},
+	nodes: []nodeRule{onNode(checkPipeline), onNode(checkAndOrFallback)},
 }
 
 type stage struct {
@@ -48,13 +48,9 @@ func stagesOf(stmts []*syntax.Stmt) []stage {
 
 func (s stage) args() []*syntax.Word { return s.call.Args[1:] }
 
-func (p *pass) pipelineTop(n syntax.Node) (*syntax.Stmt, bool) {
-	stmt, ok := n.(*syntax.Stmt)
-	if !ok {
-		return nil, false
-	}
+func (p *pass) topsPipeline() bool {
 	bin, ok := p.parent().(*syntax.BinaryCmd)
-	return stmt, !ok || !pipes(bin.Op)
+	return !ok || !pipes(bin.Op)
 }
 
 func isPipe(stmt *syntax.Stmt) bool {
@@ -62,9 +58,8 @@ func isPipe(stmt *syntax.Stmt) bool {
 	return ok && pipes(bin.Op)
 }
 
-func checkPipeline(p *pass, n syntax.Node) {
-	top, ok := p.pipelineTop(n)
-	if !ok || !isPipe(top) {
+func checkPipeline(p *pass, top *syntax.Stmt) {
+	if !p.topsPipeline() || !isPipe(top) {
 		return
 	}
 	stmts := pipelineStages(top, nil)
@@ -223,9 +218,8 @@ func (p *pass) checkAssignmentStage(first stage) {
 	}
 }
 
-func checkAndOrFallback(p *pass, n syntax.Node) {
-	or, ok := n.(*syntax.BinaryCmd)
-	if !ok || or.Op != syntax.OrStmt {
+func checkAndOrFallback(p *pass, or *syntax.BinaryCmd) {
+	if or.Op != syntax.OrStmt {
 		return
 	}
 	and, ok := or.X.Cmd.(*syntax.BinaryCmd)

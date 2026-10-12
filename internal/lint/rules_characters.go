@@ -29,17 +29,17 @@ var charactersFamily = family{
 		1135: {severity: SeverityStyle, summary: "Closing quotes right after $ only to keep it literal is confusing."},
 		1143: {severity: SeverityError, summary: "A commented-out line ends a continued command, so the lines below run separately."},
 	},
-	rules: []rule{
-		{on: nodes(&syntax.Lit{}), node: checkUnicodeSpaces},
-		{finish: checkCarriageReturns},
-		{on: nodes(&syntax.Lit{}, &syntax.SglQuoted{}), node: checkLiteralCharacters},
-		{on: nodes(&syntax.DblQuoted{}, &syntax.SglQuoted{}, &syntax.CmdSubst{}), node: checkSuspiciousClosingQuote},
-		{on: nodes(&syntax.Word{}), node: checkLiteralBraces},
-		{on: nodes(&syntax.ParamExp{}), node: checkUnbracedSubscript},
-		{on: nodes(&syntax.Stmt{}), node: checkBackgroundAmpersand},
-		{on: nodes(&syntax.DblQuoted{}), node: checkQuotedDollar},
-		{on: nodes(&syntax.CallExpr{}), node: checkCommentedContinuation},
+	nodes: []nodeRule{
+		onNode(checkUnicodeSpaces),
+		onNodes(checkLiteralCharacters, &syntax.Lit{}, &syntax.SglQuoted{}),
+		onNodes(checkSuspiciousClosingQuote, &syntax.DblQuoted{}, &syntax.SglQuoted{}, &syntax.CmdSubst{}),
+		onNode(checkLiteralBraces),
+		onNode(checkUnbracedSubscript),
+		onNode(checkBackgroundAmpersand),
+		onNode(checkQuotedDollar),
+		onNode(checkCommentedContinuation),
 	},
+	finish: []func(*pass){checkCarriageReturns},
 }
 
 const noBreakSpace = ' '
@@ -48,11 +48,7 @@ func isUnicodeSpace(r rune) bool {
 	return r == noBreakSpace || ' ' <= r && r <= ' ' || r == '​' || r == ' '
 }
 
-func checkUnicodeSpaces(p *pass, n syntax.Node) {
-	lit, ok := n.(*syntax.Lit)
-	if !ok {
-		return
-	}
+func checkUnicodeSpaces(p *pass, lit *syntax.Lit) {
 	word, ok := p.enclosingShellWord()
 	if !ok {
 		return
@@ -266,9 +262,8 @@ func checkSuspiciousClosingQuote(p *pass, n syntax.Node) {
 	p.report(1079, parser.Span{Start: span.End - 1, End: span.End}, "This looks like it was meant to open a new quote, but it closes the multi-line one that started earlier.")
 }
 
-func checkLiteralBraces(p *pass, n syntax.Node) {
-	w, ok := n.(*syntax.Word)
-	if !ok || p.dialect == dialect.Zsh {
+func checkLiteralBraces(p *pass, w *syntax.Word) {
+	if p.dialect == dialect.Zsh {
 		return
 	}
 	switch p.parent().(type) {
@@ -375,9 +370,8 @@ func isBraceExpansion(inner []byte) bool {
 	return ok && from != "" && to != ""
 }
 
-func checkUnbracedSubscript(p *pass, n syntax.Node) {
-	pe, ok := n.(*syntax.ParamExp)
-	if !ok || !pe.Short || pe.Param == nil || !parser.IsName(pe.Param.Value) || p.dialect == dialect.Zsh {
+func checkUnbracedSubscript(p *pass, pe *syntax.ParamExp) {
+	if !pe.Short || pe.Param == nil || !parser.IsName(pe.Param.Value) || p.dialect == dialect.Zsh {
 		return
 	}
 	next, ok := nextPart(p.parent(), pe)
@@ -413,9 +407,8 @@ func nextPart(parent syntax.Node, part syntax.WordPart) (syntax.WordPart, bool) 
 	return nil, false
 }
 
-func checkBackgroundAmpersand(p *pass, n syntax.Node) {
-	stmt, ok := n.(*syntax.Stmt)
-	if !ok || !stmt.Background || !stmt.Semicolon.IsValid() {
+func checkBackgroundAmpersand(p *pass, stmt *syntax.Stmt) {
+	if !stmt.Background || !stmt.Semicolon.IsValid() {
 		return
 	}
 	at := parser.Offset(stmt.Semicolon)
@@ -431,9 +424,8 @@ func checkBackgroundAmpersand(p *pass, n syntax.Node) {
 	}
 }
 
-func checkQuotedDollar(p *pass, n syntax.Node) {
-	dq, ok := n.(*syntax.DblQuoted)
-	if !ok || dq.Dollar || len(dq.Parts) == 0 {
+func checkQuotedDollar(p *pass, dq *syntax.DblQuoted) {
+	if dq.Dollar || len(dq.Parts) == 0 {
 		return
 	}
 	last, ok := dq.Parts[len(dq.Parts)-1].(*syntax.Lit)
@@ -463,11 +455,7 @@ func startsParameter(part syntax.WordPart) bool {
 	return parser.IsNameChar(c) || strings.IndexByte("@#?!-", c) >= 0
 }
 
-func checkCommentedContinuation(p *pass, n syntax.Node) {
-	call, ok := n.(*syntax.CallExpr)
-	if !ok {
-		return
-	}
+func checkCommentedContinuation(p *pass, call *syntax.CallExpr) {
 	for i, arg := range call.Args {
 		span, ok := p.span(arg)
 		if !ok {

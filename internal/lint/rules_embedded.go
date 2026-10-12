@@ -19,14 +19,10 @@ var embeddedFamily = family{
 		}
 		return out
 	}(),
-	rules: []rule{{on: nodes(&syntax.Stmt{}), node: checkEmbeddedPrograms}},
+	nodes: []nodeRule{onNode(checkEmbeddedPrograms)},
 }
 
-func checkEmbeddedPrograms(p *pass, n syntax.Node) {
-	stmt, ok := n.(*syntax.Stmt)
-	if !ok {
-		return
-	}
+func checkEmbeddedPrograms(p *pass, stmt *syntax.Stmt) {
 	for _, program := range embedded.In(p.tree, stmt) {
 		for _, e := range program.Result.Errors {
 			p.report(embeddedSyntaxCodes[program.Language], program.Span(e.Start, e.End), program.Language.String()+": "+e.Message)

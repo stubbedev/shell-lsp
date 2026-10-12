@@ -24,10 +24,11 @@ var parameterSyntaxFamily = family{
 		2300:                {severity: SeverityError, summary: "Parameter expansion cannot operate on a command substitution."},
 		2301:                {severity: SeverityError, summary: "A parameter expansion starts with quotes or other unexpected syntax."},
 	},
-	rules: []rule{
-		{on: nodes(&syntax.ParamExp{}, &syntax.Lit{}), node: checkBracedExpansion, finish: checkUnparsedBracedExpansions},
-		{on: nodes(&syntax.ParamExp{}), node: checkUnbracedVariable},
+	nodes: []nodeRule{
+		onNodes(checkBracedExpansion, &syntax.ParamExp{}, &syntax.Lit{}),
+		onNode(checkUnbracedVariable),
 	},
+	finish: []func(*pass){checkUnparsedBracedExpansions},
 }
 
 const specialParameterChars = "*@#?-$!"
@@ -176,9 +177,8 @@ func isIndirection(text string, body []bracePart) bool {
 	return expansions > 0
 }
 
-func checkUnbracedVariable(p *pass, n syntax.Node) {
-	pe, ok := n.(*syntax.ParamExp)
-	if !ok || !p.active(2250) || !pe.Short || !pe.Dollar.IsValid() || pe.Param == nil || !parser.IsName(pe.Param.Value) || p.namesAssignment(pe) {
+func checkUnbracedVariable(p *pass, pe *syntax.ParamExp) {
+	if !p.active(2250) || !pe.Short || !pe.Dollar.IsValid() || pe.Param == nil || !parser.IsName(pe.Param.Value) || p.namesAssignment(pe) {
 		return
 	}
 	span, ok := p.span(pe)

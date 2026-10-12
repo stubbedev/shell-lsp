@@ -32,7 +32,7 @@ var portableBuiltinsFamily = family{
 		3051: {shells: posixOrDash, summary: "source is undefined in POSIX sh and dash, also when the file it loads is followed."},
 		3061: {shells: strictShells, summary: "read without a variable name is undefined in POSIX sh."},
 	},
-	rules: []rule{{on: nodes(&syntax.CallExpr{}, &syntax.DeclClause{}, &syntax.LetClause{}), node: checkPortableBuiltin}},
+	nodes: []nodeRule{onNodes(checkPortableBuiltin, &syntax.CallExpr{}, &syntax.DeclClause{}, &syntax.LetClause{})},
 }
 
 var (

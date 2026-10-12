@@ -9,7 +9,8 @@ import (
 
 type family struct {
 	codes    map[Code]meta
-	rules    []rule
+	nodes    []nodeRule
+	finish   []func(p *pass)
 	commands []commandRule
 }
 
@@ -85,6 +86,25 @@ var families = []family{
 
 type nodeDispatch [][]func(p *pass, n syntax.Node)
 
+type nodeRule struct {
+	on    []nodeKind
+	check func(p *pass, n syntax.Node)
+}
+
+func onNode[T syntax.Node](check func(p *pass, n T)) nodeRule {
+	return nodeRule{on: nodes(*new(T)), check: func(p *pass, n syntax.Node) {
+		typed, ok := n.(T)
+		if !ok {
+			panic(fmt.Sprintf("lint: a %T node was dispatched to a rule for %T", n, *new(T)))
+		}
+		check(p, typed)
+	}}
+}
+
+func onNodes(check func(p *pass, n syntax.Node), first syntax.Node, rest ...syntax.Node) nodeRule {
+	return nodeRule{on: nodes(append([]syntax.Node{first}, rest...)...), check: check}
+}
+
 func nodes(prototypes ...syntax.Node) []nodeKind {
 	out := make([]nodeKind, len(prototypes))
 	for i, prototype := range prototypes {
@@ -96,7 +116,7 @@ func nodes(prototypes ...syntax.Node) []nodeKind {
 	return out
 }
 
-var catalog, rules, nodeChecks, commandChecks = assemble(families)
+var catalog, finishers, nodeChecks, commandChecks = assemble(families)
 
 func registered(code Code, m meta) meta {
 	switch {
@@ -114,9 +134,9 @@ func registered(code Code, m meta) meta {
 	return m
 }
 
-func assemble(fs []family) (map[Code]meta, []rule, nodeDispatch, commandDispatch) {
+func assemble(fs []family) (map[Code]meta, []func(p *pass), nodeDispatch, commandDispatch) {
 	codes := map[Code]meta{}
-	var all []rule
+	var finish []func(p *pass)
 	dispatch := make(nodeDispatch, nodeKinds)
 	var commands []commandRule
 	for _, f := range fs {
@@ -128,19 +148,13 @@ func assemble(fs []family) (map[Code]meta, []rule, nodeDispatch, commandDispatch
 		for code, m := range f.codes {
 			codes[code] = registered(code, m)
 		}
-		all = append(all, f.rules...)
+		for _, r := range f.nodes {
+			for _, kind := range r.on {
+				dispatch[kind] = append(dispatch[kind], r.check)
+			}
+		}
+		finish = append(finish, f.finish...)
 		commands = append(commands, f.commands...)
 	}
-	for _, r := range all {
-		if r.node == nil {
-			continue
-		}
-		if len(r.on) == 0 {
-			panic("lint: a node rule must declare the node types it handles")
-		}
-		for _, t := range r.on {
-			dispatch[t] = append(dispatch[t], r.node)
-		}
-	}
-	return codes, all, dispatch, newCommandDispatch(commands)
+	return codes, finish, dispatch, newCommandDispatch(commands)
 }

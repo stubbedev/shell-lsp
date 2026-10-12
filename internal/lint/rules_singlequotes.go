@@ -16,7 +16,7 @@ var singleQuotesFamily = family{
 	codes: map[Code]meta{
 		2016: {severity: SeverityInfo, summary: "Single quotes keep $ and backticks literal, so nothing in them is expanded."},
 	},
-	rules: []rule{{on: nodes(&syntax.SglQuoted{}), node: checkSingleQuotedExpansion}},
+	nodes: []nodeRule{onNode(checkSingleQuotedExpansion)},
 }
 
 var (
@@ -37,9 +37,8 @@ var (
 
 const evaluatingFlag = 'e'
 
-func checkSingleQuotedExpansion(p *pass, n syntax.Node) {
-	sq, ok := n.(*syntax.SglQuoted)
-	if !ok || sq.Dollar || !expansionSyntax.MatchString(sq.Value) || p.quotesPromptOrVariableName() || p.evaluatedByExpansion() {
+func checkSingleQuotedExpansion(p *pass, sq *syntax.SglQuoted) {
+	if sq.Dollar || !expansionSyntax.MatchString(sq.Value) || p.quotesPromptOrVariableName() || p.evaluatedByExpansion() {
 		return
 	}
 	name := p.quotingCommand()

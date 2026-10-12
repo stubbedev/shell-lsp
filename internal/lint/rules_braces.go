@@ -16,7 +16,7 @@ var bracesFamily = family{
 		2175: {severity: SeverityStyle, summary: "A brace range given to eval unquoted is expanded before the variable is substituted."},
 		3009: {shells: strictShells, summary: "Brace expansion is undefined in POSIX sh."},
 	},
-	rules: []rule{{on: nodes(&syntax.Word{}), node: checkBraceExpansions}},
+	nodes: []nodeRule{onNode(checkBraceExpansions)},
 }
 
 const (
@@ -40,9 +40,8 @@ func (g braceGroup) rangesOverExpansion() bool {
 	})
 }
 
-func checkBraceExpansions(p *pass, n syntax.Node) {
-	w, ok := n.(*syntax.Word)
-	if !ok || (p.dialect != dialect.Bash && !strictShells.Has(p.dialect)) || !hasBraceCandidate(w) || !p.parsesGlobs(w) {
+func checkBraceExpansions(p *pass, w *syntax.Word) {
+	if (p.dialect != dialect.Bash && !strictShells.Has(p.dialect)) || !hasBraceCandidate(w) || !p.parsesGlobs(w) {
 		return
 	}
 	for _, g := range braceGroups(w) {

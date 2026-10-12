@@ -21,16 +21,15 @@ var assignmentsFamily = family{
 		2191: {severity: SeverityWarning, summary: "An = in an array element is literal text rather than part of [index]=value."},
 		2192: {severity: SeverityWarning, summary: "An array element has an index but no value."},
 	},
-	rules: []rule{
-		{on: nodes(&syntax.ParamExp{}), node: checkPrefixAssignmentUse},
-		{on: nodes(&syntax.Assign{}), node: checkSpecialAssignment},
-		{on: nodes(&syntax.Assign{}), node: checkArrayLiteral},
+	nodes: []nodeRule{
+		onNode(checkPrefixAssignmentUse),
+		onNode(checkSpecialAssignment),
+		onNode(checkArrayLiteral),
 	},
 }
 
-func checkPrefixAssignmentUse(p *pass, n syntax.Node) {
-	pe, ok := n.(*syntax.ParamExp)
-	if !ok || pe.Param == nil || pe.Names != 0 {
+func checkPrefixAssignmentUse(p *pass, pe *syntax.ParamExp) {
+	if pe.Param == nil || pe.Names != 0 {
 		return
 	}
 	call := p.enclosingCommand()
@@ -64,9 +63,8 @@ func (p *pass) enclosingCommand() *syntax.CallExpr {
 	return nil
 }
 
-func checkSpecialAssignment(p *pass, n syntax.Node) {
-	a, ok := n.(*syntax.Assign)
-	if !ok || a.Name == nil || a.Index != nil || a.Append || a.Naked {
+func checkSpecialAssignment(p *pass, a *syntax.Assign) {
+	if a.Name == nil || a.Index != nil || a.Append || a.Naked {
 		return
 	}
 	switch a.Name.Value {
@@ -175,9 +173,8 @@ func (p *pass) checkFieldSeparator(a *syntax.Assign) {
 	}
 }
 
-func checkArrayLiteral(p *pass, n syntax.Node) {
-	a, ok := n.(*syntax.Assign)
-	if !ok || a.Array == nil || a.Index != nil || a.Name == nil {
+func checkArrayLiteral(p *pass, a *syntax.Assign) {
+	if a.Array == nil || a.Index != nil || a.Name == nil {
 		return
 	}
 	associative := p.associativeArray(a.Name.Value) && !p.dialect.Features().AssociativePairs

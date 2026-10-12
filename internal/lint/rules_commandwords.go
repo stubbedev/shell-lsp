@@ -35,9 +35,9 @@ var commandWordFamily = family{
 		2288: {severity: SeverityWarning, summary: "A command name ends in a character that suggests a stray character or a missing space."},
 		2289: {severity: SeverityError, summary: "A command name contains a tab or a line break."},
 	},
-	rules: []rule{
-		{on: nodes(&syntax.CallExpr{}), node: checkCommandWords},
-		{on: nodes(&syntax.CallExpr{}), node: checkSelfAssignment},
+	nodes: []nodeRule{
+		onNode(checkCommandWords),
+		onNode(checkSelfAssignment),
 	},
 }
 
@@ -47,11 +47,7 @@ const (
 	borderEquals      = 4
 )
 
-func checkCommandWords(p *pass, n syntax.Node) {
-	call, ok := n.(*syntax.CallExpr)
-	if !ok {
-		return
-	}
+func checkCommandWords(p *pass, call *syntax.CallExpr) {
 	p.checkEqualsAssignment(call)
 	if len(call.Args) == 0 || p.continuesBracketTest(call) {
 		return
@@ -402,9 +398,8 @@ func (p *pass) checkSpacedAssignment(call *syntax.CallExpr) {
 	}
 }
 
-func checkSelfAssignment(p *pass, n syntax.Node) {
-	call, ok := n.(*syntax.CallExpr)
-	if !ok || len(call.Args) > 0 {
+func checkSelfAssignment(p *pass, call *syntax.CallExpr) {
+	if len(call.Args) > 0 {
 		return
 	}
 	for _, a := range call.Assigns {

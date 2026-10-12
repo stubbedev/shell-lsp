@@ -17,18 +17,17 @@ var assignmentMistakesFamily = family{
 		2145: {severity: SeverityError, summary: "Joining text with an array attaches the text only to its first and last elements."},
 		2209: {severity: SeverityWarning, summary: "A command name is assigned as a string instead of its output."},
 	},
-	rules: []rule{
-		{on: nodes(&syntax.CallExpr{}), node: checkAssignmentCommand},
-		{on: nodes(&syntax.Assign{}), node: checkAssignedValue},
-		{on: nodes(&syntax.Word{}), node: checkMixedArrayArgument},
+	nodes: []nodeRule{
+		onNode(checkAssignmentCommand),
+		onNode(checkAssignedValue),
+		onNode(checkMixedArrayArgument),
 	},
 }
 
 var arithmeticWords = setOf("+", "-", "*", "/")
 
-func checkAssignmentCommand(p *pass, n syntax.Node) {
-	call, ok := n.(*syntax.CallExpr)
-	if !ok || len(call.Assigns) != 1 {
+func checkAssignmentCommand(p *pass, call *syntax.CallExpr) {
+	if len(call.Assigns) != 1 {
 		return
 	}
 	span, ok := p.span(call)
@@ -84,9 +83,8 @@ func (p *pass) checkStringArithmetic(assign *syntax.Assign) {
 	p.report(2100, span, "This assigns the literal string "+lit.Value+"; use $(( "+lit.Value+" )) to compute it.")
 }
 
-func checkAssignedValue(p *pass, n syntax.Node) {
-	assign, ok := n.(*syntax.Assign)
-	if !ok || assign.Naked || assign.Value == nil || assign.Array != nil {
+func checkAssignedValue(p *pass, assign *syntax.Assign) {
+	if assign.Naked || assign.Value == nil || assign.Array != nil {
 		return
 	}
 	span, ok := p.span(assign.Value)
@@ -104,9 +102,8 @@ func checkAssignedValue(p *pass, n syntax.Node) {
 	}
 }
 
-func checkMixedArrayArgument(p *pass, n syntax.Node) {
-	w, ok := n.(*syntax.Word)
-	if !ok || !p.isArgumentWord(w) {
+func checkMixedArrayArgument(p *pass, w *syntax.Word) {
+	if !p.isArgumentWord(w) {
 		return
 	}
 	parts := 0

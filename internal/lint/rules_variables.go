@@ -16,7 +16,8 @@ var variablesFamily = family{
 		2153: {severity: SeverityInfo, bug: true, summary: "A variable is never assigned, but one with a similar name is."},
 		2154: {severity: SeverityWarning, summary: "A variable is read but never assigned in this script."},
 	},
-	rules: []rule{{on: nodes(&syntax.ParamExp{}, &syntax.Word{}, &syntax.Assign{}, &syntax.ArrayElem{}, &syntax.ForClause{}, &syntax.LetClause{}, &syntax.DeclClause{}, &syntax.CallExpr{}, &syntax.TestClause{}, &syntax.TestDecl{}, &syntax.FlagsArithm{}, &syntax.RepeatClause{}, &syntax.SglQuoted{}), node: collectVariables, finish: reportVariables}},
+	nodes:  []nodeRule{onNodes(collectVariables, &syntax.ParamExp{}, &syntax.Word{}, &syntax.Assign{}, &syntax.ArrayElem{}, &syntax.ForClause{}, &syntax.LetClause{}, &syntax.DeclClause{}, &syntax.CallExpr{}, &syntax.TestClause{}, &syntax.TestDecl{}, &syntax.FlagsArithm{}, &syntax.RepeatClause{}, &syntax.SglQuoted{})},
+	finish: []func(*pass){reportVariables},
 }
 
 var batsVariables = []string{"status", "output", "lines", "stderr", "stderr_lines"}

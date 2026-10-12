@@ -15,7 +15,7 @@ var unusedFunctionsFamily = family{
 	codes: map[Code]meta{
 		codeUnusedFunction: {severity: SeverityStyle, tag: TagUnnecessary},
 	},
-	rules: []rule{{finish: checkUnusedFunctions}},
+	finish: []func(*pass){checkUnusedFunctions},
 }
 
 const kshMathFunctions = ".sh.math."

@@ -18,14 +18,13 @@ var portableRedirectionsFamily = family{
 		3025: {shells: strictShells, summary: "Network pseudo-devices such as /dev/tcp are undefined in POSIX sh."},
 		3031: {shells: strictShells, summary: "Redirecting to or from a glob is undefined in POSIX sh."},
 	},
-	rules: []rule{{on: nodes(&syntax.Redirect{}), node: checkPortableRedirection}},
+	nodes: []nodeRule{onNode(checkPortableRedirection)},
 }
 
 var networkDevices = []string{"/dev/tcp/", "/dev/udp/"}
 
-func checkPortableRedirection(p *pass, n syntax.Node) {
-	r, ok := n.(*syntax.Redirect)
-	if !ok || !strictShells.Has(p.dialect) {
+func checkPortableRedirection(p *pass, r *syntax.Redirect) {
+	if !strictShells.Has(p.dialect) {
 		return
 	}
 	span, ok := p.span(r)

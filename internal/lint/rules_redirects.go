@@ -23,13 +23,13 @@ var redirectsFamily = family{
 		2327: {severity: SeverityWarning, summary: "A command substitution is always empty because the command's output is redirected elsewhere."},
 		2328: {severity: SeverityError, summary: "A redirection takes the output away from the command substitution it is in."},
 	},
-	rules: []rule{
-		{on: nodes(&syntax.Redirect{}), node: checkRedirectTargets},
-		{on: nodes(&syntax.BinaryCmd{}), node: checkPipedRedirections},
-		{on: nodes(&syntax.Stmt{}), node: checkCompetingRedirections},
-		{on: nodes(&syntax.Stmt{}), node: checkRedirectedInput},
-		{on: nodes(&syntax.CmdSubst{}), node: checkDiscardedSubstitution},
-		{on: nodes(&syntax.Stmt{}), node: checkRedirectSideEffects},
+	nodes: []nodeRule{
+		onNode(checkRedirectTargets),
+		onNode(checkPipedRedirections),
+		onNode(checkCompetingRedirections),
+		onNode(checkRedirectedInput),
+		onNode(checkDiscardedSubstitution),
+		onNode(checkRedirectSideEffects),
 	},
 }
 
@@ -48,9 +48,8 @@ func isFileRedirect(op syntax.RedirOperator) bool {
 	return false
 }
 
-func checkRedirectTargets(p *pass, n syntax.Node) {
-	r, ok := n.(*syntax.Redirect)
-	if !ok || r.Word == nil || !isFileRedirect(r.Op) || len(r.Word.Parts) != 1 {
+func checkRedirectTargets(p *pass, r *syntax.Redirect) {
+	if r.Word == nil || !isFileRedirect(r.Op) || len(r.Word.Parts) != 1 {
 		return
 	}
 	lit, ok := r.Word.Parts[0].(*syntax.Lit)
@@ -137,9 +136,8 @@ func lastTargeting(targets []redirectTarget, fd int) (*syntax.Redirect, bool) {
 	return nil, false
 }
 
-func checkPipedRedirections(p *pass, n syntax.Node) {
-	bin, ok := n.(*syntax.BinaryCmd)
-	if !ok || !pipes(bin.Op) {
+func checkPipedRedirections(p *pass, bin *syntax.BinaryCmd) {
+	if !pipes(bin.Op) {
 		return
 	}
 	receiver := leftmost(bin.Y)
@@ -181,9 +179,8 @@ func operatorSpan(r *syntax.Redirect) parser.Span {
 	return parser.Span{Start: start, End: end}
 }
 
-func checkCompetingRedirections(p *pass, n syntax.Node) {
-	stmt, ok := n.(*syntax.Stmt)
-	if !ok || len(stmt.Redirs) < 2 {
+func checkCompetingRedirections(p *pass, stmt *syntax.Stmt) {
+	if len(stmt.Redirs) < 2 {
 		return
 	}
 	targets, ok := determinableRedirects(stmt)
@@ -291,9 +288,8 @@ func (p *pass) checkPipedIntoNonReader(call *syntax.CallExpr) {
 	p.reportNode(2216, call, c.name+" does not read standard input, so the piped data is ignored; "+c.advice())
 }
 
-func checkRedirectedInput(p *pass, n syntax.Node) {
-	stmt, ok := n.(*syntax.Stmt)
-	if !ok || !slices.ContainsFunc(stmt.Redirs, readsIntoStdin) {
+func checkRedirectedInput(p *pass, stmt *syntax.Stmt) {
+	if !slices.ContainsFunc(stmt.Redirs, readsIntoStdin) {
 		return
 	}
 	call, ok := stmt.Cmd.(*syntax.CallExpr)
@@ -315,9 +311,8 @@ func readsIntoStdin(r *syntax.Redirect) bool {
 	return false
 }
 
-func checkDiscardedSubstitution(p *pass, n syntax.Node) {
-	cs, ok := n.(*syntax.CmdSubst)
-	if !ok || cs.ReplyVar || len(cs.Stmts) != 1 {
+func checkDiscardedSubstitution(p *pass, cs *syntax.CmdSubst) {
+	if cs.ReplyVar || len(cs.Stmts) != 1 {
 		return
 	}
 	stmt := cs.Stmts[0]
@@ -359,9 +354,8 @@ func stdoutDiversion(redirs []*syntax.Redirect) (*syntax.Redirect, bool) {
 	return nil, false
 }
 
-func checkRedirectSideEffects(p *pass, n syntax.Node) {
-	stmt, ok := n.(*syntax.Stmt)
-	if !ok || len(stmt.Redirs) == 0 || p.dialect == dialect.Dash || p.dialect == dialect.Busybox {
+func checkRedirectSideEffects(p *pass, stmt *syntax.Stmt) {
+	if len(stmt.Redirs) == 0 || p.dialect == dialect.Dash || p.dialect == dialect.Busybox {
 		return
 	}
 	if call, ok := stmt.Cmd.(*syntax.CallExpr); !ok || len(call.Args) == 0 {

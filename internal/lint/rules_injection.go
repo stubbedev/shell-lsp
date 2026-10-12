@@ -24,9 +24,9 @@ var injectionFamily = family{
 		codeArithmeticInjection: {severity: SeverityWarning, optional: optionalArithmeticInjection},
 		codeSourceInjection:     {severity: SeverityWarning},
 	},
-	rules: []rule{
-		{on: nodes(&syntax.CallExpr{}), node: checkInjectedCommand},
-		{on: nodes(&syntax.ArithmCmd{}, &syntax.ArithmExp{}, &syntax.LetClause{}, &syntax.BinaryTest{}), node: checkInjectedArithmetic},
+	nodes: []nodeRule{
+		onNode(checkInjectedCommand),
+		onNodes(checkInjectedArithmetic, &syntax.ArithmCmd{}, &syntax.ArithmExp{}, &syntax.LetClause{}, &syntax.BinaryTest{}),
 	},
 }
 
@@ -313,11 +313,7 @@ func (t *untrustedValues) positional(n int, scope parser.ScopeID) (untrustedSour
 	return params[slices.Min(positions)], true
 }
 
-func checkInjectedCommand(p *pass, n syntax.Node) {
-	call, ok := n.(*syntax.CallExpr)
-	if !ok {
-		return
-	}
+func checkInjectedCommand(p *pass, call *syntax.CallExpr) {
 	command, ok := p.runs(call.Args)
 	if !ok {
 		return

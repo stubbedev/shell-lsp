@@ -20,7 +20,7 @@ var portableSyntaxFamily = family{
 		3034: {shells: strictShells, summary: "Reading a file with $(< file) is undefined in POSIX sh."},
 		3035: {shells: strictShells, summary: "Reading a file with `< file` is undefined in POSIX sh."},
 	},
-	rules: []rule{{on: nodes(&syntax.ProcSubst{}, &syntax.ForClause{}, &syntax.ArithmCmd{}, &syntax.Assign{}, &syntax.BinaryCmd{}, &syntax.ArrayExpr{}, &syntax.CoprocClause{}, &syntax.FuncDecl{}, &syntax.CmdSubst{}), node: checkPortableSyntax}},
+	nodes: []nodeRule{onNodes(checkPortableSyntax, &syntax.ProcSubst{}, &syntax.ForClause{}, &syntax.ArithmCmd{}, &syntax.Assign{}, &syntax.BinaryCmd{}, &syntax.ArrayExpr{}, &syntax.CoprocClause{}, &syntax.FuncDecl{}, &syntax.CmdSubst{})},
 }
 
 func checkPortableSyntax(p *pass, n syntax.Node) {

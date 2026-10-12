@@ -40,11 +40,11 @@ var comparisonsFamily = family{
 		2193: {severity: SeverityWarning, summary: "No string can match both sides of a comparison, so it never succeeds."},
 		2309: {severity: SeverityWarning, summary: "A numeric operator inside [[ ]] evaluates its operand as arithmetic."},
 	},
-	rules: []rule{
-		{on: nodes(&syntax.CallExpr{}, &syntax.TestClause{}), node: checkComparisons},
-		{on: nodes(&syntax.BinaryCmd{}), node: checkSplitBracket},
-		{finish: checkRejectedTestOperators},
+	nodes: []nodeRule{
+		onNodes(checkComparisons, &syntax.CallExpr{}, &syntax.TestClause{}),
+		onNode(checkSplitBracket),
 	},
+	finish: []func(*pass){checkRejectedTestOperators},
 }
 
 type testOp struct {
@@ -697,9 +697,8 @@ func literalText(w *syntax.Word) string {
 	return sb.String()
 }
 
-func checkSplitBracket(p *pass, n syntax.Node) {
-	bin, ok := n.(*syntax.BinaryCmd)
-	if !ok || (bin.Op != syntax.AndStmt && bin.Op != syntax.OrStmt) {
+func checkSplitBracket(p *pass, bin *syntax.BinaryCmd) {
+	if bin.Op != syntax.AndStmt && bin.Op != syntax.OrStmt {
 		return
 	}
 	if _, tail := bracketTailWords(bin.Y.Cmd); !tail || !isUnterminatedBracket(bin.X.Cmd) {
