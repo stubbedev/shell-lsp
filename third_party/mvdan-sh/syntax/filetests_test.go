@@ -1143,6 +1143,26 @@ var fileTests = []fileTestCase{
 		}, LangZsh),
 	),
 	fileTest(
+		[]string{"$+functions[_a::b] ${widgets[.x-y]} ${c[d-e]}"},
+		printsAs("$+functions[_a::b] ${widgets[.x-y]} ${c[d - e]}"),
+		langFile(call(
+			word(&ParamExp{
+				Short: true,
+				IsSet: true,
+				Param: lit("functions"),
+				Index: litWord("_a::b"),
+			}),
+			word(&ParamExp{
+				Param: lit("widgets"),
+				Index: litWord(".x-y"),
+			}),
+			word(&ParamExp{
+				Param: lit("c"),
+				Index: &BinaryArithm{Op: Sub, X: litWord("d"), Y: litWord("e")},
+			}),
+		), LangZsh),
+	),
+	fileTest(
 		[]string{"${a[2][1]} $b[1][3]x"},
 		langFile(call(
 			word(&ParamExp{

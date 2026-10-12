@@ -1806,7 +1806,7 @@ zshPrefixLoop:
 		if p.lang.in(LangZsh) && p.r == '[' && (len(p.val) != 1 || !positionalRuneParam(p.val[0])) {
 			p.pos = p.nextPos()
 			p.rune()
-			pe.Index = p.eitherIndex()
+			pe.Index = p.subscript(pe.Param)
 			pe.Elems = p.zshSubscripts()
 		}
 		p.quote = old
@@ -2160,14 +2160,36 @@ func (p *Parser) paramExpExp() *Expansion {
 
 // subscript parses the subscript of the array named by name, after its '['.
 // The subscript of an array declared associative earlier, like with
-// `declare -A name`, is a string key, so it is parsed as a word rather than
-// as an arithmetic expression; zsh subscript flags, like the `(r)` in
+// `declare -A name`, or of one of the associative arrays which zsh modules
+// provide, like functions, is a string key, so it is parsed as a word rather
+// than as an arithmetic expression; zsh subscript flags, like the `(r)` in
 // ${name[(r)pattern]}, still apply to it.
 func (p *Parser) subscript(name *Lit) ArithmExpr {
-	if name != nil && p.assocArrays[name.Value] && !(p.lang.in(LangZsh) && p.r == '(') {
+	if name != nil && p.assocArray(name.Value) && !(p.lang.in(LangZsh) && p.r == '(') {
 		return p.keyIndex()
 	}
 	return p.eitherIndex()
+}
+
+// zshSpecialAssocArrays holds the associative arrays which zsh modules
+// provide: zsh/parameter, zsh/zleparameter, zsh/complete, zsh/mapfile,
+// zsh/terminfo, zsh/termcap, zsh/langinfo and zsh/system.
+var zshSpecialAssocArrays = map[string]bool{
+	"aliases": true, "builtins": true, "commands": true, "compstate": true,
+	"dis_aliases": true, "dis_builtins": true, "dis_functions": true,
+	"dis_functions_source": true, "dis_galiases": true, "dis_saliases": true,
+	"functions": true, "functions_source": true, "galiases": true,
+	"history": true, "jobdirs": true, "jobstates": true, "jobtexts": true,
+	"langinfo": true, "mapfile": true, "modules": true, "nameddirs": true,
+	"options": true, "parameters": true, "saliases": true, "sysparams": true,
+	"termcap": true, "terminfo": true, "userdirs": true, "usergroups": true,
+	"widgets": true,
+}
+
+// assocArray reports whether name is an associative array, so that its
+// subscripts are string keys.
+func (p *Parser) assocArray(name string) bool {
+	return p.assocArrays[name] || p.lang.in(LangZsh) && zshSpecialAssocArrays[name]
 }
 
 // keyIndex parses the subscript of an associative array as a word, which

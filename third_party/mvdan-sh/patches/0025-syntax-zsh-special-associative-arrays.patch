@@ -1,0 +1,110 @@
+syntax: string keys for zsh's special associative arrays
+
+zsh modules provide associative arrays such as functions, commands,
+options, parameters and widgets, whose keys are names that often hold ':',
+'-' or '.', and plugins test for a function or widget with
+
+	(( $+functions[_omz::$command] )) || return
+	(( ${+functions[.zinit-unload]} )) || source ...
+	if (( ! $+widgets[.fzf-tab-orig-$widget] )); then :; fi
+
+which zsh -n accepts. Patch 0015 parses the subscripts of arrays declared
+with `typeset -A` as string keys, but these arrays are never declared in a
+script, so their subscripts were parsed as arithmetic and failed with
+errors like "ternary operator missing `?` before `:`".
+
+With LangZsh, the subscripts of the associative arrays which zsh/parameter,
+zsh/zleparameter, zsh/complete, zsh/mapfile, zsh/terminfo, zsh/termcap,
+zsh/langinfo and zsh/system provide are now parsed as string keys. The
+short form, as in $m[key], now also parses the subscript of an array
+declared associative as a key, as the braced form already did.
+
+Reproducer, before this change: `(( $+functions[a:b] ))` with LangZsh
+failed with "ternary operator missing `?` before `:`".
+
+diff --git a/syntax/filetests_test.go b/syntax/filetests_test.go
+index e4f57ed..8728f1a 100644
+--- a/syntax/filetests_test.go
++++ b/syntax/filetests_test.go
+@@ -1142,6 +1142,26 @@ var fileTests = []fileTestCase{
+ 			Args: litWords("foo"),
+ 		}, LangZsh),
+ 	),
++	fileTest(
++		[]string{"$+functions[_a::b] ${widgets[.x-y]} ${c[d-e]}"},
++		printsAs("$+functions[_a::b] ${widgets[.x-y]} ${c[d - e]}"),
++		langFile(call(
++			word(&ParamExp{
++				Short: true,
++				IsSet: true,
++				Param: lit("functions"),
++				Index: litWord("_a::b"),
++			}),
++			word(&ParamExp{
++				Param: lit("widgets"),
++				Index: litWord(".x-y"),
++			}),
++			word(&ParamExp{
++				Param: lit("c"),
++				Index: &BinaryArithm{Op: Sub, X: litWord("d"), Y: litWord("e")},
++			}),
++		), LangZsh),
++	),
+ 	fileTest(
+ 		[]string{"${a[2][1]} $b[1][3]x"},
+ 		langFile(call(
+diff --git a/syntax/parser.go b/syntax/parser.go
+index fb4b5d1..1575c1d 100644
+--- a/syntax/parser.go
++++ b/syntax/parser.go
+@@ -1806,7 +1806,7 @@ zshPrefixLoop:
+ 		if p.lang.in(LangZsh) && p.r == '[' && (len(p.val) != 1 || !positionalRuneParam(p.val[0])) {
+ 			p.pos = p.nextPos()
+ 			p.rune()
+-			pe.Index = p.eitherIndex()
++			pe.Index = p.subscript(pe.Param)
+ 			pe.Elems = p.zshSubscripts()
+ 		}
+ 		p.quote = old
+@@ -2160,16 +2160,38 @@ func (p *Parser) paramExpExp() *Expansion {
+ 
+ // subscript parses the subscript of the array named by name, after its '['.
+ // The subscript of an array declared associative earlier, like with
+-// `declare -A name`, is a string key, so it is parsed as a word rather than
+-// as an arithmetic expression; zsh subscript flags, like the `(r)` in
++// `declare -A name`, or of one of the associative arrays which zsh modules
++// provide, like functions, is a string key, so it is parsed as a word rather
++// than as an arithmetic expression; zsh subscript flags, like the `(r)` in
+ // ${name[(r)pattern]}, still apply to it.
+ func (p *Parser) subscript(name *Lit) ArithmExpr {
+-	if name != nil && p.assocArrays[name.Value] && !(p.lang.in(LangZsh) && p.r == '(') {
++	if name != nil && p.assocArray(name.Value) && !(p.lang.in(LangZsh) && p.r == '(') {
+ 		return p.keyIndex()
+ 	}
+ 	return p.eitherIndex()
+ }
+ 
++// zshSpecialAssocArrays holds the associative arrays which zsh modules
++// provide: zsh/parameter, zsh/zleparameter, zsh/complete, zsh/mapfile,
++// zsh/terminfo, zsh/termcap, zsh/langinfo and zsh/system.
++var zshSpecialAssocArrays = map[string]bool{
++	"aliases": true, "builtins": true, "commands": true, "compstate": true,
++	"dis_aliases": true, "dis_builtins": true, "dis_functions": true,
++	"dis_functions_source": true, "dis_galiases": true, "dis_saliases": true,
++	"functions": true, "functions_source": true, "galiases": true,
++	"history": true, "jobdirs": true, "jobstates": true, "jobtexts": true,
++	"langinfo": true, "mapfile": true, "modules": true, "nameddirs": true,
++	"options": true, "parameters": true, "saliases": true, "sysparams": true,
++	"termcap": true, "terminfo": true, "userdirs": true, "usergroups": true,
++	"widgets": true,
++}
++
++// assocArray reports whether name is an associative array, so that its
++// subscripts are string keys.
++func (p *Parser) assocArray(name string) bool {
++	return p.assocArrays[name] || p.lang.in(LangZsh) && zshSpecialAssocArrays[name]
++}
++
+ // keyIndex parses the subscript of an associative array as a word, which
+ // may hold any characters, like `e/` or `a.b`, up to the ']' which closes it.
+ func (p *Parser) keyIndex() ArithmExpr {
