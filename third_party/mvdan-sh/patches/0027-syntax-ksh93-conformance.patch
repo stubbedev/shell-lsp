@@ -1,0 +1,1001 @@
+syntax: ksh93 syntax as ksh93u+m 1.0.10 accepts it
+
+LangKsh93 took over the expectations of LangMirBSDKorn, and the forms
+patch 0006 added were never confirmed against a real ksh93. Running
+TestParseConfirm with ksh93u+m 1.0.10 showed where the two disagree.
+
+Reproducer, before this change: with LangKsh93 these failed to parse,
+although ksh93 -n accepts them,
+
+	{ ; }               1:1: `{` must be followed by a statement list
+	if a; then; fi      1:9: `then` must be followed by a statement list
+	>f a() { b; }       1:1: redirects before compound commands are a zsh feature; tried parsing as ksh93
+
+and these parsed, although ksh93 -n rejects them:
+
+	$ printf 'true &>>b\n' | ksh -n
+	ksh: syntax error at line 1: `>' unexpected
+	$ printf 'case i in 1) a ;;& esac\n' | ksh -n
+	ksh: syntax error at line 1: `&' unexpected
+	$ printf 'for ((;;));\ndo :; done\n' | ksh -n
+	ksh: syntax error at line 2: `newline' unexpected
+	$ printf 'if\0 a; then b; fi\n' | ksh -n
+	ksh: syntax error at line 1: `zero byte' unexpected
+
+Now, with LangKsh93:
+
+* A statement can start with the showme `;` of ksh(1): "Any command of a
+  list that is a simple command not beginning with a redirection, and not
+  occurring within a while, until, or if list, can be preceded by a
+  semicolon", which may also stand alone. Stmt gains Showme for it, and
+  the printer keeps it.
+* A subshell, an arithmetic command, a declaration or a function declared
+  with `name()` can follow redirections. The printer now keeps any
+  redirections before a compound command in front of it, for every
+  variant: ksh93 ignores them before a function declaration, so moving
+  them behind it would change what the script does.
+* `&>>`, `;;&` and null bytes are errors, and so is a newline between the
+  `;` after the header of a c-style for loop and its body.
+
+TestParseConfirm sets LC_ALL=C.UTF-8 for the shells, since which
+characters ksh93 takes in a name depends on the locale. Where ksh93
+accepts an input that the parser rejects on purpose, as with the other
+shells, the test says so; `function name()` stays accepted because
+shell-lsp reports it as SC2111. Four inputs make ksh93u+m 1.0.10 hang or
+abort, and on one its -n rejects what it runs; these are marked as shell
+bugs with the reason and skipped for that shell alone.
+
+diff --git a/syntax/example_test.go b/syntax/example_test.go
+index 3cfb5c1..fb4741a 100644
+--- a/syntax/example_test.go
++++ b/syntax/example_test.go
+@@ -191,6 +191,7 @@ func ExampleDebugPrint() {
+ 	// .  .  .  Position: 1:1
+ 	// .  .  .  Semicolon: 0:0
+ 	// .  .  .  Negated: false
++	// .  .  .  Showme: false
+ 	// .  .  .  Background: false
+ 	// .  .  .  Coprocess: false
+ 	// .  .  .  Disown: false
+diff --git a/syntax/filetests_test.go b/syntax/filetests_test.go
+index a6601f3..b9704ff 100644
+--- a/syntax/filetests_test.go
++++ b/syntax/filetests_test.go
+@@ -137,6 +137,8 @@ type fileTestCase struct {
+ 	// The real shells where testing the input succeeds or fails in the opposite way.
+ 	flipConfirmSet LangVariant
+ 
++	shellBug shellBug
++
+ 	// The languages with an explicit entry in byLangIndex.
+ 	langsSet LangVariant
+ }
+@@ -145,6 +147,10 @@ func flipConfirm2(langSet LangVariant) func(*fileTestCase) {
+ 	return func(c *fileTestCase) { c.flipConfirmSet = langSet }
+ }
+ 
++func shellBugConfirm2(langSet LangVariant, reason string) func(*fileTestCase) {
++	return func(c *fileTestCase) { c.shellBug = shellBug{langSet, reason} }
++}
++
+ func (c *fileTestCase) setForLangs(val any, langSets ...LangVariant) {
+ 	// The parameter is a slice to allow omitting the argument.
+ 	switch len(langSets) {
+@@ -285,7 +291,6 @@ var fileTests = []fileTestCase{
+ 			"if a\nthen\nb\nfi",
+ 			"if a;\nthen\nb\nfi",
+ 			"if a \nthen\nb\nfi",
+-			"if\x00 a; th\x00en b; \x00fi",
+ 		},
+ 		langFile(&IfClause{
+ 			Cond: litStmts("a"),
+@@ -562,31 +567,8 @@ var fileTests = []fileTestCase{
+ 			"for ((i = 0; i < 10; i++)); do echo $i; done",
+ 			"for ((i=0;i<10;i++)) do echo $i; done",
+ 			"for (( i = 0 ; i < 10 ; i++ ))\ndo echo $i\ndone",
+-			"for (( i = 0 ; i < 10 ; i++ ));\ndo echo $i\ndone",
+ 		},
+-		langFile(&ForClause{
+-			Loop: &CStyleLoop{
+-				Init: &BinaryArithm{
+-					Op: Assgn,
+-					X:  litWord("i"),
+-					Y:  litWord("0"),
+-				},
+-				Cond: &BinaryArithm{
+-					Op: Lss,
+-					X:  litWord("i"),
+-					Y:  litWord("10"),
+-				},
+-				Post: &UnaryArithm{
+-					Op:   Inc,
+-					Post: true,
+-					X:    litWord("i"),
+-				},
+-			},
+-			Do: stmts(call(
+-				litWord("echo"),
+-				word(litParamExp("i")),
+-			)),
+-		}, LangBash|LangZsh|LangKsh93),
++		langFile(echoToTen(), LangBash|LangZsh|LangKsh93),
+ 		langErr2("1:5: c-style fors are a bash/zsh/ksh93 feature; tried parsing as LANG", LangPOSIX|LangMirBSDKorn),
+ 	),
+ 	fileTest(
+@@ -1198,6 +1180,123 @@ var fileTests = []fileTestCase{
+ 		printsAs("namespace n { a; }"),
+ 		langFile(&NamespaceClause{Name: lit("n"), Body: block(litStmt("a"))}, LangKsh93),
+ 	),
++	fileTest(
++		[]string{";"},
++		langFile(&Stmt{Showme: true}, LangKsh93),
++	),
++	fileTest(
++		[]string{"; a b"},
++		langFile(&Stmt{Showme: true, Cmd: litCall("a", "b")}, LangKsh93),
++	),
++	fileTest(
++		[]string{"; &"},
++		langFile(&Stmt{Showme: true, Background: true}, LangKsh93),
++	),
++	fileTest(
++		[]string{"; a | b &"},
++		langFile(&Stmt{
++			Showme:     true,
++			Background: true,
++			Cmd: &BinaryCmd{
++				Op: Pipe,
++				X:  litStmt("a"),
++				Y:  litStmt("b"),
++			},
++		}, LangKsh93),
++	),
++	fileTest(
++		[]string{"; f() { a; }"},
++		langFile(&Stmt{Showme: true, Cmd: &FuncDecl{
++			Parens: true,
++			Name:   lit("f"),
++			Body:   stmt(block(litStmt("a"))),
++		}}, LangKsh93),
++	),
++	fileTest(
++		[]string{"; typeset a"},
++		langFile(&Stmt{Showme: true, Cmd: &DeclClause{
++			Variant: lit("typeset"),
++			Args:    []*Assign{{Naked: true, Name: lit("a")}},
++		}}, LangKsh93),
++	),
++	fileTest(
++		[]string{"a\n;", "a; ;"},
++		langFile([]*Stmt{litStmt("a"), {Showme: true}}, LangKsh93),
++	),
++	fileTest(
++		[]string{"a &\n;", "a & ;"},
++		langFile([]*Stmt{{Cmd: litCall("a"), Background: true}, {Showme: true}}, LangKsh93),
++	),
++	fileTest(
++		[]string{"a && ; b"},
++		langFile(&BinaryCmd{
++			Op: AndStmt,
++			X:  litStmt("a"),
++			Y:  &Stmt{Showme: true, Cmd: litCall("b")},
++		}, LangKsh93),
++	),
++	fileTest(
++		[]string{"{ ; }"},
++		langFile(block(&Stmt{Showme: true}), LangKsh93),
++	),
++	fileTest(
++		[]string{"(;)", "( ; )"},
++		langFile(subshell(&Stmt{Showme: true}), LangKsh93),
++	),
++	fileTest(
++		[]string{"if a; then ; fi", "if a; then; fi"},
++		langFile(&IfClause{Cond: litStmts("a"), Then: []*Stmt{{Showme: true}}}, LangKsh93),
++	),
++	fileTest(
++		[]string{"while a; do ; done", "while a; do; done"},
++		langFile(&WhileClause{Cond: litStmts("a"), Do: []*Stmt{{Showme: true}}}, LangKsh93),
++	),
++	fileTest(
++		[]string{"case a in b) ; ;; esac"},
++		langFile(&CaseClause{
++			Word: litWord("a"),
++			Items: []*CaseItem{{
++				Op:       Break,
++				Patterns: litWords("b"),
++				Stmts:    []*Stmt{{Showme: true}},
++			}},
++		}, LangKsh93),
++	),
++	fileTest(
++		[]string{">f a() { b; }"},
++		langFile(&Stmt{
++			Redirs: []*Redirect{{Op: RdrOut, Word: litWord("f")}},
++			Cmd: &FuncDecl{
++				Parens: true,
++				Name:   lit("a"),
++				Body:   stmt(block(litStmt("b"))),
++			},
++		}, LangKsh93),
++	),
++	fileTest(
++		[]string{">f (a)"},
++		langFile(&Stmt{
++			Redirs: []*Redirect{{Op: RdrOut, Word: litWord("f")}},
++			Cmd:    subshell(litStmt("a")),
++		}, LangKsh93),
++	),
++	fileTest(
++		[]string{">f ((a))"},
++		langFile(&Stmt{
++			Redirs: []*Redirect{{Op: RdrOut, Word: litWord("f")}},
++			Cmd:    arithmCmd(litWord("a")),
++		}, LangKsh93),
++	),
++	fileTest(
++		[]string{">f typeset a"},
++		langFile(&Stmt{
++			Redirs: []*Redirect{{Op: RdrOut, Word: litWord("f")}},
++			Cmd: &DeclClause{
++				Variant: lit("typeset"),
++				Args:    []*Assign{{Naked: true, Name: lit("a")}},
++			},
++		}, LangKsh93),
++	),
+ 	fileTest(
+ 		[]string{"$((sqrt(1.5) * 2))"},
+ 		langFile(arithmExp(&BinaryArithm{
+@@ -1581,6 +1680,7 @@ var fileTests = []fileTestCase{
+ 			Body:     stmt(block(litStmt("a"), litStmt("b"))),
+ 		}, LangBash|LangMirBSDKorn|LangZsh),
+ 		langErr2("1:13: the `function` builtin is a bash feature; tried parsing as LANG", LangPOSIX),
++		flipConfirm2(LangKsh93), // ksh93 rejects it; shell-lsp's linter reports it as SC2111 instead
+ 	),
+ 	fileTest(
+ 		[]string{
+@@ -2124,35 +2224,13 @@ var fileTests = []fileTestCase{
+ 			Y: stmt(block(litStmt("etc"))),
+ 		}),
+ 	),
+-	fileTest(
+-		[]string{
+-			"$(\n\tfoo\n) <<EOF\nbar\nEOF",
+-			"<<EOF $(\n\tfoo\n)\nbar\nEOF",
+-		},
+-		// note that dash won't accept the second one
+-		langFile(&Stmt{
+-			Cmd: call(word(cmdSubst(litStmt("foo")))),
+-			Redirs: []*Redirect{{
+-				Op:   Hdoc,
+-				Word: litWord("EOF"),
+-				Hdoc: litWord("bar\n"),
+-			}},
+-		}, LangBash|LangMirBSDKorn),
+-	),
+ 	fileTest(
+ 		[]string{
+ 			"$(\n\tfoo\n) <<EOF\nbar\nEOF",
+ 			"`\n\tfoo\n` <<EOF\nbar\nEOF",
+ 			"<<EOF `\n\tfoo\n`\nbar\nEOF",
+ 		},
+-		langFile(&Stmt{
+-			Cmd: call(word(cmdSubst(litStmt("foo")))),
+-			Redirs: []*Redirect{{
+-				Op:   Hdoc,
+-				Word: litWord("EOF"),
+-				Hdoc: litWord("bar\n"),
+-			}},
+-		}),
++		langFile(fooSubstBarHdoc()),
+ 	),
+ 	fileTest(
+ 		[]string{
+@@ -2475,7 +2553,7 @@ var fileTests = []fileTestCase{
+ 				{Op: AppAll, Word: litWord("b")},
+ 			},
+ 		}, LangBash|LangMirBSDKorn|LangZsh),
+-		langErr2("1:6: `&>>` redirects are a bash/mksh/zsh/ksh93 feature; tried parsing as LANG", LangPOSIX),
++		langErr2("1:6: `&>>` redirects are a bash/mksh/zsh feature; tried parsing as LANG", LangPOSIX|LangKsh93),
+ 		flipConfirm2(LangPOSIX), // POSIX shells tend to parse &> as & > hence it runs as two commands
+ 	),
+ 	fileTest(
+@@ -2817,6 +2895,7 @@ var fileTests = []fileTestCase{
+ 		langErr2("1:9: `then` must be followed by a statement list"),
+ 		langFile(&IfClause{Cond: litStmts("foo")}, LangZsh|LangMirBSDKorn),
+ 		langSkip(LangMirBSDKorn), // only allows empty lists with newlines?
++		langSkip(LangKsh93),      // an empty showme command, tested with them
+ 	),
+ 	fileTest(
+ 		[]string{"while; do exit; done", "while\ndo exit\ndone"},
+@@ -2829,6 +2908,7 @@ var fileTests = []fileTestCase{
+ 		langErr2("1:14: `do` must be followed by a statement list"),
+ 		langFile(&WhileClause{Cond: litStmts("false")}, LangZsh|LangMirBSDKorn),
+ 		langSkip(LangMirBSDKorn), // only allows empty lists with newlines?
++		langSkip(LangKsh93),      // an empty showme command, tested with them
+ 	),
+ 	fileTest(
+ 		[]string{"$({ foo; })"},
+@@ -3487,7 +3567,7 @@ var fileTests = []fileTestCase{
+ 				},
+ 			})),
+ 		), LangZsh),
+-		flipConfirm2(LangMirBSDKorn), // TODO: why is this a valid substitution in mksh?
++		flipConfirm2(LangMirBSDKorn|LangKsh93), // TODO: why is this a valid substitution in mksh and ksh93?
+ 	),
+ 	fileTest(
+ 		[]string{"foo=force_expansion\necho ${foo:|bar}"},
+@@ -4830,7 +4910,8 @@ var fileTests = []fileTestCase{
+ 					Stmts:    litStmts("b"),
+ 				},
+ 			},
+-		}, LangBash|LangKsh93),
++		}, LangBash),
++		langErr2("1:16: `;;&` is a bash feature; tried parsing as LANG", LangKsh93),
+ 	),
+ 	fileTest(
+ 		[]string{"case i in 1) a ;| 2) b ;; esac"},
+@@ -6078,6 +6159,7 @@ var fileTests = []fileTestCase{
+ 			word(lit("a"), lit("[b")),
+ 			word(lit("c"), lit("[de]f")),
+ 		), LangBash|LangMirBSDKorn|LangZsh),
++		shellBugConfirm2(LangKsh93, "ksh93u+m 1.0.10 -n rejects the unmatched `[` in a word that it runs without complaint"),
+ 	),
+ 	fileTest(
+ 		[]string{"<<EOF | b\nfoo\nEOF"},
+@@ -6475,7 +6557,66 @@ var fileTests = []fileTestCase{
+ }
+ 
+ // these don't have a canonical format with the same syntax tree
++// echoToTen is the syntax tree of `for ((i = 0; i < 10; i++)); do echo $i; done`.
++func echoToTen() *ForClause {
++	return &ForClause{
++		Loop: &CStyleLoop{
++			Init: &BinaryArithm{
++				Op: Assgn,
++				X:  litWord("i"),
++				Y:  litWord("0"),
++			},
++			Cond: &BinaryArithm{
++				Op: Lss,
++				X:  litWord("i"),
++				Y:  litWord("10"),
++			},
++			Post: &UnaryArithm{
++				Op:   Inc,
++				Post: true,
++				X:    litWord("i"),
++			},
++		},
++		Do: stmts(call(
++			litWord("echo"),
++			word(litParamExp("i")),
++		)),
++	}
++}
++
++// fooSubstBarHdoc is the syntax tree of "$(\n\tfoo\n) <<EOF\nbar\nEOF".
++func fooSubstBarHdoc() *Stmt {
++	return &Stmt{
++		Cmd: call(word(cmdSubst(litStmt("foo")))),
++		Redirs: []*Redirect{{
++			Op:   Hdoc,
++			Word: litWord("EOF"),
++			Hdoc: litWord("bar\n"),
++		}},
++	}
++}
++
+ var fileTestsNoPrint = []fileTestCase{
++	fileTest(
++		[]string{"if\x00 a; th\x00en b; \x00fi"},
++		langFile(&IfClause{
++			Cond: litStmts("a"),
++			Then: litStmts("b"),
++		}),
++		langErr2("1:3: null bytes are a bash/posix/mksh/zsh feature; tried parsing as LANG", LangKsh93),
++	),
++	fileTest(
++		[]string{"for (( i = 0 ; i < 10 ; i++ ));\ndo echo $i\ndone"},
++		langFile(echoToTen(), LangBash|LangZsh),
++		langErr2("1:5: c-style fors are a bash/zsh/ksh93 feature; tried parsing as LANG", LangPOSIX|LangMirBSDKorn),
++		langErr2("1:31: a newline after `));` is a bash/zsh feature; tried parsing as LANG", LangKsh93),
++	),
++	fileTest(
++		[]string{"<<EOF $(\n\tfoo\n)\nbar\nEOF"},
++		// dash rejects it
++		langFile(fooSubstBarHdoc(), LangBash|LangMirBSDKorn|LangKsh93),
++		shellBugConfirm2(LangKsh93, "ksh93u+m 1.0.10 aborts with free(): invalid size"),
++	),
+ 	fileTest(
+ 		[]string{`$[foo]`},
+ 		langFile(word(lit("$"), lit("[foo]")), LangPOSIX),
+diff --git a/syntax/lexer.go b/syntax/lexer.go
+index 4586416..a3f3a6b 100644
+--- a/syntax/lexer.go
++++ b/syntax/lexer.go
+@@ -86,6 +86,8 @@ retry:
+ 		switch b {
+ 		case '\x00':
+ 			// Ignore null bytes while parsing, like bash.
++			// ksh93 refuses to read a script holding one.
++			p.checkLang(p.nextPos(), langResolvedVariants&^LangKsh93, "null bytes")
+ 			p.col++
+ 			goto retry
+ 		case '\r':
+diff --git a/syntax/nodes.go b/syntax/nodes.go
+index bd29c67..4a29f86 100644
+--- a/syntax/nodes.go
++++ b/syntax/nodes.go
+@@ -228,6 +228,7 @@ type Stmt struct {
+ 	Position   Pos
+ 	Semicolon  Pos  // position of ';', '&', or '|&', if any
+ 	Negated    bool // ! stmt
++	Showme     bool // ksh93's ; stmt, where stmt is a simple command or empty
+ 	Background bool // stmt &
+ 	Coprocess  bool // mksh's |&
+ 	Disown     bool // zsh's &| or &!
+@@ -245,8 +246,8 @@ func (s *Stmt) End() Pos {
+ 		return end
+ 	}
+ 	end := s.Position
+-	if s.Negated {
+-		end = posAddCol(end, 1)
++	if s.Negated || s.Showme {
++		end = posAddCol(end, 1) // '!' or ';'
+ 	}
+ 	if s.Cmd != nil {
+ 		end = s.Cmd.End()
+diff --git a/syntax/parser.go b/syntax/parser.go
+index b1c56f1..fe741a3 100644
+--- a/syntax/parser.go
++++ b/syntax/parser.go
+@@ -949,31 +949,34 @@ func (p *Parser) followStmts(left string, lpos Pos, stops ...string) ([]*Stmt, [
+ 	return p.followList(left, lpos, false, stops...)
+ }
+ 
+-// followCondStmts is like [Parser.followStmts], but with [LangZsh] the list
+-// also ends at a statement which is not followed by a separator, as in
++// followCondStmts is like [Parser.followStmts], but for the condition of an
++// `if`, `elif`, `while` or `until`. With [LangZsh] the list also ends at a
++// statement which is not followed by a separator, as in
+ // `if [[ cond ]] { body }` or `while (( cond )) body`, so that zsh's
+-// alternate forms of complex commands can follow the condition.
++// alternate forms of complex commands can follow the condition, and with
++// [LangKsh93] its statements cannot start with a showme `;`.
+ func (p *Parser) followCondStmts(left string, lpos Pos, stops ...string) ([]*Stmt, []Comment) {
+-	return p.followList(left, lpos, p.lang.in(LangZsh), stops...)
++	return p.followList(left, lpos, true, stops...)
+ }
+ 
+-func (p *Parser) followList(left string, lpos Pos, endUnseparated bool, stops ...string) ([]*Stmt, []Comment) {
++func (p *Parser) followList(left string, lpos Pos, cond bool, stops ...string) ([]*Stmt, []Comment) {
+ 	// Language variants disallowing empty command lists:
+ 	// * [LangPOSIX]: "A list is a sequence of one or more AND-OR lists...".
+ 	// * [LangBash]: "A list is a sequence of one or more pipelines..."
++	// * [LangKsh93], where a lone `;` is an empty showme command instead.
+ 	//
+ 	// Language variants allowing empty command lists:
+ 	// * [LangZsh]: "A list is a sequence of zero or more sublists...".
+ 	// * [LangMirBSDKorn]: "Lists of commands can be created by separating pipelines...";
+ 	//   note that the man page is not explicit, but the shell clearly allows e.g. `{ }`.
+-	if p.got(semicolon) {
++	if !p.showmeAllowed(cond) && p.got(semicolon) {
+ 		if p.lang.in(LangZsh | LangMirBSDKorn) {
+ 			return nil, nil // allow an empty list
+ 		}
+ 		p.followErr(lpos, left, noQuote("a statement list"))
+ 		return nil, nil
+ 	}
+-	stmts, last := p.stmtListUntil(endUnseparated, stops...)
++	stmts, last := p.stmtListUntil(cond, stops...)
+ 	if len(stmts) < 1 {
+ 		if p.lang.in(LangZsh | LangMirBSDKorn) {
+ 			return nil, nil // allow an empty list
+@@ -1178,9 +1181,11 @@ func (p *Parser) checkLang(pos Pos, langSet LangVariant, format string, a ...any
+ }
+ 
+ // stmts parses statements until EOF or one of the stop words.
+-// If endUnseparated is set, the list also ends after a statement
+-// which is not followed by a separator.
+-func (p *Parser) stmts(yield func(*Stmt, error) bool, endUnseparated bool, stops ...string) {
++// If cond is set, the statements form the condition of an `if`, `elif`,
++// `while` or `until`; see [Parser.followCondStmts].
++func (p *Parser) stmts(yield func(*Stmt, error) bool, cond bool, stops ...string) {
++	endUnseparated := cond && p.lang.in(LangZsh)
++	showme := p.showmeAllowed(cond)
+ 	gotEnd := true
+ loop:
+ 	for p.tok != _EOF {
+@@ -1219,7 +1224,12 @@ loop:
+ 			break
+ 		}
+ 		p.openNodes++
+-		s := p.getStmt(true, false, false)
++		var s *Stmt
++		if showme && p.tok == semicolon {
++			s = p.showmeStmt(true, false)
++		} else {
++			s = p.getStmt(true, false, false)
++		}
+ 		p.openNodes--
+ 		if s == nil {
+ 			p.invalidStmtStart()
+@@ -1236,14 +1246,14 @@ func (p *Parser) stmtList(stops ...string) ([]*Stmt, []Comment) {
+ 	return p.stmtListUntil(false, stops...)
+ }
+ 
+-func (p *Parser) stmtListUntil(endUnseparated bool, stops ...string) ([]*Stmt, []Comment) {
++func (p *Parser) stmtListUntil(cond bool, stops ...string) ([]*Stmt, []Comment) {
+ 	var stmts []*Stmt
+ 	var last []Comment
+ 	fn := func(s *Stmt, err error) bool {
+ 		stmts = append(stmts, s)
+ 		return true
+ 	}
+-	p.stmts(fn, endUnseparated, stops...)
++	p.stmts(fn, cond, stops...)
+ 	split := len(p.accComs)
+ 	if p.tok == _LitWord && (p.val == "elif" || p.val == "else" || p.val == "fi") {
+ 		// Split the comments, so that any aligned with an opening token
+@@ -2540,8 +2550,10 @@ func (p *Parser) doRedirect(s *Stmt) {
+ 	}
+ 	r.Op, r.OpPos = RedirOperator(p.tok), p.pos
+ 	switch r.Op {
+-	case RdrAll, AppAll:
++	case RdrAll:
+ 		p.checkLang(p.pos, langBashLike|langKshLike|LangZsh, "%#q redirects", r.Op)
++	case AppAll:
++		p.checkLang(p.pos, langBashLike|LangMirBSDKorn|LangZsh, "%#q redirects", r.Op)
+ 	case AppClob, RdrAllClob, AppAllClob:
+ 		p.checkLang(p.pos, LangZsh, "%#q redirects", r.Op)
+ 	}
+@@ -2615,7 +2627,11 @@ func (p *Parser) getStmt(readEnd, binCmd, fnBody bool) *Stmt {
+ 		p.nest()
+ 		p.next()
+ 		p.got(_Newl)
+-		b.Y = p.getStmt(false, true, false)
++		if p.showmeAllowed(false) && p.tok == semicolon {
++			b.Y = p.showmeStmt(false, true)
++		} else {
++			b.Y = p.getStmt(false, true, false)
++		}
+ 		if b.Y == nil || p.err != nil {
+ 			if p.recoverError() {
+ 				b.Y = &Stmt{Position: recoveredPos}
+@@ -2657,6 +2673,91 @@ func (p *Parser) getStmt(readEnd, binCmd, fnBody bool) *Stmt {
+ 	return s
+ }
+ 
++// cmdAfterRedirs reports whether cmd can follow the redirections which start
++// its statement outside zsh: a simple command, and with ksh93 also a
++// subshell, an arithmetic command, a declaration or a POSIX-style function
++// declaration.
++func (p *Parser) cmdAfterRedirs(cmd Command) bool {
++	switch cmd := cmd.(type) {
++	case *CallExpr:
++		return true
++	case *Subshell, *ArithmCmd, *DeclClause, *LetClause:
++		return p.lang.in(LangKsh93)
++	case *FuncDecl:
++		return p.lang.in(LangKsh93) && !cmd.RsrvWord
++	}
++	return false
++}
++
++// showmeAllowed reports whether a statement in a list can start with ksh93's
++// showme `;`, which can precede any simple command of a list outside the
++// condition of an `if`, `elif`, `while` or `until`.
++func (p *Parser) showmeAllowed(cond bool) bool {
++	return !cond && p.lang.in(LangKsh93)
++}
++
++// showmeStmt parses a statement starting with ksh93's showme `;`: a simple
++// command which does not start with a redirection, or nothing at all. The
++// shell ignores the `;` unless `set -o showme` is on, which prints the
++// command instead of running it.
++func (p *Parser) showmeStmt(readEnd, binCmd bool) *Stmt {
++	pos := p.pos
++	p.next()
++	if p.stopToken() || p.closingRsrv() {
++		s := &Stmt{Position: pos, Showme: true}
++		if readEnd && p.tok == and {
++			s.Semicolon, s.Background = p.pos, true
++			p.next()
++		}
++		return s
++	}
++	s := p.getStmt(readEnd, binCmd, false)
++	if s == nil || p.err != nil {
++		return nil
++	}
++	first := s
++	for {
++		b, ok := first.Cmd.(*BinaryCmd)
++		if !ok {
++			break
++		}
++		first = b.X
++	}
++	if !showmeCmd(first) {
++		p.posErr(pos, "%#q can only precede a simple command", semicolon)
++		return nil
++	}
++	s.Position, s.Showme = pos, true
++	return s
++}
++
++// closingRsrv reports whether the current token is a reserved word which
++// closes or continues a compound command, so that it cannot start one.
++func (p *Parser) closingRsrv() bool {
++	if p.tok != _LitWord {
++		return false
++	}
++	switch p.val {
++	case "}", "then", "elif", "else", "fi", "do", "done", "esac":
++		return true
++	}
++	return false
++}
++
++// showmeCmd reports whether a statement can follow ksh93's showme `;`.
++func showmeCmd(s *Stmt) bool {
++	if s.Negated || (len(s.Redirs) > 0 && (s.Cmd == nil || s.Cmd.Pos().After(s.Redirs[0].Pos()))) {
++		return false
++	}
++	switch cmd := s.Cmd.(type) {
++	case *CallExpr, *DeclClause, *LetClause:
++		return true
++	case *FuncDecl:
++		return !cmd.RsrvWord
++	}
++	return false
++}
++
+ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
+ 	s.Comments, p.accComs = p.accComs, nil
+ 	for p.peekRedir() {
+@@ -2819,10 +2920,8 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
+ 	if s.Cmd == nil && len(s.Redirs) == 0 {
+ 		return nil // no statement found
+ 	}
+-	if redirsStart > 0 && s.Cmd != nil {
+-		if _, ok := s.Cmd.(*CallExpr); !ok {
+-			p.checkLang(s.Pos(), LangZsh, "redirects before compound commands")
+-		}
++	if redirsStart > 0 && s.Cmd != nil && !p.cmdAfterRedirs(s.Cmd) {
++		p.checkLang(s.Pos(), LangZsh, "redirects before compound commands")
+ 	}
+ 	for p.peekRedir() {
+ 		p.doRedirect(s)
+@@ -3142,7 +3241,10 @@ func (p *Parser) loop(fpos Pos) Loop {
+ 		}
+ 		cl.Post = p.arithmExpr(false)
+ 		cl.Rparen = p.arithmEnd(dblLeftParen, cl.Lparen, old)
+-		p.got(semicolon)
++		if p.got(semicolon) && p.tok == _Newl {
++			// ksh93 wants `do` or `{` on the same line as the `;`.
++			p.checkLang(p.pos, langBashLike|LangZsh, "a newline after `));`")
++		}
+ 		p.got(_Newl)
+ 		return cl
+ 	}
+@@ -3391,6 +3493,9 @@ func (p *Parser) caseItems(stop string) (items []*CaseItem) {
+ 		p.accComs = nil
+ 		ci.OpPos = p.pos
+ 		ci.Op = CaseOperator(p.tok)
++		if ci.Op == Resume {
++			p.checkLang(ci.OpPos, langBashLike, "%#q", ci.Op)
++		}
+ 		p.next()
+ 		p.got(_Newl)
+ 
+diff --git a/syntax/parser_test.go b/syntax/parser_test.go
+index e8d6e6d..fe0336c 100644
+--- a/syntax/parser_test.go
++++ b/syntax/parser_test.go
+@@ -107,12 +107,12 @@ func TestParseConfirm(t *testing.T) {
+ 				case *File:
+ 					for j, in := range c.inputs {
+ 						wantErr := lang.in(c.flipConfirmSet)
+-						t.Run(fmt.Sprintf("OK/%03d-%d", i, j), confirmParse(in, external.cmd, wantErr))
++						t.Run(fmt.Sprintf("OK/%03d-%d", i, j), c.shellBug.confirm(lang, in, external.cmd, wantErr))
+ 					}
+ 				case string:
+ 					for j, in := range c.inputs {
+ 						wantErr := !lang.in(c.flipConfirmSet)
+-						t.Run(fmt.Sprintf("Err/%03d-%d", i, j), confirmParse(in, external.cmd, wantErr))
++						t.Run(fmt.Sprintf("Err/%03d-%d", i, j), c.shellBug.confirm(lang, in, external.cmd, wantErr))
+ 					}
+ 				}
+ 			}
+@@ -125,7 +125,7 @@ func TestParseConfirm(t *testing.T) {
+ 					continue
+ 				}
+ 				wantErr := !lang.in(c.flipConfirmSet)
+-				t.Run(fmt.Sprintf("ErrOld/%03d", i), confirmParse(c.in, external.cmd, wantErr))
++				t.Run(fmt.Sprintf("ErrOld/%03d", i), c.shellBug.confirm(lang, c.in, external.cmd, wantErr))
+ 			}
+ 		})
+ 	}
+@@ -299,6 +299,23 @@ func cmdContains(substr, cmd string, args ...string) bool {
+ 	return strings.Contains(got, substr)
+ }
+ 
++// shellBug names the real shells which crash, hang or contradict themselves
++// on a test's input, so that the input cannot be confirmed with them, and why.
++type shellBug struct {
++	langs  LangVariant
++	reason string
++}
++
++func (b shellBug) confirm(lang LangVariant, in, cmd string, wantErr bool) func(*testing.T) {
++	if b.langs&lang != 0 {
++		return func(t *testing.T) {
++			t.Logf("input: %s", in)
++			t.Skipf("%s cannot be confirmed with: %s", cmd, b.reason)
++		}
++	}
++	return confirmParse(in, cmd, wantErr)
++}
++
+ var extGlobRe = regexp.MustCompile(`[@?*+!]\(`)
+ 
+ const externalShellTimeout = 10 * time.Second
+@@ -343,6 +360,8 @@ func confirmParse(in, cmd string, wantErr bool) func(*testing.T) {
+ 		cmd := exec.CommandContext(ctx, cmd, opts...)
+ 		killCommandOnTestExit(cmd)
+ 		cmd.Dir = t.TempDir() // to be safe
++		// Which characters can form a name depends on the locale.
++		cmd.Env = append(os.Environ(), "LC_ALL=C.UTF-8")
+ 		cmd.Stdin = strings.NewReader(in)
+ 		var stderrBuf strings.Builder
+ 		cmd.Stderr = &stderrBuf
+@@ -408,6 +427,8 @@ type errorCase struct {
+ 
+ 	// The real shells where testing the input succeeds rather than failing as expected.
+ 	flipConfirmSet LangVariant
++
++	shellBug shellBug
+ }
+ 
+ func errCase(in string, opts ...func(*errorCase)) errorCase {
+@@ -451,9 +472,13 @@ func flipConfirm(langSet LangVariant) func(*errorCase) {
+ 
+ var flipConfirmAll = flipConfirm(langResolvedVariants)
+ 
++func shellBugConfirm(langSet LangVariant, reason string) func(*errorCase) {
++	return func(c *errorCase) { c.shellBug = shellBug{langSet, reason} }
++}
++
+ // The real shells which allow unclosed heredocs.
+ // TODO: allow ending a heredoc at EOF in these language variant modes.
+-var flipConfirmUnclosedHeredoc = flipConfirm(LangBash | LangPOSIX | LangBats | LangZsh)
++var flipConfirmUnclosedHeredoc = flipConfirm(LangBash | LangPOSIX | LangBats | LangZsh | LangKsh93)
+ 
+ func init() {
+ 	seenInputs := make(map[string]bool)
+@@ -571,7 +596,7 @@ var errorCases = []errorCase{
+ 	errCase(
+ 		"! !",
+ 		langErr("1:1: cannot negate a command multiple times"),
+-		flipConfirm(LangBash), // bash allows lone `!`, unlike dash, mksh, and us.
++		flipConfirm(LangBash|LangKsh93), // bash and ksh93 allow lone `!`, unlike dash, mksh, and us.
+ 	),
+ 	errCase(
+ 		"! ! foo",
+@@ -634,7 +659,7 @@ var errorCases = []errorCase{
+ 	errCase(
+ 		">f foo() { bar; }",
+ 		langErr("1:1: redirects before compound commands are a zsh feature; tried parsing as LANG"),
+-		langErr("", LangZsh),
++		langErr("", LangZsh|LangKsh93),
+ 	),
+ 	errCase(
+ 		">f if foo; then bar; fi",
+@@ -660,16 +685,46 @@ var errorCases = []errorCase{
+ 	errCase(
+ 		";",
+ 		langErr("1:1: `;` can only immediately follow a statement"),
++		langErr("", LangKsh93), // a showme command
++	),
++	errCase(
++		"; { a; }",
++		langErr("1:1: `;` can only immediately follow a statement"),
++		langErr("1:1: `;` can only precede a simple command", LangKsh93),
++	),
++	errCase(
++		"; >f",
++		langErr("1:1: `;` can only immediately follow a statement"),
++		langErr("1:1: `;` can only precede a simple command", LangKsh93),
++	),
++	errCase(
++		"; ! a",
++		langErr("1:1: `;` can only immediately follow a statement"),
++		langErr("1:1: `;` can only precede a simple command", LangKsh93),
++	),
++	errCase(
++		"; ; a",
++		langErr("1:1: `;` can only immediately follow a statement"),
++		langErr("1:3: statements must be separated by &, ; or a newline", LangKsh93),
++	),
++	errCase(
++		"a | ; b",
++		langErr("1:3: `|` must be followed by a statement"),
++	),
++	errCase(
++		"if ; then a; fi",
++		langErr("1:1: `if` must be followed by a statement list"),
++		langErr("", LangZsh|LangMirBSDKorn),
+ 	),
+ 	errCase(
+ 		"{ ; }",
+ 		langErr("1:1: `{` must be followed by a statement list"),
+-		langErr("", LangZsh|LangMirBSDKorn),
++		langErr("", LangZsh|langKshLike),
+ 	),
+ 	errCase(
+ 		`"foo"(){ :; }`,
+ 		langErr("1:1: invalid func name"),
+-		flipConfirm(LangMirBSDKorn), // TODO: support non-literal func names
++		flipConfirm(langKshLike), // TODO: support non-literal func names
+ 	),
+ 	errCase(
+ 		`foo$bar(){ :; }`,
+@@ -735,6 +790,7 @@ var errorCases = []errorCase{
+ 	errCase(
+ 		"echo & ; bar",
+ 		langErr("1:8: `;` can only immediately follow a statement"),
++		langErr("", LangKsh93), // a showme command
+ 	),
+ 	errCase(
+ 		"foo;;",
+@@ -925,11 +981,13 @@ var errorCases = []errorCase{
+ 		"<<-EOF\n\t",
+ 		langErr("1:1: unclosed here-document `EOF`"),
+ 		flipConfirmUnclosedHeredoc,
++		shellBugConfirm(LangKsh93, "ksh93u+m 1.0.10 hangs at an unclosed <<- here-document ending in a tab"),
+ 	),
+ 	errCase(
+ 		"<<-'EOF'\n\t",
+ 		langErr("1:1: unclosed here-document `EOF`"),
+ 		flipConfirmUnclosedHeredoc,
++		shellBugConfirm(LangKsh93, "ksh93u+m 1.0.10 hangs at an unclosed <<- here-document ending in a tab"),
+ 	),
+ 	errCase(
+ 		"<<\nEOF\nbar\nEOF",
+@@ -1049,6 +1107,7 @@ var errorCases = []errorCase{
+ 	errCase(
+ 		"for 'i' in 1 2 3; do echo $i; done",
+ 		langErr("1:1: `for` must be followed by a literal"),
++		flipConfirm(LangKsh93), // ksh93 removes the quotes from the name
+ 	),
+ 	errCase(
+ 		"for in 1 2 3; do echo $i; done",
+@@ -1089,6 +1148,7 @@ var errorCases = []errorCase{
+ 	errCase(
+ 		"echo foo &\n;",
+ 		langErr("2:1: `;` can only immediately follow a statement"),
++		langErr("", LangKsh93), // a showme command
+ 	),
+ 	errCase(
+ 		"echo $(foo",
+@@ -1146,6 +1206,7 @@ var errorCases = []errorCase{
+ 	errCase(
+ 		"echo $((+))",
+ 		langErr("1:9: `+` must be followed by an expression"),
++		flipConfirm(LangKsh93), // ksh93 evaluates the missing operand as 0
+ 	),
+ 	errCase(
+ 		"echo $((a b c))",
+@@ -1230,6 +1291,7 @@ var errorCases = []errorCase{
+ 		langErr("1:8: invalid parameter name"),
+ 		langErr("1:8: not a valid parameter expansion operator: `à`", LangZsh), // not great, but seems like an edge case
+ 		langErr("", langLazyParamExp),
++		flipConfirm(LangKsh93), // ksh93 takes letters outside ASCII in names under C.UTF-8, which confirmParse sets
+ 	),
+ 	errCase(
+ 		"echo ${1a}",
+@@ -1394,10 +1456,12 @@ var errorCases = []errorCase{
+ 	errCase(
+ 		"echo foo\n;",
+ 		langErr("2:1: `;` can only immediately follow a statement"),
++		langErr("", LangKsh93), // a showme command
+ 	),
+ 	errCase(
+ 		"<<$ <<0\n$(<<$<<",
+ 		langErr("2:6: `<<` must be followed by a word", LangBash|LangMirBSDKorn),
++		shellBugConfirm(LangKsh93, "ksh93u+m 1.0.10 hangs at here-documents left open in a command substitution"),
+ 	),
+ 	errCase(
+ 		"(foo) bar",
+@@ -1500,6 +1564,7 @@ var errorCases = []errorCase{
+ 	errCase(
+ 		"<<a <<0\n$(<<$<<",
+ 		langErr("2:6: `<<` must be followed by a word"),
++		shellBugConfirm(LangKsh93, "ksh93u+m 1.0.10 hangs at here-documents left open in a command substitution"),
+ 	),
+ 	errCase(
+ 		`""()`,
+@@ -1830,7 +1895,7 @@ var errorCases = []errorCase{
+ 	errCase(
+ 		"a[]",
+ 		langErr("1:2: `[` must be followed by an expression", LangBash|LangMirBSDKorn|LangZsh),
+-		flipConfirmAll, // is cmd
++		flipConfirm(langResolvedVariants&^LangKsh93), // is cmd, but ksh93 rejects the empty subscript
+ 	),
+ 	errCase(
+ 		"a[[",
+@@ -1847,7 +1912,7 @@ var errorCases = []errorCase{
+ 	errCase(
+ 		"echo $((a[]))",
+ 		langErr("1:10: `[` must be followed by an expression", LangBash|LangMirBSDKorn|LangZsh),
+-		flipConfirm(LangMirBSDKorn), // wrong?
++		flipConfirm(langKshLike), // wrong?
+ 	),
+ 	errCase(
+ 		"echo $((x$t[",
+@@ -1933,7 +1998,7 @@ var errorCases = []errorCase{
+ 	errCase(
+ 		"echo ${foo[]}",
+ 		langErr("1:11: `[` must be followed by an expression", LangBash|LangMirBSDKorn|LangZsh),
+-		flipConfirm(LangMirBSDKorn), // TODO: why is this valid?
++		flipConfirm(langKshLike), // TODO: why is this valid?
+ 	),
+ 	errCase(
+ 		"echo ${a/\n",
+@@ -1954,6 +2019,7 @@ var errorCases = []errorCase{
+ 	errCase(
+ 		"foo=force_expansion; echo ${foo:1 2}",
+ 		langErr("1:35: not a valid arithmetic operator: `2`", LangBash|LangMirBSDKorn),
++		flipConfirm(LangKsh93), // ksh93 expands it without complaint
+ 	),
+ 	errCase(
+ 		"echo ${foo:1",
+@@ -2085,6 +2151,7 @@ var errorCases = []errorCase{
+ 	errCase(
+ 		"echo ${!a.}",
+ 		langErr("1:9: invalid parameter name", LangKsh93),
++		flipConfirm(LangKsh93), // ksh93 expands it to the name `a.` instead of failing
+ 	),
+ 	errCase(
+ 		"echo ${a.*}",
+diff --git a/syntax/printer.go b/syntax/printer.go
+index d689ed1..e0950bc 100644
+--- a/syntax/printer.go
++++ b/syntax/printer.go
+@@ -1205,6 +1205,12 @@ func (p *Printer) stmt(s *Stmt) {
+ 	if s.Negated {
+ 		p.spacedString("!", s.Pos())
+ 	}
++	// An empty showme command is its own separator.
++	emptyShowme := s.Showme && s.Cmd == nil && len(s.Redirs) == 0
++	if s.Showme {
++		p.spacedString(";", s.Pos())
++		p.wroteSemi = emptyShowme
++	}
+ 	var startRedirs int
+ 	if s.Cmd != nil {
+ 		startRedirs = p.command(s.Cmd, s.Redirs)
+@@ -1237,7 +1243,7 @@ func (p *Printer) stmt(s *Stmt) {
+ 	if sep || s.Background || s.Coprocess || s.Disown {
+ 		if sep {
+ 			p.bslashNewl()
+-		} else if !p.minify {
++		} else if !p.minify || emptyShowme { // `;&` would be a case terminator
+ 			p.space()
+ 		}
+ 		if s.Background {
+@@ -1282,6 +1288,12 @@ func (p *Printer) printRedirsUntil(redirs []*Redirect, startRedirs int, pos Pos)
+ 
+ func (p *Printer) command(cmd Command, redirs []*Redirect) (startRedirs int) {
+ 	p.advanceLine(cmd.Pos().Line())
++	if _, ok := cmd.(*CallExpr); !ok {
++		// Keep redirects before compound commands where they are, as zsh
++		// and ksh93 allow: ksh93 ignores any before a function declaration,
++		// but would apply them whenever the function runs if they followed.
++		startRedirs = p.printRedirsUntil(redirs, startRedirs, cmd.Pos())
++	}
+ 	p.spacePad(cmd.Pos())
+ 	switch cmd := cmd.(type) {
+ 	case *CallExpr:

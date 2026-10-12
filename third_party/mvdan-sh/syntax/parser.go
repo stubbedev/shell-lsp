@@ -949,31 +949,34 @@ func (p *Parser) followStmts(left string, lpos Pos, stops ...string) ([]*Stmt, [
 	return p.followList(left, lpos, false, stops...)
 }
 
-// followCondStmts is like [Parser.followStmts], but with [LangZsh] the list
-// also ends at a statement which is not followed by a separator, as in
+// followCondStmts is like [Parser.followStmts], but for the condition of an
+// `if`, `elif`, `while` or `until`. With [LangZsh] the list also ends at a
+// statement which is not followed by a separator, as in
 // `if [[ cond ]] { body }` or `while (( cond )) body`, so that zsh's
-// alternate forms of complex commands can follow the condition.
+// alternate forms of complex commands can follow the condition, and with
+// [LangKsh93] its statements cannot start with a showme `;`.
 func (p *Parser) followCondStmts(left string, lpos Pos, stops ...string) ([]*Stmt, []Comment) {
-	return p.followList(left, lpos, p.lang.in(LangZsh), stops...)
+	return p.followList(left, lpos, true, stops...)
 }
 
-func (p *Parser) followList(left string, lpos Pos, endUnseparated bool, stops ...string) ([]*Stmt, []Comment) {
+func (p *Parser) followList(left string, lpos Pos, cond bool, stops ...string) ([]*Stmt, []Comment) {
 	// Language variants disallowing empty command lists:
 	// * [LangPOSIX]: "A list is a sequence of one or more AND-OR lists...".
 	// * [LangBash]: "A list is a sequence of one or more pipelines..."
+	// * [LangKsh93], where a lone `;` is an empty showme command instead.
 	//
 	// Language variants allowing empty command lists:
 	// * [LangZsh]: "A list is a sequence of zero or more sublists...".
 	// * [LangMirBSDKorn]: "Lists of commands can be created by separating pipelines...";
 	//   note that the man page is not explicit, but the shell clearly allows e.g. `{ }`.
-	if p.got(semicolon) {
+	if !p.showmeAllowed(cond) && p.got(semicolon) {
 		if p.lang.in(LangZsh | LangMirBSDKorn) {
 			return nil, nil // allow an empty list
 		}
 		p.followErr(lpos, left, noQuote("a statement list"))
 		return nil, nil
 	}
-	stmts, last := p.stmtListUntil(endUnseparated, stops...)
+	stmts, last := p.stmtListUntil(cond, stops...)
 	if len(stmts) < 1 {
 		if p.lang.in(LangZsh | LangMirBSDKorn) {
 			return nil, nil // allow an empty list
@@ -1178,9 +1181,11 @@ func (p *Parser) checkLang(pos Pos, langSet LangVariant, format string, a ...any
 }
 
 // stmts parses statements until EOF or one of the stop words.
-// If endUnseparated is set, the list also ends after a statement
-// which is not followed by a separator.
-func (p *Parser) stmts(yield func(*Stmt, error) bool, endUnseparated bool, stops ...string) {
+// If cond is set, the statements form the condition of an `if`, `elif`,
+// `while` or `until`; see [Parser.followCondStmts].
+func (p *Parser) stmts(yield func(*Stmt, error) bool, cond bool, stops ...string) {
+	endUnseparated := cond && p.lang.in(LangZsh)
+	showme := p.showmeAllowed(cond)
 	gotEnd := true
 loop:
 	for p.tok != _EOF {
@@ -1219,7 +1224,12 @@ loop:
 			break
 		}
 		p.openNodes++
-		s := p.getStmt(true, false, false)
+		var s *Stmt
+		if showme && p.tok == semicolon {
+			s = p.showmeStmt(true, false)
+		} else {
+			s = p.getStmt(true, false, false)
+		}
 		p.openNodes--
 		if s == nil {
 			p.invalidStmtStart()
@@ -1236,14 +1246,14 @@ func (p *Parser) stmtList(stops ...string) ([]*Stmt, []Comment) {
 	return p.stmtListUntil(false, stops...)
 }
 
-func (p *Parser) stmtListUntil(endUnseparated bool, stops ...string) ([]*Stmt, []Comment) {
+func (p *Parser) stmtListUntil(cond bool, stops ...string) ([]*Stmt, []Comment) {
 	var stmts []*Stmt
 	var last []Comment
 	fn := func(s *Stmt, err error) bool {
 		stmts = append(stmts, s)
 		return true
 	}
-	p.stmts(fn, endUnseparated, stops...)
+	p.stmts(fn, cond, stops...)
 	split := len(p.accComs)
 	if p.tok == _LitWord && (p.val == "elif" || p.val == "else" || p.val == "fi") {
 		// Split the comments, so that any aligned with an opening token
@@ -2580,8 +2590,10 @@ func (p *Parser) doRedirect(s *Stmt) {
 	}
 	r.Op, r.OpPos = RedirOperator(p.tok), p.pos
 	switch r.Op {
-	case RdrAll, AppAll:
+	case RdrAll:
 		p.checkLang(p.pos, langBashLike|langKshLike|LangZsh, "%#q redirects", r.Op)
+	case AppAll:
+		p.checkLang(p.pos, langBashLike|LangMirBSDKorn|LangZsh, "%#q redirects", r.Op)
 	case AppClob, RdrAllClob, AppAllClob:
 		p.checkLang(p.pos, LangZsh, "%#q redirects", r.Op)
 	}
@@ -2655,7 +2667,11 @@ func (p *Parser) getStmt(readEnd, binCmd, fnBody bool) *Stmt {
 		p.nest()
 		p.next()
 		p.got(_Newl)
-		b.Y = p.getStmt(false, true, false)
+		if p.showmeAllowed(false) && p.tok == semicolon {
+			b.Y = p.showmeStmt(false, true)
+		} else {
+			b.Y = p.getStmt(false, true, false)
+		}
 		if b.Y == nil || p.err != nil {
 			if p.recoverError() {
 				b.Y = &Stmt{Position: recoveredPos}
@@ -2695,6 +2711,91 @@ func (p *Parser) getStmt(readEnd, binCmd, fnBody bool) *Stmt {
 		}
 	}
 	return s
+}
+
+// cmdAfterRedirs reports whether cmd can follow the redirections which start
+// its statement outside zsh: a simple command, and with ksh93 also a
+// subshell, an arithmetic command, a declaration or a POSIX-style function
+// declaration.
+func (p *Parser) cmdAfterRedirs(cmd Command) bool {
+	switch cmd := cmd.(type) {
+	case *CallExpr:
+		return true
+	case *Subshell, *ArithmCmd, *DeclClause, *LetClause:
+		return p.lang.in(LangKsh93)
+	case *FuncDecl:
+		return p.lang.in(LangKsh93) && !cmd.RsrvWord
+	}
+	return false
+}
+
+// showmeAllowed reports whether a statement in a list can start with ksh93's
+// showme `;`, which can precede any simple command of a list outside the
+// condition of an `if`, `elif`, `while` or `until`.
+func (p *Parser) showmeAllowed(cond bool) bool {
+	return !cond && p.lang.in(LangKsh93)
+}
+
+// showmeStmt parses a statement starting with ksh93's showme `;`: a simple
+// command which does not start with a redirection, or nothing at all. The
+// shell ignores the `;` unless `set -o showme` is on, which prints the
+// command instead of running it.
+func (p *Parser) showmeStmt(readEnd, binCmd bool) *Stmt {
+	pos := p.pos
+	p.next()
+	if p.stopToken() || p.closingRsrv() {
+		s := &Stmt{Position: pos, Showme: true}
+		if readEnd && p.tok == and {
+			s.Semicolon, s.Background = p.pos, true
+			p.next()
+		}
+		return s
+	}
+	s := p.getStmt(readEnd, binCmd, false)
+	if s == nil || p.err != nil {
+		return nil
+	}
+	first := s
+	for {
+		b, ok := first.Cmd.(*BinaryCmd)
+		if !ok {
+			break
+		}
+		first = b.X
+	}
+	if !showmeCmd(first) {
+		p.posErr(pos, "%#q can only precede a simple command", semicolon)
+		return nil
+	}
+	s.Position, s.Showme = pos, true
+	return s
+}
+
+// closingRsrv reports whether the current token is a reserved word which
+// closes or continues a compound command, so that it cannot start one.
+func (p *Parser) closingRsrv() bool {
+	if p.tok != _LitWord {
+		return false
+	}
+	switch p.val {
+	case "}", "then", "elif", "else", "fi", "do", "done", "esac":
+		return true
+	}
+	return false
+}
+
+// showmeCmd reports whether a statement can follow ksh93's showme `;`.
+func showmeCmd(s *Stmt) bool {
+	if s.Negated || (len(s.Redirs) > 0 && (s.Cmd == nil || s.Cmd.Pos().After(s.Redirs[0].Pos()))) {
+		return false
+	}
+	switch cmd := s.Cmd.(type) {
+	case *CallExpr, *DeclClause, *LetClause:
+		return true
+	case *FuncDecl:
+		return !cmd.RsrvWord
+	}
+	return false
 }
 
 func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
@@ -2859,10 +2960,8 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
 	if s.Cmd == nil && len(s.Redirs) == 0 {
 		return nil // no statement found
 	}
-	if redirsStart > 0 && s.Cmd != nil {
-		if _, ok := s.Cmd.(*CallExpr); !ok {
-			p.checkLang(s.Pos(), LangZsh, "redirects before compound commands")
-		}
+	if redirsStart > 0 && s.Cmd != nil && !p.cmdAfterRedirs(s.Cmd) {
+		p.checkLang(s.Pos(), LangZsh, "redirects before compound commands")
 	}
 	for p.peekRedir() {
 		p.doRedirect(s)
@@ -3182,7 +3281,10 @@ func (p *Parser) loop(fpos Pos) Loop {
 		}
 		cl.Post = p.arithmExpr(false)
 		cl.Rparen = p.arithmEnd(dblLeftParen, cl.Lparen, old)
-		p.got(semicolon)
+		if p.got(semicolon) && p.tok == _Newl {
+			// ksh93 wants `do` or `{` on the same line as the `;`.
+			p.checkLang(p.pos, langBashLike|LangZsh, "a newline after `));`")
+		}
 		p.got(_Newl)
 		return cl
 	}
@@ -3446,6 +3548,9 @@ func (p *Parser) caseItems(stop string) (items []*CaseItem) {
 		p.accComs = nil
 		ci.OpPos = p.pos
 		ci.Op = CaseOperator(p.tok)
+		if ci.Op == Resume {
+			p.checkLang(ci.OpPos, langBashLike, "%#q", ci.Op)
+		}
 		p.next()
 		p.got(_Newl)
 

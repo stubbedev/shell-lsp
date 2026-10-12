@@ -48,7 +48,7 @@ exec {fd}<&-
 print -r -- @(one|two) +(a|b)c ?(x)y *(z) !(*.log) ~(E)^a.*$ ~(i:readme)
 case $line in
 	@(first|second)) print -r -- matched ;&
-	*(?)) print -r -- fallthrough ;;&
+	*(?)) print -r -- fallthrough ;;
 	*) print -r -- always ;;
 esac
 [[ $line == ~(E)^f.+t$ ]] && print -r -- regex

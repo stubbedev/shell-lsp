@@ -137,12 +137,18 @@ type fileTestCase struct {
 	// The real shells where testing the input succeeds or fails in the opposite way.
 	flipConfirmSet LangVariant
 
+	shellBug shellBug
+
 	// The languages with an explicit entry in byLangIndex.
 	langsSet LangVariant
 }
 
 func flipConfirm2(langSet LangVariant) func(*fileTestCase) {
 	return func(c *fileTestCase) { c.flipConfirmSet = langSet }
+}
+
+func shellBugConfirm2(langSet LangVariant, reason string) func(*fileTestCase) {
+	return func(c *fileTestCase) { c.shellBug = shellBug{langSet, reason} }
 }
 
 func (c *fileTestCase) setForLangs(val any, langSets ...LangVariant) {
@@ -285,7 +291,6 @@ var fileTests = []fileTestCase{
 			"if a\nthen\nb\nfi",
 			"if a;\nthen\nb\nfi",
 			"if a \nthen\nb\nfi",
-			"if\x00 a; th\x00en b; \x00fi",
 		},
 		langFile(&IfClause{
 			Cond: litStmts("a"),
@@ -562,31 +567,8 @@ var fileTests = []fileTestCase{
 			"for ((i = 0; i < 10; i++)); do echo $i; done",
 			"for ((i=0;i<10;i++)) do echo $i; done",
 			"for (( i = 0 ; i < 10 ; i++ ))\ndo echo $i\ndone",
-			"for (( i = 0 ; i < 10 ; i++ ));\ndo echo $i\ndone",
 		},
-		langFile(&ForClause{
-			Loop: &CStyleLoop{
-				Init: &BinaryArithm{
-					Op: Assgn,
-					X:  litWord("i"),
-					Y:  litWord("0"),
-				},
-				Cond: &BinaryArithm{
-					Op: Lss,
-					X:  litWord("i"),
-					Y:  litWord("10"),
-				},
-				Post: &UnaryArithm{
-					Op:   Inc,
-					Post: true,
-					X:    litWord("i"),
-				},
-			},
-			Do: stmts(call(
-				litWord("echo"),
-				word(litParamExp("i")),
-			)),
-		}, LangBash|LangZsh|LangKsh93),
+		langFile(echoToTen(), LangBash|LangZsh|LangKsh93),
 		langErr2("1:5: c-style fors are a bash/zsh/ksh93 feature; tried parsing as LANG", LangPOSIX|LangMirBSDKorn),
 	),
 	fileTest(
@@ -1266,6 +1248,123 @@ var fileTests = []fileTestCase{
 		langFile(&NamespaceClause{Name: lit("n"), Body: block(litStmt("a"))}, LangKsh93),
 	),
 	fileTest(
+		[]string{";"},
+		langFile(&Stmt{Showme: true}, LangKsh93),
+	),
+	fileTest(
+		[]string{"; a b"},
+		langFile(&Stmt{Showme: true, Cmd: litCall("a", "b")}, LangKsh93),
+	),
+	fileTest(
+		[]string{"; &"},
+		langFile(&Stmt{Showme: true, Background: true}, LangKsh93),
+	),
+	fileTest(
+		[]string{"; a | b &"},
+		langFile(&Stmt{
+			Showme:     true,
+			Background: true,
+			Cmd: &BinaryCmd{
+				Op: Pipe,
+				X:  litStmt("a"),
+				Y:  litStmt("b"),
+			},
+		}, LangKsh93),
+	),
+	fileTest(
+		[]string{"; f() { a; }"},
+		langFile(&Stmt{Showme: true, Cmd: &FuncDecl{
+			Parens: true,
+			Name:   lit("f"),
+			Body:   stmt(block(litStmt("a"))),
+		}}, LangKsh93),
+	),
+	fileTest(
+		[]string{"; typeset a"},
+		langFile(&Stmt{Showme: true, Cmd: &DeclClause{
+			Variant: lit("typeset"),
+			Args:    []*Assign{{Naked: true, Name: lit("a")}},
+		}}, LangKsh93),
+	),
+	fileTest(
+		[]string{"a\n;", "a; ;"},
+		langFile([]*Stmt{litStmt("a"), {Showme: true}}, LangKsh93),
+	),
+	fileTest(
+		[]string{"a &\n;", "a & ;"},
+		langFile([]*Stmt{{Cmd: litCall("a"), Background: true}, {Showme: true}}, LangKsh93),
+	),
+	fileTest(
+		[]string{"a && ; b"},
+		langFile(&BinaryCmd{
+			Op: AndStmt,
+			X:  litStmt("a"),
+			Y:  &Stmt{Showme: true, Cmd: litCall("b")},
+		}, LangKsh93),
+	),
+	fileTest(
+		[]string{"{ ; }"},
+		langFile(block(&Stmt{Showme: true}), LangKsh93),
+	),
+	fileTest(
+		[]string{"(;)", "( ; )"},
+		langFile(subshell(&Stmt{Showme: true}), LangKsh93),
+	),
+	fileTest(
+		[]string{"if a; then ; fi", "if a; then; fi"},
+		langFile(&IfClause{Cond: litStmts("a"), Then: []*Stmt{{Showme: true}}}, LangKsh93),
+	),
+	fileTest(
+		[]string{"while a; do ; done", "while a; do; done"},
+		langFile(&WhileClause{Cond: litStmts("a"), Do: []*Stmt{{Showme: true}}}, LangKsh93),
+	),
+	fileTest(
+		[]string{"case a in b) ; ;; esac"},
+		langFile(&CaseClause{
+			Word: litWord("a"),
+			Items: []*CaseItem{{
+				Op:       Break,
+				Patterns: litWords("b"),
+				Stmts:    []*Stmt{{Showme: true}},
+			}},
+		}, LangKsh93),
+	),
+	fileTest(
+		[]string{">f a() { b; }"},
+		langFile(&Stmt{
+			Redirs: []*Redirect{{Op: RdrOut, Word: litWord("f")}},
+			Cmd: &FuncDecl{
+				Parens: true,
+				Name:   lit("a"),
+				Body:   stmt(block(litStmt("b"))),
+			},
+		}, LangKsh93),
+	),
+	fileTest(
+		[]string{">f (a)"},
+		langFile(&Stmt{
+			Redirs: []*Redirect{{Op: RdrOut, Word: litWord("f")}},
+			Cmd:    subshell(litStmt("a")),
+		}, LangKsh93),
+	),
+	fileTest(
+		[]string{">f ((a))"},
+		langFile(&Stmt{
+			Redirs: []*Redirect{{Op: RdrOut, Word: litWord("f")}},
+			Cmd:    arithmCmd(litWord("a")),
+		}, LangKsh93),
+	),
+	fileTest(
+		[]string{">f typeset a"},
+		langFile(&Stmt{
+			Redirs: []*Redirect{{Op: RdrOut, Word: litWord("f")}},
+			Cmd: &DeclClause{
+				Variant: lit("typeset"),
+				Args:    []*Assign{{Naked: true, Name: lit("a")}},
+			},
+		}, LangKsh93),
+	),
+	fileTest(
 		[]string{"$((sqrt(1.5) * 2))"},
 		langFile(arithmExp(&BinaryArithm{
 			Op: Mul,
@@ -1648,6 +1747,7 @@ var fileTests = []fileTestCase{
 			Body:     stmt(block(litStmt("a"), litStmt("b"))),
 		}, LangBash|LangMirBSDKorn|LangZsh),
 		langErr2("1:13: the `function` builtin is a bash feature; tried parsing as LANG", LangPOSIX),
+		flipConfirm2(LangKsh93), // ksh93 rejects it; shell-lsp's linter reports it as SC2111 instead
 	),
 	fileTest(
 		[]string{
@@ -2194,32 +2294,10 @@ var fileTests = []fileTestCase{
 	fileTest(
 		[]string{
 			"$(\n\tfoo\n) <<EOF\nbar\nEOF",
-			"<<EOF $(\n\tfoo\n)\nbar\nEOF",
-		},
-		// note that dash won't accept the second one
-		langFile(&Stmt{
-			Cmd: call(word(cmdSubst(litStmt("foo")))),
-			Redirs: []*Redirect{{
-				Op:   Hdoc,
-				Word: litWord("EOF"),
-				Hdoc: litWord("bar\n"),
-			}},
-		}, LangBash|LangMirBSDKorn),
-	),
-	fileTest(
-		[]string{
-			"$(\n\tfoo\n) <<EOF\nbar\nEOF",
 			"`\n\tfoo\n` <<EOF\nbar\nEOF",
 			"<<EOF `\n\tfoo\n`\nbar\nEOF",
 		},
-		langFile(&Stmt{
-			Cmd: call(word(cmdSubst(litStmt("foo")))),
-			Redirs: []*Redirect{{
-				Op:   Hdoc,
-				Word: litWord("EOF"),
-				Hdoc: litWord("bar\n"),
-			}},
-		}),
+		langFile(fooSubstBarHdoc()),
 	),
 	fileTest(
 		[]string{
@@ -2542,7 +2620,7 @@ var fileTests = []fileTestCase{
 				{Op: AppAll, Word: litWord("b")},
 			},
 		}, LangBash|LangMirBSDKorn|LangZsh),
-		langErr2("1:6: `&>>` redirects are a bash/mksh/zsh/ksh93 feature; tried parsing as LANG", LangPOSIX),
+		langErr2("1:6: `&>>` redirects are a bash/mksh/zsh feature; tried parsing as LANG", LangPOSIX|LangKsh93),
 		flipConfirm2(LangPOSIX), // POSIX shells tend to parse &> as & > hence it runs as two commands
 	),
 	fileTest(
@@ -2884,6 +2962,7 @@ var fileTests = []fileTestCase{
 		langErr2("1:9: `then` must be followed by a statement list"),
 		langFile(&IfClause{Cond: litStmts("foo")}, LangZsh|LangMirBSDKorn),
 		langSkip(LangMirBSDKorn), // only allows empty lists with newlines?
+		langSkip(LangKsh93),      // an empty showme command, tested with them
 	),
 	fileTest(
 		[]string{"while; do exit; done", "while\ndo exit\ndone"},
@@ -2896,6 +2975,7 @@ var fileTests = []fileTestCase{
 		langErr2("1:14: `do` must be followed by a statement list"),
 		langFile(&WhileClause{Cond: litStmts("false")}, LangZsh|LangMirBSDKorn),
 		langSkip(LangMirBSDKorn), // only allows empty lists with newlines?
+		langSkip(LangKsh93),      // an empty showme command, tested with them
 	),
 	fileTest(
 		[]string{"$({ foo; })"},
@@ -3554,7 +3634,7 @@ var fileTests = []fileTestCase{
 				},
 			})),
 		), LangZsh),
-		flipConfirm2(LangMirBSDKorn), // TODO: why is this a valid substitution in mksh?
+		flipConfirm2(LangMirBSDKorn|LangKsh93), // TODO: why is this a valid substitution in mksh and ksh93?
 	),
 	fileTest(
 		[]string{"foo=force_expansion\necho ${foo:|bar}"},
@@ -4897,7 +4977,8 @@ var fileTests = []fileTestCase{
 					Stmts:    litStmts("b"),
 				},
 			},
-		}, LangBash|LangKsh93),
+		}, LangBash),
+		langErr2("1:16: `;;&` is a bash feature; tried parsing as LANG", LangKsh93),
 	),
 	fileTest(
 		[]string{"case i in 1) a ;| 2) b ;; esac"},
@@ -6200,6 +6281,7 @@ var fileTests = []fileTestCase{
 			word(lit("a"), lit("[b")),
 			word(lit("c"), lit("[de]f")),
 		), LangBash|LangMirBSDKorn|LangZsh),
+		shellBugConfirm2(LangKsh93, "ksh93u+m 1.0.10 -n rejects the unmatched `[` in a word that it runs without complaint"),
 	),
 	fileTest(
 		[]string{"<<EOF | b\nfoo\nEOF"},
@@ -6617,7 +6699,66 @@ var fileTests = []fileTestCase{
 }
 
 // these don't have a canonical format with the same syntax tree
+// echoToTen is the syntax tree of `for ((i = 0; i < 10; i++)); do echo $i; done`.
+func echoToTen() *ForClause {
+	return &ForClause{
+		Loop: &CStyleLoop{
+			Init: &BinaryArithm{
+				Op: Assgn,
+				X:  litWord("i"),
+				Y:  litWord("0"),
+			},
+			Cond: &BinaryArithm{
+				Op: Lss,
+				X:  litWord("i"),
+				Y:  litWord("10"),
+			},
+			Post: &UnaryArithm{
+				Op:   Inc,
+				Post: true,
+				X:    litWord("i"),
+			},
+		},
+		Do: stmts(call(
+			litWord("echo"),
+			word(litParamExp("i")),
+		)),
+	}
+}
+
+// fooSubstBarHdoc is the syntax tree of "$(\n\tfoo\n) <<EOF\nbar\nEOF".
+func fooSubstBarHdoc() *Stmt {
+	return &Stmt{
+		Cmd: call(word(cmdSubst(litStmt("foo")))),
+		Redirs: []*Redirect{{
+			Op:   Hdoc,
+			Word: litWord("EOF"),
+			Hdoc: litWord("bar\n"),
+		}},
+	}
+}
+
 var fileTestsNoPrint = []fileTestCase{
+	fileTest(
+		[]string{"if\x00 a; th\x00en b; \x00fi"},
+		langFile(&IfClause{
+			Cond: litStmts("a"),
+			Then: litStmts("b"),
+		}),
+		langErr2("1:3: null bytes are a bash/posix/mksh/zsh feature; tried parsing as LANG", LangKsh93),
+	),
+	fileTest(
+		[]string{"for (( i = 0 ; i < 10 ; i++ ));\ndo echo $i\ndone"},
+		langFile(echoToTen(), LangBash|LangZsh),
+		langErr2("1:5: c-style fors are a bash/zsh/ksh93 feature; tried parsing as LANG", LangPOSIX|LangMirBSDKorn),
+		langErr2("1:31: a newline after `));` is a bash/zsh feature; tried parsing as LANG", LangKsh93),
+	),
+	fileTest(
+		[]string{"<<EOF $(\n\tfoo\n)\nbar\nEOF"},
+		// dash rejects it
+		langFile(fooSubstBarHdoc(), LangBash|LangMirBSDKorn|LangKsh93),
+		shellBugConfirm2(LangKsh93, "ksh93u+m 1.0.10 aborts with free(): invalid size"),
+	),
 	fileTest(
 		[]string{`$[foo]`},
 		langFile(word(lit("$"), lit("[foo]")), LangPOSIX),

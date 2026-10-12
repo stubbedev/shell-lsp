@@ -228,6 +228,7 @@ type Stmt struct {
 	Position   Pos
 	Semicolon  Pos  // position of ';', '&', or '|&', if any
 	Negated    bool // ! stmt
+	Showme     bool // ksh93's ; stmt, where stmt is a simple command or empty
 	Background bool // stmt &
 	Coprocess  bool // mksh's |&
 	Disown     bool // zsh's &| or &!
@@ -245,8 +246,8 @@ func (s *Stmt) End() Pos {
 		return end
 	}
 	end := s.Position
-	if s.Negated {
-		end = posAddCol(end, 1)
+	if s.Negated || s.Showme {
+		end = posAddCol(end, 1) // '!' or ';'
 	}
 	if s.Cmd != nil {
 		end = s.Cmd.End()

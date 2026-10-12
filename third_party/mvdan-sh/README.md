@@ -56,6 +56,7 @@ reproducer so that it can be sent upstream as it is.
 | 0024 | zsh: further subscripts after the first, each applied to the result of the one before (`${a[2][1]}`, `$a[1][2,3]`, `${funcstack[2,-1][(I)x]}`), in `ParamExp.Elems`, as with `zsh -n`, instead of failing with "not a valid parameter expansion operator" | [mvdan/sh#120](https://github.com/mvdan/sh/issues/120) |
 | 0025 | zsh: the subscripts of the associative arrays that zsh modules provide (`$+functions[_omz::$cmd]`, `${widgets[.x-y]}`) and of declared associative arrays in the short form (`$m[a.b]`) parse as string keys, as with `zsh -n`, instead of as arithmetic | [mvdan/sh#120](https://github.com/mvdan/sh/issues/120) |
 | 0026 | syntax: a `#` that starts a word among the arguments of `let` begins a comment (`let x=1 # one`), as with `bash -n`, `mksh -n` and `zsh -n`, instead of an arithmetic operator that fails with "statements must be separated by &, ; or a newline" | — |
+| 0027 | ksh93 as ksh93u+m 1.0.10 parses it: the showme `;` before a simple command or alone (new `Stmt.Showme`), redirections before subshells, arithmetic commands, declarations and `name()` functions (kept in place by the printer), and errors for `&>>`, `;;&`, null bytes and a newline after `));`; `TestParseConfirm` runs the shells under `LC_ALL=C.UTF-8` and skips, with the reason, inputs a shell crashes, hangs or contradicts itself on | — |
 
 ## Tests
 

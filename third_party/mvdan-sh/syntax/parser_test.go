@@ -107,12 +107,12 @@ func TestParseConfirm(t *testing.T) {
 				case *File:
 					for j, in := range c.inputs {
 						wantErr := lang.in(c.flipConfirmSet)
-						t.Run(fmt.Sprintf("OK/%03d-%d", i, j), confirmParse(in, external.cmd, wantErr))
+						t.Run(fmt.Sprintf("OK/%03d-%d", i, j), c.shellBug.confirm(lang, in, external.cmd, wantErr))
 					}
 				case string:
 					for j, in := range c.inputs {
 						wantErr := !lang.in(c.flipConfirmSet)
-						t.Run(fmt.Sprintf("Err/%03d-%d", i, j), confirmParse(in, external.cmd, wantErr))
+						t.Run(fmt.Sprintf("Err/%03d-%d", i, j), c.shellBug.confirm(lang, in, external.cmd, wantErr))
 					}
 				}
 			}
@@ -125,7 +125,7 @@ func TestParseConfirm(t *testing.T) {
 					continue
 				}
 				wantErr := !lang.in(c.flipConfirmSet)
-				t.Run(fmt.Sprintf("ErrOld/%03d", i), confirmParse(c.in, external.cmd, wantErr))
+				t.Run(fmt.Sprintf("ErrOld/%03d", i), c.shellBug.confirm(lang, c.in, external.cmd, wantErr))
 			}
 		})
 	}
@@ -299,6 +299,23 @@ func cmdContains(substr, cmd string, args ...string) bool {
 	return strings.Contains(got, substr)
 }
 
+// shellBug names the real shells which crash, hang or contradict themselves
+// on a test's input, so that the input cannot be confirmed with them, and why.
+type shellBug struct {
+	langs  LangVariant
+	reason string
+}
+
+func (b shellBug) confirm(lang LangVariant, in, cmd string, wantErr bool) func(*testing.T) {
+	if b.langs&lang != 0 {
+		return func(t *testing.T) {
+			t.Logf("input: %s", in)
+			t.Skipf("%s cannot be confirmed with: %s", cmd, b.reason)
+		}
+	}
+	return confirmParse(in, cmd, wantErr)
+}
+
 var extGlobRe = regexp.MustCompile(`[@?*+!]\(`)
 
 const externalShellTimeout = 10 * time.Second
@@ -343,6 +360,8 @@ func confirmParse(in, cmd string, wantErr bool) func(*testing.T) {
 		cmd := exec.CommandContext(ctx, cmd, opts...)
 		killCommandOnTestExit(cmd)
 		cmd.Dir = t.TempDir() // to be safe
+		// Which characters can form a name depends on the locale.
+		cmd.Env = append(os.Environ(), "LC_ALL=C.UTF-8")
 		cmd.Stdin = strings.NewReader(in)
 		var stderrBuf strings.Builder
 		cmd.Stderr = &stderrBuf
@@ -408,6 +427,8 @@ type errorCase struct {
 
 	// The real shells where testing the input succeeds rather than failing as expected.
 	flipConfirmSet LangVariant
+
+	shellBug shellBug
 }
 
 func errCase(in string, opts ...func(*errorCase)) errorCase {
@@ -451,9 +472,13 @@ func flipConfirm(langSet LangVariant) func(*errorCase) {
 
 var flipConfirmAll = flipConfirm(langResolvedVariants)
 
+func shellBugConfirm(langSet LangVariant, reason string) func(*errorCase) {
+	return func(c *errorCase) { c.shellBug = shellBug{langSet, reason} }
+}
+
 // The real shells which allow unclosed heredocs.
 // TODO: allow ending a heredoc at EOF in these language variant modes.
-var flipConfirmUnclosedHeredoc = flipConfirm(LangBash | LangPOSIX | LangBats | LangZsh)
+var flipConfirmUnclosedHeredoc = flipConfirm(LangBash | LangPOSIX | LangBats | LangZsh | LangKsh93)
 
 func init() {
 	seenInputs := make(map[string]bool)
@@ -571,7 +596,7 @@ var errorCases = []errorCase{
 	errCase(
 		"! !",
 		langErr("1:1: cannot negate a command multiple times"),
-		flipConfirm(LangBash), // bash allows lone `!`, unlike dash, mksh, and us.
+		flipConfirm(LangBash|LangKsh93), // bash and ksh93 allow lone `!`, unlike dash, mksh, and us.
 	),
 	errCase(
 		"! ! foo",
@@ -634,7 +659,7 @@ var errorCases = []errorCase{
 	errCase(
 		">f foo() { bar; }",
 		langErr("1:1: redirects before compound commands are a zsh feature; tried parsing as LANG"),
-		langErr("", LangZsh),
+		langErr("", LangZsh|LangKsh93),
 	),
 	errCase(
 		">f if foo; then bar; fi",
@@ -660,16 +685,46 @@ var errorCases = []errorCase{
 	errCase(
 		";",
 		langErr("1:1: `;` can only immediately follow a statement"),
+		langErr("", LangKsh93), // a showme command
+	),
+	errCase(
+		"; { a; }",
+		langErr("1:1: `;` can only immediately follow a statement"),
+		langErr("1:1: `;` can only precede a simple command", LangKsh93),
+	),
+	errCase(
+		"; >f",
+		langErr("1:1: `;` can only immediately follow a statement"),
+		langErr("1:1: `;` can only precede a simple command", LangKsh93),
+	),
+	errCase(
+		"; ! a",
+		langErr("1:1: `;` can only immediately follow a statement"),
+		langErr("1:1: `;` can only precede a simple command", LangKsh93),
+	),
+	errCase(
+		"; ; a",
+		langErr("1:1: `;` can only immediately follow a statement"),
+		langErr("1:3: statements must be separated by &, ; or a newline", LangKsh93),
+	),
+	errCase(
+		"a | ; b",
+		langErr("1:3: `|` must be followed by a statement"),
+	),
+	errCase(
+		"if ; then a; fi",
+		langErr("1:1: `if` must be followed by a statement list"),
+		langErr("", LangZsh|LangMirBSDKorn),
 	),
 	errCase(
 		"{ ; }",
 		langErr("1:1: `{` must be followed by a statement list"),
-		langErr("", LangZsh|LangMirBSDKorn),
+		langErr("", LangZsh|langKshLike),
 	),
 	errCase(
 		`"foo"(){ :; }`,
 		langErr("1:1: invalid func name"),
-		flipConfirm(LangMirBSDKorn), // TODO: support non-literal func names
+		flipConfirm(langKshLike), // TODO: support non-literal func names
 	),
 	errCase(
 		`foo$bar(){ :; }`,
@@ -735,6 +790,7 @@ var errorCases = []errorCase{
 	errCase(
 		"echo & ; bar",
 		langErr("1:8: `;` can only immediately follow a statement"),
+		langErr("", LangKsh93), // a showme command
 	),
 	errCase(
 		"foo;;",
@@ -925,11 +981,13 @@ var errorCases = []errorCase{
 		"<<-EOF\n\t",
 		langErr("1:1: unclosed here-document `EOF`"),
 		flipConfirmUnclosedHeredoc,
+		shellBugConfirm(LangKsh93, "ksh93u+m 1.0.10 hangs at an unclosed <<- here-document ending in a tab"),
 	),
 	errCase(
 		"<<-'EOF'\n\t",
 		langErr("1:1: unclosed here-document `EOF`"),
 		flipConfirmUnclosedHeredoc,
+		shellBugConfirm(LangKsh93, "ksh93u+m 1.0.10 hangs at an unclosed <<- here-document ending in a tab"),
 	),
 	errCase(
 		"<<\nEOF\nbar\nEOF",
@@ -1049,6 +1107,7 @@ var errorCases = []errorCase{
 	errCase(
 		"for 'i' in 1 2 3; do echo $i; done",
 		langErr("1:1: `for` must be followed by a literal"),
+		flipConfirm(LangKsh93), // ksh93 removes the quotes from the name
 	),
 	errCase(
 		"for in 1 2 3; do echo $i; done",
@@ -1089,6 +1148,7 @@ var errorCases = []errorCase{
 	errCase(
 		"echo foo &\n;",
 		langErr("2:1: `;` can only immediately follow a statement"),
+		langErr("", LangKsh93), // a showme command
 	),
 	errCase(
 		"echo $(foo",
@@ -1146,6 +1206,7 @@ var errorCases = []errorCase{
 	errCase(
 		"echo $((+))",
 		langErr("1:9: `+` must be followed by an expression"),
+		flipConfirm(LangKsh93), // ksh93 evaluates the missing operand as 0
 	),
 	errCase(
 		"echo $((a b c))",
@@ -1230,6 +1291,7 @@ var errorCases = []errorCase{
 		langErr("1:8: invalid parameter name"),
 		langErr("1:8: not a valid parameter expansion operator: `à`", LangZsh), // not great, but seems like an edge case
 		langErr("", langLazyParamExp),
+		flipConfirm(LangKsh93), // ksh93 takes letters outside ASCII in names under C.UTF-8, which confirmParse sets
 	),
 	errCase(
 		"echo ${1a}",
@@ -1394,10 +1456,12 @@ var errorCases = []errorCase{
 	errCase(
 		"echo foo\n;",
 		langErr("2:1: `;` can only immediately follow a statement"),
+		langErr("", LangKsh93), // a showme command
 	),
 	errCase(
 		"<<$ <<0\n$(<<$<<",
 		langErr("2:6: `<<` must be followed by a word", LangBash|LangMirBSDKorn),
+		shellBugConfirm(LangKsh93, "ksh93u+m 1.0.10 hangs at here-documents left open in a command substitution"),
 	),
 	errCase(
 		"(foo) bar",
@@ -1500,6 +1564,7 @@ var errorCases = []errorCase{
 	errCase(
 		"<<a <<0\n$(<<$<<",
 		langErr("2:6: `<<` must be followed by a word"),
+		shellBugConfirm(LangKsh93, "ksh93u+m 1.0.10 hangs at here-documents left open in a command substitution"),
 	),
 	errCase(
 		`""()`,
@@ -1830,7 +1895,7 @@ var errorCases = []errorCase{
 	errCase(
 		"a[]",
 		langErr("1:2: `[` must be followed by an expression", LangBash|LangMirBSDKorn|LangZsh),
-		flipConfirmAll, // is cmd
+		flipConfirm(langResolvedVariants&^LangKsh93), // is cmd, but ksh93 rejects the empty subscript
 	),
 	errCase(
 		"a[[",
@@ -1847,7 +1912,7 @@ var errorCases = []errorCase{
 	errCase(
 		"echo $((a[]))",
 		langErr("1:10: `[` must be followed by an expression", LangBash|LangMirBSDKorn|LangZsh),
-		flipConfirm(LangMirBSDKorn), // wrong?
+		flipConfirm(langKshLike), // wrong?
 	),
 	errCase(
 		"echo $((x$t[",
@@ -1933,7 +1998,7 @@ var errorCases = []errorCase{
 	errCase(
 		"echo ${foo[]}",
 		langErr("1:11: `[` must be followed by an expression", LangBash|LangMirBSDKorn|LangZsh),
-		flipConfirm(LangMirBSDKorn), // TODO: why is this valid?
+		flipConfirm(langKshLike), // TODO: why is this valid?
 	),
 	errCase(
 		"echo ${a/\n",
@@ -1954,6 +2019,7 @@ var errorCases = []errorCase{
 	errCase(
 		"foo=force_expansion; echo ${foo:1 2}",
 		langErr("1:35: not a valid arithmetic operator: `2`", LangBash|LangMirBSDKorn),
+		flipConfirm(LangKsh93), // ksh93 expands it without complaint
 	),
 	errCase(
 		"echo ${foo:1",
@@ -2085,6 +2151,7 @@ var errorCases = []errorCase{
 	errCase(
 		"echo ${!a.}",
 		langErr("1:9: invalid parameter name", LangKsh93),
+		flipConfirm(LangKsh93), // ksh93 expands it to the name `a.` instead of failing
 	),
 	errCase(
 		"echo ${a.*}",

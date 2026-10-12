@@ -86,6 +86,8 @@ retry:
 		switch b {
 		case '\x00':
 			// Ignore null bytes while parsing, like bash.
+			// ksh93 refuses to read a script holding one.
+			p.checkLang(p.nextPos(), langResolvedVariants&^LangKsh93, "null bytes")
 			p.col++
 			goto retry
 		case '\r':

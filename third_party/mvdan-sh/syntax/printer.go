@@ -1215,6 +1215,12 @@ func (p *Printer) stmt(s *Stmt) {
 	if s.Negated {
 		p.spacedString("!", s.Pos())
 	}
+	// An empty showme command is its own separator.
+	emptyShowme := s.Showme && s.Cmd == nil && len(s.Redirs) == 0
+	if s.Showme {
+		p.spacedString(";", s.Pos())
+		p.wroteSemi = emptyShowme
+	}
 	var startRedirs int
 	if s.Cmd != nil {
 		startRedirs = p.command(s.Cmd, s.Redirs)
@@ -1247,7 +1253,7 @@ func (p *Printer) stmt(s *Stmt) {
 	if sep || s.Background || s.Coprocess || s.Disown {
 		if sep {
 			p.bslashNewl()
-		} else if !p.minify {
+		} else if !p.minify || emptyShowme { // `;&` would be a case terminator
 			p.space()
 		}
 		if s.Background {
@@ -1292,6 +1298,12 @@ func (p *Printer) printRedirsUntil(redirs []*Redirect, startRedirs int, pos Pos)
 
 func (p *Printer) command(cmd Command, redirs []*Redirect) (startRedirs int) {
 	p.advanceLine(cmd.Pos().Line())
+	if _, ok := cmd.(*CallExpr); !ok {
+		// Keep redirects before compound commands where they are, as zsh
+		// and ksh93 allow: ksh93 ignores any before a function declaration,
+		// but would apply them whenever the function runs if they followed.
+		startRedirs = p.printRedirsUntil(redirs, startRedirs, cmd.Pos())
+	}
 	p.spacePad(cmd.Pos())
 	switch cmd := cmd.(type) {
 	case *CallExpr:

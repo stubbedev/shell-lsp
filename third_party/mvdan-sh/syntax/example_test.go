@@ -191,6 +191,7 @@ func ExampleDebugPrint() {
 	// .  .  .  Position: 1:1
 	// .  .  .  Semicolon: 0:0
 	// .  .  .  Negated: false
+	// .  .  .  Showme: false
 	// .  .  .  Background: false
 	// .  .  .  Coprocess: false
 	// .  .  .  Disown: false
