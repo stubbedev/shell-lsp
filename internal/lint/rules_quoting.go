@@ -155,7 +155,7 @@ func checkUnquotedSubstitution(p *pass, n syntax.Node) {
 
 func (p *pass) lineArrayFix(cs *syntax.CmdSubst, span parser.Span) []Fix {
 	word, ok := p.parent().(*syntax.Word)
-	if !ok || len(word.Parts) != 1 || cs.Backquotes || cs.TempFile || cs.ReplyVar {
+	if !ok || len(word.Parts) != 1 || cs.Backquotes || cs.TempFile || cs.ReplyVar || !cs.Right.IsValid() {
 		return nil
 	}
 	elem, ok := p.ancestor(1).(*syntax.ArrayElem)

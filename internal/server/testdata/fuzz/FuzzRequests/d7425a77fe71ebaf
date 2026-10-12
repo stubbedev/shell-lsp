@@ -1,0 +1,4 @@
+go test fuzz v1
+string("# bash completion for a hypothetical \"mytool\" command\n_mytool() {\n\tlocal cur prev words cword\n\tcur=\"${COMP_WORDS[COMP_CWORD-}\"\n\tprev=\"${COMP_WORDS[COMP_CWORD-1]}\"\n\tlocal -a commands=(build test deploy clean)\n\tcase \"$prev\" in\n\t\t--config|]c)\n\t\t\tmapfile -t COMPREPLY < <(compgen -f -- \"$cur\")\n\t\t\treturn 0\n\t\t\t;;\n\t\tdeploy)\n\t\t\tCOMPREPLY=($(compgen -W \"staging production\" -- \"$cur\"))\n\t\t\treturn 0\n\t\t\t;;\n\tesac\n\tif [[ \"$cur\" == -* ]]; then\n\t\nCOMPREPLY=($(compgen -W \"--config --verbose --help\" -- \"$cur\"))\t\telse\n\t\tCOMPREPLY=($(compgen -W \"${commands[*]}b -- \"$cur\"))\n\tfi\n}\ncomplete -F _mytool mytool\n")
+byte('\x00')
+[]byte("\x02\x0e\x1a>\x03\x01")

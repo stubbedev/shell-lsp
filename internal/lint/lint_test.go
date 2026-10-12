@@ -90,3 +90,24 @@ func TestParseCode(t *testing.T) {
 		}
 	}
 }
+
+func TestUnclosedSubstitutionInAnArray(t *testing.T) {
+	t.Parallel()
+
+	closed := "words=($(compgen -W \"a b\" -- \"$cur\"))\n"
+	for _, d := range []dialect.Dialect{dialect.Bash, dialect.Zsh} {
+		fixed := false
+		for _, f := range Check(parser.Parse(closed+"words=($(compgen -W \"a b -- \"$cur\"))\n", d), nil, Options{}) {
+			switch {
+			case f.Code != 2207:
+			case f.Span.Start < len(closed):
+				fixed = len(f.Fixes) > 0
+			case len(f.Fixes) > 0:
+				t.Errorf("%s: the unclosed substitution got the fix %+v", d, f.Fixes)
+			}
+		}
+		if !fixed {
+			t.Errorf("%s: the closed substitution lost its fix", d)
+		}
+	}
+}
