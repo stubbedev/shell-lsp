@@ -590,7 +590,8 @@ shell-lsp exists because of two projects:
 
 Both were reimplemented clean-room, without reference to their source code.
 Each was treated as a black box whose observable behaviour served as the
-specification:
+specification; [CLEAN_ROOM.md](CLEAN_ROOM.md) states what may and may not be
+used:
 
 - ShellCheck is only a test oracle. The lint fixtures under
   `internal/lint/testdata/fixtures` are original scripts whose expected
