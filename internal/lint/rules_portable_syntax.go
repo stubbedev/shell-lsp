@@ -8,17 +8,17 @@ import (
 
 var portableSyntaxFamily = family{
 	codes: map[Code]meta{
-		3001: {severity: SeverityWarning, summary: "Process substitution is undefined in POSIX sh."},
-		3005: {severity: SeverityWarning, summary: "C-style for ((...)) loops are undefined in POSIX sh."},
-		3006: {severity: SeverityWarning, summary: "The arithmetic command ((...)) is undefined in POSIX sh."},
-		3008: {severity: SeverityWarning, summary: "select loops are undefined in POSIX sh."},
-		3024: {severity: SeverityWarning, summary: "Appending with += is undefined in POSIX sh."},
-		3029: {severity: SeverityWarning, summary: "The |& operator is undefined in POSIX sh."},
-		3030: {severity: SeverityWarning, summary: "Arrays are undefined in POSIX sh."},
-		3032: {severity: SeverityWarning, summary: "coproc is undefined in POSIX sh."},
-		3033: {severity: SeverityWarning, summary: "A function name that is not a valid identifier is undefined in POSIX sh."},
-		3034: {severity: SeverityWarning, summary: "Reading a file with $(< file) is undefined in POSIX sh."},
-		3035: {severity: SeverityWarning, summary: "Reading a file with `< file` is undefined in POSIX sh."},
+		3001: {shells: strictShells, summary: "Process substitution is undefined in POSIX sh."},
+		3005: {shells: strictShells, summary: "C-style for ((...)) loops are undefined in POSIX sh."},
+		3006: {shells: strictShells, summary: "The arithmetic command ((...)) is undefined in POSIX sh."},
+		3008: {shells: strictShells, summary: "select loops are undefined in POSIX sh."},
+		3024: {shells: strictShells, summary: "Appending with += is undefined in POSIX sh."},
+		3029: {shells: strictShells, summary: "The |& operator is undefined in POSIX sh."},
+		3030: {shells: strictShells, summary: "Arrays are undefined in POSIX sh."},
+		3032: {shells: strictShells, summary: "coproc is undefined in POSIX sh."},
+		3033: {shells: strictShells, summary: "A function name that is not a valid identifier is undefined in POSIX sh."},
+		3034: {shells: strictShells, summary: "Reading a file with $(< file) is undefined in POSIX sh."},
+		3035: {shells: strictShells, summary: "Reading a file with `< file` is undefined in POSIX sh."},
 	},
 	rules: []rule{{on: nodes(&syntax.ProcSubst{}, &syntax.ForClause{}, &syntax.ArithmCmd{}, &syntax.Assign{}, &syntax.BinaryCmd{}, &syntax.ArrayExpr{}, &syntax.CoprocClause{}, &syntax.FuncDecl{}, &syntax.CmdSubst{}), node: checkPortableSyntax}},
 }
@@ -29,31 +29,31 @@ func checkPortableSyntax(p *pass, n syntax.Node) {
 	}
 	switch n := n.(type) {
 	case *syntax.ProcSubst:
-		p.nonPortableNode(portabilityIssue{code: 3001, shells: strictShells, feature: "Process substitution " + n.Op.String() + "...)", alternative: "a temporary file or a pipe"}, n)
+		p.nonPortableNode(portabilityIssue{code: 3001, feature: "Process substitution " + n.Op.String() + "...)", alternative: "a temporary file or a pipe"}, n)
 	case *syntax.ForClause:
 		switch {
 		case n.Select:
-			p.nonPortableNode(portabilityIssue{code: 3008, shells: strictShells, feature: "A select loop"}, n)
+			p.nonPortableNode(portabilityIssue{code: 3008, feature: "A select loop"}, n)
 		case isCStyleLoop(n):
-			p.nonPortableNode(portabilityIssue{code: 3005, shells: strictShells, feature: "A C-style for ((...)) loop", alternative: "a while loop with $((...)) arithmetic"}, n)
+			p.nonPortableNode(portabilityIssue{code: 3005, feature: "A C-style for ((...)) loop", alternative: "a while loop with $((...)) arithmetic"}, n)
 		}
 	case *syntax.ArithmCmd:
-		p.nonPortableNode(portabilityIssue{code: 3006, shells: strictShells, feature: "The arithmetic command ((...))", alternative: `[ "$((...))" -ne 0 ] or a $((...)) assignment`}, n)
+		p.nonPortableNode(portabilityIssue{code: 3006, feature: "The arithmetic command ((...))", alternative: `[ "$((...))" -ne 0 ] or a $((...)) assignment`}, n)
 	case *syntax.Assign:
 		if n.Append && n.Name != nil {
-			p.nonPortableNode(portabilityIssue{code: 3024, shells: strictShells, feature: "Appending with " + n.Name.Value + "+=", alternative: n.Name.Value + `="$` + n.Name.Value + `..."`}, n)
+			p.nonPortableNode(portabilityIssue{code: 3024, feature: "Appending with " + n.Name.Value + "+=", alternative: n.Name.Value + `="$` + n.Name.Value + `..."`}, n)
 		}
 	case *syntax.BinaryCmd:
 		if n.Op == syntax.PipeAll {
-			p.nonPortable(portabilityIssue{code: 3029, shells: strictShells, feature: "The |& operator", alternative: "2>&1 |"}, posSpan(n.OpPos, len("|&")))
+			p.nonPortable(portabilityIssue{code: 3029, feature: "The |& operator", alternative: "2>&1 |"}, posSpan(n.OpPos, len("|&")))
 		}
 	case *syntax.ArrayExpr:
-		p.nonPortableNode(portabilityIssue{code: 3030, shells: strictShells, feature: "An array"}, n)
+		p.nonPortableNode(portabilityIssue{code: 3030, feature: "An array"}, n)
 	case *syntax.CoprocClause:
-		p.nonPortableNode(portabilityIssue{code: 3032, shells: strictShells, feature: "coproc", alternative: "named pipes (mkfifo)"}, n)
+		p.nonPortableNode(portabilityIssue{code: 3032, feature: "coproc", alternative: "named pipes (mkfifo)"}, n)
 	case *syntax.FuncDecl:
 		if n.Name != nil && !parser.IsName(n.Name.Value) {
-			p.nonPortableNode(portabilityIssue{code: 3033, shells: strictShells, feature: "The function name " + n.Name.Value + ", which is not a valid identifier,"}, n)
+			p.nonPortableNode(portabilityIssue{code: 3033, feature: "The function name " + n.Name.Value + ", which is not a valid identifier,"}, n)
 		}
 	case *syntax.CmdSubst:
 		checkFileReadShortcut(p, n)
@@ -80,8 +80,8 @@ func checkFileReadShortcut(p *pass, cs *syntax.CmdSubst) {
 		}
 	}
 	if cs.Backquotes {
-		p.nonPortableNode(portabilityIssue{code: 3035, shells: strictShells, feature: "Reading a file with `< file`", alternative: "`cat file`"}, cs, fixes...)
+		p.nonPortableNode(portabilityIssue{code: 3035, feature: "Reading a file with `< file`", alternative: "`cat file`"}, cs, fixes...)
 		return
 	}
-	p.nonPortableNode(portabilityIssue{code: 3034, shells: strictShells, feature: "Reading a file with $(< file)", alternative: "$(cat file)"}, cs, fixes...)
+	p.nonPortableNode(portabilityIssue{code: 3034, feature: "Reading a file with $(< file)", alternative: "$(cat file)"}, cs, fixes...)
 }

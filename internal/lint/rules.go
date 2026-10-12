@@ -2,8 +2,8 @@ package lint
 
 import (
 	"fmt"
-	"maps"
 
+	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -98,6 +98,22 @@ func nodes(prototypes ...syntax.Node) []nodeKind {
 
 var catalog, rules, nodeChecks, commandChecks = assemble(families)
 
+func registered(code Code, m meta) meta {
+	switch {
+	case code.Portability() != (m.shells != 0):
+		panic(fmt.Sprintf("lint: %s must name the shells it is reported in exactly when it is a portability code", code))
+	case m.shells == 0:
+		return m
+	case m.severity != 0:
+		panic(fmt.Sprintf("lint: %s takes its severity from its shells", code))
+	case m.shells.Has(dialect.Posix):
+		m.severity = SeverityWarning
+	default:
+		m.severity = SeverityError
+	}
+	return m
+}
+
 func assemble(fs []family) (map[Code]meta, []rule, nodeDispatch, commandDispatch) {
 	codes := map[Code]meta{}
 	var all []rule
@@ -109,7 +125,9 @@ func assemble(fs []family) (map[Code]meta, []rule, nodeDispatch, commandDispatch
 				panic(fmt.Sprintf("lint: %s is registered by two families", code))
 			}
 		}
-		maps.Copy(codes, f.codes)
+		for code, m := range f.codes {
+			codes[code] = registered(code, m)
+		}
 		all = append(all, f.rules...)
 		commands = append(commands, f.commands...)
 	}

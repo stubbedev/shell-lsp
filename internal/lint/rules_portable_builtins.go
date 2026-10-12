@@ -14,23 +14,23 @@ import (
 
 var portableBuiltinsFamily = family{
 	codes: map[Code]meta{
-		3036: {severity: SeverityError, summary: "echo in dash and busybox sh does not support this flag."},
-		3037: {severity: SeverityWarning, summary: "echo flags are undefined in POSIX sh."},
-		3038: {severity: SeverityWarning, summary: "exec options are undefined in POSIX sh."},
-		3039: {severity: SeverityWarning, summary: "let is undefined in POSIX sh."},
-		3040: {severity: SeverityWarning, summary: "This set -o option is undefined in POSIX sh."},
-		3041: {severity: SeverityWarning, summary: "This set flag is undefined in POSIX sh."},
-		3042: {severity: SeverityWarning, summary: "This set option is undefined in POSIX sh."},
-		3043: {severity: SeverityWarning, summary: "local is undefined in POSIX sh."},
-		3044: {severity: SeverityWarning, summary: "A bash builtin is used that is undefined in POSIX sh."},
-		3045: {severity: SeverityWarning, summary: "A builtin option is used that is undefined in POSIX sh."},
-		3046: {severity: SeverityWarning, summary: "source is undefined in POSIX sh and dash."},
-		3047: {severity: SeverityWarning, summary: "Trapping this signal or condition is undefined in POSIX sh."},
-		3048: {severity: SeverityWarning, summary: "The SIG prefix on a signal name is undefined in POSIX sh and dash."},
-		3049: {severity: SeverityWarning, summary: "Lowercase signal names are undefined in POSIX sh."},
-		3050: {severity: SeverityWarning, summary: "printf %q is undefined in POSIX sh."},
-		3051: {severity: SeverityWarning, summary: "source is undefined in POSIX sh and dash, also when the file it loads is followed."},
-		3061: {severity: SeverityWarning, summary: "read without a variable name is undefined in POSIX sh."},
+		3036: {shells: ashShells, summary: "echo in dash and busybox sh does not support this flag."},
+		3037: {shells: posixOnly, summary: "echo flags are undefined in POSIX sh."},
+		3038: {shells: strictShells, summary: "exec options are undefined in POSIX sh."},
+		3039: {shells: strictShells, summary: "let is undefined in POSIX sh."},
+		3040: {shells: posixOnly, summary: "This set -o option is undefined in POSIX sh."},
+		3041: {shells: posixOnly, summary: "This set flag is undefined in POSIX sh."},
+		3042: {shells: posixOnly, summary: "This set option is undefined in POSIX sh."},
+		3043: {shells: posixOnly, summary: "local is undefined in POSIX sh."},
+		3044: {shells: strictShells, summary: "A bash builtin is used that is undefined in POSIX sh."},
+		3045: {shells: strictShells, summary: "A builtin option is used that is undefined in POSIX sh."},
+		3046: {shells: posixOrDash, summary: "source is undefined in POSIX sh and dash."},
+		3047: {shells: strictShells, summary: "Trapping this signal or condition is undefined in POSIX sh."},
+		3048: {shells: posixOrDash, summary: "The SIG prefix on a signal name is undefined in POSIX sh and dash."},
+		3049: {shells: posixOnly, summary: "Lowercase signal names are undefined in POSIX sh."},
+		3050: {shells: strictShells, summary: "printf %q is undefined in POSIX sh."},
+		3051: {shells: posixOrDash, summary: "source is undefined in POSIX sh and dash, also when the file it loads is followed."},
+		3061: {shells: strictShells, summary: "read without a variable name is undefined in POSIX sh."},
 	},
 	rules: []rule{{on: nodes(&syntax.CallExpr{}, &syntax.DeclClause{}, &syntax.LetClause{}), node: checkPortableBuiltin}},
 }
@@ -83,7 +83,7 @@ func checkPortableBuiltin(p *pass, n syntax.Node) {
 	case *syntax.DeclClause:
 		checkPortableDeclaration(p, n)
 	case *syntax.LetClause:
-		p.nonPortableNode(portabilityIssue{code: 3039, shells: strictShells, feature: "let", alternative: "$((...))"}, n)
+		p.nonPortableNode(portabilityIssue{code: 3039, feature: "let", alternative: "$((...))"}, n)
 	}
 }
 
@@ -91,9 +91,9 @@ func checkPortableDeclaration(p *pass, decl *syntax.DeclClause) {
 	name := decl.Variant.Value
 	switch {
 	case name == "local":
-		p.nonPortableNode(portabilityIssue{code: 3043, shells: posixOnly, feature: "local"}, decl)
+		p.nonPortableNode(portabilityIssue{code: 3043, feature: "local"}, decl)
 	case bashOnlyBuiltins[name]:
-		p.nonPortableNode(portabilityIssue{code: 3044, shells: strictShells, feature: "The builtin " + name}, decl)
+		p.nonPortableNode(portabilityIssue{code: 3044, feature: "The builtin " + name}, decl)
 	}
 	var flags []*syntax.Word
 	for _, a := range decl.Args {
@@ -141,7 +141,7 @@ func checkExecFlags(p *pass, call *syntax.CallExpr) bool {
 	if !ok || !strings.HasPrefix(flag, "-") {
 		return false
 	}
-	p.nonPortableNode(portabilityIssue{code: 3038, shells: strictShells, feature: "exec " + flag, alternative: "exec without options (env -i for a clean environment)"}, call.Args[1])
+	p.nonPortableNode(portabilityIssue{code: 3038, feature: "exec " + flag, alternative: "exec without options (env -i for a clean environment)"}, call.Args[1])
 	return true
 }
 
@@ -156,11 +156,11 @@ func checkResolvedBuiltin(p *pass, call *syntax.CallExpr) {
 	word := command.word
 	switch name := path.Base(command.name); {
 	case name == "let":
-		p.nonPortableNode(portabilityIssue{code: 3039, shells: strictShells, feature: "let", alternative: "$((...))"}, call)
+		p.nonPortableNode(portabilityIssue{code: 3039, feature: "let", alternative: "$((...))"}, call)
 	case name == "local":
-		p.nonPortableNode(portabilityIssue{code: 3043, shells: posixOnly, feature: "local"}, call)
+		p.nonPortableNode(portabilityIssue{code: 3043, feature: "local"}, call)
 	case name == "source":
-		issue := portabilityIssue{code: 3046, shells: posixOrDash, feature: "source", alternative: "."}
+		issue := portabilityIssue{code: 3046, feature: "source", alternative: "."}
 		var fixes []Fix
 		if span, ok := p.span(word); ok && word.Lit() == name {
 			fixes = append(fixes, safeFix("Replace source with .", textedit.Edit{Start: span.Start, End: span.End, NewText: "."}))
@@ -171,7 +171,7 @@ func checkResolvedBuiltin(p *pass, call *syntax.CallExpr) {
 			p.nonPortableNode(issue, call)
 		}
 	case bashOnlyBuiltins[name]:
-		p.nonPortableNode(portabilityIssue{code: 3044, shells: strictShells, feature: "The builtin " + name}, call)
+		p.nonPortableNode(portabilityIssue{code: 3044, feature: "The builtin " + name}, call)
 	}
 }
 
@@ -204,13 +204,13 @@ func checkEchoFlags(p *pass, word *syntax.Word, args []*syntax.Word) {
 		if ok && endOK && flag == "-n" && len(args) == 2 && word.Lit() == "echo" {
 			fixes = append(fixes, reviewFix("Print with printf '%s'", textedit.Edit{Start: start.Start, End: end.End, NewText: "printf '%s'"}))
 		}
-		p.nonPortableNode(portabilityIssue{code: 3037, shells: posixOnly, feature: "echo " + flag, alternative: "printf"}, args[0], fixes...)
+		p.nonPortableNode(portabilityIssue{code: 3037, feature: "echo " + flag, alternative: "printf"}, args[0], fixes...)
 		return
 	}
 	if !ashShells.Has(p.dialect) || echoAccepts(flag, p.dialect) {
 		return
 	}
-	p.nonPortableNode(portabilityIssue{code: 3036, shells: ashShells, feature: "echo " + flag + " (" + echoFlagsIn(p.dialect) + ")", alternative: "printf"}, args[0])
+	p.nonPortableNode(portabilityIssue{code: 3036, feature: "echo " + flag + " (" + echoFlagsIn(p.dialect) + ")", alternative: "printf"}, args[0])
 }
 
 func checkSetOptions(p *pass, args []*syntax.Word) {
@@ -223,14 +223,14 @@ func checkSetOptions(p *pass, args []*syntax.Word) {
 		case !ok, word == "--":
 			return
 		case strings.HasPrefix(word, "--"):
-			p.nonPortableNode(portabilityIssue{code: 3042, shells: posixOnly, feature: "set " + word}, args[i])
+			p.nonPortableNode(portabilityIssue{code: 3042, feature: "set " + word}, args[i])
 			continue
 		case !strings.HasPrefix(word, "+") && (!strings.HasPrefix(word, "-") || len(word) < 2):
 			return
 		}
 		for _, letter := range word[1:] {
 			if !builtinTakes("set", letter, dialect.Posix) {
-				p.nonPortableNode(portabilityIssue{code: 3041, shells: posixOnly, feature: "set " + word[:1] + string(letter)}, args[i])
+				p.nonPortableNode(portabilityIssue{code: 3041, feature: "set " + word[:1] + string(letter)}, args[i])
 			}
 		}
 		if !strings.HasSuffix(word, "o") || i+1 >= len(args) {
@@ -242,7 +242,7 @@ func checkSetOptions(p *pass, args []*syntax.Word) {
 		}
 		i++
 		if !posixSetOption(option) {
-			p.nonPortableNode(portabilityIssue{code: 3040, shells: posixOnly, feature: "set -o " + option}, args[i])
+			p.nonPortableNode(portabilityIssue{code: 3040, feature: "set -o " + option}, args[i])
 		}
 	}
 }
@@ -258,18 +258,18 @@ func checkTrapSignals(p *pass, args []*syntax.Word) {
 		}
 		upper := strings.ToUpper(signal)
 		if bashTrapSignals[upper] {
-			p.nonPortableNode(portabilityIssue{code: 3047, shells: strictShells, feature: "Trapping " + upper}, arg)
+			p.nonPortableNode(portabilityIssue{code: 3047, feature: "Trapping " + upper}, arg)
 		}
 		span, spanned := p.span(arg)
 		if !spanned {
 			continue
 		}
 		if strings.HasPrefix(upper, "SIG") {
-			issue := portabilityIssue{code: 3048, shells: posixOrDash, feature: "The SIG prefix in " + signal, alternative: upper[len("SIG"):], replacement: upper[len("SIG"):]}
+			issue := portabilityIssue{code: 3048, feature: "The SIG prefix in " + signal, alternative: upper[len("SIG"):], replacement: upper[len("SIG"):]}
 			p.nonPortable(issue, span, p.replacementFix(issue, span)...)
 		}
 		if signal != upper {
-			issue := portabilityIssue{code: 3049, shells: posixOnly, feature: "The lowercase signal name " + signal, alternative: upper, replacement: upper}
+			issue := portabilityIssue{code: 3049, feature: "The lowercase signal name " + signal, alternative: upper, replacement: upper}
 			p.nonPortable(issue, span, p.replacementFix(issue, span)...)
 		}
 	}
@@ -283,14 +283,14 @@ func checkPrintfFormat(p *pass, args []*syntax.Word) {
 	if strings.HasPrefix(format, "-") || !strings.Contains(format, "%q") {
 		return
 	}
-	p.nonPortableNode(portabilityIssue{code: 3050, shells: strictShells, feature: "printf %q"}, args[0])
+	p.nonPortableNode(portabilityIssue{code: 3050, feature: "printf %q"}, args[0])
 }
 
 func checkReadOperands(p *pass, call *syntax.CallExpr) {
 	if slices.ContainsFunc(call.Args[1:], func(w *syntax.Word) bool { return !startsWithDash(w) }) {
 		return
 	}
-	p.nonPortableNode(portabilityIssue{code: 3061, shells: strictShells, feature: "read without a variable name", alternative: "read -r REPLY"}, call.Args[0])
+	p.nonPortableNode(portabilityIssue{code: 3061, feature: "read without a variable name", alternative: "read -r REPLY"}, call.Args[0])
 }
 
 func startsWithDash(w *syntax.Word) bool {
@@ -313,12 +313,12 @@ func checkPortableFlags(p *pass, name string, args []*syntax.Word) {
 		}
 		if long, isLong := strings.CutPrefix(word, "--"); isLong {
 			flag, _, _ := strings.Cut(long, "=")
-			p.nonPortableNode(portabilityIssue{code: 3045, shells: strictShells, feature: name + " --" + flag}, arg)
+			p.nonPortableNode(portabilityIssue{code: 3045, feature: name + " --" + flag}, arg)
 			return
 		}
 		for _, letter := range word[1:] {
 			if !builtinTakes(name, letter, p.dialect) {
-				p.nonPortableNode(portabilityIssue{code: 3045, shells: strictShells, feature: name + " -" + string(letter)}, arg)
+				p.nonPortableNode(portabilityIssue{code: 3045, feature: name + " -" + string(letter)}, arg)
 				return
 			}
 		}

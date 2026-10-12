@@ -16,7 +16,6 @@ var (
 
 type portabilityIssue struct {
 	code        Code
-	shells      dialect.Set
 	feature     string
 	alternative string
 	replacement string
@@ -30,7 +29,7 @@ func (p *pass) replacementFix(issue portabilityIssue, span parser.Span) []Fix {
 }
 
 func (p *pass) nonPortable(issue portabilityIssue, span parser.Span, fixes ...Fix) {
-	if !issue.shells.Has(p.dialect) {
+	if !p.meta(issue.code).shells.Has(p.dialect) {
 		return
 	}
 	severity, message := SeverityError, issue.feature+" is not supported in "+shellLabel(p.dialect)+"."
@@ -44,7 +43,7 @@ func (p *pass) nonPortable(issue portabilityIssue, span parser.Span, fixes ...Fi
 }
 
 func (p *pass) nonPortableNode(issue portabilityIssue, n syntax.Node, fixes ...Fix) {
-	if !issue.shells.Has(p.dialect) {
+	if !p.meta(issue.code).shells.Has(p.dialect) {
 		return
 	}
 	if span, ok := p.span(n); ok {

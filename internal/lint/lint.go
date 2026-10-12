@@ -80,7 +80,7 @@ func ParseCode(s string) (Code, error) {
 		return 0, fmt.Errorf("expected a check code like SC2034 or SL1001, got %q: %w", s, err)
 	}
 	if n == 0 || Code(n) >= nativeBase {
-		return 0, fmt.Errorf("expected a check code like SC2034 or SL1001, got %q: the number must be between 1 and %d", s, nativeBase-1)
+		return 0, fmt.Errorf("expected a check code like SC2034 or SL1001, got %q: the number must be between 1 and %d", s, int(nativeBase)-1)
 	}
 	if native {
 		return nativeBase + Code(n), nil

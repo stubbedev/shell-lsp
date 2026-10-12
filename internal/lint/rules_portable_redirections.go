@@ -10,13 +10,13 @@ import (
 
 var portableRedirectionsFamily = family{
 	codes: map[Code]meta{
-		3011: {severity: SeverityWarning, summary: "Here-strings with <<< are undefined in POSIX sh."},
-		3020: {severity: SeverityWarning, summary: "Redirecting both streams with &> is undefined in POSIX sh and dash."},
-		3021: {severity: SeverityWarning, summary: "Redirecting both streams to a file with >& is undefined in POSIX sh."},
-		3022: {severity: SeverityWarning, summary: "Named file descriptors like {fd}> are undefined in POSIX sh."},
-		3023: {severity: SeverityWarning, summary: "File descriptor numbers above 9 are undefined in POSIX sh."},
-		3025: {severity: SeverityWarning, summary: "Network pseudo-devices such as /dev/tcp are undefined in POSIX sh."},
-		3031: {severity: SeverityWarning, summary: "Redirecting to or from a glob is undefined in POSIX sh."},
+		3011: {shells: strictShells, summary: "Here-strings with <<< are undefined in POSIX sh."},
+		3020: {shells: posixOrDash, summary: "Redirecting both streams with &> is undefined in POSIX sh and dash."},
+		3021: {shells: strictShells, summary: "Redirecting both streams to a file with >& is undefined in POSIX sh."},
+		3022: {shells: strictShells, summary: "Named file descriptors like {fd}> are undefined in POSIX sh."},
+		3023: {shells: strictShells, summary: "File descriptor numbers above 9 are undefined in POSIX sh."},
+		3025: {shells: strictShells, summary: "Network pseudo-devices such as /dev/tcp are undefined in POSIX sh."},
+		3031: {shells: strictShells, summary: "Redirecting to or from a glob is undefined in POSIX sh."},
 	},
 	rules: []rule{{on: nodes(&syntax.Redirect{}), node: checkPortableRedirection}},
 }
@@ -37,15 +37,15 @@ func checkPortableRedirection(p *pass, n syntax.Node) {
 	}
 	switch r.Op {
 	case syntax.WordHdoc:
-		p.nonPortable(portabilityIssue{code: 3011, shells: strictShells, feature: "The here-string <<<", alternative: "a here-document or printf ... |"}, posSpan(r.OpPos, len("<<<")))
+		p.nonPortable(portabilityIssue{code: 3011, feature: "The here-string <<<", alternative: "a here-document or printf ... |"}, posSpan(r.OpPos, len("<<<")))
 		return
 	case syntax.RdrAll:
 		op, end := parser.Offset(r.OpPos), parser.Offset(r.Word.End())
-		p.nonPortable(portabilityIssue{code: 3020, shells: posixOrDash, feature: "Redirecting both streams with &>", alternative: ">file 2>&1"}, span,
+		p.nonPortable(portabilityIssue{code: 3020, feature: "Redirecting both streams with &>", alternative: ">file 2>&1"}, span,
 			safeFix("Replace &> with > and 2>&1", textedit.Edit{Start: op, End: op + len("&>"), NewText: ">"}, textedit.Edit{Start: end, End: end, NewText: " 2>&1"}))
 	case syntax.DplOut:
 		if r.N == nil && !isDescriptorTarget(r.Word) {
-			p.nonPortable(portabilityIssue{code: 3021, shells: strictShells, feature: "Redirecting both streams to a file with >&", alternative: ">file 2>&1"}, span)
+			p.nonPortable(portabilityIssue{code: 3021, feature: "Redirecting both streams to a file with >&", alternative: ">file 2>&1"}, span)
 		}
 		return
 	case syntax.RdrOut, syntax.AppOut, syntax.RdrIn, syntax.RdrInOut, syntax.RdrClob, syntax.AppAll:
@@ -54,20 +54,20 @@ func checkPortableRedirection(p *pass, n syntax.Node) {
 	}
 	target := parser.LiteralChars(r.Word)
 	if device, ok := networkDevice(target); ok {
-		p.nonPortable(portabilityIssue{code: 3025, shells: strictShells, feature: "The network pseudo-device " + device}, span)
+		p.nonPortable(portabilityIssue{code: 3025, feature: "The network pseudo-device " + device}, span)
 		return
 	}
 	if isGlob(r.Word) {
-		p.nonPortable(portabilityIssue{code: 3031, shells: strictShells, feature: "Redirecting to or from a glob"}, span)
+		p.nonPortable(portabilityIssue{code: 3031, feature: "Redirecting to or from a glob"}, span)
 	}
 }
 
 func checkDescriptorPrefix(p *pass, n *syntax.Lit, span parser.Span) {
 	switch {
 	case strings.HasPrefix(n.Value, "{"):
-		p.nonPortable(portabilityIssue{code: 3022, shells: strictShells, feature: "The named descriptor " + n.Value}, span)
+		p.nonPortable(portabilityIssue{code: 3022, feature: "The named descriptor " + n.Value}, span)
 	case len(n.Value) > 1:
-		p.nonPortable(portabilityIssue{code: 3023, shells: strictShells, feature: "The descriptor number " + n.Value + " (above 9)"}, span)
+		p.nonPortable(portabilityIssue{code: 3023, feature: "The descriptor number " + n.Value + " (above 9)"}, span)
 	}
 }
 

@@ -1,9 +1,14 @@
 package lint
 
-import "slices"
+import (
+	"slices"
+
+	"github.com/stubbedev/shell-lsp/internal/dialect"
+)
 
 type meta struct {
 	severity Severity
+	shells   dialect.Set
 	tag      Tag
 	optional optionalCheck
 	summary  string

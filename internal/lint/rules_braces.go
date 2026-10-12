@@ -14,7 +14,7 @@ var bracesFamily = family{
 	codes: map[Code]meta{
 		2051: {severity: SeverityWarning, summary: "Braces are expanded before variables, so a range built from variables is not a range."},
 		2175: {severity: SeverityStyle, summary: "A brace range given to eval unquoted is expanded before the variable is substituted."},
-		3009: {severity: SeverityWarning, summary: "Brace expansion is undefined in POSIX sh."},
+		3009: {shells: strictShells, summary: "Brace expansion is undefined in POSIX sh."},
 	},
 	rules: []rule{{on: nodes(&syntax.Word{}), node: checkBraceExpansions}},
 }
@@ -49,7 +49,7 @@ func checkBraceExpansions(p *pass, n syntax.Node) {
 		if !g.expands() {
 			continue
 		}
-		p.nonPortable(portabilityIssue{code: 3009, shells: strictShells, feature: "Brace expansion " + p.excerpt(g.span), alternative: "a loop or separate words"}, g.span)
+		p.nonPortable(portabilityIssue{code: 3009, feature: "Brace expansion " + p.excerpt(g.span), alternative: "a loop or separate words"}, g.span)
 		if p.dialect == dialect.Bash && g.rangesOverExpansion() {
 			p.reportBraceRangeVariable(g)
 		}
