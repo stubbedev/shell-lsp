@@ -1,0 +1,70 @@
+### and before or
+#!/bin/bash
+# shellcheck enable=require-test-grouping
+[[ -f $1 && -r $1 || -n $2 ]] && echo ok
+>>+ SL2012 3:19 -- shell-lsp native check; shellcheck does not report unparenthesised && inside ||
+
+### or before and
+#!/bin/bash
+# shellcheck enable=require-test-grouping
+[[ -n $1 || -f $2 && -r $2 ]] && echo ok
+>>+ SL2012 3:10 -- shell-lsp native check; shellcheck does not report unparenthesised && inside ||
+
+### and groups on both sides of one or
+#!/bin/bash
+# shellcheck enable=require-test-grouping
+[[ $1 == a && $2 == b || $1 == c && $2 == d ]] && echo ok
+>>+ SL2012 3:23 -- shell-lsp native check; shellcheck does not report unparenthesised && inside ||
+
+### longer chains are reported once per or
+#!/bin/bash
+# shellcheck enable=require-test-grouping
+[[ -n $1 || -n $2 || -f $3 && -r $3 ]] && echo ok
+[[ -n $1 && -n $2 && -n $3 || -z $4 ]] && echo ok
+>>+ SL2012 3:19 -- shell-lsp native check; shellcheck does not report unparenthesised && inside ||
+>>+ SL2012 4:28 -- shell-lsp native check; shellcheck does not report unparenthesised && inside ||
+
+### mix inside parentheses
+#!/bin/bash
+# shellcheck enable=require-test-grouping
+[[ ! ( -n $1 && -n $2 || -n $3 ) ]] && echo ok
+>>+ SL2012 3:23 -- shell-lsp native check; shellcheck does not report unparenthesised && inside ||
+
+### parenthesised groups are fine
+#!/bin/bash
+# shellcheck enable=require-test-grouping
+[[ ( -f $1 && -r $1 ) || -n $2 ]] && echo ok
+[[ -n $1 || ( -f $2 && -r $2 ) ]] && echo ok
+>>> none
+
+### one kind of operator is fine
+#!/bin/bash
+# shellcheck enable=require-test-grouping
+[[ -n $1 && -n $2 && -n $3 ]] && echo ok
+[[ -n $1 || -n $2 || -n $3 ]] && echo ok
+>>> none
+
+### command lists and single brackets are not test expressions
+#!/bin/bash
+# shellcheck enable=require-test-grouping
+[ -n "$1" ] && [ -n "$2" ] || echo missing
+[[ -n $1 ]] && [[ -n $2 ]] || echo missing
+>>> none
+
+### zsh shares the precedence
+#!/bin/zsh
+# shellcheck enable=require-test-grouping
+[[ -n $1 && -n $2 || -n $3 ]] && echo ok
+>>- SC1071 1:1 -- shellcheck refuses zsh; shell-lsp lints it
+>>+ SL2012 3:19 -- shell-lsp native check; shellcheck does not report unparenthesised && inside ||
+
+### ksh shares the precedence
+#!/bin/ksh
+# shellcheck enable=require-test-grouping
+[[ -n $1 && -n $2 || -n $3 ]] && echo ok
+>>+ SL2012 3:19 -- shell-lsp native check; shellcheck does not report unparenthesised && inside ||
+
+### off unless enabled
+#!/bin/bash
+[[ -n $1 && -n $2 || -n $3 ]] && echo ok
+>>> none

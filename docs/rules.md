@@ -272,6 +272,26 @@ an explicit base (`2#1010`).
 (( cp >= 0xd800 && cp <= 0xdff )) && return 1    # SL2011: 0xdff < 0xd800; meant 0xdfff
 ```
 
+## SL2012
+
+**`&&` and `||` are mixed in `[[ ]]` without parentheses.** The rule is
+optional (`require-test-grouping`). Inside `[[ ]]`,
+`&&` binds tighter than `||`, so `[[ $a && $b || $c ]]` means
+`[[ ( $a && $b ) || $c ]]` and `[[ $a || $b && $c ]]` means
+`[[ $a || ( $b && $c ) ]]`. That is well defined, but readers often take the
+operators to apply left to right, and among shell commands `a && b || c`
+does exactly that. The quick fix adds the parentheses the shell already
+implies, so it never changes what the test does. It is optional because
+such tests are usually written on purpose, like the common version check
+`[[ $major -eq 4 && $minor -ge 4 || $major -gt 4 ]]`.
+
+```bash
+#!/bin/bash
+# shellcheck enable=require-test-grouping
+[[ -f $conf && -r $conf || -n $default ]]    # SL2012
+[[ ( -f $conf && -r $conf ) || -n $default ]]
+```
+
 The embedded-language rules check awk, sed and jq programs written inside the
 script with built-in parsers; no awk, sed or jq binary is run. A program is
 checked when it is a literal argument (`awk '...'`, `sed -e '...'`,

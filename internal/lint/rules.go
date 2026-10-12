@@ -65,6 +65,7 @@ var families = []family{
 	singleQuotesFamily,
 	arithmeticFamily,
 	testLogicFamily,
+	testGroupingFamily,
 	arithmeticStyleFamily,
 	parameterSyntaxFamily,
 	subshellFamily,
