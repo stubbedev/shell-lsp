@@ -698,6 +698,9 @@ func (c completer) paths(dirsOnly bool) (Result, error) {
 	if i := strings.LastIndexByte(raw, '/'); i >= 0 {
 		dirPart, base = raw[:i+1], raw[i+1:]
 	}
+	if strings.ContainsRune(raw, 0) {
+		return Result{}, nil
+	}
 	var items []Item
 	seen := map[string]bool{}
 	incomplete := false

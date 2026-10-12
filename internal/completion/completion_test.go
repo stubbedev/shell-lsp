@@ -2,10 +2,12 @@ package completion
 
 import (
 	"context"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
@@ -23,6 +25,9 @@ type fakeEnv struct {
 func (f fakeEnv) Executables() []string { return []string{"git", "grep", "gzip", "ls"} }
 
 func (f fakeEnv) ReadDir(dir string) ([]DirEntry, error) {
+	if strings.ContainsRune(dir, 0) {
+		return nil, &fs.PathError{Op: "open", Path: dir, Err: syscall.EINVAL}
+	}
 	entries, ok := f.dirs[filepath.ToSlash(filepath.Clean(dir))]
 	if !ok {
 		return nil, os.ErrNotExist
@@ -624,6 +629,16 @@ func TestPaths(t *testing.T) {
 	}
 	if got := labels(complete(t, dialect.Bash, "./li‸")); !slices.Equal(got, []string{"lib/"}) {
 		t.Errorf("command position path = %v", got)
+	}
+}
+
+func TestPathsWithANulByteNameNothing(t *testing.T) {
+	t.Parallel()
+
+	for _, src := range []string{"cat /\x00/‸", "cat ./a\x00b/‸", "cat x\x00‸"} {
+		if got := labels(complete(t, dialect.Bash, src)); len(got) != 0 {
+			t.Errorf("Complete(%q) = %v, want nothing", src, got)
+		}
 	}
 }
 
