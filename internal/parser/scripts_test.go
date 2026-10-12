@@ -21,6 +21,9 @@ func TestScriptsParseIndependently(t *testing.T) {
 		{Start: len(first) + len(second), End: len(text)},
 	}
 	tree := ParseScripts(nil, text, scripts, dialect.Bash, Language(dialect.Bash), nil)
+	if tree.Synthetic(0) {
+		t.Error("a tree without an origin has synthetic text")
+	}
 
 	var lines []int
 	for _, e := range tree.Errors {
@@ -47,9 +50,12 @@ func TestScriptsReportTheirLinesInTheSource(t *testing.T) {
 	t.Parallel()
 
 	text := "(\necho a\n)\n"
-	tree := ParseScripts(nil, text, []Span{{Start: 0, End: len(text)}}, dialect.Posix, Language(dialect.Posix), func(offset int) int { return 40 + offset })
+	tree := ParseScripts(nil, text, []Span{{Start: 0, End: len(text)}}, dialect.Posix, Language(dialect.Posix), offsetOrigin{})
 	if got := tree.SourceLine(2); got != 42 {
 		t.Errorf("SourceLine(2) = %d, want what the source numbering says", got)
+	}
+	if !tree.Synthetic(0) || tree.Synthetic(2) {
+		t.Errorf("Synthetic(0) = %v, Synthetic(2) = %v, want what the origin says", tree.Synthetic(0), tree.Synthetic(2))
 	}
 	if got := tree.Line(2); got != 2 {
 		t.Errorf("Line(2) = %d, want the line within the text", got)
@@ -58,3 +64,9 @@ func TestScriptsReportTheirLinesInTheSource(t *testing.T) {
 		t.Errorf("a plain tree numbers source lines %d, text lines %d", plain.SourceLine(2), plain.Line(2))
 	}
 }
+
+type offsetOrigin struct{}
+
+func (offsetOrigin) SourceLine(offset int) int { return 40 + offset }
+
+func (offsetOrigin) Synthetic(offset int) bool { return offset == 0 }

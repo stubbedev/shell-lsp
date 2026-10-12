@@ -161,6 +161,10 @@ func (d *Document) SourceOffset(offset int) int {
 	return d.mapping.HostOffset(offset)
 }
 
+func (d *Document) SourceLine(offset int) int {
+	return int(d.OffsetToPosition(offset, EncodingUTF8).Line) + 1
+}
+
 func (d *Document) Synthetic(offset int) bool {
 	return d.mapping != nil && d.mapping.Synthetic(offset)
 }

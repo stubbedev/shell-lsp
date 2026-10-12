@@ -121,9 +121,7 @@ func (l Language) Project(doc *docstore.Document) Script {
 
 func (s Script) Parse(like *parser.Tree) *parser.Tree {
 	d := s.Detection.Dialect
-	tree := parser.ParseScripts(like, s.Doc.Text(), s.scripts, d, parser.Language(d), func(offset int) int {
-		return int(s.Doc.OffsetToPosition(offset, docstore.EncodingUTF8).Line) + 1
-	})
+	tree := parser.ParseScripts(like, s.Doc.Text(), s.scripts, d, parser.Language(d), s.Doc)
 	tree.Errors = s.authored(tree.Errors)
 	return tree
 }

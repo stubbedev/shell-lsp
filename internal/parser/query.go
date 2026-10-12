@@ -140,10 +140,14 @@ func (t *Tree) Line(offset int) int {
 }
 
 func (t *Tree) SourceLine(offset int) int {
-	if t.sourceLine == nil {
+	if t.origin == nil {
 		return t.Line(offset)
 	}
-	return t.sourceLine(offset)
+	return t.origin.SourceLine(offset)
+}
+
+func (t *Tree) Synthetic(offset int) bool {
+	return t.origin != nil && t.origin.Synthetic(offset)
 }
 
 func (t *Tree) NodeSpan(node syntax.Node) (Span, bool) {

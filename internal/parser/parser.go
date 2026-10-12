@@ -50,7 +50,12 @@ type Tree struct {
 	Index
 	text       string
 	lineStarts []int
-	sourceLine func(offset int) int
+	origin     Origin
+}
+
+type Origin interface {
+	SourceLine(offset int) int
+	Synthetic(offset int) bool
 }
 
 func Parse(text string, d dialect.Dialect) *Tree {
@@ -76,7 +81,7 @@ func ParseEdit(previous *Tree, text string, d dialect.Dialect, lang syntax.LangV
 	return newTree(previous, file, errs, closedAtEnd, text, d, lang, nil)
 }
 
-func ParseScripts(previous *Tree, text string, scripts []Span, d dialect.Dialect, lang syntax.LangVariant, sourceLine func(offset int) int) *Tree {
+func ParseScripts(previous *Tree, text string, scripts []Span, d dialect.Dialect, lang syntax.LangVariant, origin Origin) *Tree {
 	starts := lineStarts(text)
 	file := &syntax.File{}
 	var errs []Error
@@ -90,13 +95,13 @@ func ParseScripts(previous *Tree, text string, scripts []Span, d dialect.Dialect
 		errs = append(errs, partErrs...)
 		maps.Copy(closedAtEnd, closed)
 	}
-	return newTree(previous, file, errs, closedAtEnd, text, d, lang, sourceLine)
+	return newTree(previous, file, errs, closedAtEnd, text, d, lang, origin)
 }
 
-func newTree(previous *Tree, file *syntax.File, errs []Error, closedAtEnd map[*syntax.Redirect]bool, text string, d dialect.Dialect, lang syntax.LangVariant, sourceLine func(offset int) int) *Tree {
+func newTree(previous *Tree, file *syntax.File, errs []Error, closedAtEnd map[*syntax.Redirect]bool, text string, d dialect.Dialect, lang syntax.LangVariant, origin Origin) *Tree {
 	index, recovered := buildIndex(file, lang, d, text, closedAtEnd, previous)
 	errs = append(errs, recovered...)
-	return &Tree{Dialect: d, Lang: lang, File: file, Errors: sortErrors(errs), Index: index, text: text, lineStarts: lineStarts(text), sourceLine: sourceLine}
+	return &Tree{Dialect: d, Lang: lang, File: file, Errors: sortErrors(errs), Index: index, text: text, lineStarts: lineStarts(text), origin: origin}
 }
 
 func parseSource(parser *syntax.Parser, src []byte, base int, text string, d dialect.Dialect) (*syntax.File, []Error, map[*syntax.Redirect]bool) {

@@ -131,6 +131,7 @@ const (
 	subshellCoproc
 	subshellBats
 	subshellProcess
+	subshellScript
 )
 
 type lostWrite struct {
@@ -583,7 +584,11 @@ func (in *interpreter) command(stmt *syntax.Stmt, s *state) *state {
 		s = in.stmts(cmd.Stmts, s)
 		s = in.redirects(stmt, s)
 	case *syntax.Subshell:
-		if end := in.subshell(subshellGroup, func(sub *state) *state { return in.stmts(cmd.Stmts, sub) }, s); end.live {
+		kind := subshellGroup
+		if in.tree.Synthetic(parser.Offset(cmd.Lparen)) {
+			kind = subshellScript
+		}
+		if end := in.subshell(kind, func(sub *state) *state { return in.stmts(cmd.Stmts, sub) }, s); end.live {
 			s.status = end.status
 		}
 		s = in.redirects(stmt, s)

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/docstore"
+	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 )
 
@@ -64,5 +65,28 @@ func TestParseKeepsEachRecipeLineToItself(t *testing.T) {
 	}
 	if at := script.Doc.OffsetToPosition(len(script.Doc.Text()), docstore.EncodingUTF16); at != (lsp.Position{Line: 7, Character: 10}) {
 		t.Errorf("the end of the projection is at %+v", at)
+	}
+}
+
+func TestLostChangesBlameTheShellOfTheLine(t *testing.T) {
+	t.Parallel()
+
+	text := "x:\n\tFOO=bar\n\techo \"$$FOO\"\n\t(BAR=1); echo \"$$BAR\"\n"
+	script := Make.Project(docstore.NewDocument("file:///w/Makefile", "makefile", 1, text))
+	report := lint.Run(script.Parse(nil), nil, lint.Options{DialectSource: lint.DialectForced})
+	var got []string
+	for _, f := range report.Findings {
+		if f.Code == 2030 || f.Code == 2031 {
+			got = append(got, f.Message)
+		}
+	}
+	want := []string{
+		"This change to FOO is made in a line or script that runs in a shell of its own, so nothing after it sees the change.",
+		"FOO was changed on line 2, which runs in a shell of its own, so this still sees the value from before that change.",
+		"This change to BAR happens in a subshell caused by a ( ) group, so it is gone once that subshell exits.",
+		"BAR was changed in a subshell (a ( ) group on line 4), so this still sees the value from before that change.",
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("messages\n got %q\nwant %q", got, want)
 	}
 }
