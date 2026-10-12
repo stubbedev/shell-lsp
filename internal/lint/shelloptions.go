@@ -4,7 +4,9 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/shelldocs"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -33,20 +35,20 @@ type StrictMode struct {
 }
 
 func StrictModeOf(tree *parser.Tree) StrictMode {
-	text := tree.Text()
-	m := StrictMode{Errexit: shebangFlag(text, 'e'), Nounset: shebangFlag(text, 'u')}
+	shebang := shebangOptionChanges(tree.Text(), tree.Dialect)
+	m := StrictMode{Errexit: turnsOn(shebang, "errexit"), Nounset: turnsOn(shebang, "nounset")}
 	for _, c := range tree.Commands {
 		if m.Errexit && m.Nounset && m.Pipefail {
 			break
 		}
-		set := StrictModeSetBy(c)
+		set := StrictModeSetBy(c, tree.Dialect)
 		m = StrictMode{Errexit: m.Errexit || set.Errexit, Nounset: m.Nounset || set.Nounset, Pipefail: m.Pipefail || set.Pipefail}
 	}
 	return m
 }
 
-func StrictModeSetBy(c parser.Command) StrictMode {
-	changes := optionChanges(c.Name, c.Args)
+func StrictModeSetBy(c parser.Command, d dialect.Dialect) StrictMode {
+	changes := optionChanges(c.Name, c.Args, d)
 	return StrictMode{Errexit: turnsOn(changes, "errexit"), Nounset: turnsOn(changes, "nounset"), Pipefail: turnsOn(changes, "pipefail")}
 }
 
@@ -59,10 +61,10 @@ func turnsOn(changes []optionChange, name string) bool {
 	return slices.Contains(changes, optionChange{name: name, on: true})
 }
 
-func optionChanges(command string, args []*syntax.Word) []optionChange {
+func optionChanges(command string, args []*syntax.Word, d dialect.Dialect) []optionChange {
 	switch command {
 	case "set":
-		return setOptionChanges(args)
+		return setOptionChanges(args, d)
 	case "shopt":
 		return shoptOptionChanges(args)
 	case "setopt", "unsetopt":
@@ -77,9 +79,7 @@ func optionChanges(command string, args []*syntax.Word) []optionChange {
 	return nil
 }
 
-var setLetterOptions = map[byte]string{'e': "errexit", 'u': "nounset"}
-
-func setOptionChanges(args []*syntax.Word) []optionChange {
+func setOptionChanges(args []*syntax.Word, d dialect.Dialect) []optionChange {
 	var changes []optionChange
 	var owed []bool
 	for _, a := range args {
@@ -99,7 +99,7 @@ func setOptionChanges(args []*syntax.Word) []optionChange {
 		for i := 1; i < len(lit); i++ {
 			if lit[i] == 'o' {
 				owed = append(owed, on)
-			} else if name, ok := setLetterOptions[lit[i]]; ok {
+			} else if name, ok := shelldocs.SetLetter(lit[i], d); ok {
 				changes = append(changes, optionChange{name: name, on: on})
 			}
 		}
@@ -152,9 +152,9 @@ func zshOption(word string, unset bool) string {
 }
 
 func scanShellOptions(tree *parser.Tree) shellOptions {
-	opts := shellOptions{errexit: shebangFlag(tree.Text(), 'e')}
+	opts := shellOptions{errexit: turnsOn(shebangOptionChanges(tree.Text(), tree.Dialect), "errexit")}
 	for _, c := range tree.Commands {
-		for _, change := range optionChanges(c.Name, c.Args) {
+		for _, change := range optionChanges(c.Name, c.Args, tree.Dialect) {
 			if !change.on {
 				continue
 			}
@@ -187,17 +187,23 @@ func scanShellOptions(tree *parser.Tree) shellOptions {
 	return opts
 }
 
-func shebangFlag(text string, flag byte) bool {
+func shebangOptionChanges(text string, d dialect.Dialect) []optionChange {
 	first, _, _ := strings.Cut(text, "\n")
 	if !strings.HasPrefix(first, "#!") {
-		return false
+		return nil
 	}
+	var changes []optionChange
 	for _, field := range strings.Fields(first)[1:] {
-		if strings.HasPrefix(field, "-") && !strings.HasPrefix(field, "--") && strings.IndexByte(field, flag) > 0 {
-			return true
+		if !strings.HasPrefix(field, "-") || strings.HasPrefix(field, "--") {
+			continue
+		}
+		for i := 1; i < len(field); i++ {
+			if name, ok := shelldocs.SetLetter(field[i], d); ok {
+				changes = append(changes, optionChange{name: name, on: true})
+			}
 		}
 	}
-	return false
+	return changes
 }
 
 func (p *pass) implicitlySplit(pe *syntax.ParamExp) bool {

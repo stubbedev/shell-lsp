@@ -163,7 +163,7 @@ func (p *pass) losesErrexit(cs *syntax.CmdSubst) bool {
 			return false
 		}
 		c, ok := commandOf(call)
-		return ok && turnsOn(optionChanges(c.name, c.args), "errexit")
+		return ok && turnsOn(optionChanges(c.name, c.args, p.dialect), "errexit")
 	})
 }
 

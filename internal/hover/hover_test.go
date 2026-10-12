@@ -224,6 +224,10 @@ func TestHoverShellVocabulary(t *testing.T) {
 		{d: dialect.Bash, src: "case $x in a) b ;& c) d ;; esac\n", needle: ";&", want: "falls through", span: ";&"},
 		{d: dialect.Bash, src: "echo $-\n", needle: "$-", want: "- `e`: `errexit`", span: "$-", wantMissing: "- `X`"},
 		{d: dialect.Dash, src: "echo $-\n", needle: "$-", want: "- `x`: `xtrace`", span: "$-", wantMissing: "braceexpand"},
+		{d: dialect.Zsh, src: "echo $-\n", needle: "$-", want: "- `F`: `noglob`", span: "$-", wantMissing: "- `h`: `hashall`"},
+		{d: dialect.Zsh, src: "set -F\n", needle: "-F", want: "`noglob`", span: "-F"},
+		{d: dialect.Zsh, src: "set -o noglob\n", needle: "noglob", want: "Disable filename generation. (`-F`)", span: "noglob"},
+		{d: dialect.Bash, src: "set -o noglob\n", needle: "noglob", want: "Disable filename generation. (`-f`)", span: "noglob"},
 	}
 	for _, tc := range tests {
 		got := hoverAt(t, tc.src, tc.d, tc.needle, tc.nth)

@@ -1,6 +1,7 @@
 package shelldocs
 
 import (
+	"fmt"
 	"iter"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
@@ -53,10 +54,19 @@ var vocabularies = [vocabularyCount][]Entry{
 	OptionLetters:       optionLetters,
 }
 
-var vocabularyIndex = func() [vocabularyCount]table {
-	var out [vocabularyCount]table
+var vocabularyIndex = func() [vocabularyCount]map[string][]Entry {
+	var out [vocabularyCount]map[string][]Entry
 	for v, entries := range vocabularies {
-		out[v] = index(entries)
+		byName := make(map[string][]Entry, len(entries))
+		for _, e := range entries {
+			for _, other := range byName[e.Name] {
+				if other.Dialects&e.Dialects != 0 {
+					panic(fmt.Sprintf("shelldocs: vocabulary %d describes %s twice for one shell", v, e.Name))
+				}
+			}
+			byName[e.Name] = append(byName[e.Name], e)
+		}
+		out[v] = byName
 	}
 	return out
 }()
@@ -71,9 +81,22 @@ func Terms(v Vocabulary, d dialect.Dialect) iter.Seq[Entry] {
 	}
 }
 
-func Term(v Vocabulary, name string) (Entry, bool) {
-	e, ok := vocabularyIndex[v][name]
-	return e, ok
+func known(v Vocabulary, name string) bool {
+	_, ok := vocabularyIndex[v][name]
+	return ok
+}
+
+func Term(v Vocabulary, name string, d dialect.Dialect) (Entry, bool) {
+	entries := vocabularyIndex[v][name]
+	for _, e := range entries {
+		if e.Dialects.Has(d) {
+			return e, true
+		}
+	}
+	if len(entries) == 0 {
+		return Entry{}, false
+	}
+	return entries[0], true
 }
 
 var (
@@ -399,23 +422,8 @@ var listOperators = []Entry{
 	{Name: ";|", Dialects: zshOnly, Synopsis: "pattern) list ;|", Doc: "Ends a `case` branch and keeps testing the following patterns."},
 }
 
-var optionLetters = []Entry{
-	{Name: "a", Dialects: every, Doc: "`allexport`: every assigned variable is exported."},
-	{Name: "b", Dialects: every, Doc: "`notify`: job status changes are reported immediately."},
-	{Name: "C", Dialects: every, Doc: "`noclobber`: `>` refuses to overwrite files."},
-	{Name: "e", Dialects: every, Doc: "`errexit`: the shell exits when a command fails."},
-	{Name: "f", Dialects: every, Doc: "`noglob`: filename generation is off."},
-	{Name: "h", Dialects: notAsh, Doc: "`hashall`: command locations are remembered."},
-	{Name: "i", Dialects: every, Doc: "The shell is interactive; `case $- in *i*)` is the usual test."},
-	{Name: "m", Dialects: every, Doc: "`monitor`: job control is on."},
-	{Name: "n", Dialects: every, Doc: "`noexec`: commands are read but not run."},
-	{Name: "u", Dialects: every, Doc: "`nounset`: expanding an unset variable is an error."},
-	{Name: "v", Dialects: every, Doc: "`verbose`: input lines are printed as they are read."},
-	{Name: "x", Dialects: every, Doc: "`xtrace`: commands are printed before they run."},
-	{Name: "s", Dialects: every, Doc: "Commands are read from standard input."},
-	{Name: "c", Dialects: every, Doc: "Commands came from the `-c` argument."},
-	{Name: "B", Dialects: bashOnly, Doc: "`braceexpand`: brace expansion is on."},
-	{Name: "H", Dialects: bashOnly, Doc: "`histexpand`: `!` history expansion is on."},
-	{Name: "E", Dialects: bashOnly, Doc: "`errtrace`: the `ERR` trap is inherited by functions."},
-	{Name: "T", Dialects: bashOnly, Doc: "`functrace`: the `DEBUG` and `RETURN` traps are inherited by functions."},
-}
+var optionLetters = append(letterEntries(func(letter string) string { return letter }),
+	Entry{Name: "i", Dialects: every, Doc: "The shell is interactive; `case $- in *i*)` is the usual test."},
+	Entry{Name: "s", Dialects: every, Doc: "Commands are read from standard input."},
+	Entry{Name: "c", Dialects: every, Doc: "Commands came from the `-c` argument."},
+)

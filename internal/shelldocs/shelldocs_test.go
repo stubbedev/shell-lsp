@@ -100,7 +100,7 @@ func TestVocabularies(t *testing.T) {
 		{Signals, "TERM"},
 		{TrapConditions, "EXIT"},
 	} {
-		if _, ok := Term(tc.v, tc.name); !ok {
+		if _, ok := Term(tc.v, tc.name, dialect.Bash); !ok {
 			t.Errorf("%q missing from vocabulary %d", tc.name, tc.v)
 		}
 	}
@@ -137,12 +137,12 @@ func TestBuiltinFlags(t *testing.T) {
 			t.Errorf("flags documented for %q, which is not a builtin", name)
 			continue
 		}
-		seen := map[string]bool{}
+		seen := map[string]dialect.Set{}
 		for _, f := range flags {
-			if !strings.HasPrefix(f.Name, "-") || f.Doc == "" || seen[f.Name] {
-				t.Errorf("%s: bad or duplicate flag %+v", name, f)
+			if !strings.HasPrefix(f.Name, "-") || f.Doc == "" || seen[f.Name]&f.Dialects != 0 {
+				t.Errorf("%s: bad flag, or one described twice for a shell: %+v", name, f)
 			}
-			seen[f.Name] = true
+			seen[f.Name] |= f.Dialects
 			if f.Dialects&b.Dialects == 0 {
 				t.Errorf("%s %s is documented for shells without %s", name, f.Name, name)
 			}
@@ -156,5 +156,38 @@ func TestBuiltinFlags(t *testing.T) {
 	}
 	if _, ok := BuiltinFlags("declare", dialect.Posix); ok {
 		t.Error("declare flags offered in POSIX sh, which has no declare")
+	}
+}
+
+func TestSetLettersFollowTheShell(t *testing.T) {
+	t.Parallel()
+
+	type key struct {
+		letter byte
+		d      dialect.Dialect
+	}
+	for k, want := range map[key]string{
+		{'e', dialect.Zsh}: "errexit", {'u', dialect.Dash}: "nounset", {'f', dialect.Bash}: "noglob", {'F', dialect.Zsh}: "noglob",
+		{'E', dialect.Bash}: "errtrace", {'E', dialect.Busybox}: "errtrace", {'E', dialect.Dash}: "emacs", {'I', dialect.Dash}: "ignoreeof",
+		{'k', dialect.Ksh}: "keyword", {'B', dialect.Ksh}: "braceexpand", {'h', dialect.Bash}: "hashall", {'h', dialect.Ksh}: "trackall",
+	} {
+		if got, ok := SetLetter(k.letter, k.d); !ok || got != want {
+			t.Errorf("SetLetter(%c, %s) = %q, %t; want %q", k.letter, k.d, got, ok, want)
+		}
+	}
+	for _, k := range []key{{'f', dialect.Zsh}, {'h', dialect.Zsh}, {'k', dialect.Zsh}, {'b', dialect.Zsh}, {'F', dialect.Bash}, {'E', dialect.Posix}, {'h', dialect.Posix}} {
+		if got, ok := SetLetter(k.letter, k.d); ok {
+			t.Errorf("SetLetter(%c, %s) = %q, want no option of that letter", k.letter, k.d, got)
+		}
+	}
+}
+
+func TestPosixSetTakesHWithoutALongName(t *testing.T) {
+	t.Parallel()
+
+	for d, want := range map[dialect.Dialect]bool{dialect.Posix: true, dialect.Bash: true, dialect.Ksh: true, dialect.Dash: false, dialect.Busybox: false} {
+		if _, got := BuiltinFlag("set", "-h", d); got != want {
+			t.Errorf("set -h documented for %s = %t, want %t", d, got, want)
+		}
 	}
 }

@@ -70,7 +70,7 @@ func echoFlagsIn(d dialect.Dialect) string {
 }
 
 func posixSetOption(name string) bool {
-	option, ok := shelldocs.Term(shelldocs.SetOptions, name)
+	option, ok := shelldocs.Term(shelldocs.SetOptions, name, dialect.Posix)
 	return ok && option.Dialects.Has(dialect.Posix)
 }
 

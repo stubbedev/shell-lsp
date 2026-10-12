@@ -61,7 +61,7 @@ func shortStrictFlags(m lint.StrictMode) string {
 
 func strictModeLine(tree *parser.Tree) (parser.Command, bool) {
 	for _, c := range tree.Commands {
-		if c.Within != parser.FileScope || lint.StrictModeSetBy(c) == (lint.StrictMode{}) {
+		if c.Within != parser.FileScope || lint.StrictModeSetBy(c, tree.Dialect) == (lint.StrictMode{}) {
 			continue
 		}
 		for _, stmt := range tree.File.Stmts {

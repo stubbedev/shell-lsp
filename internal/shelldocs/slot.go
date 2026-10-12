@@ -172,7 +172,7 @@ func testPosition(command string, before []string) (testState, string) {
 		switch state {
 		case testStart:
 			state = testAfterOperand
-			if _, ok := Term(TestUnaryOperators, w); ok {
+			if known(TestUnaryOperators, w) {
 				state = testAfterUnary
 			}
 		case testAfterOperand:
@@ -196,9 +196,5 @@ func testPosition(command string, before []string) (testState, string) {
 }
 
 func isTestBinary(w string) bool {
-	if _, ok := Term(TestBinaryOperators, w); ok {
-		return true
-	}
-	_, ok := Term(CondOperators, w)
-	return ok && w != "&&" && w != "||"
+	return known(TestBinaryOperators, w) || (known(CondOperators, w) && w != "&&" && w != "||")
 }

@@ -42,7 +42,6 @@ var (
 	bashBusybox       = dialect.SetOf(dialect.Bash, dialect.Busybox)
 	bashZshKshBusybox = dialect.SetOf(dialect.Bash, dialect.Zsh, dialect.Ksh, dialect.Busybox)
 	promptReaders     = dialect.SetOf(dialect.Bash, dialect.Zsh, dialect.Ksh, dialect.Dash, dialect.Busybox)
-	notAsh            = dialect.SetOf(dialect.Posix, dialect.Bash, dialect.Zsh, dialect.Ksh)
 	bashKshDash       = dialect.SetOf(dialect.Bash, dialect.Ksh, dialect.Dash)
 	kshDash           = dialect.SetOf(dialect.Ksh, dialect.Dash)
 	attributeFlags    = []Entry{
@@ -69,27 +68,10 @@ var (
 		{Name: "-h", Dialects: zshOnly, Doc: "Hide a special parameter's special meaning in a local declaration."},
 		{Name: "-H", Dialects: zshOnly, Doc: "Hide the value when the variable is printed."},
 	}
-	setFlags = []Entry{
-		{Name: "-e", Dialects: every, Doc: "`errexit`: exit when a command fails outside a condition."},
-		{Name: "-u", Dialects: every, Doc: "`nounset`: make the expansion of an unset variable an error."},
-		{Name: "-x", Dialects: every, Doc: "`xtrace`: print each command, prefixed with `PS4`, before running it."},
-		{Name: "-v", Dialects: every, Doc: "`verbose`: print input lines as they are read."},
-		{Name: "-f", Dialects: every, Doc: "`noglob`: disable filename generation."},
-		{Name: "-n", Dialects: every, Doc: "`noexec`: read commands without running them, to check the syntax."},
-		{Name: "-a", Dialects: every, Doc: "`allexport`: export every variable that is assigned."},
-		{Name: "-b", Dialects: every, Doc: "`notify`: report job status changes immediately."},
-		{Name: "-C", Dialects: every, Doc: "`noclobber`: refuse to overwrite existing files with `>`."},
-		{Name: "-h", Dialects: notAsh, Doc: "`hashall`: remember command locations as they are looked up."},
-		{Name: "-m", Dialects: every, Doc: "`monitor`: enable job control."},
-		{Name: "-o", Dialects: every, Doc: "Enable the option named by the next argument, such as `pipefail`; alone, list the options."},
-		{Name: "-E", Dialects: bashOnly, Doc: "`errtrace`: let functions, command substitutions and subshells inherit the `ERR` trap."},
-		{Name: "-T", Dialects: bashOnly, Doc: "`functrace`: let functions inherit the `DEBUG` and `RETURN` traps."},
-		{Name: "-B", Dialects: bashOnly, Doc: "`braceexpand`: enable brace expansion (on by default)."},
-		{Name: "-H", Dialects: bashOnly, Doc: "`histexpand`: enable `!` history expansion."},
-		{Name: "-P", Dialects: bashOnly, Doc: "`physical`: resolve symbolic links in `cd` and `pwd`."},
-		{Name: "-k", Dialects: bashZshKsh, Doc: "`keyword`: treat assignments anywhere on the command line as environment assignments."},
-		{Name: "-A", Dialects: zshKsh, Doc: "Assign the remaining arguments to the named array: `set -A name values`."},
-	}
+	setFlags = append(letterEntries(func(letter string) string { return "-" + letter }),
+		Entry{Name: "-o", Dialects: every, Doc: "Enable the option named by the next argument, such as `pipefail`; alone, list the options."},
+		Entry{Name: "-A", Dialects: zshKsh, Doc: "Assign the remaining arguments to the named array: `set -A name values`."},
+	)
 	readFlags = []Entry{
 		{Name: "-r", Dialects: every, Doc: "Raw input: backslashes are kept instead of escaping characters or joining lines. Almost always wanted."},
 		{Name: "-p", Dialects: promptReaders, Doc: "In bash, dash and busybox sh, print the next argument as a prompt first. In zsh and ksh, read from the co-process instead."},

@@ -109,7 +109,7 @@ func (h hoverer) paramExp() (Result, bool) {
 			continue
 		}
 		sections := []string{h.parameter(exp.Param.Value)}
-		sections = append(sections, expansionDocs(exp)...)
+		sections = append(sections, expansionDocs(exp, h.dialect)...)
 		return Result{Markdown: strings.Join(sections, "\n\n---\n\n"), Span: located.Span}, true
 	}
 	return Result{}, false
@@ -357,7 +357,7 @@ func (h hoverer) vocabularyArgument(command string, before []string, word string
 
 func (h hoverer) term(name string, vocabularies ...shelldocs.Vocabulary) (string, bool) {
 	for _, v := range vocabularies {
-		if e, ok := shelldocs.Term(v, name); ok {
+		if e, ok := shelldocs.Term(v, name, h.dialect); ok {
 			return fmt.Sprintf("**%s**\n\n%s", name, e.Markdown(h.dialect)), true
 		}
 	}
@@ -367,7 +367,7 @@ func (h hoverer) term(name string, vocabularies ...shelldocs.Vocabulary) (string
 func (h hoverer) signal(word string, vocabularies []shelldocs.Vocabulary) (string, bool) {
 	name, _ := shelldocs.NormalizeSignal(word)
 	for _, v := range vocabularies {
-		if e, ok := shelldocs.Term(v, name); ok {
+		if e, ok := shelldocs.Term(v, name, h.dialect); ok {
 			title := name
 			if v == shelldocs.Signals {
 				title = "SIG" + name
@@ -680,10 +680,10 @@ func positionalUse(fn parser.Function) (int, bool) {
 	return highest, variadic
 }
 
-func expansionDocs(exp *syntax.ParamExp) []string {
+func expansionDocs(exp *syntax.ParamExp, d dialect.Dialect) []string {
 	var docs []string
 	add := func(v shelldocs.Vocabulary, key string) {
-		if e, ok := shelldocs.Term(v, key); ok {
+		if e, ok := shelldocs.Term(v, key, d); ok {
 			docs = append(docs, termDoc(e))
 		}
 	}
@@ -753,7 +753,7 @@ func isAllIndex(index syntax.ArithmExpr) bool {
 func zshFlagDocs(flags *syntax.Lit) string {
 	var lines []string
 	for _, flag := range parser.ParameterFlags(flags) {
-		if e, ok := shelldocs.Term(shelldocs.ZshParameterFlags, string(flag.Name)); ok {
+		if e, ok := shelldocs.Term(shelldocs.ZshParameterFlags, string(flag.Name), dialect.Zsh); ok {
 			lines = append(lines, fmt.Sprintf("- `%c`: %s", flag.Name, e.Doc))
 		}
 	}
@@ -772,7 +772,7 @@ func zshModifierDocs(modifiers []*syntax.Lit) string {
 		} else if key != "" {
 			key = key[:1]
 		}
-		if e, ok := shelldocs.Term(shelldocs.ZshModifiers, key); ok {
+		if e, ok := shelldocs.Term(shelldocs.ZshModifiers, key, dialect.Zsh); ok {
 			lines = append(lines, fmt.Sprintf("- `:%s`: %s", m.Value, e.Doc))
 		}
 	}

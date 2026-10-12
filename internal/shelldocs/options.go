@@ -1,30 +1,108 @@
 package shelldocs
 
-import "github.com/stubbedev/shell-lsp/internal/dialect"
+import (
+	"fmt"
+	"unicode"
+	"unicode/utf8"
 
-var setOptions = []Entry{
-	{Name: "allexport", Dialects: every, Doc: "Export every variable that is assigned (`-a`)."},
-	{Name: "errexit", Dialects: every, Doc: "Exit when a command fails (`-e`)."},
-	{Name: "noclobber", Dialects: every, Doc: "Do not overwrite existing files with `>` (`-C`)."},
-	{Name: "noglob", Dialects: every, Doc: "Disable filename generation (`-f`)."},
-	{Name: "nounset", Dialects: every, Doc: "Treat expansion of unset variables as an error (`-u`)."},
-	{Name: "verbose", Dialects: every, Doc: "Print input lines as they are read (`-v`)."},
-	{Name: "xtrace", Dialects: every, Doc: "Print each command before executing it (`-x`)."},
-	{Name: "noexec", Dialects: every, Doc: "Read commands but do not execute them (`-n`)."},
-	{Name: "monitor", Dialects: every, Doc: "Enable job control (`-m`)."},
-	{Name: "notify", Dialects: every, Doc: "Report job status changes immediately (`-b`)."},
-	{Name: "ignoreeof", Dialects: every, Doc: "Do not exit an interactive shell on end-of-file."},
-	{Name: "vi", Dialects: every, Doc: "Use vi-style line editing."},
-	{Name: "emacs", Dialects: dialect.SetOf(dialect.Bash, dialect.Zsh, dialect.Dash, dialect.Ksh, dialect.Busybox), Doc: "Use emacs-style line editing."},
-	{Name: "nolog", Dialects: dialect.SetOf(dialect.Posix, dialect.Bash, dialect.Zsh, dialect.Dash, dialect.Ksh), Doc: "Do not enter function definitions into the command history; most shells accept it and ignore it."},
-	{Name: "pipefail", Dialects: notPosix, Doc: "Make a pipeline fail when any of its commands fails, not only the last."},
-	{Name: "posix", Dialects: bashOnly, Doc: "Make bash behave as a POSIX shell where the default differs."},
-	{Name: "errtrace", Dialects: bashOnly, Doc: "Inherit the `ERR` trap in functions and subshells (`-E`)."},
-	{Name: "functrace", Dialects: bashOnly, Doc: "Inherit the `DEBUG` and `RETURN` traps in functions and subshells (`-T`)."},
-	{Name: "history", Dialects: bashOnly, Doc: "Enable command history."},
-	{Name: "hashall", Dialects: bashOnly, Doc: "Remember the location of commands (`-h`)."},
-	{Name: "physical", Dialects: bashOnly, Doc: "Do not follow symbolic links for `cd` and `pwd` (`-P`)."},
-	{Name: "privileged", Dialects: bashOnly, Doc: "Do not read startup files or inherit functions from the environment (`-p`)."},
+	"github.com/stubbedev/shell-lsp/internal/dialect"
+)
+
+type shellOption struct {
+	name     string
+	dialects dialect.Set
+	doc      string
+	letters  []optionLetter
+}
+
+type optionLetter struct {
+	letter   byte
+	dialects dialect.Set
+}
+
+var (
+	notZsh      = dialect.SetOf(dialect.Posix, dialect.Bash, dialect.Dash, dialect.Ksh, dialect.Busybox)
+	dashBusybox = dialect.SetOf(dialect.Dash, dialect.Busybox)
+	dashOnly    = dialect.SetOf(dialect.Dash)
+)
+
+var shellOptions = []shellOption{
+	{name: "allexport", dialects: every, doc: "Export every variable that is assigned.", letters: []optionLetter{{'a', every}}},
+	{name: "errexit", dialects: every, doc: "Exit when a command fails outside a condition.", letters: []optionLetter{{'e', every}}},
+	{name: "noclobber", dialects: every, doc: "Refuse to overwrite existing files with `>`.", letters: []optionLetter{{'C', every}}},
+	{name: "noglob", dialects: every, doc: "Disable filename generation.", letters: []optionLetter{{'f', notZsh}, {'F', zshOnly}}},
+	{name: "nounset", dialects: every, doc: "Make the expansion of an unset variable an error.", letters: []optionLetter{{'u', every}}},
+	{name: "verbose", dialects: every, doc: "Print input lines as they are read.", letters: []optionLetter{{'v', every}}},
+	{name: "xtrace", dialects: every, doc: "Print each command, prefixed with `PS4`, before running it.", letters: []optionLetter{{'x', every}}},
+	{name: "noexec", dialects: every, doc: "Read commands without running them, to check the syntax.", letters: []optionLetter{{'n', every}}},
+	{name: "monitor", dialects: every, doc: "Enable job control.", letters: []optionLetter{{'m', every}}},
+	{name: "notify", dialects: every, doc: "Report job status changes immediately.", letters: []optionLetter{{'b', notZsh}}},
+	{name: "ignoreeof", dialects: every, doc: "Do not exit an interactive shell on end-of-file.", letters: []optionLetter{{'I', dashBusybox}}},
+	{name: "vi", dialects: every, doc: "Use vi-style line editing.", letters: []optionLetter{{'V', dashOnly}}},
+	{name: "emacs", dialects: dialect.SetOf(dialect.Bash, dialect.Zsh, dialect.Dash, dialect.Ksh, dialect.Busybox), doc: "Use emacs-style line editing.", letters: []optionLetter{{'E', dashOnly}}},
+	{name: "nolog", dialects: dialect.SetOf(dialect.Posix, dialect.Bash, dialect.Zsh, dialect.Dash, dialect.Ksh), doc: "Do not enter function definitions into the command history; most shells accept it and ignore it."},
+	{name: "pipefail", dialects: notPosix, doc: "Make a pipeline fail when any of its commands fails, not only the last."},
+	{name: "posix", dialects: bashOnly, doc: "Make bash behave as a POSIX shell where the default differs."},
+	{name: "errtrace", dialects: bashBusybox, doc: "Let functions, command substitutions and subshells inherit the `ERR` trap.", letters: []optionLetter{{'E', bashBusybox}}},
+	{name: "functrace", dialects: bashOnly, doc: "Let functions inherit the `DEBUG` and `RETURN` traps.", letters: []optionLetter{{'T', bashOnly}}},
+	{name: "history", dialects: bashOnly, doc: "Enable command history."},
+	{name: "hashall", dialects: bashOnly, doc: "Remember the location of commands as they are looked up.", letters: []optionLetter{{'h', bashOnly}}},
+	{name: "trackall", dialects: kshOnly, doc: "Remember the location of commands as they are looked up.", letters: []optionLetter{{'h', kshOnly}}},
+	{name: "physical", dialects: bashOnly, doc: "Resolve symbolic links in `cd` and `pwd` instead of keeping the logical path.", letters: []optionLetter{{'P', bashOnly}}},
+	{name: "privileged", dialects: bashOnly, doc: "Do not read startup files or inherit functions from the environment.", letters: []optionLetter{{'p', bashOnly}}},
+	{name: "braceexpand", dialects: bashKsh, doc: "Enable brace expansion; on by default.", letters: []optionLetter{{'B', bashKsh}}},
+	{name: "histexpand", dialects: bashKsh, doc: "Enable `!` history expansion.", letters: []optionLetter{{'H', bashKsh}}},
+	{name: "keyword", dialects: bashKsh, doc: "Treat assignments anywhere on the command line as environment assignments.", letters: []optionLetter{{'k', bashKsh}}},
+}
+
+var unnamedLetters = []Entry{
+	{Name: "h", Dialects: dialect.SetOf(dialect.Posix), Doc: "Locate and remember the utilities a function invokes when the function is defined."},
+}
+
+func SetLetter(letter byte, d dialect.Dialect) (string, bool) {
+	for _, o := range shellOptions {
+		for _, l := range o.letters {
+			if l.letter == letter && l.dialects.Has(d) {
+				return o.name, true
+			}
+		}
+	}
+	return "", false
+}
+
+var setOptions = func() []Entry {
+	var out []Entry
+	for _, o := range shellOptions {
+		unlettered := o.dialects
+		for _, l := range o.letters {
+			if shared := o.dialects & l.dialects; shared != 0 {
+				out = append(out, Entry{Name: o.name, Dialects: shared, Doc: fmt.Sprintf("%s (`-%c`)", o.doc, l.letter)})
+			}
+			unlettered &^= l.dialects
+		}
+		if unlettered != 0 {
+			out = append(out, Entry{Name: o.name, Dialects: unlettered, Doc: o.doc})
+		}
+	}
+	return out
+}()
+
+func letterEntries(name func(letter string) string) []Entry {
+	var out []Entry
+	for _, o := range shellOptions {
+		for _, l := range o.letters {
+			out = append(out, Entry{Name: name(string(l.letter)), Dialects: l.dialects, Doc: fmt.Sprintf("`%s`: %s", o.name, lowerFirst(o.doc))})
+		}
+	}
+	for _, e := range unnamedLetters {
+		out = append(out, Entry{Name: name(e.Name), Dialects: e.Dialects, Doc: e.Doc})
+	}
+	return out
+}
+
+func lowerFirst(s string) string {
+	r, size := utf8.DecodeRuneInString(s)
+	return string(unicode.ToLower(r)) + s[size:]
 }
 
 var shoptOptions = []Entry{
