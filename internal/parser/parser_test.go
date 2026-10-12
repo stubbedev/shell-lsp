@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -610,6 +611,21 @@ func TestBuiltinAssignmentNameSpans(t *testing.T) {
 	}
 	if want := []string{"cells", "plain"}; !slices.Equal(got, want) {
 		t.Errorf("name spans = %q, want %q", got, want)
+	}
+}
+
+func TestAttachedOptionValuesDefine(t *testing.T) {
+	t.Parallel()
+
+	src := "printf -vout x\nread -aarr\nread -ar\nwait -pjob\ncommand -p read via\ngetopts \"$spec\" flag\nread name -r\n"
+	tree := Parse(src, dialect.Bash)
+	var got []string
+	for _, d := range tree.Definitions {
+		got = append(got, src[d.NameSpan.Start:d.NameSpan.End]+":"+strconv.FormatBool(d.Attrs&AttrArray != 0))
+	}
+	want := []string{"out:false", "arr:true", "r:true", "job:false", "via:false", "flag:false", "name:false"}
+	if !slices.Equal(got, want) {
+		t.Errorf("definitions = %q, want %q", got, want)
 	}
 }
 

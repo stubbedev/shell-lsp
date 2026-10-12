@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/getopt"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -20,36 +21,47 @@ type nameOperands struct {
 
 func (n *nameOperands) read(words ...*syntax.Word) {
 	for _, w := range words {
-		if p, ok := parameterNamed(w, 0); ok {
-			n.reads = append(n.reads, p)
-		}
+		n.readArgument(whole(w))
 	}
 }
 
-func (n *nameOperands) assign(w *syntax.Word, attrs Attr) {
-	if p, ok := parameterNamed(w, attrs); ok {
+func (n *nameOperands) readArgument(arg *optionArgument) {
+	if p, ok := parameterNamed(arg, 0); ok {
+		n.reads = append(n.reads, p)
+	}
+}
+
+func (n *nameOperands) assign(arg *optionArgument, attrs Attr) {
+	if p, ok := parameterNamed(arg, attrs); ok {
 		n.assigns = append(n.assigns, p)
 	}
 }
 
-func (n *nameOperands) update(w *syntax.Word, attrs Attr) {
-	n.read(w)
-	n.assign(w, attrs)
+func (n *nameOperands) update(arg *optionArgument, attrs Attr) {
+	n.readArgument(arg)
+	n.assign(arg, attrs)
 }
 
-func parameterNamed(w *syntax.Word, attrs Attr) (namedParameter, bool) {
+func whole(w *syntax.Word) *optionArgument {
 	if w == nil {
+		return nil
+	}
+	return &optionArgument{Word: w}
+}
+
+func parameterNamed(arg *optionArgument, attrs Attr) (namedParameter, bool) {
+	if arg == nil {
 		return namedParameter{}, false
 	}
 	var sb strings.Builder
-	for _, part := range w.Parts {
+	for _, part := range arg.Word.Parts {
 		lit, ok := part.(*syntax.Lit)
 		if !ok {
 			return namedParameter{}, false
 		}
 		sb.WriteString(lit.Value)
 	}
-	return parameterAt(sb.String(), offset(w.Pos()), attrs)
+	return parameterAt(sb.String()[arg.Offset:], offset(arg.Word.Pos())+arg.Offset, attrs)
 }
 
 func parameterAt(value string, start int, attrs Attr) (namedParameter, bool) {
@@ -64,36 +76,10 @@ func parameterAt(value string, start int, attrs Attr) (namedParameter, bool) {
 	return namedParameter{name: name, span: Span{Start: start, End: start + len(name)}, attrs: attrs}, true
 }
 
-type option struct {
-	letter   byte
-	argument *syntax.Word
-}
+type zshOptions = getopt.Parsed[*syntax.Word]
 
-func splitOptions(args []*syntax.Word, withArgument string) ([]option, []*syntax.Word) {
-	var opts []option
-	for i := 0; i < len(args); i++ {
-		value, ok := Literal(args[i])
-		if !ok || len(value) < 2 || value[0] != '-' {
-			return opts, args[i:]
-		}
-		if value == "--" {
-			return opts, args[i+1:]
-		}
-		for j := 1; j < len(value); j++ {
-			opt := option{letter: value[j]}
-			if strings.IndexByte(withArgument, value[j]) < 0 {
-				opts = append(opts, opt)
-				continue
-			}
-			if j+1 == len(value) && i+1 < len(args) {
-				i++
-				opt.argument = args[i]
-			}
-			opts = append(opts, opt)
-			break
-		}
-	}
-	return opts, nil
+func parseZsh(short string, args []*syntax.Word) zshOptions {
+	return getopt.Parse(getopt.Grammar{Short: short, StopAtOperand: true}, args, Literal)
 }
 
 func operandAt(words []*syntax.Word, i int) *syntax.Word {
@@ -113,11 +99,11 @@ func withoutOptions(words []*syntax.Word) []*syntax.Word {
 	return out
 }
 
-func labelName(withArgument string) func(args []*syntax.Word) nameOperands {
+func labelName(short string) func(args []*syntax.Word) nameOperands {
 	return func(args []*syntax.Word) nameOperands {
 		var n nameOperands
-		_, rest := splitOptions(args, withArgument)
-		n.update(operandAt(rest, 1), AttrArray)
+		rest := parseZsh(short, args).Operands
+		n.update(whole(operandAt(rest, 1)), AttrArray)
 		if len(rest) > 3 {
 			n.command = rest[3:]
 		}
@@ -125,22 +111,25 @@ func labelName(withArgument string) func(args []*syntax.Word) nameOperands {
 	}
 }
 
-func assignedOptions(withArgument string, attrs map[byte]Attr) func(args []*syntax.Word) nameOperands {
+func assignedOptions(short string, attrs map[string]Attr) func(args []*syntax.Word) nameOperands {
 	return func(args []*syntax.Word) nameOperands {
 		var n nameOperands
-		opts, _ := splitOptions(args, withArgument)
-		for _, o := range opts {
-			if a, ok := attrs[o.letter]; ok {
-				n.assign(o.argument, a)
-			}
-		}
+		n.assignOptions(parseZsh(short, args), attrs)
 		return n
+	}
+}
+
+func (n *nameOperands) assignOptions(parsed zshOptions, attrs map[string]Attr) {
+	for _, o := range parsed.Options {
+		if a, ok := attrs[o.Name]; ok {
+			n.assign(o.Argument, a)
+		}
 	}
 }
 
 func describedArrays(args []*syntax.Word) nameOperands {
 	var n nameOperands
-	if _, rest := splitOptions(args, "t"); len(rest) > 1 {
+	if rest := parseZsh("t:", args).Operands; len(rest) > 1 {
 		n.read(withoutOptions(rest[1:])...)
 	}
 	return n
@@ -148,17 +137,17 @@ func describedArrays(args []*syntax.Word) nameOperands {
 
 func addedMatches(args []*syntax.Word) nameOperands {
 	var n nameOperands
-	opts, rest := splitOptions(args, "FPSpsiIWdJXxVrRDOAEM")
-	for _, o := range opts {
-		switch o.letter {
-		case 'a', 'k':
-			n.read(rest...)
-		case 'F', 'd':
-			n.read(o.argument)
-		case 'D':
-			n.update(o.argument, AttrArray)
-		case 'O', 'A':
-			n.assign(o.argument, AttrArray)
+	parsed := parseZsh("F:P:S:p:s:i:I:W:d:J:X:x:V:r:R:D:O:A:E:M:", args)
+	for _, o := range parsed.Options {
+		switch o.Name {
+		case "-a", "-k":
+			n.read(parsed.Operands...)
+		case "-F", "-d":
+			n.readArgument(o.Argument)
+		case "-D":
+			n.update(o.Argument, AttrArray)
+		case "-O", "-A":
+			n.assign(o.Argument, AttrArray)
 		}
 	}
 	return n
@@ -179,27 +168,28 @@ func styleValue(args []*syntax.Word) nameOperands {
 	}
 	switch args[0].Lit() {
 	case "-s", "-b":
-		n.assign(operandAt(args, 3), 0)
+		n.assign(whole(operandAt(args, 3)), 0)
 	case "-a":
-		n.assign(operandAt(args, 3), AttrArray)
+		n.assign(whole(operandAt(args, 3)), AttrArray)
 	case "-g":
-		n.assign(operandAt(args, 1), AttrArray)
+		n.assign(whole(operandAt(args, 1)), AttrArray)
 	}
 	return n
 }
 
 func editedVariable(args []*syntax.Word) nameOperands {
 	var n nameOperands
-	if _, rest := splitOptions(args, "prMmift"); len(rest) > 0 {
-		n.update(rest[len(rest)-1], 0)
+	if rest := parseZsh("p:r:M:m:i:f:t:", args).Operands; len(rest) > 0 {
+		n.update(whole(rest[len(rest)-1]), 0)
 	}
 	return n
 }
 
 func parsedOptions(args []*syntax.Word) nameOperands {
-	n := assignedOptions("aA", map[byte]Attr{'a': AttrArray, 'A': AttrAssoc})(args)
-	_, rest := splitOptions(args, "aA")
-	for _, spec := range rest {
+	var n nameOperands
+	parsed := parseZsh("a:A:", args)
+	n.assignOptions(parsed, map[string]Attr{"-a": AttrArray, "-A": AttrAssoc})
+	for _, spec := range parsed.Operands {
 		lit, ok := spec.Parts[len(spec.Parts)-1].(*syntax.Lit)
 		if !ok {
 			continue
@@ -216,9 +206,11 @@ func parsedOptions(args []*syntax.Word) nameOperands {
 }
 
 func systemRead(args []*syntax.Word) nameOperands {
-	n := assignedOptions("ciost", map[byte]Attr{'c': 0})(args)
-	if _, rest := splitOptions(args, "ciost"); len(rest) > 0 {
-		n.assign(rest[0], 0)
+	var n nameOperands
+	parsed := parseZsh("c:i:o:s:t:", args)
+	n.assignOptions(parsed, map[string]Attr{"-c": 0})
+	if len(parsed.Operands) > 0 {
+		n.assign(whole(parsed.Operands[0]), 0)
 	}
 	return n
 }
@@ -228,19 +220,19 @@ var dialectNameCommands = map[dialect.Dialect]map[string]func(args []*syntax.Wor
 		"_describe":    describedArrays,
 		"compadd":      addedMatches,
 		"_store_cache": cachedParameters,
-		"_wanted":      labelName("C"),
+		"_wanted":      labelName("C:"),
 		"_description": labelName(""),
 		"_all_labels":  labelName(""),
 		"_next_label":  labelName(""),
 		"_requested":   labelName(""),
 		"zstyle":       styleValue,
 		"vared":        editedVariable,
-		"print":        assignedOptions("uvfCxX", map[byte]Attr{'v': 0}),
-		"strftime":     assignedOptions("s", map[byte]Attr{'s': 0}),
+		"print":        assignedOptions("u:v:f:C:x:X:", map[string]Attr{"-v": 0}),
+		"strftime":     assignedOptions("s:", map[string]Attr{"-s": 0}),
 		"zparseopts":   parsedOptions,
-		"zformat":      assignedOptions("fFa", map[byte]Attr{'f': 0, 'F': 0, 'a': AttrArray}),
-		"zstat":        assignedOptions("fHAF", map[byte]Attr{'H': AttrAssoc, 'A': AttrArray}),
-		"zselect":      assignedOptions("taA", map[byte]Attr{'a': AttrArray, 'A': AttrAssoc}),
+		"zformat":      assignedOptions("f:F:a:", map[string]Attr{"-f": 0, "-F": 0, "-a": AttrArray}),
+		"zstat":        assignedOptions("f:H:A:F:", map[string]Attr{"-H": AttrAssoc, "-A": AttrArray}),
+		"zselect":      assignedOptions("t:a:A:", map[string]Attr{"-a": AttrArray, "-A": AttrAssoc}),
 		"sysread":      systemRead,
 	},
 }

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/getopt"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -449,7 +450,14 @@ func (b *builder) call(n *syntax.CallExpr) {
 	if b.compounds > 0 {
 		return
 	}
-	name, args := unwrapBuiltin(name, n.Args[1:])
+	start := Wrappers{}.Start(n.Args)
+	if start < 0 {
+		return
+	}
+	if name, ok = Literal(n.Args[start]); !ok {
+		return
+	}
+	args := n.Args[start+1:]
 	if variant, ok := declVariants[name]; ok {
 		b.declarationWords(variant, args)
 	}
@@ -460,87 +468,52 @@ func (b *builder) call(n *syntax.CallExpr) {
 	}
 }
 
-func unwrapBuiltin(name string, args []*syntax.Word) (string, []*syntax.Word) {
-	for (name == "builtin" || name == "command") && len(args) > 0 {
-		inner, ok := Literal(args[0])
-		if !ok {
-			break
-		}
-		name, args = inner, args[1:]
-	}
-	return name, args
-}
+type optionArgument = getopt.Argument[*syntax.Word]
 
-var optionsWithArgument = map[string]string{
-	"read":      "adinNptu",
-	"mapfile":   "dnOsuCc",
-	"readarray": "dnOsuCc",
-	"printf":    "v",
-	"wait":      "p",
+var assigningBuiltins = map[string]map[string]Attr{
+	"read":      {"-a": AttrArray},
+	"mapfile":   nil,
+	"readarray": nil,
+	"printf":    {"-v": 0},
+	"wait":      {"-p": 0},
 }
 
 func (b *builder) builtinAssignments(call *syntax.CallExpr, name string, args []*syntax.Word) {
-	argOpts, known := optionsWithArgument[name]
-	if !known && name != "getopts" {
+	if name == "getopts" {
+		if len(args) >= 2 {
+			b.argumentDefinition(call, optionArgument{Word: args[1]}, 0)
+		}
 		return
 	}
-	var names, scalars, arrays []*syntax.Word
-	for i := 0; i < len(args); i++ {
-		value, ok := Literal(args[i])
-		if !ok {
-			continue
+	targets, assigns := assigningBuiltins[name]
+	if !assigns {
+		return
+	}
+	parsed := getopt.Parse(getopt.Commands[name], args, Literal)
+	for _, opt := range parsed.Options {
+		if attrs, assigns := targets[opt.Name]; assigns && opt.Argument != nil {
+			b.argumentDefinition(call, *opt.Argument, attrs)
 		}
-		if value == "--" {
-			names = append(names, args[i+1:]...)
-			break
-		}
-		if strings.HasPrefix(value, "--") && name != "getopts" {
-			continue
-		}
-		if strings.HasPrefix(value, "-") && len(value) > 1 && name != "getopts" {
-			last := value[len(value)-1]
-			if strings.IndexByte(argOpts, last) >= 0 && i+1 < len(args) {
-				i++
-				switch {
-				case name == "read" && last == 'a':
-					arrays = append(arrays, args[i])
-				case (name == "printf" && last == 'v') || (name == "wait" && last == 'p'):
-					scalars = append(scalars, args[i])
-				}
-			}
-			continue
-		}
-		names = append(names, args[i])
 	}
 	switch name {
-	case "getopts":
-		if len(names) >= 2 {
-			b.wordDefinition(call, names[1], 0)
-		}
 	case "mapfile", "readarray":
-		if len(names) > 0 {
-			b.wordDefinition(call, names[0], AttrArray)
+		if len(parsed.Operands) > 0 {
+			b.argumentDefinition(call, optionArgument{Word: parsed.Operands[0]}, AttrArray)
 		}
 	case "read":
-		for _, w := range names {
-			b.wordDefinition(call, w, 0)
+		for _, w := range parsed.Operands {
+			b.argumentDefinition(call, optionArgument{Word: w}, 0)
 		}
-	}
-	for _, w := range scalars {
-		b.wordDefinition(call, w, 0)
-	}
-	for _, w := range arrays {
-		b.wordDefinition(call, w, AttrArray)
 	}
 }
 
-func (b *builder) wordDefinition(call *syntax.CallExpr, w *syntax.Word, attrs Attr) {
-	value, ok := Literal(w)
-	if !ok || len(w.Parts) != 1 {
+func (b *builder) argumentDefinition(call *syntax.CallExpr, arg optionArgument, attrs Attr) {
+	value, ok := arg.Text(Literal)
+	if !ok || len(arg.Word.Parts) != 1 {
 		return
 	}
-	if p, ok := parameterAt(value, nameStart(w), attrs); ok {
-		b.builtinDefinition(call, p, b.span(w))
+	if p, ok := parameterAt(value, nameStart(arg.Word)+arg.Offset, attrs); ok {
+		b.builtinDefinition(call, p, b.span(arg.Word))
 	}
 }
 

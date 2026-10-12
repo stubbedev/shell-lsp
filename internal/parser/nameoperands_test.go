@@ -60,3 +60,17 @@ func TestZshNameOperands(t *testing.T) {
 		}
 	}
 }
+
+func TestZshAttachedOptionValuesAssign(t *testing.T) {
+	t.Parallel()
+
+	src := "print -vgreeting hi\nzformat -fline '%n' n:x\nzstat -Hinfo file\nsysread -ccount chunk\n"
+	tree := Parse(src, dialect.Zsh)
+	var got []string
+	for _, def := range tree.Definitions {
+		got = append(got, src[def.NameSpan.Start:def.NameSpan.End])
+	}
+	if want := []string{"greeting", "line", "info", "count", "chunk"}; !slices.Equal(got, want) {
+		t.Errorf("definitions = %q, want %q", got, want)
+	}
+}
