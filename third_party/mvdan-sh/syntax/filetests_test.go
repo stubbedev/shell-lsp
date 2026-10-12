@@ -2314,6 +2314,21 @@ var fileTests = []fileTestCase{
 		}),
 	),
 	fileTest(
+		[]string{"cat <<EOF && (\nbar\nEOF\n\tfoo\n)"},
+		langFile(&BinaryCmd{
+			Op: AndStmt,
+			X: &Stmt{
+				Cmd: litCall("cat"),
+				Redirs: []*Redirect{{
+					Op:   Hdoc,
+					Word: litWord("EOF"),
+					Hdoc: litWord("bar\n"),
+				}},
+			},
+			Y: stmt(subshell(litStmt("foo"))),
+		}),
+	),
+	fileTest(
 		[]string{"if true; then\n\tfoo <<-EOF\n\t\tbar\n\tEOF\nfi"},
 		langFile(&IfClause{
 			Cond: litStmts("true"),

@@ -978,6 +978,11 @@ var errorCases = []errorCase{
 		flipConfirmUnclosedHeredoc,
 	),
 	errCase(
+		"cat <<EOF && (\nfoo\n)\nbar\nEOF",
+		langErr("1:14: `(` must be followed by a statement list"),
+		langErr("1:14: reached EOF without matching `(` with `)`", LangZsh|LangMirBSDKorn),
+	),
+	errCase(
 		"<<-EOF\n\t",
 		langErr("1:1: unclosed here-document `EOF`"),
 		flipConfirmUnclosedHeredoc,

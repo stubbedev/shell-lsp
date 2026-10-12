@@ -1,0 +1,75 @@
+syntax: read pending here-documents after the first newline in a subshell
+
+A subshell set aside the here-documents pending when it started, as a
+command substitution does, so their bodies were only read after its
+closing parenthesis. bash, dash, mksh, zsh and ksh93 read them after the
+first newline, wherever it is:
+
+	$ printf 'cat <<EOF && (\nbar\nEOF\n\tfoo\n)\n' | bash -n    # valid
+	$ printf 'cat <<EOF && (\nfoo\n)\nbar\nEOF\n' | bash -n
+	bash: line 6: syntax error: unexpected end of file from `(' command on line 1
+
+The parser rejected the first, reading bar and EOF as commands and the
+here-document as unclosed, and accepted the second. A subshell now
+leaves pending here-documents to be read at its first newline; a
+command substitution still postpones them, as bash does.
+
+Reproducer, before this change: `cat <<EOF && (\nbar\nEOF\n\tfoo\n)`
+failed with "1:5: unclosed here-document `EOF`".
+
+diff --git a/syntax/filetests_test.go b/syntax/filetests_test.go
+index b9704ff..98e24ae 100644
+--- a/syntax/filetests_test.go
++++ b/syntax/filetests_test.go
+@@ -2246,6 +2246,21 @@ var fileTests = []fileTestCase{
+ 			}},
+ 		}),
+ 	),
++	fileTest(
++		[]string{"cat <<EOF && (\nbar\nEOF\n\tfoo\n)"},
++		langFile(&BinaryCmd{
++			Op: AndStmt,
++			X: &Stmt{
++				Cmd: litCall("cat"),
++				Redirs: []*Redirect{{
++					Op:   Hdoc,
++					Word: litWord("EOF"),
++					Hdoc: litWord("bar\n"),
++				}},
++			},
++			Y: stmt(subshell(litStmt("foo"))),
++		}),
++	),
+ 	fileTest(
+ 		[]string{"if true; then\n\tfoo <<-EOF\n\t\tbar\n\tEOF\nfi"},
+ 		langFile(&IfClause{
+diff --git a/syntax/parser.go b/syntax/parser.go
+index fe741a3..5bf01c4 100644
+--- a/syntax/parser.go
++++ b/syntax/parser.go
+@@ -2966,6 +2966,9 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
+ func (p *Parser) subshell(s *Stmt) {
+ 	sub := &Subshell{Lparen: p.pos}
+ 	old := p.preNested(subCmd)
++	// Unlike a command substitution, a subshell does not postpone the
++	// pending here-documents: their bodies start after its first newline.
++	p.buriedHdocs = old.buriedHdocs
+ 	p.next()
+ 	sub.Stmts, sub.Last = p.followStmts("(", sub.Lparen)
+ 	p.postNested(old)
+diff --git a/syntax/parser_test.go b/syntax/parser_test.go
+index fe0336c..382153e 100644
+--- a/syntax/parser_test.go
++++ b/syntax/parser_test.go
+@@ -977,6 +977,11 @@ var errorCases = []errorCase{
+ 		langErr("1:1: unclosed here-document `EOF`"),
+ 		flipConfirmUnclosedHeredoc,
+ 	),
++	errCase(
++		"cat <<EOF && (\nfoo\n)\nbar\nEOF",
++		langErr("1:14: `(` must be followed by a statement list"),
++		langErr("1:14: reached EOF without matching `(` with `)`", LangZsh|LangMirBSDKorn),
++	),
+ 	errCase(
+ 		"<<-EOF\n\t",
+ 		langErr("1:1: unclosed here-document `EOF`"),

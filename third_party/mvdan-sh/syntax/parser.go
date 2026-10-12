@@ -3006,6 +3006,9 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
 func (p *Parser) subshell(s *Stmt) {
 	sub := &Subshell{Lparen: p.pos}
 	old := p.preNested(subCmd)
+	// Unlike a command substitution, a subshell does not postpone the
+	// pending here-documents: their bodies start after its first newline.
+	p.buriedHdocs = old.buriedHdocs
 	p.next()
 	sub.Stmts, sub.Last = p.followStmts("(", sub.Lparen)
 	p.postNested(old)
