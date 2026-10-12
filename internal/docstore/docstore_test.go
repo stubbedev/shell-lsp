@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/stubbedev/shell-lsp/internal/lsp"
+	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/projection"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 )
@@ -476,6 +477,26 @@ func TestProjectedDocumentSpeaksInHostPositions(t *testing.T) {
 	if !doc.Synthetic(0) || doc.Synthetic(dollar) {
 		t.Errorf("Synthetic(0) = %v, Synthetic(%d) = %v", doc.Synthetic(0), dollar, doc.Synthetic(dollar))
 	}
+	at := doc.Positions(EncodingUTF16)
+	rule := lsp.Range{Start: lsp.Position{Line: 0, Character: 0}, End: lsp.Position{Line: 0, Character: 2}}
+	if span, inShell := at.Span(rule); inShell {
+		t.Errorf("the rule line maps to %+v in the shell", span)
+	}
+	across := lsp.Range{Start: lsp.Position{Line: 0, Character: 0}, End: lsp.Position{Line: 1, Character: 3}}
+	if span, inShell := at.Span(across); !inShell || span != (parser.Span{Start: 0, End: 4}) {
+		t.Errorf("a range from the rule into the recipe = %+v, %v, want the recipe part", span, inShell)
+	}
+	if label := EncodingUTF8.Units("größe w"); label != 9 || EncodingUTF16.Units("größe w") != 7 || EncodingUTF16.Units("😀") != 2 {
+		t.Errorf("units of größe w = %d in UTF-8", label)
+	}
+	func() {
+		defer func() {
+			if recover() == nil {
+				t.Error("PositionToOffset on a projected document hid whether the position is in the shell")
+			}
+		}()
+		doc.PositionToOffset(lsp.Position{Line: 1, Character: 2}, EncodingUTF16)
+	}()
 
 	defer func() {
 		if recover() == nil {

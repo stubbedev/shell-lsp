@@ -34,14 +34,12 @@ func (s *Server) handleCodeAction(ctx context.Context, docs *docstore.View, acti
 	if err != nil {
 		return nil, err
 	}
+	selection, inShell := snap.positions().Span(actionParams.Range)
 	only := actionParams.Context.Only
 	doc, sources := s.actionDocument(snap)
 	in := actions.Input{
-		Document: doc,
-		Selection: parser.Span{
-			Start: snap.Doc.PositionToOffset(actionParams.Range.Start, snap.encoding),
-			End:   snap.Doc.PositionToOffset(actionParams.Range.End, snap.encoding),
-		},
+		Document:       doc,
+		Selection:      selection,
 		Diagnostics:    s.toActionDiagnostics(snap, actionParams.Context.Diagnostics),
 		AllDiagnostics: s.lintActionDiagnostics(snap),
 	}
@@ -52,7 +50,7 @@ func (s *Server) handleCodeAction(ctx context.Context, docs *docstore.View, acti
 	lazy := slices.Contains(caps.TextDocument.CodeAction.ResolveSupport.Properties, "edit") && !snap.Doc.Projected()
 	out := []any{}
 	for _, a := range actions.Actions(in) {
-		if !wants(only, string(a.Kind)) || !expressible(snap, sources, a) {
+		if !wants(only, string(a.Kind)) || a.Refactor != nil && !inShell || !expressible(snap, sources, a) {
 			continue
 		}
 		action, err := s.codeAction(docs, snap, sources, settings, actionParams.Context.Diagnostics, a, lazy)
@@ -310,15 +308,11 @@ func (s *Server) toActionDiagnostics(snap *snapshot, diags []lsp.Diagnostic) []a
 	findings, _ := s.findings(snap.File, snap.settings, snap.generation)
 	out := make([]actions.Diagnostic, 0, len(diags))
 	for i, d := range diags {
-		ad := actions.Diagnostic{
-			Index:   i,
-			Code:    d.Code,
-			Message: d.Message,
-			Span: parser.Span{
-				Start: snap.Doc.PositionToOffset(d.Range.Start, snap.encoding),
-				End:   snap.Doc.PositionToOffset(d.Range.End, snap.encoding),
-			},
+		span, inShell := snap.positions().Span(d.Range)
+		if !inShell {
+			continue
 		}
+		ad := actions.Diagnostic{Index: i, Code: d.Code, Message: d.Message, Span: span}
 		if j := slices.IndexFunc(findings, func(f lint.Finding) bool { return f.Code.String() == d.Code && f.Span == ad.Span }); j >= 0 {
 			ad.Fixes = findings[j].Fixes
 		}

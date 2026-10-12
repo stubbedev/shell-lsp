@@ -81,7 +81,7 @@ func BenchmarkParse(b *testing.B) {
 func BenchmarkSyntaxDiagnostics(b *testing.B) {
 	doc := document()
 	for b.Loop() {
-		diagnostics.Syntax(parser.Parse(text, dialect.Bash), doc, docstore.EncodingUTF16)
+		diagnostics.Syntax(parser.Parse(text, dialect.Bash), doc.Positions(docstore.EncodingUTF16))
 	}
 }
 
@@ -177,7 +177,7 @@ func TestBudgets(t *testing.T) {
 		t.Skip("the race detector slows execution several-fold, so wall-clock budgets do not apply")
 	}
 	doc := document()
-	diagnose := median(t, func() { diagnostics.Syntax(parser.Parse(text, dialect.Bash), doc, docstore.EncodingUTF16) })
+	diagnose := median(t, func() { diagnostics.Syntax(parser.Parse(text, dialect.Bash), doc.Positions(docstore.EncodingUTF16)) })
 	if diagnose > diagnosticBudget {
 		t.Errorf("parse + syntax diagnostics median = %v over 10k lines, budget %v", diagnose, diagnosticBudget)
 	}

@@ -34,6 +34,30 @@ func TestSignatureHelpRequest(t *testing.T) {
 	}
 }
 
+func TestSignatureHelpCountsLabelOffsetsInTheNegotiatedEncoding(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		encoding  string
+		character int
+		want      [2]uint32
+	}{
+		{"utf-8", len("größe b"), [2]uint32{8, 12}},
+		{"utf-16", len("grosse b") - 1, [2]uint32{6, 10}},
+		{"utf-32", len("grosse b") - 1, [2]uint32{6, 10}},
+	} {
+		c, _ := startClient(t, `{"capabilities": {"general": {"positionEncodings": ["`+tc.encoding+`"]}, "textDocument": {"diagnostic": {}}}}`)
+		c.notify("textDocument/didOpen", openParams("file:///w/a.bash", "# $1 - wert\ngröße() { local wert=\"$1\"; echo \"$wert\"; }\ngröße bob \n"))
+		got := decodeResult[lsp.SignatureHelp](t, c.call("textDocument/signatureHelp", positionParams("file:///w/a.bash", 2, tc.character, "")))
+		if len(got.Signatures) != 1 || got.Signatures[0].Label != "größe wert" || len(got.Signatures[0].Parameters) != 1 {
+			t.Fatalf("%s: signature help = %+v", tc.encoding, got)
+		}
+		if label := got.Signatures[0].Parameters[0].Label; label != tc.want {
+			t.Errorf("%s: parameter label = %v, want %v", tc.encoding, label, tc.want)
+		}
+	}
+}
+
 func TestInlayHintsAndLinks(t *testing.T) {
 	t.Parallel()
 

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stubbedev/shell-lsp/internal/actions"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 )
@@ -104,6 +105,22 @@ func TestMakefileQuickFixIsWrittenInMakeSyntax(t *testing.T) {
 	for _, e := range edits {
 		if e.Range.Start.Line != 5 || strings.Contains(e.NewText, "\n") {
 			t.Errorf("edit %+v reaches outside the recipe line", e)
+		}
+	}
+}
+
+func TestMakefileOffersOnlyDocumentActionsOutsideItsRecipes(t *testing.T) {
+	t.Parallel()
+
+	c := openMakefile(t, actionCapabilities)
+	for _, at := range []lsp.Range{makefileRange(t, 1, "wildcard"), makefileRange(t, 3, "all")} {
+		encoded, err := json.Marshal(lsp.CodeActionParams{TextDocument: lsp.TextDocumentIdentifier{URI: makefileURI}, Range: at})
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := codeActions(t, c, string(encoded))
+		if len(got) != 1 || got[0].Kind != string(actions.SourceFixAll) {
+			t.Errorf("actions at %+v, outside every recipe = %+v, want only the document's fix-all", at, got)
 		}
 	}
 }

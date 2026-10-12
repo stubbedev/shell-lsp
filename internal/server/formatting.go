@@ -9,6 +9,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/format"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
+	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 )
 
@@ -53,17 +54,21 @@ func (s *Server) format(docs *docstore.View, uri string, opts lsp.FormattingOpti
 	}
 	edits := format.Edits(text, formatted)
 	if within != nil {
-		var kept []textedit.Edit
-		for _, e := range edits {
-			if slices.ContainsFunc(within, func(r lsp.Range) bool {
-				return len(format.RangeEdits([]textedit.Edit{e}, snap.Doc.PositionToOffset(r.Start, snap.encoding), snap.Doc.PositionToOffset(r.End, snap.encoding))) > 0
-			}) {
-				kept = append(kept, e)
-			}
+		at := snap.positions()
+		spans := make([]parser.Span, len(within))
+		for i, r := range within {
+			spans[i], _ = at.Span(r)
 		}
-		edits = kept
+		edits = slices.DeleteFunc(edits, func(e textedit.Edit) bool {
+			return !slices.ContainsFunc(spans, func(span parser.Span) bool {
+				return len(format.RangeEdits([]textedit.Edit{e}, span.Start, span.End)) > 0
+			})
+		})
 	}
-	out, _ := snap.Doc.TextEdits(edits, snap.encoding)
+	out, ok := snap.positions().TextEdits(edits)
+	if !ok {
+		panic("server: formatting edits " + uri + ", which is not projected, yet its edits could not be written")
+	}
 	return out, nil
 }
 

@@ -59,14 +59,14 @@ func navigationHandler(mode navigation.Mode) func(*Server, context.Context, *doc
 		if err != nil {
 			return nil, err
 		}
-		return toLocations(locations, docs.Encoding()), nil
+		return toLocations(locations, docs), nil
 	}
 }
 
-func toLocations(locations []navigation.Location, enc docstore.Encoding) []lsp.Location {
+func toLocations(locations []navigation.Location, docs *docstore.View) []lsp.Location {
 	out := make([]lsp.Location, len(locations))
 	for i, loc := range locations {
-		out[i] = lsp.Location{URI: loc.File.URI, Range: loc.File.Doc.RangeFor(loc.Span.Start, loc.Span.End, enc)}
+		out[i] = lsp.Location{URI: loc.File.URI, Range: docs.Positions(loc.File.Doc).Range(loc.Span)}
 	}
 	return out
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/manpage"
+	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/platform"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
@@ -206,10 +207,11 @@ func completionItem(snap *snapshot, caps CompletionItemCapabilities, it completi
 	if !ok {
 		return lsp.CompletionItem{}, false, nil
 	}
-	edit := &lsp.CompletionEdit{NewText: insert.NewText, Insert: source.RangeFor(insert.Start, insert.End, snap.encoding)}
+	at := source.Positions(snap.encoding)
+	edit := &lsp.CompletionEdit{NewText: insert.NewText, Insert: at.Range(parser.Span{Start: insert.Start, End: insert.End})}
 	if caps.InsertReplaceSupport && it.Word.End > it.Replace.End {
 		if word, ok := snap.Doc.SourceReplacement(textedit.Edit{Start: it.Word.Start, End: it.Word.End, NewText: it.InsertText}); ok {
-			replace := source.RangeFor(word.Start, word.End, snap.encoding)
+			replace := at.Range(parser.Span{Start: word.Start, End: word.End})
 			edit.Replace = &replace
 		}
 	}

@@ -12,6 +12,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
+	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/projection"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 )
@@ -291,8 +292,7 @@ func (d *Document) lineEnd(line int) int {
 
 func (d *Document) PositionToOffset(pos lsp.Position, enc Encoding) int {
 	if d.mapping != nil {
-		offset, _ := d.mapping.Offset(d.source.PositionToOffset(pos, enc))
-		return offset
+		panic("docstore: PositionToOffset on the projected " + d.URI + "; Locate says whether the position lies in its shell")
 	}
 	line := int(pos.Line)
 	if line >= len(d.lineStart) {
@@ -332,13 +332,7 @@ func (d *Document) OffsetToPosition(offset int, enc Encoding) lsp.Position {
 	if d.nonASCII == 0 {
 		return lsp.Position{Line: uint32(line), Character: uint32(offset - start)} //nolint:gosec // line and column index into text, so they are bounded by len(text)
 	}
-	var units uint32
-	for i := start; i < offset; {
-		r, size := utf8.DecodeRuneInString(d.text[i:])
-		units += codeUnits(r, size, enc)
-		i += size
-	}
-	return lsp.Position{Line: uint32(line), Character: units} //nolint:gosec // line indexes into text, so it is bounded by len(text)
+	return lsp.Position{Line: uint32(line), Character: enc.Units(d.text[start:offset])} //nolint:gosec // line indexes into text, so it is bounded by len(text)
 }
 
 func (d *Document) RangeFor(start, end int, enc Encoding) lsp.Range {
@@ -349,6 +343,53 @@ func (d *Document) RangeFor(start, end int, enc Encoding) lsp.Range {
 		Start: d.OffsetToPosition(start, enc),
 		End:   d.OffsetToPosition(end, enc),
 	}
+}
+
+func (e Encoding) Units(s string) uint32 {
+	var units uint32
+	for i := 0; i < len(s); {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		units += codeUnits(r, size, e)
+		i += size
+	}
+	return units
+}
+
+type Positions struct {
+	doc *Document
+	enc Encoding
+}
+
+func (d *Document) Positions(enc Encoding) Positions { return Positions{doc: d, enc: enc} }
+
+func (p Positions) Document() *Document { return p.doc }
+
+func (p Positions) Encoding() Encoding { return p.enc }
+
+func (p Positions) Position(offset int) lsp.Position { return p.doc.OffsetToPosition(offset, p.enc) }
+
+func (p Positions) Offset(pos lsp.Position) (int, bool) { return p.doc.Locate(pos, p.enc) }
+
+func (p Positions) Range(span parser.Span) lsp.Range {
+	return p.doc.RangeFor(span.Start, span.End, p.enc)
+}
+
+func (p Positions) Ranges(spans []parser.Span) []lsp.Range {
+	out := make([]lsp.Range, len(spans))
+	for i, span := range spans {
+		out[i] = p.Range(span)
+	}
+	return out
+}
+
+func (p Positions) Span(r lsp.Range) (parser.Span, bool) {
+	start, startInside := p.Offset(r.Start)
+	end, endInside := p.Offset(r.End)
+	return parser.Span{Start: start, End: max(start, end)}, startInside || endInside || start < end
+}
+
+func (p Positions) TextEdits(edits []textedit.Edit) ([]lsp.TextEdit, bool) {
+	return p.doc.TextEdits(edits, p.enc)
 }
 
 func (d *Document) applyChanges(changes []lsp.TextDocumentContentChangeEvent, enc Encoding) {
@@ -387,6 +428,8 @@ type View struct {
 }
 
 func (v *View) Encoding() Encoding { return v.encoding }
+
+func (v *View) Positions(d *Document) Positions { return d.Positions(v.encoding) }
 
 func (v *View) Document(uri string) (*Document, bool) {
 	d, ok := v.docs[fileuri.Key(uri)]

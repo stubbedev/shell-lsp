@@ -13,7 +13,7 @@ const (
 	CodeDialect = "dialect"
 )
 
-func Syntax(tree *parser.Tree, doc *docstore.Document, enc docstore.Encoding) []lsp.Diagnostic {
+func Syntax(tree *parser.Tree, at docstore.Positions) []lsp.Diagnostic {
 	out := make([]lsp.Diagnostic, 0, len(tree.Errors))
 	for _, e := range tree.Errors {
 		code := CodeSyntax
@@ -21,7 +21,7 @@ func Syntax(tree *parser.Tree, doc *docstore.Document, enc docstore.Encoding) []
 			code = CodeDialect
 		}
 		out = append(out, lsp.Diagnostic{
-			Range:    doc.RangeFor(e.Span.Start, e.Span.End, enc),
+			Range:    at.Range(e.Span),
 			Severity: lsp.SeverityError,
 			Code:     code,
 			Source:   Source,

@@ -77,8 +77,8 @@ func encodeTokens(snap *snapshot, tokens []semantic.Token, within *parser.Span) 
 		if within != nil && (t.Span.End <= within.Start || t.Span.Start >= within.End) {
 			continue
 		}
-		start := snap.Doc.OffsetToPosition(t.Span.Start, snap.encoding)
-		end := snap.Doc.OffsetToPosition(t.Span.End, snap.encoding)
+		r := snap.positions().Range(t.Span)
+		start, end := r.Start, r.End
 		if end.Line != start.Line || end.Character <= start.Character {
 			continue
 		}
@@ -144,9 +144,9 @@ func (s *Server) handleSemanticTokensRange(_ context.Context, docs *docstore.Vie
 	if err != nil {
 		return nil, err
 	}
-	within := parser.Span{
-		Start: snap.Doc.PositionToOffset(p.Range.Start, snap.encoding),
-		End:   snap.Doc.PositionToOffset(p.Range.End, snap.encoding),
+	within, inShell := snap.positions().Span(p.Range)
+	if !inShell {
+		return lsp.SemanticTokens{Data: []uint32{}}, nil
 	}
 	return lsp.SemanticTokens{Data: encodeTokens(snap, s.semanticTokens(snap), &within)}, nil
 }
@@ -158,17 +158,18 @@ func (s *Server) handleSelectionRange(_ context.Context, docs *docstore.View, p 
 	}
 	out := make([]lsp.SelectionRange, len(p.Positions))
 	for i, pos := range p.Positions {
-		offset, inside := snap.Doc.Locate(pos, snap.encoding)
+		offset, inside := snap.positions().Offset(pos)
 		if !inside {
-			source := snap.Doc.Source()
-			at := source.OffsetToPosition(source.PositionToOffset(pos, snap.encoding), snap.encoding)
+			source := snap.Doc.Source().Positions(snap.encoding)
+			clamped, _ := source.Offset(pos)
+			at := source.Position(clamped)
 			out[i] = lsp.SelectionRange{Range: lsp.Range{Start: at, End: at}}
 			continue
 		}
 		spans := structure.SelectionPath(snap.Tree, offset)
 		var parent *lsp.SelectionRange
 		for _, span := range slices.Backward(spans) {
-			parent = &lsp.SelectionRange{Range: snap.Doc.RangeFor(span.Start, span.End, snap.encoding), Parent: parent}
+			parent = &lsp.SelectionRange{Range: snap.positions().Range(span), Parent: parent}
 		}
 		out[i] = *parent
 	}

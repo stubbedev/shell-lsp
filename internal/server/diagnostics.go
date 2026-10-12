@@ -76,25 +76,25 @@ func dialectSource(file *workspace.File, settings config.Settings) lint.DialectS
 }
 
 func (s *Server) diagnose(snap *snapshot) diagnosticReport {
-	return s.report(snap.File, snap.settings, snap.generation, snap.encoding, "v"+strconv.FormatInt(int64(snap.Doc.Version), 10))
+	return s.report(snap.File, snap.settings, snap.generation, snap.positions(), "v"+strconv.FormatInt(int64(snap.Doc.Version), 10))
 }
 
-func (s *Server) diagnoseClosed(file *workspace.File, encoding docstore.Encoding) diagnosticReport {
+func (s *Server) diagnoseClosed(file *workspace.File, at docstore.Positions) diagnosticReport {
 	settings, generation := s.settingsFor(file.URI)
 	hash := fnv.New64a()
 	_, _ = hash.Write([]byte(file.Doc.Text()))
-	return s.report(file, settings, generation, encoding, "h"+strconv.FormatUint(hash.Sum64(), 16))
+	return s.report(file, settings, generation, at, "h"+strconv.FormatUint(hash.Sum64(), 16))
 }
 
-func (s *Server) report(file *workspace.File, settings config.Settings, generation uint64, encoding docstore.Encoding, identity string) diagnosticReport {
+func (s *Server) report(file *workspace.File, settings config.Settings, generation uint64, at docstore.Positions, identity string) diagnosticReport {
 	findings, stamp := s.findings(file, settings, generation)
 	tests := s.bats.of(file.URI)
 	var items []lsp.Diagnostic
 	if !lint.Foreign(file.Tree, dialectSource(file, settings)) {
-		items = diagnostics.Syntax(file.Tree, file.Doc, encoding)
+		items = diagnostics.Syntax(file.Tree, at)
 	}
-	items = append(items, diagnostics.Lint(findings, file.Doc, encoding, s.clientCapabilities().TextDocument.PublishDiagnostics.CodeDescriptionSupport)...)
-	items = append(items, diagnostics.Bats(tests.placedOn(file.Tree), file.Doc, encoding)...)
+	items = append(items, diagnostics.Lint(findings, at, s.clientCapabilities().TextDocument.PublishDiagnostics.CodeDescriptionSupport)...)
+	items = append(items, diagnostics.Bats(tests.placedOn(file.Tree), at)...)
 	return diagnosticReport{
 		version:  file.Doc.Version,
 		resultID: fmt.Sprintf("%s/%d/%d/%d", identity, generation, stamp, tests.revision),
@@ -148,7 +148,7 @@ func (s *Server) workspaceReport(docs *docstore.View, file *workspace.File, prev
 		report = s.diagnose(snap)
 		version = &report.version
 	} else {
-		report = s.diagnoseClosed(file, docs.Encoding())
+		report = s.diagnoseClosed(file, docs.Positions(file.Doc))
 	}
 	out := lsp.WorkspaceDocumentDiagnosticReport{Kind: lsp.ReportFull, ResultID: report.resultID, URI: file.URI, Version: version, Items: report.items}
 	if previous == report.resultID {

@@ -18,11 +18,11 @@ var tags = map[lint.Tag]lsp.DiagnosticTag{
 	lint.TagDeprecated:  lsp.TagDeprecated,
 }
 
-func Lint(findings []lint.Finding, doc *docstore.Document, enc docstore.Encoding, codeDescriptions bool) []lsp.Diagnostic {
+func Lint(findings []lint.Finding, at docstore.Positions, codeDescriptions bool) []lsp.Diagnostic {
 	out := make([]lsp.Diagnostic, 0, len(findings))
 	for _, f := range findings {
 		d := lsp.Diagnostic{
-			Range:    doc.RangeFor(f.Span.Start, f.Span.End, enc),
+			Range:    at.Range(f.Span),
 			Severity: severities[f.Severity],
 			Code:     f.Code.String(),
 			Source:   Source,

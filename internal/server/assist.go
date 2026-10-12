@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"unicode/utf16"
 
 	"github.com/stubbedev/shell-lsp/internal/assist"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
@@ -60,7 +59,7 @@ func (s *Server) handleSignatureHelp(_ context.Context, docs *docstore.View, pos
 		info.Documentation = &lsp.MarkupContent{Kind: lsp.MarkupMarkdown, Value: sig.Doc}
 	}
 	for _, p := range sig.Params {
-		param := lsp.ParameterInformation{Label: [2]uint32{utf16Len(sig.Label[:p.Start]), utf16Len(sig.Label[:p.End])}}
+		param := lsp.ParameterInformation{Label: [2]uint32{docs.Encoding().Units(sig.Label[:p.Start]), docs.Encoding().Units(sig.Label[:p.End])}}
 		if p.Doc != "" {
 			param.Documentation = &lsp.MarkupContent{Kind: lsp.MarkupMarkdown, Value: p.Doc}
 		}
@@ -75,10 +74,6 @@ func (s *Server) handleSignatureHelp(_ context.Context, docs *docstore.View, pos
 	return help, nil
 }
 
-func utf16Len(s string) uint32 {
-	return uint32(len(utf16.Encode([]rune(s)))) //nolint:gosec
-}
-
 type hintData struct {
 	Tooltip string `json:"tooltip"`
 }
@@ -88,12 +83,15 @@ func (s *Server) handleInlayHint(_ context.Context, docs *docstore.View, p lsp.I
 	if err != nil {
 		return nil, err
 	}
-	enc := docs.Encoding()
-	within := parser.Span{Start: file.Doc.PositionToOffset(p.Range.Start, enc), End: file.Doc.PositionToOffset(p.Range.End, enc)}
+	at := docs.Positions(file.Doc)
+	within, inShell := at.Span(p.Range)
+	if !inShell {
+		return []lsp.InlayHint{}, nil
+	}
 	hints := assist.InlayHints(file, within, s.functionLookup(file), s.navigationEnv())
 	out := make([]lsp.InlayHint, 0, len(hints))
 	for _, h := range hints {
-		hint := lsp.InlayHint{Position: file.Doc.OffsetToPosition(h.Offset, enc), Label: h.Label}
+		hint := lsp.InlayHint{Position: at.Position(h.Offset), Label: h.Label}
 		switch h.Kind {
 		case assist.HintType:
 			hint.Kind = lsp.InlayHintType
@@ -135,7 +133,7 @@ func (s *Server) handleDocumentLink(_ context.Context, docs *docstore.View, p ls
 	links := assist.DocumentLinks(file, s.navigationEnv())
 	out := make([]lsp.DocumentLink, len(links))
 	for i, l := range links {
-		out[i] = lsp.DocumentLink{Range: file.Doc.RangeFor(l.Span.Start, l.Span.End, docs.Encoding()), Target: l.Target}
+		out[i] = lsp.DocumentLink{Range: docs.Positions(file.Doc).Range(l.Span), Target: l.Target}
 	}
 	return out, nil
 }

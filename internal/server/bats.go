@@ -136,7 +136,7 @@ func (b *batsResults) of(uri string) batsRecord {
 	return b.byURI[uri]
 }
 
-func appendBatsLenses(out []lsp.CodeLens, file *workspace.File, enc docstore.Encoding) ([]lsp.CodeLens, error) {
+func appendBatsLenses(out []lsp.CodeLens, file *workspace.File, at docstore.Positions) ([]lsp.CodeLens, error) {
 	if !file.Tree.Bats() || len(file.Tree.Tests) == 0 {
 		return out, nil
 	}
@@ -157,7 +157,7 @@ func appendBatsLenses(out []lsp.CodeLens, file *workspace.File, enc docstore.Enc
 			title = "▶ Run matching tests"
 		}
 		name := test.Name
-		if err := lens(file.Doc.RangeFor(test.Span.Start, test.NameSpan.End, enc), title, batsRunArgs{URI: file.URI, Test: &name}); err != nil {
+		if err := lens(at.Range(parser.Span{Start: test.Span.Start, End: test.NameSpan.End}), title, batsRunArgs{URI: file.URI, Test: &name}); err != nil {
 			return nil, err
 		}
 	}

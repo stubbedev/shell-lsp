@@ -25,6 +25,8 @@ type snapshot struct {
 	projectErr error
 }
 
+func (s *snapshot) positions() docstore.Positions { return s.Doc.Positions(s.encoding) }
+
 func (s *snapshot) formatStyle() format.Style {
 	return s.settings.Format.Style.Over(s.project.Style)
 }
@@ -158,7 +160,7 @@ func (s *Server) at(docs *docstore.View, p lsp.TextDocumentPositionParams) (loca
 	if err != nil {
 		return located{}, false, err
 	}
-	offset, inside := snap.Doc.Locate(p.Position, snap.encoding)
+	offset, inside := snap.positions().Offset(p.Position)
 	return located{snapshot: snap, offset: offset}, inside, nil
 }
 

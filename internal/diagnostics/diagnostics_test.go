@@ -30,7 +30,7 @@ func TestSyntaxDiagnostics(t *testing.T) {
 
 	text := "if true; then\n  echo x\necho ${name@Q}\n"
 	doc := document(t, text)
-	got := Syntax(parser.Parse(text, dialect.Ksh), doc, docstore.EncodingUTF16)
+	got := Syntax(parser.Parse(text, dialect.Ksh), doc.Positions(docstore.EncodingUTF16))
 	if len(got) != 2 {
 		t.Fatalf("diagnostics = %+v, want 2", got)
 	}
@@ -51,7 +51,7 @@ func TestLintMapsFindings(t *testing.T) {
 	text := "#!/bin/bash\necho 😀 `date` $1\n"
 	doc := document(t, text)
 	findings := lint.Check(parser.Parse(text, dialect.Bash), nil, lint.Options{})
-	got := Lint(findings, doc, docstore.EncodingUTF16, true)
+	got := Lint(findings, doc.Positions(docstore.EncodingUTF16), true)
 	byCode := map[string]lsp.Diagnostic{}
 	for _, d := range got {
 		byCode[d.Code] = d
@@ -70,7 +70,7 @@ func TestLintMapsFindings(t *testing.T) {
 	if unquoted.CodeDescription == nil || unquoted.CodeDescription.Href != "https://github.com/stubbedev/shell-lsp/blob/main/docs/checks.md#sc2086" {
 		t.Errorf("SC2086 codeDescription = %+v, want its docs/checks.md row", unquoted.CodeDescription)
 	}
-	for _, d := range Lint(findings, doc, docstore.EncodingUTF16, false) {
+	for _, d := range Lint(findings, doc.Positions(docstore.EncodingUTF16), false) {
 		if d.CodeDescription != nil {
 			t.Errorf("%s has a codeDescription although the client cannot show one", d.Code)
 		}
@@ -81,7 +81,7 @@ func TestBatsDiagnosticsCoverTheFailingLine(t *testing.T) {
 	t.Parallel()
 
 	doc := document(t, "#!/usr/bin/env bats\n@test \"x\" {\n\t[ 1 -eq 2 ]\n}\n")
-	got := Bats([]bats.Failure{{Test: "x", Line: 3, Message: "test failed: x"}, {Test: "gone", Line: 40, Message: "test failed: gone"}}, doc, docstore.EncodingUTF16)
+	got := Bats([]bats.Failure{{Test: "x", Line: 3, Message: "test failed: x"}, {Test: "gone", Line: 40, Message: "test failed: gone"}}, doc.Positions(docstore.EncodingUTF16))
 	want := []lsp.Diagnostic{
 		{Range: lsp.Range{Start: lsp.Position{Line: 2, Character: 1}, End: lsp.Position{Line: 2, Character: 12}}, Severity: lsp.SeverityError, Source: BatsSource, Message: "test failed: x"},
 		{Range: lsp.Range{Start: lsp.Position{Line: 4}, End: lsp.Position{Line: 4}}, Severity: lsp.SeverityError, Source: BatsSource, Message: "test failed: gone"},

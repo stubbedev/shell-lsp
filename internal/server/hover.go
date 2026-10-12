@@ -63,7 +63,7 @@ func (s *Server) handleHover(ctx context.Context, docs *docstore.View, hoverPara
 }
 
 func (s *Server) hoverResult(snap *snapshot, markdown string, span parser.Span) lsp.Hover {
-	r := snap.Doc.RangeFor(span.Start, span.End, snap.encoding)
+	r := snap.positions().Range(span)
 	return lsp.Hover{Contents: lsp.MarkupContent{Kind: s.hoverFormat(), Value: markdown}, Range: &r}
 }
 

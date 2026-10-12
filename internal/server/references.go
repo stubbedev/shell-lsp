@@ -27,7 +27,7 @@ func (s *Server) referenceLocations(ctx context.Context, docs *docstore.View, po
 	}
 	out := make([]lsp.Location, len(occs))
 	for i, o := range occs {
-		out[i] = lsp.Location{URI: o.File.URI, Range: o.File.Doc.RangeFor(o.Span.Start, o.Span.End, docs.Encoding())}
+		out[i] = lsp.Location{URI: o.File.URI, Range: docs.Positions(o.File.Doc).Range(o.Span)}
 	}
 	return out, nil
 }
@@ -48,7 +48,7 @@ func (s *Server) handleDocumentHighlight(ctx context.Context, docs *docstore.Vie
 		if o.Write {
 			kind = lsp.HighlightWrite
 		}
-		out[i] = lsp.DocumentHighlight{Range: here.Doc.RangeFor(o.Span.Start, o.Span.End, docs.Encoding()), Kind: kind}
+		out[i] = lsp.DocumentHighlight{Range: here.positions().Range(o.Span), Kind: kind}
 	}
 	return out, nil
 }
@@ -65,7 +65,7 @@ func (s *Server) handlePrepareRename(ctx context.Context, docs *docstore.View, p
 	if err != nil {
 		return nil, renameError(err)
 	}
-	return lsp.PrepareRenameResult{Range: here.Doc.RangeFor(sym.Span.Start, sym.Span.End, docs.Encoding()), Placeholder: sym.Name}, nil
+	return lsp.PrepareRenameResult{Range: here.positions().Range(sym.Span), Placeholder: sym.Name}, nil
 }
 
 func (s *Server) handleRename(ctx context.Context, docs *docstore.View, renameParams lsp.RenameParams) (any, error) {

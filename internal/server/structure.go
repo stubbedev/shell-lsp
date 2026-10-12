@@ -41,35 +41,35 @@ func (s *Server) handleDocumentSymbol(_ context.Context, docs *docstore.View, sy
 	}
 	symbols := workspace.Memo(snap.File, "structure.symbols", 0, func() []structure.Symbol { return structure.Symbols(snap.Tree) })
 	if s.clientCapabilities().TextDocument.DocumentSymbol.HierarchicalDocumentSymbolSupport {
-		return documentSymbols(snap.Doc, snap.encoding, symbols), nil
+		return documentSymbols(snap.positions(), symbols), nil
 	}
-	return appendFlatSymbols([]lsp.SymbolInformation{}, snap.Doc, snap.encoding, symbols, ""), nil
+	return appendFlatSymbols([]lsp.SymbolInformation{}, snap.URI, snap.positions(), symbols, ""), nil
 }
 
-func documentSymbols(doc *docstore.Document, enc docstore.Encoding, symbols []structure.Symbol) []lsp.DocumentSymbol {
+func documentSymbols(at docstore.Positions, symbols []structure.Symbol) []lsp.DocumentSymbol {
 	out := make([]lsp.DocumentSymbol, len(symbols))
 	for i, sym := range symbols {
 		out[i] = lsp.DocumentSymbol{
 			Name:           sym.Name,
 			Detail:         sym.Detail,
 			Kind:           symbolKinds[sym.Kind],
-			Range:          doc.RangeFor(sym.Span.Start, sym.Span.End, enc),
-			SelectionRange: doc.RangeFor(sym.Selection.Start, sym.Selection.End, enc),
-			Children:       documentSymbols(doc, enc, sym.Children),
+			Range:          at.Range(sym.Span),
+			SelectionRange: at.Range(sym.Selection),
+			Children:       documentSymbols(at, sym.Children),
 		}
 	}
 	return out
 }
 
-func appendFlatSymbols(out []lsp.SymbolInformation, doc *docstore.Document, enc docstore.Encoding, symbols []structure.Symbol, container string) []lsp.SymbolInformation {
+func appendFlatSymbols(out []lsp.SymbolInformation, uri string, at docstore.Positions, symbols []structure.Symbol, container string) []lsp.SymbolInformation {
 	for _, sym := range symbols {
 		out = append(out, lsp.SymbolInformation{
 			Name:          sym.Name,
 			Kind:          symbolKinds[sym.Kind],
-			Location:      lsp.Location{URI: doc.URI, Range: doc.RangeFor(sym.Span.Start, sym.Span.End, enc)},
+			Location:      lsp.Location{URI: uri, Range: at.Range(sym.Span)},
 			ContainerName: container,
 		})
-		out = appendFlatSymbols(out, doc, enc, sym.Children, sym.Name)
+		out = appendFlatSymbols(out, uri, at, sym.Children, sym.Name)
 	}
 	return out
 }
@@ -79,7 +79,7 @@ func (s *Server) handleFoldingRange(_ context.Context, docs *docstore.View, fold
 	if err != nil {
 		return nil, err
 	}
-	lineOf := func(offset int) int { return int(snap.Doc.OffsetToPosition(offset, snap.encoding).Line) }
+	lineOf := func(offset int) int { return int(snap.positions().Position(offset).Line) }
 	folds := structure.Folds(snap.Tree, lineOf)
 	if limit := s.clientCapabilities().TextDocument.FoldingRange.RangeLimit; limit > 0 && len(folds) > limit {
 		folds = folds[:limit]
@@ -100,17 +100,17 @@ func (s *Server) handleWorkspaceSymbol(ctx context.Context, docs *docstore.View,
 	for _, file := range files {
 		for _, fn := range file.Tree.Functions {
 			if structure.Matches(symbolParams.Query, fn.Name) {
-				out = append(out, workspaceSymbol(file, docs.Encoding(), fn.Name, lsp.SymbolFunction, fn.Span))
+				out = append(out, workspaceSymbol(file, docs, fn.Name, lsp.SymbolFunction, fn.Span))
 			}
 		}
 		for _, def := range file.Tree.Definitions {
 			if def.Within == parser.FileScope && def.Kind != parser.DefCommandEnv && structure.Matches(symbolParams.Query, def.Name) {
-				out = append(out, workspaceSymbol(file, docs.Encoding(), def.Name, lsp.SymbolVariable, def.Span))
+				out = append(out, workspaceSymbol(file, docs, def.Name, lsp.SymbolVariable, def.Span))
 			}
 		}
 		for _, test := range file.Tree.Tests {
 			if structure.Matches(symbolParams.Query, test.Name) {
-				out = append(out, workspaceSymbol(file, docs.Encoding(), test.Name, symbolKinds[structure.SymbolTest], test.Span))
+				out = append(out, workspaceSymbol(file, docs, test.Name, symbolKinds[structure.SymbolTest], test.Span))
 			}
 		}
 	}
@@ -123,8 +123,8 @@ func (s *Server) handleWorkspaceSymbol(ctx context.Context, docs *docstore.View,
 	return out[:min(len(out), maxWorkspaceSymbols)], nil
 }
 
-func workspaceSymbol(file *workspace.File, enc docstore.Encoding, name string, kind lsp.SymbolKind, span parser.Span) lsp.SymbolInformation {
-	return lsp.SymbolInformation{Name: name, Kind: kind, Location: lsp.Location{URI: file.URI, Range: file.Doc.RangeFor(span.Start, span.End, enc)}}
+func workspaceSymbol(file *workspace.File, docs *docstore.View, name string, kind lsp.SymbolKind, span parser.Span) lsp.SymbolInformation {
+	return lsp.SymbolInformation{Name: name, Kind: kind, Location: lsp.Location{URI: file.URI, Range: docs.Positions(file.Doc).Range(span)}}
 }
 
 func (s *Server) indexWorkspace(ctx context.Context, docs *docstore.View, u urgency) ([]*workspace.File, error) {

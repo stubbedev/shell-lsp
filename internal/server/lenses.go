@@ -35,7 +35,7 @@ func (s *Server) handleCodeLens(_ context.Context, docs *docstore.View, p lsp.Co
 	if err != nil {
 		return nil, err
 	}
-	enc := docs.Encoding()
+	at := docs.Positions(file.Doc)
 	var spans []parser.Span
 	for _, fn := range file.Tree.Functions {
 		spans = append(spans, fn.NameSpan)
@@ -48,12 +48,12 @@ func (s *Server) handleCodeLens(_ context.Context, docs *docstore.View, p lsp.Co
 		seen[def.Name] = true
 		spans = append(spans, def.NameSpan)
 	}
-	out, err := appendBatsLenses(make([]lsp.CodeLens, 0, len(file.Tree.Tests)+1+len(spans)), file, enc)
+	out, err := appendBatsLenses(make([]lsp.CodeLens, 0, len(file.Tree.Tests)+1+len(spans)), file, at)
 	if err != nil {
 		return nil, err
 	}
 	for _, span := range spans {
-		r := file.Doc.RangeFor(span.Start, span.End, enc)
+		r := at.Range(span)
 		data, err := json.Marshal(lensData{URI: file.URI, Position: r.Start})
 		if err != nil {
 			return nil, err
@@ -93,7 +93,7 @@ type callItemData struct {
 	TopLevel bool   `json:"topLevel"`
 }
 
-func (s *Server) callHierarchyItem(item navigation.CallItem, enc docstore.Encoding) (lsp.CallHierarchyItem, error) {
+func (s *Server) callHierarchyItem(item navigation.CallItem, docs *docstore.View) (lsp.CallHierarchyItem, error) {
 	data, err := json.Marshal(callItemData{Name: item.Name, Start: item.Span.Start, TopLevel: item.TopLevel})
 	if err != nil {
 		return lsp.CallHierarchyItem{}, err
@@ -107,8 +107,8 @@ func (s *Server) callHierarchyItem(item navigation.CallItem, enc docstore.Encodi
 		Kind:           kind,
 		Detail:         item.File.Path,
 		URI:            item.File.URI,
-		Range:          item.File.Doc.RangeFor(item.Span.Start, item.Span.End, enc),
-		SelectionRange: item.File.Doc.RangeFor(item.Selection.Start, item.Selection.End, enc),
+		Range:          docs.Positions(item.File.Doc).Range(item.Span),
+		SelectionRange: docs.Positions(item.File.Doc).Range(item.Selection),
 		Data:           data,
 	}, nil
 }
@@ -153,7 +153,7 @@ func (s *Server) handlePrepareCallHierarchy(_ context.Context, docs *docstore.Vi
 	if !ok {
 		return nil, nil
 	}
-	out, err := s.callHierarchyItem(item, docs.Encoding())
+	out, err := s.callHierarchyItem(item, docs)
 	if err != nil {
 		return nil, err
 	}
@@ -171,11 +171,11 @@ func (s *Server) handleIncomingCalls(ctx context.Context, docs *docstore.View, p
 	}
 	out := make([]lsp.CallHierarchyIncomingCall, 0, len(calls))
 	for _, c := range calls {
-		from, err := s.callHierarchyItem(c.Item, docs.Encoding())
+		from, err := s.callHierarchyItem(c.Item, docs)
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, lsp.CallHierarchyIncomingCall{From: from, FromRanges: callRanges(c, docs.Encoding())})
+		out = append(out, lsp.CallHierarchyIncomingCall{From: from, FromRanges: docs.Positions(c.Item.File.Doc).Ranges(c.Spans)})
 	}
 	return out, nil
 }
@@ -188,25 +188,13 @@ func (s *Server) handleOutgoingCalls(_ context.Context, docs *docstore.View, p l
 	calls := navigation.OutgoingCalls(item, s.navigationEnv())
 	out := make([]lsp.CallHierarchyOutgoingCall, 0, len(calls))
 	for _, c := range calls {
-		to, err := s.callHierarchyItem(c.Item, docs.Encoding())
+		to, err := s.callHierarchyItem(c.Item, docs)
 		if err != nil {
 			return nil, err
 		}
-		ranges := make([]lsp.Range, len(c.Spans))
-		for i, span := range c.Spans {
-			ranges[i] = item.File.Doc.RangeFor(span.Start, span.End, docs.Encoding())
-		}
-		out = append(out, lsp.CallHierarchyOutgoingCall{To: to, FromRanges: ranges})
+		out = append(out, lsp.CallHierarchyOutgoingCall{To: to, FromRanges: docs.Positions(item.File.Doc).Ranges(c.Spans)})
 	}
 	return out, nil
-}
-
-func callRanges(c navigation.Call, enc docstore.Encoding) []lsp.Range {
-	ranges := make([]lsp.Range, len(c.Spans))
-	for i, span := range c.Spans {
-		ranges[i] = c.Item.File.Doc.RangeFor(span.Start, span.End, enc)
-	}
-	return ranges
 }
 
 func (s *Server) handleInlineValue(_ context.Context, docs *docstore.View, p lsp.InlineValueParams) (any, error) {
@@ -214,12 +202,16 @@ func (s *Server) handleInlineValue(_ context.Context, docs *docstore.View, p lsp
 	if err != nil {
 		return nil, err
 	}
-	within := parser.Span{Start: snap.Doc.PositionToOffset(p.Range.Start, snap.encoding), End: snap.Doc.PositionToOffset(p.Range.End, snap.encoding)}
-	stopped := snap.Doc.PositionToOffset(p.Context.StoppedLocation.Start, snap.encoding)
+	at := snap.positions()
+	within, inShell := at.Span(p.Range)
+	stopped, stoppedInShell := at.Offset(p.Context.StoppedLocation.Start)
+	if !inShell || !stoppedInShell {
+		return []lsp.InlineValueVariableLookup{}, nil
+	}
 	values := navigation.InlineValues(snap.Tree, within, stopped)
 	out := make([]lsp.InlineValueVariableLookup, len(values))
 	for i, v := range values {
-		out[i] = lsp.InlineValueVariableLookup{Range: snap.Doc.RangeFor(v.Span.Start, v.Span.End, snap.encoding), VariableName: v.Name, CaseSensitiveLookup: true}
+		out[i] = lsp.InlineValueVariableLookup{Range: at.Range(v.Span), VariableName: v.Name, CaseSensitiveLookup: true}
 	}
 	return out, nil
 }
@@ -255,9 +247,5 @@ func (s *Server) handleLinkedEditingRange(_ context.Context, docs *docstore.View
 	if !ok {
 		return nil, nil
 	}
-	ranges := make([]lsp.Range, len(spans))
-	for i, span := range spans {
-		ranges[i] = here.Doc.RangeFor(span.Start, span.End, here.encoding)
-	}
-	return lsp.LinkedEditingRanges{Ranges: ranges, WordPattern: `[A-Za-z0-9_.-]+`}, nil
+	return lsp.LinkedEditingRanges{Ranges: here.positions().Ranges(spans), WordPattern: `[A-Za-z0-9_.-]+`}, nil
 }
