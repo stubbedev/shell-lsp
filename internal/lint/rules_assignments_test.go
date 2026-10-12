@@ -18,20 +18,3 @@ func TestLiteralEqualsFixes(t *testing.T) {
 		}
 	}
 }
-
-func TestDecodeANSIC(t *testing.T) {
-	t.Parallel()
-
-	tests := map[string]string{
-		`\t`:       "\t",
-		`a\nb`:     "a\nb",
-		`\x41\101`: "AA",
-		`\q`:       `\q`,
-		`\\n`:      `\n`,
-	}
-	for in, want := range tests {
-		if got := decodeANSIC(in); got != want {
-			t.Errorf("decodeANSIC(%q) = %q, want %q", in, got, want)
-		}
-	}
-}

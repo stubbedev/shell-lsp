@@ -471,6 +471,7 @@ func TestText(t *testing.T) {
 		{src: `pre$(cmd)'post'`, want: "pre_post"},
 		{src: `$'tab\there\x41\101é\cA\q'`, want: "tab\there" + "AA" + "é" + "\x01" + `\q`, literal: true},
 		{src: `$'\xzz'`, want: `\xzz`, literal: true},
+		{src: `$'\777\x4142\0'`, want: "\xff" + "A42" + "\x00", literal: true},
 	}
 	for _, tc := range tests {
 		file, err := syntax.NewParser().Parse(strings.NewReader("echo "+tc.src), "")
@@ -484,6 +485,23 @@ func TestText(t *testing.T) {
 		got, literal := Text(call.Args[1], "_")
 		if literal != tc.literal || got != tc.want {
 			t.Errorf("Text(%s) = %q, %t; want %q, %t", tc.src, got, literal, tc.want, tc.literal)
+		}
+	}
+}
+
+func TestDecodeANSIC(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]string{
+		`\t`:       "\t",
+		`a\nb`:     "a\nb",
+		`\x41\101`: "AA",
+		`\q`:       `\q`,
+		`\\n`:      `\n`,
+	}
+	for in, want := range tests {
+		if got := decodeANSIC(in); got != want {
+			t.Errorf("decodeANSIC(%q) = %q, want %q", in, got, want)
 		}
 	}
 }

@@ -149,7 +149,7 @@ func (p *pass) checkFieldSeparator(a *syntax.Assign) {
 	if a.Value == nil {
 		return
 	}
-	value, ok := decodedLiteral(a.Value)
+	value, ok := parser.Text(a.Value, "")
 	if !ok {
 		return
 	}
@@ -173,83 +173,6 @@ func (p *pass) checkFieldSeparator(a *syntax.Assign) {
 	case strings.Contains(value, "t"):
 		p.report(2141, span, "This IFS contains the letter t; did you mean a tab?")
 	}
-}
-
-func decodedLiteral(w *syntax.Word) (string, bool) {
-	var sb strings.Builder
-	for _, part := range w.Parts {
-		sq, ok := part.(*syntax.SglQuoted)
-		if !ok || !sq.Dollar {
-			lit, ok := parser.Literal(&syntax.Word{Parts: []syntax.WordPart{part}})
-			if !ok {
-				return "", false
-			}
-			sb.WriteString(lit)
-			continue
-		}
-		sb.WriteString(decodeANSIC(sq.Value))
-	}
-	return sb.String(), true
-}
-
-var ansiCEscapes = map[byte]byte{
-	'a': '\a', 'b': '\b', 'e': 0x1b, 'E': 0x1b, 'f': '\f', 'n': '\n', 'r': '\r', 't': '\t', 'v': '\v',
-	'\\': '\\', '\'': '\'', '"': '"', '?': '?',
-}
-
-func decodeANSIC(s string) string {
-	var sb strings.Builder
-	for i := 0; i < len(s); i++ {
-		if s[i] != '\\' || i+1 == len(s) {
-			sb.WriteByte(s[i])
-			continue
-		}
-		i++
-		if c, ok := ansiCEscapes[s[i]]; ok {
-			sb.WriteByte(c)
-			continue
-		}
-		if s[i] == 'x' {
-			if c, n := escapedNumber(s[i+1:], 16, 2); n > 0 {
-				sb.WriteByte(c)
-				i += n
-				continue
-			}
-		}
-		if c, n := escapedNumber(s[i:], 8, 3); n > 0 {
-			sb.WriteByte(c)
-			i += n - 1
-			continue
-		}
-		sb.WriteByte('\\')
-		sb.WriteByte(s[i])
-	}
-	return sb.String()
-}
-
-func escapedNumber(s string, base, width int) (byte, int) {
-	var code uint
-	end := 0
-	for ; end < min(width, len(s)); end++ {
-		digit, ok := digitValue(s[end])
-		if !ok || digit >= uint(base) {
-			break
-		}
-		code = code*uint(base) + digit
-	}
-	return byte(code), end
-}
-
-func digitValue(c byte) (uint, bool) {
-	switch {
-	case c >= '0' && c <= '9':
-		return uint(c - '0'), true
-	case c >= 'a' && c <= 'f':
-		return uint(c-'a') + 10, true
-	case c >= 'A' && c <= 'F':
-		return uint(c-'A') + 10, true
-	}
-	return 0, false
 }
 
 func checkArrayLiteral(p *pass, n syntax.Node) {
