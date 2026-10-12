@@ -51,7 +51,6 @@ var commandOpeners = map[string]bool{
 
 func analyze(tree *parser.Tree, offset int) site {
 	text := tree.Text()
-	offset = min(max(offset, 0), len(text))
 	if inComment(tree, offset) {
 		return site{}
 	}

@@ -21,7 +21,7 @@ func directiveTrigger(trigger string) bool {
 
 func directiveCompletion(in Input) (Result, bool, error) {
 	text := in.Tree.Text()
-	offset := min(max(in.Offset, 0), len(text))
+	offset := in.Offset
 	for _, comment := range in.Tree.Comments {
 		if !comment.Span.HasByteBefore(offset) {
 			continue

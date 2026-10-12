@@ -104,7 +104,7 @@ func Documentation(tree *parser.Tree, imports []parser.Import, kind ResolveKind,
 		}
 		return "", false
 	case ResolveVariable:
-		return hover.VariableDoc(tree, imports, min(max(offset, 0), len(tree.Text())), name), true
+		return hover.VariableDoc(tree, imports, offset, name), true
 	}
 	return "", false
 }
