@@ -19,6 +19,8 @@ const (
 	codeGoogleTodo       = nativeBase + 4003
 	codeGoogleFuncHeader = nativeBase + 4004
 	codeGoogleSections   = nativeBase + 4005
+	codeGoogleLength     = nativeBase + 4006
+	longScriptLines      = 100
 	shortFunctionLines   = 10
 	googleShebang        = "#!/bin/bash"
 )
@@ -30,8 +32,12 @@ var googleFamily = family{
 		codeGoogleTodo:       {severity: SeverityStyle, optional: optionalGoogleTodo},
 		codeGoogleFuncHeader: {severity: SeverityStyle, optional: optionalGoogleFunctionComments},
 		codeGoogleSections:   {severity: SeverityStyle, optional: optionalGoogleCommentSections},
+		codeGoogleLength:     {severity: SeverityStyle, optional: optionalGoogleScriptLength},
 	},
-	finish: []func(*pass){checkGoogleShebang, checkGoogleFileHeader, checkGoogleTodos, checkGoogleFunctionHeaders, checkGoogleCommentSections},
+	finish: []func(*pass){
+		checkGoogleShebang, checkGoogleFileHeader, checkGoogleTodos, checkGoogleFunctionHeaders, checkGoogleCommentSections,
+		checkGoogleScriptLength,
+	},
 }
 
 var (
@@ -273,4 +279,16 @@ func stdoutToFile(redirs []*syntax.Redirect) bool {
 		}
 	}
 	return false
+}
+
+func checkGoogleScriptLength(p *pass) {
+	if p.bats || p.text == "" {
+		return
+	}
+	lines := p.tree.Line(len(p.text) - 1)
+	if lines <= longScriptLines {
+		return
+	}
+	end := textline.End(p.text, 0)
+	p.report(codeGoogleLength, parser.Span{Start: 0, End: end}, "This script is "+strconv.Itoa(lines)+" lines long; the Google Shell Style Guide asks for scripts over "+strconv.Itoa(longScriptLines)+" lines to be rewritten in a more structured language.")
 }

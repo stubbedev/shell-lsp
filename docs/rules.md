@@ -598,3 +598,12 @@ greet() {    # SL4005: no Arguments: or Outputs:
 }
 greet world
 ```
+
+## SL4006
+
+**A script is longer than 100 lines.** The rule is optional
+(`google-script-length`). The guide reserves shell for small utilities and
+wrappers and asks for a script of more than 100 lines to be rewritten in a
+more structured language, before it grows further. Every line counts,
+comments and blank lines included, since the guide gives no other measure.
+The finding sits on the first line of the file.
