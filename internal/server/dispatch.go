@@ -156,8 +156,8 @@ func New(conn *jsonrpc.Conn, version string, process Process) *Server {
 
 func (s *Server) usePages(pages *manpage.Lookup) {
 	s.prefetch = newPrefetcher(pages)
-	s.commandDocs = commandDocs{Lookup: pages, path: s.process.pathDirs(), pathExt: s.process.pathExt()}
-	s.environment = shellEnvironment{process: s.process, pages: pages, executables: newExecutableCache(s.process.pathDirs(), s.process.pathExt()), prefetch: s.prefetch}
+	s.commandDocs = commandDocs{Lookup: pages, path: s.process.PathDirs(), pathExt: s.process.pathExt()}
+	s.environment = shellEnvironment{process: s.process, pages: pages, executables: newExecutableCache(s.process.PathDirs(), s.process.pathExt()), prefetch: s.prefetch}
 }
 
 func (s *Server) SetLogger(logger *slog.Logger) {

@@ -203,7 +203,7 @@ func (s *Server) runBats(ctx context.Context, docs *docstore.View, args batsRunA
 	if root, ok := s.workspace.RootOf(path); ok {
 		dir = root
 	}
-	runner, err := bats.Locate(dir, bats.Environment{Path: s.process.pathDirs(), PathExt: s.process.pathExt(), SystemRoot: s.process.SystemRoot})
+	runner, err := bats.Locate(dir, bats.Environment{Path: s.process.PathDirs(), PathExt: s.process.pathExt(), SystemRoot: s.process.SystemRoot})
 	if err != nil {
 		return batsRunResult{}, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "%v", err)
 	}

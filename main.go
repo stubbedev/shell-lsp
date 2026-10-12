@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"runtime/debug"
 	"strings"
 
@@ -22,14 +21,10 @@ func main() {
 		fmt.Fprintln(os.Stderr, "shell-lsp: finding the working directory:", err)
 		os.Exit(1)
 	}
-	os.Exit(cli.Run(environment(dir)))
+	os.Exit(cli.Run(environment(dir, server.CurrentProcess())))
 }
 
-func environment(dir string) cli.Env {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		home = ""
-	}
+func environment(dir string, process server.Process) cli.Env {
 	return cli.Env{
 		Args:       os.Args[1:],
 		Stdin:      os.Stdin,
@@ -37,12 +32,12 @@ func environment(dir string) cli.Env {
 		Stderr:     os.Stderr,
 		Version:    version,
 		Dir:        dir,
-		Home:       home,
-		ConfigHome: os.Getenv("XDG_CONFIG_HOME"),
-		PathDirs:   filepath.SplitList(os.Getenv("PATH")),
+		Home:       process.Home,
+		ConfigHome: process.ConfigHome,
+		PathDirs:   process.PathDirs(),
 		Terminal:   terminal(os.Stdout) && os.Getenv("TERM") != "dumb",
 		Serve: func() error {
-			return server.New(jsonrpc.NewConn(os.Stdin, os.Stdout), version, server.CurrentProcess()).Run(context.Background())
+			return server.New(jsonrpc.NewConn(os.Stdin, os.Stdout), version, process).Run(context.Background())
 		},
 	}
 }

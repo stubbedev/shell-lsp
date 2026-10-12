@@ -42,7 +42,7 @@ func CurrentProcess() Process {
 	}
 }
 
-func (p Process) pathDirs() []string { return filepath.SplitList(p.Path) }
+func (p Process) PathDirs() []string { return filepath.SplitList(p.Path) }
 
 func (p Process) pathExt() []string { return platform.Native.PathExt(p.PathExt) }
 
