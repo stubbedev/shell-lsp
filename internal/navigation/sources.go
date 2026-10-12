@@ -296,7 +296,8 @@ func (e evaluator) param(p *syntax.ParamExp, at, depth int) (string, bool) {
 
 func (e evaluator) variable(p *syntax.ParamExp, at, depth int) (string, bool) {
 	name := p.Param.Value
-	if name == "0" || (name == "BASH_SOURCE" && (p.Index == nil || indexIsZero(p.Index))) {
+	kind, _ := parser.ParamKindOf(name)
+	if kind == parser.ParamZero || (name == "BASH_SOURCE" && (p.Index == nil || zeroIndex(p.Index))) {
 		return e.scriptPath, true
 	}
 	if p.Index != nil {
@@ -314,9 +315,9 @@ func (e evaluator) variable(p *syntax.ParamExp, at, depth int) (string, bool) {
 	return "", false
 }
 
-func indexIsZero(index syntax.ArithmExpr) bool {
-	w, ok := index.(*syntax.Word)
-	return ok && w.Lit() == "0"
+func zeroIndex(index syntax.ArithmExpr) bool {
+	lit, ok := parser.IndexLit(index)
+	return ok && lit == "0"
 }
 
 func (e evaluator) cmdSubst(c *syntax.CmdSubst, at, depth int) (string, bool) {

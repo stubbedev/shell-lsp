@@ -115,6 +115,20 @@ func ParamKindOf(name string) (ParamKind, bool) {
 	return 0, false
 }
 
+func IndexLit(index syntax.ArithmExpr) (string, bool) {
+	w, ok := index.(*syntax.Word)
+	if !ok {
+		return "", false
+	}
+	return w.Lit(), true
+}
+
+func IsAllIndex(index syntax.ArithmExpr) bool {
+	lit, _ := IndexLit(index)
+	kind, ok := ParamKindOf(lit)
+	return ok && kind == ParamAll
+}
+
 func IsPlainParam(pe *syntax.ParamExp) bool {
 	return pe.Param != nil && !pe.Excl && !pe.Length && !pe.Width && pe.Flags == nil && pe.NestedParam == nil &&
 		pe.Index == nil && len(pe.Modifiers) == 0 && pe.Slice == nil && pe.Repl == nil && pe.Names == 0 && pe.Exp == nil

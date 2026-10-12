@@ -169,8 +169,7 @@ func allValuesOf(w *syntax.Word) (string, bool) {
 	if !ok || pe.Short || !isIndexedParam(pe) {
 		return "", false
 	}
-	index, ok := pe.Index.(*syntax.Word)
-	if !ok || index.Lit() != "@" {
+	if index, ok := parser.IndexLit(pe.Index); !ok || index != "@" {
 		return "", false
 	}
 	return pe.Param.Value, true

@@ -689,7 +689,7 @@ func expansionDocs(exp *syntax.ParamExp, d dialect.Dialect) []string {
 	switch {
 	case exp.Length:
 		add(shelldocs.ExpansionForms, "length")
-	case exp.Excl && exp.Index != nil && isAllIndex(exp.Index):
+	case exp.Excl && exp.Index != nil && parser.IsAllIndex(exp.Index):
 		add(shelldocs.ExpansionForms, "keys")
 	case exp.Excl:
 		add(shelldocs.ExpansionForms, "indirect")
@@ -738,15 +738,6 @@ func replaceOperator(r *syntax.Replace) string {
 		}
 	}
 	return "/"
-}
-
-func isAllIndex(index syntax.ArithmExpr) bool {
-	w, ok := index.(*syntax.Word)
-	if !ok {
-		return false
-	}
-	kind, _ := parser.ParamKindOf(w.Lit())
-	return kind == parser.ParamAll
 }
 
 func zshFlagDocs(flags *syntax.Lit) string {

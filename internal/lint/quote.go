@@ -102,11 +102,11 @@ func kindOf(pe *syntax.ParamExp) expansionKind {
 	}
 	all := pe.Param.Value
 	if pe.Index != nil {
-		w, ok := pe.Index.(*syntax.Word)
+		lit, ok := parser.IndexLit(pe.Index)
 		if !ok {
 			return expandsScalar
 		}
-		all = w.Lit()
+		all = lit
 	}
 	switch all {
 	case "@":

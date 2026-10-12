@@ -201,12 +201,7 @@ func isEmptyQuotes(offset syntax.ArithmExpr) bool {
 }
 
 func isAllSubscript(pe *syntax.ParamExp) bool {
-	w, ok := pe.Index.(*syntax.Word)
-	if !ok || pe.Exp != nil || pe.Slice != nil || pe.Repl != nil {
-		return false
-	}
-	lit := w.Lit()
-	return lit == "@" || lit == "*"
+	return pe.Exp == nil && pe.Slice == nil && pe.Repl == nil && parser.IsAllIndex(pe.Index)
 }
 
 func checkExpansionOperator(p *pass, pe *syntax.ParamExp, span parser.Span, text string) {
