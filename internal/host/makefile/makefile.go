@@ -6,6 +6,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/projection"
+	"github.com/stubbedev/shell-lsp/internal/scan"
 )
 
 const (
@@ -86,7 +87,7 @@ func (p *parser) dialect() (dialect.Detection, bool) {
 }
 
 func (p *parser) parse() {
-	for pos := 0; pos < len(p.text); {
+	scan.Forward(0, len(p.text), func(pos int) int {
 		end := p.logicalEnd(pos)
 		line := p.text[pos:end]
 		switch {
@@ -99,22 +100,24 @@ func (p *parser) parse() {
 		default:
 			p.directive(pos, end)
 		}
-		pos = end + 1
-	}
+		return end + 1
+	})
 }
 
-func (p *parser) logicalEnd(pos int) int {
-	for {
-		end := strings.IndexByte(p.text[pos:], '\n')
-		if end < 0 {
+func (p *parser) logicalEnd(start int) int {
+	end := len(p.text)
+	scan.Forward(start, len(p.text), func(pos int) int {
+		nl := strings.IndexByte(p.text[pos:], '\n')
+		switch {
+		case nl < 0:
+			return len(p.text)
+		case !continued(p.text[pos : pos+nl]):
+			end = pos + nl
 			return len(p.text)
 		}
-		end += pos
-		if !continued(p.text[pos:end]) {
-			return end
-		}
-		pos = end + 1
-	}
+		return pos + nl + 1
+	})
+	return end
 }
 
 func continued(line string) bool {
@@ -165,22 +168,15 @@ func (p *parser) rule(s string, colon, offset, end int) {
 	if after < len(s) && s[after] == ':' {
 		after++
 	}
-	for i := after; i < len(s); {
-		switch s[i] {
-		case '$':
-			i = referenceEnd(s, i, len(s))
-			continue
-		case '=':
-			return
-		case ';':
-			p.openRule(s[:colon])
-			n := len(p.recipes) - 1
-			p.recipes[n] = append(p.recipes[n], recipeLine{start: offset + i + 1, end: end})
-			return
-		}
-		i++
+	i := topLevel(s, after, "=;")
+	switch {
+	case i == len(s):
+		p.openRule(s[:colon])
+	case s[i] == ';':
+		p.openRule(s[:colon])
+		n := len(p.recipes) - 1
+		p.recipes[n] = append(p.recipes[n], recipeLine{start: offset + i + 1, end: end})
 	}
-	p.openRule(s[:colon])
 }
 
 func (p *parser) openRule(targets string) {
@@ -220,37 +216,36 @@ func oneLine(s string) string {
 }
 
 func operator(s string) (int, bool) {
-	for i := 0; i < len(s); {
-		switch s[i] {
-		case '$':
-			i = referenceEnd(s, i, len(s))
-			continue
-		case '=':
-			return i, false
-		case ':':
-			rest := strings.TrimLeft(s[i:], ":")
-			return i, !strings.HasPrefix(rest, "=") || len(s)-i-len(rest) > 3
-		}
-		i++
+	i := topLevel(s, 0, "=:")
+	switch {
+	case i == len(s):
+		return -1, false
+	case s[i] == '=':
+		return i, false
 	}
-	return -1, false
+	rest := strings.TrimLeft(s[i:], ":")
+	return i, !strings.HasPrefix(rest, "=") || len(s)-i-len(rest) > 3
 }
 
 func commentStart(s string) int {
-	for i := 0; i < len(s); {
-		switch s[i] {
-		case '\\':
-			i += 2
-			continue
-		case '$':
-			i = referenceEnd(s, i, len(s))
-			continue
-		case '#':
-			return i
+	return topLevel(s, 0, "#")
+}
+
+func topLevel(s string, from int, stops string) int {
+	found := len(s)
+	scan.Forward(from, len(s), func(i int) int {
+		switch {
+		case s[i] == '\\':
+			return i + 2
+		case s[i] == '$':
+			return referenceEnd(s, i, len(s))
+		case strings.IndexByte(stops, s[i]) >= 0:
+			found = i
+			return len(s)
 		}
-		i++
-	}
-	return len(s)
+		return i + 1
+	})
+	return found
 }
 
 func referenceEnd(s string, i, end int) int {
@@ -345,30 +340,29 @@ func (p *parser) script(b *projection.Builder, lines []recipeLine) {
 
 func (p *parser) content(b *projection.Builder, start, end int) {
 	run := start
-	for i := start; i < end; {
+	scan.Forward(start, end, func(i int) int {
 		switch {
 		case p.text[i] == '\\' && i+1 < end && p.text[i+1] == '\n':
-			i += 2
-			if i < end && p.text[i] == p.prefix {
-				b.Verbatim(run, i)
-				b.Opaque(i, i+1, "")
-				i++
-				run = i
+			next := i + 2
+			if next < end && p.text[next] == p.prefix {
+				b.Verbatim(run, next)
+				b.Opaque(next, next+1, "")
+				run = next + 1
+				return run
 			}
+			return next
+		case p.text[i] == '$' && i+1 < end && p.text[i+1] == '$':
+			b.Verbatim(run, i)
+			b.Escape(i, i+2, "$")
+			run = i + 2
+			return run
 		case p.text[i] == '$':
 			b.Verbatim(run, i)
-			if i+1 < end && p.text[i+1] == '$' {
-				b.Escape(i, i+2, "$")
-				i += 2
-			} else {
-				next := referenceEnd(p.text, i, end)
-				b.Placeholder(i, next)
-				i = next
-			}
-			run = i
-		default:
-			i++
+			run = referenceEnd(p.text, i, end)
+			b.Placeholder(i, run)
+			return run
 		}
-	}
+		return i + 1
+	})
 	b.Verbatim(run, end)
 }

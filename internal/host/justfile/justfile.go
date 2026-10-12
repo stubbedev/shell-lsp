@@ -6,6 +6,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/projection"
+	"github.com/stubbedev/shell-lsp/internal/scan"
 )
 
 const (
@@ -69,15 +70,15 @@ func Project(text string) (*projection.Map, dialect.Detection) {
 
 func splitLines(text string) []line {
 	var out []line
-	for start := 0; start < len(text); {
+	scan.Forward(0, len(text), func(start int) int {
 		end := strings.IndexByte(text[start:], '\n')
 		if end < 0 {
 			out = append(out, line{start: start, end: len(text)})
-			break
+			return len(text)
 		}
 		out = append(out, line{start: start, end: start + end})
-		start += end + 1
-	}
+		return start + end + 1
+	})
 	return out
 }
 
@@ -486,28 +487,25 @@ func (p *parser) wholeScript(b *projection.Builder, s script) {
 
 func (p *parser) fragment(b *projection.Builder, start, end int) {
 	run := start
-	for i := start; i < end; {
+	scan.Forward(start, end, func(i int) int {
 		rest := p.text[i:end]
 		switch {
 		case strings.HasPrefix(rest, escapedOpen):
 			b.Verbatim(run, i)
 			b.Escape(i, i+len(escapedOpen), interpolationOpen)
-			i += len(escapedOpen)
-			run = i
+			run = i + len(escapedOpen)
+			return run
 		case strings.HasPrefix(rest, interpolationOpen):
 			b.Verbatim(run, i)
-			closing := strings.Index(rest, "}}")
-			next := end
-			if closing >= 0 {
-				next = i + closing + len("}}")
+			run = end
+			if closing := strings.Index(rest, "}}"); closing >= 0 {
+				run = i + closing + len("}}")
 			}
-			b.Placeholder(i, next)
-			i = next
-			run = i
-		default:
-			i++
+			b.Placeholder(i, run)
+			return run
 		}
-	}
+		return i + 1
+	})
 	b.Verbatim(run, end)
 }
 
