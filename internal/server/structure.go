@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"iter"
 	"slices"
 
 	"github.com/stubbedev/shell-lsp/internal/docstore"
@@ -121,8 +122,8 @@ func (s *Server) handleWorkspaceSymbol(ctx context.Context, docs *docstore.View,
 				out = append(out, workspaceSymbol(file, docs, fn.Name, lsp.SymbolFunction, fn.Span))
 			}
 		}
-		for _, def := range file.Tree.Definitions {
-			if def.Within == parser.FileScope && def.Kind != parser.DefCommandEnv && structure.Matches(symbolParams.Query, def.Name) {
+		for def := range globalDefinitions(file.Tree) {
+			if structure.Matches(symbolParams.Query, def.Name) {
 				out = append(out, workspaceSymbol(file, docs, def.Name, lsp.SymbolVariable, def.Span))
 			}
 		}
@@ -139,6 +140,21 @@ func (s *Server) handleWorkspaceSymbol(ctx context.Context, docs *docstore.View,
 		return a.Kind == b.Kind && a.Name == b.Name && a.Location.URI == b.Location.URI
 	})
 	return out[:min(len(out), maxWorkspaceSymbols)], nil
+}
+
+func globalDefinitions(tree *parser.Tree) iter.Seq[parser.Definition] {
+	return func(yield func(parser.Definition) bool) {
+		seen := map[string]bool{}
+		for _, def := range tree.Definitions {
+			if def.Within != parser.FileScope || def.Kind == parser.DefCommandEnv || seen[def.Name] {
+				continue
+			}
+			seen[def.Name] = true
+			if !yield(def) {
+				return
+			}
+		}
+	}
 }
 
 func workspaceSymbol(file *workspace.File, docs *docstore.View, name string, kind lsp.SymbolKind, span parser.Span) lsp.SymbolInformation {

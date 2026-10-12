@@ -40,12 +40,7 @@ func (s *Server) handleCodeLens(_ context.Context, docs *docstore.View, p lsp.Co
 	for _, fn := range file.Tree.Functions {
 		spans = append(spans, fn.NameSpan)
 	}
-	seen := map[string]bool{}
-	for _, def := range file.Tree.Definitions {
-		if def.Within != parser.FileScope || seen[def.Name] || def.Kind == parser.DefCommandEnv {
-			continue
-		}
-		seen[def.Name] = true
+	for def := range globalDefinitions(file.Tree) {
 		spans = append(spans, def.NameSpan)
 	}
 	out, err := appendBatsLenses(make([]lsp.CodeLens, 0, len(file.Tree.Tests)+1+len(spans)), file, at)
