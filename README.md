@@ -511,7 +511,7 @@ code would show it, and may be reported as a syntax error.
 | `shellLsp.fixAll` | document URI | Applies every non-overlapping safe lint fix in the document via `workspace/applyEdit` |
 | `shellLsp.applyEdit` | `WorkspaceEdit` | Applies the edit via `workspace/applyEdit`; code actions use it for clients without code action literal support |
 | `shellLsp.showReferences` | `{uri, position}` | Returns the reference locations a reference-count code lens stands for |
-| `shellLsp.runBats` | `{uri, test?}` | Runs the Bats file, or only the named test, and reports the results |
+| `shellLsp.runBats` | `{uri, test?}` | Runs the Bats file, or only the named test, and reports the results; an error for a document that is not a Bats file |
 
 ## Bats
 

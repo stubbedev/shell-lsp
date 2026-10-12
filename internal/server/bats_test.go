@@ -175,6 +175,21 @@ func TestRunBatsFromPathPublishesResults(t *testing.T) {
 	}
 }
 
+func TestRunBatsRefusesFilesThatAreNotBats(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	c, _ := startClient(t, `{"capabilities": {}}`)
+	for _, doc := range []struct{ uri, language, text string }{
+		{"file:///w/Makefile", "makefile", "all:\n\techo hi\n"},
+		{"file:///w/a.sh", "shellscript", "#!/bin/sh\necho hi\n"},
+	} {
+		c.notify("textDocument/didOpen", openLanguageParams(doc.uri, doc.language, doc.text))
+		got := c.call("workspace/executeCommand", `{"command": "`+commandRunBats+`", "arguments": [{"uri": "`+doc.uri+`"}]}`)
+		if got.Error == nil || got.Error.Code != jsonrpc.CodeInvalidParams || !strings.Contains(got.Error.Message, doc.uri+" is not a Bats file") {
+			t.Errorf("running bats on %s = %+v, want an error saying it is not a Bats file", doc.uri, got)
+		}
+	}
+}
+
 func TestRunBatsWithProjectRunnerPushesDiagnostics(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	root, uri := batsSuiteOnDisk(t)

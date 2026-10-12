@@ -188,6 +188,9 @@ func (s *Server) runBats(ctx context.Context, docs *docstore.View, args batsRunA
 	if err != nil {
 		return batsRunResult{}, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%s: %v", commandRunBats, err)
 	}
+	if !file.Tree.Bats() {
+		return batsRunResult{}, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%s: %s is not a Bats file, so it has no tests to run; Bats files end in .bats or start with a bats shebang", commandRunBats, file.URI)
+	}
 	path, err := fileuri.ToPath(file.URI)
 	if err != nil {
 		return batsRunResult{}, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%s: %v", commandRunBats, err)
