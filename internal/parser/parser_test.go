@@ -657,6 +657,19 @@ func TestDefinitionsRecordTheirWriter(t *testing.T) {
 	}
 }
 
+func TestAssignmentsToALocalBindToIt(t *testing.T) {
+	t.Parallel()
+
+	tree := Parse("x=global\nf() {\n\tlocal x\n\tx=1\n\tfor x in a b; do :; done\n}\n", dialect.Bash)
+	body := tree.Functions[0].Body
+	if got := tree.Visible("x", body).Len(); got != 3 {
+		t.Errorf("x inside f has %d definitions, want 3: local x, x=1 and the loop", got)
+	}
+	if got := tree.Visible("x", FileScope).Len(); got != 1 {
+		t.Errorf("global x has %d definitions, want 1", got)
+	}
+}
+
 func TestLine(t *testing.T) {
 	t.Parallel()
 

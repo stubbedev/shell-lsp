@@ -1313,15 +1313,17 @@ func (ix *Index) buildLookups() {
 	ix.attrsByName = make(map[string]Attr, len(ix.Definitions))
 	ix.definitionsByScope = make(map[ScopeID][]int, len(ix.Scopes))
 	ix.localScopes = map[string]map[ScopeID]bool{}
-	for i, def := range ix.Definitions {
-		key := binding{name: def.Name}
-		if def.Local {
-			key.scope, key.local = def.Within, true
-			if ix.localScopes[def.Name] == nil {
-				ix.localScopes[def.Name] = map[ScopeID]bool{}
-			}
-			ix.localScopes[def.Name][def.Within] = true
+	for _, def := range ix.Definitions {
+		if !def.Local {
+			continue
 		}
+		if ix.localScopes[def.Name] == nil {
+			ix.localScopes[def.Name] = map[ScopeID]bool{}
+		}
+		ix.localScopes[def.Name][def.Within] = true
+	}
+	for i, def := range ix.Definitions {
+		key := ix.visibleBinding(def.Name, def.Within)
 		ix.definitionsByBinding[key] = append(ix.definitionsByBinding[key], i)
 		ix.attrsByBinding[key] |= def.Attrs
 		ix.attrsByName[def.Name] |= def.Attrs
