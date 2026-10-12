@@ -13,52 +13,40 @@ import (
 
 var ErrNotIdempotent = errors.New("formatter output is not stable")
 
-type Options struct {
-	Indent           uint
-	BinaryNextLine   bool
-	SwitchCaseIndent bool
-	SpaceRedirects   bool
-	KeepPadding      bool
-	FunctionNextLine bool
-	Simplify         bool
-	Minify           bool
+type settings[B, U any] struct {
+	Indent           U
+	BinaryNextLine   B
+	SwitchCaseIndent B
+	SpaceRedirects   B
+	KeepPadding      B
+	FunctionNextLine B
+	Simplify         B
+	Minify           B
 }
 
-type Style struct {
-	Indent           *uint
-	BinaryNextLine   *bool
-	SwitchCaseIndent *bool
-	SpaceRedirects   *bool
-	KeepPadding      *bool
-	FunctionNextLine *bool
-	Simplify         *bool
-	Minify           *bool
+func zip[B1, U1, B2, U2 any](a, b settings[B1, U1], flag func(B1, B1) B2, size func(U1, U1) U2) settings[B2, U2] {
+	return settings[B2, U2]{
+		Indent:           size(a.Indent, b.Indent),
+		BinaryNextLine:   flag(a.BinaryNextLine, b.BinaryNextLine),
+		SwitchCaseIndent: flag(a.SwitchCaseIndent, b.SwitchCaseIndent),
+		SpaceRedirects:   flag(a.SpaceRedirects, b.SpaceRedirects),
+		KeepPadding:      flag(a.KeepPadding, b.KeepPadding),
+		FunctionNextLine: flag(a.FunctionNextLine, b.FunctionNextLine),
+		Simplify:         flag(a.Simplify, b.Simplify),
+		Minify:           flag(a.Minify, b.Minify),
+	}
 }
+
+type Options settings[bool, uint]
+
+type Style settings[*bool, *uint]
 
 func (s Style) Over(base Style) Style {
-	return Style{
-		Indent:           firstSet(s.Indent, base.Indent),
-		BinaryNextLine:   firstSet(s.BinaryNextLine, base.BinaryNextLine),
-		SwitchCaseIndent: firstSet(s.SwitchCaseIndent, base.SwitchCaseIndent),
-		SpaceRedirects:   firstSet(s.SpaceRedirects, base.SpaceRedirects),
-		KeepPadding:      firstSet(s.KeepPadding, base.KeepPadding),
-		FunctionNextLine: firstSet(s.FunctionNextLine, base.FunctionNextLine),
-		Simplify:         firstSet(s.Simplify, base.Simplify),
-		Minify:           firstSet(s.Minify, base.Minify),
-	}
+	return Style(zip(settings[*bool, *uint](s), settings[*bool, *uint](base), firstSet[bool], firstSet[uint]))
 }
 
 func (s Style) Options() Options {
-	return Options{
-		Indent:           valueOf(s.Indent),
-		BinaryNextLine:   valueOf(s.BinaryNextLine),
-		SwitchCaseIndent: valueOf(s.SwitchCaseIndent),
-		SpaceRedirects:   valueOf(s.SpaceRedirects),
-		KeepPadding:      valueOf(s.KeepPadding),
-		FunctionNextLine: valueOf(s.FunctionNextLine),
-		Simplify:         valueOf(s.Simplify),
-		Minify:           valueOf(s.Minify),
-	}
+	return Options(zip(settings[*bool, *uint](s), settings[*bool, *uint]{}, orZero[bool], orZero[uint]))
 }
 
 func firstSet[T any](preferred, fallback *T) *T {
@@ -68,12 +56,12 @@ func firstSet[T any](preferred, fallback *T) *T {
 	return fallback
 }
 
-func valueOf[T any](p *T) T {
-	if p == nil {
-		var zero T
-		return zero
+func orZero[T any](preferred, fallback *T) T {
+	if set := firstSet(preferred, fallback); set != nil {
+		return *set
 	}
-	return *p
+	var zero T
+	return zero
 }
 
 func Format(tree *parser.Tree, opts Options) (string, error) {
