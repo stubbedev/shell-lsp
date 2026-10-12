@@ -80,15 +80,12 @@ func (p *parser) dialect() (dialect.Detection, bool) {
 	if strings.ContainsRune(p.shell, '$') {
 		return found, false
 	}
-	name, ok := dialect.Interpreter("#!" + p.shell)
+	d, ok := dialect.FromShebang("#!" + p.shell)
 	if !ok {
 		return found, false
 	}
-	d, ok := dialect.FromName(name)
-	if ok {
-		found.Dialect = d
-	}
-	return found, ok
+	found.Dialect = d
+	return found, true
 }
 
 func (p *parser) parse() {

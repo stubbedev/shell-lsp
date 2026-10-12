@@ -354,11 +354,7 @@ func (p *parser) windowsOnly(r recipe) bool {
 }
 
 func detect(s script, shebang, evidence string, src dialect.Source) (script, bool) {
-	name, ok := dialect.Interpreter(shebang)
-	if !ok {
-		return script{}, false
-	}
-	d, ok := dialect.FromName(name)
+	d, ok := dialect.FromShebang(shebang)
 	if !ok {
 		return script{}, false
 	}

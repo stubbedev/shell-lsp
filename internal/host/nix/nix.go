@@ -257,11 +257,7 @@ func (f *file) written(s shellString, callee string) (shellString, bool) {
 		s.detection = dialect.Detection{Dialect: dialect.Dash, Source: dialect.SourceHostSetting, Evidence: callee}
 	case slices.Contains(scriptWriters, callee):
 		first := strings.TrimSpace(firstLine(f.src, s.tok))
-		name, ok := dialect.Interpreter(first)
-		if !ok {
-			return shellString{}, false
-		}
-		d, ok := dialect.FromName(name)
+		d, ok := dialect.FromShebang(first)
 		if !ok {
 			return shellString{}, false
 		}
