@@ -69,6 +69,15 @@ var outputFormats = []outputFormat{
 	{name: "quiet", write: func(*bytes.Buffer, []fileReport, reportOptions) {}},
 }
 
+func formatNames() []string {
+	names := make([]string, len(outputFormats))
+	for i, f := range outputFormats {
+		names[i] = f.name
+	}
+	slices.Sort(names)
+	return names
+}
+
 type place struct {
 	line, column int
 }

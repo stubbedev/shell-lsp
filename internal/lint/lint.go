@@ -28,6 +28,8 @@ func (s Severity) String() string { return severityNames.name(s) }
 
 func SeverityNamed(name string) (Severity, bool) { return severityNames.named(name) }
 
+func SeverityNames() []string { return slices.Clone(severityNames) }
+
 type Tag uint8
 
 const (

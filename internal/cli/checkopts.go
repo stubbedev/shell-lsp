@@ -2,6 +2,7 @@ package cli
 
 import (
 	"errors"
+	"fmt"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -19,25 +20,25 @@ const (
 	checkStatusOptions  = 4
 )
 
-const checkUsage = `usage: shell-lsp check [OPTIONS...] FILE|DIR|- ...
+var checkUsage = fmt.Sprintf(`usage: shell-lsp check [OPTIONS...] FILE|DIR|- ...
 
 Lints shell scripts like shellcheck, with the same options, output formats
 and exit codes. Directories are searched for shell scripts.
 
   -a                  --check-sourced            Include warnings from sourced files
-  -C[WHEN]            --color[=WHEN]             Use color (auto, always, never)
+  -C[WHEN]            --color[=WHEN]             Use color (%s)
   -i CODE1,CODE2..    --include=CODE1,CODE2..    Consider only given types of warnings
   -e CODE1,CODE2..    --exclude=CODE1,CODE2..    Exclude types of warnings
                       --extended-analysis=bool   Perform dataflow analysis (default true)
-  -f FORMAT           --format=FORMAT            Output format (checkstyle, diff, gcc, json, json1, quiet, sarif, tty)
+  -f FORMAT           --format=FORMAT            Output format (%s)
                       --list-optional            List checks disabled by default
                       --norc                     Don't look for .shellcheckrc files
                       --rcfile=RCFILE            Prefer the specified configuration file over searching for one
   -o check1,check2..  --enable=check1,check2..   List of optional checks to enable (or 'all')
-                      --profile=PROFILE          Lint profile (minimal, recommended, strict; default recommended)
+                      --profile=PROFILE          Lint profile (%s; default %s)
   -P SOURCEPATHS      --source-path=SOURCEPATHS  Specify path when looking for sourced files ("SCRIPTDIR" for script's dir)
-  -s SHELLNAME        --shell=SHELLNAME          Specify dialect (sh, bash, dash, ksh, busybox, zsh)
-  -S SEVERITY         --severity=SEVERITY        Minimum severity of errors to consider (error, warning, info, style)
+  -s SHELLNAME        --shell=SHELLNAME          Specify dialect (%s)
+  -S SEVERITY         --severity=SEVERITY        Minimum severity of errors to consider (%s)
   -V                  --version                  Print version information
   -W NUM              --wiki-link-count=NUM      The number of wiki links to show, when applicable
   -x                  --external-sources         Allow 'source' outside of FILES (always on)
@@ -45,7 +46,9 @@ and exit codes. Directories are searched for shell scripts.
 
 Exit status: 0 no findings, 1 findings, 2 unreadable files, 3 bad command
 line, 4 bad option values or configuration.
-`
+`, listed(colorNames[:]), listed(formatNames()), listed(lint.ProfileNames()), lint.ProfileRecommended, listed(dialect.Names()), listed(lint.SeverityNames()))
+
+func listed(names []string) string { return strings.Join(names, ", ") }
 
 type colorMode uint8
 
@@ -55,7 +58,7 @@ const (
 	colorNever
 )
 
-var colorModes = map[string]colorMode{"auto": colorAuto, "always": colorAlways, "never": colorNever}
+var colorNames = [...]string{colorAuto: "auto", colorAlways: "always", colorNever: "never"}
 
 type rcMode uint8
 
@@ -99,11 +102,11 @@ var checkOptionTable = []option[checkOptions]{
 			o.color = colorAlways
 			return nil
 		}
-		mode, ok := colorModes[v]
-		if !ok {
-			return badValue("unknown value for --color: %q. Valid options are: auto, always, never", v)
+		i := slices.Index(colorNames[:], v)
+		if i < 0 {
+			return badValue("unknown value for --color: %q. Valid options are: %s", v, listed(colorNames[:]))
 		}
-		o.color = mode
+		o.color = colorMode(i)
 		return nil
 	}},
 	{'i', "include", requiredArg, func(o *checkOptions, v string) error {
@@ -136,12 +139,7 @@ var checkOptionTable = []option[checkOptions]{
 	{'f', "format", requiredArg, func(o *checkOptions, v string) error {
 		i := slices.IndexFunc(outputFormats, func(f outputFormat) bool { return f.name == v })
 		if i < 0 {
-			names := make([]string, len(outputFormats))
-			for j, f := range outputFormats {
-				names[j] = f.name
-			}
-			slices.Sort(names)
-			return badValue("unknown format %q; supported formats are %s", v, strings.Join(names, ", "))
+			return badValue("unknown format %q; supported formats are %s", v, listed(formatNames()))
 		}
 		o.format = outputFormats[i]
 		return nil
@@ -161,7 +159,7 @@ var checkOptionTable = []option[checkOptions]{
 	{0, "profile", requiredArg, func(o *checkOptions, v string) error {
 		profile, ok := lint.ProfileNamed(v)
 		if !ok {
-			return badValue("unknown profile %q; supported profiles are %s", v, strings.Join(lint.ProfileNames(), ", "))
+			return badValue("unknown profile %q; supported profiles are %s", v, listed(lint.ProfileNames()))
 		}
 		o.profile = profile
 		return nil
@@ -173,7 +171,7 @@ var checkOptionTable = []option[checkOptions]{
 	{'s', "shell", requiredArg, func(o *checkOptions, v string) error {
 		d, ok := dialect.FromName(v)
 		if !ok {
-			return badValue("unknown shell %q", v)
+			return badValue("unknown shell %q; supported shells are %s", v, listed(dialect.Names()))
 		}
 		o.shell = &d
 		return nil
@@ -181,7 +179,7 @@ var checkOptionTable = []option[checkOptions]{
 	{'S', "severity", requiredArg, func(o *checkOptions, v string) error {
 		severity, ok := lint.SeverityNamed(v)
 		if !ok {
-			return badValue("unknown value for --severity: %q. Valid options are: error, warning, info, style", v)
+			return badValue("unknown value for --severity: %q. Valid options are: %s", v, listed(lint.SeverityNames()))
 		}
 		o.severity = severity
 		return nil

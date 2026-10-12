@@ -8,7 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
@@ -21,7 +23,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
-const fmtUsage = `usage: shell-lsp fmt [flags] [path ...]
+var fmtUsage = fmt.Sprintf(`usage: shell-lsp fmt [flags] [path ...]
 
 Formats shell scripts like shfmt, with the same flags and exit codes. With
 no paths, or a single '-', it formats standard input. Directories are
@@ -38,7 +40,7 @@ searched for shell scripts.
 
 Parser options:
 
-  -ln, --language-dialect str  bash/posix/mksh/bats/zsh/ksh/dash, default "auto"
+  -ln, --language-dialect str  %s, default "auto"
   -p,  --posix                 shorthand for -ln=posix
   -s,  --simplify              simplify the code
 
@@ -60,7 +62,7 @@ Utilities:
 Formatting options are read from EditorConfig files unless a parser or
 printer flag is given. Exit status: 0 success, 1 errors or differences
 reported by -l or -d, 2 bad command line.
-`
+`, strings.Join(fmtLanguages(), "/"))
 
 const stdinDisplayName = "<standard input>"
 
@@ -112,20 +114,36 @@ func (m listMode) separator() string {
 func languageNamed(name string) (*dialect.Shell, error) {
 	var shell dialect.Shell
 	switch name {
-	case "auto":
+	case autoLanguage:
 		return nil, nil
-	case "mksh":
-		shell = dialect.FlavorMksh.Shell()
-	case "bats":
-		shell = dialect.FlavorBats.Shell()
-	default:
-		d, ok := dialect.FromName(name)
-		if !ok {
-			return nil, fmt.Errorf("unknown shell language variant: %q", name)
-		}
-		shell = dialect.Shell{Dialect: d}
 	}
+	if i := slices.IndexFunc(fmtFlavors, func(f fmtFlavor) bool { return f.name == name }); i >= 0 {
+		shell = fmtFlavors[i].flavor.Shell()
+		return &shell, nil
+	}
+	d, ok := dialect.FromName(name)
+	if !ok {
+		return nil, fmt.Errorf("unknown shell language variant: %q; want %s", name, strings.Join(fmtLanguages(), ", "))
+	}
+	shell = dialect.Shell{Dialect: d}
 	return &shell, nil
+}
+
+const autoLanguage = "auto"
+
+type fmtFlavor struct {
+	name   string
+	flavor dialect.Flavor
+}
+
+var fmtFlavors = []fmtFlavor{{"mksh", dialect.FlavorMksh}, {"bats", dialect.FlavorBats}}
+
+func fmtLanguages() []string {
+	names := dialect.Names()
+	for _, f := range fmtFlavors {
+		names = append(names, f.name)
+	}
+	return append(names, autoLanguage)
 }
 
 type fmtOptions struct {
@@ -142,22 +160,42 @@ type fmtOptions struct {
 	paths       []string
 }
 
-var styleFlagNames = []string{
-	"ln", "language-dialect", "p", "posix", "s", "simplify", "i", "indent", "bn", "binary-next-line",
-	"ci", "case-indent", "sr", "space-redirects", "kp", "keep-padding", "fn", "func-next-line", "mn", "minify",
-}
-
 func parseFmtArgs(args []string, stderr io.Writer) (fmtOptions, error) {
 	var o fmtOptions
+	posix := false
+	fs, styleFlags := fmtFlags(&o, &posix, stderr)
+	if err := fs.Parse(args); err != nil {
+		return fmtOptions{}, err
+	}
+	fs.Visit(func(f *flag.Flag) { o.styleFlags = o.styleFlags || styleFlags[f.Name] })
+	if posix {
+		o.language = &dialect.Shell{Dialect: dialect.Posix}
+	}
+	if o.style.Minify {
+		o.style.Simplify = true
+	}
+	o.paths = fs.Args()
+	return o, nil
+}
+
+func fmtFlags(o *fmtOptions, posix *bool, stderr io.Writer) (*flag.FlagSet, map[string]bool) {
 	fs := flag.NewFlagSet("shell-lsp fmt", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() { fmt.Fprint(stderr, fmtUsage) }
+	styleFlags := map[string]bool{}
 	alias := func(short, long string, register func(name string)) {
 		register(short)
 		register(long)
 	}
 	boolean := func(dst *bool, short, long string) {
 		alias(short, long, func(name string) { fs.BoolVar(dst, name, false, "") })
+	}
+	style := func(short, long string, register func(name string)) {
+		styleFlags[short], styleFlags[long] = true, true
+		alias(short, long, register)
+	}
+	styleBoolean := func(dst *bool, short, long string) {
+		style(short, long, func(name string) { fs.BoolVar(dst, name, false, "") })
 	}
 	alias("l", "list", func(name string) { fs.Var(listFlag{&o.list}, name, "") })
 	alias("f", "find", func(name string) { fs.Var(listFlag{&o.find}, name, "") })
@@ -166,17 +204,16 @@ func parseFmtArgs(args []string, stderr io.Writer) (fmtOptions, error) {
 	fs.BoolVar(&o.applyIgnore, "apply-ignore", false, "")
 	fs.StringVar(&o.filename, "filename", "", "")
 	fs.BoolVar(&o.version, "version", false, "")
-	alias("ln", "language-dialect", func(name string) {
+	style("ln", "language-dialect", func(name string) {
 		fs.Func(name, "", func(v string) error {
 			lang, err := languageNamed(v)
 			o.language = lang
 			return err
 		})
 	})
-	posix := false
-	boolean(&posix, "p", "posix")
-	boolean(&o.style.Simplify, "s", "simplify")
-	alias("i", "indent", func(name string) {
+	styleBoolean(posix, "p", "posix")
+	styleBoolean(&o.style.Simplify, "s", "simplify")
+	style("i", "indent", func(name string) {
 		fs.Func(name, "", func(v string) error {
 			n, err := strconv.ParseUint(v, 10, 32)
 			if err != nil {
@@ -186,30 +223,13 @@ func parseFmtArgs(args []string, stderr io.Writer) (fmtOptions, error) {
 			return nil
 		})
 	})
-	boolean(&o.style.BinaryNextLine, "bn", "binary-next-line")
-	boolean(&o.style.SwitchCaseIndent, "ci", "case-indent")
-	boolean(&o.style.SpaceRedirects, "sr", "space-redirects")
-	boolean(&o.style.KeepPadding, "kp", "keep-padding")
-	boolean(&o.style.FunctionNextLine, "fn", "func-next-line")
-	boolean(&o.style.Minify, "mn", "minify")
-	if err := fs.Parse(args); err != nil {
-		return fmtOptions{}, err
-	}
-	fs.Visit(func(f *flag.Flag) {
-		for _, name := range styleFlagNames {
-			if f.Name == name {
-				o.styleFlags = true
-			}
-		}
-	})
-	if posix {
-		o.language = &dialect.Shell{Dialect: dialect.Posix}
-	}
-	if o.style.Minify {
-		o.style.Simplify = true
-	}
-	o.paths = fs.Args()
-	return o, nil
+	styleBoolean(&o.style.BinaryNextLine, "bn", "binary-next-line")
+	styleBoolean(&o.style.SwitchCaseIndent, "ci", "case-indent")
+	styleBoolean(&o.style.SpaceRedirects, "sr", "space-redirects")
+	styleBoolean(&o.style.KeepPadding, "kp", "keep-padding")
+	styleBoolean(&o.style.FunctionNextLine, "fn", "func-next-line")
+	styleBoolean(&o.style.Minify, "mn", "minify")
+	return fs, styleFlags
 }
 
 func runFmt(env Env, args []string) int {
