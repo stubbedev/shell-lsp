@@ -78,20 +78,35 @@ func TestUnclosedHeredocRunsToTheEndOfTheText(t *testing.T) {
 func TestUnclosableHeredocStopsRecovering(t *testing.T) {
 	t.Parallel()
 
-	src := "cat <<EOF\nrun ` now\nEOF\n"
-	tree := Parse(src, dialect.Bash)
-	if len(tree.Errors) == 0 {
-		t.Fatal("want the unclosed here-document reported")
-	}
-	Walk(tree.File, func(n syntax.Node) bool {
-		if n == nil {
+	for _, tc := range []struct {
+		src string
+		d   dialect.Dialect
+	}{
+		{"cat <<EOF\nrun ` now\nEOF\n", dialect.Bash},
+		{"cat <<EOF $(run", dialect.Bash},
+		{"cat <<EOF `run", dialect.Bash},
+		{"<<EOF (run", dialect.Zsh},
+		{"<<EOF (run", dialect.Ksh},
+	} {
+		tree := Parse(tc.src, tc.d)
+		if len(tree.Errors) == 0 {
+			t.Errorf("%s %q: want the unclosed here-document reported", tc.d, tc.src)
+		}
+		Walk(tree.File, func(n syntax.Node) bool {
+			if n == nil {
+				return true
+			}
+			if span, ok := tree.NodeSpan(n); ok && span.End > len(tc.src) {
+				t.Errorf("%s %q: %T ends at %d, past the text", tc.d, tc.src, n, span.End)
+			}
 			return true
+		})
+		for _, c := range tree.Commands {
+			if c.Span.End > len(tc.src) {
+				t.Errorf("%s %q: command %q ends at %d, past the text", tc.d, tc.src, c.Name, c.Span.End)
+			}
 		}
-		if span, ok := tree.NodeSpan(n); ok && span.End > len(src) {
-			t.Errorf("%T ends at %d, past the text", n, span.End)
-		}
-		return true
-	})
+	}
 }
 
 func TestUnclosedHeredocNamesTheNearMiss(t *testing.T) {

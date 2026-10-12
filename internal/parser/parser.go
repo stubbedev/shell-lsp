@@ -118,7 +118,8 @@ func newTree(previous *Tree, file *syntax.File, errs []Error, closedAtEnd map[*s
 
 func parseSource(parser *syntax.Parser, src []byte, base int, text string, d dialect.Dialect) (*syntax.File, []Error, map[*syntax.Redirect]bool) {
 	var errs []Error
-	var file *syntax.File
+	var file, unclosedFile *syntax.File
+	var unclosedSrc []byte
 	closedAt := -1
 	for range maxUnrecoverable {
 		parsed, err := parser.Parse(bytes.NewReader(src), "")
@@ -134,8 +135,10 @@ func parseSource(parser *syntax.Parser, src []byte, base int, text string, d dia
 		at := parseErr.Span.Start
 		if delimiter, unclosed := unclosedHeredocDelimiter(err); unclosed {
 			if at == closedAt {
+				file, src, errs = unclosedFile, unclosedSrc, errs[:len(errs)-1]
 				break
 			}
+			unclosedFile, unclosedSrc = file, src
 			src, closedAt = endAtEndOfFile(src, delimiter), at
 			continue
 		}
