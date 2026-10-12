@@ -5,13 +5,15 @@ done
 
 ### then and fi used as plain arguments
 echo then fi
->>> SC1010 1:11
->>> SC1010 1:6
+>>> none
+>>- SC1010 1:11 -- no loop, if or case is open here for this keyword to close, so the shell can only have meant it as a plain word
+>>- SC1010 1:6 -- no loop, if or case is open here for this keyword to close, so the shell can only have meant it as a plain word
 
 ### do and esac used as plain arguments
 printf '%s\n' do esac
->>> SC1010 1:15
->>> SC1010 1:18
+>>> none
+>>- SC1010 1:15 -- no loop, if or case is open here for this keyword to close, so the shell can only have meant it as a plain word
+>>- SC1010 1:18 -- no loop, if or case is open here for this keyword to close, so the shell can only have meant it as a plain word
 
 ### esac as an alternative in a case pattern
 action=$1
@@ -38,3 +40,9 @@ echo done2 fiddle thenceforth
 ### keyword with different case is fine
 echo Done FI
 >>> none
+
+### then and fi glued onto a command inside an if
+if true; then echo then fi
+fi
+>>> SC1010 1:20
+>>> SC1010 1:25

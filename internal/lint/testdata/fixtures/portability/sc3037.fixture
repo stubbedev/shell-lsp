@@ -8,14 +8,14 @@ read -r login
 ### no-newline flag with a word in sh
 #!/bin/sh
 echo -n done
->>> SC1010 2:9
 >>> SC3037 2:6
+>>- SC1010 2:9 -- no loop, if or case is open here for this keyword to close, so the shell can only have meant it as a plain word
 
 ### combined n and e flags in sh
 #!/bin/sh
 echo -ne done
->>> SC1010 2:10
 >>> SC3037 2:6
+>>- SC1010 2:10 -- no loop, if or case is open here for this keyword to close, so the shell can only have meant it as a plain word
 
 ### flag text inside a quoted argument is not a flag
 #!/bin/sh
@@ -30,4 +30,5 @@ echo "-ne done"
 ### unknown letter is not an echo flag
 #!/bin/sh
 echo -Q done
->>> SC1010 2:9
+>>> none
+>>- SC1010 2:9 -- no loop, if or case is open here for this keyword to close, so the shell can only have meant it as a plain word

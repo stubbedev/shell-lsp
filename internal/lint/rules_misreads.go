@@ -1,6 +1,7 @@
 package lint
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
@@ -27,12 +28,27 @@ var misreadsFamily = family{
 	},
 }
 
-var closingKeywords = map[string]string{
-	"do":   "the start of a loop body",
-	"done": "the end of a loop",
-	"then": "the start of an if branch",
-	"fi":   "the end of an if",
-	"esac": "the end of a case",
+type closingKeyword struct {
+	role  string
+	opens func(syntax.Node) bool
+}
+
+var closingKeywords = map[string]closingKeyword{
+	"do":   {role: "the start of a loop body", opens: isLoop},
+	"done": {role: "the end of a loop", opens: isLoop},
+	"then": {role: "the start of an if branch", opens: isIf},
+	"fi":   {role: "the end of an if", opens: isIf},
+	"esac": {role: "the end of a case", opens: isCase},
+}
+
+func isIf(n syntax.Node) bool {
+	_, ok := n.(*syntax.IfClause)
+	return ok
+}
+
+func isCase(n syntax.Node) bool {
+	_, ok := n.(*syntax.CaseClause)
+	return ok
 }
 
 var shellPrefixes = []string{"sh", "ash", "dash", "busybox sh", "bash", "bats", "ksh", "oksh", "zsh"}
@@ -80,8 +96,8 @@ func checkKeywordAsWord(p *pass, n syntax.Node) {
 	if !ok {
 		return
 	}
-	role, keyword := closingKeywords[lit.Value]
-	if !keyword {
+	keyword, ok := closingKeywords[lit.Value]
+	if !ok {
 		return
 	}
 	word, ok := p.enclosingShellWord()
@@ -102,7 +118,7 @@ func checkKeywordAsWord(p *pass, n syntax.Node) {
 	if !ok || p.text[span.Start:span.End] != lit.Value {
 		return
 	}
-	p.reportKeywordAsWord(span, lit.Value, role)
+	p.reportKeywordAsWord(span, lit.Value, keyword)
 }
 
 func checkKeywordDeclared(p *pass, n syntax.Node) {
@@ -110,12 +126,12 @@ func checkKeywordDeclared(p *pass, n syntax.Node) {
 	if !ok || !as.Naked || as.Name == nil {
 		return
 	}
-	role, keyword := closingKeywords[as.Name.Value]
-	if _, declared := p.parent().(*syntax.DeclClause); !keyword || !declared {
+	keyword, ok := closingKeywords[as.Name.Value]
+	if _, declared := p.parent().(*syntax.DeclClause); !ok || !declared {
 		return
 	}
 	if span, ok := p.span(as.Name); ok {
-		p.reportKeywordAsWord(span, as.Name.Value, role)
+		p.reportKeywordAsWord(span, as.Name.Value, keyword)
 	}
 }
 
@@ -132,13 +148,16 @@ func checkKeywordAfterTest(p *pass, n syntax.Node) {
 	for end < len(p.text) && 'a' <= p.text[end] && p.text[end] <= 'z' {
 		end++
 	}
-	if role, keyword := closingKeywords[p.text[start:end]]; keyword {
-		p.reportKeywordAsWord(parser.Span{Start: start, End: end}, p.text[start:end], role)
+	if keyword, ok := closingKeywords[p.text[start:end]]; ok {
+		p.reportKeywordAsWord(parser.Span{Start: start, End: end}, p.text[start:end], keyword)
 	}
 }
 
-func (p *pass) reportKeywordAsWord(span parser.Span, keyword, role string) {
-	p.report(1010, span, "Here "+keyword+" is read as a plain word, not as "+role+"; put a ; or line break before it, or quote it if it is meant literally.")
+func (p *pass) reportKeywordAsWord(span parser.Span, word string, keyword closingKeyword) {
+	if !slices.ContainsFunc(p.stack, keyword.opens) {
+		return
+	}
+	p.report(1010, span, "Here "+word+" is read as a plain word, not as "+keyword.role+"; put a ; or line break before it, or quote it if it is meant literally.")
 }
 
 func checkPositionalAboveNine(p *pass, n syntax.Node) {

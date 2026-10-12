@@ -14,4 +14,5 @@ offset=base "-" 4
 
 ### command whose first argument is a plus sign is fine
 echo + done
->>> SC1010 1:8
+>>> none
+>>- SC1010 1:8 -- no loop, if or case is open here for this keyword to close, so the shell can only have meant it as a plain word

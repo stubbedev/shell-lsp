@@ -33,10 +33,12 @@ echo -s "spaced"
 ### plain no-newline flag is accepted in dash
 #!/bin/dash
 echo -n done
->>> SC1010 2:9
+>>> none
+>>- SC1010 2:9 -- no loop, if or case is open here for this keyword to close, so the shell can only have meant it as a plain word
 
 ### no-newline plus escapes cluster is accepted in busybox
 #!/bin/busybox sh
 # shellcheck shell=busybox
 echo -ne done
->>> SC1010 3:10
+>>> none
+>>- SC1010 3:10 -- no loop, if or case is open here for this keyword to close, so the shell can only have meant it as a plain word

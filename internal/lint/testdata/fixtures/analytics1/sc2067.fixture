@@ -4,8 +4,8 @@ find . -name '*.tmp' -exec rm {} ;
 
 ### escaped semicolon belongs to the next command
 find . -type f -exec touch {} && echo done \;
->>> SC1010 1:39
 >>> SC2067 1:28
+>>- SC1010 1:39 -- no loop, if or case is open here for this keyword to close, so the shell can only have meant it as a plain word
 
 ### plus belongs to grep after a pipe
 find . -execdir cat {} | grep needle +
