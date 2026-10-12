@@ -13,6 +13,7 @@ import (
 var portableExpansionsFamily = family{
 	codes: map[Code]meta{
 		3002: {shells: strictShells, summary: "Extended globs are undefined in POSIX sh."},
+		3003: {shells: posixOrDash, summary: "ANSI-C quoted $'...' strings are undefined in POSIX sh and dash."},
 		3004: {shells: strictShells, summary: "Locale-translated $\"...\" strings are undefined in POSIX sh."},
 		3007: {shells: strictShells, summary: "$[...] arithmetic is undefined in POSIX sh."},
 		3018: {shells: strictShells, summary: "The ++ and -- operators are undefined in POSIX sh."},
@@ -29,7 +30,7 @@ var portableExpansionsFamily = family{
 		3059: {shells: strictShells, summary: "Case modification in parameter expansion is undefined in POSIX sh."},
 		3060: {shells: posixOrDash, summary: "Pattern substitution ${var/pattern/replacement} is undefined in POSIX sh and dash."},
 	},
-	nodes: []nodeRule{onNodes(checkPortableExpansions, &syntax.ExtGlob{}, &syntax.DblQuoted{}, &syntax.ArithmExp{}, &syntax.UnaryArithm{}, &syntax.BinaryArithm{}, &syntax.Word{}, &syntax.ParamExp{})},
+	nodes: []nodeRule{onNodes(checkPortableExpansions, &syntax.ExtGlob{}, &syntax.SglQuoted{}, &syntax.DblQuoted{}, &syntax.ArithmExp{}, &syntax.UnaryArithm{}, &syntax.BinaryArithm{}, &syntax.Word{}, &syntax.ParamExp{})},
 }
 
 var (
@@ -49,6 +50,10 @@ func checkPortableExpansions(p *pass, n syntax.Node) {
 	switch n := n.(type) {
 	case *syntax.ExtGlob:
 		p.nonPortableNode(portabilityIssue{code: 3002, feature: "The extended glob " + n.Op.String() + "...)"}, n)
+	case *syntax.SglQuoted:
+		if n.Dollar {
+			p.nonPortableNode(portabilityIssue{code: 3003, feature: "The ANSI-C quoted string $'...'", alternative: "printf to produce the special characters"}, n)
+		}
 	case *syntax.DblQuoted:
 		if n.Dollar {
 			p.nonPortableNode(portabilityIssue{code: 3004, feature: `The locale-translated string $"..."`, alternative: `a plain "..." string`}, n)

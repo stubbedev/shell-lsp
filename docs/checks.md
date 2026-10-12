@@ -402,6 +402,7 @@ marks the checks the `minimal` profile keeps; see [Profiles](../README.md#profil
 | <a name="sc2338"></a>[SC2338](https://www.shellcheck.net/wiki/SC2338) | style | `require-double-equals` |  | = is used for string comparison in a bash test where == is preferred. |
 | <a name="sc3001"></a>[SC3001](https://www.shellcheck.net/wiki/SC3001) | warning |  | yes | Process substitution is undefined in POSIX sh. |
 | <a name="sc3002"></a>[SC3002](https://www.shellcheck.net/wiki/SC3002) | warning |  | yes | Extended globs are undefined in POSIX sh. |
+| <a name="sc3003"></a>[SC3003](https://www.shellcheck.net/wiki/SC3003) | warning |  | yes | ANSI-C quoted $'...' strings are undefined in POSIX sh and dash. |
 | <a name="sc3004"></a>[SC3004](https://www.shellcheck.net/wiki/SC3004) | warning |  | yes | Locale-translated $"..." strings are undefined in POSIX sh. |
 | <a name="sc3005"></a>[SC3005](https://www.shellcheck.net/wiki/SC3005) | warning |  | yes | C-style for ((...)) loops are undefined in POSIX sh. |
 | <a name="sc3006"></a>[SC3006](https://www.shellcheck.net/wiki/SC3006) | warning |  | yes | The arithmetic command ((...)) is undefined in POSIX sh. |

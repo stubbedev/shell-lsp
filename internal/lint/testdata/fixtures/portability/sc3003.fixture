@@ -1,0 +1,60 @@
+### tab built with an ansi-c string in sh
+#!/bin/sh
+sep=$'\t'
+printf '%s\n' "a${sep}b"
+>>> SC3003 2:5
+
+### ansi-c strings in arguments, patterns and tests in sh
+#!/bin/sh
+echo $'one' pre$'two'post
+case $1 in $'a') echo a ;; esac
+[ "$1" = $'\n' ] && echo newline
+>>> SC3003 2:16
+>>> SC3003 2:6
+>>> SC3003 3:12
+>>> SC3003 4:10
+
+### ansi-c string inside a parameter default in sh
+#!/bin/sh
+echo "${1:-$'none'}"
+echo ${2:-$'none'}
+>>> SC2086 3:6
+>>> SC3003 2:12
+>>> SC3003 3:11
+
+### ansi-c string inside command substitutions in dash
+#!/bin/dash
+x=$(printf '%s' $'a')
+y=`printf '%s' $'b'`
+echo "$x$y"
+>>> SC2006 3:3
+>>> SC3003 2:17
+>>> SC3003 3:16
+
+### dollar quote inside double quotes is literal text
+#!/bin/sh
+echo "$'not ansi-c'"
+>>> none
+
+### dollar quote in an unquoted here-document is literal text
+#!/bin/sh
+cat <<EOF
+$'not ansi-c'
+EOF
+>>> none
+
+### ansi-c strings are fine in busybox
+#!/bin/busybox sh
+# shellcheck shell=busybox
+printf '%s\n' $'a\tb'
+>>> none
+
+### ansi-c strings are fine in bash
+#!/bin/bash
+printf '%s\n' $'a\tb'
+>>> none
+
+### ansi-c strings are fine in ksh
+#!/bin/ksh
+printf '%s\n' $'a\tb'
+>>> none
