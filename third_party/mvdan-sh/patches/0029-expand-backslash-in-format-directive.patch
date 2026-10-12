@@ -1,0 +1,62 @@
+expand: a backslash inside a format directive is an invalid character
+
+Format read a backslash escape even in the middle of a directive, so the
+escape was printed and the directive went on with whatever followed it.
+Digits on both sides of the escape then made up a single width:
+
+	Format(nil, `%1\A00x`, []string{"0"})  // "\A" and then "0" padded to 100
+
+bash and dash reject such a format:
+
+	$ printf '%1\A00x' 0
+	bash: printf: `\': invalid format character
+	$ dash -c "printf '%1\A00x' 0"
+	dash: 1: printf: %1\: invalid directive
+
+Escapes are now only read outside of directives, and a backslash inside
+one fails with "invalid format char: \". FuzzFormat found it once its
+bound followed the format; the input is kept as a seed.
+
+Reproducer, before this change: Format(nil, `%1\A00x`, []string{"0"})
+returned a 102-byte string and no error.
+
+diff --git a/expand/expand.go b/expand/expand.go
+index 262e742..9777ff9 100644
+--- a/expand/expand.go
++++ b/expand/expand.go
+@@ -286,7 +286,7 @@ func formatInto(sb *strings.Builder, format string, args []string) (int, error)
+ 		}
+ 		c := format[i]
+ 		switch {
+-		case c == '\\': // escaped
++		case c == '\\' && len(fmts) == 0: // escaped, outside of a format directive
+ 			i++
+ 			if i >= len(format) {
+ 				sb.WriteByte('\\')
+diff --git a/expand/expand_test.go b/expand/expand_test.go
+index bb47118..d8e586f 100644
+--- a/expand/expand_test.go
++++ b/expand/expand_test.go
+@@ -209,6 +209,13 @@ func TestZshWholeReplaceAndAssignAlways(t *testing.T) {
+ 	qt.Assert(t, qt.Equals(got, "x foo new new"))
+ }
+ 
++func TestFormatBackslashInDirective(t *testing.T) {
++	t.Parallel()
++	// bash: printf: `\': invalid format character
++	_, _, err := Format(nil, `%1\A00x`, []string{"0"})
++	qt.Assert(t, qt.ErrorMatches(err, `invalid format char: \\`))
++}
++
+ func literalWithEnv(t *testing.T, in string) (string, error) {
+ 	t.Helper()
+ 	word, err := syntax.NewParser().Document(strings.NewReader(in))
+diff --git a/expand/testdata/fuzz/FuzzFormat/be124a8df534386d b/expand/testdata/fuzz/FuzzFormat/be124a8df534386d
+new file mode 100644
+index 0000000..5107eed
+--- /dev/null
++++ b/expand/testdata/fuzz/FuzzFormat/be124a8df534386d
+@@ -0,0 +1,3 @@
++go test fuzz v1
++string("%1\\A00x")
++string("0")

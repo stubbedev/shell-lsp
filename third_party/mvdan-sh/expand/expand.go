@@ -286,7 +286,7 @@ func formatInto(sb *strings.Builder, format string, args []string) (int, error) 
 		}
 		c := format[i]
 		switch {
-		case c == '\\': // escaped
+		case c == '\\' && len(fmts) == 0: // escaped, outside of a format directive
 			i++
 			if i >= len(format) {
 				sb.WriteByte('\\')

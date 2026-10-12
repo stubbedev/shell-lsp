@@ -209,6 +209,13 @@ func TestZshWholeReplaceAndAssignAlways(t *testing.T) {
 	qt.Assert(t, qt.Equals(got, "x foo new new"))
 }
 
+func TestFormatBackslashInDirective(t *testing.T) {
+	t.Parallel()
+	// bash: printf: `\': invalid format character
+	_, _, err := Format(nil, `%1\A00x`, []string{"0"})
+	qt.Assert(t, qt.ErrorMatches(err, `invalid format char: \\`))
+}
+
 func literalWithEnv(t *testing.T, in string) (string, error) {
 	t.Helper()
 	word, err := syntax.NewParser().Document(strings.NewReader(in))

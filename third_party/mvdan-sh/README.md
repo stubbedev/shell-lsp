@@ -57,8 +57,8 @@ reproducer so that it can be sent upstream as it is.
 | 0025 | zsh: the subscripts of the associative arrays that zsh modules provide (`$+functions[_omz::$cmd]`, `${widgets[.x-y]}`) and of declared associative arrays in the short form (`$m[a.b]`) parse as string keys, as with `zsh -n`, instead of as arithmetic | [mvdan/sh#120](https://github.com/mvdan/sh/issues/120) |
 | 0026 | syntax: a `#` that starts a word among the arguments of `let` begins a comment (`let x=1 # one`), as with `bash -n`, `mksh -n` and `zsh -n`, instead of an arithmetic operator that fails with "statements must be separated by &, ; or a newline" | — |
 | 0027 | ksh93 as ksh93u+m 1.0.10 parses it: the showme `;` before a simple command or alone (new `Stmt.Showme`), redirections before subshells, arithmetic commands, declarations and `name()` functions (kept in place by the printer), and errors for `&>>`, `;;&`, null bytes and a newline after `));`; `TestParseConfirm` runs the shells under `LC_ALL=C.UTF-8` and skips, with the reason, inputs a shell crashes, hangs or contradicts itself on | — |
-| 0020 | ksh93 as ksh93u+m 1.0.10 parses it: the showme `;` before a simple command or alone (new `Stmt.Showme`), redirections before subshells, arithmetic commands, declarations and `name()` functions (kept in place by the printer), and errors for `&>>`, `;;&`, null bytes and a newline after `));`; `TestParseConfirm` runs the shells under `LC_ALL=C.UTF-8` and skips, with the reason, inputs a shell crashes, hangs or contradicts itself on | — |
 | 0028 | expand tests: `FuzzFormat` fails only on output beyond what the format and its arguments ask for, not on any output over a MiB, and skips formats asking for over 16 MiB | — |
+| 0029 | expand: a backslash inside a `Format` directive (`%1\A00x`) is an invalid format character, as in bash, instead of an escape after which the directive goes on | — |
 
 ## Tests
 
