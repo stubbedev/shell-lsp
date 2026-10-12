@@ -1776,12 +1776,12 @@ var errorCases = []errorCase{
 	),
 	errCase(
 		"a=(x y) foo",
-		langErr("1:1: inline variables cannot be arrays", LangBash|LangZsh),
+		langErr("1:1: inline variables cannot be arrays", LangBash),
 		flipConfirmAll, // stringifies
 	),
 	errCase(
 		"a[2]=x foo",
-		langErr("1:1: inline variables cannot be arrays", LangBash|LangZsh),
+		langErr("1:1: inline variables cannot be arrays", LangBash),
 		flipConfirmAll, // stringifies
 	),
 	errCase(

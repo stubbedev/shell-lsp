@@ -4010,7 +4010,9 @@ loop:
 	}
 	if len(ce.Args) == 0 {
 		ce.Args = nil
-	} else {
+	} else if !p.lang.in(LangZsh) {
+		// Zsh allows arrays and elements in assignments before a command,
+		// like `a=(1 2) cmd`, which apply for the command's duration.
 		for _, asgn := range ce.Assigns {
 			if asgn.Index != nil || asgn.Array != nil {
 				p.posErr(asgn.Pos(), "inline variables cannot be arrays")

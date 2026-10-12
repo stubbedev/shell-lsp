@@ -1,0 +1,78 @@
+syntax: zsh allows arrays and elements in assignments before a command
+
+zsh applies an array assignment, or one to an array element, before a
+command for the duration of that command, as it does for scalars, so
+zsh -n accepts, and zsh runs,
+
+	f() { print $#a $a[2]; }
+	a=(1 2 3) f            # 3 2
+	ZSHZ_KEEP_DIRS=( $dir ) zshz --add $dir
+	in_alias=() highlight $start $end
+
+The parser rejected all of these with "inline variables cannot be arrays",
+which is right for bash but not for zsh.
+
+With LangZsh, the assignments of a call may now have an Array or an Index.
+Bash still rejects them as before.
+
+Reproducer, before this change: `a=(x y) foo` with LangZsh failed with
+"inline variables cannot be arrays".
+
+diff --git a/syntax/filetests_test.go b/syntax/filetests_test.go
+index 8bebf67..619109e 100644
+--- a/syntax/filetests_test.go
++++ b/syntax/filetests_test.go
+@@ -1129,6 +1129,19 @@ var fileTests = []fileTestCase{
+ 			},
+ 		}}, LangKsh93),
+ 	),
++	fileTest(
++		[]string{"a=(x y) b[2]=z foo"},
++		langFile(&CallExpr{
++			Assigns: []*Assign{
++				{Name: lit("a"), Array: &ArrayExpr{Elems: []*ArrayElem{
++					{Value: litWord("x")},
++					{Value: litWord("y")},
++				}}},
++				{Name: lit("b"), Index: litWord("2"), Value: litWord("z")},
++			},
++			Args: litWords("foo"),
++		}, LangZsh),
++	),
+ 	fileTest(
+ 		[]string{"${a[1][2].b}"},
+ 		langFile(word(&ParamExp{
+diff --git a/syntax/parser.go b/syntax/parser.go
+index fa29a96..0d603db 100644
+--- a/syntax/parser.go
++++ b/syntax/parser.go
+@@ -4010,7 +4010,9 @@ loop:
+ 	}
+ 	if len(ce.Args) == 0 {
+ 		ce.Args = nil
+-	} else {
++	} else if !p.lang.in(LangZsh) {
++		// Zsh allows arrays and elements in assignments before a command,
++		// like `a=(1 2) cmd`, which apply for the command's duration.
+ 		for _, asgn := range ce.Assigns {
+ 			if asgn.Index != nil || asgn.Array != nil {
+ 				p.posErr(asgn.Pos(), "inline variables cannot be arrays")
+diff --git a/syntax/parser_test.go b/syntax/parser_test.go
+index e8d6e6d..75cb34a 100644
+--- a/syntax/parser_test.go
++++ b/syntax/parser_test.go
+@@ -1776,12 +1776,12 @@ var errorCases = []errorCase{
+ 	),
+ 	errCase(
+ 		"a=(x y) foo",
+-		langErr("1:1: inline variables cannot be arrays", LangBash|LangZsh),
++		langErr("1:1: inline variables cannot be arrays", LangBash),
+ 		flipConfirmAll, // stringifies
+ 	),
+ 	errCase(
+ 		"a[2]=x foo",
+-		langErr("1:1: inline variables cannot be arrays", LangBash|LangZsh),
++		langErr("1:1: inline variables cannot be arrays", LangBash),
+ 		flipConfirmAll, // stringifies
+ 	),
+ 	errCase(

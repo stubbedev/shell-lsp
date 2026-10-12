@@ -1130,6 +1130,19 @@ var fileTests = []fileTestCase{
 		}}, LangKsh93),
 	),
 	fileTest(
+		[]string{"a=(x y) b[2]=z foo"},
+		langFile(&CallExpr{
+			Assigns: []*Assign{
+				{Name: lit("a"), Array: &ArrayExpr{Elems: []*ArrayElem{
+					{Value: litWord("x")},
+					{Value: litWord("y")},
+				}}},
+				{Name: lit("b"), Index: litWord("2"), Value: litWord("z")},
+			},
+			Args: litWords("foo"),
+		}, LangZsh),
+	),
+	fileTest(
 		[]string{"${a[1][2].b}"},
 		langFile(word(&ParamExp{
 			Param: lit("a"),
