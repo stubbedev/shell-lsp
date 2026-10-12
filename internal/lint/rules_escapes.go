@@ -85,7 +85,7 @@ func checkSingleQuoteEnding(p *pass, n syntax.Node) {
 		return
 	}
 	closing := parser.Offset(sq.Right)
-	if strings.HasSuffix(sq.Value, `\`) {
+	if endsInEscapingBackslash(sq.Value) {
 		p.report(1003, parser.Span{Start: closing - 1, End: closing + 1}, `A backslash does not escape inside single quotes, so this quote ends the string; to embed a single quote write '\'' (close, escaped quote, reopen).`)
 		return
 	}
@@ -100,6 +100,11 @@ func checkSingleQuoteEnding(p *pass, n syntax.Node) {
 	if first, _ := utf8.DecodeRuneInString(next.Value); unicode.IsLetter(first) {
 		p.report(1011, parser.Span{Start: closing, End: closing + 1}, "This apostrophe closes the single-quoted string, so "+next.Value+" is outside the quotes; write '\\'' for a literal apostrophe or use double quotes.")
 	}
+}
+
+func endsInEscapingBackslash(value string) bool {
+	trailing := len(value) - len(strings.TrimRight(value, `\`))
+	return trailing%2 == 1 && trailing < len(value)
 }
 
 func checkTruncatingNul(p *pass, n syntax.Node) {

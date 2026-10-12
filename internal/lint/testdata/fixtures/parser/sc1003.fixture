@@ -14,3 +14,13 @@ echo 'C:\Users\guest'
 ### backslash followed by a digit in single quotes
 sed 's/\(x\)/\1/' input.txt
 >>> none
+
+### strings of only backslashes or ending in an escaped backslash
+tr '\' '/' < input.txt
+printf '\e]0;%s\e\\' title
+json='\\'
+echo "$json"
+>>> none
+>>- SC1003 1:5 -- a string holding only a backslash, as in tr '\' '/', is that backslash; there is no text whose quote it could be escaping
+>>- SC1003 2:19 -- an even run of backslashes is a doubled backslash for printf, sed or JSON, not an attempt to escape the quote
+>>- SC1003 3:8 -- an even run of backslashes is a doubled backslash for printf, sed or JSON, not an attempt to escape the quote
