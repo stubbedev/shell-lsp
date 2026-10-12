@@ -184,7 +184,7 @@ func (s *Server) publish(uri string, report diagnosticReport) {
 }
 
 func (s *Server) noticeOnce(key string, kind lsp.MessageType, message string) {
-	if _, seen := s.notices.LoadOrStore(key, struct{}{}); seen {
+	if !s.notices.add(key, struct{}{}) {
 		return
 	}
 	s.logger.Warn("client notice", "message", message)

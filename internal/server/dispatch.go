@@ -110,11 +110,11 @@ type Server struct {
 	requests      map[string]requestHandler
 	notifications map[string]notificationHandler
 
-	pending  sync.Map
+	pending  *registry[chan *jsonrpc.Message]
 	nextID   atomic.Int64
-	cancels  sync.Map
-	progress sync.Map
-	notices  sync.Map
+	cancels  cancelRegistry
+	progress cancelRegistry
+	notices  *registry[struct{}]
 
 	process      Process
 	editorconfig *editorconfig.Resolver
@@ -140,6 +140,10 @@ func New(conn *jsonrpc.Conn, version string, process Process) *Server {
 		settings:     config.Default(),
 		editorconfig: editorconfig.NewResolver(regularfile.ReadConfig, time.Now, workspace.DiskRecheck),
 		shellcheckrc: newShellcheckrcResolver(shellcheckrc.Fallback(process.Home, process.ConfigHome)),
+		pending:      newRegistry[chan *jsonrpc.Message](),
+		cancels:      newCancelRegistry(),
+		progress:     newCancelRegistry(),
+		notices:      newRegistry[struct{}](),
 		sem:          make(chan struct{}, maxConcurrency),
 		exiting:      make(chan struct{}),
 	}
@@ -267,7 +271,7 @@ func (s *Server) dispatchRequest(ctx context.Context, msg *jsonrpc.Message) {
 	docs := s.docs.View()
 	s.wg.Add(1)
 	rctx, cancel := context.WithCancel(ctx)
-	s.cancels.Store(string(msg.ID), cancel)
+	s.cancels.store(string(msg.ID), cancel)
 	go func() {
 		defer s.wg.Done()
 		select {
@@ -280,7 +284,7 @@ func (s *Server) dispatchRequest(ctx context.Context, msg *jsonrpc.Message) {
 		}
 		defer func() { <-s.sem }()
 		defer cancel()
-		defer s.cancels.Delete(string(msg.ID))
+		defer s.cancels.remove(string(msg.ID))
 		rctx := context.WithValue(rctx, requestSlotKey{}, s.sem)
 
 		result, err := s.invoke(rctx, handler, docs, msg)
@@ -344,18 +348,13 @@ func (s *Server) replyError(msg *jsonrpc.Message, err error) {
 }
 
 func (s *Server) routeResponse(msg *jsonrpc.Message) {
-	waiter, ok := s.pending.LoadAndDelete(string(msg.ID))
+	waiter, ok := s.pending.take(string(msg.ID))
 	if !ok {
 		s.logger.Warn("response with unknown request id", "id", string(msg.ID))
 		return
 	}
-	ch, ok := waiter.(chan *jsonrpc.Message)
-	if !ok {
-		s.logger.Error("unexpected pending call entry", "id", string(msg.ID))
-		return
-	}
 	select {
-	case ch <- msg:
+	case waiter <- msg:
 	default:
 		s.logger.Warn("dropping response for expired call", "id", string(msg.ID))
 	}
@@ -364,8 +363,8 @@ func (s *Server) routeResponse(msg *jsonrpc.Message) {
 func (s *Server) call(ctx context.Context, method string, params, result any) error {
 	id := json.RawMessage(strconv.FormatInt(s.nextID.Add(1), 10))
 	waiter := make(chan *jsonrpc.Message, 1)
-	s.pending.Store(string(id), waiter)
-	defer s.pending.Delete(string(id))
+	s.pending.store(string(id), waiter)
+	defer s.pending.remove(string(id))
 	if err := s.conn.Request(id, method, params); err != nil {
 		return fmt.Errorf("sending %s request: %w", method, err)
 	}

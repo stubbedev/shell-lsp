@@ -37,7 +37,7 @@ func (s *Server) StartProgress(ctx context.Context, title string) (*Progress, er
 	}
 	pctx, cancel := context.WithCancel(ctx)
 	p := &Progress{server: s, token: token, ctx: pctx, cancel: cancel}
-	s.progress.Store(token, cancel)
+	s.progress.store(token, cancel)
 	return p, p.notify(progressValue{Kind: "begin", Title: title, Cancellable: true})
 }
 
@@ -48,7 +48,7 @@ func (p *Progress) Report(message string, percentage int) error {
 }
 
 func (p *Progress) End(message string) error {
-	p.server.progress.Delete(p.token)
+	p.server.progress.remove(p.token)
 	p.cancel()
 	return p.notify(progressValue{Kind: "end", Message: message})
 }
@@ -92,11 +92,7 @@ func (w *workDone) end(message string) {
 }
 
 func (s *Server) handleWorkDoneProgressCancel(_ context.Context, cancelParams progressCreateParams) error {
-	if found, ok := s.progress.LoadAndDelete(cancelParams.Token); ok {
-		if cancel, ok := found.(context.CancelFunc); ok {
-			cancel()
-		}
-	}
+	s.progress.cancel(cancelParams.Token)
 	return nil
 }
 

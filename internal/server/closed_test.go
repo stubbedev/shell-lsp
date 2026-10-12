@@ -65,7 +65,7 @@ func TestUnansweredRefreshesDoNotPileUp(t *testing.T) {
 		c.await("server request "+method, func(m *jsonrpc.Message) bool { return m.IsRequest() && m.Method == method })
 	}
 	time.Sleep(100 * time.Millisecond)
-	if n := syncMapLen(&srv.pending); n > 2 {
+	if n := srv.pending.len(); n > 2 {
 		t.Errorf("%d server requests wait for an answer, want at most one per refresh method", n)
 	}
 }

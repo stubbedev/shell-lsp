@@ -7,7 +7,6 @@ import (
 	"runtime"
 	"runtime/pprof"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -155,15 +154,6 @@ func settled(t *testing.T, srv *Server, done func(soakSample) bool) soakSample {
 	}
 }
 
-func syncMapLen(m *sync.Map) int {
-	n := 0
-	m.Range(func(any, any) bool {
-		n++
-		return true
-	})
-	return n
-}
-
 func (s *Server) cacheSizes() map[string]int {
 	s.snapshots.mu.Lock()
 	snapshots := len(s.snapshots.entries)
@@ -190,9 +180,9 @@ func (s *Server) cacheSizes() map[string]int {
 		"warming":   warming,
 		"outbound":  outbound,
 		"push jobs": pushJobs,
-		"cancels":   syncMapLen(&s.cancels),
-		"pending":   syncMapLen(&s.pending),
-		"progress":  syncMapLen(&s.progress),
+		"cancels":   s.cancels.len(),
+		"pending":   s.pending.len(),
+		"progress":  s.progress.len(),
 	}
 }
 

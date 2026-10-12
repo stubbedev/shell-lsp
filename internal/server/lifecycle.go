@@ -234,11 +234,7 @@ func (s *Server) handleShutdown(context.Context, *docstore.View, json.RawMessage
 }
 
 func (s *Server) handleCancelRequest(_ context.Context, cancelParams CancelParams) error {
-	if found, ok := s.cancels.LoadAndDelete(string(cancelParams.ID)); ok {
-		if cancel, ok := found.(context.CancelFunc); ok {
-			cancel()
-		}
-	}
+	s.cancels.cancel(string(cancelParams.ID))
 	return nil
 }
 
