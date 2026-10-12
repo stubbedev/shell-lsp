@@ -132,7 +132,7 @@ func (s *Server) callItemFromLSP(docs *docstore.View, item lsp.CallHierarchyItem
 		return navigation.CallItem{File: file, Name: data.Name, Span: parser.Span{End: len(file.Tree.Text())}, TopLevel: true}, nil
 	}
 	for _, fn := range file.Tree.Functions {
-		if fn.Name == data.Name {
+		if fn.Name == data.Name && fn.Span.Start == data.Start {
 			return navigation.CallItem{File: file, Name: fn.Name, Span: fn.Span, Selection: fn.NameSpan}, nil
 		}
 	}
@@ -144,15 +144,19 @@ func (s *Server) handlePrepareCallHierarchy(_ context.Context, docs *docstore.Vi
 	if err != nil || !inside {
 		return nil, err
 	}
-	item, ok := navigation.PrepareCallHierarchy(here.File, here.offset, s.navigationEnv())
-	if !ok {
+	items := navigation.PrepareCallHierarchy(here.File, here.offset, s.navigationEnv())
+	if len(items) == 0 {
 		return nil, nil
 	}
-	out, err := s.callHierarchyItem(item, docs)
-	if err != nil {
-		return nil, err
+	out := make([]lsp.CallHierarchyItem, 0, len(items))
+	for _, item := range items {
+		lspItem, err := s.callHierarchyItem(item, docs)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, lspItem)
 	}
-	return []lsp.CallHierarchyItem{out}, nil
+	return out, nil
 }
 
 func (s *Server) handleIncomingCalls(ctx context.Context, docs *docstore.View, p lsp.CallHierarchyCallsParams) (any, error) {

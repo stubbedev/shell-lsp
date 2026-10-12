@@ -42,18 +42,18 @@ func TestCallHierarchy(t *testing.T) {
 		"lib.sh":  "log() { echo \"$*\"; }\n",
 	})
 	main := f.load(t, "main.sh")
-	item, ok := PrepareCallHierarchy(main, f.offset(t, "main.sh", "build() {", 0), f.env)
-	if !ok || item.Name != "build" {
-		t.Fatalf("prepare = %+v, %t", item, ok)
+	items := PrepareCallHierarchy(main, f.offset(t, "main.sh", "build() {", 0), f.env)
+	if len(items) != 1 || items[0].Name != "build" {
+		t.Fatalf("prepare = %+v", items)
 	}
-	if got := strings.Join(callNames(OutgoingCalls(item, f.env)), ","); got != "logx2,compilex1" {
+	if got := strings.Join(callNames(OutgoingCalls(items[0], f.env)), ","); got != "logx2,compilex1" {
 		t.Errorf("outgoing = %s", got)
 	}
-	logItem, ok := PrepareCallHierarchy(main, f.offset(t, "main.sh", "log start", 0), f.env)
-	if !ok || logItem.File.Path != f.load(t, "lib.sh").Path {
-		t.Fatalf("prepare on a call of a sourced function = %+v, %t", logItem, ok)
+	logItems := PrepareCallHierarchy(main, f.offset(t, "main.sh", "log start", 0), f.env)
+	if len(logItems) != 1 || logItems[0].File.Path != f.load(t, "lib.sh").Path {
+		t.Fatalf("prepare on a call of a sourced function = %+v", logItems)
 	}
-	incoming, err := IncomingCalls(t.Context(), logItem, f.env, f.files)
+	incoming, err := IncomingCalls(t.Context(), logItems[0], f.env, f.files)
 	if err != nil {
 		t.Fatal(err)
 	}

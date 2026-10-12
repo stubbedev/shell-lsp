@@ -24,15 +24,17 @@ type Call struct {
 	Spans []parser.Span
 }
 
-func PrepareCallHierarchy(file *workspace.File, offset int, env Env) (CallItem, bool) {
+func PrepareCallHierarchy(file *workspace.File, offset int, env Env) []CallItem {
 	sym, ok := SymbolAt(file, offset)
 	if !ok || sym.Kind != KindFunction {
-		return CallItem{}, false
+		return nil
 	}
-	if fn, ok := file.Tree.FunctionNamed(sym.Name); ok {
-		return functionItem(file, fn), true
+	for _, fn := range file.Tree.Functions {
+		if fn.NameSpan == sym.Span {
+			return []CallItem{functionItem(file, fn)}
+		}
 	}
-	return findFunction(Chain(file, env), sym.Name)
+	return functionItems(append([]*workspace.File{file}, Chain(file, env)...), sym.Name)
 }
 
 func functionItem(file *workspace.File, fn parser.Function) CallItem {
@@ -77,7 +79,7 @@ func IncomingCalls(ctx context.Context, item CallItem, env Env, files WorkspaceF
 
 func OutgoingCalls(item CallItem, env Env) []Call {
 	group := append([]*workspace.File{item.File}, Chain(item.File, env)...)
-	byCallee := map[string]*Call{}
+	spans := map[string][]parser.Span{}
 	var order []string
 	for _, cmd := range item.File.Tree.Commands {
 		fn, inFunction := item.File.Tree.EnclosingFunction(cmd.Within)
@@ -87,30 +89,33 @@ func OutgoingCalls(item CallItem, env Env) []Call {
 		if !item.TopLevel && (!inFunction || fn.Name != item.Name || !item.Span.Touches(cmd.NameSpan.Start)) {
 			continue
 		}
-		callee, ok := findFunction(group, cmd.Name)
-		if !ok {
-			continue
-		}
-		if _, ok := byCallee[cmd.Name]; !ok {
-			byCallee[cmd.Name] = &Call{Item: callee}
+		if _, seen := spans[cmd.Name]; !seen {
 			order = append(order, cmd.Name)
 		}
-		byCallee[cmd.Name].Spans = append(byCallee[cmd.Name].Spans, cmd.NameSpan)
+		spans[cmd.Name] = append(spans[cmd.Name], cmd.NameSpan)
 	}
-	calls := make([]Call, 0, len(order))
+	var calls []Call
 	for _, name := range order {
-		calls = append(calls, *byCallee[name])
+		for _, callee := range functionItems(group, name) {
+			calls = append(calls, Call{Item: callee, Spans: spans[name]})
+		}
 	}
 	return calls
 }
 
-func findFunction(group []*workspace.File, name string) (CallItem, bool) {
+func functionItems(group []*workspace.File, name string) []CallItem {
 	for _, f := range group {
-		if fn, ok := f.Tree.FunctionNamed(name); ok {
-			return functionItem(f, fn), true
+		var items []CallItem
+		for _, fn := range f.Tree.Functions {
+			if fn.Name == name {
+				items = append(items, functionItem(f, fn))
+			}
+		}
+		if len(items) > 0 {
+			return items
 		}
 	}
-	return CallItem{}, false
+	return nil
 }
 
 type MonikerKind uint8
@@ -143,11 +148,11 @@ func MonikerAt(file *workspace.File, offset int, env Env) (Moniker, bool) {
 	owner := file
 	if sym.Kind == KindFunction {
 		if _, defined := file.Tree.FunctionNamed(sym.Name); !defined {
-			if item, ok := findFunction(Chain(file, env), sym.Name); ok {
-				owner = item.File
-			} else {
+			items := functionItems(Chain(file, env), sym.Name)
+			if len(items) == 0 {
 				return Moniker{}, false
 			}
+			owner = items[0].File
 		}
 		kind := MonikerExport
 		if owner != file {

@@ -84,3 +84,28 @@ func TestInlineValueMonikerAndLinkedEditing(t *testing.T) {
 		t.Errorf("linked editing outside heredoc = %s", none.Result)
 	}
 }
+
+func TestCallHierarchyKeepsTheChosenDefinition(t *testing.T) {
+	t.Parallel()
+
+	uri := "file:///w/redefine.sh"
+	c, _ := startClient(t, `{"capabilities": {"textDocument": {"diagnostic": {}}}}`)
+	c.notify("textDocument/didOpen", openParams(uri, "first() { :; }\nsecond() { :; }\ndeploy() { first; }\ndeploy() { second; }\ndeploy\n"))
+
+	items := decodeResult[[]lsp.CallHierarchyItem](t, c.call("textDocument/prepareCallHierarchy", positionParams(uri, 3, 0, "")))
+	if len(items) != 1 || items[0].Name != "deploy" || items[0].Range.Start.Line != 3 {
+		t.Fatalf("prepare = %+v", items)
+	}
+	raw, err := json.Marshal(items[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	outgoing := decodeResult[[]lsp.CallHierarchyOutgoingCall](t, c.call("callHierarchy/outgoingCalls", `{"item": `+string(raw)+`}`))
+	if len(outgoing) != 1 || outgoing[0].To.Name != "second" {
+		t.Errorf("outgoing calls of the second deploy = %+v, want only second", outgoing)
+	}
+	atCall := decodeResult[[]lsp.CallHierarchyItem](t, c.call("textDocument/prepareCallHierarchy", positionParams(uri, 4, 0, "")))
+	if len(atCall) != 2 || atCall[0].Range.Start.Line != 2 || atCall[1].Range.Start.Line != 3 {
+		t.Errorf("prepare on a call of a redefined function = %+v, want both definitions", atCall)
+	}
+}
