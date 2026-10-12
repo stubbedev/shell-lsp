@@ -55,6 +55,18 @@ func TestFmtPrintsListsAndDiffs(t *testing.T) {
 	}
 }
 
+func TestFmtPosixFlagIsShortForPosixLanguage(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	const script = "[[ -n $x ]]&&echo  hi\n"
+	long := run(t, dir, script, "fmt", "-ln", "posix")
+	short := run(t, dir, script, "fmt", "-p")
+	if short != long || long.status != statusOK || long.stdout != "[[ -n $x ]] && echo hi\n" {
+		t.Errorf("fmt -p = %+v, fmt -ln posix = %+v; want the same formatted script", short, long)
+	}
+}
+
 func TestFmtFormatsStandardInput(t *testing.T) {
 	t.Parallel()
 

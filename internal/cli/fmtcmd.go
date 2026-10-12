@@ -210,7 +210,7 @@ func parseFmtArgs(args []string, stderr io.Writer) (fmtOptions, error) {
 		}
 	})
 	if posix {
-		o.language = &language{dialect: dialect.Posix, variant: syntax.LangPOSIX}
+		o.language, _ = languageNamed("posix")
 	}
 	if o.style.Minify {
 		o.style.Simplify = true
