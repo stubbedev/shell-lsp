@@ -81,6 +81,21 @@ fuzz-targets:
 fuzz package target time="1m":
     go test -run '^$' -fuzz '^{{ target }}$' -fuzztime '{{ time }}' '{{ package }}'
 
+# Run every benchmark at a base revision and in the working tree, alternating runs to even out noise, and compare them with benchstat.
+bench-compare base="origin/main" count="6":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    dir="$(mktemp -d)"
+    trap 'rm -rf "$dir"' EXIT
+    git worktree add --quiet --detach "$dir/base" "{{ base }}"
+    trap 'git worktree remove --force "$dir/base"; rm -rf "$dir"' EXIT
+    bench=(go test -run '^$' -bench . -benchmem -count 1 -p 1 ./...)
+    for _ in $(seq "{{ count }}"); do
+        (cd "$dir/base" && "${bench[@]}") >>"$dir/base.txt"
+        "${bench[@]}" >>"$dir/head.txt"
+    done
+    go run golang.org/x/perf/cmd/benchstat@v0.0.0-20260929162123-406019bb8b68 base="$dir/base.txt" head="$dir/head.txt"
+
 # Drive the server from headless Neovim: diagnostics, hover, definition, completion.
 smoke:
     #!/usr/bin/env bash

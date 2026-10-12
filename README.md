@@ -570,6 +570,7 @@ tests that compare with a reference tool skip.
 | `just corpus-baseline` | Rewrite both corpus baselines after a deliberate change |
 | `just fuzz-targets` | List every fuzz target with its package |
 | `just fuzz PACKAGE TARGET [TIME]` | Fuzz one target, one minute by default; failing inputs land in the package's `testdata/fuzz` |
+| `just bench-compare [BASE] [COUNT]` | Compare every benchmark between `origin/main` (or BASE) and the working tree with benchstat, alternating six runs (or COUNT) of each |
 | `just dist` | Build static release binaries for Linux, macOS and Windows into `dist/` |
 
 The corpus checks, the manifest and how to update the baselines are

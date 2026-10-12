@@ -1,0 +1,45 @@
+name: "bench"
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bench-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CGO_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4.0.0
+      - name: Compare the benchmarks with the base branch
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          just bench-compare "$BASE" | tee "$RUNNER_TEMP/benchstat.txt"
+          {
+            echo "### Benchmarks, base $BASE against this pull request"
+            echo
+            echo "Shared runners are noisy; the budget tests of internal/perf are the gate."
+            echo
+            echo '```'
+            cat "$RUNNER_TEMP/benchstat.txt"
+            echo '```'
+          } >>"$GITHUB_STEP_SUMMARY"
