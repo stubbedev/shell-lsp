@@ -24,6 +24,7 @@ var testLogicFamily = family{
 		2065:           {severity: SeverityWarning, summary: "> or < inside test is a file redirection, not a comparison."},
 		2081:           {severity: SeverityError, summary: "[ ] compares a glob pattern as literal text and never matches it."},
 		2252:           {severity: SeverityWarning, summary: "A value always differs from at least one of several constants, so a || chain of != tests is always true."},
+		2330:           {severity: SeverityError, summary: "busybox sh expands a glob on the right of == or != in [[ ]] against file names before comparing."},
 		2333:           {severity: SeverityWarning, summary: "A value cannot equal two different constants at once, so the condition is always false."},
 		2334:           {severity: SeverityWarning, summary: "A value cannot equal two different numbers at once, so the && is always false."},
 	},
@@ -151,6 +152,9 @@ func (p *pass) checkPatternOperand(style bracketStyle, c comparison) {
 	text := p.spanText(span)
 	switch style {
 	case doubleBracket:
+		if p.dialect == dialect.Busybox && isGlob(c.right) {
+			p.report(2330, span, "busybox sh expands "+text+" as a file name glob before [[ ]] compares with it, so the result depends on the files in the current directory; use a case statement to match patterns.")
+		}
 		if pe, ok := solePartUnquoted(c.right).(*syntax.ParamExp); ok && p.implicitlyGlobbed(pe) {
 			p.report(2053, span, "The unquoted "+text+" on the right of "+c.op+" is matched as a glob pattern; quote it to compare literally, or keep it unquoted only when it deliberately holds a pattern.")
 		}

@@ -24,3 +24,38 @@ image=$1
 [[ "$1" == $wanted ]] && echo same
 >>> SC2053 2:12
 >>> SC2154 2:12
+
+### busybox globs of every kind on the right
+# shellcheck shell=busybox
+x=$1
+[[ $x = a* ]] && echo 1
+[[ $x == a?b ]] && echo 2
+[[ $x == [ab] ]] && echo 3
+[[ $x == +(a) ]] && echo 4
+[[ $x == "$x"* ]] && echo 5
+[[ $x == ${x}* ]] && echo 6
+[[ $x == a*b && $x == c ]] && echo 7
+>>> SC2330 3:9
+>>> SC2330 4:10
+>>> SC2330 5:10
+>>> SC2330 6:10
+>>> SC2330 7:10
+>>> SC2330 8:10
+>>> SC2330 9:10
+>>> SC3002 6:10
+
+### busybox quoted, escaped and non-pattern operands are fine
+# shellcheck shell=busybox
+x=$1
+[[ $x == "*a*" ]] && echo 1
+[[ $x == a\* ]] && echo 2
+[[ $x =~ a.* ]] && echo 3
+[[ $x -eq 1 ]] && echo 4
+[[ $x == ~ ]] && echo 5
+case $x in *a*) echo 6 ;; esac
+>>> SC3015 5:7
+
+### busybox glob on the left is SC2203 instead
+# shellcheck shell=busybox
+[[ *a* == "$1" ]] && echo left
+>>> SC2203 2:4

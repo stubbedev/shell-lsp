@@ -393,6 +393,7 @@ marks the checks the `minimal` profile keeps; see [Profiles](../README.md#profil
 | <a name="sc2327"></a>[SC2327](https://www.shellcheck.net/wiki/SC2327) | warning |  | yes | A command substitution is always empty because the command's output is redirected elsewhere. |
 | <a name="sc2328"></a>[SC2328](https://www.shellcheck.net/wiki/SC2328) | error |  | yes | A redirection takes the output away from the command substitution it is in. |
 | <a name="sc2329"></a>[SC2329](https://www.shellcheck.net/wiki/SC2329) | info |  |  | A function is never invoked, and the script always exits before it could be sourced and called. |
+| <a name="sc2330"></a>[SC2330](https://www.shellcheck.net/wiki/SC2330) | error |  | yes | busybox sh expands a glob on the right of == or != in \[\[ \]\] against file names before comparing. |
 | <a name="sc2331"></a>[SC2331](https://www.shellcheck.net/wiki/SC2331) | style |  |  | -a as a file test is a legacy synonym of -e that is easily confused with the -a conjunction. |
 | <a name="sc2332"></a>[SC2332](https://www.shellcheck.net/wiki/SC2332) | error |  | yes | \[ ! -o name \] or \[ ! -a file \] reads -o or -a as a binary operator and is always true. |
 | <a name="sc2333"></a>[SC2333](https://www.shellcheck.net/wiki/SC2333) | warning |  | yes | A value cannot equal two different constants at once, so the condition is always false. |
