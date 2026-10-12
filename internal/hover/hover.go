@@ -277,31 +277,31 @@ func (h hoverer) argumentOf(ctx context.Context, cmd parser.Command) (Result, bo
 	}
 	args := parser.ArgumentTexts(words)
 	args[at] = word
-	command := cmd.Name
-	wrappers := parser.Wrappers{Bats: h.Tree.Bats(), Programs: true}
-	for {
-		wrap, wrapped := wrappers.Unwrap(command, args)
-		if !wrapped || at < wrap.Command {
-			break
-		}
-		if at == wrap.Command {
+	for layer := range (parser.Wrappers{Bats: h.Tree.Bats(), Programs: true}).TextLayers(cmd.Name, args) {
+		switch {
+		case h.isFunction(layer.Name):
+			return Result{}, false, nil
+		case !layer.Wrapped || at < layer.Wrap.Command:
+			return h.ownArgument(ctx, layer.Name, layer.Args[:at], word, span)
+		case at == layer.Wrap.Command:
 			return h.commandName(ctx, word, span)
 		}
-		command, args, at = args[wrap.Command], args[wrap.Command+1:], at-wrap.Command-1
-		if h.isFunction(command) {
-			return Result{}, false, nil
-		}
+		at -= layer.Wrap.Command + 1
 	}
-	if doc, ok := h.vocabularyArgument(command, args[:at], word); ok {
+	return Result{}, false, nil
+}
+
+func (h hoverer) ownArgument(ctx context.Context, command string, before []string, word string, span parser.Span) (Result, bool, error) {
+	if doc, ok := h.vocabularyArgument(command, before, word); ok {
 		return Result{Markdown: doc, Span: span}, true, nil
 	}
 	if h.Commands == nil {
 		return Result{}, false, nil
 	}
 	if strings.HasPrefix(word, "-") {
-		return h.flag(ctx, command, args[:at], word, span)
+		return h.flag(ctx, command, before, word, span)
 	}
-	sub, err := h.Commands.Subcommand(ctx, command, args[:at+1])
+	sub, err := h.Commands.Subcommand(ctx, command, append(slices.Clip(before), word))
 	return found(Result{Markdown: sub.Doc, Span: span}, err)
 }
 

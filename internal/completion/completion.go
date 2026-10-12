@@ -352,18 +352,13 @@ var commandTakers = map[string]bool{
 }
 
 func (c completer) argument(ctx context.Context) (Result, error) {
-	wrappers := parser.Wrappers{Bats: c.Tree.Bats(), Programs: true}
-	command, args := c.site.command, c.site.previous
-	for {
-		wrap, wrapped := wrappers.Unwrap(command, args)
-		if !wrapped {
-			return c.argumentOf(ctx, command, args)
-		}
-		if wrap.Command == len(args) {
-			return c.wrapperArgument(ctx, command, args, wrap)
-		}
-		command, args = args[wrap.Command], args[wrap.Command+1:]
+	var inner parser.TextLayer
+	for inner = range (parser.Wrappers{Bats: c.Tree.Bats(), Programs: true}).TextLayers(c.site.command, c.site.previous) {
 	}
+	if !inner.Wrapped {
+		return c.argumentOf(ctx, inner.Name, inner.Args)
+	}
+	return c.wrapperArgument(ctx, inner.Name, inner.Args, inner.Wrap)
 }
 
 func (c completer) wrapperArgument(ctx context.Context, wrapper string, args []string, wrap parser.Wrap) (Result, error) {

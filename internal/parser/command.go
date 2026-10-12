@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"iter"
 	"slices"
 	"strings"
 
@@ -76,6 +77,32 @@ func (w Wrappers) Unwrap(name string, args []string) (Wrap, bool) {
 		return Wrap{}, false
 	}
 	return spec.skip(len(args), func(i int) (string, bool) { return args[i], true }), true
+}
+
+type TextLayer struct {
+	Name    string
+	Args    []string
+	Wrap    Wrap
+	Wrapped bool
+}
+
+func (l TextLayer) Own() []string {
+	if !l.Wrapped {
+		return l.Args
+	}
+	return l.Args[:l.Wrap.Command]
+}
+
+func (w Wrappers) TextLayers(name string, args []string) iter.Seq[TextLayer] {
+	return func(yield func(TextLayer) bool) {
+		for {
+			wrap, wrapped := w.Unwrap(name, args)
+			if !yield(TextLayer{Name: name, Args: args, Wrap: wrap, Wrapped: wrapped}) || !wrapped || wrap.Command == len(args) {
+				return
+			}
+			name, args = args[wrap.Command], args[wrap.Command+1:]
+		}
+	}
 }
 
 func (w Wrappers) Start(args []*syntax.Word) int {

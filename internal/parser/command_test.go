@@ -102,3 +102,27 @@ func TestWrappersUnwrap(t *testing.T) {
 		t.Errorf("bats run = %+v, %t", got, ok)
 	}
 }
+
+func TestWrappersTextLayers(t *testing.T) {
+	t.Parallel()
+
+	all := Wrappers{Programs: true}
+	for _, tt := range []struct {
+		line string
+		want []string
+	}{
+		{line: "git status", want: []string{"git [status]"}},
+		{line: "sudo -u root env A=1 git status", want: []string{"sudo [-u root]", "env [A=1]", "git [status]"}},
+		{line: "sudo -u", want: []string{"sudo [-u]"}},
+		{line: "nohup", want: []string{"nohup []"}},
+	} {
+		words := strings.Fields(tt.line)
+		var got []string
+		for layer := range all.TextLayers(words[0], words[1:]) {
+			got = append(got, layer.Name+" ["+strings.Join(layer.Own(), " ")+"]")
+		}
+		if strings.Join(got, ", ") != strings.Join(tt.want, ", ") {
+			t.Errorf("TextLayers(%q) = %q, want %q", tt.line, got, tt.want)
+		}
+	}
+}
