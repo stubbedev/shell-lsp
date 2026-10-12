@@ -1,0 +1,68 @@
+syntax: zsh applies ${#name} to the result of a further operator
+
+In zsh, the length prefix combines with every other expansion operator and
+counts what that operator produces, so zsh -n accepts, and zsh expands,
+
+	x=abcabc
+	echo ${#x%c} ${#x/a/zz} ${#x:-q}   # 5 7 6
+	(( ${#words[@]:#-*} > 1 ))
+
+Completion functions and prompt themes use it to count the elements left
+after a filter, as in ${#PREFIX%$hash*} or ${(M)#words:#*=*}. The parser
+rejected all of them with "cannot combine multiple parameter expansion
+operators".
+
+With LangZsh, a ParamExp may now have Length set together with Exp, Repl,
+Slice or Modifiers. Bash, mksh and ksh93 still reject the combination, as
+they do when the expansion runs.
+
+Reproducer, before this change: `echo ${#x%c}` with LangZsh failed with
+"cannot combine multiple parameter expansion operators".
+
+diff --git a/syntax/filetests_test.go b/syntax/filetests_test.go
+index a6601f3..6b4d15f 100644
+--- a/syntax/filetests_test.go
++++ b/syntax/filetests_test.go
+@@ -6322,6 +6322,26 @@ var fileTests = []fileTestCase{
+ 		}, LangZsh),
+ 		flipConfirm2(LangZsh), // TODO: why is this a bad substitution in zsh?
+ 	),
++	fileTest(
++		[]string{"${#foo%x} ${#a:#p} ${#b/x/y}"},
++		langFile(call(
++			word(&ParamExp{
++				Length: true,
++				Param:  lit("foo"),
++				Exp:    &Expansion{Op: RemSmallSuffix, Word: litWord("x")},
++			}),
++			word(&ParamExp{
++				Length: true,
++				Param:  lit("a"),
++				Exp:    &Expansion{Op: MatchEmpty, Word: litWord("p")},
++			}),
++			word(&ParamExp{
++				Length: true,
++				Param:  lit("b"),
++				Repl:   &Replace{Orig: litWord("x"), With: litWord("y")},
++			}),
++		), LangZsh),
++	),
+ 	fileTest(
+ 		[]string{"${$(echo footail)%tail}"},
+ 		langFile(&ParamExp{
+diff --git a/syntax/parser.go b/syntax/parser.go
+index b1c56f1..090ba67 100644
+--- a/syntax/parser.go
++++ b/syntax/parser.go
+@@ -1835,7 +1835,10 @@ zshPrefixLoop:
+ 		p.next()
+ 		return pe
+ 	}
+-	if p.tok != _EOF && (pe.Length || pe.Width || pe.IsSet || pe.Attributes) && !p.kshCountNames(pe) {
++	// Zsh applies ${#name} to the result of any further operator,
++	// so ${#name%pat} is the length of ${name%pat}.
++	zshLength := pe.Length && p.lang.in(LangZsh)
++	if p.tok != _EOF && (pe.Length && !zshLength || pe.Width || pe.IsSet || pe.Attributes) && !p.kshCountNames(pe) {
+ 		p.curErr("cannot combine multiple parameter expansion operators")
+ 	}
+ 	switch p.tok {

@@ -1835,7 +1835,10 @@ zshPrefixLoop:
 		p.next()
 		return pe
 	}
-	if p.tok != _EOF && (pe.Length || pe.Width || pe.IsSet || pe.Attributes) && !p.kshCountNames(pe) {
+	// Zsh applies ${#name} to the result of any further operator,
+	// so ${#name%pat} is the length of ${name%pat}.
+	zshLength := pe.Length && p.lang.in(LangZsh)
+	if p.tok != _EOF && (pe.Length && !zshLength || pe.Width || pe.IsSet || pe.Attributes) && !p.kshCountNames(pe) {
 		p.curErr("cannot combine multiple parameter expansion operators")
 	}
 	switch p.tok {

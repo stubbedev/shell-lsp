@@ -6323,6 +6323,26 @@ var fileTests = []fileTestCase{
 		flipConfirm2(LangZsh), // TODO: why is this a bad substitution in zsh?
 	),
 	fileTest(
+		[]string{"${#foo%x} ${#a:#p} ${#b/x/y}"},
+		langFile(call(
+			word(&ParamExp{
+				Length: true,
+				Param:  lit("foo"),
+				Exp:    &Expansion{Op: RemSmallSuffix, Word: litWord("x")},
+			}),
+			word(&ParamExp{
+				Length: true,
+				Param:  lit("a"),
+				Exp:    &Expansion{Op: MatchEmpty, Word: litWord("p")},
+			}),
+			word(&ParamExp{
+				Length: true,
+				Param:  lit("b"),
+				Repl:   &Replace{Orig: litWord("x"), With: litWord("y")},
+			}),
+		), LangZsh),
+	),
+	fileTest(
 		[]string{"${$(echo footail)%tail}"},
 		langFile(&ParamExp{
 			NestedParam: cmdSubst(litStmt("echo", "footail")),
