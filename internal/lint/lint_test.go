@@ -121,3 +121,26 @@ func TestLetWithAnEmptyQuotedExpression(t *testing.T) {
 		}
 	}
 }
+
+func TestShadowedPatternsNameTheOtherLine(t *testing.T) {
+	t.Parallel()
+
+	tree := parser.Parse("#!/bin/sh\ncase $1 in\n  *) echo a ;;\n  b) echo b ;;\nesac\n", dialect.Posix)
+	want := map[Code]string{
+		2221: "This pattern also matches everything the pattern on line 4 matches, so that one is never reached.",
+		2222: "This pattern never matches because the pattern on line 3 catches everything it would.",
+	}
+	for _, f := range Check(tree, nil, Options{}) {
+		message, ok := want[f.Code]
+		if !ok {
+			continue
+		}
+		if f.Message != message {
+			t.Errorf("%s says %q, want %q", f.Code, f.Message, message)
+		}
+		delete(want, f.Code)
+	}
+	for code := range want {
+		t.Errorf("%s is not reported", code)
+	}
+}
