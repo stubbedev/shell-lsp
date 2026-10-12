@@ -165,7 +165,6 @@ runtime-check bash parser-rejects oils/spec/array-sparse.test.sh#37
 parser-gap mksh shell-rejects oils/spec/array.test.sh#2
 stricter-by-design bash parser-rejects oils/spec/array.test.sh#28
 stricter-by-design bash parser-rejects oils/spec/array.test.sh#29
-runtime-check bash parser-rejects oils/spec/array.test.sh#36
 runtime-check mksh parser-rejects oils/spec/array.test.sh#36
 runtime-check bash parser-rejects oils/spec/array.test.sh#37
 runtime-check mksh parser-rejects oils/spec/array.test.sh#37
