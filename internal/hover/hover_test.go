@@ -193,7 +193,7 @@ func TestHoverShellVocabulary(t *testing.T) {
 		wantMissing string
 	}{
 		{d: dialect.Bash, src: "read -r line\n", needle: "-r", want: "**read -r**", span: "-r"},
-		{d: dialect.Bash, src: "read -rs pw\n", needle: "-rs", want: "- `-s`: In bash and zsh, do not echo", span: "-rs"},
+		{d: dialect.Bash, src: "read -rs pw\n", needle: "-rs", want: "- `-s`: In bash, zsh and busybox sh, do not echo", span: "-rs"},
 		{d: dialect.Zsh, src: "typeset -U path\n", needle: "-U", want: "Keep only the first occurrence", span: "-U"},
 		{d: dialect.Bash, src: "[ -f x ] && test a -nt b\n", needle: "-f", want: "```sh\n-f file\n```", span: "-f"},
 		{d: dialect.Bash, src: "[ -f x ] && test a -nt b\n", needle: "-nt", want: "modified more recently", span: "-nt"},

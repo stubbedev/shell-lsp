@@ -22,7 +22,7 @@ echo -nn "prompt"
 #!/bin/busybox sh
 # shellcheck shell=busybox
 echo -E "raw\n"
->>> SC3036 3:6
+>>- SC3036 3:6 -- busybox 1.37 echo accepts -E and prints the backslash escape literally
 
 ### s flag in busybox
 #!/bin/busybox sh

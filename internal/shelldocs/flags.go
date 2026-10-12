@@ -38,8 +38,14 @@ func BuiltinFlag(builtin, flag string, d dialect.Dialect) (Entry, bool) {
 }
 
 var (
-	bashZshBusybox = dialect.SetOf(dialect.Bash, dialect.Zsh, dialect.Busybox)
-	attributeFlags = []Entry{
+	bashZshBusybox    = dialect.SetOf(dialect.Bash, dialect.Zsh, dialect.Busybox)
+	bashBusybox       = dialect.SetOf(dialect.Bash, dialect.Busybox)
+	bashZshKshBusybox = dialect.SetOf(dialect.Bash, dialect.Zsh, dialect.Ksh, dialect.Busybox)
+	promptReaders     = dialect.SetOf(dialect.Bash, dialect.Zsh, dialect.Ksh, dialect.Dash, dialect.Busybox)
+	notAsh            = dialect.SetOf(dialect.Posix, dialect.Bash, dialect.Zsh, dialect.Ksh)
+	bashKshDash       = dialect.SetOf(dialect.Bash, dialect.Ksh, dialect.Dash)
+	kshDash           = dialect.SetOf(dialect.Ksh, dialect.Dash)
+	attributeFlags    = []Entry{
 		{Name: "-a", Dialects: bashZshKsh, Doc: "Make the variable an indexed array."},
 		{Name: "-A", Dialects: bashZshKsh, Doc: "Make the variable an associative array, indexed by strings."},
 		{Name: "-i", Dialects: bashZshKsh, Doc: "Give the variable the integer attribute: assignments are evaluated as arithmetic."},
@@ -73,7 +79,7 @@ var (
 		{Name: "-a", Dialects: every, Doc: "`allexport`: export every variable that is assigned."},
 		{Name: "-b", Dialects: every, Doc: "`notify`: report job status changes immediately."},
 		{Name: "-C", Dialects: every, Doc: "`noclobber`: refuse to overwrite existing files with `>`."},
-		{Name: "-h", Dialects: every, Doc: "`hashall`: remember command locations as they are looked up."},
+		{Name: "-h", Dialects: notAsh, Doc: "`hashall`: remember command locations as they are looked up."},
 		{Name: "-m", Dialects: every, Doc: "`monitor`: enable job control."},
 		{Name: "-o", Dialects: every, Doc: "Enable the option named by the next argument, such as `pipefail`; alone, list the options."},
 		{Name: "-E", Dialects: bashOnly, Doc: "`errtrace`: let functions, command substitutions and subshells inherit the `ERR` trap."},
@@ -86,17 +92,17 @@ var (
 	}
 	readFlags = []Entry{
 		{Name: "-r", Dialects: every, Doc: "Raw input: backslashes are kept instead of escaping characters or joining lines. Almost always wanted."},
-		{Name: "-p", Dialects: bashZshKsh, Doc: "In bash, print the next argument as a prompt first. In zsh and ksh, read from the co-process instead."},
+		{Name: "-p", Dialects: promptReaders, Doc: "In bash, dash and busybox sh, print the next argument as a prompt first. In zsh and ksh, read from the co-process instead."},
 		{Name: "-a", Dialects: bashOnly, Doc: "Assign the fields to the indexed array named by the next argument."},
 		{Name: "-A", Dialects: zshKsh, Doc: "Assign the fields to the array named by the next argument."},
-		{Name: "-d", Dialects: bashZshKsh, Doc: "Stop at the first character of the next argument instead of a newline; `-d ''` reads up to a NUL byte."},
-		{Name: "-n", Dialects: bashOnly, Doc: "Return after reading at most the given number of characters."},
+		{Name: "-d", Dialects: bashZshKshBusybox, Doc: "Stop at the first character of the next argument instead of a newline; `-d ''` reads up to a NUL byte."},
+		{Name: "-n", Dialects: bashBusybox, Doc: "Return after reading at most the given number of characters."},
 		{Name: "-N", Dialects: bashKsh, Doc: "Read exactly the given number of characters, ignoring delimiters."},
 		{Name: "-k", Dialects: zshOnly, Doc: "Read the given number of characters (one by default)."},
 		{Name: "-q", Dialects: zshOnly, Doc: "Read one character and succeed only if it is `y` or `Y`."},
-		{Name: "-s", Dialects: bashZshKsh, Doc: "In bash and zsh, do not echo the input, for passwords. In ksh, save the line in the history."},
-		{Name: "-t", Dialects: bashZshKsh, Doc: "Fail if a complete line is not read within the given number of seconds."},
-		{Name: "-u", Dialects: bashZshKsh, Doc: "Read from the given file descriptor instead of standard input."},
+		{Name: "-s", Dialects: bashZshKshBusybox, Doc: "In bash, zsh and busybox sh, do not echo the input, for passwords. In ksh, save the line in the history."},
+		{Name: "-t", Dialects: bashZshKshBusybox, Doc: "Fail if a complete line is not read within the given number of seconds."},
+		{Name: "-u", Dialects: bashZshKshBusybox, Doc: "Read from the given file descriptor instead of standard input."},
 		{Name: "-e", Dialects: bashZsh, Doc: "In bash, use readline to edit the line. In zsh, echo the words read instead of assigning them."},
 		{Name: "-i", Dialects: bashOnly, Doc: "With `-e`, put the given text into the editing buffer first."},
 	}
@@ -108,7 +114,7 @@ var (
 		"read":    readFlags,
 		"export": {
 			{Name: "-p", Dialects: every, Doc: "Print the exported variables as commands that would recreate them."},
-			{Name: "-n", Dialects: bashOnly, Doc: "Remove the export attribute instead of setting it."},
+			{Name: "-n", Dialects: bashBusybox, Doc: "Remove the export attribute instead of setting it."},
 			{Name: "-f", Dialects: bashOnly, Doc: "Export functions instead of variables."},
 		},
 		"readonly": {
@@ -171,7 +177,7 @@ var (
 		"type": {
 			{Name: "-a", Dialects: bashZsh, Doc: "Report every interpretation of the name, not only the one that would run."},
 			{Name: "-f", Dialects: bashZsh, Doc: "Skip shell functions."},
-			{Name: "-p", Dialects: bashZsh, Doc: "Print only the path of the file that would run."},
+			{Name: "-p", Dialects: bashZshBusybox, Doc: "Print only the path of the file that would run."},
 			{Name: "-P", Dialects: bashOnly, Doc: "Search `PATH` even when the name is an alias, builtin or function."},
 			{Name: "-t", Dialects: bashOnly, Doc: "Print a single word: `alias`, `keyword`, `function`, `builtin` or `file`."},
 			{Name: "-w", Dialects: zshOnly, Doc: "Print the name and a word for its kind."},
@@ -190,7 +196,7 @@ var (
 			{Name: "-t", Dialects: bashOnly, Doc: "Print the remembered location of each name."},
 		},
 		"wait": {
-			{Name: "-n", Dialects: bashOnly, Doc: "Wait for the next background job to finish and return its status."},
+			{Name: "-n", Dialects: bashBusybox, Doc: "Wait for the next background job to finish and return its status."},
 			{Name: "-f", Dialects: bashOnly, Doc: "With job control, wait for the job to terminate rather than change state."},
 			{Name: "-p", Dialects: bashOnly, Doc: "Store the process ID of the job that finished in the variable named by the next argument."},
 		},
@@ -212,7 +218,18 @@ var (
 			{Name: "-s", Dialects: notPosix, Doc: "Largest stack, in KiB."},
 			{Name: "-t", Dialects: notPosix, Doc: "Most CPU time, in seconds."},
 			{Name: "-v", Dialects: notPosix, Doc: "Largest virtual memory, in KiB."},
-			{Name: "-u", Dialects: bashZsh, Doc: "Most processes for the user."},
+			{Name: "-u", Dialects: bashZshKshBusybox, Doc: "Most processes for the user."},
+			{Name: "-e", Dialects: bashZshKshBusybox, Doc: "Highest scheduling priority (nice value) a process may raise itself to."},
+			{Name: "-i", Dialects: bashZshKshBusybox, Doc: "Most pending signals."},
+			{Name: "-l", Dialects: notPosix, Doc: "Most memory that may be locked into RAM, in KiB."},
+			{Name: "-m", Dialects: notPosix, Doc: "Largest resident set size, in KiB."},
+			{Name: "-p", Dialects: bashKshDash, Doc: "Pipe buffer size, in 512-byte blocks.", Notes: map[dialect.Dialect]string{
+				dialect.Dash: "dash's `-p` is the most processes for the user.",
+			}},
+			{Name: "-q", Dialects: bashZshKshBusybox, Doc: "Most bytes in POSIX message queues."},
+			{Name: "-r", Dialects: notPosix, Doc: "Highest real-time scheduling priority."},
+			{Name: "-w", Dialects: kshDash, Doc: "In dash, the most file locks. In ksh93, the largest swap area, in KiB."},
+			{Name: "-x", Dialects: bashZshKshBusybox, Doc: "Most file locks."},
 		},
 		"umask": {
 			{Name: "-S", Dialects: every, Doc: "Print or accept the mask in symbolic form, such as `u=rwx,g=rx,o=`."},

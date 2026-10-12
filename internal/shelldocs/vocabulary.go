@@ -405,7 +405,7 @@ var optionLetters = []Entry{
 	{Name: "C", Dialects: every, Doc: "`noclobber`: `>` refuses to overwrite files."},
 	{Name: "e", Dialects: every, Doc: "`errexit`: the shell exits when a command fails."},
 	{Name: "f", Dialects: every, Doc: "`noglob`: filename generation is off."},
-	{Name: "h", Dialects: every, Doc: "`hashall`: command locations are remembered."},
+	{Name: "h", Dialects: notAsh, Doc: "`hashall`: command locations are remembered."},
 	{Name: "i", Dialects: every, Doc: "The shell is interactive; `case $- in *i*)` is the usual test."},
 	{Name: "m", Dialects: every, Doc: "`monitor`: job control is on."},
 	{Name: "n", Dialects: every, Doc: "`noexec`: commands are read but not run."},

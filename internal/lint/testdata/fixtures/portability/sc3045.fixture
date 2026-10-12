@@ -136,10 +136,10 @@ unset -f helper
 hash -r
 >>> none
 
-### hash verbose in dash is fine
+### hash verbose in dash is not supported
 #!/bin/dash
 hash -v
->>> none
+>>+ SC3045 2:6 -- dash 0.5.13 rejects hash -v with "Illegal option -v"; shellcheck 0.11 allows it
 
 ### type path lookup in busybox is fine
 #!/bin/busybox sh
@@ -152,3 +152,33 @@ type -p gzip
 # shellcheck shell=busybox
 read -p Continue? -r answer
 >>> SC2034 3:22
+
+### ulimit resource flags are undefined in sh
+#!/bin/sh
+ulimit -n 1024
+>>> SC3045 2:8
+
+### ulimit pipe size is not in busybox
+#!/bin/busybox sh
+# shellcheck shell=busybox
+ulimit -p 8
+>>+ SC3045 3:8 -- busybox 1.37 ulimit rejects -p ("invalid option"); shellcheck 0.11 does not check busybox ulimit flags
+
+### ulimit nice limit in busybox is fine
+#!/bin/busybox sh
+# shellcheck shell=busybox
+ulimit -e 0
+>>> none
+
+### read timeout in busybox is fine
+#!/bin/busybox sh
+# shellcheck shell=busybox
+read -r -t 5 answer
+echo "$answer"
+>>- SC3045 3:9 -- busybox 1.37 read takes -t, as well as -s, -n, -d and -u
+
+### export -n in busybox is fine
+#!/bin/busybox sh
+# shellcheck shell=busybox
+export -n PAGER
+>>- SC3045 3:8 -- busybox 1.37 export takes -n to remove the export attribute

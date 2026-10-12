@@ -7,6 +7,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/shelldocs"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
@@ -34,43 +35,43 @@ var portableBuiltinsFamily = family{
 	rules: []rule{{on: nodes(&syntax.CallExpr{}, &syntax.DeclClause{}, &syntax.LetClause{}), node: checkPortableBuiltin}},
 }
 
-type allowedFlags struct {
-	posix, dash, busybox string
-}
-
-func (a allowedFlags) in(d dialect.Dialect) string {
-	switch d {
-	case dialect.Dash:
-		return a.dash
-	case dialect.Busybox:
-		return a.busybox
-	}
-	return a.posix
-}
-
 var (
-	bashOnlyBuiltins = setOf("caller", "builtin", "complete", "compgen", "declare", "dirs", "disown", "enable", "mapfile", "readarray", "pushd", "popd", "shopt", "suspend", "typeset")
-	portableFlags    = map[string]allowedFlags{
-		"cd":       {posix: "LP", dash: "LP", busybox: "LP"},
-		"export":   {posix: "p", dash: "p", busybox: "p"},
-		"hash":     {posix: "r", dash: "rv", busybox: "rv"},
-		"jobs":     {posix: "lp", dash: "lp", busybox: "lp"},
-		"printf":   {},
-		"read":     {posix: "r", dash: "rp", busybox: "rp"},
-		"readonly": {posix: "p", dash: "p", busybox: "p"},
-		"trap":     {},
-		"type":     {busybox: "p"},
-		"ulimit":   {posix: "HSacdfnstv", dash: "HSacdflmnprstvw", busybox: "HSacdflmnprstvw"},
-		"umask":    {posix: "S", dash: "S", busybox: "S"},
-		"unset":    {posix: "fv", dash: "fv", busybox: "fv"},
-		"wait":     {},
-	}
-	posixSetOptions  = setOf("allexport", "errexit", "ignoreeof", "monitor", "noclobber", "noexec", "noglob", "nolog", "notify", "nounset", "verbose", "vi", "xtrace")
-	bashTrapSignals  = setOf("ERR", "DEBUG", "RETURN")
-	posixSetLetters  = "abCefhmnuvxo"
-	echoFlagLetters  = "eEsn"
-	busyboxEchoFlags = "Es"
+	bashOnlyBuiltins    = setOf("caller", "builtin", "complete", "compgen", "declare", "dirs", "disown", "enable", "mapfile", "readarray", "pushd", "popd", "shopt", "suspend", "typeset")
+	flagCheckedBuiltins = setOf("cd", "export", "hash", "jobs", "printf", "read", "readonly", "trap", "type", "ulimit", "umask", "unset", "wait")
+	bashTrapSignals     = setOf("ERR", "DEBUG", "RETURN")
+	echoFlagLetters     = "eEsn"
 )
+
+func builtinTakes(name string, letter rune, d dialect.Dialect) bool {
+	_, ok := shelldocs.BuiltinFlag(name, "-"+string(letter), d)
+	return ok
+}
+
+func echoAccepts(flag string, d dialect.Dialect) bool {
+	if d == dialect.Dash {
+		_, ok := shelldocs.BuiltinFlag("echo", flag, d)
+		return ok
+	}
+	return !slices.ContainsFunc([]rune(flag[1:]), func(letter rune) bool { return !builtinTakes("echo", letter, d) })
+}
+
+func echoFlagsIn(d dialect.Dialect) string {
+	var names []string
+	if flags, ok := shelldocs.BuiltinFlags("echo", d); ok {
+		for flag := range flags {
+			names = append(names, flag.Name)
+		}
+	}
+	if len(names) == 1 {
+		return "only " + names[0] + " is"
+	}
+	return "only " + strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1] + " are"
+}
+
+func posixSetOption(name string) bool {
+	option, ok := shelldocs.Term(shelldocs.SetOptions, name)
+	return ok && option.Dialects.Has(dialect.Posix)
+}
 
 func checkPortableBuiltin(p *pass, n syntax.Node) {
 	if !strictShells.Has(p.dialect) {
@@ -196,8 +197,7 @@ func checkEchoFlags(p *pass, word *syntax.Word, args []*syntax.Word) {
 	if !ok || len(flag) < 2 || flag[0] != '-' || strings.Trim(flag[1:], echoFlagLetters) != "" {
 		return
 	}
-	switch p.dialect {
-	case dialect.Posix:
+	if p.dialect == dialect.Posix {
 		var fixes []Fix
 		start, ok := p.span(word)
 		end, endOK := p.span(args[0])
@@ -205,15 +205,12 @@ func checkEchoFlags(p *pass, word *syntax.Word, args []*syntax.Word) {
 			fixes = append(fixes, reviewFix("Print with printf '%s'", textedit.Edit{Start: start.Start, End: end.End, NewText: "printf '%s'"}))
 		}
 		p.nonPortableNode(portabilityIssue{code: 3037, shells: posixOnly, feature: "echo " + flag, alternative: "printf"}, args[0], fixes...)
-	case dialect.Dash:
-		if flag != "-n" {
-			p.nonPortableNode(portabilityIssue{code: 3036, shells: ashShells, feature: "echo " + flag + " (only -n is)", alternative: "printf"}, args[0])
-		}
-	case dialect.Busybox:
-		if strings.ContainsAny(flag, busyboxEchoFlags) {
-			p.nonPortableNode(portabilityIssue{code: 3036, shells: ashShells, feature: "echo " + flag + " (only -n and -e are)", alternative: "printf"}, args[0])
-		}
+		return
 	}
+	if !ashShells.Has(p.dialect) || echoAccepts(flag, p.dialect) {
+		return
+	}
+	p.nonPortableNode(portabilityIssue{code: 3036, shells: ashShells, feature: "echo " + flag + " (" + echoFlagsIn(p.dialect) + ")", alternative: "printf"}, args[0])
 }
 
 func checkSetOptions(p *pass, args []*syntax.Word) {
@@ -232,7 +229,7 @@ func checkSetOptions(p *pass, args []*syntax.Word) {
 			return
 		}
 		for _, letter := range word[1:] {
-			if !strings.ContainsRune(posixSetLetters, letter) {
+			if !builtinTakes("set", letter, dialect.Posix) {
 				p.nonPortableNode(portabilityIssue{code: 3041, shells: posixOnly, feature: "set " + word[:1] + string(letter)}, args[i])
 			}
 		}
@@ -244,7 +241,7 @@ func checkSetOptions(p *pass, args []*syntax.Word) {
 			return
 		}
 		i++
-		if !posixSetOptions[option] {
+		if !posixSetOption(option) {
 			p.nonPortableNode(portabilityIssue{code: 3040, shells: posixOnly, feature: "set -o " + option}, args[i])
 		}
 	}
@@ -306,11 +303,9 @@ func startsWithDash(w *syntax.Word) bool {
 }
 
 func checkPortableFlags(p *pass, name string, args []*syntax.Word) {
-	table, ok := portableFlags[name]
-	if !ok {
+	if !flagCheckedBuiltins[name] {
 		return
 	}
-	allowed := table.in(p.dialect)
 	for _, arg := range args {
 		word, ok := parser.Literal(arg)
 		if !ok || word == "--" || !strings.HasPrefix(word, "-") {
@@ -322,7 +317,7 @@ func checkPortableFlags(p *pass, name string, args []*syntax.Word) {
 			return
 		}
 		for _, letter := range word[1:] {
-			if !strings.ContainsRune(allowed, letter) {
+			if !builtinTakes(name, letter, p.dialect) {
 				p.nonPortableNode(portabilityIssue{code: 3045, shells: strictShells, feature: name + " -" + string(letter)}, arg)
 				return
 			}

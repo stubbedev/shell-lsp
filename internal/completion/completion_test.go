@@ -289,7 +289,7 @@ func TestBuiltinFlags(t *testing.T) {
 	}{
 		{d: dialect.Bash, src: "read -‸", want: []string{"-r", "-a", "-p", "-t"}, missing: []string{"-A", "-k"}},
 		{d: dialect.Zsh, src: "read -‸", want: []string{"-r", "-A", "-k"}, missing: []string{"-a", "-i"}},
-		{d: dialect.Dash, src: "read -‸", want: []string{"-r"}, missing: []string{"-a", "-p", "-t"}},
+		{d: dialect.Dash, src: "read -‸", want: []string{"-r", "-p"}, missing: []string{"-a", "-t"}},
 		{d: dialect.Bash, src: "declare -‸", want: []string{"-A", "-a", "-g", "-n", "-I"}, missing: []string{"-T"}},
 		{d: dialect.Zsh, src: "typeset -‸", want: []string{"-A", "-T", "-U", "-g"}, missing: []string{"-n", "-I"}},
 		{d: dialect.Dash, src: "f() { local -‸; }", want: nil, missing: []string{"-a", "-r"}},
