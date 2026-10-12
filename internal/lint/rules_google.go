@@ -3,6 +3,7 @@ package lint
 import (
 	"path"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -20,6 +21,9 @@ const (
 	codeGoogleFuncHeader = nativeBase + 4004
 	codeGoogleSections   = nativeBase + 4005
 	codeGoogleLength     = nativeBase + 4006
+	codeGoogleMain       = nativeBase + 4007
+	mainFunction         = "main"
+	mainCall             = `main "$@"`
 	longScriptLines      = 100
 	shortFunctionLines   = 10
 	googleShebang        = "#!/bin/bash"
@@ -33,10 +37,11 @@ var googleFamily = family{
 		codeGoogleFuncHeader: {severity: SeverityStyle, optional: optionalGoogleFunctionComments},
 		codeGoogleSections:   {severity: SeverityStyle, optional: optionalGoogleCommentSections},
 		codeGoogleLength:     {severity: SeverityStyle, optional: optionalGoogleScriptLength},
+		codeGoogleMain:       {severity: SeverityStyle, optional: optionalGoogleMain},
 	},
 	finish: []func(*pass){
 		checkGoogleShebang, checkGoogleFileHeader, checkGoogleTodos, checkGoogleFunctionHeaders, checkGoogleCommentSections,
-		checkGoogleScriptLength,
+		checkGoogleScriptLength, checkGoogleMain,
 	},
 }
 
@@ -291,4 +296,29 @@ func checkGoogleScriptLength(p *pass) {
 	}
 	end := textline.End(p.text, 0)
 	p.report(codeGoogleLength, parser.Span{Start: 0, End: end}, "This script is "+strconv.Itoa(lines)+" lines long; the Google Shell Style Guide asks for scripts over "+strconv.Itoa(longScriptLines)+" lines to be rewritten in a more structured language.")
+}
+
+func checkGoogleMain(p *pass) {
+	if !p.active(codeGoogleMain) || !p.executedScript() || len(p.tree.File.Stmts) == 0 ||
+		!slices.ContainsFunc(p.tree.Functions, func(fn parser.Function) bool { return fn.Name != mainFunction }) {
+		return
+	}
+	last := p.tree.File.Stmts[len(p.tree.File.Stmts)-1]
+	if _, hasMain := p.tree.FunctionNamed(mainFunction); !hasMain {
+		p.reportNode(codeGoogleMain, last, "This script defines functions, so the Google Shell Style Guide wants its program in a function called main, run by "+mainCall+" as the last line.")
+		return
+	}
+	if !callsMain(last) {
+		p.reportNode(codeGoogleMain, last, "The Google Shell Style Guide ends a script that has a main function with the call "+mainCall+".")
+	}
+}
+
+func callsMain(stmt *syntax.Stmt) bool {
+	call, ok := stmt.Cmd.(*syntax.CallExpr)
+	if !ok || stmt.Negated || stmt.Background || len(stmt.Redirs) > 0 || len(call.Assigns) > 0 || len(call.Args) != 2 || !parser.LiteralIs(call.Args[0], mainFunction) {
+		return false
+	}
+	dq, ok := parser.SolePart(call.Args[1]).(*syntax.ParamExp)
+	quoted := len(call.Args[1].Parts) == 1 && isDoubleQuoted(call.Args[1].Parts[0])
+	return ok && quoted && parser.IsPlainParam(dq) && dq.Param.Value == "@"
 }

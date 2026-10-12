@@ -607,3 +607,24 @@ wrappers and asks for a script of more than 100 lines to be rewritten in a
 more structured language, before it grows further. Every line counts,
 comments and blank lines included, since the guide gives no other measure.
 The finding sits on the first line of the file.
+
+## SL4007
+
+**A script with functions does not end with `main "$@"`.** The rule is
+optional (`google-main`). The guide requires a function called `main` in any
+script long enough to define at least one other function, and makes
+`main "$@"` the last line that is not a comment, so the start of the program
+is easy to find and its variables can be `local`. The rule applies to
+scripts that run on their own, as [SL2001](#sl2001) decides it: files with a
+`#!` line that are not libraries, startup files or files meant to be
+sourced, which is why a script that runs `main "$@"` only when it is not
+sourced is left alone. It reports the last statement when the script has
+no `main`, and when it has one but ends with something other than exactly
+`main "$@"`.
+
+```bash
+#!/bin/bash
+# shellcheck enable=google-main
+greet() { echo "hello $1"; }
+greet "$@"    # SL4007
+```

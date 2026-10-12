@@ -19,6 +19,7 @@ const (
 	optionalGoogleCommentSections
 	optionalGoogleFileHeader
 	optionalGoogleFunctionComments
+	optionalGoogleMain
 	optionalGoogleScriptLength
 	optionalGoogleShebang
 	optionalGoogleTodo
@@ -57,6 +58,7 @@ var optionalSpecs = [optionalCheckCount]optionalSpec{
 	optionalGoogleCommentSections:  {name: "google-comment-sections", notStrict: true},
 	optionalGoogleFileHeader:       {name: "google-file-header", notStrict: true},
 	optionalGoogleFunctionComments: {name: "google-function-comments", notStrict: true},
+	optionalGoogleMain:             {name: "google-main", notStrict: true},
 	optionalGoogleScriptLength:     {name: "google-script-length", notStrict: true},
 	optionalGoogleShebang:          {name: "google-shebang", notStrict: true},
 	optionalGoogleTodo:             {name: "google-todo", notStrict: true},

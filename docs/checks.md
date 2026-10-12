@@ -497,3 +497,4 @@ marks the checks the `minimal` profile keeps; see [Profiles](../README.md#profil
 | <a name="sl4004"></a>[SL4004](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl4004) | style | `google-function-comments` |  | A function that is not short has no header comment. |
 | <a name="sl4005"></a>[SL4005](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl4005) | style | `google-comment-sections` |  | A function header comment leaves out a section the function needs. |
 | <a name="sl4006"></a>[SL4006](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl4006) | style | `google-script-length` |  | A script is longer than 100 lines. |
+| <a name="sl4007"></a>[SL4007](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl4007) | style | `google-main` |  | A script with functions does not end with \`main "$@"\`. |

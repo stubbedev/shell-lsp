@@ -1,0 +1,77 @@
+### main called with all arguments at the end
+#!/bin/bash
+# shellcheck enable=google-main
+greet() { echo "hello $1"; }
+main() {
+  greet "$@"
+}
+main "$@"
+# the end
+>>> none
+
+### functions but no main
+#!/bin/bash
+# shellcheck enable=google-main
+greet() { echo "hello $1"; }
+greet "$@"
+>>+ SL4007 4:1 -- shell-lsp style guide check; shellcheck does not ask for a main function
+
+### main not called last
+#!/bin/bash
+# shellcheck enable=google-main
+greet() { echo "hello $1"; }
+main() { greet "$@"; }
+main "$@"
+echo finished
+>>+ SL4007 6:1 -- shell-lsp style guide check; shellcheck does not ask for a main function
+
+### main called the wrong way
+#!/bin/bash
+# shellcheck enable=google-main
+greet() { echo "hello $1"; }
+main() { greet "$@"; }
+main $@
+>>> SC2068 5:6
+>>+ SL4007 5:1 -- shell-lsp style guide check; shellcheck does not ask for a main function
+
+### main with a redirect is not the plain call
+#!/bin/bash
+# shellcheck enable=google-main
+greet() { echo "hello $1"; }
+main() { greet "$@"; }
+main "$@" 2>&1
+>>+ SL4007 5:1 -- shell-lsp style guide check; shellcheck does not ask for a main function
+
+### only main needs no other structure
+#!/bin/bash
+# shellcheck enable=google-main
+main() { echo hi; }
+main "$@"
+>>> none
+
+### a linear script without functions
+#!/bin/bash
+# shellcheck enable=google-main
+echo "hello $1"
+>>> none
+
+### a script that can be sourced
+#!/bin/bash
+# shellcheck enable=google-main
+greet() { echo "hello $1"; }
+main() { greet "$@"; }
+if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
+  main "$@"
+fi
+>>> none
+
+### libraries are not checked
+# shellcheck shell=bash enable=google-main
+greet() { echo "hello $1"; }
+>>> none
+
+### off unless enabled
+#!/bin/bash
+greet() { echo "hello $1"; }
+greet "$@"
+>>> none
