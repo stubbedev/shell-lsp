@@ -25,11 +25,6 @@ type expression struct {
 
 const maxExpressions = 4
 
-type (
-	bailout struct{}
-	abort   struct{}
-)
-
 type label struct {
 	name       string
 	start, end int
@@ -51,19 +46,13 @@ type parser struct {
 
 func Parse(src string, syntax Syntax) lang.Result {
 	p := &parser{src: src, res: lang.NewResult(src), structure: true, flavor: flavors[syntax]}
-	p.run()
+	lang.Run(p.run)
 	return p.res
 }
 
 func (p *parser) run() {
-	defer func() {
-		if r := recover(); r != nil {
-			if _, ok := r.(abort); !ok {
-				panic(r)
-			}
-		}
-	}()
-	for !p.attempt() {
+	for !lang.Attempt(p.commands) {
+		p.skipFailedCommand()
 	}
 	if !p.structure {
 		return
@@ -79,26 +68,19 @@ func (p *parser) run() {
 	}
 }
 
-func (p *parser) attempt() (done bool) {
-	defer func() {
-		r := recover()
-		if r == nil {
-			return
-		}
-		if _, ok := r.(bailout); !ok {
-			panic(r)
-		}
-		end := lineEnd(p.src, max(p.commandAt, min(p.pos, len(p.src))))
-		if strings.ContainsAny(p.src[p.commandAt:end], "{}:") {
-			p.structure = false
-		}
-		p.pos = end
-		done = false
-	}()
+func (p *parser) skipFailedCommand() {
+	end := lineEnd(p.src, max(p.commandAt, min(p.pos, len(p.src))))
+	if strings.ContainsAny(p.src[p.commandAt:end], "{}:") {
+		p.structure = false
+	}
+	p.pos = end
+}
+
+func (p *parser) commands() {
 	for {
 		p.skip(" \t\r\n;")
 		if p.eof() {
-			return true
+			return
 		}
 		p.commandAt = p.pos
 		p.queued = 0
@@ -109,12 +91,12 @@ func (p *parser) attempt() (done bool) {
 
 func (p *parser) fail(start, end int, message string) {
 	p.res.Fail(start, end, message)
-	panic(bailout{})
+	lang.Bail()
 }
 
 func (p *parser) unterminated(start, end int, message string) {
 	p.res.Fail(start, end, message)
-	panic(abort{})
+	lang.Abort()
 }
 
 func (p *parser) eof() bool { return p.pos >= len(p.src) }

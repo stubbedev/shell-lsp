@@ -16,11 +16,6 @@ const (
 	noBinding
 )
 
-type (
-	bailout struct{}
-	abort   struct{}
-)
-
 type parser struct {
 	lex  lexer
 	tok  token
@@ -31,7 +26,7 @@ type parser struct {
 func Parse(src string) lang.Result {
 	res := lang.NewResult(src)
 	p := &parser{lex: lexer{src: src, res: &res}}
-	p.run()
+	lang.Run(p.run)
 	p.lex.quiet = true
 	for p.tok.kind != tEOF {
 		p.tok = p.lex.next()
@@ -40,37 +35,15 @@ func Parse(src string) lang.Result {
 }
 
 func (p *parser) run() {
-	defer func() {
-		if r := recover(); r != nil {
-			if _, ok := r.(abort); !ok {
-				panic(r)
-			}
-		}
-	}()
 	p.advance()
-	if !p.attempt(p.directives) && !p.resync() {
+	if !lang.Attempt(p.directives) && !p.resync() {
 		return
 	}
 	for p.tok.kind != tEOF {
-		if !p.attempt(p.filter) && !p.resync() {
+		if !lang.Attempt(p.filter) && !p.resync() {
 			return
 		}
 	}
-}
-
-func (p *parser) attempt(parse func()) (ok bool) {
-	defer func() {
-		r := recover()
-		if r == nil {
-			return
-		}
-		if _, isBailout := r.(bailout); !isBailout {
-			panic(r)
-		}
-		ok = false
-	}()
-	parse()
-	return true
 }
 
 func (p *parser) resync() bool {
@@ -109,7 +82,7 @@ func (p *parser) push(closer kind) { p.open.Push(closer) }
 
 func (p *parser) pop(closer kind) {
 	if !p.open.Pop(closer) {
-		panic(abort{})
+		lang.Abort()
 	}
 }
 
@@ -132,7 +105,7 @@ func (p *parser) advance() {
 
 func (p *parser) failAt(t token, message string) {
 	p.lex.res.Fail(t.start, t.end, message)
-	panic(bailout{})
+	lang.Bail()
 }
 
 func (p *parser) unexpected() {

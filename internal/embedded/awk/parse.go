@@ -22,11 +22,6 @@ const (
 	membership
 )
 
-type (
-	bailout struct{}
-	abort   struct{}
-)
-
 type parser struct {
 	lex    lexer
 	tok    token
@@ -39,21 +34,12 @@ type parser struct {
 func Parse(src string) lang.Result {
 	res := lang.NewResult(src)
 	p := &parser{lex: lexer{src: src, prev: tNewline, res: &res}}
-	p.run()
+	lang.Run(func() {
+		p.advance()
+		p.program()
+	})
 	p.drain()
 	return res
-}
-
-func (p *parser) run() {
-	defer func() {
-		if r := recover(); r != nil {
-			if _, ok := r.(abort); !ok {
-				panic(r)
-			}
-		}
-	}()
-	p.advance()
-	p.program()
 }
 
 func (p *parser) drain() {
@@ -63,20 +49,12 @@ func (p *parser) drain() {
 	}
 }
 
-func (p *parser) attempt(base int, parse func()) (ok bool) {
-	defer func() {
-		r := recover()
-		if r == nil {
-			return
-		}
-		if _, isBailout := r.(bailout); !isBailout {
-			panic(r)
-		}
-		p.resync(base)
-		ok = false
-	}()
-	parse()
-	return true
+func (p *parser) attempt(base int, parse func()) bool {
+	if lang.Attempt(parse) {
+		return true
+	}
+	p.resync(base)
+	return false
 }
 
 func (p *parser) resync(base int) {
@@ -86,7 +64,7 @@ func (p *parser) resync(base int) {
 		k := p.tok.kind
 		switch {
 		case k == tEOF || k == tUnterminated || !p.open.Tracked():
-			panic(abort{})
+			lang.Abort()
 		case p.open.Depth() == base && (k == tNewline || k == tSemicolon || (k == tRBrace && base > 0)):
 			return
 		case p.open.Depth() == base && isCloser(k):
@@ -109,7 +87,7 @@ func (p *parser) track(k kind) {
 		p.open.Push(tRBracket)
 	case tRBrace, tRParen, tRBracket:
 		if !p.open.Pop(k) {
-			panic(abort{})
+			lang.Abort()
 		}
 	}
 }
@@ -139,7 +117,7 @@ func (p *parser) peek() token {
 
 func (p *parser) failAt(t token, message string) {
 	p.lex.res.Fail(t.start, t.end, message)
-	panic(bailout{})
+	lang.Bail()
 }
 
 func (p *parser) unexpected() {
