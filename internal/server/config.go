@@ -3,13 +3,14 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"slices"
 
 	"github.com/stubbedev/shell-lsp/internal/config"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
-	"github.com/stubbedev/shell-lsp/internal/platform"
+	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
 type configurationItem struct {
@@ -37,13 +38,10 @@ func (s *Server) settingsFor(at docstore.Location) (config.Settings, uint64) {
 }
 
 func settingsForPath(global config.Settings, folders map[string]config.Settings, path string) config.Settings {
-	best, settings := "", global
-	for root, folder := range folders {
-		if platform.Native.Within(path, root) && len(root) > len(best) {
-			best, settings = root, folder
-		}
+	if root, ok := workspace.InnermostRoot(path, maps.Keys(folders)); ok {
+		return folders[root]
 	}
-	return settings
+	return global
 }
 
 func (s *Server) handleDidChangeConfiguration(ctx context.Context, changeParams lsp.DidChangeConfigurationParams) error {

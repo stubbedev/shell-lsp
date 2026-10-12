@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"iter"
 	"math"
 	"os"
 	"path/filepath"
@@ -171,8 +172,12 @@ func (w *Workspace) Roots() []string {
 func (w *Workspace) RootOf(path string) (string, bool) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	return InnermostRoot(path, slices.Values(w.roots))
+}
+
+func InnermostRoot(path string, roots iter.Seq[string]) (string, bool) {
 	best := ""
-	for _, root := range w.roots {
+	for root := range roots {
 		if platform.Native.Within(path, root) && len(root) > len(best) {
 			best = root
 		}
@@ -183,8 +188,9 @@ func (w *Workspace) RootOf(path string) (string, bool) {
 func (w *Workspace) Invalidate(path string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	delete(w.files, platform.Native.Fold(path))
-	delete(w.missing, platform.Native.Fold(path))
+	key := platform.Native.Fold(path)
+	delete(w.files, key)
+	delete(w.missing, key)
 	delete(w.dirs, platform.Native.Fold(filepath.Dir(path)))
 	w.generation.Add(1)
 }
@@ -200,8 +206,9 @@ func (w *Workspace) InvalidateAll() {
 
 func (w *Workspace) Load(path string) (*File, error) {
 	now := w.now()
+	key := platform.Native.Fold(path)
 	w.mu.Lock()
-	cached, ok := w.files[platform.Native.Fold(path)]
+	cached, ok := w.files[key]
 	fresh := ok && (w.watchedLocked(path) || now.Sub(cached.checked) < DiskRecheck)
 	w.mu.Unlock()
 	var uri string
@@ -216,7 +223,6 @@ func (w *Workspace) Load(path string) (*File, error) {
 	if fresh {
 		return cached.file, nil
 	}
-	key := platform.Native.Fold(path)
 	w.mu.Lock()
 	missingSince, missing := w.missing[key]
 	w.mu.Unlock()
@@ -236,7 +242,7 @@ func (w *Workspace) Load(path string) (*File, error) {
 	if ok && cached.size == info.Size() && cached.modTime.Equal(info.ModTime()) {
 		cached.checked = now
 		w.mu.Lock()
-		w.files[platform.Native.Fold(path)] = cached
+		w.files[key] = cached
 		w.mu.Unlock()
 		return cached.file, nil
 	}
@@ -246,7 +252,7 @@ func (w *Workspace) Load(path string) (*File, error) {
 	}
 	file, _ := Parse(path, docstore.NewDocument(uri, "", 0, string(raw)), nil, func(in dialect.Input) dialect.Detection { return w.resolve(path, in) })
 	w.mu.Lock()
-	w.files[platform.Native.Fold(path)] = diskEntry{size: info.Size(), modTime: info.ModTime(), checked: now, file: file}
+	w.files[key] = diskEntry{size: info.Size(), modTime: info.ModTime(), checked: now, file: file}
 	w.mu.Unlock()
 	return file, nil
 }
