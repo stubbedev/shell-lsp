@@ -54,7 +54,7 @@ func isDoubleQuoted(part syntax.WordPart) bool {
 }
 
 func checkUnquotedBetweenSingle(p *pass, prev, part syntax.WordPart) {
-	if _, ok := prev.(*syntax.SglQuoted); !ok {
+	if quoted, ok := prev.(*syntax.SglQuoted); !ok || quoted.Dollar {
 		return
 	}
 	lit, ok := part.(*syntax.Lit)

@@ -18,3 +18,8 @@ wget --header='Accept: text/html' https://example.com
 printf '%s\n' 'first line' \
   'second line'
 >>> none
+
+### word after an ansi-c string
+#!/bin/bash
+echo $'a\t'b'c' pre$'two'post
+>>> none
