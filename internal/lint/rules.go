@@ -75,6 +75,7 @@ var families = []family{
 	directivesFamily,
 	unusedDirectivesFamily,
 	sourcesFamily,
+	relativeSourceFamily,
 	typosFamily,
 	testSyntaxFamily,
 	injectionFamily,

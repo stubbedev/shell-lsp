@@ -315,6 +315,38 @@ such tests are usually written on purpose, like the common version check
 [[ ( -f $conf && -r $conf ) || -n $default ]]
 ```
 
+## SL2013
+
+**A sourced file is found relative to where the script is run from.** The
+rule is optional (`check-relative-sources`). `. ./lib.sh` and
+`source lib/common.sh` resolve the path against the working directory of
+whoever runs the script, so run from another directory the script loads a
+different file or none. A name without a slash, such as `. lib.sh`, is
+looked up in `PATH`; bash, and zsh's `source`, then also try the working
+directory, while sh, dash, busybox, ksh and zsh's `.` never look next to the
+script. The path is worked out the way following sourced files works it
+out, so a path built from the script's own location, such as
+`"$(dirname "$0")/lib.sh"`, `"${BASH_SOURCE%/*}/lib.sh"` or `"$here/lib.sh"`
+with `here=$(cd "$(dirname "$0")" && pwd)`, is fine, and so is a path only
+known at run time, one with a default the caller can override
+(`"${srcdir:-.}/lib.sh"`) and a build-time placeholder such as `@out@`.
+Nothing is reported after the script changes directory with `cd` or
+`pushd`, for a sourced file named with a `# shellcheck source=` directive,
+in shell startup files such as `.bashrc`, which the shell reads from a
+fixed place, or in Bats files, whose tests run from the directory the test
+runner is started in. The quick fix anchors the path with `dirname`.
+
+The rule is optional because many test suites, such as the Linux kernel
+selftests, are always run from their own directory and source their
+helpers by bare name.
+
+```bash
+#!/bin/bash
+# shellcheck enable=check-relative-sources
+. ./lib.sh    # SL2013
+. "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+```
+
 The embedded-language rules check awk, sed and jq programs written inside the
 script with built-in parsers; no awk, sed or jq binary is run. A program is
 checked when it is a literal argument (`awk '...'`, `sed -e '...'`,

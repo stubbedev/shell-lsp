@@ -11,6 +11,7 @@ const (
 	optionalNegatedConditions
 	optionalNullaryConditions
 	optionalMaskedReturns
+	optionalRelativeSources
 	optionalSetESuppressed
 	optionalUnassignedUppercase
 	optionalDeprecateWhich
@@ -36,6 +37,7 @@ var optionalSpecs = [optionalCheckCount]optionalSpec{
 	optionalNegatedConditions:   {name: "avoid-negated-conditions"},
 	optionalNullaryConditions:   {name: "avoid-nullary-conditions"},
 	optionalMaskedReturns:       {name: "check-extra-masked-returns"},
+	optionalRelativeSources:     {name: "check-relative-sources"},
 	optionalSetESuppressed:      {name: "check-set-e-suppressed"},
 	optionalUnassignedUppercase: {
 		name:      "check-unassigned-uppercase",

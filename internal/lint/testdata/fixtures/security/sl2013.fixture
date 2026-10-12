@@ -1,0 +1,109 @@
+### paths relative to the working directory
+#!/bin/bash
+# shellcheck enable=check-relative-sources
+. ./lib.sh
+source lib/common.sh
+. ../shared/env.sh
+>>> SC1091 3:3
+>>> SC1091 4:8
+>>> SC1091 5:3
+>>+ SL2013 3:3 -- shell-lsp native check; shellcheck does not report relative source paths
+>>+ SL2013 4:8 -- shell-lsp native check; shellcheck does not report relative source paths
+>>+ SL2013 5:3 -- shell-lsp native check; shellcheck does not report relative source paths
+
+### bash looks a name without a slash up in PATH and the working directory
+#!/bin/bash
+# shellcheck enable=check-relative-sources
+source helpers.sh
+>>> SC1091 3:8
+>>+ SL2013 3:8 -- shell-lsp native check; shellcheck does not report relative source paths
+
+### sh and dash look a name without a slash up only in PATH
+#!/bin/sh
+# shellcheck enable=check-relative-sources
+. helpers.sh
+. ./helpers.sh
+>>> SC1091 3:3
+>>> SC1091 4:3
+>>+ SL2013 3:3 -- shell-lsp native check; shellcheck does not report relative source paths
+>>+ SL2013 4:3 -- shell-lsp native check; shellcheck does not report relative source paths
+
+### zsh source also tries the working directory, dot does not
+#!/bin/zsh
+# shellcheck enable=check-relative-sources
+source helpers.zsh
+. helpers.zsh
+>>- SC1071 1:1 -- shellcheck refuses zsh; shell-lsp lints it
+>>+ SC1091 3:8 -- shellcheck refuses zsh; the sourced file is not in the fixture
+>>+ SC1091 4:3 -- shellcheck refuses zsh; the sourced file is not in the fixture
+>>+ SL2013 3:8 -- shell-lsp native check; shellcheck does not report relative source paths
+>>+ SL2013 4:3 -- shell-lsp native check; shellcheck does not report relative source paths
+
+### a variable holding a relative path
+#!/bin/bash
+# shellcheck enable=check-relative-sources
+lib=lib
+. "$lib/common.sh"
+>>> SC1091 4:3
+>>+ SL2013 4:3 -- shell-lsp native check; shellcheck does not report relative source paths
+
+### paths anchored to the script are fine
+#!/bin/bash
+# shellcheck enable=check-relative-sources
+here=$(cd "$(dirname "$0")" && pwd)
+. "$here/lib.sh"
+. "$(dirname "$0")/lib.sh"
+. "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+source "${BASH_SOURCE%/*}/lib.sh"
+dir=${0%/*}
+. "$dir/lib.sh"
+>>> SC1091 4:3
+>>> SC1091 5:3
+>>> SC1091 6:3
+>>> SC1091 7:8
+>>> SC1091 9:3
+
+### absolute, home and unknown paths are fine
+#!/bin/bash
+# shellcheck enable=check-relative-sources
+. /etc/os-release
+. ~/.config/app.sh
+. "$HOME/.config/app.sh"
+. "$1"
+. "${srcdir:-.}/common.sh"
+. "${LIBDIR-lib}/common.sh"
+. @out@/nix-support/setup-hook.sh
+>>> SC1090 4:3
+>>> SC1090 6:3
+>>> SC1091 3:3
+>>> SC1091 5:3
+>>> SC1091 7:3
+>>> SC1091 8:3
+>>> SC1091 9:3
+
+### after changing directory the script controls the working directory
+#!/bin/bash
+# shellcheck enable=check-relative-sources
+cd "$(dirname "$0")" || exit 1
+. ./lib.sh
+>>> SC1091 4:3
+
+### pushd counts as a change of directory
+#!/bin/sh
+# shellcheck enable=check-relative-sources
+pushd /opt/app >/dev/null || exit 1
+. ./env.sh
+>>> SC1091 4:3
+>>> SC3044 3:1
+
+### a source directive names the file
+#!/bin/bash
+# shellcheck enable=check-relative-sources
+# shellcheck source=lib.sh
+. ./lib.sh
+>>> SC1091 4:3
+
+### off unless enabled
+#!/bin/bash
+. ./lib.sh
+>>> SC1091 2:3
