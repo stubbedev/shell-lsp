@@ -49,7 +49,7 @@ fixtures:
 
 # Compare the linter with shellcheck, code by code, over every shell script under the given paths.
 lintcheck +paths:
-    go run ./cmd/lintcheck compare {{paths}}
+    go run ./cmd/lintcheck compare {{ paths }}
 
 # Fetch the repositories pinned in corpus/repos.txt into the user cache directory.
 corpus-fetch:
