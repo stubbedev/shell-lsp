@@ -21,7 +21,7 @@ func TestParsePassingRun(t *testing.T) {
 	t.Parallel()
 
 	report, signalled := parse("1..2\nok 1 adds numbers\nok 2 - handles \\# signs\n")
-	want := Report{Planned: 2, HasPlan: true, Results: []Result{
+	want := Report{Plan: &Plan{Tests: 2}, Results: []Result{
 		{Number: 1, Name: "adds numbers", Status: Passed},
 		{Number: 2, Name: "handles # signs", Status: Passed},
 	}}
@@ -85,7 +85,7 @@ func TestParseBailOut(t *testing.T) {
 	t.Parallel()
 
 	report, _ := parse("1..3\nok 1 first\nBail out! database unreachable\nnot ok 2 ignored after bailing\n")
-	if !report.Bailed || report.BailReason != "database unreachable" || len(report.Results) != 1 {
+	if report.Bail == nil || report.Bail.Reason != "database unreachable" || len(report.Results) != 1 {
 		t.Fatalf("report = %+v", report)
 	}
 	if report.OK() || report.Summary() != "1 passed, 0 failed, 0 skipped; planned 3 tests but 1 reported; bailed out: database unreachable" {
@@ -116,7 +116,7 @@ func TestParseIgnoresNoise(t *testing.T) {
 	t.Parallel()
 
 	report, _ := parse("TAP version 13\n# before any test\nokay then\n1..1\nok\n")
-	if !reflect.DeepEqual(report, Report{Planned: 1, HasPlan: true, Results: []Result{{Number: 1, Status: Passed}}}) {
+	if !reflect.DeepEqual(report, Report{Plan: &Plan{Tests: 1}, Results: []Result{{Number: 1, Status: Passed}}}) {
 		t.Errorf("report = %+v", report)
 	}
 	if report.Empty() || !(Report{}).Empty() {

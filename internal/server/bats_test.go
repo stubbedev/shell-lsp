@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -117,6 +118,11 @@ func TestBatsCodeLenses(t *testing.T) {
 	}
 }
 
+type batsRunReply struct {
+	Tally   map[string]int `json:"tally"`
+	Summary string         `json:"summary"`
+}
+
 func TestRunBatsFromPathPublishesResults(t *testing.T) {
 	bin := t.TempDir()
 	runner := filepath.Join(bin, "bats")
@@ -129,8 +135,8 @@ func TestRunBatsFromPathPublishesResults(t *testing.T) {
 
 	id := c.start("workspace/executeCommand", runCommand(t, lenses[0]))
 	c.answerServerRequest("window/workDoneProgress/create")
-	result := decodeResult[batsRunResult](t, c.awaitResponse(id, "workspace/executeCommand"))
-	if result.Passed != 1 || result.Failed != 1 || result.Skipped != 1 || result.Summary != "1 passed, 1 failed, 1 skipped" {
+	result := decodeResult[batsRunReply](t, c.awaitResponse(id, "workspace/executeCommand"))
+	if !maps.Equal(result.Tally, map[string]int{"passed": 1, "failed": 1, "skipped": 1, "todo": 0}) || result.Summary != "1 passed, 1 failed, 1 skipped" {
 		t.Errorf("result = %+v", result)
 	}
 	c.awaitNotification("$/progress", func(raw json.RawMessage) bool {
@@ -161,7 +167,7 @@ func TestRunBatsFromPathPublishesResults(t *testing.T) {
 
 	id = c.start("workspace/executeCommand", runCommand(t, lenses[2]))
 	c.answerServerRequest("window/workDoneProgress/create")
-	if single := decodeResult[batsRunResult](t, c.awaitResponse(id, "workspace/executeCommand")); single.Passed != 1 || single.Failed != 0 {
+	if single := decodeResult[batsRunReply](t, c.awaitResponse(id, "workspace/executeCommand")); single.Tally["passed"] != 1 || single.Tally["failed"] != 0 {
 		t.Errorf("single test result = %+v", single)
 	}
 	c.answerServerRequest("workspace/diagnostic/refresh")
@@ -190,7 +196,7 @@ func TestRunBatsWithProjectRunnerPushesDiagnostics(t *testing.T) {
 	}
 
 	writeRunner(t, filepath.Join(root, "test", "bats", "bin", "bats"))
-	decodeResult[batsRunResult](t, c.call("workspace/executeCommand", `{"command": "`+commandRunBats+`", "arguments": [{"uri": "`+uri+`"}]}`))
+	decodeResult[batsRunReply](t, c.call("workspace/executeCommand", `{"command": "`+commandRunBats+`", "arguments": [{"uri": "`+uri+`"}]}`))
 	c.awaitNotification("textDocument/publishDiagnostics", func(raw json.RawMessage) bool {
 		params, err := lsp.DecodeParams[lsp.PublishDiagnosticsParams](raw)
 		return err == nil && len(batsDiagnostics(params.Diagnostics)) == 1 && batsDiagnostics(params.Diagnostics)[0].Range.Start.Line == 6

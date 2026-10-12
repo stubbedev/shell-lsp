@@ -30,8 +30,8 @@ type batsRunArgs struct {
 }
 
 type batsRunResult struct {
-	bats.Tally
-	Summary string `json:"summary"`
+	Tally   bats.Tally `json:"tally"`
+	Summary string     `json:"summary"`
 }
 
 type batsRecord struct {
@@ -250,8 +250,8 @@ func (s *Server) runBats(ctx context.Context, docs *docstore.View, args batsRunA
 
 func batsProgress(r bats.Report) (string, int) {
 	done := len(r.Results)
-	if !r.HasPlan {
+	if r.Plan == nil {
 		return fmt.Sprintf("%d tests", done), 0
 	}
-	return fmt.Sprintf("%d/%d tests", done, r.Planned), min(done*100/max(r.Planned, 1), 100)
+	return fmt.Sprintf("%d/%d tests", done, r.Plan.Tests), min(done*100/max(r.Plan.Tests, 1), 100)
 }
