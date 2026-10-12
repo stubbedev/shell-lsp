@@ -22,23 +22,11 @@ const (
 	SeverityStyle
 )
 
-var severityNames = [...]string{SeverityError: "error", SeverityWarning: "warning", SeverityInfo: "info", SeverityStyle: "style"}
+var severityNames = nameTable[Severity]{SeverityError: "error", SeverityWarning: "warning", SeverityInfo: "info", SeverityStyle: "style"}
 
-func (s Severity) String() string {
-	if int(s) < len(severityNames) && severityNames[s] != "" {
-		return severityNames[s]
-	}
-	return "unknown"
-}
+func (s Severity) String() string { return severityNames.name(s) }
 
-func SeverityNamed(name string) (Severity, bool) {
-	for severity, n := range severityNames {
-		if n == name && n != "" {
-			return Severity(severity), true
-		}
-	}
-	return 0, false
-}
+func SeverityNamed(name string) (Severity, bool) { return severityNames.named(name) }
 
 type Tag uint8
 

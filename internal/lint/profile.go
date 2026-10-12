@@ -10,25 +10,13 @@ const (
 	ProfileStrict
 )
 
-var profileNames = [...]string{ProfileRecommended: "recommended", ProfileMinimal: "minimal", ProfileStrict: "strict"}
+var profileNames = nameTable[Profile]{ProfileRecommended: "recommended", ProfileMinimal: "minimal", ProfileStrict: "strict"}
 
-func (p Profile) String() string {
-	if int(p) < len(profileNames) {
-		return profileNames[p]
-	}
-	return "unknown"
-}
+func (p Profile) String() string { return profileNames.name(p) }
 
-func ProfileNamed(name string) (Profile, bool) {
-	for profile, n := range profileNames {
-		if n == name {
-			return Profile(profile), true
-		}
-	}
-	return 0, false
-}
+func ProfileNamed(name string) (Profile, bool) { return profileNames.named(name) }
 
-func ProfileNames() []string { return slices.Clone(profileNames[:]) }
+func ProfileNames() []string { return slices.Clone(profileNames) }
 
 func (p Profile) enables(optional optionalCheck) bool {
 	return p == ProfileStrict && !optionalSpecs[optional].notStrict
