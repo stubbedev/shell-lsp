@@ -1,6 +1,7 @@
 package embedded
 
 import (
+	"fmt"
 	"slices"
 	"sort"
 	"strings"
@@ -82,13 +83,16 @@ func embeddedIn(tree *parser.Tree, stmt *syntax.Stmt, run parser.Invocation) (Pr
 		return Program{}, false
 	}
 	program := Program{Language: language}
-	switch {
-	case !inv.stdin:
-		program.Text, program.pieces, ok = decode(inv.scripts)
-	case run.InheritsStdin:
+	switch source := inv.program.(type) {
+	case inline:
+		program.Text, program.pieces, ok = decode(source)
+	case fromStdin:
+		if !run.InheritsStdin {
+			return Program{}, false
+		}
 		program.Text, program.pieces, ok = heredocProgram(tree, stmt)
 	default:
-		return Program{}, false
+		panic(fmt.Sprintf("embedded: %s was scanned into an invocation with no program source", name))
 	}
 	if !ok || len(program.pieces) == 0 || (run.Placeholder != "" && strings.Contains(program.Text, run.Placeholder)) {
 		return Program{}, false

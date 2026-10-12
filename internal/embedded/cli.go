@@ -32,9 +32,18 @@ type script struct {
 	skip int
 }
 
+type programSource interface{ programSource() }
+
+type inline []script
+
+type fromStdin struct{}
+
+func (inline) programSource() {}
+
+func (fromStdin) programSource() {}
+
 type invocation struct {
-	scripts  []script
-	stdin    bool
+	program  programSource
 	extended bool
 }
 
@@ -148,14 +157,13 @@ func (s *scanner) take() bool {
 }
 
 func (s *scanner) finish() (invocation, bool) {
-	if s.files > 0 {
-		return invocation{stdin: true, extended: s.extended}, s.files == 1 && s.stdin && len(s.scripts) == 0
+	switch {
+	case s.files > 0:
+		return invocation{program: fromStdin{}, extended: s.extended}, s.files == 1 && s.stdin && len(s.scripts) == 0
+	case len(s.scripts) > 0:
+		return invocation{program: inline(s.scripts), extended: s.extended}, true
+	case s.operand != nil:
+		return invocation{program: inline{{word: s.operand}}, extended: s.extended}, true
 	}
-	if len(s.scripts) > 0 {
-		return invocation{scripts: s.scripts, extended: s.extended}, true
-	}
-	if s.operand == nil {
-		return invocation{}, false
-	}
-	return invocation{scripts: []script{{word: s.operand}}, extended: s.extended}, true
+	return invocation{}, false
 }
