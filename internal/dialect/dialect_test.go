@@ -311,3 +311,35 @@ func TestNixShellShebangsNameTheirInterpreter(t *testing.T) {
 		t.Errorf("a nix-shell bash script named .sh is detected as %v, want bash", d)
 	}
 }
+
+func TestShared(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		dialects []Dialect
+		want     Dialect
+		fit      []Dialect
+		misfit   []Dialect
+	}{
+		{nil, Posix, []Dialect{Bash}, []Dialect{Zsh}},
+		{[]Dialect{Posix, Dash}, Dash, []Dialect{Bash}, []Dialect{Ksh}},
+		{[]Dialect{Posix, Bash, Busybox}, Bash, []Dialect{Dash}, []Dialect{Zsh}},
+		{[]Dialect{Zsh, Bash, Zsh}, Zsh, nil, []Dialect{Bash, Ksh}},
+		{[]Dialect{Ksh, Bash}, Ksh, nil, []Dialect{Bash}},
+	} {
+		got, fits := Shared(tt.dialects)
+		if got != tt.want {
+			t.Errorf("Shared(%v) = %v, want %v", tt.dialects, got, tt.want)
+		}
+		for _, d := range tt.fit {
+			if !fits(d) {
+				t.Errorf("Shared(%v) leaves out %v", tt.dialects, d)
+			}
+		}
+		for _, d := range tt.misfit {
+			if fits(d) {
+				t.Errorf("Shared(%v) keeps %v", tt.dialects, d)
+			}
+		}
+	}
+}

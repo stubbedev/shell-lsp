@@ -368,50 +368,18 @@ func detect(s script, shebang, evidence string, src dialect.Source) (script, boo
 	return s, true
 }
 
-type family uint8
-
-const (
-	posixFamily family = iota
-	zshFamily
-	kshFamily
-)
-
-func familyOf(d dialect.Dialect) family {
-	switch d {
-	case dialect.Zsh:
-		return zshFamily
-	case dialect.Ksh:
-		return kshFamily
-	}
-	return posixFamily
-}
-
-var posixWidth = []dialect.Dialect{dialect.Posix, dialect.Dash, dialect.Busybox, dialect.Bash}
-
 func choose(scripts []script) (dialect.Detection, []script) {
-	if len(scripts) == 0 {
-		return dialect.Detection{Dialect: dialect.Posix, Source: dialect.SourceHostDefault, Evidence: tool}, nil
+	dialects := make([]dialect.Dialect, len(scripts))
+	for i, s := range scripts {
+		dialects[i] = s.detection.Dialect
 	}
-	counts := map[family]int{}
-	var order []family
-	for _, s := range scripts {
-		f := familyOf(s.detection.Dialect)
-		if counts[f] == 0 {
-			order = append(order, f)
-		}
-		counts[f]++
+	shared, fits := dialect.Shared(dialects)
+	kept := slices.DeleteFunc(slices.Clone(scripts), func(s script) bool { return !fits(s.detection.Dialect) })
+	i := slices.IndexFunc(kept, func(s script) bool { return s.detection.Dialect == shared })
+	if i < 0 {
+		return dialect.Detection{Dialect: shared, Source: dialect.SourceHostDefault, Evidence: tool}, nil
 	}
-	chosen := order[0]
-	for _, f := range order[1:] {
-		if counts[f] > counts[chosen] {
-			chosen = f
-		}
-	}
-	kept := slices.DeleteFunc(slices.Clone(scripts), func(s script) bool { return familyOf(s.detection.Dialect) != chosen })
-	widest := slices.MaxFunc(kept, func(a, b script) int {
-		return slices.Index(posixWidth, a.detection.Dialect) - slices.Index(posixWidth, b.detection.Dialect)
-	})
-	return widest.detection, kept
+	return kept[i].detection, kept
 }
 
 func (p *parser) exportedBy(r recipe) []string {

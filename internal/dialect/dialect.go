@@ -377,3 +377,48 @@ func (s Set) Members() iter.Seq[Dialect] {
 		}
 	}
 }
+
+type family uint8
+
+const (
+	posixFamily family = iota
+	zshFamily
+	kshFamily
+)
+
+func (d Dialect) family() family {
+	switch d {
+	case Zsh:
+		return zshFamily
+	case Ksh:
+		return kshFamily
+	}
+	return posixFamily
+}
+
+var posixWidth = []Dialect{Posix, Dash, Busybox, Bash}
+
+func Shared(dialects []Dialect) (Dialect, func(Dialect) bool) {
+	counts := map[family]int{}
+	var order []family
+	for _, d := range dialects {
+		if counts[d.family()] == 0 {
+			order = append(order, d.family())
+		}
+		counts[d.family()]++
+	}
+	if len(order) == 0 {
+		return Posix, func(d Dialect) bool { return d.family() == posixFamily }
+	}
+	chosen := order[0]
+	for _, f := range order[1:] {
+		if counts[f] > counts[chosen] {
+			chosen = f
+		}
+	}
+	fits := func(d Dialect) bool { return d.family() == chosen }
+	widest := slices.MaxFunc(slices.DeleteFunc(slices.Clone(dialects), func(d Dialect) bool { return !fits(d) }), func(a, b Dialect) int {
+		return slices.Index(posixWidth, a) - slices.Index(posixWidth, b)
+	})
+	return widest, fits
+}
