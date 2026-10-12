@@ -47,6 +47,7 @@ nvm scripts MIT https://github.com/nvm-sh/nvm b1b3a0038c0666c7436cb5d383608b4b72
 nyr-openvpn-install scripts MIT https://github.com/Nyr/openvpn-install 7ff931a00c37a6806bd1fa8cb61bf3369d963e94
 oh-my-bash scripts MIT https://github.com/ohmybash/oh-my-bash abf846186ab0a8a41ec5888e827ece6277dfe446
 ohmyzsh scripts MIT https://github.com/ohmyzsh/ohmyzsh 083c339e0622bfc144b66ebf1a2e8dbe7d2ada0d
+oils oils-spec Apache-2.0 https://github.com/oils-for-unix/oils 57d3f0d088c36340bc4b3038208e58ea02acf15c spec
 openbsd scripts ISC https://github.com/openbsd/src 97aac1b75538bbb3b6940c175b6ab3c862ffb469 usr.sbin/sysupgrade usr.sbin/syspatch usr.sbin/rcctl etc/rc.d
 openvpn-install scripts MIT https://github.com/angristan/openvpn-install ad22fd9eb0c8569a885f836ef6e37576d8702e9f
 openwrt scripts GPL-2.0-only https://github.com/openwrt/openwrt 02a3d72c96f91b9195b661541b6821176b30813e package/base-files

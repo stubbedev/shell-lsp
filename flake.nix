@@ -50,6 +50,11 @@
             bats # Real test runner behind the Bats integration test
             bash-language-server # Comparison server behind `just crosscheck`
             neovim # Headless editor smoke test behind `just smoke`
+            dash # Real shells whose -n the parser is compared with by `just corpus-shells`
+            zsh
+            ksh
+            mksh
+            busybox
 
             # Development workflow
             git # Version control

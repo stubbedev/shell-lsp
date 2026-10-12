@@ -545,9 +545,10 @@ bats itself.
 
 Every dev tool (Go toolchain pinned to the version go.mod declares, gopls,
 golangci-lint, delve, just, shellcheck, shfmt, git, gh, Node.js for the
-VS Code extension, and bats, bash-language-server and Neovim for the Bats,
-`crosscheck` and `smoke` tests) comes from the flake: `direnv allow` on
-entry, or `nix develop` explicitly.
+VS Code extension, bats, bash-language-server and Neovim for the Bats,
+`crosscheck` and `smoke` tests, and dash, zsh, ksh, mksh and BusyBox for
+the corpus checks) comes from the flake: `direnv allow` on entry, or
+`nix develop` explicitly.
 
 | Recipe | What it does |
 | --- | --- |
@@ -562,8 +563,10 @@ entry, or `nix develop` explicitly.
 | `just fixtures` | Label new lint fixtures with shellcheck, then check every fixture |
 | `just lintcheck PATH...` | Per-code precision and recall of the linter against shellcheck over real scripts |
 | `just corpus-fetch` | Fetch the pinned corpus of public shell repositories into the cache |
-| `just corpus-shellcheck` | Compare the linter with shellcheck over the corpus, against `corpus/shellcheck.md` |
-| `just corpus-baseline` | Rewrite the corpus baseline after a deliberate change |
+| `just corpus-check` | Compare the linter with shellcheck and the parser with the real shells over the corpus, against the committed baselines |
+| `just corpus-shellcheck` | Only the shellcheck comparison, against `corpus/shellcheck.md` |
+| `just corpus-shells` | Only the comparison with bash, dash, zsh, ksh, mksh and BusyBox `-n`, against `corpus/shells.txt` |
+| `just corpus-baseline` | Rewrite both corpus baselines after a deliberate change |
 | `just dist` | Build static release binaries for Linux, macOS and Windows into `dist/` |
 
 The corpus checks, the manifest and how to update the baselines are
@@ -648,9 +651,10 @@ anyone can rerun, rather than on line-by-line review of the code:
   linter's precision and recall against ShellCheck, code by code, over real
   scripts, and `just crosscheck` records how its diagnostics and completion
   compare with bash-language-server's in
-  [docs/crosscheck.md](docs/crosscheck.md). `just corpus-shellcheck` holds
-  the linter to ShellCheck over a pinned corpus of public repositories,
-  against a committed baseline ([docs/corpus.md](docs/corpus.md)).
+  [docs/crosscheck.md](docs/crosscheck.md). `just corpus-check` holds the
+  linter to ShellCheck and the parser to the shells' own `-n` over a pinned
+  corpus of public repositories and the Oils spec tests, against committed
+  baselines ([docs/corpus.md](docs/corpus.md)).
 - **The same gates for every change.** `go vet`, a strict golangci-lint
   configuration, the test suite on Linux and Windows (with the seed corpora
   of its fuzz tests), headless Neovim and VS Code integration tests, a check

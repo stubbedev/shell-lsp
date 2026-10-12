@@ -59,9 +59,17 @@ corpus-fetch:
 corpus-shellcheck: corpus-fetch
     go run ./cmd/lintcheck shellcheck
 
-# Rewrite corpus/shellcheck.md from the corpus after a deliberate change, for review like a golden file.
+# Compare the parser with the real shells' -n over the corpus; fails on differences corpus/shells.txt lacks.
+corpus-shells: corpus-fetch
+    go run ./cmd/lintcheck shells
+
+# Run both corpus comparisons.
+corpus-check: corpus-shellcheck corpus-shells
+
+# Rewrite corpus/shellcheck.md and corpus/shells.txt from the corpus; classify new shells entries by hand.
 corpus-baseline: corpus-fetch
     go run ./cmd/lintcheck shellcheck -update
+    go run ./cmd/lintcheck shells -update
 
 # Drive the server from headless Neovim: diagnostics, hover, definition, completion.
 smoke:

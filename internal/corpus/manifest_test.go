@@ -14,7 +14,8 @@ func TestParseManifestReadsEveryField(t *testing.T) {
 	t.Parallel()
 
 	text := "\nnvm scripts MIT https://github.com/nvm-sh/nvm " + commit + "\n" +
-		"k8s scripts Apache-2.0 https://github.com/kubernetes/kubernetes " + commit + " hack cluster/addons\n"
+		"k8s scripts Apache-2.0 https://github.com/kubernetes/kubernetes " + commit + " hack cluster/addons\n" +
+		"oils oils-spec Apache-2.0 https://github.com/oils-for-unix/oils " + commit + " spec\n"
 	repos, err := ParseManifest(text)
 	if err != nil {
 		t.Fatal(err)
@@ -22,6 +23,7 @@ func TestParseManifestReadsEveryField(t *testing.T) {
 	want := []Repo{
 		{Name: "nvm", Kind: KindScripts, License: "MIT", URL: "https://github.com/nvm-sh/nvm", Commit: commit, Paths: []string{}},
 		{Name: "k8s", Kind: KindScripts, License: "Apache-2.0", URL: "https://github.com/kubernetes/kubernetes", Commit: commit, Paths: []string{"hack", "cluster/addons"}},
+		{Name: "oils", Kind: KindOilsSpec, License: "Apache-2.0", URL: "https://github.com/oils-for-unix/oils", Commit: commit, Paths: []string{"spec"}},
 	}
 	if len(repos) != len(want) {
 		t.Fatalf("got %d repositories, want %d", len(repos), len(want))

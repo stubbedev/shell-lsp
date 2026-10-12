@@ -36,11 +36,13 @@ func TestScriptsListsEachRepositoryUnderItsName(t *testing.T) {
 
 	cache := t.TempDir()
 	repo := Repo{Name: "demo", Kind: KindScripts, URL: "https://github.com/a/demo", Commit: commit}
+	spec := Repo{Name: "spec", Kind: KindOilsSpec, URL: "https://github.com/a/spec", Commit: commit}
 	files := map[string]string{
 		filepath.Join(repo.Dir(cache), "b.sh"):          "echo b\n",
 		filepath.Join(repo.Dir(cache), "sub", "a.bash"): "echo a\n",
 		filepath.Join(repo.Dir(cache), "crlf.sh"):       "echo a\r\n",
 		filepath.Join(repo.Dir(cache), "notes.txt"):     "echo a\n",
+		filepath.Join(spec.Dir(cache), "x.test.sh"):     "#### one\necho 1\n",
 	}
 	for path, text := range files {
 		if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
@@ -50,7 +52,7 @@ func TestScriptsListsEachRepositoryUnderItsName(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	listing, err := Scripts([]Repo{repo}, cache)
+	listing, err := Scripts([]Repo{repo, spec}, cache)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,5 +65,12 @@ func TestScriptsListsEachRepositoryUnderItsName(t *testing.T) {
 	}
 	if listing.Skipped != 1 {
 		t.Errorf("skipped %d scripts, want the CRLF one", listing.Skipped)
+	}
+	cases, err := SpecCases([]Repo{repo, spec}, cache)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cases) != 1 || cases[0].ID() != "spec/x.test.sh#1" || cases[0].Code != "echo 1\n\n" {
+		t.Errorf("spec cases = %+v", cases)
 	}
 }
