@@ -316,7 +316,7 @@ func (f *formatter) files() int {
 }
 
 func (f *formatter) walk(operand, dir string) []fmtTarget {
-	walker := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.DetectShell)
+	walker := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect)
 	walker.SetRoots([]string{dir})
 	paths, err := walker.AllShellFiles(context.Background())
 	if err != nil {

@@ -39,7 +39,7 @@ func TestCheckFollowsSourcedFilesAndHonoursOptions(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.DetectShell)
+	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect)
 	file, err := ws.Load(filepath.Join(dir, "main.sh"))
 	if err != nil {
 		t.Fatal(err)
@@ -65,7 +65,7 @@ func TestCheckReportsWindowsLineEndings(t *testing.T) {
 	if err := os.WriteFile(path, []byte("#!/bin/bash\r\necho hi\r\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.DetectShell)
+	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect)
 	file, err := ws.Load(path)
 	if err != nil {
 		t.Fatal(err)
@@ -89,7 +89,7 @@ func TestCheckReportsAByteOrderMark(t *testing.T) {
 	if err := os.WriteFile(path, []byte("\uFEFF#!/bin/bash\necho hi\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.DetectShell)
+	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect)
 	file, err := ws.Load(path)
 	if err != nil {
 		t.Fatal(err)

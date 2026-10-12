@@ -22,7 +22,7 @@ type clock struct{ t time.Time }
 func (c *clock) now() time.Time { return c.t }
 
 func newTestWorkspace(c *clock) *Workspace {
-	ws := New(func(string) (*File, bool) { return nil, false }, DetectShell)
+	ws := New(func(string) (*File, bool) { return nil, false }, Detect)
 	ws.now = c.now
 	return ws
 }
@@ -188,7 +188,7 @@ func TestShellFilesCacheFollowsDirectoryChanges(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	ws := New(func(string) (*File, bool) { return nil, false }, DetectShell)
+	ws := New(func(string) (*File, bool) { return nil, false }, Detect)
 	ws.SetRoots([]string{root})
 	rel := func() []string {
 		paths, err := ws.ShellFiles(t.Context())
@@ -350,9 +350,9 @@ func TestMakefilesLoadAsTheShellOfTheirRecipes(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	ws := New(func(string) (*File, bool) { return nil, false }, func(string, dialect.Input) dialect.Shell {
+	ws := New(func(string) (*File, bool) { return nil, false }, func(string, dialect.Input) dialect.Detection {
 		t.Error("a Makefile asked for the dialect of a shell script")
-		return dialect.Shell{Dialect: dialect.Bash}
+		return dialect.Detection{Dialect: dialect.Bash}
 	})
 	ws.SetRoots([]string{root})
 	paths, err := ws.AllShellFiles(t.Context())

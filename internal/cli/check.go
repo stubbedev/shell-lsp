@@ -140,7 +140,7 @@ func newChecker(env Env, opts checkOptions) *checker {
 		rcs:    newRCFinder(opts.rc, regularfile.ReadConfig, env.Home, env.ConfigHome),
 		stdin:  sync.OnceValues(func() ([]byte, error) { return io.ReadAll(env.Stdin) }),
 	}
-	c.ws = workspace.New(func(string) (*workspace.File, bool) { return nil, false }, c.shellOf)
+	c.ws = workspace.New(func(string) (*workspace.File, bool) { return nil, false }, c.resolve)
 	return c
 }
 
@@ -193,19 +193,19 @@ func (c *checker) settings(dir string) (fileSettings, error) {
 	return s, nil
 }
 
-func (c *checker) shellOf(path string, in dialect.Input) dialect.Shell {
+func (c *checker) resolve(path string, in dialect.Input) dialect.Detection {
 	s, err := c.settings(filepath.Dir(path))
 	if err != nil {
 		c.resolved.Store(path, resolution{err: &configError{err}})
-		return dialect.Resolve(nil, in).Shell
+		return dialect.Resolve(nil, in)
 	}
 	r, err := project.Resolve(c.editor, path, s.forced, in)
 	if err != nil {
 		c.resolved.Store(path, resolution{err: &configError{err}})
-		return r.Shell
+		return r.Detection
 	}
 	c.resolved.Store(path, resolution{r: r})
-	return r.Shell
+	return r.Detection
 }
 
 func (c *checker) navigationEnv(roots []string) navigation.Env {
@@ -270,7 +270,7 @@ func (c *checker) targets() ([]target, []string) {
 		}
 	}
 	for _, dir := range dirs {
-		walker := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.DetectShell)
+		walker := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect)
 		walker.SetRoots([]string{c.abs(dir)})
 		paths, err := walker.AllShellFiles(context.Background())
 		if err != nil {

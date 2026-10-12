@@ -12,7 +12,6 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/navigation"
 	"github.com/stubbedev/shell-lsp/internal/parser"
-	"github.com/stubbedev/shell-lsp/internal/project"
 	"github.com/stubbedev/shell-lsp/internal/shellcheckrc"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
@@ -23,15 +22,12 @@ func newWorkspace(s *Server) *workspace.Workspace {
 			file, err := s.workspaceFile(s.docs.View(), uri)
 			return file, err == nil
 		},
-		func(path string, in dialect.Input) dialect.Shell {
+		func(path string, in dialect.Input) dialect.Detection {
 			s.mu.Lock()
 			forced := settingsForPath(s.settings, s.folderSettings, path).Dialect
 			s.mu.Unlock()
-			resolved, err := project.Resolve(s.editorconfig, path, forced, in)
-			if err != nil {
-				s.noticeOnce("editorconfig:"+err.Error(), lsp.MessageWarning, err.Error())
-			}
-			return resolved.Shell
+			resolved, _ := s.resolveProject(path, forced, in)
+			return resolved.Detection
 		},
 	)
 }

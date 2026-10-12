@@ -114,7 +114,7 @@ type Overlay func(uri string) (*File, bool)
 
 type Workspace struct {
 	overlay Overlay
-	shellOf func(path string, in dialect.Input) dialect.Shell
+	resolve func(path string, in dialect.Input) dialect.Detection
 	now     func() time.Time
 
 	mu         sync.Mutex
@@ -142,12 +142,12 @@ type diskEntry struct {
 	file    *File
 }
 
-func DetectShell(_ string, in dialect.Input) dialect.Shell {
-	return dialect.Resolve(nil, in).Shell
+func Detect(_ string, in dialect.Input) dialect.Detection {
+	return dialect.Resolve(nil, in)
 }
 
-func New(overlay Overlay, shellOf func(path string, in dialect.Input) dialect.Shell) *Workspace {
-	return &Workspace{overlay: overlay, shellOf: shellOf, now: time.Now, files: map[string]diskEntry{}, dirs: map[string]dirListing{}, missing: map[string]time.Time{}}
+func New(overlay Overlay, resolve func(path string, in dialect.Input) dialect.Detection) *Workspace {
+	return &Workspace{overlay: overlay, resolve: resolve, now: time.Now, files: map[string]diskEntry{}, dirs: map[string]dirListing{}, missing: map[string]time.Time{}}
 }
 
 func (w *Workspace) SetRoots(roots []string) {
@@ -244,20 +244,20 @@ func (w *Workspace) Load(path string) (*File, error) {
 	if err != nil {
 		return nil, fmt.Errorf("loading %s: %w", path, err)
 	}
-	file := w.parse(path, docstore.NewDocument(uri, "", 0, string(raw)))
+	file, _ := Parse(path, docstore.NewDocument(uri, "", 0, string(raw)), nil, func(in dialect.Input) dialect.Detection { return w.resolve(path, in) })
 	w.mu.Lock()
 	w.files[platform.Native.Fold(path)] = diskEntry{size: info.Size(), modTime: info.ModTime(), checked: now, file: file}
 	w.mu.Unlock()
 	return file, nil
 }
 
-func (w *Workspace) parse(path string, doc *docstore.Document) *File {
-	if language, ok := host.FromName(path); ok {
+func Parse(path string, doc *docstore.Document, previous *parser.Tree, resolve func(dialect.Input) dialect.Detection) (*File, dialect.Detection) {
+	if language, ok := host.Of(doc.URI, doc.Language); ok {
 		script := language.Project(doc)
-		return &File{Path: path, URI: doc.URI, Doc: script.Doc, Tree: script.Parse(nil)}
+		return &File{Path: path, URI: doc.URI, Doc: script.Doc, Tree: script.Parse(previous)}, script.Detection
 	}
-	in := dialect.Input{URI: doc.URI, Text: doc.Text()}
-	return &File{Path: path, URI: doc.URI, Doc: doc, Tree: parser.ParseEdit(nil, doc.Text(), w.shellOf(path, in))}
+	detection := resolve(dialect.Input{URI: doc.URI, LanguageID: doc.Language, Text: doc.Text()})
+	return &File{Path: path, URI: doc.URI, Doc: doc, Tree: parser.ParseEdit(previous, doc.Text(), detection.Shell)}, detection
 }
 
 const maxMissing = 4096

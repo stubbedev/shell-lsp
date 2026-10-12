@@ -8,7 +8,6 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/format"
-	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/parser"
@@ -123,33 +122,30 @@ func (s *Server) snapshot(docs *docstore.View, uri string) (*snapshot, error) {
 		if previous != nil {
 			like = previous.Tree
 		}
-		if language, ok := host.Of(uri, doc.Language); ok {
-			script := language.Project(doc)
-			tree := script.Parse(like)
-			return &snapshot{
-				File:       &workspace.File{Path: path, URI: uri, Doc: script.Doc, Tree: tree},
-				encoding:   docs.Encoding(),
-				detection:  script.Detection,
-				settings:   settings,
-				generation: generation,
-			}
-		}
-		in := dialect.Input{URI: uri, LanguageID: doc.Language, Text: doc.Text()}
-		resolved, projectErr := project.Resolve(s.editorconfig, path, settings.Dialect, in)
-		if projectErr != nil {
-			s.noticeOnce("editorconfig:"+projectErr.Error(), lsp.MessageWarning, projectErr.Error())
-		}
-		tree := parser.ParseEdit(like, doc.Text(), resolved.Shell)
+		var resolved project.Resolution
+		var projectErr error
+		file, detection := workspace.Parse(path, doc, like, func(in dialect.Input) dialect.Detection {
+			resolved, projectErr = s.resolveProject(path, settings.Dialect, in)
+			return resolved.Detection
+		})
 		return &snapshot{
-			File:       &workspace.File{Path: path, URI: uri, Doc: doc, Tree: tree},
+			File:       file,
 			encoding:   docs.Encoding(),
-			detection:  resolved.Detection,
+			detection:  detection,
 			settings:   settings,
 			generation: generation,
 			project:    resolved.Settings,
 			projectErr: projectErr,
 		}
 	}), nil
+}
+
+func (s *Server) resolveProject(path string, forced *dialect.Dialect, in dialect.Input) (project.Resolution, error) {
+	resolved, err := project.Resolve(s.editorconfig, path, forced, in)
+	if err != nil {
+		s.noticeOnce("editorconfig:"+err.Error(), lsp.MessageWarning, err.Error())
+	}
+	return resolved, err
 }
 
 type located struct {
