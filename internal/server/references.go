@@ -13,11 +13,15 @@ import (
 )
 
 func (s *Server) handleReferences(ctx context.Context, docs *docstore.View, refParams lsp.ReferenceParams) (any, error) {
-	here, inside, err := s.at(docs, refParams.TextDocumentPositionParams)
+	return s.referenceLocations(ctx, docs, refParams.TextDocumentPositionParams, refParams.Context.IncludeDeclaration)
+}
+
+func (s *Server) referenceLocations(ctx context.Context, docs *docstore.View, position lsp.TextDocumentPositionParams, includeDeclaration bool) ([]lsp.Location, error) {
+	here, inside, err := s.at(docs, position)
 	if err != nil || !inside {
 		return nil, err
 	}
-	occs, err := navigation.References(ctx, here.File, here.offset, s.navigationEnv(), s.candidateFiles(docs), refParams.Context.IncludeDeclaration)
+	occs, err := navigation.References(ctx, here.File, here.offset, s.navigationEnv(), s.candidateFiles(docs), includeDeclaration)
 	if err != nil {
 		return nil, err
 	}

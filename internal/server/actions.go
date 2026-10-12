@@ -307,7 +307,7 @@ func (s *Server) handleExecuteCommand(ctx context.Context, docs *docstore.View, 
 		if len(exec.Arguments) != 1 || json.Unmarshal(exec.Arguments[0], &data) != nil {
 			return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%s takes one {uri, position} argument", commandShowReferences)
 		}
-		return s.referenceLocations(ctx, docs, data.URI, data.Position)
+		return s.referenceLocations(ctx, docs, data.at(), false)
 	case commandRunBats:
 		var args batsRunArgs
 		if len(exec.Arguments) != 1 || json.Unmarshal(exec.Arguments[0], &args) != nil || args.URI == "" {

@@ -29,6 +29,10 @@ type lensData struct {
 	Position lsp.Position `json:"position"`
 }
 
+func (d lensData) at() lsp.TextDocumentPositionParams {
+	return lsp.TextDocumentPositionParams{TextDocument: lsp.TextDocumentIdentifier{URI: d.URI}, Position: d.Position}
+}
+
 func (s *Server) handleCodeLens(_ context.Context, docs *docstore.View, p lsp.CodeLensParams) (any, error) {
 	file, err := s.workspaceFile(docs, p.TextDocument.URI)
 	if err != nil {
@@ -70,7 +74,7 @@ func (s *Server) handleCodeLensResolve(ctx context.Context, docs *docstore.View,
 	if err := json.Unmarshal(lens.Data, &data); err != nil {
 		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "code lens data %s is not from this server: %v", lens.Data, err)
 	}
-	locations, err := s.referenceLocations(ctx, docs, data.URI, data.Position)
+	locations, err := s.referenceLocations(ctx, docs, data.at(), false)
 	if err != nil {
 		return nil, err
 	}
@@ -84,22 +88,6 @@ func (s *Server) handleCodeLensResolve(ctx context.Context, docs *docstore.View,
 	}
 	lens.Command = &lsp.Command{Title: title, Command: commandShowReferences, Arguments: []json.RawMessage{args}}
 	return lens, nil
-}
-
-func (s *Server) referenceLocations(ctx context.Context, docs *docstore.View, uri string, position lsp.Position) ([]lsp.Location, error) {
-	here, inside, err := s.at(docs, lsp.TextDocumentPositionParams{TextDocument: lsp.TextDocumentIdentifier{URI: uri}, Position: position})
-	if err != nil || !inside {
-		return nil, err
-	}
-	occs, err := navigation.References(ctx, here.File, here.offset, s.navigationEnv(), s.candidateFiles(docs), false)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]lsp.Location, len(occs))
-	for i, o := range occs {
-		out[i] = lsp.Location{URI: o.File.URI, Range: o.File.Doc.RangeFor(o.Span.Start, o.Span.End, docs.Encoding())}
-	}
-	return out, nil
 }
 
 type callItemData struct {
