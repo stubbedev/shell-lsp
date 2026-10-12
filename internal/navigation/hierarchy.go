@@ -26,7 +26,7 @@ type Call struct {
 
 func PrepareCallHierarchy(file *workspace.File, offset int, env Env) (CallItem, bool) {
 	sym, ok := SymbolAt(file, offset)
-	if !ok || !sym.Function {
+	if !ok || sym.Kind != KindFunction {
 		return CallItem{}, false
 	}
 	if fn, ok := file.Tree.FunctionNamed(sym.Name); ok {
@@ -137,11 +137,11 @@ func MonikerAt(file *workspace.File, offset int, env Env) (Moniker, bool) {
 	if !ok {
 		return Moniker{}, false
 	}
-	if sym.Local {
-		return Moniker{Identifier: fmt.Sprintf("%s#%s/%d", relativeID(file.Path, env.Roots), sym.Name, sym.Scope), Kind: MonikerLocal}, true
+	if sym.Binding != nil {
+		return Moniker{Identifier: fmt.Sprintf("%s#%s/%d", relativeID(file.Path, env.Roots), sym.Name, *sym.Binding), Kind: MonikerLocal}, true
 	}
 	owner := file
-	if sym.Function {
+	if sym.Kind == KindFunction {
 		if _, defined := file.Tree.FunctionNamed(sym.Name); !defined {
 			if item, ok := findFunction(Chain(file, env), sym.Name); ok {
 				owner = item.File

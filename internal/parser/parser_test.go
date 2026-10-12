@@ -715,3 +715,40 @@ func TestSpanPredicates(t *testing.T) {
 		}
 	}
 }
+
+func TestSymbolAt(t *testing.T) {
+	t.Parallel()
+
+	src := "deploy() { :; }\ncount=1\ndeploy \"$count\" \"$1\"\n"
+	tree := Parse(src, dialect.Bash)
+	tests := []struct {
+		needle string
+		nth    int
+		want   Hit
+		found  bool
+	}{
+		{needle: "deploy", want: Hit{Kind: HitFunction, Name: "deploy"}, found: true},
+		{needle: "deploy", nth: 1, want: Hit{Kind: HitCommand, Name: "deploy"}, found: true},
+		{needle: "count", want: Hit{Kind: HitVariable, Name: "count"}, found: true},
+		{needle: "count", nth: 1, want: Hit{Kind: HitVariable, Name: "count"}, found: true},
+		{needle: "1\"", want: Hit{Kind: HitVariable, Name: "1"}, found: true},
+		{needle: "{"},
+	}
+	for _, tc := range tests {
+		at := -1
+		for range tc.nth + 1 {
+			at += strings.Index(src[at+1:], tc.needle) + 1
+		}
+		got, found := tree.SymbolAt(at)
+		if found != tc.found {
+			t.Errorf("SymbolAt(%q #%d) found = %t, want %t", tc.needle, tc.nth, found, tc.found)
+			continue
+		}
+		if !found {
+			continue
+		}
+		if got.Kind != tc.want.Kind || got.Name != tc.want.Name || got.Span.Start != at {
+			t.Errorf("SymbolAt(%q #%d) = %+v, want %+v starting at %d", tc.needle, tc.nth, got, tc.want, at)
+		}
+	}
+}

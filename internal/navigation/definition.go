@@ -33,38 +33,19 @@ func Definition(ctx context.Context, file *workspace.File, offset int, env Env, 
 			}
 		}
 	}
-	if name, ok := functionAt(tree, offset); ok {
+	hit, ok := tree.SymbolAt(offset)
+	switch {
+	case !ok:
+		return nil, nil
+	case hit.Kind != parser.HitVariable:
 		if mode == ModeTypeDefinition {
 			return nil, nil
 		}
-		return functionLocations(ctx, file, name, env, files, mode)
+		return functionLocations(ctx, file, hit.Name, env, files, mode)
+	case mode == ModeImplementation:
+		return nil, nil
 	}
-	if name, ok := variableAt(tree, offset); ok {
-		if mode == ModeImplementation {
-			return nil, nil
-		}
-		return variableLocations(file, name, tree.ScopeAt(offset), env, mode), nil
-	}
-	return nil, nil
-}
-
-func functionAt(tree *parser.Tree, offset int) (string, bool) {
-	for _, fn := range tree.Functions {
-		if fn.NameSpan.Covers(offset) {
-			return fn.Name, true
-		}
-	}
-	for _, cmd := range tree.Commands {
-		if cmd.NameSpan.Covers(offset) {
-			return cmd.Name, true
-		}
-	}
-	return "", false
-}
-
-func variableAt(tree *parser.Tree, offset int) (string, bool) {
-	name, _, ok := variableSpanAt(tree, offset)
-	return name, ok
+	return variableLocations(file, hit.Name, tree.ScopeAt(offset), env, mode), nil
 }
 
 func functionLocations(ctx context.Context, file *workspace.File, name string, env Env, files WorkspaceFiles, mode Mode) ([]Location, error) {

@@ -154,3 +154,18 @@ func TestPrepareRenameRejectsUndefinedVariables(t *testing.T) {
 		t.Errorf("PrepareRename(PATH) error = %v", err)
 	}
 }
+
+func TestRenameErrorsNameTheSymbolKindTheSameWay(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, map[string]string{"main.sh": "deploy() { :; }\ndeploy\ngrep x\n"})
+	main := f.load(t, "main.sh")
+	_, _, err := PrepareRename(t.Context(), main, f.offset(t, "main.sh", "grep", 0), f.env, f.files)
+	if want := `function "grep" is not defined in the workspace`; err == nil || !strings.Contains(err.Error(), want) {
+		t.Errorf("PrepareRename(grep) error = %v, want %q", err, want)
+	}
+	_, err = Rename(t.Context(), main, f.offset(t, "main.sh", "deploy", 1), "no way", f.env, f.files)
+	if want := `"no way" is not a valid function name`; err == nil || !strings.Contains(err.Error(), want) {
+		t.Errorf("Rename(deploy) error = %v, want %q", err, want)
+	}
+}

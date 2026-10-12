@@ -62,13 +62,20 @@ func (h hoverer) hover(ctx context.Context) (Result, bool, error) {
 	if r, ok := h.paramExp(); ok {
 		return r, true, nil
 	}
-	if r, ok := h.functionName(); ok {
-		return r, true, nil
+	hit, ok := h.Tree.SymbolAt(h.Offset)
+	if !ok {
+		return h.argument(ctx)
 	}
-	if r, ok := h.variableName(); ok {
-		return r, true, nil
+	switch hit.Kind {
+	case parser.HitFunction:
+		i := slices.IndexFunc(h.Tree.Functions, func(fn parser.Function) bool { return fn.NameSpan == hit.Span })
+		return Result{Markdown: h.function(h.Tree.Functions[i]), Span: hit.Span}, true, nil
+	case parser.HitCommand:
+		return h.commandName(ctx, hit.Name, hit.Span)
+	case parser.HitVariable:
+		return Result{Markdown: h.variable(hit.Name), Span: hit.Span}, true, nil
 	}
-	return h.command(ctx)
+	panic(fmt.Sprintf("hover: unknown symbol kind %d", hit.Kind))
 }
 
 type hoverer struct {
@@ -134,20 +141,6 @@ func (h hoverer) optionFlagsDoc() string {
 		fmt.Fprintf(&sb, "\n- `%s`: %s", e.Name, e.Doc)
 	}
 	return sb.String()
-}
-
-func (h hoverer) variableName() (Result, bool) {
-	for _, ref := range h.Tree.References {
-		if ref.Span.Covers(h.Offset) {
-			return Result{Markdown: h.variable(ref.Name), Span: ref.Span}, true
-		}
-	}
-	for _, def := range h.Tree.Definitions {
-		if def.NameSpan.Covers(h.Offset) {
-			return Result{Markdown: h.variable(def.Name), Span: def.NameSpan}, true
-		}
-	}
-	return Result{}, false
 }
 
 func (h hoverer) variable(name string) string {
@@ -220,15 +213,6 @@ func (h hoverer) undefinedVariable(name string) string {
 	return fmt.Sprintf("**%s**: not assigned in this file; expected from the environment or a sourced file", name)
 }
 
-func (h hoverer) functionName() (Result, bool) {
-	for _, fn := range h.Tree.Functions {
-		if fn.NameSpan.Covers(h.Offset) {
-			return Result{Markdown: h.function(fn), Span: fn.NameSpan}, true
-		}
-	}
-	return Result{}, false
-}
-
 func FunctionDoc(tree *parser.Tree, fn parser.Function) string {
 	return newHoverer(Input{Tree: tree, Offset: fn.NameSpan.Start}).function(fn)
 }
@@ -265,19 +249,16 @@ func (h hoverer) function(fn parser.Function) string {
 	return sb.String()
 }
 
-func (h hoverer) command(ctx context.Context) (Result, bool, error) {
+func (h hoverer) argument(ctx context.Context) (Result, bool, error) {
 	for _, cmd := range h.Tree.Commands {
-		if cmd.NameSpan.Covers(h.Offset) {
-			return h.commandName(ctx, cmd.Name, cmd.NameSpan)
-		}
-		if r, ok, err := h.argument(ctx, cmd); ok || err != nil {
+		if r, ok, err := h.argumentOf(ctx, cmd); ok || err != nil {
 			return r, ok, err
 		}
 	}
 	return Result{}, false, nil
 }
 
-func (h hoverer) argument(ctx context.Context, cmd parser.Command) (Result, bool, error) {
+func (h hoverer) argumentOf(ctx context.Context, cmd parser.Command) (Result, bool, error) {
 	if !cmd.Span.Covers(h.Offset) || h.isFunction(cmd.Name) {
 		return Result{}, false, nil
 	}

@@ -10,7 +10,6 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
-	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
 var (
@@ -22,13 +21,36 @@ var (
 	functionNameRule = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_.:-]*$`)
 )
 
+type Kind uint8
+
+const (
+	KindFunction Kind = iota
+	KindVariable
+)
+
+func (k Kind) String() string {
+	switch k {
+	case KindFunction:
+		return "function"
+	case KindVariable:
+		return "variable"
+	}
+	panic(fmt.Sprintf("navigation: unknown symbol kind %d", k))
+}
+
 type Symbol struct {
-	Name     string
-	Function bool
-	Local    bool
-	Scope    parser.ScopeID
-	Path     string
-	Span     parser.Span
+	Name    string
+	Kind    Kind
+	Binding *parser.ScopeID
+	Path    string
+	Span    parser.Span
+}
+
+func (s Symbol) boundAs(scope parser.ScopeID, local bool) bool {
+	if s.Binding == nil {
+		return !local
+	}
+	return local && scope == *s.Binding
 }
 
 type Occurrence struct {
@@ -40,45 +62,19 @@ type Occurrence struct {
 
 func SymbolAt(file *workspace.File, offset int) (Symbol, bool) {
 	tree := file.Tree
-	for _, fn := range tree.Functions {
-		if fn.NameSpan.Covers(offset) {
-			return Symbol{Name: fn.Name, Function: true, Path: file.Path, Span: fn.NameSpan}, true
-		}
-	}
-	for _, cmd := range tree.Commands {
-		if cmd.NameSpan.Covers(offset) {
-			return Symbol{Name: cmd.Name, Function: true, Path: file.Path, Span: cmd.NameSpan}, true
-		}
-	}
-	name, span, ok := variableSpanAt(tree, offset)
+	hit, ok := tree.SymbolAt(offset)
 	if !ok {
 		return Symbol{}, false
 	}
-	scope, local := tree.Binding(name, tree.ScopeAt(offset))
-	return Symbol{Name: name, Local: local, Scope: scope, Path: file.Path, Span: span}, true
-}
-
-func variableSpanAt(tree *parser.Tree, offset int) (string, parser.Span, bool) {
-	for _, ref := range tree.References {
-		if ref.Span.Covers(offset) {
-			return ref.Name, ref.Span, true
-		}
+	sym := Symbol{Name: hit.Name, Kind: KindFunction, Path: file.Path, Span: hit.Span}
+	if hit.Kind != parser.HitVariable {
+		return sym, true
 	}
-	for _, def := range tree.Definitions {
-		if def.NameSpan.Covers(offset) {
-			return def.Name, def.NameSpan, true
-		}
+	sym.Kind = KindVariable
+	if scope, local := tree.Binding(hit.Name, tree.ScopeAt(offset)); local {
+		sym.Binding = &scope
 	}
-	for _, located := range slices.Backward(tree.PathAt(offset)) {
-		exp, ok := located.Node.(*syntax.ParamExp)
-		if !ok || exp.Param == nil {
-			continue
-		}
-		if span, ok := tree.NodeSpan(exp.Param); ok {
-			return exp.Param.Value, span, true
-		}
-	}
-	return "", parser.Span{}, false
+	return sym, true
 }
 
 func Group(ctx context.Context, file *workspace.File, env Env, files WorkspaceFiles) ([]*workspace.File, error) {
@@ -109,7 +105,7 @@ func Group(ctx context.Context, file *workspace.File, env Env, files WorkspaceFi
 func Occurrences(sym Symbol, group []*workspace.File) []Occurrence {
 	var out []Occurrence
 	for _, f := range group {
-		if sym.Local && f.Path != sym.Path {
+		if sym.Binding != nil && f.Path != sym.Path {
 			continue
 		}
 		out = append(out, occurrencesIn(sym, f)...)
@@ -120,7 +116,7 @@ func Occurrences(sym Symbol, group []*workspace.File) []Occurrence {
 func occurrencesIn(sym Symbol, f *workspace.File) []Occurrence {
 	tree := f.Tree
 	var out []Occurrence
-	if sym.Function {
+	if sym.Kind == KindFunction {
 		for _, fn := range tree.Functions {
 			if fn.Name == sym.Name {
 				out = append(out, Occurrence{File: f, Span: fn.NameSpan, Write: true, Declaration: true})
@@ -134,8 +130,7 @@ func occurrencesIn(sym Symbol, f *workspace.File) []Occurrence {
 		return out
 	}
 	matches := func(within parser.ScopeID) bool {
-		scope, local := tree.Binding(sym.Name, within)
-		return local == sym.Local && (!local || scope == sym.Scope)
+		return sym.boundAs(tree.Binding(sym.Name, within))
 	}
 	for _, def := range tree.Definitions {
 		if def.Name == sym.Name && matches(def.Within) {
@@ -202,11 +197,7 @@ func PrepareRename(ctx context.Context, file *workspace.File, offset int, env En
 	}
 	occs := Occurrences(sym, group)
 	if !slices.ContainsFunc(occs, func(o Occurrence) bool { return o.Write }) {
-		what := "variable"
-		if sym.Function {
-			what = "command"
-		}
-		return Symbol{}, nil, fmt.Errorf("%w: %s %q is not defined in the workspace", ErrNotRenamable, what, sym.Name)
+		return Symbol{}, nil, fmt.Errorf("%w: %s %q is not defined in the workspace", ErrNotRenamable, sym.Kind, sym.Name)
 	}
 	return sym, occs, nil
 }
@@ -217,11 +208,11 @@ func Rename(ctx context.Context, file *workspace.File, offset int, newName strin
 		return nil, err
 	}
 	rule := variableNameRule
-	if sym.Function {
+	if sym.Kind == KindFunction {
 		rule = functionNameRule
 	}
 	if !rule.MatchString(newName) {
-		return nil, fmt.Errorf("%w: %q is not a valid %s name", ErrInvalidName, newName, kindName(sym))
+		return nil, fmt.Errorf("%w: %q is not a valid %s name", ErrInvalidName, newName, sym.Kind)
 	}
 	if newName == sym.Name {
 		return nil, nil
@@ -233,14 +224,7 @@ func Rename(ctx context.Context, file *workspace.File, offset int, newName strin
 	target := sym
 	target.Name = newName
 	if conflicts := Occurrences(target, group); slices.ContainsFunc(conflicts, func(o Occurrence) bool { return o.Write }) {
-		return nil, fmt.Errorf("%w: %s %q already exists in the same scope", ErrNameConflict, kindName(sym), newName)
+		return nil, fmt.Errorf("%w: %s %q already exists in the same scope", ErrNameConflict, sym.Kind, newName)
 	}
 	return occs, nil
-}
-
-func kindName(sym Symbol) string {
-	if sym.Function {
-		return "function"
-	}
-	return "variable"
 }

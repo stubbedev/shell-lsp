@@ -117,6 +117,53 @@ func (ix *Index) EnclosingFunction(scope ScopeID) (Function, bool) {
 	return Function{}, false
 }
 
+type HitKind uint8
+
+const (
+	HitFunction HitKind = iota
+	HitCommand
+	HitVariable
+)
+
+type Hit struct {
+	Kind HitKind
+	Name string
+	Span Span
+}
+
+func (t *Tree) SymbolAt(offset int) (Hit, bool) {
+	for _, fn := range t.Functions {
+		if fn.NameSpan.Covers(offset) {
+			return Hit{Kind: HitFunction, Name: fn.Name, Span: fn.NameSpan}, true
+		}
+	}
+	for _, cmd := range t.Commands {
+		if cmd.NameSpan.Covers(offset) {
+			return Hit{Kind: HitCommand, Name: cmd.Name, Span: cmd.NameSpan}, true
+		}
+	}
+	for _, ref := range t.References {
+		if ref.Span.Covers(offset) {
+			return Hit{Kind: HitVariable, Name: ref.Name, Span: ref.Span}, true
+		}
+	}
+	for _, def := range t.Definitions {
+		if def.NameSpan.Covers(offset) {
+			return Hit{Kind: HitVariable, Name: def.Name, Span: def.NameSpan}, true
+		}
+	}
+	for _, located := range slices.Backward(t.PathAt(offset)) {
+		exp, ok := located.Node.(*syntax.ParamExp)
+		if !ok || exp.Param == nil {
+			continue
+		}
+		if span, ok := t.NodeSpan(exp.Param); ok {
+			return Hit{Kind: HitVariable, Name: exp.Param.Value, Span: span}, true
+		}
+	}
+	return Hit{}, false
+}
+
 type Located struct {
 	Node syntax.Node
 	Span Span
