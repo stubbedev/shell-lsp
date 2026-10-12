@@ -13,6 +13,8 @@ const (
 	SourceExtension
 	SourceLanguageID
 	SourceModeline
+	SourceHostSetting
+	SourceHostDefault
 )
 
 func (s Source) String() string {
@@ -37,6 +39,10 @@ func (s Source) String() string {
 		return "languageId"
 	case SourceModeline:
 		return "modeline"
+	case SourceHostSetting:
+		return "hostSetting"
+	case SourceHostDefault:
+		return "hostDefault"
 	}
 	return "unknown"
 }
@@ -76,6 +82,10 @@ func (d Detection) Describe() string {
 		return "from the editor language " + d.Evidence
 	case SourceModeline:
 		return "from the modeline ft=" + d.Evidence
+	case SourceHostSetting:
+		return "from " + d.Evidence
+	case SourceHostDefault:
+		return "the shell " + d.Evidence + " runs scripts with unless told otherwise"
 	}
 	return "guessed: nothing names the shell, so " + d.Dialect.String() + " is assumed"
 }

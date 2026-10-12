@@ -145,8 +145,8 @@ func (p *pass) reportShadowed(earlier, later *syntax.Word) {
 	if !ok {
 		return
 	}
-	p.report(2221, first, "This pattern also matches everything the pattern on line "+strconv.Itoa(p.tree.Line(second.Start)+1)+" matches, so that one is never reached.")
-	p.report(2222, second, "This pattern never matches because the pattern on line "+strconv.Itoa(p.tree.Line(first.Start)+1)+" catches everything it would.")
+	p.report(2221, first, "This pattern also matches everything the pattern on line "+strconv.Itoa(p.tree.SourceLine(second.Start)+1)+" matches, so that one is never reached.")
+	p.report(2222, second, "This pattern never matches because the pattern on line "+strconv.Itoa(p.tree.SourceLine(first.Start)+1)+" catches everything it would.")
 }
 
 func globOf(w *syntax.Word) globPattern {

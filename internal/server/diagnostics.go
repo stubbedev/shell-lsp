@@ -55,7 +55,7 @@ func (s *Server) lintReport(file *workspace.File, settings config.Settings, gene
 			Exclude:            slices.Concat(settings.Lint.Exclude, rc.Disabled.Known()),
 			Optional:           slices.Concat(settings.Lint.Optional, rc.Enabled),
 			Profile:            settings.Lint.Profile,
-			DialectSource:      dialectSource(settings),
+			DialectSource:      dialectSource(file, settings),
 			NoExtendedAnalysis: rc.Extended != nil && !*rc.Extended,
 		})
 	})
@@ -71,8 +71,8 @@ func (s *Server) shellcheckrcFor(path string) shellcheckrc.File {
 	return rc
 }
 
-func dialectSource(settings config.Settings) lint.DialectSource {
-	if settings.Dialect != nil {
+func dialectSource(file *workspace.File, settings config.Settings) lint.DialectSource {
+	if settings.Dialect != nil || file.Doc.Projected() {
 		return lint.DialectForced
 	}
 	return lint.DialectDetected
@@ -93,7 +93,7 @@ func (s *Server) report(file *workspace.File, settings config.Settings, generati
 	findings, stamp := s.findings(file, settings, generation)
 	tests := s.bats.of(file.URI)
 	var items []lsp.Diagnostic
-	if !lint.Foreign(file.Tree, dialectSource(settings)) {
+	if !lint.Foreign(file.Tree, dialectSource(file, settings)) {
 		items = diagnostics.Syntax(file.Tree, file.Doc, encoding)
 	}
 	items = append(items, diagnostics.Lint(findings, file.Doc, encoding, s.clientCapabilities().TextDocument.PublishDiagnostics.CodeDescriptionSupport)...)

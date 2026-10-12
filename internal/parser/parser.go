@@ -5,7 +5,9 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
+	"sort"
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
@@ -48,6 +50,7 @@ type Tree struct {
 	Index
 	text       string
 	lineStarts []int
+	sourceLine func(offset int) int
 }
 
 func Parse(text string, d dialect.Dialect) *Tree {
@@ -56,16 +59,47 @@ func Parse(text string, d dialect.Dialect) *Tree {
 
 func (t *Tree) Bats() bool { return t.Lang == syntax.LangBats }
 
-func ParseEdit(previous *Tree, text string, d dialect.Dialect, lang syntax.LangVariant) *Tree {
-	parser := syntax.NewParser(
+func newSyntaxParser(lang syntax.LangVariant, options ...syntax.ParserOption) *syntax.Parser {
+	return syntax.NewParser(append([]syntax.ParserOption{
 		syntax.Variant(lang),
 		syntax.KeepComments(true),
 		syntax.RecoverErrors(maxRecoveredTokens),
-	)
+	}, options...)...)
+}
+
+func ParseEdit(previous *Tree, text string, d dialect.Dialect, lang syntax.LangVariant) *Tree {
 	src := []byte(text)
 	if bytes.HasPrefix(src, byteOrderMark) {
 		copy(src, "   ")
 	}
+	file, errs, closedAtEnd := parseSource(newSyntaxParser(lang), src, 0, text, d)
+	return newTree(previous, file, errs, closedAtEnd, text, d, lang, nil)
+}
+
+func ParseScripts(previous *Tree, text string, scripts []Span, d dialect.Dialect, lang syntax.LangVariant, sourceLine func(offset int) int) *Tree {
+	starts := lineStarts(text)
+	file := &syntax.File{}
+	var errs []Error
+	closedAtEnd := map[*syntax.Redirect]bool{}
+	for _, script := range scripts {
+		line := sort.SearchInts(starts, script.Start+1)
+		at := syntax.StartAt(uint(script.Start), uint(line), uint(script.Start-starts[line-1]+1))
+		part, partErrs, closed := parseSource(newSyntaxParser(lang, at), []byte(text[script.Start:script.End]), script.Start, text[:script.End], d)
+		file.Stmts = append(file.Stmts, part.Stmts...)
+		file.Last = append(file.Last, part.Last...)
+		errs = append(errs, partErrs...)
+		maps.Copy(closedAtEnd, closed)
+	}
+	return newTree(previous, file, errs, closedAtEnd, text, d, lang, sourceLine)
+}
+
+func newTree(previous *Tree, file *syntax.File, errs []Error, closedAtEnd map[*syntax.Redirect]bool, text string, d dialect.Dialect, lang syntax.LangVariant, sourceLine func(offset int) int) *Tree {
+	index, recovered := buildIndex(file, lang, d, text, closedAtEnd, previous)
+	errs = append(errs, recovered...)
+	return &Tree{Dialect: d, Lang: lang, File: file, Errors: sortErrors(errs), Index: index, text: text, lineStarts: lineStarts(text), sourceLine: sourceLine}
+}
+
+func parseSource(parser *syntax.Parser, src []byte, base int, text string, d dialect.Dialect) (*syntax.File, []Error, map[*syntax.Redirect]bool) {
 	var errs []Error
 	var file *syntax.File
 	closedAt := -1
@@ -88,17 +122,15 @@ func ParseEdit(previous *Tree, text string, d dialect.Dialect, lang syntax.LangV
 			src, closedAt = endAtEndOfFile(src, delimiter), at
 			continue
 		}
-		if at >= len(text) || !blankLine(src, at) {
+		if at >= len(text) || !blankLine(src, at-base) {
 			break
 		}
 	}
 	var closedAtEnd map[*syntax.Redirect]bool
-	if len(src) > len(text) {
+	if len(src) > len(text)-base {
 		closedAtEnd = closeAtEndOfText(file, text)
 	}
-	index, recovered := buildIndex(file, lang, d, text, closedAtEnd, previous)
-	errs = append(errs, recovered...)
-	return &Tree{Dialect: d, Lang: lang, File: file, Errors: sortErrors(errs), Index: index, text: text, lineStarts: lineStarts(text)}
+	return file, errs, closedAtEnd
 }
 
 func unclosedHeredocDelimiter(err error) (string, bool) {

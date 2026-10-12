@@ -139,6 +139,13 @@ func (t *Tree) Line(offset int) int {
 	return sort.SearchInts(t.lineStarts, offset+1)
 }
 
+func (t *Tree) SourceLine(offset int) int {
+	if t.sourceLine == nil {
+		return t.Line(offset)
+	}
+	return t.sourceLine(offset)
+}
+
 func (t *Tree) NodeSpan(node syntax.Node) (Span, bool) {
 	if w, ok := node.(*syntax.Word); ok && len(w.Parts) == 0 {
 		return Span{}, false

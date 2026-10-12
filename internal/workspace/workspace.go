@@ -19,6 +19,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
+	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/parallel"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/platform"
@@ -128,6 +129,9 @@ type Workspace struct {
 func (w *Workspace) SetWatched(watched bool) { w.watched.Store(watched) }
 
 func isShellName(path string) bool {
+	if _, ok := host.FromName(path); ok {
+		return true
+	}
 	return dialect.IsRCFile(path) || slices.Contains(shellExtensions, filepath.Ext(path))
 }
 
@@ -240,14 +244,21 @@ func (w *Workspace) Load(path string) (*File, error) {
 	if err != nil {
 		return nil, fmt.Errorf("loading %s: %w", path, err)
 	}
-	doc := docstore.NewDocument(uri, "", 0, string(raw))
-	in := dialect.Input{URI: uri, Text: doc.Text()}
-	d := w.dialectOf(path, in)
-	file := &File{Path: path, URI: uri, Doc: doc, Tree: parser.ParseEdit(nil, doc.Text(), d, parser.Variant(d, in))}
+	file := w.parse(path, docstore.NewDocument(uri, "", 0, string(raw)))
 	w.mu.Lock()
 	w.files[platform.Native.Fold(path)] = diskEntry{size: info.Size(), modTime: info.ModTime(), checked: now, file: file}
 	w.mu.Unlock()
 	return file, nil
+}
+
+func (w *Workspace) parse(path string, doc *docstore.Document) *File {
+	if language, ok := host.FromName(path); ok {
+		script := language.Project(doc)
+		return &File{Path: path, URI: doc.URI, Doc: script.Doc, Tree: script.Parse(nil)}
+	}
+	in := dialect.Input{URI: doc.URI, Text: doc.Text()}
+	d := w.dialectOf(path, in)
+	return &File{Path: path, URI: doc.URI, Doc: doc, Tree: parser.ParseEdit(nil, doc.Text(), d, parser.Variant(d, in))}
 }
 
 const maxMissing = 4096
@@ -410,9 +421,13 @@ func WatchGlobs() []string {
 	for i, name := range names {
 		names[i] = strings.TrimPrefix(name, ".")
 	}
+	for _, ext := range host.Extensions() {
+		extensions = append(extensions, strings.TrimPrefix(ext, "."))
+	}
 	return []string{
 		"**/*.{" + strings.Join(extensions, ",") + "}",
 		"**/.{" + strings.Join(names, ",") + "}",
+		"**/{" + strings.Join(host.Names(), ",") + "}",
 	}
 }
 

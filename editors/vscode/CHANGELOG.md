@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Runs shell-lsp for Makefiles too, which lints the shell in their recipes.
 - Windows: finds `shell-lsp.exe` on `PATH` and downloads the Windows release
   binary.
 - First release of the extension: runs shell-lsp for shell scripts and Bats

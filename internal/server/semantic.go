@@ -81,6 +81,9 @@ func encodeTokens(snap *snapshot, tokens []semantic.Token, within *parser.Span) 
 		}
 		start := snap.doc.OffsetToPosition(t.Span.Start, snap.encoding)
 		end := snap.doc.OffsetToPosition(t.Span.End, snap.encoding)
+		if end.Line != start.Line || end.Character <= start.Character {
+			continue
+		}
 		deltaChar := start.Character
 		if start.Line == prevLine {
 			deltaChar -= prevChar
@@ -181,7 +184,14 @@ func (s *Server) handleSelectionRange(_ context.Context, docs *docstore.View, pa
 	}
 	out := make([]lsp.SelectionRange, len(p.Positions))
 	for i, pos := range p.Positions {
-		spans := structure.SelectionPath(snap.tree, snap.doc.PositionToOffset(pos, snap.encoding))
+		offset, inside := snap.doc.Locate(pos, snap.encoding)
+		if !inside {
+			source := snap.doc.Source()
+			at := source.OffsetToPosition(source.PositionToOffset(pos, snap.encoding), snap.encoding)
+			out[i] = lsp.SelectionRange{Range: lsp.Range{Start: at, End: at}}
+			continue
+		}
+		spans := structure.SelectionPath(snap.tree, offset)
 		var parent *lsp.SelectionRange
 		for _, span := range slices.Backward(spans) {
 			parent = &lsp.SelectionRange{Range: snap.doc.RangeFor(span.Start, span.End, snap.encoding), Parent: parent}

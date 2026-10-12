@@ -19,8 +19,12 @@ const pullCapabilities = `"capabilities": {"textDocument": {"diagnostic": {}}, "
 const linkingCapabilities = `"capabilities": {"textDocument": {"diagnostic": {}, "publishDiagnostics": {"codeDescriptionSupport": true}}}`
 
 func openParams(uri, text string) string {
+	return openLanguageParams(uri, "shellscript", text)
+}
+
+func openLanguageParams(uri, languageID, text string) string {
 	encoded, err := json.Marshal(lsp.DidOpenTextDocumentParams{TextDocument: lsp.TextDocumentItem{
-		URI: uri, LanguageID: "shellscript", Version: 1, Text: text,
+		URI: uri, LanguageID: languageID, Version: 1, Text: text,
 	}})
 	if err != nil {
 		panic(err)

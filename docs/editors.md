@@ -161,6 +161,31 @@ Run `shell-lsp` over stdio for shell buffers. It negotiates UTF-8, UTF-16 or
 UTF-32 positions, uses pull diagnostics when the client supports them and
 pushes them otherwise.
 
+## Shell in other files
+
+shell-lsp also lints the shell inside Makefile recipes
+([Shell in other files](../README.md#shell-in-other-files)) when the editor
+sends it those files; it reads the language identifiers `makefile` and `make`.
+The VS Code extension attaches to Makefiles on its own. Elsewhere, add the
+file type next to the shell ones. In Neovim, add `"make"` to `filetypes` (or
+to the `FileType` pattern):
+
+```lua
+vim.lsp.config("shell_lsp", {
+  cmd = { "shell-lsp" },
+  filetypes = { "sh", "bash", "zsh", "ksh", "make" },
+  root_markers = { ".git" },
+})
+```
+
+In Helix, list shell-lsp for the `make` language:
+
+```toml
+[[language]]
+name = "make"
+language-servers = ["shell-lsp"]
+```
+
 ## Windows
 
 The Windows binary is `shell-lsp.exe`; put it on `PATH` or point the

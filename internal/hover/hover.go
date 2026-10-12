@@ -812,7 +812,7 @@ func zshModifierDocs(modifiers []*syntax.Lit) string {
 }
 
 func (h hoverer) line(offset int) int {
-	return h.Tree.Line(offset)
+	return h.Tree.SourceLine(offset)
 }
 
 func (h hoverer) snippet(offset int) string {

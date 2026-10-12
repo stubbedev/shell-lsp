@@ -142,12 +142,17 @@ func TestDescribeSaysWhyAndWhenItGuessed(t *testing.T) {
 		{Detection{Dialect: Bash, Source: SourceDirective, Evidence: "fish"}, "from the directive # shellcheck shell=fish; fish is not a shell shell-lsp knows, so it is checked as bash"},
 		{Detection{Dialect: Posix, Source: SourceDirective, Evidence: "posix"}, "from the directive # shellcheck shell=posix"},
 		{Detection{Dialect: Posix, Source: SourceEditorConfig, Evidence: "posix"}, "from shell_variant = posix in .editorconfig"},
+		{Detection{Dialect: Bash, Source: SourceHostSetting, Evidence: "SHELL := /bin/bash"}, "from SHELL := /bin/bash"},
+		{Detection{Dialect: Posix, Source: SourceHostDefault, Evidence: "make"}, "the shell make runs scripts with unless told otherwise"},
 	} {
 		if got := c.d.Describe(); got != c.want {
 			t.Errorf("%+v.Describe() = %q, want %q", c.d, got, c.want)
 		}
+		if host := c.d.Source == SourceHostSetting || c.d.Source == SourceHostDefault; host && c.d.Guessed() {
+			t.Errorf("%+v counts as a guess", c.d)
+		}
 	}
-	for s := SourceDefault; s <= SourceModeline; s++ {
+	for s := SourceDefault; s <= SourceHostDefault; s++ {
 		if s.String() == "unknown" {
 			t.Errorf("source %d has no name", s)
 		}

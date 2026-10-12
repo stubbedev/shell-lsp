@@ -37,7 +37,8 @@
   "main": "./dist/extension.cjs",
   "activationEvents": [
     "onLanguage:shellscript",
-    "onLanguage:bats"
+    "onLanguage:bats",
+    "onLanguage:makefile"
   ],
   "capabilities": {
     "untrustedWorkspaces": {

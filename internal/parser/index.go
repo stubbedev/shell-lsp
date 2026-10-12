@@ -209,6 +209,7 @@ func buildIndex(file *syntax.File, lang syntax.LangVariant, d dialect.Dialect, t
 	b.index.Scopes = append(b.index.Scopes, Scope{Span: Span{Start: 0, End: len(text)}, Parent: FileScope})
 	Walk(file, b.visit)
 	slices.SortStableFunc(b.index.Keywords, func(x, y Keyword) int { return x.Span.Start - y.Span.Start })
+	slices.SortStableFunc(b.index.Comments, func(x, y Comment) int { return x.Span.Start - y.Span.Start })
 	b.index.buildLookups()
 	return b.index, b.errs
 }

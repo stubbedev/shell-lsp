@@ -9,6 +9,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/format"
+	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/project"
@@ -120,14 +121,27 @@ func (s *Server) snapshot(docs *docstore.View, uri string) (*snapshot, error) {
 		if err != nil {
 			path = ""
 		}
+		var like *parser.Tree
+		if previous != nil {
+			like = previous.tree
+		}
+		if language, ok := host.Of(uri, doc.Language); ok {
+			script := language.Project(doc)
+			tree := script.Parse(like)
+			return &snapshot{
+				file:       &workspace.File{Path: path, URI: uri, Doc: script.Doc, Tree: tree},
+				doc:        script.Doc,
+				encoding:   docs.Encoding(),
+				detection:  script.Detection,
+				tree:       tree,
+				settings:   settings,
+				generation: generation,
+			}
+		}
 		in := dialect.Input{URI: uri, LanguageID: doc.Language, Text: doc.Text()}
 		resolved, projectErr := project.Resolve(s.editorconfig, path, settings.Dialect, in)
 		if projectErr != nil {
 			s.noticeOnce("editorconfig:"+projectErr.Error(), lsp.MessageWarning, projectErr.Error())
-		}
-		var like *parser.Tree
-		if previous != nil {
-			like = previous.tree
 		}
 		d := resolved.Dialect
 		tree := parser.ParseEdit(like, doc.Text(), d, parser.Variant(d, in))

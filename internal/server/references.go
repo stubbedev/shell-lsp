@@ -13,12 +13,13 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
-func (s *Server) positionFile(docs *docstore.View, params lsp.TextDocumentPositionParams) (*workspace.File, int, error) {
+func (s *Server) positionFile(docs *docstore.View, params lsp.TextDocumentPositionParams) (*workspace.File, int, bool, error) {
 	file, err := s.workspaceFile(docs, params.TextDocument.URI)
 	if err != nil {
-		return nil, 0, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
+		return nil, 0, false, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
 	}
-	return file, file.Doc.PositionToOffset(params.Position, docs.Encoding()), nil
+	offset, inside := file.Doc.Locate(params.Position, docs.Encoding())
+	return file, offset, inside, nil
 }
 
 func (s *Server) handleReferences(ctx context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
@@ -26,9 +27,12 @@ func (s *Server) handleReferences(ctx context.Context, docs *docstore.View, para
 	if err != nil {
 		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing textDocument/references params: %v", err)
 	}
-	file, offset, err := s.positionFile(docs, refParams.TextDocumentPositionParams)
+	file, offset, inside, err := s.positionFile(docs, refParams.TextDocumentPositionParams)
 	if err != nil {
 		return nil, err
+	}
+	if !inside {
+		return nil, nil
 	}
 	occs, err := navigation.References(ctx, file, offset, s.navigationEnv(), s.candidateFiles(docs), refParams.Context.IncludeDeclaration)
 	if err != nil {
@@ -46,9 +50,12 @@ func (s *Server) handleDocumentHighlight(ctx context.Context, docs *docstore.Vie
 	if err != nil {
 		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing textDocument/documentHighlight params: %v", err)
 	}
-	file, offset, err := s.positionFile(docs, position)
+	file, offset, inside, err := s.positionFile(docs, position)
 	if err != nil {
 		return nil, err
+	}
+	if !inside {
+		return nil, nil
 	}
 	sym, ok := navigation.SymbolAt(file, offset)
 	if !ok {
@@ -71,9 +78,12 @@ func (s *Server) handlePrepareRename(ctx context.Context, docs *docstore.View, p
 	if err != nil {
 		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing textDocument/prepareRename params: %v", err)
 	}
-	file, offset, err := s.positionFile(docs, position)
+	file, offset, inside, err := s.positionFile(docs, position)
 	if err != nil {
 		return nil, err
+	}
+	if !inside {
+		return nil, nil
 	}
 	sym, _, err := navigation.PrepareRename(ctx, file, offset, s.navigationEnv(), s.candidateFiles(docs))
 	if errors.Is(err, navigation.ErrNoSymbol) {
@@ -90,9 +100,12 @@ func (s *Server) handleRename(ctx context.Context, docs *docstore.View, params j
 	if err != nil {
 		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing textDocument/rename params: %v", err)
 	}
-	file, offset, err := s.positionFile(docs, renameParams.TextDocumentPositionParams)
+	file, offset, inside, err := s.positionFile(docs, renameParams.TextDocumentPositionParams)
 	if err != nil {
 		return nil, err
+	}
+	if !inside {
+		return nil, nil
 	}
 	occs, err := navigation.Rename(ctx, file, offset, renameParams.NewName, s.navigationEnv(), s.candidateFiles(docs))
 	if err != nil {
@@ -110,7 +123,7 @@ func (s *Server) handleRename(ctx context.Context, docs *docstore.View, params j
 		}
 		files[i].edits = append(files[i].edits, textedit.Edit{Start: o.Span.Start, End: o.Span.End, NewText: renameParams.NewName})
 	}
-	return s.multiFileEdit(docs.Encoding(), files), nil
+	return s.multiFileEdit(docs.Encoding(), files)
 }
 
 func renameError(err error) error {

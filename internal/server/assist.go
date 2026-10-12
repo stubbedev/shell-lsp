@@ -51,9 +51,12 @@ func (s *Server) handleSignatureHelp(_ context.Context, docs *docstore.View, par
 	if err != nil {
 		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing textDocument/signatureHelp params: %v", err)
 	}
-	file, offset, err := s.positionFile(docs, position)
+	file, offset, inside, err := s.positionFile(docs, position)
 	if err != nil {
 		return nil, err
+	}
+	if !inside {
+		return nil, nil
 	}
 	sig, ok := assist.SignatureHelp(file.Tree, offset, s.functionLookup(file))
 	if !ok {

@@ -47,9 +47,12 @@ func (s *Server) handleDocumentDialect(_ context.Context, docs *docstore.View, p
 		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
 	}
 	d := snap.detection
-	names := make([]string, len(selectableDialects))
-	for i, choice := range selectableDialects {
-		names[i] = choice.String()
+	names := []string{}
+	if !snap.doc.Projected() {
+		names = make([]string, len(selectableDialects))
+		for i, choice := range selectableDialects {
+			names[i] = choice.String()
+		}
 	}
 	return documentDialect{
 		Dialect:     d.Dialect.String(),
@@ -57,7 +60,7 @@ func (s *Server) handleDocumentDialect(_ context.Context, docs *docstore.View, p
 		Evidence:    d.Evidence,
 		Guessed:     d.Guessed(),
 		Description: d.Describe(),
-		Directive:   dialect.HasShellDirective(snap.doc.Text()),
+		Directive:   !snap.doc.Projected() && dialect.HasShellDirective(snap.doc.Text()),
 		Dialects:    names,
 	}, nil
 }
@@ -79,9 +82,12 @@ func (s *Server) handleSetDialect(_ context.Context, docs *docstore.View, params
 	if err != nil {
 		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
 	}
+	if snap.doc.Projected() {
+		return nil, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "%s: the shell of %s is %s, so a directive cannot choose it", setDialectMethod, p.TextDocument.URI, snap.detection.Describe())
+	}
 	edits := dialect.ShellDirectiveEdits(snap.doc.Text(), shell)
 	if len(edits) == 0 {
 		return nil, nil
 	}
-	return s.workspaceEdit(snap.doc, snap.encoding, edits), nil
+	return s.workspaceEdit(snap.doc, snap.encoding, edits)
 }

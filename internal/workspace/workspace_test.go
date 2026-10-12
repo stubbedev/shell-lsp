@@ -6,11 +6,15 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/stubbedev/shell-lsp/internal/dialect"
 )
 
 type clock struct{ t time.Time }
@@ -324,5 +328,52 @@ func TestShellFilesForgetsRemovedDirectories(t *testing.T) {
 	}
 	if len(ws.dirs) != 1 || len(ws.files) != 0 {
 		t.Errorf("cache kept removed entries: dirs %v, files %v", ws.dirs, ws.files)
+	}
+}
+
+func TestMakefilesLoadAsTheShellOfTheirRecipes(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	for name, text := range map[string]string{
+		"Makefile":         "SHELL := bash\nall:\n\tgreet() { echo hi; }; greet\n",
+		"rules/common.mk":  "x:\n\techo x\n",
+		"Makefile.am":      "bin_PROGRAMS = x\n",
+		"scripts/run.sh":   "echo run\n",
+		"notes/README.txt": "text\n",
+	} {
+		path := filepath.Join(root, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ws := New(func(string) (*File, bool) { return nil, false }, func(string, dialect.Input) dialect.Dialect {
+		t.Error("a Makefile asked for the dialect of a shell script")
+		return dialect.Bash
+	})
+	ws.SetRoots([]string{root})
+	paths, err := ws.AllShellFiles(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{filepath.Join(root, "Makefile"), filepath.Join(root, "rules", "common.mk"), filepath.Join(root, "scripts", "run.sh")}
+	if !slices.Equal(paths, want) {
+		t.Errorf("shell files = %v, want %v", paths, want)
+	}
+	f, err := ws.Load(filepath.Join(root, "Makefile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !f.Doc.Projected() || f.Doc.Source().Text() != "SHELL := bash\nall:\n\tgreet() { echo hi; }; greet\n" || f.Tree.Dialect != dialect.Bash {
+		t.Errorf("Makefile loaded as %q in %v", f.Doc.Text(), f.Tree.Dialect)
+	}
+	if len(f.Tree.Functions) != 1 || f.Tree.Functions[0].Name != "greet" {
+		t.Errorf("functions = %+v", f.Tree.Functions)
+	}
+	if globs := WatchGlobs(); !slices.Contains(globs, "**/{Makefile,makefile,GNUmakefile}") || !strings.Contains(globs[0], ",mk,mak}") {
+		t.Errorf("watch globs = %v", globs)
 	}
 }

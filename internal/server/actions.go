@@ -60,10 +60,10 @@ func (s *Server) handleCodeAction(ctx context.Context, docs *docstore.View, para
 	in.Settings = settings
 	caps := s.clientCapabilities()
 	literal := caps.TextDocument.CodeAction.CodeActionLiteralSupport != nil
-	lazy := slices.Contains(caps.TextDocument.CodeAction.ResolveSupport.Properties, "edit")
+	lazy := slices.Contains(caps.TextDocument.CodeAction.ResolveSupport.Properties, "edit") && !snap.doc.Projected()
 	out := []any{}
 	for _, a := range actions.Actions(in) {
-		if !wants(only, string(a.Kind)) {
+		if !wants(only, string(a.Kind)) || !expressible(snap, sources, a) {
 			continue
 		}
 		action, err := s.codeAction(docs, snap, sources, settings, actionParams.Context.Diagnostics, a, lazy)
@@ -83,6 +83,25 @@ func (s *Server) handleCodeAction(ctx context.Context, docs *docstore.View, para
 	return out, nil
 }
 
+func expressible(snap *snapshot, sources func() actionSources, a actions.Action) bool {
+	if !snap.doc.Projected() {
+		return true
+	}
+	if _, ok := snap.doc.SourceEdits(a.Edits); !ok {
+		return false
+	}
+	for _, o := range a.Others {
+		target, found := sources().files[o.URI]
+		if !found {
+			return false
+		}
+		if _, ok := target.Doc.SourceEdits(o.Edits); !ok {
+			return false
+		}
+	}
+	return true
+}
+
 func (s *Server) codeAction(docs *docstore.View, snap *snapshot, sources func() actionSources, settings func() (actions.SettingsFile, bool), contextDiags []lsp.Diagnostic, a actions.Action, lazy bool) (lsp.CodeAction, error) {
 	action := lsp.CodeAction{Title: a.Title, Kind: string(a.Kind), IsPreferred: a.Preferred}
 	for _, i := range a.Diagnostics {
@@ -98,7 +117,10 @@ func (s *Server) codeAction(docs *docstore.View, snap *snapshot, sources func() 
 	}
 	if a.Settings != nil {
 		file, _ := settings()
-		edit := s.settingsEdit(snap.encoding, a.Title, file, *a.Settings)
+		edit, err := s.settingsEdit(snap.encoding, a.Title, file, *a.Settings)
+		if err != nil {
+			return lsp.CodeAction{}, err
+		}
 		action.Edit = &edit
 		return action, nil
 	}
@@ -150,7 +172,10 @@ func (s *Server) changeEdit(docs *docstore.View, snap *snapshot, sources func() 
 		_, open := docs.Document(o.URI)
 		files = append(files, fileEdits{doc: target.Doc, versioned: open, edits: o.Edits})
 	}
-	edit := s.multiFileEdit(snap.encoding, files)
+	edit, err := s.multiFileEdit(snap.encoding, files)
+	if err != nil {
+		return lsp.WorkspaceEdit{}, err
+	}
 	if len(others) > 0 {
 		s.annotateForConfirmation(&edit, title)
 	}
@@ -194,17 +219,20 @@ func (s *Server) settingsFileFor(path string) (actions.SettingsFile, bool) {
 	return actions.SettingsFile{URI: fileuri.FromPath(filepath.Join(root, shellcheckrc.FileName)), Text: rc.Text}, true
 }
 
-func (s *Server) settingsEdit(enc docstore.Encoding, title string, file actions.SettingsFile, change actions.SettingsEdit) lsp.WorkspaceEdit {
+func (s *Server) settingsEdit(enc docstore.Encoding, title string, file actions.SettingsFile, change actions.SettingsEdit) (lsp.WorkspaceEdit, error) {
 	doc := docstore.NewDocument(change.URI, "", 0, file.Text)
 	if change.Create {
 		doc = docstore.NewDocument(change.URI, "", 0, "")
 	}
-	edit := s.multiFileEdit(enc, []fileEdits{{doc: doc, edits: change.Edits}})
+	edit, err := s.multiFileEdit(enc, []fileEdits{{doc: doc, edits: change.Edits}})
+	if err != nil {
+		return lsp.WorkspaceEdit{}, err
+	}
 	if change.Create {
 		edit.CreateFiles = []lsp.CreateFile{{URI: change.URI}}
 	}
 	s.annotateForConfirmation(&edit, title)
-	return edit
+	return edit, nil
 }
 
 func (s *Server) handleCodeActionResolve(_ context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
@@ -278,7 +306,10 @@ func (s *Server) handleExecuteCommand(ctx context.Context, docs *docstore.View, 
 		if len(edits) == 0 {
 			return nil, nil
 		}
-		edit = s.workspaceEdit(snap.doc, snap.encoding, edits)
+		edit, err = s.workspaceEdit(snap.doc, snap.encoding, edits)
+		if err != nil {
+			return nil, err
+		}
 	case commandApplyEdit:
 		if len(exec.Arguments) != 1 || json.Unmarshal(exec.Arguments[0], &edit) != nil {
 			return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%s takes one WorkspaceEdit argument", commandApplyEdit)
@@ -318,17 +349,17 @@ type fileEdits struct {
 	edits     []textedit.Edit
 }
 
-func (s *Server) workspaceEdit(doc *docstore.Document, enc docstore.Encoding, edits []textedit.Edit) lsp.WorkspaceEdit {
+func (s *Server) workspaceEdit(doc *docstore.Document, enc docstore.Encoding, edits []textedit.Edit) (lsp.WorkspaceEdit, error) {
 	return s.multiFileEdit(enc, []fileEdits{{doc: doc, versioned: true, edits: edits}})
 }
 
-func (s *Server) multiFileEdit(enc docstore.Encoding, files []fileEdits) lsp.WorkspaceEdit {
+func (s *Server) multiFileEdit(enc docstore.Encoding, files []fileEdits) (lsp.WorkspaceEdit, error) {
 	documentChanges := s.clientCapabilities().Workspace.WorkspaceEdit.DocumentChanges
 	out := lsp.WorkspaceEdit{}
 	for _, f := range files {
-		lspEdits := make([]lsp.TextEdit, len(f.edits))
-		for i, e := range f.edits {
-			lspEdits[i] = lsp.TextEdit{Range: f.doc.RangeFor(e.Start, e.End, enc), NewText: e.NewText}
+		lspEdits, ok := f.doc.TextEdits(f.edits, enc)
+		if !ok {
+			return lsp.WorkspaceEdit{}, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "editing %s: the change cannot be written in the syntax of the file around its shell", f.doc.URI)
 		}
 		if !documentChanges {
 			if out.Changes == nil {
@@ -344,7 +375,7 @@ func (s *Server) multiFileEdit(enc docstore.Encoding, files []fileEdits) lsp.Wor
 		}
 		out.DocumentChanges = append(out.DocumentChanges, lsp.TextDocumentEdit{TextDocument: id, Edits: lspEdits})
 	}
-	return out
+	return out, nil
 }
 
 func (s *Server) toActionDiagnostics(snap *snapshot, diags []lsp.Diagnostic) []actions.Diagnostic {

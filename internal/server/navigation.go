@@ -65,7 +65,10 @@ func (s *Server) navigationHandler(mode navigation.Mode) requestHandler {
 		if err != nil {
 			return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
 		}
-		offset := file.Doc.PositionToOffset(position.Position, docs.Encoding())
+		offset, inside := file.Doc.Locate(position.Position, docs.Encoding())
+		if !inside {
+			return nil, nil
+		}
 		locations, err := navigation.Definition(ctx, file, offset, s.navigationEnv(), s.candidateFiles(docs), mode)
 		if err != nil {
 			return nil, err

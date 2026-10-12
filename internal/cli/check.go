@@ -333,8 +333,9 @@ func (c *checker) lint(t target) linted {
 		DialectSource:      s.source,
 		NoExtendedAnalysis: !s.extended,
 	})
+	findings := c.filter(s.exclude, append(syntaxFindings(file.Tree, s.source), report.Findings...))
 	return linted{
-		report: fileReport{name: t.name, doc: file.Doc, findings: c.filter(s.exclude, append(syntaxFindings(file.Tree, s.source), report.Findings...))},
+		report: fileReport{name: t.name, doc: file.Doc.Source(), findings: sourceFindings(file.Doc, findings)},
 		file:   file,
 		env:    env,
 	}
@@ -366,7 +367,7 @@ func (c *checker) load(t target) (*workspace.File, loadedSettings, error) {
 	}
 	loaded := loadedSettings{fileSettings: s, source: lint.DialectDetected}
 	switch {
-	case s.forced != nil:
+	case s.forced != nil || file.Doc.Projected():
 		loaded.source = lint.DialectForced
 	case !r.Named():
 		loaded.source = lint.DialectGuessed
@@ -392,6 +393,9 @@ func (c *checker) parse(t target, s fileSettings) (*workspace.File, project.Reso
 	if err != nil {
 		return nil, project.Resolution{}, err
 	}
+	if file.Doc.Projected() {
+		return file, project.Resolution{}, nil
+	}
 	stored, ok := c.resolved.Load(t.path)
 	if !ok {
 		return nil, project.Resolution{}, fmt.Errorf("resolving the dialect of %s: the workspace parsed it without asking", t.path)
@@ -410,6 +414,27 @@ func syntaxFindings(tree *parser.Tree, source lint.DialectSource) []lint.Finding
 	out := make([]lint.Finding, len(tree.Errors))
 	for i, e := range tree.Errors {
 		out[i] = lint.Finding{Code: parseFailure, Severity: lint.SeverityError, Span: e.Span, Message: e.Message}
+	}
+	return out
+}
+
+func sourceFindings(doc *docstore.Document, findings []lint.Finding) []lint.Finding {
+	if !doc.Projected() {
+		return findings
+	}
+	out := make([]lint.Finding, len(findings))
+	for i, f := range findings {
+		f.Span = parser.Span{Start: doc.SourceOffset(f.Span.Start), End: doc.SourceOffset(f.Span.End)}
+		f.Fixes = nil
+		for _, fix := range findings[i].Fixes {
+			edits, ok := doc.SourceEdits(fix.Edits)
+			if !ok {
+				panic("cli: filelint kept a fix that cannot be written in " + doc.URI)
+			}
+			fix.Edits = edits
+			f.Fixes = append(f.Fixes, fix)
+		}
+		out[i] = f
 	}
 	return out
 }

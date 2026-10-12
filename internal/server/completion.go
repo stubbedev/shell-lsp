@@ -17,6 +17,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/manpage"
 	"github.com/stubbedev/shell-lsp/internal/platform"
+	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
@@ -163,13 +164,17 @@ func (s *Server) handleCompletion(ctx context.Context, docs *docstore.View, para
 	if err != nil {
 		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
 	}
+	offset, inside := snap.doc.Locate(completionParams.Position, snap.encoding)
+	if !inside {
+		return lsp.CompletionList{Items: []lsp.CompletionItem{}}, nil
+	}
 	caps := s.clientCapabilities().TextDocument.Completion.CompletionItem
 	result, err := completion.Complete(ctx, completion.Input{
 		Tree:      snap.tree,
 		Imports:   s.imports(snap.file),
-		Offset:    snap.doc.PositionToOffset(completionParams.Position, snap.encoding),
+		Offset:    offset,
 		ScriptDir: scriptDir(snap.doc.URI),
-		Snippets:  caps.SnippetSupport,
+		Snippets:  caps.SnippetSupport && !snap.doc.Projected(),
 		Trigger:   completionTrigger(completionParams.Context),
 		Env:       s.environment,
 	})
@@ -178,11 +183,13 @@ func (s *Server) handleCompletion(ctx context.Context, docs *docstore.View, para
 	}
 	items := make([]lsp.CompletionItem, 0, len(result.Items))
 	for _, it := range result.Items {
-		item, err := completionItem(snap, caps, it)
+		item, ok, err := completionItem(snap, caps, it)
 		if err != nil {
 			return nil, err
 		}
-		items = append(items, item)
+		if ok {
+			items = append(items, item)
+		}
 	}
 	return lsp.CompletionList{IsIncomplete: result.Incomplete, Items: items}, nil
 }
@@ -194,22 +201,29 @@ func completionTrigger(ctx *lsp.CompletionContext) string {
 	return ctx.TriggerCharacter
 }
 
-func completionItem(snap *snapshot, caps CompletionItemCapabilities, it completion.Item) (lsp.CompletionItem, error) {
+func completionItem(snap *snapshot, caps CompletionItemCapabilities, it completion.Item) (lsp.CompletionItem, bool, error) {
 	format := lsp.InsertPlainText
 	if it.Snippet {
 		format = lsp.InsertSnippet
 	}
-	edit := &lsp.CompletionEdit{NewText: it.InsertText, Insert: snap.doc.RangeFor(it.Replace.Start, it.Replace.End, snap.encoding)}
+	source := snap.doc.Source()
+	insert, ok := snap.doc.SourceReplacement(textedit.Edit{Start: it.Replace.Start, End: it.Replace.End, NewText: it.InsertText})
+	if !ok {
+		return lsp.CompletionItem{}, false, nil
+	}
+	edit := &lsp.CompletionEdit{NewText: insert.NewText, Insert: source.RangeFor(insert.Start, insert.End, snap.encoding)}
 	if caps.InsertReplaceSupport && it.Word.End > it.Replace.End {
-		word := snap.doc.RangeFor(it.Word.Start, it.Word.End, snap.encoding)
-		edit.Replace = &word
+		if word, ok := snap.doc.SourceReplacement(textedit.Edit{Start: it.Word.Start, End: it.Word.End, NewText: it.InsertText}); ok {
+			replace := source.RangeFor(word.Start, word.End, snap.encoding)
+			edit.Replace = &replace
+		}
 	}
 	item := lsp.CompletionItem{
 		Label:            it.Label,
 		Kind:             completionKinds[it.Kind],
 		Detail:           it.Detail,
 		SortText:         it.SortText,
-		FilterText:       it.InsertText,
+		FilterText:       insert.NewText,
 		InsertTextFormat: format,
 		TextEdit:         edit,
 	}
@@ -218,7 +232,11 @@ func completionItem(snap *snapshot, caps CompletionItemCapabilities, it completi
 	}
 	switch {
 	case it.FilterText != "":
-		item.FilterText = it.FilterText
+		filter, ok := snap.doc.SourceReplacement(textedit.Edit{Start: it.Replace.Start, End: it.Replace.End, NewText: it.FilterText})
+		if !ok {
+			return lsp.CompletionItem{}, false, nil
+		}
+		item.FilterText = filter.NewText
 	case it.Snippet:
 		item.FilterText = it.Label
 	}
@@ -228,11 +246,11 @@ func completionItem(snap *snapshot, caps CompletionItemCapabilities, it completi
 	if it.Resolve != completion.ResolveNone {
 		data, err := json.Marshal(completionData{Kind: it.Resolve, Name: it.Label, URI: snap.doc.URI, Offset: it.Replace.Start})
 		if err != nil {
-			return lsp.CompletionItem{}, err
+			return lsp.CompletionItem{}, false, err
 		}
 		item.Data = data
 	}
-	return item, nil
+	return item, true, nil
 }
 
 func (s *Server) handleCompletionResolve(ctx context.Context, docs *docstore.View, params json.RawMessage) (any, error) {

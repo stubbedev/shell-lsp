@@ -107,7 +107,7 @@ func checkFunctionViaExternal(p *pass, n syntax.Node) {
 	if !ok {
 		return
 	}
-	line := strconv.Itoa(p.tree.Line(at.Start))
+	line := strconv.Itoa(p.tree.SourceLine(at.Start))
 	p.report(2032, definition, target+" is defined by this script, so "+runner+" (used on line "+line+") cannot run it.")
 	p.report(2033, at, runner+" runs external programs and cannot see the shell function or alias "+target+"; put it in a separate script or call it through sh -c.")
 }

@@ -8,6 +8,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/stubbedev/shell-lsp/internal/lsp"
+	"github.com/stubbedev/shell-lsp/internal/projection"
+	"github.com/stubbedev/shell-lsp/internal/textedit"
 )
 
 func openDoc(t *testing.T, text string) *Store {
@@ -429,4 +431,56 @@ func randomText(rng *rand.Rand, alphabet []rune, n int) string {
 		b.WriteRune(alphabet[rng.IntN(len(alphabet))])
 	}
 	return b.String()
+}
+
+func TestProjectedDocumentSpeaksInHostPositions(t *testing.T) {
+	t.Parallel()
+
+	host := NewDocument("file:///w/Makefile", "makefile", 3, "x:\n\techo $$é $(CC)\n")
+	b := projection.NewBuilder(host.Text())
+	b.Region(func(_ string, _, _ int, text string) (string, bool) { return strings.ReplaceAll(text, "$", "$$"), true })
+	b.Opaque(4, 4, "(\n")
+	b.Verbatim(4, 9)
+	b.Escape(9, 11, "$")
+	b.Verbatim(11, 14)
+	b.Opaque(14, 19, "$$")
+	b.Opaque(19, 19, "\n)\n")
+	doc := Project(host, b.Map())
+
+	if doc.Text() != "(\necho $é $$\n)\n" || !doc.Projected() || doc.Source() != host || doc.Version != 3 || doc.URI != host.URI {
+		t.Fatalf("projection = %q, %+v", doc.Text(), doc)
+	}
+	dollar := strings.Index(doc.Text(), "$é")
+	for _, enc := range []Encoding{EncodingUTF8, EncodingUTF16} {
+		if got := doc.OffsetToPosition(dollar, enc); got != (lsp.Position{Line: 1, Character: 6}) {
+			t.Errorf("%v: the $ of $é is at %+v", enc, got)
+		}
+	}
+	if got := doc.RangeFor(dollar, dollar+len("$é"), EncodingUTF16); got.End != (lsp.Position{Line: 1, Character: 9}) {
+		t.Errorf("$é ends at %+v in UTF-16", got.End)
+	}
+	if offset, inside := doc.Locate(lsp.Position{Line: 1, Character: 2}, EncodingUTF16); !inside || offset != 3 {
+		t.Errorf("Locate in echo = %d, %v", offset, inside)
+	}
+	if _, inside := doc.Locate(lsp.Position{Line: 0, Character: 1}, EncodingUTF16); inside {
+		t.Error("the rule line is inside the shell")
+	}
+	edits, ok := doc.TextEdits([]textedit.Edit{{Start: dollar, End: dollar + len("$é"), NewText: `"$é"`}}, EncodingUTF16)
+	want := []lsp.TextEdit{{Range: lsp.Range{Start: lsp.Position{Line: 1, Character: 6}, End: lsp.Position{Line: 1, Character: 9}}, NewText: `"$$é"`}}
+	if !ok || !slices.Equal(edits, want) {
+		t.Errorf("TextEdits = %+v, %v, want %+v", edits, ok, want)
+	}
+	if _, ok := doc.TextEdits([]textedit.Edit{{Start: 0, End: 0, NewText: "#!/bin/sh\n"}}, EncodingUTF16); ok {
+		t.Error("an edit before the first recipe was written into the Makefile")
+	}
+	if !doc.Synthetic(0) || doc.Synthetic(dollar) {
+		t.Errorf("Synthetic(0) = %v, Synthetic(%d) = %v", doc.Synthetic(0), dollar, doc.Synthetic(dollar))
+	}
+
+	defer func() {
+		if recover() == nil {
+			t.Error("Project accepted a map built from other text")
+		}
+	}()
+	Project(NewDocument("file:///w/other", "", 1, "other"), b.Map())
 }

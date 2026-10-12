@@ -46,7 +46,10 @@ func (s *Server) handleHover(ctx context.Context, docs *docstore.View, params js
 	if err != nil {
 		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
 	}
-	offset := snap.doc.PositionToOffset(hoverParams.Position, snap.encoding)
+	offset, inside := snap.doc.Locate(hoverParams.Position, snap.encoding)
+	if !inside {
+		return nil, nil
+	}
 	if h, ok := embedded.HoverAt(embeddedPrograms(snap.file), offset); ok {
 		return s.hoverResult(snap, h.Markdown, h.Span), nil
 	}

@@ -121,7 +121,7 @@ func (h hoverer) silenced(report lint.Report, span parser.Span) string {
 			sb.WriteString("Silences " + plural(n, "finding") + " here:")
 			for _, i := range d.Suppressed[:min(n, suppressedSampleSize)] {
 				f := report.Suppressed[i]
-				fmt.Fprintf(&sb, "\n- line %d, %s: %s", h.Tree.Line(f.Span.Start), f.Code, f.Message)
+				fmt.Fprintf(&sb, "\n- line %d, %s: %s", h.Tree.SourceLine(f.Span.Start), f.Code, f.Message)
 			}
 			if n > suppressedSampleSize {
 				sb.WriteString("\n- and " + strconv.Itoa(n-suppressedSampleSize) + " more")

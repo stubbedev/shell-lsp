@@ -48,6 +48,10 @@ func (s *Server) format(docs *docstore.View, uri string, opts lsp.FormattingOpti
 	if !snap.settings.Format.Enabled {
 		return nil, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "formatting is disabled by shellLsp.format.enable")
 	}
+	if snap.doc.Projected() {
+		s.noticeOnce("format-projected:"+uri, lsp.MessageInfo, "Not formatting "+uri+": shell-lsp formats shell scripts, not the shell embedded in other files.")
+		return []lsp.TextEdit{}, nil
+	}
 	if snap.projectErr != nil {
 		return nil, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "%v", snap.projectErr)
 	}
@@ -72,10 +76,7 @@ func (s *Server) format(docs *docstore.View, uri string, opts lsp.FormattingOpti
 		}
 		edits = kept
 	}
-	out := make([]lsp.TextEdit, len(edits))
-	for i, e := range edits {
-		out[i] = lsp.TextEdit{Range: snap.doc.RangeFor(e.Start, e.End, snap.encoding), NewText: e.NewText}
-	}
+	out, _ := snap.doc.TextEdits(edits, snap.encoding)
 	return out, nil
 }
 

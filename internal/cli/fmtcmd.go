@@ -17,6 +17,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/editorconfig"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/format"
+	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/parallel"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/project"
@@ -327,6 +328,9 @@ func (f *formatter) walk(operand, dir string) []fmtTarget {
 	}
 	out := make([]fmtTarget, 0, len(paths))
 	for _, path := range paths {
+		if _, embedded := host.FromName(path); embedded {
+			continue
+		}
 		rel, err := filepath.Rel(dir, path)
 		if err != nil {
 			f.fail("%s: %v", path, err)
@@ -346,6 +350,10 @@ func (f *formatter) abs(path string) string {
 
 func (f *formatter) format(name, path, raw string, applyIgnore bool) formatted {
 	out := formatted{name: name, path: path, before: raw}
+	if language, embedded := host.FromName(path); embedded && path != "" {
+		out.err = fmt.Errorf("a %s embeds shell in its own syntax; shell-lsp fmt formats only shell scripts", language)
+		return out
+	}
 	doc := docstore.NewDocument("", "", 0, raw)
 	in := dialect.Input{Text: doc.Text()}
 	if path != "" {

@@ -163,7 +163,7 @@ func (s *Server) handleWillRenameFiles(ctx context.Context, docs *docstore.View,
 	var files []fileEdits
 	for _, file := range candidates {
 		edits := sourceRewrites(file, env, moved)
-		if newPath, ok := moved(file.Path); ok {
+		if newPath, ok := moved(file.Path); ok && !file.Doc.Projected() {
 			if edit, ok := shebangRewrite(file.Tree, file.Path, newPath); ok {
 				edits = append(edits, edit)
 			}
@@ -176,7 +176,7 @@ func (s *Server) handleWillRenameFiles(ctx context.Context, docs *docstore.View,
 	if len(files) == 0 {
 		return nil, nil
 	}
-	return s.multiFileEdit(docs.Encoding(), files), nil
+	return s.multiFileEdit(docs.Encoding(), files)
 }
 
 func sourceRewrites(file *workspace.File, env navigation.Env, moved func(string) (string, bool)) []textedit.Edit {

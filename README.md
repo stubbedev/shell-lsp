@@ -31,6 +31,8 @@ nor groff needs to be installed.
 - Quick fixes, [refactorings](#refactorings) and a fix-all source action.
 - Checks for awk, sed and jq programs embedded in scripts
   ([Embedded languages](#embedded-languages)).
+- The shell inside Makefile recipes, linted and navigated in place, with
+  fixes written back in make syntax ([Shell in other files](#shell-in-other-files)).
 - [Bats](#bats) support: tests in the outline, and "Run" lenses that report
   failures as diagnostics.
 - `shell-lsp check` and `shell-lsp fmt` for CI and pre-commit, compatible
@@ -124,8 +126,8 @@ requests:
 
 | Request | Params | Result |
 | --- | --- | --- |
-| `shellLsp/documentDialect` | `{textDocument}` | `{dialect, source, evidence, guessed, description, directive, dialects}`: the shell, what decided it (`default`, `override`, `editorconfig`, `directive`, `shebang`, `completionTag`, `fileName`, `extension`, `languageId` or `modeline`), the text that did, whether that is a guess, a sentence to show, whether a header shell directive exists, and the shells that can be chosen |
-| `shellLsp/setDialect` | `{textDocument, dialect}` | The `WorkspaceEdit` that adds or updates the header directive for `dialect`, or removes it when `dialect` is `null`; `null` when nothing changes |
+| `shellLsp/documentDialect` | `{textDocument}` | `{dialect, source, evidence, guessed, description, directive, dialects}`: the shell, what decided it (`default`, `override`, `editorconfig`, `directive`, `shebang`, `completionTag`, `fileName`, `extension`, `languageId`, `modeline`, or for [shell in other files](#shell-in-other-files) `hostSetting` and `hostDefault`), the text that did, whether that is a guess, a sentence to show, whether a header shell directive exists, and the shells that can be chosen (none for shell in other files, whose host decides it) |
+| `shellLsp/setDialect` | `{textDocument, dialect}` | The `WorkspaceEdit` that adds or updates the header directive for `dialect`, or removes it when `dialect` is `null`; `null` when nothing changes; an error for shell in other files |
 
 The parser understands the whole grammar of each shell, including zsh's
 short and brace forms of loops and `if`, `foreach`, `repeat`,
@@ -384,6 +386,48 @@ are highlighted through semantic tokens, and hovering an awk or jq builtin, or
 a sed command or flag, shows its documentation. Programs that contain shell
 expansions, or come from files, are skipped rather than guessed at, and
 common GNU and gawk extensions are accepted.
+
+## Shell in other files
+
+Some files that are not shell scripts hold shell that something else runs.
+shell-lsp lints and navigates that shell where it stands: it extracts it into
+a script with a map back to the file, analyses the script like any other, and
+answers in positions of the file. Requests at positions outside the shell
+find nothing, and every edit, from a quick fix to a rename, is written back in
+the syntax of the file; a fix that cannot be written there, such as one that
+would need a new line in a Makefile recipe, is not offered. The file's own
+syntax is left alone: these files are not formatted, and their shell cannot be
+switched with a `# shellcheck shell=` directive, because the file decides it.
+A `# shellcheck disable=` directive in the shell works as usual.
+
+An editor sends these files when the server is attached to their file type
+([docs/editors.md](docs/editors.md)); `shell-lsp check` and the workspace scan
+find them by name.
+
+### Makefiles
+
+A document is a Makefile when its language identifier is `makefile` or
+`make`, or, without one, when it is named `Makefile`, `makefile` or
+`GNUmakefile` or ends in `.mk` or `.mak`.
+
+- The recipes are the shell: the lines that start with the recipe prefix
+  (a tab, or `.RECIPEPREFIX`) after a rule, and the recipe after `;` on the
+  rule line, with their backslash continuations. Make syntax around them
+  (variables, conditionals, `define` bodies, comments) is not shell and is
+  skipped.
+- The `@`, `-` and `+` prefixes are dropped, `$$` is the shell's `$`, and
+  every make expansion (`$(CC)`, `${FLAGS}`, `$@`, `$(call f,x)`) stands for
+  text the shell sees but no one can know in advance, so it is neither a
+  constant nor split into words. Fixes write a `$` back as `$$`.
+- Each recipe line runs in a shell of its own, as make runs it, so a variable
+  set or a `cd` on one line does not reach the next (`SC2030`, `SC2031`), and
+  a syntax error stays on its line. With `.ONESHELL`, each recipe is one
+  script.
+- The shell is the one `SHELL` names, also behind `env`; without `SHELL` it
+  is `sh`. When `SHELL` names something that is not a shell, or is computed
+  (`$(shell ...)`, `!=`), the recipes are not analysed.
+- A directive goes on a recipe line of its own, indented like the recipe
+  (`# shellcheck disable=SC2086`), and applies to the next line.
 
 ## Commands
 

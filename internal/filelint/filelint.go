@@ -1,7 +1,10 @@
 package filelint
 
 import (
+	"slices"
+
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/navigation"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
@@ -17,7 +20,7 @@ type Options struct {
 }
 
 func Check(file *workspace.File, env navigation.Env, opts Options) lint.Report {
-	return lint.Run(file.Tree, navigation.Imports(file, env), lint.Options{
+	report := lint.Run(file.Tree, navigation.Imports(file, env), lint.Options{
 		Exclude:       opts.Exclude,
 		Optional:      opts.Optional,
 		Profile:       opts.Profile,
@@ -32,6 +35,23 @@ func Check(file *workspace.File, env navigation.Env, opts Options) lint.Report {
 
 		NoExtendedAnalysis: opts.NoExtendedAnalysis,
 	})
+	if file.Doc.Projected() {
+		report.Findings = slices.DeleteFunc(report.Findings, func(f lint.Finding) bool { return file.Doc.Synthetic(f.Span.Start) })
+		for i, f := range report.Findings {
+			report.Findings[i].Fixes = expressible(file.Doc, f.Fixes)
+		}
+	}
+	return report
+}
+
+func expressible(doc *docstore.Document, fixes []lint.Fix) []lint.Fix {
+	var out []lint.Fix
+	for _, fix := range fixes {
+		if _, ok := doc.SourceEdits(fix.Edits); ok {
+			out = append(out, fix)
+		}
+	}
+	return out
 }
 
 func followed(file *workspace.File, env navigation.Env) []lint.Source {

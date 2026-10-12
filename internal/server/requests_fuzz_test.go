@@ -25,14 +25,27 @@ const (
 	maxResolved      = 4
 )
 
-var fuzzExtensions = []string{".sh", ".bash", ".zsh", ".ksh", ".dash", ".bats"}
+type fuzzKind struct {
+	suffix, languageID string
+}
+
+var fuzzKinds = []fuzzKind{
+	{".sh", "shellscript"},
+	{".bash", "shellscript"},
+	{".zsh", "shellscript"},
+	{".ksh", "shellscript"},
+	{".dash", "shellscript"},
+	{".bats", "shellscript"},
+	{"/Makefile", "makefile"},
+}
 
 type fuzzDocument struct {
-	t     *testing.T
-	c     *testClient
-	uri   string
-	text  string
-	lines []clienttext.Line
+	t          *testing.T
+	c          *testClient
+	uri        string
+	languageID string
+	text       string
+	lines      []clienttext.Line
 }
 
 func FuzzRequests(f *testing.F) {
@@ -42,6 +55,8 @@ func FuzzRequests(f *testing.F) {
 	f.Add("@test \"adds\" {\n  run echo 1\n  [ \"$output\" = 1 ]\n}\n", byte(5), []byte{1, 1, 1, 1, 1, 1})
 	f.Add("#!/bin/bash\ndeclare -A m=([e/]=0 [foo bar]=1)\nm[a.b]=2\necho \"${m[a.b]} ${!m[@]}\"\nfor k in \"${!m[@]}\"; do unset 'm[$k]'; done\n", byte(1), []byte{2, 9, 3, 4, 1, 8})
 	f.Add("#!/bin/sh\necho ${.sh.file} ${(%):-%x} ${@name@}\nexport NIX_@suffix@=1\n", byte(0), []byte{1, 6, 1, 20, 2, 3})
+	f.Add("SHELL := bash\nall: a ; echo `x` $$y\n\t@for f in $(F); do \\\n\t  echo $$f; \\\n\tdone\n.ONESHELL:\n", byte(6), []byte{1, 9, 2, 12, 3, 0, 4, 5})
+	f.Add("x:\n\t# shellcheck disable=SC2086\n\tgreet() { echo $$1; }; greet `date`\ndefine y\n\techo\nendef\n", byte(6), []byte{2, 20, 2, 4, 1, 3})
 	seeds, err := filepath.Glob(filepath.Join("..", "parser", "testdata", "corpus", "*", "*"))
 	if err != nil {
 		f.Fatal(err)
@@ -55,18 +70,20 @@ func FuzzRequests(f *testing.F) {
 			f.Fatal(err)
 		}
 		if len(text) <= maxFuzzDocument {
-			f.Add(string(text), byte(slices.Index(fuzzExtensions, filepath.Ext(path))), []byte{byte(i), byte(i * 7), byte(i * 13), byte(i * 31), 3, 1})
+			kind := slices.IndexFunc(fuzzKinds, func(k fuzzKind) bool { return k.suffix == filepath.Ext(path) })
+			f.Add(string(text), byte(kind), []byte{byte(i), byte(i * 7), byte(i * 13), byte(i * 31), 3, 1})
 		}
 	}
 	c, _ := startClientIn(f, fuzzProcess(f), fuzzInitialize)
 	opened := 0
-	f.Fuzz(func(t *testing.T, text string, dialect byte, script []byte) {
+	f.Fuzz(func(t *testing.T, text string, kind byte, script []byte) {
 		if !utf8.ValidString(text) || len(text) > maxFuzzDocument || len(script) == 0 {
 			return
 		}
 		c.t = t
 		opened++
-		doc := &fuzzDocument{t: t, c: c, uri: "file:///fuzz/" + strconv.Itoa(opened) + fuzzExtensions[int(dialect)%len(fuzzExtensions)]}
+		k := fuzzKinds[int(kind)%len(fuzzKinds)]
+		doc := &fuzzDocument{t: t, c: c, uri: "file:///fuzz/" + strconv.Itoa(opened) + k.suffix, languageID: k.languageID}
 		doc.open(text)
 		defer doc.close()
 		doc.exercise(script)
@@ -91,7 +108,7 @@ func fuzzProcess(f *testing.F) Process {
 func (d *fuzzDocument) open(text string) {
 	d.text = strings.TrimPrefix(text, "\ufeff")
 	d.lines = clienttext.Lines(d.text)
-	d.c.notify("textDocument/didOpen", openParams(d.uri, text))
+	d.c.notify("textDocument/didOpen", openLanguageParams(d.uri, d.languageID, text))
 }
 
 func (d *fuzzDocument) close() {

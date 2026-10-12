@@ -95,9 +95,12 @@ func (s *Server) handleCodeLensResolve(ctx context.Context, docs *docstore.View,
 }
 
 func (s *Server) referenceLocations(ctx context.Context, docs *docstore.View, uri string, position lsp.Position) ([]lsp.Location, error) {
-	file, offset, err := s.positionFile(docs, lsp.TextDocumentPositionParams{TextDocument: lsp.TextDocumentIdentifier{URI: uri}, Position: position})
+	file, offset, inside, err := s.positionFile(docs, lsp.TextDocumentPositionParams{TextDocument: lsp.TextDocumentIdentifier{URI: uri}, Position: position})
 	if err != nil {
 		return nil, err
+	}
+	if !inside {
+		return nil, nil
 	}
 	occs, err := navigation.References(ctx, file, offset, s.navigationEnv(), s.candidateFiles(docs), false)
 	if err != nil {
@@ -172,9 +175,12 @@ func (s *Server) handlePrepareCallHierarchy(_ context.Context, docs *docstore.Vi
 	if err != nil {
 		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing textDocument/prepareCallHierarchy params: %v", err)
 	}
-	file, offset, err := s.positionFile(docs, position)
+	file, offset, inside, err := s.positionFile(docs, position)
 	if err != nil {
 		return nil, err
+	}
+	if !inside {
+		return nil, nil
 	}
 	item, ok := navigation.PrepareCallHierarchy(file, offset, s.navigationEnv())
 	if !ok {
@@ -274,9 +280,12 @@ func (s *Server) handleMoniker(_ context.Context, docs *docstore.View, params js
 	if err != nil {
 		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing textDocument/moniker params: %v", err)
 	}
-	file, offset, err := s.positionFile(docs, position)
+	file, offset, inside, err := s.positionFile(docs, position)
 	if err != nil {
 		return nil, err
+	}
+	if !inside {
+		return nil, nil
 	}
 	m, ok := navigation.MonikerAt(file, offset, s.navigationEnv())
 	if !ok {
@@ -298,7 +307,11 @@ func (s *Server) handleLinkedEditingRange(_ context.Context, docs *docstore.View
 	if err != nil {
 		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
 	}
-	spans, ok := structure.LinkedDelimiters(snap.tree, snap.doc.PositionToOffset(position.Position, snap.encoding))
+	offset, inside := snap.doc.Locate(position.Position, snap.encoding)
+	if !inside {
+		return nil, nil
+	}
+	spans, ok := structure.LinkedDelimiters(snap.tree, offset)
 	if !ok {
 		return nil, nil
 	}

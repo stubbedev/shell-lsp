@@ -67,7 +67,7 @@ func caseValues(tree *parser.Tree, name string, offset int) []caseValue {
 			if !refersTo(n.Word, name) {
 				return true
 			}
-			line := tree.Line(parser.Offset(n.Pos()))
+			line := tree.SourceLine(parser.Offset(n.Pos()))
 			for _, item := range n.Items {
 				for _, pattern := range item.Patterns {
 					if value, ok := parser.Literal(pattern); ok {
@@ -90,7 +90,7 @@ func getoptsValues(tree *parser.Tree, name string, add func(value, detail string
 		if !ok {
 			continue
 		}
-		line := tree.Line(cmd.Span.Start)
+		line := tree.SourceLine(cmd.Span.Start)
 		letters, silent := strings.CutPrefix(optstring, ":")
 		for i := range len(letters) {
 			if letters[i] == ':' {
@@ -120,7 +120,7 @@ func addComparison(tree *parser.Tree, name string, x, y *syntax.Word, add func(v
 		return
 	}
 	if value, ok := parser.Literal(y); ok {
-		add(value, fmt.Sprintf("compared on line %d", tree.Line(parser.Offset(y.Pos()))), false)
+		add(value, fmt.Sprintf("compared on line %d", tree.SourceLine(parser.Offset(y.Pos()))), false)
 	}
 }
 

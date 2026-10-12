@@ -57,6 +57,6 @@ func checkLostModification(p *pass, n syntax.Node) {
 		}
 		cause := subshellCauses[lost.kind]
 		p.report(2030, lost.site, "This change to "+name+" happens in a subshell caused by "+cause+", so it is gone once that subshell exits.")
-		p.report(2031, span, name+" was changed in a subshell ("+cause+" on line "+strconv.Itoa(p.tree.Line(lost.site.Start))+"), so this still sees the value from before that change.")
+		p.report(2031, span, name+" was changed in a subshell ("+cause+" on line "+strconv.Itoa(p.tree.SourceLine(lost.site.Start))+"), so this still sees the value from before that change.")
 	})
 }

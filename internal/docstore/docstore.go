@@ -12,6 +12,8 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
+	"github.com/stubbedev/shell-lsp/internal/projection"
+	"github.com/stubbedev/shell-lsp/internal/textedit"
 )
 
 type Encoding uint8
@@ -97,12 +99,77 @@ type Document struct {
 	lineStart []int
 	lineEnds  []lineEnd
 	nonASCII  int
+	source    *Document
+	mapping   *projection.Map
 }
 
 func NewDocument(uri, language string, version int32, text string) *Document {
 	d := &Document{URI: uri, Language: language, Version: version}
 	d.setText(text)
 	return d
+}
+
+func Project(source *Document, m *projection.Map) *Document {
+	if m.Host() != source.Text() {
+		panic("docstore: projecting " + source.URI + " from text other than its own")
+	}
+	d := &Document{URI: source.URI, Language: source.Language, Version: source.Version, source: source, mapping: m}
+	d.setText(m.Text())
+	return d
+}
+
+func (d *Document) Projected() bool { return d.mapping != nil }
+
+func (d *Document) Source() *Document {
+	if d.mapping == nil {
+		return d
+	}
+	return d.source
+}
+
+func (d *Document) SourceEdits(edits []textedit.Edit) ([]textedit.Edit, bool) {
+	if d.mapping == nil {
+		return edits, true
+	}
+	return d.mapping.Edits(edits)
+}
+
+func (d *Document) SourceReplacement(e textedit.Edit) (textedit.Edit, bool) {
+	if d.mapping == nil {
+		return e, true
+	}
+	return d.mapping.Replacement(e)
+}
+
+func (d *Document) TextEdits(edits []textedit.Edit, enc Encoding) ([]lsp.TextEdit, bool) {
+	mapped, ok := d.SourceEdits(edits)
+	if !ok {
+		return nil, false
+	}
+	source := d.Source()
+	out := make([]lsp.TextEdit, len(mapped))
+	for i, e := range mapped {
+		out[i] = lsp.TextEdit{Range: source.RangeFor(e.Start, e.End, enc), NewText: e.NewText}
+	}
+	return out, true
+}
+
+func (d *Document) SourceOffset(offset int) int {
+	if d.mapping == nil {
+		return offset
+	}
+	return d.mapping.HostOffset(offset)
+}
+
+func (d *Document) Synthetic(offset int) bool {
+	return d.mapping != nil && d.mapping.Synthetic(offset)
+}
+
+func (d *Document) Locate(pos lsp.Position, enc Encoding) (int, bool) {
+	if d.mapping == nil {
+		return d.PositionToOffset(pos, enc), true
+	}
+	return d.mapping.Offset(d.source.PositionToOffset(pos, enc))
 }
 
 func (d *Document) setText(raw string) {
@@ -219,6 +286,10 @@ func (d *Document) lineEnd(line int) int {
 }
 
 func (d *Document) PositionToOffset(pos lsp.Position, enc Encoding) int {
+	if d.mapping != nil {
+		offset, _ := d.mapping.Offset(d.source.PositionToOffset(pos, enc))
+		return offset
+	}
 	line := int(pos.Line)
 	if line >= len(d.lineStart) {
 		return len(d.text)
@@ -242,6 +313,9 @@ func (d *Document) PositionToOffset(pos lsp.Position, enc Encoding) int {
 }
 
 func (d *Document) OffsetToPosition(offset int, enc Encoding) lsp.Position {
+	if d.mapping != nil {
+		return d.source.OffsetToPosition(d.mapping.HostOffset(offset), enc)
+	}
 	if offset > len(d.text) {
 		offset = len(d.text)
 	}
