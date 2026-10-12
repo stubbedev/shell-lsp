@@ -150,3 +150,10 @@ commit in the manifest, or a `flake.lock` update that changes ShellCheck or a
 shell. Then give every `unclassified` line in `corpus/shells.txt` its category
 by hand, and review the diff of both files like a golden file: each changed
 count and each added or removed line should be explained by the change.
+
+## CI
+
+The `corpus` workflow fetches the corpus once, caches it with
+`actions/cache` under a key derived from `corpus/repos.txt`, and runs the
+ShellCheck and the shells comparisons as two jobs in the Nix development
+shell, so they use the tools `flake.lock` pins.

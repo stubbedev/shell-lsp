@@ -654,7 +654,7 @@ anyone can rerun, rather than on line-by-line review of the code:
   [docs/crosscheck.md](docs/crosscheck.md). `just corpus-check` holds the
   linter to ShellCheck and the parser to the shells' own `-n` over a pinned
   corpus of public repositories and the Oils spec tests, against committed
-  baselines ([docs/corpus.md](docs/corpus.md)).
+  baselines that CI enforces ([docs/corpus.md](docs/corpus.md)).
 - **The same gates for every change.** `go vet`, a strict golangci-lint
   configuration, the test suite on Linux and Windows (with the seed corpora
   of its fuzz tests), headless Neovim and VS Code integration tests, a check
