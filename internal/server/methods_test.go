@@ -18,7 +18,7 @@ func advertised(t *testing.T) map[string]any {
 	t.Helper()
 
 	srv := New(jsonrpc.NewConn(nil, nil), "test", CurrentProcess())
-	result, err := srv.handleInitialize(t.Context(), nil, json.RawMessage(`{}`))
+	result, err := srv.requests["initialize"](t.Context(), nil, json.RawMessage(`{}`))
 	if err != nil {
 		t.Fatalf("handleInitialize() error = %v", err)
 	}
@@ -104,18 +104,21 @@ func TestAdvertisedCapabilitiesMatchMethodTable(t *testing.T) {
 
 	caps := advertised(t)
 	for _, m := range methods {
-		if m.capability == "" {
+		if (m.capability.advertise != nil) != (m.support == supported && m.capability.path != "") {
+			t.Errorf("%s: support %s with capability %q, but advertises it = %t", m.name, supportNames[m.support], m.capability.path, m.capability.advertise != nil)
+		}
+		if m.capability.path == "" {
 			continue
 		}
-		got := truthy(lookup(caps, m.capability))
+		got := truthy(lookup(caps, m.capability.path))
 		switch m.support {
 		case supported:
 			if !got {
-				t.Errorf("%s is implemented but %s is not advertised", m.name, m.capability)
+				t.Errorf("%s is implemented but %s is not advertised", m.name, m.capability.path)
 			}
 		case notAdvertised:
 			if got {
-				t.Errorf("%s is not implemented but %s is advertised", m.name, m.capability)
+				t.Errorf("%s is not implemented but %s is advertised", m.name, m.capability.path)
 			}
 		}
 	}
@@ -134,8 +137,8 @@ func renderMethodTable() string {
 				continue
 			}
 			capability := ""
-			if m.capability != "" {
-				capability = "`" + m.capability + "`"
+			if m.capability.path != "" {
+				capability = "`" + m.capability.path + "`"
 			}
 			fmt.Fprintf(&sb, "| `%s` | %s | %s | %s |\n", m.name, supportNames[m.support], capability, m.note)
 		}

@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -11,7 +10,6 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/embedded"
 	"github.com/stubbedev/shell-lsp/internal/hover"
-	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/manpage"
@@ -40,27 +38,19 @@ func (c commandDocs) Describe(ctx context.Context, name string) (string, error) 
 	return fmt.Sprintf("`%s`: external command at `%s` (no manual page installed)", name, path), nil
 }
 
-func (s *Server) handleHover(ctx context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
-	hoverParams, err := lsp.DecodeParams[lsp.HoverParams](params)
-	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing textDocument/hover params: %v", err)
+func (s *Server) handleHover(ctx context.Context, docs *docstore.View, hoverParams lsp.HoverParams) (any, error) {
+	here, inside, err := s.at(docs, hoverParams.TextDocumentPositionParams)
+	if err != nil || !inside {
+		return nil, err
 	}
-	snap, err := s.snapshot(docs, hoverParams.TextDocument.URI)
-	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
-	}
-	offset, inside := snap.Doc.Locate(hoverParams.Position, snap.encoding)
-	if !inside {
-		return nil, nil
-	}
-	if h, ok := embedded.HoverAt(embeddedPrograms(snap.File), offset); ok {
-		return s.hoverResult(snap, h.Markdown, h.Span), nil
+	if h, ok := embedded.HoverAt(embeddedPrograms(here.File), here.offset); ok {
+		return s.hoverResult(here.snapshot, h.Markdown, h.Span), nil
 	}
 	result, ok, err := hover.Hover(ctx, hover.Input{
-		Tree: snap.Tree, Imports: s.imports(snap.File), Offset: offset, Commands: s.commandDocs,
+		Tree: here.Tree, Imports: s.imports(here.File), Offset: here.offset, Commands: s.commandDocs,
 		Lint: func() (lint.Report, bool) {
-			report, _ := s.lintReport(snap.File, snap.settings, snap.generation)
-			return report, snap.settings.Lint.Enabled
+			report, _ := s.lintReport(here.File, here.settings, here.generation)
+			return report, here.settings.Lint.Enabled
 		},
 	})
 	if err != nil {
@@ -69,7 +59,7 @@ func (s *Server) handleHover(ctx context.Context, docs *docstore.View, params js
 	if !ok {
 		return nil, nil
 	}
-	return s.hoverResult(snap, result.Markdown, result.Span), nil
+	return s.hoverResult(here.snapshot, result.Markdown, result.Span), nil
 }
 
 func (s *Server) hoverResult(snap *snapshot, markdown string, span parser.Span) lsp.Hover {

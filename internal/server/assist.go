@@ -46,19 +46,12 @@ func (s *Server) functionLookup(file *workspace.File) assist.FunctionLookup {
 	}
 }
 
-func (s *Server) handleSignatureHelp(_ context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
-	position, err := lsp.DecodeParams[lsp.TextDocumentPositionParams](params)
-	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing textDocument/signatureHelp params: %v", err)
-	}
-	file, offset, inside, err := s.positionFile(docs, position)
-	if err != nil {
+func (s *Server) handleSignatureHelp(_ context.Context, docs *docstore.View, position lsp.TextDocumentPositionParams) (any, error) {
+	here, inside, err := s.at(docs, position)
+	if err != nil || !inside {
 		return nil, err
 	}
-	if !inside {
-		return nil, nil
-	}
-	sig, ok := assist.SignatureHelp(file.Tree, offset, s.functionLookup(file))
+	sig, ok := assist.SignatureHelp(here.Tree, here.offset, s.functionLookup(here.File))
 	if !ok {
 		return nil, nil
 	}
@@ -90,14 +83,10 @@ type hintData struct {
 	Tooltip string `json:"tooltip"`
 }
 
-func (s *Server) handleInlayHint(_ context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
-	p, err := lsp.DecodeParams[lsp.InlayHintParams](params)
-	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing textDocument/inlayHint params: %v", err)
-	}
+func (s *Server) handleInlayHint(_ context.Context, docs *docstore.View, p lsp.InlayHintParams) (any, error) {
 	file, err := s.workspaceFile(docs, p.TextDocument.URI)
 	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
+		return nil, err
 	}
 	enc := docs.Encoding()
 	within := parser.Span{Start: file.Doc.PositionToOffset(p.Range.Start, enc), End: file.Doc.PositionToOffset(p.Range.End, enc)}
@@ -125,11 +114,7 @@ func (s *Server) handleInlayHint(_ context.Context, docs *docstore.View, params 
 	return out, nil
 }
 
-func (s *Server) handleInlayHintResolve(_ context.Context, _ *docstore.View, params json.RawMessage) (any, error) {
-	hint, err := lsp.DecodeParams[lsp.InlayHint](params)
-	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing inlayHint/resolve params: %v", err)
-	}
+func (s *Server) handleInlayHintResolve(_ context.Context, _ *docstore.View, hint lsp.InlayHint) (any, error) {
 	if len(hint.Data) == 0 {
 		return hint, nil
 	}
@@ -142,14 +127,10 @@ func (s *Server) handleInlayHintResolve(_ context.Context, _ *docstore.View, par
 	return hint, nil
 }
 
-func (s *Server) handleDocumentLink(_ context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
-	p, err := lsp.DecodeParams[lsp.DocumentLinkParams](params)
-	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing textDocument/documentLink params: %v", err)
-	}
+func (s *Server) handleDocumentLink(_ context.Context, docs *docstore.View, p lsp.DocumentLinkParams) (any, error) {
 	file, err := s.workspaceFile(docs, p.TextDocument.URI)
 	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
+		return nil, err
 	}
 	links := assist.DocumentLinks(file, s.navigationEnv())
 	out := make([]lsp.DocumentLink, len(links))

@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"hash/fnv"
 	"path/filepath"
@@ -17,7 +16,6 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/filelint"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
-	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/parallel"
@@ -111,14 +109,10 @@ func (s *Server) sourcesStamp(tree *parser.Tree) uint64 {
 	return s.workspace.Generation()
 }
 
-func (s *Server) handleDocumentDiagnostic(_ context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
-	diagParams, err := lsp.DecodeParams[lsp.DocumentDiagnosticParams](params)
-	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing textDocument/diagnostic params: %v", err)
-	}
+func (s *Server) handleDocumentDiagnostic(_ context.Context, docs *docstore.View, diagParams lsp.DocumentDiagnosticParams) (any, error) {
 	snap, err := s.snapshot(docs, diagParams.TextDocument.URI)
 	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
+		return nil, err
 	}
 	report := s.diagnose(snap)
 	if diagParams.PreviousResultID == report.resultID {
@@ -127,11 +121,7 @@ func (s *Server) handleDocumentDiagnostic(_ context.Context, docs *docstore.View
 	return lsp.FullDocumentDiagnosticReport{Kind: lsp.ReportFull, ResultID: report.resultID, Items: report.items}, nil
 }
 
-func (s *Server) handleWorkspaceDiagnostic(ctx context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
-	diagParams, err := lsp.DecodeParams[lsp.WorkspaceDiagnosticParams](params)
-	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing workspace/diagnostic params: %v", err)
-	}
+func (s *Server) handleWorkspaceDiagnostic(ctx context.Context, docs *docstore.View, diagParams lsp.WorkspaceDiagnosticParams) (any, error) {
 	previous := make(map[string]string, len(diagParams.PreviousResultIDs))
 	for _, p := range diagParams.PreviousResultIDs {
 		previous[p.URI] = p.Value

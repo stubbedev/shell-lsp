@@ -18,8 +18,8 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/editorconfig"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
+	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/manpage"
-	"github.com/stubbedev/shell-lsp/internal/navigation"
 	"github.com/stubbedev/shell-lsp/internal/regularfile"
 	"github.com/stubbedev/shell-lsp/internal/shellcheckrc"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
@@ -33,6 +33,46 @@ const (
 type requestHandler func(ctx context.Context, docs *docstore.View, params json.RawMessage) (any, error)
 
 type notificationHandler func(ctx context.Context, params json.RawMessage) error
+
+type invalidParams struct {
+	err error
+}
+
+func (e *invalidParams) Error() string { return e.err.Error() }
+
+func (e *invalidParams) Unwrap() error { return e.err }
+
+type requestBinding func(*Server) requestHandler
+
+func (b requestBinding) install(s *Server, name string) { s.requests[name] = b(s) }
+
+type notificationBinding func(*Server) notificationHandler
+
+func (b notificationBinding) install(s *Server, name string) { s.notifications[name] = b(s) }
+
+func onRequest[P any](handle func(*Server, context.Context, *docstore.View, P) (any, error)) requestBinding {
+	return func(s *Server) requestHandler {
+		return func(ctx context.Context, docs *docstore.View, raw json.RawMessage) (any, error) {
+			params, err := lsp.DecodeParams[P](raw)
+			if err != nil {
+				return nil, &invalidParams{err}
+			}
+			return handle(s, ctx, docs, params)
+		}
+	}
+}
+
+func onNotification[P any](handle func(*Server, context.Context, P) error) notificationBinding {
+	return func(s *Server) notificationHandler {
+		return func(ctx context.Context, raw json.RawMessage) error {
+			params, err := lsp.DecodeParams[P](raw)
+			if err != nil {
+				return &invalidParams{err}
+			}
+			return handle(s, ctx, params)
+		}
+	}
+}
 
 type TraceValue string
 
@@ -66,6 +106,7 @@ type Server struct {
 	folderSettings map[string]config.Settings
 	generation     uint64
 	client         ClientCapabilities
+	capabilities   ServerCapabilities
 
 	requests      map[string]requestHandler
 	notifications map[string]notificationHandler
@@ -120,65 +161,15 @@ func (s *Server) SetLogger(logger *slog.Logger) {
 }
 
 func (s *Server) registerHandlers() {
-	s.requests = map[string]requestHandler{
-		"initialize":                             s.handleInitialize,
-		"shutdown":                               s.handleShutdown,
-		"textDocument/diagnostic":                s.handleDocumentDiagnostic,
-		"workspace/diagnostic":                   s.handleWorkspaceDiagnostic,
-		"textDocument/hover":                     s.handleHover,
-		"textDocument/completion":                s.handleCompletion,
-		"completionItem/resolve":                 s.handleCompletionResolve,
-		"textDocument/definition":                s.navigationHandler(navigation.ModeDefinition),
-		"textDocument/declaration":               s.navigationHandler(navigation.ModeDeclaration),
-		"textDocument/typeDefinition":            s.navigationHandler(navigation.ModeTypeDefinition),
-		"textDocument/implementation":            s.navigationHandler(navigation.ModeImplementation),
-		"textDocument/documentSymbol":            s.handleDocumentSymbol,
-		"textDocument/foldingRange":              s.handleFoldingRange,
-		"workspace/symbol":                       s.handleWorkspaceSymbol,
-		"textDocument/formatting":                s.handleFormatting,
-		"textDocument/rangeFormatting":           s.handleRangeFormatting,
-		"textDocument/rangesFormatting":          s.handleRangesFormatting,
-		"textDocument/codeAction":                s.handleCodeAction,
-		"codeAction/resolve":                     s.handleCodeActionResolve,
-		"workspace/executeCommand":               s.handleExecuteCommand,
-		"textDocument/references":                s.handleReferences,
-		"textDocument/documentHighlight":         s.handleDocumentHighlight,
-		"textDocument/prepareRename":             s.handlePrepareRename,
-		"textDocument/rename":                    s.handleRename,
-		"textDocument/semanticTokens/full":       s.handleSemanticTokensFull,
-		"textDocument/semanticTokens/full/delta": s.handleSemanticTokensDelta,
-		"textDocument/semanticTokens/range":      s.handleSemanticTokensRange,
-		"textDocument/selectionRange":            s.handleSelectionRange,
-		"textDocument/signatureHelp":             s.handleSignatureHelp,
-		"textDocument/inlayHint":                 s.handleInlayHint,
-		"inlayHint/resolve":                      s.handleInlayHintResolve,
-		"textDocument/documentLink":              s.handleDocumentLink,
-		"textDocument/codeLens":                  s.handleCodeLens,
-		"codeLens/resolve":                       s.handleCodeLensResolve,
-		"textDocument/prepareCallHierarchy":      s.handlePrepareCallHierarchy,
-		"callHierarchy/incomingCalls":            s.handleIncomingCalls,
-		"callHierarchy/outgoingCalls":            s.handleOutgoingCalls,
-		"textDocument/inlineValue":               s.handleInlineValue,
-		"textDocument/moniker":                   s.handleMoniker,
-		"textDocument/linkedEditingRange":        s.handleLinkedEditingRange,
-		"workspace/willRenameFiles":              s.handleWillRenameFiles,
-		documentDialectMethod:                    s.handleDocumentDialect,
-		setDialectMethod:                         s.handleSetDialect,
-	}
-	s.notifications = map[string]notificationHandler{
-		"$/cancelRequest":                     s.handleCancelRequest,
-		"$/setTrace":                          s.handleSetTrace,
-		"window/workDoneProgress/cancel":      s.handleWorkDoneProgressCancel,
-		"initialized":                         s.handleInitialized,
-		"textDocument/didOpen":                s.handleDidOpen,
-		"textDocument/didChange":              s.handleDidChange,
-		"textDocument/didClose":               s.handleDidClose,
-		"workspace/didChangeConfiguration":    s.handleDidChangeConfiguration,
-		didChangeWatchedFilesMethod:           s.handleDidChangeWatchedFiles,
-		"workspace/didChangeWorkspaceFolders": s.handleDidChangeWorkspaceFolders,
-		"workspace/didRenameFiles":            s.handleDidRenameFiles,
-		"workspace/didCreateFiles":            s.handleFilesChanged,
-		"workspace/didDeleteFiles":            s.handleFilesChanged,
+	s.requests = map[string]requestHandler{}
+	s.notifications = map[string]notificationHandler{}
+	for _, m := range methods {
+		if m.handler != nil {
+			m.handler.install(s, m.name)
+		}
+		if m.capability.advertise != nil {
+			m.capability.advertise(&s.capabilities)
+		}
 	}
 }
 
@@ -316,7 +307,11 @@ func (s *Server) invoke(ctx context.Context, handler requestHandler, docs *docst
 				"panic handling %s: %v", msg.Method, r)
 		}
 	}()
-	return handler(ctx, docs, msg.Params)
+	result, err = handler(ctx, docs, msg.Params)
+	if invalid, ok := errors.AsType[*invalidParams](err); ok {
+		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing %s params: %v", msg.Method, invalid.err)
+	}
+	return result, err
 }
 
 func (s *Server) dispatchNotification(ctx context.Context, msg *jsonrpc.Message) {

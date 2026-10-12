@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"strconv"
-
-	"github.com/stubbedev/shell-lsp/internal/lsp"
 )
 
 type progressCreateParams struct {
@@ -93,11 +91,7 @@ func (w *workDone) end(message string) {
 	}
 }
 
-func (s *Server) handleWorkDoneProgressCancel(_ context.Context, params json.RawMessage) error {
-	cancelParams, err := lsp.DecodeParams[progressCreateParams](params)
-	if err != nil {
-		return err
-	}
+func (s *Server) handleWorkDoneProgressCancel(_ context.Context, cancelParams progressCreateParams) error {
 	if found, ok := s.progress.LoadAndDelete(cancelParams.Token); ok {
 		if cancel, ok := found.(context.CancelFunc); ok {
 			cancel()

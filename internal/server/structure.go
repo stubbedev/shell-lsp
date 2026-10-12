@@ -3,12 +3,10 @@ package server
 import (
 	"cmp"
 	"context"
-	"encoding/json"
 	"fmt"
 	"slices"
 
 	"github.com/stubbedev/shell-lsp/internal/docstore"
-	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/structure"
@@ -36,14 +34,10 @@ var foldKinds = map[structure.FoldKind]string{
 	structure.FoldImports: lsp.FoldingImports,
 }
 
-func (s *Server) handleDocumentSymbol(_ context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
-	symbolParams, err := lsp.DecodeParams[lsp.DocumentSymbolParams](params)
-	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing textDocument/documentSymbol params: %v", err)
-	}
+func (s *Server) handleDocumentSymbol(_ context.Context, docs *docstore.View, symbolParams lsp.DocumentSymbolParams) (any, error) {
 	snap, err := s.snapshot(docs, symbolParams.TextDocument.URI)
 	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
+		return nil, err
 	}
 	symbols := workspace.Memo(snap.File, "structure.symbols", 0, func() []structure.Symbol { return structure.Symbols(snap.Tree) })
 	if s.clientCapabilities().TextDocument.DocumentSymbol.HierarchicalDocumentSymbolSupport {
@@ -80,14 +74,10 @@ func appendFlatSymbols(out []lsp.SymbolInformation, doc *docstore.Document, enc 
 	return out
 }
 
-func (s *Server) handleFoldingRange(_ context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
-	foldParams, err := lsp.DecodeParams[lsp.FoldingRangeParams](params)
-	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing textDocument/foldingRange params: %v", err)
-	}
+func (s *Server) handleFoldingRange(_ context.Context, docs *docstore.View, foldParams lsp.FoldingRangeParams) (any, error) {
 	snap, err := s.snapshot(docs, foldParams.TextDocument.URI)
 	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
+		return nil, err
 	}
 	lineOf := func(offset int) int { return int(snap.Doc.OffsetToPosition(offset, snap.encoding).Line) }
 	folds := structure.Folds(snap.Tree, lineOf)
@@ -101,11 +91,7 @@ func (s *Server) handleFoldingRange(_ context.Context, docs *docstore.View, para
 	return out, nil
 }
 
-func (s *Server) handleWorkspaceSymbol(ctx context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
-	symbolParams, err := lsp.DecodeParams[lsp.WorkspaceSymbolParams](params)
-	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing workspace/symbol params: %v", err)
-	}
+func (s *Server) handleWorkspaceSymbol(ctx context.Context, docs *docstore.View, symbolParams lsp.WorkspaceSymbolParams) (any, error) {
 	files, err := s.indexWorkspace(ctx, docs, interactive)
 	if err != nil {
 		return nil, err

@@ -1,7 +1,6 @@
 package server
 
 import (
-	"fmt"
 	"sync"
 
 	"github.com/stubbedev/shell-lsp/internal/config"
@@ -10,6 +9,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/format"
 	"github.com/stubbedev/shell-lsp/internal/host"
+	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/project"
@@ -110,7 +110,7 @@ func (c *snapshotCache) forget(uri string) {
 func (s *Server) snapshot(docs *docstore.View, uri string) (*snapshot, error) {
 	doc, ok := docs.Document(uri)
 	if !ok {
-		return nil, fmt.Errorf("document %s is not open", uri)
+		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "document %s is not open", uri)
 	}
 	uri = doc.URI
 	settings, generation := s.settingsFor(uri)
@@ -151,6 +151,20 @@ func (s *Server) snapshot(docs *docstore.View, uri string) (*snapshot, error) {
 			projectErr: projectErr,
 		}
 	}), nil
+}
+
+type located struct {
+	*snapshot
+	offset int
+}
+
+func (s *Server) at(docs *docstore.View, p lsp.TextDocumentPositionParams) (located, bool, error) {
+	snap, err := s.snapshot(docs, p.TextDocument.URI)
+	if err != nil {
+		return located{}, false, err
+	}
+	offset, inside := snap.Doc.Locate(p.Position, snap.encoding)
+	return located{snapshot: snap, offset: offset}, inside, nil
 }
 
 func (s *Server) warm(uri string) {

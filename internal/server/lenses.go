@@ -29,14 +29,10 @@ type lensData struct {
 	Position lsp.Position `json:"position"`
 }
 
-func (s *Server) handleCodeLens(_ context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
-	p, err := lsp.DecodeParams[lsp.CodeLensParams](params)
-	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing textDocument/codeLens params: %v", err)
-	}
+func (s *Server) handleCodeLens(_ context.Context, docs *docstore.View, p lsp.CodeLensParams) (any, error) {
 	file, err := s.workspaceFile(docs, p.TextDocument.URI)
 	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
+		return nil, err
 	}
 	enc := docs.Encoding()
 	var spans []parser.Span
@@ -66,11 +62,7 @@ func (s *Server) handleCodeLens(_ context.Context, docs *docstore.View, params j
 	return out, nil
 }
 
-func (s *Server) handleCodeLensResolve(ctx context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
-	lens, err := lsp.DecodeParams[lsp.CodeLens](params)
-	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing codeLens/resolve params: %v", err)
-	}
+func (s *Server) handleCodeLensResolve(ctx context.Context, docs *docstore.View, lens lsp.CodeLens) (any, error) {
 	if lens.Command != nil {
 		return lens, nil
 	}
@@ -95,14 +87,11 @@ func (s *Server) handleCodeLensResolve(ctx context.Context, docs *docstore.View,
 }
 
 func (s *Server) referenceLocations(ctx context.Context, docs *docstore.View, uri string, position lsp.Position) ([]lsp.Location, error) {
-	file, offset, inside, err := s.positionFile(docs, lsp.TextDocumentPositionParams{TextDocument: lsp.TextDocumentIdentifier{URI: uri}, Position: position})
-	if err != nil {
+	here, inside, err := s.at(docs, lsp.TextDocumentPositionParams{TextDocument: lsp.TextDocumentIdentifier{URI: uri}, Position: position})
+	if err != nil || !inside {
 		return nil, err
 	}
-	if !inside {
-		return nil, nil
-	}
-	occs, err := navigation.References(ctx, file, offset, s.navigationEnv(), s.candidateFiles(docs), false)
+	occs, err := navigation.References(ctx, here.File, here.offset, s.navigationEnv(), s.candidateFiles(docs), false)
 	if err != nil {
 		return nil, err
 	}
@@ -170,19 +159,12 @@ func (s *Server) callItemFromLSP(docs *docstore.View, item lsp.CallHierarchyItem
 	return navigation.CallItem{}, jsonrpc.NewError(jsonrpc.CodeContentModified, "function %s no longer exists in %s", data.Name, item.URI)
 }
 
-func (s *Server) handlePrepareCallHierarchy(_ context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
-	position, err := lsp.DecodeParams[lsp.TextDocumentPositionParams](params)
-	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing textDocument/prepareCallHierarchy params: %v", err)
-	}
-	file, offset, inside, err := s.positionFile(docs, position)
-	if err != nil {
+func (s *Server) handlePrepareCallHierarchy(_ context.Context, docs *docstore.View, position lsp.TextDocumentPositionParams) (any, error) {
+	here, inside, err := s.at(docs, position)
+	if err != nil || !inside {
 		return nil, err
 	}
-	if !inside {
-		return nil, nil
-	}
-	item, ok := navigation.PrepareCallHierarchy(file, offset, s.navigationEnv())
+	item, ok := navigation.PrepareCallHierarchy(here.File, here.offset, s.navigationEnv())
 	if !ok {
 		return nil, nil
 	}
@@ -193,11 +175,7 @@ func (s *Server) handlePrepareCallHierarchy(_ context.Context, docs *docstore.Vi
 	return []lsp.CallHierarchyItem{out}, nil
 }
 
-func (s *Server) handleIncomingCalls(ctx context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
-	p, err := lsp.DecodeParams[lsp.CallHierarchyCallsParams](params)
-	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing callHierarchy/incomingCalls params: %v", err)
-	}
+func (s *Server) handleIncomingCalls(ctx context.Context, docs *docstore.View, p lsp.CallHierarchyCallsParams) (any, error) {
 	item, err := s.callItemFromLSP(docs, p.Item)
 	if err != nil {
 		return nil, err
@@ -217,11 +195,7 @@ func (s *Server) handleIncomingCalls(ctx context.Context, docs *docstore.View, p
 	return out, nil
 }
 
-func (s *Server) handleOutgoingCalls(_ context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
-	p, err := lsp.DecodeParams[lsp.CallHierarchyCallsParams](params)
-	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing callHierarchy/outgoingCalls params: %v", err)
-	}
+func (s *Server) handleOutgoingCalls(_ context.Context, docs *docstore.View, p lsp.CallHierarchyCallsParams) (any, error) {
 	item, err := s.callItemFromLSP(docs, p.Item)
 	if err != nil {
 		return nil, err
@@ -250,14 +224,10 @@ func callRanges(c navigation.Call, enc docstore.Encoding) []lsp.Range {
 	return ranges
 }
 
-func (s *Server) handleInlineValue(_ context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
-	p, err := lsp.DecodeParams[lsp.InlineValueParams](params)
-	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing textDocument/inlineValue params: %v", err)
-	}
+func (s *Server) handleInlineValue(_ context.Context, docs *docstore.View, p lsp.InlineValueParams) (any, error) {
 	snap, err := s.snapshot(docs, p.TextDocument.URI)
 	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
+		return nil, err
 	}
 	within := parser.Span{Start: snap.Doc.PositionToOffset(p.Range.Start, snap.encoding), End: snap.Doc.PositionToOffset(p.Range.End, snap.encoding)}
 	stopped := snap.Doc.PositionToOffset(p.Context.StoppedLocation.Start, snap.encoding)
@@ -275,19 +245,12 @@ var monikerKinds = map[navigation.MonikerKind]string{
 	navigation.MonikerLocal:  "local",
 }
 
-func (s *Server) handleMoniker(_ context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
-	position, err := lsp.DecodeParams[lsp.TextDocumentPositionParams](params)
-	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing textDocument/moniker params: %v", err)
-	}
-	file, offset, inside, err := s.positionFile(docs, position)
-	if err != nil {
+func (s *Server) handleMoniker(_ context.Context, docs *docstore.View, position lsp.TextDocumentPositionParams) (any, error) {
+	here, inside, err := s.at(docs, position)
+	if err != nil || !inside {
 		return nil, err
 	}
-	if !inside {
-		return nil, nil
-	}
-	m, ok := navigation.MonikerAt(file, offset, s.navigationEnv())
+	m, ok := navigation.MonikerAt(here.File, here.offset, s.navigationEnv())
 	if !ok {
 		return []lsp.Moniker{}, nil
 	}
@@ -298,26 +261,18 @@ func (s *Server) handleMoniker(_ context.Context, docs *docstore.View, params js
 	return []lsp.Moniker{{Scheme: monikerScheme, Identifier: m.Identifier, Unique: unique, Kind: monikerKinds[m.Kind]}}, nil
 }
 
-func (s *Server) handleLinkedEditingRange(_ context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
-	position, err := lsp.DecodeParams[lsp.TextDocumentPositionParams](params)
-	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing textDocument/linkedEditingRange params: %v", err)
+func (s *Server) handleLinkedEditingRange(_ context.Context, docs *docstore.View, position lsp.TextDocumentPositionParams) (any, error) {
+	here, inside, err := s.at(docs, position)
+	if err != nil || !inside {
+		return nil, err
 	}
-	snap, err := s.snapshot(docs, position.TextDocument.URI)
-	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
-	}
-	offset, inside := snap.Doc.Locate(position.Position, snap.encoding)
-	if !inside {
-		return nil, nil
-	}
-	spans, ok := structure.LinkedDelimiters(snap.Tree, offset)
+	spans, ok := structure.LinkedDelimiters(here.Tree, here.offset)
 	if !ok {
 		return nil, nil
 	}
 	ranges := make([]lsp.Range, len(spans))
 	for i, span := range spans {
-		ranges[i] = snap.Doc.RangeFor(span.Start, span.End, snap.encoding)
+		ranges[i] = here.Doc.RangeFor(span.Start, span.End, here.encoding)
 	}
 	return lsp.LinkedEditingRanges{Ranges: ranges, WordPattern: `[A-Za-z0-9_.-]+`}, nil
 }

@@ -36,14 +36,10 @@ type actionData struct {
 	FixAll   string            `json:"fixAll,omitempty"`
 }
 
-func (s *Server) handleCodeAction(ctx context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
-	actionParams, err := lsp.DecodeParams[lsp.CodeActionParams](params)
-	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing textDocument/codeAction params: %v", err)
-	}
+func (s *Server) handleCodeAction(ctx context.Context, docs *docstore.View, actionParams lsp.CodeActionParams) (any, error) {
 	snap, err := s.snapshot(docs, actionParams.TextDocument.URI)
 	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
+		return nil, err
 	}
 	only := actionParams.Context.Only
 	doc, sources := s.actionDocument(snap)
@@ -235,11 +231,7 @@ func (s *Server) settingsEdit(enc docstore.Encoding, title string, file actions.
 	return edit, nil
 }
 
-func (s *Server) handleCodeActionResolve(_ context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
-	action, err := lsp.DecodeParams[lsp.CodeAction](params)
-	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing codeAction/resolve params: %v", err)
-	}
+func (s *Server) handleCodeActionResolve(_ context.Context, docs *docstore.View, action lsp.CodeAction) (any, error) {
 	if action.Edit != nil || len(action.Data) == 0 {
 		return action, nil
 	}
@@ -249,7 +241,7 @@ func (s *Server) handleCodeActionResolve(_ context.Context, docs *docstore.View,
 	}
 	snap, err := s.snapshot(docs, data.URI)
 	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
+		return nil, err
 	}
 	if snap.Doc.Version != data.Version {
 		return nil, jsonrpc.NewError(jsonrpc.CodeContentModified, "%s changed since the action was offered", data.URI)
@@ -286,11 +278,7 @@ func (s *Server) deferredChange(snap *snapshot, doc actions.Document, data actio
 	return actions.Change{}, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "code action data for %s names nothing to compute", data.URI)
 }
 
-func (s *Server) handleExecuteCommand(ctx context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
-	exec, err := lsp.DecodeParams[lsp.ExecuteCommandParams](params)
-	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing workspace/executeCommand params: %v", err)
-	}
+func (s *Server) handleExecuteCommand(ctx context.Context, docs *docstore.View, exec lsp.ExecuteCommandParams) (any, error) {
 	var edit lsp.WorkspaceEdit
 	switch exec.Command {
 	case commandFixAll:
@@ -300,7 +288,7 @@ func (s *Server) handleExecuteCommand(ctx context.Context, docs *docstore.View, 
 		}
 		snap, err := s.snapshot(docs, uri)
 		if err != nil {
-			return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
+			return nil, err
 		}
 		edits := actions.FixAll(s.lintActionDiagnostics(snap))
 		if len(edits) == 0 {

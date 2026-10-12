@@ -2,17 +2,12 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 )
 
-func (s *Server) handleDidOpen(_ context.Context, params json.RawMessage) error {
-	openParams, err := lsp.DecodeParams[lsp.DidOpenTextDocumentParams](params)
-	if err != nil {
-		return err
-	}
+func (s *Server) handleDidOpen(_ context.Context, openParams lsp.DidOpenTextDocumentParams) error {
 	item := openParams.TextDocument
 	s.docs.Open(item)
 	s.logger.Debug("document opened", "uri", item.URI, "version", item.Version)
@@ -25,11 +20,7 @@ func (s *Server) handleDidOpen(_ context.Context, params json.RawMessage) error 
 	return nil
 }
 
-func (s *Server) handleDidChange(_ context.Context, params json.RawMessage) error {
-	changeParams, err := lsp.DecodeParams[lsp.DidChangeTextDocumentParams](params)
-	if err != nil {
-		return err
-	}
+func (s *Server) handleDidChange(_ context.Context, changeParams lsp.DidChangeTextDocumentParams) error {
 	uri := changeParams.TextDocument.URI
 	if err := s.docs.Change(uri, changeParams.TextDocument.Version, changeParams.ContentChanges); err != nil {
 		s.logger.Warn("didChange rejected", "err", err)
@@ -39,11 +30,7 @@ func (s *Server) handleDidChange(_ context.Context, params json.RawMessage) erro
 	return nil
 }
 
-func (s *Server) handleDidClose(_ context.Context, params json.RawMessage) error {
-	closeParams, err := lsp.DecodeParams[lsp.DidCloseTextDocumentParams](params)
-	if err != nil {
-		return err
-	}
+func (s *Server) handleDidClose(_ context.Context, closeParams lsp.DidCloseTextDocumentParams) error {
 	uri := closeParams.TextDocument.URI
 	s.docs.Close(uri)
 	s.snapshots.forget(uri)

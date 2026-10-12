@@ -179,7 +179,7 @@ func TestInvalidInitializationOptionsFailInitialize(t *testing.T) {
 	t.Parallel()
 
 	srv := New(jsonrpc.NewConn(nil, nil), "test", CurrentProcess())
-	_, err := srv.handleInitialize(t.Context(), nil, json.RawMessage(`{"initializationOptions": {"dialect": "fish"}}`))
+	_, err := srv.requests["initialize"](t.Context(), nil, json.RawMessage(`{"initializationOptions": {"dialect": "fish"}}`))
 	rpcErr, ok := errors.AsType[*jsonrpc.Error](err)
 	if !ok || rpcErr.Code != jsonrpc.CodeInvalidParams || !strings.Contains(rpcErr.Message, "fish") {
 		t.Errorf("error = %v, want InvalidParams naming the bad dialect", err)
@@ -197,6 +197,18 @@ func TestInvalidConfigurationKeepsSettings(t *testing.T) {
 	settings, _ := srv.currentSettings()
 	if settings.Dialect == nil || settings.Dialect.String() != "zsh" {
 		t.Errorf("settings changed by invalid configuration: %+v", settings)
+	}
+}
+
+func TestMalformedParamsNameTheMethod(t *testing.T) {
+	t.Parallel()
+
+	c, _ := startClient(t, `{`+pullCapabilities+`}`)
+	for _, method := range []string{"textDocument/hover", "textDocument/diagnostic", "workspace/executeCommand"} {
+		msg := c.call(method, `[1]`)
+		if msg.Error == nil || msg.Error.Code != jsonrpc.CodeInvalidParams || !strings.Contains(msg.Error.Message, "parsing "+method+" params") {
+			t.Errorf("%s with an array for params: error = %+v, want InvalidParams naming the method", method, msg.Error)
+		}
 	}
 }
 

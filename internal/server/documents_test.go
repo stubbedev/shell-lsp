@@ -42,7 +42,7 @@ func TestInitializeNegotiatesEncodingAndSync(t *testing.T) {
 	t.Parallel()
 
 	srv := New(jsonrpc.NewConn(nil, nil), "test", CurrentProcess())
-	result, err := srv.handleInitialize(t.Context(), nil, json.RawMessage(`{"capabilities": {"general": {"positionEncodings": ["utf-32", "utf-16"]}, "textDocument": {"diagnostic": {}}}}`))
+	result, err := srv.requests["initialize"](t.Context(), nil, json.RawMessage(`{"capabilities": {"general": {"positionEncodings": ["utf-32", "utf-16"]}, "textDocument": {"diagnostic": {}}}}`))
 	if err != nil {
 		t.Fatalf("handleInitialize() error = %v", err)
 	}
@@ -57,12 +57,12 @@ func TestStaleChangeIsIgnored(t *testing.T) {
 
 	srv := New(jsonrpc.NewConn(nil, nil), "test", CurrentProcess())
 	openParams := json.RawMessage(`{"textDocument": {"uri": "file:///t.sh", "languageId": "shellscript", "version": 3, "text": "one"}}`)
-	if err := srv.handleDidOpen(t.Context(), openParams); err != nil {
+	if err := srv.notifications["textDocument/didOpen"](t.Context(), openParams); err != nil {
 		t.Fatalf("didOpen: %v", err)
 	}
 	stale := json.RawMessage(`{"textDocument": {"uri": "file:///t.sh", "version": 3},
 		"contentChanges": [{"text": "rewritten"}]}`)
-	if err := srv.handleDidChange(t.Context(), stale); err != nil {
+	if err := srv.notifications["textDocument/didChange"](t.Context(), stale); err != nil {
 		t.Fatalf("didChange: %v", err)
 	}
 	doc, ok := srv.docs.View().Document("file:///t.sh")

@@ -47,11 +47,7 @@ func settingsForPath(global config.Settings, folders map[string]config.Settings,
 	return settings
 }
 
-func (s *Server) handleDidChangeConfiguration(ctx context.Context, params json.RawMessage) error {
-	changeParams, err := lsp.DecodeParams[lsp.DidChangeConfigurationParams](params)
-	if err != nil {
-		return err
-	}
+func (s *Server) handleDidChangeConfiguration(ctx context.Context, changeParams lsp.DidChangeConfigurationParams) error {
 	settings, found, err := config.ParseSection(changeParams.Settings)
 	if err != nil {
 		s.rejectConfiguration(err)
@@ -154,11 +150,7 @@ func isNull(raw json.RawMessage) bool {
 	return trimmed == "" || trimmed == "null"
 }
 
-func (s *Server) handleDidChangeWorkspaceFolders(ctx context.Context, params json.RawMessage) error {
-	change, err := lsp.DecodeParams[lsp.DidChangeWorkspaceFoldersParams](params)
-	if err != nil {
-		return err
-	}
+func (s *Server) handleDidChangeWorkspaceFolders(ctx context.Context, change lsp.DidChangeWorkspaceFoldersParams) error {
 	roots := s.workspace.Roots()
 	for _, folder := range change.Event.Removed {
 		if path, err := fileuri.ToPath(folder.URI); err == nil {

@@ -107,36 +107,50 @@ type DiagnosticOptions struct {
 }
 
 type ServerCapabilities struct {
-	PositionEncoding                string                  `json:"positionEncoding,omitempty"`
-	TextDocumentSync                TextDocumentSyncOptions `json:"textDocumentSync"`
-	DiagnosticProvider              DiagnosticOptions       `json:"diagnosticProvider"`
-	HoverProvider                   bool                    `json:"hoverProvider"`
-	CompletionProvider              CompletionOptions       `json:"completionProvider"`
-	DefinitionProvider              bool                    `json:"definitionProvider"`
-	DeclarationProvider             bool                    `json:"declarationProvider"`
-	TypeDefinitionProvider          bool                    `json:"typeDefinitionProvider"`
-	ImplementationProvider          bool                    `json:"implementationProvider"`
-	DocumentSymbolProvider          bool                    `json:"documentSymbolProvider"`
-	FoldingRangeProvider            bool                    `json:"foldingRangeProvider"`
-	WorkspaceSymbolProvider         bool                    `json:"workspaceSymbolProvider"`
-	DocumentFormattingProvider      bool                    `json:"documentFormattingProvider"`
-	DocumentRangeFormattingProvider RangeFormattingOptions  `json:"documentRangeFormattingProvider"`
-	CodeActionProvider              CodeActionOptions       `json:"codeActionProvider"`
-	ExecuteCommandProvider          ExecuteCommandOptions   `json:"executeCommandProvider"`
-	ReferencesProvider              bool                    `json:"referencesProvider"`
-	DocumentHighlightProvider       bool                    `json:"documentHighlightProvider"`
-	RenameProvider                  RenameOptions           `json:"renameProvider"`
-	SemanticTokensProvider          SemanticTokensOptions   `json:"semanticTokensProvider"`
-	SelectionRangeProvider          bool                    `json:"selectionRangeProvider"`
-	SignatureHelpProvider           SignatureHelpOptions    `json:"signatureHelpProvider"`
-	InlayHintProvider               InlayHintOptions        `json:"inlayHintProvider"`
-	DocumentLinkProvider            DocumentLinkOptions     `json:"documentLinkProvider"`
-	CodeLensProvider                CodeLensOptions         `json:"codeLensProvider"`
-	CallHierarchyProvider           bool                    `json:"callHierarchyProvider"`
-	InlineValueProvider             bool                    `json:"inlineValueProvider"`
-	MonikerProvider                 bool                    `json:"monikerProvider"`
-	LinkedEditingRangeProvider      bool                    `json:"linkedEditingRangeProvider"`
-	Workspace                       WorkspaceCapabilities   `json:"workspace"`
+	PositionEncoding                string                   `json:"positionEncoding,omitempty"`
+	TextDocumentSync                *TextDocumentSyncOptions `json:"textDocumentSync,omitempty"`
+	DiagnosticProvider              *DiagnosticOptions       `json:"diagnosticProvider,omitempty"`
+	HoverProvider                   bool                     `json:"hoverProvider"`
+	CompletionProvider              *CompletionOptions       `json:"completionProvider,omitempty"`
+	DefinitionProvider              bool                     `json:"definitionProvider"`
+	DeclarationProvider             bool                     `json:"declarationProvider"`
+	TypeDefinitionProvider          bool                     `json:"typeDefinitionProvider"`
+	ImplementationProvider          bool                     `json:"implementationProvider"`
+	DocumentSymbolProvider          bool                     `json:"documentSymbolProvider"`
+	FoldingRangeProvider            bool                     `json:"foldingRangeProvider"`
+	WorkspaceSymbolProvider         bool                     `json:"workspaceSymbolProvider"`
+	DocumentFormattingProvider      bool                     `json:"documentFormattingProvider"`
+	DocumentRangeFormattingProvider *RangeFormattingOptions  `json:"documentRangeFormattingProvider,omitempty"`
+	CodeActionProvider              *CodeActionOptions       `json:"codeActionProvider,omitempty"`
+	ExecuteCommandProvider          *ExecuteCommandOptions   `json:"executeCommandProvider,omitempty"`
+	ReferencesProvider              bool                     `json:"referencesProvider"`
+	DocumentHighlightProvider       bool                     `json:"documentHighlightProvider"`
+	RenameProvider                  *RenameOptions           `json:"renameProvider,omitempty"`
+	SemanticTokensProvider          *SemanticTokensOptions   `json:"semanticTokensProvider,omitempty"`
+	SelectionRangeProvider          bool                     `json:"selectionRangeProvider"`
+	SignatureHelpProvider           *SignatureHelpOptions    `json:"signatureHelpProvider,omitempty"`
+	InlayHintProvider               *InlayHintOptions        `json:"inlayHintProvider,omitempty"`
+	DocumentLinkProvider            *DocumentLinkOptions     `json:"documentLinkProvider,omitempty"`
+	CodeLensProvider                *CodeLensOptions         `json:"codeLensProvider,omitempty"`
+	CallHierarchyProvider           bool                     `json:"callHierarchyProvider"`
+	InlineValueProvider             bool                     `json:"inlineValueProvider"`
+	MonikerProvider                 bool                     `json:"monikerProvider"`
+	LinkedEditingRangeProvider      bool                     `json:"linkedEditingRangeProvider"`
+	Workspace                       *WorkspaceCapabilities   `json:"workspace,omitempty"`
+}
+
+const incrementalSync = 2
+
+var (
+	completionTriggers   = []string{"$", "{", "/", "-", ":", "@", "[", "%", "=", ","}
+	signatureHelpOptions = SignatureHelpOptions{TriggerCharacters: []string{" "}, RetriggerCharacters: []string{" "}}
+)
+
+func ensure[T any](field **T) *T {
+	if *field == nil {
+		*field = new(T)
+	}
+	return *field
 }
 
 type RenameOptions struct {
@@ -166,11 +180,7 @@ type InitializeResult struct {
 	ServerInfo   ServerInfo         `json:"serverInfo"`
 }
 
-func (s *Server) handleInitialize(_ context.Context, _ *docstore.View, params json.RawMessage) (any, error) {
-	initParams, err := lsp.DecodeParams[InitializeParams](params)
-	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing initialize params: %v", err)
-	}
+func (s *Server) handleInitialize(_ context.Context, _ *docstore.View, initParams InitializeParams) (any, error) {
 	settings, err := config.Parse(initParams.InitializationOptions)
 	if err != nil {
 		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "initializationOptions: %v", err)
@@ -190,40 +200,11 @@ func (s *Server) handleInitialize(_ context.Context, _ *docstore.View, params js
 	s.client = caps
 	s.initialized = true
 	s.mu.Unlock()
+	advertised := s.capabilities
+	advertised.PositionEncoding = enc.String()
 	return InitializeResult{
-		Capabilities: ServerCapabilities{
-			PositionEncoding:                enc.String(),
-			TextDocumentSync:                TextDocumentSyncOptions{OpenClose: true, Change: 2},
-			DiagnosticProvider:              DiagnosticOptions{InterFileDependencies: true, WorkspaceDiagnostics: true},
-			HoverProvider:                   true,
-			CompletionProvider:              CompletionOptions{TriggerCharacters: []string{"$", "{", "/", "-", ":", "@", "[", "%", "=", ","}, ResolveProvider: true},
-			DefinitionProvider:              true,
-			DeclarationProvider:             true,
-			TypeDefinitionProvider:          true,
-			ImplementationProvider:          true,
-			DocumentSymbolProvider:          true,
-			FoldingRangeProvider:            true,
-			WorkspaceSymbolProvider:         true,
-			DocumentFormattingProvider:      true,
-			DocumentRangeFormattingProvider: RangeFormattingOptions{RangesSupport: true},
-			CodeActionProvider:              CodeActionOptions{CodeActionKinds: actions.Kinds(), ResolveProvider: true},
-			ExecuteCommandProvider:          ExecuteCommandOptions{Commands: serverCommands},
-			ReferencesProvider:              true,
-			DocumentHighlightProvider:       true,
-			RenameProvider:                  RenameOptions{PrepareProvider: true},
-			SemanticTokensProvider:          semanticTokensOptions,
-			SelectionRangeProvider:          true,
-			SignatureHelpProvider:           SignatureHelpOptions{TriggerCharacters: []string{" "}, RetriggerCharacters: []string{" "}},
-			InlayHintProvider:               InlayHintOptions{ResolveProvider: true},
-			DocumentLinkProvider:            DocumentLinkOptions{},
-			CodeLensProvider:                CodeLensOptions{ResolveProvider: true},
-			CallHierarchyProvider:           true,
-			InlineValueProvider:             true,
-			MonikerProvider:                 true,
-			LinkedEditingRangeProvider:      true,
-			Workspace:                       workspaceCapabilities,
-		},
-		ServerInfo: ServerInfo{Name: "shell-lsp", Version: s.version},
+		Capabilities: advertised,
+		ServerInfo:   ServerInfo{Name: "shell-lsp", Version: s.version},
 	}, nil
 }
 
@@ -243,7 +224,7 @@ func (s *Server) handleInitialized(ctx context.Context, _ json.RawMessage) error
 	return nil
 }
 
-func (s *Server) handleShutdown(_ context.Context, _ *docstore.View, _ json.RawMessage) (any, error) {
+func (s *Server) handleShutdown(context.Context, *docstore.View, json.RawMessage) (any, error) {
 	s.mu.Lock()
 	s.shutdown = true
 	s.mu.Unlock()
@@ -253,11 +234,7 @@ func (s *Server) handleShutdown(_ context.Context, _ *docstore.View, _ json.RawM
 	return nil, nil
 }
 
-func (s *Server) handleCancelRequest(_ context.Context, params json.RawMessage) error {
-	var cancelParams CancelParams
-	if err := json.Unmarshal(params, &cancelParams); err != nil {
-		return err
-	}
+func (s *Server) handleCancelRequest(_ context.Context, cancelParams CancelParams) error {
 	if found, ok := s.cancels.LoadAndDelete(string(cancelParams.ID)); ok {
 		if cancel, ok := found.(context.CancelFunc); ok {
 			cancel()
@@ -266,11 +243,7 @@ func (s *Server) handleCancelRequest(_ context.Context, params json.RawMessage) 
 	return nil
 }
 
-func (s *Server) handleSetTrace(_ context.Context, params json.RawMessage) error {
-	var traceParams SetTraceParams
-	if err := json.Unmarshal(params, &traceParams); err != nil {
-		return err
-	}
+func (s *Server) handleSetTrace(_ context.Context, traceParams SetTraceParams) error {
 	s.setTrace(traceParams.Value)
 	return nil
 }

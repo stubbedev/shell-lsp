@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"slices"
 
 	"github.com/stubbedev/shell-lsp/internal/docstore"
@@ -13,27 +12,15 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 )
 
-func (s *Server) handleFormatting(_ context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
-	formatParams, err := lsp.DecodeParams[lsp.DocumentFormattingParams](params)
-	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing textDocument/formatting params: %v", err)
-	}
+func (s *Server) handleFormatting(_ context.Context, docs *docstore.View, formatParams lsp.DocumentFormattingParams) (any, error) {
 	return s.format(docs, formatParams.TextDocument.URI, formatParams.Options, nil)
 }
 
-func (s *Server) handleRangeFormatting(_ context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
-	formatParams, err := lsp.DecodeParams[lsp.DocumentRangeFormattingParams](params)
-	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing textDocument/rangeFormatting params: %v", err)
-	}
+func (s *Server) handleRangeFormatting(_ context.Context, docs *docstore.View, formatParams lsp.DocumentRangeFormattingParams) (any, error) {
 	return s.format(docs, formatParams.TextDocument.URI, formatParams.Options, []lsp.Range{formatParams.Range})
 }
 
-func (s *Server) handleRangesFormatting(_ context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
-	formatParams, err := lsp.DecodeParams[lsp.DocumentRangesFormattingParams](params)
-	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing textDocument/rangesFormatting params: %v", err)
-	}
+func (s *Server) handleRangesFormatting(_ context.Context, docs *docstore.View, formatParams lsp.DocumentRangesFormattingParams) (any, error) {
 	if len(formatParams.Ranges) == 0 {
 		return []lsp.TextEdit{}, nil
 	}
@@ -43,7 +30,7 @@ func (s *Server) handleRangesFormatting(_ context.Context, docs *docstore.View, 
 func (s *Server) format(docs *docstore.View, uri string, opts lsp.FormattingOptions, within []lsp.Range) ([]lsp.TextEdit, error) {
 	snap, err := s.snapshot(docs, uri)
 	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
+		return nil, err
 	}
 	if !snap.settings.Format.Enabled {
 		return nil, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "formatting is disabled by shellLsp.format.enable")

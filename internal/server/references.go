@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 
 	"github.com/stubbedev/shell-lsp/internal/docstore"
@@ -13,28 +12,12 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
-func (s *Server) positionFile(docs *docstore.View, params lsp.TextDocumentPositionParams) (*workspace.File, int, bool, error) {
-	file, err := s.workspaceFile(docs, params.TextDocument.URI)
-	if err != nil {
-		return nil, 0, false, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
-	}
-	offset, inside := file.Doc.Locate(params.Position, docs.Encoding())
-	return file, offset, inside, nil
-}
-
-func (s *Server) handleReferences(ctx context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
-	refParams, err := lsp.DecodeParams[lsp.ReferenceParams](params)
-	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing textDocument/references params: %v", err)
-	}
-	file, offset, inside, err := s.positionFile(docs, refParams.TextDocumentPositionParams)
-	if err != nil {
+func (s *Server) handleReferences(ctx context.Context, docs *docstore.View, refParams lsp.ReferenceParams) (any, error) {
+	here, inside, err := s.at(docs, refParams.TextDocumentPositionParams)
+	if err != nil || !inside {
 		return nil, err
 	}
-	if !inside {
-		return nil, nil
-	}
-	occs, err := navigation.References(ctx, file, offset, s.navigationEnv(), s.candidateFiles(docs), refParams.Context.IncludeDeclaration)
+	occs, err := navigation.References(ctx, here.File, here.offset, s.navigationEnv(), s.candidateFiles(docs), refParams.Context.IncludeDeclaration)
 	if err != nil {
 		return nil, err
 	}
@@ -45,69 +28,48 @@ func (s *Server) handleReferences(ctx context.Context, docs *docstore.View, para
 	return out, nil
 }
 
-func (s *Server) handleDocumentHighlight(ctx context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
-	position, err := lsp.DecodeParams[lsp.TextDocumentPositionParams](params)
-	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing textDocument/documentHighlight params: %v", err)
-	}
-	file, offset, inside, err := s.positionFile(docs, position)
-	if err != nil {
+func (s *Server) handleDocumentHighlight(ctx context.Context, docs *docstore.View, position lsp.TextDocumentPositionParams) (any, error) {
+	here, inside, err := s.at(docs, position)
+	if err != nil || !inside {
 		return nil, err
 	}
-	if !inside {
-		return nil, nil
-	}
-	sym, ok := navigation.SymbolAt(file, offset)
+	sym, ok := navigation.SymbolAt(here.File, here.offset)
 	if !ok {
 		return []lsp.DocumentHighlight{}, nil
 	}
-	occs := navigation.Occurrences(sym, []*workspace.File{file})
+	occs := navigation.Occurrences(sym, []*workspace.File{here.File})
 	out := make([]lsp.DocumentHighlight, len(occs))
 	for i, o := range occs {
 		kind := lsp.HighlightRead
 		if o.Write {
 			kind = lsp.HighlightWrite
 		}
-		out[i] = lsp.DocumentHighlight{Range: file.Doc.RangeFor(o.Span.Start, o.Span.End, docs.Encoding()), Kind: kind}
+		out[i] = lsp.DocumentHighlight{Range: here.Doc.RangeFor(o.Span.Start, o.Span.End, docs.Encoding()), Kind: kind}
 	}
 	return out, nil
 }
 
-func (s *Server) handlePrepareRename(ctx context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
-	position, err := lsp.DecodeParams[lsp.TextDocumentPositionParams](params)
-	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing textDocument/prepareRename params: %v", err)
-	}
-	file, offset, inside, err := s.positionFile(docs, position)
-	if err != nil {
+func (s *Server) handlePrepareRename(ctx context.Context, docs *docstore.View, position lsp.TextDocumentPositionParams) (any, error) {
+	here, inside, err := s.at(docs, position)
+	if err != nil || !inside {
 		return nil, err
 	}
-	if !inside {
-		return nil, nil
-	}
-	sym, _, err := navigation.PrepareRename(ctx, file, offset, s.navigationEnv(), s.candidateFiles(docs))
+	sym, _, err := navigation.PrepareRename(ctx, here.File, here.offset, s.navigationEnv(), s.candidateFiles(docs))
 	if errors.Is(err, navigation.ErrNoSymbol) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, renameError(err)
 	}
-	return lsp.PrepareRenameResult{Range: file.Doc.RangeFor(sym.Span.Start, sym.Span.End, docs.Encoding()), Placeholder: sym.Name}, nil
+	return lsp.PrepareRenameResult{Range: here.Doc.RangeFor(sym.Span.Start, sym.Span.End, docs.Encoding()), Placeholder: sym.Name}, nil
 }
 
-func (s *Server) handleRename(ctx context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
-	renameParams, err := lsp.DecodeParams[lsp.RenameParams](params)
-	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing textDocument/rename params: %v", err)
-	}
-	file, offset, inside, err := s.positionFile(docs, renameParams.TextDocumentPositionParams)
-	if err != nil {
+func (s *Server) handleRename(ctx context.Context, docs *docstore.View, renameParams lsp.RenameParams) (any, error) {
+	here, inside, err := s.at(docs, renameParams.TextDocumentPositionParams)
+	if err != nil || !inside {
 		return nil, err
 	}
-	if !inside {
-		return nil, nil
-	}
-	occs, err := navigation.Rename(ctx, file, offset, renameParams.NewName, s.navigationEnv(), s.candidateFiles(docs))
+	occs, err := navigation.Rename(ctx, here.File, here.offset, renameParams.NewName, s.navigationEnv(), s.candidateFiles(docs))
 	if err != nil {
 		return nil, renameError(err)
 	}

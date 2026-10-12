@@ -67,14 +67,10 @@ type setDialectParams struct {
 	Dialect      *string                    `json:"dialect"`
 }
 
-func (s *Server) handleDocumentDialect(_ context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
-	p, err := lsp.DecodeParams[documentDialectParams](params)
-	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing %s params: %v", documentDialectMethod, err)
-	}
+func (s *Server) handleDocumentDialect(_ context.Context, docs *docstore.View, p documentDialectParams) (any, error) {
 	snap, err := s.snapshot(docs, p.TextDocument.URI)
 	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
+		return nil, err
 	}
 	d := snap.detection
 	answer := documentDialect{detected: detectedDialect{
@@ -90,11 +86,7 @@ func (s *Server) handleDocumentDialect(_ context.Context, docs *docstore.View, p
 	return answer, nil
 }
 
-func (s *Server) handleSetDialect(_ context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
-	p, err := lsp.DecodeParams[setDialectParams](params)
-	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing %s params: %v", setDialectMethod, err)
-	}
+func (s *Server) handleSetDialect(_ context.Context, docs *docstore.View, p setDialectParams) (any, error) {
 	var shell *dialect.Dialect
 	if p.Dialect != nil {
 		d, ok := dialect.FromName(*p.Dialect)
@@ -105,7 +97,7 @@ func (s *Server) handleSetDialect(_ context.Context, docs *docstore.View, params
 	}
 	snap, err := s.snapshot(docs, p.TextDocument.URI)
 	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
+		return nil, err
 	}
 	if snap.Doc.Projected() {
 		return nil, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "%s: the shell of %s is %s, so a directive cannot choose it", setDialectMethod, p.TextDocument.URI, snap.detection.Describe())

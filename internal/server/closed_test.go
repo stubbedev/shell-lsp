@@ -22,13 +22,13 @@ func TestCachesDropWorkFinishingAfterClose(t *testing.T) {
 	srv := New(jsonrpc.NewConn(nil, nil), "test", CurrentProcess())
 	srv.docs.Open(lsp.TextDocumentItem{URI: uri, LanguageID: "shellscript", Version: 1, Text: "echo hi\n"})
 	stale := srv.docs.View()
-	if err := srv.handleDidClose(t.Context(), json.RawMessage(`{"textDocument": {"uri": "`+uri+`"}}`)); err != nil {
+	if err := srv.notifications["textDocument/didClose"](t.Context(), json.RawMessage(`{"textDocument": {"uri": "`+uri+`"}}`)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := srv.snapshot(stale, uri); err != nil {
 		t.Fatalf("snapshot of a view taken before close: %v", err)
 	}
-	if _, err := srv.handleSemanticTokensFull(t.Context(), stale, json.RawMessage(`{"textDocument": {"uri": "`+uri+`"}}`)); err != nil {
+	if _, err := srv.requests["textDocument/semanticTokens/full"](t.Context(), stale, json.RawMessage(`{"textDocument": {"uri": "`+uri+`"}}`)); err != nil {
 		t.Fatalf("semantic tokens of a view taken before close: %v", err)
 	}
 	sizes := srv.cacheSizes()

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -231,8 +232,8 @@ func TestInvalidInitializeParams(t *testing.T) {
 
 	client := readerFor(&output)
 	msg := readResponse(t, client)
-	if msg.Error == nil || msg.Error.Code != jsonrpc.CodeInvalidParams {
-		t.Errorf("error = %+v, want invalid params", msg.Error)
+	if msg.Error == nil || msg.Error.Code != jsonrpc.CodeInvalidParams || !strings.Contains(msg.Error.Message, "parsing initialize params") {
+		t.Errorf("error = %+v, want invalid params naming initialize", msg.Error)
 	}
 	if retry := readResponse(t, client); retry.Error != nil {
 		t.Errorf("initialize after a failed initialize = %+v, want success", retry.Error)

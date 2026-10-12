@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"path"
 	"path/filepath"
 	"slices"
@@ -43,29 +42,29 @@ type fileOperationRegistration struct {
 }
 
 type fileOperationsCapability struct {
-	DidCreate  fileOperationRegistration `json:"didCreate"`
-	WillRename fileOperationRegistration `json:"willRename"`
-	DidRename  fileOperationRegistration `json:"didRename"`
-	DidDelete  fileOperationRegistration `json:"didDelete"`
+	DidCreate  *fileOperationRegistration `json:"didCreate,omitempty"`
+	WillRename *fileOperationRegistration `json:"willRename,omitempty"`
+	DidRename  *fileOperationRegistration `json:"didRename,omitempty"`
+	DidDelete  *fileOperationRegistration `json:"didDelete,omitempty"`
 }
 
 type WorkspaceCapabilities struct {
-	WorkspaceFolders workspaceFoldersCapability `json:"workspaceFolders"`
-	FileOperations   fileOperationsCapability   `json:"fileOperations"`
+	WorkspaceFolders *workspaceFoldersCapability `json:"workspaceFolders,omitempty"`
+	FileOperations   *fileOperationsCapability   `json:"fileOperations,omitempty"`
 }
 
-var workspaceCapabilities = func() WorkspaceCapabilities {
+var watchedFileOperations = func() fileOperationRegistration {
 	var filters []fileOperationFilter
 	for _, glob := range workspace.WatchGlobs() {
 		filters = append(filters, fileOperationFilter{Pattern: fileOperationPattern{Glob: glob, Matches: "file"}})
 	}
 	filters = append(filters, fileOperationFilter{Pattern: fileOperationPattern{Glob: "**/*", Matches: "folder"}})
-	registration := fileOperationRegistration{Filters: filters}
-	return WorkspaceCapabilities{
-		WorkspaceFolders: workspaceFoldersCapability{Supported: true, ChangeNotifications: true},
-		FileOperations:   fileOperationsCapability{DidCreate: registration, WillRename: registration, DidRename: registration, DidDelete: registration},
-	}
+	return fileOperationRegistration{Filters: filters}
 }()
+
+func fileOperations(c *ServerCapabilities) *fileOperationsCapability {
+	return ensure(&ensure(&c.Workspace).FileOperations)
+}
 
 type fileWatcher struct {
 	GlobPattern string `json:"globPattern"`
@@ -105,18 +104,12 @@ func (s *Server) registerWatchers(ctx context.Context) {
 	s.workspace.SetWatched(true)
 }
 
-func (s *Server) handleFilesChanged(_ context.Context, params json.RawMessage) error {
-	if _, err := lsp.DecodeParams[lsp.FileOperationsParams](params); err != nil {
-		return err
-	}
+func (s *Server) handleFilesChanged(_ context.Context, _ lsp.FileOperationsParams) error {
 	s.workspace.InvalidateAll()
 	return nil
 }
 
-func (s *Server) handleDidRenameFiles(_ context.Context, params json.RawMessage) error {
-	if _, err := lsp.DecodeParams[lsp.RenameFilesParams](params); err != nil {
-		return err
-	}
+func (s *Server) handleDidRenameFiles(_ context.Context, _ lsp.RenameFilesParams) error {
 	s.workspace.InvalidateAll()
 	return nil
 }
@@ -133,11 +126,7 @@ func (m move) apply(path string) (string, bool) {
 	return filepath.Join(m.to, rel), true
 }
 
-func (s *Server) handleWillRenameFiles(ctx context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
-	p, err := lsp.DecodeParams[lsp.RenameFilesParams](params)
-	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing workspace/willRenameFiles params: %v", err)
-	}
+func (s *Server) handleWillRenameFiles(ctx context.Context, docs *docstore.View, p lsp.RenameFilesParams) (any, error) {
 	var moves []move
 	for _, f := range p.Files {
 		from, errFrom := fileuri.ToPath(f.OldURI)

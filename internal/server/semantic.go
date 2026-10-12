@@ -2,14 +2,12 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"slices"
 	"strconv"
 	"sync"
 	"sync/atomic"
 
 	"github.com/stubbedev/shell-lsp/internal/docstore"
-	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/semantic"
@@ -29,13 +27,13 @@ type semanticFull struct {
 type SemanticTokensOptions struct {
 	Legend semanticLegend `json:"legend"`
 	Range  bool           `json:"range"`
-	Full   semanticFull   `json:"full"`
+	Full   *semanticFull  `json:"full,omitempty"`
 }
 
-var semanticTokensOptions = SemanticTokensOptions{
-	Legend: semanticLegend{TokenTypes: semantic.TypeNames[:], TokenModifiers: semantic.ModifierNames},
-	Range:  true,
-	Full:   semanticFull{Delta: true},
+func semanticTokens(c *ServerCapabilities) *SemanticTokensOptions {
+	options := ensure(&c.SemanticTokensProvider)
+	options.Legend = semanticLegend{TokenTypes: semantic.TypeNames[:], TokenModifiers: semantic.ModifierNames}
+	return options
 }
 
 type semanticCache struct {
@@ -94,38 +92,22 @@ func encodeTokens(snap *snapshot, tokens []semantic.Token, within *parser.Span) 
 	return data
 }
 
-func (s *Server) semanticSnapshot(docs *docstore.View, uri string) (*snapshot, error) {
-	snap, err := s.snapshot(docs, uri)
-	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
-	}
-	return snap, nil
-}
-
 func (s *Server) semanticTokens(snap *snapshot) []semantic.Token {
 	return workspace.Memo(snap.File, "semantic.tokens", s.workspace.Generation(), func() []semantic.Token {
 		return semantic.Tokens(snap.Tree, s.imports(snap.File), embeddedPrograms(snap.File))
 	})
 }
 
-func (s *Server) handleSemanticTokensFull(_ context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
-	p, err := lsp.DecodeParams[lsp.SemanticTokensParams](params)
-	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing semantic tokens params: %v", err)
-	}
-	snap, err := s.semanticSnapshot(docs, p.TextDocument.URI)
+func (s *Server) handleSemanticTokensFull(_ context.Context, docs *docstore.View, p lsp.SemanticTokensParams) (any, error) {
+	snap, err := s.snapshot(docs, p.TextDocument.URI)
 	if err != nil {
 		return nil, err
 	}
 	return s.semantic.remember(p.TextDocument.URI, encodeTokens(snap, s.semanticTokens(snap), nil)), nil
 }
 
-func (s *Server) handleSemanticTokensDelta(_ context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
-	p, err := lsp.DecodeParams[lsp.SemanticTokensDeltaParams](params)
-	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing semantic tokens delta params: %v", err)
-	}
-	snap, err := s.semanticSnapshot(docs, p.TextDocument.URI)
+func (s *Server) handleSemanticTokensDelta(_ context.Context, docs *docstore.View, p lsp.SemanticTokensDeltaParams) (any, error) {
+	snap, err := s.snapshot(docs, p.TextDocument.URI)
 	if err != nil {
 		return nil, err
 	}
@@ -157,12 +139,8 @@ func tokenEdits(before, after []uint32) []lsp.SemanticTokensEdit {
 	}}
 }
 
-func (s *Server) handleSemanticTokensRange(_ context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
-	p, err := lsp.DecodeParams[lsp.SemanticTokensRangeParams](params)
-	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing semantic tokens range params: %v", err)
-	}
-	snap, err := s.semanticSnapshot(docs, p.TextDocument.URI)
+func (s *Server) handleSemanticTokensRange(_ context.Context, docs *docstore.View, p lsp.SemanticTokensRangeParams) (any, error) {
+	snap, err := s.snapshot(docs, p.TextDocument.URI)
 	if err != nil {
 		return nil, err
 	}
@@ -173,12 +151,8 @@ func (s *Server) handleSemanticTokensRange(_ context.Context, docs *docstore.Vie
 	return lsp.SemanticTokens{Data: encodeTokens(snap, s.semanticTokens(snap), &within)}, nil
 }
 
-func (s *Server) handleSelectionRange(_ context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
-	p, err := lsp.DecodeParams[lsp.SelectionRangeParams](params)
-	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing textDocument/selectionRange params: %v", err)
-	}
-	snap, err := s.semanticSnapshot(docs, p.TextDocument.URI)
+func (s *Server) handleSelectionRange(_ context.Context, docs *docstore.View, p lsp.SelectionRangeParams) (any, error) {
+	snap, err := s.snapshot(docs, p.TextDocument.URI)
 	if err != nil {
 		return nil, err
 	}

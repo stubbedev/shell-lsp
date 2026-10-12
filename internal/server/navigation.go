@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"path/filepath"
 	"slices"
 
@@ -10,7 +9,6 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/editorconfig"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
-	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/navigation"
 	"github.com/stubbedev/shell-lsp/internal/parser"
@@ -55,21 +53,13 @@ func (s *Server) navigationEnv() navigation.Env {
 	}
 }
 
-func (s *Server) navigationHandler(mode navigation.Mode) requestHandler {
-	return func(ctx context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
-		position, err := lsp.DecodeParams[lsp.TextDocumentPositionParams](params)
-		if err != nil {
-			return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing position params: %v", err)
+func navigationHandler(mode navigation.Mode) func(*Server, context.Context, *docstore.View, lsp.TextDocumentPositionParams) (any, error) {
+	return func(s *Server, ctx context.Context, docs *docstore.View, p lsp.TextDocumentPositionParams) (any, error) {
+		here, inside, err := s.at(docs, p)
+		if err != nil || !inside {
+			return nil, err
 		}
-		file, err := s.workspaceFile(docs, position.TextDocument.URI)
-		if err != nil {
-			return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
-		}
-		offset, inside := file.Doc.Locate(position.Position, docs.Encoding())
-		if !inside {
-			return nil, nil
-		}
-		locations, err := navigation.Definition(ctx, file, offset, s.navigationEnv(), s.candidateFiles(docs), mode)
+		locations, err := navigation.Definition(ctx, here.File, here.offset, s.navigationEnv(), s.candidateFiles(docs), mode)
 		if err != nil {
 			return nil, err
 		}
@@ -85,11 +75,7 @@ func toLocations(locations []navigation.Location, enc docstore.Encoding) []lsp.L
 	return out
 }
 
-func (s *Server) handleDidChangeWatchedFiles(ctx context.Context, params json.RawMessage) error {
-	watched, err := lsp.DecodeParams[lsp.DidChangeWatchedFilesParams](params)
-	if err != nil {
-		return err
-	}
+func (s *Server) handleDidChangeWatchedFiles(ctx context.Context, watched lsp.DidChangeWatchedFilesParams) error {
 	projectChanged := false
 	for _, change := range watched.Changes {
 		path, err := fileuri.ToPath(change.URI)

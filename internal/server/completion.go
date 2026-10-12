@@ -155,26 +155,21 @@ func followedInfo(dir string, entry fs.DirEntry) (fs.FileInfo, error) {
 	return entry.Info()
 }
 
-func (s *Server) handleCompletion(ctx context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
-	completionParams, err := lsp.DecodeParams[lsp.CompletionParams](params)
+func (s *Server) handleCompletion(ctx context.Context, docs *docstore.View, completionParams lsp.CompletionParams) (any, error) {
+	here, inside, err := s.at(docs, completionParams.TextDocumentPositionParams)
 	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing textDocument/completion params: %v", err)
+		return nil, err
 	}
-	snap, err := s.snapshot(docs, completionParams.TextDocument.URI)
-	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
-	}
-	offset, inside := snap.Doc.Locate(completionParams.Position, snap.encoding)
 	if !inside {
 		return lsp.CompletionList{Items: []lsp.CompletionItem{}}, nil
 	}
 	caps := s.clientCapabilities().TextDocument.Completion.CompletionItem
 	result, err := completion.Complete(ctx, completion.Input{
-		Tree:      snap.Tree,
-		Imports:   s.imports(snap.File),
-		Offset:    offset,
-		ScriptDir: scriptDir(snap.Doc.URI),
-		Snippets:  caps.SnippetSupport && !snap.Doc.Projected(),
+		Tree:      here.Tree,
+		Imports:   s.imports(here.File),
+		Offset:    here.offset,
+		ScriptDir: scriptDir(here.Doc.URI),
+		Snippets:  caps.SnippetSupport && !here.Doc.Projected(),
 		Trigger:   completionTrigger(completionParams.Context),
 		Env:       s.environment,
 	})
@@ -183,7 +178,7 @@ func (s *Server) handleCompletion(ctx context.Context, docs *docstore.View, para
 	}
 	items := make([]lsp.CompletionItem, 0, len(result.Items))
 	for _, it := range result.Items {
-		item, ok, err := completionItem(snap, caps, it)
+		item, ok, err := completionItem(here.snapshot, caps, it)
 		if err != nil {
 			return nil, err
 		}
@@ -253,11 +248,7 @@ func completionItem(snap *snapshot, caps CompletionItemCapabilities, it completi
 	return item, true, nil
 }
 
-func (s *Server) handleCompletionResolve(ctx context.Context, docs *docstore.View, params json.RawMessage) (any, error) {
-	item, err := lsp.DecodeParams[lsp.CompletionItem](params)
-	if err != nil {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "parsing completionItem/resolve params: %v", err)
-	}
+func (s *Server) handleCompletionResolve(ctx context.Context, docs *docstore.View, item lsp.CompletionItem) (any, error) {
 	if len(item.Data) == 0 {
 		return item, nil
 	}
