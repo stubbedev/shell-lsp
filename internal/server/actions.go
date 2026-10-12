@@ -192,7 +192,7 @@ func (s *Server) settingsFileFor(path string) (actions.SettingsFile, bool) {
 	if !ok {
 		return actions.SettingsFile{}, false
 	}
-	rc, found, err := s.shellcheckrc.Nearest(filepath.Dir(path))
+	rc, found, err := s.nearestShellcheckrc(path)
 	if err != nil {
 		return actions.SettingsFile{}, false
 	}

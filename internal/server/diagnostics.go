@@ -59,10 +59,17 @@ func (s *Server) lintReport(file *workspace.File, settings config.Settings, gene
 	return report, stamp
 }
 
-func (s *Server) shellcheckrcFor(path string) shellcheckrc.File {
-	rc, _, err := s.shellcheckrc.Nearest(filepath.Dir(path))
+func (s *Server) nearestShellcheckrc(path string) (shellcheckrc.File, bool, error) {
+	rc, found, err := s.shellcheckrc.Nearest(filepath.Dir(path))
 	if err != nil {
 		s.noticeOnce("shellcheckrc:"+err.Error(), lsp.MessageWarning, "Ignoring the .shellcheckrc that applies to "+path+": "+err.Error())
+	}
+	return rc, found, err
+}
+
+func (s *Server) shellcheckrcFor(path string) shellcheckrc.File {
+	rc, _, err := s.nearestShellcheckrc(path)
+	if err != nil {
 		return shellcheckrc.File{}
 	}
 	return rc

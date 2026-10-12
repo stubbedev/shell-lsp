@@ -1,39 +1,21 @@
 package shellcheckrc
 
 import (
-	"errors"
-	"fmt"
-	"io/fs"
 	"path/filepath"
 	"slices"
-	"sync"
 	"time"
+
+	"github.com/stubbedev/shell-lsp/internal/filecache"
 )
 
-const minSweep = 256
-
-type ReadFile func(path string) ([]byte, error)
-
 type Resolver struct {
-	read     ReadFile
-	now      func() time.Time
-	recheck  time.Duration
+	files    *filecache.Cache[File]
 	fallback []string
-
-	mu      sync.Mutex
-	files   map[string]cachedFile
-	sweepAt int
 }
 
-type cachedFile struct {
-	file    File
-	present bool
-	err     error
-	checked time.Time
-}
-
-func NewResolver(read ReadFile, now func() time.Time, recheck time.Duration, fallback []string) *Resolver {
-	return &Resolver{read: read, now: now, recheck: recheck, fallback: fallback, files: map[string]cachedFile{}, sweepAt: minSweep}
+func NewResolver(read filecache.ReadFile, now func() time.Time, recheck time.Duration, fallback []string) *Resolver {
+	parse := func(path string, data []byte) (File, error) { return Parse(path, string(data)) }
+	return &Resolver{files: filecache.New(read, parse, now, recheck), fallback: fallback}
 }
 
 func Fallback(home, configHome string) []string {
@@ -76,43 +58,9 @@ func (r *Resolver) Nearest(dir string) (File, bool, error) {
 }
 
 func (r *Resolver) Load(path string) (File, bool, error) {
-	now := r.now()
-	r.mu.Lock()
-	cached, ok := r.files[path]
-	r.mu.Unlock()
-	if ok && now.Sub(cached.checked) < r.recheck {
-		return cached.file, cached.present, cached.err
-	}
-	entry := cachedFile{checked: now}
-	data, err := r.read(path)
-	switch {
-	case errors.Is(err, fs.ErrNotExist):
-	case err != nil:
-		entry.err = fmt.Errorf("reading %s: %w", path, err)
-	default:
-		entry.file, entry.err = Parse(path, string(data))
-		entry.present = entry.err == nil
-	}
-	r.mu.Lock()
-	r.files[path] = entry
-	if len(r.files) >= r.sweepAt {
-		r.sweepLocked(now)
-	}
-	r.mu.Unlock()
-	return entry.file, entry.present, entry.err
+	return r.files.Load(path)
 }
 
 func (r *Resolver) Invalidate(path string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	delete(r.files, path)
-}
-
-func (r *Resolver) sweepLocked(now time.Time) {
-	for path, cached := range r.files {
-		if now.Sub(cached.checked) >= r.recheck {
-			delete(r.files, path)
-		}
-	}
-	r.sweepAt = max(minSweep, 2*len(r.files))
+	r.files.Invalidate(path)
 }

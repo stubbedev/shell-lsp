@@ -2,12 +2,14 @@ package editorconfig
 
 import (
 	"errors"
-	"fmt"
 	"io/fs"
 	"maps"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/stubbedev/shell-lsp/internal/filecache"
 )
 
 func TestPatterns(t *testing.T) {
@@ -66,7 +68,7 @@ func TestParseRejectsMalformedLines(t *testing.T) {
 
 type disk map[string]string
 
-func (d disk) read(reads *int) ReadFile {
+func (d disk) read(reads *int) filecache.ReadFile {
 	return func(path string) ([]byte, error) {
 		*reads++
 		text, ok := d[path]
@@ -135,27 +137,28 @@ func TestResolverCachesUntilRecheckOrInvalidate(t *testing.T) {
 	}
 }
 
+func TestResolverReadsABrokenFileOncePerRecheck(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join("/repo", FileName)
+	files := disk{path: "root = true\n[*]\nindent_size 2\n"}
+	reads := 0
+	r := NewResolver(files.read(&reads), time.Now, time.Hour)
+	for range 3 {
+		if _, err := r.Properties("/repo/a.sh", nil); err == nil || !strings.Contains(err.Error(), path) {
+			t.Fatalf("error = %v, want one naming %s", err, path)
+		}
+	}
+	if reads != 1 {
+		t.Errorf("a broken %s was read %d times within the recheck window", FileName, reads)
+	}
+}
+
 func TestResolverReportsUnreadableFiles(t *testing.T) {
 	t.Parallel()
 
 	r := NewResolver(func(string) ([]byte, error) { return nil, fs.ErrPermission }, time.Now, time.Second)
 	if _, err := r.Properties("/repo/a.sh", nil); !errors.Is(err, fs.ErrPermission) {
 		t.Errorf("error = %v, want the permission failure", err)
-	}
-}
-
-func TestResolverForgetsStaleDirectories(t *testing.T) {
-	t.Parallel()
-
-	now := time.Now()
-	r := NewResolver(func(string) ([]byte, error) { return nil, fs.ErrNotExist }, func() time.Time { return now }, time.Second)
-	for i := range 10 * minSweep {
-		if _, err := r.Properties(fmt.Sprintf("/tmp/session%d/a.sh", i), nil); err != nil {
-			t.Fatal(err)
-		}
-		now = now.Add(time.Second)
-	}
-	if len(r.files) > 2*minSweep {
-		t.Errorf("resolver holds %d entries after visiting directories one recheck interval apart", len(r.files))
 	}
 }

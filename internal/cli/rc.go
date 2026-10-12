@@ -6,6 +6,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/stubbedev/shell-lsp/internal/filecache"
 	"github.com/stubbedev/shell-lsp/internal/shellcheckrc"
 )
 
@@ -14,7 +15,7 @@ type rcFinder struct {
 	resolver *shellcheckrc.Resolver
 }
 
-func newRCFinder(choice rcChoice, read shellcheckrc.ReadFile, home, configHome string) *rcFinder {
+func newRCFinder(choice rcChoice, read filecache.ReadFile, home, configHome string) *rcFinder {
 	never := time.Duration(math.MaxInt64)
 	return &rcFinder{choice: choice, resolver: shellcheckrc.NewResolver(read, time.Now, never, shellcheckrc.Fallback(home, configHome))}
 }
