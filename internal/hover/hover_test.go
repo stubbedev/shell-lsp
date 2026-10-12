@@ -226,6 +226,11 @@ func TestHoverShellVocabulary(t *testing.T) {
 		{d: dialect.Dash, src: "echo $-\n", needle: "$-", want: "- `x`: `xtrace`", span: "$-", wantMissing: "braceexpand"},
 		{d: dialect.Zsh, src: "echo $-\n", needle: "$-", want: "- `F`: `noglob`", span: "$-", wantMissing: "- `h`: `hashall`"},
 		{d: dialect.Zsh, src: "set -F\n", needle: "-F", want: "`noglob`", span: "-F"},
+		{d: dialect.Bash, src: "f() { echo $0 $1; }\n", needle: "$0", want: "Name of the shell or script", span: "$0"},
+		{d: dialect.Bash, src: "f() { echo $0 $1; }\n", needle: "$1", want: "argument 1 of function `f`", span: "$1"},
+		{d: dialect.Zsh, src: "f() { echo $0; }\n", needle: "$0", want: "name of function `f` while it runs", span: "$0"},
+		{d: dialect.Ksh, src: "function g { echo $0; }\n", needle: "$0", want: "name of function `g` while it runs", span: "$0"},
+		{d: dialect.Ksh, src: "f() { echo $0; }\n", needle: "$0", want: "Name of the shell or script", span: "$0"},
 		{d: dialect.Zsh, src: "set -o noglob\n", needle: "noglob", want: "Disable filename generation. (`-F`)", span: "noglob"},
 		{d: dialect.Bash, src: "set -o noglob\n", needle: "noglob", want: "Disable filename generation. (`-f`)", span: "noglob"},
 	}

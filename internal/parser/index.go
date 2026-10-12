@@ -31,6 +31,18 @@ type Function struct {
 	Decl      *syntax.FuncDecl
 }
 
+func (f Function) NamesArgZero(d dialect.Dialect) bool {
+	switch d {
+	case dialect.Zsh:
+		return true
+	case dialect.Ksh:
+		return f.Decl != nil && f.Decl.RsrvWord
+	case dialect.Bash, dialect.Posix, dialect.Dash, dialect.Busybox:
+		return false
+	}
+	panic(fmt.Sprintf("parser: unknown dialect %d", d))
+}
+
 type DefinitionKind uint8
 
 const (

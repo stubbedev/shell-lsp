@@ -116,17 +116,16 @@ func (h hoverer) paramExp() (Result, bool) {
 }
 
 func (h hoverer) parameter(name string) string {
-	if parser.IsDigits(name) {
-		if fn, ok := h.Tree.FunctionOfBody(h.scope); ok {
-			return fmt.Sprintf("**$%s**: argument %s of function `%s`", name, name, fn.Name)
-		}
-		if name == "0" {
-			entry, _ := shelldocs.Parameter(name)
-			return "**$0**: " + entry.Doc
-		}
+	kind, _ := parser.ParamKindOf(name)
+	fn, inFunction := h.Tree.FunctionOfBody(h.scope)
+	switch {
+	case kind == parser.ParamZero && inFunction && fn.NamesArgZero(h.dialect):
+		return fmt.Sprintf("**$0**: name of function `%s` while it runs", fn.Name)
+	case kind == parser.ParamPositional && inFunction:
+		return fmt.Sprintf("**$%s**: argument %s of function `%s`", name, name, fn.Name)
+	case kind == parser.ParamPositional:
 		return fmt.Sprintf("**$%s**: positional parameter %s of the script", name, name)
-	}
-	if name == "-" {
+	case name == "-":
 		return h.optionFlagsDoc()
 	}
 	if entry, ok := shelldocs.Parameter(name); ok {
