@@ -256,7 +256,7 @@ func (s *Server) runBats(ctx context.Context, docs *docstore.View, args batsRunA
 	if !report.OK() {
 		kind = lsp.MessageError
 	}
-	s.notify("window/showMessage", lsp.ShowMessageParams{Type: kind, Message: label + ": " + outcome})
+	s.notify(showMessageMethod, lsp.ShowMessageParams{Type: kind, Message: label + ": " + outcome})
 	return batsRunResult{Tally: report.Tally(), Summary: outcome}, nil
 }
 

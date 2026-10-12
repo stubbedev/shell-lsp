@@ -12,8 +12,6 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/platform"
 )
 
-const configurationMethod = "workspace/configuration"
-
 type configurationItem struct {
 	ScopeURI string `json:"scopeUri,omitempty"`
 	Section  string `json:"section"`
@@ -68,7 +66,7 @@ func (s *Server) handleDidChangeConfiguration(ctx context.Context, params json.R
 }
 
 func (s *Server) rejectConfiguration(err error) {
-	s.notify("window/showMessage", lsp.ShowMessageParams{
+	s.notify(showMessageMethod, lsp.ShowMessageParams{
 		Type:    lsp.MessageError,
 		Message: "Ignoring invalid configuration, keeping previous settings: " + err.Error(),
 	})
@@ -86,9 +84,9 @@ func (s *Server) applySettings(ctx context.Context, update func()) {
 		method    string
 		supported bool
 	}{
-		{"workspace/semanticTokens/refresh", caps.SemanticTokens.RefreshSupport},
-		{"workspace/inlayHint/refresh", caps.InlayHint.RefreshSupport},
-		{"workspace/codeLens/refresh", caps.CodeLens.RefreshSupport},
+		{semanticTokensRefreshMethod, caps.SemanticTokens.RefreshSupport},
+		{inlayHintRefreshMethod, caps.InlayHint.RefreshSupport},
+		{codeLensRefreshMethod, caps.CodeLens.RefreshSupport},
 	} {
 		if refresh.supported {
 			s.requestRefresh(ctx, refresh.method)
@@ -197,5 +195,5 @@ func (s *Server) refreshDiagnosticsOf(ctx context.Context, clientRefresh bool, u
 	if !clientRefresh {
 		return
 	}
-	s.requestRefresh(ctx, "workspace/diagnostic/refresh")
+	s.requestRefresh(ctx, diagnosticRefreshMethod)
 }

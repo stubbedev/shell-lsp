@@ -1,5 +1,22 @@
 package server
 
+const (
+	configurationMethod         = "workspace/configuration"
+	applyEditMethod             = "workspace/applyEdit"
+	registerCapabilityMethod    = "client/registerCapability"
+	progressCreateMethod        = "window/workDoneProgress/create"
+	codeLensRefreshMethod       = "workspace/codeLens/refresh"
+	semanticTokensRefreshMethod = "workspace/semanticTokens/refresh"
+	inlayHintRefreshMethod      = "workspace/inlayHint/refresh"
+	diagnosticRefreshMethod     = "workspace/diagnostic/refresh"
+	showMessageMethod           = "window/showMessage"
+	logMessageMethod            = "window/logMessage"
+	publishDiagnosticsMethod    = "textDocument/publishDiagnostics"
+	progressMethod              = "$/progress"
+	logTraceMethod              = "$/logTrace"
+	didChangeWatchedFilesMethod = "workspace/didChangeWatchedFiles"
+)
+
 type direction uint8
 
 const (
@@ -114,31 +131,31 @@ var methods = []method{
 	{"notebookDocument/didClose", clientNotification, notAdvertised, "notebookDocumentSync", "no shell notebook format"},
 	{"workspace/didChangeWorkspaceFolders", clientNotification, supported, "workspace.workspaceFolders.changeNotifications", ""},
 	{"workspace/didChangeConfiguration", clientNotification, supported, "", ""},
-	{"workspace/didChangeWatchedFiles", clientNotification, supported, "", "watchers are registered dynamically"},
+	{didChangeWatchedFilesMethod, clientNotification, supported, "", "watchers are registered dynamically"},
 	{"workspace/didCreateFiles", clientNotification, supported, "workspace.fileOperations.didCreate", ""},
 	{"workspace/didRenameFiles", clientNotification, supported, "workspace.fileOperations.didRename", ""},
 	{"workspace/didDeleteFiles", clientNotification, supported, "workspace.fileOperations.didDelete", ""},
 
-	{"window/workDoneProgress/create", serverRequest, sent, "", "workspace indexing and Bats run progress"},
+	{progressCreateMethod, serverRequest, sent, "", "workspace indexing and Bats run progress"},
 	{"window/showMessageRequest", serverRequest, notSent, "", "the server never needs a decision from the user"},
 	{"window/showDocument", serverRequest, notSent, "", ""},
-	{"client/registerCapability", serverRequest, sent, "", "file watchers"},
+	{registerCapabilityMethod, serverRequest, sent, "", "file watchers"},
 	{"client/unregisterCapability", serverRequest, notSent, "", "registrations live for the whole session"},
 	{"workspace/workspaceFolders", serverRequest, notSent, "", "folders come from initialize and change notifications"},
 	{configurationMethod, serverRequest, sent, "", ""},
-	{"workspace/applyEdit", serverRequest, sent, "", ""},
-	{"workspace/codeLens/refresh", serverRequest, sent, "", "after settings change"},
-	{"workspace/semanticTokens/refresh", serverRequest, sent, "", "after settings change"},
-	{"workspace/inlayHint/refresh", serverRequest, sent, "", "after settings change"},
+	{applyEditMethod, serverRequest, sent, "", ""},
+	{codeLensRefreshMethod, serverRequest, sent, "", "after settings change"},
+	{semanticTokensRefreshMethod, serverRequest, sent, "", "after settings change"},
+	{inlayHintRefreshMethod, serverRequest, sent, "", "after settings change"},
 	{"workspace/inlineValue/refresh", serverRequest, notSent, "", "inline values are computed per request"},
-	{"workspace/diagnostic/refresh", serverRequest, sent, "", "after settings change and after a Bats run"},
+	{diagnosticRefreshMethod, serverRequest, sent, "", "after settings change and after a Bats run"},
 	{"workspace/foldingRange/refresh", serverRequest, notSent, "", "folding depends only on the document"},
 	{"workspace/textDocumentContent/refresh", serverRequest, notSent, "", "the server owns no virtual documents"},
 
-	{"window/showMessage", serverNotification, sent, "", "rejected configuration and Bats run summaries"},
-	{"window/logMessage", serverNotification, sent, "", "one-time notices such as a failed file watcher registration"},
+	{showMessageMethod, serverNotification, sent, "", "rejected configuration and Bats run summaries"},
+	{logMessageMethod, serverNotification, sent, "", "one-time notices such as a failed file watcher registration"},
 	{"telemetry/event", serverNotification, notSent, "", "the server collects no telemetry"},
-	{"textDocument/publishDiagnostics", serverNotification, sent, "", "only for clients without pull diagnostics"},
-	{"$/progress", serverNotification, sent, "", ""},
-	{"$/logTrace", serverNotification, sent, "", "when $/setTrace enables tracing"},
+	{publishDiagnosticsMethod, serverNotification, sent, "", "only for clients without pull diagnostics"},
+	{progressMethod, serverNotification, sent, "", ""},
+	{logTraceMethod, serverNotification, sent, "", "when $/setTrace enables tracing"},
 }

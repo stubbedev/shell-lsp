@@ -34,7 +34,7 @@ type Progress struct {
 
 func (s *Server) StartProgress(ctx context.Context, title string) (*Progress, error) {
 	token := "shell-lsp/progress-" + strconv.FormatInt(s.nextID.Add(1), 10)
-	if err := s.call(ctx, "window/workDoneProgress/create", progressCreateParams{Token: token}, nil); err != nil {
+	if err := s.call(ctx, progressCreateMethod, progressCreateParams{Token: token}, nil); err != nil {
 		return nil, err
 	}
 	pctx, cancel := context.WithCancel(ctx)
@@ -56,7 +56,7 @@ func (p *Progress) End(message string) error {
 }
 
 func (p *Progress) notify(value progressValue) error {
-	return p.server.conn.Notify("$/progress", progressParams{Token: p.token, Value: value})
+	return p.server.conn.Notify(progressMethod, progressParams{Token: p.token, Value: value})
 }
 
 type workDone struct {
@@ -126,5 +126,5 @@ func (s *Server) traceIncoming(kind, method string, id, params json.RawMessage) 
 	if trace == TraceVerbose && len(params) > 0 {
 		entry.Verbose = "Params: " + string(params)
 	}
-	s.notify("$/logTrace", entry)
+	s.notify(logTraceMethod, entry)
 }

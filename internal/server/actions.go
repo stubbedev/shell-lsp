@@ -334,7 +334,7 @@ func (s *Server) handleExecuteCommand(ctx context.Context, docs *docstore.View, 
 
 func (s *Server) applyEdit(ctx context.Context, label string, edit lsp.WorkspaceEdit) error {
 	var result lsp.ApplyWorkspaceEditResult
-	if err := s.call(ctx, "workspace/applyEdit", lsp.ApplyWorkspaceEditParams{Label: label, Edit: edit}, &result); err != nil {
+	if err := s.call(ctx, applyEditMethod, lsp.ApplyWorkspaceEditParams{Label: label, Edit: edit}, &result); err != nil {
 		return err
 	}
 	if !result.Applied {

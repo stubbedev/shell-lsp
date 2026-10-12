@@ -179,7 +179,7 @@ func (s *Server) publish(uri string, report diagnosticReport) {
 	if current, ok := s.docs.View().Document(uri); !ok || current.Version != report.version {
 		return
 	}
-	s.notify("textDocument/publishDiagnostics", lsp.PublishDiagnosticsParams{
+	s.notify(publishDiagnosticsMethod, lsp.PublishDiagnosticsParams{
 		URI:         uri,
 		Version:     &report.version,
 		Diagnostics: report.items,
@@ -191,7 +191,7 @@ func (s *Server) noticeOnce(key string, kind lsp.MessageType, message string) {
 		return
 	}
 	s.logger.Warn("client notice", "message", message)
-	s.notify("window/logMessage", lsp.LogMessageParams{Type: kind, Message: message})
+	s.notify(logMessageMethod, lsp.LogMessageParams{Type: kind, Message: message})
 }
 
 func (s *Server) notify(method string, params any) {

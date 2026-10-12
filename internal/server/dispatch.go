@@ -174,7 +174,7 @@ func (s *Server) registerHandlers() {
 		"textDocument/didChange":              s.handleDidChange,
 		"textDocument/didClose":               s.handleDidClose,
 		"workspace/didChangeConfiguration":    s.handleDidChangeConfiguration,
-		"workspace/didChangeWatchedFiles":     s.handleDidChangeWatchedFiles,
+		didChangeWatchedFilesMethod:           s.handleDidChangeWatchedFiles,
 		"workspace/didChangeWorkspaceFolders": s.handleDidChangeWorkspaceFolders,
 		"workspace/didRenameFiles":            s.handleDidRenameFiles,
 		"workspace/didCreateFiles":            s.handleFilesChanged,

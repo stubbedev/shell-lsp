@@ -50,7 +50,7 @@ func (s *Server) handleDidClose(_ context.Context, params json.RawMessage) error
 	s.semantic.forget(uri)
 	if s.push != nil {
 		s.push.cancel(uri)
-		s.notify("textDocument/publishDiagnostics", lsp.PublishDiagnosticsParams{URI: uri, Diagnostics: []lsp.Diagnostic{}})
+		s.notify(publishDiagnosticsMethod, lsp.PublishDiagnosticsParams{URI: uri, Diagnostics: []lsp.Diagnostic{}})
 	}
 	return nil
 }
