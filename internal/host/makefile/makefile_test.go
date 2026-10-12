@@ -144,8 +144,8 @@ func TestProjectPositions(t *testing.T) {
 		if got := m.HostOffset(start + len(tt.proj)); got != hostStart+len(tt.host) {
 			t.Errorf("HostOffset of the end of %q = %d, want %d", tt.proj, got, hostStart+len(tt.host))
 		}
-		if got, ok := m.Offset(hostStart); got != start || !ok {
-			t.Errorf("Offset of %q = %d, %v, want %d, true", tt.host, got, ok, start)
+		if got, ok := m.Offset(hostStart); got != start || ok == (tt.host == "$(CC)") {
+			t.Errorf("Offset of %q = %d, %v, want %d and only make syntax outside", tt.host, got, ok, start)
 		}
 	}
 	for _, outside := range []string{"x:", "@"} {

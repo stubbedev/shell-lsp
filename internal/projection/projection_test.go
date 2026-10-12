@@ -82,7 +82,7 @@ func TestOffset(t *testing.T) {
 		{8, 6, false},
 		{1, 0, false},
 		{9, 6, false},
-		{10, 6, true},
+		{10, 6, false},
 		{11, 8, true},
 		{len(host) - 1, len(m.Text()) - 1, true},
 		{len(host), len(m.Text()), false},

@@ -131,6 +131,9 @@ func TestMakefileRequestsOutsideRecipesFindNothing(t *testing.T) {
 	if hover := c.call("textDocument/hover", at(6, 1)); string(hover.Result) != "null" {
 		t.Errorf("hover on the @ recipe prefix = %s, want null", hover.Result)
 	}
+	if hover := c.call("textDocument/hover", at(4, 13)); string(hover.Result) != "null" {
+		t.Errorf("hover on $(FILES) = %s, want null rather than the shell's $$", hover.Result)
+	}
 }
 
 func TestMakefileCompletionReplacesHostText(t *testing.T) {

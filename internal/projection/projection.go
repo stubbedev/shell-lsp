@@ -166,7 +166,7 @@ func (m *Map) Offset(host int) (int, bool) {
 		if s.kind == verbatim {
 			return s.proj + host - s.host, true
 		}
-		return s.proj, true
+		return s.proj, s.kind == escape
 	}
 	for j := i - 1; j >= 0; j-- {
 		s := m.spans[j]
