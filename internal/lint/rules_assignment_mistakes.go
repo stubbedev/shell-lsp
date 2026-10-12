@@ -47,7 +47,7 @@ func checkAssignmentCommand(p *pass, n syntax.Node) {
 		}
 	}
 	if assign.Value != nil && len(assign.Value.Parts) == 1 {
-		if lit, ok := assign.Value.Parts[0].(*syntax.Lit); ok && posixUtilities[lit.Value] {
+		if lit, ok := assign.Value.Parts[0].(*syntax.Lit); ok && namesUtility(lit.Value) {
 			p.report(2209, span, "To assign the output of "+lit.Value+", use "+assign.Name.Value+"=$("+lit.Value+"); quote it if the string itself is intended.")
 		}
 	}

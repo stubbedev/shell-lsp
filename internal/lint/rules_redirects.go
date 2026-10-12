@@ -39,22 +39,6 @@ var nonReadingCommands = setOf(
 	"readlink", "realpath", "renice", "rm", "rmdir", "set", "sleep", "touch", "trap", "ulimit", "unalias", "uname",
 )
 
-var utilityNames = setOf(
-	":", ".", "admin", "alias", "ar", "asa", "at", "awk", "basename", "batch", "bc", "bg", "break", "c99", "cal", "cat",
-	"cd", "cflow", "chgrp", "chmod", "chown", "cksum", "cmp", "comm", "command", "compress", "continue", "cp", "crontab",
-	"csplit", "ctags", "cut", "cxref", "date", "dd", "delta", "df", "diff", "dirname", "du", "echo", "ed", "env", "eval",
-	"ex", "exec", "exit", "expand", "export", "expr", "false", "fc", "fg", "find", "fold", "fort77", "fuser", "gencat",
-	"get", "getconf", "getopts", "grep", "hash", "head", "iconv", "id", "ipcrm", "ipcs", "jobs", "join", "kill", "lex",
-	"link", "ln", "locale", "localedef", "logger", "logname", "lp", "ls", "m4", "mailx", "make", "man", "mesg", "mkdir",
-	"mkfifo", "more", "mv", "newgrp", "nice", "nl", "nm", "nohup", "od", "paste", "patch", "pathchk", "pax", "pr",
-	"printf", "prs", "qalter", "qdel", "qhold", "qmove", "qmsg", "qrerun", "qrls", "qselect", "qsig", "qstat", "qsub",
-	"read", "readlink", "readonly", "realpath", "renice", "return", "rm", "rmdel", "rmdir", "sact", "sccs", "sed", "set",
-	"sh", "shift", "sleep", "sort", "split", "strings", "strip", "stty", "tabs", "tail", "talk", "tee", "test", "time",
-	"timeout", "times", "touch", "tput", "tr", "trap", "true", "tsort", "tty", "type", "ulimit", "umask", "unalias",
-	"uname", "uncompress", "unexpand", "unget", "uniq", "unlink", "unset", "uucp", "uudecode", "uuencode", "uustat",
-	"uux", "val", "vi", "wait", "wc", "what", "who", "write", "xargs", "yacc", "zcat",
-)
-
 func isFileRedirect(op syntax.RedirOperator) bool {
 	switch op {
 	case syntax.RdrOut, syntax.AppOut, syntax.RdrIn, syntax.RdrInOut, syntax.RdrClob, syntax.AppClob,
@@ -81,7 +65,7 @@ func checkRedirectTargets(p *pass, n syntax.Node) {
 		}
 		span.Start = parser.Offset(r.OpPos)
 		p.report(2210, span, "This writes to or reads from a file named "+lit.Value+"; use -gt and friends to compare numbers, or >&"+lit.Value+" to duplicate a file descriptor.")
-	case utilityNames[lit.Value] && lit.Value != "file":
+	case posixUtilities[lit.Value] && lit.Value != "file":
 		p.reportNode(2238, r.Word, "This redirects to or from a file named "+lit.Value+", which is also a command name; did you mean to pipe to it instead?")
 	}
 }

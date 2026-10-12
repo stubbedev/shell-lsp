@@ -667,7 +667,7 @@ func (p *pass) reportUnassignedRead(r variableSite, f variableFacts) {
 	}
 	message := r.name + " is read but never assigned in this script."
 	switch {
-	case posixUtilities[r.name]:
+	case namesUtility(r.name):
 		message += " To run the " + r.name + " command, use $(" + r.name + ")."
 	case found:
 		message += " Did you mean " + similar + "?"

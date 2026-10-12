@@ -21,3 +21,13 @@ ls > inventory.txt
 ### the word file is excluded
 ls > file
 >>> none
+
+### redirect to a file named ps
+ps aux > ps
+>>> SC2094 1:1
+>>> SC2094 1:10
+>>> SC2238 1:10
+
+### redirect to a file named true
+echo ok > true
+>>+ SC2238 1:11 -- true is a POSIX utility; shellcheck 0.11's list of common commands leaves it out

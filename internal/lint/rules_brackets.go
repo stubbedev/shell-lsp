@@ -27,6 +27,7 @@ var bracketsFamily = family{
 }
 
 var posixUtilities = setOf(
+	":", ".", "false", "id", "readlink", "realpath", "timeout", "true",
 	"admin", "alias", "ar", "asa", "at", "awk", "basename", "batch", "bc", "bg", "break", "c99", "cal", "cat", "cd",
 	"cflow", "chgrp", "chmod", "chown", "cksum", "cmp", "comm", "command", "compress", "continue", "cp", "crontab",
 	"csplit", "ctags", "cut", "cxref", "date", "dd", "delta", "df", "diff", "dirname", "du", "echo", "ed", "env",
@@ -41,6 +42,10 @@ var posixUtilities = setOf(
 	"uncompress", "unexpand", "unget", "uniq", "unlink", "unset", "uucp", "uudecode", "uuencode", "uustat", "uux",
 	"val", "vi", "wait", "wc", "what", "who", "write", "xargs", "yacc", "zcat",
 )
+
+var valueWords = setOf(":", ".", "true", "false")
+
+func namesUtility(word string) bool { return posixUtilities[word] && !valueWords[word] }
 
 type testWord struct {
 	start, end int
@@ -117,7 +122,7 @@ func (t *bracketTest) skip(n int) {
 
 func (t *bracketTest) commandAsOperand() {
 	first := t.words[0]
-	if name := t.text(first); posixUtilities[name] {
+	if name := t.text(first); namesUtility(name) {
 		t.p.report(1014, parser.Span{Start: first.start, End: first.end}, commandInTestMessage(name))
 	}
 }
@@ -274,7 +279,7 @@ func checkDoubleBracketTest(p *pass, n syntax.Node) {
 		return
 	}
 	if w := leftmostTestWord(tc.X); w != nil {
-		if name, ok := parser.Literal(w); ok && posixUtilities[name] && w.Lit() == name {
+		if name, ok := parser.Literal(w); ok && namesUtility(name) && w.Lit() == name {
 			if span, ok := p.span(w); ok {
 				p.report(1014, span, commandInTestMessage(name))
 			}

@@ -18,3 +18,13 @@ mode=fast ls -l
 ### quoted command name is fine
 PAGER="cat" grep error app.log
 >>> none
+
+### assigning the id command
+user=id
+echo "$user"
+>>+ SC2209 1:1 -- id is a POSIX utility; shellcheck 0.11's list of common commands leaves it out
+
+### a boolean string is a value
+enabled=true
+echo "$enabled"
+>>> none
