@@ -1193,6 +1193,7 @@ func (p *Printer) elemJoin(elems []*ArrayElem, last []Comment) {
 			p.space()
 		}
 		if p.wroteIndex(el.Index) {
+			p.refElems(el.Elems)
 			p.w.WriteByte('=')
 		}
 		switch {

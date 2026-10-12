@@ -186,6 +186,7 @@ func Walk(node Node, f func(Node) bool) {
 			Walk(&c, f)
 		}
 		walkNilable(node.Index, f)
+		walkRefElems(node.Elems, f)
 		walkNilable(node.Value, f)
 		walkNilable(node.Array, f)
 	case *ExtGlob:

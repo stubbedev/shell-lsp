@@ -163,6 +163,7 @@ func Walk(node syntax.Node, f func(syntax.Node) bool) {
 	case *syntax.ArrayElem:
 		trailing = walkLeadingComments(n.Comments, func(c *syntax.Comment) bool { return c.Pos().After(n.Pos()) }, f)
 		walkArithm(n.Index, f)
+		walkRefElems(n.Elems, f)
 		walkWord(n.Value, f)
 		if n.Array != nil {
 			Walk(n.Array, f)

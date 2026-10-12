@@ -305,7 +305,7 @@ type Assign struct {
 	Naked  bool       // without '='
 	Name   *Lit       // must be a valid name
 	Index  ArithmExpr // [i], ["k"]
-	Elems  []RefElem  // [j] and .name in a[i][j].name=x with [LangKsh93]
+	Elems  []RefElem  // [j] and .name in a[i][j].name=x with [LangKsh93], [j] with [LangBash]
 	Value  *Word      // =val
 	Array  *ArrayExpr // =(arr)
 }
@@ -800,7 +800,7 @@ type ParamExp struct {
 	// TODO(v4): rename Index to Subscript, which better matches bash and zsh terminology
 
 	Index ArithmExpr // ${a[i]}, ${a["k"]}, or a ${a[i,j]} slice with [LangZsh]
-	Elems []RefElem  // [j] and .name in ${a[i][j].name} with [LangKsh93], or [j] with [LangZsh]
+	Elems []RefElem  // [j] and .name in ${a[i][j].name} with [LangKsh93], [j] with [LangBash] or [LangZsh]
 
 	// Only one of these is set at a time.
 	// TODO(v4): consider joining these in a single "expansion" field/type,
@@ -849,8 +849,10 @@ func (p *ParamExp) nakedIndex() bool {
 }
 
 // RefElem is a further subscript or member after the first subscript of a
-// ksh93 variable reference, such as [j] or .name in ${a[i][j].name}, or a
-// further subscript of a zsh parameter expansion, such as [j] in ${a[i][j]}.
+// variable reference, such as [j] or .name in ${a[i][j].name} with
+// [LangKsh93], [j] in ${a[i][j]} with [LangBash], which has no
+// multidimensional arrays, or [j] in ${a[i][j]} with [LangZsh], which
+// applies each subscript to the result of the one before.
 // Only one of its fields is set.
 type RefElem struct {
 	Index  ArithmExpr
@@ -1195,6 +1197,7 @@ func (a *ArrayExpr) End() Pos { return posAddCol(a.Rparen, 1) }
 // of Value; for example, x=( (a=1) ) or x=([index]=(a=1)).
 type ArrayElem struct {
 	Index    ArithmExpr
+	Elems    []RefElem // [j] in [i][j]=x with [LangBash] and [LangKsh93]
 	Value    *Word
 	Array    *ArrayExpr
 	Comments []Comment
@@ -1217,7 +1220,7 @@ func (a *ArrayElem) End() Pos {
 	case a.Array != nil:
 		return a.Array.End()
 	}
-	return posAddCol(a.Index.End(), len("]="))
+	return posAddCol(refEnd(a.Index, a.Elems), len("="))
 }
 
 // TODO(v4): the expand package has to stringify ExtGlob again,

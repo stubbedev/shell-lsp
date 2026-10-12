@@ -60,6 +60,7 @@ reproducer so that it can be sent upstream as it is.
 | 0028 | expand tests: `FuzzFormat` fails only on output beyond what the format and its arguments ask for, not on any output over a MiB, and skips formats asking for over 16 MiB | — |
 | 0029 | expand: a backslash inside a `Format` directive (`%1\A00x`) is an invalid format character, as in bash, instead of an escape after which the directive goes on | — |
 | 0030 | syntax: here-documents pending when a subshell starts are read after its first newline, as every shell does, instead of after its closing parenthesis | — |
+| 0031 | syntax: with bash, further subscripts (`a[1][2]=x`, `${a[1][2]}`, `([1][2]=x)`) parse into `Elems`, as with `bash -n`, which rejects or misreads them only when they run; `ArrayElem` gains `Elems`, which ksh93 fills too | — |
 
 ## Tests
 

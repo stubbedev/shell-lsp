@@ -1172,6 +1172,52 @@ var fileTests = []fileTestCase{
 		}), LangKsh93),
 	),
 	fileTest(
+		[]string{"a[1][2]=x"},
+		langFile(&CallExpr{Assigns: []*Assign{{
+			Name:  lit("a"),
+			Index: litWord("1"),
+			Elems: []RefElem{{Index: litWord("2")}},
+			Value: litWord("x"),
+		}}}, langBashLike|LangKsh93),
+	),
+	fileTest(
+		[]string{"typeset a[i][j]+=x"},
+		langFile(&DeclClause{Variant: lit("typeset"), Args: []*Assign{{
+			Append: true,
+			Name:   lit("a"),
+			Index:  litWord("i"),
+			Elems:  []RefElem{{Index: litWord("j")}},
+			Value:  litWord("x"),
+		}}}, langBashLike|LangKsh93),
+	),
+	fileTest(
+		[]string{`echo "${a[1][$j]}" ${#a[1][2]}`},
+		langFile(call(
+			litWord("echo"),
+			word(dblQuoted(&ParamExp{
+				Param: lit("a"),
+				Index: litWord("1"),
+				Elems: []RefElem{{Index: word(&ParamExp{Short: true, Param: lit("j")})}},
+			})),
+			word(&ParamExp{
+				Length: true,
+				Param:  lit("a"),
+				Index:  litWord("1"),
+				Elems:  []RefElem{{Index: litWord("2")}},
+			}),
+		), langBashLike|LangKsh93),
+	),
+	fileTest(
+		[]string{"a=([1][2]=x [3]=y)"},
+		langFile(&CallExpr{Assigns: []*Assign{{
+			Name: lit("a"),
+			Array: &ArrayExpr{Elems: []*ArrayElem{
+				{Index: litWord("1"), Elems: []RefElem{{Index: litWord("2")}}, Value: litWord("x")},
+				{Index: litWord("3"), Value: litWord("y")},
+			}},
+		}}}, langBashLike|LangKsh93),
+	),
+	fileTest(
 		[]string{"x=(a=1 b=(c=2))", "x=(\n\ta=1 b=(c=2)\n)"},
 		printsAs("x=(a=1 b=(c=2))"),
 		langFile(&CallExpr{Assigns: []*Assign{{

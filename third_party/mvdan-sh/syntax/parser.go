@@ -1817,7 +1817,7 @@ zshPrefixLoop:
 			p.pos = p.nextPos()
 			p.rune()
 			pe.Index = p.subscript(pe.Param)
-			pe.Elems = p.zshSubscripts()
+			pe.Elems = p.refElems()
 		}
 		p.quote = old
 		p.next()
@@ -1835,7 +1835,7 @@ zshPrefixLoop:
 		p.pos = p.nextPos()
 		p.rune()
 		pe.Index = p.subscript(pe.Param)
-		pe.Elems = append(p.kshRefElems(), p.zshSubscripts()...)
+		pe.Elems = p.refElems()
 	}
 	tokRune := p.r
 	p.pos = p.nextPos()
@@ -1950,18 +1950,20 @@ zshPrefixLoop:
 	return pe
 }
 
-// kshRefElems parses the further subscripts and members which may follow the
-// first subscript of a variable reference with [LangKsh93], like [j] and
-// .name in a[i][j].name, while lexing rune by rune.
-func (p *Parser) kshRefElems() []RefElem {
+// refElems parses the further subscripts and members which may follow the
+// first subscript of a variable reference, while lexing rune by rune: [j]
+// and .name in a[i][j].name with [LangKsh93], and [j] in a[i][j] with
+// [LangBash], which accepts further subscripts when parsing and rejects or
+// misreads them only when running.
+func (p *Parser) refElems() []RefElem {
 	var elems []RefElem
-	for p.lang.in(LangKsh93) {
-		switch p.r {
-		case '[':
+	for p.lang.in(LangKsh93 | langBashLike | LangZsh) {
+		switch {
+		case p.r == '[':
 			p.pos = p.nextPos()
 			p.rune()
 			elems = append(elems, RefElem{Index: p.eitherIndex()})
-		case '.':
+		case p.r == '.' && p.lang.in(LangKsh93):
 			p.rune()
 			pos := p.nextPos()
 			for p.newLit(p.r); paramNameRune(p.r); p.rune() {
@@ -1979,18 +1981,20 @@ func (p *Parser) kshRefElems() []RefElem {
 	return elems
 }
 
-// zshSubscripts parses the further subscripts which may follow the first
-// subscript of a parameter expansion with [LangZsh], each applying to the
-// result of the one before, like [1] in ${a[2][1]} or [(I)x] in
-// ${a[2,-1][(I)x]}, while lexing rune by rune.
-func (p *Parser) zshSubscripts() []RefElem {
-	var elems []RefElem
-	for p.lang.in(LangZsh) && p.r == '[' {
-		p.pos = p.nextPos()
-		p.rune()
-		elems = append(elems, RefElem{Index: p.eitherIndex()})
+// reference parses the subscript of the array named by name, after its '[',
+// followed by any further subscripts and members, like the [j] in a[i][j]=x
+// or [i][j]=x, and then lexes the next token.
+func (p *Parser) reference(name *Lit) (ArithmExpr, []RefElem) {
+	if !p.lang.in(LangKsh93 | langBashLike) {
+		return p.subscript(name), nil
 	}
-	return elems
+	old := p.quote
+	p.quote = runeByRune
+	index := p.subscript(name)
+	elems := p.refElems()
+	p.quote = old
+	p.next()
+	return index, elems
 }
 
 // kshCountNames reports whether the current token is the "@" or "*" of
@@ -2398,17 +2402,7 @@ func (p *Parser) getAssign(needEqual bool) *Assign {
 		// hasValidIdent already checks p.r is '['
 		p.rune()
 		p.pos = posAddCol(p.pos, 1)
-		if p.lang.in(LangKsh93) {
-			// Lex rune by rune to see any further subscripts or members.
-			old := p.quote
-			p.quote = runeByRune
-			as.Index = p.subscript(as.Name)
-			as.Elems = p.kshRefElems()
-			p.quote = old
-			p.next()
-		} else {
-			as.Index = p.subscript(as.Name)
-		}
+		as.Index, as.Elems = p.reference(as.Name)
 		if p.spaced || p.stopToken() {
 			if needEqual {
 				p.followErr(as.Pos(), "a[b]", assgn)
@@ -2492,7 +2486,7 @@ func (p *Parser) arrayExpr(name *Lit) *ArrayExpr {
 		el.Comments, p.accComs = p.accComs, nil
 		if p.tok == leftBrack {
 			left := p.pos
-			el.Index = p.subscript(name)
+			el.Index, el.Elems = p.reference(name)
 			switch {
 			case p.tok != assgnParen:
 				p.follow(left, `[x]`, assgn)

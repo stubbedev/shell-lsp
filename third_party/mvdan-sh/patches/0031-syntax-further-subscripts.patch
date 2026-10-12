@@ -1,0 +1,269 @@
+syntax: parse further subscripts with bash, and in ksh93 array elements
+
+Bash has no multidimensional arrays, but bash -n accepts every one of
+
+	a[1][2]=x
+	declare a[i][j]=x
+	echo "${a[1][2]}"
+	m=([1][2]=x)
+
+and only running them shows the mistake: the first runs a command named
+a[1][2]=x, declare fails with "not a valid identifier", the expansion
+fails with "bad substitution", and the array element is stored as the
+plain string [1][2]=x. The parser rejected all four, so a script that
+held one lost the rest of its statement, and tools could not point at
+the second subscript as the mistake it is.
+
+With LangBash and LangBats, the further subscripts after the first one
+of an assignment, a parameter expansion or an array element are now
+parsed into the Elems field that LangKsh93 already uses for a[i][j].
+ArrayElem gains that field too, which LangKsh93 also fills now, since
+ksh93 accepts multidimensional elements such as ([1][2]=x).
+
+Reproducer, before this change: `a[1][2]=x` with LangBash failed with
+"`a[b]` must be followed by `=`".
+
+diff --git a/syntax/filetests_test.go b/syntax/filetests_test.go
+index 59a679b..f1f624a 100644
+--- a/syntax/filetests_test.go
++++ b/syntax/filetests_test.go
+@@ -1171,6 +1171,52 @@ var fileTests = []fileTestCase{
+ 			Elems: []RefElem{{Index: litWord("2")}, {Member: lit("b")}},
+ 		}), LangKsh93),
+ 	),
++	fileTest(
++		[]string{"a[1][2]=x"},
++		langFile(&CallExpr{Assigns: []*Assign{{
++			Name:  lit("a"),
++			Index: litWord("1"),
++			Elems: []RefElem{{Index: litWord("2")}},
++			Value: litWord("x"),
++		}}}, langBashLike|LangKsh93),
++	),
++	fileTest(
++		[]string{"typeset a[i][j]+=x"},
++		langFile(&DeclClause{Variant: lit("typeset"), Args: []*Assign{{
++			Append: true,
++			Name:   lit("a"),
++			Index:  litWord("i"),
++			Elems:  []RefElem{{Index: litWord("j")}},
++			Value:  litWord("x"),
++		}}}, langBashLike|LangKsh93),
++	),
++	fileTest(
++		[]string{`echo "${a[1][$j]}" ${#a[1][2]}`},
++		langFile(call(
++			litWord("echo"),
++			word(dblQuoted(&ParamExp{
++				Param: lit("a"),
++				Index: litWord("1"),
++				Elems: []RefElem{{Index: word(&ParamExp{Short: true, Param: lit("j")})}},
++			})),
++			word(&ParamExp{
++				Length: true,
++				Param:  lit("a"),
++				Index:  litWord("1"),
++				Elems:  []RefElem{{Index: litWord("2")}},
++			}),
++		), langBashLike|LangKsh93),
++	),
++	fileTest(
++		[]string{"a=([1][2]=x [3]=y)"},
++		langFile(&CallExpr{Assigns: []*Assign{{
++			Name: lit("a"),
++			Array: &ArrayExpr{Elems: []*ArrayElem{
++				{Index: litWord("1"), Elems: []RefElem{{Index: litWord("2")}}, Value: litWord("x")},
++				{Index: litWord("3"), Value: litWord("y")},
++			}},
++		}}}, langBashLike|LangKsh93),
++	),
+ 	fileTest(
+ 		[]string{"x=(a=1 b=(c=2))", "x=(\n\ta=1 b=(c=2)\n)"},
+ 		printsAs("x=(a=1 b=(c=2))"),
+diff --git a/syntax/nodes.go b/syntax/nodes.go
+index 511239e..d0ad7f5 100644
+--- a/syntax/nodes.go
++++ b/syntax/nodes.go
+@@ -305,7 +305,7 @@ type Assign struct {
+ 	Naked  bool       // without '='
+ 	Name   *Lit       // must be a valid name
+ 	Index  ArithmExpr // [i], ["k"]
+-	Elems  []RefElem  // [j] and .name in a[i][j].name=x with [LangKsh93]
++	Elems  []RefElem  // [j] and .name in a[i][j].name=x with [LangKsh93], [j] with [LangBash]
+ 	Value  *Word      // =val
+ 	Array  *ArrayExpr // =(arr)
+ }
+@@ -800,7 +800,7 @@ type ParamExp struct {
+ 	// TODO(v4): rename Index to Subscript, which better matches bash and zsh terminology
+ 
+ 	Index ArithmExpr // ${a[i]}, ${a["k"]}, or a ${a[i,j]} slice with [LangZsh]
+-	Elems []RefElem  // [j] and .name in ${a[i][j].name} with [LangKsh93], or [j] with [LangZsh]
++	Elems []RefElem  // [j] and .name in ${a[i][j].name} with [LangKsh93], [j] with [LangBash] or [LangZsh]
+ 
+ 	// Only one of these is set at a time.
+ 	// TODO(v4): consider joining these in a single "expansion" field/type,
+@@ -849,8 +849,10 @@ func (p *ParamExp) nakedIndex() bool {
+ }
+ 
+ // RefElem is a further subscript or member after the first subscript of a
+-// ksh93 variable reference, such as [j] or .name in ${a[i][j].name}, or a
+-// further subscript of a zsh parameter expansion, such as [j] in ${a[i][j]}.
++// variable reference, such as [j] or .name in ${a[i][j].name} with
++// [LangKsh93], [j] in ${a[i][j]} with [LangBash], which has no
++// multidimensional arrays, or [j] in ${a[i][j]} with [LangZsh], which
++// applies each subscript to the result of the one before.
+ // Only one of its fields is set.
+ type RefElem struct {
+ 	Index  ArithmExpr
+@@ -1195,6 +1197,7 @@ func (a *ArrayExpr) End() Pos { return posAddCol(a.Rparen, 1) }
+ // of Value; for example, x=( (a=1) ) or x=([index]=(a=1)).
+ type ArrayElem struct {
+ 	Index    ArithmExpr
++	Elems    []RefElem // [j] in [i][j]=x with [LangBash] and [LangKsh93]
+ 	Value    *Word
+ 	Array    *ArrayExpr
+ 	Comments []Comment
+@@ -1217,7 +1220,7 @@ func (a *ArrayElem) End() Pos {
+ 	case a.Array != nil:
+ 		return a.Array.End()
+ 	}
+-	return posAddCol(a.Index.End(), len("]="))
++	return posAddCol(refEnd(a.Index, a.Elems), len("="))
+ }
+ 
+ // TODO(v4): the expand package has to stringify ExtGlob again,
+diff --git a/syntax/parser.go b/syntax/parser.go
+index 6e07adb..8a5cbfe 100644
+--- a/syntax/parser.go
++++ b/syntax/parser.go
+@@ -1817,7 +1817,7 @@ zshPrefixLoop:
+ 			p.pos = p.nextPos()
+ 			p.rune()
+ 			pe.Index = p.subscript(pe.Param)
+-			pe.Elems = p.zshSubscripts()
++			pe.Elems = p.refElems()
+ 		}
+ 		p.quote = old
+ 		p.next()
+@@ -1835,7 +1835,7 @@ zshPrefixLoop:
+ 		p.pos = p.nextPos()
+ 		p.rune()
+ 		pe.Index = p.subscript(pe.Param)
+-		pe.Elems = append(p.kshRefElems(), p.zshSubscripts()...)
++		pe.Elems = p.refElems()
+ 	}
+ 	tokRune := p.r
+ 	p.pos = p.nextPos()
+@@ -1950,18 +1950,20 @@ zshPrefixLoop:
+ 	return pe
+ }
+ 
+-// kshRefElems parses the further subscripts and members which may follow the
+-// first subscript of a variable reference with [LangKsh93], like [j] and
+-// .name in a[i][j].name, while lexing rune by rune.
+-func (p *Parser) kshRefElems() []RefElem {
++// refElems parses the further subscripts and members which may follow the
++// first subscript of a variable reference, while lexing rune by rune: [j]
++// and .name in a[i][j].name with [LangKsh93], and [j] in a[i][j] with
++// [LangBash], which accepts further subscripts when parsing and rejects or
++// misreads them only when running.
++func (p *Parser) refElems() []RefElem {
+ 	var elems []RefElem
+-	for p.lang.in(LangKsh93) {
+-		switch p.r {
+-		case '[':
++	for p.lang.in(LangKsh93 | langBashLike | LangZsh) {
++		switch {
++		case p.r == '[':
+ 			p.pos = p.nextPos()
+ 			p.rune()
+ 			elems = append(elems, RefElem{Index: p.eitherIndex()})
+-		case '.':
++		case p.r == '.' && p.lang.in(LangKsh93):
+ 			p.rune()
+ 			pos := p.nextPos()
+ 			for p.newLit(p.r); paramNameRune(p.r); p.rune() {
+@@ -1979,18 +1981,20 @@ func (p *Parser) kshRefElems() []RefElem {
+ 	return elems
+ }
+ 
+-// zshSubscripts parses the further subscripts which may follow the first
+-// subscript of a parameter expansion with [LangZsh], each applying to the
+-// result of the one before, like [1] in ${a[2][1]} or [(I)x] in
+-// ${a[2,-1][(I)x]}, while lexing rune by rune.
+-func (p *Parser) zshSubscripts() []RefElem {
+-	var elems []RefElem
+-	for p.lang.in(LangZsh) && p.r == '[' {
+-		p.pos = p.nextPos()
+-		p.rune()
+-		elems = append(elems, RefElem{Index: p.eitherIndex()})
++// reference parses the subscript of the array named by name, after its '[',
++// followed by any further subscripts and members, like the [j] in a[i][j]=x
++// or [i][j]=x, and then lexes the next token.
++func (p *Parser) reference(name *Lit) (ArithmExpr, []RefElem) {
++	if !p.lang.in(LangKsh93 | langBashLike) {
++		return p.subscript(name), nil
+ 	}
+-	return elems
++	old := p.quote
++	p.quote = runeByRune
++	index := p.subscript(name)
++	elems := p.refElems()
++	p.quote = old
++	p.next()
++	return index, elems
+ }
+ 
+ // kshCountNames reports whether the current token is the "@" or "*" of
+@@ -2398,17 +2402,7 @@ func (p *Parser) getAssign(needEqual bool) *Assign {
+ 		// hasValidIdent already checks p.r is '['
+ 		p.rune()
+ 		p.pos = posAddCol(p.pos, 1)
+-		if p.lang.in(LangKsh93) {
+-			// Lex rune by rune to see any further subscripts or members.
+-			old := p.quote
+-			p.quote = runeByRune
+-			as.Index = p.subscript(as.Name)
+-			as.Elems = p.kshRefElems()
+-			p.quote = old
+-			p.next()
+-		} else {
+-			as.Index = p.subscript(as.Name)
+-		}
++		as.Index, as.Elems = p.reference(as.Name)
+ 		if p.spaced || p.stopToken() {
+ 			if needEqual {
+ 				p.followErr(as.Pos(), "a[b]", assgn)
+@@ -2492,7 +2486,7 @@ func (p *Parser) arrayExpr(name *Lit) *ArrayExpr {
+ 		el.Comments, p.accComs = p.accComs, nil
+ 		if p.tok == leftBrack {
+ 			left := p.pos
+-			el.Index = p.subscript(name)
++			el.Index, el.Elems = p.reference(name)
+ 			switch {
+ 			case p.tok != assgnParen:
+ 				p.follow(left, `[x]`, assgn)
+diff --git a/syntax/printer.go b/syntax/printer.go
+index 74cf345..76970a4 100644
+--- a/syntax/printer.go
++++ b/syntax/printer.go
+@@ -1193,6 +1193,7 @@ func (p *Printer) elemJoin(elems []*ArrayElem, last []Comment) {
+ 			p.space()
+ 		}
+ 		if p.wroteIndex(el.Index) {
++			p.refElems(el.Elems)
+ 			p.w.WriteByte('=')
+ 		}
+ 		switch {
+diff --git a/syntax/walk.go b/syntax/walk.go
+index ed389b6..7fe6852 100644
+--- a/syntax/walk.go
++++ b/syntax/walk.go
+@@ -186,6 +186,7 @@ func Walk(node Node, f func(Node) bool) {
+ 			Walk(&c, f)
+ 		}
+ 		walkNilable(node.Index, f)
++		walkRefElems(node.Elems, f)
+ 		walkNilable(node.Value, f)
+ 		walkNilable(node.Array, f)
+ 	case *ExtGlob:
