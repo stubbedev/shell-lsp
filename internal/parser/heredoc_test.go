@@ -87,6 +87,8 @@ func TestUnclosableHeredocStopsRecovering(t *testing.T) {
 		{"cat <<EOF `run", dialect.Bash},
 		{"<<EOF (run", dialect.Zsh},
 		{"<<EOF (run", dialect.Ksh},
+		{"<<$\"A", dialect.Zsh},
+		{"<<0(\n", dialect.Bash},
 	} {
 		tree := Parse(tc.src, tc.d)
 		if len(tree.Errors) == 0 {
@@ -101,11 +103,7 @@ func TestUnclosableHeredocStopsRecovering(t *testing.T) {
 			}
 			return true
 		})
-		for _, c := range tree.Commands {
-			if c.Span.End > len(tc.src) {
-				t.Errorf("%s %q: command %q ends at %d, past the text", tc.d, tc.src, c.Name, c.Span.End)
-			}
-		}
+		assertSpansInText(t, tc.d, tc.src, tree)
 	}
 }
 

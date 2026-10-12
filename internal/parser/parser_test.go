@@ -549,29 +549,33 @@ func FuzzParse(f *testing.F) {
 	}
 	f.Fuzz(func(t *testing.T, src string) {
 		for _, d := range allDialects {
-			tree := Parse(src, d)
-			check := func(what string, s Span) {
-				if s.Start < 0 || s.End > len(src) || s.Start > s.End {
-					t.Fatalf("%s: %s span %+v out of bounds for %d bytes", d, what, s, len(src))
-				}
-			}
-			for _, e := range tree.Errors {
-				check("error", e.Span)
-			}
-			for _, def := range tree.Definitions {
-				check("definition", def.NameSpan)
-			}
-			for _, ref := range tree.References {
-				check("reference", ref.Span)
-			}
-			for _, fn := range tree.Functions {
-				check("function", fn.Span)
-			}
-			for _, c := range tree.Commands {
-				check("command", c.Span)
-			}
+			assertSpansInText(t, d, src, Parse(src, d))
 		}
 	})
+}
+
+func assertSpansInText(t testing.TB, d dialect.Dialect, src string, tree *Tree) {
+	t.Helper()
+	check := func(what string, s Span) {
+		if s.Start < 0 || s.End > len(src) || s.Start > s.End {
+			t.Fatalf("%s %q: %s span %+v out of bounds for %d bytes", d, src, what, s, len(src))
+		}
+	}
+	for _, e := range tree.Errors {
+		check("error", e.Span)
+	}
+	for _, def := range tree.Definitions {
+		check("definition", def.NameSpan)
+	}
+	for _, ref := range tree.References {
+		check("reference", ref.Span)
+	}
+	for _, fn := range tree.Functions {
+		check("function", fn.Span)
+	}
+	for _, c := range tree.Commands {
+		check("command", c.Span)
+	}
 }
 
 func TestBuiltinAssignments(t *testing.T) {
