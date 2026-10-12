@@ -130,10 +130,6 @@ func (p *pass) verbatimRegions() []parser.Span {
 	return out
 }
 
-func onlyBlanksBefore(text string, offset int) bool {
-	return strings.TrimLeft(text[textline.Start(text, offset):offset], " \t") == ""
-}
-
 const (
 	batsTest          = "@test"
 	acuteAccent       = '\u00b4'

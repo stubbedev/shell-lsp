@@ -25,7 +25,7 @@ func Next(text string, offset int) int {
 }
 
 func BlankBefore(text string, offset int) bool {
-	return strings.TrimSpace(text[Start(text, offset):offset]) == ""
+	return strings.TrimLeft(text[Start(text, offset):offset], " \t") == ""
 }
 
 func BlankAfter(text string, offset int) bool {

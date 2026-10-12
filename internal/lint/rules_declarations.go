@@ -117,7 +117,7 @@ func (p *pass) separateDeclarationFix(c command, flags options, a *syntax.Assign
 	}
 	declSpan, ok := p.span(c.decl)
 	assignSpan, assignOK := p.span(a)
-	if !ok || !assignOK || !onlyBlanksBefore(p.text, declSpan.Start) {
+	if !ok || !assignOK || !textline.BlankBefore(p.text, declSpan.Start) {
 		return nil
 	}
 	indent := p.text[textline.Start(p.text, declSpan.Start):declSpan.Start]

@@ -82,3 +82,16 @@ func TestCommentBlockStartStopsAtTheShebang(t *testing.T) {
 		}
 	}
 }
+
+func TestBlankMeansWhatTheShellSkips(t *testing.T) {
+	t.Parallel()
+
+	for text, want := range map[string]bool{"\t  x": true, "x": true, "\r x": false, "\f x": false, "a x": false} {
+		if got := BlankBefore(text, len(text)-1); got != want {
+			t.Errorf("BlankBefore(%q) = %t, want %t", text, got, want)
+		}
+	}
+	if !BlankAfter("x \r\n", 1) {
+		t.Error("the carriage return of a CRLF line end is not blank after the code")
+	}
+}
