@@ -34,8 +34,18 @@ func TestOf(t *testing.T) {
 		{"file:///w/x", "nix", Nix, true},
 	} {
 		got, ok := Of(tt.uri, tt.languageID)
-		if got != tt.want || ok != tt.ok {
+		if ok != tt.ok || ok && got != tt.want {
 			t.Errorf("Of(%q, %q) = %v, %v, want %v, %v", tt.uri, tt.languageID, got, ok, tt.want, tt.ok)
+		}
+	}
+}
+
+func TestEveryLanguageIsDefined(t *testing.T) {
+	t.Parallel()
+
+	for _, l := range []Language{Make, Just, Nix} {
+		if d := definitions[l]; d.name == "" || len(d.languageIDs) == 0 || d.project == nil {
+			t.Errorf("language %d is not fully defined: %+v", l, d)
 		}
 	}
 }

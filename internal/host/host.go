@@ -18,78 +18,65 @@ import (
 type Language uint8
 
 const (
-	Make Language = iota + 1
+	Make Language = iota
 	Just
 	Nix
 )
 
-func (l Language) String() string {
-	switch l {
-	case Make:
-		return "Makefile"
-	case Just:
-		return "justfile"
-	case Nix:
-		return "Nix file"
-	}
-	return "unknown"
-}
+func (l Language) String() string { return definitions[l].name }
 
 type definition struct {
-	language    Language
+	name        string
 	languageIDs []string
 	names       []string
 	extensions  []string
 	project     func(text string) (*projection.Map, dialect.Detection)
 }
 
-var definitions = []definition{
-	{
-		language:    Make,
+var definitions = [...]definition{
+	Make: {
+		name:        "Makefile",
 		languageIDs: []string{"makefile", "make"},
 		names:       []string{"Makefile", "makefile", "GNUmakefile"},
 		extensions:  []string{".mk", ".mak"},
 		project:     makefile.Project,
 	},
-	{
-		language:    Just,
+	Just: {
+		name:        "justfile",
 		languageIDs: []string{"just"},
 		names:       []string{"justfile", "Justfile", "JUSTFILE", ".justfile"},
 		extensions:  []string{".just"},
 		project:     justfile.Project,
 	},
-	{
-		language:    Nix,
+	Nix: {
+		name:        "Nix file",
 		languageIDs: []string{"nix"},
 		extensions:  []string{".nix"},
 		project:     nix.Project,
 	},
 }
 
-func (l Language) definition() definition {
-	i := slices.IndexFunc(definitions, func(d definition) bool { return d.language == l })
-	return definitions[i]
+func find(match func(definition) bool) (Language, bool) {
+	for l := range Language(len(definitions)) {
+		if match(definitions[l]) {
+			return l, true
+		}
+	}
+	return 0, false
 }
 
 func Of(uri, languageID string) (Language, bool) {
 	if languageID != "" {
-		i := slices.IndexFunc(definitions, func(d definition) bool { return slices.Contains(d.languageIDs, languageID) })
-		if i < 0 {
-			return 0, false
-		}
-		return definitions[i].language, true
+		return find(func(d definition) bool { return slices.Contains(d.languageIDs, languageID) })
 	}
 	return FromName(uri)
 }
 
 func FromName(name string) (Language, bool) {
 	base := path.Base(strings.ReplaceAll(name, "\\", "/"))
-	for _, d := range definitions {
-		if slices.Contains(d.names, base) || slices.ContainsFunc(d.extensions, func(ext string) bool { return strings.HasSuffix(base, ext) }) {
-			return d.language, true
-		}
-	}
-	return 0, false
+	return find(func(d definition) bool {
+		return slices.Contains(d.names, base) || slices.ContainsFunc(d.extensions, func(ext string) bool { return strings.HasSuffix(base, ext) })
+	})
 }
 
 func Names() []string {
@@ -115,7 +102,7 @@ type Script struct {
 }
 
 func (l Language) Project(doc *docstore.Document) Script {
-	m, detection := l.definition().project(doc.Text())
+	m, detection := definitions[l].project(doc.Text())
 	return Script{Doc: docstore.Project(doc, m), Detection: detection, scripts: m.Scripts()}
 }
 
