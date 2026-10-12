@@ -111,7 +111,8 @@ decides which:
 3. `shell_variant` in `.editorconfig`;
 4. a `# shellcheck shell=` directive in the comment header before the first
    command;
-5. the shebang, also behind `env`, `busybox` and `nix-shell -i`;
+5. the shebang, also behind `env`, `busybox` and `nix-shell -i`, and with
+   the interpreter's version in its name (`bash5`, `zsh-5.9`);
 6. a zsh completion tag (`#compdef`, `#autoload`) on the first line;
 7. the file name (`.bashrc`, `.zshrc`, `.profile` and the other rc files) or
    its extension (`.bash`, `.bats`, `.zsh`, `.dash`, `.sh`, `.ksh`);

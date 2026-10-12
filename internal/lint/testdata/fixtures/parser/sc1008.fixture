@@ -29,43 +29,43 @@ echo "starting"
 #!/usr/local/bin/bashful
 login_shell=/bin/bash
 echo "$login_shell"
->>> none
+>>+ SC1008 1:1 -- bashful only starts like a shell's name, so nothing says which shell runs it; shellcheck 0.11 accepts any such prefix and lints the script as bash
 
 ### interpreter name starting with sh
 #!/usr/bin/shtool
 login_shell=/bin/sh
 echo "$login_shell"
->>> none
+>>+ SC1008 1:1 -- shtool only starts like a shell's name, so nothing says which shell runs it; shellcheck 0.11 accepts any such prefix and lints the script as bash
 
 ### interpreter name starting with dash
 #!/bin/dashboard
 login_shell=/bin/dash
 echo "$login_shell"
->>> none
+>>+ SC1008 1:1 -- dashboard only starts like a shell's name, so nothing says which shell runs it; shellcheck 0.11 accepts any such prefix and lints the script as bash
 
 ### interpreter name starting with ash
 #!/bin/ashen
 login_shell=/bin/ash
 echo "$login_shell"
->>> none
+>>+ SC1008 1:1 -- ashen only starts like a shell's name, so nothing says which shell runs it; shellcheck 0.11 accepts any such prefix and lints the script as bash
 
 ### interpreter name starting with bats
 #!/usr/bin/batsman
 login_shell=/bin/bash
 echo "$login_shell"
->>> none
+>>+ SC1008 1:1 -- batsman only starts like a shell's name, so nothing says which shell runs it; shellcheck 0.11 accepts any such prefix and lints the script as bash
 
 ### interpreter name starting with ksh
 #!/bin/kshell
 login_shell=/bin/ksh
 echo "$login_shell"
->>> none
+>>+ SC1008 1:1 -- kshell only starts like a shell's name, so nothing says which shell runs it; shellcheck 0.11 accepts any such prefix and lints the script as bash
 
 ### interpreter name starting with oksh
 #!/usr/bin/okshell
 login_shell=/bin/oksh
 echo "$login_shell"
->>> none
+>>+ SC1008 1:1 -- okshell only starts like a shell's name, so nothing says which shell runs it; shellcheck 0.11 accepts any such prefix and lints the script as bash
 
 ### busybox running sh
 #!/bin/busybox sh
@@ -77,5 +77,17 @@ echo "$login_shell"
 #!/opt/tools/runner
 # shellcheck disable=SC1008
 login_shell=/bin/sh
+echo "$login_shell"
+>>> none
+
+### shell named with its version
+#!/usr/bin/bash5
+login_shell=/bin/bash
+echo "$login_shell"
+>>> none
+
+### shell named with a dashed version
+#!/usr/local/bin/dash-0.5.12
+login_shell=/bin/dash
 echo "$login_shell"
 >>> none

@@ -396,6 +396,27 @@ func TestNixShellShebangsNameTheirInterpreter(t *testing.T) {
 	}
 }
 
+func TestVersionedInterpretersNameTheirShell(t *testing.T) {
+	t.Parallel()
+
+	for name, want := range map[string]Dialect{
+		"bash": Bash, "bash5": Bash, "bash5.2": Bash, "bash-5.2": Bash, "zsh-5.9": Zsh, "zsh5": Zsh,
+		"dash-0.5.12": Dash, "sh5": Posix, "ksh93": Ksh,
+	} {
+		if got, ok := FromInterpreter(name); !ok || got != want {
+			t.Errorf("FromInterpreter(%q) = %v, %v; want %v", name, got, ok, want)
+		}
+	}
+	for _, name := range []string{"bashful", "shtool", "dashboard", "mksh-R59c", "python3", "5", "bash-", "bash."} {
+		if got, ok := FromInterpreter(name); ok {
+			t.Errorf("FromInterpreter(%q) = %v, want no shell", name, got)
+		}
+	}
+	if d := Detect(nil, Input{URI: "file:///x/run", Text: "#!/usr/bin/zsh-5.9\nprint -r -- ${(U)name}\n"}); d != Zsh {
+		t.Errorf("a script run by zsh-5.9 is detected as %v, want zsh", d)
+	}
+}
+
 func TestShared(t *testing.T) {
 	t.Parallel()
 

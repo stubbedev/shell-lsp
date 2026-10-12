@@ -198,7 +198,7 @@ func decide(override *Detection, in Input) Detection {
 		return Detection{Dialect: d, Source: SourceDirective, Evidence: name}
 	}
 	if name, ok := Interpreter(in.Text); ok {
-		if d, known := FromName(name); known {
+		if d, known := FromInterpreter(name); known {
 			first, _, _ := strings.Cut(in.Text, "\n")
 			return Detection{Dialect: d, Source: SourceShebang, Evidence: strings.TrimSpace(first)}
 		}
@@ -223,7 +223,18 @@ func FromShebang(text string) (Dialect, bool) {
 	if !ok {
 		return 0, false
 	}
-	return FromName(name)
+	return FromInterpreter(name)
+}
+
+func FromInterpreter(name string) (Dialect, bool) {
+	if d, ok := FromName(name); ok {
+		return d, true
+	}
+	unversioned := strings.TrimSuffix(strings.TrimRight(name, "0123456789."), "-")
+	if unversioned == name || !strings.ContainsAny(name[len(unversioned):], "0123456789") {
+		return 0, false
+	}
+	return FromName(unversioned)
 }
 
 func Interpreter(text string) (string, bool) {

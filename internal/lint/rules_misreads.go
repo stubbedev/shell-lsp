@@ -51,8 +51,6 @@ func isCase(n syntax.Node) bool {
 	return ok
 }
 
-var shellPrefixes = []string{"sh", "ash", "dash", "busybox sh", "bash", "bats", "ksh", "oksh", "zsh"}
-
 func checkSpaceAfterEquals(p *pass, as *syntax.Assign) {
 	if as.Naked || as.Value != nil || as.Array != nil || as.Name == nil || as.Name.Value == "IFS" {
 		return
@@ -203,13 +201,8 @@ func checkUnknownInterpreter(p *pass) {
 	if !ok {
 		return
 	}
-	if _, known := dialect.FromName(name); known {
+	if _, known := dialect.FromInterpreter(name); known {
 		return
-	}
-	for _, prefix := range shellPrefixes {
-		if strings.HasPrefix(name, prefix) {
-			return
-		}
 	}
 	first, _, _ := strings.Cut(p.text, "\n")
 	p.report(1008, parser.Span{Start: 0, End: len(first)}, "The shebang names "+name+", which is not a shell this linter recognises; add a directive such as # shellcheck shell=bash to choose the dialect.")
