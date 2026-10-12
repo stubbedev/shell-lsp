@@ -24,9 +24,10 @@ import {
   type DocumentDialect,
 } from "./dialect.ts";
 import { documentSelector } from "./documents.ts";
+import { clientCommands } from "./ids.ts";
 import { section } from "./settings.ts";
 
-export const chooseShellCommand = "shellLsp.chooseShell";
+const chooseShellCommand = clientCommands.chooseShell;
 const refreshDelayMs = 300;
 const dialectSetting = `${section}.dialect`;
 

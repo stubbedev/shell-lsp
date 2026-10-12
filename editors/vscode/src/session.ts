@@ -4,12 +4,12 @@ import { State, type LanguageClient } from "vscode-languageclient/node";
 import { createClient } from "./client.ts";
 import { describeError } from "./errors.ts";
 import { httpFetcher } from "./http.ts";
+import { runningContext } from "./ids.ts";
 import { installServer } from "./install.ts";
 import { extensionVersion, releaseAsset, releaseTarget, type ReleaseAsset } from "./release.ts";
 import { findServer, isExecutableFile, serverName } from "./serverBinary.ts";
 import { pathKey, pathSetting, section, serverKeys } from "./settings.ts";
 
-const runningContext = "shellLsp.running";
 const downloadLimits = { timeoutMs: 300_000, maxBytes: 256 * 1024 * 1024 };
 
 export class Session {

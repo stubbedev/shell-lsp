@@ -2,12 +2,7 @@ import { commands, languages, window, workspace } from "vscode";
 import type { ExecuteCommandSignature, LanguageClient, Middleware } from "vscode-languageclient/node";
 import { referenceLocations, referenceTarget } from "./commandArgs.ts";
 import { documentSelector } from "./documents.ts";
-
-const serverCommands = {
-  fixAll: "shellLsp.fixAll",
-  runBats: "shellLsp.runBats",
-  showReferences: "shellLsp.showReferences",
-} as const;
+import { serverCommands, type ServerCommand } from "./ids.ts";
 
 export function executeCommandMiddleware(client: () => LanguageClient): NonNullable<Middleware["executeCommand"]> {
   return async (command: string, args: unknown[], next: ExecuteCommandSignature): Promise<unknown> => {
@@ -42,7 +37,7 @@ async function showReferences(client: LanguageClient, args: unknown[], next: Exe
   return locations;
 }
 
-function activeDocumentUri(client: LanguageClient, command: string): string {
+function activeDocumentUri(client: LanguageClient, command: ServerCommand): string {
   const document = window.activeTextEditor?.document;
   if (document === undefined || languages.match(documentSelector, document) === 0) {
     throw new Error(`${command} needs an active shell script editor`);
