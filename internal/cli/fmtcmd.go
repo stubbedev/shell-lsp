@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -13,13 +12,10 @@ import (
 	"time"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
-	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/editorconfig"
-	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/format"
 	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/parallel"
-	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/project"
 	"github.com/stubbedev/shell-lsp/internal/regularfile"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
@@ -267,31 +263,19 @@ func (f *formatter) stdin() int {
 	}
 	name, path := stdinDisplayName, ""
 	if f.opts.filename != "" {
-		name, path = f.opts.filename, f.abs(f.opts.filename)
+		name, path = f.opts.filename, absolute(f.env.Dir, f.opts.filename)
 	}
-	f.report(f.format(name, path, string(raw), f.opts.applyIgnore))
+	f.report(f.format(target{name: name, path: path}, string(raw)))
 	return f.status
 }
 
-type fmtTarget struct {
-	name        string
-	path        string
-	applyIgnore bool
-}
-
 func (f *formatter) files() int {
-	var targets []fmtTarget
-	for _, operand := range f.opts.paths {
-		path := f.abs(operand)
-		info, err := os.Stat(path)
-		switch {
-		case err != nil:
-			f.fail("%s: %v", operand, err)
-		case info.IsDir():
-			targets = append(targets, f.walk(operand, path)...)
-		default:
-			targets = append(targets, fmtTarget{name: operand, path: path, applyIgnore: f.opts.applyIgnore})
-		}
+	targets, failures := collectTargets(f.env.Dir, f.opts.paths, func(path string) bool {
+		_, embedded := host.FromName(path)
+		return !embedded
+	})
+	for _, failure := range failures {
+		f.fail("%s", failure)
 	}
 	if f.opts.find != listOff {
 		for _, t := range targets {
@@ -307,7 +291,7 @@ func (f *formatter) files() int {
 			results[i] = formatted{name: t.name, err: err}
 			return
 		}
-		results[i] = f.format(t.name, t.path, string(raw), t.applyIgnore)
+		results[i] = f.format(t, string(raw))
 	})
 	for _, r := range results {
 		f.report(r)
@@ -315,74 +299,44 @@ func (f *formatter) files() int {
 	return f.status
 }
 
-func (f *formatter) walk(operand, dir string) []fmtTarget {
-	walker := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect)
-	walker.SetRoots([]string{dir})
-	paths, err := walker.AllShellFiles(context.Background())
-	if err != nil {
-		f.fail("%s: %v", operand, err)
-		return nil
-	}
-	out := make([]fmtTarget, 0, len(paths))
-	for _, path := range paths {
-		if _, embedded := host.FromName(path); embedded {
-			continue
-		}
-		rel, err := filepath.Rel(dir, path)
-		if err != nil {
-			f.fail("%s: %v", path, err)
-			continue
-		}
-		out = append(out, fmtTarget{name: filepath.Join(operand, rel), path: path, applyIgnore: true})
-	}
-	return out
-}
-
-func (f *formatter) abs(path string) string {
-	if filepath.IsAbs(path) {
-		return filepath.Clean(path)
-	}
-	return filepath.Join(f.env.Dir, path)
-}
-
-func (f *formatter) format(name, path, raw string, applyIgnore bool) formatted {
-	out := formatted{name: name, path: path, before: raw}
-	if language, embedded := host.FromName(path); embedded && path != "" {
+func (f *formatter) format(t target, raw string) formatted {
+	out := formatted{name: t.name, path: t.path, before: raw}
+	if language, embedded := host.FromName(t.path); embedded && t.path != "" {
 		out.err = fmt.Errorf("a %s embeds shell in its own syntax; shell-lsp fmt formats only shell scripts", language)
 		return out
-	}
-	doc := docstore.NewDocument("", "", 0, raw)
-	in := dialect.Input{Text: doc.Text()}
-	if path != "" {
-		in.URI = fileuri.FromPath(path)
 	}
 	var forced *dialect.Dialect
 	if f.opts.language != nil {
 		forced = &f.opts.language.Dialect
 	}
-	resolved, err := project.Resolve(f.editor, path, forced, in)
+	file, resolved, err := parseText(t.path, raw, func(in dialect.Input) (project.Resolution, error) {
+		resolved, err := project.Resolve(f.editor, t.path, forced, in)
+		switch {
+		case f.opts.language != nil:
+			resolved.Shell = *f.opts.language
+		case f.opts.styleFlags:
+			resolved.Detection = dialect.Resolve(nil, in)
+		}
+		return resolved, err
+	})
 	if err != nil {
 		out.err = err
 		return out
 	}
-	if applyIgnore && resolved.Settings.Ignore {
+	if (t.walked || f.opts.applyIgnore) && resolved.Settings.Ignore {
 		out.skip = true
 		return out
 	}
-	shell, style := resolved.Shell, resolved.Settings.Style.Options()
-	if f.opts.styleFlags {
-		shell, style = dialect.Resolve(forced, in).Shell, f.opts.style
-	}
-	if f.opts.language != nil {
-		shell = *f.opts.language
-	}
-	tree := parser.ParseEdit(nil, doc.Text(), shell)
-	if len(tree.Errors) > 0 {
-		e := tree.Errors[0]
-		out.err = &scriptError{at: placeOf(doc, e.Span.Start), message: e.Message}
+	if len(file.Tree.Errors) > 0 {
+		e := file.Tree.Errors[0]
+		out.err = &scriptError{at: placeOf(file.Doc, e.Span.Start), message: e.Message}
 		return out
 	}
-	out.after, out.err = format.Format(tree, style)
+	style := resolved.Settings.Style.Options()
+	if f.opts.styleFlags {
+		style = f.opts.style
+	}
+	out.after, out.err = format.Format(file.Tree, style)
 	return out
 }
 

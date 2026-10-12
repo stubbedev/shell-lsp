@@ -44,6 +44,7 @@ func TestFmtPrintsListsAndDiffs(t *testing.T) {
 		{[]string{"fmt", "-ln", "fish", "ugly.sh"}, statusUsage, ""},
 		{[]string{"fmt", "-zz"}, statusUsage, ""},
 		{[]string{"fmt", "-f", "."}, statusOK, "broken.sh\ngood.sh\nugly.sh\n"},
+		{[]string{"fmt", "-l", "ugly.sh", "./ugly.sh", "."}, statusFailed, "ugly.sh\n"},
 	} {
 		got := run(t, dir, "", c.args...)
 		if got.status != c.status || got.stdout != c.stdout {

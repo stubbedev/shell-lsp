@@ -3,11 +3,9 @@ package cli
 import (
 	"bytes"
 	"cmp"
-	"context"
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -124,14 +122,9 @@ type resolution struct {
 	err error
 }
 
-type target struct {
-	name string
-	path string
-}
-
 func newChecker(env Env, opts checkOptions) *checker {
-	if opts.rc.mode == rcExplicit && !filepath.IsAbs(opts.rc.path) {
-		opts.rc.path = filepath.Join(env.Dir, opts.rc.path)
+	if opts.rc.mode == rcExplicit {
+		opts.rc.path = absolute(env.Dir, opts.rc.path)
 	}
 	c := &checker{
 		env:    env,
@@ -252,56 +245,18 @@ func (c *checker) run() ([]fileReport, []string, error) {
 
 func (c *checker) targets() ([]target, []string) {
 	var out []target
-	var failures []string
-	var dirs []string
+	var operands []string
 	for _, operand := range c.opts.operands {
-		if operand == stdinName {
+		if operand != stdinName {
+			operands = append(operands, operand)
+			continue
+		}
+		if len(out) == 0 {
 			out = append(out, target{name: stdinName})
-			continue
-		}
-		info, err := os.Stat(c.abs(operand))
-		switch {
-		case err != nil:
-			failures = append(failures, fmt.Sprintf("%s: %v", operand, err))
-		case info.IsDir():
-			dirs = append(dirs, operand)
-		default:
-			out = append(out, target{name: operand, path: c.abs(operand)})
 		}
 	}
-	for _, dir := range dirs {
-		walker := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect)
-		walker.SetRoots([]string{c.abs(dir)})
-		paths, err := walker.AllShellFiles(context.Background())
-		if err != nil {
-			failures = append(failures, fmt.Sprintf("%s: %v", dir, err))
-			continue
-		}
-		for _, path := range paths {
-			rel, err := filepath.Rel(c.abs(dir), path)
-			if err != nil {
-				failures = append(failures, fmt.Sprintf("%s: %v", path, err))
-				continue
-			}
-			out = append(out, target{name: filepath.Join(dir, rel), path: path})
-		}
-	}
-	seen := map[string]bool{}
-	return slices.DeleteFunc(out, func(t target) bool {
-		key := platform.Native.Fold(cmp.Or(t.path, t.name))
-		if seen[key] {
-			return true
-		}
-		seen[key] = true
-		return false
-	}), failures
-}
-
-func (c *checker) abs(path string) string {
-	if filepath.IsAbs(path) {
-		return filepath.Clean(path)
-	}
-	return filepath.Join(c.env.Dir, path)
+	files, failures := collectTargets(c.env.Dir, operands, func(string) bool { return true })
+	return append(out, files...), failures
 }
 
 func (c *checker) display(path string) string {
@@ -382,13 +337,13 @@ func (c *checker) parse(t target, s fileSettings) (*workspace.File, project.Reso
 		if err != nil {
 			return nil, project.Resolution{}, fmt.Errorf("reading standard input: %w", err)
 		}
-		doc := docstore.NewDocument("", "", 0, string(raw))
-		in := dialect.Input{Text: doc.Text()}
-		r, err := project.Resolve(c.editor, "", s.forced, in)
+		file, r, err := parseText("", string(raw), func(in dialect.Input) (project.Resolution, error) {
+			return project.Resolve(c.editor, "", s.forced, in)
+		})
 		if err != nil {
 			return nil, project.Resolution{}, &configError{err}
 		}
-		return &workspace.File{Doc: doc, Tree: parser.ParseEdit(nil, doc.Text(), r.Shell)}, r, nil
+		return file, r, nil
 	}
 	file, err := c.ws.Load(t.path)
 	if err != nil {

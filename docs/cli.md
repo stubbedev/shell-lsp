@@ -28,7 +28,8 @@ and Nix files (`*.nix`) are found too, and the shell in them is linted
 ([Shell in other files](../README.md#shell-in-other-files)); `-s` does not
 apply to them, since the file decides their shell. `.git`, `node_modules`,
 `vendor` and similar directories are skipped. A `-` reads the script from
-standard input.
+standard input. A file named more than once, directly or through a directory,
+is linted once.
 Files are linted in parallel, and the report is ordered by path, then by
 position, so it is the same on every run.
 
@@ -164,7 +165,8 @@ or a single `-`, it formats standard input.
 As with shfmt, `.editorconfig` settings apply unless a parser or printer flag
 is given, and files found by walking a directory honour `ignore = true`.
 Makefiles, justfiles and Nix files are skipped when walking a directory and
-refused when named, since `fmt` formats only shell scripts.
+refused when named, since `fmt` formats only shell scripts. A file named more
+than once, directly or through a directory, is formatted once.
 Exit status 0 means success, 1 means a file could not be read or parsed or,
 with `-l` (without `-w`) or `-d`, that some formatting differs, and 2 means
 the command line is malformed.
@@ -174,7 +176,7 @@ the command line is malformed.
 The binary is `shell-lsp.exe`, and both commands take Windows paths and print
 file names with the platform's `\` separators (SARIF always uses `/`). Paths
 compare case-insensitively, so a file named twice in different case is
-checked once. `fmt -w` writes a temporary file next to the script and
+checked or formatted once. `fmt -w` writes a temporary file next to the script and
 renames it over the original, as on other platforms; it fails, leaving the
 script untouched, if the script is read-only or another program holds it open
 without sharing it.
