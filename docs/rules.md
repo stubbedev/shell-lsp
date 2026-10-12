@@ -258,6 +258,20 @@ marker=$'\xd8\x00'    # SL2010: marker holds only \xd8
 printf 'a\0b' > record    # a NUL byte written to a file survives
 ```
 
+## SL2011
+
+**Two bounds on the same value leave no number in between.** In `(( ))`,
+`$(( ))` and the other arithmetic contexts, an `&&` chain that requires a
+variable to be at least one constant and at most a smaller one can never be
+true, which usually means a typo in one of the bounds. Constants are read the
+way the shell reads them, in decimal, octal (`010`), hexadecimal (`0x1f`) or
+an explicit base (`2#1010`).
+
+```bash
+#!/bin/bash
+(( cp >= 0xd800 && cp <= 0xdff )) && return 1    # SL2011: 0xdff < 0xd800; meant 0xdfff
+```
+
 The embedded-language rules check awk, sed and jq programs written inside the
 script with built-in parsers; no awk, sed or jq binary is run. A program is
 checked when it is a literal argument (`awk '...'`, `sed -e '...'`,

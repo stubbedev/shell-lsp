@@ -1,0 +1,31 @@
+### bounds that exclude each other
+#!/bin/bash
+cp=$1
+(( cp >= 0xd800 && cp <= 0xdff )) && echo surrogate
+(( cp > 10 && cp < 11 )) && echo never
+(( 2#1000 <= cp && cp <= 7 )) && echo never
+(( cp >= 1 && cp <= 1 )) && echo one
+(( cp >= 0xd800 && cp <= 0xdfff )) && echo surrogate
+(( cp > 5 && other < 3 )) && echo fine
+echo $(( cp >= 5 && cp < 2 ))
+>>> SC2154 8:14
+>>+ SL2011 3:20 -- shell-lsp native check; shellcheck does not compare arithmetic bounds
+>>+ SL2011 4:15 -- shell-lsp native check; shellcheck does not compare arithmetic bounds
+>>+ SL2011 5:20 -- shell-lsp native check; shellcheck does not compare arithmetic bounds
+>>+ SL2011 9:21 -- shell-lsp native check; shellcheck does not compare arithmetic bounds
+
+### a chain with an unrelated condition in between
+#!/bin/bash
+n=$1
+m=$2
+(( n >= 10 && m == 1 && n < 5 )) && echo never
+>>> none
+>>+ SL2011 4:25 -- shell-lsp native check; shellcheck does not compare arithmetic bounds
+
+### negative bounds
+#!/bin/bash
+n=$1
+(( n > -1 && n < -5 )) && echo never
+(( n >= -5 && n <= -1 )) && echo negative
+>>> none
+>>+ SL2011 3:14 -- shell-lsp native check; shellcheck does not compare arithmetic bounds

@@ -1,6 +1,8 @@
 package lint
 
 import (
+	"math"
+	"strconv"
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
@@ -8,18 +10,21 @@ import (
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
+const codeEmptyRange = nativeBase + 2011
+
 var testLogicFamily = family{
 	codes: map[Code]meta{
-		2053: {severity: SeverityWarning, summary: "An unquoted right-hand side of == or != in [[ ]] is matched as a glob pattern."},
-		2055: {severity: SeverityWarning, summary: "A value always differs from at least one of two others, so a != ... -o != ... test is always true."},
-		2056: {severity: SeverityWarning, summary: "A value always differs from at least one of two others, so a != ... || != ... list is always true."},
-		2057: {severity: SeverityWarning, summary: "A comparison uses an operator that test does not understand."},
-		2058: {severity: SeverityWarning, summary: "A test uses an operator that does not exist."},
-		2065: {severity: SeverityWarning, summary: "> or < inside test is a file redirection, not a comparison."},
-		2081: {severity: SeverityError, summary: "[ ] compares a glob pattern as literal text and never matches it."},
-		2252: {severity: SeverityWarning, summary: "A value always differs from at least one of several constants, so a || chain of != tests is always true."},
-		2333: {severity: SeverityWarning, summary: "A value cannot equal two different constants at once, so the condition is always false."},
-		2334: {severity: SeverityWarning, summary: "A value cannot equal two different numbers at once, so the && is always false."},
+		codeEmptyRange: {severity: SeverityWarning},
+		2053:           {severity: SeverityWarning, summary: "An unquoted right-hand side of == or != in [[ ]] is matched as a glob pattern."},
+		2055:           {severity: SeverityWarning, summary: "A value always differs from at least one of two others, so a != ... -o != ... test is always true."},
+		2056:           {severity: SeverityWarning, summary: "A value always differs from at least one of two others, so a != ... || != ... list is always true."},
+		2057:           {severity: SeverityWarning, summary: "A comparison uses an operator that test does not understand."},
+		2058:           {severity: SeverityWarning, summary: "A test uses an operator that does not exist."},
+		2065:           {severity: SeverityWarning, summary: "> or < inside test is a file redirection, not a comparison."},
+		2081:           {severity: SeverityError, summary: "[ ] compares a glob pattern as literal text and never matches it."},
+		2252:           {severity: SeverityWarning, summary: "A value always differs from at least one of several constants, so a || chain of != tests is always true."},
+		2333:           {severity: SeverityWarning, summary: "A value cannot equal two different constants at once, so the condition is always false."},
+		2334:           {severity: SeverityWarning, summary: "A value cannot equal two different numbers at once, so the && is always false."},
 	},
 	commands: []commandRule{
 		{match: matchBase, names: []string{"test"}, check: checkTestRedirect},
@@ -28,6 +33,7 @@ var testLogicFamily = family{
 		{on: nodes(&syntax.BinaryCmd{}, &syntax.CallExpr{}, &syntax.TestClause{}), node: checkTestLogic},
 		{on: nodes(&syntax.BinaryCmd{}), node: checkChainedTests},
 		{on: nodes(&syntax.BinaryArithm{}), node: checkArithmeticContradiction},
+		{on: nodes(&syntax.BinaryArithm{}), node: checkEmptyRange},
 		{finish: checkRejectedUnknownOperators},
 	},
 }
@@ -297,6 +303,165 @@ func checkArithmeticContradiction(p *pass, n syntax.Node) {
 func isDigitArithm(expr syntax.ArithmExpr) bool {
 	w, ok := expr.(*syntax.Word)
 	return ok && parser.IsDigits(w.Lit())
+}
+
+type arithmeticBound struct {
+	subject      string
+	lower, upper int64
+	expr         syntax.ArithmExpr
+}
+
+func checkEmptyRange(p *pass, n syntax.Node) {
+	and, ok := n.(*syntax.BinaryArithm)
+	if !ok || and.Op != syntax.AndArit {
+		return
+	}
+	if parent, ok := p.parent().(*syntax.BinaryArithm); ok && parent.Op == syntax.AndArit {
+		return
+	}
+	lowest := map[string]arithmeticBound{}
+	highest := map[string]arithmeticBound{}
+	for _, operand := range andOperands(and) {
+		b, ok := boundOf(operand)
+		if !ok {
+			continue
+		}
+		low, hasLow := lowest[b.subject]
+		if !hasLow || b.lower > low.lower {
+			lowest[b.subject], low = b, b
+		}
+		high, hasHigh := highest[b.subject]
+		if !hasHigh || b.upper < high.upper {
+			highest[b.subject], high = b, b
+		}
+		if low.lower > high.upper {
+			p.reportNode(codeEmptyRange, operand, p.nodeText(low.expr)+" and "+p.nodeText(high.expr)+" cannot both hold, so this && is always false; check the bounds.")
+			return
+		}
+	}
+}
+
+func andOperands(expr syntax.ArithmExpr) []syntax.ArithmExpr {
+	bin, ok := expr.(*syntax.BinaryArithm)
+	if !ok || bin.Op != syntax.AndArit {
+		return []syntax.ArithmExpr{expr}
+	}
+	return append(andOperands(bin.X), andOperands(bin.Y)...)
+}
+
+func boundOf(expr syntax.ArithmExpr) (arithmeticBound, bool) {
+	for paren, ok := expr.(*syntax.ParenArithm); ok; paren, ok = expr.(*syntax.ParenArithm) {
+		expr = paren.X
+	}
+	cmp, ok := expr.(*syntax.BinaryArithm)
+	if !ok {
+		return arithmeticBound{}, false
+	}
+	op := cmp.Op
+	subject, isSubject := parser.ArithmeticName(cmp.X)
+	value, isConstant := arithmeticConstant(cmp.Y)
+	if !isSubject || !isConstant {
+		subject, isSubject = parser.ArithmeticName(cmp.Y)
+		value, isConstant = arithmeticConstant(cmp.X)
+		op = mirroredComparison(op)
+	}
+	if !isSubject || !isConstant {
+		return arithmeticBound{}, false
+	}
+	b := arithmeticBound{subject: subject, lower: math.MinInt64, upper: math.MaxInt64, expr: expr}
+	switch {
+	case op == syntax.Leq:
+		b.upper = value
+	case op == syntax.Lss && value > math.MinInt64:
+		b.upper = value - 1
+	case op == syntax.Geq:
+		b.lower = value
+	case op == syntax.Gtr && value < math.MaxInt64:
+		b.lower = value + 1
+	default:
+		return arithmeticBound{}, false
+	}
+	return b, true
+}
+
+func mirroredComparison(op syntax.BinAritOperator) syntax.BinAritOperator {
+	switch op {
+	case syntax.Lss:
+		return syntax.Gtr
+	case syntax.Gtr:
+		return syntax.Lss
+	case syntax.Leq:
+		return syntax.Geq
+	case syntax.Geq:
+		return syntax.Leq
+	}
+	return op
+}
+
+func arithmeticConstant(expr syntax.ArithmExpr) (int64, bool) {
+	switch e := expr.(type) {
+	case *syntax.ParenArithm:
+		return arithmeticConstant(e.X)
+	case *syntax.UnaryArithm:
+		if e.Op != syntax.Minus || e.Post {
+			return 0, false
+		}
+		v, ok := arithmeticConstant(e.X)
+		return -v, ok
+	case *syntax.Word:
+		return arithmeticNumber(e.Lit())
+	}
+	return 0, false
+}
+
+func arithmeticNumber(s string) (int64, bool) {
+	base := 10
+	switch {
+	case strings.HasPrefix(s, "0x") || strings.HasPrefix(s, "0X"):
+		base, s = 16, s[2:]
+	case strings.Contains(s, "#"):
+		prefix, digits, _ := strings.Cut(s, "#")
+		b, err := strconv.Atoi(prefix)
+		if err != nil || b < 2 || b > 64 {
+			return 0, false
+		}
+		base, s = b, digits
+	case len(s) > 1 && s[0] == '0':
+		base, s = 8, s[1:]
+	}
+	if s == "" {
+		return 0, false
+	}
+	var v int64
+	for i := range len(s) {
+		d, ok := arithmeticDigit(s[i], base)
+		if !ok || v > (math.MaxInt64-d)/int64(base) {
+			return 0, false
+		}
+		v = v*int64(base) + d
+	}
+	return v, true
+}
+
+func arithmeticDigit(c byte, base int) (int64, bool) {
+	var d int64
+	switch {
+	case c >= '0' && c <= '9':
+		d = int64(c - '0')
+	case c >= 'a' && c <= 'z':
+		d = int64(c-'a') + 10
+	case c >= 'A' && c <= 'Z' && base > 36:
+		d = int64(c-'A') + 36
+	case c >= 'A' && c <= 'Z':
+		d = int64(c-'A') + 10
+	case c == '@':
+		d = 62
+	case c == '_':
+		d = 63
+	default:
+		return 0, false
+	}
+	return d, d < int64(base)
 }
 
 func checkTestRedirect(p *pass, _ command) {
