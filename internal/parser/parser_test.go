@@ -506,6 +506,29 @@ func TestDecodeANSIC(t *testing.T) {
 	}
 }
 
+func TestANSICNul(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		in         string
+		start, end int
+		found      bool
+	}{
+		{in: `ab\x00cd`, start: 2, end: 6, found: true},
+		{in: `\0`, start: 0, end: 2, found: true},
+		{in: `x\u0000`, start: 1, end: 7, found: true},
+		{in: `\c@`, start: 0, end: 3, found: true},
+		{in: `\\0\x0a\101`},
+		{in: `\x`},
+	}
+	for _, tc := range tests {
+		start, end, found := ANSICNul(tc.in)
+		if start != tc.start || end != tc.end || found != tc.found {
+			t.Errorf("ANSICNul(%q) = %d, %d, %t; want %d, %d, %t", tc.in, start, end, found, tc.start, tc.end, tc.found)
+		}
+	}
+}
+
 func TestArgumentTexts(t *testing.T) {
 	t.Parallel()
 

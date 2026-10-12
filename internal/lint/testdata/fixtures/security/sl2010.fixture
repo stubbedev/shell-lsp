@@ -1,0 +1,19 @@
+### a NUL escape truncates the string
+#!/bin/bash
+a=$'ab\x00cd'
+b=$'\0'
+c=$'x\u0000y'
+d=$'\c@'
+e=$'\x0a\101\\0'
+echo "$a$b$c$d$e"
+>>> none
+>>+ SL2010 2:7 -- shell-lsp native check; shellcheck does not decode $'...' escapes
+>>+ SL2010 3:5 -- shell-lsp native check; shellcheck does not decode $'...' escapes
+>>+ SL2010 4:6 -- shell-lsp native check; shellcheck does not decode $'...' escapes
+>>+ SL2010 5:5 -- shell-lsp native check; shellcheck does not decode $'...' escapes
+
+### zsh strings hold NUL bytes
+#!/bin/zsh
+a=$'ab\x00cd'
+print -r -- "$a"
+>>- SC1071 1:1 -- shellcheck refuses zsh; zsh keeps NUL bytes in strings

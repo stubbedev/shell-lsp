@@ -244,6 +244,20 @@ whole directive when nothing in it is used.
 echo "$1"
 ```
 
+## SL2010
+
+**A NUL byte cuts a `$'...'` string short.** Shell variables and command
+arguments are C strings, so an escape that produces a NUL byte (`\0`,
+`\x00`, `\u0000`, `\c@`) ends the string there and everything after it is
+silently dropped: `$'a\x00b'` is just `a`. zsh can hold NUL bytes and is not
+checked.
+
+```bash
+#!/bin/bash
+marker=$'\xd8\x00'    # SL2010: marker holds only \xd8
+printf 'a\0b' > record    # a NUL byte written to a file survives
+```
+
 The embedded-language rules check awk, sed and jq programs written inside the
 script with built-in parsers; no awk, sed or jq binary is run. A program is
 checked when it is a literal argument (`awk '...'`, `sed -e '...'`,

@@ -133,43 +133,51 @@ var ansiCEscapes = map[byte]byte{
 
 func decodeANSIC(s string) string {
 	var sb strings.Builder
-	for i := 0; i < len(s); i++ {
-		if s[i] != '\\' || i+1 == len(s) {
-			sb.WriteByte(s[i])
-			continue
-		}
-		i++
-		if c, ok := ansiCEscapes[s[i]]; ok {
-			sb.WriteByte(c)
-			continue
-		}
-		switch c := s[i]; {
-		case c >= '0' && c <= '7':
-			n := escapeDigits(s[i:], 3, 8)
-			v, _ := strconv.ParseUint(s[i:i+n], 8, 16)
-			sb.WriteByte(byte(v & 0xff))
-			i += n - 1
-		case c == 'x' || c == 'u' || c == 'U':
-			n := escapeDigits(s[i+1:], hexEscapeWidth(c), 16)
-			if n == 0 {
-				sb.WriteString(s[i-1 : i+1])
-				continue
-			}
-			v, _ := strconv.ParseUint(s[i+1:i+1+n], 16, 32)
-			if c == 'x' {
-				sb.WriteByte(byte(v & 0xff))
-			} else {
-				sb.WriteRune(validRune(v))
-			}
-			i += n
-		case c == 'c' && i+1 < len(s):
-			i++
-			sb.WriteByte(s[i] & 0x1f)
-		default:
-			sb.WriteString(s[i-1 : i+1])
-		}
+	for i := 0; i < len(s); {
+		unit, width := ansiCUnit(s[i:])
+		sb.WriteString(unit)
+		i += width
 	}
 	return sb.String()
+}
+
+func ANSICNul(s string) (start, end int, found bool) {
+	for i := 0; i < len(s); {
+		unit, width := ansiCUnit(s[i:])
+		if unit == "\x00" {
+			return i, i + width, true
+		}
+		i += width
+	}
+	return 0, 0, false
+}
+
+func ansiCUnit(s string) (string, int) {
+	if s[0] != '\\' || len(s) == 1 {
+		return s[:1], 1
+	}
+	if c, ok := ansiCEscapes[s[1]]; ok {
+		return string([]byte{c}), 2
+	}
+	switch c := s[1]; {
+	case c >= '0' && c <= '7':
+		n := escapeDigits(s[1:], 3, 8)
+		v, _ := strconv.ParseUint(s[1:1+n], 8, 16)
+		return string([]byte{byte(v & 0xff)}), 1 + n
+	case c == 'x' || c == 'u' || c == 'U':
+		n := escapeDigits(s[2:], hexEscapeWidth(c), 16)
+		if n == 0 {
+			return s[:2], 2
+		}
+		v, _ := strconv.ParseUint(s[2:2+n], 16, 32)
+		if c == 'x' {
+			return string([]byte{byte(v & 0xff)}), 2 + n
+		}
+		return string(validRune(v)), 2 + n
+	case c == 'c' && len(s) > 2:
+		return string([]byte{s[2] & 0x1f}), 3
+	}
+	return s[:2], 2
 }
 
 func hexEscapeWidth(c byte) int {

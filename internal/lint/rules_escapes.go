@@ -5,21 +5,26 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
+const codeTruncatingNul = nativeBase + 2010
+
 var escapesFamily = family{
 	codes: map[Code]meta{
-		1001: {severity: SeverityInfo, summary: "A backslash before an ordinary character outside quotes does nothing."},
-		1003: {severity: SeverityInfo, bug: true, summary: "A backslash cannot escape a single quote inside single quotes, so the quote ends the string."},
-		1011: {severity: SeverityWarning, summary: "An apostrophe inside single quotes closes the string, leaving the rest outside the quotes."},
-		1012: {severity: SeverityWarning, summary: "An escape like \\n or \\t outside quotes is just the letter, not a control character."},
+		codeTruncatingNul: {severity: SeverityWarning},
+		1001:              {severity: SeverityInfo, summary: "A backslash before an ordinary character outside quotes does nothing."},
+		1003:              {severity: SeverityInfo, bug: true, summary: "A backslash cannot escape a single quote inside single quotes, so the quote ends the string."},
+		1011:              {severity: SeverityWarning, summary: "An apostrophe inside single quotes closes the string, leaving the rest outside the quotes."},
+		1012:              {severity: SeverityWarning, summary: "An escape like \\n or \\t outside quotes is just the letter, not a control character."},
 	},
 	rules: []rule{
 		{on: nodes(&syntax.Lit{}), node: checkUnquotedEscapes},
 		{on: nodes(&syntax.SglQuoted{}), node: checkSingleQuoteEnding},
+		{on: nodes(&syntax.SglQuoted{}), node: checkTruncatingNul},
 	},
 }
 
@@ -95,6 +100,21 @@ func checkSingleQuoteEnding(p *pass, n syntax.Node) {
 	if first, _ := utf8.DecodeRuneInString(next.Value); unicode.IsLetter(first) {
 		p.report(1011, parser.Span{Start: closing, End: closing + 1}, "This apostrophe closes the single-quoted string, so "+next.Value+" is outside the quotes; write '\\'' for a literal apostrophe or use double quotes.")
 	}
+}
+
+func checkTruncatingNul(p *pass, n syntax.Node) {
+	sq, ok := n.(*syntax.SglQuoted)
+	if !ok || !sq.Dollar || p.dialect == dialect.Zsh {
+		return
+	}
+	start, end, found := parser.ANSICNul(sq.Value)
+	if !found {
+		return
+	}
+	body := parser.Offset(sq.Left) + len("$'")
+	escape := sq.Value[start:end]
+	p.report(codeTruncatingNul, parser.Span{Start: body + start, End: body + end},
+		"A shell string cannot hold a NUL byte, so "+escape+" ends this $'...' string and everything after it is dropped; write NUL bytes with printf '\\0' into a file or pipe instead.")
 }
 
 func (p *pass) nextWordPart(part syntax.WordPart) syntax.WordPart {

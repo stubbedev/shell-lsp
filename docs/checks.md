@@ -478,6 +478,7 @@ marks the checks the `minimal` profile keeps; see [Profiles](../README.md#profil
 | <a name="sl2007"></a>[SL2007](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl2007) | info |  | yes | A function runs pushd but never popd. |
 | <a name="sl2008"></a>[SL2008](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl2008) | error |  | yes | A \`${…}\` the shell rejects when it runs it. |
 | <a name="sl2009"></a>[SL2009](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl2009) | info | `unused-directives` |  | A disabled check that nothing here reports. |
+| <a name="sl2010"></a>[SL2010](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl2010) | warning |  | yes | A NUL byte cuts a \`$'...'\` string short. |
 | <a name="sl3001"></a>[SL3001](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl3001) | error |  | yes | An awk program does not parse. |
 | <a name="sl3002"></a>[SL3002](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl3002) | error |  | yes | A sed script does not parse. |
 | <a name="sl3003"></a>[SL3003](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl3003) | error |  | yes | A jq filter does not parse. |
