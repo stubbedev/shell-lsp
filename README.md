@@ -615,6 +615,32 @@ under its own BSD license. The fork adds the rest of the zsh grammar and a
 ksh93 variant; every change is a patch with a reproducer, listed in its
 [README](third_party/mvdan-sh/README.md) so it can be sent upstream.
 
+## How it was built
+
+shell-lsp was implemented by AI agents over a few days, directed by its
+author, following the clean-room method described under
+[Inspiration](#inspiration):
+
+1. **Specification.** One set of agents wrote the feature specification,
+   the test suite and the lint fixtures by studying bash-language-server,
+   shfmt and ShellCheck from the outside: running them and recording what
+   they do. The specification was then extended with what fuller language
+   servers such as gopls and rust-analyzer offer, for richer refactorings
+   and context-aware completion.
+2. **Implementation.** A separate set of agents implemented that
+   specification against the test suite.
+3. **Verification.** Correctness rests on automated checks rather than on
+   line-by-line human review: ShellCheck as the oracle behind the lint
+   fixtures (`just fixtures`) and the per-code precision and recall of
+   `just lintcheck`, the comparison with bash-language-server in
+   `just crosscheck`, fuzz tests, headless Neovim and VS Code integration
+   tests, and the CI gates: `go vet`, a strict golangci-lint
+   configuration, the test suite on Linux and Windows, and the Nix build.
+
+The author set the direction, the scope and the design rules, and decided
+what landed. Later changes, such as the refactorings that followed, were
+made the same way and landed once every check passed.
+
 ## License
 
 MIT
