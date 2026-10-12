@@ -799,7 +799,7 @@ type ParamExp struct {
 	// TODO(v4): rename Index to Subscript, which better matches bash and zsh terminology
 
 	Index ArithmExpr // ${a[i]}, ${a["k"]}, or a ${a[i,j]} slice with [LangZsh]
-	Elems []RefElem  // [j] and .name in ${a[i][j].name} with [LangKsh93]
+	Elems []RefElem  // [j] and .name in ${a[i][j].name} with [LangKsh93], or [j] with [LangZsh]
 
 	// Only one of these is set at a time.
 	// TODO(v4): consider joining these in a single "expansion" field/type,
@@ -836,7 +836,7 @@ func (p *ParamExp) End() Pos {
 	}
 	// In short mode, we can only end in either an index or a simple name.
 	if p.Index != nil {
-		return posAddCol(p.Index.End(), 1)
+		return refEnd(p.Index, p.Elems)
 	}
 	return p.Param.End()
 }
@@ -848,7 +848,8 @@ func (p *ParamExp) nakedIndex() bool {
 }
 
 // RefElem is a further subscript or member after the first subscript of a
-// ksh93 variable reference, such as [j] or .name in ${a[i][j].name}.
+// ksh93 variable reference, such as [j] or .name in ${a[i][j].name}, or a
+// further subscript of a zsh parameter expansion, such as [j] in ${a[i][j]}.
 // Only one of its fields is set.
 type RefElem struct {
 	Index  ArithmExpr

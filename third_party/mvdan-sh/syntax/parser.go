@@ -1807,6 +1807,7 @@ zshPrefixLoop:
 			p.pos = p.nextPos()
 			p.rune()
 			pe.Index = p.eitherIndex()
+			pe.Elems = p.zshSubscripts()
 		}
 		p.quote = old
 		p.next()
@@ -1824,7 +1825,7 @@ zshPrefixLoop:
 		p.pos = p.nextPos()
 		p.rune()
 		pe.Index = p.subscript(pe.Param)
-		pe.Elems = p.kshRefElems()
+		pe.Elems = append(p.kshRefElems(), p.zshSubscripts()...)
 	}
 	tokRune := p.r
 	p.pos = p.nextPos()
@@ -1964,6 +1965,20 @@ func (p *Parser) kshRefElems() []RefElem {
 		default:
 			return elems
 		}
+	}
+	return elems
+}
+
+// zshSubscripts parses the further subscripts which may follow the first
+// subscript of a parameter expansion with [LangZsh], each applying to the
+// result of the one before, like [1] in ${a[2][1]} or [(I)x] in
+// ${a[2,-1][(I)x]}, while lexing rune by rune.
+func (p *Parser) zshSubscripts() []RefElem {
+	var elems []RefElem
+	for p.lang.in(LangZsh) && p.r == '[' {
+		p.pos = p.nextPos()
+		p.rune()
+		elems = append(elems, RefElem{Index: p.eitherIndex()})
 	}
 	return elems
 }

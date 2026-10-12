@@ -1,0 +1,125 @@
+syntax: zsh subscripts that follow a subscript
+
+zsh applies a further subscript to the result of the one before it, in
+both the braced and the short form, so zsh -n accepts, and zsh expands,
+
+	a=(foo bar)
+	echo ${a[2][1]} $a[1][2,3]       # b oo
+	if (( ${funcstack[2,-1][(I)_description]} )); then :; fi
+	newch=${funcs[1][pos]}
+
+Completion functions use it to pick a character out of an array element or
+to search a slice. The parser stopped after the first subscript and failed
+with "not a valid parameter expansion operator: `[`".
+
+With LangZsh, the further subscripts of a ParamExp are parsed into Elems,
+as the ksh93 variant already does for ${a[i][j]}, and End accounts for them
+in the short form too.
+
+Reproducer, before this change: `echo ${a[2][1]}` with LangZsh failed with
+"not a valid parameter expansion operator: `[`".
+
+diff --git a/syntax/filetests_test.go b/syntax/filetests_test.go
+index 619109e..e4f57ed 100644
+--- a/syntax/filetests_test.go
++++ b/syntax/filetests_test.go
+@@ -1142,6 +1142,25 @@ var fileTests = []fileTestCase{
+ 			Args: litWords("foo"),
+ 		}, LangZsh),
+ 	),
++	fileTest(
++		[]string{"${a[2][1]} $b[1][3]x"},
++		langFile(call(
++			word(&ParamExp{
++				Param: lit("a"),
++				Index: litWord("2"),
++				Elems: []RefElem{{Index: litWord("1")}},
++			}),
++			word(
++				&ParamExp{
++					Short: true,
++					Param: lit("b"),
++					Index: litWord("1"),
++					Elems: []RefElem{{Index: litWord("3")}},
++				},
++				lit("x"),
++			),
++		), LangZsh),
++	),
+ 	fileTest(
+ 		[]string{"${a[1][2].b}"},
+ 		langFile(word(&ParamExp{
+diff --git a/syntax/nodes.go b/syntax/nodes.go
+index dfdfffc..f865a00 100644
+--- a/syntax/nodes.go
++++ b/syntax/nodes.go
+@@ -799,7 +799,7 @@ type ParamExp struct {
+ 	// TODO(v4): rename Index to Subscript, which better matches bash and zsh terminology
+ 
+ 	Index ArithmExpr // ${a[i]}, ${a["k"]}, or a ${a[i,j]} slice with [LangZsh]
+-	Elems []RefElem  // [j] and .name in ${a[i][j].name} with [LangKsh93]
++	Elems []RefElem  // [j] and .name in ${a[i][j].name} with [LangKsh93], or [j] with [LangZsh]
+ 
+ 	// Only one of these is set at a time.
+ 	// TODO(v4): consider joining these in a single "expansion" field/type,
+@@ -836,7 +836,7 @@ func (p *ParamExp) End() Pos {
+ 	}
+ 	// In short mode, we can only end in either an index or a simple name.
+ 	if p.Index != nil {
+-		return posAddCol(p.Index.End(), 1)
++		return refEnd(p.Index, p.Elems)
+ 	}
+ 	return p.Param.End()
+ }
+@@ -848,7 +848,8 @@ func (p *ParamExp) nakedIndex() bool {
+ }
+ 
+ // RefElem is a further subscript or member after the first subscript of a
+-// ksh93 variable reference, such as [j] or .name in ${a[i][j].name}.
++// ksh93 variable reference, such as [j] or .name in ${a[i][j].name}, or a
++// further subscript of a zsh parameter expansion, such as [j] in ${a[i][j]}.
+ // Only one of its fields is set.
+ type RefElem struct {
+ 	Index  ArithmExpr
+diff --git a/syntax/parser.go b/syntax/parser.go
+index 0d603db..fb4b5d1 100644
+--- a/syntax/parser.go
++++ b/syntax/parser.go
+@@ -1807,6 +1807,7 @@ zshPrefixLoop:
+ 			p.pos = p.nextPos()
+ 			p.rune()
+ 			pe.Index = p.eitherIndex()
++			pe.Elems = p.zshSubscripts()
+ 		}
+ 		p.quote = old
+ 		p.next()
+@@ -1824,7 +1825,7 @@ zshPrefixLoop:
+ 		p.pos = p.nextPos()
+ 		p.rune()
+ 		pe.Index = p.subscript(pe.Param)
+-		pe.Elems = p.kshRefElems()
++		pe.Elems = append(p.kshRefElems(), p.zshSubscripts()...)
+ 	}
+ 	tokRune := p.r
+ 	p.pos = p.nextPos()
+@@ -1968,6 +1969,20 @@ func (p *Parser) kshRefElems() []RefElem {
+ 	return elems
+ }
+ 
++// zshSubscripts parses the further subscripts which may follow the first
++// subscript of a parameter expansion with [LangZsh], each applying to the
++// result of the one before, like [1] in ${a[2][1]} or [(I)x] in
++// ${a[2,-1][(I)x]}, while lexing rune by rune.
++func (p *Parser) zshSubscripts() []RefElem {
++	var elems []RefElem
++	for p.lang.in(LangZsh) && p.r == '[' {
++		p.pos = p.nextPos()
++		p.rune()
++		elems = append(elems, RefElem{Index: p.eitherIndex()})
++	}
++	return elems
++}
++
+ // kshCountNames reports whether the current token is the "@" or "*" of
+ // ksh93's ${#prefix@} or ${#prefix*}, which count the variables whose names
+ // start with prefix.

@@ -1143,6 +1143,25 @@ var fileTests = []fileTestCase{
 		}, LangZsh),
 	),
 	fileTest(
+		[]string{"${a[2][1]} $b[1][3]x"},
+		langFile(call(
+			word(&ParamExp{
+				Param: lit("a"),
+				Index: litWord("2"),
+				Elems: []RefElem{{Index: litWord("1")}},
+			}),
+			word(
+				&ParamExp{
+					Short: true,
+					Param: lit("b"),
+					Index: litWord("1"),
+					Elems: []RefElem{{Index: litWord("3")}},
+				},
+				lit("x"),
+			),
+		), LangZsh),
+	),
+	fileTest(
 		[]string{"${a[1][2].b}"},
 		langFile(word(&ParamExp{
 			Param: lit("a"),
