@@ -657,12 +657,12 @@ anyone can rerun, rather than on line-by-line review of the code:
   corpus of public repositories and the Oils spec tests, against committed
   baselines that CI enforces ([docs/corpus.md](docs/corpus.md)).
 - **The same gates for every change.** `go vet`, a strict golangci-lint
-  configuration, the test suite on Linux and Windows (with the seed corpora
-  of its fuzz tests), headless Neovim and VS Code integration tests, a check
-  that release binaries match the names the VS Code extension downloads, the
-  Nix build, the test suite again in the Nix dev shell, where the lint
-  fixtures are checked against ShellCheck and the parser against bash, dash,
-  mksh, zsh and ksh93, and CodeQL, govulncheck and Grype scans.
+  configuration, the test suite on Linux, macOS and Windows (with the seed
+  corpora of its fuzz tests), headless Neovim and VS Code integration tests, a
+  check that release binaries match the names the VS Code extension
+  downloads, the Nix build, the test suite again in the Nix dev shell, where
+  the lint fixtures are checked against ShellCheck and the parser against
+  bash, dash, mksh, zsh and ksh93, and CodeQL, govulncheck and Grype scans.
 
 Maintenance follows the same pattern. Refactoring, for instance, starts with
 agents auditing the code for facts stated in more than one place and
