@@ -41,7 +41,7 @@ func TestDocumentSync(t *testing.T) {
 func TestInitializeNegotiatesEncodingAndSync(t *testing.T) {
 	t.Parallel()
 
-	srv := New(jsonrpc.NewConn(nil, nil), "test")
+	srv := New(jsonrpc.NewConn(nil, nil), "test", CurrentProcess())
 	result, err := srv.handleInitialize(t.Context(), nil, json.RawMessage(`{"capabilities": {"general": {"positionEncodings": ["utf-32", "utf-16"]}, "textDocument": {"diagnostic": {}}}}`))
 	if err != nil {
 		t.Fatalf("handleInitialize() error = %v", err)
@@ -55,7 +55,7 @@ func TestInitializeNegotiatesEncodingAndSync(t *testing.T) {
 func TestStaleChangeIsIgnored(t *testing.T) {
 	t.Parallel()
 
-	srv := New(jsonrpc.NewConn(nil, nil), "test")
+	srv := New(jsonrpc.NewConn(nil, nil), "test", CurrentProcess())
 	openParams := json.RawMessage(`{"textDocument": {"uri": "file:///t.sh", "languageId": "shellscript", "version": 3, "text": "one"}}`)
 	if err := srv.handleDidOpen(t.Context(), openParams); err != nil {
 		t.Fatalf("didOpen: %v", err)

@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -115,7 +114,7 @@ func shellOnly(tree *parser.Tree, name string) bool {
 
 func (s *Server) warmUp(ctx context.Context) {
 	s.prefetch.start(ctx)
-	go s.environment.executables.list(os.Getenv("PATH"), time.Now())
+	go s.environment.executables.list(time.Now())
 }
 
 func (s *Server) indexInBackground(ctx context.Context) {

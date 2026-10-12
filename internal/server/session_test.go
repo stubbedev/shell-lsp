@@ -100,7 +100,7 @@ func replay(t *testing.T, path string, steps []sessionStep) {
 
 	clientReader, serverWriter := io.Pipe()
 	serverReader, clientWriter := io.Pipe()
-	srv := New(jsonrpc.NewConn(serverReader, serverWriter), "test")
+	srv := New(jsonrpc.NewConn(serverReader, serverWriter), "test", CurrentProcess())
 	runErr := make(chan error, 1)
 	go func() {
 		runErr <- srv.Run(t.Context())

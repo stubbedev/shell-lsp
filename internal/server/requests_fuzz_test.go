@@ -58,7 +58,7 @@ func FuzzRequests(f *testing.F) {
 			f.Add(string(text), byte(slices.Index(fuzzExtensions, filepath.Ext(path))), []byte{byte(i), byte(i * 7), byte(i * 13), byte(i * 31), 3, 1})
 		}
 	}
-	c, _ := startClient(f, fuzzInitialize)
+	c, _ := startClientIn(f, fuzzProcess(f), fuzzInitialize)
 	opened := 0
 	f.Fuzz(func(t *testing.T, text string, dialect byte, script []byte) {
 		if !utf8.ValidString(text) || len(text) > maxFuzzDocument || len(script) == 0 {
@@ -71,6 +71,21 @@ func FuzzRequests(f *testing.F) {
 		defer doc.close()
 		doc.exercise(script)
 	})
+}
+
+func fuzzProcess(f *testing.F) Process {
+	home, work, bin, man := f.TempDir(), f.TempDir(), f.TempDir(), f.TempDir()
+	for _, dir := range []string{filepath.Join(home, "notes"), filepath.Join(work, "lib")} {
+		if err := os.Mkdir(dir, 0o755); err != nil {
+			f.Fatal(err)
+		}
+	}
+	for _, file := range []string{filepath.Join(work, "main.sh"), filepath.Join(bin, "tool")} {
+		if err := os.WriteFile(file, []byte("#!/bin/sh\n"), 0o755); err != nil {
+			f.Fatal(err)
+		}
+	}
+	return Process{Path: bin, ManPath: man, Home: home, WorkDir: work, Environ: []string{"HOME=" + home, "PATH=" + bin}}
 }
 
 func (d *fuzzDocument) open(text string) {

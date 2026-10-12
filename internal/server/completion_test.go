@@ -303,10 +303,9 @@ func TestExecutableCache(t *testing.T) {
 	if err := os.Symlink(filepath.Join(dir, executableName("tool")), filepath.Join(dir, executableName("linked"))); err != nil {
 		t.Fatal(err)
 	}
-	cache := &executableCache{}
-	path := dir + string(os.PathListSeparator) + filepath.Join(dir, "missing")
+	cache := newExecutableCache(dir+string(os.PathListSeparator)+filepath.Join(dir, "missing"), "")
 	start := time.Now()
-	if got := cache.list(path, start); !slices.Equal(got, []string{"linked", "tool"}) {
+	if got := cache.list(start); !slices.Equal(got, []string{"linked", "tool"}) {
 		t.Errorf("executables = %v", got)
 	}
 	if err := os.WriteFile(filepath.Join(dir, executableName("newtool")), nil, 0o755); err != nil {
@@ -316,10 +315,10 @@ func TestExecutableCache(t *testing.T) {
 	if err := os.Chtimes(dir, later, later); err != nil {
 		t.Fatal(err)
 	}
-	if got := cache.list(path, start.Add(workspace.DiskRecheck/2)); !slices.Equal(got, []string{"linked", "tool"}) {
+	if got := cache.list(start.Add(workspace.DiskRecheck / 2)); !slices.Equal(got, []string{"linked", "tool"}) {
 		t.Errorf("executables within the recheck interval = %v, want the cached list", got)
 	}
-	if got := cache.list(path, start.Add(workspace.DiskRecheck)); !slices.Equal(got, []string{"linked", "newtool", "tool"}) {
+	if got := cache.list(start.Add(workspace.DiskRecheck)); !slices.Equal(got, []string{"linked", "newtool", "tool"}) {
 		t.Errorf("executables after installing a tool = %v", got)
 	}
 }

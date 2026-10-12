@@ -17,7 +17,7 @@ var updateDocs = flag.Bool("update", false, "rewrite docs/lsp-methods.md from th
 func advertised(t *testing.T) map[string]any {
 	t.Helper()
 
-	srv := New(jsonrpc.NewConn(nil, nil), "test")
+	srv := New(jsonrpc.NewConn(nil, nil), "test", CurrentProcess())
 	result, err := srv.handleInitialize(t.Context(), nil, json.RawMessage(`{}`))
 	if err != nil {
 		t.Fatalf("handleInitialize() error = %v", err)
@@ -64,7 +64,7 @@ func truthy(v any) bool {
 func TestMethodTableMatchesHandlers(t *testing.T) {
 	t.Parallel()
 
-	srv := New(jsonrpc.NewConn(nil, nil), "test")
+	srv := New(jsonrpc.NewConn(nil, nil), "test", CurrentProcess())
 	table := map[string]method{}
 	for _, m := range methods {
 		if _, dup := table[m.name]; dup {

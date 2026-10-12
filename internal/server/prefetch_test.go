@@ -19,7 +19,7 @@ import (
 func TestPrefetchesSubcommandPages(t *testing.T) {
 	t.Parallel()
 
-	srv := New(jsonrpc.NewConn(nil, nil), "test")
+	srv := New(jsonrpc.NewConn(nil, nil), "test", CurrentProcess())
 	withToolPages(t)(srv)
 	fetched := recordPrefetches(t, srv)
 	srv.prefetchCommands(parser.Parse("tool -v extra\ntool start web\n", dialect.Bash))
@@ -43,7 +43,7 @@ func TestPrefetchesExternalCommandsOnce(t *testing.T) {
 		pages[name] = stubPage(name)
 		fmt.Fprintf(&src, "%s\n", name)
 	}
-	srv := New(jsonrpc.NewConn(nil, nil), "test")
+	srv := New(jsonrpc.NewConn(nil, nil), "test", CurrentProcess())
 	withPages(t, pages)(srv)
 	fetched := recordPrefetches(t, srv)
 	srv.prefetchCommands(parser.Parse(src.String(), dialect.Bash))
@@ -63,7 +63,7 @@ func TestPrefetchesExternalCommandsOnce(t *testing.T) {
 func TestPrefetchesNestedSubcommandPages(t *testing.T) {
 	t.Parallel()
 
-	srv := New(jsonrpc.NewConn(nil, nil), "test")
+	srv := New(jsonrpc.NewConn(nil, nil), "test", CurrentProcess())
 	withPages(t, map[string]string{"tool": toolPage, "tool-extra": toolExtraPage, "tool-extra-deep": stubPage("tool-extra-deep")})(srv)
 	fetched := recordPrefetches(t, srv)
 	srv.prefetchCommands(parser.Parse("tool --unknown extra deep\n", dialect.Bash))
@@ -76,7 +76,7 @@ func TestPrefetchesNestedSubcommandPages(t *testing.T) {
 func TestPrefetchesThroughWrappers(t *testing.T) {
 	t.Parallel()
 
-	srv := New(jsonrpc.NewConn(nil, nil), "test")
+	srv := New(jsonrpc.NewConn(nil, nil), "test", CurrentProcess())
 	withPages(t, map[string]string{"sudo": stubPage("sudo"), "tool": toolPage, "tool-extra": toolExtraPage})(srv)
 	fetched := recordPrefetches(t, srv)
 	srv.prefetchCommands(parser.Parse("helper() { :; }\nsudo -u root command tool -v extra\nsudo helper extra\n", dialect.Bash))

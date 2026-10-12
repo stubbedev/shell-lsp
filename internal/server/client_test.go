@@ -29,9 +29,15 @@ type testClient struct {
 func startClient(t testing.TB, initializeParams string, setup ...func(*Server)) (*testClient, *Server) {
 	t.Helper()
 
+	return startClientIn(t, CurrentProcess(), initializeParams, setup...)
+}
+
+func startClientIn(t testing.TB, process Process, initializeParams string, setup ...func(*Server)) (*testClient, *Server) {
+	t.Helper()
+
 	clientReader, serverWriter := io.Pipe()
 	serverReader, clientWriter := io.Pipe()
-	srv := New(jsonrpc.NewConn(serverReader, serverWriter), "test")
+	srv := New(jsonrpc.NewConn(serverReader, serverWriter), "test", process)
 	srv.shellcheckrc = newShellcheckrcResolver(nil)
 	for _, fn := range setup {
 		fn(srv)

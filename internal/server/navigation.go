@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"os"
 	"path/filepath"
 	"slices"
 
@@ -48,15 +47,11 @@ func (s *Server) workspaceFile(docs *docstore.View, uri string) (*workspace.File
 }
 
 func (s *Server) navigationEnv() navigation.Env {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		home = ""
-	}
 	return navigation.Env{
 		Loader:   s.workspace,
 		Roots:    s.workspace.Roots(),
-		Home:     home,
-		PathDirs: filepath.SplitList(os.Getenv("PATH")),
+		Home:     s.process.Home,
+		PathDirs: filepath.SplitList(s.process.Path),
 	}
 }
 

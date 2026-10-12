@@ -42,7 +42,7 @@ func environment(dir string) cli.Env {
 		PathDirs:   filepath.SplitList(os.Getenv("PATH")),
 		Terminal:   terminal(os.Stdout) && os.Getenv("TERM") != "dumb",
 		Serve: func() error {
-			return server.New(jsonrpc.NewConn(os.Stdin, os.Stdout), version).Run(context.Background())
+			return server.New(jsonrpc.NewConn(os.Stdin, os.Stdout), version, server.CurrentProcess()).Run(context.Background())
 		},
 	}
 }

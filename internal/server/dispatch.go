@@ -76,6 +76,7 @@ type Server struct {
 	progress sync.Map
 	notices  sync.Map
 
+	process      Process
 	editorconfig *editorconfig.Resolver
 	shellcheckrc *shellcheckrc.Resolver
 	sem          chan struct{}
@@ -83,11 +84,12 @@ type Server struct {
 	wg           sync.WaitGroup
 }
 
-func New(conn *jsonrpc.Conn, version string) *Server {
+func New(conn *jsonrpc.Conn, version string, process Process) *Server {
 	docs := docstore.NewStore()
 	s := &Server{
 		conn:         conn,
 		version:      version,
+		process:      process,
 		logger:       slog.New(slog.NewTextHandler(os.Stderr, nil)),
 		docs:         docs,
 		snapshots:    newSnapshotCache(docs.Has),
@@ -97,11 +99,11 @@ func New(conn *jsonrpc.Conn, version string) *Server {
 		bats:         newBatsResults(),
 		settings:     config.Default(),
 		editorconfig: editorconfig.NewResolver(regularfile.ReadConfig, time.Now, workspace.DiskRecheck),
-		shellcheckrc: newShellcheckrcResolver(userShellcheckrcs()),
+		shellcheckrc: newShellcheckrcResolver(shellcheckrc.Fallback(process.Home, process.ConfigHome)),
 		sem:          make(chan struct{}, maxConcurrency),
 		exiting:      make(chan struct{}),
 	}
-	s.usePages(manpage.NewLookup(os.Getenv("MANPATH"), os.Getenv("PATH")))
+	s.usePages(manpage.NewLookup(process.ManPath, process.Path))
 	s.workspace = newWorkspace(s)
 	s.registerHandlers()
 	return s
@@ -110,7 +112,7 @@ func New(conn *jsonrpc.Conn, version string) *Server {
 func (s *Server) usePages(pages *manpage.Lookup) {
 	s.prefetch = newPrefetcher(pages)
 	s.commandDocs = commandDocs{Lookup: pages}
-	s.environment = shellEnvironment{pages: pages, executables: &executableCache{}, prefetch: s.prefetch}
+	s.environment = shellEnvironment{process: s.process, pages: pages, executables: newExecutableCache(s.process.Path, s.process.PathExt), prefetch: s.prefetch}
 }
 
 func (s *Server) SetLogger(logger *slog.Logger) {

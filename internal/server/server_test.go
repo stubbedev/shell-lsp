@@ -118,7 +118,7 @@ func TestRunLifecycle(t *testing.T) {
 
 	var input bytes.Buffer
 	var output bytes.Buffer
-	srv := New(jsonrpc.NewConn(&input, &output), "test")
+	srv := New(jsonrpc.NewConn(&input, &output), "test", CurrentProcess())
 
 	send(t, &input,
 		request(1, "initialize", `{"rootUri":"file:///ws"}`),
@@ -152,7 +152,7 @@ func TestUnknownRequestMethod(t *testing.T) {
 
 	var input bytes.Buffer
 	var output bytes.Buffer
-	srv := New(jsonrpc.NewConn(&input, &output), "test")
+	srv := New(jsonrpc.NewConn(&input, &output), "test", CurrentProcess())
 
 	send(t, &input,
 		request(1, "initialize", `{}`),
@@ -176,7 +176,7 @@ func TestRequestBeforeInitialize(t *testing.T) {
 
 	var input bytes.Buffer
 	var output bytes.Buffer
-	srv := New(jsonrpc.NewConn(&input, &output), "test")
+	srv := New(jsonrpc.NewConn(&input, &output), "test", CurrentProcess())
 
 	opened := notification("textDocument/didOpen")
 	opened.Params = json.RawMessage(`{"textDocument": {"uri": "file:///t.sh", "languageId": "shellscript", "version": 1, "text": "x"}}`)
@@ -217,7 +217,7 @@ func TestInvalidInitializeParams(t *testing.T) {
 
 	var input bytes.Buffer
 	var output bytes.Buffer
-	srv := New(jsonrpc.NewConn(&input, &output), "test")
+	srv := New(jsonrpc.NewConn(&input, &output), "test", CurrentProcess())
 
 	send(t, &input,
 		request(1, "initialize", `{"processId":"not-a-number"}`),
@@ -244,7 +244,7 @@ func TestEOFBeforeExit(t *testing.T) {
 
 	var input bytes.Buffer
 	var output bytes.Buffer
-	srv := New(jsonrpc.NewConn(&input, &output), "test")
+	srv := New(jsonrpc.NewConn(&input, &output), "test", CurrentProcess())
 
 	if err := srv.Run(t.Context()); err == nil {
 		t.Error("Run() on immediate EOF succeeded, want error")
@@ -256,7 +256,7 @@ func TestNotificationsProcessedInOrder(t *testing.T) {
 
 	var mu sync.Mutex
 	var order []string
-	srv := New(jsonrpc.NewConn(nil, nil), "test")
+	srv := New(jsonrpc.NewConn(nil, nil), "test", CurrentProcess())
 	srv.initialized = true
 	for _, name := range []string{"a", "b", "c"} {
 		srv.notifications["test/"+name] = func(_ context.Context, _ json.RawMessage) error {
@@ -284,7 +284,7 @@ func TestRequestsRunConcurrently(t *testing.T) {
 
 	input := newLockedBuffer()
 	var output bytes.Buffer
-	srv := New(jsonrpc.NewConn(input, &output), "test")
+	srv := New(jsonrpc.NewConn(input, &output), "test", CurrentProcess())
 
 	started := make(chan string, 2)
 	release := make(chan struct{})
@@ -338,7 +338,7 @@ func TestCancelRequest(t *testing.T) {
 
 	var input bytes.Buffer
 	var output bytes.Buffer
-	srv := New(jsonrpc.NewConn(&input, &output), "test")
+	srv := New(jsonrpc.NewConn(&input, &output), "test", CurrentProcess())
 
 	srv.requests["test/slow"] = func(ctx context.Context, _ *docstore.View, _ json.RawMessage) (any, error) {
 		select {
@@ -374,7 +374,7 @@ func TestServerInitiatedRequest(t *testing.T) {
 
 	clientReader, clientWriter := io.Pipe()
 	serverReader, serverWriter := io.Pipe()
-	srv := New(jsonrpc.NewConn(serverReader, clientWriter), "test")
+	srv := New(jsonrpc.NewConn(serverReader, clientWriter), "test", CurrentProcess())
 
 	srv.requests["test/roundtrip"] = func(ctx context.Context, _ *docstore.View, params json.RawMessage) (any, error) {
 		var result string
@@ -440,7 +440,7 @@ func TestProgressNotifications(t *testing.T) {
 
 	clientReader, clientWriter := io.Pipe()
 	serverReader, serverWriter := io.Pipe()
-	srv := New(jsonrpc.NewConn(serverReader, clientWriter), "test")
+	srv := New(jsonrpc.NewConn(serverReader, clientWriter), "test", CurrentProcess())
 
 	srv.requests["test/progress"] = func(ctx context.Context, _ *docstore.View, _ json.RawMessage) (any, error) {
 		progress, err := srv.StartProgress(ctx, "scanning workspace")
@@ -514,7 +514,7 @@ func TestPanicInHandlerReturnsInternalError(t *testing.T) {
 
 	var input bytes.Buffer
 	var output bytes.Buffer
-	srv := New(jsonrpc.NewConn(&input, &output), "test")
+	srv := New(jsonrpc.NewConn(&input, &output), "test", CurrentProcess())
 
 	srv.requests["test/panic"] = func(_ context.Context, _ *docstore.View, _ json.RawMessage) (any, error) {
 		panic("boom")

@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 	"sync"
 	"time"
 
@@ -48,13 +47,14 @@ type completionData struct {
 }
 
 type shellEnvironment struct {
+	process     Process
 	pages       *manpage.Lookup
 	executables *executableCache
 	prefetch    *prefetcher
 }
 
 func (e shellEnvironment) Executables() []string {
-	return e.executables.list(os.Getenv("PATH"), time.Now())
+	return e.executables.list(time.Now())
 }
 
 func (e shellEnvironment) ReadDir(dir string) ([]completion.DirEntry, error) {
@@ -75,27 +75,11 @@ func (e shellEnvironment) ReadDir(dir string) ([]completion.DirEntry, error) {
 	return out, nil
 }
 
-func (e shellEnvironment) Home() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	return home
-}
+func (e shellEnvironment) Home() string { return e.process.Home }
 
-func (e shellEnvironment) WorkDir() (string, error) { return os.Getwd() }
+func (e shellEnvironment) WorkDir() (string, error) { return e.process.workDir() }
 
-func (e shellEnvironment) EnvironmentNames() []string {
-	env := os.Environ()
-	names := make([]string, 0, len(env))
-	for _, kv := range env {
-		if name, _, ok := strings.Cut(kv, "="); ok && name != "" {
-			names = append(names, name)
-		}
-	}
-	slices.Sort(names)
-	return slices.Compact(names)
-}
+func (e shellEnvironment) EnvironmentNames() []string { return e.process.environmentNames() }
 
 func (e shellEnvironment) Options(ctx context.Context, command string, args []string) ([]manpage.Option, error) {
 	return e.pages.Options(ctx, command, args)
@@ -110,31 +94,35 @@ func (e shellEnvironment) Subcommands(ctx context.Context, command string, args 
 }
 
 type executableCache struct {
+	dirs     []string
+	pathExt  []string
 	mu       sync.Mutex
-	path     string
 	checked  time.Time
 	modTimes []time.Time
 	names    []string
 }
 
-func (c *executableCache) list(path string, now time.Time) []string {
+func newExecutableCache(path, pathExt string) *executableCache {
+	return &executableCache{dirs: filepath.SplitList(path), pathExt: platform.Native.PathExt(pathExt)}
+}
+
+func (c *executableCache) list(now time.Time) []string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.names != nil && c.path == path && now.Sub(c.checked) < workspace.DiskRecheck {
+	if c.names != nil && now.Sub(c.checked) < workspace.DiskRecheck {
 		return c.names
 	}
-	dirs := filepath.SplitList(path)
-	modTimes := make([]time.Time, len(dirs))
-	for i, dir := range dirs {
-		if info, err := os.Stat(dir); err == nil { //nolint:gosec
+	modTimes := make([]time.Time, len(c.dirs))
+	for i, dir := range c.dirs {
+		if info, err := os.Stat(dir); err == nil {
 			modTimes[i] = info.ModTime()
 		}
 	}
 	c.checked = now
-	if c.names != nil && c.path == path && slices.EqualFunc(c.modTimes, modTimes, time.Time.Equal) {
+	if c.names != nil && slices.EqualFunc(c.modTimes, modTimes, time.Time.Equal) {
 		return c.names
 	}
-	c.path, c.modTimes, c.names = path, modTimes, scanExecutables(dirs, platform.Native.PathExt(os.Getenv("PATHEXT")))
+	c.modTimes, c.names = modTimes, scanExecutables(c.dirs, c.pathExt)
 	return c.names
 }
 
@@ -161,7 +149,7 @@ func scanExecutables(dirs, pathExt []string) []string {
 
 func followedInfo(dir string, entry fs.DirEntry) (fs.FileInfo, error) {
 	if entry.Type()&fs.ModeSymlink != 0 {
-		return os.Stat(filepath.Join(dir, entry.Name())) //nolint:gosec
+		return os.Stat(filepath.Join(dir, entry.Name()))
 	}
 	return entry.Info()
 }

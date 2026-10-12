@@ -174,7 +174,7 @@ func TestDialectSettingOverridesDetection(t *testing.T) {
 func TestInvalidInitializationOptionsFailInitialize(t *testing.T) {
 	t.Parallel()
 
-	srv := New(jsonrpc.NewConn(nil, nil), "test")
+	srv := New(jsonrpc.NewConn(nil, nil), "test", CurrentProcess())
 	_, err := srv.handleInitialize(t.Context(), nil, json.RawMessage(`{"initializationOptions": {"dialect": "fish"}}`))
 	rpcErr, ok := errors.AsType[*jsonrpc.Error](err)
 	if !ok || rpcErr.Code != jsonrpc.CodeInvalidParams || !strings.Contains(rpcErr.Message, "fish") {

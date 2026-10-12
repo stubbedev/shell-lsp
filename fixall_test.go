@@ -64,7 +64,7 @@ func startFixAllClient(t *testing.T, dir string) *fixAllClient {
 	t.Helper()
 	clientReader, serverWriter := io.Pipe()
 	serverReader, clientWriter := io.Pipe()
-	srv := server.New(jsonrpc.NewConn(serverReader, serverWriter), "test")
+	srv := server.New(jsonrpc.NewConn(serverReader, serverWriter), "test", server.CurrentProcess())
 	done := make(chan struct{})
 	go func() {
 		defer close(done)

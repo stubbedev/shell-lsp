@@ -1,7 +1,6 @@
 package server
 
 import (
-	"os"
 	"time"
 
 	"github.com/stubbedev/shell-lsp/internal/regularfile"
@@ -11,12 +10,4 @@ import (
 
 func newShellcheckrcResolver(fallback []string) *shellcheckrc.Resolver {
 	return shellcheckrc.NewResolver(regularfile.ReadConfig, time.Now, workspace.DiskRecheck, fallback)
-}
-
-func userShellcheckrcs() []string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		home = ""
-	}
-	return shellcheckrc.Fallback(home, os.Getenv("XDG_CONFIG_HOME"))
 }
