@@ -146,7 +146,7 @@ func (p *pass) checkDisabledCodes(span parser.Span, value string) {
 		return
 	}
 	for item := range strings.SplitSeq(value, ",") {
-		if _, _, ok := parseDisabled(item); !ok {
+		if _, err := parseCodeItem(item); err != nil {
 			p.report(1125, span, fmt.Sprintf("%q is not a check code or range, so this disable list is ignored from here on; write codes like SC2086 or ranges like SC2000-SC2099.", item))
 			return
 		}

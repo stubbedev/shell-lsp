@@ -37,7 +37,7 @@ func TestProfiles(t *testing.T) {
 		{"strict", profileScript, Options{Profile: ProfileStrict}, []Code{2006, 2028, 2034, 2086, 2250}, []Code{2154}},
 		{"minimal keeps an optional check named in settings", profileScript, Options{Profile: ProfileMinimal, Optional: []string{"require-variable-braces"}}, []Code{2250, 2086}, []Code{2006}},
 		{"minimal keeps an optional check a directive enables", "#!/bin/bash\n# shellcheck enable=require-variable-braces\nx=1\necho \"$x\"\n", Options{Profile: ProfileMinimal}, []Code{2250}, nil},
-		{"exclude wins over strict", profileScript, Options{Profile: ProfileStrict, Exclude: []Code{2250}}, []Code{2086}, []Code{2250}},
+		{"exclude wins over strict", profileScript, Options{Profile: ProfileStrict, Exclude: CodesOf(2250)}, []Code{2086}, []Code{2250}},
 		{"a disable directive wins over minimal", "#!/bin/bash\n# shellcheck disable=SC2086\nx=$1\necho $x\n", Options{Profile: ProfileMinimal}, nil, []Code{2086}},
 		{"strict reports stale directives", "#!/bin/bash\n# shellcheck disable=SC2086\necho hi\n", Options{Profile: ProfileStrict}, []Code{codeUnusedDirective}, nil},
 	} {

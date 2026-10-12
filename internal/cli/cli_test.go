@@ -304,6 +304,10 @@ func TestGNUOptionParsing(t *testing.T) {
 		!opts.exclude.Has(1) || !opts.exclude.Has(3) || opts.exclude.Has(4) || !slices.Equal(opts.operands, []string{"a.sh", "-b.sh"}) {
 		t.Errorf("parsed options = %+v", opts)
 	}
+	ranged, err := parseCheckArgs([]string{"--exclude=SC2000-SC2086", "a.sh"})
+	if err != nil || !ranged.exclude.Has(2085) || ranged.exclude.Has(2086) {
+		t.Errorf("--exclude=SC2000-SC2086 = %+v, %v; want SC2085 excluded and SC2086 kept", ranged.exclude, err)
+	}
 	for _, bad := range [][]string{{"-f"}, {"--format"}, {"-q"}, {"--ex", "x"}, {"--norc=yes"}, {"-W", "many"}} {
 		if _, err := parseCheckArgs(bad); checkStatusOf(err) != checkStatusSyntax {
 			t.Errorf("%v = %v, want a syntax error", bad, err)

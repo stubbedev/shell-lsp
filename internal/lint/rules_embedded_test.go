@@ -62,7 +62,7 @@ func TestEmbeddedProgramFindingsAreConfigurable(t *testing.T) {
 	if got := embeddedFindings(src, Options{}); len(got) != 2 || got[0].code != "SL3001" || got[1].code != "SL3003" {
 		t.Errorf("findings with SL3002 disabled for one command = %+v, want SL3001 and SL3003", got)
 	}
-	if got := embeddedFindings(src, Options{Exclude: []Code{embeddedSyntaxCodes[0], embeddedSyntaxCodes[2]}}); len(got) != 0 {
+	if got := embeddedFindings(src, Options{Exclude: CodesOf(embeddedSyntaxCodes[0], embeddedSyntaxCodes[2])}); len(got) != 0 {
 		t.Errorf("findings with SL3001 and SL3003 excluded = %+v, want none", got)
 	}
 	fileWide := "#!/bin/bash\n# shellcheck disable=SL3001\nawk '{' f\nawk '(' g\n"

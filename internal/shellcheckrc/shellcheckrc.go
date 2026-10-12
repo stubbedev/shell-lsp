@@ -3,7 +3,6 @@ package shellcheckrc
 import (
 	"fmt"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -16,51 +15,6 @@ import (
 const FileName = ".shellcheckrc"
 
 var Names = []string{FileName, "shellcheckrc"}
-
-type codeRange struct {
-	from, to lint.Code
-}
-
-type CodeSet struct {
-	all    bool
-	ranges []codeRange
-}
-
-func (s CodeSet) Has(code lint.Code) bool {
-	return s.all || slices.ContainsFunc(s.ranges, func(r codeRange) bool { return r.from <= code && code <= r.to })
-}
-
-func (s CodeSet) Union(other CodeSet) CodeSet {
-	return CodeSet{all: s.all || other.all, ranges: slices.Concat(s.ranges, other.ranges)}
-}
-
-func (s CodeSet) Known() []lint.Code {
-	return slices.DeleteFunc(lint.Codes(), func(code lint.Code) bool { return !s.Has(code) })
-}
-
-func ParseCodeSet(list string) (CodeSet, error) {
-	var set CodeSet
-	for item := range strings.SplitSeq(list, ",") {
-		item = strings.TrimSpace(item)
-		if item == directive.All {
-			set.all = true
-			continue
-		}
-		from, to, isRange := strings.Cut(item, "-")
-		first, err := lint.ParseCode(from)
-		if err != nil {
-			return CodeSet{}, err
-		}
-		last := first
-		if isRange {
-			if last, err = lint.ParseCode(to); err != nil {
-				return CodeSet{}, err
-			}
-		}
-		set.ranges = append(set.ranges, codeRange{from: first, to: last})
-	}
-	return set, nil
-}
 
 func SplitList(v string) []string {
 	var out []string
@@ -75,7 +29,7 @@ func SplitList(v string) []string {
 type File struct {
 	Path        string
 	Text        string
-	Disabled    CodeSet
+	Disabled    lint.CodeSet
 	Enabled     []string
 	Shell       *dialect.Dialect
 	SourcePaths []string
@@ -117,7 +71,7 @@ func (rc *File) set(pair directive.Pair) error {
 	key, _ := pair.Key()
 	switch key {
 	case directive.Disable:
-		set, err := ParseCodeSet(pair.Value)
+		set, err := lint.ParseCodeSet(pair.Value)
 		if err != nil {
 			return err
 		}
@@ -185,7 +139,7 @@ func mergeDisable(lines []directive.Line, code string) (textedit.Edit, bool, boo
 			if !pair.Is(directive.Disable) {
 				continue
 			}
-			if set, err := ParseCodeSet(pair.Value); err == nil && set.Has(parsed) {
+			if set, err := lint.ParseCodeSet(pair.Value); err == nil && set.Has(parsed) {
 				return textedit.Edit{}, false, false
 			}
 			if merge == nil && pair.ValueEnd-pair.ValueOffset == len(pair.Value) {

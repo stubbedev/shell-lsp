@@ -174,7 +174,7 @@ type Normalized struct {
 }
 
 type Options struct {
-	Exclude       []Code
+	Exclude       CodeSet
 	Optional      []string
 	DialectSource DialectSource
 	Sources       []Source
@@ -225,7 +225,7 @@ func Run(tree *parser.Tree, imports []parser.Import, opts Options) Report {
 			report.Suppressed = append(report.Suppressed, f)
 			return
 		}
-		if !slices.Contains(opts.Exclude, f.Code) && p.profileKeeps(f) {
+		if !opts.Exclude.Has(f.Code) && p.profileKeeps(f) {
 			report.Findings = append(report.Findings, f)
 		}
 	}

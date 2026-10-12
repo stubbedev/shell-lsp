@@ -157,7 +157,7 @@ func (c *checker) color() bool {
 type fileSettings struct {
 	rc       shellcheckrc.File
 	forced   *dialect.Dialect
-	exclude  shellcheckrc.CodeSet
+	exclude  lint.CodeSet
 	optional []string
 	extended bool
 	roots    []string
@@ -440,7 +440,7 @@ func sourceFindings(doc *docstore.Document, findings []lint.Finding) []lint.Find
 	return out
 }
 
-func (c *checker) filter(exclude shellcheckrc.CodeSet, findings []lint.Finding) []lint.Finding {
+func (c *checker) filter(exclude lint.CodeSet, findings []lint.Finding) []lint.Finding {
 	kept := slices.DeleteFunc(findings, func(f lint.Finding) bool {
 		return f.Severity > c.opts.severity || exclude.Has(f.Code) || (c.opts.include != nil && !c.opts.include.Has(f.Code))
 	})

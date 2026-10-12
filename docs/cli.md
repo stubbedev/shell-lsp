@@ -37,7 +37,7 @@ position, so it is the same on every run.
 | `-f`, `--format=FORMAT` | `tty` (default), `gcc`, `json`, `json1`, `checkstyle`, `diff`, `quiet` or `sarif` |
 | `-s`, `--shell=SHELL` | Lint every file as `sh`, `bash`, `dash`, `ksh`, `busybox` or `zsh` |
 | `-S`, `--severity=LEVEL` | Report only findings at least this severe: `error`, `warning`, `info` or `style` |
-| `-e`, `--exclude=CODES` | Drop these codes, such as `SC2034,2086` or `SL1001`; repeatable |
+| `-e`, `--exclude=CODES` | Drop these codes, such as `SC2034,2086` or `SL1001`, or a range such as `SC2000-SC2100` that leaves out its end; repeatable |
 | `-i`, `--include=CODES` | Report only these codes; repeatable |
 | `-o`, `--enable=CHECKS` | Enable optional checks by name, or `all`; `--list-optional` lists them with the checks each turns on |
 | `--profile=PROFILE` | `recommended` (default), `minimal` or `strict`, as described under [Profiles](../README.md#profiles); `--enable`, `--exclude` and directives apply on top |
@@ -74,7 +74,7 @@ script's directory or one of its parents applies to it, and failing that
 
 ```
 # Team defaults
-disable=SC2034,SC1090-SC1091
+disable=SC2034,SC1090-SC1092
 enable=require-variable-braces
 shell=bash
 source-path=SCRIPTDIR:lib
@@ -82,7 +82,8 @@ external-sources=true
 extended-analysis=false
 ```
 
-`disable` takes codes, ranges and `all`; `source-path` entries are relative to
+`disable` takes codes, ranges and `all`; as in ShellCheck, a range leaves out
+its end, so `SC1090-SC1092` covers SC1090 and SC1091; `source-path` entries are relative to
 the rc file and, like `--source-path`, separated by `:` (`;` on Windows, as in
 `PATH`). On Windows the fallbacks are `%USERPROFILE%\.config\shellcheckrc` and
 `%USERPROFILE%\.shellcheckrc` unless `XDG_CONFIG_HOME` is set. Options on the command line add to the rc file's settings, and

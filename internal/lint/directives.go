@@ -146,12 +146,6 @@ func followingKeyword(rest string) (string, placement) {
 	return "", placedBeforeCommand
 }
 
-type codeRange struct {
-	from, to Code
-}
-
-func (r codeRange) has(code Code) bool { return r.from <= code && code < r.to }
-
 type itemPlace struct {
 	directive, pair, item int
 }
@@ -160,15 +154,14 @@ type disabledItem struct {
 	scope    parser.Span
 	span     parser.Span
 	text     string
-	all      bool
-	codes    codeRange
+	codes    CodeSet
 	place    itemPlace
 	hits     int
 	findings []int
 }
 
 func (d disabledItem) matches(code Code, at int) bool {
-	return at >= d.scope.Start && at <= d.scope.End && (d.all || d.codes.has(code))
+	return at >= d.scope.Start && at <= d.scope.End && d.codes.Has(code)
 }
 
 type suppressions struct {
@@ -254,8 +247,8 @@ func disabledItems(d directiveComment, pair directive.Pair, scope parser.Span, p
 	}
 	var out []disabledItem
 	for i, item := range items {
-		all, codes, ok := parseDisabled(item.Text)
-		if !ok {
+		codes, err := parseCodeItem(item.Text)
+		if err != nil {
 			continue
 		}
 		at := place
@@ -264,29 +257,10 @@ func disabledItems(d directiveComment, pair directive.Pair, scope parser.Span, p
 		}
 		out = append(out, disabledItem{
 			scope: scope, span: parser.Span{Start: d.at(item.Offset), End: d.at(item.End)}, text: item.Text,
-			all: all, codes: codes, place: at,
+			codes: codes, place: at,
 		})
 	}
 	return out
-}
-
-func parseDisabled(item string) (bool, codeRange, bool) {
-	if item == directive.All {
-		return true, codeRange{}, true
-	}
-	from, to, isRange := strings.Cut(item, "-")
-	first, err := ParseCode(from)
-	if err != nil {
-		return false, codeRange{}, false
-	}
-	if !isRange {
-		return false, codeRange{from: first, to: first + 1}, true
-	}
-	last, err := ParseCode(to)
-	if err != nil {
-		return false, codeRange{}, false
-	}
-	return false, codeRange{from: first, to: last}, true
 }
 
 type fileWide struct {

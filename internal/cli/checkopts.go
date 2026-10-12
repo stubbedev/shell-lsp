@@ -74,8 +74,8 @@ type checkOptions struct {
 	format       outputFormat
 	shell        *dialect.Dialect
 	severity     lint.Severity
-	exclude      shellcheckrc.CodeSet
-	include      *shellcheckrc.CodeSet
+	exclude      lint.CodeSet
+	include      *lint.CodeSet
 	enable       []string
 	profile      lint.Profile
 	extended     *bool
@@ -107,7 +107,7 @@ var checkOptionTable = []option[checkOptions]{
 		return nil
 	}},
 	{'i', "include", requiredArg, func(o *checkOptions, v string) error {
-		set, err := shellcheckrc.ParseCodeSet(v)
+		set, err := lint.ParseCodeSet(v)
 		if err != nil {
 			return badSyntax("--include: %w", err)
 		}
@@ -118,7 +118,7 @@ var checkOptionTable = []option[checkOptions]{
 		return nil
 	}},
 	{'e', "exclude", requiredArg, func(o *checkOptions, v string) error {
-		set, err := shellcheckrc.ParseCodeSet(v)
+		set, err := lint.ParseCodeSet(v)
 		if err != nil {
 			return badSyntax("--exclude: %w", err)
 		}

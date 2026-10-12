@@ -8,28 +8,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 )
 
-func TestCodeSet(t *testing.T) {
+func TestDisableRangeExcludesItsEnd(t *testing.T) {
 	t.Parallel()
 
-	set, err := ParseCodeSet("SC2086, SC2000-SC2010,SL1001")
+	rc, err := Parse("/p/.shellcheckrc", "disable=SC2000-SC2086\n")
 	if err != nil {
 		t.Fatal(err)
 	}
-	for code, want := range map[lint.Code]bool{2086: true, 2000: true, 2010: true, 2011: false, 11001: true, 2034: false} {
-		if set.Has(code) != want {
-			t.Errorf("Has(%v) = %t, want %t", code, !want, want)
-		}
-	}
-	all, err := ParseCodeSet("all")
-	if err != nil || !all.Has(2034) || len(all.Known()) != len(lint.Codes()) {
-		t.Errorf("all = %+v, %v", all, err)
-	}
-	if _, err := ParseCodeSet("SC20x"); err == nil {
-		t.Error("ParseCodeSet accepted a malformed code")
+	if !rc.Disabled.Has(2085) || rc.Disabled.Has(2086) {
+		t.Errorf("disable=SC2000-SC2086: Has(2085) = %t, Has(2086) = %t; want true, false as in shellcheck", rc.Disabled.Has(2085), rc.Disabled.Has(2086))
 	}
 }
 
@@ -114,6 +104,7 @@ func TestDisableEdit(t *testing.T) {
 		{"# keep\ndisable=SC2034 # old\nshell=bash\n", "SC2086", "# keep\ndisable=SC2034,SC2086 # old\nshell=bash\n", true},
 		{"shell=bash disable=SC2034\n", "SL1001", "shell=bash disable=SC2034,SL1001\n", true},
 		{"disable=SC2000-SC2100\n", "SC2086", "", false},
+		{"disable=SC2000-SC2086\n", "SC2086", "disable=SC2000-SC2086,SC2086\n", true},
 		{"disable=all\n", "SC2086", "", false},
 		{"disable=SC2086\n", "SC2086", "", false},
 		{"disable='SC2034'\n", "SC2086", "disable='SC2034'\ndisable=SC2086\n", true},

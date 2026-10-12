@@ -52,7 +52,7 @@ func TestShebangLines(t *testing.T) {
 	} {
 		tree := parser.Parse(script, dialect.Posix)
 		var got []string
-		for _, f := range Check(tree, nil, Options{Exclude: []Code{2239}}) {
+		for _, f := range Check(tree, nil, Options{Exclude: CodesOf(2239)}) {
 			got = append(got, f.Code.String()+" "+position(script, f.Span.Start))
 		}
 		slices.Sort(got)

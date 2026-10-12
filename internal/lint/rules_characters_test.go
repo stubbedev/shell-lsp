@@ -20,7 +20,7 @@ func TestCharacterChecks(t *testing.T) {
 	} {
 		tree := parser.Parse(script, dialect.Bash)
 		var got []string
-		for _, f := range Check(tree, nil, Options{Exclude: []Code{2086, 2154}}) {
+		for _, f := range Check(tree, nil, Options{Exclude: CodesOf(2086, 2154)}) {
 			got = append(got, f.Code.String()+" "+position(script, f.Span.Start))
 		}
 		if !slices.Equal(got, want) {

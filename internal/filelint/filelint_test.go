@@ -49,7 +49,7 @@ func TestCheckFollowsSourcedFilesAndHonoursOptions(t *testing.T) {
 	if !slices.Equal(got, []lint.Code{2086}) {
 		t.Errorf("findings = %v; the sourced file defines LIBVAR, so only SC2086 remains", got)
 	}
-	if got := codes(Check(file, env, Options{Exclude: []lint.Code{2086}}).Findings); len(got) != 0 {
+	if got := codes(Check(file, env, Options{Exclude: lint.CodesOf(2086)}).Findings); len(got) != 0 {
 		t.Errorf("Exclude kept %v", got)
 	}
 	if got := codes(Check(file, env, Options{Optional: []string{"require-variable-braces"}}).Findings); !slices.Contains(got, 2250) {

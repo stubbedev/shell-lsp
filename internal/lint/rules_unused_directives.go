@@ -37,7 +37,7 @@ func (p *pass) reportUnusedDirectives(suppressed *suppressions) {
 	items := suppressed.items
 	silencedHere := map[int]bool{}
 	for _, item := range items {
-		if item.all || item.codes.has(codeUnusedDirective) {
+		if item.codes.Has(codeUnusedDirective) {
 			silencedHere[item.place.directive] = true
 		}
 	}
@@ -58,27 +58,28 @@ func (p *pass) reportUnusedDirectives(suppressed *suppressions) {
 }
 
 func (p *pass) reportableWhenUnused(item disabledItem) bool {
-	if item.all || item.codes.has(codeUnusedDirective) || p.directives[item.place.directive].placement != placedBeforeCommand {
+	if item.codes.Has(codeUnusedDirective) || p.directives[item.place.directive].placement != placedBeforeCommand {
 		return false
 	}
-	if slices.ContainsFunc(sourceDependentCodes, item.codes.has) {
+	if slices.ContainsFunc(sourceDependentCodes, item.codes.Has) {
 		return false
 	}
-	if item.codes.to-item.codes.from != 1 {
+	code, single := item.codes.single()
+	if !single {
 		return true
 	}
-	m, known := p.catalog[item.codes.from]
+	m, known := p.catalog[code]
 	if !known {
-		return !item.codes.from.parseFailure()
+		return !code.parseFailure()
 	}
 	return m.optional == "" || p.settings.enabled(m.optional)
 }
 
 func (p *pass) unusedMessage(item disabledItem) string {
 	name := item.text
-	if item.codes.to-item.codes.from == 1 {
-		name = item.codes.from.String()
-		if _, known := p.catalog[item.codes.from]; !known {
+	if code, single := item.codes.single(); single {
+		name = code.String()
+		if _, known := p.catalog[code]; !known {
 			return name + " is not a check shell-lsp runs, so disabling it silences nothing here."
 		}
 	}

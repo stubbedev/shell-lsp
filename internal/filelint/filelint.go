@@ -11,7 +11,7 @@ import (
 )
 
 type Options struct {
-	Exclude       []lint.Code
+	Exclude       lint.CodeSet
 	Optional      []string
 	Profile       lint.Profile
 	DialectSource lint.DialectSource

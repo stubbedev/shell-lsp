@@ -51,7 +51,7 @@ func (s *Server) lintReport(file *workspace.File, settings config.Settings, gene
 	key := lintMemoKey + strconv.FormatUint(generation, 10) + "/" + rc.Path + "\x00" + rc.Text
 	report := workspace.Memo(file, key, stamp, func() lint.Report {
 		return filelint.Check(file, s.navigationEnv(), filelint.Options{
-			Exclude:            slices.Concat(settings.Lint.Exclude, rc.Disabled.Known()),
+			Exclude:            lint.CodesOf(settings.Lint.Exclude...).Union(rc.Disabled),
 			Optional:           slices.Concat(settings.Lint.Optional, rc.Enabled),
 			Profile:            settings.Lint.Profile,
 			DialectSource:      dialectSource(file, settings),
