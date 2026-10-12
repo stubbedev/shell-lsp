@@ -76,7 +76,7 @@ type hoverer struct {
 	text    string
 	dialect dialect.Dialect
 	scope   parser.ScopeID
-	path    []syntax.Node
+	path    []parser.Located
 }
 
 func (h hoverer) keyword() (Result, bool) {
@@ -94,18 +94,14 @@ func (h hoverer) keyword() (Result, bool) {
 }
 
 func (h hoverer) paramExp() (Result, bool) {
-	for _, node := range slices.Backward(h.path) {
-		exp, ok := node.(*syntax.ParamExp)
+	for _, located := range slices.Backward(h.path) {
+		exp, ok := located.Node.(*syntax.ParamExp)
 		if !ok || exp.Param == nil {
-			continue
-		}
-		span, ok := h.Tree.NodeSpan(exp)
-		if !ok {
 			continue
 		}
 		sections := []string{h.parameter(exp.Param.Value)}
 		sections = append(sections, expansionDocs(exp)...)
-		return Result{Markdown: strings.Join(sections, "\n\n---\n\n"), Span: span}, true
+		return Result{Markdown: strings.Join(sections, "\n\n---\n\n"), Span: located.Span}, true
 	}
 	return Result{}, false
 }
@@ -332,8 +328,8 @@ func (h hoverer) commandWords(cmd parser.Command) []*syntax.Word {
 	if len(cmd.Args) > 0 {
 		return cmd.Args
 	}
-	for _, node := range h.path {
-		decl, ok := node.(*syntax.DeclClause)
+	for _, located := range h.path {
+		decl, ok := located.Node.(*syntax.DeclClause)
 		if !ok || parser.Offset(decl.Variant.Pos()) != cmd.NameSpan.Start {
 			continue
 		}
@@ -455,8 +451,8 @@ func (h hoverer) builtinFlag(command, word string) (string, bool) {
 }
 
 func (h hoverer) operator() (Result, bool) {
-	for _, node := range slices.Backward(h.path) {
-		if r, ok := h.operatorOf(node); ok {
+	for _, located := range slices.Backward(h.path) {
+		if r, ok := h.operatorOf(located.Node); ok {
 			return r, true
 		}
 	}

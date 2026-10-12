@@ -8,16 +8,18 @@ import (
 
 func convertBackticks(s *site) (Change, bool) {
 	path := s.pathAt()
-	for i, node := range path {
-		cs, ok := node.(*syntax.CmdSubst)
+	ancestors := make([]syntax.Node, 0, len(path))
+	for _, located := range path {
+		cs, ok := located.Node.(*syntax.CmdSubst)
 		if !ok || !cs.Backquotes {
+			ancestors = append(ancestors, located.Node)
 			continue
 		}
-		replacement, ok := parser.DollarSubstitution(s.Tree.Text(), cs, path[:i])
+		replacement, ok := parser.DollarSubstitution(s.Tree.Text(), cs, ancestors)
 		if !ok {
 			return Change{}, false
 		}
-		span, _ := s.Tree.NodeSpan(cs)
+		span := located.Span
 		return Change{Title: "Convert backticks to $(...)", Edits: []textedit.Edit{{Start: span.Start, End: span.End, NewText: replacement}}}, true
 	}
 	return Change{}, false

@@ -22,11 +22,11 @@ func movableFunction(s *site) (movable, bool) {
 		return movable{}, false
 	}
 	path := s.pathAt()
-	i := slices.Index(path, syntax.Node(decl))
+	i := slices.IndexFunc(path, func(located parser.Located) bool { return located.Node == decl })
 	if i < 2 {
 		return movable{}, false
 	}
-	if _, top := path[i-2].(*syntax.File); !top {
+	if _, top := path[i-2].Node.(*syntax.File); !top {
 		return movable{}, false
 	}
 	defined := 0
@@ -35,7 +35,7 @@ func movableFunction(s *site) (movable, bool) {
 			defined++
 		}
 	}
-	stmt, _ := s.Tree.NodeSpan(path[i-1])
+	stmt := path[i-1].Span
 	text := s.Tree.Text()
 	if defined != 1 || !startsLine(text, stmt.Start) || strings.TrimSpace(text[stmt.End:lineEnd(text, stmt.End)]) != "" {
 		return movable{}, false

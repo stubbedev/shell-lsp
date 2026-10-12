@@ -287,11 +287,8 @@ func Matches(query, name string) bool {
 
 func SelectionPath(tree *parser.Tree, offset int) []parser.Span {
 	var spans []parser.Span
-	for _, node := range slices.Backward(tree.PathAt(offset)) {
-		span, ok := tree.NodeSpan(node)
-		if !ok {
-			continue
-		}
+	for _, located := range slices.Backward(tree.PathAt(offset)) {
+		span := located.Span
 		if n := len(spans); n > 0 && (span == spans[n-1] || span.Start > spans[n-1].Start || span.End < spans[n-1].End) {
 			continue
 		}

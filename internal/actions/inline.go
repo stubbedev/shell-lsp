@@ -74,9 +74,9 @@ func inlineVariable(s *site) (Change, bool) {
 	return Change{Title: "Inline variable " + name, Edits: edits}, true
 }
 
-func variableAt(path []syntax.Node, at int) (string, bool) {
-	for i, node := range slices.Backward(path) {
-		switch n := node.(type) {
+func variableAt(path []parser.Located, at int) (string, bool) {
+	for i, located := range slices.Backward(path) {
+		switch n := located.Node.(type) {
 		case *syntax.Assign:
 			if n.Name != nil && litSpan(n.Name).Covers(at) {
 				return n.Name.Value, true
@@ -87,7 +87,7 @@ func variableAt(path []syntax.Node, at int) (string, bool) {
 			}
 		case *syntax.Word:
 			if i > 0 {
-				if name, ok := parser.ArithmeticRead(path[i-1], n); ok {
+				if name, ok := parser.ArithmeticRead(path[i-1].Node, n); ok {
 					return name, true
 				}
 			}
@@ -186,15 +186,15 @@ func readsFollowing(tree *parser.Tree, def *parser.Definition) (int, bool) {
 
 func assignmentRemoval(tree *parser.Tree, def *parser.Definition) (textedit.Edit, bool) {
 	path := tree.PathAt(def.NameSpan.Start)
-	k := slices.IndexFunc(path, func(n syntax.Node) bool { return n == def.Node }) - 2
+	k := slices.IndexFunc(path, func(located parser.Located) bool { return located.Node == def.Node }) - 2
 	if k < 1 {
 		return textedit.Edit{}, false
 	}
-	stmt, ok := path[k].(*syntax.Stmt)
-	if !ok || !soleAssignment(stmt, def.Node) || !ownsScopeBody(tree, def.Within, path[k-1]) {
+	stmt, ok := path[k].Node.(*syntax.Stmt)
+	if !ok || !soleAssignment(stmt, def.Node) || !ownsScopeBody(tree, def.Within, path[k-1].Node) {
 		return textedit.Edit{}, false
 	}
-	span, _ := tree.NodeSpan(stmt)
+	span := path[k].Span
 	text := tree.Text()
 	if !startsLine(text, span.Start) {
 		return textedit.Edit{}, false

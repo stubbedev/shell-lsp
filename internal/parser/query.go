@@ -108,8 +108,13 @@ func (ix *Index) EnclosingFunction(scope ScopeID) (Function, bool) {
 	return ix.Functions[i], true
 }
 
-func (t *Tree) PathAt(offset int) []syntax.Node {
-	var path []syntax.Node
+type Located struct {
+	Node syntax.Node
+	Span Span
+}
+
+func (t *Tree) PathAt(offset int) []Located {
+	var path []Located
 	Walk(t.File, func(node syntax.Node) bool {
 		if node == nil {
 			return false
@@ -119,7 +124,7 @@ func (t *Tree) PathAt(offset int) []syntax.Node {
 			_, isFile := node.(*syntax.File)
 			return isFile
 		}
-		path = append(path, node)
+		path = append(path, Located{Node: node, Span: span})
 		return true
 	})
 	return path

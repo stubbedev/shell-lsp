@@ -96,7 +96,7 @@ func ifChainAt(s *site) (*syntax.IfClause, bool) {
 	path := s.pathAt()
 	i := len(path) - 1
 	for i >= 0 {
-		if _, ok := path[i].(*syntax.IfClause); ok {
+		if _, ok := path[i].Node.(*syntax.IfClause); ok {
 			break
 		}
 		i--
@@ -104,9 +104,9 @@ func ifChainAt(s *site) (*syntax.IfClause, bool) {
 	if i < 0 {
 		return nil, false
 	}
-	root, _ := path[i].(*syntax.IfClause)
+	root, _ := path[i].Node.(*syntax.IfClause)
 	for ; i > 0; i-- {
-		parent, ok := path[i-1].(*syntax.IfClause)
+		parent, ok := path[i-1].Node.(*syntax.IfClause)
 		if !ok || parent.Else != root {
 			break
 		}

@@ -13,8 +13,8 @@ import (
 )
 
 func functionHeaderAt(s *site) (*syntax.FuncDecl, bool) {
-	for _, node := range slices.Backward(s.pathAt()) {
-		fn, ok := node.(*syntax.FuncDecl)
+	for _, located := range slices.Backward(s.pathAt()) {
+		fn, ok := located.Node.(*syntax.FuncDecl)
 		if !ok {
 			continue
 		}

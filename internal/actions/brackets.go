@@ -11,8 +11,8 @@ func doubleBrackets(s *site) (Change, bool) {
 	if !s.Tree.Dialect.Features().DoubleBracket {
 		return Change{}, false
 	}
-	for _, node := range slices.Backward(s.pathAt()) {
-		stmt, ok := node.(*syntax.Stmt)
+	for _, located := range slices.Backward(s.pathAt()) {
+		stmt, ok := located.Node.(*syntax.Stmt)
 		if !ok {
 			continue
 		}

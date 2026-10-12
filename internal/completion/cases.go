@@ -138,15 +138,15 @@ func refersTo(w *syntax.Word, name string) bool {
 
 func currentPatterns(tree *parser.Tree, offset int) []string {
 	var patterns []string
-	for _, node := range tree.PathAt(offset) {
-		clause, ok := node.(*syntax.CaseClause)
+	for _, located := range tree.PathAt(offset) {
+		clause, ok := located.Node.(*syntax.CaseClause)
 		if !ok {
 			continue
 		}
 		patterns = patterns[:0]
 		for _, item := range clause.Items {
 			for _, pattern := range item.Patterns {
-				if parser.Offset(pattern.Pos()) <= offset && offset <= parser.Offset(pattern.End()) {
+				if span, ok := tree.NodeSpan(pattern); ok && span.Touches(offset) {
 					continue
 				}
 				if value, ok := parser.Literal(pattern); ok {

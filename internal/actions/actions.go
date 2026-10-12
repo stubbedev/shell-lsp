@@ -306,7 +306,7 @@ type site struct {
 	Document
 	sel     parser.Span
 	target  string
-	path    []syntax.Node
+	path    []parser.Located
 	walked  bool
 	sourced []Source
 	listed  bool
@@ -323,7 +323,7 @@ func (s *site) sources() []Source {
 	return s.sourced
 }
 
-func (s *site) pathAt() []syntax.Node {
+func (s *site) pathAt() []parser.Located {
 	if !s.walked {
 		s.path, s.walked = s.Tree.PathAt(s.sel.Start), true
 	}
@@ -351,7 +351,7 @@ func extractVariable(s *site) (Change, bool) {
 	if !ok {
 		return Change{}, false
 	}
-	stmt, ok := innermostStmt(tree, path)
+	stmt, ok := innermostStmt(path)
 	if !ok || !startsLine(text, stmt.Start) {
 		return Change{}, false
 	}
@@ -386,22 +386,22 @@ func inHeredoc(tree *parser.Tree, sel parser.Span) bool {
 	return false
 }
 
-func selectedWord(tree *parser.Tree, path []syntax.Node, sel parser.Span) (parser.Span, bool, bool) {
-	for i, node := range slices.Backward(path) {
-		w, ok := node.(*syntax.Word)
+func selectedWord(tree *parser.Tree, path []parser.Located, sel parser.Span) (parser.Span, bool, bool) {
+	for i, located := range slices.Backward(path) {
+		w, ok := located.Node.(*syntax.Word)
 		if !ok {
 			continue
 		}
-		span, ok := tree.NodeSpan(w)
-		if !ok || sel.End > span.End || (i > 0 && parser.IsArithmetic(path[i-1])) {
+		span := located.Span
+		if sel.End > span.End || (i > 0 && parser.IsArithmetic(path[i-1].Node)) {
 			return parser.Span{}, false, false
 		}
 		if span == sel {
 			return span, false, !literalGroups(tree, w.Parts, sel)
 		}
 		if i+1 < len(path) {
-			if dq, ok := path[i+1].(*syntax.DblQuoted); ok {
-				dqSpan, _ := tree.NodeSpan(dq)
+			if dq, ok := path[i+1].Node.(*syntax.DblQuoted); ok {
+				dqSpan := path[i+1].Span
 				return span, true, sel.Start > dqSpan.Start && sel.End < dqSpan.End && partsAligned(tree, dq.Parts, sel)
 			}
 		}
@@ -558,13 +558,13 @@ func topLevelStart(tree *parser.Tree, offset int) int {
 }
 
 func toggleQuotes(s *site) (Change, bool) {
-	for _, node := range slices.Backward(s.pathAt()) {
-		switch q := node.(type) {
+	for _, located := range slices.Backward(s.pathAt()) {
+		span := located.Span
+		switch q := located.Node.(type) {
 		case *syntax.SglQuoted:
 			if q.Dollar || !q.Right.IsValid() {
 				return Change{}, false
 			}
-			span, _ := s.Tree.NodeSpan(q)
 			return Change{Title: "Convert to double quotes", Edits: []textedit.Edit{{Start: span.Start, End: span.End, NewText: `"` + backslashEscaped(q.Value, doubleQuoteSpecials) + `"`}}}, true
 		case *syntax.DblQuoted:
 			if q.Dollar || !q.Right.IsValid() {
@@ -574,7 +574,6 @@ func toggleQuotes(s *site) (Change, bool) {
 			if !ok {
 				return Change{}, false
 			}
-			span, _ := s.Tree.NodeSpan(q)
 			return Change{Title: "Convert to single quotes", Edits: []textedit.Edit{{Start: span.Start, End: span.End, NewText: singleQuoted(value)}}}, true
 		}
 	}
@@ -585,9 +584,9 @@ var bareWord = regexp.MustCompile(`^[A-Za-z0-9_./:@%+-]+$`)
 
 func removeQuotes(s *site) (Change, bool) {
 	path := s.pathAt()
-	for i, node := range slices.Backward(path) {
+	for i, located := range slices.Backward(path) {
 		var value string
-		switch q := node.(type) {
+		switch q := located.Node.(type) {
 		case *syntax.SglQuoted:
 			if q.Dollar || !q.Right.IsValid() {
 				return Change{}, false
@@ -605,25 +604,24 @@ func removeQuotes(s *site) (Change, bool) {
 		if !bareWord.MatchString(value) || quotingMatters(path[:i]) {
 			return Change{}, false
 		}
-		span, _ := s.Tree.NodeSpan(node)
-		return Change{Title: "Remove the quotes", Edits: []textedit.Edit{{Start: span.Start, End: span.End, NewText: value}}}, true
+		return Change{Title: "Remove the quotes", Edits: []textedit.Edit{{Start: located.Span.Start, End: located.Span.End, NewText: value}}}, true
 	}
 	return Change{}, false
 }
 
-func quotingMatters(ancestors []syntax.Node) bool {
-	for i, node := range ancestors {
-		switch n := node.(type) {
+func quotingMatters(ancestors []parser.Located) bool {
+	for i, located := range ancestors {
+		switch n := located.Node.(type) {
 		case *syntax.Redirect:
 			if parser.IsHeredoc(n.Op) {
 				return true
 			}
 		case *syntax.CallExpr:
-			if i+1 < len(ancestors) && len(n.Args) > 0 && ancestors[i+1] == n.Args[0] {
+			if i+1 < len(ancestors) && len(n.Args) > 0 && ancestors[i+1].Node == n.Args[0] {
 				return true
 			}
 		}
-		if parser.IsArithmetic(node) {
+		if parser.IsArithmetic(located.Node) {
 			return true
 		}
 	}
@@ -667,10 +665,10 @@ func declareLocal(s *site) (Change, bool) {
 	return Change{}, false
 }
 
-func innermostStmt(tree *parser.Tree, path []syntax.Node) (parser.Span, bool) {
-	for _, node := range slices.Backward(path) {
-		if stmt, ok := node.(*syntax.Stmt); ok {
-			return tree.NodeSpan(stmt)
+func innermostStmt(path []parser.Located) (parser.Span, bool) {
+	for _, located := range slices.Backward(path) {
+		if _, ok := located.Node.(*syntax.Stmt); ok {
+			return located.Span, true
 		}
 	}
 	return parser.Span{}, false
@@ -681,18 +679,14 @@ func outermostStmtOnLine(tree *parser.Tree, offset int) (parser.Span, bool) {
 	line := lineStart(text, offset)
 	var best parser.Span
 	found := false
-	for _, node := range tree.PathAt(offset) {
-		stmt, ok := node.(*syntax.Stmt)
-		if !ok {
+	for _, located := range tree.PathAt(offset) {
+		if _, ok := located.Node.(*syntax.Stmt); !ok {
 			continue
 		}
-		span, ok := tree.NodeSpan(stmt)
-		if ok && lineStart(text, span.Start) == line {
-			return span, true
+		if lineStart(text, located.Span.Start) == line {
+			return located.Span, true
 		}
-		if ok {
-			best, found = span, true
-		}
+		best, found = located.Span, true
 	}
 	return best, found
 }

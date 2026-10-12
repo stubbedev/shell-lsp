@@ -69,8 +69,8 @@ func variableSpanAt(tree *parser.Tree, offset int) (string, parser.Span, bool) {
 			return def.Name, def.NameSpan, true
 		}
 	}
-	for _, node := range slices.Backward(tree.PathAt(offset)) {
-		exp, ok := node.(*syntax.ParamExp)
+	for _, located := range slices.Backward(tree.PathAt(offset)) {
+		exp, ok := located.Node.(*syntax.ParamExp)
 		if !ok || exp.Param == nil {
 			continue
 		}
