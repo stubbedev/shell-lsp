@@ -165,11 +165,15 @@ func (s *Server) handleCompletion(ctx context.Context, docs *docstore.View, comp
 		return lsp.CompletionList{Items: []lsp.CompletionItem{}}, nil
 	}
 	caps := s.clientCapabilities().TextDocument.Completion.CompletionItem
+	scriptDir := ""
+	if here.Doc.Local {
+		scriptDir = filepath.Dir(here.Doc.Path)
+	}
 	result, err := completion.Complete(ctx, completion.Input{
 		Tree:      here.Tree,
 		Imports:   s.imports(here.File),
 		Offset:    here.offset,
-		ScriptDir: scriptDir(here.Doc.URI),
+		ScriptDir: scriptDir,
 		Snippets:  caps.SnippetSupport && !here.Doc.Projected(),
 		Trigger:   completionTrigger(completionParams.Context),
 		Env:       s.environment,

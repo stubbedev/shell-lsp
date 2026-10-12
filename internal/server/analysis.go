@@ -6,7 +6,6 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/config"
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
-	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/format"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
@@ -114,12 +113,9 @@ func (s *Server) snapshot(docs *docstore.View, uri string) (*snapshot, error) {
 		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "document %s is not open", uri)
 	}
 	uri = doc.URI
-	settings, generation := s.settingsFor(uri)
+	settings, generation := s.settingsFor(doc.Location)
 	return s.snapshots.get(uri, doc, generation, func(previous *snapshot) *snapshot {
-		path, err := fileuri.ToPath(uri)
-		if err != nil {
-			path = ""
-		}
+		path := doc.Path
 		var like *parser.Tree
 		if previous != nil {
 			like = previous.Tree

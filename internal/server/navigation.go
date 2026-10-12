@@ -99,19 +99,26 @@ func (s *Server) handleDidChangeWatchedFiles(ctx context.Context, watched lsp.Di
 	return nil
 }
 
-func workspaceRoots(params InitializeParams) []string {
+func (s *Server) folderPath(folder lsp.WorkspaceFolder) (string, bool) {
+	path, err := fileuri.ToPath(folder.URI)
+	if err != nil {
+		s.noticeOnce("folder:"+folder.URI, lsp.MessageWarning, "Ignoring the workspace folder "+folder.URI+": "+err.Error())
+		return "", false
+	}
+	return path, true
+}
+
+func (s *Server) workspaceRoots(params InitializeParams) []string {
 	var roots []string
-	add := func(uri string) {
-		path, err := fileuri.ToPath(uri)
-		if err == nil {
+	for _, folder := range params.WorkspaceFolders {
+		if path, ok := s.folderPath(folder); ok {
 			roots = append(roots, path)
 		}
 	}
-	for _, folder := range params.WorkspaceFolders {
-		add(folder.URI)
-	}
 	if len(roots) == 0 && params.RootURI != "" {
-		add(params.RootURI)
+		if path, ok := s.folderPath(lsp.WorkspaceFolder{URI: params.RootURI}); ok {
+			roots = append(roots, path)
+		}
 	}
 	if len(roots) == 0 && params.RootPath != "" {
 		roots = append(roots, params.RootPath)
@@ -126,8 +133,8 @@ func (s *Server) candidateFiles(docs *docstore.View) navigation.WorkspaceFiles {
 			return nil, err
 		}
 		for _, doc := range docs.Documents() {
-			if path, err := fileuri.ToPath(doc.URI); err == nil {
-				paths = append(paths, path)
+			if doc.Local {
+				paths = append(paths, doc.Path)
 			}
 		}
 		slices.Sort(paths)

@@ -195,7 +195,7 @@ func (s *Server) handleInitialize(_ context.Context, _ *docstore.View, initParam
 	if caps.TextDocument.Diagnostic == nil {
 		s.delivery = pushDelivery{server: s, scheduler: newPushScheduler(diagnosticsDebounce, s.publishDiagnostics)}
 	}
-	s.workspace.SetRoots(workspaceRoots(initParams))
+	s.workspace.SetRoots(s.workspaceRoots(initParams))
 	s.mu.Lock()
 	s.settings = settings
 	s.client = caps

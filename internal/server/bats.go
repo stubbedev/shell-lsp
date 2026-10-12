@@ -12,7 +12,6 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/bats"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
-	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/parser"
@@ -188,10 +187,10 @@ func (s *Server) runBats(ctx context.Context, docs *docstore.View, args batsRunA
 	if !file.Tree.Bats() {
 		return batsRunResult{}, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%s: %s is not a Bats file, so it has no tests to run; Bats files end in .bats or start with a bats shebang", commandRunBats, file.URI)
 	}
-	path, err := fileuri.ToPath(file.URI)
-	if err != nil {
-		return batsRunResult{}, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%s: %v", commandRunBats, err)
+	if !file.Doc.Local {
+		return batsRunResult{}, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%s: %s is not a file on disk, so bats cannot run it", commandRunBats, file.URI)
 	}
+	path := file.Doc.Path
 	var selected []string
 	if args.Test != nil {
 		test, ok := namedTest(file.Tree, *args.Test)

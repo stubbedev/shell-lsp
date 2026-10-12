@@ -91,8 +91,22 @@ func splitLineEnds(raw string) (string, []lineEnd) {
 
 const byteOrderMark = "\uFEFF"
 
+type Location struct {
+	URI   string
+	Path  string
+	Local bool
+}
+
+func LocationOf(uri string) Location {
+	path, err := fileuri.ToPath(uri)
+	if err != nil {
+		return Location{URI: uri}
+	}
+	return Location{URI: uri, Path: path, Local: true}
+}
+
 type Document struct {
-	URI       string
+	Location
 	Language  string
 	Version   int32
 	bom       bool
@@ -105,7 +119,7 @@ type Document struct {
 }
 
 func NewDocument(uri, language string, version int32, text string) *Document {
-	d := &Document{URI: uri, Language: language, Version: version}
+	d := &Document{Location: LocationOf(uri), Language: language, Version: version}
 	d.setText(text)
 	return d
 }
@@ -114,7 +128,7 @@ func Project(source *Document, m *projection.Map) *Document {
 	if m.Host() != source.Text() {
 		panic("docstore: projecting " + source.URI + " from text other than its own")
 	}
-	d := &Document{URI: source.URI, Language: source.Language, Version: source.Version, source: source, mapping: m}
+	d := &Document{Location: source.Location, Language: source.Language, Version: source.Version, source: source, mapping: m}
 	d.setText(m.Text())
 	return d
 }

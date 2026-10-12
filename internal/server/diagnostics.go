@@ -15,7 +15,6 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/diagnostics"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/filelint"
-	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/parallel"
@@ -87,7 +86,7 @@ func (s *Server) diagnose(snap *snapshot) diagnosticReport {
 }
 
 func (s *Server) diagnoseClosed(file *workspace.File, at docstore.Positions) diagnosticReport {
-	settings, generation := s.settingsFor(file.URI)
+	settings, generation := s.settingsFor(file.Doc.Location)
 	hash := fnv.New64a()
 	_, _ = hash.Write([]byte(file.Doc.Text()))
 	return s.report(file, settings, generation, at, "h"+strconv.FormatUint(hash.Sum64(), 16))
@@ -313,12 +312,4 @@ func (p *pushScheduler) close() {
 	}
 	p.mu.Unlock()
 	p.wg.Wait()
-}
-
-func scriptDir(uri string) string {
-	path, err := fileuri.ToPath(uri)
-	if err != nil {
-		return ""
-	}
-	return filepath.Dir(path)
 }

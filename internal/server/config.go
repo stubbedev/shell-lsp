@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/config"
+	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/platform"
@@ -27,14 +28,13 @@ func (s *Server) currentSettings() (config.Settings, uint64) {
 	return s.settings, s.generation
 }
 
-func (s *Server) settingsFor(uri string) (config.Settings, uint64) {
-	path, err := fileuri.ToPath(uri)
+func (s *Server) settingsFor(at docstore.Location) (config.Settings, uint64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if err != nil {
+	if !at.Local {
 		return s.settings, s.generation
 	}
-	return settingsForPath(s.settings, s.folderSettings, path), s.generation
+	return settingsForPath(s.settings, s.folderSettings, at.Path), s.generation
 }
 
 func settingsForPath(global config.Settings, folders map[string]config.Settings, path string) config.Settings {
@@ -153,12 +153,12 @@ func isNull(raw json.RawMessage) bool {
 func (s *Server) handleDidChangeWorkspaceFolders(ctx context.Context, change lsp.DidChangeWorkspaceFoldersParams) error {
 	roots := s.workspace.Roots()
 	for _, folder := range change.Event.Removed {
-		if path, err := fileuri.ToPath(folder.URI); err == nil {
+		if path, ok := s.folderPath(folder); ok {
 			roots = slices.DeleteFunc(roots, func(r string) bool { return r == path })
 		}
 	}
 	for _, folder := range change.Event.Added {
-		if path, err := fileuri.ToPath(folder.URI); err == nil && !slices.Contains(roots, path) {
+		if path, ok := s.folderPath(folder); ok && !slices.Contains(roots, path) {
 			roots = append(roots, path)
 		}
 	}

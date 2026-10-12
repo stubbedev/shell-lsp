@@ -49,3 +49,15 @@ func TestLintFollowsTheNearestShellcheckrc(t *testing.T) {
 		return m.Method == "window/logMessage" && strings.Contains(string(m.Params), shellcheckrc.FileName) && strings.Contains(string(m.Params), "nope")
 	})
 }
+
+func TestWorkspaceFoldersThatAreNotFilesAreReported(t *testing.T) {
+	t.Parallel()
+
+	c, srv := startClient(t, `{"workspaceFolders": [{"uri": "vscode-vfs://github/a/b", "name": "remote"}], "capabilities": {"textDocument": {"diagnostic": {}}}}`)
+	c.await("a notice about the remote folder", func(m *jsonrpc.Message) bool {
+		return m.Method == "window/logMessage" && strings.Contains(string(m.Params), "vscode-vfs://github/a/b")
+	})
+	if roots := srv.workspace.Roots(); len(roots) != 0 {
+		t.Errorf("roots = %v, want none", roots)
+	}
+}
