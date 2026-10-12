@@ -176,19 +176,19 @@ type Input struct {
 // line, file name or extension, editor languageId, vim modeline. The
 // default is bash, matching the common editor setup where shellscript
 // buffers are bash; Resolve also reports what decided it.
-func Detect(override *Dialect, in Input) Dialect {
+func Detect(override *Detection, in Input) Dialect {
 	return Resolve(override, in).Dialect
 }
 
-func Resolve(override *Dialect, in Input) Detection {
+func Resolve(override *Detection, in Input) Detection {
 	found := decide(override, in)
 	found.Flavor = ShellOf(found.Dialect, in).Flavor
 	return found
 }
 
-func decide(override *Dialect, in Input) Detection {
+func decide(override *Detection, in Input) Detection {
 	if override != nil {
-		return Detection{Dialect: *override, Source: SourceOverride, Evidence: override.String()}
+		return *override
 	}
 	if name, ok := headerShellDirective(in.Text); ok {
 		d, known := FromName(name)

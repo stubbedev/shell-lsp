@@ -43,10 +43,11 @@ var skippedDirs = map[string]bool{
 }
 
 type File struct {
-	Path string
-	URI  string
-	Doc  *docstore.Document
-	Tree *parser.Tree
+	Path      string
+	URI       string
+	Doc       *docstore.Document
+	Tree      *parser.Tree
+	Detection dialect.Detection
 
 	memoMu sync.Mutex
 	memo   map[string]*memoEntry
@@ -250,20 +251,20 @@ func (w *Workspace) Load(path string) (*File, error) {
 	if err != nil {
 		return nil, fmt.Errorf("loading %s: %w", path, err)
 	}
-	file, _ := Parse(path, docstore.NewDocument(uri, "", 0, string(raw)), nil, func(in dialect.Input) dialect.Detection { return w.resolve(path, in) })
+	file := Parse(path, docstore.NewDocument(uri, "", 0, string(raw)), nil, func(in dialect.Input) dialect.Detection { return w.resolve(path, in) })
 	w.mu.Lock()
 	w.files[key] = diskEntry{size: info.Size(), modTime: info.ModTime(), checked: now, file: file}
 	w.mu.Unlock()
 	return file, nil
 }
 
-func Parse(path string, doc *docstore.Document, previous *parser.Tree, resolve func(dialect.Input) dialect.Detection) (*File, dialect.Detection) {
+func Parse(path string, doc *docstore.Document, previous *parser.Tree, resolve func(dialect.Input) dialect.Detection) *File {
 	if language, ok := host.Of(doc.URI, doc.Language); ok {
 		script := language.Project(doc)
-		return &File{Path: path, URI: doc.URI, Doc: script.Doc, Tree: script.Parse(previous)}, script.Detection
+		return &File{Path: path, URI: doc.URI, Doc: script.Doc, Tree: script.Parse(previous), Detection: script.Detection}
 	}
 	detection := resolve(dialect.Input{URI: doc.URI, LanguageID: doc.Language, Text: doc.Text()})
-	return &File{Path: path, URI: doc.URI, Doc: doc, Tree: parser.ParseEdit(previous, doc.Text(), detection.Shell)}, detection
+	return &File{Path: path, URI: doc.URI, Doc: doc, Tree: parser.ParseEdit(previous, doc.Text(), detection.Shell), Detection: detection}
 }
 
 const maxMissing = 4096

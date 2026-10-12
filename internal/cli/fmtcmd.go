@@ -325,9 +325,9 @@ func (f *formatter) format(t target, raw string) formatted {
 		out.err = fmt.Errorf("a %s embeds shell in its own syntax; shell-lsp fmt formats only shell scripts", language)
 		return out
 	}
-	var forced *dialect.Dialect
+	var forced *dialect.Detection
 	if f.opts.language != nil {
-		forced = &f.opts.language.Dialect
+		forced = dialect.Forced(f.opts.language.Dialect, dialect.SourceOverride)
 	}
 	file, resolved, err := parseText(t.path, raw, func(in dialect.Input) (project.Resolution, error) {
 		resolved, err := project.Resolve(f.editor, t.path, forced, in)

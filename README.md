@@ -107,19 +107,22 @@ Each document is linted as one shell. The first of these that applies
 decides which:
 
 1. the `dialect` setting;
-2. `shell_variant` in `.editorconfig`;
-3. a `# shellcheck shell=` directive in the comment header before the first
+2. `shell=` in the nearest `.shellcheckrc`;
+3. `shell_variant` in `.editorconfig`;
+4. a `# shellcheck shell=` directive in the comment header before the first
    command;
-4. the shebang, also behind `env`, `busybox` and `nix-shell -i`;
-5. a zsh completion tag (`#compdef`, `#autoload`) on the first line;
-6. the file name (`.bashrc`, `.zshrc`, `.profile` and the other rc files) or
+5. the shebang, also behind `env`, `busybox` and `nix-shell -i`;
+6. a zsh completion tag (`#compdef`, `#autoload`) on the first line;
+7. the file name (`.bashrc`, `.zshrc`, `.profile` and the other rc files) or
    its extension (`.bash`, `.bats`, `.zsh`, `.dash`, `.sh`, `.ksh`);
-7. the editor's language identifier, unless it is the generic `shellscript`;
-8. a vim modeline (`# vim: ft=zsh`);
-9. otherwise bash.
+8. the editor's language identifier, unless it is the generic `shellscript`;
+9. a vim modeline (`# vim: ft=zsh`);
+10. otherwise bash.
 
 An extension or the bash default is only a guess, and a wrong guess is the
-usual cause of findings that make no sense for the shell you use. The VS Code
+usual cause of findings that make no sense for the shell you use. When
+nothing names the shell at all, SC2148 says so, in the editor as in
+`shell-lsp check`. The VS Code
 extension shows the shell in the status bar with what decided it, and
 clicking it records your choice as a `# shellcheck shell=` directive, which
 every editor and `shell-lsp check` then follow. Other clients can use two
@@ -339,8 +342,9 @@ They are configured exactly like the `SC` checks.
 The nearest `.shellcheckrc` or `shellcheckrc` above a script, or the one in
 `$XDG_CONFIG_HOME` or the home directory, applies in the editor as it does to
 `shell-lsp check`: its `disable`, `enable` and `extended-analysis` settings
-add to `lint.exclude` and `lint.optional`. Its `shell` and `source-path`
-settings are only read by `shell-lsp check`. Completion and hover inside a
+add to `lint.exclude` and `lint.optional`, and its `shell` chooses the
+dialect unless the `dialect` setting does. Its `source-path` setting is only
+read by `shell-lsp check`. Completion and hover inside a
 `.shellcheckrc` file are not available: editors do not send that file to a
 shell language server.
 

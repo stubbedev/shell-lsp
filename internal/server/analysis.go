@@ -17,7 +17,6 @@ import (
 type snapshot struct {
 	*workspace.File
 	encoding   docstore.Encoding
-	detection  dialect.Detection
 	settings   config.Settings
 	generation uint64
 	project    project.Settings
@@ -122,14 +121,14 @@ func (s *Server) snapshot(docs *docstore.View, uri string) (*snapshot, error) {
 		}
 		var resolved project.Resolution
 		var projectErr error
-		file, detection := workspace.Parse(path, doc, like, func(in dialect.Input) dialect.Detection {
-			resolved, projectErr = s.resolveProject(path, settings.Dialect, in)
+		forced := s.lintSettings(path, settings).Forced()
+		file := workspace.Parse(path, doc, like, func(in dialect.Input) dialect.Detection {
+			resolved, projectErr = s.resolveProject(path, forced, in)
 			return resolved.Detection
 		})
 		return &snapshot{
 			File:       file,
 			encoding:   docs.Encoding(),
-			detection:  detection,
 			settings:   settings,
 			generation: generation,
 			project:    resolved.Settings,
@@ -138,7 +137,7 @@ func (s *Server) snapshot(docs *docstore.View, uri string) (*snapshot, error) {
 	}), nil
 }
 
-func (s *Server) resolveProject(path string, forced *dialect.Dialect, in dialect.Input) (project.Resolution, error) {
+func (s *Server) resolveProject(path string, forced *dialect.Detection, in dialect.Input) (project.Resolution, error) {
 	resolved, err := project.Resolve(s.editorconfig, path, forced, in)
 	if err != nil {
 		s.noticeOnce("editorconfig:"+err.Error(), lsp.MessageWarning, err.Error())

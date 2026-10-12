@@ -24,7 +24,6 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/platform"
 	"github.com/stubbedev/shell-lsp/internal/project"
 	"github.com/stubbedev/shell-lsp/internal/regularfile"
-	"github.com/stubbedev/shell-lsp/internal/shellcheckrc"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
@@ -107,19 +106,15 @@ func warnUnknownOptional(stderr io.Writer, names []string, from string) {
 }
 
 type checker struct {
-	env      Env
-	opts     checkOptions
-	editor   *editorconfig.Resolver
-	rcs      *rcFinder
-	ws       *workspace.Workspace
-	resolved sync.Map
-	warned   sync.Map
-	stdin    func() ([]byte, error)
-}
-
-type resolution struct {
-	r   project.Resolution
-	err error
+	env       Env
+	opts      checkOptions
+	editor    *editorconfig.Resolver
+	rcs       *rcFinder
+	ws        *workspace.Workspace
+	resolveMu sync.Mutex
+	resolved  map[string]error
+	warned    sync.Map
+	stdin     func() ([]byte, error)
 }
 
 func newChecker(env Env, opts checkOptions) *checker {
@@ -127,11 +122,12 @@ func newChecker(env Env, opts checkOptions) *checker {
 		opts.rc.path = absolute(env.Dir, opts.rc.path)
 	}
 	c := &checker{
-		env:    env,
-		opts:   opts,
-		editor: editorconfig.NewResolver(regularfile.ReadConfig, time.Now, time.Hour),
-		rcs:    newRCFinder(opts.rc, regularfile.ReadConfig, env.Home, env.ConfigHome),
-		stdin:  sync.OnceValues(func() ([]byte, error) { return io.ReadAll(env.Stdin) }),
+		env:      env,
+		opts:     opts,
+		editor:   editorconfig.NewResolver(regularfile.ReadConfig, time.Now, time.Hour),
+		rcs:      newRCFinder(opts.rc, regularfile.ReadConfig, env.Home, env.ConfigHome),
+		stdin:    sync.OnceValues(func() ([]byte, error) { return io.ReadAll(env.Stdin) }),
+		resolved: map[string]error{},
 	}
 	c.ws = workspace.New(func(string) (*workspace.File, bool) { return nil, false }, c.resolve)
 	return c
@@ -149,12 +145,8 @@ func (c *checker) color() bool {
 }
 
 type fileSettings struct {
-	rc       shellcheckrc.File
-	forced   *dialect.Dialect
-	exclude  lint.CodeSet
-	optional []string
-	extended bool
-	roots    []string
+	lint  filelint.Settings
+	roots []string
 }
 
 func (c *checker) settings(dir string) (fileSettings, error) {
@@ -167,13 +159,14 @@ func (c *checker) settings(dir string) (fileSettings, error) {
 			warnUnknownOptional(c.env.Stderr, rc.Enabled, rc.Path)
 		}
 	}
-	s := fileSettings{
-		rc:       rc,
-		forced:   cmp.Or(c.opts.shell, rc.Shell),
-		exclude:  c.opts.exclude.Union(rc.Disabled),
-		optional: slices.Concat(c.opts.enable, rc.Enabled),
-		extended: *cmp.Or(c.opts.extended, rc.Extended, new(true)),
-	}
+	s := fileSettings{lint: filelint.Settings{
+		RC:       rc,
+		Shell:    c.opts.shell,
+		Exclude:  c.opts.exclude,
+		Optional: c.opts.enable,
+		Profile:  c.opts.profile,
+		Extended: c.opts.extended,
+	}}
 	for _, p := range slices.Concat(c.opts.sourcePaths, rc.SourcePaths) {
 		if p == directive.ScriptDir {
 			continue
@@ -190,16 +183,29 @@ func (c *checker) settings(dir string) (fileSettings, error) {
 func (c *checker) resolve(path string, in dialect.Input) dialect.Detection {
 	s, err := c.settings(filepath.Dir(path))
 	if err != nil {
-		c.resolved.Store(path, resolution{err: &configError{err}})
+		c.remember(path, &configError{err})
 		return dialect.Resolve(nil, in)
 	}
-	r, err := project.Resolve(c.editor, path, s.forced, in)
+	r, err := project.Resolve(c.editor, path, s.lint.Forced(), in)
 	if err != nil {
-		c.resolved.Store(path, resolution{err: &configError{err}})
+		c.remember(path, &configError{err})
 		return r.Detection
 	}
-	c.resolved.Store(path, resolution{r: r})
+	c.remember(path, nil)
 	return r.Detection
+}
+
+func (c *checker) remember(path string, err error) {
+	c.resolveMu.Lock()
+	defer c.resolveMu.Unlock()
+	c.resolved[path] = err
+}
+
+func (c *checker) resolution(path string) (error, bool) {
+	c.resolveMu.Lock()
+	defer c.resolveMu.Unlock()
+	err, ok := c.resolved[path]
+	return err, ok
 }
 
 func (c *checker) navigationEnv(roots []string) navigation.Env {
@@ -284,13 +290,8 @@ func (c *checker) lint(t target) linted {
 		return linted{failure: fmt.Sprintf("%s: %v", t.name, err)}
 	}
 	env := c.navigationEnv(s.roots)
-	report := filelint.Check(file, env, filelint.Options{
-		Optional:           s.optional,
-		Profile:            c.opts.profile,
-		DialectSource:      s.source,
-		NoExtendedAnalysis: !s.extended,
-	})
-	findings := c.filter(s.exclude, append(syntaxFindings(file.Tree, s.source), report.Findings...))
+	report := filelint.Check(file, env, s.lint)
+	findings := c.filter(s.lint.Excluded(), append(syntaxFindings(file.Tree, s.lint.DialectSource(file)), report.Findings...))
 	return linted{
 		report: fileReport{name: t.name, doc: file.Doc.Source(), findings: sourceFindings(file.Doc, findings)},
 		file:   file,
@@ -304,64 +305,51 @@ type configError struct {
 
 func (e *configError) Error() string { return e.err.Error() }
 
-type loadedSettings struct {
-	fileSettings
-	source lint.DialectSource
-}
-
-func (c *checker) load(t target) (*workspace.File, loadedSettings, error) {
+func (c *checker) load(t target) (*workspace.File, fileSettings, error) {
 	dir := c.env.Dir
 	if t.path != "" {
 		dir = filepath.Dir(t.path)
 	}
 	s, err := c.settings(dir)
 	if err != nil {
-		return nil, loadedSettings{}, &configError{err}
+		return nil, fileSettings{}, &configError{err}
 	}
-	file, r, err := c.parse(t, s)
+	file, err := c.parse(t, s)
 	if err != nil {
-		return nil, loadedSettings{}, err
+		return nil, fileSettings{}, err
 	}
-	loaded := loadedSettings{fileSettings: s, source: lint.DialectDetected}
-	switch {
-	case s.forced != nil || file.Doc.Projected():
-		loaded.source = lint.DialectForced
-	case !r.Named():
-		loaded.source = lint.DialectGuessed
-	}
-	return file, loaded, nil
+	return file, s, nil
 }
 
-func (c *checker) parse(t target, s fileSettings) (*workspace.File, project.Resolution, error) {
+func (c *checker) parse(t target, s fileSettings) (*workspace.File, error) {
 	if t.path == "" {
 		raw, err := c.stdin()
 		if err != nil {
-			return nil, project.Resolution{}, fmt.Errorf("reading standard input: %w", err)
+			return nil, fmt.Errorf("reading standard input: %w", err)
 		}
-		file, r, err := parseText("", string(raw), func(in dialect.Input) (project.Resolution, error) {
-			return project.Resolve(c.editor, "", s.forced, in)
+		file, _, err := parseText("", string(raw), func(in dialect.Input) (project.Resolution, error) {
+			return project.Resolve(c.editor, "", s.lint.Forced(), in)
 		})
 		if err != nil {
-			return nil, project.Resolution{}, &configError{err}
+			return nil, &configError{err}
 		}
-		return file, r, nil
+		return file, nil
 	}
 	file, err := c.ws.Load(t.path)
 	if err != nil {
-		return nil, project.Resolution{}, err
+		return nil, err
 	}
 	if file.Doc.Projected() {
-		return file, project.Resolution{}, nil
+		return file, nil
 	}
-	stored, ok := c.resolved.Load(t.path)
-	if !ok {
-		return nil, project.Resolution{}, fmt.Errorf("resolving the dialect of %s: the workspace parsed it without asking", t.path)
+	resolveErr, asked := c.resolution(t.path)
+	if !asked {
+		return nil, fmt.Errorf("resolving the dialect of %s: the workspace parsed it without asking", t.path)
 	}
-	res, _ := stored.(resolution)
-	if res.err != nil {
-		return nil, project.Resolution{}, res.err
+	if resolveErr != nil {
+		return nil, resolveErr
 	}
-	return file, res.r, nil
+	return file, nil
 }
 
 func syntaxFindings(tree *parser.Tree, source lint.DialectSource) []lint.Finding {

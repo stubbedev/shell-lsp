@@ -10,15 +10,14 @@ import (
 func TestDetectPrecedence(t *testing.T) {
 	t.Parallel()
 
-	zsh := Zsh
 	tests := []struct {
 		name     string
-		override *Dialect
+		override *Detection
 		in       Input
 		want     Dialect
 	}{
 		{
-			name: "override beats everything", override: &zsh,
+			name: "override beats everything", override: Forced(Zsh, SourceOverride),
 			in:   Input{URI: "file:///w/a.bash", LanguageID: "bash", Text: "#!/bin/sh\n"},
 			want: Zsh,
 		},
@@ -101,9 +100,8 @@ func TestOverrideNilMeansDetect(t *testing.T) {
 func TestResolveReportsWhatDecided(t *testing.T) {
 	t.Parallel()
 
-	ksh := Ksh
 	for _, c := range []struct {
-		override *Dialect
+		override *Detection
 		in       Input
 		want     Detection
 		guessed  bool
@@ -122,7 +120,8 @@ func TestResolveReportsWhatDecided(t *testing.T) {
 		{nil, Input{Text: "echo\n# vim: set ft=zsh:\n"}, Detection{Dialect: Zsh, Source: SourceModeline, Evidence: "zsh"}, false},
 		{nil, Input{LanguageID: "shellscript", Text: "echo\n# vim: set ft=zsh:\n"}, Detection{Dialect: Zsh, Source: SourceModeline, Evidence: "zsh"}, false},
 		{nil, Input{LanguageID: "shellscript", Text: "echo\n"}, Detection{Dialect: Bash, Source: SourceDefault}, true},
-		{&ksh, Input{Text: "#!/bin/bash\necho\n"}, Detection{Dialect: Ksh, Source: SourceOverride, Evidence: "ksh"}, false},
+		{Forced(Ksh, SourceOverride), Input{Text: "#!/bin/bash\necho\n"}, Detection{Dialect: Ksh, Source: SourceOverride, Evidence: "ksh"}, false},
+		{Forced(Posix, SourceShellcheckrc), Input{Text: "#!/bin/bash\necho\n"}, Detection{Dialect: Posix, Source: SourceShellcheckrc, Evidence: "sh"}, false},
 	} {
 		got := Resolve(c.override, c.in)
 		if got != c.want || got.Guessed() != c.guessed || got.Named() != (c.want.Source != SourceDefault) {

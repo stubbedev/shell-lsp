@@ -21,7 +21,7 @@ type Resolution struct {
 	Settings Settings
 }
 
-func Resolve(resolver *editorconfig.Resolver, path string, forced *dialect.Dialect, in dialect.Input) (Resolution, error) {
+func Resolve(resolver *editorconfig.Resolver, path string, forced *dialect.Detection, in dialect.Input) (Resolution, error) {
 	r := Resolution{Detection: dialect.Resolve(forced, in)}
 	if path == "" {
 		return r, nil

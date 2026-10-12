@@ -7,6 +7,7 @@ type Source uint8
 const (
 	SourceDefault Source = iota
 	SourceOverride
+	SourceShellcheckrc
 	SourceEditorConfig
 	SourceDirective
 	SourceShebang
@@ -24,6 +25,7 @@ const sourceCount = int(SourceHostDefault) + 1
 var sourceNames = [sourceCount]string{
 	SourceDefault:       "default",
 	SourceOverride:      "override",
+	SourceShellcheckrc:  "shellcheckrc",
 	SourceEditorConfig:  "editorconfig",
 	SourceDirective:     "directive",
 	SourceShebang:       "shebang",
@@ -49,6 +51,10 @@ type Detection struct {
 	Evidence string
 }
 
+func Forced(d Dialect, by Source) *Detection {
+	return &Detection{Dialect: d, Source: by, Evidence: d.String()}
+}
+
 func (d Detection) Named() bool { return d.Source != SourceDefault }
 
 func (d Detection) Guessed() bool {
@@ -59,6 +65,8 @@ func (d Detection) Describe() string {
 	switch d.Source {
 	case SourceOverride:
 		return "set by the dialect setting"
+	case SourceShellcheckrc:
+		return "from shell=" + d.Evidence + " in .shellcheckrc"
 	case SourceEditorConfig:
 		return "from shell_variant = " + d.Evidence + " in .editorconfig"
 	case SourceDirective:

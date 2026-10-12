@@ -24,9 +24,9 @@ func newWorkspace(s *Server) *workspace.Workspace {
 		},
 		func(path string, in dialect.Input) dialect.Detection {
 			s.mu.Lock()
-			forced := settingsForPath(s.settings, s.folderSettings, path).Dialect
+			settings := settingsForPath(s.settings, s.folderSettings, path)
 			s.mu.Unlock()
-			resolved, _ := s.resolveProject(path, forced, in)
+			resolved, _ := s.resolveProject(path, s.lintSettings(path, settings).Forced(), in)
 			return resolved.Detection
 		},
 	)

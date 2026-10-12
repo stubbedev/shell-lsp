@@ -72,7 +72,7 @@ func (s *Server) handleDocumentDialect(_ context.Context, docs *docstore.View, p
 	if err != nil {
 		return nil, err
 	}
-	d := snap.detection
+	d := snap.Detection
 	answer := documentDialect{detected: detectedDialect{
 		Dialect:     d.Dialect.String(),
 		Source:      d.Source.String(),
@@ -100,7 +100,7 @@ func (s *Server) handleSetDialect(_ context.Context, docs *docstore.View, p setD
 		return nil, err
 	}
 	if snap.Doc.Projected() {
-		return nil, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "%s: the shell of %s is %s, so a directive cannot choose it", setDialectMethod, p.TextDocument.URI, snap.detection.Describe())
+		return nil, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "%s: the shell of %s is %s, so a directive cannot choose it", setDialectMethod, p.TextDocument.URI, snap.Detection.Describe())
 	}
 	edits := dialect.ShellDirectiveEdits(snap.Doc.Text(), shell)
 	if len(edits) == 0 {

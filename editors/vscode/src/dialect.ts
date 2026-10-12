@@ -14,6 +14,7 @@ export const learnLabel = "How is the shell detected?";
 const scriptSources = [
   "default",
   "override",
+  "shellcheckrc",
   "editorconfig",
   "directive",
   "shebang",
@@ -138,6 +139,8 @@ export function pickPlaceholder(found: ScriptDialect): string {
   switch (found.source) {
     case "override":
       return `The ${dialectSetting} setting makes this ${found.dialect}; a directive only takes effect once that setting is cleared`;
+    case "shellcheckrc":
+      return `shell= in .shellcheckrc makes this ${found.dialect}; a directive only takes effect once that is removed`;
     case "editorconfig":
       return `shell_variant in .editorconfig makes this ${found.dialect}; a directive only takes effect once that is removed`;
     case "default":

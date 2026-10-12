@@ -44,16 +44,10 @@ func (s *Server) lintReport(file *workspace.File, settings config.Settings, gene
 		return lint.Report{}, 0
 	}
 	stamp := s.sourcesStamp(file.Tree)
-	rc := s.shellcheckrcFor(file.Path)
-	key := lintMemoKey + strconv.FormatUint(generation, 10) + "/" + rc.Path + "\x00" + rc.Text
+	lintSettings := s.lintSettings(file.Path, settings)
+	key := lintMemoKey + strconv.FormatUint(generation, 10) + "/" + lintSettings.RC.Path + "\x00" + lintSettings.RC.Text
 	report := workspace.Memo(file, key, stamp, func() lint.Report {
-		return filelint.Check(file, s.navigationEnv(), filelint.Options{
-			Exclude:            lint.CodesOf(settings.Lint.Exclude...).Union(rc.Disabled),
-			Optional:           slices.Concat(settings.Lint.Optional, rc.Enabled),
-			Profile:            settings.Lint.Profile,
-			DialectSource:      dialectSource(file, settings),
-			NoExtendedAnalysis: rc.Extended != nil && !*rc.Extended,
-		})
+		return filelint.Check(file, s.navigationEnv(), lintSettings)
 	})
 	return report, stamp
 }
@@ -66,19 +60,17 @@ func (s *Server) nearestShellcheckrc(path string) (shellcheckrc.File, bool, erro
 	return rc, found, err
 }
 
-func (s *Server) shellcheckrcFor(path string) shellcheckrc.File {
-	rc, _, err := s.nearestShellcheckrc(path)
-	if err != nil {
-		return shellcheckrc.File{}
+func (s *Server) lintSettings(path string, settings config.Settings) filelint.Settings {
+	out := filelint.Settings{
+		Shell:    settings.Dialect,
+		Exclude:  lint.CodesOf(settings.Lint.Exclude...),
+		Optional: settings.Lint.Optional,
+		Profile:  settings.Lint.Profile,
 	}
-	return rc
-}
-
-func dialectSource(file *workspace.File, settings config.Settings) lint.DialectSource {
-	if settings.Dialect != nil || file.Doc.Projected() {
-		return lint.DialectForced
+	if rc, _, err := s.nearestShellcheckrc(path); err == nil {
+		out.RC = rc
 	}
-	return lint.DialectDetected
+	return out
 }
 
 func (s *Server) diagnose(snap *snapshot) diagnosticReport {
@@ -96,7 +88,7 @@ func (s *Server) report(file *workspace.File, settings config.Settings, generati
 	findings, stamp := s.findings(file, settings, generation)
 	tests := s.bats.of(file.URI)
 	var items []lsp.Diagnostic
-	if !lint.Foreign(file.Tree, dialectSource(file, settings)) {
+	if !lint.Foreign(file.Tree, s.lintSettings(file.Path, settings).DialectSource(file)) {
 		items = diagnostics.Syntax(file.Tree, at)
 	}
 	items = append(items, diagnostics.Lint(findings, at, s.clientCapabilities().TextDocument.PublishDiagnostics.CodeDescriptionSupport)...)

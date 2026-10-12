@@ -91,5 +91,5 @@ func parseText(path, raw string, resolve func(dialect.Input) (project.Resolution
 	if err != nil {
 		return nil, project.Resolution{}, err
 	}
-	return &workspace.File{Path: path, URI: uri, Doc: doc, Tree: parser.ParseEdit(nil, doc.Text(), resolved.Shell)}, resolved, nil
+	return &workspace.File{Path: path, URI: uri, Doc: doc, Tree: parser.ParseEdit(nil, doc.Text(), resolved.Shell), Detection: resolved.Detection}, resolved, nil
 }

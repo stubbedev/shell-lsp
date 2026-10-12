@@ -63,8 +63,7 @@ func TestShellVariantRanksBelowTheForcedDialect(t *testing.T) {
 	if r.Settings.Style.Minify != nil {
 		t.Error("a [[zsh]] section applied to a script detected as bash")
 	}
-	forced := dialect.Ksh
-	if r, _ := Resolve(resolver, script, &forced, in); r.Dialect != dialect.Ksh {
+	if r, _ := Resolve(resolver, script, dialect.Forced(dialect.Ksh, dialect.SourceOverride), in); r.Dialect != dialect.Ksh {
 		t.Errorf("dialect = %v; the forced dialect must win", r.Dialect)
 	}
 }

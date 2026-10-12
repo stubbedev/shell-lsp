@@ -50,6 +50,29 @@ func TestLintFollowsTheNearestShellcheckrc(t *testing.T) {
 	})
 }
 
+func TestLintSettingsMatchCheck(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeTestFile(t, filepath.Join(dir, "sh", shellcheckrc.FileName), "shell=sh\n")
+	c, _ := startClient(t, fmt.Sprintf(`{"rootUri": %q, "capabilities": {"textDocument": {"diagnostic": {}}}}`, fileuri.FromPath(dir)))
+
+	forced := fileuri.FromPath(filepath.Join(dir, "sh", "a.sh"))
+	c.notify("textDocument/didOpen", openParams(forced, "#!/bin/bash\n[[ -n $1 ]] && echo hi\n"))
+	if got := diagnosticCodes(pullDiagnostics(t, c, forced)); !slices.Contains(got, "SC3010") {
+		t.Errorf("codes under shell=sh = %v, want SC3010 because .shellcheckrc chooses sh as check does", got)
+	}
+	if answer := askDialect(t, c, forced); answer.Dialect != "sh" || answer.Source != "shellcheckrc" || answer.Description != "from shell=sh in .shellcheckrc" {
+		t.Errorf("dialect answer = %+v, want sh from .shellcheckrc", answer)
+	}
+
+	guessed := fileuri.FromPath(filepath.Join(dir, "script"))
+	c.notify("textDocument/didOpen", openParams(guessed, "echo hi\n"))
+	if got := diagnosticCodes(pullDiagnostics(t, c, guessed)); !slices.Contains(got, "SC2148") {
+		t.Errorf("codes of a script that names no shell = %v, want SC2148 as check reports", got)
+	}
+}
+
 func TestWorkspaceFoldersThatAreNotFilesAreReported(t *testing.T) {
 	t.Parallel()
 

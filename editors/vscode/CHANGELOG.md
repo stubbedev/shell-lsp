@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Shows when `shell=` in a `.shellcheckrc` decides the shell, and explains in
+  Choose the Shell to Lint As that a directive takes effect only once that
+  setting is removed.
 - Offers Fix All, Run Bats File and Choose the Shell to Lint As in the command
   palette for Makefiles, justfiles and Nix files too, as for shell scripts;
   Run Bats File on a document that is not a Bats file reports so instead of

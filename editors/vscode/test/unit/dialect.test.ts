@@ -177,6 +177,7 @@ describe("pickPlaceholder", () => {
   test("warns when a setting or .editorconfig decides instead of directives", () => {
     assert.match(pickPlaceholder({ ...fromShebang, source: "override" }), /shellLsp\.dialect setting/);
     assert.match(pickPlaceholder({ ...fromShebang, source: "editorconfig" }), /\.editorconfig/);
+    assert.match(pickPlaceholder({ ...fromShebang, source: "shellcheckrc" }), /\.shellcheckrc/);
     assert.match(pickPlaceholder(guessed), /^Linted as sh, guessed from the \.sh extension\./);
   });
 });
