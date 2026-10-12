@@ -74,6 +74,7 @@ func checkUnquotedExpansion(p *pass, pe *syntax.ParamExp) {
 			p.report(2048, span, "Unquoted "+text+" joins the elements and splits them again; use \"$@\" or \"${array[@]}\" to keep them intact.",
 				reviewFix("Expand each element: \""+strings.Replace(text, "*", "@", 1)+"\"", textedit.Edit{Start: span.Start, End: span.End, NewText: `"` + strings.Replace(text, "*", "@", 1) + `"`}))
 		}
+	case expandsScalar:
 	}
 	if context != contextSplit || spacelessSpecials[pe.Param.Value] || p.namesAssignment(pe) {
 		return
@@ -151,6 +152,7 @@ func checkUnquotedSubstitution(p *pass, cs *syntax.CmdSubst) {
 			advice = `split it explicitly instead, such as into lines with ${(f)"$(...)"}`
 		}
 		p.report(2207, span, "Command output is "+p.substitutionFate("split on whitespace")+" when building this array; "+advice+".", p.lineArrayFix(cs, span)...)
+	default:
 	}
 }
 
@@ -176,6 +178,7 @@ func (p *pass) lineArrayFix(cs *syntax.CmdSubst, span parser.Span) []Fix {
 		return []Fix{reviewFix("Read the lines with mapfile", textedit.Edit{Start: callSpan.Start, End: callSpan.End, NewText: "mapfile -t " + assign.Name.Value + " < <(" + inner + ")"})}
 	case dialect.Zsh:
 		return []Fix{reviewFix("Split the output into lines", textedit.Edit{Start: span.Start, End: span.End, NewText: `${(f)"` + p.spanText(span) + `"}`})}
+	default:
 	}
 	return nil
 }

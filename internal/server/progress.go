@@ -15,12 +15,20 @@ type progressParams struct {
 	Value progressValue `json:"value"`
 }
 
+type progressKind string
+
+const (
+	progressBegin  progressKind = "begin"
+	progressReport progressKind = "report"
+	progressEnd    progressKind = "end"
+)
+
 type progressValue struct {
-	Kind        string `json:"kind"`
-	Title       string `json:"title,omitempty"`
-	Message     string `json:"message,omitempty"`
-	Percentage  int    `json:"percentage,omitempty"`
-	Cancellable bool   `json:"cancellable,omitempty"`
+	Kind        progressKind `json:"kind"`
+	Title       string       `json:"title,omitempty"`
+	Message     string       `json:"message,omitempty"`
+	Percentage  int          `json:"percentage,omitempty"`
+	Cancellable bool         `json:"cancellable,omitempty"`
 }
 
 type Progress struct {
@@ -38,19 +46,19 @@ func (s *Server) StartProgress(ctx context.Context, title string) (*Progress, er
 	pctx, cancel := context.WithCancel(ctx)
 	p := &Progress{server: s, token: token, ctx: pctx, cancel: cancel}
 	s.progress.store(token, cancel)
-	return p, p.notify(progressValue{Kind: "begin", Title: title, Cancellable: true})
+	return p, p.notify(progressValue{Kind: progressBegin, Title: title, Cancellable: true})
 }
 
 func (p *Progress) Context() context.Context { return p.ctx }
 
 func (p *Progress) Report(message string, percentage int) error {
-	return p.notify(progressValue{Kind: "report", Message: message, Percentage: percentage})
+	return p.notify(progressValue{Kind: progressReport, Message: message, Percentage: percentage})
 }
 
 func (p *Progress) End(message string) error {
 	p.server.progress.remove(p.token)
 	p.cancel()
-	return p.notify(progressValue{Kind: "end", Message: message})
+	return p.notify(progressValue{Kind: progressEnd, Message: message})
 }
 
 func (p *Progress) notify(value progressValue) error {

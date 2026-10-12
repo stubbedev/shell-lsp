@@ -50,7 +50,7 @@ func (s *Server) handleCodeAction(ctx context.Context, docs *docstore.View, acti
 	lazy := slices.Contains(caps.TextDocument.CodeAction.ResolveSupport.Properties, "edit") && !snap.Doc.Projected()
 	out := []any{}
 	for _, a := range actions.Actions(in) {
-		if !wants(only, string(a.Kind)) || a.Refactor != nil && !inShell || !expressible(snap, sources, a) {
+		if !wants(only, a.Kind) || a.Refactor != nil && !inShell || !expressible(snap, sources, a) {
 			continue
 		}
 		action, err := s.codeAction(docs, snap, sources, settings, actionParams.Context.Diagnostics, a, lazy)
@@ -90,7 +90,7 @@ func expressible(snap *snapshot, sources func() actionSources, a actions.Action)
 }
 
 func (s *Server) codeAction(docs *docstore.View, snap *snapshot, sources func() actionSources, settings func() (actions.SettingsFile, bool), contextDiags []lsp.Diagnostic, a actions.Action, lazy bool) (lsp.CodeAction, error) {
-	action := lsp.CodeAction{Title: a.Title, Kind: string(a.Kind), IsPreferred: a.Preferred}
+	action := lsp.CodeAction{Title: a.Title, Kind: lsp.CodeActionKind(a.Kind), IsPreferred: a.Preferred}
 	for _, i := range a.Diagnostics {
 		action.Diagnostics = append(action.Diagnostics, contextDiags[i])
 	}
@@ -326,9 +326,11 @@ func (s *Server) lintActionDiagnostics(snap *snapshot) []actions.Diagnostic {
 	return actions.FindingDiagnostics(findings)
 }
 
-func wants(only []string, kind string) bool {
+func wants(only []lsp.CodeActionKind, kind actions.Kind) bool {
 	if len(only) == 0 {
 		return true
 	}
-	return slices.ContainsFunc(only, func(o string) bool { return kind == o || strings.HasPrefix(kind, o+".") })
+	return slices.ContainsFunc(only, func(o lsp.CodeActionKind) bool {
+		return string(kind) == string(o) || strings.HasPrefix(string(kind), string(o)+".")
+	})
 }

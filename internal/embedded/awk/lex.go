@@ -223,6 +223,7 @@ func (l *lexer) regexpAllowed() bool {
 	switch l.prev {
 	case tName, tFuncName, tBuiltinFunc, tNumber, tString, tRegexp, tRParen, tRBracket, tDollar, tIncr, tDecr, tGetline:
 		return false
+	default:
 	}
 	return true
 }

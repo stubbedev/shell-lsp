@@ -409,6 +409,7 @@ func inlinedText(value string, context useContext) (string, bool) {
 		return backslashEscaped(value, heredocSpecials), true
 	case arithmeticUse:
 		return value, parser.IsDigits(value)
+	case unquotedUse, conditionalUse:
 	}
 	if plainWord(value) {
 		return value, true

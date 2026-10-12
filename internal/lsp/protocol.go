@@ -117,19 +117,21 @@ type DocumentDiagnosticParams struct {
 }
 
 type FullDocumentDiagnosticReport struct {
-	Kind     string       `json:"kind"`
+	Kind     ReportKind   `json:"kind"`
 	ResultID string       `json:"resultId"`
 	Items    []Diagnostic `json:"items"`
 }
 
 type UnchangedDocumentDiagnosticReport struct {
-	Kind     string `json:"kind"`
-	ResultID string `json:"resultId"`
+	Kind     ReportKind `json:"kind"`
+	ResultID string     `json:"resultId"`
 }
 
+type ReportKind string
+
 const (
-	ReportFull      = "full"
-	ReportUnchanged = "unchanged"
+	ReportFull      ReportKind = "full"
+	ReportUnchanged ReportKind = "unchanged"
 )
 
 type PreviousResultID struct {
@@ -143,7 +145,7 @@ type WorkspaceDiagnosticParams struct {
 }
 
 type WorkspaceDocumentDiagnosticReport struct {
-	Kind     string       `json:"kind"`
+	Kind     ReportKind   `json:"kind"`
 	ResultID string       `json:"resultId"`
 	URI      string       `json:"uri"`
 	Version  *int32       `json:"version"`
@@ -151,10 +153,10 @@ type WorkspaceDocumentDiagnosticReport struct {
 }
 
 type workspaceUnchangedDocumentDiagnosticReport struct {
-	Kind     string `json:"kind"`
-	ResultID string `json:"resultId"`
-	URI      string `json:"uri"`
-	Version  *int32 `json:"version"`
+	Kind     ReportKind `json:"kind"`
+	ResultID string     `json:"resultId"`
+	URI      string     `json:"uri"`
+	Version  *int32     `json:"version"`
 }
 
 func (r WorkspaceDocumentDiagnosticReport) MarshalJSON() ([]byte, error) {
@@ -206,14 +208,16 @@ type ChangeAnnotation struct {
 	NeedsConfirmation bool   `json:"needsConfirmation,omitempty"`
 }
 
+type MarkupKind string
+
 const (
-	MarkupMarkdown  = "markdown"
-	MarkupPlainText = "plaintext"
+	MarkupMarkdown  MarkupKind = "markdown"
+	MarkupPlainText MarkupKind = "plaintext"
 )
 
 type MarkupContent struct {
-	Kind  string `json:"kind"`
-	Value string `json:"value"`
+	Kind  MarkupKind `json:"kind"`
+	Value string     `json:"value"`
 }
 
 type HoverParams struct {
@@ -382,16 +386,18 @@ type FoldingRangeParams struct {
 	TextDocument TextDocumentIdentifier `json:"textDocument"`
 }
 
+type FoldingRangeKind string
+
 const (
-	FoldingComment = "comment"
-	FoldingImports = "imports"
-	FoldingRegion  = "region"
+	FoldingComment FoldingRangeKind = "comment"
+	FoldingImports FoldingRangeKind = "imports"
+	FoldingRegion  FoldingRangeKind = "region"
 )
 
 type FoldingRange struct {
-	StartLine uint32 `json:"startLine"`
-	EndLine   uint32 `json:"endLine"`
-	Kind      string `json:"kind,omitempty"`
+	StartLine uint32           `json:"startLine"`
+	EndLine   uint32           `json:"endLine"`
+	Kind      FoldingRangeKind `json:"kind,omitempty"`
 }
 
 type WorkspaceSymbolParams struct {
@@ -415,8 +421,8 @@ type DocumentRangeFormattingParams struct {
 }
 
 type CodeActionContext struct {
-	Diagnostics []Diagnostic `json:"diagnostics"`
-	Only        []string     `json:"only,omitempty"`
+	Diagnostics []Diagnostic     `json:"diagnostics"`
+	Only        []CodeActionKind `json:"only,omitempty"`
 }
 
 type CodeActionParams struct {
@@ -518,9 +524,11 @@ type Command struct {
 	Arguments []json.RawMessage `json:"arguments,omitempty"`
 }
 
+type CodeActionKind string
+
 type CodeAction struct {
 	Title       string          `json:"title"`
-	Kind        string          `json:"kind,omitempty"`
+	Kind        CodeActionKind  `json:"kind,omitempty"`
 	Diagnostics []Diagnostic    `json:"diagnostics,omitempty"`
 	IsPreferred bool            `json:"isPreferred,omitempty"`
 	Edit        *WorkspaceEdit  `json:"edit,omitempty"`
@@ -709,11 +717,26 @@ type InlineValueVariableLookup struct {
 	CaseSensitiveLookup bool   `json:"caseSensitiveLookup"`
 }
 
+type UniquenessLevel string
+
+const (
+	UniqueDocument UniquenessLevel = "document"
+	UniqueProject  UniquenessLevel = "project"
+)
+
+type MonikerKind string
+
+const (
+	MonikerImport MonikerKind = "import"
+	MonikerExport MonikerKind = "export"
+	MonikerLocal  MonikerKind = "local"
+)
+
 type Moniker struct {
-	Scheme     string `json:"scheme"`
-	Identifier string `json:"identifier"`
-	Unique     string `json:"unique"`
-	Kind       string `json:"kind"`
+	Scheme     string          `json:"scheme"`
+	Identifier string          `json:"identifier"`
+	Unique     UniquenessLevel `json:"unique"`
+	Kind       MonikerKind     `json:"kind"`
 }
 
 type LinkedEditingRanges struct {

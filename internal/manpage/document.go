@@ -140,6 +140,7 @@ func (b *builder) appendRendered(text string) {
 	case subsectionHeading:
 		b.startSubsection(text)
 		return
+	case noHeading:
 	}
 	if b.tagLines > 0 {
 		b.appendWords(&b.tagText, text)

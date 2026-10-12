@@ -30,6 +30,7 @@ func (f *rcFinder) forDir(dir string) (shellcheckrc.File, error) {
 			err = fmt.Errorf("reading --rcfile %s: %w", f.choice.path, fs.ErrNotExist)
 		}
 		return rc, err
+	case rcSearch:
 	}
 	rc, _, err := f.resolver.Nearest(dir)
 	return rc, err

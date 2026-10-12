@@ -143,6 +143,7 @@ func (c *checker) color() bool {
 		return true
 	case colorNever:
 		return false
+	case colorAuto:
 	}
 	return c.env.Terminal
 }

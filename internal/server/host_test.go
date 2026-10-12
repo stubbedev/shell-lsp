@@ -119,7 +119,7 @@ func TestMakefileOffersOnlyDocumentActionsOutsideItsRecipes(t *testing.T) {
 			t.Fatal(err)
 		}
 		got := codeActions(t, c, string(encoded))
-		if len(got) != 1 || got[0].Kind != string(actions.SourceFixAll) {
+		if len(got) != 1 || got[0].Kind != lsp.CodeActionKind(actions.SourceFixAll) {
 			t.Errorf("actions at %+v, outside every recipe = %+v, want only the document's fix-all", at, got)
 		}
 	}

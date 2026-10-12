@@ -77,6 +77,7 @@ func parseLong[T any](arg string, rest []string, options []option[T], into *T) (
 		return 0, opt.apply(into, "")
 	case optionalArg:
 		return 0, opt.apply(into, value)
+	case requiredArg:
 	}
 	if inline {
 		return 0, opt.apply(into, value)
@@ -125,6 +126,7 @@ func parseShorts[T any](cluster string, rest []string, options []option[T], into
 			continue
 		case optionalArg:
 			return 0, opt.apply(into, attached)
+		case requiredArg:
 		}
 		if attached != "" {
 			return 0, opt.apply(into, attached)

@@ -817,6 +817,7 @@ func (in *interpreter) write(def *parser.Definition, s *state) {
 	case parser.DefBuiltin:
 		in.assignVar(def, s, value{space: builtinSpace(def), integer: s.get(def.Name).integer})
 		return
+	default:
 	}
 	prev := s.get(def.Name)
 	v := value{space: prev.space, integer: prev.integer}

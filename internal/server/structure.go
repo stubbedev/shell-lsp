@@ -18,20 +18,38 @@ const (
 	progressStep        = 50
 )
 
-var symbolKinds = map[structure.SymbolKind]lsp.SymbolKind{
-	structure.SymbolFile:     lsp.SymbolFile,
-	structure.SymbolFunction: lsp.SymbolFunction,
-	structure.SymbolVariable: lsp.SymbolVariable,
-	structure.SymbolArray:    lsp.SymbolArray,
-	structure.SymbolConstant: lsp.SymbolConstant,
-	structure.SymbolHeredoc:  lsp.SymbolString,
-	structure.SymbolTest:     lsp.SymbolMethod,
+func symbolKind(kind structure.SymbolKind) lsp.SymbolKind {
+	switch kind {
+	case structure.SymbolFile:
+		return lsp.SymbolFile
+	case structure.SymbolFunction:
+		return lsp.SymbolFunction
+	case structure.SymbolVariable:
+		return lsp.SymbolVariable
+	case structure.SymbolArray:
+		return lsp.SymbolArray
+	case structure.SymbolConstant:
+		return lsp.SymbolConstant
+	case structure.SymbolHeredoc:
+		return lsp.SymbolString
+	case structure.SymbolTest:
+		return lsp.SymbolMethod
+	}
+	panic(fmt.Sprintf("server: symbol kind %d has no LSP kind", kind))
 }
 
-var foldKinds = map[structure.FoldKind]string{
-	structure.FoldRegion:  lsp.FoldingRegion,
-	structure.FoldComment: lsp.FoldingComment,
-	structure.FoldImports: lsp.FoldingImports,
+func foldKind(kind structure.FoldKind) lsp.FoldingRangeKind {
+	switch kind {
+	case structure.FoldRegion:
+		return lsp.FoldingRegion
+	case structure.FoldComment:
+		return lsp.FoldingComment
+	case structure.FoldImports:
+		return lsp.FoldingImports
+	case structure.FoldBlock:
+		return ""
+	}
+	panic(fmt.Sprintf("server: fold kind %d has no LSP kind", kind))
 }
 
 func (s *Server) handleDocumentSymbol(_ context.Context, docs *docstore.View, symbolParams lsp.DocumentSymbolParams) (any, error) {
@@ -52,7 +70,7 @@ func documentSymbols(at docstore.Positions, symbols []structure.Symbol) []lsp.Do
 		out[i] = lsp.DocumentSymbol{
 			Name:           sym.Name,
 			Detail:         sym.Detail,
-			Kind:           symbolKinds[sym.Kind],
+			Kind:           symbolKind(sym.Kind),
 			Range:          at.Range(sym.Span),
 			SelectionRange: at.Range(sym.Selection),
 			Children:       documentSymbols(at, sym.Children),
@@ -65,7 +83,7 @@ func appendFlatSymbols(out []lsp.SymbolInformation, uri string, at docstore.Posi
 	for _, sym := range symbols {
 		out = append(out, lsp.SymbolInformation{
 			Name:          sym.Name,
-			Kind:          symbolKinds[sym.Kind],
+			Kind:          symbolKind(sym.Kind),
 			Location:      lsp.Location{URI: uri, Range: at.Range(sym.Span)},
 			ContainerName: container,
 		})
@@ -86,7 +104,7 @@ func (s *Server) handleFoldingRange(_ context.Context, docs *docstore.View, fold
 	}
 	out := make([]lsp.FoldingRange, len(folds))
 	for i, f := range folds {
-		out[i] = lsp.FoldingRange{StartLine: uint32(f.StartLine), EndLine: uint32(f.EndLine), Kind: foldKinds[f.Kind]} //nolint:gosec
+		out[i] = lsp.FoldingRange{StartLine: uint32(f.StartLine), EndLine: uint32(f.EndLine), Kind: foldKind(f.Kind)} //nolint:gosec
 	}
 	return out, nil
 }
@@ -110,7 +128,7 @@ func (s *Server) handleWorkspaceSymbol(ctx context.Context, docs *docstore.View,
 		}
 		for _, test := range file.Tree.Tests {
 			if structure.Matches(symbolParams.Query, test.Name) {
-				out = append(out, workspaceSymbol(file, docs, test.Name, symbolKinds[structure.SymbolTest], test.Span))
+				out = append(out, workspaceSymbol(file, docs, test.Name, symbolKind(structure.SymbolTest), test.Span))
 			}
 		}
 	}

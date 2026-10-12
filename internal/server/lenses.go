@@ -216,10 +216,16 @@ func (s *Server) handleInlineValue(_ context.Context, docs *docstore.View, p lsp
 	return out, nil
 }
 
-var monikerKinds = map[navigation.MonikerKind]string{
-	navigation.MonikerExport: "export",
-	navigation.MonikerImport: "import",
-	navigation.MonikerLocal:  "local",
+func monikerKind(kind navigation.MonikerKind) lsp.MonikerKind {
+	switch kind {
+	case navigation.MonikerExport:
+		return lsp.MonikerExport
+	case navigation.MonikerImport:
+		return lsp.MonikerImport
+	case navigation.MonikerLocal:
+		return lsp.MonikerLocal
+	}
+	panic(fmt.Sprintf("server: moniker kind %d has no LSP kind", kind))
 }
 
 func (s *Server) handleMoniker(_ context.Context, docs *docstore.View, position lsp.TextDocumentPositionParams) (any, error) {
@@ -231,11 +237,11 @@ func (s *Server) handleMoniker(_ context.Context, docs *docstore.View, position 
 	if !ok {
 		return []lsp.Moniker{}, nil
 	}
-	unique := "document"
+	unique := lsp.UniqueDocument
 	if m.Workspace {
-		unique = "project"
+		unique = lsp.UniqueProject
 	}
-	return []lsp.Moniker{{Scheme: monikerScheme, Identifier: m.Identifier, Unique: unique, Kind: monikerKinds[m.Kind]}}, nil
+	return []lsp.Moniker{{Scheme: monikerScheme, Identifier: m.Identifier, Unique: unique, Kind: monikerKind(m.Kind)}}, nil
 }
 
 func (s *Server) handleLinkedEditingRange(_ context.Context, docs *docstore.View, position lsp.TextDocumentPositionParams) (any, error) {

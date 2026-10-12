@@ -9,6 +9,7 @@ linters:
     - bodyclose
     - copyloopvar
     - errorlint
+    - exhaustive
     - gosec
     - intrange
     - misspell
@@ -29,6 +30,9 @@ linters:
         - fmt.Fprint
         - fmt.Fprintf
         - fmt.Fprintln
+    exhaustive:
+      default-signifies-exhaustive: true
+      ignore-enum-types: ^github\.com/stubbedev/shell-lsp/third_party/
     perfsprint:
       strconcat: true
       sprintf1: true

@@ -162,8 +162,10 @@ func (p *pass) checkPatternOperand(style bracketStyle, c comparison) {
 		switch p.dialect {
 		case dialect.Bash, dialect.Ksh, dialect.Zsh:
 			advice = "use [[ ]] or a case statement to match patterns"
+		default:
 		}
 		p.report(2081, span, "[ ] compares "+text+" as literal text, it never matches it as a glob; "+advice+".")
+	case testBuiltin:
 	}
 }
 

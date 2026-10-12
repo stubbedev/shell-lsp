@@ -82,6 +82,7 @@ var (
 					return "${1:dir}=\\$(cd -- \"\\$(dirname -- \"\\${BASH_SOURCE[0]}\")\" && pwd)\n$0"
 				case dialect.Zsh:
 					return "${1:dir}=\\${0:A:h}\n$0"
+				default:
 				}
 				return "${1:dir}=\\$(cd -- \"\\$(dirname -- \"\\$0\")\" && pwd)\n$0"
 			},

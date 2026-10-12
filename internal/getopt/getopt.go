@@ -49,6 +49,7 @@ func span(a Arity) (int, bool) {
 		return 2, true
 	case Flag, Optional:
 		return 1, true
+	case Unknown:
 	}
 	return 1, false
 }

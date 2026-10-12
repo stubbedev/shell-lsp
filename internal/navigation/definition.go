@@ -113,6 +113,7 @@ func pick(defs parser.Definitions, mode Mode) []parser.Definition {
 			}
 		}
 		return nil
+	case ModeDefinition, ModeImplementation:
 	}
 	return []parser.Definition{*defs.At(0)}
 }

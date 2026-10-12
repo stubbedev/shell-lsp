@@ -102,6 +102,7 @@ func malformedDirectiveMessage(kind directive.ProblemKind) string {
 		return "This word has no =value, so the rest of the directive is ignored; write key=value pairs and start any explanation with #."
 	case directive.MalformedQuote:
 		return "This quoted directive value is empty or never closed, so the rest of the directive is ignored."
+	case directive.LeftoverText:
 	}
 	return "This text after the directive's key=value pairs is not understood and is ignored; start a trailing explanation with #."
 }
@@ -175,6 +176,7 @@ func (p *pass) checkPlacement(d directiveComment, continuesRun bool) {
 		}
 		keyword, _ := followingKeyword(p.text[nextToken(p.text, d.span.End):])
 		p.report(1123, d.span, misplacedBeforeKeywordMessage(keyword, d.placement))
+	case placedBeforeCommand:
 	}
 }
 

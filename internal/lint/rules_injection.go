@@ -238,6 +238,7 @@ func (t *untrustedValues) definitionSource(def *parser.Definition) (untrustedSou
 				}
 			}
 		}
+	case parser.DefArithmetic, parser.DefDescriptor:
 	}
 	return 0, false
 }

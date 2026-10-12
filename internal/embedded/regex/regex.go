@@ -73,6 +73,7 @@ func Check(pattern string, flavor Flavor) (Pattern, *Error) {
 			return Pattern{}, s.err
 		case unknown:
 			return Pattern{}, nil
+		case proceed:
 		}
 	}
 	if s.depth > 0 {

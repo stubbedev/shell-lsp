@@ -1,16 +1,25 @@
 package diagnostics
 
 import (
+	"fmt"
+
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 )
 
-var severities = map[lint.Severity]lsp.DiagnosticSeverity{
-	lint.SeverityError:   lsp.SeverityError,
-	lint.SeverityWarning: lsp.SeverityWarning,
-	lint.SeverityInfo:    lsp.SeverityInformation,
-	lint.SeverityStyle:   lsp.SeverityHint,
+func severity(s lint.Severity) lsp.DiagnosticSeverity {
+	switch s {
+	case lint.SeverityError:
+		return lsp.SeverityError
+	case lint.SeverityWarning:
+		return lsp.SeverityWarning
+	case lint.SeverityInfo:
+		return lsp.SeverityInformation
+	case lint.SeverityStyle:
+		return lsp.SeverityHint
+	}
+	panic(fmt.Sprintf("diagnostics: lint severity %d has no LSP severity", s))
 }
 
 var tags = map[lint.Tag]lsp.DiagnosticTag{
@@ -23,7 +32,7 @@ func Lint(findings []lint.Finding, at docstore.Positions, codeDescriptions bool)
 	for _, f := range findings {
 		d := lsp.Diagnostic{
 			Range:    at.Range(f.Span),
-			Severity: severities[f.Severity],
+			Severity: severity(f.Severity),
 			Code:     f.Code.String(),
 			Source:   Source,
 			Message:  f.Message,

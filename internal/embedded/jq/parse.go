@@ -108,6 +108,7 @@ func endsExpression(k kind) bool {
 	switch k {
 	case tEOF, tRParen, tRBracket, tRBrace, tSemicolon, tThen, tElif, tElse, tEnd, tCatch, tStringMiddle, tStringTail:
 		return true
+	default:
 	}
 	return false
 }
@@ -126,6 +127,7 @@ func (p *parser) pipe(ctx context) {
 		p.Expect(tPipe)
 		p.pipe(ctx)
 		return
+	default:
 	}
 	p.comma(ctx)
 	if p.Tok.Kind == tPipe {
@@ -196,6 +198,7 @@ func isAssignment(k kind) bool {
 	switch k {
 	case tAssign, tUpdate, tAddAssign, tSubAssign, tMulAssign, tDivAssign, tModAssign, tAltAssign:
 		return true
+	default:
 	}
 	return false
 }

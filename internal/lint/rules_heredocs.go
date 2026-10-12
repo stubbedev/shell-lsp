@@ -62,6 +62,7 @@ func (p *pass) nearMissHeredocEnd(h parser.Heredoc, start int, line string) {
 		indent = len(line) - len(strings.TrimLeft(line, "\t"))
 	case parser.StripBlanks:
 		indent = len(line) - len(strings.TrimLeft(line, " \t"))
+	case parser.StripNone:
 	}
 	mistake, at, ok := parser.NearMissEndToken(line[indent:], h.Delimiter)
 	if !ok {

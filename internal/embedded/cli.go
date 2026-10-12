@@ -147,6 +147,7 @@ func (s *scanner) apply(opt option, at int, attached bool, value string, complet
 		s.files++
 		s.stdin = value == "-" || value == "/dev/stdin"
 		return complete
+	case unknown, unsupported:
 	}
 	return false
 }

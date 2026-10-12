@@ -171,6 +171,7 @@ func (l *lexer) balance(k kind) {
 		l.nested[len(l.nested)-1]++
 	case tRParen:
 		l.nested[len(l.nested)-1]--
+	default:
 	}
 }
 

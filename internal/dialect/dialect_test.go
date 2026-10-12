@@ -154,7 +154,7 @@ func TestDescribeSaysWhyAndWhenItGuessed(t *testing.T) {
 			t.Errorf("%+v counts as a guess", c.d)
 		}
 	}
-	for s := range sourceCount {
+	for s := range Source(sourceCount) {
 		if s.String() == "unknown" {
 			t.Errorf("source %d has no name", s)
 		}
@@ -289,7 +289,7 @@ func TestEverySourceHasOneName(t *testing.T) {
 			t.Error("String on an unknown source did not panic")
 		}
 	}()
-	_ = sourceCount.String()
+	_ = Source(sourceCount).String()
 }
 
 func TestInputBats(t *testing.T) {

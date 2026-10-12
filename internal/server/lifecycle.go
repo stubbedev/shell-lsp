@@ -37,7 +37,7 @@ type ClientCapabilities struct {
 			CodeDescriptionSupport bool `json:"codeDescriptionSupport"`
 		} `json:"publishDiagnostics"`
 		Hover struct {
-			ContentFormat []string `json:"contentFormat"`
+			ContentFormat []lsp.MarkupKind `json:"contentFormat"`
 		} `json:"hover"`
 		Completion struct {
 			CompletionItem CompletionItemCapabilities `json:"completionItem"`

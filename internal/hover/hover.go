@@ -673,6 +673,7 @@ func positionalUse(fn parser.Function) (int, bool) {
 			if err == nil {
 				highest = max(highest, n)
 			}
+		default:
 		}
 		return true
 	})

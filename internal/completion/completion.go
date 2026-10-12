@@ -105,6 +105,7 @@ func Documentation(tree *parser.Tree, imports []parser.Import, kind ResolveKind,
 		return "", false
 	case ResolveVariable:
 		return hover.VariableDoc(tree, imports, offset, name), true
+	case ResolveNone, ResolveCommand:
 	}
 	return "", false
 }
@@ -143,6 +144,7 @@ func Complete(ctx context.Context, in Input) (Result, error) {
 		return Result{Items: c.arrayKeys()}, nil
 	case positionCasePattern:
 		return Result{Items: c.casePatterns()}, nil
+	case positionNone:
 	}
 	return Result{}, nil
 }

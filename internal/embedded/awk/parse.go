@@ -231,6 +231,7 @@ func (p *parser) blockBody(open token, parse func()) {
 			return
 		case tEOF:
 			p.FailAt(open, lang.Unclosed(p.lex.src, open.Start, open.End))
+		default:
 		}
 		parse()
 	}
@@ -403,6 +404,7 @@ func (p *parser) print() {
 	case tGreater, tAppend, tPipe, tPipeBoth:
 		p.Advance()
 		p.concatenation(inPrint)
+	default:
 	}
 }
 
@@ -420,6 +422,7 @@ func startsOperand(k kind) bool {
 	case tName, tFuncName, tBuiltinFunc, tNumber, tString, tRegexp, tDollar, tNot, tSub, tAdd,
 		tLParen, tIncr, tDecr, tGetline, tAt:
 		return true
+	default:
 	}
 	return false
 }
@@ -428,6 +431,7 @@ func startsConcatenated(k kind) bool {
 	switch k {
 	case tName, tFuncName, tBuiltinFunc, tNumber, tString, tRegexp, tDollar, tNot, tLParen, tIncr, tDecr, tAt:
 		return true
+	default:
 	}
 	return false
 }
@@ -436,6 +440,7 @@ func isAssignment(k kind) bool {
 	switch k {
 	case tAssign, tAddAssign, tSubAssign, tMulAssign, tDivAssign, tModAssign, tPowAssign:
 		return true
+	default:
 	}
 	return false
 }
@@ -611,6 +616,7 @@ func (p *parser) unary(ctx context) value {
 		p.Advance()
 		p.unary(ctx)
 		return plain
+	default:
 	}
 	return p.power(ctx)
 }
@@ -698,6 +704,7 @@ func (p *parser) primary(ctx context) value {
 		return plain
 	case tNot, tSub, tAdd, tIncr, tDecr:
 		return p.unary(ctx)
+	default:
 	}
 	p.Unexpected()
 	return plain
@@ -707,6 +714,7 @@ func (p *parser) getlineTarget() {
 	switch p.Tok.Kind {
 	case tName, tDollar:
 		p.primary(0)
+	default:
 	}
 }
 

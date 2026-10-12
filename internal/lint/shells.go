@@ -39,6 +39,7 @@ func invocationGrammar(d dialect.Dialect) getopt.Grammar {
 		return bashOptions
 	case dialect.Ksh:
 		return kshOptions
+	default:
 	}
 	return posixShellOptions
 }

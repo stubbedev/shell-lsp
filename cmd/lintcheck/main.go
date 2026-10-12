@@ -121,6 +121,7 @@ func shellName(d dialect.Dialect) (string, bool) {
 		return d.String(), true
 	case dialect.Posix:
 		return "sh", true
+	case dialect.Zsh:
 	}
 	return "", false
 }

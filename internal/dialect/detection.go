@@ -17,8 +17,9 @@ const (
 	SourceModeline
 	SourceHostSetting
 	SourceHostDefault
-	sourceCount
 )
+
+const sourceCount = int(SourceHostDefault) + 1
 
 var sourceNames = [sourceCount]string{
 	SourceDefault:       "default",
@@ -36,7 +37,7 @@ var sourceNames = [sourceCount]string{
 }
 
 func (s Source) String() string {
-	if s >= sourceCount || sourceNames[s] == "" {
+	if int(s) >= sourceCount || sourceNames[s] == "" {
 		panic(fmt.Sprintf("dialect: unknown detection source %d", s))
 	}
 	return sourceNames[s]
@@ -81,6 +82,7 @@ func (d Detection) Describe() string {
 		return "from " + d.Evidence
 	case SourceHostDefault:
 		return "the shell " + d.Evidence + " runs scripts with unless told otherwise"
+	case SourceDefault:
 	}
 	return "guessed: nothing names the shell, so " + d.Dialect.String() + " is assumed"
 }

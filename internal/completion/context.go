@@ -379,6 +379,7 @@ func lexLine(line string) lexed {
 		lx.words = outer.words
 	case frameArithmetic:
 		lx.arithmetic = true
+	case frameCommand:
 	}
 	return lx
 }

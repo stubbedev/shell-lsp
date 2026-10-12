@@ -67,7 +67,7 @@ func (s *Server) hoverResult(snap *snapshot, markdown string, span parser.Span) 
 	return lsp.Hover{Contents: lsp.MarkupContent{Kind: s.hoverFormat(), Value: markdown}, Range: &r}
 }
 
-func (s *Server) hoverFormat() string {
+func (s *Server) hoverFormat() lsp.MarkupKind {
 	formats := s.clientCapabilities().TextDocument.Hover.ContentFormat
 	if len(formats) == 0 || slices.Contains(formats, lsp.MarkupMarkdown) {
 		return lsp.MarkupMarkdown

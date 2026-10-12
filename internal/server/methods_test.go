@@ -120,6 +120,7 @@ func TestAdvertisedCapabilitiesMatchMethodTable(t *testing.T) {
 			if got {
 				t.Errorf("%s is not implemented but %s is advertised", m.name, m.capability.path)
 			}
+		case sent, notSent:
 		}
 	}
 }

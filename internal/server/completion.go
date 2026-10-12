@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -22,23 +23,42 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
-var completionKinds = map[completion.Kind]lsp.CompletionItemKind{
-	completion.KindKeyword:    lsp.CompletionKeyword,
-	completion.KindBuiltin:    lsp.CompletionMethod,
-	completion.KindFunction:   lsp.CompletionFunction,
-	completion.KindAlias:      lsp.CompletionFunction,
-	completion.KindCommand:    lsp.CompletionModule,
-	completion.KindVariable:   lsp.CompletionVariable,
-	completion.KindFile:       lsp.CompletionFile,
-	completion.KindFolder:     lsp.CompletionFolder,
-	completion.KindFlag:       lsp.CompletionProperty,
-	completion.KindOption:     lsp.CompletionValue,
-	completion.KindSubcommand: lsp.CompletionMethod,
-	completion.KindOperator:   lsp.CompletionOperator,
-	completion.KindSignal:     lsp.CompletionConstant,
-	completion.KindValue:      lsp.CompletionEnumMember,
-	completion.KindKey:        lsp.CompletionField,
-	completion.KindSnippet:    lsp.CompletionSnippet,
+func completionKind(kind completion.Kind) lsp.CompletionItemKind {
+	switch kind {
+	case completion.KindKeyword:
+		return lsp.CompletionKeyword
+	case completion.KindBuiltin:
+		return lsp.CompletionMethod
+	case completion.KindFunction:
+		return lsp.CompletionFunction
+	case completion.KindAlias:
+		return lsp.CompletionFunction
+	case completion.KindCommand:
+		return lsp.CompletionModule
+	case completion.KindVariable:
+		return lsp.CompletionVariable
+	case completion.KindFile:
+		return lsp.CompletionFile
+	case completion.KindFolder:
+		return lsp.CompletionFolder
+	case completion.KindFlag:
+		return lsp.CompletionProperty
+	case completion.KindOption:
+		return lsp.CompletionValue
+	case completion.KindSubcommand:
+		return lsp.CompletionMethod
+	case completion.KindOperator:
+		return lsp.CompletionOperator
+	case completion.KindSignal:
+		return lsp.CompletionConstant
+	case completion.KindValue:
+		return lsp.CompletionEnumMember
+	case completion.KindKey:
+		return lsp.CompletionField
+	case completion.KindSnippet:
+		return lsp.CompletionSnippet
+	}
+	panic(fmt.Sprintf("server: completion kind %d has no LSP kind", kind))
 }
 
 type completionData struct {
@@ -221,7 +241,7 @@ func completionItem(snap *snapshot, caps CompletionItemCapabilities, it completi
 	}
 	item := lsp.CompletionItem{
 		Label:            it.Label,
-		Kind:             completionKinds[it.Kind],
+		Kind:             completionKind(it.Kind),
 		Detail:           it.Detail,
 		SortText:         it.SortText,
 		FilterText:       insert.NewText,
