@@ -16,8 +16,6 @@ var downloadFamily = family{
 	},
 }
 
-var sourcingCommands = setOf("source", ".")
-
 const stdinPath = "/dev/stdin"
 
 func checkDownloadedScript(p *pass, n syntax.Node) {
@@ -41,7 +39,7 @@ func checkDownloadedScript(p *pass, n syntax.Node) {
 				return
 			}
 		}
-	case sourcingCommands[name] && len(args) > 0:
+	case parser.IsSourceName(name) && len(args) > 0:
 		p.checkScriptOperand(runner, args[0], "the "+name+" command")
 	}
 }

@@ -323,15 +323,15 @@ func checkInjectedCommand(p *pass, n syntax.Node) {
 	}
 	args := call.Args[start+1:]
 	scope := p.tree.ScopeAt(parser.Offset(call.Pos()))
-	switch name {
-	case "eval":
+	switch {
+	case name == "eval":
 		if len(args) == 1 && wholeExpansion(args[0]) {
 			return
 		}
 		for _, arg := range args {
 			p.reportInjection(codeEvalInjection, arg, scope, "is pasted into the code eval runs")
 		}
-	case "source", ".":
+	case parser.IsSourceName(name):
 		if len(args) > 0 && !wholeExpansion(args[0]) {
 			p.reportInjection(codeSourceInjection, args[0], scope, "is pasted into the path of the file "+name+" runs, so ../ or an absolute path can load any file")
 		}

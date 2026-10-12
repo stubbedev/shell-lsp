@@ -992,6 +992,11 @@ func (in *interpreter) call(stmt *syntax.Stmt, call *syntax.CallExpr, s *state) 
 		return s
 	}
 	in.callBeforeDefinition(call, name, s)
+	if parser.IsSourceName(name) {
+		for _, imported := range slices.Sorted(maps.Keys(in.imported)) {
+			in.assign(s, imported, in.imported[imported])
+		}
+	}
 	switch name {
 	case "exit":
 		in.escape(s)
@@ -1014,10 +1019,6 @@ func (in *interpreter) call(stmt *syntax.Stmt, call *syntax.CallExpr, s *state) 
 			if v, ok := parser.Literal(arg); ok && !strings.HasPrefix(v, "-") {
 				in.assign(s, v, value{space: spaceEmpty, integer: integerNo})
 			}
-		}
-	case "source", ".":
-		for _, name := range slices.Sorted(maps.Keys(in.imported)) {
-			in.assign(s, name, in.imported[name])
 		}
 	case "trap":
 		in.trapped(call.Args[1:], s)
