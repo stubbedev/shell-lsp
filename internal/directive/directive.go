@@ -69,6 +69,14 @@ func Keys() iter.Seq[Key] {
 	}
 }
 
+func KeyNames() []string {
+	names := make([]string, 0, len(keySpecs))
+	for key := range Keys() {
+		names = append(names, key.String())
+	}
+	return names
+}
+
 func KeyNamed(name string) (Key, bool) {
 	key, ok := keysByName[name]
 	return key, ok

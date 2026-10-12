@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/directive"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 )
 
@@ -79,6 +80,19 @@ func TestUnusedDirectivesSilencedInTheirOwnDirective(t *testing.T) {
 	script = "#!/bin/bash\n# shellcheck enable=unused-directives disable=SL2009\nx=$1\n# shellcheck disable=SC2086\necho \"$x\"\n"
 	if got := Check(parser.Parse(script, dialect.Bash), nil, Options{}); len(got) != 0 {
 		t.Errorf("a file-wide disable=SL2009 still got %+v", got)
+	}
+}
+
+func TestUnknownDirectiveKeyNamesEveryKey(t *testing.T) {
+	t.Parallel()
+
+	got := findingsWith(t, "# shellcheck severity=error\necho hi\n", 1107)
+	if len(got) != 1 {
+		t.Fatalf("SC1107 findings = %+v, want one", got)
+	}
+	_, listed, _ := strings.Cut(strings.TrimSuffix(got[0].Message, "."), "known keys are ")
+	if names := strings.FieldsFunc(strings.ReplaceAll(listed, " and ", ", "), func(r rune) bool { return r == ',' || r == ' ' }); !slices.Equal(names, directive.KeyNames()) {
+		t.Errorf("SC1107 message %q lists %q, want every directive key", got[0].Message, names)
 	}
 }
 

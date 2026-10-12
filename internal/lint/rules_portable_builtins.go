@@ -7,6 +7,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/prose"
 	"github.com/stubbedev/shell-lsp/internal/shelldocs"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
@@ -65,7 +66,7 @@ func echoFlagsIn(d dialect.Dialect) string {
 	if len(names) == 1 {
 		return "only " + names[0] + " is"
 	}
-	return "only " + strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1] + " are"
+	return "only " + prose.List(names, "and") + " are"
 }
 
 func posixSetOption(name string) bool {

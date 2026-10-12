@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/shell-lsp/internal/directive"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 )
 
@@ -33,8 +34,14 @@ func TestParseNamesTheFileAndLine(t *testing.T) {
 	if !rc.Disabled.Has(2086) || !slices.Equal(rc.Enabled, []string{"require-variable-braces"}) || rc.Shell == nil || !slices.Equal(rc.SourcePaths, []string{filepath.Join("/p", "lib")}) {
 		t.Errorf("Parse = %+v", rc)
 	}
-	if _, err := Parse("/p/.shellcheckrc", "disable=SC2086\nbogus=1\n"); err == nil || !strings.HasPrefix(err.Error(), "/p/.shellcheckrc:2:") {
-		t.Errorf("error = %v, want one naming the file and line 2", err)
+	_, err = Parse("/p/.shellcheckrc", "disable=SC2086\nbogus=1\n")
+	if err == nil || !strings.HasPrefix(err.Error(), "/p/.shellcheckrc:2:") {
+		t.Fatalf("error = %v, want one naming the file and line 2", err)
+	}
+	_, listed, _ := strings.Cut(err.Error(), "known keys are ")
+	want := slices.DeleteFunc(directive.KeyNames(), func(name string) bool { return name == directive.Source.String() })
+	if names := strings.FieldsFunc(strings.ReplaceAll(listed, " and ", ", "), func(r rune) bool { return r == ',' || r == ' ' }); !slices.Equal(names, want) {
+		t.Errorf("error %q lists %q, want every key but source", err, names)
 	}
 }
 

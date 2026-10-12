@@ -3,12 +3,14 @@ package shellcheckrc
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/directive"
 	"github.com/stubbedev/shell-lsp/internal/lint"
+	"github.com/stubbedev/shell-lsp/internal/prose"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 )
 
@@ -67,6 +69,8 @@ func (rc *File) apply(line string) error {
 	return nil
 }
 
+var settingsKeys = prose.List(slices.DeleteFunc(directive.KeyNames(), func(name string) bool { return name == directive.Source.String() }), "and")
+
 func (rc *File) set(pair directive.Pair) error {
 	key, _ := pair.Key()
 	switch key {
@@ -103,7 +107,7 @@ func (rc *File) set(pair directive.Pair) error {
 		}
 		rc.Extended = &b
 	default:
-		return fmt.Errorf("%q is not a .shellcheckrc key; known keys are disable, enable, shell, source-path, external-sources and extended-analysis", pair.Name)
+		return fmt.Errorf("%q is not a .shellcheckrc key; known keys are %s", pair.Name, settingsKeys)
 	}
 	return nil
 }

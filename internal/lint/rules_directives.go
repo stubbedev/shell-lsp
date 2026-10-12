@@ -8,6 +8,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/directive"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/prose"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -109,13 +110,10 @@ func (d directiveComment) valueSpan(pair directive.Pair) parser.Span {
 	return parser.Span{Start: d.at(pair.ValueOffset), End: d.at(pair.ValueEnd)}
 }
 
-var knownShells = func() string {
-	var names []string
-	for d := range dialect.All.Members() {
-		names = append(names, d.String())
-	}
-	return strings.Join(names[:len(names)-1], ", ") + " or " + names[len(names)-1]
-}()
+var (
+	knownShells = prose.List(dialect.Names(), "or")
+	knownKeys   = prose.List(directive.KeyNames(), "and")
+)
 
 func (p *pass) checkDirectivePair(d directiveComment, pair directive.Pair) {
 	value := d.valueSpan(pair)
@@ -142,7 +140,7 @@ func (p *pass) checkDirectivePair(d directiveComment, pair directive.Pair) {
 	default:
 		if !pair.Known() {
 			span := parser.Span{Start: d.at(pair.KeyOffset), End: d.at(pair.KeyOffset) + len(pair.Name)}
-			p.report(1107, span, fmt.Sprintf("%q is not a directive key, so it is ignored; known keys are disable, enable, source, source-path, shell, external-sources and extended-analysis.", pair.Name))
+			p.report(1107, span, fmt.Sprintf("%q is not a directive key, so it is ignored; known keys are %s.", pair.Name, knownKeys))
 		}
 	}
 }
