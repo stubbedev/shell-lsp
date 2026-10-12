@@ -21,18 +21,22 @@ const (
 
 type Encoder func(host string, start, end int, text string) (string, bool)
 
+type HostOffset int
+
+type ProjOffset int
+
 type span struct {
 	kind    kind
 	region  int
-	proj    int
+	proj    ProjOffset
 	projLen int
-	host    int
+	host    HostOffset
 	hostLen int
 }
 
-func (s span) projEnd() int { return s.proj + s.projLen }
+func (s span) projEnd() ProjOffset { return s.proj + ProjOffset(s.projLen) }
 
-func (s span) hostEnd() int { return s.host + s.hostLen }
+func (s span) hostEnd() HostOffset { return s.host + HostOffset(s.hostLen) }
 
 func (s span) editable() bool { return s.kind == verbatim || s.kind == escape }
 
@@ -106,13 +110,13 @@ func (b *Builder) add(k kind, start, end int, text string) {
 	if k != opaque && region == noRegion {
 		panic(fmt.Sprintf("projection: editable span %d-%d precedes the first region", start, end))
 	}
-	s := span{kind: k, region: region, proj: b.text.Len(), projLen: len(text), host: start, hostLen: end - start}
+	s := span{kind: k, region: region, proj: ProjOffset(b.text.Len()), projLen: len(text), host: HostOffset(start), hostLen: end - start}
 	b.text.WriteString(text)
 	b.quotes.feed(text)
 	b.at = end
 	if n := len(b.spans); n > 0 && k == verbatim {
 		last := &b.spans[n-1]
-		if last.kind == verbatim && last.region == region && last.hostEnd() == start {
+		if last.kind == verbatim && last.region == region && last.hostEnd() == HostOffset(start) {
 			last.projLen += s.projLen
 			last.hostLen += s.hostLen
 			return
@@ -136,12 +140,12 @@ func (b *Builder) scripts() []parser.Span {
 
 func (m *Map) Scripts() []parser.Span { return m.scripts }
 
-func (m *Map) Synthetic(offset int) bool {
+func (m *Map) Synthetic(offset ProjOffset) bool {
 	i := sort.Search(len(m.spans), func(i int) bool { return m.spans[i].projEnd() > offset })
 	return i < len(m.spans) && m.spans[i].hostLen == 0
 }
 
-func (m *Map) HostOffset(offset int) int {
+func (m *Map) HostOffset(offset ProjOffset) HostOffset {
 	i := sort.Search(len(m.spans), func(i int) bool { return m.spans[i].projEnd() > offset })
 	if i == len(m.spans) {
 		for _, s := range slices.Backward(m.spans) {
@@ -153,18 +157,18 @@ func (m *Map) HostOffset(offset int) int {
 	}
 	s := m.spans[i]
 	if s.kind == verbatim {
-		return s.host + offset - s.proj
+		return s.host + HostOffset(offset-s.proj)
 	}
 	return s.host
 }
 
-func (m *Map) Offset(host int) (int, bool) {
+func (m *Map) Offset(host HostOffset) (ProjOffset, bool) {
 	i := sort.Search(len(m.spans), func(i int) bool { return m.spans[i].hostEnd() > host })
 	within := i < len(m.spans) && m.spans[i].host <= host
 	if within && m.spans[i].projLen > 0 {
 		s := m.spans[i]
 		if s.kind == verbatim {
-			return s.proj + host - s.host, true
+			return s.proj + ProjOffset(host-s.host), true
 		}
 		return s.proj, s.kind == escape
 	}
@@ -181,7 +185,7 @@ func (m *Map) Offset(host int) (int, bool) {
 	if i < len(m.spans) {
 		return m.spans[i].proj, false
 	}
-	return len(m.text), false
+	return ProjOffset(len(m.text)), false
 }
 
 func (m *Map) Edit(e textedit.Edit) (textedit.Edit, bool) {
@@ -190,7 +194,7 @@ func (m *Map) Edit(e textedit.Edit) (textedit.Edit, bool) {
 }
 
 func (m *Map) Replacement(e textedit.Edit) (textedit.Edit, bool) {
-	start, end, text := e.Start, e.End, e.NewText
+	start, end, text := ProjOffset(e.Start), ProjOffset(e.End), e.NewText
 	if start == end {
 		return m.insert(start, text)
 	}
@@ -222,15 +226,15 @@ func (m *Map) Replacement(e textedit.Edit) (textedit.Edit, bool) {
 	firstSpan, lastSpan := covered[0], covered[len(covered)-1]
 	hostStart, hostEnd := firstSpan.host, lastSpan.hostEnd()
 	if firstSpan.kind == verbatim {
-		hostStart += start - firstSpan.proj
+		hostStart += HostOffset(start - firstSpan.proj)
 	}
 	if lastSpan.kind == verbatim {
-		hostEnd = lastSpan.host + end - lastSpan.proj
+		hostEnd = lastSpan.host + HostOffset(end-lastSpan.proj)
 	}
 	return m.encode(firstSpan.region, hostStart, hostEnd, text)
 }
 
-func (m *Map) insert(offset int, text string) (textedit.Edit, bool) {
+func (m *Map) insert(offset ProjOffset, text string) (textedit.Edit, bool) {
 	var at *span
 	for i := sort.Search(len(m.spans), func(i int) bool { return m.spans[i].projEnd() >= offset }); i < len(m.spans); i++ {
 		s := &m.spans[i]
@@ -251,19 +255,19 @@ func (m *Map) insert(offset int, text string) (textedit.Edit, bool) {
 	host := at.hostEnd()
 	switch {
 	case at.kind == verbatim:
-		host = at.host + offset - at.proj
+		host = at.host + HostOffset(offset-at.proj)
 	case offset == at.proj:
 		host = at.host
 	}
 	return m.encode(at.region, host, host, text)
 }
 
-func (m *Map) encode(region, start, end int, text string) (textedit.Edit, bool) {
-	encoded, ok := m.encoders[region](m.host, start, end, text)
+func (m *Map) encode(region int, start, end HostOffset, text string) (textedit.Edit, bool) {
+	encoded, ok := m.encoders[region](m.host, int(start), int(end), text)
 	if !ok {
 		return textedit.Edit{}, false
 	}
-	return textedit.Edit{Start: start, End: end, NewText: encoded}, true
+	return textedit.Edit{Start: int(start), End: int(end), NewText: encoded}, true
 }
 
 func (m *Map) trim(e textedit.Edit) (int, int, string) {

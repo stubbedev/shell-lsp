@@ -47,7 +47,8 @@ func TestHostOffset(t *testing.T) {
 
 	host, m := build(t)
 	for _, tt := range []struct {
-		proj, host int
+		proj ProjOffset
+		host HostOffset
 	}{
 		{0, 2},
 		{1, 2},
@@ -57,8 +58,8 @@ func TestHostOffset(t *testing.T) {
 		{6, 10},
 		{7, 10},
 		{8, 11},
-		{len(m.Text()) - 1, len(host)},
-		{len(m.Text()), len(host)},
+		{ProjOffset(len(m.Text()) - 1), HostOffset(len(host))},
+		{ProjOffset(len(m.Text())), HostOffset(len(host))},
 	} {
 		if got := m.HostOffset(tt.proj); got != tt.host {
 			t.Errorf("HostOffset(%d) = %d, want %d", tt.proj, got, tt.host)
@@ -71,8 +72,9 @@ func TestOffset(t *testing.T) {
 
 	host, m := build(t)
 	for _, tt := range []struct {
-		host, proj int
-		inside     bool
+		host   HostOffset
+		proj   ProjOffset
+		inside bool
 	}{
 		{0, 0, false},
 		{2, 1, true},
@@ -84,8 +86,8 @@ func TestOffset(t *testing.T) {
 		{9, 6, false},
 		{10, 6, false},
 		{11, 8, true},
-		{len(host) - 1, len(m.Text()) - 1, true},
-		{len(host), len(m.Text()), false},
+		{HostOffset(len(host) - 1), ProjOffset(len(m.Text()) - 1), true},
+		{HostOffset(len(host)), ProjOffset(len(m.Text())), false},
 	} {
 		got, inside := m.Offset(tt.host)
 		if got != tt.proj || inside != tt.inside {

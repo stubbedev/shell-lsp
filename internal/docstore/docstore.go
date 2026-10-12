@@ -173,7 +173,7 @@ func (d *Document) SourceOffset(offset int) int {
 	if d.mapping == nil {
 		return offset
 	}
-	return d.mapping.HostOffset(offset)
+	return int(d.mapping.HostOffset(projection.ProjOffset(offset)))
 }
 
 func (d *Document) SourceLine(offset int) int {
@@ -181,14 +181,15 @@ func (d *Document) SourceLine(offset int) int {
 }
 
 func (d *Document) Synthetic(offset int) bool {
-	return d.mapping != nil && d.mapping.Synthetic(offset)
+	return d.mapping != nil && d.mapping.Synthetic(projection.ProjOffset(offset))
 }
 
 func (d *Document) Locate(pos lsp.Position, enc Encoding) (int, bool) {
 	if d.mapping == nil {
 		return d.PositionToOffset(pos, enc), true
 	}
-	return d.mapping.Offset(d.source.PositionToOffset(pos, enc))
+	offset, inside := d.mapping.Offset(projection.HostOffset(d.source.PositionToOffset(pos, enc)))
+	return int(offset), inside
 }
 
 func (d *Document) setText(raw string) {
@@ -332,7 +333,7 @@ func (d *Document) PositionToOffset(pos lsp.Position, enc Encoding) int {
 
 func (d *Document) OffsetToPosition(offset int, enc Encoding) lsp.Position {
 	if d.mapping != nil {
-		return d.source.OffsetToPosition(d.mapping.HostOffset(offset), enc)
+		return d.source.OffsetToPosition(int(d.mapping.HostOffset(projection.ProjOffset(offset))), enc)
 	}
 	if offset > len(d.text) {
 		offset = len(d.text)

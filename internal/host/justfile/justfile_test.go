@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/projection"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 )
 
@@ -112,15 +113,15 @@ func TestProjectPositions(t *testing.T) {
 	src := "x:\n    @echo {{name}} done\n"
 	m, _ := Project(src)
 	for _, tt := range []struct{ proj, host string }{{"echo", "echo"}, {"$$", "{{name}}"}, {"done", "done"}} {
-		start, hostStart := strings.Index(m.Text(), tt.proj), strings.Index(src, tt.host)
+		start, hostStart := projection.ProjOffset(strings.Index(m.Text(), tt.proj)), projection.HostOffset(strings.Index(src, tt.host))
 		if got := m.HostOffset(start); got != hostStart {
 			t.Errorf("HostOffset of %q = %d, want %d", tt.proj, got, hostStart)
 		}
-		if got := m.HostOffset(start + len(tt.proj)); got != hostStart+len(tt.host) {
-			t.Errorf("HostOffset of the end of %q = %d, want %d", tt.proj, got, hostStart+len(tt.host))
+		if got := m.HostOffset(start + projection.ProjOffset(len(tt.proj))); got != hostStart+projection.HostOffset(len(tt.host)) {
+			t.Errorf("HostOffset of the end of %q = %d, want %d", tt.proj, got, hostStart+projection.HostOffset(len(tt.host)))
 		}
 	}
-	if _, ok := m.Offset(strings.Index(src, "@")); ok {
+	if _, ok := m.Offset(projection.HostOffset(strings.Index(src, "@"))); ok {
 		t.Error("the @ sigil is shell")
 	}
 }

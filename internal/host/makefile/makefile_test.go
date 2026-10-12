@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/projection"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 )
 
@@ -151,20 +152,20 @@ func TestProjectPositions(t *testing.T) {
 		{"$$", "$(CC)"},
 		{"done", "done"},
 	} {
-		start := index(t, text, tt.proj)
-		hostStart := index(t, src, tt.host)
+		start := projection.ProjOffset(index(t, text, tt.proj))
+		hostStart := projection.HostOffset(index(t, src, tt.host))
 		if got := m.HostOffset(start); got != hostStart {
 			t.Errorf("HostOffset of %q = %d, want %d", tt.proj, got, hostStart)
 		}
-		if got := m.HostOffset(start + len(tt.proj)); got != hostStart+len(tt.host) {
-			t.Errorf("HostOffset of the end of %q = %d, want %d", tt.proj, got, hostStart+len(tt.host))
+		if got := m.HostOffset(start + projection.ProjOffset(len(tt.proj))); got != hostStart+projection.HostOffset(len(tt.host)) {
+			t.Errorf("HostOffset of the end of %q = %d, want %d", tt.proj, got, hostStart+projection.HostOffset(len(tt.host)))
 		}
 		if got, ok := m.Offset(hostStart); got != start || ok == (tt.host == "$(CC)") {
 			t.Errorf("Offset of %q = %d, %v, want %d and only make syntax outside", tt.host, got, ok, start)
 		}
 	}
 	for _, outside := range []string{"x:", "@"} {
-		if _, ok := m.Offset(index(t, src, outside)); ok {
+		if _, ok := m.Offset(projection.HostOffset(index(t, src, outside))); ok {
 			t.Errorf("Offset of %q reports a shell position", outside)
 		}
 	}

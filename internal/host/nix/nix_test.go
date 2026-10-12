@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/projection"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 )
 
@@ -154,7 +155,7 @@ func TestProjectPositions(t *testing.T) {
 		proj, host string
 		inside     bool
 	}{{"cp", "cp", true}, {"$$", "${src}", false}, {"$out", "$out", true}} {
-		start, hostStart := strings.Index(m.Text(), tt.proj), strings.Index(src, tt.host)
+		start, hostStart := projection.ProjOffset(strings.Index(m.Text(), tt.proj)), projection.HostOffset(strings.Index(src, tt.host))
 		if got := m.HostOffset(start); got != hostStart {
 			t.Errorf("HostOffset of %q = %d, want %d", tt.proj, got, hostStart)
 		}
