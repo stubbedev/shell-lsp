@@ -79,18 +79,9 @@ type file struct {
 func Project(src string) (*projection.Map, dialect.Detection) {
 	f := &file{src: src, tokens: tokenize(src), partner: map[int]int{}, contexts: map[int]context{}, excluded: map[int][]string{}}
 	f.scan()
-	found := f.shellStrings()
-	dialects := make([]dialect.Dialect, len(found))
-	for i, s := range found {
-		dialects[i] = s.detection.Dialect
-	}
-	shared, fits := dialect.Shared(dialects)
-	detection := dialect.Detection{Dialect: shared, Source: dialect.SourceHostDefault, Evidence: tool}
-	if i := slices.IndexFunc(found, func(s shellString) bool { return s.detection.Dialect == shared }); i >= 0 {
-		detection = found[i].detection
-	}
+	detection, kept := dialect.Choose(f.shellStrings(), func(s shellString) dialect.Detection { return s.detection }, tool)
 	b := projection.NewBuilder(src)
-	for n, group := range groups(slices.DeleteFunc(found, func(s shellString) bool { return !fits(s.detection.Dialect) })) {
+	for n, group := range groups(kept) {
 		f.project(b, group, n)
 	}
 	return b.Map(), detection

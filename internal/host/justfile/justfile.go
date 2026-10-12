@@ -60,7 +60,7 @@ type parser struct {
 func Project(text string) (*projection.Map, dialect.Detection) {
 	p := &parser{text: text, lines: splitLines(text), settings: map[string]setting{}}
 	p.parse()
-	detection, kept := choose(p.scripts())
+	detection, kept := dialect.Choose(p.scripts(), func(s script) dialect.Detection { return s.detection }, tool)
 	b := projection.NewBuilder(text)
 	for _, s := range kept {
 		p.project(b, s)
@@ -363,20 +363,6 @@ func detect(s script, shebang, evidence string, src dialect.Source) (script, boo
 	}
 	s.detection = dialect.Detection{Dialect: d, Source: src, Evidence: evidence}
 	return s, true
-}
-
-func choose(scripts []script) (dialect.Detection, []script) {
-	dialects := make([]dialect.Dialect, len(scripts))
-	for i, s := range scripts {
-		dialects[i] = s.detection.Dialect
-	}
-	shared, fits := dialect.Shared(dialects)
-	kept := slices.DeleteFunc(slices.Clone(scripts), func(s script) bool { return !fits(s.detection.Dialect) })
-	i := slices.IndexFunc(kept, func(s script) bool { return s.detection.Dialect == shared })
-	if i < 0 {
-		return dialect.Detection{Dialect: shared, Source: dialect.SourceHostDefault, Evidence: tool}, nil
-	}
-	return kept[i].detection, kept
 }
 
 func (p *parser) exportedBy(r recipe) []string {
