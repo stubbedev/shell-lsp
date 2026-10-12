@@ -8,7 +8,7 @@ import {
   type LogOutputChannel,
   type StatusBarItem,
 } from "vscode";
-import type { LanguageClient } from "vscode-languageclient/node";
+import { LSPErrorCodes, ResponseError, type LanguageClient } from "vscode-languageclient/node";
 import {
   dialectDocsUrl,
   directiveEdit,
@@ -23,13 +23,24 @@ import {
   shellPicks,
   statusText,
   type DocumentDialect,
+  type StatusText,
 } from "./dialect.ts";
+import { describeError } from "./errors.ts";
 import { clientCommands } from "./ids.ts";
 import { dialectSetting } from "./settings.ts";
 import { activeShellDocument, requireActiveShellDocument, type ShellDocument } from "./shellDocument.ts";
 
 const chooseShellCommand = clientCommands.chooseShell;
 const refreshDelayMs = 300;
+const cancellationCodes: ReadonlySet<number> = new Set([
+  LSPErrorCodes.RequestCancelled,
+  LSPErrorCodes.ServerCancelled,
+  LSPErrorCodes.ContentModified,
+]);
+
+function isCancellation(error: unknown): boolean {
+  return error instanceof ResponseError && cancellationCodes.has(error.code);
+}
 
 export class DialectStatus implements Disposable {
   private readonly item: StatusBarItem;
@@ -120,19 +131,23 @@ export class DialectStatus implements Disposable {
     }
     try {
       const found = await this.request(client, target);
-      if (generation !== this.generation) {
+      if (generation === this.generation) {
+        this.show(statusText(found));
+      }
+    } catch (error: unknown) {
+      if (generation !== this.generation || this.client() !== client || isCancellation(error)) {
         return;
       }
-      const { text, tooltip } = statusText(found);
-      this.item.text = text;
-      this.item.tooltip = tooltip;
-      this.item.show();
-    } catch (error: unknown) {
-      if (generation === this.generation) {
-        this.item.hide();
-      }
-      this.output.debug(`Not showing the dialect of ${target.document.uri.toString()}: ${String(error)}`);
+      const message = describeError(error);
+      this.output.error(`Asking for the shell of ${target.document.uri.toString()}: ${message}`);
+      this.show({ text: "$(warning) shell", tooltip: `Could not tell the shell of this document: ${message}` });
     }
+  }
+
+  private show({ text, tooltip }: StatusText): void {
+    this.item.text = text;
+    this.item.tooltip = tooltip;
+    this.item.show();
   }
 
   private target(): { client: LanguageClient; target: ShellDocument } {

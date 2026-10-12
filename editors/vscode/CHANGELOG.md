@@ -9,6 +9,9 @@
 - Choose the Shell to Lint As in a Makefile, justfile or Nix file explains
   that the file decides the shell and where to change it, instead of offering
   an empty list of shells.
+- When the server cannot say which shell a document is linted as, the status
+  bar shows a warning with the reason, also logged to the Shell LSP output,
+  instead of disappearing as if the server were still starting.
 - Runs shell-lsp for Makefiles too, which lints the shell in their recipes.
 - Runs shell-lsp for justfiles too, when an extension gives them the `just`
   language.
