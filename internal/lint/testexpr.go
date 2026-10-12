@@ -358,7 +358,7 @@ func binaryOperands(x, y syntax.TestExpr, o testOperand, visit func(testOperand)
 func (p *pass) testOperator(t testCommand, pos syntax.Pos, length int) (string, parser.Span) {
 	if t.style == doubleBracket {
 		span := posSpan(pos, length)
-		return p.text[span.Start:span.End], span
+		return p.spanText(span), span
 	}
 	i, _ := slices.BinarySearchFunc(t.args, pos.Offset(), func(w *syntax.Word, offset uint) int { return cmp.Compare(w.Pos().Offset(), offset) })
 	name, _ := parser.Literal(t.args[i])

@@ -147,7 +147,7 @@ func checkBashParamExp(p *pass, pe *syntax.ParamExp) {
 	if !ok {
 		return
 	}
-	text := p.text[span.Start:span.End]
+	text := p.spanText(span)
 	name := pe.Param.Value
 	p.checkBashVariable(name, span)
 	kind, _ := parser.ParamKindOf(name)

@@ -87,7 +87,7 @@ func checkUnquotedBetweenDouble(p *pass, word *syntax.Word, before, part, after 
 
 func (p *pass) reportTrapped(part syntax.WordPart) {
 	if span, ok := p.span(part); ok {
-		p.report(2027, span, "The quotes around "+p.text[span.Start:span.End]+" close and reopen the string, leaving it unquoted; drop the inner quotes or escape them.")
+		p.report(2027, span, "The quotes around "+p.spanText(span)+" close and reopen the string, leaving it unquoted; drop the inner quotes or escape them.")
 	}
 }
 
@@ -225,7 +225,7 @@ func checkCasePatterns(p *pass, item *syntax.CaseItem) {
 			continue
 		}
 		if span, ok := p.span(pattern); ok {
-			p.report(2254, span, "The unquoted expansion in case pattern "+p.text[span.Start:span.End]+" is matched as a glob; quote it to match its value literally.", p.soleExpansionQuoteFix(pattern, span)...)
+			p.report(2254, span, "The unquoted expansion in case pattern "+p.spanText(span)+" is matched as a glob; quote it to match its value literally.", p.soleExpansionQuoteFix(pattern, span)...)
 		}
 	}
 }

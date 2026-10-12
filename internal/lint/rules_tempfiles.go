@@ -182,7 +182,7 @@ func (p *pass) wordsText(words []*syntax.Word) string {
 	var sb strings.Builder
 	for _, w := range words {
 		if span, ok := p.span(w); ok {
-			sb.WriteString(p.text[span.Start:span.End])
+			sb.WriteString(p.spanText(span))
 			sb.WriteByte(' ')
 		}
 	}

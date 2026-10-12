@@ -27,7 +27,7 @@ func checkDivisionBeforeMultiplication(p *pass, mul *syntax.BinaryArithm) {
 	}
 	divisor, okDivisor := p.span(div.Y)
 	multiplier, okMultiplier := p.span(mul.Y)
-	if !okDivisor || !okMultiplier || p.text[divisor.Start:divisor.End] == p.text[multiplier.Start:multiplier.End] {
+	if !okDivisor || !okMultiplier || p.spanText(divisor) == p.spanText(multiplier) {
 		return
 	}
 	p.report(2017, opAt(div.OpPos, "/").span, "Integer division truncates before the multiplication; multiply first, as in a * 100 / b, to keep precision.")
@@ -42,7 +42,7 @@ func checkDecimalArithmetic(p *pass) {
 		return
 	}
 	if number, ok := p.decimalAt(e.Span.Start); ok {
-		p.report(2079, number, "Shell arithmetic is integer only, so "+p.text[number.Start:number.End]+" is not a valid number; use bc or awk for decimals.")
+		p.report(2079, number, "Shell arithmetic is integer only, so "+p.spanText(number)+" is not a valid number; use bc or awk for decimals.")
 	}
 }
 

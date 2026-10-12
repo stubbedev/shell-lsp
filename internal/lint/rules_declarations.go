@@ -121,7 +121,7 @@ func (p *pass) separateDeclarationFix(c command, flags options, a *syntax.Assign
 		return nil
 	}
 	indent := p.text[textline.Start(p.text, declSpan.Start):declSpan.Start]
-	assignment := p.text[assignSpan.Start:assignSpan.End]
+	assignment := p.spanText(assignSpan)
 	name := a.Name.Value
 	switch c.name {
 	case "export", "readonly":

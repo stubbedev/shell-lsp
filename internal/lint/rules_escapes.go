@@ -46,7 +46,7 @@ func checkUnquotedEscapes(p *pass, lit *syntax.Lit) {
 		return
 	}
 	aliasEscape := word.Parts[0] == lit && p.isCommandName(word)
-	raw := p.text[span.Start:span.End]
+	raw := p.spanText(span)
 	for i := 0; i+1 < len(raw); i++ {
 		if raw[i] != '\\' {
 			continue

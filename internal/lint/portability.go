@@ -25,7 +25,7 @@ func (p *pass) replacementFix(issue portabilityIssue, span parser.Span) []Fix {
 	if issue.replacement == "" {
 		return nil
 	}
-	return []Fix{safeFix("Replace "+p.text[span.Start:span.End]+" with "+issue.replacement, textedit.Edit{Start: span.Start, End: span.End, NewText: issue.replacement})}
+	return []Fix{safeFix("Replace "+p.spanText(span)+" with "+issue.replacement, textedit.Edit{Start: span.Start, End: span.End, NewText: issue.replacement})}
 }
 
 func (p *pass) nonPortable(issue portabilityIssue, span parser.Span, fixes ...Fix) {

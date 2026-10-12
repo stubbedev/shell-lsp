@@ -370,7 +370,7 @@ func (p *pass) reportInjection(code Code, w *syntax.Word, scope parser.ScopeID, 
 	if !ok {
 		return
 	}
-	text := p.text[span.Start:span.End]
+	text := p.spanText(span)
 	p.report(code, span, text+" comes from "+src.String()+" and "+sink+"; whoever controls it can run arbitrary commands. Check it against a fixed set of values first, or pass it as an argument instead of building code from it.")
 }
 
@@ -461,7 +461,7 @@ func (p *pass) arithmeticRisk() string {
 
 func (p *pass) reportArithmeticInjection(pe *syntax.ParamExp, src untrustedSource) {
 	if span, ok := p.span(pe); ok {
-		p.report(codeArithmeticInjection, span, p.text[span.Start:span.End]+" comes from "+src.String()+" and"+p.arithmeticRisk())
+		p.report(codeArithmeticInjection, span, p.spanText(span)+" comes from "+src.String()+" and"+p.arithmeticRisk())
 	}
 }
 

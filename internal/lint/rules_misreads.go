@@ -110,7 +110,7 @@ func checkKeywordAsWord(p *pass, lit *syntax.Lit) {
 		}
 	}
 	span, ok := p.span(lit)
-	if !ok || p.text[span.Start:span.End] != lit.Value {
+	if !ok || p.spanText(span) != lit.Value {
 		return
 	}
 	p.reportKeywordAsWord(span, lit.Value, keyword)

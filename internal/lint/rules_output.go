@@ -45,7 +45,7 @@ func (p *pass) unwrapEchoFix(c command) []Fix {
 	if !ok {
 		return nil
 	}
-	return []Fix{reviewFix("Run the command directly", textedit.Edit{Start: start.Start, End: end.End, NewText: p.text[inner.Start:inner.End]})}
+	return []Fix{reviewFix("Run the command directly", textedit.Edit{Start: start.Start, End: end.End, NewText: p.spanText(inner)})}
 }
 
 func checkUselessEcho(p *pass, c command) {

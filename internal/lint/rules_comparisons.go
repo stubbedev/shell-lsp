@@ -198,7 +198,7 @@ func (p *pass) splitTestFix(t testCommand) []Fix {
 		if !ok {
 			return nil
 		}
-		tests[i] = "[ " + p.text[s.Start:s.End] + " ]"
+		tests[i] = "[ " + p.spanText(s) + " ]"
 		walkTest(operand, func(e syntax.TestExpr, _ *syntax.UnaryTest) {
 			if mayVanish(e) {
 				safety = Review
@@ -267,7 +267,7 @@ func (p *pass) checkNullaryTest(w *syntax.Word) {
 		case 2161:
 			p.report(code, span, "[ 1 ] is always true; write true instead.")
 		default:
-			p.report(2078, span, "This test only checks that the constant string "+strings.TrimSpace(p.text[span.Start:span.End])+" is non-empty, so it is always true; did you mean to expand a variable or run a command?")
+			p.report(2078, span, "This test only checks that the constant string "+strings.TrimSpace(p.spanText(span))+" is non-empty, so it is always true; did you mean to expand a variable or run a command?")
 		}
 		return
 	}
@@ -293,7 +293,7 @@ func (p *pass) spaceOperatorFix(w *syntax.Word, at parser.Span) []Fix {
 		op = "=="
 	}
 	end := start + len(op)
-	if start <= word.Start || end >= word.End || p.text[start:end] != op || strings.ContainsAny(p.text[word.Start:word.End], `"'\\`) {
+	if start <= word.Start || end >= word.End || p.text[start:end] != op || strings.ContainsAny(p.spanText(word), `"'\\`) {
 		return nil
 	}
 	return []Fix{reviewFix("Put spaces around "+op, textedit.Edit{Start: start, End: end, NewText: " " + op + " "})}
@@ -717,7 +717,7 @@ func checkRejectedTestOperators(p *pass) {
 	if !ok || !p.insideDoubleBracket(e.Span.Start) {
 		return
 	}
-	switch p.text[e.Span.Start:e.Span.End] {
+	switch p.spanText(e.Span) {
 	case "-a":
 		p.report(2108, e.Span, "-a does not combine tests inside [[ ]]; use && instead.")
 	case "-o":

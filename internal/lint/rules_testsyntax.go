@@ -59,7 +59,7 @@ func (p *pass) checkAfterClosingBracket(extra []*syntax.Word) {
 	if !ok {
 		return
 	}
-	text := p.text[span.Start:span.End]
+	text := p.spanText(span)
 	for _, c := range testConjunctions {
 		if strings.HasPrefix(text, c.prefix) {
 			p.report(1139, parser.Span{Start: span.Start, End: span.Start + len(c.prefix)}, "Join test commands with "+c.replacement+", not "+c.prefix+"; outside [ ] it is just another word.")

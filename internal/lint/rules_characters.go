@@ -58,7 +58,7 @@ func checkUnicodeSpaces(p *pass, lit *syntax.Lit) {
 		return
 	}
 	tokenStart := word.Parts[0] == lit
-	for i, r := range p.text[span.Start:span.End] {
+	for i, r := range p.spanText(span) {
 		tokenStart = r == noBreakSpace || tokenStart && isUnicodeSpace(r)
 		if !tokenStart {
 			continue

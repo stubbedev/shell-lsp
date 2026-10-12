@@ -111,7 +111,7 @@ func (p *pass) appendTarget(stmt *syntax.Stmt) (*syntax.Stmt, string) {
 			continue
 		}
 		if span, ok := p.span(r.Word); ok {
-			return last, p.text[span.Start:span.End]
+			return last, p.spanText(span)
 		}
 	}
 	return nil, ""

@@ -145,7 +145,7 @@ func (p *pass) span(n syntax.Node) (parser.Span, bool) { return p.tree.NodeSpan(
 const maxExcerpt = 120
 
 func (p *pass) excerpt(span parser.Span) string {
-	text := p.text[span.Start:span.End]
+	text := p.spanText(span)
 	if len(text) <= maxExcerpt {
 		return text
 	}

@@ -95,9 +95,9 @@ func TestTestOperandsAgreeAcrossBrackets(t *testing.T) {
 		}
 		var got []string
 		p.testOperands(test, func(o testOperand) {
-			entry := p.nodeText(o.word) + " " + o.op + "(" + p.text[o.opSpan.Start:o.opSpan.End] + ") " + [...]string{"nullary", "unary", "left", "right"}[o.shape]
+			entry := p.nodeText(o.word) + " " + o.op + "(" + p.spanText(o.opSpan) + ") " + [...]string{"nullary", "unary", "left", "right"}[o.shape]
 			if o.negated {
-				entry += " " + p.text[o.negation.Start:o.negation.End]
+				entry += " " + p.spanText(o.negation)
 			}
 			if o.double {
 				entry += " [["

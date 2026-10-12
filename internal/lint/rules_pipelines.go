@@ -198,7 +198,7 @@ func (p *pass) redirectInsteadOfCat(cat, next stage, file *syntax.Word) []Fix {
 	end := commandEnd(next.stmt)
 	return []Fix{reviewFix("Redirect the file instead of using cat",
 		textedit.Edit{Start: catSpan.Start, End: nextStart},
-		textedit.Edit{Start: end, End: end, NewText: " < " + p.text[fileSpan.Start:fileSpan.End]})}
+		textedit.Edit{Start: end, End: end, NewText: " < " + p.spanText(fileSpan)})}
 }
 
 func readsInput(r *syntax.Redirect) bool {

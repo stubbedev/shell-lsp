@@ -118,7 +118,7 @@ func (p *pass) checkTestOperand(o testOperand) {
 		case !glob:
 		case kind == arithmeticTest:
 			if !o.double && p.dialect != dialect.Ksh {
-				p.report(2255, span, "In [ ], "+p.text[span.Start:span.End]+" is a glob, not a number; quote it or compare arithmetically with (( )).")
+				p.report(2255, span, "In [ ], "+p.spanText(span)+" is a glob, not a number; quote it or compare arithmetically with (( )).")
 			}
 		case o.shape == shapeRight && (kind == equalityTest || kind == regexTest):
 		default:
@@ -128,7 +128,7 @@ func (p *pass) checkTestOperand(o testOperand) {
 }
 
 func (p *pass) unaryGlob(o testOperand, span parser.Span) {
-	text := p.text[span.Start:span.End]
+	text := p.spanText(span)
 	switch {
 	case o.op == "-v":
 		if !o.double {
@@ -181,7 +181,7 @@ func (p *pass) braceOperand(o testOperand, span parser.Span) {
 }
 
 func (p *pass) globOperand(o testOperand, span parser.Span) {
-	text := p.text[span.Start:span.End]
+	text := p.spanText(span)
 	if o.double {
 		p.report(2203, span, "[[ ]] does not expand the glob "+text+" here; only the right side of = and != is a pattern.")
 		return

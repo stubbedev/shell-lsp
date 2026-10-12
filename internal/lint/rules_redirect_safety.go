@@ -39,8 +39,8 @@ func checkRedirectOrder(p *pass, stmt *syntax.Stmt) {
 	}
 	p.report(2069, span, "Redirections apply left to right, so 2>&1 here still points stderr at the terminal; put it after the file redirection: > file 2>&1.",
 		reviewFix("Move 2>&1 after the file redirection",
-			textedit.Edit{Start: span.Start, End: span.End, NewText: p.text[target.Start:target.End]},
-			textedit.Edit{Start: target.Start, End: target.End, NewText: p.text[span.Start:span.End]}))
+			textedit.Edit{Start: span.Start, End: span.End, NewText: p.spanText(target)},
+			textedit.Edit{Start: target.Start, End: target.End, NewText: p.spanText(span)}))
 }
 
 func (p *pass) outputCaptured(stmt *syntax.Stmt) bool {
@@ -133,7 +133,7 @@ func (p *pass) collectFileReferences(stage *syntax.Stmt, refs []fileReference) [
 		}
 		if w, ok := n.(*syntax.Word); ok {
 			if span, ok := p.span(w); ok {
-				ref := fileReference{word: w, text: p.text[span.Start:span.End], command: nearestCommand(stack)}
+				ref := fileReference{word: w, text: p.spanText(span), command: nearestCommand(stack)}
 				if r, ok := stack[len(stack)-1].(*syntax.Redirect); ok && r.Word == w {
 					ref.redirect = r
 				}

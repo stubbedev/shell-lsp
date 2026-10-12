@@ -141,7 +141,7 @@ func checkRemovalPattern(p *pass, pe *syntax.ParamExp) {
 
 func (p *pass) reportLiteralPattern(part syntax.WordPart) {
 	if span, ok := p.span(part); ok {
-		p.report(2295, span, "Quote "+p.text[span.Start:span.End]+" inside the pattern so its value is matched literally rather than as a glob.", p.quoteFix(span, Review))
+		p.report(2295, span, "Quote "+p.spanText(span)+" inside the pattern so its value is matched literally rather than as a glob.", p.quoteFix(span, Review))
 	}
 }
 

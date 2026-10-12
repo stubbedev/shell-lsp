@@ -65,7 +65,7 @@ func checkLeadingGlobArguments(p *pass, call *syntax.CallExpr) {
 			continue
 		}
 		if span, ok := p.span(arg); ok {
-			text := p.text[span.Start:span.End]
+			text := p.spanText(span)
 			p.report(2035, parser.Span{Start: span.Start, End: span.Start + 1}, "A file matched by "+text+" may start with a dash and be read as an option; use ./"+text+" or put -- before it.")
 		}
 	}
@@ -261,7 +261,7 @@ func checkRecursiveCopy(p *pass, call *syntax.CallExpr) {
 		if !ok {
 			return
 		}
-		at := span.Start + strings.IndexByte(p.text[span.Start:span.End], 'r')
+		at := span.Start + strings.IndexByte(p.spanText(span), 'r')
 		p.report(2336, span, "cp -r is implementation-defined for special files; use the portable -R.", safeFix("Replace -r with -R", textedit.Edit{Start: at, End: at + 1, NewText: "R"}))
 		return
 	}

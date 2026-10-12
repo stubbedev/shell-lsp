@@ -78,7 +78,7 @@ func unquoted(text string) string {
 
 func (p *pass) arithmeticCommandFix(let *syntax.LetClause) []Fix {
 	span, ok := p.span(let)
-	if !ok || strings.ContainsAny(p.text[span.Start:span.End], "$`\\") {
+	if !ok || strings.ContainsAny(p.spanText(span), "$`\\") {
 		return nil
 	}
 	exprs := make([]string, len(let.Exprs))
@@ -87,7 +87,7 @@ func (p *pass) arithmeticCommandFix(let *syntax.LetClause) []Fix {
 		if !ok {
 			return nil
 		}
-		exprs[i] = unquoted(p.text[s.Start:s.End])
+		exprs[i] = unquoted(p.spanText(s))
 	}
 	return []Fix{safeFix("Rewrite as (( ))", textedit.Edit{Start: span.Start, End: span.End, NewText: "(( " + strings.Join(exprs, ", ") + " ))"})}
 }

@@ -51,7 +51,7 @@ func (p *pass) checkSource(cmd parser.Command) {
 	}
 	switch {
 	case !ok:
-		p.report(1090, span, fmt.Sprintf("The file %s is only known at run time, so it can't be followed; name it with a `# shellcheck source=path` directive, or use source=/dev/null to skip it.", p.text[span.Start:span.End]))
+		p.report(1090, span, fmt.Sprintf("The file %s is only known at run time, so it can't be followed; name it with a `# shellcheck source=path` directive, or use source=/dev/null to skip it.", p.spanText(span)))
 	case name == nullDevice:
 	case strings.HasPrefix(name, "~/"):
 		p.report(1090, span, name+" depends on the home directory of whoever runs the script, so it can't be followed; name the file with a `# shellcheck source=path` directive.")

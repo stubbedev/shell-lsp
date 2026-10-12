@@ -30,7 +30,7 @@ var quotingFamily = family{
 var spacelessSpecials = setOf("-", "$", "?", "!", "#")
 
 func (p *pass) quoteFix(span parser.Span, safety Safety) Fix {
-	return Fix{Title: "Double-quote " + snippet(p.text[span.Start:span.End]), Safety: safety, Edits: []textedit.Edit{
+	return Fix{Title: "Double-quote " + snippet(p.spanText(span)), Safety: safety, Edits: []textedit.Edit{
 		{Start: span.Start, End: span.Start, NewText: `"`},
 		{Start: span.End, End: span.End, NewText: `"`},
 	}}
@@ -52,7 +52,7 @@ func checkUnquotedExpansion(p *pass, pe *syntax.ParamExp) {
 	if !ok {
 		return
 	}
-	text := p.text[span.Start:span.End]
+	text := p.spanText(span)
 	context := p.contextOf(pe)
 	if context == contextArrayElement {
 		if !pe.Length && !isAlternativeExpansion(pe) && !spacelessVariables[pe.Param.Value] {
@@ -175,7 +175,7 @@ func (p *pass) lineArrayFix(cs *syntax.CmdSubst, span parser.Span) []Fix {
 		}
 		return []Fix{reviewFix("Read the lines with mapfile", textedit.Edit{Start: callSpan.Start, End: callSpan.End, NewText: "mapfile -t " + assign.Name.Value + " < <(" + inner + ")"})}
 	case dialect.Zsh:
-		return []Fix{reviewFix("Split the output into lines", textedit.Edit{Start: span.Start, End: span.End, NewText: `${(f)"` + p.text[span.Start:span.End] + `"}`})}
+		return []Fix{reviewFix("Split the output into lines", textedit.Edit{Start: span.Start, End: span.End, NewText: `${(f)"` + p.spanText(span) + `"}`})}
 	}
 	return nil
 }

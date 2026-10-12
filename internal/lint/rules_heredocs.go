@@ -31,7 +31,7 @@ func checkHeredocEnds(p *pass) {
 	for _, h := range p.tree.Heredocs {
 		token := strings.TrimLeft(h.Delimiter, " \t")
 		start := h.Body.Start
-		for line := range strings.Lines(p.text[h.Body.Start:h.Body.End]) {
+		for line := range strings.Lines(p.spanText(h.Body)) {
 			line = strings.TrimSuffix(line, "\n")
 			p.indentedHeredocEnd(h, token, start, line)
 			p.nearMissHeredocEnd(h, start, line)

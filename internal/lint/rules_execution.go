@@ -56,10 +56,10 @@ func checkExpansionAsCommand(p *pass, call *syntax.CallExpr) {
 		case part.Backquotes:
 			p.report(2092, span, "The output of this backtick substitution is run as a command; drop the backticks to run the command itself, or capture its output in a variable.")
 		default:
-			p.report(2091, span, "The output of "+p.text[span.Start:span.End]+" is run as a command; drop the $( ) to run the command itself, or capture its output in a variable.")
+			p.report(2091, span, "The output of "+p.spanText(span)+" is run as a command; drop the $( ) to run the command itself, or capture its output in a variable.")
 		}
 	case *syntax.ArithmExp:
-		p.report(2084, span, "The result of "+p.text[span.Start:span.End]+" is run as a command; use (( )) to only evaluate it, or assign it to a variable.")
+		p.report(2084, span, "The result of "+p.spanText(span)+" is run as a command; use (( )) to only evaluate it, or assign it to a variable.")
 	}
 }
 

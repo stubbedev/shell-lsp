@@ -103,6 +103,10 @@ func (p *pass) nodeText(n syntax.Node) string {
 	if !ok {
 		return ""
 	}
+	return p.spanText(span)
+}
+
+func (p *pass) spanText(span parser.Span) string {
 	return p.text[span.Start:span.End]
 }
 

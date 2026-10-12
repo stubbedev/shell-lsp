@@ -148,7 +148,7 @@ func (p *pass) checkPatternOperand(style bracketStyle, c comparison) {
 	if !ok {
 		return
 	}
-	text := p.text[span.Start:span.End]
+	text := p.spanText(span)
 	switch style {
 	case doubleBracket:
 		if pe, ok := solePartUnquoted(c.right).(*syntax.ParamExp); ok && p.implicitlyGlobbed(pe) {
@@ -484,7 +484,7 @@ func checkRejectedUnknownOperators(p *pass) {
 	if !ok || !p.insideDoubleBracket(e.Span.Start) {
 		return
 	}
-	token := p.text[e.Span.Start:e.Span.End]
+	token := p.spanText(e.Span)
 	if isOperatorShaped(token) && testOperators[token].kind == notTestOperator {
 		p.report(2057, e.Span, token+" is not a comparison operator that [[ ]] understands; check the spelling (see help test).")
 		return

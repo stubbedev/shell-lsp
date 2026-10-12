@@ -35,7 +35,7 @@ func checkArithmeticDollar(p *pass, pe *syntax.ParamExp) {
 	if !ok {
 		return
 	}
-	text := p.text[span.Start:span.End]
+	text := p.spanText(span)
 	inner := strings.TrimPrefix(text, "$")
 	if !pe.Short {
 		inner = strings.TrimSuffix(strings.TrimPrefix(inner, "{"), "}")

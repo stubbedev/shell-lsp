@@ -305,7 +305,7 @@ func (p *pass) gluedTestTerm(w *syntax.Word) {
 	if !ok {
 		return
 	}
-	text := p.text[span.Start:span.End]
+	text := p.spanText(span)
 	after := ""
 	switch op := dashWord(text); {
 	case len(text) > 1 && text[0] == '!':
@@ -327,7 +327,7 @@ func checkGluedNegation(p *pass, call *syntax.CallExpr) {
 	if !ok {
 		return
 	}
-	text := p.text[span.Start:span.End]
+	text := p.spanText(span)
 	if strings.HasPrefix(text, "!#") || span.Start == 0 && strings.HasPrefix(text, "!/") {
 		return
 	}
