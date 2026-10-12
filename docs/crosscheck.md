@@ -9,9 +9,9 @@ word actually written there is offered.
 | File | Diagnostics (ours / bashls / shared) | Completion recall (ours / bashls) |
 | --- | --- | --- |
 | `bash/broken.bash` | 4 / 3 / 0 | 4/4 / 4/4 |
-| `bash/completion.bash` | 5 / 5 / 5 | 17/17 / 16/17 |
+| `bash/completion.bash` | 3 / 5 / 3 | 17/17 / 16/17 |
 | `bash/errors.bash` | 7 / 5 / 2 | 1/1 / 1/1 |
-| `bash/functions.bash` | 4 / 3 / 3 | 21/21 / 16/21 |
+| `bash/functions.bash` | 2 / 3 / 2 | 21/21 / 16/21 |
 | `bash/setup-hook.bash` | 1 / 1 / 1 | 35/36 / 35/36 |
 | `dash/init.sh` | 1 / 1 / 1 | 22/23 / 21/23 |
 | `dash/local.sh` | 0 / 0 / 0 | 2/2 / 2/2 |
@@ -30,6 +30,7 @@ Total completion recall: ours 135/137, bash-language-server 123/137.
 
 ### `bash/completion.bash`
 
+- diagnostics only from bash-language-server: `13:SC2207`, `18:SC2207`
 - completions bash-language-server missed: `mapfile@9:6`
 
 ### `bash/errors.bash`
@@ -39,7 +40,7 @@ Total completion recall: ours 135/137, bash-language-server 123/137.
 
 ### `bash/functions.bash`
 
-- diagnostics only from shell-lsp: `15:SL2001`
+- diagnostics only from bash-language-server: `32:SC1091`
 - completions bash-language-server missed: `mktemp@19:9`, `sort@21:12`, `cat@25:3`, `cat@28:3`, `tmp@16:12`
 
 ### `bash/setup-hook.bash`
