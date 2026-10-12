@@ -376,7 +376,6 @@ func (p *parser) exportedBy(r recipe) []string {
 
 func (p *parser) prelude(r recipe) string {
 	var sb strings.Builder
-	sb.WriteString("(\n")
 	for _, name := range p.exportedBy(r) {
 		sb.WriteString(name + "=" + projection.Dynamic + "\n")
 	}
@@ -385,14 +384,20 @@ func (p *parser) prelude(r recipe) string {
 
 func (p *parser) project(b *projection.Builder, s script) {
 	b.Region(encoder(s.whole, s.recipe.indent))
+	prelude := p.prelude(s.recipe)
 	if s.whole {
-		p.wholeScript(b, s)
+		lines := make([]projection.RecipeLine, len(s.lines))
+		for i, l := range s.lines {
+			start := p.start(l, s.recipe.indent)
+			lines[i] = projection.RecipeLine{Start: l.start, Command: start, End: l.end, Comment: start < l.end && p.text[start] == '#'}
+		}
+		b.OneShell(prelude, lines, func(l projection.RecipeLine) { p.fragment(b, l.Command, l.End) })
 		return
 	}
-	afterComment := false
+	shells := b.LineShells(prelude)
 	for i := 0; i < len(s.lines); {
 		n := p.logicalLength(s.lines[i:])
-		afterComment = p.logicalLine(b, s, s.lines[i:i+n], afterComment)
+		p.logicalLine(b, shells, s, s.lines[i:i+n])
 		i += n
 	}
 }
@@ -410,57 +415,24 @@ func (p *parser) start(l line, indent string) int {
 	return l.start + min(len(indent), len(content)-len(strings.TrimLeft(content, " \t")))
 }
 
-func (p *parser) logicalLine(b *projection.Builder, s script, lines []line, afterComment bool) bool {
-	first := lines[0]
+func (p *parser) logicalLine(b *projection.Builder, shells *projection.LineShells, s script, lines []line) {
+	first, last := lines[0], lines[len(lines)-1]
 	start := p.start(first, s.recipe.indent)
 	command := start
 	for command < first.end && command-start < len(sigils) && strings.IndexByte(sigils, p.text[command]) >= 0 {
 		command++
 	}
-	if command == first.end && len(lines) == 1 {
-		return afterComment
-	}
-	if !afterComment {
-		b.Script()
-	}
-	b.Opaque(first.start, command, "")
-	if p.text[command] == '#' && len(lines) == 1 {
-		p.fragment(b, command, first.end)
-		b.Opaque(first.end, first.end, "\n")
-		return true
-	}
-	b.Opaque(command, command, p.prelude(s.recipe))
-	from := command
-	for i, l := range lines[:len(lines)-1] {
-		p.fragment(b, from, l.end-1)
-		next := lines[i+1]
-		from = next.start + len(p.content(next)) - len(strings.TrimLeft(p.content(next), " \t"))
-		b.Opaque(l.end-1, from, "")
-	}
-	last := lines[len(lines)-1]
-	p.fragment(b, from, last.end)
-	b.Opaque(last.end, last.end, "\n)\n")
-	return false
-}
-
-func (p *parser) wholeScript(b *projection.Builder, s script) {
-	b.Script()
-	opened := false
-	last := 0
-	for _, l := range s.lines {
-		start := p.start(l, s.recipe.indent)
-		b.Opaque(l.start, start, "")
-		if !opened {
-			b.Opaque(start, start, p.prelude(s.recipe))
-			opened = true
+	comment := len(lines) == 1 && command < first.end && p.text[command] == '#'
+	shells.Add(projection.RecipeLine{Start: first.start, Command: command, End: last.end, Comment: comment}, func(projection.RecipeLine) {
+		from := command
+		for i, l := range lines[:len(lines)-1] {
+			p.fragment(b, from, l.end-1)
+			next := lines[i+1]
+			from = next.start + len(p.content(next)) - len(strings.TrimLeft(p.content(next), " \t"))
+			b.Opaque(l.end-1, from, "")
 		}
-		p.fragment(b, start, l.end)
-		b.Opaque(l.end, l.end, "\n")
-		last = l.end
-	}
-	if opened {
-		b.Opaque(last, last, ")\n")
-	}
+		p.fragment(b, from, last.end)
+	})
 }
 
 func (p *parser) fragment(b *projection.Builder, start, end int) {

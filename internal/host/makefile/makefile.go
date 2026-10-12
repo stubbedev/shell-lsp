@@ -51,15 +51,20 @@ func Project(text string) (*projection.Map, dialect.Detection) {
 		return b.Map(), detection
 	}
 	b.Region(encode)
-	afterComment := false
-	for _, lines := range p.recipes {
+	prelude := p.prelude()
+	body := func(l projection.RecipeLine) { p.content(b, l.Command, l.End) }
+	shells := b.LineShells(prelude)
+	for _, recipe := range p.recipes {
+		lines := make([]projection.RecipeLine, 0, len(recipe))
+		for _, l := range recipe {
+			lines = append(lines, p.recipeLine(l))
+		}
 		if p.oneShell {
-			b.Script()
-			p.script(b, lines)
+			b.OneShell(prelude, slices.DeleteFunc(lines, projection.RecipeLine.Empty), body)
 			continue
 		}
 		for _, l := range lines {
-			afterComment = p.line(b, l, afterComment)
+			shells.Add(l, body)
 		}
 	}
 	return b.Map(), detection
@@ -327,58 +332,10 @@ func (p *parser) prelude() string {
 	return "set " + strings.Join(options, " ") + "\n"
 }
 
-func (p *parser) commandStart(l recipeLine) int {
-	return l.end - len(strings.TrimLeft(p.text[l.start:l.end], recipeFlags))
-}
-
-func (p *parser) commentOnly(start, end int) bool {
-	return p.text[start] == '#' && !strings.Contains(p.text[start:end], "\n")
-}
-
-func (p *parser) line(b *projection.Builder, l recipeLine, afterComment bool) bool {
-	start := p.commandStart(l)
-	if start == l.end {
-		return afterComment
-	}
-	if !afterComment {
-		b.Script()
-	}
-	b.Opaque(l.start, start, "")
-	if p.commentOnly(start, l.end) {
-		p.content(b, start, l.end)
-		b.Opaque(l.end, l.end, "\n")
-		return true
-	}
-	b.Opaque(start, start, "(\n"+p.prelude())
-	p.content(b, start, l.end)
-	b.Opaque(l.end, l.end, "\n)\n")
-	return false
-}
-
-func (p *parser) script(b *projection.Builder, lines []recipeLine) {
-	wrapped := slices.ContainsFunc(lines, func(l recipeLine) bool {
-		start := p.commandStart(l)
-		return start < l.end && !p.commentOnly(start, l.end)
-	})
-	opened := false
-	last := 0
-	for _, l := range lines {
-		start := p.commandStart(l)
-		if start == l.end {
-			continue
-		}
-		b.Opaque(l.start, start, "")
-		if wrapped && !opened {
-			b.Opaque(start, start, "(\n"+p.prelude())
-			opened = true
-		}
-		p.content(b, start, l.end)
-		b.Opaque(l.end, l.end, "\n")
-		last = l.end
-	}
-	if opened {
-		b.Opaque(last, last, ")\n")
-	}
+func (p *parser) recipeLine(l recipeLine) projection.RecipeLine {
+	command := l.end - len(strings.TrimLeft(p.text[l.start:l.end], recipeFlags))
+	comment := command < l.end && p.text[command] == '#' && !strings.Contains(p.text[command:l.end], "\n")
+	return projection.RecipeLine{Start: l.start, Command: command, End: l.end, Comment: comment}
 }
 
 func (p *parser) content(b *projection.Builder, start, end int) {

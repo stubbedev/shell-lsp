@@ -35,6 +35,11 @@ func TestProjectText(t *testing.T) {
 			want:     "(\nset -euo pipefail\ncat <<EOF\nit's $$\nEOF\necho ''$$''\n)\n",
 		},
 		{
+			name:     "a shebang recipe of only comments opens no empty subshell",
+			justfile: "x:\n    #!/usr/bin/env bash\n    # nothing to run yet\n",
+			want:     "# nothing to run yet\n",
+		},
+		{
 			name:     "script attributes",
 			justfile: "[script]\nx:\n    a=1\n    echo $a\n\n[script(\"python3\")]\ny:\n    print(1)\n",
 			want:     "(\na=1\necho $a\n)\n",
