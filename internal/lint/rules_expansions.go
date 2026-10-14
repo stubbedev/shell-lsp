@@ -65,7 +65,7 @@ func checkLoopGlob(p *pass, iter *syntax.WordIter) {
 			case *syntax.ParamExp:
 				split, globbed = p.implicitlySplit(part), p.implicitlyGlobbed(part)
 			case *syntax.CmdSubst:
-				split, globbed = true, p.substitutionGlobbed()
+				split, globbed = true, p.substitutionGlobbed(part)
 			}
 			if split || globbed {
 				if span, ok := p.span(part); ok {
@@ -132,7 +132,7 @@ func checkRemovalPattern(p *pass, pe *syntax.ParamExp) {
 				p.reportLiteralPattern(part)
 			}
 		case *syntax.CmdSubst:
-			if !part.TempFile && !part.ReplyVar && p.substitutionGlobbed() {
+			if !part.TempFile && !part.ReplyVar && p.substitutionGlobbed(part) {
 				p.reportLiteralPattern(part)
 			}
 		}

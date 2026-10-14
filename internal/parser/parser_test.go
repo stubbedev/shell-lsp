@@ -249,6 +249,96 @@ func TestScopeAt(t *testing.T) {
 	}
 }
 
+func TestShellsOfSeparateProcesses(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		dialect dialect.Dialect
+		src     string
+		from    string
+		at      string
+		sees    bool
+	}{
+		{dialect.Bash, "x=1; (echo in)", "x=1", "in", true},
+		{dialect.Bash, "(x=1); echo out", "x=1", "out", false},
+		{dialect.Bash, "(x=1; (echo in))", "x=1", "in", true},
+		{dialect.Bash, "(x=1); (echo in)", "x=1", "in", false},
+		{dialect.Bash, "y=$(x=1); echo out", "x=1", "out", false},
+		{dialect.Bash, "y=`x=1`; echo out", "x=1", "out", false},
+		{dialect.Bash, "cat <(x=1); echo out", "x=1", "out", false},
+		{dialect.Bash, "x=1 & echo out", "x=1", "out", false},
+		{dialect.Bash, "coproc { x=1; }; echo out", "x=1", "out", false},
+		{dialect.Bash, "x=1 | cat; echo out", "x=1", "out", false},
+		{dialect.Bash, "echo | x=1; echo out", "x=1", "out", false},
+		{dialect.Zsh, "echo | x=1; echo out", "x=1", "out", true},
+		{dialect.Ksh, "echo | x=1; echo out", "x=1", "out", true},
+		{dialect.Zsh, "x=1 | cat; echo out", "x=1", "out", false},
+		{dialect.Bash, "y=${ x=1; }; echo out", "x=1", "out", true},
+		{dialect.Ksh, "y=${ x=1; }; echo out", "x=1", "out", true},
+		{dialect.Bash, "{ x=1; }; echo out", "x=1", "out", true},
+		{dialect.Bash, "f() { x=1; }; echo out", "x=1", "out", true},
+	} {
+		tree := Parse(tc.src, tc.dialect)
+		from, at := tree.ShellAt(strings.Index(tc.src, tc.from)), tree.ShellAt(strings.Index(tc.src, tc.at))
+		if got := tree.Inherits(at, from); got != tc.sees {
+			t.Errorf("%v %q: %q sees the shell of %q = %v, want %v", tc.dialect, tc.src, tc.at, tc.from, got, tc.sees)
+		}
+	}
+}
+
+func TestShellOfABracketedCommandStartsInsideIt(t *testing.T) {
+	t.Parallel()
+
+	src := "(x=1); cat $(y=2) <(z=3)"
+	tree := Parse(src, dialect.Bash)
+	for _, opener := range []string{"(x", "$(y", "<(z"} {
+		start := strings.Index(src, opener)
+		if got := tree.ShellAt(start); got != FileShell {
+			t.Errorf("ShellAt(%q) = %d, want the file's shell", opener, got)
+		}
+		if got := tree.ShellAt(start + len(opener)); got == FileShell {
+			t.Errorf("the inside of %q runs in the file's shell", opener)
+		}
+	}
+}
+
+func TestDefinitionBeforeSkipsShellsThatExited(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		src  string
+		want string
+	}{
+		{"x=outer\n(x=inner)\necho $x\n", "outer"},
+		{"x=outer\necho | x=inner\necho $x\n", "outer"},
+		{"(x=inner)\necho $x\n", ""},
+		{"x=outer\n(x=inner; echo $x)\n", "inner"},
+		{"x=outer\n(echo $x)\n", "outer"},
+		{"x=outer\n{ x=inner; }\necho $x\n", "inner"},
+	} {
+		tree := Parse(tc.src, dialect.Bash)
+		def, ok := tree.DefinitionBefore("x", strings.LastIndex(tc.src, "$x"))
+		got := ""
+		if ok {
+			got, _ = Literal(def.Value)
+		}
+		if got != tc.want {
+			t.Errorf("%q: the definition of x before $x is %q, want %q", tc.src, got, tc.want)
+		}
+	}
+}
+
+func TestPathValueSkipsShellsThatExited(t *testing.T) {
+	t.Parallel()
+
+	src := "dir=/a\n(dir=/b)\nsource \"$dir/x.sh\"\n"
+	tree := Parse(src, dialect.Bash)
+	arg := tree.File.Stmts[2].Cmd.(*syntax.CallExpr).Args[1]
+	if got, ok := tree.PathValue(arg, offset(arg.Pos()), PathEnv{}); !ok || got != "/a/x.sh" {
+		t.Errorf("PathValue = %q, %v, want /a/x.sh", got, ok)
+	}
+}
+
 func TestArithmeticDefinitionsAndReferences(t *testing.T) {
 	t.Parallel()
 

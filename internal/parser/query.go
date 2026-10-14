@@ -21,6 +21,27 @@ func (ix *Index) ScopeAt(offset int) ScopeID {
 	return s
 }
 
+func (ix *Index) ShellAt(offset int) ShellID {
+	last := sort.Search(len(ix.Shells), func(i int) bool { return ix.Shells[i].Span.Start > offset }) - 1
+	if last <= int(FileShell) {
+		return FileShell
+	}
+	s := ShellID(last)
+	for s != FileShell && !ix.Shells[s].Span.HasByteAt(offset) {
+		s = ix.Shells[s].Parent
+	}
+	return s
+}
+
+func (ix *Index) Inherits(shell, from ShellID) bool {
+	for ; shell != from; shell = ix.Shells[shell].Parent {
+		if shell == FileShell {
+			return false
+		}
+	}
+	return true
+}
+
 func (ix *Index) Binding(name string, scope ScopeID) (ScopeID, bool) {
 	locals := ix.localScopes[name]
 	for s := scope; ; s = ix.Scopes[s].Parent {
@@ -76,8 +97,9 @@ func (ix *Index) Visible(name string, scope ScopeID) Definitions {
 }
 
 func (ix *Index) DefinitionBefore(name string, at int) (*Definition, bool) {
+	shell := ix.ShellAt(at)
 	for def := range ix.Visible(name, ix.ScopeAt(at)).Backward() {
-		if def.Span.Start < at {
+		if def.Span.Start < at && ix.Inherits(shell, ix.ShellAt(def.Span.Start)) {
 			return def, true
 		}
 	}
@@ -218,6 +240,29 @@ func (t *Tree) SourceLine(offset int) int {
 
 func (t *Tree) Synthetic(offset int) bool {
 	return t.origin != nil && t.origin.Synthetic(offset)
+}
+
+func (t *Tree) WrittenStmts() []*syntax.Stmt {
+	return t.writtenStmts(t.File.Stmts, nil)
+}
+
+func (t *Tree) writtenStmts(list, out []*syntax.Stmt) []*syntax.Stmt {
+	for _, stmt := range list {
+		switch cmd := stmt.Cmd.(type) {
+		case *syntax.Subshell:
+			if t.Synthetic(offset(cmd.Lparen)) {
+				out = t.writtenStmts(cmd.Stmts, out)
+				continue
+			}
+		case *syntax.FuncDecl:
+			if body, ok := cmd.Body.Cmd.(*syntax.Block); ok && t.Synthetic(offset(cmd.Pos())) {
+				out = t.writtenStmts(body.Stmts, out)
+				continue
+			}
+		}
+		out = append(out, stmt)
+	}
+	return out
 }
 
 func (t *Tree) NodeSpan(node syntax.Node) (Span, bool) {

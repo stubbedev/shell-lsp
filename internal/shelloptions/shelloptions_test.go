@@ -1,6 +1,7 @@
 package shelloptions
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
@@ -28,7 +29,7 @@ func TestScan(t *testing.T) {
 		{dialect.Zsh, "opts=(extendedglob)\nsetopt $opts\n", Options{Dynamic: true}},
 	}
 	for _, tt := range tests {
-		if got := Scan(parser.Parse(tt.src, tt.dialect)); got != tt.want {
+		if got := Scan(parser.Parse(tt.src, tt.dialect)).At(len(tt.src)); got != tt.want {
 			t.Errorf("Scan(%q) = %+v, want %+v", tt.src, got, tt.want)
 		}
 	}
@@ -38,8 +39,45 @@ func TestEnabledBy(t *testing.T) {
 	t.Parallel()
 
 	tree := parser.Parse("shopt -s extglob\nshopt -u extglob\nf() { shopt -s nullglob extglob; }\n", dialect.Bash)
-	got := EnabledBy(tree, "extglob")
+	got := Scan(tree).EnabledBy("extglob", len(tree.Text()))
 	if len(got) != 2 || got[0].Span.Start != 0 || tree.Line(got[1].Span.Start) != 3 {
 		t.Fatalf("EnabledBy(extglob) = %+v", got)
+	}
+}
+
+func TestOptionsStayInTheirShell(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		src  string
+		at   string
+		want Options
+	}{
+		{"(shopt -s nullglob)\necho out\n", "out", Options{}},
+		{"(shopt -s nullglob; echo in)\n", "in", Options{NullGlob: true}},
+		{"shopt -s nullglob\n(echo in)\n", "in", Options{NullGlob: true}},
+		{"shopt -s nullglob\n(shopt -s extglob; (echo in))\n", "in", Options{NullGlob: true, ExtGlob: true}},
+		{"(shopt -s nullglob)\n(echo in)\n", "in", Options{}},
+		{"x=$(set -o pipefail)\necho out\n", "out", Options{}},
+		{"shopt -s extglob | cat\necho out\n", "out", Options{}},
+		{"(opts=x; shopt -s $opts)\necho out\n", "out", Options{}},
+		{"(opts=x; shopt -s $opts; echo in)\n", "in", Options{Dynamic: true}},
+		{"f() { shopt -s nullglob; }\necho out\n", "out", Options{NullGlob: true}},
+	} {
+		tree := parser.Parse(tt.src, dialect.Bash)
+		if got := Scan(tree).At(strings.Index(tt.src, tt.at)); got != tt.want {
+			t.Errorf("%q: options at %q = %+v, want %+v", tt.src, tt.at, got, tt.want)
+		}
+	}
+}
+
+func TestEnabledByOnlyNamesTheShellsThatRunHere(t *testing.T) {
+	t.Parallel()
+
+	src := "(shopt -s extglob)\nshopt -s extglob\n(echo in)\n"
+	tree := parser.Parse(src, dialect.Bash)
+	got := Scan(tree).EnabledBy("extglob", strings.Index(src, "in"))
+	if len(got) != 1 || tree.Line(got[0].Span.Start) != 2 {
+		t.Fatalf("EnabledBy(extglob) = %+v, want only the shopt on line 2", got)
 	}
 }

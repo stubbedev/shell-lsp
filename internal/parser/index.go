@@ -20,6 +20,15 @@ type Scope struct {
 	Parent ScopeID
 }
 
+type ShellID int
+
+const FileShell ShellID = 0
+
+type Shell struct {
+	Span   Span
+	Parent ShellID
+}
+
 type Function struct {
 	Name      string
 	NameSpan  Span
@@ -171,6 +180,7 @@ func (t Test) Literal() bool { return len(t.Segments) == 1 }
 
 type Index struct {
 	Scopes      []Scope
+	Shells      []Shell
 	Functions   []Function
 	Definitions []Definition
 	References  []Reference
@@ -203,6 +213,7 @@ type builder struct {
 	errs        []Error
 	stack       []syntax.Node
 	scopes      []ScopeID
+	shells      []shellOpening
 	elseClauses map[*syntax.IfClause]bool
 	closedAtEnd map[*syntax.Redirect]bool
 	compounds   int
@@ -224,6 +235,8 @@ func buildIndex(file *syntax.File, lang syntax.LangVariant, d dialect.Dialect, t
 		elseClauses: map[*syntax.IfClause]bool{},
 	}
 	b.index.Scopes = append(b.index.Scopes, Scope{Span: Span{Start: 0, End: len(text)}, Parent: FileScope})
+	b.index.Shells = append(b.index.Shells, Shell{Span: Span{Start: 0, End: len(text)}, Parent: FileShell})
+	b.shells = []shellOpening{{id: FileShell}}
 	Walk(file, b.visit)
 	slices.SortStableFunc(b.index.Keywords, func(x, y Keyword) int { return x.Span.Start - y.Span.Start })
 	slices.SortStableFunc(b.index.Comments, func(x, y Comment) int { return x.Span.Start - y.Span.Start })
@@ -238,6 +251,7 @@ func presized(previous *Tree) Index {
 	p := previous.Index
 	return Index{
 		Scopes:      withRoomFor(p.Scopes),
+		Shells:      withRoomFor(p.Shells),
 		Functions:   withRoomFor(p.Functions),
 		Definitions: withRoomFor(p.Definitions),
 		References:  withRoomFor(p.References),
@@ -264,6 +278,9 @@ func (b *builder) visit(node syntax.Node) bool {
 		if decl, ok := b.parent().(*syntax.FuncDecl); ok && decl.Body == top {
 			b.scopes = b.scopes[:len(b.scopes)-1]
 		}
+		if b.shells[len(b.shells)-1].node == top {
+			b.shells = b.shells[:len(b.shells)-1]
+		}
 		switch {
 		case compound(top):
 			b.compounds--
@@ -273,6 +290,7 @@ func (b *builder) visit(node syntax.Node) bool {
 		return true
 	}
 	b.enter(node)
+	b.openShell(node)
 	switch n := node.(type) {
 	case *syntax.ArrayExpr:
 		if compound(n) {
@@ -296,6 +314,47 @@ func isNamespace(node syntax.Node) bool {
 }
 
 func (b *builder) scope() ScopeID { return b.scopes[len(b.scopes)-1] }
+
+type shellOpening struct {
+	node syntax.Node
+	id   ShellID
+}
+
+func (b *builder) openShell(node syntax.Node) {
+	separate, bracketed := b.separateShell(node)
+	if !separate || !node.Pos().IsValid() {
+		return
+	}
+	span := b.span(node)
+	if bracketed {
+		span.Start = min(span.Start+1, span.End)
+	}
+	id := ShellID(len(b.index.Shells))
+	b.index.Shells = append(b.index.Shells, Shell{Span: span, Parent: b.shells[len(b.shells)-1].id})
+	b.shells = append(b.shells, shellOpening{node: node, id: id})
+}
+
+func (b *builder) separateShell(node syntax.Node) (separate, bracketed bool) {
+	switch n := node.(type) {
+	case *syntax.Subshell, *syntax.ProcSubst:
+		return true, true
+	case *syntax.CmdSubst:
+		return !n.TempFile && !n.ReplyVar, true
+	case *syntax.TestDecl:
+		return true, false
+	case *syntax.Stmt:
+		if n.Background || n.Coprocess || n.Disown {
+			return true, false
+		}
+		switch p := b.parent().(type) {
+		case *syntax.CoprocClause:
+			return true, false
+		case *syntax.BinaryCmd:
+			return (p.Op == syntax.Pipe || p.Op == syntax.PipeAll) && (n == p.X || !b.features.LastPipeInShell), false
+		}
+	}
+	return false, false
+}
 
 func (b *builder) parent() syntax.Node {
 	if len(b.stack) == 0 {

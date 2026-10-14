@@ -141,7 +141,7 @@ func checkUnquotedSubstitution(p *pass, cs *syntax.CmdSubst) {
 	switch p.contextOf(cs) {
 	case contextSplit:
 		if !producesSafeWords(cs) {
-			p.report(2046, span, "The output of this command substitution is "+p.substitutionFate("split into words")+"; quote it.", p.quoteFix(span, Review))
+			p.report(2046, span, "The output of this command substitution is "+p.substitutionFate(cs, "split into words")+"; quote it.", p.quoteFix(span, Review))
 		}
 	case contextArrayElement:
 		if producesSafeWords(cs) {
@@ -151,7 +151,7 @@ func checkUnquotedSubstitution(p *pass, cs *syntax.CmdSubst) {
 		if p.dialect == dialect.Zsh {
 			advice = `split it explicitly instead, such as into lines with ${(f)"$(...)"}`
 		}
-		p.report(2207, span, "Command output is "+p.substitutionFate("split on whitespace")+" when building this array; "+advice+".", p.lineArrayFix(cs, span)...)
+		p.report(2207, span, "Command output is "+p.substitutionFate(cs, "split on whitespace")+" when building this array; "+advice+".", p.lineArrayFix(cs, span)...)
 	default:
 	}
 }
@@ -183,8 +183,8 @@ func (p *pass) lineArrayFix(cs *syntax.CmdSubst, span parser.Span) []Fix {
 	return nil
 }
 
-func (p *pass) substitutionFate(split string) string {
-	if p.substitutionGlobbed() {
+func (p *pass) substitutionFate(cs *syntax.CmdSubst, split string) string {
+	if p.substitutionGlobbed(cs) {
 		return split + " and globbed"
 	}
 	return split

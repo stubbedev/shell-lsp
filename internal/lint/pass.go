@@ -35,7 +35,7 @@ type pass struct {
 
 	rcFile         bool
 	shellChosen    bool
-	shellOptions   *shelloptions.Options
+	perShell       *shelloptions.PerShell
 	sites          *[]glob.Site
 	variables      variableUsage
 	parameters     shelldocs.ParameterTable

@@ -45,15 +45,19 @@ type Result struct {
 
 type Evaluator struct {
 	tree        *parser.Tree
-	opts        shelloptions.Options
+	options     shelloptions.PerShell
 	sites       glob.Sites
 	assumptions []Assumption
 	overlay     map[string]Value
 	depth       int
 }
 
-func New(tree *parser.Tree, opts shelloptions.Options) *Evaluator {
-	return &Evaluator{tree: tree, opts: opts, sites: glob.For(tree, opts)}
+func New(tree *parser.Tree, options shelloptions.PerShell) *Evaluator {
+	return &Evaluator{tree: tree, options: options, sites: glob.For(tree, options)}
+}
+
+func (e *Evaluator) optionsAt(n syntax.Node) shelloptions.Options {
+	return e.options.At(parser.Offset(n.Pos()))
 }
 
 func (e *Evaluator) Expansion(pe *syntax.ParamExp, quoted bool) (Result, error) {
@@ -91,9 +95,9 @@ func (e *Evaluator) Matches(site glob.Site) (Outcome, error) {
 		switch {
 		case e.tree.Dialect == dialect.Ksh:
 			return Outcome{}, unsupported("=~ in ksh")
-		case e.opts.NoCaseMatch:
+		case site.Options.NoCaseMatch:
 			return Outcome{}, unsupported("matching under nocasematch")
-		case e.opts.RematchPCRE:
+		case site.Options.RematchPCRE:
 			return Outcome{}, unsupported("PCRE matching with rematchpcre")
 		}
 	}
@@ -701,10 +705,11 @@ func (e *Evaluator) matcher(w *syntax.Word, role glob.Role) (glob.Role, glob.Mat
 	if len(p.Errors) > 0 {
 		return role, glob.Matcher{}, unsupported("an invalid pattern")
 	}
-	if unmet := p.Unmet(e.opts); len(unmet) > 0 {
+	opts := e.optionsAt(w)
+	if unmet := p.Unmet(opts); len(unmet) > 0 {
 		return role, glob.Matcher{}, unsupported("a pattern that needs %s", unmet[0].Option)
 	}
-	if e.tree.Dialect == dialect.Bash && e.opts.NoCaseMatch {
+	if e.tree.Dialect == dialect.Bash && opts.NoCaseMatch {
 		return role, glob.Matcher{}, unsupported("matching under nocasematch")
 	}
 	m, err := p.Matcher()
@@ -845,7 +850,7 @@ func (e *Evaluator) replacement(w *syntax.Word, text string, found glob.Match) (
 	if e.tree.Dialect == dialect.Ksh && slices.ContainsFunc(w.Parts, hasBackslash) {
 		return "", unsupported("a ksh replacement with backslashes, which can refer to subpatterns")
 	}
-	if e.tree.Dialect != dialect.Bash || e.opts.NoPatsubAmp {
+	if e.tree.Dialect != dialect.Bash || e.optionsAt(w).NoPatsubAmp {
 		return e.word(w)
 	}
 	var sb strings.Builder

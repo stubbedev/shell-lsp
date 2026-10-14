@@ -42,7 +42,7 @@ var controlFamily = family{
 
 func checkStatementLists(p *pass, n syntax.Node) {
 	for _, list := range stmtLists(n) {
-		if !p.options().Errexit {
+		if len(list) > 0 && !p.optionsAt(list[0]).Errexit {
 			p.checkDirectoryRevert(list)
 		}
 		p.checkRepeatedAppends(list)
@@ -204,18 +204,11 @@ func (p *pass) pipedStatement(depth int) bool {
 	if !ok || !pipes(pipe.Op) {
 		return false
 	}
-	if pipe.X == stmt || !p.lastPipe() {
+	if pipe.X == stmt || !runsLastPipeInShell(p.dialect, p.optionsAt(pipe)) {
 		return true
 	}
 	outer, ok := p.ancestor(depth + 3).(*syntax.BinaryCmd)
 	return ok && pipes(outer.Op) && outer.X == p.ancestor(depth+2)
-}
-
-func (p *pass) lastPipe() bool {
-	if p.dialect.Features().LastPipeInShell {
-		return true
-	}
-	return p.options().Lastpipe
 }
 
 var safeDirectory = regexp.MustCompile(`^/*((\.|\.\.)/+)*(\.|\.\.)?$`)
@@ -230,7 +223,7 @@ func checkUncheckedDirectoryChange(p *pass, call *syntax.CallExpr) {
 		return
 	}
 	stmt, ok := p.parent().(*syntax.Stmt)
-	if !ok || p.options().Errexit || p.inCondition(stmt) {
+	if !ok || p.optionsAt(stmt).Errexit || p.inCondition(stmt) {
 		return
 	}
 	if name != "cd" && parseOptions(name, args).Has("-n") {

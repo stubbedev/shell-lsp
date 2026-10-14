@@ -39,15 +39,16 @@ type Site struct {
 	Subject *syntax.Word
 	Negated bool
 	Pattern Pattern
+	Options shelloptions.Options
 }
 
 type Sites struct {
-	tree *parser.Tree
-	opts shelloptions.Options
+	tree    *parser.Tree
+	options shelloptions.PerShell
 }
 
-func For(tree *parser.Tree, opts shelloptions.Options) Sites {
-	return Sites{tree: tree, opts: opts}
+func For(tree *parser.Tree, options shelloptions.PerShell) Sites {
+	return Sites{tree: tree, options: options}
 }
 
 func (s Sites) All() []Site {
@@ -168,8 +169,8 @@ func OperatorRole(op syntax.ParExpOperator) (Role, bool) {
 	return role, ok
 }
 
-func (s Sites) syntax(role Role) Syntax {
-	return Syntax{Dialect: s.tree.Dialect, Filenames: role == RoleFilenames, KshGlob: s.opts.KshGlob}
+func (s Sites) syntax(role Role, opts shelloptions.Options) Syntax {
+	return Syntax{Dialect: s.tree.Dialect, Filenames: role == RoleFilenames, KshGlob: opts.KshGlob}
 }
 
 type Resolver func(part syntax.WordPart) (string, bool)
@@ -183,7 +184,7 @@ func (s Sites) site(w *syntax.Word, role Role, exp *syntax.ParamExp) (Site, bool
 	if !ok || role == RoleFilenames && !pattern.Globs() || role == RoleRegex && len(w.Parts) == 0 {
 		return Site{}, false
 	}
-	return Site{Word: w, Span: span, Role: role, Exp: exp, Pattern: pattern}, true
+	return Site{Word: w, Span: span, Role: role, Exp: exp, Pattern: pattern, Options: s.options.At(span.Start)}, true
 }
 
 func (s Sites) Pattern(w *syntax.Word, role Role, resolve Resolver) (Role, Pattern, bool) {
@@ -191,12 +192,13 @@ func (s Sites) Pattern(w *syntax.Word, role Role, resolve Resolver) (Role, Patte
 		segments, ok := s.regexSegments(w, resolve)
 		return role, ParseRegex(segments, Syntax{Dialect: s.tree.Dialect, Regex: ExtendedRegex}), ok
 	}
-	segments, ok := s.segments(w, role, resolve)
+	opts := s.options.At(parser.Offset(w.Pos()))
+	segments, ok := s.segments(w, role, resolve, opts)
 	if !ok {
 		return role, Pattern{}, false
 	}
 	role, segments = anchored(role, segments)
-	pattern := Parse(segments, s.syntax(role))
+	pattern := Parse(segments, s.syntax(role, opts))
 	if role == RoleTest && s.tree.Dialect == dialect.Bash {
 		pattern.Needs = slices.DeleteFunc(pattern.Needs, func(n Need) bool { return n.Option == ExtGlob })
 	}
@@ -221,14 +223,14 @@ func anchored(role Role, segments []Segment) (Role, []Segment) {
 	return role, append([]Segment{first}, segments[1:]...)
 }
 
-func (s Sites) globSubst(pe *syntax.ParamExp) bool {
+func (s Sites) globSubst(pe *syntax.ParamExp, opts shelloptions.Options) bool {
 	if s.tree.Dialect.Features().GlobsUnquoted {
 		return true
 	}
 	if pe == nil {
-		return s.opts.GlobSubst
+		return opts.GlobSubst
 	}
-	return pe.GlobSubst == syntax.OptOn || pe.GlobSubst == syntax.OptUnset && s.opts.GlobSubst
+	return pe.GlobSubst == syntax.OptOn || pe.GlobSubst == syntax.OptUnset && opts.GlobSubst
 }
 
 func expanded(part syntax.WordPart, span parser.Span, src string, glob bool, resolve Resolver) Segment {
@@ -243,12 +245,12 @@ func expanded(part syntax.WordPart, span parser.Span, src string, glob bool, res
 	return Segment{Span: span, Kind: SegmentUnknown, Text: src, Glob: glob}
 }
 
-func (s Sites) segments(w *syntax.Word, role Role, resolve Resolver) ([]Segment, bool) {
+func (s Sites) segments(w *syntax.Word, role Role, resolve Resolver, opts shelloptions.Options) ([]Segment, bool) {
 	text := s.tree.Text()
 	parts := w.Parts
 	var qualifiers []syntax.WordPart
 	if role == RoleFilenames && s.tree.Dialect == dialect.Zsh {
-		cut := parser.GlobQualifiers(w, !s.opts.NoBareGlobQual)
+		cut := parser.GlobQualifiers(w, !opts.NoBareGlobQual)
 		parts, qualifiers = w.Parts[:cut], w.Parts[cut:]
 	}
 	segments := make([]Segment, 0, len(w.Parts))
@@ -289,9 +291,9 @@ func (s Sites) segments(w *syntax.Word, role Role, resolve Resolver) ([]Segment,
 				segments = append(segments, expanded(inner, innerSpan, innerSrc, false, resolve))
 			}
 		case *syntax.ParamExp:
-			segments = append(segments, expanded(p, span, src, s.globSubst(p), resolve))
+			segments = append(segments, expanded(p, span, src, s.globSubst(p, opts), resolve))
 		default:
-			segments = append(segments, expanded(p, span, src, s.globSubst(nil), resolve))
+			segments = append(segments, expanded(p, span, src, s.globSubst(nil, opts), resolve))
 		}
 	}
 	for _, q := range qualifiers {

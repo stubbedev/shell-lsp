@@ -8,7 +8,6 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/glob"
 	"github.com/stubbedev/shell-lsp/internal/parser"
-	"github.com/stubbedev/shell-lsp/internal/shelloptions"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/internal/textline"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
@@ -36,7 +35,7 @@ var patternsFamily = family{
 
 func (p *pass) patternSites() []glob.Site {
 	if p.sites == nil {
-		sites := glob.For(p.tree, p.options()).All()
+		sites := glob.For(p.tree, p.shellOptions()).All()
 		p.sites = &sites
 	}
 	return *p.sites
@@ -45,7 +44,7 @@ func (p *pass) patternSites() []glob.Site {
 func checkPatterns(p *pass) {
 	for _, site := range p.patternSites() {
 		p.checkBadPattern(site)
-		if p.options().Dynamic {
+		if site.Options.Dynamic {
 			continue
 		}
 		reported := map[glob.Option]bool{}
@@ -89,7 +88,7 @@ func (p *pass) checkPatternNeed(site glob.Site, need glob.Need) bool {
 	if need.Option == glob.ExtGlob && parsedWithCommand(site.Role) {
 		return p.checkParsedExtglob(need, text, enable)
 	}
-	if need.Option.On(p.options()) {
+	if need.Option.On(site.Options) {
 		return false
 	}
 	switch need.Option {
@@ -114,7 +113,7 @@ func (p *pass) checkParsedExtglob(need glob.Need, text, enable string) bool {
 	if !ok {
 		return false
 	}
-	enablers := shelloptions.EnabledBy(p.tree, need.Option.String())
+	enablers := p.shellOptions().EnabledBy(need.Option.String(), need.Span.Start)
 	if slices.ContainsFunc(enablers, func(c parser.Command) bool { return c.Span.End <= top.Start }) {
 		return false
 	}
@@ -130,7 +129,7 @@ func (p *pass) checkParsedExtglob(need glob.Need, text, enable string) bool {
 
 func (p *pass) topLevelStatement(offset int) (parser.Span, bool) {
 	unit, previousEnd := -1, -1
-	for _, stmt := range p.tree.File.Stmts {
+	for _, stmt := range p.tree.WrittenStmts() {
 		span, ok := p.span(stmt)
 		if !ok {
 			continue
@@ -232,7 +231,7 @@ func (p *pass) matchesRegex() bool {
 }
 
 func checkReplacementAmpersand(p *pass, pe *syntax.ParamExp) {
-	if p.dialect != dialect.Bash || pe.Repl == nil || pe.Repl.With == nil || p.options().NoPatsubAmp {
+	if p.dialect != dialect.Bash || pe.Repl == nil || pe.Repl.With == nil || p.optionsAt(pe).NoPatsubAmp {
 		return
 	}
 	for _, part := range pe.Repl.With.Parts {

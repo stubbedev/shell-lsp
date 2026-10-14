@@ -120,7 +120,7 @@ func checkEarlyExitGrep(p *pass, c command) {
 	if !parsed.Complete || !parsed.Has("-q", "--quiet", "--silent", "-m", "--max-count", "-L") {
 		return
 	}
-	if _, index := p.enclosingPipeline(); index < 1 || !p.options().Pipefail {
+	if _, index := p.enclosingPipeline(); index < 1 || !p.optionsAt(c.call).Pipefail {
 		return
 	}
 	p.reportNode(2337, c.call, c.name+" may exit before reading all its input; with pipefail set, the writer upstream can then fail with SIGPIPE and fail the whole pipeline.")

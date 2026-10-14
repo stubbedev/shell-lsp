@@ -357,7 +357,7 @@ type interpreter struct {
 	deferred   []syntax.Node
 	eval       evaluation
 	visitor    func(syntax.Node) bool
-	lastPipe   bool
+	options    shelloptions.PerShell
 	subshells  [][]subshellWrite
 
 	trackStatus   bool
@@ -380,7 +380,7 @@ func analyzeFlow(tree *parser.Tree, imports []parser.Import, bats bool) *flowRes
 		summaries:  map[*syntax.FuncDecl]*summary{},
 		computing:  map[*syntax.FuncDecl]bool{},
 		staticFunc: map[string]*syntax.FuncDecl{},
-		lastPipe:   runsLastPipeInShell(tree),
+		options:    shelloptions.Scan(tree),
 	}
 	in.visitor = in.visit
 	for _, fn := range tree.Functions {
@@ -481,13 +481,6 @@ func literalSpace(s string) space {
 		return spaceDirty
 	}
 	return spaceClean
-}
-
-func runsLastPipeInShell(tree *parser.Tree) bool {
-	if tree.Dialect.Features().LastPipeInShell {
-		return true
-	}
-	return tree.Dialect == dialect.Bash && shelloptions.Scan(tree).Lastpipe
 }
 
 func (in *interpreter) entry() *state {
@@ -1196,7 +1189,7 @@ func (in *interpreter) binary(cmd *syntax.BinaryCmd, s *state) *state {
 		return join(left, right)
 	}
 	in.subshell(subshellPipeline, func(sub *state) *state { return in.stmt(cmd.X, sub) }, s)
-	if in.lastPipe {
+	if runsLastPipeInShell(in.dialect, in.options.At(parser.Offset(cmd.Pos()))) {
 		return in.stmt(cmd.Y, s)
 	}
 	if end := in.subshell(subshellPipeline, func(sub *state) *state { return in.stmt(cmd.Y, sub) }, s); end.live {

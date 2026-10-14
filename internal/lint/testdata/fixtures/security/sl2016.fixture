@@ -55,3 +55,21 @@ for f in **/*.sh; do echo "$f"; done
 #!/bin/ksh
 rm -- @(a|b).log
 >>> none
+
+### shopt in a subshell does not reach the shell around it
+#!/bin/bash
+(shopt -s extglob)
+rm -- @(a|b).log
+>>+ SL2016 3:7 -- shell-lsp native check; shellcheck does not track the glob options a pattern needs
+
+### a subshell inherits shopt from the shell around it
+#!/bin/bash
+shopt -s extglob
+(rm -- @(a|b).log)
+>>> none
+
+### globstar set in a command substitution does not reach the loop
+#!/bin/bash
+: "$(shopt -s globstar)"
+for f in **/*.sh; do echo "$f"; done
+>>+ SL2016 3:10 -- shell-lsp native check; shellcheck does not track the glob options a pattern needs

@@ -185,7 +185,7 @@ ShellCheck fails with an internal error on these scripts, which are left out:
 | SC2100 | 3 | 2 | 0 |
 | SC2101 | 0 | 0 | 0 |
 | SC2102 | 2 | 10 | 0 |
-| SC2103 | 6 | 1 | 2 |
+| SC2103 | 8 | 1 | 0 |
 | SC2104 | 2 | 0 | 0 |
 | SC2105 | 9 | 0 | 0 |
 | SC2106 | 0 | 0 | 0 |
@@ -236,7 +236,7 @@ ShellCheck fails with an internal error on these scripts, which are left out:
 | SC2161 | 0 | 0 | 0 |
 | SC2162 | 329 | 66 | 1 |
 | SC2163 | 9 | 0 | 0 |
-| SC2164 | 134 | 60 | 51 |
+| SC2164 | 179 | 64 | 6 |
 | SC2165 | 5 | 5 | 0 |
 | SC2166 | 219 | 53 | 0 |
 | SC2167 | 5 | 3 | 0 |

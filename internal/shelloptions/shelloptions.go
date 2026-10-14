@@ -212,42 +212,108 @@ func zshOption(word string, unset bool) string {
 	return "no" + name
 }
 
-func Scan(tree *parser.Tree) Options {
-	opts := Options{
+type PerShell struct {
+	tree     *parser.Tree
+	options  []Options
+	enablers []enabler
+}
+
+type enabler struct {
+	command parser.Command
+	shell   parser.ShellID
+	changes []optionChange
+}
+
+func Scan(tree *parser.Tree) PerShell {
+	base := Options{
 		Errexit:      turnsOn(shebangOptionChanges(tree.Text(), tree.Dialect), "errexit"),
 		ExtendedGlob: tree.Dialect == dialect.Zsh && dialect.CompletionFile(tree.Text()),
 	}
-	fields := map[string]*bool{
-		"errexit": &opts.Errexit, "pipefail": &opts.Pipefail, "inheriterrexit": &opts.InheritErrexit, "posix": &opts.InheritErrexit,
-		"lastpipe": &opts.Lastpipe, "execfail": &opts.Execfail, "globsubst": &opts.GlobSubst, "shwordsplit": &opts.ShWordSplit,
-		"extendedglob": &opts.ExtendedGlob, "kshglob": &opts.KshGlob, "nobareglobqual": &opts.NoBareGlobQual,
-		"extglob": &opts.ExtGlob, "globstar": &opts.GlobStar, "nocasematch": &opts.NoCaseMatch, "nocaseglob": &opts.NoCaseGlob,
-		"nullglob": &opts.NullGlob, "failglob": &opts.FailGlob, "rematchpcre": &opts.RematchPCRE,
-	}
-	cleared := map[string]*bool{"patsubreplacement": &opts.NoPatsubAmp}
+	own := make([][]optionChange, len(tree.Shells))
+	dynamic := make([]bool, len(tree.Shells))
+	var enablers []enabler
 	for _, c := range tree.Commands {
-		opts.Dynamic = opts.Dynamic || setsUnknownOptions(c.Name, c.Args)
-		for _, change := range optionChanges(c.Name, c.Args, tree.Dialect) {
-			changed := fields
-			if !change.on {
-				changed = cleared
-			}
-			if field, ok := changed[change.name]; ok {
-				*field = true
-			}
+		shell := tree.ShellAt(c.Span.Start)
+		dynamic[shell] = dynamic[shell] || setsUnknownOptions(c.Name, c.Args)
+		changes := optionChanges(c.Name, c.Args, tree.Dialect)
+		if len(changes) == 0 {
+			continue
+		}
+		own[shell] = append(own[shell], changes...)
+		enablers = append(enablers, enabler{command: c, shell: shell, changes: changes})
+	}
+	options := make([]Options, len(tree.Shells))
+	for id, shell := range tree.Shells {
+		options[id] = base
+		if id != int(parser.FileShell) {
+			options[id] = options[shell.Parent]
+		}
+		options[id].Dynamic = options[id].Dynamic || dynamic[id]
+		for _, change := range own[id] {
+			options[id].apply(change)
 		}
 	}
-	return opts
+	return PerShell{tree: tree, options: options, enablers: enablers}
 }
 
-func EnabledBy(tree *parser.Tree, name string) []parser.Command {
+func (p PerShell) At(offset int) Options {
+	return p.options[p.tree.ShellAt(offset)]
+}
+
+func (p PerShell) EnabledBy(name string, at int) []parser.Command {
+	shell := p.tree.ShellAt(at)
 	var commands []parser.Command
-	for _, c := range tree.Commands {
-		if turnsOn(optionChanges(c.Name, c.Args, tree.Dialect), name) {
-			commands = append(commands, c)
+	for _, e := range p.enablers {
+		if p.tree.Inherits(shell, e.shell) && turnsOn(e.changes, name) {
+			commands = append(commands, e.command)
 		}
 	}
 	return commands
+}
+
+func (o *Options) apply(change optionChange) {
+	if !change.on {
+		if change.name == "patsubreplacement" {
+			o.NoPatsubAmp = true
+		}
+		return
+	}
+	switch change.name {
+	case "errexit":
+		o.Errexit = true
+	case "pipefail":
+		o.Pipefail = true
+	case "inheriterrexit", "posix":
+		o.InheritErrexit = true
+	case "lastpipe":
+		o.Lastpipe = true
+	case "execfail":
+		o.Execfail = true
+	case "globsubst":
+		o.GlobSubst = true
+	case "shwordsplit":
+		o.ShWordSplit = true
+	case "extendedglob":
+		o.ExtendedGlob = true
+	case "kshglob":
+		o.KshGlob = true
+	case "nobareglobqual":
+		o.NoBareGlobQual = true
+	case "extglob":
+		o.ExtGlob = true
+	case "globstar":
+		o.GlobStar = true
+	case "nocasematch":
+		o.NoCaseMatch = true
+	case "nocaseglob":
+		o.NoCaseGlob = true
+	case "nullglob":
+		o.NullGlob = true
+	case "failglob":
+		o.FailGlob = true
+	case "rematchpcre":
+		o.RematchPCRE = true
+	}
 }
 
 func shebangOptionChanges(text string, d dialect.Dialect) []optionChange {

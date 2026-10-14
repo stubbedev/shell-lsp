@@ -78,6 +78,13 @@ var bashCases = []evalCase{
 	{"x=a.b; s=.; p='*.'", `"${x#"$p"}"`},
 	{"base=/srv/app; dir=$base/logs", `"${dir##*/}"`},
 	{"f='my file.txt'", `"${f%.txt}"`},
+	{"x=a.b; (x=c.d)", `"${x%.*}"`},
+	{"x=a.b; : $(x=c.d)", `"${x%.*}"`},
+	{"x=a.b; : <(x=c.d)", `"${x%.*}"`},
+	{"x=a.b; x=c.d &\nwait", `"${x%.*}"`},
+	{"x=a.b; x=c.d | cat", `"${x%.*}"`},
+	{"x=a.b; echo | x=c.d", `"${x%.*}"`},
+	{"x=a.b; { x=c.d; }", `"${x%.*}"`},
 	{"x=héllo", `"${x//?/.}"`},
 	{"x=héllo", `"${#x}"`},
 }
@@ -143,6 +150,10 @@ var zshCases = []evalCase{
 	{"a=(b a c a '')", "${a%a}"},
 	{"a=(b a c a '')", "${a:#a}"},
 	{"a=(b a c a '')", "${(M)a:#a}"},
+	{"x=a.b; (x=c.d)", "${x%.*}"},
+	{"x=a.b; : $(x=c.d)", "${x%.*}"},
+	{"x=a.b; print | x=c.d", "${x%.*}"},
+	{"x=a.b; x=c.d | cat", "${x%.*}"},
 	{"a=(b a c a '')", "${(U)a}"},
 	{"a=(b a c a '')", "${a/a/x}"},
 	{"a=(b a c a '')", "${a[2,3]:u}"},
@@ -197,6 +208,8 @@ var kshCases = []evalCase{
 	{"a=(one two three)", `"${a[1]}"`},
 	{"a=(one two three)", `"${!a[@]}"`},
 	{"a=(one two three)", `"${#a[@]}"`},
+	{"x=a.b; (x=c.d)", `"${x%.*}"`},
+	{"x=a.b; print | x=c.d", `"${x%.*}"`},
 }
 
 type regexCase struct {
@@ -369,6 +382,10 @@ func TestEvaluationRefusesWhatItCannotKnow(t *testing.T) {
 		want    error
 	}{
 		{dialect.Bash, "printf '<%s>' \"${x%.*}\"\n", ErrUnknown},
+		{dialect.Bash, "(x=a.b)\nprintf '<%s>' \"${x%.*}\"\n", ErrUnknown},
+		{dialect.Bash, "y=$(x=a.b)\nprintf '<%s>' \"${x%.*}\"\n", ErrUnknown},
+		{dialect.Bash, "x=a.b | cat\nprintf '<%s>' \"${x%.*}\"\n", ErrUnknown},
+		{dialect.Bash, "x=a.b &\nprintf '<%s>' \"${x%.*}\"\n", ErrUnknown},
 		{dialect.Bash, "x=$(date)\nprintf '<%s>' \"${x%.*}\"\n", ErrUnknown},
 		{dialect.Bash, "for x in a b; do :; done\nprintf '<%s>' \"${x%.*}\"\n", ErrUnknown},
 		{dialect.Bash, "declare -i x=1+2\nprintf '<%s>' \"${x}\"\n", ErrUnknown},

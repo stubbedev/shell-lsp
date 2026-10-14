@@ -9,6 +9,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/glob"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/prose"
+	"github.com/stubbedev/shell-lsp/internal/shelloptions"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -40,7 +41,7 @@ func (h hoverer) patternDoc(site glob.Site) string {
 	if note := h.matchingNote(site); note != "" {
 		fmt.Fprintf(&sb, "\n\n%s", note)
 	}
-	for _, need := range site.Pattern.Unmet(h.options) {
+	for _, need := range site.Pattern.Unmet(site.Options) {
 		text := h.text[need.Span.Start:need.Span.End]
 		fmt.Fprintf(&sb, "\n\n%s needs `%s`; this file never enables it, so the shell matches it literally.", prose.Code(text), need.Option.Enable(h.dialect))
 	}
@@ -53,10 +54,10 @@ func (h hoverer) patternDoc(site glob.Site) string {
 func (h hoverer) matchingNote(site glob.Site) string {
 	switch site.Role {
 	case glob.RoleFilenames:
-		return strings.TrimSpace(h.unmatchedNote() + " " + h.caseNote(h.options.NoCaseGlob, "nocaseglob"))
+		return strings.TrimSpace(h.unmatchedNote(site.Options) + " " + h.caseNote(site.Options.NoCaseGlob, "nocaseglob"))
 	case glob.RoleTest, glob.RoleCase, glob.RoleReplaceFirst, glob.RoleReplaceAll, glob.RoleReplacePrefix, glob.RoleReplaceSuffix, glob.RoleRegex:
 		if h.dialect == dialect.Bash || site.Role == glob.RoleRegex {
-			return h.caseNote(h.options.NoCaseMatch, "nocasematch")
+			return h.caseNote(site.Options.NoCaseMatch, "nocasematch")
 		}
 	case glob.RoleRemoveShortestPrefix, glob.RoleRemoveLongestPrefix, glob.RoleRemoveShortestSuffix, glob.RoleRemoveLongestSuffix,
 		glob.RoleReplaceWhole, glob.RoleFilter, glob.RoleCaseConversion, glob.RoleSubscript:
@@ -71,11 +72,11 @@ func (h hoverer) caseNote(set bool, option string) string {
 	return fmt.Sprintf("This file sets `%s`, so letters match in either case.", option)
 }
 
-func (h hoverer) unmatchedNote() string {
+func (h hoverer) unmatchedNote(opts shelloptions.Options) string {
 	switch {
-	case h.options.NullGlob:
+	case opts.NullGlob:
 		return "When nothing matches, it expands to nothing (`nullglob` is set in this file)."
-	case h.options.FailGlob:
+	case opts.FailGlob:
 		return "When nothing matches, the command fails (`failglob` is set in this file)."
 	case h.dialect == dialect.Zsh:
 		return "When nothing matches, zsh stops with \"no matches found\"; the `(N)` qualifier makes it expand to nothing instead."

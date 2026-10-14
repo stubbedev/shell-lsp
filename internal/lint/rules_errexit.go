@@ -26,7 +26,7 @@ var errexitFamily = family{
 }
 
 func checkNegationUnderErrexit(p *pass, stmt *syntax.Stmt) {
-	if !stmt.Negated || !p.statusIgnored(stmt) || p.inCondition(stmt) || !p.options().Errexit {
+	if !stmt.Negated || !p.statusIgnored(stmt) || p.inCondition(stmt) || !p.optionsAt(stmt).Errexit {
 		return
 	}
 	start := parser.Offset(stmt.Pos())
@@ -108,7 +108,7 @@ func checkSuppressedErrexit(p *pass, call *syntax.CallExpr) {
 	}
 	name := call.Args[0]
 	lit, ok := name.Parts[0].(*syntax.Lit)
-	if !ok || len(name.Parts) != 1 || !p.options().Errexit {
+	if !ok || len(name.Parts) != 1 || !p.optionsAt(call).Errexit {
 		return
 	}
 	if _, defined := p.tree.FunctionNamed(lit.Value); !defined {
@@ -150,7 +150,7 @@ func (p *pass) errexitSuppression(owner, child syntax.Node) (string, bool) {
 }
 
 func (p *pass) losesErrexit(cs *syntax.CmdSubst) bool {
-	if cs.TempFile || cs.ReplyVar || p.options().InheritErrexit {
+	if cs.TempFile || cs.ReplyVar || p.optionsAt(cs).InheritErrexit {
 		return false
 	}
 	switch p.dialect {
@@ -205,7 +205,7 @@ func (p *pass) maskedUnits(n syntax.Node) []syntax.Node {
 			return []syntax.Node{n.Word}
 		}
 	case *syntax.BinaryCmd:
-		if pipes(n.Op) && !p.options().Pipefail && !p.insidePipeline() {
+		if pipes(n.Op) && !p.optionsAt(n).Pipefail && !p.insidePipeline() {
 			return allButLastWithCommand(pipelineStages(&syntax.Stmt{Cmd: n}, nil), func(s *syntax.Stmt) syntax.Node { return s })
 		}
 	case *syntax.CallExpr:

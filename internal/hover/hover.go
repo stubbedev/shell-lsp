@@ -91,7 +91,7 @@ type hoverer struct {
 	dialect dialect.Dialect
 	scope   parser.ScopeID
 	path    []parser.Located
-	options shelloptions.Options
+	options shelloptions.PerShell
 }
 
 func (h hoverer) keyword() (Result, bool) {

@@ -195,7 +195,7 @@ func checkExecNotLast(p *pass, n syntax.Node) {
 	}
 	for _, stmt := range list {
 		call, ok := stmt.Cmd.(*syntax.CallExpr)
-		if !ok || len(call.Args) < 2 || p.honoursExecfail() {
+		if !ok || len(call.Args) < 2 || p.honoursExecfail(call) {
 			continue
 		}
 		if name, _ := parser.CallName(call); name != "exec" {
@@ -216,8 +216,8 @@ func isCleanupStmt(stmt *syntax.Stmt) bool {
 	return len(call.Args) == 0 || named && cleanupCommands[name]
 }
 
-func (p *pass) honoursExecfail() bool {
-	return p.dialect == dialect.Bash && p.options().Execfail
+func (p *pass) honoursExecfail(call *syntax.CallExpr) bool {
+	return p.dialect == dialect.Bash && p.optionsAt(call).Execfail
 }
 
 func checkEchoSubstitution(p *pass, cs *syntax.CmdSubst) {
