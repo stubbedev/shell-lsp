@@ -63,6 +63,7 @@ reproducer so that it can be sent upstream as it is.
 | 0031 | syntax: with bash, further subscripts (`a[1][2]=x`, `${a[1][2]}`, `([1][2]=x)`) parse into `Elems`, as with `bash -n`, which rejects or misreads them only when they run; `ArrayElem` gains `Elems`, which ksh93 fills too | — |
 | 0032 | syntax: in `[[ ]]`, `!` binds tighter than `&&` and `&&` tighter than `\|\|`, as the shells evaluate them, so `[[ a && b \|\| c ]]` is `(a && b) \|\| c` and `[[ ! a && b ]]` is `(! a) && b`; before, both operators had the same precedence and `!` took the rest of the expression | — |
 | 0033 | pattern: a `[` inside a bracket expression that does not start a class is quoted as `\[`, so an escaped character after it (`[[\::]`) can no longer form a class that makes the regexp fail to compile | — |
+| 0034 | pattern: an escaped character ends a range in a bracket expression (`[0-\ ]`), so a reversed range is an error, as with `[z-a]`, instead of a regexp that fails to compile | — |
 
 ## Tests
 

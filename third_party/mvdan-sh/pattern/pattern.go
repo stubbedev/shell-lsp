@@ -336,8 +336,14 @@ func regexpNext(sb *strings.Builder, sl *stringLexer, mode Mode) error {
 				bsb.WriteByte('-')
 				start := sl.last()
 				end := sl.peekNext()
+				// An escaped end, as in [0-\ ], is the character after
+				// the backslash; it ends the range even when it is ']'.
+				escaped := end == '\\' && len(sl.peekRest()) > 1
+				if escaped {
+					end, _ = utf8.DecodeRuneInString(sl.peekRest()[1:])
+				}
 				// TODO: what about overlapping ranges, like: [a--z]
-				if end != ']' && start > end && deferredErr == nil {
+				if (escaped || end != ']') && start > end && deferredErr == nil {
 					deferredErr = &SyntaxError{msg: fmt.Sprintf("invalid range: %c-%c", start, end)}
 				}
 			case ']':

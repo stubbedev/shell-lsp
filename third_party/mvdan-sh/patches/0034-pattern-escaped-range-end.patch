@@ -1,0 +1,66 @@
+pattern: an escaped character ends a range like any other
+
+The check for a reversed range in a bracket expression looked at the
+character right after the '-'. When the end of the range was escaped,
+that was the backslash, so the check compared against '\' instead of
+the escaped character and let a reversed range through:
+
+	Regexp(`[0-\ ]`, 0)  // "(?s)[0- ]"
+
+regexp.Compile rejects that with "invalid character class range: `0- `",
+although Regexp documents that a nil error means the result compiles.
+The escaped character is now the end of the range, so the pattern fails
+with "invalid range: 0- " as [z-a] does; an escaped ']' ends a range
+too, rather than being mistaken for the end of the bracket expression.
+FuzzRegexp found it; the input is kept as a seed.
+
+Reproducer, before this change: regexp.MustCompile(Regexp(`[0-\ ]`, 0))
+panicked.
+
+diff --git a/pattern/pattern.go b/pattern/pattern.go
+index 81c9610..837db02 100644
+--- a/pattern/pattern.go
++++ b/pattern/pattern.go
+@@ -336,8 +336,14 @@ func regexpNext(sb *strings.Builder, sl *stringLexer, mode Mode) error {
+ 				bsb.WriteByte('-')
+ 				start := sl.last()
+ 				end := sl.peekNext()
++				// An escaped end, as in [0-\ ], is the character after
++				// the backslash; it ends the range even when it is ']'.
++				escaped := end == '\\' && len(sl.peekRest()) > 1
++				if escaped {
++					end, _ = utf8.DecodeRuneInString(sl.peekRest()[1:])
++				}
+ 				// TODO: what about overlapping ranges, like: [a--z]
+-				if end != ']' && start > end && deferredErr == nil {
++				if (escaped || end != ']') && start > end && deferredErr == nil {
+ 					deferredErr = &SyntaxError{msg: fmt.Sprintf("invalid range: %c-%c", start, end)}
+ 				}
+ 			case ']':
+diff --git a/pattern/pattern_test.go b/pattern/pattern_test.go
+index 14f80e7..12136dc 100644
+--- a/pattern/pattern_test.go
++++ b/pattern/pattern_test.go
+@@ -244,6 +244,13 @@ var regexpTests = []struct {
+ 		mustNotMatch: []string{"a"},
+ 	},
+ 	{pat: `[z-a]`, wantErr: `^invalid range: z-a$`},
++	{pat: `[0-\ ]`, wantErr: `^invalid range: 0- $`},
++	{pat: `[z-\]]`, wantErr: `^invalid range: z-]$`},
++	{
++		pat: `[a-\z]`, mode: EntireString, want: `(?s)^[a-z]$`,
++		mustMatch:    []string{"m"},
++		mustNotMatch: []string{"\\"},
++	},
+ 	{pat: `[a-a]`, want: `(?s)[a-a]`},
+ 	{pat: `[aa]`, want: `(?s)[aa]`},
+ 	{pat: `[0-4A-Z]`, want: `(?s)[0-4A-Z]`},
+diff --git a/pattern/testdata/fuzz/FuzzRegexp/8df7bce8cbe988e5 b/pattern/testdata/fuzz/FuzzRegexp/8df7bce8cbe988e5
+new file mode 100644
+index 0000000..4351d31
+--- /dev/null
++++ b/pattern/testdata/fuzz/FuzzRegexp/8df7bce8cbe988e5
+@@ -0,0 +1,3 @@
++go test fuzz v1
++string("[0-\\ ]")
++uint(75)

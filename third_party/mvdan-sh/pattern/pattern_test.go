@@ -244,6 +244,13 @@ var regexpTests = []struct {
 		mustNotMatch: []string{"a"},
 	},
 	{pat: `[z-a]`, wantErr: `^invalid range: z-a$`},
+	{pat: `[0-\ ]`, wantErr: `^invalid range: 0- $`},
+	{pat: `[z-\]]`, wantErr: `^invalid range: z-]$`},
+	{
+		pat: `[a-\z]`, mode: EntireString, want: `(?s)^[a-z]$`,
+		mustMatch:    []string{"m"},
+		mustNotMatch: []string{"\\"},
+	},
 	{pat: `[a-a]`, want: `(?s)[a-a]`},
 	{pat: `[aa]`, want: `(?s)[aa]`},
 	{pat: `[0-4A-Z]`, want: `(?s)[0-4A-Z]`},
