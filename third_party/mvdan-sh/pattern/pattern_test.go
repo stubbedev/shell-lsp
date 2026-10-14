@@ -122,7 +122,12 @@ var regexpTests = []struct {
 	{pat: `[abc]`, want: `(?s)[abc]`},
 	{pat: `[^bc]`, want: `(?s)[^bc]`},
 	{pat: `[!bc]`, want: `(?s)[^bc]`},
-	{pat: `[[]`, want: `(?s)[[]`},
+	{pat: `[[]`, want: `(?s)[\[]`},
+	{
+		pat: `[[\::]`, mode: EntireString, want: `(?s)^[\[::]$`,
+		mustMatch:    []string{"[", ":"},
+		mustNotMatch: []string{"[:", "\\"},
+	},
 	{pat: `[\]]`, want: `(?s)[\]]`},
 	{pat: `[\]]`, mode: Filenames, want: `(?s)[\]]`},
 	{pat: `[]]`, want: `(?s)[]]`},
@@ -204,7 +209,7 @@ var regexpTests = []struct {
 	{pat: `[[ab`, want: `(?s)\[\[ab`},
 	{pat: `[a[b`, want: `(?s)\[a\[b`},
 	{
-		pat: `[[abc]`, mode: EntireString, want: `(?s)^[[abc]$`,
+		pat: `[[abc]`, mode: EntireString, want: `(?s)^[\[abc]$`,
 		mustMatch:    []string{"[", "a"},
 		mustNotMatch: []string{"[a", "d"},
 	},

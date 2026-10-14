@@ -364,14 +364,18 @@ func regexpNext(sb *strings.Builder, sl *stringLexer, mode Mode) error {
 						deferredErr = classErr
 					}
 				}
-				bsb.WriteByte('[')
-				if n > 0 {
-					if filenames && strings.Contains(rest[:n], "/") {
-						hasSlash = true
-					}
-					bsb.WriteString(rest[:n])
-					sl.i += n
+				// A literal '[' is quoted, so that what follows it
+				// can't form a class such as [:x:] in the regexp.
+				if n == 0 {
+					bsb.WriteString(`\[`)
+					break
 				}
+				if filenames && strings.Contains(rest[:n], "/") {
+					hasSlash = true
+				}
+				bsb.WriteByte('[')
+				bsb.WriteString(rest[:n])
+				sl.i += n
 			default:
 				if filenames && c == '/' {
 					hasSlash = true
