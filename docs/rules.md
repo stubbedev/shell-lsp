@@ -411,6 +411,162 @@ mode=slow    # SL2015
 reset() { mode=fast; }    # SL2015
 ```
 
+## SL2016
+
+**A pattern uses a glob operator whose shell option is never turned on.**
+zsh's extended glob operators (`^`, `~`, `#`, `##`, the globbing flags such
+as `(#i)` and `(#b)`, and repetitions such as `(#c2,3)`) only work with
+`setopt extendedglob`; without it zsh matches them as plain text, so
+`[[ $answer == (#i)yes ]]` tests for the text `(#i)yes`. bash's `?(…)`,
+`*(…)`, `+(…)`, `@(…)` and `!(…)` need `shopt -s extglob`: in the arguments
+of a command or a `case` pattern bash rejects them as a syntax error, and in
+a `${var//pattern/…}` expansion it matches them as plain text. bash reads a
+whole line, and a whole function definition, before it runs any of it, so
+`shopt -s extglob` has to come on an earlier line, outside the function that
+uses the glob; inside `[[ … == … ]]` the operators always work. bash's `**`
+only descends into subdirectories with `shopt -s globstar`. ksh always has
+extended globs. An option counts as on when the file turns it on anywhere,
+with `setopt`, `set -o`, `shopt -s` or `emulate -o`, and zsh completion
+functions (`#compdef`, `#autoload`) run with `extendedglob` on. A file that
+sets options from a variable (`setopt $opts`) is not checked, and in a file
+without a shebang, which runs inside whatever sources or autoloads it, the
+finding is only informational, since that code may have turned the option
+on. The fix
+adds the command on a line of its own: `setopt local_options extendedglob`
+as the first command of a zsh function, otherwise above the line that uses
+the operator.
+
+```bash
+#!/bin/bash
+rm -- !(keep).log    # SL2016
+```
+
+```bash
+#!/bin/zsh
+[[ $answer == (#i)yes ]] && print agreed    # SL2016
+```
+
+## SL2017
+
+**A capture variable is read, but nothing in the file sets it.** zsh fills
+`$match`, `$mbegin` and `$mend` from the parenthesised groups of a pattern
+that has the `(#b)` flag, and `$MATCH`, `$MBEGIN` and `$MEND` from one with
+`(#m)`; `[[ … =~ … ]]` sets them too. bash fills `BASH_REMATCH` only from
+`[[ … =~ … ]]`. When the file reads one of them but has no such pattern or
+test, and does not assign the variable itself, the read sees whatever an
+earlier match left behind, usually nothing. A forgotten `(#b)` is the common
+cause.
+
+```bash
+#!/bin/zsh
+setopt extendedglob
+print ${line//(*)=(*)/$match[2]}    # SL2017
+```
+
+## SL2018
+
+**An unquoted & in a bash replacement inserts the matched text.** Since bash
+5.2 the `patsub_replacement` option, on by default, makes an `&` in the
+replacement of `${var/pattern/replacement}` stand for the text the pattern
+matched, as in sed; earlier versions insert a literal `&`. A script written
+for one reads differently on the other, so a literal `&` is better written
+`\&`, which every version reads the same way. The rule is silent when the
+file turns the option off with `shopt -u patsub_replacement`. The fix
+escapes the `&`.
+
+```bash
+#!/bin/bash
+echo "${title//and/&}"    # SL2018
+echo "${title//and/\&}"    # safe
+```
+
+## SL2019
+
+**zsh rejects a pattern as bad.** A group that is never closed, an unknown
+globbing flag such as `(#x)` or a repetition count such as `(#c3,1)` makes
+zsh stop with "bad pattern" when the pattern is used, which aborts the
+command.
+
+```bash
+#!/bin/zsh
+setopt extendedglob
+print ${name//(#x)a/b}    # SL2019
+```
+
+## SL2020
+
+**An external command does what a parameter expansion or [[ ]] does without a new process.**
+Each of these starts at least one process to work on a single value, which
+the shell can do itself:
+
+| Command | In the shell | Differs |
+| --- | --- | --- |
+| `$(basename "$f")` | `${f##*/}`; `${f:t}` in zsh | for a path that ends in `/`; in zsh only for `/` itself |
+| `$(dirname "$f")` | `${f:h}`, in zsh only | for a path that starts with `//` |
+| `$(pwd)` | `$PWD` | |
+| `$(echo "$x" \| tr a-z A-Z)` | `${x^^}`; `${(U)x}` in zsh | letters outside `a-z` are converted too |
+| `$(echo "$x" \| tr A-Z a-z)` | `${x,,}`; `${(L)x}` in zsh | letters outside `A-Z` are converted too |
+| `$(echo "$x" \| tr -d c)` | `${x//c}` | |
+| `$(echo "$x" \| tr a b)` | `${x//a/b}` | |
+| `$(echo "$x" \| cut -d: -f1)` | `${x%%:*}` | for a value of several lines |
+| `$(echo "$x" \| cut -d: -f2-)` | `${x#*:}` | for a value of several lines |
+| `echo "$x" \| grep -q text` | `[[ $x == *"text"* ]]` | |
+
+The value may also come from `printf '%s\n' "$x"` or a here-string
+(`<<< "$x"`), and the commands may be given as `/usr/bin/basename` and the
+like. `tr` is rewritten for the case conversions above and for single
+characters; `grep` only for a fixed string, without `-i`, `-v` or other
+options. The case conversions need bash or zsh, the rest bash, ksh or zsh,
+except for `basename`, `pwd` and `cut`, whose rewrites are POSIX. `dirname`
+is only rewritten in zsh: the POSIX `${f%/*}` keeps a path without a `/`,
+such as a `$0` of `script.sh`, where `dirname` gives `.`.
+SC2001 does the same for `sed 's/old/new/'` and fixes literal substitutions,
+and [SL2021](#sl2021) covers `$(cat file)`. Beyond the differences listed,
+a rewrite keeps trailing newlines of the value that the command substitution
+would strip, and `echo` mangles a value such as `-n` or one with backslashes
+that the expansion keeps as it is, so the fixes are offered for review.
+
+```bash
+#!/bin/bash
+name=$(basename "$path")    # SL2020
+upper=$(echo "$name" | tr a-z A-Z)    # SL2020
+if echo "$upper" | grep -q READ; then echo found; fi    # SL2020
+```
+
+## SL2021
+
+**$(cat file) runs cat to read a file the shell can read itself.** The rule
+is optional (`useless-use-of-cat`, which also turns on SC2002). In bash, ksh
+and zsh `$(<file)` reads the file without starting `cat`; only the error
+message for a missing file differs. POSIX sh has no `$(<file)`, so sh scripts
+are not checked.
+
+```bash
+#!/bin/bash
+# shellcheck enable=useless-use-of-cat
+config=$(cat "$file")    # SL2021
+```
+
+## SL2022
+
+**A regular expression escape does not work where =~ uses it.** POSIX
+regular expressions, which `[[ … =~ … ]]` uses in bash and zsh, have no
+`\d` or `\D`: the C library reads them as the letter `d`, so
+`[[ $n =~ ^\d+$ ]]` accepts `ddd` and rejects `42`. In bash the quoted text
+of the word is matched literally, so `'\d'` there matches a backslash
+followed by `d`. bash also treats a backslash written directly in the word
+as quoting the next character, so `\w`, `\s`, `\b`, `\<` and their
+uppercase forms match the plain letters instead of the GNU escapes; the
+escapes only reach the regular expression when it is kept in a variable
+(`re='^\w+$'; [[ $x =~ $re ]]`). The fix writes `[0-9]` for `\d` and
+`[^0-9]` for `\D` where that keeps its meaning.
+
+```bash
+#!/bin/bash
+[[ $1 =~ ^\d+$ ]] && echo number    # SL2022
+[[ $1 =~ ^[0-9]+$ ]] && echo number    # safe
+```
+
 The embedded-language rules check awk, sed and jq programs written inside the
 script with built-in parsers; no awk, sed or jq binary is run. A program is
 checked when it is a literal argument (`awk '...'`, `sed -e '...'`,

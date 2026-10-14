@@ -6,6 +6,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/glob"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/shelldocs"
 	"github.com/stubbedev/shell-lsp/internal/shelloptions"
@@ -35,6 +36,7 @@ type pass struct {
 	rcFile         bool
 	shellChosen    bool
 	shellOptions   *shelloptions.Options
+	sites          *[]glob.Site
 	variables      variableUsage
 	parameters     shelldocs.ParameterTable
 	dialectGuessed bool

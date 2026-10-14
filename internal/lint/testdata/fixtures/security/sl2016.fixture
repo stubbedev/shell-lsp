@@ -1,0 +1,57 @@
+### an extended glob in arguments without shopt is a syntax error
+#!/bin/bash
+rm -- @(a|b).log
+>>+ SL2016 2:7 -- shell-lsp native check; shellcheck does not track the glob options a pattern needs
+
+### an extended glob after shopt at the top is fine
+#!/bin/bash
+shopt -s extglob
+rm -- @(a|b).log
+>>> none
+
+### shopt in the same function comes too late
+#!/bin/bash
+clean() {
+  shopt -s extglob
+  rm -- !(keep).log
+}
+clean
+>>+ SL2016 4:9 -- shell-lsp native check; shellcheck does not track the glob options a pattern needs
+
+### shopt on the same line comes too late
+#!/bin/bash
+shopt -s extglob; rm -- !(keep).log
+>>+ SL2016 2:25 -- shell-lsp native check; shellcheck does not track the glob options a pattern needs
+
+### an extended glob in a case pattern without shopt
+#!/bin/bash
+case $1 in
+  @(start|run)) echo go ;;
+esac
+>>+ SL2016 3:3 -- shell-lsp native check; shellcheck does not track the glob options a pattern needs
+
+### an extended glob inside [[ ]] needs no option
+#!/bin/bash
+[[ $1 == +([0-9]) ]] && echo number
+>>> none
+
+### an extended glob in an expansion is matched literally without shopt
+#!/bin/bash
+echo "${1//+([0-9])/N}"
+>>+ SL2016 2:12 -- shell-lsp native check; shellcheck does not track the glob options a pattern needs
+
+### globstar without shopt only matches one level
+#!/bin/bash
+for f in **/*.sh; do echo "$f"; done
+>>+ SL2016 2:10 -- shell-lsp native check; shellcheck does not track the glob options a pattern needs
+
+### globstar with shopt is fine
+#!/bin/bash
+shopt -s globstar
+for f in **/*.sh; do echo "$f"; done
+>>> none
+
+### ksh always has extended globs
+#!/bin/ksh
+rm -- @(a|b).log
+>>> none

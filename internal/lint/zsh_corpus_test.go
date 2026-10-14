@@ -23,6 +23,8 @@ var zshCorpusFindings = map[string][]string{
 	"errors.zsh":     {},
 	"expansions.zsh": {},
 	"forms.zsh": {
+		"SL2016 58:2 (#i)",
+		"SL2016 59:13 ##",
 		"SC2046 76:13 $(() { print inner })",
 		"SC2162 87:1 read",
 		"SC2162 89:1 read",

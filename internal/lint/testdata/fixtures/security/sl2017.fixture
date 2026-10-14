@@ -1,0 +1,9 @@
+### BASH_REMATCH without =~
+#!/bin/bash
+echo "${BASH_REMATCH[1]}"
+>>+ SL2017 2:9 -- shell-lsp native check; shellcheck does not check that capture variables are ever set
+
+### BASH_REMATCH after =~
+#!/bin/bash
+[[ $1 =~ ^v([0-9]+) ]] && echo "${BASH_REMATCH[1]}"
+>>> none

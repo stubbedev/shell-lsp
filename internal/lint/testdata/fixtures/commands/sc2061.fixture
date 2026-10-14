@@ -6,6 +6,7 @@ find / -name *.php
 ### unquoted extended glob after ipath
 find / -type d -ipath *(cache)
 >>> SC2061 1:23
+>>+ SL2016 1:23 -- shell-lsp native check; without shopt -s extglob bash rejects *(cache) as a syntax error
 
 ### starting point glob with quoted name pattern is fine
 find * -name '*.bak'

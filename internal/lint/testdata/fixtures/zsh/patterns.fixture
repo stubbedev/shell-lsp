@@ -1,0 +1,77 @@
+### extended glob operators without setopt extendedglob
+#!/bin/zsh
+[[ $1 == (#i)yes ]] && print agreed
+print -l ^*.o
+print ${1%%[0-9]##}
+>>- SC1071 1:1 -- shellcheck refuses zsh
+>>+ SL2016 2:10 -- shell-lsp native check; zsh matches these literally without setopt extendedglob
+>>+ SL2016 3:10 -- shell-lsp native check; zsh matches these literally without setopt extendedglob
+>>+ SL2016 4:17 -- shell-lsp native check; zsh matches these literally without setopt extendedglob
+
+### setopt extendedglob anywhere turns them on
+#!/bin/zsh
+setopt extended_glob
+[[ $1 == (#i)yes ]] && print agreed
+print -l ^*.o
+>>- SC1071 1:1 -- shellcheck refuses zsh
+
+### emulate -o extendedglob turns them on
+#!/bin/zsh
+f() {
+  emulate -L zsh -o extendedglob
+  print -l ^*.o
+}
+f
+>>- SC1071 1:1 -- shellcheck refuses zsh
+
+### completion functions run with extendedglob
+#compdef foo
+[[ $1 == (#i)yes ]] && print agreed
+>>- SC1027 2:7 -- shellcheck reads this completion function as sh, where (#i) is a syntax error
+>>- SC1036 2:10 -- shellcheck reads this completion function as sh, where (#i) is a syntax error
+>>- SC1072 2:10 -- shellcheck reads this completion function as sh, where (#i) is a syntax error
+>>> SC1073 2:1
+
+### groups, numeric ranges and qualifiers need no option
+#!/bin/zsh
+print -l (a|b)*.c <1-10>.log *(.N)
+>>- SC1071 1:1 -- shellcheck refuses zsh
+
+### a bad pattern
+#!/bin/zsh
+setopt extendedglob
+print ${1//(#x)a/b}
+print ${1//(a|b/c}
+>>- SC1071 1:1 -- shellcheck refuses zsh
+>>+ SL2019 3:12 -- shell-lsp native check; zsh rejects these patterns
+>>+ SL2019 4:12 -- shell-lsp native check; zsh rejects these patterns
+
+### match is read without (#b)
+#!/bin/zsh
+print ${1//(a)/$match[1]}
+>>- SC1071 1:1 -- shellcheck refuses zsh
+>>+ SL2017 2:17 -- shell-lsp native check; nothing in the script sets this capture variable
+
+### match is read after (#b)
+#!/bin/zsh
+setopt extendedglob
+print ${1//(#b)(a)/$match[1]}
+>>- SC1071 1:1 -- shellcheck refuses zsh
+
+### MATCH needs (#m), not (#b)
+#!/bin/zsh
+setopt extendedglob
+print ${1//(#b)(a)/$MATCH}
+>>- SC1071 1:1 -- shellcheck refuses zsh
+>>+ SL2017 3:21 -- shell-lsp native check; nothing in the script sets this capture variable
+
+### =~ sets match
+#!/bin/zsh
+[[ $1 =~ '(a)' ]] && print $match[1]
+>>- SC1071 1:1 -- shellcheck refuses zsh
+
+### a local match is the script's own variable
+#!/bin/zsh
+local -a match=(x)
+print $match
+>>- SC1071 1:1 -- shellcheck refuses zsh

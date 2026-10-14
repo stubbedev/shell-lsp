@@ -1,0 +1,32 @@
+### \d in an unquoted regular expression
+#!/bin/bash
+[[ $1 =~ ^\d+$ ]] && echo number
+>>+ SL2022 2:11 -- shell-lsp native check; shellcheck does not check the escapes of =~ regular expressions
+
+### \d in a quoted regular expression
+#!/bin/bash
+[[ $1 =~ '\d' ]] && echo digit
+>>+ SL2022 2:11 -- shell-lsp native check; shellcheck does not check the escapes of =~ regular expressions
+
+### GNU escapes written directly in the word
+#!/bin/bash
+[[ $1 =~ ^\w+\s$ ]] && echo word
+>>+ SL2022 2:11 -- shell-lsp native check; shellcheck does not check the escapes of =~ regular expressions
+>>+ SL2022 2:14 -- shell-lsp native check; shellcheck does not check the escapes of =~ regular expressions
+
+### a regular expression in a variable keeps its escapes
+#!/bin/bash
+re='^\w+$'
+[[ $1 =~ $re ]] && echo word
+>>> none
+
+### escaped punctuation is fine
+#!/bin/bash
+[[ $1 =~ ^v[0-9]+\.[0-9]+$ ]] && echo version
+>>> none
+
+### \d in zsh
+#!/bin/zsh
+[[ $1 =~ '^\d+$' ]] && print number
+>>- SC1071 1:1 -- shellcheck refuses zsh
+>>+ SL2022 2:12 -- shell-lsp native check; shellcheck does not check the escapes of =~ regular expressions

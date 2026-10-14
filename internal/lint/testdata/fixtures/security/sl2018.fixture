@@ -1,0 +1,20 @@
+### an unquoted ampersand in the replacement
+#!/bin/bash
+echo "${1//and/&}"
+>>+ SL2018 2:16 -- shell-lsp native check; shellcheck predates the patsub_replacement option of bash 5.2
+
+### an escaped or quoted ampersand is literal
+#!/bin/bash
+echo "${1//and/\&}" "${1//and/"&"}"
+>>> none
+
+### patsub_replacement turned off
+#!/bin/bash
+shopt -u patsub_replacement
+echo "${1//and/&}"
+>>> none
+
+### zsh has no patsub_replacement
+#!/bin/zsh
+print ${1//and/&}
+>>- SC1071 1:1 -- shellcheck refuses zsh

@@ -13,6 +13,7 @@ for f in $(pwd)/*.zsh; do
 done
 >>- SC1071 1:1 -- shellcheck refuses zsh
 >>+ SC2231 2:10 -- zsh splits unquoted command substitutions on IFS
+>>+ SL2020 2:10 -- shell-lsp native check; $(pwd) forks a subshell for what $PWD holds
 
 ### a tilde asks for the value to be globbed on purpose
 #!/bin/zsh

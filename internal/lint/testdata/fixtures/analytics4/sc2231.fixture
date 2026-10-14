@@ -10,6 +10,7 @@ for conf in $(pwd)/conf.d/*.conf; do
   echo "$conf"
 done
 >>> SC2231 1:13
+>>+ SL2020 1:13 -- shell-lsp native check; $(pwd) forks a subshell for what $PWD holds
 
 ### quoted directory with unquoted glob
 for report in "$outdir"/*.txt; do

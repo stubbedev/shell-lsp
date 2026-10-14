@@ -1,0 +1,48 @@
+### basename of one value, and dirname, which bash cannot match exactly
+#!/bin/bash
+name=$(basename "$1")
+dir=$(dirname "$1")
+echo "$name" "$dir"
+>>+ SL2020 2:6 -- shell-lsp native check; shellcheck does not suggest the shell's own way of doing this
+
+### pwd
+#!/bin/bash
+here=$(pwd)
+echo "$here"
+>>+ SL2020 2:6 -- shell-lsp native check; shellcheck does not suggest the shell's own way of doing this
+
+### tr and cut on one value
+#!/bin/bash
+upper=$(echo "$1" | tr a-z A-Z)
+key=$(cut -d= -f1 <<< "$1")
+echo "$upper" "$key"
+>>> SC2018 2:24
+>>> SC2019 2:28
+>>+ SL2020 2:7 -- shell-lsp native check; shellcheck does not suggest the shell's own way of doing this
+>>+ SL2020 3:5 -- shell-lsp native check; shellcheck does not suggest the shell's own way of doing this
+
+### grep for a fixed string in one value
+#!/bin/bash
+if echo "$1" | grep -q needle; then echo found; fi
+>>+ SL2020 2:4 -- shell-lsp native check; shellcheck does not suggest the shell's own way of doing this
+
+### a regex for grep is left alone
+#!/bin/bash
+if echo "$1" | grep -q 'ne.dle'; then echo found; fi
+>>> none
+
+### cat into a substitution is optional
+#!/bin/bash
+# shellcheck enable=useless-use-of-cat
+config=$(cat "$1")
+echo "$config"
+>>+ SL2021 3:8 -- shell-lsp native check; shellcheck does not flag $(cat file)
+
+### basename and dirname in zsh
+#!/bin/zsh
+name=$(basename "$1")
+dir=$(dirname "$1")
+print -r -- $name $dir
+>>- SC1071 1:1 -- shellcheck refuses zsh
+>>+ SL2020 2:6 -- shell-lsp native check; shellcheck does not suggest the shell's own way of doing this
+>>+ SL2020 3:5 -- shell-lsp native check; shellcheck does not suggest the shell's own way of doing this

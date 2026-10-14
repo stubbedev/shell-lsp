@@ -488,6 +488,13 @@ marks the checks the `minimal` profile keeps; see [Profiles](../README.md#profil
 | <a name="sl2013"></a>[SL2013](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl2013) | warning | `check-relative-sources` | yes | A sourced file is found relative to where the script is run from. |
 | <a name="sl2014"></a>[SL2014](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl2014) | style | `require-local-variables` |  | A function assigns a variable it did not declare local. |
 | <a name="sl2015"></a>[SL2015](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl2015) | style | `avoid-global-reassignment` |  | A global variable is given a new value. |
+| <a name="sl2016"></a>[SL2016](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl2016) | warning |  | yes | A pattern uses a glob operator whose shell option is never turned on. |
+| <a name="sl2017"></a>[SL2017](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl2017) | warning |  | yes | A capture variable is read, but nothing in the file sets it. |
+| <a name="sl2018"></a>[SL2018](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl2018) | warning |  | yes | An unquoted & in a bash replacement inserts the matched text. |
+| <a name="sl2019"></a>[SL2019](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl2019) | error |  | yes | zsh rejects a pattern as bad. |
+| <a name="sl2020"></a>[SL2020](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl2020) | style |  |  | An external command does what a parameter expansion or \[\[ \]\] does without a new process. |
+| <a name="sl2021"></a>[SL2021](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl2021) | style | `useless-use-of-cat` |  | $(cat file) runs cat to read a file the shell can read itself. |
+| <a name="sl2022"></a>[SL2022](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl2022) | warning |  | yes | A regular expression escape does not work where =~ uses it. |
 | <a name="sl3001"></a>[SL3001](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl3001) | error |  | yes | An awk program does not parse. |
 | <a name="sl3002"></a>[SL3002](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl3002) | error |  | yes | A sed script does not parse. |
 | <a name="sl3003"></a>[SL3003](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl3003) | error |  | yes | A jq filter does not parse. |

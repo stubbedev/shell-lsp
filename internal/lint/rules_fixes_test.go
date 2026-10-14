@@ -19,6 +19,14 @@ func TestAutofixes(t *testing.T) {
 		safety Safety
 	}{
 		{2006, "now=`date`\n", "now=$(date)\n", Safe},
+		{codePatternNeedsOption, "#!/bin/zsh\n[[ $1 == ^x ]] && print y\n", "#!/bin/zsh\nsetopt extendedglob\n[[ $1 == ^x ]] && print y\n", Review},
+		{codePatternNeedsOption, "#!/bin/zsh\nf() {\n  print -l ^*.o\n}\n", "#!/bin/zsh\nf() {\n  setopt local_options extendedglob\n  print -l ^*.o\n}\n", Review},
+		{codePatternNeedsOption, "#!/bin/bash\nrm -- @(a|b).log\n", "#!/bin/bash\nshopt -s extglob\nrm -- @(a|b).log\n", Review},
+		{codePatternNeedsOption, "#!/bin/bash\nclean() {\n  shopt -s extglob\n  rm -- !(keep).log\n}\n", "#!/bin/bash\nshopt -s extglob\nclean() {\n  shopt -s extglob\n  rm -- !(keep).log\n}\n", Review},
+		{codePatternNeedsOption, "#!/bin/bash\nfor f in **/*.sh; do :; done\n", "#!/bin/bash\nshopt -s globstar\nfor f in **/*.sh; do :; done\n", Review},
+		{codeReplacementMatch, "echo \"${1//and/&}\"\n", "echo \"${1//and/\\&}\"\n", Review},
+		{codeRegexEscape, "[[ $1 =~ ^\\d+$ ]]\n", "[[ $1 =~ ^[0-9]+$ ]]\n", Review},
+		{codeRegexEscape, "#!/bin/zsh\n[[ $1 =~ '^\\D' ]]\n", "#!/bin/zsh\n[[ $1 =~ '^[^0-9]' ]]\n", Review},
 		{2006, "x=`echo \\$HOME \\\\ \\`id -u\\``\n", "x=$(echo $HOME \\ `id -u`)\n", Safe},
 		{2006, "echo \"`echo \\\"hi\\\" \\n`\"\n", "echo \"$(echo \"hi\" \\n)\"\n", Safe},
 		{2006, "x=`(cd /tmp; pwd)`\n", "x=$( (cd /tmp; pwd))\n", Safe},
@@ -169,6 +177,8 @@ func TestUnsafeRewritesOfferNoFix(t *testing.T) {
 		{2003, "expr $n + 1\n"},
 		{2003, "n=$(expr $n + $(id -u))\n"},
 		{2265, "[ -f a ] & # [ -f b ]\n"},
+		{codeRegexEscape, "[[ $1 =~ '\\d' ]]\n"},
+		{codeRegexEscape, "[[ $1 =~ ^\\w+$ ]]\n"},
 		{codeLeakedTempFile, "#!/bin/bash\ntrap 'echo bye' EXIT\nt=$(mktemp)\ndate > \"$t\"\n"},
 		{codeLeakedTempFile, "#!/bin/bash\nf() { t=$(mktemp); date > \"$t\"; }\nf\ndate\n"},
 	} {

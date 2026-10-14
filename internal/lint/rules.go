@@ -24,6 +24,8 @@ var families = []family{
 	portableTestsFamily,
 	portableBuiltinsFamily,
 	sedSubstitutionFamily,
+	patternsFamily,
+	forksFamily,
 	negationFamily,
 	bracketsFamily,
 	escapesFamily,

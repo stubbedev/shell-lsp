@@ -204,8 +204,9 @@ vocabulary, filtered by the dialect of the document:
   `shopt -o`), `setopt` and `unsetopt`, `emulate` modes, trap conditions and
   signal names after `trap`, and signal names alone after `kill`.
 - Expansion operators after `${name` (`:-`, `##`, `//`, `@Q`...), zsh
-  parameter flags after `${(` and glob qualifiers after `*(`, associative
-  array keys inside `${name[`, and `printf` conversions in the format.
+  parameter flags after `${(`, glob qualifiers after `*(` and `(#q`,
+  globbing flags after `(#`, associative array keys inside `${name[`, and
+  `printf` conversions in the format.
 - `case` patterns: the letters of the matching `getopts` optstring, or the
   values the subject is compared against elsewhere in the file.
 - Snippets, for clients that support them: keyword skeletons, and idioms
@@ -235,6 +236,53 @@ builtin flags (also combined, as in `read -rs`), test, arithmetic,
 list and `case` operators, redirections and whether a here-document body is
 expanded, signals, option names, expansion operators, and every letter that
 `$-` can contain.
+
+### Patterns and expansions
+
+Scripts often use the shell's own patterns and parameter expansions instead
+of running sed, grep, awk, basename or tr, and those are the hardest part of
+a script to read. Hovering one explains it:
+
+- A glob pattern is taken apart piece by piece, wherever it appears: in
+  `${var#…}`, `${var%%…}`, `${var//…/…}`, zsh's `${var:#…}` and subscript
+  searches, `[[ … == … ]]`, `case` items and file names. That covers POSIX
+  wildcards and bracket expressions, bash and ksh extended globs (`@(…)`,
+  `!(…)`, ksh93's `{2,3}(…)`, non-greedy `*-(…)` and `~(i)`, `~(E)` and
+  `~(F)` options), and zsh's groups, numeric ranges (`<1-10>`),
+  `^`, `~`, `#` and `##`, globbing flags such as `(#i)`, `(#b)` and `(#s)`,
+  and glob qualifiers such as `(.om[1,3]N)`. Captured groups are numbered
+  as they land in `$match`, and an operator whose shell option the file
+  never enables (`extendedglob`, `extglob`, `globstar`) is pointed out.
+- The regular expression of `[[ … =~ … ]]` is taken apart the same way,
+  following each shell's quoting rules for what reaches the regex engine,
+  with its groups numbered as they land in `BASH_REMATCH` or `$match`.
+- When the tested value is known, `[[ … == … ]]`, `case` items and `=~`
+  say whether they match, and `=~` shows what `BASH_REMATCH` or `$match`
+  then holds.
+- A parameter expansion shows its result when the values it reads are known
+  from literal assignments earlier in the file, naming the lines it took
+  them from: `${f:t:r}` with `f=archive.tar.gz` gives `archive.tar`, and
+  `${line//(#b)([^= ]##)=([^ ]#)/$match[2]:$match[1]}` swaps every key and
+  value. The evaluator is tested against bash and zsh themselves and covers zsh's flags
+  (`(U)`, `(s:,:)`, `(j:,:)`, `(o)`, `(u)`, `(M)`...), modifiers (`:h`,
+  `:t`, `:r`, `:e`, `:gs/x/y/`...), nested expansions and `$match`, and
+  bash's `${x^^}`, `${x@U}`, slices and the `&` of `patsub_replacement`.
+  Where a value comes from a command, a loop or a computation, or a result
+  would depend on the locale or a shell option the file does not settle, it
+  shows nothing rather than a guess.
+
+Pattern operators, bracket expressions, numeric ranges, globbing flags,
+glob qualifiers and the parts of a regular expression are also highlighted
+as semantic tokens. The linter reports pattern operators whose option is
+never turned on, capture variables read without a capturing match, bash's
+`&` in a replacement, zsh patterns that zsh rejects
+([SL2016](docs/rules.md#sl2016) to [SL2019](docs/rules.md#sl2019)) and
+regular expression escapes such as `\d` that `=~` does not understand
+([SL2022](docs/rules.md#sl2022)). It suggests the shell's own way when
+`basename`, `dirname` (in zsh), `pwd`, `tr`, `cut`, `grep -q`, sed (SC2001)
+or, as the optional `useless-use-of-cat` check, `cat` start a process for
+what the shell can do itself ([SL2020](docs/rules.md#sl2020),
+[SL2021](docs/rules.md#sl2021)), with a fix that rewrites it.
 
 ## Sourced files
 

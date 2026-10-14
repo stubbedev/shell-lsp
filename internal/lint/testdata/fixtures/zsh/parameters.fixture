@@ -43,6 +43,8 @@ print -r -- $ZSH_VERSION $ZSH_ARGZERO $argv $status $pipestatus $match $MATCH $E
 print -r -- ${#history} $funcstack $functrace ${#widgets} $terminfo[khome] $fg[red]$reset_color
 print -r -- ${vcs_info_msg_0_} ${vcs_info_msg_12_}
 >>- SC1071 1:1 -- shellcheck refuses zsh; zsh, its modules and the vcs_info and colors functions set these
+>>+ SL2017 2:66 -- shell-lsp native check; no (#b) pattern or =~ here sets $match
+>>+ SL2017 2:73 -- shell-lsp native check; no (#m) pattern or =~ here sets $MATCH
 
 ### a key of an associative special parameter is not a variable
 #!/bin/zsh
