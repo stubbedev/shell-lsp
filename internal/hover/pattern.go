@@ -112,7 +112,10 @@ func (h hoverer) matchOutcome(site glob.Site) (string, bool) {
 		verdict = "does not match"
 	}
 	text := fmt.Sprintf("**Result**: %s %s.", prose.Code(got.Subject), verdict)
-	if len(got.Groups) > 0 {
+	switch {
+	case got.GroupsUncertain:
+		text += fmt.Sprintf(" The whole match is %s; which part each group captures depends on the C library's regex engine, which glibc and BSD resolve differently here.", prose.Code(got.Groups[0]))
+	case len(got.Groups) > 0:
 		text += " " + h.captures(got.Groups)
 	}
 	return text + "\n\n" + h.given(got.Assumptions), true

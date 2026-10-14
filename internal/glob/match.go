@@ -3,6 +3,7 @@ package glob
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -18,6 +19,7 @@ const maxSteps = 1 << 18
 type Match struct {
 	Start, End int
 	Captures   [][2]int
+	Ambiguous  bool
 }
 
 type Matcher struct {
@@ -65,6 +67,15 @@ func (m Matcher) Whole(s string) (Match, bool, error) {
 	r := m.run(s)
 	ok := r.whole(0, len(r.text))
 	return r.result(0, len(r.text)), ok, r.err()
+}
+
+func (m Matcher) Uses(test func(Node) bool) bool {
+	used := false
+	Walk(m.pattern.Root, func(n Node) bool {
+		used = used || test(n)
+		return !used
+	})
+	return used
 }
 
 func (m Matcher) substrings() error {
@@ -123,10 +134,33 @@ func (m Matcher) Search(s string) (Match, bool, error) {
 	r := m.run(s)
 	for i := range len(r.text) + 1 {
 		if end, ok := r.longestAt(i, Anywhere); ok {
-			return r.result(i, end), true, r.err()
+			found := r.result(i, end)
+			found.Ambiguous = r.capturesVary(i, end)
+			return found, true, r.err()
 		}
 	}
 	return Match{}, false, r.err()
+}
+
+func (r *run) capturesVary(i, j int) bool {
+	if len(r.caps) == 0 {
+		return false
+	}
+	var first [][2]int
+	varies := false
+	r.resetCaptures()
+	r.match(r.m.pattern.Root, i, func(e int) bool {
+		if e != j {
+			return false
+		}
+		if first == nil {
+			first = append([][2]int(nil), r.caps...)
+			return false
+		}
+		varies = !slices.Equal(first, r.caps)
+		return varies
+	})
+	return varies || r.exhausted
 }
 
 func (m Matcher) Replace(s string, anchoring Anchoring, all bool, with func(text string, found Match) string) (string, error) {

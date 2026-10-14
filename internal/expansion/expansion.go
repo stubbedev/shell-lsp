@@ -75,10 +75,11 @@ func (e *Evaluator) Word(w *syntax.Word) (Result, error) {
 }
 
 type Outcome struct {
-	Holds       bool
-	Subject     string
-	Groups      []string
-	Assumptions []Assumption
+	Holds           bool
+	Subject         string
+	Groups          []string
+	GroupsUncertain bool
+	Assumptions     []Assumption
 }
 
 func (e *Evaluator) Matches(site glob.Site) (Outcome, error) {
@@ -104,6 +105,9 @@ func (e *Evaluator) Matches(site glob.Site) (Outcome, error) {
 	if err != nil {
 		return Outcome{}, err
 	}
+	if site.Role == glob.RoleRegex && m.Uses(func(n glob.Node) bool { _, ok := n.(*glob.Escape); return ok }) {
+		return Outcome{}, unsupported("a GNU regex escape, which BSD and macOS read differently")
+	}
 	match := m.Whole
 	if site.Role == glob.RoleRegex {
 		match = m.Search
@@ -115,6 +119,10 @@ func (e *Evaluator) Matches(site glob.Site) (Outcome, error) {
 	outcome := Outcome{Holds: ok != site.Negated, Subject: subject, Assumptions: e.assumptions}
 	if ok && site.Role == glob.RoleRegex {
 		outcome.Groups = append(outcome.Groups, subject[found.Start:found.End])
+		if found.Ambiguous {
+			outcome.GroupsUncertain = true
+			return outcome, nil
+		}
 		for _, c := range found.Captures {
 			group := ""
 			if c[0] >= 0 {

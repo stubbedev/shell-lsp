@@ -1,16 +1,13 @@
 package lint
 
 import (
-	"context"
-	"os"
-	"os/exec"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/directive"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/shelltest"
 )
 
 var forkRewrites = []struct {
@@ -99,37 +96,22 @@ func findingsFor(script string) []Finding {
 
 func TestForkRewritesMatchTheShells(t *testing.T) {
 	values := []string{"a.b c/d:e=f&g", "abc", "", "path/to/file.tar.gz", "/root", "Hello World", "x=y=z"}
-	shells := map[bool]struct {
-		name string
-		args []string
-	}{false: {"bash", []string{"--norc", "--noprofile", "-c"}}, true: {"zsh", []string{"-f", "-c"}}}
 	for _, tc := range forkRewrites {
-		zsh := strings.HasPrefix(tc.script, "#!/bin/zsh")
-		sh := shells[zsh]
-		if _, err := exec.LookPath(sh.name); err != nil {
-			if os.Getenv("REQUIRE_SHELLS") == "1" {
-				t.Fatalf("%s is not installed", sh.name)
-			}
-			t.Skipf("%s is not installed", sh.name)
+		sh := shelltest.Bash
+		if strings.HasPrefix(tc.script, "#!/bin/zsh") {
+			sh = shelltest.Zsh
 		}
+		sh.Require(t)
 		if strings.Contains(tc.script, "basename") || strings.Contains(tc.script, "dirname") || strings.Contains(tc.script, "$(cat") {
 			continue
 		}
 		for _, value := range values {
 			run := func(script string) string {
-				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-				defer cancel()
 				program := "x=" + shellQuote(value) + "\n" + strings.TrimPrefix(script, "#!/bin/zsh\n") + "printf '<%s>' \"$y\" \"$u\" \"$l\" \"$s\" \"$t\" \"$k\" \"$v\" \"$p\"\n"
-				cmd := exec.CommandContext(ctx, sh.name, append(sh.args, program)...)
-				cmd.Env = append(os.Environ(), "LC_ALL=C.UTF-8")
-				out, err := cmd.CombinedOutput()
-				if err != nil {
-					t.Fatalf("%s %q: %v\n%s", sh.name, program, err, out)
-				}
-				return strings.ReplaceAll(string(out), "\n", `\n`)
+				return strings.ReplaceAll(sh.Run(t, program), "\n", `\n`)
 			}
 			if before, after := run(tc.script), run(tc.want); before != after {
-				t.Errorf("%s with x=%q: %q prints %s, the rewrite %q prints %s", sh.name, value, tc.script, before, tc.want, after)
+				t.Errorf("%s with x=%q: %q prints %s, the rewrite %q prints %s", sh.Name, value, tc.script, before, tc.want, after)
 			}
 		}
 	}

@@ -516,7 +516,8 @@ The value may also come from `printf '%s\n' "$x"` or a here-string
 (`<<< "$x"`), and the commands may be given as `/usr/bin/basename` and the
 like. `tr` is rewritten for the case conversions above and for single
 characters; `grep` only for a fixed string, without `-i`, `-v` or other
-options. The case conversions need bash or zsh, the rest bash, ksh or zsh,
+options. The case conversions need bash 4 or later, which macOS does not
+ship as `/bin/bash`, or zsh; the rest bash, ksh or zsh,
 except for `basename`, `pwd` and `cut`, whose rewrites are POSIX. `dirname`
 is only rewritten in zsh: the POSIX `${f%/*}` keeps a path without a `/`,
 such as a `$0` of `script.sh`, where `dirname` gives `.`.

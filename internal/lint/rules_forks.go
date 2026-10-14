@@ -180,13 +180,13 @@ func (p *pass) forkingTr(cs *syntax.CmdSubst, name string, args []string) {
 		if p.dialect == dialect.Zsh {
 			rewrite = "${(U)" + name + "}"
 		}
-		p.suggest(codeShellDoesIt, cs, "tr runs a separate process to uppercase one value; "+rewrite+" does it in the shell, though it also converts letters outside a-z.", rewrite)
+		p.suggest(codeShellDoesIt, cs, "tr runs a separate process to uppercase one value; "+rewrite+" does it in the shell"+caseVersion(p.dialect)+", though it also converts letters outside a-z.", rewrite)
 	case len(args) == 2 && upperSets[args[0]] && lowerSets[args[1]] && caseShells.Has(p.dialect):
 		rewrite := "${" + name + ",,}"
 		if p.dialect == dialect.Zsh {
 			rewrite = "${(L)" + name + "}"
 		}
-		p.suggest(codeShellDoesIt, cs, "tr runs a separate process to lowercase one value; "+rewrite+" does it in the shell, though it also converts letters outside A-Z.", rewrite)
+		p.suggest(codeShellDoesIt, cs, "tr runs a separate process to lowercase one value; "+rewrite+" does it in the shell"+caseVersion(p.dialect)+", though it also converts letters outside A-Z.", rewrite)
 	case len(args) == 2 && args[0] == "-d" && substitutionShells.Has(p.dialect):
 		from, ok := trChar(args[1])
 		if !ok {
@@ -203,6 +203,13 @@ func (p *pass) forkingTr(cs *syntax.CmdSubst, name string, args []string) {
 		rewrite := "${" + name + "//" + escapedGlobChar(from) + "/" + replacementChar(to, p.dialect) + "}"
 		p.suggest(codeShellDoesIt, cs, "tr runs a separate process to replace one character in one value; "+rewrite+" does it in the shell.", rewrite)
 	}
+}
+
+func caseVersion(d dialect.Dialect) string {
+	if d == dialect.Bash {
+		return " (bash 4 and later; macOS still ships bash 3.2)"
+	}
+	return ""
 }
 
 var trEscapes = map[string]byte{`\n`: '\n', `\t`: '\t', `\\`: '\\'}

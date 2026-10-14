@@ -1,18 +1,15 @@
 package expansion
 
 import (
-	"context"
 	"errors"
-	"os"
-	"os/exec"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/glob"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/shelloptions"
+	"github.com/stubbedev/shell-lsp/internal/shelltest"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -213,7 +210,6 @@ var bashRegexCases = []regexCase{
 	{"v=v1.22 re='^v([0-9]+)'", `$v`, `$re`},
 	{"v=abbbc", `$v`, `b+`},
 	{"v=abcd re='(a|ab)(c|bcd)(d*)'", `$v`, `$re`},
-	{"v='a foo b' re='\\bfoo\\b'", `$v`, `$re`},
 	{"v=5", `$v`, `\d`},
 	{"v=d", `$v`, `\d`},
 	{"v=a.b", `$v`, `a"."b`},
@@ -229,47 +225,72 @@ var zshRegexCases = []regexCase{
 	{"v=a.b", `$v`, `a\.b`},
 	{"v=abcd", `$v`, `"(a|ab)(c|bcd)(d*)"`},
 	{"v=xaby", `$v`, `"a(b)"`},
-	{"v=a re='\\w'", `$v`, `$re`},
 }
 
 func TestRegexEvaluationMatchesTheShells(t *testing.T) {
 	shells := []struct {
 		dialect dialect.Dialect
-		shell   string
-		args    []string
+		shell   shelltest.Shell
 		cases   []regexCase
 		report  string
 	}{
-		{dialect.Bash, "bash", []string{"--norc", "--noprofile", "-c"}, bashRegexCases, `IFS='|'; printf '%s' "${BASH_REMATCH[*]}"`},
-		{dialect.Zsh, "zsh", []string{"-f", "-c"}, zshRegexCases, `print -rn -- "$MATCH|${(j:|:)match}"`},
+		{dialect.Bash, shelltest.Bash, bashRegexCases, `IFS='|'; printf '%s' "${BASH_REMATCH[*]}"`},
+		{dialect.Zsh, shelltest.Zsh, zshRegexCases, `print -rn -- "$MATCH|${(j:|:)match}"`},
 	}
 	for _, sh := range shells {
-		t.Run(sh.shell, func(t *testing.T) {
-			requireShell(t, sh.shell)
+		t.Run(sh.shell.Name, func(t *testing.T) {
+			sh.shell.Require(t)
 			for _, c := range sh.cases {
 				script := c.setup + "\nif [[ " + c.subject + " =~ " + c.re + " ]]; then " + sh.report + "; else printf none; fi\n"
-				tree := parser.Parse(script, sh.dialect)
-				site, ok := siteOfRegex(tree)
-				if !ok {
-					t.Fatalf("%q: no regex site", script)
-				}
-				got, err := New(tree, shelloptions.Scan(tree)).Matches(site)
+				got, err := regexOutcome(t, sh.dialect, script)
 				if err != nil {
 					t.Errorf("%q: %v", script, err)
 					continue
 				}
+				want := sh.shell.Run(t, script)
 				printed := "none"
-				if got.Holds {
+				switch {
+				case got.Holds && got.GroupsUncertain:
+					printed, want = got.Groups[0], strings.SplitN(want, "|", 2)[0]
+				case got.Holds && sh.dialect == dialect.Zsh:
+					printed = got.Groups[0] + "|" + strings.Join(got.Groups[1:], "|")
+				case got.Holds:
 					printed = strings.Join(got.Groups, "|")
-					if sh.dialect == dialect.Zsh {
-						printed = got.Groups[0] + "|" + strings.Join(got.Groups[1:], "|")
-					}
 				}
-				if want := run(t, sh.shell, sh.args, script); printed != want {
+				if printed != want {
 					t.Errorf("%s =~ %s with %s: we say %s, the shell says %s", c.subject, c.re, c.setup, printed, want)
 				}
 			}
 		})
+	}
+}
+
+func regexOutcome(t *testing.T, d dialect.Dialect, script string) (Outcome, error) {
+	t.Helper()
+	tree := parser.Parse(script, d)
+	site, ok := siteOfRegex(tree)
+	if !ok {
+		t.Fatalf("%q: no regex site", script)
+	}
+	return New(tree, shelloptions.Scan(tree)).Matches(site)
+}
+
+func TestRegexEvaluationLeavesOutWhatDependsOnTheLibrary(t *testing.T) {
+	for _, script := range []string{
+		"v='a foo b' re='\\bfoo\\b'\n[[ $v =~ $re ]]\n",
+		"v=a re='\\w'\n[[ $v =~ $re ]]\n",
+	} {
+		if _, err := regexOutcome(t, dialect.Bash, script); !errors.Is(err, ErrUnsupported) {
+			t.Errorf("%q: got %v, want ErrUnsupported", script, err)
+		}
+	}
+	got, err := regexOutcome(t, dialect.Bash, "v=abcd re='(a|ab)(c|bcd)(d*)'\n[[ $v =~ $re ]]\n")
+	if err != nil || !got.GroupsUncertain || got.Groups[0] != "abcd" {
+		t.Errorf("ambiguous groups: got %+v, %v", got, err)
+	}
+	got, err = regexOutcome(t, dialect.Bash, "v=v1.2 re='^v([0-9]+)[.]([0-9]+)$'\n[[ $v =~ $re ]]\n")
+	if err != nil || got.GroupsUncertain || strings.Join(got.Groups, "|") != "v1.2|1|2" {
+		t.Errorf("unambiguous groups: got %+v, %v", got, err)
 	}
 }
 
@@ -280,19 +301,6 @@ func siteOfRegex(tree *parser.Tree) (glob.Site, bool) {
 		}
 	}
 	return glob.Site{}, false
-}
-
-func run(t *testing.T, shell string, args []string, script string) string {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, shell, append(args, script)...)
-	cmd.Env = append(os.Environ(), "LC_ALL=C.UTF-8")
-	out, err := cmd.Output()
-	if err != nil {
-		t.Fatalf("%s %q: %v", shell, script, err)
-	}
-	return string(out)
 }
 
 func ours(t *testing.T, d dialect.Dialect, script string) (string, error) {
@@ -319,31 +327,19 @@ func ours(t *testing.T, d dialect.Dialect, script string) (string, error) {
 	return sb.String(), nil
 }
 
-func requireShell(t *testing.T, name string) {
-	t.Helper()
-	if _, err := exec.LookPath(name); err == nil {
-		return
-	}
-	if os.Getenv("REQUIRE_SHELLS") == "1" {
-		t.Fatalf("%s is not installed", name)
-	}
-	t.Skipf("%s is not installed", name)
-}
-
 func TestEvaluationMatchesTheShells(t *testing.T) {
 	shells := []struct {
 		dialect dialect.Dialect
-		shell   string
-		args    []string
+		shell   shelltest.Shell
 		cases   []evalCase
 	}{
-		{dialect.Bash, "bash", []string{"--norc", "--noprofile", "-c"}, bashCases},
-		{dialect.Zsh, "zsh", []string{"-f", "-c"}, zshCases},
-		{dialect.Ksh, "ksh", []string{"-c"}, kshCases},
+		{dialect.Bash, shelltest.Bash, bashCases},
+		{dialect.Zsh, shelltest.Zsh, zshCases},
+		{dialect.Ksh, shelltest.Ksh, kshCases},
 	}
 	for _, sh := range shells {
-		t.Run(sh.shell, func(t *testing.T) {
-			requireShell(t, sh.shell)
+		t.Run(sh.shell.Name, func(t *testing.T) {
+			sh.shell.Require(t)
 			for _, c := range sh.cases {
 				script := c.setup + "\nprintf '<%s>' " + c.expr + "\n"
 				got, err := ours(t, sh.dialect, script)
@@ -351,7 +347,7 @@ func TestEvaluationMatchesTheShells(t *testing.T) {
 					t.Errorf("%s; %s: %v", c.setup, c.expr, err)
 					continue
 				}
-				if want := run(t, sh.shell, sh.args, script); got != want {
+				if want := sh.shell.Run(t, script); got != want {
 					t.Errorf("%s; %s = %s, the shell says %s", c.setup, c.expr, got, want)
 				}
 			}
