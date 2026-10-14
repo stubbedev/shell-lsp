@@ -53,7 +53,11 @@ func Parse(segments []Segment, syn Syntax) Pattern {
 }
 
 func lex(segments []Segment) []item {
-	var items []item
+	size := 0
+	for i := range segments {
+		size += len(segments[i].Text)
+	}
+	items := make([]item, 0, size)
 	for i := range segments {
 		s := &segments[i]
 		switch s.Kind {
@@ -248,18 +252,30 @@ func (p *parse) sequence(depth int, slash bool) Node {
 
 func mergeLiterals(items []Node) []Node {
 	out := items[:0]
-	for _, n := range items {
-		lit, ok := n.(*Literal)
-		if !ok || len(out) == 0 {
-			out = append(out, n)
+	for i := 0; i < len(items); {
+		first, ok := items[i].(*Literal)
+		out = append(out, items[i])
+		i++
+		if !ok {
 			continue
 		}
-		prev, ok := out[len(out)-1].(*Literal)
-		if !ok || prev.Case != lit.Case {
-			out = append(out, n)
-			continue
+		var text strings.Builder
+		merged := false
+		for ; i < len(items); i++ {
+			next, ok := items[i].(*Literal)
+			if !ok || next.Case != first.Case {
+				break
+			}
+			if !merged {
+				text.WriteString(first.Text)
+				merged = true
+			}
+			text.WriteString(next.Text)
+			first.At.End = max(first.At.End, next.At.End)
 		}
-		out[len(out)-1] = &Literal{At: parser.Span{Start: prev.At.Start, End: max(prev.At.End, lit.At.End)}, Text: prev.Text + lit.Text, Case: lit.Case}
+		if merged {
+			first.Text = text.String()
+		}
 	}
 	return out
 }

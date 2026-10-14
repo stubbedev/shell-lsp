@@ -54,7 +54,7 @@ func For(tree *parser.Tree, options shelloptions.PerShell) Sites {
 func (s Sites) All() []Site {
 	var sites []Site
 	parser.Walk(s.tree.File, func(node syntax.Node) bool {
-		sites = s.appendAt(sites, node)
+		sites = s.appendAt(sites, node, false)
 		return true
 	})
 	return sites
@@ -63,7 +63,7 @@ func (s Sites) All() []Site {
 func (s Sites) At(offset int) (Site, bool) {
 	var found []Site
 	for _, located := range s.tree.PathAt(offset) {
-		found = s.appendAt(found, located.Node)
+		found = s.appendAt(found, located.Node, true)
 	}
 	found = slices.DeleteFunc(found, func(site Site) bool { return !site.Span.Touches(offset) })
 	if len(found) == 0 {
@@ -73,17 +73,17 @@ func (s Sites) At(offset int) (Site, bool) {
 }
 
 func (s Sites) Expansion(exp *syntax.ParamExp) []Site {
-	return s.appendAt(nil, exp)
+	return s.appendAt(nil, exp, true)
 }
 
-func (s Sites) appendAt(sites []Site, node syntax.Node) []Site {
+func (s Sites) appendAt(sites []Site, node syntax.Node, literal bool) []Site {
 	add := func(w *syntax.Word, role Role, exp *syntax.ParamExp) {
-		if site, ok := s.site(w, role, exp); ok {
+		if site, ok := s.site(w, role, exp, literal); ok {
 			sites = append(sites, site)
 		}
 	}
 	addMatch := func(w, subject *syntax.Word, role Role, negated bool) {
-		if site, ok := s.site(w, role, nil); ok {
+		if site, ok := s.site(w, role, nil, literal); ok {
 			site.Subject, site.Negated = subject, negated
 			sites = append(sites, site)
 		}
@@ -175,7 +175,26 @@ func (s Sites) syntax(role Role, opts shelloptions.Options) Syntax {
 
 type Resolver func(part syntax.WordPart) (string, bool)
 
-func (s Sites) site(w *syntax.Word, role Role, exp *syntax.ParamExp) (Site, bool) {
+const patternBytes = "*?[]<>()|^~#@!+"
+
+func mayGlob(w *syntax.Word) bool {
+	for _, part := range w.Parts {
+		switch p := part.(type) {
+		case *syntax.ExtGlob:
+			return true
+		case *syntax.Lit:
+			if strings.ContainsAny(p.Value, patternBytes) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (s Sites) site(w *syntax.Word, role Role, exp *syntax.ParamExp, literal bool) (Site, bool) {
+	if (role == RoleFilenames || !literal) && role != RoleRegex && !mayGlob(w) {
+		return Site{}, false
+	}
 	span, ok := s.tree.NodeSpan(w)
 	if !ok {
 		return Site{}, false
