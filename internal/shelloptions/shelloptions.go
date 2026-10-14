@@ -76,11 +76,21 @@ func unwrap(command string, args []*syntax.Word) (string, []*syntax.Word) {
 	return command, args
 }
 
-var optionCommands = map[string]bool{"set": true, "shopt": true, "setopt": true, "unsetopt": true, "emulate": true}
+func optionCommand(name string) bool {
+	switch name {
+	case "set", "shopt", "setopt", "unsetopt", "emulate":
+		return true
+	}
+	return false
+}
+
+func mayChangeOptions(name string) bool {
+	return optionCommand(name) || name == "builtin" || name == "command"
+}
 
 func setsUnknownOptions(command string, args []*syntax.Word) bool {
 	command, args = unwrap(command, args)
-	return optionCommands[command] && slices.ContainsFunc(args, func(w *syntax.Word) bool {
+	return optionCommand(command) && slices.ContainsFunc(args, func(w *syntax.Word) bool {
 		_, ok := parser.Literal(w)
 		return !ok
 	})
@@ -213,59 +223,59 @@ func zshOption(word string, unset bool) string {
 }
 
 type PerShell struct {
-	tree     *parser.Tree
-	options  []Options
-	enablers []enabler
+	tree    *parser.Tree
+	base    Options
+	changes []shellChange
 }
 
-type enabler struct {
+type shellChange struct {
 	command parser.Command
 	shell   parser.ShellID
 	changes []optionChange
+	dynamic bool
 }
 
 func Scan(tree *parser.Tree) PerShell {
-	base := Options{
+	p := PerShell{tree: tree, base: Options{
 		Errexit:      turnsOn(shebangOptionChanges(tree.Text(), tree.Dialect), "errexit"),
 		ExtendedGlob: tree.Dialect == dialect.Zsh && dialect.CompletionFile(tree.Text()),
-	}
-	own := make([][]optionChange, len(tree.Shells))
-	dynamic := make([]bool, len(tree.Shells))
-	var enablers []enabler
+	}}
 	for _, c := range tree.Commands {
-		shell := tree.ShellAt(c.Span.Start)
-		dynamic[shell] = dynamic[shell] || setsUnknownOptions(c.Name, c.Args)
-		changes := optionChanges(c.Name, c.Args, tree.Dialect)
-		if len(changes) == 0 {
+		if !mayChangeOptions(c.Name) {
 			continue
 		}
-		own[shell] = append(own[shell], changes...)
-		enablers = append(enablers, enabler{command: c, shell: shell, changes: changes})
-	}
-	options := make([]Options, len(tree.Shells))
-	for id, shell := range tree.Shells {
-		options[id] = base
-		if id != int(parser.FileShell) {
-			options[id] = options[shell.Parent]
-		}
-		options[id].Dynamic = options[id].Dynamic || dynamic[id]
-		for _, change := range own[id] {
-			options[id].apply(change)
+		changes, dynamic := optionChanges(c.Name, c.Args, tree.Dialect), setsUnknownOptions(c.Name, c.Args)
+		if len(changes) > 0 || dynamic {
+			p.changes = append(p.changes, shellChange{command: c, shell: tree.ShellAt(c.Span.Start), changes: changes, dynamic: dynamic})
 		}
 	}
-	return PerShell{tree: tree, options: options, enablers: enablers}
+	return p
 }
 
 func (p PerShell) At(offset int) Options {
-	return p.options[p.tree.ShellAt(offset)]
+	opts := p.base
+	if len(p.changes) == 0 {
+		return opts
+	}
+	shell := p.tree.ShellAt(offset)
+	for _, c := range p.changes {
+		if !p.tree.Inherits(shell, c.shell) {
+			continue
+		}
+		opts.Dynamic = opts.Dynamic || c.dynamic
+		for _, change := range c.changes {
+			opts.apply(change)
+		}
+	}
+	return opts
 }
 
 func (p PerShell) EnabledBy(name string, at int) []parser.Command {
 	shell := p.tree.ShellAt(at)
 	var commands []parser.Command
-	for _, e := range p.enablers {
-		if p.tree.Inherits(shell, e.shell) && turnsOn(e.changes, name) {
-			commands = append(commands, e.command)
+	for _, c := range p.changes {
+		if p.tree.Inherits(shell, c.shell) && turnsOn(c.changes, name) {
+			commands = append(commands, c.command)
 		}
 	}
 	return commands
