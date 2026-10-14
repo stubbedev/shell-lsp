@@ -140,6 +140,8 @@ func Complete(ctx context.Context, in Input) (Result, error) {
 		return Result{Items: c.letters(shelldocs.ZshParameterFlags)}, nil
 	case positionGlobQualifier:
 		return Result{Items: c.letters(shelldocs.ZshGlobQualifiers)}, nil
+	case positionGlobFlags:
+		return Result{Items: c.letters(shelldocs.ZshGlobFlags)}, nil
 	case positionArrayKey:
 		return Result{Items: c.arrayKeys()}, nil
 	case positionCasePattern:

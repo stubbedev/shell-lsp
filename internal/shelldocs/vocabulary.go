@@ -3,6 +3,7 @@ package shelldocs
 import (
 	"fmt"
 	"iter"
+	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 )
@@ -24,6 +25,7 @@ const (
 	ZshParameterFlags
 	ZshModifiers
 	ZshGlobQualifiers
+	ZshGlobFlags
 	PrintfDirectives
 	Redirections
 	ArithmeticOperators
@@ -47,6 +49,7 @@ var vocabularies = [vocabularyCount][]Entry{
 	ZshParameterFlags:   zshParameterFlags,
 	ZshModifiers:        zshModifiers,
 	ZshGlobQualifiers:   zshGlobQualifiers,
+	ZshGlobFlags:        zshGlobFlags,
 	PrintfDirectives:    printfDirectives,
 	Redirections:        redirections,
 	ArithmeticOperators: arithmeticOperators,
@@ -97,6 +100,17 @@ func Term(v Vocabulary, name string, d dialect.Dialect) (Entry, bool) {
 		return Entry{}, false
 	}
 	return entries[0], true
+}
+
+func ZshModifier(modifier string) (Entry, bool) {
+	key := strings.TrimRight(modifier, "0123456789")
+	switch {
+	case strings.HasPrefix(key, "gs"):
+		key = "gs"
+	case key != "":
+		key = key[:1]
+	}
+	return Term(ZshModifiers, key, dialect.Zsh)
 }
 
 var (
@@ -284,6 +298,20 @@ var zshParameterFlags = []Entry{
 	{Name: "0", Dialects: zshOnly, Doc: "Split on NUL bytes, like `(ps:\\0:)`."},
 	{Name: "%", Dialects: zshOnly, Doc: "Expand prompt escape sequences."},
 	{Name: "~", Dialects: zshOnly, Doc: "Treat the separator of `j` and `s` as a pattern."},
+	{Name: "M", Dialects: zshOnly, Doc: "With `:#`, keep the elements that match instead of removing them; with `#`, `%` and `/`, include the matched part in the result."},
+	{Name: "S", Dialects: zshOnly, Doc: "With `#`, `%` and `/`, match substrings anywhere in the value, not only at its start or end."},
+	{Name: "B", Dialects: zshOnly, Doc: "With `#`, `%` and `/`, include the index where the match begins in the result."},
+	{Name: "E", Dialects: zshOnly, Doc: "With `#`, `%` and `/`, include the index where the match ends in the result."},
+	{Name: "N", Dialects: zshOnly, Doc: "With `#`, `%` and `/`, include the length of the match in the result."},
+	{Name: "I", Dialects: zshOnly, Doc: "With `#`, `%` and `/`, use the given match, as in `(I:2:)` for the second one."},
+	{Name: "g", Dialects: zshOnly, Doc: "Process escape sequences like `print` and `echo` do; the argument picks the style, as in `(g::)`."},
+	{Name: "l", Dialects: zshOnly, Doc: "Pad on the left to the given width, as in `(l:10::0:)`."},
+	{Name: "r", Dialects: zshOnly, Doc: "Pad on the right to the given width, as in `(r:10:)`."},
+	{Name: "Z", Dialects: zshOnly, Doc: "Split like `z`, with options for comments and newlines, as in `(Z:C:)`."},
+	{Name: "D", Dialects: zshOnly, Doc: "Shorten directory names with `~` and named directories."},
+	{Name: "_", Dialects: zshOnly, Doc: "Reserved for future use; takes a delimited argument."},
+	{Name: "#", Dialects: zshOnly, Doc: "Evaluate the value as an arithmetic expression and output the character with that code."},
+	{Name: "x", Dialects: zshOnly, Doc: "With `q`, fail when a value cannot be quoted safely."},
 }
 
 var zshModifiers = []Entry{
@@ -333,6 +361,41 @@ var zshGlobQualifiers = []Entry{
 	{Name: "e", Dialects: zshOnly, Doc: "Keep matches for which the given code succeeds, as in `e:'[[ -s $REPLY ]]':`."},
 	{Name: "+", Dialects: zshOnly, Doc: "Keep matches for which the named function succeeds, with the match in `REPLY`."},
 	{Name: "Y", Dialects: zshOnly, Doc: "Stop after the given number of matches, as in `Y1`."},
+	{Name: "F", Dialects: zshOnly, Doc: "Full directories: directories with at least one entry."},
+	{Name: "A", Dialects: zshOnly, Doc: "Files readable by their group."},
+	{Name: "I", Dialects: zshOnly, Doc: "Files writable by their group."},
+	{Name: "E", Dialects: zshOnly, Doc: "Files executable by their group."},
+	{Name: "s", Dialects: zshOnly, Doc: "Setuid files."},
+	{Name: "S", Dialects: zshOnly, Doc: "Setgid files."},
+	{Name: "t", Dialects: zshOnly, Doc: "Files with the sticky bit set."},
+	{Name: "f", Dialects: zshOnly, Doc: "Files by permission bits, as in `f644` or `f:u+x:`."},
+	{Name: "u", Dialects: zshOnly, Doc: "Files owned by the given user, as in `u0` or `u:root:`."},
+	{Name: "g", Dialects: zshOnly, Doc: "Files owned by the given group, as in `g0` or `g:wheel:`."},
+	{Name: "d", Dialects: zshOnly, Doc: "Files on the given device, as in `d17`."},
+	{Name: "l", Dialects: zshOnly, Doc: "Files by hard link count, as in `l+1` (more than one link)."},
+	{Name: "c", Dialects: zshOnly, Doc: "Files by inode change age, with the same units as `m`."},
+	{Name: "M", Dialects: zshOnly, Doc: "Mark directories with a trailing `/`."},
+	{Name: "T", Dialects: zshOnly, Doc: "Append a type character to each name, as `ls -F` does."},
+	{Name: "P", Dialects: zshOnly, Doc: "Put the given word before every match as a separate word, as in `P:-f:`."},
+	{Name: ",", Dialects: zshOnly, Doc: "Separates alternative sets of qualifiers; a file is kept when any set matches it."},
+	{Name: ":", Dialects: zshOnly, Doc: "Apply the modifiers that follow to every match, as in `(:t)` or `(:r)`."},
+}
+
+var zshGlobFlags = []Entry{
+	{Name: "i", Dialects: zshOnly, Doc: "Case-insensitive: the rest of the pattern, up to the end of its group, matches letters in either case."},
+	{Name: "l", Dialects: zshOnly, Doc: "Lowercase letters in the rest of the pattern also match uppercase ones; uppercase letters still only match uppercase."},
+	{Name: "I", Dialects: zshOnly, Doc: "Case-sensitive again, undoing `(#i)` and `(#l)`."},
+	{Name: "b", Dialects: zshOnly, Doc: "Backreferences: every parenthesised group after this flag stores what it matched in `$match`, with offsets in `$mbegin` and `$mend`."},
+	{Name: "B", Dialects: zshOnly, Doc: "Backreferences off again, undoing `(#b)`."},
+	{Name: "m", Dialects: zshOnly, Doc: "Stores the whole matched text in `$MATCH`, with its offsets in `$MBEGIN` and `$MEND`."},
+	{Name: "M", Dialects: zshOnly, Doc: "Stops setting `$MATCH`, undoing `(#m)`."},
+	{Name: "a", Dialects: zshOnly, Doc: "Approximate matching: allows up to the given number of errors (insertions, deletions, transpositions or substitutions), as in `(#a1)`."},
+	{Name: "s", Dialects: zshOnly, Doc: "Matches only at the start of the value, like `^` in a regular expression."},
+	{Name: "e", Dialects: zshOnly, Doc: "Matches only at the end of the value, like `$` in a regular expression."},
+	{Name: "u", Dialects: zshOnly, Doc: "Treats multibyte characters as single characters, whatever the `multibyte` option says."},
+	{Name: "U", Dialects: zshOnly, Doc: "Matches byte by byte, whatever the `multibyte` option says."},
+	{Name: "q", Dialects: zshOnly, Doc: "Glob qualifiers inside the pattern, as in `*(#q.)`; ignored where no file names are generated."},
+	{Name: "c", Dialects: zshOnly, Doc: "Repeats what comes before it: `(#c3)` exactly three times, `(#c1,3)` one to three times."},
 }
 
 var printfDirectives = []Entry{

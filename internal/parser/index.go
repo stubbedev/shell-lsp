@@ -64,6 +64,7 @@ const (
 	AttrReadonly
 	AttrInteger
 	AttrNameref
+	AttrTransformed
 )
 
 func (a Attr) Has(flag Attr) bool { return a&flag != 0 }
@@ -673,7 +674,11 @@ type declFlags struct {
 
 func (f declFlags) namesVariables() bool { return !f.inspects && !f.definesType }
 
-var flagAttrs = map[rune]Attr{'a': AttrArray, 'A': AttrAssoc, 'x': AttrExport, 'r': AttrReadonly, 'i': AttrInteger, 'n': AttrNameref}
+var flagAttrs = map[rune]Attr{
+	'a': AttrArray, 'A': AttrAssoc, 'x': AttrExport, 'r': AttrReadonly, 'i': AttrInteger, 'n': AttrNameref,
+	'u': AttrTransformed, 'l': AttrTransformed, 'L': AttrTransformed, 'R': AttrTransformed, 'Z': AttrTransformed,
+	'U': AttrTransformed, 'E': AttrTransformed, 'F': AttrTransformed,
+}
 
 func (b *builder) applyFlags(f declFlags, word string) declFlags {
 	set := strings.HasPrefix(word, "-")

@@ -5,7 +5,7 @@ definition 1:37-1:42 "other" kind=2 attrs=000001 local=false within=0
 definition 2:12-2:17 "table" kind=2 attrs=000010 local=false within=0
 definition 3:1-3:5 "name" kind=0 attrs=000000 local=false within=0
 definition 21:15-21:18 "hex" kind=2 attrs=010000 local=false within=0
-definition 22:12-22:14 "pi" kind=2 attrs=000000 local=false within=0
+definition 22:12-22:14 "pi" kind=2 attrs=1000000 local=false within=0
 definition 23:4-23:6 "pi" kind=4 attrs=000000 local=false within=0
 definition 23:13-23:16 "hex" kind=4 attrs=000000 local=false within=0
 reference 5:18-5:22 "name" within=0

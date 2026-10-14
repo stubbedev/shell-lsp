@@ -20,6 +20,7 @@ const (
 	positionParameterFlags
 	positionArrayKey
 	positionGlobQualifier
+	positionGlobFlags
 	positionCasePattern
 )
 
@@ -43,6 +44,8 @@ var (
 	arrayKey          = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\[([^]"'$\s]*)$`)
 	caseBoundary      = regexp.MustCompile(`\bcase\s+("?\$\{?([A-Za-z_][A-Za-z0-9_]*|[0-9]+)\}?"?|\S+)\s+in\b|\besac\b`)
 	globQualifier     = regexp.MustCompile(`(?:^|[\s;|&])[^\s;|&()'"]*[*?\]][^\s;|&()'"]*\(([^()\s'"]*)$`)
+	explicitQualifier = regexp.MustCompile(`\(#q([^()\s'"]*)$`)
+	globFlags         = regexp.MustCompile(`\(#([^()\s'"q]*)$`)
 )
 
 var commandOpeners = map[string]bool{
@@ -63,6 +66,9 @@ func analyze(tree *parser.Tree, offset int) site {
 	}
 	start := logicalLineStart(text, offset)
 	lx := lexLine(text[start:offset])
+	if st, ok := zshPatternFlags(tree, text[start:offset], offset); ok {
+		return st
+	}
 	if lx.comment {
 		return site{}
 	}
@@ -136,6 +142,24 @@ func expansionContext(tree *parser.Tree, line string, offset int) (site, bool) {
 	return site{}, false
 }
 
+func zshPatternFlags(tree *parser.Tree, line string, offset int) (site, bool) {
+	if tree.Dialect != dialect.Zsh {
+		return site{}, false
+	}
+	position, m := positionGlobQualifier, explicitQualifier.FindStringSubmatchIndex(line)
+	if m == nil {
+		position, m = positionGlobFlags, globFlags.FindStringSubmatchIndex(line)
+	}
+	if m == nil {
+		return site{}, false
+	}
+	before := lexLine(line[:m[0]+1])
+	if before.singleQuoted || before.doubleQuoted || before.arithmetic || before.comment {
+		return site{}, false
+	}
+	return site{position: position, typed: line[m[2]:m[3]], replace: parser.Span{Start: offset, End: offset}}, true
+}
+
 func casePatternSubject(text string, at int) (string, bool) {
 	before := strings.TrimRight(text[:at], " \t\n(")
 	for strings.HasSuffix(before, "|") {
@@ -176,7 +200,7 @@ func casePatternSubject(text string, at int) (string, bool) {
 func tokenEnd(text string, st site) int {
 	var continues func(byte) bool
 	switch st.position {
-	case positionNone, positionParameterFlags, positionGlobQualifier:
+	case positionNone, positionParameterFlags, positionGlobQualifier, positionGlobFlags:
 		return st.replace.End
 	case positionVariable:
 		continues = parser.IsNameChar

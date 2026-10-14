@@ -9,7 +9,7 @@ definition 11:2-11:7 "psvar" kind=0 attrs=000001 local=false within=1
 definition 12:21-12:26 "psvar" kind=0 attrs=000000 local=false within=1
 definition 13:2-13:8 "PROMPT" kind=0 attrs=000000 local=false within=1
 definition 17:1-17:5 "path" kind=0 attrs=000001 local=false within=0
-definition 18:12-18:16 "path" kind=2 attrs=000000 local=false within=0
+definition 18:12-18:16 "path" kind=2 attrs=1000000 local=false within=0
 definition 19:5-19:11 "plugin" kind=3 attrs=000000 local=false within=0
 reference 12:5-12:9 "last" within=1
 reference 12:31-12:35 "last" within=1

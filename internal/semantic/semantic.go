@@ -10,8 +10,10 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/directive"
 	"github.com/stubbedev/shell-lsp/internal/embedded"
 	"github.com/stubbedev/shell-lsp/internal/embedded/lang"
+	"github.com/stubbedev/shell-lsp/internal/glob"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/shelldocs"
+	"github.com/stubbedev/shell-lsp/internal/shelloptions"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -84,6 +86,7 @@ func Tokens(tree *parser.Tree, imports []parser.Import, programs []embedded.Prog
 	g.tokens = make([]Token, 0, 2*(len(tree.Comments)+len(tree.Keywords)+len(tree.Definitions)+len(tree.References)+2*len(tree.Commands))+embeddedTokens(programs))
 	g.index()
 	g.walk()
+	g.patterns()
 	g.embed(programs)
 	return g.result()
 }
@@ -267,6 +270,60 @@ func (g *generator) walk() {
 		}
 		return true
 	})
+}
+
+func (g *generator) patterns() {
+	for _, site := range glob.For(g.tree, shelloptions.Scan(g.tree)).All() {
+		glob.Walk(site.Pattern.Root, g.patternNode)
+	}
+}
+
+func (g *generator) patternNode(n glob.Node) bool {
+	at := n.Span()
+	operator := func(start, end int) { g.add(parser.Span{Start: start, End: end}, TypeOperator, 0) }
+	switch n := n.(type) {
+	case *glob.AnyChar, *glob.AnyString, *glob.Recursive:
+		operator(at.Start, at.End)
+	case *glob.Bracket, *glob.NumRange:
+		g.add(at, TypeRegexp, 0)
+	case *glob.Anchor:
+		if at.End-at.Start == 1 {
+			operator(at.Start, at.End)
+			break
+		}
+		g.add(at, TypeKeyword, 0)
+	case *glob.Flags:
+		g.add(at, TypeKeyword, 0)
+	case *glob.Escape, *glob.Backref:
+		g.add(at, TypeRegexp, 0)
+	case *glob.KshOptions, *glob.Search:
+		end := at.End
+		if x := glob.Children(n); len(x) > 0 {
+			end = x[0].Span().Start
+		}
+		g.add(parser.Span{Start: at.Start, End: end}, TypeKeyword, 0)
+	case *glob.Foreign:
+		g.add(at, TypeRegexp, 0)
+	case *glob.Qualifiers:
+		g.add(at, TypeProperty, 0)
+	case *glob.Group:
+		inner := n.X.Span()
+		operator(at.Start, inner.Start)
+		operator(inner.End, at.End)
+	case *glob.Alternatives:
+		for _, choice := range n.Choices[1:] {
+			operator(choice.Span().Start-1, choice.Span().Start)
+		}
+	case *glob.Repeat:
+		operator(n.X.Span().End, at.End)
+	case *glob.Not:
+		operator(at.Start, at.Start+1)
+	case *glob.Exclude:
+		for _, except := range n.Except {
+			operator(except.Span().Start-1, except.Span().Start)
+		}
+	}
+	return true
 }
 
 func (g *generator) doubleQuoted(q *syntax.DblQuoted) {

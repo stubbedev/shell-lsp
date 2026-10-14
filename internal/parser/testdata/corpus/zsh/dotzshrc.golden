@@ -17,9 +17,9 @@ function 81:1-81:6 "since" body=6 within=0 doc=""
 function 86:1-86:4 "bak" body=7 within=0 doc=""
 function 88:1-88:13 "precmd_title" body=8 within=0 doc=""
 function 89:1-89:14 "preexec_title" body=9 within=0 doc=""
-definition 4:12-4:16 "path" kind=2 attrs=000000 local=false within=0
-definition 4:17-4:22 "fpath" kind=2 attrs=000000 local=false within=0
-definition 4:23-4:29 "cdpath" kind=2 attrs=000000 local=false within=0
+definition 4:12-4:16 "path" kind=2 attrs=1000000 local=false within=0
+definition 4:17-4:22 "fpath" kind=2 attrs=1000000 local=false within=0
+definition 4:23-4:29 "cdpath" kind=2 attrs=1000000 local=false within=0
 definition 5:1-5:5 "path" kind=0 attrs=000001 local=false within=0
 definition 11:1-11:7 "cdpath" kind=0 attrs=000001 local=false within=0
 definition 12:8-12:14 "EDITOR" kind=2 attrs=000100 local=false within=0

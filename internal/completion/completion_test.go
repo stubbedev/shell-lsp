@@ -361,6 +361,11 @@ func TestShellVocabularyCompletion(t *testing.T) {
 		{name: "glob qualifiers", d: dialect.Zsh, src: "print -l *(‸", want: []string{"/", ".", "N", "o"}},
 		{name: "no glob qualifiers in bash", d: dialect.Bash, src: "ls *(‸", missing: []string{"/", "N"}},
 		{name: "no qualifiers in a subshell", d: dialect.Zsh, src: "(‸", missing: []string{"/", "N"}},
+		{name: "globbing flags", d: dialect.Zsh, src: "[[ $x == (#‸", want: []string{"i", "b", "m", "s", "q"}, missing: []string{"/", "N"}},
+		{name: "globbing flags already typed", d: dialect.Zsh, src: "[[ $x == (#ib‸", want: []string{"m"}, missing: []string{"i", "b"}},
+		{name: "explicit glob qualifiers", d: dialect.Zsh, src: "print -l *(#q‸", want: []string{"/", ".", "N"}, missing: []string{"i", "b"}},
+		{name: "no globbing flags in arithmetic", d: dialect.Zsh, src: "print $((#‸", missing: []string{"b", "q"}},
+		{name: "no globbing flags in bash", d: dialect.Bash, src: "[[ $x == (#‸", missing: []string{"b", "q"}},
 	}
 	for _, tc := range tests {
 		got := labels(complete(t, tc.d, tc.src))

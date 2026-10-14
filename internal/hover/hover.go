@@ -15,6 +15,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/manpage"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/shelldocs"
+	"github.com/stubbedev/shell-lsp/internal/shelloptions"
 	"github.com/stubbedev/shell-lsp/internal/textline"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
@@ -43,6 +44,7 @@ type Result struct {
 func Hover(ctx context.Context, in Input) (Result, bool, error) {
 	h := newHoverer(in)
 	h.path = in.Tree.PathAt(in.Offset)
+	h.options = shelloptions.Scan(in.Tree)
 	r, ok, err := h.hover(ctx)
 	if err != nil {
 		return Result{}, false, err
@@ -62,6 +64,9 @@ func (h hoverer) hover(ctx context.Context) (Result, bool, error) {
 		return r, true, nil
 	}
 	if r, ok := h.paramExp(); ok {
+		return r, true, nil
+	}
+	if r, ok := h.pattern(); ok {
 		return r, true, nil
 	}
 	hit, ok := h.Tree.SymbolAt(h.Offset)
@@ -86,6 +91,7 @@ type hoverer struct {
 	dialect dialect.Dialect
 	scope   parser.ScopeID
 	path    []parser.Located
+	options shelloptions.Options
 }
 
 func (h hoverer) keyword() (Result, bool) {
@@ -103,13 +109,22 @@ func (h hoverer) keyword() (Result, bool) {
 }
 
 func (h hoverer) paramExp() (Result, bool) {
-	for _, located := range slices.Backward(h.path) {
+	for i, located := range slices.Backward(h.path) {
 		exp, ok := located.Node.(*syntax.ParamExp)
-		if !ok || exp.Param == nil {
+		if !ok || exp.Param == nil && exp.NestedParam == nil {
 			continue
 		}
-		sections := []string{h.parameter(exp.Param.Value)}
+		var sections []string
+		if exp.Param != nil {
+			sections = append(sections, h.parameter(exp.Param.Value))
+		}
 		sections = append(sections, expansionDocs(exp, h.dialect)...)
+		if doc, ok := h.expansionPattern(exp); ok {
+			sections = append(sections, doc)
+		}
+		if doc, ok := h.evaluated(exp, h.quotedAt(i)); ok {
+			sections = append(sections, doc)
+		}
 		return Result{Markdown: strings.Join(sections, "\n\n---\n\n"), Span: located.Span}, true
 	}
 	return Result{}, false
@@ -756,13 +771,7 @@ func zshFlagDocs(flags *syntax.Lit) string {
 func zshModifierDocs(modifiers []*syntax.Lit) string {
 	lines := make([]string, 0, len(modifiers))
 	for _, m := range modifiers {
-		key := strings.TrimRight(m.Value, "0123456789")
-		if strings.HasPrefix(key, "gs") {
-			key = "gs"
-		} else if key != "" {
-			key = key[:1]
-		}
-		if e, ok := shelldocs.Term(shelldocs.ZshModifiers, key, dialect.Zsh); ok {
+		if e, ok := shelldocs.ZshModifier(m.Value); ok {
 			lines = append(lines, fmt.Sprintf("- `:%s`: %s", m.Value, e.Doc))
 		}
 	}

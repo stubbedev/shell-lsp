@@ -305,3 +305,36 @@ func TestLegendNamesEveryTypeAndModifier(t *testing.T) {
 		t.Errorf("ModifierNames = %v, want %v", ModifierNames, want)
 	}
 }
+
+func TestPatternTokens(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		dialect dialect.Dialect
+		text    string
+		want    []string
+	}{
+		{dialect.Zsh, "print ${x//(#b)([^=]##)=(*)/y} *.c~b*(.N) <1-3>^x\n", []string{
+			"(#b):keyword", "(:operator", "[^=]:regexp", "##:operator", "):operator", "(:operator", "*:operator", "):operator",
+			"*:operator", "~:operator", "*:operator", "(.N):property", "<1-3>:regexp", "^:operator",
+		}},
+		{dialect.Bash, "case $x in @(a|b)?.[ch]) ;; esac\n", []string{
+			"@(:operator", "|:operator", "):operator", "?:operator", "[ch]:regexp",
+		}},
+		{dialect.Bash, "[[ $x =~ ^a(b|c)+$ ]]\n", []string{
+			"=~:operator", "^:operator", "(:operator", "|:operator", "):operator", "+:operator", "$:operator",
+		}},
+		{dialect.Ksh, "[[ $x == ~(Ei)a+ ]]\n", []string{"==:operator", "~(Ei):keyword", "+:operator"}},
+	}
+	for _, tt := range tests {
+		var got []string
+		for _, d := range describe(tt.text, Tokens(parser.Parse(tt.text, tt.dialect), nil, nil)) {
+			if strings.HasSuffix(d, ":operator") || strings.HasSuffix(d, ":regexp") || strings.HasSuffix(d, ":property") || strings.HasPrefix(d, "(#") || strings.HasPrefix(d, "~(") {
+				got = append(got, d)
+			}
+		}
+		if strings.Join(got, "\n") != strings.Join(tt.want, "\n") {
+			t.Errorf("%q tokens:\n%s\nwant:\n%s", tt.text, strings.Join(got, "\n"), strings.Join(tt.want, "\n"))
+		}
+	}
+}
