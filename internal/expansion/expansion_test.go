@@ -240,14 +240,17 @@ func TestRegexEvaluationMatchesTheShells(t *testing.T) {
 	for _, sh := range shells {
 		t.Run(sh.shell.Name, func(t *testing.T) {
 			sh.shell.Require(t)
-			for _, c := range sh.cases {
-				script := c.setup + "\nif [[ " + c.subject + " =~ " + c.re + " ]]; then " + sh.report + "; else printf none; fi\n"
+			scripts := make([]string, len(sh.cases))
+			for i, c := range sh.cases {
+				scripts[i] = c.setup + "\nif [[ " + c.subject + " =~ " + c.re + " ]]; then " + sh.report + "; else printf none; fi\n"
+			}
+			for i, want := range sh.shell.RunEach(t, scripts) {
+				c, script := sh.cases[i], scripts[i]
 				got, err := regexOutcome(t, sh.dialect, script)
 				if err != nil {
 					t.Errorf("%q: %v", script, err)
 					continue
 				}
-				want := sh.shell.Run(t, script)
 				printed := "none"
 				switch {
 				case got.Holds && got.GroupsUncertain:
@@ -340,14 +343,18 @@ func TestEvaluationMatchesTheShells(t *testing.T) {
 	for _, sh := range shells {
 		t.Run(sh.shell.Name, func(t *testing.T) {
 			sh.shell.Require(t)
-			for _, c := range sh.cases {
-				script := c.setup + "\nprintf '<%s>' " + c.expr + "\n"
-				got, err := ours(t, sh.dialect, script)
+			scripts := make([]string, len(sh.cases))
+			for i, c := range sh.cases {
+				scripts[i] = c.setup + "\nprintf '<%s>' " + c.expr + "\n"
+			}
+			for i, want := range sh.shell.RunEach(t, scripts) {
+				c := sh.cases[i]
+				got, err := ours(t, sh.dialect, scripts[i])
 				if err != nil {
 					t.Errorf("%s; %s: %v", c.setup, c.expr, err)
 					continue
 				}
-				if want := sh.shell.Run(t, script); got != want {
+				if got != want {
 					t.Errorf("%s; %s = %s, the shell says %s", c.setup, c.expr, got, want)
 				}
 			}

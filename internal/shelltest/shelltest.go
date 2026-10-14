@@ -42,6 +42,23 @@ func (s Shell) Require(t *testing.T) {
 	t.Skip(message)
 }
 
+const separator = "\x1e"
+
+func (s Shell) RunEach(t *testing.T, scripts []string) []string {
+	t.Helper()
+	var batch strings.Builder
+	for _, script := range scripts {
+		batch.WriteString("( eval " + Quote(script) + " )\nprintf '\\036'\n")
+	}
+	outputs := strings.Split(s.Run(t, batch.String()), separator)
+	if len(outputs) != len(scripts)+1 {
+		t.Fatalf("%s printed %d outputs for %d scripts", s.Name, len(outputs)-1, len(scripts))
+	}
+	return outputs[:len(scripts)]
+}
+
+func Quote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
+
 func (s Shell) Run(t *testing.T, script string) string {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

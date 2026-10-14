@@ -96,28 +96,38 @@ func findingsFor(script string) []Finding {
 
 func TestForkRewritesMatchTheShells(t *testing.T) {
 	values := []string{"a.b c/d:e=f&g", "abc", "", "path/to/file.tar.gz", "/root", "Hello World", "x=y=z"}
+	type pair struct{ script, rewrite, value string }
+	batches := map[string][]pair{}
 	for _, tc := range forkRewrites {
-		sh := shelltest.Bash
-		if strings.HasPrefix(tc.script, "#!/bin/zsh") {
-			sh = shelltest.Zsh
-		}
-		sh.Require(t)
 		if strings.Contains(tc.script, "basename") || strings.Contains(tc.script, "dirname") || strings.Contains(tc.script, "$(cat") {
 			continue
 		}
+		name := shelltest.Bash.Name
+		if strings.HasPrefix(tc.script, "#!/bin/zsh") {
+			name = shelltest.Zsh.Name
+		}
 		for _, value := range values {
-			run := func(script string) string {
-				program := "x=" + shellQuote(value) + "\n" + strings.TrimPrefix(script, "#!/bin/zsh\n") + "printf '<%s>' \"$y\" \"$u\" \"$l\" \"$s\" \"$t\" \"$k\" \"$v\" \"$p\"\n"
-				return strings.ReplaceAll(sh.Run(t, program), "\n", `\n`)
-			}
-			if before, after := run(tc.script), run(tc.want); before != after {
-				t.Errorf("%s with x=%q: %q prints %s, the rewrite %q prints %s", sh.Name, value, tc.script, before, tc.want, after)
+			batches[name] = append(batches[name], pair{tc.script, tc.want, value})
+		}
+	}
+	for _, sh := range []shelltest.Shell{shelltest.Bash, shelltest.Zsh} {
+		sh.Require(t)
+		program := func(script, value string) string {
+			return "x=" + shelltest.Quote(value) + "\n" + strings.TrimPrefix(script, "#!/bin/zsh\n") + "printf '<%s>' \"$y\" \"$u\" \"$l\" \"$s\" \"$t\" \"$k\" \"$v\" \"$p\"\n"
+		}
+		pairs := batches[sh.Name]
+		scripts := make([]string, 0, 2*len(pairs))
+		for _, pr := range pairs {
+			scripts = append(scripts, program(pr.script, pr.value), program(pr.rewrite, pr.value))
+		}
+		outputs := sh.RunEach(t, scripts)
+		for i, pr := range pairs {
+			if before, after := outputs[2*i], outputs[2*i+1]; before != after {
+				t.Errorf("%s with x=%q: %q prints %q, the rewrite %q prints %q", sh.Name, pr.value, pr.script, before, pr.rewrite, after)
 			}
 		}
 	}
 }
-
-func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
 
 func TestPatternOptionsInSourcedFilesAreInformational(t *testing.T) {
 	t.Parallel()
