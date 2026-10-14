@@ -2277,6 +2277,27 @@ var fileTests = []fileTestCase{
 		})),
 	),
 	fileTest(
+		[]string{"foo <<'E'OF\n$bar `x`\nEOF"},
+		langFile(&Stmt{
+			Cmd: litCall("foo"),
+			Redirs: []*Redirect{{
+				Op:   Hdoc,
+				Word: word(sglQuoted("E"), lit("OF")),
+				Hdoc: litWord("$bar `x`\n"),
+			}},
+		}),
+	),
+	fileTest(
+		[]string{"foo <<'`'a\n`a"},
+		langFile(&Stmt{
+			Cmd: litCall("foo"),
+			Redirs: []*Redirect{{
+				Op:   Hdoc,
+				Word: word(sglQuoted("`"), lit("a")),
+			}},
+		}),
+	),
+	fileTest(
 		[]string{"foo <<'EOF'\nbar\nEOF`oops`\nEOF"},
 		langFile(&Stmt{
 			Cmd: litCall("foo"),

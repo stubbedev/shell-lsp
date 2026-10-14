@@ -810,7 +810,11 @@ func (p *Parser) unquotedWordBytes(w *Word) ([]byte, bool) {
 	buf := make([]byte, 0, 4)
 	didUnquote := false
 	for _, wp := range w.Parts {
-		buf, didUnquote = p.unquotedWordPart(buf, wp, false)
+		var quoted bool
+		buf, quoted = p.unquotedWordPart(buf, wp, false)
+		// Quoting any part of the word, not just the last one, makes
+		// the here-document body literal.
+		didUnquote = didUnquote || quoted
 	}
 	return buf, didUnquote
 }
