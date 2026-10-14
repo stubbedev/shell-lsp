@@ -286,7 +286,9 @@ func run(t *testing.T, shell string, args []string, script string) string {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, shell, append(args, script)...).Output()
+	cmd := exec.CommandContext(ctx, shell, append(args, script)...)
+	cmd.Env = append(os.Environ(), "LC_ALL=C.UTF-8")
+	out, err := cmd.Output()
 	if err != nil {
 		t.Fatalf("%s %q: %v", shell, script, err)
 	}

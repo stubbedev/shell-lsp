@@ -120,7 +120,9 @@ func TestForkRewritesMatchTheShells(t *testing.T) {
 				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 				defer cancel()
 				program := "x=" + shellQuote(value) + "\n" + strings.TrimPrefix(script, "#!/bin/zsh\n") + "printf '<%s>' \"$y\" \"$u\" \"$l\" \"$s\" \"$t\" \"$k\" \"$v\" \"$p\"\n"
-				out, err := exec.CommandContext(ctx, sh.name, append(sh.args, program)...).CombinedOutput()
+				cmd := exec.CommandContext(ctx, sh.name, append(sh.args, program)...)
+				cmd.Env = append(os.Environ(), "LC_ALL=C.UTF-8")
+				out, err := cmd.CombinedOutput()
 				if err != nil {
 					t.Fatalf("%s %q: %v\n%s", sh.name, program, err, out)
 				}
