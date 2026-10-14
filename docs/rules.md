@@ -503,7 +503,7 @@ the shell can do itself:
 | --- | --- | --- |
 | `$(basename "$f")` | `${f##*/}`; `${f:t}` in zsh | for a path that ends in `/`; in zsh only for `/` itself |
 | `$(dirname "$f")` | `${f:h}`, in zsh only | for a path that starts with `//` |
-| `$(pwd)` | `$PWD` | |
+| `$(pwd)` | `$PWD` | when the environment hands the shell a `PWD` spelled differently from the directory, as Git Bash on Windows can |
 | `$(echo "$x" \| tr a-z A-Z)` | `${x^^}`; `${(U)x}` in zsh | letters outside `a-z` are converted too |
 | `$(echo "$x" \| tr A-Z a-z)` | `${x,,}`; `${(L)x}` in zsh | letters outside `A-Z` are converted too |
 | `$(echo "$x" \| tr -d c)` | `${x//c}` | |

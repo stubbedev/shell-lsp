@@ -62,12 +62,22 @@ func (s Shell) RunEach(t *testing.T, scripts []string) []string {
 
 func Quote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
 
+func environment() []string {
+	var env []string
+	for _, kv := range os.Environ() {
+		if !strings.HasPrefix(kv, "PWD=") && !strings.HasPrefix(kv, "OLDPWD=") {
+			env = append(env, kv)
+		}
+	}
+	return env
+}
+
 func (s Shell) Run(t *testing.T, script string) string {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), runTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, s.Name, s.Args...) //nolint:gosec // the shells are fixed
-	cmd.Env = append(os.Environ(), "LC_ALL=C.UTF-8")
+	cmd.Env = append(environment(), "LC_ALL=C.UTF-8")
 	cmd.Stdin = strings.NewReader(script)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
