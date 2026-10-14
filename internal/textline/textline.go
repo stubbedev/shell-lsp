@@ -24,6 +24,12 @@ func Next(text string, offset int) int {
 	return min(End(text, offset)+1, len(text))
 }
 
+func Indent(text string, offset int) string {
+	start := Start(text, offset)
+	line := text[start:End(text, start)]
+	return line[:len(line)-len(strings.TrimLeft(line, " \t"))]
+}
+
 func BlankBefore(text string, offset int) bool {
 	return strings.TrimLeft(text[Start(text, offset):offset], " \t") == ""
 }

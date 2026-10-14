@@ -75,6 +75,15 @@ func (ix *Index) Visible(name string, scope ScopeID) Definitions {
 	return Definitions{all: ix.Definitions, positions: ix.definitionsByBinding[ix.visibleBinding(name, scope)]}
 }
 
+func (ix *Index) DefinitionBefore(name string, at int) (*Definition, bool) {
+	for def := range ix.Visible(name, ix.ScopeAt(at)).Backward() {
+		if def.Span.Start < at {
+			return def, true
+		}
+	}
+	return nil, false
+}
+
 func (ix *Index) VisibleAttrs(name string, scope ScopeID) Attr {
 	return ix.attrsByBinding[ix.visibleBinding(name, scope)]
 }

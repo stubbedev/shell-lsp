@@ -42,7 +42,7 @@ var controlFamily = family{
 
 func checkStatementLists(p *pass, n syntax.Node) {
 	for _, list := range stmtLists(n) {
-		if !p.options().errexit {
+		if !p.options().Errexit {
 			p.checkDirectoryRevert(list)
 		}
 		p.checkRepeatedAppends(list)
@@ -215,7 +215,7 @@ func (p *pass) lastPipe() bool {
 	if p.dialect.Features().LastPipeInShell {
 		return true
 	}
-	return p.options().lastpipe
+	return p.options().Lastpipe
 }
 
 var safeDirectory = regexp.MustCompile(`^/*((\.|\.\.)/+)*(\.|\.\.)?$`)
@@ -230,7 +230,7 @@ func checkUncheckedDirectoryChange(p *pass, call *syntax.CallExpr) {
 		return
 	}
 	stmt, ok := p.parent().(*syntax.Stmt)
-	if !ok || p.options().errexit || p.inCondition(stmt) {
+	if !ok || p.options().Errexit || p.inCondition(stmt) {
 		return
 	}
 	if name != "cd" && parseOptions(name, args).Has("-n") {

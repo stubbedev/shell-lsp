@@ -4,8 +4,8 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
-	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/shelloptions"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/internal/textline"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
@@ -18,9 +18,9 @@ func strictMode(s *site) (Change, bool) {
 	if !strings.HasPrefix(text, "#!") || s.Tree.Bats() {
 		return Change{}, false
 	}
-	have := lint.StrictModeOf(s.Tree)
-	missing := lint.StrictMode{Errexit: !have.Errexit, Nounset: !have.Nounset, Pipefail: !have.Pipefail && pipefailShells.Has(s.Tree.Dialect)}
-	if missing == (lint.StrictMode{}) {
+	have := shelloptions.StrictModeOf(s.Tree)
+	missing := shelloptions.StrictMode{Errexit: !have.Errexit, Nounset: !have.Nounset, Pipefail: !have.Pipefail && pipefailShells.Has(s.Tree.Dialect)}
+	if missing == (shelloptions.StrictMode{}) {
 		return Change{}, false
 	}
 	if c, ok := strictModeLine(s.Tree); ok {
@@ -45,7 +45,7 @@ func strictMode(s *site) (Change, bool) {
 	return Change{Title: "Add " + line, Edits: []textedit.Edit{{Start: at, End: at, NewText: insert}}}, true
 }
 
-func shortStrictFlags(m lint.StrictMode) string {
+func shortStrictFlags(m shelloptions.StrictMode) string {
 	flags := "-"
 	if m.Errexit {
 		flags += "e"
@@ -61,7 +61,7 @@ func shortStrictFlags(m lint.StrictMode) string {
 
 func strictModeLine(tree *parser.Tree) (parser.Command, bool) {
 	for _, c := range tree.Commands {
-		if c.Within != parser.FileScope || lint.StrictModeSetBy(c, tree.Dialect) == (lint.StrictMode{}) {
+		if c.Within != parser.FileScope || shelloptions.StrictModeSetBy(c.Name, c.Args, tree.Dialect) == (shelloptions.StrictMode{}) {
 			continue
 		}
 		for _, stmt := range tree.File.Stmts {
@@ -77,7 +77,7 @@ func strictModeLine(tree *parser.Tree) (parser.Command, bool) {
 	return parser.Command{}, false
 }
 
-func extendStrictMode(tree *parser.Tree, c parser.Command, missing lint.StrictMode) ([]textedit.Edit, bool) {
+func extendStrictMode(tree *parser.Tree, c parser.Command, missing shelloptions.StrictMode) ([]textedit.Edit, bool) {
 	switch c.Name {
 	case "set":
 		return extendSet(tree, c, missing)
@@ -87,7 +87,7 @@ func extendStrictMode(tree *parser.Tree, c parser.Command, missing lint.StrictMo
 	return nil, false
 }
 
-func extendSet(tree *parser.Tree, c parser.Command, missing lint.StrictMode) ([]textedit.Edit, bool) {
+func extendSet(tree *parser.Tree, c parser.Command, missing shelloptions.StrictMode) ([]textedit.Edit, bool) {
 	cluster := -1
 	optionName := false
 	for i, arg := range c.Args {
@@ -144,7 +144,7 @@ func extendSet(tree *parser.Tree, c parser.Command, missing lint.StrictMode) ([]
 	return edits, true
 }
 
-func extendSetopt(c parser.Command, missing lint.StrictMode) ([]textedit.Edit, bool) {
+func extendSetopt(c parser.Command, missing shelloptions.StrictMode) ([]textedit.Edit, bool) {
 	for _, arg := range c.Args {
 		if lit, ok := parser.Literal(arg); !ok || strings.HasPrefix(lit, "-") || strings.HasPrefix(lit, "+") {
 			return nil, false

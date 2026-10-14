@@ -181,14 +181,14 @@ func (p *pass) pipelineExitLost(stage *syntax.Stmt, depth int) bool {
 		return false
 	}
 	stages := pipelineStages(pipeline, nil)
-	if stages[len(stages)-1] != stage && !p.options().pipefail {
+	if stages[len(stages)-1] != stage && !p.options().Pipefail {
 		return true
 	}
 	return !p.statusChecked(pipeline, outer)
 }
 
 func (p *pass) statusChecked(stmt *syntax.Stmt, depth int) bool {
-	if stmt.Negated || p.options().errexit {
+	if stmt.Negated || p.options().Errexit {
 		return true
 	}
 	owner := p.ancestor(depth + 1)

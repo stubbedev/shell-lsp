@@ -6,6 +6,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/shelloptions"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
@@ -25,7 +26,7 @@ var errexitFamily = family{
 }
 
 func checkNegationUnderErrexit(p *pass, stmt *syntax.Stmt) {
-	if !stmt.Negated || !p.statusIgnored(stmt) || p.inCondition(stmt) || !p.options().errexit {
+	if !stmt.Negated || !p.statusIgnored(stmt) || p.inCondition(stmt) || !p.options().Errexit {
 		return
 	}
 	start := parser.Offset(stmt.Pos())
@@ -107,7 +108,7 @@ func checkSuppressedErrexit(p *pass, call *syntax.CallExpr) {
 	}
 	name := call.Args[0]
 	lit, ok := name.Parts[0].(*syntax.Lit)
-	if !ok || len(name.Parts) != 1 || !p.options().errexit {
+	if !ok || len(name.Parts) != 1 || !p.options().Errexit {
 		return
 	}
 	if _, defined := p.tree.FunctionNamed(lit.Value); !defined {
@@ -149,7 +150,7 @@ func (p *pass) errexitSuppression(owner, child syntax.Node) (string, bool) {
 }
 
 func (p *pass) losesErrexit(cs *syntax.CmdSubst) bool {
-	if cs.TempFile || cs.ReplyVar || p.options().inheritErrexit {
+	if cs.TempFile || cs.ReplyVar || p.options().InheritErrexit {
 		return false
 	}
 	switch p.dialect {
@@ -163,7 +164,7 @@ func (p *pass) losesErrexit(cs *syntax.CmdSubst) bool {
 			return false
 		}
 		c, ok := commandOf(call)
-		return ok && turnsOn(optionChanges(c.name, c.args, p.dialect), "errexit")
+		return ok && shelloptions.StrictModeSetBy(c.name, c.args, p.dialect).Errexit
 	})
 }
 
@@ -204,7 +205,7 @@ func (p *pass) maskedUnits(n syntax.Node) []syntax.Node {
 			return []syntax.Node{n.Word}
 		}
 	case *syntax.BinaryCmd:
-		if pipes(n.Op) && !p.options().pipefail && !p.insidePipeline() {
+		if pipes(n.Op) && !p.options().Pipefail && !p.insidePipeline() {
 			return allButLastWithCommand(pipelineStages(&syntax.Stmt{Cmd: n}, nil), func(s *syntax.Stmt) syntax.Node { return s })
 		}
 	case *syntax.CallExpr:

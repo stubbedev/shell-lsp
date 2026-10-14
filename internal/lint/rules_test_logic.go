@@ -2,7 +2,6 @@ package lint
 
 import (
 	"math"
-	"strconv"
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
@@ -363,10 +362,10 @@ func boundOf(expr syntax.ArithmExpr) (arithmeticBound, bool) {
 	}
 	op := cmp.Op
 	subject, isSubject := parser.ArithmeticName(cmp.X)
-	value, isConstant := arithmeticConstant(cmp.Y)
+	value, isConstant := parser.ArithmeticConstant(cmp.Y)
 	if !isSubject || !isConstant {
 		subject, isSubject = parser.ArithmeticName(cmp.Y)
-		value, isConstant = arithmeticConstant(cmp.X)
+		value, isConstant = parser.ArithmeticConstant(cmp.X)
 		op = mirroredComparison(op)
 	}
 	if !isSubject || !isConstant {
@@ -400,72 +399,6 @@ func mirroredComparison(op syntax.BinAritOperator) syntax.BinAritOperator {
 		return syntax.Leq
 	}
 	return op
-}
-
-func arithmeticConstant(expr syntax.ArithmExpr) (int64, bool) {
-	switch e := expr.(type) {
-	case *syntax.ParenArithm:
-		return arithmeticConstant(e.X)
-	case *syntax.UnaryArithm:
-		if e.Op != syntax.Minus || e.Post {
-			return 0, false
-		}
-		v, ok := arithmeticConstant(e.X)
-		return -v, ok
-	case *syntax.Word:
-		return arithmeticNumber(e.Lit())
-	}
-	return 0, false
-}
-
-func arithmeticNumber(s string) (int64, bool) {
-	base := 10
-	switch {
-	case strings.HasPrefix(s, "0x") || strings.HasPrefix(s, "0X"):
-		base, s = 16, s[2:]
-	case strings.Contains(s, "#"):
-		prefix, digits, _ := strings.Cut(s, "#")
-		b, err := strconv.Atoi(prefix)
-		if err != nil || b < 2 || b > 64 {
-			return 0, false
-		}
-		base, s = b, digits
-	case len(s) > 1 && s[0] == '0':
-		base, s = 8, s[1:]
-	}
-	if s == "" {
-		return 0, false
-	}
-	var v int64
-	for i := range len(s) {
-		d, ok := arithmeticDigit(s[i], base)
-		if !ok || v > (math.MaxInt64-d)/int64(base) {
-			return 0, false
-		}
-		v = v*int64(base) + d
-	}
-	return v, true
-}
-
-func arithmeticDigit(c byte, base int) (int64, bool) {
-	var d int64
-	switch {
-	case c >= '0' && c <= '9':
-		d = int64(c - '0')
-	case c >= 'a' && c <= 'z':
-		d = int64(c-'a') + 10
-	case c >= 'A' && c <= 'Z' && base > 36:
-		d = int64(c-'A') + 36
-	case c >= 'A' && c <= 'Z':
-		d = int64(c-'A') + 10
-	case c == '@':
-		d = 62
-	case c == '_':
-		d = 63
-	default:
-		return 0, false
-	}
-	return d, d < int64(base)
 }
 
 func checkTestRedirect(p *pass, _ command) {

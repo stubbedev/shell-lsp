@@ -8,6 +8,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/shelloptions"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -486,7 +487,7 @@ func runsLastPipeInShell(tree *parser.Tree) bool {
 	if tree.Dialect.Features().LastPipeInShell {
 		return true
 	}
-	return tree.Dialect == dialect.Bash && scanShellOptions(tree).lastpipe
+	return tree.Dialect == dialect.Bash && shelloptions.Scan(tree).Lastpipe
 }
 
 func (in *interpreter) entry() *state {

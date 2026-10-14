@@ -101,11 +101,11 @@ func (e pathEvaluator) variable(p *syntax.ParamExp, at, depth int) (string, bool
 	if p.Index != nil {
 		return "", false
 	}
-	defs := e.tree.Visible(name, e.tree.ScopeAt(at))
-	for def := range defs.Backward() {
-		if def.Span.Start < at && def.Value != nil {
-			return e.word(def.Value, def.Span.Start, depth+1)
+	if def, ok := e.tree.DefinitionBefore(name, at); ok {
+		if def.Value == nil {
+			return "", false
 		}
+		return e.word(def.Value, def.Span.Start, depth+1)
 	}
 	if name == "HOME" && e.env.Home != "" {
 		return e.env.Home, true

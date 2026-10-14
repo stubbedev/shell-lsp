@@ -19,3 +19,17 @@ func TestListJoinsTheLastItemWithTheConjunction(t *testing.T) {
 		}
 	}
 }
+
+func TestCodeFencesTextThatHoldsBackticks(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct{ in, want string }{
+		{in: "*.c", want: "`*.c`"},
+		{in: "a`b", want: "``a`b``"},
+		{in: "`x`", want: "`` `x` ``"},
+	} {
+		if got := Code(tc.in); got != tc.want {
+			t.Errorf("Code(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}

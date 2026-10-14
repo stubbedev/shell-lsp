@@ -8,6 +8,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/shelldocs"
+	"github.com/stubbedev/shell-lsp/internal/shelloptions"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -33,7 +34,7 @@ type pass struct {
 
 	rcFile         bool
 	shellChosen    bool
-	shellOptions   *shellOptions
+	shellOptions   *shelloptions.Options
 	variables      variableUsage
 	parameters     shelldocs.ParameterTable
 	dialectGuessed bool

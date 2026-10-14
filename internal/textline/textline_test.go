@@ -95,3 +95,15 @@ func TestBlankMeansWhatTheShellSkips(t *testing.T) {
 		t.Error("the carriage return of a CRLF line end is not blank after the code")
 	}
 }
+
+func TestIndentIsTheLeadingWhitespaceOfTheLine(t *testing.T) {
+	text := "a\n\t  b c\n"
+	for _, tc := range []struct {
+		offset int
+		want   string
+	}{{0, ""}, {6, "\t  "}, {2, "\t  "}} {
+		if got := Indent(text, tc.offset); got != tc.want {
+			t.Errorf("Indent(%d) = %q, want %q", tc.offset, got, tc.want)
+		}
+	}
+}

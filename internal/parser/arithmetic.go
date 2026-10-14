@@ -1,6 +1,8 @@
 package parser
 
 import (
+	"math"
+	"strconv"
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
@@ -59,4 +61,70 @@ func arithmeticReads(text string, base int) ([]NameRead, bool) {
 		return true
 	})
 	return reads, true
+}
+
+func ArithmeticConstant(expr syntax.ArithmExpr) (int64, bool) {
+	switch e := expr.(type) {
+	case *syntax.ParenArithm:
+		return ArithmeticConstant(e.X)
+	case *syntax.UnaryArithm:
+		if e.Op != syntax.Minus || e.Post {
+			return 0, false
+		}
+		v, ok := ArithmeticConstant(e.X)
+		return -v, ok
+	case *syntax.Word:
+		return arithmeticNumber(e.Lit())
+	}
+	return 0, false
+}
+
+func arithmeticNumber(s string) (int64, bool) {
+	base := 10
+	switch {
+	case strings.HasPrefix(s, "0x") || strings.HasPrefix(s, "0X"):
+		base, s = 16, s[2:]
+	case strings.Contains(s, "#"):
+		prefix, digits, _ := strings.Cut(s, "#")
+		b, err := strconv.Atoi(prefix)
+		if err != nil || b < 2 || b > 64 {
+			return 0, false
+		}
+		base, s = b, digits
+	case len(s) > 1 && s[0] == '0':
+		base, s = 8, s[1:]
+	}
+	if s == "" {
+		return 0, false
+	}
+	var v int64
+	for i := range len(s) {
+		d, ok := arithmeticDigit(s[i], base)
+		if !ok || v > (math.MaxInt64-d)/int64(base) {
+			return 0, false
+		}
+		v = v*int64(base) + d
+	}
+	return v, true
+}
+
+func arithmeticDigit(c byte, base int) (int64, bool) {
+	var d int64
+	switch {
+	case c >= '0' && c <= '9':
+		d = int64(c - '0')
+	case c >= 'a' && c <= 'z':
+		d = int64(c-'a') + 10
+	case c >= 'A' && c <= 'Z' && base > 36:
+		d = int64(c-'A') + 36
+	case c >= 'A' && c <= 'Z':
+		d = int64(c-'A') + 10
+	case c == '@':
+		d = 62
+	case c == '_':
+		d = 63
+	default:
+		return 0, false
+	}
+	return d, d < int64(base)
 }

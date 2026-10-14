@@ -217,7 +217,7 @@ func isCleanupStmt(stmt *syntax.Stmt) bool {
 }
 
 func (p *pass) honoursExecfail() bool {
-	return p.dialect == dialect.Bash && p.options().execfail
+	return p.dialect == dialect.Bash && p.options().Execfail
 }
 
 func checkEchoSubstitution(p *pass, cs *syntax.CmdSubst) {
