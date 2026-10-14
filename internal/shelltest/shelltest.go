@@ -25,9 +25,9 @@ func shell(name, version string, args ...string) Shell {
 }
 
 var (
-	Bash = shell("bash", "version 5.3", "--norc", "--noprofile", "-c")
-	Zsh  = shell("zsh", "zsh 5.9", "-f", "-c")
-	Ksh  = shell("ksh", "93u+m", "-c")
+	Bash = shell("bash", "version 5.3", "--norc", "--noprofile", "-s")
+	Zsh  = shell("zsh", "zsh 5.9", "-f", "-s")
+	Ksh  = shell("ksh", "93u+m", "-s")
 )
 
 func (s Shell) Require(t *testing.T) {
@@ -63,8 +63,9 @@ func (s Shell) Run(t *testing.T, script string) string {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, s.Name, append(s.Args, script)...) //nolint:gosec // the shells are fixed and the scripts are test cases
+	cmd := exec.CommandContext(ctx, s.Name, s.Args...) //nolint:gosec // the shells are fixed
 	cmd.Env = append(os.Environ(), "LC_ALL=C.UTF-8")
+	cmd.Stdin = strings.NewReader(script)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("%s %q: %v\n%s", s.Name, script, err, out)
