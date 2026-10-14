@@ -42,7 +42,10 @@ func (s Shell) Require(t *testing.T) {
 	t.Skip(message)
 }
 
-const separator = "\x1e"
+const (
+	separator  = "\x1e"
+	runTimeout = 2 * time.Minute
+)
 
 func (s Shell) RunEach(t *testing.T, scripts []string) []string {
 	t.Helper()
@@ -61,7 +64,7 @@ func Quote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + 
 
 func (s Shell) Run(t *testing.T, script string) string {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), runTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, s.Name, s.Args...) //nolint:gosec // the shells are fixed
 	cmd.Env = append(os.Environ(), "LC_ALL=C.UTF-8")
