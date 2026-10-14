@@ -51,6 +51,9 @@ func checkWorldWritable(p *pass, call *syntax.CallExpr) {
 }
 
 func modeChange(name string, args []*syntax.Word) (string, []*syntax.Word, bool) {
+	if name != "chmod" && name != "mkdir" && name != "install" {
+		return "", nil, false
+	}
 	parsed := parseOptions(name, args)
 	if !parsed.Complete {
 		return "", nil, false

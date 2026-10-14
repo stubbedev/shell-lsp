@@ -186,16 +186,22 @@ func capturesWhole(p glob.Pattern) bool { return p.SetsMatch }
 
 func checkUnsetCaptures(p *pass) {
 	names, ok := captureProducers[p.dialect]
-	if !ok || p.matchesRegex() {
+	if !ok {
+		return
+	}
+	var unset []parser.Reference
+	for _, ref := range p.tree.References {
+		if _, watched := names[ref.Name]; watched && !p.tree.Defines(ref.Name) {
+			unset = append(unset, ref)
+		}
+	}
+	if len(unset) == 0 || p.matchesRegex() {
 		return
 	}
 	reported := map[string]bool{}
-	for _, ref := range p.tree.References {
-		produced, watched := names[ref.Name]
-		if !watched || reported[ref.Name] || p.tree.Defines(ref.Name) {
-			continue
-		}
-		if produced != nil && slices.ContainsFunc(p.patternSites(), func(s glob.Site) bool { return produced(s.Pattern) }) {
+	for _, ref := range unset {
+		produced := names[ref.Name]
+		if reported[ref.Name] || produced != nil && slices.ContainsFunc(p.patternSites(), func(s glob.Site) bool { return produced(s.Pattern) }) {
 			continue
 		}
 		reported[ref.Name] = true
