@@ -230,7 +230,7 @@ func buildIndex(file *syntax.File, lang syntax.LangVariant, d dialect.Dialect, t
 		features:    d.Features(),
 		text:        text,
 		closedAtEnd: closedAtEnd,
-		index:       presized(previous),
+		index:       presized(previous, len(text)),
 		scopes:      []ScopeID{FileScope},
 		elseClauses: map[*syntax.IfClause]bool{},
 	}
@@ -244,9 +244,15 @@ func buildIndex(file *syntax.File, lang syntax.LangVariant, d dialect.Dialect, t
 	return b.index, b.errs
 }
 
-func presized(previous *Tree) Index {
+func presized(previous *Tree, size int) Index {
 	if previous == nil {
-		return Index{}
+		kb := size/1024 + 1
+		return Index{
+			Definitions: make([]Definition, 0, 11*kb),
+			References:  make([]Reference, 0, 18*kb),
+			Commands:    make([]Command, 0, 24*kb),
+			Keywords:    make([]Keyword, 0, 16*kb),
+		}
 	}
 	p := previous.Index
 	return Index{
