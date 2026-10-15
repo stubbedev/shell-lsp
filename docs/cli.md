@@ -27,7 +27,10 @@ on every file without one). Makefiles (`Makefile`, `makefile`, `GNUmakefile`,
 and Nix files (`*.nix`) are found too, and the shell in them is linted
 ([Shell in other files](../README.md#shell-in-other-files)); `-s` does not
 apply to them, since the file decides their shell. `.git`, `node_modules`,
-`vendor` and similar directories are skipped. A `-` reads the script from
+`vendor` and similar directories are skipped, and so is whatever git ignores:
+the `.gitignore` files from the repository's top down, and
+`.git/info/exclude`. A file named on the command line is linted even when it
+is ignored. A `-` reads the script from
 standard input. A file named more than once, directly or through a directory,
 is linted once.
 Files are linted in parallel, and the report is ordered by path, then by

@@ -190,18 +190,7 @@ func TestShellFilesCacheFollowsDirectoryChanges(t *testing.T) {
 	}
 	ws := New(func(string) (*File, bool) { return nil, false }, Detect)
 	ws.SetRoots([]string{root})
-	rel := func() []string {
-		paths, err := ws.ShellFiles(t.Context())
-		if err != nil {
-			t.Fatal(err)
-		}
-		out := make([]string, len(paths))
-		for i, p := range paths {
-			rel, _ := filepath.Rel(root, p)
-			out[i] = filepath.ToSlash(rel)
-		}
-		return out
-	}
+	rel := func() []string { return relShellFiles(t, ws, root) }
 	if got := rel(); len(got) != 3 || got[0] != "a.sh" || got[1] != "sub/.zshrc" || got[2] != "sub/deep/b.bash" {
 		t.Fatalf("ShellFiles = %v", got)
 	}
@@ -335,21 +324,13 @@ func TestMakefilesLoadAsTheShellOfTheirRecipes(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	for name, text := range map[string]string{
+	writeTree(t, root, map[string]string{
 		"Makefile":         "SHELL := bash\nall:\n\tgreet() { echo hi; }; greet\n",
 		"rules/common.mk":  "x:\n\techo x\n",
 		"Makefile.am":      "bin_PROGRAMS = x\n",
 		"scripts/run.sh":   "echo run\n",
 		"notes/README.txt": "text\n",
-	} {
-		path := filepath.Join(root, filepath.FromSlash(name))
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(path, []byte(text), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
+	})
 	ws := New(func(string) (*File, bool) { return nil, false }, func(string, dialect.Input) dialect.Detection {
 		t.Error("a Makefile asked for the dialect of a shell script")
 		return dialect.Detection{Dialect: dialect.Bash}
@@ -375,5 +356,118 @@ func TestMakefilesLoadAsTheShellOfTheirRecipes(t *testing.T) {
 	}
 	if globs := WatchGlobs(); !strings.Contains(globs[2], "{Makefile,makefile,GNUmakefile,") || !strings.Contains(globs[0], ",mk,mak") {
 		t.Errorf("watch globs = %v", globs)
+	}
+}
+
+func relShellFiles(t *testing.T, ws *Workspace, base string) []string {
+	t.Helper()
+	paths, err := ws.ShellFiles(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := make([]string, len(paths))
+	for i, p := range paths {
+		rel, err := filepath.Rel(base, p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out[i] = filepath.ToSlash(rel)
+	}
+	return out
+}
+
+func writeTree(t *testing.T, root string, files map[string]string) {
+	t.Helper()
+	for name, text := range files {
+		path := filepath.Join(root, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(text), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestShellFilesSkipWhatGitIgnores(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	writeTree(t, repo, map[string]string{
+		".git/info/exclude":        "/local.sh\n",
+		".gitignore":               ".devenv*\n**/target/**\n*.gen.sh\n!keep.gen.sh\n",
+		"a.sh":                     "",
+		"local.sh":                 "",
+		"x.gen.sh":                 "",
+		"keep.gen.sh":              "",
+		".devenv/shell-1.sh":       "",
+		"target/debug/build.sh":    "",
+		"lib/b.sh":                 "",
+		"lib/.gitignore":           "/private.sh\n!y.gen.sh\n",
+		"lib/private.sh":           "",
+		"lib/y.gen.sh":             "",
+		"lib/deep/private.sh":      "",
+		"lib/deep/target/inner.sh": "",
+	})
+	ws := New(func(string) (*File, bool) { return nil, false }, Detect)
+	ws.SetRoots([]string{repo})
+	want := []string{"a.sh", "keep.gen.sh", "lib/b.sh", "lib/deep/private.sh", "lib/y.gen.sh"}
+	if got := relShellFiles(t, ws, repo); !slices.Equal(got, want) {
+		t.Errorf("ShellFiles = %v, want %v", got, want)
+	}
+
+	ws.SetRoots([]string{filepath.Join(repo, "lib")})
+	want = []string{"lib/b.sh", "lib/deep/private.sh", "lib/y.gen.sh"}
+	if got := relShellFiles(t, ws, repo); !slices.Equal(got, want) {
+		t.Errorf("ShellFiles of a root inside the repository = %v, want %v", got, want)
+	}
+}
+
+func TestShellFilesFollowGitignoreEdits(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeTree(t, root, map[string]string{".gitignore": "", "a.sh": "", "b.sh": ""})
+	ws := New(func(string) (*File, bool) { return nil, false }, Detect)
+	ws.SetRoots([]string{root})
+	if got := relShellFiles(t, ws, root); !slices.Equal(got, []string{"a.sh", "b.sh"}) {
+		t.Fatalf("ShellFiles = %v", got)
+	}
+	ignore := filepath.Join(root, ".gitignore")
+	rewrite(t, ignore, "b.sh\n", time.Now().Add(time.Hour))
+	if got := relShellFiles(t, ws, root); !slices.Equal(got, []string{"a.sh"}) {
+		t.Errorf("ShellFiles after ignoring b.sh = %v", got)
+	}
+	if err := os.Remove(ignore); err != nil {
+		t.Fatal(err)
+	}
+	later := time.Now().Add(2 * time.Hour)
+	if err := os.Chtimes(root, later, later); err != nil {
+		t.Fatal(err)
+	}
+	if got := relShellFiles(t, ws, root); !slices.Equal(got, []string{"a.sh", "b.sh"}) {
+		t.Errorf("ShellFiles after deleting .gitignore = %v", got)
+	}
+	if len(ws.ignores) != 0 {
+		t.Errorf("cache kept the deleted rules: %v", ws.ignores)
+	}
+}
+
+func TestShellFilesReadTheExcludeFileOfALinkedWorktree(t *testing.T) {
+	t.Parallel()
+
+	base := t.TempDir()
+	writeTree(t, base, map[string]string{
+		"main/.git/info/exclude":           "excluded.sh\n",
+		"main/.git/worktrees/wt/commondir": "../..\n",
+		"wt/.git":                          "gitdir: ../main/.git/worktrees/wt\n",
+		"wt/a.sh":                          "",
+		"wt/excluded.sh":                   "",
+	})
+	worktree := filepath.Join(base, "wt")
+	ws := New(func(string) (*File, bool) { return nil, false }, Detect)
+	ws.SetRoots([]string{worktree})
+	if got := relShellFiles(t, ws, worktree); !slices.Equal(got, []string{"a.sh"}) {
+		t.Errorf("ShellFiles = %v, want [a.sh]", got)
 	}
 }

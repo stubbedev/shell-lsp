@@ -20,6 +20,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
+	"github.com/stubbedev/shell-lsp/internal/gitignore"
 	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/parallel"
 	"github.com/stubbedev/shell-lsp/internal/parser"
@@ -33,6 +34,7 @@ const (
 	maxFileSize  = 4 << 20
 	maxScanFiles = 20000
 	shebangProbe = 256
+	ignoreFile   = ".gitignore"
 )
 
 var shellExtensions = []string{".sh", ".bash", ".zsh", ".ksh", ".dash", ".bats"}
@@ -123,6 +125,7 @@ type Workspace struct {
 	roots      []string
 	files      map[string]diskEntry
 	dirs       map[string]dirListing
+	ignores    map[string]ignoreRules
 	missing    map[string]time.Time
 	generation atomic.Uint64
 	watched    atomic.Bool
@@ -149,7 +152,7 @@ func Detect(_ string, in dialect.Input) dialect.Detection {
 }
 
 func New(overlay Overlay, resolve func(path string, in dialect.Input) dialect.Detection) *Workspace {
-	return &Workspace{overlay: overlay, resolve: resolve, now: time.Now, files: map[string]diskEntry{}, dirs: map[string]dirListing{}, missing: map[string]time.Time{}}
+	return &Workspace{overlay: overlay, resolve: resolve, now: time.Now, files: map[string]diskEntry{}, dirs: map[string]dirListing{}, ignores: map[string]ignoreRules{}, missing: map[string]time.Time{}}
 }
 
 func (w *Workspace) SetRoots(roots []string) {
@@ -201,6 +204,7 @@ func (w *Workspace) InvalidateAll() {
 	defer w.mu.Unlock()
 	clear(w.files)
 	clear(w.dirs)
+	clear(w.ignores)
 	clear(w.missing)
 	w.generation.Add(1)
 }
@@ -314,9 +318,22 @@ func (w *Workspace) LoadAll(ctx context.Context, paths []string, workers int, re
 }
 
 type dirListing struct {
+	modTime    time.Time
+	files      []string
+	dirs       []string
+	ignoreFile bool
+}
+
+type ignoreRules struct {
+	size    int64
 	modTime time.Time
-	files   []string
-	dirs    []string
+	rules   gitignore.Rules
+}
+
+type pendingDir struct {
+	path    string
+	rel     string
+	ignores *gitignore.Stack
 }
 
 func (w *Workspace) ShellFiles(ctx context.Context) ([]string, error) {
@@ -330,27 +347,159 @@ func (w *Workspace) AllShellFiles(ctx context.Context) ([]string, error) {
 func (w *Workspace) scan(ctx context.Context, limit int) ([]string, error) {
 	var out []string
 	for _, root := range w.Roots() {
-		pending := []string{root}
+		rel, ignores, err := w.enclosingIgnores(root)
+		if err != nil {
+			return nil, fmt.Errorf("scanning workspace root %s: %w", root, err)
+		}
+		pending := []pendingDir{{path: root, rel: rel, ignores: ignores}}
 		for len(pending) > 0 && len(out) < limit {
 			if err := ctx.Err(); err != nil {
 				return nil, err
 			}
 			dir := pending[len(pending)-1]
 			pending = pending[:len(pending)-1]
-			listing, err := w.listDir(dir)
+			listing, err := w.listDir(dir.path)
 			if errors.Is(err, fs.ErrPermission) || errors.Is(err, fs.ErrNotExist) {
 				continue
 			}
 			if err != nil {
 				return nil, fmt.Errorf("scanning workspace root %s: %w", root, err)
 			}
-			out = append(out, listing.files...)
-			pending = append(pending, listing.dirs...)
+			ignores := dir.ignores
+			if listing.ignoreFile {
+				rules, err := w.ignoreRules(filepath.Join(dir.path, ignoreFile))
+				if err != nil {
+					return nil, fmt.Errorf("scanning workspace root %s: %w", root, err)
+				}
+				ignores = ignores.Push(dir.rel, rules)
+			}
+			for _, file := range listing.files {
+				if !ignores.Ignored(joinRel(dir.rel, filepath.Base(file)), false) {
+					out = append(out, file)
+				}
+			}
+			for _, sub := range listing.dirs {
+				if rel := joinRel(dir.rel, filepath.Base(sub)); !ignores.Ignored(rel, true) {
+					pending = append(pending, pendingDir{path: sub, rel: rel, ignores: ignores})
+				}
+			}
 		}
 	}
 	slices.Sort(out)
 	out = slices.Compact(out)
 	return out[:min(len(out), limit)], nil
+}
+
+func joinRel(rel, name string) string {
+	name = platform.Native.Fold(name)
+	if rel == "" {
+		return name
+	}
+	return rel + "/" + name
+}
+
+func (w *Workspace) enclosingIgnores(root string) (string, *gitignore.Stack, error) {
+	top, gitDir, found, err := repository(root)
+	if err != nil || !found {
+		return "", nil, err
+	}
+	exclude, err := w.ignoreRules(filepath.Join(gitDir, "info", "exclude"))
+	if err != nil {
+		return "", nil, err
+	}
+	ignores := (*gitignore.Stack)(nil).Push("", exclude)
+	below, _ := platform.RelativeWithin(top, root)
+	rel, dir := "", top
+	for name := range strings.SplitSeq(filepath.ToSlash(below), "/") {
+		if name == "." {
+			continue
+		}
+		rules, err := w.ignoreRules(filepath.Join(dir, ignoreFile))
+		if err != nil {
+			return "", nil, err
+		}
+		ignores = ignores.Push(rel, rules)
+		rel, dir = joinRel(rel, name), filepath.Join(dir, name)
+	}
+	return rel, ignores, nil
+}
+
+func repository(root string) (top, gitDir string, found bool, err error) {
+	for dir := root; ; {
+		dotGit := filepath.Join(dir, ".git")
+		info, err := os.Lstat(dotGit)
+		switch {
+		case err == nil && info.IsDir():
+			return dir, dotGit, true, nil
+		case err == nil:
+			gitDir, err := linkedGitDir(dir, dotGit)
+			return dir, gitDir, err == nil, err
+		case !errors.Is(err, fs.ErrNotExist) && !errors.Is(err, fs.ErrPermission):
+			return "", "", false, fmt.Errorf("looking for the git repository of %s: %w", root, err)
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", "", false, nil
+		}
+		dir = parent
+	}
+}
+
+func linkedGitDir(top, dotGit string) (string, error) {
+	raw, err := regularfile.ReadConfig(dotGit)
+	if err != nil {
+		return "", fmt.Errorf("reading %s: %w", dotGit, err)
+	}
+	gitDir, ok := strings.CutPrefix(strings.TrimSpace(string(raw)), "gitdir:")
+	if !ok {
+		return "", fmt.Errorf("%s does not name a git directory", dotGit)
+	}
+	gitDir = resolveFrom(top, strings.TrimSpace(gitDir))
+	common, err := regularfile.ReadConfig(filepath.Join(gitDir, "commondir"))
+	if errors.Is(err, fs.ErrNotExist) {
+		return gitDir, nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("reading the common directory of %s: %w", gitDir, err)
+	}
+	return resolveFrom(gitDir, strings.TrimSpace(string(common))), nil
+}
+
+func resolveFrom(dir, path string) string {
+	path = filepath.FromSlash(path)
+	if filepath.IsAbs(path) {
+		return path
+	}
+	return filepath.Join(dir, path)
+}
+
+func (w *Workspace) ignoreRules(path string) (gitignore.Rules, error) {
+	key := platform.Native.Fold(path)
+	info, err := regularfile.Stat(path)
+	if errors.Is(err, fs.ErrNotExist) || errors.Is(err, fs.ErrPermission) {
+		w.mu.Lock()
+		delete(w.ignores, key)
+		w.mu.Unlock()
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("reading ignore rules %s: %w", path, err)
+	}
+	w.mu.Lock()
+	cached, ok := w.ignores[key]
+	w.mu.Unlock()
+	if ok && cached.size == info.Size() && cached.modTime.Equal(info.ModTime()) {
+		return cached.rules, nil
+	}
+	raw, info, err := regularfile.ReadStat(path, info, maxFileSize)
+	if err != nil {
+		return nil, fmt.Errorf("reading ignore rules %s: %w", path, err)
+	}
+	rules := gitignore.Parse(platform.Native.Fold(string(raw)))
+	w.mu.Lock()
+	w.ignores[key] = ignoreRules{size: info.Size(), modTime: info.ModTime(), rules: rules}
+	w.mu.Unlock()
+	return rules, nil
 }
 
 func (w *Workspace) listDir(dir string) (dirListing, error) {
@@ -379,6 +528,8 @@ func (w *Workspace) listDir(dir string) (dirListing, error) {
 			if !skippedDirs[entry.Name()] {
 				listing.dirs = append(listing.dirs, path)
 			}
+		case entry.Name() == ignoreFile:
+			listing.ignoreFile = entry.Type().IsRegular()
 		case entry.Type().IsRegular() && isShellFile(path, entry):
 			listing.files = append(listing.files, path)
 		}
@@ -386,6 +537,9 @@ func (w *Workspace) listDir(dir string) (dirListing, error) {
 	w.mu.Lock()
 	if previous, ok := w.dirs[platform.Native.Fold(dir)]; ok {
 		w.forgetRemovedLocked(previous, listing)
+		if previous.ignoreFile && !listing.ignoreFile {
+			delete(w.ignores, platform.Native.Fold(filepath.Join(dir, ignoreFile)))
+		}
 	}
 	w.dirs[platform.Native.Fold(dir)] = listing
 	w.mu.Unlock()
@@ -414,6 +568,11 @@ func (w *Workspace) forgetTreeLocked(dir string) {
 	for key := range w.files {
 		if platform.Native.Within(key, dir) {
 			delete(w.files, key)
+		}
+	}
+	for key := range w.ignores {
+		if platform.Native.Within(key, dir) {
+			delete(w.ignores, key)
 		}
 	}
 }
