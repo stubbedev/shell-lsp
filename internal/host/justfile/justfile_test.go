@@ -36,9 +36,14 @@ func TestProjectText(t *testing.T) {
 			want:     "(\nset -euo pipefail\ncat <<EOF\nit's $$\nEOF\necho ''$$''\n)\n",
 		},
 		{
-			name:     "shebang recipes strip command sigils",
-			justfile: "x:\n    #!/usr/bin/env bash\n    @echo quiet\n    -echo ignored\n    -@echo either-order\n    @-echo either-order\n",
-			want:     "(\necho quiet\necho ignored\necho either-order\necho either-order\n)\n",
+			name:     "shebang recipes keep sigils as shell",
+			justfile: "x:\n    #!/usr/bin/env bash\n    @echo quiet\n    -echo ignored\n",
+			want:     "(\n@echo quiet\n-echo ignored\n)\n",
+		},
+		{
+			name:     "script attributes keep sigils as shell",
+			justfile: "[script]\nx:\n    @echo quiet\n",
+			want:     "(\n@echo quiet\n)\n",
 		},
 		{
 			name:     "a shebang recipe of only comments opens no empty subshell",
@@ -128,15 +133,6 @@ func TestProjectPositions(t *testing.T) {
 	}
 	if _, ok := m.Offset(projection.HostOffset(strings.Index(src, "@"))); ok {
 		t.Error("the @ sigil is shell")
-	}
-
-	script := "x:\n    #!/usr/bin/env bash\n    @echo quiet\n"
-	m, _ = Project(script)
-	if _, ok := m.Offset(projection.HostOffset(strings.Index(script, "@"))); ok {
-		t.Error("the @ sigil in a shebang recipe is shell")
-	}
-	if got, want := m.HostOffset(projection.ProjOffset(strings.Index(m.Text(), "echo"))), projection.HostOffset(strings.Index(script, "echo")); got != want {
-		t.Errorf("HostOffset of echo = %d, want %d", got, want)
 	}
 }
 
