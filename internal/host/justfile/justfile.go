@@ -385,8 +385,8 @@ func (p *parser) project(b *projection.Builder, s script) {
 	if s.whole {
 		lines := make([]projection.RecipeLine, len(s.lines))
 		for i, l := range s.lines {
-			start := p.start(l, s.recipe.indent)
-			lines[i] = projection.RecipeLine{Start: l.start, Command: start, End: l.end, Comment: start < l.end && p.text[start] == '#'}
+			command := p.commandStart(l, s.recipe.indent)
+			lines[i] = projection.RecipeLine{Start: l.start, Command: command, End: l.end, Comment: command < l.end && p.text[command] == '#'}
 		}
 		b.OneShell(prelude, lines, func(l projection.RecipeLine) { p.fragment(b, l.Command, l.End) })
 		return
@@ -412,13 +412,18 @@ func (p *parser) start(l line, indent string) int {
 	return l.start + min(len(indent), len(content)-len(strings.TrimLeft(content, " \t")))
 }
 
-func (p *parser) logicalLine(b *projection.Builder, shells *projection.LineShells, s script, lines []line) {
-	first, last := lines[0], lines[len(lines)-1]
-	start := p.start(first, s.recipe.indent)
+func (p *parser) commandStart(l line, indent string) int {
+	start := p.start(l, indent)
 	command := start
-	for command < first.end && command-start < len(sigils) && strings.IndexByte(sigils, p.text[command]) >= 0 {
+	for command < l.end && command-start < len(sigils) && strings.IndexByte(sigils, p.text[command]) >= 0 {
 		command++
 	}
+	return command
+}
+
+func (p *parser) logicalLine(b *projection.Builder, shells *projection.LineShells, s script, lines []line) {
+	first, last := lines[0], lines[len(lines)-1]
+	command := p.commandStart(first, s.recipe.indent)
 	comment := len(lines) == 1 && command < first.end && p.text[command] == '#'
 	shells.Add(projection.RecipeLine{Start: first.start, Command: command, End: last.end, Comment: comment}, func(projection.RecipeLine) {
 		from := command
