@@ -466,9 +466,10 @@ find them by name.
 
 ### Makefiles
 
-A document is a Makefile when its language identifier is `makefile` or
-`make`, or, without one, when it is named `Makefile`, `makefile` or
-`GNUmakefile` or ends in `.mk` or `.mak`.
+A document is a Makefile when it is named `Makefile`, `makefile` or
+`GNUmakefile` or ends in `.mk` or `.mak`, whatever language identifier the
+editor gives it, or else when its language identifier is `makefile` or
+`make`.
 
 - The recipes are the shell: the lines that start with the recipe prefix
   (a tab, or `.RECIPEPREFIX`) after a rule, and the recipe after `;` on the
@@ -494,9 +495,9 @@ A document is a Makefile when its language identifier is `makefile` or
 
 ### justfiles
 
-A document is a justfile when its language identifier is `just`, or, without
-one, when it is named `justfile`, `Justfile`, `JUSTFILE` or `.justfile`, or
-ends in `.just`.
+A document is a justfile when it is named `justfile`, `Justfile`, `JUSTFILE`
+or `.justfile` or ends in `.just`, whatever language identifier the editor
+gives it, or else when its language identifier is `just`.
 
 - The recipe bodies are the shell. The settings, variables, aliases,
   attributes and recipe headers around them are not.
@@ -522,8 +523,9 @@ ends in `.just`.
 
 ### Nix files
 
-A document is a Nix file when its language identifier is `nix`, or, without
-one, when it ends in `.nix`. A string literal there is shell when:
+A document is a Nix file when it ends in `.nix`, whatever language
+identifier the editor gives it, or else when its language identifier is
+`nix`. A string literal there is shell when:
 
 - it is a derivation phase or hook (`buildPhase`, `installPhase`,
   `preConfigure`, `postInstall` and the other `pre`/`post` hooks,

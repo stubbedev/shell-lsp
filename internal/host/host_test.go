@@ -19,7 +19,11 @@ func TestOf(t *testing.T) {
 	}{
 		{"file:///w/Makefile", "makefile", Make, true},
 		{"file:///w/rules", "make", Make, true},
-		{"file:///w/Makefile", "shellscript", 0, false},
+		{"file:///w/Makefile", "shellscript", Make, true},
+		{"file:///w/justfile", "shellscript", Just, true},
+		{"file:///w/flake.nix", "shellscript", Nix, true},
+		{"file:///w/run.sh", "shellscript", 0, false},
+		{"file:///w/rules", "shellscript", 0, false},
 		{"file:///w/Makefile", "", Make, true},
 		{"file:///w/GNUmakefile", "", Make, true},
 		{"file:///w/build/common.mk", "", Make, true},

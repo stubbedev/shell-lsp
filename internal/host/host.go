@@ -66,10 +66,10 @@ func find(match func(definition) bool) (Language, bool) {
 }
 
 func Of(uri, languageID string) (Language, bool) {
-	if languageID != "" {
-		return find(func(d definition) bool { return slices.Contains(d.languageIDs, languageID) })
+	if l, ok := FromName(uri); ok {
+		return l, true
 	}
-	return FromName(uri)
+	return find(func(d definition) bool { return slices.Contains(d.languageIDs, languageID) })
 }
 
 func FromName(name string) (Language, bool) {

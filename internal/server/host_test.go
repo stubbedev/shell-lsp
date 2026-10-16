@@ -346,3 +346,21 @@ func TestNixShellStringsLintInPlace(t *testing.T) {
 		t.Errorf("hover on ${src} = %s, want null", hover.Result)
 	}
 }
+
+func TestHostFilesOpenedAsShellscriptAreStillProjected(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		uri, text string
+		want      []string
+	}{
+		{"file:///w/justfile", "db := env('DB', 'x')\n\n[private]\nx:\n    echo $1\n", []string{"SC2086"}},
+		{makefileURI, strings.Join(makefileLines, "\n") + "\n", []string{"SC2005", "SC2006", "SC2034", "SC2046", "SC2086", "SC2154"}},
+	} {
+		c, _ := startClient(t, `{`+pullCapabilities+`}`)
+		c.notify("textDocument/didOpen", openLanguageParams(tt.uri, "shellscript", tt.text))
+		if got := codes(pullDiagnostics(t, c, tt.uri)); !slices.Equal(got, tt.want) {
+			t.Errorf("%s opened as shellscript: diagnostics = %v, want %v", tt.uri, got, tt.want)
+		}
+	}
+}
