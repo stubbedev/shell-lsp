@@ -45,7 +45,7 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": "limited",
-      "description": "Running Bats tests is disabled in Restricted Mode because it executes code from the workspace."
+      "description": "Running Bats tests, recipes and targets is disabled in Restricted Mode because it executes code from the workspace."
     }
   },
   "contributes": {
@@ -253,6 +253,32 @@
             "default": false,
             "scope": "resource",
             "markdownDescription": "Minify the script (like `shfmt -mn`)."
+          }
+        }
+      }
+    ],
+    "taskDefinitions": [
+      {
+        "type": "shell-lsp",
+        "required": [
+          "file",
+          "recipe"
+        ],
+        "properties": {
+          "file": {
+            "type": "string",
+            "description": "The justfile or Makefile that defines the recipe or target."
+          },
+          "recipe": {
+            "type": "string",
+            "description": "The recipe or target to run."
+          },
+          "arguments": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Arguments for the recipe's parameters."
           }
         }
       }

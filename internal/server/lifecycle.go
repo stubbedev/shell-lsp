@@ -81,6 +81,11 @@ type ClientCapabilities struct {
 			DynamicRegistration bool `json:"dynamicRegistration"`
 		} `json:"didChangeWatchedFiles"`
 	} `json:"workspace"`
+	Experimental struct {
+		ShellLsp struct {
+			PromptsForArguments bool `json:"promptsForArguments"`
+		} `json:"shellLsp"`
+	} `json:"experimental"`
 }
 
 type CancelParams struct {

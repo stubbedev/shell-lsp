@@ -53,7 +53,7 @@ func (s *Server) handleCodeLens(_ context.Context, docs *docstore.View, p lsp.Co
 		return nil, err
 	}
 	if file.Native != nil {
-		if out, err = appendRunLenses(out, file, docs.Encoding()); err != nil {
+		if out, err = appendRunLenses(out, file, docs.Encoding(), s.clientCapabilities().Experimental.ShellLsp.PromptsForArguments); err != nil {
 			return nil, err
 		}
 		source := sourcePositions(file, docs.Encoding())
@@ -73,14 +73,23 @@ func (s *Server) handleCodeLens(_ context.Context, docs *docstore.View, p lsp.Co
 	return out, nil
 }
 
-func appendRunLenses(out []lsp.CodeLens, file *workspace.File, enc docstore.Encoding) ([]lsp.CodeLens, error) {
+func appendRunLenses(out []lsp.CodeLens, file *workspace.File, enc docstore.Encoding, prompts bool) ([]lsp.CodeLens, error) {
 	at := sourcePositions(file, enc)
 	for _, r := range file.Native.Index.Runnables {
-		raw, err := json.Marshal(recipeRunArgs{URI: file.URI, Name: r.Name})
+		args, title := recipeRunArgs{URI: file.URI, Name: r.Name}, "▶ Run"
+		if len(r.Params) > 0 {
+			if !prompts && r.Required() > 0 {
+				continue
+			}
+			if prompts {
+				args.Parameters, title = r.Params, "▶ Run…"
+			}
+		}
+		raw, err := json.Marshal(args)
 		if err != nil {
 			return nil, fmt.Errorf("encoding %s arguments for %s: %w", commandRunRecipe, file.URI, err)
 		}
-		out = append(out, lsp.CodeLens{Range: at.Range(r.Span), Command: &lsp.Command{Title: "▶ Run", Command: commandRunRecipe, Arguments: []json.RawMessage{raw}}})
+		out = append(out, lsp.CodeLens{Range: at.Range(r.Span), Command: &lsp.Command{Title: title, Command: commandRunRecipe, Arguments: []json.RawMessage{raw}}})
 	}
 	return out, nil
 }

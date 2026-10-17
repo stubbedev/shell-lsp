@@ -6,6 +6,8 @@ import {
   Location,
   MarkdownString,
   Position,
+  ProcessExecution,
+  tasks,
   window,
   workspace,
   WorkspaceEdit,
@@ -151,6 +153,17 @@ async function leavesTheHostShellToTheHost(folder: WorkspaceFolder): Promise<voi
   assert.equal(document.getText(), "SHELL := /bin/bash\n\nall:\n\techo hi\n");
 }
 
+async function listsRecipesAsTasks(): Promise<void> {
+  const found = await waitFor(
+    "the Makefile's all target as a task",
+    () => tasks.fetchTasks({ type: "shell-lsp" }),
+    (list) => list.some((task) => task.name === "all" && task.source === "make"),
+  );
+  const all = found.find((task) => task.name === "all");
+  assert.ok(all?.execution instanceof ProcessExecution);
+  assert.deepEqual([all.execution.process, ...all.execution.args.slice(-1)], ["make", "all"]);
+}
+
 function fileIn(folder: WorkspaceFolder, name: string): Uri {
   return folder.uri.with({ path: `${folder.uri.path}/${name}` });
 }
@@ -174,4 +187,5 @@ export async function run(): Promise<void> {
   await formatsWithEditorconfig(folder);
   await setsTheShell(folder);
   await leavesTheHostShellToTheHost(folder);
+  await listsRecipesAsTasks();
 }

@@ -304,15 +304,13 @@ func (in *indexer) recipe(r *Recipe, positional bool) {
 			in.expr(a, scope, i, false)
 		}
 	}
+	in.ix.Runnables = append(in.ix.Runnables, in.runnable(r))
 	if len(r.Body) == 0 {
 		return
 	}
 	body := Span{Start: r.Body[0].Span.Start, End: r.Span.End}
 	in.ix.Shells = append(in.ix.Shells, model.Shell{Span: body, Scope: scope})
 	in.ix.Folds = append(in.ix.Folds, model.Fold{Span: r.Span})
-	if a := r.Arity(); a.Min == 0 {
-		in.ix.Runnables = append(in.ix.Runnables, model.Runnable{Name: r.Name.Text, Span: r.Name.Span})
-	}
 	sigils := in.f.Sigils()
 	for _, l := range r.Body {
 		end := l.Sigils.Start
@@ -330,6 +328,18 @@ func (in *indexer) recipe(r *Recipe, positional bool) {
 			in.expr(frag.Interp, scope, i, false)
 		}
 	}
+}
+
+func (in *indexer) runnable(r *Recipe) model.Runnable {
+	run := model.Runnable{Name: r.Name.Text, Span: r.Name.Span}
+	for _, p := range r.Params {
+		param := model.RunParam{Name: p.Name.Text, Optional: p.Default != nil || p.Variadic == Star, Variadic: p.Variadic != Singular}
+		if p.Default != nil {
+			param.Default = in.text(p.Default.Span)
+		}
+		run.Params = append(run.Params, param)
+	}
+	return run
 }
 
 func recipeDoc(r *Recipe) string {

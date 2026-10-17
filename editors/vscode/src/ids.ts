@@ -13,6 +13,7 @@ export const serverCommands = {
   showReferences: "shellLsp.showReferences",
   runBats: "shellLsp.runBats",
   runRecipe: "shellLsp.runRecipe",
+  listRecipes: "shellLsp.listRecipes",
 } as const;
 
 export type ClientCommand = (typeof clientCommands)[keyof typeof clientCommands];

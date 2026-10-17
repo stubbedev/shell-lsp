@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
+	"github.com/stubbedev/shell-lsp/internal/host/model"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 )
 
@@ -290,8 +291,47 @@ func TestRecipeRunLenses(t *testing.T) {
 		}
 	}
 	bad := p.c.call("workspace/executeCommand", `{"command": "`+commandRunRecipe+`", "arguments": [{"uri": "`+p.uri("justfile")+`", "name": "with-arg"}]}`)
-	if bad.Error == nil || !strings.Contains(bad.Error.Message, "runs without arguments") {
+	if bad.Error == nil || !strings.Contains(bad.Error.Message, `"with-arg" takes 1 argument, not 0`) {
 		t.Errorf("running a recipe that needs an argument = %+v", bad)
+	}
+	if _, err := exec.LookPath("just"); err == nil {
+		result := decodeResult[recipeRunResult](t, p.c.call("workspace/executeCommand", `{"command": "`+commandRunRecipe+`", "arguments": [{"uri": "`+p.uri("justfile")+`", "name": "with-arg", "arguments": ["world"]}]}`))
+		if result.ExitCode != 0 || !strings.Contains(result.Output, "world") {
+			t.Errorf("running with-arg world = %+v", result)
+		}
+	}
+}
+
+func TestRecipeRunLensesPromptForArguments(t *testing.T) {
+	t.Parallel()
+
+	files := map[string]string{"justfile": "greet:\n    echo hi\n\nwith-arg name level=\"1\" *rest:\n    echo {{name}}\n"}
+	caps := `"capabilities": {"experimental": {"shellLsp": {"promptsForArguments": true}}}`
+	p := openNativeProject(t, caps, files, "justfile")
+	lenses := decodeResult[[]lsp.CodeLens](t, p.c.call("textDocument/codeLens", `{"textDocument": {"uri": "`+p.uri("justfile")+`"}}`))
+	var titles []string
+	var prompted recipeRunArgs
+	for _, l := range lenses {
+		if l.Command == nil || l.Command.Command != commandRunRecipe {
+			continue
+		}
+		titles = append(titles, l.Command.Title)
+		if l.Command.Title == "▶ Run…" {
+			if err := json.Unmarshal(l.Command.Arguments[0], &prompted); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if !slices.Equal(titles, []string{"▶ Run", "▶ Run…"}) {
+		t.Fatalf("run lens titles = %q", titles)
+	}
+	want := []model.RunParam{{Name: "name"}, {Name: "level", Default: `"1"`, Optional: true}, {Name: "rest", Optional: true, Variadic: true}}
+	if prompted.Name != "with-arg" || !slices.Equal(prompted.Parameters, want) {
+		t.Errorf("prompted lens arguments = %+v", prompted)
+	}
+	listing := decodeResult[[]recipeListing](t, p.c.call("workspace/executeCommand", `{"command": "`+commandListRecipes+`"}`))
+	if len(listing) != 2 || listing[1].Name != "with-arg" || listing[1].Tool != "just" || listing[1].Argv[len(listing[1].Argv)-1] != "with-arg" || !slices.Equal(listing[1].Parameters, want) {
+		t.Errorf("listed recipes = %+v", listing)
 	}
 }
 

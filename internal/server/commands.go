@@ -20,6 +20,7 @@ const (
 	commandShowReferences = "shellLsp.showReferences"
 	commandRunBats        = "shellLsp.runBats"
 	commandRunRecipe      = "shellLsp.runRecipe"
+	commandListRecipes    = "shellLsp.listRecipes"
 )
 
 type commandRunner func(s *Server, ctx context.Context, docs *docstore.View, args []json.RawMessage) (any, error)
@@ -35,7 +36,8 @@ var commands = []command{
 	{commandApplyEdit, "one WorkspaceEdit", oneArg((*Server).applyEditCommand)},
 	{commandShowReferences, "one {uri, position}", oneArg((*Server).showReferences)},
 	{commandRunBats, "one {uri, test?}", oneArg((*Server).runBatsCommand)},
-	{commandRunRecipe, "one {uri, name}", oneArg((*Server).runRecipeCommand)},
+	{commandRunRecipe, "one {uri, name, arguments?}", oneArg((*Server).runRecipeCommand)},
+	{commandListRecipes, "no arguments", noArgs((*Server).listRecipesCommand)},
 }
 
 var serverCommands = func() []string {
@@ -53,6 +55,15 @@ type argumentError struct {
 func (e *argumentError) Error() string { return e.err.Error() }
 
 func (e *argumentError) Unwrap() error { return e.err }
+
+func noArgs(run func(*Server, context.Context, *docstore.View) (any, error)) commandRunner {
+	return func(s *Server, ctx context.Context, docs *docstore.View, args []json.RawMessage) (any, error) {
+		if len(args) != 0 {
+			return nil, &argumentError{fmt.Errorf("got %d arguments", len(args))}
+		}
+		return run(s, ctx, docs)
+	}
+}
 
 func oneArg[A any](run func(*Server, context.Context, *docstore.View, A) (any, error)) commandRunner {
 	return func(s *Server, ctx context.Context, docs *docstore.View, args []json.RawMessage) (any, error) {

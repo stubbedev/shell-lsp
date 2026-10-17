@@ -583,7 +583,11 @@ for these files.
   shell of a recipe.
 - **Run lenses.** A recipe or target that runs without arguments gets a
   "▶ Run" lens; it runs `just` or `make` for that file, reports the exit
-  status and logs the output.
+  status and logs the output. A client that declares the experimental
+  capability `shellLsp.promptsForArguments` also gets a "▶ Run…" lens on
+  recipes with required parameters, listing them so it can ask for values;
+  the VS Code extension does, and also offers every recipe and target that
+  runs without arguments as a task.
 - **Formatting.** Justfiles are formatted the way `just --fmt` formats them,
   checked against just itself. When `just --fmt` would drop a comment, such as
   one after a recipe header, formatting stops and says which line to move
@@ -641,6 +645,8 @@ code would show it, and may be reported as a syntax error.
 | `shellLsp.applyEdit` | `WorkspaceEdit` | Applies the edit via `workspace/applyEdit`; code actions use it for clients without code action literal support |
 | `shellLsp.showReferences` | `{uri, position}` | Returns the reference locations a reference-count code lens stands for |
 | `shellLsp.runBats` | `{uri, test?}` | Runs the Bats file, or only the named test, and reports the results; an error for a document that is not a Bats file |
+| `shellLsp.runRecipe` | `{uri, name, arguments?}` | Runs the justfile recipe or Makefile target with the given arguments, reports the exit status and returns `{exitCode, output, truncated}`; an error when the arguments do not fit its parameters |
+| `shellLsp.listRecipes` | none | Lists every recipe and target in the workspace as `{uri, path, name, tool, argv, cwd, parameters}`, where `argv` runs it |
 
 ## Bats
 

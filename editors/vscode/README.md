@@ -95,6 +95,21 @@ restarts the server.
   recipe's shebang in a justfile, the writer or a `/* bash */` comment in
   Nix), so the command explains that instead of offering shells.
 
+## Recipes and targets
+
+Justfile recipes and Makefile targets get a "▶ Run" lens, or "▶ Run…" when
+the recipe has parameters to fill in: the extension asks for each one, shows
+its default, and splits a variadic parameter's answer at spaces. Every recipe
+and target that runs without arguments is also a task (**Tasks: Run Task**,
+type `shell-lsp`); a task in `tasks.json` names the file relative to the
+workspace folder, or absolutely, and can pass arguments:
+
+```json
+{ "type": "shell-lsp", "file": "justfile", "recipe": "deploy", "arguments": ["staging"] }
+```
+
+Running recipes executes workspace code, so it is disabled in Restricted Mode.
+
 ## Known limitations
 
 VS Code also files `.fish` and `.csh` scripts under Shell Script; shell-lsp

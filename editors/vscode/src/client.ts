@@ -2,6 +2,7 @@ import { workspace, type LogOutputChannel, type Uri } from "vscode";
 import { LanguageClient, ResponseError, type LanguageClientOptions } from "vscode-languageclient/node";
 import { executeCommandMiddleware } from "./commands.ts";
 import { documentSelector } from "./documents.ts";
+import { isFields } from "./fields.ts";
 import { displayName } from "./ids.ts";
 import { explicitSettings, section } from "./settings.ts";
 
@@ -37,5 +38,14 @@ export function createClient(command: string, output: LogOutputChannel, settingK
     },
   };
   const client = new LanguageClient(section, displayName, { command }, options);
+  client.registerFeature({
+    fillClientCapabilities(capabilities) {
+      const experimental: unknown = capabilities.experimental;
+      capabilities.experimental = { ...(isFields(experimental) ? experimental : {}), shellLsp: { promptsForArguments: true } };
+    },
+    initialize: () => undefined,
+    getState: () => ({ kind: "static" }),
+    clear: () => undefined,
+  });
   return client;
 }

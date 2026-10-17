@@ -318,8 +318,20 @@ func (s *Server) nativeFindings(h hostnav.Host, settings config.Settings) []lint
 const recipeTimeout = 30 * time.Minute
 
 type recipeRunArgs struct {
-	URI  string `json:"uri"`
-	Name string `json:"name"`
+	URI        string           `json:"uri"`
+	Name       string           `json:"name"`
+	Arguments  []string         `json:"arguments,omitempty"`
+	Parameters []model.RunParam `json:"parameters,omitempty"`
+}
+
+type recipeListing struct {
+	URI        string           `json:"uri"`
+	Path       string           `json:"path"`
+	Name       string           `json:"name"`
+	Tool       string           `json:"tool"`
+	Argv       []string         `json:"argv"`
+	Cwd        string           `json:"cwd"`
+	Parameters []model.RunParam `json:"parameters"`
 }
 
 type recipeRunResult struct {
@@ -342,10 +354,14 @@ func (s *Server) runRecipeCommand(ctx context.Context, docs *docstore.View, args
 	if !file.Doc.Local {
 		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%s: %s is not a file on disk", commandRunRecipe, args.URI)
 	}
-	if !slices.ContainsFunc(file.Native.Index.Runnables, func(r model.Runnable) bool { return r.Name == args.Name }) {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%s: %s has no %q that runs without arguments", commandRunRecipe, args.URI, args.Name)
+	i := slices.IndexFunc(file.Native.Index.Runnables, func(r model.Runnable) bool { return r.Name == args.Name })
+	if i < 0 {
+		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%s: %s has no %q to run", commandRunRecipe, args.URI, args.Name)
 	}
-	argv := file.Native.Language.Invocation(file.Doc.Path, args.Name)
+	if run := file.Native.Index.Runnables[i]; !run.Accepts(len(args.Arguments)) {
+		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%s: %q takes %s, not %d", commandRunRecipe, args.Name, run.Arity(), len(args.Arguments))
+	}
+	argv := append(file.Native.Language.Invocation(file.Doc.Path, args.Name), args.Arguments...)
 	label := argv[0] + " " + args.Name
 	ctx, cancel := context.WithTimeout(ctx, recipeTimeout)
 	defer cancel()
@@ -482,6 +498,28 @@ func (s *Server) nativeFixes(ctx context.Context, docs *docstore.View, h hostnav
 		}
 		action.Edit = &edit
 		out = append(out, action)
+	}
+	return out, nil
+}
+
+func (s *Server) listRecipesCommand(ctx context.Context, docs *docstore.View) (any, error) {
+	out := []recipeListing{}
+	for _, language := range []host.Language{host.Just, host.Make} {
+		files, err := s.hostFiles(docs, language)(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for _, f := range files {
+			if !f.Doc.Local {
+				continue
+			}
+			for _, r := range f.Native.Index.Runnables {
+				out = append(out, recipeListing{
+					URI: f.URI, Path: f.Path, Name: r.Name, Tool: language.Recursion().Command,
+					Argv: language.Invocation(f.Path, r.Name), Cwd: filepath.Dir(f.Path), Parameters: r.Params,
+				})
+			}
+		}
 	}
 	return out, nil
 }

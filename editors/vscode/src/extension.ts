@@ -1,8 +1,9 @@
-import { commands, window, workspace, type ExtensionContext } from "vscode";
+import { commands, tasks, window, workspace, type ExtensionContext } from "vscode";
 import { DialectStatus } from "./dialectStatus.ts";
 import { clientCommands, displayName } from "./ids.ts";
 import { Session } from "./session.ts";
 import { pathSetting } from "./settings.ts";
+import { RecipeTasks, taskType } from "./tasks.ts";
 
 let session: Session | undefined;
 
@@ -21,6 +22,7 @@ export async function activate(context: ExtensionContext): Promise<void> {
       output.show();
     }),
     commands.registerCommand(clientCommands.chooseShell, (...args: unknown[]) => status.choose(args)),
+    tasks.registerTaskProvider(taskType, new RecipeTasks(() => current.runningClient())),
     workspace.onDidChangeConfiguration((change) => {
       if (change.affectsConfiguration(pathSetting)) {
         void current.restart();

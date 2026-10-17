@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Runs justfile recipes that take parameters: their "▶ Run…" lens asks for
+  each argument. Every recipe and Makefile target that runs without arguments
+  is a `shell-lsp` task, and a task in `tasks.json` can pass arguments.
 - Shows when `shell=` in a `.shellcheckrc` decides the shell, and explains in
   Choose the Shell to Lint As that a directive takes effect only once that
   setting is removed.

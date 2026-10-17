@@ -168,9 +168,37 @@ type Fold struct {
 }
 
 type Runnable struct {
-	Name string
-	Span Span
+	Name   string
+	Span   Span
+	Params []RunParam
 }
+
+type RunParam struct {
+	Name     string `json:"name"`
+	Default  string `json:"default,omitempty"`
+	Optional bool   `json:"optional"`
+	Variadic bool   `json:"variadic"`
+}
+
+func (r Runnable) Required() int {
+	n := 0
+	for _, p := range r.Params {
+		if !p.Optional {
+			n++
+		}
+	}
+	return n
+}
+
+func (r Runnable) Arity() Arity {
+	a := Arity{Min: r.Required(), Max: len(r.Params)}
+	if len(r.Params) > 0 && r.Params[len(r.Params)-1].Variadic {
+		a.Max = Variadic
+	}
+	return a
+}
+
+func (r Runnable) Accepts(args int) bool { return r.Arity().Accepts(args) }
 
 type Deferred struct {
 	Symbol  int
