@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -30,6 +31,28 @@ func justDump(t *testing.T, path string) []byte {
 	return out
 }
 
+func justDumpOf(t *testing.T, path string) map[string]any {
+	t.Helper()
+	var raw map[string]any
+	if err := json.Unmarshal(justDump(t, path), &raw); err != nil {
+		t.Fatal(err)
+	}
+	return normalizeDump(raw)
+}
+
+func ourDump(t *testing.T, f *File) any {
+	t.Helper()
+	encoded, err := json.Marshal(dump(f))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out any
+	if err := json.Unmarshal(encoded, &out); err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
 func TestParseAgreesWithJust(t *testing.T) {
 	t.Parallel()
 
@@ -45,11 +68,7 @@ func TestParseAgreesWithJust(t *testing.T) {
 			t.Parallel()
 			golden := strings.TrimSuffix(path, ".just") + ".json"
 			if *update {
-				var raw map[string]any
-				if err := json.Unmarshal(justDump(t, path), &raw); err != nil {
-					t.Fatal(err)
-				}
-				encoded, err := json.MarshalIndent(normalizeDump(raw), "", "  ")
+				encoded, err := json.MarshalIndent(justDumpOf(t, path), "", "  ")
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -73,15 +92,7 @@ func TestParseAgreesWithJust(t *testing.T) {
 			if len(f.Errors) > 0 {
 				t.Fatalf("parse errors in a file just accepts: %+v", f.Errors)
 			}
-			encoded, err := json.Marshal(dump(f))
-			if err != nil {
-				t.Fatal(err)
-			}
-			var got any
-			if err := json.Unmarshal(encoded, &got); err != nil {
-				t.Fatal(err)
-			}
-			if diff := cmp.Diff(want, got); diff != "" {
+			if diff := cmp.Diff(want, ourDump(t, f)); diff != "" {
 				t.Errorf("parse of %s differs from just (-just +ours):\n%s", path, diff)
 			}
 		})
@@ -185,8 +196,39 @@ func enabled(attrs []Attribute) bool {
 	return !conditional
 }
 
+func unavailable(f *File) map[string]bool {
+	absent := map[string]bool{}
+	for _, it := range f.Items {
+		if it.Kind == ItemModule && it.Module.Optional {
+			absent[it.Module.Name.Text] = true
+		}
+	}
+	dropped := map[string]bool{}
+	reaches := func(p Path) bool {
+		if len(p) > 1 {
+			return absent[p[0].Text]
+		}
+		return dropped[p.String()]
+	}
+	for changed := true; changed; {
+		changed = false
+		for _, r := range f.Recipes() {
+			if !dropped[r.Name.Text] && slices.ContainsFunc(slices.Concat(r.Deps, r.Subsequent), func(d Dependency) bool { return reaches(d.Target) }) {
+				dropped[r.Name.Text], changed = true, true
+			}
+		}
+		for _, it := range f.Items {
+			if it.Kind == ItemAlias && !dropped[it.Alias.Name.Text] && reaches(it.Alias.Target) {
+				dropped[it.Alias.Name.Text], changed = true, true
+			}
+		}
+	}
+	return dropped
+}
+
 func dump(f *File) map[string]any {
 	d := dumper{text: f.Text}
+	dropped := unavailable(f)
 	recipes := map[string]any{}
 	assignments := map[string]any{}
 	aliases := map[string]any{}
@@ -196,7 +238,7 @@ func dump(f *File) map[string]any {
 		switch it.Kind {
 		case ItemRecipe:
 			r := it.Recipe
-			if !enabled(r.Attributes) {
+			if !enabled(r.Attributes) || dropped[r.Name.Text] {
 				continue
 			}
 			recipes[r.Name.Text] = dumpRecipe(f, r)
@@ -208,7 +250,7 @@ func dump(f *File) map[string]any {
 			_, private := attributeNamed(a.Attributes, "private")
 			assignments[a.Name.Text] = map[string]any{"export": a.Export, "eager": a.Eager, "private": private || strings.HasPrefix(a.Name.Text, "_"), "value": d.sexp(a.Value)}
 		case ItemAlias:
-			if enabled(it.Alias.Attributes) {
+			if enabled(it.Alias.Attributes) && !dropped[it.Alias.Name.Text] {
 				aliases[it.Alias.Name.Text] = it.Alias.Target.String()
 			}
 		case ItemModule:
@@ -219,7 +261,7 @@ func dump(f *File) map[string]any {
 			s := it.Setting
 			if enabled(s.Attributes) {
 				name := strings.ReplaceAll(s.Name.Text, "-", "_")
-				if value, ok := dumpSetting(name, s.Value); ok {
+				if value, ok := dumpSetting(f, name, s.Value); ok {
 					settings[name] = value
 				}
 			}
@@ -231,7 +273,7 @@ func dump(f *File) map[string]any {
 
 var listSettings = []string{"shell", "windows_shell", "script_interpreter"}
 
-func dumpSetting(name string, value *Expr) (any, bool) {
+func dumpSetting(f *File, name string, value *Expr) (any, bool) {
 	switch {
 	case value == nil:
 		return true, true
@@ -239,21 +281,26 @@ func dumpSetting(name string, value *Expr) (any, bool) {
 		return true, true
 	case value.Kind == ExprVariable && value.Name.Text == "false":
 		return nil, false
+	}
+	words, ok := f.Constant(value)
+	if !ok {
+		panic(fmt.Sprintf("setting %s has no constant value", name))
+	}
+	switch {
 	case slices.Contains(listSettings, name):
-		words := Strings(value)
 		args := []any{}
 		for _, w := range words[1:] {
 			args = append(args, w)
 		}
 		return map[string]any{"command": words[0], "arguments": args}, true
 	case name == "dotenv_command":
-		words := []any{}
-		for _, w := range Strings(value) {
-			words = append(words, w)
+		out := []any{}
+		for _, w := range words {
+			out = append(out, w)
 		}
-		return words, true
+		return out, true
 	}
-	return value.Str.Value, true
+	return words[0], true
 }
 
 func dumpRecipe(f *File, r *Recipe) map[string]any {
@@ -264,14 +311,8 @@ func dumpRecipe(f *File, r *Recipe) map[string]any {
 	}
 	slices.SortFunc(names, func(a, b any) int { return strings.Compare(a.(string), b.(string)) })
 	var doc any
-	if r.Doc != "" {
-		doc = r.Doc
-	}
-	if attr, ok := attributeNamed(r.Attributes, "doc"); ok {
-		doc = nil
-		if len(attr.Args) > 0 {
-			doc = attr.Args[0].Value.Str.Value
-		}
+	if text := recipeDoc(r); text != "" {
+		doc = text
 	}
 	_, private := attributeNamed(r.Attributes, "private")
 	params := []any{}
@@ -306,6 +347,10 @@ func dumpBody(f *File, r *Recipe) []any {
 	out := []any{}
 	for _, l := range r.Body {
 		parts := []any{}
+		if len(l.Fragments) == 0 {
+			out = append(out, parts)
+			continue
+		}
 		text := f.Text[l.Indent.Start+min(len(r.Indent), l.Indent.End-l.Indent.Start) : l.Indent.End]
 		for _, frag := range l.Fragments {
 			if frag.Kind != FragmentInterpolation {

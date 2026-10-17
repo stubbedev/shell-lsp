@@ -317,10 +317,7 @@ func (in *indexer) recipe(r *Recipe, positional bool) {
 
 func recipeDoc(r *Recipe) string {
 	if attr, ok := attributeNamed(r.Attributes, "doc"); ok {
-		if len(attr.Args) > 0 && attr.Args[0].Value != nil && attr.Args[0].Value.Kind == ExprString {
-			return attr.Args[0].Value.Str.Value
-		}
-		return ""
+		return strings.TrimSpace(attr.first())
 	}
 	return r.Doc
 }

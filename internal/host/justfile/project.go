@@ -105,27 +105,8 @@ func (f *File) settingValues(name string, fallback []string) ([]string, string, 
 	if !ok {
 		return fallback, "", false
 	}
-	return Strings(s.Value), f.Text[s.Span.Start:s.Span.End], true
-}
-
-func Strings(e *Expr) []string {
-	if e == nil {
-		return nil
-	}
-	switch e.Kind {
-	case ExprString:
-		return []string{e.Str.Value}
-	case ExprList:
-		var out []string
-		for _, item := range e.Args {
-			out = append(out, Strings(item)...)
-		}
-		return out
-	case ExprGroup:
-		return Strings(e.Args[0])
-	case ExprBacktick, ExprVariable, ExprCall, ExprBinary, ExprNot, ExprRoot, ExprIf, ExprBad:
-	}
-	return nil
+	values, _ := f.Constant(s.Value)
+	return values, f.Text[s.Span.Start:s.Span.End], true
 }
 
 func attributeNamed(attrs []Attribute, name string) (Attribute, bool) {
@@ -165,7 +146,8 @@ func (p projector) script(r *Recipe) (script, bool) {
 		if len(attr.Args) > 0 {
 			var words []string
 			for _, arg := range attr.Args {
-				words = append(words, Strings(arg.Value)...)
+				values, _ := p.file.Constant(arg.Value)
+				words = append(words, values...)
 			}
 			return detect(script{recipe: r, lines: lines, whole: true}, "#!"+strings.Join(words, " "), "["+p.text[attr.Span.Start:attr.Span.End]+"]", dialect.SourceHostSetting)
 		}
@@ -218,7 +200,8 @@ func (f *File) ExportedTo(r *Recipe) []string {
 	}
 	for _, attr := range r.Attributes {
 		if attr.Name.Text == "env" && len(attr.Args) > 0 {
-			names = append(names, Strings(attr.Args[0].Value)...)
+			values, _ := f.Constant(attr.Args[0].Value)
+			names = append(names, values...)
 		}
 	}
 	slices.Sort(names)

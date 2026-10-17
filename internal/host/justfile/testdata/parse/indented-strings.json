@@ -1,0 +1,164 @@
+{
+  "aliases": {},
+  "assignments": {
+    "s0": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": ""
+    },
+    "s1": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": ""
+    },
+    "s10": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": "a\n"
+    },
+    "s11": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": "a\n"
+    },
+    "s12": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": "\ta\n  b\n"
+    },
+    "s13": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": " a\nb\n"
+    },
+    "s14": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": "a\r\n"
+    },
+    "s15": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": "\na\n"
+    },
+    "s16": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": "x\n a\n"
+    },
+    "s17": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": "a\n"
+    },
+    "s18": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": "a\n"
+    },
+    "s2": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": ""
+    },
+    "s3": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": "a"
+    },
+    "s4": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": "a\n  b"
+    },
+    "s5": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": "a\nb\n"
+    },
+    "s6": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": "a\nb\n"
+    },
+    "s7": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": "a\n  b\n"
+    },
+    "s8": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": "a\n\nb\n"
+    },
+    "s9": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": "a\n\nb\n"
+    },
+    "t0": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": "\na\n\n"
+    },
+    "t1": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": "a\n"
+    },
+    "t2": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": ""
+    },
+    "t3": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": "a\n\n"
+    },
+    "t4": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": "a\t\n  b\n"
+    },
+    "t5": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": ""
+    },
+    "t6": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": "a\n\r\nb\n"
+    }
+  },
+  "modules": [],
+  "recipes": {},
+  "settings": {}
+}

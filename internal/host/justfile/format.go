@@ -1,13 +1,19 @@
 package justfile
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"slices"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
-const defaultIndentation = "    "
+const (
+	defaultIndentation   = "    "
+	maxLeadingBlankLines = 2
+)
 
 var ErrUnformattable = errors.New("cannot format the justfile")
 
@@ -37,21 +43,24 @@ func Format(f *File) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if len(elements) > 0 {
-		p.sb.WriteString(leadingBlankLines(f.Text[:elements[0].start]))
+	if len(elements) == 0 {
+		return strings.Repeat("\n", min(newlines(f.Text), 1)), nil
 	}
+	p.sb.WriteString(strings.Repeat("\n", min(newlines(f.Text[:elements[0].start]), maxLeadingBlankLines)))
 	for i, el := range elements {
 		if i > 0 && blankBetween(f.Text[elements[i-1].end:el.start]) {
 			p.sb.WriteString("\n")
 		}
 		switch {
+		case el.comment != nil && i+1 < len(elements) && p.documents(el, elements[i+1]):
+			p.sb.WriteString("# " + docOf(*elements[i+1].item))
 		case el.comment != nil:
-			p.sb.WriteString(el.comment.Text)
+			p.sb.WriteString(trimComment(el.comment.Text))
 		default:
 			p.item(*el.item)
 		}
 		if el.trailing != nil {
-			p.sb.WriteString(" " + el.trailing.Text)
+			p.sb.WriteString(" " + trimComment(el.trailing.Text))
 		}
 		p.sb.WriteString("\n")
 	}
@@ -60,8 +69,36 @@ func Format(f *File) (string, error) {
 
 func (f *File) line(offset int) int { return strings.Count(f.Text[:offset], "\n") + 1 }
 
-func leadingBlankLines(s string) string {
-	return strings.Repeat("\n", strings.Count(s, "\n"))
+func trimComment(text string) string { return strings.TrimRightFunc(text, unicode.IsSpace) }
+
+func docOf(it Item) string {
+	switch it.Kind {
+	case ItemRecipe:
+		return it.Recipe.Doc
+	case ItemModule:
+		return it.Module.Doc
+	case ItemSetting, ItemAssignment, ItemAlias, ItemImport, ItemFunction, ItemUnexport:
+	}
+	return ""
+}
+
+func (p *printer) documents(comment, next element) bool {
+	if next.item == nil || comment.start == 0 && strings.HasPrefix(p.f.Text, "#!") || strings.Count(p.f.Text[comment.end:next.start], "\n") != 1 {
+		return false
+	}
+	_, attributed := attributeNamed(attributesOf(*next.item), "doc")
+	return docOf(*next.item) != "" && !attributed
+}
+
+func newlines(text string) int {
+	r := &reader{text: text, file: &File{}}
+	n := 0
+	for t := r.next(); t.kind != tokEOF; t = r.next() {
+		if t.kind == tokNewline {
+			n++
+		}
+	}
+	return n
 }
 
 func blankBetween(s string) bool { return strings.Count(s, "\n") > 1 }
@@ -143,7 +180,7 @@ func (p *printer) text(s Span) string { return p.f.Text[s.Start:s.End] }
 
 func (p *printer) item(it Item) {
 	attrs := slices.Clone(attributesOf(it))
-	slices.SortStableFunc(attrs, func(a, b Attribute) int { return strings.Compare(a.Name.Text, b.Name.Text) })
+	slices.SortStableFunc(attrs, p.compareAttributes)
 	for _, a := range attrs {
 		p.sb.WriteString("[" + p.attribute(a) + "]\n")
 	}
@@ -185,6 +222,79 @@ func (p *printer) item(it Item) {
 	case ItemRecipe:
 		p.recipe(it.Recipe)
 	}
+}
+
+func (p *printer) compareAttributes(a, b Attribute) int {
+	if c := strings.Compare(a.Name.Text, b.Name.Text); c != 0 {
+		return c
+	}
+	if a.Name.Text == "arg" {
+		return cmp.Or(p.compareHelp(a.keyed("help"), b.keyed("help")), compareLong(a, b), strings.Compare(a.first(), b.first()))
+	}
+	return p.compareArguments(a.Args, b.Args)
+}
+
+func (p *printer) compareArguments(a, b []AttributeArg) int {
+	for i := range min(len(a), len(b)) {
+		if c := p.compareLiteral(a[i].Value, b[i].Value); c != 0 {
+			return c
+		}
+	}
+	return cmp.Compare(len(a), len(b))
+}
+
+func (p *printer) compareLiteral(a, b *Expr) int {
+	if a == nil || b == nil || a.Kind != ExprString || b.Kind != ExprString {
+		return compareBool(a != nil, b != nil)
+	}
+	return cmp.Or(strings.Compare(a.Str.Value, b.Str.Value), cmp.Compare(quoteRank(a.Str), quoteRank(b.Str)), p.comparePosition(a, b))
+}
+
+func quoteRank(s *StringLit) int {
+	rank := 0
+	if s.Raw() {
+		rank = 2
+	}
+	if s.Indented() {
+		rank++
+	}
+	return rank
+}
+
+func (p *printer) comparePosition(a, b *Expr) int {
+	return cmp.Or(cmp.Compare(p.column(a.Span.Start), p.column(b.Span.Start)), cmp.Compare(a.Span.Start, b.Span.Start))
+}
+
+func (p *printer) compareHelp(a, b *Expr) int {
+	switch {
+	case a == nil && b == nil:
+		return 0
+	case a == nil:
+		return -1
+	case b == nil:
+		return 1
+	}
+	return p.comparePosition(a, b)
+}
+
+func (p *printer) column(offset int) int {
+	return utf8.RuneCountInString(p.f.Text[p.lineStart(offset):offset])
+}
+
+func compareLong(a, b Attribute) int {
+	la, oka := a.long()
+	lb, okb := b.long()
+	return cmp.Or(compareBool(oka, okb), strings.Compare(la, lb))
+}
+
+func compareBool(a, b bool) int {
+	switch {
+	case a == b:
+		return 0
+	case a:
+		return 1
+	}
+	return -1
 }
 
 func optional(yes bool) string {

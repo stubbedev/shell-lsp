@@ -209,3 +209,43 @@ rejected 2:9 expected backtick, '!', '[', identifier, '(', '/', or string, but f
 4:1 SL5001 error expected a recipe, assignment, alias, setting, import or module, found `)`
 -- multi-line-parentheses --
 accepted
+-- leading-continuation --
+accepted
+-- error-before-a-bad-token --
+rejected 2:1 unknown start of token '0'
+1:6 SL5001 error expected a parameter or `:`, found end of line
+2:1 SL5001 error expected a recipe, assignment, alias, setting, import or module, found `0`
+-- unknown-token-after-a-bad-header --
+rejected 2:2 unknown start of token '0'
+1:6 SL5001 error expected a parameter or `:`, found end of line
+2:2 SL5001 error unknown start of token `0`
+-- unterminated-interpolation-in-a-body --
+rejected 2:2 unterminated interpolation
+1:1 SL5001 error expected a recipe, assignment, alias, setting, import or module, found `:`
+2:2 SL5001 error unterminated interpolation
+-- extraneous-attribute-before-a-blank-line --
+rejected 1:1 extraneous attribute
+1:2 SL5001 error extraneous attribute: nothing follows it to apply to
+-- extraneous-attribute-before-a-comment --
+rejected 1:1 extraneous attribute
+1:2 SL5001 error extraneous attribute: nothing follows it to apply to
+-- dangling-attribute --
+rejected 1:11 expected '@', '[', comment, end of line, or identifier, but found end of file
+1:2 SL5001 error extraneous attribute: nothing follows it to apply to
+-- mismatched-delimiter --
+rejected 2:10 mismatched closing delimiter `)`, did you mean to close the `[` on line 2?
+1:5 SL5023 error `set lists` is unstable and needs `set unstable`
+2:10 SL5001 error expected `]`, found `)`
+-- unexpected-closing-delimiter --
+rejected 1:6 unexpected closing delimiter `}`
+1:6 SL5001 error expected an expression, found `}`
+-- blank-line-after-a-header --
+rejected 3:1 expected '@', '[', comment, end of file, end of line, or identifier, but found indent
+3:1 SL5001 error unexpected indentation
+-- inconsistent-top-level-indentation --
+rejected 2:1 recipe line has inconsistent leading whitespace, started with `␠␠` but found line with `␠`
+1:1 SL5001 error unexpected indentation
+2:1 SL5001 error inconsistent leading whitespace: the lines above start with `␠␠`
+-- end-of-file-inside-parentheses --
+rejected 1:14 expected ',' or ')', but found end of file
+1:13 SL5001 error expected `)`, found end of file

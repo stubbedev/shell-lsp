@@ -99,6 +99,44 @@ type AttributeArg struct {
 	Span  Span
 }
 
+func (a Attribute) keyed(key string) *Expr {
+	for _, arg := range a.Args {
+		if arg.Key.Text == key {
+			return arg.Value
+		}
+	}
+	return nil
+}
+
+func (a Attribute) first() string {
+	for _, arg := range a.Args {
+		if arg.Key.Text == "" {
+			return literal(arg.Value)
+		}
+	}
+	return ""
+}
+
+func (a Attribute) long() (string, bool) {
+	for _, arg := range a.Args {
+		if arg.Key.Text != "long" {
+			continue
+		}
+		if arg.Value == nil {
+			return a.first(), true
+		}
+		return literal(arg.Value), true
+	}
+	return "", false
+}
+
+func literal(e *Expr) string {
+	if e == nil || e.Kind != ExprString {
+		return ""
+	}
+	return e.Str.Value
+}
+
 type Comment struct {
 	Span Span
 	Text string

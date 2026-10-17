@@ -62,6 +62,12 @@ func (f *File) Expect(offset int) (model.Expect, bool) {
 		}
 		return model.Expect{}, false
 	}
+	if inside, ok := f.formatSegment(offset); ok {
+		if inside {
+			return expect(expressionKinds)
+		}
+		return model.Expect{}, false
+	}
 	tokens, ok := f.tokensBefore(f.itemStart(offset), word.Start)
 	if !ok {
 		return model.Expect{}, false
@@ -89,6 +95,30 @@ func (f *File) bodyFragment(offset int) (Fragment, bool) {
 	return Fragment{}, false
 }
 
+func (f *File) formatSegment(offset int) (bool, bool) {
+	for _, it := range f.Items {
+		for _, root := range itemExprs(it) {
+			var found, inside bool
+			Walk(root, func(e *Expr) {
+				if found || e.Kind != ExprString || e.Str.Prefix != 'f' || offset <= e.Str.Inner.Start || offset > e.Str.Inner.End {
+					return
+				}
+				for _, seg := range e.Str.Segments {
+					if seg.Kind == FragmentInterpolation && seg.Span.Start+2 <= offset && offset <= seg.Span.End-2 {
+						found, inside = true, true
+						return
+					}
+				}
+				found = true
+			})
+			if found {
+				return inside, true
+			}
+		}
+	}
+	return false, false
+}
+
 func (f *File) itemStart(offset int) int {
 	for _, it := range f.Items {
 		if span := it.Span(); span.Start <= offset && offset <= span.End {
@@ -108,9 +138,16 @@ func (f *File) inComment(offset int) bool {
 	return slices.ContainsFunc(f.Comments, func(c Comment) bool { return c.Span.Start < offset && offset <= c.Span.End })
 }
 
-func (f *File) tokensBefore(start, end int) ([]token, bool) {
+func (f *File) tokensBefore(start, end int) (out []token, ok bool) {
 	r := &reader{text: f.Text[:end], pos: start, file: &File{}}
-	var out []token
+	defer func() {
+		if p := recover(); p != nil {
+			if _, bailed := p.(bail); !bailed {
+				panic(p)
+			}
+			out, ok = nil, false
+		}
+	}()
 	for {
 		t := r.next()
 		switch {

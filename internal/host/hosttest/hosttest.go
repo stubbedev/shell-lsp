@@ -13,7 +13,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stubbedev/shell-lsp/internal/host/model"
 	"github.com/stubbedev/shell-lsp/internal/lint"
+	"github.com/stubbedev/shell-lsp/internal/parser"
 )
 
 type Case struct {
@@ -26,7 +28,7 @@ const (
 	sectionClose = " --"
 )
 
-func Sections(t *testing.T, path string) []Case {
+func Sections(t testing.TB, path string) []Case {
 	t.Helper()
 	raw, err := os.ReadFile(path) //nolint:gosec // G304: the path is a fixture file the test names
 	if err != nil {
@@ -157,12 +159,12 @@ func Check(t *testing.T, path string, analyze Analyze, oracle Oracle, update boo
 			if !slices.Equal(got, want.findings) {
 				t.Errorf("findings\n got %q\nwant %q", got, want.findings)
 			}
-			agree(t, c.Text, want.verdict, findings)
+			Agree(t, c.Text, want.verdict, findings)
 		})
 	}
 }
 
-func agree(t *testing.T, text string, v Verdict, findings []lint.Finding) {
+func Agree(t *testing.T, text string, v Verdict, findings []lint.Finding) {
 	t.Helper()
 	var errorLines []int
 	for _, f := range findings {
@@ -173,11 +175,11 @@ func agree(t *testing.T, text string, v Verdict, findings []lint.Finding) {
 	}
 	switch {
 	case v.Accepted && len(errorLines) > 0:
-		t.Errorf("the reference tool accepts this file, but errors are reported on lines %v", errorLines)
+		t.Errorf("the reference tool accepts %q, but errors are reported on lines %v: %q", text, errorLines, Describe(text, findings))
 	case !v.Accepted && v.Line == 0 && len(errorLines) == 0:
-		t.Errorf("the reference tool rejects this file (%s), but no error is reported", v.Message)
+		t.Errorf("the reference tool rejects %q (%s), but no error is reported", text, v.Message)
 	case !v.Accepted && v.Line > 0 && !slices.Contains(errorLines, v.Line):
-		t.Errorf("the reference tool rejects line %d (%s), but errors are reported on lines %v", v.Line, v.Message, errorLines)
+		t.Errorf("the reference tool rejects line %d of %q (%s), but errors are reported on lines %v: %q", v.Line, text, v.Message, errorLines, Describe(text, findings))
 	}
 }
 
@@ -188,13 +190,81 @@ const (
 
 func RequireTool(t *testing.T, name, want string) {
 	t.Helper()
-	out, err := exec.CommandContext(t.Context(), name, "--version").Output()
+	got, err := toolVersion(t, name)
 	if err != nil {
 		t.Fatalf("-update needs %s on PATH as the reference oracle: %v", name, err)
 	}
-	got, _, _ := strings.Cut(strings.TrimSpace(string(out)), "\n")
 	if got != want {
 		t.Fatalf("the golden files are recorded with %s, but %s is installed; run -update from the nix dev shell", want, got)
+	}
+}
+
+func LiveTool(t *testing.T, name, want string) {
+	t.Helper()
+	got, err := toolVersion(t, name)
+	if err != nil {
+		t.Skipf("comparing with the live reference needs %s on PATH: %v", name, err)
+	}
+	if got != want {
+		t.Skipf("comparing with the live reference needs %s, but %s is installed", want, got)
+	}
+}
+
+func toolVersion(t *testing.T, name string) (string, error) {
+	t.Helper()
+	out, err := exec.CommandContext(t.Context(), name, "--version").Output()
+	if err != nil {
+		return "", err
+	}
+	version, _, _ := strings.Cut(strings.TrimSpace(string(out)), "\n")
+	return version, nil
+}
+
+func Findings(ix *model.Index, checks model.Checks, builtins model.Builtins) []lint.Finding {
+	m := &model.Module{Files: []*model.Index{ix}, Complete: len(ix.Includes) == 0, Builtins: builtins}
+	return append(slices.Clone(ix.Findings), m.Findings(0, checks, m.Usage())...)
+}
+
+func Bounded(t *testing.T, text string, ix *model.Index) {
+	t.Helper()
+	within := func(what string, s parser.Span) {
+		if s.Start < 0 || s.Start > s.End || s.End > len(text) {
+			t.Fatalf("%s span %v lies outside the %d bytes of %q", what, s, len(text), text)
+		}
+	}
+	for _, s := range ix.Symbols {
+		within("symbol "+s.Name, s.Span)
+		within("symbol selection "+s.Name, s.Selection)
+		if s.Selection.Start < s.Span.Start || s.Selection.End > s.Span.End {
+			t.Fatalf("symbol %s selects %v outside its span %v in %q", s.Name, s.Selection, s.Span, text)
+		}
+		if s.Parent != model.NoParent && (s.Parent < 0 || s.Parent >= len(ix.Symbols)) {
+			t.Fatalf("symbol %s has parent %d of %d symbols in %q", s.Name, s.Parent, len(ix.Symbols), text)
+		}
+	}
+	for _, r := range ix.Refs {
+		within("reference "+r.Name, r.Span)
+	}
+	for _, inc := range ix.Includes {
+		within("include "+inc.Path, inc.Span)
+	}
+	for i, sh := range ix.Shells {
+		within("shell", sh.Span)
+		if i > 0 && ix.Shells[i-1].Span.End > sh.Span.Start {
+			t.Fatalf("shell regions %v and %v overlap or are out of order in %q", ix.Shells[i-1].Span, sh.Span, text)
+		}
+	}
+	for _, f := range ix.Folds {
+		within("fold", f.Span)
+	}
+	for _, tok := range ix.Tokens {
+		within("token", tok.Span)
+	}
+	for _, r := range ix.Runnables {
+		within("runnable "+r.Name, r.Span)
+	}
+	for _, f := range ix.Findings {
+		within("finding "+f.Code.String(), f.Span)
 	}
 }
 
@@ -227,11 +297,32 @@ var makeLocation = regexp.MustCompile(`(?m)^Makefile:(\d+): (?:\*\*\* )?(.*?)(?:
 
 func MakeVerdict(t *testing.T, text string) Verdict {
 	t.Helper()
+	return makeVerdict(t, text)
+}
+
+const unrunnableShell = "SHELL=/nonexistent/shell-lsp-fuzz"
+
+var shellReach = []string{"shell", "SHELL", "!=", "eval", "call", "override", "file", "load", "guile", "include", "MAKE"}
+
+func MakeIsolated(text string) bool {
+	return !slices.ContainsFunc(shellReach, func(word string) bool { return strings.Contains(text, word) })
+}
+
+func IsolatedMakeVerdict(t *testing.T, text string) Verdict {
+	t.Helper()
+	if !MakeIsolated(text) {
+		t.Fatalf("make could run a command from %q", text)
+	}
+	return makeVerdict(t, text, unrunnableShell)
+}
+
+func makeVerdict(t *testing.T, text string, vars ...string) Verdict {
+	t.Helper()
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "Makefile"), []byte(text), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.CommandContext(t.Context(), "make", "--dry-run", "--no-print-directory", "-f", "Makefile")
+	cmd := exec.CommandContext(t.Context(), "make", append([]string{"--dry-run", "--no-print-directory", "-f", "Makefile"}, vars...)...) //nolint:gosec // G204: the variables are this package's constants
 	cmd.Dir = dir
 	cmd.Env = []string{"PATH=" + os.Getenv("PATH")}
 	var stderr bytes.Buffer

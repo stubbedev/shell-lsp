@@ -3,6 +3,19 @@
   "assignments": {},
   "modules": [],
   "recipes": {
+    "blank": {
+      "attributes": [
+        "doc"
+      ],
+      "body": [],
+      "dependencies": [],
+      "doc": null,
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    },
     "build": {
       "attributes": [
         "arg",
@@ -73,6 +86,19 @@
       "private": false,
       "quiet": false,
       "shebang": true
+    },
+    "spaced": {
+      "attributes": [
+        "doc"
+      ],
+      "body": [],
+      "dependencies": [],
+      "doc": "x",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "shebang": false
     }
   },
   "settings": {}

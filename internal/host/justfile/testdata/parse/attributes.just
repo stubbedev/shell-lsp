@@ -18,3 +18,8 @@ build target verbose="false":
 [script]
 other:
     echo $1
+[doc(" x ")]
+spaced:
+
+[doc(" ")]
+blank:

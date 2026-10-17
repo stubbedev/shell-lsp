@@ -40,6 +40,9 @@ func TestExpect(t *testing.T) {
 		{"comment", "# ab|", nil, ""},
 		{"inside a string", "a := 'x|", nil, ""},
 		{"import path", "import 'x|'", nil, ""},
+		{"format string interpolation", "a := f'x {{ ve| }}'", expressionKinds, "ve"},
+		{"format string text", "a := f'x| {{ y }}'", nil, ""},
+		{"unfinished format string interpolation", "a := f'{{ ve|", nil, ""},
 	} {
 		offset := strings.Index(tt.text, "|")
 		text := tt.text[:offset] + tt.text[offset+1:]

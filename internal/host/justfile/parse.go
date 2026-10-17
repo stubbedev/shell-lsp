@@ -41,12 +41,29 @@ type reader struct {
 	file    *File
 	pending []Attribute
 	doc     string
+	failure Span
+	lexing  bool
 }
 
 func Parse(text string) *File {
 	p := &reader{text: text, file: &File{Text: text}}
+	if at, ok := invalidUTF8(text); ok {
+		p.lexError(Span{Start: at, End: at + 1}, "just only reads UTF-8, and this byte is not")
+	}
 	p.parseFile()
+	p.file.lexicalErrors()
 	return p.file
+}
+
+func invalidUTF8(text string) (int, bool) {
+	for i := 0; i < len(text); {
+		r, size := utf8.DecodeRuneInString(text[i:])
+		if r == utf8.RuneError && size == 1 {
+			return i, true
+		}
+		i += size
+	}
+	return 0, false
 }
 
 func isNameStart(c byte) bool {
@@ -58,7 +75,10 @@ func isNameByte(c byte) bool {
 }
 
 func (p *reader) fail(span Span, format string, args ...any) {
-	p.lexError(span, fmt.Sprintf(format, args...))
+	if !p.lexing {
+		p.lexError(span, fmt.Sprintf(format, args...))
+	}
+	p.failure = span
 	panic(bail{})
 }
 
@@ -68,6 +88,15 @@ func (p *reader) lexError(span Span, message string) {
 		p.file.Errors = append(p.file.Errors, e)
 	}
 }
+
+func (p *reader) lineText(start, end int) string {
+	if end < len(p.text) {
+		return strings.TrimSuffix(p.text[start:end], "\r")
+	}
+	return p.text[start:end]
+}
+
+func blank(line string) bool { return strings.TrimLeft(line, " \t") == "" }
 
 func (p *reader) lineEnd(from int) int {
 	if i := strings.IndexByte(p.text[from:], '\n'); i >= 0 {
@@ -96,7 +125,7 @@ func (p *reader) skipSpace() {
 
 func (p *reader) comment() {
 	end := p.lineEnd(p.pos)
-	text := strings.TrimSuffix(p.text[p.pos:end], "\r")
+	text := p.lineText(p.pos, end)
 	c := Comment{Span: Span{Start: p.pos, End: p.pos + len(text)}, Text: text}
 	i, found := slices.BinarySearchFunc(p.file.Comments, c.Span.Start, func(c Comment, start int) int { return c.Span.Start - start })
 	if !found {
@@ -287,18 +316,23 @@ func cook(raw string, escapes, indented bool) (string, string) {
 }
 
 func unindent(s string) string {
-	s = strings.TrimPrefix(strings.TrimPrefix(s, "\r"), "\n")
-	lines := strings.Split(s, "\n")
+	lines := strings.SplitAfter(s, "\n")
+	if lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+	if len(lines) > 0 && blankLine(lines[0]) {
+		lines = lines[1:]
+	}
+	if len(lines) > 0 && blankLine(lines[len(lines)-1]) {
+		lines = lines[:len(lines)-1]
+	}
 	common := ""
 	first := true
-	for i, l := range lines {
-		if strings.TrimSpace(l) == "" && i != len(lines)-1 {
+	for _, l := range lines {
+		if blankLine(l) {
 			continue
 		}
 		indent := l[:len(l)-len(strings.TrimLeft(l, " \t"))]
-		if strings.TrimSpace(l) == "" {
-			continue
-		}
 		if first {
 			common, first = indent, false
 			continue
@@ -307,14 +341,18 @@ func unindent(s string) string {
 			common = common[:len(common)-1]
 		}
 	}
-	for i, l := range lines {
-		lines[i] = strings.TrimPrefix(l, common)
-		if strings.TrimSpace(l) == "" {
-			lines[i] = strings.TrimLeft(l, " \t")
+	var sb strings.Builder
+	for _, l := range lines {
+		if blankLine(l) {
+			sb.WriteString(l[len(strings.TrimRight(l, "\r\n")):])
+			continue
 		}
+		sb.WriteString(strings.TrimPrefix(l, common))
 	}
-	return strings.Join(lines, "\n")
+	return sb.String()
 }
+
+func blankLine(l string) bool { return strings.Trim(l, " \t\r\n") == "" }
 
 func (p *reader) expect(punct string) token {
 	t := p.next()
@@ -355,7 +393,10 @@ func describe(t token) string {
 
 func (p *reader) unexpected(t token, wanted string) {
 	span := t.span
-	if t.kind == tokNewline || t.kind == tokEOF {
+	switch {
+	case t.kind == tokEOF && t.span.Start > 0 && p.text[t.span.Start-1] == '\n':
+		span = Span{Start: t.span.Start - 1, End: t.span.Start - 1}
+	case t.kind == tokNewline || t.kind == tokEOF:
 		span = Span{Start: t.span.Start, End: t.span.Start}
 	}
 	p.fail(span, "expected %s, found %s", wanted, describe(t))
@@ -390,13 +431,17 @@ func (p *reader) parseFile() {
 			continue
 		}
 		end := p.lineEnd(p.pos)
-		line := strings.TrimSuffix(p.text[p.pos:end], "\r")
+		line := p.lineText(p.pos, end)
 		trimmed := strings.TrimLeft(line, " \t")
 		switch {
+		case line == `\` && end < len(p.text):
+			p.pos = end + 1
 		case trimmed == "":
+			p.extraneous()
 			p.doc = ""
 			p.pos = end + 1
 		case strings.HasPrefix(trimmed, "#") && len(trimmed) == len(line):
+			p.extraneous()
 			start := p.pos
 			p.comment()
 			text := strings.TrimSpace(strings.TrimPrefix(p.text[start:p.pos], "#"))
@@ -404,21 +449,39 @@ func (p *reader) parseFile() {
 			p.pos = end + 1
 		case len(trimmed) != len(line):
 			p.lexError(Span{Start: p.pos, End: p.pos + len(line)}, "unexpected indentation")
-			p.skipIndented(end + 1)
+			p.skipIndented(p.pos)
 			p.pending, p.doc = nil, ""
 		default:
 			p.item()
 		}
 	}
+	p.extraneous()
+}
+
+func (p *reader) extraneous() {
+	if len(p.pending) == 0 {
+		return
+	}
+	p.lexError(p.pending[0].Span, "extraneous attribute: nothing follows it to apply to")
+	p.pending = nil
 }
 
 func (p *reader) skipIndented(from int) {
 	p.pos = from
+	reference := ""
 	for p.pos < len(p.text) {
 		end := p.lineEnd(p.pos)
-		line := p.text[p.pos:end]
-		if strings.TrimSpace(line) != "" && line[0] != ' ' && line[0] != '\t' {
+		line := p.lineText(p.pos, end)
+		if !blank(line) && line[0] != ' ' && line[0] != '\t' {
 			return
+		}
+		indent := line[:len(line)-len(strings.TrimLeft(line, " \t"))]
+		switch {
+		case blank(line):
+		case reference == "":
+			reference = indent
+		case !strings.HasPrefix(indent, reference):
+			p.lexError(Span{Start: p.pos, End: p.pos + len(indent)}, "inconsistent leading whitespace: the lines above start with "+whitespace(reference))
 		}
 		p.pos = end + 1
 	}
@@ -433,10 +496,7 @@ func (p *reader) recover(start int, header bool) {
 		panic(r)
 	}
 	p.depth, p.braces = 0, 0
-	end := p.lineEnd(max(p.pos-1, start))
-	if p.pos > end {
-		end = p.lineEnd(p.pos)
-	}
+	end := p.lineEnd(max(p.failure.Start, start))
 	if header {
 		p.skipIndented(end + 1)
 	} else {
@@ -795,9 +855,11 @@ func (p *reader) body(r *Recipe) {
 	var lines []Span
 	for pos < len(p.text) {
 		end := p.lineEnd(pos)
-		line := p.text[pos:end]
+		line := p.lineText(pos, end)
 		switch {
-		case strings.TrimSpace(line) == "":
+		case blank(line) && len(lines) == 0:
+			end = -1
+		case blank(line):
 		case line[0] == ' ' || line[0] == '\t':
 			last = len(lines)
 		default:
@@ -806,18 +868,17 @@ func (p *reader) body(r *Recipe) {
 		if end < 0 {
 			break
 		}
-		lines = append(lines, Span{Start: pos, End: end})
+		lines = append(lines, Span{Start: pos, End: pos + len(line)})
 		pos = end + 1
 	}
 	lines = lines[:last+1]
 	if len(lines) == 0 {
 		return
 	}
-	p.pos = lines[len(lines)-1].End + 1
 	r.Span.End = lines[len(lines)-1].End
+	p.pos = p.lineEnd(r.Span.End) + 1
 	for _, l := range lines {
-		if strings.TrimSpace(p.text[l.Start:l.End]) != "" {
-			content := p.text[l.Start:l.End]
+		if content := p.text[l.Start:l.End]; !blank(content) {
 			r.Indent = content[:len(content)-len(strings.TrimLeft(content, " \t"))]
 			r.Shebang = strings.HasPrefix(strings.TrimLeft(content, " \t"), "#!")
 			break
@@ -832,7 +893,7 @@ func (p *reader) bodyLine(r *Recipe, lines []Span, i int) int {
 	l := lines[i]
 	content := p.text[l.Start:l.End]
 	line := Line{Span: l}
-	if strings.TrimSpace(content) == "" {
+	if blank(content) {
 		line.Indent = Span{Start: l.Start, End: l.End}
 		r.Body = append(r.Body, line)
 		return i
@@ -878,7 +939,7 @@ func (p *reader) bodyLine(r *Recipe, lines []Span, i int) int {
 	if end > textStart {
 		line.Fragments = append(line.Fragments, Fragment{Kind: FragmentText, Span: Span{Start: textStart, End: end}})
 	}
-	line.Continued = strings.HasSuffix(strings.TrimSuffix(p.text[line.Span.Start:line.Span.End], "\r"), `\`)
+	line.Continued = strings.HasSuffix(p.text[line.Span.Start:line.Span.End], `\`)
 	return i
 }
 
@@ -957,14 +1018,14 @@ func (p *reader) conjunct() *Expr {
 		return p.conditional()
 	case t.kind == tokPunct && t.text == "/":
 		p.next()
-		x := p.expression()
+		x := p.conjunct()
 		return &Expr{Kind: ExprRoot, Span: Span{Start: t.span.Start, End: x.Span.End}, Args: []*Expr{x}}
 	}
 	left := p.value()
 	op := p.peek()
 	if op.kind == tokPunct && (op.text == "+" || op.text == "++" || op.text == "/") {
 		p.next()
-		right := p.expression()
+		right := p.conjunct()
 		return &Expr{Kind: ExprBinary, Op: op.text, OpSpan: op.span, Span: Span{Start: left.Span.Start, End: right.Span.End}, Args: []*Expr{left, right}}
 	}
 	return left

@@ -1,0 +1,160 @@
+{
+  "aliases": {},
+  "assignments": {
+    "chain": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": [
+        "join",
+        "a",
+        [
+          "concatenate",
+          "b",
+          "c"
+        ]
+      ]
+    },
+    "concat": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": [
+        "if",
+        [
+          "==",
+          [
+            "concatenate",
+            "a",
+            "b"
+          ],
+          "ab"
+        ],
+        "y",
+        "n"
+      ]
+    },
+    "join": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": [
+        "if",
+        [
+          "==",
+          [
+            "join",
+            "a",
+            "b"
+          ],
+          "a/b"
+        ],
+        "y",
+        "n"
+      ]
+    },
+    "lists": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": [
+        "if",
+        [
+          "==",
+          [
+            "list-concatenate",
+            "a",
+            "b"
+          ],
+          "ab"
+        ],
+        "y",
+        "n"
+      ]
+    },
+    "logic": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": [
+        "if",
+        [
+          "or",
+          [
+            "and",
+            [
+              "==",
+              "a",
+              "a"
+            ],
+            [
+              "==",
+              "b",
+              "b"
+            ]
+          ],
+          [
+            "!=",
+            "c",
+            "d"
+          ]
+        ],
+        "y",
+        "n"
+      ]
+    },
+    "nested": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": [
+        "concatenate",
+        "a",
+        [
+          "join",
+          null,
+          "b"
+        ]
+      ]
+    },
+    "root": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": [
+        "if",
+        [
+          "==",
+          [
+            "join",
+            null,
+            "a"
+          ],
+          "/a"
+        ],
+        "y",
+        "n"
+      ]
+    },
+    "rooted": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": [
+        "join",
+        null,
+        [
+          "concatenate",
+          "a",
+          "b"
+        ]
+      ]
+    }
+  },
+  "modules": [],
+  "recipes": {},
+  "settings": {
+    "lists": true,
+    "unstable": true
+  }
+}

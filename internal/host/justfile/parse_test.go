@@ -60,7 +60,7 @@ func TestParseKeepsEveryExpressionSpan(t *testing.T) {
 			ops = append(ops, f.Text[e.OpSpan.Start:e.OpSpan.End])
 		}
 	})
-	if !slices.Equal(ops, []string{"+", "||", "&&"}) {
+	if !slices.Equal(ops, []string{"||", "&&", "+"}) {
 		t.Errorf("operators = %v", ops)
 	}
 }

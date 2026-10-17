@@ -337,3 +337,42 @@ x := (
 )
 a:
     echo {{x}}
+-- leading-continuation --
+\
+build:
+    echo
+-- error-before-a-bad-token --
+build
+0000
+-- unknown-token-after-a-bad-header --
+build
+ 0
+-- unterminated-interpolation-in-a-body --
+:
+ {{
+-- extraneous-attribute-before-a-blank-line --
+[private]
+
+build:
+    echo
+-- extraneous-attribute-before-a-comment --
+[private]
+# explains
+build:
+    echo
+-- dangling-attribute --
+[private]
+-- mismatched-delimiter --
+set lists
+x := ["a")
+-- unexpected-closing-delimiter --
+x := }
+-- blank-line-after-a-header --
+build:
+
+    echo
+-- inconsistent-top-level-indentation --
+  build
+ more
+-- end-of-file-inside-parentheses --
+build( first

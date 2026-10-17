@@ -105,6 +105,7 @@ func TestProjectDialect(t *testing.T) {
 		{"the family most recipes use", "a:\n    #!/bin/zsh\n    print\nb:\n    #!/bin/zsh\n    print\nc:\n    echo\n", dialect.Detection{Dialect: dialect.Zsh, Source: dialect.SourceHostSetting, Evidence: "#!/bin/zsh"}, 2},
 		{"script interpreter", "set script-interpreter := ['dash', '-eu']\n[script]\nx:\n    echo\n", dialect.Detection{Dialect: dialect.Dash, Source: dialect.SourceHostSetting, Evidence: "set script-interpreter := ['dash', '-eu']"}, 1},
 		{"script attribute", "[script('bash')]\nx:\n    echo\n", dialect.Detection{Dialect: dialect.Bash, Source: dialect.SourceHostSetting, Evidence: "[script('bash')]"}, 1},
+		{"computed shell", "base := \"ba\"\nset shell := [base + \"sh\", \"-c\"]\nx:\n    echo\n", dialect.Detection{Dialect: dialect.Bash, Source: dialect.SourceHostSetting, Evidence: `set shell := [base + "sh", "-c"]`}, 1},
 		{"no shell at all", "set shell := [\"nu\", \"-c\"]\nx:\n    ls\n", dialect.Detection{Dialect: dialect.Posix, Source: dialect.SourceHostDefault, Evidence: "just"}, 0},
 	} {
 		m, got := Project(tt.justfile)
