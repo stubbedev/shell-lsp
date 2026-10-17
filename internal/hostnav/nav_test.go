@@ -401,3 +401,28 @@ func TestMakeEvalDefinitions(t *testing.T) {
 	g, sym = tr.at("Makefile", "NAME", 0)
 	expectStrings(t, "references of NAME", tr.describe(References(g, sym, true)), []string{"Makefile:1:NAME", "Makefile:2:NAME"})
 }
+
+func TestFragmentsNobodyIncludesAreIncomplete(t *testing.T) {
+	t.Parallel()
+
+	tr := newTree(t, map[string]string{
+		"Makefile":            "include common.mk\nall:\n\t@echo $(UNSET)\n",
+		"common.mk":           "USED := 1\nall: ; @echo $(USED) $(MISSING)\n",
+		"variants/tiny.mk":    "OPT := 0\nall:\n\t@echo $(FROM_INCLUDER)\n",
+		"justfile":            "import 'shared.just'\n",
+		"shared.just":         "default:\n    echo {{ unset }}\n",
+		"modules/orphan.just": "default:\n    echo {{ unset }}\n",
+	})
+	codes := func(name string) []string {
+		var out []string
+		for _, f := range tr.group(name).Findings() {
+			out = append(out, f.Code.String())
+		}
+		return out
+	}
+	expectStrings(t, "findings of the Makefile", codes("Makefile"), []string{"SL6006"})
+	expectStrings(t, "findings of an included fragment", codes("common.mk"), []string{"SL6006"})
+	expectStrings(t, "findings of a fragment nothing includes", codes("variants/tiny.mk"), nil)
+	expectStrings(t, "findings of an imported justfile", codes("shared.just"), []string{"SL5003"})
+	expectStrings(t, "findings of a justfile nothing imports", codes("modules/orphan.just"), nil)
+}

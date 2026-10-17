@@ -137,10 +137,16 @@ func LanguageOf(languageID string) (Language, bool) {
 	return find(func(d definition) bool { return slices.Contains(d.languageIDs, languageID) })
 }
 
+func (l Language) EntryPoint(name string) bool {
+	return slices.Contains(definitions[l].names, baseName(name))
+}
+
 func (l Language) LanguageID() string { return definitions[l].languageIDs[0] }
 
+func baseName(name string) string { return path.Base(strings.ReplaceAll(name, "\\", "/")) }
+
 func FromName(name string) (Language, bool) {
-	base := path.Base(strings.ReplaceAll(name, "\\", "/"))
+	base := baseName(name)
 	return find(func(d definition) bool {
 		return slices.Contains(d.names, base) || slices.ContainsFunc(d.extensions, func(ext string) bool { return strings.HasSuffix(base, ext) })
 	})

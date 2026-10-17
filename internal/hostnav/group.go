@@ -136,6 +136,9 @@ func Build(ctx context.Context, h Host, env Env) (*Group, error) {
 	} else {
 		module = b.merged(roots)
 	}
+	if slices.ContainsFunc(roots, func(root *workspace.File) bool { return b.fragment(root, graph) }) {
+		module.Complete = false
+	}
 	g := &Group{Self: self, Language: b.language, Module: module, files: b.files, exists: env.Exists}
 	g.self = slices.Index(module.Files, self.Native.Index)
 	if g.self < 0 {
@@ -156,6 +159,10 @@ func Build(ctx context.Context, h Host, env Env) (*Group, error) {
 		}
 	}
 	return g, nil
+}
+
+func (b *builder) fragment(root *workspace.File, graph *Graph) bool {
+	return !b.language.EntryPoint(root.Path) && len(graph.of(root.Path)) == 0
 }
 
 func (b *builder) candidates(path string) []string {
