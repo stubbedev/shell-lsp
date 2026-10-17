@@ -567,6 +567,11 @@ for these files.
   `(recipe arguments)` dependencies and `just recipe arguments` lines, and
   the value of a variable whose value is a constant, such as `= "1.0"` after
   `{{version}}` or `= gcc` after `$(CC)` when the Makefile sets it.
+- **Quick fixes.** An unknown recipe, target, variable, function, module,
+  setting or attribute can be changed to the closest known name; an unknown
+  recipe dependency or `.PHONY` target can be added as an empty one; a missing
+  `import`, `mod` or `include` file can be created; and a Makefile recipe line
+  indented with spaces can be made to start with a tab.
 - **Completion and hover** for recipe and target names, variables,
   parameters, settings, attributes, built-in functions, constants, automatic
   variables and special targets, with what each one does.

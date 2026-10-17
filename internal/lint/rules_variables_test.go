@@ -44,25 +44,3 @@ func TestSourcedFunctionReadsItsArgumentByName(t *testing.T) {
 		t.Errorf("with a function reading every variable by name = %v, want none", got)
 	}
 }
-
-func TestNameDistance(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name, candidate string
-		distance        int
-		close           bool
-	}{
-		{"LOGLEVEL", "LOG_LEVEL", 1, true},
-		{"RETRY_COUNT", "Retry_Count", 1, true},
-		{"DATABSE_URI", "DATABASE_URL", 2, true},
-		{"ABC", "ABD", 0, false},
-		{"HOST", "PORT", 0, false},
-	}
-	for _, tc := range tests {
-		distance, ok := nameDistance(tc.name, tc.candidate)
-		if distance != tc.distance || ok != tc.close {
-			t.Errorf("nameDistance(%q, %q) = %d, %t; want %d, %t", tc.name, tc.candidate, distance, ok, tc.distance, tc.close)
-		}
-	}
-}

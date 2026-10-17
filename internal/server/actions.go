@@ -11,6 +11,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/actions"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
+	"github.com/stubbedev/shell-lsp/internal/hostnav"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
@@ -66,6 +67,23 @@ func (s *Server) handleCodeAction(ctx context.Context, docs *docstore.View, acti
 			return nil, err
 		}
 		out = append(out, lsp.Command{Title: a.Title, Command: commandApplyEdit, Arguments: []json.RawMessage{arg}})
+	}
+	if h, ok := hostnav.Of(snap.File); ok && wants(only, actions.QuickFix) {
+		fixes, err := s.nativeFixes(ctx, docs, h, actionParams)
+		if err != nil {
+			return nil, err
+		}
+		for _, fix := range fixes {
+			if literal {
+				out = append(out, fix)
+				continue
+			}
+			arg, err := json.Marshal(fix.Edit)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, lsp.Command{Title: fix.Title, Command: commandApplyEdit, Arguments: []json.RawMessage{arg}})
+		}
 	}
 	return out, nil
 }

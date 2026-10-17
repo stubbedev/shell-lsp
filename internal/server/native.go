@@ -11,8 +11,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/stubbedev/shell-lsp/internal/actions"
 	"github.com/stubbedev/shell-lsp/internal/config"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
+	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/host/model"
 	"github.com/stubbedev/shell-lsp/internal/hostnav"
@@ -441,6 +443,45 @@ func (s *Server) nativeCalls(docs *docstore.View, sites []hostnav.CallSite, inco
 			return nil, err
 		}
 		out = append(out, lsp.CallHierarchyOutgoingCall{To: to, FromRanges: sourcePositions(site.File, enc).Ranges(site.Spans)})
+	}
+	return out, nil
+}
+
+func (s *Server) nativeFixes(ctx context.Context, docs *docstore.View, h hostnav.Host, p lsp.CodeActionParams) ([]lsp.CodeAction, error) {
+	g, err := s.group(ctx, docs, h)
+	if err != nil {
+		return nil, err
+	}
+	file := h.File()
+	enc := docs.Encoding()
+	source := sourcePositions(file, enc)
+	within, _ := source.Span(p.Range)
+	caps := s.clientCapabilities().Workspace.WorkspaceEdit
+	creates := caps.DocumentChanges && slices.Contains(caps.ResourceOperations, "create")
+	_, open := docs.Document(file.URI)
+	var out []lsp.CodeAction
+	for _, fix := range g.Fixes(within) {
+		action := lsp.CodeAction{Title: fix.Title, Kind: lsp.CodeActionKind(actions.QuickFix), IsPreferred: fix.Preferred}
+		finding := source.Range(fix.Finding.Span)
+		for _, d := range p.Context.Diagnostics {
+			if d.Range == finding && d.Code == fix.Finding.Code.String() {
+				action.Diagnostics = append(action.Diagnostics, d)
+			}
+		}
+		edit := lsp.WorkspaceEdit{}
+		switch {
+		case fix.Create != "":
+			if !creates {
+				continue
+			}
+			edit.CreateFiles = []lsp.CreateFile{{URI: fileuri.FromPath(fix.Create)}}
+		default:
+			if edit, err = s.multiFileEdit(enc, []fileEdits{{doc: file.Doc.Source(), versioned: open, edits: fix.Edits}}); err != nil {
+				return nil, err
+			}
+		}
+		action.Edit = &edit
+		out = append(out, action)
 	}
 	return out, nil
 }

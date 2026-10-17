@@ -2,11 +2,13 @@ package lint
 
 import (
 	"cmp"
+	"maps"
 	"slices"
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/shelldocs"
+	"github.com/stubbedev/shell-lsp/internal/similar"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -657,10 +659,10 @@ func (p *pass) reportUnassigned(f variableFacts) {
 }
 
 func (p *pass) reportUnassignedRead(r variableSite, f variableFacts) {
-	similar, found := closestName(r.name, f.assigned)
+	closest, found := similar.Closest(r.name, maps.Keys(f.assigned))
 	if strings.ToUpper(r.name) == r.name && !p.settings.enabled(optionalUnassignedUppercase) {
 		if found {
-			p.report(2153, r.span, r.name+" is never assigned here; did you mean "+similar+"?")
+			p.report(2153, r.span, r.name+" is never assigned here; did you mean "+closest+"?")
 		}
 		return
 	}
@@ -669,52 +671,7 @@ func (p *pass) reportUnassignedRead(r variableSite, f variableFacts) {
 	case namesUtility(r.name):
 		message += " To run the " + r.name + " command, use $(" + r.name + ")."
 	case found:
-		message += " Did you mean " + similar + "?"
+		message += " Did you mean " + closest + "?"
 	}
 	p.report(2154, r.span, message)
-}
-
-func closestName(name string, candidates map[string]bool) (string, bool) {
-	best, bestDistance := "", 0
-	for candidate := range candidates {
-		distance, ok := nameDistance(name, candidate)
-		if !ok {
-			continue
-		}
-		if best == "" || distance < bestDistance || (distance == bestDistance && candidate < best) {
-			best, bestDistance = candidate, distance
-		}
-	}
-	return best, best != ""
-}
-
-func nameDistance(name, candidate string) (int, bool) {
-	distance := 1
-	if !strings.EqualFold(name, candidate) {
-		distance = levenshtein(name, candidate)
-	}
-	switch {
-	case len(candidate) > 7 && distance <= 2, len(candidate) > 3 && distance <= 1:
-		return distance, distance > 0
-	}
-	return 0, false
-}
-
-func levenshtein(a, b string) int {
-	row := make([]int, len(b)+1)
-	for j := range row {
-		row[j] = j
-	}
-	for i := 1; i <= len(a); i++ {
-		diagonal := row[0]
-		row[0] = i
-		for j := 1; j <= len(b); j++ {
-			cost := 1
-			if a[i-1] == b[j-1] {
-				cost = 0
-			}
-			diagonal, row[j] = row[j], min(row[j]+1, row[j-1]+1, diagonal+cost)
-		}
-	}
-	return row[len(b)]
 }

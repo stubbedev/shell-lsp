@@ -506,3 +506,30 @@ func TestNativeInlayHints(t *testing.T) {
 		t.Errorf("hints = %q, want %q", got, want)
 	}
 }
+
+func TestNativeQuickFixes(t *testing.T) {
+	t.Parallel()
+
+	files := map[string]string{"justfile": "build: compil\n    echo\ncompile:\n    cc\n"}
+	caps := `"capabilities": {"textDocument": {"diagnostic": {}, "codeAction": {"codeActionLiteralSupport": {"codeActionKind": {"valueSet": ["quickfix"]}}}}, "workspace": {"workspaceEdit": {"documentChanges": true, "resourceOperations": ["create"]}}}`
+	p := openNativeProject(t, caps, files, "justfile")
+	diags := pullDiagnostics(t, p.c, p.uri("justfile"))
+	raw, err := json.Marshal(diags)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := p.at("justfile", "compil", 0).Range
+	params := fmt.Sprintf(`{"textDocument": {"uri": %q}, "range": {"start": {"line": %d, "character": %d}, "end": {"line": %d, "character": %d}}, "context": {"diagnostics": %s}}`, p.uri("justfile"), r.Start.Line, r.Start.Character, r.End.Line, r.End.Character, raw)
+	actions := decodeResult[[]lsp.CodeAction](t, p.c.call("textDocument/codeAction", params))
+	var titles []string
+	for _, a := range actions {
+		titles = append(titles, a.Title)
+	}
+	if !slices.Contains(titles, "Change to `compile`") || !slices.Contains(titles, "Add recipe `compil`") {
+		t.Fatalf("actions = %q", titles)
+	}
+	change := actions[slices.Index(titles, "Change to `compile`")]
+	if !change.IsPreferred || len(change.Diagnostics) != 1 || change.Diagnostics[0].Code != "SL5002" || change.Edit == nil || len(change.Edit.DocumentChanges) != 1 || change.Edit.DocumentChanges[0].Edits[0].NewText != "compile" {
+		t.Errorf("change action = %+v", change)
+	}
+}
