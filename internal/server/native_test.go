@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -487,5 +488,21 @@ func TestNativeSignatureHelp(t *testing.T) {
 		if part := tt.label[label[0]:label[1]]; part != tt.param {
 			t.Errorf("%s: active parameter %q, want %q", tt.name, part, tt.param)
 		}
+	}
+}
+
+func TestNativeInlayHints(t *testing.T) {
+	t.Parallel()
+
+	files := map[string]string{"justfile": "version := \"1.0\"\nbuild target:\n    echo {{version}} {{target}}\nci: (build \"x\")\n    just build debug\n"}
+	p := openNativeProject(t, nativeCapabilities, files, "justfile")
+	hints := decodeResult[[]lsp.InlayHint](t, p.c.call("textDocument/inlayHint", `{"textDocument": {"uri": "`+p.uri("justfile")+`"}, "range": {"start": {"line": 0, "character": 0}, "end": {"line": 9, "character": 0}}}`))
+	var got []string
+	for _, h := range hints {
+		got = append(got, fmt.Sprintf("%d:%d %v", h.Position.Line, h.Position.Character, h.Label))
+	}
+	want := []string{`2:18 = "1.0"`, "3:11 target:", "4:15 target:"}
+	if !slices.Equal(got, want) {
+		t.Errorf("hints = %q, want %q", got, want)
 	}
 }

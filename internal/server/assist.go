@@ -97,18 +97,32 @@ type hintData struct {
 	Tooltip string `json:"tooltip"`
 }
 
-func (s *Server) handleInlayHint(_ context.Context, docs *docstore.View, p lsp.InlayHintParams) (any, error) {
+func (s *Server) handleInlayHint(ctx context.Context, docs *docstore.View, p lsp.InlayHintParams) (any, error) {
 	file, err := s.workspaceFile(docs, p.TextDocument.URI)
 	if err != nil {
 		return nil, err
 	}
 	at := docs.Positions(file.Doc)
+	out := []lsp.InlayHint{}
+	if h, ok := hostnav.Of(file); ok {
+		g, err := s.group(ctx, docs, h)
+		if err != nil {
+			return nil, err
+		}
+		source := sourcePositions(file, docs.Encoding())
+		within, _ := source.Span(p.Range)
+		if out, err = appendHints(out, g.InlayHints(within), source); err != nil {
+			return nil, err
+		}
+	}
 	within, inShell := at.Span(p.Range)
 	if !inShell {
-		return []lsp.InlayHint{}, nil
+		return out, nil
 	}
-	hints := assist.InlayHints(file, within, s.functionLookup(file), s.navigationEnv())
-	out := make([]lsp.InlayHint, 0, len(hints))
+	return appendHints(out, assist.InlayHints(file, within, s.functionLookup(file), s.navigationEnv()), at)
+}
+
+func appendHints(out []lsp.InlayHint, hints []assist.Hint, at docstore.Positions) ([]lsp.InlayHint, error) {
 	for _, h := range hints {
 		hint := lsp.InlayHint{Position: at.Position(h.Offset), Label: h.Label}
 		switch h.Kind {
@@ -116,7 +130,7 @@ func (s *Server) handleInlayHint(_ context.Context, docs *docstore.View, p lsp.I
 			hint.Kind = lsp.InlayHintType
 		case assist.HintParameter:
 			hint.Kind, hint.PaddingRight = lsp.InlayHintParameter, true
-		case assist.HintPath:
+		case assist.HintPath, assist.HintValue:
 			hint.PaddingLeft = true
 		}
 		if h.Tooltip != "" {

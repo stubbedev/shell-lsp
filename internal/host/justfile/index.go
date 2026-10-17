@@ -3,6 +3,7 @@ package justfile
 import (
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/host/model"
@@ -143,6 +144,9 @@ func (in *indexer) assignment(a *Assignment) {
 		Detail: detail(in.text(Span{Start: a.Name.Span.Start, End: a.Span.End})), Doc: a.Doc,
 		Exported: a.Export || in.ix.ExportAll, Unused: !a.Export && !in.ix.ExportAll && !strings.HasPrefix(a.Name.Text, "_"), Arity: model.NoArity,
 	})
+	if values, ok := in.f.Constant(a.Value); ok && len(values) == 1 {
+		in.ix.Symbols[i].Value, in.ix.Symbols[i].Constant = strconv.Quote(values[0]), true
+	}
 	in.attributes(a.Attributes, i)
 	in.token(a.Name.Span, semantic.TypeVariable, semantic.ModDeclaration)
 	in.expr(a.Value, model.Global, i, true)
@@ -290,6 +294,12 @@ func (in *indexer) recipe(r *Recipe, positional bool) {
 			args = len(d.Args)
 		}
 		in.path(d.Target, i, args, true)
+		if d.Paren {
+			call := &in.ix.Refs[len(in.ix.Refs)-1]
+			for _, a := range d.Args {
+				call.ArgSpans = append(call.ArgSpans, a.Span)
+			}
+		}
 		for _, a := range d.Args {
 			in.expr(a, scope, i, false)
 		}
@@ -336,7 +346,11 @@ func (in *indexer) expr(e *Expr, scope model.Scope, owner int, edge bool) {
 			in.ix.Refs = append(in.ix.Refs, model.Ref{Name: x.Name.Text, Kind: model.KindVariable, Span: x.Span, Scope: scope, Args: model.NoArgs, Owner: owner, Edge: edge})
 			in.token(x.Span, semantic.TypeVariable, 0)
 		case ExprCall:
-			in.ix.Refs = append(in.ix.Refs, model.Ref{Name: x.Name.Text, Kind: model.KindFunction, Span: x.Name.Span, Scope: scope, Args: len(x.Args), Owner: owner})
+			call := model.Ref{Name: x.Name.Text, Kind: model.KindFunction, Span: x.Name.Span, Scope: scope, Args: len(x.Args), Owner: owner}
+			for _, a := range x.Args {
+				call.ArgSpans = append(call.ArgSpans, a.Span)
+			}
+			in.ix.Refs = append(in.ix.Refs, call)
 			in.token(x.Name.Span, semantic.TypeFunction, 0)
 		case ExprString, ExprBacktick:
 			in.stringTokens(x)

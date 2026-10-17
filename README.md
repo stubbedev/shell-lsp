@@ -563,6 +563,10 @@ for these files.
 - **Signature help** for just and make functions, user-defined just
   functions, `(recipe arguments)` dependencies, attributes, and `just recipe
   arguments` lines in recipe bodies, with the argument being typed marked.
+- **Inlay hints.** Parameter names on the arguments of functions,
+  `(recipe arguments)` dependencies and `just recipe arguments` lines, and
+  the value of a variable whose value is a constant, such as `= "1.0"` after
+  `{{version}}` or `= gcc` after `$(CC)` when the Makefile sets it.
 - **Completion and hover** for recipe and target names, variables,
   parameters, settings, attributes, built-in functions, constants, automatic
   variables and special targets, with what each one does.

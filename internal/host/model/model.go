@@ -110,6 +110,8 @@ type Symbol struct {
 	Exported  bool
 	Unused    bool
 	Appends   bool
+	Value     string
+	Constant  bool
 	Arity     Arity
 }
 
@@ -139,6 +141,7 @@ type Ref struct {
 	Soft      bool
 	Horizon   int
 	Late      bool
+	ArgSpans  []Span
 }
 
 const NoArgs = -1

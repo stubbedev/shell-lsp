@@ -66,6 +66,7 @@ const (
 	HintType HintKind = iota + 1
 	HintParameter
 	HintPath
+	HintValue
 )
 
 type Hint struct {

@@ -239,6 +239,9 @@ func (in *indexer) assignment(a *Assignment) {
 			owner = i
 		}
 	}
+	if value, ok := a.Value.Literal(in.f.Text); ok && owner != model.NoSymbol && !a.Define && a.Op != "+=" && a.Op != "!=" {
+		in.ix.Symbols[owner].Value, in.ix.Symbols[owner].Constant = strings.TrimSpace(value), true
+	}
 	in.token(a.Name.Span, semantic.TypeVariable, semantic.ModDeclaration)
 	edge := a.Deferred && len(a.Targets) == 0
 	in.walk(a.Name.Expr, model.Global, owner, false, nil)
@@ -296,7 +299,11 @@ func (in *indexer) reference(n Node, scope model.Scope, owner int, edge bool, bo
 
 func (in *indexer) call(n Node, scope model.Scope, owner int, edge bool, bound []string) {
 	name, _ := n.Name.Literal(in.f.Text)
-	in.ix.Refs = append(in.ix.Refs, model.Ref{Name: name, Kind: model.KindFunction, Span: n.Name.Span, Scope: scope, Args: len(n.Args), Owner: owner, Edge: edge})
+	call := model.Ref{Name: name, Kind: model.KindFunction, Span: n.Name.Span, Scope: scope, Args: len(n.Args), Owner: owner, Edge: edge}
+	for _, a := range n.Args {
+		call.ArgSpans = append(call.ArgSpans, a.Span)
+	}
+	in.ix.Refs = append(in.ix.Refs, call)
 	in.token(n.Name.Span, semantic.TypeFunction, semantic.ModDefaultLibrary)
 	args := n.Args
 	switch {
