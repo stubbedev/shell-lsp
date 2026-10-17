@@ -153,6 +153,7 @@ rejected 1:5 could not find source file for module `foo`
 1:5 SL5018 error no source file for module `foo`; looked for `foo.just`, `foo/mod.just`, `foo/justfile`, `foo/Justfile`, `foo/JUSTFILE`, `foo/.justfile`
 -- optional-module --
 accepted
+2:1 SL5024 warning recipe `a` cannot run: it depends on `foo::b` of the absent module `foo`
 -- missing-import --
 rejected 1:8 could not find source file for import
 1:8 SL5018 error `nothere.just` is not found
@@ -304,3 +305,8 @@ rejected 2:20 indentation may not be mixed
 2:20 SL5016 error the indentation must be all spaces or all tabs
 -- tab-indentation --
 accepted
+-- recipe-depending-on-an-absent-module --
+accepted
+2:1 SL5024 warning recipe `lint` cannot run: it depends on `tools::check` of the absent module `tools`
+4:1 SL5024 warning recipe `ci` cannot run: it depends on `lint`, which needs the absent module `tools`
+6:7 SL5024 warning alias `l` cannot run: it depends on `lint`, which needs the absent module `tools`

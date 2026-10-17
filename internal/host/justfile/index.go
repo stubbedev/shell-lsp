@@ -13,7 +13,7 @@ import (
 
 const maxDetail = 80
 
-var Checks = model.Checks{Of: rules, Deprecated: lint.CodeJustDeprecated, Missing: lint.CodeJustMissingFile}
+var Checks = model.Checks{Of: rules, Deprecated: lint.CodeJustDeprecated, Missing: lint.CodeJustMissingFile, Absent: lint.CodeJustAbsentModule}
 
 func rules(kind model.Kind) model.Rules {
 	switch kind {

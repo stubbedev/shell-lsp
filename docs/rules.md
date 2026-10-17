@@ -1047,6 +1047,19 @@ functions also needs `set unstable`.
 targets := ["a", "b"]    # SL5023
 ```
 
+## SL5024
+
+**A recipe depends on an absent module.** When `mod?` finds no file for a
+module, just leaves out every recipe and alias that depends on one of its
+recipes, directly or through other recipes, so running them fails with
+"depends on absent module".
+
+```just
+mod? tools
+lint: tools::check    # SL5024
+    echo linted
+```
+
 ## SL6001
 
 **The Makefile does not parse.** make stops with "missing separator": a line

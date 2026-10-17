@@ -32,6 +32,7 @@ const (
 	CodeJustIndentation
 	CodeJustDeprecated
 	CodeJustNeedsSetting
+	CodeJustAbsentModule
 )
 
 const (
@@ -84,6 +85,7 @@ var hostFamily = family{
 		CodeJustIndentation:         {severity: SeverityError},
 		CodeJustDeprecated:          {severity: SeverityWarning, tag: TagDeprecated},
 		CodeJustNeedsSetting:        {severity: SeverityError},
+		CodeJustAbsentModule:        {severity: SeverityWarning},
 
 		CodeMakeSyntax:                {severity: SeverityError},
 		CodeMakeConditional:           {severity: SeverityError},

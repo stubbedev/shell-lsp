@@ -442,3 +442,12 @@ set indentation := " 	"
 -- tab-indentation --
 set unstable
 set indentation := "	"
+-- recipe-depending-on-an-absent-module --
+mod? tools
+lint: tools::check
+    echo
+ci: lint
+    echo
+alias l := lint
+build:
+    echo

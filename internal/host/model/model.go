@@ -148,6 +148,13 @@ const NoArgs = -1
 
 func (r Ref) Qualified() bool { return len(r.Qualifier) > 0 }
 
+func (r Ref) FirstQualifier() string {
+	if len(r.Qualifier) == 0 {
+		return ""
+	}
+	return r.Qualifier[0]
+}
+
 type Include struct {
 	Span       Span
 	Path       string
@@ -284,6 +291,7 @@ type Checks struct {
 	Of         func(Kind) Rules
 	Deprecated lint.Code
 	Missing    lint.Code
+	Absent     lint.Code
 }
 
 func Nested(offset int, spans []Span) []Span {

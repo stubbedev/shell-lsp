@@ -216,6 +216,9 @@ func (m *Module) Findings(file int, checks Checks, used Usage) []lint.Finding {
 		}
 	}
 	out = append(out, m.cycles(file, checks, expanded)...)
+	if checks.Absent != 0 {
+		out = append(out, m.absent(file, checks.Absent)...)
+	}
 	for _, d := range ix.Deferred {
 		code := d.Unused
 		if expanded[Target{Module: m, File: file, Symbol: d.Symbol}] {
@@ -329,6 +332,53 @@ func (m *Module) pathBack(from, goal node, seen map[node]bool) ([]node, bool) {
 		}
 	}
 	return nil, false
+}
+
+func (m *Module) absent(file int, code lint.Code) []lint.Finding {
+	type blocker struct {
+		via    string
+		module string
+	}
+	blocked := map[node]blocker{}
+	for changed := true; changed; {
+		changed = false
+		for f, ix := range m.Files {
+			for _, r := range ix.Refs {
+				owner := node{f, r.Owner}
+				if !r.Edge || r.Owner < 0 || ix.Symbols[r.Owner].Kind.Namespace() != r.Kind.Namespace() {
+					continue
+				}
+				if _, done := blocked[owner]; done {
+					continue
+				}
+				res := m.Resolve(f, r)
+				if sub, declared := m.Submodules[r.FirstQualifier()]; res.Missing && declared && sub == nil {
+					blocked[owner], changed = blocker{via: qualified(r), module: r.Qualifier[0]}, true
+					continue
+				}
+				for _, t := range res.Targets {
+					if b, ok := blocked[node{t.File, t.Symbol}]; ok && t.Module == m {
+						blocked[owner], changed = blocker{via: t.Info().Name, module: b.module}, true
+						break
+					}
+				}
+			}
+		}
+	}
+	var out []lint.Finding
+	ix := m.Files[file]
+	for i, s := range ix.Symbols {
+		b, ok := blocked[node{file, i}]
+		if !ok {
+			continue
+		}
+		message := fmt.Sprintf("%s `%s` cannot run: it depends on `%s` of the absent module `%s`", s.Kind, s.Name, b.via, b.module)
+		if !strings.Contains(b.via, "::") {
+			message = fmt.Sprintf("%s `%s` cannot run: it depends on `%s`, which needs the absent module `%s`", s.Kind, s.Name, b.via, b.module)
+		}
+		out = append(out, lint.HostFinding(code, s.Selection, message))
+	}
+	return out
 }
 
 func MissingInclude(checks Checks, inc Include) lint.Finding {

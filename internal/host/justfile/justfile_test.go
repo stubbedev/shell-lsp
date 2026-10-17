@@ -106,6 +106,8 @@ func TestProjectDialect(t *testing.T) {
 		{"script interpreter", "set script-interpreter := ['dash', '-eu']\n[script]\nx:\n    echo\n", dialect.Detection{Dialect: dialect.Dash, Source: dialect.SourceHostSetting, Evidence: "set script-interpreter := ['dash', '-eu']"}, 1},
 		{"script attribute", "[script('bash')]\nx:\n    echo\n", dialect.Detection{Dialect: dialect.Bash, Source: dialect.SourceHostSetting, Evidence: "[script('bash')]"}, 1},
 		{"computed shell", "base := \"ba\"\nset shell := [base + \"sh\", \"-c\"]\nx:\n    echo\n", dialect.Detection{Dialect: dialect.Bash, Source: dialect.SourceHostSetting, Evidence: `set shell := [base + "sh", "-c"]`}, 1},
+		{"python shebang", "x:\n    #!/usr/bin/env python3\n    print(1)\ny:\n    echo\n", dialect.Detection{Dialect: dialect.Posix, Source: dialect.SourceHostDefault, Evidence: "just"}, 1},
+		{"python script attribute", "[script('python3')]\nx:\n    print(1)\n", dialect.Detection{Dialect: dialect.Posix, Source: dialect.SourceHostDefault, Evidence: "just"}, 0},
 		{"no shell at all", "set shell := [\"nu\", \"-c\"]\nx:\n    ls\n", dialect.Detection{Dialect: dialect.Posix, Source: dialect.SourceHostDefault, Evidence: "just"}, 0},
 	} {
 		m, got := Project(tt.justfile)
