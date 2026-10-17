@@ -119,6 +119,11 @@ rejected 3:3 recipe line has extra leading whitespace
 accepted
 -- shebang-may-indent --
 accepted
+-- shebang-may-mix-tabs-into-indentation --
+accepted
+-- mixed-first-body-line --
+rejected 2:1 found a mix of tabs and spaces in leading whitespace: `␠␉`
+2:1 SL5001 error leading whitespace mixes tabs and spaces: `␠␉`
 -- list-literal-needs-lists --
 rejected 1:6 list literals require `set lists`
 1:6 SL5023 error list literals need `set lists`

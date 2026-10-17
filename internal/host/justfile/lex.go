@@ -34,15 +34,15 @@ func (f *File) lexicalErrors() {
 			continue
 		}
 		indent := line[:len(line)-len(strings.TrimLeft(line, " \t"))]
-		if strings.Contains(indent, " ") && strings.Contains(indent, "\t") {
-			l.lexError(Span{Start: start, End: start + len(indent)}, "leading whitespace mixes tabs and spaces: "+whitespace(indent))
-		}
 		if indent != "" && l.inBody {
 			if body := l.levels[len(l.levels)-1]; !strings.HasPrefix(indent, body) {
 				l.report(Error{Code: lint.CodeJustIndentation, Span: Span{Start: start, End: start + len(indent)}, Message: "recipe line has inconsistent leading whitespace: it started with " + whitespace(body) + " but this line has " + whitespace(indent)})
 			}
 			l.body(end)
 			continue
+		}
+		if strings.Contains(indent, " ") && strings.Contains(indent, "\t") {
+			l.lexError(Span{Start: start, End: start + len(indent)}, "leading whitespace mixes tabs and spaces: "+whitespace(indent))
 		}
 		if indent != "" && l.colon && len(indent) > len(l.indent) && strings.HasPrefix(indent, l.indent) {
 			l.inBody, l.colon = true, false

@@ -183,6 +183,15 @@ a:
   if true; then
     echo 1
   fi
+-- shebang-may-mix-tabs-into-indentation --
+a:
+    #!/usr/bin/env bash
+    for x in 1; do
+    	echo $x
+    done
+-- mixed-first-body-line --
+a:
+ 	echo 1
 -- list-literal-needs-lists --
 x := ["a"]
 a:
