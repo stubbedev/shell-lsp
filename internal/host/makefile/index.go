@@ -39,8 +39,8 @@ type Analysis struct {
 
 func Analyze(text string) Analysis {
 	f := Parse(text)
-	m, detection, shell := project(f)
-	return Analysis{File: f, Map: m, Detection: detection, Index: f.Index(shell)}
+	m, detection, shells := project(f)
+	return Analysis{File: f, Map: m, Detection: detection, Index: f.Index(shells)}
 }
 
 type indexer struct {
@@ -103,7 +103,7 @@ func detail(s string) string {
 	return s
 }
 
-func (f *File) Index(shell bool) *model.Index {
+func (f *File) Index(shells map[*Rule]bool) *model.Index {
 	ix := &model.Index{ExportAll: f.ExportAll, Broken: slices.ContainsFunc(f.Errors, func(e Error) bool {
 		return e.Kind != ErrUnterminated && e.Kind != ErrDeferredUnterminated && e.Kind != ErrPatternUnterminated && e.Kind != ErrPatternMismatch
 	})}
@@ -114,7 +114,7 @@ func (f *File) Index(shell bool) *model.Index {
 		in.assignment(a)
 	}
 	for _, r := range f.Rules {
-		in.rule(r, shell)
+		in.rule(r, shells[r])
 	}
 	for _, inc := range f.Includes {
 		in.include(inc)
@@ -234,7 +234,7 @@ func (in *indexer) evaluated(arg Expr) {
 		return
 	}
 	shift := func(s Span) Span { return Span{Start: at[s.Start], End: at[s.End]} }
-	ix := sub.Index(false)
+	ix := sub.Index(nil)
 	if ix.Opaque || slices.ContainsFunc(ix.Symbols, func(s model.Symbol) bool { return s.Scope != model.Global }) || slices.ContainsFunc(ix.Refs, func(r model.Ref) bool { return r.Scope != model.Global }) {
 		in.ix.Opaque = true
 		return

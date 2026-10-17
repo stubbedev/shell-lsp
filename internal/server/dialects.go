@@ -28,6 +28,7 @@ var selectableNames = func() []string {
 
 type documentDialectParams struct {
 	TextDocument lsp.TextDocumentIdentifier `json:"textDocument"`
+	Position     *lsp.Position              `json:"position,omitempty"`
 }
 
 type detectedDialect struct {
@@ -71,6 +72,11 @@ func (s *Server) handleDocumentDialect(_ context.Context, docs *docstore.View, p
 	snap, err := s.snapshot(docs, p.TextDocument.URI)
 	if err != nil {
 		return nil, err
+	}
+	if p.Position != nil {
+		if offset, inside := snap.positions().Offset(*p.Position); inside {
+			snap = snap.at(offset)
+		}
 	}
 	d := snap.Detection
 	answer := documentDialect{detected: detectedDialect{

@@ -61,6 +61,11 @@ export class DialectStatus implements Disposable {
       window.onDidChangeActiveTextEditor(() => {
         this.schedule();
       }),
+      window.onDidChangeTextEditorSelection((change) => {
+        if (change.textEditor === window.activeTextEditor) {
+          this.schedule();
+        }
+      }),
       workspace.onDidOpenTextDocument(() => {
         this.schedule();
       }),
@@ -159,7 +164,11 @@ export class DialectStatus implements Disposable {
   }
 
   private async request(client: LanguageClient, target: ShellDocument): Promise<DocumentDialect> {
-    const result: unknown = await client.sendRequest(documentDialectMethod, { textDocument: target.textDocument });
+    const cursor = window.activeTextEditor?.document === target.document ? window.activeTextEditor.selection.active : undefined;
+    const result: unknown = await client.sendRequest(documentDialectMethod, {
+      textDocument: target.textDocument,
+      ...(cursor === undefined ? {} : { position: client.code2ProtocolConverter.asPosition(cursor) }),
+    });
     return documentDialect(result);
   }
 

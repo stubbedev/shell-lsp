@@ -73,13 +73,11 @@ func Project(text string) (*projection.Map, dialect.Detection) {
 	return m, detection
 }
 
-func project(f *File) (*projection.Map, dialect.Detection, bool) {
+func project(f *File) (*projection.Map, dialect.Detection, map[*Rule]bool) {
 	p := f.settings()
 	b := projection.NewBuilder(f.Text)
-	detection, ok := p.dialect()
-	if !ok {
-		return b.Map(), detection, false
-	}
+	detection, analysed := p.dialect()
+	b.Shell(detection)
 	b.Region(encode)
 	prelude := p.prelude(f)
 	exprs := map[int]Expr{}
@@ -89,8 +87,14 @@ func project(f *File) (*projection.Map, dialect.Detection, bool) {
 		}
 	}
 	body := func(l projection.RecipeLine) { p.content(b, exprs[l.Start], l.Command) }
-	shells := b.LineShells(prelude)
+	projected := map[*Rule]bool{}
 	for _, rule := range f.Rules {
+		shell, ok := p.ruleShell(rule, detection, analysed)
+		if !ok {
+			continue
+		}
+		projected[rule] = true
+		b.Shell(shell)
 		lines := make([]projection.RecipeLine, 0, len(rule.Recipe))
 		for _, l := range rule.Recipe {
 			lines = append(lines, p.recipeLine(l))
@@ -99,11 +103,29 @@ func project(f *File) (*projection.Map, dialect.Detection, bool) {
 			b.OneShell(prelude, slices.DeleteFunc(lines, projection.RecipeLine.Empty), body)
 			continue
 		}
+		shells := b.LineShells(prelude)
 		for _, l := range lines {
 			shells.Add(l, body)
 		}
 	}
-	return b.Map(), detection, true
+	return b.Map(), detection, projected
+}
+
+func (p *reader) ruleShell(r *Rule, global dialect.Detection, analysed bool) (dialect.Detection, bool) {
+	for _, a := range slices.Backward(p.file.Assignments) {
+		if a.Name.Text != "SHELL" || a.Op == "+=" || a.Op == "?=" || !slices.ContainsFunc(a.Targets, func(t Word) bool {
+			return slices.ContainsFunc(r.Targets, func(target Word) bool { return target.Text == t.Text })
+		}) {
+			continue
+		}
+		value, literal := a.Value.Literal(p.text)
+		if !literal {
+			return dialect.Detection{}, false
+		}
+		d, ok := dialect.FromShebang("#!" + strings.TrimSpace(value))
+		return dialect.Detection{Dialect: d, Source: dialect.SourceHostSetting, Evidence: oneLine(p.text[a.Span.Start:a.Value.Span.End])}, ok
+	}
+	return global, analysed
 }
 
 func (f *File) settings() *reader {

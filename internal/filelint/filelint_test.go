@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/lint"
@@ -96,5 +97,36 @@ func TestCheckReportsAByteOrderMark(t *testing.T) {
 	}
 	if got := codes(Check(file, navigation.Env{Loader: loader{ws}, Roots: []string{dir}}, Settings{}).Findings); !slices.Contains(got, 1082) {
 		t.Errorf("findings = %v, want SC1082 for the byte order mark the store strips", got)
+	}
+}
+
+func TestCheckLintsEachRecipeAsItsOwnShell(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	files := map[string]string{
+		"justfile": "plain:\n    arr=(1 2)\nbash:\n    #!/usr/bin/env bash\n    arr=(1 2)\n",
+		"Makefile": "plain:\n\tarr=(1 2)\nbash: SHELL := /bin/bash\nbash:\n\tarr=(1 2)\n",
+	}
+	for name, text := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(text), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect)
+	for name, text := range files {
+		file, err := ws.Load(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var lines []int
+		for _, f := range Check(file, navigation.Env{Loader: loader{ws}, Roots: []string{dir}}, Settings{}).Findings {
+			if f.Code == 3030 {
+				lines = append(lines, strings.Count(text[:file.Doc.SourceOffset(f.Span.Start)], "\n")+1)
+			}
+		}
+		if !slices.Equal(lines, []int{2}) {
+			t.Errorf("%s: arrays reported on lines %v, want only line 2, the recipe sh runs", name, lines)
+		}
 	}
 }

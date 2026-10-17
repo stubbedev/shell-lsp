@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The shell status follows the cursor: in a justfile, Makefile or Nix file
+  it shows the shell of the recipe or string the cursor is in.
 - Formats Makefiles: spacing around operators and rule colons, trailing
   whitespace make ignores and runs of blank lines, leaving recipes and
   `define` bodies as they are.

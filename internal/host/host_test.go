@@ -1,13 +1,18 @@
 package host
 
 import (
+	"maps"
+	"os/exec"
 	"slices"
+	"strings"
 	"testing"
 
+	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/host/model"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
+	"github.com/stubbedev/shell-lsp/internal/parser"
 )
 
 func TestOf(t *testing.T) {
@@ -201,5 +206,46 @@ func TestNixHasNoNativeAnalysis(t *testing.T) {
 	}
 	if _, ok := native.Expect(0); !ok {
 		t.Error("no completion context at the start of a justfile")
+	}
+}
+
+func TestEveryRecipeParsesAsItsOwnShell(t *testing.T) {
+	t.Parallel()
+
+	shells := map[dialect.Dialect][]string{dialect.Posix: {"dash", "-n"}, dialect.Bash: {"bash", "-n"}, dialect.Zsh: {"zsh", "-f", "-n"}}
+	for _, tt := range []struct {
+		language Language
+		uri, id  string
+		text     string
+	}{
+		{Just, "file:///w/justfile", "just", "plain:\n    echo \"$1\"\nbash:\n    #!/usr/bin/env bash\n    arr=(1 2); echo \"${arr[@]}\"\nzsh:\n    #!/usr/bin/env zsh\n    for i (1 2) echo $i\n"},
+		{Make, "file:///w/Makefile", "makefile", "plain:\n\techo \"$$1\"\nbash: SHELL := /bin/bash\nbash:\n\tarr=(1 2); echo \"$${arr[@]}\"\nzsh: SHELL := /bin/zsh\nzsh:\n\tfor i (1 2) echo $$i\n"},
+	} {
+		script := tt.language.Project(docstore.NewDocument(tt.uri, tt.id, 1, tt.text))
+		trees := map[dialect.Dialect]*parser.Tree{script.Detection.Dialect: script.Parse(nil)}
+		spans := map[dialect.Dialect][]parser.Span{script.Detection.Dialect: script.Spans()}
+		for _, v := range script.Variants {
+			trees[v.Detection.Dialect] = script.ParseVariant(v, nil)
+			spans[v.Detection.Dialect] = v.Spans()
+		}
+		if len(trees) != 3 {
+			t.Fatalf("%s: shells %v, want sh, bash and zsh", tt.uri, slices.Collect(maps.Keys(trees)))
+		}
+		for d, tree := range trees {
+			if len(tree.Errors) > 0 {
+				t.Errorf("%s: the %s recipes do not parse as %s: %v", tt.uri, d, d, tree.Errors)
+			}
+			argv := shells[d]
+			if _, err := exec.LookPath(argv[0]); err != nil {
+				t.Skipf("comparing with %s needs it on PATH: %v", argv[0], err)
+			}
+			for _, span := range spans[d] {
+				cmd := exec.CommandContext(t.Context(), argv[0], argv[1:]...)
+				cmd.Stdin = strings.NewReader(script.Doc.Text()[span.Start:span.End])
+				if out, err := cmd.CombinedOutput(); err != nil {
+					t.Errorf("%s: %s -n rejects the %s recipe it runs: %v\n%s", tt.uri, argv[0], d, err, out)
+				}
+			}
+		}
 	}
 }

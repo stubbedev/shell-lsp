@@ -100,9 +100,12 @@ type file struct {
 func Project(src string) (*projection.Map, dialect.Detection) {
 	f := &file{src: src, tokens: tokenize(src), partner: map[int]int{}, contexts: map[int]context{}, excluded: map[int][]string{}}
 	f.scan()
-	detection, kept := dialect.Choose(f.shellStrings(), func(s shellString) dialect.Detection { return s.detection }, tool)
+	found := f.shellStrings()
+	detection, _ := dialect.Choose(found, func(s shellString) dialect.Detection { return s.detection }, tool)
 	b := projection.NewBuilder(src)
-	for n, group := range groups(kept) {
+	b.Shell(detection)
+	for n, group := range groups(found) {
+		b.Shell(group[0].detection)
 		f.project(b, group, n)
 	}
 	return b.Map(), detection

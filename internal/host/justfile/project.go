@@ -60,10 +60,13 @@ func Project(text string) (*projection.Map, dialect.Detection) {
 
 func (f *File) project() (*projection.Map, dialect.Detection, []*Recipe) {
 	p := projector{file: f, text: f.Text}
-	detection, kept := dialect.Choose(p.scripts(), func(s script) dialect.Detection { return s.detection }, tool)
+	scripts := p.scripts()
+	detection, _ := dialect.Choose(scripts, func(s script) dialect.Detection { return s.detection }, tool)
 	b := projection.NewBuilder(f.Text)
-	shells := make([]*Recipe, len(kept))
-	for i, s := range kept {
+	b.Shell(detection)
+	shells := make([]*Recipe, len(scripts))
+	for i, s := range scripts {
+		b.Shell(s.detection)
 		p.project(b, s)
 		shells[i] = s.recipe
 	}

@@ -47,7 +47,7 @@ func (s *Server) format(docs *docstore.View, uri string, opts lsp.FormattingOpti
 		return s.formatNative(snap, within)
 	}
 	if snap.Doc.Projected() {
-		s.noticeOnce("format-projected:"+uri, lsp.MessageInfo, "Not formatting "+uri+": shell-lsp formats shell scripts and justfiles, not the shell embedded in other files.")
+		s.noticeOnce("format-projected:"+uri, lsp.MessageInfo, "Not formatting "+uri+": shell-lsp formats shell scripts, justfiles and Makefiles, not the shell embedded in other files.")
 		return []lsp.TextEdit{}, nil
 	}
 	text := snap.Doc.Text()

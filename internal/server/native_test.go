@@ -610,3 +610,28 @@ func offsetOf(text string, pos lsp.Position) int {
 	}
 	return offset + int(pos.Character)
 }
+
+func TestDialectOfTheRecipeUnderTheCursor(t *testing.T) {
+	t.Parallel()
+
+	files := map[string]string{"justfile": "plain:\n    echo plain\nbash:\n    #!/usr/bin/env bash\n    echo bash\n"}
+	p := openNativeProject(t, nativeCapabilities, files, "justfile")
+	dialectAt := func(params string) string {
+		var got struct {
+			Dialect string `json:"dialect"`
+		}
+		if err := json.Unmarshal(p.c.call("shellLsp/documentDialect", params).Result, &got); err != nil {
+			t.Fatal(err)
+		}
+		return got.Dialect
+	}
+	if got := dialectAt(p.params("justfile", "plain", 1, "")); got != "sh" {
+		t.Errorf("dialect in the plain recipe = %q, want sh", got)
+	}
+	if got := dialectAt(p.params("justfile", "bash", 2, "")); got != "bash" {
+		t.Errorf("dialect in the bash recipe = %q, want bash", got)
+	}
+	if got := dialectAt(`{"textDocument": {"uri": "` + p.uri("justfile") + `"}}`); got != "bash" {
+		t.Errorf("dialect of the whole justfile = %q, want bash, the widest of its shells", got)
+	}
+}

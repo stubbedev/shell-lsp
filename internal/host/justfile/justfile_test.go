@@ -1,6 +1,7 @@
 package justfile
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -91,6 +92,19 @@ func TestProjectText(t *testing.T) {
 	}
 }
 
+func TestProjectShellPerRecipe(t *testing.T) {
+	t.Parallel()
+
+	m, _ := Project("a:\n    echo a\nb:\n    #!/usr/bin/env bash\n    echo b\n[script('zsh')]\nc:\n    print c\n")
+	var got []dialect.Dialect
+	for _, d := range m.Shells() {
+		got = append(got, d.Dialect)
+	}
+	if want := []dialect.Dialect{dialect.Posix, dialect.Bash, dialect.Zsh}; !slices.Equal(got, want) || len(m.Scripts()) != len(want) {
+		t.Errorf("shells of the scripts = %v over %d scripts, want %v", got, len(m.Scripts()), want)
+	}
+}
+
 func TestProjectDialect(t *testing.T) {
 	t.Parallel()
 
@@ -102,7 +116,7 @@ func TestProjectDialect(t *testing.T) {
 		{"default shell", "x:\n    echo\n", dialect.Detection{Dialect: dialect.Posix, Source: dialect.SourceHostDefault, Evidence: "just"}, 1},
 		{"set shell", "set shell := [\"bash\", \"-uc\"]\nx:\n    echo\n", dialect.Detection{Dialect: dialect.Bash, Source: dialect.SourceHostSetting, Evidence: `set shell := ["bash", "-uc"]`}, 1},
 		{"widest of the sh family", "x:\n    echo\ny:\n    #!/usr/bin/env bash\n    echo\n", dialect.Detection{Dialect: dialect.Bash, Source: dialect.SourceHostSetting, Evidence: "#!/usr/bin/env bash"}, 2},
-		{"the family most recipes use", "a:\n    #!/bin/zsh\n    print\nb:\n    #!/bin/zsh\n    print\nc:\n    echo\n", dialect.Detection{Dialect: dialect.Zsh, Source: dialect.SourceHostSetting, Evidence: "#!/bin/zsh"}, 2},
+		{"the family most recipes use", "a:\n    #!/bin/zsh\n    print\nb:\n    #!/bin/zsh\n    print\nc:\n    echo\n", dialect.Detection{Dialect: dialect.Zsh, Source: dialect.SourceHostSetting, Evidence: "#!/bin/zsh"}, 3},
 		{"script interpreter", "set script-interpreter := ['dash', '-eu']\n[script]\nx:\n    echo\n", dialect.Detection{Dialect: dialect.Dash, Source: dialect.SourceHostSetting, Evidence: "set script-interpreter := ['dash', '-eu']"}, 1},
 		{"script attribute", "[script('bash')]\nx:\n    echo\n", dialect.Detection{Dialect: dialect.Bash, Source: dialect.SourceHostSetting, Evidence: "[script('bash')]"}, 1},
 		{"computed shell", "base := \"ba\"\nset shell := [base + \"sh\", \"-c\"]\nx:\n    echo\n", dialect.Detection{Dialect: dialect.Bash, Source: dialect.SourceHostSetting, Evidence: `set shell := [base + "sh", "-c"]`}, 1},

@@ -174,6 +174,12 @@ type Script struct {
 	Detection dialect.Detection
 	Native    *Native
 	scripts   []parser.Span
+	Variants  []Variant
+}
+
+type Variant struct {
+	Detection dialect.Detection
+	scripts   []parser.Span
 }
 
 type Native struct {
@@ -227,24 +233,57 @@ func (l Language) Format(text string) (string, error) {
 
 func (l Language) Project(doc *docstore.Document) Script {
 	a := definitions[l].analyze(doc.Text())
-	script := Script{Doc: docstore.Project(doc, a.projection), Detection: a.detection, scripts: a.projection.Scripts()}
+	script := Script{Doc: docstore.Project(doc, a.projection), Detection: a.detection}
+	script.group(a.projection.Scripts(), a.projection.Shells())
 	if a.index != nil {
 		script.Native = &Native{Language: l, Index: a.index, expect: a.expect, invocation: a.invocation, enclosing: a.enclosing, format: a.format}
 	}
 	return script
 }
 
+func (s *Script) group(scripts []parser.Span, shells []dialect.Detection) {
+	primary := slices.ContainsFunc(shells, func(d dialect.Detection) bool { return d.Shell == s.Detection.Shell })
+	for i, span := range scripts {
+		d := shells[i]
+		if !primary {
+			s.Detection, primary = d, true
+		}
+		if d.Shell == s.Detection.Shell {
+			s.scripts = append(s.scripts, span)
+			continue
+		}
+		v := slices.IndexFunc(s.Variants, func(v Variant) bool { return v.Detection.Shell == d.Shell })
+		if v < 0 {
+			s.Variants = append(s.Variants, Variant{Detection: d})
+			v = len(s.Variants) - 1
+		}
+		s.Variants[v].scripts = append(s.Variants[v].scripts, span)
+	}
+}
+
+func (s Script) Spans() []parser.Span { return s.scripts }
+
+func (v Variant) Spans() []parser.Span { return v.scripts }
+
 func (s Script) Parse(like *parser.Tree) *parser.Tree {
-	tree := parser.ParseScripts(like, s.Doc.Text(), s.scripts, s.Detection.Shell, s.Doc)
-	tree.Errors = s.authored(tree.Errors)
+	return s.parse(like, s.scripts, s.Detection.Shell)
+}
+
+func (s Script) ParseVariant(v Variant, like *parser.Tree) *parser.Tree {
+	return s.parse(like, v.scripts, v.Detection.Shell)
+}
+
+func (s Script) parse(like *parser.Tree, scripts []parser.Span, shell dialect.Shell) *parser.Tree {
+	tree := parser.ParseScripts(like, s.Doc.Text(), scripts, shell, s.Doc)
+	tree.Errors = s.authored(scripts, shell, tree.Errors)
 	return tree
 }
 
-func (s Script) authored(errs []parser.Error) []parser.Error {
+func (s Script) authored(scripts []parser.Span, shell dialect.Shell, errs []parser.Error) []parser.Error {
 	written := func(e parser.Error) bool { return !s.Doc.Synthetic(e.Span.Start) }
-	byScript := make([][]parser.Error, len(s.scripts))
+	byScript := make([][]parser.Error, len(scripts))
 	for _, e := range errs {
-		i := min(sort.Search(len(s.scripts), func(i int) bool { return s.scripts[i].End > e.Span.Start }), len(s.scripts)-1)
+		i := min(sort.Search(len(scripts), func(i int) bool { return scripts[i].End > e.Span.Start }), len(scripts)-1)
 		byScript[i] = append(byScript[i], e)
 	}
 	out := make([]parser.Error, 0, len(errs))
@@ -253,7 +292,7 @@ func (s Script) authored(errs []parser.Error) []parser.Error {
 		case slices.ContainsFunc(within, written):
 			within = slices.DeleteFunc(within, func(e parser.Error) bool { return !written(e) })
 		case len(within) > 0:
-			if own := s.ownErrors(s.scripts[i]); len(own) > 0 {
+			if own := s.ownErrors(scripts[i], shell); len(own) > 0 {
 				within = own
 			}
 		}
@@ -262,12 +301,12 @@ func (s Script) authored(errs []parser.Error) []parser.Error {
 	return out
 }
 
-func (s Script) ownErrors(script parser.Span) []parser.Error {
+func (s Script) ownErrors(script parser.Span, shell dialect.Shell) []parser.Error {
 	text := []byte(s.Doc.Text())
 	for i := script.Start; i < script.End; i++ {
 		if text[i] != '\n' && s.Doc.Synthetic(i) {
 			text[i] = ' '
 		}
 	}
-	return parser.ParseScripts(nil, string(text), []parser.Span{script}, s.Detection.Shell, s.Doc).Errors
+	return parser.ParseScripts(nil, string(text), []parser.Span{script}, shell, s.Doc).Errors
 }

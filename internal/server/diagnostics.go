@@ -86,9 +86,11 @@ func (s *Server) diagnoseClosed(file *workspace.File, at docstore.Positions) dia
 func (s *Server) report(file *workspace.File, settings config.Settings, generation uint64, at docstore.Positions, identity string) diagnosticReport {
 	findings, stamp := s.findings(file, settings, generation)
 	tests := s.bats.of(file.URI)
-	var items []lsp.Diagnostic
-	if !lint.Foreign(file.Tree, s.lintSettings(file.Path, settings).DialectSource(file)) {
-		items = diagnostics.Syntax(file.Tree, at)
+	items := []lsp.Diagnostic{}
+	for _, variant := range file.Variants() {
+		if !lint.Foreign(variant.Tree, s.lintSettings(file.Path, settings).DialectSource(variant)) {
+			items = append(items, diagnostics.Syntax(variant.Tree, at)...)
+		}
 	}
 	codeDescriptions := s.clientCapabilities().TextDocument.PublishDiagnostics.CodeDescriptionSupport
 	items = append(items, diagnostics.Lint(findings, at, codeDescriptions)...)

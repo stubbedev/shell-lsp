@@ -7,6 +7,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 )
@@ -46,6 +47,7 @@ type Map struct {
 	spans    []span
 	encoders []Encoder
 	scripts  []parser.Span
+	shells   []dialect.Detection
 }
 
 func (m *Map) Host() string { return m.host }
@@ -60,6 +62,8 @@ type Builder struct {
 	spans    []span
 	encoders []Encoder
 	starts   []int
+	shells   []dialect.Detection
+	shell    dialect.Detection
 	at       int
 	quotes   quoting
 }
@@ -74,8 +78,11 @@ func (b *Builder) Region(encode Encoder) {
 	b.encoders = append(b.encoders, encode)
 }
 
+func (b *Builder) Shell(d dialect.Detection) { b.shell = d }
+
 func (b *Builder) Script() {
 	b.starts = append(b.starts, b.text.Len())
+	b.shells = append(b.shells, b.shell)
 	b.quotes = quoting{}
 }
 
@@ -126,19 +133,34 @@ func (b *Builder) add(k kind, start, end int, text string) {
 }
 
 func (b *Builder) Map() *Map {
-	return &Map{host: b.host, text: b.text.String(), spans: b.spans, encoders: b.encoders, scripts: b.scripts()}
+	scripts, shells := b.scripts()
+	return &Map{host: b.host, text: b.text.String(), spans: b.spans, encoders: b.encoders, scripts: scripts, shells: shells}
 }
 
-func (b *Builder) scripts() []parser.Span {
-	bounds := slices.Compact(append(append([]int{0}, b.starts...), b.text.Len()))
-	out := make([]parser.Span, 0, len(bounds)-1)
-	for i := 1; i < len(bounds); i++ {
-		out = append(out, parser.Span{Start: bounds[i-1], End: bounds[i]})
+func (b *Builder) scripts() ([]parser.Span, []dialect.Detection) {
+	starts, shells := append([]int{0}, b.starts...), append([]dialect.Detection{b.shell}, b.shells...)
+	if len(b.shells) > 0 {
+		shells[0] = b.shells[0]
 	}
-	return out
+	var spans []parser.Span
+	var detections []dialect.Detection
+	for i, start := range starts {
+		end := b.text.Len()
+		if i+1 < len(starts) {
+			end = starts[i+1]
+		}
+		if start == end {
+			continue
+		}
+		spans = append(spans, parser.Span{Start: start, End: end})
+		detections = append(detections, shells[i])
+	}
+	return spans, detections
 }
 
 func (m *Map) Scripts() []parser.Span { return m.scripts }
+
+func (m *Map) Shells() []dialect.Detection { return m.shells }
 
 func (m *Map) Synthetic(offset ProjOffset) bool {
 	i := sort.Search(len(m.spans), func(i int) bool { return m.spans[i].projEnd() > offset })

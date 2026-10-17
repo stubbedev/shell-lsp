@@ -137,7 +137,7 @@ requests:
 
 | Request | Params | Result |
 | --- | --- | --- |
-| `shellLsp/documentDialect` | `{textDocument}` | `{selectable, dialect, source, evidence, guessed, description}`, plus `{directive, dialects}` when `selectable` is `true`: whether a directive can choose the shell (`false` for [shell in other files](#shell-in-other-files), whose host decides it), the shell, what decided it (`default`, `override`, `shellcheckrc`, `editorconfig`, `directive`, `shebang`, `completionTag`, `fileName`, `extension`, `languageId`, `modeline`, or for shell in other files `hostSetting` and `hostDefault`), the text that did, whether that is a guess, a sentence to show, whether a header shell directive exists, and the shells that can be chosen |
+| `shellLsp/documentDialect` | `{textDocument, position?}`; with a position in a justfile, Makefile or Nix file, the shell of the recipe or string there | `{selectable, dialect, source, evidence, guessed, description}`, plus `{directive, dialects}` when `selectable` is `true`: whether a directive can choose the shell (`false` for [shell in other files](#shell-in-other-files), whose host decides it), the shell, what decided it (`default`, `override`, `shellcheckrc`, `editorconfig`, `directive`, `shebang`, `completionTag`, `fileName`, `extension`, `languageId`, `modeline`, or for shell in other files `hostSetting` and `hostDefault`), the text that did, whether that is a guess, a sentence to show, whether a header shell directive exists, and the shells that can be chosen |
 | `shellLsp/setDialect` | `{textDocument, dialect}` | The `WorkspaceEdit` that adds or updates the header directive for `dialect`, or removes it when `dialect` is `null`; `null` when nothing changes; an error for shell in other files |
 
 The parser understands the whole grammar of each shell, including zsh's
@@ -493,8 +493,11 @@ editor gives it, or else when its language identifier is `makefile` or
   script.
 - The shell is the one `SHELL` names, also behind `env`; without `SHELL` it
   is `sh`. The options in `.SHELLFLAGS` (`-e`, `-u`, `-o pipefail`), or the
-  `-e` a `.POSIX` target implies, are set in every recipe. When `SHELL` names something that is not a shell, or is computed
-  (`$(shell ...)`, `!=`), the recipes are not analysed.
+  `-e` a `.POSIX` target implies, are set in every recipe. A target-specific
+  `SHELL` (`test: SHELL := /bin/bash`) decides the shell of that target's
+  recipe, which is checked as its own shell. When `SHELL` names something
+  that is not a shell, or is computed (`$(shell ...)`, `!=`), the recipes it
+  runs are not analysed.
 - A directive goes on a recipe line of its own, indented like the recipe
   (`# shellcheck disable=SC2086`), and applies to the next line.
 - A make expansion inside single quotes (`'$(VAR)'`) is still text the shell
@@ -523,10 +526,10 @@ gives it, or else when its language identifier is `just`.
   `[script(...)]` attribute or `set script-interpreter` names for a script
   recipe, else the one `set shell` names, else `sh`. Recipes run by something
   that is not a shell, and `[windows]` recipes when `set windows-shell` or
-  `set windows-powershell` is given, are not analysed. The file is checked as
-  one shell: the family most recipes use (sh, dash, busybox and bash are one
-  family, checked as the widest of them that a recipe uses), and recipes in
-  another family are not analysed.
+  `set windows-powershell` is given, are not analysed. Each recipe is parsed
+  and checked as its own shell, so a bashism in a plain recipe is reported
+  even when another recipe is bash, and hover, completion and the dialect
+  status follow the recipe under the cursor.
 
 ### Justfiles and Makefiles natively
 

@@ -139,6 +139,19 @@ func TestProjectDialect(t *testing.T) {
 	}
 }
 
+func TestProjectShellPerRule(t *testing.T) {
+	t.Parallel()
+
+	m, _ := Project("a:\n\techo a\nb: SHELL := /bin/bash\nb:\n\techo b\nc: SHELL := python3\nc:\n\tprint(1)\n")
+	var got []dialect.Dialect
+	for _, d := range m.Shells() {
+		got = append(got, d.Dialect)
+	}
+	if want := []dialect.Dialect{dialect.Posix, dialect.Bash}; !slices.Equal(got, want) || len(m.Scripts()) != len(want) {
+		t.Errorf("shells of the scripts = %v over %d scripts, want %v:\n%s", got, len(m.Scripts()), want, m.Text())
+	}
+}
+
 func TestProjectPositions(t *testing.T) {
 	t.Parallel()
 

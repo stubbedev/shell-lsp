@@ -51,10 +51,23 @@ type File struct {
 	Tree      *parser.Tree
 	Detection dialect.Detection
 	Native    *host.Native
+	Others    []*File
+	spans     []parser.Span
 
 	memoMu sync.Mutex
 	memo   map[string]*memoEntry
 }
+
+func (f *File) At(offset int) *File {
+	for _, other := range f.Others {
+		if slices.ContainsFunc(other.spans, func(s parser.Span) bool { return s.Start <= offset && offset < s.End }) {
+			return other
+		}
+	}
+	return f
+}
+
+func (f *File) Variants() []*File { return append([]*File{f}, f.Others...) }
 
 type memoEntry struct {
 	generation uint64
@@ -283,7 +296,11 @@ func (w *Workspace) load(path, languageID string) (*File, error) {
 func Parse(path string, doc *docstore.Document, previous *parser.Tree, resolve func(dialect.Input) dialect.Detection) *File {
 	if language, ok := host.Of(doc.URI, doc.Language); ok {
 		script := language.Project(doc)
-		return &File{Path: path, URI: doc.URI, Doc: script.Doc, Tree: script.Parse(previous), Detection: script.Detection, Native: script.Native}
+		file := &File{Path: path, URI: doc.URI, Doc: script.Doc, Tree: script.Parse(previous), Detection: script.Detection, Native: script.Native, spans: script.Spans()}
+		for _, v := range script.Variants {
+			file.Others = append(file.Others, &File{Path: path, URI: doc.URI, Doc: script.Doc, Tree: script.ParseVariant(v, nil), Detection: v.Detection, Native: script.Native, spans: v.Spans()})
+		}
+		return file
 	}
 	detection := resolve(dialect.Input{URI: doc.URI, LanguageID: doc.Language, Text: doc.Text()})
 	return &File{Path: path, URI: doc.URI, Doc: doc, Tree: parser.ParseEdit(previous, doc.Text(), detection.Shell), Detection: detection}

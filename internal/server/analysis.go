@@ -25,6 +25,16 @@ type snapshot struct {
 
 func (s *snapshot) positions() docstore.Positions { return s.Doc.Positions(s.encoding) }
 
+func (s *snapshot) at(offset int) *snapshot {
+	file := s.At(offset)
+	if file == s.File {
+		return s
+	}
+	variant := *s
+	variant.File = file
+	return &variant
+}
+
 func (s *snapshot) formatStyle() format.Style {
 	return s.settings.Format.Style.Over(s.project.Style)
 }
@@ -156,7 +166,7 @@ func (s *Server) at(docs *docstore.View, p lsp.TextDocumentPositionParams) (loca
 		return located{}, false, err
 	}
 	offset, inside := snap.positions().Offset(p.Position)
-	return located{snapshot: snap, offset: offset}, inside, nil
+	return located{snapshot: snap.at(offset), offset: offset}, inside, nil
 }
 
 func (s *Server) warm(uri string) {

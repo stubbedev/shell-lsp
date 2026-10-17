@@ -44,6 +44,22 @@ func (s Settings) DialectSource(file *workspace.File) lint.DialectSource {
 }
 
 func Check(file *workspace.File, env navigation.Env, s Settings) lint.Report {
+	var merged lint.Report
+	for _, variant := range file.Variants() {
+		report := check(variant, env, s)
+		for _, d := range report.Disabled {
+			for i := range d.Suppressed {
+				d.Suppressed[i] += len(merged.Suppressed)
+			}
+			merged.Disabled = append(merged.Disabled, d)
+		}
+		merged.Findings = append(merged.Findings, report.Findings...)
+		merged.Suppressed = append(merged.Suppressed, report.Suppressed...)
+	}
+	return merged
+}
+
+func check(file *workspace.File, env navigation.Env, s Settings) lint.Report {
 	report := lint.Run(file.Tree, navigation.Imports(file, env), lint.Options{
 		Exclude:       s.Excluded(),
 		Optional:      slices.Concat(s.Optional, s.RC.Enabled),

@@ -298,7 +298,11 @@ func (c *checker) lint(t target) linted {
 	}
 	env := c.navigationEnv(s.roots)
 	report := filelint.Check(file, env, s.lint)
-	findings := sourceFindings(file.Doc, c.filter(s.lint.Excluded(), append(syntaxFindings(file.Tree, s.lint.DialectSource(file)), report.Findings...)))
+	var syntax []lint.Finding
+	for _, variant := range file.Variants() {
+		syntax = append(syntax, syntaxFindings(variant.Tree, s.lint.DialectSource(variant))...)
+	}
+	findings := sourceFindings(file.Doc, c.filter(s.lint.Excluded(), append(syntax, report.Findings...)))
 	if h, ok := hostnav.Of(file); ok {
 		native, err := c.nativeFindings(h)
 		if err != nil {
