@@ -293,3 +293,14 @@ accepted
 -- indented-continuation --
 rejected 1:1 expected '@', '[', comment, end of file, end of line, or identifier, but found indent
 1:1 SL5001 error unexpected indentation
+-- empty-indentation --
+rejected 2:20 indentation must not be empty
+2:20 SL5016 error the indentation must not be empty
+-- indentation-of-letters --
+rejected 2:20 indentation must be spaces or tabs
+2:20 SL5016 error the indentation must be spaces or tabs
+-- mixed-indentation-setting --
+rejected 2:20 indentation may not be mixed
+2:20 SL5016 error the indentation must be all spaces or all tabs
+-- tab-indentation --
+accepted

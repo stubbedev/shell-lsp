@@ -430,3 +430,15 @@ build:
  \
 build:
     echo
+-- empty-indentation --
+set unstable
+set indentation := ""
+-- indentation-of-letters --
+set unstable
+set indentation := "x"
+-- mixed-indentation-setting --
+set unstable
+set indentation := " 	"
+-- tab-indentation --
+set unstable
+set indentation := "	"

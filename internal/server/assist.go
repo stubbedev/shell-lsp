@@ -44,21 +44,41 @@ func (s *Server) functionLookup(file *workspace.File) assist.FunctionLookup {
 	}
 }
 
-func (s *Server) handleSignatureHelp(_ context.Context, docs *docstore.View, position lsp.TextDocumentPositionParams) (any, error) {
+func (s *Server) handleSignatureHelp(ctx context.Context, docs *docstore.View, position lsp.TextDocumentPositionParams) (any, error) {
 	here, inside, err := s.at(docs, position)
-	if err != nil || !inside {
+	if err != nil {
 		return nil, err
+	}
+	if native, ok := nativeLocation(here, position.Position, inside); ok {
+		g, err := s.group(ctx, docs, native.host)
+		if err != nil {
+			return nil, err
+		}
+		sig, found := g.Signature(native.source)
+		if inside {
+			sig, found = g.ShellSignature(here.offset)
+		}
+		if found {
+			return signatureHelp(sig, docs.Encoding()), nil
+		}
+	}
+	if !inside {
+		return nil, nil
 	}
 	sig, ok := assist.SignatureHelp(here.Tree, here.offset, s.functionLookup(here.File))
 	if !ok {
 		return nil, nil
 	}
+	return signatureHelp(sig, docs.Encoding()), nil
+}
+
+func signatureHelp(sig assist.Signature, enc docstore.Encoding) lsp.SignatureHelp {
 	info := lsp.SignatureInformation{Label: sig.Label, Parameters: []lsp.ParameterInformation{}}
 	if sig.Doc != "" {
 		info.Documentation = lsp.Markdown(sig.Doc)
 	}
 	for _, p := range sig.Params {
-		param := lsp.ParameterInformation{Label: [2]uint32{docs.Encoding().Units(sig.Label[:p.Start]), docs.Encoding().Units(sig.Label[:p.End])}}
+		param := lsp.ParameterInformation{Label: [2]uint32{enc.Units(sig.Label[:p.Start]), enc.Units(sig.Label[:p.End])}}
 		if p.Doc != "" {
 			param.Documentation = lsp.Markdown(p.Doc)
 		}
@@ -70,7 +90,7 @@ func (s *Server) handleSignatureHelp(_ context.Context, docs *docstore.View, pos
 		help.ActiveParameter = &active
 		help.Signatures[0].ActiveParameter = &active
 	}
-	return help, nil
+	return help
 }
 
 type hintData struct {

@@ -261,10 +261,19 @@ type Expect struct {
 	Scope Scope
 }
 
+type Invocation struct {
+	Name      string
+	Qualifier []string
+	Kind      Kind
+	Active    int
+	Scope     Scope
+}
+
 type Builtin struct {
 	Name       string
 	Kind       Kind
 	Signature  string
+	Params     []string
 	Doc        string
 	Arity      Arity
 	Deprecated string

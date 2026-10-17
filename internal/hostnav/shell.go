@@ -21,7 +21,14 @@ type region struct {
 	shell    model.Shell
 	names    []shellName
 	calls    []model.Ref
+	runs     []run
 	shadowed map[string]bool
+}
+
+type run struct {
+	span parser.Span
+	args []parser.Span
+	refs []model.Ref
 }
 
 func regions(f *workspace.File) []region {
@@ -74,7 +81,18 @@ func shellRegions(f *workspace.File) []region {
 		}
 		host := parser.Span{Start: f.Doc.SourceOffset(span.Start), End: f.Doc.SourceOffset(span.End)}
 		if i := within(host); i >= 0 && invokes(f, call.Args[0], span, host, recursion.Command, commands) {
-			out[i].calls = append(out[i].calls, calls(f, call.Args[1:], recursion, out[i].shell.Scope)...)
+			refs := calls(f, call.Args[1:], recursion, out[i].shell.Scope)
+			out[i].calls = append(out[i].calls, refs...)
+			r := run{span: host, refs: refs}
+			for _, arg := range call.Args[1:] {
+				if a, ok := f.Tree.NodeSpan(arg); ok && !f.Doc.Synthetic(a.Start) {
+					r.args = append(r.args, parser.Span{Start: f.Doc.SourceOffset(a.Start), End: f.Doc.SourceOffset(a.End)})
+				}
+			}
+			if last, ok := f.Tree.NodeSpan(call.Args[len(call.Args)-1]); ok {
+				r.span.End = f.Doc.SourceOffset(last.End)
+			}
+			out[i].runs = append(out[i].runs, r)
 		}
 		return true
 	})

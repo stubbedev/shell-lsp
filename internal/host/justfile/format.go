@@ -37,6 +37,9 @@ func Format(f *File) (string, error) {
 		e := f.Errors[0]
 		return "", fmt.Errorf("%w: line %d does not parse: %s", ErrUnformattable, f.line(e.Span.Start), e.Message)
 	}
+	if at := strings.Index(strings.ReplaceAll(f.Text, "\r\n", "\n\n"), "\r"); at >= 0 {
+		return "", fmt.Errorf("%w: line %d has a carriage return that ends no line", ErrUnformattable, f.line(at))
+	}
 	for _, finding := range f.check() {
 		if finding.Severity == lint.SeverityError {
 			return "", fmt.Errorf("%w: just rejects line %d: %s", ErrUnformattable, f.line(finding.Span.Start), finding.Message)

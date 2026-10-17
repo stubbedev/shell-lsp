@@ -1,6 +1,10 @@
 package justfile
 
-import "github.com/stubbedev/shell-lsp/internal/host/model"
+import (
+	"strings"
+
+	"github.com/stubbedev/shell-lsp/internal/host/model"
+)
 
 type settingType uint8
 
@@ -242,6 +246,13 @@ var literalArguments = func() map[string][]string {
 	return out
 }()
 
+func split(params, separator string) []string {
+	if params == "" {
+		return nil
+	}
+	return strings.Split(params, separator)
+}
+
 func args(lowest, highest int) model.Arity { return model.Arity{Min: lowest, Max: highest} }
 
 var Builtins = func() model.Builtins {
@@ -253,7 +264,7 @@ var Builtins = func() model.Builtins {
 		entries = append(entries, model.Builtin{Name: a.name, Kind: model.KindAttribute, Signature: "[" + a.name + "]", Doc: a.doc, Arity: a.arity})
 	}
 	for _, f := range functionSpecs {
-		entries = append(entries, model.Builtin{Name: f.name, Kind: model.KindFunction, Signature: f.name + "(" + f.params + ")", Doc: f.doc, Arity: f.arity, Deprecated: f.deprecated})
+		entries = append(entries, model.Builtin{Name: f.name, Kind: model.KindFunction, Signature: f.name + "(" + f.params + ")", Params: split(f.params, ", "), Doc: f.doc, Arity: f.arity, Deprecated: f.deprecated})
 	}
 	for _, c := range constantSpecs {
 		entries = append(entries, model.Builtin{Name: c.name, Kind: model.KindVariable, Signature: c.name + " := " + c.value, Doc: "A constant every justfile can use.", Arity: model.NoArity})

@@ -454,3 +454,38 @@ func TestJustfileCallHierarchy(t *testing.T) {
 		t.Errorf("incoming calls of compile = %+v", incoming)
 	}
 }
+
+func TestNativeSignatureHelp(t *testing.T) {
+	t.Parallel()
+
+	files := map[string]string{
+		"justfile": "x := replace(\"a\", \"b\", \"c\")\nbuild target profile=\"dev\":\n    echo {{target}} {{profile}}\nci: (build \"x\" \"y\")\n    just build debug \n",
+		"Makefile": "x := $(subst a,b,c)\n",
+	}
+	p := openNativeProject(t, nativeCapabilities, files, "justfile", "Makefile")
+	help := func(name, sub string, nth int) lsp.SignatureHelp {
+		t.Helper()
+		return decodeResult[lsp.SignatureHelp](t, p.c.call("textDocument/signatureHelp", p.params(name, sub, nth, "")))
+	}
+	for _, tt := range []struct {
+		name, file, sub string
+		nth             int
+		label, param    string
+		active          uint32
+	}{
+		{"builtin function", "justfile", `"b"`, 0, "replace(s, from, to)", "from", 1},
+		{"dependency", "justfile", `"y"`, 0, `build target profile="dev"`, `profile="dev"`, 1},
+		{"recipe run from the shell", "justfile", "debug", 0, `build target profile="dev"`, "target", 0},
+		{"make function", "Makefile", ",c", 0, "$(subst from,to,text)", "text", 2},
+	} {
+		got := help(tt.file, tt.sub, tt.nth)
+		if len(got.Signatures) != 1 || got.Signatures[0].Label != tt.label || got.ActiveParameter == nil || *got.ActiveParameter != tt.active {
+			t.Errorf("%s: signature help = %+v", tt.name, got)
+			continue
+		}
+		label := got.Signatures[0].Parameters[tt.active].Label
+		if part := tt.label[label[0]:label[1]]; part != tt.param {
+			t.Errorf("%s: active parameter %q, want %q", tt.name, part, tt.param)
+		}
+	}
+}

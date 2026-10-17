@@ -1,6 +1,10 @@
 package makefile
 
-import "github.com/stubbedev/shell-lsp/internal/host/model"
+import (
+	"strings"
+
+	"github.com/stubbedev/shell-lsp/internal/host/model"
+)
 
 type functionSpec struct {
 	name    string
@@ -151,7 +155,7 @@ func builtinFunction(name string) bool {
 var Builtins = func() model.Builtins {
 	var entries []model.Builtin
 	for _, f := range functionSpecs {
-		entries = append(entries, model.Builtin{Name: f.name, Kind: model.KindFunction, Signature: "$(" + f.name + " " + f.params + ")", Doc: f.doc, Arity: model.Arity{Min: f.minArgs, Max: model.Variadic}})
+		entries = append(entries, model.Builtin{Name: f.name, Kind: model.KindFunction, Signature: "$(" + f.name + " " + f.params + ")", Params: strings.Split(f.params, ","), Doc: f.doc, Arity: model.Arity{Min: f.minArgs, Max: model.Variadic}})
 	}
 	for _, v := range automaticVariables {
 		v.Kind, v.Signature, v.Arity = model.KindVariable, "$"+v.Name, model.NoArity

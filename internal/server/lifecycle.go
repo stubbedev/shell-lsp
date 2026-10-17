@@ -143,7 +143,7 @@ const incrementalSync = 2
 
 var (
 	completionTriggers   = []string{"$", "{", "/", "-", ":", "@", "[", "%", "=", ","}
-	signatureHelpOptions = SignatureHelpOptions{TriggerCharacters: []string{" "}, RetriggerCharacters: []string{" "}}
+	signatureHelpOptions = SignatureHelpOptions{TriggerCharacters: []string{" ", "(", ","}, RetriggerCharacters: []string{" ", ","}}
 )
 
 func ensure[T any](field **T) *T {

@@ -122,6 +122,21 @@ func clash(prior []definition, d definition) (definition, bool) {
 	return definition{}, false
 }
 
+func (c *checker) indentationSetting(v *Expr) {
+	values, ok := c.f.Constant(v)
+	if !ok || len(values) != 1 {
+		return
+	}
+	switch value := values[0]; {
+	case value == "":
+		c.report(lint.CodeJustSettingValue, v.Span, "the indentation must not be empty")
+	case strings.Trim(value, " \t") != "":
+		c.report(lint.CodeJustSettingValue, v.Span, "the indentation must be spaces or tabs")
+	case strings.Contains(value, " ") && strings.Contains(value, "\t"):
+		c.report(lint.CodeJustSettingValue, v.Span, "the indentation must be all spaces or all tabs")
+	}
+}
+
 func (c *checker) settingValue(s *Setting) {
 	kind, known := settingTypes[s.Name.Text]
 	if !known {
@@ -139,6 +154,8 @@ func (c *checker) settingValue(s *Setting) {
 			c.report(lint.CodeJustSettingValue, s.Name.Span, "setting `%s` needs a value: `set %s := '...'`", s.Name.Text, s.Name.Text)
 		case v.Kind == ExprList && !c.lists:
 			c.report(lint.CodeJustSettingValue, v.Span, "setting `%s` takes a string, not a list", s.Name.Text)
+		case s.Name.Text == "indentation":
+			c.indentationSetting(v)
 		}
 	case settingList:
 		if v == nil || v.Kind != ExprList {

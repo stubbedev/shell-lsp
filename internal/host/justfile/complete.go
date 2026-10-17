@@ -138,8 +138,16 @@ func (f *File) inComment(offset int) bool {
 	return slices.ContainsFunc(f.Comments, func(c Comment) bool { return c.Span.Start < offset && offset <= c.Span.End })
 }
 
-func (f *File) tokensBefore(start, end int) (out []token, ok bool) {
-	r := &reader{text: f.Text[:end], pos: start, file: &File{}}
+func (f *File) tokensBefore(start, end int) ([]token, bool) {
+	return lexLine(f.Text[:end], start, func(t token) bool { return t.kind == tokEOF }, true)
+}
+
+func (f *File) tokensUntil(start, end int) ([]token, bool) {
+	return lexLine(f.Text, start, func(t token) bool { return t.kind == tokEOF || t.span.Start >= end }, false)
+}
+
+func lexLine(text string, start int, stop func(token) bool, closedStrings bool) (out []token, ok bool) {
+	r := &reader{text: text, pos: start, file: &File{}}
 	defer func() {
 		if p := recover(); p != nil {
 			if _, bailed := p.(bail); !bailed {
@@ -151,11 +159,11 @@ func (f *File) tokensBefore(start, end int) (out []token, ok bool) {
 	for {
 		t := r.next()
 		switch {
-		case t.kind == tokEOF:
+		case stop(t):
 			return out, true
 		case t.kind == tokNewline:
 			out = out[:0]
-		case t.kind == tokString && t.str.Unclosed, t.kind == tokBacktick && t.str.Unclosed:
+		case closedStrings && (t.kind == tokString || t.kind == tokBacktick) && t.str.Unclosed:
 			return nil, false
 		case t.kind == tokPunct && (t.text == "(" || t.text == "[" || t.text == "{"):
 			r.depth++

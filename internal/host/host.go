@@ -55,6 +55,7 @@ type analysis struct {
 	detection  dialect.Detection
 	index      *model.Index
 	expect     func(offset int) (model.Expect, bool)
+	invocation func(offset int) (model.Invocation, bool)
 	format     func() (string, error)
 }
 
@@ -67,12 +68,12 @@ func projectOnly(project func(string) (*projection.Map, dialect.Detection)) func
 
 func analyzeMake(text string) analysis {
 	a := makefile.Analyze(text)
-	return analysis{projection: a.Map, detection: a.Detection, index: a.Index, expect: a.File.Expect}
+	return analysis{projection: a.Map, detection: a.Detection, index: a.Index, expect: a.File.Expect, invocation: a.File.Invocation}
 }
 
 func analyzeJust(text string) analysis {
 	a := justfile.Analyze(text)
-	return analysis{projection: a.Map, detection: a.Detection, index: a.Index, expect: a.File.Expect, format: func() (string, error) { return justfile.Format(a.File) }}
+	return analysis{projection: a.Map, detection: a.Detection, index: a.Index, expect: a.File.Expect, invocation: a.File.Invocation, format: func() (string, error) { return justfile.Format(a.File) }}
 }
 
 var definitions = [...]definition{
@@ -168,13 +169,16 @@ type Script struct {
 }
 
 type Native struct {
-	Language Language
-	Index    *model.Index
-	expect   func(offset int) (model.Expect, bool)
-	format   func() (string, error)
+	Language   Language
+	Index      *model.Index
+	expect     func(offset int) (model.Expect, bool)
+	invocation func(offset int) (model.Invocation, bool)
+	format     func() (string, error)
 }
 
 func (n *Native) Expect(offset int) (model.Expect, bool) { return n.expect(offset) }
+
+func (n *Native) Invocation(offset int) (model.Invocation, bool) { return n.invocation(offset) }
 
 func (n *Native) Formats() bool { return n.format != nil }
 
@@ -214,7 +218,7 @@ func (l Language) Project(doc *docstore.Document) Script {
 	a := definitions[l].analyze(doc.Text())
 	script := Script{Doc: docstore.Project(doc, a.projection), Detection: a.detection, scripts: a.projection.Scripts()}
 	if a.index != nil {
-		script.Native = &Native{Language: l, Index: a.index, expect: a.expect, format: a.format}
+		script.Native = &Native{Language: l, Index: a.index, expect: a.expect, invocation: a.invocation, format: a.format}
 	}
 	return script
 }

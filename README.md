@@ -560,6 +560,9 @@ for these files.
   and targets that depend on it or run it with `just` or `$(MAKE)` in their
   body, and outgoing calls are its dependencies and the recipes and targets
   its body runs.
+- **Signature help** for just and make functions, user-defined just
+  functions, `(recipe arguments)` dependencies, attributes, and `just recipe
+  arguments` lines in recipe bodies, with the argument being typed marked.
 - **Completion and hover** for recipe and target names, variables,
   parameters, settings, attributes, built-in functions, constants, automatic
   variables and special targets, with what each one does.

@@ -36,6 +36,7 @@ func FuzzAnalyze(f *testing.F) {
 		hosttest.Bounded(t, text, a.Index)
 		hosttest.Findings(a.Index, Checks, Builtins)
 		for offset := range len(text) + 1 {
+			a.File.Invocation(offset)
 			if e, ok := a.File.Expect(offset); ok && (e.Span.Start < 0 || e.Span.Start > e.Span.End || e.Span.End > len(text)) {
 				t.Fatalf("completion at %d expects %v outside %q", offset, e.Span, text)
 			}
