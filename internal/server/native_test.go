@@ -329,7 +329,11 @@ func TestRecipeRunLensesPromptForArguments(t *testing.T) {
 	if prompted.Name != "with-arg" || !slices.Equal(prompted.Parameters, want) {
 		t.Errorf("prompted lens arguments = %+v", prompted)
 	}
-	listing := decodeResult[[]recipeListing](t, p.c.call("workspace/executeCommand", `{"command": "`+commandListRecipes+`"}`))
+	listed := p.c.call("workspace/executeCommand", `{"command": "`+commandListRecipes+`"}`)
+	if strings.Contains(string(listed.Result), `"parameters":null`) {
+		t.Errorf("a recipe without parameters lists them as null instead of an empty list: %s", listed.Result)
+	}
+	listing := decodeResult[[]recipeListing](t, listed)
 	if len(listing) != 2 || listing[1].Name != "with-arg" || listing[1].Tool != "just" || listing[1].Argv[len(listing[1].Argv)-1] != "with-arg" || !slices.Equal(listing[1].Parameters, want) {
 		t.Errorf("listed recipes = %+v", listing)
 	}

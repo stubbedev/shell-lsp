@@ -520,7 +520,7 @@ func (s *Server) listRecipesCommand(ctx context.Context, docs *docstore.View) (a
 			for _, r := range f.Native.Index.Runnables {
 				out = append(out, recipeListing{
 					URI: f.URI, Path: f.Path, Name: r.Name, Tool: language.Recursion().Command,
-					Argv: language.Invocation(f.Path, r.Name), Cwd: filepath.Dir(f.Path), Parameters: r.Params,
+					Argv: language.Invocation(f.Path, r.Name), Cwd: filepath.Dir(f.Path), Parameters: append([]model.RunParam{}, r.Params...),
 				})
 			}
 		}
