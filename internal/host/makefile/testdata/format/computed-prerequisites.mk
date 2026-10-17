@@ -1,0 +1,4 @@
+SRCS = ;
+OBJS = $(SRCS)
+out:$(OBJS)   
+all:$(OBJS)  b  c

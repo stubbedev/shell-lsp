@@ -1,8 +1,10 @@
 package makefile
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/host/hosttest"
@@ -47,5 +49,29 @@ func FuzzAnalyze(f *testing.F) {
 				t.Fatalf("completion at %d expects %v outside %q", offset, e.Span, text)
 			}
 		}
+	})
+}
+
+func FuzzFormatKeepsWhatMakeReads(f *testing.F) {
+	seeds(f)
+	f.Fuzz(func(t *testing.T, text string) {
+		formatted, err := Format(Parse(text))
+		if err != nil {
+			if !errors.Is(err, ErrUnformattable) {
+				t.Fatalf("Format(%q) fails with %v, not ErrUnformattable", text, err)
+			}
+			return
+		}
+		if again, err := Format(Parse(formatted)); err != nil || again != formatted {
+			t.Fatalf("formatting %q twice gives %q, then %q (%v)", text, formatted, again, err)
+		}
+		if !hosttest.MakeIsolated(text) || !hosttest.MakeIsolated(formatted) {
+			t.Skip("make could run a command from the input")
+		}
+		if text != "" && !strings.HasSuffix(text, "\n") {
+			t.Skip("GNU Make 4.4.1 reads a last line without a newline together with bytes the line before left in its buffer, so `XXXX=0\\n0::` fails while `X=0000000\\n0::` does not")
+		}
+		hosttest.LiveTool(t, "make", hosttest.MakeVersion)
+		sameDatabase(t, text, formatted)
 	})
 }

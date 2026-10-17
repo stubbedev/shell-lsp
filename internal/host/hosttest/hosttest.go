@@ -306,6 +306,37 @@ func IsolatedMakeVerdict(t *testing.T, text string) oracle.Verdict {
 	return makeVerdict(t, text, unrunnableShell)
 }
 
+var (
+	databaseLine     = regexp.MustCompile(`, line \d+\)`)
+	databaseLocation = regexp.MustCompile(`Makefile:\d+:`)
+)
+
+func MakeDatabase(t *testing.T, dir, text string) string {
+	t.Helper()
+	if !MakeIsolated(text) {
+		t.Fatalf("make could run a command from %q", text)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "Makefile"), []byte(text), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.CommandContext(t.Context(), "make", "-pqrR", "--no-print-directory", "-f", "Makefile", unrunnableShell)
+	cmd.Dir = dir
+	cmd.Env = []string{"PATH=" + os.Getenv("PATH")}
+	out, _ := cmd.CombinedOutput()
+	var sb strings.Builder
+	for line := range strings.SplitSeq(string(out), "\n") {
+		if strings.HasPrefix(line, "# strcache") {
+			break
+		}
+		if strings.HasPrefix(line, "# Make data base") || strings.HasPrefix(line, "# Load=") || strings.HasSuffix(line, "hash-table stats:") || strings.Contains(line, "Last modified") {
+			continue
+		}
+		line = databaseLocation.ReplaceAllString(databaseLine.ReplaceAllString(line, ")"), "Makefile:")
+		sb.WriteString(line + "\n")
+	}
+	return sb.String()
+}
+
 func makeVerdict(t *testing.T, text string, vars ...string) oracle.Verdict {
 	t.Helper()
 	dir := t.TempDir()

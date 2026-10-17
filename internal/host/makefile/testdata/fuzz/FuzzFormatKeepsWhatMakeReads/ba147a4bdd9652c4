@@ -1,0 +1,2 @@
+go test fuzz v1
+string("objs=0:%\n$(objs):%:0\n")

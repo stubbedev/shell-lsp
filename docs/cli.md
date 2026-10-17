@@ -173,8 +173,11 @@ As with shfmt, `.editorconfig` settings apply unless a parser or printer flag
 is given, and files found by walking a directory honour `ignore = true`.
 Justfiles are formatted like `just --fmt` formats them; one whose comment
 `just --fmt` would drop, such as a comment after a recipe header, is reported
-and left alone. Makefiles and Nix files are skipped when walking a directory
-and refused when named, since `fmt` formats only shell scripts and justfiles. A file named more
+and left alone. Makefiles are formatted without changing what make reads from
+them: spacing around operators and rule colons, trailing whitespace make
+ignores and runs of blank lines, while recipes and `define` bodies stay as they
+are. Nix files are skipped when walking a directory and refused when named,
+since `fmt` formats only shell scripts, justfiles and Makefiles. A file named more
 than once, directly or through a directory, is formatted once.
 Exit status 0 means success, 1 means a file could not be read or parsed or,
 with `-l` (without `-w`) or `-d`, that some formatting differs, and 2 means

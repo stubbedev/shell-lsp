@@ -37,8 +37,9 @@ nor groff needs to be installed.
 - Justfiles and Makefiles as languages of their own: diagnostics, navigation,
   rename, completion, hover, outline and "Run" lenses for recipes, targets
   and variables across `import`, `mod` and `include`, also from the shell of
-  a recipe to the just or make variable it reads, and justfiles formatted
-  like `just --fmt` ([Justfiles and Makefiles natively](#justfiles-and-makefiles-natively)).
+  a recipe to the just or make variable it reads, justfiles formatted
+  like `just --fmt` and Makefiles formatted without changing what make reads
+  ([Justfiles and Makefiles natively](#justfiles-and-makefiles-natively)).
 - [Bats](#bats) support: tests in the outline, and "Run" lenses that report
   failures as diagnostics.
 - `shell-lsp check` and `shell-lsp fmt` for CI and pre-commit, compatible
@@ -594,7 +595,12 @@ for these files.
 - **Formatting.** Justfiles are formatted the way `just --fmt` formats them,
   checked against just itself. When `just --fmt` would drop a comment, such as
   one after a recipe header, formatting stops and says which line to move
-  instead of losing it. Makefiles are not formatted.
+  instead of losing it. Makefiles get one space around assignment operators
+  and after rule colons, single spaces between prerequisites, no trailing
+  whitespace where make ignores it, and at most two blank lines in a row.
+  Recipes, `define` bodies, continued lines and computed rules stay as they
+  are, and every change is checked to leave the database `make -p` prints
+  unchanged.
 
 ### Nix files
 

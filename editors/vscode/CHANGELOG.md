@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Formats Makefiles: spacing around operators and rule colons, trailing
+  whitespace make ignores and runs of blank lines, leaving recipes and
+  `define` bodies as they are.
 - Runs justfile recipes that take parameters: their "▶ Run…" lens asks for
   each argument. Every recipe and Makefile target that runs without arguments
   is a `shell-lsp` task, and a task in `tasks.json` can pass arguments.

@@ -1,0 +1,19 @@
+all: app docs
+app: main.o util.o
+	cc -o $@ $^
+%.o: %.c
+	cc -c $<
+objs = a.o b.o
+$(objs):%.o:%.c
+	cc -c $<
+docs::
+	@echo one
+docs:: index.md
+	@echo two
+gen.h gen.c &: gen.y
+	yacc $<
+run: app | out ; ./app   
+out: # make the directory
+	mkdir -p out
+quiet:;
+.PHONY: all docs run quiet

@@ -1,0 +1,2 @@
+vpath %.c src $ 
+all: ; @:

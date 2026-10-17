@@ -69,7 +69,7 @@ func projectOnly(project func(string) (*projection.Map, dialect.Detection)) func
 
 func analyzeMake(text string) analysis {
 	a := makefile.Analyze(text)
-	return analysis{projection: a.Map, detection: a.Detection, index: a.Index, expect: a.File.Expect, invocation: a.File.Invocation, enclosing: a.File.Enclosing}
+	return analysis{projection: a.Map, detection: a.Detection, index: a.Index, expect: a.File.Expect, invocation: a.File.Invocation, enclosing: a.File.Enclosing, format: func() (string, error) { return makefile.Format(a.File) }}
 }
 
 func analyzeJust(text string) analysis {
@@ -91,6 +91,7 @@ var definitions = [...]definition{
 		invocation: func(path, name string) []string {
 			return []string{"make", "-f", path, name}
 		},
+		formatter: func(text string) (string, error) { return makefile.Format(makefile.Parse(text)) },
 		recursion: Recursion{Command: "make", Ref: model.Ref{Name: "MAKE", Kind: model.KindVariable}, FileFlags: []string{"-f", "--file", "--makefile", "-C", "--directory"}, Kind: model.KindTarget},
 	},
 	Just: {

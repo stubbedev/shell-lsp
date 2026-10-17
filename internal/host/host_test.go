@@ -134,7 +134,7 @@ func TestLanguageRegistry(t *testing.T) {
 		formats bool
 		command string
 	}{
-		{Make, "makefile", false, "make"},
+		{Make, "makefile", true, "make"},
 		{Just, "just", true, "just"},
 	} {
 		if got := tt.l.LanguageID(); got != tt.id {

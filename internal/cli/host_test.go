@@ -44,16 +44,19 @@ func TestCheckDiffWritesFixesInMakeSyntax(t *testing.T) {
 	}
 }
 
-func TestFmtLeavesMakefilesAlone(t *testing.T) {
+func TestFmtFormatsMakefiles(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	writeFiles(t, dir, map[string]string{"proj/Makefile": makefile, "proj/a.sh": "if true;then echo;fi\n"})
-	if got := run(t, dir, "", "fmt", "-l", "proj"); got.stdout != filepath.FromSlash("proj/a.sh")+"\n" {
+	writeFiles(t, dir, map[string]string{"proj/Makefile": "CC=gcc\nall:app\n\t$(CC) -o app main.c  \n\n\n\n", "proj/tidy.mk": "X := 1\n", "proj/a.sh": "if true;then echo;fi\n", "proj/default.nix": "{ }\n"})
+	if got := run(t, dir, "", "fmt", "-l", "proj"); got.stdout != filepath.FromSlash("proj/Makefile")+"\n"+filepath.FromSlash("proj/a.sh")+"\n" {
 		t.Errorf("fmt -l over a project = %q, %q", got.stdout, got.stderr)
 	}
-	if got := run(t, dir, "", "fmt", "proj/Makefile"); got.status == statusOK || !strings.Contains(got.stderr, "formats only shell scripts") {
+	if got := run(t, dir, "", "fmt", "proj/Makefile"); got.status != statusOK || got.stdout != "CC = gcc\nall: app\n\t$(CC) -o app main.c  \n" {
 		t.Errorf("fmt of a Makefile = %+v", got)
+	}
+	if got := run(t, dir, "", "fmt", "proj/default.nix"); got.status == statusOK || !strings.Contains(got.stderr, "formats only shell scripts") {
+		t.Errorf("fmt of a Nix file = %+v", got)
 	}
 }
 

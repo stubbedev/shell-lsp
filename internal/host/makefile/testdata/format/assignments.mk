@@ -1,0 +1,22 @@
+CC=gcc
+CFLAGS   :=   -O2 -Wall
+LDFLAGS	?=	-lm
+OBJS+=main.o
+POSIX ::= yes
+IMMEDIATE :::= $(CC)
+EMPTY =
+BLANK =    
+PADDED = keep the two trailing spaces  
+COMMENTED = value # with a comment
+NOVALUE = # only a comment
+export  PATH_EXTRA=bin
+unexport TMPDIR
+private P=1
+export X Y
+LIST = a \
+       b \
+       c
+SPLIT \
+  = joined
+all:
+	@echo $(CC) $(CFLAGS) $(LDFLAGS) $(OBJS) $(POSIX) $(IMMEDIATE) [$(EMPTY)] [$(BLANK)] [$(PADDED)] [$(COMMENTED)] [$(NOVALUE)] $(LIST) $(SPLIT) $(P)

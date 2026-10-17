@@ -408,7 +408,7 @@ func (f *formatter) report(r formatted) {
 
 func (f *formatter) formatHost(out formatted, t target, language host.Language, raw string) formatted {
 	if !language.Formats() {
-		out.err = fmt.Errorf("a %s embeds shell in its own syntax; shell-lsp fmt formats only shell scripts and justfiles", language)
+		out.err = fmt.Errorf("a %s embeds shell in its own syntax; shell-lsp fmt formats only shell scripts, justfiles and Makefiles", language)
 		return out
 	}
 	resolved, err := project.Resolve(f.editor, t.path, nil, dialect.Input{Text: raw})
