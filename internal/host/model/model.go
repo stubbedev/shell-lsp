@@ -140,6 +140,7 @@ type Ref struct {
 	Owner     int
 	Edge      bool
 	Soft      bool
+	Declares  bool
 	Horizon   int
 	Late      bool
 	ArgSpans  []Span
@@ -241,13 +242,30 @@ type Index struct {
 	Findings  []lint.Finding
 	ExportAll bool
 	Broken    bool
+	Opaque    bool
 	Phony     []string
 	Fileless  []int
 	Search    []SearchPath
+	Branches  Alternatives
 
 	lookups sync.Once
 	byName  map[symbolKey][]int
 	byOwner map[int][]int
+}
+
+type Branches []Span
+
+func (b Branches) arm(offset int) int {
+	return slices.IndexFunc(b, func(s Span) bool { return s.Start <= offset && offset < s.End })
+}
+
+type Alternatives []Branches
+
+func (a Alternatives) Exclusive(x, y int) bool {
+	return slices.ContainsFunc(a, func(b Branches) bool {
+		armX, armY := b.arm(x), b.arm(y)
+		return armX >= 0 && armY >= 0 && armX != armY
+	})
 }
 
 type symbolKey struct {

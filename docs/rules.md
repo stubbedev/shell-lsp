@@ -794,7 +794,10 @@ Makefiles. Every justfile check was compared with what just 1.58 itself
 rejects, and every Makefile check with GNU Make 4.4. Missing names are only
 reported when every `import`, `mod` and `include` that could define them was
 found, so a justfile or Makefile that pulls in a file generated at build time
-gets no false alarms. `lint.exclude` turns them off like any other check;
+gets no false alarms. The same holds for unused names, and for a file whose
+includer is unknown: a `.just`, `.mk` or `.mak` file that nothing in the
+workspace imports or includes, or a Makefile with an `$(eval ...)` whose text
+is computed, may define and use names that the analysis cannot see. `lint.exclude` turns them off like any other check;
 directives inside the file do not apply, since the file is not a shell script.
 
 ## SL5001
@@ -1130,7 +1133,9 @@ all:
 
 **A recursively expanded variable refers to itself.** `VAR = $(VAR) more`
 makes make expand the variable forever and stop as soon as something uses it;
-use `+=` or `:=` instead.
+use `+=` or `:=` instead. A reference after an `$(eval VAR := ...)` that
+redefines the variable reads the new definition, and definitions in different
+branches of one conditional never meet, so neither is circular.
 
 ```make
 CFLAGS = $(CFLAGS) -O2    # SL6007
@@ -1141,7 +1146,8 @@ all:
 ## SL6008
 
 **A `.PHONY` target has no rule.** The name is probably misspelt, or the rule
-was removed.
+was removed. A phony target that another rule depends on, such as a `FORCE`
+prerequisite, needs no rule and is left alone.
 
 ```make
 .PHONY: all clena    # SL6008
@@ -1153,7 +1159,8 @@ all:
 
 **A target gets a second recipe.** make warns that the later recipe
 overrides the earlier one and uses only the last. Double-colon rules
-(`target::`) are meant to have several and are left alone.
+(`target::`) are meant to have several, and recipes in different branches of
+one conditional never meet, so both are left alone.
 
 ```make
 all:

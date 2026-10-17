@@ -51,6 +51,7 @@ type indexer struct {
 	dynamic   bool
 	arguments []int
 	called    map[string]bool
+	redefined []string
 }
 
 func (f *File) exported() []string {
@@ -104,6 +105,7 @@ func (f *File) Index(shell bool) *model.Index {
 	ix := &model.Index{ExportAll: f.ExportAll, Broken: slices.ContainsFunc(f.Errors, func(e Error) bool {
 		return e.Kind != ErrUnterminated && e.Kind != ErrDeferredUnterminated && e.Kind != ErrPatternUnterminated && e.Kind != ErrPatternMismatch
 	})}
+	ix.Branches = f.alternatives()
 	in := &indexer{f: f, ix: ix, scopes: map[string]model.Scope{}, exported: f.exportedNames(), called: map[string]bool{}}
 	for _, a := range f.Assignments {
 		in.assignment(a)
@@ -184,10 +186,10 @@ func (in *indexer) namesTarget(r *Rule) bool {
 	})
 }
 
-func (in *indexer) evaluated(arg Expr) {
+func (in *indexer) unescaped(arg Expr) (*File, []int, bool) {
 	text, ok := arg.Literal(in.f.Text)
 	if !ok {
-		return
+		return nil, nil, false
 	}
 	var sb strings.Builder
 	at := make([]int, 0, len(text)+1)
@@ -200,12 +202,34 @@ func (in *indexer) evaluated(arg Expr) {
 	}
 	at = append(at, arg.Span.Start+len(text))
 	sub := Parse(sb.String())
-	if len(sub.Errors) > 0 {
+	return sub, at, len(sub.Errors) == 0
+}
+
+func (in *indexer) redefines(arg Expr) []string {
+	sub, _, ok := in.unescaped(arg)
+	if !ok {
+		in.ix.Opaque = true
+		return nil
+	}
+	names := make([]string, 0, len(sub.Assignments))
+	for _, a := range sub.Assignments {
+		if len(a.Targets) == 0 && literal(a.Name) {
+			names = append(names, a.Name.Text)
+		}
+	}
+	return names
+}
+
+func (in *indexer) evaluated(arg Expr) {
+	sub, at, ok := in.unescaped(arg)
+	if !ok || len(sub.Includes) > 0 {
+		in.ix.Opaque = true
 		return
 	}
 	shift := func(s Span) Span { return Span{Start: at[s.Start], End: at[s.End]} }
 	ix := sub.Index(false)
-	if slices.ContainsFunc(ix.Symbols, func(s model.Symbol) bool { return s.Scope != model.Global }) || slices.ContainsFunc(ix.Refs, func(r model.Ref) bool { return r.Scope != model.Global }) {
+	if ix.Opaque || slices.ContainsFunc(ix.Symbols, func(s model.Symbol) bool { return s.Scope != model.Global }) || slices.ContainsFunc(ix.Refs, func(r model.Ref) bool { return r.Scope != model.Global }) {
+		in.ix.Opaque = true
 		return
 	}
 	base := len(in.ix.Symbols)
@@ -303,7 +327,7 @@ func (in *indexer) assignment(a *Assignment) {
 			}
 			in.walk(t.Expr, model.Global, model.NoSymbol, false, nil)
 			if literal(t) {
-				in.ix.Refs = append(in.ix.Refs, model.Ref{Name: t.Text, Kind: model.KindTarget, Span: t.Span, Args: model.NoArgs, Owner: model.NoSymbol, Soft: true})
+				in.ix.Refs = append(in.ix.Refs, model.Ref{Name: t.Text, Kind: model.KindTarget, Span: t.Span, Args: model.NoArgs, Owner: model.NoSymbol, Soft: true, Declares: true})
 				in.token(t.Span, semantic.TypeFunction, 0)
 			}
 		}
@@ -328,6 +352,7 @@ func (in *indexer) assignment(a *Assignment) {
 	edge := a.Deferred && len(a.Targets) == 0
 	in.walk(a.Name.Expr, model.Global, owner, false, nil)
 	in.walk(a.Value, scopes[0], owner, edge, nil)
+	in.redefined = nil
 }
 
 var namingFunctions = []string{"call", "value", "origin", "flavor"}
@@ -367,6 +392,7 @@ func (in *indexer) reference(n Node, scope model.Scope, owner int, edge bool, bo
 		in.ix.Refs = append(in.ix.Refs, model.Ref{Name: word, Kind: model.KindFunction, Span: in.nameSpan(n.Name, word), Scope: scope, Args: model.NoArgs, Owner: owner})
 	default:
 		span := in.nameSpan(n.Name, name)
+		edge := edge && !slices.Contains(in.redefined, name)
 		if edge && strings.Trim(name, "0123456789") == "" {
 			in.arguments = append(in.arguments, len(in.ix.Refs))
 		}
@@ -387,8 +413,12 @@ func (in *indexer) call(n Node, scope model.Scope, owner int, edge bool, bound [
 	}
 	in.ix.Refs = append(in.ix.Refs, call)
 	in.token(n.Name.Span, semantic.TypeFunction, semantic.ModDefaultLibrary)
-	if name == "eval" && len(n.Args) == 1 && !edge {
-		in.evaluated(n.Args[0])
+	if name == "eval" && len(n.Args) == 1 {
+		if edge {
+			defer func() { in.redefined = append(in.redefined, in.redefines(n.Args[0])...) }()
+		} else {
+			in.evaluated(n.Args[0])
+		}
 	}
 	args := n.Args
 	switch {
@@ -425,14 +455,14 @@ func literal(w Word) bool { return !w.Expr.Dynamic() && !strings.Contains(w.Text
 func (in *indexer) rule(r *Rule, shell bool) {
 	scope := model.Global
 	owner := model.NoSymbol
-	phony := false
+	phony, declaring := false, false
 	for _, t := range r.Targets {
 		in.walk(t.Expr, model.Global, model.NoSymbol, false, nil)
 		if !literal(t) {
 			continue
 		}
 		if _, special := specialTargets[t.Text]; special {
-			phony = phony || t.Text == ".PHONY"
+			phony, declaring = phony || t.Text == ".PHONY", true
 			in.ix.Refs = append(in.ix.Refs, model.Ref{Name: t.Text, Kind: model.KindTarget, Span: t.Span, Args: model.NoArgs, Owner: model.NoSymbol, Soft: true})
 			in.token(t.Span, semantic.TypeKeyword, 0)
 			continue
@@ -453,7 +483,7 @@ func (in *indexer) rule(r *Rule, shell bool) {
 			in.ix.Phony = append(in.ix.Phony, w.Text)
 		}
 		if literal(w) {
-			in.ix.Refs = append(in.ix.Refs, model.Ref{Name: w.Text, Kind: model.KindTarget, Span: w.Span, Args: model.NoArgs, Owner: owner, Soft: !phony})
+			in.ix.Refs = append(in.ix.Refs, model.Ref{Name: w.Text, Kind: model.KindTarget, Span: w.Span, Args: model.NoArgs, Owner: owner, Soft: !phony, Declares: declaring})
 			in.token(w.Span, semantic.TypeFunction, 0)
 		}
 	}

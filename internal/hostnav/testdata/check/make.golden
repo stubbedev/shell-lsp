@@ -63,6 +63,28 @@ rejected 1:1 Recursive variable 'X' references itself (eventually)
 rejected 1:1 Recursive variable 'A' references itself (eventually)
 1:7 SL6007 error variable `A` is circular: `A -> B -> A`
 2:7 SL6007 error variable `B` is circular: `B -> A -> B`
+-- eval-memoizes-a-recursive-variable --
+accepted
+-- cycle-across-exclusive-branches --
+accepted
+-- cycle-within-one-branch --
+rejected 3:1 Recursive variable 'V' references itself (eventually)
+3:7 SL6007 error variable `V` is circular: `V -> W -> V`
+4:7 SL6007 error variable `W` is circular: `W -> V -> W`
+-- phony-force-prerequisite --
+accepted
+-- phony-force-prerequisite-of-a-pattern-rule --
+accepted
+-- recipes-in-exclusive-branches --
+accepted
+-- recipe-after-a-conditional-recipe --
+accepted
+4:1 SL6009 warning this recipe for `all` replaces the one on line 2
+-- computed-eval-defines-unseen-variables --
+accepted
+-- literal-eval-keeps-findings-certain --
+accepted
+3:18 SL6006 info unknown variable `OTHER`
 -- simple-self-reference --
 accepted
 -- append --

@@ -115,6 +115,60 @@ A = $(B)
 B = $(A)
 all:
 	@echo $(A)
+-- eval-memoizes-a-recursive-variable --
+C = $(eval C := $$(shell echo hi))$(C)
+all:
+	@echo $(C) $(C)
+-- cycle-across-exclusive-branches --
+ifdef D
+V ?= $(notdir $(D))
+else
+V ?= std
+D ?= v/$(V)
+endif
+all:
+	@echo $(D)
+-- cycle-within-one-branch --
+D = 1
+ifdef D
+V = $(W)
+W = $(V)
+endif
+all:
+	@echo $(V)
+-- phony-force-prerequisite --
+.PHONY: force
+out: force
+	@echo built
+-- phony-force-prerequisite-of-a-pattern-rule --
+.PHONY: force
+%.out: force
+	@echo $@
+all: a.out
+-- recipes-in-exclusive-branches --
+ifdef FAST
+all: ;
+else
+all:
+	@echo slow
+endif
+-- recipe-after-a-conditional-recipe --
+ifdef FAST
+all: ;
+endif
+all:
+	@echo slow
+-- computed-eval-defines-unseen-variables --
+define set
+$(1) := yes
+endef
+$(eval $(call set,FLAG))
+all:
+	@echo $(FLAG)
+-- literal-eval-keeps-findings-certain --
+$(eval FLAG := yes)
+all:
+	@echo $(FLAG) $(OTHER)
 -- simple-self-reference --
 X := a
 X := $(X) b

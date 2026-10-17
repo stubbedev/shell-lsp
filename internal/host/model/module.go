@@ -181,13 +181,25 @@ func (m *Module) expanded() Usage {
 	return out
 }
 
+func (m *Module) required(declared Ref) bool {
+	return slices.ContainsFunc(m.Files, func(ix *Index) bool {
+		return slices.ContainsFunc(ix.Refs, func(r Ref) bool {
+			return !r.Declares && r.Name == declared.Name && r.Kind.Namespace() == declared.Kind.Namespace()
+		})
+	})
+}
+
 func (m *Module) Broken() bool {
 	return slices.ContainsFunc(m.Files, func(ix *Index) bool { return ix.Broken })
 }
 
+func (m *Module) opaque() bool {
+	return slices.ContainsFunc(m.Files, func(ix *Index) bool { return ix.Opaque })
+}
+
 func (m *Module) Findings(file int, checks Checks, used Usage) []lint.Finding {
 	ix := m.Files[file]
-	certain := m.Complete && !m.Broken()
+	certain := m.Complete && !m.Broken() && !m.opaque()
 	expanded := m.expanded()
 	dormant := func(r Ref) bool {
 		if !r.Edge || r.Owner < 0 {
@@ -200,7 +212,7 @@ func (m *Module) Findings(file int, checks Checks, used Usage) []lint.Finding {
 	for _, r := range ix.Refs {
 		res := m.Resolve(file, r)
 		switch {
-		case res.Missing || r.Soft || dormant(r):
+		case res.Missing || r.Soft || dormant(r) || r.Declares && m.required(r):
 		case !res.Found():
 			if rules := checks.Of(r.Kind); rules.Unknown != 0 && (certain || rules.UnknownWhen == Regardless) {
 				out = append(out, lint.HostFinding(rules.Unknown, r.Span, fmt.Sprintf("unknown %s `%s`", r.Kind, qualified(r))))
@@ -284,7 +296,7 @@ func (m *Module) edges(n node) []edge {
 			continue
 		}
 		for _, t := range m.Resolve(n.file, r).Targets {
-			if t.Module == m {
+			if t.Module == m && (t.File != n.file || !ix.Branches.Exclusive(r.Span.Start, ix.Symbols[t.Symbol].Span.Start)) {
 				out = append(out, edge{node{t.File, t.Symbol}, r})
 			}
 		}
