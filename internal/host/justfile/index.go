@@ -31,7 +31,7 @@ func rules(kind model.Kind) model.Rules {
 		return model.Rules{Unknown: lint.CodeJustUnknownModule}
 	case model.KindAttribute:
 		return model.Rules{Arity: lint.CodeJustAttributeArguments}
-	case model.KindSetting, model.KindTarget, model.KindKeyword:
+	case model.KindSetting, model.KindTarget, model.KindKeyword, model.KindStage:
 		return model.Rules{}
 	}
 	panic(fmt.Sprintf("justfile: kind %s has no rules", kind))

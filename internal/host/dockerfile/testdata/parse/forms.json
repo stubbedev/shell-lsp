@@ -1,0 +1,124 @@
+[
+  {
+    "name": "FROM",
+    "start": 1,
+    "end": 1,
+    "flags": [],
+    "json": false,
+    "command": [
+      "alpine"
+    ],
+    "heredocs": []
+  },
+  {
+    "name": "CMD",
+    "start": 2,
+    "end": 2,
+    "flags": [],
+    "json": false,
+    "command": [
+      "['echo']"
+    ],
+    "heredocs": []
+  },
+  {
+    "name": "ENTRYPOINT",
+    "start": 3,
+    "end": 3,
+    "flags": [],
+    "json": true,
+    "command": [
+      "a",
+      "b"
+    ],
+    "heredocs": []
+  },
+  {
+    "name": "SHELL",
+    "start": 4,
+    "end": 4,
+    "flags": [],
+    "json": true,
+    "command": [
+      "/bin/bash",
+      "-o",
+      "pipefail",
+      "-c"
+    ],
+    "heredocs": []
+  },
+  {
+    "name": "VOLUME",
+    "start": 5,
+    "end": 5,
+    "flags": [],
+    "json": true,
+    "command": [
+      "/data",
+      "/logs"
+    ],
+    "heredocs": []
+  },
+  {
+    "name": "VOLUME",
+    "start": 6,
+    "end": 6,
+    "flags": [],
+    "json": false,
+    "command": null,
+    "heredocs": []
+  },
+  {
+    "name": "HEALTHCHECK",
+    "start": 7,
+    "end": 7,
+    "flags": [
+      "--interval=5s",
+      "--retries=3"
+    ],
+    "json": false,
+    "command": null,
+    "heredocs": []
+  },
+  {
+    "name": "HEALTHCHECK",
+    "start": 8,
+    "end": 8,
+    "flags": [],
+    "json": true,
+    "command": [
+      "CMD",
+      "true"
+    ],
+    "heredocs": []
+  },
+  {
+    "name": "HEALTHCHECK",
+    "start": 9,
+    "end": 9,
+    "flags": [],
+    "json": false,
+    "command": null,
+    "heredocs": []
+  },
+  {
+    "name": "ONBUILD",
+    "start": 10,
+    "end": 10,
+    "flags": [],
+    "json": false,
+    "command": null,
+    "heredocs": [],
+    "inner": "RUN"
+  },
+  {
+    "name": "ONBUILD",
+    "start": 11,
+    "end": 11,
+    "flags": [],
+    "json": false,
+    "command": null,
+    "heredocs": [],
+    "inner": "COPY"
+  }
+]

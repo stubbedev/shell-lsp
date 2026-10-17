@@ -1,0 +1,89 @@
+[
+  {
+    "name": "FROM",
+    "start": 1,
+    "end": 1,
+    "flags": [],
+    "json": false,
+    "command": [
+      "alpine"
+    ],
+    "heredocs": []
+  },
+  {
+    "name": "RUN",
+    "start": 2,
+    "end": 5,
+    "flags": [],
+    "json": false,
+    "command": [
+      "\u003c\u003cEOF"
+    ],
+    "heredocs": [
+      {
+        "name": "EOF",
+        "content": "set -e\necho one\n",
+        "expand": true,
+        "chomp": false
+      }
+    ]
+  },
+  {
+    "name": "RUN",
+    "start": 6,
+    "end": 8,
+    "flags": [],
+    "json": false,
+    "command": [
+      "\u003c\u003c-\"EOT\" bash"
+    ],
+    "heredocs": [
+      {
+        "name": "EOT",
+        "content": "\techo $x\n",
+        "expand": false,
+        "chomp": true
+      }
+    ]
+  },
+  {
+    "name": "COPY",
+    "start": 9,
+    "end": 13,
+    "flags": [],
+    "json": false,
+    "command": null,
+    "heredocs": [
+      {
+        "name": "A",
+        "content": "a\n",
+        "expand": true,
+        "chomp": false
+      },
+      {
+        "name": "B",
+        "content": "b\n",
+        "expand": true,
+        "chomp": false
+      }
+    ]
+  },
+  {
+    "name": "RUN",
+    "start": 14,
+    "end": 16,
+    "flags": [],
+    "json": false,
+    "command": [
+      "python3 \u003c\u003cPY"
+    ],
+    "heredocs": [
+      {
+        "name": "PY",
+        "content": "print(1)\n",
+        "expand": true,
+        "chomp": false
+      }
+    ]
+  }
+]

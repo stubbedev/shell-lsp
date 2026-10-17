@@ -40,7 +40,8 @@
     "onLanguage:bats",
     "onLanguage:makefile",
     "onLanguage:just",
-    "onLanguage:nix"
+    "onLanguage:nix",
+    "onLanguage:dockerfile"
   ],
   "capabilities": {
     "untrustedWorkspaces": {
@@ -89,15 +90,15 @@
       "commandPalette": [
         {
           "command": "shellLsp.fixAll",
-          "when": "shellLsp.running && (editorLangId == shellscript || editorLangId == bats || editorLangId == makefile || editorLangId == just || editorLangId == nix)"
+          "when": "shellLsp.running && (editorLangId == shellscript || editorLangId == bats || editorLangId == makefile || editorLangId == just || editorLangId == nix || editorLangId == dockerfile)"
         },
         {
           "command": "shellLsp.runBats",
-          "when": "shellLsp.running && isWorkspaceTrusted && (editorLangId == shellscript || editorLangId == bats || editorLangId == makefile || editorLangId == just || editorLangId == nix)"
+          "when": "shellLsp.running && isWorkspaceTrusted && (editorLangId == shellscript || editorLangId == bats || editorLangId == makefile || editorLangId == just || editorLangId == nix || editorLangId == dockerfile)"
         },
         {
           "command": "shellLsp.chooseShell",
-          "when": "shellLsp.running && (editorLangId == shellscript || editorLangId == bats || editorLangId == makefile || editorLangId == just || editorLangId == nix)"
+          "when": "shellLsp.running && (editorLangId == shellscript || editorLangId == bats || editorLangId == makefile || editorLangId == just || editorLangId == nix || editorLangId == dockerfile)"
         }
       ]
     },

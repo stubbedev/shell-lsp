@@ -166,7 +166,7 @@ func nativeKind(kind model.Kind) lsp.SymbolKind {
 		return lsp.SymbolVariable
 	case model.KindParameter:
 		return lsp.SymbolVariable
-	case model.KindModule:
+	case model.KindModule, model.KindStage:
 		return lsp.SymbolModule
 	case model.KindSetting, model.KindAttribute, model.KindKeyword:
 		return lsp.SymbolProperty
@@ -180,7 +180,7 @@ func nativeCompletionKind(kind model.Kind) lsp.CompletionItemKind {
 		return lsp.CompletionFunction
 	case model.KindVariable, model.KindParameter:
 		return lsp.CompletionVariable
-	case model.KindModule:
+	case model.KindModule, model.KindStage:
 		return lsp.CompletionModule
 	case model.KindSetting, model.KindAttribute:
 		return lsp.CompletionProperty

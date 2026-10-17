@@ -1,0 +1,55 @@
+[
+  {
+    "name": "FROM",
+    "start": 1,
+    "end": 1,
+    "flags": [],
+    "json": false,
+    "command": [
+      "alpine"
+    ],
+    "heredocs": []
+  },
+  {
+    "name": "RUN",
+    "start": 2,
+    "end": 3,
+    "flags": [],
+    "json": false,
+    "command": [
+      "echo a   b"
+    ],
+    "heredocs": []
+  },
+  {
+    "name": "RUN",
+    "start": 4,
+    "end": 6,
+    "flags": [],
+    "json": false,
+    "command": [
+      "echo c   d"
+    ],
+    "heredocs": []
+  },
+  {
+    "name": "RUN",
+    "start": 7,
+    "end": 9,
+    "flags": [],
+    "json": false,
+    "command": [
+      "echo e   f"
+    ],
+    "heredocs": []
+  },
+  {
+    "name": "LABEL",
+    "start": 10,
+    "end": 11,
+    "flags": [],
+    "json": false,
+    "command": null,
+    "heredocs": []
+  }
+]

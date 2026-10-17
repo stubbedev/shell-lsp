@@ -2,9 +2,9 @@
 
 The lint fixtures and the parser tests are written by hand, so they only
 cover what someone thought of. Three checks run the linter, the parser and
-the justfile and Makefile analysis over a pinned corpus of real-world files
-instead and compare them with their references: ShellCheck, the shells
-themselves and just. Each records what it finds in a committed baseline, and
+the justfile, Makefile and Dockerfile analysis over a pinned corpus of
+real-world files instead and compare them with their references: ShellCheck,
+the shells themselves, just, GNU make and BuildKit. Each records what it finds in a committed baseline, and
 fails when the result changes.
 
 | Recipe | What it does |
@@ -12,13 +12,15 @@ fails when the result changes.
 | `just corpus-fetch` | Fetch the pinned repositories into the cache |
 | `just corpus-shellcheck` | Compare the linter with ShellCheck against [corpus/shellcheck.md](../corpus/shellcheck.md) |
 | `just corpus-shells` | Compare the parser with the shells' `-n` against [corpus/shells.txt](../corpus/shells.txt) |
-| `just corpus-hosts` | Analyse the justfiles and Makefiles against [corpus/hosts.txt](../corpus/hosts.txt), checking justfiles with just |
+| `just corpus-hosts` | Analyse the justfiles, Makefiles and Dockerfiles against [corpus/hosts.txt](../corpus/hosts.txt), checking them with just, make and BuildKit |
 | `just corpus-check` | All three comparisons |
 | `just corpus-baseline` | Rewrite the three baselines from the current code |
 
 All of them run `cmd/lintcheck` and need the tools from `nix develop`:
-ShellCheck 0.11.0, bash, dash, zsh, ksh, mksh, BusyBox, just, GNU Make and
-bubblewrap at the
+ShellCheck 0.11.0, bash, dash, zsh, ksh, mksh, BusyBox, just, GNU Make,
+bubblewrap and `dockerfile-oracle`, a small program in
+[tools/dockerfile-oracle](../tools/dockerfile-oracle) that runs BuildKit's
+Dockerfile parser and build checks offline, at the
 versions `flake.lock` pins.
 
 ## The corpus
@@ -33,7 +35,7 @@ line:
 - `kind` is `scripts` for a repository whose shell scripts are compared,
   `oils-spec` for the spec tests of the [Oils](https://github.com/oils-for-unix/oils)
   project (Apache-2.0), whose test cases are compared one by one, or `hosts`
-  for a repository whose justfiles and Makefiles are analysed.
+  for a repository whose justfiles, Makefiles and Dockerfiles are analysed.
 - `licence` is the repository's SPDX licence, for the record: nothing from
   the corpus is committed, vendored or redistributed.
 - `url` is `https://github.com/OWNER/REPO` and `commit` a full commit hash,
@@ -53,7 +55,9 @@ or Git LFS.
 The fetched repositories are untrusted data. Nothing in them is run: they
 are only read by ShellCheck, by the shells with `-n`, which reads a script
 without running it, by `just --dump`, which parses a justfile without running
-a recipe or a backtick, and by the parser and linter in-process. make is never
+a recipe or a backtick, by `dockerfile-oracle`, which parses and checks a
+Dockerfile without building it or fetching an image, and by the parser and
+linter in-process. make is never
 run on them, since reading a Makefile already runs its `$(shell ...)` calls
 and remakes its included files.
 
@@ -149,9 +153,9 @@ Fixes to the forked parser that this check found are listed in
 [third_party/mvdan-sh/README.md](../third_party/mvdan-sh/README.md), patches
 0020 to 0026.
 
-## Justfiles and Makefiles
+## Justfiles, Makefiles and Dockerfiles
 
-`lintcheck hosts` analyses every justfile and Makefile of the `hosts`
+`lintcheck hosts` analyses every justfile, Makefile and Dockerfile of the `hosts`
 repositories, named and with the extensions the language server recognises,
 the way the language server does: each file with the files it includes and
 the files that include it, found among the files of the same repository.
@@ -171,7 +175,13 @@ analysis reports no read-time error (syntax, conditionals, `define`, recipe
 prefixes), or accepts while the analysis reports one. Files that stop
 themselves with `$(error ...)`, need `./configure` output outside the
 repository, or fail in a file they include stay unjudged, and the check
-prints how many Makefiles make judged.
+prints how many files make or BuildKit judged.
+
+Every Dockerfile is also parsed and checked by BuildKit. A `BuildKit
+disagrees` line records a file BuildKit rejects at a line where the analysis
+reports no error, or accepts while the analysis reports one, and every build
+check BuildKit reports on an instruction that the analysis does not report
+there under its `SL7` code, or the other way round.
 
 The check fails when any line is added or removed, which it prints as a
 diff, and when a file takes longer than two seconds.
@@ -191,5 +201,5 @@ The `corpus` workflow fetches the corpus once, caches it with
 `actions/cache` under a key derived from `corpus/repos.txt`, and runs the
 ShellCheck and the shells comparisons as two jobs in the Nix development
 shell, so they use the tools `flake.lock` pins. A third job checks the
-justfiles and Makefiles the same way, after allowing the unprivileged user
+justfiles, Makefiles and Dockerfiles the same way, after allowing the unprivileged user
 namespaces bubblewrap needs.

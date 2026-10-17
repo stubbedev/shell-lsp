@@ -3,9 +3,10 @@ package lint
 import "github.com/stubbedev/shell-lsp/internal/parser"
 
 const (
-	justBase = nativeBase + 5000
-	makeBase = nativeBase + 6000
-	hostEnd  = nativeBase + 7000
+	justBase   = nativeBase + 5000
+	makeBase   = nativeBase + 6000
+	dockerBase = nativeBase + 7000
+	hostEnd    = nativeBase + 8000
 )
 
 const (
@@ -55,11 +56,40 @@ const (
 	CodeMakeNotPhony
 )
 
+const (
+	CodeDockerSyntax Code = dockerBase + 1 + iota
+	CodeDockerUnknownInstruction
+	CodeDockerUnknownFlag
+	CodeDockerJSONArgsRecommended
+	CodeDockerUnknownStage
+	CodeDockerUndefinedVariable
+	CodeDockerDuplicateStage
+	CodeDockerUnusedArg
+	CodeDockerStageNameCasing
+	CodeDockerFromAsCasing
+	CodeDockerEmptyContinuation
+	CodeDockerInstructionCasing
+	CodeDockerReservedStageName
+	CodeDockerMaintainerDeprecated
+	CodeDockerWorkdirRelative
+	CodeDockerMultipleInstructions
+	CodeDockerLegacyKeyValue
+	CodeDockerSecretInArgOrEnv
+	CodeDockerExposeProtoCasing
+	CodeDockerExposeInvalidFormat
+	CodeDockerInvalidDefaultArgInFrom
+	CodeDockerConstantPlatform
+	CodeDockerRedundantTargetPlatform
+	CodeDockerStageUsedBeforeDefinition
+)
+
 func (c Code) Host() bool { return c > justBase && c < hostEnd }
 
 func (c Code) Just() bool { return c > justBase && c < makeBase }
 
-func (c Code) Make() bool { return c > makeBase && c < hostEnd }
+func (c Code) Make() bool { return c > makeBase && c < dockerBase }
+
+func (c Code) Docker() bool { return c > dockerBase && c < hostEnd }
 
 var hostFamily = family{
 	codes: map[Code]meta{
@@ -106,6 +136,31 @@ var hostFamily = family{
 		CodeMakeDeferredUnterminatedReference: {severity: SeverityWarning},
 		CodeMakePatternMismatch:               {severity: SeverityWarning},
 		CodeMakeNotPhony:                      {severity: SeverityWarning},
+
+		CodeDockerSyntax:                    {severity: SeverityError},
+		CodeDockerUnknownInstruction:        {severity: SeverityError},
+		CodeDockerUnknownFlag:               {severity: SeverityError},
+		CodeDockerJSONArgsRecommended:       {severity: SeverityWarning},
+		CodeDockerUnknownStage:              {severity: SeverityInfo},
+		CodeDockerUndefinedVariable:         {severity: SeverityWarning},
+		CodeDockerDuplicateStage:            {severity: SeverityWarning},
+		CodeDockerUnusedArg:                 {severity: SeverityInfo, tag: TagUnnecessary},
+		CodeDockerStageNameCasing:           {severity: SeverityWarning},
+		CodeDockerFromAsCasing:              {severity: SeverityWarning},
+		CodeDockerEmptyContinuation:         {severity: SeverityWarning},
+		CodeDockerInstructionCasing:         {severity: SeverityWarning},
+		CodeDockerReservedStageName:         {severity: SeverityWarning},
+		CodeDockerMaintainerDeprecated:      {severity: SeverityWarning, tag: TagDeprecated},
+		CodeDockerWorkdirRelative:           {severity: SeverityWarning},
+		CodeDockerMultipleInstructions:      {severity: SeverityWarning},
+		CodeDockerLegacyKeyValue:            {severity: SeverityWarning},
+		CodeDockerSecretInArgOrEnv:          {severity: SeverityWarning},
+		CodeDockerExposeProtoCasing:         {severity: SeverityWarning},
+		CodeDockerExposeInvalidFormat:       {severity: SeverityWarning},
+		CodeDockerInvalidDefaultArgInFrom:   {severity: SeverityWarning},
+		CodeDockerConstantPlatform:          {severity: SeverityWarning},
+		CodeDockerRedundantTargetPlatform:   {severity: SeverityWarning},
+		CodeDockerStageUsedBeforeDefinition: {severity: SeverityError},
 	},
 }
 

@@ -74,6 +74,9 @@ func (m *Module) lookup(file int, name string, ns Namespace, scope Scope, horizo
 		if len(local) > 0 {
 			return local
 		}
+		if inherited := m.inherited(file, name, ns, scope); len(inherited) > 0 {
+			return inherited
+		}
 	}
 	var out []Target
 	for f, ix := range m.Files {
@@ -84,6 +87,31 @@ func (m *Module) lookup(file int, name string, ns Namespace, scope Scope, horizo
 		}
 	}
 	return out
+}
+
+func (m *Module) inherited(file int, name string, ns Namespace, scope Scope) []Target {
+	ix := m.Files[file]
+	seen := map[Scope]bool{scope: true}
+	parents := slices.Clone(ix.Extends[scope])
+	for len(parents) > 0 {
+		parent := parents[0]
+		parents = parents[1:]
+		if seen[parent] {
+			continue
+		}
+		seen[parent] = true
+		var found []Target
+		for _, i := range ix.named(ns, name) {
+			if s := ix.Symbols[i]; s.Scope == parent && !s.Local && !s.Inert {
+				found = append(found, Target{Module: m, File: file, Symbol: i})
+			}
+		}
+		if len(found) > 0 {
+			return found
+		}
+		parents = append(parents, ix.Extends[parent]...)
+	}
+	return nil
 }
 
 type Usage map[Target]bool

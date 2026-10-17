@@ -1257,3 +1257,289 @@ creates `$@` is left alone.
 clean:    # SL6017
 	rm -f app
 ```
+
+## SL7001
+
+**The Dockerfile does not parse.** BuildKit refuses to build it: a parser
+directive, a flag, a JSON array or a heredoc is malformed, an instruction
+lacks the arguments it needs, or the image of a `FROM` or `COPY --from` is no
+valid reference once its build arguments are expanded.
+
+```dockerfile
+# SL7001
+FROM alpine AS
+```
+
+## SL7002
+
+**An instruction is not one BuildKit knows.** The first word of every
+instruction must be one of `FROM`, `RUN`, `COPY`, `ADD`, `ENV`, `ARG` and the
+other Dockerfile instructions; anything else stops the build.
+
+```dockerfile
+FROM alpine
+# SL7002
+RUNN echo hi
+```
+
+## SL7003
+
+**A flag is not one the instruction takes.** BuildKit stops at a flag the
+instruction does not accept, such as `--chown` on `RUN`.
+
+```dockerfile
+FROM alpine
+# SL7003
+RUN --chown=1000 echo hi
+```
+
+## SL7004
+
+**`CMD` or `ENTRYPOINT` uses the shell form.** The shell form runs the command
+under `/bin/sh -c`, which becomes PID 1 and does not pass signals such as
+`SIGTERM` on, so the container cannot shut down cleanly. Write the command as
+a JSON array. A `SHELL` earlier in the stage or its base stages turns the
+check off, as BuildKit does.
+
+```dockerfile
+FROM alpine
+# SL7004
+CMD ./server --port 80
+```
+
+## SL7005
+
+**`COPY --from` names a stage that does not exist.** Without a stage of that
+name Docker pulls an image called that, which is rarely what a misspelt stage
+name meant.
+
+```dockerfile
+FROM golang:1.23 AS build
+FROM alpine
+# SL7005
+COPY --from=buidl /out/app /app
+```
+
+## SL7006
+
+**A variable is used but never declared.** Build arguments must be declared
+with `ARG` before they are used, those in `FROM` before the first `FROM`, and
+positional parameters such as `$1` never have a value outside `RUN`.
+
+```dockerfile
+FROM alpine
+# SL7006
+WORKDIR /srv/$APP
+```
+
+## SL7007
+
+**Two stages have the same name.** Stage names should be unique; `COPY --from`
+picks the last stage of that name while `FROM` picks the closest one before
+it.
+
+```dockerfile
+FROM alpine AS base
+# SL7007
+FROM debian AS base
+```
+
+## SL7008
+
+**A build argument is declared but never used.** Nothing in the Dockerfile
+reads it and no `RUN` comes after it in the stage, whose programs could read
+it from the environment. BuildKit's own `BUILDKIT_` arguments are left alone.
+
+```dockerfile
+FROM alpine
+RUN echo hi
+# SL7008
+ARG UNUSED=1
+COPY app /app
+```
+
+## SL7009
+
+**A stage name is not lowercase.** Stage names are case-insensitive, and
+BuildKit asks for lowercase names so that every reference to a stage looks the
+same.
+
+```dockerfile
+# SL7009
+FROM alpine AS Build
+```
+
+## SL7010
+
+**`AS` does not match the casing of `FROM`.** Write `FROM … AS` or `from …
+as`, not a mix.
+
+```dockerfile
+# SL7010
+FROM alpine as build
+```
+
+## SL7011
+
+**An empty line continues an instruction.** An empty line after a line ending
+in the escape character is swallowed into the instruction; a later BuildKit
+will treat it as an error.
+
+```dockerfile
+FROM alpine
+RUN apk add \
+# SL7011
+
+    curl
+```
+
+## SL7012
+
+**An instruction is not cased like the others.** Instructions are
+case-insensitive, but a Dockerfile should use one casing; the minority is
+reported, and a tie counts as uppercase. Instructions that `ONBUILD` triggers
+do not count.
+
+```dockerfile
+FROM alpine
+# SL7012
+run echo hi
+```
+
+## SL7013
+
+**A stage uses a reserved name.** `scratch` and `context` have their own
+meaning in `FROM` and `--from`, so a stage must not take them.
+
+```dockerfile
+# SL7013
+FROM alpine AS scratch
+```
+
+## SL7014
+
+**`MAINTAINER` is deprecated.** Set the `org.opencontainers.image.authors`
+label instead.
+
+```dockerfile
+FROM alpine
+# SL7014
+MAINTAINER me@example.com
+```
+
+## SL7015
+
+**`WORKDIR` is relative before the stage sets one.** A relative `WORKDIR`
+resolves against the working directory of the base image, which can change
+under it. Once any `WORKDIR` has been set in the stage or its base stages,
+relative ones are fine.
+
+```dockerfile
+FROM alpine
+# SL7015
+WORKDIR app
+```
+
+## SL7016
+
+**A stage has more than one `CMD`, `ENTRYPOINT` or `HEALTHCHECK`.** Only the
+last one takes effect, so the earlier ones are dead.
+
+```dockerfile
+FROM alpine
+# SL7016
+CMD ["one"]
+CMD ["two"]
+```
+
+## SL7017
+
+**`ENV` or `LABEL` uses the legacy `key value` form.** The form without `=`
+sets a single key whose value is the rest of the line; write `key=value`.
+
+```dockerfile
+FROM alpine
+# SL7017
+ENV MODE production
+```
+
+## SL7018
+
+**A secret is passed in `ARG` or `ENV`.** Build arguments and environment
+variables end up in the image metadata and history. Names that contain a word
+such as `TOKEN`, `PASSWORD` or `SECRET` should come from a secret mount
+instead.
+
+```dockerfile
+FROM alpine
+# SL7018
+ARG API_TOKEN
+```
+
+## SL7019
+
+**`EXPOSE` gives the protocol in uppercase.** The protocol after the port is
+`tcp` or `udp`, in lowercase.
+
+```dockerfile
+FROM alpine
+# SL7019
+EXPOSE 53/UDP
+```
+
+## SL7020
+
+**`EXPOSE` maps a host port.** `EXPOSE` only documents the container port;
+publishing it on a host port is a `docker run -p` decision.
+
+```dockerfile
+FROM alpine
+# SL7020
+EXPOSE 8080:80
+```
+
+## SL7021
+
+**The default of a build argument leaves a `FROM` image empty.** Without a
+`--build-arg` the image name expands to nothing and the build fails; give the
+argument a default.
+
+```dockerfile
+ARG BASE=
+# SL7021
+FROM $BASE
+```
+
+## SL7022
+
+**`FROM --platform` is a constant.** A fixed platform pins the base image to
+one architecture, which breaks multi-platform builds; use `$BUILDPLATFORM` or
+`$TARGETPLATFORM`.
+
+```dockerfile
+# SL7022
+FROM --platform=linux/amd64 alpine
+```
+
+## SL7023
+
+**`FROM --platform=$TARGETPLATFORM` is redundant.** Stages build for the
+target platform already.
+
+```dockerfile
+# SL7023
+FROM --platform=$TARGETPLATFORM alpine
+```
+
+## SL7024
+
+**`COPY --from` names a stage that is not built before it.** A stage can only
+copy from a stage defined earlier in the Dockerfile, never from itself or a
+later one.
+
+```dockerfile
+FROM alpine AS build
+# SL7024
+COPY --from=final /app /app
+FROM alpine AS final
+```

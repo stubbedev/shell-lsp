@@ -1,0 +1,76 @@
+-- plain --
+"x"
+-- env --
+"xone"
+-- braced --
+"xoney"
+-- default-unset --
+"xdev"
+-- default-empty --
+"xdev"
+-- default-empty-no-colon --
+"x"
+-- default-set --
+"xone"
+-- alternative-set --
+"xalt"
+-- alternative-unset --
+"x"
+-- alternative-empty-no-colon --
+"xalt"
+-- nested-default --
+"xtwo"
+-- nested-braced-default --
+"xtwo-z"
+-- env-from-env --
+"xone/two"
+-- env-same-line --
+"x"
+-- env-default-at-definition --
+"dev"
+-- quoted-double --
+"xtwo words"
+-- quoted-single --
+"x$A"
+-- escaped-dollar --
+"x$A"
+-- escape-in-double-quotes --
+"x\\a$b\"c"
+-- legacy-env --
+"xlegacy value"
+-- arg-default --
+"xone"
+-- arg-from-preamble --
+"xpre"
+-- preamble-not-visible --
+"x"
+-- arg-without-default --
+"xunset"
+-- env-beats-arg --
+"xarg"
+-- env-inherited --
+"xone"
+-- arg-not-inherited --
+"xone"
+-- env-after-workdir --
+"x"
+-- unknown-platform --
+"xamd64"
+-- unknown-pattern --
+"xone"
+-- lone-dollar --
+"x$"
+-- dollar-digit --
+"xy"
+-- arg-same-line --
+"xone"
+-- preamble-arg-same-line --
+"xone"
+-- preamble-arg-later --
+"x"
+-- dollar-digit-braced --
+"xy"
+-- dollar-digits-braced --
+"xy"
+-- default-path --
+"x/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"

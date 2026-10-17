@@ -105,3 +105,9 @@ ruby hosts BSD-2-Clause https://github.com/ruby/ruby 5b1c37352212b0f750a6a15aec7
 u-boot hosts GPL-2.0-or-later https://github.com/u-boot/u-boot 8d534cec0cc0109a37c0ded8854da03f1526dc0e Makefile scripts/Makefile.build scripts/Makefile.lib
 wireguard-make hosts GPL-2.0-only https://github.com/WireGuard/wireguard-tools a998407747005ea7e4e0258d96f105c97241e1d3 src/Makefile
 moby-make hosts Apache-2.0 https://github.com/moby/moby 3f38b15147b14ce0ce7b11558a1aa9e9f14db103 Makefile
+docker-golang hosts BSD-3-Clause https://github.com/docker-library/golang 8a8323e6f78f6875c0642a0768f2751f93c5009c
+docker-python hosts MIT https://github.com/docker-library/python ce73ea7cebf01824125c30c20cd1acbde9b364ec
+docker-php hosts MIT https://github.com/docker-library/php 9dac3d048ebdcdb3b6a27350b7572ddee58c70df
+docker-nginx hosts BSD-2-Clause https://github.com/nginx/docker-nginx 4b9f658be76820b24e4ef4605413a5c08707a512
+buildx hosts Apache-2.0 https://github.com/docker/buildx a44455e29f571690ed472eb31000bcf015347ffa Dockerfile
+grafana hosts AGPL-3.0 https://github.com/grafana/grafana bcbfcbbaa3d503014391fed053923b1a94696916 Dockerfile

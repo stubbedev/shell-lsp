@@ -1,0 +1,9 @@
+{buildGo127Module}:
+buildGo127Module {
+  pname = "dockerfile-oracle";
+  version = "0.34.0";
+  src = ./.;
+  vendorHash = "sha256-UssbzC90TuBagsIn9H09ENaeFbeGcj2hkas2RGCZUDI=";
+  env.CGO_ENABLED = 0;
+  meta.description = "BuildKit's Dockerfile parser and checks as a black box for the shell-lsp fixtures";
+}

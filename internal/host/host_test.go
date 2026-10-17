@@ -42,6 +42,16 @@ func TestOf(t *testing.T) {
 		{"file:///w/tasks.just", "", Just, true},
 		{"file:///w/flake.nix", "", Nix, true},
 		{"file:///w/x", "nix", Nix, true},
+		{"file:///w/Dockerfile", "", Docker, true},
+		{"file:///w/Containerfile", "", Docker, true},
+		{"file:///w/Dockerfile.dev", "", Docker, true},
+		{"file:///w/Containerfile.ci", "", Docker, true},
+		{"file:///w/build.Dockerfile", "", Docker, true},
+		{"file:///w/app.dockerfile", "", Docker, true},
+		{"file:///w/app.Containerfile", "", Docker, true},
+		{"file:///w/x", "dockerfile", Docker, true},
+		{"file:///w/Dockerfile", "shellscript", Docker, true},
+		{"file:///w/dockerfile.sh", "", 0, false},
 	} {
 		got, ok := Of(tt.uri, tt.languageID)
 		if ok != tt.ok || ok && got != tt.want {
@@ -220,6 +230,7 @@ func TestEveryRecipeParsesAsItsOwnShell(t *testing.T) {
 	}{
 		{Just, "file:///w/justfile", "just", "plain:\n    echo \"$1\"\nbash:\n    #!/usr/bin/env bash\n    arr=(1 2); echo \"${arr[@]}\"\nzsh:\n    #!/usr/bin/env zsh\n    for i (1 2) echo $i\n"},
 		{Make, "file:///w/Makefile", "makefile", "plain:\n\techo \"$$1\"\nbash: SHELL := /bin/bash\nbash:\n\tarr=(1 2); echo \"$${arr[@]}\"\nzsh: SHELL := /bin/zsh\nzsh:\n\tfor i (1 2) echo $$i\n"},
+		{Docker, "file:///w/Dockerfile", "dockerfile", "FROM alpine\nRUN echo \"$1\"\nONBUILD RUN echo \"$2\"\nSHELL [\"/bin/bash\", \"-c\"]\nRUN arr=(1 2); echo \"${arr[@]}\"\nFROM alpine AS z\nSHELL [\"/bin/zsh\", \"-c\"]\nFROM z\nRUN for i (1 2) echo $i\n"},
 	} {
 		script := tt.language.Project(docstore.NewDocument(tt.uri, tt.id, 1, tt.text))
 		trees := map[dialect.Dialect]*parser.Tree{script.Detection.Dialect: script.Parse(nil)}

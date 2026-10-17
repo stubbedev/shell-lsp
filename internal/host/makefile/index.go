@@ -24,7 +24,7 @@ func rules(kind model.Kind) model.Rules {
 		return model.Rules{Unknown: lint.CodeMakeUnknownFunction, UnknownWhen: model.Regardless, Arity: lint.CodeMakeFunctionArguments}
 	case model.KindTarget:
 		return model.Rules{Unknown: lint.CodeMakePhonyWithoutRule}
-	case model.KindRecipe, model.KindAlias, model.KindParameter, model.KindModule, model.KindSetting, model.KindAttribute, model.KindKeyword:
+	case model.KindRecipe, model.KindAlias, model.KindParameter, model.KindModule, model.KindSetting, model.KindAttribute, model.KindKeyword, model.KindStage:
 		return model.Rules{}
 	}
 	panic(fmt.Sprintf("makefile: kind %s has no rules", kind))

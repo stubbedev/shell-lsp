@@ -16,12 +16,14 @@ server for bash, zsh, POSIX sh, dash and ksh with dialect auto-detection.
 - Quick fixes, refactorings and a fix-all action.
 - Bats: tests in the outline and "Run" code lenses that report failures as
   diagnostics.
-- The shell in Makefile and justfile recipes and in Nix phases, hooks and
-  script writers, linted in place, with fixes written back in their syntax.
+- The shell in Makefile and justfile recipes, Dockerfile `RUN` instructions
+  and Nix phases, hooks and script writers, linted in place, with fixes
+  written back in their syntax.
 
 The server starts for documents VS Code identifies as Shell Script
 (`.sh`, `.bash`, `.zsh`, `.ksh`, rc files and shebang detection), as
-Makefile, or as `just` or `nix` (which justfile and Nix extensions provide),
+Makefile or Dockerfile, or as `just` or `nix` (which justfile and Nix
+extensions provide),
 and this
 extension adds `.bats` files and `bats` shebangs.
 
@@ -80,7 +82,8 @@ restarts the server.
 - **Shell LSP: Show Output** opens the server's log.
 - **Shell LSP: Fix All Auto-Fixable Problems** applies every non-overlapping safe
   lint fix in the active document, the ones that keep its behaviour; in a
-  Makefile, justfile or Nix file the fixes are written in that file's syntax.
+  Makefile, justfile, Dockerfile or Nix file the fixes are written in that
+  file's syntax.
 - **Shell LSP: Run Bats File** runs the active Bats file and reports failures
   as diagnostics; on any other document it reports that the document is not
   a Bats file. Running tests executes workspace code, so it is disabled in
@@ -90,10 +93,10 @@ restarts the server.
   shebang, or removes that directive. Clicking the shell name in the status
   bar runs it. The status bar shows the shell the script is linted as, marks
   it "(guessed)" when only the extension or the bash default decided it, and
-  says in its tooltip what decided it. In a Makefile, justfile or Nix file
-  the file itself decides the shell (`SHELL` in a Makefile, `set shell` or a
-  recipe's shebang in a justfile, the writer or a `/* bash */` comment in
-  Nix), so the command explains that instead of offering shells.
+  says in its tooltip what decided it. In a Makefile, justfile, Dockerfile or
+  Nix file the file itself decides the shell (`SHELL` in a Makefile or a
+  Dockerfile, `set shell` or a recipe's shebang in a justfile, the writer or
+  a `/* bash */` comment in Nix), so the command explains that instead of offering shells.
 
 ## Recipes and targets
 

@@ -31,15 +31,17 @@ nor groff needs to be installed.
 - Quick fixes, [refactorings](#refactorings) and a fix-all source action.
 - Checks for awk, sed and jq programs embedded in scripts
   ([Embedded languages](#embedded-languages)).
-- The shell inside Makefile and justfile recipes and Nix strings, linted and
-  navigated in place, with fixes written back in their syntax
+- The shell inside Makefile and justfile recipes, Dockerfile `RUN`
+  instructions and Nix strings, linted and navigated in place, with fixes written back in their syntax
   ([Shell in other files](#shell-in-other-files)).
 - Justfiles and Makefiles as languages of their own: diagnostics, navigation,
   rename, completion, hover, outline and "Run" lenses for recipes, targets
   and variables across `import`, `mod` and `include`, also from the shell of
   a recipe to the just or make variable it reads, justfiles formatted
-  like `just --fmt` and Makefiles formatted without changing what make reads
-  ([Justfiles and Makefiles natively](#justfiles-and-makefiles-natively)).
+  like `just --fmt` and Makefiles formatted without changing what make reads,
+  and Dockerfiles checked the way BuildKit checks them, with stages and build
+  arguments to navigate
+  ([Justfiles, Makefiles and Dockerfiles natively](#justfiles-makefiles-and-dockerfiles-natively)).
 - [Bats](#bats) support: tests in the outline, and "Run" lenses that report
   failures as diagnostics.
 - `shell-lsp check` and `shell-lsp fmt` for CI and pre-commit, compatible
@@ -463,9 +465,9 @@ is written back in the syntax of the file; a fix that cannot be written there,
 such as one that would need a new line in a Makefile recipe, is not offered.
 The shell cannot be switched with a `# shellcheck shell=` directive, because
 the file decides it. A `# shellcheck disable=` directive in the shell works as
-usual. In Nix files, requests outside the shell find nothing; justfiles and
-Makefiles are understood as languages of their own
-([Justfiles and Makefiles natively](#justfiles-and-makefiles-natively)).
+usual. In Nix files, requests outside the shell find nothing; justfiles,
+Makefiles and Dockerfiles are understood as languages of their own
+([Justfiles, Makefiles and Dockerfiles natively](#justfiles-makefiles-and-dockerfiles-natively)).
 
 An editor sends these files when the server is attached to their file type
 ([docs/editors.md](docs/editors.md)); `shell-lsp check` and the workspace scan
@@ -531,20 +533,44 @@ gives it, or else when its language identifier is `just`.
   even when another recipe is bash, and hover, completion and the dialect
   status follow the recipe under the cursor.
 
-### Justfiles and Makefiles natively
+### Dockerfiles
 
-Beyond the shell in their recipes, shell-lsp reads the just and make syntax
-around it with parsers of its own, so it is the only server an editor needs
-for these files.
+A document is a Dockerfile when it is named `Dockerfile` or `Containerfile`,
+starts with `Dockerfile.` or `Containerfile.` or ends in `.Dockerfile`,
+`.dockerfile` or `.Containerfile`, whatever language identifier the editor
+gives it, or else when its language identifier is `dockerfile`.
+
+- The shell form of `RUN`, and the heredocs a `RUN` feeds to its shell, are
+  the shell; so are the shell forms of `CMD`, `ENTRYPOINT`, a
+  `HEALTHCHECK CMD` and the instructions `ONBUILD` triggers. JSON forms (`RUN ["make"]`) run no shell and are skipped,
+  as is a heredoc whose first line is a shebang of something that is not a
+  shell.
+- Each instruction runs in a shell of its own, as BuildKit runs it, with the
+  continuation lines joined and the comments between them dropped.
+- The shell is the one the last `SHELL` before the instruction names, in the
+  stage or the stages it is built `FROM`, else `sh`; a heredoc with a shebang
+  runs in that one. Each shell is checked as its own.
+- The `ENV` variables of the stage and its base stages, and the `ARG`s it
+  declares, are set when the shell runs. As in any script, reading an
+  all-uppercase variable that is never set is not reported (`SC2154`), which
+  leaves alone what the base image sets, such as `PATH` or `GOPATH`.
+
+### Justfiles, Makefiles and Dockerfiles natively
+
+Beyond the shell in their recipes, shell-lsp reads the just, make and
+Dockerfile syntax around it with parsers of its own, so it is the only server
+an editor needs for these files.
 
 - **Diagnostics.** Syntax errors, unknown recipes, targets, variables,
   functions, settings and attributes, wrong argument counts, duplicates,
   circular dependencies and recursive variables, unused parameters and
   variables, missing `import`, `mod` and `include` files, and more; every
-  check is listed in [rules.md](docs/rules.md#justfiles-and-makefiles) with
-  `SL5` codes for justfiles and `SL6` codes for Makefiles. Each justfile check
-  was compared with what just 1.58 rejects and each Makefile check with GNU
-  Make 4.4. Missing names are reported only when every file that could define
+  check is listed in [rules.md](docs/rules.md#sl5001) with
+  `SL5` codes for justfiles, `SL6` codes for Makefiles and `SL7` codes for
+  Dockerfiles. Each justfile check was compared with what just 1.58 rejects,
+  each Makefile check with GNU Make 4.4, and each Dockerfile check with the
+  parser and the build checks of BuildKit 0.34, including the
+  `# check=skip=` and `# check=error=true` directives. Missing names are reported only when every file that could define
   them was found.
 - **Navigation across files.** Definition, references, document highlight and
   rename for recipes, aliases, variables, parameters, modules, functions and

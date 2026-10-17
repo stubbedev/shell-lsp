@@ -15,6 +15,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/atomicfile"
 	"github.com/stubbedev/shell-lsp/internal/corpus"
 	"github.com/stubbedev/shell-lsp/internal/host"
+	"github.com/stubbedev/shell-lsp/internal/host/dockerfile"
 	"github.com/stubbedev/shell-lsp/internal/host/oracle"
 	"github.com/stubbedev/shell-lsp/internal/hostnav"
 	"github.com/stubbedev/shell-lsp/internal/lint"
@@ -56,7 +57,7 @@ func runHosts(ctx context.Context, args []string) error {
 		return err
 	}
 	if len(files) == 0 {
-		return errors.New("the corpus lists no justfiles or Makefiles; is a `hosts` repository in the manifest?")
+		return errors.New("the corpus lists no justfiles, Makefiles or Dockerfiles; is a `hosts` repository in the manifest?")
 	}
 	reports, err := analyseHosts(ctx, files)
 	if err != nil {
@@ -90,13 +91,13 @@ func runHosts(ctx context.Context, args []string) error {
 		}
 	}
 	if string(raw) == got {
-		fmt.Printf("%d justfiles and Makefiles match %s; make judged %d of the Makefiles\n", len(reports), *baselineFile, judged)
+		fmt.Printf("%d justfiles, Makefiles and Dockerfiles match %s; make or BuildKit judged %d of them\n", len(reports), *baselineFile, judged)
 		return nil
 	}
 	for _, line := range diffLines(string(raw), got) {
 		fmt.Println(line)
 	}
-	return fmt.Errorf("the analysis of the corpus justfiles and Makefiles no longer matches %s; fix the change, or run `just corpus-baseline` and review the diff", *baselineFile)
+	return fmt.Errorf("the analysis of the corpus justfiles, Makefiles and Dockerfiles no longer matches %s; fix the change, or run `just corpus-baseline` and review the diff", *baselineFile)
 }
 
 func diffLines(want, got string) []string {
@@ -178,6 +179,22 @@ func analyseHosts(ctx context.Context, files []corpus.HostFile) ([]hostReport, e
 		case f.Language == host.Just:
 			if problem, disagrees := oracle.Disagreement(oracle.Just(ctx, f.File, filepath.Dir(f.File), isolatedEnv()), lines, errorLines); disagrees {
 				r.lines = append(r.lines, "just disagrees: "+problem)
+			}
+		case f.Language == host.Docker:
+			report, err := oracle.Dockerfile(ctx, f.File, isolatedEnv())
+			if err != nil {
+				return nil, err
+			}
+			r.judged = true
+			if problem, disagrees := oracle.Disagreement(report.Verdict(), lines, errorLines); disagrees {
+				r.lines = append(r.lines, "BuildKit disagrees: "+problem)
+			}
+			var reported []dockerfile.BuildKitCheck
+			for _, c := range report.Checks() {
+				reported = append(reported, dockerfile.BuildKitCheck{Rule: c.Rule, Line: c.Line})
+			}
+			for _, problem := range dockerfile.Parse(text).CheckDisagreements(reported, findings) {
+				r.lines = append(r.lines, "BuildKit disagrees: "+problem)
 			}
 		case f.Language == host.Make && host.Make.EntryPoint(f.File):
 			verdict := oracle.Make(ctx, f.File, f.Root, text, isolatedEnv())

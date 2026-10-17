@@ -9,6 +9,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
+	"github.com/stubbedev/shell-lsp/internal/host/dockerfile"
 	"github.com/stubbedev/shell-lsp/internal/host/justfile"
 	"github.com/stubbedev/shell-lsp/internal/host/makefile"
 	"github.com/stubbedev/shell-lsp/internal/host/model"
@@ -23,6 +24,7 @@ const (
 	Make Language = iota
 	Just
 	Nix
+	Docker
 )
 
 func (l Language) String() string { return definitions[l].name }
@@ -32,6 +34,7 @@ type definition struct {
 	languageIDs []string
 	names       []string
 	extensions  []string
+	prefixes    []string
 	analyze     func(text string) analysis
 	builtins    model.Builtins
 	checks      model.Checks
@@ -70,6 +73,11 @@ func projectOnly(project func(string) (*projection.Map, dialect.Detection)) func
 func analyzeMake(text string) analysis {
 	a := makefile.Analyze(text)
 	return analysis{projection: a.Map, detection: a.Detection, index: a.Index, expect: a.File.Expect, invocation: a.File.Invocation, enclosing: a.File.Enclosing, format: func() (string, error) { return makefile.Format(a.File) }}
+}
+
+func analyzeDocker(text string) analysis {
+	a := dockerfile.Analyze(text)
+	return analysis{projection: a.Map, detection: a.Detection, index: a.Index, expect: a.File.Expect, invocation: a.File.Invocation, enclosing: a.File.Enclosing}
 }
 
 func analyzeJust(text string) analysis {
@@ -116,6 +124,21 @@ var definitions = [...]definition{
 		extensions:  []string{".nix"},
 		analyze:     projectOnly(nix.Project),
 	},
+	Docker: {
+		name:        "Dockerfile",
+		languageIDs: []string{"dockerfile"},
+		names:       []string{"Dockerfile", "Containerfile"},
+		extensions:  []string{".Dockerfile", ".dockerfile", ".Containerfile"},
+		prefixes:    []string{"Dockerfile.", "Containerfile."},
+		analyze:     analyzeDocker,
+		builtins:    dockerfile.Builtins,
+		checks:      dockerfile.Checks,
+		validName:   dockerfile.ValidName,
+		fence:       "dockerfile",
+		invocation: func(path, name string) []string {
+			return []string{"docker", "build", "--file", path, "--target", name, filepath.Dir(path)}
+		},
+	},
 }
 
 func find(match func(definition) bool) (Language, bool) {
@@ -149,7 +172,8 @@ func baseName(name string) string { return path.Base(strings.ReplaceAll(name, "\
 func FromName(name string) (Language, bool) {
 	base := baseName(name)
 	return find(func(d definition) bool {
-		return slices.Contains(d.names, base) || slices.ContainsFunc(d.extensions, func(ext string) bool { return strings.HasSuffix(base, ext) })
+		return slices.Contains(d.names, base) || slices.ContainsFunc(d.extensions, func(ext string) bool { return strings.HasSuffix(base, ext) }) ||
+			slices.ContainsFunc(d.prefixes, func(prefix string) bool { return strings.HasPrefix(base, prefix) })
 	})
 }
 

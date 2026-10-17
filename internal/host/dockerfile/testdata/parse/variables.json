@@ -1,0 +1,116 @@
+[
+  {
+    "name": "ARG",
+    "start": 1,
+    "end": 1,
+    "flags": [],
+    "json": false,
+    "command": [
+      "VERSION=1.0"
+    ],
+    "heredocs": []
+  },
+  {
+    "name": "ARG",
+    "start": 2,
+    "end": 2,
+    "flags": [],
+    "json": false,
+    "command": [
+      "TARGET"
+    ],
+    "heredocs": []
+  },
+  {
+    "name": "FROM",
+    "start": 3,
+    "end": 3,
+    "flags": [],
+    "json": false,
+    "command": [
+      "alpine:$VERSION"
+    ],
+    "heredocs": []
+  },
+  {
+    "name": "ARG",
+    "start": 4,
+    "end": 4,
+    "flags": [],
+    "json": false,
+    "command": [
+      "VERSION"
+    ],
+    "heredocs": []
+  },
+  {
+    "name": "ENV",
+    "start": 5,
+    "end": 5,
+    "flags": [],
+    "json": false,
+    "command": null,
+    "heredocs": []
+  },
+  {
+    "name": "ENV",
+    "start": 6,
+    "end": 6,
+    "flags": [],
+    "json": false,
+    "command": null,
+    "heredocs": []
+  },
+  {
+    "name": "LABEL",
+    "start": 7,
+    "end": 7,
+    "flags": [],
+    "json": false,
+    "command": null,
+    "heredocs": []
+  },
+  {
+    "name": "EXPOSE",
+    "start": 8,
+    "end": 8,
+    "flags": [],
+    "json": false,
+    "command": [
+      "80/tcp",
+      "443"
+    ],
+    "heredocs": []
+  },
+  {
+    "name": "USER",
+    "start": 9,
+    "end": 9,
+    "flags": [],
+    "json": false,
+    "command": [
+      "app:app"
+    ],
+    "heredocs": []
+  },
+  {
+    "name": "STOPSIGNAL",
+    "start": 10,
+    "end": 10,
+    "flags": [],
+    "json": false,
+    "command": [
+      "SIGTERM"
+    ],
+    "heredocs": []
+  },
+  {
+    "name": "MAINTAINER",
+    "start": 11,
+    "end": 11,
+    "flags": [],
+    "json": false,
+    "command": null,
+    "heredocs": []
+  }
+]

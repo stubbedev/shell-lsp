@@ -1,0 +1,268 @@
+-- clean --
+accepted
+-- empty-file --
+rejected 0:1 file with no instructions
+1:1 SL7001 error the Dockerfile has no instructions
+-- only-comments --
+rejected 0:1 file with no instructions
+1:1 SL7001 error the Dockerfile has no instructions
+-- instruction-before-from --
+rejected 1:1 no build stage in current context
+1:1 SL7001 error RUN comes before the first FROM, where only ARG may appear
+-- arg-then-run-before-from --
+rejected 2:1 no build stage in current context
+1:5 SL7008 info variable `A` is never used
+2:1 SL7001 error RUN comes before the first FROM, where only ARG may appear
+-- unknown-instruction --
+rejected 2:1 dockerfile parse error on line 2: unknown instruction: FOO (did you mean FROM?)
+2:1 SL7002 error unknown instruction: FOO
+-- unknown-flag --
+rejected 2:1 dockerfile parse error on line 2: unknown flag: --bogus
+2:5 SL7003 error unknown flag: --bogus
+-- add-takes-no-from --
+rejected 2:1 dockerfile parse error on line 2: unknown flag: --from
+2:5 SL7003 error unknown flag: --from
+-- from-without-image --
+rejected 1:1 dockerfile parse error on line 1: FROM requires either one or three arguments
+1:1 SL7001 error FROM takes an image, optionally followed by `AS name`
+-- from-with-two-words --
+rejected 1:1 dockerfile parse error on line 1: FROM requires either one or three arguments
+1:1 SL7001 error FROM takes an image, optionally followed by `AS name`
+-- from-with-extra-words --
+rejected 1:1 dockerfile parse error on line 1: FROM requires either one or three arguments
+1:1 SL7001 error FROM takes an image, optionally followed by `AS name`
+-- env-without-arguments --
+rejected 2:1 dockerfile parse error on line 2: ENV requires at least one argument
+2:1 SL7001 error ENV needs at least one argument
+-- env-without-value --
+rejected 0:1 ENV must have two arguments
+2:5 SL7001 error ENV A needs a value
+-- arg-without-arguments --
+rejected 2:1 dockerfile parse error on line 2: ARG requires at least one argument
+2:1 SL7001 error ARG needs at least one argument
+-- copy-without-destination --
+rejected 2:1 dockerfile parse error on line 2: COPY requires at least two arguments, but only one was provided. Destination could not be determined
+2:1 SL7001 error COPY needs a source and a destination
+-- workdir-without-path --
+rejected 2:1 dockerfile parse error on line 2: WORKDIR requires exactly one argument
+2:1 SL7001 error WORKDIR takes exactly one argument
+-- shell-not-json --
+rejected 2:1 dockerfile parse error on line 2: SHELL requires the arguments to be in JSON form
+2:1 SL7001 error SHELL takes its arguments in JSON form, as in `SHELL ["/bin/bash", "-c"]`
+-- onbuild-from --
+rejected 2:1 dockerfile parse error on line 2: FROM isn't allowed as an ONBUILD trigger
+2:9 SL7001 error FROM cannot be an ONBUILD trigger
+-- healthcheck-unknown-type --
+rejected 2:1 dockerfile parse error on line 2: Unknown type "FOO" in HEALTHCHECK (try CMD)
+2:13 SL7001 error HEALTHCHECK takes `CMD command` or `NONE`
+-- copy-from-later-stage --
+rejected 2:1 cannot copy from stage "later", it needs to be defined before current stage "stage-0"
+2:13 SL7024 error stage `later` is defined after the stage that copies from it
+-- copy-from-index-out-of-range --
+rejected 0:1 invalid stage index 2
+2:13 SL7024 error --from=2 names a stage that is not defined before this one
+-- label-without-value --
+rejected 0:1 LABEL must have two arguments
+2:7 SL7001 error LABEL a needs a value
+-- user-without-name --
+rejected 2:1 dockerfile parse error on line 2: USER requires exactly one argument
+2:1 SL7001 error USER takes exactly one argument
+-- escape-directive --
+accepted
+-- bad-escape-directive --
+rejected 0:1 invalid escape token 'x' does not match ` or \
+1:10 SL7001 error invalid escape token 'x' does not match ` or \
+-- unterminated-heredoc --
+rejected 0:1 unterminated heredoc
+2:7 SL7001 error the heredoc EOF has no line "EOF" that ends it
+-- multiple-cmd --
+accepted
+buildkit MultipleInstructionsDisallowed 2
+buildkit MultipleInstructionsDisallowed 4
+buildkit MultipleInstructionsDisallowed 6
+2:1 SL7016 warning a later CMD in this stage replaces this one
+4:1 SL7016 warning a later ENTRYPOINT in this stage replaces this one
+6:1 SL7016 warning a later HEALTHCHECK in this stage replaces this one
+-- undefined-vars --
+accepted
+buildkit UndefinedVar 2
+2:8 SL7006 warning `TARGETARCH` is set for FROM lines only; declare it with `ARG TARGETARCH` in the stage to use it here
+2:30 SL7006 warning unknown variable `HOME`
+-- declared-platform-arg --
+accepted
+-- platform-flags --
+accepted
+buildkit FromPlatformFlagConstDisallowed 1
+buildkit RedundantTargetPlatform 2
+1:17 SL7022 warning a constant --platform=linux/amd64 pins the base image to one platform; use a build argument such as $BUILDPLATFORM
+2:17 SL7023 warning FROM builds for $TARGETPLATFORM by default, so --platform=$TARGETPLATFORM is redundant
+-- secrets --
+accepted
+buildkit SecretsUsedInArgOrEnv 2
+buildkit SecretsUsedInArgOrEnv 3
+buildkit SecretsUsedInArgOrEnv 4
+2:5 SL7008 info variable `password` is never used
+2:5 SL7018 warning ARG `password` puts sensitive data into the image history; pass it with `RUN --mount=type=secret` instead
+3:5 SL7008 info variable `api_key` is never used
+3:5 SL7018 warning ARG `api_key` puts sensitive data into the image history; pass it with `RUN --mount=type=secret` instead
+4:5 SL7008 info variable `MY_TOKEN` is never used
+4:5 SL7018 warning ARG `MY_TOKEN` puts sensitive data into the image history; pass it with `RUN --mount=type=secret` instead
+5:5 SL7008 info variable `PUBLIC_KEY` is never used
+7:5 SL7008 info variable `keystore` is never used
+8:5 SL7008 info variable `AUTHOR` is never used
+-- instruction-casing --
+accepted
+buildkit ConsistentInstructionCasing 2
+buildkit ConsistentInstructionCasing 4
+2:1 SL7012 warning `run` should be uppercase, like most instructions here
+4:1 SL7012 warning `run` should be uppercase, like most instructions here
+-- from-as-casing --
+accepted
+buildkit ConsistentInstructionCasing 1
+buildkit FromAsCasing 1
+buildkit FromAsCasing 2
+1:1 SL7012 warning `from` should be uppercase, like most instructions here
+1:13 SL7010 warning `AS` and `from` should have the same casing
+2:13 SL7010 warning `as` and `FROM` should have the same casing
+-- reserved-stage-names --
+accepted
+buildkit ReservedStageName 1
+buildkit ReservedStageName 2
+1:16 SL7013 warning `scratch` is a reserved name and should not name a stage
+2:16 SL7013 warning `context` is a reserved name and should not name a stage
+-- duplicate-stage --
+accepted
+buildkit DuplicateStageName 2
+buildkit StageNameCasing 2
+2:16 SL7007 warning a stage named `build` comes earlier; stage names should be unique
+2:16 SL7009 warning stage name `Build` should be lowercase
+-- undeclared-arg-in-from --
+rejected 1:1 base name ($NOPE) should not be blank
+buildkit InvalidDefaultArgInFrom 1
+buildkit UndefinedArgInFrom 1
+1:6 SL7001 error the image name `$NOPE` expands to nothing
+1:7 SL7006 warning FROM uses `NOPE`, which no ARG before the first FROM declares
+-- empty-default-arg-in-from --
+rejected 2:1 base name ($A) should not be blank
+buildkit InvalidDefaultArgInFrom 2
+2:6 SL7001 error the image name `$A` expands to nothing
+2:7 SL7021 warning the default of ARG A leaves the image name empty
+-- arg-in-from --
+accepted
+-- workdir --
+accepted
+-- relative-workdir --
+accepted
+buildkit WorkdirRelativePath 2
+2:9 SL7015 warning relative WORKDIR `rel` depends on the working directory of the base image; make it absolute
+-- workdir-from-undefined --
+accepted
+buildkit UndefinedVar 2
+buildkit WorkdirRelativePath 2
+2:9 SL7015 warning relative WORKDIR `$X` depends on the working directory of the base image; make it absolute
+2:10 SL7006 warning unknown variable `X`
+-- legacy-env --
+accepted
+buildkit LegacyKeyValueFormat 2
+buildkit LegacyKeyValueFormat 3
+2:1 SL7017 warning write `ENV A=value` instead of the legacy `ENV A value`
+3:1 SL7017 warning write `LABEL c=value` instead of the legacy `LABEL c value`
+-- json-args --
+accepted
+buildkit JSONArgsRecommended 2
+buildkit JSONArgsRecommended 3
+2:1 SL7004 warning the shell form of CMD runs the command under `/bin/sh -c`, which does not pass on signals; write it in JSON form
+3:1 SL7004 warning the shell form of ENTRYPOINT runs the command under `/bin/sh -c`, which does not pass on signals; write it in JSON form
+-- expose --
+accepted
+buildkit ExposeInvalidFormat 3
+buildkit ExposeProtoCasing 2
+2:8 SL7019 warning the protocol of `80/TCP` should be lowercase
+3:8 SL7020 warning EXPOSE `80:80` maps a host port or address, which EXPOSE cannot; publish it with `docker run -p` instead
+-- maintainer --
+accepted
+buildkit MaintainerDeprecated 2
+2:1 SL7014 warning MAINTAINER is deprecated; use `LABEL org.opencontainers.image.authors=...`
+-- empty-continuation --
+accepted
+buildkit NoEmptyContinuation 4
+3:1 SL7011 warning an empty line continues the instruction; BuildKit will treat it as an error
+-- comment-in-continuation --
+accepted
+-- heredocs --
+accepted
+-- stage-env-inheritance --
+accepted
+-- unused-arg --
+accepted
+-- unknown-stage-is-an-image --
+accepted
+2:13 SL7005 info no stage is named `nginx`, so Docker copies from the image of that name
+-- global-secret-arg --
+accepted
+1:5 SL7008 info variable `API_TOKEN` is never used
+-- casing-ignores-global-args --
+accepted
+1:5 SL7008 info variable `DEBUG` is never used
+-- image-expands-to-a-tag-only --
+rejected 1:1 failed to parse stage name ":latest": invalid reference format
+buildkit InvalidDefaultArgInFrom 1
+buildkit UndefinedArgInFrom 1
+1:6 SL7001 error `:latest` is no valid image reference
+1:8 SL7006 warning FROM uses `BASE`, which no ARG before the first FROM declares
+-- invalid-image-references --
+rejected 1:1 failed to parse stage name "Alpine": invalid reference format: repository name (library/Alpine) must be lowercase
+buildkit InvalidDefaultArgInFrom 1
+1:6 SL7001 error `Alpine` is no valid image reference
+-- valid-image-references --
+accepted
+-- copy-from-an-invalid-image --
+rejected 2:1 failed to parse stage name "Base": invalid reference format: repository name (library/Base) must be lowercase
+2:13 SL7001 error --from=Base names no stage and is no valid image reference
+-- check-directive-skips-a-rule --
+accepted
+-- check-directive-skips-all --
+accepted
+-- check-directive-makes-errors --
+rejected 0:1 lint violation found for rules: JSONArgsRecommended
+buildkit JSONArgsRecommended 3
+3:1 SL7004 error the shell form of CMD runs the command under `/bin/sh -c`, which does not pass on signals; write it in JSON form
+-- workdir-relative-after-any-workdir --
+accepted
+buildkit WorkdirRelativePath 2
+2:9 SL7015 warning relative WORKDIR `app` depends on the working directory of the base image; make it absolute
+-- json-args-after-shell --
+accepted
+buildkit JSONArgsRecommended 2
+buildkit JSONArgsRecommended 8
+2:1 SL7004 warning the shell form of CMD runs the command under `/bin/sh -c`, which does not pass on signals; write it in JSON form
+8:1 SL7004 warning the shell form of CMD runs the command under `/bin/sh -c`, which does not pass on signals; write it in JSON form
+-- casing-ignores-onbuild-triggers --
+accepted
+buildkit ConsistentInstructionCasing 2
+2:1 SL7012 warning `ONBUILD` should be lowercase, like most instructions here
+-- copy-from-names-the-last-stage --
+rejected 3:1 cannot copy from stage "base", it needs to be defined before current stage "mid"
+buildkit DuplicateStageName 4
+3:13 SL7024 error stage `base` is defined after the stage that copies from it
+4:16 SL7007 warning a stage named `base` comes earlier; stage names should be unique
+-- copy-from-itself --
+rejected 3:1 circular dependency detected on stage: base
+buildkit DuplicateStageName 2
+2:16 SL7007 warning a stage named `base` comes earlier; stage names should be unique
+3:13 SL7024 error stage `base` copies from itself
+-- positional-parameters-are-undefined --
+accepted
+buildkit UndefinedVar 2
+buildkit UndefinedVar 3
+buildkit UndefinedVar 4
+2:11 SL7006 warning unknown variable `1`
+3:9 SL7006 warning unknown variable `12`
+4:10 SL7006 warning unknown variable `0`
+-- path-is-set-in-every-stage --
+accepted
+buildkit UndefinedVar 3
+3:15 SL7006 warning unknown variable `HOME`
+-- args-reach-later-run-commands --
+accepted
+6:5 SL7008 info variable `LATE` is never used

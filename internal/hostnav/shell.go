@@ -67,6 +67,9 @@ func shellRegions(f *workspace.File) []region {
 		}
 	}
 	recursion := f.Native.Language.Recursion()
+	if recursion.Command == "" {
+		return out
+	}
 	commands := slices.DeleteFunc(slices.Clone(f.Native.Index.Refs), func(ref model.Ref) bool {
 		return ref.Kind != recursion.Ref.Kind || ref.Name != recursion.Ref.Name
 	})

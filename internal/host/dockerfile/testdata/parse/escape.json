@@ -1,0 +1,33 @@
+[
+  {
+    "name": "FROM",
+    "start": 2,
+    "end": 2,
+    "flags": [],
+    "json": false,
+    "command": [
+      "mcr.microsoft.com/windows/servercore"
+    ],
+    "heredocs": []
+  },
+  {
+    "name": "RUN",
+    "start": 3,
+    "end": 4,
+    "flags": [],
+    "json": false,
+    "command": [
+      "echo a   b"
+    ],
+    "heredocs": []
+  },
+  {
+    "name": "COPY",
+    "start": 5,
+    "end": 5,
+    "flags": [],
+    "json": false,
+    "command": null,
+    "heredocs": []
+  }
+]

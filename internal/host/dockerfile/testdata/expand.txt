@@ -1,0 +1,151 @@
+-- plain --
+FROM alpine
+WORKDIR x$A
+-- env --
+FROM alpine
+ENV A=one
+WORKDIR x$A
+-- braced --
+FROM alpine
+ENV A=one
+WORKDIR x${A}y
+-- default-unset --
+FROM alpine
+WORKDIR x${A:-dev}
+-- default-empty --
+FROM alpine
+ENV A=""
+WORKDIR x${A:-dev}
+-- default-empty-no-colon --
+FROM alpine
+ENV A=""
+WORKDIR x${A-dev}
+-- default-set --
+FROM alpine
+ENV A=one
+WORKDIR x${A:-dev}
+-- alternative-set --
+FROM alpine
+ENV A=one
+WORKDIR x${A:+alt}
+-- alternative-unset --
+FROM alpine
+WORKDIR x${A:+alt}
+-- alternative-empty-no-colon --
+FROM alpine
+ENV A=""
+WORKDIR x${A+alt}
+-- nested-default --
+FROM alpine
+ENV B=two
+WORKDIR x${A:-$B}
+-- nested-braced-default --
+FROM alpine
+ENV B=two
+WORKDIR x${A:-${B}-z}
+-- env-from-env --
+FROM alpine
+ENV A=one
+ENV B=${A}/two
+WORKDIR x$B
+-- env-same-line --
+FROM alpine
+ENV A=one B=$A
+WORKDIR x$B
+-- env-default-at-definition --
+FROM alpine
+ENV APP_HOME=${VERSION:-dev}
+WORKDIR $APP_HOME
+-- quoted-double --
+FROM alpine
+ENV A="two words"
+WORKDIR "x$A"
+-- quoted-single --
+FROM alpine
+ENV A=one
+WORKDIR 'x$A'
+-- escaped-dollar --
+FROM alpine
+ENV A=one
+WORKDIR x\$A
+-- escape-in-double-quotes --
+FROM alpine
+WORKDIR "x\a\$b\"c"
+-- legacy-env --
+FROM alpine
+ENV A legacy value
+WORKDIR "x$A"
+-- arg-default --
+FROM alpine
+ARG A=one
+WORKDIR x$A
+-- arg-from-preamble --
+ARG A=pre
+FROM alpine
+ARG A
+WORKDIR x$A
+-- preamble-not-visible --
+ARG A=pre
+FROM alpine
+WORKDIR x$A
+-- arg-without-default --
+FROM alpine
+ARG A
+WORKDIR x${A-unset}
+-- env-beats-arg --
+FROM alpine
+ENV A=env
+ARG A=arg
+WORKDIR x$A
+-- env-inherited --
+FROM alpine AS base
+ENV A=one
+FROM base
+WORKDIR x$A
+-- arg-not-inherited --
+FROM alpine AS base
+ARG A=one
+FROM base
+WORKDIR x${A-gone}
+-- env-after-workdir --
+FROM alpine
+WORKDIR x$A
+ENV A=late
+-- unknown-platform --
+FROM alpine
+ARG TARGETARCH
+WORKDIR x$TARGETARCH
+-- unknown-pattern --
+FROM alpine
+ENV A=one.two
+WORKDIR x${A%.*}
+-- lone-dollar --
+FROM alpine
+WORKDIR x$
+-- dollar-digit --
+FROM alpine
+WORKDIR x$1y
+-- arg-same-line --
+FROM alpine
+ARG A=one B=$A
+WORKDIR x$B
+-- preamble-arg-same-line --
+ARG A=one B=$A
+FROM alpine
+ARG B
+WORKDIR x$B
+-- preamble-arg-later --
+ARG B=$A
+ARG A=one
+FROM alpine
+ARG B
+WORKDIR x$B
+-- dollar-digit-braced --
+FROM alpine
+WORKDIR x${1}y
+-- dollar-digits-braced --
+FROM alpine
+WORKDIR x${12}y
+-- default-path --
+FROM scratch
+WORKDIR x$PATH

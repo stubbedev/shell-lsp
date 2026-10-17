@@ -1,0 +1,117 @@
+[
+  {
+    "name": "ARG",
+    "start": 2,
+    "end": 2,
+    "flags": [],
+    "json": false,
+    "command": [
+      "BASE=alpine:3.20"
+    ],
+    "heredocs": []
+  },
+  {
+    "name": "FROM",
+    "start": 3,
+    "end": 3,
+    "flags": [],
+    "json": false,
+    "command": [
+      "${BASE}",
+      "AS",
+      "build"
+    ],
+    "heredocs": []
+  },
+  {
+    "name": "WORKDIR",
+    "start": 4,
+    "end": 4,
+    "flags": [],
+    "json": false,
+    "command": [
+      "/src"
+    ],
+    "heredocs": []
+  },
+  {
+    "name": "COPY",
+    "start": 5,
+    "end": 5,
+    "flags": [
+      "--chown=1000:1000",
+      "--link"
+    ],
+    "json": false,
+    "command": null,
+    "heredocs": []
+  },
+  {
+    "name": "RUN",
+    "start": 6,
+    "end": 6,
+    "flags": [
+      "--mount=type=cache,target=/root/.cache"
+    ],
+    "json": false,
+    "command": [
+      "go mod download"
+    ],
+    "heredocs": []
+  },
+  {
+    "name": "RUN",
+    "start": 7,
+    "end": 9,
+    "flags": [],
+    "json": false,
+    "command": [
+      "go build     -o /out/app     ./cmd/app"
+    ],
+    "heredocs": []
+  },
+  {
+    "name": "FROM",
+    "start": 11,
+    "end": 11,
+    "flags": [],
+    "json": false,
+    "command": [
+      "scratch"
+    ],
+    "heredocs": []
+  },
+  {
+    "name": "COPY",
+    "start": 12,
+    "end": 12,
+    "flags": [
+      "--from=build"
+    ],
+    "json": false,
+    "command": null,
+    "heredocs": []
+  },
+  {
+    "name": "ENTRYPOINT",
+    "start": 13,
+    "end": 13,
+    "flags": [],
+    "json": true,
+    "command": [
+      "/app"
+    ],
+    "heredocs": []
+  },
+  {
+    "name": "CMD",
+    "start": 14,
+    "end": 14,
+    "flags": [],
+    "json": true,
+    "command": [
+      "--help"
+    ],
+    "heredocs": []
+  }
+]

@@ -255,6 +255,12 @@ func (g *Group) Links() []Link {
 		return out
 	}
 	ix := g.Index()
+	for _, p := range ix.Paths {
+		path := filepath.Join(filepath.Dir(g.Self.Path), filepath.FromSlash(strings.TrimPrefix(p.Path, "/")))
+		if g.exists(path) {
+			out = append(out, Link{Span: p.Span, Path: path})
+		}
+	}
 	for _, r := range ix.Refs {
 		if r.Kind != model.KindTarget || r.Owner < 0 || g.Module.Resolve(g.self, r).Found() {
 			continue

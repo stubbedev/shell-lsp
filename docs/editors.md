@@ -163,28 +163,32 @@ pushes them otherwise.
 
 ## Shell in other files
 
-shell-lsp also lints the shell inside Makefile and justfile recipes and Nix
-strings ([Shell in other files](../README.md#shell-in-other-files)) when the
-editor sends it those files; it reads the language identifiers `makefile`,
-`make`, `just` and `nix`. For justfiles and Makefiles it is a complete
-language server of its own ([Justfiles and Makefiles natively](../README.md#justfiles-and-makefiles-natively)):
-attach it alone, without just-lsp or a make language server, so the file gets
-one set of diagnostics, symbols and formatting. The VS Code extension attaches to Makefiles on its
+shell-lsp also lints the shell inside Makefile and justfile recipes,
+Dockerfile `RUN` instructions and Nix strings
+([Shell in other files](../README.md#shell-in-other-files)) when the editor
+sends it those files; it reads the language identifiers `makefile`, `make`,
+`just`, `dockerfile` and `nix`. For justfiles, Makefiles and Dockerfiles it is
+a complete language server of its own
+([Justfiles, Makefiles and Dockerfiles natively](../README.md#justfiles-makefiles-and-dockerfiles-natively)):
+attach it alone, without just-lsp, a make language server or a Dockerfile
+language server, so the file gets one set of diagnostics, symbols and
+formatting. The VS Code extension attaches to Makefiles and Dockerfiles on its
 own, and to justfiles and Nix files when extensions give them the `just` and
 `nix` languages. Elsewhere, add the file types next to the shell ones. In
-Neovim, add `"make"`, `"just"` and `"nix"` to `filetypes` (or to the
-`FileType` pattern); shell-lsp then runs next to any Nix language server:
+Neovim, add `"make"`, `"just"`, `"dockerfile"` and `"nix"` to `filetypes` (or
+to the `FileType` pattern); shell-lsp then runs next to any Nix language
+server:
 
 ```lua
 vim.lsp.config("shell_lsp", {
   cmd = { "shell-lsp" },
-  filetypes = { "sh", "bash", "zsh", "ksh", "make", "just", "nix" },
+  filetypes = { "sh", "bash", "zsh", "ksh", "make", "just", "dockerfile", "nix" },
   root_markers = { ".git" },
 })
 ```
 
-In Helix, list shell-lsp for the `make`, `just` and `nix` languages, next to
-the language servers they already use:
+In Helix, list shell-lsp for the `make`, `just`, `dockerfile` and `nix`
+languages, next to the language servers they already use:
 
 ```toml
 [[language]]
@@ -193,6 +197,10 @@ language-servers = ["shell-lsp"]
 
 [[language]]
 name = "just"
+language-servers = ["shell-lsp"]
+
+[[language]]
+name = "dockerfile"
 language-servers = ["shell-lsp"]
 
 [[language]]

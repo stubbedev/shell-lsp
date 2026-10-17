@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Runs shell-lsp for Dockerfiles too, which checks them the way BuildKit
+  does, navigates their stages and build arguments, and lints the shell in
+  their `RUN` instructions.
 - The shell status follows the cursor: in a justfile, Makefile or Nix file
   it shows the shell of the recipe or string the cursor is in.
 - Formats Makefiles: spacing around operators and rule colons, trailing

@@ -546,3 +546,27 @@ marks the checks the `minimal` profile keeps; see [Profiles](../README.md#profil
 | <a name="sl6015"></a>[SL6015](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl6015) | warning |  | yes | A deferred variable reference is not closed. |
 | <a name="sl6016"></a>[SL6016](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl6016) | warning |  | yes | A target does not match its static pattern. |
 | <a name="sl6017"></a>[SL6017](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl6017) | warning |  | yes | A standard target is missing from \`.PHONY\`. |
+| <a name="sl7001"></a>[SL7001](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl7001) | error |  | yes | The Dockerfile does not parse. |
+| <a name="sl7002"></a>[SL7002](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl7002) | error |  | yes | An instruction is not one BuildKit knows. |
+| <a name="sl7003"></a>[SL7003](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl7003) | error |  | yes | A flag is not one the instruction takes. |
+| <a name="sl7004"></a>[SL7004](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl7004) | warning |  | yes | \`CMD\` or \`ENTRYPOINT\` uses the shell form. |
+| <a name="sl7005"></a>[SL7005](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl7005) | info |  |  | \`COPY --from\` names a stage that does not exist. |
+| <a name="sl7006"></a>[SL7006](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl7006) | warning |  | yes | A variable is used but never declared. |
+| <a name="sl7007"></a>[SL7007](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl7007) | warning |  | yes | Two stages have the same name. |
+| <a name="sl7008"></a>[SL7008](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl7008) | info |  |  | A build argument is declared but never used. |
+| <a name="sl7009"></a>[SL7009](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl7009) | warning |  | yes | A stage name is not lowercase. |
+| <a name="sl7010"></a>[SL7010](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl7010) | warning |  | yes | \`AS\` does not match the casing of \`FROM\`. |
+| <a name="sl7011"></a>[SL7011](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl7011) | warning |  | yes | An empty line continues an instruction. |
+| <a name="sl7012"></a>[SL7012](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl7012) | warning |  | yes | An instruction is not cased like the others. |
+| <a name="sl7013"></a>[SL7013](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl7013) | warning |  | yes | A stage uses a reserved name. |
+| <a name="sl7014"></a>[SL7014](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl7014) | warning |  | yes | \`MAINTAINER\` is deprecated. |
+| <a name="sl7015"></a>[SL7015](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl7015) | warning |  | yes | \`WORKDIR\` is relative before the stage sets one. |
+| <a name="sl7016"></a>[SL7016](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl7016) | warning |  | yes | A stage has more than one \`CMD\`, \`ENTRYPOINT\` or \`HEALTHCHECK\`. |
+| <a name="sl7017"></a>[SL7017](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl7017) | warning |  | yes | \`ENV\` or \`LABEL\` uses the legacy \`key value\` form. |
+| <a name="sl7018"></a>[SL7018](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl7018) | warning |  | yes | A secret is passed in \`ARG\` or \`ENV\`. |
+| <a name="sl7019"></a>[SL7019](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl7019) | warning |  | yes | \`EXPOSE\` gives the protocol in uppercase. |
+| <a name="sl7020"></a>[SL7020](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl7020) | warning |  | yes | \`EXPOSE\` maps a host port. |
+| <a name="sl7021"></a>[SL7021](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl7021) | warning |  | yes | The default of a build argument leaves a \`FROM\` image empty. |
+| <a name="sl7022"></a>[SL7022](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl7022) | warning |  | yes | \`FROM --platform\` is a constant. |
+| <a name="sl7023"></a>[SL7023](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl7023) | warning |  | yes | \`FROM --platform=$TARGETPLATFORM\` is redundant. |
+| <a name="sl7024"></a>[SL7024](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl7024) | error |  | yes | \`COPY --from\` names a stage that is not built before it. |

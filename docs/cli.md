@@ -23,12 +23,13 @@ scan finds them: by extension (`.sh`, `.bash`, `.zsh`, `.ksh`, `.dash`,
 `.bats`), by rc-file name (`.bashrc`, `.zshrc`, ...), and by a shell shebang on
 executable files without an extension (on Windows, which has no execute bit,
 on every file without one). Makefiles (`Makefile`, `makefile`, `GNUmakefile`,
-`*.mk`, `*.mak`), justfiles (`justfile`, `Justfile`, `.justfile`, `*.just`)
-and Nix files (`*.nix`) are found too, and the shell in them is linted
+`*.mk`, `*.mak`), justfiles (`justfile`, `Justfile`, `.justfile`, `*.just`),
+Dockerfiles (`Dockerfile`, `Containerfile`, `Dockerfile.*`, `*.Dockerfile`,
+`*.dockerfile`, `*.Containerfile`) and Nix files (`*.nix`) are found too, and the shell in them is linted
 ([Shell in other files](../README.md#shell-in-other-files)); `-s` does not
-apply to them, since the file decides their shell. Justfiles and Makefiles are
-also checked as just and make files, with the `SL5` and `SL6` codes of
-[rules.md](rules.md#justfiles-and-makefiles), following their `import`, `mod`
+apply to them, since the file decides their shell. Justfiles, Makefiles and
+Dockerfiles are also checked as just, make and Dockerfile files, with the
+`SL5`, `SL6` and `SL7` codes of [rules.md](rules.md#sl5001), following their `import`, `mod`
 and `include` statements, and the other justfiles and Makefiles among the
 paths that include them. `.git`, `node_modules`,
 `vendor` and similar directories are skipped, and so is whatever git ignores:

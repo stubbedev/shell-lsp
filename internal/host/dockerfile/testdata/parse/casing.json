@@ -1,0 +1,50 @@
+[
+  {
+    "name": "from",
+    "start": 1,
+    "end": 1,
+    "flags": [],
+    "json": false,
+    "command": [
+      "alpine",
+      "as",
+      "Base"
+    ],
+    "heredocs": []
+  },
+  {
+    "name": "run",
+    "start": 2,
+    "end": 2,
+    "flags": [],
+    "json": false,
+    "command": [
+      "echo lower"
+    ],
+    "heredocs": []
+  },
+  {
+    "name": "FROM",
+    "start": 3,
+    "end": 3,
+    "flags": [],
+    "json": false,
+    "command": [
+      "base",
+      "AS",
+      "final"
+    ],
+    "heredocs": []
+  },
+  {
+    "name": "COPY",
+    "start": 4,
+    "end": 4,
+    "flags": [
+      "--from=Base"
+    ],
+    "json": false,
+    "command": null,
+    "heredocs": []
+  }
+]

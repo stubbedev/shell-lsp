@@ -135,3 +135,19 @@ func logicalLineStart(text string, offset int) int {
 	}
 	return start
 }
+
+func FuzzRealisticDockerfilesAgreeWithBuildKit(f *testing.F) {
+	for _, seed := range []string{"", "\x01\x02\x03", "\x02\x01\x04\x05\x06\x07", "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d"} {
+		f.Add([]byte(seed))
+	}
+	f.Fuzz(func(t *testing.T, choices []byte) {
+		hosttest.LiveTool(t, "dockerfile-oracle", hosttest.DockerfileVersion)
+		text := hosttest.GenerateDockerfile(choices)
+		v, checks := buildkitVerdict(t, text)
+		findings := findingsAlone(t, "Dockerfile")(text)
+		hosttest.Agree(t, text, v, findings)
+		if v.Accepted {
+			agreeOnChecks(t, text, checks, findings)
+		}
+	})
+}

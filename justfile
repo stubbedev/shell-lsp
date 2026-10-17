@@ -63,7 +63,7 @@ corpus-shellcheck: corpus-fetch
 corpus-shells: corpus-fetch
     go run ./cmd/lintcheck shells
 
-# Analyse the corpus justfiles and Makefiles, checking justfiles against just; fails when corpus/hosts.txt no longer matches.
+# Analyse the corpus justfiles, Makefiles and Dockerfiles, checking them against just, make and BuildKit; fails when corpus/hosts.txt no longer matches.
 corpus-hosts: corpus-fetch
     go run ./cmd/lintcheck hosts
 

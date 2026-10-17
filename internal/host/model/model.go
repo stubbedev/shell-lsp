@@ -28,6 +28,7 @@ const (
 	KindSetting
 	KindAttribute
 	KindKeyword
+	KindStage
 )
 
 var kindNames = [...]string{
@@ -41,6 +42,7 @@ var kindNames = [...]string{
 	KindSetting:   "setting",
 	KindAttribute: "attribute",
 	KindKeyword:   "keyword",
+	KindStage:     "stage",
 }
 
 func Kinds() iter.Seq[Kind] {
@@ -71,6 +73,7 @@ const (
 	NamespaceSettings
 	NamespaceAttributes
 	NamespaceKeywords
+	NamespaceStages
 )
 
 func (k Kind) Namespace() Namespace {
@@ -91,6 +94,8 @@ func (k Kind) Namespace() Namespace {
 		return NamespaceAttributes
 	case KindKeyword:
 		return NamespaceKeywords
+	case KindStage:
+		return NamespaceStages
 	}
 	panic(fmt.Sprintf("model: kind %d has no namespace", k))
 }
@@ -114,6 +119,7 @@ type Symbol struct {
 	Value     string
 	Constant  bool
 	Inert     bool
+	Local     bool
 	Arity     Arity
 }
 
@@ -186,6 +192,11 @@ type SearchPath struct {
 	Dirs    []string
 }
 
+type PathRef struct {
+	Span Span
+	Path string
+}
+
 type Shell struct {
 	Span  Span
 	Scope Scope
@@ -253,6 +264,8 @@ type Index struct {
 	Opaque    bool
 	Recipes   bool
 	Inherits  map[Scope][]Scope
+	Extends   map[Scope][]Scope
+	Paths     []PathRef
 	Phony     []string
 	Fileless  []int
 	Search    []SearchPath

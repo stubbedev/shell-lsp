@@ -41,7 +41,7 @@ func Hosts(repos []Repo, cache string) ([]HostFile, error) {
 			return nil
 		})
 		if err != nil {
-			return nil, fmt.Errorf("listing the justfiles and Makefiles of %s: %w", r.Name, err)
+			return nil, fmt.Errorf("listing the justfiles, Makefiles and Dockerfiles of %s: %w", r.Name, err)
 		}
 	}
 	slices.SortFunc(out, func(a, b HostFile) int { return cmp.Compare(a.Path, b.Path) })

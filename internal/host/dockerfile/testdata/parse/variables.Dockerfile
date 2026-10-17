@@ -1,0 +1,11 @@
+ARG VERSION=1.0
+ARG TARGET
+FROM alpine:$VERSION
+ARG VERSION
+ENV APP_VERSION=$VERSION PATH="/app/bin:${PATH}"
+ENV LEGACY value with spaces
+LABEL org.opencontainers.image.version="${VERSION:-dev}"
+EXPOSE 80/tcp 443
+USER app:app
+STOPSIGNAL SIGTERM
+MAINTAINER someone

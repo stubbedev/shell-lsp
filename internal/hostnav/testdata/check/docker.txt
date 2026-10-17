@@ -1,0 +1,271 @@
+-- clean --
+# syntax=docker/dockerfile:1
+ARG BASE=alpine:3.20
+FROM ${BASE} AS build
+ARG VERSION=1.0
+WORKDIR /src
+COPY . .
+RUN echo "$VERSION" > /version
+FROM scratch
+COPY --from=build /version /version
+ENTRYPOINT ["/bin/true"]
+-- empty-file --
+-- only-comments --
+# nothing here
+-- instruction-before-from --
+RUN echo
+FROM alpine
+-- arg-then-run-before-from --
+ARG A
+RUN echo
+FROM alpine
+-- unknown-instruction --
+FROM alpine
+FOO bar
+-- unknown-flag --
+FROM alpine
+RUN --bogus echo
+-- add-takes-no-from --
+FROM alpine
+ADD --from=x a b
+-- from-without-image --
+FROM
+-- from-with-two-words --
+FROM alpine latest
+-- from-with-extra-words --
+FROM alpine AS one two
+-- env-without-arguments --
+FROM alpine
+ENV
+-- env-without-value --
+FROM alpine
+ENV A
+-- arg-without-arguments --
+FROM alpine
+ARG
+-- copy-without-destination --
+FROM alpine
+COPY a
+-- workdir-without-path --
+FROM alpine
+WORKDIR
+-- shell-not-json --
+FROM alpine
+SHELL /bin/bash
+-- onbuild-from --
+FROM alpine
+ONBUILD FROM other
+-- healthcheck-unknown-type --
+FROM alpine
+HEALTHCHECK FOO
+-- copy-from-later-stage --
+FROM alpine
+COPY --from=later / /
+FROM alpine AS later
+-- copy-from-index-out-of-range --
+FROM alpine
+COPY --from=2 / /
+-- label-without-value --
+FROM alpine
+LABEL a
+-- user-without-name --
+FROM alpine
+USER
+-- escape-directive --
+# escape=`
+FROM alpine
+RUN echo a `
+  b
+-- bad-escape-directive --
+# escape=x
+FROM alpine
+-- unterminated-heredoc --
+FROM alpine
+RUN <<EOF
+echo never ends
+-- multiple-cmd --
+FROM alpine
+CMD ["a"]
+CMD ["b"]
+ENTRYPOINT ["x"]
+ENTRYPOINT ["y"]
+HEALTHCHECK NONE
+HEALTHCHECK NONE
+-- undefined-vars --
+FROM alpine
+ENV X=$TARGETARCH Y=$PATH Z=$HOME
+-- declared-platform-arg --
+FROM alpine
+ARG TARGETARCH
+ENV X=$TARGETARCH
+-- platform-flags --
+FROM --platform=linux/amd64 alpine
+FROM --platform=$TARGETPLATFORM alpine
+FROM --platform=$BUILDPLATFORM alpine
+-- secrets --
+FROM alpine
+ARG password
+ARG api_key
+ARG MY_TOKEN
+ARG PUBLIC_KEY
+ENV SECRET_FILE=x
+ARG keystore
+ARG AUTHOR
+-- instruction-casing --
+FROM alpine
+run echo
+RUN echo
+run echo
+-- from-as-casing --
+from alpine AS b
+FROM alpine as d
+-- reserved-stage-names --
+FROM alpine AS scratch
+FROM alpine AS context
+-- duplicate-stage --
+FROM alpine AS build
+FROM alpine AS Build
+-- undeclared-arg-in-from --
+FROM $NOPE
+-- empty-default-arg-in-from --
+ARG A
+FROM $A
+-- arg-in-from --
+ARG V=3.20
+FROM alpine:$V
+-- workdir --
+FROM alpine
+WORKDIR /abs
+WORKDIR rel
+-- relative-workdir --
+FROM alpine
+WORKDIR rel
+-- workdir-from-undefined --
+FROM alpine
+WORKDIR $X
+-- legacy-env --
+FROM alpine
+ENV A b
+LABEL c d
+-- json-args --
+FROM alpine
+CMD echo
+ENTRYPOINT exec app
+-- expose --
+FROM alpine
+EXPOSE 80/TCP
+EXPOSE 80:80
+-- maintainer --
+FROM alpine
+MAINTAINER me
+-- empty-continuation --
+FROM alpine
+RUN echo a \
+
+  b
+-- comment-in-continuation --
+FROM alpine
+RUN echo a \
+# explained
+  b
+-- heredocs --
+FROM alpine
+RUN <<EOF
+set -e
+echo "$HOME"
+RUN <<EOF
+set -e
+echo "$HOME"
+EOF
+COPY <<A <<B /dst/
+a
+A
+b
+B
+-- stage-env-inheritance --
+FROM alpine AS base
+ENV APP=/app
+FROM base
+WORKDIR $APP
+-- unused-arg --
+FROM alpine
+ARG UNUSED=1
+ARG USED=2
+RUN echo "$USED"
+-- unknown-stage-is-an-image --
+FROM alpine
+COPY --from=nginx /etc/nginx /etc/nginx
+-- global-secret-arg --
+ARG API_TOKEN=x
+FROM alpine
+-- casing-ignores-global-args --
+ARG DEBUG
+from alpine
+-- image-expands-to-a-tag-only --
+FROM ${BASE}:latest AS build
+-- invalid-image-references --
+FROM Alpine
+-- valid-image-references --
+FROM registry.example.com:5000/team/app_name:v1.2-rc AS a
+FROM ghcr.io/owner/image@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+FROM localhost/x
+-- copy-from-an-invalid-image --
+FROM alpine
+COPY --from=Base . /app
+-- check-directive-skips-a-rule --
+# check=skip=JSONArgsRecommended
+FROM alpine
+CMD echo hi
+-- check-directive-skips-all --
+# check=skip=all
+from alpine AS Base
+CMD echo hi
+-- check-directive-makes-errors --
+# check=error=true
+FROM alpine
+CMD echo hi
+-- workdir-relative-after-any-workdir --
+FROM alpine AS base
+WORKDIR app
+WORKDIR b
+FROM base
+WORKDIR c
+-- json-args-after-shell --
+FROM alpine AS base
+CMD echo hi
+SHELL ["/bin/sh", "-c"]
+ENTRYPOINT echo hi
+FROM base
+CMD echo hi
+FROM alpine
+CMD echo hi
+-- casing-ignores-onbuild-triggers --
+from alpine
+ONBUILD RUN echo onbuild
+run apk add curl
+-- copy-from-names-the-last-stage --
+FROM alpine AS base
+FROM alpine AS mid
+COPY --from=base . .
+FROM alpine AS base
+-- copy-from-itself --
+FROM alpine AS base
+FROM alpine AS base
+COPY --from=base . .
+-- positional-parameters-are-undefined --
+FROM alpine
+WORKDIR /$1
+ENV A=${12}
+LABEL a=$0b
+RUN echo $3
+-- path-is-set-in-every-stage --
+FROM scratch
+ENV PATH=/go/bin:$PATH
+ENV HOME_DIR=$HOME
+-- args-reach-later-run-commands --
+FROM alpine
+ARG TARGETPLATFORM
+ARG GO_FLAGS
+RUN go build ./...
+ARG BUILDKIT_SBOM_SCAN_STAGE=true
+ARG LATE=1
