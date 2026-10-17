@@ -5,6 +5,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/assist"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
+	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/hostnav"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/navigation"
@@ -177,7 +178,7 @@ func (s *Server) handleDocumentLink(ctx context.Context, docs *docstore.View, p 
 		return nil, err
 	}
 	for _, l := range g.Links() {
-		out = append(out, lsp.DocumentLink{Range: sourcePositions(file, docs.Encoding()).Range(l.Span), Target: l.Target.URI})
+		out = append(out, lsp.DocumentLink{Range: sourcePositions(file, docs.Encoding()).Range(l.Span), Target: fileuri.FromPath(l.Path)})
 	}
 	return out, nil
 }

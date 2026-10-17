@@ -579,7 +579,8 @@ for these files.
 - **Outline and structure.** Document and workspace symbols, folding for
   recipes, rules, conditionals, `define` blocks and comment runs, semantic
   tokens for the just and make syntax around the shell, links on `import`,
-  `mod` and `include` paths, and selection ranges that grow from a name
+  `mod` and `include` paths and on Makefile prerequisites that are files,
+  found the way make finds them through `vpath` and `VPATH`, and selection ranges that grow from a name
   through its expression and statement to the recipe, also from inside the
   shell of a recipe.
 - **Run lenses.** A recipe or target that runs without arguments gets a

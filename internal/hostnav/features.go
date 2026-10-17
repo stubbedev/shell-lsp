@@ -240,16 +240,58 @@ func (g *Group) Complete(offset int) []Item {
 }
 
 type Link struct {
-	Span   parser.Span
-	Target *workspace.File
+	Span parser.Span
+	Path string
 }
 
 func (g *Group) Links() []Link {
 	var out []Link
 	for _, r := range g.includes {
 		if r.target != nil {
-			out = append(out, Link{Span: r.include.Span, Target: r.target})
+			out = append(out, Link{Span: r.include.Span, Path: r.target.Path})
+		}
+	}
+	if g.exists == nil {
+		return out
+	}
+	ix := g.Index()
+	for _, r := range ix.Refs {
+		if r.Kind != model.KindTarget || r.Owner < 0 || g.Module.Resolve(g.self, r).Found() {
+			continue
+		}
+		if path, ok := g.prerequisite(r.Name); ok {
+			out = append(out, Link{Span: r.Span, Path: path})
 		}
 	}
 	return out
+}
+
+func (g *Group) prerequisite(name string) (string, bool) {
+	dir := filepath.Dir(g.Self.Path)
+	candidates := []string{name}
+	if !filepath.IsAbs(name) {
+		var search []model.SearchPath
+		for _, ix := range g.Module.Files {
+			search = append(search, ix.Search...)
+		}
+		for _, wanted := range []bool{true, false} {
+			for _, s := range search {
+				if (s.Pattern != "") != wanted || wanted && !model.MatchesPattern(s.Pattern, name) {
+					continue
+				}
+				for _, d := range s.Dirs {
+					candidates = append(candidates, filepath.Join(d, name))
+				}
+			}
+		}
+	}
+	for _, c := range candidates {
+		if !filepath.IsAbs(c) {
+			c = filepath.Join(dir, c)
+		}
+		if g.exists(c) {
+			return c, true
+		}
+	}
+	return "", false
 }

@@ -23,12 +23,16 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/navigation"
+	"github.com/stubbedev/shell-lsp/internal/regularfile"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
 func (s *Server) hostEnv(docs *docstore.View, language host.Language) hostnav.Env {
-	env := hostnav.Env{Loader: s.workspace, Home: s.process.Home}
+	env := hostnav.Env{Loader: s.workspace, Home: s.process.Home, Exists: func(path string) bool {
+		_, err := regularfile.Stat(path)
+		return err == nil
+	}}
 	env.Graph = func(ctx context.Context) (*hostnav.Graph, error) { return s.graphs.of(ctx, s, docs, language, env) }
 	return env
 }

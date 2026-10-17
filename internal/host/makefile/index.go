@@ -184,6 +184,10 @@ func (in *indexer) namesTarget(r *Rule) bool {
 	})
 }
 
+func searchDirs(value string) []string {
+	return strings.FieldsFunc(value, func(r rune) bool { return r == ':' || r == ' ' || r == '\t' })
+}
+
 func (in *indexer) ruleTargets() []string {
 	var out []string
 	for _, r := range in.f.Rules {
@@ -251,7 +255,7 @@ func (in *indexer) assignment(a *Assignment) {
 			scopes = append(scopes, in.scope(t.Text))
 			if !t.Expr.Dynamic() && strings.Contains(t.Text, "%") {
 				for _, name := range in.ruleTargets() {
-					if name != t.Text && matchesPattern(t.Text, name) {
+					if name != t.Text && model.MatchesPattern(t.Text, name) {
 						scopes = append(scopes, in.scope(name))
 					}
 				}
@@ -275,6 +279,9 @@ func (in *indexer) assignment(a *Assignment) {
 	}
 	if value, ok := a.Value.Literal(in.f.Text); ok && owner != model.NoSymbol && !a.Define && a.Op != "+=" && a.Op != "!=" {
 		in.ix.Symbols[owner].Value, in.ix.Symbols[owner].Constant = strings.TrimSpace(value), true
+	}
+	if value, ok := a.Value.Literal(in.f.Text); ok && a.Name.Text == "VPATH" && len(a.Targets) == 0 {
+		in.ix.Search = append(in.ix.Search, model.SearchPath{Dirs: searchDirs(value)})
 	}
 	in.token(a.Name.Span, semantic.TypeVariable, semantic.ModDeclaration)
 	edge := a.Deferred && len(a.Targets) == 0
@@ -479,6 +486,11 @@ func (in *indexer) literalValue(name string) (string, bool) {
 
 func (in *indexer) directive(d *Directive) {
 	in.token(d.Keyword.Span, semantic.TypeKeyword, 0)
+	if args, ok := d.Args.Literal(in.f.Text); ok && d.Keyword.Text == "vpath" {
+		if fields := strings.Fields(args); len(fields) > 1 {
+			in.ix.Search = append(in.ix.Search, model.SearchPath{Pattern: fields[0], Dirs: searchDirs(strings.Join(fields[1:], " "))})
+		}
+	}
 	if len(d.Names) == 0 {
 		in.walk(d.Args, model.Global, model.NoSymbol, false, nil)
 		return

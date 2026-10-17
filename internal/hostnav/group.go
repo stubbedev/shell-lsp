@@ -22,6 +22,7 @@ type Env struct {
 	Loader Loader
 	Home   string
 	Graph  func(ctx context.Context) (*Graph, error)
+	Exists func(path string) bool
 }
 
 type importer struct {
@@ -81,6 +82,7 @@ type Group struct {
 	missing  []model.Include
 	includes []resolvedInclude
 	parents  []parent
+	exists   func(path string) bool
 }
 
 type builder struct {
@@ -134,7 +136,7 @@ func Build(ctx context.Context, h Host, env Env) (*Group, error) {
 	} else {
 		module = b.merged(roots)
 	}
-	g := &Group{Self: self, Language: b.language, Module: module, files: b.files}
+	g := &Group{Self: self, Language: b.language, Module: module, files: b.files, exists: env.Exists}
 	g.self = slices.Index(module.Files, self.Native.Index)
 	if g.self < 0 {
 		panic("hostnav: " + self.URI + " is missing from its own module")

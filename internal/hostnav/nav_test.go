@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -142,7 +143,7 @@ func TestJustImportsShareOneNamespace(t *testing.T) {
 func linkTargets(tr *tree, g *Group) []string {
 	var out []string
 	for _, l := range g.Links() {
-		rel, _ := filepath.Rel(tr.dir, l.Target.Path)
+		rel, _ := filepath.Rel(tr.dir, l.Path)
 		out = append(out, filepath.ToSlash(rel))
 	}
 	return out
@@ -369,4 +370,22 @@ func TestGroupsSurviveSeveralCopiesOfOneFile(t *testing.T) {
 	if !ok || len(References(g, sym, true)) != 2 {
 		t.Errorf("references of build across copies = %+v", References(g, sym, true))
 	}
+}
+
+func TestMakePrerequisiteLinksFollowVpath(t *testing.T) {
+	t.Parallel()
+
+	tr := newTree(t, map[string]string{
+		"Makefile":     "VPATH = lib\nvpath %.c src\nall: main.o\nmain.o: main.c util.h missing.c\n\tcc -c $<\n",
+		"src/main.c":   "int main(void) { return 0; }\n",
+		"lib/util.h":   "#define UTIL 1\n",
+		"lib/README":   "",
+		"other/main.c": "",
+	})
+	g := groupFor(t, tr.ws, tr.path("Makefile"), tr.all)
+	g.exists = func(path string) bool {
+		_, err := os.Stat(path)
+		return err == nil
+	}
+	expectStrings(t, "prerequisite links", linkTargets(tr, g), []string{"src/main.c", "lib/util.h"})
 }

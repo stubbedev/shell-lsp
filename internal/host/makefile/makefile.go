@@ -446,11 +446,6 @@ func (p *reader) mixedTargets(targets []Word) {
 	}
 }
 
-func matchesPattern(pattern, name string) bool {
-	prefix, suffix, _ := strings.Cut(pattern, "%")
-	return len(name) >= len(prefix)+len(suffix) && strings.HasPrefix(name, prefix) && strings.HasSuffix(name, suffix)
-}
-
 func named(s, word string) bool {
 	if strings.HasPrefix(s[len(word):], ":") {
 		return true
@@ -691,7 +686,7 @@ func (p *reader) parseRule(s string, colon, at, end int) {
 				continue
 			}
 			for _, t := range targets {
-				if !pattern.Expr.Dynamic() && literal(t) && !strings.HasPrefix(t.Text, ".") && !matchesPattern(pattern.Text, t.Text) {
+				if !pattern.Expr.Dynamic() && literal(t) && !strings.HasPrefix(t.Text, ".") && !model.MatchesPattern(pattern.Text, t.Text) {
 					p.fail(ErrPatternMismatch, t.Span, fmt.Sprintf("target `%s` does not match the target pattern `%s`, so make ignores it", t.Text, pattern.Text))
 				}
 			}

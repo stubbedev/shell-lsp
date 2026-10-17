@@ -5,6 +5,7 @@ import (
 	"iter"
 	"slices"
 	"sort"
+	"strings"
 	"sync"
 
 	"github.com/stubbedev/shell-lsp/internal/lint"
@@ -164,6 +165,19 @@ type Include struct {
 	Dynamic    bool
 }
 
+func MatchesPattern(pattern, name string) bool {
+	prefix, suffix, ok := strings.Cut(pattern, "%")
+	if !ok {
+		return pattern == name
+	}
+	return len(name) >= len(prefix)+len(suffix) && strings.HasPrefix(name, prefix) && strings.HasSuffix(name, suffix)
+}
+
+type SearchPath struct {
+	Pattern string
+	Dirs    []string
+}
+
 type Shell struct {
 	Span  Span
 	Scope Scope
@@ -229,6 +243,7 @@ type Index struct {
 	Broken    bool
 	Phony     []string
 	Fileless  []int
+	Search    []SearchPath
 
 	lookups sync.Once
 	byName  map[symbolKey][]int
