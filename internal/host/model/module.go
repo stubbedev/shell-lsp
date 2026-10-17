@@ -45,7 +45,7 @@ func (m *Module) Resolve(file int, ref Ref) Resolution {
 		if ok && sub == nil {
 			return Resolution{Missing: true}
 		}
-		return Resolution{Targets: module.lookup(-1, ref.Name, NamespaceModules, Global)}
+		return Resolution{Targets: module.lookup(-1, ref.Name, NamespaceModules, Global, 0)}
 	}
 	ns := ref.Kind.Namespace()
 	scope := ref.Scope
@@ -53,7 +53,7 @@ func (m *Module) Resolve(file int, ref Ref) Resolution {
 	if ref.Qualified() {
 		scope, from = Global, -1
 	}
-	if targets := module.lookup(from, ref.Name, ns, scope); len(targets) > 0 {
+	if targets := module.lookup(from, ref.Name, ns, scope, ref.Horizon); len(targets) > 0 {
 		return Resolution{Targets: targets}
 	}
 	if b, ok := m.Builtins.Lookup(ref.Kind, ref.Name); ok {
@@ -62,11 +62,11 @@ func (m *Module) Resolve(file int, ref Ref) Resolution {
 	return Resolution{}
 }
 
-func (m *Module) lookup(file int, name string, ns Namespace, scope Scope) []Target {
+func (m *Module) lookup(file int, name string, ns Namespace, scope Scope, horizon int) []Target {
 	if file >= 0 && scope != Global {
 		var local []Target
 		for i, s := range m.Files[file].Symbols {
-			if s.Name == name && s.Scope == scope && s.Kind.Namespace() == ns {
+			if s.Name == name && s.Scope == scope && s.Kind.Namespace() == ns && (horizon == 0 || s.Span.End <= horizon) {
 				local = append(local, Target{Module: m, File: file, Symbol: i})
 			}
 		}

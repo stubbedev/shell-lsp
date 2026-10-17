@@ -127,7 +127,9 @@ rejected 1:10 list concatenation operator `++` requires `set lists`
 1:10 SL5023 error `++` needs `set lists`
 -- negation-needs-lists --
 rejected 1:9 negation operator requires `set lists`
+1:9 SL5023 error an `if` condition other than a comparison needs `set lists`
 1:9 SL5023 error `!` needs `set lists`
+1:15 SL5023 error `==` outside the condition of an `if` needs `set lists`
 -- logic-needs-lists --
 rejected 1:10 logical operators require `set lists`
 1:10 SL5023 error `&&` needs `set lists`
@@ -231,7 +233,7 @@ rejected 1:1 extraneous attribute
 1:2 SL5001 error extraneous attribute: nothing follows it to apply to
 -- dangling-attribute --
 rejected 1:11 expected '@', '[', comment, end of line, or identifier, but found end of file
-1:2 SL5001 error extraneous attribute: nothing follows it to apply to
+1:10 SL5001 error expected an item after the attributes, found the end of the file
 -- mismatched-delimiter --
 rejected 2:10 mismatched closing delimiter `)`, did you mean to close the `[` on line 2?
 1:5 SL5023 error `set lists` is unstable and needs `set unstable`
@@ -249,3 +251,45 @@ rejected 2:1 recipe line has inconsistent leading whitespace, started with `‚ê†‚
 -- end-of-file-inside-parentheses --
 rejected 1:14 expected ',' or ')', but found end of file
 1:13 SL5001 error expected `)`, found end of file
+-- default-sees-earlier-parameters --
+accepted
+-- default-cannot-see-itself --
+rejected 1:6 variable `x` not defined
+1:6 SL5003 error unknown variable `x`
+-- default-cannot-see-later-parameters --
+rejected 1:5 variable `y` not defined
+1:5 SL5003 error unknown variable `y`
+1:7 SL5013 info parameter `y` is never used
+-- keyword-named-recipes --
+accepted
+-- comparison-outside-a-condition --
+rejected 1:11 comparison operators require `set lists`
+1:1 SL5014 info variable `x` is never used
+1:11 SL5023 error `==` outside the condition of an `if` needs `set lists`
+-- condition-that-is-not-a-comparison --
+rejected 1:9 `if` and `assert` conditions other than comparisons require `set lists`
+1:1 SL5014 info variable `x` is never used
+1:9 SL5023 error an `if` condition other than a comparison needs `set lists`
+-- attribute-arguments-must-be-literals --
+rejected 2:8 attribute `group` arguments must be string literals
+2:8 SL5020 error the arguments of attribute `group` must be string literals
+-- attribute-argument-may-be-an-expression --
+accepted
+-- unknown-setting-before-a-broken-value --
+rejected 1:5 unknown setting `nonsense`
+1:5 SL5007 error unknown setting `nonsense`
+1:18 SL5001 error expected an expression, found end of file
+-- unknown-attribute-before-a-broken-argument --
+rejected 1:2 unknown attribute `nonsense`
+1:2 SL5008 error unknown attribute `nonsense`
+1:11 SL5001 error expected an expression, found end of file
+-- blank-line-ends-a-continuation --
+rejected 4:5 recipe line has extra leading whitespace
+4:1 SL5021 error recipe line has extra leading whitespace; join it to the line above with a trailing `\` or start the recipe with a shebang
+-- multi-line-interpolation --
+accepted
+-- continuation-swallows-indentation --
+accepted
+-- indented-continuation --
+rejected 1:1 expected '@', '[', comment, end of file, end of line, or identifier, but found indent
+1:1 SL5001 error unexpected indentation

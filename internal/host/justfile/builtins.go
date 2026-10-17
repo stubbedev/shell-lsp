@@ -50,42 +50,47 @@ var settingSpecs = []settingSpec{
 }
 
 type attributeSpec struct {
-	name  string
-	arity model.Arity
-	doc   string
+	name     string
+	arity    model.Arity
+	doc      string
+	literals []string
 }
 
+const positionalArgument = ""
+
+var keyedAttributes = []string{"arg", "cache"}
+
 var attributeSpecs = []attributeSpec{
-	{"android", args(0, 0), "Enable the item only on Android."},
-	{"arg", args(1, model.Variadic), "Configure how a parameter is passed on the command line: `long`, `short`, `value`, `flag`, `multiple`, `help`, `pattern`, `min` and `max`."},
-	{"cache", args(0, model.Variadic), "Skip the recipe when its cached inputs and outputs are unchanged. Unstable."},
-	{"confirm", args(0, 1), "Ask for confirmation before running the recipe, optionally with a custom prompt."},
-	{"continue", args(0, 1), "Keep running when a command is interrupted by one of these signals and then exits successfully."},
-	{"default", args(0, 0), "Make this the module's default recipe."},
-	{"doc", args(0, 1), "Set the documentation shown by `just --list`, or remove it when given no argument."},
-	{"dragonfly", args(0, 0), "Enable the item only on DragonFly BSD."},
-	{"env", args(2, 2), "Set an environment variable for the recipe."},
-	{"exit-message", args(0, 0), "Print a message when the recipe fails, even with `set no-exit-message`."},
-	{"extension", args(1, 1), "The file extension of the temporary script file of a shebang or script recipe."},
-	{"freebsd", args(0, 0), "Enable the item only on FreeBSD."},
-	{"group", args(1, 1), "Put the recipe or module in a named group in `just --list`."},
-	{"linux", args(0, 0), "Enable the item only on Linux."},
-	{"macos", args(0, 0), "Enable the item only on macOS."},
-	{"metadata", args(1, model.Variadic), "Attach metadata that `just --dump` reports."},
-	{"netbsd", args(0, 0), "Enable the item only on NetBSD."},
-	{"no-cd", args(0, 0), "Run the recipe in the directory `just` was started in."},
-	{"no-exit-message", args(0, 0), "Do not print a message when the recipe fails."},
-	{"no-quiet", args(0, 0), "Echo the recipe's lines even when quiet is set."},
-	{"openbsd", args(0, 0), "Enable the item only on OpenBSD."},
-	{"parallel", args(0, 0), "Run the recipe's dependencies in parallel."},
-	{"positional-arguments", args(0, 0), "Pass the recipe's arguments to the shell as positional parameters."},
-	{"private", args(0, 0), "Hide the item from `just --list`."},
-	{"script", args(0, model.Variadic), "Run the body as one script, with the given interpreter or `script-interpreter`."},
-	{"shell", args(0, 0), "Run the recipe line by line in the shell, overriding `set default-script`."},
-	{"timestamp", args(0, 1), "Print a timestamp before each command, optionally in a given format."},
-	{"unix", args(0, 0), "Enable the item only on Unix systems, macOS included."},
-	{"windows", args(0, 0), "Enable the item only on Windows."},
-	{"working-directory", args(1, 1), "Run the recipe in this directory, relative to the default one."},
+	{"android", args(0, 0), "Enable the item only on Android.", nil},
+	{"arg", args(1, model.Variadic), "Configure how a parameter is passed on the command line: `long`, `short`, `value`, `flag`, `multiple`, `help`, `pattern`, `min` and `max`.", []string{positionalArgument, "long", "short"}},
+	{"cache", args(0, model.Variadic), "Skip the recipe when its cached inputs and outputs are unchanged. Unstable.", nil},
+	{"confirm", args(0, 1), "Ask for confirmation before running the recipe, optionally with a custom prompt.", nil},
+	{"continue", args(0, 1), "Keep running when a command is interrupted by one of these signals and then exits successfully.", []string{positionalArgument}},
+	{"default", args(0, 0), "Make this the module's default recipe.", nil},
+	{"doc", args(0, 1), "Set the documentation shown by `just --list`, or remove it when given no argument.", nil},
+	{"dragonfly", args(0, 0), "Enable the item only on DragonFly BSD.", nil},
+	{"env", args(2, 2), "Set an environment variable for the recipe.", nil},
+	{"exit-message", args(0, 0), "Print a message when the recipe fails, even with `set no-exit-message`.", nil},
+	{"extension", args(1, 1), "The file extension of the temporary script file of a shebang or script recipe.", []string{positionalArgument}},
+	{"freebsd", args(0, 0), "Enable the item only on FreeBSD.", nil},
+	{"group", args(1, 1), "Put the recipe or module in a named group in `just --list`.", []string{positionalArgument}},
+	{"linux", args(0, 0), "Enable the item only on Linux.", nil},
+	{"macos", args(0, 0), "Enable the item only on macOS.", nil},
+	{"metadata", args(1, model.Variadic), "Attach metadata that `just --dump` reports.", []string{positionalArgument}},
+	{"netbsd", args(0, 0), "Enable the item only on NetBSD.", nil},
+	{"no-cd", args(0, 0), "Run the recipe in the directory `just` was started in.", nil},
+	{"no-exit-message", args(0, 0), "Do not print a message when the recipe fails.", nil},
+	{"no-quiet", args(0, 0), "Echo the recipe's lines even when quiet is set.", nil},
+	{"openbsd", args(0, 0), "Enable the item only on OpenBSD.", nil},
+	{"parallel", args(0, 0), "Run the recipe's dependencies in parallel.", nil},
+	{"positional-arguments", args(0, 0), "Pass the recipe's arguments to the shell as positional parameters.", nil},
+	{"private", args(0, 0), "Hide the item from `just --list`.", nil},
+	{"script", args(0, model.Variadic), "Run the body as one script, with the given interpreter or `script-interpreter`.", []string{positionalArgument}},
+	{"shell", args(0, 0), "Run the recipe line by line in the shell, overriding `set default-script`.", nil},
+	{"timestamp", args(0, 1), "Print a timestamp before each command, optionally in a given format.", nil},
+	{"unix", args(0, 0), "Enable the item only on Unix systems, macOS included.", nil},
+	{"windows", args(0, 0), "Enable the item only on Windows.", nil},
+	{"working-directory", args(1, 1), "Run the recipe in this directory, relative to the default one.", nil},
 }
 
 type functionSpec struct {
@@ -226,6 +231,16 @@ var keywordDocs = []model.Builtin{
 	{Name: "set", Kind: model.KindKeyword, Arity: model.NoArity, Signature: "set NAME := VALUE", Doc: "Change a setting."},
 	{Name: "unexport", Kind: model.KindKeyword, Arity: model.NoArity, Signature: "unexport NAME", Doc: "Remove an environment variable before recipes run."},
 }
+
+var literalArguments = func() map[string][]string {
+	out := map[string][]string{}
+	for _, a := range attributeSpecs {
+		if len(a.literals) > 0 {
+			out[a.name] = a.literals
+		}
+	}
+	return out
+}()
 
 func args(lowest, highest int) model.Arity { return model.Arity{Min: lowest, Max: highest} }
 

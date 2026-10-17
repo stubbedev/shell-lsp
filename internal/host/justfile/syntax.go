@@ -3,6 +3,7 @@ package justfile
 import (
 	"strings"
 
+	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 )
 
@@ -88,9 +89,10 @@ func (s *StringLit) Indented() bool { return len(s.Quote) == 3 }
 func (s *StringLit) Raw() bool { return s.Quote[0] == '\'' }
 
 type Attribute struct {
-	Name Name
-	Span Span
-	Args []AttributeArg
+	Name    Name
+	Span    Span
+	Args    []AttributeArg
+	Partial bool
 }
 
 type AttributeArg struct {
@@ -306,6 +308,7 @@ func (it Item) Span() Span {
 }
 
 type Error struct {
+	Code    lint.Code
 	Span    Span
 	Message string
 }
@@ -313,6 +316,7 @@ type Error struct {
 type File struct {
 	Text     string
 	Items    []Item
+	Stray    []Attribute
 	Comments []Comment
 	Errors   []Error
 }

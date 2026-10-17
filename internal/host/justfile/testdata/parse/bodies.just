@@ -27,3 +27,10 @@ blank-lines:
     echo a
 
     echo b
+
+multiline-interpolation:
+    echo {{ "a" +
+  "b" }} done
+    echo {{
+"c"
+}}

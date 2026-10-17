@@ -3,6 +3,8 @@ package justfile
 import (
 	"fmt"
 	"strings"
+
+	"github.com/stubbedev/shell-lsp/internal/lint"
 )
 
 type lexer struct {
@@ -10,14 +12,16 @@ type lexer struct {
 	r      *reader
 	erred  map[int]bool
 	colon  bool
+	indent string
 	inBody bool
 	open   []token
+	levels []string
 }
 
 var closers = map[string]string{")": "(", "]": "[", "}": "{"}
 
 func (f *File) lexicalErrors() {
-	l := &lexer{f: f, r: &reader{text: f.Text, file: &File{Text: f.Text}, lexing: true}, erred: map[int]bool{}}
+	l := &lexer{f: f, r: &reader{text: f.Text, file: &File{Text: f.Text}, lexing: true}, erred: map[int]bool{}, levels: []string{""}}
 	for _, e := range f.Errors {
 		l.erred[f.line(e.Span.Start)] = true
 	}
@@ -25,25 +29,58 @@ func (f *File) lexicalErrors() {
 		start := l.r.pos
 		end := l.r.lineEnd(start)
 		line := l.r.lineText(start, end)
-		switch {
-		case blank(line):
-			l.colon = false
+		if blank(line) {
 			l.r.pos = end + 1
-		case line[0] == ' ' || line[0] == '\t':
-			if l.inBody || l.colon {
-				l.inBody, l.colon = true, false
-				l.body(end)
-				continue
-			}
-			l.tokens()
-		default:
-			l.inBody, l.colon = false, false
-			l.tokens()
+			continue
 		}
+		indent := line[:len(line)-len(strings.TrimLeft(line, " \t"))]
+		if strings.Contains(indent, " ") && strings.Contains(indent, "\t") {
+			l.lexError(Span{Start: start, End: start + len(indent)}, "leading whitespace mixes tabs and spaces: "+whitespace(indent))
+		}
+		if indent != "" && l.inBody {
+			if body := l.levels[len(l.levels)-1]; !strings.HasPrefix(indent, body) {
+				l.report(Error{Code: lint.CodeJustIndentation, Span: Span{Start: start, End: start + len(indent)}, Message: "recipe line has inconsistent leading whitespace: it started with " + whitespace(body) + " but this line has " + whitespace(indent)})
+			}
+			l.body(end)
+			continue
+		}
+		if indent != "" && l.colon && len(indent) > len(l.indent) && strings.HasPrefix(indent, l.indent) {
+			l.inBody, l.colon = true, false
+			l.levels = append(l.levels, indent)
+			l.body(end)
+			continue
+		}
+		if len(indent) < len(l.indent) {
+			l.colon = false
+		}
+		l.level(Span{Start: start, End: start + len(indent)}, indent)
+		l.inBody, l.indent = false, indent
+		l.tokens()
 	}
 	for _, e := range l.r.file.Errors {
 		l.report(e)
 	}
+}
+
+func (l *lexer) level(span Span, indent string) {
+	top := l.levels[len(l.levels)-1]
+	if len(indent) > len(top) {
+		if !strings.HasPrefix(indent, top) {
+			l.lexError(span, "inconsistent leading whitespace: the lines above start with "+whitespace(top))
+		}
+		l.levels = append(l.levels, indent)
+		return
+	}
+	for len(l.levels) > 1 && len(l.levels[len(l.levels)-1]) > len(indent) {
+		l.levels = l.levels[:len(l.levels)-1]
+	}
+	if l.levels[len(l.levels)-1] != indent {
+		l.lexError(span, "inconsistent leading whitespace: the lines above start with "+whitespace(top))
+	}
+}
+
+func (l *lexer) lexError(span Span, message string) {
+	l.report(Error{Code: lint.CodeJustSyntax, Span: span, Message: message})
 }
 
 func (l *lexer) report(e Error) {
@@ -59,29 +96,31 @@ func (l *lexer) tokens() {
 		if !ok {
 			return
 		}
-		switch {
-		case t.kind == tokEOF:
+		if t.kind == tokEOF || t.kind == tokNewline {
 			return
-		case t.kind == tokNewline:
-			return
-		case t.kind == tokError && t.text != "#":
-			l.report(Error{Span: t.span, Message: "unknown start of token `" + t.text + "`"})
-		case t.kind == tokPunct && t.text == ":":
-			l.colon = true
-		case t.kind == tokPunct && (t.text == "(" || t.text == "[" || t.text == "{"):
-			l.open = append(l.open, t)
-			l.r.depth++
-		case t.kind == tokPunct && t.text == interpolationOpen:
-			first, second := halves(t)
-			l.open = append(l.open, first, second)
-			l.r.depth += 2
-		case t.kind == tokPunct && closers[t.text] != "":
-			l.close(t)
-		case t.kind == tokPunct && t.text == "}}":
-			first, second := halves(t)
-			l.close(first)
-			l.close(second)
 		}
+		l.token(t)
+		l.r.depth = len(l.open)
+	}
+}
+
+func (l *lexer) token(t token) {
+	switch {
+	case t.kind == tokError && t.text != "#":
+		l.lexError(t.span, "unknown start of token `"+t.text+"`")
+	case t.kind == tokPunct && t.text == ":":
+		l.colon = true
+	case t.kind == tokPunct && (t.text == "(" || t.text == "[" || t.text == "{"):
+		l.open = append(l.open, t)
+	case t.kind == tokPunct && t.text == interpolationOpen:
+		first, second := halves(t)
+		l.open = append(l.open, first, second)
+	case t.kind == tokPunct && closers[t.text] != "":
+		l.close(t)
+	case t.kind == tokPunct && t.text == "}}":
+		first, second := halves(t)
+		l.close(first)
+		l.close(second)
 	}
 }
 
@@ -92,14 +131,13 @@ func halves(t token) (token, token) {
 
 func (l *lexer) close(t token) {
 	if len(l.open) == 0 {
-		l.report(Error{Span: t.span, Message: "unexpected closing delimiter `" + t.text + "`"})
+		l.lexError(t.span, "unexpected closing delimiter `"+t.text+"`")
 		return
 	}
 	opener := l.open[len(l.open)-1]
 	l.open = l.open[:len(l.open)-1]
-	l.r.depth = len(l.open)
 	if opener.text != closers[t.text] {
-		l.report(Error{Span: t.span, Message: fmt.Sprintf("mismatched closing delimiter `%s`; the `%s` on line %d is still open", t.text, opener.text, l.f.line(opener.span.Start))})
+		l.lexError(t.span, fmt.Sprintf("mismatched closing delimiter `%s`; the `%s` on line %d is still open", t.text, opener.text, l.f.line(opener.span.Start)))
 	}
 }
 
@@ -129,7 +167,7 @@ func (l *lexer) body(end int) {
 func (l *lexer) interpolation(open int) bool {
 	r := l.r
 	r.depth = 1
-	defer func() { r.depth = 0 }()
+	defer func() { r.depth, l.open = 0, nil }()
 	for {
 		t, ok := r.token()
 		if !ok {
@@ -137,12 +175,13 @@ func (l *lexer) interpolation(open int) bool {
 		}
 		switch {
 		case t.kind == tokEOF:
-			l.report(Error{Span: Span{Start: open, End: open + len(interpolationOpen)}, Message: "unterminated interpolation"})
+			l.lexError(Span{Start: open, End: open + len(interpolationOpen)}, "unterminated interpolation")
 			return false
-		case t.kind == tokPunct && t.text == "}}":
+		case t.kind == tokPunct && t.text == "}}" && len(l.open) == 0:
 			return true
-		case t.kind == tokError && t.text != "#":
-			l.report(Error{Span: t.span, Message: "unknown start of token `" + t.text + "`"})
+		default:
+			l.token(t)
+			r.depth = len(l.open) + 1
 		}
 	}
 }

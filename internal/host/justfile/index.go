@@ -28,11 +28,9 @@ func rules(kind model.Kind) model.Rules {
 		return model.Rules{Unknown: lint.CodeJustUnknownFunction, Arity: lint.CodeJustFunctionArguments}
 	case model.KindModule:
 		return model.Rules{Unknown: lint.CodeJustUnknownModule}
-	case model.KindSetting:
-		return model.Rules{Unknown: lint.CodeJustUnknownSetting, UnknownWhen: model.Regardless}
 	case model.KindAttribute:
-		return model.Rules{Unknown: lint.CodeJustUnknownAttribute, UnknownWhen: model.Regardless, Arity: lint.CodeJustAttributeArguments}
-	case model.KindTarget, model.KindKeyword:
+		return model.Rules{Arity: lint.CodeJustAttributeArguments}
+	case model.KindSetting, model.KindTarget, model.KindKeyword:
 		return model.Rules{}
 	}
 	panic(fmt.Sprintf("justfile: kind %s has no rules", kind))
@@ -72,6 +70,7 @@ func (f *File) Index(shells []*Recipe) *model.Index {
 			in.recipe(it.Recipe, positional)
 		}
 	}
+	in.attributes(f.Stray, model.NoSymbol)
 	for _, c := range f.Comments {
 		ix.Tokens = append(ix.Tokens, semantic.Token{Span: c.Span, Type: semantic.TypeComment})
 	}
@@ -108,7 +107,11 @@ func (in *indexer) keyword(at int, word string) {
 
 func (in *indexer) attributes(attrs []Attribute, owner int) {
 	for _, a := range attrs {
-		in.ix.Refs = append(in.ix.Refs, model.Ref{Name: a.Name.Text, Kind: model.KindAttribute, Span: a.Name.Span, Args: len(a.Args), Owner: owner})
+		args := len(a.Args)
+		if a.Partial {
+			args = model.NoArgs
+		}
+		in.ix.Refs = append(in.ix.Refs, model.Ref{Name: a.Name.Text, Kind: model.KindAttribute, Span: a.Name.Span, Args: args, Owner: owner})
 		in.token(a.Name.Span, semantic.TypeDecorator, 0)
 		for _, arg := range a.Args {
 			if arg.Key.Text != "" {
@@ -275,7 +278,11 @@ func (in *indexer) recipe(r *Recipe, positional bool) {
 			Detail: detail(in.text(p.Span)), Exported: exported, Unused: !positional && !positionalAttr && (!exported || in.shells[r]), Arity: model.NoArity,
 		})
 		in.token(p.Name.Span, semantic.TypeParameter, semantic.ModDeclaration)
+		first := len(in.ix.Refs)
 		in.expr(p.Default, scope, i, false)
+		for j := first; j < len(in.ix.Refs); j++ {
+			in.ix.Refs[j].Horizon = p.Span.Start
+		}
 	}
 	for _, d := range slices.Concat(r.Deps, r.Subsequent) {
 		args := 0

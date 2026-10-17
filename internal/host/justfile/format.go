@@ -8,6 +8,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/stubbedev/shell-lsp/internal/lint"
 )
 
 const (
@@ -34,6 +36,11 @@ func Format(f *File) (string, error) {
 	if len(f.Errors) > 0 {
 		e := f.Errors[0]
 		return "", fmt.Errorf("%w: line %d does not parse: %s", ErrUnformattable, f.line(e.Span.Start), e.Message)
+	}
+	for _, finding := range f.check() {
+		if finding.Severity == lint.SeverityError {
+			return "", fmt.Errorf("%w: just rejects line %d: %s", ErrUnformattable, f.line(finding.Span.Start), finding.Message)
+		}
 	}
 	p := &printer{f: f, indent: defaultIndentation}
 	if s, ok := f.setting("indentation"); ok && s.Value != nil && s.Value.Kind == ExprString {

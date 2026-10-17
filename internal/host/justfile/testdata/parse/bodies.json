@@ -79,6 +79,35 @@
       "quiet": false,
       "shebang": false
     },
+    "multiline-interpolation": {
+      "attributes": [],
+      "body": [
+        [
+          "echo ",
+          [
+            [
+              "concatenate",
+              "a",
+              "b"
+            ]
+          ],
+          " done"
+        ],
+        [
+          "echo ",
+          [
+            "c"
+          ]
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    },
     "python": {
       "attributes": [
         "script"

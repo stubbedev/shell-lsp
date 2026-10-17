@@ -135,6 +135,7 @@ type Ref struct {
 	Owner     int
 	Edge      bool
 	Soft      bool
+	Horizon   int
 }
 
 const NoArgs = -1

@@ -8,6 +8,9 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/stubbedev/shell-lsp/internal/host/model"
+	"github.com/stubbedev/shell-lsp/internal/lint"
 )
 
 type tokenKind uint8
@@ -83,7 +86,17 @@ func (p *reader) fail(span Span, format string, args ...any) {
 }
 
 func (p *reader) lexError(span Span, message string) {
-	e := Error{Span: span, Message: message}
+	p.report(lint.CodeJustSyntax, span, message)
+}
+
+func (p *reader) known(kind model.Kind, name Name, code lint.Code) {
+	if _, ok := Builtins.Lookup(kind, name.Text); !ok {
+		p.report(code, name.Span, fmt.Sprintf("unknown %s `%s`", kind, name.Text))
+	}
+}
+
+func (p *reader) report(code lint.Code, span Span, message string) {
+	e := Error{Code: code, Span: span, Message: message}
 	if !slices.Contains(p.file.Errors, e) {
 		p.file.Errors = append(p.file.Errors, e)
 	}
@@ -239,7 +252,7 @@ func (p *reader) stringToken(start int, prefix byte) token {
 		case prefix == 'f' && strings.HasPrefix(p.text[i:], "{{"):
 			flush(i)
 			p.pos = i + 2
-			interp := p.interpolation(i)
+			interp := p.interpolation()
 			lit.Segments = append(lit.Segments, Segment{Kind: FragmentInterpolation, Span: Span{Start: i, End: p.pos}, Interp: interp})
 			i = p.pos
 			segment = i
@@ -425,17 +438,22 @@ func (p *reader) parseFile() {
 	if strings.HasPrefix(p.text, "#!") {
 		p.comment()
 	}
+	joined := false
 	for p.pos < len(p.text) {
-		if !p.atLineStart() {
+		if !p.atLineStart() && !joined {
 			p.pos = p.lineEnd(p.pos) + 1
 			continue
 		}
 		end := p.lineEnd(p.pos)
 		line := p.lineText(p.pos, end)
 		trimmed := strings.TrimLeft(line, " \t")
+		if joined {
+			p.pos += len(line) - len(trimmed)
+			line, joined = trimmed, false
+		}
 		switch {
 		case line == `\` && end < len(p.text):
-			p.pos = end + 1
+			p.pos, joined = end+1, true
 		case trimmed == "":
 			p.extraneous()
 			p.doc = ""
@@ -450,12 +468,20 @@ func (p *reader) parseFile() {
 		case len(trimmed) != len(line):
 			p.lexError(Span{Start: p.pos, End: p.pos + len(line)}, "unexpected indentation")
 			p.skipIndented(p.pos)
-			p.pending, p.doc = nil, ""
+			p.stray()
+			p.doc = ""
 		default:
 			p.item()
 		}
 	}
-	p.extraneous()
+	if len(p.pending) > 0 {
+		end := len(p.text)
+		if strings.HasSuffix(p.text, "\n") {
+			end--
+		}
+		p.lexError(Span{Start: end, End: end}, "expected an item after the attributes, found the end of the file")
+		p.stray()
+	}
 }
 
 func (p *reader) extraneous() {
@@ -463,25 +489,16 @@ func (p *reader) extraneous() {
 		return
 	}
 	p.lexError(p.pending[0].Span, "extraneous attribute: nothing follows it to apply to")
-	p.pending = nil
+	p.stray()
 }
 
 func (p *reader) skipIndented(from int) {
 	p.pos = from
-	reference := ""
 	for p.pos < len(p.text) {
 		end := p.lineEnd(p.pos)
 		line := p.lineText(p.pos, end)
 		if !blank(line) && line[0] != ' ' && line[0] != '\t' {
 			return
-		}
-		indent := line[:len(line)-len(strings.TrimLeft(line, " \t"))]
-		switch {
-		case blank(line):
-		case reference == "":
-			reference = indent
-		case !strings.HasPrefix(indent, reference):
-			p.lexError(Span{Start: p.pos, End: p.pos + len(indent)}, "inconsistent leading whitespace: the lines above start with "+whitespace(reference))
 		}
 		p.pos = end + 1
 	}
@@ -502,7 +519,13 @@ func (p *reader) recover(start int, header bool) {
 	} else {
 		p.pos = end + 1
 	}
-	p.pending, p.doc = nil, ""
+	p.stray()
+	p.doc = ""
+}
+
+func (p *reader) stray() {
+	p.file.Stray = append(p.file.Stray, p.pending...)
+	p.pending = nil
 }
 
 func (p *reader) item() {
@@ -514,7 +537,12 @@ func (p *reader) item() {
 		return
 	}
 	attrs, doc := p.pending, p.doc
-	p.pending, p.doc = nil, ""
+	p.doc = ""
+	p.dispatch(start, first, attrs, doc)
+	p.pending = nil
+}
+
+func (p *reader) dispatch(start int, first token, attrs []Attribute, doc string) {
 	if first.kind == tokPunct && first.text == "@" {
 		p.recipe(start, attrs, doc)
 		return
@@ -524,37 +552,41 @@ func (p *reader) item() {
 	}
 	save := p.pos
 	p.next()
-	second := p.peek()
+	second := p.next()
+	third := p.peek()
 	p.pos = save
 	isName := second.kind == tokName
+	defines := third.kind == tokPunct && third.text == ":="
+	ends := third.kind == tokNewline || third.kind == tokEOF
+	optional := second.kind == tokPunct && second.text == "?"
 	switch first.text {
 	case "alias":
-		if isName {
+		if isName && defines {
 			p.alias(start, attrs)
 			return
 		}
 	case "export", "eager":
-		if isName {
+		if isName && defines {
 			p.assignment(start, attrs, doc)
 			return
 		}
 	case "unexport":
-		if isName {
+		if isName && ends {
 			p.unexport(start)
 			return
 		}
 	case "set":
-		if isName {
+		if isName && (defines || ends) {
 			p.setting(start, attrs)
 			return
 		}
 	case "import":
-		if second.kind == tokString || second.kind == tokPunct && second.text == "?" {
+		if second.kind == tokString || optional {
 			p.importItem(start, attrs)
 			return
 		}
 	case "mod":
-		if isName || second.kind == tokPunct && second.text == "?" {
+		if optional || isName && (ends || third.kind == tokString) {
 			p.module(start, attrs, doc)
 			return
 		}
@@ -573,7 +605,7 @@ func (p *reader) attributes() {
 	p.expect("[")
 	p.depth++
 	for {
-		p.pending = append(p.pending, p.attribute())
+		p.attribute()
 		if _, ok := p.accept(","); ok {
 			continue
 		}
@@ -584,9 +616,11 @@ func (p *reader) attributes() {
 	p.endOfLine()
 }
 
-func (p *reader) attribute() Attribute {
+func (p *reader) attribute() {
 	name := p.name()
-	attr := Attribute{Name: name, Span: name.Span}
+	p.known(model.KindAttribute, name, lint.CodeJustUnknownAttribute)
+	p.pending = append(p.pending, Attribute{Name: name, Span: name.Span, Partial: true})
+	attr := &p.pending[len(p.pending)-1]
 	switch t := p.peek(); {
 	case t.kind == tokPunct && t.text == ":":
 		p.next()
@@ -600,7 +634,7 @@ func (p *reader) attribute() Attribute {
 			if _, ok := p.accept(")"); ok {
 				break
 			}
-			attr.Args = append(attr.Args, p.attributeArg())
+			attr.Args = append(attr.Args, p.attributeArg(slices.Contains(keyedAttributes, name.Text)))
 			if _, ok := p.accept(","); ok {
 				continue
 			}
@@ -610,10 +644,21 @@ func (p *reader) attribute() Attribute {
 		p.depth--
 		attr.Span.End = p.pos
 	}
-	return attr
+	p.literalArguments(*attr)
+	attr.Partial = false
 }
 
-func (p *reader) attributeArg() AttributeArg {
+func (p *reader) literalArguments(a Attribute) {
+	keys := literalArguments[a.Name.Text]
+	for _, arg := range a.Args {
+		if arg.Value != nil && slices.Contains(keys, arg.Key.Text) && (arg.Value.Kind != ExprString || arg.Value.Str.Prefix == 'f') {
+			p.report(lint.CodeJustAttributeArguments, arg.Value.Span, fmt.Sprintf("the arguments of attribute `%s` must be string literals", a.Name.Text))
+			return
+		}
+	}
+}
+
+func (p *reader) attributeArg(keyed bool) AttributeArg {
 	t := p.peek()
 	if t.kind == tokName {
 		save := p.pos
@@ -624,7 +669,7 @@ func (p *reader) attributeArg() AttributeArg {
 			p.next()
 			value := p.expression()
 			return AttributeArg{Key: Name{Text: t.text, Span: t.span}, Value: value, Span: Span{Start: t.span.Start, End: value.Span.End}}
-		case after.kind == tokPunct && (after.text == "," || after.text == ")"):
+		case keyed && after.kind == tokPunct && (after.text == "," || after.text == ")"):
 			return AttributeArg{Key: Name{Text: t.text, Span: t.span}, Span: t.span}
 		}
 		p.pos = save
@@ -686,6 +731,7 @@ func (p *reader) unexport(start int) {
 func (p *reader) setting(start int, attrs []Attribute) {
 	p.next()
 	s := &Setting{Attributes: attrs, Name: p.name()}
+	p.known(model.KindSetting, s.Name, lint.CodeJustUnknownSetting)
 	s.Span = Span{Start: start, End: s.Name.Span.End}
 	if _, ok := p.accept(":="); ok {
 		s.Value = p.expression()
@@ -846,58 +892,50 @@ func (p *reader) parenDependency() Dependency {
 	}
 	p.depth--
 	dep.Span = Span{Start: start, End: p.pos}
+	if dep.Star && !slices.ContainsFunc(dep.Args, func(a *Expr) bool { return a.Starred }) {
+		p.report(lint.CodeJustDependencyArguments, dep.Span, "a mapped dependency needs a starred argument such as `*items`")
+	}
 	return dep
 }
 
 func (p *reader) body(r *Recipe) {
 	pos := p.pos
-	last := -1
-	var lines []Span
+	var blanks []Line
 	for pos < len(p.text) {
 		end := p.lineEnd(pos)
 		line := p.lineText(pos, end)
+		span := Span{Start: pos, End: pos + len(line)}
 		switch {
-		case blank(line) && len(lines) == 0:
-			end = -1
+		case blank(line) && len(r.Body) == 0:
 		case blank(line):
+			blanks = append(blanks, Line{Span: span, Indent: span})
+			pos = end + 1
+			continue
 		case line[0] == ' ' || line[0] == '\t':
-			last = len(lines)
-		default:
-			end = -1
+			if len(r.Body) == 0 {
+				content := strings.TrimLeft(line, " \t")
+				r.Indent = line[:len(line)-len(content)]
+				r.Shebang = strings.HasPrefix(content, "#!")
+			}
+			r.Body = append(r.Body, blanks...)
+			blanks = nil
+			l := p.bodyLine(span)
+			r.Body = append(r.Body, l)
+			pos = p.lineEnd(l.Span.End) + 1
+			continue
 		}
-		if end < 0 {
-			break
-		}
-		lines = append(lines, Span{Start: pos, End: pos + len(line)})
-		pos = end + 1
+		break
 	}
-	lines = lines[:last+1]
-	if len(lines) == 0 {
+	if len(r.Body) == 0 {
 		return
 	}
-	r.Span.End = lines[len(lines)-1].End
+	r.Span.End = r.Body[len(r.Body)-1].Span.End
 	p.pos = p.lineEnd(r.Span.End) + 1
-	for _, l := range lines {
-		if content := p.text[l.Start:l.End]; !blank(content) {
-			r.Indent = content[:len(content)-len(strings.TrimLeft(content, " \t"))]
-			r.Shebang = strings.HasPrefix(strings.TrimLeft(content, " \t"), "#!")
-			break
-		}
-	}
-	for i := 0; i < len(lines); i++ {
-		i = p.bodyLine(r, lines, i)
-	}
 }
 
-func (p *reader) bodyLine(r *Recipe, lines []Span, i int) int {
-	l := lines[i]
+func (p *reader) bodyLine(l Span) Line {
 	content := p.text[l.Start:l.End]
 	line := Line{Span: l}
-	if blank(content) {
-		line.Indent = Span{Start: l.Start, End: l.End}
-		r.Body = append(r.Body, line)
-		return i
-	}
 	indent := len(content) - len(strings.TrimLeft(content, " \t"))
 	line.Indent = Span{Start: l.Start, End: l.Start + indent}
 	at := l.Start + indent
@@ -909,38 +947,36 @@ func (p *reader) bodyLine(r *Recipe, lines []Span, i int) int {
 	end := l.End
 	pos := at
 	textStart := at
-	defer func() { r.Body = append(r.Body, line) }()
+	text := func(upTo int) {
+		if upTo > textStart {
+			line.Fragments = append(line.Fragments, Fragment{Kind: FragmentText, Span: Span{Start: textStart, End: upTo}})
+		}
+	}
 	for pos < end {
 		switch {
-		case strings.HasPrefix(p.text[pos:], "{{{{"):
-			if pos > textStart {
-				line.Fragments = append(line.Fragments, Fragment{Kind: FragmentText, Span: Span{Start: textStart, End: pos}})
-			}
-			line.Fragments = append(line.Fragments, Fragment{Kind: FragmentEscape, Span: Span{Start: pos, End: pos + 4}})
-			pos += 4
+		case strings.HasPrefix(p.text[pos:], escapedOpen):
+			text(pos)
+			line.Fragments = append(line.Fragments, Fragment{Kind: FragmentEscape, Span: Span{Start: pos, End: pos + len(escapedOpen)}})
+			pos += len(escapedOpen)
 			textStart = pos
-		case strings.HasPrefix(p.text[pos:], "{{"):
-			if pos > textStart {
-				line.Fragments = append(line.Fragments, Fragment{Kind: FragmentText, Span: Span{Start: textStart, End: pos}})
-			}
+		case strings.HasPrefix(p.text[pos:], interpolationOpen):
+			text(pos)
 			interp := p.bodyInterpolation(pos)
 			line.Fragments = append(line.Fragments, Fragment{Kind: FragmentInterpolation, Span: interp.span, Interp: interp.expr, Closed: interp.closed})
 			pos = interp.span.End
 			textStart = pos
-			for pos > end && i+1 < len(lines) {
-				i++
-				end = lines[i].End
-				line.Span.End = end
+			if pos > end {
+				lineEnd := p.lineEnd(pos)
+				end = pos + len(p.lineText(pos, lineEnd))
 			}
 		default:
 			pos++
 		}
 	}
-	if end > textStart {
-		line.Fragments = append(line.Fragments, Fragment{Kind: FragmentText, Span: Span{Start: textStart, End: end}})
-	}
+	text(end)
+	line.Span.End = end
 	line.Continued = strings.HasSuffix(p.text[line.Span.Start:line.Span.End], `\`)
-	return i
+	return line
 }
 
 type interpolated struct {
@@ -970,15 +1006,15 @@ func (p *reader) bodyInterpolation(at int) (out interpolated) {
 		p.pos = save
 		p.depth, p.braces = 0, 0
 	}()
-	expr := p.interpolation(at)
+	expr := p.interpolation()
 	return interpolated{span: Span{Start: at, End: p.pos}, expr: expr, closed: true}
 }
 
-func (p *reader) interpolation(at int) *Expr {
+func (p *reader) interpolation() *Expr {
 	depth, braces := p.depth, p.braces
-	p.depth, p.braces = 0, 0
+	p.depth, p.braces = 1, 0
 	if t := p.peek(); t.kind == tokPunct && t.text == "}}" {
-		p.fail(Span{Start: at, End: t.span.End}, "an interpolation needs an expression")
+		p.fail(t.span, "an interpolation needs an expression")
 	}
 	expr := p.expression()
 	p.expect("}}")
@@ -986,14 +1022,16 @@ func (p *reader) interpolation(at int) *Expr {
 	return expr
 }
 
-var operators = map[string]int{"||": 1, "&&": 2, "==": 3, "!=": 3, "=~": 3, "!~": 3}
+const comparison = 3
+
+var operators = map[string]int{"||": 1, "&&": 2, "==": comparison, "!=": comparison, "=~": comparison, "!~": comparison}
 
 func (p *reader) expression() *Expr {
 	return p.binary(1)
 }
 
 func (p *reader) binary(level int) *Expr {
-	if level > 3 {
+	if level > comparison {
 		return p.conjunct()
 	}
 	left := p.binary(level + 1)
@@ -1003,7 +1041,7 @@ func (p *reader) binary(level int) *Expr {
 	}
 	p.next()
 	var right *Expr
-	if level == 3 {
+	if level == comparison {
 		right = p.binary(level + 1)
 	} else {
 		right = p.binary(level)

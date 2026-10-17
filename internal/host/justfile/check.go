@@ -20,7 +20,7 @@ type checker struct {
 func (f *File) check() []lint.Finding {
 	c := &checker{f: f, lists: f.Enabled("lists"), unstable: f.Enabled("unstable")}
 	for _, e := range f.Errors {
-		c.report(lint.CodeJustSyntax, e.Span, "%s", e.Message)
+		c.report(e.Code, e.Span, "%s", e.Message)
 	}
 	c.duplicates()
 	if c.lists && !c.unstable {
@@ -155,11 +155,23 @@ func (c *checker) settingValue(s *Setting) {
 	}
 }
 
+func isComparison(e *Expr) bool { return e.Kind == ExprBinary && operators[e.Op] == comparison }
+
 func (c *checker) features(it Item) {
 	visit := func(e *Expr) {
+		conditions := map[*Expr]bool{}
+		Walk(e, func(x *Expr) {
+			if x.Kind == ExprIf {
+				conditions[x.Args[0]] = true
+			}
+		})
 		Walk(e, func(x *Expr) {
 			switch {
 			case c.lists:
+			case x.Kind == ExprIf && !isComparison(x.Args[0]):
+				c.report(lint.CodeJustNeedsSetting, x.Args[0].Span, "an `if` condition other than a comparison needs `set lists`")
+			case isComparison(x) && !conditions[x]:
+				c.report(lint.CodeJustNeedsSetting, x.OpSpan, "`%s` outside the condition of an `if` needs `set lists`", x.Op)
 			case x.Kind == ExprNot:
 				c.report(lint.CodeJustNeedsSetting, Span{Start: x.Span.Start, End: x.Span.Start + 1}, "`!` needs `set lists`")
 			case x.Kind == ExprBinary && (x.Op == "&&" || x.Op == "||" || x.Op == "++"):
@@ -228,9 +240,6 @@ func (c *checker) recipe(r *Recipe) {
 		if !c.lists {
 			c.report(lint.CodeJustNeedsSetting, Span{Start: d.Span.Start, End: d.Span.Start + 1}, "mapped dependencies need `set lists`")
 		}
-		if !slices.ContainsFunc(d.Args, func(a *Expr) bool { return a.Starred }) {
-			c.report(lint.CodeJustDependencyArguments, d.Span, "a mapped dependency needs a starred argument such as `*items`")
-		}
 	}
 	c.indentation(r)
 }
@@ -265,12 +274,10 @@ func (c *checker) indentation(r *Recipe) {
 	for _, l := range r.Body {
 		indent := c.f.Text[l.Indent.Start:l.Indent.End]
 		if len(l.Fragments) == 0 {
+			continued = false
 			continue
 		}
-		switch {
-		case !strings.HasPrefix(indent, r.Indent):
-			c.report(lint.CodeJustIndentation, l.Indent, "recipe line has inconsistent leading whitespace: it started with %s but this line has %s", whitespace(r.Indent), whitespace(indent))
-		case linewise && !continued && len(indent) > len(r.Indent):
+		if linewise && !continued && len(indent) > len(r.Indent) && strings.HasPrefix(indent, r.Indent) {
 			c.report(lint.CodeJustIndentation, Span{Start: l.Indent.Start, End: l.Span.End}, "recipe line has extra leading whitespace; join it to the line above with a trailing `\\` or start the recipe with a shebang")
 		}
 		continued = l.Continued

@@ -34,6 +34,24 @@ func codes(findings []lint.Finding) []string {
 	return out
 }
 
+func TestResolveHidesLocalsBeyondTheHorizon(t *testing.T) {
+	t.Parallel()
+
+	ix := &Index{
+		Symbols: []Symbol{
+			{Name: "x", Kind: KindParameter, Span: span(2, 3), Selection: span(2, 3), Scope: 1},
+			{Name: "y", Kind: KindParameter, Span: span(4, 7), Selection: span(4, 5), Scope: 1},
+		},
+	}
+	m := &Module{Files: []*Index{ix}}
+	if got := m.Resolve(0, Ref{Name: "x", Kind: KindVariable, Scope: 1, Horizon: 4}).Targets; len(got) != 1 {
+		t.Errorf("an earlier parameter = %v, want it found", got)
+	}
+	if got := m.Resolve(0, Ref{Name: "y", Kind: KindVariable, Scope: 1, Horizon: 4}); got.Found() {
+		t.Errorf("the parameter itself = %+v, want it hidden", got)
+	}
+}
+
 func TestResolvePrefersTheLocalScope(t *testing.T) {
 	t.Parallel()
 

@@ -376,3 +376,57 @@ build:
  more
 -- end-of-file-inside-parentheses --
 build( first
+-- default-sees-earlier-parameters --
+a x y=x:
+    echo {{y}}
+-- default-cannot-see-itself --
+a x=(x):
+    echo {{x}}
+-- default-cannot-see-later-parameters --
+a x=y y="1":
+    echo {{x}}
+-- keyword-named-recipes --
+alias A:
+    echo {{A}}
+export B C:
+    echo {{B}} {{C}}
+set D:
+    echo {{D}}
+mod E:
+    echo {{E}}
+-- comparison-outside-a-condition --
+x := ("a" == "b")
+-- condition-that-is-not-a-comparison --
+x := if ("a") { "b" } else { "c" }
+-- attribute-arguments-must-be-literals --
+x := "a"
+[group(x)]
+build:
+    echo
+-- attribute-argument-may-be-an-expression --
+x := "sure?"
+[confirm(x)]
+build:
+    echo
+-- unknown-setting-before-a-broken-value --
+set nonsense := (
+-- unknown-attribute-before-a-broken-argument --
+[nonsense(
+-- blank-line-ends-a-continuation --
+build:
+    echo \
+
+      more
+-- multi-line-interpolation --
+x := "a"
+build:
+    echo {{ x +
+  "b" }} done
+-- continuation-swallows-indentation --
+\
+  build:
+    echo
+-- indented-continuation --
+ \
+build:
+    echo
