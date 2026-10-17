@@ -114,8 +114,8 @@ func (m *Module) Findings(file int, checks Checks, used Usage) []lint.Finding {
 		switch {
 		case res.Missing || r.Soft:
 		case !res.Found():
-			if code, ok := checks.Unknown[r.Kind.Namespace()]; ok && (certain || checks.Always[r.Kind.Namespace()]) {
-				out = append(out, lint.HostFinding(code, r.Span, fmt.Sprintf("unknown %s `%s`", r.Kind, qualified(r))))
+			if rules := checks.Of(r.Kind); rules.Unknown != 0 && (certain || rules.UnknownWhen == Regardless) {
+				out = append(out, lint.HostFinding(rules.Unknown, r.Span, fmt.Sprintf("unknown %s `%s`", r.Kind, qualified(r))))
 			}
 		case res.Builtin != nil:
 			out = append(out, arity(checks, r, res.Builtin.Kind, res.Builtin.Arity)...)
@@ -129,8 +129,8 @@ func (m *Module) Findings(file int, checks Checks, used Usage) []lint.Finding {
 	}
 	out = append(out, m.cycles(file, checks)...)
 	for i, s := range ix.Symbols {
-		code, ok := checks.Unused[s.Kind]
-		if ok && s.Unused && certain && !used[Target{Module: m, File: file, Symbol: i}] {
+		code := checks.Of(s.Kind).Unused
+		if code != 0 && s.Unused && certain && !used[Target{Module: m, File: file, Symbol: i}] {
 			out = append(out, lint.HostFinding(code, s.Selection, fmt.Sprintf("%s `%s` is never used", s.Kind, s.Name)))
 		}
 	}
@@ -142,8 +142,8 @@ func qualified(r Ref) string {
 }
 
 func arity(checks Checks, r Ref, kind Kind, a Arity) []lint.Finding {
-	code, ok := checks.Arity[kind]
-	if !ok || r.Args == NoArgs || a.Accepts(r.Args) {
+	code := checks.Of(kind).Arity
+	if code == 0 || r.Args == NoArgs || a.Accepts(r.Args) {
 		return nil
 	}
 	return []lint.Finding{lint.HostFinding(code, r.Span, fmt.Sprintf("%s `%s` takes %s but is given %d", kind, qualified(r), a, r.Args))}
@@ -192,8 +192,8 @@ func (m *Module) edges(n node) []edge {
 func (m *Module) cycles(file int, checks Checks) []lint.Finding {
 	var out []lint.Finding
 	for i, s := range m.Files[file].Symbols {
-		code, ok := checks.Circular[s.Kind]
-		if !ok {
+		code := checks.Of(s.Kind).Circular
+		if code == 0 {
 			continue
 		}
 		start := node{file, i}

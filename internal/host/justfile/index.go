@@ -1,6 +1,7 @@
 package justfile
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 
@@ -11,32 +12,30 @@ import (
 
 const maxDetail = 80
 
-var Checks = model.Checks{
-	Unknown: map[model.Namespace]lint.Code{
-		model.NamespaceRecipes:    lint.CodeJustUnknownRecipe,
-		model.NamespaceValues:     lint.CodeJustUnknownVariable,
-		model.NamespaceFunctions:  lint.CodeJustUnknownFunction,
-		model.NamespaceModules:    lint.CodeJustUnknownModule,
-		model.NamespaceSettings:   lint.CodeJustUnknownSetting,
-		model.NamespaceAttributes: lint.CodeJustUnknownAttribute,
-	},
-	Always: map[model.Namespace]bool{model.NamespaceSettings: true, model.NamespaceAttributes: true},
-	Arity: map[model.Kind]lint.Code{
-		model.KindRecipe:    lint.CodeJustDependencyArguments,
-		model.KindFunction:  lint.CodeJustFunctionArguments,
-		model.KindAttribute: lint.CodeJustAttributeArguments,
-	},
-	Circular: map[model.Kind]lint.Code{
-		model.KindRecipe:   lint.CodeJustCircular,
-		model.KindAlias:    lint.CodeJustCircular,
-		model.KindVariable: lint.CodeJustCircular,
-	},
-	Unused: map[model.Kind]lint.Code{
-		model.KindParameter: lint.CodeJustUnusedParameter,
-		model.KindVariable:  lint.CodeJustUnusedVariable,
-	},
-	Deprecated: lint.CodeJustDeprecated,
-	Missing:    lint.CodeJustMissingFile,
+var Checks = model.Checks{Of: rules, Deprecated: lint.CodeJustDeprecated, Missing: lint.CodeJustMissingFile}
+
+func rules(kind model.Kind) model.Rules {
+	switch kind {
+	case model.KindRecipe:
+		return model.Rules{Unknown: lint.CodeJustUnknownRecipe, Arity: lint.CodeJustDependencyArguments, Circular: lint.CodeJustCircular}
+	case model.KindAlias:
+		return model.Rules{Circular: lint.CodeJustCircular}
+	case model.KindVariable:
+		return model.Rules{Unknown: lint.CodeJustUnknownVariable, Circular: lint.CodeJustCircular, Unused: lint.CodeJustUnusedVariable}
+	case model.KindParameter:
+		return model.Rules{Unused: lint.CodeJustUnusedParameter}
+	case model.KindFunction:
+		return model.Rules{Unknown: lint.CodeJustUnknownFunction, Arity: lint.CodeJustFunctionArguments}
+	case model.KindModule:
+		return model.Rules{Unknown: lint.CodeJustUnknownModule}
+	case model.KindSetting:
+		return model.Rules{Unknown: lint.CodeJustUnknownSetting, UnknownWhen: model.Regardless}
+	case model.KindAttribute:
+		return model.Rules{Unknown: lint.CodeJustUnknownAttribute, UnknownWhen: model.Regardless, Arity: lint.CodeJustAttributeArguments}
+	case model.KindTarget, model.KindKeyword:
+		return model.Rules{}
+	}
+	panic(fmt.Sprintf("justfile: kind %s has no rules", kind))
 }
 
 type indexer struct {

@@ -2,6 +2,7 @@ package model
 
 import (
 	"fmt"
+	"iter"
 	"slices"
 	"sort"
 
@@ -38,6 +39,16 @@ var kindNames = [...]string{
 	KindSetting:   "setting",
 	KindAttribute: "attribute",
 	KindKeyword:   "keyword",
+}
+
+func Kinds() iter.Seq[Kind] {
+	return func(yield func(Kind) bool) {
+		for k := range Kind(len(kindNames)) {
+			if !yield(k) {
+				return
+			}
+		}
+	}
 }
 
 func (k Kind) String() string {
@@ -167,12 +178,23 @@ type Index struct {
 	Broken    bool
 }
 
+type Certainty uint8
+
+const (
+	WhenComplete Certainty = iota
+	Regardless
+)
+
+type Rules struct {
+	Unknown     lint.Code
+	UnknownWhen Certainty
+	Arity       lint.Code
+	Circular    lint.Code
+	Unused      lint.Code
+}
+
 type Checks struct {
-	Unknown    map[Namespace]lint.Code
-	Always     map[Namespace]bool
-	Arity      map[Kind]lint.Code
-	Circular   map[Kind]lint.Code
-	Unused     map[Kind]lint.Code
+	Of         func(Kind) Rules
 	Deprecated lint.Code
 	Missing    lint.Code
 }

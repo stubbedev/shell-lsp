@@ -164,6 +164,30 @@ func TestLanguageRegistry(t *testing.T) {
 	}
 }
 
+func TestEveryKindHasRulesOfItsOwnLanguage(t *testing.T) {
+	t.Parallel()
+
+	for l, own := range map[Language]func(lint.Code) bool{Make: lint.Code.Make, Just: lint.Code.Just} {
+		checks := l.Checks()
+		for kind := range model.Kinds() {
+			r := checks.Of(kind)
+			for _, code := range []lint.Code{r.Unknown, r.Arity, r.Circular, r.Unused} {
+				if code != 0 && !own(code) {
+					t.Errorf("%v rules for %s use %s", l, kind, code)
+				}
+			}
+			if r.Unknown == 0 && r.UnknownWhen != model.WhenComplete {
+				t.Errorf("%v rules for %s set a certainty without an unknown check", l, kind)
+			}
+		}
+		for _, code := range []lint.Code{checks.Deprecated, checks.Missing} {
+			if code != 0 && !own(code) {
+				t.Errorf("%v checks use %s", l, code)
+			}
+		}
+	}
+}
+
 func TestNixHasNoNativeAnalysis(t *testing.T) {
 	t.Parallel()
 

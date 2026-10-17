@@ -1,6 +1,7 @@
 package makefile
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 
@@ -13,19 +14,20 @@ import (
 
 const maxDetail = 80
 
-var Checks = model.Checks{
-	Unknown: map[model.Namespace]lint.Code{
-		model.NamespaceValues:    lint.CodeMakeUndefinedVariable,
-		model.NamespaceFunctions: lint.CodeMakeUnknownFunction,
-		model.NamespaceTargets:   lint.CodeMakePhonyWithoutRule,
-	},
-	Always: map[model.Namespace]bool{model.NamespaceFunctions: true},
-	Arity:  map[model.Kind]lint.Code{model.KindFunction: lint.CodeMakeFunctionArguments},
-	Circular: map[model.Kind]lint.Code{
-		model.KindVariable: lint.CodeMakeRecursiveVariable,
-	},
-	Unused:  map[model.Kind]lint.Code{model.KindVariable: lint.CodeMakeUnusedVariable},
-	Missing: lint.CodeMakeMissingInclude,
+var Checks = model.Checks{Of: rules, Missing: lint.CodeMakeMissingInclude}
+
+func rules(kind model.Kind) model.Rules {
+	switch kind {
+	case model.KindVariable:
+		return model.Rules{Unknown: lint.CodeMakeUndefinedVariable, Circular: lint.CodeMakeRecursiveVariable, Unused: lint.CodeMakeUnusedVariable}
+	case model.KindFunction:
+		return model.Rules{Unknown: lint.CodeMakeUnknownFunction, UnknownWhen: model.Regardless, Arity: lint.CodeMakeFunctionArguments}
+	case model.KindTarget:
+		return model.Rules{Unknown: lint.CodeMakePhonyWithoutRule}
+	case model.KindRecipe, model.KindAlias, model.KindParameter, model.KindModule, model.KindSetting, model.KindAttribute, model.KindKeyword:
+		return model.Rules{}
+	}
+	panic(fmt.Sprintf("makefile: kind %s has no rules", kind))
 }
 
 type Analysis struct {

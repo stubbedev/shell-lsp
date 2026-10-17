@@ -9,12 +9,19 @@ import (
 )
 
 var testChecks = Checks{
-	Unknown:  map[Namespace]lint.Code{NamespaceRecipes: lint.CodeJustUnknownRecipe, NamespaceValues: lint.CodeJustUnknownVariable, NamespaceSettings: lint.CodeJustUnknownSetting},
-	Always:   map[Namespace]bool{NamespaceSettings: true},
-	Arity:    map[Kind]lint.Code{KindRecipe: lint.CodeJustDependencyArguments},
-	Circular: map[Kind]lint.Code{KindRecipe: lint.CodeJustCircular},
-	Unused:   map[Kind]lint.Code{KindVariable: lint.CodeJustUnusedVariable},
-	Missing:  lint.CodeJustMissingFile,
+	Of: func(k Kind) Rules {
+		switch k {
+		case KindRecipe:
+			return Rules{Unknown: lint.CodeJustUnknownRecipe, Arity: lint.CodeJustDependencyArguments, Circular: lint.CodeJustCircular}
+		case KindVariable:
+			return Rules{Unknown: lint.CodeJustUnknownVariable, Unused: lint.CodeJustUnusedVariable}
+		case KindSetting:
+			return Rules{Unknown: lint.CodeJustUnknownSetting, UnknownWhen: Regardless}
+		default:
+			return Rules{}
+		}
+	},
+	Missing: lint.CodeJustMissingFile,
 }
 
 func span(start, end int) Span { return Span{Start: start, End: end} }
