@@ -1,6 +1,6 @@
 //go:build unix
 
-package bats
+package proctree
 
 import (
 	"errors"

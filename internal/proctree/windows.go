@@ -1,6 +1,6 @@
 //go:build windows
 
-package bats
+package proctree
 
 import (
 	"errors"
@@ -70,7 +70,7 @@ type threadEntry struct {
 	flags          uint32
 }
 
-func startTree(cmd *exec.Cmd) (func(), error) {
+func Start(cmd *exec.Cmd) (func(), error) {
 	job, err := killOnCloseJob()
 	if err != nil {
 		return nil, err

@@ -1,6 +1,6 @@
 //go:build unix
 
-package bats
+package proctree
 
 import (
 	"errors"
@@ -9,7 +9,7 @@ import (
 	"syscall"
 )
 
-func startTree(cmd *exec.Cmd) (func(), error) {
+func Start(cmd *exec.Cmd) (func(), error) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error {
 		err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)

@@ -1,6 +1,6 @@
 //go:build windows
 
-package bats
+package proctree
 
 import (
 	"syscall"

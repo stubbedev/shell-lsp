@@ -1,6 +1,6 @@
 //go:build unix || windows
 
-package bats
+package proctree
 
 import (
 	"context"
@@ -14,8 +14,8 @@ import (
 )
 
 const (
-	treeRoleEnv    = "SHELL_LSP_BATS_TREE_ROLE"
-	treePidFileEnv = "SHELL_LSP_BATS_TREE_PIDFILE"
+	treeRoleEnv    = "SHELL_LSP_PROCTREE_ROLE"
+	treePidFileEnv = "SHELL_LSP_PROCTREE_PIDFILE"
 	treeLifetime   = time.Minute
 	treeDeadline   = 20 * time.Second
 )
@@ -45,10 +45,10 @@ func TestCancellingKillsTheWholeTree(t *testing.T) {
 	defer cancel()
 	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestProcessTreeHelper$")
 	cmd.Env = append(os.Environ(), treeRoleEnv+"=parent", treePidFileEnv+"="+pidFile)
-	cmd.WaitDelay = waitDelay
-	release, err := startTree(cmd)
+	cmd.WaitDelay = WaitDelay
+	release, err := Start(cmd)
 	if err != nil {
-		t.Fatalf("startTree() error = %v", err)
+		t.Fatalf("Start() error = %v", err)
 	}
 	defer release()
 	child := waitForPid(t, pidFile)

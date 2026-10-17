@@ -9,13 +9,13 @@ import (
 	"regexp"
 	"slices"
 	"strings"
-	"time"
+
+	"github.com/stubbedev/shell-lsp/internal/proctree"
 )
 
 const (
 	maxLine   = 64 << 10
 	maxStderr = 8 << 10
-	waitDelay = 2 * time.Second
 )
 
 type Invocation struct {
@@ -76,8 +76,8 @@ func Run(ctx context.Context, inv Invocation, progress func(Report)) (Report, er
 	cmd.Dir = inv.Dir
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
-	cmd.WaitDelay = waitDelay
-	release, err := startTree(cmd)
+	cmd.WaitDelay = proctree.WaitDelay
+	release, err := proctree.Start(cmd)
 	if err != nil {
 		return Report{}, fmt.Errorf("running %s: %w", inv, err)
 	}

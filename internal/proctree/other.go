@@ -1,9 +1,9 @@
 //go:build !unix && !windows
 
-package bats
+package proctree
 
 import "os/exec"
 
-func startTree(cmd *exec.Cmd) (func(), error) {
+func Start(cmd *exec.Cmd) (func(), error) {
 	return func() {}, cmd.Start()
 }
