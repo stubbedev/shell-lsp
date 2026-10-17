@@ -371,3 +371,76 @@ func (s *Server) runRecipeCommand(ctx context.Context, docs *docstore.View, args
 	s.notify(showMessageMethod, lsp.ShowMessageParams{Type: kind, Message: label + ": " + outcome})
 	return recipeRunResult{ExitCode: result.Code, Output: result.Output, Truncated: result.Truncated}, nil
 }
+
+func (s *Server) nativeCallHierarchyItem(name string, kind model.Kind, extent hostnav.Extent, enc docstore.Encoding) (lsp.CallHierarchyItem, error) {
+	data, err := encodeData(callItemData{Name: name, Start: extent.Selection.Start, Native: true})
+	if err != nil {
+		return lsp.CallHierarchyItem{}, err
+	}
+	at := sourcePositions(extent.File, enc)
+	return lsp.CallHierarchyItem{Name: name, Kind: nativeKind(kind), Detail: extent.File.Path, URI: extent.File.URI, Range: at.Range(extent.Span), SelectionRange: at.Range(extent.Selection), Data: data}, nil
+}
+
+func (s *Server) nativePrepareCalls(ctx context.Context, docs *docstore.View, here nativeHere) (any, error) {
+	g, err := s.group(ctx, docs, here.host)
+	if err != nil {
+		return nil, err
+	}
+	sym, ok := g.CallTarget(here.source)
+	if !ok {
+		return nil, nil
+	}
+	item, err := s.nativeCallHierarchyItem(sym.Name, sym.Kind, g.Extent(sym), here.encoding)
+	if err != nil {
+		return nil, err
+	}
+	return []lsp.CallHierarchyItem{item}, nil
+}
+
+func (s *Server) nativeCallItem(ctx context.Context, docs *docstore.View, item lsp.CallHierarchyItem) (*hostnav.Group, hostnav.Symbol, bool, error) {
+	data, err := decodeData[callItemData]("call hierarchy item", item.Data)
+	if err != nil || !data.Native {
+		return nil, hostnav.Symbol{}, false, err
+	}
+	file, err := s.loadURI(docs, item.URI)
+	if err != nil {
+		return nil, hostnav.Symbol{}, true, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%v", err)
+	}
+	h, ok := hostnav.Of(file)
+	if !ok {
+		return nil, hostnav.Symbol{}, true, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%s is not a justfile or Makefile", item.URI)
+	}
+	g, err := s.group(ctx, docs, h)
+	if err != nil {
+		return nil, hostnav.Symbol{}, true, err
+	}
+	sym, ok := g.SymbolAt(file.Path, data.Start)
+	if !ok {
+		return nil, hostnav.Symbol{}, true, jsonrpc.NewError(jsonrpc.CodeContentModified, "%s no longer exists in %s", data.Name, item.URI)
+	}
+	return g, sym, true, nil
+}
+
+func (s *Server) nativeCalls(docs *docstore.View, sites []hostnav.CallSite, incoming bool) (any, error) {
+	enc := docs.Encoding()
+	if incoming {
+		out := make([]lsp.CallHierarchyIncomingCall, 0, len(sites))
+		for _, site := range sites {
+			from, err := s.nativeCallHierarchyItem(site.Name, site.Kind, site.Peer, enc)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, lsp.CallHierarchyIncomingCall{From: from, FromRanges: sourcePositions(site.File, enc).Ranges(site.Spans)})
+		}
+		return out, nil
+	}
+	out := make([]lsp.CallHierarchyOutgoingCall, 0, len(sites))
+	for _, site := range sites {
+		to, err := s.nativeCallHierarchyItem(site.Name, site.Kind, site.Peer, enc)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, lsp.CallHierarchyOutgoingCall{To: to, FromRanges: sourcePositions(site.File, enc).Ranges(site.Spans)})
+	}
+	return out, nil
+}

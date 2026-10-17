@@ -113,6 +113,7 @@ type callItemData struct {
 	Name     string `json:"name"`
 	Start    int    `json:"start"`
 	TopLevel bool   `json:"topLevel"`
+	Native   bool   `json:"native,omitempty"`
 }
 
 func (s *Server) callHierarchyItem(item navigation.CallItem, docs *docstore.View) (lsp.CallHierarchyItem, error) {
@@ -166,10 +167,16 @@ func (s *Server) callItemFromLSP(docs *docstore.View, item lsp.CallHierarchyItem
 	return navigation.CallItem{}, jsonrpc.NewError(jsonrpc.CodeContentModified, "function %s no longer exists in %s", data.Name, item.URI)
 }
 
-func (s *Server) handlePrepareCallHierarchy(_ context.Context, docs *docstore.View, position lsp.TextDocumentPositionParams) (any, error) {
+func (s *Server) handlePrepareCallHierarchy(ctx context.Context, docs *docstore.View, position lsp.TextDocumentPositionParams) (any, error) {
 	here, inside, err := s.at(docs, position)
-	if err != nil || !inside {
+	if err != nil {
 		return nil, err
+	}
+	if native, ok := nativeLocation(here, position.Position, inside); ok && !inside {
+		return s.nativePrepareCalls(ctx, docs, native)
+	}
+	if !inside {
+		return nil, nil
 	}
 	items := navigation.PrepareCallHierarchy(here.File, here.offset, s.navigationEnv())
 	if len(items) == 0 {
@@ -187,6 +194,12 @@ func (s *Server) handlePrepareCallHierarchy(_ context.Context, docs *docstore.Vi
 }
 
 func (s *Server) handleIncomingCalls(ctx context.Context, docs *docstore.View, p lsp.CallHierarchyCallsParams) (any, error) {
+	if g, sym, ok, err := s.nativeCallItem(ctx, docs, p.Item); ok || err != nil {
+		if err != nil {
+			return nil, err
+		}
+		return s.nativeCalls(docs, g.Incoming(sym), true)
+	}
 	item, err := s.callItemFromLSP(docs, p.Item)
 	if err != nil {
 		return nil, err
@@ -206,7 +219,13 @@ func (s *Server) handleIncomingCalls(ctx context.Context, docs *docstore.View, p
 	return out, nil
 }
 
-func (s *Server) handleOutgoingCalls(_ context.Context, docs *docstore.View, p lsp.CallHierarchyCallsParams) (any, error) {
+func (s *Server) handleOutgoingCalls(ctx context.Context, docs *docstore.View, p lsp.CallHierarchyCallsParams) (any, error) {
+	if g, sym, ok, err := s.nativeCallItem(ctx, docs, p.Item); ok || err != nil {
+		if err != nil {
+			return nil, err
+		}
+		return s.nativeCalls(docs, g.Outgoing(sym), false)
+	}
 	item, err := s.callItemFromLSP(docs, p.Item)
 	if err != nil {
 		return nil, err

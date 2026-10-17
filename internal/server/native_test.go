@@ -423,3 +423,34 @@ func TestEditingAnImportedFileRepublishesTheImporter(t *testing.T) {
 	p.c.notify("textDocument/didChange", `{"textDocument": {"uri": "`+p.uri("ci.just")+`", "version": 2}, "contentChanges": [{"text": "publish:\n    echo published\n"}]}`)
 	p.c.awaitNotification("textDocument/publishDiagnostics", unknown)
 }
+
+func TestJustfileCallHierarchy(t *testing.T) {
+	t.Parallel()
+
+	files := map[string]string{"justfile": "build: compile\n    just test\n\ncompile:\n    cc main.c\n\ntest:\n    ./run\n"}
+	p := openNativeProject(t, nativeCapabilities, files, "justfile")
+	items := decodeResult[[]lsp.CallHierarchyItem](t, p.c.call("textDocument/prepareCallHierarchy", p.params("justfile", "build", 0, "")))
+	if len(items) != 1 || items[0].Name != "build" || items[0].SelectionRange != p.at("justfile", "build", 0).Range {
+		t.Fatalf("prepared items = %+v", items)
+	}
+	item, err := json.Marshal(items[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	outgoing := decodeResult[[]lsp.CallHierarchyOutgoingCall](t, p.c.call("callHierarchy/outgoingCalls", `{"item": `+string(item)+`}`))
+	var names []string
+	for _, c := range outgoing {
+		names = append(names, c.To.Name)
+	}
+	if !slices.Equal(names, []string{"compile", "test"}) || outgoing[1].FromRanges[0] != p.at("justfile", "test", 0).Range {
+		t.Errorf("outgoing calls = %+v", outgoing)
+	}
+	callee, err := json.Marshal(outgoing[0].To)
+	if err != nil {
+		t.Fatal(err)
+	}
+	incoming := decodeResult[[]lsp.CallHierarchyIncomingCall](t, p.c.call("callHierarchy/incomingCalls", `{"item": `+string(callee)+`}`))
+	if len(incoming) != 1 || incoming[0].From.Name != "build" || incoming[0].FromRanges[0] != p.at("justfile", "compile", 0).Range {
+		t.Errorf("incoming calls of compile = %+v", incoming)
+	}
+}

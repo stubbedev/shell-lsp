@@ -556,6 +556,10 @@ for these files.
   `{{just_executable()}} recipe`, `make target` and `$(MAKE) target` lines
   are references to the recipe or target they run, unless they name another
   file with `-f`, `-C` or `-d`.
+- **Call hierarchy.** From a recipe or target, incoming calls are the recipes
+  and targets that depend on it or run it with `just` or `$(MAKE)` in their
+  body, and outgoing calls are its dependencies and the recipes and targets
+  its body runs.
 - **Completion and hover** for recipe and target names, variables,
   parameters, settings, attributes, built-in functions, constants, automatic
   variables and special targets, with what each one does.
