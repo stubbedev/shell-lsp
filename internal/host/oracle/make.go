@@ -25,8 +25,10 @@ func BoundedMake(ctx context.Context, args ...string) *exec.Cmd {
 
 func Exhausted(ctx context.Context, stderr string, err error) bool {
 	var exit *exec.ExitError
-	signaled := errors.As(err, &exit) && exit.ExitCode() < 0
-	return ctx.Err() != nil || signaled || err != nil && strings.TrimSpace(stderr) == "" || strings.Contains(stderr, "memory exhausted") || strings.Contains(stderr, "Cannot allocate memory")
+	failed := errors.As(err, &exit)
+	signaled := failed && exit.ExitCode() < 0
+	silent := failed && exit.ExitCode() > 1 && strings.TrimSpace(stderr) == ""
+	return ctx.Err() != nil || signaled || silent || strings.Contains(stderr, "memory exhausted") || strings.Contains(stderr, "Cannot allocate memory")
 }
 
 func MakeFailure(stderr, file string) (Verdict, bool) {
