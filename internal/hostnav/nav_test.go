@@ -95,6 +95,7 @@ func (tr *tree) describe(occs []Occurrence) []string {
 	out := make([]string, len(occs))
 	for i, o := range occs {
 		name, _ := filepath.Rel(tr.dir, o.File.Path)
+		name = filepath.ToSlash(name)
 		text := o.File.Doc.Source().Text()
 		line := strings.Count(text[:o.Span.Start], "\n") + 1
 		out[i] = fmt.Sprintf("%s:%d:%s", name, line, text[o.Span.Start:o.Span.End])
@@ -142,7 +143,7 @@ func linkTargets(tr *tree, g *Group) []string {
 	var out []string
 	for _, l := range g.Links() {
 		rel, _ := filepath.Rel(tr.dir, l.Target.Path)
-		out = append(out, rel)
+		out = append(out, filepath.ToSlash(rel))
 	}
 	return out
 }
