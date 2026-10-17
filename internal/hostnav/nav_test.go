@@ -426,3 +426,23 @@ func TestFragmentsNobodyIncludesAreIncomplete(t *testing.T) {
 	expectStrings(t, "findings of an imported justfile", codes("shared.just"), []string{"SL5003"})
 	expectStrings(t, "findings of a justfile nothing imports", codes("modules/orphan.just"), nil)
 }
+
+func TestExportedVariablesExpandWhenARecipeRuns(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		makefile string
+		want     []string
+	}{
+		{"V = $V\nexport V\n", nil},
+		{"V = $V\nexport V\nall:\n\t@true\n", []string{"SL6007"}},
+		{"V = $V\n.EXPORT_ALL_VARIABLES:\nall:\n\t@true\n", []string{"SL6007"}},
+	} {
+		tr := newTree(t, map[string]string{"Makefile": tt.makefile})
+		var codes []string
+		for _, f := range tr.group("Makefile").Findings() {
+			codes = append(codes, f.Code.String())
+		}
+		expectStrings(t, "findings of "+tt.makefile, codes, tt.want)
+	}
+}

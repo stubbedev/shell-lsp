@@ -270,7 +270,7 @@ func makeTargets(t *testing.T, dir string, vars []string) []string {
 			notTarget = true
 			continue
 		case files && !notTarget:
-			if m := databaseTarget.FindStringSubmatch(line); m != nil && m[1] != "Makefile" && !specialTarget.MatchString(m[1]) && !strings.Contains(m[1], "=") && !strings.HasPrefix(m[1], "-") {
+			if m := databaseTarget.FindStringSubmatch(line); m != nil && m[1] != "Makefile" && !specialTarget.MatchString(m[1]) && !strings.Contains(m[1], "=") {
 				targets = append(targets, m[1])
 			}
 		}
@@ -343,7 +343,7 @@ func makeVerdict(t *testing.T, text string, vars ...string) oracle.Verdict {
 	if err := os.WriteFile(filepath.Join(dir, "Makefile"), []byte(text), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	goals := append(slices.Clone(vars), makeTargets(t, dir, vars)...)
+	goals := slices.Concat(vars, []string{"--"}, makeTargets(t, dir, vars))
 	cmd := exec.CommandContext(t.Context(), "make", append([]string{"--dry-run", "--no-print-directory", "-f", "Makefile"}, goals...)...) //nolint:gosec // G204: the goals are names make itself listed
 	cmd.Dir = dir
 	cmd.Env = []string{"PATH=" + os.Getenv("PATH")}

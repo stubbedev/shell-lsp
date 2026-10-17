@@ -44,15 +44,16 @@ func Analyze(text string) Analysis {
 }
 
 type indexer struct {
-	f          *File
-	ix         *model.Index
-	scopes     map[string]model.Scope
-	exported   map[string]bool
-	dynamic    bool
-	arguments  []int
-	called     map[string]bool
-	redefined  []string
-	overridden map[*Rule]bool
+	f            *File
+	ix           *model.Index
+	scopes       map[string]model.Scope
+	exported     map[string]bool
+	dynamic      bool
+	arguments    []int
+	called       map[string]bool
+	redefined    []string
+	overridden   map[*Rule]bool
+	usedPatterns map[*Rule]bool
 }
 
 func (f *File) exported() []string {
@@ -107,7 +108,7 @@ func (f *File) Index(shell bool) *model.Index {
 		return e.Kind != ErrUnterminated && e.Kind != ErrDeferredUnterminated && e.Kind != ErrPatternUnterminated && e.Kind != ErrPatternMismatch
 	})}
 	ix.Branches = f.alternatives()
-	in := &indexer{overridden: f.overridden(), f: f, ix: ix, scopes: map[string]model.Scope{}, exported: f.exportedNames(), called: map[string]bool{}}
+	in := &indexer{overridden: f.overridden(), usedPatterns: f.usedPatterns(), f: f, ix: ix, scopes: map[string]model.Scope{}, exported: f.exportedNames(), called: map[string]bool{}}
 	for _, a := range f.Assignments {
 		in.assignment(a)
 	}
@@ -353,7 +354,7 @@ func (in *indexer) assignment(a *Assignment) {
 		in.ix.Search = append(in.ix.Search, model.SearchPath{Dirs: searchDirs(value)})
 	}
 	in.token(a.Name.Span, semantic.TypeVariable, semantic.ModDeclaration)
-	edge := a.Deferred && len(a.Targets) == 0
+	edge := a.Deferred
 	in.walk(a.Name.Expr, model.Global, owner, false, nil)
 	in.walk(a.Value, scopes[0], owner, edge, nil)
 	in.redefined = nil
@@ -481,10 +482,10 @@ func (in *indexer) rule(r *Rule, shell bool) {
 		in.ix.Runnables = append(in.ix.Runnables, model.Runnable{Name: t.Text, Span: t.Span})
 	}
 	for _, w := range r.Patterns {
-		in.walk(w.Expr, scope, owner, false, nil)
+		in.walk(w.Expr, model.Global, owner, false, nil)
 	}
 	for _, w := range slices.Concat(r.Prereqs, r.OrderOnly) {
-		in.walk(w.Expr, scope, owner, false, nil)
+		in.walk(w.Expr, model.Global, owner, false, nil)
 		if literal(w) && phony {
 			in.ix.Phony = append(in.ix.Phony, w.Text)
 		}
@@ -499,6 +500,7 @@ func (in *indexer) rule(r *Rule, shell bool) {
 	if owner != model.NoSymbol && slices.Contains(standardTargets, in.ix.Symbols[owner].Name) && !in.namesTarget(r) {
 		in.ix.Fileless = append(in.ix.Fileless, owner)
 	}
+	in.ix.Recipes = true
 	body := Span{Start: r.Recipe[0].Span.Start, End: r.Recipe[len(r.Recipe)-1].Span.End}
 	if shell {
 		in.ix.Shells = append(in.ix.Shells, model.Shell{Span: body, Scope: scope})
@@ -514,7 +516,7 @@ func (in *indexer) rule(r *Rule, shell bool) {
 		in.walk(l.Expr, scope, owner, false, nil)
 		for j := first; j < len(in.ix.Refs); j++ {
 			in.ix.Refs[j].Late = true
-			in.ix.Refs[j].Edge = r.Pattern()
+			in.ix.Refs[j].Edge = r.Pattern() && !in.usedPatterns[r]
 			in.ix.Refs[j].Inert = in.overridden[r]
 		}
 	}
@@ -578,7 +580,7 @@ func (in *indexer) directive(d *Directive) {
 	}
 	for _, n := range d.Names {
 		if literal(n) {
-			in.ix.Refs = append(in.ix.Refs, model.Ref{Name: n.Text, Kind: model.KindVariable, Span: n.Span, Args: model.NoArgs, Owner: model.NoSymbol, Soft: true})
+			in.ix.Refs = append(in.ix.Refs, model.Ref{Name: n.Text, Kind: model.KindVariable, Span: n.Span, Args: model.NoArgs, Owner: model.NoSymbol, Soft: true, Declares: true})
 			in.token(n.Span, semantic.TypeVariable, 0)
 			continue
 		}

@@ -100,13 +100,6 @@ func (p exprParser) parse(start, end int) Expr {
 	return e
 }
 
-func (p exprParser) closing(open, end int) int { return closingOf(p.text, open, end) }
-
-func closingOf(text string, open, end int) int {
-	closing, _ := closingWith(text, open, end)
-	return closing
-}
-
 func closingWith(text string, open, end int) (int, bool) {
 	openByte := text[open]
 	closeByte := byte(')')
@@ -231,10 +224,6 @@ func (p exprParser) topLevel(start, end int, stop, open byte) int {
 	depth := 0
 	for i := start; i < end; i++ {
 		switch c := p.text[i]; {
-		case c == '$' && i+1 < end && (p.text[i+1] == '(' || p.text[i+1] == '{'):
-			if closing := p.closing(i+1, end); closing >= 0 {
-				i = closing
-			}
 		case c == open:
 			depth++
 		case c == closer:

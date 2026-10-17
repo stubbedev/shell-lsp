@@ -54,7 +54,24 @@ func (f *File) inReplacedRecipe(replaced map[*Rule]bool, at Span) bool {
 
 func (f *File) patternUsed(at Span) (string, bool) {
 	i := slices.IndexFunc(f.Rules, func(r *Rule) bool { return r.Span.Start <= at.Start && at.End <= r.Span.End })
-	if i < 0 || len(f.Rules[i].Prereqs) > 0 || len(f.Rules[i].OrderOnly) > 0 {
+	if i < 0 {
+		return "", false
+	}
+	return f.usedPattern(i)
+}
+
+func (f *File) usedPatterns() map[*Rule]bool {
+	out := map[*Rule]bool{}
+	for i, r := range f.Rules {
+		if _, used := f.usedPattern(i); used {
+			out[r] = true
+		}
+	}
+	return out
+}
+
+func (f *File) usedPattern(i int) (string, bool) {
+	if !f.Rules[i].Pattern() || len(f.Rules[i].Prereqs) > 0 || len(f.Rules[i].OrderOnly) > 0 || f.redefinedPattern(i) {
 		return "", false
 	}
 	for _, name := range f.recipeless() {
@@ -67,6 +84,20 @@ func (f *File) patternUsed(at Span) (string, bool) {
 	return "", false
 }
 
+func (f *File) redefinedPattern(i int) bool {
+	texts := func(ws []Word) []string {
+		out := make([]string, len(ws))
+		for k, w := range ws {
+			out[k] = w.Text
+		}
+		return out
+	}
+	r := f.Rules[i]
+	return slices.ContainsFunc(f.Rules[i+1:], func(later *Rule) bool {
+		return later.Pattern() && slices.Equal(texts(later.Targets), texts(r.Targets)) && slices.Equal(texts(later.Prereqs), texts(r.Prereqs))
+	})
+}
+
 func (f *File) recipeless() []string {
 	var out []string
 	for _, r := range f.Rules {
@@ -74,7 +105,7 @@ func (f *File) recipeless() []string {
 			continue
 		}
 		for _, t := range r.Targets {
-			if _, special := specialTargets[t.Text]; !special && literal(t) {
+			if !strings.HasPrefix(t.Text, ".") && literal(t) {
 				out = append(out, t.Text)
 			}
 		}

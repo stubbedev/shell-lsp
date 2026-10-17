@@ -28,6 +28,7 @@ var (
 	directives   = []string{"include", "-include", "sinclude", "vpath", "undefine", "unexport", "export", "load", "-load"}
 	assignOps    = []string{":::=", "::=", ":=", "+=", "?=", "!=", "="}
 	recursiveOps = []string{"=", "?=", ""}
+	simpleOps    = []string{"=", ":=", "::=", ":::="}
 )
 
 const patternUse = "; make fails when it uses this pattern rule"
@@ -181,7 +182,7 @@ func (p *reader) parse() {
 			p.fail(ErrSyntax, r.Header, "grouped targets `&:` need a recipe")
 		}
 		for _, t := range r.Targets {
-			if t.Expr.Dynamic() {
+			if t.Expr.Dynamic() || hasPercent(t.Text) {
 				continue
 			}
 			if prior, ok := colons[t.Text]; ok && prior.DoubleColon != r.DoubleColon {
@@ -221,7 +222,7 @@ func (p *reader) logicalEnd(start int) int {
 }
 
 func (p *reader) defineBody(start, end int, line string) {
-	word := firstWord(strings.TrimLeft(line, " \t"))
+	word := firstWord(skipContinued(line))
 	switch word {
 	case "endef":
 		if p.defining.depth > 0 {
@@ -398,15 +399,46 @@ func (p *reader) resolvedName(e Expr) (string, bool) {
 }
 
 func (p *reader) emptyReference(n Node) bool {
+	value, ok := p.constant(n)
+	return ok && blankText(value)
+}
+
+func (p *reader) constant(n Node) (string, bool) {
 	name, ok := p.resolvedName(n.Name)
 	if n.Kind != NodeReference || n.Unbalanced || !ok || n.Braced && strings.ContainsAny(name, "(){}") {
-		return false
+		return "", false
 	}
-	name = strings.TrimSpace(name)
 	if _, builtin := Builtins.Lookup(model.KindVariable, name); builtin && !automatic(name) {
-		return false
+		return "", false
 	}
-	return !slices.ContainsFunc(p.file.Assignments, func(a *Assignment) bool { return a.Name.Text == name })
+	value := ""
+	for _, a := range p.file.Assignments {
+		if a.Name.Text != name {
+			continue
+		}
+		literal, ok := a.Value.Literal(p.text)
+		if !ok || len(a.Targets) > 0 || a.Define || !slices.Contains(simpleOps, a.Op) {
+			return "", false
+		}
+		value = literal
+	}
+	return value, true
+}
+
+func (p *reader) constantText(e Expr) (string, bool) {
+	var sb strings.Builder
+	for _, n := range e.Nodes {
+		if n.Kind == NodeText {
+			sb.WriteString(p.text[n.Span.Start:n.Span.End])
+			continue
+		}
+		value, ok := p.constant(n)
+		if !ok {
+			return "", false
+		}
+		sb.WriteString(value)
+	}
+	return sb.String(), true
 }
 
 func (p *reader) spaced(e Expr) bool {
@@ -636,6 +668,10 @@ func (p *reader) fields(at int, s string) []Word {
 		}
 		end := i
 		for end < len(s) && strings.IndexByte(whitespace+"\n\r", s[end]) < 0 && !continuation(s, end) {
+			if s[end] == '\\' && end+1 < len(s) && (s[end+1] == ' ' || s[end+1] == '\t') {
+				end += 2
+				continue
+			}
 			if s[end] == '$' {
 				end = referenceEnd(s, end, len(s))
 				continue
@@ -650,11 +686,11 @@ func (p *reader) fields(at int, s string) []Word {
 
 func (p *reader) ruleLine(s string, colon, at, end int, line Span) {
 	if semicolon := topLevel(s, 0, ";"); semicolon < colon {
-		_, literal := p.literalText(p.expr(at, at+semicolon))
+		text, known := p.constantText(p.expr(at, at+semicolon))
 		switch {
 		case blankText(s[:semicolon]):
 			p.fail(ErrSyntax, line, "missing rule before recipe: the `;` that starts a recipe has no rule before it")
-		case literal:
+		case known && !blankText(text):
 			p.fail(ErrSyntax, line, "missing separator: a `;` comes before the rule's `:`")
 		}
 		return
@@ -736,7 +772,7 @@ func (p *reader) parseRule(s string, colon, at, end int) {
 		rule.Prereqs = p.fields(depsAt, deps)
 	}
 	for _, w := range slices.Concat(targets, rule.Prereqs, rule.OrderOnly) {
-		if symbol := strings.Index(w.Text, "(("); symbol >= 0 && (symbol > 0 || !rule.Pattern()) && strings.HasSuffix(w.Text, "))") && literal(w) {
+		if symbol := strings.Index(w.Text, "(("); symbol > 0 && !strings.Contains(w.Text[:symbol], "(") && strings.HasSuffix(w.Text, "))") && !w.Expr.Dynamic() {
 			p.fail(ErrSyntax, w.Span, fmt.Sprintf("make does not support archive symbols such as `%s`; name the member as `archive(member.o)`", w.Text))
 		}
 	}
@@ -924,6 +960,9 @@ func operator(s string) (int, bool) {
 func commentStart(s string) int {
 	for i := 0; i < len(s); i++ {
 		switch {
+		case strings.HasPrefix(s[i:], "$$"):
+			i++
+			continue
 		case s[i] == '$' && i+1 < len(s) && (s[i+1] == '(' || s[i+1] == '{'):
 			if j := balanced(s, i+1, len(s), func(j int) bool { return s[j] == s[i+1] }, map[byte]byte{'(': ')', '{': '}'}[s[i+1]]); j >= 0 {
 				i = j

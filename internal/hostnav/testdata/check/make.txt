@@ -310,6 +310,75 @@ stray
 P = lib
 $(P)_FLAGS = -O2
 all: ; @echo $(lib_FLAGS)
+-- recursion-through-a-later-immediate-assignment --
+V = $V
+V := $V0
+all: ; @:
+-- immediate-assignment-reads-the-definition-before-it --
+V = x
+V := $(V) y
+all: ; @echo $(V)
+-- pattern-rules-mix-single-and-double-colons --
+%.o::
+%.o:
+all: ; @:
+-- comma-inside-a-brace-reference-splits-a-call --
+all: ; @echo $(subst ${,},,)
+-- cancelled-pattern-rule --
+%:
+	echo $(
+%:
+all:
+-- archive-symbol-with-a-stem --
+%: %.a((sym))
+-- define-body-ending-in-a-backslash --
+define BODY
+x \
+endef
+all: ; @:
+-- continuation-before-endef --
+define BODY
+\
+endef
+all: ; @echo $(BODY)
+-- prerequisites-expand-without-target-variables --
+DEP = global.c
+app: DEP = scoped.c
+app: $(DEP)
+	@echo $(DEP)
+global.c: ; @:
+-- text-after-an-empty-variable-before-a-semicolon --
+P =
+$(P)0;:
+-- comment-after-an-escaped-dollar --
+X = $$(# not a reference
+all: ; @echo '$(X)'
+-- unused-target-variable-refers-to-a-recursive-one --
+V = $V
+app: W = $V
+app: ; @:
+-- used-target-variable-refers-to-a-recursive-one --
+V = $V
+app: W = $V
+app: ; @echo $W
+-- constant-text-before-a-semicolon --
+P = 0
+$(P);:
+-- spaced-reference-before-a-semicolon --
+P = 0
+$( P);:
+-- unused-pattern-recipe-calls-a-function-badly --
+%.o: ; @echo $(subst x)
+all: ; @:
+-- used-match-anything-recipe-calls-a-function-badly --
+%: ; @echo $(subst x)
+all:
+-- escaped-space-in-a-target-pattern --
+a\ b.o: a\ %.o: %.c
+	@:
+-- exported-recursive-variable-without-recipes --
+V = $V
+export V
 -- simple-self-reference --
 X := a
 X := $(X) b

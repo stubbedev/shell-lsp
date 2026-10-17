@@ -108,7 +108,7 @@ type moment struct {
 var whenever = moment{file: -1}
 
 func (t Target) before(at moment) bool {
-	return at == whenever || t.File != at.file || t.Info().Span.Start < at.offset
+	return at == whenever || t.File != at.file || t.Info().Span.End <= at.offset
 }
 
 func effective(targets []Target, at moment) []Target {
@@ -136,8 +136,8 @@ func effective(targets []Target, at moment) []Target {
 	return out
 }
 
-func (m *Module) expanded() Usage {
-	out := Usage{}
+func (m *Module) expansions() map[Target][]moment {
+	out := map[Target][]moment{}
 	seen := map[Target]moment{}
 	type visit struct {
 		target Target
@@ -151,12 +151,12 @@ func (m *Module) expanded() Usage {
 		if prior, ok := seen[t]; ok && (prior == whenever || at != whenever && prior.offset >= at.offset) {
 			return
 		}
-		seen[t], out[t] = at, true
+		seen[t], out[t] = at, append(out[t], at)
 		queue = append(queue, visit{t, at})
 	}
 	for f, ix := range m.Files {
 		for _, r := range ix.Refs {
-			if r.Edge || r.Inert {
+			if r.Edge || r.Inert || r.Declares {
 				continue
 			}
 			at := moment{file: f, offset: r.Span.Start}
@@ -165,6 +165,15 @@ func (m *Module) expanded() Usage {
 			}
 			for _, t := range effective(m.Resolve(f, r).Targets, at) {
 				mark(t, at)
+			}
+		}
+	}
+	if slices.ContainsFunc(m.Files, func(ix *Index) bool { return ix.Recipes }) {
+		for f, ix := range m.Files {
+			for i, sym := range ix.Symbols {
+				if sym.Exported || ix.ExportAll && sym.Kind == KindVariable {
+					mark(Target{Module: m, File: f, Symbol: i}, whenever)
+				}
 			}
 		}
 	}
@@ -200,10 +209,17 @@ func (m *Module) opaque() bool {
 func (m *Module) Findings(file int, checks Checks, used Usage) []lint.Finding {
 	ix := m.Files[file]
 	certain := m.Complete && !m.Broken() && !m.opaque()
-	expanded := m.expanded()
+	expansions := m.expansions()
+	expanded := Usage{}
+	for t := range expansions {
+		expanded[t] = true
+	}
 	dormant := func(r Ref) bool {
-		if !r.Edge || r.Owner < 0 {
+		if !r.Edge {
 			return false
+		}
+		if r.Owner < 0 {
+			return true
 		}
 		owner := ix.Symbols[r.Owner]
 		return checks.Of(owner.Kind).Expanded == OnUse && !expanded[Target{Module: m, File: file, Symbol: r.Owner}]
@@ -227,7 +243,7 @@ func (m *Module) Findings(file int, checks Checks, used Usage) []lint.Finding {
 			out = append(out, arity(checks, r, s.Kind, s.Arity)...)
 		}
 	}
-	out = append(out, m.cycles(file, checks, expanded)...)
+	out = append(out, m.cycles(file, checks, expansions)...)
 	if checks.Absent != 0 {
 		out = append(out, m.absent(file, checks.Absent)...)
 	}
@@ -287,7 +303,7 @@ type edge struct {
 	ref Ref
 }
 
-func (m *Module) edges(n node) []edge {
+func (m *Module) edges(n node, at moment) []edge {
 	var out []edge
 	ix := m.Files[n.file]
 	for _, i := range ix.edgesOf(n.symbol) {
@@ -295,7 +311,7 @@ func (m *Module) edges(n node) []edge {
 		if r.Qualified() {
 			continue
 		}
-		for _, t := range m.Resolve(n.file, r).Targets {
+		for _, t := range effective(m.Resolve(n.file, r).Targets, at) {
 			if t.Module == m && (t.File != n.file || !ix.Branches.Exclusive(r.Span.Start, ix.Symbols[t.Symbol].Span.Start)) {
 				out = append(out, edge{node{t.File, t.Symbol}, r})
 			}
@@ -304,20 +320,20 @@ func (m *Module) edges(n node) []edge {
 	return out
 }
 
-func (m *Module) cycles(file int, checks Checks, expanded Usage) []lint.Finding {
+func (m *Module) cycles(file int, checks Checks, expansions map[Target][]moment) []lint.Finding {
 	var out []lint.Finding
 	for i, s := range m.Files[file].Symbols {
 		rules := checks.Of(s.Kind)
 		code := rules.Circular
-		if code == 0 || rules.Expanded == OnUse && !expanded[Target{Module: m, File: file, Symbol: i}] {
+		moments := []moment{whenever}
+		if rules.Expanded == OnUse {
+			moments = expansions[Target{Module: m, File: file, Symbol: i}]
+		}
+		if code == 0 {
 			continue
 		}
 		start := node{file, i}
-		for _, e := range m.edges(start) {
-			path, found := m.pathBack(e.to, start, map[node]bool{})
-			if !found {
-				continue
-			}
+		if e, path, found := m.cycle(start, moments); found {
 			names := []string{s.Name}
 			for _, n := range path {
 				names = append(names, m.Files[n.file].Symbols[n.symbol].Name)
@@ -327,13 +343,23 @@ func (m *Module) cycles(file int, checks Checks, expanded Usage) []lint.Finding 
 				message = fmt.Sprintf("%s `%s` is circular: `%s`", s.Kind, s.Name, strings.Join(names, " -> "))
 			}
 			out = append(out, lint.HostFinding(code, e.ref.Span, message))
-			break
 		}
 	}
 	return out
 }
 
-func (m *Module) pathBack(from, goal node, seen map[node]bool) ([]node, bool) {
+func (m *Module) cycle(start node, moments []moment) (edge, []node, bool) {
+	for _, at := range moments {
+		for _, e := range m.edges(start, at) {
+			if path, found := m.pathBack(e.to, start, map[node]bool{}, at); found {
+				return e, path, true
+			}
+		}
+	}
+	return edge{}, nil, false
+}
+
+func (m *Module) pathBack(from, goal node, seen map[node]bool, at moment) ([]node, bool) {
 	if from == goal {
 		return []node{goal}, true
 	}
@@ -341,8 +367,8 @@ func (m *Module) pathBack(from, goal node, seen map[node]bool) ([]node, bool) {
 		return nil, false
 	}
 	seen[from] = true
-	for _, e := range m.edges(from) {
-		if rest, ok := m.pathBack(e.to, goal, seen); ok {
+	for _, e := range m.edges(from, at) {
+		if rest, ok := m.pathBack(e.to, goal, seen, at); ok {
 			return append([]node{from}, rest...), true
 		}
 	}

@@ -201,6 +201,54 @@ rejected 1:1 missing separator
 1:1 SL6001 error missing separator: this line is no rule, assignment or directive
 -- computed-variable-name --
 accepted
+-- recursion-through-a-later-immediate-assignment --
+rejected 1:1 Recursive variable 'V' references itself (eventually)
+1:6 SL6007 error variable `V` depends on itself
+-- immediate-assignment-reads-the-definition-before-it --
+accepted
+-- pattern-rules-mix-single-and-double-colons --
+accepted
+-- comma-inside-a-brace-reference-splits-a-call --
+rejected 1:1 unterminated variable reference
+1:22 SL6012 error this variable reference is not closed on the same logical line
+-- cancelled-pattern-rule --
+accepted
+2:7 SL6015 warning this variable reference is not closed on the same logical line; make fails when it uses this pattern rule
+-- archive-symbol-with-a-stem --
+rejected 0:0 make: *** attempt to use unsupported feature: '%.a((sym))'.  Stop.
+1:4 SL6001 error make does not support archive symbols such as `%.a((sym))`; name the member as `archive(member.o)`
+-- define-body-ending-in-a-backslash --
+rejected 1:1 missing 'endef', unterminated 'define'
+1:8 SL6003 error `define BODY` has no `endef`
+-- continuation-before-endef --
+accepted
+-- prerequisites-expand-without-target-variables --
+accepted
+-- text-after-an-empty-variable-before-a-semicolon --
+rejected 2:1 missing separator
+2:1 SL6001 error missing separator: a `;` comes before the rule's `:`
+-- comment-after-an-escaped-dollar --
+accepted
+-- unused-target-variable-refers-to-a-recursive-one --
+accepted
+-- used-target-variable-refers-to-a-recursive-one --
+rejected 1:1 Recursive variable 'V' references itself (eventually)
+1:6 SL6007 error variable `V` depends on itself
+-- constant-text-before-a-semicolon --
+rejected 2:1 missing separator
+2:1 SL6001 error missing separator: a `;` comes before the rule's `:`
+-- spaced-reference-before-a-semicolon --
+accepted
+1:1 SL6014 info variable `P` is never used
+-- unused-pattern-recipe-calls-a-function-badly --
+accepted
+-- used-match-anything-recipe-calls-a-function-badly --
+rejected 1:1 insufficient number of arguments (1) to function 'subst'
+1:14 SL6011 error function `subst` takes at least 3 arguments but is given 1
+-- escaped-space-in-a-target-pattern --
+inconclusive: make stopped before it expanded every recipe: *** No rule to make target
+-- exported-recursive-variable-without-recipes --
+accepted
 -- simple-self-reference --
 accepted
 -- append --

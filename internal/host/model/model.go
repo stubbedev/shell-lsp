@@ -248,6 +248,7 @@ type Index struct {
 	ExportAll bool
 	Broken    bool
 	Opaque    bool
+	Recipes   bool
 	Phony     []string
 	Fileless  []int
 	Search    []SearchPath

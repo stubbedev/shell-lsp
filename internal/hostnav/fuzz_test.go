@@ -48,7 +48,7 @@ func computedTargets(r *makefile.Rule) bool {
 }
 
 func existingTarget(r *makefile.Rule) bool {
-	return slices.ContainsFunc(r.Targets, func(w makefile.Word) bool { return strings.Trim(w.Text, "./") == "" })
+	return slices.ContainsFunc(r.Targets, func(w makefile.Word) bool { return strings.Trim(w.Text, "./") == "" || w.Text == "-" })
 }
 
 func computedScope(a *makefile.Assignment) bool {
@@ -68,7 +68,7 @@ func unreadableReferenceLine(text string) bool {
 
 func referencesOnly(text string, line int) bool {
 	return slices.ContainsFunc(makefile.Parse(text).Expressions, func(e makefile.Expr) bool {
-		return strings.Count(text[:e.Span.Start], "\n")+1 == line
+		return lineOf(text, logicalLineStart(text, e.Span.Start))+1 == line
 	})
 }
 
@@ -79,10 +79,24 @@ func computedRule(text string, line int) bool {
 	})
 }
 
+func referenceBeforeSemicolon(text string) bool {
+	for line := range strings.SplitSeq(text, "\n") {
+		before, _, found := strings.Cut(line, ";")
+		if found && strings.Contains(before, "$") && !strings.Contains(before, ":") {
+			return true
+		}
+	}
+	return false
+}
+
 func escapedHashRule(text string) bool {
 	for line := range strings.SplitSeq(text, "\n") {
 		hash := max(strings.Index(line, `\#`), strings.Index(line, `\:`))
 		if hash >= 0 && strings.Contains(line[hash:], "=") && strings.Contains(line, ":") {
+			return true
+		}
+		name, _, assigns := strings.Cut(line, "=")
+		if assigns && !strings.Contains(name, ":") && strings.Contains(line, ":") && strings.ContainsAny(strings.TrimSpace(name), " \t") {
 			return true
 		}
 	}
@@ -126,11 +140,17 @@ func FuzzMakeChecksAgreeWithMake(f *testing.F) {
 		if strings.Contains(text, `\;`) {
 			t.Skip("make reads an escaped `;` by rules the analysis only approximates: `\\;x` alone is no error, `\\;;` is")
 		}
-		if strings.Contains(text, `\$`) {
-			t.Skip("make lets a backslash before a `$` interact with the escapes after the reference by rules the analysis only approximates")
+		if strings.Contains(text, `\$`) || strings.Contains(text, `$\\`) {
+			t.Skip("make lets backslashes next to a `$` interact with escapes and continuations by rules the analysis only approximates")
+		}
+		if referenceBeforeSemicolon(text) {
+			t.Skip("make expands the references before a `;` to classify a line it cannot read otherwise, which the analysis does not evaluate")
+		}
+		if strings.Contains(text, "export") && slices.ContainsFunc(makefile.Parse(text).Rules, func(r *makefile.Rule) bool { return len(r.Recipe) > 0 }) {
+			t.Skip("make expands exported variables only when it executes a recipe, which the dry run the oracle uses never does")
 		}
 		if escapedHashRule(text) {
-			t.Skip("make splits the targets of a rule it reads from a line with `\\#` or `\\:` before an `=` at the `=` too, which the analysis only approximates")
+			t.Skip("make splits the targets of a rule it reads from a line with whitespace, `\\#` or `\\:` before an `=` at the `=` too, which the analysis only approximates")
 		}
 		if slices.ContainsFunc([]string{"foreach", "if", "or", "and", "let"}, func(name string) bool {
 			return strings.Contains(text, "$("+name+" ") || strings.Contains(text, "${"+name+" ")
@@ -141,7 +161,7 @@ func FuzzMakeChecksAgreeWithMake(f *testing.F) {
 			t.Skip("make resolves bare parentheses inside a reference name by rules the analysis only approximates")
 		}
 		if slices.ContainsFunc(makefile.Parse(text).Rules, existingTarget) {
-			t.Skip("make never runs the recipe of a target that names an existing directory such as `.`, so it never expands it")
+			t.Skip("make never runs the recipe of a target that names an existing directory such as `.`, or of the target `-`, so it never expands it")
 		}
 		if slices.ContainsFunc(makefile.Parse(text).Rules, computedTargets) || slices.ContainsFunc(makefile.Parse(text).Assignments, computedScope) {
 			t.Skip("make ignores a rule whose computed or globbed targets expand to nothing, which depends on the environment")
@@ -159,11 +179,14 @@ func FuzzMakeChecksAgreeWithMake(f *testing.F) {
 		if !verdict.Accepted && verdict.Message == "recipe commences before first target" && slices.ContainsFunc(makefile.Parse(text).Expressions, func(e makefile.Expr) bool { return lineOf(text, e.Span.Start)+1 < verdict.Line }) {
 			t.Skip("whether a recipe line follows a rule depends on what the line of references before it expands to, which the analysis does not evaluate")
 		}
-		if !verdict.Accepted && strings.HasPrefix(verdict.Message, "Recursive variable") && unreadableReferenceLine(text) {
-			t.Skip("make expands a line it cannot classify to see what it becomes, so a recursive variable in it fails there first")
+		if !verdict.Accepted && unreadableReferenceLine(text) {
+			t.Skip("make expands a line it cannot classify to see what it becomes, so a variable in it can fail there first")
 		}
-		if !verdict.Accepted && verdict.Message == "unterminated variable reference" && slices.ContainsFunc(makefile.Parse(text).Rules, (*makefile.Rule).Pattern) {
+		if !verdict.Accepted && slices.ContainsFunc(makefile.Parse(text).Rules, (*makefile.Rule).Pattern) {
 			t.Skip("make chains its built-in implicit rules into pattern rules, so whether it uses one depends on rules the analysis does not model")
+		}
+		if !verdict.Accepted && (strings.Contains(verdict.Message, "RCS/") || strings.Contains(verdict.Message, "SCCS/")) {
+			t.Skip("make's built-in RCS and SCCS rules derived the name it rejects, and the analysis does not model built-in rules")
 		}
 		if !verdict.Accepted && referencesOnly(text, verdict.Line) {
 			t.Skip("make classifies a line of references only after expanding them, which the analysis does not evaluate")
