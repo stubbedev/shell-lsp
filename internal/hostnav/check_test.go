@@ -25,11 +25,20 @@ func groupFor(t *testing.T, ws *workspace.Workspace, path string, files navigati
 	if err != nil {
 		t.Fatal(err)
 	}
-	g, err := Build(context.Background(), file, Env{Loader: ws, Files: files})
+	g, err := Build(context.Background(), hostOf(t, file), Env{Loader: ws, Files: files})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return g
+}
+
+func hostOf(t *testing.T, file *workspace.File) Host {
+	t.Helper()
+	h, ok := Of(file)
+	if !ok {
+		t.Fatalf("%s is not a justfile or Makefile", file.Path)
+	}
+	return h
 }
 
 func writeTree(t *testing.T, files map[string]string) string {

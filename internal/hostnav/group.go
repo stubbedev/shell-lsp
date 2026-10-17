@@ -54,12 +54,23 @@ type resolvedInclude struct {
 	target  *workspace.File
 }
 
-func Native(file *workspace.File) bool { return file.Native != nil }
+type Host struct {
+	file *workspace.File
+}
 
-func Build(ctx context.Context, self *workspace.File, env Env) (*Group, error) {
-	if self.Native == nil {
-		panic("hostnav: " + self.URI + " has no native analysis")
+func Of(file *workspace.File) (Host, bool) {
+	if file.Native == nil {
+		return Host{}, false
 	}
+	return Host{file: file}, true
+}
+
+func (h Host) File() *workspace.File { return h.file }
+
+func (h Host) Language() host.Language { return h.file.Native.Language }
+
+func Build(ctx context.Context, h Host, env Env) (*Group, error) {
+	self := h.file
 	b := &builder{ctx: ctx, env: env, language: self.Native.Language, files: map[*model.Index]*workspace.File{}, byPath: map[string]*workspace.File{}, modules: map[string]*model.Module{}, resolved: map[string][]resolvedInclude{}}
 	self = b.canonical(self)
 	importers, parents, err := b.importers(self)

@@ -320,6 +320,21 @@ func (l twoCopies) LoadAs(path string, language host.Language) (*workspace.File,
 	return workspace.Parse(f.Path, f.Doc.Source(), nil, func(dialect.Input) dialect.Detection { return f.Detection }), nil
 }
 
+func TestOfAcceptsOnlyHostFiles(t *testing.T) {
+	t.Parallel()
+
+	tr := newTree(t, map[string]string{"justfile": "build:\n    echo hi\n", "run.sh": "echo hi\n"})
+	for name, want := range map[string]bool{"justfile": true, "run.sh": false} {
+		file, err := tr.ws.Load(tr.path(name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := Of(file); ok != want {
+			t.Errorf("Of(%s) = %v, want %v", name, ok, want)
+		}
+	}
+}
+
 func TestGroupsSurviveSeveralCopiesOfOneFile(t *testing.T) {
 	t.Parallel()
 
@@ -331,7 +346,7 @@ func TestGroupsSurviveSeveralCopiesOfOneFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	g, err := Build(context.Background(), self, Env{Loader: twoCopies{tr.ws}, Files: tr.all})
+	g, err := Build(context.Background(), hostOf(t, self), Env{Loader: twoCopies{tr.ws}, Files: tr.all})
 	if err != nil {
 		t.Fatal(err)
 	}

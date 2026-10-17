@@ -22,8 +22,8 @@ func (s *Server) referenceLocations(ctx context.Context, docs *docstore.View, po
 	if err != nil {
 		return nil, err
 	}
-	if here.Native != nil {
-		hit, err := s.nativeAt(ctx, docs, here, position.Position, inside)
+	if native, ok := nativeLocation(here, position.Position, inside); ok {
+		hit, err := s.nativeAt(ctx, docs, native)
 		if err != nil {
 			return nil, err
 		}
@@ -50,8 +50,8 @@ func (s *Server) handleDocumentHighlight(ctx context.Context, docs *docstore.Vie
 	if err != nil {
 		return nil, err
 	}
-	if here.Native != nil {
-		hit, err := s.nativeAt(ctx, docs, here, position.Position, inside)
+	if native, ok := nativeLocation(here, position.Position, inside); ok {
+		hit, err := s.nativeAt(ctx, docs, native)
 		if err != nil {
 			return nil, err
 		}
@@ -91,8 +91,8 @@ func (s *Server) handlePrepareRename(ctx context.Context, docs *docstore.View, p
 	if err != nil {
 		return nil, err
 	}
-	if here.Native != nil {
-		hit, err := s.nativeAt(ctx, docs, here, position.Position, inside)
+	if native, ok := nativeLocation(here, position.Position, inside); ok {
+		hit, err := s.nativeAt(ctx, docs, native)
 		if err != nil {
 			return nil, err
 		}
@@ -124,8 +124,8 @@ func (s *Server) handleRename(ctx context.Context, docs *docstore.View, renamePa
 	if err != nil {
 		return nil, err
 	}
-	if here.Native != nil {
-		hit, err := s.nativeAt(ctx, docs, here, renameParams.Position, inside)
+	if native, ok := nativeLocation(here, renameParams.Position, inside); ok {
+		hit, err := s.nativeAt(ctx, docs, native)
 		if err != nil {
 			return nil, err
 		}

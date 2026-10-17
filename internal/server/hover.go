@@ -43,8 +43,8 @@ func (s *Server) handleHover(ctx context.Context, docs *docstore.View, hoverPara
 	if err != nil {
 		return nil, err
 	}
-	if here.Native != nil {
-		if hover, handled, err := s.nativeHoverAt(ctx, docs, here, hoverParams.Position, inside); handled {
+	if native, ok := nativeLocation(here, hoverParams.Position, inside); ok {
+		if hover, handled, err := s.nativeHoverAt(ctx, docs, native); handled {
 			return hover, err
 		}
 	}

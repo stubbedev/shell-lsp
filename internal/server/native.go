@@ -46,17 +46,27 @@ func (s *Server) hostFiles(docs *docstore.View, language host.Language) navigati
 	}
 }
 
-func (s *Server) group(ctx context.Context, docs *docstore.View, file *workspace.File) (*hostnav.Group, error) {
-	return hostnav.Build(ctx, file, s.hostEnv(docs, file.Native.Language))
+func (s *Server) group(ctx context.Context, docs *docstore.View, h hostnav.Host) (*hostnav.Group, error) {
+	return hostnav.Build(ctx, h, s.hostEnv(docs, h.Language()))
 }
 
 func sourcePositions(file *workspace.File, enc docstore.Encoding) docstore.Positions {
 	return file.Doc.Source().Positions(enc)
 }
 
-func hostOffset(here located, pos lsp.Position) int {
-	offset, _ := sourcePositions(here.File, here.encoding).Offset(pos)
-	return offset
+type nativeHere struct {
+	located
+	host   hostnav.Host
+	source int
+	inside bool
+}
+
+func nativeLocation(here located, pos lsp.Position, inside bool) (nativeHere, bool) {
+	h, ok := hostnav.Of(here.File)
+	if !ok {
+		return nativeHere{}, false
+	}
+	return nativeHere{located: here, host: h, source: here.File.Doc.Source().PositionToOffset(pos, here.encoding), inside: inside}, true
 }
 
 type nativeHit struct {
@@ -65,17 +75,17 @@ type nativeHit struct {
 	found  bool
 }
 
-func (s *Server) nativeAt(ctx context.Context, docs *docstore.View, here located, pos lsp.Position, inside bool) (nativeHit, error) {
-	g, err := s.group(ctx, docs, here.File)
+func (s *Server) nativeAt(ctx context.Context, docs *docstore.View, here nativeHere) (nativeHit, error) {
+	g, err := s.group(ctx, docs, here.host)
 	if err != nil {
 		return nativeHit{}, err
 	}
 	hit := nativeHit{group: g}
-	if inside {
+	if here.inside {
 		hit.symbol, hit.found = g.ShellSymbol(here.offset)
 		return hit, nil
 	}
-	hit.symbol, hit.found = g.At(hostOffset(here, pos))
+	hit.symbol, hit.found = g.At(here.source)
 	return hit, nil
 }
 
@@ -95,15 +105,15 @@ func hostOccurrences(occs []hostnav.Occurrence, enc docstore.Encoding) []lsp.Loc
 	return out
 }
 
-func (s *Server) nativeDefinition(ctx context.Context, docs *docstore.View, here located, pos lsp.Position, inside bool) ([]lsp.Location, bool, error) {
-	if !inside {
-		g, err := s.group(ctx, docs, here.File)
+func (s *Server) nativeDefinition(ctx context.Context, docs *docstore.View, here nativeHere) ([]lsp.Location, bool, error) {
+	if !here.inside {
+		g, err := s.group(ctx, docs, here.host)
 		if err != nil {
 			return nil, true, err
 		}
-		return hostLocations(g.Definition(hostOffset(here, pos)), here.encoding), true, nil
+		return hostLocations(g.Definition(here.source), here.encoding), true, nil
 	}
-	hit, err := s.nativeAt(ctx, docs, here, pos, true)
+	hit, err := s.nativeAt(ctx, docs, here)
 	if err != nil || !hit.found {
 		return nil, err != nil, err
 	}
@@ -142,14 +152,14 @@ func nativeCompletionKind(kind model.Kind) lsp.CompletionItemKind {
 	panic(fmt.Sprintf("server: host kind %s has no LSP completion kind", kind))
 }
 
-func (s *Server) nativeCompletion(ctx context.Context, docs *docstore.View, here located, pos lsp.Position) (lsp.CompletionList, error) {
-	g, err := s.group(ctx, docs, here.File)
+func (s *Server) nativeCompletion(ctx context.Context, docs *docstore.View, here nativeHere) (lsp.CompletionList, error) {
+	g, err := s.group(ctx, docs, here.host)
 	if err != nil {
 		return lsp.CompletionList{}, err
 	}
 	at := sourcePositions(here.File, here.encoding)
 	items := []lsp.CompletionItem{}
-	for _, it := range g.Complete(hostOffset(here, pos)) {
+	for _, it := range g.Complete(here.source) {
 		item := lsp.CompletionItem{
 			Label:            it.Label,
 			Kind:             nativeCompletionKind(it.Kind),
@@ -237,36 +247,38 @@ func (s *Server) nativeHover(snap *snapshot, h hostnav.Hover) lsp.Hover {
 	return lsp.Hover{Contents: lsp.MarkupContent{Kind: s.hoverFormat(), Value: h.Markdown}, Range: &r}
 }
 
-func (s *Server) nativeHoverAt(ctx context.Context, docs *docstore.View, here located, pos lsp.Position, inside bool) (any, bool, error) {
-	g, err := s.group(ctx, docs, here.File)
+func (s *Server) nativeHoverAt(ctx context.Context, docs *docstore.View, here nativeHere) (any, bool, error) {
+	g, err := s.group(ctx, docs, here.host)
 	if err != nil {
 		return nil, true, err
 	}
-	if inside {
+	if here.inside {
 		sym, ok := g.ShellSymbol(here.offset)
 		if !ok {
 			return nil, false, nil
 		}
 		return s.nativeHover(here.snapshot, g.Describe(sym)), true, nil
 	}
-	h, ok := g.Hover(hostOffset(here, pos))
+	h, ok := g.Hover(here.source)
 	if !ok {
 		return nil, true, nil
 	}
 	return s.nativeHover(here.snapshot, h), true, nil
 }
 
-func (s *Server) nativeFindings(file *workspace.File, settings config.Settings) []lint.Finding {
+func (s *Server) nativeFindings(h hostnav.Host, settings config.Settings) []lint.Finding {
 	if !settings.Lint.Enabled {
 		return nil
 	}
-	g, err := s.group(context.Background(), s.docs.View(), file)
-	if err != nil {
-		s.logger.Warn("analysing the files around a host file", "uri", file.URI, "err", err)
-		return nil
+	file := h.File()
+	findings := file.Native.Index.Findings
+	if g, err := s.group(context.Background(), s.docs.View(), h); err == nil {
+		findings = g.Findings()
+	} else {
+		s.noticeOnce("hostnav:"+file.URI+":"+err.Error(), lsp.MessageWarning, "Checking "+file.Path+" on its own, without the files it includes: "+err.Error())
 	}
 	excluded := s.lintSettings(file.Path, settings).Excluded()
-	return slices.DeleteFunc(g.Findings(), func(f lint.Finding) bool { return excluded.Has(f.Code) })
+	return slices.DeleteFunc(slices.Clone(findings), func(f lint.Finding) bool { return excluded.Has(f.Code) })
 }
 
 const recipeTimeout = 30 * time.Minute

@@ -297,8 +297,8 @@ func (c *checker) lint(t target) linted {
 	env := c.navigationEnv(s.roots)
 	report := filelint.Check(file, env, s.lint)
 	findings := sourceFindings(file.Doc, c.filter(s.lint.Excluded(), append(syntaxFindings(file.Tree, s.lint.DialectSource(file)), report.Findings...)))
-	if file.Native != nil {
-		native, err := c.nativeFindings(file)
+	if h, ok := hostnav.Of(file); ok {
+		native, err := c.nativeFindings(h)
 		if err != nil {
 			return linted{failure: fmt.Sprintf("%s: %v", t.name, err)}
 		}
@@ -311,8 +311,8 @@ func (c *checker) lint(t target) linted {
 	}
 }
 
-func (c *checker) nativeFindings(file *workspace.File) ([]lint.Finding, error) {
-	g, err := hostnav.Build(context.Background(), file, hostnav.Env{Loader: c.ws, Home: c.env.Home, Files: c.hostFiles(file.Native.Language)})
+func (c *checker) nativeFindings(h hostnav.Host) ([]lint.Finding, error) {
+	g, err := hostnav.Build(context.Background(), h, hostnav.Env{Loader: c.ws, Home: c.env.Home, Files: c.hostFiles(h.Language())})
 	if err != nil {
 		return nil, err
 	}

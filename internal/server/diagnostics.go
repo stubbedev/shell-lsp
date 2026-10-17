@@ -15,6 +15,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/diagnostics"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/filelint"
+	"github.com/stubbedev/shell-lsp/internal/hostnav"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/parallel"
@@ -94,8 +95,8 @@ func (s *Server) report(file *workspace.File, settings config.Settings, generati
 	codeDescriptions := s.clientCapabilities().TextDocument.PublishDiagnostics.CodeDescriptionSupport
 	items = append(items, diagnostics.Lint(findings, at, codeDescriptions)...)
 	items = append(items, diagnostics.Bats(tests.placedOn(file.Tree), at)...)
-	if file.Native != nil {
-		items = append(items, diagnostics.Lint(s.nativeFindings(file, settings), sourcePositions(file, at.Encoding()), codeDescriptions)...)
+	if h, ok := hostnav.Of(file); ok {
+		items = append(items, diagnostics.Lint(s.nativeFindings(h, settings), sourcePositions(file, at.Encoding()), codeDescriptions)...)
 		stamp = s.workspace.Generation()
 	}
 	return diagnosticReport{
