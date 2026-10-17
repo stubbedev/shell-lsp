@@ -1,6 +1,8 @@
 package makefile
 
 import (
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
@@ -219,4 +221,19 @@ func replace(t *testing.T, s, old, text string) textedit.Edit {
 	t.Helper()
 	start := index(t, s, old)
 	return textedit.Edit{Start: start, End: start + len(old), NewText: text}
+}
+
+func TestEnclosing(t *testing.T) {
+	t.Parallel()
+
+	text := "objs := $(patsubst %.c,%.o,$(srcs))\nall: $(objs)\n\tcc -o app $(objs)\n"
+	f := Parse(text)
+	var got []string
+	for _, s := range f.Enclosing(strings.Index(text, "srcs")) {
+		got = append(got, text[s.Start:s.End])
+	}
+	want := []string{"srcs", "$(srcs)", "$(patsubst %.c,%.o,$(srcs))", "objs := $(patsubst %.c,%.o,$(srcs))", text}
+	if !slices.Equal(got, want) {
+		t.Errorf("Enclosing = %q, want %q", got, want)
+	}
 }

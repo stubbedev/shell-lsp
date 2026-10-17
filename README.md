@@ -577,8 +577,10 @@ for these files.
   variables and special targets, with what each one does.
 - **Outline and structure.** Document and workspace symbols, folding for
   recipes, rules, conditionals, `define` blocks and comment runs, semantic
-  tokens for the just and make syntax around the shell, and links on
-  `import`, `mod` and `include` paths.
+  tokens for the just and make syntax around the shell, links on `import`,
+  `mod` and `include` paths, and selection ranges that grow from a name
+  through its expression and statement to the recipe, also from inside the
+  shell of a recipe.
 - **Run lenses.** A recipe or target that runs without arguments gets a
   "▶ Run" lens; it runs `just` or `make` for that file, reports the exit
   status and logs the output.

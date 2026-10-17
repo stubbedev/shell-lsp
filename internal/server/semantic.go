@@ -10,6 +10,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
+	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/semantic"
 	"github.com/stubbedev/shell-lsp/internal/structure"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
@@ -183,19 +184,34 @@ func (s *Server) handleSelectionRange(_ context.Context, docs *docstore.View, p 
 		return nil, err
 	}
 	out := make([]lsp.SelectionRange, len(p.Positions))
+	source := sourcePositions(snap.File, snap.encoding)
 	for i, pos := range p.Positions {
 		offset, inside := snap.positions().Offset(pos)
-		if !inside {
-			source := snap.Doc.Source().Positions(snap.encoding)
-			clamped, _ := source.Offset(pos)
-			at := source.Position(clamped)
-			out[i] = lsp.SelectionRange{Range: lsp.Range{Start: at, End: at}}
-			continue
+		var ranges []lsp.Range
+		at := snap.Doc.Source().PositionToOffset(pos, snap.encoding)
+		outer := parser.Span{Start: at, End: at}
+		if inside {
+			for _, span := range structure.SelectionPath(snap.Tree, offset) {
+				ranges = append(ranges, snap.positions().Range(span))
+				outer = parser.Span{Start: snap.Doc.SourceOffset(span.Start), End: snap.Doc.SourceOffset(span.End)}
+			}
+			at = snap.Doc.SourceOffset(offset)
 		}
-		spans := structure.SelectionPath(snap.Tree, offset)
+		if snap.Native != nil {
+			for _, span := range snap.Native.Enclosing(at) {
+				if span.Start <= outer.Start && outer.End <= span.End && span != outer {
+					ranges = append(ranges, source.Range(span))
+				}
+			}
+		}
+		if len(ranges) == 0 {
+			position := source.Position(at)
+			ranges = []lsp.Range{{Start: position, End: position}}
+		}
+		ranges = slices.Compact(ranges)
 		var parent *lsp.SelectionRange
-		for _, span := range slices.Backward(spans) {
-			parent = &lsp.SelectionRange{Range: snap.positions().Range(span), Parent: parent}
+		for _, r := range slices.Backward(ranges) {
+			parent = &lsp.SelectionRange{Range: r, Parent: parent}
 		}
 		out[i] = *parent
 	}

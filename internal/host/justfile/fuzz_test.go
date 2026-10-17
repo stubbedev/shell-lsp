@@ -57,6 +57,12 @@ func FuzzAnalyze(f *testing.F) {
 		hosttest.Findings(a.Index, Checks, Builtins)
 		for offset := range len(text) + 1 {
 			a.File.Invocation(offset)
+			spans := a.File.Enclosing(offset)
+			for i, s := range spans {
+				if s.Start < 0 || s.End > len(text) || i > 0 && (s.Start > spans[i-1].Start || s.End < spans[i-1].End) {
+					t.Fatalf("enclosing spans at %d of %q are not nested within the text: %v", offset, text, spans)
+				}
+			}
 			if e, ok := a.File.Expect(offset); ok && (e.Span.Start < 0 || e.Span.Start > e.Span.End || e.Span.End > len(text)) {
 				t.Fatalf("completion at %d expects %v outside %q", offset, e.Span, text)
 			}

@@ -533,3 +533,36 @@ func TestNativeQuickFixes(t *testing.T) {
 		t.Errorf("change action = %+v", change)
 	}
 }
+
+func TestNativeSelectionRanges(t *testing.T) {
+	t.Parallel()
+
+	files := map[string]string{"justfile": "x := uppercase(\"a\" + y)\ny := \"b\"\n\n[private]\nbuild:\n    echo $HOME done\n"}
+	p := openNativeProject(t, nativeCapabilities, files, "justfile")
+	line, character := p.pos("justfile", "y)", 0)
+	home, homeAt := p.pos("justfile", "HOME", 0)
+	ranges := decodeResult[[]lsp.SelectionRange](t, p.c.call("textDocument/selectionRange", fmt.Sprintf(`{"textDocument": {"uri": %q}, "positions": [{"line": %d, "character": %d}, {"line": %d, "character": %d}]}`, p.uri("justfile"), line, character, home, homeAt+1)))
+	text := files["justfile"]
+	chain := func(r *lsp.SelectionRange) []string {
+		var out []string
+		for ; r != nil; r = r.Parent {
+			start := offsetOf(text, r.Range.Start)
+			out = append(out, text[start:offsetOf(text, r.Range.End)])
+		}
+		return out
+	}
+	if got, want := chain(&ranges[0]), []string{"y", `"a" + y`, `uppercase("a" + y)`, "x := uppercase(\"a\" + y)", text}; !slices.Equal(got, want) {
+		t.Errorf("expression selection = %q, want %q", got, want)
+	}
+	if got, want := chain(&ranges[1]), []string{"HOME", "$HOME", "echo $HOME done", "    echo $HOME done", "build:\n    echo $HOME done", "[private]\nbuild:\n    echo $HOME done", text}; !slices.Equal(got, want) {
+		t.Errorf("shell selection = %q, want %q", got, want)
+	}
+}
+
+func offsetOf(text string, pos lsp.Position) int {
+	offset := 0
+	for range pos.Line {
+		offset += strings.IndexByte(text[offset:], '\n') + 1
+	}
+	return offset + int(pos.Character)
+}

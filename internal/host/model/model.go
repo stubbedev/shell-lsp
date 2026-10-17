@@ -258,6 +258,24 @@ type Checks struct {
 	Missing    lint.Code
 }
 
+func Nested(offset int, spans []Span) []Span {
+	var inside []Span
+	for _, s := range spans {
+		if s.Start <= offset && offset <= s.End && s.End > s.Start {
+			inside = append(inside, s)
+		}
+	}
+	slices.SortStableFunc(inside, func(a, b Span) int { return (a.End - a.Start) - (b.End - b.Start) })
+	var out []Span
+	for _, s := range inside {
+		if n := len(out); n > 0 && (s == out[n-1] || s.Start > out[n-1].Start || s.End < out[n-1].End) {
+			continue
+		}
+		out = append(out, s)
+	}
+	return out
+}
+
 type Expect struct {
 	Kinds []Kind
 	Span  Span
