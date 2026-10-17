@@ -249,6 +249,83 @@ rejected 1:1 insufficient number of arguments (1) to function 'subst'
 inconclusive: make stopped before it expanded every recipe: *** No rule to make target
 -- exported-recursive-variable-without-recipes --
 accepted
+-- rule-whose-targets-expand-to-nothing --
+accepted
+1:6 SL6015 warning this variable reference is not closed on the same logical line; make fails when it expands `CC`
+1:8 SL6010 warning unknown function `CC`
+2:3 SL6006 info unknown variable `OBJS`
+-- rule-with-known-computed-targets --
+rejected 2:1 unterminated variable reference
+2:6 SL6012 error this variable reference is not closed on the same logical line; make fails when it expands `CC`
+2:8 SL6010 warning unknown function `CC`
+-- target-simple-value-expands-globally --
+rejected 1:1 Recursive variable 'CC' references itself (eventually)
+1:8 SL6007 error variable `CC` depends on itself
+-- conditional-assignment-of-a-predefined-variable --
+accepted
+-- target-append-to-a-predefined-variable-refers-to-itself --
+rejected 3:1 Recursive variable 'CC' references itself (eventually)
+3:14 SL6007 error variable `CC` depends on itself
+-- no-op-target-assignment-leaves-the-global-in-effect --
+rejected 2:1 Recursive variable 'CC' references itself (eventually)
+2:9 SL6007 error variable `CC` depends on itself
+-- global-variable-expanded-in-a-target-context --
+rejected 2:1 Recursive variable 'CC' references itself (eventually)
+2:13 SL6007 error variable `CC` depends on itself
+-- target-simple-value-sees-earlier-target-values --
+rejected 1:1 Recursive variable 'CC' references itself (eventually)
+1:14 SL6007 error variable `CC` depends on itself
+-- rule-targets-from-a-conditional-assignment --
+rejected 4:1 Recursive variable 'CC' references itself (eventually)
+4:9 SL6007 error variable `CC` depends on itself
+-- conditional-assignment-after-a-definition --
+accepted
+3:1 SL6014 info variable `X` is never used
+-- export-defines-a-variable-before-a-conditional-assignment --
+accepted
+-- append-after-an-ignored-conditional-assignment --
+accepted
+-- append-to-an-exported-undefined-variable-expands-at-once --
+rejected 1:1 Recursive variable 'CC' references itself (eventually)
+1:9 SL6007 error variable `CC` depends on itself
+-- target-append-is-lazy --
+accepted
+-- append-closes-an-unterminated-reference --
+accepted
+1:5 SL6015 warning this variable reference is not closed on the same logical line; make fails when it expands `X`
+1:7 SL6010 warning unknown function `Y`
+3:1 SL6014 info variable `W` is never used
+-- prerequisites-inherit-target-variables --
+rejected 4:1 Recursive variable 'CC' references itself (eventually)
+4:13 SL6007 error variable `CC` depends on itself
+-- target-context-reaches-through-a-global-variable --
+rejected 2:1 Recursive variable 'CC' references itself (eventually)
+1:18 SL6007 error variable `PREFIX` is circular: `PREFIX -> CC -> PREFIX`
+2:9 SL6007 error variable `CC` is circular: `CC -> PREFIX -> CC`
+-- append-that-leaves-a-reference-open --
+rejected 2:1 unterminated variable reference
+1:5 SL6012 error this variable reference is not closed on the same logical line; make fails when it expands `X`
+1:7 SL6010 warning unknown function `Y`
+2:8 SL6006 info unknown variable `Z`
+3:1 SL6014 info variable `W` is never used
+-- target-append-expands-the-global-value --
+rejected 1:1 unterminated variable reference
+3:6 SL6012 error this variable reference is not closed on the same logical line; make fails when it expands `CC`
+3:8 SL6010 warning unknown function `CC`
+-- recipe-runs-in-its-own-context-too --
+rejected 4:1 Recursive variable 'CC' references itself (eventually)
+4:8 SL6007 error variable `CC` depends on itself
+-- expanded-before-an-append-closes-it --
+rejected 1:1 unterminated variable reference
+1:5 SL6012 error this variable reference is not closed on the same logical line; make fails when it expands `X`
+1:7 SL6010 warning unknown function `Y`
+2:1 SL6014 info variable `W` is never used
+-- prerequisite-recipe-sees-the-parent-variable --
+rejected 5:1 Recursive variable 'CC' references itself (eventually)
+5:13 SL6007 error variable `CC` depends on itself
+-- rule-targets-ignore-target-variables --
+accepted
+3:3 SL6006 info unknown variable `OBJS`
 -- simple-self-reference --
 accepted
 -- append --

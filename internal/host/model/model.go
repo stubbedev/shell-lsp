@@ -113,6 +113,7 @@ type Symbol struct {
 	Appends   bool
 	Value     string
 	Constant  bool
+	Inert     bool
 	Arity     Arity
 }
 
@@ -141,6 +142,7 @@ type Ref struct {
 	Edge      bool
 	Soft      bool
 	Declares  bool
+	Base      bool
 	Inert     bool
 	Horizon   int
 	Late      bool
@@ -233,6 +235,7 @@ type Deferred struct {
 	Message string
 	Used    lint.Code
 	Unused  lint.Code
+	Until   int
 }
 
 type Index struct {
@@ -249,6 +252,7 @@ type Index struct {
 	Broken    bool
 	Opaque    bool
 	Recipes   bool
+	Inherits  map[Scope][]Scope
 	Phony     []string
 	Fileless  []int
 	Search    []SearchPath

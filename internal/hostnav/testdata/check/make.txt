@@ -379,6 +379,116 @@ a\ b.o: a\ %.o: %.c
 -- exported-recursive-variable-without-recipes --
 V = $V
 export V
+-- rule-whose-targets-expand-to-nothing --
+CC = $(CC -O2
+$(OBJS): %.o: %.c
+	@$(CC) -o $@ $^
+all: ; @:
+-- rule-with-known-computed-targets --
+OBJS = a.o
+CC = $(CC -O2
+$(OBJS): %.o: %.c
+	@$(CC) -o $@ $^
+a.c: ; @:
+-- target-simple-value-expands-globally --
+CC = $(CC) -O2
+all: CC := $(CC) main.c
+all: ; @:
+-- conditional-assignment-of-a-predefined-variable --
+CC ?= $(CC) -O2
+all: ; @echo $(CC)
+-- target-append-to-a-predefined-variable-refers-to-itself --
+all:
+	@$(CC) -o $@
+all: CC += $(CC)
+-- no-op-target-assignment-leaves-the-global-in-effect --
+all: CC ?= gcc
+CC += $(CC)
+all: ; @echo $(CC)
+-- global-variable-expanded-in-a-target-context --
+LDFLAGS = $(CC)
+all: CC = $(CC) -O2
+all: ; @echo $(LDFLAGS)
+-- target-simple-value-sees-earlier-target-values --
+all: CC += $(CC)
+all: CC := $(CC) main.c
+-- rule-targets-from-a-conditional-assignment --
+OBJS ?= a.o
+$(OBJS): %.o: %.c
+	@$(CC) -o $@ $^
+CC += $(CC)
+a.c: ; @:
+-- conditional-assignment-after-a-definition --
+DIR ?=
+DIR ?= $(DIR) build
+X := $(DIR)
+all: ; @:
+-- export-defines-a-variable-before-a-conditional-assignment --
+export OBJS
+OBJS ?= $(CC)
+CC += $(CC)
+$(OBJS): ; @:
+all: ; @:
+-- append-after-an-ignored-conditional-assignment --
+CC := gcc
+CC ?= $(CC) x
+CC += $(CC)
+all: ; @echo $(CC)
+-- append-to-an-exported-undefined-variable-expands-at-once --
+CC += $(CC)
+export DIR
+DIR += $(CC)
+-- target-append-is-lazy --
+CFLAGS := -O2
+CC += $(CC)
+all: CFLAGS += $(CC)
+all: ; @:
+-- append-closes-an-unterminated-reference --
+X = $(Y -O2
+X += a)
+W := $(X)
+all: ; @:
+-- prerequisites-inherit-target-variables --
+dist:
+	@$(CC) -o $@
+all: dist
+all: CC = $(CC) main.c
+-- target-context-reaches-through-a-global-variable --
+all: PREFIX ?= $(CC)
+CC += $(PREFIX)
+all: CC := $(CC) main.c
+-- append-that-leaves-a-reference-open --
+X = $(Y -O2
+X += ${Z}
+W := $(X)
+all: ; @:
+-- target-append-expands-the-global-value --
+app: CC += main.c
+app: ; @echo $(CC)
+CC = $(CC -O2
+-- recipe-runs-in-its-own-context-too --
+all: docs
+dist: CC =
+dist: docs
+CC = $(CC) -O2
+docs: ; @echo $(CC)
+-- expanded-before-an-append-closes-it --
+X = $(Y -O2
+W := $(X)
+X += a)
+all: ; @:
+-- prerequisite-recipe-sees-the-parent-variable --
+dist:
+	@$(CC) -o $@
+CC := cc
+all: dist
+all: CC = $(CC) main.c
+-- rule-targets-ignore-target-variables --
+P = $(P) x
+docs: OBJS = a.o
+$(OBJS): %.o: %.c
+	@echo $(P)
+docs: ; @:
 -- simple-self-reference --
 X := a
 X := $(X) b

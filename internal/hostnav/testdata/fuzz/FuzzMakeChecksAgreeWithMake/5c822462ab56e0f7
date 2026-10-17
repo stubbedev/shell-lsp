@@ -1,2 +1,0 @@
-go test fuzz v1
-string("A\f=$A\n0:\n\t$A0")

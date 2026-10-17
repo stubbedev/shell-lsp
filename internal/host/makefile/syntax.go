@@ -24,6 +24,8 @@ type Assignment struct {
 	Span      Span
 	Define    bool
 	Deferred  bool
+	JoinedAt  int
+	Swallowed bool
 	End       Span
 }
 
@@ -44,6 +46,7 @@ type Rule struct {
 	Header      Span
 	Recipe      []RecipeLine
 	Span        Span
+	NoTargets   bool
 }
 
 func (r *Rule) Pattern() bool {

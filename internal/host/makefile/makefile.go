@@ -340,20 +340,84 @@ func (p *reader) directive(start, end int) {
 }
 
 func (p *reader) deferred(first int, a *Assignment) {
-	a.Deferred = slices.Contains(recursiveOps, a.Op) || a.Op == "+=" && len(a.Targets) == 0 && p.appendsRecursively(a)
+	a.Deferred = slices.Contains(recursiveOps, a.Op) || a.Op == "+=" && (len(a.Targets) > 0 || p.appendsRecursively(a))
 	if !a.Deferred {
 		return
+	}
+	if a.Op == "+=" && len(a.Targets) == 0 {
+		p.join(a)
 	}
 	p.convert(first, ErrDeferredUnterminated, "; make fails when it expands `"+a.Name.Text+"`")
 }
 
-func (p *reader) appendsRecursively(a *Assignment) bool {
-	for _, prior := range slices.Backward(p.file.Assignments) {
-		if prior != a && prior.Name.Text == a.Name.Text && len(prior.Targets) == len(a.Targets) {
-			return prior.Deferred
+func (p *reader) join(a *Assignment) {
+	var chain []*Assignment
+	for _, prior := range p.file.Assignments {
+		if prior == a || prior.Name.Text != a.Name.Text || len(prior.Targets) > 0 || prior.Op == "?=" && (len(chain) > 0 || slices.Contains(predefined, a.Name.Text)) {
+			continue
+		}
+		if prior.Op != "+=" {
+			chain = chain[:0]
+		}
+		chain = append(chain, prior)
+	}
+	if !slices.ContainsFunc(chain, func(prior *Assignment) bool { return p.unterminatedIn(prior.Span) }) {
+		return
+	}
+	values := make([]string, 0, len(chain)+1)
+	for _, prior := range append(chain, a) {
+		values = append(values, p.text[prior.Value.Span.Start:prior.Value.Span.End])
+	}
+	joined := strings.Join(values, " ")
+	var errs []Error
+	exprParser{text: joined, errors: &errs}.parse(0, len(joined))
+	if slices.ContainsFunc(errs, func(e Error) bool { return e.Kind == ErrUnterminated }) {
+		return
+	}
+	for _, prior := range chain {
+		if prior.JoinedAt == 0 {
+			prior.JoinedAt = a.Span.Start
 		}
 	}
-	return true
+	a.Swallowed = true
+}
+
+func (p *reader) unterminatedIn(span Span) bool {
+	return slices.ContainsFunc(p.file.Errors, func(e Error) bool {
+		return e.Kind == ErrDeferredUnterminated && span.Start <= e.Span.Start && e.Span.End <= span.End
+	})
+}
+
+func (p *reader) appendsRecursively(a *Assignment) bool {
+	defined, recursive := slices.Contains(predefined, a.Name.Text), true
+	declares := func(from, to int) bool {
+		return slices.ContainsFunc(p.file.Directives, func(d *Directive) bool {
+			return from <= d.Span.Start && d.Span.Start < to && slices.ContainsFunc(d.Names, func(w Word) bool { return w.Text == a.Name.Text })
+		})
+	}
+	from := 0
+	for _, prior := range p.file.Assignments {
+		if prior == a {
+			break
+		}
+		if prior.Name.Text != a.Name.Text || len(prior.Targets) > 0 && len(prior.Targets) != len(a.Targets) {
+			continue
+		}
+		if !defined && declares(from, prior.Span.Start) {
+			defined, recursive = true, false
+		}
+		from = prior.Span.Start
+		switch {
+		case prior.Op == "?=" && defined:
+		case prior.Op == "+=" && defined:
+		default:
+			defined, recursive = true, prior.Deferred
+		}
+	}
+	if !defined && declares(from, a.Span.Start) {
+		recursive = false
+	}
+	return recursive
 }
 
 func (p *reader) convert(first int, kind ErrorKind, why string) {
@@ -411,16 +475,32 @@ func (p *reader) constant(n Node) (string, bool) {
 	if _, builtin := Builtins.Lookup(model.KindVariable, name); builtin && !automatic(name) {
 		return "", false
 	}
-	value := ""
+	value, defined := "", false
+	declared := func(before int) bool {
+		return slices.ContainsFunc(p.file.Directives, func(d *Directive) bool {
+			return d.Span.Start < before && slices.ContainsFunc(d.Names, func(w Word) bool { return w.Text == name })
+		})
+	}
 	for _, a := range p.file.Assignments {
-		if a.Name.Text != name {
+		if a.Name.Text != name || len(a.Targets) > 0 {
 			continue
 		}
+		defined = defined || declared(a.Span.Start)
 		literal, ok := a.Value.Literal(p.text)
-		if !ok || len(a.Targets) > 0 || a.Define || !slices.Contains(simpleOps, a.Op) {
+		if !ok || a.Define {
 			return "", false
 		}
-		value = literal
+		switch {
+		case a.Op == "?=" && slices.Contains(predefined, name):
+			return "", false
+		case a.Op == "?=" && defined:
+		case a.Op == "+=" && defined:
+			value += " " + literal
+		case a.Op == "+=", a.Op == "?=", slices.Contains(simpleOps, a.Op):
+			value, defined = literal, true
+		default:
+			return "", false
+		}
 	}
 	return value, true
 }
@@ -735,6 +815,10 @@ func (p *reader) parseRule(s string, colon, at, end int) {
 	}
 	i = topLevel(s, after, ";")
 	rule := &Rule{Targets: targets, DoubleColon: double, Grouped: len(targetText) < colon, Colon: at + colon, Header: Span{Start: at, End: at + i}, Span: Span{Start: at, End: end}}
+	if slices.ContainsFunc(targets, func(w Word) bool { return w.Expr.Dynamic() }) {
+		text, known := p.constantText(p.expr(at, at+len(targetText)))
+		rule.NoTargets = known && blankText(text)
+	}
 	deps := s[after:i]
 	depsAt := at + after
 	if second := topLevel(deps, 0, ":"); second < len(deps) {

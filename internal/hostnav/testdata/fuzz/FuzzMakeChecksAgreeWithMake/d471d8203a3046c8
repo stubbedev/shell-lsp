@@ -1,2 +1,0 @@
-go test fuzz v1
-string("X=$X\n0$X0")

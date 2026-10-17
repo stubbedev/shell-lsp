@@ -1,2 +1,0 @@
-go test fuzz v1
-string("CC$0=$(\n$(CC)0")

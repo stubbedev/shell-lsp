@@ -3,13 +3,13 @@ package hosttest
 import (
 	"bytes"
 	"cmp"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -87,7 +87,11 @@ type golden struct {
 	findings []string
 }
 
-func Check(t *testing.T, path string, analyze Analyze, tool Oracle, update bool) {
+type Reports func(text string, v oracle.Verdict, findings []lint.Finding) []lint.Finding
+
+func AsFound(_ string, _ oracle.Verdict, findings []lint.Finding) []lint.Finding { return findings }
+
+func Check(t *testing.T, path string, analyze Analyze, tool Oracle, reports Reports, update bool) {
 	t.Helper()
 	cases := Sections(t, path)
 	goldenPath := strings.TrimSuffix(path, ".txt") + ".golden"
@@ -128,7 +132,7 @@ func Check(t *testing.T, path string, analyze Analyze, tool Oracle, update bool)
 			if !slices.Equal(got, want.findings) {
 				t.Errorf("findings\n got %q\nwant %q", got, want.findings)
 			}
-			Agree(t, c.Text, want.verdict, findings)
+			Agree(t, c.Text, want.verdict, reports(c.Text, want.verdict, findings))
 		})
 	}
 }
@@ -254,7 +258,7 @@ var (
 
 func makeTargets(t *testing.T, dir string, vars []string) []string {
 	t.Helper()
-	cmd := exec.CommandContext(t.Context(), "make", append([]string{"-pqrR", "--no-print-directory", "-f", "Makefile"}, vars...)...) //nolint:gosec // G204: the variables are this package's constants
+	cmd := oracle.BoundedMake(t.Context(), append([]string{"-pqr", "--no-print-directory", "-f", "Makefile"}, vars...)...)
 	cmd.Dir = dir
 	cmd.Env = []string{"PATH=" + os.Getenv("PATH")}
 	out, _ := cmd.Output()
@@ -279,11 +283,6 @@ func makeTargets(t *testing.T, dir string, vars []string) []string {
 	slices.Sort(targets)
 	return slices.Compact(targets)
 }
-
-var (
-	makeFatal          = regexp.MustCompile(`(?m)^Makefile:(\d+): \*\*\* (.*?)\.  Stop\.$`)
-	makeMissingInclude = regexp.MustCompile(`(?m)^Makefile:(\d+): (\S+: No such file or directory)$`)
-)
 
 func MakeVerdict(t *testing.T, text string) oracle.Verdict {
 	t.Helper()
@@ -319,7 +318,7 @@ func MakeDatabase(t *testing.T, dir, text string) string {
 	if err := os.WriteFile(filepath.Join(dir, "Makefile"), []byte(text), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.CommandContext(t.Context(), "make", "-pqrR", "--no-print-directory", "-f", "Makefile", unrunnableShell)
+	cmd := oracle.BoundedMake(t.Context(), "-pqrR", "--no-print-directory", "-f", "Makefile", unrunnableShell)
 	cmd.Dir = dir
 	cmd.Env = []string{"PATH=" + os.Getenv("PATH")}
 	out, _ := cmd.CombinedOutput()
@@ -344,20 +343,23 @@ func makeVerdict(t *testing.T, text string, vars ...string) oracle.Verdict {
 		t.Fatal(err)
 	}
 	goals := slices.Concat(vars, []string{"--"}, makeTargets(t, dir, vars))
-	cmd := exec.CommandContext(t.Context(), "make", append([]string{"--dry-run", "--no-print-directory", "-f", "Makefile"}, goals...)...) //nolint:gosec // G204: the goals are names make itself listed
+	ctx, cancel := context.WithTimeout(t.Context(), oracle.MakeTimeout)
+	defer cancel()
+	cmd := oracle.BoundedMake(ctx, append([]string{"--dry-run", "--no-builtin-rules", "--no-print-directory", "-f", "Makefile"}, goals...)...)
 	cmd.Dir = dir
 	cmd.Env = []string{"PATH=" + os.Getenv("PATH")}
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
-	if err := cmd.Run(); err == nil {
+	err := cmd.Run()
+	if err == nil {
 		return oracle.Verdict{Accepted: true}
 	}
 	out := stderr.String()
-	for _, pattern := range []*regexp.Regexp{makeFatal, makeMissingInclude} {
-		if m := pattern.FindStringSubmatch(out); m != nil {
-			line, _ := strconv.Atoi(m[1])
-			return oracle.Verdict{Line: line, Column: 1, Message: m[2]}
-		}
+	if oracle.Exhausted(ctx, out, err) {
+		return oracle.Verdict{Inconclusive: true, Message: fmt.Sprintf("make ran out of its %d MiB or %s: %v", oracle.MakeMemoryKiB>>10, oracle.MakeTimeout, err)}
+	}
+	if v, ok := oracle.MakeFailure(out, "Makefile"); ok {
+		return v
 	}
 	if strings.Contains(out, "*** No targets.") {
 		return oracle.Verdict{Accepted: true}

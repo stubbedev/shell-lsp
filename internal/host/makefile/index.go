@@ -108,6 +108,7 @@ func (f *File) Index(shell bool) *model.Index {
 		return e.Kind != ErrUnterminated && e.Kind != ErrDeferredUnterminated && e.Kind != ErrPatternUnterminated && e.Kind != ErrPatternMismatch
 	})}
 	ix.Branches = f.alternatives()
+	ix.Inherits = map[model.Scope][]model.Scope{}
 	in := &indexer{overridden: f.overridden(), usedPatterns: f.usedPatterns(), f: f, ix: ix, scopes: map[string]model.Scope{}, exported: f.exportedNames(), called: map[string]bool{}}
 	for _, a := range f.Assignments {
 		in.assignment(a)
@@ -170,7 +171,11 @@ func (in *indexer) deferred() {
 		if owner < 0 {
 			panic(fmt.Sprintf("makefile: no assignment holds the deferred reference at %d", e.Span.Start))
 		}
-		in.ix.Deferred = append(in.ix.Deferred, model.Deferred{Symbol: owner, Span: e.Span, Message: e.Message, Used: lint.CodeMakeUnterminatedReference, Unused: lint.CodeMakeDeferredUnterminatedReference})
+		until := 0
+		if i := slices.IndexFunc(in.f.Assignments, func(a *Assignment) bool { return a.Span.Start <= e.Span.Start && e.Span.End <= a.Span.End }); i >= 0 {
+			until = in.f.Assignments[i].JoinedAt
+		}
+		in.ix.Deferred = append(in.ix.Deferred, model.Deferred{Symbol: owner, Span: e.Span, Message: e.Message, Used: lint.CodeMakeUnterminatedReference, Unused: lint.CodeMakeDeferredUnterminatedReference, Until: until})
 	}
 }
 
@@ -338,6 +343,7 @@ func (in *indexer) assignment(a *Assignment) {
 		}
 	}
 	owner := model.NoSymbol
+	firstSymbol := len(in.ix.Symbols)
 	for _, scope := range scopes {
 		i := in.symbol(model.Symbol{
 			Name: a.Name.Text, Kind: model.KindVariable, Span: a.Span, Selection: a.Name.Span, Scope: scope, Parent: model.NoParent,
@@ -356,7 +362,29 @@ func (in *indexer) assignment(a *Assignment) {
 	in.token(a.Name.Span, semantic.TypeVariable, semantic.ModDeclaration)
 	edge := a.Deferred
 	in.walk(a.Name.Expr, model.Global, owner, false, nil)
+	if a.Op == "+=" && len(a.Targets) > 0 && owner != model.NoSymbol {
+		in.ix.Refs = append(in.ix.Refs, model.Ref{Name: a.Name.Text, Kind: model.KindVariable, Span: a.Name.Span, Scope: model.Global, Args: model.NoArgs, Owner: owner, Edge: true, Soft: true, Base: true})
+	}
+	first := len(in.ix.Refs)
 	in.walk(a.Value, scopes[0], owner, edge, nil)
+	if a.Swallowed {
+		for i := first; i < len(in.ix.Refs); i++ {
+			in.ix.Refs[i].Inert = true
+		}
+	}
+	if !a.Deferred && len(a.Targets) > 0 {
+		for i := first; i < len(in.ix.Refs); i++ {
+			in.ix.Refs[i].Horizon = a.Span.Start
+		}
+	}
+	if a.Op == "?=" && (slices.Contains(predefined, a.Name.Text) || in.definedBefore(a)) {
+		for i := first; i < len(in.ix.Refs); i++ {
+			in.ix.Refs[i].Inert = true
+		}
+		for i := firstSymbol; i < len(in.ix.Symbols); i++ {
+			in.ix.Symbols[i].Inert = true
+		}
+	}
 	in.redefined = nil
 }
 
@@ -485,6 +513,10 @@ func (in *indexer) rule(r *Rule, shell bool) {
 		in.walk(w.Expr, model.Global, owner, false, nil)
 	}
 	for _, w := range slices.Concat(r.Prereqs, r.OrderOnly) {
+		if scope != model.Global && literal(w) {
+			child := in.scope(w.Text)
+			in.ix.Inherits[child] = append(in.ix.Inherits[child], scope)
+		}
 		in.walk(w.Expr, model.Global, owner, false, nil)
 		if literal(w) && phony {
 			in.ix.Phony = append(in.ix.Phony, w.Text)
@@ -517,7 +549,7 @@ func (in *indexer) rule(r *Rule, shell bool) {
 		for j := first; j < len(in.ix.Refs); j++ {
 			in.ix.Refs[j].Late = true
 			in.ix.Refs[j].Edge = r.Pattern() && !in.usedPatterns[r]
-			in.ix.Refs[j].Inert = in.overridden[r]
+			in.ix.Refs[j].Inert = in.overridden[r] || r.NoTargets
 		}
 	}
 }
@@ -586,6 +618,14 @@ func (in *indexer) directive(d *Directive) {
 		}
 		in.walk(n.Expr, model.Global, model.NoSymbol, false, nil)
 	}
+}
+
+func (in *indexer) definedBefore(a *Assignment) bool {
+	return slices.ContainsFunc(in.f.Assignments, func(prior *Assignment) bool {
+		return prior.Span.Start < a.Span.Start && prior.Name.Text == a.Name.Text && (len(prior.Targets) == 0 || len(a.Targets) > 0)
+	}) || slices.ContainsFunc(in.f.Directives, func(d *Directive) bool {
+		return d.Span.Start < a.Span.Start && slices.ContainsFunc(d.Names, func(w Word) bool { return w.Text == a.Name.Text })
+	})
 }
 
 func (in *indexer) conditional(c *Conditional) {

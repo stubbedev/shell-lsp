@@ -3,6 +3,7 @@ package model
 import (
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/lint"
@@ -66,7 +67,7 @@ func (m *Module) lookup(file int, name string, ns Namespace, scope Scope, horizo
 	if file >= 0 && scope != Global {
 		var local []Target
 		for _, i := range m.Files[file].named(ns, name) {
-			if s := m.Files[file].Symbols[i]; s.Scope == scope && (horizon == 0 || s.Span.End <= horizon) {
+			if s := m.Files[file].Symbols[i]; s.Scope == scope && !s.Inert && (horizon == 0 || s.Span.End <= horizon) {
 				local = append(local, Target{Module: m, File: file, Symbol: i})
 			}
 		}
@@ -116,7 +117,7 @@ func effective(targets []Target, at moment) []Target {
 	byFile := map[int][]Target{}
 	var files []int
 	for _, t := range targets {
-		if !t.before(at) {
+		if !t.before(at) || t.Info().Inert {
 			continue
 		}
 		if _, ok := byFile[t.File]; !ok {
@@ -136,23 +137,99 @@ func effective(targets []Target, at moment) []Target {
 	return out
 }
 
-func (m *Module) expansions() map[Target][]moment {
-	out := map[Target][]moment{}
-	seen := map[Target]moment{}
+type context struct {
+	at    moment
+	chain string
+}
+
+func chainOf(scopes []Scope) string {
+	var sb strings.Builder
+	for _, s := range scopes {
+		sb.WriteString(strconv.Itoa(int(s)) + ",")
+	}
+	return sb.String()
+}
+
+func (c context) scopes() []Scope {
+	var out []Scope
+	for part := range strings.SplitSeq(strings.TrimSuffix(c.chain, ","), ",") {
+		if n, err := strconv.Atoi(part); err == nil {
+			out = append(out, Scope(n))
+		}
+	}
+	return out
+}
+
+const maxChains = 32
+
+func (m *Module) chains(file int, scope Scope) []string {
+	if scope == Global {
+		return []string{""}
+	}
+	inherits := m.Files[file].Inherits
+	var out []string
+	var walk func(path []Scope)
+	walk = func(path []Scope) {
+		if len(out) >= maxChains {
+			return
+		}
+		out = append(out, chainOf(path))
+		for _, parent := range inherits[path[len(path)-1]] {
+			if !slices.Contains(path, parent) {
+				walk(append(slices.Clone(path), parent))
+			}
+		}
+	}
+	walk([]Scope{scope})
+	return out
+}
+
+func (m *Module) resolveIn(file int, r Ref, c context) []Target {
+	var scopes []Scope
+	switch {
+	case r.Base:
+	case r.Scope != Global:
+		scopes = append(scopes, r.Scope)
+		fallthrough
+	default:
+		for _, s := range c.scopes() {
+			if !slices.Contains(scopes, s) {
+				scopes = append(scopes, s)
+			}
+		}
+	}
+	for _, scope := range append(scopes, Global) {
+		r.Scope = scope
+		targets := slices.DeleteFunc(effective(m.Resolve(file, r).Targets, c.at), func(t Target) bool { return t.Info().Scope != scope })
+		if len(targets) > 0 {
+			return targets
+		}
+	}
+	return nil
+}
+
+func (m *Module) expansions() map[Target][]context {
+	out := map[Target][]context{}
+	type key struct {
+		target Target
+		chain  string
+	}
+	seen := map[key]moment{}
 	type visit struct {
 		target Target
-		at     moment
+		c      context
 	}
 	var queue []visit
-	mark := func(t Target, at moment) {
-		if t.Module != m || !t.before(at) {
+	mark := func(t Target, c context) {
+		if t.Module != m || !t.before(c.at) {
 			return
 		}
-		if prior, ok := seen[t]; ok && (prior == whenever || at != whenever && prior.offset >= at.offset) {
+		k := key{t, c.chain}
+		if prior, ok := seen[k]; ok && (prior == whenever || c.at != whenever && prior.offset >= c.at.offset) {
 			return
 		}
-		seen[t], out[t] = at, append(out[t], at)
-		queue = append(queue, visit{t, at})
+		seen[k], out[t] = c.at, append(out[t], c)
+		queue = append(queue, visit{t, c})
 	}
 	for f, ix := range m.Files {
 		for _, r := range ix.Refs {
@@ -163,16 +240,19 @@ func (m *Module) expansions() map[Target][]moment {
 			if r.Late {
 				at = whenever
 			}
-			for _, t := range effective(m.Resolve(f, r).Targets, at) {
-				mark(t, at)
+			for _, chain := range m.chains(f, r.Scope) {
+				c := context{at: at, chain: chain}
+				for _, t := range m.resolveIn(f, r, c) {
+					mark(t, c)
+				}
 			}
 		}
 	}
 	if slices.ContainsFunc(m.Files, func(ix *Index) bool { return ix.Recipes }) {
 		for f, ix := range m.Files {
 			for i, sym := range ix.Symbols {
-				if sym.Exported || ix.ExportAll && sym.Kind == KindVariable {
-					mark(Target{Module: m, File: f, Symbol: i}, whenever)
+				if !sym.Inert && (sym.Exported || ix.ExportAll && sym.Kind == KindVariable) {
+					mark(Target{Module: m, File: f, Symbol: i}, context{at: whenever})
 				}
 			}
 		}
@@ -182,8 +262,11 @@ func (m *Module) expansions() map[Target][]moment {
 		queue = queue[1:]
 		ix := m.Files[v.target.File]
 		for _, i := range ix.edgesOf(v.target.Symbol) {
-			for _, next := range effective(m.Resolve(v.target.File, ix.Refs[i]).Targets, v.at) {
-				mark(next, v.at)
+			if ix.Refs[i].Inert {
+				continue
+			}
+			for _, next := range m.resolveIn(v.target.File, ix.Refs[i], v.c) {
+				mark(next, v.c)
 			}
 		}
 	}
@@ -252,7 +335,10 @@ func (m *Module) Findings(file int, checks Checks, used Usage) []lint.Finding {
 	}
 	for _, d := range ix.Deferred {
 		code := d.Unused
-		if expanded[Target{Module: m, File: file, Symbol: d.Symbol}] {
+		contexts := expansions[Target{Module: m, File: file, Symbol: d.Symbol}]
+		if len(contexts) > 0 && (d.Until == 0 || slices.ContainsFunc(contexts, func(c context) bool {
+			return c.at != whenever && c.at.file == file && c.at.offset < d.Until
+		})) {
 			code = d.Used
 		}
 		out = append(out, lint.HostFinding(code, d.Span, d.Message))
@@ -303,15 +389,15 @@ type edge struct {
 	ref Ref
 }
 
-func (m *Module) edges(n node, at moment) []edge {
+func (m *Module) edges(n node, c context) []edge {
 	var out []edge
 	ix := m.Files[n.file]
 	for _, i := range ix.edgesOf(n.symbol) {
 		r := ix.Refs[i]
-		if r.Qualified() {
+		if r.Qualified() || r.Inert {
 			continue
 		}
-		for _, t := range effective(m.Resolve(n.file, r).Targets, at) {
+		for _, t := range m.resolveIn(n.file, r, c) {
 			if t.Module == m && (t.File != n.file || !ix.Branches.Exclusive(r.Span.Start, ix.Symbols[t.Symbol].Span.Start)) {
 				out = append(out, edge{node{t.File, t.Symbol}, r})
 			}
@@ -320,20 +406,20 @@ func (m *Module) edges(n node, at moment) []edge {
 	return out
 }
 
-func (m *Module) cycles(file int, checks Checks, expansions map[Target][]moment) []lint.Finding {
+func (m *Module) cycles(file int, checks Checks, expansions map[Target][]context) []lint.Finding {
 	var out []lint.Finding
 	for i, s := range m.Files[file].Symbols {
 		rules := checks.Of(s.Kind)
 		code := rules.Circular
-		moments := []moment{whenever}
+		contexts := []context{{at: whenever}}
 		if rules.Expanded == OnUse {
-			moments = expansions[Target{Module: m, File: file, Symbol: i}]
+			contexts = expansions[Target{Module: m, File: file, Symbol: i}]
 		}
 		if code == 0 {
 			continue
 		}
 		start := node{file, i}
-		if e, path, found := m.cycle(start, moments); found {
+		if e, path, found := m.cycle(start, contexts); found {
 			names := []string{s.Name}
 			for _, n := range path {
 				names = append(names, m.Files[n.file].Symbols[n.symbol].Name)
@@ -348,10 +434,10 @@ func (m *Module) cycles(file int, checks Checks, expansions map[Target][]moment)
 	return out
 }
 
-func (m *Module) cycle(start node, moments []moment) (edge, []node, bool) {
-	for _, at := range moments {
-		for _, e := range m.edges(start, at) {
-			if path, found := m.pathBack(e.to, start, map[node]bool{}, at); found {
+func (m *Module) cycle(start node, contexts []context) (edge, []node, bool) {
+	for _, c := range contexts {
+		for _, e := range m.edges(start, c) {
+			if path, found := m.pathBack(e.to, start, map[node]bool{}, c); found {
 				return e, path, true
 			}
 		}
@@ -359,7 +445,7 @@ func (m *Module) cycle(start node, moments []moment) (edge, []node, bool) {
 	return edge{}, nil, false
 }
 
-func (m *Module) pathBack(from, goal node, seen map[node]bool, at moment) ([]node, bool) {
+func (m *Module) pathBack(from, goal node, seen map[node]bool, c context) ([]node, bool) {
 	if from == goal {
 		return []node{goal}, true
 	}
@@ -367,8 +453,8 @@ func (m *Module) pathBack(from, goal node, seen map[node]bool, at moment) ([]nod
 		return nil, false
 	}
 	seen[from] = true
-	for _, e := range m.edges(from, at) {
-		if rest, ok := m.pathBack(e.to, goal, seen, at); ok {
+	for _, e := range m.edges(from, c) {
+		if rest, ok := m.pathBack(e.to, goal, seen, c); ok {
 			return append([]node{from}, rest...), true
 		}
 	}

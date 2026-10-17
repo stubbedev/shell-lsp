@@ -1,2 +1,0 @@
-go test fuzz v1
-string("OBJS =00 0:\n00$(OBJS)")

@@ -78,7 +78,7 @@ func TestJustChecksAgreeWithJust(t *testing.T) {
 	if *update {
 		hosttest.RequireTool(t, "just", hosttest.JustVersion)
 	}
-	hosttest.Check(t, filepath.Join("testdata", "check", "just.txt"), findingsAlone(t, "justfile"), hosttest.JustVerdict, *update)
+	hosttest.Check(t, filepath.Join("testdata", "check", "just.txt"), findingsAlone(t, "justfile"), hosttest.JustVerdict, hosttest.AsFound, *update)
 }
 
 func TestMakeChecksAgreeWithMake(t *testing.T) {
@@ -87,5 +87,5 @@ func TestMakeChecksAgreeWithMake(t *testing.T) {
 	if *update {
 		hosttest.RequireTool(t, "make", hosttest.MakeVersion)
 	}
-	hosttest.Check(t, filepath.Join("testdata", "check", "make.txt"), findingsAlone(t, "Makefile"), hosttest.MakeVerdict, *update)
+	hosttest.Check(t, filepath.Join("testdata", "check", "make.txt"), findingsAlone(t, "Makefile"), hosttest.MakeVerdict, makeReports, *update)
 }
