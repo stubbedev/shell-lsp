@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/host/hosttest"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/navigation"
@@ -25,11 +26,19 @@ func groupFor(t *testing.T, ws *workspace.Workspace, path string, files navigati
 	if err != nil {
 		t.Fatal(err)
 	}
-	g, err := Build(context.Background(), hostOf(t, file), Env{Loader: ws, Files: files})
+	g, err := Build(context.Background(), hostOf(t, file), envWith(ws, hostOf(t, file).Language(), files))
 	if err != nil {
 		t.Fatal(err)
 	}
 	return g
+}
+
+func envWith(loader Loader, language host.Language, files navigation.WorkspaceFiles) Env {
+	env := Env{Loader: loader}
+	if files != nil {
+		env.Graph = func(ctx context.Context) (*Graph, error) { return NewGraph(ctx, language, files, env) }
+	}
+	return env
 }
 
 func hostOf(t *testing.T, file *workspace.File) Host {
@@ -41,7 +50,7 @@ func hostOf(t *testing.T, file *workspace.File) Host {
 	return h
 }
 
-func writeTree(t *testing.T, files map[string]string) string {
+func writeTree(t testing.TB, files map[string]string) string {
 	t.Helper()
 	dir := t.TempDir()
 	for name, text := range files {

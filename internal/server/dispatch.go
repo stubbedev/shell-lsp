@@ -97,6 +97,7 @@ type Server struct {
 	workspace   *workspace.Workspace
 	semantic    *semanticCache
 	bats        *batsResults
+	graphs      hostGraphs
 
 	mu             sync.Mutex
 	phase          phase

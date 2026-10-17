@@ -1,6 +1,7 @@
 package hostnav
 
 import (
+	"cmp"
 	"context"
 	"path/filepath"
 	"slices"
@@ -20,7 +21,50 @@ type Loader interface {
 type Env struct {
 	Loader Loader
 	Home   string
-	Files  navigation.WorkspaceFiles
+	Graph  func(ctx context.Context) (*Graph, error)
+}
+
+type importer struct {
+	path   string
+	module string
+}
+
+type Graph struct {
+	importers map[string][]importer
+}
+
+func NewGraph(ctx context.Context, language host.Language, files navigation.WorkspaceFiles, env Env) (*Graph, error) {
+	g := &Graph{importers: map[string][]importer{}}
+	candidates, err := files(ctx)
+	if err != nil {
+		return nil, err
+	}
+	b := newBuilder(ctx, env, language)
+	for _, c := range candidates {
+		if c.Native == nil || c.Native.Language != language {
+			continue
+		}
+		c = b.canonical(c)
+		for _, r := range b.includes(c) {
+			if r.target != nil {
+				g.importers[r.target.Path] = append(g.importers[r.target.Path], importer{path: c.Path, module: r.include.Module})
+			}
+		}
+	}
+	for path, list := range g.importers {
+		slices.SortFunc(list, func(a, b importer) int {
+			return cmp.Or(strings.Compare(a.path, b.path), strings.Compare(a.module, b.module))
+		})
+		g.importers[path] = slices.Compact(list)
+	}
+	return g, nil
+}
+
+func (g *Graph) of(path string) []importer {
+	if g == nil {
+		return nil
+	}
+	return g.importers[path]
 }
 
 type parent struct {
@@ -69,15 +113,21 @@ func (h Host) File() *workspace.File { return h.file }
 
 func (h Host) Language() host.Language { return h.file.Native.Language }
 
+func newBuilder(ctx context.Context, env Env, language host.Language) *builder {
+	return &builder{ctx: ctx, env: env, language: language, files: map[*model.Index]*workspace.File{}, byPath: map[string]*workspace.File{}, modules: map[string]*model.Module{}, resolved: map[string][]resolvedInclude{}}
+}
+
 func Build(ctx context.Context, h Host, env Env) (*Group, error) {
-	self := h.file
-	b := &builder{ctx: ctx, env: env, language: self.Native.Language, files: map[*model.Index]*workspace.File{}, byPath: map[string]*workspace.File{}, modules: map[string]*model.Module{}, resolved: map[string][]resolvedInclude{}}
-	self = b.canonical(self)
-	importers, parents, err := b.importers(self)
-	if err != nil {
-		return nil, err
+	var graph *Graph
+	if env.Graph != nil {
+		var err error
+		if graph, err = env.Graph(ctx); err != nil {
+			return nil, err
+		}
 	}
-	roots := b.roots(self, importers)
+	b := newBuilder(ctx, env, h.Language())
+	self := b.canonical(h.file)
+	roots := b.roots(self, graph)
 	var module *model.Module
 	if len(roots) == 1 {
 		module = b.module(roots[0])
@@ -95,8 +145,13 @@ func Build(ctx context.Context, h Host, env Env) (*Group, error) {
 			g.missing = append(g.missing, r.include)
 		}
 	}
-	for _, p := range parents {
-		g.parents = append(g.parents, parent{module: b.module(p.file), name: p.name})
+	for _, imp := range graph.of(self.Path) {
+		if imp.module == "" {
+			continue
+		}
+		if file := b.load(imp.path); file != nil {
+			g.parents = append(g.parents, parent{module: b.module(file), name: imp.module})
+		}
 	}
 	return g, nil
 }
@@ -214,59 +269,38 @@ func (b *builder) fill(m *model.Module, files []*workspace.File) {
 	}
 }
 
-type modParent struct {
-	file *workspace.File
-	name string
+func (b *builder) load(path string) *workspace.File {
+	file, err := b.env.Loader.LoadAs(path, b.language)
+	if err != nil || file.Native == nil {
+		return nil
+	}
+	return b.canonical(file)
 }
 
-func (b *builder) importers(self *workspace.File) (map[string][]*workspace.File, []modParent, error) {
-	out := map[string][]*workspace.File{}
-	var parents []modParent
-	if b.env.Files == nil {
-		return out, nil, nil
-	}
-	candidates, err := b.env.Files(b.ctx)
-	if err != nil {
-		return nil, nil, err
-	}
-	for _, c := range candidates {
-		if c.Native == nil || c.Native.Language != b.language {
-			continue
-		}
-		c = b.canonical(c)
-		for _, r := range b.includes(c) {
-			if r.target == nil {
-				continue
-			}
-			if r.include.Module != "" {
-				if r.target.Path == self.Path {
-					parents = append(parents, modParent{file: c, name: r.include.Module})
-				}
-				continue
-			}
-			out[r.target.Path] = append(out[r.target.Path], c)
-		}
-	}
-	return out, parents, nil
-}
-
-func (b *builder) roots(self *workspace.File, importers map[string][]*workspace.File) []*workspace.File {
+func (b *builder) roots(self *workspace.File, graph *Graph) []*workspace.File {
 	var roots []*workspace.File
 	seen := map[string]bool{self.Path: true}
 	queue := []*workspace.File{self}
 	for len(queue) > 0 {
 		f := queue[0]
 		queue = queue[1:]
-		above := importers[f.Path]
-		if len(above) == 0 {
-			roots = append(roots, f)
-			continue
-		}
-		for _, up := range above {
+		above := 0
+		for _, imp := range graph.of(f.Path) {
+			if imp.module != "" {
+				continue
+			}
+			up := b.load(imp.path)
+			if up == nil {
+				continue
+			}
+			above++
 			if !seen[up.Path] {
 				seen[up.Path] = true
 				queue = append(queue, up)
 			}
+		}
+		if above == 0 {
+			roots = append(roots, f)
 		}
 	}
 	if len(roots) == 0 {

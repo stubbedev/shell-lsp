@@ -382,3 +382,44 @@ func TestJustfileTokensLensesAndRangeFormatting(t *testing.T) {
 		t.Errorf("workspace diagnostics = %+v", report.Items)
 	}
 }
+
+func TestEditingAnImportedFileRediagnosesTheImporter(t *testing.T) {
+	t.Parallel()
+
+	files := map[string]string{
+		"justfile": "import 'ci.just'\nbuild: release\n    echo built\n",
+		"ci.just":  "release:\n    echo released\n",
+	}
+	p := openNativeProject(t, nativeCapabilities, files, "justfile", "ci.just")
+	report := func() lsp.FullDocumentDiagnosticReport {
+		return decodeResult[lsp.FullDocumentDiagnosticReport](t, p.c.call("textDocument/diagnostic", `{"textDocument": {"uri": "`+p.uri("justfile")+`"}}`))
+	}
+	before := report()
+	if len(before.Items) > 0 {
+		t.Fatalf("diagnostics before the edit = %+v", before.Items)
+	}
+	p.c.notify("textDocument/didChange", `{"textDocument": {"uri": "`+p.uri("ci.just")+`", "version": 2}, "contentChanges": [{"text": "publish:\n    echo published\n"}]}`)
+	after := report()
+	if after.ResultID == before.ResultID {
+		t.Errorf("the result id %q did not change after the imported file did", after.ResultID)
+	}
+	if got := codes(after.Items); !slices.Equal(got, []string{"SL5002"}) {
+		t.Errorf("diagnostics after the edit = %v, want the unknown recipe", got)
+	}
+}
+
+func TestEditingAnImportedFileRepublishesTheImporter(t *testing.T) {
+	t.Parallel()
+
+	files := map[string]string{
+		"justfile": "import 'ci.just'\nbuild: release\n    echo built\n",
+		"ci.just":  "release:\n    echo released\n",
+	}
+	p := openNativeProject(t, `"capabilities": {}`, files, "justfile", "ci.just")
+	unknown := func(params json.RawMessage) bool {
+		var published lsp.PublishDiagnosticsParams
+		return json.Unmarshal(params, &published) == nil && published.URI == p.uri("justfile") && slices.Equal(codes(published.Diagnostics), []string{"SL5002"})
+	}
+	p.c.notify("textDocument/didChange", `{"textDocument": {"uri": "`+p.uri("ci.just")+`", "version": 2}, "contentChanges": [{"text": "publish:\n    echo published\n"}]}`)
+	p.c.awaitNotification("textDocument/publishDiagnostics", unknown)
+}

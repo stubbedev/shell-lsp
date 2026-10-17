@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/stubbedev/shell-lsp/internal/docstore"
+	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 )
 
@@ -42,6 +43,24 @@ func (s *Server) handleDidClose(_ context.Context, closeParams lsp.DidCloseTextD
 func (s *Server) documentChanged(uri string) {
 	s.warm(uri)
 	s.delivery.changed(uri)
+	view := s.docs.View()
+	doc, ok := view.Document(uri)
+	if !ok {
+		return
+	}
+	language, ok := host.Of(doc.URI, doc.Language)
+	if !ok {
+		return
+	}
+	var related []string
+	for _, other := range view.Documents() {
+		if l, ok := host.Of(other.URI, other.Language); ok && l == language && other.URI != uri {
+			related = append(related, other.URI)
+		}
+	}
+	if len(related) > 0 {
+		s.delivery.refresh(context.Background(), related)
+	}
 }
 
 func negotiateEncoding(preferred []string) docstore.Encoding {

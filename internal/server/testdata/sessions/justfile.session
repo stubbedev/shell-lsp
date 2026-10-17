@@ -15,7 +15,7 @@
 -> {"jsonrpc":"2.0","id":7,"method":"textDocument/completion","params":{"textDocument":{"uri":"file:///w/justfile"},"position":{"line":3,"character":23}}}
 <- {"jsonrpc":"2.0","id":7,"result":{"isIncomplete":false,"items":[{"label":"build","kind":3,"detail":"build target=\"debug\"","documentation":{"kind":"markdown","value":"Build it"},"insertTextFormat":1,"textEdit":{"range":{"start":{"line":3,"character":22},"end":{"line":3,"character":25}},"newText":"build"}},{"label":"dep","kind":3,"detail":"dep","insertTextFormat":1,"textEdit":{"range":{"start":{"line":3,"character":22},"end":{"line":3,"character":25}},"newText":"dep"}}]}}
 -> {"jsonrpc":"2.0","id":8,"method":"textDocument/diagnostic","params":{"textDocument":{"uri":"file:///w/justfile"}}}
-<- {"jsonrpc":"2.0","id":8,"result":{"kind":"full","resultId":"v1/0/1/0","items":[]}}
+<- {"jsonrpc":"2.0","id":8,"result":{"kind":"full","resultId":"v1/0/9002864317065863602/0","items":[]}}
 -> {"jsonrpc":"2.0","id":9,"method":"shutdown"}
 <- {"jsonrpc":"2.0","id":9,"result":null}
 -> {"jsonrpc":"2.0","method":"exit"}

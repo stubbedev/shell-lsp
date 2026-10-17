@@ -119,6 +119,8 @@ type checker struct {
 	warned    sync.Map
 	stdin     func() ([]byte, error)
 	all       []target
+	graphMu   sync.Mutex
+	graphs    map[host.Language]*hostnav.Graph
 }
 
 func newChecker(env Env, opts checkOptions) *checker {
@@ -312,11 +314,30 @@ func (c *checker) lint(t target) linted {
 }
 
 func (c *checker) nativeFindings(h hostnav.Host) ([]lint.Finding, error) {
-	g, err := hostnav.Build(context.Background(), h, hostnav.Env{Loader: c.ws, Home: c.env.Home, Files: c.hostFiles(h.Language())})
+	env := hostnav.Env{Loader: c.ws, Home: c.env.Home}
+	env.Graph = func(ctx context.Context) (*hostnav.Graph, error) { return c.graph(ctx, h.Language(), env) }
+	g, err := hostnav.Build(context.Background(), h, env)
 	if err != nil {
 		return nil, err
 	}
 	return g.Findings(), nil
+}
+
+func (c *checker) graph(ctx context.Context, language host.Language, env hostnav.Env) (*hostnav.Graph, error) {
+	c.graphMu.Lock()
+	defer c.graphMu.Unlock()
+	if g, ok := c.graphs[language]; ok {
+		return g, nil
+	}
+	g, err := hostnav.NewGraph(ctx, language, c.hostFiles(language), env)
+	if err != nil {
+		return nil, err
+	}
+	if c.graphs == nil {
+		c.graphs = map[host.Language]*hostnav.Graph{}
+	}
+	c.graphs[language] = g
+	return g, nil
 }
 
 func (c *checker) hostFiles(language host.Language) navigation.WorkspaceFiles {

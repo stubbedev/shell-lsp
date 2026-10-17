@@ -80,9 +80,7 @@ func (s *Server) diagnose(snap *snapshot) diagnosticReport {
 
 func (s *Server) diagnoseClosed(file *workspace.File, at docstore.Positions) diagnosticReport {
 	settings, generation := s.settingsFor(file.Doc.Location)
-	hash := fnv.New64a()
-	_, _ = hash.Write([]byte(file.Doc.Text()))
-	return s.report(file, settings, generation, at, "h"+strconv.FormatUint(hash.Sum64(), 16))
+	return s.report(file, settings, generation, at, "h"+strconv.FormatUint(hashOf(file.Doc.Text()), 16))
 }
 
 func (s *Server) report(file *workspace.File, settings config.Settings, generation uint64, at docstore.Positions, identity string) diagnosticReport {
@@ -97,13 +95,19 @@ func (s *Server) report(file *workspace.File, settings config.Settings, generati
 	items = append(items, diagnostics.Bats(tests.placedOn(file.Tree), at)...)
 	if h, ok := hostnav.Of(file); ok {
 		items = append(items, diagnostics.Lint(s.nativeFindings(h, settings), sourcePositions(file, at.Encoding()), codeDescriptions)...)
-		stamp = s.workspace.Generation()
+		stamp = hashOf(s.hostStamp(s.docs.View(), h.Language()))
 	}
 	return diagnosticReport{
 		version:  file.Doc.Version,
 		resultID: fmt.Sprintf("%s/%d/%d/%d", identity, generation, stamp, tests.revision),
 		items:    items,
 	}
+}
+
+func hashOf(text string) uint64 {
+	hash := fnv.New64a()
+	_, _ = hash.Write([]byte(text))
+	return hash.Sum64()
 }
 
 func (s *Server) sourcesStamp(tree *parser.Tree) uint64 {

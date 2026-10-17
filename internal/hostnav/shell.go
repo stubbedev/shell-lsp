@@ -2,6 +2,7 @@ package hostnav
 
 import (
 	"slices"
+	"sort"
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/host"
@@ -33,12 +34,19 @@ func shellRegions(f *workspace.File) []region {
 	for i, s := range shells {
 		out[i] = region{shell: s, shadowed: map[string]bool{}}
 	}
+	within := func(host parser.Span) int {
+		i := sort.Search(len(shells), func(i int) bool { return shells[i].Span.End >= host.End })
+		if i < len(shells) && shells[i].Span.Start <= host.Start {
+			return i
+		}
+		return -1
+	}
 	locate := func(span parser.Span) (int, parser.Span, bool) {
 		if f.Doc.Synthetic(span.Start) {
 			return 0, parser.Span{}, false
 		}
 		host := parser.Span{Start: f.Doc.SourceOffset(span.Start), End: f.Doc.SourceOffset(span.End)}
-		i := slices.IndexFunc(shells, func(s model.Shell) bool { return s.Span.Start <= host.Start && host.End <= s.Span.End })
+		i := within(host)
 		return i, host, i >= 0
 	}
 	for _, d := range f.Tree.Definitions {
@@ -52,6 +60,9 @@ func shellRegions(f *workspace.File) []region {
 		}
 	}
 	recursion := f.Native.Language.Recursion()
+	commands := slices.DeleteFunc(slices.Clone(f.Native.Index.Refs), func(ref model.Ref) bool {
+		return ref.Kind != recursion.Ref.Kind || ref.Name != recursion.Ref.Name
+	})
 	syntax.Walk(f.Tree.File, func(node syntax.Node) bool {
 		call, ok := node.(*syntax.CallExpr)
 		if !ok || len(call.Args) == 0 {
@@ -62,8 +73,7 @@ func shellRegions(f *workspace.File) []region {
 			return true
 		}
 		host := parser.Span{Start: f.Doc.SourceOffset(span.Start), End: f.Doc.SourceOffset(span.End)}
-		i := slices.IndexFunc(shells, func(s model.Shell) bool { return s.Span.Start <= host.Start && host.End <= s.Span.End })
-		if i >= 0 && invokes(f, call.Args[0], span, host, recursion) {
+		if i := within(host); i >= 0 && invokes(f, call.Args[0], span, host, recursion.Command, commands) {
 			out[i].calls = append(out[i].calls, calls(f, call.Args[1:], recursion, out[i].shell.Scope)...)
 		}
 		return true
@@ -71,13 +81,11 @@ func shellRegions(f *workspace.File) []region {
 	return out
 }
 
-func invokes(f *workspace.File, name *syntax.Word, span, host parser.Span, r host.Recursion) bool {
-	if lit, ok := parser.Literal(name); ok && lit == r.Command && !f.Doc.Synthetic(span.Start) {
+func invokes(f *workspace.File, name *syntax.Word, span, host parser.Span, command string, commands []model.Ref) bool {
+	if lit, ok := parser.Literal(name); ok && lit == command && !f.Doc.Synthetic(span.Start) {
 		return true
 	}
-	return slices.ContainsFunc(f.Native.Index.Refs, func(ref model.Ref) bool {
-		return ref.Kind == r.Ref.Kind && ref.Name == r.Ref.Name && host.Start <= ref.Span.Start && ref.Span.End <= host.End
-	})
+	return slices.ContainsFunc(commands, func(ref model.Ref) bool { return host.Start <= ref.Span.Start && ref.Span.End <= host.End })
 }
 
 func calls(f *workspace.File, args []*syntax.Word, r host.Recursion, scope model.Scope) []model.Ref {

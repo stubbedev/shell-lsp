@@ -65,8 +65,8 @@ func (m *Module) Resolve(file int, ref Ref) Resolution {
 func (m *Module) lookup(file int, name string, ns Namespace, scope Scope, horizon int) []Target {
 	if file >= 0 && scope != Global {
 		var local []Target
-		for i, s := range m.Files[file].Symbols {
-			if s.Name == name && s.Scope == scope && s.Kind.Namespace() == ns && (horizon == 0 || s.Span.End <= horizon) {
+		for _, i := range m.Files[file].named(ns, name) {
+			if s := m.Files[file].Symbols[i]; s.Scope == scope && (horizon == 0 || s.Span.End <= horizon) {
 				local = append(local, Target{Module: m, File: file, Symbol: i})
 			}
 		}
@@ -76,8 +76,8 @@ func (m *Module) lookup(file int, name string, ns Namespace, scope Scope, horizo
 	}
 	var out []Target
 	for f, ix := range m.Files {
-		for i, s := range ix.Symbols {
-			if s.Name == name && s.Scope == Global && s.Kind.Namespace() == ns {
+		for _, i := range ix.named(ns, name) {
+			if ix.Symbols[i].Scope == Global {
 				out = append(out, Target{Module: m, File: f, Symbol: i})
 			}
 		}
@@ -171,11 +171,10 @@ func (m *Module) expanded() Usage {
 	for len(queue) > 0 {
 		v := queue[0]
 		queue = queue[1:]
-		for _, r := range m.Files[v.target.File].Refs {
-			if r.Edge && r.Owner == v.target.Symbol {
-				for _, next := range effective(m.Resolve(v.target.File, r).Targets, v.at) {
-					mark(next, v.at)
-				}
+		ix := m.Files[v.target.File]
+		for _, i := range ix.edgesOf(v.target.Symbol) {
+			for _, next := range effective(m.Resolve(v.target.File, ix.Refs[i]).Targets, v.at) {
+				mark(next, v.at)
 			}
 		}
 	}
@@ -272,8 +271,10 @@ type edge struct {
 
 func (m *Module) edges(n node) []edge {
 	var out []edge
-	for _, r := range m.Files[n.file].Refs {
-		if !r.Edge || r.Owner != n.symbol || r.Qualified() {
+	ix := m.Files[n.file]
+	for _, i := range ix.edgesOf(n.symbol) {
+		r := ix.Refs[i]
+		if r.Qualified() {
 			continue
 		}
 		for _, t := range m.Resolve(n.file, r).Targets {

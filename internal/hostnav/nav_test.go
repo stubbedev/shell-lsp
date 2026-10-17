@@ -346,7 +346,7 @@ func TestGroupsSurviveSeveralCopiesOfOneFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	g, err := Build(context.Background(), hostOf(t, self), Env{Loader: twoCopies{tr.ws}, Files: tr.all})
+	g, err := Build(context.Background(), hostOf(t, self), envWith(twoCopies{tr.ws}, host.Just, tr.all))
 	if err != nil {
 		t.Fatal(err)
 	}

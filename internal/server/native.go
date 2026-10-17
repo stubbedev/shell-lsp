@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"path/filepath"
 	"slices"
+	"strconv"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/stubbedev/shell-lsp/internal/config"
@@ -23,27 +26,56 @@ import (
 )
 
 func (s *Server) hostEnv(docs *docstore.View, language host.Language) hostnav.Env {
-	return hostnav.Env{Loader: s.workspace, Home: s.process.Home, Files: s.hostFiles(docs, language)}
+	env := hostnav.Env{Loader: s.workspace, Home: s.process.Home}
+	env.Graph = func(ctx context.Context) (*hostnav.Graph, error) { return s.graphs.of(ctx, s, docs, language, env) }
+	return env
 }
 
 func (s *Server) hostFiles(docs *docstore.View, language host.Language) navigation.WorkspaceFiles {
+	all := s.candidateFiles(docs)
 	return func(ctx context.Context) ([]*workspace.File, error) {
-		paths, err := s.workspace.ShellFiles(ctx)
-		if err != nil {
-			return nil, err
-		}
-		for _, doc := range docs.Documents() {
-			if l, ok := host.Of(doc.URI, doc.Language); ok && l == language && doc.Local {
-				paths = append(paths, doc.Path)
-			}
-		}
-		paths = slices.DeleteFunc(paths, func(path string) bool {
-			l, ok := host.FromName(path)
-			return !ok || l != language
-		})
-		slices.Sort(paths)
-		return s.workspace.LoadAll(ctx, slices.Compact(paths), interactive.workers(), func(int, int) {})
+		files, err := all(ctx)
+		return slices.DeleteFunc(files, func(f *workspace.File) bool { return f.Native == nil || f.Native.Language != language }), err
 	}
+}
+
+type hostGraphs struct {
+	mu      sync.Mutex
+	entries map[host.Language]hostGraph
+}
+
+type hostGraph struct {
+	stamp string
+	graph *hostnav.Graph
+}
+
+func (s *Server) hostStamp(docs *docstore.View, language host.Language) string {
+	var sb strings.Builder
+	sb.WriteString(strconv.FormatUint(s.workspace.Generation(), 10))
+	for _, doc := range docs.Documents() {
+		if l, ok := host.Of(doc.URI, doc.Language); ok && l == language {
+			sb.WriteString(" " + doc.URI + "@" + strconv.FormatInt(int64(doc.Version), 10))
+		}
+	}
+	return sb.String()
+}
+
+func (g *hostGraphs) of(ctx context.Context, s *Server, docs *docstore.View, language host.Language, env hostnav.Env) (*hostnav.Graph, error) {
+	stamp := s.hostStamp(docs, language)
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if cached, ok := g.entries[language]; ok && cached.stamp == stamp {
+		return cached.graph, nil
+	}
+	graph, err := hostnav.NewGraph(ctx, language, s.hostFiles(docs, language), env)
+	if err != nil {
+		return nil, fmt.Errorf("finding the files that include %s files: %w", language, err)
+	}
+	if g.entries == nil {
+		g.entries = map[host.Language]hostGraph{}
+	}
+	g.entries[language] = hostGraph{stamp: stamp, graph: graph}
+	return graph, nil
 }
 
 func (s *Server) group(ctx context.Context, docs *docstore.View, h hostnav.Host) (*hostnav.Group, error) {

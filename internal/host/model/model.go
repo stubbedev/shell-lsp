@@ -5,6 +5,7 @@ import (
 	"iter"
 	"slices"
 	"sort"
+	"sync"
 
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/parser"
@@ -188,6 +189,41 @@ type Index struct {
 	Findings  []lint.Finding
 	ExportAll bool
 	Broken    bool
+
+	lookups sync.Once
+	byName  map[symbolKey][]int
+	byOwner map[int][]int
+}
+
+type symbolKey struct {
+	ns   Namespace
+	name string
+}
+
+func (ix *Index) tables() {
+	ix.lookups.Do(func() {
+		ix.byName = make(map[symbolKey][]int, len(ix.Symbols))
+		for i, s := range ix.Symbols {
+			key := symbolKey{s.Kind.Namespace(), s.Name}
+			ix.byName[key] = append(ix.byName[key], i)
+		}
+		ix.byOwner = map[int][]int{}
+		for i, r := range ix.Refs {
+			if r.Edge {
+				ix.byOwner[r.Owner] = append(ix.byOwner[r.Owner], i)
+			}
+		}
+	})
+}
+
+func (ix *Index) named(ns Namespace, name string) []int {
+	ix.tables()
+	return ix.byName[symbolKey{ns, name}]
+}
+
+func (ix *Index) edgesOf(owner int) []int {
+	ix.tables()
+	return ix.byOwner[owner]
 }
 
 type Certainty uint8
@@ -307,10 +343,8 @@ func (ix *Index) At(offset int) (Hit, bool) {
 
 func (ix *Index) Lookup(name string, ns Namespace, scope Scope) []int {
 	var local, global []int
-	for i, s := range ix.Symbols {
-		if s.Name != name || s.Kind.Namespace() != ns {
-			continue
-		}
+	for _, i := range ix.named(ns, name) {
+		s := ix.Symbols[i]
 		switch s.Scope {
 		case scope:
 			if scope != Global {
