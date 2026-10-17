@@ -308,6 +308,18 @@ func TestMakeExportedVariablesAndTargetScopes(t *testing.T) {
 	}
 }
 
+func TestMakePatternSpecificVariables(t *testing.T) {
+	t.Parallel()
+
+	tr := newTree(t, map[string]string{
+		"Makefile": "CFLAGS := -g\n%.o: CFLAGS += -O2\nmain.o: main.c\n\tcc $(CFLAGS) -c main.c\nnotes.txt:\n\techo $(CFLAGS)\n",
+	})
+	g, sym := tr.at("Makefile", "CFLAGS", 2)
+	expectStrings(t, "definition of CFLAGS in main.o's recipe", tr.locations(g.definitions(sym)), []string{"Makefile:2:CFLAGS"})
+	g, sym = tr.at("Makefile", "CFLAGS", 3)
+	expectStrings(t, "definition of CFLAGS in notes.txt's recipe", tr.locations(g.definitions(sym)), []string{"Makefile:1:CFLAGS"})
+}
+
 type twoCopies struct {
 	*workspace.Workspace
 }

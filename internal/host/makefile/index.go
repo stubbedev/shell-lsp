@@ -184,6 +184,19 @@ func (in *indexer) namesTarget(r *Rule) bool {
 	})
 }
 
+func (in *indexer) ruleTargets() []string {
+	var out []string
+	for _, r := range in.f.Rules {
+		for _, t := range r.Targets {
+			if literal(t) {
+				out = append(out, t.Text)
+			}
+		}
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
+}
+
 func (in *indexer) text(s Span) string { return in.f.Text[s.Start:s.End] }
 
 func (in *indexer) token(span Span, t semantic.Type, mods semantic.Modifier) {
@@ -236,6 +249,13 @@ func (in *indexer) assignment(a *Assignment) {
 		scopes = scopes[:0]
 		for _, t := range a.Targets {
 			scopes = append(scopes, in.scope(t.Text))
+			if !t.Expr.Dynamic() && strings.Contains(t.Text, "%") {
+				for _, name := range in.ruleTargets() {
+					if name != t.Text && matchesPattern(t.Text, name) {
+						scopes = append(scopes, in.scope(name))
+					}
+				}
+			}
 			in.walk(t.Expr, model.Global, model.NoSymbol, false, nil)
 			if literal(t) {
 				in.ix.Refs = append(in.ix.Refs, model.Ref{Name: t.Text, Kind: model.KindTarget, Span: t.Span, Args: model.NoArgs, Owner: model.NoSymbol, Soft: true})
