@@ -1,0 +1,2 @@
+go test fuzz v1
+string(".PHONY:00000\xed\xb2000000000%000:")

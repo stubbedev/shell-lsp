@@ -1116,10 +1116,13 @@ all:
 ## SL6007
 
 **A recursively expanded variable refers to itself.** `VAR = $(VAR) more`
-makes make expand the variable forever and stop; use `+=` or `:=` instead.
+makes make expand the variable forever and stop as soon as something uses it;
+use `+=` or `:=` instead.
 
 ```make
 CFLAGS = $(CFLAGS) -O2    # SL6007
+all:
+	cc $(CFLAGS) main.c
 ```
 
 ## SL6008
@@ -1167,7 +1170,8 @@ OBJS := $(subst .c,.o)    # SL6011
 ## SL6012
 
 **A variable reference is not closed.** `$(` or `${` has no matching `)` or
-`}` on the same logical line.
+`}` on the same logical line, in text make expands: a rule, a recipe, an
+immediate assignment or a recursive variable that something uses.
 
 ```make
 all:
@@ -1194,4 +1198,29 @@ as `CFLAGS` or `SHELL`, and variables used by name with `$(call ...)`,
 VERSION := 1.0    # SL6014
 all:
 	@echo all
+```
+
+## SL6015
+
+**A deferred variable reference is not closed.** A recursively expanded value
+(`=`, `?=`, `+=` or `define`), or the recipe of a pattern rule, has a `$(` or
+`${` without its closing parenthesis. make reads the file fine and fails only
+when it expands the variable or uses the pattern rule; once something expands
+the variable, the reference is reported as SL6012.
+
+```make
+SEARCH = -I$(INCLUDE    # SL6015
+all:
+	@echo done
+```
+
+## SL6016
+
+**A target does not match its static pattern.** In `targets: pattern:
+prerequisites`, every target must match the target pattern. make ignores a
+target that does not, so its recipe never runs.
+
+```make
+main.o util.c: %.o: %.c    # SL6016
+	cc -c $< -o $@
 ```

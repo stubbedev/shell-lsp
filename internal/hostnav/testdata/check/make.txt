@@ -264,3 +264,65 @@ all:
 -- semicolon-before-colon --
 a;b:
 	@echo $@
+-- reference-ends-at-the-first-parenthesis --
+x := $(()
+all:
+	@echo [$(x(y)z)]
+-- function-arguments-balance-parentheses --
+all:
+	@echo $(subst (,X,a(b)c)
+-- grouped-targets-need-a-recipe --
+a b &: c
+all:
+-- recipe-before-the-first-rule --
+	$(info hi)
+all:
+-- tab-prefixed-assignment-before-a-rule --
+	x = 1
+all:
+	@echo $(x)
+-- rule-without-targets --
+: b
+	echo $(
+all:
+-- whitespace-in-a-variable-name --
+a b = c
+all:
+-- assignment-without-a-name --
+= c
+all:
+-- text-after-a-reference --
+$(x)y
+all:
+-- unused-self-reference --
+A = $(A) more
+all:
+-- deferred-unterminated-reference --
+A = $(B
+all:
+-- self-reference-expanded-only-through-an-unused-variable --
+A = $(A)
+B = $(A)
+all:
+-- self-reference-expanded-by-a-recipe --
+A = $(A) more
+all:
+	@echo $(A)
+-- static-pattern-without-percent --
+a.o: obj: a.c
+	cc a.c
+-- dollar-space-is-a-variable --
+$ 
+all:
+-- directive-word-as-a-variable --
+define = 1
+export := 2
+all:
+	@echo $(define) $(export)
+-- directive-word-as-a-target --
+export:
+	@echo exported
+-- directive-before-a-spaced-colon --
+vpath :
+	@echo r
+all:

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/host/model"
 	"github.com/stubbedev/shell-lsp/internal/projection"
 	"github.com/stubbedev/shell-lsp/internal/scan"
 	"github.com/stubbedev/shell-lsp/internal/textline"
@@ -26,7 +27,10 @@ var (
 	modifiers    = []string{"export", "override", "private"}
 	directives   = []string{"include", "-include", "sinclude", "vpath", "undefine", "unexport", "export", "load", "-load"}
 	assignOps    = []string{":::=", "::=", ":=", "+=", "?=", "!=", "="}
+	recursiveOps = []string{"=", "?=", ""}
 )
+
+const whitespace = " \t\f\v"
 
 type define struct {
 	assignment *Assignment
@@ -38,6 +42,7 @@ type reader struct {
 	file     *File
 	prefix   byte
 	rule     *Rule
+	ignored  bool
 	defining *define
 	open     []*Conditional
 	oneShell bool
@@ -50,6 +55,9 @@ type reader struct {
 
 func Parse(text string) *File {
 	p := &reader{text: text, prefix: defaultPrefix, file: &File{Text: text}}
+	if nul := strings.IndexByte(text, 0); nul >= 0 {
+		p.fail(ErrSyntax, Span{Start: nul, End: nul + 1}, "make reads lines as C strings: a NUL byte drops the rest of its line and joins the next one onto it")
+	}
 	p.parse()
 	return p.file
 }
@@ -138,10 +146,15 @@ func (p *reader) parse() {
 		switch {
 		case p.defining != nil:
 			p.defineBody(pos, end, line)
+		case p.ignored && line != "" && line[0] == p.prefix:
 		case p.rule != nil && line != "" && line[0] == p.prefix:
+			first := len(p.file.Errors)
 			p.rule.Recipe = append(p.rule.Recipe, RecipeLine{Span: Span{Start: pos + 1, End: end}, Expr: p.expr(pos+1, end)})
 			p.rule.Span.End = end
-		case strings.TrimSpace(line) == "":
+			if p.rule.Pattern() {
+				p.convert(first, ErrPatternUnterminated, "; make fails when it uses this pattern rule")
+			}
+		case blankText(line):
 		case strings.HasPrefix(strings.TrimLeft(line, " \t"), "#"):
 			p.comment(pos+len(line)-len(strings.TrimLeft(line, " \t")), end)
 		default:
@@ -152,8 +165,26 @@ func (p *reader) parse() {
 	if p.defining != nil {
 		a := p.defining.assignment
 		p.fail(ErrDefine, a.Name.Span, "`define "+a.Name.Text+"` has no `endef`")
+		first := len(p.file.Errors)
 		a.Value = p.expr(a.Value.Span.Start, len(p.text))
+		p.deferred(first, a)
 		a.Span.End = len(p.text)
+	}
+	colons := map[string]*Rule{}
+	for _, r := range p.file.Rules {
+		if r.Grouped && len(r.Recipe) == 0 {
+			p.fail(ErrSyntax, r.Header, "grouped targets `&:` need a recipe")
+		}
+		for _, t := range r.Targets {
+			if t.Expr.Dynamic() {
+				continue
+			}
+			if prior, ok := colons[t.Text]; ok && prior.DoubleColon != r.DoubleColon {
+				p.fail(ErrSyntax, t.Span, fmt.Sprintf("target `%s` has both `:` and `::` rules; the first is on line %d", t.Text, strings.Count(p.text[:prior.Span.Start], "\n")+1))
+				continue
+			}
+			colons[t.Text] = r
+		}
 	}
 	for _, c := range p.open {
 		line := strings.Count(p.text[:c.Open.Keyword.Span.Start], "\n") + 1
@@ -193,7 +224,9 @@ func (p *reader) defineBody(start, end int, line string) {
 			return
 		}
 		a := p.defining.assignment
+		first := len(p.file.Errors)
 		a.Value = p.expr(a.Value.Span.Start, max(start-1, a.Value.Span.Start))
+		p.deferred(first, a)
 		a.End = Span{Start: start + len(line) - len(strings.TrimLeft(line, " \t")), End: end}
 		a.Span.End = end
 		p.defining = nil
@@ -220,29 +253,34 @@ func (p *reader) directive(start, end int) {
 	if cut < len(body) {
 		p.comment(start+cut, end)
 	}
-	body = strings.TrimRight(body[:cut], " \t")
-	s := strings.TrimLeft(body, " \t")
+	body = trimTrailing(body[:cut])
+	s := strings.TrimLeft(body, whitespace)
 	at := start + len(body) - len(s)
 	word := firstWord(s)
+	if named(s, word) {
+		word = ""
+	}
 	if slices.Contains(conditionals, word) {
 		p.conditional(at, s, word)
 		return
 	}
-	wasRule := p.rule != nil
-	p.rule = nil
+	wasRule := p.rule != nil || p.ignored
+	p.rule, p.ignored = nil, false
 	var mods []Word
 	for slices.Contains(modifiers, word) && modifies(strings.TrimLeft(s[len(word):], " \t")) {
 		mods = append(mods, p.keyword(at, word))
 		rest := strings.TrimLeft(s[len(word):], " \t")
 		at += len(s) - len(rest)
 		s = rest
-		word = firstWord(s)
+		if word = firstWord(s); named(s, word) {
+			word = ""
+		}
 	}
 	switch {
 	case word == "define":
 		p.define(at, s, mods, Span{Start: start, End: end})
 		return
-	case word == "endef":
+	case word == "endef" && !hasOperator(s):
 		p.fail(ErrDefine, p.keyword(at, word).Span, "`endef` without a `define`")
 		return
 	case slices.Contains(directives, word):
@@ -251,6 +289,8 @@ func (p *reader) directive(start, end int) {
 	}
 	i, rule := operator(s)
 	switch {
+	case body != "" && body[0] == p.prefix && (i < 0 || rule):
+		p.fail(ErrRecipeOutsideRule, Span{Start: start, End: start + len(body)}, "a recipe line comes before the first rule")
 	case i >= 0 && rule && topLevel(s, 0, ";") < i:
 		p.fail(ErrSyntax, Span{Start: at, End: at + len(s)}, "missing separator: a `;` comes before the rule's `:`")
 	case i >= 0 && rule:
@@ -258,14 +298,174 @@ func (p *reader) directive(start, end int) {
 	case i >= 0:
 		p.assign(s, i, at, mods, nil)
 	case strings.HasPrefix(s, "$"):
-		p.file.Expressions = append(p.file.Expressions, p.expr(at, at+len(s)))
-	case body != "" && body[0] == p.prefix:
-		p.fail(ErrRecipeOutsideRule, Span{Start: start, End: start + len(body)}, "a recipe line comes before the first rule")
+		e := p.expr(at, at+len(s))
+		p.file.Expressions = append(p.file.Expressions, e)
+		if text, ok := p.literalText(p.expr(at, at+topLevel(s, 0, ";"))); ok {
+			p.fail(ErrSyntax, text, "missing separator: this line expands to text that is no rule, assignment or directive")
+		} else {
+			p.ignored = !p.empty(e)
+		}
 	case wasRule && (body[0] == ' ' || body[0] == '\t'):
 		p.fail(ErrRecipePrefix, Span{Start: start, End: start + len(body)}, "a recipe line must start with "+prefixName(p.prefix))
 	default:
-		p.fail(ErrSyntax, Span{Start: at, End: at + len(s)}, "missing separator: this line is no rule, assignment or directive")
+		e := p.expr(at, at+len(s))
+		p.file.Expressions = append(p.file.Expressions, e)
+		if _, ok := p.literalText(e); ok {
+			p.fail(ErrSyntax, Span{Start: at, End: at + len(s)}, "missing separator: this line is no rule, assignment or directive")
+		} else {
+			p.ignored = !p.empty(e)
+		}
 	}
+}
+
+func (p *reader) deferred(first int, a *Assignment) {
+	a.Deferred = len(a.Targets) == 0 && (slices.Contains(recursiveOps, a.Op) || a.Op == "+=" && p.appendsRecursively(a))
+	if !a.Deferred {
+		return
+	}
+	p.convert(first, ErrDeferredUnterminated, "; make fails when it expands `"+a.Name.Text+"`")
+}
+
+func (p *reader) appendsRecursively(a *Assignment) bool {
+	for _, prior := range slices.Backward(p.file.Assignments) {
+		if prior != a && prior.Name.Text == a.Name.Text && len(prior.Targets) == len(a.Targets) {
+			return prior.Deferred
+		}
+	}
+	return true
+}
+
+func (p *reader) convert(first int, kind ErrorKind, why string) {
+	for i := first; i < len(p.file.Errors); i++ {
+		if e := &p.file.Errors[i]; e.Kind == ErrUnterminated {
+			e.Kind = kind
+			e.Message += why
+		}
+	}
+}
+
+func (p *reader) known(words []Word) int {
+	n := 0
+	for _, w := range words {
+		if _, ok := p.literalText(w.Expr); ok {
+			n++
+		}
+	}
+	return n
+}
+
+func blankText(s string) bool {
+	return strings.Trim(strings.ReplaceAll(s, "\\\n", " "), whitespace+"\n") == ""
+}
+
+func (p *reader) empty(e Expr) bool {
+	return !slices.ContainsFunc(e.Nodes, func(n Node) bool {
+		return n.Kind == NodeText && !blankText(p.text[n.Span.Start:n.Span.End]) || n.Kind != NodeText && !p.emptyReference(n)
+	})
+}
+
+func (p *reader) resolvedName(e Expr) (string, bool) {
+	var sb strings.Builder
+	for _, n := range e.Nodes {
+		switch {
+		case n.Kind == NodeText:
+			sb.WriteString(p.text[n.Span.Start:n.Span.End])
+		case !p.emptyReference(n):
+			return "", false
+		}
+	}
+	return sb.String(), true
+}
+
+func (p *reader) emptyReference(n Node) bool {
+	name, ok := p.resolvedName(n.Name)
+	if n.Kind != NodeReference || n.Unbalanced || !ok || n.Braced && strings.ContainsAny(name, "(){}") {
+		return false
+	}
+	name = strings.TrimSpace(name)
+	if _, builtin := Builtins.Lookup(model.KindVariable, name); builtin && !automatic(name) {
+		return false
+	}
+	return !slices.ContainsFunc(p.file.Assignments, func(a *Assignment) bool { return a.Name.Text == name })
+}
+
+func (p *reader) spaced(e Expr) bool {
+	return slices.ContainsFunc(e.Nodes, func(n Node) bool {
+		return n.Kind == NodeText && strings.ContainsAny(p.text[n.Span.Start:n.Span.End], " \t")
+	})
+}
+
+func (p *reader) literalText(e Expr) (Span, bool) {
+	if slices.ContainsFunc(e.Nodes, func(n Node) bool { return n.Kind != NodeText && !p.emptyReference(n) }) {
+		return Span{}, false
+	}
+	for _, n := range e.Nodes {
+		if n.Kind == NodeText && !blankText(p.text[n.Span.Start:n.Span.End]) {
+			return n.Span, true
+		}
+	}
+	return Span{}, false
+}
+
+func hasOperator(s string) bool {
+	i, _ := operator(s)
+	return i >= 0
+}
+
+func targetAssignment(rest string) bool {
+	rest = strings.TrimLeft(rest, " \t")
+	for word := firstWord(rest); slices.Contains(modifiers, word) && strings.TrimSpace(rest[len(word):]) != ""; word = firstWord(rest) {
+		rest = strings.TrimLeft(rest[len(word):], " \t")
+	}
+	i, isRule := operator(rest)
+	if isRule || i < 0 {
+		return false
+	}
+	name, opStart := assignmentName(rest, i)
+	if !strings.ContainsAny(name, " \t") {
+		return true
+	}
+	return rest[opStart] != ':' && topLevel(rest, i+1, ":") == len(rest)
+}
+
+func (p *reader) percent(w Word) bool {
+	return slices.ContainsFunc(w.Expr.Nodes, func(n Node) bool {
+		return n.Kind == NodeText && strings.Contains(p.text[n.Span.Start:n.Span.End], "%")
+	})
+}
+
+func (p *reader) mixedTargets(targets []Word) {
+	if len(targets) == 0 || !p.percent(targets[0]) {
+		return
+	}
+	for _, t := range targets[1:] {
+		if _, normal := p.literalText(t.Expr); normal && !p.percent(t) {
+			p.fail(ErrSyntax, t.Span, fmt.Sprintf("normal target `%s` follows the pattern target `%s`; a rule is either a pattern rule or a normal one", t.Text, targets[0].Text))
+			return
+		}
+	}
+}
+
+func matchesPattern(pattern, name string) bool {
+	prefix, suffix, _ := strings.Cut(pattern, "%")
+	return len(name) >= len(prefix)+len(suffix) && strings.HasPrefix(name, prefix) && strings.HasSuffix(name, suffix)
+}
+
+func named(s, word string) bool {
+	if strings.HasPrefix(s[len(word):], ":") {
+		return true
+	}
+	rest := strings.TrimLeft(s[len(word):], " \t")
+	return slices.ContainsFunc(assignOps, func(op string) bool { return strings.HasPrefix(rest, op) })
+}
+
+func trimTrailing(s string) string {
+	trimmed := strings.TrimRight(s, " \t")
+	dollars := len(trimmed) - len(strings.TrimRight(trimmed, "$"))
+	if dollars%2 == 1 && len(trimmed) < len(s) {
+		return s[:len(trimmed)+1]
+	}
+	return trimmed
 }
 
 func (p *reader) conditional(at int, s, word string) {
@@ -418,11 +618,11 @@ func (p *reader) plainDirective(at int, s, word string, mods []Word) {
 func (p *reader) fields(at int, s string) []Word {
 	var out []Word
 	scan.Forward(0, len(s), func(i int) int {
-		if s[i] == ' ' || s[i] == '\t' || s[i] == '\\' || s[i] == '\n' || s[i] == '\r' {
+		if strings.IndexByte(whitespace+"\\\n\r", s[i]) >= 0 {
 			return i + 1
 		}
 		end := i
-		for end < len(s) && s[end] != ' ' && s[end] != '\t' && s[end] != '\n' && s[end] != '\r' && !continuation(s, end) {
+		for end < len(s) && strings.IndexByte(whitespace+"\n\r", s[end]) < 0 && !continuation(s, end) {
 			if s[end] == '$' {
 				end = referenceEnd(s, end, len(s))
 				continue
@@ -441,10 +641,18 @@ func (p *reader) parseRule(s string, colon, at, end int) {
 	if double {
 		after++
 	}
-	targetText := strings.TrimSuffix(s[:colon], "&")
+	targetText := s[:colon]
+	if before := strings.TrimSuffix(targetText, "&"); len(before) < len(targetText) && (len(before)-len(strings.TrimRight(before, "$")))%2 == 0 {
+		targetText = before
+	}
+	if strings.TrimSpace(targetText) == "" {
+		p.ignored = true
+		return
+	}
 	targets := p.fields(at, targetText)
 	i := topLevel(s, after, "=;")
-	if i < len(s) && s[i] == '=' {
+	if i < len(s) && s[i] == '=' && targetAssignment(s[after:]) {
+		p.mixedTargets(targets)
 		rest := s[after:]
 		rest = strings.TrimLeft(rest, " \t")
 		restAt := at + len(s) - len(rest)
@@ -462,13 +670,37 @@ func (p *reader) parseRule(s string, colon, at, end int) {
 		}
 		return
 	}
-	rule := &Rule{Targets: targets, DoubleColon: double, Colon: at + colon, Header: Span{Start: at, End: at + i}, Span: Span{Start: at, End: end}}
+	i = topLevel(s, after, ";")
+	rule := &Rule{Targets: targets, DoubleColon: double, Grouped: len(targetText) < colon, Colon: at + colon, Header: Span{Start: at, End: at + i}, Span: Span{Start: at, End: end}}
 	deps := s[after:i]
 	depsAt := at + after
 	if second := topLevel(deps, 0, ":"); second < len(deps) {
 		rule.Patterns = p.fields(depsAt, deps[:second])
+		switch {
+		case len(rule.Patterns) == 0:
+			p.fail(ErrSyntax, Span{Start: depsAt + second, End: depsAt + second + 1}, "a static pattern rule needs a target pattern before this `:`")
+		case p.known(rule.Patterns) > 1:
+			p.fail(ErrSyntax, rule.Patterns[1].Span, "a static pattern rule takes one target pattern")
+		}
+		if len(targets) > 0 && p.percent(targets[0]) {
+			p.fail(ErrSyntax, targets[0].Span, fmt.Sprintf("pattern target `%s` cannot head a static pattern rule", targets[0].Text))
+		}
+		for _, pattern := range rule.Patterns {
+			if literal(pattern) {
+				p.fail(ErrSyntax, pattern.Span, "the target pattern of a static pattern rule needs a `%`")
+				continue
+			}
+			for _, t := range targets {
+				if !pattern.Expr.Dynamic() && literal(t) && !strings.HasPrefix(t.Text, ".") && !matchesPattern(pattern.Text, t.Text) {
+					p.fail(ErrPatternMismatch, t.Span, fmt.Sprintf("target `%s` does not match the target pattern `%s`, so make ignores it", t.Text, pattern.Text))
+				}
+			}
+		}
 		deps = deps[second+1:]
 		depsAt += second + 1
+	}
+	if len(rule.Patterns) == 0 {
+		p.mixedTargets(targets)
 	}
 	if bar := topLevel(deps, 0, "|"); bar < len(deps) {
 		rule.Prereqs = p.fields(depsAt, deps[:bar])
@@ -488,13 +720,38 @@ func (p *reader) parseRule(s string, colon, at, end int) {
 	}
 }
 
-func (p *reader) assign(s string, i, at int, mods, targets []Word) {
-	opStart, opEnd := i, i+1
-	for opStart > 0 && strings.IndexByte(":?+!", s[opStart-1]) >= 0 {
-		opStart--
+func assignmentName(s string, i int) (string, int) {
+	opStart := i
+	for _, op := range assignOps {
+		if strings.HasSuffix(s[:i+1], op) {
+			opStart = i + 1 - len(op)
+			break
+		}
 	}
-	name := strings.TrimRight(s[:opStart], " \t")
+	return strings.TrimRight(s[:opStart], " \t"), opStart
+}
+
+func (p *reader) assign(s string, i, at int, mods, targets []Word) {
+	name, opStart := assignmentName(s, i)
+	opEnd := i + 1
+	if name == "" {
+		p.fail(ErrSyntax, Span{Start: at + opStart, End: at + opEnd}, "this assignment has no variable name")
+		return
+	}
+	if len(targets) == 0 && !slices.ContainsFunc(mods, func(m Word) bool { return m.Text == "export" }) && p.spaced(p.expr(at, at+len(name))) {
+		if s[opStart] == ':' {
+			p.parseRule(s, opStart, at, at+len(s))
+			return
+		}
+		if colon := topLevel(s, opEnd, ":"); colon < len(s) {
+			p.parseRule(s, colon, at, at+len(s))
+			return
+		}
+		p.fail(ErrSyntax, Span{Start: at, End: at + len(name)}, "missing separator: a variable name cannot contain whitespace")
+		return
+	}
 	value := strings.TrimLeft(s[opEnd:], " \t")
+	first := len(p.file.Errors)
 	a := &Assignment{
 		Name:      p.word(at, name),
 		Op:        s[opStart:opEnd],
@@ -506,6 +763,7 @@ func (p *reader) assign(s string, i, at int, mods, targets []Word) {
 	if len(targets) > 0 {
 		a.Span.Start = targets[0].Span.Start
 	}
+	p.deferred(first, a)
 	p.file.Assignments = append(p.file.Assignments, a)
 	if len(targets) == 0 {
 		p.setting(a)
@@ -584,10 +842,19 @@ func topLevel(s string, from int, stops string) int {
 	found := len(s)
 	scan.Forward(from, len(s), func(i int) int {
 		switch {
-		case s[i] == '\\':
+		case s[i] == '\\' && i+1 < len(s) && strings.IndexByte("#:\n", s[i+1]) >= 0:
 			return i + 2
+		case s[i] == '$' && i+1 < len(s) && (s[i+1] == '(' || s[i+1] == '{'):
+			open, closeByte := s[i+1], byte(')')
+			if open == '{' {
+				closeByte = '}'
+			}
+			if j := balanced(s, i+1, len(s), func(j int) bool { return s[j] == open }, closeByte); j >= 0 {
+				return j + 1
+			}
+			return len(s)
 		case s[i] == '$':
-			return referenceEnd(s, i, len(s))
+			return i + 2
 		case strings.IndexByte(stops, s[i]) >= 0:
 			found = i
 			return len(s)

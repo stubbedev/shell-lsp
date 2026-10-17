@@ -1,6 +1,10 @@
 package makefile
 
-import "github.com/stubbedev/shell-lsp/internal/parser"
+import (
+	"strings"
+
+	"github.com/stubbedev/shell-lsp/internal/parser"
+)
 
 type Span = parser.Span
 
@@ -19,6 +23,7 @@ type Assignment struct {
 	Targets   []Word
 	Span      Span
 	Define    bool
+	Deferred  bool
 	End       Span
 }
 
@@ -34,10 +39,15 @@ type Rule struct {
 	OrderOnly   []Word
 	Patterns    []Word
 	DoubleColon bool
+	Grouped     bool
 	Colon       int
 	Header      Span
 	Recipe      []RecipeLine
 	Span        Span
+}
+
+func (r *Rule) Pattern() bool {
+	return len(r.Patterns) == 0 && len(r.Targets) > 0 && strings.Contains(r.Targets[0].Text, "%")
 }
 
 type IncludeKind uint8
@@ -84,6 +94,9 @@ const (
 	ErrRecipePrefix
 	ErrRecipeOutsideRule
 	ErrUnterminated
+	ErrDeferredUnterminated
+	ErrPatternUnterminated
+	ErrPatternMismatch
 )
 
 type File struct {

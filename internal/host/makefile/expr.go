@@ -12,11 +12,12 @@ const (
 )
 
 type Node struct {
-	Kind   NodeKind
-	Span   Span
-	Name   Expr
-	Args   []Expr
-	Braced bool
+	Kind       NodeKind
+	Span       Span
+	Name       Expr
+	Args       []Expr
+	Braced     bool
+	Unbalanced bool
 }
 
 type Expr struct {
@@ -101,17 +102,36 @@ func (p exprParser) parse(start, end int) Expr {
 func (p exprParser) closing(open, end int) int { return closingOf(p.text, open, end) }
 
 func closingOf(text string, open, end int) int {
+	closing, _ := closingWith(text, open, end)
+	return closing
+}
+
+func closingWith(text string, open, end int) (int, bool) {
 	openByte := text[open]
 	closeByte := byte(')')
 	if openByte == '{' {
 		closeByte = '}'
 	}
-	depth := 0
-	for j := open; j < end; j++ {
-		switch text[j] {
-		case openByte:
+	if _, ok := functionName(text, open+1, end); ok {
+		return balanced(text, open, end, func(j int) bool { return text[j] == openByte }, closeByte), false
+	}
+	nested := func(j int) bool { return j > 0 && text[j] == openByte && text[j-1] == '$' }
+	if closing := balanced(text, open, end, nested, closeByte); closing >= 0 {
+		return closing, false
+	}
+	if rest := text[open+1 : end]; strings.Contains(rest, "$"+string(openByte)) && strings.IndexByte(rest, closeByte) >= 0 {
+		return end, true
+	}
+	return -1, false
+}
+
+func balanced(text string, open, end int, opens func(int) bool, closeByte byte) int {
+	depth := 1
+	for j := open + 1; j < end; j++ {
+		switch {
+		case opens(j):
 			depth++
-		case closeByte:
+		case text[j] == closeByte:
 			depth--
 			if depth == 0 {
 				return j
@@ -121,6 +141,17 @@ func closingOf(text string, open, end int) int {
 	return -1
 }
 
+func functionName(text string, start, end int) (int, bool) {
+	nameEnd := start
+	for nameEnd < end && (text[nameEnd] >= 'a' && text[nameEnd] <= 'z' || text[nameEnd] == '-') {
+		nameEnd++
+	}
+	if nameEnd == start || nameEnd >= end || text[nameEnd] != ' ' && text[nameEnd] != '\t' || !builtinFunction(text[start:nameEnd]) {
+		return 0, false
+	}
+	return nameEnd, true
+}
+
 func referenceEnd(text string, dollar, end int) int {
 	if dollar+1 >= end {
 		return end
@@ -128,20 +159,25 @@ func referenceEnd(text string, dollar, end int) int {
 	if next := text[dollar+1]; next != '(' && next != '{' {
 		return dollar + 2
 	}
-	if closing := closingOf(text, dollar+1, end); closing >= 0 {
+	if closing, unbalanced := closingWith(text, dollar+1, end); closing >= 0 && !unbalanced {
 		return closing + 1
 	}
 	return end
 }
 
 func (p exprParser) reference(dollar, end int) (Node, int) {
-	closing := p.closing(dollar+1, end)
+	closing, unbalanced := closingWith(p.text, dollar+1, end)
 	inner := dollar + 2
 	n := Node{Kind: NodeReference, Braced: true}
 	if closing < 0 {
 		*p.errors = append(*p.errors, Error{Span: Span{Start: dollar, End: min(dollar+2, end)}, Message: "this variable reference is not closed on the same logical line", Kind: ErrUnterminated})
 		n.Span = Span{Start: dollar, End: end}
 		n.Name = p.parse(inner, end)
+		return n, end
+	}
+	if unbalanced {
+		n.Span, n.Unbalanced = Span{Start: dollar, End: end}, true
+		n.Name = Expr{Span: Span{Start: inner, End: end}, Nodes: []Node{{Kind: NodeText, Span: Span{Start: inner, End: end}}}}
 		return n, end
 	}
 	n.Span = Span{Start: dollar, End: closing + 1}
@@ -162,11 +198,8 @@ func (p exprParser) reference(dollar, end int) (Node, int) {
 }
 
 func (p exprParser) call(start, end int) (Expr, []Expr, bool) {
-	nameEnd := start
-	for nameEnd < end && (p.text[nameEnd] >= 'a' && p.text[nameEnd] <= 'z' || p.text[nameEnd] == '-') {
-		nameEnd++
-	}
-	if nameEnd == start || nameEnd >= end || p.text[nameEnd] != ' ' && p.text[nameEnd] != '\t' || !builtinFunction(p.text[start:nameEnd]) {
+	nameEnd, ok := functionName(p.text, start, end)
+	if !ok {
 		return Expr{}, nil, false
 	}
 	name := Expr{Span: Span{Start: start, End: nameEnd}, Nodes: []Node{{Kind: NodeText, Span: Span{Start: start, End: nameEnd}}}}

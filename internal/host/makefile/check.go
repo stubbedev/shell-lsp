@@ -13,12 +13,17 @@ var errorCodes = map[ErrorKind]lint.Code{
 	ErrRecipePrefix:      lint.CodeMakeRecipePrefix,
 	ErrRecipeOutsideRule: lint.CodeMakeRecipeOutsideRule,
 	ErrUnterminated:      lint.CodeMakeUnterminatedReference,
+
+	ErrPatternUnterminated: lint.CodeMakeDeferredUnterminatedReference,
+	ErrPatternMismatch:     lint.CodeMakePatternMismatch,
 }
 
 func (f *File) check() []lint.Finding {
 	var out []lint.Finding
 	for _, e := range f.Errors {
-		out = append(out, lint.HostFinding(errorCodes[e.Kind], e.Span, e.Message))
+		if e.Kind != ErrDeferredUnterminated {
+			out = append(out, lint.HostFinding(errorCodes[e.Kind], e.Span, e.Message))
+		}
 	}
 	return append(out, f.duplicateRecipes()...)
 }

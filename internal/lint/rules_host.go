@@ -49,6 +49,8 @@ const (
 	CodeMakeUnterminatedReference
 	CodeMakeMissingInclude
 	CodeMakeUnusedVariable
+	CodeMakeDeferredUnterminatedReference
+	CodeMakePatternMismatch
 )
 
 func (c Code) Host() bool { return c > justBase && c < hostEnd }
@@ -97,6 +99,9 @@ var hostFamily = family{
 		CodeMakeUnterminatedReference: {severity: SeverityError},
 		CodeMakeMissingInclude:        {severity: SeverityError},
 		CodeMakeUnusedVariable:        {severity: SeverityInfo, tag: TagUnnecessary},
+
+		CodeMakeDeferredUnterminatedReference: {severity: SeverityWarning},
+		CodeMakePatternMismatch:               {severity: SeverityWarning},
 	},
 }
 

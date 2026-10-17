@@ -19,7 +19,7 @@ var Checks = model.Checks{Of: rules, Missing: lint.CodeMakeMissingInclude}
 func rules(kind model.Kind) model.Rules {
 	switch kind {
 	case model.KindVariable:
-		return model.Rules{Unknown: lint.CodeMakeUndefinedVariable, Circular: lint.CodeMakeRecursiveVariable, Unused: lint.CodeMakeUnusedVariable}
+		return model.Rules{Unknown: lint.CodeMakeUndefinedVariable, Circular: lint.CodeMakeRecursiveVariable, Expanded: model.OnUse, Unused: lint.CodeMakeUnusedVariable}
 	case model.KindFunction:
 		return model.Rules{Unknown: lint.CodeMakeUnknownFunction, UnknownWhen: model.Regardless, Arity: lint.CodeMakeFunctionArguments}
 	case model.KindTarget:
@@ -44,11 +44,13 @@ func Analyze(text string) Analysis {
 }
 
 type indexer struct {
-	f        *File
-	ix       *model.Index
-	scopes   map[string]model.Scope
-	exported map[string]bool
-	dynamic  bool
+	f         *File
+	ix        *model.Index
+	scopes    map[string]model.Scope
+	exported  map[string]bool
+	dynamic   bool
+	arguments []int
+	called    map[string]bool
 }
 
 func (f *File) exported() []string {
@@ -99,8 +101,10 @@ func detail(s string) string {
 }
 
 func (f *File) Index(shell bool) *model.Index {
-	ix := &model.Index{ExportAll: f.ExportAll, Broken: slices.ContainsFunc(f.Errors, func(e Error) bool { return e.Kind != ErrUnterminated })}
-	in := &indexer{f: f, ix: ix, scopes: map[string]model.Scope{}, exported: f.exportedNames()}
+	ix := &model.Index{ExportAll: f.ExportAll, Broken: slices.ContainsFunc(f.Errors, func(e Error) bool {
+		return e.Kind != ErrUnterminated && e.Kind != ErrDeferredUnterminated && e.Kind != ErrPatternUnterminated && e.Kind != ErrPatternMismatch
+	})}
+	in := &indexer{f: f, ix: ix, scopes: map[string]model.Scope{}, exported: f.exportedNames(), called: map[string]bool{}}
 	for _, a := range f.Assignments {
 		in.assignment(a)
 	}
@@ -128,9 +132,42 @@ func (f *File) Index(shell bool) *model.Index {
 			ix.Symbols[i].Unused = false
 		}
 	}
+	in.dropCallArguments()
 	ix.Findings = f.check()
+	in.deferred()
 	slices.SortFunc(ix.Tokens, func(a, b semantic.Token) int { return a.Span.Start - b.Span.Start })
 	return ix
+}
+
+func (in *indexer) dropCallArguments() {
+	drop := map[int]bool{}
+	for _, i := range in.arguments {
+		if r := in.ix.Refs[i]; r.Owner >= 0 && in.called[in.ix.Symbols[r.Owner].Name] {
+			drop[i] = true
+		}
+	}
+	refs := in.ix.Refs[:0]
+	for i, r := range in.ix.Refs {
+		if !drop[i] {
+			refs = append(refs, r)
+		}
+	}
+	in.ix.Refs = refs
+}
+
+func (in *indexer) deferred() {
+	for _, e := range in.f.Errors {
+		if e.Kind != ErrDeferredUnterminated {
+			continue
+		}
+		owner := slices.IndexFunc(in.ix.Symbols, func(s model.Symbol) bool {
+			return s.Kind == model.KindVariable && s.Span.Start <= e.Span.Start && e.Span.End <= s.Span.End
+		})
+		if owner < 0 {
+			panic(fmt.Sprintf("makefile: no assignment holds the deferred reference at %d", e.Span.Start))
+		}
+		in.ix.Deferred = append(in.ix.Deferred, model.Deferred{Symbol: owner, Span: e.Span, Message: e.Message, Used: lint.CodeMakeUnterminatedReference, Unused: lint.CodeMakeDeferredUnterminatedReference})
+	}
 }
 
 func (in *indexer) text(s Span) string { return in.f.Text[s.Start:s.End] }
@@ -155,11 +192,15 @@ func (in *indexer) symbol(s model.Symbol) int {
 	return len(in.ix.Symbols) - 1
 }
 
-var recursiveOps = []string{"=", "?=", ""}
-
 func readByMake(name string) bool {
 	_, builtin := Builtins.Lookup(model.KindVariable, name)
-	return builtin || strings.HasSuffix(name, "FLAGS") || strings.HasPrefix(name, ".")
+	return builtin && !automatic(name) || strings.HasSuffix(name, "FLAGS") || strings.HasPrefix(name, ".")
+}
+
+func automatic(name string) bool {
+	return slices.ContainsFunc(automaticVariables, func(v model.Builtin) bool {
+		return name == v.Name || name == v.Name+"D" || name == v.Name+"F"
+	})
 }
 
 func (in *indexer) assignment(a *Assignment) {
@@ -192,14 +233,14 @@ func (in *indexer) assignment(a *Assignment) {
 	for _, scope := range scopes {
 		i := in.symbol(model.Symbol{
 			Name: a.Name.Text, Kind: model.KindVariable, Span: a.Span, Selection: a.Name.Span, Scope: scope, Parent: model.NoParent,
-			Detail: detail(header), Exported: exported, Unused: !exported && !readByMake(a.Name.Text) && scope == model.Global, Arity: model.NoArity,
+			Detail: detail(header), Exported: exported, Unused: !exported && !readByMake(a.Name.Text) && scope == model.Global, Appends: a.Op == "+=", Arity: model.NoArity,
 		})
 		if owner == model.NoSymbol {
 			owner = i
 		}
 	}
 	in.token(a.Name.Span, semantic.TypeVariable, semantic.ModDeclaration)
-	edge := slices.Contains(recursiveOps, a.Op) && len(a.Targets) == 0
+	edge := a.Deferred && len(a.Targets) == 0
 	in.walk(a.Name.Expr, model.Global, owner, false, nil)
 	in.walk(a.Value, scopes[0], owner, edge, nil)
 }
@@ -230,15 +271,20 @@ func (in *indexer) reference(n Node, scope model.Scope, owner int, edge bool, bo
 	raw, literal := n.Name.Literal(in.f.Text)
 	name := strings.TrimSpace(raw)
 	switch {
+	case n.Unbalanced:
+		in.dynamic = true
 	case !literal:
 		in.dynamic = true
 		in.walk(n.Name, scope, owner, edge, bound)
-	case name == "" || slices.Contains(bound, name) || strings.Trim(name, "0123456789") == "":
+	case name == "" || slices.Contains(bound, name):
 	case strings.ContainsAny(name, " \t"):
 		word := firstWord(name)
 		in.ix.Refs = append(in.ix.Refs, model.Ref{Name: word, Kind: model.KindFunction, Span: in.nameSpan(n.Name, word), Scope: scope, Args: model.NoArgs, Owner: owner})
 	default:
 		span := in.nameSpan(n.Name, name)
+		if edge && strings.Trim(name, "0123456789") == "" {
+			in.arguments = append(in.arguments, len(in.ix.Refs))
+		}
 		in.ix.Refs = append(in.ix.Refs, model.Ref{Name: name, Kind: model.KindVariable, Span: span, Scope: scope, Args: model.NoArgs, Owner: owner, Edge: edge})
 		mods := semantic.Modifier(0)
 		if _, builtin := Builtins.Lookup(model.KindVariable, name); builtin {
@@ -250,13 +296,16 @@ func (in *indexer) reference(n Node, scope model.Scope, owner int, edge bool, bo
 
 func (in *indexer) call(n Node, scope model.Scope, owner int, edge bool, bound []string) {
 	name, _ := n.Name.Literal(in.f.Text)
-	in.ix.Refs = append(in.ix.Refs, model.Ref{Name: name, Kind: model.KindFunction, Span: n.Name.Span, Scope: scope, Args: len(n.Args), Owner: owner})
+	in.ix.Refs = append(in.ix.Refs, model.Ref{Name: name, Kind: model.KindFunction, Span: n.Name.Span, Scope: scope, Args: len(n.Args), Owner: owner, Edge: edge})
 	in.token(n.Name.Span, semantic.TypeFunction, semantic.ModDefaultLibrary)
 	args := n.Args
 	switch {
 	case slices.Contains(namingFunctions, name):
 		if variable, ok := args[0].Literal(in.f.Text); ok && strings.TrimSpace(variable) != "" {
 			variable = strings.TrimSpace(variable)
+			if name == "call" {
+				in.called[variable] = true
+			}
 			span := in.nameSpan(args[0], variable)
 			in.ix.Refs = append(in.ix.Refs, model.Ref{Name: variable, Kind: model.KindVariable, Span: span, Scope: scope, Args: model.NoArgs, Owner: owner, Edge: edge})
 			in.token(span, semantic.TypeVariable, 0)
@@ -327,7 +376,12 @@ func (in *indexer) rule(r *Rule, shell bool) {
 		text := in.text(l.Span)
 		flags := len(text) - len(strings.TrimLeft(text, recipeFlags))
 		in.token(Span{Start: l.Span.Start, End: l.Span.Start + len(strings.TrimRight(text[:flags], " \t"))}, semantic.TypeOperator, 0)
+		first := len(in.ix.Refs)
 		in.walk(l.Expr, scope, owner, false, nil)
+		for j := first; j < len(in.ix.Refs); j++ {
+			in.ix.Refs[j].Late = true
+			in.ix.Refs[j].Edge = r.Pattern()
+		}
 	}
 }
 

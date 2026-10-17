@@ -60,14 +60,20 @@ func Sections(t testing.TB, path string) []Case {
 }
 
 type Verdict struct {
-	Accepted bool
-	Line     int
-	Column   int
-	Message  string
+	Accepted     bool
+	Inconclusive bool
+	Line         int
+	Column       int
+	Message      string
 }
 
+const inconclusive = "inconclusive: "
+
 func (v Verdict) String() string {
-	if v.Accepted {
+	switch {
+	case v.Inconclusive:
+		return inconclusive + v.Message
+	case v.Accepted:
 		return "accepted"
 	}
 	return fmt.Sprintf("rejected %d:%d %s", v.Line, v.Column, v.Message)
@@ -76,6 +82,9 @@ func (v Verdict) String() string {
 func parseVerdict(s string) (Verdict, bool) {
 	if s == "accepted" {
 		return Verdict{Accepted: true}, true
+	}
+	if message, ok := strings.CutPrefix(s, inconclusive); ok {
+		return Verdict{Inconclusive: true, Message: message}, true
 	}
 	rest, ok := strings.CutPrefix(s, "rejected ")
 	if !ok {
@@ -172,6 +181,12 @@ func Agree(t *testing.T, text string, v Verdict, findings []lint.Finding) {
 			line, _ := position(text, f.Span.Start)
 			errorLines = append(errorLines, line)
 		}
+	}
+	if v.Inconclusive {
+		return
+	}
+	if last, _ := position(text, len(text)); v.Line > last {
+		v.Line = last
 	}
 	switch {
 	case v.Accepted && len(errorLines) > 0:
@@ -293,14 +308,51 @@ func JustVerdict(t *testing.T, text string) Verdict {
 	return v
 }
 
-var makeLocation = regexp.MustCompile(`(?m)^Makefile:(\d+): (?:\*\*\* )?(.*?)(?:\.  Stop\.)?$`)
+const unrunnablePath = "/nonexistent/shell-lsp-fuzz"
+
+var stoppedBeforeRecipes = []string{"*** No rule to make target", unrunnablePath + ": No such file or directory"}
+
+var databaseTarget = regexp.MustCompile(`^([^.#%\s][^:=%]*?):(?:[^=]|$)`)
+
+func makeTargets(t *testing.T, dir string, vars []string) []string {
+	t.Helper()
+	cmd := exec.CommandContext(t.Context(), "make", append([]string{"-pqrR", "--no-print-directory", "-f", "Makefile"}, vars...)...) //nolint:gosec // G204: the variables are this package's constants
+	cmd.Dir = dir
+	cmd.Env = []string{"PATH=" + os.Getenv("PATH")}
+	out, _ := cmd.Output()
+	var targets []string
+	files, notTarget := false, false
+	for line := range strings.SplitSeq(string(out), "\n") {
+		switch {
+		case line == "# Files":
+			files = true
+		case strings.HasPrefix(line, "# ") && strings.HasSuffix(line, "database") || line == "# VPATH Search Paths":
+			files = false
+		case line == "# Not a target:":
+			notTarget = true
+			continue
+		case files && !notTarget:
+			if m := databaseTarget.FindStringSubmatch(line); m != nil && m[1] != "Makefile" && !strings.Contains(m[1], "=") && !strings.HasPrefix(m[1], "-") {
+				targets = append(targets, m[1])
+			}
+		}
+		notTarget = false
+	}
+	slices.Sort(targets)
+	return slices.Compact(targets)
+}
+
+var (
+	makeFatal          = regexp.MustCompile(`(?m)^Makefile:(\d+): \*\*\* (.*?)\.  Stop\.$`)
+	makeMissingInclude = regexp.MustCompile(`(?m)^Makefile:(\d+): (\S+: No such file or directory)$`)
+)
 
 func MakeVerdict(t *testing.T, text string) Verdict {
 	t.Helper()
 	return makeVerdict(t, text)
 }
 
-const unrunnableShell = "SHELL=/nonexistent/shell-lsp-fuzz"
+const unrunnableShell = "SHELL=" + unrunnablePath
 
 var shellReach = []string{"shell", "SHELL", "!=", "eval", "call", "override", "file", "load", "guile", "include", "MAKE"}
 
@@ -322,7 +374,8 @@ func makeVerdict(t *testing.T, text string, vars ...string) Verdict {
 	if err := os.WriteFile(filepath.Join(dir, "Makefile"), []byte(text), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.CommandContext(t.Context(), "make", append([]string{"--dry-run", "--no-print-directory", "-f", "Makefile"}, vars...)...) //nolint:gosec // G204: the variables are this package's constants
+	goals := append(slices.Clone(vars), makeTargets(t, dir, vars)...)
+	cmd := exec.CommandContext(t.Context(), "make", append([]string{"--dry-run", "--no-print-directory", "-f", "Makefile"}, goals...)...) //nolint:gosec // G204: the goals are names make itself listed
 	cmd.Dir = dir
 	cmd.Env = []string{"PATH=" + os.Getenv("PATH")}
 	var stderr bytes.Buffer
@@ -331,12 +384,19 @@ func makeVerdict(t *testing.T, text string, vars ...string) Verdict {
 		return Verdict{Accepted: true}
 	}
 	out := stderr.String()
-	for _, m := range makeLocation.FindAllStringSubmatch(out, -1) {
-		if strings.HasPrefix(m[2], "warning:") {
-			continue
+	for _, pattern := range []*regexp.Regexp{makeFatal, makeMissingInclude} {
+		if m := pattern.FindStringSubmatch(out); m != nil {
+			line, _ := strconv.Atoi(m[1])
+			return Verdict{Line: line, Column: 1, Message: m[2]}
 		}
-		line, _ := strconv.Atoi(m[1])
-		return Verdict{Line: line, Column: 1, Message: m[2]}
+	}
+	if strings.Contains(out, "*** No targets.") {
+		return Verdict{Accepted: true}
+	}
+	for _, o := range stoppedBeforeRecipes {
+		if strings.Contains(out, o) {
+			return Verdict{Inconclusive: true, Message: "make stopped before it expanded every recipe: " + o}
+		}
 	}
 	message, _, _ := strings.Cut(strings.TrimSpace(out), "\n")
 	return Verdict{Message: message}

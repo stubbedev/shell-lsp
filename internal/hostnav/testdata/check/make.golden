@@ -137,3 +137,55 @@ accepted
 rejected 1:1 missing separator
 1:1 SL6001 error missing separator: a `;` comes before the rule's `:`
 2:1 SL6005 error a recipe line comes before the first rule
+-- reference-ends-at-the-first-parenthesis --
+accepted
+1:1 SL6014 info variable `x` is never used
+1:8 SL6006 info unknown variable `(`
+3:11 SL6006 info unknown variable `x(y`
+-- function-arguments-balance-parentheses --
+rejected 2:1 unterminated call to function 'subst': missing ')'
+2:8 SL6012 error this variable reference is not closed on the same logical line
+-- grouped-targets-need-a-recipe --
+rejected 1:1 grouped targets must provide a recipe
+1:1 SL6001 error grouped targets `&:` need a recipe
+-- recipe-before-the-first-rule --
+rejected 1:1 recipe commences before first target
+1:1 SL6005 error a recipe line comes before the first rule
+-- tab-prefixed-assignment-before-a-rule --
+accepted
+-- rule-without-targets --
+accepted
+-- whitespace-in-a-variable-name --
+rejected 1:1 missing separator
+1:1 SL6001 error missing separator: a variable name cannot contain whitespace
+-- assignment-without-a-name --
+rejected 1:1 empty variable name
+1:1 SL6001 error this assignment has no variable name
+-- text-after-a-reference --
+rejected 1:1 missing separator
+1:5 SL6001 error missing separator: this line expands to text that is no rule, assignment or directive
+-- unused-self-reference --
+accepted
+1:1 SL6014 info variable `A` is never used
+-- deferred-unterminated-reference --
+accepted
+1:1 SL6014 info variable `A` is never used
+1:5 SL6015 warning this variable reference is not closed on the same logical line; make fails when it expands `A`
+-- self-reference-expanded-only-through-an-unused-variable --
+accepted
+2:1 SL6014 info variable `B` is never used
+-- self-reference-expanded-by-a-recipe --
+rejected 1:1 Recursive variable 'A' references itself (eventually)
+1:7 SL6007 error variable `A` depends on itself
+-- static-pattern-without-percent --
+rejected 1:1 target pattern contains no '%'
+1:6 SL6001 error the target pattern of a static pattern rule needs a `%`
+-- dollar-space-is-a-variable --
+accepted
+-- directive-word-as-a-variable --
+accepted
+-- directive-word-as-a-target --
+accepted
+-- directive-before-a-spaced-colon --
+rejected 2:1 recipe commences before first target
+2:1 SL6005 error a recipe line comes before the first rule

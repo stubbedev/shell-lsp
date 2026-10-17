@@ -101,6 +101,87 @@ func (m *Module) Usage() Usage {
 	return used
 }
 
+type moment struct {
+	file, offset int
+}
+
+var whenever = moment{file: -1}
+
+func (t Target) before(at moment) bool {
+	return at == whenever || t.File != at.file || t.Info().Span.Start < at.offset
+}
+
+func effective(targets []Target, at moment) []Target {
+	var out []Target
+	byFile := map[int][]Target{}
+	var files []int
+	for _, t := range targets {
+		if !t.before(at) {
+			continue
+		}
+		if _, ok := byFile[t.File]; !ok {
+			files = append(files, t.File)
+		}
+		byFile[t.File] = append(byFile[t.File], t)
+	}
+	for _, f := range files {
+		visible := byFile[f]
+		slices.SortFunc(visible, func(a, b Target) int { return a.Info().Span.Start - b.Info().Span.Start })
+		last := len(visible) - 1
+		for last > 0 && visible[last].Info().Appends {
+			last--
+		}
+		out = append(out, visible[last:]...)
+	}
+	return out
+}
+
+func (m *Module) expanded() Usage {
+	out := Usage{}
+	seen := map[Target]moment{}
+	type visit struct {
+		target Target
+		at     moment
+	}
+	var queue []visit
+	mark := func(t Target, at moment) {
+		if t.Module != m || !t.before(at) {
+			return
+		}
+		if prior, ok := seen[t]; ok && (prior == whenever || at != whenever && prior.offset >= at.offset) {
+			return
+		}
+		seen[t], out[t] = at, true
+		queue = append(queue, visit{t, at})
+	}
+	for f, ix := range m.Files {
+		for _, r := range ix.Refs {
+			if r.Edge {
+				continue
+			}
+			at := moment{file: f, offset: r.Span.Start}
+			if r.Late {
+				at = whenever
+			}
+			for _, t := range effective(m.Resolve(f, r).Targets, at) {
+				mark(t, at)
+			}
+		}
+	}
+	for len(queue) > 0 {
+		v := queue[0]
+		queue = queue[1:]
+		for _, r := range m.Files[v.target.File].Refs {
+			if r.Edge && r.Owner == v.target.Symbol {
+				for _, next := range effective(m.Resolve(v.target.File, r).Targets, v.at) {
+					mark(next, v.at)
+				}
+			}
+		}
+	}
+	return out
+}
+
 func (m *Module) Broken() bool {
 	return slices.ContainsFunc(m.Files, func(ix *Index) bool { return ix.Broken })
 }
@@ -108,11 +189,19 @@ func (m *Module) Broken() bool {
 func (m *Module) Findings(file int, checks Checks, used Usage) []lint.Finding {
 	ix := m.Files[file]
 	certain := m.Complete && !m.Broken()
+	expanded := m.expanded()
+	dormant := func(r Ref) bool {
+		if !r.Edge || r.Owner < 0 {
+			return false
+		}
+		owner := ix.Symbols[r.Owner]
+		return checks.Of(owner.Kind).Expanded == OnUse && !expanded[Target{Module: m, File: file, Symbol: r.Owner}]
+	}
 	var out []lint.Finding
 	for _, r := range ix.Refs {
 		res := m.Resolve(file, r)
 		switch {
-		case res.Missing || r.Soft:
+		case res.Missing || r.Soft || dormant(r):
 		case !res.Found():
 			if rules := checks.Of(r.Kind); rules.Unknown != 0 && (certain || rules.UnknownWhen == Regardless) {
 				out = append(out, lint.HostFinding(rules.Unknown, r.Span, fmt.Sprintf("unknown %s `%s`", r.Kind, qualified(r))))
@@ -127,7 +216,14 @@ func (m *Module) Findings(file int, checks Checks, used Usage) []lint.Finding {
 			out = append(out, arity(checks, r, s.Kind, s.Arity)...)
 		}
 	}
-	out = append(out, m.cycles(file, checks)...)
+	out = append(out, m.cycles(file, checks, expanded)...)
+	for _, d := range ix.Deferred {
+		code := d.Unused
+		if expanded[Target{Module: m, File: file, Symbol: d.Symbol}] {
+			code = d.Used
+		}
+		out = append(out, lint.HostFinding(code, d.Span, d.Message))
+	}
 	for i, s := range ix.Symbols {
 		code := checks.Of(s.Kind).Unused
 		if code != 0 && s.Unused && certain && !used[Target{Module: m, File: file, Symbol: i}] {
@@ -189,11 +285,12 @@ func (m *Module) edges(n node) []edge {
 	return out
 }
 
-func (m *Module) cycles(file int, checks Checks) []lint.Finding {
+func (m *Module) cycles(file int, checks Checks, expanded Usage) []lint.Finding {
 	var out []lint.Finding
 	for i, s := range m.Files[file].Symbols {
-		code := checks.Of(s.Kind).Circular
-		if code == 0 {
+		rules := checks.Of(s.Kind)
+		code := rules.Circular
+		if code == 0 || rules.Expanded == OnUse && !expanded[Target{Module: m, File: file, Symbol: i}] {
 			continue
 		}
 		start := node{file, i}

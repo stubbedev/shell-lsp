@@ -108,6 +108,7 @@ type Symbol struct {
 	Doc       string
 	Exported  bool
 	Unused    bool
+	Appends   bool
 	Arity     Arity
 }
 
@@ -136,6 +137,7 @@ type Ref struct {
 	Edge      bool
 	Soft      bool
 	Horizon   int
+	Late      bool
 }
 
 const NoArgs = -1
@@ -166,8 +168,17 @@ type Runnable struct {
 	Span Span
 }
 
+type Deferred struct {
+	Symbol  int
+	Span    Span
+	Message string
+	Used    lint.Code
+	Unused  lint.Code
+}
+
 type Index struct {
 	Symbols   []Symbol
+	Deferred  []Deferred
 	Refs      []Ref
 	Includes  []Include
 	Shells    []Shell
@@ -186,11 +197,19 @@ const (
 	Regardless
 )
 
+type Expansion uint8
+
+const (
+	Eager Expansion = iota
+	OnUse
+)
+
 type Rules struct {
 	Unknown     lint.Code
 	UnknownWhen Certainty
 	Arity       lint.Code
 	Circular    lint.Code
+	Expanded    Expansion
 	Unused      lint.Code
 }
 
