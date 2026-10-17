@@ -72,3 +72,19 @@ jobs:
           fail-on-cache-miss: true
       - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
       - run: nix develop --command go run ./cmd/lintcheck shells
+
+  hosts:
+    needs: fetch
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.CORPUS_PATH }}
+          key: ${{ needs.fetch.outputs.key }}
+          fail-on-cache-miss: true
+      - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
+      - run: nix develop --command go run ./cmd/lintcheck hosts

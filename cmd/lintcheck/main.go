@@ -15,6 +15,7 @@ import (
 const usage = `usage:
   lintcheck compare [-examples N] [-code SCxxxx] PATH...
   lintcheck fetch [-manifest FILE] [-cache DIR]
+  lintcheck hosts [-manifest FILE] [-cache DIR] [-baseline FILE] [-update]
   lintcheck shellcheck [-manifest FILE] [-cache DIR] [-baseline FILE] [-update]
   lintcheck shells [-manifest FILE] [-cache DIR] [-baseline FILE] [-update] [-explain]`
 
@@ -23,6 +24,7 @@ var errUsage = errors.New(usage)
 var subcommands = map[string]func(ctx context.Context, args []string) error{
 	"compare":    runCompare,
 	"fetch":      runFetch,
+	"hosts":      runHosts,
 	"shellcheck": runShellcheck,
 	"shells":     runShells,
 }

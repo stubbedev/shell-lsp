@@ -695,10 +695,11 @@ tests that compare with a reference tool skip.
 | `just fixtures` | Label new lint fixtures with shellcheck, then check every fixture |
 | `just lintcheck PATH...` | Per-code precision and recall of the linter against shellcheck over real scripts |
 | `just corpus-fetch` | Fetch the pinned corpus of public shell repositories into the cache |
-| `just corpus-check` | Compare the linter with shellcheck and the parser with the real shells over the corpus, against the committed baselines |
+| `just corpus-check` | Compare the linter with shellcheck, the parser with the real shells and the justfile and Makefile analysis with just over the corpus, against the committed baselines |
 | `just corpus-shellcheck` | Only the shellcheck comparison, against `corpus/shellcheck.md` |
 | `just corpus-shells` | Only the comparison with bash, dash, zsh, ksh, mksh and BusyBox `-n`, against `corpus/shells.txt` |
-| `just corpus-baseline` | Rewrite both corpus baselines after a deliberate change |
+| `just corpus-hosts` | Only the analysis of real justfiles and Makefiles, checked with just, against `corpus/hosts.txt` |
+| `just corpus-baseline` | Rewrite the corpus baselines after a deliberate change |
 | `just fuzz-targets` | List every fuzz target with its package |
 | `just fuzz PACKAGE TARGET [TIME]` | Fuzz one target, one minute by default; failing inputs land in the package's `testdata/fuzz` |
 | `just bench-compare [BASE] [COUNT]` | Compare every benchmark between `origin/main` (or BASE) and the working tree with benchstat, alternating six runs (or COUNT) of each |

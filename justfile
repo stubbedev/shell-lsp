@@ -63,13 +63,18 @@ corpus-shellcheck: corpus-fetch
 corpus-shells: corpus-fetch
     go run ./cmd/lintcheck shells
 
-# Run both corpus comparisons.
-corpus-check: corpus-shellcheck corpus-shells
+# Analyse the corpus justfiles and Makefiles, checking justfiles against just; fails when corpus/hosts.txt no longer matches.
+corpus-hosts: corpus-fetch
+    go run ./cmd/lintcheck hosts
 
-# Rewrite corpus/shellcheck.md and corpus/shells.txt from the corpus; classify new shells entries by hand.
+# Run every corpus comparison.
+corpus-check: corpus-shellcheck corpus-shells corpus-hosts
+
+# Rewrite corpus/shellcheck.md, corpus/shells.txt and corpus/hosts.txt from the corpus; classify new shells entries by hand.
 corpus-baseline: corpus-fetch
     go run ./cmd/lintcheck shellcheck -update
     go run ./cmd/lintcheck shells -update
+    go run ./cmd/lintcheck hosts -update
 
 # Print every fuzz target as "package target", one per line.
 fuzz-targets:

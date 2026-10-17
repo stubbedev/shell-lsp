@@ -1,22 +1,24 @@
 # Corpus checks
 
 The lint fixtures and the parser tests are written by hand, so they only
-cover what someone thought of. Two checks run the linter and the parser over
-a pinned corpus of real-world scripts instead and compare them with their
-references, ShellCheck and the shells themselves. Both record what they find
-in a committed baseline, and fail when the result changes.
+cover what someone thought of. Three checks run the linter, the parser and
+the justfile and Makefile analysis over a pinned corpus of real-world files
+instead and compare them with their references: ShellCheck, the shells
+themselves and just. Each records what it finds in a committed baseline, and
+fails when the result changes.
 
 | Recipe | What it does |
 | --- | --- |
 | `just corpus-fetch` | Fetch the pinned repositories into the cache |
 | `just corpus-shellcheck` | Compare the linter with ShellCheck against [corpus/shellcheck.md](../corpus/shellcheck.md) |
 | `just corpus-shells` | Compare the parser with the shells' `-n` against [corpus/shells.txt](../corpus/shells.txt) |
-| `just corpus-check` | Both comparisons |
-| `just corpus-baseline` | Rewrite both baselines from the current code |
+| `just corpus-hosts` | Analyse the justfiles and Makefiles against [corpus/hosts.txt](../corpus/hosts.txt), checking justfiles with just |
+| `just corpus-check` | All three comparisons |
+| `just corpus-baseline` | Rewrite the three baselines from the current code |
 
 All of them run `cmd/lintcheck` and need the tools from `nix develop`:
-ShellCheck 0.11.0, bash, dash, zsh, ksh, mksh and BusyBox at the versions
-`flake.lock` pins.
+ShellCheck 0.11.0, bash, dash, zsh, ksh, mksh, BusyBox and just at the
+versions `flake.lock` pins.
 
 ## The corpus
 
@@ -27,9 +29,10 @@ line:
 
 - `name` names the repository in reports and baselines, so a script appears
   as `nvm/nvm.sh`.
-- `kind` is `scripts` for a repository whose shell scripts are compared, or
+- `kind` is `scripts` for a repository whose shell scripts are compared,
   `oils-spec` for the spec tests of the [Oils](https://github.com/oils-for-unix/oils)
-  project (Apache-2.0), whose test cases are compared one by one.
+  project (Apache-2.0), whose test cases are compared one by one, or `hosts`
+  for a repository whose justfiles and Makefiles are analysed.
 - `licence` is the repository's SPDX licence, for the record: nothing from
   the corpus is committed, vendored or redistributed.
 - `url` is `https://github.com/OWNER/REPO` and `commit` a full commit hash,
@@ -48,7 +51,10 @@ or Git LFS.
 
 The fetched repositories are untrusted data. Nothing in them is run: they
 are only read by ShellCheck, by the shells with `-n`, which reads a script
-without running it, and by the parser and linter in-process.
+without running it, by `just --dump`, which parses a justfile without running
+a recipe or a backtick, and by the parser and linter in-process. make is never
+run on them, since reading a Makefile already runs its `$(shell ...)` calls
+and remakes its included files.
 
 A file is a script when what decides its dialect names one: a shebang, a
 `# shellcheck shell=` directive, a zsh completion tag, a file name such as
@@ -60,7 +66,7 @@ endings are counted as skipped.
 To add a repository, append its line with the commit to pin, which
 `git ls-remote https://github.com/OWNER/REPO HEAD` prints, run
 `just corpus-baseline`, classify the new entries of `corpus/shells.txt` and
-commit the manifest with both baselines.
+commit the manifest with the baselines.
 
 ## ShellCheck parity
 
@@ -142,13 +148,26 @@ Fixes to the forked parser that this check found are listed in
 [third_party/mvdan-sh/README.md](../third_party/mvdan-sh/README.md), patches
 0020 to 0026.
 
+## Justfiles and Makefiles
+
+`lintcheck hosts` analyses every justfile and Makefile of the `hosts`
+repositories, named and with the extensions the language server recognises,
+the way the language server does: each file with the files it includes and
+the files that include it, found among the files of the same repository.
+[corpus/hosts.txt](../corpus/hosts.txt) lists every finding as
+`file:line:column code`, sorted by file and position. For a justfile it also
+runs `just --dump` and adds a `just disagrees` line when just rejects a file
+the analysis reports no error in, or accepts one with an error. The check
+fails when any line is added or removed, which it prints as a diff, and when
+a file takes longer than two seconds.
+
 ## Updating the baselines
 
 Refresh the baselines with `just corpus-baseline` after a change that is
 meant to move the numbers: a lint rule, a parser fix, a new repository or
 commit in the manifest, or a `flake.lock` update that changes ShellCheck or a
 shell. Then give every `unclassified` line in `corpus/shells.txt` its category
-by hand, and review the diff of both files like a golden file: each changed
+by hand, and review the diff of the three files like a golden file: each changed
 count and each added or removed line should be explained by the change.
 
 ## CI
@@ -156,4 +175,5 @@ count and each added or removed line should be explained by the change.
 The `corpus` workflow fetches the corpus once, caches it with
 `actions/cache` under a key derived from `corpus/repos.txt`, and runs the
 ShellCheck and the shells comparisons as two jobs in the Nix development
-shell, so they use the tools `flake.lock` pins.
+shell, so they use the tools `flake.lock` pins. A third job checks the
+justfiles and Makefiles the same way.

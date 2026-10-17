@@ -86,3 +86,11 @@ zsh-completions scripts LicenseRef-zsh https://github.com/zsh-users/zsh-completi
 zsh-history-substring-search scripts BSD-3-Clause https://github.com/zsh-users/zsh-history-substring-search a0bdb0d47dbaba31dba2db7af8c48a5d9c74049a
 zsh-syntax-highlighting scripts BSD-3-Clause https://github.com/zsh-users/zsh-syntax-highlighting e6683f20e5c38d3e5447f45845d04ddda75d0f23
 zsh-z scripts MIT https://github.com/agkozak/zsh-z 7f8ff4df11b50a14e3666c7cd212baa399c9b92a
+just hosts CC0-1.0 https://github.com/casey/just e540090ff6ad3443debdf198a4897363f7e381c3 justfile
+ord hosts CC0-1.0 https://github.com/ordinals/ord fd152bf94d814c7b158853438bc6a1c6a9d37096 justfile
+bluefin hosts Apache-2.0 https://github.com/ublue-os/bluefin 13efd26e908c1dc956a731baf365966a8d5e57a3 Justfile just
+neovim hosts Apache-2.0 https://github.com/neovim/neovim 0851e7dabed9fc9c019e22088029f36e9f3ec3e3 Makefile
+redis hosts AGPL-3.0 https://github.com/redis/redis 5e332cabd547d272783cf233a34c81dcb9ea44b3 Makefile src/Makefile modules/manifest.mk
+git-make hosts GPL-2.0-only https://github.com/git/git c51408889c3b372814bc20b9431c3b74d0d268eb Makefile shared.mak config.mak.uname config.mak.dev gitweb/Makefile
+vim hosts Vim https://github.com/vim/vim 5a9a0518b153b8571ff4d55c5727b72341080cef src/Makefile src/Make_all.mak src/testdir/Make_all.mak
+micropython hosts MIT https://github.com/micropython/micropython 9a3a0c0d5ea946a4a1b6ff0e3f3087c8adbcac01 py ports/unix

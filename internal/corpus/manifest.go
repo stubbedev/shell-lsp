@@ -17,9 +17,10 @@ type Kind uint8
 const (
 	KindScripts Kind = iota
 	KindOilsSpec
+	KindHosts
 )
 
-var kindNames = [...]string{KindScripts: "scripts", KindOilsSpec: "oils-spec"}
+var kindNames = [...]string{KindScripts: "scripts", KindOilsSpec: "oils-spec", KindHosts: "hosts"}
 
 func (k Kind) String() string { return kindNames[k] }
 
