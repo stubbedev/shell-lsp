@@ -94,3 +94,14 @@ redis hosts AGPL-3.0 https://github.com/redis/redis 5e332cabd547d272783cf233a34c
 git-make hosts GPL-2.0-only https://github.com/git/git c51408889c3b372814bc20b9431c3b74d0d268eb Makefile shared.mak config.mak.uname config.mak.dev gitweb/Makefile
 vim hosts Vim https://github.com/vim/vim 5a9a0518b153b8571ff4d55c5727b72341080cef src/Makefile src/Make_all.mak src/testdir/Make_all.mak
 micropython hosts MIT https://github.com/micropython/micropython 9a3a0c0d5ea946a4a1b6ff0e3f3087c8adbcac01 py ports/unix
+postgres hosts PostgreSQL https://github.com/postgres/postgres 45fc51fcbf4534ea2f6f85e36f8155dbd5ba9851 contrib src/bin src/makefiles src/Makefile.shlib
+linux-tools hosts GPL-2.0-only https://github.com/torvalds/linux 58161ead29e50d70a317ea26b472e0c7508e69da tools/build tools/scripts tools/lib tools/perf/Makefile tools/perf/Makefile.perf tools/testing/selftests/Makefile tools/testing/selftests/lib.mk
+ffmpeg hosts LGPL-2.1-or-later https://github.com/FFmpeg/FFmpeg 94cba3150c6b83057ed48b833689adc806715cc0 Makefile ffbuild libavutil/Makefile libavcodec/Makefile libavformat/Makefile libavfilter/Makefile
+luajit hosts MIT https://github.com/LuaJIT/LuaJIT 2a8e017ef1ece6a95b983ffca073d30609dce7c4 Makefile src/Makefile
+buildroot hosts GPL-2.0-or-later https://github.com/buildroot/buildroot 45fb109414f273a51939e00f0196906a78dc4db5 Makefile package/pkg-generic.mk package/pkg-utils.mk package/pkg-autotools.mk package/pkg-cmake.mk
+prometheus hosts Apache-2.0 https://github.com/prometheus/prometheus c052a79dc7fd0f2df2219ffe336f510b0d149b72 Makefile Makefile.common
+node hosts MIT https://github.com/nodejs/node c61ba86ed02dc0c80c51b9333d3fe9e3e4e2f887 Makefile
+ruby hosts BSD-2-Clause https://github.com/ruby/ruby 5b1c37352212b0f750a6a15aec77b4b8db95bb9f common.mk defs/gmake.mk
+u-boot hosts GPL-2.0-or-later https://github.com/u-boot/u-boot 8d534cec0cc0109a37c0ded8854da03f1526dc0e Makefile scripts/Makefile.build scripts/Makefile.lib
+wireguard-make hosts GPL-2.0-only https://github.com/WireGuard/wireguard-tools a998407747005ea7e4e0258d96f105c97241e1d3 src/Makefile
+moby-make hosts Apache-2.0 https://github.com/moby/moby 3f38b15147b14ce0ce7b11558a1aa9e9f14db103 Makefile

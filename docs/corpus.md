@@ -17,7 +17,8 @@ fails when the result changes.
 | `just corpus-baseline` | Rewrite the three baselines from the current code |
 
 All of them run `cmd/lintcheck` and need the tools from `nix develop`:
-ShellCheck 0.11.0, bash, dash, zsh, ksh, mksh, BusyBox and just at the
+ShellCheck 0.11.0, bash, dash, zsh, ksh, mksh, BusyBox, just, GNU Make and
+bubblewrap at the
 versions `flake.lock` pins.
 
 ## The corpus
@@ -157,9 +158,23 @@ the files that include it, found among the files of the same repository.
 [corpus/hosts.txt](../corpus/hosts.txt) lists every finding as
 `file:line:column code`, sorted by file and position. For a justfile it also
 runs `just --dump` and adds a `just disagrees` line when just rejects a file
-the analysis reports no error in, or accepts one with an error. The check
-fails when any line is added or removed, which it prints as a diff, and when
-a file takes longer than two seconds.
+the analysis reports no error in, or accepts one with an error.
+
+Every Makefile with a standard name is also read by GNU make itself, with
+`make -pqr`, which reads and evaluates the whole file without running a
+recipe. Reading a Makefile runs its `$(shell ...)` calls, so make runs in a
+bubblewrap sandbox: no network, the repository behind a throwaway overlay,
+1 GiB of memory and a minute of time. An included file that a build would
+generate is stubbed as an empty file in that overlay, so make reads on. A
+`make disagrees` line records a file make rejects at a line where the
+analysis reports no read-time error (syntax, conditionals, `define`, recipe
+prefixes), or accepts while the analysis reports one. Files that stop
+themselves with `$(error ...)`, need `./configure` output outside the
+repository, or fail in a file they include stay unjudged, and the check
+prints how many Makefiles make judged.
+
+The check fails when any line is added or removed, which it prints as a
+diff, and when a file takes longer than two seconds.
 
 ## Updating the baselines
 
@@ -176,4 +191,5 @@ The `corpus` workflow fetches the corpus once, caches it with
 `actions/cache` under a key derived from `corpus/repos.txt`, and runs the
 ShellCheck and the shells comparisons as two jobs in the Nix development
 shell, so they use the tools `flake.lock` pins. A third job checks the
-justfiles and Makefiles the same way.
+justfiles and Makefiles the same way, after allowing the unprivileged user
+namespaces bubblewrap needs.

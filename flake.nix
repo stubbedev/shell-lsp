@@ -47,6 +47,7 @@
             # Cross-checking the language server under development
             shellcheck # Reference oracle that labels the linter's test fixtures
             gnumake # Reference oracle for the Makefile fixtures
+            bubblewrap # Sandbox for running make on the corpus Makefiles
             shfmt # Reference formatter for shell scripts
             bats # Real test runner behind the Bats integration test
             bash-language-server # Comparison server behind `just crosscheck`

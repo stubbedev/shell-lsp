@@ -21,6 +21,8 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
+var makeReadCodes = []lint.Code{lint.CodeMakeSyntax, lint.CodeMakeConditional, lint.CodeMakeDefine, lint.CodeMakeRecipePrefix, lint.CodeMakeRecipeOutsideRule}
+
 const (
 	hostsBaselineFile = "corpus/hosts.txt"
 	slowHostFile      = 2 * time.Second
@@ -30,6 +32,7 @@ type hostReport struct {
 	path    string
 	lines   []string
 	elapsed time.Duration
+	judged  bool
 }
 
 func runHosts(ctx context.Context, args []string) error {
@@ -80,8 +83,14 @@ func runHosts(ctx context.Context, args []string) error {
 	if err != nil {
 		return fmt.Errorf("reading the hosts baseline: %w", err)
 	}
+	judged := 0
+	for _, r := range reports {
+		if r.judged {
+			judged++
+		}
+	}
 	if string(raw) == got {
-		fmt.Printf("%d justfiles and Makefiles match %s\n", len(reports), *baselineFile)
+		fmt.Printf("%d justfiles and Makefiles match %s; make judged %d of the Makefiles\n", len(reports), *baselineFile, judged)
 		return nil
 	}
 	for _, line := range diffLines(string(raw), got) {
@@ -153,19 +162,28 @@ func analyseHosts(ctx context.Context, files []corpus.HostFile) ([]hostReport, e
 		findings := g.Findings()
 		r := hostReport{path: f.Path, elapsed: time.Since(start)}
 		text := file.Doc.Source().Text()
-		var errorLines []int
+		var errorLines, readLines []int
 		for _, finding := range sortedFindings(findings) {
 			line, column := lineColumn(text, finding.Span.Start)
 			r.lines = append(r.lines, fmt.Sprintf("%d:%d %s", line, column, finding.Code))
 			if finding.Severity == lint.SeverityError {
 				errorLines = append(errorLines, line)
 			}
+			if slices.Contains(makeReadCodes, finding.Code) {
+				readLines = append(readLines, line)
+			}
 		}
-		if f.Language == host.Just {
-			verdict := oracle.Just(ctx, f.File, filepath.Dir(f.File), isolatedEnv())
-			lines, _ := lineColumn(text, len(text))
-			if problem, disagrees := oracle.Disagreement(verdict, lines, errorLines); disagrees {
+		lines, _ := lineColumn(text, len(text))
+		switch {
+		case f.Language == host.Just:
+			if problem, disagrees := oracle.Disagreement(oracle.Just(ctx, f.File, filepath.Dir(f.File), isolatedEnv()), lines, errorLines); disagrees {
 				r.lines = append(r.lines, "just disagrees: "+problem)
+			}
+		case f.Language == host.Make && host.Make.EntryPoint(f.File):
+			verdict := oracle.Make(ctx, f.File, f.Root, text, isolatedEnv())
+			r.judged = !verdict.Inconclusive
+			if problem, disagrees := oracle.Disagreement(verdict, lines, readLines); disagrees {
+				r.lines = append(r.lines, "make disagrees: "+problem)
 			}
 		}
 		out = append(out, r)
