@@ -28,6 +28,8 @@ const (
 	KindVariable
 )
 
+func ValidVariableName(name string) bool { return variableNameRule.MatchString(name) }
+
 func (k Kind) String() string {
 	switch k {
 	case KindFunction:

@@ -1,0 +1,42 @@
+{
+  "aliases": {
+    "b": "build",
+    "hidden": "build",
+    "t": "test"
+  },
+  "assignments": {},
+  "modules": [],
+  "recipes": {
+    "build": {
+      "attributes": [],
+      "body": [
+        [
+          "echo build"
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    },
+    "test": {
+      "attributes": [],
+      "body": [
+        [
+          "echo test"
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    }
+  },
+  "settings": {}
+}

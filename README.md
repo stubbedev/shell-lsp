@@ -34,6 +34,11 @@ nor groff needs to be installed.
 - The shell inside Makefile and justfile recipes and Nix strings, linted and
   navigated in place, with fixes written back in their syntax
   ([Shell in other files](#shell-in-other-files)).
+- Justfiles and Makefiles as languages of their own: diagnostics, navigation,
+  rename, completion, hover, outline and "Run" lenses for recipes, targets
+  and variables across `import`, `mod` and `include`, also from the shell of
+  a recipe to the just or make variable it reads, and justfiles formatted
+  like `just --fmt` ([Justfiles and Makefiles natively](#justfiles-and-makefiles-natively)).
 - [Bats](#bats) support: tests in the outline, and "Run" lenses that report
   failures as diagnostics.
 - `shell-lsp check` and `shell-lsp fmt` for CI and pre-commit, compatible
@@ -452,13 +457,14 @@ common GNU and gawk extensions are accepted.
 Some files that are not shell scripts hold shell that something else runs.
 shell-lsp lints and navigates that shell where it stands: it extracts it into
 a script with a map back to the file, analyses the script like any other, and
-answers in positions of the file. Requests at positions outside the shell
-find nothing, and every edit, from a quick fix to a rename, is written back in
-the syntax of the file; a fix that cannot be written there, such as one that
-would need a new line in a Makefile recipe, is not offered. The file's own
-syntax is left alone: these files are not formatted, and their shell cannot be
-switched with a `# shellcheck shell=` directive, because the file decides it.
-A `# shellcheck disable=` directive in the shell works as usual.
+answers in positions of the file. Every edit, from a quick fix to a rename,
+is written back in the syntax of the file; a fix that cannot be written there,
+such as one that would need a new line in a Makefile recipe, is not offered.
+The shell cannot be switched with a `# shellcheck shell=` directive, because
+the file decides it. A `# shellcheck disable=` directive in the shell works as
+usual. In Nix files, requests outside the shell find nothing; justfiles and
+Makefiles are understood as languages of their own
+([Justfiles and Makefiles natively](#justfiles-and-makefiles-natively)).
 
 An editor sends these files when the server is attached to their file type
 ([docs/editors.md](docs/editors.md)); `shell-lsp check` and the workspace scan
@@ -520,6 +526,50 @@ gives it, or else when its language identifier is `just`.
   one shell: the family most recipes use (sh, dash, busybox and bash are one
   family, checked as the widest of them that a recipe uses), and recipes in
   another family are not analysed.
+
+### Justfiles and Makefiles natively
+
+Beyond the shell in their recipes, shell-lsp reads the just and make syntax
+around it with parsers of its own, so it is the only server an editor needs
+for these files.
+
+- **Diagnostics.** Syntax errors, unknown recipes, targets, variables,
+  functions, settings and attributes, wrong argument counts, duplicates,
+  circular dependencies and recursive variables, unused parameters and
+  variables, missing `import`, `mod` and `include` files, and more; every
+  check is listed in [rules.md](docs/rules.md#justfiles-and-makefiles) with
+  `SL5` codes for justfiles and `SL6` codes for Makefiles. Each justfile check
+  was compared with what just 1.58 rejects and each Makefile check with GNU
+  Make 4.4. Missing names are reported only when every file that could define
+  them was found.
+- **Navigation across files.** Definition, references, document highlight and
+  rename for recipes, aliases, variables, parameters, modules, functions and
+  targets. A justfile shares its names with the files it imports, a `mod`
+  starts a module of its own reached with `module::recipe`, and a Makefile
+  shares its names with the files it includes, also through simple variables
+  such as `include $(DIR)/rules.mk`. Opening an imported or included file
+  finds the files that include it in the workspace.
+- **Across the language boundary.** In a recipe, `$NAME` of an exported just
+  variable or `$` parameter, or of a make variable passed with `export`, leads
+  to its definition, shows its hover and is renamed with it; a rename that
+  would give the shell a name it cannot read is refused. `just recipe`,
+  `{{just_executable()}} recipe`, `make target` and `$(MAKE) target` lines
+  are references to the recipe or target they run, unless they name another
+  file with `-f`, `-C` or `-d`.
+- **Completion and hover** for recipe and target names, variables,
+  parameters, settings, attributes, built-in functions, constants, automatic
+  variables and special targets, with what each one does.
+- **Outline and structure.** Document and workspace symbols, folding for
+  recipes, rules, conditionals, `define` blocks and comment runs, semantic
+  tokens for the just and make syntax around the shell, and links on
+  `import`, `mod` and `include` paths.
+- **Run lenses.** A recipe or target that runs without arguments gets a
+  "▶ Run" lens; it runs `just` or `make` for that file, reports the exit
+  status and logs the output.
+- **Formatting.** Justfiles are formatted the way `just --fmt` formats them,
+  checked against just itself. When `just --fmt` would drop a comment, such as
+  one after a recipe header, formatting stops and says which line to move
+  instead of losing it. Makefiles are not formatted.
 
 ### Nix files
 

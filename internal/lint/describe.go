@@ -71,9 +71,10 @@ func (c Code) Reference() string {
 const (
 	sectionPrefix = "\n## "
 	bold          = "**"
-	exampleOpen   = "```bash\n"
 	fence         = "```"
 )
+
+var exampleLanguages = []string{"bash", "just", "make"}
 
 type nativeDoc struct {
 	summary string
@@ -97,7 +98,7 @@ var nativeDocs = sync.OnceValue(func() map[Code]nativeDoc {
 			continue
 		}
 		doc := nativeDoc{summary: strings.TrimSpace(text)}
-		if _, block, found := strings.Cut(body, exampleOpen); found {
+		if block, found := firstExample(body); found {
 			doc.example, _, _ = strings.Cut(block, fence)
 			doc.example = strings.TrimSuffix(doc.example, "\n")
 		}
@@ -105,3 +106,14 @@ var nativeDocs = sync.OnceValue(func() map[Code]nativeDoc {
 	}
 	return out
 })
+
+func firstExample(body string) (string, bool) {
+	at, found := -1, ""
+	for _, lang := range exampleLanguages {
+		open := fence + lang + "\n"
+		if i := strings.Index(body, open); i >= 0 && (at < 0 || i < at) {
+			at, found = i, body[i+len(open):]
+		}
+	}
+	return found, at >= 0
+}

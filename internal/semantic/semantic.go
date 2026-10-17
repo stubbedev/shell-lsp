@@ -30,6 +30,8 @@ const (
 	TypeOperator
 	TypeProperty
 	TypeRegexp
+	TypeNamespace
+	TypeDecorator
 )
 
 var TypeNames = [...]string{
@@ -43,6 +45,8 @@ var TypeNames = [...]string{
 	TypeOperator:  "operator",
 	TypeProperty:  "property",
 	TypeRegexp:    "regexp",
+	TypeNamespace: "namespace",
+	TypeDecorator: "decorator",
 }
 
 type Modifier uint32

@@ -1,0 +1,139 @@
+-- clean --
+accepted
+-- missing-separator --
+rejected 1:1 missing separator
+1:1 SL6001 error missing separator: this line is no rule, assignment or directive
+2:1 SL6005 error a recipe line comes before the first rule
+-- missing-separator-later --
+rejected 3:1 missing separator
+3:1 SL6001 error missing separator: this line is no rule, assignment or directive
+-- recipe-before-rule --
+rejected 1:1 recipe commences before first target
+1:1 SL6005 error a recipe line comes before the first rule
+-- recipe-after-assignment --
+rejected 4:1 recipe commences before first target
+4:1 SL6005 error a recipe line comes before the first rule
+-- spaces-instead-of-tab --
+rejected 2:1 missing separator
+2:1 SL6004 error a recipe line must start with a tab
+-- spaces-assignment-after-rule --
+accepted
+-- recipe-prefix-changed --
+rejected 4:1 missing separator
+4:1 SL6004 error a recipe line must start with `>`, the `.RECIPEPREFIX`
+-- missing-endif --
+rejected 5:1 missing 'endif'
+5:1 SL6002 error the `ifdef` on line 1 has no `endif`
+-- extraneous-else --
+rejected 1:1 extraneous 'else'
+1:1 SL6002 error `else` without an `ifeq`, `ifneq`, `ifdef` or `ifndef`
+-- extraneous-endif --
+rejected 1:1 extraneous 'endif'
+1:1 SL6002 error `endif` without an `ifeq`, `ifneq`, `ifdef` or `ifndef`
+-- bad-conditional --
+rejected 1:1 invalid syntax in conditional
+1:1 SL6002 error invalid syntax in conditional: write `ifeq (a,b)`
+-- conditionals-balanced --
+accepted
+1:9 SL6006 info unknown variable `MODE`
+3:14 SL6006 info unknown variable `MODE`
+-- missing-endef --
+rejected 1:1 missing 'endef', unterminated 'define'
+1:8 SL6003 error `define HELP` has no `endef`
+-- extraneous-endef --
+rejected 1:1 missing separator
+1:1 SL6003 error `endef` without a `define`
+-- define-used --
+accepted
+-- unterminated-reference --
+rejected 2:1 unterminated variable reference
+2:8 SL6012 error this variable reference is not closed on the same logical line
+-- insufficient-arguments --
+rejected 1:1 insufficient number of arguments (2) to function 'subst'
+1:8 SL6011 error function `subst` takes at least 3 arguments but is given 2
+-- extra-commas-are-fine --
+accepted
+-- unknown-function --
+accepted
+1:8 SL6010 warning unknown function `wild`
+-- recursive-variable --
+rejected 1:1 Recursive variable 'X' references itself (eventually)
+1:7 SL6007 error variable `X` depends on itself
+-- recursive-chain --
+rejected 1:1 Recursive variable 'A' references itself (eventually)
+1:7 SL6007 error variable `A` is circular: `A -> B -> A`
+2:7 SL6007 error variable `B` is circular: `B -> A -> B`
+-- simple-self-reference --
+accepted
+-- append --
+accepted
+-- duplicate-recipe --
+accepted
+3:1 SL6009 warning this recipe for `all` replaces the one on line 1
+-- double-colon-rules --
+accepted
+-- phony-without-rule --
+accepted
+1:13 SL6008 warning unknown target `clena`
+-- missing-include --
+rejected 1:1 nothere.mk: No such file or directory
+1:9 SL6013 error `nothere.mk` is not found
+-- optional-include --
+accepted
+-- undefined-variable --
+accepted
+2:10 SL6006 info unknown variable `NOPE`
+-- builtin-variables --
+accepted
+-- automatic-variables --
+accepted
+-- unused-variable --
+accepted
+1:1 SL6014 info variable `UNUSED` is never used
+-- exported-variable-unused-in-make --
+accepted
+-- flags-variable --
+accepted
+-- target-specific --
+accepted
+-- inline-recipe --
+accepted
+-- static-pattern --
+accepted
+-- order-only --
+accepted
+-- foreach-binding --
+accepted
+-- call-function --
+accepted
+-- computed-name --
+accepted
+-- override-and-export --
+accepted
+-- vpath --
+accepted
+-- oneshell --
+accepted
+-- recursive-make --
+accepted
+-- expression-line --
+accepted
+-- empty-reference-line --
+accepted
+1:3 SL6006 info unknown variable `nothing`
+-- conditional-in-recipe --
+accepted
+-- shell-assignment --
+accepted
+-- question-assignment --
+accepted
+-- continuation --
+accepted
+-- comment-handling --
+accepted
+-- export-names-only --
+accepted
+-- semicolon-before-colon --
+rejected 1:1 missing separator
+1:1 SL6001 error missing separator: a `;` comes before the rule's `:`
+2:1 SL6005 error a recipe line comes before the first rule

@@ -1,0 +1,45 @@
+{
+  "aliases": {},
+  "assignments": {},
+  "modules": [],
+  "recipes": {
+    "run": {
+      "attributes": [],
+      "body": [
+        [
+          "echo \"$arg\" \"$1\""
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "parameters": [
+        {
+          "default": null,
+          "export": false,
+          "kind": "singular",
+          "name": "arg"
+        }
+      ],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    }
+  },
+  "settings": {
+    "dotenv_load": true,
+    "export": true,
+    "ignore_comments": true,
+    "quiet": true,
+    "shell": {
+      "arguments": [
+        "-euo",
+        "pipefail",
+        "-c"
+      ],
+      "command": "bash"
+    },
+    "tempdir": "/tmp",
+    "working_directory": "build"
+  }
+}

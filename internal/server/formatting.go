@@ -36,15 +36,18 @@ func (s *Server) format(docs *docstore.View, uri string, opts lsp.FormattingOpti
 	if !snap.settings.Format.Enabled {
 		return nil, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "formatting is disabled by shellLsp.format.enable")
 	}
-	if snap.Doc.Projected() {
-		s.noticeOnce("format-projected:"+uri, lsp.MessageInfo, "Not formatting "+uri+": shell-lsp formats shell scripts, not the shell embedded in other files.")
-		return []lsp.TextEdit{}, nil
-	}
 	if snap.projectErr != nil {
 		return nil, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "%v", snap.projectErr)
 	}
 	if snap.project.Ignore {
 		s.noticeOnce("editorconfig-ignore:"+uri, lsp.MessageInfo, "Not formatting "+snap.Path+": "+editorconfig.FileName+" marks it ignore = true.")
+		return []lsp.TextEdit{}, nil
+	}
+	if snap.Native != nil && snap.Native.Formats() {
+		return s.formatNative(snap, within)
+	}
+	if snap.Doc.Projected() {
+		s.noticeOnce("format-projected:"+uri, lsp.MessageInfo, "Not formatting "+uri+": shell-lsp formats shell scripts and justfiles, not the shell embedded in other files.")
 		return []lsp.TextEdit{}, nil
 	}
 	text := snap.Doc.Text()
@@ -78,4 +81,30 @@ func clientStyle(client lsp.FormattingOptions) format.Style {
 		indent = client.TabSize
 	}
 	return format.Style{Indent: &indent}
+}
+
+func (s *Server) formatNative(snap *snapshot, within []lsp.Range) ([]lsp.TextEdit, error) {
+	formatted, err := snap.Native.Format()
+	if err != nil {
+		return nil, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "%v", err)
+	}
+	source := snap.Doc.Source()
+	at := source.Positions(snap.encoding)
+	edits := format.Edits(source.Text(), formatted)
+	if within != nil {
+		spans := make([]parser.Span, len(within))
+		for i, r := range within {
+			spans[i], _ = at.Span(r)
+		}
+		edits = slices.DeleteFunc(edits, func(e textedit.Edit) bool {
+			return !slices.ContainsFunc(spans, func(span parser.Span) bool {
+				return len(format.RangeEdits([]textedit.Edit{e}, span.Start, span.End)) > 0
+			})
+		})
+	}
+	out, ok := at.TextEdits(edits)
+	if !ok {
+		panic("server: formatting edits for the unprojected source of " + source.URI + " could not be written")
+	}
+	return out, nil
 }

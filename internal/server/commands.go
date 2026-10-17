@@ -19,6 +19,7 @@ const (
 	commandApplyEdit      = "shellLsp.applyEdit"
 	commandShowReferences = "shellLsp.showReferences"
 	commandRunBats        = "shellLsp.runBats"
+	commandRunRecipe      = "shellLsp.runRecipe"
 )
 
 type commandRunner func(s *Server, ctx context.Context, docs *docstore.View, args []json.RawMessage) (any, error)
@@ -34,6 +35,7 @@ var commands = []command{
 	{commandApplyEdit, "one WorkspaceEdit", oneArg((*Server).applyEditCommand)},
 	{commandShowReferences, "one {uri, position}", oneArg((*Server).showReferences)},
 	{commandRunBats, "one {uri, test?}", oneArg((*Server).runBatsCommand)},
+	{commandRunRecipe, "one {uri, name}", oneArg((*Server).runRecipeCommand)},
 }
 
 var serverCommands = func() []string {

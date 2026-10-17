@@ -91,8 +91,13 @@ func (s *Server) report(file *workspace.File, settings config.Settings, generati
 	if !lint.Foreign(file.Tree, s.lintSettings(file.Path, settings).DialectSource(file)) {
 		items = diagnostics.Syntax(file.Tree, at)
 	}
-	items = append(items, diagnostics.Lint(findings, at, s.clientCapabilities().TextDocument.PublishDiagnostics.CodeDescriptionSupport)...)
+	codeDescriptions := s.clientCapabilities().TextDocument.PublishDiagnostics.CodeDescriptionSupport
+	items = append(items, diagnostics.Lint(findings, at, codeDescriptions)...)
 	items = append(items, diagnostics.Bats(tests.placedOn(file.Tree), at)...)
+	if file.Native != nil {
+		items = append(items, diagnostics.Lint(s.nativeFindings(file, settings), sourcePositions(file, at.Encoding()), codeDescriptions)...)
+		stamp = s.workspace.Generation()
+	}
 	return diagnosticReport{
 		version:  file.Doc.Version,
 		resultID: fmt.Sprintf("%s/%d/%d/%d", identity, generation, stamp, tests.revision),

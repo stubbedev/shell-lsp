@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/stubbedev/shell-lsp/internal/docstore"
+	"github.com/stubbedev/shell-lsp/internal/hostnav"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/navigation"
@@ -18,8 +19,20 @@ func (s *Server) handleReferences(ctx context.Context, docs *docstore.View, refP
 
 func (s *Server) referenceLocations(ctx context.Context, docs *docstore.View, position lsp.TextDocumentPositionParams, includeDeclaration bool) ([]lsp.Location, error) {
 	here, inside, err := s.at(docs, position)
-	if err != nil || !inside {
+	if err != nil {
 		return nil, err
+	}
+	if here.Native != nil {
+		hit, err := s.nativeAt(ctx, docs, here, position.Position, inside)
+		if err != nil {
+			return nil, err
+		}
+		if hit.found || !inside {
+			return hostOccurrences(hostnav.References(hit.group, hit.symbol, includeDeclaration), here.encoding), nil
+		}
+	}
+	if !inside {
+		return nil, nil
 	}
 	occs, err := navigation.References(ctx, here.File, here.offset, s.navigationEnv(), s.candidateFiles(docs), includeDeclaration)
 	if err != nil {
@@ -34,8 +47,28 @@ func (s *Server) referenceLocations(ctx context.Context, docs *docstore.View, po
 
 func (s *Server) handleDocumentHighlight(ctx context.Context, docs *docstore.View, position lsp.TextDocumentPositionParams) (any, error) {
 	here, inside, err := s.at(docs, position)
-	if err != nil || !inside {
+	if err != nil {
 		return nil, err
+	}
+	if here.Native != nil {
+		hit, err := s.nativeAt(ctx, docs, here, position.Position, inside)
+		if err != nil {
+			return nil, err
+		}
+		if hit.found || !inside {
+			out := []lsp.DocumentHighlight{}
+			for _, o := range hit.group.Highlights(hit.symbol) {
+				kind := lsp.HighlightRead
+				if o.Write {
+					kind = lsp.HighlightWrite
+				}
+				out = append(out, lsp.DocumentHighlight{Range: sourcePositions(here.File, here.encoding).Range(o.Span), Kind: kind})
+			}
+			return out, nil
+		}
+	}
+	if !inside {
+		return nil, nil
 	}
 	sym, ok := navigation.SymbolAt(here.File, here.offset)
 	if !ok {
@@ -55,8 +88,26 @@ func (s *Server) handleDocumentHighlight(ctx context.Context, docs *docstore.Vie
 
 func (s *Server) handlePrepareRename(ctx context.Context, docs *docstore.View, position lsp.TextDocumentPositionParams) (any, error) {
 	here, inside, err := s.at(docs, position)
-	if err != nil || !inside {
+	if err != nil {
 		return nil, err
+	}
+	if here.Native != nil {
+		hit, err := s.nativeAt(ctx, docs, here, position.Position, inside)
+		if err != nil {
+			return nil, err
+		}
+		if hit.found || !inside {
+			if !hit.found {
+				return nil, nil
+			}
+			if err := hit.group.PrepareRename(hit.symbol); err != nil {
+				return nil, renameError(err)
+			}
+			return lsp.PrepareRenameResult{Range: sourcePositions(here.File, here.encoding).Range(hit.symbol.Span), Placeholder: hit.symbol.Name}, nil
+		}
+	}
+	if !inside {
+		return nil, nil
 	}
 	sym, _, err := navigation.PrepareRename(ctx, here.File, here.offset, s.navigationEnv(), s.candidateFiles(docs))
 	if errors.Is(err, navigation.ErrNoSymbol) {
@@ -70,8 +121,23 @@ func (s *Server) handlePrepareRename(ctx context.Context, docs *docstore.View, p
 
 func (s *Server) handleRename(ctx context.Context, docs *docstore.View, renameParams lsp.RenameParams) (any, error) {
 	here, inside, err := s.at(docs, renameParams.TextDocumentPositionParams)
-	if err != nil || !inside {
+	if err != nil {
 		return nil, err
+	}
+	if here.Native != nil {
+		hit, err := s.nativeAt(ctx, docs, here, renameParams.Position, inside)
+		if err != nil {
+			return nil, err
+		}
+		if hit.found {
+			return s.nativeRename(hit, docs.Encoding(), docs, renameParams.NewName)
+		}
+		if !inside {
+			return nil, renameError(navigation.ErrNoSymbol)
+		}
+	}
+	if !inside {
+		return nil, nil
 	}
 	occs, err := navigation.Rename(ctx, here.File, here.offset, renameParams.NewName, s.navigationEnv(), s.candidateFiles(docs))
 	if err != nil {

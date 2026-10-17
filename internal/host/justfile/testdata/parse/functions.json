@@ -1,0 +1,41 @@
+{
+  "aliases": {},
+  "assignments": {},
+  "modules": [],
+  "recipes": {
+    "hello": {
+      "attributes": [],
+      "body": [
+        [
+          "echo '",
+          [
+            [
+              "call",
+              "greet",
+              "World"
+            ]
+          ],
+          "' ",
+          [
+            [
+              "call",
+              "add",
+              "1",
+              "2"
+            ]
+          ]
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    }
+  },
+  "settings": {
+    "unstable": true
+  }
+}

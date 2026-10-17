@@ -785,3 +785,413 @@ no `main`, and when it has one but ends with something other than exactly
 greet() { echo "hello $1"; }
 greet "$@"    # SL4007
 ```
+
+## Justfiles and Makefiles
+
+shell-lsp also reads the just and make syntax around the shell in justfiles
+and Makefiles. These checks have `SL5` codes for justfiles and `SL6` codes for
+Makefiles. Every justfile check was compared with what just 1.58 itself
+rejects, and every Makefile check with GNU Make 4.4. Missing names are only
+reported when every `import`, `mod` and `include` that could define them was
+found, so a justfile or Makefile that pulls in a file generated at build time
+gets no false alarms. `lint.exclude` turns them off like any other check;
+directives inside the file do not apply, since the file is not a shell script.
+
+## SL5001
+
+**The justfile does not parse.** just would refuse to run any recipe in it:
+a string or backtick is not closed, a recipe header has no `:`, an escape
+sequence such as `\q` is not one just knows, or a line is indented outside a
+recipe.
+
+```just
+version := "1.0    # SL5001
+```
+
+## SL5002
+
+**A dependency or alias names a recipe that does not exist.** The name is
+looked up in the justfile, its imports and, for `module::recipe`, in the
+module's own file.
+
+```just
+build: compile    # SL5002
+    cargo build
+```
+
+## SL5003
+
+**An expression uses a variable or parameter that is not defined.** Inside a
+recipe, its parameters come first, then the variables of the justfile and its
+imports, then just's own constants such as `HEX`.
+
+```just
+greet:
+    echo {{name}}    # SL5003
+```
+
+## SL5004
+
+**A function that does not exist is called.** It is neither one of just's
+built-in functions nor a function defined with `name(args) := ...`.
+
+```just
+shout := upper("hi")    # SL5004
+```
+
+## SL5005
+
+**A function is called with the wrong number of arguments.**
+
+```just
+path := replace("a/b", "/")    # SL5005
+```
+
+## SL5006
+
+**A dependency passes the wrong number of arguments.** A bare dependency
+passes none, `(recipe a b)` passes two, and the recipe must accept that many
+given its defaults and variadic parameter. A mapped dependency `*(recipe ...)`
+also needs a starred argument to map over.
+
+```just
+test target:
+    cargo test {{target}}
+
+ci: test    # SL5006
+```
+
+## SL5007
+
+**A setting that just does not know is set.**
+
+```just
+set export-all    # SL5007
+```
+
+## SL5008
+
+**An attribute that just does not know is used.**
+
+```just
+[hidden]    # SL5008
+build:
+    cargo build
+```
+
+## SL5009
+
+**Two recipes have the same name.** Unless `set allow-duplicate-recipes` is
+on, just refuses the justfile. Recipes enabled on different systems, such as
+one with `[linux]` and one with `[macos]`, do not clash; `[unix]` covers
+Linux, macOS and the BSDs.
+
+```just
+build:
+    cargo build
+
+build:    # SL5009
+    make
+```
+
+## SL5010
+
+**A variable is assigned twice.** Unless `set allow-duplicate-variables` is
+on, just refuses the justfile.
+
+```just
+mode := "debug"
+mode := "release"    # SL5010
+```
+
+## SL5011
+
+**An alias clashes with another alias or a recipe of the same name.**
+
+```just
+alias b := build
+alias b := bench    # SL5011
+
+build:
+bench:
+```
+
+## SL5012
+
+**Recipes or variables depend on themselves.** A recipe that is its own
+dependency, directly or through others, and a variable defined in terms of
+itself, cannot be run or evaluated.
+
+```just
+a: b    # SL5012
+b: a    # SL5012
+```
+
+## SL5013
+
+**A recipe parameter is never used.** Nothing in the recipe's body,
+dependencies or defaults refers to it, neither as `{{name}}` nor, when it is
+exported with `$name`, as `$name` in a shell recipe. Recipes that receive
+their arguments as positional parameters (`set positional-arguments` or
+`[positional-arguments]`) are left alone.
+
+```just
+deploy target:    # SL5013
+    ./deploy.sh
+```
+
+## SL5014
+
+**A variable is never used.** No recipe, dependency or other variable refers
+to it. Exported variables are left alone because the shell may read them, and
+so are variables whose names start with `_`.
+
+```just
+unused := "x"    # SL5014
+
+build:
+    cargo build
+```
+
+## SL5015
+
+**A setting is set twice.**
+
+```just
+set quiet
+set quiet    # SL5015
+```
+
+## SL5016
+
+**A setting has a value of the wrong kind.** Boolean settings take `true` or
+`false`, settings that name a command such as `shell` take a list like
+`['bash', '-c']`, and the others take a string.
+
+```just
+set shell := "bash"    # SL5016
+```
+
+## SL5017
+
+**A path names a module that does not exist.** No `mod` statement declares
+the first part of `module::recipe`.
+
+```just
+release: tools::build    # SL5017
+```
+
+## SL5018
+
+**An imported file or module source file is not found.** `import 'path'` is
+resolved relative to the justfile that contains it, and `mod name` looks for
+`name.just`, `name/mod.just` and `name/justfile`. `import?` and `mod?` make
+the file optional.
+
+```just
+import 'ci/release.just'    # SL5018
+```
+
+## SL5019
+
+**A recipe's parameters are in an order just refuses.** A parameter is
+listed twice, a parameter without a default follows one with a default, or a
+parameter follows the variadic `+` or `*` parameter, which must come last.
+
+```just
+test target="all" filter:    # SL5019
+    cargo test {{target}} {{filter}}
+```
+
+## SL5020
+
+**An attribute is given the wrong number of arguments.**
+
+```just
+[group]    # SL5020
+build:
+    cargo build
+```
+
+## SL5021
+
+**A recipe line is indented differently from the recipe's first line.** just
+requires every line of a recipe to start with the same whitespace, all tabs
+or all spaces. A line-by-line recipe may not be indented further either,
+except for a line continued from the one above with `\`; start the recipe with
+a shebang or give it `[script]` to write a multi-line shell construct.
+
+```just
+check:
+  if true; then
+    echo yes    # SL5021
+  fi
+```
+
+## SL5022
+
+**A deprecated function or setting is used.** The message names its
+replacement, such as `env(key)` for `env_var(key)`.
+
+```just
+home := env_var("HOME")    # SL5022
+```
+
+## SL5023
+
+**A feature is used without the setting it needs.** Lists, `++`, `!`, `&&`,
+`||` and mapped dependencies need `set lists`, which like user-defined
+functions also needs `set unstable`.
+
+```just
+targets := ["a", "b"]    # SL5023
+```
+
+## SL6001
+
+**The Makefile does not parse.** make stops with "missing separator": a line
+is neither a rule, an assignment nor a directive, which is most often a word
+on a line of its own or a rule whose `:` is missing.
+
+```make
+all    # SL6001
+	echo all
+```
+
+## SL6002
+
+**A conditional is not balanced.** An `else` or `endif` has no `ifeq`,
+`ifneq`, `ifdef` or `ifndef` before it, a conditional is still open at the
+end of the file, which is reported on the last line like make does, or an
+`ifeq` does not have its two arguments.
+
+```make
+CFLAGS = -O2
+endif    # SL6002
+```
+
+## SL6003
+
+**A `define` has no `endef`, or an `endef` has no `define`.**
+
+```make
+define HELP    # SL6003
+usage: make all
+```
+
+## SL6004
+
+**A recipe line starts with spaces instead of a tab.** make reads recipe
+lines only when they start with a tab, or with the character set by
+`.RECIPEPREFIX`; a line starting with spaces after a rule is a syntax error.
+
+```make
+all:
+    echo all    # SL6004
+```
+
+## SL6005
+
+**A recipe line comes before any rule.** A line starting with a tab is a
+recipe line, but no target is being defined yet.
+
+```make
+	echo hello    # SL6005
+all:
+	echo all
+```
+
+## SL6006
+
+**A variable is used but never set.** The variable is not assigned in the
+Makefile or the files it includes, and it is not one of make's built-in
+variables such as `CC` or `MAKE`. It may still come from the environment or
+the command line, which is why this is only information.
+
+```make
+all:
+	$(CC) -o app $(SOURCES)    # SL6006
+```
+
+## SL6007
+
+**A recursively expanded variable refers to itself.** `VAR = $(VAR) more`
+makes make expand the variable forever and stop; use `+=` or `:=` instead.
+
+```make
+CFLAGS = $(CFLAGS) -O2    # SL6007
+```
+
+## SL6008
+
+**A `.PHONY` target has no rule.** The name is probably misspelt, or the rule
+was removed.
+
+```make
+.PHONY: all clena    # SL6008
+all:
+	@echo all
+```
+
+## SL6009
+
+**A target gets a second recipe.** make warns that the later recipe
+overrides the earlier one and uses only the last. Double-colon rules
+(`target::`) are meant to have several and are left alone.
+
+```make
+all:
+	@echo one
+all:    # SL6009
+	@echo two
+```
+
+## SL6010
+
+**A function make does not know is called.** `$(name args)` with a space
+calls a function, and make has no function by that name; the expansion is
+empty.
+
+```make
+FILES := $(wild *.c)    # SL6010
+```
+
+## SL6011
+
+**A built-in function gets the wrong number of arguments.**
+
+```make
+OBJS := $(subst .c,.o)    # SL6011
+```
+
+## SL6012
+
+**A variable reference is not closed.** `$(` or `${` has no matching `)` or
+`}` on the same logical line.
+
+```make
+all:
+	echo $(CFLAGS    # SL6012
+```
+
+## SL6013
+
+**An included Makefile is not found.** `include` looks for the file relative
+to the directory make runs in; `-include` and `sinclude` make it optional.
+
+```make
+include config.mk    # SL6013
+```
+
+## SL6014
+
+**A variable is set but never used.** Nothing in the Makefile or the files
+it includes expands it. Exported variables, variables make itself reads such
+as `CFLAGS` or `SHELL`, and variables used by name with `$(call ...)`,
+`$(value ...)` or `$(origin ...)` are left alone.
+
+```make
+VERSION := 1.0    # SL6014
+all:
+	@echo all
+```

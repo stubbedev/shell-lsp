@@ -166,7 +166,10 @@ pushes them otherwise.
 shell-lsp also lints the shell inside Makefile and justfile recipes and Nix
 strings ([Shell in other files](../README.md#shell-in-other-files)) when the
 editor sends it those files; it reads the language identifiers `makefile`,
-`make`, `just` and `nix`. The VS Code extension attaches to Makefiles on its
+`make`, `just` and `nix`. For justfiles and Makefiles it is a complete
+language server of its own ([Justfiles and Makefiles natively](../README.md#justfiles-and-makefiles-natively)):
+attach it alone, without just-lsp or a make language server, so the file gets
+one set of diagnostics, symbols and formatting. The VS Code extension attaches to Makefiles on its
 own, and to justfiles and Nix files when extensions give them the `just` and
 `nix` languages. Elsewhere, add the file types next to the shell ones. In
 Neovim, add `"make"`, `"just"` and `"nix"` to `filetypes` (or to the

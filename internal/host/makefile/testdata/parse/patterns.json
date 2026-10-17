@@ -1,0 +1,10 @@
+{
+  "variables": [
+    "objs"
+  ],
+  "recipes": [
+    "%.c@9",
+    "a.o@6",
+    "b.o@6"
+  ]
+}

@@ -52,8 +52,16 @@ func (s *Server) navigationEnv() navigation.Env {
 func navigationHandler(mode navigation.Mode) func(*Server, context.Context, *docstore.View, lsp.TextDocumentPositionParams) (any, error) {
 	return func(s *Server, ctx context.Context, docs *docstore.View, p lsp.TextDocumentPositionParams) (any, error) {
 		here, inside, err := s.at(docs, p)
-		if err != nil || !inside {
+		if err != nil {
 			return nil, err
+		}
+		if here.Native != nil {
+			if locations, handled, err := s.nativeDefinition(ctx, docs, here, p.Position, inside); handled {
+				return locations, err
+			}
+		}
+		if !inside {
+			return nil, nil
 		}
 		locations, err := navigation.Definition(ctx, here.File, here.offset, s.navigationEnv(), s.candidateFiles(docs), mode)
 		if err != nil {

@@ -26,7 +26,11 @@ on every file without one). Makefiles (`Makefile`, `makefile`, `GNUmakefile`,
 `*.mk`, `*.mak`), justfiles (`justfile`, `Justfile`, `.justfile`, `*.just`)
 and Nix files (`*.nix`) are found too, and the shell in them is linted
 ([Shell in other files](../README.md#shell-in-other-files)); `-s` does not
-apply to them, since the file decides their shell. `.git`, `node_modules`,
+apply to them, since the file decides their shell. Justfiles and Makefiles are
+also checked as just and make files, with the `SL5` and `SL6` codes of
+[rules.md](rules.md#justfiles-and-makefiles), following their `import`, `mod`
+and `include` statements, and the other justfiles and Makefiles among the
+paths that include them. `.git`, `node_modules`,
 `vendor` and similar directories are skipped, and so is whatever git ignores:
 the `.gitignore` files from the repository's top down, and
 `.git/info/exclude`. A file named on the command line is linted even when it
@@ -167,8 +171,10 @@ or a single `-`, it formats standard input.
 
 As with shfmt, `.editorconfig` settings apply unless a parser or printer flag
 is given, and files found by walking a directory honour `ignore = true`.
-Makefiles, justfiles and Nix files are skipped when walking a directory and
-refused when named, since `fmt` formats only shell scripts. A file named more
+Justfiles are formatted like `just --fmt` formats them; one whose comment
+`just --fmt` would drop, such as a comment after a recipe header, is reported
+and left alone. Makefiles and Nix files are skipped when walking a directory
+and refused when named, since `fmt` formats only shell scripts and justfiles. A file named more
 than once, directly or through a directory, is formatted once.
 Exit status 0 means success, 1 means a file could not be read or parsed or,
 with `-l` (without `-w`) or `-d`, that some formatting differs, and 2 means

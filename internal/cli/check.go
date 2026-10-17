@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"cmp"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -17,6 +18,8 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/editorconfig"
 	"github.com/stubbedev/shell-lsp/internal/filelint"
+	"github.com/stubbedev/shell-lsp/internal/host"
+	"github.com/stubbedev/shell-lsp/internal/hostnav"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/navigation"
 	"github.com/stubbedev/shell-lsp/internal/parallel"
@@ -115,6 +118,7 @@ type checker struct {
 	resolved  map[string]error
 	warned    sync.Map
 	stdin     func() ([]byte, error)
+	all       []target
 }
 
 func newChecker(env Env, opts checkOptions) *checker {
@@ -230,6 +234,7 @@ type linted struct {
 
 func (c *checker) run() ([]fileReport, []string, error) {
 	targets, failures := c.targets()
+	c.all = targets
 	results := c.lintAll(targets)
 	if c.opts.checkSourced {
 		results = append(results, c.lintAll(c.sourcedTargets(targets, results))...)
@@ -291,11 +296,40 @@ func (c *checker) lint(t target) linted {
 	}
 	env := c.navigationEnv(s.roots)
 	report := filelint.Check(file, env, s.lint)
-	findings := c.filter(s.lint.Excluded(), append(syntaxFindings(file.Tree, s.lint.DialectSource(file)), report.Findings...))
+	findings := sourceFindings(file.Doc, c.filter(s.lint.Excluded(), append(syntaxFindings(file.Tree, s.lint.DialectSource(file)), report.Findings...)))
+	if file.Native != nil {
+		native, err := c.nativeFindings(file)
+		if err != nil {
+			return linted{failure: fmt.Sprintf("%s: %v", t.name, err)}
+		}
+		findings = c.filter(s.lint.Excluded(), append(findings, native...))
+	}
 	return linted{
-		report: fileReport{name: t.name, doc: file.Doc.Source(), findings: sourceFindings(file.Doc, findings)},
+		report: fileReport{name: t.name, doc: file.Doc.Source(), findings: findings},
 		file:   file,
 		env:    env,
+	}
+}
+
+func (c *checker) nativeFindings(file *workspace.File) ([]lint.Finding, error) {
+	g, err := hostnav.Build(context.Background(), file, hostnav.Env{Loader: c.ws, Home: c.env.Home, Files: c.hostFiles(file.Native.Language)})
+	if err != nil {
+		return nil, err
+	}
+	return g.Findings(), nil
+}
+
+func (c *checker) hostFiles(language host.Language) navigation.WorkspaceFiles {
+	return func(ctx context.Context) ([]*workspace.File, error) {
+		var out []*workspace.File
+		for _, t := range c.all {
+			if l, ok := host.FromName(t.path); ok && l == language {
+				if f, err := c.ws.Load(t.path); err == nil {
+					out = append(out, f)
+				}
+			}
+		}
+		return out, ctx.Err()
 	}
 }
 

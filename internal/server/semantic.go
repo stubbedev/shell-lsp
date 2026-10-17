@@ -1,6 +1,7 @@
 package server
 
 import (
+	"cmp"
 	"context"
 	"slices"
 	"strconv"
@@ -9,7 +10,6 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
-	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/semantic"
 	"github.com/stubbedev/shell-lsp/internal/structure"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
@@ -70,26 +70,56 @@ func (c *semanticCache) forget(uri string) {
 	delete(c.results, uri)
 }
 
-func encodeTokens(snap *snapshot, tokens []semantic.Token, within *parser.Span) []uint32 {
-	data := make([]uint32, 0, len(tokens)*5)
-	var prevLine, prevChar uint32
+type placedToken struct {
+	r lsp.Range
+	t semantic.Token
+}
+
+func place(out []placedToken, at docstore.Positions, tokens []semantic.Token) []placedToken {
 	for _, t := range tokens {
-		if within != nil && (t.Span.End <= within.Start || t.Span.Start >= within.End) {
-			continue
+		r := at.Range(t.Span)
+		if r.End.Line == r.Start.Line && r.End.Character > r.Start.Character {
+			out = append(out, placedToken{r: r, t: t})
 		}
-		r := snap.positions().Range(t.Span)
-		start, end := r.Start, r.End
-		if end.Line != start.Line || end.Character <= start.Character {
+	}
+	return out
+}
+
+func before(a, b lsp.Position) bool {
+	return a.Line < b.Line || a.Line == b.Line && a.Character < b.Character
+}
+
+func encodeTokens(placed []placedToken, within *lsp.Range) []uint32 {
+	slices.SortStableFunc(placed, func(a, b placedToken) int {
+		return cmp.Or(cmp.Compare(a.r.Start.Line, b.r.Start.Line), cmp.Compare(a.r.Start.Character, b.r.Start.Character))
+	})
+	data := make([]uint32, 0, len(placed)*5)
+	var prevLine, prevChar uint32
+	for _, p := range placed {
+		start, end := p.r.Start, p.r.End
+		if within != nil && (!before(within.Start, end) || !before(start, within.End)) {
 			continue
 		}
 		deltaChar := start.Character
 		if start.Line == prevLine {
 			deltaChar -= prevChar
 		}
-		data = append(data, start.Line-prevLine, deltaChar, end.Character-start.Character, uint32(t.Type), uint32(t.Modifiers))
+		data = append(data, start.Line-prevLine, deltaChar, end.Character-start.Character, uint32(p.t.Type), uint32(p.t.Modifiers))
 		prevLine, prevChar = start.Line, start.Character
 	}
 	return data
+}
+
+func (s *Server) placedTokens(snap *snapshot) []placedToken {
+	placed := place(nil, snap.positions(), s.semanticTokens(snap))
+	if snap.Native == nil {
+		return placed
+	}
+	shell := slices.DeleteFunc(placed, func(p placedToken) bool {
+		_, inside := snap.positions().Offset(p.r.Start)
+		return !inside
+	})
+	return place(shell, sourcePositions(snap.File, snap.encoding), snap.Native.Index.Tokens)
 }
 
 func (s *Server) semanticTokens(snap *snapshot) []semantic.Token {
@@ -103,7 +133,7 @@ func (s *Server) handleSemanticTokensFull(_ context.Context, docs *docstore.View
 	if err != nil {
 		return nil, err
 	}
-	return s.semantic.remember(p.TextDocument.URI, encodeTokens(snap, s.semanticTokens(snap), nil)), nil
+	return s.semantic.remember(p.TextDocument.URI, encodeTokens(s.placedTokens(snap), nil)), nil
 }
 
 func (s *Server) handleSemanticTokensDelta(_ context.Context, docs *docstore.View, p lsp.SemanticTokensDeltaParams) (any, error) {
@@ -111,7 +141,7 @@ func (s *Server) handleSemanticTokensDelta(_ context.Context, docs *docstore.Vie
 	if err != nil {
 		return nil, err
 	}
-	data := encodeTokens(snap, s.semanticTokens(snap), nil)
+	data := encodeTokens(s.placedTokens(snap), nil)
 	previous, ok := s.semantic.previous(p.TextDocument.URI, p.PreviousResultID)
 	current := s.semantic.remember(p.TextDocument.URI, data)
 	if !ok {
@@ -144,11 +174,7 @@ func (s *Server) handleSemanticTokensRange(_ context.Context, docs *docstore.Vie
 	if err != nil {
 		return nil, err
 	}
-	within, inShell := snap.positions().Span(p.Range)
-	if !inShell {
-		return lsp.SemanticTokens{Data: []uint32{}}, nil
-	}
-	return lsp.SemanticTokens{Data: encodeTokens(snap, s.semanticTokens(snap), &within)}, nil
+	return lsp.SemanticTokens{Data: encodeTokens(s.placedTokens(snap), &p.Range)}, nil
 }
 
 func (s *Server) handleSelectionRange(_ context.Context, docs *docstore.View, p lsp.SelectionRangeParams) (any, error) {

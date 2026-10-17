@@ -40,8 +40,16 @@ func (c commandDocs) Describe(ctx context.Context, name string) (string, error) 
 
 func (s *Server) handleHover(ctx context.Context, docs *docstore.View, hoverParams lsp.HoverParams) (any, error) {
 	here, inside, err := s.at(docs, hoverParams.TextDocumentPositionParams)
-	if err != nil || !inside {
+	if err != nil {
 		return nil, err
+	}
+	if here.Native != nil {
+		if hover, handled, err := s.nativeHoverAt(ctx, docs, here, hoverParams.Position, inside); handled {
+			return hover, err
+		}
+	}
+	if !inside {
+		return nil, nil
 	}
 	if h, ok := embedded.HoverAt(embeddedPrograms(here.File), here.offset); ok {
 		return s.hoverResult(here.snapshot, h.Markdown, h.Span), nil

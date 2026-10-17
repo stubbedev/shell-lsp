@@ -50,6 +50,7 @@ type File struct {
 	Doc       *docstore.Document
 	Tree      *parser.Tree
 	Detection dialect.Detection
+	Native    *host.Native
 
 	memoMu sync.Mutex
 	memo   map[string]*memoEntry
@@ -210,10 +211,27 @@ func (w *Workspace) InvalidateAll() {
 }
 
 func (w *Workspace) Load(path string) (*File, error) {
+	return w.load(path, "")
+}
+
+func (w *Workspace) LoadAs(path string, language host.Language) (*File, error) {
+	return w.load(path, language.LanguageID())
+}
+
+func (f *File) parsedAs(languageID string) bool {
+	if languageID == "" {
+		return true
+	}
+	language, ok := host.LanguageOf(languageID)
+	return ok && f.Native != nil && f.Native.Language == language
+}
+
+func (w *Workspace) load(path, languageID string) (*File, error) {
 	now := w.now()
 	key := platform.Native.Fold(path)
 	w.mu.Lock()
 	cached, ok := w.files[key]
+	ok = ok && cached.file.parsedAs(languageID)
 	fresh := ok && (w.watchedLocked(path) || now.Sub(cached.checked) < DiskRecheck)
 	w.mu.Unlock()
 	var uri string
@@ -255,7 +273,7 @@ func (w *Workspace) Load(path string) (*File, error) {
 	if err != nil {
 		return nil, fmt.Errorf("loading %s: %w", path, err)
 	}
-	file := Parse(path, docstore.NewDocument(uri, "", 0, string(raw)), nil, func(in dialect.Input) dialect.Detection { return w.resolve(path, in) })
+	file := Parse(path, docstore.NewDocument(uri, languageID, 0, string(raw)), nil, func(in dialect.Input) dialect.Detection { return w.resolve(path, in) })
 	w.mu.Lock()
 	w.files[key] = diskEntry{size: info.Size(), modTime: info.ModTime(), checked: now, file: file}
 	w.mu.Unlock()
@@ -265,7 +283,7 @@ func (w *Workspace) Load(path string) (*File, error) {
 func Parse(path string, doc *docstore.Document, previous *parser.Tree, resolve func(dialect.Input) dialect.Detection) *File {
 	if language, ok := host.Of(doc.URI, doc.Language); ok {
 		script := language.Project(doc)
-		return &File{Path: path, URI: doc.URI, Doc: script.Doc, Tree: script.Parse(previous), Detection: script.Detection}
+		return &File{Path: path, URI: doc.URI, Doc: script.Doc, Tree: script.Parse(previous), Detection: script.Detection, Native: script.Native}
 	}
 	detection := resolve(dialect.Input{URI: doc.URI, LanguageID: doc.Language, Text: doc.Text()})
 	return &File{Path: path, URI: doc.URI, Doc: doc, Tree: parser.ParseEdit(previous, doc.Text(), detection.Shell), Detection: detection}

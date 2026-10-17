@@ -1,0 +1,211 @@
+-- clean --
+accepted
+-- unterminated-string --
+rejected 1:6 unterminated string
+1:6 SL5001 error unterminated string
+-- invalid-escape --
+rejected 1:6 `\q` is not a valid escape sequence
+1:6 SL5001 error `\q` is not a valid escape sequence
+-- missing-colon --
+rejected 1:6 expected '*', ':', '$', '=', identifier, or '+', but found end of line
+1:6 SL5001 error expected a parameter or `:`, found end of line
+-- unexpected-indent --
+rejected 4:1 recipe line has inconsistent leading whitespace, started with `␠␠␠␠` but found line with `␠␠`
+4:1 SL5021 error recipe line has inconsistent leading whitespace: it started with `␠␠␠␠` but this line has `␠␠`
+-- unknown-dependency --
+rejected 1:4 recipe `a` has unknown dependency `nope`
+1:4 SL5002 error unknown recipe `nope`
+-- unknown-qualified-dependency --
+rejected 1:9 recipe `a` has unknown dependency `foo::b`
+1:4 SL5017 error unknown module `foo`
+-- unknown-variable --
+rejected 2:12 variable `nope` not defined
+2:12 SL5003 error unknown variable `nope`
+-- unknown-variable-in-assignment --
+rejected 1:6 variable `y` not defined
+1:6 SL5003 error unknown variable `y`
+-- unknown-function --
+rejected 2:12 call to undefined function `nope`
+2:12 SL5004 error unknown function `nope`
+-- builtin-arity --
+rejected 2:12 function `uppercase` called with 0 arguments but takes 1
+2:12 SL5005 error function `uppercase` takes 1 argument but is given 0
+-- builtin-arity-many --
+rejected 2:12 function `replace` called with 2 arguments but takes 3
+2:12 SL5005 error function `replace` takes 3 arguments but is given 2
+-- dependency-too-many-arguments --
+rejected 1:5 dependency `b` got 1 argument but takes 0 arguments
+1:5 SL5006 error recipe `b` takes 0 arguments but is given 1
+-- dependency-missing-arguments --
+rejected 1:4 dependency `b` got 0 arguments but takes 1 argument
+1:4 SL5006 error recipe `b` takes 1 argument but is given 0
+-- dependency-variadic-ok --
+accepted
+-- unknown-setting --
+rejected 1:5 unknown setting `nonsense`
+1:5 SL5007 error unknown setting `nonsense`
+-- unknown-attribute --
+rejected 1:2 unknown attribute `nonsense`
+1:2 SL5008 error unknown attribute `nonsense`
+-- attribute-too-many-arguments --
+rejected 1:2 attribute `private` got 1 argument but takes 0 arguments
+1:2 SL5020 error attribute `private` takes 0 arguments but is given 1
+-- attribute-missing-argument --
+rejected 1:2 attribute `group` got 0 arguments but takes 1 argument
+1:2 SL5020 error attribute `group` takes 1 argument but is given 0
+-- duplicate-recipe --
+rejected 3:1 recipe `a` first defined on line 1 is redefined on line 3
+3:1 SL5009 error recipe `a` first defined on line 1 is redefined on line 3
+-- duplicate-recipe-allowed --
+accepted
+-- duplicate-recipe-other-system --
+accepted
+-- duplicate-recipe-overlapping-system --
+rejected 5:1 recipe `a` first defined on line 2 is redefined on line 5
+5:1 SL5009 error recipe `a` first defined on line 2 is redefined on line 5
+-- duplicate-variable --
+rejected 2:1 variable `x` has multiple definitions
+2:1 SL5010 error variable `x` has multiple definitions
+-- duplicate-variable-allowed --
+accepted
+-- duplicate-alias --
+rejected 2:7 alias `b` first defined on line 1 is redefined on line 2
+2:7 SL5011 error alias `b` first defined on line 1 is redefined on line 2
+-- alias-shadows-recipe --
+rejected 2:1 alias `b` defined on line 1 is redefined as a recipe on line 2
+2:1 SL5011 error alias `b` defined on line 1 is redefined as a recipe on line 2
+-- unknown-alias-target --
+rejected 1:7 alias `b` has an unknown target `nope`
+1:12 SL5002 error unknown recipe `nope`
+-- circular-dependency --
+rejected 3:4 recipe `b` has circular dependency `a -> b -> a`
+1:4 SL5012 error recipe `a` is circular: `a -> b -> a`
+3:4 SL5012 error recipe `b` is circular: `b -> a -> b`
+-- self-dependency --
+rejected 1:4 recipe `a` depends on itself
+1:4 SL5012 error recipe `a` depends on itself
+-- circular-variable --
+rejected 1:1 variable `x` depends on its own value: `x -> y -> x`
+1:6 SL5012 error variable `x` is circular: `x -> y -> x`
+2:6 SL5012 error variable `y` is circular: `y -> x -> y`
+-- self-variable --
+rejected 1:1 variable `x` is defined in terms of itself
+1:6 SL5012 error variable `x` depends on itself
+-- duplicate-setting --
+rejected 2:5 setting `quiet` first set on line 1 is redefined on line 2
+2:5 SL5015 error setting `quiet` first set on line 1 is set again on line 2
+-- bool-setting-with-string --
+rejected 1:15 expected identifier, but found string
+1:15 SL5016 error setting `export` takes `true` or `false`
+-- list-setting-with-string --
+rejected 1:14 expected '[', but found string
+1:14 SL5016 error setting `shell` takes a list such as `['bash', '-c']`
+-- duplicate-parameter --
+rejected 1:5 recipe `a` has duplicate parameter `x`
+1:5 SL5019 error recipe `a` has duplicate parameter `x`
+-- parameter-after-default --
+rejected 1:9 non-default parameter `y` follows default parameter
+1:9 SL5019 error non-default parameter `y` follows default parameter
+-- parameter-after-variadic --
+rejected 1:6 parameter `y` follows variadic parameter
+1:6 SL5019 error parameter `y` follows variadic parameter
+-- inconsistent-indentation --
+rejected 3:1 recipe line has inconsistent leading whitespace, started with `␠␠` but found line with `␉`
+3:1 SL5021 error recipe line has inconsistent leading whitespace: it started with `␠␠` but this line has `␉`
+-- extra-indentation --
+rejected 3:3 recipe line has extra leading whitespace
+3:1 SL5021 error recipe line has extra leading whitespace; join it to the line above with a trailing `\` or start the recipe with a shebang
+-- continuation-may-indent --
+accepted
+-- shebang-may-indent --
+accepted
+-- list-literal-needs-lists --
+rejected 1:6 list literals require `set lists`
+1:6 SL5023 error list literals need `set lists`
+-- concatenation-needs-lists --
+rejected 1:10 list concatenation operator `++` requires `set lists`
+1:10 SL5023 error `++` needs `set lists`
+-- negation-needs-lists --
+rejected 1:9 negation operator requires `set lists`
+1:9 SL5023 error `!` needs `set lists`
+-- logic-needs-lists --
+rejected 1:10 logical operators require `set lists`
+1:10 SL5023 error `&&` needs `set lists`
+-- lists-need-unstable --
+rejected 0:0 the `lists` setting is currently unstable, invoke `just` with `--unstable`, set the `JUST_UNSTABLE` environment variable, or add `set unstable` to your `justfile` to enable unstable features
+1:5 SL5023 error `set lists` is unstable and needs `set unstable`
+-- functions-need-unstable --
+rejected 0:0 user-defined functions are currently unstable, invoke `just` with `--unstable`, set the `JUST_UNSTABLE` environment variable, or add `set unstable` to your `justfile` to enable unstable features
+1:1 SL5023 error user-defined functions are unstable and need `set unstable`
+-- user-function-arity --
+rejected 4:12 function `f` called with 0 arguments but takes 1
+4:12 SL5005 error function `f` takes 1 argument but is given 0
+-- user-function-parameter --
+rejected 2:13 variable `y` not defined
+2:13 SL5003 error unknown variable `y`
+-- mapped-dependency-needs-star --
+rejected 4:4 mapped dependencies must have starred argument
+4:4 SL5006 error a mapped dependency needs a starred argument such as `*items`
+-- missing-module --
+rejected 1:5 could not find source file for module `foo`
+1:5 SL5018 error no source file for module `foo`; looked for `foo.just`, `foo/mod.just`, `foo/justfile`, `foo/Justfile`, `foo/JUSTFILE`, `foo/.justfile`
+-- optional-module --
+accepted
+-- missing-import --
+rejected 1:8 could not find source file for import
+1:8 SL5018 error `nothere.just` is not found
+-- optional-import --
+accepted
+-- unused-parameter --
+accepted
+1:3 SL5013 info parameter `x` is never used
+-- exported-parameter-used-in-shell --
+accepted
+-- unused-variable --
+accepted
+1:1 SL5014 info variable `x` is never used
+-- private-variable-unused --
+accepted
+-- exported-variable --
+accepted
+-- positional-arguments --
+accepted
+-- deprecated-function --
+accepted
+2:12 SL5022 warning function `env_var` is deprecated: use `env(key)`
+-- deprecated-setting --
+accepted
+1:5 SL5022 warning setting `windows-powershell` is deprecated: use `[windows]` on `set shell` instead
+-- parameter-default-uses-earlier --
+accepted
+-- interpolation-sees-parameter --
+accepted
+-- constants --
+accepted
+-- conditional-expression --
+accepted
+-- subsequent-dependencies --
+accepted
+-- quiet-recipe --
+accepted
+-- format-string --
+accepted
+-- format-string-unknown --
+rejected 1:18 variable `name` not defined
+1:18 SL5003 error unknown variable `name`
+-- attribute-arguments --
+accepted
+-- export-param-default --
+accepted
+-- recipe-named-like-keyword --
+accepted
+-- variable-named-like-keyword --
+accepted
+-- comment-only-recipe --
+accepted
+-- comment-inside-parentheses --
+rejected 2:9 expected backtick, '!', '[', identifier, '(', '/', or string, but found comment
+2:9 SL5001 error expected an expression, found a comment, which cannot appear inside brackets
+4:1 SL5001 error expected a recipe, assignment, alias, setting, import or module, found `)`
+-- multi-line-parentheses --
+accepted

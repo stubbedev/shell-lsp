@@ -1,0 +1,19 @@
+{
+  "variables": [
+    "CC",
+    "CFLAGS",
+    "MODE",
+    "NOW",
+    "OBJS",
+    "PREFIX",
+    "SRCS",
+    "TOKEN",
+    "short"
+  ],
+  "recipes": [
+    "%.o@19",
+    "app@16",
+    "clean@25",
+    "install@22"
+  ]
+}

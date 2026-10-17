@@ -123,7 +123,7 @@ func (s *Server) handleInlayHintResolve(_ context.Context, _ *docstore.View, hin
 	return hint, nil
 }
 
-func (s *Server) handleDocumentLink(_ context.Context, docs *docstore.View, p lsp.DocumentLinkParams) (any, error) {
+func (s *Server) handleDocumentLink(ctx context.Context, docs *docstore.View, p lsp.DocumentLinkParams) (any, error) {
 	file, err := s.workspaceFile(docs, p.TextDocument.URI)
 	if err != nil {
 		return nil, err
@@ -132,6 +132,16 @@ func (s *Server) handleDocumentLink(_ context.Context, docs *docstore.View, p ls
 	out := make([]lsp.DocumentLink, len(links))
 	for i, l := range links {
 		out[i] = lsp.DocumentLink{Range: docs.Positions(file.Doc).Range(l.Span), Target: l.Target}
+	}
+	if file.Native == nil {
+		return out, nil
+	}
+	g, err := s.group(ctx, docs, file)
+	if err != nil {
+		return nil, err
+	}
+	for _, l := range g.Links() {
+		out = append(out, lsp.DocumentLink{Range: sourcePositions(file, docs.Encoding()).Range(l.Span), Target: l.Target.URI})
 	}
 	return out, nil
 }

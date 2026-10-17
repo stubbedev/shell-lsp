@@ -1,0 +1,128 @@
+{
+  "aliases": {},
+  "assignments": {},
+  "modules": [],
+  "recipes": {
+    "blank-lines": {
+      "attributes": [],
+      "body": [
+        [
+          "echo a"
+        ],
+        [],
+        [
+          "echo b"
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    },
+    "continued": {
+      "attributes": [],
+      "body": [
+        [
+          "echo one \\"
+        ],
+        [
+          "  two \\"
+        ],
+        [
+          "  three"
+        ],
+        [
+          "@-echo quiet and ignored"
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    },
+    "escaped": {
+      "attributes": [],
+      "body": [
+        [
+          "echo '{{{{not an interpolation}}'"
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    },
+    "interp-cont": {
+      "attributes": [],
+      "body": [
+        [
+          "echo ",
+          [
+            "x"
+          ]
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    },
+    "python": {
+      "attributes": [
+        "script"
+      ],
+      "body": [
+        [
+          "print(\"hi\")"
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "shebang": true
+    },
+    "shebang": {
+      "attributes": [],
+      "body": [
+        [
+          "#!/usr/bin/env bash"
+        ],
+        [
+          "set -euo pipefail"
+        ],
+        [
+          "for f in *; do"
+        ],
+        [
+          "  echo \"$f\""
+        ],
+        [
+          "done"
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "shebang": true
+    }
+  },
+  "settings": {}
+}

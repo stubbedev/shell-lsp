@@ -1,0 +1,164 @@
+{
+  "aliases": {},
+  "assignments": {},
+  "modules": [],
+  "recipes": {
+    "a": {
+      "attributes": [],
+      "body": [
+        [
+          "echo a"
+        ]
+      ],
+      "dependencies": [
+        {
+          "arguments": [],
+          "recipe": "b"
+        },
+        {
+          "arguments": [
+            "x",
+            "y"
+          ],
+          "recipe": "c"
+        },
+        {
+          "arguments": [],
+          "recipe": "e"
+        },
+        {
+          "arguments": [
+            "1"
+          ],
+          "recipe": "f"
+        }
+      ],
+      "doc": null,
+      "parameters": [],
+      "priors": 2,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    },
+    "b": {
+      "attributes": [],
+      "body": [],
+      "dependencies": [],
+      "doc": null,
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    },
+    "c": {
+      "attributes": [],
+      "body": [
+        [
+          "echo ",
+          [
+            [
+              "variable",
+              "p"
+            ]
+          ],
+          " ",
+          [
+            [
+              "variable",
+              "q"
+            ]
+          ]
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "parameters": [
+        {
+          "default": null,
+          "export": false,
+          "kind": "singular",
+          "name": "p"
+        },
+        {
+          "default": null,
+          "export": false,
+          "kind": "singular",
+          "name": "q"
+        }
+      ],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    },
+    "d": {
+      "attributes": [],
+      "body": [
+        [
+          "echo ",
+          [
+            [
+              "variable",
+              "x"
+            ]
+          ]
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "parameters": [
+        {
+          "default": null,
+          "export": false,
+          "kind": "singular",
+          "name": "x"
+        }
+      ],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    },
+    "e": {
+      "attributes": [],
+      "body": [],
+      "dependencies": [],
+      "doc": null,
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    },
+    "f": {
+      "attributes": [],
+      "body": [
+        [
+          "echo ",
+          [
+            [
+              "variable",
+              "n"
+            ]
+          ]
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "parameters": [
+        {
+          "default": null,
+          "export": false,
+          "kind": "singular",
+          "name": "n"
+        }
+      ],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    }
+  },
+  "settings": {}
+}

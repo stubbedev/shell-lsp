@@ -1,0 +1,93 @@
+{
+  "aliases": {},
+  "assignments": {
+    "logic": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": [
+        "or",
+        [
+          "and",
+          [
+            "variable",
+            "version"
+          ],
+          [
+            "variable",
+            "raw"
+          ]
+        ],
+        "c"
+      ]
+    },
+    "negated": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": [
+        "if",
+        [
+          "not",
+          [
+            "!=",
+            [
+              "variable",
+              "version"
+            ],
+            "x"
+          ]
+        ],
+        "a",
+        "b"
+      ]
+    },
+    "raw": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": "2"
+    },
+    "version": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": "1"
+    }
+  },
+  "modules": [],
+  "recipes": {
+    "list": {
+      "attributes": [],
+      "body": [
+        [
+          "echo ",
+          [
+            [
+              "variable",
+              "logic"
+            ]
+          ],
+          " ",
+          [
+            [
+              "variable",
+              "negated"
+            ]
+          ]
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    }
+  },
+  "settings": {
+    "lists": true,
+    "unstable": true
+  }
+}

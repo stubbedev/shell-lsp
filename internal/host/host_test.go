@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/docstore"
+	"github.com/stubbedev/shell-lsp/internal/host/model"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 )
@@ -48,7 +49,7 @@ func TestEveryLanguageIsDefined(t *testing.T) {
 	t.Parallel()
 
 	for _, l := range []Language{Make, Just, Nix} {
-		if d := definitions[l]; d.name == "" || len(d.languageIDs) == 0 || d.project == nil {
+		if d := definitions[l]; d.name == "" || len(d.languageIDs) == 0 || d.analyze == nil {
 			t.Errorf("language %d is not fully defined: %+v", l, d)
 		}
 	}
@@ -121,5 +122,60 @@ func TestShellFlagsReachTheLinter(t *testing.T) {
 		if warned != tt.warned {
 			t.Errorf("%q: SC2164 reported = %v, want %v", tt.makefile, warned, tt.warned)
 		}
+	}
+}
+
+func TestLanguageRegistry(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		l       Language
+		id      string
+		formats bool
+		command string
+	}{
+		{Make, "makefile", false, "make"},
+		{Just, "just", true, "just"},
+	} {
+		if got := tt.l.LanguageID(); got != tt.id {
+			t.Errorf("%v.LanguageID() = %q, want %q", tt.l, got, tt.id)
+		}
+		if l, ok := LanguageOf(tt.id); !ok || l != tt.l {
+			t.Errorf("LanguageOf(%q) = %v, %v", tt.id, l, ok)
+		}
+		if got := tt.l.Formats(); got != tt.formats {
+			t.Errorf("%v.Formats() = %v", tt.l, got)
+		}
+		if got := tt.l.Recursion().Command; got != tt.command {
+			t.Errorf("%v.Recursion().Command = %q", tt.l, got)
+		}
+		if argv := tt.l.Invocation("/p/file", "target"); argv[0] != tt.command || argv[len(argv)-1] != "target" {
+			t.Errorf("%v.Invocation = %v", tt.l, argv)
+		}
+		if tt.l.Builtins().Of(model.KindFunction) == nil {
+			t.Errorf("%v has no builtin functions", tt.l)
+		}
+	}
+	if formatted, err := Just.Format("a:\n  echo\n"); err != nil || formatted != "a:\n    echo\n" {
+		t.Errorf("Just.Format = %q, %v", formatted, err)
+	}
+	if _, ok := LanguageOf("python"); ok {
+		t.Error("LanguageOf(python) found a host language")
+	}
+}
+
+func TestNixHasNoNativeAnalysis(t *testing.T) {
+	t.Parallel()
+
+	script := Nix.Project(docstore.NewDocument("file:///w/default.nix", "nix", 0, "{ buildPhase = ''\n  echo hi\n''; }\n"))
+	if script.Native != nil {
+		t.Errorf("a Nix file has native analysis: %+v", script.Native)
+	}
+	native := Just.Project(docstore.NewDocument("file:///w/justfile", "just", 0, "a:\n    echo\n")).Native
+	if native == nil || !native.Formats() || len(native.Index.Symbols) != 1 {
+		t.Errorf("a justfile's native analysis = %+v", native)
+	}
+	if _, ok := native.Expect(0); !ok {
+		t.Error("no completion context at the start of a justfile")
 	}
 }

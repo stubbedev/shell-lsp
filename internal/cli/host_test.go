@@ -61,14 +61,21 @@ func TestCheckLintsJustfileRecipes(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	writeFiles(t, dir, map[string]string{"proj/justfile": "run:\n    echo $1 {{x}}\n", "proj/tasks.just": "x:\n    #!/usr/bin/env bash\n    echo $1\n"})
+	writeFiles(t, dir, map[string]string{"proj/justfile": "import 'tasks.just'\nrun:\n    echo $1 {{x}} {{nope}}\n", "proj/tasks.just": "x := 'a'\ny:\n    #!/usr/bin/env bash\n    echo $1\n"})
 	got := run(t, dir, "", "check", "-f", "gcc", "proj")
-	want := []string{filepath.FromSlash("proj/justfile:2:10 SC2086"), filepath.FromSlash("proj/tasks.just:3:10 SC2086")}
+	want := []string{
+		filepath.FromSlash("proj/justfile:3:10 SC2086"),
+		filepath.FromSlash("proj/justfile:3:21 SL5003"),
+		filepath.FromSlash("proj/tasks.just:4:10 SC2086"),
+	}
 	if !slices.Equal(findings(t, got.stdout), want) {
 		t.Errorf("checking a project with justfiles = %v, want %v\n%s", findings(t, got.stdout), want, got.stderr)
 	}
-	if got := run(t, dir, "", "fmt", "proj/justfile"); got.status == statusOK {
+	if got := run(t, dir, "", "fmt", "proj/justfile"); got.status != statusOK || got.stdout != "import 'tasks.just'\n\nrun:\n    echo $1 {{ x }} {{ nope }}\n" && got.stdout != "import 'tasks.just'\nrun:\n    echo $1 {{ x }} {{ nope }}\n" {
 		t.Errorf("fmt of a justfile = %+v", got)
+	}
+	if got := run(t, dir, "", "check", "-e", "SL5003", "-f", "gcc", "proj/justfile"); slices.Contains(findings(t, got.stdout), filepath.FromSlash("proj/justfile:3:21 SL5003")) {
+		t.Errorf("-e SL5003 still reports it: %v", findings(t, got.stdout))
 	}
 }
 
@@ -80,5 +87,18 @@ func TestCheckLintsNixShellStrings(t *testing.T) {
 	got := run(t, dir, "", "check", "-f", "gcc", "proj")
 	if want := []string{filepath.FromSlash("proj/default.nix:2:8 SC2086")}; !slices.Equal(findings(t, got.stdout), want) {
 		t.Errorf("checking a project with Nix files = %v, want %v\n%s", findings(t, got.stdout), want, got.stderr)
+	}
+}
+
+func TestFmtRefusesToDropAJustfileComment(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeFiles(t, dir, map[string]string{"justfile": "build: # explains build\n    echo\n"})
+	if got := run(t, dir, "", "fmt", "justfile"); got.status == statusOK || !strings.Contains(got.stderr, "would drop the comment") {
+		t.Errorf("fmt of a justfile whose comment just --fmt drops = %+v", got)
+	}
+	if got := run(t, dir, "", "fmt", "-l", "."); got.status == statusOK {
+		t.Errorf("fmt -l over a directory with that justfile = %+v", got)
 	}
 }

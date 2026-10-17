@@ -358,7 +358,9 @@ type SymbolKind uint8
 
 const (
 	SymbolFile     SymbolKind = 1
+	SymbolModule   SymbolKind = 2
 	SymbolMethod   SymbolKind = 6
+	SymbolProperty SymbolKind = 7
 	SymbolFunction SymbolKind = 12
 	SymbolVariable SymbolKind = 13
 	SymbolConstant SymbolKind = 14

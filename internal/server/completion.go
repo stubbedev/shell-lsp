@@ -180,6 +180,9 @@ func (s *Server) handleCompletion(ctx context.Context, docs *docstore.View, comp
 	if err != nil {
 		return nil, err
 	}
+	if here.Native != nil && !inside {
+		return s.nativeCompletion(ctx, docs, here, completionParams.Position)
+	}
 	if !inside {
 		return lsp.CompletionList{Items: []lsp.CompletionItem{}}, nil
 	}

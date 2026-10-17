@@ -8,6 +8,7 @@ import (
 	"slices"
 
 	"github.com/stubbedev/shell-lsp/internal/docstore"
+	"github.com/stubbedev/shell-lsp/internal/host/model"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/structure"
@@ -59,10 +60,48 @@ func (s *Server) handleDocumentSymbol(_ context.Context, docs *docstore.View, sy
 		return nil, err
 	}
 	symbols := workspace.Memo(snap.File, "structure.symbols", 0, func() []structure.Symbol { return structure.Symbols(snap.Tree) })
+	if snap.Native != nil {
+		tree := nestShellSymbols(s.nativeSymbols(snap), documentSymbols(snap.positions(), authoredSymbols(snap.Doc, symbols)))
+		if s.clientCapabilities().TextDocument.DocumentSymbol.HierarchicalDocumentSymbolSupport {
+			return tree, nil
+		}
+		return flatten([]lsp.SymbolInformation{}, snap.URI, tree, ""), nil
+	}
 	if s.clientCapabilities().TextDocument.DocumentSymbol.HierarchicalDocumentSymbolSupport {
 		return documentSymbols(snap.positions(), symbols), nil
 	}
 	return appendFlatSymbols([]lsp.SymbolInformation{}, snap.URI, snap.positions(), symbols, ""), nil
+}
+
+func authoredSymbols(doc *docstore.Document, symbols []structure.Symbol) []structure.Symbol {
+	out := make([]structure.Symbol, 0, len(symbols))
+	for _, sym := range symbols {
+		if !doc.Synthetic(sym.Selection.Start) {
+			sym.Children = authoredSymbols(doc, sym.Children)
+			out = append(out, sym)
+		}
+	}
+	return out
+}
+
+func within(inner, outer lsp.Range) bool {
+	before := func(a, b lsp.Position) bool { return a.Line < b.Line || a.Line == b.Line && a.Character <= b.Character }
+	return before(outer.Start, inner.Start) && before(inner.End, outer.End)
+}
+
+func nestShellSymbols(native, shell []lsp.DocumentSymbol) []lsp.DocumentSymbol {
+	for _, sym := range shell {
+		i := slices.IndexFunc(native, func(n lsp.DocumentSymbol) bool { return within(sym.Range, n.Range) })
+		if i < 0 {
+			native = append(native, sym)
+			continue
+		}
+		native[i].Children = append(native[i].Children, sym)
+	}
+	slices.SortStableFunc(native, func(a, b lsp.DocumentSymbol) int {
+		return cmp.Or(cmp.Compare(a.Range.Start.Line, b.Range.Start.Line), cmp.Compare(a.Range.Start.Character, b.Range.Start.Character))
+	})
+	return native
 }
 
 func documentSymbols(at docstore.Positions, symbols []structure.Symbol) []lsp.DocumentSymbol {
@@ -99,15 +138,34 @@ func (s *Server) handleFoldingRange(_ context.Context, docs *docstore.View, fold
 		return nil, err
 	}
 	lineOf := func(offset int) int { return int(snap.positions().Position(offset).Line) }
-	folds := structure.Folds(snap.Tree, lineOf)
-	if limit := s.clientCapabilities().TextDocument.FoldingRange.RangeLimit; limit > 0 && len(folds) > limit {
-		folds = folds[:limit]
+	folds := foldRanges(structure.Folds(snap.Tree, lineOf))
+	if snap.Native != nil {
+		folds = mergeFolds(nativeFolds(snap), folds)
 	}
+	return limitFolds(folds, s.clientCapabilities().TextDocument.FoldingRange.RangeLimit), nil
+}
+
+func foldRanges(folds []structure.Fold) []lsp.FoldingRange {
 	out := make([]lsp.FoldingRange, len(folds))
 	for i, f := range folds {
 		out[i] = lsp.FoldingRange{StartLine: uint32(f.StartLine), EndLine: uint32(f.EndLine), Kind: foldKind(f.Kind)} //nolint:gosec
 	}
-	return out, nil
+	return out
+}
+
+func mergeFolds(a, b []lsp.FoldingRange) []lsp.FoldingRange {
+	out := slices.Concat(a, b)
+	slices.SortStableFunc(out, func(x, y lsp.FoldingRange) int {
+		return cmp.Or(cmp.Compare(x.StartLine, y.StartLine), cmp.Compare(y.EndLine, x.EndLine))
+	})
+	return slices.CompactFunc(out, func(x, y lsp.FoldingRange) bool { return x.StartLine == y.StartLine })
+}
+
+func limitFolds(folds []lsp.FoldingRange, limit int) []lsp.FoldingRange {
+	if limit > 0 && len(folds) > limit {
+		return folds[:limit]
+	}
+	return append([]lsp.FoldingRange{}, folds...)
 }
 
 func (s *Server) handleWorkspaceSymbol(ctx context.Context, docs *docstore.View, symbolParams lsp.WorkspaceSymbolParams) (any, error) {
@@ -123,13 +181,22 @@ func (s *Server) handleWorkspaceSymbol(ctx context.Context, docs *docstore.View,
 			}
 		}
 		for def := range globalDefinitions(file.Tree) {
-			if structure.Matches(symbolParams.Query, def.Name) {
+			if structure.Matches(symbolParams.Query, def.Name) && !file.Doc.Synthetic(def.NameSpan.Start) {
 				out = append(out, workspaceSymbol(file, docs, def.Name, lsp.SymbolVariable, def.Span))
 			}
 		}
 		for _, test := range file.Tree.Tests {
 			if structure.Matches(symbolParams.Query, test.Name) {
 				out = append(out, workspaceSymbol(file, docs, test.Name, symbolKind(structure.SymbolTest), test.Span))
+			}
+		}
+		if file.Native == nil {
+			continue
+		}
+		at := sourcePositions(file, docs.Encoding())
+		for _, sym := range file.Native.Index.Symbols {
+			if sym.Scope == model.Global && structure.Matches(symbolParams.Query, sym.Name) {
+				out = append(out, lsp.SymbolInformation{Name: sym.Name, Kind: nativeKind(sym.Kind), Location: lsp.Location{URI: file.URI, Range: at.Range(sym.Selection)}})
 			}
 		}
 	}

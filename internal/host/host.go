@@ -2,6 +2,7 @@ package host
 
 import (
 	"path"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/host/justfile"
 	"github.com/stubbedev/shell-lsp/internal/host/makefile"
+	"github.com/stubbedev/shell-lsp/internal/host/model"
 	"github.com/stubbedev/shell-lsp/internal/host/nix"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/projection"
@@ -30,7 +32,47 @@ type definition struct {
 	languageIDs []string
 	names       []string
 	extensions  []string
-	project     func(text string) (*projection.Map, dialect.Detection)
+	analyze     func(text string) analysis
+	builtins    model.Builtins
+	checks      model.Checks
+	validName   func(kind model.Kind, name string) bool
+	fence       string
+	invocation  func(path, name string) []string
+	recursion   Recursion
+	formatter   func(text string) (string, error)
+}
+
+type Recursion struct {
+	Command   string
+	Ref       model.Ref
+	FileFlags []string
+	Kind      model.Kind
+	Separator string
+}
+
+type analysis struct {
+	projection *projection.Map
+	detection  dialect.Detection
+	index      *model.Index
+	expect     func(offset int) (model.Expect, bool)
+	format     func() (string, error)
+}
+
+func projectOnly(project func(string) (*projection.Map, dialect.Detection)) func(string) analysis {
+	return func(text string) analysis {
+		m, detection := project(text)
+		return analysis{projection: m, detection: detection}
+	}
+}
+
+func analyzeMake(text string) analysis {
+	a := makefile.Analyze(text)
+	return analysis{projection: a.Map, detection: a.Detection, index: a.Index, expect: a.File.Expect}
+}
+
+func analyzeJust(text string) analysis {
+	a := justfile.Analyze(text)
+	return analysis{projection: a.Map, detection: a.Detection, index: a.Index, expect: a.File.Expect, format: func() (string, error) { return justfile.Format(a.File) }}
 }
 
 var definitions = [...]definition{
@@ -39,20 +81,37 @@ var definitions = [...]definition{
 		languageIDs: []string{"makefile", "make"},
 		names:       []string{"Makefile", "makefile", "GNUmakefile"},
 		extensions:  []string{".mk", ".mak"},
-		project:     makefile.Project,
+		analyze:     analyzeMake,
+		builtins:    makefile.Builtins,
+		checks:      makefile.Checks,
+		validName:   makefile.ValidName,
+		fence:       "make",
+		invocation: func(path, name string) []string {
+			return []string{"make", "-f", path, name}
+		},
+		recursion: Recursion{Command: "make", Ref: model.Ref{Name: "MAKE", Kind: model.KindVariable}, FileFlags: []string{"-f", "--file", "--makefile", "-C", "--directory"}, Kind: model.KindTarget},
 	},
 	Just: {
 		name:        "justfile",
 		languageIDs: []string{"just"},
 		names:       []string{"justfile", "Justfile", "JUSTFILE", ".justfile"},
 		extensions:  []string{".just"},
-		project:     justfile.Project,
+		analyze:     analyzeJust,
+		builtins:    justfile.Builtins,
+		checks:      justfile.Checks,
+		validName:   justfile.ValidName,
+		fence:       "just",
+		invocation: func(path, name string) []string {
+			return []string{"just", "--justfile", path, "--working-directory", filepath.Dir(path), name}
+		},
+		formatter: func(text string) (string, error) { return justfile.Format(justfile.Parse(text)) },
+		recursion: Recursion{Command: "just", Ref: model.Ref{Name: "just_executable", Kind: model.KindFunction}, FileFlags: []string{"-f", "--justfile", "-d", "--working-directory"}, Kind: model.KindRecipe, Separator: "::"},
 	},
 	Nix: {
 		name:        "Nix file",
 		languageIDs: []string{"nix"},
 		extensions:  []string{".nix"},
-		project:     nix.Project,
+		analyze:     projectOnly(nix.Project),
 	},
 }
 
@@ -69,8 +128,14 @@ func Of(uri, languageID string) (Language, bool) {
 	if l, ok := FromName(uri); ok {
 		return l, true
 	}
+	return LanguageOf(languageID)
+}
+
+func LanguageOf(languageID string) (Language, bool) {
 	return find(func(d definition) bool { return slices.Contains(d.languageIDs, languageID) })
 }
+
+func (l Language) LanguageID() string { return definitions[l].languageIDs[0] }
 
 func FromName(name string) (Language, bool) {
 	base := path.Base(strings.ReplaceAll(name, "\\", "/"))
@@ -98,12 +163,60 @@ func Extensions() []string {
 type Script struct {
 	Doc       *docstore.Document
 	Detection dialect.Detection
+	Native    *Native
 	scripts   []parser.Span
 }
 
+type Native struct {
+	Language Language
+	Index    *model.Index
+	expect   func(offset int) (model.Expect, bool)
+	format   func() (string, error)
+}
+
+func (n *Native) Expect(offset int) (model.Expect, bool) { return n.expect(offset) }
+
+func (n *Native) Formats() bool { return n.format != nil }
+
+func (n *Native) Format() (string, error) {
+	if n.format == nil {
+		panic("host: " + n.Language.String() + " has no formatter")
+	}
+	return n.format()
+}
+
+func (l Language) Builtins() model.Builtins { return definitions[l].builtins }
+
+func (l Language) Checks() model.Checks { return definitions[l].checks }
+
+func (l Language) ValidName(kind model.Kind, name string) bool {
+	return definitions[l].validName(kind, name)
+}
+
+func (l Language) Fence() string { return definitions[l].fence }
+
+func (l Language) Invocation(path, name string) []string {
+	return definitions[l].invocation(path, name)
+}
+
+func (l Language) Recursion() Recursion { return definitions[l].recursion }
+
+func (l Language) Formats() bool { return definitions[l].formatter != nil }
+
+func (l Language) Format(text string) (string, error) {
+	if !l.Formats() {
+		panic("host: " + l.String() + " has no formatter")
+	}
+	return definitions[l].formatter(text)
+}
+
 func (l Language) Project(doc *docstore.Document) Script {
-	m, detection := definitions[l].project(doc.Text())
-	return Script{Doc: docstore.Project(doc, m), Detection: detection, scripts: m.Scripts()}
+	a := definitions[l].analyze(doc.Text())
+	script := Script{Doc: docstore.Project(doc, a.projection), Detection: a.detection, scripts: a.projection.Scripts()}
+	if a.index != nil {
+		script.Native = &Native{Language: l, Index: a.index, expect: a.expect, format: a.format}
+	}
+	return script
 }
 
 func (s Script) Parse(like *parser.Tree) *parser.Tree {

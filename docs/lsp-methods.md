@@ -59,7 +59,7 @@ advertised capability, and that nothing else is handled or advertised.
 | `workspaceSymbol/resolve` | not advertised | `workspaceSymbolProvider.resolveProvider` | symbols carry full locations |
 | `shellLsp/documentDialect` | implemented |  | shell-lsp extension: the dialect a document is linted as, what decided it, and whether that was a guess |
 | `shellLsp/setDialect` | implemented |  | shell-lsp extension: the edit that sets or removes the document's # shellcheck shell= directive |
-| `workspace/executeCommand` | implemented | `executeCommandProvider` | shellLsp.fixAll, shellLsp.applyEdit, shellLsp.showReferences, shellLsp.runBats |
+| `workspace/executeCommand` | implemented | `executeCommandProvider` | shellLsp.fixAll, shellLsp.applyEdit, shellLsp.showReferences, shellLsp.runBats, shellLsp.runRecipe |
 | `workspace/willCreateFiles` | not advertised | `workspace.fileOperations.willCreate` | nothing to edit before a file exists |
 | `workspace/willRenameFiles` | implemented | `workspace.fileOperations.willRename` | rewrites source paths and shebangs |
 | `workspace/willDeleteFiles` | not advertised | `workspace.fileOperations.willDelete` | nothing to edit before a file is deleted |

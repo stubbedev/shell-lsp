@@ -1,0 +1,210 @@
+{
+  "aliases": {},
+  "assignments": {
+    "TOKEN": {
+      "eager": false,
+      "export": true,
+      "private": false,
+      "value": "secret"
+    },
+    "called": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": [
+        "call",
+        "uppercase",
+        [
+          "variable",
+          "version"
+        ]
+      ]
+    },
+    "choice": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": [
+        "if",
+        [
+          "==",
+          [
+            "variable",
+            "version"
+          ],
+          "1.0.0"
+        ],
+        "one",
+        [
+          "if",
+          [
+            "=~",
+            [
+              "variable",
+              "version"
+            ],
+            "^2"
+          ],
+          "two",
+          "other"
+        ]
+      ]
+    },
+    "computed": {
+      "eager": true,
+      "export": false,
+      "private": false,
+      "value": [
+        "evaluate",
+        "date"
+      ]
+    },
+    "cooked": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": "line one\tx\n"
+    },
+    "formatted": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": [
+        "format",
+        "v",
+        [
+          "variable",
+          "version"
+        ],
+        "!"
+      ]
+    },
+    "joined": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": [
+        "concatenate",
+        [
+          "variable",
+          "version"
+        ],
+        [
+          "concatenate",
+          "-",
+          [
+            "variable",
+            "raw"
+          ]
+        ]
+      ]
+    },
+    "multi": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": [
+        "concatenate",
+        "a",
+        "b"
+      ]
+    },
+    "nested": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": [
+        "call",
+        "replace",
+        [
+          "call",
+          "trim",
+          [
+            "variable",
+            "version"
+          ]
+        ],
+        ".",
+        "_"
+      ]
+    },
+    "path": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": [
+        "join",
+        "a",
+        "b"
+      ]
+    },
+    "raw": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": "indented\nraw\n"
+    },
+    "root": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": [
+        "join",
+        null,
+        "usr"
+      ]
+    },
+    "version": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": "1.0.0"
+    }
+  },
+  "modules": [],
+  "recipes": {
+    "show": {
+      "attributes": [],
+      "body": [
+        [
+          "echo ",
+          [
+            [
+              "variable",
+              "version"
+            ]
+          ],
+          " ",
+          [
+            [
+              "variable",
+              "joined"
+            ]
+          ],
+          " ",
+          [
+            [
+              "variable",
+              "called"
+            ]
+          ],
+          " ",
+          [
+            [
+              "variable",
+              "formatted"
+            ]
+          ]
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    }
+  },
+  "settings": {}
+}

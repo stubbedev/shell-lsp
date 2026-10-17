@@ -7,6 +7,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
+	"github.com/stubbedev/shell-lsp/internal/host/model"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/navigation"
@@ -36,24 +37,50 @@ func (s *Server) handleCodeLens(_ context.Context, docs *docstore.View, p lsp.Co
 		return nil, err
 	}
 	at := docs.Positions(file.Doc)
-	var spans []parser.Span
+	var ranges []lsp.Range
 	for _, fn := range file.Tree.Functions {
-		spans = append(spans, fn.NameSpan)
+		if !file.Doc.Synthetic(fn.NameSpan.Start) {
+			ranges = append(ranges, at.Range(fn.NameSpan))
+		}
 	}
 	for def := range globalDefinitions(file.Tree) {
-		spans = append(spans, def.NameSpan)
+		if !file.Doc.Synthetic(def.NameSpan.Start) {
+			ranges = append(ranges, at.Range(def.NameSpan))
+		}
 	}
-	out, err := appendBatsLenses(make([]lsp.CodeLens, 0, len(file.Tree.Tests)+1+len(spans)), file, at)
+	out, err := appendBatsLenses(make([]lsp.CodeLens, 0, len(file.Tree.Tests)+1+len(ranges)), file, at)
 	if err != nil {
 		return nil, err
 	}
-	for _, span := range spans {
-		r := at.Range(span)
+	if file.Native != nil {
+		if out, err = appendRunLenses(out, file, docs.Encoding()); err != nil {
+			return nil, err
+		}
+		source := sourcePositions(file, docs.Encoding())
+		for _, sym := range file.Native.Index.Symbols {
+			if sym.Scope == model.Global {
+				ranges = append(ranges, source.Range(sym.Selection))
+			}
+		}
+	}
+	for _, r := range ranges {
 		data, err := encodeData(lensData{URI: file.URI, Position: r.Start})
 		if err != nil {
 			return nil, err
 		}
 		out = append(out, lsp.CodeLens{Range: r, Data: data})
+	}
+	return out, nil
+}
+
+func appendRunLenses(out []lsp.CodeLens, file *workspace.File, enc docstore.Encoding) ([]lsp.CodeLens, error) {
+	at := sourcePositions(file, enc)
+	for _, r := range file.Native.Index.Runnables {
+		raw, err := json.Marshal(recipeRunArgs{URI: file.URI, Name: r.Name})
+		if err != nil {
+			return nil, fmt.Errorf("encoding %s arguments for %s: %w", commandRunRecipe, file.URI, err)
+		}
+		out = append(out, lsp.CodeLens{Range: at.Range(r.Span), Command: &lsp.Command{Title: "▶ Run", Command: commandRunRecipe, Arguments: []json.RawMessage{raw}}})
 	}
 	return out, nil
 }

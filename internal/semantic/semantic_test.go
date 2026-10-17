@@ -298,7 +298,7 @@ func TestResultKeepsTheFirstOfOverlappingTokensInStartOrder(t *testing.T) {
 func TestLegendNamesEveryTypeAndModifier(t *testing.T) {
 	t.Parallel()
 
-	if len(TypeNames) != int(TypeRegexp)+1 || TypeNames[TypeKeyword] != "keyword" || TypeNames[TypeRegexp] != "regexp" {
+	if len(TypeNames) != int(TypeDecorator)+1 || TypeNames[TypeKeyword] != "keyword" || TypeNames[TypeRegexp] != "regexp" || TypeNames[TypeNamespace] != "namespace" || TypeNames[TypeDecorator] != "decorator" {
 		t.Errorf("TypeNames = %v", TypeNames)
 	}
 	if want := []string{"declaration", "modification", "readonly", "defaultLibrary", "external"}; !slices.Equal(ModifierNames, want) || ModExternal != 1<<(len(ModifierNames)-1) {

@@ -1,0 +1,30 @@
+{
+  "aliases": {},
+  "assignments": {
+    "documented": {
+      "eager": false,
+      "export": false,
+      "private": false,
+      "value": "x"
+    }
+  },
+  "modules": [],
+  "recipes": {
+    "top": {
+      "attributes": [],
+      "body": [
+        [
+          "echo top"
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    }
+  },
+  "settings": {}
+}

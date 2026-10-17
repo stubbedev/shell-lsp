@@ -16,6 +16,11 @@ export function executeCommandMiddleware(client: () => LanguageClient): NonNulla
           throw new Error("Running Bats tests is disabled in Restricted Mode; trust the workspace to run them.");
         }
         return next(command, args.length > 0 ? args : [requireActiveShellDocument(client(), command).textDocument]);
+      case serverCommands.runRecipe:
+        if (!workspace.isTrusted) {
+          throw new Error("Running recipes is disabled in Restricted Mode; trust the workspace to run them.");
+        }
+        return next(command, args);
       default:
         return next(command, args);
     }

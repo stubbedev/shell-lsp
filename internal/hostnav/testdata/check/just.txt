@@ -1,0 +1,339 @@
+-- clean --
+set shell := ["bash", "-cu"]
+version := "1"
+export TOKEN := "x"
+
+# Build it
+build target="debug": (compile target)
+    echo {{version}} $TOKEN
+
+compile profile:
+    echo {{profile}}
+-- unterminated-string --
+x := "abc
+a:
+    echo
+-- invalid-escape --
+x := "\q"
+a:
+    echo {{x}}
+-- missing-colon --
+a b c
+    echo
+-- unexpected-indent --
+a:
+    echo
+
+  stray
+-- unknown-dependency --
+a: nope
+    echo
+-- unknown-qualified-dependency --
+a: foo::b
+    echo
+-- unknown-variable --
+a:
+    echo {{nope}}
+-- unknown-variable-in-assignment --
+x := y + "1"
+a:
+    echo {{x}}
+-- unknown-function --
+a:
+    echo {{nope()}}
+-- builtin-arity --
+a:
+    echo {{uppercase()}}
+-- builtin-arity-many --
+a:
+    echo {{replace("a", "b")}}
+-- dependency-too-many-arguments --
+a: (b "1")
+b:
+    echo
+-- dependency-missing-arguments --
+a: b
+b x:
+    echo {{x}}
+-- dependency-variadic-ok --
+a: (b "1" "2" "3")
+b +xs:
+    echo {{xs}}
+-- unknown-setting --
+set nonsense
+a:
+    echo
+-- unknown-attribute --
+[nonsense]
+a:
+    echo
+-- attribute-too-many-arguments --
+[private("x")]
+a:
+    echo
+-- attribute-missing-argument --
+[group]
+a:
+    echo
+-- duplicate-recipe --
+a:
+    echo 1
+a:
+    echo 2
+-- duplicate-recipe-allowed --
+set allow-duplicate-recipes
+a:
+    echo 1
+a:
+    echo 2
+-- duplicate-recipe-other-system --
+[linux]
+a:
+    echo 1
+[macos]
+a:
+    echo 2
+-- duplicate-recipe-overlapping-system --
+[unix]
+a:
+    echo 1
+[linux]
+a:
+    echo 2
+-- duplicate-variable --
+x := "1"
+x := "2"
+a:
+    echo {{x}}
+-- duplicate-variable-allowed --
+set allow-duplicate-variables
+x := "1"
+x := "2"
+a:
+    echo {{x}}
+-- duplicate-alias --
+alias b := a
+alias b := a
+a:
+    echo
+-- alias-shadows-recipe --
+alias b := a
+b:
+    echo
+a:
+    echo
+-- unknown-alias-target --
+alias b := nope
+a:
+    echo
+-- circular-dependency --
+a: b
+    echo
+b: a
+    echo
+-- self-dependency --
+a: a
+    echo
+-- circular-variable --
+x := y
+y := x
+a:
+    echo {{x}}
+-- self-variable --
+x := x
+a:
+    echo {{x}}
+-- duplicate-setting --
+set quiet
+set quiet
+a:
+    echo
+-- bool-setting-with-string --
+set export := "yes"
+a:
+    echo
+-- list-setting-with-string --
+set shell := "bash"
+a:
+    echo
+-- duplicate-parameter --
+a x x:
+    echo {{x}}
+-- parameter-after-default --
+a x="1" y:
+    echo {{x}} {{y}}
+-- parameter-after-variadic --
+a +x y:
+    echo {{x}} {{y}}
+-- inconsistent-indentation --
+a:
+  echo 1
+	echo 2
+-- extra-indentation --
+a:
+  echo 1
+    echo 2
+-- continuation-may-indent --
+a:
+  echo 1 \
+    2
+-- shebang-may-indent --
+a:
+  #!/usr/bin/env bash
+  if true; then
+    echo 1
+  fi
+-- list-literal-needs-lists --
+x := ["a"]
+a:
+    echo {{x}}
+-- concatenation-needs-lists --
+x := "1" ++ "2"
+a:
+    echo {{x}}
+-- negation-needs-lists --
+x := if !("a" == "b") { "1" } else { "2" }
+a:
+    echo {{x}}
+-- logic-needs-lists --
+x := "a" && "b"
+a:
+    echo {{x}}
+-- lists-need-unstable --
+set lists
+a:
+    echo
+-- functions-need-unstable --
+f(x) := x
+a:
+    echo {{f("1")}}
+-- user-function-arity --
+set unstable
+f(x) := x
+a:
+    echo {{f()}}
+-- user-function-parameter --
+set unstable
+f(x) := x + y
+a:
+    echo {{f("1")}}
+-- mapped-dependency-needs-star --
+set unstable
+set lists
+items := ["a"]
+a: *(b items)
+b x:
+    echo {{x}}
+-- missing-module --
+mod foo
+a:
+    echo
+-- optional-module --
+mod? foo
+a: foo::b
+    echo
+-- missing-import --
+import "nothere.just"
+a:
+    echo
+-- optional-import --
+import? "nothere.just"
+a:
+    echo
+-- unused-parameter --
+a x:
+    echo hi
+-- exported-parameter-used-in-shell --
+a $x:
+    echo $x
+-- unused-variable --
+x := "1"
+a:
+    echo
+-- private-variable-unused --
+_x := "1"
+a:
+    echo
+-- exported-variable --
+export x := "1"
+a:
+    echo
+-- positional-arguments --
+set positional-arguments
+a x:
+    echo $1
+-- deprecated-function --
+a:
+    echo {{env_var("HOME")}}
+-- deprecated-setting --
+set windows-powershell
+a:
+    echo
+-- parameter-default-uses-earlier --
+a x y=(x + "1"):
+    echo {{y}}
+-- interpolation-sees-parameter --
+a target:
+    echo {{target}} {{uppercase(target)}}
+-- constants --
+a:
+    echo {{HEX}} {{BOLD + "x" + NORMAL}}
+-- conditional-expression --
+os_name := if os() == "linux" { "Linux" } else { "Other" }
+a:
+    echo {{os_name}}
+-- subsequent-dependencies --
+a: && b c
+    echo a
+b:
+    echo b
+c:
+    echo c
+-- quiet-recipe --
+@a:
+    echo quiet
+-- format-string --
+name := "world"
+msg := f"hello {{name}}"
+a:
+    echo {{msg}}
+-- format-string-unknown --
+msg := f"hello {{name}}"
+a:
+    echo {{msg}}
+-- attribute-arguments --
+[confirm("sure?")]
+[group: "ci"]
+[script("bash")]
+[env("A", "b")]
+a:
+    echo $A
+-- export-param-default --
+a $x="1":
+    echo $x
+-- recipe-named-like-keyword --
+set:
+    echo
+export:
+    echo
+-- variable-named-like-keyword --
+alias := "1"
+a:
+    echo {{alias}}
+-- comment-only-recipe --
+a:
+    # just a comment
+-- comment-inside-parentheses --
+x := (
+  "a" + # c1
+  "b"
+)
+a:
+    echo {{x}}
+-- multi-line-parentheses --
+x := (
+  "a" +
+  "b"
+)
+a:
+    echo {{x}}

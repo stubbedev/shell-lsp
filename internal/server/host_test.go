@@ -10,6 +10,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/actions"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
+	"github.com/stubbedev/shell-lsp/internal/semantic"
 )
 
 const makefileURI = "file:///w/Makefile"
@@ -150,33 +151,41 @@ func TestMakefileFixAllIsWrittenInMakeSyntax(t *testing.T) {
 	}
 }
 
-func TestMakefileRequestsOutsideRecipesFindNothing(t *testing.T) {
+func TestMakefileRequestsOutsideRecipesAnswerInMake(t *testing.T) {
 	t.Parallel()
 
 	c := openMakefile(t, `"capabilities": {}`)
 	at := func(line, character int) string {
 		return positionParams(makefileURI, line, character, "")
 	}
-	for _, method := range []string{"textDocument/hover", "textDocument/definition", "textDocument/references", "textDocument/signatureHelp", "textDocument/documentHighlight"} {
-		params := at(1, 2)
-		if method == "textDocument/references" {
-			params = positionParams(makefileURI, 1, 2, `, "context": {"includeDeclaration": true}`)
-		}
-		if msg := c.call(method, params); msg.Error != nil || string(msg.Result) != "null" {
-			t.Errorf("%s on the FILES assignment = %s, %v, want null", method, msg.Result, msg.Error)
-		}
+	declaration := makefileRange(t, 1, "FILES")
+	use := makefileRange(t, 4, "FILES")
+	hover := decodeResult[*lsp.Hover](t, c.call("textDocument/hover", at(1, 2)))
+	if hover == nil || hover.Range == nil || *hover.Range != declaration || !strings.Contains(hover.Contents.Value, "FILES = $(wildcard *.c)") {
+		t.Errorf("hover on the FILES assignment = %+v, want the make variable", hover)
 	}
-	if items := decodeResult[lsp.CompletionList](t, c.call("textDocument/completion", at(1, 2))).Items; len(items) != 0 {
-		t.Errorf("completion on the FILES assignment = %v", items)
+	if got := decodeResult[[]lsp.Location](t, c.call("textDocument/definition", at(4, 13))); len(got) != 1 || got[0].Range != declaration {
+		t.Errorf("definition of $(FILES) = %+v, want the assignment at %+v", got, declaration)
+	}
+	refs := decodeResult[[]lsp.Location](t, c.call("textDocument/references", positionParams(makefileURI, 1, 2, `, "context": {"includeDeclaration": true}`)))
+	if len(refs) != 2 || refs[0].Range != declaration || refs[1].Range != use {
+		t.Errorf("references of FILES = %+v, want the assignment and $(FILES)", refs)
+	}
+	highlights := decodeResult[[]lsp.DocumentHighlight](t, c.call("textDocument/documentHighlight", at(4, 13)))
+	if len(highlights) != 2 || highlights[0].Range != declaration || highlights[1].Range != use {
+		t.Errorf("highlights of FILES = %+v", highlights)
+	}
+	if msg := c.call("textDocument/signatureHelp", at(1, 2)); msg.Error != nil || string(msg.Result) != "null" {
+		t.Errorf("signatureHelp on the FILES assignment = %s, %v, want null", msg.Result, msg.Error)
+	}
+	if labels := completionLabels(decodeResult[lsp.CompletionList](t, c.call("textDocument/completion", at(1, 2)))); !slices.Contains(labels, "include") || !slices.Contains(labels, "ifeq") {
+		t.Errorf("completion at the start of a make line = %v, want the directives", labels)
 	}
 	if hover := decodeResult[*lsp.Hover](t, c.call("textDocument/hover", at(4, 25))); hover == nil || hover.Range == nil || *hover.Range != makefileRange(t, 4, "echo") {
 		t.Errorf("hover on echo in the recipe = %+v", hover)
 	}
 	if hover := c.call("textDocument/hover", at(6, 1)); string(hover.Result) != "null" {
 		t.Errorf("hover on the @ recipe prefix = %s, want null", hover.Result)
-	}
-	if hover := c.call("textDocument/hover", at(4, 13)); string(hover.Result) != "null" {
-		t.Errorf("hover on $(FILES) = %s, want null rather than the shell's $$", hover.Result)
 	}
 }
 
@@ -225,14 +234,14 @@ func TestMakefileIsNotFormatted(t *testing.T) {
 	}
 }
 
-func TestMakefileSemanticTokensStayInRecipes(t *testing.T) {
-	t.Parallel()
+type placed struct {
+	line, start, length uint32
+	kind                string
+}
 
-	c := openMakefile(t, `"capabilities": {}`)
-	data := decodeResult[lsp.SemanticTokens](t, c.call("textDocument/semanticTokens/full", `{"textDocument": {"uri": "`+makefileURI+`"}}`)).Data
-	if len(data) == 0 {
-		t.Fatal("no semantic tokens for the recipes")
-	}
+func decodeTokens(t *testing.T, data []uint32) []placed {
+	t.Helper()
+	var out []placed
 	var line, start uint32
 	for i := 0; i < len(data); i += 5 {
 		if data[i] > 0 {
@@ -241,8 +250,37 @@ func TestMakefileSemanticTokensStayInRecipes(t *testing.T) {
 		} else {
 			start += data[i+1]
 		}
-		if line < 4 || start == 0 || start+data[i+2] > uint32(len(makefileLines[line])) {
-			t.Errorf("token %d at %d:%d+%d is outside the recipes", i/5, line, start, data[i+2])
+		out = append(out, placed{line: line, start: start, length: data[i+2], kind: semantic.TypeNames[data[i+3]]})
+	}
+	return out
+}
+
+func TestMakefileSemanticTokensCoverMakeAndShell(t *testing.T) {
+	t.Parallel()
+
+	c := openMakefile(t, `"capabilities": {}`)
+	tokens := decodeTokens(t, decodeResult[lsp.SemanticTokens](t, c.call("textDocument/semanticTokens/full", `{"textDocument": {"uri": "`+makefileURI+`"}}`)).Data)
+	token := func(line int, sub, kind string) placed {
+		r := makefileRange(t, line, sub)
+		return placed{line: r.Start.Line, start: r.Start.Character, length: r.End.Character - r.Start.Character, kind: kind}
+	}
+	for _, want := range []placed{
+		token(0, "SHELL", "variable"),
+		token(1, "FILES", "variable"),
+		token(1, "wildcard", "function"),
+		token(3, "all", "function"),
+		token(3, "build", "function"),
+		token(4, "for", "keyword"),
+		token(4, "FILES", "variable"),
+	} {
+		if !slices.Contains(tokens, want) {
+			t.Errorf("no %+v among %+v", want, tokens)
+		}
+	}
+	for i := 1; i < len(tokens); i++ {
+		prev, cur := tokens[i-1], tokens[i]
+		if cur.line == prev.line && cur.start < prev.start+prev.length {
+			t.Errorf("token %+v overlaps %+v", cur, prev)
 		}
 	}
 }
@@ -354,7 +392,7 @@ func TestHostFilesOpenedAsShellscriptAreStillProjected(t *testing.T) {
 		uri, text string
 		want      []string
 	}{
-		{"file:///w/justfile", "db := env('DB', 'x')\n\n[private]\nx:\n    echo $1\n", []string{"SC2086"}},
+		{"file:///w/justfile", "db := env('DB', 'x')\n\n[private]\nx:\n    echo $1 {{db}}\n", []string{"SC2086"}},
 		{makefileURI, strings.Join(makefileLines, "\n") + "\n", []string{"SC2005", "SC2006", "SC2034", "SC2046", "SC2086", "SC2154"}},
 	} {
 		c, _ := startClient(t, `{`+pullCapabilities+`}`)

@@ -1,0 +1,18 @@
+{
+  "variables": [
+    "BANNER",
+    "RULE",
+    "debug:CFLAGS",
+    "debug:MODE"
+  ],
+  "recipes": [
+    "all@10",
+    "debug@25",
+    "four@20",
+    "multi@28",
+    "multi@30",
+    "one@13",
+    "three@20",
+    "two@17"
+  ]
+}

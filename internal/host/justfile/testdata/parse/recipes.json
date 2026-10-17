@@ -1,0 +1,334 @@
+{
+  "aliases": {},
+  "assignments": {},
+  "modules": [],
+  "recipes": {
+    "_helper": {
+      "attributes": [
+        "private"
+      ],
+      "body": [
+        [
+          "echo $token"
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "parameters": [
+        {
+          "default": null,
+          "export": true,
+          "kind": "singular",
+          "name": "token"
+        }
+      ],
+      "priors": 0,
+      "private": true,
+      "quiet": false,
+      "shebang": false
+    },
+    "build": {
+      "attributes": [],
+      "body": [
+        [
+          "cargo build --profile ",
+          [
+            [
+              "variable",
+              "target"
+            ]
+          ],
+          " ",
+          [
+            [
+              "variable",
+              "flags"
+            ]
+          ]
+        ]
+      ],
+      "dependencies": [
+        {
+          "arguments": [
+            [
+              "variable",
+              "target"
+            ]
+          ],
+          "recipe": "compile"
+        },
+        {
+          "arguments": [],
+          "recipe": "notify"
+        }
+      ],
+      "doc": "Build the project",
+      "parameters": [
+        {
+          "default": "debug",
+          "export": false,
+          "kind": "singular",
+          "name": "target"
+        },
+        {
+          "default": "",
+          "export": false,
+          "kind": "plus",
+          "name": "flags"
+        }
+      ],
+      "priors": 1,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    },
+    "compile": {
+      "attributes": [],
+      "body": [
+        [
+          "echo compiling ",
+          [
+            [
+              "variable",
+              "profile"
+            ]
+          ]
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "parameters": [
+        {
+          "default": null,
+          "export": false,
+          "kind": "singular",
+          "name": "profile"
+        }
+      ],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    },
+    "default": {
+      "attributes": [],
+      "body": [],
+      "dependencies": [
+        {
+          "arguments": [],
+          "recipe": "build"
+        },
+        {
+          "arguments": [],
+          "recipe": "test"
+        }
+      ],
+      "doc": "The default recipe",
+      "parameters": [],
+      "priors": 2,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    },
+    "deploy": {
+      "attributes": [
+        "confirm",
+        "group",
+        "no-cd"
+      ],
+      "body": [
+        [
+          "echo ",
+          [
+            [
+              "variable",
+              "env"
+            ]
+          ],
+          " ",
+          [
+            [
+              "variable",
+              "region"
+            ]
+          ]
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "parameters": [
+        {
+          "default": "staging",
+          "export": false,
+          "kind": "singular",
+          "name": "env"
+        },
+        {
+          "default": [
+            "concatenate",
+            [
+              "variable",
+              "env"
+            ],
+            "-east"
+          ],
+          "export": false,
+          "kind": "singular",
+          "name": "region"
+        }
+      ],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    },
+    "empty": {
+      "attributes": [],
+      "body": [],
+      "dependencies": [],
+      "doc": null,
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    },
+    "notify": {
+      "attributes": [],
+      "body": [
+        [
+          "echo done"
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    },
+    "params-with-defaults": {
+      "attributes": [],
+      "body": [
+        [
+          "echo ",
+          [
+            [
+              "variable",
+              "a"
+            ]
+          ],
+          " ",
+          [
+            [
+              "variable",
+              "b"
+            ]
+          ],
+          " ",
+          [
+            [
+              "variable",
+              "c"
+            ]
+          ],
+          " ",
+          [
+            [
+              "variable",
+              "d"
+            ]
+          ],
+          " ",
+          [
+            [
+              "variable",
+              "rest"
+            ]
+          ]
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "parameters": [
+        {
+          "default": null,
+          "export": false,
+          "kind": "singular",
+          "name": "a"
+        },
+        {
+          "default": "x",
+          "export": false,
+          "kind": "singular",
+          "name": "b"
+        },
+        {
+          "default": [
+            "evaluate",
+            "echo y"
+          ],
+          "export": false,
+          "kind": "singular",
+          "name": "c"
+        },
+        {
+          "default": [
+            "concatenate",
+            [
+              "variable",
+              "a"
+            ],
+            [
+              "variable",
+              "b"
+            ]
+          ],
+          "export": false,
+          "kind": "singular",
+          "name": "d"
+        },
+        {
+          "default": null,
+          "export": false,
+          "kind": "star",
+          "name": "rest"
+        }
+      ],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    },
+    "test": {
+      "attributes": [],
+      "body": [
+        [
+          "cargo test ",
+          [
+            [
+              "variable",
+              "args"
+            ]
+          ]
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "parameters": [
+        {
+          "default": null,
+          "export": false,
+          "kind": "star",
+          "name": "args"
+        }
+      ],
+      "priors": 0,
+      "private": false,
+      "quiet": true,
+      "shebang": false
+    }
+  },
+  "settings": {}
+}

@@ -290,8 +290,8 @@ func (f *formatter) stdin() int {
 
 func (f *formatter) files() int {
 	targets, failures := collectTargets(f.env.Dir, f.opts.paths, func(path string) bool {
-		_, embedded := host.FromName(path)
-		return !embedded
+		language, embedded := host.FromName(path)
+		return !embedded || language.Formats()
 	})
 	for _, failure := range failures {
 		f.fail("%s", failure)
@@ -321,8 +321,7 @@ func (f *formatter) files() int {
 func (f *formatter) format(t target, raw string) formatted {
 	out := formatted{name: t.name, path: t.path, before: raw}
 	if language, embedded := host.FromName(t.path); embedded && t.path != "" {
-		out.err = fmt.Errorf("a %s embeds shell in its own syntax; shell-lsp fmt formats only shell scripts", language)
-		return out
+		return f.formatHost(out, t, language, raw)
 	}
 	var forced *dialect.Detection
 	if f.opts.language != nil {
@@ -405,4 +404,22 @@ func (f *formatter) report(r formatted) {
 	if f.opts.list == listOff && !f.opts.write && !f.opts.diff {
 		f.print(r.after)
 	}
+}
+
+func (f *formatter) formatHost(out formatted, t target, language host.Language, raw string) formatted {
+	if !language.Formats() {
+		out.err = fmt.Errorf("a %s embeds shell in its own syntax; shell-lsp fmt formats only shell scripts and justfiles", language)
+		return out
+	}
+	resolved, err := project.Resolve(f.editor, t.path, nil, dialect.Input{Text: raw})
+	if err != nil {
+		out.err = err
+		return out
+	}
+	if (t.walked || f.opts.applyIgnore) && resolved.Settings.Ignore {
+		out.skip = true
+		return out
+	}
+	out.after, out.err = language.Format(raw)
+	return out
 }

@@ -1,0 +1,79 @@
+{
+  "aliases": {},
+  "assignments": {},
+  "modules": [],
+  "recipes": {
+    "build": {
+      "attributes": [
+        "arg",
+        "arg",
+        "doc",
+        "env",
+        "linux",
+        "macos",
+        "working-directory"
+      ],
+      "body": [
+        [
+          "echo ",
+          [
+            [
+              "variable",
+              "target"
+            ]
+          ],
+          " ",
+          [
+            [
+              "variable",
+              "verbose"
+            ]
+          ],
+          " $NAME"
+        ]
+      ],
+      "dependencies": [],
+      "doc": "Overridden doc",
+      "parameters": [
+        {
+          "default": null,
+          "export": false,
+          "kind": "singular",
+          "name": "target"
+        },
+        {
+          "default": "false",
+          "export": false,
+          "kind": "singular",
+          "name": "verbose"
+        }
+      ],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    },
+    "other": {
+      "attributes": [
+        "extension",
+        "no-exit-message",
+        "positional-arguments",
+        "script",
+        "unix"
+      ],
+      "body": [
+        [
+          "echo $1"
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "shebang": true
+    }
+  },
+  "settings": {}
+}

@@ -1,0 +1,266 @@
+-- clean --
+CC := gcc
+CFLAGS += -O2
+SRCS := $(wildcard *.c)
+OBJS := $(SRCS:.c=.o)
+export TOKEN := secret
+
+.PHONY: all clean
+
+all: app
+
+app: $(OBJS)
+	$(CC) $(CFLAGS) -o $@ $^ && echo "$$TOKEN"
+
+%.o: %.c
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+clean:
+	rm -f app $(OBJS)
+-- missing-separator --
+all
+	echo all
+-- missing-separator-later --
+all:
+	@echo all
+garbage words here
+-- recipe-before-rule --
+	echo hi
+all:
+	@echo all
+-- recipe-after-assignment --
+all:
+	@echo all
+FOO = bar
+	echo not a recipe
+-- spaces-instead-of-tab --
+all:
+    echo all
+-- spaces-assignment-after-rule --
+all:
+	@echo $(X)
+    X = 1
+-- recipe-prefix-changed --
+.RECIPEPREFIX = >
+all:
+> @echo one
+	@echo two
+-- missing-endif --
+ifdef DEBUG
+X = 1
+all:
+	@echo $(X)
+-- extraneous-else --
+else
+all:
+	@echo all
+-- extraneous-endif --
+endif
+all:
+	@echo all
+-- bad-conditional --
+ifeq (a
+endif
+all:
+	@echo all
+-- conditionals-balanced --
+ifeq ($(MODE),debug)
+X = -g
+else ifeq ($(MODE),release)
+X = -O2
+else
+X =
+endif
+ifneq "$(X)" ""
+Y := yes
+endif
+all:
+	@echo $(X) $(Y)
+-- missing-endef --
+define HELP
+usage
+all:
+	@echo all
+-- extraneous-endef --
+endef
+all:
+	@echo all
+-- define-used --
+define GREETING =
+@echo hello
+endef
+all:
+	$(GREETING)
+-- unterminated-reference --
+all:
+	@echo $(CFLAGS
+-- insufficient-arguments --
+X := $(subst a,b)
+all:
+	@echo $(X)
+-- extra-commas-are-fine --
+X := $(if a,b,c,d)
+all:
+	@echo $(X)
+-- unknown-function --
+X := $(wild *.c)
+all:
+	@echo x$(X)x
+-- recursive-variable --
+X = $(X) a
+all:
+	@echo $(X)
+-- recursive-chain --
+A = $(B)
+B = $(A)
+all:
+	@echo $(A)
+-- simple-self-reference --
+X := a
+X := $(X) b
+all:
+	@echo $(X)
+-- append --
+X = a
+X += b
+all:
+	@echo $(X)
+-- duplicate-recipe --
+all:
+	@echo one
+all:
+	@echo two
+-- double-colon-rules --
+all::
+	@echo one
+all::
+	@echo two
+-- phony-without-rule --
+.PHONY: all clena
+all:
+	@echo all
+-- missing-include --
+include nothere.mk
+all:
+	@echo all
+-- optional-include --
+-include nothere.mk
+sinclude other.mk
+all:
+	@echo all
+-- undefined-variable --
+all:
+	@echo $(NOPE)
+-- builtin-variables --
+all:
+	@echo $(CC) $(MAKE) $(CURDIR) $(RM) $(SHELL)
+-- automatic-variables --
+all: dep
+	@echo $@ $< $^ $(@D) $(<F)
+dep:
+	@echo $@
+-- unused-variable --
+UNUSED := 1
+all:
+	@echo all
+-- exported-variable-unused-in-make --
+export TOKEN := 1
+all:
+	@echo $$TOKEN
+-- flags-variable --
+CFLAGS := -O2
+all:
+	@echo all
+-- target-specific --
+all: MODE = fast
+all:
+	@echo $(MODE)
+-- inline-recipe --
+all: ; @echo inline
+-- static-pattern --
+objs := a.o b.o
+all: $(objs)
+$(objs): %.o: %.c
+	@echo $<
+%.c:
+	@touch $@
+-- order-only --
+all: | dir
+	@echo all
+dir:
+	@mkdir -p dir
+-- foreach-binding --
+NAMES := a b
+all:
+	@echo $(foreach n,$(NAMES),$(n).o)
+-- call-function --
+greet = hello $(1)
+all:
+	@echo $(call greet,world)
+-- computed-name --
+a_flags := 1
+kind := a
+all:
+	@echo $($(kind)_flags)
+-- override-and-export --
+override X := 1
+export Y = 2
+unexport Z
+all:
+	@echo $(X) $$Y
+-- vpath --
+vpath %.c src
+all:
+	@echo all
+-- oneshell --
+.ONESHELL:
+all:
+	@cd /tmp
+	@pwd
+-- recursive-make --
+all:
+	$(MAKE) build
+build:
+	@echo build
+-- expression-line --
+$(info hello)
+all:
+	@echo all
+-- empty-reference-line --
+$(nothing)
+all:
+	@echo all
+-- conditional-in-recipe --
+all:
+ifdef X
+	@echo x
+else
+	@echo y
+endif
+-- shell-assignment --
+NOW != date
+all:
+	@echo $(NOW)
+-- question-assignment --
+X ?= 1
+all:
+	@echo $(X)
+-- continuation --
+SRCS = a.c \
+       b.c
+all:
+	@echo $(SRCS)
+-- comment-handling --
+X = 1 # trailing comment
+# full comment
+all: # comment after rule
+	@echo $(X) # shell comment
+-- export-names-only --
+FOO := 1
+export FOO
+unexport BAR
+all:
+	@echo $$FOO
+-- semicolon-before-colon --
+a;b:
+	@echo $@

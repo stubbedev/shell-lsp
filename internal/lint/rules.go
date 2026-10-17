@@ -90,6 +90,7 @@ var families = []family{
 	unusedFunctionsFamily,
 	embeddedFamily,
 	googleFamily,
+	hostFamily,
 }
 
 type nodeDispatch [][]func(p *pass, n syntax.Node)
