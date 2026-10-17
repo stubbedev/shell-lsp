@@ -547,7 +547,8 @@ for these files.
   targets. A justfile shares its names with the files it imports, a `mod`
   starts a module of its own reached with `module::recipe`, and a Makefile
   shares its names with the files it includes, also through simple variables
-  such as `include $(DIR)/rules.mk`. Opening an imported or included file
+  such as `include $(DIR)/rules.mk`, and with what a `$(eval ...)` of fixed
+  text defines. Opening an imported or included file
   finds the files that include it in the workspace.
 - **Across the language boundary.** In a recipe, `$NAME` of an exported just
   variable or `$` parameter, or of a make variable passed with `export`, leads

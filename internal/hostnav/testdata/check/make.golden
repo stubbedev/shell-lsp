@@ -196,3 +196,7 @@ accepted
 accepted
 -- install-creates-itself --
 accepted
+-- eval-defines-a-variable --
+accepted
+-- eval-defines-a-target --
+accepted

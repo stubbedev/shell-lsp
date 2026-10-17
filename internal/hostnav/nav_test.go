@@ -389,3 +389,15 @@ func TestMakePrerequisiteLinksFollowVpath(t *testing.T) {
 	}
 	expectStrings(t, "prerequisite links", linkTargets(tr, g), []string{"src/main.c", "lib/util.h"})
 }
+
+func TestMakeEvalDefinitions(t *testing.T) {
+	t.Parallel()
+
+	tr := newTree(t, map[string]string{
+		"Makefile": "$(eval GREETING := $$(NAME) says hi)\nNAME := make\nall:\n\t@echo $(GREETING)\n",
+	})
+	g, sym := tr.at("Makefile", "GREETING", 1)
+	expectStrings(t, "definition of GREETING", tr.locations(g.definitions(sym)), []string{"Makefile:1:GREETING"})
+	g, sym = tr.at("Makefile", "NAME", 0)
+	expectStrings(t, "references of NAME", tr.describe(References(g, sym, true)), []string{"Makefile:1:NAME", "Makefile:2:NAME"})
+}

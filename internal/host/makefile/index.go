@@ -184,6 +184,47 @@ func (in *indexer) namesTarget(r *Rule) bool {
 	})
 }
 
+func (in *indexer) evaluated(arg Expr) {
+	text, ok := arg.Literal(in.f.Text)
+	if !ok {
+		return
+	}
+	var sb strings.Builder
+	at := make([]int, 0, len(text)+1)
+	for i := 0; i < len(text); i++ {
+		at = append(at, arg.Span.Start+i)
+		sb.WriteByte(text[i])
+		if text[i] == '$' && i+1 < len(text) && text[i+1] == '$' {
+			i++
+		}
+	}
+	at = append(at, arg.Span.Start+len(text))
+	sub := Parse(sb.String())
+	if len(sub.Errors) > 0 {
+		return
+	}
+	shift := func(s Span) Span { return Span{Start: at[s.Start], End: at[s.End]} }
+	ix := sub.Index(false)
+	if slices.ContainsFunc(ix.Symbols, func(s model.Symbol) bool { return s.Scope != model.Global }) || slices.ContainsFunc(ix.Refs, func(r model.Ref) bool { return r.Scope != model.Global }) {
+		return
+	}
+	base := len(in.ix.Symbols)
+	for _, sym := range ix.Symbols {
+		sym.Span, sym.Selection, sym.Parent = shift(sym.Span), shift(sym.Selection), model.NoParent
+		in.ix.Symbols = append(in.ix.Symbols, sym)
+	}
+	for _, r := range ix.Refs {
+		r.Span = shift(r.Span)
+		if r.Owner >= 0 {
+			r.Owner += base
+		}
+		for i, a := range r.ArgSpans {
+			r.ArgSpans[i] = shift(a)
+		}
+		in.ix.Refs = append(in.ix.Refs, r)
+	}
+}
+
 func searchDirs(value string) []string {
 	return strings.FieldsFunc(value, func(r rune) bool { return r == ':' || r == ' ' || r == '\t' })
 }
@@ -346,6 +387,9 @@ func (in *indexer) call(n Node, scope model.Scope, owner int, edge bool, bound [
 	}
 	in.ix.Refs = append(in.ix.Refs, call)
 	in.token(n.Name.Span, semantic.TypeFunction, semantic.ModDefaultLibrary)
+	if name == "eval" && len(n.Args) == 1 && !edge {
+		in.evaluated(n.Args[0])
+	}
 	args := n.Args
 	switch {
 	case slices.Contains(namingFunctions, name):

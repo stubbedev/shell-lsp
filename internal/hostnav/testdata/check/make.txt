@@ -336,3 +336,10 @@ clean:
 -- install-creates-itself --
 install:
 	touch $@
+-- eval-defines-a-variable --
+$(eval GREETING := hello)
+all:
+	@echo $(GREETING)
+-- eval-defines-a-target --
+$(eval built: ; @echo built)
+all: built
