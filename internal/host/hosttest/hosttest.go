@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/host/model"
+	"github.com/stubbedev/shell-lsp/internal/host/oracle"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 )
@@ -59,47 +60,6 @@ func Sections(t testing.TB, path string) []Case {
 	return out
 }
 
-type Verdict struct {
-	Accepted     bool
-	Inconclusive bool
-	Line         int
-	Column       int
-	Message      string
-}
-
-const inconclusive = "inconclusive: "
-
-func (v Verdict) String() string {
-	switch {
-	case v.Inconclusive:
-		return inconclusive + v.Message
-	case v.Accepted:
-		return "accepted"
-	}
-	return fmt.Sprintf("rejected %d:%d %s", v.Line, v.Column, v.Message)
-}
-
-func parseVerdict(s string) (Verdict, bool) {
-	if s == "accepted" {
-		return Verdict{Accepted: true}, true
-	}
-	if message, ok := strings.CutPrefix(s, inconclusive); ok {
-		return Verdict{Inconclusive: true, Message: message}, true
-	}
-	rest, ok := strings.CutPrefix(s, "rejected ")
-	if !ok {
-		return Verdict{}, false
-	}
-	position, message, _ := strings.Cut(rest, " ")
-	lineText, columnText, _ := strings.Cut(position, ":")
-	line, err1 := strconv.Atoi(lineText)
-	column, err2 := strconv.Atoi(columnText)
-	if err1 != nil || err2 != nil {
-		return Verdict{}, false
-	}
-	return Verdict{Line: line, Column: column, Message: message}, true
-}
-
 func position(text string, offset int) (int, int) {
 	line := strings.Count(text[:offset], "\n") + 1
 	return line, offset - (strings.LastIndexByte(text[:offset], '\n') + 1) + 1
@@ -118,16 +78,16 @@ func Describe(text string, findings []lint.Finding) []string {
 	return out
 }
 
-type Oracle func(t *testing.T, text string) Verdict
+type Oracle func(t *testing.T, text string) oracle.Verdict
 
 type Analyze func(text string) []lint.Finding
 
 type golden struct {
-	verdict  Verdict
+	verdict  oracle.Verdict
 	findings []string
 }
 
-func Check(t *testing.T, path string, analyze Analyze, oracle Oracle, update bool) {
+func Check(t *testing.T, path string, analyze Analyze, tool Oracle, update bool) {
 	t.Helper()
 	cases := Sections(t, path)
 	goldenPath := strings.TrimSuffix(path, ".txt") + ".golden"
@@ -135,7 +95,7 @@ func Check(t *testing.T, path string, analyze Analyze, oracle Oracle, update boo
 	if update {
 		var sb strings.Builder
 		for _, c := range cases {
-			v := oracle(t, c.Text)
+			v := tool(t, c.Text)
 			fmt.Fprintf(&sb, "%s%s%s\n%s\n", sectionOpen, c.Name, sectionClose, v)
 			for _, line := range Describe(c.Text, analyze(c.Text)) {
 				sb.WriteString(line + "\n")
@@ -147,7 +107,7 @@ func Check(t *testing.T, path string, analyze Analyze, oracle Oracle, update boo
 	}
 	for _, g := range Sections(t, goldenPath) {
 		lines := strings.Split(strings.TrimSuffix(g.Text, "\n"), "\n")
-		v, ok := parseVerdict(lines[0])
+		v, ok := oracle.Parse(lines[0])
 		if !ok {
 			t.Fatalf("%s: section %q starts with %q, not a verdict", goldenPath, g.Name, lines[0])
 		}
@@ -173,7 +133,7 @@ func Check(t *testing.T, path string, analyze Analyze, oracle Oracle, update boo
 	}
 }
 
-func Agree(t *testing.T, text string, v Verdict, findings []lint.Finding) {
+func Agree(t *testing.T, text string, v oracle.Verdict, findings []lint.Finding) {
 	t.Helper()
 	var errorLines []int
 	for _, f := range findings {
@@ -182,19 +142,9 @@ func Agree(t *testing.T, text string, v Verdict, findings []lint.Finding) {
 			errorLines = append(errorLines, line)
 		}
 	}
-	if v.Inconclusive {
-		return
-	}
-	if last, _ := position(text, len(text)); v.Line > last {
-		v.Line = last
-	}
-	switch {
-	case v.Accepted && len(errorLines) > 0:
-		t.Errorf("the reference tool accepts %q, but errors are reported on lines %v: %q", text, errorLines, Describe(text, findings))
-	case !v.Accepted && v.Line == 0 && len(errorLines) == 0:
-		t.Errorf("the reference tool rejects %q (%s), but no error is reported", text, v.Message)
-	case !v.Accepted && v.Line > 0 && !slices.Contains(errorLines, v.Line):
-		t.Errorf("the reference tool rejects line %d of %q (%s), but errors are reported on lines %v: %q", v.Line, text, v.Message, errorLines, Describe(text, findings))
+	last, _ := position(text, len(text))
+	if problem, ok := oracle.Disagreement(v, last, errorLines); ok {
+		t.Errorf("%s: %q: %q", problem, text, Describe(text, findings))
 	}
 }
 
@@ -283,29 +233,14 @@ func Bounded(t *testing.T, text string, ix *model.Index) {
 	}
 }
 
-var justLocation = regexp.MustCompile(`(?m)^\s*——▶ [^:]+:(\d+):(\d+)`)
-
-func JustVerdict(t *testing.T, text string) Verdict {
+func JustVerdict(t *testing.T, text string) oracle.Verdict {
 	t.Helper()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "justfile")
 	if err := os.WriteFile(path, []byte(text), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.CommandContext(t.Context(), "just", "--justfile", path, "--working-directory", dir, "--dump") //nolint:gosec // G204: the reference oracle reads a file in the test's own temporary directory
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err == nil {
-		return Verdict{Accepted: true}
-	}
-	out := stderr.String()
-	message, _, _ := strings.Cut(strings.TrimPrefix(out, "error: "), "\n")
-	v := Verdict{Message: message}
-	if m := justLocation.FindStringSubmatch(out); m != nil {
-		v.Line, _ = strconv.Atoi(m[1])
-		v.Column, _ = strconv.Atoi(m[2])
-	}
-	return v
+	return oracle.Just(t.Context(), path, dir, os.Environ())
 }
 
 const unrunnablePath = "/nonexistent/shell-lsp-fuzz"
@@ -347,7 +282,7 @@ var (
 	makeMissingInclude = regexp.MustCompile(`(?m)^Makefile:(\d+): (\S+: No such file or directory)$`)
 )
 
-func MakeVerdict(t *testing.T, text string) Verdict {
+func MakeVerdict(t *testing.T, text string) oracle.Verdict {
 	t.Helper()
 	return makeVerdict(t, text)
 }
@@ -360,7 +295,7 @@ func MakeIsolated(text string) bool {
 	return !slices.ContainsFunc(shellReach, func(word string) bool { return strings.Contains(text, word) })
 }
 
-func IsolatedMakeVerdict(t *testing.T, text string) Verdict {
+func IsolatedMakeVerdict(t *testing.T, text string) oracle.Verdict {
 	t.Helper()
 	if !MakeIsolated(text) {
 		t.Fatalf("make could run a command from %q", text)
@@ -368,7 +303,7 @@ func IsolatedMakeVerdict(t *testing.T, text string) Verdict {
 	return makeVerdict(t, text, unrunnableShell)
 }
 
-func makeVerdict(t *testing.T, text string, vars ...string) Verdict {
+func makeVerdict(t *testing.T, text string, vars ...string) oracle.Verdict {
 	t.Helper()
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "Makefile"), []byte(text), 0o600); err != nil {
@@ -381,23 +316,23 @@ func makeVerdict(t *testing.T, text string, vars ...string) Verdict {
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err == nil {
-		return Verdict{Accepted: true}
+		return oracle.Verdict{Accepted: true}
 	}
 	out := stderr.String()
 	for _, pattern := range []*regexp.Regexp{makeFatal, makeMissingInclude} {
 		if m := pattern.FindStringSubmatch(out); m != nil {
 			line, _ := strconv.Atoi(m[1])
-			return Verdict{Line: line, Column: 1, Message: m[2]}
+			return oracle.Verdict{Line: line, Column: 1, Message: m[2]}
 		}
 	}
 	if strings.Contains(out, "*** No targets.") {
-		return Verdict{Accepted: true}
+		return oracle.Verdict{Accepted: true}
 	}
 	for _, o := range stoppedBeforeRecipes {
 		if strings.Contains(out, o) {
-			return Verdict{Inconclusive: true, Message: "make stopped before it expanded every recipe: " + o}
+			return oracle.Verdict{Inconclusive: true, Message: "make stopped before it expanded every recipe: " + o}
 		}
 	}
 	message, _, _ := strings.Cut(strings.TrimSpace(out), "\n")
-	return Verdict{Message: message}
+	return oracle.Verdict{Message: message}
 }
