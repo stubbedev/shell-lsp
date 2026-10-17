@@ -11,7 +11,7 @@ buildGo127Module {
 
   vendorHash = "sha256-TxEBzxsQdz/o4zjOoFggtfgrKDrpblWqOxs1a3io5Sk=";
 
-  excludedPackages = ["third_party"];
+  excludedPackages = ["third_party" "tools"];
 
   env.CGO_ENABLED = 0;
 
