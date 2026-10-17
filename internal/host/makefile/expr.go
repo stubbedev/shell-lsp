@@ -88,11 +88,12 @@ func (p exprParser) parse(start, end int) Expr {
 			i = after - 1
 		default:
 			flush(i)
-			n := Node{Kind: NodeReference, Span: Span{Start: i, End: i + 2}}
-			n.Name = Expr{Span: Span{Start: i + 1, End: i + 2}, Nodes: []Node{{Kind: NodeText, Span: Span{Start: i + 1, End: i + 2}}}}
+			after := referenceEnd(p.text, i, end)
+			n := Node{Kind: NodeReference, Span: Span{Start: i, End: after}}
+			n.Name = Expr{Span: Span{Start: after - 1, End: after}, Nodes: []Node{{Kind: NodeText, Span: Span{Start: after - 1, End: after}}}}
 			e.Nodes = append(e.Nodes, n)
-			text = i + 2
-			i++
+			text = after
+			i = after - 1
 		}
 	}
 	flush(end)
@@ -156,6 +157,9 @@ func referenceEnd(text string, dollar, end int) int {
 	if dollar+1 >= end {
 		return end
 	}
+	if strings.HasPrefix(text[dollar+1:end], `\#`) {
+		return dollar + 3
+	}
 	if next := text[dollar+1]; next != '(' && next != '{' {
 		return dollar + 2
 	}
@@ -181,12 +185,13 @@ func (p exprParser) reference(dollar, end int) (Node, int) {
 		return n, end
 	}
 	n.Span = Span{Start: dollar, End: closing + 1}
-	if name, args, ok := p.call(inner, closing); ok {
+	open := p.text[dollar+1]
+	if name, args, ok := p.call(inner, closing, open); ok {
 		n.Kind, n.Name, n.Args = NodeCall, name, args
 		return n, closing + 1
 	}
-	if colon := p.topLevel(inner, closing, ':'); colon >= 0 {
-		if equals := p.topLevel(colon+1, closing, '='); equals >= 0 {
+	if colon := p.topLevel(inner, closing, ':', open); colon >= 0 {
+		if equals := p.topLevel(colon+1, closing, '=', open); equals >= 0 {
 			n.Kind = NodeSubstitution
 			n.Name = p.parse(inner, colon)
 			n.Args = []Expr{p.parse(colon+1, equals), p.parse(equals+1, closing)}
@@ -197,7 +202,7 @@ func (p exprParser) reference(dollar, end int) (Node, int) {
 	return n, closing + 1
 }
 
-func (p exprParser) call(start, end int) (Expr, []Expr, bool) {
+func (p exprParser) call(start, end int, open byte) (Expr, []Expr, bool) {
 	nameEnd, ok := functionName(p.text, start, end)
 	if !ok {
 		return Expr{}, nil, false
@@ -209,7 +214,7 @@ func (p exprParser) call(start, end int) (Expr, []Expr, bool) {
 	}
 	var args []Expr
 	for {
-		comma := p.topLevel(from, end, ',')
+		comma := p.topLevel(from, end, ',', open)
 		if comma < 0 {
 			return name, append(args, p.parse(from, end)), true
 		}
@@ -218,7 +223,11 @@ func (p exprParser) call(start, end int) (Expr, []Expr, bool) {
 	}
 }
 
-func (p exprParser) topLevel(start, end int, stop byte) int {
+func (p exprParser) topLevel(start, end int, stop, open byte) int {
+	closer := byte(')')
+	if open == '{' {
+		closer = '}'
+	}
 	depth := 0
 	for i := start; i < end; i++ {
 		switch c := p.text[i]; {
@@ -226,9 +235,9 @@ func (p exprParser) topLevel(start, end int, stop byte) int {
 			if closing := p.closing(i+1, end); closing >= 0 {
 				i = closing
 			}
-		case c == '(' || c == '{':
+		case c == open:
 			depth++
-		case c == ')' || c == '}':
+		case c == closer:
 			depth--
 		case c == stop && depth == 0:
 			return i

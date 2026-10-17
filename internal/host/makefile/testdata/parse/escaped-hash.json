@@ -1,0 +1,9 @@
+{
+  "variables": [
+    "VALUE",
+    "x:SCOPED"
+  ],
+  "recipes": [
+    "all@4"
+  ]
+}

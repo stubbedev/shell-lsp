@@ -141,6 +141,7 @@ type Ref struct {
 	Edge      bool
 	Soft      bool
 	Declares  bool
+	Inert     bool
 	Horizon   int
 	Late      bool
 	ArgSpans  []Span
@@ -166,12 +167,16 @@ type Include struct {
 	Dynamic    bool
 }
 
-func MatchesPattern(pattern, name string) bool {
+func MatchesPattern(pattern, name string) bool { return matches(pattern, name, 0) }
+
+func MatchesRulePattern(pattern, name string) bool { return matches(pattern, name, 1) }
+
+func matches(pattern, name string, stem int) bool {
 	prefix, suffix, ok := strings.Cut(pattern, "%")
 	if !ok {
 		return pattern == name
 	}
-	return len(name) >= len(prefix)+len(suffix) && strings.HasPrefix(name, prefix) && strings.HasSuffix(name, suffix)
+	return len(name) >= len(prefix)+len(suffix)+stem && strings.HasPrefix(name, prefix) && strings.HasSuffix(name, suffix)
 }
 
 type SearchPath struct {

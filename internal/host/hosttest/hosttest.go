@@ -247,7 +247,10 @@ const unrunnablePath = "/nonexistent/shell-lsp-fuzz"
 
 var stoppedBeforeRecipes = []string{"*** No rule to make target", unrunnablePath + ": No such file or directory"}
 
-var databaseTarget = regexp.MustCompile(`^([^.#%\s][^:=%]*?):(?:[^=]|$)`)
+var (
+	databaseTarget = regexp.MustCompile(`^([^#\s][^:=]*?):(?:[^=]|$)`)
+	specialTarget  = regexp.MustCompile(`^\.[A-Z_]+$`)
+)
 
 func makeTargets(t *testing.T, dir string, vars []string) []string {
 	t.Helper()
@@ -267,7 +270,7 @@ func makeTargets(t *testing.T, dir string, vars []string) []string {
 			notTarget = true
 			continue
 		case files && !notTarget:
-			if m := databaseTarget.FindStringSubmatch(line); m != nil && m[1] != "Makefile" && !strings.Contains(m[1], "=") && !strings.HasPrefix(m[1], "-") {
+			if m := databaseTarget.FindStringSubmatch(line); m != nil && m[1] != "Makefile" && !specialTarget.MatchString(m[1]) && !strings.Contains(m[1], "=") && !strings.HasPrefix(m[1], "-") {
 				targets = append(targets, m[1])
 			}
 		}

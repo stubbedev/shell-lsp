@@ -156,7 +156,7 @@ func (m *Module) expanded() Usage {
 	}
 	for f, ix := range m.Files {
 		for _, r := range ix.Refs {
-			if r.Edge {
+			if r.Edge || r.Inert {
 				continue
 			}
 			at := moment{file: f, offset: r.Span.Start}
@@ -212,7 +212,7 @@ func (m *Module) Findings(file int, checks Checks, used Usage) []lint.Finding {
 	for _, r := range ix.Refs {
 		res := m.Resolve(file, r)
 		switch {
-		case res.Missing || r.Soft || dormant(r) || r.Declares && m.required(r):
+		case res.Missing || r.Soft || r.Inert || dormant(r) || r.Declares && m.required(r):
 		case !res.Found():
 			if rules := checks.Of(r.Kind); rules.Unknown != 0 && (certain || rules.UnknownWhen == Regardless) {
 				out = append(out, lint.HostFinding(rules.Unknown, r.Span, fmt.Sprintf("unknown %s `%s`", r.Kind, qualified(r))))

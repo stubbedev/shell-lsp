@@ -169,6 +169,147 @@ all:
 $(eval FLAG := yes)
 all:
 	@echo $(FLAG) $(OTHER)
+-- export-continued-onto-the-name --
+export\
+CONTINUED = two
+all: ; @echo $(CONTINUED)
+-- reference-before-an-operator --
+A$:=one
+all: ; @echo $(A)
+-- target-variable-named-by-a-reference --
+all:$ X:=1
+all: ; @:
+-- export-of-several-names-with-an-operator --
+export A B=1
+all: ; @echo [$(B)]
+-- escaped-hash-in-a-variable-name --
+a\#b = 1
+all: ; @:
+-- escaped-hash-before-an-operator-makes-a-rule --
+a\#b=:
+-- escaped-hash-in-an-exported-name --
+export a\#b=1
+all: ; @:
+-- keyword-named-variable-after-a-continuation --
+export\
+= 1
+all: ; @echo $(export)
+-- line-starting-with-an-escaped-semicolon --
+all: ; @echo ok
+\;ignored
+-- escaped-semicolon-line-ends-the-rule --
+all: ; @echo ok
+\;ignored
+	echo orphan
+-- semicolon-before-the-colon-of-a-spaced-name --
+a b=;:
+all: ; @:
+-- references-before-a-semicolon --
+$(EMPTY);:
+all: ; @:
+-- semicolon-without-a-rule --
+;:
+-- escaped-backslash-before-a-colon --
+out\\: ; @:
+-- archive-symbol --
+app: lib.a((main))
+	@:
+-- target-of-parentheses --
+((:
+	@:
+-- archive-symbol-of-an-unused-pattern --
+%.o: lib.a((main))
+	@:
+all: ; @:
+-- archive-member --
+app: lib.a(main.o)
+	@:
+lib.a(main.o): ; @:
+-- other-brackets-inside-call-arguments --
+all: ; @echo [$(subst {,x,a{b)] [${subst (,x,a(b}] [$(foreach },,)]
+-- recipe-after-references-and-a-semicolon --
+$(NOTHING);echo $(
+all: ; @:
+-- escaped-colon-in-a-variable-name --
+a\:b = 1
+all: ; @:
+-- nameless-variable-of-a-computed-target --
+$(NOTHING): =
+all: ; @:
+-- spaces-around-a-reference-name --
+X = $X
+all: ; @echo [$(X )] [$( X)]
+-- computed-name-with-a-space --
+$(NOTHING) B = 1
+all: ; @echo $(B)
+-- comment-after-an-escaped-backslash --
+$\\# a comment
+all: ; @:
+-- hash-variable-is-no-comment --
+X = a$#b
+Y = $(subst a,b,a#c)
+all: ; @echo [$(X)] [$(Y)]
+-- backslash-variable-before-a-hash --
+A$\#= 1
+all: ; @:
+-- unused-pattern-rule-with-a-broken-inline-recipe --
+%.o: ; echo $(
+all: ; @:
+-- dollar-and-an-escaped-hash-name-the-hash-variable --
+$\#
+Y = a$\#b
+all: ; @echo [$(Y)]
+-- escaped-percent-is-no-target-pattern --
+out: \%: in
+	@:
+-- match-anything-rule-used-by-a-target-without-a-recipe --
+%:
+	echo $(
+all:
+-- tab-before-a-spaced-assignment --
+	A B := 1
+all: ; @:
+-- replaced-recipe-is-never-expanded --
+X = $X
+all:
+	@echo $X
+all:
+	@echo replaced
+-- pattern-rule-needs-a-nonempty-stem --
+%0:
+	echo $(
+0:
+-- broken-recipe-that-a-later-one-replaces --
+all:
+	echo $(
+all:
+	@echo replaced
+-- unused-pattern-specific-variable-with-a-broken-value --
+%.o: CFLAGS = $(
+all: ; @:
+-- used-target-specific-variable-with-a-broken-value --
+all: CFLAGS = $(
+all: ; @echo $(CFLAGS)
+-- spaced-target-variable-is-a-prerequisite-list --
+x: A B=$(
+x: ; @:
+-- escaped-hash-in-a-target --
+a\#b: ; @echo ok
+-- continuation-inside-a-variable-name --
+A\
+B = 1
+all: ; @:
+-- line-starting-with-a-continuation --
+\
+A = 1
+all: ; @echo $(A)
+-- continued-line-without-a-separator --
+\
+stray
+-- computed-variable-name --
+P = lib
+$(P)_FLAGS = -O2
+all: ; @echo $(lib_FLAGS)
 -- simple-self-reference --
 X := a
 X := $(X) b

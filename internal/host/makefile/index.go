@@ -44,14 +44,15 @@ func Analyze(text string) Analysis {
 }
 
 type indexer struct {
-	f         *File
-	ix        *model.Index
-	scopes    map[string]model.Scope
-	exported  map[string]bool
-	dynamic   bool
-	arguments []int
-	called    map[string]bool
-	redefined []string
+	f          *File
+	ix         *model.Index
+	scopes     map[string]model.Scope
+	exported   map[string]bool
+	dynamic    bool
+	arguments  []int
+	called     map[string]bool
+	redefined  []string
+	overridden map[*Rule]bool
 }
 
 func (f *File) exported() []string {
@@ -106,7 +107,7 @@ func (f *File) Index(shell bool) *model.Index {
 		return e.Kind != ErrUnterminated && e.Kind != ErrDeferredUnterminated && e.Kind != ErrPatternUnterminated && e.Kind != ErrPatternMismatch
 	})}
 	ix.Branches = f.alternatives()
-	in := &indexer{f: f, ix: ix, scopes: map[string]model.Scope{}, exported: f.exportedNames(), called: map[string]bool{}}
+	in := &indexer{overridden: f.overridden(), f: f, ix: ix, scopes: map[string]model.Scope{}, exported: f.exportedNames(), called: map[string]bool{}}
 	for _, a := range f.Assignments {
 		in.assignment(a)
 	}
@@ -300,6 +301,9 @@ func automatic(name string) bool {
 }
 
 func (in *indexer) assignment(a *Assignment) {
+	if a.Name.Expr.Dynamic() {
+		in.ix.Opaque = true
+	}
 	for _, m := range a.Modifiers {
 		in.token(m.Span, semantic.TypeKeyword, 0)
 	}
@@ -318,9 +322,9 @@ func (in *indexer) assignment(a *Assignment) {
 		scopes = scopes[:0]
 		for _, t := range a.Targets {
 			scopes = append(scopes, in.scope(t.Text))
-			if !t.Expr.Dynamic() && strings.Contains(t.Text, "%") {
+			if !t.Expr.Dynamic() && hasPercent(t.Text) {
 				for _, name := range in.ruleTargets() {
-					if name != t.Text && model.MatchesPattern(t.Text, name) {
+					if name != t.Text && model.MatchesRulePattern(t.Text, name) {
 						scopes = append(scopes, in.scope(name))
 					}
 				}
@@ -387,6 +391,8 @@ func (in *indexer) reference(n Node, scope model.Scope, owner int, edge bool, bo
 		in.dynamic = true
 		in.walk(n.Name, scope, owner, edge, bound)
 	case name == "" || slices.Contains(bound, name):
+	case name != raw && !strings.ContainsAny(name, " \t"):
+		in.ix.Refs = append(in.ix.Refs, model.Ref{Name: raw, Kind: model.KindVariable, Span: in.nameSpan(n.Name, name), Scope: scope, Args: model.NoArgs, Owner: owner})
 	case strings.ContainsAny(name, " \t"):
 		word := firstWord(name)
 		in.ix.Refs = append(in.ix.Refs, model.Ref{Name: word, Kind: model.KindFunction, Span: in.nameSpan(n.Name, word), Scope: scope, Args: model.NoArgs, Owner: owner})
@@ -450,7 +456,7 @@ func (in *indexer) call(n Node, scope model.Scope, owner int, edge bool, bound [
 	}
 }
 
-func literal(w Word) bool { return !w.Expr.Dynamic() && !strings.Contains(w.Text, "%") }
+func literal(w Word) bool { return !w.Expr.Dynamic() && !hasPercent(w.Text) }
 
 func (in *indexer) rule(r *Rule, shell bool) {
 	scope := model.Global
@@ -509,6 +515,7 @@ func (in *indexer) rule(r *Rule, shell bool) {
 		for j := first; j < len(in.ix.Refs); j++ {
 			in.ix.Refs[j].Late = true
 			in.ix.Refs[j].Edge = r.Pattern()
+			in.ix.Refs[j].Inert = in.overridden[r]
 		}
 	}
 }

@@ -85,6 +85,122 @@ accepted
 -- literal-eval-keeps-findings-certain --
 accepted
 3:18 SL6006 info unknown variable `OTHER`
+-- export-continued-onto-the-name --
+accepted
+-- reference-before-an-operator --
+accepted
+-- target-variable-named-by-a-reference --
+accepted
+-- export-of-several-names-with-an-operator --
+accepted
+2:17 SL6006 info unknown variable `B`
+-- escaped-hash-in-a-variable-name --
+rejected 1:1 missing separator
+1:1 SL6001 error missing separator: make reads no assignment from a line with a `\#` or `\:` before its operator
+-- escaped-hash-before-an-operator-makes-a-rule --
+accepted
+-- escaped-hash-in-an-exported-name --
+accepted
+-- keyword-named-variable-after-a-continuation --
+accepted
+-- line-starting-with-an-escaped-semicolon --
+accepted
+-- escaped-semicolon-line-ends-the-rule --
+rejected 3:1 recipe commences before first target
+3:1 SL6005 error a recipe line comes before the first rule
+-- semicolon-before-the-colon-of-a-spaced-name --
+rejected 1:1 missing separator
+1:1 SL6001 error missing separator: a `;` comes before the rule's `:`
+-- references-before-a-semicolon --
+accepted
+-- semicolon-without-a-rule --
+rejected 1:1 missing rule before recipe
+1:1 SL6001 error missing rule before recipe: the `;` that starts a recipe has no rule before it
+-- escaped-backslash-before-a-colon --
+accepted
+-- archive-symbol --
+rejected 0:0 make: *** attempt to use unsupported feature: 'lib.a((main))'.  Stop.
+1:6 SL6001 error make does not support archive symbols such as `lib.a((main))`; name the member as `archive(member.o)`
+-- target-of-parentheses --
+accepted
+-- archive-symbol-of-an-unused-pattern --
+rejected 0:0 make: *** attempt to use unsupported feature: 'lib.a((main))'.  Stop.
+1:6 SL6001 error make does not support archive symbols such as `lib.a((main))`; name the member as `archive(member.o)`
+-- archive-member --
+accepted
+-- other-brackets-inside-call-arguments --
+accepted
+-- recipe-after-references-and-a-semicolon --
+accepted
+1:3 SL6006 info unknown variable `NOTHING`
+-- escaped-colon-in-a-variable-name --
+rejected 1:1 missing separator
+1:1 SL6001 error missing separator: make reads no assignment from a line with a `\#` or `\:` before its operator
+-- nameless-variable-of-a-computed-target --
+accepted
+-- spaces-around-a-reference-name --
+accepted
+1:1 SL6014 info variable `X` is never used
+2:17 SL6006 info unknown variable `X `
+2:26 SL6006 info unknown variable ` X`
+-- computed-name-with-a-space --
+rejected 1:1 missing separator
+1:1 SL6001 error missing separator: a variable name cannot contain whitespace
+-- comment-after-an-escaped-backslash --
+accepted
+1:2 SL6006 info unknown variable `\`
+-- hash-variable-is-no-comment --
+accepted
+1:7 SL6006 info unknown variable `#`
+-- backslash-variable-before-a-hash --
+accepted
+-- unused-pattern-rule-with-a-broken-inline-recipe --
+accepted
+1:13 SL6015 warning this variable reference is not closed on the same logical line; make fails when it uses this pattern rule
+-- dollar-and-an-escaped-hash-name-the-hash-variable --
+accepted
+1:3 SL6006 info unknown variable `#`
+2:8 SL6006 info unknown variable `#`
+-- escaped-percent-is-no-target-pattern --
+rejected 1:1 target pattern contains no '%'
+1:6 SL6001 error the target pattern of a static pattern rule needs a `%`
+-- match-anything-rule-used-by-a-target-without-a-recipe --
+rejected 2:1 unterminated variable reference
+2:7 SL6012 error this variable reference is not closed on the same logical line; make uses this pattern rule for `all`
+-- tab-before-a-spaced-assignment --
+rejected 1:1 recipe commences before first target
+1:1 SL6005 error a recipe line comes before the first rule
+-- replaced-recipe-is-never-expanded --
+accepted
+4:1 SL6009 warning this recipe for `all` replaces the one on line 2
+-- pattern-rule-needs-a-nonempty-stem --
+accepted
+2:7 SL6015 warning this variable reference is not closed on the same logical line; make fails when it uses this pattern rule
+-- broken-recipe-that-a-later-one-replaces --
+accepted
+2:7 SL6015 warning this variable reference is not closed on the same logical line; a later recipe replaces this one, so make never expands it
+3:1 SL6009 warning this recipe for `all` replaces the one on line 1
+-- unused-pattern-specific-variable-with-a-broken-value --
+accepted
+1:15 SL6015 warning this variable reference is not closed on the same logical line; make fails when it expands `CFLAGS`
+-- used-target-specific-variable-with-a-broken-value --
+rejected 1:1 unterminated variable reference
+1:15 SL6012 error this variable reference is not closed on the same logical line; make fails when it expands `CFLAGS`
+-- spaced-target-variable-is-a-prerequisite-list --
+rejected 1:1 unterminated variable reference
+1:8 SL6012 error this variable reference is not closed on the same logical line
+-- escaped-hash-in-a-target --
+accepted
+-- continuation-inside-a-variable-name --
+rejected 1:1 missing separator
+1:1 SL6001 error missing separator: a variable name cannot contain whitespace
+-- line-starting-with-a-continuation --
+accepted
+-- continued-line-without-a-separator --
+rejected 1:1 missing separator
+1:1 SL6001 error missing separator: this line is no rule, assignment or directive
+-- computed-variable-name --
+accepted
 -- simple-self-reference --
 accepted
 -- append --

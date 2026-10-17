@@ -47,7 +47,16 @@ type Rule struct {
 }
 
 func (r *Rule) Pattern() bool {
-	return len(r.Patterns) == 0 && len(r.Targets) > 0 && strings.Contains(r.Targets[0].Text, "%")
+	return len(r.Patterns) == 0 && len(r.Targets) > 0 && hasPercent(r.Targets[0].Text)
+}
+
+func hasPercent(s string) bool {
+	for i := range len(s) {
+		if s[i] == '%' && (i-len(strings.TrimRight(s[:i], `\`)))%2 == 0 {
+			return true
+		}
+	}
+	return false
 }
 
 type IncludeKind uint8
