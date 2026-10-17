@@ -1237,3 +1237,16 @@ target that does not, so its recipe never runs.
 main.o util.c: %.o: %.c    # SL6016
 	cc -c $< -o $@
 ```
+
+## SL6017
+
+**A standard target is missing from `.PHONY`.** Targets such as `clean`,
+`install`, `check` or `dist` name an action, not a file. If a file or
+directory of that name exists, make considers the target up to date and never
+runs its recipe; listing the target in `.PHONY` prevents that. A recipe that
+creates `$@` is left alone.
+
+```make
+clean:    # SL6017
+	rm -f app
+```

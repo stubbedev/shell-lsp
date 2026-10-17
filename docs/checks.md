@@ -545,3 +545,4 @@ marks the checks the `minimal` profile keeps; see [Profiles](../README.md#profil
 | <a name="sl6014"></a>[SL6014](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl6014) | info |  |  | A variable is set but never used. |
 | <a name="sl6015"></a>[SL6015](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl6015) | warning |  | yes | A deferred variable reference is not closed. |
 | <a name="sl6016"></a>[SL6016](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl6016) | warning |  | yes | A target does not match its static pattern. |
+| <a name="sl6017"></a>[SL6017](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl6017) | warning |  | yes | A standard target is missing from \`.PHONY\`. |

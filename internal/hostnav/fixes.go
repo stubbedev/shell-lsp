@@ -54,6 +54,9 @@ func (g *Group) Fixes(within parser.Span) []Fix {
 			if path, ok := g.creatable(f.Span); ok {
 				out = append(out, Fix{Title: "Create `" + filepath.Base(path) + "`", Finding: f, Create: path})
 			}
+		case f.Code == lint.CodeMakeNotPhony:
+			start := strings.LastIndexByte(text[:f.Span.Start], '\n') + 1
+			out = append(out, Fix{Title: "Add `" + name + "` to .PHONY", Finding: f, Edits: []textedit.Edit{{Start: start, End: start, NewText: ".PHONY: " + name + "\n"}}, Preferred: true})
 		case f.Code == lint.CodeMakeRecipePrefix && !g.setsRecipePrefix():
 			start := strings.LastIndexByte(text[:f.Span.Start], '\n') + 1
 			end := start + len(text[start:]) - len(strings.TrimLeft(text[start:], " \t"))

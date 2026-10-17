@@ -219,6 +219,9 @@ func (m *Module) Findings(file int, checks Checks, used Usage) []lint.Finding {
 	if checks.Absent != 0 {
 		out = append(out, m.absent(file, checks.Absent)...)
 	}
+	if checks.NotPhony != 0 && certain {
+		out = append(out, m.notPhony(file, checks.NotPhony)...)
+	}
 	for _, d := range ix.Deferred {
 		code := d.Unused
 		if expanded[Target{Module: m, File: file, Symbol: d.Symbol}] {
@@ -377,6 +380,24 @@ func (m *Module) absent(file int, code lint.Code) []lint.Finding {
 			message = fmt.Sprintf("%s `%s` cannot run: it depends on `%s`, which needs the absent module `%s`", s.Kind, s.Name, b.via, b.module)
 		}
 		out = append(out, lint.HostFinding(code, s.Selection, message))
+	}
+	return out
+}
+
+func (m *Module) notPhony(file int, code lint.Code) []lint.Finding {
+	phony := map[string]bool{}
+	for _, ix := range m.Files {
+		for _, name := range ix.Phony {
+			phony[name] = true
+		}
+	}
+	var out []lint.Finding
+	ix := m.Files[file]
+	for _, i := range ix.Fileless {
+		if s := ix.Symbols[i]; !phony[s.Name] {
+			phony[s.Name] = true
+			out = append(out, lint.HostFinding(code, s.Selection, fmt.Sprintf("`%s` creates no file of that name; list it in .PHONY so a file called `%s` cannot keep it from running", s.Name, s.Name)))
+		}
 	}
 	return out
 }

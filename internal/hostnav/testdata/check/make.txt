@@ -326,3 +326,13 @@ export:
 vpath :
 	@echo r
 all:
+-- clean-without-phony --
+clean:
+	rm -f app
+-- clean-in-phony --
+.PHONY: clean
+clean:
+	rm -f app
+-- install-creates-itself --
+install:
+	touch $@

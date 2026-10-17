@@ -227,6 +227,8 @@ type Index struct {
 	Findings  []lint.Finding
 	ExportAll bool
 	Broken    bool
+	Phony     []string
+	Fileless  []int
 
 	lookups sync.Once
 	byName  map[symbolKey][]int
@@ -292,6 +294,7 @@ type Checks struct {
 	Deprecated lint.Code
 	Missing    lint.Code
 	Absent     lint.Code
+	NotPhony   lint.Code
 }
 
 func Nested(offset int, spans []Span) []Span {

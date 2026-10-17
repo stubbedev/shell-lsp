@@ -189,3 +189,10 @@ accepted
 -- directive-before-a-spaced-colon --
 rejected 2:1 recipe commences before first target
 2:1 SL6005 error a recipe line comes before the first rule
+-- clean-without-phony --
+accepted
+1:1 SL6017 warning `clean` creates no file of that name; list it in .PHONY so a file called `clean` cannot keep it from running
+-- clean-in-phony --
+accepted
+-- install-creates-itself --
+accepted

@@ -14,7 +14,7 @@ import (
 
 const maxDetail = 80
 
-var Checks = model.Checks{Of: rules, Missing: lint.CodeMakeMissingInclude}
+var Checks = model.Checks{Of: rules, Missing: lint.CodeMakeMissingInclude, NotPhony: lint.CodeMakeNotPhony}
 
 func rules(kind model.Kind) model.Rules {
 	switch kind {
@@ -168,6 +168,20 @@ func (in *indexer) deferred() {
 		}
 		in.ix.Deferred = append(in.ix.Deferred, model.Deferred{Symbol: owner, Span: e.Span, Message: e.Message, Used: lint.CodeMakeUnterminatedReference, Unused: lint.CodeMakeDeferredUnterminatedReference})
 	}
+}
+
+var standardTargets = []string{"check", "clean", "dist", "distclean", "install", "install-strip", "installcheck", "installdirs", "maintainer-clean", "mostlyclean", "uninstall"}
+
+func (in *indexer) namesTarget(r *Rule) bool {
+	return slices.ContainsFunc(r.Recipe, func(l RecipeLine) bool {
+		found := false
+		Walk(l.Expr, func(n Node) bool {
+			name, ok := n.Name.Literal(in.f.Text)
+			found = found || n.Kind == NodeReference && ok && (name == "@" || name == "@F")
+			return !found
+		})
+		return found
+	})
 }
 
 func (in *indexer) text(s Span) string { return in.f.Text[s.Start:s.End] }
@@ -364,6 +378,9 @@ func (in *indexer) rule(r *Rule, shell bool) {
 	}
 	for _, w := range slices.Concat(r.Prereqs, r.OrderOnly) {
 		in.walk(w.Expr, scope, owner, false, nil)
+		if literal(w) && phony {
+			in.ix.Phony = append(in.ix.Phony, w.Text)
+		}
 		if literal(w) {
 			in.ix.Refs = append(in.ix.Refs, model.Ref{Name: w.Text, Kind: model.KindTarget, Span: w.Span, Args: model.NoArgs, Owner: owner, Soft: !phony})
 			in.token(w.Span, semantic.TypeFunction, 0)
@@ -371,6 +388,9 @@ func (in *indexer) rule(r *Rule, shell bool) {
 	}
 	if len(r.Recipe) == 0 {
 		return
+	}
+	if owner != model.NoSymbol && slices.Contains(standardTargets, in.ix.Symbols[owner].Name) && !in.namesTarget(r) {
+		in.ix.Fileless = append(in.ix.Fileless, owner)
 	}
 	body := Span{Start: r.Recipe[0].Span.Start, End: r.Recipe[len(r.Recipe)-1].Span.End}
 	if shell {

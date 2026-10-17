@@ -63,4 +63,8 @@ func TestMakefileFixes(t *testing.T) {
 	if got, want := tr.fixes("rules.mk"), []string{"Start the recipe line with a tab -> all:\n\ttrue\n\techo spaces\n"}; !slices.Equal(got, want) {
 		t.Errorf("fixes of rules.mk = %q, want %q", got, want)
 	}
+	phony := newTree(t, map[string]string{"Makefile": "all:\n\ttrue\n\nclean:\n\trm -f app\n"})
+	if got, want := phony.fixes("Makefile"), []string{"Add `clean` to .PHONY -> all:\n\ttrue\n\n.PHONY: clean\nclean:\n\trm -f app\n"}; !slices.Equal(got, want) {
+		t.Errorf("fixes for a target missing from .PHONY = %q, want %q", got, want)
+	}
 }
