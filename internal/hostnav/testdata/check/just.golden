@@ -117,6 +117,8 @@ rejected 3:3 recipe line has extra leading whitespace
 3:1 SL5021 error recipe line has extra leading whitespace; join it to the line above with a trailing `\` or start the recipe with a shebang
 -- continuation-may-indent --
 accepted
+-- exported-parameter-read-before-reassignment --
+accepted
 -- shebang-may-indent --
 accepted
 -- shebang-may-mix-tabs-into-indentation --

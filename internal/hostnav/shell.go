@@ -202,9 +202,6 @@ func (g *Group) shellUsage() model.Usage {
 		file := g.fileOf(g.Module, f)
 		for _, r := range regions(file) {
 			for _, n := range r.names {
-				if r.shadowed[n.name] {
-					continue
-				}
 				for _, t := range g.Module.Resolve(f, model.Ref{Name: n.name, Kind: model.KindVariable, Scope: r.shell.Scope}).Targets {
 					if s := t.Info(); s.Exported || t.Module.Files[t.File].ExportAll {
 						used[t] = true

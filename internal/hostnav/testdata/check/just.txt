@@ -177,6 +177,11 @@ a:
 a:
   echo 1 \
     2
+-- exported-parameter-read-before-reassignment --
+a $tag:
+    #!/usr/bin/env bash
+    if [ "$tag" = x ]; then tag=y; fi
+    echo "$tag"
 -- shebang-may-indent --
 a:
   #!/usr/bin/env bash
