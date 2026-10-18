@@ -2,7 +2,6 @@ package completion
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
@@ -90,19 +89,61 @@ var (
 	}
 )
 
-var snippetMarkup = regexp.MustCompile(`\$\{[0-9]+:([^}]*)\}|\$[0-9]+|\\(.)`)
-
 func snippetPreview(body string) string {
-	return snippetMarkup.ReplaceAllStringFunc(body, func(m string) string {
-		sub := snippetMarkup.FindStringSubmatch(m)
-		switch {
-		case strings.HasPrefix(m, "${"):
-			return sub[1]
-		case strings.HasPrefix(m, `\`):
-			return sub[2]
+	var sb strings.Builder
+	previewSnippet(&sb, body, false)
+	return sb.String()
+}
+
+func previewSnippet(sb *strings.Builder, text string, placeholder bool) string {
+	for text != "" {
+		switch c := text[0]; {
+		case c == '\\' && len(text) > 1:
+			sb.WriteByte(text[1])
+			text = text[2:]
+		case c == '}' && placeholder:
+			return text[1:]
+		case c == '$':
+			rest, ok := previewTabstop(sb, text[1:])
+			if !ok {
+				sb.WriteByte(c)
+			}
+			text = rest
+		default:
+			sb.WriteByte(c)
+			text = text[1:]
 		}
-		return ""
-	})
+	}
+	if placeholder {
+		panic("completion: a snippet placeholder is never closed")
+	}
+	return ""
+}
+
+func previewTabstop(sb *strings.Builder, text string) (string, bool) {
+	if digits := leadingDigits(text); digits > 0 {
+		return text[digits:], true
+	}
+	inner, braced := strings.CutPrefix(text, "{")
+	digits := leadingDigits(inner)
+	if !braced || digits == 0 || digits == len(inner) {
+		return text, false
+	}
+	switch inner[digits] {
+	case '}':
+		return inner[digits+1:], true
+	case ':':
+		return previewSnippet(sb, inner[digits+1:], true), true
+	}
+	return text, false
+}
+
+func leadingDigits(text string) int {
+	n := 0
+	for n < len(text) && text[n] >= '0' && text[n] <= '9' {
+		n++
+	}
+	return n
 }
 
 func (c completer) idioms() []Item {
