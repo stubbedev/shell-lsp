@@ -133,11 +133,60 @@ exec jq '$ENV.HOME' config.json
 exec -c -a jqtool jq '$ENV.HOME' config.json
 >>> none
 
-### brace glued to the append command is still reported
+### brace glued to the append command leaves an unclosed brace
 sed -e '${a\
 trailer' -e '}' notes.txt
->>> SC2016 1:8
+>>- SC2016 1:8 -- the line continuation joins ${a and trailer into a ${ without its }, which double quotes would reject rather than expand
 
 ### brace glued to the print command is still reported
 sed -n '${p}' notes.txt
 >>> SC2016 1:8
+
+### escaped dollar stays literal in double quotes too
+grep '\$HOME' notes.txt
+>>- SC2016 1:6 -- \$HOME is literal in double quotes as well, so the single quotes hide no expansion
+
+### braced expansion without its closing brace
+echo 'Usage: ${name'
+>>- SC2016 1:6 -- ${name without } is a syntax error in double quotes, not an expansion
+
+### command substitution without its closing parenthesis
+echo '$(ls'
+>>- SC2016 1:6 -- $( without ) is a syntax error in double quotes, not an expansion
+
+### double dollar before a word
+echo 'pid $$foo'
+>>- SC2016 1:6 -- $$ is the process ID and foo stays literal, so no variable foo is hidden
+
+### special parameters stay quiet
+echo '$# and $@ and $*'
+>>> none
+
+### sed quit on the last line is fine
+sed '$q' notes.txt
+>>- SC2016 1:5 -- sed reads $ as the last line address of q
+
+### sed append glued to its text is fine
+sed '$atext' notes.txt
+>>- SC2016 1:5 -- sed reads $ as the last line address of a, which appends text
+
+### sed last line address continued from a double-quoted first address is fine
+sed -n "$first"',$p' notes.txt
+>>> SC2154 1:9
+
+### sed last line address does not excuse a later expansion
+sed '$!N;s/\n/${sep}/' notes.txt
+>>> SC2016 1:5
+
+### sed rejects a dollar digit so it is reported
+sed '$1' notes.txt
+>>> SC2016 1:5
+>>+ SL3002 1:7 -- shell-lsp native check; sed reads the address $ and then the unknown command 1
+
+### braced sed group on the last line is reported
+sed '${s/a/b/}' notes.txt
+>>> SC2016 1:5
+
+### backticks around words that are no command
+echo 'testMirrors `do something bad`'
+>>- SC2016 1:6 -- `do something bad` does not parse as a command, so double quotes would be a syntax error rather than a substitution

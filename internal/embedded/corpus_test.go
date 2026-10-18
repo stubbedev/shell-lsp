@@ -13,6 +13,7 @@ import (
 
 var knownInvalid = map[string]string{
 	"$prefix": "extra characters after command",
+	"$1":      "unknown command `1`",
 	"foo":     "unknown command `f`",
 }
 

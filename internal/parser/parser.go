@@ -88,6 +88,12 @@ func ParseSnippet(text string, lang syntax.LangVariant) (*syntax.File, error) {
 	return newSyntaxParser(lang).Parse(strings.NewReader(text), "")
 }
 
+func ParseDocument(text string, lang syntax.LangVariant) (*syntax.Word, error) {
+	return newSyntaxParser(lang).Document(strings.NewReader(text))
+}
+
+func Closed(closer syntax.Pos) bool { return closer.IsValid() && !closer.IsRecovered() }
+
 func ParseEdit(previous *Tree, text string, shell dialect.Shell) *Tree {
 	src := []byte(text)
 	blankByteOrderMark(src)

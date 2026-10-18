@@ -1,6 +1,7 @@
 package sed
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -258,6 +259,26 @@ func TestTokens(t *testing.T) {
 		"# done:comment", "::keyword+builtin", "top:property", "b:keyword+builtin", "top:property",
 		"$:operator", "a:keyword+builtin", "bye:string",
 	)
+}
+
+func TestLastLineAddresses(t *testing.T) {
+	t.Parallel()
+
+	for src, want := range map[string][]int{
+		`$p`:                {0},
+		`1,$d`:              {2},
+		`$!N;s/\n/ /;$q`:    {0, 12},
+		`${/^$/d}`:          {0},
+		`s/foo$/bar/`:       nil,
+		`/x$/p`:             nil,
+		`$1`:                nil,
+		`$prefix`:           nil,
+		"$p\n$x;1,$zap\n$d": {0, 3, 13},
+	} {
+		if got := LastLineAddresses(src); !slices.Equal(got, want) {
+			t.Errorf("LastLineAddresses(%q) = %v, want %v", src, got, want)
+		}
+	}
 }
 
 func TestOptionTokens(t *testing.T) {

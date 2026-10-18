@@ -43,12 +43,23 @@ type parser struct {
 	pending   [maxExpressions]expression
 	queued    int
 	commandAt int
+	lastLines []int
 }
 
 func Parse(src string, syntax Syntax) lang.Result {
-	p := &parser{src: src, res: lang.NewResult(src), structure: true, flavor: flavors[syntax]}
+	p := newParser(src, syntax)
 	lang.Run(p.run)
 	return p.res
+}
+
+func LastLineAddresses(src string) []int {
+	p := newParser(src, Basic)
+	lang.Run(p.run)
+	return p.lastLines
+}
+
+func newParser(src string, syntax Syntax) parser {
+	return parser{src: src, res: lang.NewResult(src), structure: true, flavor: flavors[syntax]}
 }
 
 func (p *parser) run() {
@@ -70,6 +81,7 @@ func (p *parser) run() {
 }
 
 func (p *parser) skipFailedCommand() {
+	p.lastLines = slices.DeleteFunc(p.lastLines, func(at int) bool { return at >= p.commandAt })
 	end := textline.End(p.src, max(p.commandAt, min(p.pos, len(p.src))))
 	if strings.ContainsAny(p.src[p.commandAt:end], "{}:") {
 		p.structure = false
@@ -345,6 +357,7 @@ func (p *parser) address(second bool) address {
 	case c == '$':
 		p.pos++
 		p.emit(start, lang.Operator)
+		p.lastLines = append(p.lastLines, start)
 		return lastAddress
 	case c == '/':
 		p.regexpAddress(start, '/')

@@ -103,7 +103,7 @@ ShellCheck fails with an internal error on these scripts, which are left out:
 | SC2013 | 20 | 0 | 0 |
 | SC2014 | 0 | 0 | 0 |
 | SC2015 | 174 | 8 | 0 |
-| SC2016 | 864 | 333 | 3 |
+| SC2016 | 816 | 279 | 51 |
 | SC2017 | 3 | 0 | 0 |
 | SC2018 | 10 | 1 | 0 |
 | SC2019 | 10 | 1 | 0 |
