@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
@@ -602,7 +602,27 @@ func (s Signature) Label() string {
 	return strings.Join(parts, " ")
 }
 
-var paramDocLine = regexp.MustCompile(`^\$?([0-9]+|[A-Za-z_][A-Za-z0-9_]*)\s*(?:-|:)\s+(.+)$`)
+func paramDocLine(line string) (string, string, bool) {
+	rest := strings.TrimPrefix(line, "$")
+	end := strings.IndexFunc(rest, func(r rune) bool { return unicode.IsSpace(r) || r == '-' || r == ':' })
+	if end < 0 {
+		return "", "", false
+	}
+	name := rest[:end]
+	if !parser.IsName(name) && !parser.IsDigits(name) {
+		return "", "", false
+	}
+	separated := strings.TrimLeftFunc(rest[end:], unicode.IsSpace)
+	described, ok := strings.CutPrefix(separated, "-")
+	if !ok {
+		described, ok = strings.CutPrefix(separated, ":")
+	}
+	doc := strings.TrimLeftFunc(described, unicode.IsSpace)
+	if !ok || doc == described || doc == "" {
+		return "", "", false
+	}
+	return name, doc, true
+}
 
 func FunctionSignature(tree *parser.Tree, fn parser.Function) Signature {
 	highest, variadic := positionalUse(fn)
@@ -620,17 +640,17 @@ func FunctionSignature(tree *parser.Tree, fn parser.Function) Signature {
 	}
 	var docLines []string
 	for line := range strings.SplitSeq(fn.Doc, "\n") {
-		m := paramDocLine.FindStringSubmatch(line)
-		if m == nil {
+		name, doc, ok := paramDocLine(line)
+		if !ok {
 			docLines = append(docLines, line)
 			continue
 		}
-		i := slices.IndexFunc(sig.Params, func(p Parameter) bool { return strconv.Itoa(p.Index) == m[1] || p.Name == m[1] })
+		i := slices.IndexFunc(sig.Params, func(p Parameter) bool { return strconv.Itoa(p.Index) == name || p.Name == name })
 		if i < 0 {
 			docLines = append(docLines, line)
 			continue
 		}
-		sig.Params[i].Doc = m[2]
+		sig.Params[i].Doc = doc
 	}
 	sig.Doc = strings.TrimSpace(strings.Join(docLines, "\n"))
 	return sig

@@ -461,3 +461,25 @@ func TestFunctionSignature(t *testing.T) {
 		t.Errorf("params = %+v", sig.Params)
 	}
 }
+
+func TestParamDocLine(t *testing.T) {
+	t.Parallel()
+
+	type doc struct{ name, text string }
+	for line, want := range map[string]doc{
+		"$1 - source path":      {"1", "source path"},
+		"12: twelfth":           {"12", "twelfth"},
+		"dest:\twhere to copy ": {"dest", "where to copy "},
+		"$_name  -  the name":   {"_name", "the name"},
+		"x - a - b":             {"x", "a - b"},
+	} {
+		if name, text, ok := paramDocLine(line); !ok || name != want.name || text != want.text {
+			t.Errorf("paramDocLine(%q) = %q, %q, %v; want %q, %q", line, name, text, ok, want.name, want.text)
+		}
+	}
+	for _, line := range []string{"", "Copies a file.", "dest:where", "1a - mixed", "$ - nothing", "x -", "x -   ", "a-b - dashed", "x = y", "$$1 - twice"} {
+		if name, text, ok := paramDocLine(line); ok {
+			t.Errorf("paramDocLine(%q) = %q, %q; want no parameter", line, name, text)
+		}
+	}
+}
