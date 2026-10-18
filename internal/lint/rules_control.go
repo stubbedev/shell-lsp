@@ -2,7 +2,6 @@ package lint
 
 import (
 	"path"
-	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -211,7 +210,14 @@ func (p *pass) pipedStatement(depth int) bool {
 	return ok && pipes(outer.Op) && outer.X == p.ancestor(depth+2)
 }
 
-var safeDirectory = regexp.MustCompile(`^/*((\.|\.\.)/+)*(\.|\.\.)?$`)
+func safeDirectory(path string) bool {
+	for segment := range strings.SplitSeq(path, "/") {
+		if segment != "" && segment != "." && segment != ".." {
+			return false
+		}
+	}
+	return true
+}
 
 func checkUncheckedDirectoryChange(p *pass, call *syntax.CallExpr) {
 	command, ok := p.resolved(call)
@@ -230,7 +236,7 @@ func checkUncheckedDirectoryChange(p *pass, call *syntax.CallExpr) {
 		return
 	}
 	if name != "popd" && len(args) == 1 {
-		if target, ok := parser.Literal(args[0]); ok && safeDirectory.MatchString(target) {
+		if target, ok := parser.Literal(args[0]); ok && safeDirectory(target) {
 			return
 		}
 	}

@@ -1,7 +1,6 @@
 package lint
 
 import (
-	"regexp"
 	"slices"
 	"strings"
 
@@ -23,7 +22,6 @@ var relativeSourceFamily = family{
 
 var (
 	scriptPathEnv       = parser.PathEnv{ScriptPath: directive.ScriptDir + "/script"}
-	buildPlaceholder    = regexp.MustCompile(`@[^@\s/]+@`)
 	defaultingOperators = []syntax.ParExpOperator{syntax.DefaultUnset, syntax.DefaultUnsetOrNull}
 )
 
@@ -41,7 +39,7 @@ func checkRelativeSources(p *pass) {
 			continue
 		}
 		target, ok := p.tree.PathValue(word, cmd.Span.Start, scriptPathEnv)
-		if !ok || !relativePath(target) || buildPlaceholder.MatchString(target) || hasDefault(word) {
+		if !ok || !relativePath(target) || hasBuildPlaceholder(target) || hasDefault(word) {
 			continue
 		}
 		span, ok := p.span(word)
@@ -62,6 +60,20 @@ func hasDefault(w *syntax.Word) bool {
 		pe, ok := n.(*syntax.ParamExp)
 		return ok && pe.Exp != nil && slices.Contains(defaultingOperators, pe.Exp.Op)
 	})
+}
+
+func hasBuildPlaceholder(path string) bool {
+	for rest := path; ; {
+		_, after, opened := strings.Cut(rest, "@")
+		name, _, closed := strings.Cut(after, "@")
+		if !opened || !closed {
+			return false
+		}
+		if name != "" && !strings.ContainsAny(name, "/ \t\n\f\r") {
+			return true
+		}
+		rest = after
+	}
 }
 
 func relativePath(target string) bool {

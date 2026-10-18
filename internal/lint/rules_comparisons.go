@@ -2,7 +2,6 @@ package lint
 
 import (
 	"iter"
-	"regexp"
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
@@ -497,7 +496,13 @@ func isConstantWord(w *syntax.Word, regex bool) bool {
 	return true
 }
 
-var decimalNumber = regexp.MustCompile(`^[+-]?[0-9]+\.[0-9]+$`)
+func decimalNumber(s string) bool {
+	if s != "" && (s[0] == '+' || s[0] == '-') {
+		s = s[1:]
+	}
+	whole, fraction, ok := strings.Cut(s, ".")
+	return ok && parser.IsDigits(whole) && parser.IsDigits(fraction)
+}
 
 func (p *pass) checkComparison(double bool, op testOp, x, y *syntax.Word) {
 	operator := testOperators[op.name]
@@ -560,7 +565,7 @@ func (p *pass) checkDecimals(words ...*syntax.Word) {
 		return
 	}
 	for _, w := range words {
-		if !decimalNumber.MatchString(roughText(w)) {
+		if !decimalNumber(roughText(w)) {
 			continue
 		}
 		if span, ok := p.span(w); ok {

@@ -1,7 +1,6 @@
 package lint
 
 import (
-	"regexp"
 	"slices"
 	"strings"
 
@@ -116,20 +115,44 @@ func guardsEmpty(w *syntax.Word) bool {
 	})
 }
 
-var (
-	repeatedSlashes = regexp.MustCompile(`/+`)
-	repeatedStars   = regexp.MustCompile(`\*+`)
-)
-
 func normalizePath(path string) string {
-	path = repeatedStars.ReplaceAllString(repeatedSlashes.ReplaceAllString(path, "/"), "*")
+	path = squeezeRuns(path, "/*")
 	if trimmed := strings.TrimRight(path, "/"); trimmed != "" {
 		return trimmed
 	}
 	return path
 }
 
-var singleRelativeName = regexp.MustCompile(`^(\.\.?/)+[^/]+$`)
+func squeezeRuns(s, chars string) string {
+	var sb strings.Builder
+	copied := 0
+	for i := 1; i < len(s); i++ {
+		if s[i] == s[i-1] && strings.IndexByte(chars, s[i]) >= 0 {
+			sb.WriteString(s[copied:i])
+			copied = i + 1
+		}
+	}
+	if copied == 0 {
+		return s
+	}
+	sb.WriteString(s[copied:])
+	return sb.String()
+}
+
+func singleRelativeName(path string) bool {
+	name := path
+	for {
+		rest, ok := strings.CutPrefix(name, "./")
+		if !ok {
+			rest, ok = strings.CutPrefix(name, "../")
+		}
+		if !ok {
+			break
+		}
+		name = rest
+	}
+	return name != path && name != "" && !strings.Contains(name, "/")
+}
 
 func checkMkdirMode(p *pass, c command) {
 	flags := c.options()
@@ -139,7 +162,7 @@ func checkMkdirMode(p *pass, c command) {
 	nested := false
 	for _, arg := range c.args[1:] {
 		lit, ok := parser.Literal(arg)
-		if !ok || (strings.Contains(lit, "/") && !singleRelativeName.MatchString(lit)) {
+		if !ok || (strings.Contains(lit, "/") && !singleRelativeName(lit)) {
 			nested = true
 			break
 		}

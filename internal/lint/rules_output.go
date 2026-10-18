@@ -2,13 +2,13 @@ package lint
 
 import (
 	"fmt"
-	"regexp"
 	"slices"
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/printf"
+	"github.com/stubbedev/shell-lsp/internal/scan"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/internal/textline"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
@@ -61,7 +61,22 @@ func checkUselessEcho(p *pass, c command) {
 
 var echoEscapeShells = dialect.SetOf(dialect.Bash, dialect.Posix, dialect.Ksh)
 
-var echoEscape = regexp.MustCompile(`\\([rntabefv\\']|[0-7]{1,3}|x[0-9A-Fa-f]{1,2})`)
+const echoLetterEscapes = `rntabefv\'`
+
+func hasEchoEscape(text string) bool {
+	for i := 0; i+1 < len(text); i++ {
+		if text[i] != '\\' {
+			continue
+		}
+		switch c := text[i+1]; {
+		case strings.IndexByte(echoLetterEscapes, c) >= 0, '0' <= c && c <= '7':
+			return true
+		case c == 'x' && i+2 < len(text) && scan.HexDigit(text[i+2]):
+			return true
+		}
+	}
+	return false
+}
 
 func checkEchoEscapes(p *pass, c command) {
 	if !echoEscapeShells.Has(p.dialect) {
@@ -71,7 +86,7 @@ func checkEchoEscapes(p *pass, c command) {
 		return
 	}
 	for _, arg := range c.args {
-		if text, _ := parser.Text(arg, ""); echoEscape.MatchString(text) {
+		if text, _ := parser.Text(arg, ""); hasEchoEscape(text) {
 			p.reportNode(2028, arg, "echo does not reliably interpret backslash escapes like the one in this argument; use printf instead.")
 		}
 	}

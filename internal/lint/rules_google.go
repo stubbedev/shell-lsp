@@ -2,13 +2,15 @@ package lint
 
 import (
 	"path"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/scan"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/internal/textline"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
@@ -44,11 +46,6 @@ var googleFamily = family{
 		checkGoogleScriptLength, checkGoogleMain,
 	},
 }
-
-var (
-	todoMarker = regexp.MustCompile(`\bTODO\b|^\s*((?i:todo))\b`)
-	ownedTodo  = regexp.MustCompile(`^TODO\([^()\s][^()]*\)`)
-)
 
 func checkGoogleShebang(p *pass) {
 	if p.bats {
@@ -106,20 +103,36 @@ func checkGoogleTodos(p *pass) {
 		if !ok || strings.HasPrefix(strings.TrimSpace(body), "shellcheck ") {
 			continue
 		}
-		at := todoMarker.FindStringSubmatchIndex(body)
-		if at == nil {
-			continue
-		}
-		start := at[0]
-		if at[2] >= 0 {
-			start = at[2]
-		}
-		if start > 0 && strings.ContainsRune("'\"`", rune(body[start-1])) || ownedTodo.MatchString(body[start:]) {
+		start, ok := todoMarker(body)
+		if !ok || start > 0 && strings.ContainsRune("'\"`", rune(body[start-1])) || ownedTodo(body[start:]) {
 			continue
 		}
 		offset := c.Span.Start + len("#") + start
 		p.report(codeGoogleTodo, parser.Span{Start: offset, End: offset + len("TODO")}, "The Google Shell Style Guide writes TODO comments as TODO(owner): message, naming who can tell more about the work.")
 	}
+}
+
+func todoMarker(body string) (int, bool) {
+	lead := len(body) - len(strings.TrimLeftFunc(body, unicode.IsSpace))
+	for start := 0; start < len(body); {
+		if !parser.IsNameChar(body[start]) {
+			start++
+			continue
+		}
+		end := start + scan.While(body[start:], parser.IsNameChar)
+		if word := body[start:end]; word == "TODO" || start == lead && strings.EqualFold(word, "todo") {
+			return start, true
+		}
+		start = end
+	}
+	return 0, false
+}
+
+func ownedTodo(marker string) bool {
+	owner, ok := strings.CutPrefix(marker, "TODO(")
+	end := strings.IndexAny(owner, "()")
+	first, _ := utf8.DecodeRuneInString(owner)
+	return ok && end > 0 && owner[end] == ')' && !unicode.IsSpace(first)
 }
 
 func checkGoogleFunctionHeaders(p *pass) {
