@@ -43,6 +43,7 @@ func TestRemoveQuotes(t *testing.T) {
 		"x=\"«-v»\"\n":                      "x=-v\n",
 		"case $a in \"«start»\") ;; esac\n": "case $a in start) ;; esac\n",
 		"echo pre'«fix»'\n":                 "echo prefix\n",
+		"echo «'a,b@c%d+e'»\n":              "echo a,b@c%d+e\n",
 	}
 	for src, want := range tests {
 		got, title, ok := refactor(t, RemoveQuotes, src)
@@ -61,6 +62,8 @@ func TestRemoveQuotes(t *testing.T) {
 		"cat <<«'EOF'»\n$x\nEOF\n",
 		"echo «$'a'»\n",
 		"echo «\"a\\\"b\"»\n",
+		"case $a in «'esac'») ;; esac\n",
+		"echo «'a}b'»\n",
 	} {
 		if got, _, ok := refactor(t, RemoveQuotes, src); ok {
 			t.Errorf("remove quotes offered for %q: %q", src, got)

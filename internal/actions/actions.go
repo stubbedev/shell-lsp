@@ -2,7 +2,6 @@ package actions
 
 import (
 	"fmt"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -558,8 +557,6 @@ func toggleQuotes(s *site) (Change, bool) {
 	return Change{}, false
 }
 
-var bareWord = regexp.MustCompile(`^[A-Za-z0-9_./:@%+-]+$`)
-
 func removeQuotes(s *site) (Change, bool) {
 	path := s.pathAt()
 	for i, located := range slices.Backward(path) {
@@ -579,7 +576,7 @@ func removeQuotes(s *site) (Change, bool) {
 		default:
 			continue
 		}
-		if !bareWord.MatchString(value) || quotingMatters(path[:i]) {
+		if !plainWord(value) || quotingMatters(path[:i]) {
 			return Change{}, false
 		}
 		return Change{Title: "Remove the quotes", Edits: []textedit.Edit{{Start: located.Span.Start, End: located.Span.End, NewText: value}}}, true
