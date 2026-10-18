@@ -145,6 +145,34 @@ func TestRename(t *testing.T) {
 	}
 }
 
+func TestValidNames(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		kind  Kind
+		name  string
+		valid bool
+	}{
+		{KindVariable, "count", true},
+		{KindVariable, "_x9", true},
+		{KindVariable, "9x", false},
+		{KindVariable, "a.b", false},
+		{KindVariable, "", false},
+		{KindFunction, "git::log-short.v2", true},
+		{KindFunction, "_private", true},
+		{KindFunction, "-flag", false},
+		{KindFunction, ".hidden", false},
+		{KindFunction, "1st", false},
+		{KindFunction, "a b", false},
+		{KindFunction, "a/b", false},
+		{KindFunction, "", false},
+	} {
+		if got := tc.kind.ValidName(tc.name); got != tc.valid {
+			t.Errorf("%s.ValidName(%q) = %v, want %v", tc.kind, tc.name, got, tc.valid)
+		}
+	}
+}
+
 func TestPrepareRenameRejectsUndefinedVariables(t *testing.T) {
 	t.Parallel()
 

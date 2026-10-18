@@ -5,21 +5,22 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"regexp"
 	"slices"
+	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/scan"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
 var (
-	ErrNoSymbol      = errors.New("no symbol at this position")
-	ErrNotRenamable  = errors.New("symbol cannot be renamed")
-	ErrInvalidName   = errors.New("invalid name")
-	ErrNameConflict  = errors.New("name already in use")
-	variableNameRule = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
-	functionNameRule = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_.:-]*$`)
+	ErrNoSymbol     = errors.New("no symbol at this position")
+	ErrNotRenamable = errors.New("symbol cannot be renamed")
+	ErrInvalidName  = errors.New("invalid name")
+	ErrNameConflict = errors.New("name already in use")
 )
+
+const functionNamePunctuation = ".:-"
 
 type Kind uint8
 
@@ -27,8 +28,6 @@ const (
 	KindFunction Kind = iota
 	KindVariable
 )
-
-func ValidVariableName(name string) bool { return variableNameRule.MatchString(name) }
 
 func (k Kind) String() string {
 	switch k {
@@ -38,6 +37,22 @@ func (k Kind) String() string {
 		return "variable"
 	}
 	panic(fmt.Sprintf("navigation: unknown symbol kind %d", k))
+}
+
+func (k Kind) ValidName(name string) bool {
+	switch k {
+	case KindFunction:
+		return validFunctionName(name)
+	case KindVariable:
+		return parser.IsName(name)
+	}
+	panic(fmt.Sprintf("navigation: unknown symbol kind %d", k))
+}
+
+func validFunctionName(name string) bool {
+	return name != "" && parser.IsName(name[:1]) && scan.All(name, func(c byte) bool {
+		return parser.IsNameChar(c) || strings.IndexByte(functionNamePunctuation, c) >= 0
+	})
 }
 
 type Symbol struct {
@@ -209,11 +224,7 @@ func Rename(ctx context.Context, file *workspace.File, offset int, newName strin
 	if err != nil {
 		return nil, err
 	}
-	rule := variableNameRule
-	if sym.Kind == KindFunction {
-		rule = functionNameRule
-	}
-	if !rule.MatchString(newName) {
+	if !sym.Kind.ValidName(newName) {
 		return nil, fmt.Errorf("%w: %q is not a valid %s name", ErrInvalidName, newName, sym.Kind)
 	}
 	if newName == sym.Name {

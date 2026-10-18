@@ -121,7 +121,7 @@ func (g *Group) Rename(sym Symbol, newName string) ([]Occurrence, error) {
 	}
 	occs := g.Occurrences(sym)
 	shell := slices.ContainsFunc(occs, func(o Occurrence) bool { return o.Shell })
-	if !g.Language.ValidName(sym.Kind, newName) || shell && sym.Kind != g.Language.Recursion().Kind && !navigation.ValidVariableName(newName) {
+	if !g.Language.ValidName(sym.Kind, newName) || shell && sym.Kind != g.Language.Recursion().Kind && !parser.IsName(newName) {
 		return nil, fmt.Errorf("%w: %q is not a valid %s name", navigation.ErrInvalidName, newName, sym.Kind)
 	}
 	if newName == sym.Name {
