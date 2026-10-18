@@ -2,6 +2,7 @@ package main
 
 import (
 	"maps"
+	"strings"
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/lint"
@@ -65,5 +66,54 @@ func TestParseParityNeedsTheSummary(t *testing.T) {
 
 	if _, err := parseParity("| SC2086 | 1 | 2 | 3 |\n"); err == nil {
 		t.Error("a baseline without its summary line parsed")
+	}
+}
+
+func TestParseParityReadsOnlyItsOwnLines(t *testing.T) {
+	t.Parallel()
+
+	const summary = "7 scripts compared, 1 skipped as not UTF-8 or with CRLF line endings.\n"
+	p, err := parseParity("# title\n" + summary + "prose with | a bar and 3 scripts compared\n- `a b.sh`\n" + parityHeader + "\n" + parityDelimiter + "\n| SC2086 | 1 | 02 | 3 |\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, err := lint.ParseCode("SC2086")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.compared != 7 || p.skipped != 1 || len(p.crashed) != 1 || p.crashed[0] != "a b.sh" || len(p.tallies) != 1 || p.tallies[code] != (tally{agree: 1, oursOnly: 2, theirsOnly: 3}) {
+		t.Fatalf("parity = %+v", p)
+	}
+	for _, line := range []string{
+		"7 scripts compared, 1 skipped as not UTF-8 or with CRLF line endings",
+		"7 scripts compared, 1 skipped as not UTF-8 or with CRLF line endings. ",
+		"x7 scripts compared, 1 skipped as not UTF-8 or with CRLF line endings.",
+		"7 scripts compared, -1 skipped as not UTF-8 or with CRLF line endings.",
+		"99999999999999999999 scripts compared, 1 skipped as not UTF-8 or with CRLF line endings.",
+	} {
+		if _, _, ok := parseSummary(line); ok {
+			t.Errorf("parseSummary(%q) took it for the summary", line)
+		}
+	}
+	for _, listing := range []string{
+		"- `a.sh",
+		"- ``",
+		"- `a`b`",
+		"| SC2086 | 1 | 2 |",
+		"| SC2086 | 1 | 2 | 3 | 4 |",
+		"| SC2086 | 1 | 2 | x |",
+		"| SC2086 | 1 | 2 | -3 |",
+		"| sc2086 | 1 | 2 | 3 |",
+		"| SC02086 | 1 | 2 | 3 |",
+		"| SC2086 | 1 | 2 | 3 |  ",
+		"|SC2086 | 1 | 2 | 3 |",
+		"| SC2086 | 1 | 2 | 99999999999999999999 |",
+		"| SC2086 | 1 | 2 | 3 |\n| SC2086 | 1 | 2 | 3 |",
+	} {
+		if _, err := parseParity(summary + listing + "\n"); err == nil {
+			t.Errorf("parseParity accepted %q", listing)
+		} else if !strings.HasPrefix(err.Error(), "line ") {
+			t.Errorf("parseParity(%q) = %v, want the line named", listing, err)
+		}
 	}
 }

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -15,6 +14,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/atomicfile"
 	"github.com/stubbedev/shell-lsp/internal/corpus"
 	"github.com/stubbedev/shell-lsp/internal/lint"
+	"github.com/stubbedev/shell-lsp/internal/scan"
 )
 
 const (
@@ -23,11 +23,26 @@ const (
 	parityBaselineFile = "corpus/shellcheck.md"
 )
 
-var (
-	parityRow     = regexp.MustCompile(`^\| (SC\d+) \| (\d+) \| (\d+) \| (\d+) \|$`)
-	paritySummary = regexp.MustCompile(`^(\d+) scripts compared, (\d+) skipped as not UTF-8 or with CRLF line endings\.$`)
-	parityCrash   = regexp.MustCompile("^- `([^`]+)`$")
+const (
+	summaryCompared = " scripts compared, "
+	summarySkipped  = " skipped as not UTF-8 or with CRLF line endings."
+	crashOpen       = "- `"
+	crashClose      = "`"
+	rowMark         = "|"
+	rowOpen         = rowMark + " "
+	rowSeparator    = " | "
+	rowClose        = " |"
+	rowCells        = 4
 )
+
+var (
+	parityHeader    = tableRow("Code", "Agree", "Ours only", "ShellCheck only")
+	parityDelimiter = tableRow("---", "---", "---", "---")
+)
+
+func tableRow(cells ...string) string {
+	return rowOpen + strings.Join(cells, rowSeparator) + rowClose
+}
 
 type parity struct {
 	compared, skipped int
@@ -122,19 +137,19 @@ func renderParity(p parity) string {
 	b.WriteString("[repos.txt](repos.txt), compared with ShellCheck " + shellcheckVersion + " as described in\n")
 	b.WriteString("[docs/corpus.md](../docs/corpus.md). A finding agrees when both report the same code at the\n")
 	b.WriteString("same line and column. CI fails when any number here changes.\n\n")
-	fmt.Fprintf(&b, "%d scripts compared, %d skipped as not UTF-8 or with CRLF line endings.\n\n", p.compared, p.skipped)
+	b.WriteString(strconv.Itoa(p.compared) + summaryCompared + strconv.Itoa(p.skipped) + summarySkipped + "\n\n")
 	if len(p.crashed) > 0 {
 		b.WriteString("ShellCheck fails with an internal error on these scripts, which are left out:\n\n")
 		for _, path := range p.crashed {
-			b.WriteString("- `" + path + "`\n")
+			b.WriteString(crashOpen + path + crashClose + "\n")
 		}
 		b.WriteString("\n")
 	}
-	b.WriteString("| Code | Agree | Ours only | ShellCheck only |\n")
-	b.WriteString("| --- | --- | --- | --- |\n")
+	b.WriteString(parityHeader + "\n")
+	b.WriteString(parityDelimiter + "\n")
 	for _, code := range implementedCodes() {
 		t := p.tallies[code]
-		fmt.Fprintf(&b, "| %s | %d | %d | %d |\n", code, t.agree, t.oursOnly, t.theirsOnly)
+		b.WriteString(tableRow(code.String(), strconv.Itoa(t.agree), strconv.Itoa(t.oursOnly), strconv.Itoa(t.theirsOnly)) + "\n")
 	}
 	return b.String()
 }
@@ -143,27 +158,14 @@ func parseParity(text string) (parity, error) {
 	p := parity{tallies: map[lint.Code]tally{}}
 	summary := false
 	for n, line := range strings.Split(text, "\n") {
-		if m := paritySummary.FindStringSubmatch(line); m != nil {
-			p.compared, p.skipped = atoi(m[1]), atoi(m[2])
+		if compared, skipped, ok := parseSummary(line); ok {
+			p.compared, p.skipped = compared, skipped
 			summary = true
 			continue
 		}
-		if m := parityCrash.FindStringSubmatch(line); m != nil {
-			p.crashed = append(p.crashed, m[1])
-			continue
-		}
-		m := parityRow.FindStringSubmatch(line)
-		if m == nil {
-			continue
-		}
-		code, err := lint.ParseCode(m[1])
-		if err != nil {
+		if err := p.parseListing(line); err != nil {
 			return parity{}, fmt.Errorf("line %d: %w", n+1, err)
 		}
-		if _, dup := p.tallies[code]; dup {
-			return parity{}, fmt.Errorf("line %d: %s is listed twice", n+1, code)
-		}
-		p.tallies[code] = tally{agree: atoi(m[2]), oursOnly: atoi(m[3]), theirsOnly: atoi(m[4])}
 	}
 	if !summary {
 		return parity{}, errors.New("no \"N scripts compared, M skipped ...\" line")
@@ -171,12 +173,69 @@ func parseParity(text string) (parity, error) {
 	return p, nil
 }
 
-func atoi(s string) int {
-	n, err := strconv.Atoi(s)
-	if err != nil {
-		panic(fmt.Sprintf("lintcheck: %q matched a digits pattern: %v", s, err))
+func parseSummary(line string) (int, int, bool) {
+	compared, rest, ok := cutCount(line)
+	if !ok {
+		return 0, 0, false
 	}
-	return n
+	rest, ok = strings.CutPrefix(rest, summaryCompared)
+	if !ok {
+		return 0, 0, false
+	}
+	skipped, rest, ok := cutCount(rest)
+	if !ok || rest != summarySkipped {
+		return 0, 0, false
+	}
+	return compared, skipped, true
+}
+
+func cutCount(s string) (int, string, bool) {
+	end := scan.While(s, scan.Digit)
+	n, err := strconv.Atoi(s[:end])
+	return n, s[end:], err == nil && end > 0
+}
+
+func (p *parity) parseListing(line string) error {
+	switch {
+	case strings.HasPrefix(line, crashOpen):
+		path, ok := strings.CutSuffix(strings.TrimPrefix(line, crashOpen), crashClose)
+		if !ok || path == "" || strings.Contains(path, crashClose) {
+			return fmt.Errorf("%q is not a script path in backquotes", line)
+		}
+		p.crashed = append(p.crashed, path)
+	case line == parityHeader || line == parityDelimiter:
+	case strings.HasPrefix(line, rowMark):
+		return p.parseRow(line)
+	}
+	return nil
+}
+
+func (p *parity) parseRow(line string) error {
+	body, closed := strings.CutSuffix(strings.TrimPrefix(line, rowOpen), rowClose)
+	cells := strings.Split(body, rowSeparator)
+	if !strings.HasPrefix(line, rowOpen) || !closed || len(cells) != rowCells {
+		return fmt.Errorf("%q is not a row of a code and three counts", line)
+	}
+	code, err := lint.ParseCode(cells[0])
+	if err != nil {
+		return err
+	}
+	if code.String() != cells[0] {
+		return fmt.Errorf("%q is not written as %s", cells[0], code)
+	}
+	if _, dup := p.tallies[code]; dup {
+		return fmt.Errorf("%s is listed twice", code)
+	}
+	var counts [rowCells - 1]int
+	for i, cell := range cells[1:] {
+		n, rest, ok := cutCount(cell)
+		if !ok || rest != "" {
+			return fmt.Errorf("%s: %q is not a count", code, cell)
+		}
+		counts[i] = n
+	}
+	p.tallies[code] = tally{agree: counts[0], oursOnly: counts[1], theirsOnly: counts[2]}
+	return nil
 }
 
 type parityProblem struct {
