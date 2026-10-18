@@ -33,6 +33,10 @@ check() {
 @test "named at run time ${BASH_VERSINFO[0]:+by bash}" {
   true
 }
+
+@test "-h starts with a dash" {
+  true
+}
 `
 
 func TestRealBats(t *testing.T) {
@@ -49,8 +53,11 @@ func TestRealBats(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if got := report.Tally(); got != (Tally{Passed: 2, Failed: 2, Skipped: 1}) || report.PlanMismatch() {
+	if got := report.Tally(); got != (Tally{Passed: 3, Failed: 2, Skipped: 1}) || report.PlanMismatch() {
 		t.Fatalf("tally = %+v, plan mismatch %v, report %+v", got, report.PlanMismatch(), report)
+	}
+	if last := report.Results[len(report.Results)-1].Name; last != "-h starts with a dash" {
+		t.Errorf("the last test is named %q, want its leading dash kept", last)
 	}
 	lines := map[string]int{"passes": 7, "fails in a helper (x|y)": 11, "fails directly": 15, "is skipped": 19}
 	failures := Failures(report, file, dir, func(name string) (int, bool) {

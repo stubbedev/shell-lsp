@@ -51,3 +51,27 @@ func TestContinuedCountsTrailingBackslashes(t *testing.T) {
 		}
 	}
 }
+
+func TestWhileStopsAtTheFirstByteOutsideTheClass(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		s    string
+		want int
+	}{
+		{"", 0},
+		{"x1", 0},
+		{"12x3", 2},
+		{"123", 3},
+	} {
+		if got := While(tt.s, Digit); got != tt.want {
+			t.Errorf("While(%q, Digit) = %d, want %d", tt.s, got, tt.want)
+		}
+	}
+	if !All("", Digit) || !All("09", Digit) || All("0x", Digit) {
+		t.Error("All disagrees with While")
+	}
+	if got := TrimBlanks(" \t a b "); got != "a b " {
+		t.Errorf("TrimBlanks = %q, want the leading spaces and tabs gone", got)
+	}
+}

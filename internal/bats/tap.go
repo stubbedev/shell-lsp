@@ -2,9 +2,10 @@ package bats
 
 import (
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/stubbedev/shell-lsp/internal/scan"
 )
 
 type Status uint8
@@ -57,13 +58,10 @@ func (t Tally) Counts() map[string]int {
 	return counts
 }
 
-var (
-	planLine   = regexp.MustCompile(`^1\.\.(\d+)\b`)
-	resultLine = regexp.MustCompile(`^(not )?ok\b(?:[ \t]+(\d+))?(?:[ \t]*-)?[ \t]*(.*)$`)
-	frameLine  = regexp.MustCompile(`\bin (?:test )?file (.+), line (\d+)[,)]`)
+const (
+	bailOut       = "Bail out!"
+	lineReference = ", line "
 )
-
-const bailOut = "Bail out!"
 
 type Parser struct {
 	report Report
@@ -78,15 +76,12 @@ func (p *Parser) Line(line string) bool {
 		p.report.Bail = &Bail{Reason: strings.TrimSpace(reason)}
 		return false
 	}
-	if m := planLine.FindStringSubmatch(line); m != nil {
-		planned, err := strconv.Atoi(m[1])
-		if err == nil {
-			p.report.Plan = &Plan{Tests: planned}
-		}
+	if planned, ok := plan(line); ok {
+		p.report.Plan = &Plan{Tests: planned}
 		return false
 	}
-	if m := resultLine.FindStringSubmatch(line); m != nil {
-		p.report.Results = append(p.report.Results, result(m[1] != "", m[2], m[3], len(p.report.Results)+1))
+	if r, ok := testPoint(line, len(p.report.Results)+1); ok {
+		p.report.Results = append(p.report.Results, r)
 		return true
 	}
 	if comment, ok := strings.CutPrefix(line, "#"); ok && len(p.report.Results) > 0 {
@@ -98,31 +93,100 @@ func (p *Parser) Line(line string) bool {
 func (p *Parser) Report() Report { return p.report }
 
 func (p *Parser) comment(r *Result, text string) {
-	m := frameLine.FindStringSubmatch(text)
-	if m == nil {
-		r.Output = append(r.Output, text)
+	if f, ok := frame(text); ok {
+		r.Frames = append(r.Frames, f)
 		return
 	}
-	line, err := strconv.Atoi(m[2])
-	if err != nil || line < 1 {
-		r.Output = append(r.Output, text)
-		return
-	}
-	r.Frames = append(r.Frames, Frame{File: m[1], Line: line})
+	r.Output = append(r.Output, text)
 }
 
-func result(failed bool, number, description string, position int) Result {
-	r := Result{Number: position, Status: Passed}
-	if n, err := strconv.Atoi(number); err == nil {
-		r.Number = n
+func plan(line string) (int, bool) {
+	count, ok := strings.CutPrefix(line, "1..")
+	if !ok {
+		return 0, false
 	}
+	digits, rest := number(count)
+	if digits == "" || rest != "" && !scan.Blank(rest[0]) {
+		return 0, false
+	}
+	tests, err := strconv.Atoi(digits)
+	if err != nil {
+		return 0, false
+	}
+	return tests, true
+}
+
+func number(s string) (string, string) {
+	end := scan.While(s, scan.Digit)
+	return s[:end], s[end:]
+}
+
+func testPoint(line string, position int) (Result, bool) {
+	rest, failed := strings.CutPrefix(line, "not ")
+	rest, ok := strings.CutPrefix(rest, "ok")
+	if !ok || rest != "" && !scan.Blank(rest[0]) {
+		return Result{}, false
+	}
+	r := Result{Number: position, Status: Passed}
 	if failed {
 		r.Status = Failed
 	}
+	rest = scan.TrimBlanks(rest)
+	if digits, after := number(rest); digits != "" && (after == "" || scan.Blank(after[0])) {
+		if n, err := strconv.Atoi(digits); err == nil {
+			r.Number = n
+		}
+		rest = scan.TrimBlanks(after)
+	}
+	if after, ok := strings.CutPrefix(rest, "-"); ok && (after == "" || scan.Blank(after[0])) {
+		rest = scan.TrimBlanks(after)
+	}
+	describe(&r, rest)
+	return r, true
+}
+
+func frame(text string) (Frame, bool) {
+	if len(text) < 2 || text[0] != '(' && text[0] != ' ' {
+		return Frame{}, false
+	}
+	var location string
+	switch text[len(text)-1] {
+	case ')':
+		location = "in test file "
+	case ',':
+		location = "in file "
+	default:
+		return Frame{}, false
+	}
+	body := text[1 : len(text)-1]
+	if called, ok := strings.CutPrefix(body, "from function "); ok {
+		at := strings.Index(called, " "+location)
+		if at < 0 {
+			return Frame{}, false
+		}
+		body = called[at+1:]
+	}
+	reference, ok := strings.CutPrefix(body, location)
+	if !ok {
+		return Frame{}, false
+	}
+	at := strings.LastIndex(reference, lineReference)
+	if at <= 0 {
+		return Frame{}, false
+	}
+	digits, rest := number(reference[at+len(lineReference):])
+	line, err := strconv.Atoi(digits)
+	if rest != "" || err != nil || line < 1 {
+		return Frame{}, false
+	}
+	return Frame{File: reference[:at], Line: line}, true
+}
+
+func describe(r *Result, description string) {
 	name, directive, hasDirective := splitDirective(description)
 	r.Name = name
 	if !hasDirective {
-		return r
+		return
 	}
 	keyword, reason, _ := strings.Cut(directive, " ")
 	switch {
@@ -133,7 +197,6 @@ func result(failed bool, number, description string, position int) Result {
 	default:
 		r.Name = unescape(description)
 	}
-	return r
 }
 
 func splitDirective(description string) (string, string, bool) {
