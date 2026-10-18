@@ -8,6 +8,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/shlex"
 	"github.com/stubbedev/shell-lsp/internal/textline"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
@@ -535,7 +536,7 @@ func tokenEnd(text string, st site) int {
 	case positionNone, positionParameterFlags, positionGlobQualifier, positionGlobFlags:
 		return st.replace.End
 	case positionVariable:
-		continues = parser.IsNameChar
+		continues = shlex.IsNameChar
 	case positionExpansionOperator:
 		continues = func(b byte) bool { return strings.IndexByte("-:=?+#%/^,@|*", b) >= 0 }
 	case positionArrayKey:
