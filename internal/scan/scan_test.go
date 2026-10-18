@@ -71,6 +71,12 @@ func TestWhileStopsAtTheFirstByteOutsideTheClass(t *testing.T) {
 	if !All("", Digit) || !All("09", Digit) || All("0x", Digit) {
 		t.Error("All disagrees with While")
 	}
+	if !All("09afAF", HexDigit) || HexDigit('g') || HexDigit('G') || HexDigit('@') {
+		t.Error("HexDigit admits the wrong bytes")
+	}
+	if !All("azAZ09", Alnum) || Alnum('@') || Alnum('[') || Alnum('`') || Alnum('{') || Letter('5') || !All("az09", LowerOrDigit) || LowerOrDigit('A') {
+		t.Error("the letter classes admit the wrong bytes")
+	}
 	if got := TrimBlanks(" \t a b "); got != "a b " {
 		t.Errorf("TrimBlanks = %q, want the leading spaces and tabs gone", got)
 	}

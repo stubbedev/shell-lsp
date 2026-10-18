@@ -52,9 +52,7 @@ func webScheme(text string, separator int) (int, bool) {
 	return 0, false
 }
 
-func schemeChar(c byte) bool {
-	return 'a' <= c|0x20 && c|0x20 <= 'z' || scan.Digit(c) || c == '+' || c == '-' || c == '.'
-}
+func schemeChar(c byte) bool { return scan.Alnum(c) || c == '+' || c == '-' || c == '.' }
 
 func iriEnd(text string, authority int) int {
 	at := authorityEnd(text, authority)
@@ -116,7 +114,7 @@ func pchar(text string, at int) (int, bool) {
 	case unreserved(c) || c == ':' || c == '@' || strings.IndexByte(subDelims, c) >= 0:
 		return at + 1, true
 	case c == '%':
-		if at+2 < len(text) && hexDigit(text[at+1]) && hexDigit(text[at+2]) {
+		if at+2 < len(text) && scan.HexDigit(text[at+1]) && scan.HexDigit(text[at+2]) {
 			return at + 3, true
 		}
 		return at, false
@@ -128,11 +126,7 @@ func pchar(text string, at int) (int, bool) {
 	return at, false
 }
 
-func unreserved(c byte) bool {
-	return 'a' <= c|0x20 && c|0x20 <= 'z' || scan.Digit(c) || c == '-' || c == '.' || c == '_' || c == '~'
-}
-
-func hexDigit(c byte) bool { return scan.Digit(c) || 'a' <= c|0x20 && c|0x20 <= 'f' }
+func unreserved(c byte) bool { return scan.Alnum(c) || c == '-' || c == '.' || c == '_' || c == '~' }
 
 func ucschar(r rune) bool {
 	switch {
