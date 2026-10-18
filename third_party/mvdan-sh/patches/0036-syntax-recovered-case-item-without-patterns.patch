@@ -1,0 +1,51 @@
+syntax: a recovered case item without patterns has no position
+
+With RecoverErrors, a case item cut off before its first pattern, as in
+"case x in (" or "case x in a) ;; (" at the end of the input, is kept
+without patterns. CaseItem.Pos indexed Patterns[0], so walking such a
+tree and asking a node for its position panicked with an index out of
+range. Such an item now reports an invalid position, as other recovered
+nodes do.
+
+Reproducer, before this change: parse "case x in (" with RecoverErrors(3)
+and call Pos on every node Walk visits; it panics.
+
+diff --git a/syntax/nodes.go b/syntax/nodes.go
+index d0ad7f5..8a625e5 100644
+--- a/syntax/nodes.go
++++ b/syntax/nodes.go
+@@ -1055,7 +1055,14 @@ type CaseItem struct {
+ 	Last  []Comment
+ }
+ 
+-func (c *CaseItem) Pos() Pos { return c.Patterns[0].Pos() }
++func (c *CaseItem) Pos() Pos {
++	if len(c.Patterns) == 0 {
++		// Only error recovery leaves an item without patterns, such as
++		// at the end of "case x in (".
++		return Pos{}
++	}
++	return c.Patterns[0].Pos()
++}
+ func (c *CaseItem) End() Pos {
+ 	if c.OpPos.IsValid() {
+ 		return posAddCol(c.OpPos, len(c.Op.String()))
+diff --git a/syntax/parser_test.go b/syntax/parser_test.go
+index 058f97b..43d24e1 100644
+--- a/syntax/parser_test.go
++++ b/syntax/parser_test.go
+@@ -2939,6 +2939,14 @@ func TestParseRecoverErrors(t *testing.T) {
+ 			src:         `(one > ; two | ); { three`,
+ 			wantMissing: 3,
+ 		},
++		{
++			src:         "case x in (",
++			wantMissing: 1,
++		},
++		{
++			src:         "case x in a) ;; (",
++			wantMissing: 1,
++		},
+ 		{
+ 			src:     "badsyntax)",
+ 			wantErr: true,

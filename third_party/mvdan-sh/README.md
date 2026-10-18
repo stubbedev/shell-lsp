@@ -65,6 +65,7 @@ reproducer so that it can be sent upstream as it is.
 | 0033 | pattern: a `[` inside a bracket expression that does not start a class is quoted as `\[`, so an escaped character after it (`[[\::]`) can no longer form a class that makes the regexp fail to compile | — |
 | 0034 | pattern: an escaped character ends a range in a bracket expression (`[0-\ ]`), so a reversed range is an error, as with `[z-a]`, instead of a regexp that fails to compile | — |
 | 0035 | syntax: a here-document delimiter with any quoted part (`'E'OF`, `` '`'a ``) keeps its body literal, as in the shells, instead of only when its last part is quoted | — |
+| 0036 | syntax: a case item that error recovery leaves without patterns (`case x in (`) reports an invalid position instead of panicking in `Pos` | — |
 
 ## Tests
 

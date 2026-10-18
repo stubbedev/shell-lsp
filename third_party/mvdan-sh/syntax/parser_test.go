@@ -2940,6 +2940,14 @@ func TestParseRecoverErrors(t *testing.T) {
 			wantMissing: 3,
 		},
 		{
+			src:         "case x in (",
+			wantMissing: 1,
+		},
+		{
+			src:         "case x in a) ;; (",
+			wantMissing: 1,
+		},
+		{
 			src:     "badsyntax)",
 			wantErr: true,
 		},

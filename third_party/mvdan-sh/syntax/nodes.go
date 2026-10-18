@@ -1055,7 +1055,14 @@ type CaseItem struct {
 	Last  []Comment
 }
 
-func (c *CaseItem) Pos() Pos { return c.Patterns[0].Pos() }
+func (c *CaseItem) Pos() Pos {
+	if len(c.Patterns) == 0 {
+		// Only error recovery leaves an item without patterns, such as
+		// at the end of "case x in (".
+		return Pos{}
+	}
+	return c.Patterns[0].Pos()
+}
 func (c *CaseItem) End() Pos {
 	if c.OpPos.IsValid() {
 		return posAddCol(c.OpPos, len(c.Op.String()))
