@@ -93,6 +93,20 @@ func ParseEdit(previous *Tree, text string, shell dialect.Shell) *Tree {
 	return newTree(previous, file, errs, closedAtEnd, text, shell, nil)
 }
 
+type SyntaxParser struct {
+	parser  *syntax.Parser
+	dialect dialect.Dialect
+}
+
+func NewSyntaxParser(shell dialect.Shell) SyntaxParser {
+	return SyntaxParser{parser: newSyntaxParser(shell.Lang()), dialect: shell.Dialect}
+}
+
+func (p SyntaxParser) Parse(text string) *syntax.File {
+	file, _, _ := parseSource(p.parser, []byte(text), 0, text, p.dialect)
+	return file
+}
+
 func ParseScripts(previous *Tree, text string, scripts []Span, shell dialect.Shell, origin Origin) *Tree {
 	starts := lineStarts(text)
 	file := &syntax.File{}

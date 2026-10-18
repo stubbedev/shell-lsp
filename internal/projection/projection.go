@@ -57,15 +57,15 @@ func (m *Map) Text() string { return m.text }
 const noRegion = -1
 
 type Builder struct {
-	host     string
-	text     strings.Builder
-	spans    []span
-	encoders []Encoder
-	starts   []int
-	shells   []dialect.Detection
-	shell    dialect.Detection
-	at       int
-	quotes   quoting
+	host         string
+	text         strings.Builder
+	spans        []span
+	encoders     []Encoder
+	starts       []int
+	shells       []dialect.Detection
+	shell        dialect.Detection
+	at           int
+	placeholders []int
 }
 
 const Dynamic = "$$"
@@ -83,14 +83,10 @@ func (b *Builder) Shell(d dialect.Detection) { b.shell = d }
 func (b *Builder) Script() {
 	b.starts = append(b.starts, b.text.Len())
 	b.shells = append(b.shells, b.shell)
-	b.quotes = quoting{}
 }
 
 func (b *Builder) Placeholder(start, end int) {
-	if b.quotes.inSingle() {
-		b.Opaque(start, end, "'"+Dynamic+"'")
-		return
-	}
+	b.placeholders = append(b.placeholders, len(b.spans))
 	b.Opaque(start, end, Dynamic)
 }
 
@@ -119,7 +115,6 @@ func (b *Builder) add(k kind, start, end int, text string) {
 	}
 	s := span{kind: k, region: region, proj: ProjOffset(b.text.Len()), projLen: len(text), host: HostOffset(start), hostLen: end - start}
 	b.text.WriteString(text)
-	b.quotes.feed(text)
 	b.at = end
 	if n := len(b.spans); n > 0 && k == verbatim {
 		last := &b.spans[n-1]
@@ -134,7 +129,9 @@ func (b *Builder) add(k kind, start, end int, text string) {
 
 func (b *Builder) Map() *Map {
 	scripts, shells := b.scripts()
-	return &Map{host: b.host, text: b.text.String(), spans: b.spans, encoders: b.encoders, scripts: scripts, shells: shells}
+	m := &Map{host: b.host, text: b.text.String(), spans: b.spans, encoders: b.encoders, scripts: scripts, shells: shells}
+	m.closeSingleQuotes(b.placeholders)
+	return m
 }
 
 func (b *Builder) scripts() ([]parser.Span, []dialect.Detection) {
