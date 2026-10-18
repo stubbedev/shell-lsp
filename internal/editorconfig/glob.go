@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/stubbedev/shell-lsp/internal/scan"
 )
 
 type numericRange struct {
@@ -142,16 +144,10 @@ func brace(glob string, open int, ranges *[]numericRange) (string, int, bool) {
 	return "", open, false
 }
 
-var numericBrace = regexp.MustCompile(`^([+-]?\d+)\.\.([+-]?\d+)$`)
-
 func braceBody(body string, ranges *[]numericRange) string {
-	if m := numericBrace.FindStringSubmatch(body); m != nil {
-		low, errLow := strconv.Atoi(m[1])
-		high, errHigh := strconv.Atoi(m[2])
-		if errLow == nil && errHigh == nil {
-			*ranges = append(*ranges, numericRange{low: min(low, high), high: max(low, high)})
-			return `([+-]?\d+)`
-		}
+	if r, ok := numericBrace(body); ok {
+		*ranges = append(*ranges, r)
+		return `([+-]?\d+)`
 	}
 	alternatives := splitTopLevel(body)
 	if len(alternatives) == 1 {
@@ -162,6 +158,31 @@ func braceBody(body string, ranges *[]numericRange) string {
 		parts[i] = translate(alt, ranges)
 	}
 	return "(?:" + strings.Join(parts, "|") + ")"
+}
+
+func numericBrace(body string) (numericRange, bool) {
+	first, second, ok := strings.Cut(body, "..")
+	if !ok {
+		return numericRange{}, false
+	}
+	low, okLow := braceInteger(first)
+	high, okHigh := braceInteger(second)
+	if !okLow || !okHigh {
+		return numericRange{}, false
+	}
+	return numericRange{low: min(low, high), high: max(low, high)}, true
+}
+
+func braceInteger(s string) (int, bool) {
+	digits := s
+	if s != "" && (s[0] == '+' || s[0] == '-') {
+		digits = s[1:]
+	}
+	if digits == "" || !scan.All(digits, scan.Digit) {
+		return 0, false
+	}
+	n, err := strconv.Atoi(s)
+	return n, err == nil
 }
 
 func splitTopLevel(body string) []string {

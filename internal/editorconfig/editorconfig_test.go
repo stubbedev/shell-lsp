@@ -55,6 +55,36 @@ func TestPatterns(t *testing.T) {
 	}
 }
 
+func TestNumericBrace(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		body string
+		want numericRange
+		ok   bool
+	}{
+		{"1..3", numericRange{low: 1, high: 3}, true},
+		{"3..1", numericRange{low: 1, high: 3}, true},
+		{"-2..+5", numericRange{low: -2, high: 5}, true},
+		{"007..8", numericRange{low: 7, high: 8}, true},
+		{"1...3", numericRange{}, false},
+		{"1.2..3", numericRange{}, false},
+		{"a..3", numericRange{}, false},
+		{"1..", numericRange{}, false},
+		{"..3", numericRange{}, false},
+		{"+..3", numericRange{}, false},
+		{"--1..3", numericRange{}, false},
+		{"1..3x", numericRange{}, false},
+		{" 1..3", numericRange{}, false},
+		{"99999999999999999999..1", numericRange{}, false},
+		{"1,2", numericRange{}, false},
+	} {
+		if got, ok := numericBrace(tt.body); got != tt.want || ok != tt.ok {
+			t.Errorf("numericBrace(%q) = %+v, %t, want %+v, %t", tt.body, got, ok, tt.want, tt.ok)
+		}
+	}
+}
+
 func TestParseRejectsMalformedLines(t *testing.T) {
 	t.Parallel()
 
