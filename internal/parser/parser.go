@@ -86,11 +86,15 @@ func newSyntaxParser(lang syntax.LangVariant, options ...syntax.ParserOption) *s
 
 func ParseEdit(previous *Tree, text string, shell dialect.Shell) *Tree {
 	src := []byte(text)
+	blankByteOrderMark(src)
+	file, errs, closedAtEnd := parseSource(newSyntaxParser(shell.Lang()), src, 0, text, shell.Dialect)
+	return newTree(previous, file, errs, closedAtEnd, text, shell, nil)
+}
+
+func blankByteOrderMark(src []byte) {
 	if bytes.HasPrefix(src, byteOrderMark) {
 		copy(src, "   ")
 	}
-	file, errs, closedAtEnd := parseSource(newSyntaxParser(shell.Lang()), src, 0, text, shell.Dialect)
-	return newTree(previous, file, errs, closedAtEnd, text, shell, nil)
 }
 
 type SyntaxParser struct {

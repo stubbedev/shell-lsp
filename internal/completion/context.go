@@ -1,8 +1,9 @@
 package completion
 
 import (
-	"regexp"
+	"errors"
 	"slices"
+	"sort"
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
@@ -18,6 +19,7 @@ const (
 	positionVariable
 	positionCommand
 	positionArgument
+	positionPath
 	positionExpansionOperator
 	positionParameterFlags
 	positionArrayKey
@@ -27,36 +29,21 @@ const (
 )
 
 type site struct {
-	position  position
-	prefix    string
-	replace   parser.Span
-	command   string
-	previous  []string
-	paramForm string
-	name      string
-	used      []string
-	typed     string
-	wordEnd   int
+	position position
+	prefix   string
+	value    string
+	replace  parser.Span
+	command  string
+	previous []string
+	name     string
+	used     []string
+	typed    string
+	wordEnd  int
 }
 
-var (
-	variablePrefix    = regexp.MustCompile(`\$(\{[#!]?)?([A-Za-z_][A-Za-z0-9_]*)?$`)
-	assignmentWord    = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(\[[^]]*\])?\+?=`)
-	expansionOperator = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*|[0-9]+|[@*#?$!-])(\[[^]]*\])?([-:=?+#%/^,@|*]+)$`)
-	parameterFlags    = regexp.MustCompile(`\$\{\(([^()]*)$`)
-	arrayKey          = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\[([^]"'$\s]*)$`)
-	globQualifier     = regexp.MustCompile(`(?:^|[\s;|&])[^\s;|&()'"]*[*?\]][^\s;|&()'"]*\(([^()\s'"]*)$`)
-	explicitQualifier = regexp.MustCompile(`\(#q([^()\s'"]*)$`)
-	globFlags         = regexp.MustCompile(`\(#([^()\s'"q]*)$`)
-)
-
-var commandOpeners = map[string]bool{
-	"if": true, "then": true, "else": true, "elif": true, "do": true, "while": true, "until": true,
-	"!": true, "time": true, "{": true, "coproc": true,
-}
+const placeholder = "shellLspCursor"
 
 func analyze(tree *parser.Tree, offset int) site {
-	text := tree.Text()
 	if inComment(tree, offset) {
 		return site{}
 	}
@@ -64,164 +51,482 @@ func analyze(tree *parser.Tree, offset int) site {
 		if doc.Quoted {
 			return site{}
 		}
-		return variableContext(text, textline.Start(text, offset), offset)
+		return heredocSite(tree, offset)
 	}
-	start := logicalLineStart(text, offset)
-	lx := lexLine(text[start:offset])
-	if st, ok := zshPatternFlags(tree, text[start:offset], offset); ok {
-		return st
-	}
-	if lx.comment {
-		return site{}
-	}
-	if !lx.singleQuoted {
-		if st, ok := expansionContext(tree, text[start:offset], offset); ok {
-			return st
-		}
-		if st := variableContext(text, start, offset); st.position == positionVariable {
+	for _, start := range regions(tree, offset) {
+		if st, ok := siteFrom(tree, parser.Span{Start: start, End: offset}); ok {
 			return st
 		}
 	}
-	if tree.Dialect == dialect.Zsh && !lx.singleQuoted && !lx.doubleQuoted {
-		if m := globQualifier.FindStringSubmatch(text[start:offset]); m != nil {
-			return site{position: positionGlobQualifier, typed: m[1], replace: parser.Span{Start: offset, End: offset}}
-		}
-	}
-	if lx.arithmetic {
-		return site{
-			position: positionVariable,
-			prefix:   lx.current,
-			replace:  parser.Span{Start: offset - len(lx.current), End: offset},
-		}
-	}
-	if (lx.singleQuoted || lx.doubleQuoted) && !startsQuoted(lx.current) {
+	return site{}
+}
+
+func heredocSite(tree *parser.Tree, offset int) site {
+	body, err := tree.ParseHeredocFragment(parser.Span{Start: textline.Start(tree.Text(), offset), End: offset}, placeholder)
+	if err != nil {
 		return site{}
 	}
-	st := site{
-		prefix:  lx.current,
-		replace: parser.Span{Start: offset - len(lx.current), End: offset},
+	return newProbe(tree, body, offset).site()
+}
+
+func regions(tree *parser.Tree, at int) []int {
+	var containing, last *syntax.Stmt
+	top := tree.File.Stmts
+	if i := sort.Search(len(top), func(i int) bool { return parser.Offset(top[i].Pos()) > at }); i > 0 {
+		parser.Walk(top[i-1], func(n syntax.Node) bool {
+			if n == nil || !n.Pos().IsValid() || parser.Offset(n.Pos()) > at {
+				return false
+			}
+			inside := !n.End().IsValid() || at <= parser.Offset(n.End())
+			if stmt, ok := n.(*syntax.Stmt); ok {
+				last = stmt
+				if inside {
+					containing = stmt
+				}
+			}
+			return inside
+		})
 	}
-	if subject, used, ok := casePatternSubject(tree, st.replace.Start); ok {
-		st.position, st.name, st.used = positionCasePattern, subject, used
-		return st
+	var starts []int
+	add := func(start int) {
+		if !slices.Contains(starts, start) {
+			starts = append(starts, start)
+		}
 	}
-	words := lx.words
-	for len(words) > 0 && (commandOpeners[words[0]] || assignmentWord.MatchString(words[0])) {
-		words = words[1:]
+	switch {
+	case last == nil:
+		add(0)
+	case last == containing || continuesAfterBlanks(last):
+		add(parser.Offset(last.Pos()))
+	default:
+		add(parser.Offset(last.End()))
 	}
-	if len(words) == 0 {
-		st.position = positionCommand
-		return st
+	if containing != nil {
+		add(parser.Offset(containing.Pos()))
 	}
-	st.position = positionArgument
-	st.command = words[0]
-	st.previous = words[1:]
+	add(logicalLineStart(tree.Text(), at))
+	return starts
+}
+
+func continuesAfterBlanks(stmt *syntax.Stmt) bool {
+	switch cmd := stmt.Cmd.(type) {
+	case *syntax.CallExpr, *syntax.DeclClause, *syntax.LetClause:
+		return true
+	case *syntax.BinaryCmd:
+		return continuesAfterBlanks(cmd.Y)
+	case *syntax.TimeClause:
+		return cmd.Stmt != nil && continuesAfterBlanks(cmd.Stmt)
+	case *syntax.CoprocClause:
+		return continuesAfterBlanks(cmd.Stmt)
+	}
+	return false
+}
+
+func siteFrom(tree *parser.Tree, span parser.Span) (site, bool) {
+	file, err := tree.ParseFragment(span, placeholder)
+	if err == nil {
+		return newProbe(tree, file, span.End).site(), true
+	}
+	if st, ok := casePattern(tree, span); ok {
+		return st, true
+	}
+	return testOperator(tree, span, err)
+}
+
+type probe struct {
+	tree   *parser.Tree
+	text   string
+	cursor int
+	path   []syntax.Node
+}
+
+func newProbe(tree *parser.Tree, root syntax.Node, cursor int) probe {
+	return probe{tree: tree, text: tree.Text(), cursor: cursor, path: locate(root, cursor, cursor+len(placeholder))}
+}
+
+func locate(root syntax.Node, from, to int) []syntax.Node {
+	var path []syntax.Node
+	parser.Walk(root, func(n syntax.Node) bool {
+		switch n.(type) {
+		case nil:
+			return false
+		case *syntax.File:
+			return true
+		}
+		pos, end := n.Pos(), n.End()
+		if !pos.IsValid() || parser.Offset(pos) > from || end.IsValid() && parser.Offset(end) < to {
+			return false
+		}
+		path = append(path, n)
+		return true
+	})
+	return path
+}
+
+func (p probe) site() site {
+	for i, node := range slices.Backward(p.path) {
+		var child syntax.Node
+		if i+1 < len(p.path) {
+			child = p.path[i+1]
+		}
+		switch n := node.(type) {
+		case *syntax.Comment:
+			return site{}
+		case *syntax.ParamExp:
+			return p.expansion(n, child)
+		case *syntax.Word:
+			if i == 0 || child == nil {
+				return site{}
+			}
+			if st, decided := p.word(i, n, p.path[i-1]); decided {
+				return st
+			}
+		case *syntax.Assign:
+			if child == n.Name {
+				return p.declaration(i, n)
+			}
+		case *syntax.WordIter:
+			return site{}
+		}
+	}
+	return site{}
+}
+
+func (p probe) word(i int, w *syntax.Word, parent syntax.Node) (site, bool) {
+	if lit, ok := p.path[i+1].(*syntax.Lit); ok && p.tree.Dialect == dialect.Zsh && strings.HasPrefix(lit.Value, "(") {
+		return p.group(w, lit), true
+	}
+	if parser.IsArithmetic(parent) {
+		return p.arithmetic(w), true
+	}
+	switch n := parent.(type) {
+	case *syntax.ParamExp:
+		return site{}, false
+	case *syntax.CallExpr:
+		k := slices.Index(n.Args, w)
+		if k < 0 {
+			return site{}, true
+		}
+		st, ok := p.commandWord(i, w)
+		switch {
+		case !ok:
+			return site{}, true
+		case k == 0:
+			st.position = positionCommand
+			return st, true
+		}
+		st.position, st.command, st.previous = positionArgument, p.nodeText(n.Args[0]), p.texts(n.Args[1:k])
+		return st, true
+	case *syntax.Assign:
+		if !n.Naked {
+			return site{}, true
+		}
+		return p.declaration(i-1, n), true
+	case *syntax.Redirect:
+		if n.Word != w || parser.IsHeredoc(n.Op) || n.Op == syntax.DplIn || n.Op == syntax.DplOut {
+			return site{}, true
+		}
+		return p.pathWord(i, w), true
+	case *syntax.WordIter:
+		if !slices.Contains(n.Items, w) {
+			return site{}, true
+		}
+		return p.pathWord(i, w), true
+	case *syntax.TestClause, *syntax.BinaryTest, *syntax.UnaryTest, *syntax.ParenTest:
+		return p.testWord(i, w), true
+	}
+	return site{}, true
+}
+
+func (p probe) commandWord(i int, w *syntax.Word) (site, bool) {
+	for _, n := range p.path[i+1:] {
+		switch n.(type) {
+		case *syntax.SglQuoted, *syntax.DblQuoted:
+			if n != syntax.Node(w.Parts[0]) {
+				return site{}, false
+			}
+		}
+	}
+	start := parser.Offset(w.Pos())
+	text, _ := parser.Text(w, "_")
+	value, _, _ := strings.Cut(text, placeholder)
+	return site{prefix: p.text[start:p.cursor], value: value, replace: parser.Span{Start: start, End: p.cursor}}, true
+}
+
+func (p probe) pathWord(i int, w *syntax.Word) site {
+	st, ok := p.commandWord(i, w)
+	if !ok {
+		return site{}
+	}
+	st.position = positionPath
 	return st
 }
 
-func expansionContext(tree *parser.Tree, line string, offset int) (site, bool) {
-	if m := expansionOperator.FindStringSubmatchIndex(line); m != nil && !parser.EscapedAt(line, m[0]) {
-		return site{
-			position: positionExpansionOperator,
-			name:     line[m[2]:m[3]],
-			prefix:   line[m[6]:m[7]],
-			replace:  parser.Span{Start: offset - (m[7] - m[6]), End: offset},
-		}, true
+func (p probe) declaration(i int, a *syntax.Assign) site {
+	if i == 0 || !a.Naked {
+		return site{}
 	}
-	if m := arrayKey.FindStringSubmatchIndex(line); m != nil && !parser.EscapedAt(line, m[0]) {
-		return site{
-			position: positionArrayKey,
-			name:     line[m[2]:m[3]],
-			prefix:   line[m[4]:m[5]],
-			replace:  parser.Span{Start: offset - (m[5] - m[4]), End: offset},
-		}, true
-	}
-	if tree.Dialect != dialect.Zsh {
-		return site{}, false
-	}
-	if m := parameterFlags.FindStringSubmatchIndex(line); m != nil && !parser.EscapedAt(line, m[0]) {
-		return site{position: positionParameterFlags, typed: line[m[2]:m[3]], replace: parser.Span{Start: offset, End: offset}}, true
-	}
-	return site{}, false
-}
-
-func zshPatternFlags(tree *parser.Tree, line string, offset int) (site, bool) {
-	if tree.Dialect != dialect.Zsh {
-		return site{}, false
-	}
-	position, m := positionGlobQualifier, explicitQualifier.FindStringSubmatchIndex(line)
-	if m == nil {
-		position, m = positionGlobFlags, globFlags.FindStringSubmatchIndex(line)
-	}
-	if m == nil {
-		return site{}, false
-	}
-	before := lexLine(line[:m[0]+1])
-	if before.singleQuoted || before.doubleQuoted || before.arithmetic || before.comment {
-		return site{}, false
-	}
-	return site{position: position, typed: line[m[2]:m[3]], replace: parser.Span{Start: offset, End: offset}}, true
-}
-
-const cursorPattern = "shellLspCursorPattern"
-
-func casePatternSubject(tree *parser.Tree, at int) (string, []string, bool) {
-	region, ok := caseRegion(tree, at)
+	decl, ok := p.path[i-1].(*syntax.DeclClause)
 	if !ok {
-		return "", nil, false
+		return site{}
 	}
-	probe := parser.Parse(tree.Text()[region:at]+cursorPattern+")", tree.Dialect)
+	start := parser.Offset(a.Pos())
+	k := slices.Index(decl.Args, a)
+	previous := make([]string, 0, k)
+	for _, arg := range decl.Args[:k] {
+		previous = append(previous, p.nodeText(arg))
+	}
+	return site{
+		position: positionArgument,
+		prefix:   p.text[start:p.cursor],
+		replace:  parser.Span{Start: start, End: p.cursor},
+		command:  decl.Variant.Value,
+		previous: previous,
+	}
+}
+
+func (p probe) testWord(i int, w *syntax.Word) site {
+	st, ok := p.commandWord(i, w)
+	if !ok {
+		return site{}
+	}
+	for _, n := range slices.Backward(p.path[:i]) {
+		if clause, ok := n.(*syntax.TestClause); ok {
+			st.position, st.command, st.previous = positionArgument, testCommand, p.testWords(clause.X, parser.Offset(w.Pos()), nil)
+			return st
+		}
+	}
+	return site{}
+}
+
+const testCommand = "[["
+
+func (p probe) testWords(x syntax.TestExpr, before int, out []string) []string {
+	if x == nil || !x.Pos().IsValid() || parser.Offset(x.Pos()) >= before {
+		return out
+	}
+	switch n := x.(type) {
+	case *syntax.BinaryTest:
+		out = p.testWords(n.X, before, out)
+		if parser.Offset(n.OpPos) < before {
+			out = append(out, n.Op.String())
+		}
+		return p.testWords(n.Y, before, out)
+	case *syntax.UnaryTest:
+		return p.testWords(n.X, before, append(out, n.Op.String()))
+	case *syntax.ParenTest:
+		out = p.testWords(n.X, before, append(out, "("))
+		if n.Rparen.IsValid() && parser.Offset(n.Rparen) < before {
+			out = append(out, ")")
+		}
+		return out
+	}
+	return append(out, p.nodeText(x))
+}
+
+func (p probe) arithmetic(w *syntax.Word) site {
+	if len(w.Parts) != 1 {
+		return site{}
+	}
+	lit, ok := w.Parts[0].(*syntax.Lit)
+	if !ok {
+		return site{}
+	}
+	start := parser.Offset(lit.Pos())
+	return site{position: positionVariable, prefix: p.text[start:p.cursor], replace: parser.Span{Start: start, End: p.cursor}}
+}
+
+func (p probe) expansion(pe *syntax.ParamExp, child syntax.Node) site {
+	name := ""
+	if pe.Param != nil {
+		name = pe.Param.Value
+	}
+	switch {
+	case child == nil:
+		if len(pe.Modifiers) > 0 && p.startsAtCursor(pe.Modifiers[0]) {
+			return p.operator(name, ":")
+		}
+	case child == pe.Param:
+		start := parser.Offset(pe.Param.Pos())
+		return site{position: positionVariable, prefix: p.text[start:p.cursor], replace: parser.Span{Start: start, End: p.cursor}}
+	case pe.Flags != nil && child == pe.Flags:
+		return site{position: positionParameterFlags, typed: p.text[parser.Offset(pe.Flags.Pos()):p.cursor], replace: parser.Span{Start: p.cursor, End: p.cursor}}
+	case child == pe.Index:
+		return p.key(name, pe.Index)
+	case pe.Exp != nil && child == pe.Exp.Word:
+		if p.startsAtCursor(pe.Exp.Word) {
+			return p.operator(name, pe.Exp.Op.String())
+		}
+	case pe.Slice != nil && child == pe.Slice.Offset:
+		if p.startsAtCursor(pe.Slice.Offset) {
+			return p.operator(name, ":")
+		}
+		return p.arithmeticOperand(pe.Slice.Offset)
+	case pe.Slice != nil && child == pe.Slice.Length:
+		return p.arithmeticOperand(pe.Slice.Length)
+	case pe.Repl != nil && child == pe.Repl.Orig:
+		return p.replacement(name, pe.Repl)
+	}
+	return site{}
+}
+
+func (p probe) startsAtCursor(n syntax.Node) bool {
+	return n.Pos().IsValid() && parser.Offset(n.Pos()) == p.cursor
+}
+
+func (p probe) operator(name, op string) site {
+	return site{position: positionExpansionOperator, name: name, prefix: op, replace: parser.Span{Start: p.cursor - len(op), End: p.cursor}}
+}
+
+func (p probe) replacement(name string, repl *syntax.Replace) site {
+	op := "/"
+	switch {
+	case repl.All:
+		op = "//"
+	case repl.Whole:
+		op = ":/"
+	}
+	switch start := parser.Offset(repl.Orig.Pos()); {
+	case start == p.cursor:
+		return p.operator(name, op)
+	case op == "/" && start == p.cursor-1 && strings.IndexByte("#%", p.text[start]) >= 0:
+		return p.operator(name, op+p.text[start:p.cursor])
+	}
+	return site{}
+}
+
+func (p probe) arithmeticOperand(x syntax.ArithmExpr) site {
+	w, ok := x.(*syntax.Word)
+	if !ok {
+		return site{}
+	}
+	return p.arithmetic(w)
+}
+
+func (p probe) key(name string, index syntax.ArithmExpr) site {
+	w, ok := index.(*syntax.Word)
+	if !ok || name == "" || len(w.Parts) != 1 {
+		return site{}
+	}
+	part := w.Parts[0]
+	if dq, ok := part.(*syntax.DblQuoted); ok && len(dq.Parts) == 1 {
+		part = dq.Parts[0]
+	}
+	lit, ok := part.(*syntax.Lit)
+	if !ok {
+		return site{}
+	}
+	start := parser.Offset(lit.Pos())
+	return site{position: positionArrayKey, name: name, prefix: p.text[start:p.cursor], replace: parser.Span{Start: start, End: p.cursor}}
+}
+
+func (p probe) group(w *syntax.Word, lit *syntax.Lit) site {
+	inner := p.text[parser.Offset(lit.Pos())+1 : p.cursor]
+	st := site{replace: parser.Span{Start: p.cursor, End: p.cursor}}
+	switch {
+	case strings.HasPrefix(inner, "#q"):
+		st.position, st.typed = positionGlobQualifier, inner[2:]
+	case strings.HasPrefix(inner, "#"):
+		st.position, st.typed = positionGlobFlags, inner[1:]
+	case parser.HasGlob(w.Parts[:slices.Index(w.Parts, syntax.WordPart(lit))], true):
+		st.position, st.typed = positionGlobQualifier, inner
+	default:
+		return site{}
+	}
+	if !parser.QualifierText(st.typed) {
+		return site{}
+	}
+	return st
+}
+
+func (p probe) nodeText(n syntax.Node) string {
+	span, ok := p.tree.NodeSpan(n)
+	if !ok {
+		return ""
+	}
+	return p.text[span.Start:min(span.End, p.cursor)]
+}
+
+func (p probe) texts(words []*syntax.Word) []string {
+	out := make([]string, 0, len(words))
+	for _, w := range words {
+		out = append(out, p.nodeText(w))
+	}
+	return out
+}
+
+func casePattern(tree *parser.Tree, span parser.Span) (site, bool) {
+	file, err := tree.ParseFragment(span, placeholder+")")
+	if err != nil {
+		return site{}, false
+	}
 	var clause *syntax.CaseClause
-	syntax.Walk(probe.File, func(n syntax.Node) bool {
+	var pattern *syntax.Word
+	syntax.Walk(file, func(n syntax.Node) bool {
 		c, ok := n.(*syntax.CaseClause)
-		if ok && slices.ContainsFunc(c.Items, func(item *syntax.CaseItem) bool {
-			return slices.ContainsFunc(item.Patterns, func(w *syntax.Word) bool { return parser.LiteralIs(w, cursorPattern) })
-		}) {
-			clause = c
+		if !ok {
+			return true
+		}
+		for _, item := range c.Items {
+			for _, w := range item.Patterns {
+				if value, ok := parser.Literal(w); ok && strings.HasSuffix(value, placeholder) && parser.Offset(w.End()) == span.End+len(placeholder) {
+					clause, pattern = c, w
+				}
+			}
 		}
 		return true
 	})
 	if clause == nil {
-		return "", nil, false
+		return site{}, false
 	}
 	pe, ok := parser.SoleParam(clause.Word)
 	if !ok || !parser.IsPlainParam(pe) {
-		return "", nil, false
+		return site{}, false
 	}
 	var used []string
 	for _, item := range clause.Items {
-		for _, pattern := range item.Patterns {
-			if value, ok := parser.Literal(pattern); ok && value != cursorPattern {
+		for _, w := range item.Patterns {
+			if value, ok := parser.Literal(w); ok && w != pattern {
 				used = append(used, value)
 			}
 		}
 	}
-	return pe.Param.Value, used, true
+	start := parser.Offset(pattern.Pos())
+	return site{
+		position: positionCasePattern,
+		prefix:   tree.Text()[start:span.End],
+		replace:  parser.Span{Start: start, End: span.End},
+		name:     pe.Param.Value,
+		used:     used,
+	}, true
 }
 
-func caseRegion(tree *parser.Tree, at int) (int, bool) {
-	region := 0
-	for _, stmt := range tree.File.Stmts {
-		switch {
-		case stmt.End().IsValid() && int(stmt.End().Offset()) <= at:
-			region = int(stmt.End().Offset())
-		case int(stmt.Pos().Offset()) <= at:
-			return int(stmt.Pos().Offset()), encloses(stmt, at)
+func testOperator(tree *parser.Tree, span parser.Span, err error) (site, bool) {
+	parseErr, ok := errors.AsType[syntax.ParseError](err)
+	if !ok || !parseErr.Pos.IsValid() {
+		return site{}, false
+	}
+	at := parser.Offset(parseErr.Pos)
+	if at < span.Start || at > span.End {
+		return site{}, false
+	}
+	file, err := tree.ParseFragment(parser.Span{Start: span.Start, End: at}, "")
+	if err != nil {
+		return site{}, false
+	}
+	p := probe{tree: tree, text: tree.Text(), cursor: span.End, path: locate(file, at, at)}
+	for _, n := range slices.Backward(p.path) {
+		if clause, ok := n.(*syntax.TestClause); ok {
+			return site{
+				position: positionArgument,
+				prefix:   p.text[at:span.End],
+				replace:  parser.Span{Start: at, End: span.End},
+				command:  testCommand,
+				previous: p.testWords(clause.X, at, nil),
+			}, true
 		}
 	}
-	return region, true
-}
-
-func encloses(stmt *syntax.Stmt, at int) bool {
-	found := false
-	syntax.Walk(stmt, func(n syntax.Node) bool {
-		c, ok := n.(*syntax.CaseClause)
-		if ok && int(c.In.Offset()) < at && (!c.Esac.IsValid() || at <= int(c.Esac.Offset())) {
-			found = true
-		}
-		return !found
-	})
-	return found
+	return site{}, false
 }
 
 func tokenEnd(text string, st site) int {
@@ -247,192 +552,6 @@ func tokenEnd(text string, st site) int {
 
 func wordChar(b byte) bool {
 	return strings.IndexByte(" \t\n;&|()<>`\"'", b) < 0
-}
-
-func startsQuoted(word string) bool {
-	return strings.HasPrefix(word, "'") || strings.HasPrefix(word, `"`)
-}
-
-func variableContext(text string, from, offset int) site {
-	match := variablePrefix.FindStringSubmatchIndex(text[from:offset])
-	if match == nil || parser.EscapedAt(text, from+match[0]) {
-		return site{}
-	}
-	nameStart := from + match[1]
-	if match[4] >= 0 {
-		nameStart = from + match[4]
-	}
-	form := ""
-	if match[2] >= 0 {
-		form = text[from+match[2] : from+match[3]]
-	}
-	return site{
-		position:  positionVariable,
-		prefix:    text[nameStart:offset],
-		replace:   parser.Span{Start: nameStart, End: offset},
-		paramForm: form,
-	}
-}
-
-type lexed struct {
-	words        []string
-	current      string
-	comment      bool
-	singleQuoted bool
-	doubleQuoted bool
-	arithmetic   bool
-}
-
-type frameMode uint8
-
-const (
-	frameCommand frameMode = iota
-	frameDouble
-	frameArithmetic
-)
-
-type frame struct {
-	mode  frameMode
-	words []string
-	cur   strings.Builder
-	depth int
-	cond  bool
-}
-
-func (f *frame) opensCondition() bool {
-	if len(f.words) == 0 || f.words[len(f.words)-1] != "[[" {
-		return false
-	}
-	for _, w := range f.words[:len(f.words)-1] {
-		if !commandOpeners[w] && !assignmentWord.MatchString(w) {
-			return false
-		}
-	}
-	return true
-}
-
-func lexLine(line string) lexed {
-	stack := []*frame{{mode: frameCommand}}
-	top := func() *frame { return stack[len(stack)-1] }
-	push := func(mode frameMode) { stack = append(stack, &frame{mode: mode}) }
-	pop := func() {
-		if len(stack) > 1 {
-			stack = stack[:len(stack)-1]
-		}
-	}
-	endWord := func() {
-		f := top()
-		if f.cur.Len() == 0 {
-			return
-		}
-		f.words = append(f.words, f.cur.String())
-		f.cur.Reset()
-		switch {
-		case f.opensCondition():
-			f.cond = true
-		case f.cond && f.words[len(f.words)-1] == "]]":
-			f.cond = false
-		}
-	}
-	singleQuoted := false
-	for i := 0; i < len(line); i++ {
-		c := line[i]
-		f := top()
-		next := byte(0)
-		if i+1 < len(line) {
-			next = line[i+1]
-		}
-		switch {
-		case singleQuoted:
-			f.cur.WriteByte(c)
-			if c == '\'' {
-				singleQuoted = false
-			}
-		case f.mode == frameArithmetic:
-			switch {
-			case c == ')' && next == ')' && f.depth == 0:
-				pop()
-				i++
-			case c == '(':
-				f.depth++
-				f.cur.Reset()
-			case c == ')':
-				f.depth = max(f.depth-1, 0)
-				f.cur.Reset()
-			case parser.IsNameChar(c):
-				f.cur.WriteByte(c)
-			default:
-				f.cur.Reset()
-			}
-		case c == '\\':
-			if next == '\n' {
-				i++
-				endWord()
-				continue
-			}
-			f.cur.WriteByte(c)
-			if i+1 < len(line) {
-				i++
-				f.cur.WriteByte(line[i])
-			}
-		case c == '$' && next == '(' && i+2 < len(line) && line[i+2] == '(':
-			push(frameArithmetic)
-			i += 2
-		case c == '$' && next == '(':
-			push(frameCommand)
-			i++
-		case f.mode == frameDouble:
-			f.cur.WriteByte(c)
-			if c == '"' {
-				pop()
-				top().cur.WriteString(f.cur.String())
-			}
-		case c == '\'':
-			singleQuoted = true
-			f.cur.WriteByte(c)
-		case c == '"':
-			push(frameDouble)
-			top().cur.WriteByte(c)
-		case c == '#' && f.cur.Len() == 0:
-			return lexed{comment: true}
-		case c == ' ' || c == '\t' || c == '\n':
-			endWord()
-		case c == '(' && next == '(' && f.cur.Len() == 0 && len(f.words) == 0:
-			push(frameArithmetic)
-			i++
-		case f.cond && (c == '&' || c == '|' || c == '(' || c == ')'):
-			endWord()
-			f.cur.WriteByte(c)
-			if (c == '&' || c == '|') && next == c {
-				f.cur.WriteByte(c)
-				i++
-			}
-			endWord()
-		case c == ')' && len(stack) > 1:
-			pop()
-		case c == ';' || c == '&' || c == '|' || c == '(' || c == ')' || c == '`':
-			endWord()
-			f.words = nil
-		case (c == '{' || c == '}') && f.cur.Len() == 0 && (next == 0 || next == ' ' || next == '\t'):
-			endWord()
-			f.words = nil
-		default:
-			f.cur.WriteByte(c)
-		}
-	}
-	f := top()
-	lx := lexed{current: f.cur.String(), words: f.words, singleQuoted: singleQuoted}
-	switch f.mode {
-	case frameDouble:
-		outer := stack[len(stack)-2]
-		lx.doubleQuoted = true
-		lx.current = outer.cur.String() + lx.current
-		lx.words = outer.words
-	case frameArithmetic:
-		lx.arithmetic = true
-	case frameCommand:
-	}
-	return lx
 }
 
 func inComment(tree *parser.Tree, offset int) bool {

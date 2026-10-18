@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -15,6 +14,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/hover"
 	"github.com/stubbedev/shell-lsp/internal/manpage"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/printf"
 	"github.com/stubbedev/shell-lsp/internal/shelldocs"
 )
 
@@ -134,6 +134,8 @@ func Complete(ctx context.Context, in Input) (Result, error) {
 		return c.commands(true), nil
 	case positionArgument:
 		return c.argument(ctx)
+	case positionPath:
+		return c.paths(false)
 	case positionExpansionOperator:
 		return Result{Items: c.terms(shelldocs.ExpansionOperators, KindOperator)}, nil
 	case positionParameterFlags:
@@ -151,19 +153,8 @@ func Complete(ctx context.Context, in Input) (Result, error) {
 	return Result{}, nil
 }
 
-var conversionSpec = regexp.MustCompile(`^[-+ #0]*([0-9]+|\*)?(\.([0-9]+|\*)?)?$`)
-
 func (c completer) printfDirectives() []Item {
-	prefix := c.site.prefix
-	i := strings.LastIndexByte(prefix, '%')
-	if i < 0 || !conversionSpec.MatchString(prefix[i+1:]) {
-		return nil
-	}
-	run := 1
-	for j := i - 1; j >= 0 && prefix[j] == '%'; j-- {
-		run++
-	}
-	if run%2 == 0 {
+	if !printf.Pending(c.site.value) {
 		return nil
 	}
 	at := parser.Span{Start: c.Offset, End: c.Offset}

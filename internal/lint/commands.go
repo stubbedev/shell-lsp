@@ -241,31 +241,7 @@ func qualifiedGlob(w *syntax.Word, bare bool) bool {
 }
 
 func scanGlob(w *syntax.Word, wildcards bool) bool {
-	sawOpen := false
-	for _, part := range w.Parts[:parser.GlobQualifiers(w, true)] {
-		switch p := part.(type) {
-		case *syntax.ExtGlob:
-			return wildcards
-		case *syntax.Lit:
-			for i := 0; i < len(p.Value); i++ {
-				switch p.Value[i] {
-				case '\\':
-					i++
-				case '*', '?':
-					if wildcards {
-						return true
-					}
-				case '[':
-					sawOpen = true
-				case ']':
-					if sawOpen {
-						return true
-					}
-				}
-			}
-		}
-	}
-	return false
+	return parser.HasGlob(w.Parts[:parser.GlobQualifiers(w, true)], wildcards)
 }
 
 func pipelineStages(stmt *syntax.Stmt, into []*syntax.Stmt) []*syntax.Stmt {
