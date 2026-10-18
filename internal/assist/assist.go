@@ -2,7 +2,6 @@ package assist
 
 import (
 	"cmp"
-	"regexp"
 	"slices"
 	"strings"
 
@@ -158,8 +157,6 @@ type Link struct {
 	Target string
 }
 
-var urlPattern = regexp.MustCompile(`https?://[^\s<>"'` + "`" + `]+`)
-
 func DocumentLinks(file *workspace.File, env navigation.Env) []Link {
 	var links []Link
 	for _, ref := range navigation.Sources(file, env) {
@@ -171,11 +168,11 @@ func DocumentLinks(file *workspace.File, env navigation.Env) []Link {
 			links = append(links, Link{Span: *ref.Directive, Target: ref.Target.URI})
 		}
 	}
+	text := file.Tree.Text()
 	for _, c := range file.Tree.Comments {
-		text := file.Tree.Text()[c.Span.Start:c.Span.End]
-		for _, m := range urlPattern.FindAllStringIndex(text, -1) {
-			url := strings.TrimRight(text[m[0]:m[1]], ".,;:)]}!?")
-			links = append(links, Link{Span: parser.Span{Start: c.Span.Start + m[0], End: c.Span.Start + m[0] + len(url)}, Target: url})
+		for url := range webURLs(text[c.Span.Start:c.Span.End]) {
+			span := parser.Span{Start: c.Span.Start + url.Start, End: c.Span.Start + url.End}
+			links = append(links, Link{Span: span, Target: text[span.Start:span.End]})
 		}
 	}
 	return links
