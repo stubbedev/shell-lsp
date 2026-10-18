@@ -7,6 +7,10 @@ func TestConversions(t *testing.T) {
 
 	for format, want := range map[string]string{
 		"%s":                            "s",
+		"%q":                            "q",
+		"%q / %q / %q":                  "qqq",
+		"%s%Z":                          "sZ",
+		"%lld %hhx":                     "dx",
 		"%0*s":                          "*s",
 		"%(%F)T":                        "T",
 		"%d%%%(%H)T":                    "dT",

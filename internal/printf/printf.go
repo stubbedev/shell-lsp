@@ -8,7 +8,7 @@ const (
 	star        = '*'
 )
 
-var lengths = []string{"hh", "h", "ll", "l", "q", "L", "j", "z", "Z", "t"}
+var lengths = []string{"hh", "h", "ll", "l", "L", "j", "z", "t"}
 
 type outcome uint8
 
