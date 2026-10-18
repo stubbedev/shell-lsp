@@ -17,7 +17,7 @@ type caseValue struct {
 
 func (c completer) casePatterns() []Item {
 	var items []Item
-	for _, v := range caseValues(c.Tree, c.site.name, c.Offset) {
+	for _, v := range caseValues(c.Tree, c.site.name, c.site.used) {
 		if !strings.HasPrefix(v.value, c.site.prefix) {
 			continue
 		}
@@ -32,9 +32,9 @@ func (c completer) casePatterns() []Item {
 	return items
 }
 
-func caseValues(tree *parser.Tree, name string, offset int) []caseValue {
+func caseValues(tree *parser.Tree, name string, current []string) []caseValue {
 	used := map[string]bool{}
-	for _, p := range currentPatterns(tree, offset) {
+	for _, p := range current {
 		used[p] = true
 	}
 	var values []caseValue
@@ -127,26 +127,4 @@ func addComparison(tree *parser.Tree, name string, x, y *syntax.Word, add func(v
 func refersTo(w *syntax.Word, name string) bool {
 	pe, ok := parser.SoleParam(w)
 	return ok && pe.Param.Value == name && pe.Exp == nil && pe.Repl == nil && pe.Slice == nil && pe.Index == nil && !pe.Length && !pe.Excl
-}
-
-func currentPatterns(tree *parser.Tree, offset int) []string {
-	var patterns []string
-	for _, located := range tree.PathAt(offset) {
-		clause, ok := located.Node.(*syntax.CaseClause)
-		if !ok {
-			continue
-		}
-		patterns = patterns[:0]
-		for _, item := range clause.Items {
-			for _, pattern := range item.Patterns {
-				if span, ok := tree.NodeSpan(pattern); ok && span.Touches(offset) {
-					continue
-				}
-				if value, ok := parser.Literal(pattern); ok {
-					patterns = append(patterns, value)
-				}
-			}
-		}
-	}
-	return patterns
 }

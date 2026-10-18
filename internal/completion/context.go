@@ -2,11 +2,13 @@ package completion
 
 import (
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/textline"
+	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
 type position uint8
@@ -32,6 +34,7 @@ type site struct {
 	previous  []string
 	paramForm string
 	name      string
+	used      []string
 	typed     string
 	wordEnd   int
 }
@@ -42,7 +45,6 @@ var (
 	expansionOperator = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*|[0-9]+|[@*#?$!-])(\[[^]]*\])?([-:=?+#%/^,@|*]+)$`)
 	parameterFlags    = regexp.MustCompile(`\$\{\(([^()]*)$`)
 	arrayKey          = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\[([^]"'$\s]*)$`)
-	caseBoundary      = regexp.MustCompile(`\bcase\s+("?\$\{?([A-Za-z_][A-Za-z0-9_]*|[0-9]+)\}?"?|\S+)\s+in\b|\besac\b`)
 	globQualifier     = regexp.MustCompile(`(?:^|[\s;|&])[^\s;|&()'"]*[*?\]][^\s;|&()'"]*\(([^()\s'"]*)$`)
 	explicitQualifier = regexp.MustCompile(`\(#q([^()\s'"]*)$`)
 	globFlags         = regexp.MustCompile(`\(#([^()\s'"q]*)$`)
@@ -99,15 +101,16 @@ func analyze(tree *parser.Tree, offset int) site {
 		prefix:  lx.current,
 		replace: parser.Span{Start: offset - len(lx.current), End: offset},
 	}
+	if subject, used, ok := casePatternSubject(tree, st.replace.Start); ok {
+		st.position, st.name, st.used = positionCasePattern, subject, used
+		return st
+	}
 	words := lx.words
 	for len(words) > 0 && (commandOpeners[words[0]] || assignmentWord.MatchString(words[0])) {
 		words = words[1:]
 	}
 	if len(words) == 0 {
 		st.position = positionCommand
-		if subject, ok := casePatternSubject(text, st.replace.Start); ok {
-			st.position, st.name = positionCasePattern, subject
-		}
 		return st
 	}
 	st.position = positionArgument
@@ -160,41 +163,65 @@ func zshPatternFlags(tree *parser.Tree, line string, offset int) (site, bool) {
 	return site{position: position, typed: line[m[2]:m[3]], replace: parser.Span{Start: offset, End: offset}}, true
 }
 
-func casePatternSubject(text string, at int) (string, bool) {
-	before := strings.TrimRight(text[:at], " \t\n(")
-	for strings.HasSuffix(before, "|") {
-		before = strings.TrimRight(before[:len(before)-1], " \t\n")
-		before = strings.TrimRightFunc(before, func(r rune) bool { return !strings.ContainsRune(" \t\n;()|", r) })
-		before = strings.TrimRight(before, " \t\n(")
+const cursorPattern = "shellLspCursorPattern"
+
+func casePatternSubject(tree *parser.Tree, at int) (string, []string, bool) {
+	region, ok := caseRegion(tree, at)
+	if !ok {
+		return "", nil, false
 	}
-	type openCase struct {
-		subject string
-		end     int
+	probe := parser.Parse(tree.Text()[region:at]+cursorPattern+")", tree.Dialect)
+	var clause *syntax.CaseClause
+	syntax.Walk(probe.File, func(n syntax.Node) bool {
+		c, ok := n.(*syntax.CaseClause)
+		if ok && slices.ContainsFunc(c.Items, func(item *syntax.CaseItem) bool {
+			return slices.ContainsFunc(item.Patterns, func(w *syntax.Word) bool { return parser.LiteralIs(w, cursorPattern) })
+		}) {
+			clause = c
+		}
+		return true
+	})
+	if clause == nil {
+		return "", nil, false
 	}
-	var open []openCase
-	for _, m := range caseBoundary.FindAllStringSubmatchIndex(text[:at], -1) {
-		if text[m[0]:m[1]] == "esac" {
-			if len(open) > 0 {
-				open = open[:len(open)-1]
+	pe, ok := parser.SoleParam(clause.Word)
+	if !ok || !parser.IsPlainParam(pe) {
+		return "", nil, false
+	}
+	var used []string
+	for _, item := range clause.Items {
+		for _, pattern := range item.Patterns {
+			if value, ok := parser.Literal(pattern); ok && value != cursorPattern {
+				used = append(used, value)
 			}
-			continue
 		}
-		subject := ""
-		if m[4] >= 0 {
-			subject = text[m[4]:m[5]]
+	}
+	return pe.Param.Value, used, true
+}
+
+func caseRegion(tree *parser.Tree, at int) (int, bool) {
+	region := 0
+	for _, stmt := range tree.File.Stmts {
+		switch {
+		case stmt.End().IsValid() && int(stmt.End().Offset()) <= at:
+			region = int(stmt.End().Offset())
+		case int(stmt.Pos().Offset()) <= at:
+			return int(stmt.Pos().Offset()), encloses(stmt, at)
 		}
-		open = append(open, openCase{subject: subject, end: m[1]})
 	}
-	if len(open) == 0 {
-		return "", false
-	}
-	inner := open[len(open)-1]
-	afterHeader := inner.end == len(before)
-	afterItem := strings.HasSuffix(before, ";;") || strings.HasSuffix(before, ";&") || strings.HasSuffix(before, ";|")
-	if inner.subject == "" || (!afterHeader && !afterItem) {
-		return "", false
-	}
-	return inner.subject, true
+	return region, true
+}
+
+func encloses(stmt *syntax.Stmt, at int) bool {
+	found := false
+	syntax.Walk(stmt, func(n syntax.Node) bool {
+		c, ok := n.(*syntax.CaseClause)
+		if ok && int(c.In.Offset()) < at && (!c.Esac.IsValid() || at <= int(c.Esac.Offset())) {
+			found = true
+		}
+		return !found
+	})
+	return found
 }
 
 func tokenEnd(text string, st site) int {

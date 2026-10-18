@@ -459,10 +459,24 @@ func TestCasePatterns(t *testing.T) {
 	if got := labels(complete(t, dialect.Posix, inline)); !slices.Equal(got, []string{"start"}) {
 		t.Errorf("inline values = %v", got)
 	}
+	for src, want := range map[string]string{
+		"[ \"$1\" = start ]\n[ \"$1\" = stop ]\ncase $1 in st‸":                                                      "start stop",
+		"[ \"$1\" = start ]\n[ \"$1\" = stop ]\ncase $1 in stop|st‸":                                                 "start",
+		"[ \"$1\" = start ]\ncase \"${1}\" in (‸":                                                                    "start",
+		"[ \"$1\" = start ]\n[ \"$2\" = deep ]\ncase $1 in start) case $2 in d‸":                                     "deep",
+		"[ \"$1\" = start ]\n[ \"$1\" = stop ]\n[ \"$2\" = deep ]\ncase $1 in start) case $2 in deep) ;; esac ;; s‸": "stop",
+		"f() {\n\t[ \"$1\" = start ]\n\tcase $1 in\n\t\tst‸\n\tesac\n}\n":                                            "start",
+	} {
+		if got := strings.Join(labels(complete(t, dialect.Bash, src)), " "); got != want {
+			t.Errorf("%q offers %q, want %q", src, got, want)
+		}
+	}
 	for _, src := range []string{
 		"case $x in\n\ta) ec‸",
 		"case $x in\n\ta) :;;\nesac\nec‸",
 		"for f in\n\ta‸",
+		"[ \"$(date)\" = now ]\ncase $(date) in n‸",
+		"[ \"$x\" = a ]\ncase ${x:-a} in a‸",
 	} {
 		if got := complete(t, dialect.Bash, src); slices.ContainsFunc(got.Items, func(it Item) bool { return it.Kind == KindValue }) {
 			t.Errorf("%q offers case values: %v", src, labels(got))
