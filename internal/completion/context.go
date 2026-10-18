@@ -8,7 +8,6 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
-	"github.com/stubbedev/shell-lsp/internal/shlex"
 	"github.com/stubbedev/shell-lsp/internal/textline"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
@@ -530,29 +529,44 @@ func testOperator(tree *parser.Tree, span parser.Span, err error) (site, bool) {
 	return site{}, false
 }
 
-func tokenEnd(text string, st site) int {
-	var continues func(byte) bool
+func tokenEnd(tree *parser.Tree, st site) int {
+	at := st.replace.End
 	switch st.position {
 	case positionNone, positionParameterFlags, positionGlobQualifier, positionGlobFlags:
-		return st.replace.End
-	case positionVariable:
-		continues = shlex.IsNameChar
-	case positionExpansionOperator:
-		continues = func(b byte) bool { return strings.IndexByte("-:=?+#%/^,@|*", b) >= 0 }
-	case positionArrayKey:
-		continues = func(b byte) bool { return b != ']' && b != '}' && wordChar(b) }
-	default:
-		continues = wordChar
+		return at
+	case positionVariable, positionCommand, positionArgument, positionPath, positionExpansionOperator, positionArrayKey, positionCasePattern:
 	}
-	end := st.replace.End
-	for end < len(text) && continues(text[end]) {
-		end++
+	for _, located := range slices.Backward(tree.PathAt(at)) {
+		switch n := located.Node.(type) {
+		case *syntax.ParamExp:
+			if end, ok := expansionEnd(tree, n, st.position, at); ok {
+				return end
+			}
+		case *syntax.Lit:
+			if st.position != positionVariable && st.position != positionExpansionOperator && st.position != positionArrayKey {
+				return located.Span.End
+			}
+		}
 	}
-	return end
+	return at
 }
 
-func wordChar(b byte) bool {
-	return strings.IndexByte(" \t\n;&|()<>`\"'", b) < 0
+func expansionEnd(tree *parser.Tree, pe *syntax.ParamExp, position position, at int) (int, bool) {
+	partEnd := func(n syntax.Node) (int, bool) {
+		span, ok := tree.NodeSpan(n)
+		return span.End, ok && span.Touches(at)
+	}
+	switch {
+	case position == positionVariable && pe.Param != nil:
+		return partEnd(pe.Param)
+	case position == positionArrayKey && pe.Index != nil:
+		return partEnd(pe.Index)
+	case position == positionExpansionOperator && pe.Exp != nil && pe.Exp.Word != nil:
+		return max(at, parser.Offset(pe.Exp.Word.Pos())), true
+	case position == positionExpansionOperator && pe.Exp != nil && pe.Rbrace.IsValid():
+		return max(at, parser.Offset(pe.Rbrace)), true
+	}
+	return 0, false
 }
 
 func inComment(tree *parser.Tree, offset int) bool {

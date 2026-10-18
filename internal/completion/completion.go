@@ -123,7 +123,7 @@ func Complete(ctx context.Context, in Input) (Result, error) {
 		return Result{}, nil
 	}
 	c := completer{Input: in, dialect: in.Tree.Dialect, site: analyze(in.Tree, in.Offset)}
-	c.site.wordEnd = tokenEnd(in.Tree.Text(), c.site)
+	c.site.wordEnd = tokenEnd(in.Tree, c.site)
 	switch c.site.position {
 	case positionVariable:
 		return Result{Items: c.variables()}, nil

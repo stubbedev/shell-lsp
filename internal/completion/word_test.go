@@ -19,6 +19,9 @@ func TestReplacedWordStopsAtTheTokenEnd(t *testing.T) {
 		{name: "command word stops at a separator", src: "gr‸ep; ls", label: "grep", rest: "ep"},
 		{name: "operator", src: "echo ${x:‸-y}", label: ":-", rest: "-"},
 		{name: "nothing after the cursor", src: "gr‸ ls", label: "grep", rest: ""},
+		{name: "command word ends before an expansion", src: "gr‸ep$(date)", label: "grep", rest: "ep"},
+		{name: "command word keeps an escaped space", src: "gr‸ep\\ x", label: "grep", rest: "ep\\ x"},
+		{name: "variable ends before a subscript", src: "greeting=hi\necho ${gr‸eet[0]}", label: "greeting", rest: "eet"},
 	}
 	for _, tc := range tests {
 		offset := strings.Index(tc.src, cursor)
