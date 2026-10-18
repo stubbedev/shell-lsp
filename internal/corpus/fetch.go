@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -22,8 +21,6 @@ const (
 	fetchPrefix  = ".fetch-"
 	fetchWorkers = 8
 )
-
-var cacheEntry = regexp.MustCompile(`^(?:\.fetch-.*|[a-z0-9][a-z0-9._-]*@[0-9a-f]{12})$`)
 
 func (r Repo) Dir(cache string) string { return filepath.Join(cache, r.dirName()) }
 
@@ -64,7 +61,7 @@ func prune(repos []Repo, cache string) error {
 		return fmt.Errorf("listing the corpus cache %s: %w", cache, err)
 	}
 	for _, e := range entries {
-		if wanted[e.Name()] || !cacheEntry.MatchString(e.Name()) {
+		if wanted[e.Name()] || !cacheEntry(e.Name()) {
 			continue
 		}
 		if err := os.RemoveAll(filepath.Join(cache, e.Name())); err != nil {

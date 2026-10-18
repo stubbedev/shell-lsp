@@ -7,9 +7,10 @@ import (
 	"fmt"
 	"os"
 	"path"
-	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/stubbedev/shell-lsp/internal/scan"
 )
 
 type Kind uint8
@@ -38,14 +39,37 @@ type Repo struct {
 	Paths   []string
 }
 
-var (
-	repoName   = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*$`)
-	repoURL    = regexp.MustCompile(`^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
-	commitHash = regexp.MustCompile(`^[0-9a-f]{40}$`)
-	license    = regexp.MustCompile(`^[A-Za-z0-9.+-]+$`)
+const (
+	manifestFields = 5
+	githubPrefix   = "https://github.com/"
+	commitDigits   = 40
+	keyBytes       = 6
+	keySeparator   = "@"
 )
 
-const manifestFields = 5
+func lowerHex(c byte) bool { return scan.Digit(c) || 'a' <= c && c <= 'f' }
+
+func repoName(name string) bool {
+	return name != "" && scan.LowerOrDigit(name[0]) && scan.All(name[1:], func(c byte) bool {
+		return scan.LowerOrDigit(c) || c == '.' || c == '_' || c == '-'
+	})
+}
+
+func license(id string) bool {
+	return id != "" && scan.All(id, func(c byte) bool { return scan.Alnum(c) || c == '.' || c == '+' || c == '-' })
+}
+
+func repoURL(url string) bool {
+	path, prefixed := strings.CutPrefix(url, githubPrefix)
+	owner, repo, split := strings.Cut(path, "/")
+	return prefixed && split && githubName(owner) && githubName(repo)
+}
+
+func githubName(name string) bool {
+	return name != "" && scan.All(name, func(c byte) bool { return scan.Alnum(c) || c == '_' || c == '.' || c == '-' })
+}
+
+func commitHash(commit string) bool { return len(commit) == commitDigits && scan.All(commit, lowerHex) }
 
 func LoadManifest(file string) ([]Repo, error) {
 	raw, err := os.ReadFile(file) //nolint:gosec
@@ -88,20 +112,20 @@ func parseRepo(fields []string) (Repo, error) {
 		return Repo{}, fmt.Errorf("want name, kind, licence, URL and commit, got %q", strings.Join(fields, " "))
 	}
 	name, kindName, lic, url, commit := fields[0], fields[1], fields[2], fields[3], fields[4]
-	if !repoName.MatchString(name) {
+	if !repoName(name) {
 		return Repo{}, fmt.Errorf("repository name %q is not lower-case letters, digits, '.', '_' or '-'", name)
 	}
 	kind, ok := kindFromName(kindName)
 	if !ok {
 		return Repo{}, fmt.Errorf("%s: kind %q is not one of %s", name, kindName, strings.Join(kindNames[:], ", "))
 	}
-	if !license.MatchString(lic) {
+	if !license(lic) {
 		return Repo{}, fmt.Errorf("%s: licence %q is not an SPDX identifier", name, lic)
 	}
-	if !repoURL.MatchString(url) {
+	if !repoURL(url) {
 		return Repo{}, fmt.Errorf("%s: URL %q is not https://github.com/OWNER/REPO", name, url)
 	}
-	if !commitHash.MatchString(commit) {
+	if !commitHash(commit) {
 		return Repo{}, fmt.Errorf("%s: commit %q is not a full lower-case SHA-1", name, commit)
 	}
 	paths := fields[manifestFields:]
@@ -115,7 +139,15 @@ func parseRepo(fields []string) (Repo, error) {
 
 func (r Repo) key() string {
 	sum := sha256.Sum256([]byte(strings.Join(append([]string{r.URL, r.Commit}, r.Paths...), "\n")))
-	return hex.EncodeToString(sum[:6])
+	return hex.EncodeToString(sum[:keyBytes])
 }
 
-func (r Repo) dirName() string { return r.Name + "@" + r.key() }
+func (r Repo) dirName() string { return r.Name + keySeparator + r.key() }
+
+func cacheEntry(name string) bool {
+	if strings.HasPrefix(name, fetchPrefix) {
+		return true
+	}
+	repo, key, ok := strings.Cut(name, keySeparator)
+	return ok && repoName(repo) && len(key) == hex.EncodedLen(keyBytes) && scan.All(key, lowerHex)
+}

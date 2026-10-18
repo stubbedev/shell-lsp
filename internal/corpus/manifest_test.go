@@ -116,3 +116,57 @@ func TestPruneRemovesOnlyStaleCorpusEntries(t *testing.T) {
 		t.Errorf("Fetched = %v, want an error naming the pruned repository", err)
 	}
 }
+
+func TestManifestFieldsAreReadExactly(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		check func(string) bool
+		field string
+		valid []string
+		bad   []string
+	}{
+		{repoName, "name", []string{"a", "0x", "k8s", "a.b_c-d"}, []string{"", "A", ".a", "-a", "_a", "a@b", "a/b", "aB"}},
+		{license, "licence", []string{"MIT", "Apache-2.0", "GPL-2.0+", "0BSD"}, []string{"", "M/T", "MIT OR X", "(MIT)"}},
+		{repoURL, "URL", []string{"https://github.com/a/b", "https://github.com/A-1/b_c.d"}, []string{
+			"", "https://github.com/a", "https://github.com//b", "https://github.com/a/", "https://github.com/a/b/c",
+			"https://github.com/a/b?x", "http://github.com/a/b", "https://github.comx/a/b", " https://github.com/a/b",
+		}},
+		{commitHash, "commit", []string{commit, strings.Repeat("0", 40)}, []string{"", commit[:39], commit + "0", strings.ToUpper(commit), strings.Repeat("g", 40)}},
+	} {
+		for _, v := range tc.valid {
+			if !tc.check(v) {
+				t.Errorf("%s %q was rejected", tc.field, v)
+			}
+		}
+		for _, v := range tc.bad {
+			if tc.check(v) {
+				t.Errorf("%s %q was accepted", tc.field, v)
+			}
+		}
+	}
+}
+
+func TestCacheEntryRecognisesOnlyCorpusDirectories(t *testing.T) {
+	t.Parallel()
+
+	repo := Repo{Name: "k8s.io_x-y", URL: "https://github.com/a/b", Commit: commit}
+	for name, want := range map[string]bool{
+		filepath.Base(repo.Dir("cache")): true,
+		".fetch-a-123":                   true,
+		".fetch-":                        true,
+		"a@0123456789ab":                 true,
+		"a@0123456789a":                  false,
+		"a@0123456789abc":                false,
+		"a@0123456789AB":                 false,
+		"A@0123456789ab":                 false,
+		"@0123456789ab":                  false,
+		"a@b@0123456789ab":               false,
+		"unrelated":                      false,
+		".fetch":                         false,
+	} {
+		if got := cacheEntry(name); got != want {
+			t.Errorf("cacheEntry(%q) = %t, want %t", name, got, want)
+		}
+	}
+}
