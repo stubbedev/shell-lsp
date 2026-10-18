@@ -1,12 +1,9 @@
 package manpage
 
 import (
-	"regexp"
 	"slices"
 	"strings"
 )
-
-var optionName = regexp.MustCompile(`^--?[A-Za-z0-9?#@][A-Za-z0-9_-]*`)
 
 type Option struct {
 	Names  []string
@@ -55,8 +52,8 @@ func appendOptions(options []Option, blocks []block, seen map[string]bool) []Opt
 func (o *Option) addNames(tag string) {
 	for part := range strings.SplitSeq(tag, ",") {
 		part = strings.TrimSpace(part)
-		name := optionName.FindString(part)
-		if name == "" || name == "-" || name == "--" {
+		name := optionName(part)
+		if name == "" {
 			continue
 		}
 		o.Valued = o.Valued || takesValue(part[len(name):])

@@ -1,7 +1,6 @@
 package manpage
 
 import (
-	"regexp"
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/scan"
@@ -12,11 +11,6 @@ const (
 	blockOpen     = `\{`
 	blockClose    = `\}`
 	definitionEnd = ".."
-)
-
-var (
-	bareWord       = regexp.MustCompile(`^[a-z][a-z0-9_-]*[a-z0-9]$`)
-	crossReference = regexp.MustCompile(`^([^()]+)\([0-9][A-Za-z]*\)$`)
 )
 
 type headingKind uint8
@@ -224,14 +218,7 @@ func isTerm(text string) bool {
 	}
 	first, _, _ := strings.Cut(text, " ")
 	name, _ := splitReference(strings.TrimSuffix(first, ","))
-	return bareWord.MatchString(name) && !endsSentence(text)
-}
-
-func splitReference(word string) (string, bool) {
-	if m := crossReference.FindStringSubmatch(word); m != nil {
-		return m[1], true
-	}
-	return word, false
+	return isBareWord(name) && !endsSentence(text)
 }
 
 func endsSentence(text string) bool {

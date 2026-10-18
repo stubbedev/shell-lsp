@@ -212,7 +212,7 @@ func (s entryScope) head(text string, prefixed bool) (string, string, bool) {
 			return "", "", false
 		case n > 0:
 			word := strings.TrimSuffix(fields[n], ",")
-			return word, text, bareWord.MatchString(word)
+			return word, text, isBareWord(word)
 		}
 	}
 	if prefixed {
@@ -221,9 +221,9 @@ func (s entryScope) head(text string, prefixed bool) (string, string, bool) {
 	word, referenced := splitReference(strings.TrimSuffix(fields[0], ","))
 	if referenced {
 		word = subcommandOf(word, s.names)
-		return word, s.invocation + " " + word, bareWord.MatchString(word)
+		return word, s.invocation + " " + word, isBareWord(word)
 	}
-	return word, s.invocation + " " + text, bareWord.MatchString(word)
+	return word, s.invocation + " " + text, isBareWord(word)
 }
 
 func subcommandOf(page string, names []string) string {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"regexp"
 	"strings"
 	"sync"
 )
@@ -15,8 +14,6 @@ const (
 	sectionSynopsis = "SYNOPSIS"
 	sectionDescribe = "DESCRIPTION"
 )
-
-var validName = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9._+-]*$`)
 
 var ErrNoPage = errors.New("no manual page")
 
@@ -118,7 +115,7 @@ func (l *Lookup) cached(name string) (cached, bool) {
 }
 
 func (l *Lookup) Page(ctx context.Context, name string) (Page, error) {
-	if !validName.MatchString(name) {
+	if !validName(name) {
 		return Page{}, fmt.Errorf("%w: %q is not a command name", ErrNoPage, name)
 	}
 	if hit, ok := l.cached(name); ok {

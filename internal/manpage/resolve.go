@@ -79,7 +79,7 @@ func (r *resolver) root(command string) (level, error) {
 }
 
 func (r *resolver) child(parent *level, word string) (level, bool, error) {
-	if !bareWord.MatchString(word) {
+	if !isBareWord(word) {
 		return level{}, false, nil
 	}
 	listed, isListed := findSubcommand(parent.node.Subcommands, word)
@@ -176,7 +176,7 @@ func (r *resolver) listing(lv *level) ([]Subcommand, error) {
 	prefix := lv.page + "-"
 	for _, pageName := range l.library.prefixed(prefix) {
 		name := pageName[len(prefix):]
-		if _, listed := findSubcommand(lv.node.Subcommands, name); listed || !bareWord.MatchString(name) {
+		if _, listed := findSubcommand(lv.node.Subcommands, name); listed || !isBareWord(name) {
 			continue
 		}
 		page, state, err := r.page(pageName)
