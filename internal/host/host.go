@@ -35,6 +35,7 @@ type definition struct {
 	names       []string
 	extensions  []string
 	prefixes    []string
+	companions  []string
 	analyze     func(text string) analysis
 	builtins    model.Builtins
 	checks      model.Checks
@@ -130,6 +131,7 @@ var definitions = [...]definition{
 		names:       []string{"Dockerfile", "Containerfile"},
 		extensions:  []string{".Dockerfile", ".dockerfile", ".Containerfile"},
 		prefixes:    []string{"Dockerfile.", "Containerfile."},
+		companions:  []string{".dockerignore"},
 		analyze:     analyzeDocker,
 		builtins:    dockerfile.Builtins,
 		checks:      dockerfile.Checks,
@@ -172,6 +174,9 @@ func baseName(name string) string { return path.Base(strings.ReplaceAll(name, "\
 func FromName(name string) (Language, bool) {
 	base := baseName(name)
 	return find(func(d definition) bool {
+		if slices.ContainsFunc(d.companions, func(ext string) bool { return strings.HasSuffix(base, ext) }) {
+			return false
+		}
 		return slices.Contains(d.names, base) || slices.ContainsFunc(d.extensions, func(ext string) bool { return strings.HasSuffix(base, ext) }) ||
 			slices.ContainsFunc(d.prefixes, func(prefix string) bool { return strings.HasPrefix(base, prefix) })
 	})

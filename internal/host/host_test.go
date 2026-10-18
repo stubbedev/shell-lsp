@@ -52,6 +52,8 @@ func TestOf(t *testing.T) {
 		{"file:///w/x", "dockerfile", Docker, true},
 		{"file:///w/Dockerfile", "shellscript", Docker, true},
 		{"file:///w/dockerfile.sh", "", 0, false},
+		{"file:///w/Dockerfile.dockerignore", "", 0, false},
+		{"file:///w/Containerfile.ci.dockerignore", "", 0, false},
 	} {
 		got, ok := Of(tt.uri, tt.languageID)
 		if ok != tt.ok || ok && got != tt.want {
