@@ -3047,3 +3047,85 @@ func TestParseStartAt(t *testing.T) {
 	_, err = p.Parse(strings.NewReader("fi"), "")
 	qt.Assert(t, qt.ErrorMatches(err, `^2:6: .*`))
 }
+
+func TestParseErrorCloser(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		lang    LangVariant
+		recover bool
+		in      string
+		want    string
+	}{
+		{lang: LangBash, in: "[[ -f a", want: "\n]]"},
+		{lang: LangBash, in: "echo ${a", want: "}"},
+		{lang: LangBash, in: "echo ${a[1", want: "]"},
+		{lang: LangBash, in: "echo ${a:1", want: "}"},
+		{lang: LangBash, in: `echo "a`, want: `"`},
+		{lang: LangBash, in: "echo 'a", want: "'"},
+		{lang: LangBash, in: "echo $(a", want: ")"},
+		{lang: LangBash, in: "if a; then b", want: "\nfi"},
+		{lang: LangBash, in: "{ a", want: "\n}"},
+		{lang: LangBash, in: "echo $((a", want: "))"},
+		{lang: LangBash, in: "echo a)", want: ""},
+		{lang: LangBash, in: "[[ a b", want: ""},
+		{lang: LangBash, recover: true, in: `[[ "$a`, want: "\"\n]]"},
+		{lang: LangBash, recover: true, in: `[[ $(echo "${a`, want: "}\")\n]]"},
+		{lang: LangBash, recover: true, in: "if [[ -f a", want: "\n]]"},
+		{lang: LangBash, recover: true, in: "echo ${a[$(b", want: ")]"},
+		{lang: LangZsh, in: "print ${(j", want: ")"},
+		{lang: LangZsh, in: "print -l *(N", want: ")"},
+		{lang: LangZsh, recover: true, in: "print ${a:h", want: "}"},
+	}
+	for _, tc := range tests {
+		options := []ParserOption{Variant(tc.lang)}
+		if tc.recover {
+			options = append(options, RecoverErrors(8))
+		}
+		_, err := NewParser(options...).Parse(strings.NewReader(tc.in), "")
+		perr, ok := err.(ParseError)
+		if !ok {
+			t.Errorf("%q: error %v is not a ParseError", tc.in, err)
+			continue
+		}
+		qt.Check(t, qt.Equals(perr.Closer, tc.want), qt.Commentf("%q", tc.in))
+		if tc.want == "" {
+			continue
+		}
+		qt.Check(t, qt.IsTrue(perr.Incomplete), qt.Commentf("%q", tc.in))
+		closed := tc.in
+		for range 4 {
+			closed += perr.Closer
+			_, err = NewParser(options...).Parse(strings.NewReader(closed), "")
+			if perr, ok = err.(ParseError); !ok || perr.Closer == "" {
+				break
+			}
+		}
+		qt.Check(t, qt.IsNil(err), qt.Commentf("%q closed as %q", tc.in, closed))
+	}
+}
+
+func TestParseRecoveredSingleQuoteKeepsItsText(t *testing.T) {
+	t.Parallel()
+
+	f, err := NewParser(RecoverErrors(1)).Parse(strings.NewReader("echo 'it is"), "")
+	qt.Assert(t, qt.IsNil(err))
+	sq := f.Stmts[0].Cmd.(*CallExpr).Args[1].Parts[0].(*SglQuoted)
+	qt.Assert(t, qt.IsTrue(sq.Right.IsRecovered()))
+	qt.Assert(t, qt.Equals(sq.Value, "it is"))
+}
+
+func TestParseZshModifierPositions(t *testing.T) {
+	t.Parallel()
+
+	src := "echo ${a:h:t}"
+	f, err := NewParser(Variant(LangZsh)).Parse(strings.NewReader(src), "")
+	qt.Assert(t, qt.IsNil(err))
+	pe := f.Stmts[0].Cmd.(*CallExpr).Args[1].Parts[0].(*ParamExp)
+	qt.Assert(t, qt.HasLen(pe.Modifiers, 2))
+	for i, want := range []int{len("echo ${a:"), len("echo ${a:h:")} {
+		mod := pe.Modifiers[i]
+		qt.Check(t, qt.Equals(int(mod.Pos().Offset()), want))
+		qt.Check(t, qt.Equals(src[mod.Pos().Offset():mod.End().Offset()], mod.Value))
+	}
+}

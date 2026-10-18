@@ -1,0 +1,44 @@
+syntax: the first zsh modifier starts after its colon
+
+In ${a:h:t}, the literal of every modifier after the first starts at its
+letter, but the first one started at the colon before it, while its value
+holds only the letter, so its position and its end disagreed with its
+text: the source between them read ":" instead of "h".
+
+Reproducer: parse "echo ${a:h:t}" with LangZsh; Modifiers[0].Pos() is
+1:9, the colon, instead of 1:10.
+
+diff --git a/syntax/parser.go b/syntax/parser.go
+--- a/syntax/parser.go
++++ b/syntax/parser.go
+@@ -1869,7 +1869,7 @@
+ 			break
+ 		}
+ 		if p.lang.in(LangZsh) && (p.r == '&' || asciiLetter(p.r)) {
+-			pos := p.pos
++			pos := p.nextPos()
+ 		loop:
+ 			for p.newLit(p.r); ; p.rune() {
+ 				switch p.r {
+diff --git a/syntax/parser_test.go b/syntax/parser_test.go
+--- a/syntax/parser_test.go
++++ b/syntax/parser_test.go
+@@ -3047,3 +3047,18 @@
+ 	_, err = p.Parse(strings.NewReader("fi"), "")
+ 	qt.Assert(t, qt.ErrorMatches(err, `^2:6: .*`))
+ }
++
++func TestParseZshModifierPositions(t *testing.T) {
++	t.Parallel()
++
++	src := "echo ${a:h:t}"
++	f, err := NewParser(Variant(LangZsh)).Parse(strings.NewReader(src), "")
++	qt.Assert(t, qt.IsNil(err))
++	pe := f.Stmts[0].Cmd.(*CallExpr).Args[1].Parts[0].(*ParamExp)
++	qt.Assert(t, qt.HasLen(pe.Modifiers, 2))
++	for i, want := range []int{len("echo ${a:"), len("echo ${a:h:")} {
++		mod := pe.Modifiers[i]
++		qt.Check(t, qt.Equals(int(mod.Pos().Offset()), want))
++		qt.Check(t, qt.Equals(src[mod.Pos().Offset():mod.End().Offset()], mod.Value))
++	}
++}

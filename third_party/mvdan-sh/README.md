@@ -66,6 +66,9 @@ reproducer so that it can be sent upstream as it is.
 | 0034 | pattern: an escaped character ends a range in a bracket expression (`[0-\ ]`), so a reversed range is an error, as with `[z-a]`, instead of a regexp that fails to compile | — |
 | 0035 | syntax: a here-document delimiter with any quoted part (`'E'OF`, `` '`'a ``) keeps its body literal, as in the shells, instead of only when its last part is quoted | — |
 | 0036 | syntax: a case item that error recovery leaves without patterns (`case x in (`) reports an invalid position instead of panicking in `Pos` | — |
+| 0037 | zsh: the first modifier of `${a:h:t}` starts at its letter, as the others do, instead of at the colon before it | [mvdan/sh#120](https://github.com/mvdan/sh/issues/120) |
+| 0038 | syntax: a single-quoted string that error recovery closes at the end of the input keeps the text read so far in `Value` instead of an empty one | — |
+| 0039 | syntax: `ParseError.Closer` names the text that closes the construct left open, after what error recovery supplied at the end of the input inside it (a `"` and then `]]` on a new line after `[[ "$a`), so a caller completing partial input can append it and parse again | — |
 
 ## Tests
 

@@ -549,6 +549,10 @@ type Parser struct {
 	recoveredErrors  int
 	recoverErrorsMax int
 
+	// eofClosers holds the text of the closers which error recovery
+	// supplied at the end of the input, innermost first.
+	eofClosers []string
+
 	forbidNested bool
 
 	// wordCont is set while the parts of a word are being parsed, so that
@@ -630,6 +634,7 @@ func (p *Parser) reset() {
 	p.openNodes = 0
 	p.nesting = 0
 	p.recoveredErrors = 0
+	p.eofClosers = p.eofClosers[:0]
 	p.heredocs, p.buriedHdocs = p.heredocs[:0], 0
 	p.hdocStops = nil
 	p.parsingDoc = false
@@ -1007,31 +1012,61 @@ func (p *Parser) followWordTok(tok token, pos Pos) *Word {
 func (p *Parser) stmtEnd(n Node, start, end string) Pos {
 	pos, ok := p.gotRsrv(end)
 	if !ok {
-		if p.recoverError() {
+		if p.recoverCloser(wordCloser(end)) {
 			return recoveredPos
 		}
-		p.posErr(n.Pos(), "%#q statement must end with %#q", start, end)
+		p.closerErr(n.Pos(), wordCloser(end), "%#q statement must end with %#q", start, end)
 	}
 	return pos
 }
 
 func (p *Parser) quoteErr(lpos Pos, quote token) {
-	p.posErr(lpos, "reached %#q without closing quote %#q", p.tok, quote)
+	p.closerErr(lpos, quote.String(), "reached %#q without closing quote %#q", p.tok, quote)
 }
 
 func (p *Parser) matchingErr(lpos Pos, left, right token) {
-	p.posErr(lpos, "reached %#q without matching %#q with %#q", p.tok, left, right)
+	p.closerErr(lpos, closerText(left, right), "reached %#q without matching %#q with %#q", p.tok, left, right)
 }
 
 func (p *Parser) matched(lpos Pos, left, right token) Pos {
 	pos := p.pos
 	if !p.got(right) {
-		if p.recoverError() {
+		if p.recoverCloser(closerText(left, right)) {
 			return recoveredPos
 		}
 		p.matchingErr(lpos, left, right)
 	}
 	return pos
+}
+
+// closerText returns the text which closes a construct opened by left with
+// right, on a new line when right is a reserved word, like the "}" of a
+// block or the "]]" of a test, so that it is read as a word of its own.
+func closerText(left, right token) string {
+	if left == leftBrace || left == dblLeftBrack {
+		return wordCloser(right.String())
+	}
+	return right.String()
+}
+
+// wordCloser returns the text which closes a construct with a reserved
+// word, like "fi", on a new line so that it is read as a word of its own.
+func wordCloser(word string) string {
+	return "\n" + word
+}
+
+// recoverCloser is like [Parser.recoverError], for a missing closer, given
+// as the text which would close the construct. When the input has ended,
+// the text is noted too, so that an error about a construct around this
+// one can tell what would close both; see [ParseError.Closer].
+func (p *Parser) recoverCloser(closer string) bool {
+	if !p.recoverError() {
+		return false
+	}
+	if p.tok == _EOF {
+		p.eofClosers = append(p.eofClosers, closer)
+	}
+	return true
 }
 
 func (p *Parser) errPass(err error) {
@@ -1096,6 +1131,16 @@ type ParseError struct {
 	Text     string
 
 	Incomplete bool
+
+	// Closer is the text which was missing to close the construct starting
+	// at Pos: its closing token, such as "}" for a "${", on a new line when
+	// that is a reserved word, such as "\n]]" for a "[[". It is empty for
+	// errors of any other kind. When Incomplete is set too, the input ended
+	// inside that construct, and Closer starts with what error recovery
+	// supplied there to close the constructs inside it, such as "\"\n]]"
+	// for `[[ "$a`, so that a caller completing partial input, such as a
+	// shell prompt being typed, can append Closer and parse again.
+	Closer string
 }
 
 func (e ParseError) Error() string {
@@ -1149,17 +1194,28 @@ func (e LangError) Error() string {
 }
 
 func (p *Parser) posErr(pos Pos, format string, args ...any) {
+	p.closerErr(pos, "", format, args...)
+}
+
+// closerErr is like posErr, for an error about the construct starting at
+// pos, which the closer text was missing to close; an empty closer means
+// that the error is not about a missing closer.
+func (p *Parser) closerErr(pos Pos, closer string, format string, args ...any) {
 	// for i, arg := range args {
 	// 	if arg, ok := arg.(fmt.Stringer); ok && arg != _EOF {
 	// 		args[i] = quotedToken(arg)
 	// 	}
 	// }
-	p.errPass(ParseError{
+	err := ParseError{
 		Filename:   p.f.Name,
 		Pos:        pos,
 		Text:       fmt.Sprintf(format, args...),
 		Incomplete: p.tok == _EOF && p.Incomplete(),
-	})
+	}
+	if closer != "" {
+		err.Closer = strings.Join(p.eofClosers, "") + closer
+	}
+	p.errPass(err)
 }
 
 func (p *Parser) curErr(format string, args ...any) {
@@ -1427,8 +1483,9 @@ func (p *Parser) wordPart() WordPart {
 				p.litBs = append(p.litBs, '\\', '\n')
 			case runeEOF:
 				p.tok = _EOF
-				if p.recoverError() {
+				if p.recoverCloser(sglQuote.String()) {
 					sq.Right = recoveredPos
+					sq.Value = p.endLit()
 					return sq
 				}
 				p.quoteErr(sq.Pos(), sglQuote)
@@ -1474,7 +1531,7 @@ func (p *Parser) wordPart() WordPart {
 		// Like above, the lexer didn't call p.rune for us.
 		p.rune()
 		if !p.got(bckQuote) {
-			if p.recoverError() {
+			if p.recoverCloser(bckQuote.String()) {
 				cs.Right = recoveredPos
 			} else {
 				p.quoteErr(cs.Pos(), bckQuote)
@@ -1598,7 +1655,7 @@ func (p *Parser) arithmExp(left token) *ArithmExp {
 	ar.X = p.followArithm(left, ar.Left)
 	if ar.Bracket {
 		if p.tok != rightBrack {
-			if p.recoverError() {
+			if p.recoverCloser(rightBrack.String()) {
 				ar.Right = recoveredPos
 				return ar
 			}
@@ -1638,7 +1695,7 @@ func (p *Parser) dblQuoted() *DblQuoted {
 	p.quote = old
 	q.Right = p.pos
 	if !p.got(dblQuote) {
-		if p.recoverError() {
+		if p.recoverCloser(dblQuote.String()) {
 			q.Right = recoveredPos
 		} else {
 			p.quoteErr(q.Pos(), dblQuote)
@@ -1869,7 +1926,7 @@ zshPrefixLoop:
 			break
 		}
 		if p.lang.in(LangZsh) && (p.r == '&' || asciiLetter(p.r)) {
-			pos := p.pos
+			pos := p.nextPos()
 		loop:
 			for p.newLit(p.r); ; p.rune() {
 				switch p.r {
@@ -3051,7 +3108,7 @@ func (p *Parser) braceGroup() *Block {
 	b.Stmts, b.Last = p.followStmts("{", b.Lbrace, "}")
 	if pos, ok := p.gotRsrv("}"); ok {
 		b.Rbrace = pos
-	} else if p.recoverError() {
+	} else if p.recoverCloser(wordCloser(rightBrace.String())) {
 		b.Rbrace = recoveredPos
 	} else {
 		p.matchingErr(b.Lbrace, leftBrace, rightBrace)

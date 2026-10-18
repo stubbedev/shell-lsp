@@ -1,0 +1,39 @@
+syntax: a recovered single-quoted string keeps its text
+
+With RecoverErrors, a single-quoted string cut off by the end of the
+input is kept with a recovered closing quote, but its Value was left
+empty, unlike a double-quoted string, whose parts keep the text read so
+far. A caller reading the partial input, such as a completion of the
+word being typed, lost the text of the word.
+
+Reproducer: parse "echo 'it is" with RecoverErrors(1); the SglQuoted
+Value is "" instead of "it is".
+
+diff --git a/syntax/parser.go b/syntax/parser.go
+--- a/syntax/parser.go
++++ b/syntax/parser.go
+@@ -1429,6 +1429,7 @@
+ 				p.tok = _EOF
+ 				if p.recoverError() {
+ 					sq.Right = recoveredPos
++					sq.Value = p.endLit()
+ 					return sq
+ 				}
+ 				p.quoteErr(sq.Pos(), sglQuote)
+diff --git a/syntax/parser_test.go b/syntax/parser_test.go
+--- a/syntax/parser_test.go
++++ b/syntax/parser_test.go
+@@ -3062,3 +3062,13 @@
+ 		qt.Check(t, qt.Equals(src[mod.Pos().Offset():mod.End().Offset()], mod.Value))
+ 	}
+ }
++
++func TestParseRecoveredSingleQuoteKeepsItsText(t *testing.T) {
++	t.Parallel()
++
++	f, err := NewParser(RecoverErrors(1)).Parse(strings.NewReader("echo 'it is"), "")
++	qt.Assert(t, qt.IsNil(err))
++	sq := f.Stmts[0].Cmd.(*CallExpr).Args[1].Parts[0].(*SglQuoted)
++	qt.Assert(t, qt.IsTrue(sq.Right.IsRecovered()))
++	qt.Assert(t, qt.Equals(sq.Value, "it is"))
++}

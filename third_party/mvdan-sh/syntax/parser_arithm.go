@@ -419,7 +419,7 @@ func (p *Parser) matchedArithm(lpos Pos, left, right token) {
 
 func (p *Parser) arithmEnd(ltok token, lpos Pos, old saveState) Pos {
 	if !p.peekArithmEnd() {
-		if p.recoverError() {
+		if p.recoverCloser(dblRightParen.String()) {
 			return recoveredPos
 		}
 		p.arithmMatchingErr(lpos, ltok, dblRightParen)
