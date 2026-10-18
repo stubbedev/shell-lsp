@@ -76,7 +76,7 @@ type checkResult struct {
 }
 
 func implementedCodes() []lint.Code {
-	return slices.DeleteFunc(lint.Codes(), lint.Code.Native)
+	return slices.DeleteFunc(lint.Codes(), func(c lint.Code) bool { return !c.ShellCheck() })
 }
 
 func shellcheckShell(d dialect.Dialect) (string, bool) {

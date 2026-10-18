@@ -1,0 +1,19 @@
+# A configuration written the way most projects write it
+failure-threshold: warning
+ignored:
+  - DL3008
+  - SC2086
+override:
+  error:
+    - DL3001
+  warning: [DL3042, DL3013]
+  info: []
+trustedRegistries:
+- docker.io
+- "my-registry.example.com:5000"
+- '*.gcr.io'
+label-schema:
+  author: text
+  contact: email
+  created: rfc3339
+strict-labels: true

@@ -40,42 +40,73 @@ const (
 
 type Code uint16
 
+type codeFamily struct {
+	prefix string
+	base   int
+	end    int
+	wiki   Wiki
+}
+
+type Wiki struct {
+	Name string
+	URL  string
+}
+
 const (
 	nativeBase   Code = 10000
-	compatPrefix      = "SC"
-	nativePrefix      = "SL"
+	hadolintBase Code = 20000
+	familyEnd    Code = 30000
 )
 
-func (c Code) Native() bool { return c >= nativeBase }
+var (
+	shellcheckCodes = codeFamily{prefix: "SC", base: 0, end: int(nativeBase), wiki: Wiki{Name: "ShellCheck wiki", URL: "https://www.shellcheck.net/wiki/"}}
+	nativeCodes     = codeFamily{prefix: "SL", base: int(nativeBase), end: int(hadolintBase)}
+	hadolintCodes   = codeFamily{prefix: "DL", base: int(hadolintBase), end: int(familyEnd), wiki: Wiki{Name: "Hadolint wiki", URL: "https://github.com/hadolint/hadolint/wiki/"}}
+	codeFamilies    = []codeFamily{shellcheckCodes, nativeCodes, hadolintCodes}
+)
+
+func (f codeFamily) has(c Code) bool { return int(c) > f.base && int(c) < f.end }
+
+func (c Code) family() codeFamily {
+	for _, f := range codeFamilies {
+		if f.has(c) {
+			return f
+		}
+	}
+	panic("lint: code " + strconv.Itoa(int(c)) + " belongs to no code family")
+}
+
+func (c Code) ShellCheck() bool { return shellcheckCodes.has(c) }
+
+func (c Code) Native() bool { return nativeCodes.has(c) }
+
+func (c Code) Hadolint() bool { return hadolintCodes.has(c) }
 
 func (c Code) Portability() bool { return c >= 3000 && c < 4000 }
 
 func (c Code) parseFailure() bool { return c >= 1000 && c < 2000 }
 
 func (c Code) String() string {
-	if c.Native() {
-		return nativePrefix + strconv.Itoa(int(c-nativeBase))
-	}
-	return compatPrefix + strconv.Itoa(int(c))
+	f := c.family()
+	return f.prefix + strconv.Itoa(int(c)-f.base)
 }
 
 func ParseCode(s string) (Code, error) {
 	upper := strings.ToUpper(strings.TrimSpace(s))
-	digits, native := strings.CutPrefix(upper, nativePrefix)
-	if !native {
-		digits = strings.TrimPrefix(upper, compatPrefix)
+	family := shellcheckCodes
+	for _, f := range codeFamilies {
+		if strings.HasPrefix(upper, f.prefix) {
+			family = f
+		}
 	}
-	n, err := strconv.ParseUint(digits, 10, 16)
+	n, err := strconv.ParseUint(strings.TrimPrefix(upper, family.prefix), 10, 16)
 	if err != nil {
-		return 0, fmt.Errorf("expected a check code like SC2034 or SL1001, got %q: %w", s, err)
+		return 0, fmt.Errorf("expected a check code like SC2034, SL1001 or DL3008, got %q: %w", s, err)
 	}
-	if n == 0 || Code(n) >= nativeBase {
-		return 0, fmt.Errorf("expected a check code like SC2034 or SL1001, got %q: the number must be between 1 and %d", s, int(nativeBase)-1)
+	if n == 0 || int(n) >= family.end-family.base {
+		return 0, fmt.Errorf("expected a check code like SC2034, SL1001 or DL3008, got %q: the number after %s must be between 1 and %d", s, family.prefix, family.end-family.base-1)
 	}
-	if native {
-		return nativeBase + Code(n), nil
-	}
-	return Code(n), nil
+	return Code(family.base + int(n)), nil //nolint:gosec // G115: base + n stays below the family's end, which a Code holds
 }
 
 type Finding struct {

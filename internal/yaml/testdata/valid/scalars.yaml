@@ -1,0 +1,26 @@
+plain: hello world
+colon-inside: a:b
+hash-inside: a#b
+url: https://example.com/x?y=1#frag
+single: 'it''s here'
+double: "tab\there \u00e9 \x41 \"q\" \\"
+empty-single: ''
+empty-double: ""
+null-tilde: ~
+null-word: null
+null-empty:
+bool-true: true
+bool-upper: TRUE
+bool-yes: yes
+int: 42
+negative: -7
+hex: 0x1F
+octal: 0o17
+float: 2.5
+exp: 1e3
+inf: .inf
+nan: .NaN
+trailing: value   # comment
+dash-word: -x
+question-word: ?x
+colon-word: :x

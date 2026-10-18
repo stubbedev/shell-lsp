@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"path/filepath"
 	"sync"
 	"time"
 )
@@ -76,4 +77,26 @@ func (c *Cache[T]) sweepLocked(now time.Time) {
 		}
 	}
 	c.sweepAt = max(minSweep, 2*len(c.entries))
+}
+
+func (c *Cache[T]) Nearest(dir string, names, fallback []string) (T, bool, error) {
+	for {
+		for _, name := range names {
+			if value, found, err := c.Load(filepath.Join(dir, name)); found || err != nil {
+				return value, found, err
+			}
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	for _, path := range fallback {
+		if value, found, err := c.Load(path); found || err != nil {
+			return value, found, err
+		}
+	}
+	var zero T
+	return zero, false, nil
 }

@@ -39,10 +39,9 @@ func Catalog() []CodeInfo {
 }
 
 const (
-	docsURL           = "https://github.com/stubbedev/shell-lsp/blob/main/docs/"
-	checksPage        = "checks.md"
-	rulesPage         = "rules.md"
-	shellcheckWikiURL = "https://www.shellcheck.net/wiki/"
+	docsURL    = "https://github.com/stubbedev/shell-lsp/blob/main/docs/"
+	checksPage = "checks.md"
+	rulesPage  = "rules.md"
 )
 
 func (c Code) Anchor() string { return strings.ToLower(c.String()) }
@@ -54,16 +53,17 @@ func (c Code) Docs() string {
 	return docsURL + checksPage + "#" + c.Anchor()
 }
 
-func (c Code) Wiki() (string, bool) {
-	if c.Native() {
-		return "", false
+func (c Code) Wiki() (Wiki, bool) {
+	wiki := c.family().wiki
+	if wiki.URL == "" {
+		return Wiki{}, false
 	}
-	return shellcheckWikiURL + c.String(), true
+	return Wiki{Name: wiki.Name, URL: wiki.URL + c.String()}, true
 }
 
 func (c Code) Reference() string {
 	if wiki, ok := c.Wiki(); ok {
-		return wiki
+		return wiki.URL
 	}
 	return c.Docs()
 }

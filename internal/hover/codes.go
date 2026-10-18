@@ -27,7 +27,7 @@ func codeHeader(info lint.CodeInfo) string {
 func references(code lint.Code) string {
 	links := "[" + code.String() + " in the shell-lsp " + docsPage(code) + "](" + code.Docs() + ")"
 	if wiki, ok := code.Wiki(); ok {
-		links += " · [ShellCheck wiki](" + wiki + ")"
+		links += " · [" + wiki.Name + "](" + wiki.URL + ")"
 	}
 	return links
 }
@@ -40,8 +40,8 @@ func docsPage(code lint.Code) string {
 }
 
 func referenceTitle(code lint.Code) string {
-	if code.Native() {
-		return code.String() + " in the shell-lsp rules"
+	if wiki, ok := code.Wiki(); ok {
+		return code.String() + " on the " + wiki.Name
 	}
-	return code.String() + " on the ShellCheck wiki"
+	return code.String() + " in the shell-lsp rules"
 }

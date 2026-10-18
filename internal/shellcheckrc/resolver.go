@@ -37,24 +37,7 @@ func IsName(path string) bool {
 }
 
 func (r *Resolver) Nearest(dir string) (File, bool, error) {
-	for {
-		for _, name := range Names {
-			if rc, found, err := r.Load(filepath.Join(dir, name)); found || err != nil {
-				return rc, found, err
-			}
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			break
-		}
-		dir = parent
-	}
-	for _, path := range r.fallback {
-		if rc, found, err := r.Load(path); found || err != nil {
-			return rc, found, err
-		}
-	}
-	return File{}, false, nil
+	return r.files.Nearest(dir, Names, r.fallback)
 }
 
 func (r *Resolver) Load(path string) (File, bool, error) {

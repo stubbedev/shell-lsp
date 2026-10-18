@@ -1,2 +1,3 @@
 * text=auto eol=lf
 *.png binary
+internal/yaml/testdata/valid/crlf.yaml -text

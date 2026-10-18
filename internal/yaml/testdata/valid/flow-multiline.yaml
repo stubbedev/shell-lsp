@@ -1,0 +1,8 @@
+ignored: [
+  DL3006,   # tags are pinned by digest
+  DL3007,
+]
+label-schema: {
+  a: text,
+  b: url
+}

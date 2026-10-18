@@ -1,0 +1,1 @@
+{"failure-threshold":"!!str warning","ignored":["!!str DL3008","!!str SC2086"],"override":{"error":["!!str DL3001"],"warning":["!!str DL3042","!!str DL3013"],"info":[]},"trustedRegistries":["!!str docker.io","!!str my-registry.example.com:5000","!!str *.gcr.io"],"label-schema":{"author":"!!str text","contact":"!!str email","created":"!!str rfc3339"},"strict-labels":"!!bool true"}
