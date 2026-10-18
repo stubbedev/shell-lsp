@@ -9,6 +9,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/host/dockerfile"
 	"github.com/stubbedev/shell-lsp/internal/lint"
+	"github.com/stubbedev/shell-lsp/internal/scan"
 )
 
 var (
@@ -115,19 +116,15 @@ func (c *checker) required() {
 	}
 }
 
-func lowerOrDigit(r rune) bool { return r >= 'a' && r <= 'z' || r >= '0' && r <= '9' }
-
-func alnum(r rune) bool { return lowerOrDigit(r) || r >= 'A' && r <= 'Z' }
-
 func validLabelKey(key string) bool {
-	if key == "" || key[0] < 'a' || key[0] > 'z' || !lowerOrDigit(rune(key[len(key)-1])) {
+	if key == "" || !scan.Lower(key[0]) || !scan.LowerOrDigit(key[len(key)-1]) {
 		return false
 	}
 	if strings.Contains(key, "..") || strings.Contains(key, "--") ||
 		slices.ContainsFunc(reservedLabelPrefixes, func(p string) bool { return strings.HasPrefix(key, p) }) {
 		return false
 	}
-	return !strings.ContainsFunc(key, func(r rune) bool { return !lowerOrDigit(r) && !strings.ContainsRune(".-_/", r) })
+	return scan.All(key, func(c byte) bool { return scan.LowerOrDigit(c) || strings.IndexByte(".-_/", c) >= 0 })
 }
 
 func validURL(v string) bool {
@@ -151,9 +148,7 @@ func validURL(v string) bool {
 	return !strings.ContainsAny(rest, "[]")
 }
 
-func digits(s string) bool {
-	return s != "" && !strings.ContainsFunc(s, func(r rune) bool { return r < '0' || r > '9' })
-}
+func digits(s string) bool { return s != "" && scan.All(s, scan.Digit) }
 
 func number(s string) int {
 	n := 0
@@ -186,8 +181,8 @@ func validRFC3339(v string) bool {
 	}
 	rest := v[19:]
 	if fraction, ok := strings.CutPrefix(rest, "."); ok {
-		end := strings.IndexFunc(fraction, func(r rune) bool { return r < '0' || r > '9' })
-		if end <= 0 {
+		end := scan.While(fraction, scan.Digit)
+		if end == 0 {
 			return false
 		}
 		rest = fraction[end:]
@@ -202,12 +197,12 @@ func validRFC3339(v string) bool {
 }
 
 func validHash(v string) bool {
-	return (len(v) >= 7 && len(v) <= 40 || len(v) == 64) && !strings.ContainsFunc(v, func(r rune) bool { return (r < '0' || r > '9') && (r < 'a' || r > 'f') })
+	return (len(v) >= 7 && len(v) <= 40 || len(v) == 64) && scan.All(v, scan.LowerHexDigit)
 }
 
 func identifiers(s string, numeric bool) bool {
 	for id := range strings.SplitSeq(s, ".") {
-		if id == "" || strings.ContainsFunc(id, func(r rune) bool { return !alnum(r) && r != '-' }) {
+		if id == "" || !scan.All(id, func(c byte) bool { return scan.Alnum(c) || c == '-' }) {
 			return false
 		}
 		if numeric && digits(id) && len(id) > 1 && id[0] == '0' {
@@ -230,7 +225,7 @@ func validSemver(v string) bool {
 const atext = "!#$%&'*+-/=?^_`{|}~"
 
 func atom(s string) bool {
-	return s != "" && !strings.ContainsFunc(s, func(r rune) bool { return !alnum(r) && !strings.ContainsRune(atext, r) })
+	return s != "" && scan.All(s, func(c byte) bool { return scan.Alnum(c) || strings.IndexByte(atext, c) >= 0 })
 }
 
 func hostname(s string) bool {
@@ -240,7 +235,7 @@ func hostname(s string) bool {
 	}
 	for l := range strings.SplitSeq(s, ".") {
 		if l == "" || len(l) > maxLabel || l[0] == '-' || l[len(l)-1] == '-' ||
-			strings.ContainsFunc(l, func(r rune) bool { return !alnum(r) && r != '-' }) {
+			!scan.All(l, func(c byte) bool { return scan.Alnum(c) || c == '-' }) {
 			return false
 		}
 	}

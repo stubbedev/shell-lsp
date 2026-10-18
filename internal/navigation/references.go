@@ -51,7 +51,7 @@ func (k Kind) ValidName(name string) bool {
 
 func validFunctionName(name string) bool {
 	return name != "" && parser.IsName(name[:1]) && scan.All(name, func(c byte) bool {
-		return parser.IsNameChar(c) || strings.IndexByte(functionNamePunctuation, c) >= 0
+		return scan.NameChar(c) || strings.IndexByte(functionNamePunctuation, c) >= 0
 	})
 }
 

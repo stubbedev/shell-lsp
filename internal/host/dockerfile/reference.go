@@ -1,6 +1,10 @@
 package dockerfile
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/stubbedev/shell-lsp/internal/scan"
+)
 
 const maxTag = 128
 
@@ -48,19 +52,17 @@ func validReference(ref string) bool {
 	return ok
 }
 
-func lowerAlnum(c byte) bool { return c >= 'a' && c <= 'z' || c >= '0' && c <= '9' }
-
 func validComponent(p string) bool {
-	if p == "" || !lowerAlnum(p[0]) || !lowerAlnum(p[len(p)-1]) {
+	if p == "" || !scan.LowerOrDigit(p[0]) || !scan.LowerOrDigit(p[len(p)-1]) {
 		return false
 	}
 	for i := 0; i < len(p); i++ {
 		c := p[i]
-		if lowerAlnum(c) {
+		if scan.LowerOrDigit(c) {
 			continue
 		}
 		j := i
-		for j < len(p) && !lowerAlnum(p[j]) {
+		for j < len(p) && !scan.LowerOrDigit(p[j]) {
 			j++
 		}
 		sep := p[i:j]
@@ -73,11 +75,11 @@ func validComponent(p string) bool {
 }
 
 func validTag(tag string) bool {
-	if tag == "" || len(tag) > maxTag || !nameChar(tag[0]) {
+	if tag == "" || len(tag) > maxTag || !scan.NameChar(tag[0]) {
 		return false
 	}
 	for i := range len(tag) {
-		if c := tag[i]; !nameChar(c) && c != '.' && c != '-' {
+		if c := tag[i]; !scan.NameChar(c) && c != '.' && c != '-' {
 			return false
 		}
 	}

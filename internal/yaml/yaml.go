@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/stubbedev/shell-lsp/internal/scan"
 )
 
 type Kind uint8
@@ -137,12 +139,10 @@ func (p *parser) lineEnd(pos int) int {
 	return len(p.text)
 }
 
-func blank(b byte) bool { return b == ' ' || b == '\t' }
-
 func breakOrEnd(b byte) bool { return b == '\n' || b == '\r' || b == 0 }
 
 func (p *parser) skipBlanks(pos int) int {
-	for blank(p.at(pos)) {
+	for scan.Blank(p.at(pos)) {
 		pos++
 	}
 	return pos
@@ -219,12 +219,12 @@ func (p *parser) document() (*Node, error) {
 }
 
 func (p *parser) marker(pos int, m string) bool {
-	return p.column(pos) == 0 && strings.HasPrefix(p.text[pos:], m) && (blank(p.at(pos+3)) || breakOrEnd(p.at(pos+3)))
+	return p.column(pos) == 0 && strings.HasPrefix(p.text[pos:], m) && (scan.Blank(p.at(pos+3)) || breakOrEnd(p.at(pos+3)))
 }
 
 func (p *parser) indicator(pos int) bool {
 	b := p.at(pos + 1)
-	return blank(b) || breakOrEnd(b)
+	return scan.Blank(b) || breakOrEnd(b)
 }
 
 func (p *parser) block(pos, parent int) (*Node, int, error) {
@@ -254,7 +254,7 @@ func (p *parser) block(pos, parent int) (*Node, int, error) {
 
 func (p *parser) lineDone(pos int) error {
 	pos = p.skipBlanks(pos)
-	if breakOrEnd(p.at(pos)) || p.at(pos) == '#' && blank(p.at(pos-1)) {
+	if breakOrEnd(p.at(pos)) || p.at(pos) == '#' && scan.Blank(p.at(pos-1)) {
 		return nil
 	}
 	return p.failAt(pos, "unexpected %q after the value", p.at(pos))
@@ -417,9 +417,9 @@ func (p *parser) plainEnd(pos int, flow bool) int {
 	for !breakOrEnd(p.at(end)) {
 		b := p.at(end)
 		switch {
-		case b == ':' && (blank(p.at(end+1)) || breakOrEnd(p.at(end+1)) || flow && flowIndicator(p.at(end+1))):
+		case b == ':' && (scan.Blank(p.at(end+1)) || breakOrEnd(p.at(end+1)) || flow && flowIndicator(p.at(end+1))):
 			return end
-		case b == '#' && end > pos && blank(p.at(end-1)):
+		case b == '#' && end > pos && scan.Blank(p.at(end-1)):
 			return end
 		case flow && flowIndicator(b):
 			return end
@@ -493,9 +493,9 @@ func (p *parser) doubleQuoted(pos int) (string, int, error) {
 func (p *parser) skipFlowSpace(pos int) (int, error) {
 	for pos < len(p.text) {
 		switch b := p.at(pos); {
-		case blank(b) || b == '\n' || b == '\r':
+		case scan.Blank(b) || b == '\n' || b == '\r':
 			pos++
-		case b == '#' && (pos == 0 || blank(p.at(pos-1)) || p.at(pos-1) == '\n'):
+		case b == '#' && (pos == 0 || scan.Blank(p.at(pos-1)) || p.at(pos-1) == '\n'):
 			pos = p.lineEnd(pos)
 		default:
 			return pos, nil

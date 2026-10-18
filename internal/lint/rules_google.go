@@ -115,11 +115,11 @@ func checkGoogleTodos(p *pass) {
 func todoMarker(body string) (int, bool) {
 	lead := len(body) - len(strings.TrimLeftFunc(body, unicode.IsSpace))
 	for start := 0; start < len(body); {
-		if !parser.IsNameChar(body[start]) {
+		if !scan.NameChar(body[start]) {
 			start++
 			continue
 		}
-		end := start + scan.While(body[start:], parser.IsNameChar)
+		end := start + scan.While(body[start:], scan.NameChar)
 		if word := body[start:end]; word == "TODO" || start == lead && strings.EqualFold(word, "todo") {
 			return start, true
 		}

@@ -47,8 +47,6 @@ const (
 	keySeparator   = "@"
 )
 
-func lowerHex(c byte) bool { return scan.Digit(c) || 'a' <= c && c <= 'f' }
-
 func repoName(name string) bool {
 	return name != "" && scan.LowerOrDigit(name[0]) && scan.All(name[1:], func(c byte) bool {
 		return scan.LowerOrDigit(c) || c == '.' || c == '_' || c == '-'
@@ -69,7 +67,9 @@ func githubName(name string) bool {
 	return name != "" && scan.All(name, func(c byte) bool { return scan.Alnum(c) || c == '_' || c == '.' || c == '-' })
 }
 
-func commitHash(commit string) bool { return len(commit) == commitDigits && scan.All(commit, lowerHex) }
+func commitHash(commit string) bool {
+	return len(commit) == commitDigits && scan.All(commit, scan.LowerHexDigit)
+}
 
 func LoadManifest(file string) ([]Repo, error) {
 	raw, err := os.ReadFile(file) //nolint:gosec
@@ -149,5 +149,5 @@ func cacheEntry(name string) bool {
 		return true
 	}
 	repo, key, ok := strings.Cut(name, keySeparator)
-	return ok && repoName(repo) && len(key) == hex.EncodedLen(keyBytes) && scan.All(key, lowerHex)
+	return ok && repoName(repo) && len(key) == hex.EncodedLen(keyBytes) && scan.All(key, scan.LowerHexDigit)
 }

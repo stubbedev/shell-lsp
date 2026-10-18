@@ -6,6 +6,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/embedded/lang"
 	"github.com/stubbedev/shell-lsp/internal/embedded/regex"
+	"github.com/stubbedev/shell-lsp/internal/scan"
 	"github.com/stubbedev/shell-lsp/internal/textline"
 )
 
@@ -343,7 +344,7 @@ func (p *parser) address(second bool) address {
 	}
 	start := p.pos
 	switch c := p.src[p.pos]; {
-	case lang.IsDigit(c):
+	case scan.Digit(c):
 		p.skip("0123456789")
 		p.emit(start, lang.Number)
 		if !second && p.peekIs("~") {
@@ -476,7 +477,7 @@ func (p *parser) checkExpressions() {
 }
 
 func (p *parser) regex(e expression) regex.Pattern {
-	if e.start == e.end || lang.IsNameChar(e.delimiter) {
+	if e.start == e.end || scan.NameChar(e.delimiter) {
 		return regex.Pattern{}
 	}
 	return p.res.CheckRegex(p.excerpt(e.start, e.end, e.delimiter), p.flavor)
@@ -506,7 +507,7 @@ func (p *parser) excerpt(start, end int, delimiter byte) lang.Excerpt {
 
 func (p *parser) references(e expression, pattern regex.Pattern) {
 	groups, known := pattern.Groups()
-	if !known || lang.IsDigit(e.delimiter) {
+	if !known || scan.Digit(e.delimiter) {
 		return
 	}
 	for i := e.start; i+1 < e.end; i++ {
@@ -543,7 +544,7 @@ func (p *parser) substituteFlags() {
 			p.once(&seen, globalFlag, "multiple `g` options to `s`")
 		case c == 'p':
 			p.once(&seen, printFlag, "multiple `p` options to `s`")
-		case lang.IsDigit(c):
+		case scan.Digit(c):
 			p.once(&seen, countFlag, "multiple number options to `s`")
 			digits := p.pos
 			p.skip("0123456789")

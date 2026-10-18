@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/scan"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
@@ -198,7 +199,7 @@ func mentionsVariable(text, name string) bool {
 				break
 			}
 			end := at + i + len(needle)
-			if end == len(text) || !parser.IsNameChar(text[end]) {
+			if end == len(text) || !scan.NameChar(text[end]) {
 				return true
 			}
 			at = end

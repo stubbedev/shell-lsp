@@ -5,6 +5,8 @@ import (
 	"path"
 	"slices"
 	"strings"
+
+	"github.com/stubbedev/shell-lsp/internal/scan"
 )
 
 type Flavour uint8
@@ -56,11 +58,7 @@ func windowsVolume(slashed string) (string, string) {
 }
 
 func HasDrive(p string) bool {
-	return len(p) >= 2 && p[1] == ':' && isASCIILetter(p[0])
-}
-
-func isASCIILetter(c byte) bool {
-	return 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z'
+	return len(p) >= 2 && p[1] == ':' && scan.Letter(p[0])
 }
 
 func (f Flavour) IsAbs(p string) bool {
@@ -76,7 +74,7 @@ func (f Flavour) Join(dir, p string) string {
 }
 
 func (f Flavour) FromMSYS(p string) string {
-	if f == POSIX || len(p) < 2 || p[0] != '/' || !isASCIILetter(p[1]) || len(p) > 2 && p[2] != '/' {
+	if f == POSIX || len(p) < 2 || p[0] != '/' || !scan.Letter(p[1]) || len(p) > 2 && p[2] != '/' {
 		return p
 	}
 	return f.Clean(p[1:2] + ":/" + strings.TrimPrefix(p[2:], "/"))

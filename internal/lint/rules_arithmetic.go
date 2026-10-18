@@ -5,6 +5,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/scan"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -52,14 +53,14 @@ func (p *pass) decimalAt(dot int) (parser.Span, bool) {
 		return parser.Span{}, false
 	}
 	start := dot
-	for start > 0 && isDigit(text[start-1]) {
+	for start > 0 && scan.Digit(text[start-1]) {
 		start--
 	}
-	if start == dot || (start > 0 && parser.IsNameChar(text[start-1])) || p.indexesTextKeys(start) {
+	if start == dot || (start > 0 && scan.NameChar(text[start-1])) || p.indexesTextKeys(start) {
 		return parser.Span{}, false
 	}
 	end := dot + 1
-	for end < len(text) && isDigit(text[end]) {
+	for end < len(text) && scan.Digit(text[end]) {
 		end++
 	}
 	return parser.Span{Start: start, End: end}, true
@@ -71,7 +72,7 @@ func (p *pass) indexesTextKeys(number int) bool {
 	}
 	nameEnd := number - 1
 	nameStart := nameEnd
-	for nameStart > 0 && parser.IsNameChar(p.text[nameStart-1]) {
+	for nameStart > 0 && scan.NameChar(p.text[nameStart-1]) {
 		nameStart--
 	}
 	if strings.HasSuffix(p.text[:nameStart], "${") {

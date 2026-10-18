@@ -6,6 +6,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/directive"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/scan"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/internal/textline"
 )
@@ -111,7 +112,7 @@ func (p *pass) removeDisabled(items []disabledItem, unused []bool, i int) Fix {
 	case pairUnused || len(listed) == 1:
 		pair := d.parsed.Pairs[at.pair]
 		start := d.at(pair.KeyOffset)
-		for start > d.span.Start && isBlankByte(p.text[start-1]) {
+		for start > d.span.Start && scan.Blank(p.text[start-1]) {
 			start--
 		}
 		return safeFix("Remove the unused disable list", textedit.Edit{Start: start, End: d.at(pair.ValueEnd)})
@@ -134,7 +135,7 @@ func (p *pass) removeComment(span parser.Span) textedit.Edit {
 		return textedit.Edit{Start: start, End: end}
 	}
 	start = span.Start
-	for start > 0 && isBlankByte(p.text[start-1]) {
+	for start > 0 && scan.Blank(p.text[start-1]) {
 		start--
 	}
 	return textedit.Edit{Start: start, End: span.End}

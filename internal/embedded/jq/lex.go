@@ -2,6 +2,7 @@ package jq
 
 import (
 	"github.com/stubbedev/shell-lsp/internal/embedded/lang"
+	"github.com/stubbedev/shell-lsp/internal/scan"
 	"github.com/stubbedev/shell-lsp/internal/textline"
 )
 
@@ -145,7 +146,7 @@ func (l *lexer) token(c byte) token {
 		return l.dot()
 	case c == '$' || c == '@':
 		return l.sigil(c)
-	case lang.IsNameStart(c):
+	case scan.NameStart(c):
 		return l.ident()
 	}
 	if t, ok := operators.Scan(l.res, l.src, start); ok {
@@ -220,7 +221,7 @@ func (l *lexer) escape() {
 	case 'u':
 		l.pos++
 		for range 4 {
-			if l.pos >= len(l.src) || !lang.IsHexDigit(l.src[l.pos]) {
+			if l.pos >= len(l.src) || !scan.HexDigit(l.src[l.pos]) {
 				l.fail(at, l.pos, "invalid escape "+lang.Quote(l.src, at, l.pos)+" needs four hexadecimal digits")
 				return
 			}
@@ -240,7 +241,7 @@ func (l *lexer) dot() token {
 		l.pos++
 		return l.emit(tDotDot, start, lang.Operator, 0)
 	}
-	if l.pos < len(l.src) && lang.IsNameStart(l.src[l.pos]) {
+	if l.pos < len(l.src) && scan.NameStart(l.src[l.pos]) {
 		l.pos = lang.ScanName(l.src, l.pos)
 		return l.emit(tField, start, lang.Property, 0)
 	}
@@ -250,7 +251,7 @@ func (l *lexer) dot() token {
 func (l *lexer) sigil(c byte) token {
 	start := l.pos
 	l.pos++
-	if l.pos >= len(l.src) || !lang.IsNameStart(l.src[l.pos]) {
+	if l.pos >= len(l.src) || !scan.NameStart(l.src[l.pos]) {
 		l.fail(start, l.pos, lang.Quote(l.src, start, l.pos)+" needs a name")
 		return token{Kind: tIllegal, Start: start, End: l.pos}
 	}

@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/host/model"
+	"github.com/stubbedev/shell-lsp/internal/scan"
 )
 
 func (f *File) scopeAt(offset int) model.Scope {
@@ -77,7 +78,7 @@ func (f *File) expectReference(in *Instruction, offset int, scope model.Scope) (
 	}
 	for i := offset - 1; i >= in.Line.Start && i >= offset-64; i-- {
 		c := f.Text[i]
-		if nameChar(c) {
+		if scan.NameChar(c) {
 			continue
 		}
 		if c == '{' && i > 0 && f.Text[i-1] == '$' || c == '$' {

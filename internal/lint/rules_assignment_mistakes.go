@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/scan"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -69,7 +70,7 @@ func (p *pass) checkStringArithmetic(assign *syntax.Assign) {
 		return
 	}
 	end := 0
-	for end < len(lit.Value) && parser.IsNameChar(lit.Value[end]) {
+	for end < len(lit.Value) && scan.NameChar(lit.Value[end]) {
 		end++
 	}
 	name := lit.Value[:end]

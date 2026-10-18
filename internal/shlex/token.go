@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"iter"
 	"strings"
+
+	"github.com/stubbedev/shell-lsp/internal/scan"
 )
 
 type Kind uint8
@@ -191,20 +193,12 @@ func allInParts(parts []Part, yield func([]Token, int) bool) bool {
 	return true
 }
 
-func IsNameChar(c byte) bool {
-	return c == '_' || 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || '0' <= c && c <= '9'
-}
-
-func isDigit(c byte) bool {
-	return '0' <= c && c <= '9'
-}
-
 func AssignmentPrefix(word string) (int, bool) {
 	i := 0
-	for i < len(word) && IsNameChar(word[i]) {
+	for i < len(word) && scan.NameChar(word[i]) {
 		i++
 	}
-	if i == 0 || isDigit(word[0]) {
+	if i == 0 || scan.Digit(word[0]) {
 		return 0, false
 	}
 	if i < len(word) && word[i] == '[' {

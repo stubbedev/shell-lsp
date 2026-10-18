@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/scan"
 	"github.com/stubbedev/shell-lsp/internal/shlex"
 	"github.com/stubbedev/shell-lsp/internal/textline"
 )
@@ -223,7 +224,7 @@ func dollarOnLoopVariable(l typoLine) string {
 		}
 		name := strings.TrimPrefix(strings.TrimPrefix(variable.Text(l.src), "$"), "{")
 		end := 0
-		for end < len(name) && IsNameChar(name[end]) {
+		for end < len(name) && scan.NameChar(name[end]) {
 			end++
 		}
 		if end > 0 {

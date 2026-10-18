@@ -7,6 +7,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/scan"
 	"github.com/stubbedev/shell-lsp/internal/textline"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
@@ -248,10 +249,10 @@ func checkSuspiciousClosingQuote(p *pass, n syntax.Node) {
 		return
 	}
 	next := p.text[span.End]
-	if !parser.IsNameChar(next) && next != '%' && strings.IndexByte(continues, next) < 0 {
+	if !scan.NameChar(next) && next != '%' && strings.IndexByte(continues, next) < 0 {
 		return
 	}
-	if _, single := n.(*syntax.SglQuoted); single && isASCIILetter(p.text[span.End-2]) && isASCIILetter(next) {
+	if _, single := n.(*syntax.SglQuoted); single && scan.Letter(p.text[span.End-2]) && scan.Letter(next) {
 		return
 	}
 	p.report(1078, parser.Span{Start: span.Start, End: span.Start + open}, "This quote spans several lines and is closed right before more text; check that it is closed where you meant.")
@@ -415,7 +416,7 @@ func checkBackgroundAmpersand(p *pass, stmt *syntax.Stmt) {
 	switch {
 	case strings.HasPrefix(rest, "amp;"), strings.HasPrefix(rest, "gt;"), strings.HasPrefix(rest, "lt;"):
 		p.report(1109, parser.Span{Start: at, End: at + 1 + strings.IndexByte(rest, ';') + 1}, htmlEntityMessage)
-	case rest[0] == '_' || isASCIILetter(rest[0]):
+	case rest[0] == '_' || scan.Letter(rest[0]):
 		p.report(1132, parser.Span{Start: at, End: at + 1}, "This & runs the command in the background and starts a new one; quote the word if the & is part of it, such as in a URL.")
 	}
 }
@@ -448,7 +449,7 @@ func startsParameter(part syntax.WordPart) bool {
 		return false
 	}
 	c := lit.Value[0]
-	return parser.IsNameChar(c) || strings.IndexByte("@#?!-", c) >= 0
+	return scan.NameChar(c) || strings.IndexByte("@#?!-", c) >= 0
 }
 
 func checkCommentedContinuation(p *pass, call *syntax.CallExpr) {

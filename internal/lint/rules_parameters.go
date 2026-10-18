@@ -5,6 +5,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/scan"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/internal/textline"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
@@ -79,7 +80,7 @@ func (p *pass) checkBracedOnLine(start, end int) {
 		case single:
 		case c == '"':
 			double = !double
-		case c == '#' && !double && (i == start || isBlankByte(p.text[i-1])):
+		case c == '#' && !double && (i == start || scan.Blank(p.text[i-1])):
 			return
 		case c == '$' && i+1 < end && p.text[i+1] == '{':
 			i = p.checkBracedAt(i) - 1
@@ -87,10 +88,8 @@ func (p *pass) checkBracedOnLine(start, end int) {
 	}
 }
 
-func isBlankByte(c byte) bool { return c == ' ' || c == '\t' }
-
 func (p *pass) startsParameter(c byte) bool {
-	return parser.IsNameChar(c) || strings.IndexByte(specialParameterChars, c) >= 0 || c == '.' && p.tree.Lang() == syntax.LangKsh93
+	return scan.NameChar(c) || strings.IndexByte(specialParameterChars, c) >= 0 || c == '.' && p.tree.Lang() == syntax.LangKsh93
 }
 
 func (p *pass) braces() *braceScanner {
@@ -155,7 +154,7 @@ func (p *pass) reportBraced(dollar int) (int, bool) {
 
 func isQuotableName(s string) bool {
 	if len(s) == 1 {
-		return parser.IsNameChar(s[0]) || strings.IndexByte(specialParameterChars, s[0]) >= 0
+		return scan.NameChar(s[0]) || strings.IndexByte(specialParameterChars, s[0]) >= 0
 	}
 	return parser.IsName(s)
 }
@@ -321,9 +320,9 @@ func (s *braceScanner) scanPart(i int) (bracePart, bool) {
 		return s.doubleQuoted(i, i+2)
 	case next != 0 && strings.IndexByte(specialParameterChars, next) >= 0, next >= '0' && next <= '9':
 		return bracePart{kind: braceVariable, start: i, end: i + 2}, true
-	case next != 0 && parser.IsNameChar(next):
+	case next != 0 && scan.NameChar(next):
 		end := i + 1
-		for end < len(text) && parser.IsNameChar(text[end]) {
+		for end < len(text) && scan.NameChar(text[end]) {
 			end++
 		}
 		return bracePart{kind: braceVariable, start: i, end: end}, true

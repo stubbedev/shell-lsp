@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+
+	"github.com/stubbedev/shell-lsp/internal/scan"
 )
 
 type Emitted struct {
@@ -83,7 +85,7 @@ func (o *Operators[K]) Scan(r *Result, src string, at int) (Lexeme[K], bool) {
 }
 
 func StartsNumber(src string, at int) bool {
-	return IsDigit(src[at]) || (src[at] == '.' && at+1 < len(src) && IsDigit(src[at+1]))
+	return scan.Digit(src[at]) || (src[at] == '.' && at+1 < len(src) && scan.Digit(src[at+1]))
 }
 
 func ScanNumber(src string, at int) int {
@@ -96,7 +98,7 @@ func ScanNumber(src string, at int) int {
 		if exponent < len(src) && (src[exponent] == '+' || src[exponent] == '-') {
 			exponent++
 		}
-		if exponent < len(src) && IsDigit(src[exponent]) {
+		if exponent < len(src) && scan.Digit(src[exponent]) {
 			at = scanDigits(src, exponent)
 		}
 	}
@@ -104,14 +106,14 @@ func ScanNumber(src string, at int) int {
 }
 
 func scanDigits(src string, at int) int {
-	for at < len(src) && IsDigit(src[at]) {
+	for at < len(src) && scan.Digit(src[at]) {
 		at++
 	}
 	return at
 }
 
 func ScanName(src string, at int) int {
-	for at < len(src) && IsNameChar(src[at]) {
+	for at < len(src) && scan.NameChar(src[at]) {
 		at++
 	}
 	return at
@@ -119,7 +121,7 @@ func ScanName(src string, at int) int {
 
 func ScanQualifiedName(src string, at int) int {
 	at = ScanName(src, at)
-	for strings.HasPrefix(src[at:], "::") && at+2 < len(src) && IsNameStart(src[at+2]) {
+	for strings.HasPrefix(src[at:], "::") && at+2 < len(src) && scan.NameStart(src[at+2]) {
 		at = ScanName(src, at+2)
 	}
 	return at

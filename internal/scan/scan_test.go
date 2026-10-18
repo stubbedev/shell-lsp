@@ -77,6 +77,12 @@ func TestWhileStopsAtTheFirstByteOutsideTheClass(t *testing.T) {
 	if !All("azAZ09", Alnum) || Alnum('@') || Alnum('[') || Alnum('`') || Alnum('{') || Letter('5') || !All("az09", LowerOrDigit) || LowerOrDigit('A') {
 		t.Error("the letter classes admit the wrong bytes")
 	}
+	if !All("09af", LowerHexDigit) || LowerHexDigit('A') || LowerHexDigit('g') {
+		t.Error("LowerHexDigit admits the wrong bytes")
+	}
+	if !All("_azAZ", NameStart) || NameStart('0') || NameStart('-') || !All("_azAZ09", NameChar) || NameChar('-') || NameChar(0xc3) {
+		t.Error("the name classes admit the wrong bytes")
+	}
 	if got := TrimBlanks(" \t a b "); got != "a b " {
 		t.Errorf("TrimBlanks = %q, want the leading spaces and tabs gone", got)
 	}

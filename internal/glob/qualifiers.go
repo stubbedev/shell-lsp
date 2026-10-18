@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/scan"
 )
 
 type qualifierArg uint8
@@ -65,13 +66,13 @@ func parseQualifiers(text string, offsets []int, explicit bool) *Qualifiers {
 		case argDelimited:
 			i = delimited(text, i, end)
 		case argIdentifier:
-			for i < end && (parser.IsNameChar(text[i]) || text[i] == ':') {
+			for i < end && (scan.NameChar(text[i]) || text[i] == ':') {
 				i++
 			}
 		case argDigits:
 			i = digits(text, i, end)
 		case argUserOrDigits, argModeOrDigits:
-			if i < end && !isDigit(text[i]) {
+			if i < end && !scan.Digit(text[i]) {
 				i = delimited(text, i, end)
 				break
 			}
@@ -96,10 +97,8 @@ func parseQualifiers(text string, offsets []int, explicit bool) *Qualifiers {
 	return q
 }
 
-func isDigit(c byte) bool { return c >= '0' && c <= '9' }
-
 func digits(text string, i, end int) int {
-	for i < end && isDigit(text[i]) {
+	for i < end && scan.Digit(text[i]) {
 		i++
 	}
 	return i

@@ -138,11 +138,3 @@ func (d Doc) Markdown(language string) string {
 }
 
 type Docs map[string]Doc
-
-func IsDigit(c byte) bool { return c >= '0' && c <= '9' }
-
-func IsHexDigit(c byte) bool { return IsDigit(c) || (c|0x20 >= 'a' && c|0x20 <= 'f') }
-
-func IsNameStart(c byte) bool { return c == '_' || (c|0x20 >= 'a' && c|0x20 <= 'z') }
-
-func IsNameChar(c byte) bool { return IsNameStart(c) || IsDigit(c) }

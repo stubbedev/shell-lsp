@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/scan"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -89,7 +90,7 @@ func (p *pass) checkTestArgument(args []*syntax.Word, i int, arg *syntax.Word) {
 		p.report(1076, parser.Span{Start: span.Start, End: span.Start + 1}, "[ ] does not do arithmetic, so "+p.text[span.Start:span.Start+1]+" is just part of a word here; compute the value with $(( )) instead.")
 		return
 	}
-	if size := leadingUnicodeDash(lit); size > 0 && size < len(lit) && isASCIILetter(lit[size]) {
+	if size := leadingUnicodeDash(lit); size > 0 && size < len(lit) && scan.Letter(lit[size]) {
 		p.report(1100, parser.Span{Start: span.Start, End: span.Start + size}, "This is a Unicode dash, not a hyphen-minus; retype it as - so the test operator is recognised.")
 		return
 	}
@@ -126,7 +127,7 @@ func (p *pass) checkGluedOperator(arg *syntax.Word) {
 		if !found {
 			continue
 		}
-		if len(arg.Parts) == 1 && (before == "" || !parser.IsNameChar(before[len(before)-1])) {
+		if len(arg.Parts) == 1 && (before == "" || !scan.NameChar(before[len(before)-1])) {
 			return
 		}
 		if span, ok := p.span(last); ok {

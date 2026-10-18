@@ -6,6 +6,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/scan"
 	"github.com/stubbedev/shell-lsp/internal/shelldocs"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/internal/textline"
@@ -360,7 +361,7 @@ func mentions(text, name string) bool {
 			return false
 		}
 		start, end := at+i, at+i+len(name)
-		if (start == 0 || !parser.IsNameChar(text[start-1])) && (end == len(text) || !parser.IsNameChar(text[end])) {
+		if (start == 0 || !scan.NameChar(text[start-1])) && (end == len(text) || !scan.NameChar(text[end])) {
 			return true
 		}
 		at = start + 1
@@ -428,7 +429,7 @@ func plainWord(s string) bool {
 		return false
 	}
 	for i := range len(s) {
-		if !parser.IsNameChar(s[i]) && !strings.ContainsRune("./:,+@%-", rune(s[i])) {
+		if !scan.NameChar(s[i]) && !strings.ContainsRune("./:,+@%-", rune(s[i])) {
 			return false
 		}
 	}

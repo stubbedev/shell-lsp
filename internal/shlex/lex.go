@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/scan"
 )
 
 const maxDepth = 1000
@@ -569,11 +570,11 @@ func (l *lexer) dollar(parts []Part, quoted bool) []Part {
 	case next == '"' && !quoted:
 		return append(parts, l.doubleQuoted(DollarDoubleQuoted, 2))
 	case next == '_' || 'a' <= next && next <= 'z' || 'A' <= next && next <= 'Z':
-		for l.pos += 2; l.more() && IsNameChar(l.src[l.pos]); {
+		for l.pos += 2; l.more() && scan.NameChar(l.src[l.pos]); {
 			l.pos++
 		}
 		return append(parts, Part{Kind: Param, Start: start, End: l.pos})
-	case isDigit(next) || strings.IndexByte("@*#?$!-", next) >= 0:
+	case scan.Digit(next) || strings.IndexByte("@*#?$!-", next) >= 0:
 		l.pos += 2
 		return append(parts, Part{Kind: Param, Start: start, End: l.pos})
 	}

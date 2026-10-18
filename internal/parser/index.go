@@ -7,7 +7,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/getopt"
-	"github.com/stubbedev/shell-lsp/internal/shlex"
+	"github.com/stubbedev/shell-lsp/internal/scan"
 	"github.com/stubbedev/shell-lsp/internal/textline"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
@@ -1230,20 +1230,8 @@ func IsDigits(s string) bool {
 	return true
 }
 
-func IsNameChar(c byte) bool {
-	return shlex.IsNameChar(c)
-}
-
 func IsName(s string) bool {
-	if s == "" || ('0' <= s[0] && s[0] <= '9') {
-		return false
-	}
-	for i := range len(s) {
-		if !IsNameChar(s[i]) {
-			return false
-		}
-	}
-	return true
+	return s != "" && scan.NameStart(s[0]) && scan.All(s, scan.NameChar)
 }
 
 func docComment(text string, start int) string {

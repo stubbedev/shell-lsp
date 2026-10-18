@@ -6,6 +6,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/scan"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
@@ -180,7 +181,7 @@ func checkBashParamExp(p *pass, pe *syntax.ParamExp) {
 }
 
 func checkIndirectExpansion(p *pass, pe *syntax.ParamExp, span parser.Span, text string) {
-	if !parser.IsNameChar(pe.Param.Value[0]) {
+	if !scan.NameChar(pe.Param.Value[0]) {
 		return
 	}
 	p.nonPortable(portabilityIssue{code: 3053, feature: "The indirect expansion " + text, alternative: "eval"}, span)
@@ -222,7 +223,7 @@ func checkExpansionOperator(p *pass, pe *syntax.ParamExp, span parser.Span, text
 
 func isNameChars(s string) bool {
 	for i := range len(s) {
-		if !parser.IsNameChar(s[i]) {
+		if !scan.NameChar(s[i]) {
 			return false
 		}
 	}

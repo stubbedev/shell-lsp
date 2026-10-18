@@ -42,6 +42,12 @@ func Alnum(c byte) bool { return Letter(c) || Digit(c) }
 
 func LowerOrDigit(c byte) bool { return Lower(c) || Digit(c) }
 
+func LowerHexDigit(c byte) bool { return Digit(c) || 'a' <= c && c <= 'f' }
+
+func NameStart(c byte) bool { return Letter(c) || c == '_' }
+
+func NameChar(c byte) bool { return NameStart(c) || Digit(c) }
+
 func Blank(c byte) bool { return c == ' ' || c == '\t' }
 
 func TrimBlanks(s string) string { return s[While(s, Blank):] }

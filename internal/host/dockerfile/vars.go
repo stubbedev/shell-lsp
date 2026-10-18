@@ -1,36 +1,34 @@
 package dockerfile
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/stubbedev/shell-lsp/internal/scan"
+)
 
 type VarRef struct {
 	Name string
 	Span Span
 }
 
-func nameStart(c byte) bool { return c == '_' || c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z' }
-
-func nameChar(c byte) bool { return nameStart(c) || c >= '0' && c <= '9' }
-
 func nameEnd(s string, i int) int {
-	if i >= len(s) || !nameStart(s[i]) {
+	if i >= len(s) || !scan.NameStart(s[i]) {
 		return i
 	}
-	for i < len(s) && nameChar(s[i]) {
+	for i < len(s) && scan.NameChar(s[i]) {
 		i++
 	}
 	return i
 }
 
-func digit(c byte) bool { return c >= '0' && c <= '9' }
-
 func paramEnd(s string, i int, braced bool) int {
 	switch {
-	case i >= len(s) || !digit(s[i]):
+	case i >= len(s) || !scan.Digit(s[i]):
 		return nameEnd(s, i)
 	case !braced:
 		return i + 1
 	}
-	for i < len(s) && digit(s[i]) {
+	for i < len(s) && scan.Digit(s[i]) {
 		i++
 	}
 	return i

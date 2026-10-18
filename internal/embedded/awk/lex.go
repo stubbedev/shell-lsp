@@ -5,6 +5,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/embedded/lang"
 	"github.com/stubbedev/shell-lsp/internal/embedded/regex"
+	"github.com/stubbedev/shell-lsp/internal/scan"
 	"github.com/stubbedev/shell-lsp/internal/textline"
 )
 
@@ -203,7 +204,7 @@ func (l *lexer) token(c byte) token {
 	case lang.StartsNumber(l.src, start):
 		l.pos = scanNumber(l.src, start)
 		return l.emit(tNumber, start, lang.Number, 0)
-	case lang.IsNameStart(c):
+	case scan.NameStart(c):
 		return l.name()
 	}
 	if t, ok := operators.Scan(l.res, l.src, start); ok {
@@ -281,11 +282,11 @@ func (l *lexer) unterminated(sem lang.Kind, start int, message string) token {
 }
 
 func scanNumber(src string, at int) int {
-	if src[at] != '0' || at+2 >= len(src) || src[at+1]|0x20 != 'x' || !lang.IsHexDigit(src[at+2]) {
+	if src[at] != '0' || at+2 >= len(src) || src[at+1]|0x20 != 'x' || !scan.HexDigit(src[at+2]) {
 		return lang.ScanNumber(src, at)
 	}
 	at += 2
-	for at < len(src) && lang.IsHexDigit(src[at]) {
+	for at < len(src) && scan.HexDigit(src[at]) {
 		at++
 	}
 	return at

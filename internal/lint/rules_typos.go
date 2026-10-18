@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/scan"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -32,7 +33,7 @@ var spelledKeywords = spelledKeywordsLongestFirst()
 func spelledKeywordsLongestFirst() []string {
 	var out []string
 	for word := range reservedWords {
-		if isASCIILetter(word[0]) {
+		if scan.Letter(word[0]) {
 			out = append(out, word)
 		}
 	}
@@ -85,14 +86,10 @@ func isMisspelledElif(name string) bool {
 
 func leadingLetters(s string) string {
 	end := 0
-	for end < len(s) && isASCIILetter(s[end]) {
+	for end < len(s) && scan.Letter(s[end]) {
 		end++
 	}
 	return s[:end]
-}
-
-func isASCIILetter(c byte) bool {
-	return 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z'
 }
 
 func (p *pass) checkKeywordSpelling(name string, span parser.Span) {
