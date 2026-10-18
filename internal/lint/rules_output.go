@@ -8,6 +8,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/printf"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/internal/textline"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
@@ -160,7 +161,7 @@ func checkPrintfArguments(p *pass, c command) {
 		}
 		return
 	}
-	conversions := printfConversions(text)
+	conversions := printf.Conversions(text)
 	if len(conversions) == 0 {
 		if len(call.data) > 0 {
 			p.reportNode(2182, call.format, "This printf format has no conversion specifiers, so its arguments are ignored.")
@@ -234,11 +235,7 @@ func plural(n int, noun string) string {
 	return fmt.Sprintf("%d %ss", n, noun)
 }
 
-const (
-	printfFlags             = "#-+ 0"
-	printfConversion        = "diouxXfFeEgGaAcsbqQSC"
-	printfNumericConversion = "diouxXfFeEgGaA*"
-)
+const printfNumericConversion = "diouxXfFeEgGaA*"
 
 func printsOnlyNumbers(args []*syntax.Word) bool {
 	call, ok := printfArguments(args)
@@ -246,73 +243,5 @@ func printsOnlyNumbers(args []*syntax.Word) bool {
 		return false
 	}
 	format, ok := parser.Literal(call.format)
-	return ok && strings.Trim(string(printfConversions(format)), printfNumericConversion) == ""
-}
-
-var printfLengths = []string{"hh", "h", "ll", "l", "q", "L", "j", "z", "Z", "t"}
-
-func printfConversions(format string) []byte {
-	var out []byte
-	for i := 0; i < len(format)-1; i++ {
-		if format[i] != '%' {
-			continue
-		}
-		switch format[i+1] {
-		case '%':
-			i++
-			continue
-		case '(':
-			closing := strings.IndexByte(format[i+2:], ')')
-			at := i + 2 + closing + 1
-			if closing < 0 || at >= len(format) {
-				return out
-			}
-			out = append(out, format[at])
-			i = at
-			continue
-		}
-		spec, end, ok := printfSpecifier(format, i+1)
-		if !ok {
-			out = append(out, format[i+1])
-			i++
-			continue
-		}
-		out = append(out, spec...)
-		i = end
-	}
-	return out
-}
-
-func printfSpecifier(format string, j int) ([]byte, int, bool) {
-	var out []byte
-	for _, flag := range []byte(printfFlags) {
-		if j < len(format) && format[j] == flag {
-			j++
-		}
-	}
-	j, out = printfWidth(format, j, out)
-	if j < len(format) && format[j] == '.' {
-		j++
-	}
-	j, out = printfWidth(format, j, out)
-	for _, length := range printfLengths {
-		if strings.HasPrefix(format[j:], length) {
-			j += len(length)
-			break
-		}
-	}
-	if j >= len(format) || strings.IndexByte(printfConversion, format[j]) < 0 {
-		return nil, 0, false
-	}
-	return append(out, format[j]), j, true
-}
-
-func printfWidth(format string, j int, out []byte) (int, []byte) {
-	if j < len(format) && format[j] == '*' {
-		return j + 1, append(out, '*')
-	}
-	for j < len(format) && format[j] >= '0' && format[j] <= '9' {
-		j++
-	}
-	return j, out
+	return ok && strings.Trim(string(printf.Conversions(format)), printfNumericConversion) == ""
 }
