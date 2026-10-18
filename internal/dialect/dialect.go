@@ -237,28 +237,46 @@ func FromInterpreter(name string) (Dialect, bool) {
 	return FromName(unversioned)
 }
 
-func Interpreter(text string) (string, bool) {
+type Shebang struct {
+	Interpreter string
+	Arguments   []string
+}
+
+func ParseShebang(text string) (Shebang, bool) {
 	first, _, _ := strings.Cut(text, "\n")
-	rest, ok := strings.CutPrefix(first, "#!")
+	return shebangLine(first)
+}
+
+func shebangLine(line string) (Shebang, bool) {
+	rest, ok := strings.CutPrefix(line, "#!")
+	if !ok {
+		return Shebang{}, false
+	}
+	words := strings.Fields(rest)
+	if len(words) == 0 {
+		return Shebang{}, false
+	}
+	return Shebang{Interpreter: words[0], Arguments: words[1:]}, true
+}
+
+func Interpreter(text string) (string, bool) {
+	shebang, ok := ParseShebang(text)
 	if !ok {
 		return "", false
 	}
-	fields := strings.Fields(rest)
-	if len(fields) > 0 && filepath.Base(fields[0]) == "env" {
-		i := slices.IndexFunc(fields[1:], func(field string) bool {
-			return !strings.HasPrefix(field, "-") && !strings.Contains(field, "=")
+	interpreter, arguments := shebang.Interpreter, shebang.Arguments
+	if filepath.Base(interpreter) == "env" {
+		i := slices.IndexFunc(arguments, func(argument string) bool {
+			return !strings.HasPrefix(argument, "-") && !strings.Contains(argument, "=")
 		})
 		if i < 0 {
 			return "", false
 		}
-		fields = fields[1+i:]
+		interpreter, arguments = arguments[i], arguments[i+1:]
 	}
-	if len(fields) == 0 {
-		return "", false
-	}
-	name := filepath.Base(fields[0])
-	if name == "busybox" && len(fields) > 1 {
-		return name + " " + fields[1], true
+	name := filepath.Base(interpreter)
+	if name == "busybox" && len(arguments) > 0 {
+		return name + " " + arguments[0], true
 	}
 	if name == nixShell {
 		if interpreter, ok := nixShellInterpreter(text); ok {
@@ -272,16 +290,15 @@ const nixShell = "nix-shell"
 
 func nixShellInterpreter(text string) (string, bool) {
 	for line := range strings.SplitSeq(text, "\n") {
-		rest, ok := strings.CutPrefix(line, "#!")
-		if !ok {
+		if !strings.HasPrefix(line, "#!") {
 			return "", false
 		}
-		fields := strings.Fields(rest)
-		if len(fields) == 0 || filepath.Base(fields[0]) != nixShell {
+		shebang, ok := shebangLine(line)
+		if !ok || filepath.Base(shebang.Interpreter) != nixShell {
 			continue
 		}
-		if i := slices.Index(fields, "-i"); i >= 0 && i+1 < len(fields) {
-			return filepath.Base(fields[i+1]), true
+		if i := slices.Index(shebang.Arguments, "-i"); i >= 0 && i+1 < len(shebang.Arguments) {
+			return filepath.Base(shebang.Arguments[i+1]), true
 		}
 	}
 	return "", false

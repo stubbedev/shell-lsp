@@ -56,17 +56,17 @@ func checkGoogleShebang(p *pass) {
 	}
 	first, _, _ := strings.Cut(p.text, "\n")
 	first = strings.TrimSuffix(first, "\r")
-	rest, ok := strings.CutPrefix(first, "#!")
-	if !ok {
+	if !strings.HasPrefix(first, "#!") {
 		return
 	}
-	fields := strings.Fields(rest)
-	if len(fields) > 0 && fields[0] == "/bin/bash" {
+	shebang, _ := dialect.ParseShebang(first)
+	interpreter, arguments := shebang.Interpreter, shebang.Arguments
+	if interpreter == "/bin/bash" {
 		return
 	}
 	span := parser.Span{Start: 0, End: len(first)}
 	var fixes []Fix
-	if len(fields) == 1 && path.Base(fields[0]) == "bash" || len(fields) == 2 && path.Base(fields[0]) == "env" && fields[1] == "bash" {
+	if len(arguments) == 0 && path.Base(interpreter) == "bash" || len(arguments) == 1 && path.Base(interpreter) == "env" && arguments[0] == "bash" {
 		fixes = append(fixes, reviewFix("Use "+googleShebang, textedit.Edit{Start: span.Start, End: span.End, NewText: googleShebang}))
 	}
 	p.report(codeGoogleShebang, span, "The Google Shell Style Guide allows only bash for executables, started with "+googleShebang+"; this script starts with "+first+".", fixes...)

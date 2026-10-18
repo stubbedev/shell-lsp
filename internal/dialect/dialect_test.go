@@ -396,6 +396,27 @@ func TestNixShellShebangsNameTheirInterpreter(t *testing.T) {
 	}
 }
 
+func TestParseShebangReadsInterpreterAndArguments(t *testing.T) {
+	t.Parallel()
+
+	for text, want := range map[string]Shebang{
+		"#!/bin/sh\necho\n":                  {Interpreter: "/bin/sh", Arguments: []string{}},
+		"#! /usr/bin/env -S bash -e\n":       {Interpreter: "/usr/bin/env", Arguments: []string{"-S", "bash", "-e"}},
+		"#!\t/bin/bash  -x \t\necho\n":       {Interpreter: "/bin/bash", Arguments: []string{"-x"}},
+		"#!/usr/bin/env bash\r\necho hi\r\n": {Interpreter: "/usr/bin/env", Arguments: []string{"bash"}},
+	} {
+		got, ok := ParseShebang(text)
+		if !ok || got.Interpreter != want.Interpreter || !slices.Equal(got.Arguments, want.Arguments) {
+			t.Errorf("ParseShebang(%q) = %+v, %v; want %+v", text, got, ok, want)
+		}
+	}
+	for _, text := range []string{"", "#!\n", "#!   \necho\n", "echo\n#!/bin/sh\n", " #!/bin/sh\n", "# !/bin/sh\n"} {
+		if got, ok := ParseShebang(text); ok {
+			t.Errorf("ParseShebang(%q) = %+v, want no shebang", text, got)
+		}
+	}
+}
+
 func TestVersionedInterpretersNameTheirShell(t *testing.T) {
 	t.Parallel()
 

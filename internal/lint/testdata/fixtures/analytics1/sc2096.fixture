@@ -19,7 +19,27 @@ echo "strict"
 echo "split"
 >>> none
 
-### env --split-string is fine
+### env --split-string with a separate argument is still one word
 #!/usr/bin/env --split-string bash -e
 echo "split long"
+>>+ SC2096 1:1 -- env receives "--split-string bash -e" as one unknown long option and fails; shellcheck matches the text --split-string
+
+### env --split-string with an attached argument is fine
+#!/usr/bin/env --split-string=bash -e
+echo "split long"
 >>> none
+
+### env -S clustered behind another option is fine
+#!/usr/bin/env -vS bash -e
+echo "split verbosely"
+>>- SC2096 1:1 -- env reads the cluster -vS and splits the rest; shellcheck only accepts -S right after env
+
+### env -S behind a separate option is still one word
+#!/usr/bin/env -i -S bash -e
+echo "split late"
+>>> SC2096 1:1
+
+### an interpreter merely ending in env does not split
+#!/usr/local/bin/myenv -S bash -e
+echo "not env"
+>>+ SC2096 1:1 -- myenv is not env, so nothing splits its argument; shellcheck matches the text env -S anywhere
