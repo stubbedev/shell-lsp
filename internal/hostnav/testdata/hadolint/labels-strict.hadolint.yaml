@@ -1,0 +1,4 @@
+label-schema:
+  org.opencontainers.image.title: text
+  org.opencontainers.image.source: url
+strict-labels: true

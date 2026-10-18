@@ -39,8 +39,9 @@ nor groff needs to be installed.
   and variables across `import`, `mod` and `include`, also from the shell of
   a recipe to the just or make variable it reads, justfiles formatted
   like `just --fmt` and Makefiles formatted without changing what make reads,
-  and Dockerfiles checked the way BuildKit checks them, with stages and build
-  arguments to navigate
+  and Dockerfiles checked the way BuildKit checks them and with Hadolint's
+  rules, pragmas and `.hadolint.yaml`, with stages and build arguments to
+  navigate
   ([Justfiles, Makefiles and Dockerfiles natively](#justfiles-makefiles-and-dockerfiles-natively)).
 - [Bats](#bats) support: tests in the outline, and "Run" lenses that report
   failures as diagnostics.
@@ -538,7 +539,9 @@ gives it, or else when its language identifier is `just`.
 A document is a Dockerfile when it is named `Dockerfile` or `Containerfile`,
 starts with `Dockerfile.` or `Containerfile.` or ends in `.Dockerfile`,
 `.dockerfile` or `.Containerfile`, whatever language identifier the editor
-gives it, or else when its language identifier is `dockerfile`.
+gives it, or else when its language identifier is `dockerfile`. A file ending
+in `.dockerignore`, such as `Dockerfile.dockerignore`, is the ignore file of a
+Dockerfile and not one itself.
 
 - The shell form of `RUN`, and the heredocs a `RUN` feeds to its shell, are
   the shell; so are the shell forms of `CMD`, `ENTRYPOINT`, a
@@ -547,9 +550,10 @@ gives it, or else when its language identifier is `dockerfile`.
   shell.
 - Each instruction runs in a shell of its own, as BuildKit runs it, with the
   continuation lines joined and the comments between them dropped.
-- The shell is the one the last `SHELL` before the instruction names, in the
-  stage or the stages it is built `FROM`, else `sh`; a heredoc with a shebang
-  runs in that one. Each shell is checked as its own.
+- The shell is the one the last `SHELL` or `# hadolint shell=` pragma before
+  the instruction names, in the stage or the stages it is built `FROM`, else
+  `sh`; a heredoc with a shebang runs in that one. Each shell is checked as its
+  own, and a `RUN` in a shell that is not one, such as PowerShell, is left alone.
 - The `ENV` variables of the stage and its base stages, and the `ARG`s it
   declares, are set when the shell runs. As in any script, reading an
   all-uppercase variable that is never set is not reported (`SC2154`), which
@@ -572,6 +576,13 @@ an editor needs for these files.
   parser and the build checks of BuildKit 0.34, including the
   `# check=skip=` and `# check=error=true` directives. Missing names are reported only when every file that could define
   them was found.
+- **Hadolint's rules for Dockerfiles**, under its `DL` codes: package
+  versions and caches, image tags and trusted registries, `USER`, `COPY`,
+  pipes without `pipefail`, label schemas and the rest, with `# hadolint
+  ignore=` pragmas and the nearest `.hadolint.yaml`, so no Hadolint needs to
+  run beside the server. Each rule was compared with Hadolint 2.14, and
+  [hadolint.md](docs/hadolint.md) lists what it reads and where it
+  deliberately differs.
 - **Navigation across files.** Definition, references, document highlight and
   rename for recipes, aliases, variables, parameters, modules, functions and
   targets. A justfile shares its names with the files it imports, a `mod`
@@ -756,7 +767,8 @@ Building and publishing the VS Code extension is described in
 
 ## Inspiration
 
-shell-lsp exists because of two projects:
+shell-lsp exists because of two projects, and owes its Dockerfile rules to a
+third:
 
 - [bash-language-server](https://github.com/bash-lsp/bash-language-server)
   set the baseline for what a shell language server offers: diagnostics,
@@ -767,8 +779,11 @@ shell-lsp exists because of two projects:
   a shell script means: its check codes, `# shellcheck` directives,
   `.shellcheckrc` files and command line are what scripts and CI pipelines
   already rely on.
+- [Hadolint](https://github.com/hadolint/hadolint) did the same for
+  Dockerfiles: its `DL` codes, `# hadolint` pragmas and `.hadolint.yaml` are
+  what Dockerfile pipelines rely on.
 
-Both were reimplemented clean-room, without reference to their source code.
+All three were reimplemented clean-room, without reference to their source code.
 Each was treated as a black box whose observable behaviour served as the
 specification; [CLEAN_ROOM.md](CLEAN_ROOM.md) states what may and may not be
 used:
@@ -782,6 +797,10 @@ used:
 - bash-language-server is compared from the outside: `just crosscheck` runs
   both servers over the same corpus and records their diagnostics and
   completion recall in [docs/crosscheck.md](docs/crosscheck.md).
+- Hadolint is only a test oracle too: the Dockerfiles under
+  `internal/hostnav/testdata/hadolint` were written for the purpose, their
+  expected findings recorded by running it, with deliberate differences
+  explained in place ([docs/hadolint.md](docs/hadolint.md)).
 
 What carries over is the interface, so existing scripts, annotations and
 configuration keep working: the `SC` check codes and their numbering, the

@@ -1,7 +1,8 @@
 # Checks
 
 Every check the linter runs, generated from the lint catalog by
-`go test ./internal/lint -run TestChecksDoc -update`. `SC` codes reuse ShellCheck's numbering;
+`go test ./internal/lint -run TestChecksDoc -update`. `SC` codes reuse ShellCheck's numbering and
+`DL` codes Hadolint's, for Dockerfiles; see [hadolint.md](hadolint.md) for how they differ from it.
 `SL` codes are shell-lsp's own and are described in [rules.md](rules.md). Optional checks run only
 when switched on by name with `enable=`, `--enable` or the `lint.optional` setting. The Minimal column
 marks the checks the `minimal` profile keeps; see [Profiles](../README.md#profiles).
@@ -570,3 +571,57 @@ marks the checks the `minimal` profile keeps; see [Profiles](../README.md#profil
 | <a name="sl7022"></a>[SL7022](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl7022) | warning |  | yes | \`FROM --platform\` is a constant. |
 | <a name="sl7023"></a>[SL7023](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl7023) | warning |  | yes | \`FROM --platform=$TARGETPLATFORM\` is redundant. |
 | <a name="sl7024"></a>[SL7024](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl7024) | error |  | yes | \`COPY --from\` names a stage that is not built before it. |
+| <a name="dl1001"></a>[DL1001](https://github.com/hadolint/hadolint/wiki/DL1001) | info | `no-ignore-pragmas` |  | A \`# hadolint ignore=\` comment hides findings; the project asks for none. |
+| <a name="dl3001"></a>[DL3001](https://github.com/hadolint/hadolint/wiki/DL3001) | info |  |  | RUN starts a tool meant for a running system, such as an editor or process viewer, which is no use while building. |
+| <a name="dl3002"></a>[DL3002](https://github.com/hadolint/hadolint/wiki/DL3002) | warning |  | yes | The last USER of a stage is root, so the container runs with full privileges. |
+| <a name="dl3003"></a>[DL3003](https://github.com/hadolint/hadolint/wiki/DL3003) | warning |  | yes | RUN changes directory with cd; WORKDIR sets the directory for every later instruction and is easier to follow. |
+| <a name="dl3004"></a>[DL3004](https://github.com/hadolint/hadolint/wiki/DL3004) | error |  | yes | RUN calls sudo, which builds already run as root do not need and which images rarely have configured. |
+| <a name="dl3006"></a>[DL3006](https://github.com/hadolint/hadolint/wiki/DL3006) | warning |  | yes | FROM names an image without a tag or digest, so each build may start from a different image. |
+| <a name="dl3007"></a>[DL3007](https://github.com/hadolint/hadolint/wiki/DL3007) | warning |  | yes | FROM uses the latest tag, which moves, so each build may start from a different image. |
+| <a name="dl3008"></a>[DL3008](https://github.com/hadolint/hadolint/wiki/DL3008) | warning |  | yes | apt-get install lists a package without a version, so a rebuild may install a different one. |
+| <a name="dl3009"></a>[DL3009](https://github.com/hadolint/hadolint/wiki/DL3009) | info |  |  | The package lists apt-get update downloads are left in the image. |
+| <a name="dl3010"></a>[DL3010](https://github.com/hadolint/hadolint/wiki/DL3010) | info |  |  | An archive is copied in and then unpacked; ADD unpacks a local archive itself, in one layer. |
+| <a name="dl3011"></a>[DL3011](https://github.com/hadolint/hadolint/wiki/DL3011) | error |  | yes | EXPOSE names a port above 65535, which no protocol can use. |
+| <a name="dl3013"></a>[DL3013](https://github.com/hadolint/hadolint/wiki/DL3013) | warning |  | yes | pip install lists a package without a version, so a rebuild may install a different one. |
+| <a name="dl3014"></a>[DL3014](https://github.com/hadolint/hadolint/wiki/DL3014) | warning |  | yes | apt-get would stop to ask for confirmation, which fails a build; it needs -y. |
+| <a name="dl3015"></a>[DL3015](https://github.com/hadolint/hadolint/wiki/DL3015) | info |  |  | apt-get install also installs recommended packages unless --no-install-recommends is given. |
+| <a name="dl3016"></a>[DL3016](https://github.com/hadolint/hadolint/wiki/DL3016) | warning |  | yes | npm install lists a package without a version, so a rebuild may install a different one. |
+| <a name="dl3018"></a>[DL3018](https://github.com/hadolint/hadolint/wiki/DL3018) | warning |  | yes | apk add lists a package without a version, so a rebuild may install a different one. |
+| <a name="dl3019"></a>[DL3019](https://github.com/hadolint/hadolint/wiki/DL3019) | info |  |  | apk add keeps its package index in the image unless --no-cache is given. |
+| <a name="dl3020"></a>[DL3020](https://github.com/hadolint/hadolint/wiki/DL3020) | error |  | yes | ADD copies plain files or folders; COPY does that without ADD's URL and archive handling. |
+| <a name="dl3021"></a>[DL3021](https://github.com/hadolint/hadolint/wiki/DL3021) | error |  | yes | COPY with several sources needs a destination that ends in /. |
+| <a name="dl3026"></a>[DL3026](https://github.com/hadolint/hadolint/wiki/DL3026) | error |  | yes | FROM pulls an image from a registry that is not on the configured list of trusted registries. |
+| <a name="dl3027"></a>[DL3027](https://github.com/hadolint/hadolint/wiki/DL3027) | warning |  | yes | RUN uses apt, whose interface is meant for people and may change; apt-get and apt-cache are stable. |
+| <a name="dl3028"></a>[DL3028](https://github.com/hadolint/hadolint/wiki/DL3028) | warning |  | yes | gem install lists a gem without a version, so a rebuild may install a different one. |
+| <a name="dl3030"></a>[DL3030](https://github.com/hadolint/hadolint/wiki/DL3030) | warning |  | yes | yum would stop to ask for confirmation, which fails a build; it needs -y. |
+| <a name="dl3032"></a>[DL3032](https://github.com/hadolint/hadolint/wiki/DL3032) | warning |  | yes | The packages and metadata yum downloads are left in the image without yum clean all. |
+| <a name="dl3033"></a>[DL3033](https://github.com/hadolint/hadolint/wiki/DL3033) | warning |  | yes | yum install lists a package without a version, so a rebuild may install a different one. |
+| <a name="dl3034"></a>[DL3034](https://github.com/hadolint/hadolint/wiki/DL3034) | warning |  | yes | zypper would stop to ask for confirmation, which fails a build; it needs --non-interactive. |
+| <a name="dl3035"></a>[DL3035](https://github.com/hadolint/hadolint/wiki/DL3035) | warning |  | yes | zypper dist-upgrade upgrades the whole base image; a newer base image does that reproducibly. |
+| <a name="dl3036"></a>[DL3036](https://github.com/hadolint/hadolint/wiki/DL3036) | warning |  | yes | The packages and metadata zypper downloads are left in the image without zypper clean. |
+| <a name="dl3037"></a>[DL3037](https://github.com/hadolint/hadolint/wiki/DL3037) | warning |  | yes | zypper install lists a package without a version, so a rebuild may install a different one. |
+| <a name="dl3038"></a>[DL3038](https://github.com/hadolint/hadolint/wiki/DL3038) | warning |  | yes | dnf would stop to ask for confirmation, which fails a build; it needs -y. |
+| <a name="dl3040"></a>[DL3040](https://github.com/hadolint/hadolint/wiki/DL3040) | warning |  | yes | The packages and metadata dnf downloads are left in the image without dnf clean all. |
+| <a name="dl3041"></a>[DL3041](https://github.com/hadolint/hadolint/wiki/DL3041) | warning |  | yes | dnf install lists a package without a version, so a rebuild may install a different one. |
+| <a name="dl3042"></a>[DL3042](https://github.com/hadolint/hadolint/wiki/DL3042) | warning |  | yes | pip install keeps the packages it downloads in a cache inside the image unless --no-cache-dir is given. |
+| <a name="dl3044"></a>[DL3044](https://github.com/hadolint/hadolint/wiki/DL3044) | error |  | yes | ENV reads a variable that the same ENV sets, which Docker expands to its earlier value. |
+| <a name="dl3045"></a>[DL3045](https://github.com/hadolint/hadolint/wiki/DL3045) | warning |  | yes | COPY copies to a relative path while no WORKDIR is set, so the base image decides where it lands. |
+| <a name="dl3046"></a>[DL3046](https://github.com/hadolint/hadolint/wiki/DL3046) | warning |  | yes | useradd with a large UID and without -l writes a huge sparse lastlog file into the image. |
+| <a name="dl3047"></a>[DL3047](https://github.com/hadolint/hadolint/wiki/DL3047) | info |  |  | wget prints a progress bar line by line into the build log unless told to be quieter. |
+| <a name="dl3048"></a>[DL3048](https://github.com/hadolint/hadolint/wiki/DL3048) | style |  |  | A label key breaks Docker's naming guidelines for label keys. |
+| <a name="dl3049"></a>[DL3049](https://github.com/hadolint/hadolint/wiki/DL3049) | info |  |  | The image lacks a label the configured label schema requires. |
+| <a name="dl3050"></a>[DL3050](https://github.com/hadolint/hadolint/wiki/DL3050) | info |  |  | A label is not in the configured label schema, which is strict. |
+| <a name="dl3051"></a>[DL3051](https://github.com/hadolint/hadolint/wiki/DL3051) | warning |  | yes | A label the label schema names is empty. |
+| <a name="dl3052"></a>[DL3052](https://github.com/hadolint/hadolint/wiki/DL3052) | warning |  | yes | A label the label schema types as url is not an absolute URL. |
+| <a name="dl3053"></a>[DL3053](https://github.com/hadolint/hadolint/wiki/DL3053) | warning |  | yes | A label the label schema types as rfc3339 is not an RFC 3339 date and time. |
+| <a name="dl3054"></a>[DL3054](https://github.com/hadolint/hadolint/wiki/DL3054) | warning |  | yes | A label the label schema types as spdx is not an SPDX license expression. |
+| <a name="dl3055"></a>[DL3055](https://github.com/hadolint/hadolint/wiki/DL3055) | warning |  | yes | A label the label schema types as hash is not a git commit hash. |
+| <a name="dl3056"></a>[DL3056](https://github.com/hadolint/hadolint/wiki/DL3056) | warning |  | yes | A label the label schema types as semver is not a semantic version. |
+| <a name="dl3057"></a>[DL3057](https://github.com/hadolint/hadolint/wiki/DL3057) | info | `require-healthcheck` |  | A stage has no HEALTHCHECK, so Docker cannot tell whether its container works. |
+| <a name="dl3058"></a>[DL3058](https://github.com/hadolint/hadolint/wiki/DL3058) | warning |  | yes | A label the label schema types as email is not an email address. |
+| <a name="dl3059"></a>[DL3059](https://github.com/hadolint/hadolint/wiki/DL3059) | info |  |  | Consecutive RUN instructions each add a layer; joining them with && makes one. |
+| <a name="dl3060"></a>[DL3060](https://github.com/hadolint/hadolint/wiki/DL3060) | info |  |  | The yarn cache is left in the image without yarn cache clean. |
+| <a name="dl3062"></a>[DL3062](https://github.com/hadolint/hadolint/wiki/DL3062) | warning |  | yes | go install names a module without a version, so a rebuild may build a different one. |
+| <a name="dl4001"></a>[DL4001](https://github.com/hadolint/hadolint/wiki/DL4001) | warning |  | yes | A stage downloads with both wget and curl; one tool is enough. |
+| <a name="dl4005"></a>[DL4005](https://github.com/hadolint/hadolint/wiki/DL4005) | warning |  | yes | RUN replaces /bin/sh with a link; SHELL changes the shell of later instructions without touching the image. |
+| <a name="dl4006"></a>[DL4006](https://github.com/hadolint/hadolint/wiki/DL4006) | warning |  | yes | A pipeline in RUN succeeds when its last command does, hiding a failure earlier in the pipe, unless pipefail is set. |

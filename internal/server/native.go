@@ -304,7 +304,7 @@ func (s *Server) nativeHoverAt(ctx context.Context, docs *docstore.View, here na
 	return s.nativeHover(here.snapshot, h), true, nil
 }
 
-func (s *Server) nativeFindings(h hostnav.Host, settings config.Settings) []lint.Finding {
+func (s *Server) nativeFindings(h hostnav.Host, settings config.Settings, docker hostnav.Hadolint) []lint.Finding {
 	if !settings.Lint.Enabled {
 		return nil
 	}
@@ -316,7 +316,7 @@ func (s *Server) nativeFindings(h hostnav.Host, settings config.Settings) []lint
 		s.noticeOnce("hostnav:"+file.URI+":"+err.Error(), lsp.MessageWarning, "Checking "+file.Path+" on its own, without the files it includes: "+err.Error())
 	}
 	excluded := s.lintSettings(file.Path, settings).Excluded()
-	return slices.DeleteFunc(slices.Clone(findings), func(f lint.Finding) bool { return excluded.Has(f.Code) })
+	return slices.DeleteFunc(slices.Concat(findings, docker.Findings()), func(f lint.Finding) bool { return excluded.Has(f.Code) })
 }
 
 const recipeTimeout = 30 * time.Minute

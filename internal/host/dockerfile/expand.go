@@ -14,15 +14,22 @@ type binding struct {
 type environment map[string]binding
 
 type expander struct {
-	text   string
-	escape byte
-	env    environment
-	at     int
-	known  bool
+	text     string
+	escape   byte
+	env      environment
+	at       int
+	known    bool
+	declared bool
 }
 
 func (f *File) evaluate(text string, env environment) (string, bool) {
 	e := &expander{text: text, escape: f.Escape, env: env, known: true}
+	out := e.word(func(byte) bool { return false })
+	return out, e.known
+}
+
+func (f *File) evaluateDeclared(text string, env environment) (string, bool) {
+	e := &expander{text: text, escape: f.Escape, env: env, known: true, declared: true}
 	out := e.word(func(byte) bool { return false })
 	return out, e.known
 }
@@ -92,7 +99,7 @@ func (e *expander) doubleQuoted() string {
 
 func (e *expander) lookup(name string) (string, bool) {
 	b, set := e.env[name]
-	if set && !b.known {
+	if set && !b.known || !set && e.declared {
 		e.known = false
 	}
 	return b.value, set
@@ -250,6 +257,46 @@ func (f *File) stageEnvironment(s Stage, stages []Stage, before *Instruction) en
 				maps.Copy(env, f.bindings(env, in))
 			case "ARG":
 				f.declare(env, in, preamble)
+			}
+		}
+	}
+	return env
+}
+
+func (f *File) Expand(at *Instruction, text string) (string, bool) {
+	return f.evaluate(text, f.environmentAt(at))
+}
+
+func (f *File) ExpandDeclared(at *Instruction, text string) (string, bool) {
+	return f.evaluateDeclared(text, f.environmentAt(at))
+}
+
+func (f *File) environmentAt(at *Instruction) environment {
+	stages := f.Stages()
+	for _, s := range stages {
+		if s.From == at {
+			break
+		}
+		for _, in := range s.Instructions {
+			if in == at || in.Inner == at {
+				return f.suppliable(f.stageEnvironment(s, stages, in), s.Instructions, in)
+			}
+		}
+	}
+	return f.suppliable(f.preambleEnvironment(), f.Preamble(), nil)
+}
+
+func (f *File) suppliable(env environment, scope []*Instruction, before *Instruction) environment {
+	for _, in := range scope {
+		if in == before {
+			break
+		}
+		if in.Name != "ARG" {
+			continue
+		}
+		for _, p := range f.Pairs(in) {
+			if _, set := env[p.Key.Text]; !set && p.Value == nil {
+				env[p.Key.Text] = binding{}
 			}
 		}
 	}

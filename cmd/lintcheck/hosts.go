@@ -14,11 +14,13 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/atomicfile"
 	"github.com/stubbedev/shell-lsp/internal/corpus"
+	"github.com/stubbedev/shell-lsp/internal/hadolint"
 	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/host/dockerfile"
 	"github.com/stubbedev/shell-lsp/internal/host/oracle"
 	"github.com/stubbedev/shell-lsp/internal/hostnav"
 	"github.com/stubbedev/shell-lsp/internal/lint"
+	"github.com/stubbedev/shell-lsp/internal/regularfile"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
@@ -126,7 +128,35 @@ func lineSet(lines []string) map[string]bool {
 	return out
 }
 
+func hadolintConfig(configs *hadolint.Resolver, f corpus.HostFile) (hadolint.Config, error) {
+	if f.Language != host.Docker {
+		return hadolint.Config{}, nil
+	}
+	cfg, _, err := configs.Nearest(filepath.Dir(f.File))
+	if err != nil {
+		return hadolint.Config{}, fmt.Errorf("reading the Hadolint configuration of %s: %w", f.Path, err)
+	}
+	return cfg, nil
+}
+
+func hadolintDisagreements(ctx context.Context, f corpus.HostFile, cfg hadolint.Config, df *dockerfile.File, findings []lint.Finding) []string {
+	found, err := oracle.Hadolint(ctx, f.File, cfg.Path, isolatedEnv())
+	if err != nil {
+		return []string{"Hadolint fails: " + strings.ReplaceAll(err.Error(), f.File, f.Path)}
+	}
+	reported := make([]hadolint.Reported, len(found))
+	for i, r := range found {
+		reported[i] = hadolint.Reported{Code: r.Code, Line: r.Line}
+	}
+	var out []string
+	for _, problem := range hadolint.Disagreements(df, reported, findings) {
+		out = append(out, "Hadolint disagrees: "+problem)
+	}
+	return out
+}
+
 func analyseHosts(ctx context.Context, files []corpus.HostFile) ([]hostReport, error) {
+	configs := hadolint.NewResolver(regularfile.ReadConfig, time.Now, time.Hour, nil)
 	byRoot := map[string]*workspace.Workspace{}
 	graphs := map[string]*hostnav.Graph{}
 	var out []hostReport
@@ -161,6 +191,12 @@ func analyseHosts(ctx context.Context, files []corpus.HostFile) ([]hostReport, e
 			return nil, fmt.Errorf("analysing %s: %w", f.Path, err)
 		}
 		findings := g.Findings()
+		dockerConfig, err := hadolintConfig(configs, f)
+		if err != nil {
+			return nil, err
+		}
+		docker, isDocker := hostnav.HadolintOf(file, dockerConfig)
+		findings = docker.Host(slices.Concat(findings, docker.Findings()))
 		r := hostReport{path: f.Path, elapsed: time.Since(start)}
 		text := file.Doc.Source().Text()
 		var errorLines, readLines []int
@@ -195,6 +231,9 @@ func analyseHosts(ctx context.Context, files []corpus.HostFile) ([]hostReport, e
 			}
 			for _, problem := range dockerfile.Parse(text).CheckDisagreements(reported, findings) {
 				r.lines = append(r.lines, "BuildKit disagrees: "+problem)
+			}
+			if df, ok := file.Native.Dockerfile(); ok && isDocker {
+				r.lines = append(r.lines, hadolintDisagreements(ctx, f, dockerConfig, df, findings)...)
 			}
 		case f.Language == host.Make && host.Make.EntryPoint(f.File):
 			verdict := oracle.Make(ctx, f.File, f.Root, text, isolatedEnv())

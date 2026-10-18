@@ -1,0 +1,264 @@
+### yum-install-bare
+FROM fedora:40
+RUN yum install httpd
+>>> DL3030 2
+>>> DL3032 2
+>>> DL3033 2
+### yum-install-clean-versioned
+FROM fedora:40
+RUN yum install -y httpd-2.4.57 && yum clean all
+>>> none
+### yum-assumeyes-before-subcommand
+FROM fedora:40
+RUN yum --assumeyes install httpd-2.4.57 && yum clean all
+>>> none
+### yum-short-flag-cluster-with-y
+FROM fedora:40
+RUN yum -qy install httpd-2.4.57 && yum clean all
+>>> none
+### yum-yes-long-is-not-accepted
+FROM fedora:40
+RUN yum install --yes httpd-2.4.57 && yum clean all
+>>> DL3030 2
+### yum-groupinstall-only-needs-y
+FROM fedora:40
+RUN yum groupinstall "Development Tools"
+>>> DL3030 2
+>>+ DL3032 2 -- groupinstall downloads packages into the yum cache as install does
+### yum-localinstall-only-needs-y
+FROM fedora:40
+RUN yum localinstall -y /tmp/pkg.rpm
+>>+ DL3032 2 -- localinstall still fetches metadata and dependencies into the yum cache
+### yum-install-without-packages
+FROM fedora:40
+RUN yum install -y && yum clean all
+>>> none
+### yum-remove-is-ignored
+FROM fedora:40
+RUN yum remove httpd
+>>+ DL3030 2 -- yum remove asks for confirmation too
+### yum-module-install-counts-module-word
+FROM fedora:40
+RUN yum -y module install nodejs-18 && yum clean all
+>>- DL3033 2 -- module is the command; nodejs-18 names a versioned stream
+### yum-clean-before-install
+FROM fedora:40
+RUN yum clean all && yum install -y httpd-2.4.57
+>>> none
+### yum-clean-in-next-run
+FROM fedora:40
+RUN yum install -y httpd-2.4.57
+RUN yum clean all
+>>> DL3032 2
+>>> DL3059 3
+### yum-rm-rf-anything-counts-as-clean
+FROM fedora:40
+RUN yum install -y httpd-2.4.57 && rm -rf /tmp/build
+>>+ DL3032 2 -- removing /tmp/build leaves the yum cache in the image
+### yum-rm-fr-is-not-clean
+FROM fedora:40
+RUN yum install -y httpd-2.4.57 && rm -fr /var/cache/yum
+>>- DL3032 2 -- rm -fr removes the yum cache as rm -rf does
+### yum-dnf-clean-does-not-count
+FROM fedora:40
+RUN yum install -y httpd-2.4.57 && dnf clean all
+>>- DL3032 2 -- where dnf exists, yum is dnf and shares its cache, so dnf clean all cleans it
+### yum-cache-mount-does-not-count
+FROM fedora:40
+RUN --mount=type=cache,target=/var/cache/yum yum install -y httpd-2.4.57
+>>- DL3032 2 -- a cache mount on /var/cache/yum keeps the cache out of the image
+### yum-one-finding-per-run
+FROM fedora:40
+RUN yum install httpd && yum install nginx
+>>> DL3030 2
+>>> DL3032 2
+>>> DL3033 2
+### yum-y-on-other-command-does-not-count
+FROM fedora:40
+RUN yum install httpd-2.4.57 && yum -y clean all
+>>> DL3030 2
+### yum-version-forms
+FROM fedora:40
+RUN yum install -y httpd-2.4.57-1.el9 nginx-1:1.20.1 glibc-2.28.i686 /tmp/foo-1.0.rpm && yum clean all
+>>> none
+### yum-unversioned-forms
+FROM fedora:40
+RUN yum install -y python3-pip 'httpd >= 2.4' && yum clean all
+>>> DL3033 2
+### yum-version-suffix-bad-char
+FROM fedora:40
+RUN yum install -y 'httpd-2.4*' && yum clean all
+>>- DL3033 2 -- httpd-2.4* holds yum to the 2.4 releases
+### yum-version-variable
+FROM fedora:40
+ARG VER=2.4
+RUN yum install -y "httpd-${VER}" && yum clean all
+>>- DL3033 3 -- ARG VER sets 2.4, so the package is httpd-2.4
+### yum-flag-value-taken-as-package
+FROM fedora:40
+RUN yum install -y --enablerepo epel httpd-2.4.57 && yum clean all
+>>- DL3033 2 -- --enablerepo takes epel as its value
+### yum-flag-value-with-equals
+FROM fedora:40
+RUN yum install -y --enablerepo=epel httpd-2.4.57 && yum clean all
+>>> none
+### yum-double-dash-is-a-package
+FROM fedora:40
+RUN yum install -y -- httpd-2.4.57 && yum clean all
+>>- DL3033 2 -- -- ends the options; it names no package
+### dnf-install-bare
+FROM fedora:40
+RUN dnf install httpd
+>>> DL3038 2
+>>> DL3040 2
+>>> DL3041 2
+### dnf-install-clean-versioned
+FROM fedora:40
+RUN dnf -y install httpd-2.4.57 && dnf clean all
+>>> none
+### dnf-group-install-two-words
+FROM fedora:40
+RUN dnf -y group install development-tools && dnf clean all
+>>- DL3041 2 -- group install takes groups, which have no versions
+### dnf-at-group-unversioned
+FROM fedora:40
+RUN dnf -y install @development-tools && dnf clean all
+>>- DL3041 2 -- @development-tools names a group, which has no version
+### dnf-libdnf5-cache-mount
+FROM fedora:40
+RUN --mount=type=cache,target=/var/cache/libdnf5 dnf -y install httpd-2.4.57
+>>> none
+### dnf-dnf-cache-mount-does-not-count
+FROM fedora:40
+RUN --mount=type=cache,target=/var/cache/dnf dnf -y install httpd-2.4.57
+>>- DL3040 2 -- a cache mount on /var/cache/dnf keeps dnf's cache out of the image
+### dnf-bind-mount-does-not-count
+FROM fedora:40
+RUN --mount=type=bind,target=/var/cache/libdnf5 dnf -y install httpd-2.4.57
+>>> DL3040 2
+### microdnf-install-bare
+FROM registry.access.redhat.com/ubi9/ubi-minimal:9.4
+RUN microdnf install httpd
+>>> DL3038 2
+>>> DL3040 2
+>>> DL3041 2
+### microdnf-needs-its-own-clean
+FROM registry.access.redhat.com/ubi9/ubi-minimal:9.4
+RUN microdnf install -y httpd-2.4.57 && dnf clean all
+>>> DL3040 2
+### microdnf-clean
+FROM registry.access.redhat.com/ubi9/ubi-minimal:9.4
+RUN microdnf install -y httpd-2.4.57 && microdnf clean all
+>>> none
+### dnf-and-microdnf-one-clean
+FROM fedora:40
+RUN dnf -y install httpd-2.4.57 && microdnf -y install nginx-1.24 && dnf clean all
+>>> DL3040 2
+### dnf-absolute-path-ignored
+FROM fedora:40
+RUN /usr/bin/dnf install httpd
+>>+ DL3038 2 -- /usr/bin/dnf is dnf, called by its path
+>>+ DL3040 2 -- /usr/bin/dnf is dnf, called by its path
+>>+ DL3041 2 -- /usr/bin/dnf is dnf, called by its path
+### tdnf-ignored
+FROM photon:5.0
+RUN tdnf install httpd
+>>> none
+### zypper-install-bare
+FROM opensuse/leap:15.6
+RUN zypper install curl
+>>> DL3034 2
+>>> DL3036 2
+>>> DL3037 2
+### zypper-in-clean-versioned
+FROM opensuse/leap:15.6
+RUN zypper -n in curl=8.6.0 && zypper clean -a
+>>> none
+### zypper-non-interactive-after-subcommand
+FROM opensuse/leap:15.6
+RUN zypper install --no-confirm curl=8.6.0 && zypper cc
+>>> none
+### zypper-remove-needs-non-interactive
+FROM opensuse/leap:15.6
+RUN zypper rm curl
+>>> DL3034 2
+### zypper-update-is-ignored
+FROM opensuse/leap:15.6
+RUN zypper update
+>>+ DL3034 2 -- zypper update asks for confirmation and downloads packages into the cache
+>>+ DL3036 2 -- zypper update asks for confirmation and downloads packages into the cache
+### zypper-dup
+FROM opensuse/leap:15.6
+RUN zypper -n dup
+>>> DL3035 2
+>>+ DL3036 2 -- dist-upgrade downloads packages into the cache too
+### zypper-dist-upgrade-onbuild
+FROM opensuse/leap:15.6
+ONBUILD RUN zypper --non-interactive dist-upgrade
+>>> DL3035 2
+>>+ DL3036 2 -- dist-upgrade downloads packages into the cache too
+### zypper-version-operators
+FROM opensuse/leap:15.6
+RUN zypper -n install 'curl>=8' 'git<3' vim=9.1 && zypper clean
+>>> none
+### zypper-dash-version-not-enough
+FROM opensuse/leap:15.6
+RUN zypper -n install curl-8.6.0 && zypper clean
+>>> DL3037 2
+### zypper-rpm-files
+FROM opensuse/leap:15.6
+RUN zypper -n install ./local.rpm https://example.com/remote.rpm && zypper clean
+>>> none
+### zypper-rm-rf-is-not-clean
+FROM opensuse/leap:15.6
+RUN zypper -n install curl=8.6.0 && rm -rf /var/cache/zypp
+>>- DL3036 2 -- removing /var/cache/zypp removes zypper's cache
+### zypper-cache-mount
+FROM opensuse/leap:15.6
+RUN --mount=type=cache,target=/var/cache/zypp zypper -n install curl=8.6.0
+>>> none
+### zypper-tmpfs-mount
+FROM opensuse/leap:15.6
+RUN --mount=type=tmpfs,target=/var/cache/zypp zypper -n install curl=8.6.0
+>>> none
+### shell-constructs-are-walked
+FROM fedora:40
+RUN if true; then (yum install httpd) || { echo failed; }; fi
+>>> DL3030 2
+>>> DL3032 2
+>>> DL3033 2
+### assignment-prefix-and-exec
+FROM fedora:40
+RUN LANG=C exec dnf install httpd
+>>> DL3038 2
+>>> DL3040 2
+>>> DL3041 2
+### env-and-sh-c-hide-the-command
+FROM fedora:40
+RUN env LANG=C dnf install httpd && sh -c 'yum install nginx'
+>>+ DL3038 2 -- env runs dnf as well; the sh -c string is not read
+>>+ DL3040 2 -- env runs dnf as well; the sh -c string is not read
+>>+ DL3041 2 -- env runs dnf as well; the sh -c string is not read
+### json-form-is-joined-and-parsed
+FROM fedora:40
+RUN ["dnf", "-y", "install", "httpd-2.4.57", "&&", "dnf", "clean", "all"]
+>>+ DL3040 2 -- the exec form runs no shell, so &&, dnf, clean and all are package names and nothing cleans
+>>+ DL3041 2 -- the exec form runs no shell, so &&, dnf, clean and all are package names and nothing cleans
+### heredoc-run
+FROM fedora:40
+RUN <<EOF
+set -e
+dnf install httpd
+EOF
+>>> DL3038 2
+>>> DL3040 2
+>>> DL3041 2
+### multi-line-run-reports-first-line
+FROM fedora:40
+
+RUN echo start \
+    && zypper install \
+       curl
+>>> DL3034 3
+>>> DL3036 3
+>>> DL3037 3

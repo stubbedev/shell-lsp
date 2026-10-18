@@ -1,6 +1,8 @@
 package server
 
 import (
+	"encoding/json"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -18,7 +20,7 @@ func TestDockerfileThroughTheServer(t *testing.T) {
 
 	p := openNativeProject(t, nativeCapabilities, dockerProject, "Dockerfile")
 	uri := p.uri("Dockerfile")
-	if got, want := codes(pullDiagnostics(t, p.c, uri)), []string{"SC2086", "SC2086", "SL7004"}; !slices.Equal(got, want) {
+	if got, want := codes(pullDiagnostics(t, p.c, uri)), []string{"DL3003", "DL3006", "DL3045", "SC2086", "SC2086", "SL7004"}; !slices.Equal(got, want) {
 		t.Errorf("diagnostics = %v, want %v", got, want)
 	}
 	defs := decodeResult[[]lsp.Location](t, p.c.call("textDocument/definition", p.params("Dockerfile", "APP_HOME", 1, "")))
@@ -45,4 +47,41 @@ func TestDockerfileThroughTheServer(t *testing.T) {
 	if edit == nil || len(edit.DocumentChanges) != 1 || len(edit.DocumentChanges[0].Edits) != 2 {
 		t.Errorf("rename of the stage = %+v, want both occurrences", edit)
 	}
+}
+
+func TestDockerfileHonoursHadolintSettings(t *testing.T) {
+	t.Parallel()
+
+	project := map[string]string{
+		".hadolint.yaml": "ignored: [DL3006]\noverride:\n  error: [DL3003]\n",
+		"Dockerfile":     "FROM alpine\nRUN echo $1\n# hadolint ignore=SC2086,DL3059\nRUN echo $2\nRUN cd /tmp && echo \"$3\"\n# hadolint global ignore=DL3045\nCOPY a b\n",
+		"a":              "",
+	}
+	p := openNativeProject(t, nativeCapabilities, project, "Dockerfile")
+	items := pullDiagnostics(t, p.c, p.uri("Dockerfile"))
+	var got []string
+	for _, d := range items {
+		got = append(got, fmt.Sprintf("%d %s %d", d.Range.Start.Line+1, d.Code, d.Severity))
+	}
+	slices.Sort(got)
+	want := []string{"2 SC2086 3", "5 DL3003 1"}
+	if !slices.Equal(got, want) {
+		t.Errorf("diagnostics = %q, want %q", got, want)
+	}
+}
+
+func TestDockerfileWithABrokenHadolintConfigurationIsCheckedWithout(t *testing.T) {
+	t.Parallel()
+
+	project := map[string]string{
+		".hadolint.yaml": "ignored: DL3006\n",
+		"Dockerfile":     "FROM alpine\n",
+	}
+	p := openNativeProject(t, nativeCapabilities, project, "Dockerfile")
+	if got, want := codes(pullDiagnostics(t, p.c, p.uri("Dockerfile"))), []string{"DL3006"}; !slices.Equal(got, want) {
+		t.Errorf("diagnostics = %v, want %v", got, want)
+	}
+	p.c.awaitNotification(logMessageMethod, func(raw json.RawMessage) bool {
+		return strings.Contains(string(raw), ".hadolint.yaml") && strings.Contains(string(raw), "line 1, column 10")
+	})
 }

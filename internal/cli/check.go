@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -18,6 +19,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/editorconfig"
 	"github.com/stubbedev/shell-lsp/internal/filelint"
+	"github.com/stubbedev/shell-lsp/internal/hadolint"
 	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/hostnav"
 	"github.com/stubbedev/shell-lsp/internal/lint"
@@ -113,6 +115,7 @@ type checker struct {
 	opts      checkOptions
 	editor    *editorconfig.Resolver
 	rcs       *rcFinder
+	hadolint  *hadolint.Resolver
 	ws        *workspace.Workspace
 	resolveMu sync.Mutex
 	resolved  map[string]error
@@ -132,6 +135,7 @@ func newChecker(env Env, opts checkOptions) *checker {
 		opts:     opts,
 		editor:   editorconfig.NewResolver(regularfile.ReadConfig, time.Now, time.Hour),
 		rcs:      newRCFinder(opts.rc, regularfile.ReadConfig, env.Home, env.ConfigHome),
+		hadolint: hadolint.NewResolver(regularfile.ReadConfig, time.Now, time.Duration(math.MaxInt64), hadolint.ConfigFallback(env.Home, env.ConfigHome)),
 		stdin:    sync.OnceValues(func() ([]byte, error) { return io.ReadAll(env.Stdin) }),
 		resolved: map[string]error{},
 	}
@@ -151,8 +155,9 @@ func (c *checker) color() bool {
 }
 
 type fileSettings struct {
-	lint  filelint.Settings
-	roots []string
+	lint     filelint.Settings
+	hadolint hadolint.Config
+	roots    []string
 }
 
 func (c *checker) settings(dir string) (fileSettings, error) {
@@ -165,7 +170,12 @@ func (c *checker) settings(dir string) (fileSettings, error) {
 			warnUnknownOptional(c.env.Stderr, rc.Enabled, rc.Path)
 		}
 	}
-	s := fileSettings{lint: filelint.Settings{
+	docker, _, err := c.hadolint.Nearest(dir)
+	if err != nil {
+		return fileSettings{}, err
+	}
+	docker.Optional = slices.Concat(c.opts.enable, rc.Enabled)
+	s := fileSettings{hadolint: docker, lint: filelint.Settings{
 		RC:       rc,
 		Shell:    c.opts.shell,
 		Exclude:  c.opts.exclude,
@@ -302,14 +312,16 @@ func (c *checker) lint(t target) linted {
 	for _, variant := range file.Variants() {
 		syntax = append(syntax, syntaxFindings(variant.Tree, s.lint.DialectSource(variant))...)
 	}
-	findings := sourceFindings(file.Doc, c.filter(s.lint.Excluded(), append(syntax, report.Findings...)))
+	findings := sourceFindings(file.Doc, append(syntax, report.Findings...))
+	docker, _ := hostnav.HadolintOf(file, s.hadolint)
 	if h, ok := hostnav.Of(file); ok {
 		native, err := c.nativeFindings(h)
 		if err != nil {
 			return linted{failure: fmt.Sprintf("%s: %v", t.name, err)}
 		}
-		findings = c.filter(s.lint.Excluded(), append(findings, native...))
+		findings = slices.Concat(findings, native, docker.Findings())
 	}
+	findings = c.filter(s.lint.Excluded(), docker.Host(findings))
 	return linted{
 		report: fileReport{name: t.name, doc: file.Doc.Source(), findings: findings},
 		file:   file,

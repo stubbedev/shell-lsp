@@ -62,6 +62,7 @@ type analysis struct {
 	invocation func(offset int) (model.Invocation, bool)
 	enclosing  func(offset int) []parser.Span
 	format     func() (string, error)
+	dockerfile *dockerfile.File
 }
 
 func projectOnly(project func(string) (*projection.Map, dialect.Detection)) func(string) analysis {
@@ -78,7 +79,7 @@ func analyzeMake(text string) analysis {
 
 func analyzeDocker(text string) analysis {
 	a := dockerfile.Analyze(text)
-	return analysis{projection: a.Map, detection: a.Detection, index: a.Index, expect: a.File.Expect, invocation: a.File.Invocation, enclosing: a.File.Enclosing}
+	return analysis{projection: a.Map, detection: a.Detection, index: a.Index, expect: a.File.Expect, invocation: a.File.Invocation, enclosing: a.File.Enclosing, dockerfile: a.File}
 }
 
 func analyzeJust(text string) analysis {
@@ -218,7 +219,10 @@ type Native struct {
 	invocation func(offset int) (model.Invocation, bool)
 	enclosing  func(offset int) []parser.Span
 	format     func() (string, error)
+	dockerfile *dockerfile.File
 }
+
+func (n *Native) Dockerfile() (*dockerfile.File, bool) { return n.dockerfile, n.dockerfile != nil }
 
 func (n *Native) Enclosing(offset int) []parser.Span { return n.enclosing(offset) }
 
@@ -265,7 +269,7 @@ func (l Language) Project(doc *docstore.Document) Script {
 	script := Script{Doc: docstore.Project(doc, a.projection), Detection: a.detection}
 	script.group(a.projection.Scripts(), a.projection.Shells())
 	if a.index != nil {
-		script.Native = &Native{Language: l, Index: a.index, expect: a.expect, invocation: a.invocation, enclosing: a.enclosing, format: a.format}
+		script.Native = &Native{Language: l, Index: a.index, expect: a.expect, invocation: a.invocation, enclosing: a.enclosing, format: a.format, dockerfile: a.dockerfile}
 	}
 	return script
 }

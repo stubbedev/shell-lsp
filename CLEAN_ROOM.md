@@ -1,8 +1,10 @@
 # Clean-room policy
 
 shell-lsp is MIT-licensed. ShellCheck, whose check codes, directives and
-command line it stays compatible with, is licensed under the GPL-3.0, and
-bash-language-server under the MIT licence. To keep every line of shell-lsp
+command line it stays compatible with, is licensed under the GPL-3.0, as is
+Hadolint, whose check codes, pragmas and configuration file it stays
+compatible with for Dockerfiles, and bash-language-server under the MIT
+licence. To keep every line of shell-lsp
 its own, these projects are reimplemented from what they do, never from how
 they do it. This file states what may and may not inform the code, the tests
 and the documentation. It applies equally to people and to the AI agents that
@@ -11,6 +13,7 @@ do most of the work (see [How it was built](README.md#how-it-was-built)).
 ## Projects this covers
 
 - [ShellCheck](https://github.com/koalaman/shellcheck)
+- [Hadolint](https://github.com/hadolint/hadolint)
 - [bash-language-server](https://github.com/bash-lsp/bash-language-server)
 - Any other shell linter or language server, whatever its licence, when its
   behaviour is compared with ours.

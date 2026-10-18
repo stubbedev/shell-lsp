@@ -17,6 +17,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/config"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/editorconfig"
+	"github.com/stubbedev/shell-lsp/internal/hadolint"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/manpage"
@@ -120,6 +121,7 @@ type Server struct {
 	process      Process
 	editorconfig *editorconfig.Resolver
 	shellcheckrc *shellcheckrc.Resolver
+	hadolint     *hadolint.Resolver
 	sem          chan struct{}
 	exiting      chan struct{}
 	wg           sync.WaitGroup
@@ -141,6 +143,7 @@ func New(conn *jsonrpc.Conn, version string, process Process) *Server {
 		settings:     config.Default(),
 		editorconfig: editorconfig.NewResolver(regularfile.ReadConfig, time.Now, workspace.DiskRecheck),
 		shellcheckrc: newShellcheckrcResolver(shellcheckrc.Fallback(process.Home, process.ConfigHome)),
+		hadolint:     newHadolintResolver(hadolint.ConfigFallback(process.Home, process.ConfigHome)),
 		pending:      newRegistry[chan *jsonrpc.Message](),
 		cancels:      newCancelRegistry(),
 		progress:     newCancelRegistry(),

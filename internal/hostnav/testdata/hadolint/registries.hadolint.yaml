@@ -1,0 +1,6 @@
+trustedRegistries:
+  - gcr.io
+  - docker.io
+  - "registry.example.com:5000"
+  - "*.quay.io"
+  - "mirror.*"

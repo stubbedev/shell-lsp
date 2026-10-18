@@ -1,0 +1,3 @@
+override:
+  fatal: [DL3006]
+  ignore: [DL4000]

@@ -9,6 +9,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/editorconfig"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
+	"github.com/stubbedev/shell-lsp/internal/hadolint"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/navigation"
 	"github.com/stubbedev/shell-lsp/internal/parser"
@@ -94,6 +95,11 @@ func (s *Server) handleDidChangeWatchedFiles(ctx context.Context, watched lsp.Di
 		}
 		if shellcheckrc.IsName(path) {
 			s.shellcheckrc.Invalidate(path)
+			projectChanged = true
+			continue
+		}
+		if hadolint.IsConfigName(path) {
+			s.hadolint.Invalidate(path)
 			projectChanged = true
 			continue
 		}

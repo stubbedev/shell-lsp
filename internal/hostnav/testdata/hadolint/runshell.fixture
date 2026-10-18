@@ -1,0 +1,414 @@
+### dl3001-each-listed-command
+FROM debian:12
+RUN free -m
+RUN echo
+RUN kill -0 1
+RUN echo
+RUN mount
+RUN echo
+RUN ps aux
+RUN echo
+RUN service cron start
+RUN echo
+RUN shutdown -h now
+RUN echo
+RUN ssh example.org
+RUN echo
+RUN top -bn1
+RUN echo
+RUN vim -c q
+>>> DL3001 10
+>>> DL3001 12
+>>> DL3001 14
+>>> DL3001 16
+>>> DL3001 18
+>>> DL3001 2
+>>> DL3001 4
+>>> DL3001 6
+>>> DL3001 8
+>>> DL3059 10
+>>> DL3059 11
+>>> DL3059 12
+>>> DL3059 13
+>>> DL3059 14
+>>> DL3059 15
+>>> DL3059 16
+>>> DL3059 17
+>>> DL3059 18
+>>> DL3059 3
+>>> DL3059 4
+>>> DL3059 5
+>>> DL3059 6
+>>> DL3059 7
+>>> DL3059 8
+>>> DL3059 9
+### dl3001-unlisted-commands
+FROM debian:12
+RUN ifconfig && nano x && systemctl enable cron && htop && killall x && umount /x
+>>> none
+### dl3001-absolute-path-ignored
+FROM debian:12
+RUN /usr/bin/vim -c q
+>>+ DL3001 2 -- /usr/bin/vim is vim, called by its path
+### dl3001-package-name-not-command
+FROM debian:12
+RUN apt-get install -y --no-install-recommends vim=2:9.0 openssh-client=1:9.2
+>>> none
+### dl3001-later-in-and-list
+FROM debian:12
+RUN echo start \
+ && mkdir -p /srv \
+ && ps aux
+>>> DL3001 2
+### dl3001-inside-subshell-and-group
+FROM debian:12
+RUN (top -bn1) && { free -m; }
+>>> DL3001 2
+### dl3001-assignment-prefix
+FROM debian:12
+RUN TERM=xterm top -bn1
+>>> DL3001 2
+### dl3001-env-and-sudo-not-unwrapped
+FROM debian:12
+RUN env TERM=xterm top -bn1
+>>+ DL3001 2 -- env runs top
+### dl3001-exec-command-builtin-unwrapped
+FROM debian:12
+RUN exec ps && command top && builtin kill 1
+>>> DL3001 2
+### dl3001-busybox-unwrapped
+FROM debian:12
+RUN busybox ps
+>>> DL3001 2
+### dl3001-sh-c-opaque
+FROM debian:12
+RUN sh -c 'ps aux'
+>>> none
+### dl3001-json-form
+FROM debian:12
+RUN ["ps", "aux"]
+>>> DL3001 2
+### dl3001-json-joined-with-spaces
+FROM debian:12
+RUN ["echo", "done && ps"]
+>>- DL3001 2 -- the exec form runs no shell, so `done && ps` is an argument of echo
+### dl3001-heredoc
+FROM debian:12
+RUN <<EOT
+echo hi
+ps aux
+EOT
+>>> DL3001 2
+### dl3001-onbuild
+FROM debian:12
+ONBUILD RUN ps aux
+>>> DL3001 2
+### dl3003-cd-and-make
+FROM debian:12
+RUN cd /usr/src/app && make
+>>> DL3003 2
+### dl3003-cd-in-subshell
+FROM debian:12
+RUN (cd /usr/src/app && make) && make -C /usr/src/lib
+>>> DL3003 2
+### dl3003-cd-root-dash-noarg
+FROM debian:12
+RUN cd / && cd - && cd
+>>> DL3003 2
+### dl3003-sh-c-opaque
+FROM debian:12
+RUN sh -c 'cd /tmp && make'
+>>> none
+### dl3003-pushd-ignored
+FROM debian:12
+SHELL ["/bin/bash", "-c"]
+RUN pushd /tmp && make && popd
+>>> none
+### dl3003-onbuild-ignored
+FROM debian:12
+ONBUILD RUN cd /tmp && make
+>>+ DL3003 2 -- cd in a trigger behaves as in any RUN
+### dl3003-json-form
+FROM debian:12
+RUN ["cd", "/tmp"]
+>>> DL3003 2
+### dl3004-sudo-command
+FROM debian:12
+RUN sudo apt-get update
+>>> DL3004 2
+>>+ DL3009 2 -- sudo runs apt-get update, whose lists stay in the image
+### dl3004-sudo-later-in-pipeline
+FROM debian:12
+RUN echo 'x' | sudo tee /etc/x
+>>> DL3004 2
+>>> DL4006 2
+### dl3004-sudo-as-argument
+FROM debian:12
+RUN apt-get install -y --no-install-recommends sudo=1.9.13p3-1
+>>> none
+### dl3004-absolute-sudo-ignored
+FROM debian:12
+RUN /usr/bin/sudo true
+>>+ DL3004 2 -- /usr/bin/sudo is sudo, called by its path
+### dl3004-gosu-su-doas-ignored
+FROM debian:12
+RUN gosu nobody true && su -c true nobody && doas true
+>>> none
+### dl3004-xargs-opaque
+FROM debian:12
+RUN echo x | xargs sudo rm
+>>+ DL3004 2 -- xargs runs sudo
+>>> DL4006 2
+### dl3046-high-uid
+FROM debian:12
+RUN useradd -u 100000 app
+>>> DL3046 2
+### dl3046-five-digit-uid-ok
+FROM debian:12
+RUN useradd -u 99999 app
+>>> none
+### dl3046-leading-zeros-count
+FROM debian:12
+RUN useradd -u 000042 app
+>>- DL3046 2 -- 000042 is UID 42
+### dl3046-variable-uid
+FROM debian:12
+ARG APP_UID=1000
+RUN useradd -u "$APP_UID" app
+>>- DL3046 3 -- ARG APP_UID sets 1000, so the UID is 1000
+### dl3046-l-exempts
+FROM debian:12
+RUN useradd -l -u 1000000 app
+>>> none
+### dl3046-no-log-init-exempts
+FROM debian:12
+RUN useradd --no-log-init -u 1000000 app
+>>> none
+### dl3046-combined-lu-exempts
+FROM debian:12
+RUN useradd -lmu 1000000 app
+>>> none
+### dl3046-combined-mu-flagged
+FROM debian:12
+RUN useradd -mu 1000000 app
+>>> DL3046 2
+### dl3046-long-uid-ignored
+FROM debian:12
+RUN useradd --uid 1000000 app && useradd --uid=1000001 app2
+>>+ DL3046 2 -- --uid is the long form of -u
+### dl3046-attached-value-ignored
+FROM debian:12
+RUN useradd -u1000000 app
+>>+ DL3046 2 -- -u1000000 is -u with its value attached
+### dl3046-l-after-name
+FROM debian:12
+RUN useradd -u 1000000 app -l
+>>> none
+### dl3047-plain
+FROM debian:12
+RUN wget https://example.org/a.tgz
+>>> DL3047 2
+### dl3047-progress-forms
+FROM debian:12
+RUN wget --progress=dot:giga https://example.org/a \
+ && wget --progress https://example.org/b
+>>> none
+### dl3047-quiet-forms
+FROM debian:12
+RUN wget -q https://example.org/a && wget --quiet https://example.org/b && wget -qO- https://example.org/c
+>>> none
+### dl3047-no-verbose-forms
+FROM debian:12
+RUN wget -nv https://example.org/a && wget --no-verbose https://example.org/b
+>>> none
+### dl3047-output-file-forms
+FROM debian:12
+RUN wget -o /dev/null https://example.org/a && wget -a log https://example.org/b && wget --output-file=log https://example.org/c
+>>> none
+### dl3047-dash-O-not-enough
+FROM debian:12
+RUN wget -O- https://example.org/a
+>>> DL3047 2
+### dl3047-nv-cluster-not-enough
+FROM debian:12
+RUN wget -nvO /tmp/a https://example.org/a
+>>- DL3047 2 -- -nvO turns verbose output off as -nv does
+### dl3047-one-loud-wget
+FROM debian:12
+RUN wget -q https://example.org/a && wget https://example.org/b
+>>> DL3047 2
+### dl4001-same-run
+FROM debian:12
+RUN curl -fsSO https://example.org/a && wget -q https://example.org/b
+>>> DL4001 2
+### dl4001-later-runs-flagged
+FROM debian:12
+RUN wget -q https://example.org/a
+COPY a /a
+RUN curl -fsSO https://example.org/b
+COPY b /b
+RUN echo none
+COPY c /c
+RUN curl -fsSO https://example.org/c
+>>> DL4001 4
+>>> DL4001 8
+### dl4001-separate-stages
+FROM debian:12 AS fetch
+RUN wget -q https://example.org/a
+FROM debian:12
+RUN curl -fsSO https://example.org/b
+>>> none
+### dl4001-not-inherited-from-base-stage
+FROM debian:12 AS base
+RUN wget -q https://example.org/a
+FROM base
+RUN curl -fsSO https://example.org/b
+>>> none
+### dl4001-onbuild-ignored
+FROM debian:12
+ONBUILD RUN wget -q https://example.org/a
+COPY a /a
+RUN curl -fsSO https://example.org/b
+>>> none
+### dl4005-ln-bin-sh
+FROM debian:12
+RUN ln -sf /bin/bash /bin/sh
+>>> DL4005 2
+### dl4005-bin-sh-as-source
+FROM debian:12
+RUN ln -s /bin/sh /usr/local/bin/posix-sh
+>>- DL4005 2 -- the new link points to /bin/sh; /bin/sh itself stays
+### dl4005-other-paths-ignored
+FROM debian:12
+RUN ln -sf /bin/bash /usr/bin/sh && cp /bin/bash /bin/sh
+>>> none
+### dl4006-pipe-default-shell
+FROM debian:12
+RUN wget -qO- https://example.org/a.tgz | tar xz
+>>> DL4006 2
+### dl4006-set-pipefail-in-run-not-enough
+FROM debian:12
+RUN set -o pipefail && wget -qO- https://example.org/a.tgz | tar xz
+>>- DL4006 2 -- set -o pipefail before the pipe makes it fail when any of its commands fails
+### dl4006-shell-bash-pipefail
+FROM debian:12
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+RUN wget -qO- https://example.org/a.tgz | tar xz
+>>> none
+### dl4006-shell-combined-flags
+FROM debian:12
+SHELL ["/bin/bash", "-euxo", "pipefail", "-c"]
+RUN wget -qO- https://example.org/a.tgz | tar xz
+>>> none
+### dl4006-shell-sh-pipefail-not-enough
+FROM debian:12
+SHELL ["/bin/sh", "-o", "pipefail", "-c"]
+RUN wget -qO- https://example.org/a.tgz | tar xz
+>>- DL4006 3 -- SHELL runs /bin/sh -o pipefail, so pipefail is on
+### dl4006-shell-usr-bin-bash-not-recognised
+FROM debian:12
+SHELL ["/usr/bin/bash", "-o", "pipefail", "-c"]
+RUN wget -qO- https://example.org/a.tgz | tar xz
+>>- DL4006 3 -- SHELL runs bash -o pipefail, so pipefail is on
+### dl4006-shell-bash-without-pipefail
+FROM debian:12
+SHELL ["/bin/bash", "-c"]
+RUN wget -qO- https://example.org/a.tgz | tar xz
+>>> DL4006 3
+### dl4006-shell-pwsh-exempt
+FROM mcr.microsoft.com/powershell:7.4-debian-12
+SHELL ["pwsh", "-Command"]
+RUN Get-ChildItem | Select-Object Name
+>>> none
+### dl4006-shell-not-inherited
+FROM debian:12 AS base
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+FROM base
+RUN wget -qO- https://example.org/a.tgz | tar xz
+>>- DL4006 4 -- a stage built FROM base keeps the SHELL of base
+### dl4006-pipe-in-subshell-and-substitution
+FROM debian:12
+RUN echo "$(uname -a | cut -d' ' -f1)"
+>>> DL4006 2
+### dl4006-pipe-stderr
+FROM debian:12
+SHELL ["/bin/bash", "-c"]
+RUN make |& tee build.log
+>>> DL4006 3
+### dl4006-or-list-not-pipe
+FROM debian:12
+RUN test -f /x || touch /x
+>>> none
+### dl4006-quoted-pipe-not-pipe
+FROM debian:12
+RUN echo 'a | b' && grep -E 'x|y' /etc/hosts
+>>> none
+### dl4006-sh-c-opaque
+FROM debian:12
+RUN sh -c 'uname -a | cut -c1-5'
+>>> none
+### dl4006-json-form-joined
+FROM debian:12
+RUN ["sh", "-c", "uname -a | cut -c1-5"]
+>>- DL4006 2 -- the pipe sits in the string sh -c runs, which shell-lsp does not read
+### dl4006-onbuild-ignored
+FROM debian:12
+ONBUILD RUN uname -a | cut -c1-5
+>>> none
+### dl3059-two-simple-runs
+FROM debian:12
+RUN apt-get update
+RUN mkdir -p /srv
+>>> DL3009 2
+>>> DL3059 3
+### dl3059-chain-of-four
+FROM debian:12
+RUN mkdir -p /a
+# a comment
+RUN mkdir -p /b
+
+RUN mkdir -p /c
+RUN mkdir -p /d
+>>> DL3059 4
+>>> DL3059 6
+>>> DL3059 7
+### dl3059-multi-command-run-breaks
+FROM debian:12
+RUN mkdir -p /a
+RUN mkdir -p /b && mkdir -p /c
+RUN mkdir -p /d
+RUN mkdir -p /e
+>>> DL3059 5
+### dl3059-tests-and-assignments-free
+FROM debian:12
+RUN [ -d /a ] && mkdir -p /b
+RUN X=1 && mkdir -p /c
+>>> DL3059 3
+### dl3059-substitution-counts
+FROM debian:12
+RUN echo "$(date)"
+RUN mkdir -p /c
+>>> none
+### dl3059-same-flags
+FROM debian:12
+RUN --mount=type=cache,target=/var/cache/apt apt-get update
+RUN --mount=type=cache,target=/var/cache/apt mkdir -p /a
+>>> DL3009 2
+>>> DL3059 3
+### dl3059-different-flags
+FROM debian:12
+RUN --mount=type=cache,target=/var/cache/apt apt-get update
+RUN mkdir -p /a
+>>> DL3009 2
+### dl3059-other-instruction-breaks
+FROM debian:12
+RUN mkdir -p /a
+ENV A=1
+RUN mkdir -p /b
+>>> none
+### dl3059-onbuild-breaks
+FROM debian:12
+RUN mkdir -p /a
+ONBUILD RUN mkdir -p /b
+RUN mkdir -p /c
+>>> none

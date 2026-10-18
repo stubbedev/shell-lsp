@@ -58,13 +58,21 @@ func (f *File) project() (*projection.Map, dialect.Detection, []model.Shell) {
 	}
 	stages := f.Stages()
 	ends := make([]stageShell, len(stages))
+	pragmas := slices.DeleteFunc(f.Pragmas(), func(p Pragma) bool { return p.Kind != PragmaShell })
 	for i, s := range stages {
 		shell, analysed := defaultDetection, true
 		if s.Parent >= 0 {
 			shell, analysed = ends[s.Parent].detection, ends[s.Parent].analysed
 		}
+		for i > 0 && len(pragmas) > 0 && pragmas[0].Span.Start < s.From.Span.Start {
+			pragmas = pragmas[1:]
+		}
 		declared := f.inheritedNames(s)
 		for _, in := range s.Instructions {
+			for len(pragmas) > 0 && pragmas[0].Span.Start < in.Span.Start {
+				shell, analysed = pragmaShell(f, pragmas[0])
+				pragmas = pragmas[1:]
+			}
 			if in.Name == "SHELL" && in.Form == FormJSON {
 				shell, analysed = shellOf(f, in)
 			}
@@ -88,6 +96,11 @@ func shellOf(f *File, in *Instruction) (dialect.Detection, bool) {
 	}
 	d, ok := dialect.FromShebang("#!" + strings.Join(words, " "))
 	return dialect.Detection{Dialect: d, Source: dialect.SourceHostSetting, Evidence: f.Text[in.Line.Start:in.Line.End]}, ok
+}
+
+func pragmaShell(f *File, p Pragma) (dialect.Detection, bool) {
+	d, ok := dialect.FromShebang("#!" + p.Shell)
+	return dialect.Detection{Dialect: d, Source: dialect.SourceHostSetting, Evidence: f.Text[p.Span.Start:p.Span.End]}, ok
 }
 
 func (f *File) declares(in *Instruction) []string {

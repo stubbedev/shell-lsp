@@ -1,0 +1,8 @@
+label-schema:
+  test.text: text
+  test.url: url
+  test.email: email
+  test.time: rfc3339
+  test.spdx: spdx
+  test.hash: hash
+  test.semver: semver

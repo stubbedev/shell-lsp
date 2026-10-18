@@ -1,0 +1,4 @@
+ignored: &codes [DL3006, SC2086]
+override:
+  error: *codes
+  style: [DL4000]

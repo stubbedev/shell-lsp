@@ -4,31 +4,48 @@ import "strings"
 
 const maxTag = 128
 
-func validReference(ref string) bool {
+type Reference struct {
+	Domain string
+	Path   string
+	Tag    string
+	Digest string
+}
+
+func ParseReference(ref string) (Reference, bool) {
+	var r Reference
 	name, digest, hasDigest := strings.Cut(ref, "@")
-	if hasDigest && !validDigest(digest) {
-		return false
+	if hasDigest {
+		if !validDigest(digest) {
+			return Reference{}, false
+		}
+		r.Digest = digest
 	}
 	if slash := strings.LastIndexByte(name, '/'); strings.LastIndexByte(name, ':') > slash {
 		colon := strings.LastIndexByte(name, ':')
 		if !validTag(name[colon+1:]) {
-			return false
+			return Reference{}, false
 		}
-		name = name[:colon]
+		r.Tag, name = name[colon+1:], name[:colon]
 	}
 	parts := strings.Split(name, "/")
 	if len(parts) > 1 && (strings.ContainsAny(parts[0], ".:") || parts[0] == "localhost") {
 		if !validDomain(parts[0]) {
-			return false
+			return Reference{}, false
 		}
-		parts = parts[1:]
+		r.Domain, parts = parts[0], parts[1:]
 	}
 	for _, p := range parts {
 		if !validComponent(p) {
-			return false
+			return Reference{}, false
 		}
 	}
-	return true
+	r.Path = strings.Join(parts, "/")
+	return r, true
+}
+
+func validReference(ref string) bool {
+	_, ok := ParseReference(ref)
+	return ok
 }
 
 func lowerAlnum(c byte) bool { return c >= 'a' && c <= 'z' || c >= '0' && c <= '9' }

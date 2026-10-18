@@ -1,0 +1,267 @@
+### ignore-next-instruction
+# hadolint ignore=DL3006
+FROM ubuntu
+>>> none
+### ignore-multiple-codes
+FROM ubuntu:20.04
+# hadolint ignore=DL3008,DL3015
+RUN apt-get install -y curl
+>>> none
+### ignore-spaces-around-comma-and-equals
+FROM ubuntu:20.04
+# hadolint ignore = DL3008 , DL3015
+RUN apt-get install -y curl
+>>> none
+### ignore-no-space-after-hash
+#hadolint ignore=DL3006
+FROM ubuntu
+>>> none
+### ignore-tabs-and-indent
+	#	hadolint	ignore=	DL3006
+FROM ubuntu
+>>> none
+### ignore-trailing-comment-allowed
+# hadolint ignore=DL3006 # pinned later
+FROM ubuntu
+>>> none
+### ignore-trailing-hash-without-space
+# hadolint ignore=DL3006#why
+FROM ubuntu
+>>> none
+### ignore-trailing-words-invalidate
+# hadolint ignore=DL3006 because
+FROM ubuntu
+>>> DL3006 2
+### ignore-lowercase-code-invalid
+# hadolint ignore=dl3006
+FROM ubuntu
+>>- DL3006 2 -- dl3006 names DL3006 in lower case
+### ignore-uppercase-keyword-invalid
+# HADOLINT IGNORE=DL3006
+FROM ubuntu
+>>> DL3006 2
+### ignore-double-hash-invalid
+## hadolint ignore=DL3006
+FROM ubuntu
+>>> DL3006 2
+### ignore-foreign-prefix-invalidates-whole-list
+# hadolint ignore=XX9999,DL3006
+FROM ubuntu
+>>> DL3006 2
+### ignore-digits-only-code-accepted
+# hadolint ignore=1234,DL3006
+FROM ubuntu
+>>> none
+### ignore-trailing-comma-invalid
+# hadolint ignore=DL3006,
+FROM ubuntu
+>>> DL3006 2
+### ignore-empty-list-invalid
+# hadolint ignore=
+FROM ubuntu
+>>> DL3006 2
+### ignore-unknown-code-harmless
+# hadolint ignore=DL9999,DL3006
+FROM ubuntu
+>>> none
+### ignore-blank-line-breaks-adjacency
+# hadolint ignore=DL3006
+
+FROM ubuntu
+>>> DL3006 3
+### ignore-comment-line-breaks-adjacency
+# hadolint ignore=DL3006
+# base image
+FROM ubuntu
+>>> DL3006 3
+### ignore-stacked-only-last-applies
+FROM ubuntu:20.04
+# hadolint ignore=DL3015
+# hadolint ignore=DL3008
+RUN apt-get install -y curl
+>>> DL3015 4
+### ignore-one-instruction-only
+FROM ubuntu:20.04
+# hadolint ignore=DL3008,DL3015
+RUN apt-get install -y curl
+RUN apt-get install -y wget
+>>> DL3008 4
+>>> DL3015 4
+>>> DL3059 4
+### ignore-same-line-is-not-a-pragma
+FROM ubuntu # hadolint ignore=DL3006
+>>+ DL1000 1 -- a # after an instruction is part of it, so FROM has too many words
+>>> DL3006 1
+### ignore-shell-comment-in-run-is-not-a-pragma
+FROM ubuntu:20.04
+RUN echo $X # hadolint ignore=SC2086
+>>> none
+### ignore-inside-continuation-not-applied
+FROM ubuntu:20.04
+RUN apt-get update && \
+# hadolint ignore=DL3008
+    apt-get install -y curl
+>>> DL3008 2
+>>> DL3009 2
+>>> DL3015 2
+### ignore-shellcheck-code
+FROM ubuntu:20.04
+# hadolint ignore=SC2086
+RUN echo $X
+>>> none
+### ignore-shellcheck-code-multiline-run
+FROM ubuntu:20.04
+# hadolint ignore=SC2086
+RUN true && \
+    true && \
+    echo $X
+>>> none
+### ignore-surviving-shellcheck-code-hides-run
+FROM ubuntu:20.04
+# hadolint ignore=SC2086
+RUN cd /x; echo $X
+>>> DL3003 3
+### ignore-shadowed-shellcheck-code-no-effect
+FROM ubuntu:20.04
+# hadolint ignore=SC2164
+RUN cd /x; echo $X
+>>> DL3003 3
+### ignore-dl4001-on-later-instruction
+FROM ubuntu:20.04
+RUN wget http://example.com/a
+# hadolint ignore=DL4001
+RUN curl http://example.com/b
+>>> DL3047 2
+>>> DL3059 4
+### ignore-dl4001-on-first-instruction-no-effect
+FROM ubuntu:20.04
+# hadolint ignore=DL4001
+RUN wget http://example.com/a
+RUN curl http://example.com/b
+>>> DL3047 3
+>>> DL3059 4
+>>> DL4001 4
+### ignore-dl3059-on-second-run
+FROM ubuntu:20.04
+RUN a
+# hadolint ignore=DL3059
+RUN b
+RUN c
+>>> DL3059 5
+### ignore-dl4003-on-second-cmd
+FROM ubuntu:20.04
+CMD ["a"]
+# hadolint ignore=DL4003
+CMD ["b"]
+>>+ DL4003 2 -- BuildKit reports the CMD the later one replaces, which the pragma above the later CMD does not cover
+### ignore-dl1000-not-suppressible
+FROM ubuntu:20.04
+# hadolint ignore=DL1000
+FOO bar
+>>- DL1000 3 -- the pragma above the line ignores its syntax error as it asks
+### ignore-onbuild-run
+FROM ubuntu:20.04
+# hadolint ignore=SC2086
+ONBUILD RUN echo $X
+>>> none
+### ignore-heredoc-run
+FROM ubuntu:20.04
+# hadolint ignore=SC2086
+RUN <<EOF
+echo $X
+EOF
+>>> none
+### global-ignore-top
+# hadolint global ignore=DL3006,DL3008
+FROM ubuntu
+RUN apt-get install -y curl
+>>> DL3015 3
+### global-ignore-at-end-applies-backwards
+FROM ubuntu
+RUN apt-get install -y curl
+# hadolint global ignore=DL3006,DL3008
+>>> DL3015 2
+### global-ignore-multiple-accumulate
+# hadolint global ignore=DL3006
+FROM ubuntu
+# hadolint global ignore=DL3008
+
+RUN apt-get install -y curl
+# hadolint global ignore=DL3015
+>>> none
+### global-ignore-shellcheck-all-runs
+# hadolint global ignore=SC2086
+FROM ubuntu:20.04
+RUN echo $X
+RUN echo $Y
+>>> DL3059 4
+### global-ignore-inside-continuation-not-applied
+FROM ubuntu:20.04
+RUN echo a && \
+# hadolint global ignore=SC2086
+    echo $X
+>>> none
+### global-ignore-missing-space-invalid
+# hadolint globalignore=DL3006
+FROM ubuntu
+>>> DL3006 2
+### shell-pwsh-disables-shellcheck-rest-of-stage
+FROM ubuntu:20.04
+# hadolint shell=pwsh
+RUN echo $X
+RUN echo $Y
+>>- DL3059 4 -- the pragma makes both RUNs PowerShell, whose commands are not counted
+### shell-substring-cmd-disables-shellcheck
+FROM ubuntu:20.04
+# hadolint shell=/opt/cmdtools/sh
+RUN echo $X
+>>> none
+### shell-pragma-before-first-from
+# hadolint shell=powershell
+FROM ubuntu:20.04
+RUN echo $X
+>>> none
+### shell-pragma-reset-at-next-from
+FROM ubuntu:20.04
+# hadolint shell=pwsh
+RUN echo $X
+FROM ubuntu:20.04
+RUN echo $RANDOM
+>>> none
+### shell-pragma-replaced-by-later-shell-instruction
+FROM ubuntu:20.04
+# hadolint shell=pwsh
+RUN echo $X
+SHELL ["/bin/sh", "-c"]
+RUN echo $RANDOM
+>>> none
+### shell-pragma-replaces-earlier-shell-instruction
+FROM ubuntu:20.04
+SHELL ["pwsh", "-c"]
+RUN echo $X
+# hadolint shell=/bin/bash
+RUN echo $RANDOM
+>>- DL3059 5 -- the RUN before is PowerShell, whose commands are not counted
+### shell-pragma-bare-name-is-shebang
+FROM ubuntu:20.04
+# hadolint shell=bash
+RUN echo hi
+>>> none
+### shell-pragma-with-arguments-invalid
+FROM ubuntu:20.04
+# hadolint shell=/bin/bash -o pipefail
+RUN echo $RANDOM
+>>> none
+### shell-pragma-leaves-dl-rules-alone
+FROM ubuntu:20.04
+# hadolint shell=pwsh
+RUN wget -O - http://example.com/a | sh
+>>- DL3047 3 -- the pragma says the RUN is PowerShell, which is not read as POSIX shell
+>>- DL4006 3 -- the pragma says the RUN is PowerShell, which is not read as POSIX shell
+### shellcheck-directive-in-heredoc-body
+FROM ubuntu:20.04
+RUN <<EOF
+# shellcheck disable=SC2086
+echo $X
+EOF
+>>> none

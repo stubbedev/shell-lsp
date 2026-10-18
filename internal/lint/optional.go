@@ -23,9 +23,11 @@ const (
 	optionalGoogleScriptLength
 	optionalGoogleShebang
 	optionalGoogleTodo
+	optionalNoIgnorePragmas
 	optionalQuoteSafeVariables
 	optionalDoubleBrackets
 	optionalDoubleEquals
+	optionalRequireHealthcheck
 	optionalLocalVariables
 	optionalTestGrouping
 	optionalVariableBraces
@@ -62,9 +64,11 @@ var optionalSpecs = [optionalCheckCount]optionalSpec{
 	optionalGoogleScriptLength:     {name: "google-script-length", notStrict: true},
 	optionalGoogleShebang:          {name: "google-shebang", notStrict: true},
 	optionalGoogleTodo:             {name: "google-todo", notStrict: true},
+	optionalNoIgnorePragmas:        {name: "no-ignore-pragmas", notStrict: true},
 	optionalQuoteSafeVariables:     {name: "quote-safe-variables"},
 	optionalDoubleBrackets:         {name: "require-double-brackets"},
 	optionalDoubleEquals:           {name: "require-double-equals"},
+	optionalRequireHealthcheck:     {name: "require-healthcheck", notStrict: true},
 	optionalLocalVariables:         {name: "require-local-variables"},
 	optionalTestGrouping:           {name: "require-test-grouping"},
 	optionalVariableBraces:         {name: "require-variable-braces"},

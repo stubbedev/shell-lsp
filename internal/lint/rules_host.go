@@ -166,7 +166,7 @@ var hostFamily = family{
 
 func HostFinding(code Code, span parser.Span, message string) Finding {
 	m, ok := catalog[code]
-	if !ok || !code.Host() {
+	if !ok || !code.Host() && !code.Hadolint() {
 		panic("lint: " + code.String() + " is not a host language check")
 	}
 	return Finding{Code: code, Severity: m.severity, Tag: m.tag, Span: span, Message: message}

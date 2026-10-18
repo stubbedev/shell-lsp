@@ -1,0 +1,741 @@
+### key-reverse-dns-lowercase-ok
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL org.example.name=x org.example.build-id=1 org.example.a_b=2 org.example.v1=3 org.1example=4 org.example.2=5 vendor/component=6
+>>> none
+### key-uppercase-letter
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL org.Example.name=x
+LABEL MAINTAINER=x
+>>> DL3048 3
+>>> DL3048 4
+### key-must-start-with-letter
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL 1abc=x
+LABEL _abc=x
+LABEL .abc=x
+LABEL -abc=x
+>>> DL3048 3
+>>> DL3048 4
+>>> DL3048 5
+>>> DL3048 6
+### key-must-end-with-letter-or-digit
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL abc.=x
+LABEL abc-=x
+LABEL abc_=x
+LABEL abc/=x
+>>> DL3048 3
+>>> DL3048 4
+>>> DL3048 5
+>>> DL3048 6
+### key-doubled-dot-or-dash
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL org..example=x
+LABEL org--example=x
+>>> DL3048 3
+>>> DL3048 4
+### key-other-doubled-separators-ok
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL a__b=1 a//b=2 a.-b=3 a-.b=4 a._b=5 a/.b=6
+>>> none
+### key-punctuation-rejected
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL a:b=x
+LABEL a@b=x
+LABEL a+b=x
+LABEL a~b=x
+LABEL café=x
+LABEL org\.example=x
+>>> DL3048 3
+>>> DL3048 4
+>>> DL3048 5
+>>> DL3048 6
+>>> DL3048 7
+>>- DL3048 8 -- BuildKit removes the escape, so the key is org.example
+### key-reserved-namespaces
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL com.docker.foo=x
+LABEL io.docker.foo=x
+LABEL org.dockerproject.foo=x
+>>> DL3048 3
+>>> DL3048 4
+>>> DL3048 5
+### key-reserved-lookalikes-ok
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL com.docker=x io.docker=y com.dockerhub.foo=z org.example.com.docker.x=w
+>>> none
+### key-quoted-forms
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL "org.example.a"=x 'org.example.b'=y
+LABEL "org example"=x
+LABEL ""=x
+>>> DL3048 4
+>>> DL3048 5
+### key-variable-not-expanded
+FROM debian:12
+ARG K=org.example.k
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL ${K}=x
+LABEL $K=x
+>>- DL3048 4 -- K expands to org.example.k, a valid key
+>>- DL3048 5 -- K expands to org.example.k, a valid key
+### key-one-finding-per-instruction
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL A=1 B=2 c=3
+>>> DL3048 3
+### key-multiline-reported-at-instruction
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+RUN true
+LABEL a=1 \
+      B=2 \
+      c=3
+>>> DL3048 4
+### key-legacy-form
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL Description some free text
+LABEL description some free text
+>>> DL3048 3
+### key-onbuild-not-checked
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+ONBUILD LABEL BAD=1 test.url=nope test.text=
+>>> none
+### key-checked-in-every-stage
+FROM debian:12 AS build
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL Stage=build
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL Stage=final
+>>> DL3048 3
+>>> DL3048 6
+### required-all-missing
+FROM debian:12
+RUN true
+>>> DL3049 1
+### required-all-present
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+>>> none
+### required-reported-per-stage
+FROM debian:12 AS build
+RUN true
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+>>- DL3049 1 -- only the final stage becomes the image; build stages need no labels
+### required-multiline-from
+FROM debian:12 \
+  AS build
+RUN true
+>>> DL3049 1
+### required-split-over-instructions
+FROM debian:12
+LABEL test.text=a test.url=https://example.com
+LABEL test.email=dev@example.com test.time=2024-01-02T03:04:05Z
+LABEL test.spdx=MIT test.hash=abcdef0
+>>> DL3049 1
+### required-key-case-sensitive
+FROM debian:12
+LABEL TEST.TEXT=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+>>> DL3048 2
+>>> DL3049 1
+### required-legacy-form-counts
+FROM debian:12
+LABEL test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL test.text hello world
+>>> none
+### required-only-label-instructions-count
+FROM debian:12
+ARG test.text=a
+ENV test.semver=1.0.0
+ONBUILD LABEL test.url=https://example.com
+>>> DL3049 1
+### required-inherited-from-earlier-stage
+FROM debian:12 AS base
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+FROM base AS build
+RUN true
+FROM build
+RUN true
+>>> none
+### required-stage-ref-ignores-tag-digest-registry
+FROM debian:12 AS base
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+FROM base:1
+FROM base@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+FROM docker.io/base
+FROM registry.example.com:5000/base:2
+>>+ DL3006 5 -- docker.io/base is an image on Docker Hub, not the stage base, and has no tag
+>>+ DL3049 6 -- registry.example.com:5000/base:2 is an image, not the stage base, so the final stage has none of the labels
+### required-stage-ref-not-a-path
+FROM debian:12 AS base
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+FROM library/base
+FROM docker.io/library/base
+FROM localhost/base
+>>> DL3006 3
+>>> DL3006 4
+>>> DL3006 5
+>>- DL3049 3 -- only the final stage becomes the image; build stages need no labels
+>>- DL3049 4 -- only the final stage becomes the image; build stages need no labels
+>>> DL3049 5
+### required-stage-ref-port-without-dot
+FROM debian:12 AS localhost
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+FROM localhost:5000/other
+>>+ DL3006 3 -- localhost:5000/other is an image with no tag, not the stage localhost, so the final stage has no labels
+>>+ DL3049 3 -- localhost:5000/other is an image with no tag, not the stage localhost, so the final stage has no labels
+### required-stage-ref-case-sensitive
+FROM debian:12 AS Base
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+FROM base
+>>- DL3006 3 -- stage names are case-insensitive, so base is the stage Base and keeps its labels
+>>- DL3049 3 -- stage names are case-insensitive, so base is the stage Base and keeps its labels
+### required-stage-ref-forward-not-resolved
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+FROM later
+FROM debian:12 AS later
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+>>> DL3006 3
+>>- DL3049 3 -- only the final stage becomes the image; build stages need no labels
+### required-stage-ref-variable-not-resolved
+FROM debian:12 AS base
+ARG B=base
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+FROM ${B}
+>>+ DL1000 4 -- B is declared inside a stage, so FROM ${B} expands to nothing, which BuildKit rejects
+>>> DL3049 4
+### required-unaliased-child-fills-parent
+FROM debian:12 AS base
+FROM base
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+>>> none
+### required-aliased-child-does-not-fill-parent
+FROM debian:12 AS base
+FROM base AS final
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+>>- DL3049 1 -- only the final stage becomes the image; build stages need no labels
+### required-sibling-labels-not-shared
+FROM debian:12 AS base
+LABEL test.text=a test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT
+FROM base
+LABEL test.hash=abcdef0
+FROM base
+LABEL test.semver=1.0.0
+>>- DL3049 3 -- only the final stage becomes the image; build stages need no labels
+>>> DL3049 5
+### required-child-labels-not-inherited
+FROM debian:12 AS base
+FROM base
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+FROM base
+>>> DL3049 4
+### required-redeclared-alias
+FROM debian:12 AS base
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+FROM debian:12 AS base
+RUN true
+FROM base
+>>> DL3024 3
+>>- DL3049 3 -- FROM base builds on the later stage named base, which has no labels
+>>+ DL3049 5 -- FROM base builds on the later stage named base, which has no labels
+### empty-value-forms
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL test.text=""
+LABEL test.text=''
+LABEL test.text=
+LABEL test.text=""""
+>>> DL3051 3
+>>> DL3051 4
+>>> DL3051 5
+>>> DL3051 6
+### empty-not-whitespace-or-variable
+FROM debian:12
+ARG E
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL test.text=" "
+LABEL test.text="$E"
+LABEL test.text=${E}
+LABEL test.text ""
+>>+ DL3051 7 -- BuildKit removes the quotes of the legacy form too, so the label is empty
+### empty-also-fails-type-check
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL test.url=""
+LABEL test.hash=""
+LABEL test.spdx=""
+>>> DL3051 3
+>>> DL3051 4
+>>> DL3051 5
+>>> DL3052 3
+>>> DL3054 5
+>>> DL3055 4
+### empty-one-per-label-per-instruction
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL test.text="" test.text="" test.url="https://example.com"
+LABEL test.text="" test.text="x"
+>>> DL3051 3
+>>> DL3051 4
+### findings-per-label-in-one-instruction
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL test.url=nope test.email=nope test.semver=nope test.hash=nope test.time=nope test.spdx=nope
+>>> DL3052 3
+>>> DL3053 3
+>>> DL3054 3
+>>> DL3055 3
+>>> DL3056 3
+>>> DL3058 3
+### findings-duplicate-key-any-bad-occurrence
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL test.url=nope test.url=https://example.com
+LABEL test.url=https://example.com test.url=nope
+>>> DL3052 3
+>>> DL3052 4
+### findings-only-for-schema-labels
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL org.example.url=nope org.example.version=v1 org.example.other=""
+>>> none
+### url-accepted-schemes
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL test.url=https://example.com/a?b=c#d
+LABEL test.url=ftp://example.com
+LABEL test.url=git+ssh://git@example.com/x.git
+LABEL test.url=mailto:dev@example.com
+LABEL test.url=urn:isbn:0451450523
+LABEL test.url=file:///etc/os-release
+>>> none
+### url-requires-scheme
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL test.url=example.com
+LABEL test.url=www.example.com/x
+LABEL test.url=//example.com
+LABEL test.url=/srv/x
+LABEL test.url=1http://example.com
+LABEL test.url=h_t://example.com
+>>> DL3052 3
+>>> DL3052 4
+>>> DL3052 5
+>>> DL3052 6
+>>> DL3052 7
+>>> DL3052 8
+### url-authority-optional-and-lenient
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL test.url=https:example.com
+LABEL test.url=https://
+LABEL test.url=https://example
+LABEL test.url=https://-x_y.example..com
+LABEL test.url=https://example.com:99999
+LABEL test.url=HTTPS://EXAMPLE.COM
+>>> none
+### url-invalid-characters
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL test.url="https://example.com/a b"
+LABEL test.url=https://example.com/<x>
+LABEL test.url=https://example.com/{x}
+LABEL test.url=https://example.com/café
+LABEL test.url=https://example.com/a\b
+LABEL test.url=" https://example.com"
+LABEL test.url="https://example.com "
+>>> DL3052 3
+>>> DL3052 4
+>>> DL3052 5
+>>> DL3052 6
+>>- DL3052 7 -- BuildKit removes the escape, so the URL is https://example.com/ab
+>>> DL3052 8
+>>> DL3052 9
+### url-percent-encoding
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL test.url=https://example.com/%20
+LABEL test.url=https://example.com/%2
+LABEL test.url=https://example.com/%zz
+LABEL test.url=https://ex%41mple.com
+>>> DL3052 4
+>>> DL3052 5
+>>+ DL3052 6 -- Go's URL parser, which the check uses, rejects percent escapes in host names
+### url-port-and-userinfo
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL test.url=https://user:pw@example.com:8080
+LABEL test.url=https://example.com:abc
+LABEL test.url=https://example.com:80:80
+LABEL test.url=https://a@b@example.com
+>>> DL3052 4
+>>> DL3052 5
+>>> DL3052 6
+### url-brackets-only-for-ip-literal
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL test.url=https://[::1]:8080/
+LABEL test.url=https://[2001:db8::1]
+LABEL test.url=https://example.com/[x]
+LABEL test.url=https://[::1
+LABEL test.url=https://[1::2::3]/
+>>> DL3052 5
+>>> DL3052 6
+>>> DL3052 7
+### url-ip-literal-variants
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL test.url=https://[::ffff:192.0.2.1]/
+LABEL test.url=https://[::ffff:192.0.2.256]/
+LABEL test.url=https://[fe80::1%25eth0]/
+LABEL test.url=https://[fe80::1%eth0]/
+LABEL test.url=https://[v1.x]/
+LABEL test.url=https://[v12.x]/
+>>> DL3052 4
+>>> DL3052 6
+>>+ DL3052 7 -- IPvFuture literals such as [v1.x] are not accepted
+>>> DL3052 8
+### url-query-and-fragment
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL test.url=https://x?a?b/c
+LABEL test.url=https://x#a?b/c
+LABEL test.url=https://x#a#b
+LABEL test.url=https://x?
+LABEL test.url=https://x#
+>>> DL3052 5
+### url-variables-are-literal
+FROM debian:12
+ARG HOST
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL test.url="https://$HOST/x"
+LABEL test.url="$URL"
+LABEL test.url="${URL}"
+>>+ DL3051 5 -- URL is declared nowhere, so the label expands to nothing
+>>+ DL3051 6 -- URL is declared nowhere, so the label expands to nothing
+>>> DL3052 5
+>>> DL3052 6
+### time-basic-forms
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL test.time=2024-01-02T03:04:05Z
+LABEL test.time=2024-01-02T03:04:05+01:00
+LABEL test.time=2024-01-02T03:04:05-00:00
+LABEL test.time=2024-01-02t03:04:05z
+LABEL test.time=2024-01-02T03:04:05.123456789Z
+LABEL test.time=" 2024-01-02T03:04:05Z "
+LABEL test.time="	2024-01-02T03:04:05Z"
+>>+ DL3053 8 -- RFC 3339 allows no spaces around the time
+>>+ DL3053 9 -- RFC 3339 allows no spaces around the time
+### time-separator-must-be-t
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL test.time="2024-01-02 03:04:05Z"
+LABEL test.time=2024-01-02_03:04:05Z
+LABEL test.time="2024-01-02T03:04:05 Z"
+>>> DL3053 3
+>>> DL3053 4
+>>> DL3053 5
+### time-incomplete
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL test.time=2024-01-02
+LABEL test.time=2024-01-02T03:04:05
+LABEL test.time=2024-01-02T03:04Z
+LABEL test.time=03:04:05Z
+LABEL test.time=20240102T030405Z
+>>> DL3053 3
+>>> DL3053 4
+>>> DL3053 5
+>>> DL3053 6
+>>> DL3053 7
+### time-zone-forms
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL test.time=2024-01-02T03:04:05+0100
+LABEL test.time=2024-01-02T03:04:05+01
+LABEL test.time=2024-01-02T03:04:05+1:00
+LABEL test.time=2024-01-02T03:04:05+99:99
+LABEL test.time=2024-01-02T03:04:05UTC
+>>+ DL3053 3 -- RFC 3339 writes offsets as +hh:mm with hours below 24 and minutes below 60
+>>> DL3053 4
+>>> DL3053 5
+>>+ DL3053 6 -- RFC 3339 writes offsets as +hh:mm with hours below 24 and minutes below 60
+>>> DL3053 7
+### time-fraction-forms
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL test.time=2024-01-02T03:04:05.Z
+LABEL test.time=2024-01-02T03:04:05,5Z
+LABEL test.time=2024-01-02T03:04:05.5+01:00
+LABEL test.time=2024-01-02T03:04:05.5
+>>+ DL3053 3 -- RFC 3339 needs a digit after the decimal point
+>>> DL3053 4
+>>> DL3053 6
+### time-calendar-ranges
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL test.time=2024-02-29T00:00:00Z
+LABEL test.time=2023-02-29T00:00:00Z
+LABEL test.time=1900-02-29T00:00:00Z
+LABEL test.time=2000-02-29T00:00:00Z
+LABEL test.time=2024-04-31T00:00:00Z
+LABEL test.time=2024-13-01T00:00:00Z
+>>> DL3053 4
+>>> DL3053 5
+>>> DL3053 7
+>>> DL3053 8
+### time-clock-ranges
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL test.time=2024-01-02T24:00:00Z
+LABEL test.time=2024-01-02T23:60:00Z
+LABEL test.time=2024-01-02T12:00:60Z
+LABEL test.time=2024-01-02T23:59:61Z
+>>> DL3053 3
+>>> DL3053 4
+>>> DL3053 6
+### time-year-forms
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL test.time=24-01-02T03:04:05Z
+LABEL test.time=10000-01-02T03:04:05Z
+LABEL test.time=-4-02-29T03:04:05Z
+LABEL test.time=+2024-01-02T03:04:05Z
+LABEL test.time=2024-1-2T03:04:05Z
+>>+ DL3053 3 -- RFC 3339 writes the year with four digits
+>>+ DL3053 4 -- RFC 3339 writes the year with four digits
+>>+ DL3053 5 -- RFC 3339 writes the year with four digits
+>>> DL3053 6
+>>> DL3053 7
+### spdx-single-identifiers
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL test.spdx=Apache-2.0
+LABEL test.spdx=GPL-3.0-or-later
+LABEL test.spdx=0BSD
+LABEL test.spdx=BSD-3-Clause
+LABEL test.spdx=LPD-document
+>>> none
+### spdx-case-sensitive
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL test.spdx=mit
+LABEL test.spdx=apache-2.0
+LABEL test.spdx=Bsd-3-Clause
+>>> DL3054 3
+>>> DL3054 4
+>>> DL3054 5
+### spdx-deprecated-rejected
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL test.spdx=GPL-3.0
+LABEL test.spdx=GPL-2.0+
+LABEL test.spdx=LGPL-2.1
+LABEL test.spdx=BSD-2-Clause-FreeBSD
+>>> DL3054 3
+>>> DL3054 4
+>>> DL3054 5
+>>> DL3054 6
+### spdx-newer-than-3-23-rejected
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL test.spdx=Gutmann
+LABEL test.spdx=pkgconf
+LABEL test.spdx=any-OSI
+LABEL test.spdx=X11-swapped
+>>- DL3054 3 -- these identifiers are on SPDX License List 3.27
+>>- DL3054 4 -- these identifiers are on SPDX License List 3.27
+>>- DL3054 5 -- these identifiers are on SPDX License List 3.27
+>>- DL3054 6 -- these identifiers are on SPDX License List 3.27
+### spdx-expressions-rejected
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL test.spdx="MIT OR Apache-2.0"
+LABEL test.spdx="GPL-2.0-only WITH Classpath-exception-2.0"
+LABEL test.spdx=MIT+
+LABEL test.spdx=(MIT)
+LABEL test.spdx=LicenseRef-acme
+LABEL test.spdx=NOASSERTION
+>>- DL3054 3 -- SPDX license expressions combine identifiers, which the OCI licenses label is defined to hold
+>>- DL3054 4 -- SPDX license expressions combine identifiers, which the OCI licenses label is defined to hold
+>>- DL3054 5 -- SPDX license expressions combine identifiers, which the OCI licenses label is defined to hold
+>>- DL3054 6 -- SPDX license expressions combine identifiers, which the OCI licenses label is defined to hold
+>>- DL3054 7 -- SPDX license expressions combine identifiers, which the OCI licenses label is defined to hold
+>>> DL3054 8
+### spdx-whitespace
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL test.spdx="MIT  "
+LABEL test.spdx=" MIT"
+LABEL test.spdx=Proprietary
+>>- DL3054 4 -- spaces around an expression change nothing
+>>> DL3054 5
+### hash-lengths
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL test.hash=0123456789abcdef0123456789abcdef01234567
+LABEL test.hash=0123abc
+LABEL test.hash=0123abcd
+LABEL test.hash=0123456789abcdef0123456789abcdef0123456
+LABEL test.hash=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+>>- DL3055 5 -- git abbreviates hashes to 7 or more characters, and SHA-256 repositories use 64
+>>- DL3055 6 -- git abbreviates hashes to 7 or more characters, and SHA-256 repositories use 64
+>>- DL3055 7 -- git abbreviates hashes to 7 or more characters, and SHA-256 repositories use 64
+### hash-lowercase-hex-only
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL test.hash=0123ABC
+LABEL test.hash=0123456789ABCDEF0123456789ABCDEF01234567
+LABEL test.hash=0123abg
+LABEL test.hash=" 0123abc"
+LABEL test.hash=sha1:0123abc
+>>> DL3055 3
+>>> DL3055 4
+>>> DL3055 5
+>>> DL3055 6
+>>> DL3055 7
+### semver-core
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL test.semver=0.0.0
+LABEL test.semver=10.20.30
+LABEL test.semver=v1.2.3
+LABEL test.semver=1.2
+LABEL test.semver=1.2.3.4
+LABEL test.semver=1.2.x
+LABEL test.semver=" 1.2.3"
+LABEL test.semver="1.2.3 "
+>>> DL3056 10
+>>> DL3056 5
+>>> DL3056 6
+>>> DL3056 7
+>>> DL3056 8
+>>> DL3056 9
+### semver-leading-zeros-ok
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL test.semver=01.02.03
+LABEL test.semver=1.2.3-01
+LABEL test.semver=1.2.3+001
+>>+ DL3056 3 -- SemVer forbids leading zeros in numeric parts
+>>+ DL3056 4 -- SemVer forbids leading zeros in numeric parts
+### semver-prerelease-and-build
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL test.semver=1.2.3-rc.1+build.5
+LABEL test.semver=1.2.3-alpha-beta
+LABEL test.semver=1.2.3+build-1
+LABEL test.semver=1.2.3-al_pha
+LABEL test.semver=1.2.3+a+b
+>>> DL3056 6
+>>> DL3056 7
+### semver-empty-and-trailing-dot-parts
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL test.semver=1.2.3-
+LABEL test.semver=1.2.3+
+LABEL test.semver=1.2.3-alpha.
+LABEL test.semver=1.2.3-.alpha
+LABEL test.semver=1.2.3-a..b
+LABEL test.semver=1.2.3-+
+>>+ DL3056 3 -- SemVer allows no empty identifiers
+>>+ DL3056 4 -- SemVer allows no empty identifiers
+>>+ DL3056 5 -- SemVer allows no empty identifiers
+>>> DL3056 6
+>>> DL3056 7
+>>+ DL3056 8 -- SemVer allows no empty identifiers
+### semver-whitespace-rejected
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL test.semver=" 1.2.3"
+LABEL test.semver="1.2.3 "
+>>> DL3056 3
+>>> DL3056 4
+### email-addr-spec-forms
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL test.email=first.last@example.com
+LABEL test.email=a+tag@example.com
+LABEL test.email=dev@localhost
+LABEL test.email=dev@[192.0.2.1]
+LABEL test.email=dev@example.com.
+LABEL test.email=DEV@EXAMPLE.COM
+>>> none
+### email-local-part-rules
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL test.email=first..last@example.com
+LABEL test.email=.first@example.com
+LABEL test.email=first.@example.com
+LABEL test.email='"first last"@example.com'
+LABEL test.email="first last@example.com"
+LABEL test.email=é@example.com
+>>> DL3058 3
+>>> DL3058 4
+>>> DL3058 5
+>>> DL3058 7
+>>> DL3058 8
+### email-domain-rules
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL test.email=dev@-example.com
+LABEL test.email=dev@example-.com
+LABEL test.email=dev@ex_ample.com
+LABEL test.email=dev@example..com
+LABEL test.email=dev@xn--bcher-kva.example
+LABEL test.email=dev@1.2.3.4
+>>> DL3058 3
+>>> DL3058 4
+>>> DL3058 5
+>>> DL3058 6
+### email-comments-and-whitespace-ok
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL test.email="dev@example.com (Dev Team)"
+LABEL test.email="(team) dev@example.com"
+LABEL test.email=" dev@example.com "
+LABEL test.email="dev . ops@example.com"
+>>+ DL3058 3 -- the label holds a bare address; comments and spaces are no part of it
+>>+ DL3058 4 -- the label holds a bare address; comments and spaces are no part of it
+>>+ DL3058 5 -- the label holds a bare address; comments and spaces are no part of it
+>>+ DL3058 6 -- the label holds a bare address; comments and spaces are no part of it
+### email-not-a-mailbox-list
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL test.email="Dev <dev@example.com>"
+LABEL test.email=<dev@example.com>
+LABEL test.email=mailto:dev@example.com
+LABEL test.email=a@example.com,b@example.com
+LABEL test.email=@example.com
+LABEL test.email=dev@
+>>> DL3058 3
+>>> DL3058 4
+>>> DL3058 5
+>>> DL3058 6
+>>> DL3058 7
+>>> DL3058 8
+### email-length-limits
+FROM debian:12
+LABEL test.text=hello test.url=https://example.com test.email=dev@example.com test.time=2024-01-02T03:04:05Z test.spdx=MIT test.hash=abcdef0 test.semver=1.0.0
+LABEL test.email=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx@example.com
+LABEL test.email=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx@example.com
+LABEL test.email=dev@xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.com
+LABEL test.email=dev@xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.com
+>>> DL3058 4
+>>> DL3058 6

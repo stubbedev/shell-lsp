@@ -1,0 +1,323 @@
+### pip-unpinned-and-cached
+FROM python:3.12
+RUN pip install flask
+>>> DL3013 2
+>>> DL3042 2
+### pip-pinned-without-cache
+FROM python:3.12
+RUN pip install --no-cache-dir flask==3.0.3 'gunicorn===22.0.0'
+>>> none
+### pip-range-specifiers-count-as-pinned
+FROM python:3.12
+RUN pip install --no-cache-dir 'flask>=3' 'jinja2~=3.1' 'click!=8.0.0' 'itsdangerous<3'
+>>> none
+### pip-unquoted-gt-is-a-redirect
+FROM python:3.12
+RUN pip install --no-cache-dir flask>=3
+>>> DL3013 2
+### pip-extras-need-a-version
+FROM python:3.12
+RUN pip install --no-cache-dir 'uvicorn[standard]==0.30.1' 'httpx[http2]'
+>>> DL3013 2
+### pip-requirements-file-spellings
+FROM python:3.12
+RUN pip install --no-cache-dir rich -r requirements.txt
+RUN pip install --no-cache-dir --requirement=requirements.txt rich
+>>- DL3013 3 -- --requirement=requirements.txt may pin rich, so whether it is pinned is unknown
+>>> DL3059 3
+### pip-constraint-exempts-command
+FROM python:3.12
+RUN pip install --no-cache-dir -c constraints.txt rich
+>>> none
+### pip-lone-dot-exempts-command
+FROM python:3.12
+RUN pip install --no-cache-dir rich .
+>>+ DL3013 2 -- rich is unpinned beside the project in .
+### pip-paths-wheels-and-sdists
+FROM python:3.12
+RUN pip install --no-cache-dir ./src dist/app-1.0-py3-none-any.whl vendor/lib-2.0.tar.gz
+>>> none
+### pip-zip-and-tgz-archives-unpinned
+FROM python:3.12
+RUN pip install --no-cache-dir lib-1.0.zip lib-1.0.tgz
+>>- DL3013 2 -- local archives are fixed files
+### pip-git-url-ref
+FROM python:3.12
+RUN pip install --no-cache-dir git+https://example.com/team/tool.git
+RUN pip install --no-cache-dir git+https://example.com/team/tool.git@v1.4.0
+>>> DL3013 2
+>>> DL3059 3
+### pip-hg-url-without-ref
+FROM python:3.12
+RUN pip install --no-cache-dir hg+https://example.com/team/tool
+>>> DL3013 2
+### pip-plain-url-counts-as-pinned
+FROM python:3.12
+RUN pip install --no-cache-dir https://example.com/dl/tool-1.0.zip
+>>> none
+### pip-upgrading-pip-is-unpinned
+FROM python:3.12
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+>>> DL3013 2
+### pip-option-values
+FROM python:3.12
+RUN pip install --no-cache-dir --index-url mirror rich==13.7.1
+RUN pip install --no-cache-dir --timeout 60 rich==13.7.1
+>>- DL3013 3 -- --timeout takes 60 as its value
+>>> DL3059 3
+### pip-target-with-equals-still-consumes
+FROM python:3.12
+RUN pip install --no-cache-dir --target=/opt/lib rich
+>>+ DL3013 2 -- --target=/opt/lib carries its value, so rich is a package and unpinned
+### pip-double-dash-is-a-package
+FROM python:3.12
+RUN pip install --no-cache-dir -- rich==13.7.1
+>>- DL3013 2 -- -- ends the options; it names no package
+### pip-versioned-command-name
+FROM python:3.12
+RUN pip3.12 install rich
+>>> DL3013 2
+>>> DL3042 2
+### python-m-pip
+FROM python:3.12
+RUN python3 -m pip install rich
+>>> DL3013 2
+>>> DL3042 2
+### python-m-pip-option-before-install-ignored
+FROM python:3.12
+RUN python3 -m pip -q install rich
+>>+ DL3013 2 -- -q is an option of pip, so the command is still pip install
+>>+ DL3042 2 -- -q is an option of pip, so the command is still pip install
+### python-c-hides-version-rule
+FROM python:3.12
+RUN python3 -c 'import sys' -m pip install rich
+>>- DL3042 2 -- python -c runs its own code; -m pip install rich are its arguments
+### pip-absolute-path-ignored
+FROM python:3.12
+RUN /opt/venv/bin/pip install rich
+>>+ DL3013 2 -- /opt/venv/bin/pip is pip, called by its path
+>>+ DL3042 2 -- /opt/venv/bin/pip is pip, called by its path
+### pipx-and-pipenv
+FROM python:3.12
+RUN pipx install black
+RUN pipenv install rich
+>>> DL3013 2
+>>> DL3059 3
+### pip-no-cache-dir-spellings
+FROM python:3.12
+RUN pip --no-cache-dir install rich==13.7.1
+RUN pip install --no-cache-dir=1 rich==13.7.1
+>>- DL3042 3 -- --no-cache-dir=1 still names the option
+>>> DL3059 3
+### pip-env-no-cache-dir
+FROM python:3.12
+ENV PIP_NO_CACHE_DIR=1
+RUN pip install rich==13.7.1
+>>> none
+### pip-env-no-cache-dir-false
+FROM python:3.12
+ENV PIP_NO_CACHE_DIR=false
+RUN pip install rich==13.7.1
+>>- DL3042 3 -- pip turns its cache off for any boolean in PIP_NO_CACHE_DIR, false included
+### pip-env-scoped-to-stage-name
+FROM python:3.12 AS base
+ENV PIP_NO_CACHE_DIR=yes
+FROM python:3.12 AS app
+RUN pip install rich==13.7.1
+FROM base
+RUN pip install rich==13.7.1
+>>- DL3042 4 -- the stage app is neither the final stage nor the base of another, so its cache never reaches an image
+### pip-env-shared-by-unnamed-image
+FROM python:3.12
+ENV PIP_NO_CACHE_DIR=yes
+FROM python:3.11-slim AS app
+RUN pip install rich==13.7.1
+>>+ DL3042 4 -- the stage app starts from python:3.11-slim, not from the stage that sets PIP_NO_CACHE_DIR
+### pip-env-later-falsy-does-not-reset
+FROM python:3.12
+ENV PIP_NO_CACHE_DIR=on
+ENV PIP_NO_CACHE_DIR=0
+RUN pip install rich==13.7.1
+>>> none
+### pip-arg-no-cache-dir-not-exempt
+FROM python:3.12
+ARG PIP_NO_CACHE_DIR=1
+RUN pip install rich==13.7.1
+>>- DL3042 3 -- ARG values are in the environment of later RUNs, so pip sees PIP_NO_CACHE_DIR=1
+### pip-run-text-assignment-exempts
+FROM python:3.12
+RUN pip install rich==13.7.1 && echo PIP_NO_CACHE_DIR=true
+>>+ DL3042 2 -- echo prints PIP_NO_CACHE_DIR=true; it does not set it for pip
+### pip-run-text-mixed-case-value-not-exempt
+FROM python:3.12
+RUN PIP_NO_CACHE_DIR=tRuE pip install rich==13.7.1
+>>- DL3042 2 -- pip reads tRuE as true
+### pip-cache-mounts
+FROM python:3.12
+RUN --mount=type=cache,target=/root/.cache/pip pip install rich==13.7.1
+RUN --mount=type=cache,target=/cache pip install rich==13.7.1
+RUN --mount=type=bind,target=/root/.cache/pip pip install rich==13.7.1
+>>> DL3042 3
+>>> DL3042 4
+### pip-one-finding-per-run
+FROM python:3.12
+RUN pip install --no-cache-dir rich==13.7.1 \
+ && pip install typer \
+ && pip install httpx
+>>> DL3013 2
+>>> DL3042 2
+### pip-shell-constructs-seen
+FROM python:3.12
+RUN if [ -f requirements.txt ]; then :; else (for p in a; do { pip install rich; }; done); fi
+>>> DL3013 2
+>>> DL3042 2
+### pip-wrappers-hide-command
+FROM python:3.12
+RUN sudo pip install rich && sh -c 'pip install typer' && env A=1 pip install httpx
+>>> DL3004 2
+>>+ DL3013 2 -- sudo and env run pip as well
+>>+ DL3042 2 -- sudo and env run pip as well
+### pip-heredoc-body
+FROM python:3.12
+RUN <<EOT
+set -e
+pip install rich
+EOT
+>>> DL3013 2
+>>> DL3042 2
+### pip-exec-form
+FROM python:3.12
+RUN ["pip", "install", "rich"]
+>>> DL3013 2
+>>> DL3042 2
+### pip-onbuild-ignores-env
+FROM python:3.12
+ENV PIP_NO_CACHE_DIR=1
+ONBUILD RUN pip install rich==13.7.1
+>>- DL3042 3 -- the trigger runs in an image built from this one, which keeps ENV PIP_NO_CACHE_DIR=1
+### npm-unpinned
+FROM node:20
+RUN npm install express
+RUN npm install @types/node
+>>> DL3016 2
+>>> DL3016 3
+>>> DL3059 3
+### npm-pinned-tags-and-ranges
+FROM node:20
+RUN npm install express@4.19.2 @types/node@20 lodash@latest 'react@^18'
+>>+ DL3016 2 -- lodash@latest follows the newest release
+### npm-ci-bare-install-and-aliases
+FROM node:20
+RUN npm ci && npm install && npm i express && npm add lodash
+>>+ DL3016 2 -- npm i and npm add are npm install
+### npm-global-install
+FROM node:20
+RUN npm install -g typescript
+>>> DL3016 2
+### npm-git-url-needs-hash
+FROM node:20
+RUN npm install git+https://example.com/team/lib.git git+ssh://git@example.com/team/other.git#v2
+>>> DL3016 2
+### npm-github-shorthand-always-unpinned
+FROM node:20
+RUN npm install github:team/lib#v1.0.0
+>>- DL3016 2 -- #v1.0.0 pins the git ref
+### npm-paths-and-tarballs
+FROM node:20
+RUN npm install ./lib ../shared /opt/pkg ~/pkg vendor/pkg-1.0.tgz
+>>> none
+### npm-lone-dot-unpinned
+FROM node:20
+RUN npm install .
+>>- DL3016 2 -- . installs the local package
+### npm-option-value-read-as-package
+FROM node:20
+RUN npm install --prefix out express@4.19.2
+>>- DL3016 2 -- --prefix takes out as its value
+### npm-loglevel-consumes-value
+FROM node:20
+RUN npm install --loglevel warn express@4.19.2
+>>> none
+### npm-subcommand-must-come-first
+FROM node:20
+RUN npm --prefix out install express && exec npm install lodash
+>>+ DL3016 2 -- --prefix takes out as its value and exec runs npm, so both commands are npm install
+### gem-unpinned-and-colon-versions
+FROM ruby:3.3
+RUN gem install rails
+RUN gem install rails:7.1.3 bundler:2.5.6
+>>> DL3028 2
+>>> DL3059 3
+### gem-version-flag-exempts-command
+FROM ruby:3.3
+RUN gem install rails bundler -v 2.5.6
+>>> none
+### gem-attached-short-version-not-exempt
+FROM ruby:3.3
+RUN gem install bundler -v2.5.6
+>>- DL3028 2 -- -v2.5.6 is -v with its value attached
+### gem-option-swallows-next-word
+FROM ruby:3.3
+RUN gem install --no-document rails
+RUN gem install rails --no-document
+>>+ DL3028 2 -- --no-document takes no value, so rails is the gem and unpinned
+>>> DL3028 3
+>>> DL3059 3
+### gem-build-args-after-double-dash
+FROM ruby:3.3
+RUN gem install nokogiri:1.16.5 -- --use-system-libraries extra
+>>> none
+### gem-local-file-unpinned
+FROM ruby:3.3
+RUN gem install ./pkg/tool-1.0.gem
+>>- DL3028 2 -- a local .gem file is a fixed file
+### yarn-install-and-cache-clean
+FROM node:20
+RUN yarn install --frozen-lockfile
+RUN yarn install --frozen-lockfile && yarn cache clean
+>>> DL3060 2
+### yarn-cache-clean-in-later-run
+FROM node:20
+RUN yarn install --frozen-lockfile
+RUN yarn cache clean
+>>> DL3059 3
+>>> DL3060 2
+### yarn-add-and-bare-yarn-ignored
+FROM node:20
+RUN yarn add express && yarn
+>>+ DL3060 2 -- yarn add and a bare yarn install packages into the cache too
+### yarn-cache-mount-exempts
+FROM node:20
+RUN --mount=type=cache,target=/usr/local/share/.cache/yarn yarn install --frozen-lockfile
+>>> none
+### yarn-any-cache-or-clean-word-exempts
+FROM node:20
+RUN yarn install --frozen-lockfile && yarn cache dir
+>>+ DL3060 2 -- yarn cache dir prints the cache directory; it cleans nothing
+### go-unpinned-and-local
+FROM golang:1.22
+RUN go install example.com/tools/cmd/lint
+RUN go install ./cmd/app
+>>> DL3059 3
+>>> DL3062 2
+>>- DL3062 3 -- ./cmd/app is built from the source in the image
+### go-pinned-and-latest
+FROM golang:1.22
+RUN go install example.com/tools/cmd/lint@v1.2.3 && go install golang.org/x/tools/gopls@latest
+>>> DL3062 2
+### go-run-program-arguments
+FROM golang:1.22
+RUN go run example.com/tools/cmd/gen@v0.4.0 generate
+>>- DL3062 2 -- generate is an argument of the program go run starts
+### go-get-and-build
+FROM golang:1.22
+RUN go build ./... && go get example.com/lib
+>>> DL3062 2
+### go-flag-value-read-as-package
+FROM golang:1.22
+RUN go install -tags netgo example.com/tools/cmd/lint@v1.2.3
+>>- DL3062 2 -- -tags takes netgo as its value
+### go-version-from-command-substitution
+FROM golang:1.22
+RUN go run example.com/tools/cmd/gen@$(go list -m -f '{{.Version}}' example.com/tools) generate
+>>- DL3062 2 -- the version comes from go list, so the module is pinned to it

@@ -1,0 +1,4 @@
+label-schema:
+  maintainer: email
+  version: semver
+  homepage: url

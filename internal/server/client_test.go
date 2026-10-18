@@ -39,6 +39,7 @@ func startClientIn(t testing.TB, process Process, initializeParams string, setup
 	serverReader, clientWriter := io.Pipe()
 	srv := New(jsonrpc.NewConn(serverReader, serverWriter), "test", process)
 	srv.shellcheckrc = newShellcheckrcResolver(nil)
+	srv.hadolint = newHadolintResolver(nil)
 	for _, fn := range setup {
 		fn(srv)
 	}

@@ -1,0 +1,125 @@
+### registry-exact-match
+# trusted: gcr.io, docker.io, registry.example.com:5000, *.quay.io, mirror.*
+FROM gcr.io/team/app:1.0
+FROM quay.io/team/tool:2
+>>> DL3026 3
+### registry-implicit-docker-hub-untrusted
+# trusted: gcr.io, docker.io, registry.example.com:5000, *.quay.io, mirror.*
+FROM debian:12
+FROM someorg/tool:1
+>>> none
+### registry-case-sensitive
+# trusted: gcr.io, docker.io, registry.example.com:5000, *.quay.io, mirror.*
+FROM GCR.IO/team/app:1
+>>> DL3026 2
+### registry-scratch-and-stages-exempt
+# trusted: gcr.io, docker.io, registry.example.com:5000, *.quay.io, mirror.*
+FROM gcr.io/team/app:1 AS base
+FROM base
+FROM scratch
+>>> none
+### registry-stage-reference-case
+# trusted: gcr.io, docker.io, registry.example.com:5000, *.quay.io, mirror.*
+FROM gcr.io/team/app:1 AS Base
+FROM base
+>>- DL3006 3 -- stage names are case-insensitive, so base is the stage Base
+### registry-stage-defined-later
+# trusted: gcr.io, docker.io, registry.example.com:5000, *.quay.io, mirror.*
+FROM base
+FROM gcr.io/team/app:1 AS base
+>>> DL3006 2
+### registry-variable-image-is-docker-hub
+# trusted: gcr.io, docker.io, registry.example.com:5000, *.quay.io, mirror.*
+ARG BASE=gcr.io/team/app:1
+FROM ${BASE}
+>>> none
+### registry-not-checked-for-copy-and-onbuild
+# trusted: gcr.io, docker.io, registry.example.com:5000, *.quay.io, mirror.*
+FROM gcr.io/team/app:1
+COPY --from=quay.io/team/tool:2 /bin/tool /usr/local/bin/
+ONBUILD FROM quay.io/team/tool:2
+>>> DL3043 4
+### registry-reported-with-other-from-rules
+# trusted: gcr.io, docker.io, registry.example.com:5000, *.quay.io, mirror.*
+FROM --platform=linux/arm64 quay.io/team/tool
+FROM \
+    quay.io/team/tool:latest \
+    AS second
+>>> DL3006 2
+>>> DL3007 3
+>>> DL3026 2
+>>> DL3026 3
+>>> DL3029 2
+### registry-implicit-docker-hub
+# trusted: gcr.io, docker.io, registry.example.com:5000, *.quay.io, mirror.*
+FROM debian:12
+FROM library/debian:12
+FROM someorg/tool:1
+FROM docker.io/library/alpine:3.20
+FROM index.docker.io/library/alpine:3.20
+>>- DL3026 6 -- index.docker.io is Docker Hub, as docker.io is
+### registry-host-without-dot-is-docker-hub
+# trusted: gcr.io, docker.io, registry.example.com:5000, *.quay.io, mirror.*
+FROM localhost/tool:1
+FROM localhost:5000/tool
+FROM myregistry:5000/tool
+>>+ DL3006 3 -- the registry has a port, so the image tool has no tag
+>>+ DL3006 4 -- the registry has a port, so the image tool has no tag
+>>+ DL3026 2 -- Docker reads localhost and any name with a port as a registry, not as Docker Hub
+>>+ DL3026 3 -- Docker reads localhost and any name with a port as a registry, not as Docker Hub
+>>+ DL3026 4 -- Docker reads localhost and any name with a port as a registry, not as Docker Hub
+### registry-variable-image-trusted-hub
+# trusted: gcr.io, docker.io, registry.example.com:5000, *.quay.io, mirror.*
+ARG REGISTRY=quay.io
+FROM $REGISTRY/team/tool:2
+>>+ DL3026 3 -- REGISTRY defaults to quay.io, which the list does not trust
+### registry-port-is-part-of-name
+# trusted: gcr.io, docker.io, registry.example.com:5000, *.quay.io, mirror.*
+FROM registry.example.com:5000/team/app:1
+FROM registry.example.com/team/app:1
+>>> DL3026 3
+### registry-leading-wildcard-with-dot
+# trusted: gcr.io, docker.io, registry.example.com:5000, *.quay.io, mirror.*
+FROM eu.gcr.io/team/app:1
+FROM a.b.gcr.io/team/app:1
+FROM gcr.io/team/app:1
+>>> DL3026 2
+>>> DL3026 3
+### registry-leading-wildcard-without-dot
+# trusted: gcr.io, docker.io, registry.example.com:5000, *.quay.io, mirror.*
+FROM gcr.io/team/app:1
+FROM eu.gcr.io/team/app:1
+FROM notgcr.io/team/app:1
+>>> DL3026 3
+>>> DL3026 4
+### registry-trailing-wildcard
+# trusted: gcr.io, docker.io, registry.example.com:5000, *.quay.io, mirror.*
+FROM gcr.io/team/app:1
+FROM gcr.io:443/team/app:1
+FROM eu.gcr.io/team/app:1
+>>> DL3026 3
+>>> DL3026 4
+### registry-star-matches-everything
+# trusted: gcr.io, docker.io, registry.example.com:5000, *.quay.io, mirror.*
+FROM debian:12
+FROM quay.io/team/tool:2
+>>> DL3026 3
+### registry-inner-wildcard-is-literal
+# trusted: gcr.io, docker.io, registry.example.com:5000, *.quay.io, mirror.*
+FROM gcr.io/team/app:1
+FROM eu.gcr.io/team/app:1
+>>> DL3026 3
+### registry-tld-wildcard-covers-docker-hub
+# trusted: gcr.io, docker.io, registry.example.com:5000, *.quay.io, mirror.*
+FROM debian:12
+FROM quay.io/team/tool:2
+FROM registry.example.com/team/app:1
+>>> DL3026 3
+>>> DL3026 4
+### registry-several-entries
+# trusted: gcr.io, docker.io, registry.example.com:5000, *.quay.io, mirror.*
+FROM gcr.io/team/app:1
+FROM quay.io/team/tool:2
+FROM ghcr.io/team/tool:3
+>>> DL3026 3
+>>> DL3026 4

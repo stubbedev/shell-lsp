@@ -1,0 +1,296 @@
+### apt-install-bare
+FROM debian:12
+RUN apt-get install curl
+>>> DL3008 2
+>>> DL3014 2
+>>> DL3015 2
+### apt-install-clean
+FROM debian:12
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends curl=7.88.1-10 \
+ && rm -rf /var/lib/apt/lists/*
+>>> none
+### apt-install-multiline-reports-run-line
+FROM debian:12
+RUN echo start && \
+    apt-get install \
+      curl \
+      git
+>>> DL3008 2
+>>> DL3014 2
+>>> DL3015 2
+### apt-absolute-path-not-seen
+FROM debian:12
+RUN /usr/bin/apt-get install curl
+>>+ DL3008 2 -- /usr/bin/apt-get is apt-get, called by its path
+>>+ DL3014 2 -- /usr/bin/apt-get is apt-get, called by its path
+>>+ DL3015 2 -- /usr/bin/apt-get is apt-get, called by its path
+### apt-install-word-anywhere
+FROM debian:12
+RUN apt-get remove vim install git
+>>- DL3008 2 -- the command is remove; install is a package name here
+>>> DL3014 2
+>>- DL3015 2 -- the command is remove; install is a package name here
+### apt-pin-forms-accepted
+FROM debian:12
+RUN apt-get install -y --no-install-recommends a=1.2 b=1.* c/bookworm-backports ./d.deb e_1_amd64.deb /opt/f "g=${V}" "${H}.deb"
+>>> none
+### apt-pin-tilde-not-pinned
+FROM debian:12
+RUN apt-get install -y --no-install-recommends 'curl~7'
+>>> DL3008 2
+### apt-pin-variable-not-pinned
+FROM debian:12
+RUN apt-get install -y --no-install-recommends "$PKGS"
+>>- DL3008 2 -- PKGS has no value the Dockerfile sets, so whether it holds pinned packages is unknown
+### apt-pin-expansion-content-ignored
+FROM debian:12
+RUN apt-get install -y --no-install-recommends "${PKG:-curl=7}"
+>>- DL3008 2 -- the word expands to curl=7, which is pinned
+### apt-pin-deb-suffix-case-sensitive
+FROM debian:12
+RUN apt-get install -y --no-install-recommends curl.DEB
+>>> DL3008 2
+### apt-double-dash-is-a-package
+FROM debian:12
+RUN apt-get install -y --no-install-recommends -- curl=7
+>>- DL3008 2 -- -- ends the options; it names no package
+### apt-target-release-skips-next-word
+FROM debian:12
+RUN apt-get install -y --no-install-recommends -t bookworm-backports curl=7
+>>> none
+### apt-target-release-equals-still-skips
+FROM debian:12
+RUN apt-get install -y --no-install-recommends --target-release=bookworm curl
+>>+ DL3008 2 -- --target-release=bookworm carries its value, so curl is a package and unpinned
+### apt-option-o-does-not-skip
+FROM debian:12
+RUN apt-get install -y --no-install-recommends -o Debug curl=7
+>>- DL3008 2 -- -o takes Debug as its value, so curl=7 is the only package
+### apt-yes-spellings
+FROM debian:12
+RUN apt-get -y install --no-install-recommends a=1 \
+ && apt-get install --yes --no-install-recommends b=1 \
+ && apt-get install --assume-yes=false --no-install-recommends c=1 \
+ && apt-get install -qy --no-install-recommends d=1
+>>+ DL3014 2 -- --assume-yes=false turns the confirmation back on
+### apt-quiet-twice-counts-as-yes
+FROM debian:12
+RUN apt-get -q install -q --no-install-recommends a=1 && apt-get install -qq --no-install-recommends b=1 && apt-get install -q=2 --no-install-recommends c=1
+>>> none
+### apt-quiet-thrice-is-not-yes
+FROM debian:12
+RUN apt-get install -qqq --no-install-recommends curl=7
+>>- DL3014 2 -- quiet level 3 implies -y as level 2 does
+### apt-quiet-mixed-forms-not-yes
+FROM debian:12
+RUN apt-get install -q --quiet --no-install-recommends curl=7
+>>- DL3014 2 -- -q and --quiet add up to quiet level 2, which implies -y
+### apt-quiet-long-equals-two-not-yes
+FROM debian:12
+RUN apt-get install --quiet=2 --no-install-recommends curl=7
+>>- DL3014 2 -- --quiet=2 is quiet level 2, which implies -y
+### apt-yes-flag-in-other-command-not-counted
+FROM debian:12
+RUN apt-get install --no-install-recommends curl=7 && echo -y
+>>> DL3014 2
+### apt-assume-yes-via-config-not-counted
+FROM debian:12
+RUN apt-get install -o APT::Get::Assume-Yes=true --no-install-recommends curl=7
+>>- DL3014 2 -- -o APT::Get::Assume-Yes=true is what -y sets
+### apt-recommends-config-separate-word
+FROM debian:12
+RUN apt-get install -y -o APT::Install-Recommends=false curl=7
+>>> none
+### apt-recommends-config-attached-not-seen
+FROM debian:12
+RUN apt-get install -y -oAPT::Install-Recommends=false curl=7
+>>- DL3015 2 -- -oAPT::Install-Recommends=false sets the option as the separate form does
+### apt-update-only-lists-kept
+FROM debian:12
+RUN apt-get update
+>>> DL3009 2
+### apt-update-rm-lists-glob
+FROM debian:12
+RUN apt-get update && rm /var/lib/apt/lists/*
+>>> none
+### apt-update-rm-rf-any-path
+FROM debian:12
+RUN apt-get update && rm -rf /tmp/build
+>>+ DL3009 2 -- removing /tmp/build leaves the package lists in the image
+### apt-update-rm-fr-lists-dir-not-enough
+FROM debian:12
+RUN apt-get update && rm -fr /var/lib/apt/lists
+>>- DL3009 2 -- rm -fr removes the lists as rm -rf does
+### apt-update-clean-not-enough
+FROM debian:12
+RUN apt-get update && apt-get clean
+>>> DL3009 2
+### apt-update-rm-before-update
+FROM debian:12
+RUN rm -rf /var/lib/apt/lists/* && apt-get update
+>>> none
+### apt-update-rm-in-later-run
+FROM debian:12
+RUN apt-get update
+RUN rm -rf /var/lib/apt/lists/*
+>>> DL3009 2
+>>> DL3059 3
+### apt-update-cache-mount
+FROM debian:12
+RUN --mount=type=cache,target=/var/lib/apt/lists,sharing=locked apt-get update
+>>> none
+### apt-update-bind-mount-not-enough
+FROM debian:12
+RUN --mount=type=bind,target=/var/lib/apt/lists apt-get update
+>>> DL3009 2
+### apt-update-nonfinal-stage-ignored
+FROM debian:12 AS build
+RUN apt-get update
+FROM debian:12
+RUN true
+>>> none
+### apt-update-base-stage-reported
+FROM debian:12 AS base
+RUN apt-get update
+FROM base:1 AS app
+RUN true
+>>- DL3009 2 -- FROM base:1 pulls the image base:1, not the stage base, so that stage never reaches an image
+### apt-update-unnamed-stages-match-unnamed-final
+FROM debian:12
+RUN apt-get update
+FROM debian:12
+RUN true
+>>- DL3009 2 -- the first stage is neither the final stage nor the base of another stage, so its lists never reach an image
+### apt-update-onbuild-nonfinal-reported
+FROM debian:12 AS template
+ONBUILD RUN apt-get update
+FROM debian:12
+RUN true
+>>> DL3009 2
+### aptitude-update-lists-kept
+FROM debian:12
+RUN aptitude update
+>>> DL3009 2
+### apt-cli-used
+FROM debian:12
+RUN apt list --installed
+>>> DL3027 2
+### apt-cli-update-also-lists
+FROM debian:12
+RUN apt update && apt install -y curl
+>>> DL3009 2
+>>> DL3027 2
+### shell-constructs-seen
+FROM debian:12
+RUN (apt-get install a) ; { apt-get install b; } || if true; then apt-get install c; fi
+>>> DL3008 2
+>>> DL3014 2
+>>> DL3015 2
+### wrappers-transparent
+FROM debian:12
+RUN X=1 command apt-get install a && exec -a name apt-get install b && time -p busybox apt-get install c
+>>> DL3008 2
+>>> DL3014 2
+>>> DL3015 2
+### wrappers-opaque
+FROM debian:12
+RUN env apt-get install a && nice apt-get install b && sh -c 'apt-get install c' && xargs apt-get install < list
+>>+ DL3008 2 -- env, nice and xargs run apt-get as well
+>>+ DL3014 2 -- env, nice and xargs run apt-get as well
+>>+ DL3015 2 -- env, nice and xargs run apt-get as well
+### json-form-joined
+FROM debian:12
+RUN ["apt-get", "install", "-y", "--no-install-recommends", "a=1 && apt install b"]
+>>- DL3027 2 -- the exec form runs no shell, so && and apt are arguments of apt-get
+### heredoc-run-body
+FROM debian:12
+RUN <<EOF
+set -e
+apt-get update
+apt-get install curl
+EOF
+>>> DL3008 2
+>>> DL3009 2
+>>> DL3014 2
+>>> DL3015 2
+### heredoc-as-stdin-not-seen
+FROM debian:12
+RUN bash <<EOF
+apt-get install curl
+EOF
+>>> none
+### shell-powershell-no-effect
+FROM debian:12
+SHELL ["powershell", "-command"]
+RUN apt-get install curl
+>>- DL3008 3 -- SHELL makes the RUN PowerShell, which is not read as POSIX shell
+>>- DL3014 3 -- SHELL makes the RUN PowerShell, which is not read as POSIX shell
+>>- DL3015 3 -- SHELL makes the RUN PowerShell, which is not read as POSIX shell
+### apk-add-bare
+FROM alpine:3.19
+RUN apk add curl
+>>> DL3018 2
+>>> DL3019 2
+### apk-add-clean
+FROM alpine:3.19
+RUN apk add --no-cache curl=8.5.0-r0 ./local.apk
+>>> none
+### apk-no-cache-before-subcommand
+FROM alpine:3.19
+RUN apk --no-cache add curl=8.5.0-r0
+>>> none
+### apk-update-flag-not-no-cache
+FROM alpine:3.19
+RUN apk --update add curl=8.5.0-r0
+>>> DL3019 2
+### apk-rm-cache-not-enough
+FROM alpine:3.19
+RUN apk add curl=8.5.0-r0 && rm -rf /var/cache/apk/*
+>>- DL3019 2 -- removing /var/cache/apk/* leaves no package index in the image
+### apk-cache-mount
+FROM alpine:3.19
+RUN --mount=type=cache,target=/var/cache/apk apk add curl=8.5.0-r0
+>>> none
+### apk-pin-operators
+FROM alpine:3.19
+RUN apk add --no-cache 'a>=1' 'b<=2' c~=3 d@edge=4
+>>> none
+### apk-pin-tilde-not-pinned
+FROM alpine:3.19
+RUN apk add --no-cache curl~8.5
+>>- DL3018 2 -- ~8.5 pins curl to its 8.5 releases
+### apk-pin-tag-only-not-pinned
+FROM alpine:3.19
+RUN apk add --no-cache curl@edge
+>>> DL3018 2
+### apk-pin-slash-not-pinned
+FROM alpine:3.19
+RUN apk add --no-cache /tmp/pkgs/curl
+>>> DL3018 2
+### apk-virtual-and-repository-skip-next-word
+FROM alpine:3.19
+RUN apk add --no-cache --virtual .build-deps -X https://example.invalid/edge curl=8
+>>> none
+### apk-root-does-not-skip
+FROM alpine:3.19
+RUN apk add --no-cache --root /sysroot curl=8
+>>- DL3018 2 -- --root takes /sysroot as its value
+### apk-add-word-anywhere
+FROM alpine:3.19
+RUN apk del add curl
+>>- DL3018 2 -- the command is del; add is a package name here
+>>- DL3019 2 -- the command is del; add is a package name here
+### apk-no-cache-per-command
+FROM alpine:3.19
+RUN apk add --no-cache a=1 && apk add b=1
+>>> DL3019 2
+### apt-packages-in-a-shell-variable
+FROM debian:12
+RUN PKGS="curl wget" && apt-get install -y --no-install-recommends $PKGS
+>>- DL3008 2 -- PKGS is set by the shell, not the Dockerfile, so its packages are unknown
+### apt-packages-in-an-env-variable
+FROM debian:12
+ENV PKGS="curl=7.88.1-10 wget"
+RUN apt-get install -y --no-install-recommends $PKGS
+>>> DL3008 3

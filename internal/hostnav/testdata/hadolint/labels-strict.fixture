@@ -1,0 +1,81 @@
+### strict-only-schema-labels-ok
+FROM debian:12
+LABEL org.opencontainers.image.title=demo org.opencontainers.image.source=https://example.com
+>>> none
+### strict-extra-label
+FROM debian:12
+LABEL org.opencontainers.image.title=demo org.opencontainers.image.source=https://example.com
+LABEL org.example.extra=1
+>>> DL3050 3
+### strict-one-finding-per-instruction
+FROM debian:12
+LABEL org.opencontainers.image.title=demo org.opencontainers.image.source=https://example.com org.example.a=1 org.example.b=2
+>>> DL3050 2
+### strict-each-instruction-reported
+FROM debian:12
+LABEL org.opencontainers.image.title=demo org.opencontainers.image.source=https://example.com
+LABEL org.example.a=1
+LABEL org.example.b=2
+>>> DL3050 3
+>>> DL3050 4
+### strict-key-case-sensitive
+FROM debian:12
+LABEL org.opencontainers.image.title=demo org.opencontainers.image.source=https://example.com
+LABEL org.opencontainers.image.Title=demo
+>>> DL3048 3
+>>> DL3050 3
+### strict-quoted-keys-match
+FROM debian:12
+LABEL "org.opencontainers.image.title"=demo 'org.opencontainers.image.source'=https://example.com
+>>> none
+### strict-legacy-form
+FROM debian:12
+LABEL org.opencontainers.image.title=demo org.opencontainers.image.source=https://example.com
+LABEL org.example.note free text
+>>> DL3050 3
+### strict-multiline-instruction
+FROM debian:12
+RUN true
+LABEL org.opencontainers.image.title=demo \
+      org.opencontainers.image.source=https://example.com \
+      org.example.extra=1
+>>> DL3050 3
+### strict-extra-empty-value
+FROM debian:12
+LABEL org.opencontainers.image.title=demo org.opencontainers.image.source=https://example.com org.example.extra=""
+>>> DL3050 2
+### strict-extra-with-invalid-key
+FROM debian:12
+LABEL org.opencontainers.image.title=demo org.opencontainers.image.source=https://example.com Extra=1
+>>> DL3048 2
+>>> DL3050 2
+### strict-variable-key
+FROM debian:12
+ARG K=org.opencontainers.image.title
+LABEL org.opencontainers.image.title=demo org.opencontainers.image.source=https://example.com
+LABEL ${K}=demo
+>>- DL3048 4 -- K expands to org.opencontainers.image.title, a valid key in the schema
+>>- DL3050 4 -- K expands to org.opencontainers.image.title, a valid key in the schema
+### strict-onbuild-not-checked
+FROM debian:12
+LABEL org.opencontainers.image.title=demo org.opencontainers.image.source=https://example.com
+ONBUILD LABEL org.example.extra=1
+>>> none
+### strict-every-stage
+FROM debian:12 AS build
+LABEL org.opencontainers.image.title=demo org.opencontainers.image.source=https://example.com org.example.stage=build
+FROM build
+LABEL org.example.stage=final
+>>> DL3050 2
+>>> DL3050 4
+### strict-with-other-findings
+FROM debian:12
+LABEL org.opencontainers.image.title="" org.opencontainers.image.source=nope org.example.extra=1
+>>> DL3050 2
+>>> DL3051 2
+>>> DL3052 2
+### strict-missing-and-extra
+FROM debian:12
+LABEL org.example.extra=1
+>>> DL3049 1
+>>> DL3050 2

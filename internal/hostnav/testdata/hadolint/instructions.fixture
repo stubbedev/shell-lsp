@@ -1,0 +1,481 @@
+### parse-unknown-instruction
+FROM debian:12
+RUN true
+FETCH http://example.com/x
+>>> DL1000 3
+### parse-unknown-instruction-indented
+FROM debian:12
+    FETCH x
+>>> DL1000 2
+### parse-first-error-only
+FROM debian
+WORKDIR app
+FETCH a
+FETCH b
+>>> DL1000 3
+>>+ DL1000 4 -- the checks keep reading a file past its first syntax error
+>>+ DL3000 2 -- the checks keep reading a file past its first syntax error
+>>+ DL3006 1 -- the checks keep reading a file past its first syntax error
+### parse-missing-argument
+FROM debian:12
+COPY onlyone
+>>> DL1000 2
+### parse-from-unexpected-word
+FROM debian:12 base
+>>> DL1000 1
+### parse-json-then-text
+FROM debian:12
+CMD ["serve"] --verbose
+>>- DL1000 2 -- BuildKit reads CMD ["serve"] --verbose as the shell form, which it accepts
+>>+ DL3025 2 -- BuildKit reads CMD ["serve"] --verbose as the shell form, which it accepts
+### parse-healthcheck-bad-duration
+FROM debian:12
+HEALTHCHECK --interval=30 CMD true
+>>> DL1000 2
+### parse-expose-protocol
+FROM debian:12
+EXPOSE 53/sctp
+>>- DL1000 2 -- Docker publishes SCTP ports, and BuildKit accepts 53/sctp
+### parse-add-heredoc-unsupported
+FROM debian:12
+ADD <<NOTE /etc/note
+hello there
+NOTE
+>>- DL1000 3 -- BuildKit accepts heredocs in ADD
+### workdir-relative
+FROM debian:12
+WORKDIR srv/app
+>>> DL3000 2
+### workdir-absolute-and-variables
+FROM debian:12
+WORKDIR /srv
+WORKDIR $HOME
+WORKDIR ${APP_DIR}/data
+WORKDIR "/opt/app"
+>>> none
+### workdir-windows-drive
+FROM mcr.microsoft.com/windows/servercore:ltsc2022
+WORKDIR C:\\app
+WORKDIR d:/data
+>>+ DL3000 2 -- BuildKit judges WORKDIR as a Linux path, where C:\\app is relative
+### workdir-dot-and-tilde
+FROM debian:12
+WORKDIR .
+WORKDIR ~/work
+>>> DL3000 2
+>>- DL3000 3 -- after WORKDIR . the relative ~/work resolves against it, which BuildKit's check accepts
+### workdir-continued
+FROM debian:12
+WORKDIR \
+    build
+>>> DL3000 2
+### user-root-last
+FROM debian:12
+USER app
+USER root
+>>> DL3002 3
+### user-root-then-app
+FROM debian:12
+USER root
+RUN apt-get update
+USER app
+>>> DL3009 3
+### user-root-forms
+FROM debian:12 AS one
+USER root:root
+FROM debian:12 AS two
+USER 0
+FROM debian:12 AS three
+USER 0:0
+FROM debian:12
+USER nobody
+>>- DL3002 2 -- only the final stage becomes the image that runs; build stages may run as root
+>>- DL3002 4 -- only the final stage becomes the image that runs; build stages may run as root
+>>- DL3002 6 -- only the final stage becomes the image that runs; build stages may run as root
+### user-root-group-only
+FROM debian:12
+USER app:root
+>>> none
+### user-root-earlier-stage
+FROM debian:12 AS build
+USER root
+FROM debian:12
+USER app
+>>- DL3002 2 -- only the final stage becomes the image that runs; build stages may run as root
+### user-not-root-spellings
+FROM debian:12 AS a
+USER ROOT
+FROM debian:12 AS b
+USER "root"
+FROM debian:12
+USER $RUNAS
+>>> none
+### user-before-from
+USER root
+FROM debian:12
+>>> DL3061 1
+### from-no-tag
+FROM debian
+>>> DL3006 1
+### from-tag-digest-scratch
+FROM debian:12 AS a
+FROM debian@sha256:3f1a7c2b9d0e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a
+FROM scratch
+>>> none
+### from-stage-reference
+FROM debian:12 AS builder
+FROM builder
+>>> none
+### from-stage-reference-case
+FROM debian:12 AS Builder
+FROM builder
+>>- DL3006 2 -- stage names are case-insensitive, so builder is the stage Builder
+### from-stage-defined-later
+FROM builder
+FROM debian:12 AS builder
+>>> DL3006 1
+### from-variable-image
+ARG BASE=debian
+FROM ${BASE}
+FROM $BASE AS second
+>>+ DL3006 2 -- BASE defaults to debian, which has no tag
+>>+ DL3006 3 -- BASE defaults to debian, which has no tag
+### from-variable-inside-name
+ARG FLAVOUR=slim
+FROM debian-$FLAVOUR
+>>> DL3006 2
+### from-registry-no-tag
+FROM quay.io/team/tool
+>>> DL3006 1
+### from-registry-port-no-tag
+FROM registry.example.com:5000/team/tool
+>>> DL3006 1
+### from-localhost-port
+FROM localhost:5000/tool
+>>+ DL3006 1 -- localhost:5000 is the registry, so the image tool has no tag
+### from-latest
+FROM debian:latest
+>>> DL3007 1
+### from-latest-variants
+FROM debian:Latest AS a
+FROM debian:latest@sha256:3f1a7c2b9d0e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a AS b
+FROM ${BASE}:latest
+>>+ DL1000 3 -- BASE is declared nowhere, so the image is :latest, which is no valid reference
+>>- DL3007 3 -- the image is no valid reference to judge
+### from-uppercase-scratch
+FROM SCRATCH
+>>+ DL1000 1 -- image names are lowercase, so BuildKit rejects SCRATCH
+>>- DL3006 1 -- SCRATCH is no valid image reference to judge
+### copy-then-extract
+FROM debian:12
+COPY bundle.tar.gz /tmp/
+RUN tar -xzf /tmp/bundle.tar.gz -C /opt
+>>> DL3010 2
+### copy-renamed-then-extract
+FROM debian:12
+COPY bundle.bin /tmp/bundle.tar
+RUN tar --extract --file /tmp/bundle.tar
+>>> DL3010 2
+### copy-then-decompress
+FROM debian:12
+COPY data.xz /data.xz
+RUN unxz /data.xz
+>>> DL3010 2
+### copy-archive-not-extracted
+FROM debian:12
+COPY bundle.tar.gz /tmp/
+RUN tar -tzf /tmp/bundle.tar.gz
+>>> none
+### copy-archive-unknown-extension
+FROM debian:12
+COPY bundle.tar.zst /tmp/
+RUN tar -xf /tmp/bundle.tar.zst
+>>> none
+### copy-archive-old-style-tar
+FROM debian:12
+COPY bundle.tar /tmp/
+RUN tar xf /tmp/bundle.tar
+>>+ DL3010 2 -- tar xf extracts as tar -xf does
+### copy-archive-extracted-in-other-stage
+FROM debian:12 AS fetch
+COPY bundle.tar /tmp/
+FROM debian:12
+RUN tar -xf /tmp/bundle.tar
+>>> none
+### copy-archive-from-stage
+FROM debian:12 AS fetch
+FROM debian:12
+COPY --from=fetch /bundle.tar /tmp/
+RUN tar -xf /tmp/bundle.tar
+>>> none
+### add-local-file
+FROM debian:12
+ADD config.yaml /etc/app/
+>>> DL3020 2
+### add-archive-and-url
+FROM debian:12
+ADD rootfs.tar.xz /
+ADD https://example.com/tool.sh /usr/local/bin/
+>>> none
+### add-mixed-sources
+FROM debian:12
+ADD rootfs.tar notes.txt /srv/
+>>> DL3020 2
+### add-other-schemes
+FROM debian:12
+ADD ftp://example.com/a.txt /srv/
+ADD rootfs.zip /srv/
+>>> DL3020 2
+>>> DL3020 3
+### expose-out-of-range
+FROM debian:12
+EXPOSE 80 65536
+>>> DL3011 2
+### expose-valid-forms
+FROM debian:12
+EXPOSE 0 65535 8080/tcp 53/udp 9000-9010 $PORT
+>>> none
+### expose-range-out-of-range
+FROM debian:12
+EXPOSE 60000-70000/tcp
+>>> DL3011 2
+### healthcheck-twice
+FROM debian:12
+HEALTHCHECK CMD curl -f http://localhost/
+HEALTHCHECK --interval=5m CMD true
+HEALTHCHECK NONE
+>>+ DL3012 2 -- BuildKit reports each HEALTHCHECK a later one replaces, not each after the first
+>>> DL3012 3
+>>- DL3012 4 -- BuildKit reports each HEALTHCHECK a later one replaces, not each after the first
+### copy-many-sources-no-slash
+FROM debian:12
+COPY a.conf b.conf /etc/app
+>>> DL3021 2
+### copy-many-sources-slash
+FROM debian:12
+COPY a.conf b.conf /etc/app/
+COPY ["a.conf", "b.conf", "/etc/app/"]
+>>> none
+### copy-many-sources-json
+FROM debian:12
+COPY ["a.conf", "b.conf", "/etc/app"]
+>>> DL3021 2
+### copy-wildcard-single-source
+FROM debian:12
+COPY *.conf /etc/app
+>>> none
+### copy-many-sources-variable-dest
+FROM debian:12
+ARG DEST=/etc/app
+COPY a.conf b.conf $DEST
+COPY a.conf b.conf ${DEST}/
+>>> DL3021 3
+### copy-two-heredocs
+FROM debian:12
+COPY <<ONE <<TWO /etc/app
+first
+ONE
+second
+TWO
+>>> DL3021 2
+### copy-from-unknown
+FROM debian:12
+COPY --from=builder /out /usr/local/bin/
+>>> DL3022 2
+### copy-from-forms
+FROM debian:12 AS builder
+FROM debian:12
+COPY --from=builder /out /a/
+COPY --from=0 /out /b/
+COPY --from=alpine:3.20 /etc/os-release /c/
+COPY --from=busybox@sha256:00ff /bin/sh /d/
+>>+ DL1000 6 -- sha256:00ff is too short to be a digest, so BuildKit rejects busybox@sha256:00ff
+### copy-from-not-resolved
+FROM debian:12 AS builder
+FROM debian:12
+COPY --from=Builder /out /a/
+COPY --from=alpine /etc/os-release /b/
+COPY --from=$STAGE /out /c/
+COPY --from=2 /out /d/
+>>- DL3022 3 -- stage names are case-insensitive, STAGE has no value, and BuildKit files a stage index not yet defined as a stage used before its definition
+>>> DL3022 4
+>>- DL3022 5 -- stage names are case-insensitive, STAGE has no value, and BuildKit files a stage index not yet defined as a stage used before its definition
+>>- DL3022 6 -- stage names are case-insensitive, STAGE has no value, and BuildKit files a stage index not yet defined as a stage used before its definition
+>>+ DL3023 6 -- BuildKit files a stage index not yet defined as a stage used before its definition
+### copy-from-later-stage
+FROM debian:12
+COPY --from=builder /out /a/
+FROM debian:12 AS builder
+>>- DL3022 2 -- BuildKit files a stage named after this one as a stage used before its definition
+>>+ DL3023 2 -- BuildKit files a stage named after this one as a stage used before its definition
+### copy-from-self
+FROM debian:12 AS builder
+COPY --from=builder /out /a/
+>>> DL3023 2
+### copy-from-self-index
+FROM debian:12
+COPY --from=0 /out /a/
+>>+ DL3023 2 -- stage 0 copies from itself
+### stage-alias-duplicate
+FROM debian:12 AS build
+FROM debian:12 AS test
+FROM debian:12 AS build
+FROM debian:12 AS build
+>>> DL3024 3
+>>> DL3024 4
+### stage-alias-case-differs
+FROM debian:12 AS build
+FROM debian:12 AS BUILD
+>>+ DL3024 2 -- stage names are case-insensitive, so BUILD repeats build
+### cmd-shell-form
+FROM debian:12
+CMD node server.js
+ENTRYPOINT /usr/bin/app --serve
+>>> DL3025 2
+>>> DL3025 3
+### cmd-json-forms
+FROM debian:12
+ENTRYPOINT []
+CMD [ "node", "server.js" ]
+>>> none
+### cmd-invalid-json
+FROM debian:12
+CMD ['node', 'server.js']
+>>> DL3025 2
+### cmd-shell-form-with-shell
+FROM debian:12
+SHELL ["/bin/bash", "-c"]
+CMD echo ready
+>>- DL3025 3 -- with SHELL set the shell form is deliberate, as BuildKit's check holds
+### cmd-onbuild-shell-form
+FROM debian:12
+ONBUILD CMD echo ready
+>>> none
+### from-platform-constant
+FROM --platform=linux/amd64 debian:12
+>>> DL3029 1
+### from-platform-build-variables
+FROM --platform=$BUILDPLATFORM debian:12 AS build
+FROM --platform=${TARGETPLATFORM} debian:12
+>>> none
+### from-platform-other-variable
+FROM --platform=$TARGETARCH debian:12
+>>- DL3029 1 -- the platform comes from a build argument, not a constant
+### onbuild-forbidden-triggers
+FROM debian:12
+ONBUILD FROM debian:12
+ONBUILD ONBUILD RUN true
+ONBUILD MAINTAINER someone
+ONBUILD RUN make
+>>> DL3043 2
+>>> DL3043 3
+>>> DL3043 4
+### onbuild-continued
+FROM debian:12
+  ONBUILD \
+    maintainer someone
+>>> DL3043 2
+### onbuild-body-not-linted
+FROM debian:12
+ONBUILD WORKDIR relative
+ONBUILD ADD notes.txt /srv/
+ONBUILD USER root
+>>> none
+### env-refers-to-sibling
+FROM debian:12
+ENV PREFIX=/opt/app BIN=$PREFIX/bin
+>>> DL3044 2
+### env-refers-to-later-sibling
+FROM debian:12
+ENV BIN=${PREFIX}/bin \
+    PREFIX=/opt/app
+>>> DL3044 2
+### env-references-not-sibling
+FROM debian:12
+ENV PATH=/opt/bin:$PATH
+ENV PREFIX=/opt/app
+ENV BIN=$PREFIX/bin
+ENV A=1 B=${A:-2} C=$AB
+>>+ DL3044 5 -- ${A:-2} reads A, which this ENV sets
+### env-legacy-form
+FROM debian:12
+ENV GREETING hello $NAME
+>>> none
+### env-quoted-reference
+FROM debian:12
+ENV A=1 B='$A'
+>>- DL3044 2 -- single quotes keep $A from expanding
+### copy-relative-no-workdir
+FROM debian:12
+COPY app.py app/
+COPY run.sh .
+>>> DL3045 2
+>>> DL3045 3
+### copy-relative-with-workdir
+FROM debian:12
+WORKDIR /srv
+COPY app.py app/
+>>> none
+### copy-relative-workdir-later
+FROM debian:12
+COPY app.py app/
+WORKDIR /srv
+>>> DL3045 2
+### copy-relative-workdir-in-parent
+FROM debian:12 AS base
+WORKDIR /srv
+FROM base
+COPY app.py app/
+>>> none
+### copy-relative-workdir-other-stage
+FROM debian:12 AS base
+WORKDIR /srv
+FROM debian:12
+COPY app.py app/
+>>> DL3045 4
+### copy-destination-forms
+FROM debian:12
+COPY a /srv/a
+COPY b $DEST
+COPY c C:\\data
+COPY d ~/d
+>>> DL3045 5
+### before-from
+ARG VERSION=12
+# syntax and comments are fine
+LABEL org.example.team=core
+RUN true
+FROM debian:${VERSION}
+>>> DL3061 3
+>>> DL3061 4
+### before-from-only-args
+ARG A=1
+ARG B
+FROM debian:12
+>>> none
+### maintainer
+FROM debian:12
+MAINTAINER someone <someone@example.com>
+>>> DL4000 2
+### cmd-twice
+FROM debian:12
+CMD ["a"]
+CMD ["b"]
+CMD ["c"]
+>>+ DL4003 2 -- BuildKit reports each CMD a later one replaces, not each after the first
+>>> DL4003 3
+>>- DL4003 4 -- BuildKit reports each CMD a later one replaces, not each after the first
+### cmd-once-per-stage
+FROM debian:12 AS a
+CMD ["a"]
+FROM debian:12
+CMD ["b"]
+ONBUILD CMD ["c"]
+>>> none
+### entrypoint-twice
+FROM debian:12
+ENTRYPOINT ["a"]
+ENTRYPOINT ["b"]
+CMD ["c"]
+>>+ DL4004 2 -- BuildKit reports each ENTRYPOINT a later one replaces, not each after the first
+>>- DL4004 3 -- BuildKit reports each ENTRYPOINT a later one replaces, not each after the first

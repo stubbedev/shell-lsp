@@ -15,6 +15,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/diagnostics"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/filelint"
+	"github.com/stubbedev/shell-lsp/internal/hadolint"
 	"github.com/stubbedev/shell-lsp/internal/hostnav"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
@@ -61,6 +62,16 @@ func (s *Server) nearestShellcheckrc(path string) (shellcheckrc.File, bool, erro
 	return rc, found, err
 }
 
+func (s *Server) hadolintConfig(path string, settings config.Settings) hadolint.Config {
+	cfg, _, err := s.hadolint.Nearest(filepath.Dir(path))
+	if err != nil {
+		s.noticeOnce("hadolint:"+err.Error(), lsp.MessageWarning, "Ignoring the Hadolint configuration that applies to "+path+": "+err.Error())
+		cfg = hadolint.Config{}
+	}
+	cfg.Optional = slices.Concat(settings.Lint.Optional, s.lintSettings(path, settings).RC.Enabled)
+	return cfg
+}
+
 func (s *Server) lintSettings(path string, settings config.Settings) filelint.Settings {
 	out := filelint.Settings{
 		Shell:    settings.Dialect,
@@ -93,10 +104,11 @@ func (s *Server) report(file *workspace.File, settings config.Settings, generati
 		}
 	}
 	codeDescriptions := s.clientCapabilities().TextDocument.PublishDiagnostics.CodeDescriptionSupport
-	items = append(items, diagnostics.Lint(findings, at, codeDescriptions)...)
+	docker, _ := hostnav.HadolintOf(file, s.hadolintConfig(file.Path, settings))
+	items = append(items, diagnostics.Lint(docker.Shell(findings), at, codeDescriptions)...)
 	items = append(items, diagnostics.Bats(tests.placedOn(file.Tree), at)...)
 	if h, ok := hostnav.Of(file); ok {
-		items = append(items, diagnostics.Lint(s.nativeFindings(h, settings), sourcePositions(file, at.Encoding()), codeDescriptions)...)
+		items = append(items, diagnostics.Lint(docker.Host(s.nativeFindings(h, settings, docker)), sourcePositions(file, at.Encoding()), codeDescriptions)...)
 		stamp = hashOf(s.hostStamp(s.docs.View(), h.Language()))
 	}
 	return diagnosticReport{

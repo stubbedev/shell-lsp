@@ -11,6 +11,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/editorconfig"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
+	"github.com/stubbedev/shell-lsp/internal/hadolint"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/navigation"
@@ -85,7 +86,7 @@ func (s *Server) registerWatchers(ctx context.Context) {
 		return
 	}
 	globs := append(workspace.WatchGlobs(), "**/"+editorconfig.FileName)
-	for _, name := range shellcheckrc.Names {
+	for _, name := range slices.Concat(shellcheckrc.Names, hadolint.ConfigNames) {
 		globs = append(globs, "**/"+name)
 	}
 	watchers := make([]fileWatcher, len(globs))

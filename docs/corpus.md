@@ -4,7 +4,7 @@ The lint fixtures and the parser tests are written by hand, so they only
 cover what someone thought of. Three checks run the linter, the parser and
 the justfile, Makefile and Dockerfile analysis over a pinned corpus of
 real-world files instead and compare them with their references: ShellCheck,
-the shells themselves, just, GNU make and BuildKit. Each records what it finds in a committed baseline, and
+the shells themselves, just, GNU make, BuildKit and Hadolint. Each records what it finds in a committed baseline, and
 fails when the result changes.
 
 | Recipe | What it does |
@@ -12,13 +12,13 @@ fails when the result changes.
 | `just corpus-fetch` | Fetch the pinned repositories into the cache |
 | `just corpus-shellcheck` | Compare the linter with ShellCheck against [corpus/shellcheck.md](../corpus/shellcheck.md) |
 | `just corpus-shells` | Compare the parser with the shells' `-n` against [corpus/shells.txt](../corpus/shells.txt) |
-| `just corpus-hosts` | Analyse the justfiles, Makefiles and Dockerfiles against [corpus/hosts.txt](../corpus/hosts.txt), checking them with just, make and BuildKit |
+| `just corpus-hosts` | Analyse the justfiles, Makefiles and Dockerfiles against [corpus/hosts.txt](../corpus/hosts.txt), checking them with just, make, BuildKit and Hadolint |
 | `just corpus-check` | All three comparisons |
 | `just corpus-baseline` | Rewrite the three baselines from the current code |
 
 All of them run `cmd/lintcheck` and need the tools from `nix develop`:
 ShellCheck 0.11.0, bash, dash, zsh, ksh, mksh, BusyBox, just, GNU Make,
-bubblewrap and `dockerfile-oracle`, a small program in
+bubblewrap, Hadolint 2.14.0 and `dockerfile-oracle`, a small program in
 [tools/dockerfile-oracle](../tools/dockerfile-oracle) that runs BuildKit's
 Dockerfile parser and build checks offline, at the
 versions `flake.lock` pins.
@@ -181,7 +181,13 @@ Every Dockerfile is also parsed and checked by BuildKit. A `BuildKit
 disagrees` line records a file BuildKit rejects at a line where the analysis
 reports no error, or accepts while the analysis reports one, and every build
 check BuildKit reports on an instruction that the analysis does not report
-there under its `SL7` code, or the other way round.
+there under its `SL7` code, or the other way round. Hadolint lints each
+Dockerfile as well, with the `.hadolint.yaml` the analysis uses, and a
+`Hadolint disagrees` line records each `DL` finding on an instruction that
+only one of the two reports there. Most of these are the deliberate
+differences [hadolint.md](hadolint.md) describes, kept in the baseline so a
+change in either shows. A file Hadolint cannot lint gets a `Hadolint fails`
+line.
 
 The check fails when any line is added or removed, which it prints as a
 diff, and when a file takes longer than two seconds.

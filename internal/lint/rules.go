@@ -91,6 +91,7 @@ var families = []family{
 	embeddedFamily,
 	googleFamily,
 	hostFamily,
+	hadolintFamily,
 }
 
 type nodeDispatch [][]func(p *pass, n syntax.Node)

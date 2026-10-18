@@ -1,0 +1,49 @@
+### pragma-ignore-used
+FROM debian:12
+# hadolint ignore=DL3000
+WORKDIR srv
+>>> DL1001 2
+>>> DL3057 1
+### pragma-ignore-unused
+FROM debian:12
+# hadolint ignore=DL3002,DL3006
+WORKDIR /srv
+>>> DL1001 2
+>>> DL3057 1
+### pragma-global-not-reported
+# hadolint global ignore=DL3000
+FROM debian:12
+WORKDIR srv
+>>> DL3057 2
+### pragma-trailing-words-not-a-pragma
+FROM debian:12
+# hadolint ignore=DL3000 legacy path
+WORKDIR srv
+>>> DL3000 3
+>>> DL3057 1
+### pragma-blank-line-breaks-scope
+FROM debian:12
+# hadolint ignore=DL3000
+
+WORKDIR srv
+>>> DL1001 2
+>>> DL3000 4
+>>> DL3057 1
+### healthcheck-one-per-stage
+FROM debian:12 AS a
+HEALTHCHECK CMD true
+FROM debian:12
+HEALTHCHECK CMD true
+>>> none
+### healthcheck-missing
+FROM debian:12 AS build
+RUN make
+FROM debian:12
+HEALTHCHECK NONE
+>>- DL3057 1 -- only the final stage becomes the image that runs
+### healthcheck-inherited
+FROM debian:12 AS base
+HEALTHCHECK CMD true
+FROM base
+RUN true
+>>> none

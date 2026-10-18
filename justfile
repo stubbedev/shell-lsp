@@ -47,6 +47,23 @@ fixtures:
     go test ./internal/lint -run Shellcheck -update
     go test ./internal/lint
 
+# Fetch the pinned SPDX License List and rewrite the license and exception identifiers the Dockerfile label checks accept.
+spdx version="3.27.0":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    dir="$(mktemp -d)"
+    trap 'rm -rf "$dir"' EXIT
+    base="https://raw.githubusercontent.com/spdx/license-list-data/v{{ version }}/json"
+    out=internal/hadolint/spdx
+    for list in licenses exceptions; do
+        curl -fsSL --max-time 60 -o "$dir/$list.json" "$base/$list.json"
+    done
+    { echo "# SPDX License List {{ version }}"; yq -p json -o yaml -r '.licenses[] | select(.isDeprecatedLicenseId == false) | .licenseId' "$dir/licenses.json" | LC_ALL=C sort; } > "$dir/licenses.txt"
+    { echo "# SPDX License List {{ version }}"; yq -p json -o yaml -r '.exceptions[] | select(.isDeprecatedLicenseId == false) | .licenseExceptionId' "$dir/exceptions.json" | LC_ALL=C sort; } > "$dir/exceptions.txt"
+    mkdir -p "$out"
+    mv "$dir/licenses.txt" "$out/licenses.txt"
+    mv "$dir/exceptions.txt" "$out/exceptions.txt"
+
 # Compare the linter with shellcheck, code by code, over every shell script under the given paths.
 lintcheck +paths:
     go run ./cmd/lintcheck compare {{ paths }}

@@ -14,7 +14,8 @@ func renderChecks() string {
 	var sb strings.Builder
 	sb.WriteString("# Checks\n\n")
 	sb.WriteString("Every check the linter runs, generated from the lint catalog by\n")
-	sb.WriteString("`go test ./internal/lint -run TestChecksDoc -update`. `SC` codes reuse ShellCheck's numbering;\n")
+	sb.WriteString("`go test ./internal/lint -run TestChecksDoc -update`. `SC` codes reuse ShellCheck's numbering and\n")
+	sb.WriteString("`DL` codes Hadolint's, for Dockerfiles; see [hadolint.md](hadolint.md) for how they differ from it.\n")
 	sb.WriteString("`SL` codes are shell-lsp's own and are described in [rules.md](rules.md). Optional checks run only\n")
 	sb.WriteString("when switched on by name with `enable=`, `--enable` or the `lint.optional` setting. The Minimal column\n")
 	sb.WriteString("marks the checks the `minimal` profile keeps; see [Profiles](../README.md#profiles).\n\n")
