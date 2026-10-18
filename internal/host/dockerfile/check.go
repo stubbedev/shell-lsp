@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/stubbedev/shell-lsp/internal/lint"
 )
@@ -17,8 +18,9 @@ var errorCodes = map[ErrorKind]lint.Code{
 }
 
 var (
-	exactlyOne     = []string{"WORKDIR", "USER", "MAINTAINER"}
-	atLeastOne     = []string{"ENV", "ARG", "LABEL"}
+	exactlyOne     = []string{"WORKDIR", "USER"}
+	atLeastOne     = []string{"ENV", "ARG", "LABEL", "MAINTAINER"}
+	durationFlags  = []string{"interval", "timeout", "start-period", "start-interval"}
 	singleton      = []string{"CMD", "ENTRYPOINT", "HEALTHCHECK"}
 	notTriggers    = []string{"FROM", "MAINTAINER", "ONBUILD"}
 	reservedStages = []string{"scratch", "context"}
@@ -192,6 +194,38 @@ func (c *checker) arguments(in *Instruction, global bool) {
 	}
 	if name == "MAINTAINER" {
 		c.report(lint.CodeDockerMaintainerDeprecated, in.Keyword.Span, "MAINTAINER is deprecated; use `LABEL org.opencontainers.image.authors=...`")
+	}
+	if name == "HEALTHCHECK" {
+		c.healthcheckFlags(in)
+	}
+}
+
+const minimumInterval = time.Millisecond
+
+func (c *checker) healthcheckFlags(in *Instruction) {
+	for _, f := range in.Flags {
+		if f.Value == nil || f.Value.Text == "" {
+			continue
+		}
+		name, value := f.Name.Text, f.Value.Text
+		switch {
+		case slices.Contains(durationFlags, name):
+			d, err := time.ParseDuration(value)
+			switch {
+			case err != nil:
+				c.report(lint.CodeDockerSyntax, f.Value.Span, "--%s takes a duration such as 30s or 1m30s: %v", name, err)
+			case d != 0 && d < minimumInterval:
+				c.report(lint.CodeDockerSyntax, f.Value.Span, "--%s cannot be less than %s", name, minimumInterval)
+			}
+		case name == "retries":
+			n, err := strconv.ParseInt(value, 10, 64)
+			switch {
+			case err != nil:
+				c.report(lint.CodeDockerSyntax, f.Value.Span, "--retries takes a whole number: %v", err)
+			case n < 0:
+				c.report(lint.CodeDockerSyntax, f.Value.Span, "--retries cannot be negative")
+			}
+		}
 	}
 }
 

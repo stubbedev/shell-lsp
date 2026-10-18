@@ -183,6 +183,24 @@ buildkit ExposeProtoCasing 2
 accepted
 buildkit MaintainerDeprecated 2
 2:1 SL7014 warning MAINTAINER is deprecated; use `LABEL org.opencontainers.image.authors=...`
+-- maintainer-with-spaces --
+accepted
+buildkit MaintainerDeprecated 2
+2:1 SL7014 warning MAINTAINER is deprecated; use `LABEL org.opencontainers.image.authors=...`
+-- healthcheck-durations --
+accepted
+-- healthcheck-duration-without-unit --
+rejected 2:1 dockerfile parse error on line 2: time: missing unit in duration "30"
+2:24 SL7001 error --interval takes a duration such as 30s or 1m30s: time: missing unit in duration "30"
+-- healthcheck-duration-below-a-millisecond --
+rejected 2:1 dockerfile parse error on line 2: Interval "timeout" cannot be less than 1ms
+2:23 SL7001 error --timeout cannot be less than 1ms
+-- healthcheck-negative-retries --
+rejected 2:1 dockerfile parse error on line 2: --retries cannot be negative (-1)
+2:23 SL7001 error --retries cannot be negative
+-- healthcheck-fractional-retries --
+rejected 2:1 dockerfile parse error on line 2: strconv.ParseInt: parsing "1.5": invalid syntax
+2:23 SL7001 error --retries takes a whole number: strconv.ParseInt: parsing "1.5": invalid syntax
 -- empty-continuation --
 accepted
 buildkit NoEmptyContinuation 4

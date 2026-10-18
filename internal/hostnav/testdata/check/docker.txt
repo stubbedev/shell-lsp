@@ -158,6 +158,24 @@ EXPOSE 80:80
 -- maintainer --
 FROM alpine
 MAINTAINER me
+-- maintainer-with-spaces --
+FROM alpine
+MAINTAINER Some One <someone@example.com>
+-- healthcheck-durations --
+FROM alpine
+HEALTHCHECK --interval=1m30s --timeout= --start-period=0 --retries=3 CMD true
+-- healthcheck-duration-without-unit --
+FROM alpine
+HEALTHCHECK --interval=30 CMD true
+-- healthcheck-duration-below-a-millisecond --
+FROM alpine
+HEALTHCHECK --timeout=500us CMD true
+-- healthcheck-negative-retries --
+FROM alpine
+HEALTHCHECK --retries=-1 CMD true
+-- healthcheck-fractional-retries --
+FROM alpine
+HEALTHCHECK --retries=1.5 CMD true
 -- empty-continuation --
 FROM alpine
 RUN echo a \
