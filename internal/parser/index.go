@@ -7,6 +7,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/getopt"
+	"github.com/stubbedev/shell-lsp/internal/shlex"
 	"github.com/stubbedev/shell-lsp/internal/textline"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
@@ -1230,7 +1231,7 @@ func IsDigits(s string) bool {
 }
 
 func IsNameChar(c byte) bool {
-	return c == '_' || 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || '0' <= c && c <= '9'
+	return shlex.IsNameChar(c)
 }
 
 func IsName(s string) bool {
