@@ -3,6 +3,8 @@ package shlex
 import (
 	"strings"
 	"testing"
+
+	"github.com/stubbedev/shell-lsp/internal/dialect"
 )
 
 func FuzzLex(f *testing.F) {
@@ -18,22 +20,30 @@ func FuzzLex(f *testing.F) {
 		"f() { (cd x && ((n++))); } ; ((a) b) $((a)+(b))",
 		"echo 'open \"open $(open ${open `open",
 		"\xff\xfe\\\xc3 $\xc3\xa9",
+		"ls *.(c|h)(N) @(a|b) +(x) !(y) ~(E)re {2}(ab) *(e:'(x)':)",
 	} {
 		f.Add(seed)
 	}
 	f.Fuzz(func(t *testing.T, src string) {
-		tokens, err := Lex(src)
-		if err != nil {
-			if !strings.Contains(err.Error(), "nested deeper") {
-				t.Fatalf("Lex(%q): unexpected error %v", src, err)
-			}
-			return
-		}
-		end := checkSequence(t, src, tokens, 0, len(src), true)
-		if gap := src[end:]; !blank(gap) {
-			t.Fatalf("Lex(%q): bytes %q after the last token are not covered", src, gap)
+		for _, d := range []dialect.Dialect{dialect.Bash, dialect.Zsh, dialect.Ksh, dialect.Posix} {
+			lexChecked(t, src, d)
 		}
 	})
+}
+
+func lexChecked(t *testing.T, src string, d dialect.Dialect) {
+	t.Helper()
+	tokens, err := Lex(src, d)
+	if err != nil {
+		if !strings.Contains(err.Error(), "nested deeper") {
+			t.Fatalf("Lex(%q, %s): unexpected error %v", src, d, err)
+		}
+		return
+	}
+	end := checkSequence(t, src, tokens, 0, len(src), true)
+	if gap := src[end:]; !blank(gap) {
+		t.Fatalf("Lex(%q, %s): bytes %q after the last token are not covered", src, d, gap)
+	}
 }
 
 func blank(gap string) bool {

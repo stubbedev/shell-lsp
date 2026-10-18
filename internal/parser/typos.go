@@ -51,7 +51,7 @@ const (
 )
 
 func typoHint(text string, at int, d dialect.Dialect) string {
-	line, ok := lexTypoLine(text, min(at, len(text)))
+	line, ok := lexTypoLine(text, min(at, len(text)), d)
 	if !ok {
 		return ""
 	}
@@ -66,11 +66,11 @@ func typoHint(text string, at int, d dialect.Dialect) string {
 	return ""
 }
 
-func lexTypoLine(text string, at int) (typoLine, bool) {
+func lexTypoLine(text string, at int, d dialect.Dialect) (typoLine, bool) {
 	lineStart, lineEnd := textline.Bounds(text, at)
 	from, to := max(lineStart, at-hintWindow), min(lineEnd, at+hintWindow)
 	src := text[from:to]
-	tokens, err := shlex.Lex(src)
+	tokens, err := shlex.Lex(src, d)
 	if err != nil {
 		return typoLine{}, false
 	}

@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/stubbedev/shell-lsp/internal/dialect"
 )
 
 const maxDepth = 1000
@@ -23,8 +25,8 @@ var operators = func() []Kind {
 
 var declarations = []string{"declare", "export", "local", "readonly", "typeset"}
 
-func Lex(src string) ([]Token, error) {
-	l := lexer{src: src, limit: len(src)}
+func Lex(src string, d dialect.Dialect) ([]Token, error) {
+	l := lexer{src: src, limit: len(src), dialect: d}
 	tokens := l.list(frameOpen)
 	if l.err != nil {
 		return nil, l.err
@@ -33,11 +35,12 @@ func Lex(src string) ([]Token, error) {
 }
 
 type lexer struct {
-	src   string
-	pos   int
-	limit int
-	depth int
-	err   error
+	src     string
+	pos     int
+	limit   int
+	depth   int
+	err     error
+	dialect dialect.Dialect
 }
 
 type heredoc struct {
@@ -297,6 +300,10 @@ func (l *lexer) word(mode wordMode, arrays bool) Token {
 			parts = append(parts, l.substitution(ProcessSubst, 2))
 		case mode == modeCommand && c == '(' && arrays && l.assignedSoFar(start):
 			parts = append(parts, l.array())
+		case mode == modeCommand && l.atExtGlob():
+			parts = append(parts, l.extGlob())
+		case mode == modeCommand && l.pos > start && l.atGlobGroup():
+			parts = append(parts, l.globGroup())
 		case mode == modeRegex && c == '(':
 			depth++
 			parts = l.literal(parts)
@@ -310,6 +317,89 @@ func (l *lexer) word(mode wordMode, arrays bool) Token {
 		}
 	}
 	return finishWord(start, l.pos, parts)
+}
+
+const (
+	extGlobOperators   = "?*+@!"
+	kshGroupPrefixes   = "}~%-"
+	groupOpen          = '('
+	groupClose         = ')'
+	extGlobOpenerWidth = 2
+)
+
+func (l *lexer) atExtGlob() bool {
+	return l.dialect != dialect.Zsh && strings.IndexByte(extGlobOperators, l.at(0)) >= 0 &&
+		l.at(1) == groupOpen && l.at(2) != groupClose
+}
+
+func (l *lexer) atGlobGroup() bool {
+	if l.at(0) != groupOpen || l.at(1) == groupClose {
+		return false
+	}
+	switch l.dialect {
+	case dialect.Zsh:
+		return true
+	case dialect.Ksh:
+		return strings.IndexByte(kshGroupPrefixes, l.src[l.pos-1]) >= 0
+	case dialect.Bash, dialect.Posix, dialect.Dash, dialect.Busybox:
+	}
+	return false
+}
+
+func (l *lexer) extGlob() Part {
+	p := Part{Kind: ExtGlob, Start: l.pos}
+	l.pos += extGlobOpenerWidth
+	for depth := 1; l.more(); l.pos++ {
+		switch l.src[l.pos] {
+		case groupOpen:
+			depth++
+		case groupClose:
+			if depth--; depth == 0 {
+				l.pos++
+				p.End = l.pos
+				return p
+			}
+		}
+	}
+	p.End, p.Unterminated = l.pos, true
+	return p
+}
+
+func (l *lexer) globGroup() Part {
+	p := Part{Kind: GlobGroup, Start: l.pos}
+	l.pos++
+	var quote byte
+	for depth := 1; l.more(); l.pos++ {
+		c := l.src[l.pos]
+		switch {
+		case quote != 0:
+			if c == quote {
+				quote = 0
+			} else if c == '\\' && quote == '"' {
+				l.skipEscaped()
+			}
+		case c == '\\':
+			l.skipEscaped()
+		case c == '\'' || c == '"':
+			quote = c
+		case c == groupOpen:
+			depth++
+		case c == groupClose:
+			if depth--; depth == 0 {
+				l.pos++
+				p.End = l.pos
+				return p
+			}
+		}
+	}
+	p.End, p.Unterminated = l.pos, true
+	return p
+}
+
+func (l *lexer) skipEscaped() {
+	if l.pos+1 < l.limit {
+		l.pos++
+	}
 }
 
 func finishWord(start, end int, parts []Part) Token {

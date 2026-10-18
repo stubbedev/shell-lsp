@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+
+	"github.com/stubbedev/shell-lsp/internal/dialect"
 )
 
 var partNames = map[PartKind]string{
@@ -21,6 +23,8 @@ var partNames = map[PartKind]string{
 	Backquote:           "bq",
 	ProcessSubst:        "proc",
 	Array:               "array",
+	ExtGlob:             "extglob",
+	GlobGroup:           "group",
 }
 
 func describe(src string, tokens []Token) []string {
@@ -62,7 +66,12 @@ func describeParts(src string, parts []Part) []string {
 
 func lex(t *testing.T, src string) []Token {
 	t.Helper()
-	tokens, err := Lex(src)
+	return lexAs(t, src, dialect.Bash)
+}
+
+func lexAs(t *testing.T, src string, d dialect.Dialect) []Token {
+	t.Helper()
+	tokens, err := Lex(src, d)
 	if err != nil {
 		t.Fatalf("Lex(%q): %v", src, err)
 	}
@@ -182,6 +191,45 @@ func TestLexParts(t *testing.T) {
 	}
 }
 
+func TestLexPatternGroups(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		dialect dialect.Dialect
+		src     string
+		tokens  []string
+		parts   [][]string
+	}{
+		{
+			dialect.Bash, "ls @(a|b)x +(y) !(z)",
+			[]string{"word:ls/cmd", "word:@(a|b)x", "word:+(y)", "word:!(z)"},
+			[][]string{{"lit:ls"}, {"extglob:@(a|b)", "lit:x"}, {"extglob:+(y)"}, {"extglob:!(z)"}},
+		},
+		{dialect.Bash, "ls *(a(b)c)", []string{"word:ls/cmd", "word:*(a(b)c)"}, [][]string{{"lit:ls"}, {"extglob:*(a(b)c)"}}},
+		{dialect.Bash, "f@()", []string{"word:f@/cmd", "(", ")"}, nil},
+		{dialect.Bash, "ls *.(c|h)", []string{"word:ls/cmd", "word:*.", "(", "word:c/cmd", "|", "word:h/cmd", ")"}, nil},
+		{dialect.Bash, "ls ?(a", []string{"word:ls/cmd", "word:?(a/open"}, [][]string{{"lit:ls"}, {"extglob:?(a/open"}}},
+		{dialect.Zsh, "ls *.(c|h)(N)", []string{"word:ls/cmd", "word:*.(c|h)(N)"}, [][]string{{"lit:ls"}, {"lit:*.", "group:(c|h)", "group:(N)"}}},
+		{dialect.Zsh, "ls *(e:'(x)':)", []string{"word:ls/cmd", "word:*(e:'(x)':)"}, [][]string{{"lit:ls"}, {"lit:*", "group:(e:'(x)':)"}}},
+		{dialect.Zsh, "echo @(a)", []string{"word:echo/cmd", "word:@(a)"}, [][]string{{"lit:echo"}, {"lit:@", "group:(a)"}}},
+		{dialect.Zsh, "f() { :; }", []string{"word:f/cmd", "(", ")", "{", "word::/cmd", ";", "}"}, nil},
+		{dialect.Zsh, "ls x(N", []string{"word:ls/cmd", "word:x(N/open"}, [][]string{{"lit:ls"}, {"lit:x", "group:(N/open"}}},
+		{dialect.Ksh, "ls ~(E)re {2}(ab) a(b)", []string{"word:ls/cmd", "word:~(E)re", "word:{2}(ab)", "word:a", "(", "word:b/cmd", ")"}, nil},
+		{dialect.Ksh, "ls @(a)", []string{"word:ls/cmd", "word:@(a)"}, [][]string{{"lit:ls"}, {"extglob:@(a)"}}},
+	} {
+		tokens := lexAs(t, tt.src, tt.dialect)
+		if diff := cmp.Diff(tt.tokens, describe(tt.src, tokens)); diff != "" {
+			t.Errorf("Lex(%q, %s) mismatch (-want +got):\n%s", tt.src, tt.dialect, diff)
+			continue
+		}
+		for i, want := range tt.parts {
+			if diff := cmp.Diff(want, describeParts(tt.src, tokens[i].Parts)); diff != "" {
+				t.Errorf("parts of word %d of %q in %s mismatch (-want +got):\n%s", i, tt.src, tt.dialect, diff)
+			}
+		}
+	}
+}
+
 func TestLexNestedSequences(t *testing.T) {
 	t.Parallel()
 
@@ -215,10 +263,10 @@ func TestLexRejectsTooDeepNesting(t *testing.T) {
 	t.Parallel()
 
 	src := strings.Repeat("$(", maxDepth+1)
-	if _, err := Lex(src); err == nil || !strings.Contains(err.Error(), "nested deeper") {
+	if _, err := Lex(src, dialect.Bash); err == nil || !strings.Contains(err.Error(), "nested deeper") {
 		t.Errorf("Lex of %d nested substitutions: err %v, want a nesting error", maxDepth+1, err)
 	}
-	if _, err := Lex(strings.Repeat("$(", maxDepth/2)); err != nil {
+	if _, err := Lex(strings.Repeat("$(", maxDepth/2), dialect.Bash); err != nil {
 		t.Errorf("Lex of %d nested substitutions: %v", maxDepth/2, err)
 	}
 }

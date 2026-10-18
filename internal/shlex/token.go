@@ -150,6 +150,8 @@ const (
 	Backquote
 	ProcessSubst
 	Array
+	ExtGlob
+	GlobGroup
 )
 
 type Part struct {
