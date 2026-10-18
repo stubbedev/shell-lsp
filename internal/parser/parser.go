@@ -84,6 +84,10 @@ func newSyntaxParser(lang syntax.LangVariant, options ...syntax.ParserOption) *s
 	}, options...)...)
 }
 
+func ParseSnippet(text string, lang syntax.LangVariant) (*syntax.File, error) {
+	return newSyntaxParser(lang).Parse(strings.NewReader(text), "")
+}
+
 func ParseEdit(previous *Tree, text string, shell dialect.Shell) *Tree {
 	src := []byte(text)
 	blankByteOrderMark(src)

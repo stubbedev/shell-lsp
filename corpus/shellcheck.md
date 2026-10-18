@@ -215,7 +215,7 @@ ShellCheck fails with an internal error on these scripts, which are left out:
 | SC2139 | 71 | 1 | 0 |
 | SC2140 | 16 | 0 | 0 |
 | SC2141 | 2 | 1 | 0 |
-| SC2142 | 2 | 0 | 0 |
+| SC2142 | 0 | 0 | 2 |
 | SC2143 | 17 | 1 | 0 |
 | SC2144 | 12 | 2 | 0 |
 | SC2145 | 56 | 6 | 0 |

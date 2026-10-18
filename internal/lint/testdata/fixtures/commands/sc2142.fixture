@@ -10,3 +10,27 @@ alias runall="nice \${@}"
 alias $1='pwd'
 >>> SC2086 1:7
 >>> SC2139 1:7
+
+### escaped field reference passed to awk
+alias fields='awk "{print \$1}"'
+>>- SC2142 1:7 -- the alias body escapes the dollar, so awk receives $1 and the shell never reads a positional parameter
+
+### escaped dollar in the alias body
+alias price='echo \$1'
+>>- SC2142 1:7 -- the alias body escapes the dollar, so echo prints $1 literally
+
+### awk program single-quoted inside the alias body
+alias names='ls -l | awk '"'"'{print $9}'"'"
+>>- SC2142 1:7 -- the $9 sits in single quotes inside the alias body, so awk reads it and the shell never does
+
+### positional parameter of a function the alias defines
+alias greet='hello() { echo "hi $1"; }; hello'
+>>- SC2142 1:7 -- $1 belongs to the function the alias defines and calls, which receives the alias arguments
+
+### shell name in an alias
+alias me='echo $0'
+>>- SC2142 1:7 -- $0 names the shell rather than a positional parameter
+
+### length of a positional parameter in an alias
+alias len='echo ${#1}'
+>>+ SC2142 1:7 -- ${#1} reads the first positional parameter too; shellcheck only matches $1 and ${1

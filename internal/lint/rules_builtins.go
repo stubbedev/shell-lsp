@@ -1,7 +1,6 @@
 package lint
 
 import (
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -157,21 +156,48 @@ func checkSetAssignment(p *pass, c command) {
 	}
 }
 
-var positionalInAlias = regexp.MustCompile(`\$\{?[0-9*@]`)
-
 func checkAliasBody(p *pass, c command) {
 	for _, arg := range c.args {
 		text, _ := parser.Text(arg, "_")
-		if !strings.Contains(text, "=") {
+		_, body, ok := strings.Cut(text, "=")
+		if !ok {
 			continue
 		}
 		if part := firstExpandingPart(arg); part != nil {
 			p.reportNode(2139, part, "This expands when the alias is defined, not when it is used; single-quote the alias body to expand it later.")
 		}
-		if positionalInAlias.MatchString(text) {
+		if p.aliasReadsPositionals(body) {
 			p.reportNode(2142, arg, "Aliases cannot take positional parameters; define a function instead.")
 		}
 	}
+}
+
+func (p *pass) aliasReadsPositionals(body string) bool {
+	if !strings.Contains(body, "$") {
+		return false
+	}
+	file, err := parser.ParseSnippet(body, p.tree.Lang())
+	if err != nil {
+		return false
+	}
+	found := false
+	parser.Walk(file, func(n syntax.Node) bool {
+		if _, function := n.(*syntax.FuncDecl); function || found {
+			return false
+		}
+		found = namesPositionals(n)
+		return !found
+	})
+	return found
+}
+
+func namesPositionals(n syntax.Node) bool {
+	pe, ok := n.(*syntax.ParamExp)
+	if !ok || pe.Param == nil {
+		return false
+	}
+	kind, _ := parser.ParamKindOf(pe.Param.Value)
+	return kind == parser.ParamPositional || kind == parser.ParamAll
 }
 
 func firstExpandingPart(w *syntax.Word) syntax.Node {
