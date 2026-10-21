@@ -134,7 +134,7 @@ dist version=`git describe --tags --always --dirty`:
     version="{{ version }}"
     rm -rf dist
     mkdir -p dist
-    for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
+    for target in linux/amd64 linux/arm64 darwin/arm64 windows/amd64 windows/arm64; do
         goos="${target%/*}"
         goarch="${target#*/}"
         suffix=""

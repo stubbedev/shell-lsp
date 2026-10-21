@@ -31,17 +31,22 @@ const arches: ReadonlyMap<string, Arch> = new Map([
   ["arm64", "arm64"],
 ]);
 
-export const releaseTargets: readonly ReleaseTarget[] = [...oses.values()].flatMap((os) =>
-  [...arches.values()].map((arch) => ({ os, arch })),
-);
+export const releaseTargets: readonly ReleaseTarget[] = [
+  { os: "linux", arch: "amd64" },
+  { os: "linux", arch: "arm64" },
+  { os: "darwin", arch: "arm64" },
+  { os: "windows", arch: "amd64" },
+  { os: "windows", arch: "arm64" },
+];
 
 export function serverDownload(version: string, platform: string, arch: string): ServerDownload {
   const os = oses.get(platform);
   const goArch = arches.get(arch);
-  if (os === undefined || goArch === undefined) {
+  const target = releaseTargets.find((candidate) => candidate.os === os && candidate.arch === goArch);
+  if (target === undefined) {
     return { kind: "unsupported", platform: `${platform}-${arch}` };
   }
-  return { kind: "release", asset: releaseAsset(version, { os, arch: goArch }) };
+  return { kind: "release", asset: releaseAsset(version, target) };
 }
 
 export function releaseAsset(version: string, target: ReleaseTarget): ReleaseAsset {

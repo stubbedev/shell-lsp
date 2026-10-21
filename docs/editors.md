@@ -139,8 +139,9 @@ absolute path, set in user settings), else `shell-lsp` on `PATH`, else a
 binary it downloaded earlier. When it finds none it offers to download the
 release binary for its own version, verifies it against the release's
 `SHA256SUMS` before saving it, and keeps it in the extension's storage.
-Prebuilt binaries cover Linux, macOS and Windows on x64 and arm64; on other
-platforms install the server yourself and set `shellLsp.path`.
+Prebuilt binaries cover Linux and Windows on x64 and arm64 and macOS on
+arm64; on other platforms install the server yourself and set
+`shellLsp.path`.
 
 The server's settings are VS Code settings under `shellLsp`
 (`shellLsp.dialect`, `shellLsp.lint.exclude`, `shellLsp.format.indent`, and

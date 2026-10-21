@@ -17,7 +17,6 @@ describe("serverDownload", () => {
     for (const [platform, arch, os, goArch] of [
       ["linux", "x64", "linux", "amd64"],
       ["linux", "arm64", "linux", "arm64"],
-      ["darwin", "x64", "darwin", "amd64"],
       ["darwin", "arm64", "darwin", "arm64"],
       ["win32", "x64", "windows", "amd64"],
       ["win32", "arm64", "windows", "arm64"],
@@ -32,6 +31,7 @@ describe("serverDownload", () => {
   test("names the platform that has no release binary", () => {
     assert.deepEqual(serverDownload("1.2.3", "win32", "ia32"), { kind: "unsupported", platform: "win32-ia32" });
     assert.deepEqual(serverDownload("1.2.3", "linux", "ia32"), { kind: "unsupported", platform: "linux-ia32" });
+    assert.deepEqual(serverDownload("1.2.3", "darwin", "x64"), { kind: "unsupported", platform: "darwin-x64" });
     assert.deepEqual(serverDownload("1.2.3", "freebsd", "x64"), { kind: "unsupported", platform: "freebsd-x64" });
   });
 });
@@ -60,7 +60,6 @@ describe("releaseAssetProblems", () => {
   const names = [
     "shell-lsp-v1.2.3-linux-amd64",
     "shell-lsp-v1.2.3-linux-arm64",
-    "shell-lsp-v1.2.3-darwin-amd64",
     "shell-lsp-v1.2.3-darwin-arm64",
     "shell-lsp-v1.2.3-windows-amd64.exe",
     "shell-lsp-v1.2.3-windows-arm64.exe",
@@ -85,12 +84,10 @@ describe("releaseAssetProblems", () => {
   test("names a binary that is built under a name the extension never asks for", () => {
     const renamed = names.map((name) => name.replace("darwin", "macos"));
     assert.deepEqual(releaseAssetProblems("1.2.3", renamed, sumsOf(names)), [
-      "the extension downloads shell-lsp-v1.2.3-darwin-amd64, which was not built",
       "the extension downloads shell-lsp-v1.2.3-darwin-arm64, which was not built",
-      "shell-lsp-v1.2.3-macos-amd64 was built, but the extension never downloads it",
       "shell-lsp-v1.2.3-macos-arm64 was built, but the extension never downloads it",
     ]);
-    assert.equal(releaseAssetProblems("1.2.4", names, sumsOf(names)).length, 24);
+    assert.equal(releaseAssetProblems("1.2.4", names, sumsOf(names)).length, 20);
   });
 });
 

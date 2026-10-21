@@ -55,8 +55,9 @@ Every LSP method, in both directions, is listed with its status in
 
 Pick one:
 
-- **Release binaries** for Linux, macOS and Windows (amd64 and arm64) are
-  attached to every [GitHub release](https://github.com/stubbedev/shell-lsp/releases),
+- **Release binaries** for Linux and Windows (amd64 and arm64) and macOS
+  (arm64) are attached to every
+  [GitHub release](https://github.com/stubbedev/shell-lsp/releases),
   together with a `SHA256SUMS` file. Download the one for your platform,
   check it with `sha256sum --check --ignore-missing SHA256SUMS` (on Windows,
   compare `Get-FileHash <file>` in PowerShell with its line), make it

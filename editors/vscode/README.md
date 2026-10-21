@@ -41,7 +41,7 @@ matching the extension's version from
 [GitHub](https://github.com/stubbedev/shell-lsp/releases). The download is
 checked against the release's `SHA256SUMS` before it is saved and made
 executable, and it is refused if the checksum does not match. Prebuilt
-binaries exist for Linux, macOS and Windows on x64 and arm64.
+binaries exist for Linux and Windows on x64 and arm64 and macOS on arm64.
 
 To install the server yourself instead, use the release binaries,
 `nix profile install github:stubbedev/shell-lsp` or
