@@ -1210,12 +1210,14 @@ func (b *builder) errorAt(pos syntax.Pos, message string) {
 }
 
 func (b *builder) span(n syntax.Node) Span {
-	start := offset(n.Pos())
-	end := n.End()
+	return spanWithin(offset(n.Pos()), n.End(), b.text)
+}
+
+func spanWithin(start int, end syntax.Pos, text string) Span {
 	if !end.IsValid() {
-		return Span{Start: start, End: len(b.text)}
+		return Span{Start: start, End: len(text)}
 	}
-	return Span{Start: start, End: max(start, offset(end))}
+	return Span{Start: start, End: min(max(start, offset(end)), len(text))}
 }
 
 func IsDigits(s string) bool {

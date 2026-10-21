@@ -276,11 +276,7 @@ func (t *Tree) NodeSpan(node syntax.Node) (Span, bool) {
 	if !start.IsValid() || offset(start) > len(t.text) {
 		return Span{}, false
 	}
-	end := node.End()
-	if !end.IsValid() {
-		return Span{Start: offset(start), End: len(t.text)}, true
-	}
-	return Span{Start: offset(start), End: min(max(offset(start), offset(end)), len(t.text))}, true
+	return spanWithin(offset(start), node.End(), t.text), true
 }
 
 func (t *Tree) LiteralKeys(name string) []string {
