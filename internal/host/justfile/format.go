@@ -156,6 +156,9 @@ func (p *printer) elements() ([]element, error) {
 		for _, a := range attributesOf(*it) {
 			el.start = min(el.start, p.lineStart(a.Span.Start))
 		}
+		if a, ok := p.unsettledArgument(*it); ok {
+			return nil, fmt.Errorf("%w: `just --fmt` orders the [arg] attributes on line %d by the column of their help text, so formatting again would reorder them; order them by that column yourself", ErrUnformattable, p.f.line(a.Span.Start))
+		}
 		header := span.End
 		if it.Kind == ItemRecipe {
 			header = it.Recipe.Header.End
@@ -188,10 +191,45 @@ func (p *printer) lineStart(offset int) int {
 
 func (p *printer) text(s Span) string { return p.f.Text[s.Start:s.End] }
 
-func (p *printer) item(it Item) {
+func (p *printer) sortedAttributes(it Item) []Attribute {
 	attrs := slices.Clone(attributesOf(it))
 	slices.SortStableFunc(attrs, p.compareAttributes)
-	for _, a := range attrs {
+	return attrs
+}
+
+func (p *printer) unsettledArgument(it Item) (Attribute, bool) {
+	attrs := p.sortedAttributes(it)
+	for i := 1; i < len(attrs); i++ {
+		a, b := attrs[i-1], attrs[i]
+		if a.Name.Text == "arg" && b.Name.Text == "arg" && compareArgs(p.compareFormattedHelp(a, b), a, b) > 0 {
+			return b, true
+		}
+	}
+	return Attribute{}, false
+}
+
+func (p *printer) compareFormattedHelp(a, b Attribute) int {
+	ca, oka := p.formattedHelpColumn(a)
+	cb, okb := p.formattedHelpColumn(b)
+	if oka && okb {
+		return cmp.Or(cmp.Compare(ca, cb), -1)
+	}
+	return compareBool(oka, okb)
+}
+
+func (p *printer) formattedHelpColumn(a Attribute) (int, bool) {
+	before := "[" + a.Name.Text + "("
+	for _, arg := range a.Args {
+		if arg.Key.Text == "help" && arg.Value != nil {
+			return utf8.RuneCountInString(before + "help="), true
+		}
+		before += p.attributeArg(arg) + ", "
+	}
+	return 0, false
+}
+
+func (p *printer) item(it Item) {
+	for _, a := range p.sortedAttributes(it) {
 		p.sb.WriteString("[" + p.attribute(a) + "]\n")
 	}
 	switch it.Kind {
@@ -239,7 +277,7 @@ func (p *printer) compareAttributes(a, b Attribute) int {
 		return c
 	}
 	if a.Name.Text == "arg" {
-		return cmp.Or(p.compareHelp(a.keyed("help"), b.keyed("help")), compareLong(a, b), strings.Compare(a.first(), b.first()))
+		return compareArgs(p.compareHelp(a.keyed("help"), b.keyed("help")), a, b)
 	}
 	return p.compareArguments(a.Args, b.Args)
 }
@@ -291,6 +329,10 @@ func (p *printer) column(offset int) int {
 	return utf8.RuneCountInString(p.f.Text[p.lineStart(offset):offset])
 }
 
+func compareArgs(help int, a, b Attribute) int {
+	return cmp.Or(help, compareLong(a, b), strings.Compare(a.first(), b.first()))
+}
+
 func compareLong(a, b Attribute) int {
 	la, oka := a.long()
 	lb, okb := b.long()
@@ -320,16 +362,20 @@ func (p *printer) attribute(a Attribute) string {
 	}
 	args := make([]string, len(a.Args))
 	for i, arg := range a.Args {
-		switch {
-		case arg.Key.Text != "" && arg.Value != nil:
-			args[i] = arg.Key.Text + "=" + p.expr(arg.Value)
-		case arg.Key.Text != "":
-			args[i] = arg.Key.Text
-		default:
-			args[i] = p.expr(arg.Value)
-		}
+		args[i] = p.attributeArg(arg)
 	}
 	return a.Name.Text + "(" + strings.Join(args, ", ") + ")"
+}
+
+func (p *printer) attributeArg(arg AttributeArg) string {
+	switch {
+	case arg.Key.Text != "" && arg.Value != nil:
+		return arg.Key.Text + "=" + p.expr(arg.Value)
+	case arg.Key.Text != "":
+		return arg.Key.Text
+	default:
+		return p.expr(arg.Value)
+	}
 }
 
 func (p *printer) recipe(r *Recipe) {

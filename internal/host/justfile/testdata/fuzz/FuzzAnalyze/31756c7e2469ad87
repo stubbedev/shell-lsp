@@ -1,0 +1,2 @@
+go test fuzz v1
+string("[arg('00',help='')]\n[arg('0', help='')]\nA:")

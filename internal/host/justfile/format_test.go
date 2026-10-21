@@ -86,3 +86,15 @@ func TestFormatRefusesToDropComments(t *testing.T) {
 		}
 	}
 }
+
+func TestFormatRefusesArgumentOrderThatWouldNotSettle(t *testing.T) {
+	t.Parallel()
+
+	if _, err := Format(Parse("[arg('a0',help='')]\n[arg('a', help='')]\nA a0 a:\n")); !errors.Is(err, ErrUnformattable) {
+		t.Errorf("Format error = %v, want ErrUnformattable", err)
+	}
+	want := "[arg('a', help='x')]\n[arg('a0', help='y')]\nA a0 a:\n"
+	if got, err := Format(Parse("[arg('a0', help='y')]\n[arg('a', help='x')]\nA a0 a:\n")); err != nil || got != want {
+		t.Errorf("Format = %q, %v; want %q", got, err, want)
+	}
+}
