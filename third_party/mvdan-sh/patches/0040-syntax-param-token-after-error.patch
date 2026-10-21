@@ -1,0 +1,79 @@
+syntax: a parameter expansion token read after an error ends the input
+
+The lexer turns every token into _EOF once p.err is set, so the parser
+loops stop at the first error. paramExp and paramExpParameter read the
+token after a subscript, an operand or a nested expansion with
+paramToken directly and stored it in p.tok without that check. When
+paramToken's own p.rune() failed, such as on invalid UTF-8 right after a
+`]`, the error was recorded but p.tok kept the token, the error helpers
+did nothing more because p.err was already set, and callExpr spun
+forever on the same token. These reads now go through nextParamToken,
+which applies the same rule as the lexer.
+
+Reproducer, before this change: parse "${0#$[a a]\xf1" with
+RecoverErrors(3); Parse never returns.
+
+diff --git a/syntax/lexer.go b/syntax/lexer.go
+index eeeb814..bdfc6ce 100644
+--- a/syntax/lexer.go
++++ b/syntax/lexer.go
+@@ -781,6 +781,13 @@ func (p *Parser) dqToken(r rune) token {
+ 	panic("unreachable")
+ }
+ 
++func (p *Parser) nextParamToken() {
++	p.tok = p.paramToken(p.r)
++	if p.err != nil {
++		p.tok = _EOF
++	}
++}
++
+ func (p *Parser) paramToken(r rune) token {
+ 	switch r {
+ 	case '}':
+diff --git a/syntax/parser.go b/syntax/parser.go
+index 516e6cc..86afac5 100644
+--- a/syntax/parser.go
++++ b/syntax/parser.go
+@@ -1900,7 +1900,7 @@ zshPrefixLoop:
+ 	}
+ 	tokRune := p.r
+ 	p.pos = p.nextPos()
+-	p.tok = p.paramToken(p.r)
++	p.nextParamToken()
+ 	if p.tok == rightBrace {
+ 		pe.Rbrace = p.pos
+ 		p.quote = old
+@@ -2004,7 +2004,7 @@ zshPrefixLoop:
+ 		}
+ 	}
+ 	if p.tok != _EOF && p.tok != rightBrace {
+-		p.tok = p.paramToken(p.r)
++		p.nextParamToken()
+ 	}
+ 	p.quote = old
+ 	pe.Rbrace = p.matched(pe.Dollar, dollBrace, rightBrace)
+@@ -2127,7 +2127,7 @@ func (p *Parser) paramExpParameter(pe *ParamExp) *ParamExp {
+ 		p.unnest(1)
+ 		if quotePos.IsValid() {
+ 			if p.r != '"' {
+-				p.tok = p.paramToken(p.r)
++				p.nextParamToken()
+ 				if p.tok == illegalTok {
+ 					p.posErr(pe.Pos(), "invalid nested parameter expansion")
+ 				} else {
+diff --git a/syntax/parser_test.go b/syntax/parser_test.go
+index 6e0ff07..73c2dce 100644
+--- a/syntax/parser_test.go
++++ b/syntax/parser_test.go
+@@ -2951,6 +2951,10 @@ func TestParseRecoverErrors(t *testing.T) {
+ 			src:     "badsyntax)",
+ 			wantErr: true,
+ 		},
++		{
++			src:     "${0#$[a a]\xf1",
++			wantErr: true,
++		},
+ 	}
+ 	parser := NewParser(RecoverErrors(3))
+ 	printer := NewPrinter()

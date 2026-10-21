@@ -1900,7 +1900,7 @@ zshPrefixLoop:
 	}
 	tokRune := p.r
 	p.pos = p.nextPos()
-	p.tok = p.paramToken(p.r)
+	p.nextParamToken()
 	if p.tok == rightBrace {
 		pe.Rbrace = p.pos
 		p.quote = old
@@ -2004,7 +2004,7 @@ zshPrefixLoop:
 		}
 	}
 	if p.tok != _EOF && p.tok != rightBrace {
-		p.tok = p.paramToken(p.r)
+		p.nextParamToken()
 	}
 	p.quote = old
 	pe.Rbrace = p.matched(pe.Dollar, dollBrace, rightBrace)
@@ -2127,7 +2127,7 @@ func (p *Parser) paramExpParameter(pe *ParamExp) *ParamExp {
 		p.unnest(1)
 		if quotePos.IsValid() {
 			if p.r != '"' {
-				p.tok = p.paramToken(p.r)
+				p.nextParamToken()
 				if p.tok == illegalTok {
 					p.posErr(pe.Pos(), "invalid nested parameter expansion")
 				} else {

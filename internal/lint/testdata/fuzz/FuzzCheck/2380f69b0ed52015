@@ -1,0 +1,2 @@
+go test fuzz v1
+string("${a0#$[a a]\xf1${a0#${a\x00\x00\x00\xff\xd6d\xe8a")

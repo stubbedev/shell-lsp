@@ -781,6 +781,13 @@ func (p *Parser) dqToken(r rune) token {
 	panic("unreachable")
 }
 
+func (p *Parser) nextParamToken() {
+	p.tok = p.paramToken(p.r)
+	if p.err != nil {
+		p.tok = _EOF
+	}
+}
+
 func (p *Parser) paramToken(r rune) token {
 	switch r {
 	case '}':

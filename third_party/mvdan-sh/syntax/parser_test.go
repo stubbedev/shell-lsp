@@ -2951,6 +2951,10 @@ func TestParseRecoverErrors(t *testing.T) {
 			src:     "badsyntax)",
 			wantErr: true,
 		},
+		{
+			src:     "${0#$[a a]\xf1",
+			wantErr: true,
+		},
 	}
 	parser := NewParser(RecoverErrors(3))
 	printer := NewPrinter()
