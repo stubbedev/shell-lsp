@@ -207,7 +207,7 @@ func (fm *formatter) rule(r *Rule, pos, end int) string {
 		return text[pos:end]
 	}
 	colon := text[start:stop]
-	if r.Grouped {
+	if r.Grouped && !lineKeyword(targets) {
 		colon = " " + colon
 	}
 	dynamic := func(w Word) bool { return w.Expr.Dynamic() }

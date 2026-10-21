@@ -1113,6 +1113,10 @@ func topLevel(s string, from int, stops string) int {
 	return found
 }
 
+func lineKeyword(word string) bool {
+	return word == "define" || word == "endef" || slices.Contains(conditionals, word) || slices.Contains(modifiers, word) || slices.Contains(directives, word)
+}
+
 func firstWord(s string) string {
 	for i := range len(s) {
 		if s[i] == ' ' || s[i] == '\t' || continuation(s, i) {
