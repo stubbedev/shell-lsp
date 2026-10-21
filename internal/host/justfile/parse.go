@@ -140,9 +140,11 @@ func (p *reader) comment() {
 	end := p.lineEnd(p.pos)
 	text := p.lineText(p.pos, end)
 	c := Comment{Span: Span{Start: p.pos, End: p.pos + len(text)}, Text: text}
-	i, found := slices.BinarySearchFunc(p.file.Comments, c.Span.Start, func(c Comment, start int) int { return c.Span.Start - start })
-	if !found {
-		p.file.Comments = slices.Insert(p.file.Comments, i, c)
+	comments := p.file.Comments
+	i, found := slices.BinarySearchFunc(comments, c.Span.Start, func(c Comment, start int) int { return c.Span.Start - start })
+	overlaps := found || i > 0 && comments[i-1].Span.End > c.Span.Start || i < len(comments) && comments[i].Span.Start < c.Span.End
+	if !overlaps {
+		p.file.Comments = slices.Insert(comments, i, c)
 	}
 	p.pos = end
 }
