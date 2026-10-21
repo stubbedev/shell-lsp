@@ -2844,6 +2844,17 @@ func TestParseRecoverErrorsAfterAssignment(t *testing.T) {
 	}
 }
 
+func TestParseHeredocWordSpanningNewline(t *testing.T) {
+	t.Parallel()
+
+	for _, lang := range []LangVariant{LangBash, LangZsh, LangKsh93} {
+		for _, opts := range [][]ParserOption{nil, {RecoverErrors(3)}} {
+			parser := NewParser(append(opts, Variant(lang))...)
+			_, _ = parser.Parse(strings.NewReader("<<$A[\n"), "")
+		}
+	}
+}
+
 func TestParseRecoverErrors(t *testing.T) {
 	t.Parallel()
 

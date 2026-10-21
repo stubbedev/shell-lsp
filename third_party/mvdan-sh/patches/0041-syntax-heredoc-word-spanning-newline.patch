@@ -1,0 +1,48 @@
+syntax: a here-document is pending only once its word is parsed
+
+A here-document redirect was added to the pending here-documents before
+its word was parsed. When reading that word crossed a newline, as an
+unclosed subscript does in "<<$A[\n" with zsh, the lexer read the
+pending here-document bodies at that newline and dereferenced the word
+that was still being parsed, which was nil, and panicked. The redirect
+is now added once its word is complete.
+
+Reproducer, before this change: parse "<<$A[\n" with LangZsh; it panics
+in unquotedWordBytes.
+
+diff --git a/syntax/parser.go b/syntax/parser.go
+index 86afac5..0fca67b 100644
+--- a/syntax/parser.go
++++ b/syntax/parser.go
+@@ -2657,8 +2657,8 @@ func (p *Parser) doRedirect(s *Stmt) {
+ 	case Hdoc, DashHdoc, HashHdoc:
+ 		old := p.quote
+ 		p.quote, p.forbidNested = hdocWord, true
+-		p.heredocs = append(p.heredocs, r)
+ 		r.Word = p.followWordTok(token(r.Op), r.OpPos)
++		p.heredocs = append(p.heredocs, r)
+ 		p.quote, p.forbidNested = old, false
+ 		if p.tok == _Newl {
+ 			if len(p.accComs) > 0 {
+diff --git a/syntax/parser_test.go b/syntax/parser_test.go
+index 73c2dce..24eb9ee 100644
+--- a/syntax/parser_test.go
++++ b/syntax/parser_test.go
+@@ -2844,6 +2844,17 @@ func TestParseRecoverErrorsAfterAssignment(t *testing.T) {
+ 	}
+ }
+ 
++func TestParseHeredocWordSpanningNewline(t *testing.T) {
++	t.Parallel()
++
++	for _, lang := range []LangVariant{LangBash, LangZsh, LangKsh93} {
++		for _, opts := range [][]ParserOption{nil, {RecoverErrors(3)}} {
++			parser := NewParser(append(opts, Variant(lang))...)
++			_, _ = parser.Parse(strings.NewReader("<<$A[\n"), "")
++		}
++	}
++}
++
+ func TestParseRecoverErrors(t *testing.T) {
+ 	t.Parallel()
+ 

@@ -2657,8 +2657,8 @@ func (p *Parser) doRedirect(s *Stmt) {
 	case Hdoc, DashHdoc, HashHdoc:
 		old := p.quote
 		p.quote, p.forbidNested = hdocWord, true
-		p.heredocs = append(p.heredocs, r)
 		r.Word = p.followWordTok(token(r.Op), r.OpPos)
+		p.heredocs = append(p.heredocs, r)
 		p.quote, p.forbidNested = old, false
 		if p.tok == _Newl {
 			if len(p.accComs) > 0 {
