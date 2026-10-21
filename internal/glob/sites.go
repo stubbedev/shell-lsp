@@ -207,6 +207,9 @@ func (s Sites) site(w *syntax.Word, role Role, exp *syntax.ParamExp, literal boo
 }
 
 func (s Sites) Pattern(w *syntax.Word, role Role, resolve Resolver) (Role, Pattern, bool) {
+	if cutShort(w) {
+		return role, Pattern{}, false
+	}
 	if role == RoleRegex {
 		segments, ok := s.regexSegments(w, resolve)
 		return role, ParseRegex(segments, Syntax{Dialect: s.tree.Dialect, Regex: ExtendedRegex}), ok
@@ -222,6 +225,15 @@ func (s Sites) Pattern(w *syntax.Word, role Role, resolve Resolver) (Role, Patte
 		pattern.Needs = slices.DeleteFunc(pattern.Needs, func(n Need) bool { return n.Option == ExtGlob })
 	}
 	return role, pattern, true
+}
+
+func cutShort(w *syntax.Word) bool {
+	for _, part := range w.Parts[:max(len(w.Parts)-1, 0)] {
+		if !part.End().IsValid() {
+			return true
+		}
+	}
+	return false
 }
 
 func anchored(role Role, segments []Segment) (Role, []Segment) {
