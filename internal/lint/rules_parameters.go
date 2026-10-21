@@ -186,7 +186,11 @@ func checkUnbracedVariable(p *pass, pe *syntax.ParamExp) {
 	}
 	text := p.text[span.Start:parser.Offset(pe.Param.Pos())] + pe.Param.Value
 	if pe.Index != nil {
-		text += p.text[parser.Offset(pe.Param.Pos())+len(pe.Param.Value) : parser.Offset(pe.Index.End())+len("]")]
+		closing := parser.Offset(pe.Index.End())
+		if closing >= len(p.text) || p.text[closing] != ']' {
+			return
+		}
+		text += p.text[parser.Offset(pe.Param.Pos())+len(pe.Param.Value) : closing+len("]")]
 	}
 	message := "Write ${" + text[1:] + "} instead of " + text + " to make the end of the variable name explicit."
 	if !strings.HasPrefix(p.text[span.Start:], text) {
