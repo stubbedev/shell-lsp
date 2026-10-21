@@ -154,8 +154,8 @@ func parseSource(parser *syntax.Parser, src []byte, base int, text string, d dia
 		if len(src) > len(text)-base && parsedPastText(parsed, err, text) {
 			break
 		}
-		file, parsedSrc = parsed, src
 		if err == nil {
+			file, parsedSrc = parsed, src
 			break
 		}
 		parseErr, located := convertError(err, text, d)
@@ -164,6 +164,7 @@ func parseSource(parser *syntax.Parser, src []byte, base int, text string, d dia
 		if unclosed && at == closedAt {
 			break
 		}
+		file, parsedSrc = parsed, src
 		errs = append(errs, parseErr)
 		if !located {
 			break
