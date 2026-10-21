@@ -146,16 +146,16 @@ dist version=`git describe --tags --always --dirty`:
     done
     (cd dist && sha256sum shell-lsp-* >SHA256SUMS)
 
-# Recompute vendorHash in package.nix from go.mod and go.sum; run after any dependency change.
+# Recompute vendorHash in nix/package.nix from go.mod and go.sum; run after any dependency change.
 sync-flake:
     #!/usr/bin/env bash
     set -euo pipefail
     fake="sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
-    cur="$(grep -oP 'vendorHash = "\K[^"]+' package.nix)"
-    sed -i "s#vendorHash = \"${cur}\"#vendorHash = \"${fake}\"#" package.nix
+    cur="$(grep -oP 'vendorHash = "\K[^"]+' nix/package.nix)"
+    sed -i "s#vendorHash = \"${cur}\"#vendorHash = \"${fake}\"#" nix/package.nix
     out="$(nix build .#default --no-link 2>&1 || true)"
     got="$(printf '%s' "$out" | grep -oP 'got:\s+\K(sha256-\S+)' | head -1 || true)"
-    sed -i "s#vendorHash = \"${fake}\"#vendorHash = \"${got:-$cur}\"#" package.nix
+    sed -i "s#vendorHash = \"${fake}\"#vendorHash = \"${got:-$cur}\"#" nix/package.nix
     err="$(mktemp)"
     trap 'rm -f "$err"' EXIT
     if ! nix build .#default --no-link >/dev/null 2>"$err"; then
@@ -245,7 +245,7 @@ release level:
     sed -i "s/^    rev: v$current\$/    rev: $tag/" docs/cli.md
     just sync-flake
     just check
-    git add docs/cli.md package.nix
+    git add docs/cli.md nix/package.nix
     git commit -m "Point pre-commit at $tag"
     git push origin HEAD:main
 

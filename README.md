@@ -757,7 +757,7 @@ described in [docs/corpus.md](docs/corpus.md).
 With Nix:
 
 - `nix build` builds the package, stamped with the commit date, and runs the
-  test suite; update `vendorHash` in `package.nix` whenever go.mod
+  test suite; update `vendorHash` in `nix/package.nix` whenever go.mod
   dependencies change
 - `nix run` runs it
 - `nix fmt` formats the nix files with alejandra
