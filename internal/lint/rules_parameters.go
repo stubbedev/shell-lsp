@@ -186,8 +186,9 @@ func checkUnbracedVariable(p *pass, pe *syntax.ParamExp) {
 	}
 	text := p.text[span.Start:parser.Offset(pe.Param.Pos())] + pe.Param.Value
 	if pe.Index != nil {
-		closing := parser.Offset(pe.Index.End())
-		if closing >= len(p.text) || p.text[closing] != ']' {
+		end := pe.Index.End()
+		closing := parser.Offset(end)
+		if !end.IsValid() || closing >= len(p.text) || p.text[closing] != ']' {
 			return
 		}
 		text += p.text[parser.Offset(pe.Param.Pos())+len(pe.Param.Value) : closing+len("]")]
