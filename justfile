@@ -224,16 +224,28 @@ release level:
         exit 1
     fi
 
-    failures="$(gh run list --branch main --limit 200 --json headSha,workflowName,conclusion \
-        --jq '.[] | select(.conclusion == "failure" or .conclusion == "timed_out" or .conclusion == "startup_failure") | "\(.headSha) \(.workflowName) \(.conclusion)"')"
-    unreleased="$(git rev-list "v$current..HEAD")"
-    failed=""
-    if [[ -n "$failures" && -n "$unreleased" ]]; then
-        failed="$(grep -F -f <(printf '%s\n' "$unreleased") <<<"$failures" || [[ $? -eq 1 ]])"
-    fi
-    if [[ -n "$failed" ]]; then
-        echo "CI failed on commits since v$current; investigate before releasing:" >&2
-        echo "$failed" >&2
+    runs="$(gh run list --branch main --limit 200 --json headSha,workflowName,conclusion \
+        --jq '.[] | [.headSha, .workflowName, .conclusion] | @tsv')"
+    declare -A unreleased=()
+    while read -r sha; do
+        unreleased["$sha"]=1
+    done < <(git rev-list "v$current..HEAD")
+    declare -A failed=()
+    while IFS=$'\t' read -r sha workflow conclusion; do
+        case "$conclusion" in
+            failure | timed_out | startup_failure) ;;
+            *) continue ;;
+        esac
+        [[ -n "${unreleased[$sha]:-}" ]] || continue
+        passed_later="$(awk -F '\t' -v workflow="$workflow" '$2 == workflow && $3 == "success" { print $1 }' <<<"$runs" |
+            grep -xF -f <(git rev-list "$sha..HEAD") || [[ $? -eq 1 ]])"
+        if [[ -z "$passed_later" ]]; then
+            failed["$sha $workflow $conclusion"]=1
+        fi
+    done <<<"$runs"
+    if [[ ${#failed[@]} -gt 0 ]]; then
+        echo "CI failed on commits since v$current and has not passed on a later commit; investigate before releasing:" >&2
+        printf '%s\n' "${!failed[@]}" | sort >&2
         exit 1
     fi
 
