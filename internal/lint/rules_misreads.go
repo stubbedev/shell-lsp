@@ -153,10 +153,10 @@ func (p *pass) reportKeywordAsWord(span parser.Span, word string, keyword closin
 }
 
 func checkPositionalAboveNine(p *pass, pe *syntax.ParamExp) {
-	if !pe.Short || pe.Param == nil || len(pe.Param.Value) != 1 || !scan.Digit(pe.Param.Value[0]) {
+	if !pe.Short || !pe.Dollar.IsValid() || pe.Index != nil || pe.Param == nil || len(pe.Param.Value) != 1 || !scan.Digit(pe.Param.Value[0]) {
 		return
 	}
-	start, end := parser.Offset(pe.Pos()), parser.Offset(pe.End())
+	start, end := parser.Offset(pe.Dollar), parser.Offset(pe.Param.End())
 	digits := end
 	for digits < len(p.text) && scan.Digit(p.text[digits]) {
 		digits++
