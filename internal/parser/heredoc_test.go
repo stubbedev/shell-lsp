@@ -89,6 +89,7 @@ func TestUnclosableHeredocStopsRecovering(t *testing.T) {
 		{"<<EOF (run", dialect.Ksh},
 		{"<<$\"A", dialect.Zsh},
 		{"<<0(\n", dialect.Bash},
+		{"<<0(\n#\n(", dialect.Bash},
 		{"<<0\\", dialect.Bash},
 		{"<<&\\\x00", dialect.Bash},
 		{"<<#\\", dialect.Bash},
@@ -107,6 +108,17 @@ func TestUnclosableHeredocStopsRecovering(t *testing.T) {
 			return true
 		})
 		assertSpansInText(t, tc.d, tc.src, tree)
+	}
+}
+
+func TestUnclosedHeredocDoesNotIndexTheRecoveryDelimiter(t *testing.T) {
+	t.Parallel()
+
+	for _, src := range []string{"<<0(\n#\n(", "<<0(\n#\n(\n"} {
+		tree := Parse(src, dialect.Bash)
+		if len(tree.Commands) != 0 {
+			t.Errorf("%q: commands = %+v, want none", src, tree.Commands)
+		}
 	}
 }
 

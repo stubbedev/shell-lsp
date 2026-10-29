@@ -296,6 +296,9 @@ func (b *builder) visit(node syntax.Node) bool {
 		}
 		return true
 	}
+	if !b.withinText(node) {
+		return false
+	}
 	b.enter(node)
 	b.openShell(node)
 	switch n := node.(type) {
@@ -308,6 +311,11 @@ func (b *builder) visit(node syntax.Node) bool {
 	}
 	b.stack = append(b.stack, node)
 	return true
+}
+
+func (b *builder) withinText(node syntax.Node) bool {
+	pos := node.Pos()
+	return !pos.IsValid() || offset(pos) < len(b.text)
 }
 
 func compound(node syntax.Node) bool {
