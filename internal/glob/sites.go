@@ -207,7 +207,7 @@ func (s Sites) site(w *syntax.Word, role Role, exp *syntax.ParamExp, literal boo
 }
 
 func (s Sites) Pattern(w *syntax.Word, role Role, resolve Resolver) (Role, Pattern, bool) {
-	if cutShort(w) {
+	if unusableParts(w) {
 		return role, Pattern{}, false
 	}
 	if role == RoleRegex {
@@ -227,10 +227,17 @@ func (s Sites) Pattern(w *syntax.Word, role Role, resolve Resolver) (Role, Patte
 	return role, pattern, true
 }
 
-func cutShort(w *syntax.Word) bool {
-	for _, part := range w.Parts[:max(len(w.Parts)-1, 0)] {
-		if !part.End().IsValid() {
+func unusableParts(w *syntax.Word) bool {
+	end := uint(0)
+	for i, part := range w.Parts {
+		if i < len(w.Parts)-1 && !part.End().IsValid() {
 			return true
+		}
+		if start := part.Pos(); start.IsValid() && start.Offset() < end {
+			return true
+		}
+		if e := part.End(); e.IsValid() {
+			end = e.Offset()
 		}
 	}
 	return false
