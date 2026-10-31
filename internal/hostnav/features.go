@@ -97,6 +97,9 @@ func (g *Group) PrepareRename(sym Symbol) error {
 	if !sym.Defined() {
 		return fmt.Errorf("%w: %s `%s` is built in", navigation.ErrNotRenamable, sym.Kind, sym.Name)
 	}
+	if !g.Language.Renames() {
+		return fmt.Errorf("%w: %s `%s` is defined in a %s, which other code may read by its name; rename it with that language's own server", navigation.ErrNotRenamable, sym.Kind, sym.Name, g.Language)
+	}
 	if sym.Kind == model.KindModule && g.moduleRoot(sym) != nil && !g.explicitPath(sym) {
 		return fmt.Errorf("%w: module `%s` is found by its name; give it an explicit path first", navigation.ErrNotRenamable, sym.Name)
 	}
@@ -171,7 +174,7 @@ func (g *Group) Describe(sym Symbol) Hover {
 		}
 		md += "\n\n*" + s.Kind.String() + "*"
 		if s.Exported {
-			md += ", exported to recipes"
+			md += ", exported to the shell"
 		}
 		if file := g.files[t.Module.Files[t.File]]; file != nil && file.Path != g.Self.Path {
 			md += " in `" + filepath.Base(file.Path) + "`"

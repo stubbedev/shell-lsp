@@ -467,7 +467,8 @@ is written back in the syntax of the file; a fix that cannot be written there,
 such as one that would need a new line in a Makefile recipe, is not offered.
 The shell cannot be switched with a `# shellcheck shell=` directive, because
 the file decides it. A `# shellcheck disable=` directive in the shell works as
-usual. In Nix files, requests outside the shell find nothing; justfiles,
+usual. In Nix files, requests outside the shell find nothing
+([Nix files](#nix-files) says what the shell reaches in the Nix around it); justfiles,
 Makefiles and Dockerfiles are understood as languages of their own
 ([Justfiles, Makefiles and Dockerfiles natively](#justfiles-makefiles-and-dockerfiles-natively)).
 
@@ -680,6 +681,26 @@ one and close in another.
   `excludeShellChecks`.
 - The file is checked as one shell, chosen as for justfiles; phases and the
   bash writers are bash.
+
+Inside the shell, a variable that the Nix around it puts in the environment
+leads to the attribute that sets it, with definition, references, document
+highlight and hover showing the binding and where it comes from. These are:
+
+- in a phase or `shellHook`, the attributes of its derivation, also
+  `inherit`ed ones and those under `env`, but not `meta`, `passthru` or
+  `__`-prefixed ones, so `$pname` and `''${version}` reach `pname = ...;` and
+  `version = ...;`;
+- in a `runCommand` script, the attributes it is given;
+- in a systemd unit's scripts, its `environment`;
+- in a `writeShellApplication`'s `text`, its `runtimeEnv`.
+
+Such a variable is not renamed from the shell, since other Nix code may read
+the attribute by its name.
+
+The Nix language itself (its syntax errors and checks, its symbols, folding,
+formatting, and navigation between Nix bindings, also through `${...}`) is
+left to a Nix language server such as nixd or nil, which runs beside
+shell-lsp without the two reporting or listing anything twice.
 
 Shell that Nix assembles across `${...}`, such as a `case` whose patterns come
 from `lib.optionalString`, cannot be checked, since only evaluating the Nix

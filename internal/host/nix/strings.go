@@ -3,6 +3,7 @@ package nix
 import (
 	"strings"
 
+	"github.com/stubbedev/shell-lsp/internal/host/model"
 	"github.com/stubbedev/shell-lsp/internal/projection"
 	"github.com/stubbedev/shell-lsp/internal/scan"
 )
@@ -110,7 +111,7 @@ func (f *file) decodeIndented(b *projection.Builder, start, end int) {
 		case strings.HasPrefix(rest, "${"):
 			b.Verbatim(run, i)
 			run = min(antiquoteEnd(src, i+2), end)
-			b.Placeholder(i, run)
+			f.placeholder(b, i, run)
 			return run
 		case rest[0] == '$' && len(rest) > 1 && rest[1] != '\'' && rest[1] != '\n':
 			return i + 2
@@ -134,7 +135,7 @@ func (f *file) quoted(b *projection.Builder, start, end int) {
 		case strings.HasPrefix(rest, "${"):
 			b.Verbatim(run, i)
 			run = min(antiquoteEnd(src, i+2), end)
-			b.Placeholder(i, run)
+			f.placeholder(b, i, run)
 			return run
 		case rest[0] == '$' && len(rest) > 1 && rest[1] != '"' && rest[1] != '\\':
 			return i + 2
@@ -142,6 +143,11 @@ func (f *file) quoted(b *projection.Builder, start, end int) {
 		return i + 1
 	})
 	b.Verbatim(run, end)
+}
+
+func (f *file) placeholder(b *projection.Builder, start, end int) {
+	b.Placeholder(start, end)
+	f.holes = append(f.holes, model.Span{Start: start, End: end})
 }
 
 func unescape(c byte) string {

@@ -44,6 +44,7 @@ type definition struct {
 	invocation  func(path, name string) []string
 	recursion   Recursion
 	formatter   func(text string) (string, error)
+	shellOnly   bool
 }
 
 type Recursion struct {
@@ -65,11 +66,9 @@ type analysis struct {
 	dockerfile *dockerfile.File
 }
 
-func projectOnly(project func(string) (*projection.Map, dialect.Detection)) func(string) analysis {
-	return func(text string) analysis {
-		m, detection := project(text)
-		return analysis{projection: m, detection: detection}
-	}
+func analyzeNix(text string) analysis {
+	a := nix.Analyze(text)
+	return analysis{projection: a.Map, detection: a.Detection, index: a.Index, enclosing: a.Enclosing}
 }
 
 func analyzeMake(text string) analysis {
@@ -124,7 +123,10 @@ var definitions = [...]definition{
 		name:        "Nix file",
 		languageIDs: []string{"nix"},
 		extensions:  []string{".nix"},
-		analyze:     projectOnly(nix.Project),
+		analyze:     analyzeNix,
+		checks:      nix.Checks,
+		fence:       "nix",
+		shellOnly:   true,
 	},
 	Docker: {
 		name:        "Dockerfile",
@@ -248,6 +250,10 @@ func (l Language) ValidName(kind model.Kind, name string) bool {
 }
 
 func (l Language) Fence() string { return definitions[l].fence }
+
+func (l Language) ShellOnly() bool { return definitions[l].shellOnly }
+
+func (l Language) Renames() bool { return definitions[l].validName != nil }
 
 func (l Language) Invocation(path, name string) []string {
 	return definitions[l].invocation(path, name)

@@ -1,6 +1,7 @@
 package nix
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -88,9 +89,9 @@ func TestProjectText(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			m, _ := Project(tt.nix)
+			m := Analyze(tt.nix).Map
 			if m.Text() != tt.want {
-				t.Errorf("Project(%q) =\n%q\nwant\n%q", tt.nix, m.Text(), tt.want)
+				t.Errorf("Analyze(%q) =\n%q\nwant\n%q", tt.nix, m.Text(), tt.want)
 			}
 		})
 	}
@@ -109,7 +110,7 @@ func TestProjectDialect(t *testing.T) {
 		{"a marker", "{ x = /* zsh */ ''print''; }", dialect.Detection{Dialect: dialect.Zsh, Source: dialect.SourceHostSetting, Evidence: "/* zsh */"}},
 		{"a shebang", "writeScript \"x\" ''\n  #!/usr/bin/env ksh\n  print\n''", dialect.Detection{Dialect: dialect.Ksh, Source: dialect.SourceHostSetting, Evidence: "#!/usr/bin/env ksh"}},
 	} {
-		if _, got := Project(tt.nix); got != tt.want {
+		if got := Analyze(tt.nix).Detection; got != tt.want {
 			t.Errorf("%s: detection = %+v, want %+v", tt.name, got, tt.want)
 		}
 	}
@@ -130,7 +131,7 @@ func TestProjectEdits(t *testing.T) {
 		{"a dollar before a brace", "{ buildPhase = ''\n  echo {a}\n''; }", "echo ", "echo $", "", false},
 		{"a double-quoted string", quoted, "`date`", "\"$(date)\"\\", "{ buildPhase = \"echo \\\"$(date)\\\"\\\\ ${a}\"; }", true},
 	} {
-		m, _ := Project(tt.src)
+		m := Analyze(tt.src).Map
 		start := strings.Index(m.Text(), tt.old)
 		if start < 0 {
 			t.Fatalf("%s: %q not in %q", tt.name, tt.old, m.Text())
@@ -150,7 +151,7 @@ func TestProjectPositions(t *testing.T) {
 	t.Parallel()
 
 	src := "{ buildPhase = ''\n    cp ${src} $out\n  ''; }"
-	m, _ := Project(src)
+	m := Analyze(src).Map
 	for _, tt := range []struct {
 		proj, host string
 		inside     bool
@@ -162,5 +163,83 @@ func TestProjectPositions(t *testing.T) {
 		if got, inside := m.Offset(hostStart); got != start || inside != tt.inside {
 			t.Errorf("Offset of %q = %d, %v, want %d, %v", tt.host, got, inside, start, tt.inside)
 		}
+	}
+}
+
+func TestAnalyzeExportsTheEnvironmentOfShellStrings(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name, nix string
+		want      []string
+	}{
+		{
+			name: "derivation attributes, inherited ones and env",
+			nix:  "stdenv.mkDerivation (finalAttrs: {\n  pname = \"x\";\n  inherit version;\n  inherit (src) rev owner;\n  \"QUOTED\" = 1;\n  \"not-a-name\" = 1;\n  env.CFLAGS = \"-O2\";\n  env = { LDFLAGS = \"\"; };\n  meta.description = \"\";\n  passthru = { tests = 1; };\n  __structuredAttrs = false;\n  installPhase = ''\n    echo $pname\n  '';\n})",
+			want: []string{"pname", "version", "rev", "owner", "QUOTED", "CFLAGS", "LDFLAGS", "installPhase"},
+		},
+		{
+			name: "let bindings, with and assert inside values are not attributes",
+			nix:  "{ a = let b = 1; c = let d = 2; in d; in b; e = with lib; f; g = assert true; h; buildPhase = ''\n  make\n''; }",
+			want: []string{"a", "e", "g", "buildPhase"},
+		},
+		{
+			name: "runCommand exports its attribute set",
+			nix:  "runCommand \"x\" { FOO = \"1\"; meta = { }; } ''\n  echo $FOO > $out\n''",
+			want: []string{"FOO"},
+		},
+		{
+			name: "a systemd unit exports its environment",
+			nix:  "{ systemd.services.x = { environment.A = \"1\"; environment = { B = \"2\"; }; path = [ ]; script = ''\n  echo $A $B\n''; }; }",
+			want: []string{"A", "B"},
+		},
+		{
+			name: "writeShellApplication exports its runtimeEnv",
+			nix:  "writeShellApplication { name = \"x\"; runtimeEnv = { A = \"1\"; }; text = ''\n  echo $A\n''; }",
+			want: []string{"A"},
+		},
+		{
+			name: "writers and marked strings have no environment",
+			nix:  "{ a = 1; b = writeShellScript \"x\" ''\n  echo\n''; c = /* bash */ ''\n  echo\n''; }",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			a := Analyze(tt.nix)
+			var got []string
+			for _, s := range a.Index.Symbols {
+				got = append(got, s.Name)
+				if !s.Exported || s.Scope == 0 || tt.nix[s.Selection.Start:s.Selection.End] != s.Name {
+					t.Errorf("symbol %+v is not an exported variable named where it is defined", s)
+				}
+			}
+			if !slices.Equal(got, tt.want) {
+				t.Errorf("exported %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestAnalyzeShellsLeaveOutAntiquotations(t *testing.T) {
+	t.Parallel()
+
+	src := "{ pname = \"p\"; buildPhase = ''\n  cp ${src} $out\n''; installPhase = \"echo ${a}$pname\"; }"
+	a := Analyze(src)
+	var got []string
+	for _, s := range a.Index.Shells {
+		got = append(got, src[s.Span.Start:s.Span.End])
+		if s.Scope != a.Index.Shells[0].Scope {
+			t.Errorf("the phases of one derivation are in different scopes: %+v", a.Index.Shells)
+		}
+	}
+	if want := []string{"\n  cp ", " $out\n", "echo ", "$pname"}; !slices.Equal(got, want) {
+		t.Errorf("shells = %q, want %q", got, want)
+	}
+	if got := a.Index.Symbols[0].Detail; got != `pname = "p";` {
+		t.Errorf("detail = %q", got)
+	}
+	inner := strings.Index(src, "$out")
+	if spans := a.Enclosing(inner); len(spans) != 2 || src[spans[1].Start:spans[1].End] != "''\n  cp ${src} $out\n''" {
+		t.Errorf("Enclosing(%d) = %+v", inner, spans)
 	}
 }

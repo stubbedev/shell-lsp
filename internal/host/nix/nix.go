@@ -7,10 +7,11 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/directive"
+	"github.com/stubbedev/shell-lsp/internal/host/model"
 	"github.com/stubbedev/shell-lsp/internal/projection"
 )
 
-var environment = directive.Render(directive.Disable, "SC2154") + "\n"
+var phaseDirective = directive.Render(directive.Disable, "SC2154") + "\n"
 
 const (
 	tool          = "nix"
@@ -70,6 +71,11 @@ type frame struct {
 	binding string
 	path    string
 	owner   string
+	expect  bool
+	inherit int
+	lets    int
+	pending int
+	current []int
 }
 
 type context struct {
@@ -79,7 +85,9 @@ type context struct {
 }
 
 type shellString struct {
+	at         int
 	tok        token
+	env        environment
 	detection  dialect.Detection
 	prelude    string
 	directive  string
@@ -95,10 +103,19 @@ type file struct {
 	partner  map[int]int
 	contexts map[int]context
 	excluded map[int][]string
+	bindings map[int][]binding
+	holes    []model.Span
 }
 
-func Project(src string) (*projection.Map, dialect.Detection) {
-	f := &file{src: src, tokens: tokenize(src), partner: map[int]int{}, contexts: map[int]context{}, excluded: map[int][]string{}}
+type Analysis struct {
+	Map       *projection.Map
+	Detection dialect.Detection
+	Index     *model.Index
+	strings   []model.Span
+}
+
+func Analyze(src string) Analysis {
+	f := &file{src: src, tokens: tokenize(src), partner: map[int]int{}, contexts: map[int]context{}, excluded: map[int][]string{}, bindings: map[int][]binding{}}
 	f.scan()
 	found := f.shellStrings()
 	detection, _ := dialect.Choose(found, func(s shellString) dialect.Detection { return s.detection }, tool)
@@ -108,8 +125,15 @@ func Project(src string) (*projection.Map, dialect.Detection) {
 		b.Shell(group[0].detection)
 		f.project(b, group, n)
 	}
-	return b.Map(), detection
+	a := Analysis{Map: b.Map(), Detection: detection, Index: f.index(found)}
+	for _, s := range found {
+		start, end := contentBounds(src, s.tok)
+		a.strings = append(a.strings, model.Span{Start: s.tok.start, End: s.tok.end}, model.Span{Start: start, End: end})
+	}
+	return a
 }
+
+func (a Analysis) Enclosing(offset int) []model.Span { return model.Nested(offset, a.strings) }
 
 func groups(found []shellString) [][]shellString {
 	var out [][]shellString
@@ -124,13 +148,17 @@ func groups(found []shellString) [][]shellString {
 }
 
 func (f *file) scan() {
-	frames := []frame{{open: noBrace, kind: rootFrame}}
+	frames := []frame{{open: noBrace, kind: rootFrame, inherit: noBrace}}
 	for i, t := range f.tokens {
 		top := &frames[len(frames)-1]
+		f.attribute(top, i)
 		kind, opens := opensFrame(t)
 		switch {
 		case opens:
-			frames = append(frames, frame{open: i, kind: kind, owner: joinPath(top.owner, top.path)})
+			if kind == attrsFrame && f.assigned(i) && len(top.current) == 1 {
+				f.bindings[top.open][top.current[0]].value = i
+			}
+			frames = append(frames, frame{open: i, kind: kind, owner: joinPath(top.owner, top.path), expect: kind == attrsFrame, inherit: noBrace})
 		case t.is("}") || t.is(")") || t.is("]"):
 			if len(frames) > 1 {
 				f.partner[i], f.partner[top.open] = top.open, i
@@ -147,6 +175,14 @@ func (f *file) scan() {
 			f.contexts[i] = resolve(frames)
 		}
 	}
+}
+
+func (f *file) assigned(open int) bool {
+	j := open - 1
+	if j >= 0 && f.tokens[j].keyword("rec") {
+		j--
+	}
+	return j >= 0 && f.tokens[j].is("=")
 }
 
 func joinPath(owner, path string) string {
@@ -222,7 +258,7 @@ func (f *file) classify(i int) (shellString, bool) {
 	t := f.tokens[i]
 	value, joined := f.valuePosition(i)
 	c := f.contexts[i]
-	s := shellString{tok: t, joined: joined, context: c}
+	s := shellString{at: i, tok: t, env: environment{open: noBrace}, joined: joined, context: c}
 	marker := strings.TrimSpace(t.comment)
 	if d, ok := markers[marker]; ok {
 		s.detection = dialect.Detection{Dialect: d, Source: dialect.SourceHostSetting, Evidence: "/* " + marker + " */"}
@@ -237,8 +273,13 @@ func (f *file) classify(i int) (shellString, bool) {
 	switch {
 	case slices.Contains(derivationBindings, c.binding):
 		s.derivation = true
-	case c.binding == "shellHook", slices.Contains(serviceBindings, c.binding) && slices.Contains(strings.Split(c.path, "."), "systemd"):
+		s.env = environment{open: c.brace, source: derivationEnv}
+	case c.binding == "shellHook":
+		s.env = environment{open: c.brace, source: derivationEnv}
+	case slices.Contains(serviceBindings, c.binding) && slices.Contains(strings.Split(c.path, "."), "systemd"):
+		s.env = environment{open: c.brace, source: unitEnv}
 	case c.binding == shellAppText && c.brace != noBrace && f.callee(c.brace) == shellApp:
+		s.env = environment{open: c.brace, source: appEnv}
 		s.prelude = strictMode
 		if excluded := f.excluded[c.brace]; len(excluded) > 0 {
 			s.directive = directive.Render(directive.Disable, strings.Join(excluded, ",")) + "\n"
@@ -283,6 +324,7 @@ func (f *file) written(s shellString, callee string) (shellString, bool) {
 	case slices.Contains(commandRunner, callee):
 		s.detection = dialect.Detection{Dialect: dialect.Bash, Source: dialect.SourceHostDefault, Evidence: tool}
 		s.derivation = true
+		s.env = environment{open: f.partner[s.at-1], source: derivationEnv}
 	default:
 		s.detection = dialect.Detection{Dialect: dialect.Bash, Source: dialect.SourceHostDefault, Evidence: tool}
 	}
@@ -340,7 +382,7 @@ func (f *file) project(b *projection.Builder, group []shellString, n int) {
 	opener, end := first.directive+"(\n"+first.prelude, closing
 	if first.derivation {
 		name := phaseFunction + strconv.Itoa(n)
-		opener = environment + first.directive + name + "() {\n" + strictMode + first.prelude
+		opener = phaseDirective + first.directive + name + "() {\n" + strictMode + first.prelude
 		end = "\n:\n}\n" + name + "\n"
 	}
 	b.Script()

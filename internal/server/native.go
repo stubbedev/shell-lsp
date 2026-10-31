@@ -101,7 +101,7 @@ type nativeHere struct {
 
 func nativeLocation(here located, pos lsp.Position, inside bool) (nativeHere, bool) {
 	h, ok := hostnav.Of(here.File)
-	if !ok {
+	if !ok || !inside && h.Language().ShellOnly() {
 		return nativeHere{}, false
 	}
 	return nativeHere{located: here, host: h, source: here.File.Doc.Source().PositionToOffset(pos, here.encoding), inside: inside}, true
@@ -214,6 +214,9 @@ func (s *Server) nativeCompletion(ctx context.Context, docs *docstore.View, here
 }
 
 func (s *Server) nativeSymbols(snap *snapshot) []lsp.DocumentSymbol {
+	if snap.Native.Language.ShellOnly() {
+		return []lsp.DocumentSymbol{}
+	}
 	ix := snap.Native.Index
 	at := sourcePositions(snap.File, snap.encoding)
 	var build func(parent int) []lsp.DocumentSymbol

@@ -55,9 +55,12 @@ func (s *Server) handleSignatureHelp(ctx context.Context, docs *docstore.View, p
 		if err != nil {
 			return nil, err
 		}
-		sig, found := g.Signature(native.source)
+		var sig assist.Signature
+		var found bool
 		if inside {
 			sig, found = g.ShellSignature(here.offset)
+		} else {
+			sig, found = g.Signature(native.source)
 		}
 		if found {
 			return signatureHelp(sig, docs.Encoding()), nil

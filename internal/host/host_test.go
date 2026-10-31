@@ -205,12 +205,20 @@ func TestEveryKindHasRulesOfItsOwnLanguage(t *testing.T) {
 	}
 }
 
-func TestNixHasNoNativeAnalysis(t *testing.T) {
+func TestNixAnalysisServesOnlyTheShell(t *testing.T) {
 	t.Parallel()
 
-	script := Nix.Project(docstore.NewDocument("file:///w/default.nix", "nix", 0, "{ buildPhase = ''\n  echo hi\n''; }\n"))
-	if script.Native != nil {
-		t.Errorf("a Nix file has native analysis: %+v", script.Native)
+	nix := Nix.Project(docstore.NewDocument("file:///w/default.nix", "nix", 0, "{ pname = \"x\"; buildPhase = ''\n  echo $pname\n''; }\n")).Native
+	if nix == nil || !Nix.ShellOnly() || Nix.Renames() || nix.Formats() || len(nix.Index.Symbols) != 2 || len(nix.Index.Shells) != 1 {
+		t.Errorf("a Nix file's native analysis = %+v", nix)
+	}
+	if rules := Nix.Checks().Of(model.KindVariable); rules != (model.Rules{}) {
+		t.Errorf("Nix checks variables natively: %+v", rules)
+	}
+	for _, l := range []Language{Make, Just, Docker} {
+		if l.ShellOnly() {
+			t.Errorf("%v serves only its shell", l)
+		}
 	}
 	native := Just.Project(docstore.NewDocument("file:///w/justfile", "just", 0, "a:\n    echo\n")).Native
 	if native == nil || !native.Formats() || len(native.Index.Symbols) != 1 {

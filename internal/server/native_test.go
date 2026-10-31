@@ -154,7 +154,7 @@ func TestJustfileHoverCompletionAndStructure(t *testing.T) {
 		t.Errorf("hover on build = %+v", hover)
 	}
 	hover = decodeResult[*lsp.Hover](t, p.c.call("textDocument/hover", p.params("justfile", "TOKEN", 1, "")))
-	if hover == nil || !strings.Contains(hover.Contents.Value, "exported to recipes") {
+	if hover == nil || !strings.Contains(hover.Contents.Value, "exported to the shell") {
 		t.Errorf("hover on $TOKEN = %+v", hover)
 	}
 	labels := completionLabels(decodeResult[lsp.CompletionList](t, p.c.call("textDocument/completion", p.params("justfile", "target}}", 0, ""))))
@@ -633,5 +633,38 @@ func TestDialectOfTheRecipeUnderTheCursor(t *testing.T) {
 	}
 	if got := dialectAt(`{"textDocument": {"uri": "` + p.uri("justfile") + `"}}`); got != "bash" {
 		t.Errorf("dialect of the whole justfile = %q, want bash, the widest of its shells", got)
+	}
+}
+
+func TestNixShellReachesTheDerivationAttributesItReads(t *testing.T) {
+	t.Parallel()
+
+	files := map[string]string{"default.nix": "stdenv.mkDerivation {\n  pname = \"hello\";\n  version = \"1.0\";\n  buildPhase = ''\n    make PREFIX=$out NAME=$pname\n  '';\n  installPhase = ''\n    install -D hello $out/bin/''${pname}-$version\n  '';\n}\n"}
+	p := openNativeProject(t, nativeCapabilities, files, "default.nix")
+	definition := decodeResult[[]lsp.Location](t, p.c.call("textDocument/definition", p.params("default.nix", "pname", 1, "")))
+	if want := []lsp.Location{p.at("default.nix", "pname", 0)}; !slices.Equal(definition, want) {
+		t.Errorf("definition of $pname = %+v, want %+v", definition, want)
+	}
+	refs := decodeResult[[]lsp.Location](t, p.c.call("textDocument/references", p.params("default.nix", "pname", 2, `, "context": {"includeDeclaration": true}`)))
+	if want := []lsp.Location{p.at("default.nix", "pname", 0), p.at("default.nix", "pname", 1), p.at("default.nix", "pname", 2)}; !slices.Equal(refs, want) {
+		t.Errorf("references of ${pname} = %+v, want %+v", refs, want)
+	}
+	hover := decodeResult[*lsp.Hover](t, p.c.call("textDocument/hover", p.params("default.nix", "version", 1, "")))
+	if hover == nil || !strings.Contains(hover.Contents.Value, "```nix\nversion = \"1.0\";\n```") || !strings.Contains(hover.Contents.Value, "Set in the environment by the derivation.") || !strings.Contains(hover.Contents.Value, "exported to the shell") {
+		t.Errorf("hover on $version = %+v", hover)
+	}
+	rename := p.c.call("textDocument/rename", p.params("default.nix", "pname", 1, `, "newName": "name"`))
+	if rename.Error == nil || !strings.Contains(rename.Error.Message, "Nix file") {
+		t.Errorf("renaming a derivation attribute from the shell = %+v", rename)
+	}
+	if outside := decodeResult[*lsp.Hover](t, p.c.call("textDocument/hover", p.params("default.nix", "pname", 0, ""))); outside != nil {
+		t.Errorf("hover on the Nix binding = %+v, want nothing", outside)
+	}
+	if outside := decodeResult[[]lsp.Location](t, p.c.call("textDocument/definition", p.params("default.nix", "pname", 0, ""))); len(outside) != 0 {
+		t.Errorf("definition on the Nix binding = %+v, want nothing", outside)
+	}
+	symbols := decodeResult[[]lsp.DocumentSymbol](t, p.c.call("textDocument/documentSymbol", `{"textDocument": {"uri": "`+p.uri("default.nix")+`"}}`))
+	if slices.ContainsFunc(symbols, func(s lsp.DocumentSymbol) bool { return s.Name == "pname" || s.Name == "version" }) {
+		t.Errorf("document symbols list Nix attributes: %+v", symbols)
 	}
 }

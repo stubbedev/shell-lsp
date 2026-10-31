@@ -189,7 +189,7 @@ func TestJustExportedVariablesCrossIntoTheShell(t *testing.T) {
 	expectStrings(t, "references of TOKEN", tr.describe(References(g, sym, true)), []string{"justfile:1:TOKEN", "justfile:5:TOKEN"})
 	g, sym = tr.shellAt("justfile", "TOKEN", 1)
 	expectStrings(t, "definition of $TOKEN", tr.locations(g.definitions(sym)), []string{"justfile:1:TOKEN"})
-	if !strings.Contains(g.Describe(sym).Markdown, "exported to recipes") {
+	if !strings.Contains(g.Describe(sym).Markdown, "exported to the shell") {
 		t.Errorf("hover of $TOKEN = %q", g.Describe(sym).Markdown)
 	}
 	g, sym = tr.at("justfile", "user", 0)
