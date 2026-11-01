@@ -25,7 +25,7 @@ jobs:
         with:
           go-version-file: go.mod
       - run: go vet ./...
-      - uses: golangci/golangci-lint-action@80a417e6155c5cdf37eb2391cf7785a64fbb9ae0 # v9.3.0
+      - uses: golangci/golangci-lint-action@1eaa2a6e86d5fafe5c327d0fa82d6bdda6c20e4f # v9.3.0
         with:
           version: v2.13.2
       - run: go test ./...
@@ -136,7 +136,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
+      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
       - run: nix build --print-build-logs
       - run: ./result/bin/shell-lsp --version
       - name: Test against the reference tools of the dev shell
