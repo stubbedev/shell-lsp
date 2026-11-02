@@ -144,7 +144,7 @@ func openNixEvalProject(t *testing.T, enabled bool, fake *fakeEvaluator, files m
 		t.Fatal(err)
 	}
 	c, srv := startClient(t, `{"rootUri": "`+fileuri.FromPath(root)+`", "initializationOptions": `+string(options)+`, `+nativeCapabilities+`}`, func(s *Server) {
-		s.graphs.nix.open = func(func(error)) (nixEvaluator, error) {
+		s.nixEval.open = func(func(error)) (nixEvaluator, error) {
 			opens.Add(1)
 			if fake == nil {
 				return nil, errors.New("the evaluator must not open")

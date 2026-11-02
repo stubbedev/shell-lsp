@@ -99,6 +99,7 @@ type Server struct {
 	semantic    *semanticCache
 	bats        *batsResults
 	graphs      hostGraphs
+	nixEval     nixEvaluation
 
 	mu             sync.Mutex
 	phase          phase

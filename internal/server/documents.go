@@ -17,7 +17,13 @@ func (s *Server) handleDidOpen(_ context.Context, openParams lsp.DidOpenTextDocu
 		if snap, err := s.snapshot(s.docs.View(), item.URI); err == nil {
 			s.prefetchCommands(snap.Tree)
 		}
+		s.warmFlakeOf(docstore.LocationOf(item.URI), false)
 	}()
+	return nil
+}
+
+func (s *Server) handleDidSave(_ context.Context, saveParams lsp.DidSaveTextDocumentParams) error {
+	go s.warmFlakeOf(docstore.LocationOf(saveParams.TextDocument.URI), true)
 	return nil
 }
 

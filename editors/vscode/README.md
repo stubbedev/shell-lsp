@@ -57,6 +57,7 @@ To install the server yourself instead, use the release binaries,
 | `shellLsp.lint.profile` | `recommended` | How much to report: `recommended`, `minimal` or `strict` |
 | `shellLsp.lint.exclude` | `[]` | Codes to suppress, as `SC2034` or `2034` |
 | `shellLsp.lint.optional` | `[]` | Opt-in checks to enable by name, such as `require-variable-braces`, or `all` |
+| `shellLsp.nix.evaluate` | `false` | Evaluate flakes with `nix` to complete and describe NixOS, home-manager and flake-parts options and nixpkgs attributes |
 | `shellLsp.format.enable` | `true` | Answer formatting requests |
 | `shellLsp.format.indent` | editor setting | Spaces per level; `0` indents with tabs |
 | `shellLsp.format.binaryNextLine` | `false` | Put `&&`, `\|\|` and `\|` at the start of continuation lines |

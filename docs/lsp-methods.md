@@ -77,7 +77,7 @@ advertised capability, and that nothing else is handled or advertised.
 | `textDocument/didOpen` | implemented | `textDocumentSync.openClose` |  |
 | `textDocument/didChange` | implemented | `textDocumentSync.change` | incremental |
 | `textDocument/willSave` | not advertised | `textDocumentSync.willSave` | nothing depends on saves |
-| `textDocument/didSave` | not advertised | `textDocumentSync.save` | the open document is authoritative; saves change nothing |
+| `textDocument/didSave` | implemented | `textDocumentSync.save` | the open document stays authoritative; a save only warms the Nix evaluator |
 | `textDocument/didClose` | implemented | `textDocumentSync.openClose` |  |
 | `notebookDocument/didOpen` | not advertised | `notebookDocumentSync` | no shell notebook format |
 | `notebookDocument/didChange` | not advertised | `notebookDocumentSync` | no shell notebook format |

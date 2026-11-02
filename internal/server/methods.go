@@ -142,7 +142,7 @@ var methods = []method{
 	{"textDocument/didOpen", clientNotification, supported, capability{"textDocumentSync.openClose", func(c *ServerCapabilities) { ensure(&c.TextDocumentSync).OpenClose = true }}, "", onNotification((*Server).handleDidOpen)},
 	{"textDocument/didChange", clientNotification, supported, capability{"textDocumentSync.change", func(c *ServerCapabilities) { ensure(&c.TextDocumentSync).Change = incrementalSync }}, "incremental", onNotification((*Server).handleDidChange)},
 	{"textDocument/willSave", clientNotification, notAdvertised, capability{path: "textDocumentSync.willSave"}, "nothing depends on saves", nil},
-	{"textDocument/didSave", clientNotification, notAdvertised, capability{path: "textDocumentSync.save"}, "the open document is authoritative; saves change nothing", nil},
+	{"textDocument/didSave", clientNotification, supported, capability{"textDocumentSync.save", func(c *ServerCapabilities) { ensure(&c.TextDocumentSync).Save = true }}, "the open document stays authoritative; a save only warms the Nix evaluator", onNotification((*Server).handleDidSave)},
 	{"textDocument/didClose", clientNotification, supported, capability{"textDocumentSync.openClose", func(c *ServerCapabilities) { ensure(&c.TextDocumentSync).OpenClose = true }}, "", onNotification((*Server).handleDidClose)},
 	{"notebookDocument/didOpen", clientNotification, notAdvertised, capability{path: "notebookDocumentSync"}, "no shell notebook format", nil},
 	{"notebookDocument/didChange", clientNotification, notAdvertised, capability{path: "notebookDocumentSync"}, "no shell notebook format", nil},

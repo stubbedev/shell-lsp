@@ -136,7 +136,7 @@ func (s *Server) nixSession() *nixSession {
 }
 
 func (s *Server) openNixSession() (*nixSession, error) {
-	e := &s.graphs.nix
+	e := &s.nixEval
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if !e.armed || e.stopped || e.failed {
@@ -159,7 +159,7 @@ func (s *Server) openNixSession() (*nixSession, error) {
 }
 
 func (s *Server) closeNixSession(stop bool) {
-	e := &s.graphs.nix
+	e := &s.nixEval
 	e.mu.Lock()
 	session := e.session
 	e.session, e.failed = nil, false

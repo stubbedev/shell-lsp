@@ -49,7 +49,6 @@ func (s *Server) hostFiles(docs *docstore.View, language host.Language) navigati
 type hostGraphs struct {
 	mu      sync.Mutex
 	entries map[host.Language]hostGraph
-	nix     nixEvaluation
 }
 
 type hostGraph struct {

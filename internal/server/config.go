@@ -72,6 +72,7 @@ func (s *Server) applySettings(ctx context.Context, update func()) {
 	caps := s.client.Workspace
 	s.mu.Unlock()
 	s.workspace.InvalidateAll()
+	s.syncNixEvaluation()
 	s.refreshDiagnostics(ctx)
 	for _, refresh := range []struct {
 		method    string
