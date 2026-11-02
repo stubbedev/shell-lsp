@@ -76,12 +76,8 @@ func Parse(text string, d dialect.Dialect) *Tree {
 
 func (t *Tree) Runners() Wrappers { return Wrappers{Bats: t.Bats(), Programs: true} }
 
-func newSyntaxParser(lang syntax.LangVariant, options ...syntax.ParserOption) *syntax.Parser {
-	return syntax.NewParser(append([]syntax.ParserOption{
-		syntax.Variant(lang),
-		syntax.KeepComments(true),
-		syntax.RecoverErrors(maxRecoveredTokens),
-	}, options...)...)
+func newSyntaxParser(lang syntax.LangVariant) *syntax.Parser {
+	return syntax.NewParser(syntax.Variant(lang), syntax.KeepComments(true), syntax.RecoverErrors(maxRecoveredTokens))
 }
 
 func ParseSnippet(text string, lang syntax.LangVariant) (*syntax.File, error) {
@@ -126,10 +122,11 @@ func ParseScripts(previous *Tree, text string, scripts []Span, shell dialect.She
 	file := &syntax.File{}
 	var errs []Error
 	closedAtEnd := map[*syntax.Redirect]bool{}
+	reused := newSyntaxParser(shell.Lang())
 	for _, script := range scripts {
 		line := sort.SearchInts(starts, script.Start+1)
-		at := syntax.StartAt(uint(script.Start), uint(line), uint(script.Start-starts[line-1]+1))
-		part, partErrs, closed := parseSource(newSyntaxParser(shell.Lang(), at), []byte(text[script.Start:script.End]), script.Start, text[:script.End], shell.Dialect)
+		syntax.StartAt(uint(script.Start), uint(line), uint(script.Start-starts[line-1]+1))(reused)
+		part, partErrs, closed := parseSource(reused, []byte(text[script.Start:script.End]), script.Start, text[:script.End], shell.Dialect)
 		file.Stmts = append(file.Stmts, part.Stmts...)
 		file.Last = append(file.Last, part.Last...)
 		errs = append(errs, partErrs...)
