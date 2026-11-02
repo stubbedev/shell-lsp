@@ -2,6 +2,7 @@ package lint
 
 import (
 	"path"
+	"slices"
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/parser"
@@ -90,6 +91,24 @@ func checkInteractiveSu(p *pass, c command) {
 	p.reportNode(2117, c.call, "su starts an interactive shell and the rest of the script continues only after it exits; use su -c or sudo to run commands as another user.")
 }
 
+func (p *pass) localToFunction(part syntax.WordPart) bool {
+	pe, ok := part.(*syntax.ParamExp)
+	if !ok || pe.Param == nil {
+		return false
+	}
+	for _, n := range slices.Backward(p.stack) {
+		decl, isFunction := n.(*syntax.FuncDecl)
+		if !isFunction {
+			continue
+		}
+		body, spanned := p.span(decl)
+		return spanned && slices.ContainsFunc(p.tree.Definitions, func(d parser.Definition) bool {
+			return d.Local && d.Name == pe.Param.Value && body.Start <= d.NameSpan.Start && d.NameSpan.End <= body.End
+		})
+	}
+	return false
+}
+
 func checkSSHExpansion(p *pass, c command) {
 	if len(c.args) < 2 {
 		return
@@ -108,7 +127,7 @@ func checkSSHExpansion(p *pass, c command) {
 		return
 	}
 	for _, part := range dq.Parts {
-		if isExpansion(part) {
+		if isExpansion(part) && !p.localToFunction(part) {
 			p.reportNode(2029, part, "This expands on the client before ssh sends the command; escape it or single-quote the command to expand it on the server.")
 			return
 		}

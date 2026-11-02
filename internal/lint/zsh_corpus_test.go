@@ -15,8 +15,6 @@ var zshCorpusFindings = map[string][]string{
 	"_deploy": {"SC2034 5:10 targets"},
 	"dotzshrc.zsh": {
 		"SC2139 58:10 {md,txt}=",
-		"SC2164 62:28 cd -- $1",
-		"SC2164 65:2 cd ${(j:/:)${(s::)${(l:n::.:)}//./..}}",
 		"SC1090 98:9 $rc",
 		"SC1090 102:35 ~/.zshrc.local",
 	},

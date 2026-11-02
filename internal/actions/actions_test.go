@@ -163,7 +163,7 @@ func lintDiagnostics(tree *parser.Tree) []Diagnostic {
 func TestQuickFixes(t *testing.T) {
 	t.Parallel()
 
-	text := "#!/bin/bash\nf() {\n\t# shellcheck disable=SC2034\n\tcd /tmp\n}\necho $1\n"
+	text := "#!/bin/bash\nf() {\n\t# shellcheck disable=SC2034\n\tcd /tmp\n\tpwd\n}\necho $1\n"
 	tree := parser.Parse(text, dialect.Bash)
 	all := slices.DeleteFunc(lintDiagnostics(tree), func(d Diagnostic) bool { return d.Code.String() == "SL2009" })
 	var diags []Diagnostic
@@ -177,12 +177,12 @@ func TestQuickFixes(t *testing.T) {
 		byTitle[a.Title] = a
 	}
 	expect := map[string]string{
-		"Add || return":                  "#!/bin/bash\nf() {\n\t# shellcheck disable=SC2034\n\tcd /tmp || return\n}\necho $1\n",
-		"Add || exit":                    "#!/bin/bash\nf() {\n\t# shellcheck disable=SC2034\n\tcd /tmp || exit\n}\necho $1\n",
-		"Ignore SC2164 for this command": "#!/bin/bash\nf() {\n\t# shellcheck disable=SC2034,SC2164\n\tcd /tmp\n}\necho $1\n",
-		"Ignore SC2164 in this file":     "#!/bin/bash\n# shellcheck disable=SC2164\nf() {\n\t# shellcheck disable=SC2034\n\tcd /tmp\n}\necho $1\n",
-		"Double-quote $1":                "#!/bin/bash\nf() {\n\t# shellcheck disable=SC2034\n\tcd /tmp\n}\necho \"$1\"\n",
-		"Ignore SC2086 for this command": "#!/bin/bash\nf() {\n\t# shellcheck disable=SC2034\n\tcd /tmp\n}\n# shellcheck disable=SC2086\necho $1\n",
+		"Add || return":                  "#!/bin/bash\nf() {\n\t# shellcheck disable=SC2034\n\tcd /tmp || return\n\tpwd\n}\necho $1\n",
+		"Add || exit":                    "#!/bin/bash\nf() {\n\t# shellcheck disable=SC2034\n\tcd /tmp || exit\n\tpwd\n}\necho $1\n",
+		"Ignore SC2164 for this command": "#!/bin/bash\nf() {\n\t# shellcheck disable=SC2034,SC2164\n\tcd /tmp\n\tpwd\n}\necho $1\n",
+		"Ignore SC2164 in this file":     "#!/bin/bash\n# shellcheck disable=SC2164\nf() {\n\t# shellcheck disable=SC2034\n\tcd /tmp\n\tpwd\n}\necho $1\n",
+		"Double-quote $1":                "#!/bin/bash\nf() {\n\t# shellcheck disable=SC2034\n\tcd /tmp\n\tpwd\n}\necho \"$1\"\n",
+		"Ignore SC2086 for this command": "#!/bin/bash\nf() {\n\t# shellcheck disable=SC2034\n\tcd /tmp\n\tpwd\n}\n# shellcheck disable=SC2086\necho $1\n",
 	}
 	for title, want := range expect {
 		a, ok := byTitle[title]

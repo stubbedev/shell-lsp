@@ -13,3 +13,13 @@ ssh "$target_host"
 ### an identity option disables the check
 ssh -i ~/.ssh/deploy_ed25519 "$target_host"
 >>> SC2154 1:31
+
+### a function's local variable cannot exist on the server
+#!/bin/bash
+f() {
+  local value
+  value=$(date)
+  ssh host "echo '$value'"
+}
+f
+>>- SC2029 5:19 -- the name is local to this function, so expanding it here is the only way the server can see its value

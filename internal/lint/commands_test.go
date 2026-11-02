@@ -122,3 +122,22 @@ func TestCommandDispatch(t *testing.T) {
 		}
 	}
 }
+
+func TestZshAtFlagKeepsElementsApart(t *testing.T) {
+	t.Parallel()
+
+	for script, want := range map[string]int{
+		"typeset -A a\nfor k in \"${(@k)a}\"; do print -r -- \"$k\"; done\n": 0,
+		"typeset -A a\nfor k in \"${(k)a}\"; do print -r -- \"$k\"; done\n":  1,
+	} {
+		count := 0
+		for _, f := range Check(parser.Parse(script, dialect.Zsh), nil, Options{DialectSource: DialectDetected}) {
+			if f.Code == 2066 {
+				count++
+			}
+		}
+		if count != want {
+			t.Errorf("%q reports SC2066 %d times, want %d", script, count, want)
+		}
+	}
+}

@@ -166,7 +166,11 @@ func mayExpandToSeveralWords(w *syntax.Word) bool {
 
 func isSeveralWordsInQuotes(part syntax.WordPart) bool {
 	pe, ok := part.(*syntax.ParamExp)
-	return ok && (kindOf(pe) == expandsElements || pe.Excl)
+	return ok && (kindOf(pe) == expandsElements || pe.Excl || keepsElementsApart(pe))
+}
+
+func keepsElementsApart(pe *syntax.ParamExp) bool {
+	return pe.Flags != nil && strings.IndexByte(pe.Flags.Value, '@') >= 0
 }
 
 func soleBareExpansion(w *syntax.Word) (*syntax.ParamExp, bool) {

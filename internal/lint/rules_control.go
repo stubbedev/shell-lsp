@@ -229,7 +229,7 @@ func checkUncheckedDirectoryChange(p *pass, call *syntax.CallExpr) {
 		return
 	}
 	stmt, ok := p.parent().(*syntax.Stmt)
-	if !ok || p.optionsAt(stmt).Errexit || p.inCondition(stmt) {
+	if !ok || p.optionsAt(stmt).Errexit || p.inCondition(stmt) || p.nothingFollows(stmt) {
 		return
 	}
 	if name != "cd" && parseOptions(name, args).Has("-n") {
@@ -243,6 +243,83 @@ func checkUncheckedDirectoryChange(p *pass, call *syntax.CallExpr) {
 	if span, ok := p.span(call); ok {
 		p.report(2164, span, "If "+name+" fails, the following commands run in the wrong directory; add || exit (or || return in a function).", p.leaveOnFailure(stmt)...)
 	}
+}
+
+func (p *pass) nothingFollows(stmt *syntax.Stmt) bool {
+	var child syntax.Node = stmt
+	for depth := 0; ; depth++ {
+		switch owner := p.ancestor(depth).(type) {
+		case *syntax.FuncDecl:
+			return !p.invoked(owner)
+		case *syntax.Stmt:
+		case *syntax.BinaryCmd:
+			if owner.Y != child {
+				return false
+			}
+		case *syntax.Block:
+			if returns, ends := functionEnds(owner.Stmts, child); !ends {
+				return false
+			} else if returns {
+				return !p.invoked(p.enclosingFunction())
+			}
+		case *syntax.IfClause:
+			if child == syntax.Node(owner.Else) {
+				break
+			}
+			if returns, ends := functionEnds(owner.Then, child); !ends {
+				return false
+			} else if returns {
+				return !p.invoked(p.enclosingFunction())
+			}
+		case *syntax.CaseItem:
+			if returns, ends := functionEnds(owner.Stmts, child); !ends {
+				return false
+			} else if returns {
+				return !p.invoked(p.enclosingFunction())
+			}
+		case *syntax.CaseClause:
+		default:
+			return false
+		}
+		child = p.ancestor(depth)
+	}
+}
+
+func (p *pass) enclosingFunction() *syntax.FuncDecl {
+	for _, n := range slices.Backward(p.stack) {
+		if decl, ok := n.(*syntax.FuncDecl); ok {
+			return decl
+		}
+	}
+	return nil
+}
+
+func (p *pass) invoked(decl *syntax.FuncDecl) bool {
+	return decl == nil || decl.Name == nil || slices.ContainsFunc(p.tree.Commands, func(c parser.Command) bool { return c.Name == decl.Name.Value })
+}
+
+func functionEnds(list []*syntax.Stmt, child syntax.Node) (bool, bool) {
+	stmt, ok := child.(*syntax.Stmt)
+	if !ok {
+		return false, false
+	}
+	i := slices.Index(list, stmt)
+	switch {
+	case i < 0:
+		return false, false
+	case i == len(list)-1:
+		return false, true
+	}
+	return true, plainReturn(list[i+1])
+}
+
+func plainReturn(stmt *syntax.Stmt) bool {
+	call, ok := stmt.Cmd.(*syntax.CallExpr)
+	if !ok || len(call.Args) != 1 || len(call.Assigns) > 0 {
+		return false
+	}
+	name, ok := parser.Literal(call.Args[0])
+	return ok && name == "return"
 }
 
 func (p *pass) leaveOnFailure(stmt *syntax.Stmt) []Fix {
