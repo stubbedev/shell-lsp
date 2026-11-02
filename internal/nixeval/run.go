@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/proctree"
@@ -133,11 +134,33 @@ func execRunner(program string) runner {
 	}
 }
 
-func runProgram(ctx context.Context, program, dir string, args []string) ([]byte, error) {
-	name := commandName(args)
+func lookProgram(program string) (string, error) {
 	path, err := exec.LookPath(program)
 	if errors.Is(err, exec.ErrNotFound) {
-		return nil, &NixNotFoundError{Err: err}
+		return "", &NixNotFoundError{Err: err}
+	}
+	return path, err
+}
+
+func nixIdentity(program string) func() (string, error) {
+	return func() (string, error) {
+		path, err := lookProgram(program)
+		if err != nil {
+			return "", fmt.Errorf("finding %s: %w", program, err)
+		}
+		resolved, err := filepath.EvalSymlinks(path)
+		if err != nil {
+			return "", fmt.Errorf("resolving %s: %w", path, err)
+		}
+		return resolved, nil
+	}
+}
+
+func runProgram(ctx context.Context, program, dir string, args []string) ([]byte, error) {
+	name := commandName(args)
+	path, err := lookProgram(program)
+	if _, missing := errors.AsType[*NixNotFoundError](err); missing {
+		return nil, err
 	}
 	if err != nil {
 		return nil, &CommandError{Command: name, Err: err}

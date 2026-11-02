@@ -105,6 +105,13 @@ const fixtureUsesParts = `{
 }
 `
 
+func realClient(t *testing.T) *Client {
+	t.Helper()
+	h := newHarness(t, execRunner(nixProgram))
+	h.settings.identify = nixIdentity(nixProgram)
+	return h.client(t)
+}
+
 func requireNix(t *testing.T) {
 	t.Helper()
 	if _, err := exec.LookPath(nixProgram); err != nil {
@@ -180,36 +187,36 @@ func TestRealHostileAttributeNamesStayData(t *testing.T) {
 	requireNix(t)
 
 	dir := lockedFixture(t, fixtureSingleFile, fixtureNixpkgs)
-	c := New()
+	c := realClient(t)
 	const injected = `${throw "INJECTED"}`
 	const closes = `"; x = throw "INJECTED"; y = "`
 	for _, hostile := range []string{injected, closes, `\` + injected, "''" + injected} {
-		names, err := c.NixpkgsAttrs(t.Context(), dir, []string{hostile}, "")
+		names, err := freshOf(c.NixpkgsAttrs(t.Context(), dir, []string{hostile}, ""))
 		if err != nil {
 			t.Errorf("NixpkgsAttrs(%q) error = %v", hostile, err)
 		}
 		if len(names) != 0 {
 			t.Errorf("NixpkgsAttrs(%q) = %q, want none", hostile, names)
 		}
-		if _, found, err := c.NixpkgsPackage(t.Context(), dir, []string{hostile}); err != nil || found {
-			t.Errorf("NixpkgsPackage(%q) = found %v, %v, want nothing", hostile, found, err)
+		if pkg, err := freshOf(c.NixpkgsPackage(t.Context(), dir, []string{hostile})); err != nil || pkg != nil {
+			t.Errorf("NixpkgsPackage(%q) = %+v, %v, want nothing", hostile, pkg, err)
 		}
-		_, err = c.Options(t.Context(), dir, OptionSource{Kind: SourceNixOS, Name: hostile})
+		_, err = freshOf(c.Options(t.Context(), dir, OptionSource{Kind: SourceNixOS, Name: hostile}))
 		if err == nil || strings.Contains(err.Error(), "error: INJECTED") {
 			t.Errorf("Options(%q) error = %v, want a missing attribute and no injected throw", hostile, err)
 		}
 	}
 	evil := `evil${throw "INJECTED"}"; x = "`
-	names, err := c.NixpkgsAttrs(t.Context(), dir, nil, "evil")
+	names, err := freshOf(c.NixpkgsAttrs(t.Context(), dir, nil, "evil"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !slices.Equal(names, []string{evil}) {
 		t.Fatalf("NixpkgsAttrs(evil) = %q, want the hostile name as data", names)
 	}
-	pkg, found, err := c.NixpkgsPackage(t.Context(), dir, []string{evil})
-	if err != nil || !found || pkg.Name != "evil" {
-		t.Errorf("NixpkgsPackage(evil name) = %+v, %v, %v", pkg, found, err)
+	pkg, err := freshOf(c.NixpkgsPackage(t.Context(), dir, []string{evil}))
+	if err != nil || pkg == nil || pkg.Name != "evil" {
+		t.Errorf("NixpkgsPackage(evil name) = %+v, %v", pkg, err)
 	}
 }
 
@@ -218,7 +225,7 @@ func TestRealHostileDirectoryNameStaysData(t *testing.T) {
 	requireNix(t)
 
 	dir := writeFixture(t, filepath.Join(t.TempDir(), `x#y?dir=z%20"${throw "INJECTED"}`), `{ outputs = { self }: { lib.answer = 42; }; }`+"\n")
-	got, err := New().Outputs(t.Context(), dir)
+	got, err := freshOf(realClient(t).Outputs(t.Context(), dir))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -232,9 +239,9 @@ func TestRealSingleFileFlake(t *testing.T) {
 	requireNix(t)
 
 	dir := lockedFixture(t, fixtureSingleFile, fixtureNixpkgs)
-	c := New()
+	c := realClient(t)
 
-	outputs, err := c.Outputs(t.Context(), dir)
+	outputs, err := freshOf(c.Outputs(t.Context(), dir))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -249,7 +256,7 @@ func TestRealSingleFileFlake(t *testing.T) {
 		t.Errorf("Outputs() = %+v, want other systems marked as not evaluated", outputs)
 	}
 
-	sources, err := c.OptionSources(t.Context(), dir)
+	sources, err := freshOf(c.OptionSources(t.Context(), dir))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -258,7 +265,7 @@ func TestRealSingleFileFlake(t *testing.T) {
 		t.Errorf("OptionSources() = %+v, want %+v", sources, wantSources)
 	}
 
-	names, err := c.NixpkgsAttrs(t.Context(), dir, []string{"python3Packages"}, "re")
+	names, err := freshOf(c.NixpkgsAttrs(t.Context(), dir, []string{"python3Packages"}, "re"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -266,35 +273,35 @@ func TestRealSingleFileFlake(t *testing.T) {
 		t.Errorf("NixpkgsAttrs(python3Packages, re) = %q", names)
 	}
 	for _, path := range [][]string{{"absent"}, {"notPackage"}, {"notPackage", "deeper"}} {
-		if names, err := c.NixpkgsAttrs(t.Context(), dir, path, ""); err != nil || len(names) != 0 {
+		if names, err := freshOf(c.NixpkgsAttrs(t.Context(), dir, path, "")); err != nil || len(names) != 0 {
 			t.Errorf("NixpkgsAttrs(%q) = %q, %v, want none", path, names, err)
 		}
 	}
-	if _, err := c.NixpkgsAttrs(t.Context(), dir, []string{"broken"}, ""); err == nil || !strings.Contains(err.Error(), "broken on purpose") {
+	if _, err := freshOf(c.NixpkgsAttrs(t.Context(), dir, []string{"broken"}, "")); err == nil || !strings.Contains(err.Error(), "broken on purpose") {
 		t.Errorf("NixpkgsAttrs(broken) error = %v, want the throw reported", err)
 	}
 
-	pkg, found, err := c.NixpkgsPackage(t.Context(), dir, []string{"hello"})
-	if err != nil || !found {
-		t.Fatalf("NixpkgsPackage(hello) = found %v, %v", found, err)
+	pkg, err := freshOf(c.NixpkgsPackage(t.Context(), dir, []string{"hello"}))
+	if err != nil || pkg == nil {
+		t.Fatalf("NixpkgsPackage(hello) = %+v, %v", pkg, err)
 	}
 	wantPkg := Package{Name: "hello", Version: "1.0", Description: "The hello package", Declaration: Declaration{File: "/pkgs/hello.nix", Line: 7}}
-	if pkg != wantPkg {
+	if *pkg != wantPkg {
 		t.Errorf("NixpkgsPackage(hello) = %+v, want %+v", pkg, wantPkg)
 	}
 	for _, path := range [][]string{{"broken"}, {"absent"}, {"python3Packages"}, {"notPackage"}} {
-		if _, found, err := c.NixpkgsPackage(t.Context(), dir, path); err != nil || found {
-			t.Errorf("NixpkgsPackage(%q) = found %v, %v, want nothing", path, found, err)
+		if pkg, err := freshOf(c.NixpkgsPackage(t.Context(), dir, path)); err != nil || pkg != nil {
+			t.Errorf("NixpkgsPackage(%q) = %+v, %v, want nothing", path, pkg, err)
 		}
 	}
 
-	nixos, err := c.Options(t.Context(), dir, OptionSource{Kind: SourceNixOS, Name: "box"})
+	nixos, err := freshOf(c.Options(t.Context(), dir, OptionSource{Kind: SourceNixOS, Name: "box"}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	checkFixtureOptions(t, nixos)
 
-	home, err := c.Options(t.Context(), dir, OptionSource{Kind: SourceHomeManager, Name: "me"})
+	home, err := freshOf(c.Options(t.Context(), dir, OptionSource{Kind: SourceHomeManager, Name: "me"}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -355,20 +362,20 @@ func TestRealFlakePartsOptionsAreCapturedFromMkFlake(t *testing.T) {
 	requireNix(t)
 
 	dir := lockedFixture(t, fixtureUsesParts, fixtureFakeParts)
-	c := New()
-	sources, err := c.OptionSources(t.Context(), dir)
+	c := realClient(t)
+	sources, err := freshOf(c.OptionSources(t.Context(), dir))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if want := []OptionSource{{Kind: SourceFlakeParts}}; !slices.Equal(sources, want) {
 		t.Fatalf("OptionSources() = %+v, want %+v", sources, want)
 	}
-	tree, err := c.Options(t.Context(), dir, sources[0])
+	tree, err := freshOf(c.Options(t.Context(), dir, sources[0]))
 	if err != nil {
 		t.Fatal(err)
 	}
 	mustOption(t, tree, "perSystem", "packages")
-	outputs, err := c.Outputs(t.Context(), dir)
+	outputs, err := freshOf(c.Outputs(t.Context(), dir))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -380,28 +387,19 @@ func TestRealFlakePartsOptionsAreCapturedFromMkFlake(t *testing.T) {
 func TestRealSubdirectoryOfADirtyGitTree(t *testing.T) {
 	t.Parallel()
 	requireNix(t)
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git is not installed")
-	}
+	requireGit(t)
 
 	root := t.TempDir()
 	dir := writeFixture(t, filepath.Join(root, "sub"), fmt.Sprintf(fixtureUsesParts, "./parts"))
 	writeFixture(t, filepath.Join(dir, "parts"), fixtureFakeParts)
-	git := func(args ...string) {
-		t.Helper()
-		cmd := exec.CommandContext(t.Context(), "git", args...)
-		cmd.Dir = root
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %q: %v\n%s", args, err, out)
-		}
-	}
+	git := gitIn(t, root)
 	git("init", "-q")
 	git("add", ".")
 	lockFixture(t, dir)
 	git("add", ".")
 	writeFile(t, filepath.Join(dir, "untracked.txt"), "dirty\n")
 
-	sources, err := New().OptionSources(t.Context(), dir)
+	sources, err := freshOf(realClient(t).OptionSources(t.Context(), dir))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -415,7 +413,7 @@ func TestRealFlakeWithoutNixpkgsIsAPreciseError(t *testing.T) {
 	requireNix(t)
 
 	dir := writeFixture(t, t.TempDir(), `{ outputs = { self }: { }; }`+"\n")
-	_, err := New().NixpkgsAttrs(t.Context(), dir, nil, "")
+	_, err := freshOf(realClient(t).NixpkgsAttrs(t.Context(), dir, nil, ""))
 	if !errors.Is(err, ErrNoNixpkgsInput) || !strings.Contains(err.Error(), dir) {
 		t.Errorf("error = %v, want ErrNoNixpkgsInput naming %s", err, dir)
 	}
@@ -428,7 +426,7 @@ func TestRealOutdatedLockIsRefusedAndNotRewritten(t *testing.T) {
 	root := t.TempDir()
 	dep := writeFixture(t, filepath.Join(root, "dep"), fixtureNixpkgs)
 	dir := writeFixture(t, filepath.Join(root, "flake"), fmt.Sprintf(`{ inputs.nixpkgs.url = "path:%s"; outputs = { self, nixpkgs }: { }; }`, dep))
-	_, err := New().Outputs(t.Context(), dir)
+	_, err := freshOf(realClient(t).Outputs(t.Context(), dir))
 	if err == nil || !strings.Contains(err.Error(), "no-update-lock-file") {
 		t.Errorf("error = %v, want a refusal to change the lock file", err)
 	}
@@ -467,7 +465,7 @@ func TestRealFlakeCannotLoosenEvaluationThroughNixConfig(t *testing.T) {
 }
 `, tt.outputs)
 		dir := writeFixture(t, t.TempDir(), nix)
-		_, err := New().OptionSources(t.Context(), dir)
+		_, err := freshOf(realClient(t).OptionSources(t.Context(), dir))
 		if err == nil || !strings.Contains(err.Error(), tt.want) {
 			t.Errorf("%s: error = %v, want a refusal mentioning %q", tt.name, err, tt.want)
 		}
@@ -498,8 +496,8 @@ func TestRealNixpkgsAndFlakeParts(t *testing.T) {
 		t.Skipf("the inputs this repository locks are not in the local store: %v\n%s", err, out)
 	}
 
-	c := New()
-	sources, err := c.OptionSources(t.Context(), dir)
+	c := realClient(t)
+	sources, err := freshOf(c.OptionSources(t.Context(), dir))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -507,7 +505,7 @@ func TestRealNixpkgsAndFlakeParts(t *testing.T) {
 		t.Fatalf("OptionSources() = %+v, want %+v", sources, want)
 	}
 
-	nixos, err := c.Options(t.Context(), dir, sources[0])
+	nixos, err := freshOf(c.Options(t.Context(), dir, sources[0]))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -518,23 +516,23 @@ func TestRealNixpkgsAndFlakeParts(t *testing.T) {
 	}
 	mustOption(t, nixos, "services", "nginx", "virtualHosts", "example.org", "root")
 
-	flakeParts, err := c.Options(t.Context(), dir, sources[1])
+	flakeParts, err := freshOf(c.Options(t.Context(), dir, sources[1]))
 	if err != nil {
 		t.Fatal(err)
 	}
 	mustOption(t, flakeParts, "systems")
 	mustOption(t, flakeParts, "perSystem", "packages")
 
-	names, err := c.NixpkgsAttrs(t.Context(), dir, []string{"python3Packages"}, "requests")
+	names, err := freshOf(c.NixpkgsAttrs(t.Context(), dir, []string{"python3Packages"}, "requests"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !slices.Contains(names, "requests") {
 		t.Errorf("NixpkgsAttrs(python3Packages, requests) = %q", names)
 	}
-	pkg, found, err := c.NixpkgsPackage(t.Context(), dir, []string{"hello"})
-	if err != nil || !found || pkg.Description == "" || pkg.Declaration.Line == 0 {
-		t.Errorf("NixpkgsPackage(hello) = %+v, %v, %v", pkg, found, err)
+	pkg, err := freshOf(c.NixpkgsPackage(t.Context(), dir, []string{"hello"}))
+	if err != nil || pkg == nil || pkg.Description == "" || pkg.Declaration.Line == 0 {
+		t.Errorf("NixpkgsPackage(hello) = %+v, %v", pkg, err)
 	}
 }
 
@@ -555,4 +553,135 @@ func repositoryLockedRevisions(t *testing.T) (nixpkgs, flakeParts string) {
 		t.Fatal(err)
 	}
 	return lock.Nodes["nixpkgs"].Locked.Rev, lock.Nodes["flake-parts"].Locked.Rev
+}
+
+const fixtureDiscoversModules = `{
+  outputs = { self }: let
+    ` + fixtureOptionHelper + `
+    files = builtins.attrNames (builtins.readDir ./modules);
+    found = map (name: import (./modules + "/${name}") leaf) files;
+  in {
+    nixosConfigurations.box.options = builtins.foldl' (a: b: a // b) { } found;
+  };
+}
+`
+
+func TestRealAModuleFoundOnlyByReadingADirectoryIsCoveredByTheKey(t *testing.T) {
+	t.Parallel()
+	requireNix(t)
+	requireGit(t)
+
+	dir := writeFixture(t, filepath.Join(t.TempDir(), "flake"), fixtureDiscoversModules)
+	modules := filepath.Join(dir, "modules")
+	if err := os.Mkdir(modules, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(modules, "first.nix"), `leaf: { first = leaf [ "first" ] { }; }`+"\n")
+	git := gitIn(t, dir)
+	git("init", "-q")
+	git("add", ".")
+	lockFixture(t, dir)
+	git("add", ".")
+
+	c := realClient(t)
+	source := OptionSource{Kind: SourceNixOS, Name: "box"}
+	options := func() *OptionTree {
+		t.Helper()
+		return settled(t, func() (Answer[*OptionTree], error) { return c.Options(t.Context(), dir, source) })
+	}
+	mustOption(t, options(), "first")
+
+	writeFile(t, filepath.Join(modules, "first.nix"), `leaf: { renamed = leaf [ "renamed" ] { }; }`+"\n")
+	tree := options()
+	mustOption(t, tree, "renamed")
+	if _, ok := tree.Lookup([]string{"first"}); ok {
+		t.Error("the edited module still contributes its old option")
+	}
+
+	writeFile(t, filepath.Join(modules, "second.nix"), `leaf: { second = leaf [ "second" ] { }; }`+"\n")
+	if _, ok := options().Lookup([]string{"second"}); ok {
+		t.Error("nix sees an untracked module, so the key must not need it")
+	}
+	git("add", ".")
+	mustOption(t, options(), "second")
+}
+
+func TestRealTruncatedBranchesAreReported(t *testing.T) {
+	t.Parallel()
+	requireNix(t)
+
+	dir := writeFixture(t, t.TempDir(), `{
+  outputs = { self }: let
+    deep = path: {
+      _type = "option";
+      loc = path;
+      type = { description = "self"; getSubOptions = prefix: { next = deep (prefix ++ [ "next" ]); }; };
+    };
+  in {
+    nixosConfigurations.box.options = { root = deep [ "root" ]; };
+  };
+}
+`)
+	tree, err := freshOf(realClient(t).Options(t.Context(), dir, OptionSource{Kind: SourceNixOS, Name: "box"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	truncated := tree.Truncated()
+	if len(truncated) != 1 {
+		t.Fatalf("Truncated() = %q, want the one endless branch", truncated)
+	}
+	if !slices.Equal(truncated[0][:2], []string{"root", "next"}) || len(truncated[0]) != 32 {
+		t.Errorf("Truncated()[0] = %q, want the path 32 names deep", truncated[0])
+	}
+	if _, ok := tree.Lookup(truncated[0]); !ok {
+		t.Errorf("the deepest listed option %q is missing", truncated[0])
+	}
+}
+
+func TestRealBaseTreeOfTheLockedNixpkgsEvaluatesUnderTheSafetyFlags(t *testing.T) {
+	t.Parallel()
+	requireNix(t)
+	if testing.Short() {
+		t.Skip("evaluating real NixOS options belongs to full test runs")
+	}
+
+	nixpkgs, _ := repositoryLockedRevisions(t)
+	dir := writeFixture(t, t.TempDir(), fmt.Sprintf(`{
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/%s";
+  outputs = { nixpkgs, ... }: {
+    nixosConfigurations.box = nixpkgs.lib.nixosSystem {
+      system = "x86_64-linux";
+      modules = [ { boot.isContainer = true; system.stateVersion = "25.05"; } ];
+    };
+  };
+}
+`, nixpkgs))
+	if out, err := offlineLock(t, dir); err != nil {
+		t.Skipf("the inputs this repository locks are not in the local store: %v\n%s", err, out)
+	}
+	c := realClient(t)
+	warmed := c.Warm(dir)
+	<-warmed.Done()
+	if err := warmed.Err(); err != nil {
+		t.Fatal(err)
+	}
+	other := writeFixture(t, t.TempDir(), fmt.Sprintf(`{
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/%s";
+  outputs = { nixpkgs, ... }: {
+    nixosConfigurations.box = throw "not evaluated before the shared tree answers";
+  };
+}
+`, nixpkgs))
+	if out, err := offlineLock(t, other); err != nil {
+		t.Fatalf("locking the second flake: %v\n%s", err, out)
+	}
+	answer, err := c.Options(t.Context(), other, OptionSource{Kind: SourceNixOS, Name: "box"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tree, stale := answer.Get()
+	if stale == nil || stale.Basis != BasisLockedNixpkgs {
+		t.Fatalf("stale = %+v, want the locked nixpkgs", stale)
+	}
+	mustOption(t, tree, "services", "nginx", "enable")
 }

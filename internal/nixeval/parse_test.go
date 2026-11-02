@@ -1,7 +1,6 @@
 package nixeval
 
 import (
-	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -12,15 +11,7 @@ import (
 const capturedMetadata = `{
   "path": "/nix/store/abc-source",
   "locked": {"narHash": "sha256-AAAA=", "dir": "sub", "type": "git"},
-  "locks": {
-    "root": "root",
-    "nodes": {
-      "root": {"inputs": {"nixpkgs": "nixpkgs_2", "parts": "flake-parts", "pinned": ["parts", "nixpkgs-lib"]}},
-      "nixpkgs_2": {"locked": {"owner": "NixOS", "repo": "nixpkgs", "type": "github"}},
-      "flake-parts": {"locked": {"owner": "hercules-ci", "repo": "flake-parts", "type": "github"}}
-    },
-    "version": 7
-  }
+  "locks": {"root": "root", "nodes": {"root": {}}, "version": 7}
 }`
 
 func TestParseMetadataBuildsALockedReference(t *testing.T) {
@@ -33,9 +24,6 @@ func TestParseMetadataBuildsALockedReference(t *testing.T) {
 	if want := "path:/nix/store/abc-source?dir=sub&narHash=sha256-AAAA%3D"; got.ref != want {
 		t.Errorf("ref = %s, want %s", got.ref, want)
 	}
-	if input, err := got.nixpkgsInput(); err != nil || input != "nixpkgs" {
-		t.Errorf("nixpkgsInput() = %q, %v, want nixpkgs", input, err)
-	}
 }
 
 func TestParseMetadataRejectsIncompleteOutput(t *testing.T) {
@@ -43,73 +31,11 @@ func TestParseMetadataRejectsIncompleteOutput(t *testing.T) {
 
 	for _, in := range []string{
 		`not json`,
-		`{"locked": {"narHash": "sha256-A="}, "locks": {"root": "root", "nodes": {"root": {}}}}`,
-		`{"path": "/nix/store/a", "locks": {"root": "root", "nodes": {"root": {}}}}`,
-		`{"path": "/nix/store/a", "locked": {"narHash": "sha256-A="}, "locks": {"root": "root", "nodes": {}}}`,
+		`{"locked": {"narHash": "sha256-A="}}`,
+		`{"path": "/nix/store/a"}`,
 	} {
 		if _, err := parseMetadata([]byte(in)); err == nil {
 			t.Errorf("parseMetadata(%s) = nil error", in)
-		}
-	}
-}
-
-func TestNixpkgsInputChoosesOnlyWhatTheFlakeLocks(t *testing.T) {
-	t.Parallel()
-
-	metadataWith := func(nodes string) []byte {
-		return []byte(`{"path": "/nix/store/a", "locked": {"narHash": "sha256-A="}, "locks": {"root": "root", "nodes": {` + nodes + `}}}`)
-	}
-	tests := []struct {
-		name    string
-		nodes   string
-		want    string
-		wantErr string
-	}{
-		{
-			name:  "the name wins over other nixpkgs inputs",
-			nodes: `"root": {"inputs": {"nixpkgs": "a", "unstable": "b"}}, "a": {"locked": {"repo": "nixpkgs"}}, "b": {"locked": {"repo": "nixpkgs"}}`,
-			want:  "nixpkgs",
-		},
-		{
-			name:  "a followed input keeps its name",
-			nodes: `"root": {"inputs": {"nixpkgs": ["other", "nixpkgs"]}}`,
-			want:  "nixpkgs",
-		},
-		{
-			name:  "a single renamed nixpkgs",
-			nodes: `"root": {"inputs": {"unstable": "b", "tools": "c"}}, "b": {"locked": {"repo": "nixpkgs"}}, "c": {"locked": {"repo": "tools"}}`,
-			want:  "unstable",
-		},
-		{
-			name:  "a registry reference",
-			nodes: `"root": {"inputs": {"pkgs": "b"}}, "b": {"original": {"id": "nixpkgs", "type": "indirect"}}`,
-			want:  "pkgs",
-		},
-		{
-			name:    "two renamed inputs are ambiguous",
-			nodes:   `"root": {"inputs": {"stable": "b", "unstable": "c"}}, "b": {"locked": {"repo": "nixpkgs"}}, "c": {"locked": {"repo": "nixpkgs"}}`,
-			wantErr: "stable, unstable",
-		},
-		{
-			name:    "no nixpkgs at all",
-			nodes:   `"root": {"inputs": {"tools": "c"}}, "c": {"locked": {"repo": "tools"}}`,
-			wantErr: "no root input",
-		},
-	}
-	for _, tt := range tests {
-		locked, err := parseMetadata(metadataWith(tt.nodes))
-		if err != nil {
-			t.Fatalf("%s: %v", tt.name, err)
-		}
-		got, err := locked.nixpkgsInput()
-		if tt.wantErr != "" {
-			if !errors.Is(err, ErrNoNixpkgsInput) || !strings.Contains(err.Error(), tt.wantErr) {
-				t.Errorf("%s: error = %v, want ErrNoNixpkgsInput naming %q", tt.name, err, tt.wantErr)
-			}
-			continue
-		}
-		if err != nil || got != tt.want {
-			t.Errorf("%s: nixpkgsInput() = %q, %v, want %q", tt.name, got, err, tt.want)
 		}
 	}
 }
@@ -202,7 +128,7 @@ func TestParsePackageDistinguishesNoPackage(t *testing.T) {
 	t.Parallel()
 
 	missing, err := parsePackage([]byte(`null`))
-	if err != nil || missing.found {
+	if err != nil || missing != nil {
 		t.Errorf("parsePackage(null) = %+v, %v, want not found", missing, err)
 	}
 	got, err := parsePackage([]byte(`{"name": "h-1", "version": "1", "description": "d", "position": "/pkgs/a:b/h.nix:58"}`))
@@ -210,7 +136,7 @@ func TestParsePackageDistinguishesNoPackage(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := Package{Name: "h-1", Version: "1", Description: "d", Declaration: Declaration{File: "/pkgs/a:b/h.nix", Line: 58}}
-	if !got.found || got.pkg != want {
+	if got == nil || *got != want {
 		t.Errorf("parsePackage() = %+v, want %+v", got, want)
 	}
 }
@@ -252,7 +178,15 @@ const capturedOptions = `[
   {"loc": ["items", "*", "name"], "type": "string", "description": null, "default": null, "example": null, "declarations": []}
 ]`
 
-func childNames(n *OptionNode) []string {
+func parseOptions(list []byte) (*OptionTree, error) {
+	encoded, err := encodeOptions([]byte(`{"options": ` + string(list) + `, "truncated": []}`))
+	if err != nil {
+		return nil, err
+	}
+	return decodeOptions(encoded)
+}
+
+func childNames(n OptionNode) []string {
 	names := []string{}
 	for child := range n.Children() {
 		names = append(names, child.Name())

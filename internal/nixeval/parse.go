@@ -4,45 +4,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"iter"
 	"maps"
 	"slices"
 	"strconv"
 	"strings"
 )
 
-var ErrNoNixpkgsInput = errors.New("the flake locks no single nixpkgs input")
-
-const nixpkgsName = "nixpkgs"
-
 type lockedFlake struct {
-	ref              string
-	nixpkgsInputs    []string
-	exactNixpkgsName bool
-}
-
-func (l lockedFlake) nixpkgsInput() (string, error) {
-	if l.exactNixpkgsName {
-		return nixpkgsName, nil
-	}
-	switch len(l.nixpkgsInputs) {
-	case 0:
-		return "", fmt.Errorf("%w: no root input named %s or locking the nixpkgs repository", ErrNoNixpkgsInput, nixpkgsName)
-	case 1:
-		return l.nixpkgsInputs[0], nil
-	}
-	return "", fmt.Errorf("%w: no root input is named %s and these are all nixpkgs: %s", ErrNoNixpkgsInput, nixpkgsName, strings.Join(l.nixpkgsInputs, ", "))
-}
-
-type metadataSource struct {
-	Repo string `json:"repo"`
-	ID   string `json:"id"`
-}
-
-type metadataNode struct {
-	Inputs   map[string]json.RawMessage `json:"inputs"`
-	Locked   metadataSource             `json:"locked"`
-	Original metadataSource             `json:"original"`
+	ref string
 }
 
 type metadataLocked struct {
@@ -50,19 +19,9 @@ type metadataLocked struct {
 	Dir     string `json:"dir"`
 }
 
-type metadataLocks struct {
-	Root  string                  `json:"root"`
-	Nodes map[string]metadataNode `json:"nodes"`
-}
-
 type metadata struct {
 	Path   string         `json:"path"`
 	Locked metadataLocked `json:"locked"`
-	Locks  metadataLocks  `json:"locks"`
-}
-
-func (n metadataNode) isNixpkgs() bool {
-	return n.Locked.Repo == nixpkgsName || n.Original.ID == nixpkgsName
 }
 
 func parseMetadata(data []byte) (lockedFlake, error) {
@@ -73,24 +32,7 @@ func parseMetadata(data []byte) (lockedFlake, error) {
 	if parsed.Path == "" || parsed.Locked.NarHash == "" {
 		return lockedFlake{}, errors.New("parsing nix flake metadata output: no store path or NAR hash")
 	}
-	root, ok := parsed.Locks.Nodes[parsed.Locks.Root]
-	if !ok {
-		return lockedFlake{}, fmt.Errorf("parsing nix flake metadata output: no root lock node %q", parsed.Locks.Root)
-	}
-	locked := lockedFlake{ref: lockedRef(parsed.Path, parsed.Locked.NarHash, parsed.Locked.Dir)}
-	for _, name := range slices.Sorted(maps.Keys(root.Inputs)) {
-		if name == nixpkgsName {
-			locked.exactNixpkgsName = true
-		}
-		var nodeName string
-		if err := json.Unmarshal(root.Inputs[name], &nodeName); err != nil {
-			continue
-		}
-		if parsed.Locks.Nodes[nodeName].isNixpkgs() {
-			locked.nixpkgsInputs = append(locked.nixpkgsInputs, name)
-		}
-	}
-	return locked, nil
+	return lockedFlake{ref: lockedRef(parsed.Path, parsed.Locked.NarHash, parsed.Locked.Dir)}, nil
 }
 
 type OutputKind string
@@ -210,23 +152,15 @@ type rawPackage struct {
 	Position    string `json:"position"`
 }
 
-func parsePackage(data []byte) (packageResult, error) {
+func parsePackage(data []byte) (*Package, error) {
 	var raw *rawPackage
 	if err := json.Unmarshal(data, &raw); err != nil {
-		return packageResult{}, fmt.Errorf("parsing package description: %w", err)
+		return nil, fmt.Errorf("parsing package description: %w", err)
 	}
 	if raw == nil {
-		return packageResult{}, nil
+		return nil, nil
 	}
-	return packageResult{
-		found: true,
-		pkg:   Package{Name: raw.Name, Version: raw.Version, Description: raw.Description, Declaration: parsePosition(raw.Position)},
-	}, nil
-}
-
-type packageResult struct {
-	pkg   Package
-	found bool
+	return &Package{Name: raw.Name, Version: raw.Version, Description: raw.Description, Declaration: parsePosition(raw.Position)}, nil
 }
 
 func parsePosition(position string) Declaration {
@@ -284,118 +218,4 @@ func parseSources(data []byte) ([]OptionSource, error) {
 		sources = append(sources, OptionSource{Kind: SourceFlakeParts})
 	}
 	return sources, nil
-}
-
-type Option struct {
-	Path         []string      `json:"loc"`
-	Type         string        `json:"type"`
-	Description  string        `json:"description"`
-	Default      string        `json:"default"`
-	Example      string        `json:"example"`
-	Declarations []Declaration `json:"declarations"`
-}
-
-type OptionNode struct {
-	name        string
-	option      *Option
-	children    []*OptionNode
-	placeholder *OptionNode
-}
-
-func isPlaceholder(name string) bool {
-	return name == "*" || (strings.HasPrefix(name, "<") && strings.HasSuffix(name, ">"))
-}
-
-func (n *OptionNode) Name() string {
-	return n.name
-}
-
-func (n *OptionNode) IsPlaceholder() bool {
-	return isPlaceholder(n.name)
-}
-
-func (n *OptionNode) Option() (Option, bool) {
-	if n.option == nil {
-		return Option{}, false
-	}
-	option := *n.option
-	option.Path = slices.Clone(option.Path)
-	option.Declarations = slices.Clone(option.Declarations)
-	return option, true
-}
-
-func (n *OptionNode) Children() iter.Seq[*OptionNode] {
-	return slices.Values(n.children)
-}
-
-func (n *OptionNode) child(name string) (*OptionNode, bool) {
-	i, found := slices.BinarySearchFunc(n.children, name, func(child *OptionNode, target string) int {
-		return strings.Compare(child.name, target)
-	})
-	if found {
-		return n.children[i], true
-	}
-	return n.placeholder, n.placeholder != nil
-}
-
-type OptionTree struct {
-	root *OptionNode
-}
-
-func (t *OptionTree) Root() *OptionNode {
-	return t.root
-}
-
-func (t *OptionTree) Lookup(path []string) (*OptionNode, bool) {
-	node := t.root
-	for _, name := range path {
-		next, ok := node.child(name)
-		if !ok {
-			return nil, false
-		}
-		node = next
-	}
-	return node, true
-}
-
-func parseOptions(data []byte) (*OptionTree, error) {
-	var options []*Option
-	if err := json.Unmarshal(data, &options); err != nil {
-		return nil, fmt.Errorf("parsing option tree: %w", err)
-	}
-	for _, option := range options {
-		if option == nil || len(option.Path) == 0 {
-			return nil, errors.New("parsing option tree: an option has no location")
-		}
-	}
-	slices.SortStableFunc(options, func(a, b *Option) int {
-		return slices.Compare(a.Path, b.Path)
-	})
-	return &OptionTree{root: buildTree(options)}, nil
-}
-
-func buildTree(sorted []*Option) *OptionNode {
-	root := &OptionNode{}
-	for _, option := range sorted {
-		node := root
-		for _, name := range option.Path {
-			node = node.lastChildNamed(name)
-		}
-		if node.option == nil {
-			node.option = option
-		}
-	}
-	return root
-}
-
-func (n *OptionNode) lastChildNamed(name string) *OptionNode {
-	if last := len(n.children) - 1; last >= 0 && n.children[last].name == name {
-		return n.children[last]
-	}
-	child := &OptionNode{name: name}
-	n.children = append(n.children, child)
-	if n.placeholder == nil && isPlaceholder(name) {
-		n.placeholder = child
-	}
-	return child
 }

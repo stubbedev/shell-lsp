@@ -106,9 +106,13 @@ let
     declarations = declarationsOf opt;
   };
 
-  walk = depth: tree:
-    if depth >= maxTreeDepth
+  walk = depth: path: tree: let
+    names = builtins.attrNames tree;
+  in
+    if names == []
     then []
+    else if depth >= maxTreeDepth
+    then [{truncated = path;}]
     else
       builtins.concatMap (name: let
         v = tree.${name};
@@ -120,11 +124,18 @@ let
             then []
             else [(describe v)]
           )
-          ++ walk (depth + 1) (subOptionsOf v)
+          ++ walk (depth + 1) v.loc (subOptionsOf v)
         else if builtins.isAttrs v && (v.type or null) != "derivation"
-        then walk (depth + 1) v
+        then walk (depth + 1) (path ++ [name]) v
         else [])
-      (builtins.attrNames tree);
+      names;
+
+  optionsReport = tree: let
+    entries = builtins.partition (entry: entry ? truncated) (walk 0 [] tree);
+  in {
+    options = entries.wrong;
+    truncated = map (entry: entry.truncated) entries.right;
+  };
 
   capturedOptions = "__shellLspFlakePartsOptions";
 
@@ -190,7 +201,17 @@ in {
     kind,
     name,
   }:
-    walk 0 (optionTrees (builtins.getFlake ref) name).${kind};
+    optionsReport (optionTrees (builtins.getFlake ref) name).${kind};
+
+  base = {
+    ref,
+    input,
+    system,
+  }:
+    optionsReport ((builtins.getFlake ref).inputs.${input}.lib.nixosSystem {
+      inherit system;
+      modules = [];
+    }).options;
 
   attrs = args: let
     value = attrAt (packagesOf args) args.path;

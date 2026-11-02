@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"slices"
 	"time"
@@ -14,128 +15,462 @@ import (
 )
 
 const (
-	evalTimeout       = 2 * time.Minute
+	refreshTimeout    = 10 * time.Minute
 	maxConcurrent     = 4
+	maxBackground     = 1
 	maxFlakeFile      = 16 << 20
 	smallCacheBudget  = 32 << 20
 	optionCacheBudget = 256 << 20
+	cacheSubdirectory = "shell-lsp/nixeval"
 )
 
+var evalDigest = sha256.Sum256([]byte(evalSource))
+
+type queryKind string
+
+const (
+	queryOutputs queryKind = "outputs"
+	querySources queryKind = "sources"
+	queryOptions queryKind = "options"
+	queryAttrs   queryKind = "attrs"
+	queryPackage queryKind = "package"
+	queryBase    queryKind = "base"
+)
+
+type settings struct {
+	run      runner
+	identify func() (string, error)
+	cacheDir string
+	timeout  time.Duration
+	now      func() time.Time
+	report   func(error)
+}
+
 type Client struct {
-	run     runner
-	slots   chan struct{}
-	system  *cache[string]
-	locked  *cache[lockedFlake]
-	outputs *cache[[]Output]
-	attrs   *cache[[]string]
-	pkgs    *cache[packageResult]
-	sources *cache[[]OptionSource]
-	options *cache[*OptionTree]
+	run      runner
+	identify func() (string, error)
+	disk     *store
+	report   func(error)
+	life     *lifetime
+	slots    chan struct{}
+	lowSlots chan struct{}
+	system   *cache[string]
+	locked   *cache[lockedFlake]
+	outputs  *cache[[]Output]
+	attrs    *cache[[]string]
+	packages *cache[*Package]
+	sources  *cache[[]OptionSource]
+	options  *cache[*OptionTree]
 }
 
-func New() *Client {
-	return newClient(execRunner(nixProgram), evalTimeout, time.Now)
+func New(report func(error)) (*Client, error) {
+	root, err := os.UserCacheDir()
+	if err != nil {
+		return nil, fmt.Errorf("finding the user cache directory: %w", err)
+	}
+	return newClient(settings{
+		run:      execRunner(nixProgram),
+		identify: nixIdentity(nixProgram),
+		cacheDir: filepath.Join(root, filepath.FromSlash(cacheSubdirectory)),
+		timeout:  refreshTimeout,
+		now:      time.Now,
+		report:   report,
+	})
 }
 
-func newClient(run runner, timeout time.Duration, now func() time.Time) *Client {
+func newClient(s settings) (*Client, error) {
+	if err := os.MkdirAll(s.cacheDir, cacheDirMode); err != nil {
+		return nil, fmt.Errorf("creating the evaluation cache directory: %w", err)
+	}
+	life := newLifetime()
 	return &Client{
-		run:     run,
-		slots:   make(chan struct{}, maxConcurrent),
-		system:  newCache[string](smallCacheBudget, timeout, now),
-		locked:  newCache[lockedFlake](smallCacheBudget, timeout, now),
-		outputs: newCache[[]Output](smallCacheBudget, timeout, now),
-		attrs:   newCache[[]string](smallCacheBudget, timeout, now),
-		pkgs:    newCache[packageResult](smallCacheBudget, timeout, now),
-		sources: newCache[[]OptionSource](smallCacheBudget, timeout, now),
-		options: newCache[*OptionTree](optionCacheBudget, timeout, now),
-	}
+		run:      s.run,
+		identify: s.identify,
+		disk:     &store{dir: s.cacheDir, budget: storeBudget, now: s.now, report: s.report},
+		report:   s.report,
+		life:     life,
+		slots:    make(chan struct{}, maxConcurrent),
+		lowSlots: make(chan struct{}, maxBackground),
+		system:   newCache[string](life, smallCacheBudget, s.timeout, s.now),
+		locked:   newCache[lockedFlake](life, smallCacheBudget, s.timeout, s.now),
+		outputs:  newCache[[]Output](life, smallCacheBudget, s.timeout, s.now),
+		attrs:    newCache[[]string](life, smallCacheBudget, s.timeout, s.now),
+		packages: newCache[*Package](life, smallCacheBudget, s.timeout, s.now),
+		sources:  newCache[[]OptionSource](life, smallCacheBudget, s.timeout, s.now),
+		options:  newCache[*OptionTree](life, optionCacheBudget, s.timeout, s.now),
+	}, nil
 }
 
-func (c *Client) Outputs(ctx context.Context, dir string) ([]Output, error) {
-	outputs, err := load(ctx, c, c.outputs, dir, "", func(ctx context.Context, flake lockedFlake) (computed[[]Output], error) {
-		return runParsed(ctx, c, dir, showArgs(flake.ref), parseOutputs)
+func (c *Client) Close() {
+	c.life.close()
+}
+
+func (c *Client) Outputs(ctx context.Context, dir string) (Answer[[]Output], error) {
+	answer, err := serveFlake(ctx, c, dir, func(flake flakeState) (query[[]Output], error) {
+		return c.outputsQuery(flake), nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("listing the outputs of flake %s: %w", dir, err)
+		return Answer[[]Output]{}, fmt.Errorf("listing the outputs of flake %s: %w", dir, err)
 	}
-	return slices.Clone(outputs), nil
+	return mapAnswer(answer, slices.Clone[[]Output]), nil
 }
 
-func (c *Client) NixpkgsAttrs(ctx context.Context, dir string, parent []string, prefix string) ([]string, error) {
-	names, err := load(ctx, c, c.attrs, dir, pathDetail(parent), func(ctx context.Context, flake lockedFlake) (computed[[]string], error) {
-		args, err := c.packageArgs(ctx, flake, parent)
+func (c *Client) OptionSources(ctx context.Context, dir string) (Answer[[]OptionSource], error) {
+	answer, err := serveFlake(ctx, c, dir, func(flake flakeState) (query[[]OptionSource], error) {
+		return c.sourcesQuery(flake), nil
+	})
+	if err != nil {
+		return Answer[[]OptionSource]{}, fmt.Errorf("listing the option sources of flake %s: %w", dir, err)
+	}
+	return mapAnswer(answer, slices.Clone[[]OptionSource]), nil
+}
+
+func (c *Client) Options(ctx context.Context, dir string, source OptionSource) (Answer[*OptionTree], error) {
+	answer, err := serveFlake(ctx, c, dir, func(flake flakeState) (query[*OptionTree], error) {
+		return c.optionsQuery(flake, source), nil
+	})
+	if err != nil {
+		return Answer[*OptionTree]{}, fmt.Errorf("listing the options of %s %q of flake %s: %w", source.Kind, source.Name, dir, err)
+	}
+	return answer, nil
+}
+
+func (c *Client) NixpkgsAttrs(ctx context.Context, dir string, parent []string, prefix string) (Answer[[]string], error) {
+	answer, err := serveFlake(ctx, c, dir, func(flake flakeState) (query[[]string], error) {
+		scope, err := c.inputScope(ctx, flake)
 		if err != nil {
-			return computed[[]string]{}, err
+			return query[[]string]{}, err
 		}
-		return runParsed(ctx, c, dir, evalArgs(callExpr("attrs", args...)), parseNames)
+		return c.attrsQuery(flake, scope, parent), nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("listing nixpkgs attributes under %q of flake %s: %w", parent, dir, err)
+		return Answer[[]string]{}, fmt.Errorf("listing nixpkgs attributes under %q of flake %s: %w", parent, dir, err)
 	}
-	return withPrefix(names, prefix), nil
+	return mapAnswer(answer, func(names []string) []string { return withPrefix(names, prefix) }), nil
 }
 
-func (c *Client) NixpkgsPackage(ctx context.Context, dir string, path []string) (Package, bool, error) {
-	result, err := load(ctx, c, c.pkgs, dir, pathDetail(path), func(ctx context.Context, flake lockedFlake) (computed[packageResult], error) {
-		args, err := c.packageArgs(ctx, flake, path)
+func (c *Client) NixpkgsPackage(ctx context.Context, dir string, path []string) (Answer[*Package], error) {
+	answer, err := serveFlake(ctx, c, dir, func(flake flakeState) (query[*Package], error) {
+		scope, err := c.inputScope(ctx, flake)
 		if err != nil {
-			return computed[packageResult]{}, err
+			return query[*Package]{}, err
 		}
-		return runParsed(ctx, c, dir, evalArgs(callExpr("package", args...)), parsePackage)
+		return c.packageQuery(flake, scope, path), nil
 	})
 	if err != nil {
-		return Package{}, false, fmt.Errorf("describing nixpkgs attribute %q of flake %s: %w", path, dir, err)
+		return Answer[*Package]{}, fmt.Errorf("describing nixpkgs attribute %q of flake %s: %w", path, dir, err)
 	}
-	return result.pkg, result.found, nil
+	return mapAnswer(answer, copyPackage), nil
 }
 
-func (c *Client) OptionSources(ctx context.Context, dir string) ([]OptionSource, error) {
-	sources, err := load(ctx, c, c.sources, dir, "", func(ctx context.Context, flake lockedFlake) (computed[[]OptionSource], error) {
-		return runParsed(ctx, c, dir, evalArgs(callExpr("sources", stringArg("ref", flake.ref))), parseSources)
-	})
+func serveFlake[T any](ctx context.Context, c *Client, dir string, build func(flakeState) (query[T], error)) (Answer[T], error) {
+	flake, err := c.inspect(ctx, dir)
 	if err != nil {
-		return nil, fmt.Errorf("listing the option sources of flake %s: %w", dir, err)
+		return Answer[T]{}, err
 	}
-	return slices.Clone(sources), nil
+	q, err := build(flake)
+	if err != nil {
+		return Answer[T]{}, err
+	}
+	return serve(ctx, c, q)
 }
 
-func (c *Client) Options(ctx context.Context, dir string, source OptionSource) (*OptionTree, error) {
+func copyPackage(pkg *Package) *Package {
+	if pkg == nil {
+		return nil
+	}
+	duplicate := *pkg
+	return &duplicate
+}
+
+func (c *Client) Warm(dir string) *Refresh {
+	done := make(chan struct{})
+	failure := new(error)
+	started := c.life.start(func() {
+		defer close(done)
+		*failure = c.warm(c.life.ctx, dir)
+	})
+	if !started {
+		*failure = ErrClosed
+		close(done)
+	}
+	return &Refresh{done: done, err: failure}
+}
+
+func (c *Client) warm(ctx context.Context, dir string) error {
+	flake, err := c.inspect(ctx, dir)
+	if err != nil {
+		return fmt.Errorf("warming flake %s: %w", dir, err)
+	}
+	var problems []error
+	if _, err := settle(ctx, c, c.outputsQuery(flake)); err != nil {
+		problems = append(problems, fmt.Errorf("warming the outputs of flake %s: %w", dir, err))
+	}
+	sources, err := settle(ctx, c, c.sourcesQuery(flake))
+	if err != nil {
+		problems = append(problems, fmt.Errorf("warming the option sources of flake %s: %w", dir, err))
+	}
+	for _, source := range sources {
+		if _, err := settle(ctx, c, c.optionsQuery(flake, source)); err != nil {
+			problems = append(problems, fmt.Errorf("warming the options of %s %q of flake %s: %w", source.Kind, source.Name, dir, err))
+		}
+	}
+	scope, err := c.inputScope(ctx, flake)
+	if errors.Is(err, ErrNoNixpkgsInput) {
+		return errors.Join(problems...)
+	}
+	if err != nil {
+		return errors.Join(append(problems, fmt.Errorf("warming nixpkgs of flake %s: %w", dir, err))...)
+	}
+	if _, err := settle(ctx, c, c.attrsQuery(flake, scope, nil)); err != nil {
+		problems = append(problems, fmt.Errorf("warming the nixpkgs attributes of flake %s: %w", dir, err))
+	}
+	if slices.ContainsFunc(sources, func(source OptionSource) bool { return source.Kind == SourceNixOS }) {
+		if _, err := settle(ctx, c, c.baseQuery(flake, scope)); err != nil {
+			problems = append(problems, fmt.Errorf("warming the NixOS options of the nixpkgs of flake %s: %w", dir, err))
+		}
+	}
+	return errors.Join(problems...)
+}
+
+type query[T any] struct {
+	results  *cache[T]
+	key      contentKey
+	slot     slotKey
+	base     func() (contentKey, bool)
+	evaluate func(context.Context, task) ([]byte, error)
+	decode   func([]byte) (T, error)
+}
+
+func start[T any](c *Client, q query[T], level priority) *entry[T] {
+	return q.results.join(q.key, q.slot, level, func(ctx context.Context, work task) (computed[T], error) {
+		if payload, ok := c.disk.read(q.key); ok {
+			value, err := q.decode(payload)
+			if err == nil {
+				c.disk.setLatest(q.slot, q.key)
+				return computed[T]{value: value, cost: len(payload)}, nil
+			}
+			c.report(fmt.Errorf("discarding the evaluation cache entry %x: %w", q.key, err))
+		}
+		work.miss()
+		payload, err := q.evaluate(ctx, work)
+		if err != nil {
+			return computed[T]{}, err
+		}
+		value, err := q.decode(payload)
+		if err != nil {
+			return computed[T]{}, err
+		}
+		c.disk.write(q.key, payload)
+		c.disk.setLatest(q.slot, q.key)
+		return computed[T]{value: value, cost: len(payload)}, nil
+	})
+}
+
+func serve[T any](ctx context.Context, c *Client, q query[T]) (Answer[T], error) {
+	if err := ctx.Err(); err != nil {
+		return Answer[T]{}, err
+	}
+	e := start(c, q, foreground)
+	select {
+	case <-e.done:
+	case <-e.missed:
+	case <-ctx.Done():
+		return Answer[T]{}, &NotReadyError{Refresh: e.refresh(), Err: ctx.Err()}
+	}
+	if e.succeeded() {
+		return Answer[T]{value: e.value}, nil
+	}
+	if value, basis, ok := fallback(c, q); ok {
+		return Answer[T]{value: value, stale: &Stale{Basis: basis, Refresh: e.refresh()}}, nil
+	}
+	select {
+	case <-e.done:
+	case <-ctx.Done():
+		return Answer[T]{}, &NotReadyError{Refresh: e.refresh(), Err: ctx.Err()}
+	}
+	if e.err != nil {
+		return Answer[T]{}, e.err
+	}
+	return Answer[T]{value: e.value}, nil
+}
+
+func settle[T any](ctx context.Context, c *Client, q query[T]) (T, error) {
+	var zero T
+	e := start(c, q, background)
+	select {
+	case <-e.done:
+		return e.value, e.err
+	case <-ctx.Done():
+		return zero, context.Cause(ctx)
+	}
+}
+
+func fallback[T any](c *Client, q query[T]) (T, Basis, bool) {
+	if key, ok := c.disk.latest(q.slot); ok && key != q.key {
+		if value, ok := loadFinished(c, q, key); ok {
+			return value, BasisEarlierState, true
+		}
+	}
+	if q.base != nil {
+		if key, ok := q.base(); ok {
+			if value, ok := loadFinished(c, q, key); ok {
+				return value, BasisLockedNixpkgs, true
+			}
+		}
+	}
+	var zero T
+	return zero, BasisEarlierState, false
+}
+
+func loadFinished[T any](c *Client, q query[T], key contentKey) (T, bool) {
+	if value, ok := q.results.succeeded(key); ok {
+		return value, true
+	}
+	var zero T
+	payload, ok := c.disk.read(key)
+	if !ok {
+		return zero, false
+	}
+	value, err := q.decode(payload)
+	if err != nil {
+		c.report(fmt.Errorf("discarding the evaluation cache entry %x: %w", key, err))
+		return zero, false
+	}
+	q.results.insert(key, computed[T]{value: value, cost: len(payload)})
+	return value, true
+}
+
+func (c *Client) evaluating(flake flakeState, args func(lockedFlake) []string) func(context.Context, task) ([]byte, error) {
+	return func(ctx context.Context, work task) ([]byte, error) {
+		locked, err := c.resolve(ctx, flake)
+		if err != nil {
+			return nil, err
+		}
+		return c.runBounded(ctx, work, flake.dir, args(locked))
+	}
+}
+
+func encodingOptions(evaluate func(context.Context, task) ([]byte, error)) func(context.Context, task) ([]byte, error) {
+	return func(ctx context.Context, work task) ([]byte, error) {
+		out, err := evaluate(ctx, work)
+		if err != nil {
+			return nil, err
+		}
+		return encodeOptions(out)
+	}
+}
+
+func (c *Client) outputsQuery(flake flakeState) query[[]Output] {
+	return query[[]Output]{
+		results: c.outputs,
+		key:     flake.queryKey(queryOutputs, ""),
+		slot:    flake.slot(queryOutputs, ""),
+		decode:  parseOutputs,
+		evaluate: c.evaluating(flake, func(locked lockedFlake) []string {
+			return showArgs(locked.ref)
+		}),
+	}
+}
+
+func (c *Client) sourcesQuery(flake flakeState) query[[]OptionSource] {
+	return query[[]OptionSource]{
+		results: c.sources,
+		key:     flake.queryKey(querySources, ""),
+		slot:    flake.slot(querySources, ""),
+		decode:  parseSources,
+		evaluate: c.evaluating(flake, func(locked lockedFlake) []string {
+			return evalArgs(callExpr("sources", stringArg("ref", locked.ref)))
+		}),
+	}
+}
+
+func (c *Client) optionsQuery(flake flakeState, source OptionSource) query[*OptionTree] {
 	detail := fmt.Sprintf("%s %q", source.Kind.evalName(), source.Name)
-	tree, err := load(ctx, c, c.options, dir, detail, func(ctx context.Context, flake lockedFlake) (computed[*OptionTree], error) {
-		expr := callExpr("options", stringArg("ref", flake.ref), stringArg("kind", source.Kind.evalName()), stringArg("name", source.Name))
-		return runParsed(ctx, c, dir, evalArgs(expr), parseOptions)
+	q := query[*OptionTree]{
+		results: c.options,
+		key:     flake.queryKey(queryOptions, detail),
+		slot:    flake.slot(queryOptions, detail),
+		decode:  decodeOptions,
+		evaluate: encodingOptions(c.evaluating(flake, func(locked lockedFlake) []string {
+			return evalArgs(callExpr("options", stringArg("ref", locked.ref), stringArg("kind", source.Kind.evalName()), stringArg("name", source.Name)))
+		})),
+	}
+	if source.Kind == SourceNixOS {
+		q.base = func() (contentKey, bool) { return c.baseKey(flake) }
+	}
+	return q
+}
+
+func (c *Client) baseKey(flake flakeState) (contentKey, bool) {
+	ctx, cancel := context.WithTimeout(c.life.ctx, systemLookupTimeout)
+	defer cancel()
+	scope, err := c.inputScope(ctx, flake)
+	if err != nil {
+		return contentKey{}, false
+	}
+	return scope.queryKey(queryBase, ""), true
+}
+
+func (c *Client) baseQuery(flake flakeState, scope inputScope) query[*OptionTree] {
+	return query[*OptionTree]{
+		results: c.options,
+		key:     scope.queryKey(queryBase, ""),
+		slot:    flake.slot(queryBase, ""),
+		decode:  decodeOptions,
+		evaluate: encodingOptions(c.evaluating(flake, func(locked lockedFlake) []string {
+			return evalArgs(callExpr("base", scope.args(locked)...))
+		})),
+	}
+}
+
+func (c *Client) attrsQuery(flake flakeState, scope inputScope, parent []string) query[[]string] {
+	detail := pathDetail(parent)
+	return query[[]string]{
+		results: c.attrs,
+		key:     scope.queryKey(queryAttrs, detail),
+		slot:    flake.slot(queryAttrs, detail),
+		decode:  parseNames,
+		evaluate: c.evaluating(flake, func(locked lockedFlake) []string {
+			return evalArgs(callExpr("attrs", append(scope.args(locked), listArg("path", parent))...))
+		}),
+	}
+}
+
+func (c *Client) packageQuery(flake flakeState, scope inputScope, path []string) query[*Package] {
+	detail := pathDetail(path)
+	return query[*Package]{
+		results: c.packages,
+		key:     scope.queryKey(queryPackage, detail),
+		slot:    flake.slot(queryPackage, detail),
+		decode:  parsePackage,
+		evaluate: c.evaluating(flake, func(locked lockedFlake) []string {
+			return evalArgs(callExpr("package", append(scope.args(locked), listArg("path", path))...))
+		}),
+	}
+}
+
+func (c *Client) resolve(ctx context.Context, flake flakeState) (lockedFlake, error) {
+	locked, err := c.locked.await(ctx, flake.local, func(ctx context.Context, work task) (computed[lockedFlake], error) {
+		out, err := c.runBounded(ctx, work, flake.dir, metadataArgs())
+		if err != nil {
+			return computed[lockedFlake]{}, err
+		}
+		value, err := parseMetadata(out)
+		if err != nil {
+			return computed[lockedFlake]{}, err
+		}
+		return computed[lockedFlake]{value: value, cost: len(out)}, nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("listing the options of %s %q of flake %s: %w", source.Kind, source.Name, dir, err)
+		return lockedFlake{}, fmt.Errorf("resolving the flake: %w", err)
 	}
-	return tree, nil
-}
-
-func (c *Client) Invalidate(dir string) {
-	clean := filepath.Clean(dir)
-	c.locked.invalidate(clean)
-	c.outputs.invalidate(clean)
-	c.attrs.invalidate(clean)
-	c.pkgs.invalidate(clean)
-	c.sources.invalidate(clean)
-	c.options.invalidate(clean)
-}
-
-func (c *Client) packageArgs(ctx context.Context, flake lockedFlake, path []string) ([]exprArg, error) {
-	input, err := flake.nixpkgsInput()
-	if err != nil {
-		return nil, err
-	}
-	system, err := c.currentSystem(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return []exprArg{stringArg("ref", flake.ref), stringArg("input", input), stringArg("system", system), listArg("path", path)}, nil
+	return locked, nil
 }
 
 func (c *Client) currentSystem(ctx context.Context) (string, error) {
-	return c.system.get(ctx, request{}, func(ctx context.Context) (computed[string], error) {
-		out, err := c.runBounded(ctx, "", systemArgs())
+	return c.system.await(ctx, contentKey{}, func(ctx context.Context, _ task) (computed[string], error) {
+		out, err := c.run(ctx, "", systemArgs())
 		if err != nil {
 			return computed[string]{}, fmt.Errorf("finding the current system: %w", err)
 		}
@@ -147,7 +482,16 @@ func (c *Client) currentSystem(ctx context.Context) (string, error) {
 	})
 }
 
-func (c *Client) runBounded(ctx context.Context, dir string, args []string) ([]byte, error) {
+func (c *Client) runBounded(ctx context.Context, work task, dir string, args []string) ([]byte, error) {
+	if work.priority == background {
+		select {
+		case c.lowSlots <- struct{}{}:
+			defer func() { <-c.lowSlots }()
+		case <-work.promoted:
+		case <-ctx.Done():
+			return nil, fmt.Errorf("waiting for a free background nix process slot: %w", ctx.Err())
+		}
+	}
 	select {
 	case c.slots <- struct{}{}:
 		defer func() { <-c.slots }()
@@ -157,64 +501,21 @@ func (c *Client) runBounded(ctx context.Context, dir string, args []string) ([]b
 	return c.run(ctx, dir, args)
 }
 
-func runParsed[T any](ctx context.Context, c *Client, dir string, args []string, parse func([]byte) (T, error)) (computed[T], error) {
-	out, err := c.runBounded(ctx, dir, args)
-	if err != nil {
-		return computed[T]{}, err
-	}
-	value, err := parse(out)
-	if err != nil {
-		return computed[T]{}, err
-	}
-	return computed[T]{value: value, cost: len(out)}, nil
-}
-
-func load[T any](ctx context.Context, c *Client, results *cache[T], dir, detail string, compute func(context.Context, lockedFlake) (computed[T], error)) (T, error) {
-	var zero T
-	clean, identity, err := openFlake(dir)
-	if err != nil {
-		return zero, err
-	}
-	return results.get(ctx, request{dir: clean, fingerprint: identity, detail: detail}, func(ctx context.Context) (computed[T], error) {
-		flake, err := c.locked.get(ctx, request{dir: clean, fingerprint: identity}, func(ctx context.Context) (computed[lockedFlake], error) {
-			return runParsed(ctx, c, clean, metadataArgs(), parseMetadata)
-		})
-		if err != nil {
-			return computed[T]{}, fmt.Errorf("resolving the flake: %w", err)
-		}
-		return compute(ctx, flake)
-	})
-}
-
 func pathDetail(path []string) string {
 	return fmt.Sprintf("%q", path)
 }
 
-func openFlake(dir string) (string, fingerprint, error) {
-	if !filepath.IsAbs(dir) {
-		return "", fingerprint{}, fmt.Errorf("the flake directory %q is not absolute", dir)
-	}
-	clean := filepath.Clean(dir)
-	nix, _, err := regularfile.Read(filepath.Join(clean, "flake.nix"), maxFlakeFile)
+func readFlakeFiles(dir string) (nix, lock []byte, err error) {
+	nix, _, err = regularfile.Read(filepath.Join(dir, "flake.nix"), maxFlakeFile)
 	if err != nil {
-		return "", fingerprint{}, fmt.Errorf("reading flake.nix: %w", err)
+		return nil, nil, fmt.Errorf("reading flake.nix: %w", err)
 	}
-	lock, _, err := regularfile.Read(filepath.Join(clean, "flake.lock"), maxFlakeFile)
+	lock, _, err = regularfile.Read(filepath.Join(dir, "flake.lock"), maxFlakeFile)
 	if errors.Is(err, fs.ErrNotExist) {
-		return clean, fingerprintOf(nix, nil), nil
+		return nix, nil, nil
 	}
 	if err != nil {
-		return "", fingerprint{}, fmt.Errorf("reading flake.lock: %w", err)
+		return nil, nil, fmt.Errorf("reading flake.lock: %w", err)
 	}
-	return clean, fingerprintOf(nix, lock), nil
-}
-
-func fingerprintOf(nix, lock []byte) fingerprint {
-	nixSum := sha256.Sum256(nix)
-	lockSum := sha256.Sum256(lock)
-	lockPresent := byte(0)
-	if lock != nil {
-		lockPresent = 1
-	}
-	return sha256.Sum256(slices.Concat(nixSum[:], lockSum[:], []byte{lockPresent}))
+	return nix, lock, nil
 }
