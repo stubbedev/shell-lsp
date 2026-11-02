@@ -657,14 +657,274 @@ func TestNixShellReachesTheDerivationAttributesItReads(t *testing.T) {
 	if rename.Error == nil || !strings.Contains(rename.Error.Message, "Nix file") {
 		t.Errorf("renaming a derivation attribute from the shell = %+v", rename)
 	}
-	if outside := decodeResult[*lsp.Hover](t, p.c.call("textDocument/hover", p.params("default.nix", "pname", 0, ""))); outside != nil {
-		t.Errorf("hover on the Nix binding = %+v, want nothing", outside)
+	if binding := decodeResult[*lsp.Hover](t, p.c.call("textDocument/hover", p.params("default.nix", "pname", 0, ""))); binding == nil || !strings.Contains(binding.Contents.Value, "pname = \"hello\";") {
+		t.Errorf("hover on the Nix binding = %+v", binding)
 	}
-	if outside := decodeResult[[]lsp.Location](t, p.c.call("textDocument/definition", p.params("default.nix", "pname", 0, ""))); len(outside) != 0 {
-		t.Errorf("definition on the Nix binding = %+v, want nothing", outside)
+	fromBinding := decodeResult[[]lsp.Location](t, p.c.call("textDocument/references", p.params("default.nix", "pname", 0, `, "context": {"includeDeclaration": true}`)))
+	if !slices.Equal(fromBinding, refs) {
+		t.Errorf("references from the Nix binding = %+v, want those from the shell", fromBinding)
+	}
+	refused := p.c.call("textDocument/rename", p.params("default.nix", "pname", 0, `, "newName": "name"`))
+	if refused.Error == nil || !strings.Contains(refused.Error.Message, "Nix file") {
+		t.Errorf("renaming an attribute the shell reads from the Nix side = %+v", refused)
 	}
 	symbols := decodeResult[[]lsp.DocumentSymbol](t, p.c.call("textDocument/documentSymbol", `{"textDocument": {"uri": "`+p.uri("default.nix")+`"}}`))
-	if slices.ContainsFunc(symbols, func(s lsp.DocumentSymbol) bool { return s.Name == "pname" || s.Name == "version" }) {
-		t.Errorf("document symbols list Nix attributes: %+v", symbols)
+	pnames := 0
+	for _, s := range symbols {
+		if s.Name == "pname" {
+			pnames++
+		}
+	}
+	if pnames != 1 {
+		t.Errorf("document symbols list pname %d times: %+v", pnames, symbols)
+	}
+}
+
+func corpusFile(t *testing.T, parts ...string) string {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join(append([]string{"..", "..", "corpus", "nix"}, parts...)...))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(raw)
+}
+
+func symbolNames(symbols []lsp.DocumentSymbol) []string {
+	out := make([]string, len(symbols))
+	for i, s := range symbols {
+		out[i] = s.Name
+	}
+	return out
+}
+
+func childSymbol(t *testing.T, symbols []lsp.DocumentSymbol, name string) lsp.DocumentSymbol {
+	t.Helper()
+	i := slices.IndexFunc(symbols, func(s lsp.DocumentSymbol) bool { return s.Name == name })
+	if i < 0 {
+		t.Fatalf("no symbol %s in %q", name, symbolNames(symbols))
+	}
+	return symbols[i]
+}
+
+func editTexts(edit lsp.WorkspaceEdit) []string {
+	var out []string
+	for _, change := range edit.DocumentChanges {
+		for _, e := range change.Edits {
+			out = append(out, e.NewText)
+		}
+	}
+	return out
+}
+
+func TestNixSingleFlakeAnswersOutsideItsShell(t *testing.T) {
+	t.Parallel()
+
+	const name = "flake.nix"
+	text := corpusFile(t, "single-flake", name)
+	p := openNativeProject(t, nativeCapabilities, map[string]string{name: text}, name)
+
+	if got, want := decodeResult[[]lsp.Location](t, p.c.call("textDocument/definition", p.params(name, "revision", 1, ""))), []lsp.Location{p.at(name, "revision", 0)}; !slices.Equal(got, want) {
+		t.Errorf("definition of ${revision} = %+v, want %+v", got, want)
+	}
+	refs := decodeResult[[]lsp.Location](t, p.c.call("textDocument/references", p.params(name, "pkgsFor", 0, `, "context": {"includeDeclaration": true}`)))
+	if want := strings.Count(text, "pkgsFor"); len(refs) != want {
+		t.Errorf("references of pkgsFor = %d, want %d: %+v", len(refs), want, refs)
+	}
+	highlights := decodeResult[[]lsp.DocumentHighlight](t, p.c.call("textDocument/documentHighlight", p.params(name, "pkgsFor", 1, "")))
+	if len(highlights) != len(refs) || highlights[0].Kind != lsp.HighlightWrite {
+		t.Errorf("highlights of pkgsFor = %+v", highlights)
+	}
+	alias := decodeResult[[]lsp.Location](t, p.c.call("textDocument/definition", p.params(name, "inputs.nixpkgs.shortRev", 0, "")))
+	if want := []lsp.Location{p.at(name, "inputs", 1)}; !slices.Equal(alias, want) {
+		t.Errorf("definition of the alias = %+v, want %+v", alias, want)
+	}
+	hover := decodeResult[*lsp.Hover](t, p.c.call("textDocument/hover", p.params(name, "revision", 1, "")))
+	if hover == nil || !strings.Contains(hover.Contents.Value, `revision = inputs.nixpkgs.shortRev or "dirty";`) {
+		t.Errorf("hover on ${revision} = %+v", hover)
+	}
+	shell := decodeResult[[]lsp.Location](t, p.c.call("textDocument/definition", p.params(name, "LOGSHIP_SPOOL", 1, "")))
+	if want := []lsp.Location{p.at(name, "LOGSHIP_SPOOL", 0)}; !slices.Equal(shell, want) {
+		t.Errorf("definition of $LOGSHIP_SPOOL = %+v, want %+v", shell, want)
+	}
+
+	symbols := decodeResult[[]lsp.DocumentSymbol](t, p.c.call("textDocument/documentSymbol", `{"textDocument": {"uri": "`+p.uri(name)+`"}}`))
+	for _, want := range []string{"description", "inputs", "outputs"} {
+		childSymbol(t, symbols, want)
+	}
+	outputs := childSymbol(t, symbols, "outputs")
+	if outputs.Kind != lsp.SymbolFunction {
+		t.Errorf("outputs has kind %v, want a function", outputs.Kind)
+	}
+	block := childSymbol(t, outputs.Children, "let")
+	for _, want := range []string{"systems", "forAllSystems", "revision", "pkgsFor"} {
+		childSymbol(t, block.Children, want)
+	}
+	if fn := childSymbol(t, block.Children, "pkgsFor"); fn.Kind != lsp.SymbolFunction || len(fn.Children) == 0 || fn.Children[0].Name != "system" {
+		t.Errorf("pkgsFor = %+v, want a function with its argument", fn)
+	}
+	packages := childSymbol(t, outputs.Children, "packages")
+	for _, want := range []string{"system", "let", "default", "logship", "manual"} {
+		childSymbol(t, packages.Children, want)
+	}
+	workspace := decodeResult[[]lsp.SymbolInformation](t, p.c.call("workspace/symbol", `{"query": "pkgsFor"}`))
+	if len(workspace) != 1 || workspace[0].Name != "pkgsFor" || workspace[0].Location != p.at(name, "pkgsFor", 0) {
+		t.Errorf("workspace symbols = %+v", workspace)
+	}
+
+	folds := decodeResult[[]lsp.FoldingRange](t, p.c.call("textDocument/foldingRange", `{"textDocument": {"uri": "`+p.uri(name)+`"}}`))
+	lastLine := uint32(strings.Count(strings.TrimRight(text, "\n"), "\n"))
+	outputsLine := uint32(strings.Count(text[:strings.Index(text, "outputs = {")], "\n"))
+	if !slices.ContainsFunc(folds, func(f lsp.FoldingRange) bool { return f.StartLine == 0 && f.EndLine == lastLine }) {
+		t.Errorf("folds = %+v, want the file's attribute set", folds)
+	}
+	if !slices.ContainsFunc(folds, func(f lsp.FoldingRange) bool { return f.StartLine == outputsLine && f.EndLine > outputsLine+1 }) {
+		t.Errorf("folds = %+v, want the outputs function on line %d", folds, outputsLine)
+	}
+
+	edit := decodeResult[lsp.WorkspaceEdit](t, p.c.call("textDocument/rename", p.params(name, "revision", 0, `, "newName": "rev"`)))
+	if got := editTexts(edit); !slices.Equal(got, []string{"rev", "rev"}) {
+		t.Errorf("renaming revision edits %q", got)
+	}
+	edit = decodeResult[lsp.WorkspaceEdit](t, p.c.call("textDocument/rename", p.params(name, "system:", 0, `, "newName": "platform"`)))
+	if got := editTexts(edit); !slices.Equal(got, []string{"platform", "system = platform;"}) {
+		t.Errorf("renaming the argument of pkgsFor edits %q", got)
+	}
+}
+
+func TestNixFlakePartsAnswersWithinEachFile(t *testing.T) {
+	t.Parallel()
+
+	const name = "default.nix"
+	text := corpusFile(t, "flake-parts", "nix", "packages", name)
+	p := openNativeProject(t, nativeCapabilities, map[string]string{name: text}, name)
+
+	if got, want := decodeResult[[]lsp.Location](t, p.c.call("textDocument/definition", p.params(name, "config.project.version", 0, ""))), []lsp.Location{p.at(name, "config", 0)}; !slices.Equal(got, want) {
+		t.Errorf("definition of the outer config = %+v, want %+v", got, want)
+	}
+	if got, want := decodeResult[[]lsp.Location](t, p.c.call("textDocument/definition", p.params(name, "config.packages.mirrorctl", 0, ""))), []lsp.Location{p.at(name, "config", 2)}; !slices.Equal(got, want) {
+		t.Errorf("definition of the shadowing config = %+v, want %+v", got, want)
+	}
+	refs := decodeResult[[]lsp.Location](t, p.c.call("textDocument/references", p.params(name, "projectVersion", 0, `, "context": {"includeDeclaration": false}`)))
+	if want := []lsp.Location{p.at(name, "projectVersion", 1), p.at(name, "projectVersion", 2)}; !slices.Equal(refs, want) {
+		t.Errorf("references of projectVersion = %+v, want %+v", refs, want)
+	}
+	symbols := decodeResult[[]lsp.DocumentSymbol](t, p.c.call("textDocument/documentSymbol", `{"textDocument": {"uri": "`+p.uri(name)+`"}}`))
+	perSystem := childSymbol(t, symbols, "perSystem")
+	if perSystem.Kind != lsp.SymbolFunction {
+		t.Errorf("perSystem has kind %v, want a function", perSystem.Kind)
+	}
+	childSymbol(t, childSymbol(t, perSystem.Children, "packages").Children, "platform-note")
+	refused := p.c.call("textDocument/rename", p.params(name, "platform-note", 0, `, "newName": "note"`))
+	if refused.Error == nil || !strings.Contains(refused.Error.Message, "may read it by its name") {
+		t.Errorf("renaming an attribute of the module's result = %+v", refused)
+	}
+}
+
+func TestNixFlakePartsShellReachesItsAttribute(t *testing.T) {
+	t.Parallel()
+
+	const name = "shell.nix"
+	text := corpusFile(t, "flake-parts", "nix", name)
+	p := openNativeProject(t, nativeCapabilities, map[string]string{name: text}, name)
+	if got, want := decodeResult[[]lsp.Location](t, p.c.call("textDocument/definition", p.params(name, "MIRROR_ROOT", 1, ""))), []lsp.Location{p.at(name, "MIRROR_ROOT", 0)}; !slices.Equal(got, want) {
+		t.Errorf("definition of $MIRROR_ROOT = %+v, want %+v", got, want)
+	}
+	if got, want := decodeResult[[]lsp.Location](t, p.c.call("textDocument/definition", p.params(name, "system}", 0, ""))), []lsp.Location{p.at(name, "system", 0)}; !slices.Equal(got, want) {
+		t.Errorf("definition of ${system} = %+v, want %+v", got, want)
+	}
+}
+
+func TestNixRenameThroughTheServer(t *testing.T) {
+	t.Parallel()
+
+	const name = "default.nix"
+	text := "let\n  value = 1;\n  other = 2;\nin {\n  inherit value;\n  sum = value + other;\n}\n"
+	p := openNativeProject(t, nativeCapabilities, map[string]string{name: text}, name)
+
+	prepared := decodeResult[lsp.PrepareRenameResult](t, p.c.call("textDocument/prepareRename", p.params(name, "value", 2, "")))
+	if prepared.Placeholder != "value" || prepared.Range != p.at(name, "value", 2).Range {
+		t.Errorf("prepareRename = %+v", prepared)
+	}
+	edit := decodeResult[lsp.WorkspaceEdit](t, p.c.call("textDocument/rename", p.params(name, "value", 0, `, "newName": "amount"`)))
+	if got := editTexts(edit); !slices.Equal(got, []string{"amount", "value = amount;", "amount"}) {
+		t.Errorf("rename edits %q", got)
+	}
+	for _, tt := range []struct{ newName, message string }{
+		{"let", "not a valid"},
+		{"other", "already"},
+	} {
+		response := p.c.call("textDocument/rename", p.params(name, "value", 0, `, "newName": "`+tt.newName+`"`))
+		if response.Error == nil || !strings.Contains(response.Error.Message, tt.message) {
+			t.Errorf("renaming to %s = %+v", tt.newName, response)
+		}
+	}
+	refused := p.c.call("textDocument/prepareRename", p.params(name, "sum", 0, ""))
+	if refused.Error == nil || !strings.Contains(refused.Error.Message, "may read it by its name") {
+		t.Errorf("preparing to rename an attribute of the result = %+v", refused)
+	}
+}
+
+func TestNixSelectionRangesComposeWithTheShell(t *testing.T) {
+	t.Parallel()
+
+	const name = "default.nix"
+	text := "{\n  a = [ one ];\n  buildPhase = ''\n    echo $out\n  '';\n}\n"
+	p := openNativeProject(t, nativeCapabilities, map[string]string{name: text}, name)
+	oneLine, oneAt := p.pos(name, "one", 0)
+	outLine, outAt := p.pos(name, "$out", 0)
+	ranges := decodeResult[[]lsp.SelectionRange](t, p.c.call("textDocument/selectionRange", fmt.Sprintf(`{"textDocument": {"uri": %q}, "positions": [{"line": %d, "character": %d}, {"line": %d, "character": %d}]}`, p.uri(name), oneLine, oneAt+1, outLine, outAt+1)))
+	chain := func(r *lsp.SelectionRange) []string {
+		var out []string
+		for ; r != nil; r = r.Parent {
+			out = append(out, text[offsetOf(text, r.Range.Start):offsetOf(text, r.Range.End)])
+		}
+		return out
+	}
+	binding := "buildPhase = ''\n    echo $out\n  '';"
+	whole := "{\n  a = [ one ];\n  " + binding + "\n}"
+	if got, want := chain(&ranges[0]), []string{"one", "[ one ]", "a = [ one ];", whole, whole + "\n"}; !slices.Equal(got, want) {
+		t.Errorf("selection in Nix = %q, want %q", got, want)
+	}
+	got := chain(&ranges[1])
+	for _, want := range []string{"$out", "''\n    echo $out\n  ''", binding, whole, whole + "\n"} {
+		if !slices.Contains(got, want) {
+			t.Errorf("selection in the shell = %q, want it to hold %q", got, want)
+		}
+	}
+	for i := 1; i < len(got); i++ {
+		if !strings.Contains(got[i], got[i-1]) {
+			t.Errorf("selection in the shell does not nest at %d: %q", i, got)
+		}
+	}
+}
+
+func TestNixShellSymbolsNestInTheBindingThatHoldsThem(t *testing.T) {
+	t.Parallel()
+
+	const name = "default.nix"
+	text := "stdenv.mkDerivation {\n  buildPhase = ''\n    helper() { echo hi; }\n    helper\n  '';\n}\n"
+	p := openNativeProject(t, nativeCapabilities, map[string]string{name: text}, name)
+	symbols := decodeResult[[]lsp.DocumentSymbol](t, p.c.call("textDocument/documentSymbol", `{"textDocument": {"uri": "`+p.uri(name)+`"}}`))
+	if got := symbolNames(childSymbol(t, symbols, "buildPhase").Children); !slices.Contains(got, "helper") {
+		t.Errorf("buildPhase holds %q, want helper", got)
+	}
+}
+
+func TestNixFoldsCoverLanguageAndComments(t *testing.T) {
+	t.Parallel()
+
+	const name = "default.nix"
+	text := "# one\n# two\nlet\n  a = [\n    1\n  ];\nin {\n  b = ''\n    text\n  '';\n}\n"
+	p := openNativeProject(t, nativeCapabilities, map[string]string{name: text}, name)
+	got := decodeResult[[]lsp.FoldingRange](t, p.c.call("textDocument/foldingRange", `{"textDocument": {"uri": "`+p.uri(name)+`"}}`))
+	want := []lsp.FoldingRange{
+		{StartLine: 0, EndLine: 1, Kind: lsp.FoldingComment},
+		{StartLine: 2, EndLine: 5},
+		{StartLine: 3, EndLine: 5},
+		{StartLine: 6, EndLine: 10},
+		{StartLine: 7, EndLine: 9},
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("folds = %+v, want %+v", got, want)
 	}
 }

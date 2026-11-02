@@ -100,10 +100,20 @@ func (g *Group) PrepareRename(sym Symbol) error {
 	if !g.Language.Renames() {
 		return fmt.Errorf("%w: %s `%s` is defined in a %s, which other code may read by its name; rename it with that language's own server", navigation.ErrNotRenamable, sym.Kind, sym.Name, g.Language)
 	}
+	if r := renamesOf(sym); r != nil {
+		if reason := r.Refusal(sym.targets[0].Symbol); reason != "" {
+			return fmt.Errorf("%w: %s", navigation.ErrNotRenamable, reason)
+		}
+	}
 	if sym.Kind == model.KindModule && g.moduleRoot(sym) != nil && !g.explicitPath(sym) {
 		return fmt.Errorf("%w: module `%s` is found by its name; give it an explicit path first", navigation.ErrNotRenamable, sym.Name)
 	}
 	return nil
+}
+
+func renamesOf(sym Symbol) model.Renames {
+	t := sym.targets[0]
+	return t.Module.Files[t.File].Renames
 }
 
 func (g *Group) explicitPath(sym Symbol) bool {
@@ -133,6 +143,11 @@ func (g *Group) Rename(sym Symbol, newName string) ([]Occurrence, error) {
 	t := sym.targets[0]
 	if clash := t.Module.Resolve(t.File, model.Ref{Name: newName, Kind: sym.Kind, Scope: t.Info().Scope}); len(clash.Targets) > 0 {
 		return nil, fmt.Errorf("%w: %s `%s` already exists", navigation.ErrNameConflict, clash.Targets[0].Info().Kind, newName)
+	}
+	if r := renamesOf(sym); r != nil {
+		if reason := r.Conflict(t.Symbol, newName); reason != "" {
+			return nil, fmt.Errorf("%w: %s", navigation.ErrNameConflict, reason)
+		}
 	}
 	return occs, nil
 }

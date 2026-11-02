@@ -467,10 +467,10 @@ is written back in the syntax of the file; a fix that cannot be written there,
 such as one that would need a new line in a Makefile recipe, is not offered.
 The shell cannot be switched with a `# shellcheck shell=` directive, because
 the file decides it. A `# shellcheck disable=` directive in the shell works as
-usual. In Nix files, requests outside the shell find nothing
-([Nix files](#nix-files) says what the shell reaches in the Nix around it); justfiles,
-Makefiles and Dockerfiles are understood as languages of their own
-([Justfiles, Makefiles and Dockerfiles natively](#justfiles-makefiles-and-dockerfiles-natively)).
+usual. Nix files, justfiles, Makefiles and Dockerfiles are also understood as
+languages of their own
+([Nix files](#nix-files),
+[Justfiles, Makefiles and Dockerfiles natively](#justfiles-makefiles-and-dockerfiles-natively)).
 
 An editor sends these files when the server is attached to their file type
 ([docs/editors.md](docs/editors.md)); `shell-lsp check` and the workspace scan
@@ -694,13 +694,49 @@ highlight and hover showing the binding and where it comes from. These are:
 - in a systemd unit's scripts, its `environment`;
 - in a `writeShellApplication`'s `text`, its `runtimeEnv`.
 
-Such a variable is not renamed from the shell, since other Nix code may read
-the attribute by its name.
+Such a variable is not renamed, from the shell or from its attribute, since
+other Nix code may read the attribute by its name.
 
-The Nix language itself (its syntax errors and checks, its symbols, folding,
-formatting, and navigation between Nix bindings, also through `${...}`) is
-left to a Nix language server such as nixd or nil, which runs beside
-shell-lsp without the two reporting or listing anything twice.
+Outside the shell, within one file, the Nix language answers too:
+
+- Syntax errors and checks are reported, as they are in every Nix file.
+- Definition, references, document highlight, hover and rename work for every
+  binding: `let`, `rec` attributes, lambda arguments, formals, `@` aliases and
+  `inherit`, also through `${...}` in a string. A cursor on `inherit x` means
+  the `x` it reads.
+- An attribute of a set is followed where the file itself proves it: through
+  `s.a.b`, `s ? a`, `inherit (s) a` and `with s;` when `s` is bound in the file
+  to an attribute set written there, and through the `@` alias of a function
+  for its formals. Nothing else is guessed, so `self.x`, `pkgs.hello` and a set
+  built with `//` lead nowhere.
+- The outline holds attribute sets, `let` blocks and functions with their
+  parameters, nested as they are written, with the shell's functions inside
+  the binding that holds them; workspace symbols list every attribute and
+  `let` binding.
+- Folding covers attribute sets, lists, `let` blocks, strings, lambdas and runs
+  of comments, and selection ranges grow from the shell in a string through the
+  Nix around it.
+
+A rename refuses, with the reason, to rename to anything but a plain name, or
+when another binding would capture a read of the new name or be shadowed by it.
+It also refuses names the evaluator itself reads, such as `__overrides` and the
+`body` of a legacy `let`, and an attribute of a non-recursive set unless every
+read of that set is proven, since anything else could read it by its name. What
+it does:
+
+- `inherit x` stays an attribute named `x`: renaming the binding it reads writes
+  `x = new;`, and renaming a binding made by `inherit x` writes `new = x;`, also
+  taking it out of an `inherit` with several names.
+- A formal is part of the function's interface. Renaming one also renames its
+  reads through the `@` alias and the keys passed at calls of that function in
+  the same file. Callers in other files, `callPackage` above all, are not
+  changed and must follow by hand.
+- A `rec` attribute is renamed with its reads in the file. Other files that read
+  the attribute are not changed.
+
+Navigation stops at the file: `import`, `callPackage`, flake `inputs` and
+flake-parts `imports` are not followed, and nothing is evaluated. Completion and
+signature help in the Nix language are not offered.
 
 Shell that Nix assembles across `${...}`, such as a `case` whose patterns come
 from `lib.optionalString`, cannot be checked, since only evaluating the Nix

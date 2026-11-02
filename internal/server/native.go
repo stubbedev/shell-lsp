@@ -24,7 +24,6 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/navigation"
 	"github.com/stubbedev/shell-lsp/internal/regularfile"
-	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
@@ -101,7 +100,7 @@ type nativeHere struct {
 
 func nativeLocation(here located, pos lsp.Position, inside bool) (nativeHere, bool) {
 	h, ok := hostnav.Of(here.File)
-	if !ok || !inside && h.Language().ShellOnly() {
+	if !ok {
 		return nativeHere{}, false
 	}
 	return nativeHere{located: here, host: h, source: here.File.Doc.Source().PositionToOffset(pos, here.encoding), inside: inside}, true
@@ -214,9 +213,6 @@ func (s *Server) nativeCompletion(ctx context.Context, docs *docstore.View, here
 }
 
 func (s *Server) nativeSymbols(snap *snapshot) []lsp.DocumentSymbol {
-	if snap.Native.Language.ShellOnly() {
-		return []lsp.DocumentSymbol{}
-	}
 	ix := snap.Native.Index
 	at := sourcePositions(snap.File, snap.encoding)
 	var build func(parent int) []lsp.DocumentSymbol
@@ -278,7 +274,7 @@ func (s *Server) nativeRename(hit nativeHit, enc docstore.Encoding, docs *docsto
 			index[o.File.URI] = i
 			files = append(files, fileEdits{doc: o.File.Doc.Source(), versioned: open})
 		}
-		files[i].edits = append(files[i].edits, textedit.Edit{Start: o.Span.Start, End: o.Span.End, NewText: newName})
+		files[i].edits = append(files[i].edits, o.Edits(newName)...)
 	}
 	return s.multiFileEdit(enc, files)
 }

@@ -177,8 +177,9 @@ formatting. The VS Code extension attaches to Makefiles and Dockerfiles on its
 own, and to justfiles and Nix files when extensions give them the `just` and
 `nix` languages. Elsewhere, add the file types next to the shell ones. In
 Neovim, add `"make"`, `"just"`, `"dockerfile"` and `"nix"` to `filetypes` (or
-to the `FileType` pattern); shell-lsp then runs next to any Nix language
-server:
+to the `FileType` pattern). For Nix files it answers within each file
+([Nix files](../README.md#nix-files)), with no other Nix language server needed
+for that:
 
 ```lua
 vim.lsp.config("shell_lsp", {
@@ -189,7 +190,7 @@ vim.lsp.config("shell_lsp", {
 ```
 
 In Helix, list shell-lsp for the `make`, `just`, `dockerfile` and `nix`
-languages, next to the language servers they already use:
+languages:
 
 ```toml
 [[language]]
@@ -206,7 +207,7 @@ language-servers = ["shell-lsp"]
 
 [[language]]
 name = "nix"
-language-servers = ["nil", "shell-lsp"]
+language-servers = ["shell-lsp"]
 ```
 
 ## Windows

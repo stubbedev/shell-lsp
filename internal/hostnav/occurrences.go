@@ -6,6 +6,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/host/model"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
@@ -15,6 +16,19 @@ type Occurrence struct {
 	Write       bool
 	Declaration bool
 	Shell       bool
+	Rewrite     *model.Rewrite
+}
+
+func (o Occurrence) Edits(newName string) []textedit.Edit {
+	if o.Rewrite == nil {
+		return []textedit.Edit{{Start: o.Span.Start, End: o.Span.End, NewText: newName}}
+	}
+	r := o.Rewrite
+	edits := []textedit.Edit{{Start: r.Span.Start, End: r.Span.End, NewText: r.Before + newName + r.After}}
+	if r.Remove.End > r.Remove.Start {
+		edits = append(edits, textedit.Edit{Start: r.Remove.Start, End: r.Remove.End})
+	}
+	return edits
 }
 
 type identity struct {
@@ -88,7 +102,7 @@ func (g *Group) Declarations(sym Symbol) []Occurrence {
 	for f, ix := range module.Files {
 		for i, s := range ix.Symbols {
 			if identityOf(model.Target{Module: module, File: f, Symbol: i}) == sym.id {
-				out = append(out, Occurrence{File: g.fileOf(module, f), Span: s.Selection, Write: true, Declaration: true})
+				out = append(out, Occurrence{File: g.fileOf(module, f), Span: s.Selection, Write: true, Declaration: true, Rewrite: s.Rewrite})
 			}
 		}
 	}
@@ -125,7 +139,7 @@ func (g *Group) Occurrences(sym Symbol) []Occurrence {
 					continue
 				}
 				if slices.ContainsFunc(module.Resolve(f, r).Targets, func(t model.Target) bool { return identityOf(t) == sym.id }) {
-					out = append(out, Occurrence{File: g.fileOf(module, f), Span: r.Span})
+					out = append(out, Occurrence{File: g.fileOf(module, f), Span: r.Span, Rewrite: r.Rewrite})
 				}
 			}
 		}
@@ -143,6 +157,7 @@ func merge(occs []Occurrence) []Occurrence {
 		if n := len(out); n > 0 && out[n-1].File.Path == o.File.Path && out[n-1].Span == o.Span {
 			out[n-1].Write = out[n-1].Write || o.Write
 			out[n-1].Declaration = out[n-1].Declaration || o.Declaration
+			out[n-1].Rewrite = cmp.Or(out[n-1].Rewrite, o.Rewrite)
 			continue
 		}
 		out = append(out, o)

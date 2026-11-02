@@ -121,6 +121,21 @@ type Symbol struct {
 	Inert     bool
 	Local     bool
 	Arity     Arity
+	Passive   bool
+	Listed    bool
+	Rewrite   *Rewrite
+}
+
+type Rewrite struct {
+	Span   Span
+	Before string
+	After  string
+	Remove Span
+}
+
+type Renames interface {
+	Refusal(symbol int) string
+	Conflict(symbol int, newName string) string
 }
 
 const NoParent = -1
@@ -153,6 +168,7 @@ type Ref struct {
 	Horizon   int
 	Late      bool
 	ArgSpans  []Span
+	Rewrite   *Rewrite
 }
 
 const NoArgs = -1
@@ -270,10 +286,12 @@ type Index struct {
 	Fileless  []int
 	Search    []SearchPath
 	Branches  Alternatives
+	Renames   Renames
 
-	lookups sync.Once
-	byName  map[symbolKey][]int
-	byOwner map[int][]int
+	lookups  sync.Once
+	byName   map[symbolKey][]int
+	byOwner  map[int][]int
+	byParent map[int][]int
 }
 
 type Branches []Span
@@ -299,9 +317,11 @@ type symbolKey struct {
 func (ix *Index) tables() {
 	ix.lookups.Do(func() {
 		ix.byName = make(map[symbolKey][]int, len(ix.Symbols))
+		ix.byParent = map[int][]int{}
 		for i, s := range ix.Symbols {
 			key := symbolKey{s.Kind.Namespace(), s.Name}
 			ix.byName[key] = append(ix.byName[key], i)
+			ix.byParent[s.Parent] = append(ix.byParent[s.Parent], i)
 		}
 		ix.byOwner = map[int][]int{}
 		for i, r := range ix.Refs {
@@ -454,7 +474,7 @@ const NoSymbol = -1
 
 func (ix *Index) At(offset int) (Hit, bool) {
 	for i, s := range ix.Symbols {
-		if s.Selection.Touches(offset) && s.Selection.End > s.Selection.Start {
+		if !s.Passive && s.Selection.Touches(offset) && s.Selection.End > s.Selection.Start {
 			return Hit{Name: s.Name, Kind: s.Kind, Span: s.Selection, Scope: s.Scope, Symbol: i, Declaration: true}, true
 		}
 	}
@@ -506,11 +526,6 @@ func (ix *Index) Exported(name string, scope Scope) []int {
 }
 
 func (ix *Index) Children(parent int) []int {
-	var out []int
-	for i, s := range ix.Symbols {
-		if s.Parent == parent {
-			out = append(out, i)
-		}
-	}
-	return out
+	ix.tables()
+	return ix.byParent[parent]
 }

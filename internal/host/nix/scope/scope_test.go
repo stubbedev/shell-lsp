@@ -360,3 +360,49 @@ func BenchmarkResolveShadowedScopes(b *testing.B) {
 		Resolve(f)
 	}
 }
+
+func TestCapture(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name, src, newName string
+		found              bool
+		kind               CaptureKind
+	}{
+		{name: "free", src: "let one = 1; in one", newName: "two"},
+		{name: "same scope", src: "let one = 1; two = 2; in one", newName: "two", found: true, kind: AlreadyBound},
+		{name: "a lambda around a read", src: "let one = 1; in two: one", newName: "two", found: true, kind: CapturedRead},
+		{name: "a let around a read", src: "let one = 1; in let two = 2; in one", newName: "two", found: true, kind: CapturedRead},
+		{name: "a let around a read in an inherit", src: "let one = 1; in let two = 2; inherit one; in two", newName: "two", found: true, kind: CapturedRead},
+		{name: "a binding beside a read", src: "let one = 1; in [ one (two: two) ]", newName: "two"},
+		{name: "a read of an outer binding", src: "let two = 2; in let one = 1; in one + two", newName: "two", found: true, kind: ShadowedRead},
+		{name: "a read of a builtin", src: "let one = 1; in map", newName: "map", found: true, kind: ShadowedRead},
+		{name: "a read through with", src: "let one = 1; in with s; two", newName: "two", found: true, kind: ShadowedRead},
+		{name: "a read outside", src: "[ two (let one = 1; in one) ]", newName: "two"},
+		{name: "a read with its own binding inside", src: "let one = 1; in two: two", newName: "two"},
+		{name: "an inherit reads past the let", src: "let two = 2; in let one = 1; inherit two; in one", newName: "two", found: true, kind: AlreadyBound},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			table := Resolve(syntax.Parse(tt.src))
+			i := slices.IndexFunc(table.Defs(), func(d *Def) bool { return d.Name == "one" })
+			if i < 0 {
+				t.Fatalf("no binding of one in %q", tt.src)
+			}
+			got, found := table.Capture(table.Defs()[i], tt.newName)
+			if found != tt.found || found && got.Kind != tt.kind {
+				t.Errorf("Capture = %+v, %v, want kind %d, %v", got, found, tt.kind, tt.found)
+			}
+		})
+	}
+}
+
+func TestReserved(t *testing.T) {
+	t.Parallel()
+
+	for name, want := range map[string]bool{"__curPos": true, "__overrides": true, "__sub": true, "__findFile": true, "body": false, "x": false} {
+		if got := Reserved(name); got != want {
+			t.Errorf("Reserved(%q) = %v, want %v", name, got, want)
+		}
+	}
+}

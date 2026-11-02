@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/host/model"
 	"github.com/stubbedev/shell-lsp/internal/host/nix/syntax"
 	"github.com/stubbedev/shell-lsp/internal/projection"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
@@ -209,8 +210,11 @@ func TestAnalyzeExportsTheEnvironmentOfShellStrings(t *testing.T) {
 			a := Analyze(tt.nix)
 			var got []string
 			for _, s := range a.Index.Symbols {
+				if !s.Exported {
+					continue
+				}
 				got = append(got, s.Name)
-				if !s.Exported || s.Scope == 0 || tt.nix[s.Selection.Start:s.Selection.End] != s.Name {
+				if s.Scope == 0 || tt.nix[s.Selection.Start:s.Selection.End] != s.Name {
 					t.Errorf("symbol %+v is not an exported variable named where it is defined", s)
 				}
 			}
@@ -240,7 +244,7 @@ func TestAnalyzeShellsLeaveOutAntiquotations(t *testing.T) {
 		t.Errorf("detail = %q", got)
 	}
 	inner := strings.Index(src, "$out")
-	if spans := a.Enclosing(inner); len(spans) != 2 || src[spans[1].Start:spans[1].End] != "''\n  cp ${src} $out\n''" {
+	if spans := a.Enclosing(inner); !slices.Contains(spans, model.Span{Start: strings.Index(src, "''\n"), End: strings.Index(src, "\n''") + 3}) {
 		t.Errorf("Enclosing(%d) = %+v", inner, spans)
 	}
 }

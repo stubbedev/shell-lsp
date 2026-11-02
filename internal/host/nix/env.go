@@ -8,7 +8,6 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/host/model"
 	"github.com/stubbedev/shell-lsp/internal/host/nix/syntax"
 	"github.com/stubbedev/shell-lsp/internal/lint"
-	"github.com/stubbedev/shell-lsp/internal/parser"
 )
 
 type envSource uint8
@@ -132,6 +131,7 @@ func (f *file) index(found []shellString) *model.Index {
 		ix.Findings = append(ix.Findings, lint.HostFinding(lint.CodeNixSyntax, e.Span, e.Message))
 	}
 	ix.Findings = append(ix.Findings, check(f.tree, f.table)...)
+	table := newSymbolTable(f, ix)
 	scopes := map[environment]model.Scope{}
 	for _, s := range found {
 		if s.env.set == nil {
@@ -139,24 +139,16 @@ func (f *file) index(found []shellString) *model.Index {
 		}
 		scope, ok := scopes[s.env]
 		if !ok {
-			scope = model.Scope(len(scopes) + 1)
+			scope = table.environment(s.env)
 			scopes[s.env] = scope
-			for _, b := range vars(s.env) {
-				name := f.src[b.name.Start:b.name.End]
-				if !parser.IsName(name) {
-					continue
-				}
-				ix.Symbols = append(ix.Symbols, model.Symbol{
-					Name: name, Kind: model.KindVariable, Span: b.span, Selection: b.name,
-					Scope: scope, Parent: model.NoParent, Detail: f.detail(b), Doc: envDocs[s.env.source], Exported: true,
-				})
-			}
 		}
 		for _, piece := range pieces(s.str) {
 			ix.Shells = append(ix.Shells, model.Shell{Span: piece, Scope: scope})
 		}
 	}
 	slices.SortFunc(ix.Shells, func(a, b model.Shell) int { return cmp.Compare(a.Span.Start, b.Span.Start) })
+	table.build()
+	ix.Folds = folds(f.tree)
 	return ix
 }
 

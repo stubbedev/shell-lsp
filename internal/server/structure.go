@@ -91,17 +91,21 @@ func within(inner, outer lsp.Range) bool {
 
 func nestShellSymbols(native, shell []lsp.DocumentSymbol) []lsp.DocumentSymbol {
 	for _, sym := range shell {
-		i := slices.IndexFunc(native, func(n lsp.DocumentSymbol) bool { return within(sym.Range, n.Range) })
-		if i < 0 {
-			native = append(native, sym)
-			continue
-		}
-		native[i].Children = append(native[i].Children, sym)
+		native = nestSymbol(native, sym)
 	}
-	slices.SortStableFunc(native, func(a, b lsp.DocumentSymbol) int {
+	return native
+}
+
+func nestSymbol(siblings []lsp.DocumentSymbol, sym lsp.DocumentSymbol) []lsp.DocumentSymbol {
+	if i := slices.IndexFunc(siblings, func(n lsp.DocumentSymbol) bool { return within(sym.Range, n.Range) }); i >= 0 {
+		siblings[i].Children = nestSymbol(siblings[i].Children, sym)
+		return siblings
+	}
+	siblings = append(siblings, sym)
+	slices.SortStableFunc(siblings, func(a, b lsp.DocumentSymbol) int {
 		return cmp.Or(cmp.Compare(a.Range.Start.Line, b.Range.Start.Line), cmp.Compare(a.Range.Start.Character, b.Range.Start.Character))
 	})
-	return native
+	return siblings
 }
 
 func documentSymbols(at docstore.Positions, symbols []structure.Symbol) []lsp.DocumentSymbol {
@@ -195,7 +199,7 @@ func (s *Server) handleWorkspaceSymbol(ctx context.Context, docs *docstore.View,
 		}
 		at := sourcePositions(file, docs.Encoding())
 		for _, sym := range file.Native.Index.Symbols {
-			if sym.Scope == model.Global && structure.Matches(symbolParams.Query, sym.Name) {
+			if (sym.Scope == model.Global || sym.Listed) && structure.Matches(symbolParams.Query, sym.Name) {
 				out = append(out, lsp.SymbolInformation{Name: sym.Name, Kind: nativeKind(sym.Kind), Location: lsp.Location{URI: file.URI, Range: at.Range(sym.Selection)}})
 			}
 		}

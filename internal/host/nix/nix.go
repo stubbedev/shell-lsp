@@ -32,7 +32,7 @@ type Analysis struct {
 	Index     *model.Index
 	Errors    []syntax.Error
 	Scope     *scope.Table
-	strings   []model.Span
+	tree      *syntax.File
 }
 
 func Analyze(src string) Analysis {
@@ -46,17 +46,12 @@ func Analyze(src string) Analysis {
 		b.Shell(group[0].detection)
 		f.project(b, group, n)
 	}
-	a := Analysis{Map: b.Map(), Detection: detection, Index: f.index(f.found), Errors: f.tree.Errors, Scope: f.table}
-	if len(f.found) > 0 {
-		a.strings = make([]model.Span, 0, 2*len(f.found))
-	}
-	for _, s := range f.found {
-		a.strings = append(a.strings, s.str.Span(), s.str.Content)
-	}
-	return a
+	return Analysis{Map: b.Map(), Detection: detection, Index: f.index(f.found), Errors: f.tree.Errors, Scope: f.table, tree: f.tree}
 }
 
-func (a Analysis) Enclosing(offset int) []model.Span { return model.Nested(offset, a.strings) }
+func (Analysis) Expect(int) (model.Expect, bool) { return model.Expect{}, false }
+
+func (Analysis) Invocation(int) (model.Invocation, bool) { return model.Invocation{}, false }
 
 func groups(found []shellString) [][]shellString {
 	var out [][]shellString
