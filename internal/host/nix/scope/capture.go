@@ -49,7 +49,7 @@ func (t *Table) Capture(d *Def, name string) (Capture, bool) {
 }
 
 func (t *Table) captured(u Use, until *Scope, name string) bool {
-	if binder, ok := t.binders[u.Node]; ok && binder.Scope.binding(name) != nil {
+	if binder, ok := t.Binder(u.Node); ok && binder.Scope.binding(name) != nil {
 		return true
 	}
 	for s := t.ScopeAt(u.Node.Span().Start); s != nil && s != until; s = s.Parent {

@@ -7,28 +7,31 @@ func (p *treeParser) attrSet(start int, rec bool) *AttrSet {
 	bindings := p.bindings(false)
 	p.open[inBraces]--
 	closed := p.closing(TokRBrace, "}", open)
-	return &AttrSet{exprNode: exprAt(p.span(start)), Rec: rec, Bindings: bindings, Closed: closed}
+	return p.arena.sets.put(p.chunk, AttrSet{exprNode: exprAt(p.span(start)), Rec: rec, Bindings: bindings, Closed: closed})
 }
 
 func (p *treeParser) bindings(isLet bool) []Binding {
-	var out []Binding
+	mark := len(p.arena.bindings.stack)
 	for !p.atCloser() {
 		switch p.tok.kind {
 		case TokInherit:
-			out = append(out, p.inherit())
+			stmt := p.inherit()
+			p.arena.bindings.stack = append(p.arena.bindings.stack, stmt)
 		case TokIdent, TokOrKeyword, TokQuote, TokInterp:
-			out = append(out, p.assign(isLet))
+			stmt := p.assign(isLet)
+			p.arena.bindings.stack = append(p.arena.bindings.stack, stmt)
 		default:
 			p.errorHere("expected an attribute, found " + p.describe(p.tok))
 			p.syncBinding()
 		}
 	}
-	return out
+	return p.arena.bindings.since(mark, p.chunk)
 }
 
 func (p *treeParser) assign(isLet bool) *Assign {
 	start := p.tok.start
 	path := p.attrPath()
+	p.binders += len(path)
 	if isLet && !StaticAttr(path[0]) {
 		p.report(path[0].Span(), "a `let` cannot bind a dynamic attribute")
 	}
@@ -39,7 +42,7 @@ func (p *treeParser) assign(isLet bool) *Assign {
 		value = p.bad()
 	}
 	p.endBinding()
-	return &Assign{bindingNode: bindingAt(p.span(start)), Path: path, Value: value}
+	return p.arena.assigns.put(p.chunk, Assign{bindingNode: bindingAt(p.span(start)), Path: path, Value: value})
 }
 
 func (p *treeParser) inherit() *Inherit {
@@ -49,16 +52,19 @@ func (p *treeParser) inherit() *Inherit {
 	if p.tok.kind == TokLParen {
 		from = p.paren()
 	}
-	var attrs []Attr
+	mark := len(p.arena.attrs.stack)
 	for p.atAttr() && !p.startsBinding() {
 		a := p.attribute()
 		if !StaticAttr(a) {
 			p.report(a.Span(), "`inherit` cannot name a dynamic attribute")
 		}
-		attrs = append(attrs, a)
+		p.arena.attrs.stack = append(p.arena.attrs.stack, a)
 	}
+	attrs := p.arena.attrs.since(mark, p.chunk)
+	p.reads += len(attrs)
+	p.binders += len(attrs)
 	p.endBinding()
-	return &Inherit{bindingNode: bindingAt(p.span(start)), From: from, Attrs: attrs}
+	return p.arena.inherits.put(p.chunk, Inherit{bindingNode: bindingAt(p.span(start)), From: from, Attrs: attrs})
 }
 
 func (p *treeParser) endBinding() {
@@ -82,11 +88,14 @@ func (p *treeParser) atAttr() bool {
 }
 
 func (p *treeParser) attrPath() AttrPath {
-	path := AttrPath{p.attribute()}
+	mark := len(p.arena.attrs.stack)
+	first := p.attribute()
+	p.arena.attrs.stack = append(p.arena.attrs.stack, first)
 	for p.accept(TokDot) {
-		path = append(path, p.attribute())
+		next := p.attribute()
+		p.arena.attrs.stack = append(p.arena.attrs.stack, next)
 	}
-	return path
+	return p.arena.attrs.since(mark, p.chunk)
 }
 
 func (p *treeParser) attribute() Attr {
@@ -95,18 +104,24 @@ func (p *treeParser) attribute() Attr {
 	case TokIdent, TokOrKeyword:
 		name := p.src[here.Start:here.End]
 		p.advance()
-		return &IdentAttr{attrNode: attrAt(here), Name: name}
+		return p.arena.identAttrs.put(p.chunk, IdentAttr{attrNode: p.attrAt(here), Name: name})
 	case TokQuote:
 		s := p.quoted()
-		return &StringAttr{attrNode: attrAt(s.Span()), Value: s}
+		return &StringAttr{attrNode: p.attrAt(s.Span()), Value: s}
 	case TokInterp:
 		in := p.antiquote()
 		if in.Closed {
 			p.advance()
 		}
-		return &DynamicAttr{attrNode: attrAt(in.Span()), Value: in.Value, Closed: in.Closed}
+		return &DynamicAttr{attrNode: p.attrAt(in.Span()), Value: in.Value, Closed: in.Closed}
 	default:
 		p.errorHere("expected an attribute name, found " + p.describe(p.tok))
-		return &BadAttr{attrAt(Span{Start: p.prevEnd, End: p.prevEnd})}
+		return &BadAttr{p.attrAt(Span{Start: p.prevEnd, End: p.prevEnd})}
 	}
+}
+
+func (p *treeParser) attrAt(s Span) attrNode {
+	slot := p.slots
+	p.slots++
+	return attrNode{node: node{s}, slot: int32(slot)} //nolint:gosec // bounded by the source length, which the transport caps well below 2^31
 }

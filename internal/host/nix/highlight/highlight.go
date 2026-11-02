@@ -161,7 +161,7 @@ func (n *namer) reference(ref scope.Ref, name string) (class, bool) {
 	case scope.Definition:
 		return definition(ref.Def), true
 	case scope.Global:
-		return library(ref.Builtin), true
+		return library(*ref.Builtin), true
 	case scope.Dynamic:
 		if member, ok := builtinMember(name); ok && n.isBuiltins(ref.With.Scope) {
 			return library(member), true

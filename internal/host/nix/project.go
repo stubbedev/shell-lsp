@@ -485,8 +485,8 @@ func (p *Project) readDependencies() {
 			continue
 		}
 		u := p.units[i]
-		for _, id := range slices.Sorted(maps.Keys(u.slots)) {
-			p.slotValues(u, u.slots[id])
+		for _, scoped := range u.slots {
+			p.slotValues(u, scoped.slot)
 		}
 	}
 }
@@ -657,7 +657,7 @@ func (p *Project) Homes(file int, scope model.Scope, name string) ([]model.Home,
 
 func (p *Project) homes(file int, scope model.Scope, name string) ([]model.Home, bool) {
 	at := model.Home{File: file, Scope: scope}
-	if slot, ok := p.units[file].slots[scope]; ok {
+	if slot, ok := p.units[file].slot(scope); ok {
 		return p.homesOfSlot(at, slot), true
 	}
 	if env, ok := p.shellEnv(at); ok {

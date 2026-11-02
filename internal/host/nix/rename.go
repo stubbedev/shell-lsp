@@ -86,13 +86,13 @@ func (r renames) line(n syntax.Node) int {
 
 func (r renames) Conflict(symbol int, newName string) string {
 	sym, o := r.ix.Symbols[symbol], r.owners[symbol]
-	if _, taken := o.set.names[newName]; taken {
+	if o.set.names.has(newName) {
 		return fmt.Sprintf("`%s` is already bound next to `%s`", newName, sym.Name)
 	}
-	if o.set.reads[newName] {
+	if o.set.reads.has(newName) {
 		return fmt.Sprintf("this file already reads an attribute `%s` of the set that holds `%s`, which would then find the renamed one", newName, sym.Name)
 	}
-	if slices.ContainsFunc(o.set.callers, func(c *attrs) bool { _, taken := c.names[newName]; return taken }) {
+	if slices.ContainsFunc(o.set.callers, func(c *attrs) bool { return c.names.has(newName) }) {
 		return fmt.Sprintf("a call in this file already passes `%s` next to `%s`", newName, sym.Name)
 	}
 	if o.def == nil {

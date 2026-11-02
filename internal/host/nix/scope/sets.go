@@ -44,12 +44,14 @@ func (k setKind) readsItself(name string) bool {
 }
 
 type entry struct {
-	name     string
-	binders  []syntax.Attr
-	bindings []syntax.Binding
-	inherit  *syntax.Inherit
-	value    syntax.Expr
-	set      *setNode
+	name         string
+	binders      []syntax.Attr
+	bindings     []syntax.Binding
+	inherit      *syntax.Inherit
+	value        syntax.Expr
+	set          *setNode
+	firstBinder  [1]syntax.Attr
+	firstBinding [1]syntax.Binding
 }
 
 type extra struct {
@@ -59,6 +61,8 @@ type extra struct {
 	set       *setNode
 }
 
+const linearEntries = 8
+
 type setNode struct {
 	rec        bool
 	owner      syntax.Node
@@ -67,19 +71,60 @@ type setNode struct {
 	parent     *setNode
 	merged     *setNode
 	entries    []*entry
-	index      map[string]*entry
+	indexed    map[string]*entry
 	froms      []*syntax.Paren
 	statements []*syntax.Inherit
 	extras     []extra
 }
 
-func newSetNode(rec bool) *setNode {
-	return &setNode{rec: rec, index: map[string]*entry{}}
+func (r *resolver) newSetNode(isRec bool) *setNode {
+	if len(r.setChunk) == 0 {
+		r.setChunk = make([]setNode, r.chunk)
+	}
+	n := &r.setChunk[0]
+	r.setChunk = r.setChunk[1:]
+	n.rec = isRec
+	return n
+}
+
+func (n *setNode) lookup(name string) (*entry, bool) {
+	if n.indexed != nil {
+		e, ok := n.indexed[name]
+		return e, ok
+	}
+	for _, e := range n.entries {
+		if e.name == name {
+			return e, true
+		}
+	}
+	return nil, false
 }
 
 func (n *setNode) add(e *entry) {
-	n.index[e.name] = e
 	n.entries = append(n.entries, e)
+	switch {
+	case n.indexed != nil:
+		n.indexed[e.name] = e
+	case len(n.entries) > linearEntries:
+		n.indexed = make(map[string]*entry, 2*len(n.entries))
+		for _, known := range n.entries {
+			n.indexed[known.name] = known
+		}
+	}
+}
+
+func (r *resolver) newEntry(name string, attr syntax.Attr, binding syntax.Binding) *entry {
+	if len(r.entryChunk) == 0 {
+		r.entryChunk = make([]entry, r.chunk)
+	}
+	e := &r.entryChunk[0]
+	r.entryChunk = r.entryChunk[1:]
+	e.name = name
+	e.firstBinder[0] = attr
+	e.firstBinding[0] = binding
+	e.binders = e.firstBinder[:]
+	e.bindings = e.firstBinding[:]
+	return e
 }
 
 func (n *setNode) path(leaf string) string {
@@ -110,7 +155,7 @@ func (r *resolver) duplicate(n *setNode, attr syntax.Attr, name string) {
 }
 
 func (r *resolver) literal(set *syntax.AttrSet) *setNode {
-	n := newSetNode(set.Rec)
+	n := r.newSetNode(set.Rec)
 	n.owner = set
 	if set.Rec {
 		n.spans = []syntax.Span{set.Span()}
@@ -120,6 +165,7 @@ func (r *resolver) literal(set *syntax.AttrSet) *setNode {
 }
 
 func (r *resolver) fill(n *setNode, bindings []syntax.Binding) {
+	n.entries = slices.Grow(n.entries, len(bindings))
 	for _, b := range bindings {
 		switch b := b.(type) {
 		case *syntax.Assign:
@@ -141,9 +187,11 @@ func (r *resolver) inheritStatement(n *setNode, stmt *syntax.Inherit) {
 			n.extras = append(n.extras, extra{name: attr})
 			continue
 		}
-		existing, exists := n.index[name]
+		existing, exists := n.lookup(name)
 		if !exists {
-			n.add(&entry{name: name, binders: []syntax.Attr{attr}, bindings: []syntax.Binding{stmt}, inherit: stmt})
+			fresh := r.newEntry(name, attr, stmt)
+			fresh.inherit = stmt
+			n.add(fresh)
 			continue
 		}
 		r.duplicate(n, attr, name)
@@ -166,16 +214,18 @@ func (r *resolver) assign(n *setNode, a *syntax.Assign) {
 			}
 			continue
 		}
-		e, exists := cur.index[name]
+		e, exists := cur.lookup(name)
 		if last {
 			r.terminal(cur, e, exists, attr, name, a)
 			return
 		}
 		switch {
 		case !exists:
-			child := newSetNode(false)
+			child := r.newSetNode(false)
 			child.name, child.parent = name, cur
-			cur.add(&entry{name: name, binders: []syntax.Attr{attr}, bindings: []syntax.Binding{a}, set: child})
+			fresh := r.newEntry(name, attr, a)
+			fresh.set = child
+			cur.add(fresh)
 			cur = child
 		case e.set == nil:
 			r.duplicate(cur, attr, name)
@@ -199,7 +249,7 @@ func (r *resolver) dynamicStep(cur *setNode, attr syntax.Attr, a *syntax.Assign,
 		cur.extras = append(cur.extras, extra{name: attr, value: a.Value})
 		return nil
 	}
-	child := newSetNode(false)
+	child := r.newSetNode(false)
 	cur.extras = append(cur.extras, extra{name: attr, set: child})
 	return child
 }
@@ -207,7 +257,7 @@ func (r *resolver) dynamicStep(cur *setNode, attr syntax.Attr, a *syntax.Assign,
 func (r *resolver) terminal(cur *setNode, e *entry, exists bool, attr syntax.Attr, name string, a *syntax.Assign) {
 	set, isSet := syntax.Unparenthesized(a.Value).(*syntax.AttrSet)
 	if !exists {
-		fresh := &entry{name: name, binders: []syntax.Attr{attr}, bindings: []syntax.Binding{a}}
+		fresh := r.newEntry(name, attr, a)
 		if isSet {
 			fresh.set = r.literal(set)
 			fresh.set.name, fresh.set.parent = name, cur
@@ -246,7 +296,7 @@ func (r *resolver) merge(into, from *setNode) {
 		p.into.statements = append(p.into.statements, p.from.statements...)
 		p.into.extras = append(p.into.extras, p.from.extras...)
 		for _, fe := range p.from.entries {
-			e, exists := p.into.index[fe.name]
+			e, exists := p.into.lookup(fe.name)
 			switch {
 			case !exists:
 				p.into.add(fe)

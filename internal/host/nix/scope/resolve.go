@@ -9,7 +9,11 @@ import (
 
 type resolver struct {
 	table      *Table
-	shadow     map[string][]*Def
+	shadow     map[string]*Def
+	defChunk   []Def
+	entryChunk []entry
+	setChunk   []setNode
+	chunk      int
 	scope      *Scope
 	with       *syntax.With
 	duplicates []pendingDuplicate
@@ -17,30 +21,35 @@ type resolver struct {
 
 func (r *resolver) lookup(name string, inherit bool) Ref {
 	if name == CurPos && !inherit {
-		global, _ := builtins.Lookup(CurPos)
+		global, _ := builtins.Find(CurPos)
 		return Ref{Kind: Global, Builtin: global}
 	}
-	if stack := r.shadow[name]; len(stack) > 0 {
-		return Ref{Kind: Definition, Def: stack[len(stack)-1]}
+	if top := r.shadow[name]; top != nil {
+		return Ref{Kind: Definition, Def: top}
 	}
-	if b, ok := builtins.Lookup(name); ok && b.Global && name != CurPos {
+	if b, ok := builtins.Find(name); ok && b.Global && name != CurPos {
 		return Ref{Kind: Global, Builtin: b}
 	}
 	if r.with != nil {
 		return Ref{Kind: Dynamic, With: r.with}
 	}
-	return Ref{}
+	return Ref{Kind: Undefined}
+}
+
+func (t *Table) resolve(slot int, ref Ref) {
+	ref.known = true
+	t.refs[slot] = ref
 }
 
 func (r *resolver) ident(id *syntax.Ident) {
 	ref := r.lookup(id.Name, false)
-	r.table.idents[id] = ref
+	r.table.resolve(id.Slot(), ref)
 	r.table.uses = append(r.table.uses, Use{Node: id, Name: id.Name, Ref: ref})
 }
 
 func (r *resolver) inherit(attr syntax.Attr, name string) {
 	ref := r.lookup(name, true)
-	r.table.inherited[attr] = ref
+	r.table.resolve(attr.Slot(), ref)
 	r.table.uses = append(r.table.uses, Use{Node: attr, Name: name, Ref: ref, Inherit: true})
 }
 
@@ -56,29 +65,42 @@ func (r *resolver) open(kind ScopeKind, spans ...syntax.Span) *Scope {
 
 func (r *resolver) close(s *Scope) {
 	for _, d := range s.Defs {
-		stack := r.shadow[d.Name]
-		r.shadow[d.Name] = stack[:len(stack)-1]
+		r.shadow[d.Name] = d.outer
 	}
 	r.scope = s.Parent
 }
 
 func (r *resolver) declare(s *Scope, name string, kind DefKind) *Def {
-	if stack := r.shadow[name]; len(stack) > 0 && stack[len(stack)-1].Scope == s {
-		return stack[len(stack)-1]
+	top := r.shadow[name]
+	if top != nil && top.Scope == s {
+		return top
 	}
-	d := &Def{Name: name, Kind: kind, Scope: s, Implicit: slices.Contains(evaluatorReads, name)}
+	d := r.newDef()
+	*d = Def{ID: len(r.table.defs), Name: name, Kind: kind, Scope: s, Implicit: slices.Contains(evaluatorReads, name), outer: top}
 	s.Defs = append(s.Defs, d)
 	r.table.defs = append(r.table.defs, d)
-	r.shadow[name] = append(r.shadow[name], d)
+	r.shadow[name] = d
 	return d
 }
 
 func (r *resolver) binder(d *Def, node syntax.Node) {
 	d.Binders = append(d.Binders, node)
-	r.table.binders[node] = d
-	if id, ok := node.(*syntax.Ident); ok {
-		r.table.idents[id] = Ref{Kind: Definition, Def: d}
+	switch node := node.(type) {
+	case *syntax.Ident:
+		r.table.binders[node.Slot()] = d
+		r.table.resolve(node.Slot(), Ref{Kind: Definition, Def: d})
+	case syntax.Attr:
+		r.table.binders[node.Slot()] = d
 	}
+}
+
+func (r *resolver) newDef() *Def {
+	if len(r.defChunk) == 0 {
+		r.defChunk = make([]Def, r.chunk)
+	}
+	d := &r.defChunk[0]
+	r.defChunk = r.defChunk[1:]
+	return d
 }
 
 func (r *resolver) exprs(list []syntax.Expr) {
@@ -203,7 +225,7 @@ func (r *resolver) pattern(s *Scope, p *syntax.PatternParam) {
 }
 
 func (r *resolver) let(e *syntax.Let) {
-	n := newSetNode(true)
+	n := r.newSetNode(true)
 	n.owner = e
 	n.spans = []syntax.Span{e.Span()}
 	r.fill(n, e.Bindings)
@@ -273,6 +295,7 @@ func (r *resolver) contents(n *setNode, pending []*setNode) []*setNode {
 func (r *resolver) recursive(n *setNode, kind setKind, body syntax.Expr) {
 	r.outward(n)
 	s := r.open(kind.scope(), n.spans...)
+	s.Defs = slices.Grow(s.Defs, len(n.entries))
 	if n.owner != nil {
 		r.table.owners[n.owner] = s
 	}

@@ -58,7 +58,7 @@ type stringBody struct {
 
 func (p *treeParser) flush(b *stringBody, end int) {
 	if end > b.literal {
-		b.parts = append(b.parts, &Literal{partNode: partAt(Span{Start: b.literal, End: end}), Text: p.src[b.literal:end]})
+		b.parts = append(b.parts, p.arena.literals.put(p.chunk, Literal{partNode: partAt(Span{Start: b.literal, End: end}), Text: p.src[b.literal:end]}))
 		p.emit(b.text, b.literal, end)
 	}
 }
@@ -95,7 +95,7 @@ func (p *treeParser) unterminated(open token, kind StringKind, b *stringBody, en
 		p.closeAt(end)
 	}
 	stop := p.prevEnd
-	return &String{exprNode: exprAt(Span{Start: open.start, End: stop}), Kind: kind, Content: Span{Start: open.end, End: stop}, Parts: b.parts}
+	return p.arena.strings.put(p.chunk, String{exprNode: exprAt(Span{Start: open.start, End: stop}), Kind: kind, Content: Span{Start: open.end, End: stop}, Parts: b.parts})
 }
 
 func (p *treeParser) quoted() *String {
@@ -114,7 +114,7 @@ func (p *treeParser) quoted() *String {
 			p.flush(b, i)
 			p.emit(TokQuote, i, i+1)
 			p.closeAt(i + 1)
-			return &String{exprNode: exprAt(Span{Start: open.start, End: i + 1}), Kind: Quoted, Content: Span{Start: open.end, End: i}, Parts: b.parts, Closed: true}
+			return p.arena.strings.put(p.chunk, String{exprNode: exprAt(Span{Start: open.start, End: i + 1}), Kind: Quoted, Content: Span{Start: open.end, End: i}, Parts: b.parts, Closed: true})
 		case c == '\\' && i+1 < len(src):
 			_, width := utf8.DecodeRuneInString(src[i+1:])
 			i = p.escape(b, i, i+1+width, decodeEscape(src[i+1:i+1+width]))
@@ -157,7 +157,7 @@ func (p *treeParser) indented() *String {
 			p.flush(b, i)
 			p.emit(TokIndentQuote, i, i+2)
 			p.closeAt(i + 2)
-			return &String{exprNode: exprAt(Span{Start: open.start, End: i + 2}), Kind: Indented, Content: Span{Start: open.end, End: i}, Parts: b.parts, Closed: true}
+			return p.arena.strings.put(p.chunk, String{exprNode: exprAt(Span{Start: open.start, End: i + 2}), Kind: Indented, Content: Span{Start: open.end, End: i}, Parts: b.parts, Closed: true})
 		case strings.HasPrefix(rest, "${"):
 			next, ok := p.interpolate(b, i)
 			if !ok {
@@ -179,8 +179,8 @@ func (p *treeParser) path() *Path {
 	if t.kind == TokSearchPath {
 		p.advance()
 		inner := Span{Start: t.start + 1, End: t.end - 1}
-		literal := &Literal{partNode: partAt(inner), Text: p.src[inner.Start:inner.End]}
-		return &Path{exprNode: exprAt(Span{Start: t.start, End: t.end}), Kind: SearchPath, Parts: []Part{literal}}
+		literal := p.arena.literals.put(p.chunk, Literal{partNode: partAt(inner), Text: p.src[inner.Start:inner.End]})
+		return p.arena.paths.put(p.chunk, Path{exprNode: exprAt(Span{Start: t.start, End: t.end}), Kind: SearchPath, Parts: []Part{literal}})
 	}
 	kind := RelativePath
 	switch {
@@ -189,7 +189,7 @@ func (p *treeParser) path() *Path {
 	case p.src[t.start] == '/':
 		kind = AbsolutePath
 	}
-	first := &Literal{partNode: partAt(Span{Start: t.start, End: t.end}), Text: p.src[t.start:t.end]}
+	first := p.arena.literals.put(p.chunk, Literal{partNode: partAt(Span{Start: t.start, End: t.end}), Text: p.src[t.start:t.end]})
 	b := &stringBody{parts: []Part{first}, literal: t.end, text: TokPathText}
 	end, closed := p.pathBody(b, t.end)
 	if closed {
@@ -198,7 +198,7 @@ func (p *treeParser) path() *Path {
 	if closed && p.src[end-1] == '/' {
 		p.report(Span{Start: t.start, End: end}, "a path cannot end in `/`")
 	}
-	return &Path{exprNode: exprAt(p.span(t.start)), Kind: kind, Parts: b.parts}
+	return p.arena.paths.put(p.chunk, Path{exprNode: exprAt(p.span(t.start)), Kind: kind, Parts: b.parts})
 }
 
 func (p *treeParser) pathBody(b *stringBody, at int) (int, bool) {

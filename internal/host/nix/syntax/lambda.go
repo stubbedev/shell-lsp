@@ -9,7 +9,14 @@ func (p *treeParser) identLambda(start int) Expr {
 }
 
 func (p *treeParser) identifier() *Ident {
-	id := &Ident{exprNode: exprAt(Span{Start: p.tok.start, End: p.tok.end}), Name: p.src[p.tok.start:p.tok.end]}
+	slot := p.slots
+	p.slots++
+	p.reads++
+	id := p.arena.idents.put(p.chunk, Ident{
+		exprNode: exprAt(Span{Start: p.tok.start, End: p.tok.end}),
+		Name:     p.src[p.tok.start:p.tok.end],
+		slot:     int32(slot), //nolint:gosec // bounded by the source length, which the transport caps well below 2^31
+	})
 	p.advance()
 	return id
 }
@@ -69,6 +76,7 @@ func (p *treeParser) pattern(start int) *PatternParam {
 	separated := true
 	for separated && p.tok.kind == TokIdent {
 		param.Formals = append(param.Formals, p.formal())
+		p.binders++
 		separated = p.accept(TokComma)
 	}
 	param.Ellipsis = separated && p.accept(TokEllipsis)

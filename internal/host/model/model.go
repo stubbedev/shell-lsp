@@ -106,25 +106,25 @@ const Global Scope = 0
 
 type Symbol struct {
 	Name      string
-	Kind      Kind
 	Span      Span
 	Selection Span
 	Scope     Scope
 	Parent    int
 	Detail    string
 	Doc       string
+	Value     string
+	Arity     Arity
+	Rewrite   *Rewrite
+	Kind      Kind
 	Exported  bool
 	Unused    bool
 	Appends   bool
-	Value     string
 	Constant  bool
 	Inert     bool
 	Local     bool
-	Arity     Arity
 	Passive   bool
 	Listed    bool
 	Hidden    bool
-	Rewrite   *Rewrite
 }
 
 type Rewrite struct {
@@ -155,21 +155,21 @@ func (a Arity) Accepts(n int) bool {
 
 type Ref struct {
 	Name      string
-	Kind      Kind
 	Span      Span
 	Scope     Scope
 	Qualifier []string
 	Args      int
 	Owner     int
+	Horizon   int
+	ArgSpans  []Span
+	Rewrite   *Rewrite
+	Kind      Kind
 	Edge      bool
 	Soft      bool
 	Declares  bool
 	Base      bool
 	Inert     bool
-	Horizon   int
 	Late      bool
-	ArgSpans  []Span
-	Rewrite   *Rewrite
 }
 
 const NoArgs = -1

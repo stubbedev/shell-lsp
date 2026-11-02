@@ -162,7 +162,7 @@ func passes(c flowCaller, name string) bool {
 	if own == nil {
 		return false
 	}
-	_, named := own.names[name]
+	named := own.names.has(name)
 	return named
 }
 
@@ -244,7 +244,7 @@ func (p *Project) readConflict(file int, sym model.Symbol, newName string) strin
 			if r.Name != newName {
 				continue
 			}
-			slot, opened := u.slots[r.Scope]
+			slot, opened := u.slot(r.Scope)
 			if !opened {
 				continue
 			}

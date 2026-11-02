@@ -10,9 +10,11 @@ import (
 )
 
 const (
-	CurPos     = "__curPos"
-	overrides  = "__overrides"
-	legacyBody = "body"
+	maxPresizedNames = 1 << 16
+	maxResolverChunk = 256
+	CurPos           = "__curPos"
+	overrides        = "__overrides"
+	legacyBody       = "body"
 )
 
 var evaluatorReads = []string{"__sub", "__mul", "__div", "__lessThan", "__findFile", "__nixPath"}
@@ -29,6 +31,7 @@ const (
 )
 
 type Def struct {
+	ID       int
 	Name     string
 	Kind     DefKind
 	Binders  []syntax.Node
@@ -36,6 +39,8 @@ type Def struct {
 	Scope    *Scope
 	Implicit bool
 	uses     []Use
+	outer    *Def
+	useCount int
 }
 
 func (d *Def) Uses() []Use { return d.uses }
@@ -53,8 +58,9 @@ const (
 
 type Ref struct {
 	Kind    RefKind
+	known   bool
 	Def     *Def
-	Builtin builtins.Builtin
+	Builtin *builtins.Builtin
 	With    *syntax.With
 }
 
@@ -95,9 +101,8 @@ type Duplicate struct {
 }
 
 type Table struct {
-	idents     map[*syntax.Ident]Ref
-	inherited  map[syntax.Attr]Ref
-	binders    map[syntax.Node]*Def
+	refs       []Ref
+	binders    []*Def
 	owners     map[syntax.Node]*Scope
 	outerWiths map[*syntax.With]*syntax.With
 	root       *Scope
@@ -108,18 +113,27 @@ type Table struct {
 }
 
 func (t *Table) Of(id *syntax.Ident) (Ref, bool) {
-	ref, ok := t.idents[id]
-	return ref, ok
+	return t.resolved(id.Slot())
+}
+
+func (t *Table) resolved(slot int) (Ref, bool) {
+	ref := t.refs[slot]
+	return ref, ref.known
 }
 
 func (t *Table) Inherited(attr syntax.Attr) (Ref, bool) {
-	ref, ok := t.inherited[attr]
-	return ref, ok
+	return t.resolved(attr.Slot())
 }
 
 func (t *Table) Binder(node syntax.Node) (*Def, bool) {
-	def, ok := t.binders[node]
-	return def, ok
+	var def *Def
+	switch node := node.(type) {
+	case *syntax.Ident:
+		def = t.binders[node.Slot()]
+	case syntax.Attr:
+		def = t.binders[node.Slot()]
+	}
+	return def, def != nil
 }
 
 func (t *Table) Uses() []Use { return t.uses }
@@ -190,7 +204,7 @@ func (t *Table) NamesAt(offset int) Names {
 	}
 	for _, b := range builtins.All() {
 		if b.Global && (b.Name == CurPos || !seen[b.Name]) {
-			out.Visible = append(out.Visible, Name{Name: b.Name, Ref: Ref{Kind: Global, Builtin: b}})
+			out.Visible = append(out.Visible, Name{Name: b.Name, Ref: Ref{Kind: Global, Builtin: &b}})
 		}
 	}
 	slices.SortFunc(out.Visible, func(a, b Name) int { return strings.Compare(a.Name, b.Name) })
@@ -201,16 +215,18 @@ func Resolve(f *syntax.File) *Table {
 	root := &Scope{Kind: FileScope}
 	r := &resolver{
 		table: &Table{
-			idents:     map[*syntax.Ident]Ref{},
-			inherited:  map[syntax.Attr]Ref{},
-			binders:    map[syntax.Node]*Def{},
+			refs:       make([]Ref, f.Slots),
+			binders:    make([]*Def, f.Slots),
 			owners:     map[syntax.Node]*Scope{},
 			outerWiths: map[*syntax.With]*syntax.With{},
 			root:       root,
 			scopes:     []*Scope{root},
+			uses:       make([]Use, 0, f.Reads),
+			defs:       make([]*Def, 0, f.Binders),
 		},
-		shadow: map[string][]*Def{},
+		shadow: make(map[string]*Def, min(f.Binders, maxPresizedNames)),
 		scope:  root,
+		chunk:  min(max(f.Binders, 1), maxResolverChunk),
 	}
 	r.expr(f.Root)
 	for _, e := range f.Stray {
@@ -220,15 +236,31 @@ func Resolve(f *syntax.File) *Table {
 	return r.table
 }
 
+func (t *Table) groupUses() {
+	total := 0
+	for i := range t.uses {
+		if d := t.uses[i].Ref.Def; d != nil {
+			d.useCount++
+			total++
+		}
+	}
+	grouped := make([]Use, total)
+	for _, d := range t.defs {
+		d.uses = grouped[:0:d.useCount]
+		grouped = grouped[d.useCount:]
+	}
+	for i := range t.uses {
+		if d := t.uses[i].Ref.Def; d != nil {
+			d.uses = append(d.uses, t.uses[i])
+		}
+	}
+}
+
 func (r *resolver) finish() {
 	t := r.table
 	byStart := func(a, b syntax.Node) int { return cmp.Compare(a.Span().Start, b.Span().Start) }
 	slices.SortStableFunc(t.uses, func(a, b Use) int { return byStart(a.Node, b.Node) })
-	for _, u := range t.uses {
-		if u.Ref.Def != nil {
-			u.Ref.Def.uses = append(u.Ref.Def.uses, u)
-		}
-	}
+	t.groupUses()
 	slices.SortStableFunc(t.defs, func(a, b *Def) int { return byStart(a.Binders[0], b.Binders[0]) })
 	for _, s := range t.scopes {
 		slices.SortStableFunc(s.regions, func(a, b region) int { return cmp.Compare(a.span.Start, b.span.Start) })

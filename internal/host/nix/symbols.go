@@ -12,10 +12,12 @@ import (
 )
 
 const (
-	letBlockName    = "let"
-	passAsFile      = "passAsFile"
-	makeWrapperArgs = "makeWrapperArgs"
-	overlaysAttr    = "overlays"
+	maxTableChunk    = 256
+	slotsPerFlowSlot = 3
+	letBlockName     = "let"
+	passAsFile       = "passAsFile"
+	makeWrapperArgs  = "makeWrapperArgs"
+	overlaysAttr     = "overlays"
 )
 
 var wrapperSetFlags = []string{"--set", "--set-default"}
@@ -29,38 +31,29 @@ type attrs struct {
 	id      model.Scope
 	kind    model.Kind
 	parent  *attrs
-	names   map[string]entry
+	names   nameTable[entry]
 	kids    map[string]*attrs
-	reads   map[string]bool
+	reads   nameTable[struct{}]
 	callers []*attrs
 	dynamic bool
 	escaped bool
 	bound   bool
-	sources map[string][]flowSource
+	sources nameTable[[]flowSource]
 	dynKids []*attrs
 	direct  []syntax.Expr
 	lambda  *syntax.Lambda
 }
 
-func (a *attrs) name(name string, e entry) {
-	if a.names == nil {
-		a.names = map[string]entry{}
-	}
-	a.names[name] = e
-}
+func (a *attrs) name(name string, e entry) { a.names.set(name, e) }
 
 func (a *attrs) read(name string) {
-	if a.reads == nil {
-		a.reads = map[string]bool{}
+	if !a.reads.has(name) {
+		a.reads.set(name, struct{}{})
 	}
-	a.reads[name] = true
 }
 
 func (a *attrs) source(name string, src flowSource) {
-	if a.sources == nil {
-		a.sources = map[string][]flowSource{}
-	}
-	a.sources[name] = append(a.sources[name], src)
+	a.sources.set(name, append(a.sources.of(name), src))
 }
 
 func (a *attrs) closed() bool {
@@ -89,6 +82,8 @@ type symbolTable struct {
 	f          *file
 	ix         *model.Index
 	next       model.Scope
+	attrChunk  []attrs
+	oneTargets []syntax.Expr
 	exports    map[int]export
 	envScopes  map[environment]model.Scope
 	shellEnvs  map[model.Scope]environment
@@ -100,13 +95,13 @@ type symbolTable struct {
 	values     map[*scope.Def]*attrs
 	lambdas    map[*scope.Def]*syntax.Lambda
 	formals    map[*syntax.Lambda]*attrs
-	entries    map[*scope.Def]entry
-	symbolOf   map[syntax.Attr]int
-	statements map[syntax.Attr]*syntax.Inherit
+	entries    []entry
+	symbolOf   []int32
+	statements []*syntax.Inherit
 	reads      []syntax.Node
 	calls      []*syntax.Apply
-	consumed   map[*syntax.Ident]bool
-	slots      map[model.Scope]flowSlot
+	consumed   []bool
+	slots      []scopedSlot
 	withSlots  map[*syntax.With]model.Scope
 	flowCalls  []flowCall
 	chains     []flowChain
@@ -118,6 +113,7 @@ type symbolTable struct {
 }
 
 func newSymbolTable(f *file, ix *model.Index) *symbolTable {
+	slots := f.tree.Slots
 	return &symbolTable{
 		f:          f,
 		ix:         ix,
@@ -128,11 +124,10 @@ func newSymbolTable(f *file, ix *model.Index) *symbolTable {
 		values:     map[*scope.Def]*attrs{},
 		lambdas:    map[*scope.Def]*syntax.Lambda{},
 		formals:    map[*syntax.Lambda]*attrs{},
-		entries:    map[*scope.Def]entry{},
-		symbolOf:   map[syntax.Attr]int{},
-		statements: map[syntax.Attr]*syntax.Inherit{},
-		consumed:   map[*syntax.Ident]bool{},
-		slots:      map[model.Scope]flowSlot{},
+		entries:    make([]entry, len(f.table.Defs())),
+		symbolOf:   make([]int32, slots),
+		statements: make([]*syntax.Inherit, slots),
+		consumed:   make([]bool, slots),
 		withSlots:  map[*syntax.With]model.Scope{},
 		loaded:     map[*syntax.Path]bool{},
 		selected:   map[syntax.Expr]bool{},
@@ -168,15 +163,20 @@ func (b *symbolTable) environment(env environment) model.Scope {
 }
 
 func (b *symbolTable) fresh(parent *attrs, kind model.Kind) *attrs {
-	return &attrs{
-		id:     b.newScope(),
-		kind:   kind,
-		parent: parent,
+	if len(b.attrChunk) == 0 {
+		b.attrChunk = make([]attrs, min(max(b.f.tree.Binders, 1), maxTableChunk))
 	}
+	a := &b.attrChunk[0]
+	b.attrChunk = b.attrChunk[1:]
+	a.id, a.kind, a.parent = b.newScope(), kind, parent
+	return a
 }
 
 func (b *symbolTable) build() {
-	b.ix.Refs = slices.Grow(b.ix.Refs, len(b.f.table.Uses()))
+	b.ix.Refs = slices.Grow(b.ix.Refs, b.f.tree.Slots)
+	b.ix.Symbols = slices.Grow(b.ix.Symbols, b.f.tree.Binders)
+	b.owners = slices.Grow(b.owners, b.f.tree.Binders)
+	b.slots = slices.Grow(b.slots, b.f.tree.Slots/slotsPerFlowSlot)
 	b.expr(b.f.tree.Root, model.NoParent)
 	for _, stray := range b.f.tree.Stray {
 		b.expr(stray, model.NoParent)
@@ -196,9 +196,11 @@ func (b *symbolTable) compact() {
 	b.entries, b.symbolOf, b.statements, b.consumed = nil, nil, nil, nil
 	b.loaded, b.selected, b.letAlias, b.exports, b.envScopes = nil, nil, nil, nil, nil
 	b.paths = nil
-	b.ix.Symbols = slices.Clone(b.ix.Symbols)
-	b.ix.Refs = slices.Clone(b.ix.Refs)
-	b.owners = slices.Clone(b.owners)
+	b.attrChunk, b.oneTargets = nil, nil
+	b.ix.Symbols = syntax.Tightened(b.ix.Symbols)
+	b.ix.Refs = syntax.Tightened(b.ix.Refs)
+	b.owners = syntax.Tightened(b.owners)
+	b.slots = syntax.Tightened(b.slots)
 }
 
 func (b *symbolTable) publish() {
@@ -321,6 +323,8 @@ func (b *symbolTable) let(start int, bindings []syntax.Binding, parent int) *att
 
 func (b *symbolTable) set(n *syntax.AttrSet, into *attrs, parent int) {
 	b.sets[n] = into
+	into.names.reserve(len(n.Bindings))
+	into.sources.reserve(len(n.Bindings))
 	b.bindings(n.Bindings, into, parent)
 }
 
@@ -417,7 +421,7 @@ func (b *symbolTable) bind(into *attrs, attr syntax.Attr, name string, stmt synt
 		return model.NoSymbol, false
 	}
 	exported, isExported := b.exports[selection.Start]
-	e, known := into.names[name]
+	e, known := into.names.get(name)
 	if !known {
 		e = entry{scope: into.id, kind: kind}
 		if isExported {
@@ -428,7 +432,7 @@ func (b *symbolTable) bind(into *attrs, attr syntax.Attr, name string, stmt synt
 	}
 	def, _ := b.f.table.Binder(attr)
 	if def != nil {
-		b.entries[def] = e
+		b.entries[def.ID] = e
 	}
 	_, isInherit := stmt.(*syntax.Inherit)
 	i := b.add(model.Symbol{
@@ -436,7 +440,7 @@ func (b *symbolTable) bind(into *attrs, attr syntax.Attr, name string, stmt synt
 		Scope: e.scope, Parent: parent, Doc: exported.doc, Exported: isExported, Listed: true,
 		Detail: b.f.detail(binding{name: selection, span: stmt.Span(), inherit: isInherit}),
 	}, owner{def: def, set: into})
-	b.symbolOf[attr] = i
+	b.symbolOf[attr.Slot()] = int32(i + 1) //nolint:gosec // bounded by the source length, which the transport caps well below 2^31
 	return i, true
 }
 
@@ -455,7 +459,7 @@ func (b *symbolTable) inherit(stmt *syntax.Inherit, into *attrs, parent int) {
 		b.reads = append(b.reads, stmt)
 	}
 	for _, attr := range stmt.Attrs {
-		b.statements[attr] = stmt
+		b.statements[attr.Slot()] = stmt
 		name, ok := syntax.AttrName(attr)
 		if !ok {
 			b.expr(attr, parent)
@@ -510,7 +514,7 @@ func (b *symbolTable) parameter(into *attrs, name *syntax.Ident, span model.Span
 	def, _ := b.f.table.Binder(name)
 	e := entry{scope: into.id, kind: model.KindParameter}
 	if def != nil {
-		b.entries[def] = e
+		b.entries[def.ID] = e
 	}
 	detail := b.f.src[span.Start:span.End]
 	if strings.Contains(detail, "\n") {
@@ -538,12 +542,14 @@ func (b *symbolTable) staticSet(e syntax.Expr) *attrs {
 
 func (b *symbolTable) consume(e syntax.Expr) *attrs {
 	if id, ok := syntax.Unparenthesized(e).(*syntax.Ident); ok {
-		b.consumed[id] = true
+		b.consumed[id.Slot()] = true
 	}
 	return b.staticSet(e)
 }
 
 func (b *symbolTable) link() {
+	b.selected = make(map[syntax.Expr]bool, len(b.reads))
+	b.chains = slices.Grow(b.chains, len(b.reads))
 	for _, read := range b.reads {
 		switch read := read.(type) {
 		case *syntax.Select:
@@ -587,7 +593,7 @@ func (b *symbolTable) follow(target syntax.Expr, read syntax.Expr, path syntax.A
 		}
 		if set != nil {
 			set.read(name)
-			if e, known := set.names[name]; known {
+			if e, known := set.names.get(name); known {
 				b.ref(name, e, nameSpan(attr), nil)
 				set = set.kids[name]
 				names = append(names, name)
@@ -622,7 +628,7 @@ func (b *symbolTable) inheritedFrom(stmt *syntax.Inherit) {
 			continue
 		}
 		set.read(name)
-		e, known := set.names[name]
+		e, known := set.names.get(name)
 		if !known {
 			continue
 		}
@@ -635,8 +641,8 @@ func (b *symbolTable) inheritedFrom(stmt *syntax.Inherit) {
 }
 
 func (b *symbolTable) passive(attr syntax.Attr) {
-	if i, ok := b.symbolOf[attr]; ok {
-		b.ix.Symbols[i].Passive = true
+	if i := b.symbolOf[attr.Slot()]; i > 0 {
+		b.ix.Symbols[i-1].Passive = true
 	}
 }
 
@@ -647,16 +653,16 @@ func (b *symbolTable) readUse(u scope.Use, e entry) {
 		return
 	}
 	b.passive(attr)
-	b.ref(u.Name, e, nameSpan(attr), kept(b.f.src, b.statements[attr], attr))
+	b.ref(u.Name, e, nameSpan(attr), kept(b.f.src, b.statements[attr.Slot()], attr))
 }
 
 func (b *symbolTable) lexical(u scope.Use) {
-	if id, ok := u.Node.(*syntax.Ident); !ok || !b.consumed[id] {
+	if id, ok := u.Node.(*syntax.Ident); !ok || !b.consumed[id.Slot()] {
 		if set := b.values[u.Ref.Def]; set != nil {
 			set.escaped = true
 		}
 	}
-	if e, ok := b.entries[u.Ref.Def]; ok {
+	if e := b.entries[u.Ref.Def.ID]; e.scope != model.Scope(0) {
 		b.readUse(u, e)
 	}
 }
@@ -670,7 +676,7 @@ func (b *symbolTable) throughWith(u scope.Use) {
 			return
 		}
 		set.read(u.Name)
-		if e, known := set.names[u.Name]; known {
+		if e, known := set.names.get(u.Name); known {
 			b.readUse(u, e)
 			return
 		}
@@ -707,8 +713,7 @@ func (b *symbolTable) call(call *syntax.Apply) {
 func (b *symbolTable) keys(set *syntax.AttrSet, formals *attrs) {
 	formals.callers = append(formals.callers, b.sets[set])
 	b.passedKeys(set, func(name string) (entry, bool) {
-		e, known := formals.names[name]
-		return e, known
+		return formals.names.get(name)
 	})
 }
 

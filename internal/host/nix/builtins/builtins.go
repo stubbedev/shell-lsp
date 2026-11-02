@@ -35,15 +35,23 @@ var table = sync.OnceValue(func() []Builtin {
 	return entries
 })
 
-func Lookup(name string) (Builtin, bool) {
+func Find(name string) (*Builtin, bool) {
 	entries := table()
 	i, found := slices.BinarySearchFunc(entries, name, func(b Builtin, target string) int {
 		return cmp.Compare(b.Name, target)
 	})
 	if !found {
+		return nil, false
+	}
+	return &entries[i], true
+}
+
+func Lookup(name string) (Builtin, bool) {
+	b, found := Find(name)
+	if !found {
 		return Builtin{}, false
 	}
-	return entries[i], true
+	return *b, true
 }
 
 func All() []Builtin {

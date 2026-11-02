@@ -50,6 +50,33 @@ type flowSlot struct {
 	arg     int
 }
 
+type scopedSlot struct {
+	id   model.Scope
+	slot flowSlot
+}
+
+func (b *symbolTable) addSlot(id model.Scope, slot flowSlot) {
+	b.slots = append(b.slots, scopedSlot{id: id, slot: slot})
+}
+
+func (b *symbolTable) slot(id model.Scope) (flowSlot, bool) {
+	i, found := slices.BinarySearchFunc(b.slots, id, func(s scopedSlot, target model.Scope) int { return cmp.Compare(s.id, target) })
+	if !found {
+		return flowSlot{}, false
+	}
+	return b.slots[i].slot, true
+}
+
+func (b *symbolTable) oneTarget(target syntax.Expr) []syntax.Expr {
+	if len(b.oneTargets) == 0 {
+		b.oneTargets = make([]syntax.Expr, min(max(b.f.tree.Slots, 1), maxTableChunk))
+	}
+	out := b.oneTargets[:1:1]
+	b.oneTargets = b.oneTargets[1:]
+	out[0] = target
+	return out
+}
+
 type flowChain struct {
 	target  syntax.Expr
 	path    []string
@@ -97,7 +124,7 @@ func (b *symbolTable) openable(target syntax.Expr) bool {
 
 func (b *symbolTable) openRead(target syntax.Expr, path []string, attr syntax.Attr, name string, rewrite *model.Rewrite) {
 	id := b.newScope()
-	b.slots[id] = flowSlot{targets: []syntax.Expr{target}, path: path}
+	b.addSlot(id, flowSlot{targets: b.oneTarget(target), path: path})
 	b.ref(name, entry{scope: id, kind: model.KindAttribute}, nameSpan(attr), rewrite)
 }
 
@@ -113,7 +140,7 @@ func (b *symbolTable) withSlot(withs []*syntax.With) model.Scope {
 			b.chains = append(b.chains, flowChain{target: with.Scope})
 		}
 	}
-	b.slots[id] = flowSlot{targets: targets}
+	b.addSlot(id, flowSlot{targets: targets})
 	b.withSlots[withs[0]] = id
 	return id
 }
@@ -140,7 +167,7 @@ func (b *symbolTable) openKeys(arg syntax.Expr, call *syntax.Apply, at int) {
 		return
 	}
 	id := b.newScope()
-	b.slots[id] = flowSlot{call: call, arg: at}
+	b.addSlot(id, flowSlot{call: call, arg: at})
 	b.passedKeys(set, func(string) (entry, bool) { return entry{scope: id, kind: model.KindAttribute}, true })
 }
 
@@ -311,7 +338,7 @@ func (b *symbolTable) consumedAlias(e syntax.Expr) bool {
 	}
 	return !slices.ContainsFunc(def.Uses(), func(u scope.Use) bool {
 		id, plain := u.Node.(*syntax.Ident)
-		return !plain || !b.consumed[id]
+		return !plain || !b.consumed[id.Slot()]
 	})
 }
 
@@ -328,6 +355,7 @@ func (b *symbolTable) settleChains() {
 
 func (b *symbolTable) pathIncludes() {
 	slices.SortFunc(b.paths, func(x, y *syntax.Path) int { return cmp.Compare(x.Span().Start, y.Span().Start) })
+	b.ix.Includes = slices.Grow(b.ix.Includes, len(b.paths))
 	for _, p := range b.paths {
 		if !loadable(p) {
 			continue
@@ -357,7 +385,7 @@ func (b *symbolTable) flakeFollows() {
 func (b *symbolTable) followsOf(of, inputs *attrs) {
 	for _, name := range slices.Sorted(maps.Keys(of.kids)) {
 		kid := of.kids[name]
-		for _, src := range kid.sources[followsAttr] {
+		for _, src := range kid.sources.of(followsAttr) {
 			if text, ok := syntax.Unparenthesized(src.expr).(*syntax.String); ok {
 				b.followed(text, inputs)
 			}
@@ -377,7 +405,7 @@ func (b *symbolTable) followed(text *syntax.String, inputs *attrs) {
 		return
 	}
 	name, _, _ := strings.Cut(literal.Text, "/")
-	e, known := inputs.names[name]
+	e, known := inputs.names.get(name)
 	if !known {
 		return
 	}

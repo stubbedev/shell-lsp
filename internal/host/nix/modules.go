@@ -197,11 +197,11 @@ func (p *Project) flakeRound() {
 	set := u.sets[root]
 	if inputs := set.kids[inputsAttr]; inputs != nil {
 		p.addMember(p.inputs, u, inputs, false)
-		for name := range inputs.names {
+		for _, name := range inputs.names.keys {
 			p.inputs.names[name] = true
 		}
 	}
-	for _, src := range set.sources[outputsAttr] {
+	for _, src := range set.sources.of(outputsAttr) {
 		if fn, ok := syntax.Unparenthesized(src.expr).(*syntax.Lambda); ok {
 			p.outputs = fn
 			p.outputsRound(u, fn)
@@ -350,8 +350,8 @@ func (p *Project) argValue(c *flowClass, name string) []flowValue {
 
 func (p *Project) moduleSet(c *flowClass, v flowSet) {
 	p.walkAll(c, p.selectFrom(v, importsAttr))
-	_, options := v.set.names[optionsFormal]
-	_, config := v.set.names[configFormal]
+	options := v.set.names.has(optionsFormal)
+	config := v.set.names.has(configFormal)
 	if !options && !config {
 		p.register(c, c.root, v.unit, v.set, false)
 		return
@@ -368,7 +368,7 @@ func (p *Project) registerNamed(c *flowClass, v flowSet, name string, declared b
 	if kid := v.set.kids[name]; kid != nil {
 		p.register(c, c.root, v.unit, kid, declared)
 	}
-	for _, src := range v.set.sources[name] {
+	for _, src := range v.set.sources.of(name) {
 		for _, value := range p.evalSource(v.unit, src) {
 			for _, set := range p.setsOf(value) {
 				p.register(c, c.root, set.unit, set.set, declared)
@@ -472,7 +472,7 @@ func (p *Project) register(c *flowClass, s *space, u *symbolTable, set *attrs, d
 			}
 		}
 	}
-	for _, name := range sortedNames(set.names) {
+	for _, name := range set.names.sorted() {
 		s.names[name] = true
 		kid := p.kid(s, name)
 		kid.declared = kid.declared || declared
@@ -480,7 +480,7 @@ func (p *Project) register(c *flowClass, s *space, u *symbolTable, set *attrs, d
 			if own := set.kids[name]; own != nil {
 				p.walk(nested, flowSet{unit: u, set: own})
 			}
-			for _, src := range set.sources[name] {
+			for _, src := range set.sources.of(name) {
 				p.walkAll(nested, p.evalSource(u, src))
 			}
 			continue
@@ -488,7 +488,7 @@ func (p *Project) register(c *flowClass, s *space, u *symbolTable, set *attrs, d
 		if own := set.kids[name]; own != nil {
 			p.register(c, kid, u, own, declared)
 		}
-		for _, src := range set.sources[name] {
+		for _, src := range set.sources.of(name) {
 			kid.bound = append(kid.bound, flowBound{unit: u, source: src})
 			if declared {
 				p.optionSubmodule(u, kid, src)

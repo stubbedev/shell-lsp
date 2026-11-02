@@ -15,15 +15,36 @@ func letBlock(n *syntax.Let) model.Span {
 	return span
 }
 
+func foldable(n syntax.Node) bool {
+	switch n.(type) {
+	case *syntax.AttrSet, *syntax.List, *syntax.String, *syntax.Lambda, *syntax.Paren, *syntax.Interpolation, *syntax.PatternParam, *syntax.Inherit, *syntax.LegacyLet, *syntax.Let:
+		return true
+	}
+	return false
+}
+
 func folds(tree *syntax.File) []model.Fold {
-	var out []model.Fold
-	visit := func(n syntax.Node) bool {
-		switch n := n.(type) {
-		case *syntax.AttrSet, *syntax.List, *syntax.String, *syntax.Lambda, *syntax.Paren, *syntax.Interpolation, *syntax.PatternParam, *syntax.Inherit, *syntax.LegacyLet:
-			out = append(out, model.Fold{Span: n.Span()})
-		case *syntax.Let:
-			out = append(out, model.Fold{Span: letBlock(n)})
+	total := 0
+	count := func(n syntax.Node) bool {
+		if foldable(n) {
+			total++
 		}
+		return true
+	}
+	syntax.Inspect(tree.Root, count)
+	for _, stray := range tree.Stray {
+		syntax.Inspect(stray, count)
+	}
+	out := make([]model.Fold, 0, total+len(tree.Comments))
+	visit := func(n syntax.Node) bool {
+		if !foldable(n) {
+			return true
+		}
+		span := n.Span()
+		if let, isLet := n.(*syntax.Let); isLet {
+			span = letBlock(let)
+		}
+		out = append(out, model.Fold{Span: span})
 		return true
 	}
 	syntax.Inspect(tree.Root, visit)

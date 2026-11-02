@@ -88,6 +88,8 @@ func (b *Builder) Region(encode Encoder) {
 
 func (b *Builder) Shell(d dialect.Detection) { b.shell = d }
 
+func (b *Builder) Reserve(spans int) { b.spans = slices.Grow(b.spans, spans) }
+
 func (b *Builder) Script() {
 	b.starts = append(b.starts, b.text.Len())
 	b.shells = append(b.shells, b.shell)
@@ -139,6 +141,9 @@ func (b *Builder) add(k kind, start, end int, text string) {
 
 func (b *Builder) Map() *Map {
 	scripts, shells := b.scripts()
+	if cap(b.spans) > 2*len(b.spans) {
+		b.spans = slices.Clone(b.spans)
+	}
 	m := &Map{host: b.host, text: b.text.String(), spans: b.spans, encoders: b.encoders, scripts: scripts, shells: shells}
 	if b.standIn == "" {
 		m.settle(b.placeholders, b.programs)

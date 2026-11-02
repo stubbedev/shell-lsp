@@ -76,15 +76,17 @@ func (c *semanticCache) forget(uri string) {
 }
 
 type placedToken struct {
-	r lsp.Range
-	t semantic.Token
+	r         lsp.Range
+	kind      semantic.Type
+	modifiers semantic.Modifier
 }
 
 func place(out []placedToken, at docstore.Positions, tokens []semantic.Token) []placedToken {
+	out = slices.Grow(out, len(tokens))
 	for _, t := range tokens {
 		r := at.Range(t.Span)
 		if r.End.Line == r.Start.Line && r.End.Character > r.Start.Character {
-			out = append(out, placedToken{r: r, t: t})
+			out = append(out, placedToken{r: r, kind: t.Type, modifiers: t.Modifiers})
 		}
 	}
 	return out
@@ -109,7 +111,7 @@ func encodeTokens(placed []placedToken, within *lsp.Range) []uint32 {
 		if start.Line == prevLine {
 			deltaChar -= prevChar
 		}
-		data = append(data, start.Line-prevLine, deltaChar, end.Character-start.Character, uint32(p.t.Type), uint32(p.t.Modifiers))
+		data = append(data, start.Line-prevLine, deltaChar, end.Character-start.Character, uint32(p.kind), uint32(p.modifiers))
 		prevLine, prevChar = start.Line, start.Character
 	}
 	return data
@@ -133,7 +135,7 @@ func placeOrdered(at docstore.Positions, tokens []semantic.Token) []placedToken 
 	out := make([]placedToken, len(tokens))
 	for i, t := range tokens {
 		start := advance(t.Span.Start)
-		out[i] = placedToken{r: lsp.Range{Start: start, End: advance(t.Span.End)}, t: t}
+		out[i] = placedToken{r: lsp.Range{Start: start, End: advance(t.Span.End)}, kind: t.Type, modifiers: t.Modifiers}
 	}
 	return out
 }

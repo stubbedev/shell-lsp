@@ -4,85 +4,86 @@ func Inspect(n Node, visit func(Node) bool) {
 	if !visit(n) {
 		return
 	}
-	each := func(children ...Node) {
-		for _, c := range children {
-			Inspect(c, visit)
-		}
-	}
 	switch n := n.(type) {
 	case *String:
-		eachOf(n.Parts, each)
+		inspectAll(n.Parts, visit)
 	case *Interpolation:
-		each(n.Value)
+		Inspect(n.Value, visit)
 	case *Path:
-		eachOf(n.Parts, each)
+		inspectAll(n.Parts, visit)
 	case *Paren:
-		each(n.Inner)
+		Inspect(n.Inner, visit)
 	case *List:
-		eachOf(n.Items, each)
+		inspectAll(n.Items, visit)
 	case *AttrSet:
-		eachOf(n.Bindings, each)
+		inspectAll(n.Bindings, visit)
 	case *Let:
-		eachOf(n.Bindings, each)
-		each(n.Body)
+		inspectAll(n.Bindings, visit)
+		Inspect(n.Body, visit)
 	case *LegacyLet:
-		each(n.Set)
+		Inspect(n.Set, visit)
 	case *With:
-		each(n.Scope, n.Body)
+		Inspect(n.Scope, visit)
+		Inspect(n.Body, visit)
 	case *Assert:
-		each(n.Cond, n.Body)
+		Inspect(n.Cond, visit)
+		Inspect(n.Body, visit)
 	case *If:
-		each(n.Cond, n.Then, n.Else)
+		Inspect(n.Cond, visit)
+		Inspect(n.Then, visit)
+		Inspect(n.Else, visit)
 	case *Lambda:
-		each(n.Param, n.Body)
+		Inspect(n.Param, visit)
+		Inspect(n.Body, visit)
 	case *Apply:
-		each(n.Fn)
-		eachOf(n.Args, each)
+		Inspect(n.Fn, visit)
+		inspectAll(n.Args, visit)
 	case *Select:
-		each(n.Target)
-		eachOf(n.Path, each)
+		Inspect(n.Target, visit)
+		inspectAll(n.Path, visit)
 		if n.Default != nil {
-			each(n.Default)
+			Inspect(n.Default, visit)
 		}
 	case *HasAttr:
-		each(n.Target)
-		eachOf(n.Path, each)
+		Inspect(n.Target, visit)
+		inspectAll(n.Path, visit)
 	case *Binary:
-		each(n.Left, n.Right)
+		Inspect(n.Left, visit)
+		Inspect(n.Right, visit)
 	case *Unary:
-		each(n.Operand)
+		Inspect(n.Operand, visit)
 	case *StringAttr:
-		each(n.Value)
+		Inspect(n.Value, visit)
 	case *DynamicAttr:
-		each(n.Value)
+		Inspect(n.Value, visit)
 	case *Assign:
-		eachOf(n.Path, each)
-		each(n.Value)
+		inspectAll(n.Path, visit)
+		Inspect(n.Value, visit)
 	case *Inherit:
 		if n.From != nil {
-			each(n.From)
+			Inspect(n.From, visit)
 		}
-		eachOf(n.Attrs, each)
+		inspectAll(n.Attrs, visit)
 	case *IdentParam:
-		each(n.Name)
+		Inspect(n.Name, visit)
 	case *PatternParam:
 		if n.Alias != nil && n.AliasFirst {
-			each(n.Alias)
+			Inspect(n.Alias, visit)
 		}
-		eachOf(n.Formals, each)
+		inspectAll(n.Formals, visit)
 		if n.Alias != nil && !n.AliasFirst {
-			each(n.Alias)
+			Inspect(n.Alias, visit)
 		}
 	case *Formal:
-		each(n.Name)
+		Inspect(n.Name, visit)
 		if n.Default != nil {
-			each(n.Default)
+			Inspect(n.Default, visit)
 		}
 	}
 }
 
-func eachOf[T Node](nodes []T, each func(...Node)) {
+func inspectAll[T Node](nodes []T, visit func(Node) bool) {
 	for _, n := range nodes {
-		each(n)
+		Inspect(n, visit)
 	}
 }

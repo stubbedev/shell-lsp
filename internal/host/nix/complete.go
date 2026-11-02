@@ -222,7 +222,7 @@ func (c *cursor) names() []Item {
 		case n.Ref.Kind == scope.Definition:
 			out = append(out, c.defItem(n.Ref.Def))
 		case !c.hiddenAlias(n.Name):
-			out = append(out, builtinItem(n.Ref.Builtin))
+			out = append(out, builtinItem(*n.Ref.Builtin))
 		}
 	}
 	for _, with := range names.Withs {
@@ -435,7 +435,7 @@ func memberItems(values []flowValue) []Item {
 func setItems(v flowSet) []Item {
 	var out []Item
 	for _, s := range v.unit.ix.Symbols {
-		if _, named := v.set.names[s.Name]; !named || s.Scope != v.set.id || s.Hidden || s.Kind == model.KindModule {
+		if !v.set.names.has(s.Name) || s.Scope != v.set.id || s.Hidden || s.Kind == model.KindModule {
 			continue
 		}
 		kind := model.KindAttribute

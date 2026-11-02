@@ -40,15 +40,22 @@ type treeParser struct {
 	errors    []Error
 	lookahead [lookaheadMask + 1]peeked
 	bareOr    int
+	chunk     int
+	slots     int
+	reads     int
+	binders   int
+	arena     nodeArena
 }
 
 func Parse(src string) *File {
-	p := &treeParser{src: src, tokens: make([]Token, 0, len(src)/6+1)}
+	p := &treeParser{chunk: chunkFor(src)}
+	p.src = src
+	p.tokens = make([]Token, 0, estimatedTokens(src))
 	p.advance()
 	root := p.expr()
 	stray := p.strayExprs()
 	slices.SortStableFunc(p.errors, func(a, b Error) int { return cmp.Compare(a.Span.Start, b.Span.Start) })
-	return &File{Text: src, Root: root, Stray: stray, Comments: p.comments, Tokens: slices.Clone(p.tokens), Errors: p.errors, BareOr: p.bareOr}
+	return &File{Text: src, Root: root, Stray: stray, Comments: p.comments, Tokens: Tightened(p.tokens), Errors: p.errors, BareOr: p.bareOr, Slots: p.slots, Reads: p.reads, Binders: p.binders}
 }
 
 func (p *treeParser) strayExprs() []Expr {

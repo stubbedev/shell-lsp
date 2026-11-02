@@ -20,6 +20,9 @@ type File struct {
 	Tokens   []Token
 	Errors   []Error
 	BareOr   int
+	Slots    int
+	Reads    int
+	Binders  int
 }
 
 type Token struct {
@@ -91,13 +94,17 @@ func partAt(s Span) partNode { return partNode{node{s}} }
 type Attr interface {
 	Node
 	attr()
+	Slot() int
 }
 
-type attrNode struct{ node }
+type attrNode struct {
+	node
+	slot int32
+}
 
 func (attrNode) attr() {}
 
-func attrAt(s Span) attrNode { return attrNode{node{s}} }
+func (a attrNode) Slot() int { return int(a.slot) }
 
 type Binding interface {
 	Node
@@ -126,7 +133,10 @@ type Bad struct{ exprNode }
 type Ident struct {
 	exprNode
 	Name string
+	slot int32
 }
+
+func (n *Ident) Slot() int { return int(n.slot) }
 
 type Int struct {
 	exprNode

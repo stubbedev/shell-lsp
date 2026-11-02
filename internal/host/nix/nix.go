@@ -16,9 +16,10 @@ import (
 var phaseDirective = directive.Render(directive.Disable, "SC2154") + "\n"
 
 const (
-	tool          = "nix"
-	strictMode    = "set -o errexit -o nounset -o pipefail\n"
-	phaseFunction = "nixPhase"
+	srcBytesPerSpan = 32
+	tool            = "nix"
+	strictMode      = "set -o errexit -o nounset -o pipefail\n"
+	phaseFunction   = "nixPhase"
 )
 
 type file struct {
@@ -89,6 +90,9 @@ func (f *file) projection() (*projection.Map, dialect.Detection) {
 	detection, _ := dialect.Choose(f.found, func(s shellString) dialect.Detection { return s.detection }, tool)
 	b := projection.NewBuilder(f.src)
 	b.Shell(detection)
+	if len(f.found) > 0 {
+		b.Reserve(len(f.src) / srcBytesPerSpan)
+	}
 	for n, group := range groups(f.found) {
 		b.Shell(group[0].detection)
 		f.project(b, group, n)

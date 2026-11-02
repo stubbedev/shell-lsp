@@ -163,7 +163,7 @@ func (p *Project) throughWith(u *symbolTable, innermost *syntax.With, name strin
 			case flowBuiltins:
 				found = union(found, p.selectFrom(v, name))
 			case flowSet:
-				_, named := v.set.names[name]
+				named := v.set.names.has(name)
 				if named {
 					found = union(found, p.selectFrom(v, name))
 				}
@@ -641,7 +641,7 @@ func (p *Project) selectFrom(v flowValue, name string) []flowValue {
 		if kid := v.set.kids[name]; kid != nil {
 			out.one(flowSet{unit: v.unit, set: kid})
 		}
-		for _, src := range v.set.sources[name] {
+		for _, src := range v.set.sources.of(name) {
 			if src.stmt != nil {
 				out.add(p.evalSource(v.unit, src))
 				continue
@@ -739,7 +739,7 @@ func (p *Project) primedAttr(v flowPrimed, name string) []flowValue {
 
 func (p *Project) collapsed(v flowValue) []flowValue {
 	set, isSet := v.(flowSet)
-	if !isSet || !slices.ContainsFunc(sortedNames(set.set.names), systemName) {
+	if !isSet || !slices.ContainsFunc(set.set.names.keys, systemName) {
 		return []flowValue{v}
 	}
 	return p.children(v)
@@ -767,7 +767,7 @@ func (p *Project) foreignOutputs(input string) []flowValue {
 		if !isSet {
 			continue
 		}
-		for _, src := range set.set.sources[outputsAttr] {
+		for _, src := range set.set.sources.of(outputsAttr) {
 			for _, fn := range p.evalSource(set.unit, src) {
 				if lambda, isLambda := fn.(flowLambda); isLambda {
 					out.add(p.foreignBody(lambda))
@@ -884,7 +884,7 @@ func (p *Project) children(v flowValue) []flowValue {
 		return out.list
 	case flowSet:
 		var out flowValues
-		for _, name := range sortedNames(v.set.names) {
+		for _, name := range v.set.names.sorted() {
 			out.add(p.selectFrom(v, name))
 		}
 		return out.list
