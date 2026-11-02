@@ -155,7 +155,7 @@ func requireNix(t *testing.T) {
 
 func runNix(t *testing.T, binary string, args ...string) ([]byte, string, error) {
 	t.Helper()
-	cmd := exec.CommandContext(t.Context(), binary, args...) //nolint:gosec // G204: the arguments reach nix as argv and come from this test
+	cmd := exec.CommandContext(t.Context(), binary, args...)
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()

@@ -100,16 +100,10 @@ func TestPlanQueriesAskDocumentFeaturesOnceAndProbeInsideTokens(t *testing.T) {
 			t.Errorf("%s was asked %d times, want once for the one token of the file", f, perFeature[f])
 		}
 	}
+	wantColumns := map[feature]uint32{featureDefinition: 4, featureCompletion: 6}
 	for _, q := range queries {
-		switch q.feature {
-		case featureDefinition:
-			if q.position.Character != 4 {
-				t.Errorf("definition probes UTF-16 column %d, want 4", q.position.Character)
-			}
-		case featureCompletion:
-			if q.position.Character != 6 {
-				t.Errorf("completion probes UTF-16 column %d, want 6", q.position.Character)
-			}
+		if want, checked := wantColumns[q.feature]; checked && q.position.Character != want {
+			t.Errorf("%s probes UTF-16 column %d, want %d", q.feature, q.position.Character, want)
 		}
 	}
 }

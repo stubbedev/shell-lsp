@@ -53,15 +53,17 @@ func (l flakeLock) nodeOf(reference json.RawMessage, depth int) (lockNode, bool)
 	if json.Unmarshal(reference, &path) != nil {
 		return lockNode{}, false
 	}
-	at, known := l.Nodes[l.Root], true
+	at := l.Nodes[l.Root]
 	for _, name := range path {
 		next, listed := at.Inputs[name]
 		if !listed {
 			return lockNode{}, false
 		}
-		if at, known = l.nodeOf(next, depth+1); !known {
+		node, known := l.nodeOf(next, depth+1)
+		if !known {
 			return lockNode{}, false
 		}
+		at = node
 	}
 	return at, true
 }

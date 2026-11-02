@@ -56,8 +56,9 @@ func (p *treeParser) startsPattern() bool {
 		return second.kind == TokColon || second.kind == TokAt
 	case TokIdent:
 		return second.kind == TokComma || second.kind == TokQuestion || second.kind == TokRBrace
+	default:
+		return false
 	}
-	return false
 }
 
 func (p *treeParser) pattern(start int) *PatternParam {

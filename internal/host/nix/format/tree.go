@@ -438,7 +438,7 @@ func isDocComment(raw string) bool {
 
 func isLanguageWord(s string) bool {
 	for _, r := range s {
-		if !(unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-' || r == '_' || r == '+' || r == '.') {
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '-' && r != '_' && r != '+' && r != '.' {
 			return false
 		}
 	}
@@ -626,6 +626,7 @@ func comparison(op syntax.Op) bool {
 	switch op {
 	case syntax.OpEq, syntax.OpNe, syntax.OpLt, syntax.OpLe, syntax.OpGt, syntax.OpGe:
 		return true
+	case syntax.OpPipeInto, syntax.OpPipeFrom, syntax.OpImplies, syntax.OpOr, syntax.OpAnd, syntax.OpUpdate, syntax.OpAdd, syntax.OpSub, syntax.OpMul, syntax.OpDiv, syntax.OpConcat:
 	}
 	return false
 }

@@ -122,7 +122,7 @@ func (f *file) walk(e syntax.Expr, c context, at position) {
 		f.walk(e.Then, c, plain)
 		f.walk(e.Else, c, plain)
 	case *syntax.Lambda:
-		f.defaults(e.Param, c)
+		f.defaults(e.Param)
 		body := position{}
 		if at.items {
 			body = plain
@@ -161,7 +161,7 @@ func (f *file) listSurface() bool {
 	return s != nil && s.role == execRole
 }
 
-func (f *file) defaults(param syntax.Param, c context) {
+func (f *file) defaults(param syntax.Param) {
 	pattern, ok := param.(*syntax.PatternParam)
 	if !ok {
 		return
@@ -281,6 +281,7 @@ func callOf(e *syntax.Apply, k int) call {
 		if text, literal := syntax.Unparenthesized(e.Args[0]).(*syntax.String); literal {
 			out.file = literalOf(text)
 		}
+	case scriptRole, sourcedRole, phaseRole, hookRole, unitRole, appRole, shebangRole, gitAliasRole, execRole, foreignRole:
 	}
 	return out
 }
@@ -352,6 +353,7 @@ func (f *file) attrSurface(c context) *surface {
 func (f *file) shaped(s shellString, found *surface, via call) (shellString, bool) {
 	c := s.context
 	switch found.role {
+	case scriptRole:
 	case foreignRole:
 		return shellString{}, false
 	case phaseRole:

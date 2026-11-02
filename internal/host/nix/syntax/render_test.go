@@ -167,10 +167,10 @@ func callParts(e Expr) []string {
 		}
 		return parts
 	case *Binary:
-		switch e.Op {
-		case OpPipeInto:
+		if e.Op == OpPipeInto {
 			return append(callParts(e.Right), render(e.Left))
-		case OpPipeFrom:
+		}
+		if e.Op == OpPipeFrom {
 			return append(callParts(e.Left), render(e.Right))
 		}
 	}
@@ -196,6 +196,7 @@ func renderBinary(e *Binary) string {
 		return "(! (__lessThan " + r + " " + l + "))"
 	case OpGe:
 		return "(! (__lessThan " + l + " " + r + "))"
+	case OpImplies, OpOr, OpAnd, OpEq, OpNe, OpUpdate, OpAdd, OpConcat:
 	}
 	return "(" + l + " " + e.Op.String() + " " + r + ")"
 }

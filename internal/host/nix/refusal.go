@@ -125,7 +125,7 @@ func (p *Project) formalRefusal(fn flowLambda, name string) (string, bool) {
 	}
 	callers := p.callers[fn]
 	if reason := p.incomplete(); reason != "" && (len(callers) > 0 || p.fileLambda(fn)) {
-		return fmt.Sprintf("the callers of this function are not all known: %s", reason), true
+		return "the callers of this function are not all known: " + reason, true
 	}
 	if len(callers) == 0 {
 		return "", false

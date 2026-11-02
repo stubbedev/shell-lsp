@@ -184,7 +184,7 @@ func (f *file) programPath(at, limit int) (int, int, bool) {
 		}
 		name := rest[len(dir):]
 		n := strings.IndexFunc(name, func(r rune) bool {
-			return !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("._+-", r))
+			return !isASCIIAlnum(r) && !strings.ContainsRune("._+-", r)
 		})
 		if n < 0 {
 			n = len(name)
@@ -195,6 +195,10 @@ func (f *file) programPath(at, limit int) (int, int, bool) {
 		return at + len(dir), at + len(dir) + n, true
 	}
 	return 0, 0, false
+}
+
+func isASCIIAlnum(r rune) bool {
+	return r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9'
 }
 
 func (f *file) insideSingleQuotes(at int) bool {
@@ -213,8 +217,8 @@ func spliceOf(e syntax.Expr) (splice, bool) {
 	if apply, isCall := syntax.Unparenthesized(e).(*syntax.Apply); isCall {
 		if c := callSurfaces[calleeName(syntax.Unparenthesized(apply.Fn))]; c != nil && c.script != nil && c.script.role == scriptRole && c.positional(len(apply.Args), len(apply.Args)) {
 			last := syntax.Unparenthesized(apply.Args[len(apply.Args)-1])
-			if _, isString := last.(*syntax.String); isString {
-				return splice{items: []syntax.Expr{last}, command: true}, last.(*syntax.String).Closed
+			if str, isString := last.(*syntax.String); isString {
+				return splice{items: []syntax.Expr{last}, command: true}, str.Closed
 			}
 			return splice{}, false
 		}

@@ -26,16 +26,18 @@ func (p *treeParser) expr() Expr {
 	case TokIf:
 		return p.ifExpr(start)
 	case TokIdent:
-		switch p.peek().kind {
-		case TokColon:
+		next := p.peek().kind
+		if next == TokColon {
 			return p.identLambda(start)
-		case TokAt:
+		}
+		if next == TokAt {
 			return p.aliasedLambda(start)
 		}
 	case TokLBrace:
 		if p.startsPattern() {
 			return p.patternLambda(start)
 		}
+	default:
 	}
 	return p.binary(precLowest)
 }
@@ -171,8 +173,9 @@ func (p *treeParser) prefix() Expr {
 		p.advance()
 		operand := p.binary(precNegate)
 		return &Unary{exprNode: exprAt(p.span(start)), Op: OpNegate, Operand: operand}
+	default:
+		return p.application()
 	}
-	return p.application()
 }
 
 func (p *treeParser) atAtom() bool {
@@ -183,8 +186,9 @@ func (p *treeParser) atAtom() bool {
 		return true
 	case TokLet:
 		return p.peek().kind == TokLBrace
+	default:
+		return false
 	}
-	return false
 }
 
 func (p *treeParser) application() Expr {
@@ -219,8 +223,9 @@ func (p *treeParser) selection() Expr {
 		or := &Ident{exprNode: exprAt(Span{Start: p.tok.start, End: p.tok.end}), Name: p.src[p.tok.start:p.tok.end]}
 		p.advance()
 		return &Apply{exprNode: exprAt(p.span(start)), Fn: target, Args: []Expr{or}}
+	default:
+		return target
 	}
-	return target
 }
 
 func (p *treeParser) simple() Expr {
@@ -230,7 +235,7 @@ func (p *treeParser) simple() Expr {
 	switch t.kind {
 	case TokIdent:
 		if p.startsBinding() {
-			break
+			return p.notAnExpression(t)
 		}
 		p.advance()
 		return &Ident{exprNode: exprAt(here), Name: text}
@@ -271,13 +276,17 @@ func (p *treeParser) simple() Expr {
 		return p.misplaced()
 	case TokIf, TokWith, TokAssert:
 		return p.misplaced()
-	}
-	if t.kind == TokOrKeyword {
+	case TokOrKeyword:
 		p.errorHere("`or` cannot stand alone as an expression")
 		p.bareOr++
 		p.advance()
 		return &Ident{exprNode: exprAt(here), Name: text}
+	default:
+		return p.notAnExpression(t)
 	}
+}
+
+func (p *treeParser) notAnExpression(t token) Expr {
 	p.errorHere("expected an expression, found " + p.describe(t))
 	return p.bad()
 }
@@ -297,18 +306,22 @@ func (p *treeParser) paren() *Paren {
 	return &Paren{exprNode: exprAt(p.span(open.start)), Inner: inner, Closed: closed}
 }
 
+func (p *treeParser) atListItem() bool {
+	switch p.tok.kind {
+	case TokIf, TokWith, TokAssert, TokLet:
+		return true
+	default:
+		return p.atAtom()
+	}
+}
+
 func (p *treeParser) list() *List {
 	open := p.tok
 	p.advance()
 	p.open[inBrackets]++
 	var items []Expr
 	for !p.atCloser() && p.tok.kind != TokSemicolon && !p.startsBinding() {
-		switch p.tok.kind {
-		case TokIf, TokWith, TokAssert, TokLet:
-			items = append(items, p.selection())
-			continue
-		}
-		if p.atAtom() {
+		if p.atListItem() {
 			items = append(items, p.selection())
 			continue
 		}

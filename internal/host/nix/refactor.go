@@ -90,6 +90,7 @@ func meaning(tree *syntax.File, t *scope.Table, ref scope.Ref, ordinals map[*sco
 	case scope.Dynamic:
 		span := ref.With.Scope.Span()
 		return "with " + strconv.Itoa(len(t.Withs(ref.With))) + " " + tree.Text[span.Start:span.End]
+	case scope.Undefined:
 	}
 	return "undefined"
 }
@@ -172,6 +173,7 @@ func readSame(u scope.Use, at *scope.Scope) bool {
 		return with == nil
 	case scope.Global:
 		return true
+	case scope.Definition:
 	}
 	return false
 }

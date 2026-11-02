@@ -134,6 +134,7 @@ func (p *Project) compute(u *symbolTable, e syntax.Expr) []flowValue {
 			if suffix, literal := syntax.Unparenthesized(e.Right).(*syntax.String); literal {
 				return p.joined(u, e.Left, literalOf(suffix))
 			}
+		case syntax.OpPipeInto, syntax.OpPipeFrom, syntax.OpImplies, syntax.OpOr, syntax.OpAnd, syntax.OpEq, syntax.OpNe, syntax.OpLt, syntax.OpLe, syntax.OpGt, syntax.OpGe, syntax.OpSub, syntax.OpMul, syntax.OpDiv:
 		}
 	}
 	return nil
@@ -147,6 +148,7 @@ func (p *Project) evalRef(u *symbolTable, ref scope.Ref, name string) []flowValu
 		return builtinValue(ref.Builtin.Name)
 	case scope.Dynamic:
 		return union(p.throughWith(u, ref.With, name), writerValue(name))
+	case scope.Undefined:
 	}
 	return writerValue(name)
 }
@@ -290,6 +292,7 @@ func (p *Project) evalDef(u *symbolTable, d *scope.Def) []flowValue {
 			out = union(out, []flowValue{flowPkgs{}})
 		}
 		return union(out, writerValue(d.Name))
+	case scope.LetDef, scope.RecDef, scope.InheritDef:
 	}
 	if len(out) > 0 {
 		return out
@@ -749,7 +752,7 @@ func (p *Project) overlayBodies() []flowValue {
 	p.collecting = true
 	defer func() { p.collecting = false }()
 	bodies := []flowValue{}
-	for i := 0; i < len(p.units); i++ {
+	for i := 0; i < len(p.units); i++ { //nolint:intrange // p.eval can load files through loadLate, which appends to p.units; a range would freeze the length and miss them
 		u := p.units[i]
 		for _, site := range u.overlays {
 			for _, v := range p.eval(u, site) {

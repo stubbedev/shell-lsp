@@ -21,10 +21,10 @@ func linkCalls(tree *syntax.File, ix *model.Index) {
 		case *syntax.Apply:
 			callees = appendCallee(callees, n.Fn)
 		case *syntax.Binary:
-			switch n.Op {
-			case syntax.OpPipeInto:
+			if n.Op == syntax.OpPipeInto {
 				callees = appendCallee(callees, n.Right)
-			case syntax.OpPipeFrom:
+			}
+			if n.Op == syntax.OpPipeFrom {
 				callees = appendCallee(callees, n.Left)
 			}
 		}

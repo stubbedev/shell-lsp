@@ -79,7 +79,7 @@ func repositoryGolden(t testing.TB, path string) string {
 
 func readFile(t testing.TB, path string) string {
 	t.Helper()
-	raw, err := os.ReadFile(path) //nolint:gosec // G304: the path is a fixture or a repository file the test names
+	raw, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +102,7 @@ func writeAtomically(t testing.TB, path, content string) {
 	if err := tmp.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Chmod(tmp.Name(), 0o644); err != nil { //nolint:gosec // G302: golden files are ordinary checked-in text
+	if err := os.Chmod(tmp.Name(), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Rename(tmp.Name(), path); err != nil {
@@ -112,7 +112,7 @@ func writeAtomically(t testing.TB, path, content string) {
 
 func referenceFormat(t testing.TB, src string) string {
 	t.Helper()
-	cmd := exec.Command(referenceTool, "-q", "-") //nolint:gosec,noctx // G204: the reference tool is a constant
+	cmd := exec.Command(referenceTool, "-q", "-")
 	cmd.Stdin = strings.NewReader(src)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -228,7 +228,7 @@ func referenceDoesTheSame(src, out string) bool {
 	if _, err := exec.LookPath(referenceTool); err != nil {
 		return false
 	}
-	cmd := exec.Command(referenceTool, "-q", "-") //nolint:gosec,noctx // G204: the reference tool is a constant
+	cmd := exec.Command(referenceTool, "-q", "-")
 	cmd.Stdin = strings.NewReader(src)
 	printed, err := cmd.Output()
 	return err != nil || string(printed) == out
@@ -438,7 +438,7 @@ func measureFormat(t *testing.T, src string) formatCost {
 }
 
 func allocBudget(input, output int) uint64 {
-	return uint64(allocBase + allocPerInput*input + allocPerOutput*output) //nolint:gosec // G115: sizes are positive
+	return uint64(allocBase + allocPerInput*input + allocPerOutput*output)
 }
 
 func deepestAccepted(h hostileShape) int {
@@ -493,7 +493,7 @@ func TestAllocationIsLinearInFileSize(t *testing.T) {
 	if large.perUnit() > growthPermitted*small.perUnit() {
 		t.Errorf("allocation per byte rose from %.0f to %.0f as the file grew", small.perUnit(), large.perUnit())
 	}
-	if perByte := large.alloc / uint64(large.input); perByte > allocPerByteOrdinary { //nolint:gosec // G115: the size is positive
+	if perByte := large.alloc / uint64(large.input); perByte > allocPerByteOrdinary {
 		t.Errorf("an ordinary file allocates %d bytes per input byte, over %d", perByte, allocPerByteOrdinary)
 	}
 }

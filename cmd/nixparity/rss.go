@@ -75,11 +75,11 @@ type procStat struct {
 }
 
 func parseProcStat(text string) (procStat, error) {
-	closing := strings.LastIndexByte(text, ')')
-	if closing < 0 {
+	_, afterName, named := strings.CutLast(text, ")")
+	if !named {
 		return procStat{}, fmt.Errorf("process status %q has no command name", text)
 	}
-	fields := strings.Fields(text[closing+1:])
+	fields := strings.Fields(afterName)
 	if len(fields) <= procStatRSSAt {
 		return procStat{}, fmt.Errorf("process status %q has %d fields after the command name", text, len(fields))
 	}

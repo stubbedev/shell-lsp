@@ -102,7 +102,7 @@ func (f *file) safeString(str *syntax.String, hops int) bool {
 		switch part := part.(type) {
 		case *syntax.Literal:
 			if strings.ContainsFunc(part.Text, func(r rune) bool {
-				return !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("._/:=@%+,-", r))
+				return !isASCIIAlnum(r) && !strings.ContainsRune("._/:=@%+,-", r)
 			}) {
 				return false
 			}

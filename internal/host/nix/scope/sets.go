@@ -38,6 +38,7 @@ func (k setKind) readsItself(name string) bool {
 		return name == overrides
 	case legacySet:
 		return name == overrides || name == legacyBody
+	case letSet:
 	}
 	return false
 }

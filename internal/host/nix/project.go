@@ -48,7 +48,7 @@ type flowCaller struct {
 }
 
 type Project struct {
-	ctx stdcontext.Context
+	ctx    stdcontext.Context
 	mu     sync.Mutex
 	source Source
 	units  []*symbolTable
@@ -411,7 +411,7 @@ func (p *Project) clearDerived() {
 }
 
 func (p *Project) readDependencies() {
-	for i := 0; i < len(p.units); i++ {
+	for i := 0; i < len(p.units); i++ { //nolint:intrange // p.slotValues can load files through loadLate, which appends to p.units; a range would freeze the length and miss them
 		if p.foreign[i] {
 			continue
 		}

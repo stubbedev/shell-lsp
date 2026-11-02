@@ -213,10 +213,12 @@ func simpleString(s *stringTerm) bool {
 func flatHard(doc []item) bool {
 	for i := range doc {
 		switch doc[i].tag {
+		case tagText:
 		case tagSpacing:
 			switch doc[i].space {
 			case lineHard, lineEmpty, lineCount:
 				return true
+			case spaceHard, spaceSoft, spacePlain, breakSoft, breakPlain:
 			}
 		case tagGroup:
 			if flatHard(doc[i].items) {
@@ -473,6 +475,7 @@ func flatWithin(doc []item, width *int) bool {
 				return false
 			case spaceHard, spacePlain, spaceSoft:
 				*width++
+			case breakSoft, breakPlain:
 			}
 		case tagGroup:
 			if !flatWithin(it.items, width) {
@@ -1023,8 +1026,8 @@ func binaryAbsorbed(b *binaryExpr, n int) []item {
 }
 
 func forcedOperand(e expr, n int) []item {
-	if _, ok := e.(*listTerm); ok {
-		return listDoc(e.(*listTerm), n)
+	if list, ok := e.(*listTerm); ok {
+		return listDoc(list, n)
 	}
 	return forcedDoc(e, n)
 }
@@ -1253,8 +1256,8 @@ func callDoc(args []expr, n int, fnItems []item) []item {
 			i++
 			continue
 		}
-		if _, sel := args[i].(*selectTerm); sel {
-			doc = transparent(doc, space, group(selectDoc(args[i].(*selectTerm), m)))
+		if sel, ok := args[i].(*selectTerm); ok {
+			doc = transparent(doc, space, group(selectDoc(sel, m)))
 			continue
 		}
 		doc = transparent(doc, space, priority(argDoc(args[i], m)))
@@ -1262,7 +1265,7 @@ func callDoc(args []expr, n int, fnItems []item) []item {
 	if pair[max(last-1, 0)] && last > 0 {
 		return doc
 	}
-	return seq(doc, space, lastArg(args[last], m, count == 1))
+	return seq(doc, space, lastArg(args[last], m))
 }
 
 func isList(e expr) bool {
@@ -1314,7 +1317,7 @@ func argDoc(e expr, n int) []item {
 	return exprDoc(e, n)
 }
 
-func lastArg(e expr, n int, only bool) []item {
+func lastArg(e expr, n int) []item {
 	switch v := e.(type) {
 	case *setTerm:
 		if isAbsorbable(v) {
@@ -1529,7 +1532,7 @@ func assertDoc(a *assertExpr, n int) []item {
 		args := append([]expr{c.fn}, c.args...)
 		head = callDoc(args, n, keyword)
 	default:
-		head = seq(transparent(keyword), space, lastArg(a.cond, n+1, false))
+		head = seq(transparent(keyword), space, lastArg(a.cond, n+1))
 	}
 	return seq(group(head), tokenDoc(a.semi, n), hardLine, inlineBody(a.body, n))
 }

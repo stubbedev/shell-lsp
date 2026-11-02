@@ -750,6 +750,7 @@ func hardOrBlank(it *item) bool {
 	switch it.space {
 	case lineHard, lineEmpty, lineCount, spaceHard:
 		return true
+	case spaceSoft, spacePlain, breakSoft, breakPlain:
 	}
 	return false
 }
@@ -791,6 +792,7 @@ func fixupInto(out, doc []item, flat bool) []item {
 					it.space = spaceHard
 				case breakPlain, breakSoft:
 					continue
+				case spaceHard, lineHard, lineEmpty, lineCount:
 				}
 			}
 			out = pushItem(out, it)

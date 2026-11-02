@@ -1,6 +1,7 @@
 package nix
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
@@ -77,10 +78,10 @@ func onCalls(r role, shell dialect.Dialect, arg int, names ...string) []surface 
 	return out
 }
 
-func onKeys(r role, shell dialect.Dialect, call string, keys ...string) []surface {
+func onKeys(r role, call string, keys ...string) []surface {
 	out := make([]surface, len(keys))
 	for i, key := range keys {
-		out[i] = surface{call: call, key: key, role: r, shell: shell}
+		out[i] = surface{call: call, key: key, role: r, shell: dialect.Bash}
 	}
 	return out
 }
@@ -140,8 +141,8 @@ func surfaceTable() []surface {
 		onCalls(runnerRole, dialect.Bash, 3, "runCommand", "runCommandLocal", "runCommandCC", "runCommandNoCC", "runCommandNoCCLocal"),
 		onCalls(runnerRole, dialect.Bash, 2, "runCommandWith"),
 		onCalls(namedRole, dialect.Bash, 2, "writeText", "writeTextDir", "toFile"),
-		onKeys(appRole, dialect.Bash, shellApp, shellAppText),
-		onKeys(namedRole, dialect.Bash, writeTextFile, shellAppText),
+		onKeys(appRole, shellApp, shellAppText),
+		onKeys(namedRole, writeTextFile, shellAppText),
 
 		onAttrs(namedRole, dialect.Bash, under("home.file.*", "text")...),
 		onAttrs(namedRole, dialect.Bash, under("xdg.configFile.*", "text")...),
@@ -186,16 +187,16 @@ func surfaceTable() []surface {
 		onCalls(foreignRole, dialect.Bash, lastArg, "writeCBin"),
 	)
 	for _, call := range imageBuilders {
-		add(onKeys(scriptRole, dialect.Bash, call, "runAsRoot", "extraCommands"))
+		add(onKeys(scriptRole, call, "runAsRoot", "extraCommands"))
 	}
 	for _, call := range layeredBuilders {
-		add(onKeys(scriptRole, dialect.Bash, call, "extraCommands", "fakeRootCommands"))
+		add(onKeys(scriptRole, call, "extraCommands", "fakeRootCommands"))
 	}
 	for _, call := range fhsBuilders {
-		add(onKeys(scriptRole, dialect.Bash, call, "runScript", "profile", "extraBuildCommands", "extraInstallCommands", "extraPreBwrapCmds"))
+		add(onKeys(scriptRole, call, "runScript", "profile", "extraBuildCommands", "extraInstallCommands", "extraPreBwrapCmds"))
 	}
 	for _, call := range nixosTests {
-		add(onKeys(foreignRole, dialect.Bash, call, "testScript"))
+		add(onKeys(foreignRole, call, "testScript"))
 	}
 	var out []surface
 	for _, part := range table {
@@ -279,9 +280,8 @@ func surfaceIndex(table []surface) (*attrNode, map[string]*callSurface) {
 		s := &table[i]
 		if s.attr != "" {
 			node := root
-			segments := strings.Split(s.attr, ".")
-			for j := len(segments) - 1; j >= 0; j-- {
-				node = node.kid(segments[j])
+			for _, segment := range slices.Backward(strings.Split(s.attr, ".")) {
+				node = node.kid(segment)
 			}
 			node.surface = s
 			continue

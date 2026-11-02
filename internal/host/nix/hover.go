@@ -54,8 +54,9 @@ func hoverable(kind syntax.TokenKind) bool {
 	switch kind {
 	case syntax.TokIdent, syntax.TokIf, syntax.TokThen, syntax.TokElse, syntax.TokAssert, syntax.TokWith, syntax.TokLet, syntax.TokIn, syntax.TokRec, syntax.TokInherit, syntax.TokOrKeyword:
 		return true
+	default:
+		return false
 	}
-	return false
 }
 
 func (d *Document) builtinHover(span syntax.Span) (Hover, bool) {

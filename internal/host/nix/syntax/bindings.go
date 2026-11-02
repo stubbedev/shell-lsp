@@ -76,8 +76,9 @@ func (p *treeParser) atAttr() bool {
 	switch p.tok.kind {
 	case TokIdent, TokOrKeyword, TokQuote, TokInterp:
 		return true
+	default:
+		return false
 	}
-	return false
 }
 
 func (p *treeParser) attrPath() AttrPath {
@@ -104,7 +105,8 @@ func (p *treeParser) attribute() Attr {
 			p.advance()
 		}
 		return &DynamicAttr{attrNode: attrAt(in.Span()), Value: in.Value, Closed: in.Closed}
+	default:
+		p.errorHere("expected an attribute name, found " + p.describe(p.tok))
+		return &BadAttr{attrAt(Span{Start: p.prevEnd, End: p.prevEnd})}
 	}
-	p.errorHere("expected an attribute name, found " + p.describe(p.tok))
-	return &BadAttr{attrAt(Span{Start: p.prevEnd, End: p.prevEnd})}
 }

@@ -79,7 +79,7 @@ func buildPlan(root string, s settings) (plan, error) {
 
 func listNixFiles(root string) ([]string, error) {
 	var rels []string
-	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error { //nolint:gosec // G703: root is the directory the operator named on the command line, and walking it is this tool's job
 		if err != nil {
 			return fmt.Errorf("listing %s: %w", path, err)
 		}

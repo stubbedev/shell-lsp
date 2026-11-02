@@ -182,7 +182,7 @@ func serverArgv(name, commandLine string) ([]string, error) {
 
 func buildOurs(ctx context.Context, dir string) (string, error) {
 	bin := filepath.Join(dir, oursName)
-	cmd := exec.CommandContext(ctx, "go", "build", "-o", bin, ".")
+	cmd := exec.CommandContext(ctx, "go", "build", "-o", bin, ".") //nolint:gosec // G204: no shell is involved, the program is a constant, and bin is an argv entry under a directory from os.MkdirTemp
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return "", fmt.Errorf("building %s from the working directory: %w\n%s", oursName, err, out)
 	}

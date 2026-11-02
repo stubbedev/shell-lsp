@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding"
 	"fmt"
 	"slices"
 	"time"
@@ -50,7 +51,7 @@ func hoverAgrees(a, b []string) bool {
 func allFeatures() []feature {
 	out := make([]feature, len(featureSpecs))
 	for i := range out {
-		out[i] = feature(i) //nolint:gosec
+		out[i] = feature(i)
 	}
 	return out
 }
@@ -58,6 +59,8 @@ func allFeatures() []feature {
 func (f feature) spec() featureSpec { return featureSpecs[f] }
 
 func (f feature) String() string { return featureSpecs[f].name }
+
+var _ encoding.TextMarshaler = feature(0)
 
 func (f feature) MarshalText() ([]byte, error) { return []byte(f.String()), nil }
 
@@ -161,6 +164,8 @@ var verdictNames = [...]string{
 }
 
 func (v verdict) String() string { return verdictNames[v] }
+
+var _ encoding.TextMarshaler = verdict(0)
 
 func (v verdict) MarshalText() ([]byte, error) { return []byte(v.String()), nil }
 

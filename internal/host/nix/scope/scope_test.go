@@ -29,6 +29,7 @@ func rendered(src string, u Use) string {
 		return use + "global"
 	case Dynamic:
 		return use + "with"
+	case Undefined:
 	}
 	return use + "undefined"
 }

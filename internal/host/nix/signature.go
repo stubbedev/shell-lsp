@@ -204,16 +204,22 @@ func heldDoc(callee flowLambda) string {
 
 func (c *cursor) writeParam(label *labelBuilder, text string, param syntax.Param) paramGroup {
 	group := paramGroup{first: len(label.params)}
-	pattern, ok := param.(*syntax.PatternParam)
-	if !ok {
-		id := param.(*syntax.IdentParam)
-		label.param(c.clean(id.Name.Name))
-		return group
+	switch param := param.(type) {
+	case *syntax.IdentParam:
+		label.param(c.clean(param.Name.Name))
+	case *syntax.PatternParam:
+		group.formals = param.Formals
+		c.writePattern(label, text, param)
+	default:
+		panic("nix: a parsed lambda has an unknown parameter")
 	}
-	group.formals = pattern.Formals
+	return group
+}
+
+func (c *cursor) writePattern(label *labelBuilder, text string, pattern *syntax.PatternParam) {
 	if len(pattern.Formals) == 0 {
 		label.param(emptyPattern(pattern))
-		return group
+		return
 	}
 	label.word("{ ")
 	for i, f := range pattern.Formals {
@@ -226,7 +232,6 @@ func (c *cursor) writeParam(label *labelBuilder, text string, param syntax.Param
 		label.word(", ...")
 	}
 	label.word(" }")
-	return group
 }
 
 func emptyPattern(p *syntax.PatternParam) string {

@@ -43,7 +43,7 @@ type treeParser struct {
 }
 
 func Parse(src string) *File {
-	p := &treeParser{lexer: lexer{src: src, tokens: make([]Token, 0, len(src)/4+1)}}
+	p := &treeParser{src: src, tokens: make([]Token, 0, len(src)/4+1)}
 	p.advance()
 	root := p.expr()
 	stray := p.strayExprs()
@@ -70,11 +70,7 @@ func (p *treeParser) strayExprs() []Expr {
 }
 
 func (p *treeParser) startsExpr() bool {
-	switch p.tok.kind {
-	case TokIf, TokWith, TokAssert, TokLet, TokNot, TokMinus:
-		return true
-	}
-	return p.atAtom()
+	return p.tok.kind == TokNot || p.tok.kind == TokMinus || p.atListItem()
 }
 
 func (p *treeParser) advance() {
@@ -200,8 +196,9 @@ func (p *treeParser) atCloser() bool {
 		return p.open[inBraces] > 0
 	case TokIn:
 		return p.open[inLet] > 0
+	default:
+		return false
 	}
-	return false
 }
 
 func (p *treeParser) startsBinding() bool {
@@ -255,6 +252,7 @@ func (p *treeParser) syncBinding() {
 			if depth == 0 && p.peek().kind == TokAssign {
 				return
 			}
+		default:
 		}
 		p.skip()
 	}

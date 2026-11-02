@@ -3,6 +3,7 @@ package hostnav
 import (
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/embedded"
 	"github.com/stubbedev/shell-lsp/internal/host/model"
@@ -94,6 +95,7 @@ func (g *Group) bindingHops(file *workspace.File, b embedded.Binding) []Symbol {
 			return []Symbol{sym}
 		}
 		return g.assignedHops(file, b.Read, b.ReadSpan.Start)
+	case embedded.ValueOther:
 	}
 	return nil
 }
@@ -205,9 +207,11 @@ func (g *Group) renameLink(sym Symbol, newName string) ([]Occurrence, error) {
 
 func (g *Group) describeLink(sym Symbol) Hover {
 	b := sym.link.binding
-	md := fmt.Sprintf("`%s` in this %s program is set by `%s %s`, as `%s`.", sym.Name, sym.link.program, b.Flag, b.Name, b.Text)
+	var md strings.Builder
+	fmt.Fprintf(&md, "`%s` in this %s program is set by `%s %s`, as `%s`.", sym.Name, sym.link.program, b.Flag, b.Name, b.Text)
 	for _, hop := range sym.link.hops {
-		md += "\n\n---\n\n" + g.Describe(hop).Markdown
+		md.WriteString("\n\n---\n\n")
+		md.WriteString(g.Describe(hop).Markdown)
 	}
-	return Hover{Markdown: md, Span: sym.Span}
+	return Hover{Markdown: md.String(), Span: sym.Span}
 }

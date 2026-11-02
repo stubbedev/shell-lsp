@@ -32,6 +32,7 @@ func (p *treeParser) skipToBrace() {
 				return
 			}
 			depth--
+		default:
 		}
 		p.skip()
 	}
