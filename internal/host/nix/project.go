@@ -2,7 +2,7 @@ package nix
 
 import (
 	"cmp"
-	"context"
+	stdcontext "context"
 	"fmt"
 	"maps"
 	"path/filepath"
@@ -48,7 +48,7 @@ type flowCaller struct {
 }
 
 type Project struct {
-	ctx context.Context
+	ctx stdcontext.Context
 	mu     sync.Mutex
 	source Source
 	units  []*symbolTable
@@ -137,7 +137,7 @@ type wantedFile struct {
 	fallback string
 }
 
-func Link(ctx context.Context, req Request, source Source) *Project {
+func Link(ctx stdcontext.Context, req Request, source Source) *Project {
 	p := &Project{
 		ctx:          ctx,
 		source:       source,
@@ -188,7 +188,7 @@ func (localSource) Read(path string) ([]byte, error) {
 }
 
 func standalone(ix *model.Index) *Project {
-	return Link(context.Background(), Request{Self: ix}, localSource{})
+	return Link(stdcontext.Background(), Request{Self: ix}, localSource{})
 }
 
 func (p *Project) Fresh(source Source) bool {

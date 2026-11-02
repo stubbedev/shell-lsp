@@ -235,6 +235,10 @@ func (s *Server) handleSemanticTokensRange(_ context.Context, docs *docstore.Vie
 	return lsp.SemanticTokens{Data: encodeTokens(s.placedTokens(snap), &p.Range)}, nil
 }
 
+func spansCross(a, b parser.Span) bool {
+	return a.Start < b.Start && b.Start < a.End && a.End < b.End || b.Start < a.Start && a.Start < b.End && b.End < a.End
+}
+
 func (s *Server) handleSelectionRange(_ context.Context, docs *docstore.View, p lsp.SelectionRangeParams) (any, error) {
 	snap, err := s.snapshot(docs, p.TextDocument.URI)
 	if err != nil {
@@ -248,18 +252,28 @@ func (s *Server) handleSelectionRange(_ context.Context, docs *docstore.View, p 
 		at := snap.Doc.Source().PositionToOffset(pos, snap.encoding)
 		outer := parser.Span{Start: at, End: at}
 		if inside {
+			at = snap.Doc.SourceOffset(offset)
+		}
+		var enclosing []parser.Span
+		if snap.Native != nil {
+			enclosing = snap.Native.Enclosing(at)
+		}
+		if inside {
 			path := structure.SelectionPath(snap.Tree, offset)
 			if snap.Native != nil {
 				path = path[:len(path)-1]
 			}
 			for _, span := range path {
+				authored := parser.Span{Start: snap.Doc.SourceOffset(span.Start), End: snap.Doc.SourceOffset(span.End)}
+				if slices.ContainsFunc(enclosing, func(host parser.Span) bool { return spansCross(host, authored) }) {
+					break
+				}
 				ranges = append(ranges, snap.positions().Range(span))
-				outer = parser.Span{Start: snap.Doc.SourceOffset(span.Start), End: snap.Doc.SourceOffset(span.End)}
+				outer = authored
 			}
-			at = snap.Doc.SourceOffset(offset)
 		}
 		if snap.Native != nil {
-			for _, span := range snap.Native.Enclosing(at) {
+			for _, span := range enclosing {
 				if span.Start <= outer.Start && outer.End <= span.End && span != outer {
 					ranges = append(ranges, source.Range(span))
 				}

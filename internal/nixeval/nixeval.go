@@ -19,7 +19,7 @@ const (
 	refreshTimeout    = 10 * time.Minute
 	maxConcurrent     = 4
 	maxBackground     = 1
-	maxFlakeFile      = 16 << 20
+	MaxFlakeFile      = 16 << 20
 	smallCacheBudget  = 32 << 20
 	optionCacheBudget = 256 << 20
 	cacheSubdirectory = "shell-lsp/nixeval"
@@ -541,11 +541,11 @@ func pathDetail(path []string) string {
 }
 
 func readFlakeFiles(dir string) (nix, lock []byte, err error) {
-	nix, _, err = regularfile.Read(filepath.Join(dir, "flake.nix"), maxFlakeFile)
+	nix, _, err = regularfile.Read(filepath.Join(dir, "flake.nix"), MaxFlakeFile)
 	if err != nil {
 		return nil, nil, fmt.Errorf("reading flake.nix: %w", err)
 	}
-	lock, _, err = regularfile.Read(filepath.Join(dir, "flake.lock"), maxFlakeFile)
+	lock, _, err = regularfile.Read(filepath.Join(dir, "flake.lock"), MaxFlakeFile)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nix, nil, nil
 	}

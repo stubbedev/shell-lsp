@@ -224,15 +224,13 @@ func (s *Server) clientCapabilities() ClientCapabilities {
 func (s *Server) handleInitialized(ctx context.Context, _ json.RawMessage) error {
 	s.warmUp(ctx)
 	s.nixEval.arm()
-	s.wg.Add(1)
-	go func() {
-		defer s.wg.Done()
+	s.wg.Go(func() {
 		select {
 		case <-ctx.Done():
 		case <-s.exiting:
 		}
 		s.stopNixEvaluation()
-	}()
+	})
 	go func() {
 		s.loadConfiguration(ctx)
 		s.registerWatchers(ctx)

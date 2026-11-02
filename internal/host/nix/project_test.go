@@ -1,7 +1,7 @@
 package nix
 
 import (
-	"context"
+	stdcontext "context"
 	"errors"
 	"io/fs"
 	"path/filepath"
@@ -130,10 +130,10 @@ func TestLockedInputsLeadIntoTheStore(t *testing.T) {
 func TestLinkStopsWhenCancelled(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(t.Context())
+	ctx, cancel := stdcontext.WithCancel(t.Context())
 	cancel()
 	p := Link(ctx, Request{Self: Analyze("{ a = 1; }\n").Index}, localSource{})
-	if reason := p.incomplete(); !strings.Contains(reason, context.Canceled.Error()) {
+	if reason := p.incomplete(); !strings.Contains(reason, stdcontext.Canceled.Error()) {
 		t.Errorf("incomplete = %q, want it to name the cancellation", reason)
 	}
 }

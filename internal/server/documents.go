@@ -43,6 +43,7 @@ func (s *Server) handleDidClose(_ context.Context, closeParams lsp.DidCloseTextD
 	s.snapshots.forget(uri)
 	s.semantic.forget(uri)
 	s.delivery.closed(uri)
+	s.forgetNixClasses(uri)
 	return nil
 }
 

@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"io/fs"
 	"maps"
 	"path/filepath"
 	"slices"
@@ -28,6 +29,7 @@ const (
 	nixAnyUser         = "<name>"
 	nixStringsQuiet    = 750 * time.Millisecond
 	nixStringsJob      = "strings"
+	nixClassPatience   = 50 * time.Millisecond
 	nixMissingNotice   = "shellLsp.nix.evaluate is on, but no nix binary is on PATH: NixOS, home-manager and flake-parts options and nixpkgs attributes are unavailable until it is installed. Static Nix features keep working."
 )
 
@@ -59,6 +61,8 @@ type nixEvaluation struct {
 	stopped bool
 	failed  bool
 	session *nixSession
+
+	classPatience time.Duration
 
 	strings nixStrings
 }
@@ -194,24 +198,93 @@ func (e *nixEvaluation) arm() {
 }
 
 type nixSession struct {
-	client   nixEvaluator
-	closing  chan struct{}
-	watchers sync.WaitGroup
+	client     nixEvaluator
+	closing    chan struct{}
+	watchers   sync.WaitGroup
+	classLinks sync.Mutex
 
 	mu      sync.Mutex
 	closed  bool
 	warmed  map[string]bool
 	warming map[string]bool
 	watched map[<-chan struct{}]bool
+	classes map[string]*nixClassLookup
+}
+
+type nixClassLookup struct {
+	stamp   string
+	done    chan struct{}
+	cancel  context.CancelFunc
+	found   bool
+	classes []nix.OptionClass
+	earlier []nix.OptionClass
 }
 
 func (n *nixSession) close() {
 	n.mu.Lock()
 	n.closed = true
+	for _, lookup := range n.classes {
+		lookup.cancel()
+	}
 	n.mu.Unlock()
 	close(n.closing)
 	n.client.Close()
 	n.watchers.Wait()
+}
+
+func (n *nixSession) classLookup(uri, stamp string, find func(context.Context) []nix.OptionClass) *nixClassLookup {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	previous, held := n.classes[uri]
+	if held && previous.stamp == stamp {
+		return previous
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	lookup := &nixClassLookup{stamp: stamp, done: make(chan struct{}), cancel: cancel}
+	if held {
+		previous.cancel()
+		lookup.earlier = previous.settled()
+	}
+	if n.closed {
+		cancel()
+		close(lookup.done)
+		return lookup
+	}
+	n.classes[uri] = lookup
+	n.watchers.Go(func() {
+		defer cancel()
+		defer close(lookup.done)
+		n.classLinks.Lock()
+		defer n.classLinks.Unlock()
+		if ctx.Err() != nil {
+			return
+		}
+		classes := find(ctx)
+		if ctx.Err() == nil {
+			lookup.classes, lookup.found = classes, true
+		}
+	})
+	return lookup
+}
+
+func (l *nixClassLookup) settled() []nix.OptionClass {
+	select {
+	case <-l.done:
+		if l.found {
+			return l.classes
+		}
+	default:
+	}
+	return l.earlier
+}
+
+func (n *nixSession) forgetClasses(uri string) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if lookup, held := n.classes[uri]; held {
+		lookup.cancel()
+		delete(n.classes, uri)
+	}
 }
 
 func (n *nixSession) watch(refresh *nixeval.Refresh, finished func(error)) {
@@ -283,7 +356,7 @@ func (s *Server) openNixSession() (*nixSession, error) {
 		e.failed = true
 		return nil, err
 	}
-	e.session = &nixSession{client: client, closing: make(chan struct{}), warmed: map[string]bool{}, warming: map[string]bool{}, watched: map[<-chan struct{}]bool{}}
+	e.session = &nixSession{client: client, closing: make(chan struct{}), warmed: map[string]bool{}, warming: map[string]bool{}, watched: map[<-chan struct{}]bool{}, classes: map[string]*nixClassLookup{}}
 	return e.session, nil
 }
 
@@ -296,6 +369,16 @@ func (s *Server) closeNixSession(stop bool) {
 	e.mu.Unlock()
 	if session != nil {
 		session.close()
+	}
+}
+
+func (s *Server) forgetNixClasses(uri string) {
+	e := &s.nixEval
+	e.mu.Lock()
+	session := e.session
+	e.mu.Unlock()
+	if session != nil {
+		session.forgetClasses(uri)
 	}
 }
 
@@ -323,15 +406,27 @@ func (s *Server) syncNixEvaluation() {
 	}
 }
 
-func nixFlakeDir(path string) (string, bool) {
+func (s *Server) nixFlakeDir(path string) (string, bool) {
 	for dir := filepath.Dir(path); ; dir = filepath.Dir(dir) {
-		if _, err := regularfile.Stat(filepath.Join(dir, nix.FlakeFile)); err == nil {
+		if s.isFlakeDir(dir) {
 			return dir, true
 		}
 		if dir == filepath.Dir(dir) {
 			return "", false
 		}
 	}
+}
+
+func (s *Server) isFlakeDir(dir string) bool {
+	path := filepath.Join(dir, nix.FlakeFile)
+	source, _, err := regularfile.Read(path, nixeval.MaxFlakeFile)
+	if err != nil {
+		if !errors.Is(err, fs.ErrNotExist) {
+			s.logger.Warn("reading a file that may be a flake", "path", path, "err", err)
+		}
+		return false
+	}
+	return nix.Read(string(source)).IsFlake()
 }
 
 func (s *Server) warmFlakeOf(at docstore.Location, force bool) {
@@ -341,7 +436,7 @@ func (s *Server) warmFlakeOf(at docstore.Location, force bool) {
 	if settings, _ := s.settingsFor(at); !settings.Nix.Evaluate {
 		return
 	}
-	dir, ok := nixFlakeDir(at.Path)
+	dir, ok := s.nixFlakeDir(at.Path)
 	if !ok {
 		return
 	}
@@ -398,7 +493,7 @@ func (s *Server) nixEvaluated(ctx context.Context, docs *docstore.View, snap *sn
 		}
 		return r
 	}
-	dir, ok := nixFlakeDir(snap.Path)
+	dir, ok := s.nixFlakeDir(snap.Path)
 	if !ok {
 		return r
 	}
@@ -408,8 +503,25 @@ func (s *Server) nixEvaluated(ctx context.Context, docs *docstore.View, snap *sn
 	}
 	s.warmFlake(session, dir, false)
 	r.session, r.dir = session, dir
-	r.classes = sync.OnceValue(func() []nix.OptionClass { return s.nixFileClasses(ctx, docs, snap) })
+	r.classes = sync.OnceValue(func() []nix.OptionClass { return r.fileClasses(docs, snap) })
 	return r
+}
+
+func (r *nixRequest) fileClasses(docs *docstore.View, snap *snapshot) []nix.OptionClass {
+	s := r.server
+	lookup := r.session.classLookup(snap.URI, s.hostStamp(docs, host.Nix), func(ctx context.Context) []nix.OptionClass {
+		return s.nixFileClasses(ctx, docs, snap)
+	})
+	patience := time.NewTimer(cmp.Or(s.nixEval.classPatience, nixClassPatience))
+	defer patience.Stop()
+	select {
+	case <-lookup.done:
+		return lookup.settled()
+	case <-patience.C:
+	case <-r.parent.Done():
+	}
+	r.incomplete = true
+	return lookup.settled()
 }
 
 func (s *Server) nixFileClasses(ctx context.Context, docs *docstore.View, snap *snapshot) []nix.OptionClass {
@@ -419,7 +531,9 @@ func (s *Server) nixFileClasses(ctx context.Context, docs *docstore.View, snap *
 	}
 	g, err := s.group(ctx, docs, h)
 	if err != nil {
-		s.logger.Warn("finding the module classes of a Nix file", "path", snap.Path, "err", err)
+		if ctx.Err() == nil {
+			s.logger.Warn("finding the module classes of a Nix file", "path", snap.Path, "err", err)
+		}
 		return nil
 	}
 	return g.NixClasses()
@@ -469,7 +583,8 @@ func (r *nixRequest) waitFor(refresh *nixeval.Refresh) {
 
 func (r *nixRequest) failed(err error) {
 	if notReady, ok := errors.AsType[*nixeval.NotReadyError](err); ok {
-		r.waitFor(notReady.Refresh)
+		r.incomplete = true
+		r.session.watch(notReady.Refresh, r.server.nixProblem)
 		return
 	}
 	if errors.Is(err, context.DeadlineExceeded) && r.parent.Err() == nil {

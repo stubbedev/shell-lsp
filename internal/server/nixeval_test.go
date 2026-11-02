@@ -128,6 +128,11 @@ type nixEvalProject struct {
 
 func openNixEvalProject(t *testing.T, enabled bool, fake *fakeEvaluator, files map[string]string) *nixEvalProject {
 	t.Helper()
+	return openNixEvalProjectPatient(t, enabled, fake, files, clientTimeout)
+}
+
+func openNixEvalProjectPatient(t *testing.T, enabled bool, fake *fakeEvaluator, files map[string]string, patience time.Duration) *nixEvalProject {
+	t.Helper()
 	root := t.TempDir()
 	for name, text := range files {
 		path := filepath.Join(root, name)
@@ -144,6 +149,7 @@ func openNixEvalProject(t *testing.T, enabled bool, fake *fakeEvaluator, files m
 		t.Fatal(err)
 	}
 	c, srv := startClient(t, `{"rootUri": "`+fileuri.FromPath(root)+`", "initializationOptions": `+string(options)+`, `+nativeCapabilities+`}`, func(s *Server) {
+		s.nixEval.classPatience = patience
 		s.nixEval.open = func(func(error)) (nixEvaluator, error) {
 			opens.Add(1)
 			if fake == nil {
@@ -505,5 +511,204 @@ func TestNixRunRefusalNamesNoSpecificTool(t *testing.T) {
 	msg := p.c.call("workspace/executeCommand", `{"command": "`+commandRunRecipe+`", "arguments": [{"uri": "`+p.uri("a.bash")+`", "name": "x"}]}`)
 	if msg.Error == nil || !strings.Contains(msg.Error.Message, "nothing to run") || strings.Contains(msg.Error.Message, "justfile") {
 		t.Errorf("error = %+v", msg.Error)
+	}
+}
+
+func awaitNixWarms(t *testing.T, p *nixEvalProject, fake *fakeEvaluator, want []string) {
+	t.Helper()
+	settled := func() bool {
+		fake.mu.Lock()
+		same := slices.Equal(fake.warmed, want)
+		fake.mu.Unlock()
+		if !same {
+			return false
+		}
+		session := p.srv.nixSession()
+		session.mu.Lock()
+		defer session.mu.Unlock()
+		return len(session.warming) == 0
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for !settled() {
+		if time.Now().After(deadline) {
+			fake.mu.Lock()
+			defer fake.mu.Unlock()
+			t.Fatalf("warmed %q, want %q", fake.warmed, want)
+		}
+		time.Sleep(time.Millisecond)
+	}
+	time.Sleep(50 * time.Millisecond)
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	if !slices.Equal(fake.warmed, want) {
+		t.Fatalf("warmed %q after it had settled at %q", fake.warmed, want)
+	}
+}
+
+func (p *nixEvalProject) save(name string) {
+	p.c.notify("textDocument/didSave", `{"textDocument": {"uri": "`+fileuri.FromPath(filepath.Join(p.root, name))+`"}}`)
+}
+
+func TestNixOpeningAFileWarmsItsFlakeOnce(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeEvaluator()
+	p := openNixEvalProject(t, true, fake, map[string]string{"one/flake.nix": emptyFlake, "two/flake.nix": emptyFlake})
+	one, two := filepath.Join(p.root, "one"), filepath.Join(p.root, "two")
+	p.open(t, "one/a.nix", "{ |}")
+	awaitNixWarms(t, p, fake, []string{one})
+	p.open(t, "one/nested/b.nix", "{ |}")
+	p.open(t, "one/run.sh", "echo |")
+	p.open(t, "outside.nix", "{ |}")
+	awaitNixWarms(t, p, fake, []string{one})
+	p.open(t, "two/a.nix", "{ |}")
+	awaitNixWarms(t, p, fake, []string{one, two})
+	if got := p.opens.Load(); got != 1 {
+		t.Errorf("the evaluator opened %d times, want once", got)
+	}
+}
+
+func TestNixSavingAFileWarmsItsFlakeAgain(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeEvaluator()
+	p := openNixEvalProject(t, true, fake, map[string]string{"one/flake.nix": emptyFlake})
+	one := filepath.Join(p.root, "one")
+	p.open(t, "one/a.nix", "{ |}")
+	awaitNixWarms(t, p, fake, []string{one})
+	p.save("one/a.nix")
+	awaitNixWarms(t, p, fake, []string{one, one})
+	p.save("one/run.sh")
+	p.save("outside.nix")
+	awaitNixWarms(t, p, fake, []string{one, one})
+	p.save("one/a.nix")
+	awaitNixWarms(t, p, fake, []string{one, one, one})
+}
+
+func TestNixOpeningAndSavingWarmNothingWithTheSettingOff(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeEvaluator()
+	p := openNixEvalProject(t, false, fake, map[string]string{"flake.nix": emptyFlake})
+	p.open(t, "a.nix", "{ |}")
+	p.save("a.nix")
+	p.save("flake.nix")
+	time.Sleep(50 * time.Millisecond)
+	if got := p.opens.Load(); got != 0 {
+		t.Errorf("the evaluator opened %d times with the setting off", got)
+	}
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	if len(fake.warmed) != 0 {
+		t.Errorf("warmed %q with the setting off", fake.warmed)
+	}
+}
+
+func TestNixTurningTheSettingOffClosesTheSessionAtOnce(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeEvaluator()
+	p := openNixEvalProject(t, true, fake, map[string]string{"flake.nix": emptyFlake})
+	p.open(t, "a.nix", "{ |}")
+	awaitNixWarms(t, p, fake, []string{p.root})
+	p.c.notify("workspace/didChangeConfiguration", `{"settings": {"shellLsp": {"nix": {"evaluate": false}}}}`)
+	deadline := time.Now().Add(10 * time.Second)
+	for fake.closes() != 1 {
+		if time.Now().After(deadline) {
+			t.Fatalf("Close ran %d times without any request after the setting turned off, want once", fake.closes())
+		}
+		time.Sleep(time.Millisecond)
+	}
+	p.save("a.nix")
+	time.Sleep(50 * time.Millisecond)
+	if got := p.opens.Load(); got != 1 {
+		t.Errorf("the evaluator opened %d times after the setting turned off, want once", got)
+	}
+	p.c.notify("workspace/didChangeConfiguration", `{"settings": {"shellLsp": {"nix": {"evaluate": true}}}}`)
+	awaitNixWarms(t, p, fake, []string{p.root, p.root})
+	if got := p.opens.Load(); got != 2 {
+		t.Errorf("the evaluator opened %d times after the setting turned on again, want twice", got)
+	}
+}
+
+func TestNixNotReadyAsksAgainEvenIfTheRefreshJustFinished(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeEvaluator()
+	refresh, finish := nixeval.NewRefresh()
+	finish(nil)
+	fake.err = &nixeval.NotReadyError{Refresh: refresh, Err: context.DeadlineExceeded}
+	p := openNixEvalProject(t, true, fake, map[string]string{"flake.nix": emptyFlake})
+	list, labels := p.labels(t, p.open(t, "web.nix", "{ services.| }"))
+	if !list.IsIncomplete || slices.Contains(labels, "nginx") {
+		t.Errorf("a request that got no answer: %q, incomplete %t", labels, list.IsIncomplete)
+	}
+}
+
+func TestNixRequestDoesNotWaitForTheModuleClassesOfItsFile(t *testing.T) {
+	t.Parallel()
+
+	const web = "{ | }"
+	p := openNixEvalProjectPatient(t, true, newFakeEvaluator(), map[string]string{
+		"flake.nix": "{ outputs = { nixpkgs, ... }: { nixosConfigurations.box = nixpkgs.lib.nixosSystem { modules = [ ./web.nix ]; }; }; }\n",
+		"web.nix":   "{ }\n",
+	}, time.Millisecond)
+	deadline := time.Now().Add(clientTimeout)
+	session := p.srv.nixSession()
+	for session == nil {
+		if time.Now().After(deadline) {
+			t.Fatal("the evaluation session never opened")
+		}
+		time.Sleep(time.Millisecond)
+		session = p.srv.nixSession()
+	}
+	links := &session.classLinks
+	links.Lock()
+	params := p.open(t, "web.nix", web)
+	list, labels := p.labels(t, params)
+	links.Unlock()
+	if !list.IsIncomplete || !slices.Contains(labels, "services") || !slices.Contains(labels, "systems") {
+		t.Fatalf("with the classes unknown: %q, incomplete %t, want every source and to be asked again", labels, list.IsIncomplete)
+	}
+	settled := func(what string) []string {
+		t.Helper()
+		deadline := time.Now().Add(clientTimeout)
+		for {
+			list, labels := p.labels(t, params)
+			if !list.IsIncomplete {
+				return labels
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("%s: still incomplete: %q", what, labels)
+			}
+			time.Sleep(time.Millisecond)
+		}
+	}
+	if labels := settled("after the link"); !slices.Contains(labels, "services") || slices.Contains(labels, "systems") {
+		t.Fatalf("with the classes known: %q, want only the NixOS source", labels)
+	}
+	links.Lock()
+	defer links.Unlock()
+	p.c.notify("textDocument/didChange", `{"textDocument": {"uri": "`+fileuri.FromPath(filepath.Join(p.root, "web.nix"))+`", "version": 2}, "contentChanges": [{"text": "{  }"}]}`)
+	list, labels = p.labels(t, params)
+	if !list.IsIncomplete || !slices.Contains(labels, "services") || slices.Contains(labels, "systems") {
+		t.Errorf("while the classes are found again: %q, incomplete %t, want the earlier classes and to be asked again", labels, list.IsIncomplete)
+	}
+}
+
+func TestNixAModuleNamedFlakeIsNotAFlake(t *testing.T) {
+	t.Parallel()
+
+	const module = "{ perSystem = { ... }: { }; }\n"
+	fake := newFakeEvaluator()
+	p := openNixEvalProject(t, true, fake, map[string]string{"flake.nix": emptyFlake, "modules/flake.nix": module})
+	p.open(t, "modules/a.nix", "{ |}")
+	awaitNixWarms(t, p, fake, []string{p.root})
+
+	lone := newFakeEvaluator()
+	bare := openNixEvalProject(t, true, lone, map[string]string{"flake.nix": module})
+	_, labels := bare.labels(t, bare.open(t, "a.nix", "{ services.| }"))
+	if slices.Contains(labels, "nginx") || bare.opens.Load() != 0 {
+		t.Errorf("a module named flake.nix alone: labels %q, %d opens", labels, bare.opens.Load())
 	}
 }

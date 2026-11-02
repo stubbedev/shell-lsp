@@ -230,7 +230,7 @@ func (s *Server) nixCompletion(ctx context.Context, docs *docstore.View, here na
 	for _, it := range found {
 		item := nativeItem(it.Label, it.Kind, it.Detail, it.Span, at)
 		if it.HasDoc() {
-			data, err := encodeData(completionData{Name: it.Label, URI: here.File.URI, Offset: here.source, Nix: true})
+			data, err := encodeData(completionData{Name: it.Label, URI: here.URI, Offset: here.source, Nix: true})
 			if err != nil {
 				return lsp.CompletionList{}, err
 			}
@@ -377,7 +377,7 @@ func nixComments(g *hostnav.Group, here nativeHere) string {
 	if !ok {
 		return ""
 	}
-	doc := here.File.Native.Nix()
+	doc := here.Native.Nix()
 	var out strings.Builder
 	seen := map[string]bool{}
 	for _, d := range g.Declarations(sym) {

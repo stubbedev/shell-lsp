@@ -780,7 +780,7 @@ func TestNixSingleFlakeAnswersOutsideItsShell(t *testing.T) {
 
 	folds := decodeResult[[]lsp.FoldingRange](t, p.c.call("textDocument/foldingRange", `{"textDocument": {"uri": "`+p.uri(name)+`"}}`))
 	lastLine := uint32(strings.Count(strings.TrimRight(text, "\n"), "\n"))
-	outputsLine := uint32(strings.Count(text[:strings.Index(text, "outputs = {")], "\n"))
+	outputsLine := uint32(strings.Count(text[:strings.Index(text, "outputs =\n")], "\n")) + 1
 	if !slices.ContainsFunc(folds, func(f lsp.FoldingRange) bool { return f.StartLine == 0 && f.EndLine == lastLine }) {
 		t.Errorf("folds = %+v, want the file's attribute set", folds)
 	}

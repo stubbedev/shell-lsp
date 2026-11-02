@@ -380,8 +380,9 @@ func TestNixShellStringsLintInPlace(t *testing.T) {
 	if !found {
 		t.Errorf("no action makes %+v", want)
 	}
-	if hover := c.call("textDocument/hover", positionParams(uri, 3, strings.Index(lines[3], "src"), "")); string(hover.Result) != "null" {
-		t.Errorf("hover on ${src} = %s, want null", hover.Result)
+	hover := decodeResult[*lsp.Hover](t, c.call("textDocument/hover", positionParams(uri, 3, strings.Index(lines[3], "src"), "")))
+	if hover == nil || !strings.Contains(hover.Contents.Value, "*parameter*") || hover.Range == nil || *hover.Range != at("src") {
+		t.Errorf("hover on ${src} = %+v, want the Nix parameter on its name", hover)
 	}
 }
 

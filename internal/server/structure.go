@@ -76,10 +76,13 @@ func (s *Server) handleDocumentSymbol(_ context.Context, docs *docstore.View, sy
 func authoredSymbols(doc *docstore.Document, symbols []structure.Symbol) []structure.Symbol {
 	out := make([]structure.Symbol, 0, len(symbols))
 	for _, sym := range symbols {
-		if !doc.Synthetic(sym.Selection.Start) {
-			sym.Children = authoredSymbols(doc, sym.Children)
-			out = append(out, sym)
+		children := authoredSymbols(doc, sym.Children)
+		if doc.Synthetic(sym.Selection.Start) {
+			out = append(out, children...)
+			continue
 		}
+		sym.Children = children
+		out = append(out, sym)
 	}
 	return out
 }

@@ -164,15 +164,15 @@ func parsePackage(data []byte) (*Package, error) {
 }
 
 func parsePosition(position string) Declaration {
-	i := strings.LastIndexByte(position, ':')
-	if i < 0 {
+	file, number, found := strings.CutLast(position, ":")
+	if !found {
 		return Declaration{File: position}
 	}
-	line, err := strconv.Atoi(position[i+1:])
+	line, err := strconv.Atoi(number)
 	if err != nil {
 		return Declaration{File: position}
 	}
-	return Declaration{File: position[:i], Line: line}
+	return Declaration{File: file, Line: line}
 }
 
 type SourceKind int
