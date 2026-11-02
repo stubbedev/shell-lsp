@@ -487,15 +487,23 @@ func (c *Client) packageQuery(flake flakeState, scope inputScope, path []string)
 
 func (c *Client) resolve(ctx context.Context, flake flakeState) (lockedFlake, error) {
 	locked, err := c.locked.await(ctx, flake.local, func(ctx context.Context, work task) (computed[lockedFlake], error) {
-		out, err := c.runBounded(ctx, work, flake.dir, metadataArgs())
+		described, err := c.runBounded(ctx, work, flake.dir, metadataArgs())
 		if err != nil {
 			return computed[lockedFlake]{}, err
 		}
-		value, err := parseMetadata(out)
+		dir, err := parseMetadata(described)
 		if err != nil {
 			return computed[lockedFlake]{}, err
 		}
-		return computed[lockedFlake]{value: value, cost: len(out)}, nil
+		fetched, err := c.runBounded(ctx, work, flake.dir, prefetchArgs())
+		if err != nil {
+			return computed[lockedFlake]{}, err
+		}
+		value, err := parsePrefetch(fetched, dir)
+		if err != nil {
+			return computed[lockedFlake]{}, err
+		}
+		return computed[lockedFlake]{value: value, cost: len(described) + len(fetched)}, nil
 	})
 	if err != nil {
 		return lockedFlake{}, fmt.Errorf("resolving the flake: %w", err)

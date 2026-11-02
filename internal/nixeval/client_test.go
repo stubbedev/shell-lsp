@@ -18,7 +18,8 @@ import (
 )
 
 const (
-	fakeMetadata = `{"path": "/nix/store/abc-source", "locked": {"narHash": "sha256-AAAA="}}`
+	fakeMetadata = `{"locked": {"type": "git", "url": "file:///repo"}}`
+	fakePrefetch = `{"storePath": "/nix/store/abc-source", "hash": "sha256-AAAA="}`
 	fakeRef      = "path:/nix/store/abc-source?narHash=sha256-AAAA%3D"
 	fakeLock     = `{"nodes": {"nixpkgs": {"locked": {"repo": "nixpkgs", "narHash": "sha256-NP="}}, "root": {"inputs": {"nixpkgs": "nixpkgs"}}}, "root": "root", "version": 7}` + "\n"
 	fakeIdentity = "/nix/store/fake-nix/bin/nix"
@@ -33,7 +34,7 @@ type fakeNix struct {
 }
 
 func newFakeNix(replies map[string]string) *fakeNix {
-	base := map[string]string{"flake metadata": fakeMetadata, "config show": "x86_64-linux\n", "flake show": `{}`}
+	base := map[string]string{"flake metadata": fakeMetadata, "flake prefetch": fakePrefetch, "config show": "x86_64-linux\n", "flake show": `{}`}
 	maps.Copy(base, replies)
 	return &fakeNix{replies: base}
 }
@@ -56,7 +57,7 @@ func (f *fakeNix) run(ctx context.Context, _ string, args []string) ([]byte, err
 	reply, ok := f.replies[command]
 	gate := f.gate
 	f.mu.Unlock()
-	if gate != nil && command != "config show" && command != "flake metadata" {
+	if gate != nil && command != "config show" && command != "flake metadata" && command != "flake prefetch" {
 		select {
 		case <-gate:
 		case <-ctx.Done():
@@ -191,7 +192,7 @@ func TestEveryEvaluatingCommandIsHardened(t *testing.T) {
 		{"--no-update-lock-file"},
 	}
 	forbidden := []string{"--impure", "--no-pure-eval", "--accept-flake-config", "--no-write-lock-file", "--commit-lock-file", "--recreate-lock-file"}
-	for _, args := range [][]string{metadataArgs(), showArgs(fakeRef), evalArgs("1")} {
+	for _, args := range [][]string{metadataArgs(), prefetchArgs(), showArgs(fakeRef), evalArgs("1")} {
 		for _, flag := range required {
 			if !containsRun(args, flag) {
 				t.Errorf("%q lacks %q", args, flag)
@@ -233,6 +234,60 @@ func TestClientEvaluatesTheLockedReference(t *testing.T) {
 	}
 	if !slices.Contains(f.calls[0], ".") {
 		t.Errorf("flake metadata did not resolve the working directory: %q", f.calls[0])
+	}
+}
+
+func TestEvaluationUsesTheStorePathPrefetchCopiedAndTheDirectoryMetadataReports(t *testing.T) {
+	t.Parallel()
+
+	f := newFakeNix(map[string]string{
+		"flake metadata": `{"path": "/nix/store/never-copied-source", "locked": {"narHash": "sha256-LAZY=", "dir": "sub"}}`,
+		"flake prefetch": `{"storePath": "/nix/store/copied-source", "hash": "sha256-COPY="}`,
+	})
+	if _, err := freshOf(testClient(t, f).Outputs(t.Context(), flakeDir(t))); err != nil {
+		t.Fatal(err)
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	commands := make([]string, 0, len(f.calls))
+	for _, args := range f.calls {
+		commands = append(commands, commandName(args))
+	}
+	if want := []string{"nix flake metadata", "nix flake prefetch", "nix flake show"}; !slices.Equal(commands, want) {
+		t.Fatalf("commands = %q, want %q", commands, want)
+	}
+	if want := "path:/nix/store/copied-source?dir=sub&narHash=sha256-COPY%3D"; !slices.Contains(f.calls[2], want) {
+		t.Errorf("flake show = %q, want the reference %s", f.calls[2], want)
+	}
+}
+
+func TestAFailedPrefetchIsAPreciseErrorAndNothingIsEvaluated(t *testing.T) {
+	t.Parallel()
+
+	dir := flakeDir(t)
+	failure := errors.New("exit status 1")
+	var evaluated atomic.Int32
+	c := newHarness(t, func(_ context.Context, _ string, args []string) ([]byte, error) {
+		switch commandName(args) {
+		case "nix flake metadata":
+			return []byte(fakeMetadata), nil
+		case "nix flake prefetch":
+			return nil, &CommandError{Command: "nix flake prefetch", Stderr: "the store is read-only", Err: failure}
+		}
+		evaluated.Add(1)
+		return []byte(`{}`), nil
+	}).client(t)
+	_, err := freshOf(c.Outputs(t.Context(), dir))
+	if !errors.Is(err, failure) {
+		t.Fatalf("error = %v, want it to wrap %v", err, failure)
+	}
+	for _, want := range []string{dir, "nix flake prefetch", "the store is read-only"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not mention %q", err, want)
+		}
+	}
+	if got := evaluated.Load(); got != 0 {
+		t.Errorf("%d evaluations ran after the prefetch failed", got)
 	}
 }
 
@@ -371,6 +426,8 @@ func TestProcessesAreBoundedAcrossDistinctRequests(t *testing.T) {
 			switch commandName(args) {
 			case "nix flake metadata":
 				return []byte(fakeMetadata), nil
+			case "nix flake prefetch":
+				return []byte(fakePrefetch), nil
 			case "nix config show":
 				return []byte("x86_64-linux\n"), nil
 			}
@@ -848,6 +905,8 @@ func TestWarmStaysOutOfTheWayAndARequestPromotesIt(t *testing.T) {
 			switch commandName(args) {
 			case "nix flake metadata":
 				return []byte(fakeMetadata), nil
+			case "nix flake prefetch":
+				return []byte(fakePrefetch), nil
 			case "nix config show":
 				return []byte("x86_64-linux\n"), nil
 			case "nix flake show":

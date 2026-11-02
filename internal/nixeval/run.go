@@ -67,6 +67,10 @@ func metadataArgs() []string {
 	return hardened("flake", "metadata", ".", "--json")
 }
 
+func prefetchArgs() []string {
+	return hardened("flake", "prefetch", ".", "--json", "--option", "flake-registry", "")
+}
+
 func showArgs(ref string) []string {
 	return hardened("flake", "show", ref, "--json")
 }

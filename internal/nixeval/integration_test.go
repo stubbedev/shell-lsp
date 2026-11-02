@@ -3,6 +3,7 @@
 package nixeval
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -408,6 +410,65 @@ func TestRealSubdirectoryOfADirtyGitTree(t *testing.T) {
 	}
 }
 
+const fixtureReadsItsOwnTree = `{
+  outputs = { self }: let
+    ` + fixtureOptionHelper + `
+  in {
+    nixosConfigurations.box.options = {
+      inside = leaf [ "inside" ] { default = builtins.readFile ./marker; };
+      above = leaf [ "above" ] { default = builtins.readFile ../marker; };
+      self = leaf [ "self" ] { default = builtins.readFile (self.outPath + "/marker"); };
+    };
+  };
+}
+`
+
+func TestRealGitFlakeWhoseContentNixHasNeverSeenEvaluatesFromItsOwnSnapshot(t *testing.T) {
+	t.Parallel()
+	requireNix(t)
+	requireGit(t)
+
+	root := t.TempDir()
+	dir := writeFixture(t, filepath.Join(root, "sub"), fixtureReadsItsOwnTree)
+	inside, above := rand.Text(), rand.Text()
+	writeFile(t, filepath.Join(dir, "marker"), inside)
+	writeFile(t, filepath.Join(root, "marker"), above)
+	git := gitIn(t, root)
+	git("init", "-q")
+	git("add", ".")
+	lockFixture(t, dir)
+	git("add", ".")
+	writeFile(t, filepath.Join(dir, "untracked.txt"), "dirty\n")
+
+	tree, err := freshOf(realClient(t).Options(t.Context(), dir, OptionSource{Kind: SourceNixOS, Name: "box"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, want := range map[string]string{"inside": inside, "above": above, "self": inside} {
+		if got := mustOption(t, tree, name).Default; got != strconv.Quote(want) {
+			t.Errorf("option %s defaults to %s, want the %q the tree holds", name, got, want)
+		}
+	}
+}
+
+func TestRealGitFlakeWhoseFlakeNixIsUntrackedIsAPreciseError(t *testing.T) {
+	t.Parallel()
+	requireNix(t)
+	requireGit(t)
+
+	dir := t.TempDir()
+	git := gitIn(t, dir)
+	git("init", "-q")
+	writeFile(t, filepath.Join(dir, "tracked"), rand.Text())
+	git("add", "tracked")
+	writeFixture(t, dir, fixtureFakeParts)
+
+	_, err := freshOf(realClient(t).Outputs(t.Context(), dir))
+	if err == nil || !strings.Contains(err.Error(), "flake.nix") {
+		t.Errorf("error = %v, want one naming the flake.nix that git does not track", err)
+	}
+}
+
 func TestRealFlakeWithoutNixpkgsIsAPreciseError(t *testing.T) {
 	t.Parallel()
 	requireNix(t)
@@ -695,6 +756,11 @@ func corpusFlake(t *testing.T, name string) string {
 	dir := t.TempDir()
 	if err := os.CopyFS(dir, os.DirFS(filepath.Join("..", "..", "corpus", "nix", name))); err != nil {
 		t.Fatal(err)
+	}
+	cmd := exec.CommandContext(t.Context(), nixProgram, hardened("flake", "archive")...)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Skipf("the inputs corpus flake %s locks are not in the local store and cannot be fetched: %v\n%s", name, err, out)
 	}
 	return dir
 }

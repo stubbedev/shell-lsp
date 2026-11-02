@@ -14,25 +14,37 @@ type lockedFlake struct {
 	ref string
 }
 
-type metadataLocked struct {
-	NarHash string `json:"narHash"`
-	Dir     string `json:"dir"`
-}
-
 type metadata struct {
-	Path   string         `json:"path"`
-	Locked metadataLocked `json:"locked"`
+	Locked *struct {
+		Dir string `json:"dir"`
+	} `json:"locked"`
 }
 
-func parseMetadata(data []byte) (lockedFlake, error) {
+func parseMetadata(data []byte) (string, error) {
 	var parsed metadata
 	if err := json.Unmarshal(data, &parsed); err != nil {
-		return lockedFlake{}, fmt.Errorf("parsing nix flake metadata output: %w", err)
+		return "", fmt.Errorf("parsing nix flake metadata output: %w", err)
 	}
-	if parsed.Path == "" || parsed.Locked.NarHash == "" {
-		return lockedFlake{}, errors.New("parsing nix flake metadata output: no store path or NAR hash")
+	if parsed.Locked == nil {
+		return "", errors.New("parsing nix flake metadata output: no locked reference")
 	}
-	return lockedFlake{ref: lockedRef(parsed.Path, parsed.Locked.NarHash, parsed.Locked.Dir)}, nil
+	return parsed.Locked.Dir, nil
+}
+
+type prefetched struct {
+	StorePath string `json:"storePath"`
+	Hash      string `json:"hash"`
+}
+
+func parsePrefetch(data []byte, dir string) (lockedFlake, error) {
+	var parsed prefetched
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		return lockedFlake{}, fmt.Errorf("parsing nix flake prefetch output: %w", err)
+	}
+	if parsed.StorePath == "" || parsed.Hash == "" {
+		return lockedFlake{}, errors.New("parsing nix flake prefetch output: no store path or NAR hash")
+	}
+	return lockedFlake{ref: lockedRef(parsed.StorePath, parsed.Hash, dir)}, nil
 }
 
 type OutputKind string

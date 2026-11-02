@@ -123,6 +123,7 @@ func TestCommandNameOmitsArguments(t *testing.T) {
 		want string
 	}{
 		{metadataArgs(), "nix flake metadata"},
+		{prefetchArgs(), "nix flake prefetch"},
 		{showArgs("path:/x"), "nix flake show"},
 		{evalArgs("secret"), "nix eval"},
 		{systemArgs(), "nix config show"},
@@ -131,5 +132,13 @@ func TestCommandNameOmitsArguments(t *testing.T) {
 		if got := commandName(tt.args); got != tt.want {
 			t.Errorf("commandName(%q) = %q, want %q", tt.args, got, tt.want)
 		}
+	}
+}
+
+func TestPrefetchNeedsNoGlobalRegistryToFindTheWorkingDirectory(t *testing.T) {
+	t.Parallel()
+
+	if run := []string{"--option", "flake-registry", ""}; !containsRun(prefetchArgs(), run) {
+		t.Errorf("%q lacks %q, so a machine that cannot reach the registry cannot resolve a local flake", prefetchArgs(), run)
 	}
 }

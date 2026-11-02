@@ -8,16 +8,27 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
-const capturedMetadata = `{
-  "path": "/nix/store/abc-source",
-  "locked": {"narHash": "sha256-AAAA=", "dir": "sub", "type": "git"},
+const (
+	capturedMetadata = `{
+  "locked": {"lastModified": 0, "dir": "sub", "type": "git", "url": "file:///repo"},
   "locks": {"root": "root", "nodes": {"root": {}}, "version": 7}
 }`
+	capturedPrefetch = `{
+  "hash": "sha256-AAAA=",
+  "locked": {"lastModified": 0, "type": "git", "url": "file:///repo"},
+  "original": {"type": "git", "url": "file:///repo"},
+  "storePath": "/nix/store/abc-source"
+}`
+)
 
-func TestParseMetadataBuildsALockedReference(t *testing.T) {
+func TestMetadataAndPrefetchBuildALockedReference(t *testing.T) {
 	t.Parallel()
 
-	got, err := parseMetadata([]byte(capturedMetadata))
+	dir, err := parseMetadata([]byte(capturedMetadata))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := parsePrefetch([]byte(capturedPrefetch), dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,11 +42,24 @@ func TestParseMetadataRejectsIncompleteOutput(t *testing.T) {
 
 	for _, in := range []string{
 		`not json`,
-		`{"locked": {"narHash": "sha256-A="}}`,
 		`{"path": "/nix/store/a"}`,
 	} {
 		if _, err := parseMetadata([]byte(in)); err == nil {
 			t.Errorf("parseMetadata(%s) = nil error", in)
+		}
+	}
+}
+
+func TestParsePrefetchRejectsIncompleteOutput(t *testing.T) {
+	t.Parallel()
+
+	for _, in := range []string{
+		`not json`,
+		`{"hash": "sha256-A="}`,
+		`{"storePath": "/nix/store/a"}`,
+	} {
+		if _, err := parsePrefetch([]byte(in), ""); err == nil {
+			t.Errorf("parsePrefetch(%s) = nil error", in)
 		}
 	}
 }
