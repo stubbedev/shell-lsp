@@ -3,19 +3,26 @@ package hostnav
 import (
 	"cmp"
 	"context"
+	"errors"
+	"io/fs"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/host/model"
+	"github.com/stubbedev/shell-lsp/internal/host/nix"
 	"github.com/stubbedev/shell-lsp/internal/navigation"
+	"github.com/stubbedev/shell-lsp/internal/parallel"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
 type Loader interface {
 	Load(path string) (*workspace.File, error)
 	LoadAs(path string, language host.Language) (*workspace.File, error)
+	NixFiles(dir string) ([]string, error)
 }
 
 type Env struct {
@@ -47,7 +54,7 @@ func NewGraph(ctx context.Context, language host.Language, files navigation.Work
 		}
 		c = b.canonical(c)
 		for _, r := range b.includes(c) {
-			if r.target != nil {
+			if r.target != nil && !r.include.Probe {
 				g.importers[r.target.Path] = append(g.importers[r.target.Path], importer{path: c.Path, module: r.include.Module})
 			}
 		}
@@ -83,6 +90,7 @@ type Group struct {
 	includes []resolvedInclude
 	parents  []parent
 	exists   func(path string) bool
+	builder  *builder
 }
 
 type builder struct {
@@ -120,6 +128,9 @@ func newBuilder(ctx context.Context, env Env, language host.Language) *builder {
 }
 
 func Build(ctx context.Context, h Host, env Env) (*Group, error) {
+	if h.Language() == host.Nix {
+		return buildProject(ctx, h, env), nil
+	}
 	var graph *Graph
 	if env.Graph != nil {
 		var err error
@@ -161,6 +172,103 @@ func Build(ctx context.Context, h Host, env Env) (*Group, error) {
 	return g, nil
 }
 
+func buildProject(ctx context.Context, h Host, env Env) *Group {
+	b := newBuilder(ctx, env, h.Language())
+	self := b.canonical(h.file)
+	module := &model.Module{Complete: true, Builtins: b.language.Builtins(), Submodules: map[string]*model.Module{}, Files: []*model.Index{self.Native.Index}}
+	g := &Group{Self: self, Language: b.language, Module: module, files: b.files, exists: env.Exists, builder: b}
+	module.Linker = func() model.Links { return g.link() }
+	return g
+}
+
+func (g *Group) link() model.Links {
+	b := g.builder
+	request := nix.Request{Self: g.Self.Native.Index, SelfPath: g.Self.Path}
+	var graph *Graph
+	if g.Self.Path != "" {
+		request.Flake = b.nearestFlake(g.Self.Path)
+		if b.env.Graph != nil {
+			found, err := b.env.Graph(b.ctx)
+			if err != nil {
+				request.Failure = "finding the files that import this one: " + err.Error()
+			}
+			graph = found
+		}
+		for _, root := range b.roots(g.Self, graph) {
+			request.Roots = append(request.Roots, root.Path)
+		}
+	}
+	project := g.cachedProject(request, graph)
+	g.Module.Files = project.Indexes()
+	return project
+}
+
+type projectCell struct {
+	mu      sync.Mutex
+	project *nix.Project
+	graph   *Graph
+}
+
+func (g *Group) cachedProject(request nix.Request, graph *Graph) *nix.Project {
+	source := projectSource{g.builder}
+	cell := workspace.Memo(g.Self, "hostnav.project", 0, func() *projectCell { return &projectCell{} })
+	cell.mu.Lock()
+	defer cell.mu.Unlock()
+	if cell.project != nil && cell.graph == graph && request.Failure == "" && cell.project.Fresh(source) {
+		return cell.project
+	}
+	project := nix.Link(request, source)
+	if request.Failure == "" && g.builder.ctx.Err() == nil {
+		cell.project, cell.graph = project, graph
+	}
+	return project
+}
+
+func (b *builder) nearestFlake(path string) string {
+	for dir := filepath.Dir(path); ; dir = filepath.Dir(dir) {
+		if flake := filepath.Join(dir, nix.FlakeFile); b.load(flake) != nil {
+			return flake
+		}
+		if dir == filepath.Dir(dir) {
+			return ""
+		}
+	}
+}
+
+type projectSource struct{ b *builder }
+
+func (s projectSource) LoadAll(paths []string) []*model.Index {
+	loaded := make([]*workspace.File, len(paths))
+	parallel.For(runtime.GOMAXPROCS(0), len(paths), func(i int) {
+		if s.b.ctx.Err() != nil {
+			return
+		}
+		if file, err := s.b.env.Loader.LoadAs(paths[i], s.b.language); err == nil && file.Native != nil {
+			loaded[i] = file
+		}
+	})
+	out := make([]*model.Index, len(paths))
+	for i, file := range loaded {
+		if file != nil {
+			out[i] = s.b.canonical(file).Native.Index
+		}
+	}
+	return out
+}
+
+func (s projectSource) Tree(dir string) ([]string, error) {
+	files, err := s.b.env.Loader.NixFiles(dir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	return files, err
+}
+
+func (s projectSource) Read(path string) ([]byte, error) {
+	data, _, err := workspace.ReadDisk(path)
+	return data, err
+}
+
 func (b *builder) fragment(root *workspace.File, graph *Graph) bool {
 	return !b.language.EntryPoint(root.Path) && len(graph.of(root.Path)) == 0
 }
@@ -186,17 +294,20 @@ func (b *builder) includes(f *workspace.File) []resolvedInclude {
 	if done, ok := b.resolved[f.Path]; ok {
 		return done
 	}
-	dir := filepath.Dir(f.Path)
 	var out []resolvedInclude
 	for _, inc := range f.Native.Index.Includes {
-		r := resolvedInclude{include: inc}
-		if !inc.Dynamic && f.Path != "" {
-			r.target = b.find(dir, inc.Candidates)
-		}
-		out = append(out, r)
+		out = append(out, b.resolveInclude(f, inc))
 	}
 	b.resolved[f.Path] = out
 	return out
+}
+
+func (b *builder) resolveInclude(f *workspace.File, inc model.Include) resolvedInclude {
+	r := resolvedInclude{include: inc}
+	if !inc.Dynamic && f.Path != "" {
+		r.target = b.find(filepath.Dir(f.Path), inc.Candidates)
+	}
+	return r
 }
 
 func (b *builder) find(dir string, candidates []string) *workspace.File {

@@ -189,6 +189,7 @@ type Include struct {
 	Optional   bool
 	Module     string
 	Dynamic    bool
+	Probe      bool
 }
 
 func MatchesPattern(pattern, name string) bool { return matches(pattern, name, 0) }
@@ -373,6 +374,18 @@ type Checks struct {
 	NotPhony   lint.Code
 }
 
+func (c Checks) Active() bool {
+	if c.Deprecated != 0 || c.Missing != 0 || c.Absent != 0 || c.NotPhony != 0 {
+		return true
+	}
+	for kind := range Kinds() {
+		if c.Of(kind) != (Rules{}) {
+			return true
+		}
+	}
+	return false
+}
+
 func Nested(offset int, spans []Span) []Span {
 	var inside []Span
 	for _, s := range spans {
@@ -481,6 +494,15 @@ func (ix *Index) At(offset int) (Hit, bool) {
 	for _, r := range ix.Refs {
 		if r.Span.Touches(offset) && r.Span.End > r.Span.Start {
 			return Hit{Name: r.Name, Kind: r.Kind, Span: r.Span, Scope: r.Scope, Qualifier: r.Qualifier, Symbol: NoSymbol}, true
+		}
+	}
+	return Hit{}, false
+}
+
+func (ix *Index) DeclarationAt(offset int) (Hit, bool) {
+	for i, s := range ix.Symbols {
+		if s.Selection.Touches(offset) && s.Selection.End > s.Selection.Start {
+			return Hit{Name: s.Name, Kind: s.Kind, Span: s.Selection, Scope: s.Scope, Symbol: i, Declaration: true}, true
 		}
 	}
 	return Hit{}, false

@@ -697,7 +697,7 @@ highlight and hover showing the binding and where it comes from. These are:
 Such a variable is not renamed, from the shell or from its attribute, since
 other Nix code may read the attribute by its name.
 
-Outside the shell, within one file, the Nix language answers too:
+Outside the shell, the Nix language answers too, within a file and across a project:
 
 - Syntax errors and checks are reported, as they are in every Nix file.
 - Definition, references, document highlight, hover and rename work for every
@@ -707,8 +707,34 @@ Outside the shell, within one file, the Nix language answers too:
 - An attribute of a set is followed where the file itself proves it: through
   `s.a.b`, `s ? a`, `inherit (s) a` and `with s;` when `s` is bound in the file
   to an attribute set written there, and through the `@` alias of a function
-  for its formals. Nothing else is guessed, so `self.x`, `pkgs.hello` and a set
-  built with `//` lead nowhere.
+  for its formals.
+- Across files, the project is the nearest `flake.nix` with everything it
+  reaches, plus the files that import the one at hand. Nothing is evaluated;
+  what follows is read from the source:
+  - `import ./x`, `import ./dir` (its `default.nix`), `callPackage ./x { }`,
+    `pkgs.callPackage`, `lib.callPackageWith` and `imports = [ ./x ]`, also with
+    the path in a `let` of the file. Definition on the path opens the file,
+    `(import ./x).a` reaches `a`, and the keys of a call reach the formals of the
+    file it calls.
+  - In a flake, `inputs.x`, the `outputs` formal `x`, an `@` alias and the string
+    of `follows` are all the declaration of the input `x`, and `self.y` reaches
+    the output `y`. Where `flake.lock` locks the input and its source is in the
+    Nix store, definition also opens its `flake.nix` or `default.nix`; nothing
+    is downloaded.
+  - Modules are found from `mkFlake`, `nixosSystem`, `homeManagerConfiguration`,
+    `darwinSystem`, `nixOnDroidConfiguration`, `evalModules`, `imports`,
+    `nixosModules`-style outputs, `perSystem`, `withSystem`,
+    `home-manager.users.<name>`, `home-manager.sharedModules`,
+    `flake.modules.<class>.<name>` and `import-tree`, which takes every `.nix`
+    file below a directory unless its path below that directory has a segment
+    starting with `_`. Modules of one class share one namespace: `options.a`,
+    `config.a` and a plain `a` are the same name, so a read of `config.a` leads to
+    every declaration and definition of it in every file. `_module.args.a`,
+    `specialArgs` and `extraSpecialArgs` make `a` the same name as the formal `a`
+    of the modules of that class, whose definition is the binding.
+
+  Nothing else is guessed, so `pkgs.hello` and a read through a set built with
+  `//` lead nowhere, and the namespaces of two flakes never meet.
 - The outline holds attribute sets, `let` blocks and functions with their
   parameters, nested as they are written, with the shell's functions inside
   the binding that holds them; workspace symbols list every attribute and
@@ -728,15 +754,28 @@ it does:
   `x = new;`, and renaming a binding made by `inherit x` writes `new = x;`, also
   taking it out of an `inherit` with several names.
 - A formal is part of the function's interface. Renaming one also renames its
-  reads through the `@` alias and the keys passed at calls of that function in
-  the same file. Callers in other files, `callPackage` above all, are not
-  changed and must follow by hand.
-- A `rec` attribute is renamed with its reads in the file. Other files that read
-  the attribute are not changed.
+  reads through the `@` alias and the keys passed at calls of that function, in
+  this file and in the files that reach it by `import` or `callPackage`. It is
+  refused for a formal of a `callPackage` target that some caller leaves for
+  `callPackage` to fill by name, and for a formal of a module or of `outputs`,
+  which are passed by name, unless it is an input or a `_module.args` name the
+  project binds itself.
+- A `rec` attribute is renamed with its reads in the project.
+- An attribute of the value of a file is renamed with its reads when every
+  `import` of the file selects from it directly or through a `let` that is only
+  selected from.
+- An option is renamed everywhere in its class when the project declares it, or
+  a set above it, in `options`, and no read passes a set above it on as a value or
+  selects from one with a computed name. Options declared elsewhere, such as
+  `services.nginx.enable` and `flake`, keep their names.
+- An input is renamed with its declaration, formals, reads and `follows`, unless
+  `inputs` is read with a computed name. `flake.lock` follows on the next
+  `nix flake lock`.
+- A project of more than 8192 files is not followed past that, and a rename that
+  would have to know every reader is refused.
 
-Navigation stops at the file: `import`, `callPackage`, flake `inputs` and
-flake-parts `imports` are not followed, and nothing is evaluated. Completion and
-signature help in the Nix language are not offered.
+Diagnostics stay within the file, so typing never walks the project; it is read
+when a request needs another file, and only files that changed are parsed again.
 
 Shell that Nix assembles across `${...}`, such as a `case` whose patterns come
 from `lib.optionalString`, cannot be checked, since only evaluating the Nix

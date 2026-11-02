@@ -1,10 +1,12 @@
 package model
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/stubbedev/shell-lsp/internal/lint"
 )
@@ -14,6 +16,49 @@ type Module struct {
 	Submodules map[string]*Module
 	Complete   bool
 	Builtins   Builtins
+	Linker     func() Links
+
+	linking sync.Once
+	links   Links
+}
+
+type Home struct {
+	File  int
+	Scope Scope
+}
+
+type Links interface {
+	Homes(file int, scope Scope, name string) ([]Home, bool)
+	Shared(file int, scope Scope, name string) (Home, bool)
+	Refusal(file, symbol int) (string, bool)
+	Conflict(file, symbol int, newName string) string
+	Sources(file, symbol int) []string
+}
+
+func (m *Module) Links() Links {
+	if m.Linker == nil {
+		return nil
+	}
+	m.linking.Do(func() { m.links = m.Linker() })
+	return m.links
+}
+
+var linkedNamespaces = [...]Namespace{NamespaceAttributes, NamespaceFunctions, NamespaceValues}
+
+func (m *Module) atHomes(homes []Home, name string) []Target {
+	var out []Target
+	for _, h := range homes {
+		ix := m.Files[h.File]
+		for _, ns := range linkedNamespaces {
+			for _, i := range ix.named(ns, name) {
+				if ix.Symbols[i].Scope == h.Scope {
+					out = append(out, Target{Module: m, File: h.File, Symbol: i})
+				}
+			}
+		}
+	}
+	slices.SortFunc(out, func(a, b Target) int { return cmp.Or(cmp.Compare(a.File, b.File), cmp.Compare(a.Symbol, b.Symbol)) })
+	return slices.Compact(out)
 }
 
 type Target struct {
@@ -33,6 +78,11 @@ type Resolution struct {
 func (r Resolution) Found() bool { return len(r.Targets) > 0 || r.Builtin != nil }
 
 func (m *Module) Resolve(file int, ref Ref) Resolution {
+	if links := m.Links(); links != nil {
+		if homes, linked := links.Homes(file, ref.Scope, ref.Name); linked {
+			return Resolution{Targets: m.atHomes(homes, ref.Name)}
+		}
+	}
 	module := m
 	for _, name := range ref.Qualifier {
 		sub := module.Submodules[name]

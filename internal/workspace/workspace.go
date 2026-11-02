@@ -35,6 +35,7 @@ const (
 	maxScanFiles = 20000
 	shebangProbe = 256
 	ignoreFile   = ".gitignore"
+	nixExtension = ".nix"
 )
 
 var shellExtensions = []string{".sh", ".bash", ".zsh", ".ksh", ".dash", ".bats"}
@@ -431,6 +432,38 @@ func joinRel(rel, name string) string {
 		return name
 	}
 	return rel + "/" + name
+}
+
+func (w *Workspace) NixFiles(dir string) ([]string, error) {
+	var out []string
+	pending := []string{dir}
+	for len(pending) > 0 && len(out) < maxScanFiles {
+		at := pending[len(pending)-1]
+		pending = pending[:len(pending)-1]
+		entries, err := os.ReadDir(at)
+		if err != nil {
+			return nil, fmt.Errorf("listing the Nix files under %s: %w", dir, err)
+		}
+		for _, entry := range entries {
+			path := filepath.Join(at, entry.Name())
+			kind := entry.Type()
+			if kind&fs.ModeSymlink != 0 {
+				info, err := os.Stat(path)
+				if err != nil {
+					continue
+				}
+				kind = info.Mode().Type()
+			}
+			switch {
+			case kind.IsDir():
+				pending = append(pending, path)
+			case kind.IsRegular() && filepath.Ext(path) == nixExtension:
+				out = append(out, path)
+			}
+		}
+	}
+	slices.Sort(out)
+	return out, nil
 }
 
 func (w *Workspace) enclosingIgnores(root string) (string, *gitignore.Stack, error) {

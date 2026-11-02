@@ -1,11 +1,17 @@
 package hostnav
 
 import (
+	"context"
 	"errors"
+	"io/fs"
+	"maps"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/navigation"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 )
@@ -257,6 +263,416 @@ func TestNixRenameValidatesTheName(t *testing.T) {
 	for _, newName := range []string{"a-b", "a'", "_x", "true", "A1"} {
 		if _, err := renameNix(t, "let one = 1; in one", "one", 0, newName); err != nil {
 			t.Errorf("renaming to %q: %v", newName, err)
+		}
+	}
+}
+
+func corpusTree(t *testing.T, name string) *tree {
+	t.Helper()
+	root := filepath.Join("..", "..", "corpus", "nix", name)
+	files := map[string]string{}
+	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil || entry.IsDir() || filepath.Ext(path) != ".nix" {
+			return err
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		files[filepath.ToSlash(rel)] = string(raw)
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return newTree(t, files)
+}
+
+func (tr *tree) after(name, before, sub string) int {
+	tr.t.Helper()
+	return tr.offset(name, before+sub, 0) + len(before)
+}
+
+func (tr *tree) definitionAfter(name, before, sub string) []string {
+	tr.t.Helper()
+	return tr.locations(tr.group(name).Definition(tr.after(name, before, sub)))
+}
+
+func (tr *tree) referencesAfter(name, before, sub string) []string {
+	tr.t.Helper()
+	g := tr.group(name)
+	sym, ok := g.At(tr.after(name, before, sub))
+	if !ok {
+		tr.t.Fatalf("no symbol at %q after %q in %s", sub, before, name)
+	}
+	return tr.describe(References(g, sym, true))
+}
+
+func (tr *tree) renamedAfter(name, before, sub, newName string) (map[string]string, error) {
+	tr.t.Helper()
+	g := tr.group(name)
+	sym, ok := g.At(tr.after(name, before, sub))
+	if !ok {
+		tr.t.Fatalf("no symbol at %q after %q in %s", sub, before, name)
+	}
+	occs, err := g.Rename(sym, newName)
+	if err != nil {
+		return nil, err
+	}
+	edits := map[string][]textedit.Edit{}
+	for _, o := range occs {
+		rel, err := filepath.Rel(tr.dir, o.File.Path)
+		if err != nil {
+			tr.t.Fatal(err)
+		}
+		edits[filepath.ToSlash(rel)] = append(edits[filepath.ToSlash(rel)], o.Edits(newName)...)
+	}
+	out := map[string]string{}
+	for file, list := range edits {
+		out[file] = textedit.Apply(tr.files[file], list)
+	}
+	return out, nil
+}
+
+func expectRename(t *testing.T, got map[string]string, err error, want map[string]string) {
+	t.Helper()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !maps.Equal(got, want) {
+		t.Errorf("renamed to\n%q\nwant\n%q", got, want)
+	}
+}
+
+var importTree = map[string]string{
+	"default.nix":     "let\n  viaLet = import ./lib.nix;\n  dirValue = import ./dir;\n  path = ./lib.nix;\n  viaPath = import path;\nin [\n  (import ./lib.nix).answer\n  viaLet.answer\n  dirValue.nested\n  viaPath.answer\n  (import ./fn.nix { one = 1; }).two\n]\n",
+	"lib.nix":         "{\n  answer = 42;\n}\n",
+	"dir/default.nix": "{\n  nested = 1;\n}\n",
+	"fn.nix":          "{ one }: {\n  two = one;\n}\n",
+}
+
+func TestNixDefinitionFollowsImports(t *testing.T) {
+	t.Parallel()
+
+	tr := newTree(t, importTree)
+	g := tr.group("default.nix")
+	for _, tt := range []struct {
+		sub  string
+		nth  int
+		want string
+	}{
+		{"answer", 0, "lib.nix:2:answer"},
+		{"answer", 1, "lib.nix:2:answer"},
+		{"answer", 2, "lib.nix:2:answer"},
+		{"nested", 0, "dir/default.nix:2:nested"},
+		{"two", 0, "fn.nix:2:two"},
+		{"one", 0, "fn.nix:1:one"},
+		{"./lib.nix", 0, "lib.nix:1:"},
+		{"./dir", 0, "dir/default.nix:1:"},
+		{"./fn.nix", 0, "fn.nix:1:"},
+	} {
+		if got := tr.locations(g.Definition(tr.offset("default.nix", tt.sub, tt.nth))); !slices.Equal(got, []string{tt.want}) {
+			t.Errorf("definition of %q #%d = %v, want %s", tt.sub, tt.nth, got, tt.want)
+		}
+	}
+}
+
+func TestNixReferencesComeFromImporters(t *testing.T) {
+	t.Parallel()
+
+	tr := newTree(t, importTree)
+	g, sym := tr.at("lib.nix", "answer", 0)
+	expectStrings(t, "references of an imported attribute", tr.describe(References(g, sym, true)), []string{
+		"default.nix:7:answer",
+		"default.nix:8:answer",
+		"default.nix:10:answer",
+		"lib.nix:2:answer",
+	})
+	g, sym = tr.at("fn.nix", "one", 0)
+	expectStrings(t, "references of a formal", tr.describe(References(g, sym, true)), []string{
+		"default.nix:11:one",
+		"fn.nix:1:one",
+		"fn.nix:2:one",
+	})
+}
+
+func TestNixRenameAcrossFiles(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name  string
+		files map[string]string
+		in    string
+		sub   string
+		want  map[string]string
+	}{
+		{
+			name:  "a formal updates the keys of its callPackage callers",
+			files: map[string]string{"default.nix": "{ callPackage }: callPackage ./y.nix { foo = 1; }\n", "y.nix": "{ foo }: foo\n"},
+			in:    "y.nix",
+			sub:   "foo",
+			want:  map[string]string{"default.nix": "{ callPackage }: callPackage ./y.nix { alpha = 1; }\n", "y.nix": "{ alpha }: alpha\n"},
+		},
+		{
+			name:  "from the key",
+			files: map[string]string{"default.nix": "{ pkgs }: pkgs.callPackage ./y.nix { foo = 1; }\n", "y.nix": "{ foo }: foo\n"},
+			in:    "default.nix",
+			sub:   "foo",
+			want:  map[string]string{"default.nix": "{ pkgs }: pkgs.callPackage ./y.nix { alpha = 1; }\n", "y.nix": "{ alpha }: alpha\n"},
+		},
+		{
+			name:  "an inherited key keeps what it reads",
+			files: map[string]string{"default.nix": "{ lib, foo }: lib.callPackageWith { } ./y.nix { inherit foo; }\n", "y.nix": "{ foo }: foo\n"},
+			in:    "y.nix",
+			sub:   "foo",
+			want:  map[string]string{"default.nix": "{ lib, foo }: lib.callPackageWith { } ./y.nix { alpha = foo; }\n", "y.nix": "{ alpha }: alpha\n"},
+		},
+		{
+			name:  "an import called with a set",
+			files: map[string]string{"default.nix": "import ./y.nix { foo = 1; }\n", "y.nix": "{ foo }: foo\n"},
+			in:    "y.nix",
+			sub:   "foo",
+			want:  map[string]string{"default.nix": "import ./y.nix { alpha = 1; }\n", "y.nix": "{ alpha }: alpha\n"},
+		},
+		{
+			name:  "an attribute every importer selects",
+			files: map[string]string{"default.nix": "(import ./y.nix).foo\n", "y.nix": "{\n  foo = 1;\n}\n"},
+			in:    "y.nix",
+			sub:   "foo",
+			want:  map[string]string{"default.nix": "(import ./y.nix).alpha\n", "y.nix": "{\n  alpha = 1;\n}\n"},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := newTree(t, tt.files).renamedAfter(tt.in, "", tt.sub, "alpha")
+			expectRename(t, got, err, tt.want)
+		})
+	}
+}
+
+func TestNixRenameRefusesWhatOtherFilesCannotFollow(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name  string
+		files map[string]string
+		in    string
+		sub   string
+	}{
+		{name: "callPackage fills a formal by name", files: map[string]string{"default.nix": "{ callPackage }: callPackage ./y.nix { }\n", "y.nix": "{ foo }: foo\n"}, in: "y.nix", sub: "foo"},
+		{name: "the set leaves through an import", files: map[string]string{"default.nix": "{ f }: f (import ./y.nix)\n", "y.nix": "{\n  foo = 1;\n}\n"}, in: "y.nix", sub: "foo"},
+		{name: "a selected set is passed on", files: map[string]string{"default.nix": "{ f }: f (import ./y.nix).bar\n", "y.nix": "{\n  bar.foo = 1;\n}\n"}, in: "y.nix", sub: "foo"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if _, err := newTree(t, tt.files).renamedAfter(tt.in, "", tt.sub, "alpha"); !errors.Is(err, navigation.ErrNotRenamable) {
+				t.Errorf("error = %v, want %v", err, navigation.ErrNotRenamable)
+			}
+		})
+	}
+	tr := newTree(t, map[string]string{"default.nix": "(import ./y.nix).foo + (import ./y.nix).bar\n", "y.nix": "{\n  foo = 1;\n}\n"})
+	if _, err := tr.renamedAfter("y.nix", "", "foo", "bar"); !errors.Is(err, navigation.ErrNameConflict) {
+		t.Errorf("renaming onto a name another file reads: %v, want %v", err, navigation.ErrNameConflict)
+	}
+}
+
+func TestNixImportCyclesTerminate(t *testing.T) {
+	t.Parallel()
+
+	tr := newTree(t, map[string]string{
+		"a.nix": "let\n  b = import ./b.nix;\nin {\n  one = b.two;\n}\n",
+		"b.nix": "let\n  a = import ./a.nix;\nin {\n  two = a.one;\n}\n",
+		"c.nix": "import ./d.nix\n",
+		"d.nix": "import ./c.nix\n",
+		"e.nix": "(import ./c.nix).nothing\n",
+		"f.nix": "{ imports = [ ./g.nix ]; }\n",
+		"g.nix": "{ imports = [ ./f.nix ]; }\n",
+	})
+	expectStrings(t, "a read around the cycle", tr.definitionAfter("a.nix", "b.", "two"), []string{"b.nix:4:two"})
+	expectStrings(t, "and back", tr.definitionAfter("b.nix", "a.", "one"), []string{"a.nix:4:one"})
+	if got := tr.definitionAfter("e.nix", ").", "nothing"); len(got) != 0 {
+		t.Errorf("a value that is only a cycle has %v", got)
+	}
+	if got := tr.definitionAfter("f.nix", "[ ", "./g.nix"); !slices.Equal(got, []string{"g.nix:1:"}) {
+		t.Errorf("a path in a cycle of modules = %v", got)
+	}
+}
+
+func TestNixFlakesStaySeparate(t *testing.T) {
+	t.Parallel()
+
+	flake := "{\n  inputs.nixpkgs.url = \"github:NixOS/nixpkgs\";\n  outputs = { self, nixpkgs }: {\n    value = (import ./lib.nix).shared;\n    copy = self.value;\n    system = nixpkgs.lib;\n  };\n}\n"
+	lib := "{\n  shared = 1;\n}\n"
+	tr := newTree(t, map[string]string{
+		"one/flake.nix": flake, "one/lib.nix": lib,
+		"two/flake.nix": flake, "two/lib.nix": lib,
+		"flake.nix": "{\n  outputs = _: { };\n}\n",
+	})
+	g, sym := tr.at("one/lib.nix", "shared", 0)
+	expectStrings(t, "references stay inside the flake", tr.describe(References(g, sym, true)), []string{"one/flake.nix:4:shared", "one/lib.nix:2:shared"})
+	expectStrings(t, "definition stays inside the flake", tr.definitionAfter("two/flake.nix", ").", "shared"), []string{"two/lib.nix:2:shared"})
+	expectStrings(t, "an output through self", tr.definitionAfter("two/flake.nix", "self.", "value"), []string{"two/flake.nix:4:value"})
+	expectStrings(t, "a formal goes to its input", tr.definitionAfter("one/flake.nix", "{ self, ", "nixpkgs"), []string{"one/flake.nix:2:nixpkgs"})
+	expectStrings(t, "a read of the formal too", tr.definitionAfter("one/flake.nix", "system = ", "nixpkgs"), []string{"one/flake.nix:2:nixpkgs"})
+}
+
+func TestNixDiagnosticsNeverTouchTheProject(t *testing.T) {
+	t.Parallel()
+
+	tr := newTree(t, importTree)
+	file, err := tr.ws.Load(tr.path("default.nix"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	graphs := 0
+	env := Env{Loader: tr.ws}
+	env.Graph = func(ctx context.Context) (*Graph, error) {
+		graphs++
+		return NewGraph(ctx, host.Nix, tr.all, env)
+	}
+	g, err := Build(context.Background(), hostOf(t, file), env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g.Findings()
+	if graphs != 0 || len(g.Module.Files) != 1 {
+		t.Errorf("diagnostics built the graph %d times and hold %d files", graphs, len(g.Module.Files))
+	}
+	if _, ok := g.At(tr.offset("default.nix", "answer", 0)); !ok || graphs != 1 {
+		t.Errorf("navigation found nothing or built the graph %d times", graphs)
+	}
+}
+
+func TestNixSingleFlakeCorpus(t *testing.T) {
+	t.Parallel()
+
+	tr := corpusTree(t, "single-flake")
+	expectStrings(t, "self reaches the outputs", tr.definitionAfter("flake.nix", "[self.", "overlays"), []string{"flake.nix:22:overlays"})
+	expectStrings(t, "the nixpkgs formal", tr.definitionAfter("flake.nix", "self,\n    ", "nixpkgs"), []string{"flake.nix:4:nixpkgs"})
+	expectStrings(t, "the inputs alias", tr.definitionAfter("flake.nix", "revision = inputs.", "nixpkgs"), []string{"flake.nix:4:nixpkgs"})
+	expectStrings(t, "an imported let", tr.definitionAfter("flake.nix", "release.defaults.", "retentionDays"), []string{"release.nix:4:retentionDays"})
+	expectStrings(t, "a value passed to callPackage", tr.definitionAfter("pkgs/logship.nix", "inherit (release) ", "version"), []string{"release.nix:2:version"})
+	expectStrings(t, "a key of callPackage", tr.definitionAfter("flake.nix", "./pkgs/rotate.nix {\n        ", "retentionDays"), []string{"pkgs/rotate.nix:7:retentionDays"})
+	got, err := tr.renamedAfter("pkgs/rotate.nix", "  ", "retentionDays", "keepDays")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got["flake.nix"], "keepDays = release.defaults.retentionDays;") || !strings.Contains(got["pkgs/rotate.nix"], "toString keepDays") {
+		t.Errorf("renamed to %q", got)
+	}
+}
+
+func TestNixFlakePartsCorpus(t *testing.T) {
+	t.Parallel()
+
+	tr := corpusTree(t, "flake-parts")
+	expectStrings(t, "an option and its setting", tr.definitionAfter("nix/checks.nix", "config.project.", "version"), []string{"nix/project.nix:9:version", "nix/project.nix:23:version"})
+	expectStrings(t, "a perSystem option", tr.definitionAfter("nix/shell.nix", "config.project.", "syncTools"), []string{"nix/project.nix:15:syncTools"})
+	expectStrings(t, "self' reaches perSystem", tr.definitionAfter("nix/shell.nix", "self'.packages.", "mirrorctl"), []string{"nix/packages/default.nix:17:mirrorctl"})
+	expectStrings(t, "a path in imports", tr.definitionAfter("flake.nix", "./nix/project.nix\n        ", "./nix/packages"), []string{"nix/packages/default.nix:1:"})
+	expectStrings(t, "inherit from self'", tr.definitionAfter("nix/checks.nix", "inherit (self'.packages) mirrorctl ", "manual"), []string{"nix/packages/manual.nix:7:manual"})
+	expectStrings(t, "withSystem", tr.definitionAfter("nix/overlay.nix", "config.packages.", "mirrorctl"), []string{"nix/packages/default.nix:17:mirrorctl"})
+	expectStrings(t, "inputs in a module", tr.definitionAfter("nix/overlay.nix", "inputs.", "nixpkgs"), []string{"flake.nix:5:nixpkgs"})
+	expectStrings(t, "config in the flake", tr.definitionAfter("nix/overlay.nix", "config.flake.overlays.", "default"), []string{"nix/overlay.nix:10:default"})
+	expectStrings(t, "a follows goes to the input", tr.definitionAfter("flake.nix", "follows = \"", "nixpkgs"), []string{"flake.nix:5:nixpkgs"})
+	expectStrings(t, "a callPackage key", tr.definitionAfter("nix/packages/default.nix", "{\n        ", "version"), []string{"pkgs/mirrorctl.nix:5:version"})
+	expectStrings(t, "every reader of an option", tr.referencesAfter("nix/project.nix", "project.", "version"), []string{
+		"nix/checks.nix:14:version",
+		"nix/checks.nix:15:version",
+		"nix/packages/default.nix:2:version",
+		"nix/packages/manual.nix:7:version",
+		"nix/project.nix:9:version",
+		"nix/project.nix:23:version",
+	})
+	got, err := tr.renamedAfter("nix/project.nix", "options.project.", "syncTools", "tools")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got["nix/shell.nix"], "config.project.tools") || !strings.Contains(got["nix/packages/default.nix"], "syncTools = config.project.tools;") || !strings.Contains(got["nix/project.nix"], "options.project.tools") {
+		t.Errorf("renamed to %q", got)
+	}
+}
+
+func TestNixDendriticCorpus(t *testing.T) {
+	t.Parallel()
+
+	tr := corpusTree(t, "dendritic")
+	expectStrings(t, "a setting found through import-tree", tr.definitionAfter("modules/editor.nix", "config.harbor.lib.", "ownerName"), []string{"modules/core/lib/owner.nix:2:ownerName"})
+	expectStrings(t, "a read from its setting", tr.referencesAfter("modules/core/lib/owner.nix", "harbor.lib.", "ownerName"), []string{
+		"modules/core/lib/owner.nix:2:ownerName",
+		"modules/editor.nix:2:ownerName",
+	})
+	expectStrings(t, "a merged option", tr.definitionAfter("modules/editor.nix", "lib.mkIf config.features.", "editor"), []string{
+		"modules/core/features.nix:10:editor",
+		"modules/hosts/box.nix:20:editor",
+		"modules/hosts/laptop.nix:6:editor",
+	})
+	expectStrings(t, "a class of its own", tr.definitionAfter("modules/editor.nix", "systemPackages = lib.mkIf config.features.", "editor"), []string{
+		"modules/core/features.nix:14:editor",
+		"modules/hosts/box.nix:15:editor",
+	})
+	expectStrings(t, "an option from the home module", tr.definitionAfter("modules/editor.nix", "config.harbor.paths.", "stateDir"), []string{
+		"modules/core/paths.nix:7:stateDir",
+		"modules/core/paths.nix:12:stateDir",
+		"modules/hosts/laptop.nix:7:stateDir",
+	})
+	expectStrings(t, "a deferred module", tr.definitionAfter("modules/images.nix", "config.flake.modules.nixos.", "editor"), []string{"modules/editor.nix:16:editor"})
+	expectStrings(t, "every class set under one name", tr.definitionAfter("modules/hosts/box.nix", "config.flake.modules.", "nixos"), []string{
+		"modules/core/features.nix:13:nixos",
+		"modules/editor.nix:16:nixos",
+	})
+	expectStrings(t, "a formal from _module.args", tr.definitionAfter("modules/images.nix", "= ", "nixpkgsFor"), []string{"modules/core/flake.nix:15:nixpkgsFor"})
+	expectStrings(t, "the formal itself", tr.definitionAfter("modules/core/configurations.nix", "withSystem,\n  ", "nixpkgsFor"), []string{"modules/core/flake.nix:15:nixpkgsFor"})
+	expectStrings(t, "a formal and its binding are one", tr.referencesAfter("modules/core/flake.nix", "_module.args.", "nixpkgsFor"), []string{
+		"modules/core/configurations.nix:6:nixpkgsFor",
+		"modules/core/configurations.nix:51:nixpkgsFor",
+		"modules/core/flake.nix:15:nixpkgsFor",
+		"modules/images.nix:3:nixpkgsFor",
+		"modules/images.nix:6:nixpkgsFor",
+	})
+	expectStrings(t, "pkgs from perSystem _module.args", tr.definitionAfter("modules/tools.nix", "  ", "pkgs"), []string{"modules/core/flake.nix:20:pkgs"})
+	expectStrings(t, "inputs in a module", tr.definitionAfter("modules/core/flake.nix", "import inputs.", "nixpkgs"), []string{"flake.nix:5:nixpkgs"})
+	expectStrings(t, "self' in a module", tr.definitionAfter("modules/tools.nix", "self'.packages.", "greet"), []string{"modules/tools.nix:8:greet"})
+	expectStrings(t, "a key to an excluded file", tr.definitionAfter("modules/tools.nix", "{\n      ", "greeting"), []string{"modules/_pkgs/greet.nix:3:greeting"})
+	expectStrings(t, "the custom host tree", tr.definitionAfter("modules/hosts/box.nix", "${config.harbor.", "owner"), []string{
+		"modules/core/features.nix:15:owner",
+		"modules/hosts/box.nix:16:owner",
+	})
+	g, sym := tr.at("modules/_disabled/old-owner.nix", "ownerName", 0)
+	expectStrings(t, "a file import-tree skips is alone", tr.describe(References(g, sym, true)), []string{"modules/_disabled/old-owner.nix:2:ownerName"})
+
+	got, err := tr.renamedAfter("modules/core/paths.nix", "options.harbor.paths.", "stateDir", "stateRoot")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for file, want := range map[string]string{
+		"modules/core/paths.nix":   "config.harbor.paths.stateRoot = lib.mkDefault",
+		"modules/editor.nix":       "EDITOR_STATE = config.harbor.paths.stateRoot;",
+		"modules/hosts/laptop.nix": "harbor.paths.stateRoot = \"/var/lib/harbor\";",
+	} {
+		if !strings.Contains(got[file], want) {
+			t.Errorf("%s renamed to %q", file, got[file])
+		}
+	}
+	got, err = tr.renamedAfter("modules/images.nix", "= ", "nixpkgsFor", "pkgsOf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got["modules/core/flake.nix"], "_module.args.pkgsOf = nixpkgsFor;") || !strings.Contains(got["modules/core/configurations.nix"], "pkgs = pkgsOf host.system;") {
+		t.Errorf("renamed to %q", got)
+	}
+	for _, tt := range []struct{ file, before, sub string }{
+		{"modules/core/lib/owner.nix", "harbor.lib.", "ownerName"},
+		{"modules/core/flake.nix", "_module.args.", "pkgs"},
+		{"modules/hosts/box.nix", "networking.", "hostName"},
+		{"modules/tools.nix", "  ", "pkgs"},
+	} {
+		if _, err := tr.renamedAfter(tt.file, tt.before, tt.sub, "alpha"); !errors.Is(err, navigation.ErrNotRenamable) {
+			t.Errorf("renaming %s in %s: %v, want %v", tt.sub, tt.file, err, navigation.ErrNotRenamable)
 		}
 	}
 }

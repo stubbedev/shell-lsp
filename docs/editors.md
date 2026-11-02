@@ -177,9 +177,9 @@ formatting. The VS Code extension attaches to Makefiles and Dockerfiles on its
 own, and to justfiles and Nix files when extensions give them the `just` and
 `nix` languages. Elsewhere, add the file types next to the shell ones. In
 Neovim, add `"make"`, `"just"`, `"dockerfile"` and `"nix"` to `filetypes` (or
-to the `FileType` pattern). For Nix files it answers within each file
-([Nix files](../README.md#nix-files)), with no other Nix language server needed
-for that:
+to the `FileType` pattern). For Nix files it follows imports, flakes and module
+trees across files without evaluating them
+([Nix files](../README.md#nix-files)):
 
 ```lua
 vim.lsp.config("shell_lsp", {

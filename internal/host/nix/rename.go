@@ -64,6 +64,7 @@ type renames struct {
 	table  *scope.Table
 	ix     *model.Index
 	owners []owner
+	unit   *symbolTable
 }
 
 func (r renames) Refusal(symbol int) string {

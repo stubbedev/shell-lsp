@@ -1,0 +1,372 @@
+package nix
+
+import (
+	"cmp"
+	"maps"
+	"slices"
+	"strings"
+
+	"github.com/stubbedev/shell-lsp/internal/host/model"
+	"github.com/stubbedev/shell-lsp/internal/host/nix/scope"
+	"github.com/stubbedev/shell-lsp/internal/host/nix/syntax"
+)
+
+const (
+	callPackageWithName = "callPackageWith"
+	mkMergeName         = "mkMerge"
+	importTreeName      = "import-tree"
+	withSystemName      = "withSystem"
+	modulesAttr         = "modules"
+	followsAttr         = "follows"
+	inputsAttr          = "inputs"
+	FlakeFile           = "flake.nix"
+	nixExtension        = ".nix"
+)
+
+var (
+	transparentCalls = []string{"mkIf", "mkDefault", "mkForce", "mkBefore", "mkAfter", "mkOverride", "mkOrder", "optionalAttrs", "mkPerSystemOption"}
+	attrMappers      = []string{"mapAttrs", "mapAttrs'", "mapAttrsToList", "concatMapAttrs"}
+)
+
+type flowSource struct {
+	expr syntax.Expr
+	stmt *syntax.Inherit
+	attr syntax.Attr
+}
+
+type flowSlot struct {
+	targets []syntax.Expr
+	path    []string
+	call    *syntax.Apply
+	arg     int
+}
+
+type flowChain struct {
+	target  syntax.Expr
+	path    []string
+	read    syntax.Expr
+	dynamic bool
+}
+
+type callKind uint8
+
+const (
+	callImport callKind = iota
+	callAuto
+	callLocal
+	callMkFlake
+	callRoot
+	callMapAttrs
+	callWithSystem
+)
+
+type flowCall struct {
+	kind   callKind
+	call   *syntax.Apply
+	path   int
+	class  string
+	closed bool
+}
+
+func (a *attrs) flowsFrom(name string, leaf syntax.Attr, value syntax.Expr) {
+	if leaf == nil {
+		a.direct = append(a.direct, value)
+		return
+	}
+	a.sources[name] = append(a.sources[name], flowSource{expr: value})
+}
+
+func (b *symbolTable) openable(target syntax.Expr) bool {
+	id, plain := syntax.Unparenthesized(target).(*syntax.Ident)
+	if !plain {
+		return true
+	}
+	ref, ok := b.f.table.Of(id)
+	return ok && ref.Kind == scope.Definition
+}
+
+func (b *symbolTable) openRead(target syntax.Expr, path []string, attr syntax.Attr, name string, rewrite *model.Rewrite) {
+	id := b.newScope()
+	b.slots[id] = flowSlot{targets: []syntax.Expr{target}, path: path}
+	b.ref(name, entry{scope: id, kind: model.KindAttribute}, nameSpan(attr), rewrite)
+}
+
+func (b *symbolTable) withSlot(withs []*syntax.With) model.Scope {
+	if id, done := b.withSlots[withs[0]]; done {
+		return id
+	}
+	id := b.newScope()
+	targets := make([]syntax.Expr, len(withs))
+	for i, with := range withs {
+		targets[i] = with.Scope
+		if b.openable(with.Scope) {
+			b.chains = append(b.chains, flowChain{target: with.Scope})
+		}
+	}
+	b.slots[id] = flowSlot{targets: targets}
+	b.withSlots[withs[0]] = id
+	return id
+}
+
+func (b *symbolTable) inheritedOpen(stmt *syntax.Inherit) {
+	target := stmt.From.Inner
+	if !b.openable(target) {
+		return
+	}
+	for _, attr := range stmt.Attrs {
+		name, ok := syntax.AttrName(attr)
+		if !ok {
+			b.chains = append(b.chains, flowChain{target: target, dynamic: true})
+			continue
+		}
+		b.openRead(target, nil, attr, name, selected(b.f.src, stmt, attr))
+		b.passive(attr)
+	}
+}
+
+func (b *symbolTable) openKeys(arg syntax.Expr, call *syntax.Apply, at int) {
+	set, literal := syntax.Unparenthesized(arg).(*syntax.AttrSet)
+	if !literal || set.Rec {
+		return
+	}
+	id := b.newScope()
+	b.slots[id] = flowSlot{call: call, arg: at}
+	b.passedKeys(set, func(string) (entry, bool) { return entry{scope: id, kind: model.KindAttribute}, true })
+}
+
+func (b *symbolTable) classify(call *syntax.Apply) {
+	fn := syntax.Unparenthesized(call.Fn)
+	name := calleeName(fn)
+	switch {
+	case name == importName && b.builtinImport(fn):
+		b.importing(callImport, call, 0)
+	case name == callPackageName:
+		b.importing(callAuto, call, 0)
+	case name == callPackageWithName:
+		b.importing(callAuto, call, 1)
+	case name == mkFlakeName:
+		b.flowCalls = append(b.flowCalls, flowCall{kind: callMkFlake, call: call})
+	case name == importTreeName:
+		b.markTrees(call.Args)
+	case rootClasses[name] != "":
+		b.flowCalls = append(b.flowCalls, flowCall{kind: callRoot, call: call, class: rootClasses[name]})
+	case slices.Contains(attrMappers, name):
+		b.flowCalls = append(b.flowCalls, flowCall{kind: callMapAttrs, call: call})
+	case name == withSystemName:
+		b.flowCalls = append(b.flowCalls, flowCall{kind: callWithSystem, call: call})
+	default:
+		b.localCall(fn, call)
+	}
+}
+
+func (b *symbolTable) builtinImport(fn syntax.Expr) bool {
+	switch fn := fn.(type) {
+	case *syntax.Ident:
+		ref, ok := b.f.table.Of(fn)
+		return ok && ref.Kind == scope.Global
+	case *syntax.Select:
+		target, plain := syntax.Unparenthesized(fn.Target).(*syntax.Ident)
+		return plain && target.Name == builtinsName
+	}
+	return false
+}
+
+func (b *symbolTable) importing(kind callKind, call *syntax.Apply, at int) {
+	if at >= len(call.Args) {
+		return
+	}
+	b.markStatic(call.Args[at])
+	b.flowCalls = append(b.flowCalls, flowCall{kind: kind, call: call, path: at})
+	if at+1 < len(call.Args) {
+		b.openKeys(call.Args[at+1], call, at+1)
+	}
+}
+
+func (b *symbolTable) localCall(fn syntax.Expr, call *syntax.Apply) {
+	switch fn := fn.(type) {
+	case *syntax.Lambda:
+	case *syntax.Ident:
+		ref, ok := b.f.table.Of(fn)
+		if !ok || ref.Kind != scope.Definition {
+			return
+		}
+		if b.lambdas[ref.Def] == nil && b.importedDef(ref.Def) {
+			b.openKeys(call.Args[0], call, 0)
+		}
+	case *syntax.Select:
+		switch target := syntax.Unparenthesized(fn.Target).(type) {
+		case *syntax.Apply:
+		case *syntax.Ident:
+			ref, ok := b.f.table.Of(target)
+			if !ok || ref.Kind != scope.Definition || ref.Def.Kind != scope.LetDef {
+				return
+			}
+		default:
+			return
+		}
+	default:
+		return
+	}
+	b.flowCalls = append(b.flowCalls, flowCall{kind: callLocal, call: call})
+}
+
+func (b *symbolTable) importedDef(d *scope.Def) bool {
+	if len(d.Bindings) != 1 {
+		return false
+	}
+	a, assigned := d.Bindings[0].(*syntax.Assign)
+	if !assigned || len(a.Path) != 1 {
+		return false
+	}
+	value, applied := syntax.Unparenthesized(a.Value).(*syntax.Apply)
+	return applied && calleeName(syntax.Unparenthesized(value.Fn)) == importName
+}
+
+func (b *symbolTable) markTrees(args []syntax.Expr) {
+	for _, arg := range args {
+		switch arg := syntax.Unparenthesized(arg).(type) {
+		case *syntax.Path:
+			b.trees = append(b.trees, arg)
+		case *syntax.List:
+			b.markTrees(arg.Items)
+		case *syntax.Ident:
+			if p := b.staticPath(arg); p != nil {
+				b.trees = append(b.trees, p)
+			}
+		}
+	}
+}
+
+func (b *symbolTable) staticPath(id *syntax.Ident) *syntax.Path {
+	ref, ok := b.f.table.Of(id)
+	if !ok || ref.Kind != scope.Definition || len(ref.Def.Bindings) != 1 {
+		return nil
+	}
+	a, assigned := ref.Def.Bindings[0].(*syntax.Assign)
+	if !assigned || len(a.Path) != 1 {
+		return nil
+	}
+	p, _ := syntax.Unparenthesized(a.Value).(*syntax.Path)
+	return p
+}
+
+func (b *symbolTable) markStatic(e syntax.Expr) {
+	switch e := syntax.Unparenthesized(e).(type) {
+	case *syntax.Path:
+		b.loaded[e] = true
+	case *syntax.Ident:
+		if p := b.staticPath(e); p != nil {
+			b.loaded[p] = true
+		}
+	}
+}
+
+func (b *symbolTable) moduleList(a *syntax.Assign, value syntax.Expr) {
+	if name := lastIdent(a.Path); name == importsAttr || name == modulesAttr {
+		b.markItems(value)
+	}
+}
+
+func (b *symbolTable) markItems(value syntax.Expr) {
+	switch value := syntax.Unparenthesized(value).(type) {
+	case *syntax.List:
+		for _, item := range value.Items {
+			b.markStatic(item)
+		}
+	case *syntax.Binary:
+		if value.Op == syntax.OpConcat {
+			b.markItems(value.Left)
+			b.markItems(value.Right)
+		}
+	}
+}
+
+func (b *symbolTable) aliased(into *attrs, a *syntax.Assign, leaf syntax.Attr, value syntax.Expr) {
+	if !into.bound || len(a.Path) != 1 {
+		return
+	}
+	if def, ok := b.f.table.Binder(leaf); ok {
+		b.letAlias[value] = def
+	}
+}
+
+func (b *symbolTable) consumedAlias(e syntax.Expr) bool {
+	def, bound := b.letAlias[syntax.Unparenthesized(e)]
+	if !bound {
+		return false
+	}
+	return !slices.ContainsFunc(def.Uses(), func(u scope.Use) bool {
+		id, plain := u.Node.(*syntax.Ident)
+		return !plain || !b.consumed[id]
+	})
+}
+
+func (b *symbolTable) settleChains() {
+	b.chains = slices.DeleteFunc(b.chains, func(c flowChain) bool { return c.read != nil && b.consumedAlias(c.read) })
+	for i := range b.flowCalls {
+		call := b.flowCalls[i].call
+		b.flowCalls[i].closed = b.selected[call] || b.consumedAlias(call)
+	}
+	clear(b.selected)
+	clear(b.letAlias)
+	clear(b.loaded)
+}
+
+func (b *symbolTable) pathIncludes() {
+	slices.SortFunc(b.paths, func(x, y *syntax.Path) int { return cmp.Compare(x.Span().Start, y.Span().Start) })
+	for _, p := range b.paths {
+		if !local(p) {
+			continue
+		}
+		span := p.Span()
+		text := b.f.src[span.Start:span.End]
+		entry := text + "/" + DirectoryEntry
+		isFile := strings.HasSuffix(text, nixExtension)
+		candidates := []string{entry}
+		if isFile {
+			candidates = []string{text, entry}
+		}
+		b.ix.Includes = append(b.ix.Includes, model.Include{Span: span, Path: text, Candidates: candidates, Optional: true, Probe: !isFile && !b.loaded[p]})
+	}
+}
+
+func (b *symbolTable) flakeFollows() {
+	root, isSet := syntax.Unparenthesized(b.f.tree.Root).(*syntax.AttrSet)
+	if !isSet || b.sets[root] == nil {
+		return
+	}
+	if inputs := b.sets[root].kids[inputsAttr]; inputs != nil {
+		b.followsOf(inputs, inputs)
+	}
+}
+
+func (b *symbolTable) followsOf(of, inputs *attrs) {
+	for _, name := range slices.Sorted(maps.Keys(of.kids)) {
+		kid := of.kids[name]
+		for _, src := range kid.sources[followsAttr] {
+			if text, ok := syntax.Unparenthesized(src.expr).(*syntax.String); ok {
+				b.followed(text, inputs)
+			}
+		}
+		if nested := kid.kids[inputsAttr]; nested != nil {
+			b.followsOf(nested, inputs)
+		}
+	}
+}
+
+func (b *symbolTable) followed(text *syntax.String, inputs *attrs) {
+	if len(text.Parts) != 1 {
+		return
+	}
+	literal, plain := text.Parts[0].(*syntax.Literal)
+	if !plain {
+		return
+	}
+	name, _, _ := strings.Cut(literal.Text, "/")
+	e, known := inputs.names[name]
+	if !known {
+		return
+	}
+	start := literal.Span().Start
+	b.ref(name, e, model.Span{Start: start, End: start + len(name)}, nil)
+}

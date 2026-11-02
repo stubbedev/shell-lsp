@@ -471,3 +471,33 @@ func TestShellFilesReadTheExcludeFileOfALinkedWorktree(t *testing.T) {
 		t.Errorf("ShellFiles = %v, want [a.sh]", got)
 	}
 }
+
+func TestNixFilesFollowsLinksAndSkipsNothing(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	for _, name := range []string{"a.nix", "vendor/b.nix", "_c/d.nix", "e.txt"} {
+		path := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink(filepath.Join(dir, "a.nix"), filepath.Join(dir, "link.nix")); err != nil {
+		t.Fatal(err)
+	}
+	ws := New(func(string) (*File, bool) { return nil, false }, Detect)
+	got, err := ws.NixFiles(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{filepath.Join(dir, "_c", "d.nix"), filepath.Join(dir, "a.nix"), filepath.Join(dir, "link.nix"), filepath.Join(dir, "vendor", "b.nix")}
+	if !slices.Equal(got, want) {
+		t.Errorf("found %q, want %q", got, want)
+	}
+	if _, err := ws.NixFiles(filepath.Join(dir, "gone")); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("a missing directory: %v", err)
+	}
+}

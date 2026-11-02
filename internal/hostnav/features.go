@@ -16,6 +16,9 @@ import (
 func (g *Group) Findings() []lint.Finding {
 	checks := g.Language.Checks()
 	ix := g.Index()
+	if !checks.Active() {
+		return slices.Clone(ix.Findings)
+	}
 	used := g.Module.Usage()
 	for t := range g.shellUsage() {
 		used[t] = true
@@ -34,10 +37,24 @@ type Location struct {
 }
 
 func (g *Group) includeAt(offset int) (resolvedInclude, bool) {
+	if g.builder != nil {
+		return g.projectIncludeAt(offset)
+	}
 	for _, r := range g.includes {
 		if r.include.Span.Touches(offset) {
 			return r, true
 		}
+	}
+	return resolvedInclude{}, false
+}
+
+func (g *Group) projectIncludeAt(offset int) (resolvedInclude, bool) {
+	for _, inc := range g.Index().Includes {
+		if !inc.Span.Touches(offset) {
+			continue
+		}
+		r := g.builder.resolveInclude(g.Self, inc)
+		return r, r.target != nil || !inc.Probe
 	}
 	return resolvedInclude{}, false
 }
@@ -62,9 +79,41 @@ func (g *Group) definitions(sym Symbol) []Location {
 			return []Location{{File: root}}
 		}
 	}
+	declarations := g.Declarations(sym)
+	if slices.ContainsFunc(declarations, func(d Occurrence) bool { return d.kind != model.KindParameter }) {
+		declarations = slices.DeleteFunc(declarations, func(d Occurrence) bool { return d.kind == model.KindParameter })
+	}
+	if sym.id.module != nil && sym.id.module.Links() != nil {
+		declarations = merge(declarations)
+	}
 	var out []Location
-	for _, d := range g.Declarations(sym) {
+	for _, d := range declarations {
 		out = append(out, Location{File: d.File, Span: d.Span})
+	}
+	return append(out, g.sources(sym)...)
+}
+
+func (g *Group) sources(sym Symbol) []Location {
+	if g.builder == nil {
+		return nil
+	}
+	var out []Location
+	seen := map[string]bool{}
+	for _, t := range sym.targets {
+		links := t.Module.Links()
+		if links == nil {
+			continue
+		}
+		for _, path := range links.Sources(t.File, t.Symbol) {
+			if seen[path] {
+				continue
+			}
+			seen[path] = true
+			if file := g.builder.load(path); file != nil {
+				out = append(out, Location{File: file})
+				break
+			}
+		}
 	}
 	return out
 }
@@ -100,15 +149,26 @@ func (g *Group) PrepareRename(sym Symbol) error {
 	if !g.Language.Renames() {
 		return fmt.Errorf("%w: %s `%s` is defined in a %s, which other code may read by its name; rename it with that language's own server", navigation.ErrNotRenamable, sym.Kind, sym.Name, g.Language)
 	}
-	if r := renamesOf(sym); r != nil {
-		if reason := r.Refusal(sym.targets[0].Symbol); reason != "" {
-			return fmt.Errorf("%w: %s", navigation.ErrNotRenamable, reason)
-		}
+	if reason := g.refusal(sym); reason != "" {
+		return fmt.Errorf("%w: %s", navigation.ErrNotRenamable, reason)
 	}
 	if sym.Kind == model.KindModule && g.moduleRoot(sym) != nil && !g.explicitPath(sym) {
 		return fmt.Errorf("%w: module `%s` is found by its name; give it an explicit path first", navigation.ErrNotRenamable, sym.Name)
 	}
 	return nil
+}
+
+func (g *Group) refusal(sym Symbol) string {
+	t := sym.targets[0]
+	if links := t.Module.Links(); links != nil {
+		if reason, decided := links.Refusal(t.File, t.Symbol); decided {
+			return reason
+		}
+	}
+	if r := renamesOf(sym); r != nil {
+		return r.Refusal(t.Symbol)
+	}
+	return ""
 }
 
 func renamesOf(sym Symbol) model.Renames {
@@ -143,6 +203,11 @@ func (g *Group) Rename(sym Symbol, newName string) ([]Occurrence, error) {
 	t := sym.targets[0]
 	if clash := t.Module.Resolve(t.File, model.Ref{Name: newName, Kind: sym.Kind, Scope: t.Info().Scope}); len(clash.Targets) > 0 {
 		return nil, fmt.Errorf("%w: %s `%s` already exists", navigation.ErrNameConflict, clash.Targets[0].Info().Kind, newName)
+	}
+	if links := t.Module.Links(); links != nil {
+		if reason := links.Conflict(t.File, t.Symbol, newName); reason != "" {
+			return nil, fmt.Errorf("%w: %s", navigation.ErrNameConflict, reason)
+		}
 	}
 	if r := renamesOf(sym); r != nil {
 		if reason := r.Conflict(t.Symbol, newName); reason != "" {
