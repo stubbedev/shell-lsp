@@ -2,6 +2,7 @@ package embedded
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/embedded/lang"
@@ -181,7 +182,16 @@ func (p *Program) Shadows(name string) bool {
 }
 
 func (p *Program) NamesArguments() bool {
-	return p.Language == Jq && (strings.Contains(p.Text, "$ARGS") || strings.Contains(p.Text, "$__prog_args"))
+	if p.Language != Jq {
+		return false
+	}
+	return slices.ContainsFunc(p.Result.Tokens, func(tok lang.Token) bool {
+		if tok.Kind != lang.Variable {
+			return false
+		}
+		text := p.Text[tok.Start:tok.End]
+		return text == "$ARGS" || text == "$__prog_args"
+	})
 }
 
 func (p *Program) boundHover(tok lang.Token) (Hover, bool) {

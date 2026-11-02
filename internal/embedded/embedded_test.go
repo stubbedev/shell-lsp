@@ -404,3 +404,25 @@ func TestAntiquotationsInAHereDocument(t *testing.T) {
 		t.Errorf("programs = %+v", programs)
 	}
 }
+
+func TestNamesArgumentsReadsTheProgram(t *testing.T) {
+	t.Parallel()
+
+	for src, want := range map[string]bool{
+		"jq '$ARGS.named' f\n":            true,
+		"jq '$__prog_args' f\n":           true,
+		"jq '\"\\($ARGS.named)\"' f\n":    true,
+		"jq '\"$ARGS\"' f\n":              false,
+		"jq '.a # $ARGS\n' f\n":           false,
+		"jq '$ARGSX' f\n":                 false,
+		"awk 'BEGIN { x = \"$ARGS\" }'\n": false,
+	} {
+		programs := find(t, src)
+		if len(programs) != 1 {
+			t.Fatalf("%q: %d programs", src, len(programs))
+		}
+		if got := programs[0].NamesArguments(); got != want {
+			t.Errorf("%q: NamesArguments = %v, want %v", src, got, want)
+		}
+	}
+}
