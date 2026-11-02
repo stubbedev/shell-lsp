@@ -13,6 +13,7 @@ fails when the result changes.
 | `just corpus-shellcheck` | Compare the linter with ShellCheck against [corpus/shellcheck.md](../corpus/shellcheck.md) |
 | `just corpus-shells` | Compare the parser with the shells' `-n` against [corpus/shells.txt](../corpus/shells.txt) |
 | `just corpus-hosts` | Analyse the justfiles, Makefiles and Dockerfiles against [corpus/hosts.txt](../corpus/hosts.txt), checking them with just, make, BuildKit and Hadolint |
+| `just corpus-nix-lint` | Compare the Nix checks with statix and deadnix on a 2,500-file sample of the nixpkgs `flake.lock` pins, against [corpus/nix-lint.md](../corpus/nix-lint.md) |
 | `just corpus-check` | All three comparisons |
 | `just corpus-baseline` | Rewrite the three baselines from the current code |
 
@@ -191,6 +192,10 @@ line.
 
 The check fails when any line is added or removed, which it prints as a
 diff, and when a file takes longer than two seconds.
+
+## Nix lint comparison
+
+`just corpus-nix-lint` runs statix and deadnix as black boxes beside the Nix checks and compares each lint. It also applies every fix in files up to 128 KiB and fails if one stops parsing or changes what a name resolves to. `lintcheck nixlint -sample 100000` covers all of nixpkgs in about 6 minutes, and `lintcheck nixlint -examples 5 -skip secrets,certs PATH` reports on any tree without a baseline. CI does not run this, because a run spawns two tools per file.
 
 ## Updating the baselines
 

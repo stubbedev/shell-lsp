@@ -517,8 +517,12 @@ func (s *Server) nativeFindings(h hostnav.Host, settings config.Settings, docker
 	}
 	checks := s.lintSettings(file.Path, settings)
 	unused := hostnav.OptionalNixFindings(h, checks)
+	locked, err := hostnav.FlakeLockFindings(h, s.flakeLocks, checks)
+	if err != nil {
+		s.noticeOnce("flake-lock:"+err.Error(), lsp.MessageWarning, "Ignoring the flake.lock next to "+file.Path+": "+err.Error())
+	}
 	excluded := checks.Excluded()
-	return slices.DeleteFunc(slices.Concat(findings, unused, docker.Findings()), func(f lint.Finding) bool {
+	return slices.DeleteFunc(slices.Concat(findings, unused, locked, docker.Findings()), func(f lint.Finding) bool {
 		return excluded.Has(f.Code) || !settings.Lint.Profile.KeepsHost(f)
 	})
 }

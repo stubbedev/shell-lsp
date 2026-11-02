@@ -16,6 +16,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/filelint"
 	"github.com/stubbedev/shell-lsp/internal/hadolint"
+	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/hostnav"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
@@ -66,6 +67,15 @@ func (s *Server) nearestShellcheckrc(path string) (shellcheckrc.File, bool, erro
 	return rc, found, err
 }
 
+func (s *Server) statixExcluded(path string) []lint.Code {
+	codes, err := s.statix.ExcludedFor(path)
+	if err != nil {
+		s.noticeOnce("statix:"+err.Error(), lsp.MessageWarning, "Ignoring the statix.toml that applies to "+path+": "+err.Error())
+		return nil
+	}
+	return codes
+}
+
 func (s *Server) hadolintConfig(path string, settings config.Settings) hadolint.Config {
 	cfg, _, err := s.hadolint.Nearest(filepath.Dir(path))
 	if err != nil {
@@ -85,6 +95,9 @@ func (s *Server) lintSettings(path string, settings config.Settings) filelint.Se
 	}
 	if rc, _, err := s.nearestShellcheckrc(path); err == nil {
 		out.RC = rc
+	}
+	if host.IsNixPath(path) {
+		out.Exclude = out.Exclude.Union(lint.CodesOf(s.statixExcluded(path)...))
 	}
 	return out
 }

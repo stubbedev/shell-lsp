@@ -277,13 +277,13 @@ func (p *Project) Sources(file, symbol int) []string {
 	if !ok {
 		return nil
 	}
-	return []string{filepath.Join(source, FlakeFile), filepath.Join(source, DirectoryEntry)}
+	return []string{joinedTo(source, FlakeFile), joinedTo(source, DirectoryEntry)}
 }
 
 func (p *Project) flakeLockFile() (flakeLock, bool) {
 	if !p.lockRead {
 		p.lockRead = true
-		if data, err := p.source.Read(filepath.Join(p.flakeDir, lockFile)); err == nil {
+		if data, err := p.source.Read(joinedTo(p.flakeDir, LockFileName)); err == nil {
 			p.lockText = string(data)
 			if lock, ok := parseFlakeLock(data); ok {
 				p.lock = &lock

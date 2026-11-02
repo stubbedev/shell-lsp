@@ -218,7 +218,7 @@ func (p *Project) joined(u *symbolTable, base syntax.Expr, suffix string) []flow
 	var out []flowValue
 	for _, v := range p.eval(u, base) {
 		if root, ok := p.pathOf(v); ok {
-			out = union(out, []flowValue{flowPath{path: filepath.Join(root, suffix)}})
+			out = union(out, []flowValue{flowPath{path: joinedTo(root, suffix)}})
 		}
 	}
 	return out
@@ -541,7 +541,7 @@ func (p *Project) fileIndex(path string) (int, bool) {
 	if i, ok := p.byPath[path]; ok {
 		return i, true
 	}
-	i, ok := p.byPath[filepath.Join(path, DirectoryEntry)]
+	i, ok := p.byPath[joinedTo(path, DirectoryEntry)]
 	return i, ok
 }
 
@@ -565,7 +565,7 @@ func (p *Project) loadLate(path string) (int, bool) {
 		return 0, false
 	}
 	before := len(p.units)
-	p.closure([]wantedFile{{path: path, fallback: filepath.Join(path, DirectoryEntry)}})
+	p.closure([]wantedFile{{path: path, fallback: joinedTo(path, DirectoryEntry)}})
 	if len(p.units) == before {
 		return 0, false
 	}
@@ -574,7 +574,7 @@ func (p *Project) loadLate(path string) (int, bool) {
 }
 
 func (p *Project) peekFile(path string) (int, bool) {
-	if p.peeks == maxPeekedFiles || filepath.IsAbs(path) || strings.HasPrefix(path, "~") {
+	if p.peeks == maxPeekedFiles || absolute(path) || strings.HasPrefix(path, "~") {
 		return 0, false
 	}
 	p.peeks++
@@ -762,7 +762,7 @@ func (p *Project) foreignOutputs(input string) []flowValue {
 		return nil
 	}
 	var out flowValues
-	for _, root := range p.fileValue(filepath.Join(source, FlakeFile)) {
+	for _, root := range p.fileValue(joinedTo(source, FlakeFile)) {
 		set, isSet := root.(flowSet)
 		if !isSet {
 			continue

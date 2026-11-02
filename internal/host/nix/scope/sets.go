@@ -37,7 +37,7 @@ func (k setKind) readsItself(name string) bool {
 	case recSet:
 		return name == overrides
 	case legacySet:
-		return name == overrides || name == legacyBody
+		return name == overrides || name == LegacyBody
 	case letSet:
 	}
 	return false

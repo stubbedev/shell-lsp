@@ -963,6 +963,7 @@ func TestNewPutsTheCacheUnderTheUserCacheDirectory(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("XDG_CACHE_HOME", root)
 	t.Setenv("HOME", root)
+	t.Setenv("LocalAppData", root)
 	c, err := New(func(error) {})
 	if err != nil {
 		t.Fatal(err)

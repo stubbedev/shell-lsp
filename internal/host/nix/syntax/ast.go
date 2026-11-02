@@ -391,10 +391,10 @@ func AttrName(a Attr) (string, bool) {
 	case *IdentAttr:
 		return a.Name, true
 	case *StringAttr:
-		return stringValue(a.Value)
+		return StringValue(a.Value)
 	case *DynamicAttr:
 		if s, ok := Unparenthesized(a.Value).(*String); ok {
-			return stringValue(s)
+			return StringValue(s)
 		}
 	}
 	return "", false
@@ -417,7 +417,7 @@ func interpolated(s *String) bool {
 	})
 }
 
-func stringValue(s *String) (string, bool) {
+func StringValue(s *String) (string, bool) {
 	var value strings.Builder
 	for _, part := range s.Parts {
 		switch part := part.(type) {

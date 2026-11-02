@@ -211,7 +211,13 @@ func TestAnAnswerThatDidNotWaitForTheLinkIsMarked(t *testing.T) {
 	projects := NewProjects()
 	t.Cleanup(projects.Close)
 	called := make(chan struct{}, 1)
-	env := Env{Loader: ws, Projects: projects, Patience: time.Nanosecond, OnPartial: func() { called <- struct{}{} }}
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	graph := func(context.Context) (*Graph, error) {
+		<-release
+		return nil, nil
+	}
+	env := Env{Loader: ws, Projects: projects, Graph: graph, Patience: time.Nanosecond, OnPartial: func() { called <- struct{}{} }}
 	g, err := Build(context.Background(), hostOf(t, file), env)
 	if err != nil {
 		t.Fatal(err)

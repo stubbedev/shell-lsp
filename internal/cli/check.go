@@ -21,6 +21,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/filelint"
 	"github.com/stubbedev/shell-lsp/internal/hadolint"
 	"github.com/stubbedev/shell-lsp/internal/host"
+	"github.com/stubbedev/shell-lsp/internal/host/nix"
 	"github.com/stubbedev/shell-lsp/internal/hostnav"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/navigation"
@@ -29,6 +30,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/platform"
 	"github.com/stubbedev/shell-lsp/internal/project"
 	"github.com/stubbedev/shell-lsp/internal/regularfile"
+	"github.com/stubbedev/shell-lsp/internal/statixconfig"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
@@ -116,6 +118,8 @@ type checker struct {
 	editor    *editorconfig.Resolver
 	rcs       *rcFinder
 	hadolint  *hadolint.Resolver
+	statix    *statixconfig.Resolver
+	locks     *nix.LockFiles
 	ws        *workspace.Workspace
 	resolveMu sync.Mutex
 	resolved  map[string]error
@@ -136,6 +140,8 @@ func newChecker(env Env, opts checkOptions) *checker {
 		editor:   editorconfig.NewResolver(regularfile.ReadConfig, time.Now, time.Hour),
 		rcs:      newRCFinder(opts.rc, regularfile.ReadConfig, env.Home, env.ConfigHome),
 		hadolint: hadolint.NewResolver(regularfile.ReadConfig, time.Now, time.Duration(math.MaxInt64), hadolint.ConfigFallback(env.Home, env.ConfigHome)),
+		statix:   statixconfig.NewResolver(regularfile.ReadConfig, time.Now, time.Duration(math.MaxInt64)),
+		locks:    nix.NewLockFiles(regularfile.ReadConfig, time.Now, time.Duration(math.MaxInt64)),
 		stdin:    sync.OnceValues(func() ([]byte, error) { return io.ReadAll(env.Stdin) }),
 		resolved: map[string]error{},
 	}
@@ -306,6 +312,13 @@ func (c *checker) lint(t target) linted {
 		}
 		return linted{failure: fmt.Sprintf("%s: %v", t.name, err)}
 	}
+	if host.IsNixPath(file.Path) {
+		disabled, err := c.statix.ExcludedFor(file.Path)
+		if err != nil {
+			return linted{config: err}
+		}
+		s.lint.Exclude = s.lint.Exclude.Union(lint.CodesOf(disabled...))
+	}
 	env := c.navigationEnv(s.roots)
 	report := filelint.Check(file, env, s.lint)
 	var syntax []lint.Finding
@@ -336,7 +349,11 @@ func (c *checker) nativeFindings(h hostnav.Host, settings filelint.Settings) ([]
 	if err != nil {
 		return nil, err
 	}
-	findings := slices.Concat(g.Findings(), hostnav.OptionalNixFindings(h, settings))
+	locked, err := hostnav.FlakeLockFindings(h, c.locks, settings)
+	if err != nil {
+		return nil, err
+	}
+	findings := slices.Concat(g.Findings(), hostnav.OptionalNixFindings(h, settings), locked)
 	return slices.DeleteFunc(findings, func(f lint.Finding) bool { return !c.opts.profile.KeepsHost(f) }), nil
 }
 

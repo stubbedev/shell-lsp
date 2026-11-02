@@ -39,10 +39,10 @@ func skipBlank(text string, at int) int {
 	return len(text) - len(strings.TrimLeft(text[at:], " \t\r\n"))
 }
 
-func (c *checker) separated(span syntax.Span) bool {
+func (c *checker) separated(span syntax.Span, prefixed bool) bool {
 	text := c.tree.Text
-	before := span.Start == 0 || strings.IndexByte(" \t\r\n([{=;", text[span.Start-1]) >= 0
-	after := span.End == len(text) || strings.IndexByte(" \t\r\n)]},;", text[span.End]) >= 0
+	before := prefixed || span.Start == 0 || strings.IndexByte(" \t\r\n([{=;", text[span.Start-1]) >= 0
+	after := span.End == len(text) || strings.IndexByte(" \t\r\n)]},;.?", text[span.End]) >= 0
 	return before && after
 }
 
@@ -114,6 +114,11 @@ func (c *checker) aliasRemoval(p *syntax.PatternParam) textedit.Edit {
 		i := slices.IndexFunc(tokens, func(t syntax.Token) bool { return t.Kind == syntax.TokLBrace })
 		return textedit.Edit{Start: alias.Start, End: tokens[i].Span.Start}
 	}
-	i := slices.IndexFunc(tokens, func(t syntax.Token) bool { return t.Kind == syntax.TokRBrace })
-	return textedit.Edit{Start: tokens[i].Span.End, End: alias.End}
+	end := p.Span().Start
+	for _, t := range tokens {
+		if t.Kind == syntax.TokRBrace && t.Span.End <= alias.Start {
+			end = t.Span.End
+		}
+	}
+	return textedit.Edit{Start: end, End: alias.End}
 }

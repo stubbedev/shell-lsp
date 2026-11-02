@@ -583,8 +583,34 @@ marks the checks the `minimal` profile keeps; see [Profiles](../README.md#profil
 | <a name="sl8010"></a>[SL8010](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8010) | info |  |  | \`rec\` has nothing to do. |
 | <a name="sl8011"></a>[SL8011](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8011) | info |  |  | \`x = x;\` in a set that is not recursive is \`inherit x;\`. |
 | <a name="sl8012"></a>[SL8012](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8012) | warning |  | yes | \`or\` is used as a variable. |
-| <a name="sl8013"></a>[SL8013](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8013) | info |  |  | A \`let\` or an \`inherit\` binds nothing. |
+| <a name="sl8013"></a>[SL8013](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8013) | info |  |  | A \`let\` binds nothing. |
 | <a name="sl8014"></a>[SL8014](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8014) | info | `unescaped-antiquotations` |  | An antiquotation reaches a command's arguments unescaped. |
+| <a name="sl8015"></a>[SL8015](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8015) | info |  |  | Two Boolean literals are compared. |
+| <a name="sl8016"></a>[SL8016](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8016) | info |  |  | \`a = b.a;\` is \`inherit (b) a;\`. |
+| <a name="sl8017"></a>[SL8017](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8017) | warning |  | yes | \`let { ... }\` is an undocumented form. |
+| <a name="sl8018"></a>[SL8018](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8018) | info |  |  | A \`let\` is the whole body of another. |
+| <a name="sl8019"></a>[SL8019](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8019) | info | `eta-reduction` |  | A function only passes its argument on. |
+| <a name="sl8020"></a>[SL8020](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8020) | info | `empty-pattern` |  | A pattern names nothing. |
+| <a name="sl8021"></a>[SL8021](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8021) | info |  |  | \`x@{ ... }\` captures nothing that \`x\` does not. |
+| <a name="sl8022"></a>[SL8022](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8022) | info |  |  | A URI is not quoted. |
+| <a name="sl8023"></a>[SL8023](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8023) | warning |  | yes | \`builtins.toPath\` is deprecated. |
+| <a name="sl8024"></a>[SL8024](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8024) | info |  |  | \`!(a == b)\` is \`a != b\`. |
+| <a name="sl8025"></a>[SL8025](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8025) | info |  |  | \`if x ? a then x.a else y\` is \`x.a or y\`. |
+| <a name="sl8026"></a>[SL8026](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8026) | info | `repeated-keys` |  | Three or more bindings in a set start with the same key. |
+| <a name="sl8027"></a>[SL8027](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8027) | info |  |  | A list is joined with an empty list. |
+| <a name="sl8028"></a>[SL8028](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8028) | info |  |  | An \`inherit\` names no attribute. |
+| <a name="sl8029"></a>[SL8029](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8029) | info |  |  | A \`let\` binding or a pattern name starting with \`\_\` is never read. |
+| <a name="sl8030"></a>[SL8030](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8030) | info | `used-underscore-bindings` |  | A name starting with \`\_\` is read. |
+| <a name="sl8031"></a>[SL8031](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8031) | warning |  | yes | A flake reads something a pure evaluation does not have. |
+| <a name="sl8032"></a>[SL8032](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8032) | warning |  | yes | A fetcher has nothing that pins what it fetches. |
+| <a name="sl8033"></a>[SL8033](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8033) | warning |  | yes | \`//\` overrides an attribute that a \`rec\` set reads itself. |
+| <a name="sl8034"></a>[SL8034](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8034) | warning |  | yes | A NixOS module chooses its own shape from \`config\`. |
+| <a name="sl8035"></a>[SL8035](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8035) | info | `top-level-with` |  | A \`with\` wraps a whole file. |
+| <a name="sl8036"></a>[SL8036](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8036) | info | `store-copied-paths` |  | A path is interpolated. |
+| <a name="sl8037"></a>[SL8037](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8037) | info | `pkgs-lib` |  | \`pkgs.lib\` is written where \`lib\` is in scope. |
+| <a name="sl8038"></a>[SL8038](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8038) | info |  |  | A flake declares an input nothing reads. |
+| <a name="sl8039"></a>[SL8039](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8039) | warning |  | yes | A flake overrides an input that its input does not have. |
+| <a name="sl8040"></a>[SL8040](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8040) | info | `missing-nixpkgs-follows` |  | A flake input locks its own nixpkgs. |
 | <a name="dl1001"></a>[DL1001](https://github.com/hadolint/hadolint/wiki/DL1001) | info | `no-ignore-pragmas` |  | A \`# hadolint ignore=\` comment hides findings; the project asks for none. |
 | <a name="dl3001"></a>[DL3001](https://github.com/hadolint/hadolint/wiki/DL3001) | info |  |  | RUN starts a tool meant for a running system, such as an editor or process viewer, which is no use while building. |
 | <a name="dl3002"></a>[DL3002](https://github.com/hadolint/hadolint/wiki/DL3002) | warning |  | yes | The last USER of a stage is root, so the container runs with full privileges. |

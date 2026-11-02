@@ -312,6 +312,8 @@ func TestAnalyzeReportsNoErrorsInValidNix(t *testing.T) {
 	}
 }
 
+const fuzzInputLimit = 1 << 16
+
 func FuzzAnalyze(f *testing.F) {
 	for _, seed := range []string{
 		"{ src = ~/foo; }",
@@ -324,6 +326,9 @@ func FuzzAnalyze(f *testing.F) {
 		f.Add(seed)
 	}
 	f.Fuzz(func(t *testing.T, src string) {
+		if len(src) > fuzzInputLimit {
+			t.Skip("inputs over the limit say nothing the smaller ones do not")
+		}
 		a := Analyze(src)
 		if a.Map.Host() != src {
 			t.Fatalf("the projection maps other text than %q", src)

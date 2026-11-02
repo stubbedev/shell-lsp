@@ -59,7 +59,7 @@ func (s suppression) covers(f lint.Finding) bool {
 
 func unsuppressed(tree *syntax.File, findings []lint.Finding) []lint.Finding {
 	all := suppressions(tree)
-	kept := silence(findings, all)
+	kept := silence(silence(findings, foreignSkips(tree)), all)
 	kept = append(kept, badCodes(tree)...)
 	if optedIn(tree) {
 		kept = append(kept, unusedDirectives(tree, all)...)
@@ -326,4 +326,27 @@ func outermostNodes(tree *syntax.File) map[int]syntax.Span {
 		return true
 	})
 	return starts
+}
+
+var foreignMarkers = []struct {
+	marker string
+	codes  lint.CodeSet
+}{
+	{"deadnix: skip", lint.DeadnixCodes()},
+	{"statix: skip", lint.StatixCodes()},
+	{"statix skip", lint.StatixCodes()},
+}
+
+func foreignSkips(tree *syntax.File) []suppression {
+	var out []suppression
+	for _, comment := range tree.Comments {
+		body := tree.Text[comment.Span.Start:comment.Span.End]
+		for _, m := range foreignMarkers {
+			if strings.Contains(body, m.marker) {
+				next := textline.Next(tree.Text, comment.Span.End)
+				out = append(out, suppression{scope: syntax.Span{Start: comment.Span.End, End: textline.End(tree.Text, next)}, codes: m.codes})
+			}
+		}
+	}
+	return out
 }

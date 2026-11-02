@@ -2,7 +2,7 @@ package nix
 
 import (
 	"fmt"
-	"strings"
+	"slices"
 
 	"github.com/stubbedev/shell-lsp/internal/host/nix/scope"
 	"github.com/stubbedev/shell-lsp/internal/host/nix/syntax"
@@ -18,6 +18,7 @@ const (
 	falseLiteral = "false"
 	recKeyword   = "rec"
 	letKeyword   = "let"
+	withKeyword  = "with"
 )
 
 type parenRole uint8
@@ -26,6 +27,7 @@ const (
 	parenAnywhere parenRole = iota
 	parenAtExpression
 	parenRequired
+	parenPrefixed
 )
 
 type checker struct {
@@ -34,6 +36,9 @@ type checker struct {
 	parens   map[*syntax.Paren]parenRole
 	names    map[string]bool
 	outputs  *syntax.Lambda
+	flake    bool
+	optional bool
+	tight    map[*syntax.Unary]bool
 	findings []lint.Finding
 }
 
@@ -41,15 +46,23 @@ func check(tree *syntax.File, table *scope.Table, extra []lint.Finding) []lint.F
 	if len(tree.Errors) > 0 {
 		return nil
 	}
-	c := &checker{tree: tree, table: table, parens: map[*syntax.Paren]parenRole{}, names: map[string]bool{}, outputs: flakeOutputs(tree.Root), findings: extra}
+	kept := unsuppressed(tree, newChecker(tree, table, extra, false).run())
+	lint.SortHostFindings(kept)
+	return kept
+}
+
+func newChecker(tree *syntax.File, table *scope.Table, extra []lint.Finding, optional bool) *checker {
+	return &checker{tree: tree, table: table, parens: map[*syntax.Paren]parenRole{}, names: map[string]bool{}, outputs: flakeOutputs(tree.Root), flake: flakeShaped(tree.Root), optional: optional, findings: extra}
+}
+
+func (c *checker) run() []lint.Finding {
 	c.uses()
 	c.duplicates()
 	c.unusedLets()
-	c.atExpression(tree.Root)
-	syntax.Inspect(tree.Root, c.visit)
-	kept := unsuppressed(tree, c.findings)
-	lint.SortHostFindings(kept)
-	return kept
+	c.atExpression(c.tree.Root)
+	c.fileShape()
+	syntax.Inspect(c.tree.Root, c.visit)
+	return c.findings
 }
 
 func flakeOutputs(root syntax.Expr) *syntax.Lambda {
@@ -95,39 +108,6 @@ func (c *checker) duplicates() {
 	}
 }
 
-func (c *checker) unusedLets() {
-	for _, d := range c.table.Defs() {
-		if d.Scope.Kind != scope.LetScope || d.Implicit || deliberatelyUnused(d.Name) || usedOutsideItself(d) {
-			continue
-		}
-		c.report(lint.CodeNixUnusedLet, d.Binders[0].Span(), fmt.Sprintf("`%s` is bound but nothing reads it", d.Name), c.removal(d))
-	}
-}
-
-func deliberatelyUnused(name string) bool {
-	return name != scope.CurPos && strings.HasPrefix(name, unusedPrefix)
-}
-
-func usedOutsideItself(d *scope.Def) bool {
-	var own []syntax.Span
-	for _, b := range d.Bindings {
-		if _, ok := b.(*syntax.Assign); ok {
-			own = append(own, b.Span())
-		}
-	}
-	i := 0
-	for _, u := range d.Uses() {
-		at := u.Node.Span().Start
-		for i < len(own) && own[i].End <= at {
-			i++
-		}
-		if i == len(own) || at < own[i].Start {
-			return true
-		}
-	}
-	return false
-}
-
 func (c *checker) atExpression(exprs ...syntax.Expr) {
 	for _, e := range exprs {
 		if p, ok := e.(*syntax.Paren); ok {
@@ -144,14 +124,18 @@ func (c *checker) visit(n syntax.Node) bool {
 	case *syntax.If:
 		c.atExpression(n.Cond, n.Then, n.Else)
 		c.redundantIf(n)
+		c.uselessHasAttr(n)
 	case *syntax.AttrSet:
 		c.redundantRec(n)
+		c.repeatedKeys(n)
 	case *syntax.Assign:
 		c.atExpression(n.Value)
 		c.spelledInherit(n)
+		c.manualInheritFrom(n)
 	case *syntax.Let:
 		c.atExpression(n.Body)
 		c.emptyLet(n)
+		c.collapsibleLet(n)
 	case *syntax.Inherit:
 		if n.From != nil {
 			c.parens[n.From] = parenRequired
@@ -166,6 +150,7 @@ func (c *checker) visit(n syntax.Node) bool {
 		c.atExpression(n.Cond, n.Body)
 	case *syntax.Interpolation:
 		c.atExpression(n.Value)
+		c.storeCopy(n)
 	case *syntax.DynamicAttr:
 		c.atExpression(n.Value)
 	case *syntax.Formal:
@@ -173,11 +158,22 @@ func (c *checker) visit(n syntax.Node) bool {
 			c.atExpression(n.Default)
 		}
 	case *syntax.Select:
-		if p, ok := n.Target.(*syntax.Paren); ok {
-			if _, selected := p.Inner.(*syntax.Select); selected {
-				c.parens[p] = parenRequired
-			}
-		}
+		c.selectTarget(n)
+		c.selection(n)
+	case *syntax.Binary:
+		c.binary(n)
+	case *syntax.Unary:
+		c.unary(n)
+	case *syntax.Apply:
+		c.application(n)
+	case *syntax.URI:
+		c.unquotedURI(n)
+	case *syntax.LegacyLet:
+		c.legacyLet(n)
+	case *syntax.Ident:
+		c.identifier(n)
+	case *syntax.Path:
+		c.searchPath(n)
 	}
 	return true
 }
@@ -196,7 +192,7 @@ func atomic(e syntax.Expr) bool {
 
 func (c *checker) paren(p *syntax.Paren) {
 	role := c.parens[p]
-	if role == parenRequired || role == parenAnywhere && !atomic(p.Inner) || !c.separated(p.Span()) {
+	if role == parenRequired || role != parenAtExpression && !atomic(p.Inner) || !c.separated(p.Span(), role == parenPrefixed) {
 		return
 	}
 	c.report(lint.CodeNixUselessParens, p.Span(), "these parentheses change nothing", c.offer("Remove the parentheses", lint.Safe, c.withoutParens(p)...))
@@ -299,21 +295,25 @@ func (c *checker) emptyInherit(i *syntax.Inherit) {
 	if len(i.Attrs) > 0 {
 		return
 	}
-	c.report(lint.CodeNixEmptyBinding, i.Span(), "this `inherit` binds nothing", c.offer("Remove the empty `inherit`", lint.Safe, c.statementRemoval(i.Span())))
+	c.report(lint.CodeNixEmptyInherit, i.Span(), "this `inherit` binds nothing", c.offer("Remove the empty `inherit`", lint.Safe, c.statementRemoval(i.Span())))
 }
 
 func (c *checker) lambda(l *syntax.Lambda) {
 	switch p := l.Param.(type) {
 	case *syntax.IdentParam:
 		c.unusedArgument(p)
+		c.etaReduction(l, p)
 	case *syntax.PatternParam:
 		c.pattern(l, p)
+		c.emptyPattern(l, p)
+		c.moduleShape(l, p)
+		c.redundantPatternBind(p)
 	}
 }
 
 func (c *checker) unusedArgument(p *syntax.IdentParam) {
 	d, bound := c.table.Binder(p.Name)
-	if !bound || d.Used() || deliberatelyUnused(d.Name) {
+	if !bound || d.Used() || underscored(d.Name) {
 		return
 	}
 	var fixes []lint.Fix
@@ -325,40 +325,52 @@ func (c *checker) unusedArgument(p *syntax.IdentParam) {
 
 func (c *checker) pattern(l *syntax.Lambda, p *syntax.PatternParam) {
 	c.duplicateFormals(p)
-	aliasRead := false
-	if p.Alias != nil {
-		aliasRead = c.alias(p)
+	defs := make([]*scope.Def, 0, len(p.Formals)+1)
+	for _, f := range p.Formals {
+		if d, bound := c.table.Binder(f.Name); bound && d.Binders[0] == syntax.Node(f.Name) {
+			defs = append(defs, d)
+		}
 	}
-	if aliasRead || l == c.outputs && !p.Ellipsis {
+	aliasAt := -1
+	if p.Alias != nil {
+		if d, bound := c.table.Binder(p.Alias); bound && d.Binders[0] == syntax.Node(p.Alias) {
+			aliasAt = len(defs)
+			defs = append(defs, d)
+		}
+	}
+	dead := c.deadInPattern(p, defs)
+	for _, d := range defs {
+		c.usedUnderscore(d)
+	}
+	if len(dead) == 0 {
+		return
+	}
+	if aliasAt >= 0 && dead[aliasAt] {
+		name := defs[aliasAt].Name
+		c.report(unusedCode(name, lint.CodeNixUnusedArgument), p.Alias.Span(), fmt.Sprintf("the function never reads its `@` name `%s`", name),
+			c.offer("Remove `"+name+"@`", lint.Safe, c.aliasRemoval(p)))
+	}
+	if l == c.outputs && !p.Ellipsis {
 		return
 	}
 	safety := lint.Review
-	if p.Ellipsis {
+	if p.Ellipsis && (aliasAt < 0 || dead[aliasAt]) {
 		safety = lint.Safe
 	}
 	for i, f := range p.Formals {
 		d, bound := c.table.Binder(f.Name)
-		if !bound || d.Binders[0] != syntax.Node(f.Name) || d.Used() || deliberatelyUnused(d.Name) {
+		if !bound || d.Binders[0] != syntax.Node(f.Name) {
 			continue
 		}
-		c.report(lint.CodeNixUnusedFormal, f.Name.Span(), fmt.Sprintf("the function never reads its argument `%s`", d.Name),
-			c.offer("Remove `"+d.Name+"` from the pattern", safety, c.formalRemoval(p, i)))
+		if at := slices.Index(defs, d); !dead[at] {
+			continue
+		}
+		var fixes []lint.Fix
+		if len(d.Uses()) == 0 {
+			fixes = c.offer("Remove `"+d.Name+"` from the pattern", safety, c.formalRemoval(p, i))
+		}
+		c.report(unusedCode(d.Name, lint.CodeNixUnusedFormal), f.Name.Span(), fmt.Sprintf("the function never reads its argument `%s`", d.Name), fixes)
 	}
-}
-
-func (c *checker) alias(p *syntax.PatternParam) bool {
-	d, bound := c.table.Binder(p.Alias)
-	if !bound {
-		return false
-	}
-	if d.Used() {
-		return true
-	}
-	if d.Binders[0] == syntax.Node(p.Alias) && !deliberatelyUnused(d.Name) {
-		c.report(lint.CodeNixUnusedArgument, p.Alias.Span(), fmt.Sprintf("the function never reads its `@` name `%s`", d.Name),
-			c.offer("Remove `"+d.Name+"@`", lint.Safe, c.aliasRemoval(p)))
-	}
-	return false
 }
 
 func (c *checker) duplicateFormals(p *syntax.PatternParam) {

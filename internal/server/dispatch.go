@@ -20,12 +20,14 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/editorconfig"
 	"github.com/stubbedev/shell-lsp/internal/hadolint"
 	"github.com/stubbedev/shell-lsp/internal/host"
+	"github.com/stubbedev/shell-lsp/internal/host/nix"
 	"github.com/stubbedev/shell-lsp/internal/hostnav"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/manpage"
 	"github.com/stubbedev/shell-lsp/internal/regularfile"
 	"github.com/stubbedev/shell-lsp/internal/shellcheckrc"
+	"github.com/stubbedev/shell-lsp/internal/statixconfig"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
@@ -133,6 +135,8 @@ type Server struct {
 	editorconfig *editorconfig.Resolver
 	shellcheckrc *shellcheckrc.Resolver
 	hadolint     *hadolint.Resolver
+	statix       *statixconfig.Resolver
+	flakeLocks   *nix.LockFiles
 	sem          chan struct{}
 	exiting      chan struct{}
 	wg           sync.WaitGroup
@@ -156,6 +160,8 @@ func New(conn *jsonrpc.Conn, version string, process Process) *Server {
 		editorconfig: editorconfig.NewResolver(regularfile.ReadConfig, time.Now, workspace.DiskRecheck),
 		shellcheckrc: newShellcheckrcResolver(shellcheckrc.Fallback(process.Home, process.ConfigHome)),
 		hadolint:     newHadolintResolver(hadolint.ConfigFallback(process.Home, process.ConfigHome)),
+		statix:       newStatixResolver(),
+		flakeLocks:   newFlakeLocks(),
 		pending:      newRegistry[chan *jsonrpc.Message](),
 		cancels:      newCancelRegistry(),
 		progress:     newCancelRegistry(),
@@ -196,6 +202,8 @@ func (s *Server) watchDisk() {
 	s.editorconfig.Watch(disk)
 	s.shellcheckrc.Watch(disk)
 	s.hadolint.Watch(disk)
+	s.statix.Watch(disk)
+	s.flakeLocks.Watch(disk)
 }
 
 func (s *Server) SetLogger(logger *slog.Logger) {

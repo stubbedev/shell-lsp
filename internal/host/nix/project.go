@@ -184,7 +184,7 @@ func Link(ctx stdcontext.Context, req Request, source Source) *Project {
 	}
 	p.closure(next)
 	if i, ok := p.byPath[req.Flake]; ok && req.Flake != "" {
-		p.flakeUnit, p.flakeDir = p.units[i], filepath.Dir(req.Flake)
+		p.flakeUnit, p.flakeDir = p.units[i], dirOf(req.Flake)
 	}
 	p.settle()
 	return p
@@ -228,7 +228,7 @@ func (p *Project) Fresh(source Source) bool {
 	if !p.lockRead {
 		return true
 	}
-	lock, err := source.Read(filepath.Join(p.flakeDir, lockFile))
+	lock, err := source.Read(joinedTo(p.flakeDir, LockFileName))
 	if err != nil {
 		return p.lockText == ""
 	}
@@ -325,28 +325,21 @@ func (p *Project) treeFiles(root string) []string {
 
 func keptModules(root string, listed []string) []string {
 	return slices.DeleteFunc(listed, func(file string) bool {
-		rel := strings.TrimPrefix(file, root)
+		rel := filepath.ToSlash(strings.TrimPrefix(file, root))
 		return !strings.HasSuffix(rel, nixExtension) || strings.Contains(rel, treeExcluded)
 	})
-}
-
-func within(dir, path string) string {
-	if filepath.IsAbs(path) {
-		return filepath.Clean(path)
-	}
-	return filepath.Join(dir, path)
 }
 
 func (p *Project) located(dir, path string) string {
 	if rest, home := strings.CutPrefix(path, "~/"); home && p.home != "" {
 		return filepath.Join(p.home, rest)
 	}
-	return within(dir, path)
+	return Within(dir, path)
 }
 
 func (p *Project) resolve(u *symbolTable, path *syntax.Path) string {
 	span := path.Span()
-	return p.located(filepath.Dir(p.paths[p.files[u]]), u.f.src[span.Start:span.End])
+	return p.located(dirOf(p.paths[p.files[u]]), u.f.src[span.Start:span.End])
 }
 
 func (p *Project) closure(level []wantedFile) {

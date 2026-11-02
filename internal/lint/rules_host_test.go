@@ -29,6 +29,36 @@ func TestHostCodeRanges(t *testing.T) {
 	}
 }
 
+func TestStatixLintsAreCheckedByUniqueCodes(t *testing.T) {
+	t.Parallel()
+
+	seen := map[Code]string{}
+	ids := map[int]string{}
+	for _, l := range StatixLints() {
+		if other, repeated := seen[l.Code]; repeated {
+			t.Errorf("%s and %s share %s", l.Name, other, l.Code)
+		}
+		if other, repeated := ids[l.ID]; repeated {
+			t.Errorf("%s and %s share W%02d", l.Name, other, l.ID)
+		}
+		seen[l.Code], ids[l.ID] = l.Name, l.Name
+		if _, known := catalog[l.Code]; !known || !l.Code.Nix() {
+			t.Errorf("%s maps to %s, which is no Nix check", l.Name, l.Code)
+		}
+		if !StatixCodes().Has(l.Code) {
+			t.Errorf("StatixCodes lacks %s", l.Code)
+		}
+	}
+	if len(seen) != 17 {
+		t.Errorf("%d statix lints are mapped, and statix list names 17", len(seen))
+	}
+	for _, code := range []Code{CodeNixUnusedLet, CodeNixUnusedArgument, CodeNixUnusedFormal, CodeNixUnusedUnderscore, CodeNixUsedUnderscore} {
+		if !DeadnixCodes().Has(code) {
+			t.Errorf("DeadnixCodes lacks %s", code)
+		}
+	}
+}
+
 func TestHostFinding(t *testing.T) {
 	t.Parallel()
 

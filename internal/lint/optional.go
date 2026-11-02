@@ -16,6 +16,8 @@ const (
 	optionalSetESuppressed
 	optionalUnassignedUppercase
 	optionalDeprecateWhich
+	optionalEmptyPattern
+	optionalEtaReduction
 	optionalGoogleCommentSections
 	optionalGoogleFileHeader
 	optionalGoogleFunctionComments
@@ -23,16 +25,22 @@ const (
 	optionalGoogleScriptLength
 	optionalGoogleShebang
 	optionalGoogleTodo
+	optionalMissingNixpkgsFollows
 	optionalNoIgnorePragmas
+	optionalPkgsLib
 	optionalQuoteSafeVariables
+	optionalRepeatedKeys
 	optionalDoubleBrackets
 	optionalDoubleEquals
 	optionalRequireHealthcheck
 	optionalLocalVariables
 	optionalTestGrouping
 	optionalVariableBraces
+	optionalStoreCopy
+	optionalTopLevelWith
 	optionalUnescapedAntiquotations
 	optionalUnusedDirectives
+	optionalUsedUnderscore
 	optionalUselessCat
 	optionalCheckCount
 )
@@ -76,6 +84,14 @@ var optionalSpecs = [optionalCheckCount]optionalSpec{
 	optionalUnescapedAntiquotations: {name: "unescaped-antiquotations"},
 	optionalUnusedDirectives:        {name: "unused-directives"},
 	optionalUselessCat:              {name: "useless-use-of-cat"},
+	optionalEtaReduction:            {name: "eta-reduction"},
+	optionalEmptyPattern:            {name: "empty-pattern"},
+	optionalRepeatedKeys:            {name: "repeated-keys"},
+	optionalUsedUnderscore:          {name: "used-underscore-bindings"},
+	optionalTopLevelWith:            {name: "top-level-with"},
+	optionalStoreCopy:               {name: "store-copied-paths"},
+	optionalPkgsLib:                 {name: "pkgs-lib"},
+	optionalMissingNixpkgsFollows:   {name: "missing-nixpkgs-follows"},
 }
 
 func (c optionalCheck) String() string { return optionalSpecs[c].name }
@@ -89,7 +105,7 @@ func optionalNamed(name string) (optionalCheck, bool) {
 	return notOptional, false
 }
 
-type optionalSet uint32
+type optionalSet uint64
 
 const allOptional optionalSet = 1<<optionalCheckCount - 1
 

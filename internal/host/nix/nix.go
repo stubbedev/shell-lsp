@@ -125,7 +125,11 @@ func (f *file) project(b *projection.Builder, group []shellString, n int) {
 		opener = phaseDirective + first.directive + name + "() {\n" + strictMode + prelude
 		end = "\n:\n}\n" + name + "\n"
 	}
-	b.Script()
+	if first.directive == sourcedDirective {
+		b.SourcedScript()
+	} else {
+		b.Script()
+	}
 	last := 0
 	for _, s := range group {
 		last = f.body(b, s, opener, shellBody)

@@ -1,6 +1,10 @@
 package lint
 
-import "github.com/stubbedev/shell-lsp/internal/parser"
+import (
+	"slices"
+
+	"github.com/stubbedev/shell-lsp/internal/parser"
+)
 
 const (
 	justBase   = nativeBase + 5000
@@ -99,6 +103,32 @@ const (
 	CodeNixOrIdentifier
 	CodeNixEmptyBinding
 	CodeNixUnescapedAntiquotation
+	CodeNixBoolComparison
+	CodeNixManualInheritFrom
+	CodeNixLegacyLet
+	CodeNixCollapsibleLet
+	CodeNixEtaReduction
+	CodeNixEmptyPattern
+	CodeNixRedundantPatternBind
+	CodeNixUnquotedURI
+	CodeNixDeprecatedToPath
+	CodeNixBoolSimplification
+	CodeNixUselessHasAttr
+	CodeNixRepeatedKeys
+	CodeNixEmptyListConcat
+	CodeNixEmptyInherit
+	CodeNixUnusedUnderscore
+	CodeNixUsedUnderscore
+	CodeNixImpureInFlake
+	CodeNixUnpinnedFetch
+	CodeNixRecOverride
+	CodeNixModuleRecursion
+	CodeNixTopLevelWith
+	CodeNixStoreCopy
+	CodeNixPkgsLib
+	CodeNixUnusedFlakeInput
+	CodeNixFollowsMissingInput
+	CodeNixMissingNixpkgsFollows
 )
 
 func (c Code) Host() bool { return c > justBase && c < hostEnd }
@@ -196,7 +226,74 @@ var hostFamily = family{
 		CodeNixOrIdentifier:           {severity: SeverityWarning},
 		CodeNixEmptyBinding:           {severity: SeverityInfo, tag: TagUnnecessary},
 		CodeNixUnescapedAntiquotation: {severity: SeverityInfo, optional: optionalUnescapedAntiquotations},
+
+		CodeNixBoolComparison:        {severity: SeverityInfo},
+		CodeNixManualInheritFrom:     {severity: SeverityInfo},
+		CodeNixLegacyLet:             {severity: SeverityWarning, tag: TagDeprecated},
+		CodeNixCollapsibleLet:        {severity: SeverityInfo},
+		CodeNixEtaReduction:          {severity: SeverityInfo, optional: optionalEtaReduction},
+		CodeNixEmptyPattern:          {severity: SeverityInfo, optional: optionalEmptyPattern},
+		CodeNixRedundantPatternBind:  {severity: SeverityInfo, tag: TagUnnecessary},
+		CodeNixUnquotedURI:           {severity: SeverityInfo, tag: TagDeprecated},
+		CodeNixDeprecatedToPath:      {severity: SeverityWarning, tag: TagDeprecated},
+		CodeNixBoolSimplification:    {severity: SeverityInfo},
+		CodeNixUselessHasAttr:        {severity: SeverityInfo},
+		CodeNixRepeatedKeys:          {severity: SeverityInfo, optional: optionalRepeatedKeys},
+		CodeNixEmptyListConcat:       {severity: SeverityInfo, tag: TagUnnecessary},
+		CodeNixEmptyInherit:          {severity: SeverityInfo, tag: TagUnnecessary},
+		CodeNixUnusedUnderscore:      {severity: SeverityInfo, tag: TagUnnecessary},
+		CodeNixUsedUnderscore:        {severity: SeverityInfo, optional: optionalUsedUnderscore},
+		CodeNixImpureInFlake:         {severity: SeverityWarning},
+		CodeNixUnpinnedFetch:         {severity: SeverityWarning},
+		CodeNixRecOverride:           {severity: SeverityWarning},
+		CodeNixModuleRecursion:       {severity: SeverityWarning},
+		CodeNixTopLevelWith:          {severity: SeverityInfo, optional: optionalTopLevelWith},
+		CodeNixStoreCopy:             {severity: SeverityInfo, optional: optionalStoreCopy},
+		CodeNixPkgsLib:               {severity: SeverityInfo, optional: optionalPkgsLib},
+		CodeNixUnusedFlakeInput:      {severity: SeverityInfo, tag: TagUnnecessary},
+		CodeNixFollowsMissingInput:   {severity: SeverityWarning},
+		CodeNixMissingNixpkgsFollows: {severity: SeverityInfo, optional: optionalMissingNixpkgsFollows},
 	},
+}
+
+type StatixLint struct {
+	Name string
+	ID   int
+	Code Code
+}
+
+var statixLints = []StatixLint{
+	{"bool_comparison", 1, CodeNixBoolComparison},
+	{"empty_let_in", 2, CodeNixEmptyBinding},
+	{"manual_inherit", 3, CodeNixSpelledInherit},
+	{"manual_inherit_from", 4, CodeNixManualInheritFrom},
+	{"legacy_let_syntax", 5, CodeNixLegacyLet},
+	{"collapsible_let_in", 6, CodeNixCollapsibleLet},
+	{"eta_reduction", 7, CodeNixEtaReduction},
+	{"useless_parens", 8, CodeNixUselessParens},
+	{"empty_pattern", 10, CodeNixEmptyPattern},
+	{"redundant_pattern_bind", 11, CodeNixRedundantPatternBind},
+	{"unquoted_uri", 12, CodeNixUnquotedURI},
+	{"empty_inherit", 14, CodeNixEmptyInherit},
+	{"deprecated_to_path", 17, CodeNixDeprecatedToPath},
+	{"bool_simplification", 18, CodeNixBoolSimplification},
+	{"useless_has_attr", 19, CodeNixUselessHasAttr},
+	{"repeated_keys", 20, CodeNixRepeatedKeys},
+	{"empty_list_concat", 23, CodeNixEmptyListConcat},
+}
+
+func StatixLints() []StatixLint { return slices.Clone(statixLints) }
+
+func StatixCodes() CodeSet {
+	codes := make([]Code, len(statixLints))
+	for i, l := range statixLints {
+		codes[i] = l.Code
+	}
+	return CodesOf(codes...)
+}
+
+func DeadnixCodes() CodeSet {
+	return CodesOf(CodeNixUnusedLet, CodeNixUnusedArgument, CodeNixUnusedFormal, CodeNixUnusedUnderscore, CodeNixUsedUnderscore)
 }
 
 func HostFinding(code Code, span parser.Span, message string) Finding {

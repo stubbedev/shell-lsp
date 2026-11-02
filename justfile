@@ -93,6 +93,14 @@ corpus-baseline: corpus-fetch
     go run ./cmd/lintcheck shells -update
     go run ./cmd/lintcheck hosts -update
 
+# Compare the Nix checks with statix and deadnix; fails when corpus/nix-lint.md no longer matches.
+corpus-nix-lint:
+    go run ./cmd/lintcheck nixlint
+
+# Rewrite corpus/nix-lint.md.
+corpus-nix-lint-baseline:
+    go run ./cmd/lintcheck nixlint -update
+
 nix_parity_reports := cache_directory() / "shell-lsp" / "nixparity"
 
 # Compare shell-lsp with a Nix language server (nixd or nil) over the two fixtures of corpus/nix; reports land in the user cache directory.

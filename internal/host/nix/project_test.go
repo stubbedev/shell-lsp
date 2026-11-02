@@ -110,9 +110,9 @@ func TestLockedInputsLeadIntoTheStore(t *testing.T) {
 	flake := filepath.Join("/w", FlakeFile)
 	text := "{\n  inputs.nixpkgs.url = \"github:NixOS/nixpkgs\";\n  inputs.unlocked.url = \"github:example/none\";\n  outputs = _: { };\n}\n"
 	self := Analyze(text).Index
-	source := memorySource{filepath.Join("/w", lockFile): lockedInputs}
+	source := memorySource{filepath.Join("/w", LockFileName): lockedInputs}
 	p := Link(t.Context(), Request{Self: self, SelfPath: flake, Flake: flake}, source)
-	want := []string{filepath.Join(lockedStore, FlakeFile), filepath.Join(lockedStore, DirectoryEntry)}
+	want := []string{lockedStore + "/" + FlakeFile, lockedStore + "/" + DirectoryEntry}
 	if got := p.Sources(0, symbolNamed(t, self, "nixpkgs")); !slices.Equal(got, want) {
 		t.Errorf("sources of a locked input = %q, want %q", got, want)
 	}
@@ -201,10 +201,8 @@ func TestDependencyFilesDoNotFollowTheirOwnImports(t *testing.T) {
 func TestFreshNoticesAnAbsentFileAppearing(t *testing.T) {
 	t.Parallel()
 
-	const (
-		flakePath = "/w/flake.nix"
-		later     = "/w/later.nix"
-	)
+	const flakePath = "/w/flake.nix"
+	later := filepath.Join("/w", "later.nix")
 	files := memorySource{flakePath: "{ outputs = { self }: { value = import ./later.nix; }; }\n"}
 	src := onceSource{memorySource: files, seen: map[string]*model.Index{}}
 	p := Link(stdcontext.Background(), Request{Flake: flakePath}, src)
@@ -226,7 +224,7 @@ func TestTheProjectStopsAtItsSizeBudget(t *testing.T) {
 	var imports strings.Builder
 	body := "{ pad = \"" + strings.Repeat("x", 1<<20) + "\"; }\n"
 	for i := range 2 * maxProjectBytes / (1 << 20) {
-		name := "/w/f" + strconv.Itoa(i) + ".nix"
+		name := filepath.Join("/w", "f"+strconv.Itoa(i)+".nix")
 		src[name] = body
 		imports.WriteString(" ./f" + strconv.Itoa(i) + ".nix")
 	}

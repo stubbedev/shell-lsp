@@ -11,10 +11,12 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/hadolint"
 	"github.com/stubbedev/shell-lsp/internal/host"
+	"github.com/stubbedev/shell-lsp/internal/host/nix"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/navigation"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/shellcheckrc"
+	"github.com/stubbedev/shell-lsp/internal/statixconfig"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
@@ -101,6 +103,16 @@ func (s *Server) handleDidChangeWatchedFiles(ctx context.Context, watched lsp.Di
 		}
 		if hadolint.IsConfigName(path) {
 			s.hadolint.Invalidate(path)
+			projectChanged = true
+			continue
+		}
+		if filepath.Base(path) == statixconfig.FileName {
+			s.statix.Invalidate(path)
+			projectChanged = true
+			continue
+		}
+		if filepath.Base(path) == nix.LockFileName {
+			s.flakeLocks.Invalidate(path)
 			projectChanged = true
 			continue
 		}

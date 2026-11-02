@@ -43,6 +43,15 @@ func OptionalNixFindings(h Host, settings filelint.Settings) []lint.Finding {
 	if checksNixOptional(settings, nix.UnescapedAntiquotationsCheck()) {
 		out = append(out, nix.UnescapedAntiquotationFindings(text)...)
 	}
+	var lints []lint.Code
+	for _, code := range nix.OptionalLintCodes() {
+		if info, known := lint.Describe(code); known && checksNixOptional(settings, info.Optional) {
+			lints = append(lints, code)
+		}
+	}
+	if len(lints) > 0 {
+		out = append(out, nix.OptionalLintFindings(text, lint.CodesOf(lints...))...)
+	}
 	return out
 }
 
@@ -70,11 +79,7 @@ func (g *Group) SourceLinks() []assist.Link {
 }
 
 func (g *Group) nixPath(p nix.PathLiteral) string {
-	path := filepath.FromSlash(p.Path)
-	if filepath.IsAbs(path) {
-		return filepath.Clean(path)
-	}
-	return filepath.Join(filepath.Dir(g.Self.Path), path)
+	return nix.Within(filepath.Dir(g.Self.Path), p.Path)
 }
 
 func (g *Group) nixFile(p nix.PathLiteral) (string, bool) {
@@ -97,4 +102,16 @@ func (g *Group) nixDirectoryEntry(p nix.PathLiteral) (string, bool) {
 	}
 	entry := filepath.Join(path, nix.DirectoryEntry)
 	return entry, g.exists(entry)
+}
+
+func FlakeLockFindings(h Host, locks *nix.LockFiles, settings filelint.Settings) ([]lint.Finding, error) {
+	if h.Language() != host.Nix {
+		return nil, nil
+	}
+	file := h.File()
+	var enabled lint.CodeSet
+	if info, known := lint.Describe(lint.CodeNixMissingNixpkgsFollows); known && checksNixOptional(settings, info.Optional) {
+		enabled = lint.CodesOf(lint.CodeNixMissingNixpkgsFollows)
+	}
+	return locks.FindingsFor(file.Path, file.Doc.Source().Text(), enabled)
 }

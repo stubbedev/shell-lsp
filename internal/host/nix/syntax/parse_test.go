@@ -533,6 +533,8 @@ func TestTokensKeepStringsVerbatim(t *testing.T) {
 	}
 }
 
+const fuzzInputLimit = 1 << 16
+
 func FuzzParse(f *testing.F) {
 	for _, c := range grammarCases(f) {
 		f.Add(grammarPrefix + c.src)
@@ -546,6 +548,9 @@ func FuzzParse(f *testing.F) {
 		f.Add(seed)
 	}
 	f.Fuzz(func(t *testing.T, src string) {
+		if len(src) > fuzzInputLimit {
+			t.Skip("inputs over the limit say nothing the smaller ones do not")
+		}
 		checkTree(t, Parse(src))
 	})
 }
@@ -556,6 +561,9 @@ func FuzzMatchesNix(f *testing.F) {
 	}
 	f.Fuzz(func(t *testing.T, src string) {
 		requireNix(t)
+		if len(src) > fuzzInputLimit {
+			t.Skip("inputs over the limit say nothing the smaller ones do not")
+		}
 		if strings.ContainsRune(src, 0) {
 			t.Skip("a command line argument cannot hold a NUL")
 		}

@@ -6,7 +6,7 @@ Hadolint, whose check codes, pragmas and configuration file it stays
 compatible with for Dockerfiles, and bash-language-server under the MIT
 licence. To keep every line of shell-lsp
 its own, these projects are reimplemented from what they do, never from how
-they do it. This file states what may and may not inform the code, the tests
+they do it, with the one narrower exception for statix below. This file states what may and may not inform the code, the tests
 and the documentation. It applies equally to people and to the AI agents that
 do most of the work (see [How it was built](README.md#how-it-was-built)).
 
@@ -15,8 +15,26 @@ do most of the work (see [How it was built](README.md#how-it-was-built)).
 - [ShellCheck](https://github.com/koalaman/shellcheck)
 - [Hadolint](https://github.com/hadolint/hadolint)
 - [bash-language-server](https://github.com/bash-lsp/bash-language-server)
-- Any other shell linter or language server, whatever its licence, when its
-  behaviour is compared with ours.
+- [deadnix](https://github.com/astro/deadnix) (GPL-3.0-only): black box only.
+  It is run and its findings recorded, and its feature list is used. Its source
+  is never read and nothing is copied.
+- [nixfmt](https://github.com/NixOS/nixfmt) (MPL-2.0): black box only. Its output
+  is the reference for the Nix formatter.
+- [alejandra](https://github.com/kamadorueda/alejandra) (Unlicense): black box
+  only, should it be compared with. Nothing here derives from it.
+- [nixd](https://github.com/nix-community/nixd) (LGPL-3.0-or-later) and
+  [nil](https://github.com/oxalica/nil) (Apache-2.0 or MIT): black box only, as
+  reference servers.
+- Any other shell or Nix linter, formatter or language server, whatever its
+  licence, when its behaviour is compared with ours.
+
+[statix](https://github.com/molybdenumsoftware/statix) (MIT) is treated more narrowly
+than the rest. Its licence lets us learn from its lint names, documented behaviour,
+`statix explain` text and README, as well as by running it, and the names and
+numbers of its lints are used for compatibility. Its source was not used: the checks
+are our own Go on our own parser and scope tables, since it is Rust on a different
+tree, and every message is our own wording. Anything substantial ever reused
+from it must keep its MIT notice.
 
 The parser and formatter are not covered: they are a fork of
 [mvdan.cc/sh](https://github.com/mvdan/sh), reused under its BSD licence in

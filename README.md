@@ -978,6 +978,9 @@ when a request needs another file, and only files that changed are parsed again.
 
 Beyond that, Nix files get these:
 
+- The lints of statix and the findings of deadnix, as `SL8xxx` checks with fixes, a
+  nearest `statix.toml` and `# deadnix: skip` comments honoured, and further checks
+  for Nix pitfalls; see [the check list](docs/rules.md#statix-and-deadnix-compatibility).
 - Inlay hints name the parameter of a positional argument and the file a directory
   path opens, links open paths and web addresses, and call hierarchy follows
   functions across files.

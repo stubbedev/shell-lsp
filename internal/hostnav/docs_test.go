@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stubbedev/shell-lsp/docs"
 	"github.com/stubbedev/shell-lsp/internal/host/nix"
@@ -57,6 +58,16 @@ func docLanguageOf(code lint.Code) docLanguage {
 	return docLanguage{fence: "dockerfile", file: "Dockerfile", marks: precedingMarks}
 }
 
+var documentedLock = nix.NewLockFiles(func(string) ([]byte, error) {
+	return []byte(`{"root": "root", "version": 7, "nodes": {
+		"root": {"inputs": {"a": "a", "b": "b", "nixpkgs": "nixpkgs"}},
+		"a": {"inputs": {"nixpkgs": "nixpkgs_2"}},
+		"b": {},
+		"nixpkgs": {},
+		"nixpkgs_2": {}
+	}}`), nil
+}, time.Now, time.Hour)
+
 func TestRulesDocHostExamplesReportTheirCodes(t *testing.T) {
 	t.Parallel()
 
@@ -79,6 +90,14 @@ func TestRulesDocHostExamplesReportTheirCodes(t *testing.T) {
 			findings := findingsAlone(t, language.file)(example)
 			if code == lint.CodeNixUnescapedAntiquotation {
 				findings = append(findings, nix.UnescapedAntiquotationFindings(example)...)
+			}
+			if code.Nix() {
+				findings = append(findings, nix.OptionalLintFindings(example, lint.CodesOf(nix.OptionalLintCodes()...))...)
+				locked, err := documentedLock.FindingsFor("/w/flake.nix", example, lint.CodesOf(lint.CodeNixMissingNixpkgsFollows))
+				if err != nil {
+					t.Fatal(err)
+				}
+				findings = append(findings, locked...)
 			}
 			for _, f := range findings {
 				line := strings.Count(example[:f.Span.Start], "\n") + 1

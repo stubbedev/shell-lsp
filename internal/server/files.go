@@ -12,12 +12,14 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/editorconfig"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/hadolint"
+	"github.com/stubbedev/shell-lsp/internal/host/nix"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/navigation"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/platform"
 	"github.com/stubbedev/shell-lsp/internal/shellcheckrc"
+	"github.com/stubbedev/shell-lsp/internal/statixconfig"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
@@ -86,7 +88,7 @@ func (s *Server) registerWatchers(ctx context.Context) {
 		return
 	}
 	globs := append(workspace.WatchGlobs(), "**/"+editorconfig.FileName)
-	for _, name := range slices.Concat(shellcheckrc.Names, hadolint.ConfigNames) {
+	for _, name := range slices.Concat(shellcheckrc.Names, hadolint.ConfigNames, []string{statixconfig.FileName, nix.LockFileName}) {
 		globs = append(globs, "**/"+name)
 	}
 	watchers := make([]fileWatcher, len(globs))

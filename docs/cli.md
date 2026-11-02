@@ -72,7 +72,7 @@ long options may be abbreviated while they stay unambiguous (`--sev=error`).
 | 1 | Findings were reported |
 | 2 | A file could not be read; the others were still checked |
 | 3 | The command line is malformed, such as an unknown option or no files |
-| 4 | An option value, a `.shellcheckrc` or a `.hadolint.yaml` is invalid |
+| 4 | An option value, a `.shellcheckrc`, a `.hadolint.yaml` or a `statix.toml` is invalid |
 
 ### .shellcheckrc
 
@@ -105,6 +105,8 @@ SC1134 in every script.
 A `.shellcheckrc` has no profile setting, so the same file keeps working with
 ShellCheck; choose a profile with `--profile` or the editor's
 `lint.profile` setting instead.
+Nix files also honour the nearest `statix.toml`; see [rules.md](rules.md#statix-and-deadnix-compatibility).
+
 
 ### Output formats
 

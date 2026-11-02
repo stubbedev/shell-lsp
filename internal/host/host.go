@@ -187,6 +187,10 @@ func find(match func(definition) bool) (Language, bool) {
 	return 0, false
 }
 
+func IsNixPath(path string) bool {
+	return slices.Contains(definitions[Nix].extensions, filepath.Ext(path))
+}
+
 func Of(uri, languageID string) (Language, bool) {
 	if l, ok := FromName(uri); ok {
 		return l, true

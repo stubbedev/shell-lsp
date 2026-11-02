@@ -5,12 +5,13 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"path"
 	"path/filepath"
 	"strings"
 )
 
 const (
-	lockFile        = "flake.lock"
+	LockFileName    = "flake.lock"
 	storeDirectory  = "/nix/store"
 	lockedName      = "source"
 	narHashPrefix   = "sha256-"
@@ -49,12 +50,12 @@ func (l flakeLock) nodeOf(reference json.RawMessage, depth int) (lockNode, bool)
 		node, known := l.Nodes[direct]
 		return node, known
 	}
-	var path []string
-	if json.Unmarshal(reference, &path) != nil {
+	var route []string
+	if json.Unmarshal(reference, &route) != nil {
 		return lockNode{}, false
 	}
 	at := l.Nodes[l.Root]
-	for _, name := range path {
+	for _, name := range route {
 		next, listed := at.Inputs[name]
 		if !listed {
 			return lockNode{}, false
@@ -81,7 +82,7 @@ func (l flakeLock) sourceOf(input string) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	return filepath.Join(store, node.Locked.Dir), true
+	return path.Join(store, node.Locked.Dir), true
 }
 
 func storePath(narHash string) (string, bool) {
@@ -117,4 +118,32 @@ func storeBase32(hash [storeHashLength]byte) string {
 		out.WriteByte(storeAlphabet[v&31])
 	}
 	return out.String()
+}
+
+func dirOf(file string) string {
+	if InStore(file) {
+		return path.Dir(file)
+	}
+	return filepath.Dir(file)
+}
+
+func joinedTo(dir, rest string) string {
+	if InStore(dir) {
+		return path.Join(dir, rest)
+	}
+	return filepath.Join(dir, rest)
+}
+
+func absolute(file string) bool {
+	return filepath.IsAbs(file) || strings.HasPrefix(filepath.ToSlash(file), "/")
+}
+
+func Within(dir, file string) string {
+	switch {
+	case InStore(file):
+		return path.Clean(file)
+	case absolute(file):
+		return filepath.Clean(file)
+	}
+	return joinedTo(dir, file)
 }

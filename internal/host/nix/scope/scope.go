@@ -14,7 +14,7 @@ const (
 	maxResolverChunk = 256
 	CurPos           = "__curPos"
 	overrides        = "__overrides"
-	legacyBody       = "body"
+	LegacyBody       = "body"
 )
 
 var evaluatorReads = []string{"__sub", "__mul", "__div", "__lessThan", "__findFile", "__nixPath"}

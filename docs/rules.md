@@ -1559,7 +1559,8 @@ file, after code it covers that line up to the comment, and on a line of its own
 it covers the binding, formal, list element or other expression that starts next.
 With nothing to cover, as in front of `in` or a closing bracket, it does nothing.
 It takes codes, ranges such as `SL8000-SL8099` and `all`. SL8001 cannot be
-disabled this way.
+disabled this way. See [statix and deadnix compatibility](#statix-and-deadnix-compatibility)
+for `statix.toml`, `# deadnix: skip` and how the options of those tools map here.
 
 ## SL8001
 
@@ -1610,12 +1611,13 @@ pattern counts too. Nix refuses the file. The quick fix removes a repeated forma
 ## SL8005
 
 **A `let` binding is never read.** Nix is lazy, so an unread binding is never
-evaluated, and removing it changes nothing. A binding read only from its own value
-counts as unread. Names starting with `_` are left alone, and so are `__sub`,
-`__mul`, `__div`, `__lessThan`, `__findFile` and `__nixPath`, which Nix reads
-itself when it evaluates `-`, `*`, `/`, comparisons and `<path>` lookups. The fix
-removes the binding, with every line of a dotted one, or the one name from an
-`inherit`.
+evaluated, and removing it changes nothing. A binding read only by itself, or only by
+other bindings of the same `let` that nothing reads, counts as unread, so `a` and `b`
+are both reported in `let a = 1; b = a; in 2`. Names starting with `_` are SL8029.
+`__sub`, `__mul`, `__div`, `__lessThan`, `__findFile` and `__nixPath` are left alone,
+since Nix reads them itself when it evaluates `-`, `*`, `/`, comparisons and `<path>`
+lookups. The fix removes the binding, with every line of a dotted one, or the one name
+from an `inherit`.
 
 ```nix
 let unused = 1; in 2    # SL8005
@@ -1635,13 +1637,14 @@ x: 1    # SL8006
 
 ## SL8007
 
-**A function pattern names an argument it never reads.** When the function has an
-`@` name that it reads, the formals are not reported, because the set may be passed
-on whole and they state what it must hold. With `...` the fix-all action removes
-the formal, since callers can still pass it. Without `...` removing it makes those
-callers fail, so the quick fix is offered but only on request. The `outputs` of a
-flake is exempt without `...`, since Nix calls it with every input whether it reads
-them or not.
+**A function pattern names an argument it never reads.** A formal read only by the
+default of another unread formal counts as unread. With `...` and no `@` name in use
+the fix-all action removes the formal, since callers can still pass it. Without `...`
+removing it makes those callers fail, and with an `@` name in use the formal may state
+what the set passed on must hold, so there the quick fix is offered only on request.
+Names starting with `_` are SL8029. The `outputs` of a flake is exempt without `...`,
+since Nix calls it with every input whether it reads them or not; SL8038 reports the
+inputs nothing reads.
 
 ```nix
 { a, b, ... }: a    # SL8007
@@ -1652,8 +1655,8 @@ them or not.
 **Parentheses change nothing.** They enclose a single value, or a whole expression
 where any expression may stand: a binding's value, a function body, a condition.
 They are not reported where taking them away would join tokens, as in `a/(b)` or
-`x:(y)`, where `(a.b).c or d` would look at a different attribute path, or around
-the source of `inherit (x) y;`, where they are required. Parentheses that only
+`x:(y)`, where `(a.b).c or d` would look at a different attribute path, around a path or
+a number before `.`, or around the source of `inherit (x) y;`, where they are required. Parentheses that only
 make an operator's precedence plain are left alone.
 
 ```nix
@@ -1704,8 +1707,7 @@ let or = 1; f = x: x; in f or    # SL8012
 
 ## SL8013
 
-**A `let` or an `inherit` binds nothing.** `let in x` is `x`, and an `inherit` that
-names no attribute has no effect at all, not even evaluating its source.
+**A `let` binds nothing.** `let in x` is `x`. This is statix's `empty_let_in`.
 
 ```nix
 let in 1    # SL8013
@@ -1732,3 +1734,387 @@ cfg: writeShellScript "x" ''
   cat ${cfg.dir}    # SL8014
 ''
 ```
+
+## SL8015
+
+**Two Boolean literals are compared.** `true == false` is known without
+evaluating anything. The fix writes the answer. A name `true` bound in the file is
+not the literal, and is left alone. `x == true` is not reported, as for SL8009.
+This is statix's `bool_comparison`.
+
+```nix
+true == false    # SL8015
+```
+
+## SL8016
+
+**`a = b.a;` is `inherit (b) a;`.** The binding's name and the one attribute selected
+are the same, so the `inherit` form says it once. Both forms read `b` from the same
+scope, in a `let` and a `rec` as well, so the fix changes nothing. A longer path such
+as `a = b.c.a;`, or a selection with `or`, is left alone. This is statix's
+`manual_inherit_from`.
+
+```nix
+b: { a = b.a; }    # SL8016
+```
+
+## SL8017
+
+**`let { ... }` is an undocumented form.** Nix reads it as a `rec` set with `.body`
+selected, and that is what the fix writes. This is statix's `legacy_let_syntax`.
+
+```nix
+let { body = 1; }    # SL8017
+```
+
+## SL8018
+
+**A `let` is the whole body of another.** The two can be one block. It is not
+reported when they cannot: when both bind a name, when the outer bindings read a
+name the inner block would then capture, or when the inner block binds a name Nix
+reads itself, such as `__sub`. This is statix's `collapsible_let_in`.
+
+```nix
+let a = 1; in let b = 2; in a + b    # SL8018
+```
+
+## SL8019
+
+**A function only passes its argument on.** `x: f x` is `f`. This check is optional
+and off by default, since the long form is often clearer; turn it on with
+`enable=eta-reduction`. The fix is offered on request only: `f` may be a value that
+is not yet a function, and `f` is evaluated earlier once the wrapper is gone, which
+can turn laziness into a recursion when two bindings refer to each other. A binding
+whose own value it is, as in `f = x: f x`, is never reported, since `f = f` recurses
+forever. This is statix's `eta_reduction`.
+
+```nix
+f: x: f x    # SL8019
+```
+
+## SL8020
+
+**A pattern names nothing.** `{ ... }: 1` and `{ }: 1` read no attribute, and `_`
+says so. This check is optional and off by default, since `{ ... }:` is the usual
+shape of a NixOS module; turn it on with `enable=empty-pattern`. A function whose body
+is a set that sets `imports` is left alone, as statix does. The fix is offered on
+request only: `_:` also accepts arguments that are not sets. This is statix's
+`empty_pattern`.
+
+```nix
+{ ... }: 1    # SL8020
+```
+
+## SL8021
+
+**`x@{ ... }` captures nothing that `x` does not.** The fix is offered on request only,
+since `{ ... }` also makes the function refuse an argument that is not a set. This is
+statix's `redundant_pattern_bind`.
+
+```nix
+x@{ ... }: x    # SL8021
+```
+
+## SL8022
+
+**A URI is not quoted.** A bare URI is a string spelled in a form that RFC 45
+deprecates, and the fix quotes it. This is statix's `unquoted_uri`.
+
+```nix
+{ a = https://example.org; }    # SL8022
+```
+
+## SL8023
+
+**`builtins.toPath` is deprecated.** To make a path from a string, add it to one:
+`/. + s`. To keep a string, use it as it is. There is no automatic fix, because which
+of those is meant depends on the code. A `toPath` bound in the file, or reached through
+a `with` that is not `builtins`, is left alone. This is statix's `deprecated_to_path`.
+
+```nix
+builtins.toPath "/x"    # SL8023
+```
+
+## SL8024
+
+**`!(a == b)` is `a != b`.** The fix keeps the parentheses where the operand of a
+tighter operator needs them, as in `(a != b) == c`. This is statix's
+`bool_simplification`.
+
+```nix
+!(1 == 2)    # SL8024
+```
+
+## SL8025
+
+**`if x ? a then x.a else y` is `x.a or y`.** Both yield `y` when `x` lacks `a`,
+and when `x` is not a set. The fix parenthesizes the default unless it is a single
+value. This is statix's `useless_has_attr`.
+
+```nix
+x: if x ? a then x.a else 1    # SL8025
+```
+
+## SL8026
+
+**Three or more bindings in a set start with the same key.** One nested set could
+hold them. This is a matter of style and has no automatic fix, so the check is
+optional and off by default; turn it on with `enable=repeated-keys`. It looks at
+sets that are not `rec`, and is not reported when the first binding of the key is
+already a whole `a = { }`. This is statix's `repeated_keys`.
+
+```nix
+{ a.b = 1; a.c = 2; a.d = 3; }    # SL8026
+```
+
+## SL8027
+
+**A list is joined with an empty list.** `[ ] ++ x` is `x`. This is statix's
+`empty_list_concat`.
+
+```nix
+x: [ ] ++ x    # SL8027
+```
+
+## SL8028
+
+**An `inherit` names no attribute.** It has no effect at all, not even evaluating its
+source. This is statix's `empty_inherit`, which reports only the form without a source.
+
+```nix
+{ inherit; }    # SL8028
+```
+
+## SL8029
+
+**A `let` binding or a pattern name starting with `_` is never read.** The `_` says the
+name goes unread, but in a `let` the binding itself can go, and a name in a pattern is
+part of what the function asks for. This matches deadnix. To leave these names alone,
+as `deadnix --no-underscore` does, exclude SL8029. A plain argument such as `_x: 1` is
+how to say an argument goes unread, and is never reported.
+
+```nix
+let _unused = 1; in 2    # SL8029
+```
+
+## SL8030
+
+**A name starting with `_` is read.** The `_` says it goes unread, so one of the two
+is wrong. This check is optional and off by default, as `deadnix --warn-used-underscore`
+is; turn it on with `enable=used-underscore-bindings`. Plain arguments and `rec`
+attributes are left alone, as deadnix leaves them.
+
+```nix
+let _a = 1; in _a    # SL8030
+```
+
+## SL8031
+
+**A flake reads something a pure evaluation does not have.** `<nixpkgs>`,
+`builtins.currentSystem` and `builtins.currentTime` fail, and `builtins.getEnv` and
+`builtins.nixPath` silently yield nothing, unless the flake is evaluated with
+`--impure`. Only `flake.nix`-shaped files are looked at: a set of `description`,
+`inputs`, `outputs` and `nixConfig`, whose `outputs` is a function.
+
+```nix
+{ outputs = { self }: { system = builtins.currentSystem; }; }    # SL8031
+```
+
+## SL8032
+
+**A fetcher has nothing that pins what it fetches.** `builtins.fetchTarball`,
+`builtins.fetchurl` and `builtins.fetchGit` given only a URL fetch whatever is there
+today and fail in a pure evaluation. Add `sha256`, or for `fetchGit` a `rev`. Only an
+argument written out in place is judged.
+
+```nix
+builtins.fetchTarball "https://example.org/a.tar.gz"    # SL8032
+```
+
+## SL8033
+
+**`//` overrides an attribute that a `rec` set reads itself.** In
+`rec { a = 1; b = a; } // { a = 2; }`, `b` is still `1`, because `rec` resolved it
+before `//` ran. Merge the sets, or use a fixed point such as `lib.fix`.
+
+```nix
+(rec { a = 1; b = a; } // {
+  a = 2;    # SL8033
+}).b
+```
+
+## SL8034
+
+**A NixOS module chooses its own shape from `config`.** `config = if config.x then ...`
+and `imports = lib.optional config.x ...` recurse forever: the module system must read
+every module's attributes and `imports` to compute `config`. Use `lib.mkIf` for
+`config`, whose condition the module system can defer, and for `imports` import
+unconditionally and switch the imported module's effect with an option. The check
+looks at the `if`, `lib.optional` and `lib.optionals` of a module's top level, and at a
+condition that is certain to read `config`, directly or through a `let` binding. Values
+under other attributes, which the module system reads lazily, are left alone. Where
+the `else` is `{ }` and `lib` is in scope, the fix writes `lib.mkIf` on request.
+
+```nix
+{ config, ... }: {
+  config = if config.x then { } else { };    # SL8034
+}
+```
+
+## SL8035
+
+**A `with` wraps a whole file.** Every free name in the file may then come from it, so a
+misspelt name is no longer reported, and a name bound outside the `with` beats one in it
+without any sign. This check is optional and off by default; turn it on with
+`enable=top-level-with`.
+
+```nix
+{ lib }: with lib; id    # SL8035
+```
+
+## SL8036
+
+**A path is interpolated.** `"${./src}"` copies the path, all of it, into the Nix store,
+and yields the copy's name. That is often the point, but for a directory it may be a lot
+of copying, and `toString` or `+` keeps the path. This check is optional and off by
+default; turn it on with `enable=store-copied-paths`.
+
+```nix
+"${./.}"    # SL8036
+```
+
+## SL8037
+
+**`pkgs.lib` is written where `lib` is in scope.** This check is optional and off by
+default, since a module's `lib` argument can be extended beyond `pkgs.lib`; turn it on
+with `enable=pkgs-lib`. For the same reason the fix is offered on request only.
+
+```nix
+{ pkgs, lib }: pkgs.lib.id lib    # SL8037
+```
+
+## SL8038
+
+**A flake declares an input nothing reads.** No read of the `outputs` argument and no
+`follows` reaches it, so it only slows down locking. Nothing is reported when the
+inputs could be read in a way the file does not show: when the `@` name of `outputs` or
+`self` is passed on whole, or `self.inputs` is read.
+
+```nix
+{
+  inputs.unused.url = "github:a/b";    # SL8038
+  outputs = { self, ... }: { };
+}
+```
+
+## SL8039
+
+**A flake overrides an input that its input does not have.** Nix warns that the
+override does nothing, and `flake.lock` shows it: the locked `a` lists no input `b`. This
+looks at `flake.lock` next to `flake.nix`, through the same cache as the configuration
+files, and says nothing when there is no lock file or the input is not locked yet.
+
+```nix
+{
+  inputs.a.url = "github:o/a";
+  inputs.a.inputs.gone.follows = "b";    # SL8039
+  inputs.b.url = "github:o/b";
+  outputs = { self, a, b }: { };
+}
+```
+
+## SL8040
+
+**A flake input locks its own nixpkgs.** The flake then evaluates two copies of
+nixpkgs. `inputs.a.inputs.nixpkgs.follows = "nixpkgs";` shares one, if the input works
+with that revision, which only its author can promise. So this check is optional and
+off by default; turn it on with `enable=missing-nixpkgs-follows`.
+
+```nix
+{
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs";
+  inputs.a.url = "github:o/a";    # SL8040
+  outputs = { self, nixpkgs, a }: { };
+}
+```
+
+## statix and deadnix compatibility
+
+Every lint of statix has a check above, and deadnix's findings are SL8005, SL8006,
+SL8007 and SL8029.
+
+| statix lint | Check | Fix | By default |
+| --- | --- | --- | --- |
+| `bool_comparison` (W01) | SL8015 | safe | on |
+| `empty_let_in` (W02) | SL8013 | safe | on |
+| `manual_inherit` (W03) | SL8011 | safe | on |
+| `manual_inherit_from` (W04) | SL8016 | safe | on |
+| `legacy_let_syntax` (W05) | SL8017 | safe | on |
+| `collapsible_let_in` (W06) | SL8018 | safe | on |
+| `eta_reduction` (W07) | SL8019 | on request | off |
+| `useless_parens` (W08) | SL8008 | safe | on |
+| `empty_pattern` (W10) | SL8020 | on request | off |
+| `redundant_pattern_bind` (W11) | SL8021 | on request | on |
+| `unquoted_uri` (W12) | SL8022 | safe | on |
+| `empty_inherit` (W14) | SL8028 | safe | on |
+| `deprecated_to_path` (W17) | SL8023 | none | on |
+| `bool_simplification` (W18) | SL8024 | safe | on |
+| `useless_has_attr` (W19) | SL8025 | safe | on |
+| `repeated_keys` (W20) | SL8026 | none | off |
+| `empty_list_concat` (W23) | SL8027 | safe | on |
+
+| deadnix option | Here |
+| --- | --- |
+| `--no-lambda-arg` | exclude SL8006 |
+| `--no-lambda-pattern-names` | exclude SL8007 |
+| `--no-underscore` | exclude SL8029 |
+| `--warn-used-underscore` | `enable=used-underscore-bindings` (SL8030) |
+| `--edit` | the fix-all code action, or `shell-lsp check -f diff` for a patch |
+| `--output-format json` | `shell-lsp check -f json` |
+
+`--no-lambda-arg` and SL8006 differ in one way: SL8006 also covers an unread `@` name,
+which deadnix reports whatever its options. `deadnix --edit` also removes a formal from a
+pattern without `...`; that makes existing callers fail, so here the fix is on request.
+
+Where the tools are wrong, shell-lsp differs on purpose, with
+[corpus/nix-lint.md](../corpus/nix-lint.md) keeping the count:
+
+- statix reports `let a = a; in a` and `rec { a = a; }` as `manual_inherit`; `inherit a;`
+  would read an outer `a` instead, so SL8011 does not.
+- statix reports `(a.b).c or d`; `a.b.c or d` yields `d` where the original fails, so
+  SL8008 does not. SL8008 also reports parentheses around a whole expression in places
+  statix does not look, such as an `if` condition and a function's default.
+- statix's fix for `!(a == b) == c` does not parse, and for `!(a == b) // c` means something
+  else; SL8024's fix keeps the parentheses.
+- statix reports `let a = 1; in let a = 2; in a` as collapsible; merging is an error, so
+  SL8018 does not.
+- deadnix counts `inherit (x) a;` as reading the `a` of an enclosing pattern; it reads only
+  `x`, so SL8007 reports that `a`.
+- deadnix reports `let __sub = f; in 2 - 3`; Nix calls that binding for `-`.
+- deadnix reports the formals of a flake's `outputs` without `...`; without them Nix refuses
+  the call.
+- deadnix does not report `let a = b; b = a; in 2`; SL8005 does.
+
+### `statix.toml`
+
+The nearest `statix.toml` in the file's directory or above is read, through the same
+cache as `.shellcheckrc`. `disabled` turns the named lints off in Nix files. Unknown names
+are ignored, as statix ignores them. `ignore` lists patterns in `.gitignore` syntax,
+relative to the file's directory, for files in which all of the checks above from
+statix are off. `nix_version` is accepted and has no effect, since none of statix's
+lints depends on it any more. Other keys are ignored and a file that is not TOML is
+reported, as statix does.
+
+```toml
+disabled = ["repeated_keys"]
+ignore = [".direnv", "generated.nix"]
+```
+
+### Skip comments
+
+A comment containing `deadnix: skip` silences SL8005, SL8006, SL8007, SL8029 and SL8030
+for what follows it on its own line and on the next line, as deadnix does: a blank line
+or another comment in between ends it, and a one-line `let` under it is covered whole.
+Either comment kind works. A comment containing `statix: skip` or `statix skip` does the
+same for the checks from statix. statix itself reads no such comment, so this exists for
+files that want a single spelling across tools.

@@ -135,9 +135,9 @@ func TestReadsLeadIntoALockedDependency(t *testing.T) {
 	flake := filepath.Join("/w", FlakeFile)
 	self := Analyze("{\n  inputs.nixpkgs.url = \"github:NixOS/nixpkgs\";\n  outputs = { nixpkgs, ... }: {\n    v = nixpkgs.lib.answer;\n  };\n}\n").Index
 	source := memorySource{
-		filepath.Join("/w", lockFile):         lockedInputs,
-		filepath.Join(lockedStore, FlakeFile): "{\n  outputs = { self }: {\n    lib = import ./lib.nix;\n  };\n}\n",
-		filepath.Join(lockedStore, "lib.nix"): "{\n  answer = 42;\n}\n",
+		filepath.Join("/w", LockFileName): lockedInputs,
+		lockedStore + "/" + FlakeFile:     "{\n  outputs = { self }: {\n    lib = import ./lib.nix;\n  };\n}\n",
+		lockedStore + "/lib.nix":          "{\n  answer = 42;\n}\n",
 	}
 	p := Link(t.Context(), Request{Self: self, SelfPath: flake, Flake: flake}, source)
 	for _, r := range self.Refs {
@@ -145,7 +145,7 @@ func TestReadsLeadIntoALockedDependency(t *testing.T) {
 			continue
 		}
 		homes, linked := p.Homes(0, r.Scope, r.Name)
-		if !linked || len(homes) != 1 || p.paths[homes[0].File] != filepath.Join(lockedStore, "lib.nix") {
+		if !linked || len(homes) != 1 || p.paths[homes[0].File] != lockedStore+"/lib.nix" {
 			t.Fatalf("homes of nixpkgs.lib.answer = %+v, %v", homes, linked)
 		}
 		symbol := symbolNamed(t, p.units[homes[0].File].ix, "answer")
