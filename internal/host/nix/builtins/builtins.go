@@ -6,7 +6,7 @@ import (
 	"sync"
 )
 
-const hiddenAliasPrefix = "__"
+const HiddenAliasPrefix = "__"
 
 type Builtin struct {
 	Name   string
@@ -25,7 +25,7 @@ var table = sync.OnceValue(func() []Builtin {
 			continue
 		}
 		entries = append(entries, Builtin{
-			Name:   hiddenAliasPrefix + m.name,
+			Name:   HiddenAliasPrefix + m.name,
 			Params: m.params,
 			Doc:    "Alias of `builtins." + m.name + "`. " + doc,
 			Global: true,

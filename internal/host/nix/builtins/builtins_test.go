@@ -232,10 +232,10 @@ func TestGlobalMatchesInstalledNix(t *testing.T) {
 		}
 		if m.global {
 			reachable = append(reachable, m.name)
-			prefixOnly = append(prefixOnly, hiddenAliasPrefix+m.name)
+			prefixOnly = append(prefixOnly, HiddenAliasPrefix+m.name)
 			continue
 		}
-		reachable = append(reachable, hiddenAliasPrefix+m.name)
+		reachable = append(reachable, HiddenAliasPrefix+m.name)
 		prefixOnly = append(prefixOnly, m.name)
 	}
 

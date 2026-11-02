@@ -5,10 +5,15 @@ import (
 	"context"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 
 	"github.com/stubbedev/shell-lsp/internal/docstore"
+	"github.com/stubbedev/shell-lsp/internal/host"
+	"github.com/stubbedev/shell-lsp/internal/host/nix/highlight"
+	"github.com/stubbedev/shell-lsp/internal/host/nix/scope"
+	"github.com/stubbedev/shell-lsp/internal/host/nix/syntax"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/semantic"
@@ -111,22 +116,67 @@ func encodeTokens(placed []placedToken, within *lsp.Range) []uint32 {
 	return data
 }
 
-func (s *Server) placedTokens(snap *snapshot) []placedToken {
-	placed := place(nil, snap.positions(), s.semanticTokens(snap))
-	if snap.Native == nil {
-		return placed
+func placeOrdered(at docstore.Positions, tokens []semantic.Token) []placedToken {
+	text := at.Document().Text()
+	enc := at.Encoding()
+	from := 0
+	var here lsp.Position
+	advance := func(offset int) lsp.Position {
+		between := text[from:offset]
+		if strings.IndexByte(between, '\n') >= 0 {
+			here = at.Position(offset)
+		} else {
+			here.Character += enc.Units(between)
+		}
+		from = offset
+		return here
 	}
-	shell := slices.DeleteFunc(placed, func(p placedToken) bool {
+	out := make([]placedToken, len(tokens))
+	for i, t := range tokens {
+		start := advance(t.Span.Start)
+		out[i] = placedToken{r: lsp.Range{Start: start, End: advance(t.Span.End)}, t: t}
+	}
+	return out
+}
+
+func (s *Server) placedTokens(snap *snapshot) []placedToken {
+	if snap.Native == nil {
+		return place(nil, snap.positions(), s.semanticTokens(snap.File))
+	}
+	source := sourcePositions(snap.File, snap.encoding)
+	if snap.Native.Language == host.Nix {
+		return placeOrdered(source, s.nixTokens(snap.File))
+	}
+	shell := slices.DeleteFunc(place(nil, snap.positions(), s.semanticTokens(snap.File)), func(p placedToken) bool {
 		_, inside := snap.positions().Offset(p.r.Start)
 		return !inside
 	})
-	return place(shell, sourcePositions(snap.File, snap.encoding), snap.Native.Index.Tokens)
+	return place(shell, source, snap.Native.Index.Tokens)
 }
 
-func (s *Server) semanticTokens(snap *snapshot) []semantic.Token {
-	return workspace.Memo(snap.File, "semantic.tokens", s.workspace.Generation(), func() []semantic.Token {
-		return semantic.Tokens(snap.Tree, s.imports(snap.File), embeddedPrograms(snap.File))
+func (s *Server) semanticTokens(file *workspace.File) []semantic.Token {
+	return workspace.Memo(file, "semantic.tokens", s.workspace.Generation(), func() []semantic.Token {
+		return semantic.Tokens(file.Tree, s.imports(file), embeddedPrograms(file))
 	})
+}
+
+func (s *Server) nixTokens(file *workspace.File) []semantic.Token {
+	return workspace.Memo(file, "semantic.nix", s.workspace.Generation(), func() []semantic.Token {
+		tree := syntax.Parse(file.Doc.Source().Text())
+		return highlight.Tokens(tree, scope.Resolve(tree), s.hostShellTokens(file))
+	})
+}
+
+func (s *Server) hostShellTokens(file *workspace.File) []semantic.Token {
+	var out []semantic.Token
+	for _, variant := range file.Variants() {
+		for _, t := range s.semanticTokens(variant) {
+			t.Span = parser.Span{Start: file.Doc.SourceOffset(t.Span.Start), End: file.Doc.SourceOffset(t.Span.End)}
+			out = append(out, t)
+		}
+	}
+	slices.SortStableFunc(out, func(a, b semantic.Token) int { return cmp.Compare(a.Span.Start, b.Span.Start) })
+	return out
 }
 
 func (s *Server) handleSemanticTokensFull(_ context.Context, docs *docstore.View, p lsp.SemanticTokensParams) (any, error) {
