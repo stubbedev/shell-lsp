@@ -107,7 +107,7 @@ func compareWithShellcheck(ctx context.Context, listing corpus.Listing) (compari
 	}
 	results := make([]checkResult, len(listing.Scripts))
 	order := largestFirst(listing.Scripts)
-	parallel.For(runtime.NumCPU(), len(order), func(n int) {
+	parallel.For(referenceWorkers(), len(order), func(n int) {
 		i := order[n]
 		results[i] = check(ctx, listing.Scripts[i])
 	})
