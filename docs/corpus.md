@@ -209,3 +209,114 @@ ShellCheck and the shells comparisons as two jobs in the Nix development
 shell, so they use the tools `flake.lock` pins. A third job checks the
 justfiles, Makefiles and Dockerfiles the same way, after allowing the unprivileged user
 namespaces bubblewrap needs.
+
+## Nix server parity
+
+shell-lsp means to replace nixd and nil as a single server for Nix and the
+shell it embeds. `cmd/nixparity` measures how far that is true instead of
+claiming it: it starts two servers over stdio, shell-lsp and a reference, on
+the same directory, opens the same Nix files in both, asks both the same
+questions and compares the answers. Nix support in shell-lsp is still being
+built, so the measurement shows gaps; those gaps are what it is for. The
+reference servers are black boxes under [CLEAN_ROOM.md](../CLEAN_ROOM.md):
+they are run and their answers compared. Reports and baselines hold counts
+and positions only, never a message, a hover text or a completion label.
+
+| Recipe | What it does |
+| --- | --- |
+| `just nix-parity [nixd\|nil]` | Compare over the two fixtures of `corpus/nix`, with nixd by default |
+| `just nix-parity-check` | The same against nixd, failing when a count no longer matches its baseline |
+| `just nix-parity-baseline` | Rewrite `corpus/nix/*.parity.json` from the current code and nixd |
+| `just nix-parity-fetch` | Fetch the large flakes that [corpus/nix/repos.txt](../corpus/nix/repos.txt) pins |
+| `just nix-parity-large [PATH] [nixd\|nil]` | Compare on the flake at PATH, or the pinned nixpkgs when PATH is empty |
+
+The recipes need `nixd` or `nil` on `PATH`, and write `NAME.md` and
+`NAME.json` under `shell-lsp/nixparity` in the user cache directory, besides
+printing the Markdown. `nixparity compare` takes any directory and any two
+command lines with `-ours` and `-theirs`; without `-ours` it builds shell-lsp
+from the working directory.
+
+### Fixtures
+
+`corpus/nix/single-flake` keeps its outputs in one `flake.nix` that uses the
+`inputs` argument and reaches other files through literal `import ./x.nix` and
+`callPackage ./y.nix`. `corpus/nix/flake-parts` has a `mkFlake { inherit
+inputs; }` root, an `imports` module tree, `perSystem` modules using `pkgs`,
+`system`, `config` and `self'`, top-level `flake` and `systems`, and values
+shared between modules through `config`. Both are small projects that evaluate
+and build, with shell in their phases and `shellHook`, and pin the inputs of
+this repository's `flake.lock`.
+
+The large flake is kept out of `corpus/repos.txt`, whose repositories feed the
+ShellCheck and shell baselines. `corpus/nix/repos.txt` has the same format and
+is fetched by the same code into its own cache directory, `corpus-nix`. Its
+`kind` column is not read here. Unlike the corpus above, a measured project
+is not only read: a reference server may evaluate the Nix it is given, so
+point `nix-parity-large` only at code you trust.
+
+### What is compared
+
+Files come from a walk that skips hidden directories, and `-files` of them
+(200 by default) are sampled. A file over 4 MiB or not UTF-8 is listed as
+skipped. In each file `-positions` names (20 by default) are sampled, leaving
+out comments and keywords and keeping names inside shell strings. Sampling
+depends only on `-seed` and the file's path, so a run asks the same questions
+every time. Positions are in UTF-16, the only encoding offered to the servers.
+
+| Feature | Asked | Compared as |
+| --- | --- | --- |
+| diagnostics | per file, as published | set of start positions |
+| documentSymbol | per file | set of name and start of its selection range |
+| foldingRange | per file | set of start and end lines |
+| formatting | per file | the text after applying the edits |
+| definition | per position | set of file and range |
+| references | per position, with the declaration | set of file and range |
+| rename | per position | set of file, range and new text |
+| hover | per position | the hover range, when both give one; the wording is never compared |
+| completion | per position, two characters into the name | set of labels |
+
+Paths inside the project are compared relative to it. Each server's answer
+gets one outcome:
+
+- `answered`, or `empty` for null or an empty result. An empty edit list from
+  a formatter is an answer: the text stays as it is.
+- `refused` for an error response, `unsupported` for a capability the server
+  does not declare or a method it does not know, and `silent` when it publishes
+  no diagnostics for a file within 10 seconds of the last publication. A server
+  need not publish for a clean file, so `silent` is not a failure.
+- `malformed`, `timeout` or `crashed`: failures. Every call is limited by
+  `-timeout`, 30 seconds by default.
+
+The two outcomes of a question give one verdict: `agree` or `disagree` when
+both answered, `ours missing` or `theirs missing` when one did, `both empty`
+when neither did, and `failed` when either side failed. A failure never counts
+as agreement or as an empty answer, whatever the other side said. Whole-answer
+agreement is strict, so the report also counts the items of the compared
+answers that are shared and that only one side gave.
+
+### Latency, memory and failures
+
+The servers run one after the other, one request at a time, so neither
+disturbs the other's timing. The report gives p50, p90, p99 and maximum latency
+per feature over the calls that got a response; for diagnostics, that is the
+time from opening a file to its first publication. Peak RSS sums the server's
+process group, sampled every 250 ms, and is at least the peak the kernel
+reports for the server process itself. It is measured on Linux and reported as
+`not measured` elsewhere.
+
+A server that exits is restarted with its files open again, and one that
+times out three times in a row is killed and restarted, at most three times per
+run; after that every remaining question counts as `crashed`. Every server
+process group is killed and reaped when its run ends.
+
+### The baseline
+
+`just nix-parity-check` compares the counts with
+`corpus/nix/FIXTURE.parity.json` and fails on any change, including a change
+in the reference server's version, the sampling or the skipped files. A
+regression, fewer agreements or more disagreements, failures or questions only
+the reference answers, prints the examples for that feature; any other change
+asks for the baseline to be refreshed. Latency, memory and restarts are left
+out because they differ between runs and machines: compare them by reading the
+reports. Refresh with `just nix-parity-baseline` and review the diff like the
+other baselines. CI does not run this check.

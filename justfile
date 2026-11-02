@@ -93,6 +93,49 @@ corpus-baseline: corpus-fetch
     go run ./cmd/lintcheck shells -update
     go run ./cmd/lintcheck hosts -update
 
+nix_parity_reports := cache_directory() / "shell-lsp" / "nixparity"
+
+# Compare shell-lsp with a Nix language server (nixd or nil) over the two fixtures of corpus/nix; reports land in the user cache directory.
+nix-parity theirs="nixd": (_nix-parity-fixtures theirs "report")
+
+# Compare shell-lsp with nixd over the two fixtures; fails when a count no longer matches its baseline in corpus/nix.
+nix-parity-check: (_nix-parity-fixtures "nixd" "check")
+
+# Rewrite the parity baselines in corpus/nix from the current code and nixd; review the diff.
+nix-parity-baseline: (_nix-parity-fixtures "nixd" "update")
+
+_nix-parity-fixtures theirs mode:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for fixture in single-flake flake-parts; do
+        baseline="corpus/nix/$fixture.parity.json"
+        case "{{ mode }}" in
+        report) flags=() ;;
+        check) flags=(-baseline "$baseline") ;;
+        update) flags=(-baseline "$baseline" -update) ;;
+        *)
+            echo "unknown parity mode: {{ mode }} (want report, check or update)" >&2
+            exit 2
+            ;;
+        esac
+        go run ./cmd/nixparity compare -theirs "{{ theirs }}" -out "{{ nix_parity_reports }}/$fixture-{{ theirs }}" "${flags[@]}" "corpus/nix/$fixture"
+    done
+
+# Fetch the large flakes pinned in corpus/nix/repos.txt into the user cache directory.
+nix-parity-fetch:
+    go run ./cmd/nixparity fetch
+
+# Compare shell-lsp with a Nix language server on a large flake: the directory given, or the pinned nixpkgs when none is.
+nix-parity-large path="" theirs="nixd":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    target=("{{ path }}")
+    if [[ -z "{{ path }}" ]]; then
+        go run ./cmd/nixparity fetch
+        target=(-repo nixpkgs)
+    fi
+    go run ./cmd/nixparity compare -theirs "{{ theirs }}" -out "{{ nix_parity_reports }}/large-{{ theirs }}" "${target[@]}"
+
 # Print every fuzz target as "package target", one per line.
 fuzz-targets:
     #!/usr/bin/env bash
