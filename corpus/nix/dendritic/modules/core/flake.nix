@@ -2,21 +2,24 @@
   config,
   inputs,
   ...
-}: let
-  nixpkgsFor = system:
+}:
+let
+  nixpkgsFor =
+    system:
     import inputs.nixpkgs {
       inherit system;
       config = config.harbor.lib.nixpkgsConfig;
       overlays = builtins.attrValues config.flake.overlays;
     };
-in {
-  imports = [inputs.flake-parts.flakeModules.modules];
+in
+{
+  imports = [ inputs.flake-parts.flakeModules.modules ];
 
   _module.args.nixpkgsFor = nixpkgsFor;
 
-  systems = ["x86_64-linux"];
+  systems = [ "x86_64-linux" ];
 
-  perSystem = {system, ...}: {
+  perSystem = { system, ... }: {
     _module.args.pkgs = nixpkgsFor system;
   };
 }

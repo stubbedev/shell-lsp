@@ -1,4 +1,4 @@
-{config, ...}: {
+{ config, ... }: {
   configurations.homeManager.laptop = {
     system = "x86_64-linux";
     module = {

@@ -1,5 +1,5 @@
 {
-  perSystem = {pkgs, ...}: {
+  perSystem = { pkgs, ... }: {
     checks.owner-file = pkgs.harbor.probe {
       label = "owner-file";
       vars.expected = "/etc/harbor/owner";

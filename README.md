@@ -1065,7 +1065,7 @@ With Nix:
   test suite; update `vendorHash` in `nix/package.nix` whenever go.mod
   dependencies change
 - `nix run` runs it
-- `nix fmt` formats the nix files with alejandra
+- `nix fmt` formats the nix files with nixfmt
 
 Building and publishing the VS Code extension is described in
 [docs/vscode-publishing.md](docs/vscode-publishing.md).

@@ -3,10 +3,11 @@
   self,
   lib,
   ...
-}: {
+}:
+{
   options.harbor.lib = lib.mkOption {
     type = lib.types.lazyAttrsOf lib.types.raw;
-    default = {};
+    default = { };
     description = "Plain data and functions shared by every class of module.";
   };
 

@@ -11,7 +11,7 @@ stdenvNoCC.mkDerivation {
 
   dontUnpack = true;
 
-  nativeBuildInputs = [makeWrapper];
+  nativeBuildInputs = [ makeWrapper ];
 
   buildPhase = ''
     runHook preBuild

@@ -13,9 +13,13 @@ stdenvNoCC.mkDerivation (finalAttrs: {
 
   dontUnpack = true;
 
-  nativeBuildInputs = [makeWrapper];
+  nativeBuildInputs = [ makeWrapper ];
 
-  runtimePath = lib.makeBinPath [coreutils curl zstd];
+  runtimePath = lib.makeBinPath [
+    coreutils
+    curl
+    zstd
+  ];
 
   buildPhase = ''
     runHook preBuild

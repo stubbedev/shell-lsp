@@ -8,7 +8,11 @@
 }:
 writeShellApplication {
   name = "logship-rotate";
-  runtimeInputs = [coreutils findutils zstd];
+  runtimeInputs = [
+    coreutils
+    findutils
+    zstd
+  ];
   text = ''
     spool="''${1:?usage: logship-rotate SPOOL}"
     find "$spool" -name '*.log' -mtime +1 -print0 |

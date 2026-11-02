@@ -7,12 +7,14 @@
   gawk,
   gnused,
   threshold,
-}: let
+}:
+let
   columns = writeText "columns.conf" ''
     size
     name
   '';
-in {
+in
+{
   summary = writeShellScript "logship-report" ''
     limit=${lib.escapeShellArg (toString threshold)}
     ${jq}/bin/jq --arg limit "$limit" '.[] | select(.size > ($limit | tonumber))' "$1"
@@ -24,7 +26,7 @@ in {
     echo "$1"
   '';
 
-  python = writers.writePython3 "logship-report-python" {} ''
+  python = writers.writePython3 "logship-report-python" { } ''
     print("not a shell")
   '';
 

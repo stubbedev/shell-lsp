@@ -5,7 +5,8 @@
   withSystem,
   nixpkgsFor,
   ...
-}: let
+}:
+let
   hostOptions = lib.types.submodule {
     options = {
       system = lib.mkOption {
@@ -18,16 +19,17 @@
       };
     };
   };
-in {
+in
+{
   options.configurations = {
     homeManager = lib.mkOption {
       type = lib.types.lazyAttrsOf hostOptions;
-      default = {};
+      default = { };
       description = "Standalone home environments.";
     };
     nixos = lib.mkOption {
       type = lib.types.lazyAttrsOf hostOptions;
-      default = {};
+      default = { };
       description = "Whole machines.";
     };
   };
@@ -35,23 +37,21 @@ in {
   config.flake = {
     homeConfigurations = lib.mapAttrs (
       _name: host:
-        withSystem host.system (
-          {pkgs, ...}:
-            inputs.home-manager.lib.homeManagerConfiguration {
-              inherit pkgs;
-              modules = [host.module];
-            }
-        )
-    )
-    config.configurations.homeManager;
+      withSystem host.system (
+        { pkgs, ... }:
+        inputs.home-manager.lib.homeManagerConfiguration {
+          inherit pkgs;
+          modules = [ host.module ];
+        }
+      )
+    ) config.configurations.homeManager;
 
     nixosConfigurations = lib.mapAttrs (
       _name: host:
-        inputs.nixpkgs.lib.nixosSystem {
-          pkgs = nixpkgsFor host.system;
-          modules = [host.module];
-        }
-    )
-    config.configurations.nixos;
+      inputs.nixpkgs.lib.nixosSystem {
+        pkgs = nixpkgsFor host.system;
+        modules = [ host.module ];
+      }
+    ) config.configurations.nixos;
   };
 }

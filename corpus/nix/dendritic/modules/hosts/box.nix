@@ -2,14 +2,16 @@
   config,
   inputs,
   ...
-}: let
+}:
+let
   nixosModules = config.flake.modules.nixos;
   homeModules = config.flake.modules.homeManager;
-in {
+in
+{
   configurations.nixos.box = {
     system = "x86_64-linux";
-    module = {config, ...}: {
-      imports = builtins.attrValues nixosModules ++ [inputs.home-manager.nixosModules.home-manager];
+    module = { config, ... }: {
+      imports = builtins.attrValues nixosModules ++ [ inputs.home-manager.nixosModules.home-manager ];
 
       networking.hostName = "box";
       features.editor = true;
