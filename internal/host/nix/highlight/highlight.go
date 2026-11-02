@@ -13,7 +13,6 @@ import (
 
 const (
 	builtinsSet = "builtins"
-	aliasPrefix = "__"
 	blank       = " \t\r"
 )
 
@@ -194,7 +193,7 @@ func library(b builtins.Builtin) class {
 }
 
 func builtinMember(name string) (builtins.Builtin, bool) {
-	if strings.HasPrefix(name, aliasPrefix) {
+	if strings.HasPrefix(name, builtins.HiddenAliasPrefix) {
 		return builtins.Builtin{}, false
 	}
 	return builtins.Lookup(name)
