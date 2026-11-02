@@ -1710,3 +1710,20 @@ names no attribute has no effect at all, not even evaluating its source.
 ```nix
 let in 1    # SL8013
 ```
+
+## SL8014
+
+**An antiquotation reaches the shell unescaped.** A `${x}` in a string that is
+shell becomes text before the shell parses it, so a space, quote or `$` in its
+value changes the command. Use `lib.escapeShellArg`, or `lib.escapeShellArgs` for
+a list. It is reported only where the value is not provably safe: a store path
+(`pkgs.x`, a path, the result of a writer, `lib.getExe`, `lib.getBin`,
+`lib.makeBinPath`), a number, a literal that holds no character the shell treats
+specially, or an expression that is escaped already. A value followed by a `/`
+counts as a path, and comments and here-documents are left alone.
+
+```nix
+cfg: writeShellScript "x" ''
+  cat ${cfg.dir}    # SL8014
+''
+```

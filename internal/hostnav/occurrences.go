@@ -66,9 +66,10 @@ type Symbol struct {
 	doc     string
 	shell   bool
 	foreign bool
+	link    *programLink
 }
 
-func (s Symbol) Defined() bool { return len(s.targets) > 0 || len(s.locals) > 0 }
+func (s Symbol) Defined() bool { return len(s.targets) > 0 || len(s.locals) > 0 || s.link != nil }
 
 func (s Symbol) Exported() bool {
 	return slices.ContainsFunc(s.targets, func(t model.Target) bool {
@@ -148,6 +149,9 @@ func (g *Group) modules() []*model.Module {
 }
 
 func (g *Group) Occurrences(sym Symbol) []Occurrence {
+	if sym.link != nil {
+		return g.linkOccurrences(sym)
+	}
 	if sym.shell && !sym.Defined() {
 		return g.undefinedReads(sym)
 	}

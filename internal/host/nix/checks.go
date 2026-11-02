@@ -37,11 +37,11 @@ type checker struct {
 	findings []lint.Finding
 }
 
-func check(tree *syntax.File, table *scope.Table) []lint.Finding {
+func check(tree *syntax.File, table *scope.Table, extra []lint.Finding) []lint.Finding {
 	if len(tree.Errors) > 0 {
 		return nil
 	}
-	c := &checker{tree: tree, table: table, parens: map[*syntax.Paren]parenRole{}, names: map[string]bool{}, outputs: flakeOutputs(tree.Root)}
+	c := &checker{tree: tree, table: table, parens: map[*syntax.Paren]parenRole{}, names: map[string]bool{}, outputs: flakeOutputs(tree.Root), findings: extra}
 	c.uses()
 	c.duplicates()
 	c.unusedLets()

@@ -98,6 +98,7 @@ const (
 	CodeNixSpelledInherit
 	CodeNixOrIdentifier
 	CodeNixEmptyBinding
+	CodeNixUnescapedAntiquotation
 )
 
 func (c Code) Host() bool { return c > justBase && c < hostEnd }
@@ -181,19 +182,20 @@ var hostFamily = family{
 		CodeDockerRedundantTargetPlatform:   {severity: SeverityWarning},
 		CodeDockerStageUsedBeforeDefinition: {severity: SeverityError},
 
-		CodeNixSyntax:             {severity: SeverityError},
-		CodeNixUndefinedVariable:  {severity: SeverityError},
-		CodeNixDuplicateAttribute: {severity: SeverityError},
-		CodeNixDuplicateFormal:    {severity: SeverityError},
-		CodeNixUnusedLet:          {severity: SeverityInfo, tag: TagUnnecessary},
-		CodeNixUnusedArgument:     {severity: SeverityInfo, tag: TagUnnecessary},
-		CodeNixUnusedFormal:       {severity: SeverityInfo, tag: TagUnnecessary},
-		CodeNixUselessParens:      {severity: SeverityInfo, tag: TagUnnecessary},
-		CodeNixRedundantIf:        {severity: SeverityInfo, tag: TagUnnecessary},
-		CodeNixRedundantRec:       {severity: SeverityInfo, tag: TagUnnecessary},
-		CodeNixSpelledInherit:     {severity: SeverityInfo},
-		CodeNixOrIdentifier:       {severity: SeverityWarning},
-		CodeNixEmptyBinding:       {severity: SeverityInfo, tag: TagUnnecessary},
+		CodeNixSyntax:                 {severity: SeverityError},
+		CodeNixUndefinedVariable:      {severity: SeverityError},
+		CodeNixDuplicateAttribute:     {severity: SeverityError},
+		CodeNixDuplicateFormal:        {severity: SeverityError},
+		CodeNixUnusedLet:              {severity: SeverityInfo, tag: TagUnnecessary},
+		CodeNixUnusedArgument:         {severity: SeverityInfo, tag: TagUnnecessary},
+		CodeNixUnusedFormal:           {severity: SeverityInfo, tag: TagUnnecessary},
+		CodeNixUselessParens:          {severity: SeverityInfo, tag: TagUnnecessary},
+		CodeNixRedundantIf:            {severity: SeverityInfo, tag: TagUnnecessary},
+		CodeNixRedundantRec:           {severity: SeverityInfo, tag: TagUnnecessary},
+		CodeNixSpelledInherit:         {severity: SeverityInfo},
+		CodeNixOrIdentifier:           {severity: SeverityWarning},
+		CodeNixEmptyBinding:           {severity: SeverityInfo, tag: TagUnnecessary},
+		CodeNixUnescapedAntiquotation: {severity: SeverityInfo},
 	},
 }
 

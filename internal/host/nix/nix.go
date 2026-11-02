@@ -8,6 +8,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/host/model"
 	"github.com/stubbedev/shell-lsp/internal/host/nix/scope"
 	"github.com/stubbedev/shell-lsp/internal/host/nix/syntax"
+	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/projection"
 )
 
@@ -24,7 +25,18 @@ type file struct {
 	tree  *syntax.File
 	table *scope.Table
 	found []shellString
+	path  []string
+	embed Embedder
 }
+
+type Embedding struct {
+	Map       *projection.Map
+	Detection dialect.Detection
+	Index     *model.Index
+	Findings  []lint.Finding
+}
+
+type Embedder func(name string) (func(text string) Embedding, bool)
 
 type Analysis struct {
 	Map       *projection.Map
@@ -35,9 +47,11 @@ type Analysis struct {
 	tree      *syntax.File
 }
 
-func Analyze(src string) Analysis {
+func Analyze(src string) Analysis { return AnalyzeWith(src, nil) }
+
+func AnalyzeWith(src string, embed Embedder) Analysis {
 	tree := syntax.Parse(src)
-	f := &file{src: src, tree: tree, table: scope.Resolve(tree)}
+	f := &file{src: src, tree: tree, table: scope.Resolve(tree), embed: embed}
 	f.discover()
 	f.discoverWrapped()
 	m, detection := f.projection()
@@ -69,6 +83,10 @@ func groups(found []shellString) [][]shellString {
 
 func (f *file) project(b *projection.Builder, group []shellString, n int) {
 	first := group[0]
+	if first.hosted != nil {
+		b.Embed(first.hosted.inner.Map, first.hosted.via)
+		return
+	}
 	opener, end := first.directive+"(\n"+first.prelude, closing
 	if first.derivation {
 		name := phaseFunction + strconv.Itoa(n)
@@ -78,7 +96,7 @@ func (f *file) project(b *projection.Builder, group []shellString, n int) {
 	b.Script()
 	last := 0
 	for _, s := range group {
-		last = f.body(b, s, opener)
+		last = f.body(b, s, opener, shellBody)
 		opener = "\n"
 	}
 	b.Opaque(last, last, end)

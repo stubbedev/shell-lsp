@@ -86,7 +86,7 @@ func TestProjectText(t *testing.T) {
 		{
 			name: "comments, paths and nested strings do not end strings early",
 			nix:  "{ a = ./x; /* '' */ # ''\n  buildPhase = ''\n  echo ${lib.concatMapStrings (x: ''${x} '') [ \"}\" ]}\n''; }",
-			want: phaseOpen(0) + "echo $$\n" + phaseClose(0),
+			want: phaseOpen(0) + "echo $$ \n" + phaseClose(0),
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {

@@ -14,6 +14,7 @@ const (
 	flag
 	valued
 	paired
+	assign
 	glued
 	source
 	file
@@ -45,6 +46,13 @@ func (fromStdin) programSource() {}
 type invocation struct {
 	program  programSource
 	extended bool
+	bindings []flagged
+}
+
+type flagged struct {
+	flag        string
+	name, value *syntax.Word
+	skip        int
 }
 
 type scanner struct {
@@ -52,6 +60,8 @@ type scanner struct {
 	args     []*syntax.Word
 	at       int
 	scripts  []script
+	bindings []flagged
+	flag     string
 	files    int
 	stdin    bool
 	extended bool
@@ -96,6 +106,7 @@ func (c *cli) scan(args []*syntax.Word) (invocation, bool) {
 }
 
 func (s *scanner) option(text string, complete bool) bool {
+	s.flag = text
 	if long, ok := strings.CutPrefix(text, "--"); ok {
 		name, value, hasValue := strings.Cut(long, "=")
 		return s.apply(s.cli.long[name], len(text)-len(value), hasValue, value, complete)
@@ -126,7 +137,25 @@ func (s *scanner) apply(opt option, at int, attached bool, value string, complet
 	case valued:
 		return attached || s.take()
 	case paired:
-		return !attached && s.take() && s.take()
+		if attached || !s.take() {
+			return false
+		}
+		name := s.args[s.at]
+		if !s.take() {
+			return false
+		}
+		s.bindings = append(s.bindings, flagged{flag: s.flag, name: name, value: s.args[s.at]})
+		return true
+	case assign:
+		if attached {
+			s.bindings = append(s.bindings, flagged{flag: s.flag, name: s.args[s.at], skip: at})
+			return true
+		}
+		if !s.take() {
+			return false
+		}
+		s.bindings = append(s.bindings, flagged{flag: s.flag, name: s.args[s.at]})
+		return true
 	case source:
 		if attached {
 			s.scripts = append(s.scripts, script{word: s.args[s.at], skip: at})
@@ -160,11 +189,11 @@ func (s *scanner) take() bool {
 func (s *scanner) finish() (invocation, bool) {
 	switch {
 	case s.files > 0:
-		return invocation{program: fromStdin{}, extended: s.extended}, s.files == 1 && s.stdin && len(s.scripts) == 0
+		return invocation{program: fromStdin{}, extended: s.extended, bindings: s.bindings}, s.files == 1 && s.stdin && len(s.scripts) == 0
 	case len(s.scripts) > 0:
-		return invocation{program: inline(s.scripts), extended: s.extended}, true
+		return invocation{program: inline(s.scripts), extended: s.extended, bindings: s.bindings}, true
 	case s.operand != nil:
-		return invocation{program: inline{{word: s.operand}}, extended: s.extended}, true
+		return invocation{program: inline{{word: s.operand}}, extended: s.extended, bindings: s.bindings}, true
 	}
 	return invocation{}, false
 }

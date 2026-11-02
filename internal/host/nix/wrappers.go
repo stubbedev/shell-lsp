@@ -11,17 +11,13 @@ import (
 )
 
 const (
-	writeTextFile    = "writeTextFile"
 	runtimeEnvAttr   = "runtimeEnv"
 	derivationWriter = "mkDerivation"
 	wholeArgument    = ""
 	scriptHeadLines  = 4
 )
 
-var (
-	shellEscapes = []string{"escapeShellArg", "escapeShellArgs"}
-	stringWraps  = append([]string{"optionalString", "mkIf"}, passThrough...)
-)
+var shellEscapes = []string{"escapeShellArg", "escapeShellArgs"}
 
 type lambdaSinks struct {
 	scripts  map[string]string
@@ -151,12 +147,12 @@ func (w *sinkWalk) readInherit(stmt *syntax.Inherit, attr syntax.Attr) (sinkOwne
 func (w *sinkWalk) apply(call *syntax.Apply) {
 	name := calleeName(syntax.Unparenthesized(call.Fn))
 	switch {
-	case slices.Contains(positionalWriters(), name):
+	case positionalWriter(name):
 		w.script(call.Args[len(call.Args)-1], name)
-	case slices.Contains(commandRunner, name):
-		if len(call.Args) == 3 {
-			w.env(call.Args[1])
-			w.script(call.Args[2], name)
+	case runner(name):
+		if arg := callSurfaces[name].script.arg; len(call.Args) == arg {
+			w.env(call.Args[arg-2])
+			w.script(call.Args[arg-1], name)
 		}
 	case name == shellApp:
 		w.attrSinks(call.Args[0], shellApp)
@@ -165,10 +161,6 @@ func (w *sinkWalk) apply(call *syntax.Apply) {
 	default:
 		w.forwards(call)
 	}
-}
-
-func positionalWriters() []string {
-	return slices.Concat(bashWriters, dashWriters, scriptWriters)
 }
 
 func (w *sinkWalk) attrSinks(arg syntax.Expr, writer string) {
@@ -300,7 +292,7 @@ func (w *sinkWalk) script(e syntax.Expr, writer string) {
 		w.script(e.Then, writer)
 		w.script(e.Else, writer)
 	case *syntax.Apply:
-		if slices.Contains(stringWraps, calleeName(syntax.Unparenthesized(e.Fn))) {
+		if stringWrap(calleeName(syntax.Unparenthesized(e.Fn))) {
 			w.script(e.Args[len(e.Args)-1], writer)
 		}
 	}
@@ -372,7 +364,7 @@ func (b *symbolTable) wrapperCandidates() []*syntax.Apply {
 	var out []*syntax.Apply
 	for _, call := range b.calls {
 		name := calleeName(syntax.Unparenthesized(call.Fn))
-		if slices.Contains(knownWriters(), name) || name == writeTextFile || slices.Contains(transparentCalls, name) || name == importName || name == mkMergeName {
+		if knownWriter(name) || slices.Contains(transparentCalls, name) || name == importName || name == mkMergeName {
 			continue
 		}
 		if slices.ContainsFunc(call.Args, stringBearing) {
@@ -395,10 +387,6 @@ func stringBearing(arg syntax.Expr) bool {
 	return false
 }
 
-func knownWriters() []string {
-	return slices.Concat(positionalWriters(), commandRunner, []string{shellApp})
-}
-
 func scriptStrings(e syntax.Expr) []*syntax.String {
 	switch e := syntax.Unparenthesized(e).(type) {
 	case *syntax.String:
@@ -410,7 +398,7 @@ func scriptStrings(e syntax.Expr) []*syntax.String {
 	case *syntax.If:
 		return slices.Concat(scriptStrings(e.Then), scriptStrings(e.Else))
 	case *syntax.Apply:
-		if slices.Contains(stringWraps, calleeName(syntax.Unparenthesized(e.Fn))) {
+		if stringWrap(calleeName(syntax.Unparenthesized(e.Fn))) {
 			return scriptStrings(e.Args[len(e.Args)-1])
 		}
 	}
@@ -434,11 +422,11 @@ func writerArgument(name string, arg int, key string) (string, bool, bool) {
 		return shellApp, true, false
 	case name == shellApp && arg == 0 && key == runtimeEnvAttr:
 		return "", false, true
-	case slices.Contains(commandRunner, name) && arg == 2 && key == wholeArgument:
+	case runner(name) && arg == callSurfaces[name].script.arg-1 && key == wholeArgument:
 		return name, true, false
-	case slices.Contains(commandRunner, name) && arg == 1 && key == wholeArgument:
+	case runner(name) && arg == callSurfaces[name].script.arg-2 && key == wholeArgument:
 		return "", false, true
-	case slices.Contains(positionalWriters(), name) && arg == 1 && key == wholeArgument:
+	case positionalWriter(name) && arg >= 1 && key == wholeArgument:
 		return name, true, false
 	}
 	return "", false, false
@@ -653,10 +641,10 @@ func (p *Project) Shells(file int) []model.Shell {
 			p.provenEnvs[model.Home{File: file, Scope: id}] = s.env
 		}
 		phase := 0
-		if slices.Contains(commandRunner, s.writer) {
+		if runner(s.writer) {
 			phase = phaseRank("buildCommand")
 		}
-		for _, piece := range pieces(s.str) {
+		for _, piece := range p.units[file].f.pieces(s.str) {
 			out = append(out, model.Shell{Span: piece, Scope: id, Phase: phase})
 		}
 	}
@@ -674,7 +662,7 @@ func (f *file) discoverWrapped() {
 	}
 	ix := &model.Index{}
 	for _, s := range f.found {
-		for _, piece := range pieces(s.str) {
+		for _, piece := range f.pieces(s.str) {
 			ix.Shells = append(ix.Shells, model.Shell{Span: piece})
 		}
 	}
@@ -697,7 +685,7 @@ func (f *file) discoverWrapped() {
 func (f *file) aliasesWriter() bool {
 	found := false
 	visit := func(n syntax.Node) bool {
-		if a, assigned := n.(*syntax.Assign); assigned && slices.Contains(knownWriters(), calleeName(syntax.Unparenthesized(a.Value))) {
+		if a, assigned := n.(*syntax.Assign); assigned && knownWriter(calleeName(syntax.Unparenthesized(a.Value))) {
 			found = true
 		}
 		return !found
@@ -825,46 +813,48 @@ func ProjectedStrings(src string, proven []ProvenString) (Analysis, bool) {
 	m, detection := f.projection()
 	index := &model.Index{}
 	for _, s := range f.found {
-		index.Holes = append(index.Holes, holes(s.str)...)
+		index.Holes = append(index.Holes, f.holes(s.str)...)
 	}
 	return Analysis{Map: m, Detection: detection, Index: index}, true
 }
 
 func scriptOf(u *symbolTable, call *syntax.Apply) model.Script {
 	var name string
-	var text *syntax.String
+	var text syntax.Expr
 	for _, arg := range call.Args {
 		switch arg := syntax.Unparenthesized(arg).(type) {
-		case *syntax.String:
-			if text != nil && name == "" {
-				name = literalOf(text)
-			}
-			text = arg
 		case *syntax.AttrSet:
 			for _, b := range arg.Bindings {
 				a, assigned := b.(*syntax.Assign)
 				if !assigned || len(a.Path) != 1 {
 					continue
 				}
-				str, isString := syntax.Unparenthesized(a.Value).(*syntax.String)
-				if !isString {
-					continue
-				}
 				switch lastIdent(a.Path) {
 				case "name":
-					name = literalOf(str)
+					if str, isString := syntax.Unparenthesized(a.Value).(*syntax.String); isString {
+						name = literalOf(str)
+					}
 				case shellAppText:
-					text = str
+					text = a.Value
 				}
 			}
+		default:
+			if str, isString := text.(*syntax.String); isString && name == "" {
+				name = literalOf(str)
+			}
+			text = arg
 		}
 	}
-	script := model.Script{Name: name}
+	script := model.Script{Name: name, Fence: scriptFence(calleeName(syntax.Unparenthesized(call.Fn)))}
 	if text == nil {
 		return script
 	}
+	span := syntax.Unparenthesized(text).Span()
+	if str, isString := syntax.Unparenthesized(text).(*syntax.String); isString {
+		span = str.Content
+	}
 	var head []string
-	for line := range strings.SplitSeq(u.f.src[text.Content.Start:text.Content.End], "\n") {
+	for line := range strings.SplitSeq(u.f.src[span.Start:span.End], "\n") {
 		if trimmed := strings.TrimSpace(line); trimmed != "" {
 			head = append(head, trimmed)
 		}

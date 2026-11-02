@@ -15,7 +15,13 @@ type Program struct {
 	Language Language
 	Text     string
 	Result   lang.Result
+	Bindings []Binding
 	pieces   []piece
+	holes    []hole
+}
+
+type hole struct {
+	start, end int
 }
 
 type piece struct {
@@ -83,12 +89,12 @@ func embeddedIn(tree *parser.Tree, stmt *syntax.Stmt, run parser.Invocation) (Pr
 	program := Program{Language: language}
 	switch source := inv.program.(type) {
 	case inline:
-		program.Text, program.pieces, ok = decode(source)
+		program.Text, program.pieces, program.holes, ok = decode(source, languages[language].standIn)
 	case fromStdin:
 		if !run.InheritsStdin {
 			return Program{}, false
 		}
-		program.Text, program.pieces, ok = heredocProgram(tree, stmt)
+		program.Text, program.pieces, program.holes, ok = heredocProgram(tree, stmt, languages[language].standIn)
 	default:
 		panic(fmt.Sprintf("embedded: %s was scanned into an invocation with no program source", name))
 	}
@@ -96,10 +102,16 @@ func embeddedIn(tree *parser.Tree, stmt *syntax.Stmt, run parser.Invocation) (Pr
 		return Program{}, false
 	}
 	program.Result = languages[language].parse(program.Text, inv)
+	program.Result.Errors = slices.DeleteFunc(program.Result.Errors, program.touchesHole)
+	program.Bindings = bindingsOf(tree, inv.bindings)
 	return program, true
 }
 
-func heredocProgram(tree *parser.Tree, stmt *syntax.Stmt) (string, []piece, bool) {
+func (p *Program) touchesHole(e lang.Error) bool {
+	return slices.ContainsFunc(p.holes, func(h hole) bool { return e.Start <= h.end && h.start <= e.End })
+}
+
+func heredocProgram(tree *parser.Tree, stmt *syntax.Stmt, standIn string) (string, []piece, []hole, bool) {
 	var input *syntax.Redirect
 	for _, r := range stmt.Redirs {
 		if r.N == nil || r.N.Value == "0" {
@@ -107,41 +119,47 @@ func heredocProgram(tree *parser.Tree, stmt *syntax.Stmt) (string, []piece, bool
 		}
 	}
 	if input == nil || (input.Op != syntax.Hdoc && input.Op != syntax.DashHdoc) {
-		return "", nil, false
+		return "", nil, nil, false
 	}
 	if _, quoted := parser.HeredocDelimiter(input.Word); !quoted {
-		return "", nil, false
+		return "", nil, nil, false
 	}
 	at := parser.Offset(input.OpPos)
 	i := slices.IndexFunc(tree.Heredocs, func(h parser.Heredoc) bool { return h.Span.Start == at })
 	if i < 0 {
-		return "", nil, false
+		return "", nil, nil, false
 	}
 	body := tree.Heredocs[i].Body
 	text := tree.Text()[body.Start:body.End]
-	if tree.Heredocs[i].Strip != parser.StripTabs {
-		return text, []piece{{source: body.Start, length: len(text)}}, true
+	strip := tree.Heredocs[i].Strip == parser.StripTabs
+	if !strip && !strings.Contains(text, dynamicText) {
+		return text, []piece{{source: body.Start, length: len(text)}}, nil, true
 	}
-	var d decoder
+	d := decoder{standIn: standIn}
 	d.text.Grow(len(text))
 	lineStart := true
-	for i := range len(text) {
-		if lineStart && text[i] == '\t' {
+	for i := 0; i < len(text); i++ {
+		if strip && lineStart && text[i] == '\t' {
 			continue
 		}
 		lineStart = text[i] == '\n'
+		if strings.HasPrefix(text[i:], dynamicText) && !nameByteAt(text, i+len(dynamicText)) {
+			d.hole()
+			i++
+			continue
+		}
 		d.emit(text[i], body.Start+i)
 	}
-	return d.text.String(), d.pieces, true
+	return d.text.String(), d.pieces, d.holes, true
 }
 
-func decode(scripts []script) (string, []piece, bool) {
+func decode(scripts []script, standIn string) (string, []piece, []hole, bool) {
 	if len(scripts) == 1 && scripts[0].skip == 0 && len(scripts[0].word.Parts) == 1 {
 		if q, ok := scripts[0].word.Parts[0].(*syntax.SglQuoted); ok && !q.Dollar && parser.Closed(q.Right) && q.Value != "" {
-			return q.Value, []piece{{source: parser.Offset(q.Left) + 1, length: len(q.Value)}}, true
+			return q.Value, []piece{{source: parser.Offset(q.Left) + 1, length: len(q.Value)}}, nil, true
 		}
 	}
-	var d decoder
+	d := decoder{standIn: standIn}
 	d.text.Grow(decodedSize(scripts))
 	for i, s := range scripts {
 		if i > 0 {
@@ -149,10 +167,10 @@ func decode(scripts []script) (string, []piece, bool) {
 		}
 		d.drop = s.skip
 		if !d.word(s.word) {
-			return "", nil, false
+			return "", nil, nil, false
 		}
 	}
-	return d.text.String(), d.pieces, true
+	return d.text.String(), d.pieces, d.holes, true
 }
 
 func decodedSize(scripts []script) int {
@@ -179,8 +197,28 @@ func decodedSize(scripts []script) int {
 type decoder struct {
 	text    strings.Builder
 	pieces  []piece
+	holes   []hole
+	standIn string
 	drop    int
 	partial bool
+}
+
+func (d *decoder) hole() {
+	at := d.text.Len()
+	d.text.WriteString(d.standIn)
+	d.holes = append(d.holes, hole{start: at, end: d.text.Len()})
+	d.partial = false
+}
+
+const dynamicText = "$$"
+
+func nameByteAt(text string, i int) bool {
+	return i < len(text) && parser.IsName("_"+text[i:i+1])
+}
+
+func DynamicValue(part syntax.WordPart) bool {
+	p, ok := part.(*syntax.ParamExp)
+	return ok && p.Short && p.Param != nil && p.Param.Value == "$"
 }
 
 func (d *decoder) emit(c byte, source int) {
@@ -218,12 +256,21 @@ func (d *decoder) word(w *syntax.Word) bool {
 				return false
 			}
 			for _, inner := range p.Parts {
+				if DynamicValue(inner) {
+					d.hole()
+					continue
+				}
 				lit, ok := inner.(*syntax.Lit)
 				if !ok {
 					return false
 				}
 				d.unescape(lit.Value, parser.Offset(lit.ValuePos), parser.IsDoubleQuoteEscapable)
 			}
+		case *syntax.ParamExp:
+			if !DynamicValue(p) {
+				return false
+			}
+			d.hole()
 		case *syntax.Lit:
 			if expands(p.Value, i == 0) {
 				return false
@@ -349,8 +396,11 @@ func HoverAt(programs []Program, source int) (Hover, bool) {
 			continue
 		}
 		tok, ok := p.Result.TokenAt(at)
-		if !ok || tok.Modifiers&lang.Builtin == 0 {
+		if !ok {
 			return Hover{}, false
+		}
+		if tok.Modifiers&lang.Builtin == 0 {
+			return p.boundHover(tok)
 		}
 		doc, ok := languages[p.Language].doc(p.Text[tok.Start:tok.End], tok)
 		if !ok {

@@ -74,6 +74,9 @@ func (g *Group) Definition(offset int) []Location {
 }
 
 func (g *Group) definitions(sym Symbol) []Location {
+	if sym.link != nil {
+		return g.linkDefinitions(sym)
+	}
 	if len(sym.locals) > 0 {
 		out := make([]Location, len(sym.locals))
 		for i, o := range sym.locals {
@@ -153,6 +156,12 @@ func (g *Group) Highlights(sym Symbol) []Occurrence {
 }
 
 func (g *Group) PrepareRename(sym Symbol) error {
+	if sym.link != nil {
+		if sym.link.refusal != "" {
+			return fmt.Errorf("%w: %s", navigation.ErrNotRenamable, sym.link.refusal)
+		}
+		return nil
+	}
 	if !sym.Defined() {
 		return fmt.Errorf("%w: %s `%s` is built in", navigation.ErrNotRenamable, sym.Kind, sym.Name)
 	}
@@ -205,6 +214,9 @@ func (g *Group) Rename(sym Symbol, newName string) ([]Occurrence, error) {
 	if err := g.PrepareRename(sym); err != nil {
 		return nil, err
 	}
+	if sym.link != nil {
+		return g.renameLink(sym, newName)
+	}
 	occs := g.Occurrences(sym)
 	shell := slices.ContainsFunc(occs, func(o Occurrence) bool { return o.Shell })
 	if !g.Language.ValidName(sym.Kind, newName) || shell && sym.Kind != g.Language.Recursion().Kind && !parser.IsName(newName) {
@@ -256,6 +268,9 @@ func (g *Group) Hover(offset int) (Hover, bool) {
 }
 
 func (g *Group) Describe(sym Symbol) Hover {
+	if sym.link != nil {
+		return g.describeLink(sym)
+	}
 	fence := g.Language.Fence()
 	if b := sym.Builtin; b != nil {
 		md := "```" + fence + "\n" + b.Signature + "\n```\n\n" + b.Doc
@@ -280,7 +295,7 @@ func (g *Group) Describe(sym Symbol) Hover {
 		}
 		if links := t.Module.Links(); links != nil {
 			if script, ok := links.Script(t.File, t.Symbol); ok && script.Head != "" {
-				md += "\n\n```sh\n" + script.Head + "\n```"
+				md += "\n\n```" + script.Fence + "\n" + script.Head + "\n```"
 			}
 		}
 		parts = append(parts, md)

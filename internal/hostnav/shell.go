@@ -181,6 +181,9 @@ func (g *Group) ShellSymbol(offset int) (Symbol, bool) {
 	if g.builder != nil {
 		return g.nixShellSymbol(g.Self, offset)
 	}
+	if sym, ok := g.programSymbol(g.Self, offset); ok {
+		return sym, true
+	}
 	at := g.Self.Doc.SourceOffset(offset)
 	for _, r := range regions(g.Self) {
 		for _, c := range r.calls {

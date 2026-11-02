@@ -236,8 +236,9 @@ type Hole struct {
 }
 
 type Script struct {
-	Name string
-	Head string
+	Name  string
+	Head  string
+	Fence string
 }
 
 type Fold struct {

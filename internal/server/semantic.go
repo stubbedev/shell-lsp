@@ -175,6 +175,7 @@ func (s *Server) nixTokens(file *workspace.File) []semantic.Token {
 
 func (s *Server) hostShellTokens(variants []*workspace.File) []semantic.Token {
 	var out []semantic.Token
+	out = append(out, variants[0].Native.Index.Tokens...)
 	for _, variant := range variants {
 		for _, t := range s.semanticTokens(variant) {
 			t.Span = parser.Span{Start: variant.Doc.SourceOffset(t.Span.Start), End: variant.Doc.SourceOffset(t.Span.End)}

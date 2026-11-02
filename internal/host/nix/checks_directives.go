@@ -246,7 +246,10 @@ func UnusedDirectiveFindings(text string) []lint.Finding {
 	}
 	bare := *tree
 	bare.Comments = nil
-	silence(check(&bare, scope.Resolve(tree)), all)
+	table := scope.Resolve(tree)
+	f := &file{src: text, tree: tree, table: table}
+	f.discover()
+	silence(check(&bare, table, f.quotingRisks(f.found)), all)
 	return unusedDirectives(tree, all)
 }
 

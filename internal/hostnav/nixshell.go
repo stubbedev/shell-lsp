@@ -80,7 +80,7 @@ func nixRegions(f *workspace.File, out []region) {
 			return true
 		}
 		cmd := shellCommand{span: at}
-		if hole, found := holeAt(holes, at); found {
+		if hole, found := holeAt(holes, text, at); found {
 			cmd.hole = &hole
 			suffix := strings.Trim(text[min(hole.Span.End, at.End):at.End], `"'`)
 			cmd.name = programName(hole.Exe, suffix)
@@ -113,8 +113,13 @@ func programName(exe, suffix string) string {
 	return path.Base(suffix)
 }
 
-func holeAt(holes []model.Hole, word parser.Span) (model.Hole, bool) {
-	i := slices.IndexFunc(holes, func(h model.Hole) bool { return h.Span.Start == word.Start || h.Span.Start == word.Start+1 })
+func holeAt(holes []model.Hole, text string, word parser.Span) (model.Hole, bool) {
+	i := slices.IndexFunc(holes, func(h model.Hole) bool {
+		if h.Span.Start == word.Start || h.Span.Start == word.Start+1 {
+			return true
+		}
+		return h.Span.End < word.Start && nix.ProgramDir(text[h.Span.End:word.Start])
+	})
 	if i < 0 {
 		return model.Hole{}, false
 	}
@@ -195,6 +200,9 @@ func (g *Group) wrappedSymbol(offset int) (Symbol, bool) {
 }
 
 func (g *Group) nixShellSymbol(file *workspace.File, offset int) (Symbol, bool) {
+	if sym, ok := g.programSymbol(file, offset); ok {
+		return sym, true
+	}
 	at := file.Doc.SourceOffset(offset)
 	if !file.Doc.Synthetic(offset) {
 		if hit, ok := g.Index().At(at); ok {

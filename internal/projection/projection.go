@@ -1,6 +1,7 @@
 package projection
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"sort"
@@ -18,6 +19,9 @@ const (
 	verbatim kind = iota + 1
 	escape
 	opaque
+	hidden
+	elided
+	pinned
 )
 
 type Encoder func(host string, start, end int, text string) (string, bool)
@@ -66,6 +70,9 @@ type Builder struct {
 	shell        dialect.Detection
 	at           int
 	placeholders []int
+	programs     []program
+	sealed       bool
+	standIn      string
 }
 
 const Dynamic = "$$"
@@ -87,7 +94,7 @@ func (b *Builder) Script() {
 
 func (b *Builder) Placeholder(start, end int) {
 	b.placeholders = append(b.placeholders, len(b.spans))
-	b.Opaque(start, end, Dynamic)
+	b.Opaque(start, end, cmp.Or(b.standIn, Dynamic))
 }
 
 func (b *Builder) Verbatim(start, end int) {
@@ -116,7 +123,9 @@ func (b *Builder) add(k kind, start, end int, text string) {
 	s := span{kind: k, region: region, proj: ProjOffset(b.text.Len()), projLen: len(text), host: HostOffset(start), hostLen: end - start}
 	b.text.WriteString(text)
 	b.at = end
-	if n := len(b.spans); n > 0 && k == verbatim {
+	sealed := b.sealed
+	b.sealed = false
+	if n := len(b.spans); n > 0 && k == verbatim && !sealed {
 		last := &b.spans[n-1]
 		if last.kind == verbatim && last.region == region && last.hostEnd() == HostOffset(start) {
 			last.projLen += s.projLen
@@ -130,7 +139,9 @@ func (b *Builder) add(k kind, start, end int, text string) {
 func (b *Builder) Map() *Map {
 	scripts, shells := b.scripts()
 	m := &Map{host: b.host, text: b.text.String(), spans: b.spans, encoders: b.encoders, scripts: scripts, shells: shells}
-	m.closeSingleQuotes(b.placeholders)
+	if b.standIn == "" {
+		m.settle(b.placeholders, b.programs)
+	}
 	return m
 }
 
@@ -175,7 +186,7 @@ func (m *Map) HostOffset(offset ProjOffset) HostOffset {
 		return 0
 	}
 	s := m.spans[i]
-	if s.kind == verbatim {
+	if s.kind == verbatim || s.kind == pinned {
 		return s.host + HostOffset(offset-s.proj)
 	}
 	return s.host
@@ -184,9 +195,15 @@ func (m *Map) HostOffset(offset ProjOffset) HostOffset {
 func (m *Map) Offset(host HostOffset) (ProjOffset, bool) {
 	i := sort.Search(len(m.spans), func(i int) bool { return m.spans[i].hostEnd() > host })
 	within := i < len(m.spans) && m.spans[i].host <= host
+	if within && m.spans[i].kind == elided {
+		return m.spans[i].proj, true
+	}
+	if within && m.spans[i].kind == hidden {
+		return m.spans[i].proj, false
+	}
 	if within && m.spans[i].projLen > 0 {
 		s := m.spans[i]
-		if s.kind == verbatim {
+		if s.kind == verbatim || s.kind == pinned {
 			return s.proj + ProjOffset(host-s.host), true
 		}
 		return s.proj, s.kind == escape

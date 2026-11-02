@@ -292,3 +292,115 @@ func TestHover(t *testing.T) {
 		}
 	}
 }
+
+func TestAntiquotationsSplitPrograms(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		src, text string
+		errors    int
+	}{
+		{"jq '.a | '$$' | .b' f\n", ".a | __nix__ | .b", 0},
+		{"jq \".a == \\\"$$\\\"\" f\n", `.a == "__nix__"`, 0},
+		{"awk '{ print '$$' }' f\n", "{ print __nix__ }", 0},
+		{"sed 's/'$$'/'$$'/' f\n", "s/1/1/", 0},
+		{"jq '.a | | '$$ f\n", ".a | | __nix__", 1},
+		{"jq '.a | '$$' | ' f\n", ".a | __nix__ | ", 1},
+	} {
+		programs := find(t, tt.src)
+		if len(programs) != 1 {
+			t.Errorf("Find(%q) = %d programs, want 1", tt.src, len(programs))
+			continue
+		}
+		p := programs[0]
+		if p.Text != tt.text || len(p.Result.Errors) != tt.errors {
+			t.Errorf("Find(%q) = %q with errors %+v, want %q with %d", tt.src, p.Text, p.Result.Errors, tt.text, tt.errors)
+		}
+	}
+	if programs := find(t, "jq \"$$\" f\n"); len(programs) != 0 {
+		t.Errorf("a program that is only an antiquotation = %+v", programs)
+	}
+}
+
+func TestAnAntiquotationHidesTheErrorsItTouches(t *testing.T) {
+	t.Parallel()
+
+	for _, src := range []string{"sed \"$$\"'/x/' f\n", "awk '{ print }'$$ f\n"} {
+		for _, p := range find(t, src) {
+			if len(p.Result.Errors) != 0 {
+				t.Errorf("Find(%q) reports %+v next to the antiquotation", src, p.Result.Errors)
+			}
+		}
+	}
+}
+
+func TestCommandLineBindings(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		src, name string
+		kind      ValueKind
+		read      string
+	}{
+		{"jq --arg name \"$value\" '$name' f\n", "name", ValueVariable, "value"},
+		{"jq --argjson name \"${value}\" '$name' f\n", "name", ValueVariable, "value"},
+		{"jq --arg name \"$$\" '$name' f\n", "name", ValueHole, ""},
+		{"jq --rawfile name f '$name' g\n", "name", ValueOther, ""},
+		{"awk -v name=\"$value\" 'BEGIN { print name }'\n", "name", ValueVariable, "value"},
+		{"awk -vname=$value 'BEGIN { print name }'\n", "name", ValueVariable, "value"},
+		{"awk --assign=name=$$ 'BEGIN { print name }'\n", "name", ValueHole, ""},
+		{"awk -v name=1 'BEGIN { print name }'\n", "name", ValueOther, ""},
+	} {
+		programs := find(t, tt.src)
+		if len(programs) != 1 {
+			t.Errorf("Find(%q) = %d programs", tt.src, len(programs))
+			continue
+		}
+		p := &programs[0]
+		b, ok := p.Binding(tt.name)
+		if !ok || b.Kind != tt.kind || b.Read != tt.read {
+			t.Errorf("%q: binding = %+v, %v, want %v reading %q", tt.src, b, ok, tt.kind, tt.read)
+			continue
+		}
+		if got := tt.src[b.Span.Start:b.Span.End]; got != tt.name {
+			t.Errorf("%q: the binding is at %q", tt.src, got)
+		}
+		reads := p.Reads(tt.name)
+		if len(reads) != 1 || tt.src[reads[0].Start:reads[0].End] != tt.name {
+			t.Errorf("%q: reads = %+v", tt.src, reads)
+		}
+	}
+}
+
+func TestBoundVariableHover(t *testing.T) {
+	t.Parallel()
+
+	src := "jq --arg name \"$value\" '.a == $name' f\n"
+	programs := find(t, src)
+	h, ok := HoverAt(programs, strings.Index(src, "$name"))
+	if !ok || !strings.Contains(h.Markdown, "--arg name") || !strings.Contains(h.Markdown, "$value") {
+		t.Errorf("hover = %+v, %v", h, ok)
+	}
+}
+
+func TestDeclaredVariablesAreNotTheBinding(t *testing.T) {
+	t.Parallel()
+
+	programs := find(t, "jq --arg x \"$y\" '. as $x | $x' f\n")
+	if !programs[0].Shadows("x") {
+		t.Errorf("`as $x` does not shadow the argument")
+	}
+	awk := find(t, "awk -v x=1 'function f(x) { return x } { print x }' g\n")
+	if !awk[0].Shadows("x") {
+		t.Errorf("a parameter does not shadow the assignment")
+	}
+}
+
+func TestAntiquotationsInAHereDocument(t *testing.T) {
+	t.Parallel()
+
+	programs := find(t, "awk -f - <<'EOF'\n{ print $$ }\nEOF\n")
+	if len(programs) != 1 || programs[0].Text != "{ print __nix__ }\n" || len(programs[0].Result.Errors) != 0 {
+		t.Errorf("programs = %+v", programs)
+	}
+}

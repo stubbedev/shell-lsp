@@ -13,6 +13,8 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/projection"
+	"github.com/stubbedev/shell-lsp/internal/textedit"
 )
 
 func TestOf(t *testing.T) {
@@ -264,5 +266,94 @@ func TestEveryRecipeParsesAsItsOwnShell(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+func TestNixHoldsOtherHostLanguages(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name, nix, shell string
+		code             lint.Code
+		at               string
+	}{
+		{
+			name:  "a justfile through writeText",
+			nix:   "writeText \"justfile\" ''\n  build: missing\n    echo $HOME\n''\n",
+			shell: "echo $HOME",
+			code:  lint.CodeJustUnknownRecipe,
+			at:    "missing",
+		},
+		{
+			name:  "a justfile in a home file",
+			nix:   "{ home.file.\"x/justfile\".text = ''\n  build: missing\n    echo $HOME\n''; }\n",
+			shell: "echo $HOME",
+			code:  lint.CodeJustUnknownRecipe,
+			at:    "missing",
+		},
+		{
+			name:  "a Makefile",
+			nix:   "writeText \"Makefile\" ''\n  all:\n  \techo hi\n  bad\n''\n",
+			shell: "echo hi",
+			code:  lint.CodeMakeSyntax,
+			at:    "bad",
+		},
+		{
+			name:  "a Dockerfile",
+			nix:   "writeText \"Dockerfile\" ''\n  FROM alpine\n  NOPE x\n  RUN echo hi\n''\n",
+			shell: "echo hi",
+			code:  lint.CodeDockerUnknownInstruction,
+			at:    "NOPE",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			a := analyzeNix(tt.nix)
+			if !strings.Contains(a.projection.Text(), tt.shell) {
+				t.Errorf("projection = %q, want it to hold %q", a.projection.Text(), tt.shell)
+			}
+			i := slices.IndexFunc(a.index.Findings, func(f lint.Finding) bool { return f.Code == tt.code })
+			if i < 0 {
+				t.Fatalf("findings = %+v, want %s", a.index.Findings, tt.code)
+			}
+			if span := a.index.Findings[i].Span; !strings.HasPrefix(tt.nix[span.Start:], tt.at) {
+				t.Errorf("%s is at %q, want %q", tt.code, tt.nix[span.Start:span.End], tt.at)
+			}
+			if at := strings.Index(tt.nix, tt.shell); !slices.ContainsFunc(a.index.Shells, func(s model.Shell) bool { return s.Span.Start <= at && at < s.Span.End }) {
+				t.Errorf("shells = %+v do not hold the recipe", a.index.Shells)
+			}
+		})
+	}
+}
+
+func TestAntiquotationsInAnEmbeddedFileReportNothing(t *testing.T) {
+	t.Parallel()
+
+	a := analyzeNix("x: writeText \"justfile\" ''\n  version := ${x}\n  build:\n    echo ${x}\n''\n")
+	for _, f := range a.index.Findings {
+		if f.Code.Just() {
+			t.Errorf("finding %+v touches an antiquotation", f)
+		}
+	}
+	if !strings.Contains(a.projection.Text(), "echo "+projection.Dynamic) {
+		t.Errorf("projection = %q, want the antiquotation to stay unknown in the shell", a.projection.Text())
+	}
+}
+
+func TestNixEmbeddedEditsAreEscapedTwice(t *testing.T) {
+	t.Parallel()
+
+	src := "writeText \"Makefile\" ''\n  all:\n  \techo `date`\n''\n"
+	a := analyzeNix(src)
+	start := strings.Index(a.projection.Text(), "`date`")
+	if start < 0 {
+		t.Fatalf("projection = %q", a.projection.Text())
+	}
+	edit, ok := a.projection.Edit(textedit.Edit{Start: start, End: start + len("`date`"), NewText: "$x"})
+	if !ok {
+		t.Fatal("the edit was refused")
+	}
+	if got := textedit.Apply(src, []textedit.Edit{edit}); !strings.Contains(got, "echo $$x") {
+		t.Errorf("after the edit = %q, want make's escape of the dollar", got)
 	}
 }

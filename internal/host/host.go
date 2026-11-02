@@ -15,6 +15,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/host/model"
 	"github.com/stubbedev/shell-lsp/internal/host/nix"
 	nixformat "github.com/stubbedev/shell-lsp/internal/host/nix/format"
+	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/projection"
 )
@@ -68,8 +69,32 @@ type analysis struct {
 }
 
 func analyzeNix(text string) analysis {
-	a := nix.Analyze(text)
+	a := nix.AnalyzeWith(text, embedHost)
 	return analysis{projection: a.Map, detection: a.Detection, index: a.Index, expect: a.Expect, invocation: a.Invocation, enclosing: a.Enclosing, format: func() (string, error) { return nixformat.Format(text) }, nix: a.Document()}
+}
+
+func embedHost(name string) (func(string) nix.Embedding, bool) {
+	l, ok := FromName(name)
+	if !ok || l == Nix {
+		return nil, false
+	}
+	return func(text string) nix.Embedding {
+		a := definitions[l].analyze(text)
+		return nix.Embedding{Map: a.projection, Detection: a.detection, Index: a.index, Findings: embeddedFindings(l, a.index)}
+	}, true
+}
+
+func embeddedFindings(l Language, ix *model.Index) []lint.Finding {
+	checks := definitions[l].checks
+	if !checks.Active() {
+		return nil
+	}
+	m := &model.Module{Complete: len(ix.Includes) == 0, Builtins: definitions[l].builtins, Submodules: map[string]*model.Module{}, Files: []*model.Index{ix}}
+	used := m.Usage()
+	for i := range ix.Symbols {
+		used[model.Target{Module: m, File: 0, Symbol: i}] = true
+	}
+	return m.Findings(0, checks, used)
 }
 
 func analyzeMake(text string) analysis {
@@ -124,13 +149,12 @@ var definitions = [...]definition{
 		name:        "Nix file",
 		languageIDs: []string{"nix"},
 		extensions:  []string{".nix"},
-		analyze:     analyzeNix,
 		checks:      nix.Checks,
 		validName:   nix.ValidName,
 		fence:       "nix",
 		formatter:   nixformat.Format,
-		invocation: func(_, name string) []string { return nix.Invocation(name) },
-		recursion:  Recursion{Kind: model.KindFunction},
+		invocation:  func(_, name string) []string { return nix.Invocation(name) },
+		recursion:   Recursion{Kind: model.KindFunction},
 	},
 	Docker: {
 		name:        "Dockerfile",
@@ -149,6 +173,8 @@ var definitions = [...]definition{
 		},
 	},
 }
+
+func init() { definitions[Nix].analyze = analyzeNix }
 
 func find(match func(definition) bool) (Language, bool) {
 	for l := range Language(len(definitions)) {

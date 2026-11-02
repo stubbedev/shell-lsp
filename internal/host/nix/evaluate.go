@@ -187,7 +187,7 @@ func builtinValue(name string) []flowValue {
 }
 
 func writerValue(name string) []flowValue {
-	if slices.Contains(knownWriters(), name) {
+	if knownWriter(name) {
 		return []flowValue{flowWriter{name: name}}
 	}
 	return nil
@@ -379,7 +379,7 @@ func (p *Project) evalApply(u *symbolTable, call *syntax.Apply) []flowValue {
 		if fn, literal := syntax.Unparenthesized(last).(*syntax.Lambda); literal {
 			return p.eval(u, fn.Body)
 		}
-	case slices.Contains(scriptProducers(), name):
+	case scriptProducer(name):
 		return []flowValue{flowScript{unit: u, call: call}}
 	}
 	return p.callResult(u, call, p.eval(u, fn))
@@ -416,10 +416,6 @@ func (b *symbolTable) ownFunction(fn syntax.Expr) bool {
 		return false
 	}
 	return b.lambdas[ref.Def] != nil
-}
-
-func scriptProducers() []string {
-	return slices.Concat(positionalWriters(), []string{shellApp})
 }
 
 func (p *Project) importsPackages(u *symbolTable, arg syntax.Expr) bool {

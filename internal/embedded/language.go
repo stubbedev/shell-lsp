@@ -23,23 +23,26 @@ type language struct {
 	parse    func(string, invocation) lang.Result
 	doc      func(string, lang.Token) (lang.Doc, bool)
 	cli      cli
+	sigil    string
+	standIn  string
 }
 
 var languages = [...]language{
 	Awk: {
 		name:     "awk",
+		standIn:  "__nix__",
 		commands: []string{"awk", "gawk", "mawk", "nawk", "original-awk"},
 		parse:    func(text string, _ invocation) lang.Result { return awk.Parse(text) },
 		doc:      awk.Doc,
 		cli: cli{
 			short: [128]option{
-				'F': valued, 'v': valued, 'f': file, 'e': source, 'E': file, 'i': valued, 'l': valued, 'W': valued,
+				'F': valued, 'v': assign, 'f': file, 'e': source, 'E': file, 'i': valued, 'l': valued, 'W': valued,
 				'b': flag, 'c': flag, 'C': flag, 'g': flag, 'h': flag, 'M': flag, 'n': flag, 'N': flag, 'O': flag,
 				'P': flag, 'r': flag, 's': flag, 'S': flag, 't': flag, 'V': flag,
 				'd': glued, 'D': glued, 'L': glued, 'o': glued, 'p': glued,
 			},
 			long: map[string]option{
-				"field-separator": valued, "assign": valued, "file": file, "source": source, "exec": file,
+				"field-separator": valued, "assign": assign, "file": file, "source": source, "exec": file,
 				"include": valued, "load": valued,
 				"posix": flag, "traditional": flag, "compat": flag, "re-interval": flag, "characters-as-bytes": flag,
 				"sandbox": flag, "optimize": flag, "no-optimize": flag, "version": flag, "help": flag, "usage": flag,
@@ -51,6 +54,7 @@ var languages = [...]language{
 	},
 	Sed: {
 		name:     "sed",
+		standIn:  "1",
 		commands: []string{"sed", "gsed"},
 		parse:    parseSed,
 		doc:      sed.Doc,
@@ -72,6 +76,8 @@ var languages = [...]language{
 	},
 	Jq: {
 		name:     "jq",
+		sigil:    "$",
+		standIn:  "__nix__",
 		commands: []string{"jq", "gojq", "jaq"},
 		parse:    func(text string, _ invocation) lang.Result { return jq.Parse(text) },
 		doc:      jq.Doc,

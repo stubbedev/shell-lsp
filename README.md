@@ -456,7 +456,17 @@ shell string with the native codes [`SL3001`](docs/rules.md#sl3001) (awk),
 are highlighted through semantic tokens, and hovering an awk or jq builtin, or
 a sed command or flag, shows its documentation. Programs that contain shell
 expansions, or come from files, are skipped rather than guessed at, and
-common GNU and gawk extensions are accepted.
+common GNU and gawk extensions are accepted. The one exception is a value no one
+can know that the file around the shell puts there, such as a Nix `${x}` or a
+just `{{x}}`, and a shell's `$$`: it stands for one word of the program, and a
+finding next to it is dropped.
+
+A variable bound on the command line (`jq --arg name "$value"`, `--argjson`,
+`--slurpfile`, `--rawfile`, `awk -v name="$value"`, `--assign`) is known in the
+program: hovering `$name` in jq or `name` in awk says which flag sets it and to
+what. In a file with a host language this goes on through the chain, see
+[Nix files](#nix-files). A program variable that the program also declares (`as
+$name`, a function parameter) is left alone.
 
 ## Shell in other files
 
@@ -649,36 +659,115 @@ an editor needs for these files.
 
 A document is a Nix file when it ends in `.nix`, whatever language
 identifier the editor gives it, or else when its language identifier is
-`nix`. A string literal there is shell when:
+`nix`. A string literal there is shell, with no marker needed, when it stands
+in one of these places. The table of them was read from the option declarations
+of a pinned nixpkgs and home-manager, and an attribute counts wherever it is
+written: as one long path, as nested sets, inside `flake.modules.x.y`,
+`home-manager.users.x` or any other prefix, and through a function such as
+`lib.mapAttrs`.
 
-- it is a derivation phase or hook (`buildPhase`, `installPhase`,
-  `preConfigure`, `postInstall` and the other `pre`/`post` hooks,
-  `buildCommand`), or the script of `runCommand`, `runCommandLocal`,
-  `runCommandCC`;
-- it is a `shellHook`, or the `script`, `preStart`, `postStart`, `preStop`,
-  `postStop` or `reload` of a systemd unit (an attribute under `systemd`);
-- it is the script of `writeShellScript`, `writeShellScriptBin`,
-  `writeShellApplication` (`text`), `writeBash`, `writeBashBin`, `writeDash`,
-  `writeDashBin`, or of `writeScript` and `writeScriptBin` when its shebang
-  names a shell;
-- a `/* bash */` (or `sh`, `dash`, `zsh`, `ksh`, `shell`) comment comes right
-  before it;
-- it is passed to a function in the same file that static following shows
-  hands it to one of those: its formal is the `text` of
-  `writeShellApplication`, the script argument of a writer or of `runCommand`,
-  a phase of a derivation, a `${text}` on a line of its own in a shell string,
-  or the argument after `-c` there, also through `lib.escapeShellArg`, through
-  further functions and through an alias of a writer. Such a function may also
-  write `writeTextFile` with a shell's shebang.
+- **Derivations:** a phase or hook (`buildPhase`, `installPhase`, `preConfigure`,
+  `postInstall` and the other `pre`/`post` hooks, `buildCommand`), a `shellHook`,
+  the script of `runCommand`, `runCommandLocal`, `runCommandCC`,
+  `runCommandNoCC`, `runCommandNoCCLocal` and `runCommandWith`.
+- **Writers:** `writeShellScript`, `writeShellScriptBin`, `writeShellApplication`
+  (`text`), `writeBash`, `writeBashBin` (also with their options), `writeDash` and
+  `writeDashBin` (as `dash`), and `writeScript` and `writeScriptBin`, which run
+  what their shebang names.
+- **Images and environments:** `runAsRoot` and `extraCommands` of
+  `dockerTools.buildImage`, `extraCommands` and `fakeRootCommands` of
+  `buildLayeredImage` and `streamLayeredImage`, and `runScript`, `profile`,
+  `extraBuildCommands`, `extraInstallCommands` and `extraPreBwrapCmds` of
+  `buildFHSEnv`.
+- **Units:** `script`, `preStart`, `postStart`, `preStop`, `postStop` and `reload`
+  of `systemd.services.*` and `systemd.user.services.*`, also under
+  `boot.initrd`. The `Exec*` strings of `serviceConfig` and home-manager's
+  `Service`, also in a list, are command lines with their `-`, `+`, `@`, `:` and
+  `!` prefixes dropped.
+- **NixOS:** `system.activationScripts.*` and `system.userActivationScripts.*`,
+  as a string or `.text`, `environment.shellInit`, `loginShellInit`,
+  `interactiveShellInit`, `extraInit` and `shellAliases.*`, `programs.bash.*Init`,
+  `logout` and `shellAliases.*`, `programs.zsh.*Init` and `shellAliases.*` (as
+  zsh), `boot.initrd.pre*Commands` and `post*Commands` (as BusyBox),
+  `boot.postBootCommands`, `extraInstallCommands` of the boot loaders,
+  `networking.localCommands`, `firewall.extraCommands` and
+  `extraStopCommands`, `nat.extraCommands` and `extraStopCommands`,
+  `dhcpcd.runHook`, the hooks of `networking.wireguard.interfaces.*` and
+  `networking.wg-quick.interfaces.*`, `powerManagement.*Commands` and
+  `services.xserver.displayManager.sessionCommands` and `setupCommands`.
+- **home-manager:** `home.activation.*`, `home.extraProfileCommands`,
+  `home.extraBuilderCommands`, `home.sessionVariablesExtra`,
+  `home.shellAliases.*`, `onChange` of the files below, `programs.bash.bashrcExtra`,
+  `initExtra`, `profileExtra` and `logoutExtra`, `programs.zsh.initContent`,
+  `initExtra`, `initExtraFirst`, `initExtraBeforeCompInit`, `completionInit`,
+  `envExtra`, `profileExtra`, `loginExtra`, `logoutExtra`, `shellGlobalAliases.*`
+  and `siteFunctions.*` (as zsh), and a value of `programs.git.settings.alias` or
+  `programs.git.aliases` that starts with `!`.
+- **Named files:** the text of `writeText`, `writeTextDir`, `builtins.toFile`,
+  `writeTextFile`, `home.file.*`, `xdg.configFile.*`, `xdg.dataFile.*`,
+  `xdg.stateFile.*` and `environment.etc.*`, when its shebang names a shell, or else
+  when its file name does (`.sh`, `.bash`, `.zsh`, `.dash`, `.ksh`, a shell's rc
+  file). The name is `destination`, then `target`, then the attribute or argument
+  that names the file.
+- **By hand:** a `/* bash */` (or `sh`, `dash`, `zsh`, `ksh`, `shell`) comment right
+  before it.
+- **Through a function in the same file:** static following shows it hands the
+  string to one of the above: its formal is the `text` of `writeShellApplication`,
+  the script argument of a writer or of `runCommand`, a phase of a derivation, a
+  `${text}` on a line of its own in a shell string, or the argument after `-c`
+  there, also through `lib.escapeShellArg`, through further functions and through
+  an alias of a writer. Such a function may also write `writeTextFile` with a
+  shell's shebang.
+
+Strings known to be in another language are not read as shell: `writeFish`,
+`writeNu`, `writePython3`, `writePyPy2`, `writePyPy3`, `writePerl`, `writeRuby`,
+`writeLua`, `writeJS`, `writeRust`, `writeHaskell`, `writeNim`, `writeGuile`,
+`writeBabashka`, `writeFSharp`, `writeRscript` and `writeCBin`, `testScript` of a
+NixOS test (Python), `programs.fish.*`, `programs.nushell.*` and
+`services.udev.extraRules`. A `${name}` of such a writer still hovers with the head
+of what it writes, in that language. `security.wrappers` and `makeSetupHook` take
+paths, so they hold no string to read, and only the writer behind them counts.
+
+A string in a named file whose name is that of a justfile, Makefile or Dockerfile
+gets everything those languages have in a file of their own, as far as it can be
+reached from a Nix document: the syntax errors and checks of the language
+(`SL5`, `SL6` and `SL7`) at their place in the `.nix` file, the shell in its recipes
+and `RUN` lines with all its linting, highlighting and navigation in the shell the
+file decides, semantic tokens, and definition, references and hover for its recipes,
+targets and variables. `${...}` stands for text no one can know, and a finding that
+touches one is dropped. Those names are not renamed. Checks that need the files
+around it (`import`, `include`) and that a name is unused are left out, and Hadolint's
+`DL` rules, completion and signature help do not reach into such a string.
 
 The binding counts through `lib.optionalString`, `lib.mkIf`, `mkBefore`,
-`mkAfter`, `mkForce`, `mkDefault`, `if ... then ... else` and `or`, and the
-strings joined with `+` in one binding are one script, so an `if` may open in
-one and close in another.
+`mkAfter`, `mkForce`, `mkDefault`, `mkOverride`, `mkOrder`, `lib.hm.dag.entryAfter`,
+`entryBefore`, `entryBetween`, `entryAnywhere`, `lib.stringAfter`, `noDepEntry`,
+`fullDepEntry`, `if ... then ... else` and `or`, the items of `lib.mkMerge`,
+`concatStringsSep`, `concatStrings` and `concatLines`, the bodies of `concatMapStrings`,
+`concatMapStringsSep`, `map` and `mapAttrsToList`, and the strings joined with `+` in
+one binding are one script, so an `if` may open in one and close in another.
+
+An antiquotation in a shell string is read for what it is:
+
+- A string it holds is shell in that place: `${lib.optionalString c "..."}`, `${if c
+  then "..." else ""}`, the items of `concatStringsSep`, `concatStrings` and
+  `concatLines`, and the bodies of `concatMapStrings`, `concatMapStringsSep`, `map`
+  and `mapAttrsToList`. Of an `if` with text in both branches the first is read. Inside
+  shell single quotes it stays one word.
+- A shell writer in it (`${writeShellScript "x" ''...''}`) is read as a script of its
+  own that the outer one runs, as `$(...)`.
+- As a command word, `${pkg}/bin/foo` and `${lib.getExe' pkg "foo"}` are the program
+  `foo`, and `${lib.getExe pkgs.foo}` is `foo` or the `mainProgram` of well-known
+  packages (`gnused` is `sed`, `ripgrep` is `rg`), also behind `sudo`, `env` and the
+  other wrappers. Every check, hover and embedded `jq`, `awk` or `sed` program treats
+  it as that command. Its name is not edited, since the antiquotation decides it.
+- `lib.escapeShellArg`, `toString` and the program getters lead to what they read.
+- Anything else stands for text the shell cannot know. Where its value is not
+  provably safe, `SL8014` says that it is a quoting risk.
 
 - Indentation is removed as Nix removes it, `'''`, `''$` and `''\x` (or `\"`,
   `\$` and the other escapes of a `"` string) are what Nix makes of them, and
-  every `${...}` stands for text the shell cannot know. Fixes are escaped for
+  every other `${...}` stands for text the shell cannot know. Fixes are escaped for
   the string they land in, and new lines get its indentation.
 - A phase runs as stdenv runs it: inside a function, with `set -eu -o
   pipefail`, in the same shell as the other phases, and with every attribute
@@ -688,8 +777,11 @@ one and close in another.
   or wrapper `env`. The scripts of the writers and of systemd units otherwise
   run on their own, and `writeShellApplication` adds its strict mode and
   honours its `excludeShellChecks`.
-- The file is checked as one shell, chosen as for justfiles; phases and the
-  bash writers are bash.
+- Each string is checked as the shell its place decides: phases, the bash writers,
+  units and activation scripts are bash, `writeDash` is dash, zsh options are zsh, and
+  a file or shebang says for itself. A string read into a shell someone else set up,
+  such as an init option or alias, does not report variables it never sets or reads
+  (`SC2154`, `SC2034`).
 
 Inside the shell, a variable that the Nix around it puts in the environment
 leads to the attribute that sets it, with definition, references, document
@@ -726,14 +818,22 @@ The shell and the Nix around it answer for each other:
 
 - `${...}` in a shell string is Nix: every feature of the Nix language answers
   inside it.
-- A command word `${pkg}/bin/foo`, `${lib.getExe pkg}` or `${pkg}` is that
+- A `$name` in a jq or awk program follows its flag: `jq --arg name "$value" '$name'`
+  and `awk -v name="$value" '...'` lead from the variable to the flag, on to the shell
+  variable, an assignment `value=${x}` and the Nix binding or attribute behind it, also
+  in another file. Definition lists each of them, references hold them all and hover
+  shows the chain. Renaming `$name` renames the flag and the reads in that program and
+  leaves the rest, which keep their own names; it is refused when the program also reads
+  `$ARGS` or when an antiquotation or escape splits the name.- A command word `${pkg}/bin/foo`, `${lib.getExe pkg}` or `${pkg}` is that
   program. On the shell text next to the antiquotation, hover says what it runs,
   and definition goes to the binding of `pkg`.
 - A name bound to `writeShellScript`, `writeShellApplication`, the other writers
   or a wrapper is a command where it is interpolated. Definition and references
   reach it, hover shows the first lines of the script, and call hierarchy
   crosses the link. Its caller is the script that holds the string.
-- A command in `text`, a phase or a unit that matches an item of `runtimeInputs`,
+- A name bound to `writeText`, `writeTextFile`, `builtins.toFile` or a writer of
+  another language is a file whose content is known: hover on `${cfg}` shows the head of
+  what it writes, also when that is an expression such as `builtins.toJSON { ... }`.- A command in `text`, a phase or a unit that matches an item of `runtimeInputs`,
   `buildInputs`, `nativeBuildInputs`, `packages` or `path` leads to that item, or
   to the script the item names.
 - The phases of one derivation share a shell, so an assignment, `export` or

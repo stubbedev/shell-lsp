@@ -1,32 +1,19 @@
 package nix
 
 import (
-	"slices"
+	"cmp"
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/directive"
+	"github.com/stubbedev/shell-lsp/internal/host/model"
 	"github.com/stubbedev/shell-lsp/internal/host/nix/syntax"
-)
-
-const (
-	shellApp      = "writeShellApplication"
-	shellAppText  = "text"
-	shellHook     = "shellHook"
-	excludeChecks = "excludeShellChecks"
-	systemd       = "systemd"
+	"github.com/stubbedev/shell-lsp/internal/projection"
 )
 
 var (
-	derivationBindings = phaseHooks(phaseStages, "buildCommand")
-	serviceBindings    = []string{"script", "preStart", "postStart", "preStop", "postStop", "reload"}
-	bashWriters        = []string{"writeShellScript", "writeShellScriptBin", "writeBash", "writeBashBin"}
-	dashWriters        = []string{"writeDash", "writeDashBin"}
-	scriptWriters      = []string{"writeScript", "writeScriptBin"}
-	commandRunner      = []string{"runCommand", "runCommandLocal", "runCommandCC", "runCommandNoCC", "runCommandNoCCLocal"}
-	passThrough        = []string{"mkBefore", "mkAfter", "mkForce", "mkDefault"}
-	conditional        = []string{"optionalString", "mkIf", "mkOrder"}
-	markers            = map[string]dialect.Dialect{"shell": dialect.Bash, "bash": dialect.Bash, "sh": dialect.Posix, "dash": dialect.Dash, "zsh": dialect.Zsh, "ksh": dialect.Ksh}
+	sourcedDirective = directive.Render(directive.Disable, "SC2154,SC2034") + "\n"
+	markers          = map[string]dialect.Dialect{"shell": dialect.Bash, "bash": dialect.Bash, "sh": dialect.Posix, "dash": dialect.Dash, "zsh": dialect.Zsh, "ksh": dialect.Ksh}
 )
 
 func phaseHooks(stages []string, names ...string) []string {
@@ -41,23 +28,17 @@ func stageBinding(stage string) string {
 }
 
 type context struct {
-	site          *syntax.Assign
-	name          string
-	ownerSystemd  bool
-	insideSystemd bool
-	set           *syntax.AttrSet
-	callee        string
-	merged        syntax.Expr
-	prefix        string
+	site   *syntax.Assign
+	name   string
+	set    *syntax.AttrSet
+	callee string
+	merged syntax.Expr
+	prefix string
 }
 
 func (c context) cleared() context {
-	c.site, c.name, c.insideSystemd = nil, "", c.ownerSystemd
+	c.site, c.name = nil, ""
 	return c
-}
-
-func (c context) nested() context {
-	return context{ownerSystemd: c.insideSystemd, insideSystemd: c.insideSystemd}
 }
 
 func (c context) sameBinding(other context) bool { return c.site == other.site && c.set == other.set }
@@ -65,12 +46,21 @@ func (c context) sameBinding(other context) bool { return c.site == other.site &
 type position struct {
 	value  bool
 	joined bool
+	items  bool
 }
 
 type call struct {
-	name string
-	env  *syntax.AttrSet
-	expr syntax.Expr
+	name    string
+	surface *surface
+	env     *syntax.AttrSet
+	expr    syntax.Expr
+	file    string
+}
+
+type hostedText struct {
+	via   *projection.Map
+	inner Embedding
+	base  model.Scope
 }
 
 type shellString struct {
@@ -84,6 +74,8 @@ type shellString struct {
 	joined     bool
 	context    context
 	phase      int
+	skip       int
+	hosted     *hostedText
 }
 
 func (f *file) discover() {
@@ -91,6 +83,7 @@ func (f *file) discover() {
 	for _, e := range f.tree.Stray {
 		f.walk(e, context{}, position{})
 	}
+	f.path = nil
 }
 
 func (f *file) walk(e syntax.Expr, c context, at position) {
@@ -99,10 +92,15 @@ func (f *file) walk(e syntax.Expr, c context, at position) {
 	case *syntax.String:
 		f.visitString(e, c, at, call{})
 	case *syntax.Paren:
-		c.ownerSystemd = c.insideSystemd
 		f.walk(e.Inner, c, at)
 	case *syntax.List:
-		inner := c.nested()
+		if at.items || at.value && f.listSurface() {
+			for _, item := range e.Items {
+				f.walk(item, c, plain)
+			}
+			return
+		}
+		inner := context{}
 		for _, item := range e.Items {
 			f.walk(item, inner, position{})
 		}
@@ -125,7 +123,14 @@ func (f *file) walk(e syntax.Expr, c context, at position) {
 		f.walk(e.Else, c, plain)
 	case *syntax.Lambda:
 		f.defaults(e.Param, c)
-		f.walk(e.Body, c, position{})
+		body := position{}
+		if at.items {
+			body = plain
+		}
+		mark := len(f.path)
+		f.path = append(f.path, unknownAttr)
+		f.walk(e.Body, c, body)
+		f.path = f.path[:mark]
 	case *syntax.Apply:
 		f.apply(e, c, at)
 	case *syntax.Select:
@@ -151,12 +156,17 @@ func (f *file) walk(e syntax.Expr, c context, at position) {
 	}
 }
 
+func (f *file) listSurface() bool {
+	s := attrSurfaces.find(f.path)
+	return s != nil && s.role == execRole
+}
+
 func (f *file) defaults(param syntax.Param, c context) {
 	pattern, ok := param.(*syntax.PatternParam)
 	if !ok {
 		return
 	}
-	inner := c.nested()
+	inner := context{}
 	for _, formal := range pattern.Formals {
 		if formal.Default != nil {
 			f.walk(formal.Default, inner, position{})
@@ -165,7 +175,7 @@ func (f *file) defaults(param syntax.Param, c context) {
 }
 
 func (f *file) attrs(set *syntax.AttrSet, c context, callee string) {
-	inner := c.nested()
+	inner := context{}
 	inner.set, inner.callee, inner.merged = set, callee, c.merged
 	f.bindings(set.Bindings, inner)
 }
@@ -176,8 +186,16 @@ func (f *file) bindings(bindings []syntax.Binding, c context) {
 		case *syntax.Assign:
 			inner := c
 			inner.site, inner.name, inner.prefix = b, lastIdent(b.Path), pathPrefix(b.Path)
-			inner.insideSystemd = c.ownerSystemd || namesSystemd(b.Path)
+			mark := len(f.path)
+			for _, a := range b.Path {
+				name, ok := syntax.AttrName(a)
+				if !ok {
+					name = unknownAttr
+				}
+				f.path = append(f.path, name)
+			}
 			f.walk(b.Value, inner, position{value: true})
+			f.path = f.path[:mark]
 		case *syntax.Inherit:
 			if b.From != nil {
 				f.walk(b.From, c.cleared(), position{})
@@ -205,28 +223,22 @@ func lastIdent(path syntax.AttrPath) string {
 	return ""
 }
 
-func namesSystemd(path syntax.AttrPath) bool {
-	return slices.ContainsFunc(path, func(a syntax.Attr) bool {
-		name, _, ok := syntax.StaticName(a)
-		return ok && name == systemd
-	})
-}
-
 func (f *file) apply(e *syntax.Apply, c context, at position) {
-	fn := calleeName(e.Fn)
+	carried, carries := carriers[calleeName(e.Fn)]
 	f.walkApplied(e.Fn, e, 0, c, at)
 	for i, arg := range e.Args {
 		k := i + 1
 		itemAt := position{}
-		if k == 1 && slices.Contains(passThrough, fn) || k == 2 && slices.Contains(conditional, fn) {
+		if carries && k == carried.arg {
 			itemAt = at
+			itemAt.items = carried.items && at.value
 		}
 		f.walkApplied(arg, e, k, c, itemAt)
 	}
 }
 
 func (f *file) walkApplied(item syntax.Expr, e *syntax.Apply, k int, c context, at position) {
-	switch item := item.(type) {
+	switch item := syntax.Unparenthesized(item).(type) {
 	case *syntax.String:
 		f.visitString(item, c, at, callOf(e, k))
 	case *syntax.AttrSet:
@@ -248,26 +260,29 @@ func applied(e *syntax.Apply, k int) syntax.Expr {
 }
 
 func callOf(e *syntax.Apply, k int) call {
-	if k >= 2 {
-		if _, ok := applied(e, k-1).(*syntax.String); ok {
-			name := calleeName(applied(e, k-2))
-			if slices.Contains(bashWriters, name) || slices.Contains(dashWriters, name) || slices.Contains(scriptWriters, name) {
-				return call{name: name}
-			}
+	if k == 0 {
+		return call{}
+	}
+	name := calleeName(syntax.Unparenthesized(e.Fn))
+	c := callSurfaces[name]
+	if c == nil || !c.positional(k, len(e.Args)) {
+		return call{}
+	}
+	out := call{name: name, surface: c.script}
+	switch c.script.role {
+	case runnerRole:
+		env := applied(e, k-1)
+		if set, isSet := syntax.Unparenthesized(env).(*syntax.AttrSet); isSet {
+			out.env = set
+		} else {
+			out.expr = env
+		}
+	case namedRole:
+		if text, literal := syntax.Unparenthesized(e.Args[0]).(*syntax.String); literal {
+			out.file = literalOf(text)
 		}
 	}
-	if k < 3 {
-		return call{}
-	}
-	_, named := applied(e, k-2).(*syntax.String)
-	name := calleeName(applied(e, k-3))
-	if !named || !slices.Contains(commandRunner, name) {
-		return call{}
-	}
-	if set, isSet := syntax.Unparenthesized(applied(e, k-1)).(*syntax.AttrSet); isSet {
-		return call{name: name, env: set}
-	}
-	return call{name: name, expr: applied(e, k-1)}
+	return out
 }
 
 func calleeName(e syntax.Expr) string {
@@ -294,6 +309,12 @@ func (f *file) visitString(str *syntax.String, c context, at position, via call)
 	}
 	if s, ok := f.classify(str, c, at, via); ok {
 		f.found = append(f.found, s)
+		return
+	}
+	for _, part := range str.Parts {
+		if hole, ok := part.(*syntax.Interpolation); ok {
+			f.walk(hole.Value, context{}, position{})
+		}
 	}
 }
 
@@ -306,35 +327,73 @@ func (f *file) classify(str *syntax.String, c context, at position, via call) (s
 			return s, true
 		}
 	}
-	if via.name != "" {
-		return f.written(s, via)
+	if via.surface != nil {
+		return f.shaped(s, via.surface, via)
 	}
 	if !at.value {
 		return shellString{}, false
 	}
-	switch {
-	case slices.Contains(derivationBindings, c.name):
+	found := f.attrSurface(c)
+	if found == nil {
+		return shellString{}, false
+	}
+	return f.shaped(s, found, via)
+}
+
+func (f *file) attrSurface(c context) *surface {
+	if kind := callSurfaces[c.callee]; kind != nil && c.prefix == "" {
+		if keyed := kind.keys[c.name]; keyed != nil {
+			return keyed
+		}
+	}
+	return attrSurfaces.find(f.path)
+}
+
+func (f *file) shaped(s shellString, found *surface, via call) (shellString, bool) {
+	c := s.context
+	switch found.role {
+	case foreignRole:
+		return shellString{}, false
+	case phaseRole:
 		s.derivation = true
 		s.env = environment{set: c.set, source: derivationEnv, expr: c.merged}
 		s.phase = phaseRank(c.name)
-	case c.name == shellHook:
+	case hookRole:
 		s.env = environment{set: c.set, source: derivationEnv, expr: c.merged}
 		s.phase = phaseRank(c.name)
 		s.directive = phaseDirective
-	case slices.Contains(serviceBindings, c.name) && c.insideSystemd:
+	case unitRole:
 		s.env = environment{set: c.set, source: unitEnv, prefix: c.prefix, expr: c.merged}
 		s.directive = readsEnvironment(s.env)
-	case c.name == shellAppText && c.set != nil && c.callee == shellApp:
+	case appRole:
 		s.env = environment{set: c.set, source: appEnv, expr: c.merged}
 		s.prelude = strictMode
 		s.directive = readsEnvironment(s.env)
 		if excluded := f.excluded(c.set); len(excluded) > 0 {
 			s.directive += directive.Render(directive.Disable, strings.Join(excluded, ",")) + "\n"
 		}
-	default:
-		return shellString{}, false
+	case runnerRole:
+		s.derivation = true
+		s.env = environment{set: via.env, source: derivationEnv, expr: via.expr}
+		s.phase = phaseRank("buildCommand")
+	case shebangRole:
+		return f.withShebang(s)
+	case namedRole:
+		return f.namedText(s, via)
+	case sourcedRole:
+		s.directive = sourcedDirective
+	case gitAliasRole:
+		if !strings.HasPrefix(f.src[s.str.Content.Start:s.str.Content.End], "!") {
+			return shellString{}, false
+		}
+		s.skip = len("!")
+		s.directive = sourcedDirective
+	case execRole:
+		text := f.src[s.str.Content.Start:s.str.Content.End]
+		s.skip = len(text) - len(strings.TrimLeft(text, "-@:+!"))
+		s.directive = sourcedDirective
 	}
-	s.detection = dialect.Detection{Dialect: dialect.Bash, Source: dialect.SourceHostDefault, Evidence: tool}
+	s.detection = found.detection()
 	return s, true
 }
 
@@ -367,29 +426,99 @@ func readsEnvironment(env environment) string {
 }
 
 func (f *file) written(s shellString, via call) (shellString, bool) {
-	marked, isMarker := markers[via.name]
-	switch {
-	case isMarker:
+	if marked, isMarker := markers[via.name]; isMarker {
 		s.detection = dialect.Detection{Dialect: marked, Source: dialect.SourceHostSetting, Evidence: via.name}
-	case slices.Contains(dashWriters, via.name):
-		s.detection = dialect.Detection{Dialect: dialect.Dash, Source: dialect.SourceHostSetting, Evidence: via.name}
-	case slices.Contains(scriptWriters, via.name):
-		first := strings.TrimSpace(f.firstLine(s.str))
-		d, ok := dialect.FromShebang(first)
-		if !ok {
-			return shellString{}, false
-		}
-		s.detection = dialect.Detection{Dialect: d, Source: dialect.SourceHostSetting, Evidence: first}
-		s.shebang = true
-	case slices.Contains(commandRunner, via.name):
-		s.detection = dialect.Detection{Dialect: dialect.Bash, Source: dialect.SourceHostDefault, Evidence: tool}
-		s.derivation = true
-		s.env = environment{set: via.env, source: derivationEnv, expr: via.expr}
-		s.phase = phaseRank("buildCommand")
-	default:
-		s.detection = dialect.Detection{Dialect: dialect.Bash, Source: dialect.SourceHostDefault, Evidence: tool}
+		return s, true
 	}
+	if c := callSurfaces[via.name]; c != nil && c.script != nil {
+		return f.shaped(s, c.script, via)
+	}
+	s.detection = dialect.Detection{Dialect: dialect.Bash, Source: dialect.SourceHostDefault, Evidence: tool}
 	return s, true
+}
+
+func (f *file) shebangOf(str *syntax.String) (dialect.Dialect, string, bool, bool) {
+	first := strings.TrimSpace(f.firstLine(str))
+	if !strings.HasPrefix(first, "#!") {
+		return 0, "", false, false
+	}
+	if strings.Contains(first, "runtimeShell") || strings.Contains(first, "stdenv.shell") {
+		return dialect.Bash, first, true, true
+	}
+	d, shell := dialect.FromShebang(first)
+	return d, first, shell, true
+}
+
+func (f *file) withShebang(s shellString) (shellString, bool) {
+	d, first, shell, _ := f.shebangOf(s.str)
+	if !shell {
+		return shellString{}, false
+	}
+	s.detection = dialect.Detection{Dialect: d, Source: dialect.SourceHostSetting, Evidence: first}
+	s.shebang = true
+	return s, true
+}
+
+func (f *file) namedText(s shellString, via call) (shellString, bool) {
+	name := cmp.Or(via.file, f.fileName(s.context))
+	if f.embed != nil && name != "" {
+		if analyze, known := f.embed(name); known {
+			return f.hostText(s, analyze), true
+		}
+	}
+	if _, _, _, has := f.shebangOf(s.str); has {
+		return f.withShebang(s)
+	}
+	d, named := dialect.FromFileName(name)
+	if name == "" || !named {
+		return shellString{}, false
+	}
+	s.detection = dialect.Detection{Dialect: d, Source: dialect.SourceHostSetting, Evidence: name}
+	s.directive = sourcedDirective
+	return s, true
+}
+
+func (f *file) fileName(c context) string {
+	for _, key := range []string{"destination", "target"} {
+		if name := siblingLiteral(c.set, key); name != "" {
+			return name
+		}
+	}
+	if c.callee == writeTextFile {
+		return siblingLiteral(c.set, "name")
+	}
+	if n := len(f.path); n >= 2 {
+		return f.path[n-2]
+	}
+	return ""
+}
+
+func siblingLiteral(set *syntax.AttrSet, key string) string {
+	if set == nil {
+		return ""
+	}
+	for _, b := range set.Bindings {
+		a, assigned := b.(*syntax.Assign)
+		if !assigned || len(a.Path) != 1 || lastIdent(a.Path) != key {
+			continue
+		}
+		if text, literal := syntax.Unparenthesized(a.Value).(*syntax.String); literal {
+			return literalOf(text)
+		}
+	}
+	return ""
+}
+
+func (f *file) hostText(s shellString, analyze func(string) Embedding) shellString {
+	b := projection.NewBuilder(f.src)
+	b.StandIn(holeStandIn)
+	f.body(b, s, "", textBody)
+	via := b.Map()
+	inner := analyze(via.Text())
+	s.hosted = &hostedText{via: via, inner: inner}
+	s.detection = inner.Detection
+	s.joined = false
+	return s
 }
 
 func (f *file) firstLine(str *syntax.String) string {

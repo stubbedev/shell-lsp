@@ -120,3 +120,42 @@ func TestEmbeddedProgramHover(t *testing.T) {
 		}
 	}
 }
+
+func TestEmbeddedProgramInNixDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	const uri = "file:///w/p.nix"
+	for _, tt := range []struct {
+		name, line, code string
+		col              int
+	}{
+		{"a bin path", "    ${pkgs.jq}/bin/jq '.a | | .b' f", "SL3003", len("    ${pkgs.jq}/bin/jq '.a | ")},
+		{"an antiquotation splits the program", "    ${pkgs.jq}/bin/jq '.a${x} | | .b' f", "SL3003", len("    ${pkgs.jq}/bin/jq '.a${x} | ")},
+		{"getExe", "    ${lib.getExe pkgs.gawk} '{ print \"x }' f", "SL3001", len("    ${lib.getExe pkgs.gawk} '{ print ")},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			c, _ := startClient(t, `{`+pullCapabilities+`}`)
+			text := "{ pkgs, lib, x }: pkgs.writeShellScript \"s\" ''\n" + tt.line + "\n''\n"
+			c.notify("textDocument/didOpen", openLanguageParams(uri, "nix", text))
+			got := embeddedOnly(pullDiagnostics(t, c, uri))
+			if len(got) != 1 || got[0].Code != tt.code || got[0].Range.Start.Line != 1 || got[0].Range.Start.Character != uint32(tt.col) {
+				t.Errorf("diagnostics = %+v, want %s at column %d", got, tt.code, tt.col)
+			}
+		})
+	}
+}
+
+func TestEmbeddedProgramHoverInNix(t *testing.T) {
+	t.Parallel()
+
+	const uri = "file:///w/h.nix"
+	c, _ := startClient(t, `{"capabilities": {"textDocument": {"diagnostic": {}}}}`)
+	text := "{ pkgs }: pkgs.writeShellScript \"s\" ''\n  ${pkgs.jq}/bin/jq 'map(.a)' f\n''\n"
+	c.notify("textDocument/didOpen", openLanguageParams(uri, "nix", text))
+	character := strconv.Itoa(len("  ${pkgs.jq}/bin/jq 'm"))
+	got := decodeResult[lsp.Hover](t, c.call("textDocument/hover", `{"textDocument": {"uri": "`+uri+`"}, "position": {"line": 1, "character": `+character+`}}`))
+	if !strings.Contains(got.Contents.Value, "map(f)") {
+		t.Errorf("hover = %+v", got)
+	}
+}

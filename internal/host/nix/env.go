@@ -33,8 +33,13 @@ var (
 	envChildren = [...]string{derivationEnv: "env", unitEnv: "environment", appEnv: "runtimeEnv", wrapperEnv: ""}
 )
 
+const (
+	getExeName   = "getExe"
+	toStringName = "toString"
+)
+
 var (
-	programGetters = []string{"getExe", "getExe'", "getBin"}
+	programGetters = []string{getExeName, "getExe'", "getBin"}
 	inputLists     = []string{"runtimeInputs", "buildInputs", "nativeBuildInputs", "packages", "path"}
 )
 
@@ -46,6 +51,7 @@ type environment struct {
 	child  string
 	prefix string
 	expr   syntax.Expr
+	own    *syntax.String
 }
 
 func (env environment) attrPath() []string {
@@ -153,37 +159,42 @@ func (f *file) index(found []shellString) *model.Index {
 	for _, e := range f.tree.Errors {
 		ix.Findings = append(ix.Findings, lint.HostFinding(lint.CodeNixSyntax, e.Span, e.Message))
 	}
-	ix.Findings = append(ix.Findings, check(f.tree, f.table)...)
+	ix.Findings = append(ix.Findings, check(f.tree, f.table, f.quotingRisks(found))...)
 	table := newSymbolTable(f, ix)
 	for _, s := range found {
-		scope := table.environment(s.env)
+		if s.hosted != nil {
+			table.reserveHosted(s)
+			continue
+		}
+		env := s.env
+		if env.set == nil && env.expr == nil && !s.derivation {
+			env.own = s.str
+		}
+		scope := table.environment(env)
 		inputs := f.inputs(s.env)
-		for _, piece := range pieces(s.str) {
+		for _, piece := range f.pieces(s.str) {
 			ix.Shells = append(ix.Shells, model.Shell{Span: piece, Scope: scope, Phase: s.phase, Inputs: inputs})
 		}
-		ix.Holes = append(ix.Holes, holes(s.str)...)
+		ix.Holes = append(ix.Holes, f.holes(s.str)...)
 	}
 	slices.SortFunc(ix.Shells, func(a, b model.Shell) int { return cmp.Compare(a.Span.Start, b.Span.Start) })
 	slices.SortFunc(ix.Holes, func(a, b model.Hole) int { return cmp.Compare(a.Span.Start, b.Span.Start) })
 	table.build()
 	table.embedHeredocs(found)
+	table.embedHosted(found)
 	linkCalls(f.tree, ix)
 	ix.Runnables = outputs(f.tree)
 	ix.Folds = folds(f.tree)
 	return ix
 }
 
-func holes(str *syntax.String) []model.Hole {
+func (f *file) holes(str *syntax.String) []model.Hole {
 	var out []model.Hole
-	for _, part := range str.Parts {
-		hole, ok := part.(*syntax.Interpolation)
-		if !ok {
-			continue
-		}
+	f.eachHole(str, func(hole *syntax.Interpolation) {
 		if head, exe, named := programOf(hole.Value); named {
 			out = append(out, model.Hole{Span: hole.Span(), Head: head, Exe: exe})
 		}
-	}
+	})
 	return out
 }
 
@@ -196,11 +207,15 @@ func programOf(e syntax.Expr) (model.Span, string, bool) {
 			return nameSpan(e.Path[len(e.Path)-1]), "", true
 		}
 	case *syntax.Apply:
-		if !slices.Contains(programGetters, calleeName(syntax.Unparenthesized(e.Fn))) {
+		getter := calleeName(syntax.Unparenthesized(e.Fn))
+		if !slices.Contains(programGetters, getter) && !slices.Contains(shellEscapes, getter) && getter != toStringName {
 			return model.Span{}, "", false
 		}
 		head, _, named := programOf(e.Args[0])
 		exe := ""
+		if getter == getExeName {
+			exe = mainProgram(e.Args[0])
+		}
 		if len(e.Args) > 1 {
 			if literal, ok := syntax.Unparenthesized(e.Args[1]).(*syntax.String); ok && len(literal.Parts) == 1 {
 				if text, plain := literal.Parts[0].(*syntax.Literal); plain {
@@ -241,21 +256,15 @@ func (f *file) inputs(env environment) []model.Input {
 	return out
 }
 
-func pieces(str *syntax.String) []model.Span {
-	start := str.Content.Start
-	var out []model.Span
-	for _, part := range str.Parts {
-		if _, ok := part.(*syntax.Interpolation); !ok {
-			continue
+func mainProgram(e syntax.Expr) string {
+	name := ""
+	switch e := syntax.Unparenthesized(e).(type) {
+	case *syntax.Ident:
+		name = e.Name
+	case *syntax.Select:
+		if e.Default == nil {
+			name = lastIdent(e.Path)
 		}
-		hole := part.Span()
-		if hole.Start > start {
-			out = append(out, model.Span{Start: start, End: hole.Start})
-		}
-		start = hole.End
 	}
-	if str.Content.End > start {
-		out = append(out, model.Span{Start: start, End: str.Content.End})
-	}
-	return out
+	return cmp.Or(mainPrograms[name], name)
 }

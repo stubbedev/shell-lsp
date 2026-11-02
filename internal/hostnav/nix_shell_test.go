@@ -290,7 +290,9 @@ func TestNixRenameRefusesWhenTheScanWasCut(t *testing.T) {
 		t.Fatal(err)
 	}
 	env := Env{Loader: tr.ws}
-	env.Graph = func(context.Context) (*Graph, error) { return &Graph{importers: map[string][]importer{}, cut: true}, nil }
+	env.Graph = func(context.Context) (*Graph, error) {
+		return &Graph{importers: map[string][]importer{}, cut: true}, nil
+	}
 	g, err := Build(context.Background(), hostOf(t, file), env)
 	if err != nil {
 		t.Fatal(err)
@@ -387,5 +389,106 @@ func TestNixAFileInTwoClassesKeepsOneIdentity(t *testing.T) {
 	for _, name := range []string{"shared.nix", "user.nix"} {
 		g, sym := tr.at(name, "flag", 0)
 		expectStrings(t, "references from "+name, tr.describe(References(g, sym, true)), want)
+	}
+}
+
+const jqChain = "let cfgValue = \"x\"; in writeShellScript \"s\" ''\n  value=${cfgValue}\n  jq --arg name \"$value\" '.a == $name' f\n''\n"
+
+func TestNixProgramArgumentChain(t *testing.T) {
+	t.Parallel()
+
+	tr := nixTree(t, jqChain)
+	expectStrings(t, "definition", tr.shellDefinition(nixFile, "$name"), []string{"default.nix:3:name", "default.nix:2:value", "default.nix:1:cfgValue"})
+	g, sym := tr.shellAt(nixFile, "$name", 0)
+	expectStrings(t, "references", tr.describe(References(g, sym, true)), []string{
+		"default.nix:1:cfgValue",
+		"default.nix:2:value",
+		"default.nix:2:cfgValue",
+		"default.nix:3:name",
+		"default.nix:3:value",
+		"default.nix:3:name",
+	})
+	md := g.Describe(sym).Markdown
+	for _, want := range []string{"--arg name", "value", "cfgValue"} {
+		if !strings.Contains(md, want) {
+			t.Errorf("hover = %q, want it to say %q", md, want)
+		}
+	}
+	occs, err := g.Rename(sym, "wanted")
+	if err != nil {
+		t.Fatalf("rename: %v", err)
+	}
+	expectStrings(t, "rename stays in the program", tr.describe(occs), []string{"default.nix:3:name", "default.nix:3:name"})
+	if _, err := g.Rename(sym, "a b"); !errors.Is(err, navigation.ErrInvalidName) {
+		t.Errorf("renaming to a bad name = %v", err)
+	}
+	expectStrings(t, "from the flag", tr.shellDefinition(nixFile, "name \"$value"), []string{"default.nix:3:name", "default.nix:2:value", "default.nix:1:cfgValue"})
+}
+
+func TestNixProgramArgumentFromAnAntiquotation(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct{ name, script, sub string }{
+		{"jq", "jq --arg name \"${cfgValue}\" '$name' f", "$name"},
+		{"awk", "awk -v name=${cfgValue} 'BEGIN { print name }'", "name }"},
+		{"a named program", "${pkgs.gawk}/bin/awk -v name=${cfgValue} 'BEGIN { print name }'", "name }"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			src := "let cfgValue = \"x\"; in writeShellScript \"s\" ''\n  " + tt.script + "\n''\n"
+			got := newTree(t, map[string]string{nixFile: src}).shellDefinition(nixFile, tt.sub)
+			want := "default.nix:1:cfgValue"
+			if !slices.Contains(got, want) {
+				t.Errorf("definition = %q, want it to reach %q", got, want)
+			}
+		})
+	}
+}
+
+func TestNixProgramArgumentAcrossFiles(t *testing.T) {
+	t.Parallel()
+
+	tr := newTree(t, map[string]string{
+		"default.nix": "let\n  common = import ./attrs.nix;\nin\n  stdenv.mkDerivation (common // {\n    buildPhase = ''\n      jq --arg name \"$shared\" '$name' f\n    '';\n  })\n",
+		"attrs.nix":   "{\n  shared = \"1\";\n}\n",
+	})
+	got := tr.shellDefinition("default.nix", "$name")
+	if !slices.Contains(got, "attrs.nix:2:shared") {
+		t.Errorf("definition = %q, want it to reach the other file", got)
+	}
+}
+
+func TestNixProgramRenameIsRefusedPrecisely(t *testing.T) {
+	t.Parallel()
+
+	tr := nixTree(t, "writeShellScript \"s\" ''\n  jq --arg name \"$1\" '$name, $ARGS.named' f\n''\n")
+	g, sym := tr.shellAt(nixFile, "$name", 0)
+	err := g.PrepareRename(sym)
+	if !errors.Is(err, navigation.ErrNotRenamable) || !strings.Contains(err.Error(), "$ARGS") {
+		t.Errorf("renaming beside $ARGS = %v", err)
+	}
+	tr = nixTree(t, "writeShellScript \"s\" ''\n  jq --arg name \"$1\" --arg other \"$2\" '$name, $other' f\n''\n")
+	g, sym = tr.shellAt(nixFile, "$name", 0)
+	if _, err := g.Rename(sym, "other"); !errors.Is(err, navigation.ErrNameConflict) {
+		t.Errorf("renaming onto another argument = %v", err)
+	}
+}
+
+func TestNixTextFileHoverShowsItsHead(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct{ name, bind, want string }{
+		{"writeText", "writeText \"c.json\" ''\n    {\"a\": 1}\n  ''", `{"a": 1}`},
+		{"toJSON", "writeText \"c.json\" (builtins.toJSON { a = 1; })", "builtins.toJSON"},
+		{"writeTextFile", "writeTextFile { name = \"c\"; text = \"plain\"; }", "plain"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			tr := nixTree(t, "let\n  cfg = "+tt.bind+";\nin\n  writeShellScript \"s\" ''\n    cat ${cfg}\n  ''\n")
+			hover, ok := tr.group(nixFile).Hover(tr.after(nixFile, "${", "cfg"))
+			if !ok || !strings.Contains(hover.Markdown, tt.want) {
+				t.Errorf("hover = %+v, %v, want it to hold %q", hover, ok, tt.want)
+			}
+		})
 	}
 }
