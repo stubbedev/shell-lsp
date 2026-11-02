@@ -18,6 +18,8 @@ func TestHostCodeRanges(t *testing.T) {
 		{CodeJustNeedsSetting, true, true, false, "SL5023"},
 		{CodeMakeSyntax, true, false, true, "SL6001"},
 		{CodeMakeUnusedVariable, true, false, true, "SL6014"},
+		{CodeNixUndefinedVariable, true, false, false, "SL8002"},
+		{CodeNixEmptyBinding, true, false, false, "SL8013"},
 		{codeDownloadedScript, false, false, false, "SL1005"},
 		{2086, false, false, false, "SC2086"},
 	} {
@@ -40,4 +42,27 @@ func TestHostFinding(t *testing.T) {
 		}
 	}()
 	HostFinding(2086, parser.Span{}, "x")
+}
+
+func TestProfilesKeepHostFindings(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		profile  Profile
+		code     Code
+		expected bool
+	}{
+		{ProfileRecommended, CodeNixUnusedLet, true},
+		{ProfileStrict, CodeNixUnusedLet, true},
+		{ProfileMinimal, CodeNixUnusedLet, false},
+		{ProfileMinimal, CodeNixUselessParens, false},
+		{ProfileMinimal, CodeNixUndefinedVariable, true},
+		{ProfileMinimal, CodeNixDuplicateAttribute, true},
+		{ProfileMinimal, CodeNixOrIdentifier, true},
+		{ProfileMinimal, CodeNixSyntax, true},
+	} {
+		if got := tt.profile.KeepsHost(HostFinding(tt.code, parser.Span{}, "x")); got != tt.expected {
+			t.Errorf("%s keeps %s: %v", tt.profile, tt.code, got)
+		}
+	}
 }

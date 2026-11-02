@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 )
 
@@ -66,5 +67,42 @@ func TestMakefileFixes(t *testing.T) {
 	phony := newTree(t, map[string]string{"Makefile": "all:\n\ttrue\n\nclean:\n\trm -f app\n"})
 	if got, want := phony.fixes("Makefile"), []string{"Add `clean` to .PHONY -> all:\n\ttrue\n\n.PHONY: clean\nclean:\n\trm -f app\n"}; !slices.Equal(got, want) {
 		t.Errorf("fixes for a target missing from .PHONY = %q, want %q", got, want)
+	}
+}
+
+func TestNixFixes(t *testing.T) {
+	t.Parallel()
+
+	tr := newTree(t, map[string]string{"default.nix": "let\n  a = 1;\n  b = 2;\nin { b = b; c = (b); }\n"})
+	want := []string{
+		"Remove `a` -> let\n  b = 2;\nin { b = b; c = (b); }\n",
+		"Use `inherit b;` -> let\n  a = 1;\n  b = 2;\nin { inherit b; c = (b); }\n",
+		"Remove the parentheses -> let\n  a = 1;\n  b = 2;\nin { b = b; c = b; }\n",
+	}
+	if got := tr.fixes("default.nix"); !slices.Equal(got, want) {
+		t.Errorf("fixes =\n%q\nwant\n%q", got, want)
+	}
+	g := tr.group("default.nix")
+	text := g.Self.Doc.Source().Text()
+	if got, want := textedit.Apply(text, lint.FindingsSafeEdits(g.Findings())), "let\n  b = 2;\nin { inherit b; c = b; }\n"; got != want {
+		t.Errorf("fix-all gives %q, want %q", got, want)
+	}
+}
+
+func TestNixFixAllLeavesReviewFixesAlone(t *testing.T) {
+	t.Parallel()
+
+	tr := newTree(t, map[string]string{"default.nix": "{ a, b }: x: a\n"})
+	g := tr.group("default.nix")
+	if edits := lint.FindingsSafeEdits(g.Findings()); len(edits) != 0 {
+		t.Errorf("fix-all edits a function's interface: %+v", edits)
+	}
+	if got := tr.fixes("default.nix"); len(got) != 2 {
+		t.Errorf("quick fixes = %q", got)
+	}
+	for _, fix := range g.Fixes(parser.Span{End: len(g.Self.Doc.Source().Text())}) {
+		if fix.Preferred {
+			t.Errorf("%q is preferred, but needs a review", fix.Title)
+		}
 	}
 }

@@ -571,3 +571,37 @@ func FuzzMatchesNix(f *testing.F) {
 		}
 	})
 }
+
+func TestAttrName(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		src, name   string
+		named, safe bool
+	}{
+		{"a", "a", true, true},
+		{`"a b"`, "a b", true, true},
+		{`""`, "", true, true},
+		{`"a\n"`, "a\n", true, true},
+		{`"\a"`, "a", true, true},
+		{`"${b}"`, "", false, false},
+		{`"a${b}"`, "", false, false},
+		{"${b}", "", false, false},
+		{`${"a"}`, "a", true, true},
+		{`${("a")}`, "a", true, true},
+		{`${"a${b}"}`, "", false, false},
+		{"${''a''}", "a", true, true},
+		{"${'' a''}", "a", true, true},
+		{"${''a\nb''}", "", false, true},
+		{`${"a" + "b"}`, "", false, false},
+	} {
+		src := "{ " + tt.src + " = 1; }"
+		attr := Parse(src).Root.(*AttrSet).Bindings[0].(*Assign).Path[0]
+		if name, ok := AttrName(attr); name != tt.name || ok != tt.named {
+			t.Errorf("AttrName(%q) = %q, %v", tt.src, name, ok)
+		}
+		if got := StaticAttr(attr); got != tt.safe {
+			t.Errorf("StaticAttr(%q) = %v", tt.src, got)
+		}
+	}
+}

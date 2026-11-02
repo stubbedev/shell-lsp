@@ -131,6 +131,7 @@ func (f *file) index(found []shellString) *model.Index {
 	for _, e := range f.tree.Errors {
 		ix.Findings = append(ix.Findings, lint.HostFinding(lint.CodeNixSyntax, e.Span, e.Message))
 	}
+	ix.Findings = append(ix.Findings, check(f.tree, f.table)...)
 	scopes := map[environment]model.Scope{}
 	for _, s := range found {
 		if s.env.set == nil {

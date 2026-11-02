@@ -6,6 +6,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/directive"
 	"github.com/stubbedev/shell-lsp/internal/host/model"
+	"github.com/stubbedev/shell-lsp/internal/host/nix/scope"
 	"github.com/stubbedev/shell-lsp/internal/host/nix/syntax"
 	"github.com/stubbedev/shell-lsp/internal/projection"
 )
@@ -21,6 +22,7 @@ const (
 type file struct {
 	src   string
 	tree  *syntax.File
+	table *scope.Table
 	found []shellString
 }
 
@@ -29,11 +31,13 @@ type Analysis struct {
 	Detection dialect.Detection
 	Index     *model.Index
 	Errors    []syntax.Error
+	Scope     *scope.Table
 	strings   []model.Span
 }
 
 func Analyze(src string) Analysis {
-	f := &file{src: src, tree: syntax.Parse(src)}
+	tree := syntax.Parse(src)
+	f := &file{src: src, tree: tree, table: scope.Resolve(tree)}
 	f.discover()
 	detection, _ := dialect.Choose(f.found, func(s shellString) dialect.Detection { return s.detection }, tool)
 	b := projection.NewBuilder(src)
@@ -42,7 +46,7 @@ func Analyze(src string) Analysis {
 		b.Shell(group[0].detection)
 		f.project(b, group, n)
 	}
-	a := Analysis{Map: b.Map(), Detection: detection, Index: f.index(f.found), Errors: f.tree.Errors}
+	a := Analysis{Map: b.Map(), Detection: detection, Index: f.index(f.found), Errors: f.tree.Errors, Scope: f.table}
 	if len(f.found) > 0 {
 		a.strings = make([]model.Span, 0, 2*len(f.found))
 	}

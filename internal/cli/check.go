@@ -336,7 +336,7 @@ func (c *checker) nativeFindings(h hostnav.Host) ([]lint.Finding, error) {
 	if err != nil {
 		return nil, err
 	}
-	return g.Findings(), nil
+	return slices.DeleteFunc(g.Findings(), func(f lint.Finding) bool { return !c.opts.profile.KeepsHost(f) }), nil
 }
 
 func (c *checker) graph(ctx context.Context, language host.Language, env hostnav.Env) (*hostnav.Graph, error) {

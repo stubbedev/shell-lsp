@@ -84,7 +84,21 @@ const (
 	CodeDockerStageUsedBeforeDefinition
 )
 
-const CodeNixSyntax Code = nixBase + 1
+const (
+	CodeNixSyntax Code = nixBase + 1 + iota
+	CodeNixUndefinedVariable
+	CodeNixDuplicateAttribute
+	CodeNixDuplicateFormal
+	CodeNixUnusedLet
+	CodeNixUnusedArgument
+	CodeNixUnusedFormal
+	CodeNixUselessParens
+	CodeNixRedundantIf
+	CodeNixRedundantRec
+	CodeNixSpelledInherit
+	CodeNixOrIdentifier
+	CodeNixEmptyBinding
+)
 
 func (c Code) Host() bool { return c > justBase && c < hostEnd }
 
@@ -167,7 +181,19 @@ var hostFamily = family{
 		CodeDockerRedundantTargetPlatform:   {severity: SeverityWarning},
 		CodeDockerStageUsedBeforeDefinition: {severity: SeverityError},
 
-		CodeNixSyntax: {severity: SeverityError},
+		CodeNixSyntax:             {severity: SeverityError},
+		CodeNixUndefinedVariable:  {severity: SeverityError},
+		CodeNixDuplicateAttribute: {severity: SeverityError},
+		CodeNixDuplicateFormal:    {severity: SeverityError},
+		CodeNixUnusedLet:          {severity: SeverityInfo, tag: TagUnnecessary},
+		CodeNixUnusedArgument:     {severity: SeverityInfo, tag: TagUnnecessary},
+		CodeNixUnusedFormal:       {severity: SeverityInfo, tag: TagUnnecessary},
+		CodeNixUselessParens:      {severity: SeverityInfo, tag: TagUnnecessary},
+		CodeNixRedundantIf:        {severity: SeverityInfo, tag: TagUnnecessary},
+		CodeNixRedundantRec:       {severity: SeverityInfo, tag: TagUnnecessary},
+		CodeNixSpelledInherit:     {severity: SeverityInfo},
+		CodeNixOrIdentifier:       {severity: SeverityWarning},
+		CodeNixEmptyBinding:       {severity: SeverityInfo, tag: TagUnnecessary},
 	},
 }
 
@@ -178,3 +204,7 @@ func HostFinding(code Code, span parser.Span, message string) Finding {
 	}
 	return Finding{Code: code, Severity: m.severity, Tag: m.tag, Span: span, Message: message}
 }
+
+func SortHostFindings(findings []Finding) { sortFindings(findings) }
+
+func (p Profile) KeepsHost(f Finding) bool { return p.keeps(f, catalog[f.Code], false) }

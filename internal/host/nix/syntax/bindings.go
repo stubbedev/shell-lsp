@@ -29,8 +29,8 @@ func (p *treeParser) bindings(isLet bool) []Binding {
 func (p *treeParser) assign(isLet bool) *Assign {
 	start := p.tok.start
 	path := p.attrPath()
-	if d, ok := path[0].(*DynamicAttr); ok && isLet {
-		p.report(d.Span(), "a `let` cannot bind a dynamic attribute")
+	if isLet && !StaticAttr(path[0]) {
+		p.report(path[0].Span(), "a `let` cannot bind a dynamic attribute")
 	}
 	var value Expr
 	if p.expect(TokAssign, "=") {
@@ -52,7 +52,7 @@ func (p *treeParser) inherit() *Inherit {
 	var attrs []Attr
 	for p.atAttr() && !p.startsBinding() {
 		a := p.attribute()
-		if _, dynamic := a.(*DynamicAttr); dynamic {
+		if !StaticAttr(a) {
 			p.report(a.Span(), "`inherit` cannot name a dynamic attribute")
 		}
 		attrs = append(attrs, a)

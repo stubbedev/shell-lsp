@@ -373,3 +373,8 @@ let or = x; in y.z or z or	(let or = x; in (y).z or ((z or)))
 let or = x; in [ y or z ]	(let or = x; in [ ((y or)) (z) ])
 let or = x; in { inherit or; }	(let or = x; in { inherit or; })
 ''''''''	ERROR
+let ${"x"} = 1; in x	OK
+let ${("x")}.b = 1; in x	OK
+{ inherit ${"x"}; }	OK
+let "a${x}" = 1; in 1	ERROR
+{ inherit "${x}"; }	ERROR

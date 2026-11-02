@@ -101,3 +101,12 @@ func TestNixSyntaxErrorsAreFindings(t *testing.T) {
 		t.Errorf("a valid file reports %+v", clean)
 	}
 }
+
+func TestNixChecksAreFindings(t *testing.T) {
+	t.Parallel()
+
+	findings := findingsAlone(t, "default.nix")("# shellcheck disable=SL8005\nlet a = 1; in b\n")
+	if len(findings) != 1 || findings[0].Code != lint.CodeNixUndefinedVariable || findings[0].Severity != lint.SeverityError {
+		t.Errorf("findings = %+v", findings)
+	}
+}

@@ -50,8 +50,9 @@ func (s *Server) handleCodeAction(ctx context.Context, docs *docstore.View, acti
 	literal := caps.TextDocument.CodeAction.CodeActionLiteralSupport != nil
 	lazy := slices.Contains(caps.TextDocument.CodeAction.ResolveSupport.Properties, "edit") && !snap.Doc.Projected()
 	out := []any{}
+	h, hosted := hostnav.Of(snap.File)
 	for _, a := range actions.Actions(in) {
-		if !wants(only, a.Kind) || a.Refactor != nil && !inShell || !expressible(snap, sources, a) {
+		if !wants(only, a.Kind) || hosted && a.Kind == actions.SourceFixAll || a.Refactor != nil && !inShell || !expressible(snap, sources, a) {
 			continue
 		}
 		action, err := s.codeAction(docs, snap, sources, settings, actionParams.Context.Diagnostics, a, lazy)
@@ -68,8 +69,8 @@ func (s *Server) handleCodeAction(ctx context.Context, docs *docstore.View, acti
 		}
 		out = append(out, lsp.Command{Title: a.Title, Command: commandApplyEdit, Arguments: []json.RawMessage{arg}})
 	}
-	if h, ok := hostnav.Of(snap.File); ok && wants(only, actions.QuickFix) {
-		fixes, err := s.nativeFixes(ctx, docs, h, actionParams)
+	if hosted {
+		fixes, err := s.hostActions(ctx, docs, snap, h, actionParams)
 		if err != nil {
 			return nil, err
 		}
@@ -86,6 +87,39 @@ func (s *Server) handleCodeAction(ctx context.Context, docs *docstore.View, acti
 		}
 	}
 	return out, nil
+}
+
+func (s *Server) hostActions(ctx context.Context, docs *docstore.View, snap *snapshot, h hostnav.Host, p lsp.CodeActionParams) ([]lsp.CodeAction, error) {
+	var out []lsp.CodeAction
+	if wants(p.Context.Only, actions.QuickFix) {
+		fixes, err := s.nativeFixes(ctx, docs, h, p)
+		if err != nil {
+			return nil, err
+		}
+		out = fixes
+	}
+	if !wants(p.Context.Only, actions.SourceFixAll) {
+		return out, nil
+	}
+	edits, ok := s.hostFixAllEdits(snap, h)
+	if !ok || len(edits) == 0 {
+		return out, nil
+	}
+	edit, err := s.workspaceEdit(snap.Doc.Source(), snap.encoding, edits)
+	if err != nil {
+		return nil, err
+	}
+	return append(out, lsp.CodeAction{Title: actions.FixAllTitle, Kind: lsp.CodeActionKind(actions.SourceFixAll), Edit: &edit}), nil
+}
+
+func (s *Server) hostFixAllEdits(snap *snapshot, h hostnav.Host) ([]textedit.Edit, bool) {
+	shell, ok := snap.Doc.SourceEdits(actions.FixAll(s.lintActionDiagnostics(snap)))
+	if !ok {
+		return nil, false
+	}
+	docker, _ := hostnav.HadolintOf(snap.File, s.hadolintConfig(snap.Path, snap.settings))
+	native := lint.FindingsSafeEdits(docker.Host(s.nativeFindings(h, snap.settings, docker)))
+	return textedit.NonOverlapping([][]textedit.Edit{shell, native}), true
 }
 
 func expressible(snap *snapshot, sources func() actionSources, a actions.Action) bool {

@@ -341,7 +341,7 @@ func TestNixShellStringsLintInPlace(t *testing.T) {
 
 	const uri = "file:///w/package.nix"
 	lines := []string{
-		"stdenv.mkDerivation {",
+		"{ stdenv, src }: stdenv.mkDerivation {",
 		"  pname = \"x\";",
 		"  installPhase = ''",
 		"    cp ${src}/bin/* $out/bin/`basename $1`",
@@ -400,5 +400,28 @@ func TestHostFilesOpenedAsShellscriptAreStillProjected(t *testing.T) {
 		if got := codes(pullDiagnostics(t, c, tt.uri)); !slices.Equal(got, tt.want) {
 			t.Errorf("%s opened as shellscript: diagnostics = %v, want %v", tt.uri, got, tt.want)
 		}
+	}
+}
+
+func TestNixFixAllRemovesAnUnusedBinding(t *testing.T) {
+	t.Parallel()
+
+	const uri = "file:///w/fixall.nix"
+	c, _ := startClient(t, `{`+actionCapabilities+`}`)
+	c.notify("textDocument/didOpen", openLanguageParams(uri, "nix", "let\n  a = 1;\n  b = 2;\nin b\n"))
+	id := c.start("workspace/executeCommand", `{"command": "`+commandFixAll+`", "arguments": ["`+uri+`"]}`)
+	applied := c.await("workspace/applyEdit", func(m *jsonrpc.Message) bool { return m.IsRequest() && m.Method == "workspace/applyEdit" })
+	var params lsp.ApplyWorkspaceEditParams
+	if err := json.Unmarshal(applied.Params, &params); err != nil {
+		t.Fatal(err)
+	}
+	if len(params.Edit.DocumentChanges) != 1 || params.Edit.DocumentChanges[0].TextDocument.URI != uri || len(params.Edit.DocumentChanges[0].Edits) == 0 {
+		t.Fatalf("applyEdit = %+v, want edits to the Nix file", params)
+	}
+	if err := c.conn.Reply(applied.ID, lsp.ApplyWorkspaceEditResult{Applied: true}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if done := c.awaitResponse(id, "workspace/executeCommand"); done.Error != nil {
+		t.Errorf("executeCommand error = %+v", done.Error)
 	}
 }

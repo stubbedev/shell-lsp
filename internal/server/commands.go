@@ -10,6 +10,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/actions"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
+	"github.com/stubbedev/shell-lsp/internal/hostnav"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 )
@@ -96,11 +97,18 @@ func (s *Server) fixAll(ctx context.Context, docs *docstore.View, uri string) (a
 	if err != nil {
 		return nil, err
 	}
-	edits := actions.FixAll(s.lintActionDiagnostics(snap))
+	doc, edits := snap.Doc, actions.FixAll(s.lintActionDiagnostics(snap))
+	if h, hosted := hostnav.Of(snap.File); hosted {
+		var ok bool
+		doc = snap.Doc.Source()
+		if edits, ok = s.hostFixAllEdits(snap, h); !ok {
+			return nil, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "fixing %s: a shell fix cannot be written in the syntax of the file around its shell", uri)
+		}
+	}
 	if len(edits) == 0 {
 		return nil, nil
 	}
-	edit, err := s.workspaceEdit(snap.Doc, snap.encoding, edits)
+	edit, err := s.workspaceEdit(doc, snap.encoding, edits)
 	if err != nil {
 		return nil, err
 	}

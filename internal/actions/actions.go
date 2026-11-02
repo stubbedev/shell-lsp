@@ -184,7 +184,7 @@ func Actions(in Input) []Action {
 		}
 	}
 	if fixAll := FixAll(in.AllDiagnostics); len(fixAll) > 0 {
-		out = append(out, Action{Title: "Apply all automatic fixes", Kind: SourceFixAll, Edits: fixAll})
+		out = append(out, Action{Title: FixAllTitle, Kind: SourceFixAll, Edits: fixAll})
 	}
 	return out
 }
@@ -196,6 +196,8 @@ func FindingDiagnostics(findings []lint.Finding) []Diagnostic {
 	}
 	return out
 }
+
+const FixAllTitle = "Apply all automatic fixes"
 
 func FixAll(diags []Diagnostic) []textedit.Edit {
 	fixSets := make([][]lint.Fix, len(diags))

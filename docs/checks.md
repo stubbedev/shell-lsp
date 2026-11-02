@@ -572,6 +572,18 @@ marks the checks the `minimal` profile keeps; see [Profiles](../README.md#profil
 | <a name="sl7023"></a>[SL7023](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl7023) | warning |  | yes | \`FROM --platform=$TARGETPLATFORM\` is redundant. |
 | <a name="sl7024"></a>[SL7024](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl7024) | error |  | yes | \`COPY --from\` names a stage that is not built before it. |
 | <a name="sl8001"></a>[SL8001](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8001) | error |  | yes | The Nix file does not parse. |
+| <a name="sl8002"></a>[SL8002](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8002) | error |  | yes | A variable has no binding. |
+| <a name="sl8003"></a>[SL8003](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8003) | error |  | yes | An attribute is defined twice. |
+| <a name="sl8004"></a>[SL8004](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8004) | error |  | yes | A function pattern names an argument twice. |
+| <a name="sl8005"></a>[SL8005](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8005) | info |  |  | A \`let\` binding is never read. |
+| <a name="sl8006"></a>[SL8006](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8006) | info |  |  | A function never reads its argument or its \`@\` name. |
+| <a name="sl8007"></a>[SL8007](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8007) | info |  |  | A function pattern names an argument it never reads. |
+| <a name="sl8008"></a>[SL8008](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8008) | info |  |  | Parentheses change nothing. |
+| <a name="sl8009"></a>[SL8009](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8009) | info |  |  | An \`if\` picks between \`true\` and \`false\`. |
+| <a name="sl8010"></a>[SL8010](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8010) | info |  |  | \`rec\` has nothing to do. |
+| <a name="sl8011"></a>[SL8011](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8011) | info |  |  | \`x = x;\` in a set that is not recursive is \`inherit x;\`. |
+| <a name="sl8012"></a>[SL8012](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8012) | warning |  | yes | \`or\` is used as a variable. |
+| <a name="sl8013"></a>[SL8013](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8013) | info |  |  | A \`let\` or an \`inherit\` binds nothing. |
 | <a name="dl1001"></a>[DL1001](https://github.com/hadolint/hadolint/wiki/DL1001) | info | `no-ignore-pragmas` |  | A \`# hadolint ignore=\` comment hides findings; the project asks for none. |
 | <a name="dl3001"></a>[DL3001](https://github.com/hadolint/hadolint/wiki/DL3001) | info |  |  | RUN starts a tool meant for a running system, such as an editor or process viewer, which is no use while building. |
 | <a name="dl3002"></a>[DL3002](https://github.com/hadolint/hadolint/wiki/DL3002) | warning |  | yes | The last USER of a stage is root, so the container runs with full privileges. |

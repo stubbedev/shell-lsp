@@ -1546,10 +1546,20 @@ FROM alpine AS final
 
 ## Nix files
 
-shell-lsp reads the whole Nix file, so it can find the shell strings in it. The
-parser keeps going after an error, and the shell strings elsewhere in the file
-stay checked. `lint.exclude` turns the check off like any other; directives
-inside the file do not apply, since the file is not a shell script.
+shell-lsp reads the whole Nix file: it resolves every name to its binding and
+finds the shell strings in it. The parser keeps going after an error, and the
+shell strings elsewhere in the file stay checked, but the checks below other
+than SL8001 wait for a file that parses, since a broken file says too little
+about which names exist.
+
+`lint.exclude` turns a check off like any other, and `lint.profile` applies:
+`minimal` keeps the errors and warnings. `# shellcheck disable=` works as it does
+in a shell script, in `#` comments: before the first expression it covers the
+file, after code it covers that line up to the comment, and on a line of its own
+it covers the binding, formal, list element or other expression that starts next.
+With nothing to cover, as in front of `in` or a closing bracket, it does nothing.
+It takes codes, ranges such as `SL8000-SL8099` and `all`. SL8001 cannot be
+disabled this way.
 
 ## SL8001
 
@@ -1559,4 +1569,144 @@ expression is nested too deeply to analyse.
 
 ```nix
 { version = ; }    # SL8001
+```
+
+## SL8002
+
+**A variable has no binding.** No enclosing `let`, `rec`, function argument or
+`with` can provide the name, and it is not a built-in, so Nix refuses the file
+before evaluating anything. Inside a `with` nothing is reported, since the name
+can only be known at evaluation. Global built-ins such as `map` take precedence
+over a `with`, and any lexical binding takes precedence over both.
+
+```nix
+{ pname = "x"; version = versoin; }    # SL8002
+```
+
+## SL8003
+
+**An attribute is defined twice.** Nix refuses the file. Paths that only share a
+prefix merge, and so do attribute sets written for the same name, as `a.b = 1;
+a.c = 2;` or `a = { b = 1; }; a = { c = 2; };` do. A dynamic name such as `${x}`
+is only known when the file is evaluated and is not compared; a constant one such
+as `${"a"}` is the name `a`.
+
+```nix
+{
+  a = 1;
+  a = 2;    # SL8003
+}
+```
+
+## SL8004
+
+**A function pattern names an argument twice.** Repeating the `@` name in the
+pattern counts too. Nix refuses the file. The quick fix removes a repeated formal.
+
+```nix
+{ a, a }: a    # SL8004
+```
+
+## SL8005
+
+**A `let` binding is never read.** Nix is lazy, so an unread binding is never
+evaluated, and removing it changes nothing. A binding read only from its own value
+counts as unread. Names starting with `_` are left alone, and so are `__sub`,
+`__mul`, `__div`, `__lessThan`, `__findFile` and `__nixPath`, which Nix reads
+itself when it evaluates `-`, `*`, `/`, comparisons and `<path>` lookups. The fix
+removes the binding, with every line of a dotted one, or the one name from an
+`inherit`.
+
+```nix
+let unused = 1; in 2    # SL8005
+```
+
+## SL8006
+
+**A function never reads its argument or its `@` name.** Removing a plain argument
+would change how the function is called, so the quick fix renames it with a `_`
+prefix, which is also how to say the argument is meant to go unread, as for the
+first argument of an overlay. An unread `@` name can simply go, and the fix-all
+action removes it.
+
+```nix
+x: 1    # SL8006
+```
+
+## SL8007
+
+**A function pattern names an argument it never reads.** When the function has an
+`@` name that it reads, the formals are not reported, because the set may be passed
+on whole and they state what it must hold. With `...` the fix-all action removes
+the formal, since callers can still pass it. Without `...` removing it makes those
+callers fail, so the quick fix is offered but only on request. The `outputs` of a
+flake is exempt without `...`, since Nix calls it with every input whether it reads
+them or not.
+
+```nix
+{ a, b, ... }: a    # SL8007
+```
+
+## SL8008
+
+**Parentheses change nothing.** They enclose a single value, or a whole expression
+where any expression may stand: a binding's value, a function body, a condition.
+They are not reported where taking them away would join tokens, as in `a/(b)` or
+`x:(y)`, where `(a.b).c or d` would look at a different attribute path, or around
+the source of `inherit (x) y;`, where they are required. Parentheses that only
+make an operator's precedence plain are left alone.
+
+```nix
+{ a = (1); }    # SL8008
+```
+
+## SL8009
+
+**An `if` picks between `true` and `false`.** `if x then true else false` is `x`
+and `if x then false else true` is `!x`. A name `true` or `false` bound in the file
+is not the Boolean, and is left alone. `x == true` and `x == null` are not reported:
+both also accept values that are not Booleans, so they say more than `x` does.
+
+```nix
+x: if x then true else false    # SL8009
+```
+
+## SL8010
+
+**`rec` has nothing to do.** No expression in the set reads any of its attributes,
+so it means the same without `rec`. A `rec` set that defines `__overrides` is left
+alone, since Nix reads that attribute itself. A `rec` on a set written for a name
+that an earlier set already defined never takes effect at all.
+
+```nix
+rec { a = 1; }    # SL8010
+```
+
+## SL8011
+
+**`x = x;` in a set that is not recursive is `inherit x;`.** In a `let` or a `rec`
+set the same words mean a binding that reads itself, which is a different thing and
+not reported.
+
+```nix
+x: { x = x; }    # SL8011
+```
+
+## SL8012
+
+**`or` is used as a variable.** Nix still reads `f or` as `f` applied to a variable
+named `or`, in this one position, and warns that this will change. It is usually a
+`.attr or default` missing its attribute. Rename the binding.
+
+```nix
+let or = 1; f = x: x; in f or    # SL8012
+```
+
+## SL8013
+
+**A `let` or an `inherit` binds nothing.** `let in x` is `x`, and an `inherit` that
+names no attribute has no effect at all, not even evaluating its source.
+
+```nix
+let in 1    # SL8013
 ```

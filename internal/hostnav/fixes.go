@@ -41,6 +41,9 @@ func (g *Group) Fixes(within parser.Span) []Fix {
 		if f.Span.End < within.Start || f.Span.Start > within.End {
 			continue
 		}
+		for i, fix := range f.Fixes {
+			out = append(out, Fix{Title: fix.Title, Finding: f, Edits: fix.Edits, Preferred: i == 0 && fix.Safety == lint.Safe})
+		}
 		name := text[f.Span.Start:f.Span.End]
 		if kind, ok := unknownNames[f.Code]; ok {
 			if closest, found := similar.Closest(name, slices.Values(g.namesOf(kind, f.Span.Start))); found {

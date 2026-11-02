@@ -319,7 +319,9 @@ func (s *Server) nativeFindings(h hostnav.Host, settings config.Settings, docker
 		s.noticeOnce("hostnav:"+file.URI+":"+err.Error(), lsp.MessageWarning, "Checking "+file.Path+" on its own, without the files it includes: "+err.Error())
 	}
 	excluded := s.lintSettings(file.Path, settings).Excluded()
-	return slices.DeleteFunc(slices.Concat(findings, docker.Findings()), func(f lint.Finding) bool { return excluded.Has(f.Code) })
+	return slices.DeleteFunc(slices.Concat(findings, docker.Findings()), func(f lint.Finding) bool {
+		return excluded.Has(f.Code) || !settings.Lint.Profile.KeepsHost(f)
+	})
 }
 
 const recipeTimeout = 30 * time.Minute

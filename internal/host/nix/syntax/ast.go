@@ -364,6 +364,70 @@ func StaticName(a Attr) (string, Span, bool) {
 	return "", Span{}, false
 }
 
+func StaticAttr(a Attr) bool {
+	switch a := a.(type) {
+	case *StringAttr:
+		return !interpolated(a.Value)
+	case *DynamicAttr:
+		s, ok := Unparenthesized(a.Value).(*String)
+		return ok && !interpolated(s)
+	}
+	return true
+}
+
+func AttrName(a Attr) (string, bool) {
+	switch a := a.(type) {
+	case *IdentAttr:
+		return a.Name, true
+	case *StringAttr:
+		return stringValue(a.Value)
+	case *DynamicAttr:
+		if s, ok := Unparenthesized(a.Value).(*String); ok {
+			return stringValue(s)
+		}
+	}
+	return "", false
+}
+
+func Unparenthesized(e Expr) Expr {
+	for {
+		p, ok := e.(*Paren)
+		if !ok {
+			return e
+		}
+		e = p.Inner
+	}
+}
+
+func interpolated(s *String) bool {
+	return slices.ContainsFunc(s.Parts, func(p Part) bool {
+		_, ok := p.(*Interpolation)
+		return ok
+	})
+}
+
+func stringValue(s *String) (string, bool) {
+	var value strings.Builder
+	for _, part := range s.Parts {
+		switch part := part.(type) {
+		case *Literal:
+			value.WriteString(part.Text)
+		case *Escape:
+			value.WriteString(part.Text)
+		default:
+			return "", false
+		}
+	}
+	if s.Kind == Quoted {
+		return value.String(), true
+	}
+	text := value.String()
+	if strings.Contains(text, "\n") {
+		return "", false
+	}
+	return strings.TrimLeft(text, " "), true
+}
+
 type Assign struct {
 	bindingNode
 	Path  AttrPath
