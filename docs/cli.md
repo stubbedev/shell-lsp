@@ -31,7 +31,7 @@ apply to them, since the file decides their shell. Justfiles, Makefiles and
 Dockerfiles are also checked as just, make and Dockerfile files, with the
 `SL5`, `SL6` and `SL7` codes of [rules.md](rules.md#sl5001), following their `import`, `mod`
 and `include` statements, and the other justfiles and Makefiles among the
-paths that include them. Nix files report syntax errors as [SL8001](rules.md#sl8001). Dockerfiles are checked with Hadolint's `DL` rules
+paths that include them. Nix files are checked with the `SL8` codes of [rules.md](rules.md#sl8001), with `# shellcheck disable=` honoured in Nix comments. Dockerfiles are checked with Hadolint's `DL` rules
 too, configured by the nearest `.hadolint.yaml` ([hadolint.md](hadolint.md)). `.git`, `node_modules`,
 `vendor` and similar directories are skipped, and so is whatever git ignores:
 the `.gitignore` files from the repository's top down, and
@@ -178,8 +178,13 @@ Justfiles are formatted like `just --fmt` formats them; one whose comment
 and left alone. Makefiles are formatted without changing what make reads from
 them: spacing around operators and rule colons, trailing whitespace make
 ignores and runs of blank lines, while recipes and `define` bodies stay as they
-are. Nix files are skipped when walking a directory and refused when named,
-since `fmt` formats only shell scripts, justfiles and Makefiles. A file named more
+are. Nix files are formatted like `nixfmt` 1.5.0 formats them, at its default
+width of 100 columns and indent of 2, with the formatter built in: no `nixfmt`
+binary is needed. `.editorconfig` settings and the printer flags do not affect
+them, shell inside their strings is left as written, and a file with a syntax
+error is refused with its position and never partly rewritten. The other files
+that embed shell are skipped when walking a directory and refused when named,
+since `fmt` formats only shell scripts, justfiles, Makefiles and Nix files. A file named more
 than once, directly or through a directory, is formatted once.
 Exit status 0 means success, 1 means a file could not be read or parsed or,
 with `-l` (without `-w`) or `-d`, that some formatting differs, and 2 means

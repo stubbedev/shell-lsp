@@ -1,0 +1,7704 @@
+-- case-0001 --
+x
+-- case-0002 --
+1
+-- case-0003 --
+{ }
+-- case-0004 --
+{ }
+-- case-0005 --
+{
+
+}
+-- case-0006 --
+{
+  # c
+}
+-- case-0007 --
+{
+  # c
+}
+-- case-0008 --
+[ ]
+-- case-0009 --
+[ ]
+-- case-0010 --
+[
+
+]
+-- case-0011 --
+[
+  # c
+]
+-- case-0012 --
+[ 1 ]
+-- case-0013 --
+[
+  1
+  2
+  3
+]
+-- case-0014 --
+[
+  1
+  2
+]
+-- case-0015 --
+[
+  1
+  2
+]
+-- case-0016 --
+[
+  1
+  2
+]
+-- case-0017 --
+[
+
+  1
+
+  2
+
+]
+-- case-0018 --
+{ a = 1; }
+-- case-0019 --
+{
+  a = 1;
+  b = 2;
+}
+-- case-0020 --
+{
+  a = 1;
+  b = 2;
+}
+-- case-0021 --
+{
+  a = 1;
+  b = 2;
+}
+-- case-0022 --
+{
+
+  a = 1;
+
+  b = 2;
+
+}
+-- case-0023 --
+rec { a = 1; }
+-- case-0024 --
+rec {
+  a = 1;
+}
+-- case-0025 --
+rec { }
+-- case-0026 --
+rec {
+}
+-- case-0027 --
+{
+  a.b.c = 1;
+  "d".e = 2;
+  ${f} = 3;
+}
+-- case-0028 --
+{ a.b.c = 1; }
+-- case-0029 --
+{ inherit a; }
+-- case-0030 --
+{ inherit a b c; }
+-- case-0031 --
+{ inherit (x) a b c; }
+-- case-0032 --
+{ inherit (x) ; }
+-- case-0033 --
+{ inherit ; }
+-- case-0034 --
+{
+  inherit
+    a
+    b
+    ;
+}
+-- case-0035 --
+{
+  inherit
+    a
+    b
+    ;
+}
+-- case-0036 --
+{
+  inherit (x)
+    a
+    b
+    ;
+}
+-- case-0037 --
+{
+  inherit (x)
+    a
+    b
+    ;
+}
+-- case-0038 --
+{
+  inherit (x)
+    a # c
+    b
+    ;
+}
+-- case-0039 --
+{
+  inherit # c
+    a
+    ;
+}
+-- case-0040 --
+{
+  inherit a; # c
+}
+-- case-0041 --
+{
+  inherit (x)
+    a
+    ;
+}
+-- case-0042 --
+{
+  inherit (x)
+    a
+    ;
+}
+-- case-0044 --
+a b
+-- case-0045 --
+a b c
+-- case-0046 --
+a b
+-- case-0047 --
+a b c
+-- case-0048 --
+a b c
+-- case-0049 --
+a [
+  1
+] b
+-- case-0050 --
+a {
+  b = 1;
+} c
+-- case-0051 --
+a { b = 1; }
+-- case-0052 --
+a {
+  b = 1;
+}
+-- case-0053 --
+a [ 1 ]
+-- case-0054 --
+a [
+  1
+]
+-- case-0055 --
+a (b c)
+-- case-0056 --
+a (b c)
+-- case-0057 --
+a (b c)
+-- case-0058 --
+a (b c)
+-- case-0059 --
+a b {
+  c = 1;
+}
+-- case-0060 --
+a b (x: x)
+-- case-0061 --
+a b (x: x)
+-- case-0062 --
+# c
+a b
+-- case-0063 --
+# c
+a b
+-- case-0064 --
+# c
+a
+-- case-0065 --
+a # c
+-- case-0066 --
+# c
+a
+-- case-0067 --
+a # c
+-- case-0068 --
+# c
+
+a
+-- case-0069 --
+# c
+
+a
+
+# d
+-- case-0070 --
+(a)
+-- case-0071 --
+(a)
+-- case-0072 --
+(a)
+-- case-0073 --
+(a)
+-- case-0074 --
+(a)
+-- case-0075 --
+# c
+(a)
+-- case-0076 --
+(
+  a # c
+)
+-- case-0077 --
+(
+  # c
+  a
+)
+-- case-0078 --
+(a b)
+-- case-0079 --
+(a b)
+-- case-0080 --
+({ a = 1; })
+-- case-0081 --
+({
+  a = 1;
+})
+-- case-0082 --
+({ a = 1; })
+-- case-0083 --
+({ a = 1; })
+-- case-0084 --
+([ 1 ])
+-- case-0085 --
+(x: x)
+-- case-0086 --
+(x: x)
+-- case-0087 --
+(if a then b else c)
+-- case-0088 --
+(if a then b else c)
+-- case-0089 --
+(
+  let
+    a = 1;
+  in
+  a
+)
+-- case-0090 --
+((a))
+-- case-0091 --
+((a))
+-- case-0092 --
+{
+  a = f (
+    let
+      b = 1;
+    in
+    {
+      c = 1;
+    }
+  );
+}
+-- case-0093 --
+{
+  a = f (
+    let
+      b = 1;
+    in
+    c d
+  );
+}
+-- case-0094 --
+{
+  a = f {
+    b = 1;
+
+    c = 1;
+  };
+}
+-- case-0095 --
+{
+  a = f {
+    b = 1;
+    # c
+
+    c = 1;
+  };
+}
+-- case-0096 --
+{
+  a = f (a.b) {
+    c = 1;
+  };
+}
+-- case-0100 --
+{
+  a = f {
+    b = 1;
+    /*
+      x
+      y
+    */
+  };
+}
+-- case-0101 --
+{
+  a = f {
+    b = 1;
+    c = "x
+y";
+  };
+}
+-- case-0102 --
+{
+  a = f {
+    b = 1;
+    c = "x
+    y";
+  };
+}
+-- case-0103 --
+{
+  a = f {
+    b = 1;
+    c = "x
+in";
+  };
+}
+-- case-0104 --
+{
+  a = f {
+    b = 1;
+    c = "x
+in ";
+  };
+}
+-- case-0106 --
+{
+  a =
+    {
+      b = 1;
+    }
+    .c;
+}
+-- case-0107 --
+{
+  a =
+    !{
+      b = 1;
+    };
+}
+-- case-0108 --
+{
+  a =
+    -{
+      b = 1;
+    };
+}
+-- case-0109 --
+{
+  a =
+    {
+      b = 1;
+    }
+      ? c;
+}
+-- case-0110 --
+{
+  a = f.g {
+    b = 1;
+  };
+}
+-- case-0111 --
+{
+  a = f.g x {
+    b = 1;
+  };
+}
+-- case-0112 --
+{
+  a = { b = 1; }.c x {
+    b = 1;
+  };
+}
+-- case-0113 --
+{
+  a = (b c) {
+    b = 1;
+  };
+}
+-- case-0114 --
+{
+  a = (b c) {
+    b = 1;
+  };
+}
+-- case-0115 --
+{
+  a =
+    {
+      b = 1;
+    }
+    .c;
+}
+-- case-0116 --
+{
+  a =
+    {
+      b = 1;
+      c = 2;
+    }
+    .d
+      {
+        e = 1;
+      };
+}
+-- case-0117 --
+{
+  a ? f {
+    b = 1;
+  },
+}:
+a
+-- case-0118 --
+{
+  a ? f (c d),
+}:
+a
+-- case-0119 --
+{
+  a ?
+    !{
+      b = 1;
+    },
+}:
+a
+-- case-0120 --
+{
+  a ? b c,
+}:
+a
+-- case-0121 --
+{
+  a ? b + c,
+}:
+a
+-- case-0122 --
+{
+  a ? b // {
+    c = 1;
+  },
+}:
+a
+-- case-0123 --
+{
+  a ? x: {
+    c = 1;
+  },
+}:
+a
+-- case-0124 --
+{
+  a ? x: y,
+}:
+a
+-- case-0125 --
+{
+  a ?
+    let
+    in
+    x,
+}:
+a
+-- case-0126 --
+{
+  a ? with a; b c,
+}:
+a
+-- case-0127 --
+{
+  a ? with a; {
+    b = 1;
+  },
+}:
+a
+-- case-0128 --
+{
+  a ? ''
+    b
+  '',
+}:
+a
+-- case-0129 --
+{
+  a ? (b c),
+}:
+a
+-- case-0130 --
+{
+  a ? (b c),
+}:
+a
+-- case-0131 --
+[
+  f
+  {
+    b = 1;
+  }
+]
+-- case-0132 --
+[
+  (f {
+    b = 1;
+  })
+  x
+]
+-- case-0133 --
+{
+  a =
+    b:
+    f {
+      c = 1;
+    };
+}
+-- case-0134 --
+{
+  a = b: f (c d);
+}
+-- case-0135 --
+{
+  a = with b; f (c d);
+}
+-- case-0136 --
+if a then
+  f {
+    b = 1;
+  }
+else
+  c
+-- case-0137 --
+if
+  f {
+    b = 1;
+  }
+then
+  a
+else
+  c
+-- case-0138 --
+if a then
+  x: {
+    b = 1;
+  }
+else
+  c
+-- case-0139 --
+if a then
+  with b;
+  {
+    b = 1;
+  }
+else
+  c
+-- case-0140 --
+if a then
+  let
+    b = 1;
+  in
+  c
+else
+  c
+-- case-0141 --
+if a then
+  ''
+    b
+  ''
+else
+  c
+-- case-0142 --
+if a then "b
+c" else c
+-- case-0143 --
+if a then (b c) else c
+-- case-0144 --
+if a then (if b then c else d) else c
+-- case-0145 --
+if a then
+  !{
+    b = 1;
+  }
+else
+  c
+-- case-0146 --
+if
+  ''
+    b
+  ''
+then
+  a
+else
+  c
+-- case-0147 --
+if (b c) then a else c
+-- case-0148 --
+if "b
+c" then a else c
+-- case-0149 --
+if a then
+  b
+else
+  ''
+    b
+  ''
+-- case-0150 --
+if a then b else (b c)
+-- case-0151 --
+if a then
+  b
+else
+  x: {
+    c = 1;
+  }
+-- case-0152 --
+if a then
+  b
+else
+  let
+    c = 1;
+  in
+  d
+-- case-0153 --
+if a then b else with a; b
+-- case-0154 --
+if a then
+  b
+else
+  with a;
+  {
+    b = 1;
+  }
+-- case-0155 --
+if a then [ b ] else [ c ]
+-- case-0156 --
+if a then
+  b
+else if c then
+  {
+    d = 1;
+  }
+else
+  e
+-- case-0157 --
+if a then
+  b
+else if c then
+  d
+else
+  e
+-- case-0158 --
+if a then
+  b
+# c
+else if c then
+  d
+else
+  e
+-- case-0159 --
+if a then b else (if c then d else e)
+-- case-0160 --
+with a;
+with b;
+{
+  c = 1;
+}
+-- case-0161 --
+with a; with b; c
+-- case-0162 --
+with a;
+assert b;
+c
+-- case-0163 --
+assert a;
+with b;
+c
+-- case-0164 --
+with a; with b; c d
+-- case-0165 --
+with a;
+with b;
+{
+  c = 1;
+}
+-- case-0166 --
+{
+  a = with b; with c; d;
+}
+-- case-0167 --
+{
+  a =
+    with b;
+    with c;
+    {
+      d = 1;
+    };
+}
+-- case-0168 --
+{
+  a =
+    with b;
+    with c;
+    {
+      d = 1;
+    };
+}
+-- case-0169 --
+{
+  a = with b; c.d;
+}
+-- case-0170 --
+{
+  a = with b; c.d;
+}
+-- case-0171 --
+{
+  a =
+    with {
+      b = 1;
+    };
+    c;
+}
+-- case-0172 --
+{
+  a =
+    with {
+      b = 1;
+    };
+    c d;
+}
+-- case-0173 --
+with {
+  b = 1;
+};
+{
+  c = 1;
+}
+-- case-0174 --
+with (a b); c d
+-- case-0175 --
+assert a; # c
+{
+  b = 1;
+}
+-- case-0176 --
+with a; # c
+{
+  b = 1;
+}
+-- case-0177 --
+with a;
+# c
+b
+-- case-0178 --
+with a; # c
+with b;
+d
+-- case-0179 --
+with a; # c
+with b;
+d
+-- case-0180 --
+with a; # c
+
+b
+-- case-0181 --
+assert (a b);
+c d
+-- case-0182 --
+assert a -> b;
+c
+-- case-0183 --
+assert a || b;
+c
+-- case-0184 --
+{
+  a =
+    (
+      let
+        b = 1;
+      in
+      f
+    )
+      {
+        c = 1;
+      };
+}
+-- case-0185 --
+{
+  a = f (
+    with a;
+    let
+      b = 1;
+    in
+    c
+  );
+}
+-- case-0186 --
+{
+  a =
+    f
+      (
+        let
+          b = 1;
+        in
+        c
+      )
+      (
+        let
+          b = 1;
+        in
+        c
+      );
+}
+-- case-0187 --
+{
+  a = f (
+    y:
+    let
+      b = 1;
+    in
+    c
+  ) x;
+}
+-- case-0188 --
+{
+  a = f (y: {
+    b = 1;
+  }) x;
+}
+-- case-0189 --
+{
+  a = f (with a; {
+    b = 1;
+  }) x;
+}
+-- case-0190 --
+{
+  a = f (g) (h);
+}
+-- case-0191 --
+{
+  a = f (g h) x;
+}
+-- case-0192 --
+{
+  a = f (
+    assert a;
+    {
+      b = 1;
+    }
+  ) x;
+}
+-- case-0193 --
+{
+  z = {
+    a = f (
+      let
+        b = 1;
+      in
+      c
+    ) x;
+  };
+}
+-- case-0194 --
+{
+  a = {
+    z = 1;
+    a = f {
+    } x;
+  };
+}
+-- case-0195 --
+let
+  a = (b c);
+in
+d
+-- case-0196 --
+let
+  a = (b c);
+in
+d
+-- case-0197 --
+let
+  a = (b c);
+  b = (c d);
+in
+d
+-- case-0198 --
+{
+  a = (b c);
+}
+-- case-0199 --
+{
+  a = (b c);
+}
+-- case-0200 --
+{
+  a = (b c);
+  d = 1;
+}
+-- case-0201 --
+{ a = (a.b); }
+-- case-0202 --
+let
+  a = (a.b);
+in
+c
+-- case-0203 --
+let
+  a = (x: x);
+in
+c
+-- case-0204 --
+let
+  a = (if a then b else c);
+in
+c
+-- case-0205 --
+let
+  a = (c);
+in
+c
+-- case-0206 --
+let
+  a = (b c);
+in
+c
+-- case-0207 --
+{
+  a = {
+    b = (c d);
+  };
+}
+-- case-0208 --
+let
+  a = {
+    b = (c d);
+  };
+in
+d
+-- case-0209 --
+let
+  inherit (a) b;
+  c = (d e);
+in
+f
+-- case-0210 --
+x: ./a
+-- case-0211 --
+x: null
+-- case-0212 --
+x: "http://a"
+-- case-0213 --
+x: <a>
+-- case-0214 --
+x: ~/a
+-- case-0215 --
+x: 1
+-- case-0216 --
+x: 1.5
+-- case-0217 --
+with a; 1
+-- case-0218 --
+with a; ./p
+-- case-0219 --
+with a; <p>
+-- case-0220 --
+with a; "http://b"
+-- case-0221 --
+with a; 1
+-- case-0222 --
+with a; ./p
+-- case-0223 --
+with a; "s"
+-- case-0224 --
+let
+in
+1
+-- case-0225 --
+let
+in
+./p
+-- case-0226 --
+let
+in
+null
+-- case-0227 --
+{
+  a = 1;
+}
+-- case-0228 --
+{
+  a = ./p;
+}
+-- case-0229 --
+{
+  a = <p>;
+}
+-- case-0230 --
+{
+  a = "http://b";
+}
+-- case-0231 --
+{ }.a or "x
+y"
+-- case-0232 --
+[ 1 ].a or "x
+y"
+-- case-0233 --
+[ 1 ].a
+-- case-0234 --
+[ 1 ].a
+-- case-0235 --
+[ 1 ].a or [ 2 ]
+-- case-0236 --
+{ a = 1; }.b
+-- case-0237 --
+{ a = 1; }.b or { c = 1; }
+-- case-0238 --
+{
+  a = 1;
+}
+.b or {
+  c = 1;
+}
+-- case-0239 --
+![ 1 ]
+-- case-0240 --
+![
+  1
+]
+-- case-0241 --
+-{ a = 1; }
+-- case-0242 --
+-{ a = 1; }
+-- case-0243 --
+[ 1 ] ? a
+-- case-0244 --
+[ 1 ] ? a
+-- case-0245 --
+[ 1 ] ? a
+-- case-0246 --
+{ a = 1; }."b
+c"
+-- case-0247 --
+{ a = 1; }.${b}
+-- case-0248 --
+{ a = 1; }.${b c}
+-- case-0249 --
+f.${{ a = 1; }}
+-- case-0250 --
+f.${{ a = 1; }}
+-- case-0251 --
+{ a = 1; }.${{ b = 1; }}
+-- case-0252 --
+{
+  a = 1;
+}
+.${{
+  b = 1;
+  c = 1;
+}}
+-- case-0253 --
+{
+  a.${{
+    b = 1;
+    c = 1;
+  }} =
+    1;
+}
+-- case-0254 --
+{
+  a.${{ b = 1; }} = 1;
+}
+-- case-0255 --
+{
+  ${{
+    b = 1;
+    c = 1;
+  }} =
+    1;
+}
+-- case-0256 --
+{
+  ${{ b = 1; }}.c = 1;
+}
+-- case-0257 --
+{
+  "a${b c}" = 1;
+}
+-- case-0258 --
+./a/${{ b = 1; }}/c
+-- case-0259 --
+./a/${{
+  b = 1;
+  c = 1;
+}}/c
+-- case-0260 --
+{
+  a = 1;
+}
++ ./a/${{
+  b = 1;
+  c = 1;
+}}/c
+-- case-0261 --
+"${{ a = 1; }}${{
+  b = 1;
+  c = 1;
+}}"
+-- case-0262 --
+"${{ a = 1; }}${{
+  b = 1;
+  c = 1;
+}}"
+-- case-0263 --
+!(a b)
+-- case-0264 --
+!(a)
+-- case-0265 --
+!(a b).c
+-- case-0266 --
+(a b).c
+-- case-0267 --
+(a b).c or { d = 1; }
+-- case-0268 --
+{
+  a = 1;
+  b = !(x y);
+}
+-- case-0269 --
+{
+  a = 1;
+  b = (x y).c;
+}
+-- case-0270 --
+{ a = 1; }.b.c
+-- case-0271 --
+{ a = 1; }.b.c
+-- case-0272 --
+if { a = 1; }.b then c else d
+-- case-0273 --
+{
+  a =
+    {
+      b = 1;
+    }
+    .c or [ d ];
+}
+-- case-0274 --
+{
+  a =
+    {
+      b = 1;
+    }
+    .c or [
+      d
+    ];
+}
+-- case-0275 --
+{
+  a = f { b = 1; };
+}
+-- case-0276 --
+{
+  a = f {
+  } x;
+}
+-- case-0277 --
+{
+  a = x y z;
+}
+-- case-0278 --
+{
+  a = f (c d);
+}
+-- case-0279 --
+{
+  a = f (x: d) z;
+}
+-- case-0280 --
+{
+  a = f {
+    b = 1;
+  } x;
+}
+-- case-0281 --
+{
+  a =
+    f
+      {
+        b = 1;
+      }
+      {
+        c = 1;
+      };
+}
+-- case-0282 --
+{
+  a =
+    f
+      {
+        b = 1;
+      }
+      {
+        c = 1;
+      };
+}
+-- case-0283 --
+{
+  a = f x {
+    c = 1;
+  };
+}
+-- case-0284 --
+{
+  a = f {
+    b = 1;
+  } x;
+}
+-- case-0285 --
+{
+  a = f {
+    b = 1;
+  } x;
+}
+-- case-0286 --
+{
+  ${a} = f {
+    b = 1;
+  } x;
+}
+-- case-0287 --
+{
+  ${a} = b;
+}
+-- case-0288 --
+{
+  ${a} = 1;
+}
+-- case-0289 --
+{
+  ${a b} = 1;
+}
+-- case-0290 --
+{
+  ${a b} = 1;
+}
+-- case-0291 --
+{
+  ${a b} = 1;
+}
+-- case-0292 --
+{
+  ${a b} = c;
+}
+-- case-0293 --
+{
+  ${a b} = c d;
+}
+-- case-0294 --
+{
+  ${a b} = {
+    c = 1;
+  };
+}
+-- case-0295 --
+{
+  ${a b} = f {
+    c = 1;
+  };
+}
+-- case-0296 --
+{ ${if a then b else c} = c d; }
+-- case-0297 --
+{
+  a.${b} = c;
+}
+-- case-0298 --
+{
+  a.${b c} = c;
+}
+-- case-0299 --
+[
+  {
+    ${a b} = c;
+  }
+]
+-- case-0300 --
+(x: y z)
+-- case-0301 --
+(
+  x:
+  f {
+    a = 1;
+  }
+)
+-- case-0302 --
+(x: y: z)
+-- case-0303 --
+(y: a)
+-- case-0304 --
+[
+  (y: a)
+]
+-- case-0305 --
+(y: {
+  b = 1;
+})
+-- case-0306 --
+({ x }: a)
+-- case-0307 --
+({ x, y }: a)
+-- case-0308 --
+({ x, y }: a b)
+-- case-0309 --
+{
+  x = f "x
+  }: y" {
+    c = 1;
+  };
+}
+-- case-0310 --
+{
+  x = f {
+    c = 1;
+    d = "x
+  }: y";
+  };
+}
+-- case-0311 --
+{
+  x = f {
+    c = 1;
+    d = "x
+  }:";
+  };
+}
+-- case-0312 --
+{
+  x = f {
+    c = 1;
+    d = "x
+  } @ y";
+  };
+}
+-- case-0313 --
+{
+  x = f {
+    c = 1;
+    d = "x
+  }:y";
+  };
+}
+-- case-0314 --
+{
+  x = f {
+    c = 1;
+    d = "x
+  }";
+  };
+}
+-- case-0315 --
+[ "a${if a then b else c}" ]
+-- case-0316 --
+{ a = "${if a then b else c}"; }
+-- case-0317 --
+{
+  a = "${{
+    b = 1;
+    c = 2;
+  }}";
+}
+-- case-0318 --
+{
+  a = "${{
+    b = 1;
+    c = 2;
+  }}";
+}
+-- case-0319 --
+[
+  "${{
+    b = 1;
+    c = 2;
+  }}"
+]
+-- case-0320 --
+f "${{
+  b = 1;
+  c = 2;
+}}" x
+-- case-0321 --
+f "${{
+  b = 1;
+  c = 2;
+}}" x
+-- case-0322 --
+[ ./a/${if a then b else c} ]
+-- case-0323 --
+[
+  ./a/${{
+    b = 1;
+    c = 2;
+  }}
+]
+-- case-0324 --
+{
+  a = ./a/${{
+    b = 1;
+    c = 2;
+  }};
+}
+-- case-0325 --
+f ./a/${{
+  b = 1;
+  c = 2;
+}} x
+-- case-0326 --
+[
+  {
+    a."b${{
+      b = 1;
+      c = 2;
+    }}" =
+      1;
+  }
+]
+-- case-0327 --
+if a then { b, c }: d else e
+-- case-0328 --
+if a then
+  { b, c }: {
+    d = 1;
+  }
+else
+  e
+-- case-0329 --
+if a then x@{ b, c }: d else e
+-- case-0330 --
+if a then { b }: d else e
+-- case-0331 --
+if a then
+  { b }:
+  d
+else
+  e
+-- case-0332 --
+if a then
+  { b }: {
+    d = 1;
+  }
+else
+  e
+-- case-0333 --
+if a then x: d else e
+-- case-0334 --
+if a then { b, c }: d e else f
+-- case-0335 --
+if a then b else { b, c }: d
+-- case-0336 --
+if { b, c }: d then a else f
+-- case-0337 --
+if a then y: { b, c }: d else e
+-- case-0338 --
+if a then
+  let
+  in
+  d
+else
+  e
+-- case-0339 --
+if a then with b; { b, c }: d else e
+-- case-0340 --
+{ a = { b, c }: d e; }
+-- case-0341 --
+with a; { b, c }: d
+-- case-0342 --
+let
+in
+{ b, c }:
+d
+-- case-0343 --
+f ({ b, c }: d)
+-- case-0344 --
+x: { b, c }: d
+-- case-0345 --
+{ b }: { c, d }: e
+-- case-0346 --
+{
+  a ? { b, c }: d,
+}:
+e
+-- case-0347 --
+[ ({ b, c }: d) ]
+-- case-0348 --
+({ b, c }: d) x
+-- case-0349 --
+{ b, c }: { d, e }: f
+-- case-0350 --
+[
+  (with a; b.c)
+]
+-- case-0351 --
+[
+  (
+    {
+    }
+    .c
+  )
+]
+-- case-0352 --
+[
+  (
+    !{
+    }
+  )
+]
+-- case-0353 --
+[
+  (a.b)
+]
+-- case-0354 --
+[
+  (
+    assert a;
+    b.c
+  )
+]
+-- case-0355 --
+(with a; with b; c)
+-- case-0356 --
+(with a; with b; c d)
+-- case-0357 --
+[
+  (
+    { b }:
+    c
+  )
+]
+-- case-0358 --
+(
+  { b }:
+  c
+)
+-- case-0359 --
+(x: y: z w)
+-- case-0360 --
+[
+  (x: {
+  })
+]
+-- case-0361 --
+(x: {
+})
+-- case-0362 --
+(x: [
+])
+-- case-0363 --
+(if a then b else c).d
+-- case-0364 --
+{
+  a = 1;
+  b = (x: y) z;
+}
+-- case-0365 --
+("http://a")
+-- case-0366 --
+[ ("http://a") ]
+-- case-0367 --
+{
+  a = ("http://a");
+}
+-- case-0368 --
+let
+  # c
+
+  a = 1;
+
+  # d
+
+  b = 2;
+
+  # e
+
+in
+c
+-- case-0369 --
+let
+
+  # c
+
+in
+c
+-- case-0370 --
+let
+  # c
+  # d
+
+  # e
+in
+c
+-- case-0371 --
+let
+  a = 1;
+
+  # c
+in
+d
+-- case-0372 --
+let
+  a = 1;
+  # c
+
+in
+d
+-- case-0373 --
+let
+  a = 1; # c
+
+in
+d
+-- case-0374 --
+let
+  a = 1; # c
+
+  # d
+
+  # e
+
+in
+f
+-- case-0375 --
+let
+  a = 1;
+
+  # c
+
+  b = 1;
+in
+f
+-- case-0376 --
+let
+  a = 1;
+  # c
+
+  b = 1;
+in
+f
+-- case-0377 --
+let
+  a = 1; # c
+
+  b = 1;
+in
+f
+-- case-0378 --
+{
+  inherit
+    a
+
+    # c
+
+    b
+
+    # d
+
+    ;
+}
+-- case-0379 --
+{
+  inherit # c
+
+    a # d
+
+    # e
+    b
+    ;
+}
+-- case-0380 --
+{
+  inherit
+
+    a
+
+    b
+    ;
+}
+-- case-0381 --
+[
+  # c
+
+  1
+]
+-- case-0382 --
+[
+
+  # c
+
+  1
+
+  # d
+
+]
+-- case-0383 --
+{
+  a, # c
+
+  # d
+
+  b,
+}:
+c
+-- case-0384 --
+{
+  a,
+
+  # d
+
+  b,
+}:
+c
+-- case-0385 --
+{
+  a,
+
+  # d
+
+  # e
+
+  b,
+
+  # f
+
+}:
+c
+-- case-0386 --
+{
+
+  # c
+
+  a,
+
+  # d
+
+  ...
+}:
+c
+-- case-0387 --
+# c
+(
+
+  # d
+
+  a
+
+  # e
+
+  # f
+
+)
+-- case-0388 --
+(
+
+  a
+)
+-- case-0389 --
+if
+  a # c
+
+# d
+
+then
+  b
+else
+  c
+-- case-0390 --
+# c
+if
+
+  # d
+
+  a
+then
+  b
+else
+  c
+-- case-0391 --
+with # c
+
+  # d
+
+  a;
+b
+-- case-0392 --
+with a; # c
+
+# d
+
+b
+-- case-0393 --
+x: # c
+
+# d
+
+y
+-- case-0394 --
+# c
+f
+
+  # d
+
+  x
+-- case-0395 --
+a # c
+
+# d
+
+# e
++
+
+  # f
+
+  b
+-- case-0396 --
+{
+  a  # c
+
+    # d
+
+    =  # e
+
+      # f
+
+      b # g
+
+  # h
+
+  ;
+}
+-- case-0397 --
+let
+in
+# c
+
+# d
+
+a
+-- case-0398 --
+{
+  a ? # c
+
+    # d
+
+    b,
+}:
+c
+-- case-0399 --
+# c
+
+# d
+a
+
+# e
+
+# f
+-- case-0400 --
+rec # c
+
+# d
+
+{
+}
+-- case-0401 --
+{
+  c =
+    rec {
+      a
+
+        = b;
+    }
+      "t";
+}
+-- case-0402 --
+{
+  c = { a = b; } "t";
+}
+-- case-0403 --
+{
+  c = { a = b; } "t";
+}
+-- case-0404 --
+{
+  c =
+    {
+      a = b;
+    }
+      "t";
+}
+-- case-0405 --
+{
+  c =
+    {
+      a = b;
+    }
+      x;
+}
+-- case-0406 --
+{
+  c =
+    {
+      a = b;
+    }
+      x;
+}
+-- case-0407 --
+a + b
+-- case-0408 --
+a + b + c
+-- case-0409 --
+a + b
+-- case-0410 --
+a + b
+-- case-0411 --
+a + b + c
+-- case-0412 --
+a + b + c
+-- case-0413 --
+a + (b + c)
+-- case-0414 --
+a // { b = 1; }
+-- case-0415 --
+a
+// {
+  b = 1;
+}
+-- case-0416 --
+{
+  b = 1;
+}
+// a
+-- case-0417 --
+a // { b = 1; } // c
+-- case-0418 --
+a
+// {
+  b = 1;
+}
+// c
+-- case-0419 --
+a ++ [ 1 ]
+-- case-0420 --
+a
+++ [
+  1
+]
+-- case-0421 --
+a # c
++ b
+-- case-0422 --
+a
+# c
++ b
+-- case-0423 --
+a # c
++ b
+-- case-0424 --
+a
+# c
++ b
+-- case-0425 --
+a && b || c
+-- case-0426 --
+a && b || c
+-- case-0427 --
+a == b
+-- case-0428 --
+a -> b
+-- case-0429 --
+a -> b
+-- case-0430 --
+a |> b
+-- case-0431 --
+!a
+-- case-0432 --
+!a
+-- case-0433 --
+!a
+-- case-0434 --
+! # c
+a
+-- case-0435 --
+-a
+-- case-0436 --
+-a
+-- case-0437 --
+-(a)
+-- case-0438 --
+!(a)
+-- case-0439 --
+!(a b)
+-- case-0440 --
+a.b
+-- case-0441 --
+a.b
+-- case-0442 --
+a.b
+-- case-0443 --
+a.b.c
+-- case-0444 --
+a.b
+-- case-0445 --
+a.b
+-- case-0446 --
+a # c
+.b
+-- case-0447 --
+a.b or c
+-- case-0448 --
+a.b or c
+-- case-0449 --
+a.b or c
+-- case-0450 --
+a.b or c
+-- case-0451 --
+a.b or (c d)
+-- case-0452 --
+a ? b
+-- case-0453 --
+a ? b
+-- case-0454 --
+a ? b
+-- case-0455 --
+a ? b
+-- case-0456 --
+a ? b.c
+-- case-0457 --
+a ? b.c
+-- case-0458 --
+x: x
+-- case-0459 --
+"x:y:" x
+-- case-0460 --
+x: x
+-- case-0461 --
+x: x
+-- case-0462 --
+x: y: x
+-- case-0463 --
+x: y: x
+-- case-0464 --
+x: y: x
+-- case-0465 --
+x: # c
+x
+-- case-0466 --
+x: # c
+x
+-- case-0467 --
+# c
+x: x
+-- case-0468 --
+x:
+# c
+x
+-- case-0469 --
+{ a }: a
+-- case-0470 --
+{ a, b }: a
+-- case-0471 --
+{ a, b }: a
+-- case-0472 --
+{ a, b, ... }: a
+-- case-0473 --
+{ ... }: a
+-- case-0474 --
+{ }: a
+-- case-0475 --
+{ }: a
+-- case-0476 --
+{
+  a ? 1,
+}:
+a
+-- case-0477 --
+{
+  a ? 1,
+  b ? 2,
+}:
+a
+-- case-0478 --
+{
+  a ? 1,
+  b ? 2,
+}:
+a
+-- case-0479 --
+{
+  a,
+  b,
+}:
+a
+-- case-0480 --
+{
+  a,
+}:
+a
+-- case-0481 --
+{
+  a,
+}:
+a
+-- case-0482 --
+{ a }:
+a
+-- case-0483 --
+{ a, b }:
+a
+-- case-0484 --
+{ ... }:
+a
+-- case-0485 --
+x@{ a }: a
+-- case-0486 --
+{ a }@x: a
+-- case-0487 --
+x@{ a }: a
+-- case-0488 --
+{ a }@x: a
+-- case-0489 --
+x@{
+  a,
+}:
+a
+-- case-0490 --
+{
+  a,
+}@x:
+a
+-- case-0491 --
+{ a, b }@x: a
+-- case-0492 --
+{ a, b }@x: a
+-- case-0493 --
+{ a, b }@x: a
+-- case-0494 --
+{
+  a, # c
+  b,
+}:
+a
+-- case-0495 --
+{
+  a, # c
+  b,
+}:
+a
+-- case-0496 --
+{
+  a, # c
+  b,
+}:
+a
+-- case-0497 --
+# c
+{
+  a,
+}:
+a
+-- case-0498 --
+{
+  # c
+  a,
+}:
+a
+-- case-0499 --
+{
+  a, # c
+}:
+a
+-- case-0500 --
+{
+  a, # c
+}:
+a
+-- case-0501 --
+{
+  a,
+  # c
+}:
+a
+-- case-0502 --
+{
+  a,
+  ... # c
+}:
+a
+-- case-0503 --
+{
+  a, # c
+  ...
+}:
+a
+-- case-0504 --
+{
+  a,
+  b,
+}:
+a
+-- case-0505 --
+{
+  a,
+
+  b,
+
+  c,
+}:
+a
+-- case-0506 --
+{
+  a ? {
+    b = 1;
+  },
+  c,
+}:
+a
+-- case-0507 --
+{
+  a ? [ 1 ],
+  c ? x: x,
+  d ? if a then b else c,
+}:
+a
+-- case-0508 --
+{
+  a ? b,
+}:
+a
+-- case-0509 --
+{
+  a ? b,
+}:
+a
+-- case-0510 --
+{
+  a ? # c
+    b,
+}:
+a
+-- case-0511 --
+{ a }: { b }: a
+-- case-0512 --
+{ a }: {
+  b = 1;
+}
+-- case-0513 --
+{ a, b }: {
+  b = 1;
+}
+-- case-0514 --
+{ a, b }: [
+  b
+]
+-- case-0515 --
+x: {
+  b = 1;
+}
+-- case-0516 --
+x: [
+  b
+]
+-- case-0517 --
+x: (b)
+-- case-0518 --
+x: y z
+-- case-0519 --
+x: y z
+-- case-0520 --
+x: if a then b else c
+-- case-0521 --
+x:
+let
+  a = 1;
+in
+a
+-- case-0522 --
+x:
+let
+  a = 1;
+in
+a
+-- case-0523 --
+x: with a; b
+-- case-0524 --
+x:
+assert a;
+b
+-- case-0525 --
+{
+  "q" =
+    {
+      c = # h
+        c;
+    }
+      x
+      x;
+}
+-- case-0526 --
+{
+  "q" =
+    {
+      c = c;
+    }
+      x
+      x;
+}
+-- case-0527 --
+{
+  "q" =
+    {
+      c = c;
+    }
+      x;
+}
+-- case-0528 --
+{
+  "q" =
+    {
+      c = c;
+    }
+      x;
+}
+-- case-0529 --
+{
+  "q" =
+    {
+      c = c;
+    }
+      x;
+}
+-- case-0530 --
+{
+  "q" =
+    {
+      c = 1;
+      d = c;
+    }
+      x;
+}
+-- case-0531 --
+{
+  "q" =
+    {
+      c = 1;
+      d = c;
+    }
+      x;
+}
+-- case-0532 --
+{
+  "q" =
+    {
+      c = 1;
+      d = c;
+    }
+      x
+      y;
+}
+-- case-0533 --
+(
+  let
+    a = 1;
+  in
+  b
+).c or {
+  d = 1;
+  e = 2;
+}
+-- case-0534 --
+(with a; b).c or {
+  d = 1;
+  e = 2;
+}
+-- case-0535 --
+(
+  assert a;
+  b
+).c or {
+  d = 1;
+  e = 2;
+}
+-- case-0536 --
+(a + b).c or {
+  d = 1;
+  e = 2;
+}
+-- case-0537 --
+(a b c).d or {
+  d = 1;
+  e = 2;
+}
+-- case-0538 --
+(a.b).c or {
+  d = 1;
+  e = 2;
+}
+-- case-0539 --
+(!a).c or {
+  d = 1;
+  e = 2;
+}
+-- case-0540 --
+(x: y).c or {
+  d = 1;
+  e = 2;
+}
+-- case-0541 --
+(x: { a = 1; }).c or {
+  d = 1;
+  e = 2;
+}
+-- case-0542 --
+(x: y z).c or {
+  d = 1;
+  e = 2;
+}
+-- case-0543 --
+({ x }: y z).c or {
+  d = 1;
+  e = 2;
+}
+-- case-0544 --
+("a").c or {
+  d = 1;
+  e = 2;
+}
+-- case-0545 --
+("a").c or {
+  d = 1;
+  e = 2;
+}
+-- case-0546 --
+(./a).c or {
+  d = 1;
+  e = 2;
+}
+-- case-0547 --
+([ 1 ]).c or {
+  d = 1;
+  e = 2;
+}
+-- case-0548 --
+({ a = 1; }).c or {
+  d = 1;
+  e = 2;
+}
+-- case-0549 --
+((a b)).c or {
+  d = 1;
+  e = 2;
+}
+-- case-0550 --
+(a).c or {
+  d = 1;
+  e = 2;
+}
+-- case-0551 --
+(1).c or {
+  d = 1;
+  e = 2;
+}
+-- case-0552 --
+(if a then b else c).c or {
+  d = 1;
+  e = 2;
+}
+-- case-0553 --
+!(
+  let
+    a = 1;
+  in
+  b
+).c or {
+  d = 1;
+  e = 2;
+}
+-- case-0554 --
+{
+  d = 1;
+  e = 2;
+}
+.c or (
+  let
+    a = 1;
+  in
+  b
+)
+-- case-0555 --
+{
+  d = 1;
+  e = 2;
+}
+.c or (x: y)
+-- case-0556 --
+{
+  d = 1;
+  e = 2;
+}
+.c or [
+  1
+  2
+]
+-- case-0557 --
+{
+  d = 1;
+  e = 2;
+}
+.c or "x${y}"
+-- case-0558 --
+{
+  d = 1;
+  e = 2;
+}
+.c or { }
+-- case-0559 --
+{
+  d = 1;
+  e = 2;
+}
+.c or [ ]
+-- case-0560 --
+{
+  d = 1;
+  e = 2;
+}
+.${"a"}
+-- case-0561 --
+{
+  d = 1;
+  e = 2;
+}
+."a${"b"}"
+-- case-0562 --
+{
+  d = 1;
+  e = 2;
+}
+  ? a.${"b"}
+-- case-0563 --
+!{
+  d = 1;
+  e = 2;
+}
+.${"a"}
+-- case-0564 --
+-(a {
+  d = 1;
+  e = 2;
+})
+-- case-0565 --
+-(a b c)
+-- case-0566 --
+!(a b).c
+-- case-0567 --
+-[ 1 ]
+-- case-0568 --
+-f [ 1 ]
+-- case-0569 --
+-f [
+  1
+]
+-- case-0570 --
+!a b
+-- case-0571 --
+!a b
+-- case-0572 --
+!a + b
+-- case-0573 --
+!a + b
+-- case-0574 --
+!a == b
+-- case-0575 --
+!a == b
+-- case-0576 --
+!a && b
+-- case-0577 --
+!a && b
+-- case-0578 --
+-a * b
+-- case-0579 --
+-a * b
+-- case-0580 --
+![
+  1
+]
++ b
+-- case-0581 --
+!f {
+  a = 1;
+}
+-- case-0582 --
+{
+  a = 1;
+  b =
+    !f {
+      a = 1;
+    };
+}
+-- case-0583 --
+{ a = 1; } + b
+-- case-0584 --
+[ 1 ] + b
+-- case-0585 --
+(a b) + c
+-- case-0586 --
+{
+  a = 1;
+}
++ {
+  b = 1;
+}
+-- case-0587 --
+f { a = 1; } + c
+-- case-0588 --
+f x + c
+-- case-0589 --
+x.y + c
+-- case-0590 --
+{ a = 1; }.b + c
+-- case-0591 --
+!{ a = 1; } && c
+-- case-0592 --
+{ a = 1; }.a
+-- case-0593 --
+{
+  a = 1;
+  b = 2;
+}
+.a
+-- case-0594 --
+{
+  a = 1;
+  b = 2;
+}
+.a
+-- case-0595 --
+(x y).b
+-- case-0596 --
+(if a then b else c).b
+-- case-0597 --
+{
+  a = 1;
+  b = 2;
+}
+  ? a
+-- case-0598 --
+{
+  a = 1;
+  b = 2;
+}
+.a or {
+  c = 1;
+  d = 2;
+}
+-- case-0599 --
+a.${b}
+-- case-0600 --
+a.${b c}
+-- case-0601 --
+a.${b}
+-- case-0602 --
+a.${b}
+-- case-0603 --
+a."b${c d}"
+-- case-0604 --
+a.b.${if a then b else c}.c
+-- case-0605 --
+!{
+  a = 1;
+  b = 2;
+}
+-- case-0606 --
+-{
+  a = 1;
+  b = 2;
+}
+-- case-0607 --
+!(if a then b else c)
+-- case-0608 --
+let
+  a = 1;
+in
+a
+-- case-0609 --
+let
+  a = 1;
+  b = 2;
+in
+a
+-- case-0610 --
+let
+in
+a
+-- case-0611 --
+let
+in
+a
+-- case-0612 --
+let
+  a = 1;
+in
+a
+-- case-0613 --
+let
+  a = 1;
+in
+a
+-- case-0614 --
+let
+  a = 1;
+in
+a
+-- case-0615 --
+let
+  a = 1;
+in
+a
+-- case-0616 --
+let
+
+  a = 1;
+
+  b = 2;
+
+in
+
+a
+-- case-0617 --
+let # c
+  a = 1;
+in
+a
+-- case-0618 --
+let
+  a = 1; # c
+in
+a
+-- case-0619 --
+let
+  a = 1;
+  # c
+in
+a
+-- case-0620 --
+let
+  a = 1;
+in
+# c
+a
+-- case-0621 --
+let
+  a = 1;
+in
+# c
+a
+-- case-0622 --
+let
+  a = 1; # c
+in
+# d
+a
+-- case-0623 --
+let # c
+  a = 1;
+in
+a
+-- case-0624 --
+let
+  a = 1; # c
+in
+a
+-- case-0625 --
+let
+  a = 1;
+in
+# c
+a
+-- case-0626 --
+let
+in
+# c
+a
+-- case-0627 --
+let # c
+in
+a
+-- case-0628 --
+let
+  # c
+in
+a
+-- case-0629 --
+let
+  a = 1;
+in
+{
+  b = 1;
+}
+-- case-0630 --
+let
+  a = 1;
+in
+{
+  b = 1;
+}
+-- case-0631 --
+let
+  a = 1;
+in
+[
+  b
+]
+-- case-0632 --
+let
+  a = 1;
+in
+(a b)
+-- case-0633 --
+let
+  a = 1;
+in
+if a then b else c
+-- case-0634 --
+let
+  a = 1;
+in
+x: x
+-- case-0635 --
+let
+  a = 1;
+in
+with a;
+a
+-- case-0636 --
+let
+  a = 1;
+in
+a b
+-- case-0637 --
+let
+  a = 1;
+in
+let
+  b = 1;
+in
+b
+-- case-0638 --
+let { a = 1; }
+-- case-0639 --
+let {
+  a = 1;
+  b = 2;
+}
+-- case-0640 --
+let {
+  a = 1;
+}
+-- case-0641 --
+with a; b
+-- case-0642 --
+with a; b
+-- case-0643 --
+with a; b
+-- case-0644 --
+with a; b
+-- case-0645 --
+with a; b
+-- case-0646 --
+with a; with b; c
+-- case-0647 --
+with a; with b; c
+-- case-0648 --
+with a;
+{
+  b = 1;
+}
+-- case-0649 --
+with a; { b = 1; }
+-- case-0650 --
+with a; [ b ]
+-- case-0651 --
+with a;
+[
+  b
+]
+-- case-0652 --
+with a; (b c)
+-- case-0653 --
+with a; x: x
+-- case-0654 --
+with a; if a then b else c
+-- case-0655 --
+with a;
+let
+  a = 1;
+in
+a
+-- case-0656 --
+with a; b c
+-- case-0657 --
+with a; b c
+-- case-0658 --
+with a; # c
+b
+-- case-0659 --
+with a; # c
+b
+-- case-0660 --
+with # c
+  a;
+b
+-- case-0661 --
+with a # c
+;
+b
+-- case-0662 --
+with # c
+  a;
+b
+-- case-0663 --
+with a # c
+;
+b
+-- case-0664 --
+with { a = 1; }; b
+-- case-0665 --
+with {
+  a = 1;
+};
+b
+-- case-0666 --
+with (a b); b
+-- case-0667 --
+with (a b); b
+-- case-0668 --
+with a b; c
+-- case-0669 --
+with a b; c
+-- case-0670 --
+with if a then b else c; c
+-- case-0671 --
+assert a;
+b
+-- case-0672 --
+assert a;
+b
+-- case-0673 --
+assert a;
+b
+-- case-0674 --
+assert a;
+b
+-- case-0675 --
+assert a;
+b
+-- case-0676 --
+assert a;
+assert b;
+c
+-- case-0677 --
+assert a;
+assert b;
+c
+-- case-0678 --
+assert a;
+{
+  b = 1;
+}
+-- case-0679 --
+assert a;
+{
+  b = 1;
+}
+-- case-0680 --
+assert a;
+[ b ]
+-- case-0681 --
+assert a;
+(b c)
+-- case-0682 --
+assert a;
+x: x
+-- case-0683 --
+assert a;
+if a then b else c
+-- case-0684 --
+assert a;
+let
+  a = 1;
+in
+a
+-- case-0685 --
+assert a;
+b c
+-- case-0686 --
+assert a; # c
+b
+-- case-0687 --
+# c
+assert a;
+b
+-- case-0688 --
+assert a # c
+;
+b
+-- case-0689 --
+assert { a = 1; };
+b
+-- case-0690 --
+assert (a b);
+b
+-- case-0691 --
+assert a && b;
+c
+-- case-0692 --
+assert if a then b else c;
+c
+-- case-0693 --
+if a then b else c
+-- case-0694 --
+if a then b else c
+-- case-0695 --
+if a then b else c
+-- case-0696 --
+if a then
+  b
+else if c then
+  d
+else
+  e
+-- case-0697 --
+if a then if b then c else d else e
+-- case-0698 --
+if a then
+  {
+    b = 1;
+  }
+else
+  {
+    c = 1;
+  }
+-- case-0699 --
+if a then { b = 1; } else { c = 1; }
+-- case-0700 --
+if { a = 1; } then b else c
+-- case-0701 --
+if
+  {
+    a = 1;
+  }
+then
+  b
+else
+  c
+-- case-0702 --
+if a then
+  [
+    1
+  ]
+else
+  [
+    2
+  ]
+-- case-0703 --
+if a then (b c) else (d e)
+-- case-0704 --
+if a then x: x else y: y
+-- case-0705 --
+if a then
+  let
+    a = 1;
+  in
+  a
+else
+  b
+-- case-0706 --
+if a then with a; b else c
+-- case-0707 --
+if
+  a # c
+then
+  b
+else
+  c
+-- case-0708 --
+# c
+if a then b else c
+-- case-0709 --
+if a then # c
+  b
+else
+  c
+-- case-0710 --
+if a then
+  b # c
+else
+  c
+-- case-0711 --
+if a then
+  b
+# c
+else
+  c
+-- case-0712 --
+if a then b else c # d
+-- case-0713 --
+# c
+if a then b else c
+-- case-0714 --
+if
+  a # c
+then
+  b
+else
+  c
+-- case-0715 --
+if a then # c
+  b
+else
+  c
+-- case-0716 --
+if a then
+  b # c
+else
+  c
+-- case-0717 --
+if a then
+  b
+# c
+else
+  c
+-- case-0718 --
+if a b then c d else e f
+-- case-0719 --
+if a b then c d else e f
+-- case-0720 --
+if a && b then c else d
+-- case-0721 --
+if a && b then c else d
+-- case-0722 --
+{ a = b c; }
+-- case-0723 --
+{
+  a = b c;
+}
+-- case-0724 --
+{
+  a = b;
+}
+-- case-0725 --
+{
+  a = b;
+}
+-- case-0726 --
+{
+  a = b;
+}
+-- case-0727 --
+{
+  a = {
+    b = 1;
+  };
+}
+-- case-0728 --
+{
+  a = {
+    b = 1;
+  };
+}
+-- case-0729 --
+{
+  a = {
+    b = 1;
+    c = 2;
+  };
+}
+-- case-0730 --
+{
+  a = [
+    1
+  ];
+}
+-- case-0731 --
+{ a = [ 1 ]; }
+-- case-0732 --
+{ a = (b c); }
+-- case-0733 --
+{
+  a = (b c);
+}
+-- case-0734 --
+{
+  a = (b c);
+}
+-- case-0735 --
+{ a = x: x; }
+-- case-0736 --
+{
+  a = x: x;
+}
+-- case-0737 --
+{ a = { x }: x; }
+-- case-0738 --
+{ a = { x, y }: x; }
+-- case-0739 --
+{
+  a =
+    {
+      x,
+    }:
+    x;
+}
+-- case-0740 --
+{
+  a = x: {
+    b = 1;
+  };
+}
+-- case-0741 --
+{
+  a = { x, y }: {
+    b = 1;
+  };
+}
+-- case-0742 --
+{
+  a = x: y: {
+    b = 1;
+  };
+}
+-- case-0743 --
+{ a = if a then b else c; }
+-- case-0744 --
+{
+  a = if a then b else c;
+}
+-- case-0745 --
+{
+  a =
+    let
+      b = 1;
+    in
+    b;
+}
+-- case-0746 --
+{
+  a =
+    let
+      b = 1;
+    in
+    b;
+}
+-- case-0747 --
+{ a = with a; b; }
+-- case-0748 --
+{
+  a = with a; b;
+}
+-- case-0749 --
+{
+  a = with a; [
+    b
+  ];
+}
+-- case-0750 --
+{
+  a = with a; {
+    b = 1;
+  };
+}
+-- case-0751 --
+{
+  a =
+    assert a;
+    b;
+}
+-- case-0752 --
+{
+  a =
+    assert a;
+    b;
+}
+-- case-0753 --
+{ a = b + c; }
+-- case-0754 --
+{
+  a = b + c;
+}
+-- case-0755 --
+{
+  a = b // {
+    c = 1;
+  };
+}
+-- case-0756 --
+{
+  a = {
+    c = 1;
+  }
+  // b;
+}
+-- case-0757 --
+{
+  a = b {
+    c = 1;
+  };
+}
+-- case-0758 --
+{
+  a = b c {
+    c = 1;
+  };
+}
+-- case-0759 --
+{
+  a = b [
+    1
+  ];
+}
+-- case-0760 --
+{
+  a = b (c d);
+}
+-- case-0761 --
+{
+  a = b (x: {
+    c = 1;
+  });
+}
+-- case-0762 --
+{
+  a = b (x: c);
+}
+-- case-0763 --
+{ a = "b"; }
+-- case-0764 --
+{ a = "b"; }
+-- case-0765 --
+{
+  a = ''
+    b
+  '';
+}
+-- case-0766 --
+{
+  a = "b
+c";
+}
+-- case-0767 --
+{ a = b.c; }
+-- case-0768 --
+{ a = !b; }
+-- case-0769 --
+{ a = -b; }
+-- case-0770 --
+{ a = b ? c; }
+-- case-0771 --
+{
+  a = b ? c;
+}
+-- case-0772 --
+{
+  a = b.c;
+}
+-- case-0773 --
+{
+  a = # c
+    b;
+}
+-- case-0774 --
+{
+  a  # c
+    = b;
+}
+-- case-0775 --
+{
+  a = b # c
+  ;
+}
+-- case-0776 --
+{
+  a = b; # c
+}
+-- case-0777 --
+{
+  a = # c
+    b;
+}
+-- case-0778 --
+{
+  a  # c
+    = b;
+}
+-- case-0779 --
+{
+  a = b # c
+  ;
+}
+-- case-0780 --
+{
+  a = b; # c
+}
+-- case-0781 --
+{
+  a = # c
+    {
+      b = 1;
+    };
+}
+-- case-0782 --
+{
+  a = # c
+    [ 1 ];
+}
+-- case-0783 --
+{
+  a = # c
+    if a then b else c;
+}
+-- case-0784 --
+{
+  a =
+    # c
+    b;
+}
+-- case-0785 --
+{
+  # c
+  a = b;
+}
+-- case-0786 --
+{
+  # c
+
+  a = b;
+}
+-- case-0787 --
+{
+
+  # c
+  a = b;
+}
+-- case-0788 --
+{
+  a = b;
+  # c
+}
+-- case-0789 --
+{
+  a = b;
+
+  # c
+}
+-- case-0790 --
+{
+  a = b;
+  # c
+
+}
+-- case-0791 --
+{
+  a = b;
+
+  # c
+
+}
+-- case-0792 --
+{
+  a = b;
+  # c
+  d = e;
+}
+-- case-0793 --
+{
+  a = b;
+
+  # c
+  d = e;
+}
+-- case-0794 --
+{
+  a = b;
+  # c
+
+  d = e;
+}
+-- case-0795 --
+{
+  a = b;
+
+  # c
+
+  d = e;
+}
+-- case-0796 --
+{
+  a = b;
+  # c
+  d = e;
+}
+-- case-0797 --
+{
+  a = b; # c
+  d = e;
+}
+-- case-0798 --
+{
+  a = b; # c
+  d = e;
+}
+-- case-0799 --
+{
+  a = b; # c
+  # d
+  e = f;
+}
+-- case-0800 --
+{
+  a = b; # c
+
+  # d
+  e = f;
+}
+-- case-0801 --
+{
+  # a
+
+  # b
+}
+-- case-0802 --
+{
+  # a
+  # b
+}
+-- case-0803 --
+{
+  # c
+}
+-- case-0804 --
+[
+  # c
+]
+-- case-0805 --
+[
+  # c
+  1
+  # d
+  2
+  # e
+]
+-- case-0806 --
+[
+  1 # c
+  2 # d
+]
+-- case-0807 --
+[
+  1 # c
+  2
+]
+-- case-0808 --
+[
+  1
+
+  # c
+
+  2
+]
+-- case-0809 --
+[
+  a
+  b
+]
+-- case-0810 --
+[ (a b) ]
+-- case-0811 --
+[
+  (a b)
+]
+-- case-0812 --
+[ { a = 1; } ]
+-- case-0813 --
+[
+  { a = 1; }
+  { b = 1; }
+]
+-- case-0814 --
+[
+  {
+    a = 1;
+  }
+  { b = 1; }
+]
+-- case-0815 --
+[
+  [ 1 ]
+  [ 2 ]
+]
+-- case-0816 --
+[
+  [
+    1
+  ]
+  [ 2 ]
+]
+-- case-0817 --
+[ (x: x) ]
+-- case-0818 --
+[
+  "a"
+  "b"
+]
+-- case-0819 --
+[
+  "a
+b"
+]
+-- case-0820 --
+[
+  ''
+    a
+  ''
+]
+-- case-0821 --
+[
+  a.b
+  c.d
+]
+-- case-0822 --
+[ (if a then b else c) ]
+-- case-0823 --
+[
+  (
+    let
+      a = 1;
+    in
+    a
+  )
+]
+-- case-0824 --
+[ (with a; b) ]
+-- case-0825 --
+[ (a + b) ]
+-- case-0826 --
+[
+  (!a)
+  (-a)
+]
+-- case-0827 --
+[
+  ./a
+  ~/b
+  <c>
+  "http://d.e"
+]
+-- case-0828 --
+[
+  # c
+  1
+]
+-- case-0829 --
+[
+  1 # c
+]
+-- case-0830 --
+[
+  {
+    a = 1;
+  }
+]
+-- case-0831 --
+[
+  [ ]
+  { }
+]
+-- case-0832 --
+[
+  [
+
+  ]
+  {
+
+  }
+]
+-- case-0833 --
+"a"
+-- case-0834 --
+"a
+b"
+-- case-0835 --
+"a${b}c"
+-- case-0836 --
+"a${b}c"
+-- case-0837 --
+"a${b}c"
+-- case-0838 --
+"a${b}c"
+-- case-0839 --
+"a${b}c"
+-- case-0840 --
+"a${b c}c"
+-- case-0841 --
+"a${b c}c"
+-- case-0842 --
+"a${{ b = 1; }}c"
+-- case-0843 --
+"a${{
+  b = 1;
+  c = 2;
+}}c"
+-- case-0844 --
+"a${if a then b else c}c"
+-- case-0845 --
+"a${[ 1 ]}c"
+-- case-0846 --
+"a${[
+  1
+]}c"
+-- case-0847 --
+"a${"b${c}"}c"
+-- case-0848 --
+"a${
+  # c
+  b
+}c"
+-- case-0849 --
+"a${
+  b # c
+}c"
+-- case-0850 --
+"a${
+  # c
+  b
+}c"
+-- case-0851 --
+"\n\t\"\${a}$b$$c"
+-- case-0852 --
+"a"
+-- case-0853 --
+"a "
+-- case-0854 --
+''
+  a
+''
+-- case-0855 --
+''
+    a
+  b
+''
+-- case-0856 --
+''
+  a
+      b
+''
+-- case-0857 --
+''
+
+  a
+
+''
+-- case-0858 --
+''
+  a   
+   
+''
+-- case-0859 --
+"a${b}c"
+-- case-0860 --
+"a${b}c"
+-- case-0861 --
+''
+  a${b}c
+''
+-- case-0862 --
+''
+  ${b}
+''
+-- case-0863 --
+''
+  ${b}
+''
+-- case-0864 --
+''
+  ${b}
+''
+-- case-0865 --
+''
+  ${b}
+''
+-- case-0866 --
+''
+  a ${if a then b else c} d
+  e
+''
+-- case-0867 --
+''
+  a ${{
+    b = 1;
+    c = 2;
+  }} d
+''
+-- case-0868 --
+''
+  ''${a} '''b ''\n $${c} $d
+''
+-- case-0869 --
+''
+  	a
+  	b
+''
+-- case-0870 --
+''
+  	a
+    b
+''
+-- case-0871 --
+''
+  a
+    b''
+-- case-0872 --
+''
+  a
+   b ''
+-- case-0873 --
+''
+
+''
+-- case-0874 --
+""
+-- case-0875 --
+""
+-- case-0876 --
+{
+  a = ''
+    b
+  '';
+  c = 1;
+}
+-- case-0877 --
+x ''
+  a
+''
+-- case-0878 --
+x ''
+  a
+'' y
+-- case-0879 --
+[
+  ''
+    a
+  ''
+  ''
+    b
+  ''
+]
+-- case-0880 --
+./a
+-- case-0881 --
+./a/${b}/c
+-- case-0882 --
+./a/${b}/c
+-- case-0883 --
+./a${b c}
+-- case-0884 --
+./a/${b}
+-- case-0885 --
+<nixpkgs>
+-- case-0886 --
+~/a
+-- case-0887 --
+"http://a.b/c"
+-- case-0888 --
+1.5
+-- case-0889 --
+.5
+-- case-0890 --
+null
+-- case-0891 --
+true
+-- case-0892 --
+a'b-c_d
+-- case-0893 --
+or
+-- case-0894 --
+{ or = 1; }
+-- case-0895 --
+a or b
+-- case-0896 --
+a.or
+-- case-0897 --
+{ a = 1; }.b or c
+-- case-0898 --
+a.b or c d
+-- case-0899 --
+(a).b
+-- case-0900 --
+(a) b
+-- case-0901 --
+a (b)
+-- case-0902 --
+(a) b
+-- case-0903 --
+((a) (b))
+-- case-0904 --
+(a b) c
+-- case-0905 --
+((a b) c)
+-- case-0906 --
+((a b) c)
+-- case-0907 --
+(((a b)))
+-- case-0908 --
+((a b))
+-- case-0909 --
+({
+  b = 1;
+  c = 2;
+})
+-- case-0910 --
+[ (a) ]
+-- case-0911 --
+{ a = (b); }
+-- case-0912 --
+{ a = ({ b = 1; }); }
+-- case-0913 --
+{
+  a = (b);
+}
+-- case-0914 --
+{ a = (if a then b else c); }
+-- case-0915 --
+{ a = (x: x); }
+-- case-0916 --
+{
+  a = (
+    let
+      b = 1;
+    in
+    b
+  );
+}
+-- case-0917 --
+{ a = (with a; b); }
+-- case-0918 --
+{
+  a = (with a; b);
+}
+-- case-0919 --
+{
+  a = (
+    # c
+    b
+  );
+}
+-- case-0920 --
+{
+  a = (
+    b # c
+  );
+}
+-- case-0921 --
+# c
+(a)
+-- case-0922 --
+(
+  a # c
+)
+-- case-0923 --
+(a) # c
+-- case-0924 --
+# c
+(a)
+-- case-0925 --
+[
+  (a)
+  (a b)
+  ({ a = 1; })
+  ([ 1 ])
+  ("a")
+  ("b")
+  (./a)
+  (a.b)
+  (a ? b)
+  (!a)
+  (-a)
+  (1)
+  (x: x)
+  (a + b)
+  (if a then b else c)
+  (
+    let
+    in
+    a
+  )
+  (with a; b)
+  (
+    assert a;
+    b
+  )
+]
+-- case-0926 --
+{
+  a = (a);
+  b = (a b);
+  c = ({ a = 1; });
+  d = ([ 1 ]);
+  e = ("a");
+  f = ("b");
+  g = (./a);
+  h = (a.b);
+  i = (a ? b);
+  j = (!a);
+  k = (-a);
+  l = (1);
+  m = (x: x);
+  n = (a + b);
+  o = (if a then b else c);
+  p = (
+    let
+    in
+    a
+  );
+  q = (with a; b);
+  r = (
+    assert a;
+    b
+  );
+}
+-- case-0927 --
+("a")
+-- case-0928 --
+("b")
+-- case-0929 --
+(./a)
+-- case-0930 --
+(a.b)
+-- case-0931 --
+(a ? b)
+-- case-0932 --
+(!a)
+-- case-0933 --
+(-a)
+-- case-0934 --
+(1)
+-- case-0935 --
+(a + b)
+-- case-0936 --
+(
+  let
+  in
+  a
+)
+-- case-0937 --
+(with a; b)
+-- case-0938 --
+(
+  assert a;
+  b
+)
+-- case-0939 --
+f (a) (a b) ({ a = 1; }) ([ 1 ]) ("a") ("b") (./a) (a.b) (a ? b) (!a) (-a) (1) (x: x) (a + b)
+  (if a then b else c)
+  (
+    let
+    in
+    a
+  )
+  (with a; b)
+  (
+    assert a;
+    b
+  )
+-- case-0940 --
+(a) z
+-- case-0941 --
+(a b) z
+-- case-0942 --
+({ a = 1; }) z
+-- case-0943 --
+([ 1 ]) z
+-- case-0944 --
+("a") z
+-- case-0945 --
+("b") z
+-- case-0946 --
+(./a) z
+-- case-0947 --
+(a.b) z
+-- case-0948 --
+(a ? b) z
+-- case-0949 --
+(!a) z
+-- case-0950 --
+(-a) z
+-- case-0951 --
+(1) z
+-- case-0952 --
+(x: x) z
+-- case-0953 --
+(a + b) z
+-- case-0954 --
+(if a then b else c) z
+-- case-0955 --
+(
+  let
+  in
+  a
+)
+  z
+-- case-0956 --
+(with a; b) z
+-- case-0957 --
+(
+  assert a;
+  b
+)
+  z
+-- case-0958 --
+(a) + z
+-- case-0959 --
+(a b) + z
+-- case-0960 --
+({ a = 1; }) + z
+-- case-0961 --
+([ 1 ]) + z
+-- case-0962 --
+("a") + z
+-- case-0963 --
+("b") + z
+-- case-0964 --
+(./a) + z
+-- case-0965 --
+(a.b) + z
+-- case-0966 --
+(a ? b) + z
+-- case-0967 --
+(!a) + z
+-- case-0968 --
+(-a) + z
+-- case-0969 --
+(1) + z
+-- case-0970 --
+(x: x) + z
+-- case-0971 --
+(a + b) + z
+-- case-0972 --
+(if a then b else c) + z
+-- case-0973 --
+(
+  let
+  in
+  a
+)
++ z
+-- case-0974 --
+(with a; b) + z
+-- case-0975 --
+(
+  assert a;
+  b
+)
++ z
+-- case-0976 --
+z + (a)
+-- case-0977 --
+z + (a b)
+-- case-0978 --
+z + ({ a = 1; })
+-- case-0979 --
+z + ([ 1 ])
+-- case-0980 --
+z + ("a")
+-- case-0981 --
+z + ("b")
+-- case-0982 --
+z + (./a)
+-- case-0983 --
+z + (a.b)
+-- case-0984 --
+z + (a ? b)
+-- case-0985 --
+z + (!a)
+-- case-0986 --
+z + (-a)
+-- case-0987 --
+z + (1)
+-- case-0988 --
+z + (x: x)
+-- case-0989 --
+z + (a + b)
+-- case-0990 --
+z + (if a then b else c)
+-- case-0991 --
+z
++ (
+  let
+  in
+  a
+)
+-- case-0992 --
+z + (with a; b)
+-- case-0993 --
+z
++ (
+  assert a;
+  b
+)
+-- case-0994 --
+x: (a)
+-- case-0995 --
+x: (a b)
+-- case-0996 --
+x: ({ a = 1; })
+-- case-0997 --
+x: ([ 1 ])
+-- case-0998 --
+x: ("a")
+-- case-0999 --
+x: ("b")
+-- case-1000 --
+x: (./a)
+-- case-1001 --
+x: (a.b)
+-- case-1002 --
+x: (a ? b)
+-- case-1003 --
+x: (!a)
+-- case-1004 --
+x: (-a)
+-- case-1005 --
+x: (1)
+-- case-1006 --
+x: (x: x)
+-- case-1007 --
+x: (a + b)
+-- case-1008 --
+x: (if a then b else c)
+-- case-1009 --
+x:
+(
+  let
+  in
+  a
+)
+-- case-1010 --
+x: (with a; b)
+-- case-1011 --
+x:
+(
+  assert a;
+  b
+)
+-- case-1012 --
+with z; (a)
+-- case-1013 --
+with z; (a b)
+-- case-1014 --
+with z; ({ a = 1; })
+-- case-1015 --
+with z; ([ 1 ])
+-- case-1016 --
+with z; ("a")
+-- case-1017 --
+with z; ("b")
+-- case-1018 --
+with z; (./a)
+-- case-1019 --
+with z; (a.b)
+-- case-1020 --
+with z; (a ? b)
+-- case-1021 --
+with z; (!a)
+-- case-1022 --
+with z; (-a)
+-- case-1023 --
+with z; (1)
+-- case-1024 --
+with z; (x: x)
+-- case-1025 --
+with z; (a + b)
+-- case-1026 --
+with z; (if a then b else c)
+-- case-1027 --
+with z;
+(
+  let
+  in
+  a
+)
+-- case-1028 --
+with z; (with a; b)
+-- case-1029 --
+with z;
+(
+  assert a;
+  b
+)
+-- case-1030 --
+let
+in
+(a)
+-- case-1031 --
+let
+in
+(a b)
+-- case-1032 --
+let
+in
+({ a = 1; })
+-- case-1033 --
+let
+in
+(x: x)
+-- case-1034 --
+let
+in
+(a + b)
+-- case-1035 --
+let
+in
+(if a then b else c)
+-- case-1036 --
+let
+in
+(a.b)
+-- case-1037 --
+let
+in
+(
+  let
+  in
+  a
+)
+-- case-1038 --
+let
+in
+(with a; b)
+-- case-1039 --
+if (a) then (b c) else (d + e)
+-- case-1040 --
+if (a b) then (x: x) else ({ a = 1; })
+-- case-1041 --
+if (a.b) then
+  (if a then b else c)
+else
+  (
+    let
+    in
+    a
+  )
+-- case-1042 --
+if (with a; b) then
+  (
+    assert a;
+    b
+  )
+else
+  ([ 1 ])
+-- case-1043 --
+if (a + b) then (a) else (!a)
+-- case-1044 --
+with (a); b
+-- case-1045 --
+with (x: x); b
+-- case-1046 --
+with ({ a = 1; }); b
+-- case-1047 --
+with (a + b); b
+-- case-1048 --
+with (a.b); b
+-- case-1049 --
+with (if a then b else c); b
+-- case-1050 --
+assert (a);
+b
+-- case-1051 --
+assert (a b);
+b
+-- case-1052 --
+assert (a + b);
+b
+-- case-1053 --
+assert (x: x);
+b
+-- case-1054 --
+!(!a)
+-- case-1055 --
+-(-a)
+-- case-1056 --
+!(a.b)
+-- case-1057 --
+(a b).c
+-- case-1058 --
+({ a = 1; }).c
+-- case-1059 --
+(a.b).c
+-- case-1060 --
+(a) ? b
+-- case-1061 --
+(a b) ? c
+-- case-1062 --
+a.b or (c)
+-- case-1063 --
+a.b or (x: x)
+-- case-1064 --
+"${(a)}"
+-- case-1065 --
+"${(a b)}"
+-- case-1066 --
+"${(x: x)}"
+-- case-1067 --
+"${(if a then b else c)}"
+-- case-1068 --
+{ ${(a)} = 1; }
+-- case-1069 --
+{ inherit (a) b; }
+-- case-1070 --
+{ inherit (a b) b; }
+-- case-1071 --
+{ inherit ((a)) b; }
+-- case-1072 --
+{
+  a ? (b),
+}:
+a
+-- case-1073 --
+{
+  a ? (b c),
+}:
+a
+-- case-1074 --
+{
+  a ? (x: x),
+}:
+a
+-- case-1075 --
+{
+  a ? (if a then b else c),
+}:
+a
+-- case-1076 --
+(((a)))
+-- case-1077 --
+((a b))
+-- case-1078 --
+((x: x))
+-- case-1079 --
+((if a then b else c))
+-- case-1080 --
+[ ((a b)) ]
+-- case-1081 --
+{ a = ((a b)); }
+-- case-1082 --
+{ a = ((x: x)); }
+-- case-1083 --
+(a) (b) (c)
+-- case-1084 --
+(a b)
+-- case-1085 --
+(a b)
+-- case-1086 --
+(x: x)
+-- case-1087 --
+(x: x)
+-- case-1088 --
+(x: x)
+-- case-1089 --
+({ a = 1; })
+-- case-1090 --
+(if a then b else c)
+-- case-1091 --
+(
+  let
+  in
+  a
+)
+-- case-1092 --
+(with a; b)
+-- case-1093 --
+{
+  a = (x: x);
+}
+-- case-1094 --
+{
+  a = (b c);
+}
+-- case-1095 --
+{
+  a = ({ b = 1; });
+}
+-- case-1096 --
+{
+  a = (if a then b else c);
+}
+-- case-1097 --
+{
+  a = (
+    let
+    in
+    a
+  );
+}
+-- case-1098 --
+{
+  a = ([ 1 ]);
+}
+-- case-1099 --
+{
+  a = (a + b);
+}
+-- case-1100 --
+{
+  a = (a.b);
+}
+-- case-1101 --
+[
+  (a b)
+]
+-- case-1102 --
+[
+  (x: x)
+]
+-- case-1103 --
+[
+  ({ a = 1; })
+]
+-- case-1104 --
+[
+  (a)
+]
+-- case-1105 --
+f (a b)
+-- case-1106 --
+f (x: x)
+-- case-1107 --
+f ({ a = 1; })
+-- case-1108 --
+f (a)
+-- case-1109 --
+z + (a b)
+-- case-1110 --
+z + (a)
+-- case-1111 --
+x: (a b)
+-- case-1112 --
+x: (x: x)
+-- case-1113 --
+x: ({ a = 1; })
+-- case-1114 --
+x: (a)
+-- case-1115 --
+(
+  # c
+  a b
+)
+-- case-1116 --
+[
+  (x: x)
+]
+-- case-1117 --
+{
+  a = [
+    (x: x)
+  ];
+}
+-- case-1118 --
+{
+  a = (x: y: x);
+}
+-- case-1119 --
+[
+  (x: y z)
+]
+-- case-1120 --
+[
+  (x: y z)
+]
+-- case-1121 --
+[
+  (x: {
+    y = 1;
+  })
+]
+-- case-1122 --
+[
+  (x: {
+    y = 1;
+  })
+]
+-- case-1123 --
+[
+  (
+    { x, y }:
+    y
+  )
+]
+-- case-1124 --
+[ ({ x, y }: y) ]
+-- case-1125 --
+[
+  (
+    { x }:
+    y
+  )
+]
+-- case-1126 --
+({ x, y }: y)
+-- case-1127 --
+(a + b)
+-- case-1128 --
+[
+  (a + b)
+]
+-- case-1129 --
+(with a; b)
+-- case-1130 --
+[
+  (with a; b)
+]
+-- case-1131 --
+[
+  (with a; b c)
+]
+-- case-1132 --
+(
+  let
+    a = 1;
+  in
+  a
+)
+-- case-1133 --
+[
+  (
+    let
+      a = 1;
+    in
+    a
+  )
+]
+-- case-1134 --
+(
+  let
+    a = 1;
+    b = 2;
+  in
+  a
+)
+-- case-1135 --
+[
+  (
+    let
+      a = 1;
+      b = 2;
+    in
+    a
+  )
+]
+-- case-1136 --
+f (
+  let
+    a = 1;
+    b = 2;
+  in
+  a
+)
+-- case-1137 --
+f (
+  let
+    a = 1;
+  in
+  a
+) z
+-- case-1138 --
+[
+  (
+    assert a;
+    b c
+  )
+]
+-- case-1139 --
+[ (if a then b else c) ]
+-- case-1140 --
+f (if a then b else c)
+-- case-1141 --
+f (if a then b else c) z
+-- case-1142 --
+f z (if a then b else c)
+-- case-1143 --
+[
+  (f {
+    a = 1;
+  })
+]
+-- case-1144 --
+[
+  (f {
+    a = 1;
+    b = 2;
+  })
+]
+-- case-1145 --
+[
+  (f [
+    1
+  ])
+]
+-- case-1146 --
+[
+  (f x {
+    a = 1;
+    b = 2;
+  })
+]
+-- case-1147 --
+[
+  (f {
+    a = 1;
+    b = 2;
+  } x)
+]
+-- case-1148 --
+(f {
+  a = 1;
+})
+-- case-1149 --
+(f {
+  a = 1;
+} x)
+-- case-1150 --
+[
+  (
+    a
+    // {
+      b = 1;
+    }
+  )
+]
+-- case-1151 --
+[
+  (
+    {
+      b = 1;
+    }
+    // a
+  )
+]
+-- case-1152 --
+[
+  (
+    !{
+      a = 1;
+      b = 2;
+    }
+  )
+]
+-- case-1153 --
+[
+  (
+    {
+      a = 1;
+      b = 2;
+    }
+    .c
+  )
+]
+-- case-1154 --
+[
+  ({
+    a = 1;
+    b = 2;
+  })
+]
+-- case-1155 --
+[
+  (a.b.c)
+]
+-- case-1156 --
+[
+  (''
+    a
+  '')
+]
+-- case-1157 --
+(''
+  a
+'')
+-- case-1158 --
+("a
+b")
+-- case-1159 --
+(f ''
+  a
+'')
+-- case-1160 --
+(f "a
+b")
+-- case-1161 --
+f ''
+  a
+'' z
+-- case-1162 --
+f "a
+b" z
+-- case-1163 --
+f {
+  a = 1;
+}
+-- case-1164 --
+f
+  {
+    a = 1;
+  }
+  {
+    b = 1;
+  }
+-- case-1165 --
+f { a = 1; } {
+  b = 1;
+}
+-- case-1166 --
+f {
+  a = 1;
+} { b = 1; }
+-- case-1167 --
+f x {
+  a = 1;
+} y
+-- case-1168 --
+f
+  [
+    1
+  ]
+  [
+    2
+  ]
+-- case-1169 --
+f (x: x) {
+  a = 1;
+}
+-- case-1170 --
+f (x: {
+  a = 1;
+})
+-- case-1171 --
+f x (y: {
+  a = 1;
+})
+-- case-1172 --
+f (x: {
+  a = 1;
+}) z
+-- case-1173 --
+f (x: {
+  a = 1;
+})
+-- case-1174 --
+f (a {
+  b = 1;
+})
+-- case-1175 --
+f (a {
+  b = 1;
+})
+-- case-1176 --
+f x
+-- case-1177 --
+f x y
+-- case-1178 --
+f x y z
+-- case-1179 --
+f x y z
+-- case-1180 --
+f { a = 1; } y
+-- case-1181 --
+f { a = 1; }
+-- case-1182 --
+f {
+  a = 1;
+}
+-- case-1183 --
+f x {
+  a = 1;
+}
+-- case-1184 --
+{
+  a = f x;
+}
+-- case-1185 --
+{
+  a = f x y;
+}
+-- case-1186 --
+{
+  a = f { b = 1; };
+}
+-- case-1187 --
+{
+  a = f x {
+    b = 1;
+  } y;
+}
+-- case-1188 --
+{
+  a =
+    f
+      {
+        b = 1;
+      }
+      {
+        c = 1;
+      };
+}
+-- case-1189 --
+{
+  a =
+    f
+      (x: {
+        b = 1;
+      })
+      {
+        c = 1;
+      };
+}
+-- case-1190 --
+{
+  a =
+    # c
+    f x;
+}
+-- case-1191 --
+# c
+f x
+-- case-1192 --
+# c
+f x # d
+  y
+-- case-1193 --
+f x # c
+  y
+-- case-1194 --
+# c
+f x
+-- case-1195 --
+f x # c
+  y
+-- case-1196 --
+f x # c
+-- case-1197 --
+{
+  a =
+    f x # c
+      y;
+}
+-- case-1198 --
+{
+  a =
+    # c
+    f x;
+}
+-- case-1199 --
+[
+  f # c
+]
+-- case-1200 --
+f ''
+  a
+''
+-- case-1201 --
+f x ''
+  a
+''
+-- case-1202 --
+{
+  a = f ''
+    a
+  '';
+}
+-- case-1203 --
+{
+  a = f x ''
+    a
+  '';
+}
+-- case-1204 --
+{
+  a = f ''
+    a
+  '' x;
+}
+-- case-1205 --
+{
+  a = f "a
+b";
+}
+-- case-1206 --
+a
++ ''
+  b
+''
+-- case-1207 --
+{
+  a = b + ''
+    b
+  '';
+}
+-- case-1208 --
+''
+  b
+''
++ a
+-- case-1209 --
+{
+  a = ''
+    b
+  ''
+  + a;
+}
+-- case-1210 --
+{
+  a = b + "c
+d";
+}
+-- case-1211 --
+{
+  a = b + {
+    c = 1;
+    d = 2;
+  };
+}
+-- case-1212 --
+{
+  a = {
+    c = 1;
+    d = 2;
+  }
+  + b;
+}
+-- case-1213 --
+{
+  a =
+    b
+    + {
+      c = 1;
+      d = 2;
+    }
+    + e;
+}
+-- case-1214 --
+{
+  a = b + [
+    c
+  ];
+}
+-- case-1215 --
+{
+  a = b + (c d);
+}
+-- case-1216 --
+{
+  a = b + (c d);
+}
+-- case-1217 --
+{ a = b + (if a then b else c); }
+-- case-1218 --
+{ a = (if a then b else c) + b; }
+-- case-1219 --
+{ a = b + c.d; }
+-- case-1221 --
+{
+  a = b && (x: x);
+}
+-- case-1222 --
+a
++ b # c
++ d
+-- case-1223 --
+a
++ b
+# c
++ d
+-- case-1224 --
+{
+  a =
+    b # c
+    + d;
+}
+-- case-1225 --
+{
+  a =
+    b
+    # c
+    + d;
+}
+-- case-1226 --
+a -> b -> c
+-- case-1227 --
+a -> b -> c
+-- case-1228 --
+a ++ b ++ c
+-- case-1229 --
+a ++ b ++ c
+-- case-1230 --
+a // b // c
+-- case-1231 --
+a // b // c
+-- case-1232 --
+a || b && c
+-- case-1233 --
+a || b && c
+-- case-1234 --
+a + b * c
+-- case-1235 --
+a + b * c
+-- case-1236 --
+a * b + c
+-- case-1237 --
+a * b + c
+-- case-1238 --
+a < b
+-- case-1239 --
+a < b
+-- case-1240 --
+(a + b) * c
+-- case-1241 --
+(a + b) * c
+-- case-1242 --
+a * (b + c)
+-- case-1243 --
+a == b && c == d
+-- case-1244 --
+a == b && c == d
+-- case-1245 --
+a == b && c == d
+-- case-1246 --
+a || !b
+-- case-1247 --
+a || !b
+-- case-1248 --
+a + -b
+-- case-1249 --
+a - -b
+-- case-1250 --
+a - b
+-- case-1251 --
+a - b
+-- case-1252 --
+a |> b |> c
+-- case-1253 --
+a <| b <| c
+-- case-1254 --
+a |> b |> c
+-- case-1255 --
+a
+|> f {
+  b = 1;
+}
+|> c
+-- case-1256 --
+x: a + b
+-- case-1257 --
+x: a + b
+-- case-1258 --
+x: a + b
+-- case-1259 --
+x:
+{
+  b = 1;
+}
+// c
+-- case-1260 --
+x:
+c
+// {
+  b = 1;
+}
+-- case-1261 --
+x:
+f {
+  b = 1;
+}
+-- case-1262 --
+x:
+f {
+  b = 1;
+}
+// c
+-- case-1263 --
+{
+  a =
+    x:
+    f {
+      b = 1;
+    };
+}
+-- case-1264 --
+{ a = x: f y; }
+-- case-1265 --
+{
+  a = x: f y;
+}
+-- case-1266 --
+{
+  a = x: f y;
+}
+-- case-1267 --
+{
+  a =
+    x: y:
+    f {
+      b = 1;
+    };
+}
+-- case-1268 --
+{
+  a = x: {
+    b = 1;
+  };
+}
+-- case-1269 --
+{ a = x: if a then b else c; }
+-- case-1270 --
+{ a = { x, y }: if a then b else c; }
+-- case-1271 --
+{
+  a =
+    x:
+    let
+      a = 1;
+      b = 2;
+    in
+    c;
+}
+-- case-1272 --
+{ a = x: with a; b; }
+-- case-1273 --
+{
+  a = x: with a; b;
+}
+-- case-1274 --
+{
+  a =
+    x: with a; {
+      b = 1;
+    };
+}
+-- case-1275 --
+{
+  a = x: (b c);
+}
+-- case-1276 --
+{
+  a = x: (b c);
+}
+-- case-1277 --
+x: (b c)
+-- case-1278 --
+x: (b c) d
+-- case-1279 --
+x: { a = 1; }
+-- case-1280 --
+x: [ 1 ]
+-- case-1281 --
+x: (a b)
+-- case-1282 --
+x: "a"
+-- case-1283 --
+x: "a"
+-- case-1284 --
+x: ''
+  a
+''
+-- case-1285 --
+x: ''
+  a
+''
+-- case-1286 --
+x: "a
+b"
+-- case-1287 --
+x: y.z
+-- case-1288 --
+x: !a
+-- case-1289 --
+[
+  (x: { a = 1; })
+]
+-- case-1290 --
+[
+  (x: [
+    1
+  ])
+]
+-- case-1291 --
+[
+  (x: [ 1 ])
+]
+-- case-1292 --
+[
+  (x: (a b))
+]
+-- case-1293 --
+[
+  (x: (a b))
+]
+-- case-1294 --
+[
+  (
+    x:
+    f {
+      a = 1;
+    }
+  )
+]
+-- case-1295 --
+[
+  (
+    x:
+    let
+      a = 1;
+    in
+    a
+  )
+]
+-- case-1296 --
+[
+  (
+    x:
+    let
+      a = 1;
+    in
+    a
+  )
+]
+-- case-1297 --
+[
+  (x: y: {
+    a = 1;
+  })
+]
+-- case-1298 --
+[
+  (x: y: {
+    a = 1;
+  })
+]
+-- case-1299 --
+[
+  (x: y: {
+    a = 1;
+  })
+]
+-- case-1300 --
+[
+  (x: y: {
+    a = 1;
+  })
+]
+-- case-1301 --
+[
+  (x: ''
+    a
+  '')
+]
+-- case-1302 --
+[
+  (
+    x: # c
+    { a = 1; })
+]
+-- case-1303 --
+x: # c
+{ a = 1; }
+-- case-1304 --
+x: # c
+{ a = 1; }
+-- case-1305 --
+x:
+# c
+{ a = 1; }
+-- case-1306 --
+{ x }: # c
+{
+  a = 1;
+}
+-- case-1307 --
+{ x, y }: # c
+{
+  a = 1;
+}
+-- case-1308 --
+{ x, y }:
+{
+  a = 1;
+}
+-- case-1309 --
+{ x, y }: { a = 1; }
+-- case-1310 --
+{ x, y }: [ 1 ]
+-- case-1311 --
+{ x, y }: (a b)
+-- case-1312 --
+{ x, y }: "a"
+-- case-1313 --
+{ x, y }: "a"
+-- case-1314 --
+{ x, y }: y: z
+-- case-1315 --
+{ x, y }: y: { a = 1; }
+-- case-1316 --
+{ x, y }: { z, w }: z
+-- case-1317 --
+{ x, y }:
+let
+in
+z
+-- case-1318 --
+{ x, y }:
+let
+in
+z
+-- case-1319 --
+{ x, y }: with a; z
+-- case-1320 --
+{ x, y }: with a; { b = 1; }
+-- case-1321 --
+{ x, y }: with a;
+{
+  b = 1;
+}
+-- case-1322 --
+{ x, y }:
+assert a;
+z
+-- case-1323 --
+{ x, y }: if a then b else c
+-- case-1324 --
+{ x, y }: f x
+-- case-1325 --
+{ x, y }:
+f {
+  a = 1;
+}
+-- case-1326 --
+{ x, y }: a + b
+-- case-1327 --
+{ x, y }: (if a then b else c)
+-- case-1328 --
+{ x, y }: (x: y)
+-- case-1329 --
+{ x, y }: (x: y)
+-- case-1330 --
+{ x, y }: (a b)
+-- case-1331 --
+{ x, y }: y.z
+-- case-1332 --
+{ x, y }: !a
+-- case-1333 --
+{ x, y }: "a
+b"
+-- case-1334 --
+{ x, y }: ''
+  a
+''
+-- case-1335 --
+{ x }: y
+-- case-1336 --
+{ x }:
+y
+-- case-1337 --
+{ x }: {
+  a = 1;
+  b = 2;
+}
+-- case-1338 --
+{ x }:
+let
+  a = 1;
+  b = 2;
+in
+a
+-- case-1339 --
+{ x }:
+let
+  a = 1;
+in
+a
+-- case-1340 --
+{ x }: with a; b
+-- case-1341 --
+{ x }: if a then b else c
+-- case-1342 --
+{ x }:
+f {
+  a = 1;
+}
+-- case-1343 --
+{
+  a = {
+    b = 1;
+  };
+}
+-- case-1344 --
+{
+  a = {
+    b = 1;
+  };
+}
+-- case-1345 --
+{
+  a = [ 1 ];
+}
+-- case-1346 --
+{
+  a = [
+    1
+  ];
+}
+-- case-1347 --
+{
+  a = (b c);
+}
+-- case-1348 --
+{
+  a = (b c);
+}
+-- case-1349 --
+{
+  a = (b c);
+}
+-- case-1350 --
+{
+  a = x: x;
+}
+-- case-1351 --
+{
+  a = x: {
+    b = 1;
+  };
+}
+-- case-1352 --
+{
+  a =
+    let
+    in
+    x;
+}
+-- case-1353 --
+{
+  a =
+    let
+    in
+    x;
+}
+-- case-1354 --
+{
+  a = with x; y;
+}
+-- case-1355 --
+{
+  a = with x; {
+    b = 1;
+  };
+}
+-- case-1356 --
+{
+  a =
+    assert x;
+    y;
+}
+-- case-1357 --
+{
+  a = "x";
+}
+-- case-1358 --
+{
+  a = "x";
+}
+-- case-1359 --
+{
+  a = ''
+    x
+  '';
+}
+-- case-1360 --
+{
+  a = "x
+y";
+}
+-- case-1361 --
+{
+  a = f x;
+}
+-- case-1362 --
+{
+  a = f {
+    b = 1;
+  };
+}
+-- case-1363 --
+{
+  a = b.c;
+}
+-- case-1364 --
+{
+  a = b + c;
+}
+-- case-1365 --
+{
+  a = f (g {
+    b = 1;
+  });
+}
+-- case-1366 --
+{
+  a = f (b c);
+}
+-- case-1367 --
+{ a = f (if a then b else c); }
+-- case-1368 --
+{
+  a = f (
+    let
+      b = 1;
+    in
+    c
+  );
+}
+-- case-1369 --
+{
+  a = f (
+    with a;
+    {
+      b = 1;
+    }
+  );
+}
+-- case-1370 --
+{
+  a = f (with a; b c);
+}
+-- case-1371 --
+{
+  a = f ({
+    b = 1;
+  });
+}
+-- case-1372 --
+{
+  a = f ([
+    1
+  ]);
+}
+-- case-1373 --
+{
+  a = f (g [
+    1
+  ]);
+}
+-- case-1374 --
+{
+  a = f (
+    g x [
+      1
+    ]
+  );
+}
+-- case-1375 --
+{
+  a = f (
+    g {
+      b = 1;
+    } x
+  );
+}
+-- case-1376 --
+{
+  a = f (
+    x: y: {
+      b = 1;
+    }
+  );
+}
+-- case-1377 --
+{
+  a = f (
+    { x }: {
+      b = 1;
+    }
+  );
+}
+-- case-1378 --
+{
+  a = f (
+    { x, y }: {
+      b = 1;
+    }
+  );
+}
+-- case-1379 --
+{
+  a = f (
+    a
+    // {
+      b = 1;
+    }
+  );
+}
+-- case-1380 --
+{
+  a = f (''
+    b
+  '');
+}
+-- case-1381 --
+{
+  a = f (g ''
+    b
+  '');
+}
+-- case-1382 --
+{
+  a = f (x: ''
+    b
+  '');
+}
+-- case-1383 --
+{
+  a = f x y [
+    1
+  ];
+}
+-- case-1384 --
+{
+  a =
+    f
+      {
+        b = 1;
+      }
+      [
+        1
+      ];
+}
+-- case-1385 --
+{
+  a = f {
+    b = 1;
+  } x;
+}
+-- case-1386 --
+{
+  a = f (x: x) (y: {
+    b = 1;
+  });
+}
+-- case-1387 --
+{
+  a = f (x: x) (y: {
+    b = 1;
+  });
+}
+-- case-1388 --
+{
+  a = f (x: x) z;
+}
+-- case-1389 --
+{
+  a = f [
+  ] x;
+}
+-- case-1390 --
+{
+  a = f {
+  };
+}
+-- case-1391 --
+{
+  a =
+    with a;
+    f {
+      b = 1;
+    };
+}
+-- case-1392 --
+{ a = with a; if a then b else c; }
+-- case-1393 --
+{
+  a = with a; (b c);
+}
+-- case-1394 --
+{
+  a =
+    with a;
+    let
+      b = 1;
+    in
+    c;
+}
+-- case-1395 --
+{
+  a =
+    with a;
+    x: {
+      b = 1;
+    };
+}
+-- case-1396 --
+{
+  a = with a; x: y;
+}
+-- case-1397 --
+{ a = with a; b + c; }
+-- case-1398 --
+{
+  a = with a; b + c;
+}
+-- case-1399 --
+{
+  a = with a; ''
+    b
+  '';
+}
+-- case-1400 --
+{
+  a =
+    assert a;
+    f {
+      b = 1;
+    };
+}
+-- case-1401 --
+{
+  a =
+    assert a;
+    if a then b else c;
+}
+-- case-1402 --
+{
+  a =
+    assert a;
+    (b c);
+}
+-- case-1403 --
+{
+  a =
+    assert a;
+    let
+      b = 1;
+    in
+    c;
+}
+-- case-1404 --
+{
+  a =
+    assert a;
+    x: {
+      b = 1;
+    };
+}
+-- case-1405 --
+{
+  a =
+    assert a;
+    {
+      b = 1;
+    };
+}
+-- case-1406 --
+{
+  a =
+    assert a;
+    {
+      b = 1;
+    };
+}
+-- case-1407 --
+{
+  a =
+    let
+      b = 1;
+    in
+    {
+      c = 1;
+    };
+}
+-- case-1408 --
+{
+  a =
+    let
+      b = 1;
+    in
+    f {
+      c = 1;
+    };
+}
+-- case-1409 --
+{
+  a =
+    let
+      b = 1;
+    in
+    if a then b else c;
+}
+-- case-1410 --
+{
+  a =
+    let
+      b = 1;
+    in
+    x: y;
+}
+-- case-1411 --
+{
+  a =
+    let
+      b = 1;
+    in
+    with a;
+    y;
+}
+-- case-1412 --
+{
+  a =
+    let
+      b = 1;
+    in
+    with a;
+    {
+      c = 1;
+    };
+}
+-- case-1413 --
+{
+  a =
+    let
+      b = 1;
+    in
+    (a b);
+}
+-- case-1414 --
+{
+  a =
+    let
+      b = 1;
+    in
+    (a b);
+}
+-- case-1415 --
+{
+  a =
+    let
+      b = 1;
+    in
+    ''
+      a
+    '';
+}
+-- case-1416 --
+{
+  a =
+    let
+      b = 1;
+    in
+    "a";
+}
+-- case-1417 --
+{
+  a =
+    let
+      b = 1;
+    in
+    {
+      c = 1;
+    };
+}
+-- case-1418 --
+{
+  a =
+    let
+      b = 1;
+    in
+    c d;
+}
+-- case-1419 --
+let
+in
+{
+  a = 1;
+}
+-- case-1420 --
+let
+in
+[ 1 ]
+-- case-1421 --
+let
+in
+(a b)
+-- case-1422 --
+let
+in
+"a"
+-- case-1423 --
+let
+in
+x: y
+-- case-1424 --
+let
+in
+a b
+-- case-1425 --
+let
+in
+a + b
+-- case-1426 --
+let
+in
+with a;
+b
+-- case-1427 --
+let
+in
+let
+in
+a
+-- case-1428 --
+let
+in
+a.b
+-- case-1429 --
+let
+in
+!a
+-- case-1430 --
+let
+  a = 1;
+in
+x: {
+  b = 1;
+}
+-- case-1431 --
+{
+  a = f (y: c) x;
+}
+-- case-1432 --
+{
+  a = f (c d) x;
+}
+-- case-1433 --
+{
+  a = f (y: c) { b = 1; };
+}
+-- case-1435 --
+{
+  a = f (
+    let
+      b = 1;
+    in
+    c
+  ) x;
+}
+-- case-1436 --
+{
+  a = f (
+    let
+      b = 1;
+    in
+    c
+  ) a.b;
+}
+-- case-1437 --
+{
+  a = f (c d) a.b;
+}
+-- case-1438 --
+{
+  a = f (c d) (e g);
+}
+-- case-1439 --
+{
+  a = f (c d) "a
+b";
+}
+-- case-1440 --
+{ a = f (if a then b else c) x; }
+-- case-1441 --
+{
+  a = f {
+    b = 1;
+  } { c = 1; };
+}
+-- case-1442 --
+{
+  a = f (
+    let
+      b = 1;
+    in
+    c
+  ) { d = 1; };
+}
+-- case-1443 --
+{
+  a =
+    f
+      (
+        let
+          b = 1;
+        in
+        c
+      )
+      {
+        d = 1;
+      };
+}
+-- case-1444 --
+{
+  a = f "a
+b" {
+    c = 1;
+  };
+}
+-- case-1445 --
+{
+  a = f a.b {
+    c = 1;
+  };
+}
+-- case-1446 --
+{
+}
+-- case-1447 --
+{
+  a = 1;
+}
+-- case-1448 --
+{
+  a = 1;
+}
+-- case-1449 --
+{
+  a = 1;
+  b = 2;
+}
+-- case-1450 --
+{
+  a = 1;
+
+  b = 2;
+}
+-- case-1451 --
+[
+]
+-- case-1452 --
+[
+  1
+]
+-- case-1453 --
+[
+  1
+  2
+]
+-- case-1454 --
+[
+
+  1
+
+  2
+
+]
+-- case-1455 --
+[
+  a.b
+  (c d)
+  { e = 1; }
+  [ f ]
+  "g"
+]
+-- case-1456 --
+(x: y)
+-- case-1457 --
+("a")
+-- case-1458 --
+f (a)
+-- case-1459 --
+f ({ a = 1; })
+-- case-1460 --
+f ([ 1 ])
+-- case-1461 --
+f (x: y)
+-- case-1462 --
+f (g h)
+-- case-1463 --
+f (a + b)
+-- case-1464 --
+{ a = (b c); }
+-- case-1465 --
+{ a = (b); }
+-- case-1466 --
+{ a = (x: y); }
+-- case-1467 --
+{ a = ({ b = 1; }); }
+-- case-1468 --
+{ a = ([ 1 ]); }
+-- case-1469 --
+{ a = (if a then b else c); }
+-- case-1470 --
+{ a = (a + b); }
+-- case-1471 --
+{ a = b; }
+-- case-1472 --
+{ a = "b"; }
+-- case-1473 --
+{ a = "b"; }
+-- case-1474 --
+{
+  a = ''
+    b
+  '';
+}
+-- case-1475 --
+{ a = ./b; }
+-- case-1476 --
+{ a = b.c; }
+-- case-1477 --
+{ a = b { c = 1; }; }
+-- case-1478 --
+{ a = b [ 1 ]; }
+-- case-1479 --
+{ a = b (c d); }
+-- case-1480 --
+{ a = b (x: y); }
+-- case-1481 --
+{ a = b c { d = 1; }; }
+-- case-1482 --
+{
+  a = {
+    b = 1;
+  };
+}
+-- case-1483 --
+{ a = [ 1 ]; }
+-- case-1484 --
+{ a = x: y; }
+-- case-1485 --
+{ a = x: { y = 1; }; }
+-- case-1486 --
+{ a = { b }: c; }
+-- case-1487 --
+{ a = if b then c else d; }
+-- case-1488 --
+{
+  a =
+    let
+    in
+    b;
+}
+-- case-1489 --
+{ a = with b; c; }
+-- case-1490 --
+{
+  a = with b; {
+    c = 1;
+  };
+}
+-- case-1491 --
+{ a = with b; [ 1 ]; }
+-- case-1492 --
+{
+  a =
+    assert b;
+    c;
+}
+-- case-1493 --
+{ a = b + c; }
+-- case-1494 --
+{
+  a = b // {
+    c = 1;
+  };
+}
+-- case-1495 --
+{ a = b ++ [ 1 ]; }
+-- case-1496 --
+{ a = !b; }
+-- case-1497 --
+{ a = -b; }
+-- case-1498 --
+{ a = b ? c; }
+-- case-1499 --
+{ a = b.c or d; }
+-- case-1500 --
+{ a.b.c = 1; }
+-- case-1501 --
+{ "a".${b} = 1; }
+-- case-1502 --
+{ inherit a b; }
+-- case-1503 --
+{ inherit (a b) c; }
+-- case-1504 --
+{
+  inherit
+    a
+    ;
+}
+-- case-1505 --
+f a
+-- case-1506 --
+f a b
+-- case-1507 --
+f { a = 1; }
+-- case-1508 --
+f a { b = 1; }
+-- case-1509 --
+f { a = 1; } b
+-- case-1510 --
+f [ 1 ]
+-- case-1511 --
+f "a"
+-- case-1512 --
+f "a"
+-- case-1513 --
+f a.b
+-- case-1514 --
+f (x: y) z
+-- case-1515 --
+f a
+-- case-1516 --
+a + b + c
+-- case-1517 --
+a ++ b ++ c
+-- case-1518 --
+a + b * c
+-- case-1519 --
+a * b + c
+-- case-1520 --
+a // b // c
+-- case-1521 --
+a && b || c
+-- case-1522 --
+a == b
+-- case-1523 --
+a- > b
+-- case-1524 --
+a |> b
+-- case-1525 --
+a + b
+-- case-1526 --
+-(a b)
+-- case-1527 --
+a."b"
+-- case-1528 --
+{ a = 1; }.b
+-- case-1529 --
+a ? b
+-- case-1530 --
+a ? b.c
+-- case-1531 --
+x: y
+-- case-1532 --
+x: y: z
+-- case-1533 --
+x: { a = 1; }
+-- case-1534 --
+x: [ 1 ]
+-- case-1535 --
+x:
+let
+in
+a
+-- case-1536 --
+x: a b
+-- case-1537 --
+x: a + b
+-- case-1538 --
+{ a }: b
+-- case-1539 --
+{ a, b }: c
+-- case-1540 --
+{ a, ... }: b
+-- case-1541 --
+{ ... }: b
+-- case-1542 --
+{ }: b
+-- case-1543 --
+{
+  a ? 1,
+}:
+b
+-- case-1544 --
+{
+  a,
+  b ? 1,
+}:
+c
+-- case-1545 --
+{
+  a,
+  b,
+}:
+c
+-- case-1546 --
+{
+  a,
+}:
+b
+-- case-1547 --
+{ a }@x: b
+-- case-1548 --
+x@{ a }: b
+-- case-1549 --
+{ a }: { b }: c
+-- case-1550 --
+{ a }: { b = 1; }
+-- case-1551 --
+{ a }: x: y
+-- case-1552 --
+{ a }: if a then b else c
+-- case-1553 --
+{ a }:
+let
+in
+b
+-- case-1554 --
+{ a }: with a; b
+-- case-1555 --
+if a then { b = 1; } else { c = 1; }
+-- case-1556 --
+if a then b else c
+-- case-1557 --
+let
+  a = 1;
+in
+b
+-- case-1558 --
+let
+  a = 1;
+  b = 2;
+in
+c
+-- case-1559 --
+let
+  a = 1;
+in
+{
+  b = 1;
+}
+-- case-1560 --
+let
+  a = 1;
+in
+[ 1 ]
+-- case-1561 --
+let
+  a = 1;
+in
+x: y
+-- case-1562 --
+let
+  a = 1;
+
+in
+b
+-- case-1563 --
+with a; { b = 1; }
+-- case-1564 --
+with a; [ 1 ]
+-- case-1565 --
+with a; x: y
+-- case-1566 --
+with a;
+let
+in
+b
+-- case-1567 --
+assert a;
+{
+  b = 1;
+}
+-- case-1568 --
+assert a b;
+c
+-- case-1569 --
+"a${b}"
+-- case-1570 --
+"a${b c}d"
+-- case-1571 --
+"a${{ b = 1; }}"
+-- case-1572 --
+"${x: y}"
+-- case-1573 --
+"${if a then b else c}"
+-- case-1574 --
+"${a}"
+-- case-1575 --
+''
+  a
+  b''
+-- case-1576 --
+''
+  a
+  ${b}
+''
+-- case-1577 --
+"a${b}"
+-- case-1578 --
+<a>
+-- case-1579 --
+"http://a.b"
+-- case-1580 --
+{
+  a = b;
+  c = d;
+}
+-- case-1581 --
+{ a = { }; }
+-- case-1582 --
+{ a = [ ]; }
+-- case-1583 --
+{
+  a = {
+    b = 1;
+    c = 2;
+  };
+}
+-- case-1584 --
+{
+  a = [
+    1
+    2
+  ];
+}
+-- case-1585 --
+{
+  a = [
+    1
+  ];
+}
+-- case-1586 --
+{
+  a = {
+    b = 1;
+  };
+}
+-- case-1587 --
+{
+  a = rec {
+    b = 1;
+  };
+}
+-- case-1588 --
+{
+  a =
+    let
+    in
+    b;
+  c = d;
+}
+-- case-1589 --
+{
+  a = (b c);
+}
+-- case-1590 --
+[ [ 1 ] ]
+-- case-1591 --
+[
+  [
+    1
+    2
+  ]
+]
+-- case-1592 --
+[ { a = 1; } ]
+-- case-1593 --
+[
+  {
+    a = 1;
+    b = 2;
+  }
+]
+-- case-1594 --
+[ { } ]
+-- case-1595 --
+[ [ ] ]
+-- case-1596 --
+[ (a b) ]
+-- case-1597 --
+[ (x: y) ]
+-- case-1598 --
+[
+  (
+    let
+    in
+    a
+  )
+]
+-- case-1599 --
+[ (with a; b) ]
+-- case-1600 --
+[ (a + b) ]
+-- case-1601 --
+[ (a.b) ]
+-- case-1602 --
+[ (!a) ]
+-- case-1603 --
+[ ("a") ]
+-- case-1604 --
+[ ({ a = 1; }) ]
+-- case-1605 --
+[ ([ 1 ]) ]
+-- case-1606 --
+f (x: {
+  a = 1;
+})
+-- case-1607 --
+f (x: y: { a = 1; })
+-- case-1608 --
+f ({ a }: { b = 1; })
+-- case-1609 --
+f (x: [ 1 ])
+-- case-1610 --
+f (a {
+  b = 1;
+})
+-- case-1611 --
+f (a b { c = 1; })
+-- case-1612 --
+f (with a; { b = 1; })
+-- case-1613 --
+f (with a; b)
+-- case-1614 --
+f (
+  assert a;
+  b
+)
+-- case-1615 --
+f (a // { b = 1; })
+-- case-1616 --
+f ({ a = 1; } // b)
+-- case-1617 --
+f ({ a = 1; }) ({ b = 1; })
+-- case-1618 --
+f a.b c.d
+-- case-1619 --
+f "a" "b"
+-- case-1620 --
+f 1 2
+-- case-1621 --
+f (a) (b)
+-- case-1622 --
+f [ 1 ] [ 2 ]
+-- case-1623 --
+f { a = 1; } { b = 1; }
+-- case-1624 --
+f x { a = 1; } { b = 1; }
+-- case-1625 --
+f x [ 1 ]
+-- case-1626 --
+{ a = 1; } b
+-- case-1627 --
+[ 1 ] b
+-- case-1628 --
+"a" b
+-- case-1629 --
+a.b c
+-- case-1630 --
+(x: y) z
+-- case-1631 --
+f (g h) i
+-- case-1632 --
+f g (h i)
+-- case-1633 --
+f ./a
+-- case-1634 --
+f <a>
+-- case-1635 --
+f "http://a"
+-- case-1636 --
+f null
+-- case-1637 --
+f (a.b)
+-- case-1638 --
+f (!a)
+-- case-1639 --
+f ("a")
+-- case-1640 --
+f ("a")
+-- case-1641 --
+f ((a))
+-- case-1642 --
+f ((a b))
+-- case-1643 --
+a + { b = 1; }
+-- case-1644 --
+{ b = 1; } + a
+-- case-1645 --
+a + [ 1 ]
+-- case-1646 --
+a + (b c)
+-- case-1647 --
+a + (x: y)
+-- case-1648 --
+a + b c
+-- case-1649 --
+a b + c
+-- case-1650 --
+a
+// {
+  b = 1;
+  c = 2;
+}
+-- case-1651 --
+a // b // { c = 1; }
+-- case-1652 --
+a // { c = 1; } // b
+-- case-1653 --
+{ a = 1; } // { b = 1; }
+-- case-1654 --
+{
+  a = 1;
+  b = 2;
+}
+// {
+  c = 1;
+  d = 2;
+}
+-- case-1655 --
+a ++ [ 1 ] ++ b
+-- case-1656 --
+a && b
+-- case-1657 --
+a || b
+-- case-1658 --
+a != b
+-- case-1659 --
+a * b
+-- case-1660 --
+a / b
+-- case-1661 --
+a <| b
+-- case-1662 --
+a + b + c * d
+-- case-1663 --
+a + b == c + d
+-- case-1664 --
+!a && b
+-- case-1665 --
+-a + b
+-- case-1666 --
+a ++ b // c
+-- case-1667 --
+a // b ++ c
+-- case-1668 --
+{ x }: a // b
+-- case-1669 --
+x: a // b
+-- case-1670 --
+{ a = x: y: z; }
+-- case-1671 --
+{ a = { x }: { y }: z; }
+-- case-1672 --
+{ a = x: { y }: z; }
+-- case-1673 --
+{ a = { x }: y: z; }
+-- case-1674 --
+{ a = x: y: { z = 1; }; }
+-- case-1675 --
+{ a = { x }: { z = 1; }; }
+-- case-1676 --
+{ a = { x, y }: { z = 1; }; }
+-- case-1677 --
+{ a = { x }: [ 1 ]; }
+-- case-1678 --
+{ a = x: (b c); }
+-- case-1679 --
+{ a = x: if b then c else d; }
+-- case-1680 --
+{
+  a =
+    x:
+    let
+    in
+    b;
+}
+-- case-1681 --
+{ a = x: with b; c; }
+-- case-1682 --
+{
+  a =
+    x:
+    assert b;
+    c;
+}
+-- case-1683 --
+{ a = x: b c; }
+-- case-1684 --
+{ a = x: b { c = 1; }; }
+-- case-1685 --
+{ a = x: b + c; }
+-- case-1686 --
+{ a = with b; with c; d; }
+-- case-1687 --
+{ a = with b; c d; }
+-- case-1688 --
+{ a = with b; x: y; }
+-- case-1689 --
+{
+  a =
+    with b;
+    let
+    in
+    c;
+}
+-- case-1690 --
+{ a = with b; if c then d else e; }
+-- case-1691 --
+{ a = with b; (c d); }
+-- case-1692 --
+{ a = with b; "c"; }
+-- case-1693 --
+{ a = with b; 1; }
+-- case-1694 --
+{
+  a =
+    assert b;
+    {
+      c = 1;
+    };
+}
+-- case-1695 --
+{
+  a =
+    assert b;
+    [ 1 ];
+}
+-- case-1696 --
+{
+  a =
+    assert b;
+    assert c;
+    d;
+}
+-- case-1697 --
+{ a = if b then { c = 1; } else { d = 1; }; }
+-- case-1698 --
+{ a = b.c { d = 1; }; }
+-- case-1699 --
+{ a = b.c or { d = 1; }; }
+-- case-1700 --
+{ a = { d = 1; }.b; }
+-- case-1701 --
+{ a = (b c).d; }
+-- case-1702 --
+{ a = [ 1 ].b; }
+-- case-1703 --
+{ a = "c".b; }
+-- case-1704 --
+{ a = !{ d = 1; }; }
+-- case-1705 --
+{ a = !(b c); }
+-- case-1706 --
+{ a = -(b c); }
+-- case-1707 --
+{ a = (b c) ? d; }
+-- case-1708 --
+{
+  a = rec {
+    d = 1;
+  };
+}
+-- case-1709 --
+{
+  a = let {
+    d = 1;
+  };
+}
+-- case-1710 --
+{ a = <b>; }
+-- case-1711 --
+{ a = ~/b; }
+-- case-1712 --
+{ a = "http://b"; }
+-- case-1713 --
+{ a = null; }
+-- case-1714 --
+{ a = 1.5; }
+-- case-1715 --
+{ "a" = 1; }
+-- case-1716 --
+{ ${a} = 1; }
+-- case-1717 --
+{ a."b" = 1; }
+-- case-1718 --
+{ ${a b} = 1; }
+-- case-1719 --
+{ ${a}.b = 1; }
+-- case-1720 --
+{ a.${b} = c d; }
+-- case-1721 --
+{
+  ${a} = {
+    b = 1;
+  };
+}
+-- case-1722 --
+{ "a" = b; }
+-- case-1723 --
+{ "a" = "b"; }
+-- case-1724 --
+{ "a" = [ 1 ]; }
+-- case-1725 --
+{ "a" = x: y; }
+-- case-1726 --
+{ "a" = b c; }
+-- case-1727 --
+{ "a${b}" = 1; }
+-- case-1729 --
+# c
+
+# d
+a
+-- case-1730 --
+a
+# c
+-- case-1731 --
+a
+
+# c
+
+# d
+-- case-1732 --
+/*
+  a
+  b
+*/
+a
+-- case-1733 --
+{
+  # c
+  a = 1;
+}
+-- case-1734 --
+{
+  # c
+  a = 1;
+
+  # d
+
+  b = 2; # e
+  # f
+}
+-- case-1735 --
+{
+  a = 1; # c
+}
+-- case-1736 --
+{
+  # c
+  a = 1;
+}
+-- case-1737 --
+{
+  a = 1;
+  # c
+}
+-- case-1738 --
+[
+  # c
+  1 # d
+
+  # e
+  2
+  # f
+]
+-- case-1739 --
+{
+  a = # c
+    1;
+}
+-- case-1740 --
+{
+  a =
+    # c
+    1;
+}
+-- case-1741 --
+{
+  a  # c
+    = 1;
+}
+-- case-1742 --
+{
+  a = 1 # c
+  ;
+}
+-- case-1743 --
+{
+  a = {
+    b = 1; # c
+  }; # d
+}
+-- case-1744 --
+{
+  a = [
+    # c
+    1
+  ];
+}
+-- case-1745 --
+{
+  a = {
+    # c
+    b = 1;
+  };
+}
+-- case-1746 --
+let # c
+  a = 1; # d
+  # e
+in
+# f
+# g
+b # h
+-- case-1747 --
+x: # c
+y
+-- case-1748 --
+x:
+# c
+y
+-- case-1749 --
+# c
+x: y
+-- case-1750 --
+{ a }: # c
+b
+-- case-1751 --
+# c
+{
+  a, # d
+  # e
+  b # f
+  , # g
+  ... # h
+}:
+c
+-- case-1752 --
+{
+  a ? # c
+    1,
+}:
+b
+-- case-1753 --
+{
+  a  # c
+    ? 1,
+}:
+b
+-- case-1754 --
+if
+  a # c
+then
+  b # d
+else
+  c # e
+-- case-1755 --
+# c
+if a then # d
+  b
+# e
+else
+  c
+-- case-1756 --
+if a then
+  # c
+  b
+else
+  # d
+  c
+-- case-1757 --
+# c
+if a then b else c
+-- case-1758 --
+# c
+f a
+-- case-1759 --
+f a # c
+  b
+-- case-1760 --
+f
+  # c
+  a
+-- case-1761 --
+f {
+  # c
+  a = 1;
+}
+-- case-1762 --
+a
+# c
++ b
+-- case-1763 --
+assert a;
+# c
+b
+-- case-1764 --
+a. # c
+b
+-- case-1765 --
+a # c
+.b
+-- case-1766 --
+a.b or # c
+c
+-- case-1767 --
+a.b # c
+  or c
+-- case-1768 --
+a
+  # c
+  ? b
+-- case-1769 --
+"${
+  # c
+  a
+}"
+-- case-1770 --
+"${
+  a # c
+}"
+-- case-1771 --
+"${
+  # c
+  a
+}"
+-- case-1772 --
+{
+  inherit
+    a # c
+    b
+    ;
+}
+-- case-1773 --
+{
+  inherit (a) # c
+    b
+    ;
+}
+-- case-1774 --
+{
+  inherit
+    a # c
+    b
+    ;
+}
+-- case-1775 --
+rec # c
+{ }
+-- case-1776 --
+{
+  a = 1; # c
+
+  b = 2;
+}
+-- case-1777 --
+[
+  1 # c
+  2
+]
+-- case-1778 --
+{
+  /*
+    a
+    b
+  */
+}
+-- case-1779 --
+# a
+#b
+#
+a
+-- case-1780 --
+#   c
+a
+-- case-1781 --
+{
+  a = "b"; # c
+}
+-- case-1782 --
+{
+  a =
+    x: # c
+    y;
+}
+-- case-1783 --
+{
+  a =
+    # c
+    f x;
+}
+-- case-1784 --
+{
+  a = f x # c
+  ;
+}
+-- case-1785 --
+{
+  a = [ 1 ] # c
+  ;
+}
+-- case-1786 --
+{ a = [ 1 ] ++ b; }
+-- case-1787 --
+{
+  a = [
+    1
+    2
+  ]
+  ++ b;
+}
+-- case-1788 --
+{ a = [ 1 ] ++ b ++ c; }
+-- case-1789 --
+{ a = [ 1 ] ++ [ 2 ]; }
+-- case-1790 --
+{ a = [ 1 ] ++ b c; }
+-- case-1791 --
+{ a = b ++ c ++ [ 1 ]; }
+-- case-1792 --
+{ a = b ++ [ 1 ] ++ c; }
+-- case-1793 --
+{
+  a = {
+    b = 1;
+  }
+  // c;
+}
+-- case-1794 --
+{ a = b // c // { d = 1; }; }
+-- case-1795 --
+{ a = f x ++ [ 1 ]; }
+-- case-1796 --
+{
+  a = f x // {
+    d = 1;
+  };
+}
+-- case-1797 --
+{
+  a = b.c // {
+    d = 1;
+  };
+}
+-- case-1798 --
+{
+  a = (b) // {
+    d = 1;
+  };
+}
+-- case-1799 --
+{ a = [ 1 ] ++ (f x); }
+-- case-1800 --
+{
+  a = b + c;
+  d = [ 1 ] ++ e;
+}
+-- case-1801 --
+{ a = b && c; }
+-- case-1802 --
+{ a = b == c; }
+-- case-1803 --
+{ a = b || [ 1 ]; }
+-- case-1804 --
+{
+  a = [ 1 ] ++ b;
+}
+-- case-1805 --
+{
+  a = b // {
+    c = 1;
+  };
+}
+-- case-1806 --
+[ 1 ] ++ b
+-- case-1807 --
+x: [ 1 ] ++ b
+-- case-1808 --
+let
+in
+[ 1 ] ++ b
+-- case-1809 --
+with a; [ 1 ] ++ b
+-- case-1810 --
+{ a = x: b // { c = 1; }; }
+-- case-1811 --
+f (a ++ [ 1 ])
+-- case-1812 --
+[ (a ++ [ 1 ]) ]
+-- case-1813 --
+(a ++ [ 1 ])
+-- case-1814 --
+if a ++ [ 1 ] then b else c
+-- case-1815 --
+let
+  a = [ 1 ] ++ b;
+in
+c
+-- case-1816 --
+{
+  a = f x ''
+    b
+  '';
+}
+-- case-1817 --
+{
+  a = ''
+    b
+  ''
+  + c;
+}
+-- case-1818 --
+{
+  a = b + ''
+    c
+  '';
+}
+-- case-1819 --
+{
+  a = f ''
+    b
+  '' c;
+}
+-- case-1820 --
+{ a = "b" + c; }
+-- case-1821 --
+{ a = b + "c"; }
+-- case-1822 --
+f { } ''
+  a
+''
+-- case-1823 --
+f x y ''
+  a
+''
+-- case-1824 --
+f (g x) ''
+  a
+''
+-- case-1825 --
+f [ a ] ''
+  a
+''
+-- case-1826 --
+''
+  a
+    b ${
+      f [
+        1
+      ]
+    } c
+  d
+''
+-- case-1827 --
+''
+  a
+    ${
+      f [
+        1
+      ]
+    } c
+  d
+''
+-- case-1828 --
+''
+    ${
+      f [
+        1
+      ]
+    } c
+  d ${x}
+''
+-- case-1829 --
+{
+  a = 1;
+  # c
+  b = 2;
+  c = 3; # d
+}
+-- case-1830 --
+{
+  a,
+
+  b,
+  # c
+
+  d,
+}:
+e
+-- case-1831 --
+[
+  (a {
+    b = 1;
+  })
+  (a [ 1 ])
+  (a.b {
+    c = 2;
+  })
+  (a b {
+    c = 2;
+  })
+]
+-- case-1832 --
+f (a {
+  b = 1;
+}) c
+-- case-1833 --
+f (x: y: {
+  a = 1;
+}) z
+-- case-1834 --
+{
+  a =
+    x: y: z:
+    w;
+}
+-- case-1835 --
+{ a = x: y: z: { b = 1; }; }
+-- case-1836 --
+x: y: z:
+w
+-- case-1837 --
+''
+  ${f a ''
+    b
+  ''}
+''
+-- case-1838 --
+"${f ''
+  b
+''}"
+-- case-1839 --
+''
+  ${f {
+    a = 1;
+  }}
+''
+-- case-1840 --
+a
+++ map f [
+  1
+  2
+]
+-- case-1841 --
+a
+# c
+++ b
+-- case-1842 --
+a
+++ b
+# c
+++ c
+-- case-1843 --
+a + b
+-- case-1844 --
+# c
+a # d
+-- case-1845 --
+{
+  a = {
+    b = 1;
+  };
+  c = [ 1 ];
+  d = x: y;
+  e = f { g = 1; };
+  h = if a then b else c;
+}
+-- case-1846 --
+f a { b = 1; } [ 1 ] (x: y)
+-- case-1847 --
+x: y: { z = 1; }
+-- case-1848 --
+{
+  a,
+  b ? 1,
+  ...
+}:
+c
+-- case-1849 --
+{ a, b }@c: d
+-- case-1850 --
+c@{ a }: d
+-- case-1851 --
+a.b.c or d
+-- case-1852 --
+{
+  inherit a;
+  inherit (b) c d;
+}
+-- case-1853 --
+"a${b c}"
+-- case-1854 --
+''
+  a ${b}
+    c
+''
+-- case-1855 --
+# c
+{
+  # d
+  a = 1; # e
+
+  # f
+  b = 2;
+}
+-- case-1856 --
+rec { a = 1; }
+-- case-1857 --
+./a/${b}
+-- case-1858 --
+with let
+  in
+  x;
+y
+-- case-1859 --
+with assert a;
+b;
+y
+-- case-1860 --
+with with assert a;
+b;
+c;
+y
+-- case-1861 --
+with with let
+  in
+  x;
+y;
+z
+-- case-1862 --
+assert
+  let
+  in
+  x;
+y
+-- case-1863 --
+assert
+  assert a;
+  b;
+y
+-- case-1864 --
+a
++ (
+  let
+  in
+  x
+)
+-- case-1866 --
+f (
+  let
+  in
+  x
+)
+-- case-1867 --
+[
+  (
+    let
+    in
+    x
+  )
+  (
+    assert a;
+    b
+  )
+]
+-- case-1868 --
+{
+  a =
+    let
+    in
+    x;
+  b =
+    assert c;
+    d;
+}
+-- case-1870 --
+{
+  a =
+    with b;
+    let
+    in
+    y;
+}
+-- case-1871 --
+with {
+  a = 1;
+  b = 2;
+};
+c
+-- case-1872 --
+with [
+  a
+  b
+];
+c
+-- case-1873 --
+with (a b); c
+-- case-1874 --
+with (
+  assert a;
+  b
+);
+c
+-- case-1875 --
+with (
+  let
+  in
+  a
+);
+c
+-- case-1876 --
+x:
+let
+in
+y
+-- case-1877 --
+if
+  let
+  in
+  x
+then
+  assert a;
+  b
+else
+  let
+  in
+  y

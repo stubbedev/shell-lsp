@@ -59,3 +59,33 @@ func TestFormattingErrors(t *testing.T) {
 		t.Errorf("disabled formatting error = %+v", disabled.Error)
 	}
 }
+
+func TestFormattingNixMatchesWholeFileInRanges(t *testing.T) {
+	t.Parallel()
+
+	c, _ := startClient(t, `{"capabilities": {"textDocument": {"diagnostic": {}}}}`)
+	const uri = "file:///w/default.nix"
+	c.notify("textDocument/didOpen", openParams(uri, "{\n  a=1;\n\n  b=2;\n}\n"))
+	whole := decodeResult[[]lsp.TextEdit](t, c.call("textDocument/formatting",
+		`{"textDocument": {"uri": "`+uri+`"}, "options": {"tabSize": 8, "insertSpaces": false}}`))
+	if len(whole) != 2 || whole[0].NewText != "  a = 1;\n" || whole[1].NewText != "  b = 2;\n" {
+		t.Fatalf("whole-file edits = %+v", whole)
+	}
+	ranged := decodeResult[[]lsp.TextEdit](t, c.call("textDocument/rangeFormatting",
+		`{"textDocument": {"uri": "`+uri+`"}, "range": {"start": {"line": 3, "character": 0}, "end": {"line": 3, "character": 3}}, "options": {"tabSize": 8, "insertSpaces": false}}`))
+	if len(ranged) != 1 || ranged[0] != whole[1] {
+		t.Errorf("range edits = %+v, want only the whole-file edit of b: %+v", ranged, whole[1])
+	}
+}
+
+func TestFormattingNixRefusesSyntaxErrors(t *testing.T) {
+	t.Parallel()
+
+	c, _ := startClient(t, `{"capabilities": {"textDocument": {"diagnostic": {}}}}`)
+	const uri = "file:///w/broken.nix"
+	c.notify("textDocument/didOpen", openParams(uri, "{ a = ; }\n"))
+	resp := c.call("textDocument/formatting", `{"textDocument": {"uri": "`+uri+`"}, "options": {"tabSize": 2, "insertSpaces": true}}`)
+	if resp.Error == nil || !strings.Contains(resp.Error.Message, "1:7") {
+		t.Errorf("formatting a broken Nix file = %+v, want an error with its position", resp)
+	}
+}

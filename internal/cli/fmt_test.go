@@ -143,3 +143,24 @@ func TestFmtHonoursEditorConfigUnlessStyleFlagsAreGiven(t *testing.T) {
 		t.Errorf("--apply-ignore did not skip the ignored file: %q", got.stdout)
 	}
 }
+
+func TestFmtFormatsNixFiles(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeFiles(t, dir, map[string]string{"a.nix": "{a=1;b=[1 2];}\n", "good.nix": "{ a = 1; }\n", "broken.nix": "{ a = ; }\n", ".editorconfig": "[*]\nindent_size = 8\nindent_style = tab\n"})
+	want := "{\n  a = 1;\n  b = [\n    1\n    2\n  ];\n}\n"
+	if got := run(t, dir, "", "fmt", "a.nix"); got.status != statusOK || got.stdout != want {
+		t.Errorf("fmt a.nix = %d %q (stderr %q), want %q", got.status, got.stdout, got.stderr, want)
+	}
+	if got := run(t, dir, "", "fmt", "-l", "a.nix", "good.nix"); got.status != statusFailed || got.stdout != "a.nix\n" {
+		t.Errorf("fmt -l = %d %q (stderr %q)", got.status, got.stdout, got.stderr)
+	}
+	got := run(t, dir, "", "fmt", "-w", "broken.nix")
+	if got.status != statusFailed || !strings.Contains(got.stderr, "1:7") {
+		t.Errorf("fmt -w broken.nix = %d, stderr %q, want the position of the syntax error", got.status, got.stderr)
+	}
+	if after := readFile(t, filepath.Join(dir, "broken.nix")); after != "{ a = ; }\n" {
+		t.Errorf("a refused file was rewritten to %q", after)
+	}
+}

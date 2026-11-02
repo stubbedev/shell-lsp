@@ -14,6 +14,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/host/makefile"
 	"github.com/stubbedev/shell-lsp/internal/host/model"
 	"github.com/stubbedev/shell-lsp/internal/host/nix"
+	nixformat "github.com/stubbedev/shell-lsp/internal/host/nix/format"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/projection"
 )
@@ -44,7 +45,6 @@ type definition struct {
 	invocation  func(path, name string) []string
 	recursion   Recursion
 	formatter   func(text string) (string, error)
-	shellOnly   bool
 }
 
 type Recursion struct {
@@ -68,7 +68,7 @@ type analysis struct {
 
 func analyzeNix(text string) analysis {
 	a := nix.Analyze(text)
-	return analysis{projection: a.Map, detection: a.Detection, index: a.Index, enclosing: a.Enclosing}
+	return analysis{projection: a.Map, detection: a.Detection, index: a.Index, expect: a.Expect, invocation: a.Invocation, enclosing: a.Enclosing, format: func() (string, error) { return nixformat.Format(text) }}
 }
 
 func analyzeMake(text string) analysis {
@@ -125,8 +125,9 @@ var definitions = [...]definition{
 		extensions:  []string{".nix"},
 		analyze:     analyzeNix,
 		checks:      nix.Checks,
+		validName:   nix.ValidName,
 		fence:       "nix",
-		shellOnly:   true,
+		formatter:   nixformat.Format,
 	},
 	Docker: {
 		name:        "Dockerfile",
@@ -250,8 +251,6 @@ func (l Language) ValidName(kind model.Kind, name string) bool {
 }
 
 func (l Language) Fence() string { return definitions[l].fence }
-
-func (l Language) ShellOnly() bool { return definitions[l].shellOnly }
 
 func (l Language) Renames() bool { return definitions[l].validName != nil }
 
