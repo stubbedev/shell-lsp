@@ -14,7 +14,11 @@ import (
 
 func corpusProject(t *testing.T, name string) map[string]string {
 	t.Helper()
-	root := filepath.Join("..", "..", "corpus", "nix", name)
+	return corpusFiles(t, filepath.Join("..", "..", "corpus", "nix", name))
+}
+
+func corpusFiles(t testing.TB, root string) map[string]string {
+	t.Helper()
 	files := map[string]string{}
 	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil || entry.IsDir() || filepath.Ext(path) != ".nix" {

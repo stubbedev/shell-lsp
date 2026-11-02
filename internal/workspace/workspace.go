@@ -16,12 +16,14 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"weak"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/gitignore"
 	"github.com/stubbedev/shell-lsp/internal/host"
+	"github.com/stubbedev/shell-lsp/internal/host/model"
 	"github.com/stubbedev/shell-lsp/internal/parallel"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/platform"
@@ -142,6 +144,7 @@ type Workspace struct {
 	dirs       map[string]dirListing
 	ignores    map[string]ignoreRules
 	missing    map[string]time.Time
+	includes   map[string]includesEntry
 	generation atomic.Uint64
 	watched    atomic.Bool
 	scanCut    atomic.Bool
@@ -160,7 +163,31 @@ type diskEntry struct {
 	size    int64
 	modTime time.Time
 	checked time.Time
-	file    *File
+	held    *File
+	dropped weak.Pointer[File]
+}
+
+func newDiskEntry(file *File, info fs.FileInfo, checked time.Time) diskEntry {
+	entry := diskEntry{size: info.Size(), modTime: info.ModTime(), checked: checked}
+	if file.Native != nil && file.Native.Language == host.Nix {
+		entry.dropped = weak.Make(file)
+		return entry
+	}
+	entry.held = file
+	return entry
+}
+
+func (e diskEntry) file() *File {
+	if e.held != nil {
+		return e.held
+	}
+	return e.dropped.Value()
+}
+
+type includesEntry struct {
+	size     int64
+	modTime  time.Time
+	includes []model.Include
 }
 
 func Detect(_ string, in dialect.Input) dialect.Detection {
@@ -168,7 +195,7 @@ func Detect(_ string, in dialect.Input) dialect.Detection {
 }
 
 func New(overlay Overlay, resolve func(path string, in dialect.Input) dialect.Detection) *Workspace {
-	return &Workspace{overlay: overlay, resolve: resolve, now: time.Now, files: map[string]diskEntry{}, dirs: map[string]dirListing{}, ignores: map[string]ignoreRules{}, missing: map[string]time.Time{}}
+	return &Workspace{overlay: overlay, resolve: resolve, now: time.Now, files: map[string]diskEntry{}, dirs: map[string]dirListing{}, ignores: map[string]ignoreRules{}, missing: map[string]time.Time{}, includes: map[string]includesEntry{}}
 }
 
 func (w *Workspace) SetRoots(roots []string) {
@@ -233,6 +260,44 @@ func (w *Workspace) LoadAs(path string, language host.Language) (*File, error) {
 	return w.load(path, language.LanguageID())
 }
 
+func (w *Workspace) Present(path string) bool {
+	if _, open := w.overlay(fileuri.FromPath(path)); open {
+		return true
+	}
+	_, err := regularfile.Stat(path)
+	return err == nil
+}
+
+func (w *Workspace) NixIncludes(path string) ([]model.Include, int64, error) {
+	if f, open := w.overlay(fileuri.FromPath(path)); open && f.Native != nil {
+		return f.Native.Index.Includes, int64(len(f.Doc.Source().Text())), nil
+	}
+	info, err := regularfile.Stat(path)
+	if err != nil {
+		return nil, 0, fmt.Errorf("reading the imports of %s: %w", path, err)
+	}
+	key := platform.Native.Fold(path)
+	w.mu.Lock()
+	cached, ok := w.includes[key]
+	w.mu.Unlock()
+	if ok && cached.size == info.Size() && cached.modTime.Equal(info.ModTime()) {
+		return cached.includes, cached.size, nil
+	}
+	raw, info, err := regularfile.ReadStat(path, info, maxFileSize)
+	if err != nil {
+		return nil, 0, fmt.Errorf("reading the imports of %s: %w", path, err)
+	}
+	includes := slices.DeleteFunc(host.NixIncludes(string(raw)), func(inc model.Include) bool { return inc.Probe || inc.Dynamic })
+	for i := range includes {
+		includes[i] = includes[i].Detached()
+	}
+	includes = slices.Clone(includes)
+	w.mu.Lock()
+	w.includes[key] = includesEntry{size: info.Size(), modTime: info.ModTime(), includes: includes}
+	w.mu.Unlock()
+	return includes, info.Size(), nil
+}
+
 func (f *File) parsedAs(languageID string) bool {
 	if languageID == "" {
 		return true
@@ -246,12 +311,13 @@ func (w *Workspace) load(path, languageID string) (*File, error) {
 	key := platform.Native.Fold(path)
 	w.mu.Lock()
 	cached, ok := w.files[key]
-	ok = ok && cached.file.parsedAs(languageID)
+	known := cached.file()
+	ok = ok && known != nil && known.parsedAs(languageID)
 	fresh := ok && (w.watchedLocked(path) || now.Sub(cached.checked) < DiskRecheck)
 	w.mu.Unlock()
 	var uri string
 	if ok {
-		uri = cached.file.URI
+		uri = known.URI
 	} else {
 		uri = fileuri.FromPath(path)
 	}
@@ -259,7 +325,7 @@ func (w *Workspace) load(path, languageID string) (*File, error) {
 		return f, nil
 	}
 	if fresh {
-		return cached.file, nil
+		return known, nil
 	}
 	w.mu.Lock()
 	missingSince, missing := w.missing[key]
@@ -282,17 +348,25 @@ func (w *Workspace) load(path, languageID string) (*File, error) {
 		w.mu.Lock()
 		w.files[key] = cached
 		w.mu.Unlock()
-		return cached.file, nil
+		return known, nil
 	}
 	raw, info, err := regularfile.ReadStat(path, info, maxFileSize)
 	if err != nil {
 		return nil, fmt.Errorf("loading %s: %w", path, err)
 	}
-	file := Parse(path, docstore.NewDocument(uri, languageID, 0, string(raw)), nil, func(in dialect.Input) dialect.Detection { return w.resolve(path, in) })
+	file := w.parseDisk(path, docstore.NewDocument(uri, languageID, 0, string(raw)))
 	w.mu.Lock()
-	w.files[key] = diskEntry{size: info.Size(), modTime: info.ModTime(), checked: now, file: file}
+	w.files[key] = newDiskEntry(file, info, now)
 	w.mu.Unlock()
 	return file, nil
+}
+
+func (w *Workspace) parseDisk(path string, doc *docstore.Document) *File {
+	if language, ok := host.Of(doc.URI, doc.Language); ok && language == host.Nix && host.NixStoreFile(path) {
+		script := host.ProjectDependency(doc)
+		return &File{Path: path, URI: doc.URI, Doc: script.Doc, Tree: script.Parse(nil), Detection: script.Detection, Native: script.Native, spans: script.Spans()}
+	}
+	return Parse(path, doc, nil, func(in dialect.Input) dialect.Detection { return w.resolve(path, in) })
 }
 
 func Parse(path string, doc *docstore.Document, previous *parser.Tree, resolve func(dialect.Input) dialect.Detection) *File {

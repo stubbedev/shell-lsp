@@ -9,7 +9,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
-	"sync"
+	"time"
 
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/host"
@@ -24,6 +24,8 @@ type Loader interface {
 	Load(path string) (*workspace.File, error)
 	LoadAs(path string, language host.Language) (*workspace.File, error)
 	NixFiles(dir string) ([]string, error)
+	NixIncludes(path string) ([]model.Include, int64, error)
+	Present(path string) bool
 	ScanCut() bool
 }
 
@@ -33,7 +35,9 @@ type Env struct {
 	Graph  func(ctx context.Context) (*Graph, error)
 	Exists func(path string) bool
 
-	Background bool
+	Projects *Projects
+	Stamp    Stamp
+	Patience time.Duration
 }
 
 type importer struct {
@@ -43,6 +47,8 @@ type importer struct {
 
 type Graph struct {
 	importers map[string][]importer
+	imports   map[string][]string
+	bytes     map[string]int64
 	cut       bool
 }
 
@@ -74,6 +80,89 @@ func NewGraph(ctx context.Context, language host.Language, files navigation.Work
 	return g, nil
 }
 
+func NewNixGraph(ctx context.Context, paths func(context.Context) ([]string, error), env Env) (*Graph, error) {
+	listed, err := paths(ctx)
+	if err != nil {
+		return nil, err
+	}
+	b := newBuilder(ctx, env, host.Nix)
+	edges := make([][]string, len(listed))
+	bytes := make([]int64, len(listed))
+	parallel.For(env.workers(), len(listed), func(i int) {
+		if ctx.Err() != nil {
+			return
+		}
+		includes, size, err := env.Loader.NixIncludes(listed[i])
+		if err != nil {
+			return
+		}
+		bytes[i] = size
+		dir := filepath.Dir(listed[i])
+		for _, inc := range includes {
+			if inc.Probe || inc.Dynamic {
+				continue
+			}
+			if target, found := b.present(dir, inc.Candidates); found {
+				edges[i] = append(edges[i], target)
+			}
+		}
+	})
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	g := &Graph{importers: map[string][]importer{}, imports: make(map[string][]string, len(listed)), bytes: make(map[string]int64, len(listed)), cut: env.Loader.ScanCut()}
+	for i, list := range edges {
+		g.bytes[listed[i]] = bytes[i]
+		g.imports[listed[i]] = list
+		for _, target := range list {
+			g.importers[target] = append(g.importers[target], importer{path: listed[i]})
+		}
+	}
+	for path, list := range g.importers {
+		slices.SortFunc(list, func(a, b importer) int { return strings.Compare(a.path, b.path) })
+		g.importers[path] = slices.Compact(list)
+	}
+	return g, nil
+}
+
+func (g *Graph) reachesPast(limit int64, roots ...string) bool {
+	if g == nil {
+		return false
+	}
+	seen := map[string]bool{}
+	queue := slices.Clone(roots)
+	var total int64
+	for len(queue) > 0 {
+		path := queue[len(queue)-1]
+		queue = queue[:len(queue)-1]
+		if seen[path] {
+			continue
+		}
+		seen[path] = true
+		total += g.bytes[path]
+		if total > limit {
+			return true
+		}
+		queue = append(queue, g.imports[path]...)
+	}
+	return false
+}
+
+func (b *builder) present(dir string, candidates []string) (string, bool) {
+	for _, c := range candidates {
+		for _, path := range b.candidates(c) {
+			if !filepath.IsAbs(path) {
+				path = filepath.Join(dir, path)
+			}
+			path = filepath.Clean(path)
+			if b.env.Loader.Present(path) {
+				return path, true
+			}
+		}
+	}
+	return "", false
+}
+
 func (g *Graph) of(path string) []importer {
 	if g == nil {
 		return nil
@@ -97,6 +186,7 @@ type Group struct {
 	parents  []parent
 	exists   func(path string) bool
 	builder  *builder
+	partial  bool
 }
 
 type builder struct {
@@ -188,47 +278,47 @@ func buildProject(ctx context.Context, h Host, env Env) *Group {
 }
 
 func (g *Group) link() model.Links {
-	b := g.builder
-	request := nix.Request{Self: g.Self.Native.Index, SelfPath: g.Self.Path, Home: b.env.Home}
-	var graph *Graph
-	if g.Self.Path != "" {
-		request.Flake = b.nearestFlake(g.Self.Path)
-		if b.env.Graph != nil {
-			found, err := b.env.Graph(b.ctx)
-			if err != nil {
-				request.Failure = "finding the files that import this one: " + err.Error()
-			}
-			graph = found
-			request.ScanCut = graph != nil && graph.cut
-		}
-		for _, root := range b.roots(g.Self, graph) {
-			request.Roots = append(request.Roots, root.Path)
-		}
+	l := g.builder.env.linkedProject(g.builder.ctx, g.Self)
+	at, inside := l.holds(g.Self)
+	if !inside {
+		panic("hostnav: " + g.Self.URI + " is missing from its own project")
 	}
-	project := g.cachedProject(request, graph)
-	g.Module.Files = project.Indexes()
-	return project
+	g.Module.Files = l.indexes
+	g.Module.ShareNames(l.names)
+	g.partial = l.partial
+	g.self = at
+	g.files = l.files
+	return l.project
 }
 
-type projectCell struct {
-	mu      sync.Mutex
-	project *nix.Project
-	graph   *Graph
+func (g *Group) selfAt() int {
+	if g.builder != nil {
+		g.Module.Links()
+	}
+	return g.self
 }
 
-func (g *Group) cachedProject(request nix.Request, graph *Graph) *nix.Project {
-	source := projectSource{g.builder}
-	cell := workspace.Memo(g.Self, "hostnav.project", 0, func() *projectCell { return &projectCell{} })
-	cell.mu.Lock()
-	defer cell.mu.Unlock()
-	if cell.project != nil && cell.graph == graph && request.Failure == "" && cell.project.Fresh(source) {
-		return cell.project
+func (e Env) linkedProject(ctx context.Context, self *workspace.File) *linkedProject {
+	if self.Path == "" {
+		return unlinkedProject(self, "")
 	}
-	project := nix.Link(g.builder.ctx, request, source)
-	if request.Failure == "" && g.builder.ctx.Err() == nil && !g.builder.env.Background {
-		cell.project, cell.graph = project, graph
+	if e.Projects == nil {
+		return e.linkOnce(ctx, self)
 	}
-	return project
+	if l := e.Projects.of(ctx, self, e); l != nil {
+		return l
+	}
+	return unlinkedProject(self, stillLinking)
+}
+
+func (e Env) linkOnce(ctx context.Context, self *workspace.File) *linkedProject {
+	request := nix.Request{Self: self.Native.Index, SelfPath: self.Path, Home: e.Home}
+	plan, err := planProject(ctx, self, e)
+	if err != nil {
+		return unlinkedProject(self, stillLinking)
+	}
+	request.Flake, request.Failure, request.ScanCut, request.Roots = plan.flake, plan.failure, plan.scanCut, plan.roots
+	return linkProject(ctx, e, request, self)
 }
 
 type Proof struct {
@@ -247,26 +337,21 @@ func Prove(ctx context.Context, hosts []Host, env Env) map[string]Proof {
 	out := make(map[string]Proof, len(hosts))
 	for _, h := range hosts {
 		file := h.file
-		if _, done := out[file.URI]; done || !nix.MayWrap(file.Native.Index) {
+		if !nix.MayWrap(file.Native.Index) {
 			continue
 		}
 		if ctx.Err() != nil {
 			return nil
 		}
-		project, linked := buildProject(ctx, h, env).Module.Links().(*nix.Project)
+		g := buildProject(ctx, h, env)
+		project, linked := g.Module.Links().(*nix.Project)
 		if !linked {
 			panic("hostnav: " + file.URI + " did not link as a Nix project")
 		}
-		if ctx.Err() != nil {
+		if ctx.Err() != nil || g.partial {
 			return nil
 		}
-		out[file.URI] = Proof{Doc: file.Doc.Source(), Strings: project.Proven(0)}
-		for _, other := range hosts {
-			index := other.file.Native.Index
-			if i, inside := project.FileOf(other.file.Path, index); inside && nix.MayWrap(index) {
-				out[other.file.URI] = Proof{Doc: other.file.Doc.Source(), Strings: project.Proven(i)}
-			}
-		}
+		out[file.URI] = Proof{Doc: file.Doc.Source(), Strings: project.Proven(g.selfAt())}
 	}
 	return out
 }
@@ -318,9 +403,6 @@ func (s projectSource) Read(path string) ([]byte, error) {
 }
 
 func (e Env) workers() int {
-	if e.Background {
-		return 1
-	}
 	return runtime.GOMAXPROCS(0)
 }
 

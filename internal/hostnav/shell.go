@@ -188,7 +188,7 @@ func (g *Group) ShellSymbol(offset int) (Symbol, bool) {
 	for _, r := range regions(g.Self) {
 		for _, c := range r.calls {
 			if c.Span.Touches(at) {
-				return g.symbolFor(model.Hit{Name: c.Name, Kind: c.Kind, Span: c.Span, Scope: c.Scope, Qualifier: c.Qualifier, Symbol: model.NoSymbol}, g.self, g.Module)
+				return g.symbolFor(model.Hit{Name: c.Name, Kind: c.Kind, Span: c.Span, Scope: c.Scope, Qualifier: c.Qualifier, Symbol: model.NoSymbol}, g.selfAt(), g.Module)
 			}
 		}
 	}
@@ -201,7 +201,7 @@ func (g *Group) ShellSymbol(offset int) (Symbol, bool) {
 		if host < r.shell.Span.Start || host > r.shell.Span.End || r.shadowed[hit.Name] {
 			continue
 		}
-		res := g.Module.Resolve(g.self, model.Ref{Name: hit.Name, Kind: model.KindVariable, Scope: r.shell.Scope})
+		res := g.Module.Resolve(g.selfAt(), model.Ref{Name: hit.Name, Kind: model.KindVariable, Scope: r.shell.Scope})
 		if len(res.Targets) == 0 {
 			return Symbol{}, false
 		}

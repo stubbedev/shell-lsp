@@ -81,6 +81,7 @@ func (p *Project) eval(u *symbolTable, e syntax.Expr) []flowValue {
 	p.visiting[e] = true
 	out := p.compute(u, e)
 	delete(p.visiting, e)
+	out = slices.Clip(out)
 	p.memo[e] = out
 	return out
 }
@@ -242,14 +243,64 @@ func (p *Project) pathOf(v flowValue) (string, bool) {
 	return "", false
 }
 
+const linearUnion = 16
+
 func union(a, b []flowValue) []flowValue {
-	out := slices.Clone(a)
-	for _, v := range b {
-		if !slices.Contains(out, v) {
-			out = append(out, v)
+	switch {
+	case len(b) == 0:
+		return a
+	case len(a) == 0:
+		return b
+	}
+	out := flowValues{list: a}
+	out.add(b)
+	return out.list
+}
+
+type flowValues struct {
+	list  []flowValue
+	owned bool
+	seen  map[flowValue]struct{}
+}
+
+func (s *flowValues) add(values []flowValue) {
+	if len(s.list) == 0 && !s.owned {
+		if len(values) > 0 {
+			s.list = values
+		}
+		return
+	}
+	for _, v := range values {
+		s.one(v)
+	}
+}
+
+func (s *flowValues) one(v flowValue) {
+	if s.held(v) {
+		return
+	}
+	if !s.owned {
+		s.list = append(make([]flowValue, 0, 2*len(s.list)+1), s.list...)
+		s.owned = true
+	}
+	s.list = append(s.list, v)
+	if s.seen != nil {
+		s.seen[v] = struct{}{}
+	}
+}
+
+func (s *flowValues) held(v flowValue) bool {
+	if len(s.list) <= linearUnion {
+		return slices.Contains(s.list, v)
+	}
+	if s.seen == nil {
+		s.seen = make(map[flowValue]struct{}, 2*len(s.list))
+		for _, known := range s.list {
+			s.seen[known] = struct{}{}
 		}
 	}
-	return out
+	_, known := s.seen[v]
+	return known
 }
 
 func (p *Project) evalSelect(u *symbolTable, e *syntax.Select) []flowValue {
@@ -287,7 +338,7 @@ func (p *Project) evalDef(u *symbolTable, d *scope.Def) []flowValue {
 	}
 	switch d.Kind {
 	case scope.ArgDef, scope.FormalDef, scope.AliasDef:
-		out = union(out, p.bindings[d])
+		out = union(out, slices.Clip(p.bindings[d]))
 		if d.Name == pkgsFormal {
 			out = union(out, []flowValue{flowPkgs{}})
 		}
@@ -373,11 +424,11 @@ func (p *Project) evalApply(u *symbolTable, call *syntax.Apply) []flowValue {
 	case name == mapAttrsName && len(call.Args) == 2:
 		return []flowValue{flowMapped{unit: u, call: call}}
 	case name == attrValuesName:
-		var out []flowValue
+		var out flowValues
 		for _, v := range p.eval(u, last) {
-			out = union(out, p.children(v))
+			out.add(p.children(v))
 		}
-		return out
+		return out.list
 	case slices.Contains(systemHelpers, name):
 		if fn, literal := syntax.Unparenthesized(last).(*syntax.Lambda); literal {
 			return p.eval(u, fn.Body)
@@ -398,15 +449,15 @@ func (p *Project) callResult(u *symbolTable, call *syntax.Apply, values []flowVa
 }
 
 func (p *Project) derivationValue(u *symbolTable, arg syntax.Expr) []flowValue {
-	var out []flowValue
+	var out flowValues
 	for _, v := range p.evalModuleValue(u, arg) {
 		if fn, isLambda := v.(flowLambda); isLambda {
-			out = union(out, p.eval(fn.unit, fn.fn.Body))
+			out.add(p.eval(fn.unit, fn.fn.Body))
 			continue
 		}
-		out = union(out, []flowValue{v})
+		out.one(v)
 	}
-	return out
+	return out.list
 }
 
 func (b *symbolTable) ownFunction(fn syntax.Expr) bool {
@@ -446,44 +497,44 @@ func (p *Project) extended(u *symbolTable, fn, overlay syntax.Expr) []flowValue 
 }
 
 func (p *Project) listItems(values []flowValue) []flowValue {
-	var out []flowValue
+	var out flowValues
 	for _, v := range values {
 		list, ok := v.(flowList)
 		if !ok {
 			continue
 		}
 		for _, item := range list.list.Items {
-			out = union(out, p.evalModuleValue(list.unit, item))
+			out.add(p.evalModuleValue(list.unit, item))
 		}
 	}
-	return out
+	return out.list
 }
 
 func (p *Project) treesOf(u *symbolTable, args []syntax.Expr) []flowValue {
-	var out []flowValue
+	var out flowValues
 	for _, arg := range args {
 		for _, v := range p.eval(u, arg) {
 			switch v := v.(type) {
 			case flowPath:
-				out = append(out, flowTree{dir: v.path})
+				out.one(flowTree{dir: v.path})
 			case flowList:
 				for _, item := range v.list.Items {
-					out = union(out, p.treesOf(v.unit, []syntax.Expr{item}))
+					out.add(p.treesOf(v.unit, []syntax.Expr{item}))
 				}
 			}
 		}
 	}
-	return out
+	return out.list
 }
 
 func (p *Project) importValue(u *symbolTable, arg syntax.Expr) []flowValue {
-	var out []flowValue
+	var out flowValues
 	for _, v := range p.eval(u, arg) {
 		if path, ok := p.pathOf(v); ok {
-			out = union(out, p.fileValue(path))
+			out.add(p.fileValue(path))
 		}
 	}
-	return out
+	return out.list
 }
 
 func (p *Project) fileIndex(path string) (int, bool) {
@@ -510,7 +561,7 @@ func (p *Project) loadLate(path string) (int, bool) {
 	if p.peek != nil {
 		return p.peekFile(path)
 	}
-	if p.settled || p.tried[path] {
+	if p.settled || p.shallow || p.tried[path] {
 		return 0, false
 	}
 	before := len(p.units)
@@ -540,18 +591,18 @@ func (p *Project) peekFile(path string) (int, bool) {
 
 func (p *Project) applied(values []flowValue, args int) []flowValue {
 	for range args {
-		var next []flowValue
+		var next flowValues
 		for _, v := range values {
 			switch v := v.(type) {
 			case flowLambda:
-				next = union(next, p.eval(v.unit, v.fn.Body))
+				next.add(p.eval(v.unit, v.fn.Body))
 			case flowWriter:
-				next = union(next, []flowValue{v})
+				next.one(v)
 			case flowSpace:
-				next = union(next, p.appliedSpace(v.space))
+				next.add(p.appliedSpace(v.space))
 			}
 		}
-		values = next
+		values = next.list
 	}
 	return values
 }
@@ -562,19 +613,19 @@ func (p *Project) appliedSpace(s *space) []flowValue {
 	}
 	p.applying[s] = true
 	defer delete(p.applying, s)
-	var out []flowValue
+	var out flowValues
 	for _, b := range s.bound {
-		out = union(out, p.applied(p.evalSource(b.unit, b.source), 1))
+		out.add(p.applied(p.evalSource(b.unit, b.source), 1))
 	}
-	return out
+	return out.list
 }
 
 func (p *Project) selectAll(values []flowValue, name string) []flowValue {
-	var out []flowValue
+	var out flowValues
 	for _, v := range values {
-		out = union(out, p.selectFrom(v, name))
+		out.add(p.selectFrom(v, name))
 	}
-	return out
+	return out.list
 }
 
 func (p *Project) selectFrom(v flowValue, name string) []flowValue {
@@ -586,18 +637,18 @@ func (p *Project) selectFrom(v flowValue, name string) []flowValue {
 	defer delete(p.selecting, key)
 	switch v := v.(type) {
 	case flowSet:
-		var out []flowValue
+		var out flowValues
 		if kid := v.set.kids[name]; kid != nil {
-			out = append(out, flowSet{unit: v.unit, set: kid})
+			out.one(flowSet{unit: v.unit, set: kid})
 		}
 		for _, src := range v.set.sources[name] {
 			if src.stmt != nil {
-				out = union(out, p.evalSource(v.unit, src))
+				out.add(p.evalSource(v.unit, src))
 				continue
 			}
-			out = union(out, p.eval(v.unit, src.expr))
+			out.add(p.eval(v.unit, src.expr))
 		}
-		return out
+		return out.list
 	case flowSpace:
 		out := []flowValue{flowSpace{space: p.kid(v.space, name)}}
 		if wild := v.space.kids[anyName]; wild != nil {
@@ -635,7 +686,7 @@ func (p *Project) selectFrom(v flowValue, name string) []flowValue {
 
 func (p *Project) mappedAttr(v flowMapped, name string) []flowValue {
 	over := p.selectAll(p.eval(v.unit, v.call.Args[1]), name)
-	var out []flowValue
+	var out flowValues
 	for _, fn := range p.eval(v.unit, v.call.Args[0]) {
 		outer, isLambda := fn.(flowLambda)
 		if !isLambda {
@@ -647,13 +698,13 @@ func (p *Project) mappedAttr(v flowMapped, name string) []flowValue {
 				continue
 			}
 			if args, calls := callsParameter(inner); calls {
-				out = union(out, p.applied(over, args))
+				out.add(p.applied(over, args))
 				continue
 			}
-			out = union(out, p.eval(inner.unit, inner.fn.Body))
+			out.add(p.eval(inner.unit, inner.fn.Body))
 		}
 	}
-	return out
+	return out.list
 }
 
 func callsParameter(fn flowLambda) (int, bool) {
@@ -710,7 +761,7 @@ func (p *Project) foreignOutputs(input string) []flowValue {
 	if !ok {
 		return nil
 	}
-	var out []flowValue
+	var out flowValues
 	for _, root := range p.fileValue(filepath.Join(source, FlakeFile)) {
 		set, isSet := root.(flowSet)
 		if !isSet {
@@ -719,12 +770,12 @@ func (p *Project) foreignOutputs(input string) []flowValue {
 		for _, src := range set.set.sources[outputsAttr] {
 			for _, fn := range p.evalSource(set.unit, src) {
 				if lambda, isLambda := fn.(flowLambda); isLambda {
-					out = union(out, p.foreignBody(lambda))
+					out.add(p.foreignBody(lambda))
 				}
 			}
 		}
 	}
-	return out
+	return out.list
 }
 
 func (p *Project) foreignBody(fn flowLambda) []flowValue {
@@ -751,17 +802,17 @@ func (p *Project) overlayBodies() []flowValue {
 	}
 	p.collecting = true
 	defer func() { p.collecting = false }()
-	bodies := []flowValue{}
+	bodies := flowValues{list: []flowValue{}}
 	for i := 0; i < len(p.units); i++ { //nolint:intrange // p.eval can load files through loadLate, which appends to p.units; a range would freeze the length and miss them
 		u := p.units[i]
 		for _, site := range u.overlays {
 			for _, v := range p.eval(u, site) {
-				bodies = union(bodies, p.overlayOf(v, map[flowValue]bool{}))
+				bodies.add(p.overlayOf(v, map[flowValue]bool{}))
 			}
 		}
 	}
-	p.overlayValues = bodies
-	return bodies
+	p.overlayValues = bodies.list
+	return bodies.list
 }
 
 func (p *Project) overlayOf(v flowValue, seen map[flowValue]bool) []flowValue {
@@ -771,7 +822,7 @@ func (p *Project) overlayOf(v flowValue, seen map[flowValue]bool) []flowValue {
 	seen[v] = true
 	switch v := v.(type) {
 	case flowLambda:
-		var out []flowValue
+		var out flowValues
 		for _, second := range p.eval(v.unit, v.fn.Body) {
 			inner, curried := second.(flowLambda)
 			if !curried {
@@ -779,23 +830,23 @@ func (p *Project) overlayOf(v flowValue, seen map[flowValue]bool) []flowValue {
 			}
 			p.bindParam(v, []flowValue{flowPkgs{}})
 			p.bindParam(inner, []flowValue{flowPkgs{}})
-			out = union(out, p.eval(inner.unit, inner.fn.Body))
+			out.add(p.eval(inner.unit, inner.fn.Body))
 		}
-		return out
+		return out.list
 	case flowList:
-		var out []flowValue
+		var out flowValues
 		for _, item := range v.list.Items {
 			for _, value := range p.eval(v.unit, item) {
-				out = union(out, p.overlayOf(value, seen))
+				out.add(p.overlayOf(value, seen))
 			}
 		}
-		return out
+		return out.list
 	case flowSet, flowUpdate, flowSpace:
-		var out []flowValue
+		var out flowValues
 		for _, kid := range p.children(v) {
-			out = union(out, p.overlayOf(kid, seen))
+			out.add(p.overlayOf(kid, seen))
 		}
-		return out
+		return out.list
 	}
 	return nil
 }
@@ -818,34 +869,34 @@ func (p *Project) children(v flowValue) []flowValue {
 	defer delete(p.expanding, v)
 	switch v := v.(type) {
 	case flowUpdate:
-		out := []flowValue{}
+		out := flowValues{list: []flowValue{}}
 		for _, side := range []syntax.Expr{v.node.Left, v.node.Right} {
 			for _, value := range p.eval(v.unit, side) {
-				out = union(out, p.children(value))
+				out.add(p.children(value))
 			}
 		}
-		return out
+		return out.list
 	case flowPkgs:
-		out := []flowValue{}
+		out := flowValues{list: []flowValue{}}
 		for _, body := range p.overlayBodies() {
-			out = union(out, p.children(body))
+			out.add(p.children(body))
 		}
-		return out
+		return out.list
 	case flowSet:
-		var out []flowValue
+		var out flowValues
 		for _, name := range sortedNames(v.set.names) {
-			out = union(out, p.selectFrom(v, name))
+			out.add(p.selectFrom(v, name))
 		}
-		return out
+		return out.list
 	case flowSpace:
-		var out []flowValue
+		var out flowValues
 		for _, name := range sortedNames(v.space.kids) {
-			out = union(out, []flowValue{flowSpace{space: v.space.kids[name]}})
+			out.one(flowSpace{space: v.space.kids[name]})
 			for _, b := range v.space.kids[name].bound {
-				out = union(out, p.evalSource(b.unit, b.source))
+				out.add(p.evalSource(b.unit, b.source))
 			}
 		}
-		return out
+		return out.list
 	}
 	return nil
 }

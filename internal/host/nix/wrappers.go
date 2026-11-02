@@ -361,17 +361,30 @@ func (w *sinkWalk) forwards(call *syntax.Apply) {
 }
 
 func (b *symbolTable) wrapperCandidates() []*syntax.Apply {
-	var out []*syntax.Apply
-	for _, call := range b.calls {
-		name := calleeName(syntax.Unparenthesized(call.Fn))
-		if knownWriter(name) || slices.Contains(transparentCalls, name) || name == importName || name == mkMergeName {
-			continue
-		}
-		if slices.ContainsFunc(call.Args, stringBearing) {
-			out = append(out, call)
-		}
+	return slices.DeleteFunc(slices.Clone(b.calls), func(call *syntax.Apply) bool { return !wrapperCandidate(call) })
+}
+
+func wrapperCandidate(call *syntax.Apply) bool {
+	name := calleeName(syntax.Unparenthesized(call.Fn))
+	if knownWriter(name) || slices.Contains(transparentCalls, name) || name == importName || name == mkMergeName {
+		return false
 	}
-	return out
+	return slices.ContainsFunc(call.Args, stringBearing)
+}
+
+func (f *file) passesStrings() bool {
+	found := false
+	visit := func(n syntax.Node) bool {
+		if call, isCall := n.(*syntax.Apply); isCall && wrapperCandidate(call) {
+			found = true
+		}
+		return !found
+	}
+	syntax.Inspect(f.tree.Root, visit)
+	for _, stray := range f.tree.Stray {
+		syntax.Inspect(stray, visit)
+	}
+	return found
 }
 
 func stringBearing(arg syntax.Expr) bool {
@@ -657,7 +670,7 @@ type provenKey struct {
 }
 
 func (f *file) discoverWrapped() {
-	if len(f.sinks()) == 0 && !f.aliasesWriter() {
+	if !f.passesStrings() || len(f.sinks()) == 0 && !f.aliasesWriter() {
 		return
 	}
 	ix := &model.Index{}
@@ -743,8 +756,19 @@ func (p *Project) Proven(file int) []ProvenString {
 }
 
 func (p *Project) FileOf(path string, ix *model.Index) (int, bool) {
+	i, known := p.FileIndex(path)
+	if known && p.units[i].ix == ix {
+		return i, true
+	}
+	if path == "" && p.units[0].ix == ix {
+		return 0, true
+	}
+	return 0, false
+}
+
+func (p *Project) FileIndex(path string) (int, bool) {
 	i, known := p.byPath[path]
-	return i, known && p.units[i].ix == ix
+	return i, known
 }
 
 func MayWrap(ix *model.Index) bool {

@@ -183,7 +183,7 @@ func (g *Group) wrappedSymbol(offset int) (Symbol, bool) {
 	if g.builder == nil {
 		return Symbol{}, false
 	}
-	wrapped := g.wrappedOf(g.Module, g.self)
+	wrapped := g.wrappedOf(g.Module, g.selfAt())
 	if wrapped == nil {
 		return Symbol{}, false
 	}
@@ -206,7 +206,7 @@ func (g *Group) nixShellSymbol(file *workspace.File, offset int) (Symbol, bool) 
 	at := file.Doc.SourceOffset(offset)
 	if !file.Doc.Synthetic(offset) {
 		if hit, ok := g.Index().At(at); ok {
-			if sym, found := g.symbolFor(hit, g.self, g.Module); found {
+			if sym, found := g.symbolFor(hit, g.selfAt(), g.Module); found {
 				return sym, true
 			}
 		}
@@ -236,7 +236,7 @@ func (g *Group) nixShellSymbol(file *workspace.File, offset int) (Symbol, bool) 
 		return Symbol{Name: hit.Name, Kind: kind, Span: span, locals: reach.visible, scope: r.shell.Scope}, true
 	}
 	if hit.Kind == parser.HitVariable && !r.shadowed[hit.Name] {
-		res := g.Module.Resolve(g.self, model.Ref{Name: hit.Name, Kind: model.KindVariable, Scope: r.shell.Scope})
+		res := g.Module.Resolve(g.selfAt(), model.Ref{Name: hit.Name, Kind: model.KindVariable, Scope: r.shell.Scope})
 		if len(res.Targets) > 0 {
 			return Symbol{Name: hit.Name, Kind: res.Targets[0].Info().Kind, Span: span, id: identityOf(res.Targets[0]), targets: res.Targets, shell: true}, true
 		}

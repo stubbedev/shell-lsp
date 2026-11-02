@@ -14,6 +14,14 @@ import (
 
 var version = ""
 
+const serverGCPercent = 50
+
+func tuneCollector() {
+	if _, chosen := os.LookupEnv("GOGC"); !chosen {
+		debug.SetGCPercent(serverGCPercent)
+	}
+}
+
 func main() {
 	version = resolvedVersion(version, debug.ReadBuildInfo)
 	dir, err := os.Getwd()
@@ -37,6 +45,7 @@ func environment(dir string, process server.Process) cli.Env {
 		PathDirs:   process.PathDirs(),
 		Terminal:   terminal(os.Stdout) && os.Getenv("TERM") != "dumb",
 		Serve: func() error {
+			tuneCollector()
 			return server.New(jsonrpc.NewConn(os.Stdin, os.Stdout), version, process).Run(context.Background())
 		},
 	}

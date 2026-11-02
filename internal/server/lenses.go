@@ -223,7 +223,7 @@ func (s *Server) handleIncomingCalls(ctx context.Context, docs *docstore.View, p
 	if err != nil {
 		return nil, err
 	}
-	calls, err := navigation.IncomingCalls(ctx, item, s.navigationEnv(), s.candidateFiles(docs))
+	calls, err := navigation.IncomingCalls(ctx, item, s.navigationEnv(), s.shellCandidates(docs))
 	if err != nil {
 		return nil, err
 	}

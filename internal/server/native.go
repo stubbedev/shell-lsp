@@ -1,10 +1,12 @@
 package server
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"path/filepath"
+	"runtime/debug"
 	"slices"
 	"strconv"
 	"strings"
@@ -29,11 +31,39 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
+const (
+	projectLinkPatience = 100 * time.Millisecond
+	memoryReleaseQuiet  = 2 * time.Second
+)
+
+type memoryRelease struct {
+	mu    sync.Mutex
+	timer *time.Timer
+}
+
+func (m *memoryRelease) schedule() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.timer != nil {
+		m.timer.Reset(memoryReleaseQuiet)
+		return
+	}
+	m.timer = time.AfterFunc(memoryReleaseQuiet, debug.FreeOSMemory)
+}
+
+func (m *memoryRelease) stop() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.timer != nil {
+		m.timer.Stop()
+	}
+}
+
 func (s *Server) hostEnv(docs *docstore.View, language host.Language) hostnav.Env {
 	env := hostnav.Env{Loader: s.workspace, Home: s.process.Home, Exists: func(path string) bool {
 		_, err := regularfile.Stat(path)
 		return err == nil
-	}}
+	}, Projects: s.projects, Stamp: hostnav.Stamp{Docs: docs.Revision(), Disk: s.workspace.Generation()}, Patience: cmp.Or(s.linkPatience, projectLinkPatience)}
 	env.Graph = func(ctx context.Context) (*hostnav.Graph, error) { return s.graphs.of(ctx, s, docs, language, env) }
 	return env
 }
@@ -67,14 +97,43 @@ func (s *Server) hostStamp(docs *docstore.View, language host.Language) string {
 	return sb.String()
 }
 
+func (s *Server) nixGraphStamp(docs *docstore.View) string {
+	var sb strings.Builder
+	sb.WriteString(strconv.FormatUint(s.workspace.Generation(), 10))
+	for _, doc := range docs.Documents() {
+		l, known := host.Of(doc.URI, doc.Language)
+		if !known || l != host.Nix {
+			continue
+		}
+		snap, err := s.snapshot(docs, doc.URI)
+		if err != nil || snap.Native == nil {
+			continue
+		}
+		sb.WriteString(" " + doc.URI)
+		for _, inc := range snap.Native.Index.Includes {
+			if !inc.Probe && !inc.Dynamic {
+				sb.WriteString(" " + inc.Path)
+			}
+		}
+	}
+	return sb.String()
+}
+
+func (s *Server) graphStamp(docs *docstore.View, language host.Language) string {
+	if language == host.Nix {
+		return s.nixGraphStamp(docs)
+	}
+	return s.hostStamp(docs, language)
+}
+
 func (g *hostGraphs) of(ctx context.Context, s *Server, docs *docstore.View, language host.Language, env hostnav.Env) (*hostnav.Graph, error) {
-	stamp := s.hostStamp(docs, language)
+	stamp := s.graphStamp(docs, language)
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if cached, ok := g.entries[language]; ok && cached.stamp == stamp {
 		return cached.graph, nil
 	}
-	graph, err := hostnav.NewGraph(ctx, language, s.hostFiles(docs, language), env)
+	graph, err := s.importGraph(ctx, docs, language, env)
 	if err != nil {
 		return nil, fmt.Errorf("finding the files that include %s files: %w", language, err)
 	}
@@ -83,6 +142,26 @@ func (g *hostGraphs) of(ctx context.Context, s *Server, docs *docstore.View, lan
 	}
 	g.entries[language] = hostGraph{stamp: stamp, graph: graph}
 	return graph, nil
+}
+
+func (s *Server) importGraph(ctx context.Context, docs *docstore.View, language host.Language, env hostnav.Env) (*hostnav.Graph, error) {
+	if language != host.Nix {
+		return hostnav.NewGraph(ctx, language, s.hostFiles(docs, language), env)
+	}
+	return hostnav.NewNixGraph(ctx, func(ctx context.Context) ([]string, error) {
+		paths, err := s.workspace.ShellFiles(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for _, doc := range docs.Documents() {
+			if doc.Local {
+				paths = append(paths, doc.Path)
+			}
+		}
+		slices.Sort(paths)
+		paths = slices.Compact(paths)
+		return slices.DeleteFunc(paths, func(path string) bool { return !nixPath(path) }), nil
+	}, env)
 }
 
 func (s *Server) group(ctx context.Context, docs *docstore.View, h hostnav.Host) (*hostnav.Group, error) {

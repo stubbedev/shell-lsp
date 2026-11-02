@@ -185,6 +185,7 @@ func (f *file) index(found []shellString) *model.Index {
 	linkCalls(f.tree, ix)
 	ix.Runnables = outputs(f.tree)
 	ix.Folds = folds(f.tree)
+	table.compact()
 	return ix
 }
 

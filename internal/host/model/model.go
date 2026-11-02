@@ -193,6 +193,16 @@ type Include struct {
 	Probe      bool
 }
 
+func (inc Include) Detached() Include {
+	inc.Path = strings.Clone(inc.Path)
+	inc.Module = strings.Clone(inc.Module)
+	inc.Candidates = slices.Clone(inc.Candidates)
+	for i, c := range inc.Candidates {
+		inc.Candidates[i] = strings.Clone(c)
+	}
+	return inc
+}
+
 func MatchesPattern(pattern, name string) bool { return matches(pattern, name, 0) }
 
 func MatchesRulePattern(pattern, name string) bool { return matches(pattern, name, 1) }
@@ -361,6 +371,17 @@ func (ix *Index) tables() {
 func (ix *Index) named(ns Namespace, name string) []int {
 	ix.tables()
 	return ix.byName[symbolKey{ns, name}]
+}
+
+func (ix *Index) Binds(scope Scope, name string) bool {
+	for _, ns := range linkedNamespaces {
+		for _, i := range ix.named(ns, name) {
+			if ix.Symbols[i].Scope == scope {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (ix *Index) edgesOf(owner int) []int {

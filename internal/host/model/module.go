@@ -20,6 +20,7 @@ type Module struct {
 
 	linking sync.Once
 	links   Links
+	names   *NameTable
 }
 
 type Home struct {
@@ -46,6 +47,52 @@ func (m *Module) Links() Links {
 	m.linking.Do(func() { m.links = m.Linker() })
 	return m.links
 }
+
+type Place struct {
+	File int32
+	Item int32
+}
+
+type NameTable struct {
+	building sync.Once
+	symbols  map[string][]Place
+	refs     map[string][]Place
+}
+
+func (t *NameTable) of(m *Module) *NameTable {
+	t.building.Do(func() {
+		symbols, refs := 0, 0
+		for _, ix := range m.Files {
+			symbols += len(ix.Symbols)
+			refs += len(ix.Refs)
+		}
+		t.symbols, t.refs = make(map[string][]Place, symbols/8), make(map[string][]Place, refs/8)
+		for f, ix := range m.Files {
+			for i := range ix.Symbols {
+				name := ix.Symbols[i].Name
+				t.symbols[name] = append(t.symbols[name], Place{File: int32(f), Item: int32(i)})
+			}
+			for i := range ix.Refs {
+				name := ix.Refs[i].Name
+				t.refs[name] = append(t.refs[name], Place{File: int32(f), Item: int32(i)})
+			}
+		}
+	})
+	return t
+}
+
+func (m *Module) ShareNames(t *NameTable) { m.names = t }
+
+func (m *Module) table() *NameTable {
+	if m.names == nil {
+		m.names = &NameTable{}
+	}
+	return m.names.of(m)
+}
+
+func (m *Module) SymbolsNamed(name string) []Place { return m.table().symbols[name] }
+
+func (m *Module) RefsNamed(name string) []Place { return m.table().refs[name] }
 
 var linkedNamespaces = [...]Namespace{NamespaceAttributes, NamespaceFunctions, NamespaceValues}
 

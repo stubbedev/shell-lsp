@@ -43,12 +43,12 @@ type treeParser struct {
 }
 
 func Parse(src string) *File {
-	p := &treeParser{src: src, tokens: make([]Token, 0, len(src)/4+1)}
+	p := &treeParser{src: src, tokens: make([]Token, 0, len(src)/6+1)}
 	p.advance()
 	root := p.expr()
 	stray := p.strayExprs()
 	slices.SortStableFunc(p.errors, func(a, b Error) int { return cmp.Compare(a.Span.Start, b.Span.Start) })
-	return &File{Text: src, Root: root, Stray: stray, Comments: p.comments, Tokens: p.tokens, Errors: p.errors, BareOr: p.bareOr}
+	return &File{Text: src, Root: root, Stray: stray, Comments: p.comments, Tokens: slices.Clone(p.tokens), Errors: p.errors, BareOr: p.bareOr}
 }
 
 func (p *treeParser) strayExprs() []Expr {

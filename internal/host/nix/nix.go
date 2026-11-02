@@ -2,6 +2,7 @@ package nix
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/directive"
@@ -56,6 +57,29 @@ func AnalyzeWith(src string, embed Embedder) Analysis {
 	f.discoverWrapped()
 	m, detection := f.projection()
 	return Analysis{Map: m, Detection: detection, Index: f.index(f.found), Errors: f.tree.Errors, Scope: f.table, tree: f.tree}
+}
+
+func AnalyzeDependency(src string) Analysis {
+	tree := syntax.Parse(src)
+	f := &file{src: src, tree: tree, table: scope.Resolve(tree)}
+	ix := &model.Index{}
+	table := newSymbolTable(f, ix)
+	table.build()
+	table.compact()
+	linkCalls(tree, ix)
+	m, detection := f.projection()
+	tree.Tokens, tree.Comments = nil, nil
+	f.table.ForgetUses()
+	return Analysis{Map: m, Detection: detection, Index: ix, Scope: f.table, tree: tree}
+}
+
+func InStore(path string) bool { return strings.HasPrefix(path, storeDirectory+"/") }
+
+func Includes(src string) []model.Include {
+	tree := syntax.Parse(src)
+	ix := &model.Index{}
+	newSymbolTable(&file{src: src, tree: tree, table: scope.Resolve(tree)}, ix).build()
+	return ix.Includes
 }
 
 func (f *file) projection() (*projection.Map, dialect.Detection) {

@@ -40,6 +40,7 @@ func startClientIn(t testing.TB, process Process, initializeParams string, setup
 	srv := New(jsonrpc.NewConn(serverReader, serverWriter), "test", process)
 	srv.shellcheckrc = newShellcheckrcResolver(nil)
 	srv.hadolint = newHadolintResolver(nil)
+	srv.linkPatience = clientTimeout
 	for _, fn := range setup {
 		fn(srv)
 	}

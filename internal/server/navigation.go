@@ -10,6 +10,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/editorconfig"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/hadolint"
+	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/navigation"
 	"github.com/stubbedev/shell-lsp/internal/parser"
@@ -64,7 +65,7 @@ func navigationHandler(mode navigation.Mode) func(*Server, context.Context, *doc
 		if !inside {
 			return nil, nil
 		}
-		locations, err := navigation.Definition(ctx, here.File, here.offset, s.navigationEnv(), s.candidateFiles(docs), mode)
+		locations, err := navigation.Definition(ctx, here.File, here.offset, s.navigationEnv(), s.shellCandidates(docs), mode)
 		if err != nil {
 			return nil, err
 		}
@@ -140,12 +141,26 @@ func (s *Server) workspaceRoots(params InitializeParams) []string {
 	return roots
 }
 
+func nixPath(path string) bool {
+	l, known := host.FromName(path)
+	return known && l == host.Nix
+}
+
+func (s *Server) shellCandidates(docs *docstore.View) navigation.WorkspaceFiles {
+	return s.candidates(docs, nixPath)
+}
+
 func (s *Server) candidateFiles(docs *docstore.View) navigation.WorkspaceFiles {
+	return s.candidates(docs, func(string) bool { return false })
+}
+
+func (s *Server) candidates(docs *docstore.View, skipped func(path string) bool) navigation.WorkspaceFiles {
 	return func(ctx context.Context) ([]*workspace.File, error) {
 		paths, err := s.workspace.ShellFiles(ctx)
 		if err != nil {
 			return nil, err
 		}
+		paths = slices.DeleteFunc(paths, skipped)
 		for _, doc := range docs.Documents() {
 			if doc.Local {
 				paths = append(paths, doc.Path)

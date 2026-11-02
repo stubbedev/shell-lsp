@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/stubbedev/shell-lsp/internal/docstore"
+	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 )
@@ -13,6 +14,9 @@ func (s *Server) handleDidOpen(_ context.Context, openParams lsp.DidOpenTextDocu
 	s.docs.Open(item)
 	s.logger.Debug("document opened", "uri", item.URI, "version", item.Version)
 	s.documentChanged(item.URI)
+	if language, known := host.Of(item.URI, item.LanguageID); known && language == host.Nix {
+		s.scheduleNixProjects()
+	}
 	go func() {
 		if snap, err := s.snapshot(s.docs.View(), item.URI); err == nil {
 			s.prefetchCommands(snap.Tree)
@@ -44,6 +48,9 @@ func (s *Server) handleDidClose(_ context.Context, closeParams lsp.DidCloseTextD
 	s.semantic.forget(uri)
 	s.delivery.closed(uri)
 	s.forgetNixClasses(uri)
+	if path, err := fileuri.ToPath(uri); err == nil {
+		s.projects.Forget(path)
+	}
 	return nil
 }
 

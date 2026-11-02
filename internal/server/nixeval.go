@@ -28,6 +28,7 @@ const (
 	maxNixNoticeBytes  = 600
 	nixAnyUser         = "<name>"
 	nixStringsQuiet    = 750 * time.Millisecond
+	nixOpenedQuiet     = 20 * time.Millisecond
 	nixStringsJob      = "strings"
 	nixClassPatience   = 50 * time.Millisecond
 	nixMissingNotice   = "shellLsp.nix.evaluate is on, but no nix binary is on PATH: NixOS, home-manager and flake-parts options and nixpkgs attributes are unavailable until it is installed. Static Nix features keep working."
@@ -74,6 +75,7 @@ type nixStrings struct {
 	mu        sync.Mutex
 	stopped   bool
 	scheduler *pushScheduler
+	opened    *pushScheduler
 	proofs    map[string]hostnav.Proof
 	revision  uint64
 }
@@ -115,10 +117,13 @@ func (n *nixStrings) publish(proofs map[string]hostnav.Proof, open func(uri stri
 func (n *nixStrings) stop() {
 	n.mu.Lock()
 	n.stopped = true
-	scheduler := n.scheduler
+	scheduler, opened := n.scheduler, n.opened
 	n.mu.Unlock()
 	if scheduler != nil {
 		scheduler.close()
+	}
+	if opened != nil {
+		opened.close()
 	}
 }
 
@@ -149,11 +154,35 @@ func (s *Server) scheduleNixStrings() {
 	n.scheduler.schedule(nixStringsJob)
 }
 
+func (s *Server) scheduleNixProjects() {
+	n := &s.nixEval.strings
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if n.stopped {
+		return
+	}
+	if n.opened == nil {
+		n.opened = newPushScheduler(cmp.Or(n.quiet, nixOpenedQuiet), s.wantNixProjects)
+	}
+	n.opened.schedule(nixStringsJob)
+}
+
 func (s *Server) proveNixStrings(ctx context.Context, _ string) {
 	n := &s.nixEval.strings
 	n.proving.Lock()
 	defer n.proving.Unlock()
 	docs := s.docs.View()
+	hosts := s.nixHosts(docs)
+	env := s.hostEnv(docs, host.Nix)
+	env.Patience = 0
+	proofs := hostnav.Prove(ctx, hosts, env)
+	if proofs == nil || !n.publish(proofs, s.docs.Has) {
+		return
+	}
+	s.redeliverNixStrings()
+}
+
+func (s *Server) nixHosts(docs *docstore.View) []hostnav.Host {
 	var hosts []hostnav.Host
 	for _, doc := range docs.Documents() {
 		if language, known := host.Of(doc.URI, doc.Language); !known || language != host.Nix {
@@ -169,13 +198,15 @@ func (s *Server) proveNixStrings(ctx context.Context, _ string) {
 		}
 	}
 	slices.SortFunc(hosts, func(a, b hostnav.Host) int { return strings.Compare(a.File().URI, b.File().URI) })
+	return hosts
+}
+
+func (s *Server) wantNixProjects(context.Context, string) {
+	docs := s.docs.View()
 	env := s.hostEnv(docs, host.Nix)
-	env.Background = true
-	proofs := hostnav.Prove(ctx, hosts, env)
-	if ctx.Err() != nil || !n.publish(proofs, s.docs.Has) {
-		return
+	for _, h := range s.nixHosts(docs) {
+		s.projects.Want(h, env)
 	}
-	s.redeliverNixStrings()
 }
 
 func (s *Server) redeliverNixStrings() {
@@ -383,6 +414,8 @@ func (s *Server) forgetNixClasses(uri string) {
 }
 
 func (s *Server) stopNixEvaluation() {
+	s.projects.Close()
+	s.releasing.stop()
 	s.closeNixSession(true)
 	s.nixEval.strings.stop()
 }
@@ -529,7 +562,9 @@ func (s *Server) nixFileClasses(ctx context.Context, docs *docstore.View, snap *
 	if !ok {
 		return nil
 	}
-	g, err := s.group(ctx, docs, h)
+	env := s.hostEnv(docs, h.Language())
+	env.Patience = 0
+	g, err := hostnav.Build(ctx, h, env)
 	if err != nil {
 		if ctx.Err() == nil {
 			s.logger.Warn("finding the module classes of a Nix file", "path", snap.Path, "err", err)

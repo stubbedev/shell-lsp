@@ -98,7 +98,7 @@ func (g *Group) At(offset int) (Symbol, bool) {
 	if !ok {
 		return g.wrappedSymbol(offset)
 	}
-	sym, found := g.symbolFor(hit, g.self, g.Module)
+	sym, found := g.symbolFor(hit, g.selfAt(), g.Module)
 	if found || hit.Declaration {
 		return sym, found
 	}
@@ -106,7 +106,7 @@ func (g *Group) At(offset int) (Symbol, bool) {
 	if !declared {
 		return Symbol{}, false
 	}
-	return g.symbolFor(own, g.self, g.Module)
+	return g.symbolFor(own, g.selfAt(), g.Module)
 }
 
 func (g *Group) fileOf(module *model.Module, i int) *workspace.File {
@@ -119,18 +119,17 @@ func (g *Group) Declarations(sym Symbol) []Occurrence {
 	if module == nil {
 		return nil
 	}
-	for f, ix := range module.Files {
-		for i, s := range ix.Symbols {
-			if identityOf(model.Target{Module: module, File: f, Symbol: i}) == sym.id {
-				out = append(out, Occurrence{File: g.fileOf(module, f), Span: s.Selection, Write: true, Declaration: true, Rewrite: s.Rewrite, kind: s.Kind})
-			}
+	for _, at := range module.SymbolsNamed(sym.id.name) {
+		f, i := int(at.File), int(at.Item)
+		if identityOf(model.Target{Module: module, File: f, Symbol: i}) == sym.id {
+			s := module.Files[f].Symbols[i]
+			out = append(out, Occurrence{File: g.fileOf(module, f), Span: s.Selection, Write: true, Declaration: true, Rewrite: s.Rewrite, kind: s.Kind})
 		}
 	}
 	return out
 }
 
 func (g *Group) modules() []*model.Module {
-	g.Module.Links()
 	out := []*model.Module{g.Module}
 	for _, p := range g.parents {
 		out = append(out, p.module)
@@ -166,14 +165,14 @@ func (g *Group) Occurrences(sym Symbol) []Occurrence {
 	}
 	out := g.Declarations(sym)
 	for _, module := range g.modules() {
-		for f, ix := range module.Files {
-			for _, r := range ix.Refs {
-				if r.Name != sym.Name || module.Links() == nil && r.Kind.Namespace() != sym.id.ns {
-					continue
-				}
-				if slices.ContainsFunc(module.Resolve(f, r).Targets, func(t model.Target) bool { return identityOf(t) == sym.id }) {
-					out = append(out, Occurrence{File: g.fileOf(module, f), Span: r.Span, Rewrite: r.Rewrite})
-				}
+		for _, at := range module.RefsNamed(sym.Name) {
+			f := int(at.File)
+			r := module.Files[f].Refs[at.Item]
+			if module.Links() == nil && r.Kind.Namespace() != sym.id.ns {
+				continue
+			}
+			if slices.ContainsFunc(module.Resolve(f, r).Targets, func(t model.Target) bool { return identityOf(t) == sym.id }) {
+				out = append(out, Occurrence{File: g.fileOf(module, f), Span: r.Span, Rewrite: r.Rewrite})
 			}
 		}
 	}

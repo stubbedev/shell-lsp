@@ -29,7 +29,7 @@ func (g *Group) InlayHints(within parser.Span) []assist.Hint {
 		if r.Kind != model.KindVariable {
 			continue
 		}
-		for _, t := range g.Module.Resolve(g.self, r).Targets {
+		for _, t := range g.Module.Resolve(g.selfAt(), r).Targets {
 			if s := t.Info(); s.Constant {
 				out = append(out, assist.Hint{Offset: r.Span.End, Label: "= " + truncate(s.Value), Kind: assist.HintValue})
 				break
@@ -91,7 +91,7 @@ func (g *Group) parameterHints(r model.Ref, args []parser.Span, text string) []a
 }
 
 func (g *Group) parameterNames(r model.Ref) []string {
-	res := g.Module.Resolve(g.self, model.Ref{Name: r.Name, Kind: r.Kind, Scope: r.Scope, Qualifier: r.Qualifier})
+	res := g.Module.Resolve(g.selfAt(), model.Ref{Name: r.Name, Kind: r.Kind, Scope: r.Scope, Qualifier: r.Qualifier})
 	if res.Builtin != nil {
 		return res.Builtin.Params
 	}

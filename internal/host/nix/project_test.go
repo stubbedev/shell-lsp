@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -136,4 +137,121 @@ func TestLinkStopsWhenCancelled(t *testing.T) {
 	if reason := p.incomplete(); !strings.Contains(reason, stdcontext.Canceled.Error()) {
 		t.Errorf("incomplete = %q, want it to name the cancellation", reason)
 	}
+}
+
+func TestRenameRefusesASharedNameADependencyDeclares(t *testing.T) {
+	t.Parallel()
+
+	const (
+		flakePath = "/w/flake.nix"
+		storeFile = storeDirectory + "/x-source/module.nix"
+		flakeText = `{
+  outputs = { self, nixpkgs }: {
+    nixosConfigurations.a = nixpkgs.lib.nixosSystem {
+      modules = [ ` + storeFile + ` { services.web.port = 1; } ];
+    };
+  };
+}
+`
+		storeText = "{ lib, ... }: {\n  options.services.web.port = lib.mkOption { };\n}\n"
+	)
+	src := memorySource{flakePath: flakeText, storeFile: storeText}
+	p := Link(stdcontext.Background(), Request{Flake: flakePath}, src)
+	i, ok := p.FileIndex(flakePath)
+	if !ok {
+		t.Fatal("the flake is not in its project")
+	}
+	symbol := -1
+	for at, sym := range p.units[i].ix.Symbols {
+		if sym.Name == "port" {
+			symbol = at
+		}
+	}
+	if symbol < 0 {
+		t.Fatal("the flake holds no symbol `port`")
+	}
+	reason, decided := p.Refusal(i, symbol)
+	if !decided || !strings.Contains(reason, "dependency") {
+		t.Errorf("refusal = %q, %v, want one that names the dependency", reason, decided)
+	}
+}
+
+func TestDependencyFilesDoNotFollowTheirOwnImports(t *testing.T) {
+	t.Parallel()
+
+	const (
+		flakePath = "/w/flake.nix"
+		loaded    = storeDirectory + "/x-source/used.nix"
+		unused    = storeDirectory + "/x-source/unused.nix"
+	)
+	src := memorySource{
+		flakePath: "{ outputs = { self }: { value = import " + loaded + "; }; }\n",
+		loaded:    "{ lazy = import " + unused + "; own = 1; }\n",
+		unused:    "{ never = 1; }\n",
+	}
+	p := Link(stdcontext.Background(), Request{Flake: flakePath}, src)
+	if _, ok := p.FileIndex(loaded); !ok {
+		t.Error("the imported dependency file was not loaded")
+	}
+	if _, ok := p.FileIndex(unused); ok {
+		t.Error("a file only a dependency imports was loaded without anything reading it")
+	}
+}
+
+func TestFreshNoticesAnAbsentFileAppearing(t *testing.T) {
+	t.Parallel()
+
+	const (
+		flakePath = "/w/flake.nix"
+		later     = "/w/later.nix"
+	)
+	files := memorySource{flakePath: "{ outputs = { self }: { value = import ./later.nix; }; }\n"}
+	src := onceSource{memorySource: files, seen: map[string]*model.Index{}}
+	p := Link(stdcontext.Background(), Request{Flake: flakePath}, src)
+	if !p.Fresh(src) {
+		t.Fatal("a project is stale right after its link")
+	}
+	files[later] = "{ }\n"
+	delete(src.seen, later)
+	if p.Fresh(src) {
+		t.Error("the project stays fresh when a file it wanted appears")
+	}
+}
+
+func TestTheProjectStopsAtItsSizeBudget(t *testing.T) {
+	t.Parallel()
+
+	const flakePath = "/w/flake.nix"
+	src := memorySource{}
+	var imports strings.Builder
+	body := "{ pad = \"" + strings.Repeat("x", 1<<20) + "\"; }\n"
+	for i := range 2 * maxProjectBytes / (1 << 20) {
+		name := "/w/f" + strconv.Itoa(i) + ".nix"
+		src[name] = body
+		imports.WriteString(" ./f" + strconv.Itoa(i) + ".nix")
+	}
+	src[flakePath] = "{ outputs = { self }: { imports = [" + imports.String() + " ]; }; }\n"
+	p := Link(stdcontext.Background(), Request{Flake: flakePath}, src)
+	if !p.Truncated() {
+		t.Error("a project larger than the budget is not marked as truncated")
+	}
+	if p.bytes > maxProjectBytes+2*maxLoadBatch*(1<<20) {
+		t.Errorf("the project holds %d bytes", p.bytes)
+	}
+}
+
+type onceSource struct {
+	memorySource
+	seen map[string]*model.Index
+}
+
+func (s onceSource) LoadAll(paths []string) []*model.Index {
+	out := make([]*model.Index, len(paths))
+	for i, path := range paths {
+		if _, known := s.seen[path]; !known {
+			s.seen[path] = s.memorySource.LoadAll([]string{path})[0]
+		}
+		out[i] = s.seen[path]
+	}
+	return out
 }

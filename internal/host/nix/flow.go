@@ -83,7 +83,7 @@ func (a *attrs) flowsFrom(name string, leaf syntax.Attr, value syntax.Expr) {
 		a.direct = append(a.direct, value)
 		return
 	}
-	a.sources[name] = append(a.sources[name], flowSource{expr: value})
+	a.source(name, flowSource{expr: value})
 }
 
 func (b *symbolTable) openable(target syntax.Expr) bool {

@@ -18,6 +18,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/editorconfig"
 	"github.com/stubbedev/shell-lsp/internal/hadolint"
+	"github.com/stubbedev/shell-lsp/internal/hostnav"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/manpage"
@@ -84,22 +85,25 @@ const (
 )
 
 type Server struct {
-	conn        *jsonrpc.Conn
-	version     string
-	logger      *slog.Logger
-	docs        *docstore.Store
-	snapshots   *snapshotCache
-	warming     *coalescer
-	outbound    *coalescer
-	delivery    diagnosticDelivery
-	commandDocs commandDocs
-	prefetch    *prefetcher
-	environment shellEnvironment
-	workspace   *workspace.Workspace
-	semantic    *semanticCache
-	bats        *batsResults
-	graphs      hostGraphs
-	nixEval     nixEvaluation
+	conn         *jsonrpc.Conn
+	version      string
+	logger       *slog.Logger
+	docs         *docstore.Store
+	snapshots    *snapshotCache
+	warming      *coalescer
+	outbound     *coalescer
+	delivery     diagnosticDelivery
+	commandDocs  commandDocs
+	prefetch     *prefetcher
+	environment  shellEnvironment
+	workspace    *workspace.Workspace
+	semantic     *semanticCache
+	bats         *batsResults
+	graphs       hostGraphs
+	projects     *hostnav.Projects
+	releasing    memoryRelease
+	linkPatience time.Duration
+	nixEval      nixEvaluation
 
 	mu             sync.Mutex
 	phase          phase
@@ -136,6 +140,7 @@ func New(conn *jsonrpc.Conn, version string, process Process) *Server {
 		process:      process,
 		logger:       slog.New(slog.NewTextHandler(os.Stderr, nil)),
 		docs:         docs,
+		projects:     hostnav.NewProjects(),
 		snapshots:    newSnapshotCache(docs.Has),
 		warming:      newCoalescer(),
 		outbound:     newCoalescer(),
@@ -155,6 +160,7 @@ func New(conn *jsonrpc.Conn, version string, process Process) *Server {
 	s.usePages(manpage.NewLookup(process.ManPath, process.Path))
 	s.delivery = pullDelivery{server: s}
 	s.workspace = newWorkspace(s)
+	s.projects.OnDrained(s.releasing.schedule)
 	s.registerHandlers()
 	return s
 }

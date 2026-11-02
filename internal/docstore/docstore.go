@@ -438,11 +438,14 @@ func codeUnits(r rune, size int, enc Encoding) uint32 {
 }
 
 type View struct {
+	revision uint64
 	encoding Encoding
 	docs     map[string]*Document
 }
 
 func (v *View) Encoding() Encoding { return v.encoding }
+
+func (v *View) Revision() uint64 { return v.revision }
 
 func (v *View) Positions(d *Document) Positions { return d.Positions(v.encoding) }
 
@@ -482,7 +485,7 @@ func (s *Store) update(fn func(next *View) error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	current := s.view.Load()
-	next := &View{encoding: current.encoding, docs: maps.Clone(current.docs)}
+	next := &View{encoding: current.encoding, revision: current.revision + 1, docs: maps.Clone(current.docs)}
 	if err := fn(next); err != nil {
 		return err
 	}

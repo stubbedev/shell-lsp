@@ -14,7 +14,7 @@ func (p *Project) incomplete() string {
 	case p.failure != "":
 		return p.failure
 	case p.truncated:
-		return fmt.Sprintf("the project has more than %d files, so not every reader is known", maxProjectFiles)
+		return fmt.Sprintf("the project has more than %d files or %d bytes of source, so not every reader is known", maxProjectFiles, maxProjectBytes)
 	case p.scanCut:
 		return "the workspace scan stopped before it saw every file, so not every file that imports this one is known"
 	}
@@ -59,6 +59,9 @@ func (p *Project) Refusal(file, symbol int) (string, bool) {
 	p.readEscapes()
 	if spaces := p.spacesOf(model.Home{File: file, Scope: sym.Scope}, sym.Name); len(spaces) > 0 {
 		for _, s := range spaces {
+			if p.foreignMember(s, sym.Name) {
+				return fmt.Sprintf("`%s` is also declared by a dependency in the Nix store, which is not this project's to change", sym.Name), true
+			}
 			if reason := p.spaceRefusal(s, sym.Name); reason != "" {
 				return reason, true
 			}
@@ -70,6 +73,10 @@ func (p *Project) Refusal(file, symbol int) (string, bool) {
 		return p.formalRefusal(flowLambda{unit: u, fn: o.set.lambda}, sym.Name)
 	}
 	return p.fileAttrRefusal(file, o)
+}
+
+func (p *Project) foreignMember(s *space, name string) bool {
+	return slices.ContainsFunc(s.members, func(h model.Home) bool { return p.foreign[h.File] && p.holds(h, name) })
 }
 
 func (p *Project) spaceRefusal(s *space, name string) string {
@@ -277,6 +284,7 @@ func (p *Project) flakeLockFile() (flakeLock, bool) {
 	if !p.lockRead {
 		p.lockRead = true
 		if data, err := p.source.Read(filepath.Join(p.flakeDir, lockFile)); err == nil {
+			p.lockText = string(data)
 			if lock, ok := parseFlakeLock(data); ok {
 				p.lock = &lock
 			}

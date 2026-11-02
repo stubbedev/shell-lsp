@@ -24,7 +24,7 @@ func (g *Group) Findings() []lint.Finding {
 		used[t] = true
 	}
 	out := slices.Clone(ix.Findings)
-	out = append(out, g.Module.Findings(g.self, checks, used)...)
+	out = append(out, g.Module.Findings(g.selfAt(), checks, used)...)
 	for _, inc := range g.missing {
 		out = append(out, model.MissingInclude(checks, inc))
 	}
@@ -346,7 +346,7 @@ func (g *Group) Complete(offset int) []Item {
 	for _, kind := range expect.Kinds {
 		for f, ix := range module.Files {
 			for _, s := range ix.Symbols {
-				visible := s.Scope == model.Global || f == g.self && module == g.Module && s.Scope == expect.Scope
+				visible := s.Scope == model.Global || f == g.selfAt() && module == g.Module && s.Scope == expect.Scope
 				if s.Kind == kind && visible {
 					add(Item{Label: s.Name, Kind: s.Kind, Detail: s.Detail, Doc: s.Doc})
 				}
@@ -390,7 +390,7 @@ func (g *Group) Links() []Link {
 		}
 	}
 	for _, r := range ix.Refs {
-		if r.Kind != model.KindTarget || r.Owner < 0 || g.Module.Resolve(g.self, r).Found() {
+		if r.Kind != model.KindTarget || r.Owner < 0 || g.Module.Resolve(g.selfAt(), r).Found() {
 			continue
 		}
 		if path, ok := g.prerequisite(r.Name); ok {

@@ -124,6 +124,13 @@ func (t *Table) Binder(node syntax.Node) (*Def, bool) {
 
 func (t *Table) Uses() []Use { return t.uses }
 
+func (t *Table) ForgetUses() {
+	t.uses = nil
+	for _, d := range t.defs {
+		d.uses = nil
+	}
+}
+
 func (t *Table) Defs() []*Def { return t.defs }
 
 func (t *Table) Duplicates() []Duplicate { return t.duplicates }

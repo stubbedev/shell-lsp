@@ -16,7 +16,9 @@ import (
 )
 
 const (
-	maxProjectFiles = 8192
+	maxProjectFiles = 4096
+	maxProjectBytes = 8 << 20
+	maxLoadBatch    = 256
 	maxForeignFiles = 256
 	maxFlowRounds   = 8
 	maxSpaceDepth   = 32
@@ -40,6 +42,7 @@ type Request struct {
 	Failure  string
 	Home     string
 	ScanCut  bool
+	Shallow  bool
 }
 
 type flowCaller struct {
@@ -59,6 +62,8 @@ type Project struct {
 	trees  map[string][]string
 
 	truncated bool
+	shallow   bool
+	bytes     int
 	failure   string
 	scanCut   bool
 	home      string
@@ -72,6 +77,9 @@ type Project struct {
 	outputs   *syntax.Lambda
 	lock      *flakeLock
 	lockRead  bool
+	lockText  string
+	watched   []string
+	absent    []string
 
 	memo      map[syntax.Expr][]flowValue
 	visiting  map[syntax.Expr]bool
@@ -141,12 +149,14 @@ func Link(ctx stdcontext.Context, req Request, source Source) *Project {
 	p := &Project{
 		ctx:          ctx,
 		source:       source,
+		memo:         map[syntax.Expr][]flowValue{},
 		files:        map[*symbolTable]int{},
 		byPath:       map[string]int{},
 		tried:        map[string]bool{},
 		trees:        map[string][]string{},
 		failure:      req.Failure,
 		scanCut:      req.ScanCut,
+		shallow:      req.Shallow,
 		home:         req.Home,
 		foreign:      map[int]bool{},
 		applying:     map[*space]bool{},
@@ -162,7 +172,10 @@ func Link(ctx stdcontext.Context, req Request, source Source) *Project {
 		escapedSets:  map[*attrs]bool{},
 	}
 	p.inputs = p.newSpace(nil, inputsAttr, inputsRole)
-	next := p.add(req.SelfPath, req.Self)
+	var next []wantedFile
+	if req.Self != nil {
+		next = p.add(req.SelfPath, req.Self)
+	}
 	for _, root := range req.Roots {
 		next = append(next, wantedFile{path: root})
 	}
@@ -191,13 +204,20 @@ func standalone(ix *model.Index) *Project {
 	return Link(stdcontext.Background(), Request{Self: ix}, localSource{})
 }
 
+func Unlinked(ix *model.Index, path, reason string) *Project {
+	return Link(stdcontext.Background(), Request{Self: ix, SelfPath: path, Failure: reason}, localSource{})
+}
+
 func (p *Project) Fresh(source Source) bool {
 	p.begin()
 	defer p.mu.Unlock()
-	for i, ix := range source.LoadAll(p.paths[1:]) {
-		if ix != p.units[i+1].ix {
+	for i, ix := range source.LoadAll(p.watched) {
+		if ix != p.units[p.byPath[p.watched[i]]].ix {
 			return false
 		}
+	}
+	if slices.ContainsFunc(source.LoadAll(p.absent), func(ix *model.Index) bool { return ix != nil }) {
+		return false
 	}
 	for root, files := range p.trees {
 		listed, err := source.Tree(root)
@@ -205,7 +225,32 @@ func (p *Project) Fresh(source Source) bool {
 			return false
 		}
 	}
-	return true
+	if !p.lockRead {
+		return true
+	}
+	lock, err := source.Read(filepath.Join(p.flakeDir, lockFile))
+	if err != nil {
+		return p.lockText == ""
+	}
+	return string(lock) == p.lockText
+}
+
+func MaxProjectBytes() int64 { return maxProjectBytes }
+
+func (p *Project) Truncated() bool { return p.truncated }
+
+func (p *Project) observe() {
+	for i, path := range p.paths {
+		if path != "" && !p.foreign[i] {
+			p.watched = append(p.watched, path)
+		}
+	}
+	for path := range p.tried {
+		if _, known := p.byPath[path]; !known && !InStore(path) {
+			p.absent = append(p.absent, path)
+		}
+	}
+	slices.Sort(p.absent)
 }
 
 func (p *Project) Indexes() []*model.Index {
@@ -223,14 +268,18 @@ func (p *Project) add(path string, ix *model.Index) []wantedFile {
 	}
 	u := r.unit
 	p.files[u] = len(p.units)
+	p.bytes += len(u.f.src)
 	p.units = append(p.units, u)
 	p.paths = append(p.paths, path)
 	if path == "" {
 		return nil
 	}
 	p.byPath[path] = p.files[u]
-	if strings.HasPrefix(path, storeDirectory+"/") {
+	if InStore(path) {
 		p.foreign[p.files[u]] = true
+		return nil
+	}
+	if p.shallow {
 		return nil
 	}
 	return p.edges(u, path)
@@ -302,34 +351,42 @@ func (p *Project) resolve(u *symbolTable, path *syntax.Path) string {
 
 func (p *Project) closure(level []wantedFile) {
 	for len(level) > 0 && p.ctx.Err() == nil {
-		var wanted []wantedFile
-		var paths []string
+		wanted := make([]wantedFile, 0, len(level))
 		for _, w := range level {
 			if !p.tried[w.path] {
 				p.tried[w.path] = true
 				if _, known := p.byPath[w.path]; !known {
 					wanted = append(wanted, w)
-					paths = append(paths, w.path)
 				}
 			}
 		}
+		if len(p.units)-len(p.foreign)+len(wanted) > 2*maxProjectFiles {
+			p.truncated = true
+			return
+		}
 		var next []wantedFile
-		for i, ix := range p.source.LoadAll(paths) {
-			if ix == nil {
-				if wanted[i].fallback != "" {
-					next = append(next, wantedFile{path: wanted[i].fallback})
-				}
-				continue
+		for batch := range slices.Chunk(wanted, maxLoadBatch) {
+			paths := make([]string, len(batch))
+			for i, w := range batch {
+				paths[i] = w.path
 			}
-			if strings.HasPrefix(wanted[i].path, storeDirectory+"/") {
-				if len(p.foreign) >= maxForeignFiles {
+			for i, ix := range p.source.LoadAll(paths) {
+				if ix == nil {
+					if batch[i].fallback != "" {
+						next = append(next, wantedFile{path: batch[i].fallback})
+					}
 					continue
 				}
-			} else if len(p.units)-len(p.foreign) >= maxProjectFiles {
-				p.truncated = true
-				return
+				if InStore(batch[i].path) {
+					if len(p.foreign) >= maxForeignFiles {
+						continue
+					}
+				} else if len(p.units)-len(p.foreign) >= maxProjectFiles || p.bytes >= maxProjectBytes {
+					p.truncated = true
+					return
+				}
+				next = append(next, p.add(batch[i].path, ix)...)
 			}
-			next = append(next, p.add(wanted[i].path, ix)...)
 		}
 		level = next
 	}
@@ -345,10 +402,10 @@ func (p *Project) settle() {
 			p.flakeRound()
 		}
 		for _, kinds := range scanOrder {
-			p.memo = map[syntax.Expr][]flowValue{}
-			for _, u := range p.units {
+			clear(p.memo)
+			for i, u := range p.units {
 				for _, c := range u.flowCalls {
-					if slices.Contains(kinds, c.kind) && p.ctx.Err() == nil {
+					if slices.Contains(kinds, c.kind) && p.ctx.Err() == nil && (!p.foreign[i] || p.foreignScanned(u, c)) {
 						p.scan(u, c)
 					}
 				}
@@ -366,8 +423,20 @@ func (p *Project) settle() {
 		p.failure = cmp.Or(p.failure, fmt.Sprintf("following values across files did not settle within %d rounds", maxFlowRounds))
 	}
 	p.clearDerived()
+	p.observe()
 	p.settled = true
 	p.ctx = nil
+}
+
+func (p *Project) foreignScanned(u *symbolTable, c flowCall) bool {
+	switch c.kind {
+	case callImport, callAuto, callFix:
+		return true
+	case callLocal:
+		return u.ownFunction(syntax.Unparenthesized(c.call.Fn))
+	case callMkFlake, callRoot, callMapAttrs, callWithSystem:
+	}
+	return false
 }
 
 func (p *Project) enter(v flowValue) bool {
@@ -401,7 +470,7 @@ func compactHomes(homes []model.Home) []model.Home {
 
 func (p *Project) clearDerived() {
 	p.steps = 0
-	p.memo = map[syntax.Expr][]flowValue{}
+	clear(p.memo)
 	p.overlayValues = nil
 	p.scriptMemo = map[sinkKey]string{}
 	p.envMemo = map[sinkKey]bool{}
@@ -470,14 +539,14 @@ func (p *Project) bindParam(fn flowLambda, values []flowValue) {
 func (p *Project) applyBinding(u *symbolTable, values []flowValue, args []syntax.Expr) {
 	for _, arg := range args {
 		given := p.eval(u, arg)
-		var next []flowValue
+		var next flowValues
 		for _, v := range values {
 			if fn, ok := v.(flowLambda); ok {
 				p.bindParam(fn, given)
-				next = union(next, p.eval(fn.unit, fn.fn.Body))
+				next.add(p.eval(fn.unit, fn.fn.Body))
 			}
 		}
-		values = next
+		values = next.list
 	}
 }
 
@@ -512,11 +581,13 @@ func (p *Project) scan(u *symbolTable, c flowCall) {
 }
 
 func (p *Project) scanImport(u *symbolTable, c flowCall) {
-	if at, ok := p.resolvedArg(u, c); ok {
-		i, known := p.fileIndex(at)
-		if known && c.kind == callImport {
-			p.sites[i] = append(p.sites[i], c.closed)
-		}
+	at, resolved := p.resolvedArg(u, c)
+	i, known := p.fileIndex(at)
+	if p.foreign[p.files[u]] && !known {
+		return
+	}
+	if resolved && known && c.kind == callImport {
+		p.sites[i] = append(p.sites[i], c.closed)
 	}
 	values := p.importValue(u, c.call.Args[c.path])
 	for _, v := range values {
@@ -552,9 +623,9 @@ func (p *Project) resolvedArg(u *symbolTable, c flowCall) (string, bool) {
 }
 
 func (p *Project) scanMapper(u *symbolTable, args []syntax.Expr) {
-	elements := []flowValue{}
+	elements := flowValues{list: []flowValue{}}
 	for _, v := range p.eval(u, args[1]) {
-		elements = union(elements, p.children(v))
+		elements.add(p.children(v))
 	}
 	for _, v := range p.eval(u, args[0]) {
 		name, ok := v.(flowLambda)
@@ -563,7 +634,7 @@ func (p *Project) scanMapper(u *symbolTable, args []syntax.Expr) {
 		}
 		for _, inner := range p.eval(name.unit, name.fn.Body) {
 			if fn, ok := inner.(flowLambda); ok {
-				p.bindParam(fn, elements)
+				p.bindParam(fn, elements.list)
 			}
 		}
 	}
@@ -644,7 +715,7 @@ func (p *Project) shellHomes(at model.Home, env environment, name string) []mode
 }
 
 func (p *Project) holds(h model.Home, name string) bool {
-	return slices.ContainsFunc(p.units[h.File].ix.Symbols, func(s model.Symbol) bool { return s.Scope == h.Scope && s.Name == name })
+	return p.units[h.File].ix.Binds(h.Scope, name)
 }
 
 func (p *Project) sessionHomes(name string) []model.Home {
@@ -708,11 +779,11 @@ func (p *Project) Installable(path []string) []model.Home {
 	for _, prefix := range installablePrefixes {
 		values := roots
 		for _, attr := range prefix {
-			var next []flowValue
+			var next flowValues
 			for _, v := range p.selectAll(values, attr) {
-				next = union(next, p.collapsed(v))
+				next.add(p.collapsed(v))
 			}
-			values = next
+			values = next.list
 		}
 		for _, attr := range path[:len(path)-1] {
 			values = p.selectAll(values, attr)
@@ -770,15 +841,15 @@ func (p *Project) slotValues(u *symbolTable, slot flowSlot) []flowValue {
 	if slot.call != nil {
 		return p.calleeAt(u, slot.call, slot.arg)
 	}
-	var out []flowValue
+	var out flowValues
 	for _, target := range slot.targets {
 		values := p.eval(u, target)
 		for _, name := range slot.path {
 			values = p.selectAll(values, name)
 		}
-		out = union(out, values)
+		out.add(values)
 	}
-	return out
+	return out.list
 }
 
 func (p *Project) calleeAt(u *symbolTable, call *syntax.Apply, arg int) []flowValue {

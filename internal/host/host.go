@@ -73,6 +73,8 @@ func analyzeNix(text string) analysis {
 	return analysis{projection: a.Map, detection: a.Detection, index: a.Index, expect: a.Expect, invocation: a.Invocation, enclosing: a.Enclosing, format: func() (string, error) { return nixformat.Format(text) }, nix: a.Document()}
 }
 
+func NixIncludes(text string) []model.Include { return nix.Includes(text) }
+
 func embedHost(name string) (func(string) nix.Embedding, bool) {
 	l, ok := FromName(name)
 	if !ok || l == Nix {
@@ -311,6 +313,15 @@ func (l Language) Format(text string) (string, error) {
 		panic("host: " + l.String() + " has no formatter")
 	}
 	return definitions[l].formatter(text)
+}
+
+func NixStoreFile(path string) bool { return nix.InStore(path) }
+
+func ProjectDependency(doc *docstore.Document) Script {
+	a := nix.AnalyzeDependency(doc.Text())
+	script := projectedScript(doc, a.Map, a.Detection)
+	script.Native = &Native{Language: Nix, Index: a.Index, expect: a.Expect, invocation: a.Invocation, enclosing: a.Enclosing, format: func() (string, error) { return nixformat.Format(doc.Text()) }, nix: a.Document()}
+	return script
 }
 
 func (l Language) Project(doc *docstore.Document) Script {

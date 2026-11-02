@@ -263,6 +263,9 @@ func (s *Server) workspaceFiles(ctx context.Context, docs *docstore.View, u urge
 		seen[file.URI] = true
 		files = append(files, file)
 	}
+	if u == background {
+		paths = slices.DeleteFunc(paths, nixPath)
+	}
 	loaded, err := s.workspace.LoadAll(ctx, paths, u.workers(), report)
 	if err != nil {
 		return nil, err

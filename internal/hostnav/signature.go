@@ -57,7 +57,7 @@ func (g *Group) ShellSignature(offset int) (assist.Signature, bool) {
 }
 
 func (g *Group) signatureOf(inv model.Invocation) (assist.Signature, bool) {
-	res := g.Module.Resolve(g.self, model.Ref{Name: inv.Name, Kind: inv.Kind, Scope: inv.Scope, Qualifier: inv.Qualifier})
+	res := g.Module.Resolve(g.selfAt(), model.Ref{Name: inv.Name, Kind: inv.Kind, Scope: inv.Scope, Qualifier: inv.Qualifier})
 	switch {
 	case res.Builtin != nil:
 		b := res.Builtin

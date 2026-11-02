@@ -75,7 +75,7 @@ func (g *Group) namesOf(kind model.Kind, at int) []string {
 	var out []string
 	for f, ix := range g.Module.Files {
 		for _, s := range ix.Symbols {
-			if s.Kind.Namespace() == ns && (s.Scope == model.Global || f == g.self && s.Scope == scope) {
+			if s.Kind.Namespace() == ns && (s.Scope == model.Global || f == g.selfAt() && s.Scope == scope) {
 				out = append(out, s.Name)
 			}
 		}

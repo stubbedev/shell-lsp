@@ -42,6 +42,27 @@ type attrs struct {
 	lambda  *syntax.Lambda
 }
 
+func (a *attrs) name(name string, e entry) {
+	if a.names == nil {
+		a.names = map[string]entry{}
+	}
+	a.names[name] = e
+}
+
+func (a *attrs) read(name string) {
+	if a.reads == nil {
+		a.reads = map[string]bool{}
+	}
+	a.reads[name] = true
+}
+
+func (a *attrs) source(name string, src flowSource) {
+	if a.sources == nil {
+		a.sources = map[string][]flowSource{}
+	}
+	a.sources[name] = append(a.sources[name], src)
+}
+
 func (a *attrs) closed() bool {
 	for ; a != nil; a = a.parent {
 		if a.escaped {
@@ -148,17 +169,14 @@ func (b *symbolTable) environment(env environment) model.Scope {
 
 func (b *symbolTable) fresh(parent *attrs, kind model.Kind) *attrs {
 	return &attrs{
-		id:      b.newScope(),
-		kind:    kind,
-		parent:  parent,
-		names:   map[string]entry{},
-		kids:    map[string]*attrs{},
-		reads:   map[string]bool{},
-		sources: map[string][]flowSource{},
+		id:     b.newScope(),
+		kind:   kind,
+		parent: parent,
 	}
 }
 
 func (b *symbolTable) build() {
+	b.ix.Refs = slices.Grow(b.ix.Refs, len(b.f.table.Uses()))
 	b.expr(b.f.tree.Root, model.NoParent)
 	for _, stray := range b.f.tree.Stray {
 		b.expr(stray, model.NoParent)
@@ -172,6 +190,15 @@ func (b *symbolTable) build() {
 	b.candidates = b.wrapperCandidates()
 	b.reads, b.calls = nil, nil
 	b.publish()
+}
+
+func (b *symbolTable) compact() {
+	b.entries, b.symbolOf, b.statements, b.consumed = nil, nil, nil, nil
+	b.loaded, b.selected, b.letAlias, b.exports, b.envScopes = nil, nil, nil, nil, nil
+	b.paths = nil
+	b.ix.Symbols = slices.Clone(b.ix.Symbols)
+	b.ix.Refs = slices.Clone(b.ix.Refs)
+	b.owners = slices.Clone(b.owners)
 }
 
 func (b *symbolTable) publish() {
@@ -242,7 +269,7 @@ func (b *symbolTable) exportExtra(id model.Scope, set *attrs, name string, selec
 		Parent: model.NoParent, Doc: doc, Exported: true, Hidden: true, Passive: true,
 		Detail: b.f.src[selection.Start:selection.End],
 	}, owner{set: set})
-	set.names[name] = entry{scope: set.id, kind: model.KindVariable}
+	set.name(name, entry{scope: set.id, kind: model.KindVariable})
 }
 
 func (b *symbolTable) expr(root syntax.Node, parent int) {
@@ -366,6 +393,9 @@ func (b *symbolTable) child(of *attrs, attr syntax.Attr, name string) *attrs {
 	kid, ok := of.kids[name]
 	if !ok {
 		kid = b.fresh(of, model.KindAttribute)
+		if of.kids == nil {
+			of.kids = map[string]*attrs{}
+		}
 		of.kids[name] = kid
 	}
 	if def, ok := b.f.table.Binder(attr); ok {
@@ -394,7 +424,7 @@ func (b *symbolTable) bind(into *attrs, attr syntax.Attr, name string, stmt synt
 			e.kind = model.KindVariable
 			b.extendShell(exported.scope, into.id)
 		}
-		into.names[name] = e
+		into.name(name, e)
 	}
 	def, _ := b.f.table.Binder(attr)
 	if def != nil {
@@ -432,7 +462,7 @@ func (b *symbolTable) inherit(stmt *syntax.Inherit, into *attrs, parent int) {
 			into.dynamic = true
 			continue
 		}
-		into.sources[name] = append(into.sources[name], flowSource{stmt: stmt, attr: attr})
+		into.source(name, flowSource{stmt: stmt, attr: attr})
 		if i, bound := b.bind(into, attr, name, stmt, into.kind, parent); bound {
 			b.ix.Symbols[i].Rewrite = rebound(b.f.src, stmt, attr, name)
 		}
@@ -446,14 +476,14 @@ func (b *symbolTable) lambda(l *syntax.Lambda, parent int) {
 	switch p := l.Param.(type) {
 	case *syntax.IdentParam:
 		b.parameter(into, p.Name, p.Span(), parent)
-		into.names[p.Name.Name] = entry{scope: into.id, kind: model.KindParameter}
+		into.name(p.Name.Name, entry{scope: into.id, kind: model.KindParameter})
 	case *syntax.PatternParam:
 		if p.Alias != nil && p.AliasFirst {
 			b.alias(into, p.Alias, parent)
 		}
 		for _, formal := range p.Formals {
 			b.parameter(into, formal.Name, formal.Span(), parent)
-			into.names[formal.Name.Name] = entry{scope: into.id, kind: model.KindParameter}
+			into.name(formal.Name.Name, entry{scope: into.id, kind: model.KindParameter})
 		}
 		if p.Alias != nil && !p.AliasFirst {
 			b.alias(into, p.Alias, parent)
@@ -556,7 +586,7 @@ func (b *symbolTable) follow(target syntax.Expr, read syntax.Expr, path syntax.A
 			return
 		}
 		if set != nil {
-			set.reads[name] = true
+			set.read(name)
 			if e, known := set.names[name]; known {
 				b.ref(name, e, nameSpan(attr), nil)
 				set = set.kids[name]
@@ -591,7 +621,7 @@ func (b *symbolTable) inheritedFrom(stmt *syntax.Inherit) {
 			set.escaped = true
 			continue
 		}
-		set.reads[name] = true
+		set.read(name)
 		e, known := set.names[name]
 		if !known {
 			continue
@@ -639,7 +669,7 @@ func (b *symbolTable) throughWith(u scope.Use) {
 			b.readUse(u, entry{scope: b.withSlot(withs[i:]), kind: model.KindAttribute})
 			return
 		}
-		set.reads[u.Name] = true
+		set.read(u.Name)
 		if e, known := set.names[u.Name]; known {
 			b.readUse(u, e)
 			return
