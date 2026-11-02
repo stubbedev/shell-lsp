@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 )
 
@@ -163,5 +164,46 @@ func TestASetThatHoldsItselfIsCut(t *testing.T) {
 	p := Link(Request{Self: a.Index}, localSource{})
 	if reason := p.incomplete(); !strings.Contains(reason, "deeper") {
 		t.Errorf("incomplete = %q", reason)
+	}
+}
+
+func TestRebasedStringsFollowAnEdit(t *testing.T) {
+	t.Parallel()
+
+	const before = "a ''one'' b ''two'' c"
+	proven := []ProvenString{{Start: strings.Index(before, "''one"), Writer: "w"}, {Start: strings.Index(before, "''two"), Writer: "w"}}
+	for _, tt := range []struct {
+		name, after string
+		want        []int
+	}{
+		{"nothing changed", before, []int{2, 12}},
+		{"before both", "xx a ''one'' b ''two'' c", []int{5, 15}},
+		{"inside the first", "a ''onexx'' b ''two'' c", []int{2, 14}},
+		{"after both", "a ''one'' b ''two'' cxx", []int{2, 12}},
+		{"over the first", "axx b ''two'' c", []int{6}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			var got []int
+			for _, s := range RebasedStrings(proven, before, tt.after) {
+				got = append(got, s.Start)
+			}
+			if !slices.Equal(got, tt.want) {
+				t.Errorf("starts = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestProjectedStringsKeepTheirWriter(t *testing.T) {
+	t.Parallel()
+
+	src := "wrapped ''\n  echo one\n''\n"
+	a, ok := ProjectedStrings(src, []ProvenString{{Start: strings.Index(src, "''"), Writer: "writeDash"}})
+	if !ok || a.Detection.Dialect != dialect.Dash {
+		t.Errorf("detection = %+v, %v", a.Detection, ok)
+	}
+	if _, ok := ProjectedStrings(src, []ProvenString{{Start: strings.Index(src, "''"), Writer: "writeScript"}}); ok {
+		t.Error("writeScript without a shebang projected a string")
 	}
 }

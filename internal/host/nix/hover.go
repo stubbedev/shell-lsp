@@ -63,65 +63,70 @@ func (d *Document) builtinHover(span syntax.Span) (Hover, bool) {
 	if len(chain) == 0 {
 		return Hover{}, false
 	}
-	ev := newEvaluator(d.tree, d.table, chain, NoFiles)
-	v, ok := ev.named(chain)
-	if !ok || v.kind == setValue || v.kind == lambdaValue || v.kind == unknownValue {
+	b, ok := builtinOf(newReading(d, chain, NoFiles).named(chain))
+	if !ok {
 		return Hover{}, false
-	}
-	b := v.builtin
-	if v.kind == builtinsValue {
-		b, _ = builtins.Lookup(builtinsName)
 	}
 	return Hover{Markdown: hoverFence + builtinSignature(b) + "\n```\n\n" + b.Doc + "\n\n" + arity(b), Span: span}, true
 }
 
-func (ev *evaluator) named(chain []syntax.Node) (value, bool) {
-	leaf := chain[len(chain)-1]
-	switch leaf := leaf.(type) {
-	case *syntax.Ident:
-		ref, ok := ev.table.Of(leaf)
-		if !ok || ref.Kind == scope.Definition {
-			return value{}, false
+func builtinOf(values []flowValue) (builtins.Builtin, bool) {
+	for _, v := range values {
+		switch v := v.(type) {
+		case flowBuiltin:
+			return builtins.Lookup(v.name)
+		case flowBuiltins:
+			return builtins.Lookup(builtinsName)
 		}
-		return ev.evalRef(ref, leaf.Name), true
+	}
+	return builtins.Builtin{}, false
+}
+
+func (r *reading) named(chain []syntax.Node) []flowValue {
+	switch leaf := chain[len(chain)-1].(type) {
+	case *syntax.Ident:
+		ref, ok := r.table.Of(leaf)
+		if !ok || ref.Kind == scope.Definition || ref.Kind == scope.Undefined {
+			return nil
+		}
+		p, u := r.linked()
+		return p.evalRef(u, ref, leaf.Name)
 	case *syntax.IdentAttr:
 		if len(chain) < 2 {
-			return value{}, false
+			return nil
 		}
-		return ev.namedAttr(chain[len(chain)-2], leaf)
+		return r.namedAttr(chain[len(chain)-2], leaf)
 	}
-	return value{}, false
+	return nil
 }
 
-func (ev *evaluator) namedAttr(parent syntax.Node, leaf *syntax.IdentAttr) (value, bool) {
-	var target value
-	var path syntax.AttrPath
+func (r *reading) namedAttr(parent syntax.Node, leaf *syntax.IdentAttr) []flowValue {
 	switch parent := parent.(type) {
 	case *syntax.Select:
-		target, path = ev.eval(parent.Target), parent.Path
+		return r.builtinMember(parent.Target, parent.Path, leaf)
 	case *syntax.HasAttr:
-		target, path = ev.eval(parent.Target), parent.Path
+		return r.builtinMember(parent.Target, parent.Path, leaf)
 	case *syntax.Inherit:
 		if parent.From != nil {
-			return ev.builtinMember(ev.eval(parent.From.Inner), leaf.Name)
+			return r.builtinMember(parent.From.Inner, syntax.AttrPath{leaf}, leaf)
 		}
-		ref, ok := ev.table.Inherited(leaf)
+		ref, ok := r.table.Inherited(leaf)
 		if !ok || ref.Kind != scope.Global {
-			return value{}, false
+			return nil
 		}
-		return ev.evalRef(ref, leaf.Name), true
-	default:
-		return value{}, false
+		p, u := r.linked()
+		return p.evalRef(u, ref, leaf.Name)
 	}
-	i := slices.IndexFunc(path, func(a syntax.Attr) bool { return a == syntax.Attr(leaf) })
-	return ev.builtinMember(ev.selected(target, path[:i]), leaf.Name)
+	return nil
 }
 
-func (ev *evaluator) builtinMember(owner value, name string) (value, bool) {
-	if owner.kind != builtinsValue {
-		return value{}, false
+func (r *reading) builtinMember(target syntax.Expr, path syntax.AttrPath, leaf *syntax.IdentAttr) []flowValue {
+	p, u := r.linked()
+	i := slices.IndexFunc(path, func(a syntax.Attr) bool { return a == syntax.Attr(leaf) })
+	if !slices.Contains(p.evalPath(u, target, path[:i]), flowValue(flowBuiltins{})) {
+		return nil
 	}
-	return ev.memberNamed(owner, name), true
+	return p.selectFrom(flowBuiltins{}, leaf.Name)
 }
 
 func arity(b builtins.Builtin) string {

@@ -301,13 +301,13 @@ type evaluatedRoot struct {
 	path    []string
 }
 
-func (ev *evaluator) rootOf(chain []syntax.Node, e syntax.Expr, hops int) (evaluatedRoot, bool) {
+func (r *reading) rootOf(chain []syntax.Node, e syntax.Expr, hops int) (evaluatedRoot, bool) {
 	if hops == 0 {
 		return evaluatedRoot{}, false
 	}
 	switch e := syntax.Unparenthesized(e).(type) {
 	case *syntax.Select:
-		root, ok := ev.rootOf(chain, e.Target, hops-1)
+		root, ok := r.rootOf(chain, e.Target, hops-1)
 		names, static := attrNames(e.Path)
 		if !ok || !static {
 			return evaluatedRoot{}, false
@@ -315,14 +315,14 @@ func (ev *evaluator) rootOf(chain []syntax.Node, e syntax.Expr, hops int) (evalu
 		root.path = slices.Concat(root.path, names)
 		return root, true
 	case *syntax.Ident:
-		return ev.identRoot(chain, e, hops)
+		return r.identRoot(chain, e, hops)
 	}
 	return evaluatedRoot{}, false
 }
 
-func (ev *evaluator) identRoot(chain []syntax.Node, id *syntax.Ident, hops int) (evaluatedRoot, bool) {
-	if ref, ok := ev.table.Of(id); ok && ref.Kind == scope.Definition {
-		if root, ok := ev.boundRoot(chain, ref.Def, hops); ok {
+func (r *reading) identRoot(chain []syntax.Node, id *syntax.Ident, hops int) (evaluatedRoot, bool) {
+	if ref, ok := r.table.Of(id); ok && ref.Kind == scope.Definition {
+		if root, ok := r.boundRoot(chain, ref.Def, hops); ok {
 			return root, true
 		}
 	}
@@ -335,7 +335,7 @@ func (ev *evaluator) identRoot(chain []syntax.Node, id *syntax.Ident, hops int) 
 	return evaluatedRoot{}, false
 }
 
-func (ev *evaluator) boundRoot(chain []syntax.Node, d *scope.Def, hops int) (evaluatedRoot, bool) {
+func (r *reading) boundRoot(chain []syntax.Node, d *scope.Def, hops int) (evaluatedRoot, bool) {
 	switch d.Kind {
 	case scope.FormalDef:
 		if d.Name != configFormal && d.Name != optionsFormal {
@@ -343,22 +343,22 @@ func (ev *evaluator) boundRoot(chain []syntax.Node, d *scope.Def, hops int) (eva
 		}
 		return formalRoot(chain, d)
 	case scope.LetDef, scope.RecDef, scope.InheritDef:
-		origins := ev.originsOf(d)
+		origins := r.originsOf(d)
 		if len(origins) != 1 {
 			return evaluatedRoot{}, false
 		}
-		return ev.originRoot(chain, origins[0], hops-1)
+		return r.originRoot(chain, origins[0], hops-1)
 	case scope.ArgDef, scope.AliasDef:
 	}
 	return evaluatedRoot{}, false
 }
 
-func (ev *evaluator) originRoot(chain []syntax.Node, o origin, hops int) (evaluatedRoot, bool) {
+func (r *reading) originRoot(chain []syntax.Node, o origin, hops int) (evaluatedRoot, bool) {
 	switch {
 	case o.assign != nil && o.depth == len(o.assign.Path):
-		return ev.rootOf(chain, o.assign.Value, hops)
+		return r.rootOf(chain, o.assign.Value, hops)
 	case o.inherit != nil && o.inherit.From != nil:
-		root, ok := ev.rootOf(chain, o.inherit.From.Inner, hops)
+		root, ok := r.rootOf(chain, o.inherit.From.Inner, hops)
 		name, static := syntax.AttrName(o.attr)
 		if !ok || !static {
 			return evaluatedRoot{}, false
@@ -452,23 +452,22 @@ func (d *Document) evaluatedHover(span syntax.Span, known Evaluated) (Hover, boo
 	if len(chain) < 2 {
 		return Hover{}, false
 	}
-	ev := newEvaluator(d.tree, d.table, chain, NoFiles)
-	markdown, ok := ev.evaluatedDoc(chain, known)
+	markdown, ok := newReading(d, chain, NoFiles).evaluatedDoc(chain, known)
 	if !ok {
 		return Hover{}, false
 	}
 	return Hover{Markdown: markdown, Span: span}, true
 }
 
-func (ev *evaluator) evaluatedDoc(chain []syntax.Node, known Evaluated) (string, bool) {
+func (r *reading) evaluatedDoc(chain []syntax.Node, known Evaluated) (string, bool) {
 	switch leaf := chain[len(chain)-1].(type) {
 	case *syntax.Ident:
-		ref, ok := ev.table.Of(leaf)
+		ref, ok := r.table.Of(leaf)
 		if !ok || ref.Kind != scope.Dynamic {
 			return "", false
 		}
-		for _, with := range ev.table.Withs(ref.With) {
-			if root, ok := ev.rootOf(chain, with.Scope, maxRootHops); ok && root.nixpkgs {
+		for _, with := range r.table.Withs(ref.With) {
+			if root, ok := r.rootOf(chain, with.Scope, maxRootHops); ok && root.nixpkgs {
 				return packageDoc(known, slices.Concat(root.path, []string{leaf.Name}))
 			}
 		}
@@ -481,20 +480,20 @@ func (ev *evaluator) evaluatedDoc(chain []syntax.Node, known Evaluated) (string,
 			}
 			return optionDoc(known, OptionSite{Class: site.Class, Path: append(slices.Clip(site.Path), leaf.Name)})
 		case *syntax.Select:
-			return ev.selectedDoc(chain, known, parent.Target, parent.Path, leaf)
+			return r.selectedDoc(chain, known, parent.Target, parent.Path, leaf)
 		case *syntax.HasAttr:
-			return ev.selectedDoc(chain, known, parent.Target, parent.Path, leaf)
+			return r.selectedDoc(chain, known, parent.Target, parent.Path, leaf)
 		case *syntax.Inherit:
 			if parent.From != nil {
-				return ev.selectedDoc(chain, known, parent.From.Inner, syntax.AttrPath{leaf}, leaf)
+				return r.selectedDoc(chain, known, parent.From.Inner, syntax.AttrPath{leaf}, leaf)
 			}
 		}
 	}
 	return "", false
 }
 
-func (ev *evaluator) selectedDoc(chain []syntax.Node, known Evaluated, target syntax.Expr, path syntax.AttrPath, leaf syntax.Attr) (string, bool) {
-	root, ok := ev.rootOf(chain, target, maxRootHops)
+func (r *reading) selectedDoc(chain []syntax.Node, known Evaluated, target syntax.Expr, path syntax.AttrPath, leaf syntax.Attr) (string, bool) {
+	root, ok := r.rootOf(chain, target, maxRootHops)
 	if !ok {
 		return "", false
 	}

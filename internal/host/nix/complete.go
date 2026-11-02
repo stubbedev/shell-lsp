@@ -71,7 +71,7 @@ func (a Analysis) Expect(offset int) (model.Expect, bool) {
 }
 
 type cursor struct {
-	*evaluator
+	*reading
 	chain  []syntax.Node
 	word   syntax.Span
 	spelt  string
@@ -91,12 +91,12 @@ func locate(text string, offset int, files Files) (*cursor, bool) {
 		return nil, false
 	}
 	return &cursor{
-		evaluator: newEvaluator(tree, scope.Resolve(tree), chain, files),
-		chain:     chain,
-		word:      word,
-		spelt:     text[word.Start:word.End],
-		prefix:    text[word.Start:offset],
-		known:     NoEvaluation,
+		reading: newReading(&Document{tree: tree, table: scope.Resolve(tree)}, chain, files),
+		chain:   chain,
+		word:    word,
+		spelt:   text[word.Start:word.End],
+		prefix:  text[word.Start:offset],
+		known:   NoEvaluation,
 	}, true
 }
 
@@ -226,8 +226,8 @@ func (c *cursor) names() []Item {
 		}
 	}
 	for _, with := range names.Withs {
-		if v := c.eval(with.Scope); v.kind != unknownValue {
-			out = append(out, c.memberItems(v)...)
+		if v := c.eval(with.Scope); closedValues(v) {
+			out = append(out, memberItems(v)...)
 			continue
 		}
 		out = append(out, c.evaluatedMembers(with.Scope, nil)...)
@@ -312,8 +312,8 @@ func (c *cursor) attribute(leaf *syntax.IdentAttr) []Item {
 		return c.pathMembers(parent.Target, parent.Path, leaf)
 	case *syntax.Inherit:
 		if parent.From != nil {
-			if v := c.eval(parent.From.Inner); v.kind != unknownValue {
-				return c.memberItems(v)
+			if v := c.eval(parent.From.Inner); closedValues(v) {
+				return memberItems(v)
 			}
 			return c.evaluatedMembers(parent.From.Inner, nil)
 		}
@@ -329,8 +329,9 @@ func (c *cursor) attribute(leaf *syntax.IdentAttr) []Item {
 
 func (c *cursor) pathMembers(target syntax.Expr, path syntax.AttrPath, leaf *syntax.IdentAttr) []Item {
 	i := slices.IndexFunc(path, func(a syntax.Attr) bool { return a == syntax.Attr(leaf) })
-	if v := c.selected(c.eval(target), path[:i]); v.kind != unknownValue {
-		return c.memberItems(v)
+	p, u := c.linked()
+	if v := p.evalPath(u, target, path[:i]); closedValues(v) {
+		return memberItems(v)
 	}
 	names, static := attrNames(path[:i])
 	if !static {
@@ -357,19 +358,23 @@ func (c *cursor) passedKeys(set *syntax.AttrSet) []Item {
 	if !ok {
 		return nil
 	}
-	callee := c.evalApplied(site.apply.Fn, site.apply.Args[:site.arg])
-	if callee.kind != lambdaValue {
-		return nil
-	}
-	pattern, ok := callee.lambda.Param.(*syntax.PatternParam)
-	if !ok {
-		return nil
-	}
+	p, u := c.linked()
 	bound := boundKeys(set)
-	out := make([]Item, 0, len(pattern.Formals))
-	for _, f := range pattern.Formals {
-		if !bound[f.Name.Name] {
-			out = append(out, Item{Label: f.Name.Name, Kind: model.KindAttribute, Detail: formalDetail(callee.tree.Text, f), Doc: commentAbove(callee.tree, f.Span().Start)})
+	var out []Item
+	for _, v := range p.calleeAt(u, site.apply, site.arg) {
+		callee, isLambda := v.(flowLambda)
+		if !isLambda {
+			continue
+		}
+		pattern, ok := callee.fn.Param.(*syntax.PatternParam)
+		if !ok {
+			continue
+		}
+		tree := callee.unit.f.tree
+		for _, f := range pattern.Formals {
+			if !bound[f.Name.Name] {
+				out = append(out, Item{Label: f.Name.Name, Kind: model.KindAttribute, Detail: formalDetail(tree.Text, f), Doc: commentAbove(tree, f.Span().Start)})
+			}
 		}
 	}
 	return out
@@ -410,24 +415,36 @@ func boundKeys(set *syntax.AttrSet) map[string]bool {
 	return bound
 }
 
-func (c *cursor) memberItems(v value) []Item {
-	switch v.kind {
-	case builtinsValue:
-		var out []Item
-		for _, b := range builtins.All() {
-			if !strings.HasPrefix(b.Name, builtins.HiddenAliasPrefix) {
-				out = append(out, builtinItem(b))
+func memberItems(values []flowValue) []Item {
+	var out []Item
+	for _, v := range values {
+		switch v := v.(type) {
+		case flowBuiltins:
+			for _, b := range builtins.All() {
+				if !strings.HasPrefix(b.Name, builtins.HiddenAliasPrefix) {
+					out = append(out, builtinItem(b))
+				}
 			}
+		case flowSet:
+			out = append(out, setItems(v)...)
 		}
-		return out
-	case setValue:
-		out := make([]Item, 0, len(v.members))
-		for _, m := range v.members {
-			out = append(out, c.memberItem(m))
-		}
-		return out
 	}
-	return nil
+	return out
+}
+
+func setItems(v flowSet) []Item {
+	var out []Item
+	for _, s := range v.unit.ix.Symbols {
+		if _, named := v.set.names[s.Name]; !named || s.Scope != v.set.id || s.Hidden || s.Kind == model.KindModule {
+			continue
+		}
+		kind := model.KindAttribute
+		if s.Kind == model.KindFunction {
+			kind = model.KindFunction
+		}
+		out = append(out, Item{Label: attrLabel(s.Name), Kind: kind, Detail: s.Detail, Doc: commentAbove(v.unit.f.tree, s.Span.Start)})
+	}
+	return out
 }
 
 func builtinItem(b builtins.Builtin) Item {

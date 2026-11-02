@@ -34,14 +34,18 @@ func SignatureAt(text string, offset int) (Signature, bool) {
 	if !ok {
 		return Signature{}, false
 	}
-	callee := c.eval(site.apply.Fn)
 	head := c.calleeLabel(site.apply.Fn)
-	switch callee.kind {
-	case builtinValue:
-		return builtinCall(head, callee.builtin, site.arg)
-	case lambdaValue:
-		return c.lambdaCall(head, callee, site)
-	case unknownValue, setValue, builtinsValue:
+	for _, callee := range c.eval(site.apply.Fn) {
+		switch callee := callee.(type) {
+		case flowBuiltin:
+			b, known := builtins.Lookup(callee.name)
+			if !known {
+				panic("nix: `" + callee.name + "` is not a builtin")
+			}
+			return builtinCall(head, b, site.arg)
+		case flowLambda:
+			return c.lambdaCall(head, callee, site)
+		}
 	}
 	return Signature{}, false
 }
@@ -142,19 +146,60 @@ type paramGroup struct {
 	formals []*syntax.Formal
 }
 
-func (c *cursor) lambdaCall(head string, callee value, site callSite) (Signature, bool) {
+func (c *cursor) lambdaCall(head string, callee flowLambda, site callSite) (Signature, bool) {
 	var label labelBuilder
 	label.word(head)
 	var groups []paramGroup
-	for lambda := callee.lambda; lambda != nil; {
+	for lambda := callee.fn; lambda != nil; {
 		label.word(" ")
-		groups = append(groups, c.writeParam(&label, callee.tree.Text, lambda.Param))
+		groups = append(groups, c.writeParam(&label, callee.unit.f.src, lambda.Param))
 		lambda, _ = syntax.Unparenthesized(lambda.Body).(*syntax.Lambda)
 	}
 	if site.arg >= len(groups) {
 		return Signature{}, false
 	}
-	return Signature{Label: label.text.String(), Doc: c.clean(callee.doc), Params: label.params, Active: c.activeParam(groups[site.arg], site)}, true
+	return Signature{Label: label.text.String(), Doc: c.clean(c.calleeDoc(callee, site.apply.Fn)), Params: label.params, Active: c.activeParam(groups[site.arg], site)}, true
+}
+
+func (c *cursor) calleeDoc(callee flowLambda, fn syntax.Expr) string {
+	if doc := heldDoc(callee); doc != "" {
+		return doc
+	}
+	id, plain := syntax.Unparenthesized(fn).(*syntax.Ident)
+	if !plain {
+		return ""
+	}
+	ref, ok := c.table.Of(id)
+	if !ok || ref.Kind != scope.Definition {
+		return ""
+	}
+	origins := c.originsOf(ref.Def)
+	if len(origins) == 0 {
+		return ""
+	}
+	return c.originDoc(origins[0])
+}
+
+func heldDoc(callee flowLambda) string {
+	tree := callee.unit.f.tree
+	doc := ""
+	visit := func(n syntax.Node) bool {
+		a, assigned := n.(*syntax.Assign)
+		if !assigned {
+			return doc == ""
+		}
+		for l, ok := syntax.Unparenthesized(a.Value).(*syntax.Lambda); ok; l, ok = syntax.Unparenthesized(l.Body).(*syntax.Lambda) {
+			if l == callee.fn {
+				doc = commentAbove(tree, a.Span().Start)
+				return false
+			}
+		}
+		return doc == ""
+	}
+	for _, root := range slices.Concat([]syntax.Expr{tree.Root}, tree.Stray) {
+		syntax.Inspect(root, visit)
+	}
+	return doc
 }
 
 func (c *cursor) writeParam(label *labelBuilder, text string, param syntax.Param) paramGroup {

@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 )
@@ -165,5 +166,118 @@ func TestNixWrapperAcrossFilesThroughTheServer(t *testing.T) {
 	references := decodeResult[[]lsp.Location](t, p.c.call("textDocument/references", p.params(probes, "expected", 0, `, "context": {"includeDeclaration": true}`)))
 	if len(references) != 2 {
 		t.Errorf("references = %+v", references)
+	}
+}
+
+const (
+	wrapperCapabilities = `"capabilities": {"general": {"positionEncodings": ["utf-16"]}, "textDocument": {"diagnostic": {}}, "workspace": {"diagnostics": {"refreshSupport": true}, "semanticTokens": {"refreshSupport": true}}}`
+	wrapperProbes       = "modules/probes.nix"
+	wrapperBuilder      = "modules/core/builders/probe.nix"
+	wrapperVariable     = "expected variable"
+)
+
+func openWrapperProject(t *testing.T, quiet time.Duration) (*nativeProject, *Server) {
+	t.Helper()
+	files := corpusProject(t, "dendritic")
+	const quoted = `test -e "$expected"`
+	if !strings.Contains(files[wrapperProbes], quoted) {
+		t.Fatalf("%s no longer holds %q", wrapperProbes, quoted)
+	}
+	files[wrapperProbes] = strings.Replace(files[wrapperProbes], quoted, `ls $expected`, 1)
+	var srv *Server
+	p := openNativeProjectWith(t, func(s *Server) {
+		srv = s
+		s.nixEval.strings.quiet = quiet
+	}, wrapperCapabilities, files, wrapperProbes)
+	return p, srv
+}
+
+func (p *nativeProject) awaitNixStringRefresh() {
+	p.t.Helper()
+	p.c.answerServerRequest(diagnosticRefreshMethod)
+	p.c.answerServerRequest(semanticTokensRefreshMethod)
+}
+
+func (p *nativeProject) wrapperFinding() (lsp.Diagnostic, bool) {
+	p.t.Helper()
+	items := pullDiagnostics(p.t, p.c, p.uri(wrapperProbes))
+	i := slices.IndexFunc(items, func(d lsp.Diagnostic) bool { return d.Code == "SC2086" })
+	if i < 0 {
+		return lsp.Diagnostic{}, false
+	}
+	return items[i], true
+}
+
+func (p *nativeProject) wrapperTokens() []string {
+	p.t.Helper()
+	data := decodeResult[lsp.SemanticTokens](p.t, p.c.call("textDocument/semanticTokens/full", `{"textDocument": {"uri": "`+p.uri(wrapperProbes)+`"}}`)).Data
+	return texts(spellTokens(p.t, p.files[wrapperProbes], "utf-16", data))
+}
+
+func holdsWrapperVariable(tokens []string) bool {
+	return slices.ContainsFunc(tokens, func(token string) bool { return strings.HasPrefix(token, wrapperVariable) })
+}
+
+func TestNixWrapperStringInAnotherFileIsShellAfterLinking(t *testing.T) {
+	t.Parallel()
+
+	p, _ := openWrapperProject(t, time.Millisecond)
+	p.awaitNixStringRefresh()
+	finding, found := p.wrapperFinding()
+	if !found {
+		t.Fatal("the proven string has no shell finding")
+	}
+	if want := p.at(wrapperProbes, "$expected", 0).Range.Start; finding.Range.Start != want {
+		t.Errorf("the finding starts at %+v, want %+v", finding.Range.Start, want)
+	}
+	if got := p.wrapperTokens(); !holdsWrapperVariable(got) {
+		t.Errorf("no shell token for the variable in %q", got)
+	}
+}
+
+func TestNixDiagnosticsAndTokensAloneBuildNoProject(t *testing.T) {
+	t.Parallel()
+
+	p, srv := openWrapperProject(t, time.Hour)
+	if _, found := p.wrapperFinding(); found {
+		t.Error("a diagnostics pass proved a string without linking")
+	}
+	if got := p.wrapperTokens(); holdsWrapperVariable(got) {
+		t.Errorf("a tokens pass proved a string without linking: %q", got)
+	}
+	srv.graphs.mu.Lock()
+	graphs := len(srv.graphs.entries)
+	srv.graphs.mu.Unlock()
+	if graphs != 0 {
+		t.Errorf("diagnostics and tokens built %d import graphs", graphs)
+	}
+	if _, _, held := srv.nixEval.strings.of(p.uri(wrapperProbes)); held {
+		t.Error("diagnostics and tokens published a proof")
+	}
+}
+
+func TestNixWrapperStringStopsBeingShellWhenTheOverlayStopsProvingIt(t *testing.T) {
+	t.Parallel()
+
+	p, srv := openWrapperProject(t, time.Millisecond)
+	p.awaitNixStringRefresh()
+	if _, found := p.wrapperFinding(); !found {
+		t.Fatal("the proven string has no shell finding")
+	}
+	const writer = "final.runCommand"
+	if !strings.Contains(p.files[wrapperBuilder], writer) {
+		t.Fatalf("%s no longer holds %q", wrapperBuilder, writer)
+	}
+	stopped := strings.Replace(p.files[wrapperBuilder], writer, "final.describe", 1)
+	p.c.notify("textDocument/didOpen", openLanguageParams(p.uri(wrapperBuilder), "", stopped))
+	p.awaitNixStringRefresh()
+	if _, found := p.wrapperFinding(); found {
+		t.Error("a string no writer reaches keeps its shell finding")
+	}
+	if got := p.wrapperTokens(); holdsWrapperVariable(got) {
+		t.Errorf("a string no writer reaches keeps its shell tokens: %q", got)
+	}
+	if _, _, held := srv.nixEval.strings.of(p.uri(wrapperProbes)); held {
+		t.Error("a proof that no longer holds stays in memory")
 	}
 }

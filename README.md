@@ -755,10 +755,20 @@ The shell and the Nix around it answer for each other:
   only evaluating it would show the Nix, and so is a Nix expression given to
   `nix eval --expr`.
 
-A string passed to a wrapper defined in another file is proven when a request
-reads the project, and then navigation, hover, references and call hierarchy
-answer in it. Its shell is not linted or highlighted, because diagnostics and
-tokens stay within the file.
+A string passed to a wrapper defined in another file is proven by following the
+project, and a keystroke never does that. Navigation, hover, references and call
+hierarchy answer in it as soon as a request reads the project. Its shell is linted
+and highlighted once a background pass has proven it: that pass follows the
+project from each open Nix file that has such a call, one at a time, after 750 ms
+without a change to an open Nix file or after a watched file or a setting changes,
+then asks the client to refresh diagnostics and tokens if the proven strings moved.
+Until then the string reads as plain Nix, and a diagnostics or tokens request on
+its own builds nothing. Between passes a proven string follows edits around it and
+inside it, and one whose opening was edited stops being shell until the next pass.
+These strings report syntax errors and shell findings for open files only, so
+workspace diagnostics of a closed file leave them out. Their findings offer no quick
+fixes, and `SC2154` stays off in them, since the environment a wrapper gives its
+string is not known.
 
 Outside the shell, the Nix language answers too, within a file and across a project:
 

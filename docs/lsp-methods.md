@@ -106,7 +106,7 @@ advertised capability, and that nothing else is handled or advertised.
 | `workspace/semanticTokens/refresh` | sent |  | after settings change |
 | `workspace/inlayHint/refresh` | sent |  | after settings change |
 | `workspace/inlineValue/refresh` | never sent |  | inline values are computed per request |
-| `workspace/diagnostic/refresh` | sent |  | after settings change and after a Bats run |
+| `workspace/diagnostic/refresh` | sent |  | after settings change, after a Bats run, and when a background pass proves shell strings in a Nix file |
 | `workspace/foldingRange/refresh` | never sent |  | folding depends only on the document |
 | `workspace/textDocumentContent/refresh` | never sent |  | the server owns no virtual documents |
 

@@ -21,6 +21,7 @@ const (
 	maxSpaceDepth   = 32
 	maxSpaces       = 1 << 15
 	maxFlowSteps    = 1 << 24
+	maxPeekedFiles  = 16
 	treeExcluded    = "/_"
 )
 
@@ -61,6 +62,8 @@ type Project struct {
 	home      string
 	settled   bool
 	foreign   map[int]bool
+	peek      Files
+	peeks     int
 
 	flakeUnit *symbolTable
 	flakeDir  string
@@ -771,10 +774,10 @@ func (p *Project) slotValues(u *symbolTable, slot flowSlot) []flowValue {
 func (p *Project) calleeAt(u *symbolTable, call *syntax.Apply, arg int) []flowValue {
 	fn := syntax.Unparenthesized(call.Fn)
 	values, skip := []flowValue(nil), 0
-	switch calleeName(fn) {
-	case importName, callPackageName:
+	switch name := calleeName(fn); {
+	case name == importName && u.builtinImport(fn), name == callPackageName:
 		values, skip = p.importValue(u, call.Args[0]), 1
-	case callPackageWithName:
+	case name == callPackageWithName && len(call.Args) > 1:
 		values, skip = p.importValue(u, call.Args[1]), 2
 	default:
 		values = p.eval(u, fn)

@@ -28,6 +28,7 @@ import (
 const (
 	diagnosticsDebounce = 200 * time.Millisecond
 	lintMemoKey         = "lint.report/"
+	nixProvenMemoKey    = "nix.proven/"
 )
 
 type diagnosticReport struct {
@@ -47,11 +48,14 @@ func (s *Server) lintReport(file *workspace.File, settings config.Settings, gene
 	}
 	stamp := s.sourcesStamp(file.Tree)
 	lintSettings := s.lintSettings(file.Path, settings)
-	key := lintMemoKey + strconv.FormatUint(generation, 10) + "/" + lintSettings.RC.Path + "\x00" + lintSettings.RC.Text
-	report := workspace.Memo(file, key, stamp, func() lint.Report {
+	report := workspace.Memo(file, lintKey(lintSettings, generation), stamp, func() lint.Report {
 		return filelint.Check(file, s.navigationEnv(), lintSettings)
 	})
 	return report, stamp
+}
+
+func lintKey(settings filelint.Settings, generation uint64) string {
+	return lintMemoKey + strconv.FormatUint(generation, 10) + "/" + settings.RC.Path + "\x00" + settings.RC.Text
 }
 
 func (s *Server) nearestShellcheckrc(path string) (shellcheckrc.File, bool, error) {
@@ -97,25 +101,55 @@ func (s *Server) diagnoseClosed(file *workspace.File, at docstore.Positions) dia
 func (s *Server) report(file *workspace.File, settings config.Settings, generation uint64, at docstore.Positions, identity string) diagnosticReport {
 	findings, stamp := s.findings(file, settings, generation)
 	tests := s.bats.of(file.URI)
-	items := []lsp.Diagnostic{}
-	for _, variant := range file.Variants() {
-		if !lint.Foreign(variant.Tree, s.lintSettings(file.Path, settings).DialectSource(variant)) {
-			items = append(items, diagnostics.Syntax(variant.Tree, at)...)
-		}
-	}
+	items := s.syntaxItems(file, settings, at)
 	codeDescriptions := s.clientCapabilities().TextDocument.PublishDiagnostics.CodeDescriptionSupport
 	docker, _ := hostnav.HadolintOf(file, s.hadolintConfig(file.Path, settings))
 	items = append(items, diagnostics.Lint(docker.Shell(findings), at, codeDescriptions)...)
 	items = append(items, diagnostics.Bats(tests.placedOn(file.Tree), at)...)
 	if h, ok := hostnav.Of(file); ok {
 		items = append(items, diagnostics.Lint(docker.Host(s.nativeFindings(h, settings, docker)), sourcePositions(file, at.Encoding()), codeDescriptions)...)
-		stamp = hashOf(s.hostStamp(s.docs.View(), h.Language()))
+		proven := s.provenItems(file, settings, generation, at.Encoding(), codeDescriptions)
+		items = append(items, proven.items...)
+		stamp = hashOf(s.hostStamp(s.docs.View(), h.Language()) + "/" + strconv.FormatUint(proven.revision, 10))
 	}
 	return diagnosticReport{
 		version:  file.Doc.Version,
 		resultID: fmt.Sprintf("%s/%d/%d/%d", identity, generation, stamp, tests.revision),
 		items:    items,
 	}
+}
+
+func (s *Server) syntaxItems(file *workspace.File, settings config.Settings, at docstore.Positions) []lsp.Diagnostic {
+	items := []lsp.Diagnostic{}
+	for _, variant := range file.Variants() {
+		if !lint.Foreign(variant.Tree, s.lintSettings(file.Path, settings).DialectSource(variant)) {
+			items = append(items, diagnostics.Syntax(variant.Tree, at)...)
+		}
+	}
+	return items
+}
+
+type provenItems struct {
+	items    []lsp.Diagnostic
+	revision uint64
+}
+
+func (s *Server) provenItems(file *workspace.File, settings config.Settings, generation uint64, enc docstore.Encoding, codeDescriptions bool) provenItems {
+	proof, revision, held := s.nixEval.strings.of(file.URI)
+	if !held {
+		return provenItems{revision: revision}
+	}
+	key := nixProvenMemoKey + lintKey(s.lintSettings(file.Path, settings), generation)
+	items := workspace.Memo(file, key, revision, func() []lsp.Diagnostic {
+		wrapped := hostnav.Wrapped(file, proof.On(file.Doc.Source()), nil)
+		if wrapped == nil {
+			return nil
+		}
+		at := wrapped.Doc.Positions(enc)
+		findings, _ := s.findings(wrapped, settings, generation)
+		return append(s.syntaxItems(wrapped, settings, at), diagnostics.Lint(findings, at, codeDescriptions)...)
+	})
+	return provenItems{items: items, revision: revision}
 }
 
 func hashOf(text string) uint64 {
@@ -216,6 +250,7 @@ type diagnosticDelivery interface {
 	changed(uri string)
 	closed(uri string)
 	refresh(ctx context.Context, uris []string)
+	redeliver(ctx context.Context, uris []string)
 	stop()
 }
 
@@ -224,11 +259,16 @@ type pullDelivery struct {
 	refreshSupport bool
 }
 
-func (pullDelivery) changed(string) {}
+func (p pullDelivery) changed(uri string) { p.server.nixDocumentsChanged([]string{uri}) }
 
-func (pullDelivery) closed(string) {}
+func (p pullDelivery) closed(uri string) { p.server.nixEval.strings.forget(uri) }
 
-func (p pullDelivery) refresh(ctx context.Context, _ []string) {
+func (p pullDelivery) refresh(ctx context.Context, uris []string) {
+	p.server.nixDocumentsChanged(uris)
+	p.redeliver(ctx, uris)
+}
+
+func (p pullDelivery) redeliver(ctx context.Context, _ []string) {
 	if p.refreshSupport {
 		p.server.requestRefresh(ctx, diagnosticRefreshMethod)
 	}
@@ -241,14 +281,23 @@ type pushDelivery struct {
 	scheduler *pushScheduler
 }
 
-func (p pushDelivery) changed(uri string) { p.scheduler.schedule(uri) }
+func (p pushDelivery) changed(uri string) {
+	p.scheduler.schedule(uri)
+	p.server.nixDocumentsChanged([]string{uri})
+}
 
 func (p pushDelivery) closed(uri string) {
 	p.scheduler.cancel(uri)
+	p.server.nixEval.strings.forget(uri)
 	p.server.notify(publishDiagnosticsMethod, lsp.PublishDiagnosticsParams{URI: uri, Diagnostics: []lsp.Diagnostic{}})
 }
 
-func (p pushDelivery) refresh(_ context.Context, uris []string) {
+func (p pushDelivery) refresh(ctx context.Context, uris []string) {
+	p.server.nixDocumentsChanged(uris)
+	p.redeliver(ctx, uris)
+}
+
+func (p pushDelivery) redeliver(_ context.Context, uris []string) {
 	for _, uri := range uris {
 		p.scheduler.schedule(uri)
 	}

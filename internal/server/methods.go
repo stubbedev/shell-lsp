@@ -169,7 +169,7 @@ var methods = []method{
 	{semanticTokensRefreshMethod, serverRequest, sent, capability{}, "after settings change", nil},
 	{inlayHintRefreshMethod, serverRequest, sent, capability{}, "after settings change", nil},
 	{"workspace/inlineValue/refresh", serverRequest, notSent, capability{}, "inline values are computed per request", nil},
-	{diagnosticRefreshMethod, serverRequest, sent, capability{}, "after settings change and after a Bats run", nil},
+	{diagnosticRefreshMethod, serverRequest, sent, capability{}, "after settings change, after a Bats run, and when a background pass proves shell strings in a Nix file", nil},
 	{"workspace/foldingRange/refresh", serverRequest, notSent, capability{}, "folding depends only on the document", nil},
 	{"workspace/textDocumentContent/refresh", serverRequest, notSent, capability{}, "the server owns no virtual documents", nil},
 

@@ -26,6 +26,11 @@ type nativeProject struct {
 
 func openNativeProject(t *testing.T, capabilities string, files map[string]string, open ...string) *nativeProject {
 	t.Helper()
+	return openNativeProjectWith(t, func(*Server) {}, capabilities, files, open...)
+}
+
+func openNativeProjectWith(t *testing.T, setup func(*Server), capabilities string, files map[string]string, open ...string) *nativeProject {
+	t.Helper()
 	root := t.TempDir()
 	for name, text := range files {
 		path := filepath.Join(root, name)
@@ -36,7 +41,7 @@ func openNativeProject(t *testing.T, capabilities string, files map[string]strin
 			t.Fatal(err)
 		}
 	}
-	c, _ := startClient(t, `{"rootUri": "`+fileuri.FromPath(root)+`", `+capabilities+`}`)
+	c, _ := startClient(t, `{"rootUri": "`+fileuri.FromPath(root)+`", `+capabilities+`}`, setup)
 	p := &nativeProject{t: t, root: root, files: files, c: c}
 	for _, name := range open {
 		c.notify("textDocument/didOpen", openLanguageParams(p.uri(name), "", files[name]))

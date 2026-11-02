@@ -1,6 +1,7 @@
 package server
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"maps"
@@ -25,6 +26,8 @@ const (
 	maxNixpkgsItems    = 500
 	maxNixNoticeBytes  = 600
 	nixAnyUser         = "<name>"
+	nixStringsQuiet    = 750 * time.Millisecond
+	nixStringsJob      = "strings"
 	nixMissingNotice   = "shellLsp.nix.evaluate is on, but no nix binary is on PATH: NixOS, home-manager and flake-parts options and nixpkgs attributes are unavailable until it is installed. Static Nix features keep working."
 )
 
@@ -56,6 +59,132 @@ type nixEvaluation struct {
 	stopped bool
 	failed  bool
 	session *nixSession
+
+	strings nixStrings
+}
+
+type nixStrings struct {
+	quiet   time.Duration
+	proving sync.Mutex
+
+	mu        sync.Mutex
+	stopped   bool
+	scheduler *pushScheduler
+	proofs    map[string]hostnav.Proof
+	revision  uint64
+}
+
+func (n *nixStrings) of(uri string) (hostnav.Proof, uint64, bool) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	proof, held := n.proofs[uri]
+	return proof, n.revision, held
+}
+
+func (n *nixStrings) forget(uri string) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	delete(n.proofs, uri)
+}
+
+func (n *nixStrings) publish(proofs map[string]hostnav.Proof, open func(uri string) bool) bool {
+	next := make(map[string]hostnav.Proof, len(proofs))
+	for uri, proof := range proofs {
+		if len(proof.Strings) > 0 && open(uri) {
+			next[uri] = proof
+		}
+	}
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	changed := len(next) != len(n.proofs)
+	for uri, proof := range next {
+		held, had := n.proofs[uri]
+		changed = changed || !had || !slices.Equal(held.On(proof.Doc), proof.Strings)
+	}
+	n.proofs = next
+	if changed {
+		n.revision++
+	}
+	return changed
+}
+
+func (n *nixStrings) stop() {
+	n.mu.Lock()
+	n.stopped = true
+	scheduler := n.scheduler
+	n.mu.Unlock()
+	if scheduler != nil {
+		scheduler.close()
+	}
+}
+
+func (s *Server) nixDocumentsChanged(uris []string) {
+	view := s.docs.View()
+	if slices.ContainsFunc(uris, func(uri string) bool {
+		doc, open := view.Document(uri)
+		if !open {
+			return false
+		}
+		language, known := host.Of(doc.URI, doc.Language)
+		return known && language == host.Nix
+	}) {
+		s.scheduleNixStrings()
+	}
+}
+
+func (s *Server) scheduleNixStrings() {
+	n := &s.nixEval.strings
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if n.stopped {
+		return
+	}
+	if n.scheduler == nil {
+		n.scheduler = newPushScheduler(cmp.Or(n.quiet, nixStringsQuiet), s.proveNixStrings)
+	}
+	n.scheduler.schedule(nixStringsJob)
+}
+
+func (s *Server) proveNixStrings(ctx context.Context, _ string) {
+	n := &s.nixEval.strings
+	n.proving.Lock()
+	defer n.proving.Unlock()
+	docs := s.docs.View()
+	var hosts []hostnav.Host
+	for _, doc := range docs.Documents() {
+		if language, known := host.Of(doc.URI, doc.Language); !known || language != host.Nix {
+			continue
+		}
+		snap, err := s.snapshot(docs, doc.URI)
+		if err != nil {
+			s.logger.Debug("proving the shell strings of a closed document", "uri", doc.URI)
+			continue
+		}
+		if h, ok := hostnav.Of(snap.File); ok {
+			hosts = append(hosts, h)
+		}
+	}
+	slices.SortFunc(hosts, func(a, b hostnav.Host) int { return strings.Compare(a.File().URI, b.File().URI) })
+	env := s.hostEnv(docs, host.Nix)
+	env.Background = true
+	proofs := hostnav.Prove(ctx, hosts, env)
+	if ctx.Err() != nil || !n.publish(proofs, s.docs.Has) {
+		return
+	}
+	s.redeliverNixStrings()
+}
+
+func (s *Server) redeliverNixStrings() {
+	ctx := context.Background()
+	view := s.docs.View().Documents()
+	uris := make([]string, len(view))
+	for i, doc := range view {
+		uris[i] = doc.URI
+	}
+	s.delivery.redeliver(ctx, uris)
+	if s.clientCapabilities().Workspace.SemanticTokens.RefreshSupport {
+		s.requestRefresh(ctx, semanticTokensRefreshMethod)
+	}
 }
 
 func (e *nixEvaluation) arm() {
@@ -170,7 +299,10 @@ func (s *Server) closeNixSession(stop bool) {
 	}
 }
 
-func (s *Server) stopNixEvaluation() { s.closeNixSession(true) }
+func (s *Server) stopNixEvaluation() {
+	s.closeNixSession(true)
+	s.nixEval.strings.stop()
+}
 
 func (s *Server) nixEvaluationWanted() bool {
 	s.mu.Lock()

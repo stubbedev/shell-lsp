@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/stubbedev/shell-lsp/internal/docstore"
+	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/host/model"
 	"github.com/stubbedev/shell-lsp/internal/host/nix"
@@ -126,44 +126,52 @@ func (g *Group) allRegions(module *model.Module, f int) []region {
 	if file == nil {
 		return nil
 	}
-	own := regions(file)
-	if wrapped := g.wrappedOf(module, f); wrapped != nil {
-		return slices.Concat(own, regions(wrapped))
+	out := regions(file)
+	wrapped := g.wrappedOf(module, f)
+	if wrapped == nil {
+		return out
 	}
-	return own
+	for _, variant := range wrapped.Variants() {
+		out = slices.Concat(out, regions(variant))
+	}
+	return out
 }
 
 func (g *Group) wrappedOf(module *model.Module, f int) *workspace.File {
-	links := module.Links()
-	if links == nil {
+	project, linked := module.Links().(*nix.Project)
+	if !linked {
 		return nil
 	}
-	shells := links.Shells(f)
+	shells := project.Shells(f)
 	if len(shells) == 0 {
 		return nil
 	}
+	proven := project.Proven(f)
 	file := g.fileOf(module, f)
 	var key strings.Builder
 	key.WriteString("hostnav.wrapped")
-	spans := make([]parser.Span, len(shells))
-	for i, s := range shells {
-		spans[i] = s.Span
+	for _, s := range shells {
 		fmt.Fprintf(&key, "/%d-%d:%d", s.Span.Start, s.Span.End, s.Scope)
 	}
-	return workspace.Memo(file, key.String(), 0, func() *workspace.File {
-		source := file.Doc.Source()
-		a, ok := nix.ProjectedStrings(source.Text(), spans)
-		if !ok {
-			return nil
-		}
-		doc := docstore.Project(source, a.Map)
-		index := &model.Index{Shells: shells, Holes: a.Index.Holes}
-		return &workspace.File{
-			Path: file.Path, URI: file.URI, Doc: doc, Detection: a.Detection,
-			Tree:   parser.ParseScripts(nil, doc.Text(), a.Map.Scripts(), a.Detection.Shell, doc),
-			Native: &host.Native{Language: host.Nix, Index: index},
-		}
-	})
+	for _, s := range proven {
+		fmt.Fprintf(&key, "/%d=%s", s.Start, s.Writer)
+	}
+	return workspace.Memo(file, key.String(), 0, func() *workspace.File { return Wrapped(file, proven, shells) })
+}
+
+func Wrapped(file *workspace.File, proven []nix.ProvenString, shells []model.Shell) *workspace.File {
+	script, ok := host.ProvenScript(file.Doc.Source(), proven, shells)
+	if !ok {
+		return nil
+	}
+	variant := func(tree *parser.Tree, detection dialect.Detection) *workspace.File {
+		return &workspace.File{Path: file.Path, URI: file.URI, Doc: script.Doc, Detection: detection, Tree: tree, Native: script.Native}
+	}
+	out := variant(script.Parse(nil), script.Detection)
+	for _, v := range script.Variants {
+		out.Others = append(out.Others, variant(script.ParseVariant(v, nil), v.Detection))
+	}
+	return out
 }
 
 func (g *Group) wrappedSymbol(offset int) (Symbol, bool) {
@@ -178,7 +186,12 @@ func (g *Group) wrappedSymbol(offset int) (Symbol, bool) {
 	if !inside {
 		return Symbol{}, false
 	}
-	return g.nixShellSymbol(wrapped, at)
+	for _, variant := range wrapped.Variants() {
+		if sym, ok := g.nixShellSymbol(variant, at); ok {
+			return sym, true
+		}
+	}
+	return Symbol{}, false
 }
 
 func (g *Group) nixShellSymbol(file *workspace.File, offset int) (Symbol, bool) {

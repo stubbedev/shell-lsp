@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/host/model"
 	"github.com/stubbedev/shell-lsp/internal/host/nix"
@@ -31,6 +32,8 @@ type Env struct {
 	Home   string
 	Graph  func(ctx context.Context) (*Graph, error)
 	Exists func(path string) bool
+
+	Background bool
 }
 
 type importer struct {
@@ -222,10 +225,47 @@ func (g *Group) cachedProject(request nix.Request, graph *Graph) *nix.Project {
 		return cell.project
 	}
 	project := nix.Link(request, source)
-	if request.Failure == "" && g.builder.ctx.Err() == nil {
+	if request.Failure == "" && g.builder.ctx.Err() == nil && !g.builder.env.Background {
 		cell.project, cell.graph = project, graph
 	}
 	return project
+}
+
+type Proof struct {
+	Doc     *docstore.Document
+	Strings []nix.ProvenString
+}
+
+func (p Proof) On(doc *docstore.Document) []nix.ProvenString {
+	if p.Doc == doc {
+		return p.Strings
+	}
+	return nix.RebasedStrings(p.Strings, p.Doc.Text(), doc.Text())
+}
+
+func Prove(ctx context.Context, hosts []Host, env Env) map[string]Proof {
+	out := make(map[string]Proof, len(hosts))
+	for _, h := range hosts {
+		file := h.file
+		if _, done := out[file.URI]; done || !nix.MayWrap(file.Native.Index) {
+			continue
+		}
+		if ctx.Err() != nil {
+			return nil
+		}
+		project, linked := buildProject(ctx, h, env).Module.Links().(*nix.Project)
+		if !linked {
+			panic("hostnav: " + file.URI + " did not link as a Nix project")
+		}
+		out[file.URI] = Proof{Doc: file.Doc.Source(), Strings: project.Proven(0)}
+		for _, other := range hosts {
+			index := other.file.Native.Index
+			if i, inside := project.FileOf(other.file.Path, index); inside && nix.MayWrap(index) {
+				out[other.file.URI] = Proof{Doc: other.file.Doc.Source(), Strings: project.Proven(i)}
+			}
+		}
+	}
+	return out
 }
 
 func (b *builder) nearestFlake(path string) string {
@@ -243,7 +283,7 @@ type projectSource struct{ b *builder }
 
 func (s projectSource) LoadAll(paths []string) []*model.Index {
 	loaded := make([]*workspace.File, len(paths))
-	parallel.For(runtime.GOMAXPROCS(0), len(paths), func(i int) {
+	parallel.For(s.b.env.workers(), len(paths), func(i int) {
 		if s.b.ctx.Err() != nil {
 			return
 		}
@@ -271,6 +311,13 @@ func (s projectSource) Tree(dir string) ([]string, error) {
 func (s projectSource) Read(path string) ([]byte, error) {
 	data, _, err := workspace.ReadDisk(path)
 	return data, err
+}
+
+func (e Env) workers() int {
+	if e.Background {
+		return 1
+	}
+	return runtime.GOMAXPROCS(0)
 }
 
 func (b *builder) fragment(root *workspace.File, graph *Graph) bool {

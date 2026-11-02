@@ -5,6 +5,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/stubbedev/shell-lsp/internal/host/model"
+	"github.com/stubbedev/shell-lsp/internal/host/nix/builtins"
 	"github.com/stubbedev/shell-lsp/internal/host/nix/scope"
 	"github.com/stubbedev/shell-lsp/internal/host/nix/syntax"
 )
@@ -42,22 +44,26 @@ type (
 		unit *symbolTable
 		call *syntax.Apply
 	}
-	flowPrimed struct{ space *space }
+	flowPrimed   struct{ space *space }
+	flowBuiltin  struct{ name string }
+	flowBuiltins struct{}
 )
 
-func (flowSet) flowValue()    {}
-func (flowLambda) flowValue() {}
-func (flowList) flowValue()   {}
-func (flowPath) flowValue()   {}
-func (flowTree) flowValue()   {}
-func (flowSpace) flowValue()  {}
-func (flowSelf) flowValue()   {}
-func (flowPkgs) flowValue()   {}
-func (flowWriter) flowValue() {}
-func (flowScript) flowValue() {}
-func (flowUpdate) flowValue() {}
-func (flowMapped) flowValue() {}
-func (flowPrimed) flowValue() {}
+func (flowSet) flowValue()      {}
+func (flowLambda) flowValue()   {}
+func (flowList) flowValue()     {}
+func (flowPath) flowValue()     {}
+func (flowTree) flowValue()     {}
+func (flowSpace) flowValue()    {}
+func (flowSelf) flowValue()     {}
+func (flowPkgs) flowValue()     {}
+func (flowWriter) flowValue()   {}
+func (flowScript) flowValue()   {}
+func (flowUpdate) flowValue()   {}
+func (flowMapped) flowValue()   {}
+func (flowPrimed) flowValue()   {}
+func (flowBuiltin) flowValue()  {}
+func (flowBuiltins) flowValue() {}
 
 type flowSelection struct {
 	from flowValue
@@ -89,10 +95,7 @@ func (p *Project) compute(u *symbolTable, e syntax.Expr) []flowValue {
 		if !ok {
 			return nil
 		}
-		if ref.Kind != scope.Definition {
-			return writerValue(e.Name)
-		}
-		return p.evalDef(u, ref.Def)
+		return p.evalRef(u, ref, e.Name)
 	case *syntax.Select:
 		return p.evalSelect(u, e)
 	case *syntax.String:
@@ -132,6 +135,53 @@ func (p *Project) compute(u *symbolTable, e syntax.Expr) []flowValue {
 				return p.joined(u, e.Left, literalOf(suffix))
 			}
 		}
+	}
+	return nil
+}
+
+func (p *Project) evalRef(u *symbolTable, ref scope.Ref, name string) []flowValue {
+	switch ref.Kind {
+	case scope.Definition:
+		return p.evalDef(u, ref.Def)
+	case scope.Global:
+		return builtinValue(ref.Builtin.Name)
+	case scope.Dynamic:
+		return union(p.throughWith(u, ref.With, name), writerValue(name))
+	}
+	return writerValue(name)
+}
+
+func (p *Project) throughWith(u *symbolTable, innermost *syntax.With, name string) []flowValue {
+	for _, with := range u.f.table.Withs(innermost) {
+		values := p.eval(u, with.Scope)
+		found, decided := []flowValue(nil), len(values) == 0
+		for _, v := range values {
+			switch v := v.(type) {
+			case flowBuiltins:
+				found = union(found, p.selectFrom(v, name))
+			case flowSet:
+				_, named := v.set.names[name]
+				if named {
+					found = union(found, p.selectFrom(v, name))
+				}
+				decided = decided || named || v.set.dynamic
+			default:
+				decided = true
+			}
+		}
+		if decided || len(found) > 0 {
+			return found
+		}
+	}
+	return nil
+}
+
+func builtinValue(name string) []flowValue {
+	if name == builtinsName {
+		return []flowValue{flowBuiltins{}}
+	}
+	if _, known := builtins.Lookup(name); known {
+		return []flowValue{flowBuiltin{name: name}}
 	}
 	return nil
 }
@@ -265,8 +315,8 @@ func (p *Project) evalInherit(u *symbolTable, stmt *syntax.Inherit, name string)
 		if own, ok := syntax.AttrName(attr); !ok || own != name {
 			continue
 		}
-		if ref, ok := u.f.table.Inherited(attr); ok && ref.Kind == scope.Definition {
-			return p.evalDef(u, ref.Def)
+		if ref, ok := u.f.table.Inherited(attr); ok {
+			return p.evalRef(u, ref, name)
 		}
 	}
 	return nil
@@ -458,6 +508,9 @@ func (p *Project) fileValue(path string) []flowValue {
 }
 
 func (p *Project) loadLate(path string) (int, bool) {
+	if p.peek != nil {
+		return p.peekFile(path)
+	}
 	if p.settled || p.tried[path] {
 		return 0, false
 	}
@@ -467,6 +520,22 @@ func (p *Project) loadLate(path string) (int, bool) {
 		return 0, false
 	}
 	p.changed = true
+	return p.fileIndex(path)
+}
+
+func (p *Project) peekFile(path string) (int, bool) {
+	if p.peeks == maxPeekedFiles || filepath.IsAbs(path) || strings.HasPrefix(path, "~") {
+		return 0, false
+	}
+	p.peeks++
+	text, ok := p.peek("./" + filepath.ToSlash(path))
+	if !ok {
+		return 0, false
+	}
+	ix := &model.Index{}
+	tree := syntax.Parse(text)
+	newSymbolTable(&file{src: text, tree: tree, table: scope.Resolve(tree)}, ix).build()
+	p.add(path, ix)
 	return p.fileIndex(path)
 }
 
@@ -556,6 +625,11 @@ func (p *Project) selectFrom(v flowValue, name string) []flowValue {
 		return p.mappedAttr(v, name)
 	case flowPrimed:
 		return p.primedAttr(v, name)
+	case flowBuiltins:
+		if strings.HasPrefix(name, builtins.HiddenAliasPrefix) {
+			return nil
+		}
+		return builtinValue(name)
 	}
 	return nil
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/host/nix/highlight"
+	"github.com/stubbedev/shell-lsp/internal/hostnav"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/semantic"
@@ -159,17 +160,24 @@ func (s *Server) semanticTokens(file *workspace.File) []semantic.Token {
 }
 
 func (s *Server) nixTokens(file *workspace.File) []semantic.Token {
-	return workspace.Memo(file, "semantic.nix", s.workspace.Generation(), func() []semantic.Token {
+	proof, revision, held := s.nixEval.strings.of(file.URI)
+	return workspace.Memo(file, "semantic.nix", s.workspace.Generation()+revision, func() []semantic.Token {
 		tree, table := file.Native.Nix().Syntax()
-		return highlight.Tokens(tree, table, s.hostShellTokens(file))
+		variants := file.Variants()
+		if held {
+			if wrapped := hostnav.Wrapped(file, proof.On(file.Doc.Source()), nil); wrapped != nil {
+				variants = slices.Concat(variants, wrapped.Variants())
+			}
+		}
+		return highlight.Tokens(tree, table, s.hostShellTokens(variants))
 	})
 }
 
-func (s *Server) hostShellTokens(file *workspace.File) []semantic.Token {
+func (s *Server) hostShellTokens(variants []*workspace.File) []semantic.Token {
 	var out []semantic.Token
-	for _, variant := range file.Variants() {
+	for _, variant := range variants {
 		for _, t := range s.semanticTokens(variant) {
-			t.Span = parser.Span{Start: file.Doc.SourceOffset(t.Span.Start), End: file.Doc.SourceOffset(t.Span.End)}
+			t.Span = parser.Span{Start: variant.Doc.SourceOffset(t.Span.Start), End: variant.Doc.SourceOffset(t.Span.End)}
 			out = append(out, t)
 		}
 	}

@@ -289,12 +289,27 @@ func (l Language) Format(text string) (string, error) {
 
 func (l Language) Project(doc *docstore.Document) Script {
 	a := definitions[l].analyze(doc.Text())
-	script := Script{Doc: docstore.Project(doc, a.projection), Detection: a.detection}
-	script.group(a.projection.Scripts(), a.projection.Shells())
+	script := projectedScript(doc, a.projection, a.detection)
 	if a.index != nil {
 		script.Native = &Native{Language: l, Index: a.index, expect: a.expect, invocation: a.invocation, enclosing: a.enclosing, format: a.format, dockerfile: a.dockerfile, nix: a.nix}
 	}
 	return script
+}
+
+func projectedScript(doc *docstore.Document, m *projection.Map, detection dialect.Detection) Script {
+	script := Script{Doc: docstore.Project(doc, m), Detection: detection}
+	script.group(m.Scripts(), m.Shells())
+	return script
+}
+
+func ProvenScript(doc *docstore.Document, proven []nix.ProvenString, shells []model.Shell) (Script, bool) {
+	a, ok := nix.ProjectedStrings(doc.Text(), proven)
+	if !ok {
+		return Script{}, false
+	}
+	script := projectedScript(doc, a.Map, a.Detection)
+	script.Native = &Native{Language: Nix, Index: &model.Index{Shells: shells, Holes: a.Index.Holes}}
+	return script, true
 }
 
 func (s *Script) group(scripts []parser.Span, shells []dialect.Detection) {

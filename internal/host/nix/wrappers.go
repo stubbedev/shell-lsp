@@ -738,7 +738,63 @@ func outermost(found []shellString) []shellString {
 	})
 }
 
-func ProjectedStrings(src string, spans []model.Span) (Analysis, bool) {
+type ProvenString struct {
+	Start  int
+	Writer string
+}
+
+func (p *Project) Proven(file int) []ProvenString {
+	p.begin()
+	defer p.mu.Unlock()
+	proven := p.provenIn(file)
+	out := make([]ProvenString, len(proven))
+	for i, s := range proven {
+		out[i] = ProvenString{Start: s.str.Span().Start, Writer: s.writer}
+	}
+	return out
+}
+
+func (p *Project) FileOf(path string, ix *model.Index) (int, bool) {
+	i, known := p.byPath[path]
+	return i, known && p.units[i].ix == ix
+}
+
+func MayWrap(ix *model.Index) bool {
+	r, ok := ix.Renames.(renames)
+	if !ok {
+		panic("nix: this index was not analyzed as Nix")
+	}
+	return len(r.unit.candidates) > 0
+}
+
+func RebasedStrings(proven []ProvenString, before, after string) []ProvenString {
+	limit := min(len(before), len(after))
+	prefix := 0
+	for prefix < limit && before[prefix] == after[prefix] {
+		prefix++
+	}
+	suffix := 0
+	for suffix < limit-prefix && before[len(before)-1-suffix] == after[len(after)-1-suffix] {
+		suffix++
+	}
+	out := make([]ProvenString, 0, len(proven))
+	for _, s := range proven {
+		switch {
+		case s.Start < prefix:
+			out = append(out, s)
+		case s.Start >= len(before)-suffix:
+			s.Start += len(after) - len(before)
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+func ProjectedStrings(src string, proven []ProvenString) (Analysis, bool) {
+	writers := make(map[int]string, len(proven))
+	for _, s := range proven {
+		writers[s.Start] = s.Writer
+	}
 	tree := syntax.Parse(src)
 	f := &file{src: src, tree: tree, table: scope.Resolve(tree)}
 	visit := func(n syntax.Node) bool {
@@ -746,12 +802,15 @@ func ProjectedStrings(src string, spans []model.Span) (Analysis, bool) {
 		if !isString {
 			return true
 		}
-		if slices.ContainsFunc(pieces(str), func(piece model.Span) bool { return slices.Contains(spans, piece) }) {
-			found, ok := f.written(shellString{str: str}, call{name: shellApp})
-			if ok {
+		writer, wanted := writers[str.Span().Start]
+		if !wanted {
+			return true
+		}
+		if found, ok := f.provenShell(provenString{str: str, writer: writer}); ok {
+			if !found.derivation {
 				found.directive = phaseDirective
-				f.found = append(f.found, found)
 			}
+			f.found = append(f.found, found)
 		}
 		return true
 	}

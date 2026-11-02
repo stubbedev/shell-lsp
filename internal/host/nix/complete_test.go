@@ -249,6 +249,7 @@ func TestCompleteReadsFormalsOfOtherFiles(t *testing.T) {
 		"callPackage ./other.nix { | }",
 		"callPackage ./${x}.nix { | }",
 		"let import = x: x; in import ./y.nix { | }",
+		"callPackageWith { | }",
 	} {
 		files := files
 		if strings.Contains(src, "callPackage ./y.nix") {
