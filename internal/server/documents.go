@@ -56,7 +56,7 @@ func (s *Server) handleDidClose(_ context.Context, closeParams lsp.DidCloseTextD
 }
 
 func (s *Server) documentChanged(uri string) {
-	s.warm(uri)
+	s.warmth.schedule(uri)
 	s.delivery.changed(uri)
 	view := s.docs.View()
 	doc, ok := view.Document(uri)

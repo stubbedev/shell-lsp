@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/stubbedev/shell-lsp/internal/diskwatch"
 	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/host/model"
 	"github.com/stubbedev/shell-lsp/internal/host/nix"
@@ -34,6 +35,7 @@ type linkedProject struct {
 	stamp   Stamp
 	dirty   bool
 	checked time.Time
+	disk    diskwatch.Stamp
 	used    uint64
 	project *nix.Project
 	names   *model.NameTable
@@ -156,17 +158,23 @@ func (p *Projects) current(self *workspace.File, env Env) *linkedProject {
 	p.clock++
 	l.used = p.clock
 	now := p.now()
-	due := now.Sub(l.checked) >= workspace.DiskRecheck
+	due := now.Sub(l.checked) >= workspace.DiskRecheck && !env.Disk.Unchanged(l.disk)
+	stamp := env.Disk.Current()
 	if due {
 		l.checked = now
 	}
 	p.mu.Unlock()
-	if !due || l.project.Fresh(projectSource{newBuilder(p.ctx, env, host.Nix)}) {
+	if !due {
 		return l
 	}
+	fresh := l.project.Fresh(projectSource{newBuilder(p.ctx, env, host.Nix)})
 	p.mu.Lock()
+	defer p.mu.Unlock()
+	if fresh {
+		l.disk = stamp
+		return l
+	}
 	l.dirty = true
-	p.mu.Unlock()
 	return nil
 }
 
@@ -310,11 +318,12 @@ func (p *Projects) project(ctx context.Context, env Env, request nix.Request) *l
 			return known
 		}
 	}
+	watched := env.Disk.Current()
 	l := linkProject(ctx, env, request)
 	if ctx.Err() != nil {
 		return nil
 	}
-	l.key, l.stamp, l.checked = key, env.Stamp, p.now()
+	l.key, l.stamp, l.checked, l.disk = key, env.Stamp, p.now(), watched
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if l.project.Truncated() {
@@ -341,12 +350,13 @@ func (p *Projects) refreshed(l *linkedProject, env Env) bool {
 	if settled {
 		return true
 	}
+	watched := env.Disk.Current()
 	if dirty || !l.project.Fresh(projectSource{newBuilder(p.ctx, env, host.Nix)}) {
 		return false
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	l.stamp, l.checked = env.Stamp, p.now()
+	l.stamp, l.checked, l.disk = env.Stamp, p.now(), watched
 	return true
 }
 

@@ -15,9 +15,11 @@ import (
 	"time"
 
 	"github.com/stubbedev/shell-lsp/internal/config"
+	"github.com/stubbedev/shell-lsp/internal/diskwatch"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/editorconfig"
 	"github.com/stubbedev/shell-lsp/internal/hadolint"
+	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/hostnav"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
@@ -91,12 +93,14 @@ type Server struct {
 	docs         *docstore.Store
 	snapshots    *snapshotCache
 	warming      *coalescer
+	warmth       *pushScheduler
 	outbound     *coalescer
 	delivery     diagnosticDelivery
 	commandDocs  commandDocs
 	prefetch     *prefetcher
 	environment  shellEnvironment
 	workspace    *workspace.Workspace
+	disk         *diskwatch.Watcher
 	semantic     *semanticCache
 	bats         *batsResults
 	graphs       hostGraphs
@@ -159,9 +163,12 @@ func New(conn *jsonrpc.Conn, version string, process Process) *Server {
 		sem:          make(chan struct{}, maxConcurrency),
 		exiting:      make(chan struct{}),
 	}
+	s.warmth = newPushScheduler(warmQuiet, func(_ context.Context, uri string) { s.warmNow(uri) })
+	s.watchDisk()
 	s.usePages(manpage.NewLookup(process.ManPath, process.Path))
 	s.delivery = pullDelivery{server: s}
 	s.workspace = newWorkspace(s)
+	s.workspace.WatchDisk(s.disk)
 	s.projects.OnDrained(func() {
 		s.releasing.schedule()
 		s.linkLanded()
@@ -173,7 +180,22 @@ func New(conn *jsonrpc.Conn, version string, process Process) *Server {
 func (s *Server) usePages(pages *manpage.Lookup) {
 	s.prefetch = newPrefetcher(pages)
 	s.commandDocs = commandDocs{Lookup: pages, path: s.process.PathDirs(), pathExt: s.process.pathExt()}
-	s.environment = shellEnvironment{process: s.process, pages: pages, executables: newExecutableCache(s.process.PathDirs(), s.process.pathExt()), prefetch: s.prefetch}
+	executables := newExecutableCache(s.process.PathDirs(), s.process.pathExt())
+	executables.disk = s.disk
+	s.environment = shellEnvironment{process: s.process, pages: pages, executables: executables, prefetch: s.prefetch}
+}
+
+func (s *Server) watchDisk() {
+	disk, err := diskwatch.New()
+	if err != nil {
+		s.logger.Debug("rechecking the disk on each request instead of being told what changed", "err", err)
+		return
+	}
+	s.disk = disk
+	disk.TrustImmutable(host.NixStoreFile)
+	s.editorconfig.Watch(disk)
+	s.shellcheckrc.Watch(disk)
+	s.hadolint.Watch(disk)
 }
 
 func (s *Server) SetLogger(logger *slog.Logger) {
@@ -199,9 +221,12 @@ func (s *Server) Run(ctx context.Context) error {
 		cancel()
 		s.wg.Wait()
 		s.delivery.stop()
+		s.warmth.close()
+		s.disk.Close()
 	}()
 	for {
 		msg, err := s.conn.Read()
+		s.disk.Drain()
 		if err != nil {
 			if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
 				if s.isShutdown() {

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/stubbedev/shell-lsp/internal/diskwatch"
 	"github.com/stubbedev/shell-lsp/internal/filecache"
 )
 
@@ -107,6 +108,8 @@ func NewResolver(read filecache.ReadFile, now func() time.Time, recheck time.Dur
 	}
 	return &Resolver{files: filecache.New(read, parse, now, recheck)}
 }
+
+func (r *Resolver) Watch(disk *diskwatch.Watcher) { r.files.Watch(disk) }
 
 func (r *Resolver) Properties(path string, languages []string) (Properties, error) {
 	var chain []File

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/stubbedev/shell-lsp/internal/completion"
+	"github.com/stubbedev/shell-lsp/internal/diskwatch"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
@@ -118,8 +119,10 @@ func (e shellEnvironment) Subcommands(ctx context.Context, command string, args 
 type executableCache struct {
 	dirs     []string
 	pathExt  []string
+	disk     *diskwatch.Watcher
 	mu       sync.Mutex
 	checked  time.Time
+	stamp    diskwatch.Stamp
 	modTimes []time.Time
 	names    []string
 }
@@ -131,16 +134,18 @@ func newExecutableCache(dirs, pathExt []string) *executableCache {
 func (c *executableCache) list(now time.Time) []string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.names != nil && now.Sub(c.checked) < workspace.DiskRecheck {
+	if c.names != nil && (now.Sub(c.checked) < workspace.DiskRecheck || c.disk.Unchanged(c.stamp)) {
 		return c.names
 	}
+	stamp := c.disk.Current()
 	modTimes := make([]time.Time, len(c.dirs))
 	for i, dir := range c.dirs {
+		stamp = stamp.And(c.disk.TrackDir(dir))
 		if info, err := os.Stat(dir); err == nil {
 			modTimes[i] = info.ModTime()
 		}
 	}
-	c.checked = now
+	c.checked, c.stamp = now, stamp
 	if c.names != nil && slices.EqualFunc(c.modTimes, modTimes, time.Time.Equal) {
 		return c.names
 	}

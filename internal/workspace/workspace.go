@@ -19,6 +19,7 @@ import (
 	"weak"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/diskwatch"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/gitignore"
@@ -137,14 +138,17 @@ type Workspace struct {
 	overlay Overlay
 	resolve func(path string, in dialect.Input) dialect.Detection
 	now     func() time.Time
+	disk    *diskwatch.Watcher
+	stat    func(string) (fs.FileInfo, error)
 
 	mu         sync.Mutex
 	roots      []string
 	files      map[string]diskEntry
 	dirs       map[string]dirListing
 	ignores    map[string]ignoreRules
-	missing    map[string]time.Time
+	missing    map[string]missingEntry
 	includes   map[string]includesEntry
+	repos      map[string]repoEntry
 	generation atomic.Uint64
 	watched    atomic.Bool
 	scanCut    atomic.Bool
@@ -153,6 +157,10 @@ type Workspace struct {
 func (w *Workspace) SetWatched(watched bool) { w.watched.Store(watched) }
 
 func (w *Workspace) Watched() bool { return w.watched.Load() }
+
+func (w *Workspace) WatchDisk(disk *diskwatch.Watcher) { w.disk = disk }
+
+func (w *Workspace) UseStat(stat func(string) (fs.FileInfo, error)) { w.stat = stat }
 
 func isShellName(path string) bool {
 	if _, ok := host.FromName(path); ok {
@@ -165,12 +173,24 @@ type diskEntry struct {
 	size    int64
 	modTime time.Time
 	checked time.Time
+	stamp   diskwatch.Stamp
 	held    *File
 	dropped weak.Pointer[File]
 }
 
-func newDiskEntry(file *File, info fs.FileInfo, checked time.Time) diskEntry {
-	entry := diskEntry{size: info.Size(), modTime: info.ModTime(), checked: checked}
+type missingEntry struct {
+	since time.Time
+	stamp diskwatch.Stamp
+}
+
+type repoEntry struct {
+	top, gitDir string
+	found       bool
+	stamp       diskwatch.Stamp
+}
+
+func newDiskEntry(file *File, info fs.FileInfo, checked time.Time, stamp diskwatch.Stamp) diskEntry {
+	entry := diskEntry{size: info.Size(), modTime: info.ModTime(), checked: checked, stamp: stamp}
 	if file.Native != nil && file.Native.Language == host.Nix {
 		entry.dropped = weak.Make(file)
 		return entry
@@ -189,6 +209,7 @@ func (e diskEntry) file() *File {
 type includesEntry struct {
 	size     int64
 	modTime  time.Time
+	stamp    diskwatch.Stamp
 	includes []model.Include
 }
 
@@ -197,7 +218,7 @@ func Detect(_ string, in dialect.Input) dialect.Detection {
 }
 
 func New(overlay Overlay, resolve func(path string, in dialect.Input) dialect.Detection) *Workspace {
-	return &Workspace{overlay: overlay, resolve: resolve, now: time.Now, files: map[string]diskEntry{}, dirs: map[string]dirListing{}, ignores: map[string]ignoreRules{}, missing: map[string]time.Time{}, includes: map[string]includesEntry{}}
+	return &Workspace{overlay: overlay, resolve: resolve, now: time.Now, stat: regularfile.Stat, files: map[string]diskEntry{}, dirs: map[string]dirListing{}, ignores: map[string]ignoreRules{}, missing: map[string]missingEntry{}, includes: map[string]includesEntry{}, repos: map[string]repoEntry{}}
 }
 
 func (w *Workspace) SetRoots(roots []string) {
@@ -251,6 +272,7 @@ func (w *Workspace) InvalidateAll() {
 	clear(w.dirs)
 	clear(w.ignores)
 	clear(w.missing)
+	clear(w.repos)
 	w.generation.Add(1)
 }
 
@@ -274,15 +296,23 @@ func (w *Workspace) NixIncludes(path string) ([]model.Include, int64, error) {
 	if f, open := w.overlay(fileuri.FromPath(path)); open && f.Native != nil {
 		return f.Native.Index.Includes, int64(len(f.Doc.Source().Text())), nil
 	}
-	info, err := regularfile.Stat(path)
-	if err != nil {
-		return nil, 0, fmt.Errorf("reading the imports of %s: %w", path, err)
-	}
 	key := platform.Native.Fold(path)
 	w.mu.Lock()
 	cached, ok := w.includes[key]
 	w.mu.Unlock()
+	if ok && w.disk.Unchanged(cached.stamp) {
+		return cached.includes, cached.size, nil
+	}
+	stamp := w.disk.Track(path)
+	info, err := w.stat(path)
+	if err != nil {
+		return nil, 0, fmt.Errorf("reading the imports of %s: %w", path, err)
+	}
 	if ok && cached.size == info.Size() && cached.modTime.Equal(info.ModTime()) {
+		cached.stamp = stamp
+		w.mu.Lock()
+		w.includes[key] = cached
+		w.mu.Unlock()
 		return cached.includes, cached.size, nil
 	}
 	raw, info, err := regularfile.ReadStat(path, info, maxFileSize)
@@ -295,7 +325,7 @@ func (w *Workspace) NixIncludes(path string) ([]model.Include, int64, error) {
 	}
 	includes = slices.Clone(includes)
 	w.mu.Lock()
-	w.includes[key] = includesEntry{size: info.Size(), modTime: info.ModTime(), includes: includes}
+	w.includes[key] = includesEntry{size: info.Size(), modTime: info.ModTime(), stamp: stamp, includes: includes}
 	w.mu.Unlock()
 	return includes, info.Size(), nil
 }
@@ -311,11 +341,12 @@ func (f *File) parsedAs(languageID string) bool {
 func (w *Workspace) load(path, languageID string) (*File, error) {
 	now := w.now()
 	key := platform.Native.Fold(path)
+	w.disk.Track(path)
 	w.mu.Lock()
 	cached, ok := w.files[key]
 	known := cached.file()
 	ok = ok && known != nil && known.parsedAs(languageID)
-	fresh := ok && (w.watchedLocked(path) || now.Sub(cached.checked) < DiskRecheck)
+	fresh := ok && (w.watchedLocked(path) || now.Sub(cached.checked) < DiskRecheck || w.disk.Unchanged(cached.stamp))
 	w.mu.Unlock()
 	var uri string
 	if ok {
@@ -330,23 +361,24 @@ func (w *Workspace) load(path, languageID string) (*File, error) {
 		return known, nil
 	}
 	w.mu.Lock()
-	missingSince, missing := w.missing[key]
+	absent, missing := w.missing[key]
 	w.mu.Unlock()
-	if missing && now.Sub(missingSince) < DiskRecheck {
+	if missing && (now.Sub(absent.since) < DiskRecheck || w.disk.Unchanged(absent.stamp)) {
 		return nil, fmt.Errorf("loading %s: %w", path, fs.ErrNotExist)
 	}
-	info, err := regularfile.Stat(path)
+	stamp := w.disk.Track(path)
+	info, err := w.stat(path)
 	if err != nil {
 		w.mu.Lock()
 		delete(w.files, key)
 		if errors.Is(err, fs.ErrNotExist) {
-			w.rememberMissingLocked(key, now)
+			w.rememberMissingLocked(key, now, stamp)
 		}
 		w.mu.Unlock()
 		return nil, fmt.Errorf("loading %s: %w", path, err)
 	}
 	if ok && cached.size == info.Size() && cached.modTime.Equal(info.ModTime()) {
-		cached.checked = now
+		cached.checked, cached.stamp = now, stamp
 		w.mu.Lock()
 		w.files[key] = cached
 		w.mu.Unlock()
@@ -358,7 +390,7 @@ func (w *Workspace) load(path, languageID string) (*File, error) {
 	}
 	file := w.parseDisk(path, docstore.NewDocument(uri, languageID, 0, string(raw)))
 	w.mu.Lock()
-	w.files[key] = newDiskEntry(file, info, now)
+	w.files[key] = newDiskEntry(file, info, now, stamp)
 	w.mu.Unlock()
 	return file, nil
 }
@@ -386,10 +418,10 @@ func Parse(path string, doc *docstore.Document, previous *parser.Tree, resolve f
 
 const maxMissing = 4096
 
-func (w *Workspace) rememberMissingLocked(key string, now time.Time) {
+func (w *Workspace) rememberMissingLocked(key string, now time.Time, stamp diskwatch.Stamp) {
 	if len(w.missing) >= maxMissing {
-		for missingKey, since := range w.missing {
-			if now.Sub(since) >= DiskRecheck {
+		for missingKey, entry := range w.missing {
+			if now.Sub(entry.since) >= DiskRecheck {
 				delete(w.missing, missingKey)
 			}
 		}
@@ -397,7 +429,7 @@ func (w *Workspace) rememberMissingLocked(key string, now time.Time) {
 			clear(w.missing)
 		}
 	}
-	w.missing[key] = now
+	w.missing[key] = missingEntry{since: now, stamp: stamp}
 }
 
 func ReadDisk(path string) ([]byte, fs.FileInfo, error) {
@@ -431,6 +463,7 @@ func (w *Workspace) LoadAll(ctx context.Context, paths []string, workers int, re
 }
 
 type dirListing struct {
+	stamp      diskwatch.Stamp
 	modTime    time.Time
 	files      []string
 	dirs       []string
@@ -440,6 +473,7 @@ type dirListing struct {
 type ignoreRules struct {
 	size    int64
 	modTime time.Time
+	stamp   diskwatch.Stamp
 	rules   gitignore.Rules
 }
 
@@ -524,6 +558,7 @@ func (w *Workspace) NixFiles(dir string) ([]string, error) {
 	for len(pending) > 0 && len(out) < maxScanFiles {
 		at := pending[len(pending)-1]
 		pending = pending[:len(pending)-1]
+		w.disk.TrackDir(at)
 		entries, err := os.ReadDir(at)
 		if err != nil {
 			return nil, fmt.Errorf("listing the Nix files under %s: %w", dir, err)
@@ -532,6 +567,7 @@ func (w *Workspace) NixFiles(dir string) ([]string, error) {
 			path := filepath.Join(at, entry.Name())
 			kind := entry.Type()
 			if kind&fs.ModeSymlink != 0 {
+				w.disk.Track(path)
 				info, err := os.Stat(path)
 				if err != nil {
 					continue
@@ -554,10 +590,11 @@ func (w *Workspace) NixFiles(dir string) ([]string, error) {
 }
 
 func (w *Workspace) enclosingIgnores(root string) (string, *gitignore.Stack, error) {
-	top, gitDir, found, err := repository(root)
-	if err != nil || !found {
+	repo, err := w.repositoryOf(root)
+	if err != nil || !repo.found {
 		return "", nil, err
 	}
+	top, gitDir := repo.top, repo.gitDir
 	exclude, err := w.ignoreRules(filepath.Join(gitDir, "info", "exclude"))
 	if err != nil {
 		return "", nil, err
@@ -577,6 +614,31 @@ func (w *Workspace) enclosingIgnores(root string) (string, *gitignore.Stack, err
 		rel, dir = joinRel(rel, name), filepath.Join(dir, name)
 	}
 	return rel, ignores, nil
+}
+
+func (w *Workspace) repositoryOf(root string) (repoEntry, error) {
+	w.mu.Lock()
+	cached, ok := w.repos[root]
+	w.mu.Unlock()
+	if ok && w.disk.Unchanged(cached.stamp) {
+		return cached, nil
+	}
+	stamp := w.disk.Current()
+	for dir := root; ; dir = filepath.Dir(dir) {
+		stamp = stamp.And(w.disk.Track(filepath.Join(dir, ".git")))
+		if dir == filepath.Dir(dir) {
+			break
+		}
+	}
+	top, gitDir, found, err := repository(root)
+	if err != nil {
+		return repoEntry{}, err
+	}
+	entry := repoEntry{top: top, gitDir: gitDir, found: found, stamp: stamp}
+	w.mu.Lock()
+	w.repos[root] = entry
+	w.mu.Unlock()
+	return entry, nil
 }
 
 func repository(root string) (top, gitDir string, found bool, err error) {
@@ -630,20 +692,28 @@ func resolveFrom(dir, path string) string {
 
 func (w *Workspace) ignoreRules(path string) (gitignore.Rules, error) {
 	key := platform.Native.Fold(path)
-	info, err := regularfile.Stat(path)
+	w.mu.Lock()
+	cached, ok := w.ignores[key]
+	w.mu.Unlock()
+	if ok && w.disk.Unchanged(cached.stamp) {
+		return cached.rules, nil
+	}
+	stamp := w.disk.Track(path)
+	info, err := w.stat(path)
 	if errors.Is(err, fs.ErrNotExist) || errors.Is(err, fs.ErrPermission) {
 		w.mu.Lock()
-		delete(w.ignores, key)
+		w.ignores[key] = ignoreRules{stamp: stamp}
 		w.mu.Unlock()
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("reading ignore rules %s: %w", path, err)
 	}
-	w.mu.Lock()
-	cached, ok := w.ignores[key]
-	w.mu.Unlock()
 	if ok && cached.size == info.Size() && cached.modTime.Equal(info.ModTime()) {
+		cached.stamp = stamp
+		w.mu.Lock()
+		w.ignores[key] = cached
+		w.mu.Unlock()
 		return cached.rules, nil
 	}
 	raw, info, err := regularfile.ReadStat(path, info, maxFileSize)
@@ -652,12 +722,19 @@ func (w *Workspace) ignoreRules(path string) (gitignore.Rules, error) {
 	}
 	rules := gitignore.Parse(platform.Native.Fold(string(raw)))
 	w.mu.Lock()
-	w.ignores[key] = ignoreRules{size: info.Size(), modTime: info.ModTime(), rules: rules}
+	w.ignores[key] = ignoreRules{size: info.Size(), modTime: info.ModTime(), stamp: stamp, rules: rules}
 	w.mu.Unlock()
 	return rules, nil
 }
 
 func (w *Workspace) listDir(dir string) (dirListing, error) {
+	w.mu.Lock()
+	cached, ok := w.dirs[platform.Native.Fold(dir)]
+	w.mu.Unlock()
+	if ok && w.disk.Unchanged(cached.stamp) {
+		return cached, nil
+	}
+	stamp := w.disk.TrackDir(dir)
 	info, err := os.Stat(dir)
 	if err != nil {
 		w.mu.Lock()
@@ -665,17 +742,18 @@ func (w *Workspace) listDir(dir string) (dirListing, error) {
 		w.mu.Unlock()
 		return dirListing{}, err
 	}
-	w.mu.Lock()
-	cached, ok := w.dirs[platform.Native.Fold(dir)]
-	w.mu.Unlock()
 	if ok && cached.modTime.Equal(info.ModTime()) {
+		cached.stamp = stamp
+		w.mu.Lock()
+		w.dirs[platform.Native.Fold(dir)] = cached
+		w.mu.Unlock()
 		return cached, nil
 	}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return dirListing{}, err
 	}
-	listing := dirListing{modTime: info.ModTime()}
+	listing := dirListing{modTime: info.ModTime(), stamp: stamp}
 	for _, entry := range entries {
 		path := filepath.Join(dir, entry.Name())
 		switch {

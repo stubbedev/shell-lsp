@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/stubbedev/shell-lsp/internal/diskwatch"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/host/model"
@@ -36,6 +37,7 @@ type Env struct {
 	Exists func(path string) bool
 
 	Projects *Projects
+	Disk     *diskwatch.Watcher
 	Stamp    Stamp
 	Patience time.Duration
 
@@ -407,6 +409,7 @@ func (s projectSource) Tree(dir string) ([]string, error) {
 }
 
 func (s projectSource) Read(path string) ([]byte, error) {
+	s.b.env.Disk.Track(path)
 	data, _, err := workspace.ReadDisk(path)
 	return data, err
 }

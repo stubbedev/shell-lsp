@@ -5,6 +5,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/stubbedev/shell-lsp/internal/diskwatch"
 	"github.com/stubbedev/shell-lsp/internal/filecache"
 )
 
@@ -17,6 +18,8 @@ func NewResolver(read filecache.ReadFile, now func() time.Time, recheck time.Dur
 	parse := func(path string, data []byte) (File, error) { return Parse(path, string(data)) }
 	return &Resolver{files: filecache.New(read, parse, now, recheck), fallback: fallback}
 }
+
+func (r *Resolver) Watch(disk *diskwatch.Watcher) { r.files.Watch(disk) }
 
 func Fallback(home, configHome string) []string {
 	var out []string

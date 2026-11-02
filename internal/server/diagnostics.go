@@ -25,6 +25,7 @@ import (
 )
 
 const (
+	warmQuiet           = 75 * time.Millisecond
 	diagnosticsDebounce = 200 * time.Millisecond
 	lintMemoKey         = "lint.report/"
 	nixProvenMemoKey    = "nix.proven/"

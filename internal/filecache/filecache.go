@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/stubbedev/shell-lsp/internal/diskwatch"
 )
 
 const minSweep = 256
@@ -20,6 +22,7 @@ type Cache[T any] struct {
 	parse   Parse[T]
 	now     func() time.Time
 	recheck time.Duration
+	disk    *diskwatch.Watcher
 
 	mu      sync.Mutex
 	entries map[string]entry[T]
@@ -31,21 +34,24 @@ type entry[T any] struct {
 	present bool
 	err     error
 	checked time.Time
+	stamp   diskwatch.Stamp
 }
 
 func New[T any](read ReadFile, parse Parse[T], now func() time.Time, recheck time.Duration) *Cache[T] {
 	return &Cache[T]{read: read, parse: parse, now: now, recheck: recheck, entries: map[string]entry[T]{}, sweepAt: minSweep}
 }
 
+func (c *Cache[T]) Watch(disk *diskwatch.Watcher) { c.disk = disk }
+
 func (c *Cache[T]) Load(path string) (T, bool, error) {
 	now := c.now()
 	c.mu.Lock()
 	cached, ok := c.entries[path]
 	c.mu.Unlock()
-	if ok && now.Sub(cached.checked) < c.recheck {
+	if ok && (now.Sub(cached.checked) < c.recheck || c.disk.Unchanged(cached.stamp)) {
 		return cached.value, cached.present, cached.err
 	}
-	fresh := entry[T]{checked: now}
+	fresh := entry[T]{checked: now, stamp: c.disk.Track(path)}
 	data, err := c.read(path)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
@@ -72,7 +78,7 @@ func (c *Cache[T]) Invalidate(path string) {
 
 func (c *Cache[T]) sweepLocked(now time.Time) {
 	for path, cached := range c.entries {
-		if now.Sub(cached.checked) >= c.recheck {
+		if now.Sub(cached.checked) >= c.recheck && !c.disk.Unchanged(cached.stamp) {
 			delete(c.entries, path)
 		}
 	}

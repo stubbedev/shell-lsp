@@ -4,9 +4,13 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"os"
+	"path/filepath"
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/stubbedev/shell-lsp/internal/diskwatch"
 )
 
 func parseNumber(path string, data []byte) (int, error) {
@@ -80,5 +84,39 @@ func TestCacheForgetsStalePaths(t *testing.T) {
 	}
 	if len(c.entries) > 2*minSweep {
 		t.Errorf("cache holds %d entries after visiting paths one recheck interval apart", len(c.entries))
+	}
+}
+
+func TestAWatchedCacheSkipsReadsUntilTheFileChanges(t *testing.T) {
+	disk, err := diskwatch.New()
+	if err != nil {
+		t.Skipf("no inotify here: %v", err)
+	}
+	defer disk.Close()
+	path := filepath.Join(t.TempDir(), "config")
+	if err := os.WriteFile(path, []byte("1"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	reads := 0
+	c := New(func(p string) ([]byte, error) {
+		reads++
+		return os.ReadFile(p)
+	}, parseNumber, func() time.Time { return now }, time.Second)
+	c.Watch(disk)
+	if n, _, _ := c.Load(path); n != 1 {
+		t.Fatalf("first load = %d", n)
+	}
+	now = now.Add(time.Hour)
+	disk.Drain()
+	if n, _, _ := c.Load(path); n != 1 || reads != 1 {
+		t.Errorf("a quiet file reread: value %d after %d reads", n, reads)
+	}
+	if err := os.WriteFile(path, []byte("2"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	disk.Drain()
+	if n, _, _ := c.Load(path); n != 2 {
+		t.Errorf("an edit outside the editor went unseen: %d", n)
 	}
 }

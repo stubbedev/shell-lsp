@@ -63,7 +63,7 @@ func (s *Server) hostEnv(docs *docstore.View, language host.Language) hostnav.En
 	env := hostnav.Env{Loader: s.workspace, Home: s.process.Home, Exists: func(path string) bool {
 		_, err := regularfile.Stat(path)
 		return err == nil
-	}, Projects: s.projects, Stamp: hostnav.Stamp{Docs: docs.Revision(), Disk: s.workspace.Generation()}, Patience: cmp.Or(s.linkPatience, projectLinkPatience), OnPartial: s.partialAnswer}
+	}, Projects: s.projects, Disk: s.disk, Stamp: hostnav.Stamp{Docs: docs.Revision(), Disk: s.workspace.Generation()}, Patience: cmp.Or(s.linkPatience, projectLinkPatience), OnPartial: s.partialAnswer}
 	env.Graph = func(ctx context.Context) (*hostnav.Graph, error) { return s.graphs.of(ctx, s, docs, language, env) }
 	return env
 }

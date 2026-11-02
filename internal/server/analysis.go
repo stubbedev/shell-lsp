@@ -169,7 +169,7 @@ func (s *Server) at(docs *docstore.View, p lsp.TextDocumentPositionParams) (loca
 	return located{snapshot: snap.at(offset), offset: offset}, inside, nil
 }
 
-func (s *Server) warm(uri string) {
+func (s *Server) warmNow(uri string) {
 	s.warming.run(uri, func() {
 		if _, err := s.snapshot(s.docs.View(), uri); err != nil {
 			s.logger.Debug("warming closed document", "uri", uri)

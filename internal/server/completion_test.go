@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/shell-lsp/internal/diskwatch"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/manpage"
@@ -353,5 +354,42 @@ func TestCompletionResolveDocumentsFunctionsAndVariables(t *testing.T) {
 	resolvedVar := decodeResult[lsp.CompletionItem](t, c.call("completionItem/resolve", string(raw)))
 	if resolvedVar.Documentation == nil || !strings.Contains(resolvedVar.Documentation.Value, "global variable") {
 		t.Errorf("resolved variable = %+v", resolvedVar)
+	}
+}
+
+func TestAWatchedExecutableListSeesAnInstall(t *testing.T) {
+	disk, err := diskwatch.New()
+	if err != nil {
+		t.Skipf("no inotify here: %v", err)
+	}
+	defer disk.Close()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, executableName("tool")), nil, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cache := newExecutableCache([]string{dir}, platform.Native.PathExt(""))
+	cache.disk = disk
+	start := time.Now()
+	if got := cache.list(start); !slices.Equal(got, []string{"tool"}) {
+		t.Fatalf("executables = %v", got)
+	}
+	later := start.Add(time.Hour)
+	disk.Drain()
+	cache.mu.Lock()
+	stamp := cache.stamp
+	cache.mu.Unlock()
+	if got := cache.list(later); !slices.Equal(got, []string{"tool"}) || !disk.Unchanged(stamp) {
+		t.Errorf("a quiet PATH = %v, unchanged %v", got, disk.Unchanged(stamp))
+	}
+	if err := os.WriteFile(filepath.Join(dir, executableName("newtool")), nil, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	moved := later.Add(time.Hour)
+	if err := os.Chtimes(dir, moved, moved); err != nil {
+		t.Fatal(err)
+	}
+	disk.Drain()
+	if got := cache.list(moved); !slices.Equal(got, []string{"newtool", "tool"}) {
+		t.Errorf("executables after installing a tool = %v", got)
 	}
 }
