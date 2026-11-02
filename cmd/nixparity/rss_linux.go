@@ -17,6 +17,22 @@ import (
 const procDir = "/proc"
 
 func sampleTreeRSS(group int) (int64, error) {
+	total, err := currentTreeRSS(group)
+	if err != nil {
+		return 0, err
+	}
+	status, err := readProcFile(strconv.Itoa(group), "status")
+	if err != nil {
+		return 0, err
+	}
+	leaderPeak, err := parsePeakRSS(status)
+	if err != nil {
+		return 0, err
+	}
+	return max(total, leaderPeak), nil
+}
+
+func currentTreeRSS(group int) (int64, error) {
 	entries, err := os.ReadDir(procDir)
 	if err != nil {
 		return 0, fmt.Errorf("listing %s: %w", procDir, err)
@@ -42,15 +58,7 @@ func sampleTreeRSS(group int) (int64, error) {
 			total += stat.rssPages * page
 		}
 	}
-	status, err := readProcFile(strconv.Itoa(group), "status")
-	if err != nil {
-		return 0, err
-	}
-	leaderPeak, err := parsePeakRSS(status)
-	if err != nil {
-		return 0, err
-	}
-	return max(total, leaderPeak), nil
+	return total, nil
 }
 
 func readProcFile(pid, name string) (string, error) {

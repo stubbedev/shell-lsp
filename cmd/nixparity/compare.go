@@ -105,6 +105,7 @@ type performance struct {
 	Server       identity         `json:"server"`
 	Restarts     int              `json:"restarts"`
 	PeakRSSBytes *int64           `json:"peakRssBytes"`
+	IdleRSSBytes *int64           `json:"idleRssBytes"`
 	Latency      []latencySummary `json:"latency"`
 }
 
@@ -212,7 +213,7 @@ func latencies(queries []query, answers []answer) []latencySummary {
 }
 
 func performanceOf(p plan, run sideRun) performance {
-	return performance{Server: run.identity, Restarts: run.restarts, PeakRSSBytes: run.peakRSS, Latency: latencies(p.queries, run.answers)}
+	return performance{Server: run.identity, Restarts: run.restarts, PeakRSSBytes: run.peakRSS, IdleRSSBytes: run.idleRSS, Latency: latencies(p.queries, run.answers)}
 }
 
 func compareRuns(p plan, ours, theirs sideRun, exampleLimit int) report {

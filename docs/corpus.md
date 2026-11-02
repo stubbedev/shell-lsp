@@ -301,8 +301,8 @@ disturbs the other's timing. The report gives p50, p90, p99 and maximum latency
 per feature over the calls that got a response; for diagnostics, that is the
 time from opening a file to its first publication. Peak RSS sums the server's
 process group, sampled every 250 ms, and is at least the peak the kernel
-reports for the server process itself. It is measured on Linux and reported as
-`not measured` elsewhere.
+reports for the server process itself. Idle RSS samples the same group once more, three seconds after the last
+request. Both are measured on Linux and reported as `not measured` elsewhere.
 
 A server that exits is restarted with its files open again, and one that
 times out three times in a row is killed and restarted, at most three times per

@@ -15,6 +15,7 @@ const (
 	wedgedAfterTimeout = 3
 	diagnosticsSilence = 10 * time.Second
 	diagnosticsSettle  = 500 * time.Millisecond
+	idleSettle         = 3 * time.Second
 )
 
 type session struct {
@@ -35,16 +36,37 @@ type sideRun struct {
 	answers  []answer
 	restarts int
 	peakRSS  *int64
+	idleRSS  *int64
 }
 
 func measure(ctx context.Context, cfg serverConfig, p plan) (sideRun, error) {
 	s := &session{cfg: cfg, norm: normalizer{root: p.root}, docs: p.docs}
 	answers, err := s.sweep(ctx, p.queries)
+	idle := s.idleRSS(ctx)
 	s.retire()
 	if err := errors.Join(append(s.errs, err)...); err != nil {
 		return sideRun{}, fmt.Errorf("measuring %s: %w", cfg.name, err)
 	}
-	return sideRun{identity: s.info, answers: answers, restarts: s.restarts, peakRSS: s.peakRSS}, nil
+	return sideRun{identity: s.info, answers: answers, restarts: s.restarts, peakRSS: s.peakRSS, idleRSS: idle}, nil
+}
+
+func (s *session) idleRSS(ctx context.Context) *int64 {
+	if s.srv == nil || s.srv.isDead() {
+		return nil
+	}
+	select {
+	case <-time.After(idleSettle):
+	case <-ctx.Done():
+		return nil
+	}
+	rss, err := currentTreeRSS(s.srv.cmd.Process.Pid)
+	if err != nil {
+		if !errors.Is(err, errRSSUnsupported) {
+			fmt.Fprintf(os.Stderr, "nixparity: sampling the idle memory of %s: %v\n", s.cfg.name, err)
+		}
+		return nil
+	}
+	return &rss
 }
 
 func (s *session) sweep(ctx context.Context, queries []query) ([]answer, error) {

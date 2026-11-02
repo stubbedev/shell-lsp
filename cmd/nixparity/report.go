@@ -72,9 +72,9 @@ func renderMarkdown(r report) string {
 	fmt.Fprintf(&b, "## Latency of %s\n\n", theirs)
 	renderLatency(&b, r.Theirs.Latency)
 	b.WriteString("## Memory and restarts\n\n")
-	table(&b, []string{"Server", "Peak RSS", "Restarts"}, [][]string{
-		{ours, formatRSS(r.Ours.PeakRSSBytes), strconv.Itoa(r.Ours.Restarts)},
-		{theirs, formatRSS(r.Theirs.PeakRSSBytes), strconv.Itoa(r.Theirs.Restarts)},
+	table(&b, []string{"Server", "Peak RSS", "Idle RSS", "Restarts"}, [][]string{
+		{ours, formatRSS(r.Ours.PeakRSSBytes), formatRSS(r.Ours.IdleRSSBytes), strconv.Itoa(r.Ours.Restarts)},
+		{theirs, formatRSS(r.Theirs.PeakRSSBytes), formatRSS(r.Theirs.IdleRSSBytes), strconv.Itoa(r.Theirs.Restarts)},
 	})
 	if len(r.Examples) > 0 {
 		b.WriteString("## Examples\n\n")

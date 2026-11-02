@@ -46,8 +46,8 @@ func TestMarkdownNamesEveryFeatureInOrderAndEveryFailure(t *testing.T) {
 		"| definition | 3 | 0 | 1 | 0 | 1 | 0 | 1 |",
 		"| definition | 1 | 1 | 0 | 0 | 0 | 0 | 1 | 0 |",
 		"| hover | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1 |",
-		"| shell-lsp | 3.0 MiB | 0 |",
-		"| nixd 2 | not measured | 1 |",
+		"| shell-lsp | 3.0 MiB | not measured | 0 |",
+		"| nixd 2 | not measured | not measured | 1 |",
 		"- definition a.nix:1:3: failed",
 	} {
 		if !strings.Contains(text, want) {
