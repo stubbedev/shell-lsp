@@ -221,3 +221,25 @@ func TestIndexLookups(t *testing.T) {
 		t.Errorf("Children = %v", got)
 	}
 }
+
+func TestCyclesAreFoundOnlyOnTheCycle(t *testing.T) {
+	refTo := func(name string, owner int) Ref {
+		return Ref{Name: name, Kind: KindFunction, Owner: owner, Edge: true, Args: NoArgs, Span: Span{Start: owner, End: owner + 1}}
+	}
+	symbol := func(name string, at int) Symbol {
+		return Symbol{Name: name, Kind: KindFunction, Span: Span{Start: at, End: at + 1}, Selection: Span{Start: at, End: at + 1}, Parent: NoParent, Arity: NoArity}
+	}
+	ix := &Index{
+		Symbols: []Symbol{symbol("loopA", 0), symbol("loopB", 1), symbol("selfish", 2), symbol("leaf", 3), symbol("tail", 4)},
+		Refs:    []Ref{refTo("loopB", 0), refTo("loopA", 1), refTo("selfish", 2), refTo("loopA", 4)},
+	}
+	m := &Module{Files: []*Index{ix}}
+	search := newCycleSearch(m)
+	whenever := []context{{at: whenever}}
+	for i, want := range []bool{true, true, true, false, false} {
+		_, _, found := search.cycle(node{0, i}, whenever)
+		if found != want {
+			t.Errorf("%s: on a cycle = %v, want %v", ix.Symbols[i].Name, found, want)
+		}
+	}
+}

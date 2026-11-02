@@ -242,6 +242,15 @@ func (t Target) before(at moment) bool {
 }
 
 func effective(targets []Target, at moment) []Target {
+	switch len(targets) {
+	case 0:
+		return nil
+	case 1:
+		if !targets[0].before(at) || targets[0].Info().Inert {
+			return nil
+		}
+		return slices.Clone(targets)
+	}
 	var out []Target
 	byFile := map[int][]Target{}
 	var files []int
@@ -280,6 +289,9 @@ func chainOf(scopes []Scope) string {
 }
 
 func (c context) scopes() []Scope {
+	if c.chain == "" {
+		return nil
+	}
 	var out []Scope
 	for part := range strings.SplitSeq(strings.TrimSuffix(c.chain, ","), ",") {
 		if n, err := strconv.Atoi(part); err == nil {
@@ -518,6 +530,91 @@ type edge struct {
 	ref Ref
 }
 
+type edgeKey struct {
+	from node
+	in   context
+}
+
+type cycleSearch struct {
+	module *Module
+	edges  map[edgeKey][]edge
+	graphs map[context]*componentGraph
+}
+
+type vertex struct {
+	index, low      int
+	onStack, cyclic bool
+}
+
+type componentGraph struct {
+	vertices map[node]*vertex
+	stack    []*vertex
+}
+
+func newCycleSearch(m *Module) *cycleSearch {
+	return &cycleSearch{module: m, edges: map[edgeKey][]edge{}, graphs: map[context]*componentGraph{}}
+}
+
+func (s *cycleSearch) from(n node, c context) []edge {
+	key := edgeKey{n, c}
+	if known, ok := s.edges[key]; ok {
+		return known
+	}
+	out := s.module.edges(n, c)
+	s.edges[key] = out
+	return out
+}
+
+func (s *cycleSearch) onCycle(n node, c context) bool {
+	if len(s.from(n, c)) == 0 {
+		return false
+	}
+	g := s.graphs[c]
+	if g == nil {
+		g = &componentGraph{vertices: map[node]*vertex{}}
+		s.graphs[c] = g
+	}
+	v := g.vertices[n]
+	if v == nil {
+		v = s.connect(g, n, c)
+	}
+	return v.cyclic
+}
+
+func (s *cycleSearch) connect(g *componentGraph, n node, c context) *vertex {
+	order := len(g.vertices)
+	v := &vertex{index: order, low: order, onStack: true}
+	g.vertices[n] = v
+	g.stack = append(g.stack, v)
+	for _, e := range s.from(n, c) {
+		if e.to == n {
+			v.cyclic = true
+		}
+		next := g.vertices[e.to]
+		switch {
+		case next == nil:
+			next = s.connect(g, e.to, c)
+			v.low = min(v.low, next.low)
+		case next.onStack:
+			v.low = min(v.low, next.index)
+		}
+	}
+	if v.low != v.index {
+		return v
+	}
+	first := len(g.stack) - 1
+	for g.stack[first] != v {
+		first--
+	}
+	members := g.stack[first:]
+	for _, member := range members {
+		member.onStack = false
+		member.cyclic = member.cyclic || len(members) > 1
+	}
+	g.stack = g.stack[:first]
+	return v
+}
+
 func (m *Module) edges(n node, c context) []edge {
 	var out []edge
 	ix := m.Files[n.file]
@@ -537,6 +634,7 @@ func (m *Module) edges(n node, c context) []edge {
 
 func (m *Module) cycles(file int, checks Checks, expansions map[Target][]context) []lint.Finding {
 	var out []lint.Finding
+	search := newCycleSearch(m)
 	for i, s := range m.Files[file].Symbols {
 		rules := checks.Of(s.Kind)
 		code := rules.Circular
@@ -548,7 +646,7 @@ func (m *Module) cycles(file int, checks Checks, expansions map[Target][]context
 			continue
 		}
 		start := node{file, i}
-		if e, path, found := m.cycle(start, contexts); found {
+		if e, path, found := search.cycle(start, contexts); found {
 			names := []string{s.Name}
 			for _, n := range path {
 				names = append(names, m.Files[n.file].Symbols[n.symbol].Name)
@@ -563,10 +661,13 @@ func (m *Module) cycles(file int, checks Checks, expansions map[Target][]context
 	return out
 }
 
-func (m *Module) cycle(start node, contexts []context) (edge, []node, bool) {
+func (s *cycleSearch) cycle(start node, contexts []context) (edge, []node, bool) {
 	for _, c := range contexts {
-		for _, e := range m.edges(start, c) {
-			if path, found := m.pathBack(e.to, start, map[node]bool{}, c); found {
+		if !s.onCycle(start, c) {
+			continue
+		}
+		for _, e := range s.from(start, c) {
+			if path, found := s.pathBack(e.to, start, map[node]bool{}, c); found {
 				return e, path, true
 			}
 		}
@@ -574,7 +675,7 @@ func (m *Module) cycle(start node, contexts []context) (edge, []node, bool) {
 	return edge{}, nil, false
 }
 
-func (m *Module) pathBack(from, goal node, seen map[node]bool, c context) ([]node, bool) {
+func (s *cycleSearch) pathBack(from, goal node, seen map[node]bool, c context) ([]node, bool) {
 	if from == goal {
 		return []node{goal}, true
 	}
@@ -582,8 +683,8 @@ func (m *Module) pathBack(from, goal node, seen map[node]bool, c context) ([]nod
 		return nil, false
 	}
 	seen[from] = true
-	for _, e := range m.edges(from, c) {
-		if rest, ok := m.pathBack(e.to, goal, seen, c); ok {
+	for _, e := range s.from(from, c) {
+		if rest, ok := s.pathBack(e.to, goal, seen, c); ok {
 			return append([]node{from}, rest...), true
 		}
 	}
