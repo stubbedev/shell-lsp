@@ -50,6 +50,8 @@ func docLanguageOf(code lint.Code) docLanguage {
 		return docLanguage{fence: "just", file: "justfile", marks: trailingMarks}
 	case code.Make():
 		return docLanguage{fence: "make", file: "Makefile", marks: trailingMarks}
+	case code.Nix():
+		return docLanguage{fence: "nix", file: "default.nix", marks: trailingMarks}
 	}
 	return docLanguage{fence: "dockerfile", file: "Dockerfile", marks: precedingMarks}
 }

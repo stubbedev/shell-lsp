@@ -1543,3 +1543,20 @@ FROM alpine AS build
 COPY --from=final /app /app
 FROM alpine AS final
 ```
+
+## Nix files
+
+shell-lsp reads the whole Nix file, so it can find the shell strings in it. The
+parser keeps going after an error, and the shell strings elsewhere in the file
+stay checked. `lint.exclude` turns the check off like any other; directives
+inside the file do not apply, since the file is not a shell script.
+
+## SL8001
+
+**The Nix file does not parse.** Nix would refuse to evaluate it: a bracket or
+string is not closed, a binding has no `;`, an operator has no operand, or an
+expression is nested too deeply to analyse.
+
+```nix
+{ version = ; }    # SL8001
+```

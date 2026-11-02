@@ -31,7 +31,7 @@ apply to them, since the file decides their shell. Justfiles, Makefiles and
 Dockerfiles are also checked as just, make and Dockerfile files, with the
 `SL5`, `SL6` and `SL7` codes of [rules.md](rules.md#sl5001), following their `import`, `mod`
 and `include` statements, and the other justfiles and Makefiles among the
-paths that include them. Dockerfiles are checked with Hadolint's `DL` rules
+paths that include them. Nix files report syntax errors as [SL8001](rules.md#sl8001). Dockerfiles are checked with Hadolint's `DL` rules
 too, configured by the nearest `.hadolint.yaml` ([hadolint.md](hadolint.md)). `.git`, `node_modules`,
 `vendor` and similar directories are skipped, and so is whatever git ignores:
 the `.gitignore` files from the repository's top down, and

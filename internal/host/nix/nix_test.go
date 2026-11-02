@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/host/nix/syntax"
 	"github.com/stubbedev/shell-lsp/internal/projection"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 )
@@ -242,4 +243,98 @@ func TestAnalyzeShellsLeaveOutAntiquotations(t *testing.T) {
 	if spans := a.Enclosing(inner); len(spans) != 2 || src[spans[1].Start:spans[1].End] != "''\n  cp ${src} $out\n''" {
 		t.Errorf("Enclosing(%d) = %+v", inner, spans)
 	}
+}
+
+func TestAnalyzeKeepsEveryPathWhole(t *testing.T) {
+	t.Parallel()
+
+	src := "{ a = ~/foo; b = ./x.nix; c = ../y; d = /etc/z; e = <nixpkgs>; }"
+	var paths []string
+	syntax.Inspect(syntax.Parse(src).Root, func(n syntax.Node) bool {
+		if p, ok := n.(*syntax.Path); ok {
+			paths = append(paths, src[p.Span().Start:p.Span().End])
+		}
+		return true
+	})
+	if want := []string{"~/foo", "./x.nix", "../y", "/etc/z", "<nixpkgs>"}; !slices.Equal(paths, want) {
+		t.Errorf("paths = %q, want %q", paths, want)
+	}
+}
+
+func TestAnalyzeFindsShellAfterSyntaxErrors(t *testing.T) {
+	t.Parallel()
+
+	script := "''\n  make\n''"
+	want := phaseOpen(0) + "make\n" + phaseClose(0)
+	for _, tt := range []struct {
+		name, nix string
+	}{
+		{"a missing value", "{ a = ; buildPhase = " + script + "; }"},
+		{"a missing semicolon", "{ a = 1\n  buildPhase = " + script + "; }"},
+		{"a missing semicolon after a dotted name", "{ a = b\n  c.d = 1; buildPhase = " + script + "; }"},
+		{"a missing operand", "{ a = 1 +; buildPhase = " + script + "; }"},
+		{"an unclosed list", "{ a = [ 1 2\n  buildPhase = " + script + "; }"},
+		{"an unclosed group", "{ a = (1; buildPhase = " + script + "; }"},
+		{"a stray closer", "{ a = ); buildPhase = " + script + "; }"},
+		{"a bad attribute", "{ 5 = 1; buildPhase = " + script + "; }"},
+		{"a name without a value", "{ a; buildPhase = " + script + "; }"},
+		{"a stray semicolon", "{ ;; buildPhase = " + script + "; }"},
+		{"an unknown character", "{ a = %; buildPhase = " + script + "; }"},
+		{"a trailing dot", "{ a = b.; buildPhase = " + script + "; }"},
+		{"an if without branches", "{ a = if b; buildPhase = " + script + "; }"},
+		{"a missing outer brace", "{ buildPhase = " + script + ";"},
+		{"a set after a closed one", "{ } } { buildPhase = " + script + "; }"},
+		{"a let without in", "{ a = let b = 1; buildPhase = " + script + "; }"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			a := Analyze(tt.nix)
+			if len(a.Errors) == 0 {
+				t.Errorf("Analyze(%q) reports no syntax error", tt.nix)
+			}
+			if got := a.Map.Text(); got != want {
+				t.Errorf("Analyze(%q) =\n%q\nwant\n%q", tt.nix, got, want)
+			}
+		})
+	}
+}
+
+func TestAnalyzeReportsNoErrorsInValidNix(t *testing.T) {
+	t.Parallel()
+
+	src := "stdenv.mkDerivation (finalAttrs: { pname = \"x\"; installPhase = ''\n  echo ${finalAttrs.pname}\n''; })\n"
+	if errs := Analyze(src).Errors; len(errs) > 0 {
+		t.Errorf("Analyze(%q) reports %+v", src, errs)
+	}
+}
+
+func FuzzAnalyze(f *testing.F) {
+	for _, seed := range []string{
+		"{ src = ~/foo; }",
+		"{ buildPhase = ''\n  make ${toString x} '''$x ''${y}\n''; }",
+		"writeShellScript \"x\" \"echo \\\"$1\\\" ${a}\"",
+		"{ text = /* bash */ ''echo ${\"''\"}''; a = \"${ { b = \"}\"; } }\"; }",
+		"{ a = ; buildPhase = ''make''; ",
+		"runCommand \"x\" { a = 1; } ''${",
+	} {
+		f.Add(seed)
+	}
+	f.Fuzz(func(t *testing.T, src string) {
+		a := Analyze(src)
+		if a.Map.Host() != src {
+			t.Fatalf("the projection maps other text than %q", src)
+		}
+		end := 0
+		for _, s := range a.Index.Shells {
+			if s.Span.Start < end || s.Span.End <= s.Span.Start || s.Span.End > len(src) {
+				t.Fatalf("shell spans of %q overlap or are empty: %+v", src, a.Index.Shells)
+			}
+			end = s.Span.End
+		}
+		for _, sym := range a.Index.Symbols {
+			if sym.Selection.Start < sym.Span.Start || sym.Selection.End > sym.Span.End || sym.Span.End > len(src) || src[sym.Selection.Start:sym.Selection.End] != sym.Name {
+				t.Fatalf("symbol %+v of %q is not where it is named", sym, src)
+			}
+		}
+	})
 }

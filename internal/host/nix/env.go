@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/host/model"
+	"github.com/stubbedev/shell-lsp/internal/host/nix/syntax"
+	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 )
 
@@ -31,111 +33,80 @@ var (
 var Checks = model.Checks{Of: func(model.Kind) model.Rules { return model.Rules{} }}
 
 type environment struct {
-	open   int
+	set    *syntax.AttrSet
 	source envSource
 }
 
 type binding struct {
-	path    string
+	path    []string
 	name    model.Span
-	start   int
-	end     int
-	value   int
+	span    model.Span
+	value   *syntax.AttrSet
 	inherit bool
 }
 
-func (f *file) attribute(top *frame, i int) {
-	if top.kind != attrsFrame {
-		return
+func bindingsOf(set *syntax.AttrSet) []binding {
+	var out []binding
+	for _, b := range set.Bindings {
+		switch b := b.(type) {
+		case *syntax.Assign:
+			if bound, ok := assigned(b); ok {
+				out = append(out, bound)
+			}
+		case *syntax.Inherit:
+			for _, a := range b.Attrs {
+				if id, ok := a.(*syntax.IdentAttr); ok {
+					out = append(out, binding{path: []string{id.Name}, name: id.Span(), span: b.Span(), inherit: true})
+				}
+			}
+		}
 	}
-	t := f.tokens[i]
-	switch {
-	case t.keyword("let"):
-		top.lets++
-		return
-	case t.keyword("in") && top.lets > 0:
-		top.lets--
-		return
-	case top.lets > 0:
-		return
-	case t.keyword("with") || t.keyword("assert"):
-		top.pending++
-	case t.is(";"):
-		if top.pending > 0 {
-			top.pending--
-			return
-		}
-		for _, b := range top.current {
-			f.bindings[top.open][b].end = t.end
-		}
-		top.current, top.expect, top.inherit = nil, true, noBrace
-	case top.inherit != noBrace:
-		if t.kind == identToken && !strings.Contains(t.text, ".") {
-			top.current = append(top.current, f.bind(top.open, binding{path: t.text, name: model.Span{Start: t.start, End: t.end}, start: top.inherit, end: t.end, value: noBrace, inherit: true}))
-		}
-	case !top.expect:
-	case t.keyword("inherit"):
-		top.expect, top.inherit = false, t.start
-	case i+1 < len(f.tokens) && f.tokens[i+1].is("="):
-		top.expect = false
-		if path, name, ok := f.attrName(t); ok {
-			top.current = []int{f.bind(top.open, binding{path: path, name: name, start: t.start, end: name.End, value: noBrace})}
-		}
-	default:
-		top.expect = false
-	}
+	return out
 }
 
-func (f *file) bind(open int, b binding) int {
-	f.bindings[open] = append(f.bindings[open], b)
-	return len(f.bindings[open]) - 1
-}
-
-func (f *file) attrName(t token) (string, model.Span, bool) {
-	switch {
-	case t.kind == identToken:
-		name := t.name()
-		return t.text, model.Span{Start: t.end - len(name), End: t.end}, true
-	case t.kind == stringToken && !t.indented && t.end-t.start >= 2 && f.src[t.end-1] == '"':
-		inner := f.src[t.start+1 : t.end-1]
-		if strings.ContainsAny(inner, `\$`) {
-			return "", model.Span{}, false
+func assigned(a *syntax.Assign) (binding, bool) {
+	path := make([]string, len(a.Path))
+	var name model.Span
+	for i, attr := range a.Path {
+		text, span, ok := syntax.StaticName(attr)
+		if !ok {
+			return binding{}, false
 		}
-		return inner, model.Span{Start: t.start + 1, End: t.end - 1}, true
+		path[i], name = text, span
 	}
-	return "", model.Span{}, false
+	value, _ := a.Value.(*syntax.AttrSet)
+	return binding{path: path, name: name, span: a.Span(), value: value}, true
 }
 
-func (f *file) children(open int) []binding {
-	if open == noBrace {
+func children(set *syntax.AttrSet) []binding {
+	if set == nil {
 		return nil
 	}
-	return slices.DeleteFunc(slices.Clone(f.bindings[open]), func(b binding) bool { return strings.Contains(b.path, ".") })
+	return slices.DeleteFunc(bindingsOf(set), func(b binding) bool { return len(b.path) > 1 })
 }
 
-func (f *file) nested(bindings []binding, key string) []binding {
+func nested(bindings []binding, key string) []binding {
 	var out []binding
 	for _, b := range bindings {
-		head, rest, dotted := strings.Cut(b.path, ".")
 		switch {
-		case head != key:
-		case !dotted:
-			out = append(out, f.children(b.value)...)
-		case !strings.Contains(rest, "."):
+		case b.path[0] != key:
+		case len(b.path) == 1:
+			out = append(out, children(b.value)...)
+		case len(b.path) == 2:
 			out = append(out, b)
 		}
 	}
 	return out
 }
 
-func (f *file) vars(env environment) []binding {
-	bindings := f.bindings[env.open]
-	out := f.nested(bindings, envChildren[env.source])
+func vars(env environment) []binding {
+	bindings := bindingsOf(env.set)
+	out := nested(bindings, envChildren[env.source])
 	if env.source != derivationEnv {
 		return out
 	}
 	for _, b := range bindings {
-		if !strings.Contains(b.path, ".") && !strings.HasPrefix(b.path, "__") && !slices.Contains(unexported, b.path) {
+		if len(b.path) == 1 && !strings.HasPrefix(b.path[0], "__") && !slices.Contains(unexported, b.path[0]) {
 			out = append(out, b)
 		}
 	}
@@ -144,7 +115,7 @@ func (f *file) vars(env environment) []binding {
 }
 
 func (f *file) detail(b binding) string {
-	text := f.src[b.start:b.end]
+	text := f.src[b.span.Start:b.span.End]
 	if !strings.Contains(text, "\n") {
 		return text
 	}
@@ -152,33 +123,35 @@ func (f *file) detail(b binding) string {
 	if b.inherit {
 		return "inherit " + name + ";"
 	}
-	return f.src[b.start:b.name.End] + " = …;"
+	return f.src[b.span.Start:b.name.End] + " = …;"
 }
 
 func (f *file) index(found []shellString) *model.Index {
 	ix := &model.Index{}
+	for _, e := range f.tree.Errors {
+		ix.Findings = append(ix.Findings, lint.HostFinding(lint.CodeNixSyntax, e.Span, e.Message))
+	}
 	scopes := map[environment]model.Scope{}
 	for _, s := range found {
-		if s.env.open == noBrace {
+		if s.env.set == nil {
 			continue
 		}
 		scope, ok := scopes[s.env]
 		if !ok {
 			scope = model.Scope(len(scopes) + 1)
 			scopes[s.env] = scope
-			for _, b := range f.vars(s.env) {
+			for _, b := range vars(s.env) {
 				name := f.src[b.name.Start:b.name.End]
 				if !parser.IsName(name) {
 					continue
 				}
 				ix.Symbols = append(ix.Symbols, model.Symbol{
-					Name: name, Kind: model.KindVariable, Span: model.Span{Start: b.start, End: b.end}, Selection: b.name,
+					Name: name, Kind: model.KindVariable, Span: b.span, Selection: b.name,
 					Scope: scope, Parent: model.NoParent, Detail: f.detail(b), Doc: envDocs[s.env.source], Exported: true,
 				})
 			}
 		}
-		start, end := contentBounds(f.src, s.tok)
-		for _, piece := range f.pieces(start, end) {
+		for _, piece := range pieces(s.str) {
 			ix.Shells = append(ix.Shells, model.Shell{Span: piece, Scope: scope})
 		}
 	}
@@ -186,15 +159,21 @@ func (f *file) index(found []shellString) *model.Index {
 	return ix
 }
 
-func (f *file) pieces(start, end int) []model.Span {
-	holes := slices.DeleteFunc(slices.Clone(f.holes), func(h model.Span) bool { return h.Start < start || h.End > end })
-	slices.SortFunc(holes, func(a, b model.Span) int { return cmp.Compare(a.Start, b.Start) })
+func pieces(str *syntax.String) []model.Span {
+	start := str.Content.Start
 	var out []model.Span
-	for _, h := range append(holes, model.Span{Start: end, End: end}) {
-		if h.Start > start {
-			out = append(out, model.Span{Start: start, End: h.Start})
+	for _, part := range str.Parts {
+		if _, ok := part.(*syntax.Interpolation); !ok {
+			continue
 		}
-		start = max(start, h.End)
+		hole := part.Span()
+		if hole.Start > start {
+			out = append(out, model.Span{Start: start, End: hole.Start})
+		}
+		start = hole.End
+	}
+	if str.Content.End > start {
+		out = append(out, model.Span{Start: start, End: str.Content.End})
 	}
 	return out
 }

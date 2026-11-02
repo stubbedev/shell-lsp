@@ -571,6 +571,7 @@ marks the checks the `minimal` profile keeps; see [Profiles](../README.md#profil
 | <a name="sl7022"></a>[SL7022](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl7022) | warning |  | yes | \`FROM --platform\` is a constant. |
 | <a name="sl7023"></a>[SL7023](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl7023) | warning |  | yes | \`FROM --platform=$TARGETPLATFORM\` is redundant. |
 | <a name="sl7024"></a>[SL7024](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl7024) | error |  | yes | \`COPY --from\` names a stage that is not built before it. |
+| <a name="sl8001"></a>[SL8001](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8001) | error |  | yes | The Nix file does not parse. |
 | <a name="dl1001"></a>[DL1001](https://github.com/hadolint/hadolint/wiki/DL1001) | info | `no-ignore-pragmas` |  | A \`# hadolint ignore=\` comment hides findings; the project asks for none. |
 | <a name="dl3001"></a>[DL3001](https://github.com/hadolint/hadolint/wiki/DL3001) | info |  |  | RUN starts a tool meant for a running system, such as an editor or process viewer, which is no use while building. |
 | <a name="dl3002"></a>[DL3002](https://github.com/hadolint/hadolint/wiki/DL3002) | warning |  | yes | The last USER of a stage is root, so the container runs with full privileges. |

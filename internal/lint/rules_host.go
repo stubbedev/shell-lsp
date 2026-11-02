@@ -6,7 +6,8 @@ const (
 	justBase   = nativeBase + 5000
 	makeBase   = nativeBase + 6000
 	dockerBase = nativeBase + 7000
-	hostEnd    = nativeBase + 8000
+	nixBase    = nativeBase + 8000
+	hostEnd    = nativeBase + 9000
 )
 
 const (
@@ -83,13 +84,17 @@ const (
 	CodeDockerStageUsedBeforeDefinition
 )
 
+const CodeNixSyntax Code = nixBase + 1
+
 func (c Code) Host() bool { return c > justBase && c < hostEnd }
 
 func (c Code) Just() bool { return c > justBase && c < makeBase }
 
 func (c Code) Make() bool { return c > makeBase && c < dockerBase }
 
-func (c Code) Docker() bool { return c > dockerBase && c < hostEnd }
+func (c Code) Docker() bool { return c > dockerBase && c < nixBase }
+
+func (c Code) Nix() bool { return c > nixBase && c < hostEnd }
 
 var hostFamily = family{
 	codes: map[Code]meta{
@@ -161,6 +166,8 @@ var hostFamily = family{
 		CodeDockerConstantPlatform:          {severity: SeverityWarning},
 		CodeDockerRedundantTargetPlatform:   {severity: SeverityWarning},
 		CodeDockerStageUsedBeforeDefinition: {severity: SeverityError},
+
+		CodeNixSyntax: {severity: SeverityError},
 	},
 }
 

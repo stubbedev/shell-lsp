@@ -1,0 +1,375 @@
+x	x
+1	1
+01	1
+"a"	"a"
+''a''	"a"
+a:b	"a:b"
+http://x.y/z?a=b&c=d	"http://x.y/z?a=b&c=d"
+<a>	(__findFile __nixPath "a")
+<a/b.c>	(__findFile __nixPath "a/b.c")
+x + y * z	(x + (__mul y z))
+x * y + z	((__mul x y) + z)
+x - y - z	(__sub (__sub x y) z)
+x - y + z	((__sub x y) + z)
+x / y * z	(__mul (__div x y) z)
+x * y / z	(__div (__mul x y) z)
+x ++ y ++ z	(x ++ (y ++ z))
+x // y // z	(x // (y // z))
+x -> y -> z	(x -> (y -> z))
+x && y && z	((x && y) && z)
+x || y || z	((x || y) || z)
+x && y || z	((x && y) || z)
+x || y && z	(x || (y && z))
+x < y	(__lessThan x y)
+x > y	(__lessThan y x)
+x <= y	(! (__lessThan y x))
+x >= y	(! (__lessThan x y))
+x == y	(x == y)
+x != y	(x != y)
+x < y == z	((__lessThan x y) == z)
+x == y < z	(x == (__lessThan y z))
+x && y == z	(x && (y == z))
+x == y && z	((x == y) && z)
+x -> y || z	(x -> (y || z))
+x || y -> z	((x || y) -> z)
+x // y == z	((x // y) == z)
+x // y < z	(__lessThan (x // y) z)
+x + y // z	((x + y) // z)
+x // y + z	(x // (y + z))
+x * y ++ z	(__mul x (y ++ z))
+x ++ y * z	(__mul (x ++ y) z)
+x ++ y + z	((x ++ y) + z)
+x + y ++ z	(x + (y ++ z))
+x // y ++ z	(x // (y ++ z))
+! x == y	((! x) == y)
+! x + y	(! (x + y))
+! x * y	(! (__mul x y))
+! x ++ y	(! (x ++ y))
+! x // y	((! x) // y)
+! x < y	(__lessThan (! x) y)
+! x && y	((! x) && y)
+! x ? y	(! ((x) ? y))
+x + ! y + z	(x + (! (y + z)))
+x + ! y == z	((x + (! y)) == z)
+x == ! y	(x == (! y))
+x && ! y	(x && (! y))
+! x && ! y	((! x) && (! y))
+! ! x	(! (! x))
+- x	(__sub 0 x)
+- - x	(__sub 0 (__sub 0 x))
+- x + y	((__sub 0 x) + y)
+- x y	(__sub 0 (x y))
+- x ++ y	((__sub 0 x) ++ y)
+- x * y	(__mul (__sub 0 x) y)
+- x - y	(__sub (__sub 0 x) y)
+x - - y	(__sub x (__sub 0 y))
+x * - y	(__mul x (__sub 0 y))
+x ++ - y	(x ++ (__sub 0 y))
+- x ? y	(((__sub 0 x)) ? y)
+x -y	(__sub x y)
+x ? y	((x) ? y)
+x ? y ? z	((((x) ? y)) ? z)
+x ? y.z	((x) ? y.z)
+x ? "y"	((x) ? y)
+x ? ${y}	((x) ? "${y}")
+x ? y + z	(((x) ? y) + z)
+x ++ y ? z	(x ++ ((y) ? z))
+x.y ? z	(((x).y) ? z)
+x.y or z ? y	(((x).y or (z)) ? y)
+x |> y |> z	(z (y x))
+x <| y <| z	(x (y z))
+(x |> y) <| z	(y x z)
+x <| (y |> z)	(x (z y))
+x -> y |> z	(z (x -> y))
+x |> y -> z	((y -> z) x)
+x |> y || z	((y || z) x)
+x || y |> z	(z (x || y))
+x y	(x y)
+x y z	(x y z)
+x (y z)	(x (y z))
+x y + z y	((x y) + (z y))
+x x.y z	(x (x).y z)
+- x.y or z	(__sub 0 (x).y or (z))
+! x.y	(! (x).y)
+x.y	(x).y
+x.y.z	(x).y.z
+x. y	(x).y
+x .y	(x).y
+x . y	(x).y
+x."y"	(x).y
+x."y".z	(x).y.z
+x.${y}	(x)."${y}"
+x.y or z	(x).y or (z)
+x.y or z.y or x	(x).y or ((z).y or (x))
+x.y or z y	((x).y or (z) y)
+x.y.z or y.z	(x).y.z or ((y).z)
+x.or	(x).or
+(x).y	(x).y
+"a".y	("a").y
+[x].y	([ (x) ]).y
+{x=1;}.x	({ x = 1; }).x
+{x=1;}.x or 2	({ x = 1; }).x or (2)
+(x)	x
+((x))	x
+[ ]	[ ]
+[ x ]	[ (x) ]
+[ x x.y (x y) ]	[ (x) ((x).y) ((x y)) ]
+[ x.y or z ]	[ ((x).y or (z)) ]
+[ (x) (y) ]	[ (x) (y) ]
+{ }	{ }
+{ a = 1; }	{ a = 1; }
+{ or = 1; }	{ or = 1; }
+{ "a" = 1; }	{ a = 1; }
+{ a.b = 1; }	{ a = { b = 1; }; }
+{ a."b".c = 1; }	{ a = { b = { c = 1; }; }; }
+{ ${x} = 1; }	{ "${x}" = 1; }
+{ a.${x} = 1; }	{ a = { "${x}" = 1; }; }
+{ inherit x; }	{ inherit x; }
+{ inherit "x"; }	{ inherit x; }
+{ inherit (x) a; }	{ inherit (x) a; }
+{ inherit (x) a b; }	{ inherit (x) a b; }
+{ inherit (x) "a" b; }	{ inherit (x) a b; }
+{ inherit; }	{ }
+{ inherit (x); }	{ }
+rec { }	rec { }
+rec { a = 1; }	rec { a = 1; }
+let in x	(let in x)
+let a = 1; in a	(let a = 1; in a)
+let inherit x; in x	(let inherit x; in x)
+let inherit (x) a; in a	(let inherit (x) a; in a)
+let a.b = 1; in a	(let a = { b = 1; }; in a)
+let "a" = 1; in a	(let a = 1; in a)
+let a.${x} = 1; in a	(let a = { "${x}" = 1; }; in a)
+let { a = 1; body = a; }	(rec { a = 1; body = a; }).body
+x let { a = 1; body = a; }	(x (rec { a = 1; body = a; }).body)
+with x; y	(with x; y)
+with x; y + z	(with x; (y + z))
+assert x; y	assert x; y
+assert x; y + z	assert x; (y + z)
+if x then y else z	(if x then y else z)
+if x then y + z else z	(if x then (y + z) else z)
+if x then y else y + z	(if x then y else (y + z))
+if if x then y else z then y else z	(if (if x then y else z) then y else z)
+a: a	(a: a)
+a: b: a	(a: (b: a))
+a: a + x	(a: (a + x))
+x (a: a)	(x (a: a))
+{ }: 1	({  }: 1)
+{ ... }: 1	({ ... }: 1)
+{ a }: a	({ a }: a)
+{ a, }: a	({ a }: a)
+{ a, b }: a	({ a, b }: a)
+{ a ? 1 }: a	({ a ? 1 }: a)
+{ a ? 1, b ? a, ... }: a	({ a ? 1, b ? a, ... }: a)
+{ a ? b: b }: a	({ a ? (b: b) }: a)
+a@{ b }: a	({ b } @ a: a)
+{ b }@a: a	({ b } @ a: a)
+a @ { ... } : a	({ ... } @ a: a)
+{ a } : a	({ a }: a)
+1/2	OK
+a/a	OK
+x /a	OK
+x / y	OK
+x/ y	OK
+x//y	OK
+./.	OK
+../..	OK
+/a	OK
+/a/b	OK
+~/a	OK
+x<a>y	OK
+x <y	OK
+x<y	OK
+<a>/b	OK
+./a${x}	OK
+./${x}	OK
+a/${x}	OK
+/${x}	OK
+~/${x}	OK
+./a${x}/b	OK
+./a${x}b	OK
+./${x}${y}	OK
+./${x}//b	OK
+./a/${x}/b/${y}c.nix	OK
+a.b/c	OK
+a-b/c	OK
+a+b/c	OK
+1.5/c	OK
+a:a	OK
+a.b:c	OK
+a+b:c	OK
+1 a:b	OK
+_a: _a	OK
+1.	OK
+0.5	OK
+00.5	OK
+.5	OK
+1.5e3	OK
+1.5E-3	OK
+.5e+1	OK
+1.5.5	OK
+x.5	OK
+1 x	OK
+"a\nb\tc\rd\e\\\"\${a}$${a}$"	OK
+"$"	OK
+"$$"	OK
+"$a"	OK
+"\$"	OK
+"$\a"	OK
+"${x}${y}"	OK
+"${"${"${x}"}"}"	OK
+''''$''	OK
+''''\n''	OK
+''$''	OK
+''$a$$ '${x}' ''${x}''	OK
+''a'b''	OK
+''${''${x}''}''	OK
+/* a */ x # b	OK
+/**/ x	OK
+/***/ x	OK
+/* * / */ x	OK
+x /*b*/ /c	OK
+x/*b*/	OK
+{ ...}: 1	OK
+{...}: 1	OK
+{a?1,...}: a	OK
+x@{...}: x	OK
+{ a = x; b = y; }.a	OK
+a-b: a-b	OK
+a'b: a'b	OK
+_: 1	OK
+__curPos	OK
+	ERROR
+(	ERROR
+)	ERROR
+[	ERROR
+]	ERROR
+{	ERROR
+}	ERROR
+x +	ERROR
++ x	ERROR
+* x	ERROR
+x *	ERROR
+x < y < z	ERROR
+x == y == z	ERROR
+x == y != z	ERROR
+x <= y >= z	ERROR
+x |> y <| z	ERROR
+x <| y |> z	ERROR
+or	ERROR
+or: x	ERROR
+{ or ? 1 }: x	ERROR
+1 + if x then y else z	ERROR
+1 + a: a	ERROR
+1 + let in x	ERROR
+1 + with x; y	ERROR
+1 + assert x; y	ERROR
+[ if x then y else z ]	ERROR
+[ -1 ]	ERROR
+[ !x ]	ERROR
+[ a: a ]	ERROR
+[ x; ]	ERROR
+x if	ERROR
+{ if = 1; }	ERROR
+x.if	ERROR
+x.	ERROR
+x.y.	ERROR
+x. 1	ERROR
+x ?	ERROR
+x ?.	ERROR
+x.''y''	ERROR
+{ ''a'' = 1; }	ERROR
+{ a = 1 }	ERROR
+{ a }	ERROR
+{ a = }	ERROR
+{ a = 1;; }	ERROR
+{ ; }	ERROR
+{ a. = 1; }	ERROR
+{ inherit ${x}; }	ERROR
+{ inherit (x) ${y}; }	ERROR
+{ inherit a.b; }	ERROR
+{ inherit ( }	ERROR
+let ${x} = 1; in x	ERROR
+let	ERROR
+let a = 1;	ERROR
+let a = 1; in	ERROR
+rec	ERROR
+rec x	ERROR
+if x	ERROR
+if x then	ERROR
+if x then y	ERROR
+if x then y else	ERROR
+with x	ERROR
+with x;	ERROR
+assert x	ERROR
+assert x;	ERROR
+(x	ERROR
+[ x	ERROR
+{ a = 1;	ERROR
+{ a = 1	ERROR
+{ a =	ERROR
+{ a	ERROR
+{ a.	ERROR
+{ "a"	ERROR
+{ ${x}	ERROR
+{ ${x	ERROR
+()	ERROR
+x y)	ERROR
+x ]	ERROR
+x }	ERROR
+x@	ERROR
+x@{	ERROR
+{a}@	ERROR
+{ a ?	ERROR
+{ a ? 1	ERROR
+{ a ,	ERROR
+{ ...	ERROR
+{ a } @ x	ERROR
+{ a }@{ b }: a	ERROR
+{ a, ..., }: a	ERROR
+{ ..., a }: a	ERROR
+{ a b }: a	ERROR
+a @ b: 1	ERROR
+1: 1	ERROR
+"a": 1	ERROR
+{ a = 1; } : 1	ERROR
+$x	ERROR
+x $	ERROR
+%	ERROR
+&	ERROR
+|	ERROR
+x & y	ERROR
+x | y	ERROR
+...	ERROR
+,	ERROR
+;	ERROR
+@	ERROR
+`	ERROR
+\	ERROR
+~	ERROR
+~a	ERROR
+~/	ERROR
+.	ERROR
+..	ERROR
+./	ERROR
+/	ERROR
+a/ /	ERROR
+<a/>	ERROR
+"${x	ERROR
+"a	ERROR
+''a	ERROR
+'''''	ERROR
+/* a	ERROR
+x /* a	ERROR
+${x}	ERROR
+./a/	ERROR
+a/a/	ERROR
+a/a//a	ERROR
+./${x}/	ERROR
+let or = x; in y or	(let or = x; in (y or))
+let or = x; in y z or	(let or = x; in (y (z or)))
+let or = x; in (y or)	(let or = x; in (y or))
+let or = x; in y.z or z or	(let or = x; in (y).z or ((z or)))
+let or = x; in [ y or z ]	(let or = x; in [ ((y or)) (z) ])
+let or = x; in { inherit or; }	(let or = x; in { inherit or; })
+''''''''	ERROR

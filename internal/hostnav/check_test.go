@@ -89,3 +89,15 @@ func TestMakeChecksAgreeWithMake(t *testing.T) {
 	}
 	hosttest.Check(t, filepath.Join("testdata", "check", "make.txt"), findingsAlone(t, "Makefile"), hosttest.MakeVerdict, makeReports, *update)
 }
+
+func TestNixSyntaxErrorsAreFindings(t *testing.T) {
+	t.Parallel()
+
+	findings := findingsAlone(t, "default.nix")("{ a = ; buildPhase = ''\n  make\n''; }\n")
+	if len(findings) != 1 || findings[0].Code != lint.CodeNixSyntax || findings[0].Span.Start != 6 {
+		t.Errorf("findings = %+v", findings)
+	}
+	if clean := findingsAlone(t, "default.nix")("{ a = 1; }\n"); len(clean) != 0 {
+		t.Errorf("a valid file reports %+v", clean)
+	}
+}
