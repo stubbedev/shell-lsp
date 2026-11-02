@@ -170,7 +170,7 @@ func DocumentLinks(file *workspace.File, env navigation.Env) []Link {
 	}
 	text := file.Tree.Text()
 	for _, c := range file.Tree.Comments {
-		for url := range webURLs(text[c.Span.Start:c.Span.End]) {
+		for url := range WebURLs(text[c.Span.Start:c.Span.End]) {
 			span := parser.Span{Start: c.Span.Start + url.Start, End: c.Span.Start + url.End}
 			links = append(links, Link{Span: span, Target: text[span.Start:span.End]})
 		}

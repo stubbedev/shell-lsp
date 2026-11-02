@@ -15,7 +15,7 @@ const (
 	proseTrailers   = ".,;:!?'"
 )
 
-func webURLs(text string) iter.Seq[parser.Span] {
+func WebURLs(text string) iter.Seq[parser.Span] {
 	return func(yield func(parser.Span) bool) {
 		for from := 0; ; {
 			found := strings.Index(text[from:], schemeSeparator)

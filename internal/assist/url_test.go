@@ -40,11 +40,11 @@ func TestWebURLs(t *testing.T) {
 		{"# https://example.com/\uFFFE", []string{"https://example.com/"}},
 	} {
 		var got []string
-		for span := range webURLs(tt.text) {
+		for span := range WebURLs(tt.text) {
 			got = append(got, tt.text[span.Start:span.End])
 		}
 		if !slices.Equal(got, tt.want) {
-			t.Errorf("webURLs(%q) = %q, want %q", tt.text, got, tt.want)
+			t.Errorf("WebURLs(%q) = %q, want %q", tt.text, got, tt.want)
 		}
 	}
 }

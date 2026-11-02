@@ -223,3 +223,34 @@ func TestIfToCaseFollowsTheProjectStyle(t *testing.T) {
 		}
 	}
 }
+
+func TestNixRefactoringsAreOffered(t *testing.T) {
+	t.Parallel()
+
+	const name = "default.nix"
+	text := "let\n  a = 1;\nin\n  a + 2 * 3\n"
+	root := t.TempDir()
+	writeFiles(t, root, map[string]string{name: text})
+	uri := fileuri.FromPath(filepath.Join(root, name))
+	c, _ := startClient(t, `{"rootUri": "`+fileuri.FromPath(root)+`", `+actionCapabilities+`}`)
+	c.notify("textDocument/didOpen", openParams(uri, text))
+
+	apply := func(params, only string) string {
+		t.Helper()
+		found := decodeResult[[]lsp.CodeAction](t, c.call("textDocument/codeAction", params))
+		for _, a := range found {
+			if string(a.Kind) == only && a.Edit != nil && len(a.Edit.DocumentChanges) == 1 {
+				return applyLSPEdits(text, a.Edit.DocumentChanges[0].Edits)
+			}
+		}
+		t.Fatalf("no %s action in %+v", only, found)
+		return ""
+	}
+	selection := `{"textDocument": {"uri": "` + uri + `"}, "range": {"start": {"line": 3, "character": 6}, "end": {"line": 3, "character": 11}}, "context": {"diagnostics": [], "only": ["refactor.extract"]}}`
+	if got, want := apply(selection, "refactor.extract"), "let\n  a = 1;\n  extracted = 2 * 3;\nin\n  a + extracted\n"; got != want {
+		t.Errorf("extract = %q, want %q", got, want)
+	}
+	if got, want := apply(rangeParams(uri, 1, 2, "refactor.inline"), "refactor.inline"), "1 + 2 * 3\n"; got != want {
+		t.Errorf("inline = %q, want %q", got, want)
+	}
+}

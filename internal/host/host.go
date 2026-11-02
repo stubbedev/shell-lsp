@@ -128,6 +128,8 @@ var definitions = [...]definition{
 		validName:   nix.ValidName,
 		fence:       "nix",
 		formatter:   nixformat.Format,
+		invocation: func(_, name string) []string { return nix.Invocation(name) },
+		recursion:  Recursion{Kind: model.KindFunction},
 	},
 	Docker: {
 		name:        "Dockerfile",

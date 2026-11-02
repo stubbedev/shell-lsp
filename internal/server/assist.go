@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"slices"
 
 	"github.com/stubbedev/shell-lsp/internal/assist"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
@@ -180,8 +181,15 @@ func (s *Server) handleDocumentLink(ctx context.Context, docs *docstore.View, p 
 	if err != nil {
 		return nil, err
 	}
+	source := sourcePositions(file, docs.Encoding())
 	for _, l := range g.Links() {
-		out = append(out, lsp.DocumentLink{Range: sourcePositions(file, docs.Encoding()).Range(l.Span), Target: fileuri.FromPath(l.Path)})
+		out = append(out, lsp.DocumentLink{Range: source.Range(l.Span), Target: fileuri.FromPath(l.Path)})
+	}
+	for _, l := range g.SourceLinks() {
+		r := source.Range(l.Span)
+		if !slices.ContainsFunc(out, func(d lsp.DocumentLink) bool { return d.Range == r }) {
+			out = append(out, lsp.DocumentLink{Range: r, Target: l.Target})
+		}
 	}
 	return out, nil
 }

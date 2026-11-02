@@ -11,6 +11,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/actions"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
+	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/hostnav"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lint"
@@ -98,6 +99,13 @@ func (s *Server) hostActions(ctx context.Context, docs *docstore.View, snap *sna
 		}
 		out = fixes
 	}
+	if h.Language() == host.Nix {
+		refactorings, err := s.nixRefactorings(snap, p)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, refactorings...)
+	}
 	if !wants(p.Context.Only, actions.SourceFixAll) {
 		return out, nil
 	}
@@ -110,6 +118,23 @@ func (s *Server) hostActions(ctx context.Context, docs *docstore.View, snap *sna
 		return nil, err
 	}
 	return append(out, lsp.CodeAction{Title: actions.FixAllTitle, Kind: lsp.CodeActionKind(actions.SourceFixAll), Edit: &edit}), nil
+}
+
+func (s *Server) nixRefactorings(snap *snapshot, p lsp.CodeActionParams) ([]lsp.CodeAction, error) {
+	source := snap.Doc.Source()
+	selection, _ := source.Positions(snap.encoding).Span(p.Range)
+	var out []lsp.CodeAction
+	for _, a := range actions.Nix(source.Text(), selection) {
+		if !wants(p.Context.Only, a.Kind) {
+			continue
+		}
+		edit, err := s.workspaceEdit(source, snap.encoding, a.Edits)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, lsp.CodeAction{Title: a.Title, Kind: lsp.CodeActionKind(a.Kind), Edit: &edit})
+	}
+	return out, nil
 }
 
 func (s *Server) hostFixAllEdits(snap *snapshot, h hostnav.Host) ([]textedit.Edit, bool) {

@@ -55,7 +55,7 @@ func TestFmtFormatsMakefiles(t *testing.T) {
 	if got := run(t, dir, "", "fmt", "proj/Makefile"); got.status != statusOK || got.stdout != "CC = gcc\nall: app\n\t$(CC) -o app main.c  \n" {
 		t.Errorf("fmt of a Makefile = %+v", got)
 	}
-	if got := run(t, dir, "", "fmt", "proj/default.nix"); got.status == statusOK || !strings.Contains(got.stderr, "formats only shell scripts") {
+	if got := run(t, dir, "", "fmt", "proj/default.nix"); got.status != statusOK {
 		t.Errorf("fmt of a Nix file = %+v", got)
 	}
 }
@@ -103,5 +103,102 @@ func TestFmtRefusesToDropAJustfileComment(t *testing.T) {
 	}
 	if got := run(t, dir, "", "fmt", "-l", "."); got.status == statusOK {
 		t.Errorf("fmt -l over a directory with that justfile = %+v", got)
+	}
+}
+
+const nixFindings = "let\n  unused = 1;\nin\n  undefinedName\n"
+
+func TestCheckReportsNixFilesInEveryFormat(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeFiles(t, dir, map[string]string{"proj/default.nix": nixFindings, "proj/sub/mod.nix": "{ }\n", "proj/.git/hook.nix": "undefinedElsewhere\n"})
+
+	gcc := run(t, dir, "", "check", "-f", "gcc", "proj")
+	want := []string{filepath.FromSlash("proj/default.nix:2:3 SL8005"), filepath.FromSlash("proj/default.nix:4:3 SL8002")}
+	if !slices.Equal(findings(t, gcc.stdout), want) || gcc.status != checkStatusFindings {
+		t.Errorf("gcc = %d %v, want %v\n%s", gcc.status, findings(t, gcc.stdout), want, gcc.stderr)
+	}
+	for _, tt := range []struct {
+		format string
+		has    []string
+	}{
+		{"tty", []string{filepath.FromSlash("In proj/default.nix line 2:"), "  unused = 1;", "SL8002 (error)"}},
+		{"json", []string{`"level":"info"`, `"level":"error"`, `"line":4`}},
+		{"json1", []string{`{"comments":[`, `"level":"error"`}},
+		{"checkstyle", []string{"source='ShellCheck.SL8005'", "source='ShellCheck.SL8002'", "severity='error'"}},
+		{"sarif", []string{`"ruleId":"SL8005"`, `"ruleId":"SL8002"`, `"version":"2.1.0"`}},
+		{"diff", []string{"-  unused = 1;\n"}},
+	} {
+		got := run(t, dir, "", "check", "-f", tt.format, "proj")
+		if got.status != checkStatusFindings {
+			t.Errorf("%s exits %d: %s", tt.format, got.status, got.stderr)
+		}
+		for _, sub := range tt.has {
+			if !strings.Contains(got.stdout, sub) {
+				t.Errorf("%s output lacks %q:\n%s", tt.format, sub, got.stdout)
+			}
+		}
+	}
+	if got := run(t, dir, "", "check", "-f", "quiet", "proj"); got.status != checkStatusFindings || got.stdout != "" {
+		t.Errorf("quiet = %+v", got)
+	}
+}
+
+func TestCheckFiltersNixFindings(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeFiles(t, dir, map[string]string{"default.nix": nixFindings, "clean.nix": "{ }\n", "broken.nix": "{ a = ; }\n"})
+	for _, tt := range []struct {
+		args []string
+		want []string
+	}{
+		{[]string{"-S", "error"}, []string{"default.nix:4:3 SL8002"}},
+		{[]string{"-e", "SL8002"}, []string{"default.nix:2:3 SL8005"}},
+		{[]string{"-i", "SL8005"}, []string{"default.nix:2:3 SL8005"}},
+		{[]string{"-e", "SL8002,SL8005"}, nil},
+	} {
+		args := append(append([]string{"check", "-f", "gcc"}, tt.args...), "default.nix")
+		got := run(t, dir, "", args...)
+		if have := findings(t, got.stdout); !slices.Equal(have, tt.want) {
+			t.Errorf("%v = %v, want %v", tt.args, have, tt.want)
+		}
+		status := checkStatusFindings
+		if tt.want == nil {
+			status = statusOK
+		}
+		if got.status != status {
+			t.Errorf("%v exits %d, want %d", tt.args, got.status, status)
+		}
+	}
+	if got := run(t, dir, "", "check", "clean.nix"); got.status != statusOK || got.stdout != "" {
+		t.Errorf("a clean Nix file = %+v", got)
+	}
+	if got := run(t, dir, "", "check", "-f", "gcc", "broken.nix"); got.status != checkStatusFindings || !strings.Contains(got.stdout, "[SL8001]") {
+		t.Errorf("a Nix file that does not parse = %+v", got)
+	}
+	if got := run(t, dir, "", "check", "missing.nix"); got.status != checkStatusFiles {
+		t.Errorf("a missing Nix file = %+v", got)
+	}
+}
+
+func TestCheckWalksTheNixCorpus(t *testing.T) {
+	t.Parallel()
+
+	for _, name := range []string{"single-flake", "flake-parts"} {
+		root, err := filepath.Abs(filepath.Join("..", "..", "corpus", "nix", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := run(t, t.TempDir(), "", "check", "-f", "gcc", root)
+		if got.status != statusOK && got.status != checkStatusFindings {
+			t.Errorf("%s exits %d: %s", name, got.status, got.stderr)
+		}
+		for _, code := range []string{"[SL8001]", "[SL8002]"} {
+			if strings.Contains(got.stdout, code) {
+				t.Errorf("%s reports %s:\n%s", name, code, got.stdout)
+			}
+		}
 	}
 }

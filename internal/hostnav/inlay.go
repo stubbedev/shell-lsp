@@ -1,10 +1,14 @@
 package hostnav
 
 import (
+	"cmp"
+	"slices"
 	"unicode/utf8"
 
 	"github.com/stubbedev/shell-lsp/internal/assist"
+	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/host/model"
+	"github.com/stubbedev/shell-lsp/internal/navigation"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 )
 
@@ -47,6 +51,27 @@ func (g *Group) InlayHints(within parser.Span) []assist.Hint {
 			out = append(out, g.parameterHints(first, args, text)...)
 		}
 	}
+	return append(out, g.nixHints(within)...)
+}
+
+func (g *Group) nixHints(within parser.Span) []assist.Hint {
+	if g.Language != host.Nix {
+		return nil
+	}
+	doc := g.nixDocument()
+	var out []assist.Hint
+	for _, h := range doc.ParameterHints(within) {
+		out = append(out, assist.Hint{Offset: h.Offset, Label: h.Name + ":", Kind: assist.HintParameter})
+	}
+	for _, p := range doc.PathLiterals() {
+		if p.Span.Start < within.Start || within.End < p.Span.End {
+			continue
+		}
+		if entry, ok := g.nixDirectoryEntry(p); ok {
+			out = append(out, assist.Hint{Offset: p.Span.End, Label: "→ " + navigation.RelativeName(g.Self.Path, entry), Kind: assist.HintPath, Tooltip: entry})
+		}
+	}
+	slices.SortStableFunc(out, func(a, b assist.Hint) int { return cmp.Compare(a.Offset, b.Offset) })
 	return out
 }
 

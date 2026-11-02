@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
@@ -107,5 +108,87 @@ func TestCallHierarchyKeepsTheChosenDefinition(t *testing.T) {
 	atCall := decodeResult[[]lsp.CallHierarchyItem](t, c.call("textDocument/prepareCallHierarchy", positionParams(uri, 4, 0, "")))
 	if len(atCall) != 2 || atCall[0].Range.Start.Line != 2 || atCall[1].Range.Start.Line != 3 {
 		t.Errorf("prepare on a call of a redefined function = %+v, want both definitions", atCall)
+	}
+}
+
+func nixRunTitles(t *testing.T, p *nativeProject, name string) []string {
+	t.Helper()
+	var titles []string
+	for _, l := range decodeResult[[]lsp.CodeLens](t, p.c.call("textDocument/codeLens", `{"textDocument": {"uri": "`+p.uri(name)+`"}}`)) {
+		if l.Command != nil && l.Command.Command == commandRunRecipe {
+			titles = append(titles, l.Command.Title)
+		}
+	}
+	return titles
+}
+
+func TestNixFlakeRunLenses(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		corpus []string
+		want   []string
+	}{
+		{[]string{"single-flake", "flake.nix"}, []string{"▶ nix build .#default", "▶ nix build .#logship", "▶ nix build .#logship-rotate", "▶ nix build .#manual", "▶ nix run .#default", "▶ nix flake check", "▶ nix develop .#default"}},
+		{[]string{"flake-parts", "nix", "shell.nix"}, []string{"▶ nix develop .#default"}},
+		{[]string{"flake-parts", "nix", "checks.nix"}, []string{"▶ nix flake check"}},
+		{[]string{"flake-parts", "nix", "project.nix"}, nil},
+	} {
+		name := tt.corpus[len(tt.corpus)-1]
+		p := openNativeProject(t, nativeCapabilities, map[string]string{name: corpusFile(t, tt.corpus...)}, name)
+		if got := nixRunTitles(t, p, name); !slices.Equal(got, tt.want) {
+			t.Errorf("run lenses of %v = %q, want %q", tt.corpus, got, tt.want)
+		}
+	}
+}
+
+func TestNixDocumentLinks(t *testing.T) {
+	t.Parallel()
+
+	const name = "default.nix"
+	files := map[string]string{name: "# https://example.com/docs\n{ a = import ./b.nix; c = import ./sub; }\n", "b.nix": "1\n", "sub/default.nix": "2\n"}
+	p := openNativeProject(t, nativeCapabilities, files, name)
+	links := decodeResult[[]lsp.DocumentLink](t, p.c.call("textDocument/documentLink", `{"textDocument": {"uri": "`+p.uri(name)+`"}}`))
+	var targets []string
+	seen := map[lsp.Range]bool{}
+	for _, l := range links {
+		if seen[l.Range] {
+			t.Errorf("two links over %+v: %+v", l.Range, links)
+		}
+		seen[l.Range] = true
+		targets = append(targets, l.Target)
+	}
+	slices.Sort(targets)
+	want := []string{p.uri("b.nix"), p.uri("sub/default.nix"), "https://example.com/docs"}
+	slices.Sort(want)
+	if !slices.Equal(targets, want) {
+		t.Errorf("link targets = %q, want %q", targets, want)
+	}
+}
+
+func TestNixCallHierarchyAcrossItsBindings(t *testing.T) {
+	t.Parallel()
+
+	const name = "default.nix"
+	p := openNativeProject(t, nativeCapabilities, map[string]string{name: "let\n  g = y: y;\n  f = x: g x;\nin\n  f 1\n"}, name)
+	items := decodeResult[[]lsp.CallHierarchyItem](t, p.c.call("textDocument/prepareCallHierarchy", p.params(name, "f", 0, "")))
+	if len(items) != 1 || items[0].Name != "f" {
+		t.Fatalf("prepared items = %+v", items)
+	}
+	item, err := json.Marshal(items[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	outgoing := decodeResult[[]lsp.CallHierarchyOutgoingCall](t, p.c.call("callHierarchy/outgoingCalls", `{"item": `+string(item)+`}`))
+	if len(outgoing) != 1 || outgoing[0].To.Name != "g" {
+		t.Fatalf("outgoing calls = %+v", outgoing)
+	}
+	callee, err := json.Marshal(outgoing[0].To)
+	if err != nil {
+		t.Fatal(err)
+	}
+	incoming := decodeResult[[]lsp.CallHierarchyIncomingCall](t, p.c.call("callHierarchy/incomingCalls", `{"item": `+string(callee)+`}`))
+	if len(incoming) != 1 || incoming[0].From.Name != "f" {
+		t.Errorf("incoming calls = %+v", incoming)
 	}
 }

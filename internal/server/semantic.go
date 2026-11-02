@@ -241,7 +241,11 @@ func (s *Server) handleSelectionRange(_ context.Context, docs *docstore.View, p 
 		at := snap.Doc.Source().PositionToOffset(pos, snap.encoding)
 		outer := parser.Span{Start: at, End: at}
 		if inside {
-			for _, span := range structure.SelectionPath(snap.Tree, offset) {
+			path := structure.SelectionPath(snap.Tree, offset)
+			if snap.Native != nil {
+				path = path[:len(path)-1]
+			}
+			for _, span := range path {
 				ranges = append(ranges, snap.positions().Range(span))
 				outer = parser.Span{Start: snap.Doc.SourceOffset(span.Start), End: snap.Doc.SourceOffset(span.End)}
 			}

@@ -148,6 +148,8 @@ func (f *file) index(found []shellString) *model.Index {
 	}
 	slices.SortFunc(ix.Shells, func(a, b model.Shell) int { return cmp.Compare(a.Span.Start, b.Span.Start) })
 	table.build()
+	linkCalls(f.tree, ix)
+	ix.Runnables = outputs(f.tree)
 	ix.Folds = folds(f.tree)
 	return ix
 }

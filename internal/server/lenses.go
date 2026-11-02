@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
+	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/host/model"
+	"github.com/stubbedev/shell-lsp/internal/host/nix"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/navigation"
@@ -76,7 +79,7 @@ func (s *Server) handleCodeLens(_ context.Context, docs *docstore.View, p lsp.Co
 func appendRunLenses(out []lsp.CodeLens, file *workspace.File, enc docstore.Encoding, prompts bool) ([]lsp.CodeLens, error) {
 	at := sourcePositions(file, enc)
 	for _, r := range file.Native.Index.Runnables {
-		args, title := recipeRunArgs{URI: file.URI, Name: r.Name}, "▶ Run"
+		args, title := recipeRunArgs{URI: file.URI, Name: r.Name}, runTitle(file, r)
 		if len(r.Params) > 0 {
 			if !prompts && r.Required() > 0 {
 				continue
@@ -92,6 +95,13 @@ func appendRunLenses(out []lsp.CodeLens, file *workspace.File, enc docstore.Enco
 		out = append(out, lsp.CodeLens{Range: at.Range(r.Span), Command: &lsp.Command{Title: title, Command: commandRunRecipe, Arguments: []json.RawMessage{raw}}})
 	}
 	return out, nil
+}
+
+func runTitle(file *workspace.File, r model.Runnable) string {
+	if file.Native.Language == host.Nix {
+		return "▶ " + strings.Join(nix.Invocation(r.Name), " ")
+	}
+	return "▶ Run"
 }
 
 func (s *Server) handleCodeLensResolve(ctx context.Context, docs *docstore.View, lens lsp.CodeLens) (any, error) {
