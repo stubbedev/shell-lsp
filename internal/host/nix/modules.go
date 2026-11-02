@@ -1,7 +1,10 @@
 package nix
 
 import (
+	"cmp"
+	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/host/model"
 	"github.com/stubbedev/shell-lsp/internal/host/nix/syntax"
@@ -15,6 +18,7 @@ const (
 	classDarwin    = "darwin"
 	classDroid     = "nixOnDroid"
 	classModules   = "modules"
+	classSubmodule = "submodule"
 
 	configFormal  = "config"
 	optionsFormal = "options"
@@ -41,8 +45,10 @@ var (
 		"nixOnDroidConfiguration":  classDroid,
 		"evalModules":              classModules,
 	}
-	moduleKeys = []string{importsAttr, optionsFormal, configFormal, "_file", "key", "disabledModules", "freeformType"}
-	givenArgs  = []string{configFormal, optionsFormal, "lib", "pkgs", "modulesPath", specialArgs, inputsAttr, selfFormal, "system", selfPrimed, inputsPrimed, withSystemName, "moduleWithSystem", "flake-parts-lib", "getSystem", "final"}
+	moduleKeys    = []string{importsAttr, optionsFormal, configFormal, "_file", "key", "disabledModules", "freeformType"}
+	givenArgs     = []string{configFormal, optionsFormal, "lib", pkgsFormal, "modulesPath", specialArgs, inputsAttr, selfFormal, "system", selfPrimed, inputsPrimed, withSystemName, moduleWithSystemName, "flake-parts-lib", "getSystem", "final"}
+	wrappingTypes = []string{"listOf", "nullOr", "uniq", "unique", "coercedTo"}
+	keyedTypes    = []string{"attrsOf", "lazyAttrsOf"}
 )
 
 type moduleOutput struct {
@@ -89,6 +95,8 @@ type space struct {
 	declared bool
 	escaped  bool
 	dynamic  bool
+	sub      *flowClass
+	depth    int
 }
 
 func (s *space) clear() {
@@ -129,7 +137,24 @@ type flowClass struct {
 
 func (p *Project) newSpace(parent *space, name string, role spaceRole) *space {
 	p.nextShared--
-	return &space{parent: parent, name: name, role: role, id: p.nextShared, kids: map[string]*space{}, names: map[string]bool{}}
+	p.spaces++
+	depth := 0
+	if parent != nil {
+		depth = parent.depth + 1
+	}
+	return &space{parent: parent, name: name, role: role, id: p.nextShared, kids: map[string]*space{}, names: map[string]bool{}, depth: depth}
+}
+
+func (p *Project) tooDeep(s *space) bool {
+	if p.spaces >= maxSpaces {
+		p.failure = cmp.Or(p.failure, fmt.Sprintf("the project has more than %d attribute paths in its modules, so they are followed no further", maxSpaces))
+		return true
+	}
+	if s.depth < maxSpaceDepth {
+		return false
+	}
+	p.failure = cmp.Or(p.failure, fmt.Sprintf("an attribute set holds itself deeper than %d levels at `%s`, so it is followed no further", maxSpaceDepth, strings.Join(s.path(), ".")))
+	return true
 }
 
 func (p *Project) kid(s *space, name string) *space {
@@ -285,6 +310,9 @@ func (p *Project) walk(c *flowClass, v flowValue) {
 		for _, set := range v.space.sets {
 			p.walk(c, set)
 		}
+	case flowUpdate:
+		p.walkAll(c, p.eval(v.unit, v.node.Left))
+		p.walkAll(c, p.eval(v.unit, v.node.Right))
 	}
 }
 
@@ -313,7 +341,7 @@ func (p *Project) argValue(c *flowClass, name string) []flowValue {
 	case c.name == classPerSystem && name == selfPrimed:
 		return []flowValue{flowSpace{space: c.root}}
 	case c.name == classPerSystem && name == inputsPrimed:
-		return []flowValue{flowSpace{space: p.inputs}}
+		return []flowValue{flowPrimed{space: p.inputs}}
 	}
 	return []flowValue{flowSpace{space: p.kid(c.args, name)}}
 }
@@ -340,11 +368,86 @@ func (p *Project) registerNamed(c *flowClass, v flowSet, name string, declared b
 	}
 	for _, src := range v.set.sources[name] {
 		for _, value := range p.evalSource(v.unit, src) {
-			if set, ok := value.(flowSet); ok {
+			for _, set := range p.setsOf(value) {
 				p.register(c, c.root, set.unit, set.set, declared)
 			}
 		}
 	}
+}
+
+func (p *Project) setsOf(v flowValue) []flowSet {
+	if set, isSet := v.(flowSet); isSet {
+		return []flowSet{set}
+	}
+	if !p.enter(v) {
+		return nil
+	}
+	defer delete(p.expanding, v)
+	switch v := v.(type) {
+	case flowUpdate:
+		var out []flowSet
+		for _, side := range []syntax.Expr{v.node.Left, v.node.Right} {
+			for _, value := range p.eval(v.unit, side) {
+				out = append(out, p.setsOf(value)...)
+			}
+		}
+		return out
+	case flowMapped:
+		var out []flowSet
+		for _, value := range p.eval(v.unit, v.call.Args[1]) {
+			out = append(out, p.setsOf(value)...)
+		}
+		return out
+	}
+	return nil
+}
+
+func (p *Project) optionSubmodule(u *symbolTable, s *space, src flowSource) {
+	option, isCall := syntax.Unparenthesized(src.expr).(*syntax.Apply)
+	if src.stmt != nil || !isCall || calleeName(syntax.Unparenthesized(option.Fn)) != mkOptionName {
+		return
+	}
+	set, literal := syntax.Unparenthesized(option.Args[len(option.Args)-1]).(*syntax.AttrSet)
+	if !literal {
+		return
+	}
+	for _, b := range set.Bindings {
+		if a, assigned := b.(*syntax.Assign); assigned && lastIdent(a.Path) == "type" {
+			p.submoduleType(u, s, a.Value)
+		}
+	}
+}
+
+func (p *Project) submoduleType(u *symbolTable, s *space, t syntax.Expr) {
+	call, isCall := syntax.Unparenthesized(t).(*syntax.Apply)
+	if !isCall || p.tooDeep(s) {
+		return
+	}
+	last := call.Args[len(call.Args)-1]
+	switch name := calleeName(syntax.Unparenthesized(call.Fn)); {
+	case name == "submodule":
+		p.walkAll(p.subClass(s), p.evalModuleValue(u, last))
+	case name == "submoduleWith":
+		if set, literal := syntax.Unparenthesized(last).(*syntax.AttrSet); literal {
+			for _, b := range set.Bindings {
+				if a, assigned := b.(*syntax.Assign); assigned && lastIdent(a.Path) == modulesAttr {
+					p.walkAll(p.subClass(s), p.eval(u, a.Value))
+				}
+			}
+		}
+	case slices.Contains(keyedTypes, name):
+		p.submoduleType(u, p.kid(s, anyName), last)
+	case slices.Contains(wrappingTypes, name):
+		p.submoduleType(u, s, last)
+	}
+}
+
+func (p *Project) subClass(s *space) *flowClass {
+	if s.sub == nil {
+		args := p.newSpace(nil, "", argsRole)
+		s.sub = &flowClass{name: classSubmodule, root: s, args: args}
+	}
+	return s.sub
 }
 
 type registration struct {
@@ -354,7 +457,7 @@ type registration struct {
 
 func (p *Project) register(c *flowClass, s *space, u *symbolTable, set *attrs, declared bool) {
 	key := registration{into: s, set: set}
-	if p.seen[key] {
+	if p.seen[key] || p.tooDeep(s) {
 		return
 	}
 	p.seen[key] = true
@@ -385,8 +488,11 @@ func (p *Project) register(c *flowClass, s *space, u *symbolTable, set *attrs, d
 		}
 		for _, src := range set.sources[name] {
 			kid.bound = append(kid.bound, flowBound{unit: u, source: src})
+			if declared {
+				p.optionSubmodule(u, kid, src)
+			}
 			for _, value := range p.evalSource(u, src) {
-				if bound, ok := value.(flowSet); ok {
+				for _, bound := range p.setsOf(value) {
 					p.register(c, kid, bound.unit, bound.set, declared)
 				}
 			}

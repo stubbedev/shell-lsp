@@ -71,7 +71,7 @@ func TestProjectText(t *testing.T) {
 		{
 			name: "systemd scripts and shell hooks are scripts of their own",
 			nix:  "{ systemd.services.x.script = ''\n  echo x\n''; shell = mkShell { shellHook = ''\n  echo hook\n''; }; }",
-			want: "(\necho x\n\n:\n)\n(\necho hook\n\n:\n)\n",
+			want: "(\necho x\n\n:\n)\n" + phaseDirective + "(\necho hook\n\n:\n)\n",
 		},
 		{
 			name: "markers opt a string in",

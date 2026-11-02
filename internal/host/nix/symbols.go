@@ -1,6 +1,7 @@
 package nix
 
 import (
+	"maps"
 	"slices"
 	"strings"
 
@@ -10,7 +11,14 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/parser"
 )
 
-const letBlockName = "let"
+const (
+	letBlockName    = "let"
+	passAsFile      = "passAsFile"
+	makeWrapperArgs = "makeWrapperArgs"
+	overlaysAttr    = "overlays"
+)
+
+var wrapperSetFlags = []string{"--set", "--set-default"}
 
 type entry struct {
 	scope model.Scope
@@ -61,7 +69,11 @@ type symbolTable struct {
 	ix         *model.Index
 	next       model.Scope
 	exports    map[int]export
-	envScopes  map[*syntax.AttrSet]model.Scope
+	envScopes  map[environment]model.Scope
+	shellEnvs  map[model.Scope]environment
+	sinks      map[*syntax.Lambda]*lambdaSinks
+	candidates []*syntax.Apply
+	overlays   []syntax.Expr
 	owners     []owner
 	sets       map[*syntax.AttrSet]*attrs
 	values     map[*scope.Def]*attrs
@@ -89,7 +101,8 @@ func newSymbolTable(f *file, ix *model.Index) *symbolTable {
 		f:          f,
 		ix:         ix,
 		exports:    map[int]export{},
-		envScopes:  map[*syntax.AttrSet]model.Scope{},
+		envScopes:  map[environment]model.Scope{},
+		shellEnvs:  map[model.Scope]environment{},
 		sets:       map[*syntax.AttrSet]*attrs{},
 		values:     map[*scope.Def]*attrs{},
 		lambdas:    map[*scope.Def]*syntax.Lambda{},
@@ -112,10 +125,15 @@ func (b *symbolTable) newScope() model.Scope {
 }
 
 func (b *symbolTable) environment(env environment) model.Scope {
-	id, ok := b.envScopes[env.set]
-	if !ok {
-		id = b.newScope()
-		b.envScopes[env.set] = id
+	id, ok := b.envScopes[env]
+	if ok {
+		return id
+	}
+	id = b.newScope()
+	b.envScopes[env] = id
+	b.shellEnvs[id] = env
+	if env.set == nil {
+		return id
 	}
 	for _, v := range vars(env) {
 		if !parser.IsName(b.f.src[v.name.Start:v.name.End]) {
@@ -145,12 +163,86 @@ func (b *symbolTable) build() {
 	for _, stray := range b.f.tree.Stray {
 		b.expr(stray, model.NoParent)
 	}
+	b.exportExtras()
 	b.link()
 	b.flakeFollows()
 	b.pathIncludes()
 	b.settleChains()
+	b.sinks = b.f.sinks()
+	b.candidates = b.wrapperCandidates()
 	b.reads, b.calls = nil, nil
+	b.publish()
+}
+
+func (b *symbolTable) publish() {
 	b.ix.Renames = renames{src: b.f.src, table: b.f.table, ix: b.ix, owners: b.owners, unit: b}
+}
+
+func (b *symbolTable) exportExtras() {
+	for _, id := range slices.Sorted(maps.Keys(b.shellEnvs)) {
+		env := b.shellEnvs[id]
+		if env.set == nil || env.source != derivationEnv {
+			continue
+		}
+		set := b.sets[env.set]
+		if set == nil {
+			continue
+		}
+		for _, a := range env.set.Bindings {
+			assign, assigned := a.(*syntax.Assign)
+			if !assigned || len(assign.Path) != 1 {
+				continue
+			}
+			list, isList := syntax.Unparenthesized(assign.Value).(*syntax.List)
+			if !isList {
+				continue
+			}
+			switch lastIdent(assign.Path) {
+			case passAsFile:
+				b.passedAsFiles(id, set, list)
+			case makeWrapperArgs:
+				b.wrapperArguments(id, set, list)
+			}
+		}
+	}
+}
+
+func (b *symbolTable) passedAsFiles(id model.Scope, set *attrs, list *syntax.List) {
+	for _, item := range list.Items {
+		str, isString := syntax.Unparenthesized(item).(*syntax.String)
+		if !isString || literalOf(str) == "" {
+			continue
+		}
+		name := literalOf(str)
+		selection := str.Content
+		for i, s := range b.ix.Symbols {
+			if s.Name == name && s.Scope == set.id && !s.Hidden {
+				selection = b.ix.Symbols[i].Selection
+			}
+		}
+		b.exportExtra(id, set, name+"Path", selection, "The path of a file that holds `"+name+"`, which `passAsFile` keeps out of the environment.")
+	}
+}
+
+func (b *symbolTable) wrapperArguments(id model.Scope, set *attrs, list *syntax.List) {
+	for i := 0; i+1 < len(list.Items); i++ {
+		flag, isString := syntax.Unparenthesized(list.Items[i]).(*syntax.String)
+		name, named := syntax.Unparenthesized(list.Items[i+1]).(*syntax.String)
+		if !isString || !named || !slices.Contains(wrapperSetFlags, literalOf(flag)) || !parser.IsName(literalOf(name)) {
+			continue
+		}
+		b.exportExtra(id, set, literalOf(name), name.Content, "Set by `makeWrapperArgs` in the environment of the wrapped program; the phases of this derivation do not see it.")
+	}
+}
+
+func (b *symbolTable) exportExtra(id model.Scope, set *attrs, name string, selection model.Span, doc string) {
+	b.extendShell(id, set.id)
+	b.add(model.Symbol{
+		Name: name, Kind: model.KindVariable, Span: selection, Selection: selection, Scope: set.id,
+		Parent: model.NoParent, Doc: doc, Exported: true, Hidden: true, Passive: true,
+		Detail: b.f.src[selection.Start:selection.End],
+	}, owner{set: set})
+	set.names[name] = entry{scope: set.id, kind: model.KindVariable}
 }
 
 func (b *symbolTable) expr(root syntax.Node, parent int) {
@@ -265,6 +357,9 @@ func (b *symbolTable) assign(a *syntax.Assign, into *attrs, parent int) {
 		b.aliased(into, a, leaf, value)
 	}
 	b.moduleList(a, value)
+	if overlayPath(a.Path) {
+		b.overlays = append(b.overlays, a.Value)
+	}
 }
 
 func (b *symbolTable) child(of *attrs, attr syntax.Attr, name string) *attrs {
@@ -296,7 +391,8 @@ func (b *symbolTable) bind(into *attrs, attr syntax.Attr, name string, stmt synt
 	if !known {
 		e = entry{scope: into.id, kind: kind}
 		if isExported {
-			e = entry{scope: exported.scope, kind: model.KindVariable}
+			e.kind = model.KindVariable
+			b.extendShell(exported.scope, into.id)
 		}
 		into.names[name] = e
 	}
@@ -312,6 +408,15 @@ func (b *symbolTable) bind(into *attrs, attr syntax.Attr, name string, stmt synt
 	}, owner{def: def, set: into})
 	b.symbolOf[attr] = i
 	return i, true
+}
+
+func (b *symbolTable) extendShell(shell, set model.Scope) {
+	if b.ix.Extends == nil {
+		b.ix.Extends = map[model.Scope][]model.Scope{}
+	}
+	if !slices.Contains(b.ix.Extends[shell], set) {
+		b.ix.Extends[shell] = append(b.ix.Extends[shell], set)
+	}
 }
 
 func (b *symbolTable) inherit(stmt *syntax.Inherit, into *attrs, parent int) {

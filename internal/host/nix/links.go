@@ -61,6 +61,16 @@ func local(p *syntax.Path) bool {
 	})
 }
 
+func loadable(p *syntax.Path) bool {
+	if p.Kind == syntax.HomePath {
+		return !slices.ContainsFunc(p.Parts, func(part syntax.Part) bool {
+			_, interpolated := part.(*syntax.Interpolation)
+			return interpolated
+		})
+	}
+	return local(p)
+}
+
 type Prose struct {
 	Span      model.Span
 	Continues bool

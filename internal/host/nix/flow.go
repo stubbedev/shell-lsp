@@ -12,20 +12,29 @@ import (
 )
 
 const (
-	callPackageWithName = "callPackageWith"
-	mkMergeName         = "mkMerge"
-	importTreeName      = "import-tree"
-	withSystemName      = "withSystem"
-	modulesAttr         = "modules"
-	followsAttr         = "follows"
-	inputsAttr          = "inputs"
-	FlakeFile           = "flake.nix"
-	nixExtension        = ".nix"
+	callPackageWithName  = "callPackageWith"
+	mkMergeName          = "mkMerge"
+	importTreeName       = "import-tree"
+	withSystemName       = "withSystem"
+	moduleWithSystemName = "moduleWithSystem"
+	mapAttrsName         = "mapAttrs"
+	attrValuesName       = "attrValues"
+	extendName           = "extend"
+	pkgsFormal           = "pkgs"
+	mkOptionName         = "mkOption"
+	modulesAttr          = "modules"
+	followsAttr          = "follows"
+	inputsAttr           = "inputs"
+	FlakeFile            = "flake.nix"
+	nixExtension         = ".nix"
 )
 
 var (
 	transparentCalls = []string{"mkIf", "mkDefault", "mkForce", "mkBefore", "mkAfter", "mkOverride", "mkOrder", "optionalAttrs", "mkPerSystemOption"}
-	attrMappers      = []string{"mapAttrs", "mapAttrs'", "mapAttrsToList", "concatMapAttrs"}
+	attrMappers      = []string{mapAttrsName, "mapAttrs'", "mapAttrsToList", "concatMapAttrs"}
+	fixers           = []string{"fix", "makeExtensible"}
+	derivationMakers = []string{"mkDerivation", "mkShell", "mkShellNoCC"}
+	systemHelpers    = []string{"genAttrs", "forAllSystems", "forEachSystem", "eachSystem", "eachDefaultSystem", "perSystem"}
 )
 
 type flowSource struct {
@@ -58,6 +67,7 @@ const (
 	callRoot
 	callMapAttrs
 	callWithSystem
+	callFix
 )
 
 type flowCall struct {
@@ -153,7 +163,11 @@ func (b *symbolTable) classify(call *syntax.Apply) {
 	case slices.Contains(attrMappers, name):
 		b.flowCalls = append(b.flowCalls, flowCall{kind: callMapAttrs, call: call})
 	case name == withSystemName:
+		b.flowCalls = append(b.flowCalls, flowCall{kind: callWithSystem, call: call, path: 1})
+	case name == moduleWithSystemName:
 		b.flowCalls = append(b.flowCalls, flowCall{kind: callWithSystem, call: call})
+	case slices.Contains(fixers, name):
+		b.flowCalls = append(b.flowCalls, flowCall{kind: callFix, call: call})
 	default:
 		b.localCall(fn, call)
 	}
@@ -315,7 +329,7 @@ func (b *symbolTable) settleChains() {
 func (b *symbolTable) pathIncludes() {
 	slices.SortFunc(b.paths, func(x, y *syntax.Path) int { return cmp.Compare(x.Span().Start, y.Span().Start) })
 	for _, p := range b.paths {
-		if !local(p) {
+		if !loadable(p) {
 			continue
 		}
 		span := p.Span()
@@ -323,7 +337,7 @@ func (b *symbolTable) pathIncludes() {
 		entry := text + "/" + DirectoryEntry
 		isFile := strings.HasSuffix(text, nixExtension)
 		candidates := []string{entry}
-		if isFile {
+		if isFile || b.loaded[p] {
 			candidates = []string{text, entry}
 		}
 		b.ix.Includes = append(b.ix.Includes, model.Include{Span: span, Path: text, Candidates: candidates, Optional: true, Probe: !isFile && !b.loaded[p]})

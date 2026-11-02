@@ -23,7 +23,10 @@ func (g *Group) callable(kind model.Kind) bool {
 
 func (g *Group) CallTarget(offset int) (Symbol, bool) {
 	sym, ok := g.At(offset)
-	if !ok || !sym.Defined() || !g.callable(sym.Kind) {
+	if !ok || !sym.Defined() || len(sym.targets) == 0 {
+		return Symbol{}, false
+	}
+	if !g.callable(sym.Kind) && !g.isScript(sym.targets[0]) {
 		return Symbol{}, false
 	}
 	return sym, true
@@ -37,8 +40,11 @@ func (g *Group) SymbolAt(path string, offset int) (Symbol, bool) {
 				continue
 			}
 			for i, s := range ix.Symbols {
-				if s.Selection.Start == offset && g.callable(s.Kind) {
-					t := model.Target{Module: module, File: f, Symbol: i}
+				if s.Selection.Start != offset {
+					continue
+				}
+				t := model.Target{Module: module, File: f, Symbol: i}
+				if g.callable(s.Kind) || g.isScript(t) {
 					return Symbol{Name: s.Name, Kind: s.Kind, Span: s.Selection, id: identityOf(t), targets: []model.Target{t}}, true
 				}
 			}
@@ -81,6 +87,10 @@ func (g *Group) calls() []call {
 					out = append(out, call{caller: model.Target{Module: module, File: f, Symbol: r.Owner}, callee: t, file: file, span: r.Span})
 				}
 			}
+			if g.builder != nil {
+				out = append(out, g.nixCalls(module, f)...)
+				continue
+			}
 			for _, region := range regions(file) {
 				owner := slices.IndexFunc(ix.Symbols, func(s model.Symbol) bool {
 					return g.callable(s.Kind) && s.Span.Start <= region.shell.Span.Start && region.shell.Span.End <= s.Span.End
@@ -93,6 +103,40 @@ func (g *Group) calls() []call {
 						out = append(out, call{caller: model.Target{Module: module, File: f, Symbol: owner}, callee: t, file: file, span: c.Span})
 					}
 				}
+			}
+		}
+	}
+	return out
+}
+
+func (g *Group) nixCalls(module *model.Module, f int) []call {
+	ix := module.Files[f]
+	file := g.fileOf(module, f)
+	var out []call
+	for _, r := range g.allRegions(module, f) {
+		if len(r.commands) == 0 {
+			continue
+		}
+		owner, named := model.NoSymbol, model.NoSymbol
+		for i, s := range ix.Symbols {
+			if s.Hidden || s.Kind == model.KindModule || s.Kind == model.KindParameter || s.Span.Start > r.shell.Span.Start || r.shell.Span.End > s.Span.End {
+				continue
+			}
+			named = i
+			if g.callable(s.Kind) || g.isScript(model.Target{Module: module, File: f, Symbol: i}) {
+				owner = i
+			}
+		}
+		if owner == model.NoSymbol {
+			owner = named
+		}
+		if owner == model.NoSymbol {
+			continue
+		}
+		caller := model.Target{Module: module, File: f, Symbol: owner}
+		for _, cmd := range r.commands {
+			for _, t := range g.nixCommandTargets(module, f, cmd) {
+				out = append(out, call{caller: caller, callee: t, file: file, span: cmd.span})
 			}
 		}
 	}

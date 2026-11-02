@@ -23,6 +23,8 @@ type region struct {
 	calls    []model.Ref
 	runs     []run
 	shadowed map[string]bool
+	defs     map[string][]parser.Span
+	commands []shellCommand
 }
 
 type run struct {
@@ -39,7 +41,7 @@ func shellRegions(f *workspace.File) []region {
 	shells := f.Native.Index.Shells
 	out := make([]region, len(shells))
 	for i, s := range shells {
-		out[i] = region{shell: s, shadowed: map[string]bool{}}
+		out[i] = region{shell: s, shadowed: map[string]bool{}, defs: map[string][]parser.Span{}}
 	}
 	within := func(host parser.Span) int {
 		i := sort.Search(len(shells), func(i int) bool { return shells[i].Span.End >= host.End })
@@ -65,6 +67,10 @@ func shellRegions(f *workspace.File) []region {
 		if i, host, ok := locate(r.Span); ok {
 			out[i].names = append(out[i].names, shellName{name: r.Name, span: host})
 		}
+	}
+	if f.Native.Language == host.Nix {
+		nixRegions(f, out)
+		return out
 	}
 	recursion := f.Native.Language.Recursion()
 	if recursion.Command == "" {
@@ -136,6 +142,9 @@ func calls(f *workspace.File, args []*syntax.Word, r host.Recursion, scope model
 }
 
 func (g *Group) shellOccurrences(sym Symbol) []Occurrence {
+	if g.builder != nil {
+		return g.nixShellOccurrences(sym)
+	}
 	if sym.id.ns == g.Language.Recursion().Kind.Namespace() {
 		return g.callOccurrences(sym)
 	}
@@ -169,6 +178,9 @@ func (g *Group) resolvesTo(module *model.Module, file int, sym Symbol, scope mod
 }
 
 func (g *Group) ShellSymbol(offset int) (Symbol, bool) {
+	if g.builder != nil {
+		return g.nixShellSymbol(g.Self, offset)
+	}
 	at := g.Self.Doc.SourceOffset(offset)
 	for _, r := range regions(g.Self) {
 		for _, c := range r.calls {

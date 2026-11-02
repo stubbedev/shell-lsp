@@ -16,17 +16,26 @@ const (
 	derivationEnv envSource = iota
 	unitEnv
 	appEnv
+	wrapperEnv
 )
+
+const envPathSeparator = "\x00"
 
 var envDocs = [...]string{
 	derivationEnv: "Set in the environment by the derivation.",
 	unitEnv:       "Set in the environment by the unit's `environment`.",
 	appEnv:        "Set in the environment by `runtimeEnv`.",
+	wrapperEnv:    "Set in the environment by the function that runs this script.",
 }
 
 var (
 	unexported  = []string{"meta", "passthru", "env"}
-	envChildren = [...]string{derivationEnv: "env", unitEnv: "environment", appEnv: "runtimeEnv"}
+	envChildren = [...]string{derivationEnv: "env", unitEnv: "environment", appEnv: "runtimeEnv", wrapperEnv: ""}
+)
+
+var (
+	programGetters = []string{"getExe", "getExe'", "getBin"}
+	inputLists     = []string{"runtimeInputs", "buildInputs", "nativeBuildInputs", "packages", "path"}
 )
 
 var Checks = model.Checks{Of: func(model.Kind) model.Rules { return model.Rules{} }}
@@ -34,6 +43,20 @@ var Checks = model.Checks{Of: func(model.Kind) model.Rules { return model.Rules{
 type environment struct {
 	set    *syntax.AttrSet
 	source envSource
+	child  string
+	prefix string
+	expr   syntax.Expr
+}
+
+func (env environment) attrPath() []string {
+	var out []string
+	if env.prefix != "" {
+		out = strings.Split(env.prefix, envPathSeparator)
+	}
+	if child := cmp.Or(env.child, envChildren[env.source]); child != "" {
+		out = append(out, child)
+	}
+	return out
 }
 
 type binding struct {
@@ -84,14 +107,14 @@ func children(set *syntax.AttrSet) []binding {
 	return slices.DeleteFunc(bindingsOf(set), func(b binding) bool { return len(b.path) > 1 })
 }
 
-func nested(bindings []binding, key string) []binding {
+func nested(bindings []binding, path []string) []binding {
 	var out []binding
 	for _, b := range bindings {
 		switch {
-		case b.path[0] != key:
-		case len(b.path) == 1:
+		case len(b.path) < len(path) || !slices.Equal(b.path[:len(path)], path):
+		case len(b.path) == len(path):
 			out = append(out, children(b.value)...)
-		case len(b.path) == 2:
+		case len(b.path) == len(path)+1:
 			out = append(out, b)
 		}
 	}
@@ -100,7 +123,7 @@ func nested(bindings []binding, key string) []binding {
 
 func vars(env environment) []binding {
 	bindings := bindingsOf(env.set)
-	out := nested(bindings, envChildren[env.source])
+	out := nested(bindings, env.attrPath())
 	if env.source != derivationEnv {
 		return out
 	}
@@ -132,26 +155,90 @@ func (f *file) index(found []shellString) *model.Index {
 	}
 	ix.Findings = append(ix.Findings, check(f.tree, f.table)...)
 	table := newSymbolTable(f, ix)
-	scopes := map[environment]model.Scope{}
 	for _, s := range found {
-		if s.env.set == nil {
-			continue
-		}
-		scope, ok := scopes[s.env]
-		if !ok {
-			scope = table.environment(s.env)
-			scopes[s.env] = scope
-		}
+		scope := table.environment(s.env)
+		inputs := f.inputs(s.env)
 		for _, piece := range pieces(s.str) {
-			ix.Shells = append(ix.Shells, model.Shell{Span: piece, Scope: scope})
+			ix.Shells = append(ix.Shells, model.Shell{Span: piece, Scope: scope, Phase: s.phase, Inputs: inputs})
 		}
+		ix.Holes = append(ix.Holes, holes(s.str)...)
 	}
 	slices.SortFunc(ix.Shells, func(a, b model.Shell) int { return cmp.Compare(a.Span.Start, b.Span.Start) })
+	slices.SortFunc(ix.Holes, func(a, b model.Hole) int { return cmp.Compare(a.Span.Start, b.Span.Start) })
 	table.build()
+	table.embedHeredocs(found)
 	linkCalls(f.tree, ix)
 	ix.Runnables = outputs(f.tree)
 	ix.Folds = folds(f.tree)
 	return ix
+}
+
+func holes(str *syntax.String) []model.Hole {
+	var out []model.Hole
+	for _, part := range str.Parts {
+		hole, ok := part.(*syntax.Interpolation)
+		if !ok {
+			continue
+		}
+		if head, exe, named := programOf(hole.Value); named {
+			out = append(out, model.Hole{Span: hole.Span(), Head: head, Exe: exe})
+		}
+	}
+	return out
+}
+
+func programOf(e syntax.Expr) (model.Span, string, bool) {
+	switch e := syntax.Unparenthesized(e).(type) {
+	case *syntax.Ident:
+		return e.Span(), "", true
+	case *syntax.Select:
+		if e.Default == nil {
+			return nameSpan(e.Path[len(e.Path)-1]), "", true
+		}
+	case *syntax.Apply:
+		if !slices.Contains(programGetters, calleeName(syntax.Unparenthesized(e.Fn))) {
+			return model.Span{}, "", false
+		}
+		head, _, named := programOf(e.Args[0])
+		exe := ""
+		if len(e.Args) > 1 {
+			if literal, ok := syntax.Unparenthesized(e.Args[1]).(*syntax.String); ok && len(literal.Parts) == 1 {
+				if text, plain := literal.Parts[0].(*syntax.Literal); plain {
+					exe = text.Text
+				}
+			}
+		}
+		return head, exe, named
+	}
+	return model.Span{}, "", false
+}
+
+func (f *file) inputs(env environment) []model.Input {
+	if env.set == nil {
+		return nil
+	}
+	var out []model.Input
+	for _, b := range env.set.Bindings {
+		a, assigned := b.(*syntax.Assign)
+		if !assigned || !slices.Contains(inputLists, lastIdent(a.Path)) {
+			continue
+		}
+		list := lastIdent(a.Path)
+		value := syntax.Unparenthesized(a.Value)
+		if with, opened := value.(*syntax.With); opened {
+			value = syntax.Unparenthesized(with.Body)
+		}
+		items, isList := value.(*syntax.List)
+		if !isList {
+			continue
+		}
+		for _, item := range items.Items {
+			if head, _, named := programOf(item); named {
+				out = append(out, model.Input{Name: f.src[head.Start:head.End], Span: item.Span(), Head: head, List: list})
+			}
+		}
+	}
+	return out
 }
 
 func pieces(str *syntax.String) []model.Span {

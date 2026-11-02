@@ -122,3 +122,48 @@ func TestNixSingleFlakeLayoutThroughTheServer(t *testing.T) {
 		t.Errorf("rename edits %+v", renamed)
 	}
 }
+
+func TestNixShellAcrossTheBoundaryThroughTheServer(t *testing.T) {
+	t.Parallel()
+
+	const name = "default.nix"
+	files := map[string]string{
+		name: "let\n  hello = writeShellScript \"hello\" ''\n    echo hi\n  '';\nin\n  stdenv.mkDerivation {\n    version = \"1\";\n    preBuild = ''\n      export FOO=$version\n    '';\n    buildPhase = ''\n      ${hello}/bin/hello $FOO $out\n    '';\n  }\n",
+	}
+	p := openNativeProject(t, nativeCapabilities, files, name)
+	definition := func(sub string) []lsp.Location {
+		return decodeResult[[]lsp.Location](t, p.c.call("textDocument/definition", p.params(name, sub, 0, "")))
+	}
+	if got, want := definition("$version"), p.at(name, "version", 0); len(got) != 1 || got[0] != want {
+		t.Errorf("definition of $version = %+v, want %+v", got, want)
+	}
+	if got, want := definition("$FOO"), p.at(name, "FOO", 0); len(got) != 1 || got[0] != want {
+		t.Errorf("definition of $FOO = %+v, want %+v", got, want)
+	}
+	if got, want := definition("bin/hello"), p.at(name, "hello", 0); len(got) != 1 || got[0] != want {
+		t.Errorf("definition of the program = %+v, want %+v", got, want)
+	}
+	hover := decodeResult[*lsp.Hover](t, p.c.call("textDocument/hover", p.params(name, "$out", 0, "")))
+	if hover == nil || !strings.Contains(hover.Contents.Value, "store path") {
+		t.Errorf("hover of $out = %+v", hover)
+	}
+	script := decodeResult[*lsp.Hover](t, p.c.call("textDocument/hover", p.params(name, "hello}", 0, "")))
+	if script == nil || !strings.Contains(script.Contents.Value, "echo hi") {
+		t.Errorf("hover of a script = %+v", script)
+	}
+}
+
+func TestNixWrapperAcrossFilesThroughTheServer(t *testing.T) {
+	t.Parallel()
+
+	const probes = "modules/probes.nix"
+	p := openNativeProject(t, nativeCapabilities, corpusProject(t, "dendritic"), probes)
+	definition := decodeResult[[]lsp.Location](t, p.c.call("textDocument/definition", p.params(probes, "$expected", 0, "")))
+	if want := []lsp.Location{p.at(probes, "expected", 0)}; !slices.Equal(definition, want) {
+		t.Errorf("definition = %+v, want %+v", definition, want)
+	}
+	references := decodeResult[[]lsp.Location](t, p.c.call("textDocument/references", p.params(probes, "expected", 0, `, "context": {"includeDeclaration": true}`)))
+	if len(references) != 2 {
+		t.Errorf("references = %+v", references)
+	}
+}

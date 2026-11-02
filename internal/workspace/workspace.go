@@ -144,6 +144,7 @@ type Workspace struct {
 	missing    map[string]time.Time
 	generation atomic.Uint64
 	watched    atomic.Bool
+	scanCut    atomic.Bool
 }
 
 func (w *Workspace) SetWatched(watched bool) { w.watched.Store(watched) }
@@ -372,9 +373,13 @@ type pendingDir struct {
 	ignores *gitignore.Stack
 }
 
+var ErrScanCut = errors.New("more files than one scan follows")
+
 func (w *Workspace) ShellFiles(ctx context.Context) ([]string, error) {
 	return w.scan(ctx, maxScanFiles)
 }
+
+func (w *Workspace) ScanCut() bool { return w.scanCut.Load() }
 
 func (w *Workspace) AllShellFiles(ctx context.Context) ([]string, error) {
 	return w.scan(ctx, math.MaxInt)
@@ -423,6 +428,9 @@ func (w *Workspace) scan(ctx context.Context, limit int) ([]string, error) {
 	}
 	slices.Sort(out)
 	out = slices.Compact(out)
+	if limit != math.MaxInt {
+		w.scanCut.Store(len(out) >= limit)
+	}
 	return out[:min(len(out), limit)], nil
 }
 
@@ -463,6 +471,9 @@ func (w *Workspace) NixFiles(dir string) ([]string, error) {
 		}
 	}
 	slices.Sort(out)
+	if len(pending) > 0 {
+		return out, fmt.Errorf("listing the Nix files under %s: %w", dir, ErrScanCut)
+	}
 	return out, nil
 }
 

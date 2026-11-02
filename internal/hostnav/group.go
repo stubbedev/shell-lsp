@@ -23,6 +23,7 @@ type Loader interface {
 	Load(path string) (*workspace.File, error)
 	LoadAs(path string, language host.Language) (*workspace.File, error)
 	NixFiles(dir string) ([]string, error)
+	ScanCut() bool
 }
 
 type Env struct {
@@ -39,6 +40,7 @@ type importer struct {
 
 type Graph struct {
 	importers map[string][]importer
+	cut       bool
 }
 
 func NewGraph(ctx context.Context, language host.Language, files navigation.WorkspaceFiles, env Env) (*Graph, error) {
@@ -47,6 +49,7 @@ func NewGraph(ctx context.Context, language host.Language, files navigation.Work
 	if err != nil {
 		return nil, err
 	}
+	g.cut = env.Loader.ScanCut()
 	b := newBuilder(ctx, env, language)
 	for _, c := range candidates {
 		if c.Native == nil || c.Native.Language != language {
@@ -183,7 +186,7 @@ func buildProject(ctx context.Context, h Host, env Env) *Group {
 
 func (g *Group) link() model.Links {
 	b := g.builder
-	request := nix.Request{Self: g.Self.Native.Index, SelfPath: g.Self.Path}
+	request := nix.Request{Self: g.Self.Native.Index, SelfPath: g.Self.Path, Home: b.env.Home}
 	var graph *Graph
 	if g.Self.Path != "" {
 		request.Flake = b.nearestFlake(g.Self.Path)
@@ -193,6 +196,7 @@ func (g *Group) link() model.Links {
 				request.Failure = "finding the files that import this one: " + err.Error()
 			}
 			graph = found
+			request.ScanCut = graph != nil && graph.cut
 		}
 		for _, root := range b.roots(g.Self, graph) {
 			request.Roots = append(request.Roots, root.Path)

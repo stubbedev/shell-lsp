@@ -123,6 +123,7 @@ type Symbol struct {
 	Arity     Arity
 	Passive   bool
 	Listed    bool
+	Hidden    bool
 	Rewrite   *Rewrite
 }
 
@@ -215,8 +216,28 @@ type PathRef struct {
 }
 
 type Shell struct {
-	Span  Span
-	Scope Scope
+	Span   Span
+	Scope  Scope
+	Phase  int
+	Inputs []Input
+}
+
+type Input struct {
+	Name string
+	Span Span
+	Head Span
+	List string
+}
+
+type Hole struct {
+	Span Span
+	Head Span
+	Exe  string
+}
+
+type Script struct {
+	Name string
+	Head string
 }
 
 type Fold struct {
@@ -272,6 +293,7 @@ type Index struct {
 	Refs      []Ref
 	Includes  []Include
 	Shells    []Shell
+	Holes     []Hole
 	Folds     []Fold
 	Tokens    []semantic.Token
 	Runnables []Runnable
@@ -322,7 +344,9 @@ func (ix *Index) tables() {
 		for i, s := range ix.Symbols {
 			key := symbolKey{s.Kind.Namespace(), s.Name}
 			ix.byName[key] = append(ix.byName[key], i)
-			ix.byParent[s.Parent] = append(ix.byParent[s.Parent], i)
+			if !s.Hidden {
+				ix.byParent[s.Parent] = append(ix.byParent[s.Parent], i)
+			}
 		}
 		ix.byOwner = map[int][]int{}
 		for i, r := range ix.Refs {
@@ -501,7 +525,7 @@ func (ix *Index) At(offset int) (Hit, bool) {
 
 func (ix *Index) DeclarationAt(offset int) (Hit, bool) {
 	for i, s := range ix.Symbols {
-		if s.Selection.Touches(offset) && s.Selection.End > s.Selection.Start {
+		if !s.Hidden && s.Selection.Touches(offset) && s.Selection.End > s.Selection.Start {
 			return Hit{Name: s.Name, Kind: s.Kind, Span: s.Selection, Scope: s.Scope, Symbol: i, Declaration: true}, true
 		}
 	}

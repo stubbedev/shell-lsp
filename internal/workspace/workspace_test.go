@@ -1,6 +1,7 @@
 package workspace
 
 import (
+	"context"
 	"errors"
 	"io/fs"
 	"os"
@@ -499,5 +500,30 @@ func TestNixFilesFollowsLinksAndSkipsNothing(t *testing.T) {
 	}
 	if _, err := ws.NixFiles(filepath.Join(dir, "gone")); !errors.Is(err, fs.ErrNotExist) {
 		t.Errorf("a missing directory: %v", err)
+	}
+}
+
+func TestScanCutIsRemembered(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	for _, name := range []string{"a.sh", "b.sh"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("echo\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ws := New(func(string) (*File, bool) { return nil, false }, Detect)
+	ws.SetRoots([]string{dir})
+	if _, err := ws.scan(context.Background(), 1); err != nil {
+		t.Fatal(err)
+	}
+	if !ws.ScanCut() {
+		t.Error("a scan that stopped at its limit is not remembered")
+	}
+	if _, err := ws.ShellFiles(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if ws.ScanCut() {
+		t.Error("a scan that saw everything still counts as cut")
 	}
 }

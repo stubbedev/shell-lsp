@@ -112,8 +112,8 @@ func TestAnExportedBindingIsOneSymbol(t *testing.T) {
 	for _, s := range a.Index.Symbols {
 		if s.Exported {
 			kinds = append(kinds, s.Name)
-			if s.Kind != model.KindVariable || s.Scope != a.Index.Shells[0].Scope {
-				t.Errorf("exported %+v is not a variable in the scope of the shell", s)
+			if s.Kind != model.KindVariable || !slices.Contains(a.Index.Extends[a.Index.Shells[0].Scope], s.Scope) {
+				t.Errorf("exported %+v is not a variable in a scope the shell reads", s)
 			}
 		}
 	}

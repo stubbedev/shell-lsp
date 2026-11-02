@@ -39,14 +39,20 @@ func Analyze(src string) Analysis {
 	tree := syntax.Parse(src)
 	f := &file{src: src, tree: tree, table: scope.Resolve(tree)}
 	f.discover()
+	f.discoverWrapped()
+	m, detection := f.projection()
+	return Analysis{Map: m, Detection: detection, Index: f.index(f.found), Errors: f.tree.Errors, Scope: f.table, tree: f.tree}
+}
+
+func (f *file) projection() (*projection.Map, dialect.Detection) {
 	detection, _ := dialect.Choose(f.found, func(s shellString) dialect.Detection { return s.detection }, tool)
-	b := projection.NewBuilder(src)
+	b := projection.NewBuilder(f.src)
 	b.Shell(detection)
 	for n, group := range groups(f.found) {
 		b.Shell(group[0].detection)
 		f.project(b, group, n)
 	}
-	return Analysis{Map: b.Map(), Detection: detection, Index: f.index(f.found), Errors: f.tree.Errors, Scope: f.table, tree: f.tree}
+	return b.Map(), detection
 }
 
 func groups(found []shellString) [][]shellString {

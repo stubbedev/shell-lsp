@@ -1,6 +1,7 @@
 package nix
 
 import (
+	"cmp"
 	"fmt"
 	"maps"
 	"path/filepath"
@@ -15,7 +16,11 @@ import (
 
 const (
 	maxProjectFiles = 8192
+	maxForeignFiles = 256
 	maxFlowRounds   = 8
+	maxSpaceDepth   = 32
+	maxSpaces       = 1 << 15
+	maxFlowSteps    = 1 << 24
 	treeExcluded    = "/_"
 )
 
@@ -31,6 +36,8 @@ type Request struct {
 	Flake    string
 	Roots    []string
 	Failure  string
+	Home     string
+	ScanCut  bool
 }
 
 type flowCaller struct {
@@ -50,6 +57,10 @@ type Project struct {
 
 	truncated bool
 	failure   string
+	scanCut   bool
+	home      string
+	settled   bool
+	foreign   map[int]bool
 
 	flakeUnit *symbolTable
 	flakeDir  string
@@ -74,12 +85,46 @@ type Project struct {
 	slotHomes   map[model.Home][]model.Home
 	escapesRead bool
 	escapedSets map[*attrs]bool
+
+	spaces        int
+	steps         int
+	applying      map[*space]bool
+	expanding     map[flowValue]bool
+	envMemo       map[sinkKey]bool
+	overlayValues []flowValue
+	collecting    bool
+	scriptMemo    map[sinkKey]string
+	sinkVisiting  map[sinkKey]bool
+	provedCalls   map[*syntax.Apply][]provenString
+	provenFiles   map[int][]provenString
+	provenScopes  map[provenKey]model.Scope
+	provenEnvs    map[model.Home]environment
+	spaceClosure  map[spaceQuery][]*space
 }
+
+type spaceQuery struct {
+	home model.Home
+	name string
+}
+
+var (
+	sessionPaths        = [][]string{{"home", "sessionVariables"}, {"environment", "variables"}, {"environment", "sessionVariables"}}
+	installablePrefixes = [][]string{
+		nil,
+		{"packages"},
+		{"legacyPackages"},
+		{"apps"},
+		{"checks"},
+		{"devShells"},
+		{"nixosConfigurations"},
+		{"homeConfigurations"},
+	}
+)
 
 var scanOrder = [...][]callKind{
 	{callMkFlake},
 	{callRoot},
-	{callImport, callAuto, callLocal, callMapAttrs, callWithSystem},
+	{callImport, callAuto, callLocal, callMapAttrs, callWithSystem, callFix},
 }
 
 type wantedFile struct {
@@ -89,18 +134,26 @@ type wantedFile struct {
 
 func Link(req Request, source Source) *Project {
 	p := &Project{
-		source:      source,
-		files:       map[*symbolTable]int{},
-		byPath:      map[string]int{},
-		tried:       map[string]bool{},
-		trees:       map[string][]string{},
-		failure:     req.Failure,
-		bindings:    map[*scope.Def][]flowValue{},
-		visiting:    map[syntax.Expr]bool{},
-		selecting:   map[flowSelection]bool{},
-		classes:     map[string]*flowClass{},
-		slotHomes:   map[model.Home][]model.Home{},
-		escapedSets: map[*attrs]bool{},
+		source:       source,
+		files:        map[*symbolTable]int{},
+		byPath:       map[string]int{},
+		tried:        map[string]bool{},
+		trees:        map[string][]string{},
+		failure:      req.Failure,
+		scanCut:      req.ScanCut,
+		home:         req.Home,
+		foreign:      map[int]bool{},
+		applying:     map[*space]bool{},
+		expanding:    map[flowValue]bool{},
+		sinkVisiting: map[sinkKey]bool{},
+		provenScopes: map[provenKey]model.Scope{},
+		provenEnvs:   map[model.Home]environment{},
+		bindings:     map[*scope.Def][]flowValue{},
+		visiting:     map[syntax.Expr]bool{},
+		selecting:    map[flowSelection]bool{},
+		classes:      map[string]*flowClass{},
+		slotHomes:    map[model.Home][]model.Home{},
+		escapedSets:  map[*attrs]bool{},
 	}
 	p.inputs = p.newSpace(nil, inputsAttr, inputsRole)
 	next := p.add(req.SelfPath, req.Self)
@@ -118,8 +171,22 @@ func Link(req Request, source Source) *Project {
 	return p
 }
 
+type localSource struct{}
+
+func (localSource) LoadAll(paths []string) []*model.Index { return make([]*model.Index, len(paths)) }
+
+func (localSource) Tree(string) ([]string, error) { return nil, nil }
+
+func (localSource) Read(path string) ([]byte, error) {
+	return nil, fmt.Errorf("reading %s: a single file has no project to read from", path)
+}
+
+func standalone(ix *model.Index) *Project {
+	return Link(Request{Self: ix}, localSource{})
+}
+
 func (p *Project) Fresh(source Source) bool {
-	p.mu.Lock()
+	p.begin()
 	defer p.mu.Unlock()
 	for i, ix := range source.LoadAll(p.paths[1:]) {
 		if ix != p.units[i+1].ix {
@@ -156,6 +223,10 @@ func (p *Project) add(path string, ix *model.Index) []wantedFile {
 		return nil
 	}
 	p.byPath[path] = p.files[u]
+	if strings.HasPrefix(path, storeDirectory+"/") {
+		p.foreign[p.files[u]] = true
+		return nil
+	}
 	return p.edges(u, path)
 }
 
@@ -166,9 +237,9 @@ func (p *Project) edges(u *symbolTable, path string) []wantedFile {
 		if inc.Probe {
 			continue
 		}
-		wanted := wantedFile{path: within(dir, inc.Candidates[0])}
+		wanted := wantedFile{path: p.located(dir, inc.Candidates[0])}
 		if len(inc.Candidates) > 1 {
-			wanted.fallback = within(dir, inc.Candidates[1])
+			wanted.fallback = p.located(dir, inc.Candidates[1])
 		}
 		out = append(out, wanted)
 	}
@@ -211,9 +282,16 @@ func within(dir, path string) string {
 	return filepath.Join(dir, path)
 }
 
+func (p *Project) located(dir, path string) string {
+	if rest, home := strings.CutPrefix(path, "~/"); home && p.home != "" {
+		return filepath.Join(p.home, rest)
+	}
+	return within(dir, path)
+}
+
 func (p *Project) resolve(u *symbolTable, path *syntax.Path) string {
 	span := path.Span()
-	return within(filepath.Dir(p.paths[p.files[u]]), u.f.src[span.Start:span.End])
+	return p.located(filepath.Dir(p.paths[p.files[u]]), u.f.src[span.Start:span.End])
 }
 
 func (p *Project) closure(level []wantedFile) {
@@ -237,7 +315,11 @@ func (p *Project) closure(level []wantedFile) {
 				}
 				continue
 			}
-			if len(p.units) >= maxProjectFiles {
+			if strings.HasPrefix(wanted[i].path, storeDirectory+"/") {
+				if len(p.foreign) >= maxForeignFiles {
+					continue
+				}
+			} else if len(p.units)-len(p.foreign) >= maxProjectFiles {
 				p.truncated = true
 				return
 			}
@@ -263,16 +345,73 @@ func (p *Project) settle() {
 				}
 			}
 		}
+		p.readDependencies()
 		if !p.changed {
 			break
 		}
 	}
+	if p.changed {
+		p.failure = cmp.Or(p.failure, fmt.Sprintf("following values across files did not settle within %d rounds", maxFlowRounds))
+	}
+	p.clearDerived()
+	p.settled = true
+}
+
+func (p *Project) enter(v flowValue) bool {
+	if p.expanding[v] || !p.spend() {
+		return false
+	}
+	p.expanding[v] = true
+	return true
+}
+
+func (p *Project) begin() {
+	p.mu.Lock()
+	p.steps = 0
+}
+
+func (p *Project) spend() bool {
+	p.steps++
+	if p.steps <= maxFlowSteps {
+		return true
+	}
+	p.failure = cmp.Or(p.failure, fmt.Sprintf("following values took more than %d steps, so it stopped", maxFlowSteps))
+	return false
+}
+
+func compactHomes(homes []model.Home) []model.Home {
+	slices.SortFunc(homes, func(a, b model.Home) int {
+		return cmp.Or(cmp.Compare(a.File, b.File), cmp.Compare(a.Scope, b.Scope))
+	})
+	return slices.Compact(homes)
+}
+
+func (p *Project) clearDerived() {
+	p.steps = 0
 	p.memo = map[syntax.Expr][]flowValue{}
+	p.overlayValues = nil
+	p.scriptMemo = map[sinkKey]string{}
+	p.envMemo = map[sinkKey]bool{}
+	p.provedCalls = map[*syntax.Apply][]provenString{}
+	p.provenFiles = map[int][]provenString{}
+	p.spaceClosure = map[spaceQuery][]*space{}
+}
+
+func (p *Project) readDependencies() {
+	for i := 0; i < len(p.units); i++ {
+		if p.foreign[i] {
+			continue
+		}
+		u := p.units[i]
+		for _, id := range slices.Sorted(maps.Keys(u.slots)) {
+			p.slotValues(u, u.slots[id])
+		}
+	}
 }
 
 func (p *Project) reset() {
 	p.changed = false
-	p.memo = map[syntax.Expr][]flowValue{}
+	p.clearDerived()
 	p.memberships = map[model.Home][]membership{}
 	p.seen = map[any]bool{}
 	p.callers = map[flowLambda][]flowCaller{}
@@ -332,6 +471,12 @@ func (p *Project) applyBinding(u *symbolTable, values []flowValue, args []syntax
 func (p *Project) scan(u *symbolTable, c flowCall) {
 	args := c.call.Args
 	switch c.kind {
+	case callFix:
+		for _, v := range p.eval(u, args[len(args)-1]) {
+			if fn, ok := v.(flowLambda); ok {
+				p.bindParam(fn, p.eval(fn.unit, fn.fn.Body))
+			}
+		}
 	case callImport, callAuto:
 		p.scanImport(u, c)
 	case callLocal:
@@ -347,8 +492,8 @@ func (p *Project) scan(u *symbolTable, c flowCall) {
 			p.scanMapper(u, args)
 		}
 	case callWithSystem:
-		if len(args) > 1 {
-			p.scanWithSystem(u, args[1])
+		if c.path < len(args) {
+			p.scanWithSystem(u, args[c.path])
 		}
 	}
 }
@@ -364,9 +509,24 @@ func (p *Project) scanImport(u *symbolTable, c flowCall) {
 	for _, v := range values {
 		if fn, ok := v.(flowLambda); ok {
 			p.callers[fn] = append(p.callers[fn], flowCaller{unit: u, call: c})
+			if c.kind == callAuto {
+				p.fillFromPackages(fn)
+			}
 		}
 	}
 	p.applyBinding(u, values, c.call.Args[c.path+1:])
+}
+
+func (p *Project) fillFromPackages(fn flowLambda) {
+	param, pattern := fn.fn.Param.(*syntax.PatternParam)
+	if !pattern {
+		return
+	}
+	for _, formal := range param.Formals {
+		if d, ok := fn.unit.f.table.Binder(formal.Name); ok {
+			p.bind(d, p.selectFrom(flowPkgs{}, formal.Name.Name))
+		}
+	}
 }
 
 func (p *Project) resolvedArg(u *symbolTable, c flowCall) (string, bool) {
@@ -406,7 +566,7 @@ func (p *Project) scanWithSystem(u *symbolTable, arg syntax.Expr) {
 }
 
 func (p *Project) Homes(file int, scope model.Scope, name string) ([]model.Home, bool) {
-	p.mu.Lock()
+	p.begin()
 	defer p.mu.Unlock()
 	return p.homes(file, scope, name)
 }
@@ -416,22 +576,161 @@ func (p *Project) homes(file int, scope model.Scope, name string) ([]model.Home,
 	if slot, ok := p.units[file].slots[scope]; ok {
 		return p.homesOfSlot(at, slot), true
 	}
+	if env, ok := p.shellEnv(at); ok {
+		out := p.shellHomes(at, env, name)
+		return out, len(out) > 0
+	}
 	var out []model.Home
-	for _, m := range p.memberships[at] {
-		if m.applies(name) {
-			out = append(out, m.space.members...)
+	for _, s := range p.spacesOf(at, name) {
+		out = append(out, s.members...)
+	}
+	return compactHomes(out), len(out) > 0
+}
+
+func (p *Project) shellEnv(at model.Home) (environment, bool) {
+	if env, ok := p.units[at.File].shellEnvs[at.Scope]; ok {
+		return env, true
+	}
+	env, ok := p.provenEnvs[at]
+	return env, ok
+}
+
+func (p *Project) shellHomes(at model.Home, env environment, name string) []model.Home {
+	if slices.Contains(unexported, name) || strings.HasPrefix(name, "__") {
+		return nil
+	}
+	u := p.units[at.File]
+	homes, done := p.slotHomes[at]
+	if !done {
+		for _, set := range u.ix.Extends[at.Scope] {
+			homes = append(homes, model.Home{File: at.File, Scope: set})
+		}
+		var values []flowValue
+		if own := u.sets[env.set]; own != nil {
+			values = []flowValue{flowSet{unit: u, set: own}}
+			for _, attr := range env.attrPath() {
+				values = p.selectAll(values, attr)
+			}
+			if len(env.attrPath()) == 0 {
+				values = nil
+			}
+		}
+		if env.expr != nil {
+			values = union(values, p.evalModuleValue(u, env.expr))
+		}
+		for _, v := range values {
+			homes = p.place(homes, v)
+		}
+		homes = compactHomes(homes)
+		p.slotHomes[at] = homes
+	}
+	if slices.ContainsFunc(homes, func(h model.Home) bool { return p.holds(h, name) }) {
+		return homes
+	}
+	return p.sessionHomes(name)
+}
+
+func (p *Project) holds(h model.Home, name string) bool {
+	return slices.ContainsFunc(p.units[h.File].ix.Symbols, func(s model.Symbol) bool { return s.Scope == h.Scope && s.Name == name })
+}
+
+func (p *Project) sessionHomes(name string) []model.Home {
+	var out []model.Home
+	for _, class := range sortedNames(p.classes) {
+		for _, path := range sessionPaths {
+			at := p.classes[class].root
+			for _, attr := range path {
+				if at != nil {
+					at = at.kids[attr]
+				}
+			}
+			if at != nil && at.names[name] {
+				out = append(out, at.members...)
+			}
 		}
 	}
-	return out, len(out) > 0
+	return out
+}
+
+func (p *Project) spacesOf(at model.Home, name string) []*space {
+	key := spaceQuery{home: at, name: name}
+	if done, ok := p.spaceClosure[key]; ok {
+		return done
+	}
+	var out []*space
+	queue := []model.Home{at}
+	seen := map[model.Home]bool{at: true}
+	for len(queue) > 0 {
+		h := queue[0]
+		queue = queue[1:]
+		for _, m := range p.memberships[h] {
+			if !m.applies(name) || slices.Contains(out, m.space) {
+				continue
+			}
+			out = append(out, m.space)
+			for _, member := range m.space.members {
+				if !seen[member] && p.holds(member, name) {
+					seen[member] = true
+					queue = append(queue, member)
+				}
+			}
+		}
+	}
+	slices.SortFunc(out, func(a, b *space) int { return cmp.Compare(b.id, a.id) })
+	p.spaceClosure[key] = out
+	return out
+}
+
+func (p *Project) Installable(path []string) []model.Home {
+	p.begin()
+	defer p.mu.Unlock()
+	if len(path) == 0 {
+		return nil
+	}
+	roots := p.selfValues()
+	if c, ok := p.classes[classPerSystem]; ok {
+		roots = union(roots, []flowValue{flowSpace{space: c.root}})
+	}
+	last := path[len(path)-1]
+	for _, prefix := range installablePrefixes {
+		values := roots
+		for _, attr := range prefix {
+			var next []flowValue
+			for _, v := range p.selectAll(values, attr) {
+				next = union(next, p.collapsed(v))
+			}
+			values = next
+		}
+		for _, attr := range path[:len(path)-1] {
+			values = p.selectAll(values, attr)
+		}
+		var homes []model.Home
+		for _, v := range values {
+			homes = p.place(homes, v)
+		}
+		homes = slices.DeleteFunc(homes, func(h model.Home) bool { return !p.holds(h, last) })
+		if len(homes) > 0 {
+			return homes
+		}
+	}
+	return nil
+}
+
+func (p *Project) Package(name string) []model.Home {
+	p.begin()
+	defer p.mu.Unlock()
+	var homes []model.Home
+	for _, body := range p.overlayBodies() {
+		homes = p.place(homes, body)
+	}
+	return slices.DeleteFunc(homes, func(h model.Home) bool { return !p.holds(h, name) })
 }
 
 func (p *Project) Shared(file int, scope model.Scope, name string) (model.Home, bool) {
-	p.mu.Lock()
+	p.begin()
 	defer p.mu.Unlock()
-	for _, m := range p.memberships[model.Home{File: file, Scope: scope}] {
-		if m.applies(name) {
-			return model.Home{File: sharedFile, Scope: m.space.id}, true
-		}
+	if spaces := p.spacesOf(model.Home{File: file, Scope: scope}, name); len(spaces) > 0 {
+		return model.Home{File: sharedFile, Scope: spaces[0].id}, true
 	}
 	return model.Home{}, false
 }
@@ -449,6 +748,7 @@ func (p *Project) homesOfSlot(at model.Home, slot flowSlot) []model.Home {
 		}
 		out = p.place(out, v)
 	}
+	out = compactHomes(out)
 	p.slotHomes[at] = out
 	return out
 }
@@ -483,17 +783,41 @@ func (p *Project) calleeAt(u *symbolTable, call *syntax.Apply, arg int) []flowVa
 }
 
 func (p *Project) place(out []model.Home, v flowValue) []model.Home {
+	if !p.enter(v) {
+		return out
+	}
+	defer delete(p.expanding, v)
 	switch v := v.(type) {
 	case flowSet:
 		home := model.Home{File: p.files[v.unit], Scope: v.set.id}
-		if members := p.memberships[home]; len(members) > 0 {
-			return append(out, members[0].space.members...)
+		members := p.memberships[home]
+		if len(members) == 0 {
+			return append(out, home)
 		}
-		return append(out, home)
+		for _, m := range members {
+			out = append(out, m.space.members...)
+		}
+		return out
 	case flowSpace:
+		return append(out, v.space.members...)
+	case flowPrimed:
 		return append(out, v.space.members...)
 	case flowSelf:
 		for _, value := range p.selfValues() {
+			out = p.place(out, value)
+		}
+	case flowPkgs:
+		for _, body := range p.overlayBodies() {
+			out = p.place(out, body)
+		}
+	case flowUpdate:
+		for _, side := range []syntax.Expr{v.node.Left, v.node.Right} {
+			for _, value := range p.eval(v.unit, side) {
+				out = p.place(out, value)
+			}
+		}
+	case flowMapped:
+		for _, value := range p.eval(v.unit, v.call.Args[1]) {
 			out = p.place(out, value)
 		}
 	}

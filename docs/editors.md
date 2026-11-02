@@ -177,9 +177,13 @@ formatting. The VS Code extension attaches to Makefiles and Dockerfiles on its
 own, and to justfiles and Nix files when extensions give them the `just` and
 `nix` languages. Elsewhere, add the file types next to the shell ones. In
 Neovim, add `"make"`, `"just"`, `"dockerfile"` and `"nix"` to `filetypes` (or
-to the `FileType` pattern). For Nix files it follows imports, flakes and module
-trees across files without evaluating them
-([Nix files](../README.md#nix-files)):
+to the `FileType` pattern). For Nix files it follows imports, flakes, module
+trees, overlays and the shell in strings across files without evaluating them
+([Nix files](../README.md#nix-files)). The setting `nix.evaluate`, off by default,
+also evaluates flakes with `nix`, to complete and describe NixOS, home-manager and
+flake-parts options and nixpkgs attributes. That can fetch the flake's inputs over
+the network, uses CPU for as long as an evaluation runs, and keeps results in a
+disk cache. It needs `nix` on `PATH`:
 
 ```lua
 vim.lsp.config("shell_lsp", {

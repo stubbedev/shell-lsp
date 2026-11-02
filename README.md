@@ -185,6 +185,7 @@ the offending field.
 | `format.functionNextLine` | `false` | Put the opening brace of a function on its own line |
 | `format.simplify` | `false` | Apply shfmt's simplifications (like `shfmt -s`) |
 | `format.minify` | `false` | Minify the script (like `shfmt -mn`) |
+| `nix.evaluate` | `false` | Evaluate flakes with `nix` to complete and describe NixOS, home-manager and flake-parts options and nixpkgs attributes |
 
 Formatting runs the same printer shfmt is built on, in-process, so no shfmt
 binary is needed. Documents with syntax errors are not formatted, and range
@@ -661,7 +662,14 @@ identifier the editor gives it, or else when its language identifier is
   `writeDashBin`, or of `writeScript` and `writeScriptBin` when its shebang
   names a shell;
 - a `/* bash */` (or `sh`, `dash`, `zsh`, `ksh`, `shell`) comment comes right
-  before it.
+  before it;
+- it is passed to a function in the same file that static following shows
+  hands it to one of those: its formal is the `text` of
+  `writeShellApplication`, the script argument of a writer or of `runCommand`,
+  a phase of a derivation, a `${text}` on a line of its own in a shell string,
+  or the argument after `-c` there, also through `lib.escapeShellArg`, through
+  further functions and through an alias of a writer. Such a function may also
+  write `writeTextFile` with a shell's shebang.
 
 The binding counts through `lib.optionalString`, `lib.mkIf`, `mkBefore`,
 `mkAfter`, `mkForce`, `mkDefault`, `if ... then ... else` and `or`, and the
@@ -675,10 +683,11 @@ one and close in another.
 - A phase runs as stdenv runs it: inside a function, with `set -eu -o
   pipefail`, in the same shell as the other phases, and with every attribute
   of the derivation and of its setup hooks in the environment, so reading a
-  variable the phase never sets is not reported (`SC2154`). The scripts of
-  the writers and of systemd units run on their own, and
-  `writeShellApplication` adds its strict mode and honours its
-  `excludeShellChecks`.
+  variable the phase never sets is not reported (`SC2154`). The same goes for
+  a `shellHook` and for a script with a non-empty `environment`, `runtimeEnv`
+  or wrapper `env`. The scripts of the writers and of systemd units otherwise
+  run on their own, and `writeShellApplication` adds its strict mode and
+  honours its `excludeShellChecks`.
 - The file is checked as one shell, chosen as for justfiles; phases and the
   bash writers are bash.
 
@@ -687,15 +696,69 @@ leads to the attribute that sets it, with definition, references, document
 highlight and hover showing the binding and where it comes from. These are:
 
 - in a phase or `shellHook`, the attributes of its derivation, also
-  `inherit`ed ones and those under `env`, but not `meta`, `passthru` or
-  `__`-prefixed ones, so `$pname` and `''${version}` reach `pname = ...;` and
-  `version = ...;`;
+  `inherit`ed ones (where definition goes on to what the `inherit` reads) and
+  those under `env`, but not `meta`, `passthru` or `__`-prefixed ones, so
+  `$pname` and `''${version}` reach `pname = ...;` and `version = ...;`. A set
+  merged with `//` or an `env` that is a value from another file counts too;
+- `$xPath` for a name `x` in `passAsFile`, which leads to `x`, and a name after
+  `--set` in `makeWrapperArgs`, whose hover says that it reaches the wrapped
+  program and not the phases;
 - in a `runCommand` script, the attributes it is given;
-- in a systemd unit's scripts, its `environment`;
-- in a `writeShellApplication`'s `text`, its `runtimeEnv`.
+- in a systemd unit's scripts, its `environment`, also spelled as one long path;
+- in a `writeShellApplication`'s `text`, its `runtimeEnv`;
+- in a wrapper's string, the keys of the argument that wrapper passes on as the
+  environment, so `env.x` reaches `$x`;
+- when nothing nearer sets it, `home.sessionVariables`,
+  `environment.variables` and `environment.sessionVariables` of the project's
+  modules, of any class.
 
-Such a variable is not renamed, from the shell or from its attribute, since
-other Nix code may read the attribute by its name.
+In a phase, `$out`, `$src`, `$pname`, `$version`, `$name`, `$system`, `$builder`,
+`$stdenv`, `$srcs`, `$outputs`, `$prefix`, `$sourceRoot`, `$phases`, `$curPhase`,
+`$NIX_BUILD_TOP`, `$NIX_BUILD_CORES`, `$NIX_STORE`, `$NIX_LOG_FD`, `$TMPDIR`,
+`$TMP`, `$TEMP`, `$TEMPDIR`, `$HOME`, `$PATH`, `$PWD`, `$SHELL`, `$CONFIG_SHELL`,
+`$SOURCE_DATE_EPOCH` and `$TZ` are known to come from the builder or `setup.sh`:
+hover says so unless an attribute sets them, and they are never reported.
+
+An attribute that sets a variable is not renamed, from the shell or from itself,
+since other Nix code may read it by its name.
+
+The shell and the Nix around it answer for each other:
+
+- `${...}` in a shell string is Nix: every feature of the Nix language answers
+  inside it.
+- A command word `${pkg}/bin/foo`, `${lib.getExe pkg}` or `${pkg}` is that
+  program. On the shell text next to the antiquotation, hover says what it runs,
+  and definition goes to the binding of `pkg`.
+- A name bound to `writeShellScript`, `writeShellApplication`, the other writers
+  or a wrapper is a command where it is interpolated. Definition and references
+  reach it, hover shows the first lines of the script, and call hierarchy
+  crosses the link. Its caller is the script that holds the string.
+- A command in `text`, a phase or a unit that matches an item of `runtimeInputs`,
+  `buildInputs`, `nativeBuildInputs`, `packages` or `path` leads to that item, or
+  to the script the item names.
+- The phases of one derivation share a shell, so an assignment, `export` or
+  function reaches later phases in the order `setup.sh` runs them: `shellHook`,
+  then `pre`, the phase and `post` of unpack, patch, configure, build, check,
+  install, fixup, installCheck and dist. Definition, references and rename follow
+  it. A read before the phase that sets it, or in another derivation, leads
+  nowhere and hover says why.
+- In a shell string, `nix build .#x` and the other uses of `nix` with a `.#` word
+  lead to `x` of the flake that holds the file, looked up directly and under
+  `packages`, `legacyPackages`, `apps`, `checks`, `devShells`,
+  `nixosConfigurations` and `homeConfigurations`. This assumes that the command
+  runs in that flake. `nix-shell -p x` leads to `x` where one of the project's
+  overlays sets it; anything else in nixpkgs leads nowhere.
+- A here-document inside a shell string is Nix when its delimiter is `NIX`, `nix`
+  or `EOF_NIX`, when `# nix` follows it on its line, or when its line names a file
+  ending in `.nix`. Its syntax errors are reported and its bindings navigate, but
+  are not renamed. A body with `${...}` or an escape in it is left as text, since
+  only evaluating it would show the Nix, and so is a Nix expression given to
+  `nix eval --expr`.
+
+A string passed to a wrapper defined in another file is proven when a request
+reads the project, and then navigation, hover, references and call hierarchy
+answer in it. Its shell is not linted or highlighted, because diagnostics and
+tokens stay within the file.
 
 Outside the shell, the Nix language answers too, within a file and across a project:
 
@@ -719,11 +782,22 @@ Outside the shell, the Nix language answers too, within a file and across a proj
   - In a flake, `inputs.x`, the `outputs` formal `x`, an `@` alias and the string
     of `follows` are all the declaration of the input `x`, and `self.y` reaches
     the output `y`. Where `flake.lock` locks the input and its source is in the
-    Nix store, definition also opens its `flake.nix` or `default.nix`; nothing
-    is downloaded.
+    Nix store, definition also opens its `flake.nix` or `default.nix`, and reads
+    such as `inputs.x.lib.y` and `inputs'.x.packages.y` go on into the files
+    there, up to 256 of them; nothing is downloaded, and nothing in the store is
+    renamed.
+  - `"${inputs.x}/y.nix"`, `"${./dir}/y.nix"` and `./dir + "/y.nix"` are paths,
+    `~/x` is one below the home directory, and `import ./x` opens a file `x`
+    without an extension before it tries `x/default.nix`.
+  - `pkgs` and the `final` and `prev` of an overlay read what the project's
+    overlays set: `final: prev:` functions under an attribute named `overlays`,
+    such as `flake.overlays.x` and `nixpkgs.overlays`. So `pkgs.x.y` follows
+    `lib.mapAttrs`, `lib.fix`, `makeExtensible` and `lib.extend`. Every overlay
+    counts for every `pkgs` of the project, since which of them apply is only
+    known by evaluating.
   - Modules are found from `mkFlake`, `nixosSystem`, `homeManagerConfiguration`,
     `darwinSystem`, `nixOnDroidConfiguration`, `evalModules`, `imports`,
-    `nixosModules`-style outputs, `perSystem`, `withSystem`,
+    `nixosModules`-style outputs, `perSystem`, `withSystem`, `moduleWithSystem`,
     `home-manager.users.<name>`, `home-manager.sharedModules`,
     `flake.modules.<class>.<name>` and `import-tree`, which takes every `.nix`
     file below a directory unless its path below that directory has a segment
@@ -731,10 +805,16 @@ Outside the shell, the Nix language answers too, within a file and across a proj
     `config.a` and a plain `a` are the same name, so a read of `config.a` leads to
     every declaration and definition of it in every file. `_module.args.a`,
     `specialArgs` and `extraSpecialArgs` make `a` the same name as the formal `a`
-    of the modules of that class, whose definition is the binding.
+    of the modules of that class, whose definition is the binding. The options of
+    a `types.submodule` and `submoduleWith`, also under `attrsOf`, `lazyAttrsOf`,
+    `listOf` and `nullOr`, and the names an option set gets from `mapAttrs`, are
+    names below their option. A file in two classes joins them for the names it
+    holds, so a rename reaches both.
+  - A set built with `//` holds both sides, the right one first, when both are
+    known.
 
-  Nothing else is guessed, so `pkgs.hello` and a read through a set built with
-  `//` lead nowhere, and the namespaces of two flakes never meet.
+  Nothing else is guessed, so `pkgs.hello` without an overlay that sets it leads
+  nowhere, and the namespaces of two flakes never meet.
 - The outline holds attribute sets, `let` blocks and functions with their
   parameters, nested as they are written, with the shell's functions inside
   the binding that holds them; workspace symbols list every attribute and
@@ -771,11 +851,29 @@ it does:
 - An input is renamed with its declaration, formals, reads and `follows`, unless
   `inputs` is read with a computed name. `flake.lock` follows on the next
   `nix flake lock`.
-- A project of more than 8192 files is not followed past that, and a rename that
-  would have to know every reader is refused.
+- A project of more than 8192 files is not followed past that, and a workspace
+  scan stops at 20000 files. Following also stops at 32 levels of a set that
+  holds itself, at 32768 attribute paths of modules, after 2^24 steps and after 8
+  rounds that still find something new. In each of these cases a rename that has
+  to know every reader is refused with the reason.
 
 Diagnostics stay within the file, so typing never walks the project; it is read
 when a request needs another file, and only files that changed are parsed again.
+
+Beyond that, Nix files get these:
+
+- Inlay hints name the parameter of a positional argument and the file a directory
+  path opens, links open paths and web addresses, and call hierarchy follows
+  functions across files.
+- Completion, hover and signature help cover the builtins, keywords, bindings,
+  attributes and paths the file can see.
+- A "▶ Run" lens on a flake output runs `nix build`, `nix run`, `nix develop` or
+  `nix flake check`.
+- The refactorings are extract to a `let` binding, inline a `let` binding, spell
+  `x = x;` as `inherit x;`, and nest or flatten an attribute path.
+- Each finding offers "Ignore here" and "Ignore in this file" fixes, a malformed
+  `disable` list reports `SC1125`, and with `enable=unused-directives` a directive
+  that suppresses nothing reports `SL2009`.
 
 Shell that Nix assembles across `${...}`, such as a `case` whose patterns come
 from `lib.optionalString`, cannot be checked, since only evaluating the Nix

@@ -18,26 +18,26 @@ const (
 )
 
 var (
-	derivationBindings = phaseHooks(
-		[]string{"Unpack", "Patch", "Configure", "Build", "Check", "Install", "Fixup", "InstallCheck", "Dist"},
-		"buildPhase", "configurePhase", "checkPhase", "installPhase", "unpackPhase", "patchPhase", "fixupPhase",
-		"installCheckPhase", "distPhase", "buildCommand",
-	)
-	serviceBindings = []string{"script", "preStart", "postStart", "preStop", "postStop", "reload"}
-	bashWriters     = []string{"writeShellScript", "writeShellScriptBin", "writeBash", "writeBashBin"}
-	dashWriters     = []string{"writeDash", "writeDashBin"}
-	scriptWriters   = []string{"writeScript", "writeScriptBin"}
-	commandRunner   = []string{"runCommand", "runCommandLocal", "runCommandCC", "runCommandNoCC", "runCommandNoCCLocal"}
-	passThrough     = []string{"mkBefore", "mkAfter", "mkForce", "mkDefault"}
-	conditional     = []string{"optionalString", "mkIf", "mkOrder"}
-	markers         = map[string]dialect.Dialect{"shell": dialect.Bash, "bash": dialect.Bash, "sh": dialect.Posix, "dash": dialect.Dash, "zsh": dialect.Zsh, "ksh": dialect.Ksh}
+	derivationBindings = phaseHooks(phaseStages, "buildCommand")
+	serviceBindings    = []string{"script", "preStart", "postStart", "preStop", "postStop", "reload"}
+	bashWriters        = []string{"writeShellScript", "writeShellScriptBin", "writeBash", "writeBashBin"}
+	dashWriters        = []string{"writeDash", "writeDashBin"}
+	scriptWriters      = []string{"writeScript", "writeScriptBin"}
+	commandRunner      = []string{"runCommand", "runCommandLocal", "runCommandCC", "runCommandNoCC", "runCommandNoCCLocal"}
+	passThrough        = []string{"mkBefore", "mkAfter", "mkForce", "mkDefault"}
+	conditional        = []string{"optionalString", "mkIf", "mkOrder"}
+	markers            = map[string]dialect.Dialect{"shell": dialect.Bash, "bash": dialect.Bash, "sh": dialect.Posix, "dash": dialect.Dash, "zsh": dialect.Zsh, "ksh": dialect.Ksh}
 )
 
 func phaseHooks(stages []string, names ...string) []string {
 	for _, stage := range stages {
-		names = append(names, "pre"+stage, "post"+stage)
+		names = append(names, "pre"+stage, stageBinding(stage), "post"+stage)
 	}
 	return names
+}
+
+func stageBinding(stage string) string {
+	return strings.ToLower(stage[:1]) + stage[1:] + "Phase"
 }
 
 type context struct {
@@ -47,6 +47,8 @@ type context struct {
 	insideSystemd bool
 	set           *syntax.AttrSet
 	callee        string
+	merged        syntax.Expr
+	prefix        string
 }
 
 func (c context) cleared() context {
@@ -68,6 +70,7 @@ type position struct {
 type call struct {
 	name string
 	env  *syntax.AttrSet
+	expr syntax.Expr
 }
 
 type shellString struct {
@@ -80,6 +83,7 @@ type shellString struct {
 	derivation bool
 	joined     bool
 	context    context
+	phase      int
 }
 
 func (f *file) discover() {
@@ -132,12 +136,16 @@ func (f *file) walk(e syntax.Expr, c context, at position) {
 	case *syntax.HasAttr:
 		f.walk(e.Target, c, at)
 	case *syntax.Binary:
-		f.walk(e.Left, c, at)
+		before, after := c, c
+		if e.Op == syntax.OpUpdate {
+			before.merged, after.merged = e.Right, e.Left
+		}
+		f.walk(e.Left, before, at)
 		right := position{}
 		if e.Op == syntax.OpAdd {
 			right = position{value: true, joined: true}
 		}
-		f.walk(e.Right, c, right)
+		f.walk(e.Right, after, right)
 	case *syntax.Unary:
 		f.walk(e.Operand, c, position{})
 	}
@@ -158,7 +166,7 @@ func (f *file) defaults(param syntax.Param, c context) {
 
 func (f *file) attrs(set *syntax.AttrSet, c context, callee string) {
 	inner := c.nested()
-	inner.set, inner.callee = set, callee
+	inner.set, inner.callee, inner.merged = set, callee, c.merged
 	f.bindings(set.Bindings, inner)
 }
 
@@ -167,7 +175,7 @@ func (f *file) bindings(bindings []syntax.Binding, c context) {
 		switch b := b.(type) {
 		case *syntax.Assign:
 			inner := c
-			inner.site, inner.name = b, lastIdent(b.Path)
+			inner.site, inner.name, inner.prefix = b, lastIdent(b.Path), pathPrefix(b.Path)
 			inner.insideSystemd = c.ownerSystemd || namesSystemd(b.Path)
 			f.walk(b.Value, inner, position{value: true})
 		case *syntax.Inherit:
@@ -176,6 +184,18 @@ func (f *file) bindings(bindings []syntax.Binding, c context) {
 			}
 		}
 	}
+}
+
+func pathPrefix(path syntax.AttrPath) string {
+	names := make([]string, 0, len(path)-1)
+	for _, a := range path[:len(path)-1] {
+		name, ok := syntax.AttrName(a)
+		if !ok {
+			return ""
+		}
+		names = append(names, name)
+	}
+	return strings.Join(names, envPathSeparator)
 }
 
 func lastIdent(path syntax.AttrPath) string {
@@ -239,13 +259,15 @@ func callOf(e *syntax.Apply, k int) call {
 	if k < 3 {
 		return call{}
 	}
-	set, isSet := applied(e, k-1).(*syntax.AttrSet)
 	_, named := applied(e, k-2).(*syntax.String)
 	name := calleeName(applied(e, k-3))
-	if !isSet || !named || !slices.Contains(commandRunner, name) {
+	if !named || !slices.Contains(commandRunner, name) {
 		return call{}
 	}
-	return call{name: name, env: set}
+	if set, isSet := syntax.Unparenthesized(applied(e, k-1)).(*syntax.AttrSet); isSet {
+		return call{name: name, env: set}
+	}
+	return call{name: name, expr: applied(e, k-1)}
 }
 
 func calleeName(e syntax.Expr) string {
@@ -293,16 +315,21 @@ func (f *file) classify(str *syntax.String, c context, at position, via call) (s
 	switch {
 	case slices.Contains(derivationBindings, c.name):
 		s.derivation = true
-		s.env = environment{set: c.set, source: derivationEnv}
+		s.env = environment{set: c.set, source: derivationEnv, expr: c.merged}
+		s.phase = phaseRank(c.name)
 	case c.name == shellHook:
-		s.env = environment{set: c.set, source: derivationEnv}
+		s.env = environment{set: c.set, source: derivationEnv, expr: c.merged}
+		s.phase = phaseRank(c.name)
+		s.directive = phaseDirective
 	case slices.Contains(serviceBindings, c.name) && c.insideSystemd:
-		s.env = environment{set: c.set, source: unitEnv}
+		s.env = environment{set: c.set, source: unitEnv, prefix: c.prefix, expr: c.merged}
+		s.directive = readsEnvironment(s.env)
 	case c.name == shellAppText && c.set != nil && c.callee == shellApp:
-		s.env = environment{set: c.set, source: appEnv}
+		s.env = environment{set: c.set, source: appEnv, expr: c.merged}
 		s.prelude = strictMode
+		s.directive = readsEnvironment(s.env)
 		if excluded := f.excluded(c.set); len(excluded) > 0 {
-			s.directive = directive.Render(directive.Disable, strings.Join(excluded, ",")) + "\n"
+			s.directive += directive.Render(directive.Disable, strings.Join(excluded, ",")) + "\n"
 		}
 	default:
 		return shellString{}, false
@@ -332,8 +359,18 @@ func (f *file) excluded(set *syntax.AttrSet) []string {
 	return out
 }
 
+func readsEnvironment(env environment) string {
+	if env.set != nil && len(vars(env)) > 0 || env.expr != nil {
+		return phaseDirective
+	}
+	return ""
+}
+
 func (f *file) written(s shellString, via call) (shellString, bool) {
+	marked, isMarker := markers[via.name]
 	switch {
+	case isMarker:
+		s.detection = dialect.Detection{Dialect: marked, Source: dialect.SourceHostSetting, Evidence: via.name}
 	case slices.Contains(dashWriters, via.name):
 		s.detection = dialect.Detection{Dialect: dialect.Dash, Source: dialect.SourceHostSetting, Evidence: via.name}
 	case slices.Contains(scriptWriters, via.name):
@@ -347,7 +384,8 @@ func (f *file) written(s shellString, via call) (shellString, bool) {
 	case slices.Contains(commandRunner, via.name):
 		s.detection = dialect.Detection{Dialect: dialect.Bash, Source: dialect.SourceHostDefault, Evidence: tool}
 		s.derivation = true
-		s.env = environment{set: via.env, source: derivationEnv}
+		s.env = environment{set: via.env, source: derivationEnv, expr: via.expr}
+		s.phase = phaseRank("buildCommand")
 	default:
 		s.detection = dialect.Detection{Dialect: dialect.Bash, Source: dialect.SourceHostDefault, Evidence: tool}
 	}

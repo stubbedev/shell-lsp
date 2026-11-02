@@ -61,9 +61,14 @@ type Symbol struct {
 	id      identity
 	targets []model.Target
 	Builtin *model.Builtin
+	locals  []Occurrence
+	scope   model.Scope
+	doc     string
+	shell   bool
+	foreign bool
 }
 
-func (s Symbol) Defined() bool { return len(s.targets) > 0 }
+func (s Symbol) Defined() bool { return len(s.targets) > 0 || len(s.locals) > 0 }
 
 func (s Symbol) Exported() bool {
 	return slices.ContainsFunc(s.targets, func(t model.Target) bool {
@@ -90,7 +95,7 @@ func (g *Group) symbolFor(hit model.Hit, file int, module *model.Module) (Symbol
 func (g *Group) At(offset int) (Symbol, bool) {
 	hit, ok := g.Index().At(offset)
 	if !ok {
-		return Symbol{}, false
+		return g.wrappedSymbol(offset)
 	}
 	sym, found := g.symbolFor(hit, g.self, g.Module)
 	if found || hit.Declaration {
@@ -143,8 +148,17 @@ func (g *Group) modules() []*model.Module {
 }
 
 func (g *Group) Occurrences(sym Symbol) []Occurrence {
+	if sym.shell && !sym.Defined() {
+		return g.undefinedReads(sym)
+	}
 	if !sym.Defined() {
 		return nil
+	}
+	if len(sym.locals) > 0 {
+		if sym.foreign {
+			return slices.Clone(sym.locals)
+		}
+		return g.localOccurrences(sym)
 	}
 	out := g.Declarations(sym)
 	for _, module := range g.modules() {

@@ -74,6 +74,16 @@ func (g *Group) Definition(offset int) []Location {
 }
 
 func (g *Group) definitions(sym Symbol) []Location {
+	if len(sym.locals) > 0 {
+		out := make([]Location, len(sym.locals))
+		for i, o := range sym.locals {
+			out[i] = Location{File: o.File, Span: o.Span}
+		}
+		return out
+	}
+	if sym.shell {
+		sym = g.origin(sym)
+	}
 	if sym.Kind == model.KindModule {
 		if root := g.moduleRoot(sym); root != nil {
 			return []Location{{File: root}}
@@ -146,8 +156,11 @@ func (g *Group) PrepareRename(sym Symbol) error {
 	if !sym.Defined() {
 		return fmt.Errorf("%w: %s `%s` is built in", navigation.ErrNotRenamable, sym.Kind, sym.Name)
 	}
-	if !g.Language.Renames() {
-		return fmt.Errorf("%w: %s `%s` is defined in a %s, which other code may read by its name; rename it with that language's own server", navigation.ErrNotRenamable, sym.Kind, sym.Name, g.Language)
+	if sym.foreign {
+		return fmt.Errorf("%w: `%s` is the name of a program, not a binding of this file", navigation.ErrNotRenamable, sym.Name)
+	}
+	if len(sym.locals) > 0 {
+		return nil
 	}
 	if reason := g.refusal(sym); reason != "" {
 		return fmt.Errorf("%w: %s", navigation.ErrNotRenamable, reason)
@@ -199,6 +212,12 @@ func (g *Group) Rename(sym Symbol, newName string) ([]Occurrence, error) {
 	}
 	if newName == sym.Name {
 		return nil, nil
+	}
+	if len(sym.locals) > 0 {
+		if !parser.IsName(newName) {
+			return nil, fmt.Errorf("%w: %q is not a valid shell name", navigation.ErrInvalidName, newName)
+		}
+		return occs, nil
 	}
 	t := sym.targets[0]
 	if clash := t.Module.Resolve(t.File, model.Ref{Name: newName, Kind: sym.Kind, Scope: t.Info().Scope}); len(clash.Targets) > 0 {
@@ -259,7 +278,18 @@ func (g *Group) Describe(sym Symbol) Hover {
 		if file := g.files[t.Module.Files[t.File]]; file != nil && file.Path != g.Self.Path {
 			md += " in `" + filepath.Base(file.Path) + "`"
 		}
+		if links := t.Module.Links(); links != nil {
+			if script, ok := links.Script(t.File, t.Symbol); ok && script.Head != "" {
+				md += "\n\n```sh\n" + script.Head + "\n```"
+			}
+		}
 		parts = append(parts, md)
+	}
+	if len(sym.targets) == 0 {
+		parts = append(parts, "```sh\n"+sym.Name+"\n```")
+	}
+	if sym.doc != "" {
+		parts = append(parts, sym.doc)
 	}
 	return Hover{Markdown: strings.Join(parts, "\n\n---\n\n"), Span: sym.Span}
 }

@@ -15,6 +15,8 @@ func (p *Project) incomplete() string {
 		return p.failure
 	case p.truncated:
 		return fmt.Sprintf("the project has more than %d files, so not every reader is known", maxProjectFiles)
+	case p.scanCut:
+		return "the workspace scan stopped before it saw every file, so not every file that imports this one is known"
 	}
 	return ""
 }
@@ -35,6 +37,9 @@ func (p *Project) readEscapes() {
 				case flowSpace:
 					v.space.escaped = v.space.escaped || !chain.dynamic
 					v.space.dynamic = v.space.dynamic || chain.dynamic
+				case flowPrimed:
+					v.space.escaped = v.space.escaped || !chain.dynamic
+					v.space.dynamic = v.space.dynamic || chain.dynamic
 				case flowSet:
 					p.escapedSets[v.set] = true
 				}
@@ -44,15 +49,21 @@ func (p *Project) readEscapes() {
 }
 
 func (p *Project) Refusal(file, symbol int) (string, bool) {
-	p.mu.Lock()
+	p.begin()
 	defer p.mu.Unlock()
 	u := p.units[file]
 	sym := u.ix.Symbols[symbol]
+	if p.foreign[file] {
+		return fmt.Sprintf("`%s` belongs to a dependency in the Nix store, which is not this project's to change", sym.Name), true
+	}
 	p.readEscapes()
-	for _, m := range p.memberships[model.Home{File: file, Scope: sym.Scope}] {
-		if m.applies(sym.Name) {
-			return p.spaceRefusal(m.space, sym.Name), true
+	if spaces := p.spacesOf(model.Home{File: file, Scope: sym.Scope}, sym.Name); len(spaces) > 0 {
+		for _, s := range spaces {
+			if reason := p.spaceRefusal(s, sym.Name); reason != "" {
+				return reason, true
+			}
 		}
+		return "", true
 	}
 	o := u.owners[symbol]
 	if o.set != nil && o.set.lambda != nil {
@@ -113,11 +124,11 @@ func (p *Project) formalRefusal(fn flowLambda, name string) (string, bool) {
 		return fmt.Sprintf("the module system passes `%s` by this name", name), true
 	}
 	callers := p.callers[fn]
+	if reason := p.incomplete(); reason != "" && (len(callers) > 0 || p.fileLambda(fn)) {
+		return fmt.Sprintf("the callers of this function are not all known: %s", reason), true
+	}
 	if len(callers) == 0 {
 		return "", false
-	}
-	if reason := p.incomplete(); reason != "" {
-		return fmt.Sprintf("the callers of this function are not all known: %s", reason), true
 	}
 	for _, c := range callers {
 		if c.call.kind == callAuto && !passes(c, name) {
@@ -125,6 +136,10 @@ func (p *Project) formalRefusal(fn flowLambda, name string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+func (p *Project) fileLambda(fn flowLambda) bool {
+	return slices.Contains(p.fileValue(p.paths[p.files[fn.unit]]), flowValue(fn))
 }
 
 func passes(c flowCaller, name string) bool {
@@ -169,7 +184,7 @@ func (p *Project) fileAttrRefusal(file int, o owner) (string, bool) {
 }
 
 func (p *Project) Conflict(file, symbol int, newName string) string {
-	p.mu.Lock()
+	p.begin()
 	defer p.mu.Unlock()
 	u := p.units[file]
 	sym := u.ix.Symbols[symbol]
@@ -237,7 +252,7 @@ func (p *Project) readConflict(file int, sym model.Symbol, newName string) strin
 }
 
 func (p *Project) Sources(file, symbol int) []string {
-	p.mu.Lock()
+	p.begin()
 	defer p.mu.Unlock()
 	sym := p.units[file].ix.Symbols[symbol]
 	shared := false

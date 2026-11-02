@@ -33,6 +33,10 @@ type Links interface {
 	Refusal(file, symbol int) (string, bool)
 	Conflict(file, symbol int, newName string) string
 	Sources(file, symbol int) []string
+	Script(file, symbol int) (Script, bool)
+	Shells(file int) []Shell
+	Installable(path []string) []Home
+	Package(name string) []Home
 }
 
 func (m *Module) Links() Links {
@@ -45,7 +49,7 @@ func (m *Module) Links() Links {
 
 var linkedNamespaces = [...]Namespace{NamespaceAttributes, NamespaceFunctions, NamespaceValues}
 
-func (m *Module) atHomes(homes []Home, name string) []Target {
+func (m *Module) AtHomes(homes []Home, name string) []Target {
 	var out []Target
 	for _, h := range homes {
 		ix := m.Files[h.File]
@@ -80,7 +84,7 @@ func (r Resolution) Found() bool { return len(r.Targets) > 0 || r.Builtin != nil
 func (m *Module) Resolve(file int, ref Ref) Resolution {
 	if links := m.Links(); links != nil {
 		if homes, linked := links.Homes(file, ref.Scope, ref.Name); linked {
-			return Resolution{Targets: m.atHomes(homes, ref.Name)}
+			return Resolution{Targets: m.AtHomes(homes, ref.Name)}
 		}
 	}
 	module := m
