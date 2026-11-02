@@ -218,7 +218,7 @@ func TestDirectives(t *testing.T) {
 		{"before a closer it reaches nothing", "{\n  a = (1);\n  # shellcheck disable=SL8008\n}\n", []string{"SL8008 (1)"}},
 		{"a block comment is no directive", "/* shellcheck disable=SL8005 */ let a = 1; in 2\n", []string{"SL8005 a"}},
 		{"another kind of key", "# shellcheck source=SL8005\nlet a = 1; in 2\n", []string{"SL8005 a"}},
-		{"a code that is no code", "# shellcheck disable=nonsense\nlet a = 1; in 2\n", []string{"SL8005 a"}},
+		{"a code that is no code", "# shellcheck disable=nonsense\nlet a = 1; in 2\n", []string{"SC1125 nonsense", "SL8005 a"}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()

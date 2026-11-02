@@ -65,6 +65,7 @@ type completionData struct {
 	Name   string                 `json:"name"`
 	URI    string                 `json:"uri,omitempty"`
 	Offset int                    `json:"offset,omitempty"`
+	Nix    bool                   `json:"nix,omitempty"`
 }
 
 type shellEnvironment struct {
@@ -283,6 +284,9 @@ func (s *Server) handleCompletionResolve(ctx context.Context, docs *docstore.Vie
 	data, err := decodeData[completionData]("completion item", item.Data)
 	if err != nil {
 		return nil, err
+	}
+	if data.Nix {
+		return s.resolveNixCompletion(docs, item, data), nil
 	}
 	if data.Name == "" || data.Kind == completion.ResolveNone {
 		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "completion item data %s is not from this server: it names nothing to resolve", item.Data)

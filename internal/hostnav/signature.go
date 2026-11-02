@@ -4,15 +4,32 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/assist"
+	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/host/model"
+	"github.com/stubbedev/shell-lsp/internal/host/nix"
 )
 
 func (g *Group) Signature(offset int) (assist.Signature, bool) {
+	if g.Language == host.Nix {
+		return nixSignature(g.Self.Doc.Source().Text(), offset)
+	}
 	inv, ok := g.Self.Native.Invocation(offset)
 	if !ok {
 		return assist.Signature{}, false
 	}
 	return g.signatureOf(inv)
+}
+
+func nixSignature(text string, offset int) (assist.Signature, bool) {
+	sig, ok := nix.SignatureAt(text, offset)
+	if !ok {
+		return assist.Signature{}, false
+	}
+	params := make([]assist.ParamLabel, len(sig.Params))
+	for i, p := range sig.Params {
+		params[i] = assist.ParamLabel{Start: p.Start, End: p.End}
+	}
+	return assist.Signature{Label: sig.Label, Doc: sig.Doc, Params: params, Active: sig.Active}, true
 }
 
 func (g *Group) ShellSignature(offset int) (assist.Signature, bool) {

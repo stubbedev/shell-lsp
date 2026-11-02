@@ -3,12 +3,14 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"unicode/utf16"
 
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/host/model"
@@ -926,5 +928,250 @@ func TestNixFoldsCoverLanguageAndComments(t *testing.T) {
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("folds = %+v, want %+v", got, want)
+	}
+}
+
+func markedPosition(t *testing.T, src string) (string, int, int) {
+	t.Helper()
+	at := strings.Index(src, "|")
+	if at < 0 {
+		t.Fatalf("%q has no cursor", src)
+	}
+	before := src[:at]
+	start := strings.LastIndexByte(before, '\n') + 1
+	return before + src[at+1:], strings.Count(before, "\n"), len(utf16.Encode([]rune(before[start:])))
+}
+
+func openMarkedNix(t *testing.T, src string, extra map[string]string) (*nativeProject, string) {
+	t.Helper()
+	text, line, character := markedPosition(t, src)
+	files := map[string]string{"default.nix": text}
+	maps.Copy(files, extra)
+	p := openNativeProject(t, nativeCapabilities, files, "default.nix")
+	return p, positionParams(p.uri("default.nix"), line, character, "")
+}
+
+func nixCompletionLabels(t *testing.T, src string, extra map[string]string) []string {
+	t.Helper()
+	p, params := openMarkedNix(t, src, extra)
+	list := decodeResult[lsp.CompletionList](t, p.c.call("textDocument/completion", params))
+	labels := make([]string, len(list.Items))
+	for i, it := range list.Items {
+		labels[i] = it.Label
+	}
+	return labels
+}
+
+func TestNixCompletionThroughTheClient(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name, src string
+		want, not []string
+	}{
+		{name: "after let", src: "let |", want: []string{"in", "inherit"}, not: []string{"map"}},
+		{name: "in a set", src: "{ a = 1; | }", want: []string{"inherit"}, not: []string{"a"}},
+		{name: "past a scope's end", src: "let a = 1; in |", want: []string{"a", "map", "let"}, not: []string{"__add"}},
+		{name: "at x.", src: "let x = { one = 1; }; in x.|", want: []string{"one"}, not: []string{"map"}},
+		{name: "at builtins.", src: "builtins.|", want: []string{"attrNames"}, not: []string{"__attrNames"}},
+		{name: "an alias when typed", src: "__attr|", want: []string{"__attrNames"}},
+		{name: "in a pattern", src: "{ a, | }: a", not: []string{"a", "map"}},
+		{name: "keys of a call", src: "let f = { one }: one; in f { | }", want: []string{"one", "inherit"}},
+		{name: "in ${...} in a shell string", src: "let nixName = 1; in { buildPhase = ''\n  echo ${|}\n''; }", want: []string{"nixName", "map"}, not: []string{"PATH"}},
+		{name: "a broken file", src: "let a = 1; b = |\nin {", want: []string{"a", "b"}},
+		{name: "after non-ASCII", src: "let a = \"é😀\"; b = \"é😀${|}\"; in a", want: []string{"a", "b"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := nixCompletionLabels(t, tt.src, nil)
+			for _, want := range tt.want {
+				if !slices.Contains(got, want) {
+					t.Errorf("%q lacks %q in %q", tt.src, want, got)
+				}
+			}
+			for _, not := range tt.not {
+				if slices.Contains(got, not) {
+					t.Errorf("%q offers %q", tt.src, not)
+				}
+			}
+		})
+	}
+}
+
+func TestNixCompletionReadsAnotherFile(t *testing.T) {
+	t.Parallel()
+
+	y := map[string]string{"y.nix": "{ stdenv, lib ? null }: 1\n", "dir/default.nix": "{ fromDir }: 1\n"}
+	for _, tt := range []struct{ src, want string }{
+		{"callPackage ./y.nix { | }", "stdenv"},
+		{"import ./y.nix { | }", "lib"},
+		{"callPackage ./dir { | }", "fromDir"},
+	} {
+		if got := nixCompletionLabels(t, tt.src, y); !slices.Contains(got, tt.want) {
+			t.Errorf("%q lacks %q in %q", tt.src, tt.want, got)
+		}
+	}
+	if got := nixCompletionLabels(t, "callPackage ./missing.nix { | }", y); !slices.Equal(got, []string{"inherit"}) {
+		t.Errorf("a missing file offers %q", got)
+	}
+}
+
+func TestNixCompletionEditsTheWordWithUTF16Positions(t *testing.T) {
+	t.Parallel()
+
+	p, params := openMarkedNix(t, "[ \"é😀\" ma|p ]", nil)
+	list := decodeResult[lsp.CompletionList](t, p.c.call("textDocument/completion", params))
+	i := slices.IndexFunc(list.Items, func(it lsp.CompletionItem) bool { return it.Label == "map" })
+	if i < 0 {
+		t.Fatalf("items = %+v", list.Items)
+	}
+	const start = 8
+	want := lsp.Range{Start: lsp.Position{Line: 0, Character: start}, End: lsp.Position{Line: 0, Character: start + 3}}
+	if got := list.Items[i].TextEdit; got == nil || got.Insert != want || got.NewText != "map" {
+		t.Errorf("edit = %+v, want %+v", got, want)
+	}
+}
+
+func TestNixCompletionResolvesDocsLazily(t *testing.T) {
+	t.Parallel()
+
+	p, params := openMarkedNix(t, "let\n  # Says one.\n  one = 1;\nin |", nil)
+	list := decodeResult[lsp.CompletionList](t, p.c.call("textDocument/completion", params))
+	for _, want := range []struct{ label, doc string }{{"one", "Says one."}, {"map", "`f`"}, {"let", "mutually recursive"}} {
+		i := slices.IndexFunc(list.Items, func(it lsp.CompletionItem) bool { return it.Label == want.label })
+		if i < 0 {
+			t.Fatalf("%q is not in %+v", want.label, list.Items)
+		}
+		item := list.Items[i]
+		if item.Documentation != nil {
+			t.Errorf("%q arrives with its documentation", want.label)
+		}
+		raw, err := json.Marshal(item)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resolved := decodeResult[lsp.CompletionItem](t, p.c.call("completionItem/resolve", string(raw)))
+		if resolved.Documentation == nil || !strings.Contains(resolved.Documentation.Value, want.doc) {
+			t.Errorf("resolved %q = %+v", want.label, resolved)
+		}
+	}
+}
+
+func TestNixHoverThroughTheClient(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name, src string
+		want      []string
+	}{
+		{name: "a builtin", src: "ma|p", want: []string{"map f list", "Takes 2 arguments."}},
+		{name: "a member of builtins", src: "builtins.ad|d", want: []string{"add e1 e2", "Adds two numbers."}},
+		{name: "a keyword", src: "l|et a = 1; in a", want: []string{"mutually recursive"}},
+		{name: "a binding with its comment", src: "let\n  # Says one.\n  one = 1;\nin on|e", want: []string{"```nix\none = 1;\n```", "Says one."}},
+		{name: "a binding read through a set", src: "let s = {\n  # Says one.\n  one = 1;\n}; in s.on|e", want: []string{"one = 1;", "Says one."}},
+		{name: "a formal with its comment", src: "{\n  # Says one.\n  one,\n}: on|e", want: []string{"one", "Says one."}},
+		{name: "a builtin inside ${...}", src: "{ buildPhase = ''\n  echo ${ma|p}\n''; }", want: []string{"map f list"}},
+		{name: "after non-ASCII", src: "[ \"é😀\" ma|p ]", want: []string{"map f list"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			p, params := openMarkedNix(t, tt.src, nil)
+			hover := decodeResult[*lsp.Hover](t, p.c.call("textDocument/hover", params))
+			if hover == nil {
+				t.Fatalf("%q has no hover", tt.src)
+			}
+			for _, want := range tt.want {
+				if !strings.Contains(hover.Contents.Value, want) {
+					t.Errorf("%q lacks %q:\n%s", tt.src, want, hover.Contents.Value)
+				}
+			}
+		})
+	}
+}
+
+func TestNixSignatureHelpThroughTheClient(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name, src, label string
+		active           uint32
+		param            string
+	}{
+		{name: "a builtin", src: "map a |", label: "map f list", active: 1, param: "list"},
+		{name: "curried", src: "let f = a: b: a; in f 1 |", label: "f a b", active: 1, param: "b"},
+		{name: "a set pattern", src: "let f = { one, two ? \"é😀\" }: one; in f { one = 1; | }", label: "f { one, two ? \"é😀\" }", active: 1, param: "two ? \"é😀\""},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			p, params := openMarkedNix(t, tt.src, nil)
+			help := decodeResult[*lsp.SignatureHelp](t, p.c.call("textDocument/signatureHelp", params))
+			if help == nil || len(help.Signatures) != 1 || help.Signatures[0].Label != tt.label || help.ActiveParameter == nil || *help.ActiveParameter != tt.active {
+				t.Fatalf("%q = %+v", tt.src, help)
+			}
+			units := utf16.Encode([]rune(tt.label))
+			bounds := help.Signatures[0].Parameters[tt.active].Label
+			if got := string(utf16.Decode(units[bounds[0]:bounds[1]])); got != tt.param {
+				t.Errorf("%q highlights %q, want %q", tt.src, got, tt.param)
+			}
+		})
+	}
+}
+
+func TestNixIgnoreQuickFixes(t *testing.T) {
+	t.Parallel()
+
+	const name = "default.nix"
+	files := map[string]string{name: "let\n  unused = 1;\nin 2\n"}
+	caps := `"capabilities": {"textDocument": {"diagnostic": {}, "codeAction": {"codeActionLiteralSupport": {"codeActionKind": {"valueSet": ["quickfix"]}}}}, "workspace": {"workspaceEdit": {"documentChanges": true}}}`
+	p := openNativeProject(t, caps, files, name)
+	diags := pullDiagnostics(t, p.c, p.uri(name))
+	raw, err := json.Marshal(diags)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := p.at(name, "unused", 0).Range
+	params := fmt.Sprintf(`{"textDocument": {"uri": %q}, "range": {"start": {"line": %d, "character": %d}, "end": {"line": %d, "character": %d}}, "context": {"diagnostics": %s}}`, p.uri(name), r.Start.Line, r.Start.Character, r.End.Line, r.End.Character, raw)
+	actions := decodeResult[[]lsp.CodeAction](t, p.c.call("textDocument/codeAction", params))
+	got := map[string]lsp.CodeAction{}
+	for _, a := range actions {
+		got[a.Title] = a
+	}
+	for title, newText := range map[string]string{
+		"Ignore SL8005 here":         "  # shellcheck disable=SL8005\n",
+		"Ignore SL8005 in this file": "# shellcheck disable=SL8005\n",
+	} {
+		action, ok := got[title]
+		if !ok {
+			t.Fatalf("%q is not in %v", title, slices.Collect(maps.Keys(got)))
+		}
+		if len(action.Diagnostics) != 1 || action.Diagnostics[0].Code != "SL8005" || action.Edit == nil || len(action.Edit.DocumentChanges) != 1 || action.Edit.DocumentChanges[0].Edits[0].NewText != newText {
+			t.Errorf("%q = %+v", title, action)
+		}
+	}
+	if _, ok := got["Remove `unused`"]; !ok {
+		t.Errorf("the fix of the finding is gone: %v", slices.Collect(maps.Keys(got)))
+	}
+}
+
+func TestNixDirectivesReachDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	const name = "default.nix"
+	files := map[string]string{name: "# shellcheck disable=nonsense\n# shellcheck disable=SL8006\n1\n"}
+	codes := func(capabilities string) []string {
+		p := openNativeProject(t, capabilities, files, name)
+		var out []string
+		for _, d := range pullDiagnostics(t, p.c, p.uri(name)) {
+			out = append(out, d.Code)
+		}
+		slices.Sort(out)
+		return out
+	}
+	if got := codes(nativeCapabilities); !slices.Equal(got, []string{"SC1125"}) {
+		t.Errorf("by default = %q", got)
+	}
+	strict := nativeCapabilities + `, "initializationOptions": {"lint": {"profile": "strict"}}`
+	if got := codes(strict); !slices.Equal(got, []string{"SC1125", "SL2009"}) {
+		t.Errorf("under the strict profile = %q", got)
 	}
 }

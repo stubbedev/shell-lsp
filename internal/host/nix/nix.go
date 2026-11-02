@@ -49,10 +49,6 @@ func Analyze(src string) Analysis {
 	return Analysis{Map: b.Map(), Detection: detection, Index: f.index(f.found), Errors: f.tree.Errors, Scope: f.table, tree: f.tree}
 }
 
-func (Analysis) Expect(int) (model.Expect, bool) { return model.Expect{}, false }
-
-func (Analysis) Invocation(int) (model.Invocation, bool) { return model.Invocation{}, false }
-
 func groups(found []shellString) [][]shellString {
 	var out [][]shellString
 	for _, s := range found {

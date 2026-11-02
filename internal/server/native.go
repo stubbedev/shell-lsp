@@ -13,16 +13,20 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/actions"
 	"github.com/stubbedev/shell-lsp/internal/config"
+	"github.com/stubbedev/shell-lsp/internal/directive"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
+	"github.com/stubbedev/shell-lsp/internal/filelint"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/host/model"
+	"github.com/stubbedev/shell-lsp/internal/host/nix"
 	"github.com/stubbedev/shell-lsp/internal/hostnav"
 	"github.com/stubbedev/shell-lsp/internal/hostrun"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/navigation"
+	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/regularfile"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
@@ -189,7 +193,20 @@ func nativeCompletionKind(kind model.Kind) lsp.CompletionItemKind {
 	panic(fmt.Sprintf("server: host kind %s has no LSP completion kind", kind))
 }
 
+func nativeItem(label string, kind model.Kind, detail string, span parser.Span, at docstore.Positions) lsp.CompletionItem {
+	return lsp.CompletionItem{
+		Label:            label,
+		Kind:             nativeCompletionKind(kind),
+		Detail:           detail,
+		InsertTextFormat: lsp.InsertPlainText,
+		TextEdit:         &lsp.CompletionEdit{NewText: label, Insert: at.Range(span)},
+	}
+}
+
 func (s *Server) nativeCompletion(ctx context.Context, docs *docstore.View, here nativeHere) (lsp.CompletionList, error) {
+	if here.host.Language() == host.Nix {
+		return s.nixCompletion(docs, here)
+	}
 	g, err := s.group(ctx, docs, here.host)
 	if err != nil {
 		return lsp.CompletionList{}, err
@@ -197,19 +214,65 @@ func (s *Server) nativeCompletion(ctx context.Context, docs *docstore.View, here
 	at := sourcePositions(here.File, here.encoding)
 	items := []lsp.CompletionItem{}
 	for _, it := range g.Complete(here.source) {
-		item := lsp.CompletionItem{
-			Label:            it.Label,
-			Kind:             nativeCompletionKind(it.Kind),
-			Detail:           it.Detail,
-			InsertTextFormat: lsp.InsertPlainText,
-			TextEdit:         &lsp.CompletionEdit{NewText: it.Label, Insert: at.Range(it.Span)},
-		}
+		item := nativeItem(it.Label, it.Kind, it.Detail, it.Span, at)
 		if it.Doc != "" {
 			item.Documentation = lsp.Markdown(it.Doc)
 		}
 		items = append(items, item)
 	}
 	return lsp.CompletionList{Items: items}, nil
+}
+
+func (s *Server) nixCompletion(docs *docstore.View, here nativeHere) (lsp.CompletionList, error) {
+	at := sourcePositions(here.File, here.encoding)
+	found := nix.Complete(here.File.Doc.Source().Text(), here.source, s.nixFiles(docs, here.File))
+	items := make([]lsp.CompletionItem, 0, len(found))
+	for _, it := range found {
+		item := nativeItem(it.Label, it.Kind, it.Detail, it.Span, at)
+		if it.Doc != "" {
+			data, err := encodeData(completionData{Name: it.Label, URI: here.File.URI, Offset: here.source, Nix: true})
+			if err != nil {
+				return lsp.CompletionList{}, err
+			}
+			item.Data = data
+		}
+		items = append(items, item)
+	}
+	return lsp.CompletionList{Items: items}, nil
+}
+
+func (s *Server) resolveNixCompletion(docs *docstore.View, item lsp.CompletionItem, data completionData) lsp.CompletionItem {
+	snap, err := s.snapshot(docs, data.URI)
+	if err != nil {
+		return item
+	}
+	if doc, ok := nix.ItemDoc(snap.Doc.Source().Text(), data.Offset, data.Name, s.nixFiles(docs, snap.File)); ok {
+		item.Documentation = lsp.Markdown(doc)
+	}
+	return item
+}
+
+func (s *Server) nixFiles(docs *docstore.View, file *workspace.File) nix.Files {
+	if !file.Doc.Local {
+		return nix.NoFiles
+	}
+	loader := s.hostEnv(docs, host.Nix).Loader
+	dir := filepath.Dir(file.Path)
+	return func(path string) (string, bool) {
+		named := filepath.Join(dir, filepath.FromSlash(path))
+		for _, candidate := range []string{named, filepath.Join(named, nix.DirectoryEntry)} {
+			if target, err := loader.LoadAs(candidate, host.Nix); err == nil {
+				return target.Doc.Source().Text(), true
+			}
+		}
+		return "", false
+	}
+}
+
+const nixDocumentMemo = "server.nix"
+
+func nixDocument(file *workspace.File) *nix.Document {
+	return workspace.Memo(file, nixDocumentMemo, 0, func() *nix.Document { return nix.Read(file.Doc.Source().Text()) })
 }
 
 func (s *Server) nativeSymbols(snap *snapshot) []lsp.DocumentSymbol {
@@ -285,6 +348,11 @@ func (s *Server) nativeHover(snap *snapshot, h hostnav.Hover) lsp.Hover {
 }
 
 func (s *Server) nativeHoverAt(ctx context.Context, docs *docstore.View, here nativeHere) (any, bool, error) {
+	if here.host.Language() == host.Nix && !here.inside {
+		if h, ok := nixDocument(here.File).Hover(here.source); ok {
+			return s.nativeHover(here.snapshot, hostnav.Hover{Markdown: h.Markdown, Span: h.Span}), true, nil
+		}
+	}
 	g, err := s.group(ctx, docs, here.host)
 	if err != nil {
 		return nil, true, err
@@ -300,7 +368,36 @@ func (s *Server) nativeHoverAt(ctx context.Context, docs *docstore.View, here na
 	if !ok {
 		return nil, true, nil
 	}
+	if here.host.Language() == host.Nix {
+		h.Markdown += nixComments(g, here)
+	}
 	return s.nativeHover(here.snapshot, h), true, nil
+}
+
+func nixComments(g *hostnav.Group, here nativeHere) string {
+	sym, ok := g.At(here.source)
+	if !ok {
+		return ""
+	}
+	doc := nixDocument(here.File)
+	var out strings.Builder
+	seen := map[string]bool{}
+	for _, d := range g.Declarations(sym) {
+		comment := doc.CommentAbove(d.Span.Start)
+		if comment != "" && !seen[comment] {
+			seen[comment] = true
+			out.WriteString("\n\n")
+			out.WriteString(comment)
+		}
+	}
+	return out.String()
+}
+
+func nixChecksUnusedDirectives(settings filelint.Settings) bool {
+	enabled := func(names []string) bool {
+		return slices.Contains(names, nix.UnusedDirectivesCheck()) || slices.Contains(names, directive.All)
+	}
+	return settings.Profile == lint.ProfileStrict || enabled(settings.Optional) || enabled(settings.RC.Enabled)
 }
 
 func (s *Server) nativeFindings(h hostnav.Host, settings config.Settings, docker hostnav.Hadolint) []lint.Finding {
@@ -314,8 +411,13 @@ func (s *Server) nativeFindings(h hostnav.Host, settings config.Settings, docker
 	} else {
 		s.noticeOnce("hostnav:"+file.URI+":"+err.Error(), lsp.MessageWarning, "Checking "+file.Path+" on its own, without the files it includes: "+err.Error())
 	}
-	excluded := s.lintSettings(file.Path, settings).Excluded()
-	return slices.DeleteFunc(slices.Concat(findings, docker.Findings()), func(f lint.Finding) bool {
+	checks := s.lintSettings(file.Path, settings)
+	var unused []lint.Finding
+	if h.Language() == host.Nix && nixChecksUnusedDirectives(checks) {
+		unused = nix.UnusedDirectiveFindings(file.Doc.Source().Text())
+	}
+	excluded := checks.Excluded()
+	return slices.DeleteFunc(slices.Concat(findings, unused, docker.Findings()), func(f lint.Finding) bool {
 		return excluded.Has(f.Code) || !settings.Lint.Profile.KeepsHost(f)
 	})
 }
@@ -481,7 +583,7 @@ func (s *Server) nativeFixes(ctx context.Context, docs *docstore.View, h hostnav
 	creates := caps.DocumentChanges && slices.Contains(caps.ResourceOperations, "create")
 	_, open := docs.Document(file.URI)
 	var out []lsp.CodeAction
-	for _, fix := range g.Fixes(within) {
+	for _, fix := range slices.Concat(g.Fixes(within), nixIgnoreFixes(g, h, within)) {
 		action := lsp.CodeAction{Title: fix.Title, Kind: lsp.CodeActionKind(actions.QuickFix), IsPreferred: fix.Preferred}
 		finding := source.Range(fix.Finding.Span)
 		for _, d := range p.Context.Diagnostics {
@@ -505,6 +607,20 @@ func (s *Server) nativeFixes(ctx context.Context, docs *docstore.View, h hostnav
 		out = append(out, action)
 	}
 	return out, nil
+}
+
+func nixIgnoreFixes(g *hostnav.Group, h hostnav.Host, within parser.Span) []hostnav.Fix {
+	if h.Language() != host.Nix {
+		return nil
+	}
+	findings := slices.DeleteFunc(g.Findings(), func(f lint.Finding) bool { return f.Span.End < within.Start || f.Span.Start > within.End })
+	var out []hostnav.Fix
+	for i, fixes := range nixDocument(h.File()).IgnoreFixes(findings) {
+		for _, fix := range fixes {
+			out = append(out, hostnav.Fix{Title: fix.Title, Finding: findings[i], Edits: fix.Edits})
+		}
+	}
+	return out
 }
 
 func (s *Server) listRecipesCommand(ctx context.Context, docs *docstore.View) (any, error) {
