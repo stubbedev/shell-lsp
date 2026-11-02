@@ -1,6 +1,6 @@
 module github.com/stubbedev/shell-lsp/tools/dockerfile-oracle
 
-go 1.27
+go 1.27.3
 
 require (
 	github.com/moby/buildkit v0.34.0
