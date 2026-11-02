@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
-	"runtime"
 	"slices"
 	"strings"
 	"time"

@@ -19,7 +19,7 @@ func referenceWorkers() int {
 	if !known {
 		return runtime.NumCPU()
 	}
-	return max(1, min(runtime.NumCPU(), int(available/bytesPerShellCheck)))
+	return max(1, min(runtime.NumCPU(), int(available/bytesPerShellCheck))) //nolint:gosec // divided by 4 GiB, so it fits
 }
 
 func availableMemory() (uint64, bool) {
@@ -64,7 +64,7 @@ func cgroupRoom() (uint64, bool) {
 	var room uint64
 	limited := false
 	for dir := filepath.Join("/sys/fs/cgroup", path); strings.HasPrefix(dir, "/sys/fs/cgroup"); dir = filepath.Dir(dir) {
-		raw, err := os.ReadFile(filepath.Join(dir, "memory.max"))
+		raw, err := os.ReadFile(filepath.Join(dir, "memory.max")) //nolint:gosec // a fixed name in cgroup directories of this process
 		if err != nil {
 			continue
 		}

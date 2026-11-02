@@ -34,6 +34,8 @@
             nixfmt # Reference formatter for the Nix golden files
             nixd # Reference server for `just nix-parity`
             nil # Reference server for `just nix-parity`
+            statix # Reference linter for `just corpus-nix-lint`
+            deadnix # Reference dead-code finder for `just corpus-nix-lint`
             shfmt # Reference formatter for shell scripts
             bats # Real test runner behind the Bats integration test
             bash-language-server # Comparison server behind `just crosscheck`
