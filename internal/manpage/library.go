@@ -89,10 +89,18 @@ func (l *library) prefixed(prefix string) []string {
 	return l.names[start:end]
 }
 
+func existing(dirs []string) []string {
+	return slices.DeleteFunc(slices.Clone(dirs), func(dir string) bool {
+		_, err := os.Stat(dir)
+		return errors.Is(err, fs.ErrNotExist)
+	})
+}
+
 func (l *library) scan() {
 	l.pages = map[string]string{}
+	dirs := existing(l.dirs)
 	for _, sec := range commandSections {
-		for _, dir := range l.dirs {
+		for _, dir := range dirs {
 			entries, err := os.ReadDir(filepath.Join(dir, "man"+sec))
 			if err != nil {
 				if !errors.Is(err, fs.ErrNotExist) {
