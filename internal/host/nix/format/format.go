@@ -24,21 +24,31 @@ func refusal(src string, offset int, message string) *RefusalError {
 	return &RefusalError{Line: strings.Count(before, "\n") + 1, Column: utf8.RuneCountInString(before[start:]) + 1, Message: message}
 }
 
+func invalidUTF8(src string) int {
+	for at, r := range src {
+		if r == utf8.RuneError {
+			if _, width := utf8.DecodeRuneInString(src[at:]); width == 1 {
+				return at
+			}
+		}
+	}
+	return -1
+}
+
 func Format(src string) (string, error) {
+	if at := invalidUTF8(src); at >= 0 {
+		return "", refusal(src, at, "the file is not valid UTF-8")
+	}
 	file := syntax.Parse(src)
-	if len(file.Errors) > 0 {
+	if len(file.Errors) > file.BareOr {
 		e := file.Errors[0]
 		return "", refusal(file.Text, e.Span.Start, e.Message)
 	}
-	c := &converter{file: file}
-	inner := c.expr(file.Root)
-	root := c.assemble(&node{kind: kindRoot, span: syntax.Span{End: len(file.Text)}, kids: []*node{inner}}, []*node{inner})
-	b := &builder{src: file.Text, used: make(map[int]bool, len(file.Comments))}
-	doc := b.root(root)
-	for _, comment := range file.Comments {
-		if !b.used[comment.Span.Start] {
-			return "", refusal(file.Text, comment.Span.Start, "a comment in this position is not supported by the formatter, and dropping it is not an option")
-		}
-	}
-	return render(doc), nil
+	return render(buildDoc(file), len(src)), nil
+}
+
+func buildDoc(file *syntax.File) []item {
+	c := newConverter(file)
+	root, end := c.root(file)
+	return fixup(rootDoc(root, end))
 }

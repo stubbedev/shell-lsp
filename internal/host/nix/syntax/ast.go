@@ -19,6 +19,7 @@ type File struct {
 	Comments []Comment
 	Tokens   []Token
 	Errors   []Error
+	BareOr   int
 }
 
 type Token struct {

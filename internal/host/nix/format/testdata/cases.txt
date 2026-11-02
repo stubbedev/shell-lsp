@@ -5388,3 +5388,102 @@ with (let in a); c
 x: let in y
 -- case-1877 --
 if let in x then assert a; b else let in y
+-- case-or-fallback-chain --
+x.y or z or w
+-- case-or-fallback-select --
+a.b or c.d or e or f
+-- case-or-in-list --
+[ y or z ]
+-- case-or-in-argument --
+f a.b or c or d e
+-- case-or-in-operator --
+x.y or z or + 1
+-- case-indented-one-row --
+''
+  a''
+-- case-indented-one-row-default --
+{A?''
+0''}:0
+-- case-number-select --
+1 .a
+-- case-float-select-or --
+f 1.5 .a or b x
+-- case-comment-stars --
+/* * */0
+-- case-comment-doc-trailing --
+0 /** a */
+-- case-comment-empty-doc --
+/** */0
+-- case-comment-four-stars --
+/****/0
+-- case-comment-star-box --
+/*
+ * x
+ * y
+ */0
+-- case-comment-star-box-indented --
+{
+  /*
+   * x
+   *
+   * y
+   */
+  a = 1;
+}
+-- case-comment-star-only --
+/*
+ *
+*/0
+-- case-comment-star-kept --
+/*
+  * x
+  * y
+ */0
+-- case-comment-star-first-text --
+/** a
+ * x
+ */0
+-- case-comment-star-blank-row --
+/*
+ * x
+
+ * y
+ */0
+-- case-indented-blank-rows --
+''
+   
+''
+-- case-formals-mixed --
+{ a, ... }: 0
+-- case-indented-one-line-hard-arg --
+00''${{A=0;A=0;}}''
+-- case-indented-escape-dollar --
+''a''$b''
+-- case-indented-escape-interp --
+{A=''''${'';}
+-- case-paren-fn-comment --
+((#0
+0)0)
+-- case-leading-blank-lines --
+
+
+00A
+#0
+-- case-comment-registers-no-level --
+{ a = f /* b */ "u"
+
+ ''
+   c
+ '';
+}
+-- case-callee-list-comment --
+[/*0*/]0
+-- case-callee-set-comment --
+{/*0*/ a=1;}0
+-- case-callee-select-comment --
+[/*0*/].a 0
+-- case-callee-paren-comment --
+(/*0*/a)0
+-- case-uri-select --
+A:0 .A
+#00

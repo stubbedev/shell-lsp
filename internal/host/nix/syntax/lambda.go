@@ -65,13 +65,12 @@ func (p *treeParser) pattern(start int) *PatternParam {
 	p.advance()
 	p.open[inBraces]++
 	param := &PatternParam{}
-	for p.tok.kind == TokIdent {
+	separated := true
+	for separated && p.tok.kind == TokIdent {
 		param.Formals = append(param.Formals, p.formal())
-		if !p.accept(TokComma) {
-			break
-		}
+		separated = p.accept(TokComma)
 	}
-	param.Ellipsis = p.accept(TokEllipsis)
+	param.Ellipsis = separated && p.accept(TokEllipsis)
 	p.open[inBraces]--
 	param.Closed = p.closing(TokRBrace, "}", open)
 	param.span = p.span(start)

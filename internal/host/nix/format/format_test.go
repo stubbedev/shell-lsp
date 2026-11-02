@@ -1,28 +1,50 @@
 package format
 
 import (
+	"bytes"
+	"flag"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stubbedev/shell-lsp/internal/host/hosttest"
 	"github.com/stubbedev/shell-lsp/internal/host/nix/syntax"
 )
 
+var update = flag.Bool("update", false, "rewrite the golden files from what the real nixfmt prints")
+
 const (
-	referenceTool    = "nixfmt"
-	referenceVersion = "nixfmt 1.5.0"
-	repositoryRoot   = "../../../.."
+	referenceTool        = "nixfmt"
+	referenceVersion     = "nixfmt 1.5.0"
+	repositoryRoot       = "../../../.."
+	hostileBudget        = 10 * time.Second
+	hostileDepth         = 1500
+	parserDepthLimit     = 4000
+	allocPerInput        = 8192
+	allocPerOutput       = 64
+	allocBase            = 4 << 20
+	growthPermitted      = 2.5
+	fuzzInputLimit       = 1 << 16
+	allocPerByteOrdinary = 1000
+)
+
+var (
+	casesInput   = filepath.Join("testdata", "cases.txt")
+	casesGolden  = filepath.Join("testdata", "cases.golden")
+	unstableList = filepath.Join("testdata", "not-idempotent.txt")
+	repoGoldens  = filepath.Join("testdata", "repo")
 )
 
 func repositoryFiles(t testing.TB) []string {
 	t.Helper()
 	var out []string
-	for _, pattern := range []string{"flake.nix", "nix/*.nix", "tools/dockerfile-oracle/package.nix"} {
+	for _, pattern := range []string{"flake.nix", "nix/*.nix", "tools/dockerfile-oracle/package.nix", "internal/nixeval/eval.nix"} {
 		found, err := filepath.Glob(filepath.Join(repositoryRoot, pattern))
 		if err != nil {
 			t.Fatal(err)
@@ -46,6 +68,15 @@ func repositoryFiles(t testing.TB) []string {
 	return out
 }
 
+func repositoryGolden(t testing.TB, path string) string {
+	t.Helper()
+	rel, err := filepath.Rel(repositoryRoot, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return filepath.Join(repoGoldens, rel+".golden")
+}
+
 func readFile(t testing.TB, path string) string {
 	t.Helper()
 	raw, err := os.ReadFile(path) //nolint:gosec // G304: the path is a fixture or a repository file the test names
@@ -55,35 +86,95 @@ func readFile(t testing.TB, path string) string {
 	return string(raw)
 }
 
-func TestCases(t *testing.T) {
-	t.Parallel()
+func writeAtomically(t testing.TB, path, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Remove(tmp.Name()) }()
+	if _, err := tmp.WriteString(content); err != nil {
+		t.Fatal(err)
+	}
+	if err := tmp.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(tmp.Name(), 0o644); err != nil { //nolint:gosec // G302: golden files are ordinary checked-in text
+		t.Fatal(err)
+	}
+	if err := os.Rename(tmp.Name(), path); err != nil {
+		t.Fatal(err)
+	}
+}
 
-	inputs := hosttest.Sections(t, filepath.Join("testdata", "cases.txt"))
-	goldens := hosttest.Sections(t, filepath.Join("testdata", "cases.golden"))
+func referenceFormat(t testing.TB, src string) string {
+	t.Helper()
+	cmd := exec.Command(referenceTool, "-q", "-") //nolint:gosec,noctx // G204: the reference tool is a constant
+	cmd.Stdin = strings.NewReader(src)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("%s refused %q: %v: %s", referenceTool, src, err, stderr.String())
+	}
+	return string(out)
+}
+
+func regenerateCases(t *testing.T) {
+	t.Helper()
+	var golden strings.Builder
+	var unstable []string
+	for _, c := range hosttest.Sections(t, casesInput) {
+		out := referenceFormat(t, c.Text)
+		fmt.Fprintf(&golden, "-- %s --\n%s", c.Name, out)
+		if referenceFormat(t, out) != out {
+			unstable = append(unstable, c.Name)
+		}
+	}
+	writeAtomically(t, casesGolden, golden.String())
+	listing := strings.Join(unstable, "\n")
+	if listing != "" {
+		listing += "\n"
+	}
+	writeAtomically(t, unstableList, listing)
+}
+
+func regenerateRepository(t *testing.T) {
+	t.Helper()
+	for _, path := range repositoryFiles(t) {
+		writeAtomically(t, repositoryGolden(t, path), referenceFormat(t, readFile(t, path)))
+	}
+}
+
+func TestCases(t *testing.T) {
+	if *update {
+		hosttest.RequireTool(t, referenceTool, referenceVersion)
+		regenerateCases(t)
+	}
+	inputs := hosttest.Sections(t, casesInput)
+	goldens := hosttest.Sections(t, casesGolden)
 	if len(inputs) != len(goldens) {
 		t.Fatalf("%d inputs but %d goldens", len(inputs), len(goldens))
 	}
-	unstable := strings.Fields(readFile(t, filepath.Join("testdata", "not-idempotent.txt")))
+	unstable := strings.Fields(readFile(t, unstableList))
 	for i, input := range inputs {
 		t.Run(input.Name, func(t *testing.T) {
-			t.Parallel()
 			assertFormats(t, input.Text, goldens[i].Text, !slices.Contains(unstable, input.Name))
 		})
 	}
 }
 
 func TestRepositoryFiles(t *testing.T) {
-	t.Parallel()
-
+	if *update {
+		hosttest.RequireTool(t, referenceTool, referenceVersion)
+		regenerateRepository(t)
+	}
 	for _, path := range repositoryFiles(t) {
-		rel, err := filepath.Rel(repositoryRoot, path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Run(rel, func(t *testing.T) {
-			t.Parallel()
-			golden := filepath.Join("testdata", "repo", rel+".golden")
-			assertFormats(t, readFile(t, path), readFile(t, golden), true)
+		t.Run(path, func(t *testing.T) {
+			assertFormats(t, readFile(t, path), readFile(t, repositoryGolden(t, path)), true)
 		})
 	}
 }
@@ -97,9 +188,7 @@ func assertFormats(t *testing.T, input, golden string, stable bool) {
 	if got != golden {
 		t.Errorf("Format(%q)\n got: %q\nwant: %q", input, got, golden)
 	}
-	if want, have := shape(t, input), shape(t, got); want != have {
-		t.Errorf("formatting %q changed the tree\n got: %s\nwant: %s", input, have, want)
-	}
+	assertPreserved(t, input, got)
 	if !stable {
 		return
 	}
@@ -112,10 +201,72 @@ func assertFormats(t *testing.T, input, golden string, stable bool) {
 	}
 }
 
+func assertPreserved(t testing.TB, input, output string) {
+	t.Helper()
+	if problem := preservationProblem(t, input, output); problem != "" {
+		t.Error(problem)
+	}
+}
+
+func preservationProblem(t testing.TB, input, output string) string {
+	t.Helper()
+	if file := syntax.Parse(output); len(file.Errors) > file.BareOr {
+		return fmt.Sprintf("formatting %q gave %q, which does not parse: %v", input, output, file.Errors[0])
+	}
+	if want, have := shape(t, input), shape(t, output); want != have && !selectsFromPath(input) {
+		return fmt.Sprintf("formatting %q changed the tree\n got: %s\nwant: %s", input, have, want)
+	}
+	for _, note := range commentLines(t, input) {
+		if !strings.Contains(output, note) {
+			return fmt.Sprintf("formatting %q lost the comment text %q from\n%s", input, note, output)
+		}
+	}
+	return ""
+}
+
+func referenceDoesTheSame(src, out string) bool {
+	if _, err := exec.LookPath(referenceTool); err != nil {
+		return false
+	}
+	cmd := exec.Command(referenceTool, "-q", "-") //nolint:gosec,noctx // G204: the reference tool is a constant
+	cmd.Stdin = strings.NewReader(src)
+	printed, err := cmd.Output()
+	return err != nil || string(printed) == out
+}
+
+func selectsFromPath(src string) bool {
+	found := false
+	syntax.Inspect(syntax.Parse(src).Root, func(n syntax.Node) bool {
+		if s, ok := n.(*syntax.Select); ok {
+			if p, isPath := s.Target.(*syntax.Path); isPath && p.Kind != syntax.SearchPath {
+				found = true
+			}
+		}
+		return !found
+	})
+	return found
+}
+
+func commentLines(t testing.TB, src string) []string {
+	t.Helper()
+	file := syntax.Parse(src)
+	var out []string
+	for _, c := range file.Comments {
+		body := strings.TrimLeft(src[c.Span.Start:c.Span.End], "#/*")
+		body = strings.TrimRight(body, "/*")
+		for line := range strings.SplitSeq(body, "\n") {
+			if trimmed := strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(line), "*")); trimmed != "" {
+				out = append(out, trimmed)
+			}
+		}
+	}
+	return out
+}
+
 func shape(t testing.TB, src string) string {
 	t.Helper()
 	file := syntax.Parse(src)
-	if len(file.Errors) > 0 {
+	if len(file.Errors) > file.BareOr {
 		t.Fatalf("parsing %q: %v", src, file.Errors[0])
 	}
 	var sb strings.Builder
@@ -128,19 +279,22 @@ func shape(t testing.TB, src string) string {
 			fmt.Fprintf(&sb, "int:%s ", n.Text)
 		case *syntax.Float:
 			fmt.Fprintf(&sb, "float:%s ", n.Text)
-		case *syntax.URI, *syntax.String:
+		case *syntax.URI:
+			sb.WriteString("string() ")
+			return
+		case *syntax.String:
 			sb.WriteString("string(")
-			if s, ok := n.(*syntax.String); ok {
-				for _, p := range s.Parts {
-					if in, ok := p.(*syntax.Interpolation); ok {
-						walk(in.Value)
-					}
+			for _, p := range n.Parts {
+				if in, ok := p.(*syntax.Interpolation); ok {
+					walk(in.Value)
 				}
 			}
 			sb.WriteString(") ")
 			return
 		case *syntax.Binary:
 			fmt.Fprintf(&sb, "op:%s ", n.Op)
+		case *syntax.IdentAttr:
+			fmt.Fprintf(&sb, "attr:%s ", n.Name)
 		default:
 			fmt.Fprintf(&sb, "%T ", n)
 		}
@@ -202,49 +356,204 @@ func TestShellInStringsStaysVerbatim(t *testing.T) {
 	}
 }
 
+func TestCommentsInEveryPositionFormat(t *testing.T) {
+	t.Parallel()
+
+	for _, src := range []string{
+		"a # c\n.b\n",
+		"a.b # c\nor d\n",
+		"a. /* c */ b\n",
+		"! # c\na\n",
+		"- /* c */ a\n",
+		"x # c\n: y\n",
+		"{ a } # c\n: y\n",
+		"x @ # c\n{ a }: y\n",
+		"{ a } /* c */ @ x: y\n",
+		"f # c\nx\n",
+		"( # c\na)\n",
+		"{ # c\na = 1; }\n",
+		"a ? # c\nb\n",
+		"[ # c\n]\n",
+		"\"${ # c\na}\"\n",
+		"rec # c\n{ }\n",
+	} {
+		out, err := Format(src)
+		if err != nil {
+			t.Errorf("Format(%q): %v", src, err)
+			continue
+		}
+		assertPreserved(t, src, out)
+	}
+}
+
+type hostileShape struct {
+	name, open, closing, core string
+}
+
+func (h hostileShape) at(depth int) string {
+	return strings.Repeat(h.open, depth) + h.core + strings.Repeat(h.closing, depth)
+}
+
+func hostileShapes() []hostileShape {
+	long := strings.Repeat("x", 120)
+	return []hostileShape{
+		{"applications", "f (", ")", "x"},
+		{"two arguments", "f y (", ") z", "x"},
+		{"last sets", "f { a = ", "; }", "x"},
+		{"lists", "[ ", " ]", long},
+		{"lambdas", "f (x: ", ")", long},
+		{"interpolations", `"${`, `}"`, long},
+		{"inner interpolations", `"a${`, `}b"`, long},
+		{"operators", "(a + ", ")", long},
+		{"or fallbacks", "a.b or (", ")", long},
+		{"priorities", "g (h) (", ") (k)", long},
+		{"many priorities", "g (h i) [ j ] (", ") { k = 1; }", long},
+		{"with lists", "(with a; [ ", " ])", long},
+	}
+}
+
+type formatCost struct {
+	took   time.Duration
+	alloc  uint64
+	input  int
+	output int
+}
+
+func (c formatCost) perUnit() float64 {
+	return float64(c.alloc) / float64(c.input+c.output/allocPerOutput+1)
+}
+
+func measureFormat(t *testing.T, src string) formatCost {
+	t.Helper()
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	start := time.Now()
+	out, err := Format(src)
+	took := time.Since(start)
+	runtime.ReadMemStats(&after)
+	if err != nil {
+		t.Fatalf("Format of %d bytes: %v", len(src), err)
+	}
+	return formatCost{took: took, alloc: after.TotalAlloc - before.TotalAlloc, input: len(src), output: len(out)}
+}
+
+func allocBudget(input, output int) uint64 {
+	return uint64(allocBase + allocPerInput*input + allocPerOutput*output) //nolint:gosec // G115: sizes are positive
+}
+
+func deepestAccepted(h hostileShape) int {
+	low, high := 1, parserDepthLimit
+	for low < high {
+		middle := (low + high + 1) / 2
+		if len(syntax.Parse(h.at(middle)).Errors) == 0 {
+			low = middle
+			continue
+		}
+		high = middle - 1
+	}
+	return low
+}
+
+func TestHostileNestingStaysFast(t *testing.T) {
+	for _, h := range hostileShapes() {
+		t.Run(h.name, func(t *testing.T) {
+			deepest := deepestAccepted(h)
+			var previous formatCost
+			for _, depth := range []int{50, 100, 200, 400, 800, hostileDepth, deepest} {
+				depth = min(depth, deepest)
+				cost := measureFormat(t, h.at(depth))
+				t.Logf("depth %d: %d bytes in, %d out, %s, %d allocated", depth, cost.input, cost.output, cost.took, cost.alloc)
+				if budget := allocBudget(cost.input, cost.output); cost.alloc > budget {
+					t.Fatalf("depth %d allocated %d bytes, over the budget of %d", depth, cost.alloc, budget)
+				}
+				if cost.took > hostileBudget {
+					t.Fatalf("depth %d took %s, over the budget of %s", depth, cost.took, hostileBudget)
+				}
+				if previous.alloc > allocBase && cost.perUnit() > growthPermitted*previous.perUnit() {
+					t.Fatalf("allocation grows faster than the input at depth %d: %.0f bytes per unit after %.0f", depth, cost.perUnit(), previous.perUnit())
+				}
+				previous = cost
+			}
+		})
+	}
+}
+
+func TestDeeperThanTheParserLimitIsRefused(t *testing.T) {
+	t.Parallel()
+
+	if _, err := Format(hostileShapes()[0].at(parserDepthLimit)); err == nil {
+		t.Error("nesting past the parser limit was formatted instead of refused")
+	}
+}
+
+func TestAllocationIsLinearInFileSize(t *testing.T) {
+	const unit = "  a.b.c = f x { y = [ 1 2 ]; z = \"s${t}\"; }; # note\n"
+	small := measureFormat(t, "{\n"+strings.Repeat(unit, 1000)+"}\n")
+	large := measureFormat(t, "{\n"+strings.Repeat(unit, 16000)+"}\n")
+	if large.perUnit() > growthPermitted*small.perUnit() {
+		t.Errorf("allocation per byte rose from %.0f to %.0f as the file grew", small.perUnit(), large.perUnit())
+	}
+	if perByte := large.alloc / uint64(large.input); perByte > allocPerByteOrdinary { //nolint:gosec // G115: the size is positive
+		t.Errorf("an ordinary file allocates %d bytes per input byte, over %d", perByte, allocPerByteOrdinary)
+	}
+}
+
 func TestAgreesWithLiveNixfmt(t *testing.T) {
 	hosttest.LiveTool(t, referenceTool, referenceVersion)
 	for _, path := range repositoryFiles(t) {
-		src := readFile(t, path)
-		assertAgrees(t, path, src)
+		assertAgrees(t, path, readFile(t, path))
 	}
-	for _, input := range hosttest.Sections(t, filepath.Join("testdata", "cases.txt")) {
+	for _, input := range hosttest.Sections(t, casesInput) {
 		assertAgrees(t, input.Name, input.Text)
 	}
 }
 
 func assertAgrees(t *testing.T, name, src string) {
 	t.Helper()
-	cmd := exec.CommandContext(t.Context(), referenceTool, "-q", "-")
-	cmd.Stdin = strings.NewReader(src)
-	want, err := cmd.Output()
-	if err != nil {
-		return
-	}
+	want := referenceFormat(t, src)
 	got, err := Format(src)
 	if err != nil {
 		t.Errorf("%s: %v", name, err)
 		return
 	}
-	if got != string(want) {
+	if got != want {
 		t.Errorf("%s differs from nixfmt\n got: %q\nwant: %q", name, got, want)
 	}
 }
 
 func FuzzFormat(f *testing.F) {
-	for _, c := range hosttest.Sections(f, filepath.Join("testdata", "cases.txt")) {
+	for _, c := range hosttest.Sections(f, casesInput) {
 		f.Add(c.Text)
 	}
 	f.Fuzz(func(t *testing.T, src string) {
+		if len(src) > fuzzInputLimit {
+			t.Skip("inputs over the limit say nothing the smaller ones do not")
+		}
+		var before, after runtime.MemStats
+		runtime.ReadMemStats(&before)
 		out, err := Format(src)
+		runtime.ReadMemStats(&after)
+		if used, budget := after.TotalAlloc-before.TotalAlloc, allocBudget(len(src), len(out)); used > budget {
+			t.Errorf("Format(%q) allocated %d bytes, over the budget of %d", src, used, budget)
+		}
 		if err != nil {
 			if out != "" {
 				t.Errorf("Format(%q) returned both %q and %v", src, out, err)
 			}
 			return
 		}
-		if _, err := Format(out); err != nil {
-			t.Errorf("Format(%q) = %q, which does not parse: %v", src, out, err)
+		problem := preservationProblem(t, src, out)
+		if problem == "" {
+			again, err := Format(out)
+			switch {
+			case err != nil:
+				problem = fmt.Sprintf("Format(%q) = %q, which does not format again: %v", src, out, err)
+			case again != out:
+				problem = fmt.Sprintf("Format is not idempotent on %q\nonce: %q\ntwice: %q", src, out, again)
+			}
+		}
+		if problem != "" && !referenceDoesTheSame(src, out) {
+			t.Error(problem)
 		}
 	})
 }

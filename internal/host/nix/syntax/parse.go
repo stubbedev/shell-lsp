@@ -39,6 +39,7 @@ type treeParser struct {
 	open      [enclosures]int
 	errors    []Error
 	lookahead [lookaheadMask + 1]peeked
+	bareOr    int
 }
 
 func Parse(src string) *File {
@@ -47,7 +48,7 @@ func Parse(src string) *File {
 	root := p.expr()
 	stray := p.strayExprs()
 	slices.SortStableFunc(p.errors, func(a, b Error) int { return cmp.Compare(a.Span.Start, b.Span.Start) })
-	return &File{Text: src, Root: root, Stray: stray, Comments: p.comments, Tokens: p.tokens, Errors: p.errors}
+	return &File{Text: src, Root: root, Stray: stray, Comments: p.comments, Tokens: p.tokens, Errors: p.errors, BareOr: p.bareOr}
 }
 
 func (p *treeParser) strayExprs() []Expr {

@@ -378,3 +378,5 @@ let ${("x")}.b = 1; in x	OK
 { inherit ${"x"}; }	OK
 let "a${x}" = 1; in 1	ERROR
 { inherit "${x}"; }	ERROR
+a + x: y	ERROR
+{ a ... }: x	ERROR

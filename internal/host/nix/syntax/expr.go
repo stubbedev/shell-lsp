@@ -272,6 +272,12 @@ func (p *treeParser) simple() Expr {
 	case TokIf, TokWith, TokAssert:
 		return p.misplaced()
 	}
+	if t.kind == TokOrKeyword {
+		p.errorHere("`or` cannot stand alone as an expression")
+		p.bareOr++
+		p.advance()
+		return &Ident{exprNode: exprAt(here), Name: text}
+	}
 	p.errorHere("expected an expression, found " + p.describe(t))
 	return p.bad()
 }
