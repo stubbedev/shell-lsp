@@ -185,3 +185,26 @@ func TestOnlyStandIn(t *testing.T) {
 		}
 	}
 }
+
+func TestOnlyASourcedScriptReadsAsSourced(t *testing.T) {
+	t.Parallel()
+
+	host := "one two three"
+	b := NewBuilder(host)
+	b.Region(upper)
+	b.Script()
+	b.Verbatim(0, 4)
+	b.SourcedScript()
+	b.Verbatim(4, 8)
+	b.Script()
+	b.Verbatim(8, len(host))
+	m := b.Map()
+	for _, tt := range []struct {
+		at   ProjOffset
+		want bool
+	}{{0, false}, {3, false}, {4, true}, {7, true}, {8, false}, {ProjOffset(len(host)), false}} {
+		if got := m.Sourced(tt.at); got != tt.want {
+			t.Errorf("Sourced(%d) = %v, want %v", tt.at, got, tt.want)
+		}
+	}
+}

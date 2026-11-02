@@ -91,9 +91,9 @@ func checkInteractiveSu(p *pass, c command) {
 	p.reportNode(2117, c.call, "su starts an interactive shell and the rest of the script continues only after it exits; use su -c or sudo to run commands as another user.")
 }
 
-func (p *pass) localToFunction(part syntax.WordPart) bool {
+func (p *pass) localToSourcedFunction(part syntax.WordPart) bool {
 	pe, ok := part.(*syntax.ParamExp)
-	if !ok || pe.Param == nil {
+	if !ok || pe.Param == nil || !p.inSourcedFragment(part) {
 		return false
 	}
 	for _, n := range slices.Backward(p.stack) {
@@ -127,7 +127,7 @@ func checkSSHExpansion(p *pass, c command) {
 		return
 	}
 	for _, part := range dq.Parts {
-		if isExpansion(part) && !p.localToFunction(part) {
+		if isExpansion(part) && !p.localToSourcedFunction(part) {
 			p.reportNode(2029, part, "This expands on the client before ssh sends the command; escape it or single-quote the command to expand it on the server.")
 			return
 		}

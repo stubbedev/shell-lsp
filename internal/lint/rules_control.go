@@ -229,7 +229,7 @@ func checkUncheckedDirectoryChange(p *pass, call *syntax.CallExpr) {
 		return
 	}
 	stmt, ok := p.parent().(*syntax.Stmt)
-	if !ok || p.optionsAt(stmt).Errexit || p.inCondition(stmt) || p.nothingFollows(stmt) {
+	if !ok || p.optionsAt(stmt).Errexit || p.inCondition(stmt) || p.inSourcedFragment(stmt) && p.nothingFollows(stmt) {
 		return
 	}
 	if name != "cd" && parseOptions(name, args).Has("-n") {

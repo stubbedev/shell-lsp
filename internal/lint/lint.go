@@ -213,6 +213,8 @@ type Options struct {
 	Normalized Normalized
 
 	NoExtendedAnalysis bool
+
+	Sourced func(offset int) bool
 }
 
 type Report struct {

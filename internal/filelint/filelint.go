@@ -75,6 +75,8 @@ func check(file *workspace.File, env navigation.Env, s Settings) lint.Report {
 		},
 
 		NoExtendedAnalysis: !*cmp.Or(s.Extended, s.RC.Extended, new(true)),
+
+		Sourced: file.Doc.Sourced,
 	})
 	if file.Doc.Projected() {
 		report.Findings = slices.DeleteFunc(report.Findings, func(f lint.Finding) bool {

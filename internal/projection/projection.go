@@ -53,6 +53,7 @@ type Map struct {
 	encoders []Encoder
 	scripts  []parser.Span
 	shells   []dialect.Detection
+	sourced  []int
 }
 
 func (m *Map) Host() string { return m.host }
@@ -74,6 +75,7 @@ type Builder struct {
 	programs     []program
 	sealed       bool
 	standIn      string
+	sourced      []int
 }
 
 const Dynamic = "$$"
@@ -93,6 +95,11 @@ func (b *Builder) Reserve(spans int) { b.spans = slices.Grow(b.spans, spans) }
 func (b *Builder) Script() {
 	b.starts = append(b.starts, b.text.Len())
 	b.shells = append(b.shells, b.shell)
+}
+
+func (b *Builder) SourcedScript() {
+	b.sourced = append(b.sourced, b.text.Len())
+	b.Script()
 }
 
 func (b *Builder) Placeholder(start, end int) {
@@ -144,7 +151,7 @@ func (b *Builder) Map() *Map {
 	if cap(b.spans) > 2*len(b.spans) {
 		b.spans = slices.Clone(b.spans)
 	}
-	m := &Map{host: b.host, text: b.text.String(), spans: b.spans, encoders: b.encoders, scripts: scripts, shells: shells}
+	m := &Map{host: b.host, text: b.text.String(), spans: b.spans, encoders: b.encoders, scripts: scripts, shells: shells, sourced: b.sourcedScripts(scripts)}
 	if b.standIn == "" {
 		m.settle(b.placeholders, b.programs)
 	}
@@ -172,7 +179,26 @@ func (b *Builder) scripts() ([]parser.Span, []dialect.Detection) {
 	return spans, detections
 }
 
+func (b *Builder) sourcedScripts(scripts []parser.Span) []int {
+	if len(b.sourced) == 0 {
+		return nil
+	}
+	var out []int
+	for i, script := range scripts {
+		if _, sourced := slices.BinarySearch(b.sourced, script.Start); sourced {
+			out = append(out, i)
+		}
+	}
+	return out
+}
+
 func (m *Map) Scripts() []parser.Span { return m.scripts }
+
+func (m *Map) Sourced(offset ProjOffset) bool {
+	at := sort.Search(len(m.scripts), func(i int) bool { return m.scripts[i].End > int(offset) })
+	_, sourced := slices.BinarySearch(m.sourced, at)
+	return sourced
+}
 
 func (m *Map) Shells() []dialect.Detection { return m.shells }
 

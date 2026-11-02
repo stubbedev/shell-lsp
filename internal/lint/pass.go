@@ -49,6 +49,7 @@ type pass struct {
 	assignmentArms map[*syntax.Assign][]branchArm
 
 	normalized Normalized
+	sourced    func(offset int) bool
 	probes     []Finding
 }
 
@@ -67,6 +68,7 @@ func newPass(tree *parser.Tree, imports []parser.Import, opts Options) *pass {
 		parameters:     shelldocs.KnownParameters(tree.Dialect),
 
 		normalized: opts.Normalized,
+		sourced:    opts.Sourced,
 	}
 }
 
@@ -144,6 +146,14 @@ func (p *pass) ancestor(depth int) syntax.Node {
 }
 
 func (p *pass) span(n syntax.Node) (parser.Span, bool) { return p.tree.NodeSpan(n) }
+
+func (p *pass) inSourcedFragment(n syntax.Node) bool {
+	if p.sourced == nil {
+		return false
+	}
+	span, ok := p.span(n)
+	return ok && p.sourced(span.Start)
+}
 
 const maxExcerpt = 120
 

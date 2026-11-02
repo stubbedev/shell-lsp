@@ -156,6 +156,14 @@ func TestNixStringsReportOnlyWhatTheShellWouldDo(t *testing.T) {
 		{"a store path cannot be followed", "{ programs.zsh.initContent = ''\n  source ${pkgs.a}/b\n  source ${c}\n''; }", nil},
 		{"nor a run-time path", "{ programs.zsh.initContent = ''\n  f=\"$HOME/x\"\n  source \"$f\"\n''; }", nil},
 		{"a real mistake is still found", "{ programs.bash.initExtra = ''\n  rm -rf $1\n''; }", []lint.Code{2086}},
+		{"a cd that ends a sourced function leaves no command to go wrong", "{ programs.zsh.initContent = ''\n  hop() { cd \"$1\"; }\n''; }", nil},
+		{"nor does one before a plain return", "{ programs.zsh.initContent = ''\n  hop() {\n    if [ -n \"$1\" ]; then\n      cd \"$1\"\n      return\n    fi\n    echo none\n  }\n''; }", nil},
+		{"a sourced cd with a command after it is still found", "{ programs.bash.initExtra = ''\n  hop() { cd \"$1\"; ls; }\n''; }", []lint.Code{2164}},
+		{"a sourced function the fragment calls is still found", "{ programs.bash.initExtra = ''\n  hop() { cd \"$1\"; }\n  hop /tmp\n  rm -f ./x\n''; }", []lint.Code{2164}},
+		{"a plain script keeps ShellCheck's verdict on the same function", "writeShellScript \"a\" ''\n  hop() { cd \"$1\"; }\n''", []lint.Code{2329, 2164}},
+		{"a sourced function's local cannot exist on the server", "{ programs.bash.initExtra = ''\n  f() {\n    local value\n    value=$(date)\n    ssh host \"echo $value\"\n  }\n''; }", nil},
+		{"a sourced variable that is no local expands on the client", "{ programs.bash.initExtra = ''\n  value=1\n  ssh host \"echo $value\"\n''; }", []lint.Code{2029}},
+		{"a plain script keeps ShellCheck's verdict on the same local", "writeShellScript \"a\" ''\n  f() {\n    local value\n    value=$(date)\n    ssh host \"echo $value\"\n  }\n  f\n''", []lint.Code{2029}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()

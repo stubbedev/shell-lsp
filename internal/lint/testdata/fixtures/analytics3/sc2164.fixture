@@ -174,26 +174,3 @@ goto_logs() {
 }
 goto_logs
 >>> SC2164 3:3
-
-### a cd that ends a function nothing here calls leaves no command to go wrong
-#!/bin/bash
-hop() { cd "$1"; }
->>- SC2164 2:9 -- nothing runs after this cd in the function and nothing here calls it, so no later command can land in the wrong directory
-
-### a cd followed only by a plain return ends the function too
-#!/bin/bash
-hop() {
-  if [ -n "$1" ]; then
-    cd "$1"
-    return
-  fi
-  echo none
-}
->>- SC2164 4:5 -- the return that follows leaves the function with cd's own status, and nothing here calls it
-
-### a cd in a function something calls still leaves the caller in the wrong place
-#!/bin/bash
-hop() { cd "$1"; }
-hop /tmp
-rm -f ./x
->>> SC2164 2:9

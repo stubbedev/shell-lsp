@@ -184,6 +184,10 @@ func (d *Document) Synthetic(offset int) bool {
 	return d.mapping != nil && d.mapping.Synthetic(projection.ProjOffset(offset))
 }
 
+func (d *Document) Sourced(offset int) bool {
+	return d.mapping != nil && d.mapping.Sourced(projection.ProjOffset(offset))
+}
+
 func (d *Document) OnlyStandIn(start, end int) bool {
 	return d.mapping != nil && d.mapping.OnlyStandIn(projection.ProjOffset(start), projection.ProjOffset(end))
 }
