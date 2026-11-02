@@ -29,6 +29,7 @@ func (s Stamp) before(other Stamp) bool { return s.Docs < other.Docs || s.Disk <
 
 type linkedProject struct {
 	partial bool
+	linking bool
 	key     string
 	stamp   Stamp
 	dirty   bool
@@ -74,6 +75,12 @@ func NewProjects() *Projects {
 }
 
 func (p *Projects) Close() { p.stop() }
+
+func (p *Projects) Linking() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.active
+}
 
 func (p *Projects) OnDrained(drained func()) {
 	p.mu.Lock()
@@ -447,6 +454,12 @@ func linkProject(ctx context.Context, env Env, request nix.Request, seeds ...*wo
 	}
 	project := nix.Link(ctx, request, projectSource{b})
 	return &linkedProject{project: project, names: &model.NameTable{}, indexes: project.Indexes(), files: b.files}
+}
+
+func linkingProject(self *workspace.File) *linkedProject {
+	l := unlinkedProject(self, stillLinking)
+	l.linking = true
+	return l
 }
 
 func unlinkedProject(self *workspace.File, reason string) *linkedProject {

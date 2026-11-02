@@ -28,6 +28,9 @@ type file struct {
 	found []shellString
 	path  []string
 	embed Embedder
+
+	quotesRead  map[*syntax.String]bool
+	quotedHoles map[*syntax.Interpolation]bool
 }
 
 type Embedding struct {
@@ -56,7 +59,7 @@ func AnalyzeWith(src string, embed Embedder) Analysis {
 	f.discover()
 	f.discoverWrapped()
 	m, detection := f.projection()
-	return Analysis{Map: m, Detection: detection, Index: f.index(f.found), Errors: f.tree.Errors, Scope: f.table, tree: f.tree}
+	return Analysis{Map: m, Detection: detection, Index: f.index(m), Errors: f.tree.Errors, Scope: f.table, tree: f.tree}
 }
 
 func AnalyzeDependency(src string) Analysis {
@@ -111,10 +114,11 @@ func (f *file) project(b *projection.Builder, group []shellString, n int) {
 		b.Embed(first.hosted.inner.Map, first.hosted.via)
 		return
 	}
-	opener, end := first.directive+"(\n"+first.prelude, closing
+	prelude := first.prelude + f.spacelessPrelude(group)
+	opener, end := first.directive+"(\n"+prelude, closing
 	if first.derivation {
 		name := phaseFunction + strconv.Itoa(n)
-		opener = phaseDirective + first.directive + name + "() {\n" + strictMode + first.prelude
+		opener = phaseDirective + first.directive + name + "() {\n" + strictMode + prelude
 		end = "\n:\n}\n" + name + "\n"
 	}
 	b.Script()

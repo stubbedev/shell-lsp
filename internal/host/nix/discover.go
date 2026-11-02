@@ -12,7 +12,7 @@ import (
 )
 
 var (
-	sourcedDirective = directive.Render(directive.Disable, "SC2154,SC2034") + "\n"
+	sourcedDirective = directive.Render(directive.Disable, "SC2154,SC2034,SC2329") + "\n"
 	markers          = map[string]dialect.Dialect{"shell": dialect.Bash, "bash": dialect.Bash, "sh": dialect.Posix, "dash": dialect.Dash, "zsh": dialect.Zsh, "ksh": dialect.Ksh}
 )
 
@@ -75,6 +75,7 @@ type shellString struct {
 	context    context
 	phase      int
 	skip       int
+	provides   []string
 	hosted     *hostedText
 }
 
@@ -309,6 +310,7 @@ func (f *file) visitString(str *syntax.String, c context, at position, via call)
 		return
 	}
 	if s, ok := f.classify(str, c, at, via); ok {
+		f.markQuotedHoles(s.str, s.detection.Shell)
 		f.found = append(f.found, s)
 		return
 	}
@@ -321,24 +323,38 @@ func (f *file) visitString(str *syntax.String, c context, at position, via call)
 
 func (f *file) classify(str *syntax.String, c context, at position, via call) (shellString, bool) {
 	s := shellString{str: str, joined: at.joined, context: c}
-	if comment, ok := f.tree.CommentBefore(str.Span().Start); ok {
-		marker := strings.TrimSpace(f.src[comment.Body.Start:comment.Body.End])
-		if d, ok := markers[marker]; ok {
-			s.detection = dialect.Detection{Dialect: d, Source: dialect.SourceHostSetting, Evidence: "/* " + marker + " */"}
-			return s, true
+	marked, isMarked := f.marker(str)
+	found := via.surface
+	if found == nil && at.value {
+		found = f.attrSurface(c)
+	}
+	if found != nil {
+		if shaped, ok := f.shaped(s, found, via); ok {
+			if isMarked && shaped.hosted == nil {
+				shaped.detection = marked
+			}
+			return shaped, true
 		}
 	}
-	if via.surface != nil {
-		return f.shaped(s, via.surface, via)
-	}
-	if !at.value {
+	if !isMarked {
 		return shellString{}, false
 	}
-	found := f.attrSurface(c)
-	if found == nil {
-		return shellString{}, false
+	s.detection = marked
+	s.directive = sourcedDirective
+	return s, true
+}
+
+func (f *file) marker(str *syntax.String) (dialect.Detection, bool) {
+	comment, ok := f.tree.CommentBefore(str.Span().Start)
+	if !ok {
+		return dialect.Detection{}, false
 	}
-	return f.shaped(s, found, via)
+	marker := strings.TrimSpace(f.src[comment.Body.Start:comment.Body.End])
+	d, known := markers[marker]
+	if !known {
+		return dialect.Detection{}, false
+	}
+	return dialect.Detection{Dialect: d, Source: dialect.SourceHostSetting, Evidence: "/* " + marker + " */"}, true
 }
 
 func (f *file) attrSurface(c context) *surface {
@@ -360,10 +376,11 @@ func (f *file) shaped(s shellString, found *surface, via call) (shellString, boo
 		s.derivation = true
 		s.env = environment{set: c.set, source: derivationEnv, expr: c.merged}
 		s.phase = phaseRank(c.name)
+		s.provides = declaredOutputs(c.set)
 	case hookRole:
 		s.env = environment{set: c.set, source: derivationEnv, expr: c.merged}
 		s.phase = phaseRank(c.name)
-		s.directive = phaseDirective
+		s.directive = sourcedDirective
 	case unitRole:
 		s.env = environment{set: c.set, source: unitEnv, prefix: c.prefix, expr: c.merged}
 		s.directive = readsEnvironment(s.env)
@@ -378,12 +395,14 @@ func (f *file) shaped(s shellString, found *surface, via call) (shellString, boo
 		s.derivation = true
 		s.env = environment{set: via.env, source: derivationEnv, expr: via.expr}
 		s.phase = phaseRank("buildCommand")
+		s.provides = declaredOutputs(via.env)
 	case shebangRole:
 		return f.withShebang(s)
 	case namedRole:
 		return f.namedText(s, via)
 	case sourcedRole:
 		s.directive = sourcedDirective
+		s.provides = found.provides
 	case gitAliasRole:
 		if !strings.HasPrefix(f.src[s.str.Content.Start:s.str.Content.End], "!") {
 			return shellString{}, false
@@ -441,14 +460,53 @@ func (f *file) written(s shellString, via call) (shellString, bool) {
 
 func (f *file) shebangOf(str *syntax.String) (dialect.Dialect, string, bool, bool) {
 	first := strings.TrimSpace(f.firstLine(str))
-	if !strings.HasPrefix(first, "#!") {
+	if !strings.HasPrefix(first, shebangPrefix) {
 		return 0, "", false, false
 	}
-	if strings.Contains(first, "runtimeShell") || strings.Contains(first, "stdenv.shell") {
-		return dialect.Bash, first, true, true
-	}
-	d, shell := dialect.FromShebang(first)
+	d, shell := dialect.FromShebang(f.shebangLine(str))
 	return d, first, shell, true
+}
+
+const (
+	shebangPrefix = "#!"
+	bashPath      = "/bin/bash"
+)
+
+func (f *file) shebangLine(str *syntax.String) string {
+	var line strings.Builder
+	for _, part := range str.Parts {
+		switch part := part.(type) {
+		case *syntax.Literal:
+			text := part.Text
+			if line.Len() == 0 {
+				text = strings.TrimLeft(text, " \t\r\n")
+			}
+			before, _, ended := strings.Cut(text, "\n")
+			line.WriteString(before)
+			if ended {
+				return line.String()
+			}
+		case *syntax.Interpolation:
+			line.WriteString(interpreterOf(part.Value))
+		case *syntax.Escape:
+			return line.String()
+		}
+	}
+	return line.String()
+}
+
+func interpreterOf(e syntax.Expr) string {
+	value := syntax.Unparenthesized(e)
+	if selected, isSelect := value.(*syntax.Select); isSelect && lastIdent(selected.Path) == "shell" && calleeName(selected.Target) == "stdenv" {
+		return bashPath
+	}
+	if calleeName(value) == "runtimeShell" {
+		return bashPath
+	}
+	if _, exe, named := programOf(value); named && exe != "" {
+		return "/" + exe
+	}
+	return ""
 }
 
 func (f *file) withShebang(s shellString) (shellString, bool) {

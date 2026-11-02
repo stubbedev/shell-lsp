@@ -176,44 +176,32 @@ func limitFolds(folds []lsp.FoldingRange, limit int) []lsp.FoldingRange {
 }
 
 func (s *Server) handleWorkspaceSymbol(ctx context.Context, docs *docstore.View, symbolParams lsp.WorkspaceSymbolParams) (any, error) {
-	files, err := s.indexWorkspace(ctx, docs, interactive)
-	if err != nil {
-		return nil, err
+	return s.matchingSymbols(ctx, docs, symbolParams.Query)
+}
+
+func fileSymbols(file *workspace.File, docs *docstore.View) []lsp.SymbolInformation {
+	var out []lsp.SymbolInformation
+	for _, fn := range file.Tree.Functions {
+		out = append(out, workspaceSymbol(file, docs, fn.Name, lsp.SymbolFunction, fn.Span))
 	}
-	out := []lsp.SymbolInformation{}
-	for _, file := range files {
-		for _, fn := range file.Tree.Functions {
-			if structure.Matches(symbolParams.Query, fn.Name) {
-				out = append(out, workspaceSymbol(file, docs, fn.Name, lsp.SymbolFunction, fn.Span))
-			}
-		}
-		for def := range globalDefinitions(file.Tree) {
-			if structure.Matches(symbolParams.Query, def.Name) && !file.Doc.Synthetic(def.NameSpan.Start) {
-				out = append(out, workspaceSymbol(file, docs, def.Name, lsp.SymbolVariable, def.Span))
-			}
-		}
-		for _, test := range file.Tree.Tests {
-			if structure.Matches(symbolParams.Query, test.Name) {
-				out = append(out, workspaceSymbol(file, docs, test.Name, symbolKind(structure.SymbolTest), test.Span))
-			}
-		}
-		if file.Native == nil {
-			continue
-		}
-		at := sourcePositions(file, docs.Encoding())
-		for _, sym := range file.Native.Index.Symbols {
-			if (sym.Scope == model.Global || sym.Listed) && structure.Matches(symbolParams.Query, sym.Name) {
-				out = append(out, lsp.SymbolInformation{Name: sym.Name, Kind: nativeKind(sym.Kind), Location: lsp.Location{URI: file.URI, Range: at.Range(sym.Selection)}})
-			}
+	for def := range globalDefinitions(file.Tree) {
+		if !file.Doc.Synthetic(def.NameSpan.Start) {
+			out = append(out, workspaceSymbol(file, docs, def.Name, lsp.SymbolVariable, def.Span))
 		}
 	}
-	slices.SortStableFunc(out, func(a, b lsp.SymbolInformation) int {
-		return cmp.Or(cmp.Compare(a.Kind, b.Kind), cmp.Compare(a.Name, b.Name), cmp.Compare(a.Location.URI, b.Location.URI))
-	})
-	out = slices.CompactFunc(out, func(a, b lsp.SymbolInformation) bool {
-		return a.Kind == b.Kind && a.Name == b.Name && a.Location.URI == b.Location.URI
-	})
-	return out[:min(len(out), maxWorkspaceSymbols)], nil
+	for _, test := range file.Tree.Tests {
+		out = append(out, workspaceSymbol(file, docs, test.Name, symbolKind(structure.SymbolTest), test.Span))
+	}
+	if file.Native == nil {
+		return out
+	}
+	at := sourcePositions(file, docs.Encoding())
+	for _, sym := range file.Native.Index.Symbols {
+		if sym.Scope == model.Global || sym.Listed {
+			out = append(out, lsp.SymbolInformation{Name: sym.Name, Kind: nativeKind(sym.Kind), Location: lsp.Location{URI: file.URI, Range: at.Range(sym.Selection)}})
+		}
+	}
+	return out
 }
 
 func globalDefinitions(tree *parser.Tree) iter.Seq[parser.Definition] {

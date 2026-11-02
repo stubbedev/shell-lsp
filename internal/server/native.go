@@ -63,7 +63,7 @@ func (s *Server) hostEnv(docs *docstore.View, language host.Language) hostnav.En
 	env := hostnav.Env{Loader: s.workspace, Home: s.process.Home, Exists: func(path string) bool {
 		_, err := regularfile.Stat(path)
 		return err == nil
-	}, Projects: s.projects, Stamp: hostnav.Stamp{Docs: docs.Revision(), Disk: s.workspace.Generation()}, Patience: cmp.Or(s.linkPatience, projectLinkPatience)}
+	}, Projects: s.projects, Stamp: hostnav.Stamp{Docs: docs.Revision(), Disk: s.workspace.Generation()}, Patience: cmp.Or(s.linkPatience, projectLinkPatience), OnPartial: s.partialAnswer}
 	env.Graph = func(ctx context.Context) (*hostnav.Graph, error) { return s.graphs.of(ctx, s, docs, language, env) }
 	return env
 }
@@ -162,6 +162,30 @@ func (s *Server) importGraph(ctx context.Context, docs *docstore.View, language 
 		paths = slices.Compact(paths)
 		return slices.DeleteFunc(paths, func(path string) bool { return !nixPath(path) }), nil
 	}, env)
+}
+
+func (s *Server) partialAnswer() {
+	if s.partialShown.Swap(true) {
+		return
+	}
+	s.notify(logMessageMethod, lsp.LogMessageParams{Type: lsp.MessageInfo, Message: "Answering from single files until the project finishes linking; hints and lenses refresh when it does."})
+	if !s.projects.Linking() {
+		s.linkLanded()
+	}
+}
+
+func (s *Server) linkLanded() {
+	if !s.partialShown.Swap(false) {
+		return
+	}
+	caps := s.clientCapabilities().Workspace
+	ctx := context.Background()
+	if caps.InlayHint.RefreshSupport {
+		s.requestRefresh(ctx, inlayHintRefreshMethod)
+	}
+	if caps.CodeLens.RefreshSupport {
+		s.requestRefresh(ctx, codeLensRefreshMethod)
+	}
 }
 
 func (s *Server) group(ctx context.Context, docs *docstore.View, h hostnav.Host) (*hostnav.Group, error) {
@@ -439,7 +463,9 @@ func (s *Server) nativeHoverAt(ctx context.Context, docs *docstore.View, here na
 		if !ok {
 			return nil, false, nil
 		}
-		return s.nativeHover(here.snapshot, g.Describe(sym)), true, nil
+		described := g.Describe(sym)
+		described.Markdown += linkingNote(g)
+		return s.nativeHover(here.snapshot, described), true, nil
 	}
 	h, ok := g.Hover(here.source)
 	if !ok {
@@ -448,7 +474,15 @@ func (s *Server) nativeHoverAt(ctx context.Context, docs *docstore.View, here na
 	if here.host.Language() == host.Nix {
 		h.Markdown += nixComments(g, here)
 	}
+	h.Markdown += linkingNote(g)
 	return s.nativeHover(here.snapshot, h), true, nil
+}
+
+func linkingNote(g *hostnav.Group) string {
+	if !g.Linking() {
+		return ""
+	}
+	return "\n\n*The rest of the project is still being linked, so this answer covers this file alone.*"
 }
 
 func nixComments(g *hostnav.Group, here nativeHere) string {
@@ -482,7 +516,7 @@ func (s *Server) nativeFindings(h hostnav.Host, settings config.Settings, docker
 		s.noticeOnce("hostnav:"+file.URI+":"+err.Error(), lsp.MessageWarning, "Checking "+file.Path+" on its own, without the files it includes: "+err.Error())
 	}
 	checks := s.lintSettings(file.Path, settings)
-	unused := hostnav.UnusedNixDirectives(h, checks)
+	unused := hostnav.OptionalNixFindings(h, checks)
 	excluded := checks.Excluded()
 	return slices.DeleteFunc(slices.Concat(findings, unused, docker.Findings()), func(f lint.Finding) bool {
 		return excluded.Has(f.Code) || !settings.Lint.Profile.KeepsHost(f)
@@ -692,23 +726,41 @@ func nixIgnoreFixes(g *hostnav.Group, h hostnav.Host, within parser.Span) []host
 
 func (s *Server) listRecipesCommand(ctx context.Context, docs *docstore.View) (any, error) {
 	out := []recipeListing{}
-	for _, language := range []host.Language{host.Just, host.Make, host.Nix} {
-		files, err := s.hostFiles(docs, language)(ctx)
+	listed := func(f *workspace.File) bool {
+		if f.Native == nil || !f.Doc.Local {
+			return true
+		}
+		language := f.Native.Language
+		for _, r := range f.Native.Index.Runnables {
+			argv := language.Invocation(f.Path, r.Name)
+			out = append(out, recipeListing{
+				URI: f.URI, Path: f.Path, Name: strings.Clone(r.Name), Tool: argv[0],
+				Argv: argv, Cwd: filepath.Dir(f.Path), Parameters: append([]model.RunParam{}, r.Params...),
+			})
+		}
+		return len(out) < maxListedRecipes
+	}
+	for _, doc := range docs.Documents() {
+		if _, known := host.Of(doc.URI, doc.Language); !known {
+			continue
+		}
+		file, err := s.workspaceFile(docs, doc.URI)
 		if err != nil {
 			return nil, err
 		}
-		for _, f := range files {
-			if !f.Doc.Local {
-				continue
-			}
-			for _, r := range f.Native.Index.Runnables {
-				argv := language.Invocation(f.Path, r.Name)
-				out = append(out, recipeListing{
-					URI: f.URI, Path: f.Path, Name: r.Name, Tool: argv[0],
-					Argv: argv, Cwd: filepath.Dir(f.Path), Parameters: append([]model.RunParam{}, r.Params...),
-				})
-			}
-		}
+		listed(file)
 	}
+	visited, total, err := s.eachDiskFile(ctx, closedFiles(docs, func(path string) bool {
+		_, known := host.FromName(path)
+		return known
+	}), listed)
+	if err != nil {
+		return nil, err
+	}
+	s.noticeScanCut("Listing recipes")
+	s.noticeIndexLimit("Listing recipes", maxListedRecipes, visited, total)
+	slices.SortStableFunc(out, func(a, b recipeListing) int {
+		return cmp.Or(strings.Compare(a.Path, b.Path), strings.Compare(a.Name, b.Name))
+	})
 	return out, nil
 }

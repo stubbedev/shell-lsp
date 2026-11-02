@@ -336,7 +336,7 @@ func (c *checker) nativeFindings(h hostnav.Host, settings filelint.Settings) ([]
 	if err != nil {
 		return nil, err
 	}
-	findings := slices.Concat(g.Findings(), hostnav.UnusedNixDirectives(h, settings))
+	findings := slices.Concat(g.Findings(), hostnav.OptionalNixFindings(h, settings))
 	return slices.DeleteFunc(findings, func(f lint.Finding) bool { return !c.opts.profile.KeepsHost(f) }), nil
 }
 

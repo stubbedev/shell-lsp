@@ -762,8 +762,14 @@ An antiquotation in a shell string is read for what it is:
   other wrappers. Every check, hover and embedded `jq`, `awk` or `sed` program treats
   it as that command. Its name is not edited, since the antiquotation decides it.
 - `lib.escapeShellArg`, `toString` and the program getters lead to what they read.
-- Anything else stands for text the shell cannot know. Where its value is not
-  provably safe, `SL8014` says that it is a quoting risk.
+- Anything else stands for text the shell cannot know, so nothing is reported about
+  the placeholder itself. With `enable=unescaped-antiquotations`, `SL8014` reports
+  one inside a command's argument whose value is not provably safe.
+- Strings sourced into a session (shell init, aliases, `shellHook`, activation
+  entries) and strings marked only by a `/* zsh */` comment keep what they define for
+  later, and a sourced path is not followed. `$out` and the other builder variables
+  whose values cannot hold a space, and the variables Home Manager gives an activation
+  entry, count as safe to leave unquoted.
 
 - Indentation is removed as Nix removes it, `'''`, `''$` and `''\x` (or `\"`,
   `\$` and the other escapes of a `"` string) are what Nix makes of them, and

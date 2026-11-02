@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -133,4 +134,23 @@ func TestMatches(t *testing.T) {
 			t.Errorf("Matches(%q, deploy) = %t", query, got)
 		}
 	}
+}
+
+func TestWorkspaceSymbolsStopAtAReportedLimit(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	for _, name := range []string{"a.sh", "b.sh", "c.sh"} {
+		if err := os.WriteFile(filepath.Join(root, name), []byte("#!/bin/sh\nfn_"+strings.TrimSuffix(name, ".sh")+"() { :; }\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	c, _ := startClient(t, `{"rootUri": "`+fileuri.FromPath(root)+`", "capabilities": {"textDocument": {"diagnostic": {}}}}`, func(s *Server) { s.symbols.limit = 1 })
+	got := decodeResult[[]lsp.SymbolInformation](t, c.call("workspace/symbol", `{"query": "fn_"}`))
+	if len(got) != 1 {
+		t.Fatalf("symbols past the limit: %+v", got)
+	}
+	c.awaitNotification(logMessageMethod, func(raw json.RawMessage) bool {
+		return strings.Contains(string(raw), "limit of 1 after 1 of 3 files")
+	})
 }

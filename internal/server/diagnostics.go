@@ -19,7 +19,6 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/hostnav"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
-	"github.com/stubbedev/shell-lsp/internal/parallel"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/shellcheckrc"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
@@ -182,17 +181,27 @@ func (s *Server) handleWorkspaceDiagnostic(ctx context.Context, docs *docstore.V
 	for _, p := range diagParams.PreviousResultIDs {
 		previous[p.URI] = p.Value
 	}
-	files, err := s.indexWorkspace(ctx, docs, interactive)
+	items := make([]lsp.WorkspaceDocumentDiagnosticReport, 0, len(docs.Documents()))
+	diagnostics := 0
+	report := func(file *workspace.File) bool {
+		item := s.workspaceReport(docs, file, previous[file.URI])
+		diagnostics += len(item.Items)
+		items = append(items, item)
+		return diagnostics < maxWorkspaceDiagnostics
+	}
+	for _, doc := range docs.Documents() {
+		file, err := s.workspaceFile(docs, doc.URI)
+		if err != nil {
+			return nil, err
+		}
+		report(file)
+	}
+	visited, total, err := s.eachDiskFile(ctx, closedFiles(docs, everyFile), report)
 	if err != nil {
 		return nil, err
 	}
-	items := make([]lsp.WorkspaceDocumentDiagnosticReport, len(files))
-	parallel.For(interactive.workers(), len(files), func(i int) {
-		items[i] = s.workspaceReport(docs, files[i], previous[files[i].URI])
-	})
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
+	s.noticeScanCut("Workspace diagnostics")
+	s.noticeIndexLimit("Workspace diagnostics", maxWorkspaceDiagnostics, visited, total)
 	slices.SortFunc(items, func(a, b lsp.WorkspaceDocumentDiagnosticReport) int { return strings.Compare(a.URI, b.URI) })
 	return lsp.WorkspaceDiagnosticReport{Items: items}, nil
 }

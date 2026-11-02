@@ -198,3 +198,31 @@ func TestAProjectWithNoPatienceAnswersFromTheFileAlone(t *testing.T) {
 		t.Errorf("while the link runs, the group holds %d files, want the open one alone", len(g.Module.Files))
 	}
 }
+
+func TestAnAnswerThatDidNotWaitForTheLinkIsMarked(t *testing.T) {
+	t.Parallel()
+
+	dir := writeTree(t, map[string]string{"flake.nix": "{ outputs = _: { }; }\n", "a.nix": "{ a = 1; }\n"})
+	ws := newWorkspace()
+	file, err := ws.Load(filepath.Join(dir, "a.nix"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	projects := NewProjects()
+	t.Cleanup(projects.Close)
+	called := make(chan struct{}, 1)
+	env := Env{Loader: ws, Projects: projects, Patience: time.Nanosecond, OnPartial: func() { called <- struct{}{} }}
+	g, err := Build(context.Background(), hostOf(t, file), env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g.Module.Links()
+	if !g.Linking() {
+		t.Error("a group answered before its link landed does not say so")
+	}
+	select {
+	case <-called:
+	default:
+		t.Error("nothing was told that an answer did not wait for the link")
+	}
+}

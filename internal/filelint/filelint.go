@@ -6,6 +6,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
+	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/navigation"
 	"github.com/stubbedev/shell-lsp/internal/shellcheckrc"
@@ -61,7 +62,7 @@ func Check(file *workspace.File, env navigation.Env, s Settings) lint.Report {
 
 func check(file *workspace.File, env navigation.Env, s Settings) lint.Report {
 	report := lint.Run(file.Tree, navigation.Imports(file, env), lint.Options{
-		Exclude:       s.Excluded(),
+		Exclude:       excluded(file, s),
 		Optional:      slices.Concat(s.Optional, s.RC.Enabled),
 		Profile:       s.Profile,
 		DialectSource: s.DialectSource(file),
@@ -76,12 +77,23 @@ func check(file *workspace.File, env navigation.Env, s Settings) lint.Report {
 		NoExtendedAnalysis: !*cmp.Or(s.Extended, s.RC.Extended, new(true)),
 	})
 	if file.Doc.Projected() {
-		report.Findings = slices.DeleteFunc(report.Findings, func(f lint.Finding) bool { return file.Doc.Synthetic(f.Span.Start) })
+		report.Findings = slices.DeleteFunc(report.Findings, func(f lint.Finding) bool {
+			return file.Doc.Synthetic(f.Span.Start) || file.Doc.OnlyStandIn(f.Span.Start, f.Span.End)
+		})
 		for i, f := range report.Findings {
 			report.Findings[i].Fixes = expressible(file.Doc, f.Fixes)
 		}
 	}
 	return report
+}
+
+var unresolvableSources = lint.CodesOf(1090, 1091)
+
+func excluded(file *workspace.File, s Settings) lint.CodeSet {
+	if file.Native != nil && file.Native.Language == host.Nix {
+		return s.Excluded().Union(unresolvableSources)
+	}
+	return s.Excluded()
 }
 
 func expressible(doc *docstore.Document, fixes []lint.Fix) []lint.Fix {

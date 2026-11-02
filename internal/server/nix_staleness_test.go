@@ -123,3 +123,16 @@ func TestNixRequestDuringALinkAnswersFromTheOpenFile(t *testing.T) {
 		t.Errorf("definition of a local binding = %+v, want %+v", definition, want)
 	}
 }
+
+func TestALinkThatLandsRefreshesHintsAndLenses(t *testing.T) {
+	t.Parallel()
+
+	files := corpusProject(t, "dendritic")
+	const local = "modules/local.nix"
+	files[local] = "let\n  shown = 1;\nin\n{ value = shown; }\n"
+	caps := `"capabilities": {"workspace": {"inlayHint": {"refreshSupport": true}, "codeLens": {"refreshSupport": true}}}`
+	p := openNativeProjectWith(t, func(s *Server) { s.linkPatience = time.Nanosecond; s.nixEval.strings.quiet = time.Hour }, caps, files, local)
+	p.c.call("textDocument/references", p.params(local, "shown", 1, `, "context": {"includeDeclaration": true}`))
+	p.c.answerServerRequest(inlayHintRefreshMethod)
+	p.c.answerServerRequest(codeLensRefreshMethod)
+}

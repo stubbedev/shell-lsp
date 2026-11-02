@@ -99,7 +99,7 @@ func (m *Map) HostSpan(start, end int) (int, int) { return m.startOf(start), m.e
 func (m *Map) TouchesStandIn(start, end int) bool {
 	i := sort.Search(len(m.spans), func(i int) bool { return int(m.spans[i].projEnd()) >= start })
 	for ; i < len(m.spans) && int(m.spans[i].proj) <= end; i++ {
-		if s := m.spans[i]; s.kind == opaque && s.projLen > 0 {
+		if s := m.spans[i]; (s.kind == opaque || s.kind == standIn) && s.projLen > 0 {
 			return true
 		}
 	}

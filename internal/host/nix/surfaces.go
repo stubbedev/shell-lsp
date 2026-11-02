@@ -38,6 +38,19 @@ type surface struct {
 	role     role
 	shell    dialect.Dialect
 	language string
+	provides []string
+}
+
+var (
+	homeActivationValues   = []string{"DRY_RUN_CMD", "VERBOSE_ARG", "VERBOSE_ECHO", "VERBOSE_RUN", "newGenPath", "oldGenPath"}
+	systemActivationValues = []string{"systemConfig"}
+)
+
+func providing(names []string, surfaces []surface) []surface {
+	for i := range surfaces {
+		surfaces[i].provides = names
+	}
+	return surfaces
 }
 
 func (s surface) evidence() string {
@@ -151,8 +164,9 @@ func surfaceTable() []surface {
 		onAttrs(namedRole, dialect.Bash, under("environment.etc.*", "text")...),
 
 		onAttrs(sourcedRole, dialect.Bash, "home.file.*.onChange", "xdg.configFile.*.onChange", "xdg.dataFile.*.onChange", "xdg.stateFile.*.onChange"),
-		onAttrs(sourcedRole, dialect.Bash, "system.activationScripts.*", "system.activationScripts.*.text", "system.userActivationScripts.*", "system.userActivationScripts.*.text"),
-		onAttrs(sourcedRole, dialect.Bash, "home.activation.*", "home.extraProfileCommands", "home.extraBuilderCommands", "home.sessionVariablesExtra", "home.shellAliases.*"),
+		providing(systemActivationValues, onAttrs(sourcedRole, dialect.Bash, "system.activationScripts.*", "system.activationScripts.*.text", "system.userActivationScripts.*", "system.userActivationScripts.*.text")),
+		providing(homeActivationValues, onAttrs(sourcedRole, dialect.Bash, "home.activation.*")),
+		onAttrs(sourcedRole, dialect.Bash, "home.extraProfileCommands", "home.extraBuilderCommands", "home.sessionVariablesExtra", "home.shellAliases.*"),
 		onAttrs(sourcedRole, dialect.Bash, under("environment", "shellInit", "loginShellInit", "interactiveShellInit", "extraInit", "shellAliases.*")...),
 		onAttrs(sourcedRole, dialect.Bash, under("programs.bash", "shellInit", "loginShellInit", "interactiveShellInit", "promptInit", "promptPluginInit", "logout", "bashrcExtra", "initExtra", "logoutExtra", "profileExtra", "shellAliases.*")...),
 		onAttrs(sourcedRole, dialect.Zsh, under("programs.zsh", "shellInit", "loginShellInit", "interactiveShellInit", "promptInit", "completionInit", "envExtra", "initContent", "initExtra", "initExtraBeforeCompInit", "initExtraFirst", "loginExtra", "logoutExtra", "profileExtra", "shellAliases.*", "shellGlobalAliases.*", "siteFunctions.*")...),

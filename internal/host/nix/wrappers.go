@@ -5,9 +5,13 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/host/model"
 	"github.com/stubbedev/shell-lsp/internal/host/nix/scope"
 	"github.com/stubbedev/shell-lsp/internal/host/nix/syntax"
+	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/projection"
+	shellsyntax "github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
 const (
@@ -215,6 +219,8 @@ func (w *sinkWalk) bound(set *syntax.AttrSet, visit func(name string, value synt
 	}
 }
 
+const shellCommandFlag = "-c"
+
 func (w *sinkWalk) textFile(arg syntax.Expr) {
 	set, literal := syntax.Unparenthesized(arg).(*syntax.AttrSet)
 	if !literal {
@@ -235,21 +241,11 @@ func (w *sinkWalk) textFile(arg syntax.Expr) {
 }
 
 func (w *sinkWalk) shebangWriter(str *syntax.String) (string, bool) {
-	first := strings.TrimSpace(w.f.firstLine(str))
-	if !strings.HasPrefix(first, "#!") {
+	d, _, shell, _ := w.f.shebangOf(str)
+	if !shell {
 		return "", false
 	}
-	for _, marker := range []string{"zsh", "dash", "ksh"} {
-		if strings.Contains(first, marker) {
-			return marker, true
-		}
-	}
-	for _, marker := range []string{"bash", "/sh", "runtimeShell", "stdenv.shell"} {
-		if strings.Contains(first, marker) {
-			return "bash", true
-		}
-	}
-	return "", false
+	return d.String(), true
 }
 
 func (w *sinkWalk) derivation(set *syntax.AttrSet) {
@@ -299,30 +295,48 @@ func (w *sinkWalk) script(e syntax.Expr, writer string) {
 }
 
 func (w *sinkWalk) scriptHoles(str *syntax.String, writer string) {
+	var positions []int
+	var via *projection.Map
 	for _, part := range str.Parts {
 		hole, ok := part.(*syntax.Interpolation)
-		if !ok || !w.commandHole(str, hole) {
+		if !ok {
 			continue
 		}
 		value := syntax.Unparenthesized(hole.Value)
 		if escaped, isCall := value.(*syntax.Apply); isCall && slices.Contains(shellEscapes, calleeName(syntax.Unparenthesized(escaped.Fn))) {
 			value = escaped.Args[len(escaped.Args)-1]
 		}
-		if owner, read := w.read(value); read {
+		owner, read := w.read(value)
+		if !read {
+			continue
+		}
+		if via == nil {
+			via = w.f.standInBody(str)
+			positions = commandPositions(via.Text())
+		}
+		if at, _ := via.Offset(projection.HostOffset(hole.Span().Start)); slices.Contains(positions, int(at)) {
 			w.of(owner.fn).scripts[owner.key] = writer
 		}
 	}
 }
 
-func (w *sinkWalk) commandHole(str *syntax.String, hole *syntax.Interpolation) bool {
-	span := hole.Span()
-	start := max(strings.LastIndexByte(w.f.src[:span.Start], '\n')+1, str.Content.Start)
-	before := w.f.src[start:span.Start]
-	if strings.HasSuffix(strings.TrimRight(before, " \t"), " -c") {
+func commandPositions(text string) []int {
+	var out []int
+	parser.Walk(parser.NewSyntaxParser(dialect.Shell{}).Parse(text), func(n shellsyntax.Node) bool {
+		call, ok := n.(*shellsyntax.CallExpr)
+		if !ok {
+			return true
+		}
+		for i, word := range call.Args {
+			whole := len(call.Args) == 1 && len(call.Assigns) == 0
+			flagged := i > 0 && parser.LiteralIs(call.Args[i-1], shellCommandFlag)
+			if (whole || flagged) && text[parser.Offset(word.Pos()):parser.Offset(word.End())] == holeStandIn {
+				out = append(out, parser.Offset(word.Pos()))
+			}
+		}
 		return true
-	}
-	after, _, _ := strings.Cut(w.f.src[span.End:str.Content.End], "\n")
-	return strings.TrimSpace(before) == "" && strings.TrimSpace(after) == ""
+	})
+	return out
 }
 
 func (w *sinkWalk) env(e syntax.Expr) {

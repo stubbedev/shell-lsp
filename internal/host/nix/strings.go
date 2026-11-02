@@ -4,8 +4,10 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/host/model"
 	"github.com/stubbedev/shell-lsp/internal/host/nix/syntax"
+	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/projection"
 )
 
@@ -201,9 +203,67 @@ func isASCIIAlnum(r rune) bool {
 	return r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9'
 }
 
-func (f *file) insideSingleQuotes(at int) bool {
-	line := f.src[strings.LastIndexByte(f.src[:at], '\n')+1 : at]
-	return strings.Count(line, "'")%2 == 1
+func (f *file) standInBody(str *syntax.String) *projection.Map {
+	b := projection.NewBuilder(f.src)
+	b.StandIn(holeStandIn)
+	f.body(b, shellString{str: str}, "", textBody)
+	return b.Map()
+}
+
+func (f *file) markQuotedHoles(str *syntax.String, shell dialect.Shell) {
+	if f.quotesRead[str] {
+		return
+	}
+	if f.quotesRead == nil {
+		f.quotesRead = map[*syntax.String]bool{}
+	}
+	f.quotesRead[str] = true
+	var holes []*syntax.Interpolation
+	for _, part := range str.Parts {
+		if hole, ok := part.(*syntax.Interpolation); ok && hole.Closed {
+			if _, spliced := spliceOf(hole.Value); spliced {
+				holes = append(holes, hole)
+			}
+		}
+	}
+	if len(holes) == 0 {
+		return
+	}
+	if mentionsSingleQuote(str) {
+		m := f.standInBody(str)
+		inside := projection.SingleQuotes(parser.NewSyntaxParser(shell).Parse(m.Text()))
+		for _, hole := range holes {
+			if at, _ := m.Offset(projection.HostOffset(hole.Span().Start)); inside(int(at)) {
+				if f.quotedHoles == nil {
+					f.quotedHoles = map[*syntax.Interpolation]bool{}
+				}
+				f.quotedHoles[hole] = true
+			}
+		}
+	}
+	for _, hole := range holes {
+		if f.quotedHoles[hole] {
+			continue
+		}
+		sp, _ := spliceOf(hole.Value)
+		for _, item := range sp.items {
+			if nested, isString := item.(*syntax.String); isString {
+				f.markQuotedHoles(nested, shell)
+			}
+		}
+	}
+}
+
+func mentionsSingleQuote(str *syntax.String) bool {
+	return slices.ContainsFunc(str.Parts, func(part syntax.Part) bool {
+		switch part := part.(type) {
+		case *syntax.Literal:
+			return strings.IndexByte(part.Text, '\'') >= 0
+		case *syntax.Escape:
+			return strings.IndexByte(part.Text, '\'') >= 0
+		}
+		return false
+	})
 }
 
 type splice struct {
@@ -362,6 +422,7 @@ func quotedEncoder(host string, start, end int, text string) (string, bool) {
 }
 
 func (f *file) pieces(str *syntax.String) []model.Span {
+	f.markQuotedHoles(str, dialect.Shell{})
 	start := str.Content.Start
 	var out []model.Span
 	for _, part := range str.Parts {
@@ -390,10 +451,11 @@ func (f *file) pieces(str *syntax.String) []model.Span {
 
 func (f *file) holeSplice(hole *syntax.Interpolation) (splice, bool) {
 	sp, ok := spliceOf(hole.Value)
-	return sp, ok && hole.Closed && !f.insideSingleQuotes(hole.Span().Start)
+	return sp, ok && hole.Closed && !f.quotedHoles[hole]
 }
 
 func (f *file) eachHole(str *syntax.String, visit func(*syntax.Interpolation)) {
+	f.markQuotedHoles(str, dialect.Shell{})
 	for _, part := range str.Parts {
 		hole, ok := part.(*syntax.Interpolation)
 		if !ok {

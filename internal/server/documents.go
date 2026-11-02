@@ -48,6 +48,7 @@ func (s *Server) handleDidClose(_ context.Context, closeParams lsp.DidCloseTextD
 	s.semantic.forget(uri)
 	s.delivery.closed(uri)
 	s.forgetNixClasses(uri)
+	s.symbols.closes.Add(1)
 	if path, err := fileuri.ToPath(uri); err == nil {
 		s.projects.Forget(path)
 	}

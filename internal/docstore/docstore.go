@@ -184,6 +184,10 @@ func (d *Document) Synthetic(offset int) bool {
 	return d.mapping != nil && d.mapping.Synthetic(projection.ProjOffset(offset))
 }
 
+func (d *Document) OnlyStandIn(start, end int) bool {
+	return d.mapping != nil && d.mapping.OnlyStandIn(projection.ProjOffset(start), projection.ProjOffset(end))
+}
+
 func (d *Document) Locate(pos lsp.Position, enc Encoding) (int, bool) {
 	if d.mapping == nil {
 		return d.PositionToOffset(pos, enc), true

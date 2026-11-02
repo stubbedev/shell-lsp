@@ -8,6 +8,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/host/model"
 	"github.com/stubbedev/shell-lsp/internal/host/nix/syntax"
 	"github.com/stubbedev/shell-lsp/internal/lint"
+	"github.com/stubbedev/shell-lsp/internal/projection"
 )
 
 type envSource uint8
@@ -154,12 +155,13 @@ func (f *file) detail(b binding) string {
 	return f.src[b.span.Start:b.name.End] + " = …;"
 }
 
-func (f *file) index(found []shellString) *model.Index {
+func (f *file) index(m *projection.Map) *model.Index {
+	found := f.found
 	ix := &model.Index{}
 	for _, e := range f.tree.Errors {
 		ix.Findings = append(ix.Findings, lint.HostFinding(lint.CodeNixSyntax, e.Span, e.Message))
 	}
-	ix.Findings = append(ix.Findings, check(f.tree, f.table, f.quotingRisks(found))...)
+	ix.Findings = append(ix.Findings, check(f.tree, f.table, nil)...)
 	table := newSymbolTable(f, ix)
 	for _, s := range found {
 		if s.hosted != nil {
@@ -180,7 +182,7 @@ func (f *file) index(found []shellString) *model.Index {
 	slices.SortFunc(ix.Shells, func(a, b model.Shell) int { return cmp.Compare(a.Span.Start, b.Span.Start) })
 	slices.SortFunc(ix.Holes, func(a, b model.Hole) int { return cmp.Compare(a.Span.Start, b.Span.Start) })
 	table.build()
-	table.embedHeredocs(found)
+	table.embedHeredocs(m)
 	table.embedHosted(found)
 	linkCalls(f.tree, ix)
 	ix.Runnables = outputs(f.tree)

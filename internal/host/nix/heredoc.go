@@ -5,113 +5,51 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/host/model"
-	"github.com/stubbedev/shell-lsp/internal/host/nix/syntax"
 	"github.com/stubbedev/shell-lsp/internal/lint"
+	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/projection"
+	shellsyntax "github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
-const nixMarker = "# nix"
+const nixMarker = "nix"
 
 var nixDelimiters = []string{"NIX", "nix", "EOF_NIX"}
 
-type nixHeredoc struct {
-	span model.Span
-}
-
-func (f *file) nixHeredocs(str *syntax.String) []nixHeredoc {
-	literalOnly := func(body model.Span) bool {
-		return !slices.ContainsFunc(str.Parts, func(p syntax.Part) bool {
-			_, literal := p.(*syntax.Literal)
-			return !literal && p.Span().Start < body.End && body.Start < p.Span().End
-		})
-	}
-	var out []nixHeredoc
-	for _, body := range f.heredocBodies(str, nixOpener) {
-		if literalOnly(body) {
-			out = append(out, nixHeredoc{span: body})
-		}
-	}
-	return out
-}
-
-func (f *file) heredocBodies(str *syntax.String, opener func(string) (string, bool)) []model.Span {
+func nixHeredocs(m *projection.Map) []model.Span {
 	var out []model.Span
-	end := str.Content.End
-	at := str.Content.Start
-	for at < end {
-		stop := lineEnd(f.src, at, end)
-		line := f.src[at:stop]
-		at = min(stop+1, end)
-		delimiter, opens := opener(line)
-		if !opens {
+	for _, h := range m.Heredocs() {
+		if h.Body.Start == h.Body.End || !opensNix(h) || !m.Literal(h.Body.Start, h.Body.End) {
 			continue
 		}
-		start := at
-		for at < end {
-			next := lineEnd(f.src, at, end)
-			if strings.TrimSpace(f.src[at:next]) == delimiter {
-				out = append(out, model.Span{Start: start, End: at})
-				at = min(next+1, end)
-				break
-			}
-			at = min(next+1, end)
-			if next == end {
-				break
-			}
-		}
+		start, end := m.HostSpan(h.Body.Start, h.Body.End)
+		out = append(out, model.Span{Start: start, End: end})
 	}
 	return out
 }
 
-func lineEnd(src string, at, end int) int {
-	if nl := strings.IndexByte(src[at:end], '\n'); nl >= 0 {
-		return at + nl
+func opensNix(h projection.Heredoc) bool {
+	if slices.Contains(nixDelimiters, h.Delimiter) {
+		return true
 	}
-	return end
+	first, _, _ := strings.Cut(strings.TrimSpace(h.Comment), " ")
+	return first == nixMarker || writesNixFile(h.Stmt)
 }
 
-func heredocDelimiter(line string) (string, bool) {
-	delimiter, _, _, opens := heredocParts(line)
-	return delimiter, opens
+func writesNixFile(stmt *shellsyntax.Stmt) bool {
+	named := func(w *shellsyntax.Word) bool {
+		text, literal := parser.Literal(w)
+		return literal && strings.HasSuffix(text, nixExtension)
+	}
+	if slices.ContainsFunc(stmt.Redirs, func(r *shellsyntax.Redirect) bool { return r.Word != nil && named(r.Word) }) {
+		return true
+	}
+	call, isCall := stmt.Cmd.(*shellsyntax.CallExpr)
+	return isCall && slices.ContainsFunc(call.Args, named)
 }
 
-func heredocParts(line string) (string, string, string, bool) {
-	before, after, found := strings.Cut(line, "<<")
-	if !found || strings.HasPrefix(after, "<") {
-		return "", "", "", false
-	}
-	after = strings.TrimLeft(strings.TrimPrefix(after, "-"), " \t")
-	fields := strings.Fields(after)
-	if len(fields) == 0 {
-		return "", "", "", false
-	}
-	delimiter := strings.Trim(fields[0], `'"`)
-	return delimiter, before, strings.Join(fields[1:], " "), delimiter != ""
-}
-
-func nixOpener(line string) (string, bool) {
-	delimiter, before, rest, opens := heredocParts(line)
-	if !opens {
-		return "", false
-	}
-	switch {
-	case slices.Contains(nixDelimiters, delimiter):
-	case strings.Contains(rest, nixMarker):
-	case writesNixFile(before), writesNixFile(rest):
-	default:
-		return "", false
-	}
-	return delimiter, true
-}
-
-func writesNixFile(text string) bool {
-	return slices.ContainsFunc(strings.Fields(text), func(word string) bool { return strings.HasSuffix(strings.Trim(word, `'"`), nixExtension) })
-}
-
-func (b *symbolTable) embedHeredocs(found []shellString) {
-	for _, s := range found {
-		for _, h := range b.f.nixHeredocs(s.str) {
-			b.embed(h.span)
-		}
+func (b *symbolTable) embedHeredocs(m *projection.Map) {
+	for _, body := range nixHeredocs(m) {
+		b.embed(body)
 	}
 	b.publish()
 }

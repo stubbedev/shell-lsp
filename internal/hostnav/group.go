@@ -38,6 +38,8 @@ type Env struct {
 	Projects *Projects
 	Stamp    Stamp
 	Patience time.Duration
+
+	OnPartial func()
 }
 
 type importer struct {
@@ -187,7 +189,10 @@ type Group struct {
 	exists   func(path string) bool
 	builder  *builder
 	partial  bool
+	linking  bool
 }
+
+func (g *Group) Linking() bool { return g.linking }
 
 type builder struct {
 	ctx      context.Context
@@ -286,6 +291,10 @@ func (g *Group) link() model.Links {
 	g.Module.Files = l.indexes
 	g.Module.ShareNames(l.names)
 	g.partial = l.partial
+	g.linking = l.linking
+	if l.linking && g.builder.env.OnPartial != nil {
+		g.builder.env.OnPartial()
+	}
 	g.self = at
 	g.files = l.files
 	return l.project
@@ -308,14 +317,14 @@ func (e Env) linkedProject(ctx context.Context, self *workspace.File) *linkedPro
 	if l := e.Projects.of(ctx, self, e); l != nil {
 		return l
 	}
-	return unlinkedProject(self, stillLinking)
+	return linkingProject(self)
 }
 
 func (e Env) linkOnce(ctx context.Context, self *workspace.File) *linkedProject {
 	request := nix.Request{Self: self.Native.Index, SelfPath: self.Path, Home: e.Home}
 	plan, err := planProject(ctx, self, e)
 	if err != nil {
-		return unlinkedProject(self, stillLinking)
+		return linkingProject(self)
 	}
 	request.Flake, request.Failure, request.ScanCut, request.Roots = plan.flake, plan.failure, plan.scanCut, plan.roots
 	return linkProject(ctx, e, request, self)

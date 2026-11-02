@@ -31,7 +31,7 @@ func TestProjectText(t *testing.T) {
 		{
 			name: "a phase loses its indentation and runs as a stdenv function",
 			nix:  "stdenv.mkDerivation {\n  pname = \"x\";\n  installPhase = ''\n    mkdir -p $out\n      cp x $out\n  '';\n}\n",
-			want: phaseOpen(0) + "mkdir -p $out\n  cp x $out\n" + phaseClose(0),
+			want: phaseOpen(0) + "out=x\nmkdir -p $out\n  cp x $out\n" + phaseClose(0),
 		},
 		{
 			name: "escapes and antiquotations",
@@ -56,7 +56,7 @@ func TestProjectText(t *testing.T) {
 		{
 			name: "writers and runCommand",
 			nix:  "[ (writeShellScript \"a\" ''\n  echo a\n'') (writers.writeDash \"b\" ''\n  echo b\n'') (runCommand \"c\" { } ''\n  echo c > $out\n'') ]",
-			want: "(\necho a\n\n:\n)\n(\necho b\n\n:\n)\n" + phaseOpen(2) + "echo c > $out\n" + phaseClose(2),
+			want: "(\necho a\n\n:\n)\n(\necho b\n\n:\n)\n" + phaseOpen(2) + "out=x\necho c > $out\n" + phaseClose(2),
 		},
 		{
 			name: "writeScript runs what its shebang names",
@@ -71,12 +71,12 @@ func TestProjectText(t *testing.T) {
 		{
 			name: "systemd scripts and shell hooks are scripts of their own",
 			nix:  "{ systemd.services.x.script = ''\n  echo x\n''; shell = mkShell { shellHook = ''\n  echo hook\n''; }; }",
-			want: "(\necho x\n\n:\n)\n" + phaseDirective + "(\necho hook\n\n:\n)\n",
+			want: "(\necho x\n\n:\n)\n" + sourcedDirective + "(\necho hook\n\n:\n)\n",
 		},
 		{
 			name: "markers opt a string in",
 			nix:  "{ cmd = /* bash */ ''\n  echo marked\n''; }",
-			want: "(\necho marked\n\n:\n)\n",
+			want: sourcedDirective + "(\necho marked\n\n:\n)\n",
 		},
 		{
 			name: "other strings are not shell",

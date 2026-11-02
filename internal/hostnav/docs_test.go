@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/docs"
+	"github.com/stubbedev/shell-lsp/internal/host/nix"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 )
 
@@ -75,7 +76,11 @@ func TestRulesDocHostExamplesReportTheirCodes(t *testing.T) {
 			examples++
 			example, _, _ := strings.Cut(block, "```")
 			found := map[int][]string{}
-			for _, f := range findingsAlone(t, language.file)(example) {
+			findings := findingsAlone(t, language.file)(example)
+			if code == lint.CodeNixUnescapedAntiquotation {
+				findings = append(findings, nix.UnescapedAntiquotationFindings(example)...)
+			}
+			for _, f := range findings {
 				line := strings.Count(example[:f.Span.Start], "\n") + 1
 				found[line] = append(found[line], f.Code.String())
 			}

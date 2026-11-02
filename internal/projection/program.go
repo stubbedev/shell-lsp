@@ -86,7 +86,7 @@ func (m *Map) commandWords(file *syntax.File, base ProjOffset, named []program) 
 
 func (m *Map) named(p program) []requote {
 	if p.base == noSpan {
-		return []requote{{span: p.hole, text: p.name}}
+		return []requote{{span: p.hole, text: p.name, kind: opaque}}
 	}
 	return []requote{
 		{span: p.hole, kind: hidden},

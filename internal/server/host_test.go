@@ -359,12 +359,13 @@ func TestNixShellStringsLintInPlace(t *testing.T) {
 	for _, d := range diags {
 		got = append(got, d.Code)
 	}
-	if want := []string{"SC2086", "SC2006", "SC2046", "SC2086"}; !slices.Equal(got, want) {
+	if want := []string{"SC2006", "SC2046", "SC2086"}; !slices.Equal(got, want) {
 		t.Fatalf("Nix diagnostics = %v, want %v: %+v", got, want, diags)
 	}
 	i := slices.IndexFunc(diags, func(d lsp.Diagnostic) bool { return d.Code == "SC2006" })
-	if diags[0].Range != at("$out") || diags[i].Range != at("`basename $1`") {
-		t.Errorf("diagnostics at %+v and %+v, want on $out and the backticks", diags[0].Range, diags[i].Range)
+	split := slices.IndexFunc(diags, func(d lsp.Diagnostic) bool { return d.Code == "SC2086" })
+	if diags[split].Range != at("$1") || diags[i].Range != at("`basename $1`") {
+		t.Errorf("diagnostics at %+v and %+v, want on $1 and the backticks", diags[split].Range, diags[i].Range)
 	}
 	encoded, err := json.Marshal(lsp.CodeActionParams{TextDocument: lsp.TextDocumentIdentifier{URI: uri}, Range: diags[i].Range, Context: lsp.CodeActionContext{Diagnostics: diags[i : i+1]}})
 	if err != nil {

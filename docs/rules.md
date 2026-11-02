@@ -1713,14 +1713,19 @@ let in 1    # SL8013
 
 ## SL8014
 
-**An antiquotation reaches the shell unescaped.** A `${x}` in a string that is
-shell becomes text before the shell parses it, so a space, quote or `$` in its
-value changes the command. Use `lib.escapeShellArg`, or `lib.escapeShellArgs` for
-a list. It is reported only where the value is not provably safe: a store path
-(`pkgs.x`, a path, the result of a writer, `lib.getExe`, `lib.getBin`,
-`lib.makeBinPath`), a number, a literal that holds no character the shell treats
-specially, or an expression that is escaped already. A value followed by a `/`
-counts as a path, and comments and here-documents are left alone.
+**An antiquotation reaches a command's arguments unescaped.** This check is
+optional and off by default; turn it on with `enable=unescaped-antiquotations` in
+`.shellcheckrc`, `--enable=unescaped-antiquotations` or the `lint.optional` setting. A `${x}` in a
+string that is shell becomes text before the shell parses it, so a space, quote or
+`$` in its value changes the command. Use `lib.escapeShellArg`, or
+`lib.escapeShellArgs` for a list. The shell's own parse decides where it applies:
+only a hole inside a word that is an argument of a command is reported, never a
+hole that is a whole statement or the command word, which is how code is spliced
+on purpose, and never one in an assignment, a loop list, a comment or a
+here-document. The value must also not be provably safe: a store path (`pkgs.x`, a
+path, the result of a writer, `lib.getExe`, `lib.getBin`, `lib.makeBinPath`), a
+number, a literal that holds no character the shell treats specially, or an
+expression that is escaped already. A value followed by a `/` counts as a path.
 
 ```nix
 cfg: writeShellScript "x" ''

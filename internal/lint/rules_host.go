@@ -195,7 +195,7 @@ var hostFamily = family{
 		CodeNixSpelledInherit:         {severity: SeverityInfo},
 		CodeNixOrIdentifier:           {severity: SeverityWarning},
 		CodeNixEmptyBinding:           {severity: SeverityInfo, tag: TagUnnecessary},
-		CodeNixUnescapedAntiquotation: {severity: SeverityInfo},
+		CodeNixUnescapedAntiquotation: {severity: SeverityInfo, optional: optionalUnescapedAntiquotations},
 	},
 }
 

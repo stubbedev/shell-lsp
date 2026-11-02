@@ -22,6 +22,7 @@ const (
 	hidden
 	elided
 	pinned
+	standIn
 )
 
 type Encoder func(host string, start, end int, text string) (string, bool)
@@ -94,7 +95,7 @@ func (b *Builder) Script() {
 
 func (b *Builder) Placeholder(start, end int) {
 	b.placeholders = append(b.placeholders, len(b.spans))
-	b.Opaque(start, end, cmp.Or(b.standIn, Dynamic))
+	b.add(standIn, start, end, cmp.Or(b.standIn, Dynamic))
 }
 
 func (b *Builder) Verbatim(start, end int) {
@@ -117,7 +118,7 @@ func (b *Builder) add(k kind, start, end int, text string) {
 		panic(fmt.Sprintf("projection: span %d-%d is out of order after host offset %d of %d", start, end, b.at, len(b.host)))
 	}
 	region := len(b.encoders) - 1
-	if k != opaque && region == noRegion {
+	if k != opaque && k != standIn && region == noRegion {
 		panic(fmt.Sprintf("projection: editable span %d-%d precedes the first region", start, end))
 	}
 	s := span{kind: k, region: region, proj: ProjOffset(b.text.Len()), projLen: len(text), host: HostOffset(start), hostLen: end - start}
@@ -173,6 +174,21 @@ func (m *Map) Shells() []dialect.Detection { return m.shells }
 func (m *Map) Synthetic(offset ProjOffset) bool {
 	i := sort.Search(len(m.spans), func(i int) bool { return m.spans[i].projEnd() > offset })
 	return i < len(m.spans) && m.spans[i].hostLen == 0
+}
+
+func (m *Map) OnlyStandIn(start, end ProjOffset) bool {
+	found := false
+	for i := sort.Search(len(m.spans), func(i int) bool { return m.spans[i].projEnd() > start }); i < len(m.spans) && m.spans[i].proj < end; i++ {
+		s := m.spans[i]
+		switch {
+		case s.projLen == 0:
+		case s.kind == standIn:
+			found = true
+		case strings.Trim(m.text[max(s.proj, start):min(s.projEnd(), end)], `"'`) != "":
+			return false
+		}
+	}
+	return found
 }
 
 func (m *Map) HostOffset(offset ProjOffset) HostOffset {

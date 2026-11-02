@@ -3,12 +3,14 @@ package nix
 import (
 	"fmt"
 	"slices"
+	"sort"
 	"strings"
 
-	"github.com/stubbedev/shell-lsp/internal/host/model"
 	"github.com/stubbedev/shell-lsp/internal/host/nix/scope"
 	"github.com/stubbedev/shell-lsp/internal/host/nix/syntax"
 	"github.com/stubbedev/shell-lsp/internal/lint"
+	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/projection"
 )
 
 const maxSafeHops = 8
@@ -19,22 +21,64 @@ var (
 	safeCalls  = []string{"getExe", "getExe'", "getBin", "getDev", "getLib", "getOutput", "makeBinPath", "makeLibraryPath", "makeSearchPath", "placeholder", "callPackage", "mkDerivation", "derivation", "symlinkJoin", "buildEnv", "escapeShellArg", "escapeShellArgs"}
 )
 
-func (f *file) quotingRisks(found []shellString) []lint.Finding {
-	var out []lint.Finding
-	for _, s := range found {
+func UnescapedAntiquotationsCheck() string {
+	info, known := lint.Describe(lint.CodeNixUnescapedAntiquotation)
+	if !known {
+		panic("nix: " + lint.CodeNixUnescapedAntiquotation.String() + " is not in the catalog")
+	}
+	return info.Optional
+}
+
+func UnescapedAntiquotationFindings(text string) []lint.Finding {
+	tree := syntax.Parse(text)
+	if len(tree.Errors) > 0 {
+		return nil
+	}
+	f := &file{src: text, tree: tree, table: scope.Resolve(tree)}
+	f.discover()
+	f.discoverWrapped()
+	kept := slices.DeleteFunc(unsuppressed(tree, f.quotingRisks()), func(finding lint.Finding) bool {
+		return finding.Code != lint.CodeNixUnescapedAntiquotation
+	})
+	lint.SortHostFindings(kept)
+	return kept
+}
+
+func (f *file) quotingRisks() []lint.Finding {
+	var risky []*syntax.Interpolation
+	for _, s := range f.found {
 		if s.hosted != nil {
 			continue
 		}
-		bodies := f.heredocBodies(s.str, heredocDelimiter)
 		f.eachHole(s.str, func(hole *syntax.Interpolation) {
-			span := hole.Span()
-			if strings.HasPrefix(f.src[span.End:], "/") || f.safe(hole.Value, 0) || f.inComment(s.str, span.Start) || slices.ContainsFunc(bodies, func(b model.Span) bool { return b.Start <= span.Start && span.End <= b.End }) {
-				return
+			if !f.followedByPath(hole) && !f.safe(hole.Value, 0) {
+				risky = append(risky, hole)
 			}
-			out = append(out, lint.HostFinding(lint.CodeNixUnescapedAntiquotation, span, fmt.Sprintf("`%s` reaches the shell as it is, so a space or quote in its value changes the command; use `lib.escapeShellArg` unless the value cannot hold one", oneLine(f.src[span.Start:span.End]))))
 		})
 	}
+	if len(risky) == 0 {
+		return nil
+	}
+	m, _ := f.projection()
+	words := m.ArgumentWords()
+	out := make([]lint.Finding, 0, len(risky))
+	for _, hole := range risky {
+		span := hole.Span()
+		if at, _ := m.Offset(projection.HostOffset(span.Start)); inWord(words, int(at)) {
+			out = append(out, lint.HostFinding(lint.CodeNixUnescapedAntiquotation, span, fmt.Sprintf("`%s` becomes part of a command's argument as it is, so a space or quote in its value changes the command; use `lib.escapeShellArg` unless the value cannot hold one", oneLine(f.src[span.Start:span.End]))))
+		}
+	}
 	return out
+}
+
+func (f *file) followedByPath(hole *syntax.Interpolation) bool {
+	end := hole.Span().End
+	return end < len(f.src) && f.src[end] == '/'
+}
+
+func inWord(words []parser.Span, at int) bool {
+	i := sort.Search(len(words), func(i int) bool { return words[i].End > at })
+	return i < len(words) && words[i].Start <= at
 }
 
 func oneLine(text string) string {
@@ -43,25 +87,6 @@ func oneLine(text string) string {
 		return first + " …"
 	}
 	return first
-}
-
-func (f *file) inComment(str *syntax.String, at int) bool {
-	start := max(strings.LastIndexByte(f.src[:at], '\n')+1, str.Content.Start)
-	quote := byte(0)
-	for i := start; i < at; i++ {
-		c := f.src[i]
-		switch {
-		case quote != 0:
-			if c == quote {
-				quote = 0
-			}
-		case c == '\'' || c == '"':
-			quote = c
-		case c == '#' && (i == start || f.src[i-1] == ' ' || f.src[i-1] == '\t'):
-			return true
-		}
-	}
-	return false
 }
 
 func (f *file) safe(e syntax.Expr, hops int) bool {
@@ -128,7 +153,31 @@ func (f *file) safeCall(e *syntax.Apply, hops int) bool {
 	case name == "concatMapStrings" || name == "concatMapStringsSep" || name == "concatStringsSep" || name == "map":
 		return slices.ContainsFunc(e.Args, func(arg syntax.Expr) bool { return escapes(arg) })
 	}
-	return false
+	return f.safeResult(e, hops)
+}
+
+func (f *file) safeResult(e *syntax.Apply, hops int) bool {
+	id, plain := syntax.Unparenthesized(e.Fn).(*syntax.Ident)
+	if !plain {
+		return false
+	}
+	ref, ok := f.table.Of(id)
+	if !ok || ref.Kind != scope.Definition || len(ref.Def.Bindings) != 1 {
+		return false
+	}
+	a, assigned := ref.Def.Bindings[0].(*syntax.Assign)
+	if !assigned || len(a.Path) != 1 {
+		return false
+	}
+	body := syntax.Unparenthesized(a.Value)
+	for range e.Args {
+		lambda, isLambda := body.(*syntax.Lambda)
+		if !isLambda {
+			return false
+		}
+		body = syntax.Unparenthesized(lambda.Body)
+	}
+	return f.safe(body, hops+1)
 }
 
 func escapes(e syntax.Expr) bool {

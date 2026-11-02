@@ -158,3 +158,30 @@ func TestBuilderRejectsDisorder(t *testing.T) {
 		}()
 	}
 }
+
+func TestOnlyStandIn(t *testing.T) {
+	t.Parallel()
+
+	const host = "aa ${x} bb"
+	b := NewBuilder(host)
+	b.Region(keep)
+	b.Script()
+	b.Verbatim(0, 3)
+	b.Placeholder(3, 7)
+	b.Verbatim(7, len(host))
+	m := b.Map()
+	at := strings.Index(m.Text(), Dynamic)
+	for _, tt := range []struct {
+		start, end int
+		want       bool
+	}{
+		{at, at + len(Dynamic), true},
+		{0, at + len(Dynamic), false},
+		{at, len(m.Text()), false},
+		{0, 2, false},
+	} {
+		if got := m.OnlyStandIn(ProjOffset(tt.start), ProjOffset(tt.end)); got != tt.want {
+			t.Errorf("OnlyStandIn(%d, %d) over %q = %v, want %v", tt.start, tt.end, m.Text(), got, tt.want)
+		}
+	}
+}

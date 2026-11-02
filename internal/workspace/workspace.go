@@ -152,6 +152,8 @@ type Workspace struct {
 
 func (w *Workspace) SetWatched(watched bool) { w.watched.Store(watched) }
 
+func (w *Workspace) Watched() bool { return w.watched.Load() }
+
 func isShellName(path string) bool {
 	if _, ok := host.FromName(path); ok {
 		return true

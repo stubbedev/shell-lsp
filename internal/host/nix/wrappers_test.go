@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/host/nix/scope"
+	"github.com/stubbedev/shell-lsp/internal/host/nix/syntax"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 )
 
@@ -205,5 +207,105 @@ func TestProjectedStringsKeepTheirWriter(t *testing.T) {
 	}
 	if _, ok := ProjectedStrings(src, []ProvenString{{Start: strings.Index(src, "''"), Writer: "writeScript"}}); ok {
 		t.Error("writeScript without a shebang projected a string")
+	}
+}
+
+func TestHeredocsComeFromTheShellParser(t *testing.T) {
+	t.Parallel()
+
+	broken := "let one = ; in one"
+	syntaxErrors := func(text string) int {
+		count := 0
+		for _, f := range Analyze(text).Index.Findings {
+			if f.Code == lint.CodeNixSyntax {
+				count++
+			}
+		}
+		return count
+	}
+	for _, tt := range []struct {
+		name, script string
+		embeds       bool
+	}{
+		{"a file named in a redirect", "cat > out.nix <<EOF\n  " + broken + "\n  EOF", true},
+		{"a quoted file name", "cat > \"out.nix\" <<'EOF'\n  " + broken + "\n  EOF", true},
+		{"the delimiter names the language", "cat <<NIX\n  " + broken + "\n  NIX", true},
+		{"a marker comment", "cat <<EOF # nix\n  " + broken + "\n  EOF", true},
+		{"a marker comment in other words", "cat <<EOF # nixpkgs\n  " + broken + "\n  EOF", false},
+		{"text about a heredoc is not one", "echo 'cat <<NIX'\n  " + broken + "\n  echo NIX", false},
+		{"a comment about a heredoc is not one", "# cat <<NIX\n  : " + broken + "\n  # NIX", false},
+		{"a here-string is not one", "cat <<<NIX\n  " + broken + "\n  NIX", false},
+		{"never closed", "cat <<NIX\n  " + broken, false},
+		{"an indented delimiter does not close it", "cat <<NIX\n  " + broken + "\n    NIX", false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			src := "writeShellScript \"gen\" ''\n  " + tt.script + "\n''\n"
+			if got := syntaxErrors(src) > 0; got != tt.embeds {
+				t.Errorf("%q embeds = %v, want %v", src, got, tt.embeds)
+			}
+		})
+	}
+}
+
+func TestSplicesInSingleQuotesAreTheShellsDecision(t *testing.T) {
+	t.Parallel()
+
+	const splice = "${lib.optionalString c ''echo inner''}"
+	for _, tt := range []struct {
+		name, script string
+		spliced      bool
+	}{
+		{"plain", splice, true},
+		{"an apostrophe in a comment before it", "# don't\n  " + splice, true},
+		{"an apostrophe earlier on the line, in double quotes", `echo "it's" ` + splice, true},
+		{"a prime inside an earlier hole", "${lib.getExe' pkgs.gzip \"gzip\"} " + splice, true},
+		{"inside single quotes", "echo '" + splice + "'", false},
+		{"inside single quotes opened on an earlier line", "echo '\n  " + splice + "\n  '", false},
+		{"after a closed pair", "echo 'a' " + splice, true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			src := "writeShellScript \"gen\" ''\n  " + tt.script + "\n''\n"
+			if got := strings.Contains(Analyze(src).Map.Text(), "echo inner"); got != tt.spliced {
+				t.Errorf("%q spliced = %v, want %v:\n%s", src, got, tt.spliced, Analyze(src).Map.Text())
+			}
+		})
+	}
+}
+
+func TestShebangWriters(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		line string
+		want string
+	}{
+		{"#!/bin/sh", "sh"},
+		{"#!/usr/bin/env zsh", "zsh"},
+		{"#!${pkgs.dash}/bin/dash", "dash"},
+		{"#!${pkgs.runtimeShell}", "bash"},
+		{"#!${runtimeShell}", "bash"},
+		{"#!${stdenv.shell}", "bash"},
+		{"#!${lib.getExe pkgs.zsh}", "zsh"},
+		{"#!/usr/bin/env python3", ""},
+		{"#!/usr/bin/fishzsh", ""},
+		{"# not one: zsh", ""},
+	} {
+		src := "lib: pkgs: writeTextFile { name = \"x\"; text = ''\n  " + tt.line + "\n  echo hi\n''; }\n"
+		tree := syntax.Parse(src)
+		f := &file{src: src, tree: tree, table: scope.Resolve(tree)}
+		var str *syntax.String
+		syntax.Inspect(tree.Root, func(n syntax.Node) bool {
+			if s, ok := n.(*syntax.String); ok && str == nil && s.Kind == syntax.Indented {
+				str = s
+			}
+			return true
+		})
+		w := &sinkWalk{f: f}
+		got, _ := w.shebangWriter(str)
+		if got != tt.want {
+			t.Errorf("%q: writer = %q, want %q", tt.line, got, tt.want)
+		}
 	}
 }

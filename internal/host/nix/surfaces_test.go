@@ -197,11 +197,22 @@ func TestUnescapedAntiquotations(t *testing.T) {
 		{"a comment", "x: { buildPhase = ''\n  # ${x}\n''; }", nil},
 		{"a here-document", "x: { buildPhase = ''\n  cat <<EOF\n  ${x}\n  EOF\n''; }", nil},
 		{"a plain string", "x: { a = \"${x}\"; }", nil},
+		{"a whole statement", "x: { buildPhase = ''\n  ${x}\n''; }", nil},
+		{"a command word", "x: { buildPhase = ''\n  ${x} --flag\n''; }", nil},
+		{"a command under a wrapper", "x: { buildPhase = ''\n  exec ${x} --flag\n''; }", nil},
+		{"an assignment value", "x: { buildPhase = ''\n  y=${x}\n''; }", nil},
+		{"a loop list", "x: { buildPhase = ''\n  for i in ${x}; do :; done\n''; }", nil},
+		{"an argument in a pipeline", "x: { buildPhase = ''\n  echo a | tee ${x}\n''; }", []string{code + " ${x}"}},
+		{"after an apostrophe in a comment", "x: { buildPhase = ''\n  # don't\n  echo ${x}\n''; }", []string{code + " ${x}"}},
+		{"a comment hash inside a word is no comment", "x: { buildPhase = ''\n  echo a#b ${x}\n''; }", []string{code + " ${x}"}},
+		{"getExe", "lib: pkgs: { buildPhase = ''\n  time ${lib.getExe pkgs.jq} .\n''; }", nil},
+		{"a function building from its argument", "pkgs: let f = n: \"${pkgs.jq}/${n}\"; a = f \"x\"; in { buildPhase = ''\n  source ${a}\n''; }", []string{code + " ${a}"}},
+		{"a function returning a store path", "pkgs: let f = n: \"${pkgs.runCommand n { } ''\n  echo hi\n''}/init\"; a = f \"x\"; in { buildPhase = ''\n  source ${a}\n''; }", nil},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			var got []string
-			for _, s := range summaries(tt.nix, findingsOf(tt.nix)) {
+			for _, s := range summaries(tt.nix, UnescapedAntiquotationFindings(tt.nix)) {
 				if strings.HasPrefix(s, code) {
 					got = append(got, s)
 				}
@@ -223,5 +234,49 @@ func TestSurfaceTableIsConsistent(t *testing.T) {
 		if s.role == foreignRole && s.language == "" && s.call != "writeCBin" && s.key == "" {
 			t.Errorf("surface %+v is foreign without saying what it is", s)
 		}
+	}
+}
+
+func TestSourcedSurfacesKeepWhatTheyDefine(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name, nix string
+		want      string
+	}{
+		{"a zsh init", "{ programs.zsh.initContent = ''\n  f() { :; }\n  X=1\n''; }", sourcedDirective},
+		{"a bash init", "{ programs.bash.initExtra = ''\n  f() { :; }\n''; }", sourcedDirective},
+		{"environment", "{ environment.shellInit = ''\n  X=1\n''; }", sourcedDirective},
+		{"an activation entry", "{ home.activation.a = lib.hm.dag.entryAfter [ \"writeBoundary\" ] ''\n  $DRY_RUN_CMD mkdir $VERBOSE_ARG x\n''; }", sourcedDirective},
+		{"a marked fragment", "{ a = /* zsh */ ''\n  f() { :; }\n''; }", sourcedDirective},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := Analyze(tt.nix).Map.Text(); !strings.HasPrefix(got, tt.want) {
+				t.Errorf("projection %q does not open with %q", got, tt.want)
+			}
+		})
+	}
+	activation := Analyze("{ home.activation.a = ''\n  $DRY_RUN_CMD mkdir $VERBOSE_ARG x\n''; }").Map.Text()
+	if !strings.Contains(activation, "DRY_RUN_CMD=x\n") || !strings.Contains(activation, "VERBOSE_ARG=x\n") {
+		t.Errorf("activation projection %q does not assign what Home Manager provides", activation)
+	}
+	marked := Analyze("writeShellApplication { name = \"a\"; text = /* bash */ ''\n  echo hi\n''; }").Map.Text()
+	if !strings.Contains(marked, strictMode) {
+		t.Errorf("a marker on a known writer dropped the writer's shape: %q", marked)
+	}
+}
+
+func TestPhasesProjectOnlyWhatTheyRead(t *testing.T) {
+	t.Parallel()
+
+	text := Analyze("{ outputs = [ \"out\" \"dev\" ]; installPhase = ''\n  cp a $out/x $dev ''${TMPDIR}/y\n  z=$unknown\n''; }").Map.Text()
+	for _, want := range []string{"TMPDIR=x\n", "dev=x\n", "out=x\n"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("projection %q lacks %q", text, want)
+		}
+	}
+	if strings.Contains(text, "unknown=x") || strings.Contains(text, "pname=x") {
+		t.Errorf("projection %q assigns a variable it should not", text)
 	}
 }

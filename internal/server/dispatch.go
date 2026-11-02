@@ -103,6 +103,8 @@ type Server struct {
 	projects     *hostnav.Projects
 	releasing    memoryRelease
 	linkPatience time.Duration
+	partialShown atomic.Bool
+	symbols      symbolIndex
 	nixEval      nixEvaluation
 
 	mu             sync.Mutex
@@ -160,7 +162,10 @@ func New(conn *jsonrpc.Conn, version string, process Process) *Server {
 	s.usePages(manpage.NewLookup(process.ManPath, process.Path))
 	s.delivery = pullDelivery{server: s}
 	s.workspace = newWorkspace(s)
-	s.projects.OnDrained(s.releasing.schedule)
+	s.projects.OnDrained(func() {
+		s.releasing.schedule()
+		s.linkLanded()
+	})
 	s.registerHandlers()
 	return s
 }

@@ -584,7 +584,7 @@ marks the checks the `minimal` profile keeps; see [Profiles](../README.md#profil
 | <a name="sl8011"></a>[SL8011](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8011) | info |  |  | \`x = x;\` in a set that is not recursive is \`inherit x;\`. |
 | <a name="sl8012"></a>[SL8012](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8012) | warning |  | yes | \`or\` is used as a variable. |
 | <a name="sl8013"></a>[SL8013](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8013) | info |  |  | A \`let\` or an \`inherit\` binds nothing. |
-| <a name="sl8014"></a>[SL8014](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8014) | info |  |  | An antiquotation reaches the shell unescaped. |
+| <a name="sl8014"></a>[SL8014](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8014) | info | `unescaped-antiquotations` |  | An antiquotation reaches a command's arguments unescaped. |
 | <a name="dl1001"></a>[DL1001](https://github.com/hadolint/hadolint/wiki/DL1001) | info | `no-ignore-pragmas` |  | A \`# hadolint ignore=\` comment hides findings; the project asks for none. |
 | <a name="dl3001"></a>[DL3001](https://github.com/hadolint/hadolint/wiki/DL3001) | info |  |  | RUN starts a tool meant for a running system, such as an editor or process viewer, which is no use while building. |
 | <a name="dl3002"></a>[DL3002](https://github.com/hadolint/hadolint/wiki/DL3002) | warning |  | yes | The last USER of a stage is root, so the container runs with full privileges. |

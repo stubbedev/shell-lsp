@@ -130,3 +130,49 @@ func TestCheckLintsEachRecipeAsItsOwnShell(t *testing.T) {
 		}
 	}
 }
+
+func TestNixStringsReportOnlyWhatTheShellWouldDo(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name, nix string
+		want      []lint.Code
+	}{
+		{"a store path needs no quotes", "{ installPhase = ''\n  mkdir -p $out/bin\n''; }", nil},
+		{"nor a name built from one", "{ installPhase = ''\n  d=$out/bin\n  mkdir -p $d\n''; }", nil},
+		{"a declared output", "{ outputs = [ \"out\" \"dev\" ]; installPhase = ''\n  mkdir -p $dev\n''; }", nil},
+		{"an undeclared variable stays reported", "{ installPhase = ''\n  mkdir -p $custom\n''; }", []lint.Code{2086}},
+		{"$out is not a store path in a dev shell", "{ shellHook = ''\n  mkdir -p $out\n''; }", []lint.Code{2086}},
+		{"or in a plain script", "writeShellScript \"a\" ''\n  out=\"a b\"\n  mkdir -p $out\n''", []lint.Code{2086}},
+		{"Home Manager's deliberate word splitting", "{ home.activation.a = ''\n  $DRY_RUN_CMD mkdir $VERBOSE_ARG x\n''; }", nil},
+		{"the same names elsewhere are not provided", "{ programs.bash.initExtra = ''\n  mkdir $VERBOSE_ARG x\n''; }", []lint.Code{2086}},
+		{"a sourced function is for later", "{ programs.zsh.initContent = ''\n  hop() { echo hi; }\n''; }", nil},
+		{"a sourced variable is for later", "{ programs.zsh.initContent = ''\n  HOP=1\n''; }", nil},
+		{"a session variable is not this fragment's to assign", "{ programs.bash.initExtra = ''\n  echo \"$session_var\"\n''; }", nil},
+		{"a dev shell hook is sourced too", "{ shellHook = ''\n  hop() { echo hi; }\n''; }", nil},
+		{"a marked fragment says nothing about how it runs", "{ a = /* zsh */ ''\n  hop() { echo hi; }\n  echo \"$session_var\"\n''; }", nil},
+		{"a hole is a literal in an alias body", "{ programs.zsh.initContent = ''\n  alias a='${lib.getExe' pkgs.gzip \"gzip\"} -dc'\n''; }", nil},
+		{"a hole is a literal in a case pattern", "{ programs.zsh.initContent = ''\n  case $1 in\n    ${verbs}) echo hi ;;\n  esac\n''; }", nil},
+		{"a store path cannot be followed", "{ programs.zsh.initContent = ''\n  source ${pkgs.a}/b\n  source ${c}\n''; }", nil},
+		{"nor a run-time path", "{ programs.zsh.initContent = ''\n  f=\"$HOME/x\"\n  source \"$f\"\n''; }", nil},
+		{"a real mistake is still found", "{ programs.bash.initExtra = ''\n  rm -rf $1\n''; }", []lint.Code{2086}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			path := filepath.Join(dir, "default.nix")
+			if err := os.WriteFile(path, []byte(tt.nix+"\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect)
+			file, err := ws.Load(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := codes(Check(file, navigation.Env{Loader: loader{ws}, Roots: []string{dir}}, Settings{}).Findings)
+			if !slices.Equal(got, append([]lint.Code{}, tt.want...)) {
+				t.Errorf("%q reports %v, want %v", tt.nix, got, tt.want)
+			}
+		})
+	}
+}

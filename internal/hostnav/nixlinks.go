@@ -24,18 +24,26 @@ func (g *Group) NixClasses() []nix.OptionClass {
 	return project.OptionClasses(g.Self.Path)
 }
 
-func checksUnusedNixDirectives(settings filelint.Settings) bool {
+func checksNixOptional(settings filelint.Settings, check string) bool {
 	enabled := func(names []string) bool {
-		return slices.Contains(names, nix.UnusedDirectivesCheck()) || slices.Contains(names, directive.All)
+		return slices.Contains(names, check) || slices.Contains(names, directive.All)
 	}
 	return settings.Profile == lint.ProfileStrict || enabled(settings.Optional) || enabled(settings.RC.Enabled)
 }
 
-func UnusedNixDirectives(h Host, settings filelint.Settings) []lint.Finding {
-	if h.Language() != host.Nix || !checksUnusedNixDirectives(settings) {
+func OptionalNixFindings(h Host, settings filelint.Settings) []lint.Finding {
+	if h.Language() != host.Nix {
 		return nil
 	}
-	return nix.UnusedDirectiveFindings(h.File().Doc.Source().Text())
+	text := h.File().Doc.Source().Text()
+	var out []lint.Finding
+	if checksNixOptional(settings, nix.UnusedDirectivesCheck()) {
+		out = nix.UnusedDirectiveFindings(text)
+	}
+	if checksNixOptional(settings, nix.UnescapedAntiquotationsCheck()) {
+		out = append(out, nix.UnescapedAntiquotationFindings(text)...)
+	}
+	return out
 }
 
 func (g *Group) SourceLinks() []assist.Link {

@@ -2,8 +2,11 @@ package nix
 
 import (
 	"slices"
+	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/host/model"
+	"github.com/stubbedev/shell-lsp/internal/host/nix/syntax"
+	"github.com/stubbedev/shell-lsp/internal/parser"
 )
 
 var phaseStages = []string{"Unpack", "Patch", "Configure", "Build", "Check", "Install", "Fixup", "InstallCheck", "Dist"}
@@ -30,6 +33,134 @@ func phaseRank(binding string) int {
 		}
 	}
 	return firstStage + stageSteps*len(phaseStages)
+}
+
+const spacelessValue = "=x\n"
+
+func (f *file) spacelessPrelude(group []shellString) string {
+	first := group[0]
+	if !first.derivation && len(first.provides) == 0 {
+		return ""
+	}
+	known := func(name string) bool {
+		return first.derivation && spacelessBuilderVariables[name] || slices.Contains(first.provides, name)
+	}
+	var names []string
+	for _, s := range group {
+		names = f.spacelessReads(s.str, known, names)
+	}
+	slices.Sort(names)
+	var sb strings.Builder
+	for _, name := range slices.Compact(names) {
+		sb.WriteString(name)
+		sb.WriteString(spacelessValue)
+	}
+	return sb.String()
+}
+
+func (f *file) spacelessReads(str *syntax.String, known func(string) bool, names []string) []string {
+	for i, part := range str.Parts {
+		switch part := part.(type) {
+		case *syntax.Literal:
+			names = appendExpansions(part.Text, known, names)
+		case *syntax.Escape:
+			if !strings.HasSuffix(part.Text, "$") && !strings.HasSuffix(part.Text, "${") || i+1 == len(str.Parts) {
+				continue
+			}
+			if next, isLiteral := str.Parts[i+1].(*syntax.Literal); isLiteral {
+				names = appendName(next.Text, 0, known, names)
+			}
+		case *syntax.Interpolation:
+			sp, spliced := f.holeSplice(part)
+			if !spliced {
+				continue
+			}
+			for _, item := range sp.items {
+				if nested, isString := item.(*syntax.String); isString {
+					names = f.spacelessReads(nested, known, names)
+				}
+			}
+		}
+	}
+	return names
+}
+
+func appendExpansions(text string, known func(string) bool, names []string) []string {
+	for at := strings.IndexByte(text, '$'); at >= 0; {
+		names = appendName(text, at+1, known, names)
+		next := strings.IndexByte(text[at+1:], '$')
+		if next < 0 {
+			break
+		}
+		at += 1 + next
+	}
+	return names
+}
+
+func appendName(text string, start int, known func(string) bool, names []string) []string {
+	if start < len(text) && text[start] == '{' {
+		start++
+	}
+	end := start
+	for end < len(text) && isNameByte(text[end]) {
+		end++
+	}
+	if name := text[start:end]; name != "" && known(name) {
+		names = append(names, name)
+	}
+	return names
+}
+
+func isNameByte(c byte) bool {
+	return c == '_' || isASCIIAlnum(rune(c))
+}
+
+var spacelessBuilderVariables = map[string]bool{
+	"CONFIG_SHELL":      true,
+	"NIX_BUILD_CORES":   true,
+	"NIX_BUILD_TOP":     true,
+	"NIX_LOG_FD":        true,
+	"NIX_STORE":         true,
+	"SHELL":             true,
+	"SOURCE_DATE_EPOCH": true,
+	"TEMP":              true,
+	"TEMPDIR":           true,
+	"TMP":               true,
+	"TMPDIR":            true,
+	"TZ":                true,
+	"builder":           true,
+	"name":              true,
+	"out":               true,
+	"pname":             true,
+	"stdenv":            true,
+	"system":            true,
+	"version":           true,
+}
+
+func declaredOutputs(set *syntax.AttrSet) []string {
+	if set == nil {
+		return nil
+	}
+	for _, b := range set.Bindings {
+		a, assigned := b.(*syntax.Assign)
+		if !assigned || len(a.Path) != 1 || lastIdent(a.Path) != "outputs" {
+			continue
+		}
+		list, isList := syntax.Unparenthesized(a.Value).(*syntax.List)
+		if !isList {
+			return nil
+		}
+		var names []string
+		for _, item := range list.Items {
+			if text, isString := syntax.Unparenthesized(item).(*syntax.String); isString {
+				if name := literalOf(text); parser.IsName(name) {
+					names = append(names, name)
+				}
+			}
+		}
+		return names
+	}
+	return nil
 }
 
 var builderVariables = map[string]string{

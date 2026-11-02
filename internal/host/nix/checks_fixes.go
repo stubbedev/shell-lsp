@@ -108,10 +108,12 @@ func (c *checker) formalRemoval(p *syntax.PatternParam, i int) textedit.Edit {
 }
 
 func (c *checker) aliasRemoval(p *syntax.PatternParam) textedit.Edit {
-	text := c.tree.Text
 	alias := p.Alias.Span()
+	tokens := c.tree.TokensIn(p.Span())
 	if p.AliasFirst {
-		return textedit.Edit{Start: alias.Start, End: alias.End + strings.IndexByte(text[alias.End:], '{')}
+		i := slices.IndexFunc(tokens, func(t syntax.Token) bool { return t.Kind == syntax.TokLBrace })
+		return textedit.Edit{Start: alias.Start, End: tokens[i].Span.Start}
 	}
-	return textedit.Edit{Start: strings.LastIndexByte(text[:alias.Start], '}') + 1, End: alias.End}
+	i := slices.IndexFunc(tokens, func(t syntax.Token) bool { return t.Kind == syntax.TokRBrace })
+	return textedit.Edit{Start: tokens[i].Span.End, End: alias.End}
 }
