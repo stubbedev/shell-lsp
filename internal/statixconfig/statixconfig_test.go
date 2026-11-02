@@ -158,7 +158,7 @@ func TestResolverFindsTheNearestAncestor(t *testing.T) {
 	reads := 0
 	read := func(path string) ([]byte, error) {
 		reads++
-		text, ok := files[path]
+		text, ok := files[filepath.ToSlash(path)]
 		if !ok {
 			return nil, fs.ErrNotExist
 		}
@@ -193,7 +193,7 @@ func TestResolverFindsTheNearestAncestor(t *testing.T) {
 		t.Errorf("a second lookup read the disk %d times", reads-before)
 	}
 	files["/w/statix.toml"] = `disabled = ["useless_parens"]`
-	r.Invalidate("/w/statix.toml")
+	r.Invalidate(filepath.FromSlash("/w/statix.toml"))
 	got, err := r.ExcludedFor("/w/a.nix")
 	if err != nil {
 		t.Fatal(err)
