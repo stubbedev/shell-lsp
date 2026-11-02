@@ -133,11 +133,11 @@ func TestReadsLeadIntoALockedDependency(t *testing.T) {
 	flake := filepath.Join("/w", FlakeFile)
 	self := Analyze("{\n  inputs.nixpkgs.url = \"github:NixOS/nixpkgs\";\n  outputs = { nixpkgs, ... }: {\n    v = nixpkgs.lib.answer;\n  };\n}\n").Index
 	source := memorySource{
-		filepath.Join("/w", lockFile):          lockedInputs,
+		filepath.Join("/w", lockFile):         lockedInputs,
 		filepath.Join(lockedStore, FlakeFile): "{\n  outputs = { self }: {\n    lib = import ./lib.nix;\n  };\n}\n",
 		filepath.Join(lockedStore, "lib.nix"): "{\n  answer = 42;\n}\n",
 	}
-	p := Link(Request{Self: self, SelfPath: flake, Flake: flake}, source)
+	p := Link(t.Context(), Request{Self: self, SelfPath: flake, Flake: flake}, source)
 	for _, r := range self.Refs {
 		if r.Name != "answer" {
 			continue
@@ -161,7 +161,7 @@ func TestASetThatHoldsItselfIsCut(t *testing.T) {
 
 	src := "{ lib }: lib.nixosSystem {\n  modules = [ (let s = { a = s; }; in s) ];\n}\n"
 	a := Analyze(src)
-	p := Link(Request{Self: a.Index}, localSource{})
+	p := Link(t.Context(), Request{Self: a.Index}, localSource{})
 	if reason := p.incomplete(); !strings.Contains(reason, "deeper") {
 		t.Errorf("incomplete = %q", reason)
 	}

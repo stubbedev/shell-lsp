@@ -96,6 +96,10 @@ func TestNoOptionsWhereNoOptionCanBeSet(t *testing.T) {
 		"{ outputs = { self }: { packages.| }; }",
 		"{ inputs.nixpkgs.| ; outputs = _: { }; }",
 		"let x = { services.| }; in x",
+		"{ | }: 1",
+		"let x = { | }; in x",
+		"{ options = { | }; }",
+		"{ outputs = { self }: { packages = { | }; }; }",
 	} {
 		text, at := marked(t, src)
 		known := newFakeEvaluated()

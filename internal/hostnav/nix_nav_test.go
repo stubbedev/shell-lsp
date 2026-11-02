@@ -3,6 +3,7 @@ package hostnav
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
 	"maps"
 	"os"
@@ -297,6 +298,15 @@ func (tr *tree) after(name, before, sub string) int {
 	return tr.offset(name, before+sub, 0) + len(before)
 }
 
+func (tr *tree) site(file, before, name string) string {
+	tr.t.Helper()
+	text := tr.files[file]
+	if n := strings.Count(text, before+name); n != 1 {
+		tr.t.Fatalf("%q occurs %d times in %s, want once", before+name, n, file)
+	}
+	return fmt.Sprintf("%s:%d:%s", file, strings.Count(text[:tr.after(file, before, name)], "\n")+1, name)
+}
+
 func (tr *tree) definitionAfter(name, before, sub string) []string {
 	tr.t.Helper()
 	return tr.locations(tr.group(name).Definition(tr.after(name, before, sub)))
@@ -454,6 +464,23 @@ func TestNixRenameAcrossFiles(t *testing.T) {
 	}
 }
 
+const (
+	deferredFlake  = "{\n  outputs = inputs@{ flake-parts, ... }: flake-parts.lib.mkFlake { inherit inputs; } { imports = [ ./y.nix ]; };\n}\n"
+	deferredModule = "{ config, inputs, lib, ... }: {\n  options.deferred = lib.mkOption { };\n  config.deferred.sub.foo = 1;\n  config.flake.nixosConfigurations.a = inputs.nixpkgs.lib.nixosSystem {\n    modules = [\n      config.deferred\n      { options.sub.foo = lib.mkOption { }; }\n    ];\n  };\n"
+)
+
+func TestNixRenameThroughAModulePassedToTheModuleSystem(t *testing.T) {
+	t.Parallel()
+
+	got, err := newTree(t, map[string]string{"flake.nix": deferredFlake, "y.nix": deferredModule + "}\n"}).renamedAfter("y.nix", "config.deferred.sub.", "foo", "alpha")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got["y.nix"], "config.deferred.sub.alpha = 1;") || !strings.Contains(got["y.nix"], "options.sub.alpha = lib.mkOption") {
+		t.Errorf("renamed to %q", got["y.nix"])
+	}
+}
+
 func TestNixRenameRefusesWhatOtherFilesCannotFollow(t *testing.T) {
 	t.Parallel()
 
@@ -466,6 +493,7 @@ func TestNixRenameRefusesWhatOtherFilesCannotFollow(t *testing.T) {
 		{name: "callPackage fills a formal by name", files: map[string]string{"default.nix": "{ callPackage }: callPackage ./y.nix { }\n", "y.nix": "{ foo }: foo\n"}, in: "y.nix", sub: "foo"},
 		{name: "the set leaves through an import", files: map[string]string{"default.nix": "{ f }: f (import ./y.nix)\n", "y.nix": "{\n  foo = 1;\n}\n"}, in: "y.nix", sub: "foo"},
 		{name: "a selected set is passed on", files: map[string]string{"default.nix": "{ f }: f (import ./y.nix).bar\n", "y.nix": "{\n  bar.foo = 1;\n}\n"}, in: "y.nix", sub: "foo"},
+		{name: "a set below a module is passed on", files: map[string]string{"flake.nix": deferredFlake, "y.nix": deferredModule + "  config.copy = f config.deferred.sub;\n}\n"}, in: "y.nix", sub: "foo"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
@@ -547,16 +575,33 @@ func TestNixDiagnosticsNeverTouchTheProject(t *testing.T) {
 	}
 }
 
+func TestNixModuleNamedFlakeIsNotAFlake(t *testing.T) {
+	t.Parallel()
+
+	tr := newTree(t, map[string]string{
+		"flake.nix":             "{\n  inputs.nixpkgs.url = \"github:NixOS/nixpkgs\";\n  outputs = inputs@{ flake-parts, ... }: flake-parts.lib.mkFlake { inherit inputs; } (inputs.import-tree ./modules);\n}\n",
+		"modules/flake.nix":     "{ inputs, ... }: {\n  shared = inputs.nixpkgs;\n}\n",
+		"modules/set/flake.nix": "{\n  config.greeting = 1;\n}\n",
+		"modules/read.nix":      "{ config, ... }: {\n  copy = config.greeting;\n}\n",
+	})
+	expectStrings(t, "a function named flake.nix", tr.definitionAfter("modules/flake.nix", "= inputs.", "nixpkgs"), []string{tr.site("flake.nix", "  inputs.", "nixpkgs")})
+	expectStrings(t, "a set named flake.nix", tr.referencesAfter("modules/set/flake.nix", "config.", "greeting"), []string{
+		tr.site("modules/read.nix", "config.", "greeting"),
+		tr.site("modules/set/flake.nix", "config.", "greeting"),
+	})
+}
+
 func TestNixSingleFlakeCorpus(t *testing.T) {
 	t.Parallel()
 
 	tr := corpusTree(t, "single-flake")
-	expectStrings(t, "self reaches the outputs", tr.definitionAfter("flake.nix", "[self.", "overlays"), []string{"flake.nix:22:overlays"})
-	expectStrings(t, "the nixpkgs formal", tr.definitionAfter("flake.nix", "self,\n    ", "nixpkgs"), []string{"flake.nix:4:nixpkgs"})
-	expectStrings(t, "the inputs alias", tr.definitionAfter("flake.nix", "revision = inputs.", "nixpkgs"), []string{"flake.nix:4:nixpkgs"})
-	expectStrings(t, "an imported let", tr.definitionAfter("flake.nix", "release.defaults.", "retentionDays"), []string{"release.nix:4:retentionDays"})
-	expectStrings(t, "a value passed to callPackage", tr.definitionAfter("pkgs/logship.nix", "inherit (release) ", "version"), []string{"release.nix:2:version"})
-	expectStrings(t, "a key of callPackage", tr.definitionAfter("flake.nix", "./pkgs/rotate.nix {\n        ", "retentionDays"), []string{"pkgs/rotate.nix:7:retentionDays"})
+	input := tr.site("flake.nix", "  inputs.", "nixpkgs")
+	expectStrings(t, "self reaches the outputs", tr.definitionAfter("flake.nix", "[ self.", "overlays"), []string{tr.site("flake.nix", "    {\n      ", "overlays")})
+	expectStrings(t, "the nixpkgs formal", tr.definitionAfter("flake.nix", "self,\n      ", "nixpkgs"), []string{input})
+	expectStrings(t, "the inputs alias", tr.definitionAfter("flake.nix", "revision = inputs.", "nixpkgs"), []string{input})
+	expectStrings(t, "an imported let", tr.definitionAfter("flake.nix", "release.defaults.", "retentionDays"), []string{tr.site("release.nix", "    ", "retentionDays")})
+	expectStrings(t, "a value passed to callPackage", tr.definitionAfter("pkgs/logship.nix", "inherit (release) ", "version"), []string{tr.site("release.nix", "  ", "version")})
+	expectStrings(t, "a key of callPackage", tr.definitionAfter("flake.nix", "./pkgs/rotate.nix {\n          ", "retentionDays"), []string{tr.site("pkgs/rotate.nix", "  ", "retentionDays")})
 	got, err := tr.renamedAfter("pkgs/rotate.nix", "  ", "retentionDays", "keepDays")
 	if err != nil {
 		t.Fatal(err)
@@ -570,29 +615,37 @@ func TestNixFlakePartsCorpus(t *testing.T) {
 	t.Parallel()
 
 	tr := corpusTree(t, "flake-parts")
-	expectStrings(t, "an option and its setting", tr.definitionAfter("nix/checks.nix", "config.project.", "version"), []string{"nix/project.nix:9:version", "nix/project.nix:23:version"})
-	expectStrings(t, "a perSystem option", tr.definitionAfter("nix/shell.nix", "config.project.", "syncTools"), []string{"nix/project.nix:15:syncTools"})
-	expectStrings(t, "self' reaches perSystem", tr.definitionAfter("nix/shell.nix", "self'.packages.", "mirrorctl"), []string{"nix/packages/default.nix:17:mirrorctl"})
-	expectStrings(t, "a path in imports", tr.definitionAfter("flake.nix", "./nix/project.nix\n        ", "./nix/packages"), []string{"nix/packages/default.nix:1:"})
-	expectStrings(t, "inherit from self'", tr.definitionAfter("nix/checks.nix", "inherit (self'.packages) mirrorctl ", "manual"), []string{"nix/packages/manual.nix:7:manual"})
-	expectStrings(t, "withSystem", tr.definitionAfter("nix/overlay.nix", "config.packages.", "mirrorctl"), []string{"nix/packages/default.nix:17:mirrorctl"})
-	expectStrings(t, "inputs in a module", tr.definitionAfter("nix/overlay.nix", "inputs.", "nixpkgs"), []string{"flake.nix:5:nixpkgs"})
-	expectStrings(t, "config in the flake", tr.definitionAfter("nix/overlay.nix", "config.flake.overlays.", "default"), []string{"nix/overlay.nix:10:default"})
-	expectStrings(t, "a follows goes to the input", tr.definitionAfter("flake.nix", "follows = \"", "nixpkgs"), []string{"flake.nix:5:nixpkgs"})
-	expectStrings(t, "a callPackage key", tr.definitionAfter("nix/packages/default.nix", "{\n        ", "version"), []string{"pkgs/mirrorctl.nix:5:version"})
-	expectStrings(t, "every reader of an option", tr.referencesAfter("nix/project.nix", "project.", "version"), []string{
-		"nix/checks.nix:14:version",
-		"nix/checks.nix:15:version",
-		"nix/packages/default.nix:2:version",
-		"nix/packages/manual.nix:7:version",
-		"nix/project.nix:9:version",
-		"nix/project.nix:23:version",
+	const packages = "nix/packages/default.nix"
+	const manual = "nix/packages/manual.nix"
+	const project = "nix/project.nix"
+	const checks = "nix/checks.nix"
+	option := tr.site(project, "    project.", "version")
+	setting := tr.site(project, "config.project.", "version")
+	mirrorctl := tr.site(packages, "        ", "mirrorctl")
+	input := tr.site("flake.nix", "    ", "nixpkgs")
+	expectStrings(t, "an option and its setting", tr.definitionAfter(checks, "config.project.", "version"), []string{option, setting})
+	expectStrings(t, "a perSystem option", tr.definitionAfter("nix/shell.nix", "config.project.", "syncTools"), []string{tr.site(project, "options.project.", "syncTools")})
+	expectStrings(t, "self' reaches perSystem", tr.definitionAfter("nix/shell.nix", "self'.packages.", "mirrorctl"), []string{mirrorctl})
+	expectStrings(t, "a path in imports", tr.definitionAfter("flake.nix", "./nix/project.nix\n        ", "./nix/packages"), []string{packages + ":1:"})
+	expectStrings(t, "inherit from self'", tr.definitionAfter(checks, "inherit (self'.packages) mirrorctl ", "manual"), []string{tr.site(manual, "packages.", "manual")})
+	expectStrings(t, "withSystem", tr.definitionAfter("nix/overlay.nix", "config.packages.", "mirrorctl"), []string{mirrorctl})
+	expectStrings(t, "inputs in a module", tr.definitionAfter("nix/overlay.nix", "inputs.", "nixpkgs"), []string{input})
+	expectStrings(t, "config in the flake", tr.definitionAfter("nix/overlay.nix", "config.flake.overlays.", "default"), []string{tr.site("nix/overlay.nix", "    overlays.", "default")})
+	expectStrings(t, "a follows goes to the input", tr.definitionAfter("flake.nix", "follows = \"", "nixpkgs"), []string{input})
+	expectStrings(t, "a callPackage key", tr.definitionAfter(packages, "{\n          ", "version"), []string{tr.site("pkgs/mirrorctl.nix", "  ", "version")})
+	expectStrings(t, "every reader of an option", tr.referencesAfter(project, "project.", "version"), []string{
+		tr.site(checks, "\"$reported\" != \"${config.project.", "version"),
+		tr.site(checks, "expected ${config.project.", "version"),
+		tr.site(packages, "config.project.", "version"),
+		tr.site(manual, "config.project.", "version"),
+		option,
+		setting,
 	})
-	got, err := tr.renamedAfter("nix/project.nix", "options.project.", "syncTools", "tools")
+	got, err := tr.renamedAfter(project, "options.project.", "syncTools", "tools")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(got["nix/shell.nix"], "config.project.tools") || !strings.Contains(got["nix/packages/default.nix"], "syncTools = config.project.tools;") || !strings.Contains(got["nix/project.nix"], "options.project.tools") {
+	if !strings.Contains(got["nix/shell.nix"], "config.project.tools") || !strings.Contains(got[packages], "syncTools = config.project.tools;") || !strings.Contains(got[project], "options.project.tools") {
 		t.Errorf("renamed to %q", got)
 	}
 }
@@ -601,46 +654,60 @@ func TestNixDendriticCorpus(t *testing.T) {
 	t.Parallel()
 
 	tr := corpusTree(t, "dendritic")
-	expectStrings(t, "a setting found through import-tree", tr.definitionAfter("modules/editor.nix", "config.harbor.lib.", "ownerName"), []string{"modules/core/lib/owner.nix:2:ownerName"})
-	expectStrings(t, "a read from its setting", tr.referencesAfter("modules/core/lib/owner.nix", "harbor.lib.", "ownerName"), []string{
-		"modules/core/lib/owner.nix:2:ownerName",
-		"modules/editor.nix:2:ownerName",
+	const (
+		box            = "modules/hosts/box.nix"
+		configurations = "modules/core/configurations.nix"
+		coreFlake      = "modules/core/flake.nix"
+		editor         = "modules/editor.nix"
+		features       = "modules/core/features.nix"
+		images         = "modules/images.nix"
+		laptop         = "modules/hosts/laptop.nix"
+		owner          = "modules/core/lib/owner.nix"
+		paths          = "modules/core/paths.nix"
+		tools          = "modules/tools.nix"
+	)
+	setting := tr.site(owner, "harbor.lib.", "ownerName")
+	nixpkgsFor := tr.site(coreFlake, "_module.args.", "nixpkgsFor")
+	expectStrings(t, "a setting found through import-tree", tr.definitionAfter(editor, "config.harbor.lib.", "ownerName"), []string{setting})
+	expectStrings(t, "a read from its setting", tr.referencesAfter(owner, "harbor.lib.", "ownerName"), []string{
+		setting,
+		tr.site(editor, "config.harbor.lib.", "ownerName"),
 	})
-	expectStrings(t, "a merged option", tr.definitionAfter("modules/editor.nix", "lib.mkIf config.features.", "editor"), []string{
-		"modules/core/features.nix:10:editor",
-		"modules/hosts/box.nix:20:editor",
-		"modules/hosts/laptop.nix:6:editor",
+	expectStrings(t, "a merged option", tr.definitionAfter(editor, "lib.mkIf config.features.", "editor"), []string{
+		tr.site(features, "flake.modules.homeManager.features = { lib, ... }: {\n    options.features.", "editor"),
+		tr.site(box, "homeModules;\n        features.", "editor"),
+		tr.site(laptop, "features.", "editor"),
 	})
-	expectStrings(t, "a class of its own", tr.definitionAfter("modules/editor.nix", "systemPackages = lib.mkIf config.features.", "editor"), []string{
-		"modules/core/features.nix:14:editor",
-		"modules/hosts/box.nix:15:editor",
+	expectStrings(t, "a class of its own", tr.definitionAfter(editor, "systemPackages = lib.mkIf config.features.", "editor"), []string{
+		tr.site(features, "flake.modules.nixos.features = { lib, ... }: {\n    options.features.", "editor"),
+		tr.site(box, "hostName = \"box\";\n      features.", "editor"),
 	})
-	expectStrings(t, "an option from the home module", tr.definitionAfter("modules/editor.nix", "config.harbor.paths.", "stateDir"), []string{
-		"modules/core/paths.nix:7:stateDir",
-		"modules/core/paths.nix:12:stateDir",
-		"modules/hosts/laptop.nix:7:stateDir",
+	expectStrings(t, "an option from the home module", tr.definitionAfter(editor, "config.harbor.paths.", "stateDir"), []string{
+		tr.site(paths, "options.harbor.paths.", "stateDir"),
+		tr.site(paths, "config.harbor.paths.", "stateDir"),
+		tr.site(laptop, "harbor.paths.", "stateDir"),
 	})
-	expectStrings(t, "a deferred module", tr.definitionAfter("modules/images.nix", "config.flake.modules.nixos.", "editor"), []string{"modules/editor.nix:16:editor"})
-	expectStrings(t, "every class set under one name", tr.definitionAfter("modules/hosts/box.nix", "config.flake.modules.", "nixos"), []string{
-		"modules/core/features.nix:13:nixos",
-		"modules/editor.nix:16:nixos",
+	expectStrings(t, "a deferred module", tr.definitionAfter(images, "config.flake.modules.nixos.", "editor"), []string{tr.site(editor, "flake.modules.nixos.", "editor")})
+	expectStrings(t, "every class set under one name", tr.definitionAfter(box, "config.flake.modules.", "nixos"), []string{
+		tr.site(features, "flake.modules.", "nixos"),
+		tr.site(editor, "flake.modules.", "nixos"),
 	})
-	expectStrings(t, "a formal from _module.args", tr.definitionAfter("modules/images.nix", "= ", "nixpkgsFor"), []string{"modules/core/flake.nix:15:nixpkgsFor"})
-	expectStrings(t, "the formal itself", tr.definitionAfter("modules/core/configurations.nix", "withSystem,\n  ", "nixpkgsFor"), []string{"modules/core/flake.nix:15:nixpkgsFor"})
-	expectStrings(t, "a formal and its binding are one", tr.referencesAfter("modules/core/flake.nix", "_module.args.", "nixpkgsFor"), []string{
-		"modules/core/configurations.nix:6:nixpkgsFor",
-		"modules/core/configurations.nix:51:nixpkgsFor",
-		"modules/core/flake.nix:15:nixpkgsFor",
-		"modules/images.nix:3:nixpkgsFor",
-		"modules/images.nix:6:nixpkgsFor",
+	expectStrings(t, "a formal from _module.args", tr.definitionAfter(images, "= ", "nixpkgsFor"), []string{nixpkgsFor})
+	expectStrings(t, "the formal itself", tr.definitionAfter(configurations, "withSystem,\n  ", "nixpkgsFor"), []string{nixpkgsFor})
+	expectStrings(t, "a formal and its binding are one", tr.referencesAfter(coreFlake, "_module.args.", "nixpkgsFor"), []string{
+		tr.site(configurations, "withSystem,\n  ", "nixpkgsFor"),
+		tr.site(configurations, "pkgs = ", "nixpkgsFor"),
+		nixpkgsFor,
+		tr.site(images, "config,\n  ", "nixpkgsFor"),
+		tr.site(images, "= ", "nixpkgsFor"),
 	})
-	expectStrings(t, "pkgs from perSystem _module.args", tr.definitionAfter("modules/tools.nix", "  ", "pkgs"), []string{"modules/core/flake.nix:20:pkgs"})
-	expectStrings(t, "inputs in a module", tr.definitionAfter("modules/core/flake.nix", "import inputs.", "nixpkgs"), []string{"flake.nix:5:nixpkgs"})
-	expectStrings(t, "self' in a module", tr.definitionAfter("modules/tools.nix", "self'.packages.", "greet"), []string{"modules/tools.nix:8:greet"})
-	expectStrings(t, "a key to an excluded file", tr.definitionAfter("modules/tools.nix", "{\n      ", "greeting"), []string{"modules/_pkgs/greet.nix:3:greeting"})
-	expectStrings(t, "the custom host tree", tr.definitionAfter("modules/hosts/box.nix", "${config.harbor.", "owner"), []string{
-		"modules/core/features.nix:15:owner",
-		"modules/hosts/box.nix:16:owner",
+	expectStrings(t, "pkgs from perSystem _module.args", tr.definitionAfter(tools, "  ", "pkgs"), []string{tr.site(coreFlake, "_module.args.", "pkgs")})
+	expectStrings(t, "inputs in a module", tr.definitionAfter(coreFlake, "import inputs.", "nixpkgs"), []string{tr.site("flake.nix", "    ", "nixpkgs")})
+	expectStrings(t, "self' in a module", tr.definitionAfter(tools, "self'.packages.", "greet"), []string{tr.site(tools, "      packages.", "greet")})
+	expectStrings(t, "a key to an excluded file", tr.definitionAfter(tools, "{\n        ", "greeting"), []string{tr.site("modules/_pkgs/greet.nix", "  ", "greeting")})
+	expectStrings(t, "the custom host tree", tr.definitionAfter(box, "${config.harbor.", "owner"), []string{
+		tr.site(features, "options.harbor.", "owner"),
+		tr.site(box, "      harbor.", "owner"),
 	})
 	g, sym := tr.at("modules/_disabled/old-owner.nix", "ownerName", 0)
 	expectStrings(t, "a file import-tree skips is alone", tr.describe(References(g, sym, true)), []string{"modules/_disabled/old-owner.nix:2:ownerName"})

@@ -18,7 +18,7 @@ func TestSignatureAtCalls(t *testing.T) {
 	}{
 		{name: "a builtin", src: "map |", label: "map f list", params: []string{"f", "list"}},
 		{name: "a builtin's next argument", src: "map a |", label: "map f list", params: []string{"f", "list"}, active: 1},
-		{name: "a parameter inside its callee's name", src: "filter |", label: "filter f list", params: []string{"f", "list"}},
+		{name: "a parameter inside its callee's name", src: "with builtins; filter |", label: "filter f list", params: []string{"f", "list"}},
 		{name: "a member of builtins", src: "builtins.attrNames |", label: "builtins.attrNames set", params: []string{"set"}},
 		{name: "an argument being typed", src: "map a b|", label: "map f list", params: []string{"f", "list"}, active: 1},
 		{name: "before later arguments", src: "map | x", label: "map f list", params: []string{"f", "list"}},

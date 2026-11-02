@@ -2,6 +2,7 @@ package nix
 
 import (
 	"cmp"
+	"context"
 	"fmt"
 	"maps"
 	"path/filepath"
@@ -47,6 +48,7 @@ type flowCaller struct {
 }
 
 type Project struct {
+	ctx context.Context
 	mu     sync.Mutex
 	source Source
 	units  []*symbolTable
@@ -135,8 +137,9 @@ type wantedFile struct {
 	fallback string
 }
 
-func Link(req Request, source Source) *Project {
+func Link(ctx context.Context, req Request, source Source) *Project {
 	p := &Project{
+		ctx:          ctx,
 		source:       source,
 		files:        map[*symbolTable]int{},
 		byPath:       map[string]int{},
@@ -185,7 +188,7 @@ func (localSource) Read(path string) ([]byte, error) {
 }
 
 func standalone(ix *model.Index) *Project {
-	return Link(Request{Self: ix}, localSource{})
+	return Link(context.Background(), Request{Self: ix}, localSource{})
 }
 
 func (p *Project) Fresh(source Source) bool {
@@ -298,7 +301,7 @@ func (p *Project) resolve(u *symbolTable, path *syntax.Path) string {
 }
 
 func (p *Project) closure(level []wantedFile) {
-	for len(level) > 0 {
+	for len(level) > 0 && p.ctx.Err() == nil {
 		var wanted []wantedFile
 		var paths []string
 		for _, w := range level {
@@ -335,6 +338,9 @@ func (p *Project) closure(level []wantedFile) {
 func (p *Project) settle() {
 	for range maxFlowRounds {
 		p.reset()
+		if p.ctx.Err() != nil {
+			break
+		}
 		if p.flakeUnit != nil {
 			p.flakeRound()
 		}
@@ -342,7 +348,7 @@ func (p *Project) settle() {
 			p.memo = map[syntax.Expr][]flowValue{}
 			for _, u := range p.units {
 				for _, c := range u.flowCalls {
-					if slices.Contains(kinds, c.kind) {
+					if slices.Contains(kinds, c.kind) && p.ctx.Err() == nil {
 						p.scan(u, c)
 					}
 				}
@@ -353,11 +359,15 @@ func (p *Project) settle() {
 			break
 		}
 	}
-	if p.changed {
+	switch {
+	case p.ctx.Err() != nil:
+		p.failure = cmp.Or(p.failure, fmt.Sprintf("following values across files stopped: %v", p.ctx.Err()))
+	case p.changed:
 		p.failure = cmp.Or(p.failure, fmt.Sprintf("following values across files did not settle within %d rounds", maxFlowRounds))
 	}
 	p.clearDerived()
 	p.settled = true
+	p.ctx = nil
 }
 
 func (p *Project) enter(v flowValue) bool {

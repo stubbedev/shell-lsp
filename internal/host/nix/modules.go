@@ -95,6 +95,7 @@ type space struct {
 	declared bool
 	escaped  bool
 	dynamic  bool
+	module   bool
 	sub      *flowClass
 	depth    int
 }
@@ -102,7 +103,7 @@ type space struct {
 func (s *space) clear() {
 	s.names = map[string]bool{}
 	s.members, s.bound, s.sets = nil, nil, nil
-	s.declared = false
+	s.declared, s.module = false, false
 	for _, kid := range s.kids {
 		kid.clear()
 	}
@@ -304,6 +305,7 @@ func (p *Project) walk(c *flowClass, v flowValue) {
 			p.walkAll(c, p.evalModuleValue(v.unit, item))
 		}
 	case flowSpace:
+		v.space.module = true
 		for _, b := range v.space.bound {
 			p.walkAll(c, p.evalSource(b.unit, b.source))
 		}

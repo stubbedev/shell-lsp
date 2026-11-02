@@ -93,6 +93,13 @@ func hasHead(set *syntax.AttrSet, name string) bool {
 	})
 }
 
+func declaresOutputs(root syntax.Expr) bool {
+	set, ok := syntax.Unparenthesized(root).(*syntax.AttrSet)
+	return ok && hasHead(set, outputsAttr)
+}
+
+func (d *Document) IsFlake() bool { return declaresOutputs(d.tree.Root) }
+
 func (c *outputCollector) flake(e syntax.Expr) {
 	switch e := reduced(e).(type) {
 	case *syntax.AttrSet:

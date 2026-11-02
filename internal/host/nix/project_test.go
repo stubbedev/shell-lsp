@@ -1,10 +1,12 @@
 package nix
 
 import (
+	"context"
 	"errors"
 	"io/fs"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/host/model"
@@ -108,7 +110,7 @@ func TestLockedInputsLeadIntoTheStore(t *testing.T) {
 	text := "{\n  inputs.nixpkgs.url = \"github:NixOS/nixpkgs\";\n  inputs.unlocked.url = \"github:example/none\";\n  outputs = _: { };\n}\n"
 	self := Analyze(text).Index
 	source := memorySource{filepath.Join("/w", lockFile): lockedInputs}
-	p := Link(Request{Self: self, SelfPath: flake, Flake: flake}, source)
+	p := Link(t.Context(), Request{Self: self, SelfPath: flake, Flake: flake}, source)
 	want := []string{filepath.Join(lockedStore, FlakeFile), filepath.Join(lockedStore, DirectoryEntry)}
 	if got := p.Sources(0, symbolNamed(t, self, "nixpkgs")); !slices.Equal(got, want) {
 		t.Errorf("sources of a locked input = %q, want %q", got, want)
@@ -119,8 +121,19 @@ func TestLockedInputsLeadIntoTheStore(t *testing.T) {
 	if got := p.Sources(0, symbolNamed(t, self, "url")); got != nil {
 		t.Errorf("sources of an attribute that is no input = %q", got)
 	}
-	bare := Link(Request{Self: self, SelfPath: flake, Flake: flake}, memorySource{})
+	bare := Link(t.Context(), Request{Self: self, SelfPath: flake, Flake: flake}, memorySource{})
 	if got := bare.Sources(0, symbolNamed(t, self, "nixpkgs")); got != nil {
 		t.Errorf("sources without a lock = %q", got)
+	}
+}
+
+func TestLinkStopsWhenCancelled(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	p := Link(ctx, Request{Self: Analyze("{ a = 1; }\n").Index}, localSource{})
+	if reason := p.incomplete(); !strings.Contains(reason, context.Canceled.Error()) {
+		t.Errorf("incomplete = %q, want it to name the cancellation", reason)
 	}
 }

@@ -211,7 +211,7 @@ func (c *cursor) formalSlot() []Item {
 	if _, bad := lambda.Body.(*syntax.Bad); !bad {
 		return nil
 	}
-	return keywordItems(setKeywords)
+	return slices.Concat(keywordItems(setKeywords), c.optionKeysAt(len(c.chain)-1-3))
 }
 
 func (c *cursor) names() []Item {

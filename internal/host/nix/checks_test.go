@@ -61,6 +61,9 @@ func TestChecks(t *testing.T) {
 		{`let __sub = 1; in 2 - 3`, nil},
 		{`let { a = 1; body = 2; }`, []string{"SL8005 a"}},
 		{`let __curPos = 1; in __curPos`, []string{"SL8005 __curPos"}},
+		{`let __curPos = 1; in 2`, []string{"SL8005 __curPos"}},
+		{`__curPos: __curPos`, []string{"SL8006 __curPos"}},
+		{`let __other = 1; in 2`, nil},
 		{`rec { a = 1; b = a; }`, nil},
 		{`{ a = 1; }`, nil},
 

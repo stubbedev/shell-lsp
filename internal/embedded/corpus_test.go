@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/embedded/lang"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 )
 
@@ -113,8 +114,8 @@ func FuzzFind(f *testing.F) {
 			p.Regions(func(s parser.Span) { inBounds("region", s) })
 			for _, tok := range p.Result.Tokens {
 				p.Spans(tok.Start, tok.End, func(s parser.Span) { inBounds("token", s) })
-				if _, ok := HoverAt([]Program{p}, p.Span(tok.Start, tok.End).Start); ok && tok.Modifiers == 0 {
-					t.Fatalf("hover on a non-builtin token %+v in %q", tok, text)
+				if _, ok := HoverAt([]Program{p}, p.Span(tok.Start, tok.End).Start); ok && tok.Modifiers == 0 && !boundOnTheCommandLine(&p, tok) {
+					t.Fatalf("hover on a token that is neither a builtin nor a variable bound on the command line %+v in %q", tok, text)
 				}
 			}
 			for _, e := range p.Result.Errors {
@@ -122,6 +123,15 @@ func FuzzFind(f *testing.F) {
 			}
 		}
 	})
+}
+
+func boundOnTheCommandLine(p *Program, tok lang.Token) bool {
+	name, ok := p.variable(tok)
+	if !ok || p.Shadows(name) {
+		return false
+	}
+	_, bound := p.Binding(name)
+	return bound
 }
 
 func TestCorpusProgramsParse(t *testing.T) {

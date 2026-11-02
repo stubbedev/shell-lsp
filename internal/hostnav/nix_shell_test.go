@@ -247,10 +247,11 @@ func TestNixDendriticWrappersCorpus(t *testing.T) {
 
 	tr := corpusTree(t, "dendritic")
 	const probes = "modules/probes.nix"
-	expectStrings(t, "pkgs through an overlay", tr.definitionAfter(probes, "pkgs.", "harbor"), []string{"modules/core/builders.nix:19:harbor"})
-	expectStrings(t, "vars.x reaches $x", tr.definitionAfter(probes, "\"$", "expected"), []string{probes + ":5:expected"})
+	expected := tr.site(probes, "vars.", "expected")
+	expectStrings(t, "pkgs through an overlay", tr.definitionAfter(probes, "pkgs.", "harbor"), []string{tr.site("modules/core/builders.nix", "inherit ", "harbor")})
+	expectStrings(t, "vars.x reaches $x", tr.definitionAfter(probes, "\"$", "expected"), []string{expected})
 	g, sym := tr.at(probes, "expected", 0)
-	expectStrings(t, "and back", tr.describe(References(g, sym, true)), []string{probes + ":5:expected", probes + ":7:expected"})
+	expectStrings(t, "and back", tr.describe(References(g, sym, true)), []string{expected, tr.site(probes, "\"$", "expected")})
 
 	g = tr.group(probes)
 	shells := g.Module.Links().Shells(g.self)

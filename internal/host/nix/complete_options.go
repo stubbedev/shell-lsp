@@ -120,7 +120,7 @@ type optionWalk struct {
 
 func optionWalkTo(chain []syntax.Node, end int) optionWalk {
 	w := optionWalk{mode: walkModule, top: true}
-	if set, ok := chain[0].(*syntax.AttrSet); ok && hasHead(set, outputsAttr) {
+	if root, ok := chain[0].(syntax.Expr); ok && declaresOutputs(root) {
 		w.mode = walkFlakeFile
 	}
 	for i := range end {
@@ -420,7 +420,11 @@ func (c *cursor) nixpkgsItems(parent []string) []Item {
 }
 
 func (c *cursor) optionKeys() []Item {
-	site, ok := optionSiteAt(c.chain, len(c.chain)-1)
+	return c.optionKeysAt(len(c.chain) - 1)
+}
+
+func (c *cursor) optionKeysAt(end int) []Item {
+	site, ok := optionSiteAt(c.chain, end)
 	if !ok {
 		return nil
 	}

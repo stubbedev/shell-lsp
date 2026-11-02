@@ -224,7 +224,7 @@ func (g *Group) cachedProject(request nix.Request, graph *Graph) *nix.Project {
 	if cell.project != nil && cell.graph == graph && request.Failure == "" && cell.project.Fresh(source) {
 		return cell.project
 	}
-	project := nix.Link(request, source)
+	project := nix.Link(g.builder.ctx, request, source)
 	if request.Failure == "" && g.builder.ctx.Err() == nil && !g.builder.env.Background {
 		cell.project, cell.graph = project, graph
 	}
@@ -257,6 +257,9 @@ func Prove(ctx context.Context, hosts []Host, env Env) map[string]Proof {
 		if !linked {
 			panic("hostnav: " + file.URI + " did not link as a Nix project")
 		}
+		if ctx.Err() != nil {
+			return nil
+		}
 		out[file.URI] = Proof{Doc: file.Doc.Source(), Strings: project.Proven(0)}
 		for _, other := range hosts {
 			index := other.file.Native.Index
@@ -270,7 +273,8 @@ func Prove(ctx context.Context, hosts []Host, env Env) map[string]Proof {
 
 func (b *builder) nearestFlake(path string) string {
 	for dir := filepath.Dir(path); ; dir = filepath.Dir(dir) {
-		if flake := filepath.Join(dir, nix.FlakeFile); b.load(flake) != nil {
+		flake := filepath.Join(dir, nix.FlakeFile)
+		if file := b.load(flake); file != nil && file.Native.Nix().IsFlake() {
 			return flake
 		}
 		if dir == filepath.Dir(dir) {

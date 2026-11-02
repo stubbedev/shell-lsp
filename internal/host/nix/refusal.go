@@ -90,7 +90,7 @@ func (p *Project) spaceRefusal(s *space, name string) string {
 			return fmt.Sprintf("`%s` is an option declared outside this project, so the name is not this project's to change", name)
 		}
 	}
-	for at := s; at != nil; at = at.parent {
+	for at := s; at != nil && !at.module; at = at.parent {
 		if at.escaped {
 			return fmt.Sprintf("the set that holds `%s` is passed on as a value, so other code may read it by its name", name)
 		}

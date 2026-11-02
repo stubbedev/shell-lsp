@@ -97,11 +97,15 @@ func (c *checker) duplicates() {
 
 func (c *checker) unusedLets() {
 	for _, d := range c.table.Defs() {
-		if d.Scope.Kind != scope.LetScope || d.Implicit || strings.HasPrefix(d.Name, unusedPrefix) || usedOutsideItself(d) {
+		if d.Scope.Kind != scope.LetScope || d.Implicit || deliberatelyUnused(d.Name) || usedOutsideItself(d) {
 			continue
 		}
 		c.report(lint.CodeNixUnusedLet, d.Binders[0].Span(), fmt.Sprintf("`%s` is bound but nothing reads it", d.Name), c.removal(d))
 	}
+}
+
+func deliberatelyUnused(name string) bool {
+	return name != scope.CurPos && strings.HasPrefix(name, unusedPrefix)
 }
 
 func usedOutsideItself(d *scope.Def) bool {
@@ -309,7 +313,7 @@ func (c *checker) lambda(l *syntax.Lambda) {
 
 func (c *checker) unusedArgument(p *syntax.IdentParam) {
 	d, bound := c.table.Binder(p.Name)
-	if !bound || d.Used() || strings.HasPrefix(d.Name, unusedPrefix) {
+	if !bound || d.Used() || deliberatelyUnused(d.Name) {
 		return
 	}
 	var fixes []lint.Fix
@@ -334,7 +338,7 @@ func (c *checker) pattern(l *syntax.Lambda, p *syntax.PatternParam) {
 	}
 	for i, f := range p.Formals {
 		d, bound := c.table.Binder(f.Name)
-		if !bound || d.Binders[0] != syntax.Node(f.Name) || d.Used() || strings.HasPrefix(d.Name, unusedPrefix) {
+		if !bound || d.Binders[0] != syntax.Node(f.Name) || d.Used() || deliberatelyUnused(d.Name) {
 			continue
 		}
 		c.report(lint.CodeNixUnusedFormal, f.Name.Span(), fmt.Sprintf("the function never reads its argument `%s`", d.Name),
@@ -350,7 +354,7 @@ func (c *checker) alias(p *syntax.PatternParam) bool {
 	if d.Used() {
 		return true
 	}
-	if d.Binders[0] == syntax.Node(p.Alias) && !strings.HasPrefix(d.Name, unusedPrefix) {
+	if d.Binders[0] == syntax.Node(p.Alias) && !deliberatelyUnused(d.Name) {
 		c.report(lint.CodeNixUnusedArgument, p.Alias.Span(), fmt.Sprintf("the function never reads its `@` name `%s`", d.Name),
 			c.offer("Remove `"+d.Name+"@`", lint.Safe, c.aliasRemoval(p)))
 	}
