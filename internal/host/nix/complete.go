@@ -26,23 +26,31 @@ type Item struct {
 	Detail string
 	Doc    string
 	Span   syntax.Span
+
+	packagePath []string
 }
 
-func Complete(text string, offset int, files Files) []Item {
+func (it Item) HasDoc() bool { return it.Doc != "" || it.packagePath != nil }
+
+func Complete(text string, offset int, files Files, known Evaluated) []Item {
 	c, ok := locate(text, offset, files)
 	if !ok {
 		return nil
 	}
+	c.known = known
 	return c.items()
 }
 
-func ItemDoc(text string, offset int, label string, files Files) (string, bool) {
-	items := Complete(text, offset, files)
+func ItemDoc(text string, offset int, label string, files Files, known Evaluated) (string, bool) {
+	items := Complete(text, offset, files, known)
 	i := slices.IndexFunc(items, func(it Item) bool { return it.Label == label })
-	if i < 0 || items[i].Doc == "" {
+	switch {
+	case i < 0:
 		return "", false
+	case items[i].packagePath != nil:
+		return packageDoc(known, items[i].packagePath)
 	}
-	return items[i].Doc, true
+	return items[i].Doc, items[i].Doc != ""
 }
 
 func (a Analysis) Expect(offset int) (model.Expect, bool) {
@@ -68,6 +76,7 @@ type cursor struct {
 	word   syntax.Span
 	spelt  string
 	prefix string
+	known  Evaluated
 }
 
 func locate(text string, offset int, files Files) (*cursor, bool) {
@@ -87,28 +96,23 @@ func locate(text string, offset int, files Files) (*cursor, bool) {
 		word:      word,
 		spelt:     text[word.Start:word.End],
 		prefix:    text[word.Start:offset],
+		known:     NoEvaluation,
 	}, true
 }
 
-func isNameStart(c byte) bool { return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c == '_' }
-
-func isDigit(c byte) bool { return c >= '0' && c <= '9' }
-
-func isNameByte(c byte) bool { return isNameStart(c) || isDigit(c) || c == '\'' || c == '-' }
-
 func wordAt(text string, offset int) (syntax.Span, bool) {
 	start := offset
-	for start > 0 && isNameByte(text[start-1]) {
+	for start > 0 && syntax.IsNameByte(text[start-1]) {
 		start--
 	}
-	for start < offset && !isNameStart(text[start]) {
+	for start < offset && !syntax.IsNameStart(text[start]) {
 		start++
 	}
-	if start == offset && offset > 0 && isDigit(text[offset-1]) {
+	if start == offset && offset > 0 && syntax.IsDigit(text[offset-1]) {
 		return syntax.Span{}, false
 	}
 	end := offset
-	for end < len(text) && isNameByte(text[end]) {
+	for end < len(text) && syntax.IsNameByte(text[end]) {
 		end++
 	}
 	return syntax.Span{Start: start, End: end}, true
@@ -222,7 +226,11 @@ func (c *cursor) names() []Item {
 		}
 	}
 	for _, with := range names.Withs {
-		out = append(out, c.memberItems(c.eval(with.Scope))...)
+		if v := c.eval(with.Scope); v.kind != unknownValue {
+			out = append(out, c.memberItems(v)...)
+			continue
+		}
+		out = append(out, c.evaluatedMembers(with.Scope, nil)...)
 	}
 	return out
 }
@@ -304,20 +312,31 @@ func (c *cursor) attribute(leaf *syntax.IdentAttr) []Item {
 		return c.pathMembers(parent.Target, parent.Path, leaf)
 	case *syntax.Inherit:
 		if parent.From != nil {
-			return c.memberItems(c.eval(parent.From.Inner))
+			if v := c.eval(parent.From.Inner); v.kind != unknownValue {
+				return c.memberItems(v)
+			}
+			return c.evaluatedMembers(parent.From.Inner, nil)
 		}
 		return c.names()
 	case *syntax.Assign:
 		if parent.Path[0] == syntax.Attr(leaf) {
-			return c.keys()
+			return slices.Concat(c.keys(), c.optionKeys())
 		}
+		return c.optionKeys()
 	}
 	return nil
 }
 
 func (c *cursor) pathMembers(target syntax.Expr, path syntax.AttrPath, leaf *syntax.IdentAttr) []Item {
 	i := slices.IndexFunc(path, func(a syntax.Attr) bool { return a == syntax.Attr(leaf) })
-	return c.memberItems(c.selected(c.eval(target), path[:i]))
+	if v := c.selected(c.eval(target), path[:i]); v.kind != unknownValue {
+		return c.memberItems(v)
+	}
+	names, static := attrNames(path[:i])
+	if !static {
+		return nil
+	}
+	return c.evaluatedMembers(target, names)
 }
 
 func (c *cursor) keys() []Item {

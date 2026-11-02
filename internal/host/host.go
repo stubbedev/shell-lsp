@@ -64,11 +64,12 @@ type analysis struct {
 	enclosing  func(offset int) []parser.Span
 	format     func() (string, error)
 	dockerfile *dockerfile.File
+	nix        *nix.Document
 }
 
 func analyzeNix(text string) analysis {
 	a := nix.Analyze(text)
-	return analysis{projection: a.Map, detection: a.Detection, index: a.Index, expect: a.Expect, invocation: a.Invocation, enclosing: a.Enclosing, format: func() (string, error) { return nixformat.Format(text) }}
+	return analysis{projection: a.Map, detection: a.Detection, index: a.Index, expect: a.Expect, invocation: a.Invocation, enclosing: a.Enclosing, format: func() (string, error) { return nixformat.Format(text) }, nix: a.Document()}
 }
 
 func analyzeMake(text string) analysis {
@@ -225,6 +226,14 @@ type Native struct {
 	enclosing  func(offset int) []parser.Span
 	format     func() (string, error)
 	dockerfile *dockerfile.File
+	nix        *nix.Document
+}
+
+func (n *Native) Nix() *nix.Document {
+	if n.nix == nil {
+		panic("host: " + n.Language.String() + " is not a Nix file")
+	}
+	return n.nix
 }
 
 func (n *Native) Dockerfile() (*dockerfile.File, bool) { return n.dockerfile, n.dockerfile != nil }
@@ -260,6 +269,13 @@ func (l Language) Invocation(path, name string) []string {
 	return definitions[l].invocation(path, name)
 }
 
+func (l Language) RunLabel(name string, argv []string) string {
+	if l == Nix {
+		return strings.Join(argv, " ")
+	}
+	return argv[0] + " " + name
+}
+
 func (l Language) Recursion() Recursion { return definitions[l].recursion }
 
 func (l Language) Formats() bool { return definitions[l].formatter != nil }
@@ -276,7 +292,7 @@ func (l Language) Project(doc *docstore.Document) Script {
 	script := Script{Doc: docstore.Project(doc, a.projection), Detection: a.detection}
 	script.group(a.projection.Scripts(), a.projection.Shells())
 	if a.index != nil {
-		script.Native = &Native{Language: l, Index: a.index, expect: a.expect, invocation: a.invocation, enclosing: a.enclosing, format: a.format, dockerfile: a.dockerfile}
+		script.Native = &Native{Language: l, Index: a.index, expect: a.expect, invocation: a.invocation, enclosing: a.enclosing, format: a.format, dockerfile: a.dockerfile, nix: a.nix}
 	}
 	return script
 }

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"time"
@@ -24,7 +25,10 @@ const (
 	cacheSubdirectory = "shell-lsp/nixeval"
 )
 
-var evalDigest = sha256.Sum256([]byte(evalSource))
+var (
+	evalDigest       = sha256.Sum256([]byte(evalSource))
+	optionRenderings = [...]string{"all", "outside-deferred", "top-level", "nothing"}
+)
 
 type queryKind string
 
@@ -131,6 +135,20 @@ func (c *Client) Options(ctx context.Context, dir string, source OptionSource) (
 	})
 	if err != nil {
 		return Answer[*OptionTree]{}, fmt.Errorf("listing the options of %s %q of flake %s: %w", source.Kind, source.Name, dir, err)
+	}
+	return answer, nil
+}
+
+func (c *Client) BaseOptions(ctx context.Context, dir string) (Answer[*OptionTree], error) {
+	answer, err := serveFlake(ctx, c, dir, func(flake flakeState) (query[*OptionTree], error) {
+		scope, err := c.inputScope(ctx, flake)
+		if err != nil {
+			return query[*OptionTree]{}, err
+		}
+		return c.baseQuery(flake, scope), nil
+	})
+	if err != nil {
+		return Answer[*OptionTree]{}, fmt.Errorf("listing the NixOS options of the nixpkgs of flake %s: %w", dir, err)
 	}
 	return answer, nil
 }
@@ -351,13 +369,30 @@ func (c *Client) evaluating(flake flakeState, args func(lockedFlake) []string) f
 	}
 }
 
-func encodingOptions(evaluate func(context.Context, task) ([]byte, error)) func(context.Context, task) ([]byte, error) {
+func isEvaluationFailure(err error) bool {
+	_, exited := errors.AsType[*exec.ExitError](err)
+	return exited
+}
+
+func (c *Client) renderedOptions(flake flakeState, what string, args func(locked lockedFlake, rendering exprArg) []string) func(context.Context, task) ([]byte, error) {
 	return func(ctx context.Context, work task) ([]byte, error) {
-		out, err := evaluate(ctx, work)
-		if err != nil {
-			return nil, err
+		var failure error
+		for i, rendering := range optionRenderings {
+			out, err := c.evaluating(flake, func(locked lockedFlake) []string {
+				return args(locked, stringArg("rendering", rendering))
+			})(ctx, work)
+			if err == nil {
+				if i > 0 {
+					c.report(fmt.Errorf("some option values of %s cannot be evaluated, so only the %q rendering is cached: %w", what, rendering, failure))
+				}
+				return encodeOptions(out)
+			}
+			if !isEvaluationFailure(err) {
+				return nil, err
+			}
+			failure = err
 		}
-		return encodeOptions(out)
+		return nil, failure
 	}
 }
 
@@ -392,9 +427,9 @@ func (c *Client) optionsQuery(flake flakeState, source OptionSource) query[*Opti
 		key:     flake.queryKey(queryOptions, detail),
 		slot:    flake.slot(queryOptions, detail),
 		decode:  decodeOptions,
-		evaluate: encodingOptions(c.evaluating(flake, func(locked lockedFlake) []string {
-			return evalArgs(callExpr("options", stringArg("ref", locked.ref), stringArg("kind", source.Kind.evalName()), stringArg("name", source.Name)))
-		})),
+		evaluate: c.renderedOptions(flake, detail, func(locked lockedFlake, rendering exprArg) []string {
+			return evalArgs(callExpr("options", stringArg("ref", locked.ref), stringArg("kind", source.Kind.evalName()), stringArg("name", source.Name), rendering))
+		}),
 	}
 	if source.Kind == SourceNixOS {
 		q.base = func() (contentKey, bool) { return c.baseKey(flake) }
@@ -418,9 +453,9 @@ func (c *Client) baseQuery(flake flakeState, scope inputScope) query[*OptionTree
 		key:     scope.queryKey(queryBase, ""),
 		slot:    flake.slot(queryBase, ""),
 		decode:  decodeOptions,
-		evaluate: encodingOptions(c.evaluating(flake, func(locked lockedFlake) []string {
-			return evalArgs(callExpr("base", scope.args(locked)...))
-		})),
+		evaluate: c.renderedOptions(flake, "the NixOS options of the locked nixpkgs", func(locked lockedFlake, rendering exprArg) []string {
+			return evalArgs(callExpr("base", append(scope.args(locked), rendering)...))
+		}),
 	}
 }
 

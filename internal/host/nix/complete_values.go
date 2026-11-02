@@ -428,15 +428,11 @@ func bindsFunction(origins []origin) bool {
 }
 
 func (ev *evaluator) memberItem(m member) Item {
-	label := m.name
-	if !ValidName(model.KindAttribute, m.name) {
-		label = `"` + m.name + `"`
-	}
 	kind := model.KindAttribute
 	if bindsFunction(m.origins) {
 		kind = model.KindFunction
 	}
-	return Item{Label: label, Kind: kind, Detail: ev.originDetail(m.origins[0]), Doc: ev.originDoc(m.origins[0])}
+	return Item{Label: attrLabel(m.name), Kind: kind, Detail: ev.originDetail(m.origins[0]), Doc: ev.originDoc(m.origins[0])}
 }
 
 func (ev *evaluator) originDetail(o origin) string {

@@ -35,7 +35,7 @@ func TestHoverOnBuiltinsAndKeywords(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			text, at := marked(t, tt.src)
-			got, ok := Read(text).Hover(at)
+			got, ok := Read(text).Hover(at, NoEvaluation)
 			if !ok {
 				t.Fatalf("%q has no hover", tt.src)
 			}
@@ -67,7 +67,7 @@ func TestHoverLeavesBindingsAlone(t *testing.T) {
 		"[ | ]",
 	} {
 		text, at := marked(t, src)
-		if got, ok := Read(text).Hover(at); ok {
+		if got, ok := Read(text).Hover(at, NoEvaluation); ok {
 			t.Errorf("%q hovers %q", src, got.Markdown)
 		}
 	}

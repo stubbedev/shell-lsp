@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -1001,5 +1002,117 @@ func TestACancelledRequestStartsNoWork(t *testing.T) {
 	}
 	if got := f.count(""); got != 0 {
 		t.Errorf("nix ran %d times for a cancelled request", got)
+	}
+}
+
+func evalExpr(args []string) string {
+	i := slices.Index(args, "--expr")
+	if i < 0 {
+		return ""
+	}
+	return args[i+1]
+}
+
+func exitFailure(t *testing.T) error {
+	t.Helper()
+	err := exec.CommandContext(t.Context(), "sh", "-c", "exit 1").Run()
+	if err == nil {
+		t.Fatal("the failing command succeeded")
+	}
+	return &CommandError{Command: "nix eval", Stderr: "error: attribute 'pkgs' missing", Err: err}
+}
+
+func TestOptionsSurviveAValueThatStopsTheEvaluator(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name     string
+		failures int
+		rendered string
+	}{
+		{"everything renders", 0, "all"},
+		{"a deferred module cannot render", 1, "outside-deferred"},
+		{"a submodule cannot render", 2, "top-level"},
+		{"a top-level option cannot render", 3, "nothing"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			failure := exitFailure(t)
+			f := newFakeNix(map[string]string{"eval sources": `{"nixos": ["box"], "home-manager": [], "flake-parts": false}`, "eval options": fakeOptions})
+			var mu sync.Mutex
+			var rendered []string
+			h := newHarness(t, func(ctx context.Context, dir string, args []string) ([]byte, error) {
+				if expr := evalExpr(args); strings.Contains(expr, ").options {") {
+					mu.Lock()
+					defer mu.Unlock()
+					if len(rendered) < tt.failures {
+						rendered = append(rendered, expr)
+						return nil, failure
+					}
+					rendered = append(rendered, expr)
+				}
+				return f.run(ctx, dir, args)
+			})
+			c := h.client(t)
+			dir := flakeDir(t)
+			tree := settled(t, func() (Answer[*OptionTree], error) {
+				return c.Options(t.Context(), dir, OptionSource{Kind: SourceNixOS, Name: "box"})
+			})
+			if _, ok := tree.Lookup([]string{"a"}); !ok {
+				t.Error("the option tree lost its option")
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			if len(rendered) != tt.failures+1 || !strings.Contains(rendered[tt.failures], `rendering = "`+tt.rendered+`"`) {
+				t.Errorf("%d attempts, the last being %q, want %d ending with rendering %q", len(rendered), rendered[len(rendered)-1], tt.failures+1, tt.rendered)
+			}
+			if got := len(h.reported()); (got > 0) != (tt.failures > 0) {
+				t.Errorf("reports = %v after %d failures", h.reported(), tt.failures)
+			}
+		})
+	}
+}
+
+func TestOptionsReportTheLastFailureWhenNothingRenders(t *testing.T) {
+	t.Parallel()
+
+	failure := exitFailure(t)
+	f := newFakeNix(nil)
+	attempts := atomic.Int32{}
+	h := newHarness(t, func(ctx context.Context, dir string, args []string) ([]byte, error) {
+		if strings.Contains(evalExpr(args), ").options {") {
+			attempts.Add(1)
+			return nil, failure
+		}
+		return f.run(ctx, dir, args)
+	})
+	c := h.client(t)
+	_, err := c.Options(t.Context(), flakeDir(t), OptionSource{Kind: SourceNixOS, Name: "box"})
+	if err == nil || !strings.Contains(err.Error(), "attribute 'pkgs' missing") {
+		t.Errorf("Options() error = %v", err)
+	}
+	if got := attempts.Load(); got != int32(len(optionRenderings)) {
+		t.Errorf("%d attempts, want one per rendering", got)
+	}
+}
+
+func TestOptionsDoNotRetryWhenNixCannotRun(t *testing.T) {
+	t.Parallel()
+
+	f := newFakeNix(nil)
+	attempts := atomic.Int32{}
+	h := newHarness(t, func(ctx context.Context, dir string, args []string) ([]byte, error) {
+		if strings.Contains(evalExpr(args), ").options {") {
+			attempts.Add(1)
+			return nil, &NixNotFoundError{Err: exec.ErrNotFound}
+		}
+		return f.run(ctx, dir, args)
+	})
+	c := h.client(t)
+	if _, err := c.Options(t.Context(), flakeDir(t), OptionSource{Kind: SourceNixOS, Name: "box"}); err == nil {
+		t.Error("Options() succeeded without nix")
+	}
+	if got := attempts.Load(); got != 1 {
+		t.Errorf("%d attempts, want 1", got)
 	}
 }

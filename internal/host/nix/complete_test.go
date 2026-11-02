@@ -21,7 +21,7 @@ func marked(t *testing.T, src string) (string, int) {
 func completeMarked(t *testing.T, src string, files Files) []Item {
 	t.Helper()
 	text, at := marked(t, src)
-	return Complete(text, at, files)
+	return Complete(text, at, files, NoEvaluation)
 }
 
 func labelsOf(items []Item) []string {
@@ -264,13 +264,13 @@ func TestItemDocAttachesLazily(t *testing.T) {
 	t.Parallel()
 
 	text, at := marked(t, "let\n  # Says one.\n  one = 1;\nin |")
-	if doc, ok := ItemDoc(text, at, "one", NoFiles); !ok || doc != "Says one." {
+	if doc, ok := ItemDoc(text, at, "one", NoFiles, NoEvaluation); !ok || doc != "Says one." {
 		t.Errorf("one = %q, %v", doc, ok)
 	}
-	if doc, ok := ItemDoc(text, at, "map", NoFiles); !ok || !strings.Contains(doc, "`f`") {
+	if doc, ok := ItemDoc(text, at, "map", NoFiles, NoEvaluation); !ok || !strings.Contains(doc, "`f`") {
 		t.Errorf("map = %q, %v", doc, ok)
 	}
-	if _, ok := ItemDoc(text, at, "gone", NoFiles); ok {
+	if _, ok := ItemDoc(text, at, "gone", NoFiles, NoEvaluation); ok {
 		t.Error("an item that is no longer offered has a doc")
 	}
 }
@@ -310,7 +310,7 @@ func TestEveryOffsetIsAnswered(t *testing.T) {
 		analysis := Analyze(src)
 		doc := Read(src)
 		for at := 0; at <= len(src); at++ {
-			for _, it := range Complete(src, at, NoFiles) {
+			for _, it := range Complete(src, at, NoFiles, NoEvaluation) {
 				if it.Span.Start > at || it.Span.End < at || it.Span.End > len(src) {
 					t.Errorf("%q at %d: %q has span %+v", src, at, it.Label, it.Span)
 				}
@@ -328,7 +328,7 @@ func TestEveryOffsetIsAnswered(t *testing.T) {
 					t.Errorf("%q at %d: the cursor leaks into %q", src, at, sig.Label)
 				}
 			}
-			doc.Hover(at)
+			doc.Hover(at, NoEvaluation)
 			doc.CommentAbove(at)
 			if e, ok := analysis.Expect(at); ok && (e.Span.Start > at || e.Span.End > len(src)) {
 				t.Errorf("%q at %d: expect span %+v", src, at, e.Span)

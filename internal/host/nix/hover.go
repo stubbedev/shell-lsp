@@ -16,13 +16,16 @@ type Hover struct {
 	Span     syntax.Span
 }
 
-func (d *Document) Hover(offset int) (Hover, bool) {
+func (d *Document) Hover(offset int, known Evaluated) (Hover, bool) {
 	token, ok := d.tokenAt(offset)
 	if !ok {
 		return Hover{}, false
 	}
 	if token.Kind == syntax.TokIdent {
-		return d.builtinHover(token.Span)
+		if h, ok := d.builtinHover(token.Span); ok {
+			return h, true
+		}
+		return d.evaluatedHover(token.Span, known)
 	}
 	k, ok := keywordNamed(d.tree.Text[token.Span.Start:token.Span.End])
 	if !ok {
@@ -30,6 +33,10 @@ func (d *Document) Hover(offset int) (Hover, bool) {
 	}
 	return Hover{Markdown: hoverFence + k.Name + "\n```\n\n" + k.Doc, Span: token.Span}, true
 }
+
+func (a Analysis) Document() *Document { return &Document{tree: a.tree, table: a.Scope} }
+
+func (d *Document) Syntax() (*syntax.File, *scope.Table) { return d.tree, d.table }
 
 func (d *Document) tokenAt(offset int) (syntax.Token, bool) {
 	tokens := d.tree.TokensIn(syntax.Span{Start: max(offset-1, 0), End: offset + 1})

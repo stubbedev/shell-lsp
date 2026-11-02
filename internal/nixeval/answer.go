@@ -69,3 +69,16 @@ func (e *NotReadyError) Error() string {
 func (e *NotReadyError) Unwrap() error {
 	return e.Err
 }
+
+func NewAnswer[T any](value T, stale *Stale) Answer[T] {
+	return Answer[T]{value: value, stale: stale}
+}
+
+func NewRefresh() (*Refresh, func(error)) {
+	done := make(chan struct{})
+	failure := new(error)
+	return &Refresh{done: done, err: failure}, func(err error) {
+		*failure = err
+		close(done)
+	}
+}

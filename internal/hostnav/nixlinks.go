@@ -2,17 +2,40 @@ package hostnav
 
 import (
 	"path/filepath"
+	"slices"
 
 	"github.com/stubbedev/shell-lsp/internal/assist"
+	"github.com/stubbedev/shell-lsp/internal/directive"
+	"github.com/stubbedev/shell-lsp/internal/filelint"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/host/nix"
+	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/parser"
-	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
-func (g *Group) nixDocument() *nix.Document {
-	return workspace.Memo(g.Self, "hostnav.nix", 0, func() *nix.Document { return nix.Read(g.Self.Doc.Source().Text()) })
+func (g *Group) nixDocument() *nix.Document { return g.Self.Native.Nix() }
+
+func (g *Group) NixClasses() []nix.OptionClass {
+	project, ok := g.Module.Links().(*nix.Project)
+	if !ok {
+		return nil
+	}
+	return project.OptionClasses(g.Self.Path)
+}
+
+func checksUnusedNixDirectives(settings filelint.Settings) bool {
+	enabled := func(names []string) bool {
+		return slices.Contains(names, nix.UnusedDirectivesCheck()) || slices.Contains(names, directive.All)
+	}
+	return settings.Profile == lint.ProfileStrict || enabled(settings.Optional) || enabled(settings.RC.Enabled)
+}
+
+func UnusedNixDirectives(h Host, settings filelint.Settings) []lint.Finding {
+	if h.Language() != host.Nix || !checksUnusedNixDirectives(settings) {
+		return nil
+	}
+	return nix.UnusedDirectiveFindings(h.File().Doc.Source().Text())
 }
 
 func (g *Group) SourceLinks() []assist.Link {

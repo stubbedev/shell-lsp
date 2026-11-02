@@ -1,5 +1,6 @@
 let
   failed = "«failed to evaluate»";
+  notEvaluated = "«not evaluated»";
   maxTreeDepth = 32;
   maxRenderDepth = 3;
   maxRenderWidth = 32;
@@ -97,16 +98,42 @@ let
     then opt.type.getSubOptions opt.loc
     else {};
 
-  describe = opt: {
-    inherit (opt) loc;
-    type = attemptText (opt.type.description or null);
-    description = attemptText (literalText (opt.description or null));
-    default = defaultOf opt;
-    example = exampleOf opt;
-    declarations = declarationsOf opt;
-  };
+  forcesValues = rendering: region:
+    rendering == "all"
+    || (rendering == "outside-deferred" && region != "deferred")
+    || (rendering == "top-level" && region == "top");
 
-  walk = depth: path: tree: let
+  regionBelow = region: opt:
+    if region == "deferred" || (opt.type.name or null) == "deferredModule"
+    then "deferred"
+    else "submodule";
+
+  renderedValues = rendering: region: opt:
+    if forcesValues rendering region
+    then {
+      default = defaultOf opt;
+      example = exampleOf opt;
+    }
+    else {
+      default =
+        if rendering != "nothing" && opt ? defaultText
+        then defaultOf opt
+        else if opt ? default || opt ? defaultText
+        then notEvaluated
+        else null;
+      example = null;
+    };
+
+  describe = rendering: region: opt:
+    {
+      inherit (opt) loc;
+      type = attemptText (opt.type.description or null);
+      description = attemptText (literalText (opt.description or null));
+      declarations = declarationsOf opt;
+    }
+    // renderedValues rendering region opt;
+
+  walk = rendering: region: depth: path: tree: let
     names = builtins.attrNames tree;
   in
     if names == []
@@ -122,16 +149,16 @@ let
           (
             if isHidden v
             then []
-            else [(describe v)]
+            else [(describe rendering region v)]
           )
-          ++ walk (depth + 1) v.loc (subOptionsOf v)
+          ++ walk rendering (regionBelow region v) (depth + 1) v.loc (subOptionsOf v)
         else if builtins.isAttrs v && (v.type or null) != "derivation"
-        then walk (depth + 1) (path ++ [name]) v
+        then walk rendering region (depth + 1) (path ++ [name]) v
         else [])
       names;
 
-  optionsReport = tree: let
-    entries = builtins.partition (entry: entry ? truncated) (walk 0 [] tree);
+  optionsReport = rendering: tree: let
+    entries = builtins.partition (entry: entry ? truncated) (walk rendering "top" 0 [] tree);
   in {
     options = entries.wrong;
     truncated = map (entry: entry.truncated) entries.right;
@@ -200,15 +227,17 @@ in {
     ref,
     kind,
     name,
+    rendering,
   }:
-    optionsReport (optionTrees (builtins.getFlake ref) name).${kind};
+    optionsReport rendering (optionTrees (builtins.getFlake ref) name).${kind};
 
   base = {
     ref,
     input,
     system,
+    rendering,
   }:
-    optionsReport ((builtins.getFlake ref).inputs.${input}.lib.nixosSystem {
+    optionsReport rendering ((builtins.getFlake ref).inputs.${input}.lib.nixosSystem {
       inherit system;
       modules = [];
     }).options;

@@ -204,6 +204,9 @@ func TestVSCodeExtensionDefaultsMatchTheServer(t *testing.T) {
 	if got.Format.Style.Indent != nil {
 		t.Errorf("format.indent defaults to %d, want unset so the editor's tab size applies", *got.Format.Style.Indent)
 	}
+	if got.Nix != want.Nix || want.Nix.Evaluate {
+		t.Errorf("nix defaults %s parse to %+v, want evaluation off, got %+v", raw, got.Nix, want.Nix)
+	}
 }
 
 type documentedSetting struct {

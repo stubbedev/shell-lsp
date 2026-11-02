@@ -99,3 +99,20 @@ func TestParseFormat(t *testing.T) {
 		t.Error("negative indent accepted")
 	}
 }
+
+func TestParseNixEvaluate(t *testing.T) {
+	t.Parallel()
+
+	if Default().Nix.Evaluate {
+		t.Error("evaluation is on by default")
+	}
+	for raw, want := range map[string]bool{`{}`: false, `{"nix": {}}`: false, `{"nix": {"evaluate": false}}`: false, `{"nix": {"evaluate": true}}`: true} {
+		got, err := Parse(json.RawMessage(raw))
+		if err != nil || got.Nix.Evaluate != want {
+			t.Errorf("Parse(%s) = %+v, %v, want evaluate %t", raw, got.Nix, err, want)
+		}
+	}
+	if _, err := Parse(json.RawMessage(`{"nix": {"evaluate": "yes"}}`)); err == nil {
+		t.Error("a non-boolean nix.evaluate is accepted")
+	}
+}

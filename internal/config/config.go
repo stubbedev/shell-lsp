@@ -17,6 +17,11 @@ type Settings struct {
 	Dialect *dialect.Dialect
 	Lint    Lint
 	Format  Format
+	Nix     Nix
+}
+
+type Nix struct {
+	Evaluate bool
 }
 
 type Format struct {
@@ -42,6 +47,11 @@ type rawSettings struct {
 	Dialect *string    `json:"dialect"`
 	Lint    *rawLint   `json:"lint"`
 	Format  *rawFormat `json:"format"`
+	Nix     *rawNix    `json:"nix"`
+}
+
+type rawNix struct {
+	Evaluate *bool `json:"evaluate"`
 }
 
 type rawFormat struct {
@@ -82,6 +92,9 @@ func Parse(raw json.RawMessage) (Settings, error) {
 	}
 	if parsed.Format != nil {
 		settings.Format = parseFormat(*parsed.Format, settings.Format)
+	}
+	if parsed.Nix != nil && parsed.Nix.Evaluate != nil {
+		settings.Nix.Evaluate = *parsed.Nix.Evaluate
 	}
 	if parsed.Lint == nil {
 		return settings, nil

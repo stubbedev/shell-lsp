@@ -685,3 +685,72 @@ func TestRealBaseTreeOfTheLockedNixpkgsEvaluatesUnderTheSafetyFlags(t *testing.T
 	}
 	mustOption(t, tree, "services", "nginx", "enable")
 }
+
+func corpusFlake(t *testing.T, name string) string {
+	t.Helper()
+	if testing.Short() {
+		t.Skip("evaluating a corpus flake can fetch its inputs")
+	}
+	requireNix(t)
+	dir := t.TempDir()
+	if err := os.CopyFS(dir, os.DirFS(filepath.Join("..", "..", "corpus", "nix", name))); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+func TestRealFlakePartsTreeSurvivesADefaultThatNeedsPkgs(t *testing.T) {
+	t.Parallel()
+
+	dir := corpusFlake(t, "flake-parts")
+	h := newHarness(t, execRunner(nixProgram))
+	h.settings.identify = nixIdentity(nixProgram)
+	c := h.client(t)
+	tree, err := freshOf(c.Options(t.Context(), dir, OptionSource{Kind: SourceFlakeParts}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := mustOption(t, tree, "perSystem", "project", "syncTools"); got.Default != "«not evaluated»" || got.Type != "list of package" || got.Description == "" {
+		t.Errorf("perSystem.project.syncTools = %+v", got)
+	}
+	if got := mustOption(t, tree, "debug"); got.Default != "false" || got.Type != "boolean" {
+		t.Errorf("debug = %+v, want its default rendered", got)
+	}
+	if got := mustOption(t, tree, "transposition", "x", "adHoc"); got.Default != "false" {
+		t.Errorf("a submodule default outside perSystem = %+v, want it rendered", got)
+	}
+	if got := mustOption(t, tree, "project", "version"); len(got.Declarations) == 0 || !strings.HasSuffix(got.Declarations[0].File, "nix/project.nix") {
+		t.Errorf("project.version = %+v", got)
+	}
+	if len(h.reported()) == 0 {
+		t.Error("the values left out were not reported")
+	}
+}
+
+func TestRealCorpusSingleFlakeNixpkgs(t *testing.T) {
+	t.Parallel()
+
+	dir := corpusFlake(t, "single-flake")
+	c := realClient(t)
+	sources, err := freshOf(c.OptionSources(t.Context(), dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sources) != 0 {
+		t.Errorf("OptionSources() = %+v, want none", sources)
+	}
+	names, err := freshOf(c.NixpkgsAttrs(t.Context(), dir, []string{"lib"}, "mk"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(names, "mkIf") {
+		t.Errorf("NixpkgsAttrs(lib, mk) = %q", names)
+	}
+	pkg, err := freshOf(c.NixpkgsPackage(t.Context(), dir, []string{"hello"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pkg == nil || pkg.Description == "" {
+		t.Errorf("NixpkgsPackage(hello) = %+v", pkg)
+	}
+}

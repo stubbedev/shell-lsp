@@ -315,7 +315,7 @@ func (c *checker) lint(t target) linted {
 	findings := sourceFindings(file.Doc, append(syntax, report.Findings...))
 	docker, _ := hostnav.HadolintOf(file, s.hadolint)
 	if h, ok := hostnav.Of(file); ok {
-		native, err := c.nativeFindings(h)
+		native, err := c.nativeFindings(h, s.lint)
 		if err != nil {
 			return linted{failure: fmt.Sprintf("%s: %v", t.name, err)}
 		}
@@ -329,14 +329,15 @@ func (c *checker) lint(t target) linted {
 	}
 }
 
-func (c *checker) nativeFindings(h hostnav.Host) ([]lint.Finding, error) {
+func (c *checker) nativeFindings(h hostnav.Host, settings filelint.Settings) ([]lint.Finding, error) {
 	env := hostnav.Env{Loader: c.ws, Home: c.env.Home}
 	env.Graph = func(ctx context.Context) (*hostnav.Graph, error) { return c.graph(ctx, h.Language(), env) }
 	g, err := hostnav.Build(context.Background(), h, env)
 	if err != nil {
 		return nil, err
 	}
-	return slices.DeleteFunc(g.Findings(), func(f lint.Finding) bool { return !c.opts.profile.KeepsHost(f) }), nil
+	findings := slices.Concat(g.Findings(), hostnav.UnusedNixDirectives(h, settings))
+	return slices.DeleteFunc(findings, func(f lint.Finding) bool { return !c.opts.profile.KeepsHost(f) }), nil
 }
 
 func (c *checker) graph(ctx context.Context, language host.Language, env hostnav.Env) (*hostnav.Graph, error) {

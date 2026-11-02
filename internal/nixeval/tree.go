@@ -369,6 +369,14 @@ func (r *blobReader) option(into *Option) {
 	}
 }
 
+func ParseOptionTree(data []byte) (*OptionTree, error) {
+	payload, err := encodeOptions(data)
+	if err != nil {
+		return nil, err
+	}
+	return decodeOptions(payload)
+}
+
 func decodeOptions(payload []byte) (*OptionTree, error) {
 	if len(payload) < treeHeaderSize {
 		return nil, fmt.Errorf("decoding an option tree: only %d bytes", len(payload))

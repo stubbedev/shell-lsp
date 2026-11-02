@@ -286,7 +286,7 @@ func (s *Server) handleCompletionResolve(ctx context.Context, docs *docstore.Vie
 		return nil, err
 	}
 	if data.Nix {
-		return s.resolveNixCompletion(docs, item, data), nil
+		return s.resolveNixCompletion(ctx, docs, item, data), nil
 	}
 	if data.Name == "" || data.Kind == completion.ResolveNone {
 		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "completion item data %s is not from this server: it names nothing to resolve", item.Data)

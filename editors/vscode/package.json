@@ -256,6 +256,17 @@
             "markdownDescription": "Minify the script (like `shfmt -mn`)."
           }
         }
+      },
+      {
+        "title": "Nix",
+        "properties": {
+          "shellLsp.nix.evaluate": {
+            "type": "boolean",
+            "default": false,
+            "scope": "resource",
+            "markdownDescription": "Evaluate flakes with `nix` to complete and describe NixOS, home-manager and flake-parts options and nixpkgs attributes. Off by default: evaluating can fetch flake inputs and use real CPU as soon as a repository opens, and rendered option defaults are cached on disk. While it is off nothing spawns `nix`; static Nix features work either way."
+          }
+        }
       }
     ],
     "taskDefinitions": [

@@ -147,8 +147,8 @@ type ServerCapabilities struct {
 const incrementalSync = 2
 
 var (
-	completionTriggers   = []string{"$", "{", "/", "-", ":", "@", "[", "%", "=", ","}
-	signatureHelpOptions = SignatureHelpOptions{TriggerCharacters: []string{" ", "(", ","}, RetriggerCharacters: []string{" ", ","}}
+	completionTriggers   = []string{"$", "{", "/", "-", ":", "@", "[", "%", "=", ",", "."}
+	signatureHelpOptions = SignatureHelpOptions{TriggerCharacters: []string{" ", "(", ",", "{", ";"}, RetriggerCharacters: []string{" ", ",", ";"}}
 )
 
 func ensure[T any](field **T) *T {
@@ -222,9 +222,20 @@ func (s *Server) clientCapabilities() ClientCapabilities {
 
 func (s *Server) handleInitialized(ctx context.Context, _ json.RawMessage) error {
 	s.warmUp(ctx)
+	s.graphs.nix.arm()
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		select {
+		case <-ctx.Done():
+		case <-s.exiting:
+		}
+		s.stopNixEvaluation()
+	}()
 	go func() {
 		s.loadConfiguration(ctx)
 		s.registerWatchers(ctx)
+		s.syncNixEvaluation()
 		s.indexInBackground(ctx)
 	}()
 	return nil
@@ -235,6 +246,7 @@ func (s *Server) handleShutdown(context.Context, *docstore.View, json.RawMessage
 	s.phase = shutDown
 	s.mu.Unlock()
 	s.delivery.stop()
+	s.stopNixEvaluation()
 	return nil, nil
 }
 

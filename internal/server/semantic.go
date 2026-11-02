@@ -12,8 +12,6 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/host/nix/highlight"
-	"github.com/stubbedev/shell-lsp/internal/host/nix/scope"
-	"github.com/stubbedev/shell-lsp/internal/host/nix/syntax"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/semantic"
@@ -162,8 +160,8 @@ func (s *Server) semanticTokens(file *workspace.File) []semantic.Token {
 
 func (s *Server) nixTokens(file *workspace.File) []semantic.Token {
 	return workspace.Memo(file, "semantic.nix", s.workspace.Generation(), func() []semantic.Token {
-		tree := syntax.Parse(file.Doc.Source().Text())
-		return highlight.Tokens(tree, scope.Resolve(tree), s.hostShellTokens(file))
+		tree, table := file.Native.Nix().Syntax()
+		return highlight.Tokens(tree, table, s.hostShellTokens(file))
 	})
 }
 
