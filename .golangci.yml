@@ -32,7 +32,8 @@ linters:
         - fmt.Fprintln
     exhaustive:
       default-signifies-exhaustive: true
-      ignore-enum-types: ^github\.com/stubbedev/shell-lsp/third_party/
+      ignore-types:
+        - ^github\.com/stubbedev/shell-lsp/third_party/
     perfsprint:
       strconcat: true
       sprintf1: true

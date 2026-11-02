@@ -294,6 +294,8 @@ func (c *converter) lineAt(offset int) int {
 
 func trimComment(s string) string { return strings.TrimRightFunc(s, unicode.IsSpace) }
 
+func endsALineComment(body string) bool { return strings.ContainsRune(body, '\r') }
+
 func commentBody(c syntax.Token, src string) string {
 	raw := src[c.Span.Start:c.Span.End]
 	if c.Kind == syntax.TokLineComment {
@@ -320,7 +322,7 @@ func (c *converter) trailing() string {
 			return strings.Join(parts, " ")
 		case syntax.TokBlockComment:
 			raw := c.src[t.Span.Start:t.Span.End]
-			if strings.ContainsRune(raw, '\n') {
+			if strings.ContainsRune(raw, '\n') || endsALineComment(commentBody(t, c.src)) {
 				return strings.Join(parts, " ")
 			}
 			if isDocComment(raw) {
@@ -362,6 +364,8 @@ func (c *converter) blockComment(t syntax.Token, stringNext bool) (trivium, bool
 			return trivium{}, false
 		case stringNext && isLanguageWord(body):
 			return trivium{kind: languageNote, text: body}, true
+		case endsALineComment(body):
+			return trivium{kind: blockNote, lines: []string{body}}, true
 		}
 		return trivium{kind: lineNote, text: " " + body}, true
 	}
@@ -407,7 +411,7 @@ func (c *converter) blockComment(t syntax.Token, stringNext bool) (trivium, bool
 	kind := blockNote
 	if doc {
 		kind = docNote
-	} else if len(rows) == 1 {
+	} else if len(rows) == 1 && !endsALineComment(strings.TrimSpace(rows[0])) {
 		return trivium{kind: lineNote, text: " " + strings.TrimSpace(rows[0])}, true
 	}
 	return trivium{kind: kind, lines: rows}, true

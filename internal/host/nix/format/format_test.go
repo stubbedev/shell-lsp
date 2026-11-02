@@ -224,16 +224,6 @@ func preservationProblem(t testing.TB, input, output string) string {
 	return ""
 }
 
-func referenceDoesTheSame(src, out string) bool {
-	if _, err := exec.LookPath(referenceTool); err != nil {
-		return false
-	}
-	cmd := exec.Command(referenceTool, "-q", "-")
-	cmd.Stdin = strings.NewReader(src)
-	printed, err := cmd.Output()
-	return err != nil || string(printed) == out
-}
-
 func selectsFromPath(src string) bool {
 	found := false
 	syntax.Inspect(syntax.Parse(src).Root, func(n syntax.Node) bool {
@@ -409,6 +399,7 @@ func hostileShapes() []hostileShape {
 		{"priorities", "g (h) (", ") (k)", long},
 		{"many priorities", "g (h i) [ j ] (", ") { k = 1; }", long},
 		{"with lists", "(with a; [ ", " ])", long},
+		{"negations", "!", "", "a [\n1] b"},
 	}
 }
 
@@ -521,6 +512,59 @@ func assertAgrees(t *testing.T, name, src string) {
 	}
 }
 
+func TestACarriageReturnInsideACommentKeepsTheCommentABlock(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct{ name, src, want string }{
+		{"leading a list", "[/*0\r0\x0e*/]0\n", "[\n  /*\n    0\r0\x0e\n  */\n]\n  0\n"},
+		{"trailing a with", "with 0/*0\r0*/;0\n", "with 0\n/*\n  0\r0\n*/\n;\n0\n"},
+		{"trailing an expression", "1 /*a\rb*/\n", "1\n/*\n  a\rb\n*/\n"},
+		{"one row of a block", "/*\n  a\rb\n*/\n1\n", "/*\n  a\rb\n*/\n1\n"},
+		{"at the edge of a comment, where it is only space", "1 /*a\r*/\n", "1 # a\n"},
+		{"ending a block's lines", "/*a\r\n*/ 1\n", "# a\n1\n"},
+	} {
+		got, err := Format(tt.src)
+		if err != nil {
+			t.Errorf("%s: %v", tt.name, err)
+			continue
+		}
+		if got != tt.want {
+			t.Errorf("%s: Format(%q) = %q, want %q", tt.name, tt.src, got, tt.want)
+		}
+		if problem := preservationProblem(t, tt.src, got); problem != "" {
+			t.Errorf("%s: %s", tt.name, problem)
+		}
+		if again, err := Format(got); err != nil || again != got {
+			t.Errorf("%s: formatting %q again gave %q, %v", tt.name, got, again, err)
+		}
+	}
+}
+
+func TestNegatingAPathKeepsItsSpace(t *testing.T) {
+	t.Parallel()
+
+	for src, want := range map[string]string{
+		"- /0\n":    "- /0\n",
+		"- a/b\n":   "- a/b\n",
+		"- ./x y\n": "- ./x y\n",
+		"- - /0\n":  "-- /0\n",
+		"- a\n":     "-a\n",
+		"! /0\n":    "!/0\n",
+	} {
+		got, err := Format(src)
+		if err != nil {
+			t.Errorf("Format(%q): %v", src, err)
+			continue
+		}
+		if got != want {
+			t.Errorf("Format(%q) = %q, want %q", src, got, want)
+		}
+		if problem := preservationProblem(t, src, got); problem != "" {
+			t.Error(problem)
+		}
+	}
+}
+
 func FuzzFormat(f *testing.F) {
 	for _, c := range hosttest.Sections(f, casesInput) {
 		f.Add(c.Text)
@@ -552,7 +596,7 @@ func FuzzFormat(f *testing.F) {
 				problem = fmt.Sprintf("Format is not idempotent on %q\nonce: %q\ntwice: %q", src, out, again)
 			}
 		}
-		if problem != "" && !referenceDoesTheSame(src, out) {
+		if problem != "" {
 			t.Error(problem)
 		}
 	})

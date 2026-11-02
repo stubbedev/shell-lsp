@@ -373,7 +373,15 @@ func pathDoc(p *pathTerm, n int) []item {
 
 func hasCommentsIn(e expr) bool {
 	f, l := firstToken(e), lastToken(e)
-	return hasComment(f.pre) || f.trail != "" || l.trail != ""
+	return hasComment(f.pre) || (f.trail != "" && !opensABody(e)) || l.trail != ""
+}
+
+func opensABody(e expr) bool {
+	switch e.(type) {
+	case *setTerm, *listTerm:
+		return true
+	}
+	return false
 }
 
 func looseSimple(e expr) bool {
@@ -1644,11 +1652,34 @@ func hasAttrDoc(h *hasAttrExpr, n int) []item {
 	return seq(target, space, tokenDoc(h.mark, n+1), hardSpace, pathOf(h.path, n+1))
 }
 
-func unaryDoc(u *unaryExpr, n int) []item {
-	op := tokenDoc(u.opTok, n)
-	switch u.operand.(type) {
-	case *plainTerm, *selectTerm, *unaryExpr, *setTerm:
-		return seq(op, exprDoc(u.operand, n))
+func startsWithPath(e expr) bool {
+	switch e := e.(type) {
+	case *pathTerm:
+		return true
+	case *selectTerm:
+		return startsWithPath(e.target)
+	case *applyExpr:
+		return startsWithPath(e.fn)
 	}
-	return seq(op, groupedTerm(u.operand, n))
+	return false
+}
+
+func unaryDoc(u *unaryExpr, n int) []item {
+	var parts [][]item
+	for {
+		parts = append(parts, tokenDoc(u.opTok, n))
+		next, chained := u.operand.(*unaryExpr)
+		if !chained {
+			break
+		}
+		u = next
+	}
+	if u.opTok.text == "-" && startsWithPath(u.operand) {
+		parts = append(parts, hardSpace)
+	}
+	switch u.operand.(type) {
+	case *plainTerm, *selectTerm, *setTerm:
+		return seq(append(parts, exprDoc(u.operand, n))...)
+	}
+	return seq(append(parts, groupedTerm(u.operand, n))...)
 }

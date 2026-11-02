@@ -5487,3 +5487,20 @@ f 1.5 .a or b x
 -- case-uri-select --
 A:0 .A
 #00
+-- case-interp-set-trailing-comment --
+"${{ #0
+}}0"
+-- case-interp-list-trailing-comment --
+"${[ #0
+]}0"
+-- case-interp-full-set-trailing-comment --
+"${{ #0
+a = 1; }}0"
+-- case-interp-full-list-trailing-comment --
+"${[ #0
+1 ]}0"
+-- case-indented-interp-set-tight-comment --
+''${{#0
+}}00000000''
+-- case-interp-set-trailing-block-comment --
+"${{ /*0*/ }}0"
