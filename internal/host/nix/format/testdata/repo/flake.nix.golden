@@ -1,5 +1,5 @@
 {
-  description = "shell-lsp - language server for bash, zsh and POSIX sh";
+  description = "shell-lsp - language server for shell, justfiles, Makefiles, Dockerfiles and Nix";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";

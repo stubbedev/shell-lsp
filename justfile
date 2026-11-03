@@ -305,11 +305,17 @@ release level:
         echo "docs/cli.md has no pre-commit 'rev: v$current' line to bump" >&2
         exit 1
     fi
+    download="download/v$current/shell-lsp-v$current-"
+    if ! grep -qF "$download" README.md; then
+        echo "README.md has no quick-start URL naming v$current to bump" >&2
+        exit 1
+    fi
     sed -i "s/^    rev: v$current\$/    rev: $tag/" docs/cli.md
+    sed -i "s#$download#download/$tag/shell-lsp-$tag-#" README.md
     just sync-flake
     just check
-    git add docs/cli.md nix/package.nix
-    git commit -m "Point pre-commit at $tag"
+    git add docs/cli.md README.md nix/package.nix
+    git commit -m "Point pre-commit and the quick start at $tag"
     git push origin HEAD:main
 
     sha="$(git rev-parse HEAD)"
