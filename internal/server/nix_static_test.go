@@ -132,6 +132,19 @@ func TestExtractToAFileNeedsAClientThatCreatesFiles(t *testing.T) {
 			t.Error("offered to a client that cannot create files")
 		}
 	}
+	for name, capabilities := range map[string]string{
+		"documentChanges without create": `"capabilities": {"workspace":{"workspaceEdit":{"documentChanges":true}},"textDocument":{"codeAction":{"codeActionLiteralSupport":{"codeActionKind":{"valueSet":["refactor"]}}}}}`,
+		"rename and delete only":         `"capabilities": {"workspace":{"workspaceEdit":{"documentChanges":true,"resourceOperations":["rename","delete"]}},"textDocument":{"codeAction":{"codeActionLiteralSupport":{"codeActionKind":{"valueSet":["refactor"]}}}}}`,
+		"create without documentChanges": `"capabilities": {"workspace":{"workspaceEdit":{"resourceOperations":["create"]}},"textDocument":{"codeAction":{"codeActionLiteralSupport":{"codeActionKind":{"valueSet":["refactor"]}}}}}`,
+	} {
+		actions, _ := titles(capabilities, nil)
+		if len(actions) == 0 {
+			t.Errorf("%s: no action at all, so the test proves nothing", name)
+		}
+		if _, offered := actions[title]; offered {
+			t.Errorf("offered to a client with %s", name)
+		}
+	}
 	if actions, _ := titles(withCreate, map[string]string{"cfg.nix": "{ }\n"}); len(actions) > 0 {
 		if _, offered := actions[title]; offered {
 			t.Error("offered over a file that exists")

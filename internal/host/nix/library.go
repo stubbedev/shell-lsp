@@ -24,6 +24,8 @@ var attrPreserving = []string{"mapAttrs", "recurseIntoAttrs", "dontRecurseIntoAt
 
 var packageSetFiles = []string{"pkgs/top-level/all-packages.nix", "pkgs/build-support/trivial-builders/default.nix"}
 
+const packageAliasFile = "pkgs/top-level/aliases.nix"
+
 var libraryFixers = []string{"makeExtensible", "makeExtensible'", "makeScope", "fix", "fix'", "extends"}
 
 type LibraryEntry struct {
@@ -399,6 +401,45 @@ func (l *Library) Package(names []string) (LibraryEntry, bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.steps = 0
+	if entry, ok := l.packageNamed(names); ok || len(names) != 1 {
+		return entry, ok
+	}
+	target, aliased := l.aliasOf(names[0])
+	if !aliased {
+		return LibraryEntry{}, false
+	}
+	return l.packageNamed([]string{target})
+}
+
+func (l *Library) aliasOf(name string) (string, bool) {
+	f, ok := l.load(filepath.Join(l.dir, filepath.FromSlash(packageAliasFile)))
+	if !ok {
+		return "", false
+	}
+	target, found := "", false
+	syntax.Inspect(f.tree.Root, func(n syntax.Node) bool {
+		set, isSet := n.(*syntax.AttrSet)
+		if found || !isSet {
+			return !found
+		}
+		for _, binding := range set.Bindings {
+			assign, isAssign := binding.(*syntax.Assign)
+			if !isAssign {
+				continue
+			}
+			path, static := attrNames(assign.Path)
+			value, isName := syntax.Unparenthesized(assign.Value).(*syntax.Ident)
+			if static && isName && slices.Equal(path, []string{name}) {
+				target, found = value.Name, true
+				return false
+			}
+		}
+		return true
+	})
+	return target, found
+}
+
+func (l *Library) packageNamed(names []string) (LibraryEntry, bool) {
 	for _, set := range packageSetFiles {
 		f, ok := l.load(filepath.Join(l.dir, filepath.FromSlash(set)))
 		if !ok {

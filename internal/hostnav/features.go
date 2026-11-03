@@ -15,7 +15,10 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
-const maxListedReaders = 8
+const (
+	maxListedReaders = 8
+	shellFence       = "sh"
+)
 
 func (g *Group) Findings() []lint.Finding {
 	if g.Language == host.Nix {
@@ -342,6 +345,8 @@ func (g *Group) Hover(offset int) (Hover, bool) {
 	return g.Describe(sym), true
 }
 
+func shellFenced(code string) string { return "```" + shellFence + "\n" + code + "\n```" }
+
 func (g *Group) Describe(sym Symbol) Hover {
 	if sym.embedded != nil {
 		return sym.embedded.text.placedHover(sym.embedded.text.group.Describe(sym.embedded.symbol))
@@ -354,6 +359,9 @@ func (g *Group) Describe(sym Symbol) Hover {
 	}
 	fence := g.Language.Fence()
 	if b := sym.Builtin; b != nil {
+		if sym.shell {
+			fence = shellFence
+		}
 		md := "```" + fence + "\n" + b.Signature + "\n```\n\n" + b.Doc
 		if b.Deprecated != "" {
 			md += "\n\n**Deprecated:** " + b.Deprecated + "."
@@ -387,7 +395,7 @@ func (g *Group) Describe(sym Symbol) Hover {
 		parts = append(parts, md)
 	}
 	if len(sym.targets) == 0 {
-		parts = append(parts, "```sh\n"+sym.Name+"\n```")
+		parts = append(parts, shellFenced(sym.Name))
 	}
 	if sym.doc != "" {
 		parts = append(parts, sym.doc)

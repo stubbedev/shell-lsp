@@ -233,7 +233,7 @@ func TestExtractingABindingToAFile(t *testing.T) {
 	if want := "{ x, lib }:\nlet\n  y = 1;\nin\n{\n  cfg = import ./cfg.nix { inherit lib x y; };\n}\n"; textedit.Apply(src, r.Edits) != want {
 		t.Errorf("host = %q", textedit.Apply(src, r.Edits))
 	}
-	if r.Create == nil || r.Create.Name != "cfg.nix" || r.Create.Text != "{ lib, x, y }:\n{ a = x; b = y; c = lib.id; d = (z: z) 1; }\n" {
+	if r.Create == nil || r.Create.Name != "cfg.nix" || r.Create.Text != "{\n  lib,\n  x,\n  y,\n}:\n{\n  a = x;\n  b = y;\n  c = lib.id;\n  d = (z: z) 1;\n}\n" {
 		t.Errorf("new file = %+v", r.Create)
 	}
 	for _, tt := range []struct {
@@ -243,6 +243,14 @@ func TestExtractingABindingToAFile(t *testing.T) {
 		{"it reads an unknown name", "{ cfg = { a = b; }; }", "cfg"},
 		{"it reads itself", "rec { cfg = { a = cfg; }; }", "cfg ="},
 		{"a value not worth a file", "{ cfg = 1; }", "cfg"},
+		{"its position would change", "{ cfg = { a = __curPos; }; }", "cfg"},
+		{"a name a path cannot spell", "{ \"foo bar\" = { a = 1; }; }", "foo bar"},
+		{"a name with a directory", "{ \"a/b\" = { a = 1; }; }", "a/b"},
+		{"a name that leaves the directory", "{ \"../up\" = { a = 1; }; }", "../up"},
+		{"a name with an apostrophe", "{ cfg' = { a = 1; }; }", "cfg'"},
+		{"a name that is empty", "{ \"\" = { a = 1; }; }", "\"\""},
+		{"a name that would hide the file", "{ \".a\" = { a = 1; }; }", ".a"},
+		{"a name that would read a variable", "{ \"a\\${b}\" = { a = 1; }; }", "a\\$"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
@@ -250,6 +258,19 @@ func TestExtractingABindingToAFile(t *testing.T) {
 				t.Errorf("offered: %+v", r)
 			}
 		})
+	}
+}
+
+func TestExtractingKeepsTheLayoutOfTheNewFile(t *testing.T) {
+	t.Parallel()
+
+	src := "{ x }:\n{\n  a = {\n    cfg = {\n      b = x;\n      c = \"one\ntwo\";\n      d = ''\n        three\n\n          four\n      '';\n    };\n  };\n}\n"
+	r, _, ok := refactoring(t, src, "cfg", true, "Extract to")
+	if !ok {
+		t.Fatal("no refactoring was offered")
+	}
+	if want := "{ x }:\n{\n  b = x;\n  c = \"one\ntwo\";\n  d = ''\n    three\n\n      four\n  '';\n}\n"; r.Create == nil || r.Create.Text != want {
+		t.Errorf("new file = %+v, want %q", r.Create, want)
 	}
 }
 

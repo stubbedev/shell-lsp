@@ -409,6 +409,31 @@ func TestTheLibraryIsReadFromItsSource(t *testing.T) {
 	}
 }
 
+func TestAPackageAliasIsTheAttributeItNames(t *testing.T) {
+	t.Parallel()
+
+	files := map[string]string{
+		"/np/pkgs/top-level/aliases.nix":        "lib: self: super:\nwith self;\nlet\n  helper = other;\nin\nmapAliases {\n  old = fresh;\n  gone = throw \"gone\";\n  loop = old;\n}\n",
+		"/np/pkgs/by-name/fr/fresh/package.nix": "{ }:\n{ meta.description = \"Fresh.\"; }\n",
+		"/np/pkgs/by-name/ot/other/package.nix": "{ }:\n{ }\n",
+		"/np/pkgs/top-level/all-packages.nix":   "{ }\n",
+	}
+	read := func(path string) (string, bool) {
+		text, ok := files[filepath.ToSlash(path)]
+		return text, ok
+	}
+	library := NewLibrary(filepath.FromSlash("/np"), read)
+	entry, ok := library.Package([]string{"old"})
+	if !ok || entry.Doc != "Fresh." || filepath.ToSlash(entry.Declaration.File) != "/np/pkgs/by-name/fr/fresh/package.nix" {
+		t.Errorf("an alias = %+v, %v", entry, ok)
+	}
+	for _, name := range []string{"gone", "helper", "loop", "absent"} {
+		if entry, ok := library.Package([]string{name}); ok {
+			t.Errorf("%s = %+v", name, entry)
+		}
+	}
+}
+
 func TestCompleteOffersWhatABuilderTakes(t *testing.T) {
 	t.Parallel()
 
@@ -436,6 +461,66 @@ func TestCompleteOffersWhatABuilderTakes(t *testing.T) {
 				if slices.Contains(got, unwanted) {
 					t.Errorf("%q offers %s: %q", tt.src, unwanted, got)
 				}
+			}
+		})
+	}
+}
+
+func TestCompleteOffersWhatTheFileReads(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name, src string
+		has, not  []string
+	}{
+		{"a sibling read", "{ gst }: [ gst.base gst.good gst.go| ]", []string{"base", "good"}, nil},
+		{"a read after the cursor", "{ gst }: [ gst.go| gst.base ]", []string{"base"}, nil},
+		{"an inherit", "{ gst }: { inherit (gst) base; a = gst.go|; }", []string{"base"}, nil},
+		{"under the same parent", "{ a }: [ a.b.c a.x.y a.b.d| ]", []string{"c"}, []string{"y", "b", "x"}},
+		{"from the first attribute", "{ a }: [ a.b.c a.d| ]", []string{"b"}, []string{"c"}},
+		{"a read through another binding", "{ a, b }: [ b.x a.d| ]", nil, []string{"x"}},
+		{"a read through a shadow", "{ a }: [ (a: a.x) a.d| ]", nil, []string{"x"}},
+		{"a computed read", "{ a, n }: [ a.${n} a.d| ]", nil, []string{"n"}},
+		{"a name not bound here", "[ a.b a.c| ]", nil, []string{"b"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			labels := labelsOf(completeMarked(t, tt.src, NoFiles))
+			for _, want := range tt.has {
+				if !slices.Contains(labels, want) {
+					t.Errorf("labels = %q, want %q", labels, want)
+				}
+			}
+			for _, unwanted := range tt.not {
+				if slices.Contains(labels, unwanted) {
+					t.Errorf("labels = %q, did not want %q", labels, unwanted)
+				}
+			}
+		})
+	}
+}
+
+func TestCompleteOffersTheKeysOfAFlakeInput(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name, src string
+		offered   bool
+	}{
+		{"on a path", "{ inputs.a.fo|; outputs = _: { }; }", true},
+		{"in a set of inputs", "{ inputs = { a.fo|; }; outputs = _: { }; }", true},
+		{"in the set of an input", "{ inputs.a = { url = \"x\"; fo| }; outputs = _: { }; }", true},
+		{"an input of an input", "{ inputs.a.inputs.b.fo|; outputs = _: { }; }", true},
+		{"no outputs, so no flake", "{ inputs.a.fo|; }", false},
+		{"not under inputs", "{ other.a.fo|; outputs = _: { }; }", false},
+		{"the name of the input", "{ inputs.fo|; outputs = _: { }; }", false},
+		{"below a key of the input", "{ inputs.a.url.fo|; outputs = _: { }; }", false},
+		{"not at the root", "{ x = { inputs.a.fo|; outputs = _: { }; }; }", false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := slices.Contains(labelsOf(completeMarked(t, tt.src, NoFiles)), "follows"); got != tt.offered {
+				t.Errorf("follows offered = %v, want %v", got, tt.offered)
 			}
 		})
 	}

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/host/model"
+	nixformat "github.com/stubbedev/shell-lsp/internal/host/nix/format"
 	"github.com/stubbedev/shell-lsp/internal/host/nix/scope"
 	"github.com/stubbedev/shell-lsp/internal/host/nix/syntax"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
@@ -73,7 +74,7 @@ func (d *Document) extractToFile(selection model.Span) (Refactoring, bool) {
 	}
 	stmt := site.assign
 	path, static := attrNames(stmt.Path)
-	if !static || len(path) != 1 || !extractableValue(stmt.Value) {
+	if !static || len(path) != 1 || !extractableValue(stmt.Value) || !plainFileName(path[0]) {
 		return Refactoring{}, false
 	}
 	formals, ok := d.formalsOfValue(stmt.Value, path[0])
@@ -88,13 +89,26 @@ func (d *Document) extractToFile(selection model.Span) (Refactoring, bool) {
 		head = "{ " + strings.Join(formals, ", ") + " }:\n"
 	}
 	value := stmt.Value.Span()
+	created, err := nixformat.Format(head + d.text(value) + "\n")
+	if err != nil {
+		return Refactoring{}, false
+	}
 	return Refactoring{
 		Title:   "Extract to `" + name + "`",
 		Kind:    RefactorExtract,
 		Edits:   []textedit.Edit{{Start: value.Start, End: value.End, NewText: call}},
-		Create:  &NewFile{Name: name, Text: head + d.text(value) + "\n"},
+		Create:  &NewFile{Name: name, Text: created},
 		rebinds: true,
 	}, true
+}
+
+func plainFileName(name string) bool {
+	if name == "" || name[0] == '.' || strings.IndexByte(name, '/') >= 0 {
+		return false
+	}
+	file := syntax.Parse("./" + name)
+	path, isPath := file.Root.(*syntax.Path)
+	return isPath && len(file.Errors) == 0 && len(file.Stray) == 0 && len(path.Parts) == 1
 }
 
 func extractableValue(e syntax.Expr) bool {
@@ -107,7 +121,11 @@ func extractableValue(e syntax.Expr) bool {
 
 func (d *Document) formalsOfValue(value syntax.Expr, self string) ([]string, bool) {
 	var formals []string
-	for _, use := range d.freeUses(value.Span()) {
+	uses := d.freeUses(value.Span())
+	if positionDependent(uses) {
+		return nil, false
+	}
+	for _, use := range uses {
 		switch use.Ref.Kind {
 		case scope.Dynamic, scope.Undefined:
 			return nil, false

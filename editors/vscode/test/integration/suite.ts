@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
 import {
+  CodeAction,
   commands,
   ConfigurationTarget,
   languages,
@@ -8,6 +9,7 @@ import {
   MarkdownString,
   Position,
   ProcessExecution,
+  Range,
   tasks,
   window,
   workspace,
@@ -16,6 +18,8 @@ import {
   type Diagnostic,
   type DocumentSymbol,
   type Hover,
+  type LocationLink,
+  type TextDocument,
   type TextEdit,
   type Uri,
   type WorkspaceFolder,
@@ -165,6 +169,95 @@ async function listsRecipesAsTasks(): Promise<void> {
   assert.deepEqual([all.execution.process, ...all.execution.args.slice(-1)], ["make", "all"]);
 }
 
+function positionOf(text: string, needle: string, delta = 0): Position {
+  const at = text.indexOf(needle);
+  assert.ok(at >= 0, `no ${needle} in ${text}`);
+  const before = text.slice(0, at + delta);
+  const lines = before.split("\n");
+  return new Position(lines.length - 1, (lines.at(-1) ?? "").length);
+}
+
+async function actionsAt(uri: Uri, at: Position): Promise<CodeAction[]> {
+  const found = await commands.executeCommand<(CodeAction | { title: string })[] | undefined>("vscode.executeCodeActionProvider", uri, new Range(at, at));
+  return (found ?? []).filter((action) => action instanceof CodeAction);
+}
+
+async function appliesAction(document: TextDocument, needle: string, title: string): Promise<void> {
+  const at = positionOf(document.getText(), needle);
+  const actions = await waitFor(
+    `the action "${title}" at ${needle}`,
+    () => actionsAt(document.uri, at),
+    (list) => list.some((action) => action.title === title),
+  );
+  const action = actions.find((candidate) => candidate.title === title);
+  assert.ok(action?.edit, `"${title}" came without an edit`);
+  assert.ok(await workspace.applyEdit(action.edit), `the client refused the edit of "${title}"`);
+}
+
+async function extractsToAFile(folder: WorkspaceFolder): Promise<void> {
+  const document = await workspace.openTextDocument(fileIn(folder, "nix/default.nix"));
+  assert.equal(document.languageId, "nix");
+  await window.showTextDocument(document);
+  await appliesAction(document, "cfg =", "Extract to `cfg.nix`");
+  assert.ok(document.getText().includes("  cfg = import ./cfg.nix { inherit lib x y; };\n"), document.getText());
+  assert.equal(document.getText().includes("./data.txt"), false, document.getText());
+
+  const created = fileIn(folder, "nix/cfg.nix");
+  const extracted = await workspace.openTextDocument(created);
+  const wanted = "{\n  lib,\n  x,\n  y,\n}:\n{\n  a = x;\n  b = y;\n  c = lib.id x;\n  d = ./data.txt;\n  e = ''\n    one\n\n      two\n  '';\n}\n";
+  await waitFor("the text of the new file", () => extracted.getText(), (text) => text === wanted);
+  assert.ok(await extracted.save());
+  assert.equal(new TextDecoder().decode(await workspace.fs.readFile(created)), wanted);
+
+  const taken = await workspace.openTextDocument(fileIn(folder, "nix/taken/default.nix"));
+  await waitFor(
+    "the refactorings of the binding whose file exists",
+    () => actionsAt(taken.uri, positionOf(taken.getText(), "taken")),
+    (list) => list.length > 0 && list.every((action) => action.title !== "Extract to `taken.nix`"),
+  );
+}
+
+async function rewritesNix(folder: WorkspaceFolder): Promise<void> {
+  const document = await workspace.openTextDocument(fileIn(folder, "nix/default.nix"));
+  await window.showTextDocument(document);
+  await appliesAction(document, "with lib", "Convert `with` to `let`/`inherit`");
+  assert.ok(document.getText().includes("aliased = let inherit (lib) id; in id x;\n"), document.getText());
+
+  await appliesAction(document, "one\\ntwo", "Rewrite as an indented string");
+  assert.ok(document.getText().includes("quoted = ''\n    one\n    two\n  '';\n"), document.getText());
+  await appliesAction(document, "one\n    two", "Rewrite as a quoted string");
+  assert.ok(document.getText().includes("quoted = \"one\\ntwo\\n\";\n"), document.getText());
+}
+
+async function findsTheTypeOfAnOption(folder: WorkspaceFolder): Promise<void> {
+  const document = await workspace.openTextDocument(fileIn(folder, "nix/default.nix"));
+  const at = positionOf(document.getText(), "port = lib.mkOption");
+  const want = positionOf(document.getText(), "lib.types.port");
+  const found = await waitFor(
+    "the type of the option",
+    () => commands.executeCommand<(Location | LocationLink)[] | undefined>("vscode.executeTypeDefinitionProvider", document.uri, at),
+    (list) => (list ?? []).length > 0,
+  );
+  const [target] = found ?? [];
+  assert.ok(target instanceof Location, JSON.stringify(found));
+  assert.equal(target.uri.toString(), document.uri.toString());
+  assert.deepEqual([target.range.start.line, target.range.start.character], [want.line, want.character]);
+}
+
+async function formatsARangeInANixString(folder: WorkspaceFolder): Promise<void> {
+  const document = await workspace.openTextDocument(fileIn(folder, "nix/default.nix"));
+  const at = positionOf(document.getText(), "second");
+  const edits = await waitFor(
+    "range formatting in the string",
+    () => commands.executeCommand<TextEdit[] | undefined>("vscode.executeFormatRangeProvider", document.uri, new Range(at, at.translate(0, 6)), { tabSize: 2, insertSpaces: true }),
+    (found) => (found ?? []).length > 0,
+  );
+  const edit = new WorkspaceEdit();
+  edit.set(document.uri, edits ?? []);
+  assert.ok(await workspace.applyEdit(edit));
+  assert.ok(document.getText().includes("writeShellScript \"s\" ''\n    first\n\n      second\n  '';\n"), document.getText());
+}
+
 function fileIn(folder: WorkspaceFolder, name: string): Uri {
   return folder.uri.with({ path: `${folder.uri.path}/${name}` });
 }
@@ -197,5 +290,9 @@ export async function run(): Promise<void> {
   await setsTheShell(folder);
   await leavesTheHostShellToTheHost(folder);
   await listsRecipesAsTasks();
+  await extractsToAFile(folder);
+  await rewritesNix(folder);
+  await findsTheTypeOfAnOption(folder);
+  await formatsARangeInANixString(folder);
   await writeFile(requiredEnv("SHELL_LSP_SUITE_FINISHED"), "");
 }

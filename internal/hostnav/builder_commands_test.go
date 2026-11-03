@@ -31,6 +31,30 @@ func TestBuilderCommandsAreKnownInAPhase(t *testing.T) {
 	}
 }
 
+func TestBuilderHoversFenceShellAsShell(t *testing.T) {
+	t.Parallel()
+
+	const bare = "{ stdenv }:\nstdenv.mkDerivation {\n  postInstall = ''\n    makeWrapper a b\n    echo $out\n  '';\n}\n"
+	for _, tt := range []struct {
+		name, source, sub, want string
+	}{
+		{"a command of no input", bare, "makeWrapper", "```sh\nmakeWrapper EXECUTABLE OUT ARGS\n```"},
+		{"a command of an input", wrapperPhase, "wrapProgram", "```sh\nwrapProgram EXECUTABLE ARGS\n```"},
+		{"a function of setup.sh", wrapperPhase, "substituteInPlace", "```sh\nsubstituteInPlace FILE ARGS\n```"},
+		{"a flag", wrapperPhase, "--set", "```sh\n--set VAR VAL\n```"},
+		{"a variable of the builder", bare, "$out", "```sh\n$out\n```"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			tr := newTree(t, map[string]string{"default.nix": tt.source})
+			g, sym := tr.shellAt("default.nix", tt.sub, 0)
+			if got := g.Describe(sym).Markdown; !strings.Contains(got, tt.want) {
+				t.Errorf("hover = %q, want it to hold %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestAHookCommandGoesToTheInputThatBringsIt(t *testing.T) {
 	t.Parallel()
 

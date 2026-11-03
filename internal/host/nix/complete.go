@@ -11,7 +11,25 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/host/nix/syntax"
 )
 
-const cursorName = "shellLspCursor"
+const (
+	cursorName       = "shellLspCursor"
+	flakeInputsAttr  = "inputs"
+	flakeOutputsAttr = "outputs"
+)
+
+var flakeInputItems = []Item{
+	{Label: "url", Kind: model.KindAttribute, Detail: "where the input comes from"},
+	{Label: followsAttr, Kind: model.KindAttribute, Detail: "use another input instead of locking this one"},
+	{Label: "flake", Kind: model.KindAttribute, Detail: "whether the input is a flake"},
+	{Label: flakeInputsAttr, Kind: model.KindAttribute, Detail: "override the inputs of this input"},
+	{Label: "dir", Kind: model.KindAttribute, Detail: "the subdirectory that holds flake.nix"},
+	{Label: "type", Kind: model.KindAttribute, Detail: "the type of the flake reference"},
+	{Label: "owner", Kind: model.KindAttribute, Detail: "the owner of the repository"},
+	{Label: "repo", Kind: model.KindAttribute, Detail: "the name of the repository"},
+	{Label: "ref", Kind: model.KindAttribute, Detail: "the branch or tag"},
+	{Label: "rev", Kind: model.KindAttribute, Detail: "the commit"},
+	{Label: "narHash", Kind: model.KindAttribute, Detail: "the hash of the contents"},
+}
 
 var (
 	fullKeywords = []string{"assert", "if", "let", "rec", "with"}
@@ -331,9 +349,9 @@ func (c *cursor) attribute(leaf *syntax.IdentAttr) []Item {
 		return c.names()
 	case *syntax.Assign:
 		if parent.Path[0] == syntax.Attr(leaf) {
-			return slices.Concat(c.keys(), c.optionKeys())
+			return slices.Concat(c.keys(), c.optionKeys(), c.flakeInputKeys(parent, leaf))
 		}
-		return c.optionKeys()
+		return slices.Concat(c.optionKeys(), c.flakeInputKeys(parent, leaf))
 	}
 	return nil
 }
@@ -348,7 +366,71 @@ func (c *cursor) pathMembers(target syntax.Expr, path syntax.AttrPath, leaf *syn
 	if !static {
 		return nil
 	}
-	return c.evaluatedMembers(target, names)
+	return slices.Concat(c.evaluatedMembers(target, names), c.readsThrough(target, names))
+}
+
+func (c *cursor) readsThrough(target syntax.Expr, parent []string) []Item {
+	name, isName := syntax.Unparenthesized(target).(*syntax.Ident)
+	if !isName {
+		return nil
+	}
+	binding, resolved := c.table.Of(name)
+	if !resolved || binding.Def == nil {
+		return nil
+	}
+	sameBinding := func(e syntax.Expr) bool {
+		id, isIdent := syntax.Unparenthesized(e).(*syntax.Ident)
+		if !isIdent {
+			return false
+		}
+		ref, ok := c.table.Of(id)
+		return ok && ref.Def == binding.Def
+	}
+	var out []Item
+	add := func(attr syntax.Attr) {
+		if id, static := attr.(*syntax.IdentAttr); static {
+			out = append(out, Item{Label: attrLabel(id.Name), Kind: model.KindAttribute, Detail: "read elsewhere in this file"})
+		}
+	}
+	syntax.Inspect(c.tree.Root, func(n syntax.Node) bool {
+		switch n := n.(type) {
+		case *syntax.Select:
+			if len(n.Path) > len(parent) && sameBinding(n.Target) {
+				if names, static := attrNames(n.Path[:len(parent)]); static && slices.Equal(names, parent) {
+					add(n.Path[len(parent)])
+				}
+			}
+		case *syntax.Inherit:
+			if n.From != nil && len(parent) == 0 && sameBinding(n.From.Inner) {
+				for _, attr := range n.Attrs {
+					add(attr)
+				}
+			}
+		}
+		return true
+	})
+	return out
+}
+
+func (c *cursor) flakeInputKeys(assign *syntax.Assign, leaf syntax.Attr) []Item {
+	root, isSet := syntax.Unparenthesized(c.tree.Root).(*syntax.AttrSet)
+	if !isSet || !boundKeys(root)[flakeOutputsAttr] {
+		return nil
+	}
+	sets := keyCandidates(c, assign, leaf)
+	if len(sets) == 0 || sets[len(sets)-1].start != root.Span().Start {
+		return nil
+	}
+	path := sets[len(sets)-1].path
+	if len(path) == 0 || len(path)%2 != 0 {
+		return nil
+	}
+	for i := 0; i < len(path); i += 2 {
+		if path[i] != flakeInputsAttr {
+			return nil
+		}
+	}
+	return slices.Clone(flakeInputItems)
 }
 
 func (c *cursor) keys() []Item {

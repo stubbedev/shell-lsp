@@ -24,6 +24,7 @@ const (
 	mkOptionName         = "mkOption"
 	modulesAttr          = "modules"
 	followsAttr          = "follows"
+	finalAttrsName       = "finalAttrs"
 	inputsAttr           = "inputs"
 	FlakeFile            = "flake.nix"
 	nixExtension         = ".nix"
