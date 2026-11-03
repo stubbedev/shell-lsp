@@ -239,7 +239,10 @@ The recipes need `nixd` or `nil` on `PATH`, and write `NAME.md` and
 `NAME.json` under `shell-lsp/nixparity` in the user cache directory, besides
 printing the Markdown. `nixparity compare` takes any directory and any two
 command lines with `-ours` and `-theirs`; without `-ours` it builds shell-lsp
-from the working directory.
+from the working directory. `-ours-init '{"nix":{"evaluate":true}}'` passes
+initialization options to shell-lsp, and `-ours-settle 2m` gives it that long
+between opening the files and the first question, which is how the evaluated
+option and package answers are compared with nixd's.
 
 ### Fixtures
 
@@ -298,6 +301,36 @@ when neither did, and `failed` when either side failed. A failure never counts
 as agreement or as an empty answer, whatever the other side said. Whole-answer
 agreement is strict, so the report also counts the items of the compared
 answers that are shared and that only one side gave.
+
+### Differences that are decided
+
+Every question on which a reference answers and shell-lsp does not, and every
+class of disagreement, was opened and judged by Nix semantics. These classes
+are deliberate: a report counts them, and they are not bugs of shell-lsp.
+
+| Feature | Reference | What it does | Why shell-lsp differs |
+| --- | --- | --- | --- |
+| rename | nixd, nil | Renames a module argument such as `lib` or `config` | The module system passes it by that name, so the renamed code no longer evaluates. shell-lsp refuses and names the reason |
+| rename | nixd, nil | Renames an attribute of a set that leaves its binding: a set passed on, read by a computed name, or an option declared outside the project | Nothing can follow the other readers. shell-lsp refuses with the reason, and renames what it can prove |
+| rename | nixd, nil | Edits `inherit x` differently | Both rename the binding; shell-lsp's edit of an `inherit` covers a different range, so the set of edits differs at those positions |
+| references | nixd | Lists every name read through a `with` for any one of them | They have nothing in common but the `with`. shell-lsp lists the reads of that name through that `with` |
+| references | nixd | On `inherit (final) lib;` lists only the local uses | shell-lsp lists those and every other read of `final.lib`, which the same word also is |
+| definition | nixd | On a nixpkgs attribute points at the value, so `lib.escapeShellArgs` lands inside `concatMapStringsSep`, and `lib.getExe` on the lambda after its name | shell-lsp points at the attribute, where its documentation is |
+| definition | nixd | Takes `meta.position` as a zero-based line, one line below where it is | shell-lsp reads it as the one-based line it is |
+| definition | nixd | On a formal in a module goes to that formal even when `_module.args` sets it | shell-lsp goes to the place that sets the value |
+| definition | nixd | On an option gives only its declaration | shell-lsp also lists the assignments in the project, which are what a reader wants next |
+| definition | nixd | `pkgs.x.override` lands in `lib/customisation.nix` | Every derivation has it; shell-lsp does not answer rather than name one implementation for all |
+| completion | nil | Offers any word of the file, so `config.host.pl` gets `platform` whether or not it exists there | shell-lsp offers what the project declares or sets, and with `nix.evaluate` what evaluation finds |
+| completion | nixd | Offers the package set in a plain name position, so `lib` completes to `lib25519` outside any `with pkgs` | Those names are not in scope there |
+| completion | nixd | Reads the last attribute of a select at any cursor in it, so `lib.ty\|pes.lazyAttrsOf` offers `lazyAttrsOf` | At that cursor the attribute being typed is `types` |
+| documentSymbol | nixd | Adds literal values and reads as children of an attribute | An outline of names reads better, and the value is one hover away. shell-lsp nests attribute paths and `let` blocks, and lists formals |
+| foldingRange | nixd | Folds a whole `let … in body`, whose first line a client can fold only once | shell-lsp folds the bindings, keeping the body visible, and also folds comment runs, multi-line `inherit`s and strings |
+
+Without `nix.evaluate`, nixd still answers `pkgs.x` because it evaluates
+`<nixpkgs>` on its own. shell-lsp does not start an evaluator unless asked; the
+same questions are answered with the setting on. `pkgs.runCommand` and other
+functions of the package set are the exception: evaluation reports only
+`meta.position`, which a function does not have.
 
 ### Latency, memory and failures
 

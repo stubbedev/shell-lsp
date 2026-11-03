@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -19,7 +20,7 @@ import (
 const usage = `usage:
   nixparity fetch [-manifest FILE] [-cache DIR]
   nixparity compare [-ours ARGV] [-theirs ARGV] [-seed N] [-positions N] [-files N] [-timeout D]
-                    [-examples N] [-out PREFIX] [-baseline FILE] [-update]
+                    [-ours-init JSON] [-ours-settle D] [-examples N] [-out PREFIX] [-baseline FILE] [-update]
                     [-repo NAME [-manifest FILE] [-cache DIR] | DIR]`
 
 const (
@@ -132,6 +133,8 @@ func (c corpusFlags) repoDir(name string) (string, error) {
 type compareOptions struct {
 	corpusFlags
 	ours, theirs string
+	oursInit     string
+	oursSettle   time.Duration
 	repo         string
 	settings     settings
 	timeout      time.Duration
@@ -147,6 +150,8 @@ func parseCompare(args []string) (compareOptions, string, error) {
 	o.register(fs)
 	fs.StringVar(&o.ours, "ours", "", "command line of the server under test; built from this repository when empty")
 	fs.StringVar(&o.theirs, "theirs", "nixd", "command line of the reference server, such as nixd or nil")
+	fs.StringVar(&o.oursInit, "ours-init", "", "initializationOptions of the server under test, as JSON, such as {\"nix\":{\"evaluate\":true}}")
+	fs.DurationVar(&o.oursSettle, "ours-settle", 0, "how long the server under test may work between opening the files and the first question")
 	fs.StringVar(&o.repo, "repo", "", "fetched manifest entry to measure instead of a directory")
 	fs.Uint64Var(&o.settings.seed, "seed", 1, "seed of the file and position sampling")
 	fs.IntVar(&o.settings.positions, "positions", defaultPositions, "positions sampled per file")
@@ -159,8 +164,11 @@ func parseCompare(args []string) (compareOptions, string, error) {
 	if err := parseFlags(fs, args); err != nil {
 		return compareOptions{}, "", err
 	}
-	if o.settings.positions <= 0 || o.settings.fileLimit <= 0 || o.timeout <= 0 || o.examples < 0 || (o.update && o.baseline == "") {
+	if o.settings.positions <= 0 || o.settings.fileLimit <= 0 || o.timeout <= 0 || o.examples < 0 || o.oursSettle < 0 || (o.update && o.baseline == "") {
 		return compareOptions{}, "", errUsage
+	}
+	if o.oursInit != "" && !json.Valid([]byte(o.oursInit)) {
+		return compareOptions{}, "", fmt.Errorf("-ours-init is not JSON: %s", o.oursInit)
 	}
 	switch {
 	case o.repo != "" && fs.NArg() == 0:
@@ -232,7 +240,7 @@ func runCompare(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	ours, err := measure(ctx, serverConfig{name: filepath.Base(oursArgv[0]), argv: oursArgv, root: root, timeout: o.timeout}, p)
+	ours, err := measure(ctx, serverConfig{name: filepath.Base(oursArgv[0]), argv: oursArgv, root: root, timeout: o.timeout, init: json.RawMessage(o.oursInit), settle: o.oursSettle}, p)
 	if err != nil {
 		return err
 	}

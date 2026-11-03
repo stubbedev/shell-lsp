@@ -75,6 +75,11 @@ func (s *session) sweep(ctx context.Context, queries []query) ([]answer, error) 
 	}
 	s.info = s.srv.info
 	published := s.diagnostics(ctx)
+	select {
+	case <-time.After(s.cfg.settle):
+	case <-ctx.Done():
+		return nil, fmt.Errorf("waiting for %s to settle: %w", s.cfg.name, ctx.Err())
+	}
 	answers := make([]answer, len(queries))
 	for i, q := range queries {
 		if err := ctx.Err(); err != nil {

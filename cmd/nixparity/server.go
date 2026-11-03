@@ -29,6 +29,8 @@ type serverConfig struct {
 	argv    []string
 	root    string
 	timeout time.Duration
+	init    json.RawMessage
+	settle  time.Duration
 }
 
 type identity struct {
@@ -263,7 +265,7 @@ func (s *server) awaitDiagnostics(ctx context.Context, rels []string, silence, s
 
 func (s *server) initialize(ctx context.Context) error {
 	uri := fileuri.FromPath(s.cfg.root)
-	r := s.call(ctx, "initialize", initializeParams(uri), s.cfg.timeout)
+	r := s.call(ctx, "initialize", initializeParams(uri, s.cfg.init), s.cfg.timeout)
 	switch {
 	case r.state == replyTimedOut:
 		return fmt.Errorf("no answer within %s", s.cfg.timeout)
@@ -296,8 +298,8 @@ func (s *server) initialize(ctx context.Context) error {
 	return s.notify("initialized", map[string]any{})
 }
 
-func initializeParams(rootURI string) map[string]any {
-	return map[string]any{
+func initializeParams(rootURI string, options json.RawMessage) map[string]any {
+	params := map[string]any{
 		"processId":        os.Getpid(),
 		"rootUri":          rootURI,
 		"workspaceFolders": []map[string]string{{"uri": rootURI, "name": "root"}},
@@ -316,6 +318,10 @@ func initializeParams(rootURI string) map[string]any {
 			},
 		},
 	}
+	if len(options) > 0 {
+		params["initializationOptions"] = options
+	}
+	return params
 }
 
 func (s *server) supports(capability string) bool {
