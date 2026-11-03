@@ -39,6 +39,7 @@ type Embedding struct {
 	Detection dialect.Detection
 	Index     *model.Index
 	Findings  []lint.Finding
+	Hosted    []HostedText
 }
 
 type HostedText struct {

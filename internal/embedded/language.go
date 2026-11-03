@@ -18,22 +18,26 @@ const (
 )
 
 type language struct {
-	name     string
-	commands []string
-	parse    func(string, invocation) lang.Result
-	doc      func(string, lang.Token) (lang.Doc, bool)
-	cli      cli
-	sigil    string
-	standIn  string
+	name         string
+	commands     []string
+	parse        func(string, invocation) lang.Result
+	doc          func(string, lang.Token) (lang.Doc, bool)
+	names        func() lang.Docs
+	argSeparator string
+	cli          cli
+	sigil        string
+	standIn      string
 }
 
 var languages = [...]language{
 	Awk: {
-		name:     "awk",
-		standIn:  "__nix__",
-		commands: []string{"awk", "gawk", "mawk", "nawk", "original-awk"},
-		parse:    func(text string, _ invocation) lang.Result { return awk.Parse(text) },
-		doc:      awk.Doc,
+		name:         "awk",
+		standIn:      "__nix__",
+		commands:     []string{"awk", "gawk", "mawk", "nawk", "original-awk"},
+		parse:        func(text string, _ invocation) lang.Result { return awk.Parse(text) },
+		doc:          awk.Doc,
+		names:        awk.Names,
+		argSeparator: ",",
 		cli: cli{
 			short: [128]option{
 				'F': valued, 'v': assign, 'f': file, 'e': source, 'E': file, 'i': valued, 'l': valued, 'W': valued,
@@ -53,11 +57,13 @@ var languages = [...]language{
 		},
 	},
 	Sed: {
-		name:     "sed",
-		standIn:  "1",
-		commands: []string{"sed", "gsed"},
-		parse:    parseSed,
-		doc:      sed.Doc,
+		name:         "sed",
+		standIn:      "1",
+		commands:     []string{"sed", "gsed"},
+		parse:        parseSed,
+		doc:          sed.Doc,
+		names:        func() lang.Docs { return nil },
+		argSeparator: ";",
 		cli: cli{
 			short: [128]option{
 				'e': source, 'f': file, 'l': valued,
@@ -75,12 +81,14 @@ var languages = [...]language{
 		},
 	},
 	Jq: {
-		name:     "jq",
-		sigil:    "$",
-		standIn:  "__nix__",
-		commands: []string{"jq", "gojq", "jaq"},
-		parse:    func(text string, _ invocation) lang.Result { return jq.Parse(text) },
-		doc:      jq.Doc,
+		name:         "jq",
+		sigil:        "$",
+		standIn:      "__nix__",
+		commands:     []string{"jq", "gojq", "jaq"},
+		parse:        func(text string, _ invocation) lang.Result { return jq.Parse(text) },
+		doc:          jq.Doc,
+		names:        jq.Names,
+		argSeparator: ";",
 		cli: cli{
 			short: [128]option{
 				'L': valued, 'f': unsupported,

@@ -205,6 +205,13 @@ func (d *Document) Sourced(offset int) bool {
 	return d.mapping != nil && d.mapping.Sourced(projection.ProjOffset(offset))
 }
 
+func (d *Document) ScriptOf(offset int) int {
+	if d.mapping == nil {
+		return 0
+	}
+	return d.mapping.ScriptOf(projection.ProjOffset(offset))
+}
+
 func (d *Document) StandIn(offset int) bool {
 	return d.mapping != nil && d.mapping.StandIn(projection.ProjOffset(offset))
 }

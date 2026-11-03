@@ -2,6 +2,7 @@ package actions
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/stubbedev/shell-lsp/internal/host/nix"
 	"github.com/stubbedev/shell-lsp/internal/parser"
@@ -19,11 +20,11 @@ func nixKind(kind nix.RefactorKind) Kind {
 	panic(fmt.Sprintf("actions: Nix refactoring kind %d has no action kind", kind))
 }
 
-func Nix(text string, selection parser.Span) []Action {
-	refactorings := nix.Read(text).Refactorings(selection)
+func Nix(doc *nix.Document, selection parser.Span) []Action {
+	refactorings := slices.Concat(doc.Refactorings(selection), doc.HostedRefactorings(selection))
 	out := make([]Action, len(refactorings))
 	for i, r := range refactorings {
-		out[i] = Action{Title: r.Title, Kind: nixKind(r.Kind), Edits: r.Edits}
+		out[i] = Action{Title: r.Title, Kind: nixKind(r.Kind), Edits: r.Edits, CreateNix: r.Create}
 	}
 	return out
 }

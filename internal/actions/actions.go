@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/format"
+	"github.com/stubbedev/shell-lsp/internal/host/nix"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/shellcheckrc"
@@ -72,6 +73,7 @@ type Action struct {
 	Refactor    *Refactor
 	FixAllCode  *lint.Code
 	Settings    *SettingsEdit
+	CreateNix   *nix.NewFile
 }
 
 type SettingsFile struct {

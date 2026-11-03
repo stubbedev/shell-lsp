@@ -70,6 +70,8 @@ type Symbol struct {
 	link    *programLink
 	lexical *lexicalName
 	binding *Symbol
+
+	embedded *embeddedSymbol
 }
 
 type lexicalName struct {
@@ -77,7 +79,9 @@ type lexicalName struct {
 	source  string
 }
 
-func (s Symbol) Defined() bool { return len(s.targets) > 0 || len(s.locals) > 0 || s.link != nil }
+func (s Symbol) Defined() bool {
+	return len(s.targets) > 0 || len(s.locals) > 0 || s.link != nil || s.embedded != nil
+}
 
 func (s Symbol) Exported() bool {
 	return slices.ContainsFunc(s.targets, func(t model.Target) bool {
@@ -102,6 +106,9 @@ func (g *Group) symbolFor(hit model.Hit, file int, module *model.Module) (Symbol
 }
 
 func (g *Group) At(offset int) (Symbol, bool) {
+	if sym, ok := g.embeddedSymbol(offset); ok {
+		return sym, true
+	}
 	hit, ok := g.Index().At(offset)
 	if !ok {
 		if sym, lexical := g.lexicalSymbol(offset); lexical {
@@ -184,6 +191,9 @@ func (g *Group) modules() []*model.Module {
 }
 
 func (g *Group) Occurrences(sym Symbol) []Occurrence {
+	if sym.embedded != nil {
+		return g.embeddedOccurrences(sym)
+	}
 	if sym.link != nil {
 		return g.linkOccurrences(sym)
 	}

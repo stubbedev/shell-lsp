@@ -6,6 +6,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/assist"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
+	"github.com/stubbedev/shell-lsp/internal/embedded"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/hostnav"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
@@ -69,6 +70,13 @@ func (s *Server) handleSignatureHelp(ctx context.Context, docs *docstore.View, p
 	}
 	if !inside {
 		return nil, nil
+	}
+	if sig, ok := embedded.SignatureAt(embeddedPrograms(here.File), here.offset); ok {
+		params := make([]assist.ParamLabel, len(sig.Params))
+		for i, p := range sig.Params {
+			params[i] = assist.ParamLabel{Start: p.Start, End: p.End}
+		}
+		return signatureHelp(assist.Signature{Label: sig.Label, Doc: sig.Doc, Params: params, Active: sig.Active}, docs.Encoding()), nil
 	}
 	sig, ok := assist.SignatureHelp(here.Tree, here.offset, s.functionLookup(here.File))
 	if !ok {

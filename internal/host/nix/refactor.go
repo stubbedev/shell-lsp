@@ -9,6 +9,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/host/nix/scope"
 	"github.com/stubbedev/shell-lsp/internal/host/nix/syntax"
 	"github.com/stubbedev/shell-lsp/internal/lint"
+	"github.com/stubbedev/shell-lsp/internal/projection"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/internal/textline"
 )
@@ -31,6 +32,8 @@ type Refactoring struct {
 	gone  *scope.Def
 
 	repeats bool
+	rebinds bool
+	Create  *NewFile
 }
 
 func (d *Document) Refactorings(selection model.Span) []Refactoring {
@@ -39,9 +42,29 @@ func (d *Document) Refactorings(selection model.Span) []Refactoring {
 	}
 	selection = trimmed(d.tree.Text, selection)
 	var out []Refactoring
-	for _, compute := range []func(model.Span) (Refactoring, bool){d.extract, d.inline, d.toInherit, d.toBindings, d.rewriteString, d.toggledAttr, d.nest, d.flatten} {
+	for _, compute := range []func(model.Span) (Refactoring, bool){d.extract, d.extractToFile, d.inline, d.toInherit, d.toBindings, d.rewriteString, d.toggledAttr, d.nest, d.flatten, d.withToLet} {
 		if r, ok := compute(selection); ok && d.keepsMeaning(r) {
 			out = append(out, r)
+		}
+	}
+	return out
+}
+
+func (d *Document) HostedRefactorings(selection model.Span) []Refactoring {
+	var out []Refactoring
+	for _, t := range d.hosted {
+		if !strings.HasSuffix(t.Name, nixExtension) || selection.Start < t.Content.Start || selection.End > t.Content.End {
+			continue
+		}
+		start, opens := t.Via.Offset(projection.HostOffset(selection.Start))
+		end, closes := t.Via.Offset(projection.HostOffset(selection.End))
+		if !opens || !closes {
+			continue
+		}
+		for _, r := range Read(t.Via.Text()).Refactorings(model.Span{Start: int(start), End: int(end)}) {
+			if edits, mapped := t.Via.Edits(r.Edits); mapped && r.Create == nil {
+				out = append(out, Refactoring{Title: r.Title + " in " + t.Name, Kind: r.Kind, Edits: edits})
+			}
 		}
 	}
 	return out
@@ -57,6 +80,9 @@ func (d *Document) keepsMeaning(r Refactoring) bool {
 	after := syntax.Parse(textedit.Apply(d.tree.Text, r.Edits))
 	if len(after.Errors) > 0 || len(after.Stray) > 0 {
 		return false
+	}
+	if r.rebinds {
+		return true
 	}
 	table := scope.Resolve(after)
 	return len(table.Duplicates()) == len(d.table.Duplicates()) &&

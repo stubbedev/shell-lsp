@@ -29,6 +29,51 @@ const (
 
 type Encoder func(host string, start, end int, text string) (string, bool)
 
+type Settled func(host string, edits []textedit.Edit) bool
+
+type Region struct {
+	encode  func(host string, start, end int, text string, set *editSet) (string, bool)
+	settled Settled
+}
+
+func NewRegion(encode Encoder, settled Settled) *Region {
+	r := &Region{settled: settled}
+	r.encode = func(host string, start, end int, text string, set *editSet) (string, bool) {
+		encoded, ok := encode(host, start, end, text)
+		if ok {
+			set.record(r, host, textedit.Edit{Start: start, End: end, NewText: encoded})
+		}
+		return encoded, ok
+	}
+	return r
+}
+
+type regionEdits struct {
+	region *Region
+	host   string
+	edits  []textedit.Edit
+}
+
+type editSet struct {
+	regions []regionEdits
+}
+
+func (set *editSet) record(r *Region, host string, e textedit.Edit) {
+	if r.settled == nil {
+		return
+	}
+	i := slices.IndexFunc(set.regions, func(have regionEdits) bool { return have.region == r })
+	if i < 0 {
+		i = len(set.regions)
+		set.regions = append(set.regions, regionEdits{region: r, host: host})
+	}
+	set.regions[i].edits = append(set.regions[i].edits, e)
+}
+
+func (set *editSet) holds() bool {
+	return !slices.ContainsFunc(set.regions, func(have regionEdits) bool { return !have.region.settled(have.host, have.edits) })
+}
+
 type HostOffset int
 
 type ProjOffset int
@@ -52,7 +97,7 @@ type Map struct {
 	host     string
 	text     string
 	spans    []span
-	encoders []Encoder
+	regions  []*Region
 	scripts  []parser.Span
 	shells   []dialect.Detection
 	sourced  []int
@@ -70,7 +115,7 @@ type Builder struct {
 	host         string
 	text         strings.Builder
 	spans        []span
-	encoders     []Encoder
+	regions      []*Region
 	starts       []int
 	shells       []dialect.Detection
 	shell        dialect.Detection
@@ -88,9 +133,9 @@ func NewBuilder(host string) *Builder {
 	return &Builder{host: host}
 }
 
-func (b *Builder) Region(encode Encoder) {
-	b.encoders = append(b.encoders, encode)
-}
+func (b *Builder) Region(encode Encoder) { b.Enter(NewRegion(encode, nil)) }
+
+func (b *Builder) Enter(r *Region) { b.regions = append(b.regions, r) }
 
 func (b *Builder) Shell(d dialect.Detection) { b.shell = d }
 
@@ -134,7 +179,7 @@ func (b *Builder) add(k kind, start, end int, text string) {
 	if start < b.at || end < start || end > len(b.host) {
 		panic(fmt.Sprintf("projection: span %d-%d is out of order after host offset %d of %d", start, end, b.at, len(b.host)))
 	}
-	region := len(b.encoders) - 1
+	region := len(b.regions) - 1
 	if k != opaque && k != standIn && region == noRegion {
 		panic(fmt.Sprintf("projection: editable span %d-%d precedes the first region", start, end))
 	}
@@ -143,9 +188,9 @@ func (b *Builder) add(k kind, start, end int, text string) {
 	b.at = end
 	sealed := b.sealed
 	b.sealed = false
-	if n := len(b.spans); n > 0 && k == verbatim && !sealed {
+	if n := len(b.spans); n > 0 && (k == verbatim || k == indent) && !sealed {
 		last := &b.spans[n-1]
-		if last.kind == verbatim && last.region == region && last.hostEnd() == HostOffset(start) {
+		if last.kind == k && last.region == region && last.hostEnd() == HostOffset(start) {
 			last.projLen += s.projLen
 			last.hostLen += s.hostLen
 			return
@@ -159,7 +204,7 @@ func (b *Builder) Map() *Map {
 	if cap(b.spans) > 2*len(b.spans) {
 		b.spans = slices.Clone(b.spans)
 	}
-	m := &Map{host: b.host, text: b.text.String(), spans: b.spans, encoders: b.encoders, scripts: scripts, shells: shells, sourced: b.sourcedScripts(scripts), standIn: b.standIn}
+	m := &Map{host: b.host, text: b.text.String(), spans: b.spans, regions: b.regions, scripts: scripts, shells: shells, sourced: b.sourcedScripts(scripts), standIn: b.standIn}
 	if b.standIn == "" {
 		m.settle(b.placeholders, b.programs)
 	}
@@ -203,9 +248,12 @@ func (b *Builder) sourcedScripts(scripts []parser.Span) []int {
 func (m *Map) Scripts() []parser.Span { return m.scripts }
 
 func (m *Map) Sourced(offset ProjOffset) bool {
-	at := sort.Search(len(m.scripts), func(i int) bool { return m.scripts[i].End > int(offset) })
-	_, sourced := slices.BinarySearch(m.sourced, at)
+	_, sourced := slices.BinarySearch(m.sourced, m.ScriptOf(offset))
 	return sourced
+}
+
+func (m *Map) ScriptOf(offset ProjOffset) int {
+	return sort.Search(len(m.scripts), func(i int) bool { return m.scripts[i].End > int(offset) })
 }
 
 func (m *Map) Shells() []dialect.Detection { return m.shells }
@@ -285,11 +333,17 @@ func (m *Map) Offset(host HostOffset) (ProjOffset, bool) {
 }
 
 func (m *Map) Edit(e textedit.Edit) (textedit.Edit, bool) {
+	var set editSet
+	mapped, ok := m.edit(e, &set)
+	return mapped, ok && set.holds()
+}
+
+func (m *Map) edit(e textedit.Edit, set *editSet) (textedit.Edit, bool) {
 	if m.writesStandIn(e) {
 		return textedit.Edit{}, false
 	}
 	start, end, text := m.trim(e)
-	return m.Replacement(textedit.Edit{Start: start, End: end, NewText: text})
+	return m.replace(textedit.Edit{Start: start, End: end, NewText: text}, set)
 }
 
 func (m *Map) writesStandIn(e textedit.Edit) bool {
@@ -297,9 +351,15 @@ func (m *Map) writesStandIn(e textedit.Edit) bool {
 }
 
 func (m *Map) Replacement(e textedit.Edit) (textedit.Edit, bool) {
+	var set editSet
+	mapped, ok := m.replace(e, &set)
+	return mapped, ok && set.holds()
+}
+
+func (m *Map) replace(e textedit.Edit, set *editSet) (textedit.Edit, bool) {
 	start, end, text := ProjOffset(e.Start), ProjOffset(e.End), e.NewText
 	if start == end {
-		return m.insert(start, text)
+		return m.insert(start, text, set)
 	}
 	first := sort.Search(len(m.spans), func(i int) bool { return m.spans[i].projEnd() > start })
 	var covered []span
@@ -343,7 +403,7 @@ func (m *Map) Replacement(e textedit.Edit) (textedit.Edit, bool) {
 			hostEnd = m.spans[following].hostEnd()
 		}
 	}
-	return m.encode(firstSpan.region, hostStart, hostEnd, text)
+	return m.encode(firstSpan.region, hostStart, hostEnd, text, set)
 }
 
 func (m *Map) ownIndent(first int, s span, start ProjOffset) (HostOffset, bool) {
@@ -353,7 +413,7 @@ func (m *Map) ownIndent(first int, s span, start ProjOffset) (HostOffset, bool) 
 	return m.spans[first-1].host, true
 }
 
-func (m *Map) insert(offset ProjOffset, text string) (textedit.Edit, bool) {
+func (m *Map) insert(offset ProjOffset, text string, set *editSet) (textedit.Edit, bool) {
 	var at, past *span
 	for i := sort.Search(len(m.spans), func(i int) bool { return m.spans[i].projEnd() >= offset }); i < len(m.spans); i++ {
 		s := &m.spans[i]
@@ -384,15 +444,15 @@ func (m *Map) insert(offset ProjOffset, text string) (textedit.Edit, bool) {
 	if past != nil {
 		host = past.hostEnd()
 	}
-	return m.encode(at.region, host, host, text)
+	return m.encode(at.region, host, host, text, set)
 }
 
 func (m *Map) lineHolds(i, region int) bool {
 	return i < len(m.spans) && m.spans[i].region == region && (m.spans[i].editable() || m.spans[i].kind == standIn)
 }
 
-func (m *Map) encode(region int, start, end HostOffset, text string) (textedit.Edit, bool) {
-	encoded, ok := m.encoders[region](m.host, int(start), int(end), text)
+func (m *Map) encode(region int, start, end HostOffset, text string, set *editSet) (textedit.Edit, bool) {
+	encoded, ok := m.regions[region].encode(m.host, int(start), int(end), text, set)
 	if !ok {
 		return textedit.Edit{}, false
 	}
@@ -423,12 +483,16 @@ func (m *Map) trim(e textedit.Edit) (int, int, string) {
 
 func (m *Map) Edits(edits []textedit.Edit) ([]textedit.Edit, bool) {
 	out := make([]textedit.Edit, len(edits))
+	var set editSet
 	for i, e := range edits {
-		mapped, ok := m.Edit(e)
+		mapped, ok := m.edit(e, &set)
 		if !ok {
 			return nil, false
 		}
 		out[i] = mapped
+	}
+	if !set.holds() {
+		return nil, false
 	}
 	return out, true
 }

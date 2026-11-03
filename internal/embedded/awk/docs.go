@@ -1,6 +1,10 @@
 package awk
 
-import "github.com/stubbedev/shell-lsp/internal/embedded/lang"
+import (
+	"maps"
+
+	"github.com/stubbedev/shell-lsp/internal/embedded/lang"
+)
 
 var functions = lang.Docs{
 	"length":   {Signature: "length([s])", Summary: "Number of characters in `s`, or in `$0` when called without an argument. Given an array, gawk returns its number of elements."},
@@ -81,4 +85,11 @@ func Doc(name string, tok lang.Token) (lang.Doc, bool) {
 	}
 	doc, ok := table[name]
 	return doc, ok
+}
+
+func Names() lang.Docs {
+	out := make(lang.Docs, len(functions)+len(variables))
+	maps.Copy(out, functions)
+	maps.Copy(out, variables)
+	return out
 }

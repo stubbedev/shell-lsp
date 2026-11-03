@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- Nix: a justfile, Makefile or Dockerfile written from Nix answers rename and hover
+  as its own language, also when a string named `x.nix` writes it. Fixes that would
+  together re-indent an indented string are withheld, and refactorings reach Nix
+  written in a string.
+- Nix: definition and hover read `pkgs.x` and `lib.x` from the locked source, or from
+  the checkout inside nixpkgs, without an evaluator, including `lib.extend` and
+  `lib.licenses.*`. `finalAttrs` is the set it returns. Completion offers the keys
+  `mkDerivation`, `mkShell`, `writeShellApplication`, `writeTextFile` and `meta` take,
+  and the names of `with lib.x`.
+- Nix: `wrapProgram`, `makeWrapper`, `substituteInPlace` and the other commands of
+  `stdenv` and its setup hooks answer hover, completion, flags and signature help in a
+  phase. Two scripts in a file no longer share a variable of the same name.
+- Nix: new refactorings convert `with` to `let`/`inherit` and extract a binding to a
+  file. Type definition on an option goes to its `type`.
+- Completion and signature help inside awk and jq programs.
 - Declares the `nix` language for `.nix` files, with comment toggling and bracket
   pairs, so Nix files start the server without any other extension installed.
 - Nix: justfiles, Makefiles and Dockerfiles written from Nix get completion,

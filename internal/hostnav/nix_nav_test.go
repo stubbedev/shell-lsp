@@ -981,3 +981,19 @@ func TestNixRenameConflictNamesTheSite(t *testing.T) {
 		t.Errorf("error = %v, want a conflict at the read on default.nix:6", err)
 	}
 }
+
+func TestAFixedPointArgumentIsTheSetItReturns(t *testing.T) {
+	t.Parallel()
+
+	source := "{ stdenv, fetchurl }:\nstdenv.mkDerivation (finalAttrs: {\n  pname = \"x\";\n  version = \"1\";\n  src = fetchurl { url = \"https://x/${finalAttrs.version}\"; };\n})\n"
+	tr := newTree(t, map[string]string{"default.nix": source})
+	g := tr.group("default.nix")
+	at := strings.Index(source, "finalAttrs.version") + len("finalAttrs.")
+	if got := tr.locations(g.Definition(at)); !slices.Equal(got, []string{"default.nix:4:version"}) {
+		t.Errorf("definition = %q", got)
+	}
+	hover, ok := g.Hover(at)
+	if !ok || !strings.Contains(hover.Markdown, "version") {
+		t.Errorf("hover = %+v, %v", hover, ok)
+	}
+}

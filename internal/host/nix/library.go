@@ -15,7 +15,14 @@ import (
 const (
 	libraryEntry    = "lib/default.nix"
 	libraryMaxSteps = 4096
+	byNameShard     = 2
+	metaAttr        = "meta"
+	descriptionAttr = "description"
 )
+
+var attrPreserving = []string{"mapAttrs", "recurseIntoAttrs", "dontRecurseIntoAttrs"}
+
+var packageSetFiles = []string{"pkgs/top-level/all-packages.nix", "pkgs/build-support/trivial-builders/default.nix"}
 
 var libraryFixers = []string{"makeExtensible", "makeExtensible'", "makeScope", "fix", "fix'", "extends"}
 
@@ -121,19 +128,15 @@ func (l *Library) sets(v libraryValue) []librarySet {
 }
 
 func (l *Library) applied(f *libraryFile, call *syntax.Apply) []librarySet {
-	for _, arg := range call.Args {
-		if p, isPath := syntax.Unparenthesized(arg).(*syntax.Path); isPath && loadable(p) {
-			span := p.Span()
-			target := filepath.Join(filepath.Dir(f.path), filepath.FromSlash(f.tree.Text[span.Start:span.End]))
-			loaded, ok := l.load(target)
-			if !ok {
-				loaded, ok = l.load(filepath.Join(target, DirectoryEntry))
-			}
-			if !ok {
-				return nil
-			}
-			return l.sets(libraryValue{file: loaded, expr: loaded.tree.Root})
+	if p, hasPath := loadedPath(call); hasPath {
+		loaded, ok := l.loadAt(f, p)
+		if !ok {
+			return nil
 		}
+		return l.sets(libraryValue{file: loaded, expr: loaded.tree.Root})
+	}
+	if slices.Contains(attrPreserving, calleeName(syntax.Unparenthesized(call.Fn))) {
+		return l.sets(libraryValue{file: f, expr: call.Args[len(call.Args)-1]})
 	}
 	if !fixesItsArgument(f.table, call) {
 		return nil
@@ -147,7 +150,37 @@ func (l *Library) applied(f *libraryFile, call *syntax.Apply) []librarySet {
 			l.selves[d] = libraryValue{file: f, expr: fn.Body}
 		}
 	}
-	return l.sets(libraryValue{file: f, expr: fn.Body})
+	return slices.Concat(l.fixerAttrs(f, call), l.sets(libraryValue{file: f, expr: fn.Body}))
+}
+
+func loadedPath(call *syntax.Apply) (*syntax.Path, bool) {
+	for _, arg := range call.Args {
+		if p, isPath := syntax.Unparenthesized(arg).(*syntax.Path); isPath && loadable(p) {
+			return p, true
+		}
+	}
+	return nil, false
+}
+
+func (l *Library) loadAt(f *libraryFile, p *syntax.Path) (*libraryFile, bool) {
+	span := p.Span()
+	target := filepath.Join(filepath.Dir(f.path), filepath.FromSlash(f.tree.Text[span.Start:span.End]))
+	if loaded, ok := l.load(target); ok {
+		return loaded, true
+	}
+	return l.load(filepath.Join(target, DirectoryEntry))
+}
+
+func (l *Library) fixerAttrs(f *libraryFile, call *syntax.Apply) []librarySet {
+	id, plain := syntax.Unparenthesized(call.Fn).(*syntax.Ident)
+	if !plain {
+		return nil
+	}
+	value, bound := localValue(f.table, id)
+	if !bound {
+		return nil
+	}
+	return l.sets(libraryValue{file: f, expr: value})
 }
 
 func fixesItsArgument(table *scope.Table, call *syntax.Apply) bool {
@@ -206,7 +239,7 @@ func (l *Library) named(f *libraryFile, id *syntax.Ident) []librarySet {
 	if self, known := l.selves[ref.Def]; known {
 		return l.sets(self)
 	}
-	if ref.Def.Kind == scope.FormalDef && ref.Def.Name == LibName {
+	if ref.Def.Name == LibName && isFileFormal(f, ref.Def) {
 		return l.root()
 	}
 	if value, bound := singleValue(ref.Def); bound {
@@ -218,6 +251,18 @@ func (l *Library) named(f *libraryFile, id *syntax.Ident) []librarySet {
 		}
 	}
 	return nil
+}
+
+func isFileFormal(f *libraryFile, d *scope.Def) bool {
+	lambda, isLambda := syntax.Unparenthesized(f.tree.Root).(*syntax.Lambda)
+	if !isLambda {
+		return false
+	}
+	pattern, patterned := lambda.Param.(*syntax.PatternParam)
+	return patterned && slices.ContainsFunc(pattern.Formals, func(formal *syntax.Formal) bool {
+		own, bound := f.table.Binder(formal.Name)
+		return bound && own == d
+	})
 }
 
 func (l *Library) follow(hit libraryHit, ok bool) []librarySet {
@@ -245,7 +290,7 @@ func (l *Library) selected(f *libraryFile, e *syntax.Select) []librarySet {
 
 func (l *Library) inheritedHit(f *libraryFile, stmt *syntax.Inherit, name string) (libraryHit, bool) {
 	if stmt.From != nil {
-		if id, plain := syntax.Unparenthesized(stmt.From.Inner).(*syntax.Ident); plain && id.Name == builtinsName {
+		if isGlobalBuiltins(f.table, stmt.From.Inner) {
 			return libraryHit{builtin: name}, true
 		}
 		return l.lookup(l.sets(libraryValue{file: f, expr: stmt.From.Inner}), name)
@@ -315,28 +360,120 @@ func (l *Library) Lookup(names []string) (LibraryEntry, bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.steps = 0
-	current := l.root()
+	hit, ok := l.walk(l.root(), names)
+	if !ok {
+		return LibraryEntry{}, false
+	}
+	return hit.entry()
+}
+
+func (l *Library) walk(current []librarySet, names []string) (libraryHit, bool) {
 	var hit libraryHit
 	for _, name := range names {
 		found, ok := l.lookup(current, name)
 		if !ok {
-			return LibraryEntry{}, false
+			return libraryHit{}, false
 		}
 		hit = found
 		current = l.sets(hit.value)
 	}
+	return hit, hit.builtin != "" || hit.file != nil
+}
+
+func (hit libraryHit) entry() (LibraryEntry, bool) {
 	if hit.builtin != "" {
 		return LibraryEntry{Builtin: hit.builtin}, true
 	}
 	if hit.file == nil {
 		return LibraryEntry{}, false
 	}
-	text := hit.file.tree.Text
-	line := strings.Count(text[:hit.at.Start], "\n")
-	return LibraryEntry{
-		Declaration: nixeval.Declaration{File: hit.file.path, Line: line + 1, Column: hit.at.Start - (strings.LastIndexByte(text[:hit.at.Start], '\n') + 1) + 1},
-		Doc:         cleanDocComment(commentAbove(hit.file.tree, hit.comment)),
-	}, true
+	return LibraryEntry{Declaration: hit.file.declarationAt(hit.at.Start), Doc: cleanDocComment(commentAbove(hit.file.tree, hit.comment))}, true
+}
+
+func (f *libraryFile) declarationAt(at int) nixeval.Declaration {
+	text := f.tree.Text
+	return nixeval.Declaration{File: f.path, Line: strings.Count(text[:at], "\n") + 1, Column: at - (strings.LastIndexByte(text[:at], '\n') + 1) + 1}
+}
+
+func (l *Library) Package(names []string) (LibraryEntry, bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.steps = 0
+	for _, set := range packageSetFiles {
+		f, ok := l.load(filepath.Join(l.dir, filepath.FromSlash(set)))
+		if !ok {
+			continue
+		}
+		if hit, found := l.walk(l.sets(libraryValue{file: f, expr: f.tree.Root}), names); found {
+			return l.packageEntry(hit)
+		}
+	}
+	if len(names) != 1 || len(names[0]) < byNameShard {
+		return LibraryEntry{}, false
+	}
+	f, ok := l.load(filepath.Join(l.dir, "pkgs", "by-name", names[0][:byNameShard], names[0], "package.nix"))
+	if !ok {
+		return LibraryEntry{}, false
+	}
+	return packageFileEntry(f), true
+}
+
+func (l *Library) packageEntry(hit libraryHit) (LibraryEntry, bool) {
+	if call, isCall := syntax.Unparenthesized(hit.value.expr).(*syntax.Apply); isCall && strings.HasPrefix(calleeName(syntax.Unparenthesized(call.Fn)), callPackageName) {
+		if p, hasPath := loadedPath(call); hasPath {
+			if target, ok := l.loadAt(hit.value.file, p); ok {
+				return packageFileEntry(target), true
+			}
+		}
+	}
+	return hit.entry()
+}
+
+func packageFileEntry(f *libraryFile) LibraryEntry {
+	return LibraryEntry{Declaration: nixeval.Declaration{File: f.path, Line: 1, Column: 1}, Doc: metaDescription(f.tree)}
+}
+
+func metaDescription(tree *syntax.File) string {
+	found := ""
+	syntax.Inspect(tree.Root, func(n syntax.Node) bool {
+		assign, isAssign := n.(*syntax.Assign)
+		if found != "" || !isAssign {
+			return found == ""
+		}
+		path, static := attrNames(assign.Path)
+		switch {
+		case !static:
+		case slices.Equal(path, []string{metaAttr, descriptionAttr}):
+			found = stringValue(assign.Value)
+		case slices.Equal(path, []string{metaAttr}):
+			if set, isSet := syntax.Unparenthesized(assign.Value).(*syntax.AttrSet); isSet {
+				found = describedIn(set)
+			}
+		}
+		return found == ""
+	})
+	return found
+}
+
+func describedIn(set *syntax.AttrSet) string {
+	for _, binding := range set.Bindings {
+		assign, isAssign := binding.(*syntax.Assign)
+		if !isAssign {
+			continue
+		}
+		if path, static := attrNames(assign.Path); static && slices.Equal(path, []string{descriptionAttr}) {
+			return stringValue(assign.Value)
+		}
+	}
+	return ""
+}
+
+func stringValue(e syntax.Expr) string {
+	str, literal := syntax.Unparenthesized(e).(*syntax.String)
+	if !literal {
+		return ""
+	}
+	return literalOf(str)
 }
 
 func (l *Library) Members(names []string) []string {
@@ -370,6 +507,14 @@ func (l *Library) Members(names []string) []string {
 	}
 	slices.Sort(out)
 	return slices.Compact(out)
+}
+
+func PackageMarkdown(names []string, entry LibraryEntry) string {
+	parts := []string{fenced(pkgsName + "." + strings.Join(names, "."))}
+	if entry.Doc != "" {
+		parts = append(parts, entry.Doc)
+	}
+	return strings.Join(append(parts, "Defined in "+declarationText(entry.Declaration)), "\n\n")
 }
 
 func cleanDocComment(doc string) string {

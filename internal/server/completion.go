@@ -14,6 +14,9 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/completion"
 	"github.com/stubbedev/shell-lsp/internal/diskwatch"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
+	"github.com/stubbedev/shell-lsp/internal/embedded"
+	"github.com/stubbedev/shell-lsp/internal/host/model"
+	"github.com/stubbedev/shell-lsp/internal/hostnav"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/manpage"
@@ -216,6 +219,25 @@ func (s *Server) handleCompletion(ctx context.Context, docs *docstore.View, comp
 			return nil, err
 		}
 		if ok {
+			items = append(items, item)
+		}
+	}
+	for _, it := range embedded.CompletionsAt(embeddedPrograms(here.File), here.offset) {
+		kind := model.KindFunction
+		if it.Binding {
+			kind = model.KindVariable
+		}
+		item := nativeItem(it.Label, kind, it.Detail, it.Span, here.positions())
+		if it.Doc != "" {
+			item.Documentation = lsp.Markdown(it.Doc)
+		}
+		items = append(items, item)
+	}
+	if native, ok := nativeLocation(here, completionParams.Position, inside); ok {
+		source := sourcePositions(native.File, native.encoding)
+		for _, it := range hostnav.BuilderCompletions(native.File, here.offset) {
+			item := nativeItem(it.Label, it.Kind, it.Detail, it.Span, source)
+			item.Documentation = lsp.Markdown(it.Doc)
 			items = append(items, item)
 		}
 	}

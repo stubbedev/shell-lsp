@@ -185,3 +185,5 @@ func Doc(name string, tok lang.Token) (lang.Doc, bool) {
 	doc, ok := table[name]
 	return doc, ok
 }
+
+func Names() lang.Docs { return functions }

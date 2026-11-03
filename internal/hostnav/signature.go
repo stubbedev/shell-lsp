@@ -68,6 +68,9 @@ func (g *Group) ShellSignature(offset int) (assist.Signature, bool) {
 		}
 	}
 	for _, r := range regions(g.Self) {
+		if sig, ok := builderSignature(g.Self, r, at); ok {
+			return sig, true
+		}
 		for _, run := range r.runs {
 			if len(run.refs) == 0 || at < run.refs[0].Span.End+1 || at > run.span.End+1 {
 				continue
@@ -87,6 +90,35 @@ func (g *Group) ShellSignature(offset int) (assist.Signature, bool) {
 		}
 	}
 	return assist.Signature{}, false
+}
+
+func builderSignature(file *workspace.File, r region, at int) (assist.Signature, bool) {
+	if at < r.shell.Span.Start || at > r.shell.Span.End {
+		return assist.Signature{}, false
+	}
+	for _, cmd := range r.commands {
+		hook, known := nix.BuilderCommand(cmd.name)
+		if !known || !runsBuilderCommands(file, r, cmd.name) || len(hook.Builtin.Params) == 0 || at <= cmd.span.End || !withinWords(cmd, at) {
+			continue
+		}
+		active := 0
+		for _, word := range cmd.words {
+			if word.span.End < at {
+				active++
+			}
+		}
+		b := hook.Builtin
+		return signature(b.Name, b.Signature, b.Params, b.Doc, min(active, len(b.Params)-1)), true
+	}
+	return assist.Signature{}, false
+}
+
+func withinWords(cmd shellCommand, at int) bool {
+	end := cmd.span.End
+	if n := len(cmd.words); n > 0 {
+		end = cmd.words[n-1].span.End
+	}
+	return at <= end+1
 }
 
 func (g *Group) signatureOf(inv model.Invocation) (assist.Signature, bool) {

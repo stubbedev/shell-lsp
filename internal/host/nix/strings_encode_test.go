@@ -1,6 +1,7 @@
 package nix
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/host/nix/scope"
@@ -40,6 +41,40 @@ func TestAStandInBodyEditEscapesForItsString(t *testing.T) {
 			}
 			if got := textedit.Apply(tt.src, []textedit.Edit{edit}); got != tt.want {
 				t.Errorf("host = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEditsKeepTheIndentOfTheWholeString(t *testing.T) {
+	t.Parallel()
+
+	removal := func(text, line string) textedit.Edit {
+		start := strings.Index(text, line)
+		return textedit.Edit{Start: start, End: start + len(line)}
+	}
+	for _, tt := range []struct {
+		name, body string
+		lines      []string
+		mapped     bool
+	}{
+		{"one of two shallowest lines goes", "  a\n  b\n    c\n", []string{"a\n"}, true},
+		{"both shallowest lines go", "  a\n  b\n    c\n", []string{"a\n", "b\n"}, false},
+		{"a deeper line stays beside a shallow one", "  a\n  b\n    c\n", []string{"a\n", "  c\n"}, true},
+		{"a hole with a deep line in it does not hold the indent up", "  a\n    ${\"\n  x\"}\n", []string{"a\n"}, false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			src := "''\n" + tt.body + "''"
+			tree := syntax.Parse(src)
+			f := &file{src: src, tree: tree, table: scope.Resolve(tree)}
+			m := f.standInBody(tree.Root.(*syntax.String))
+			edits := make([]textedit.Edit, len(tt.lines))
+			for i, line := range tt.lines {
+				edits[i] = removal(m.Text(), line)
+			}
+			if _, mapped := m.Edits(edits); mapped != tt.mapped {
+				t.Errorf("Edits(%+v) on %q mapped = %v, want %v", edits, m.Text(), mapped, tt.mapped)
 			}
 		})
 	}

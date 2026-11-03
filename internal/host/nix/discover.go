@@ -3,6 +3,7 @@ package nix
 import (
 	"cmp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
@@ -645,14 +646,22 @@ func (f *file) nixText(text string) Embedding {
 	a.Index.Tokens = slices.DeleteFunc(tokens, func(t semantic.Token) bool {
 		return t.Type == semantic.TypeString && slices.ContainsFunc(a.Index.Shells, func(shell model.Shell) bool { return shell.Span.Touches(t.Span.Start) })
 	})
-	return Embedding{Map: a.Map, Detection: a.Detection, Index: a.Index}
+	return Embedding{Map: a.Map, Detection: a.Detection, Index: a.Index, Hosted: a.Hosted}
 }
 
 func (f *file) hostedTexts() []HostedText {
 	var out []HostedText
 	for _, s := range f.found {
-		if h := s.hosted; h != nil {
-			out = append(out, HostedText{Name: h.name, Family: h.family, Placed: h.placed, Content: s.str.Content, Via: h.via})
+		h := s.hosted
+		if h == nil {
+			continue
+		}
+		out = append(out, HostedText{Name: h.name, Family: h.family, Placed: h.placed, Content: s.str.Content, Via: h.via})
+		for _, nested := range h.inner.Hosted {
+			nested.Family = strconv.Itoa(s.str.Content.Start) + "/" + nested.Family
+			nested.Content = placedSpan(h.via, nested.Content)
+			nested.Via = projection.Through(nested.Via, h.via)
+			out = append(out, nested)
 		}
 	}
 	return out

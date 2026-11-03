@@ -182,3 +182,88 @@ func TestRefactoringsFromTheOtherServersKeepTheValue(t *testing.T) {
 		})
 	}
 }
+
+func TestWithBecomesLetInherit(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name, src, marker, want string
+	}{
+		{"the names read through it", "{ pkgs }: with pkgs; [ hello jq hello ]", "with", "{ pkgs }: let inherit (pkgs) hello jq; in [ hello jq hello ]"},
+		{"a comment stays", "{ pkgs }: with pkgs; # tools\n[ hello ]", "pkgs;", "{ pkgs }: let inherit (pkgs) hello; in # tools\n[ hello ]"},
+		{"a scope that is not a name", "{ a }: with a.b; [ c ]", "with", "{ a }: let inherit (a.b) c; in [ c ]"},
+		{"lexical names are left alone", "{ pkgs, x }: with pkgs; [ x y ]", "with", "{ pkgs, x }: let inherit (pkgs) y; in [ x y ]"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			r, _, ok := refactoring(t, tt.src, tt.marker, true, "Convert `with`")
+			if !ok {
+				t.Fatal("no refactoring was offered")
+			}
+			if got := textedit.Apply(tt.src, r.Edits); got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+	for _, tt := range []struct {
+		name, src, marker string
+	}{
+		{"an outer with could answer", "{ a, b }: with a; with b; [ c ]", "with b"},
+		{"an inner with may answer", "{ a, b }: with a; [ (with b; c) d ]", "with a"},
+		{"nothing is read through it", "{ a, x }: with a; [ x ]", "with"},
+		{"the cursor is in the body", "{ a }: with a; [ c ]", "[ c"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if r, _, ok := refactoring(t, tt.src, tt.marker, true, "Convert `with`"); ok {
+				t.Errorf("offered: %+v", r)
+			}
+		})
+	}
+}
+
+func TestExtractingABindingToAFile(t *testing.T) {
+	t.Parallel()
+
+	src := "{ x, lib }:\nlet\n  y = 1;\nin\n{\n  cfg = { a = x; b = y; c = lib.id; d = (z: z) 1; };\n}\n"
+	r, _, ok := refactoring(t, src, "cfg", true, "Extract to")
+	if !ok {
+		t.Fatal("no refactoring was offered")
+	}
+	if want := "{ x, lib }:\nlet\n  y = 1;\nin\n{\n  cfg = import ./cfg.nix { inherit lib x y; };\n}\n"; textedit.Apply(src, r.Edits) != want {
+		t.Errorf("host = %q", textedit.Apply(src, r.Edits))
+	}
+	if r.Create == nil || r.Create.Name != "cfg.nix" || r.Create.Text != "{ lib, x, y }:\n{ a = x; b = y; c = lib.id; d = (z: z) 1; }\n" {
+		t.Errorf("new file = %+v", r.Create)
+	}
+	for _, tt := range []struct {
+		name, src, marker string
+	}{
+		{"it reads through a with", "{ p }: with p; { cfg = { a = b; }; }", "cfg"},
+		{"it reads an unknown name", "{ cfg = { a = b; }; }", "cfg"},
+		{"it reads itself", "rec { cfg = { a = cfg; }; }", "cfg ="},
+		{"a value not worth a file", "{ cfg = 1; }", "cfg"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if r, _, ok := refactoring(t, tt.src, tt.marker, true, "Extract to"); ok {
+				t.Errorf("offered: %+v", r)
+			}
+		})
+	}
+}
+
+func TestAnOptionsTypeIsFoundAtItsDeclaration(t *testing.T) {
+	t.Parallel()
+
+	src := "{ lib, ... }:\n{\n  options.a = lib.mkOption { type = lib.types.port; default = 1; };\n  options.b = lib.mkEnableOption \"b\";\n  options.c = lib.mkOption { default = 1; };\n  d = 1;\n}\n"
+	d := Read(src)
+	if got, ok := d.OptionTypeAt(strings.Index(src, "options.a")); !ok || src[got.Start:got.End] != "lib.types.port" {
+		t.Errorf("type of a = %+v, %v", got, ok)
+	}
+	for _, name := range []string{"options.b", "options.c", "d ="} {
+		if got, ok := d.OptionTypeAt(strings.Index(src, name)); ok {
+			t.Errorf("type of %s = %+v", name, got)
+		}
+	}
+}

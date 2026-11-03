@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/navigation"
+	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
 func (tr *tree) shellDefinition(name, sub string) []string {
@@ -515,5 +516,30 @@ func TestAHolePathIsNotRelativeToTheNixFile(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+func TestSeparateScriptsDoNotShareVariables(t *testing.T) {
+	t.Parallel()
+
+	source := "{ writeShellScript }:\n{\n  a = writeShellScript \"a\" ''\n    who=1\n    echo $who\n  '';\n  b = writeShellScript \"b\" ''\n    who=2\n    echo $who\n  '';\n}\n"
+	tr := newTree(t, map[string]string{"default.nix": source})
+	g := tr.group("default.nix")
+	host := strings.LastIndex(source, "$who") + 1
+	offset, inside := g.Self.Doc.Positions(0).Offset(g.Self.Doc.Source().OffsetToPosition(host, 0))
+	if !inside {
+		t.Fatal("$who is not in the shell")
+	}
+	visible := g.Self.Tree.VisibleAt("who", g.Self.Tree.ScopeAt(offset), offset)
+	if want := strings.LastIndex(source, "who=2"); visible.Len() != 1 || g.Self.Doc.SourceOffset(visible.At(0).NameSpan.Start) != want {
+		t.Errorf("visible = %d definitions, want the assignment at %d", visible.Len(), want)
+	}
+	sym, ok := navigation.SymbolAt(g.Self, offset)
+	if !ok {
+		t.Fatal("no symbol at $who")
+	}
+	occs := navigation.Occurrences(sym, []*workspace.File{g.Self})
+	if len(occs) != 2 {
+		t.Errorf("occurrences = %+v, want the assignment and the read of this script", occs)
 	}
 }

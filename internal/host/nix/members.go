@@ -69,6 +69,19 @@ func (c Cursor) LibraryMembersWanted() ([]string, syntax.Span, bool) {
 	return full[1:], c.word, true
 }
 
+func (c Cursor) LibraryWiths() ([][]string, syntax.Span) {
+	if _, isName := c.ancestor(0).(*syntax.Ident); !isName {
+		return nil, syntax.Span{}
+	}
+	var out [][]string
+	for _, with := range c.table.NamesAt(c.word.Start + 1).Withs {
+		if root, known := c.rootOf(c.chain, with.Scope, maxRootHops); known && root.nixpkgs && len(root.path) > 0 && root.path[0] == LibName {
+			out = append(out, root.path[1:])
+		}
+	}
+	return out, c.word
+}
+
 func LibraryItems(names []string, parent []string, word syntax.Span) []Item {
 	out := make([]Item, len(names))
 	for i, name := range names {

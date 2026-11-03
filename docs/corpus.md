@@ -323,14 +323,19 @@ are deliberate: a report counts them, and they are not bugs of shell-lsp.
 | completion | nil | Offers any word of the file, so `config.host.pl` gets `platform` whether or not it exists there | shell-lsp offers what the project declares or sets, and with `nix.evaluate` what evaluation finds |
 | completion | nixd | Offers the package set in a plain name position, so `lib` completes to `lib25519` outside any `with pkgs` | Those names are not in scope there |
 | completion | nixd | Reads the last attribute of a select at any cursor in it, so `lib.ty\|pes.lazyAttrsOf` offers `lazyAttrsOf` | At that cursor the attribute being typed is `types` |
+| definition, completion | nixd | Reads a derivation's `meta`, `meta.maintainers` and `passthru` as the NixOS options of those names, so they land in `lib/modules/generic/meta-maintainers.nix` and `nixos/modules/misc/passthru.nix` | A derivation is not a module. shell-lsp offers the keys `mkDerivation` and `meta` take, and goes to the binding |
+| completion | nil | Offers builtins right after the `{` of an argument set, and `pkgs` or `lib` while a formal is being written | Those are keys and names being declared, not expressions to read |
+| hover | nil | On `a.b` of an unknown `a` answers ``Field `b` `` with the type `?` | It repeats the word under the cursor. shell-lsp answers once it knows what `a` is, as on `finalAttrs.version` |
 | documentSymbol | nixd | Adds literal values and reads as children of an attribute | An outline of names reads better, and the value is one hover away. shell-lsp nests attribute paths and `let` blocks, and lists formals |
 | foldingRange | nixd | Folds a whole `let … in body`, whose first line a client can fold only once | shell-lsp folds the bindings, keeping the body visible, and also folds comment runs, multi-line `inherit`s and strings |
 
 Without `nix.evaluate`, nixd still answers `pkgs.x` because it evaluates
-`<nixpkgs>` on its own. shell-lsp does not start an evaluator unless asked; the
-same questions are answered with the setting on. `pkgs.runCommand` and other
-functions of the package set are the exception: evaluation reports only
-`meta.position`, which a function does not have.
+`<nixpkgs>` on its own. shell-lsp does not start an evaluator unless asked. It
+reads the package set from the locked nixpkgs source instead, or from the
+checkout when the file is inside nixpkgs: `pkgs/top-level/all-packages.nix`, the
+trivial builders and `pkgs/by-name`, for definition and hover. Attributes that
+only exist after evaluation, such as `pkgs.nerd-fonts.jetbrains-mono` and the
+versions nixd shows as inlay hints, need the setting on.
 
 ### Latency, memory and failures
 

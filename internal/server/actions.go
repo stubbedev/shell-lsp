@@ -3,6 +3,9 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"io/fs"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -128,8 +131,18 @@ func (s *Server) nixRefactorings(snap *snapshot, p lsp.CodeActionParams) ([]lsp.
 	source := snap.Doc.Source()
 	selection, _ := source.Positions(snap.encoding).Span(p.Range)
 	var out []lsp.CodeAction
-	for _, a := range actions.Nix(source.Text(), selection) {
+	for _, a := range actions.Nix(snap.Native.Nix(), selection) {
 		if !wants(p.Context.Only, a.Kind) {
+			continue
+		}
+		if a.CreateNix != nil {
+			extracted, offered, err := s.nixExtractEdit(snap, a)
+			if err != nil {
+				return nil, err
+			}
+			if offered {
+				out = append(out, lsp.CodeAction{Title: a.Title, Kind: lsp.CodeActionKind(a.Kind), Edit: &extracted})
+			}
 			continue
 		}
 		edit, err := s.workspaceEdit(source, snap.encoding, a.Edits)
@@ -139,6 +152,28 @@ func (s *Server) nixRefactorings(snap *snapshot, p lsp.CodeActionParams) ([]lsp.
 		out = append(out, lsp.CodeAction{Title: a.Title, Kind: lsp.CodeActionKind(a.Kind), Edit: &edit})
 	}
 	return out, nil
+}
+
+func (s *Server) nixExtractEdit(snap *snapshot, a actions.Action) (lsp.WorkspaceEdit, bool, error) {
+	caps := s.clientCapabilities().Workspace.WorkspaceEdit
+	if !snap.Doc.Local || !caps.DocumentChanges || !slices.Contains(caps.ResourceOperations, "create") {
+		return lsp.WorkspaceEdit{}, false, nil
+	}
+	path := filepath.Join(filepath.Dir(snap.Path), a.CreateNix.Name)
+	if _, err := os.Lstat(path); !errors.Is(err, fs.ErrNotExist) {
+		return lsp.WorkspaceEdit{}, false, nil
+	}
+	uri := fileuri.FromPath(path)
+	created := docstore.NewDocument(uri, "nix", 0, "")
+	edit, err := s.multiFileEdit(snap.encoding, []fileEdits{
+		{doc: snap.Doc.Source(), edits: a.Edits},
+		{doc: created, edits: []textedit.Edit{{Start: 0, End: 0, NewText: a.CreateNix.Text}}},
+	})
+	if err != nil {
+		return lsp.WorkspaceEdit{}, false, err
+	}
+	edit.CreateFiles = []lsp.CreateFile{{URI: uri}}
+	return edit, true, nil
 }
 
 func (s *Server) hostFixAllEdits(snap *snapshot, h hostnav.Host) ([]textedit.Edit, bool) {

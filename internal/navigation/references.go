@@ -146,16 +146,16 @@ func occurrencesIn(sym Symbol, f *workspace.File) []Occurrence {
 		}
 		return out
 	}
-	matches := func(within parser.ScopeID) bool {
-		return sym.boundAs(tree.Binding(sym.Name, within))
+	matches := func(within parser.ScopeID, at int) bool {
+		return sym.boundAs(tree.Binding(sym.Name, within)) && (f.Path != sym.Path || tree.SameScript(sym.Span.Start, at))
 	}
 	for _, def := range tree.Definitions {
-		if def.Name == sym.Name && matches(def.Within) {
+		if def.Name == sym.Name && matches(def.Within, def.NameSpan.Start) {
 			out = append(out, Occurrence{File: f, Span: def.NameSpan, Write: true, Declaration: def.Kind == parser.DefDeclare})
 		}
 	}
 	for _, ref := range tree.References {
-		if ref.Name == sym.Name && matches(ref.Within) {
+		if ref.Name == sym.Name && matches(ref.Within, ref.Span.Start) {
 			out = append(out, Occurrence{File: f, Span: ref.Span})
 		}
 	}

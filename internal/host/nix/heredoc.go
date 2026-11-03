@@ -11,7 +11,10 @@ import (
 	shellsyntax "github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
-const nixMarker = "nix"
+const (
+	nixMarker = "nix"
+	shownHole = "${…}"
+)
 
 var nixDelimiters = []string{"NIX", "nix", "EOF_NIX"}
 
@@ -69,6 +72,7 @@ func (b *symbolTable) merge(inner *model.Index, base model.Scope, place func(mod
 	symbols := len(b.ix.Symbols)
 	for _, sym := range inner.Symbols {
 		sym.Span, sym.Selection, sym.Listed = place(sym.Span), place(sym.Selection), false
+		sym.Detail = WithoutStandIns(sym.Detail)
 		sym.Scope += base
 		if sym.Parent != model.NoParent {
 			sym.Parent += symbols
@@ -153,6 +157,10 @@ func (h *hostedText) placer() func(model.Span) model.Span {
 	return func(s model.Span) model.Span { return placedSpan(h.via, s) }
 }
 
+func WithoutStandIns(text string) string {
+	return strings.ReplaceAll(text, holeStandIn, shownHole)
+}
+
 func (t HostedText) Findings(found []lint.Finding) []lint.Finding {
 	return placedFindings(t.Via, found)
 }
@@ -164,25 +172,40 @@ func placedSpan(via *projection.Map, s model.Span) model.Span {
 
 func placedFindings(via *projection.Map, found []lint.Finding) []lint.Finding {
 	out := make([]lint.Finding, 0, len(found))
+	sets := make([][]lint.Fix, 0, len(found))
 	for _, finding := range found {
 		if via.TouchesStandIn(finding.Span.Start, finding.Span.End) {
 			continue
 		}
-		finding.Span, finding.Fixes = placedSpan(via, finding.Span), placedFixes(via, finding.Fixes)
+		placed, kept := placedFixes(via, finding.Fixes)
+		finding.Span, finding.Fixes = placedSpan(via, finding.Span), placed
 		out = append(out, finding)
+		sets = append(sets, kept)
+	}
+	if _, together := via.Edits(lint.SafeEdits(sets)); !together {
+		reviewFixes(out)
 	}
 	return out
 }
 
-func placedFixes(via *projection.Map, fixes []lint.Fix) []lint.Fix {
-	var out []lint.Fix
+func placedFixes(via *projection.Map, fixes []lint.Fix) (placed, kept []lint.Fix) {
 	for _, fix := range fixes {
 		if edits, mapped := via.Edits(fix.Edits); mapped {
+			kept = append(kept, fix)
 			fix.Edits = edits
-			out = append(out, fix)
+			placed = append(placed, fix)
 		}
 	}
-	return out
+	return placed, kept
+}
+
+func reviewFixes(findings []lint.Finding) {
+	for i := range findings {
+		findings[i].Fixes = slices.Clone(findings[i].Fixes)
+		for j := range findings[i].Fixes {
+			findings[i].Fixes[j].Safety = lint.Review
+		}
+	}
 }
 
 func (b *symbolTable) embedHosted(found []shellString) {
@@ -194,8 +217,7 @@ func (b *symbolTable) embedHosted(found []shellString) {
 		}
 		added = true
 		place := h.placer()
-		b.ix.Findings = append(b.ix.Findings, placedFindings(h.via, h.inner.Index.Findings)...)
-		b.ix.Findings = append(b.ix.Findings, placedFindings(h.via, h.inner.Findings)...)
+		b.ix.Findings = append(b.ix.Findings, placedFindings(h.via, slices.Concat(h.inner.Index.Findings, h.inner.Findings))...)
 		for _, t := range h.inner.Index.Tokens {
 			if !h.via.TouchesStandIn(t.Span.Start, t.Span.End) {
 				t.Span = place(t.Span)

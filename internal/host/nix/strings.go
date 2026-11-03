@@ -9,6 +9,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/host/nix/syntax"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/projection"
+	"github.com/stubbedev/shell-lsp/internal/textedit"
 )
 
 const (
@@ -30,9 +31,10 @@ func (f *file) body(b *projection.Builder, s shellString, opener string, mode bo
 	str := s.str
 	start, end := str.Content.Start, str.Content.End
 	if str.Kind == syntax.Quoted {
-		b.Region(quotedEncoder)
+		region := projection.NewRegion(quotedEncoder, nil)
+		b.Enter(region)
 		b.Opaque(start, start+s.skip, opener)
-		f.decode(b, str.Parts, start+s.skip, end, mode, quotedEncoder)
+		f.decode(b, str.Parts, start+s.skip, end, mode, region)
 		return end
 	}
 	i := start
@@ -41,8 +43,8 @@ func (f *file) body(b *projection.Builder, s shellString, opener string, mode bo
 	}
 	lines := lineEnds(str)
 	indent := minIndent(src, lines, i, end)
-	encode := indentedEncoder(i, end, strings.Repeat(" ", indent))
-	b.Region(encode)
+	region := projection.NewRegion(indentedEncoder(end, strings.Repeat(" ", indent)), keepsIndent(str, i, end))
+	b.Enter(region)
 	b.Opaque(start, i, "")
 	if s.shebang {
 		next := end
@@ -56,7 +58,7 @@ func (f *file) body(b *projection.Builder, s shellString, opener string, mode bo
 		i = next
 	}
 	b.Opaque(i, i, opener)
-	f.indentedBody(b, str.Parts, lines, i, indent, s.skip, mode, encode)
+	f.indentedBody(b, str.Parts, lines, i, indent, s.skip, mode, region)
 	return end
 }
 
@@ -105,7 +107,7 @@ func minIndent(src string, lines []int, start, end int) int {
 	return max(best, 0)
 }
 
-func (f *file) indentedBody(b *projection.Builder, parts []syntax.Part, lines []int, start, indent, lead int, mode bodyMode, encode projection.Encoder) {
+func (f *file) indentedBody(b *projection.Builder, parts []syntax.Part, lines []int, start, indent, lead int, mode bodyMode, region *projection.Region) {
 	at := start
 	for _, stop := range lines {
 		if stop <= at {
@@ -116,13 +118,13 @@ func (f *file) indentedBody(b *projection.Builder, parts []syntax.Part, lines []
 		if lead > 0 {
 			b.Opaque(stripped, stripped+lead, "")
 		}
-		parts = f.decode(b, parts, stripped+lead, stop, mode, encode)
+		parts = f.decode(b, parts, stripped+lead, stop, mode, region)
 		lead = 0
 		at = stop
 	}
 }
 
-func (f *file) decode(b *projection.Builder, parts []syntax.Part, start, end int, mode bodyMode, encode projection.Encoder) []syntax.Part {
+func (f *file) decode(b *projection.Builder, parts []syntax.Part, start, end int, mode bodyMode, region *projection.Region) []syntax.Part {
 	from := start
 	for len(parts) > 0 {
 		s := parts[0].Span()
@@ -145,7 +147,7 @@ func (f *file) decode(b *projection.Builder, parts []syntax.Part, start, end int
 				b.Placeholder(s.Start, s.End)
 				break
 			}
-			from = f.hole(b, part, end, encode)
+			from = f.hole(b, part, end, region)
 		}
 		if s.End > end {
 			return parts
@@ -155,11 +157,11 @@ func (f *file) decode(b *projection.Builder, parts []syntax.Part, start, end int
 	return parts
 }
 
-func (f *file) hole(b *projection.Builder, part *syntax.Interpolation, limit int, encode projection.Encoder) int {
+func (f *file) hole(b *projection.Builder, part *syntax.Interpolation, limit int, region *projection.Region) int {
 	span := part.Span()
 	value := syntax.Unparenthesized(part.Value)
 	if sp, ok := f.holeSplice(part); ok {
-		f.spliced(b, span, sp, encode)
+		f.spliced(b, span, sp, region)
 		return span.End
 	}
 	if pathEnd, baseEnd, ok := f.programPath(span.End, limit); ok {
@@ -387,7 +389,7 @@ func emptyString(e syntax.Expr) bool {
 	return literal && text.Content.Start == text.Content.End
 }
 
-func (f *file) spliced(b *projection.Builder, span syntax.Span, sp splice, encode projection.Encoder) {
+func (f *file) spliced(b *projection.Builder, span syntax.Span, sp splice, region *projection.Region) {
 	at := span.Start
 	open, end := "", ""
 	if sp.command {
@@ -410,7 +412,7 @@ func (f *file) spliced(b *projection.Builder, span syntax.Span, sp splice, encod
 		at = s.End
 	}
 	b.Opaque(at, span.End, end)
-	b.Region(encode)
+	b.Enter(region)
 }
 
 func opensAntiquote(host string, start, end int, text string) bool {
@@ -418,7 +420,7 @@ func opensAntiquote(host string, start, end int, text string) bool {
 		strings.HasSuffix(text, "$") && strings.HasPrefix(host[end:], "{")
 }
 
-func indentedEncoder(body, limit int, indent string) projection.Encoder {
+func indentedEncoder(limit int, indent string) projection.Encoder {
 	return func(host string, start, end int, text string) (string, bool) {
 		quotes := strings.HasPrefix(text, "'") && strings.HasSuffix(host[:start], "'") ||
 			strings.HasSuffix(text, "'") && strings.HasPrefix(host[end:], "'")
@@ -431,16 +433,35 @@ func indentedEncoder(body, limit int, indent string) projection.Encoder {
 		if strings.HasSuffix(text, "\n") && strings.TrimLeft(host[end:limit], " ") == "" {
 			encoded = strings.TrimSuffix(encoded, indent)
 		}
-		return encoded, keepsIndent(host, body, limit, start, end, encoded)
+		return encoded, true
 	}
 }
 
-func keepsIndent(host string, body, limit, start, end int, encoded string) bool {
-	lineStart := strings.LastIndexByte(host[:start], '\n') + 1
-	if strings.TrimLeft(host[max(lineStart, body):start], " ") != "" && !strings.Contains(host[start:end], "\n") && !strings.Contains(encoded, "\n") {
-		return true
+func keepsIndent(str *syntax.String, body, limit int) projection.Settled {
+	return func(host string, edits []textedit.Edit) bool {
+		if !slices.ContainsFunc(edits, func(e textedit.Edit) bool { return movesLineStart(host, body, e) }) {
+			return true
+		}
+		return leastIndent(unholed(host, str, body, limit, edits)) == leastIndent(unholed(host, str, body, limit, nil))
 	}
-	return leastIndent(host[body:start]+encoded+host[end:limit]) == leastIndent(host[body:limit])
+}
+
+func movesLineStart(host string, body int, e textedit.Edit) bool {
+	lineStart := strings.LastIndexByte(host[:e.Start], '\n') + 1
+	return strings.TrimLeft(host[max(lineStart, body):e.Start], " ") == "" || strings.Contains(host[e.Start:e.End], "\n") || strings.Contains(e.NewText, "\n")
+}
+
+func unholed(host string, str *syntax.String, body, limit int, edits []textedit.Edit) string {
+	masked := make([]textedit.Edit, 0, len(edits)+len(str.Parts))
+	for _, e := range edits {
+		masked = append(masked, textedit.Edit{Start: e.Start - body, End: e.End - body, NewText: e.NewText})
+	}
+	for _, part := range str.Parts {
+		if hole, isHole := part.(*syntax.Interpolation); isHole && hole.Span().Start >= body && hole.Span().End <= limit {
+			masked = append(masked, textedit.Edit{Start: hole.Span().Start - body, End: hole.Span().End - body, NewText: holeStandIn})
+		}
+	}
+	return textedit.Apply(host[body:limit], masked)
 }
 
 func leastIndent(text string) int {

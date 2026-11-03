@@ -13,7 +13,7 @@ advertised capability, and that nothing else is handled or advertised.
 | `textDocument/willSaveWaitUntil` | not advertised | `textDocumentSync.willSaveWaitUntil` | formatting is offered through textDocument/formatting instead |
 | `textDocument/declaration` | implemented | `declarationProvider` |  |
 | `textDocument/definition` | implemented | `definitionProvider` |  |
-| `textDocument/typeDefinition` | implemented | `typeDefinitionProvider` | array and associative array declarations |
+| `textDocument/typeDefinition` | implemented | `typeDefinitionProvider` | array and associative array declarations; in Nix, the `type` given to an option |
 | `textDocument/implementation` | implemented | `implementationProvider` | every definition of a function across the sourced chain and workspace |
 | `textDocument/references` | implemented | `referencesProvider` |  |
 | `textDocument/prepareCallHierarchy` | implemented | `callHierarchyProvider` |  |

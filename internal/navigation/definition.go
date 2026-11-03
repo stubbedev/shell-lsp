@@ -51,7 +51,7 @@ func Definition(ctx context.Context, file *workspace.File, offset int, env Env, 
 	case mode == ModeImplementation:
 		return nil, nil
 	}
-	return variableLocations(file, hit.Name, tree.ScopeAt(offset), env, mode), nil
+	return variableLocations(file, hit.Name, tree.ScopeAt(offset), offset, env, mode), nil
 }
 
 func functionLocations(ctx context.Context, file *workspace.File, name string, env Env, files WorkspaceFiles, mode Mode) ([]Location, error) {
@@ -89,8 +89,8 @@ func functionsIn(f *workspace.File, name string) []Location {
 	return out
 }
 
-func variableLocations(file *workspace.File, name string, scope parser.ScopeID, env Env, mode Mode) []Location {
-	if defs := pick(file.Tree.Visible(name, scope), mode); len(defs) > 0 {
+func variableLocations(file *workspace.File, name string, scope parser.ScopeID, at int, env Env, mode Mode) []Location {
+	if defs := pick(file.Tree.VisibleAt(name, scope, at), mode); len(defs) > 0 {
 		return locate(file, defs)
 	}
 	for _, f := range Chain(file, env) {

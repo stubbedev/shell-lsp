@@ -333,11 +333,98 @@ func (g *Group) commandSymbol(file *workspace.File, r region, cmd shellCommand, 
 		}
 	}
 	for i, word := range cmd.words {
-		if word.span.Touches(at) {
-			return g.installable(cmd, i)
+		if !word.span.Touches(at) {
+			continue
 		}
+		if sym, ok := builderFlagSymbol(file, r, cmd, word); ok {
+			return sym, true
+		}
+		return g.installable(cmd, i)
 	}
 	return Symbol{}, false
+}
+
+func builderFlagSymbol(file *workspace.File, r region, cmd shellCommand, word shellWord) (Symbol, bool) {
+	if !runsBuilderCommands(file, r, cmd.name) {
+		return Symbol{}, false
+	}
+	flags := nix.BuilderFlags(cmd.name)
+	i := slices.IndexFunc(flags, func(b model.Builtin) bool { return b.Name == word.text })
+	if i < 0 {
+		return Symbol{}, false
+	}
+	return Symbol{Name: word.text, Kind: model.KindAttribute, Span: word.span, Builtin: &flags[i], shell: true, scope: r.shell.Scope}, true
+}
+
+func runsBuilderCommands(file *workspace.File, r region, name string) bool {
+	return r.shell.Phase > 0 && !definesFunction(file, name)
+}
+
+func definesFunction(file *workspace.File, name string) bool {
+	return slices.ContainsFunc(file.Tree.Functions, func(fn parser.Function) bool { return fn.Name == name })
+}
+
+func (g *Group) builderCommandTarget(file *workspace.File, r region, cmd shellCommand) (Symbol, bool) {
+	hook, known := nix.BuilderCommand(cmd.name)
+	if !known || !runsBuilderCommands(file, r, cmd.name) {
+		return Symbol{}, false
+	}
+	for _, input := range r.shell.Inputs {
+		if input.Name != hook.Provider {
+			continue
+		}
+		sym, found := g.readAt(file, input.Head)
+		if !found {
+			sym = Symbol{Name: cmd.name, Kind: model.KindFunction, locals: []Occurrence{{File: file, Span: input.Span, Declaration: true}}, foreign: true}
+		}
+		sym.Span = cmd.span
+		sym.doc = fmt.Sprintf("%s\n\nA setup hook of `%s`, which `%s` brings in.", hook.Builtin.Doc, hook.Provider, input.List)
+		return sym, true
+	}
+	return Symbol{Name: cmd.name, Kind: model.KindFunction, Span: cmd.span, Builtin: &hook.Builtin, shell: true, scope: r.shell.Scope}, true
+}
+
+func BuilderCompletions(file *workspace.File, offset int) []Item {
+	at := file.Doc.SourceOffset(offset)
+	list := regions(file)
+	i := slices.IndexFunc(list, func(r region) bool { return r.shell.Span.Start <= at && at <= r.shell.Span.End })
+	if i < 0 || list[i].shell.Phase == 0 {
+		return nil
+	}
+	for _, cmd := range list[i].commands {
+		if cmd.span.Touches(at) {
+			return builderCommandItems(file, cmd)
+		}
+		for _, word := range cmd.words {
+			if word.span.Touches(at) && strings.HasPrefix(word.text, "-") {
+				return builderFlagItems(file, list[i], cmd, word)
+			}
+		}
+	}
+	return nil
+}
+
+func builderCommandItems(file *workspace.File, cmd shellCommand) []Item {
+	var out []Item
+	for _, hook := range nix.BuilderCommands() {
+		if strings.HasPrefix(hook.Builtin.Name, cmd.name) && !definesFunction(file, hook.Builtin.Name) {
+			out = append(out, Item{Label: hook.Builtin.Name, Kind: model.KindFunction, Detail: hook.Builtin.Signature, Doc: hook.Builtin.Doc, Span: cmd.span})
+		}
+	}
+	return out
+}
+
+func builderFlagItems(file *workspace.File, r region, cmd shellCommand, word shellWord) []Item {
+	if !runsBuilderCommands(file, r, cmd.name) {
+		return nil
+	}
+	var out []Item
+	for _, flag := range nix.BuilderFlags(cmd.name) {
+		if strings.HasPrefix(flag.Name, word.text) {
+			out = append(out, Item{Label: flag.Name, Kind: flag.Kind, Detail: flag.Signature, Doc: flag.Doc, Span: word.span})
+		}
+	}
+	return out
 }
 
 func (g *Group) commandTarget(file *workspace.File, r region, cmd shellCommand) (Symbol, bool) {
@@ -355,6 +442,9 @@ func (g *Group) commandTarget(file *workspace.File, r region, cmd shellCommand) 
 	}
 	if cmd.name == "" {
 		return Symbol{}, false
+	}
+	if sym, ok := g.builderCommandTarget(file, r, cmd); ok {
+		return sym, true
 	}
 	for _, input := range r.shell.Inputs {
 		sym, known := g.readAt(file, input.Head)

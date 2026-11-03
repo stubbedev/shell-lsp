@@ -69,6 +69,9 @@ func (g *Group) projectIncludeAt(offset int) (resolvedInclude, bool) {
 }
 
 func (g *Group) Definition(offset int) []Location {
+	if t, inner, inside := g.embeddedAtOffset(offset); inside {
+		return g.placedLocations(t, t.group.Definition(inner))
+	}
 	if r, ok := g.includeAt(offset); ok {
 		if r.target == nil {
 			return nil
@@ -83,6 +86,9 @@ func (g *Group) Definition(offset int) []Location {
 }
 
 func (g *Group) definitions(sym Symbol) []Location {
+	if sym.embedded != nil {
+		return g.placedLocations(sym.embedded.text, sym.embedded.text.group.definitions(sym.embedded.symbol))
+	}
 	if sym.link != nil {
 		return g.linkDefinitions(sym)
 	}
@@ -181,6 +187,9 @@ func (g *Group) Highlights(sym Symbol) []Occurrence {
 }
 
 func (g *Group) PrepareRename(sym Symbol) error {
+	if sym.embedded != nil {
+		return sym.embedded.text.group.PrepareRename(sym.embedded.symbol)
+	}
 	if sym.link != nil {
 		if sym.link.refusal != "" {
 			return fmt.Errorf("%w: %s", navigation.ErrNotRenamable, sym.link.refusal)
@@ -273,6 +282,9 @@ func (g *Group) Rename(sym Symbol, newName string) ([]Occurrence, error) {
 	if err := g.PrepareRename(sym); err != nil {
 		return nil, err
 	}
+	if sym.embedded != nil {
+		return g.renameEmbedded(sym, newName)
+	}
 	if sym.link != nil {
 		return g.renameLink(sym, newName)
 	}
@@ -313,6 +325,10 @@ type Hover struct {
 }
 
 func (g *Group) Hover(offset int) (Hover, bool) {
+	if t, inner, inside := g.embeddedAtOffset(offset); inside {
+		h, ok := t.group.Hover(inner)
+		return t.placedHover(h), ok
+	}
 	if r, ok := g.includeAt(offset); ok {
 		if r.target == nil {
 			return Hover{Markdown: "`" + r.include.Path + "` is not found", Span: r.include.Span}, true
@@ -327,6 +343,9 @@ func (g *Group) Hover(offset int) (Hover, bool) {
 }
 
 func (g *Group) Describe(sym Symbol) Hover {
+	if sym.embedded != nil {
+		return sym.embedded.text.placedHover(sym.embedded.text.group.Describe(sym.embedded.symbol))
+	}
 	if sym.link != nil {
 		return g.describeLink(sym)
 	}

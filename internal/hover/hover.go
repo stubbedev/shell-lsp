@@ -160,7 +160,7 @@ func (h hoverer) optionFlagsDoc() string {
 }
 
 func (h hoverer) variable(name string) string {
-	defs := h.Tree.Visible(name, h.scope)
+	defs := h.Tree.VisibleAt(name, h.scope, h.Offset)
 	if defs.Len() == 0 {
 		if imp, _, ok := parser.ImportedGlobal(h.Imports, name); ok {
 			return VariableDoc(imp.Tree, nil, 0, name) + importedFrom(imp)

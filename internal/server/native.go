@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"runtime/debug"
 	"runtime/metrics"
@@ -312,6 +313,11 @@ func (s *Server) nativeDefinition(ctx context.Context, docs *docstore.View, here
 		locations := hostLocations(g.Definition(here.source), here.encoding)
 		if here.host.Language() == host.Nix {
 			locations = append(locations, s.nixElsewhere(ctx, docs, here)...)
+			if len(locations) == 0 {
+				if entry, _, ok := s.nixPackage(here); ok {
+					locations = declarationLocations(entry.Declaration)
+				}
+			}
 		}
 		return locations, true, nil
 	}
@@ -320,6 +326,26 @@ func (s *Server) nativeDefinition(ctx context.Context, docs *docstore.View, here
 		return nil, err != nil, err
 	}
 	return hostLocations(hit.group.ShellDefinition(hit.symbol), here.encoding), true, nil
+}
+
+func (s *Server) nativeTypeDefinition(ctx context.Context, docs *docstore.View, here nativeHere) ([]lsp.Location, error) {
+	if here.host.Language() != host.Nix {
+		return nil, nil
+	}
+	g, err := s.group(ctx, docs, here.host)
+	if err != nil {
+		return nil, err
+	}
+	var out []hostnav.Location
+	for _, l := range g.Definition(here.source) {
+		if l.File.Native == nil || l.File.Native.Language != host.Nix {
+			continue
+		}
+		if span, typed := l.File.Native.Nix().OptionTypeAt(l.Span.Start); typed {
+			out = append(out, hostnav.Location{File: l.File, Span: span})
+		}
+	}
+	return hostLocations(out, here.encoding), nil
 }
 
 func (s *Server) nixElsewhere(ctx context.Context, docs *docstore.View, here nativeHere) []lsp.Location {
@@ -376,7 +402,10 @@ func (s *Server) nixLibrary(file *workspace.File) (*nix.Library, bool) {
 	}
 	source, ok := s.flakeLocks.SourceOf(dir, nixpkgsInput)
 	if !ok {
-		return nil, false
+		if !nixpkgsCheckout(dir) {
+			return nil, false
+		}
+		source = dir
 	}
 	s.library.mu.Lock()
 	defer s.library.mu.Unlock()
@@ -393,6 +422,15 @@ func (s *Server) nixLibrary(file *workspace.File) (*nix.Library, bool) {
 	return library, true
 }
 
+func nixpkgsCheckout(dir string) bool {
+	for _, marker := range []string{"lib/default.nix", "pkgs/top-level/all-packages.nix"} {
+		if info, err := os.Stat(filepath.Join(dir, filepath.FromSlash(marker))); err != nil || !info.Mode().IsRegular() {
+			return false
+		}
+	}
+	return true
+}
+
 type heldLibrary struct {
 	mu     sync.Mutex
 	source string
@@ -405,6 +443,22 @@ func (s *Server) nixLibraryEntry(file *workspace.File, names []string) (nix.Libr
 		return nix.LibraryEntry{}, false
 	}
 	return library.Lookup(names)
+}
+
+func (s *Server) nixPackage(here nativeHere) (nix.LibraryEntry, hostnav.Hover, bool) {
+	names, span, ok := here.File.Native.Nix().NixpkgsPathAt(here.source)
+	if !ok || names[0] == nix.LibName {
+		return nix.LibraryEntry{}, hostnav.Hover{}, false
+	}
+	library, ok := s.nixLibrary(here.File)
+	if !ok {
+		return nix.LibraryEntry{}, hostnav.Hover{}, false
+	}
+	entry, ok := library.Package(names)
+	if !ok {
+		return nix.LibraryEntry{}, hostnav.Hover{}, false
+	}
+	return entry, hostnav.Hover{Markdown: nix.PackageMarkdown(names, entry), Span: span}, true
 }
 
 func (s *Server) nixLibraryHover(here nativeHere) (lsp.Hover, bool) {
@@ -520,6 +574,13 @@ func (s *Server) nixCompletion(ctx context.Context, docs *docstore.View, here na
 			found = withProjectMembers(found, nix.LibraryItems(library.Members(parent), parent, word))
 		}
 	}
+	if withs, word := cursor.LibraryWiths(); len(withs) > 0 {
+		if library, ok := s.nixLibrary(here.File); ok {
+			for _, parent := range withs {
+				found = withProjectMembers(found, nix.LibraryItems(library.Members(parent), parent, word))
+			}
+		}
+	}
 	items := make([]lsp.CompletionItem, 0, len(found))
 	for _, it := range found {
 		item := nativeItem(it.Label, it.Kind, it.Detail, it.Span, at)
@@ -536,8 +597,13 @@ func (s *Server) nixCompletion(ctx context.Context, docs *docstore.View, here na
 }
 
 func withProjectMembers(found, members []nix.Item) []nix.Item {
+	seen := make(map[string]bool, len(found)+len(members))
+	for _, it := range found {
+		seen[it.Label] = true
+	}
 	for _, member := range members {
-		if !slices.ContainsFunc(found, func(it nix.Item) bool { return it.Label == member.Label }) {
+		if !seen[member.Label] {
+			seen[member.Label] = true
 			found = append(found, member)
 		}
 	}
@@ -666,6 +732,11 @@ func (s *Server) nativeHoverAt(ctx context.Context, docs *docstore.View, here na
 		h.Markdown = s.findingsAbove(proven.whole, proven.variant, proven.offset, here.settings, here.generation, h.Markdown)
 	}
 	if !ok {
+		if here.host.Language() == host.Nix {
+			if _, packaged, found := s.nixPackage(here); found {
+				return s.nativeHover(here.snapshot, packaged), true, nil
+			}
+		}
 		return nil, true, nil
 	}
 	if here.host.Language() == host.Nix {

@@ -18,32 +18,37 @@ func (b *Builder) Embed(inner, via *Map) {
 		}
 		if s.region != noRegion && s.region != region {
 			region = s.region
-			b.Region(composed(inner, via, region))
+			b.Enter(composed(inner, via, region))
 		}
 		b.embedded(inner, via, s)
 	}
 }
 
-func composed(inner, via *Map, region int) Encoder {
-	return func(host string, start, end int, text string) (string, bool) {
+func composed(inner, via *Map, region int) *Region {
+	return &Region{encode: func(host string, start, end int, text string, set *editSet) (string, bool) {
 		from, _ := via.Offset(HostOffset(start))
 		to, _ := via.Offset(HostOffset(end))
-		encoded, ok := inner.encoders[region](inner.host, int(from), int(to), text)
+		encoded, ok := inner.regions[region].encode(inner.host, int(from), int(to), text, set)
 		if !ok {
 			return "", false
 		}
-		return via.encoders[len(via.encoders)-1](host, start, end, encoded)
-	}
+		return via.regions[len(via.regions)-1].encode(host, start, end, encoded, set)
+	}}
 }
 
 func (b *Builder) embedded(inner, via *Map, s span) {
 	text := inner.text[s.proj:s.projEnd()]
 	start := max(via.startOf(int(s.host)), b.at)
 	end := max(via.endOf(int(s.host), int(s.hostEnd())), start)
+	if s.kind != opaque {
+		b.outerIndent(via, start)
+	}
 	if s.kind != verbatim {
 		switch s.kind {
 		case escape:
 			b.Escape(start, end, text)
+		case indent:
+			b.Indent(start, end)
 		default:
 			b.Opaque(start, end, text)
 		}
@@ -55,6 +60,9 @@ func (b *Builder) embedded(inner, via *Map, s span) {
 			break
 		}
 		if part.projLen == 0 {
+			if part.kind == indent {
+				b.outerIndent(via, int(part.hostEnd()))
+			}
 			continue
 		}
 		b.throughDecoded(via, part, max(int(s.host), int(part.proj)), min(int(s.hostEnd()), int(part.projEnd())))
@@ -75,6 +83,23 @@ func (b *Builder) throughDecoded(via *Map, part span, from, to int) {
 	default:
 		b.Placeholder(int(part.host), int(part.hostEnd()))
 	}
+}
+
+func (b *Builder) outerIndent(via *Map, end int) {
+	i := sort.Search(len(via.spans), func(i int) bool { return via.spans[i].hostEnd() >= HostOffset(end) })
+	for ; i < len(via.spans) && via.spans[i].hostEnd() == HostOffset(end); i++ {
+		if s := via.spans[i]; s.kind == indent && int(s.host) >= b.at && s.hostLen > 0 {
+			b.Indent(int(s.host), end)
+			return
+		}
+	}
+}
+
+func Through(inner, via *Map) *Map {
+	b := NewBuilder(via.host)
+	b.StandIn(inner.standIn)
+	b.Embed(inner, via)
+	return b.Map()
 }
 
 func (m *Map) startOf(proj int) int { return int(m.HostOffset(ProjOffset(proj))) }

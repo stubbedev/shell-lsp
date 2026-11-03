@@ -275,3 +275,25 @@ func TestEditRefusesToWriteAStandIn(t *testing.T) {
 		t.Error("an edit that keeps the stand-in where it is was refused")
 	}
 }
+
+func TestEditsJudgeTheWholeSet(t *testing.T) {
+	t.Parallel()
+
+	host := "aa\nbb\n"
+	strict := func(_ string, edits []textedit.Edit) bool { return len(edits) < 2 }
+	b := NewBuilder(host)
+	b.Enter(NewRegion(func(_ string, _, _ int, text string) (string, bool) { return text, true }, strict))
+	b.Verbatim(0, len(host))
+	m := b.Map()
+	one := textedit.Edit{Start: 0, End: 2, NewText: "x"}
+	two := textedit.Edit{Start: 3, End: 5, NewText: "y"}
+	if _, ok := m.Edits([]textedit.Edit{one}); !ok {
+		t.Error("one edit was refused")
+	}
+	if _, ok := m.Edit(two); !ok {
+		t.Error("the other edit was refused")
+	}
+	if got, ok := m.Edits([]textedit.Edit{one, two}); ok {
+		t.Errorf("the set was mapped to %+v though the region does not settle under it", got)
+	}
+}

@@ -17,8 +17,10 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/host/model"
 	"github.com/stubbedev/shell-lsp/internal/host/nix"
 	"github.com/stubbedev/shell-lsp/internal/lint"
+	"github.com/stubbedev/shell-lsp/internal/navigation"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/projection"
+	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
@@ -112,6 +114,76 @@ func embeddedAt(file *workspace.File, offset int) (*embeddedText, int, bool) {
 	}
 	inner, inside := texts[i].Via.Offset(projection.HostOffset(offset))
 	return texts[i], int(inner), inside
+}
+
+type embeddedSymbol struct {
+	text   *embeddedText
+	symbol Symbol
+}
+
+func (g *Group) embeddedAtOffset(offset int) (*embeddedText, int, bool) {
+	if g.Language != host.Nix {
+		return nil, 0, false
+	}
+	t, inner, inside := embeddedAt(g.Self, offset)
+	return t, inner, t != nil && inside
+}
+
+func (g *Group) embeddedSymbol(offset int) (Symbol, bool) {
+	t, inner, inside := g.embeddedAtOffset(offset)
+	if !inside {
+		return Symbol{}, false
+	}
+	sym, found := t.group.At(inner)
+	if !found {
+		return Symbol{}, false
+	}
+	return Symbol{Name: sym.Name, Kind: sym.Kind, Span: t.placed(sym.Span), embedded: &embeddedSymbol{text: t, symbol: sym}}, true
+}
+
+func (t *embeddedText) placedHover(h Hover) Hover {
+	return Hover{Markdown: nix.WithoutStandIns(h.Markdown), Span: t.placed(h.Span)}
+}
+
+func (g *Group) placedLocations(t *embeddedText, locations []Location) []Location {
+	out := make([]Location, len(locations))
+	for i, l := range locations {
+		out[i] = Location{File: g.Self, Span: t.placed(l.Span)}
+	}
+	return out
+}
+
+func (g *Group) embeddedOccurrences(sym Symbol) []Occurrence {
+	t := sym.embedded.text
+	occs := t.group.Occurrences(sym.embedded.symbol)
+	out := make([]Occurrence, len(occs))
+	for i, o := range occs {
+		o.File, o.Span = g.Self, t.placed(o.Span)
+		out[i] = o
+	}
+	return out
+}
+
+func (g *Group) renameEmbedded(sym Symbol, newName string) ([]Occurrence, error) {
+	t := sym.embedded.text
+	occs, err := t.group.Rename(sym.embedded.symbol, newName)
+	if err != nil {
+		return nil, err
+	}
+	edits := make([]textedit.Edit, 0, len(occs))
+	out := make([]Occurrence, len(occs))
+	for i, o := range occs {
+		edits = append(edits, o.Edits(newName)...)
+		o.File, o.Span = g.Self, t.placed(o.Span)
+		if o.Rewrite != nil {
+			return nil, fmt.Errorf("%w: renaming `%s` rewrites more than its name, which embedded text cannot carry", navigation.ErrNotRenamable, sym.Name)
+		}
+		out[i] = o
+	}
+	if _, mapped := t.Via.Edits(edits); !mapped {
+		return nil, fmt.Errorf("%w: `%s` is read through a Nix antiquotation or would change the string around it", navigation.ErrNotRenamable, sym.Name)
+	}
+	return out, nil
 }
 
 func (t *embeddedText) placed(span parser.Span) parser.Span {

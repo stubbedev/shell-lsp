@@ -68,7 +68,7 @@ func programDefinition(file *workspace.File, n programName, env Env, mode Mode) 
 	if n.binding.Kind != embedded.ValueVariable {
 		return out
 	}
-	return append(out, variableLocations(file, n.binding.Read, file.Tree.ScopeAt(n.binding.ReadSpan.Start), env, mode)...)
+	return append(out, variableLocations(file, n.binding.Read, file.Tree.ScopeAt(n.binding.ReadSpan.Start), n.binding.ReadSpan.Start, env, mode)...)
 }
 
 func programReferences(ctx context.Context, file *workspace.File, n programName, env Env, files WorkspaceFiles) ([]Occurrence, error) {

@@ -222,7 +222,7 @@ func (c *cursor) formalSlot() []Item {
 	if _, bad := lambda.Body.(*syntax.Bad); !bad {
 		return nil
 	}
-	return slices.Concat(keywordItems(setKeywords), c.formalsAt(4, nil), c.optionKeysAt(len(c.chain)-1-3))
+	return slices.Concat(keywordItems(setKeywords), c.formalsAt(4, nil), c.optionKeysAt(len(c.chain)-1-3), c.builderKeys(len(c.chain)-1-3, nil))
 }
 
 func (c *cursor) names() []Item {
@@ -359,7 +359,7 @@ func (c *cursor) keys() []Item {
 		}
 		return keywordItems(setKeywords)
 	case *syntax.AttrSet:
-		return slices.Concat(keywordItems(setKeywords), c.passedKeys(owner))
+		return slices.Concat(keywordItems(setKeywords), c.passedKeys(owner), c.builderKeys(len(c.chain)-3, boundKeys(owner)))
 	}
 	return nil
 }

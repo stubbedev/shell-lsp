@@ -511,7 +511,7 @@ func (c completer) variables() []Item {
 		if seen[def.Name] || !strings.HasPrefix(def.Name, c.site.prefix) {
 			continue
 		}
-		visible := c.Tree.Visible(def.Name, scope)
+		visible := c.Tree.VisibleAt(def.Name, scope, c.Offset)
 		if visible.Len() == 0 {
 			continue
 		}

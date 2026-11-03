@@ -608,7 +608,39 @@ func (b *symbolTable) consume(e syntax.Expr) *attrs {
 	return b.staticSet(e)
 }
 
+func (b *symbolTable) bindSelves() {
+	for _, call := range b.calls {
+		if !slices.Contains(selfApplied, b.f.libraryName(syntax.Unparenthesized(call.Fn))) {
+			continue
+		}
+		fn, isLambda := syntax.Unparenthesized(call.Args[len(call.Args)-1]).(*syntax.Lambda)
+		if !isLambda {
+			continue
+		}
+		param, named := fn.Param.(*syntax.IdentParam)
+		if !named {
+			continue
+		}
+		if def, bound := b.f.table.Binder(param.Name); bound {
+			if set := b.staticSet(letBody(fn.Body)); set != nil {
+				b.values[def] = set
+			}
+		}
+	}
+}
+
+func letBody(e syntax.Expr) syntax.Expr {
+	for {
+		let, isLet := syntax.Unparenthesized(e).(*syntax.Let)
+		if !isLet {
+			return e
+		}
+		e = let.Body
+	}
+}
+
 func (b *symbolTable) link() {
+	b.bindSelves()
 	b.selected = make(map[syntax.Expr]bool, len(b.reads))
 	b.chains = slices.Grow(b.chains, len(b.reads))
 	for _, read := range b.reads {

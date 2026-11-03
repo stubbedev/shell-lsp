@@ -242,6 +242,25 @@ func (t *Tree) Synthetic(offset int) bool {
 	return t.origin != nil && t.origin.Synthetic(offset)
 }
 
+func (t *Tree) SameScript(a, b int) bool {
+	return t.origin == nil || t.origin.ScriptOf(a) == t.origin.ScriptOf(b)
+}
+
+func (t *Tree) VisibleAt(name string, scope ScopeID, at int) Definitions {
+	defs := t.Visible(name, scope)
+	if t.origin == nil {
+		return defs
+	}
+	script := t.origin.ScriptOf(at)
+	kept := make([]int, 0, len(defs.positions))
+	for _, p := range defs.positions {
+		if t.origin.ScriptOf(defs.all[p].NameSpan.Start) == script {
+			kept = append(kept, p)
+		}
+	}
+	return Definitions{all: defs.all, positions: kept}
+}
+
 func (t *Tree) StandIn(offset int) bool {
 	return t.origin != nil && t.origin.StandIn(offset)
 }

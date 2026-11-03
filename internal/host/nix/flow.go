@@ -34,6 +34,7 @@ var (
 	attrMappers      = []string{mapAttrsName, "mapAttrs'", "mapAttrsToList", "concatMapAttrs"}
 	fixers           = []string{"fix", "makeExtensible"}
 	derivationMakers = []string{"mkDerivation", "mkShell", "mkShellNoCC"}
+	selfApplied      = []string{"mkDerivation", "fix", "makeExtensible"}
 	systemHelpers    = []string{"genAttrs", "forAllSystems", "forEachSystem", "eachSystem", "eachDefaultSystem", "perSystem"}
 )
 
@@ -197,14 +198,22 @@ func (b *symbolTable) classify(call *syntax.Apply) {
 	}
 }
 
+func isGlobalBuiltins(table *scope.Table, e syntax.Expr) bool {
+	id, plain := syntax.Unparenthesized(e).(*syntax.Ident)
+	if !plain || id.Name != builtinsName {
+		return false
+	}
+	ref, ok := table.Of(id)
+	return ok && ref.Kind == scope.Global
+}
+
 func (b *symbolTable) builtinImport(fn syntax.Expr) bool {
 	switch fn := fn.(type) {
 	case *syntax.Ident:
 		ref, ok := b.f.table.Of(fn)
 		return ok && ref.Kind == scope.Global
 	case *syntax.Select:
-		target, plain := syntax.Unparenthesized(fn.Target).(*syntax.Ident)
-		return plain && target.Name == builtinsName
+		return isGlobalBuiltins(b.f.table, fn.Target)
 	}
 	return false
 }

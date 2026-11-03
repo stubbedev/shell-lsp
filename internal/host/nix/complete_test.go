@@ -408,3 +408,62 @@ func TestTheLibraryIsReadFromItsSource(t *testing.T) {
 		t.Errorf("Members = %q", got)
 	}
 }
+
+func TestCompleteOffersWhatABuilderTakes(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name, src string
+		has, not  []string
+	}{
+		{"mkDerivation", "{ stdenv }: stdenv.mkDerivation { pname = \"x\"; me| }", []string{"meta", "buildPhase", "nativeBuildInputs"}, []string{"pname", "runtimeInputs"}},
+		{"mkDerivation through a function", "{ stdenv }: stdenv.mkDerivation (finalAttrs: { me| })", []string{"meta"}, nil},
+		{"writeShellApplication", "{ writeShellApplication }: writeShellApplication { te| }", []string{"text", "runtimeInputs"}, []string{"buildPhase"}},
+		{"meta of a derivation", "{ stdenv }: stdenv.mkDerivation { meta = { de| }; }", []string{"description", "mainProgram"}, []string{"pname"}},
+		{"a meta that is no builder's", "{ meta = { de| }; }", nil, []string{"description"}},
+		{"a function of the same name", "let mkDerivation = x: { }; in mkDerivation { me| }", nil, []string{"meta"}},
+		{"another function", "{ f }: f { me| }", nil, []string{"meta"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := labelsOf(completeMarked(t, tt.src, NoFiles))
+			for _, want := range tt.has {
+				if !slices.Contains(got, want) {
+					t.Errorf("%q lacks %s: %q", tt.src, want, got)
+				}
+			}
+			for _, unwanted := range tt.not {
+				if slices.Contains(got, unwanted) {
+					t.Errorf("%q offers %s: %q", tt.src, unwanted, got)
+				}
+			}
+		})
+	}
+}
+
+func TestLibraryWithsAreFoundFromTheCursor(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name, src string
+		want      [][]string
+	}{
+		{"a member set of lib", "{ lib }: with lib.licenses; [ mi| ]", [][]string{{"licenses"}}},
+		{"lib itself", "{ lib }: with lib; [ mi| ]", [][]string{{}}},
+		{"no with", "{ lib }: [ mi| ]", nil},
+		{"a with of something else", "{ x }: with x; [ mi| ]", nil},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			text, at := marked(t, tt.src)
+			cursor, ok := Locate(text, at, NoFiles)
+			if !ok {
+				t.Fatalf("no cursor in %q", tt.src)
+			}
+			got, _ := cursor.LibraryWiths()
+			if !slices.EqualFunc(got, tt.want, slices.Equal[[]string]) {
+				t.Errorf("LibraryWiths() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

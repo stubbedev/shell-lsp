@@ -60,7 +60,11 @@ func navigationHandler(mode navigation.Mode) func(*Server, context.Context, *doc
 			return nil, err
 		}
 		if native, ok := nativeLocation(here, p.Position, inside); ok {
-			if locations, handled, err := s.nativeDefinition(ctx, docs, native); handled {
+			if mode == navigation.ModeTypeDefinition {
+				if !inside {
+					return s.nativeTypeDefinition(ctx, docs, native)
+				}
+			} else if locations, handled, err := s.nativeDefinition(ctx, docs, native); handled {
 				return locations, err
 			}
 		}

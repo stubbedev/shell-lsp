@@ -5,6 +5,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/stubbedev/shell-lsp/internal/host/model"
 	"github.com/stubbedev/shell-lsp/internal/host/nix/scope"
 	"github.com/stubbedev/shell-lsp/internal/host/nix/syntax"
 )
@@ -202,5 +203,138 @@ func TestSuppliedValuesComeOnlyFromADirectCall(t *testing.T) {
 				t.Errorf("supplied = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestTheLibraryKnowsWhatItsFixerAdds(t *testing.T) {
+	t.Parallel()
+
+	entry := "let\n  makeExtensible' = rattrs: let self = rattrs self // {\n    # Patches the library.\n    extend = f: f;\n  }; in self;\n  lib = makeExtensible' (self: { a = 1; extend = 2; });\nin lib\n"
+	root := filepath.FromSlash("/np/lib/default.nix")
+	read := func(path string) (string, bool) { return entry, path == root }
+	library := NewLibrary(filepath.FromSlash("/np"), read)
+	got, found := library.Lookup([]string{"extend"})
+	if !found {
+		t.Fatal("lib.extend was not found")
+	}
+	if got.Doc != "Patches the library." || got.Declaration.Line != 4 {
+		t.Errorf("lib.extend = %+v, want the fixer's own attribute, which overrides the library's", got)
+	}
+	if _, found := NewLibrary(filepath.FromSlash("/np"), read).Lookup([]string{"a"}); !found {
+		t.Error("lib.a is lost beside the fixer's attribute")
+	}
+	if members := NewLibrary(filepath.FromSlash("/np"), read).Members(nil); !slices.Contains(members, "extend") || !slices.Contains(members, "a") {
+		t.Errorf("members = %q", members)
+	}
+}
+
+func TestLibraryNamesAreResolvedInScope(t *testing.T) {
+	t.Parallel()
+
+	root := filepath.FromSlash("/np/lib/default.nix")
+	for _, tt := range []struct {
+		name, entry string
+		names       []string
+		builtin     string
+		found       bool
+	}{
+		{"inherit from the global builtins", "let inherit (builtins) mapAttrs; in { inherit mapAttrs; }", []string{"mapAttrs"}, "mapAttrs", true},
+		{"inherit from a local set named builtins", "let builtins = { mapAttrs = 1; }; inherit (builtins) mapAttrs; in { inherit mapAttrs; }", []string{"mapAttrs"}, "", true},
+		{"inherit from a local set without the name", "let builtins = { }; inherit (builtins) mapAttrs; in { inherit mapAttrs; }", []string{"mapAttrs"}, "", false},
+		{"the file's own formal is the library", "{ lib }: { top = 1; again = lib; }", []string{"again", "top"}, "", true},
+		{"a formal of an inner function is not the library", "{ top = 1; again = { lib }: lib; }", []string{"again", "top"}, "", false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			read := func(path string) (string, bool) { return tt.entry, path == root }
+			got, found := NewLibrary(filepath.FromSlash("/np"), read).Lookup(tt.names)
+			if found != tt.found || got.Builtin != tt.builtin {
+				t.Errorf("Lookup(%q) = %+v, %v; want builtin %q, found %v", tt.names, got, found, tt.builtin, tt.found)
+			}
+		})
+	}
+}
+
+func TestOnlyTheGlobalBuiltinsImport(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name, src string
+		follows   bool
+	}{
+		{"the global builtins", "builtins.import ./a.nix\n", true},
+		{"a local set named builtins", "let builtins = { import = x: x; }; in builtins.import ./a.nix\n", false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			tree := syntax.Parse(tt.src)
+			var call *syntax.Apply
+			syntax.Inspect(tree.Root, func(n syntax.Node) bool {
+				if apply, isCall := n.(*syntax.Apply); isCall {
+					call = apply
+				}
+				return true
+			})
+			table := newSymbolTable(&file{src: tt.src, tree: tree, table: scope.Resolve(tree)}, &model.Index{})
+			if got := table.builtinImport(call.Fn); got != tt.follows {
+				t.Errorf("builtinImport of %q = %v, want %v", tt.src, got, tt.follows)
+			}
+		})
+	}
+}
+
+func TestThePackageSetIsReadFromItsSource(t *testing.T) {
+	t.Parallel()
+
+	files := map[string]string{
+		filepath.FromSlash("/np/pkgs/top-level/all-packages.nix"):                 "{ lib }:\nres: pkgs: super:\nwith pkgs;\n{\n  called = callPackage ../tools/called { };\n  python3 = { pkgs = { x = 1; }; };\n}\n",
+		filepath.FromSlash("/np/pkgs/tools/called/default.nix"):                   "{ stdenv }:\nstdenv.mkDerivation { meta = { description = \"Called.\"; }; }\n",
+		filepath.FromSlash("/np/pkgs/build-support/trivial-builders/default.nix"): "{ }:\nrec {\n  # Runs a command.\n  runCommand = name: name;\n}\n",
+		filepath.FromSlash("/np/pkgs/by-name/he/hello/package.nix"):               "{ stdenv }:\nstdenv.mkDerivation { meta.description = \"Says hello.\"; }\n",
+	}
+	read := func(path string) (string, bool) {
+		text, ok := files[path]
+		return text, ok
+	}
+	for _, tt := range []struct {
+		names []string
+		file  string
+		line  int
+		doc   string
+	}{
+		{[]string{"called"}, "/np/pkgs/tools/called/default.nix", 1, "Called."},
+		{[]string{"python3", "pkgs", "x"}, "/np/pkgs/top-level/all-packages.nix", 6, ""},
+		{[]string{"runCommand"}, "/np/pkgs/build-support/trivial-builders/default.nix", 4, "Runs a command."},
+		{[]string{"hello"}, "/np/pkgs/by-name/he/hello/package.nix", 1, "Says hello."},
+	} {
+		entry, ok := NewLibrary(filepath.FromSlash("/np"), read).Package(tt.names)
+		if !ok {
+			t.Errorf("pkgs.%v was not found", tt.names)
+			continue
+		}
+		if entry.Declaration.File != filepath.FromSlash(tt.file) || entry.Declaration.Line != tt.line || entry.Doc != tt.doc {
+			t.Errorf("pkgs.%v = %+v", tt.names, entry)
+		}
+	}
+	for _, absent := range [][]string{{"nothing"}, {"hello", "dev"}, {"x"}} {
+		if entry, ok := NewLibrary(filepath.FromSlash("/np"), read).Package(absent); ok {
+			t.Errorf("pkgs.%v = %+v, want nothing", absent, entry)
+		}
+	}
+}
+
+func TestTheLibraryLooksThroughCallsThatKeepAttributes(t *testing.T) {
+	t.Parallel()
+
+	root := filepath.FromSlash("/np/lib/default.nix")
+	entry := "{ licenses = mapAttrs mk { mit = 1; }; kept = recurseIntoAttrs { a = 1; }; lost = other { b = 1; }; }"
+	read := func(path string) (string, bool) { return entry, path == root }
+	for _, names := range [][]string{{"licenses", "mit"}, {"kept", "a"}} {
+		if _, found := NewLibrary(filepath.FromSlash("/np"), read).Lookup(names); !found {
+			t.Errorf("lib.%v was not found", names)
+		}
+	}
+	if got, found := NewLibrary(filepath.FromSlash("/np"), read).Lookup([]string{"lost", "b"}); found {
+		t.Errorf("lib.lost.b = %+v through a function that may change its attributes", got)
 	}
 }

@@ -438,6 +438,9 @@ confirm it, so editors that support annotations show a preview first.
 
 ## Embedded languages
 
+Inside an awk or jq program, completion offers its functions and the variables its
+command line sets, and signature help follows the arguments of a call.
+
 awk, sed and jq programs passed as literal arguments (`awk '...'`, `sed -e
 '...'`, `jq -r '...'`) or fed as a quoted here-document to `awk -f -` and
 `sed -f -` are parsed by built-in parsers; no awk, sed or jq binary is run.
@@ -736,8 +739,13 @@ pragmas and `.hadolint.yaml`, the shell in its recipes and `RUN` lines with all 
 linting, highlighting and navigation in the shell the file decides, semantic tokens,
 completion, signature help, and definition, references and hover for its recipes,
 targets and variables. `${...}` stands for text no one can know, and a finding that
-touches one is dropped. Those names are not renamed, and these findings offer no
-fixes. An `include` or `import` in such a file resolves to another file written from
+touches one is dropped. Hover and rename answer as that language does: a rename edits
+every read in the string and is refused when one would write into a `${...}`. Findings
+offer the fixes they have in a file of their own, written back with the string's
+escapes; edits that would together empty the shallowest lines of an indented string,
+and so re-indent the rest, are withheld, and fixes that would do so only together
+stay out of fix-all. The same goes for such a file written by a string named `x.nix`,
+at any depth. An `include` or `import` in such a file resolves to another file written from
 the same place in Nix (`home.file."x/justfile"` and `home.file."x/lib.just"`). What
 it does not find is reported for a file in the store (`writeText` and the like), where
 nothing can stand beside it, and not for a file placed in the home directory or `/etc`,
@@ -747,7 +755,8 @@ A string in a named file whose name ends in `.nix` is Nix: its syntax errors and
 checks, semantic tokens, and definition, references and hover for its bindings answer
 inside the string, with the shell strings it holds read as anywhere else. It is not
 followed across files, its names are not renamed, and a finding that touches a `${...}`
-is dropped.
+is dropped. Its refactorings are offered too, titled with the file they apply to, and
+written back through the string.
 
 The binding counts through `lib.optionalString`, `lib.mkIf`, `mkBefore`,
 `mkAfter`, `mkForce`, `mkDefault`, `mkOverride`, `mkOrder`, `lib.hm.dag.entryAfter`,
@@ -1014,6 +1023,23 @@ Beyond that, Nix files get these:
   lists the library. Names read through `with` go to that `with`, and references
   list that name through it. `config.x.` and option keys complete from every file
   of the project, and `inputs.` from the flake.
+- Without an evaluator, definition and hover read `pkgs.x` from the locked nixpkgs
+  source, or from the checkout when the file is inside nixpkgs, and `lib.x` the same
+  way, looking through `lib.mapAttrs` and into what `makeExtensible` adds, as
+  `lib.extend`. Completion in `with lib.licenses;` offers its names.
+- `finalAttrs` in `mkDerivation (finalAttrs: { ... })` is the set it returns, for
+  definition, hover, references and completion. So is the argument of `fix` and
+  `makeExtensible`.
+- Completion in the argument of `mkDerivation`, `mkShell`, `writeShellApplication`
+  and `writeTextFile`, and in a derivation's `meta`, offers the keys they take.
+- In a phase, the commands `stdenv` and its setup hooks bring in, such as
+  `wrapProgram`, `makeWrapper`, `substituteInPlace` and `patchShebangs`, answer hover,
+  completion, signature help and their flags, and definition goes to the input that
+  brings them in. A function of the same name in the script wins.
+- Separate scripts do not share variables: definition, references, rename, hover and
+  completion stay in the script the cursor is in, and `phases` of one derivation meet
+  in the order they run.
+- Type definition on an option goes to the `type` its `mkOption` gives.
 - With `nix.evaluate`, definition follows `pkgs.x` to `meta.position`, or to where the
   attribute is bound when there is none or it is not a package (`pkgs.runCommand`),
   `lib.x` to that same position when the source of the library cannot follow it, and
@@ -1026,7 +1052,9 @@ Beyond that, Nix files get these:
 - The refactorings are extract to a `let` binding, inline a `let` binding, spell
   `x = x;` as `inherit x;` and an `inherit` as bindings, rewrite a string between its
   quoted and indented forms when its value stays the same, quote or unquote an
-  attribute, and nest or flatten an attribute path.
+  attribute, nest or flatten an attribute path, convert a `with` whose names only it
+  can answer to `let inherit`, and extract a binding to a new file beside this one
+  when its value reads nothing through a `with`.
 - An undefined name offers "Change to" the closest name in scope, and "Add to the
   arguments of this function" for the nearest function with a pattern.
 - `url = "github:o/r"` in a flake links to the page of that repository, also for
