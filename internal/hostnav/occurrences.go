@@ -70,6 +70,7 @@ type Symbol struct {
 	link    *programLink
 	lexical *lexicalName
 	binding *Symbol
+	phased  bool
 
 	embedded *embeddedSymbol
 }
@@ -82,6 +83,8 @@ type lexicalName struct {
 func (s Symbol) Defined() bool {
 	return len(s.targets) > 0 || len(s.locals) > 0 || s.link != nil || s.embedded != nil
 }
+
+func (s Symbol) AcrossPhases() bool { return s.phased }
 
 func (s Symbol) Exported() bool {
 	return slices.ContainsFunc(s.targets, func(t model.Target) bool {

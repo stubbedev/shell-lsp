@@ -69,7 +69,7 @@ type Origin interface {
 	SourceLine(offset int) int
 	Synthetic(offset int) bool
 	StandIn(offset int) bool
-	ScriptOf(offset int) int
+	ShellOf(offset int) int
 }
 
 func Parse(text string, d dialect.Dialect) *Tree {

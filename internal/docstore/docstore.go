@@ -205,11 +205,11 @@ func (d *Document) ReadByHost(offset int, name string) bool {
 	return d.mapping != nil && d.mapping.ReadByHost(projection.ProjOffset(offset), name)
 }
 
-func (d *Document) ScriptOf(offset int) int {
+func (d *Document) ShellOf(offset int) int {
 	if d.mapping == nil {
 		return 0
 	}
-	return d.mapping.ScriptOf(projection.ProjOffset(offset))
+	return d.mapping.ShellOf(projection.ProjOffset(offset))
 }
 
 func (d *Document) Units(scripts []parser.Span) (shared []parser.Span, apart [][]parser.Span) {

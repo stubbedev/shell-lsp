@@ -243,7 +243,7 @@ func (t *Tree) Synthetic(offset int) bool {
 }
 
 func (t *Tree) SameScript(a, b int) bool {
-	return t.origin == nil || t.origin.ScriptOf(a) == t.origin.ScriptOf(b)
+	return t.origin == nil || t.origin.ShellOf(a) == t.origin.ShellOf(b)
 }
 
 func (t *Tree) VisibleAt(name string, scope ScopeID, at int) Definitions {
@@ -251,10 +251,10 @@ func (t *Tree) VisibleAt(name string, scope ScopeID, at int) Definitions {
 	if t.origin == nil {
 		return defs
 	}
-	script := t.origin.ScriptOf(at)
+	shell := t.origin.ShellOf(at)
 	kept := make([]int, 0, len(defs.positions))
 	for _, p := range defs.positions {
-		if t.origin.ScriptOf(defs.all[p].NameSpan.Start) == script {
+		if t.origin.ShellOf(defs.all[p].NameSpan.Start) == shell {
 			kept = append(kept, p)
 		}
 	}

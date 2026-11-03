@@ -67,7 +67,7 @@ func TestScriptsReportTheirLinesInTheSource(t *testing.T) {
 
 type offsetOrigin struct{}
 
-func (offsetOrigin) ScriptOf(int) int { return 0 }
+func (offsetOrigin) ShellOf(int) int { return 0 }
 
 func (offsetOrigin) SourceLine(offset int) int { return 40 + offset }
 

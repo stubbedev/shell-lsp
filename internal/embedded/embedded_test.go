@@ -418,7 +418,7 @@ func TestAntiquotationsInAHereDocument(t *testing.T) {
 
 type everyDollarHole struct{}
 
-func (everyDollarHole) ScriptOf(int) int { return 0 }
+func (everyDollarHole) ShellOf(int) int { return 0 }
 
 func (everyDollarHole) SourceLine(int) int { return 1 }
 

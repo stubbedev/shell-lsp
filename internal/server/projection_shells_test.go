@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -206,6 +207,61 @@ func TestProjectedShellsKeepAssignmentsAndOptionsToThemselves(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestPhasesOfADerivationAreOneScriptForNavigation(t *testing.T) {
+	t.Parallel()
+
+	pc := projectedShellCase{
+		uri: "file:///w/phases.nix", languageID: "nix",
+		lines: []string{
+			`stdenv.mkDerivation {`,
+			`  configurePhase = ''`,
+			`    carried=1`,
+			`  '';`,
+			`  buildPhase = ''`,
+			`    echo "$carried"`,
+			`    echo "$car"`,
+			`  '';`,
+			`}`,
+		},
+	}
+	c := openProjectedShells(t, pc)
+	assignment, read := pc.position(t, "carried=1"), pc.position(t, `"$carried"`)
+	read.Character += uint32(len(`"$`))
+	typed := pc.position(t, `"$car"`)
+	typed.Character += uint32(len(`"$car`))
+	textDocument := fmt.Sprintf(`"textDocument":{"uri":%q}`, pc.uri)
+	at := func(p lsp.Position) string {
+		return fmt.Sprintf(`%s,"position":{"line":%d,"character":%d}`, textDocument, p.Line, p.Character)
+	}
+
+	definition := decodeResult[[]lsp.Location](t, c.call("textDocument/definition", "{"+at(read)+"}"))
+	if len(definition) != 1 || definition[0].Range.Start.Line != assignment.Line {
+		t.Errorf("definition of the read = %+v, want the assignment on line %d", definition, assignment.Line)
+	}
+	for name, from := range map[string]lsp.Position{"assignment": assignment, "read": read} {
+		refs := decodeResult[[]lsp.Location](t, c.call("textDocument/references", "{"+at(from)+`,"context":{"includeDeclaration":true}}`))
+		lines := make([]uint32, 0, len(refs))
+		for _, ref := range refs {
+			lines = append(lines, ref.Range.Start.Line)
+		}
+		slices.Sort(lines)
+		if !slices.Equal(lines, []uint32{assignment.Line, read.Line}) {
+			t.Errorf("references from the %s are on lines %v, want %d and %d", name, lines, assignment.Line, read.Line)
+		}
+		edit := decodeResult[lsp.WorkspaceEdit](t, c.call("textDocument/rename", "{"+at(from)+`,"newName":"moved"}`))
+		if edits := edit.Changes[pc.uri]; len(edits) != 2 {
+			t.Errorf("rename from the %s edits %+v, want the assignment and the read", name, edit)
+		}
+	}
+	hover := decodeResult[lsp.Hover](t, c.call("textDocument/hover", "{"+at(read)+"}"))
+	if !strings.Contains(hover.Contents.Value, "carried=1") {
+		t.Errorf("hover on the read = %q, want the assignment", hover.Contents.Value)
+	}
+	if labels := completionLabels(decodeResult[lsp.CompletionList](t, c.call("textDocument/completion", "{"+at(typed)+"}"))); !slices.Contains(labels, "carried") {
+		t.Errorf("completion in the later phase = %v, want carried", labels)
 	}
 }
 

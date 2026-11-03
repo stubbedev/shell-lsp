@@ -356,4 +356,4 @@ func (o *unitOrigin) Synthetic(offset int) bool { return o.doc.Synthetic(o.unit.
 
 func (o *unitOrigin) StandIn(offset int) bool { return o.doc.StandIn(o.unit.start(offset)) }
 
-func (o *unitOrigin) ScriptOf(offset int) int { return o.doc.ScriptOf(o.unit.start(offset)) }
+func (o *unitOrigin) ShellOf(offset int) int { return o.doc.ShellOf(o.unit.start(offset)) }

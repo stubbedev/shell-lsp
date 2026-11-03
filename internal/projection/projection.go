@@ -299,6 +299,14 @@ func (m *Map) ScriptOf(offset ProjOffset) int {
 
 func (m *Map) UnitOf(script int) int { return m.units[script] }
 
+func (m *Map) ShellOf(offset ProjOffset) int {
+	script := m.ScriptOf(offset)
+	if script < len(m.units) && m.units[script] != SharedUnit {
+		return m.units[script]
+	}
+	return -1 - script
+}
+
 func (m *Map) AppendLayout(dst []byte, script parser.Span) []byte {
 	first := sort.Search(len(m.spans), func(i int) bool { return m.spans[i].projEnd() > ProjOffset(script.Start) })
 	for i := first; i < len(m.spans) && int(m.spans[i].proj) < script.End; i++ {

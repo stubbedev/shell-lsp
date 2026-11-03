@@ -716,7 +716,7 @@ func (s *Server) nativeHoverAt(ctx context.Context, docs *docstore.View, here na
 	}
 	if here.inside {
 		sym, ok := g.ShellSymbol(here.offset)
-		if !ok {
+		if !ok || sym.AcrossPhases() {
 			return nil, false, nil
 		}
 		described := g.Describe(sym)

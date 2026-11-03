@@ -225,7 +225,7 @@ func (g *Group) nixShellSymbol(file *workspace.File, offset int) (Symbol, bool) 
 	}
 	reach := phaseReach(file, list, r, hit.Name)
 	if reach.crossing {
-		return Symbol{Name: hit.Name, Kind: kind, Span: span, locals: reach.visible, scope: r.shell.Scope}, true
+		return Symbol{Name: hit.Name, Kind: kind, Span: span, locals: reach.visible, scope: r.shell.Scope, phased: true}, true
 	}
 	if hit.Kind == parser.HitVariable && !r.shadowed[hit.Name] {
 		res := g.Module.Resolve(g.selfAt(), model.Ref{Name: hit.Name, Kind: model.KindVariable, Scope: r.shell.Scope})
