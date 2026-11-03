@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { writeFile } from "node:fs/promises";
 import {
   commands,
   ConfigurationTarget,
@@ -168,6 +169,14 @@ function fileIn(folder: WorkspaceFolder, name: string): Uri {
   return folder.uri.with({ path: `${folder.uri.path}/${name}` });
 }
 
+function requiredEnv(name: string): string {
+  const value = process.env[name];
+  if (value === undefined) {
+    throw new Error(`the suite runner did not set ${name}`);
+  }
+  return value;
+}
+
 export async function run(): Promise<void> {
   const folder = workspace.workspaceFolders?.[0];
   assert.ok(folder, "the test workspace is not open");
@@ -188,4 +197,5 @@ export async function run(): Promise<void> {
   await setsTheShell(folder);
   await leavesTheHostShellToTheHost(folder);
   await listsRecipesAsTasks();
+  await writeFile(requiredEnv("SHELL_LSP_SUITE_FINISHED"), "");
 }

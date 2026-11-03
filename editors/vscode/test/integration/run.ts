@@ -1,5 +1,5 @@
 import { runTests } from "@vscode/test-electron";
-import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -15,6 +15,7 @@ const sandbox = await mkdtemp(join(tmpdir(), "shell-lsp-vscode-"));
 try {
   const workspaceDir = join(sandbox, "workspace");
   const userDataDir = join(sandbox, "user-data");
+  const finished = join(sandbox, "suite-finished");
   await cp(join(import.meta.dirname, "workspace"), workspaceDir, { recursive: true });
   await mkdir(join(userDataDir, "User"), { recursive: true });
   await writeFile(
@@ -24,6 +25,7 @@ try {
   await runTests({
     extensionDevelopmentPath: extensionRoot,
     extensionTestsPath: join(extensionRoot, "out", "integration", "suite.cjs"),
+    extensionTestsEnv: { SHELL_LSP_SUITE_FINISHED: finished },
     launchArgs: [
       workspaceDir,
       "--disable-extensions",
@@ -32,6 +34,9 @@ try {
       `--extensions-dir=${join(sandbox, "extensions")}`,
     ],
     ...(vscodeExecutable === undefined ? {} : { vscodeExecutablePath: vscodeExecutable }),
+  });
+  await access(finished).catch((error: unknown) => {
+    throw new Error(`${vscodeExecutable ?? "VS Code"} exited without running the suite; SHELL_LSP_VSCODE_EXECUTABLE must name the Electron binary, not a launcher script`, { cause: error });
   });
 } finally {
   await rm(sandbox, { recursive: true, force: true });
