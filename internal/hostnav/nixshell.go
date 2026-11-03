@@ -16,6 +16,7 @@ import (
 )
 
 const (
+	wrappedMemoKey  = "hostnav.wrapped"
 	flakeSelfPrefix = ".#"
 	nixCommand      = "nix"
 	nixShellCommand = "nix-shell"
@@ -147,21 +148,12 @@ func (g *Group) wrappedOf(module *model.Module, f int) *workspace.File {
 	if !linked {
 		return nil
 	}
-	shells := project.Shells(f)
-	if len(shells) == 0 {
+	proven, shells, key, held := project.ProvenFile(f)
+	if !held {
 		return nil
 	}
-	proven := project.Proven(f)
 	file := g.fileOf(module, f)
-	var key strings.Builder
-	key.WriteString("hostnav.wrapped")
-	for _, s := range shells {
-		fmt.Fprintf(&key, "/%d-%d:%d", s.Span.Start, s.Span.End, s.Scope)
-	}
-	for _, s := range proven {
-		fmt.Fprintf(&key, "/%d=%s", s.Start, s.Writer)
-	}
-	return workspace.Memo(file, key.String(), 0, func() *workspace.File { return Wrapped(file, proven, shells) })
+	return workspace.Memo(file, wrappedMemoKey+key, 0, func() *workspace.File { return Wrapped(file, proven, shells) })
 }
 
 func Wrapped(file *workspace.File, proven []nix.ProvenString, shells []model.Shell) *workspace.File {
@@ -478,7 +470,7 @@ func (g *Group) nixCommandTargets(module *model.Module, f int, cmd shellCommand)
 		return nil
 	}
 	var out []model.Target
-	for _, t := range module.Resolve(f, model.Ref{Name: hit.Name, Kind: hit.Kind, Scope: hit.Scope, Qualifier: hit.Qualifier}).Targets {
+	for _, t := range module.Resolve(f, model.Ref{Name: hit.Name, Kind: hit.Kind, Scope: hit.Scope, Call: model.Qualified(hit.Qualifier)}).Targets {
 		if g.isScript(t) {
 			out = append(out, t)
 		}

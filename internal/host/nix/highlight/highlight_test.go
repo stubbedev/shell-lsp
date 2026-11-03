@@ -32,9 +32,9 @@ func spell(src string, tokens []semantic.Token) []string {
 	return out
 }
 
-func tokensOf(src string, shell []semantic.Token) []semantic.Token {
+func tokensOf(src string, shell []semantic.Token, pieces ...syntax.Span) []semantic.Token {
 	f := syntax.Parse(src)
-	return Tokens(f, scope.Resolve(f), shell)
+	return Tokens(f, scope.Resolve(f), shell, pieces)
 }
 
 func checkShape(t *testing.T, src string, tokens []semantic.Token) {
@@ -182,6 +182,18 @@ func TestShellComposition(t *testing.T) {
 			[]string{"x parameter declaration", ": operator", `" string`, "a function", "${ operator", `" string`, "b keyword", "${ operator", "x parameter", "} operator", `" string`, "} operator", "c function", `" string`},
 		},
 		{
+			"a shell word across a spliced string colours the text it holds",
+			`c: "foo${f c "bar"} x"`,
+			[]shellToken{{`foo${f c "bar"}`, function, 0}},
+			[]string{"c parameter declaration", ": operator", `" string`, "foo function", "${ operator", "c parameter", `" string`, "bar function", `" string`, "} operator", " x string", `" string`},
+		},
+		{
+			"a string in a splice that is no shell stays a Nix string",
+			`c: "foo${f "no" "bar"} x"`,
+			[]shellToken{{`foo${f "no" "bar"}`, function, 0}},
+			[]string{"c parameter declaration", ": operator", `" string`, "foo function", "${ operator", `" string`, "no string", `" string`, `" string`, "bar function", `" string`, "} operator", " x string", `" string`},
+		},
+		{
 			"a shell token never reaches past its string",
 			`"ab" + "cd"`,
 			[]shellToken{{`ab" + "`, function, 0}},
@@ -206,10 +218,20 @@ func TestShellComposition(t *testing.T) {
 			[]string{"1 number"},
 		},
 	}
+	spliced := map[string]string{
+		"a shell string nested in an antiquotation keeps its own tokens": "b",
+		"a shell word across a spliced string colours the text it holds": "bar",
+		"a string in a splice that is no shell stays a Nix string":       "bar",
+	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
+			var pieces []syntax.Span
+			if text, nested := spliced[tc.name]; nested {
+				at := strings.Index(tc.src, text)
+				pieces = []syntax.Span{{Start: at, End: at + len(text)}}
+			}
 			shell := make([]semantic.Token, len(tc.shell))
 			for i, s := range tc.shell {
 				at := strings.Index(tc.src, s.text)
@@ -218,7 +240,7 @@ func TestShellComposition(t *testing.T) {
 				}
 				shell[i] = semantic.Token{Span: syntax.Span{Start: at, End: at + len(s.text)}, Type: s.kind, Modifiers: s.mods}
 			}
-			tokens := tokensOf(tc.src, shell)
+			tokens := tokensOf(tc.src, shell, pieces...)
 			checkShape(t, tc.src, tokens)
 			if got := spell(tc.src, tokens); !slices.Equal(got, tc.want) {
 				t.Errorf("tokens of %q\n got %q\nwant %q", tc.src, got, tc.want)

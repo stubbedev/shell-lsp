@@ -354,3 +354,14 @@ func TestSelectionInOneOfSeveralScriptsKeepsItsOwnRanges(t *testing.T) {
 		})
 	}
 }
+
+func TestNixShellWordAcrossASplicedStringKeepsItsColour(t *testing.T) {
+	t.Parallel()
+
+	const uri = "file:///w/spliced.nix"
+	src := "{ pkgs, lib, c }:\npkgs.writeShellScript \"x\" ''\n  foo${lib.optionalString c \"bar baz\"}\n  ${lib.optionalString c \"ls /tmp\"}\n''\n"
+	c, _ := startClient(t, `{"capabilities": {"general": {"positionEncodings": ["utf-16"]}}}`)
+	c.notify("textDocument/didOpen", openLanguageParams(uri, "nix", src))
+	full := decodeResult[lsp.SemanticTokens](t, c.call("textDocument/semanticTokens/full", `{"textDocument": {"uri": "`+uri+`"}}`))
+	checkInOrder(t, texts(spellTokens(t, src, "utf-16", full.Data)), []string{"foo function external", "${ operator", "bar function external", "} operator", "ls function external", "/tmp string"})
+}

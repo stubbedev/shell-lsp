@@ -135,7 +135,7 @@ func (m *Module) Resolve(file int, ref Ref) Resolution {
 		}
 	}
 	module := m
-	for _, name := range ref.Qualifier {
+	for _, name := range ref.Qualifier() {
 		sub := module.Submodules[name]
 		if sub == nil {
 			return Resolution{Missing: true}
@@ -155,7 +155,7 @@ func (m *Module) Resolve(file int, ref Ref) Resolution {
 	if ref.Qualified() {
 		scope, from = Global, -1
 	}
-	if targets := module.lookup(from, ref.Name, ns, scope, ref.Horizon); len(targets) > 0 {
+	if targets := module.lookup(from, ref.Name, ns, scope, int(ref.Horizon)); len(targets) > 0 {
 		return Resolution{Targets: targets}
 	}
 	if b, ok := m.Builtins.Lookup(ref.Kind, ref.Name); ok {
@@ -222,7 +222,7 @@ func (m *Module) Usage() Usage {
 	for f, ix := range m.Files {
 		for _, r := range ix.Refs {
 			for _, t := range m.Resolve(f, r).Targets {
-				if !r.Edge || r.Owner != t.Symbol || t.File != f {
+				if !r.Edge || int(r.Owner) != t.Symbol || t.File != f {
 					used[t] = true
 				}
 			}
@@ -446,7 +446,7 @@ func (m *Module) Findings(file int, checks Checks, used Usage) []lint.Finding {
 			return true
 		}
 		owner := ix.Symbols[r.Owner]
-		return checks.Of(owner.Kind).Expanded == OnUse && !expanded[Target{Module: m, File: file, Symbol: r.Owner}]
+		return checks.Of(owner.Kind).Expanded == OnUse && !expanded[Target{Module: m, File: file, Symbol: int(r.Owner)}]
 	}
 	var out []lint.Finding
 	for _, r := range ix.Refs {
@@ -494,12 +494,12 @@ func (m *Module) Findings(file int, checks Checks, used Usage) []lint.Finding {
 }
 
 func qualified(r Ref) string {
-	return strings.Join(append(slices.Clone(r.Qualifier), r.Name), "::")
+	return strings.Join(append(slices.Clone(r.Qualifier()), r.Name), "::")
 }
 
 func arity(checks Checks, r Ref, kind Kind, a Arity) []lint.Finding {
 	code := checks.Of(kind).Arity
-	if code == 0 || r.Args == NoArgs || a.Accepts(r.Args) {
+	if code == 0 || int(r.Args) == NoArgs || a.Accepts(int(r.Args)) {
 		return nil
 	}
 	return []lint.Finding{lint.HostFinding(code, r.Span, fmt.Sprintf("%s `%s` takes %s but is given %d", kind, qualified(r), a, r.Args))}
@@ -701,7 +701,7 @@ func (m *Module) absent(file int, code lint.Code) []lint.Finding {
 		changed = false
 		for f, ix := range m.Files {
 			for _, r := range ix.Refs {
-				owner := node{f, r.Owner}
+				owner := node{f, int(r.Owner)}
 				if !r.Edge || r.Owner < 0 || ix.Symbols[r.Owner].Kind.Namespace() != r.Kind.Namespace() {
 					continue
 				}
@@ -710,7 +710,7 @@ func (m *Module) absent(file int, code lint.Code) []lint.Finding {
 				}
 				res := m.Resolve(f, r)
 				if sub, declared := m.Submodules[r.FirstQualifier()]; res.Missing && declared && sub == nil {
-					blocked[owner], changed = blocker{via: qualified(r), module: r.Qualifier[0]}, true
+					blocked[owner], changed = blocker{via: qualified(r), module: r.Call.Qualifier[0]}, true
 					continue
 				}
 				for _, t := range res.Targets {

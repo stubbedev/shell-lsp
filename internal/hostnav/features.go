@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/host/model"
 	"github.com/stubbedev/shell-lsp/internal/host/nix"
 	"github.com/stubbedev/shell-lsp/internal/lint"
@@ -14,18 +15,25 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
+const maxListedReaders = 8
+
 func (g *Group) Findings() []lint.Finding {
+	if g.Language == host.Nix {
+		return slices.Concat(g.Index().Findings, embeddedFindings(g.Self, g.Index().Findings))
+	}
+	return slices.Concat(g.Index().Findings, g.moduleFindings())
+}
+
+func (g *Group) moduleFindings() []lint.Finding {
 	checks := g.Language.Checks()
-	ix := g.Index()
 	if !checks.Active() {
-		return slices.Clone(ix.Findings)
+		return nil
 	}
 	used := g.Module.Usage()
 	for t := range g.shellUsage() {
 		used[t] = true
 	}
-	out := slices.Clone(ix.Findings)
-	out = append(out, g.Module.Findings(g.selfAt(), checks, used)...)
+	out := g.Module.Findings(g.selfAt(), checks, used)
 	for _, inc := range g.missing {
 		out = append(out, model.MissingInclude(checks, inc))
 	}
@@ -192,12 +200,43 @@ func (g *Group) PrepareRename(sym Symbol) error {
 		return nil
 	}
 	if reason := g.refusal(sym); reason != "" {
-		return fmt.Errorf("%w: %s", navigation.ErrNotRenamable, reason)
+		return fmt.Errorf("%w: %s%s", navigation.ErrNotRenamable, reason, g.knownReaders(sym))
 	}
 	if sym.Kind == model.KindModule && g.moduleRoot(sym) != nil && !g.explicitPath(sym) {
 		return fmt.Errorf("%w: module `%s` is found by its name; give it an explicit path first", navigation.ErrNotRenamable, sym.Name)
 	}
 	return nil
+}
+
+func (g *Group) knownReaders(sym Symbol) string {
+	seen := map[string]bool{}
+	var sites []string
+	for _, o := range g.Occurrences(sym) {
+		if o.Declaration {
+			continue
+		}
+		site := g.siteOf(o)
+		if !seen[site] {
+			seen[site] = true
+			sites = append(sites, site)
+		}
+	}
+	if len(sites) == 0 {
+		return ""
+	}
+	if extra := len(sites) - maxListedReaders; extra > 0 {
+		return fmt.Sprintf(". Renaming it would break the reads at %s and %d more", strings.Join(sites[:maxListedReaders], ", "), extra)
+	}
+	return ". Renaming it would break the reads at " + strings.Join(sites, ", ")
+}
+
+func (g *Group) siteOf(o Occurrence) string {
+	name := filepath.Base(o.File.Path)
+	if rel, err := filepath.Rel(filepath.Dir(g.Self.Path), o.File.Path); err == nil {
+		name = rel
+	}
+	line := strings.Count(o.File.Doc.Source().Text()[:o.Span.Start], "\n") + 1
+	return fmt.Sprintf("%s:%d", name, line)
 }
 
 func (g *Group) refusal(sym Symbol) string {
@@ -305,7 +344,7 @@ func (g *Group) Describe(sym Symbol) Hover {
 	var parts []string
 	for _, t := range sym.targets {
 		s := t.Info()
-		md := "```" + fence + "\n" + s.Detail + "\n```"
+		md := "```" + fence + "\n" + s.Description() + "\n```"
 		if s.Doc != "" {
 			md += "\n\n" + s.Doc
 		}
@@ -376,7 +415,7 @@ func (g *Group) Complete(offset int) []Item {
 			for _, s := range ix.Symbols {
 				visible := s.Scope == model.Global || f == g.selfAt() && module == g.Module && s.Scope == expect.Scope
 				if s.Kind == kind && visible {
-					add(Item{Label: s.Name, Kind: s.Kind, Detail: s.Detail, Doc: s.Doc})
+					add(Item{Label: s.Name, Kind: s.Kind, Detail: s.Description(), Doc: s.Doc})
 				}
 			}
 		}

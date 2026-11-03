@@ -40,6 +40,10 @@ func (f *fakeEvaluated) NixpkgsPackage(path []string) (*nixeval.Package, bool) {
 	return &nixeval.Package{Name: "hello-2.0", Version: "2.0", Description: "Says hello.", Declaration: nixeval.Declaration{File: "/pkgs/" + strings.Join(path, "/") + ".nix", Line: 3}}, true
 }
 
+func (f *fakeEvaluated) NixpkgsDeclaration(path []string) (nixeval.Declaration, bool) {
+	return nixeval.Declaration{File: "/pkgs/" + strings.Join(path, "/") + ".nix", Line: 3}, true
+}
+
 func (f *fakeEvaluated) ModuleSites(int) []OptionSite { return nil }
 
 func newFakeEvaluated() *fakeEvaluated { return &fakeEvaluated{roots: map[string][]string{}} }

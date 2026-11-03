@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"unsafe"
 
 	"github.com/stubbedev/shell-lsp/internal/lint"
 )
@@ -75,10 +76,10 @@ func TestQualifiedReferencesEnterSubmodules(t *testing.T) {
 
 	child := &Module{Files: []*Index{{Symbols: []Symbol{{Name: "lint", Kind: KindRecipe}}}}}
 	root := &Module{Files: []*Index{{}}, Submodules: map[string]*Module{"tools": child, "gone": nil}}
-	if got := root.Resolve(0, Ref{Name: "lint", Kind: KindRecipe, Qualifier: []string{"tools"}}); len(got.Targets) != 1 || got.Targets[0].Module != child {
+	if got := root.Resolve(0, Ref{Name: "lint", Kind: KindRecipe, Call: Qualified([]string{"tools"})}); len(got.Targets) != 1 || got.Targets[0].Module != child {
 		t.Errorf("tools::lint = %+v", got)
 	}
-	if got := root.Resolve(0, Ref{Name: "lint", Kind: KindRecipe, Qualifier: []string{"gone"}}); !got.Missing {
+	if got := root.Resolve(0, Ref{Name: "lint", Kind: KindRecipe, Call: Qualified([]string{"gone"})}); !got.Missing {
 		t.Errorf("gone::lint, from an optional module that is absent, = %+v, want missing", got)
 	}
 	if got := root.Resolve(0, Ref{Name: "lint", Kind: KindRecipe}); got.Found() {
@@ -224,7 +225,7 @@ func TestIndexLookups(t *testing.T) {
 
 func TestCyclesAreFoundOnlyOnTheCycle(t *testing.T) {
 	refTo := func(name string, owner int) Ref {
-		return Ref{Name: name, Kind: KindFunction, Owner: owner, Edge: true, Args: NoArgs, Span: Span{Start: owner, End: owner + 1}}
+		return Ref{Name: name, Kind: KindFunction, Owner: Narrow(owner), Edge: true, Args: NoArgs, Span: Span{Start: owner, End: owner + 1}}
 	}
 	symbol := func(name string, at int) Symbol {
 		return Symbol{Name: name, Kind: KindFunction, Span: Span{Start: at, End: at + 1}, Selection: Span{Start: at, End: at + 1}, Parent: NoParent, Arity: NoArity}
@@ -241,5 +242,14 @@ func TestCyclesAreFoundOnlyOnTheCycle(t *testing.T) {
 		if found != want {
 			t.Errorf("%s: on a cycle = %v, want %v", ix.Symbols[i].Name, found, want)
 		}
+	}
+}
+
+func TestARefStaysSmall(t *testing.T) {
+	t.Parallel()
+
+	const budget = 88
+	if size := unsafe.Sizeof(Ref{}); size > budget {
+		t.Errorf("a Ref takes %d bytes, over the budget of %d: an index holds one per read", size, budget)
 	}
 }

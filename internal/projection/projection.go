@@ -11,6 +11,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
+	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
 type kind uint8
@@ -54,6 +55,7 @@ type Map struct {
 	scripts  []parser.Span
 	shells   []dialect.Detection
 	sourced  []int
+	prepared map[int]*syntax.File
 }
 
 func (m *Map) Host() string { return m.host }

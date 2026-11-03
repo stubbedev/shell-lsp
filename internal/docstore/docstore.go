@@ -15,6 +15,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/projection"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
+	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
 type Encoding uint8
@@ -133,7 +134,23 @@ func Project(source *Document, m *projection.Map) *Document {
 	return d
 }
 
+func (d *Document) On(source *Document) *Document {
+	if d.mapping == nil {
+		return source
+	}
+	moved := *d
+	moved.Location, moved.Language, moved.Version, moved.source = source.Location, source.Language, source.Version, source
+	return &moved
+}
+
 func (d *Document) Projected() bool { return d.mapping != nil }
+
+func (d *Document) PreparedScript(start int) (*syntax.File, bool) {
+	if d.mapping == nil {
+		return nil, false
+	}
+	return d.mapping.Prepared(start)
+}
 
 func (d *Document) Source() *Document {
 	if d.mapping == nil {

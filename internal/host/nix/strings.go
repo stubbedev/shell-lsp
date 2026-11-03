@@ -163,7 +163,7 @@ func (f *file) hole(b *projection.Builder, part *syntax.Interpolation, limit int
 		b.Program(span.Start, span.End, pathEnd, baseEnd)
 		return baseEnd
 	}
-	if _, exe, named := programOf(value); named && exe != "" {
+	if _, exe, named := f.programOf(value); named && exe != "" {
 		b.NamedPlaceholder(span.Start, span.End, exe)
 		return span.End
 	}
@@ -221,7 +221,7 @@ func (f *file) markQuotedHoles(str *syntax.String, shell dialect.Shell) {
 	var holes []*syntax.Interpolation
 	for _, part := range str.Parts {
 		if hole, ok := part.(*syntax.Interpolation); ok && hole.Closed {
-			if _, spliced := spliceOf(hole.Value); spliced {
+			if _, spliced := f.spliceOf(hole.Value); spliced {
 				holes = append(holes, hole)
 			}
 		}
@@ -245,11 +245,26 @@ func (f *file) markQuotedHoles(str *syntax.String, shell dialect.Shell) {
 		if f.quotedHoles[hole] {
 			continue
 		}
-		sp, _ := spliceOf(hole.Value)
+		sp, _ := f.spliceOf(hole.Value)
 		for _, item := range sp.items {
 			if nested, isString := item.(*syntax.String); isString {
 				f.markQuotedHoles(nested, shell)
 			}
+		}
+	}
+}
+
+func (f *file) sealHoles(str *syntax.String) {
+	if f.quotesRead == nil {
+		f.quotesRead = map[*syntax.String]bool{}
+	}
+	f.quotesRead[str] = true
+	if f.quotedHoles == nil {
+		f.quotedHoles = map[*syntax.Interpolation]bool{}
+	}
+	for _, part := range str.Parts {
+		if hole, isHole := part.(*syntax.Interpolation); isHole {
+			f.quotedHoles[hole] = true
 		}
 	}
 }
@@ -267,15 +282,16 @@ func mentionsSingleQuote(str *syntax.String) bool {
 }
 
 type splice struct {
+	f       *file
 	items   []syntax.Expr
 	sep     string
 	command bool
 }
 
-func spliceOf(e syntax.Expr) (splice, bool) {
-	var sp splice
+func (f *file) spliceOf(e syntax.Expr) (splice, bool) {
+	sp := splice{f: f}
 	if apply, isCall := syntax.Unparenthesized(e).(*syntax.Apply); isCall {
-		if c := callSurfaces[calleeName(syntax.Unparenthesized(apply.Fn))]; c != nil && c.script != nil && c.script.role == scriptRole && c.positional(len(apply.Args), len(apply.Args)) {
+		if c := callSurfaces[f.callName(apply.Fn)]; c != nil && c.script != nil && c.script.role == scriptRole && c.positional(len(apply.Args), len(apply.Args)) {
 			last := syntax.Unparenthesized(apply.Args[len(apply.Args)-1])
 			if str, isString := last.(*syntax.String); isString {
 				return splice{items: []syntax.Expr{last}, command: true}, str.Closed
@@ -328,7 +344,7 @@ func (s *splice) collect(e syntax.Expr) {
 
 func (s *splice) applied(e *syntax.Apply) {
 	n := len(e.Args)
-	name := calleeName(syntax.Unparenthesized(e.Fn))
+	name := s.f.callName(e.Fn)
 	switch {
 	case name == "optionalString" && n == 2:
 		s.collect(e.Args[1])
@@ -450,7 +466,7 @@ func (f *file) pieces(str *syntax.String) []model.Span {
 }
 
 func (f *file) holeSplice(hole *syntax.Interpolation) (splice, bool) {
-	sp, ok := spliceOf(hole.Value)
+	sp, ok := f.spliceOf(hole.Value)
 	return sp, ok && hole.Closed && !f.quotedHoles[hole]
 }
 

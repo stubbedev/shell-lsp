@@ -143,16 +143,20 @@ func vars(env environment) []binding {
 	return out
 }
 
-func (f *file) detail(b binding) string {
+func (f *file) described(b binding) string {
+	detail, elided := f.detail(b)
+	return model.Symbol{Detail: detail, Elided: elided}.Description()
+}
+
+func (f *file) detail(b binding) (string, model.Elision) {
 	text := f.src[b.span.Start:b.span.End]
 	if !strings.Contains(text, "\n") {
-		return text
+		return text, model.NotElided
 	}
-	name := f.src[b.name.Start:b.name.End]
 	if b.inherit {
-		return "inherit " + name + ";"
+		return f.src[b.name.Start:b.name.End], model.ElidedInherit
 	}
-	return f.src[b.span.Start:b.name.End] + " = …;"
+	return f.src[b.span.Start:b.name.End], model.ElidedValue
 }
 
 func (f *file) index(m *projection.Map) *model.Index {
@@ -194,14 +198,14 @@ func (f *file) index(m *projection.Map) *model.Index {
 func (f *file) holes(str *syntax.String) []model.Hole {
 	var out []model.Hole
 	f.eachHole(str, func(hole *syntax.Interpolation) {
-		if head, exe, named := programOf(hole.Value); named {
+		if head, exe, named := f.programOf(hole.Value); named {
 			out = append(out, model.Hole{Span: hole.Span(), Head: head, Exe: exe})
 		}
 	})
 	return out
 }
 
-func programOf(e syntax.Expr) (model.Span, string, bool) {
+func (f *file) programOf(e syntax.Expr) (model.Span, string, bool) {
 	switch e := syntax.Unparenthesized(e).(type) {
 	case *syntax.Ident:
 		return e.Span(), "", true
@@ -210,11 +214,11 @@ func programOf(e syntax.Expr) (model.Span, string, bool) {
 			return nameSpan(e.Path[len(e.Path)-1]), "", true
 		}
 	case *syntax.Apply:
-		getter := calleeName(syntax.Unparenthesized(e.Fn))
+		getter := f.callName(e.Fn)
 		if !slices.Contains(programGetters, getter) && !slices.Contains(shellEscapes, getter) && getter != toStringName {
 			return model.Span{}, "", false
 		}
-		head, _, named := programOf(e.Args[0])
+		head, _, named := f.programOf(e.Args[0])
 		exe := ""
 		if getter == getExeName {
 			exe = mainProgram(e.Args[0])
@@ -251,7 +255,7 @@ func (f *file) inputs(env environment) []model.Input {
 			continue
 		}
 		for _, item := range items.Items {
-			if head, _, named := programOf(item); named {
+			if head, _, named := f.programOf(item); named {
 				out = append(out, model.Input{Name: f.src[head.Start:head.End], Span: item.Span(), Head: head, List: list})
 			}
 		}

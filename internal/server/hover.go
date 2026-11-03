@@ -7,6 +7,7 @@ import (
 	"os"
 	"slices"
 
+	"github.com/stubbedev/shell-lsp/internal/config"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/embedded"
 	"github.com/stubbedev/shell-lsp/internal/hover"
@@ -15,6 +16,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/manpage"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/platform"
+	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
 type commandDocs struct {
@@ -51,16 +53,7 @@ func (s *Server) handleHover(ctx context.Context, docs *docstore.View, hoverPara
 	if !inside {
 		return nil, nil
 	}
-	if h, ok := embedded.HoverAt(embeddedPrograms(here.File), here.offset); ok {
-		return s.hoverResult(here.snapshot, h.Markdown, h.Span), nil
-	}
-	result, ok, err := hover.Hover(ctx, hover.Input{
-		Tree: here.Tree, Imports: s.imports(here.File), Offset: here.offset, Commands: s.commandDocs,
-		Lint: func() (lint.Report, bool) {
-			report, _ := s.lintReport(here.File, here.settings, here.generation)
-			return report, here.settings.Lint.Enabled
-		},
-	})
+	result, ok, err := s.shellHover(ctx, here.File, here.File, here.offset, here.settings, here.generation)
 	if err != nil {
 		return nil, err
 	}
@@ -68,6 +61,23 @@ func (s *Server) handleHover(ctx context.Context, docs *docstore.View, hoverPara
 		return nil, nil
 	}
 	return s.hoverResult(here.snapshot, result.Markdown, result.Span), nil
+}
+
+func (s *Server) shellHover(ctx context.Context, whole, variant *workspace.File, offset int, settings config.Settings, generation uint64) (hover.Result, bool, error) {
+	if h, ok := embedded.HoverAt(embeddedPrograms(variant), offset); ok {
+		return hover.Result{Markdown: h.Markdown, Span: h.Span}, true, nil
+	}
+	return hover.Hover(ctx, hover.Input{
+		Tree: variant.Tree, Imports: s.imports(variant), Offset: offset, Commands: s.commandDocs,
+		Lint: s.lintOf(whole, settings, generation),
+	})
+}
+
+func (s *Server) lintOf(file *workspace.File, settings config.Settings, generation uint64) func() (lint.Report, bool) {
+	return func() (lint.Report, bool) {
+		report, _ := s.lintReport(file, settings, generation)
+		return report, settings.Lint.Enabled
+	}
 }
 
 func (s *Server) hoverResult(snap *snapshot, markdown string, span parser.Span) lsp.Hover {

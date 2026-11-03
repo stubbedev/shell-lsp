@@ -71,6 +71,7 @@ reproducer so that it can be sent upstream as it is.
 | 0039 | syntax: `ParseError.Closer` names the text that closes the construct left open, after what error recovery supplied at the end of the input inside it (a `"` and then `]]` on a new line after `[[ "$a`), so a caller completing partial input can append it and parse again | — |
 | 0040 | syntax: a parameter expansion token whose read fails (invalid UTF-8 right after `]` in `${0#$[a a]\xf1`) ends the input, as every other token does after an error, instead of leaving `callExpr` looping forever on it | — |
 | 0041 | syntax: a here-document becomes pending only once its word is parsed, so a word that crosses a newline (`<<$A[` and a newline, with zsh) is no longer read as a here-document with a nil word, which panicked | — |
+| 0042 | syntax: statements, parameter expansions, double-quoted strings and assignments come from chunks, and a statement list collects on a stack and copies to its exact size, so a large script costs far fewer allocations for the same tree | — |
 
 ## Tests
 

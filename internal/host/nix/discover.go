@@ -2,14 +2,17 @@ package nix
 
 import (
 	"cmp"
+	"slices"
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/directive"
 	"github.com/stubbedev/shell-lsp/internal/host/model"
+	"github.com/stubbedev/shell-lsp/internal/host/nix/highlight"
 	"github.com/stubbedev/shell-lsp/internal/host/nix/scope"
 	"github.com/stubbedev/shell-lsp/internal/host/nix/syntax"
 	"github.com/stubbedev/shell-lsp/internal/projection"
+	"github.com/stubbedev/shell-lsp/internal/semantic"
 )
 
 var (
@@ -59,9 +62,12 @@ type call struct {
 }
 
 type hostedText struct {
-	via   *projection.Map
-	inner Embedding
-	base  model.Scope
+	via    *projection.Map
+	inner  Embedding
+	base   model.Scope
+	name   string
+	family string
+	placed bool
 }
 
 type shellString struct {
@@ -242,11 +248,7 @@ func (f *file) apply(e *syntax.Apply, c context, at position) {
 func (f *file) walkApplied(item syntax.Expr, e *syntax.Apply, k int, c context, at position) {
 	switch item := syntax.Unparenthesized(item).(type) {
 	case *syntax.String:
-		via := call{}
-		if !f.definedHere(syntax.Unparenthesized(e.Fn)) {
-			via = callOf(e, k)
-		}
-		f.visitString(item, c, at, via)
+		f.visitString(item, c, at, f.callOf(e, k))
 	case *syntax.AttrSet:
 		callee := ""
 		if k > 0 {
@@ -265,11 +267,11 @@ func applied(e *syntax.Apply, k int) syntax.Expr {
 	return e.Args[k-1]
 }
 
-func callOf(e *syntax.Apply, k int) call {
+func (f *file) callOf(e *syntax.Apply, k int) call {
 	if k == 0 {
 		return call{}
 	}
-	name := calleeName(syntax.Unparenthesized(e.Fn))
+	name := f.callName(e.Fn)
 	c := callSurfaces[name]
 	if c == nil || !c.positional(k, len(e.Args)) {
 		return call{}
@@ -309,6 +311,8 @@ func calleeName(e syntax.Expr) string {
 	}
 	return ""
 }
+
+func (f *file) callName(fn syntax.Expr) string { return f.libraryName(syntax.Unparenthesized(fn)) }
 
 func (f *file) libraryName(e syntax.Expr) string {
 	if f.definedHere(e) {
@@ -360,7 +364,11 @@ func (f *file) visitString(str *syntax.String, c context, at position, via call)
 		return
 	}
 	if s, ok := f.classify(str, c, at, via); ok {
-		f.markQuotedHoles(s.str, s.detection.Shell)
+		if s.hosted != nil {
+			f.sealHoles(s.str)
+		} else {
+			f.markQuotedHoles(s.str, s.detection.Shell)
+		}
 		f.found = append(f.found, s)
 		return
 	}
@@ -537,7 +545,7 @@ func (f *file) shebangLine(str *syntax.String) string {
 				return line.String()
 			}
 		case *syntax.Interpolation:
-			line.WriteString(interpreterOf(part.Value))
+			line.WriteString(f.interpreterOf(part.Value))
 		case *syntax.Escape:
 			return line.String()
 		}
@@ -545,15 +553,15 @@ func (f *file) shebangLine(str *syntax.String) string {
 	return line.String()
 }
 
-func interpreterOf(e syntax.Expr) string {
+func (f *file) interpreterOf(e syntax.Expr) string {
 	value := syntax.Unparenthesized(e)
-	if selected, isSelect := value.(*syntax.Select); isSelect && lastIdent(selected.Path) == "shell" && calleeName(selected.Target) == "stdenv" {
+	if selected, isSelect := value.(*syntax.Select); isSelect && lastIdent(selected.Path) == "shell" && f.libraryName(selected.Target) == "stdenv" {
 		return bashPath
 	}
-	if calleeName(value) == "runtimeShell" {
+	if f.libraryName(value) == "runtimeShell" {
 		return bashPath
 	}
-	if _, exe, named := programOf(value); named && exe != "" {
+	if _, exe, named := f.programOf(value); named && exe != "" {
 		return "/" + exe
 	}
 	return ""
@@ -572,8 +580,11 @@ func (f *file) withShebang(s shellString) (shellString, bool) {
 func (f *file) namedText(s shellString, via call) (shellString, bool) {
 	name := cmp.Or(via.file, f.fileName(s.context))
 	if f.embed != nil && name != "" {
+		if strings.HasSuffix(name, nixExtension) {
+			return f.hostText(s, f.nixText, name, via), true
+		}
 		if analyze, known := f.embed(name); known {
-			return f.hostText(s, analyze), true
+			return f.hostText(s, analyze, name, via), true
 		}
 	}
 	if _, _, _, has := f.shebangOf(s.str); has {
@@ -619,13 +630,32 @@ func siblingLiteral(set *syntax.AttrSet, key string) string {
 	return ""
 }
 
-func (f *file) hostText(s shellString, analyze func(string) Embedding) shellString {
+func (f *file) nixText(text string) Embedding {
+	a := AnalyzeWith(text, f.embed)
+	tokens := highlight.Tokens(a.tree, a.Scope, nil, nil)
+	a.Index.Tokens = slices.DeleteFunc(tokens, func(t semantic.Token) bool {
+		return t.Type == semantic.TypeString && slices.ContainsFunc(a.Index.Shells, func(shell model.Shell) bool { return shell.Span.Touches(t.Span.Start) })
+	})
+	return Embedding{Map: a.Map, Detection: a.Detection, Index: a.Index}
+}
+
+func (f *file) hostedTexts() []HostedText {
+	var out []HostedText
+	for _, s := range f.found {
+		if h := s.hosted; h != nil {
+			out = append(out, HostedText{Name: h.name, Family: h.family, Placed: h.placed, Content: s.str.Content, Via: h.via})
+		}
+	}
+	return out
+}
+
+func (f *file) hostText(s shellString, analyze func(string) Embedding, name string, written call) shellString {
 	b := projection.NewBuilder(f.src)
 	b.StandIn(holeStandIn)
 	f.body(b, s, "", textBody)
 	via := b.Map()
 	inner := analyze(via.Text())
-	s.hosted = &hostedText{via: via, inner: inner}
+	s.hosted = &hostedText{via: via, inner: inner, name: name, placed: written.surface == nil && s.context.callee != writeTextFile, family: strings.Join(f.path[:max(len(f.path)-2, 0)], "/")}
 	s.detection = inner.Detection
 	s.joined = false
 	return s

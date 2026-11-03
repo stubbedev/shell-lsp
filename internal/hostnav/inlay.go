@@ -23,8 +23,8 @@ func (g *Group) InlayHints(within parser.Span) []assist.Hint {
 		if !inside(r.Span) {
 			continue
 		}
-		if len(r.ArgSpans) > 0 {
-			out = append(out, g.parameterHints(r, r.ArgSpans, text)...)
+		if spans := r.ArgSpans(); len(spans) > 0 {
+			out = append(out, g.parameterHints(r, spans, text)...)
 		}
 		if r.Kind != model.KindVariable {
 			continue
@@ -91,7 +91,7 @@ func (g *Group) parameterHints(r model.Ref, args []parser.Span, text string) []a
 }
 
 func (g *Group) parameterNames(r model.Ref) []string {
-	res := g.Module.Resolve(g.selfAt(), model.Ref{Name: r.Name, Kind: r.Kind, Scope: r.Scope, Qualifier: r.Qualifier})
+	res := g.Module.Resolve(g.selfAt(), model.Ref{Name: r.Name, Kind: r.Kind, Scope: r.Scope, Call: r.Call})
 	if res.Builtin != nil {
 		return res.Builtin.Params
 	}

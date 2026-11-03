@@ -3,6 +3,7 @@ package highlight
 import (
 	"cmp"
 	"slices"
+	"sort"
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/host/nix/builtins"
@@ -42,14 +43,13 @@ var (
 	constantClass  = class{kind: semantic.TypeVariable, mods: semantic.ModReadonly | semantic.ModDefaultLibrary}
 )
 
-func Tokens(f *syntax.File, table *scope.Table, shell []semantic.Token) []semantic.Token {
+func Tokens(f *syntax.File, table *scope.Table, shell []semantic.Token, pieces []syntax.Span) []semantic.Token {
 	n := namer{table: table, classes: make(map[int]class, len(f.Tokens)/4)}
 	syntax.Inspect(f.Root, n.visit)
 	for _, e := range f.Stray {
 		syntax.Inspect(e, n.visit)
 	}
-	slices.SortFunc(n.antiquotes, func(a, b syntax.Span) int { return cmp.Compare(a.Start, b.Start) })
-	return overlay(f.Text, classified(f, n.classes), clipped(f, n.antiquotes, shell))
+	return overlay(f.Text, classified(f, n.classes), clipped(f, outermost(n.antiquotes), pieces, shell))
 }
 
 func lexical(kind syntax.TokenKind) (class, bool) {
@@ -256,58 +256,75 @@ func (n *namer) attr(a syntax.Attr, c class) {
 	}
 }
 
-func clipped(f *syntax.File, antiquotes []syntax.Span, shell []semantic.Token) []semantic.Token {
+func clipped(f *syntax.File, antiquotes, pieces []syntax.Span, shell []semantic.Token) []semantic.Token {
 	if len(shell) == 0 {
 		return nil
 	}
-	pieces := outsideAntiquotes(shell, antiquotes)
-	runs := literalRuns(f.Tokens)
-	out := make([]semantic.Token, 0, len(pieces))
-	run, end := 0, 0
-	for _, piece := range pieces {
-		start := max(piece.Span.Start, end)
-		for run < len(runs) && runs[run].End <= start {
-			run++
-		}
-		for _, r := range runs[run:] {
-			if r.Start >= piece.Span.End {
+	runs := shellRuns(literalRuns(f.Tokens), antiquotes, pieces)
+	parts := make([]shellPart, 0, len(shell))
+	for _, t := range shell {
+		first := sort.Search(len(runs), func(i int) bool { return runs[i].End > t.Span.Start })
+		for _, r := range runs[first:] {
+			if r.Start >= t.Span.End {
 				break
 			}
-			span := syntax.Span{Start: max(r.Start, start), End: min(r.End, piece.Span.End)}
-			out = appendLines(out, f.Text, span, class{kind: piece.Type, mods: piece.Modifiers})
-			end = span.End
+			parts = append(parts, shellPart{span: syntax.Span{Start: max(r.Start, t.Span.Start), End: min(r.End, t.Span.End)}, width: t.Span.End - t.Span.Start, class: class{kind: t.Type, mods: t.Modifiers}})
+		}
+	}
+	slices.SortStableFunc(parts, func(a, b shellPart) int {
+		return cmp.Or(cmp.Compare(a.span.Start, b.span.Start), cmp.Compare(a.width, b.width))
+	})
+	out := make([]semantic.Token, 0, len(parts))
+	end := 0
+	for _, part := range parts {
+		start := max(part.span.Start, end)
+		if start >= part.span.End {
+			continue
+		}
+		out = appendLines(out, f.Text, syntax.Span{Start: start, End: part.span.End}, part.class)
+		end = part.span.End
+	}
+	return out
+}
+
+type shellPart struct {
+	span  syntax.Span
+	width int
+	class class
+}
+
+func shellRuns(runs, antiquotes, pieces []syntax.Span) []syntax.Span {
+	out := make([]syntax.Span, 0, len(runs))
+	outer := 0
+	for _, run := range runs {
+		for outer < len(antiquotes) && antiquotes[outer].End <= run.Start {
+			outer++
+		}
+		if outer == len(antiquotes) || antiquotes[outer].Start >= run.End {
+			out = append(out, run)
+			continue
+		}
+		first := sort.Search(len(pieces), func(i int) bool { return pieces[i].End > run.Start })
+		for _, piece := range pieces[first:] {
+			if piece.Start >= run.End {
+				break
+			}
+			out = append(out, syntax.Span{Start: max(run.Start, piece.Start), End: min(run.End, piece.End)})
 		}
 	}
 	return out
 }
 
-func outsideAntiquotes(shell []semantic.Token, antiquotes []syntax.Span) []semantic.Token {
-	pieces := make([]semantic.Token, 0, len(shell))
-	keep := func(t semantic.Token, start, end int) {
-		if start < end {
-			pieces = append(pieces, semantic.Token{Span: syntax.Span{Start: start, End: end}, Type: t.Type, Modifiers: t.Modifiers})
+func outermost(antiquotes []syntax.Span) []syntax.Span {
+	slices.SortFunc(antiquotes, func(a, b syntax.Span) int { return cmp.Compare(a.Start, b.Start) })
+	end := 0
+	return slices.DeleteFunc(antiquotes, func(s syntax.Span) bool {
+		if s.Start < end {
+			return true
 		}
-	}
-	first := 0
-	for _, t := range shell {
-		for first < len(antiquotes) && antiquotes[first].Start < t.Span.Start {
-			first++
-		}
-		at := t.Span.Start
-		for _, hole := range antiquotes[first:] {
-			if hole.Start >= t.Span.End {
-				break
-			}
-			if hole.Start < at {
-				continue
-			}
-			keep(t, at, hole.Start)
-			at = hole.End
-		}
-		keep(t, at, t.Span.End)
-	}
-	slices.SortStableFunc(pieces, func(a, b semantic.Token) int { return cmp.Compare(a.Span.Start, b.Span.Start) })
-	return pieces
+		end = s.End
+		return false
+	})
 }
 
 func literalRuns(tokens []syntax.Token) []syntax.Span {

@@ -23,13 +23,9 @@ type programLink struct {
 	taken   func(name string) bool
 }
 
-func Programs(file *workspace.File) []embedded.Program {
-	return workspace.Memo(file, "embedded.programs", 0, func() []embedded.Program { return embedded.Find(file.Tree) })
-}
-
 func (g *Group) programSymbol(file *workspace.File, offset int) (Symbol, bool) {
 	for _, variant := range file.Variants() {
-		programs := Programs(variant)
+		programs := navigation.Programs(variant)
 		for i := range programs {
 			p := &programs[i]
 			name, ok := p.VariableAt(offset)
@@ -63,25 +59,17 @@ func (g *Group) linked(file *workspace.File, p *embedded.Program, b embedded.Bin
 		occs = append(occs, Occurrence{File: file, Span: host(read)})
 	}
 	link := &programLink{flag: flag, occs: occs, binding: b, program: p.Language, hops: g.bindingHops(file, b)}
-	link.taken = func(name string) bool {
-		_, bound := p.Binding(name)
-		return bound || len(p.Reads(name)) > 0
-	}
+	link.taken = p.Taken
 	link.refusal = programRefusal(file, p, b.Name, occs)
 	return Symbol{Name: b.Name, Kind: model.KindVariable, Span: span, link: link}
 }
 
 func programRefusal(file *workspace.File, p *embedded.Program, name string, occs []Occurrence) string {
-	if p.NamesArguments() {
-		return fmt.Sprintf("this %s program also reads its arguments through `$ARGS`, whose keys are not followed", p.Language)
+	spans := make([]parser.Span, len(occs))
+	for i, o := range occs {
+		spans[i] = o.Span
 	}
-	text := file.Doc.Source().Text()
-	for _, o := range occs {
-		if text[o.Span.Start:o.Span.End] != name {
-			return fmt.Sprintf("`%s` is written across an antiquotation or an escape here", name)
-		}
-	}
-	return ""
+	return p.RenameRefusal(name, file.Doc.Source().Text(), spans)
 }
 
 func (g *Group) bindingHops(file *workspace.File, b embedded.Binding) []Symbol {

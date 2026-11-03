@@ -133,7 +133,7 @@ func calls(f *workspace.File, args []*syntax.Word, r host.Recursion, scope model
 		ref.Span = parser.Span{Start: f.Doc.SourceOffset(span.Start), End: f.Doc.SourceOffset(span.End)}
 		if r.Separator != "" && strings.Contains(lit, r.Separator) {
 			parts := strings.Split(lit, r.Separator)
-			ref.Name, ref.Qualifier = parts[len(parts)-1], parts[:len(parts)-1]
+			ref.Name, ref.Call = parts[len(parts)-1], model.Qualified(parts[:len(parts)-1])
 			ref.Span.Start = ref.Span.End - len(ref.Name)
 		}
 		out = append(out, ref)
@@ -188,7 +188,7 @@ func (g *Group) ShellSymbol(offset int) (Symbol, bool) {
 	for _, r := range regions(g.Self) {
 		for _, c := range r.calls {
 			if c.Span.Touches(at) {
-				return g.symbolFor(model.Hit{Name: c.Name, Kind: c.Kind, Span: c.Span, Scope: c.Scope, Qualifier: c.Qualifier, Symbol: model.NoSymbol}, g.selfAt(), g.Module)
+				return g.symbolFor(model.Hit{Name: c.Name, Kind: c.Kind, Span: c.Span, Scope: c.Scope, Qualifier: c.Qualifier(), Symbol: model.NoSymbol}, g.selfAt(), g.Module)
 			}
 		}
 	}

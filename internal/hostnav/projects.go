@@ -98,6 +98,17 @@ func (p *Projects) Want(h Host, env Env) {
 	p.enqueue(self, env)
 }
 
+func (p *Projects) ReleaseCaches() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.active {
+		return
+	}
+	for _, l := range p.linked {
+		l.project.Release()
+	}
+}
+
 func (p *Projects) Forget(path string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()

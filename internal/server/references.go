@@ -10,7 +10,6 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/navigation"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
-	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
 func (s *Server) handleReferences(ctx context.Context, docs *docstore.View, refParams lsp.ReferenceParams) (any, error) {
@@ -70,11 +69,7 @@ func (s *Server) handleDocumentHighlight(ctx context.Context, docs *docstore.Vie
 	if !inside {
 		return nil, nil
 	}
-	sym, ok := navigation.SymbolAt(here.File, here.offset)
-	if !ok {
-		return []lsp.DocumentHighlight{}, nil
-	}
-	occs := navigation.Occurrences(sym, []*workspace.File{here.File})
+	occs := navigation.HighlightsAt(here.File, here.offset)
 	out := make([]lsp.DocumentHighlight, len(occs))
 	for i, o := range occs {
 		kind := lsp.HighlightRead

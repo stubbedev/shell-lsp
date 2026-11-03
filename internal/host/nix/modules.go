@@ -95,6 +95,8 @@ type space struct {
 	sets     []flowSet
 	declared bool
 	escaped  bool
+	leftIn   *symbolTable
+	leftAt   int
 	dynamic  bool
 	module   bool
 	sub      *flowClass
@@ -478,7 +480,7 @@ func holdsModules(u *symbolTable, t syntax.Expr, keys int, seen map[*scope.Def]b
 	case *syntax.Select:
 		return keys == 0 && deferredModuleType(lastIdent(t.Path))
 	case *syntax.Apply:
-		name := calleeName(syntax.Unparenthesized(t.Fn))
+		name := u.f.callName(t.Fn)
 		last := t.Args[len(t.Args)-1]
 		switch {
 		case slices.Contains(wrappingTypes, name):
@@ -513,7 +515,7 @@ func (p *Project) submoduleType(u *symbolTable, s *space, t syntax.Expr) {
 		return
 	}
 	last := call.Args[len(call.Args)-1]
-	switch name := calleeName(syntax.Unparenthesized(call.Fn)); {
+	switch name := u.f.callName(call.Fn); {
 	case name == "submodule":
 		p.walkAll(p.subClass(s), p.evalModuleValue(u, last))
 	case name == "submoduleWith":
@@ -551,10 +553,10 @@ func (p *Project) register(c *flowClass, s *space, u *symbolTable, set *attrs, d
 	}
 	p.seen[key] = true
 	p.addMember(s, u, set, false)
-	for _, kid := range set.dynKids {
+	for _, kid := range set.dynamicKids() {
 		if nested := p.nestedClass(c, append(s.path(), anyName)); nested != nil {
 			p.walk(nested, flowSet{unit: u, set: kid})
-			for _, value := range kid.direct {
+			for _, value := range kid.directValues() {
 				p.walkAll(nested, p.evalModuleValue(u, value))
 			}
 		}

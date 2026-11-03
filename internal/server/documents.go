@@ -11,6 +11,9 @@ import (
 
 func (s *Server) handleDidOpen(_ context.Context, openParams lsp.DidOpenTextDocumentParams) error {
 	item := openParams.TextDocument
+	if path, err := fileuri.ToPath(item.URI); err == nil {
+		item.Text = s.workspace.KnownText(path, item.Text)
+	}
 	s.docs.Open(item)
 	s.logger.Debug("document opened", "uri", item.URI, "version", item.Version)
 	s.documentChanged(item.URI)
@@ -44,13 +47,16 @@ func (s *Server) handleDidChange(_ context.Context, changeParams lsp.DidChangeTe
 func (s *Server) handleDidClose(_ context.Context, closeParams lsp.DidCloseTextDocumentParams) error {
 	uri := closeParams.TextDocument.URI
 	s.docs.Close(uri)
-	s.snapshots.forget(uri)
+	last := s.snapshots.forget(uri)
 	s.semantic.forget(uri)
 	s.delivery.closed(uri)
 	s.forgetNixClasses(uri)
 	s.symbols.closes.Add(1)
 	if path, err := fileuri.ToPath(uri); err == nil {
 		s.projects.Forget(path)
+		if last != nil {
+			s.workspace.Adopt(path, last.File)
+		}
 	}
 	return nil
 }

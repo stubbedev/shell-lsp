@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"weak"
 
 	"github.com/stubbedev/shell-lsp/internal/actions"
 	"github.com/stubbedev/shell-lsp/internal/config"
@@ -23,6 +24,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/host/nix"
 	"github.com/stubbedev/shell-lsp/internal/hostnav"
 	"github.com/stubbedev/shell-lsp/internal/hostrun"
+	"github.com/stubbedev/shell-lsp/internal/hover"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
@@ -43,6 +45,7 @@ const (
 type memoryRelease struct {
 	mu    sync.Mutex
 	timer *time.Timer
+	calm  func()
 }
 
 func (m *memoryRelease) schedule() {
@@ -52,7 +55,10 @@ func (m *memoryRelease) schedule() {
 		m.timer.Reset(memoryReleaseQuiet)
 		return
 	}
-	m.timer = time.AfterFunc(memoryReleaseQuiet, debug.FreeOSMemory)
+	m.timer = time.AfterFunc(memoryReleaseQuiet, func() {
+		m.calm()
+		debug.FreeOSMemory()
+	})
 }
 
 func (m *memoryRelease) stop() {
@@ -179,6 +185,7 @@ func (s *Server) partialAnswer() {
 }
 
 func (s *Server) linkLanded() {
+	s.workspace.ReleaseStash()
 	if !s.partialShown.Swap(false) {
 		return
 	}
@@ -277,17 +284,29 @@ func (s *Server) nixElsewhere(ctx context.Context, docs *docstore.View, here nat
 	names, _, inNixpkgs := doc.NixpkgsPathAt(here.source)
 	switch {
 	case inNixpkgs && names[0] == nix.LibName:
-		if entry, ok := s.nixLibraryEntry(here.File, names[1:]); ok && entry.Builtin == "" {
+		entry, ok := s.nixLibraryEntry(here.File, names[1:])
+		if ok && entry.Builtin == "" {
 			return declarationLocations(entry.Declaration)
 		}
-		return nil
+		if ok {
+			return nil
+		}
+		return nixpkgsDeclared(known, names)
 	case inNixpkgs:
-		if pkg, ok := known.NixpkgsPackage(names); ok {
+		if pkg, ok := known.NixpkgsPackage(names); ok && pkg.Declaration.File != "" {
 			return declarationLocations(known.realised([]nixeval.Declaration{pkg.Declaration})...)
 		}
-		return nil
+		return nixpkgsDeclared(known, names)
 	}
 	return declarationLocations(known.realised(doc.OptionDeclarations(here.source, known))...)
+}
+
+func nixpkgsDeclared(known *nixRequest, names []string) []lsp.Location {
+	declaration, ok := known.NixpkgsDeclaration(names)
+	if !ok {
+		return nil
+	}
+	return declarationLocations(known.realised([]nixeval.Declaration{declaration})...)
 }
 
 func declarationLocations(declarations ...nixeval.Declaration) []lsp.Location {
@@ -314,10 +333,25 @@ func (s *Server) nixLibrary(file *workspace.File) (*nix.Library, bool) {
 	if !ok {
 		return nil, false
 	}
-	return nix.NewLibrary(source, func(path string) (string, bool) {
+	s.library.mu.Lock()
+	defer s.library.mu.Unlock()
+	if s.library.source == source {
+		if library := s.library.held.Value(); library != nil {
+			return library, true
+		}
+	}
+	library := nix.NewLibrary(source, func(path string) (string, bool) {
 		raw, _, err := regularfile.Read(path, maxLibraryFile)
 		return string(raw), err == nil
-	}), true
+	})
+	s.library.source, s.library.held = source, weak.Make(library)
+	return library, true
+}
+
+type heldLibrary struct {
+	mu     sync.Mutex
+	source string
+	held   weak.Pointer[nix.Library]
 }
 
 func (s *Server) nixLibraryEntry(file *workspace.File, names []string) (nix.LibraryEntry, bool) {
@@ -408,12 +442,27 @@ func (s *Server) nativeCompletion(ctx context.Context, docs *docstore.View, here
 
 func (s *Server) nixCompletion(ctx context.Context, docs *docstore.View, here nativeHere) (lsp.CompletionList, error) {
 	at := sourcePositions(here.File, here.encoding)
+	if items, hosted := hostnav.EmbeddedComplete(here.File, here.source); hosted {
+		out := make([]lsp.CompletionItem, 0, len(items))
+		for _, it := range items {
+			item := nativeItem(it.Label, it.Kind, it.Detail, it.Span, at)
+			if it.Doc != "" {
+				item.Documentation = lsp.Markdown(it.Doc)
+			}
+			out = append(out, item)
+		}
+		return lsp.CompletionList{Items: out}, nil
+	}
 	known := s.nixEvaluated(ctx, docs, here.snapshot)
 	defer known.done()
 	text := here.File.Doc.Source().Text()
-	found := nix.Complete(text, here.source, s.nixFiles(docs, here.File), known)
+	cursor, located := nix.Locate(text, here.source, s.nixFiles(docs, here.File))
+	if !located {
+		return lsp.CompletionList{IsIncomplete: known.incomplete, Items: []lsp.CompletionItem{}}, nil
+	}
+	found := cursor.Complete(known)
 	linking := false
-	if req, wanted := nix.MembersWanted(text, here.source); wanted && here.Doc.Local {
+	if req, wanted := cursor.MembersWanted(); wanted && here.Doc.Local {
 		g, err := s.group(ctx, docs, here.host)
 		if err != nil {
 			return lsp.CompletionList{}, err
@@ -421,7 +470,7 @@ func (s *Server) nixCompletion(ctx context.Context, docs *docstore.View, here na
 		linking = g.Linking()
 		found = withProjectMembers(found, g.NixMembers(req))
 	}
-	if parent, word, wanted := nix.LibraryMembersWanted(text, here.source); wanted {
+	if parent, word, wanted := cursor.LibraryMembersWanted(); wanted {
 		if library, ok := s.nixLibrary(here.File); ok {
 			found = withProjectMembers(found, nix.LibraryItems(library.Members(parent), parent, word))
 		}
@@ -477,7 +526,7 @@ func (s *Server) nativeSymbols(snap *snapshot) []lsp.DocumentSymbol {
 			sym := ix.Symbols[i]
 			out = append(out, lsp.DocumentSymbol{
 				Name:           sym.Name,
-				Detail:         sym.Detail,
+				Detail:         sym.Description(),
 				Kind:           nativeKind(sym.Kind),
 				Range:          at.Range(sym.Span),
 				SelectionRange: at.Range(sym.Selection),
@@ -561,9 +610,16 @@ func (s *Server) nativeHoverAt(ctx context.Context, docs *docstore.View, here na
 		}
 		described := g.Describe(sym)
 		described.Markdown += linkingNote(g)
+		described.Markdown = s.findingsAbove(here.File, here.File, here.offset, here.settings, here.generation, described.Markdown)
 		return s.nativeHover(here.snapshot, described), true, nil
 	}
 	h, ok := g.Hover(here.source)
+	if proven, held := s.nixProvenOffset(here); held {
+		if !ok {
+			return s.provenShellHover(ctx, here, proven)
+		}
+		h.Markdown = s.findingsAbove(proven.whole, proven.variant, proven.offset, here.settings, here.generation, h.Markdown)
+	}
 	if !ok {
 		return nil, true, nil
 	}
@@ -572,6 +628,36 @@ func (s *Server) nativeHoverAt(ctx context.Context, docs *docstore.View, here na
 	}
 	h.Markdown += linkingNote(g)
 	return s.nativeHover(here.snapshot, h), true, nil
+}
+
+func (s *Server) findingsAbove(whole, variant *workspace.File, offset int, settings config.Settings, generation uint64, markdown string) string {
+	return hover.WithFindings(hover.Input{Tree: variant.Tree, Offset: offset, Lint: s.lintOf(whole, settings, generation)}, hover.Result{Markdown: markdown}).Markdown
+}
+
+type provenOffset struct {
+	whole, variant *workspace.File
+	offset         int
+}
+
+func (s *Server) nixProvenOffset(here nativeHere) (provenOffset, bool) {
+	wrapped := s.nixProvenFile(here.File).wrapped
+	if here.host.Language() != host.Nix || wrapped == nil {
+		return provenOffset{}, false
+	}
+	offset, inside := wrapped.Doc.Positions(here.encoding).Offset(here.File.Doc.Source().OffsetToPosition(here.source, here.encoding))
+	if !inside {
+		return provenOffset{}, false
+	}
+	return provenOffset{whole: wrapped, variant: wrapped.At(offset), offset: offset}, true
+}
+
+func (s *Server) provenShellHover(ctx context.Context, here nativeHere, proven provenOffset) (any, bool, error) {
+	result, ok, err := s.shellHover(ctx, proven.whole, proven.variant, proven.offset, here.settings, here.generation)
+	if err != nil || !ok {
+		return nil, true, err
+	}
+	r := proven.whole.Doc.Positions(here.encoding).Range(result.Span)
+	return lsp.Hover{Contents: lsp.MarkupContent{Kind: s.hoverFormat(), Value: result.Markdown}, Range: &r}, true, nil
 }
 
 func linkingNote(g *hostnav.Group) string {
@@ -877,11 +963,7 @@ func (s *Server) nixUpdateInput(h hostnav.Host, at int) (lsp.CodeAction, bool, e
 }
 
 func (s *Server) nixProvenFindings(file *workspace.File) ([]lint.Finding, *workspace.File) {
-	proof, _, held := s.nixEval.strings.of(file.URI)
-	if !held {
-		return nil, nil
-	}
-	wrapped := hostnav.Wrapped(file, proof.On(file.Doc.Source()), nil)
+	wrapped := s.nixProvenFile(file).wrapped
 	if wrapped == nil {
 		return nil, nil
 	}

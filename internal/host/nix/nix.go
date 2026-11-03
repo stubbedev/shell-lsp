@@ -41,9 +41,18 @@ type Embedding struct {
 	Findings  []lint.Finding
 }
 
+type HostedText struct {
+	Name    string
+	Family  string
+	Placed  bool
+	Content model.Span
+	Via     *projection.Map
+}
+
 type Embedder func(name string) (func(text string) Embedding, bool)
 
 type Analysis struct {
+	Hosted    []HostedText
 	Map       *projection.Map
 	Detection dialect.Detection
 	Index     *model.Index
@@ -52,15 +61,35 @@ type Analysis struct {
 	tree      *syntax.File
 }
 
+type Parsed struct {
+	src   string
+	tree  *syntax.File
+	table *scope.Table
+}
+
+func Parse(src string) *Parsed {
+	tree := syntax.Parse(src)
+	return &Parsed{src: src, tree: tree, table: scope.Resolve(tree)}
+}
+
+func (p *Parsed) Text() string { return p.src }
+
+func (p *Parsed) Includes() []model.Include {
+	ix := &model.Index{}
+	newSymbolTable(&file{src: p.src, tree: p.tree, table: p.table}, ix).build()
+	return ix.Includes
+}
+
 func Analyze(src string) Analysis { return AnalyzeWith(src, nil) }
 
-func AnalyzeWith(src string, embed Embedder) Analysis {
-	tree := syntax.Parse(src)
-	f := &file{src: src, tree: tree, table: scope.Resolve(tree), embed: embed}
+func AnalyzeWith(src string, embed Embedder) Analysis { return Parse(src).Analyze(embed) }
+
+func (p *Parsed) Analyze(embed Embedder) Analysis {
+	f := &file{src: p.src, tree: p.tree, table: p.table, embed: embed}
 	f.discover()
 	f.discoverWrapped()
 	m, detection := f.projection()
-	return Analysis{Map: m, Detection: detection, Index: f.index(m), Errors: f.tree.Errors, Scope: f.table, tree: f.tree}
+	return Analysis{Hosted: f.hostedTexts(), Map: m, Detection: detection, Index: f.index(m), Errors: f.tree.Errors, Scope: f.table, tree: f.tree}
 }
 
 func AnalyzeDependency(src string) Analysis {
@@ -78,13 +107,6 @@ func AnalyzeDependency(src string) Analysis {
 }
 
 func InStore(path string) bool { return strings.HasPrefix(path, storeDirectory+"/") }
-
-func Includes(src string) []model.Include {
-	tree := syntax.Parse(src)
-	ix := &model.Index{}
-	newSymbolTable(&file{src: src, tree: tree, table: scope.Resolve(tree)}, ix).build()
-	return ix.Includes
-}
 
 func (f *file) projection() (*projection.Map, dialect.Detection) {
 	detection, _ := dialect.Choose(f.found, func(s shellString) dialect.Detection { return s.detection }, tool)

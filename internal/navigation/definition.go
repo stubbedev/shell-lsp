@@ -26,6 +26,12 @@ type WorkspaceFiles func(ctx context.Context) ([]*workspace.File, error)
 
 func Definition(ctx context.Context, file *workspace.File, offset int, env Env, files WorkspaceFiles, mode Mode) ([]Location, error) {
 	tree := file.Tree
+	if n, ok := programNameAt(file, offset); ok {
+		if mode == ModeTypeDefinition || mode == ModeImplementation {
+			return nil, nil
+		}
+		return programDefinition(file, n, env, mode), nil
+	}
 	if mode != ModeTypeDefinition && mode != ModeImplementation {
 		for _, ref := range Sources(file, env) {
 			if ref.Names(offset) && ref.Target != nil {

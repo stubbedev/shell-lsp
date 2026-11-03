@@ -1,9 +1,11 @@
 package navigation
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -195,5 +197,92 @@ func TestRenameErrorsNameTheSymbolKindTheSameWay(t *testing.T) {
 	_, err = Rename(t.Context(), main, f.offset(t, "main.sh", "deploy", 1), "no way", f.env, f.files)
 	if want := `"no way" is not a valid function name`; err == nil || !strings.Contains(err.Error(), want) {
 		t.Errorf("Rename(deploy) error = %v, want %q", err, want)
+	}
+}
+
+const programChain = "#!/bin/bash\nvalue=1\njq --arg name \"$value\" '$name, $name' f\nawk -v other=\"$value\" 'BEGIN { print other }'\necho \"$value\"\n"
+
+func TestProgramArgumentsFollowTheirFlag(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, map[string]string{"a.sh": programChain})
+	file := f.load(t, "a.sh")
+	ctx := context.Background()
+	for _, tt := range []struct {
+		name, needle string
+		definition   []string
+		references   []string
+	}{
+		{
+			"jq", "$name",
+			[]string{"a.sh:3:name", "a.sh:2:value"},
+			[]string{"a.sh:2:value:w", "a.sh:3:name:w", "a.sh:3:value:r", "a.sh:3:name:r", "a.sh:3:name:r", "a.sh:4:value:r", "a.sh:5:value:r"},
+		},
+		{
+			"awk", "other }",
+			[]string{"a.sh:4:other", "a.sh:2:value"},
+			[]string{"a.sh:2:value:w", "a.sh:3:value:r", "a.sh:4:other:w", "a.sh:4:value:r", "a.sh:4:other:r", "a.sh:5:value:r"},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			at := f.offset(t, "a.sh", tt.needle, 0)
+			locations, err := Definition(ctx, file, at, f.env, f.files, ModeDefinition)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got []string
+			for _, l := range locations {
+				rel, _ := filepath.Rel(f.root, l.File.Path)
+				text := l.File.Tree.Text()
+				got = append(got, fmt.Sprintf("%s:%d:%s", rel, strings.Count(text[:l.Span.Start], "\n")+1, text[l.Span.Start:l.Span.End]))
+			}
+			if !slices.Equal(got, tt.definition) {
+				t.Errorf("definition = %q, want %q", got, tt.definition)
+			}
+			occs, err := References(ctx, file, at, f.env, f.files, true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := render(f, occs); !slices.Equal(got, tt.references) {
+				t.Errorf("references = %q, want %q", got, tt.references)
+			}
+		})
+	}
+}
+
+func TestProgramArgumentRenameStaysInTheProgram(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, map[string]string{"a.sh": programChain})
+	file := f.load(t, "a.sh")
+	ctx := context.Background()
+	at := f.offset(t, "a.sh", "$name", 0)
+	occs, err := Rename(ctx, file, at, "wanted", f.env, f.files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := render(f, occs), []string{"a.sh:3:name:w", "a.sh:3:name:r", "a.sh:3:name:r"}; !slices.Equal(got, want) {
+		t.Errorf("rename = %q, want %q", got, want)
+	}
+	if _, err := Rename(ctx, file, at, "a b", f.env, f.files); !errors.Is(err, ErrInvalidName) {
+		t.Errorf("renaming to a bad name = %v", err)
+	}
+	refused := newFixture(t, map[string]string{"a.sh": "#!/bin/bash\njq --arg name \"$1\" '$name, $ARGS.named' f\n"})
+	if _, err := Rename(ctx, refused.load(t, "a.sh"), refused.offset(t, "a.sh", "$name", 0), "wanted", refused.env, refused.files); !errors.Is(err, ErrNotRenamable) || !strings.Contains(err.Error(), "$ARGS") {
+		t.Errorf("renaming beside $ARGS = %v", err)
+	}
+}
+
+func TestAProgramVariableWithoutAFlagIsNotLinked(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, map[string]string{"a.sh": "#!/bin/bash\njq '. as $name | $name' f\n"})
+	locations, err := Definition(context.Background(), f.load(t, "a.sh"), f.offset(t, "a.sh", "| $name", 0)+2, f.env, f.files, ModeDefinition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(locations) != 0 {
+		t.Errorf("definition = %+v", locations)
 	}
 }

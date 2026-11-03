@@ -114,8 +114,8 @@ type Symbol struct {
 	Doc       string
 	Value     string
 	Arity     Arity
-	Rewrite   *Rewrite
 	Kind      Kind
+	Elided    Elision
 	Exported  bool
 	Unused    bool
 	Appends   bool
@@ -125,6 +125,25 @@ type Symbol struct {
 	Passive   bool
 	Listed    bool
 	Hidden    bool
+}
+
+type Elision uint8
+
+const (
+	NotElided Elision = iota
+	ElidedValue
+	ElidedInherit
+)
+
+func (s Symbol) Description() string {
+	switch s.Elided {
+	case ElidedValue:
+		return s.Detail + " = …;"
+	case ElidedInherit:
+		return "inherit " + s.Detail + ";"
+	case NotElided:
+	}
+	return s.Detail
 }
 
 type Rewrite struct {
@@ -137,6 +156,8 @@ type Rewrite struct {
 type Renames interface {
 	Refusal(symbol int) string
 	Conflict(symbol int, newName string) string
+	SymbolRewrite(symbol int) *Rewrite
+	RefRewrite(ref int) *Rewrite
 }
 
 const NoParent = -1
@@ -153,34 +174,65 @@ func (a Arity) Accepts(n int) bool {
 	return !a.Known() || n >= a.Min && (a.Max == Variadic || n <= a.Max)
 }
 
-type Ref struct {
-	Name      string
-	Span      Span
-	Scope     Scope
+type RefCall struct {
 	Qualifier []string
-	Args      int
-	Owner     int
-	Horizon   int
 	ArgSpans  []Span
-	Rewrite   *Rewrite
-	Kind      Kind
-	Edge      bool
-	Soft      bool
-	Declares  bool
-	Base      bool
-	Inert     bool
-	Late      bool
+}
+
+func Qualified(qualifier []string) *RefCall {
+	if len(qualifier) == 0 {
+		return nil
+	}
+	return &RefCall{Qualifier: qualifier}
+}
+
+type Ref struct {
+	Name     string
+	Span     Span
+	Scope    Scope
+	Call     *RefCall
+	Args     int32
+	Owner    int32
+	Horizon  int32
+	Kind     Kind
+	Edge     bool
+	Soft     bool
+	Declares bool
+	Base     bool
+	Inert    bool
+	Late     bool
 }
 
 const NoArgs = -1
 
-func (r Ref) Qualified() bool { return len(r.Qualifier) > 0 }
+func (r Ref) Qualifier() []string {
+	if r.Call == nil {
+		return nil
+	}
+	return r.Call.Qualifier
+}
+
+func (r Ref) ArgSpans() []Span {
+	if r.Call == nil {
+		return nil
+	}
+	return r.Call.ArgSpans
+}
+
+func (r *Ref) AddArg(span Span) {
+	if r.Call == nil {
+		r.Call = &RefCall{}
+	}
+	r.Call.ArgSpans = append(r.Call.ArgSpans, span)
+}
+
+func (r Ref) Qualified() bool { return len(r.Qualifier()) > 0 }
 
 func (r Ref) FirstQualifier() string {
-	if len(r.Qualifier) == 0 {
+	if !r.Qualified() {
 		return ""
 	}
-	return r.Qualifier[0]
+	return r.Call.Qualifier[0]
 }
 
 type Include struct {
@@ -362,7 +414,7 @@ func (ix *Index) tables() {
 		ix.byOwner = map[int][]int{}
 		for i, r := range ix.Refs {
 			if r.Edge {
-				ix.byOwner[r.Owner] = append(ix.byOwner[r.Owner], i)
+				ix.byOwner[int(r.Owner)] = append(ix.byOwner[int(r.Owner)], i)
 			}
 		}
 	})
@@ -539,7 +591,7 @@ func (ix *Index) At(offset int) (Hit, bool) {
 	}
 	for _, r := range ix.Refs {
 		if r.Span.Touches(offset) && r.Span.End > r.Span.Start {
-			return Hit{Name: r.Name, Kind: r.Kind, Span: r.Span, Scope: r.Scope, Qualifier: r.Qualifier, Symbol: NoSymbol}, true
+			return Hit{Name: r.Name, Kind: r.Kind, Span: r.Span, Scope: r.Scope, Qualifier: r.Qualifier(), Symbol: NoSymbol}, true
 		}
 	}
 	return Hit{}, false
@@ -596,4 +648,8 @@ func (ix *Index) Exported(name string, scope Scope) []int {
 func (ix *Index) Children(parent int) []int {
 	ix.tables()
 	return ix.byParent[parent]
+}
+
+func Narrow(n int) int32 {
+	return int32(n) //nolint:gosec // offsets, counts and indexes of a source file, which the transport caps well below 2^31
 }

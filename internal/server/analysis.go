@@ -110,10 +110,20 @@ func (c *snapshotCache) fill(uri string, e *snapshotEntry, build func() *snapsho
 	return e.snap
 }
 
-func (c *snapshotCache) forget(uri string) {
+func (c *snapshotCache) forget(uri string) *snapshot {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	entry, held := c.entries[uri]
 	delete(c.entries, uri)
+	if !held {
+		return nil
+	}
+	select {
+	case <-entry.ready:
+		return entry.snap
+	default:
+		return nil
+	}
 }
 
 func (s *Server) snapshot(docs *docstore.View, uri string) (*snapshot, error) {
@@ -132,10 +142,16 @@ func (s *Server) snapshot(docs *docstore.View, uri string) (*snapshot, error) {
 		var resolved project.Resolution
 		var projectErr error
 		forced := s.lintSettings(path, settings).Forced()
-		file := workspace.Parse(path, doc, like, func(in dialect.Input) dialect.Detection {
-			resolved, projectErr = s.resolveProject(path, forced, in)
-			return resolved.Detection
-		})
+		file, reopened := (*workspace.File)(nil), false
+		if previous == nil && doc.Local {
+			file, reopened = s.workspace.Reopened(path, doc)
+		}
+		if !reopened {
+			file = workspace.Parse(path, doc, like, func(in dialect.Input) dialect.Detection {
+				resolved, projectErr = s.resolveProject(path, forced, in)
+				return resolved.Detection
+			})
+		}
 		return &snapshot{
 			File:       file,
 			encoding:   docs.Encoding(),

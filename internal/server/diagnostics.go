@@ -17,6 +17,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/filelint"
 	"github.com/stubbedev/shell-lsp/internal/hadolint"
 	"github.com/stubbedev/shell-lsp/internal/host"
+	"github.com/stubbedev/shell-lsp/internal/host/nix"
 	"github.com/stubbedev/shell-lsp/internal/hostnav"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
@@ -30,6 +31,7 @@ const (
 	diagnosticsDebounce = 200 * time.Millisecond
 	lintMemoKey         = "lint.report/"
 	nixProvenMemoKey    = "nix.proven/"
+	nixProvenFileKey    = "nix.proven.file"
 )
 
 type diagnosticReport struct {
@@ -103,15 +105,15 @@ func (s *Server) lintSettings(path string, settings config.Settings) filelint.Se
 }
 
 func (s *Server) diagnose(snap *snapshot) diagnosticReport {
-	return s.report(snap.File, snap.settings, snap.generation, snap.positions(), "v"+strconv.FormatInt(int64(snap.Doc.Version), 10))
+	return s.report(snap.File, snap.settings, snap.generation, snap.positions(), "v"+strconv.FormatInt(int64(snap.Doc.Version), 10), s.nixProvenFile(snap.File))
 }
 
-func (s *Server) diagnoseClosed(file *workspace.File, at docstore.Positions) diagnosticReport {
+func (s *Server) diagnoseClosed(ctx context.Context, docs *docstore.View, file *workspace.File, at docstore.Positions) diagnosticReport {
 	settings, generation := s.settingsFor(file.Doc.Location)
-	return s.report(file, settings, generation, at, "h"+strconv.FormatUint(hashOf(file.Doc.Text()), 16))
+	return s.report(file, settings, generation, at, "h"+strconv.FormatUint(hashOf(file.Doc.Text()), 16), s.closedProvenFile(ctx, docs, file))
 }
 
-func (s *Server) report(file *workspace.File, settings config.Settings, generation uint64, at docstore.Positions, identity string) diagnosticReport {
+func (s *Server) report(file *workspace.File, settings config.Settings, generation uint64, at docstore.Positions, identity string, proven provenFile) diagnosticReport {
 	findings, stamp := s.findings(file, settings, generation)
 	tests := s.bats.of(file.URI)
 	items := s.syntaxItems(file, settings, at)
@@ -121,8 +123,7 @@ func (s *Server) report(file *workspace.File, settings config.Settings, generati
 	items = append(items, diagnostics.Bats(tests.placedOn(file.Tree), at)...)
 	if h, ok := hostnav.Of(file); ok {
 		items = append(items, diagnostics.Lint(docker.Host(s.nativeFindings(h, settings, docker)), sourcePositions(file, at.Encoding()), codeDescriptions)...)
-		proven := s.provenItems(file, settings, generation, at.Encoding(), codeDescriptions)
-		items = append(items, proven.items...)
+		items = append(items, s.provenItems(file, proven, settings, generation, at.Encoding(), codeDescriptions)...)
 		stamp = hashOf(s.hostStamp(s.docs.View(), h.Language()) + "/" + strconv.FormatUint(proven.revision, 10))
 	}
 	return diagnosticReport{
@@ -142,27 +143,50 @@ func (s *Server) syntaxItems(file *workspace.File, settings config.Settings, at 
 	return items
 }
 
-type provenItems struct {
-	items    []lsp.Diagnostic
+type provenFile struct {
+	wrapped  *workspace.File
 	revision uint64
 }
 
-func (s *Server) provenItems(file *workspace.File, settings config.Settings, generation uint64, enc docstore.Encoding, codeDescriptions bool) provenItems {
+func (s *Server) nixProvenFile(file *workspace.File) provenFile {
 	proof, revision, held := s.nixEval.strings.of(file.URI)
 	if !held {
-		return provenItems{revision: revision}
+		return provenFile{revision: revision}
+	}
+	return provenFile{wrapped: wrappedBy(file, proof, revision), revision: revision}
+}
+
+func (s *Server) closedProvenFile(ctx context.Context, docs *docstore.View, file *workspace.File) provenFile {
+	h, ok := hostnav.Of(file)
+	if !ok || h.Language() != host.Nix || !nix.MayWrap(file.Native.Index) {
+		return provenFile{}
+	}
+	env := s.hostEnv(docs, host.Nix)
+	env.Patience = 0
+	proof, held := hostnav.Prove(ctx, []hostnav.Host{h}, env)[file.URI]
+	if !held || len(proof.Strings) == 0 {
+		return provenFile{}
+	}
+	revision := hashOf(proof.Key())
+	return provenFile{wrapped: wrappedBy(file, proof, revision), revision: revision}
+}
+
+func wrappedBy(file *workspace.File, proof hostnav.Proof, revision uint64) *workspace.File {
+	return workspace.Memo(file, nixProvenFileKey, revision, func() *workspace.File {
+		return hostnav.Wrapped(file, proof.On(file.Doc.Source()), nil)
+	})
+}
+
+func (s *Server) provenItems(file *workspace.File, proven provenFile, settings config.Settings, generation uint64, enc docstore.Encoding, codeDescriptions bool) []lsp.Diagnostic {
+	if proven.wrapped == nil {
+		return nil
 	}
 	key := nixProvenMemoKey + lintKey(s.lintSettings(file.Path, settings), generation)
-	items := workspace.Memo(file, key, revision, func() []lsp.Diagnostic {
-		wrapped := hostnav.Wrapped(file, proof.On(file.Doc.Source()), nil)
-		if wrapped == nil {
-			return nil
-		}
-		at := wrapped.Doc.Positions(enc)
-		findings, _ := s.findings(wrapped, settings, generation)
-		return append(s.syntaxItems(wrapped, settings, at), diagnostics.Lint(findings, at, codeDescriptions)...)
+	return workspace.Memo(file, key, proven.revision, func() []lsp.Diagnostic {
+		at := proven.wrapped.Doc.Positions(enc)
+		findings, _ := s.findings(proven.wrapped, settings, generation)
+		return append(s.syntaxItems(proven.wrapped, settings, at), diagnostics.Lint(findings, at, codeDescriptions)...)
 	})
-	return provenItems{items: items, revision: revision}
 }
 
 func hashOf(text string) uint64 {
@@ -198,7 +222,7 @@ func (s *Server) handleWorkspaceDiagnostic(ctx context.Context, docs *docstore.V
 	items := make([]lsp.WorkspaceDocumentDiagnosticReport, 0, len(docs.Documents()))
 	diagnostics := 0
 	report := func(file *workspace.File) bool {
-		item := s.workspaceReport(docs, file, previous[file.URI])
+		item := s.workspaceReport(ctx, docs, file, previous[file.URI])
 		diagnostics += len(item.Items)
 		items = append(items, item)
 		return diagnostics < maxWorkspaceDiagnostics
@@ -220,14 +244,14 @@ func (s *Server) handleWorkspaceDiagnostic(ctx context.Context, docs *docstore.V
 	return lsp.WorkspaceDiagnosticReport{Items: items}, nil
 }
 
-func (s *Server) workspaceReport(docs *docstore.View, file *workspace.File, previous string) lsp.WorkspaceDocumentDiagnosticReport {
+func (s *Server) workspaceReport(ctx context.Context, docs *docstore.View, file *workspace.File, previous string) lsp.WorkspaceDocumentDiagnosticReport {
 	var report diagnosticReport
 	var version *int32
 	if snap, err := s.snapshot(docs, file.URI); err == nil {
 		report = s.diagnose(snap)
 		version = &report.version
 	} else {
-		report = s.diagnoseClosed(file, docs.Positions(file.Doc))
+		report = s.diagnoseClosed(ctx, docs, file, docs.Positions(file.Doc))
 	}
 	out := lsp.WorkspaceDocumentDiagnosticReport{Kind: lsp.ReportFull, ResultID: report.resultID, URI: file.URI, Version: version, Items: report.items}
 	if previous == report.resultID {

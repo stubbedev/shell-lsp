@@ -12,7 +12,6 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/host/nix/highlight"
-	"github.com/stubbedev/shell-lsp/internal/hostnav"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/semantic"
@@ -166,16 +165,21 @@ func (s *Server) semanticTokens(file *workspace.File) []semantic.Token {
 }
 
 func (s *Server) nixTokens(file *workspace.File) []semantic.Token {
-	proof, revision, held := s.nixEval.strings.of(file.URI)
-	return workspace.Memo(file, "semantic.nix", s.workspace.Generation()+revision, func() []semantic.Token {
+	proven := s.nixProvenFile(file)
+	return workspace.Memo(file, "semantic.nix", s.workspace.Generation()+proven.revision, func() []semantic.Token {
 		tree, table := file.Native.Nix().Syntax()
 		variants := file.Variants()
-		if held {
-			if wrapped := hostnav.Wrapped(file, proof.On(file.Doc.Source()), nil); wrapped != nil {
-				variants = slices.Concat(variants, wrapped.Variants())
-			}
+		shells := file.Native.Index.Shells
+		if proven.wrapped != nil {
+			variants = slices.Concat(variants, proven.wrapped.Variants())
+			shells = slices.Concat(shells, proven.wrapped.Native.Index.Shells)
 		}
-		return highlight.Tokens(tree, table, s.hostShellTokens(variants))
+		pieces := make([]parser.Span, len(shells))
+		for i, shell := range shells {
+			pieces[i] = shell.Span
+		}
+		slices.SortFunc(pieces, func(a, b parser.Span) int { return cmp.Compare(a.Start, b.Start) })
+		return highlight.Tokens(tree, table, s.hostShellTokens(variants), pieces)
 	})
 }
 

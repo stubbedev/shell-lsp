@@ -90,7 +90,7 @@ func (g *Group) symbolFor(hit model.Hit, file int, module *model.Module) (Symbol
 	if hit.Declaration {
 		sym.targets = []model.Target{{Module: module, File: file, Symbol: hit.Symbol}}
 	} else {
-		res := module.Resolve(file, model.Ref{Name: hit.Name, Kind: hit.Kind, Scope: hit.Scope, Qualifier: hit.Qualifier})
+		res := module.Resolve(file, model.Ref{Name: hit.Name, Kind: hit.Kind, Scope: hit.Scope, Call: model.Qualified(hit.Qualifier)})
 		sym.targets, sym.Builtin = res.Targets, res.Builtin
 	}
 	if len(sym.targets) > 0 {
@@ -159,7 +159,7 @@ func (g *Group) Declarations(sym Symbol) []Occurrence {
 		f, i := int(at.File), int(at.Item)
 		if identityOf(model.Target{Module: module, File: f, Symbol: i}) == sym.id {
 			s := module.Files[f].Symbols[i]
-			out = append(out, Occurrence{File: g.fileOf(module, f), Span: s.Selection, Write: true, Declaration: true, Rewrite: s.Rewrite, kind: s.Kind})
+			out = append(out, Occurrence{File: g.fileOf(module, f), Span: s.Selection, Write: true, Declaration: true, Rewrite: symbolRewrite(module.Files[f], i), kind: s.Kind})
 		}
 	}
 	return out
@@ -208,12 +208,26 @@ func (g *Group) Occurrences(sym Symbol) []Occurrence {
 				continue
 			}
 			if slices.ContainsFunc(module.Resolve(f, r).Targets, func(t model.Target) bool { return identityOf(t) == sym.id }) {
-				out = append(out, Occurrence{File: g.fileOf(module, f), Span: r.Span, Rewrite: r.Rewrite})
+				out = append(out, Occurrence{File: g.fileOf(module, f), Span: r.Span, Rewrite: refRewrite(module.Files[f], int(at.Item))})
 			}
 		}
 	}
 	out = append(out, g.shellOccurrences(sym)...)
 	return merge(out)
+}
+
+func symbolRewrite(ix *model.Index, symbol int) *model.Rewrite {
+	if ix.Renames == nil {
+		return nil
+	}
+	return ix.Renames.SymbolRewrite(symbol)
+}
+
+func refRewrite(ix *model.Index, ref int) *model.Rewrite {
+	if ix.Renames == nil {
+		return nil
+	}
+	return ix.Renames.RefRewrite(ref)
 }
 
 func merge(occs []Occurrence) []Occurrence {

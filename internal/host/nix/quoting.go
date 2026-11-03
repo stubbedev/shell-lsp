@@ -99,10 +99,10 @@ func (f *file) safe(e syntax.Expr, hops int) bool {
 	case *syntax.String:
 		return f.safeString(e, hops)
 	case *syntax.Ident:
-		return slices.Contains(safeNames, e.Name) || f.safeBinding(e, hops)
+		return slices.Contains(safeNames, f.libraryName(e)) || f.safeBinding(e, hops)
 	case *syntax.Select:
 		root, plain := syntax.Unparenthesized(e.Target).(*syntax.Ident)
-		return plain && e.Default == nil && slices.Contains(storeRoots, root.Name)
+		return plain && e.Default == nil && !f.definedHere(e) && slices.Contains(storeRoots, root.Name)
 	case *syntax.If:
 		return f.safe(e.Then, hops+1) && f.safe(e.Else, hops+1)
 	case *syntax.Binary:
@@ -143,7 +143,7 @@ func (f *file) safeString(str *syntax.String, hops int) bool {
 }
 
 func (f *file) safeCall(e *syntax.Apply, hops int) bool {
-	name := calleeName(syntax.Unparenthesized(e.Fn))
+	name := f.callName(e.Fn)
 	last := e.Args[len(e.Args)-1]
 	switch {
 	case slices.Contains(safeCalls, name), knownWriter(name):
@@ -151,7 +151,7 @@ func (f *file) safeCall(e *syntax.Apply, hops int) bool {
 	case name == "toString", name == "optionalString":
 		return f.safe(last, hops+1)
 	case name == "concatMapStrings" || name == "concatMapStringsSep" || name == "concatStringsSep" || name == "map":
-		return slices.ContainsFunc(e.Args, func(arg syntax.Expr) bool { return escapes(arg) })
+		return slices.ContainsFunc(e.Args, f.escapes)
 	}
 	return f.safeResult(e, hops)
 }
@@ -180,12 +180,12 @@ func (f *file) safeResult(e *syntax.Apply, hops int) bool {
 	return f.safe(body, hops+1)
 }
 
-func escapes(e syntax.Expr) bool {
+func (f *file) escapes(e syntax.Expr) bool {
 	switch e := syntax.Unparenthesized(e).(type) {
 	case *syntax.Ident, *syntax.Select:
-		return slices.Contains(shellEscapes, calleeName(e))
+		return slices.Contains(shellEscapes, f.libraryName(e))
 	case *syntax.Apply:
-		return calleeName(syntax.Unparenthesized(e.Fn)) == "map" && len(e.Args) > 0 && escapes(e.Args[0])
+		return f.callName(e.Fn) == "map" && len(e.Args) > 0 && f.escapes(e.Args[0])
 	}
 	return false
 }

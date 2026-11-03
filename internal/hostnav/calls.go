@@ -84,7 +84,7 @@ func (g *Group) calls() []call {
 					continue
 				}
 				for _, t := range module.Resolve(f, r).Targets {
-					out = append(out, call{caller: model.Target{Module: module, File: f, Symbol: r.Owner}, callee: t, file: file, span: r.Span})
+					out = append(out, call{caller: model.Target{Module: module, File: f, Symbol: int(r.Owner)}, callee: t, file: file, span: r.Span})
 				}
 			}
 			if g.builder != nil {

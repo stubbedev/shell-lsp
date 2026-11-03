@@ -104,7 +104,7 @@ func (in *indexer) stage(s Stage) {
 	}
 	if s.Parent >= 0 {
 		in.ix.Extends[s.Scope] = []model.Scope{stageScope(s.Parent)}
-		in.ix.Refs = append(in.ix.Refs, model.Ref{Name: strings.ToLower(s.Image.Text), Kind: model.KindStage, Span: s.Image.Span, Args: model.NoArgs, Owner: owner, Soft: true})
+		in.ix.Refs = append(in.ix.Refs, model.Ref{Name: strings.ToLower(s.Image.Text), Kind: model.KindStage, Span: s.Image.Span, Args: model.NoArgs, Owner: model.Narrow(owner), Soft: true})
 		in.token(s.Image.Span, semantic.TypeNamespace, 0)
 	}
 	in.keyword(from)
@@ -169,7 +169,7 @@ func (in *indexer) words(words []Word, scope model.Scope, horizon int) {
 func (in *indexer) refs(words []Word, scope model.Scope, horizon int, soft bool) {
 	for _, w := range words {
 		for _, r := range in.f.References(w) {
-			in.ix.Refs = append(in.ix.Refs, model.Ref{Name: r.Name, Kind: model.KindVariable, Span: r.Span, Scope: scope, Args: model.NoArgs, Owner: model.NoSymbol, Horizon: horizon, Soft: soft})
+			in.ix.Refs = append(in.ix.Refs, model.Ref{Name: r.Name, Kind: model.KindVariable, Span: r.Span, Scope: scope, Args: model.NoArgs, Owner: model.NoSymbol, Horizon: model.Narrow(horizon), Soft: soft})
 			in.token(r.Span, semantic.TypeVariable, 0)
 		}
 	}

@@ -106,10 +106,12 @@ type Project struct {
 	envMemo       map[sinkKey]bool
 	overlayValues []flowValue
 	collecting    bool
-	scriptMemo    map[sinkKey]string
+	scriptMemo    map[sinkKey]scriptSink
 	sinkVisiting  map[sinkKey]bool
 	provedCalls   map[*syntax.Apply][]provenString
 	provenFiles   map[int][]provenString
+	provenShells  map[int][]model.Shell
+	provenKeys    map[int]string
 	provenScopes  map[provenKey]model.Scope
 	provenEnvs    map[model.Home]environment
 	spaceClosure  map[spaceQuery][]*space
@@ -461,14 +463,22 @@ func compactHomes(homes []model.Home) []model.Home {
 	return slices.Compact(homes)
 }
 
+func (p *Project) Release() {
+	p.begin()
+	defer p.mu.Unlock()
+	p.clearDerived()
+}
+
 func (p *Project) clearDerived() {
 	p.steps = 0
 	clear(p.memo)
 	p.overlayValues = nil
-	p.scriptMemo = map[sinkKey]string{}
+	p.scriptMemo = map[sinkKey]scriptSink{}
 	p.envMemo = map[sinkKey]bool{}
 	p.provedCalls = map[*syntax.Apply][]provenString{}
 	p.provenFiles = map[int][]provenString{}
+	p.provenShells = map[int][]model.Shell{}
+	p.provenKeys = map[int]string{}
 	p.spaceClosure = map[spaceQuery][]*space{}
 }
 

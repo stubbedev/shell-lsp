@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/host/model"
 	"github.com/stubbedev/shell-lsp/internal/host/nix/scope"
 	"github.com/stubbedev/shell-lsp/internal/host/nix/syntax"
 	"github.com/stubbedev/shell-lsp/internal/lint"
@@ -307,5 +308,100 @@ func TestShebangWriters(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("%q: writer = %q, want %q", tt.line, got, tt.want)
 		}
+	}
+}
+
+func TestAFunctionBoundHereIsNotTheLibraryFunctionOfThatName(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct{ name, src, absent string }{
+		{"a local optionalString is not spliced", "{ pkgs }:\nlet\n  optionalString = c: s: \"x\";\nin\npkgs.writeShellScript \"s\" ''\n  ${optionalString true \"echo inner\"}\n''\n", "echo inner"},
+		{"a local concatStringsSep is not spliced", "{ pkgs }:\nlet\n  concatStringsSep = a: b: \"x\";\nin\npkgs.writeShellScript \"s\" ''\n  ${concatStringsSep \" \" [ \"echo inner\" ]}\n''\n", "echo inner"},
+		{"a local lib is not the library", "{ pkgs }:\nlet\n  lib = { optionalString = c: s: \"x\"; };\nin\npkgs.writeShellScript \"s\" ''\n  ${lib.optionalString true \"echo inner\"}\n''\n", "echo inner"},
+		{"a local writer does not make its text shell", "let\n  writeShellScript = n: s: s;\n  w = text: writeShellScript \"x\" text;\nin\nw ''\n  echo inner\n''\n", "echo inner"},
+		{"a local mkIf does not carry a script", "{ lib }:\nlet\n  mkIf = c: s: \"x\";\nin\n{ environment.shellInit = mkIf true ''\n  echo inner\n''; }\n", "echo inner"},
+		{"a local writer named in a call is not a sink through a splice", "let\n  writeBash = a: b: \"\";\nin\nx: writeBash \"n\" ''\n  echo inner\n''\n", "echo inner"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := Analyze(tt.src).Map.Text(); strings.Contains(got, tt.absent) {
+				t.Errorf("projection %q holds %q", got, tt.absent)
+			}
+		})
+	}
+}
+
+func TestAFunctionTakenFromTheLibraryStaysThatFunction(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct{ name, src string }{
+		{"a formal", "{ pkgs, optionalString }:\npkgs.writeShellScript \"s\" ''\n  ${optionalString true \"echo inner\"}\n''\n"},
+		{"an inherit from lib", "{ pkgs, lib }:\nlet\n  inherit (lib) optionalString;\nin\npkgs.writeShellScript \"s\" ''\n  ${optionalString true \"echo inner\"}\n''\n"},
+		{"an alias of the same name", "{ pkgs, lib }:\nlet\n  optionalString = lib.optionalString;\nin\npkgs.writeShellScript \"s\" ''\n  ${optionalString true \"echo inner\"}\n''\n"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := Analyze(tt.src).Map.Text(); !strings.Contains(got, "echo inner") {
+				t.Errorf("projection %q misses the spliced string", got)
+			}
+		})
+	}
+}
+
+func TestAShadowedProgramGetterNamesNoProgram(t *testing.T) {
+	t.Parallel()
+
+	src := "{ pkgs }:\nlet\n  getExe = p: \"/bin/other\";\nin\npkgs.writeShellScript \"s\" ''\n  ${getExe pkgs.ripgrep} x\n''\n"
+	if got := Analyze(src).Map.Text(); strings.Contains(got, "rg") {
+		t.Errorf("a local getExe named a program: %q", got)
+	}
+	if got := Analyze(strings.Replace(src, "getExe = p: \"/bin/other\";", "inherit (pkgs.lib) getExe;", 1)).Map.Text(); !strings.Contains(got, "rg") {
+		t.Errorf("the library getExe named no program: %q", got)
+	}
+}
+
+func TestProvenStringsSayWhetherAnEnvironmentIsKnown(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name, src string
+		ambient   bool
+	}{
+		{"a writer on its own", "let\n  w = text: writeShellScript \"x\" text;\nin\nw ''\n  echo inner\n''\n", false},
+		{"writeShellApplication without runtimeEnv", "let\n  w = text: writeShellApplication { name = \"x\"; inherit text; };\nin\nw ''\n  echo inner\n''\n", false},
+		{"writeShellApplication with its own runtimeEnv", "let\n  w = text: writeShellApplication { name = \"x\"; inherit text; runtimeEnv.A = 1; };\nin\nw ''\n  echo inner\n''\n", true},
+		{"spliced into a larger script", "let\n  w = text: writeShellScript \"x\" ''\n    A=1\n    ${text}\n  '';\nin\nw ''\n  echo inner\n''\n", true},
+		{"a derivation", "let\n  w = text: mkDerivation { name = \"x\"; buildPhase = text; };\nin\nw ''\n  echo inner\n''\n", true},
+		{"runCommand", "let\n  w = text: runCommand \"x\" { } text;\nin\nw ''\n  echo inner\n''\n", true},
+		{"an environment given at the call", "let\n  w = { text, env }: writeShellApplication { name = \"x\"; inherit text; runtimeEnv = env; };\nin\nw { env.A = \"1\"; text = ''\n  echo inner\n''; }\n", true},
+		{"an environment given by the function between", "let\n  v = { text, env }: runCommand \"x\" env text;\n  w = text: v { inherit text; env.A = \"1\"; };\nin\nw ''\n  echo inner\n''\n", true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			tree := syntax.Parse(tt.src)
+			f := &file{src: tt.src, tree: tree, table: scope.Resolve(tree)}
+			ix := &model.Index{}
+			newSymbolTable(f, ix).build()
+			proven := standalone(ix).provenIn(0)
+			if len(proven) == 0 {
+				t.Fatalf("no proven string in %q", tt.src)
+			}
+			if got := proven[len(proven)-1].sink.ambient; got != tt.ambient {
+				t.Errorf("ambient = %v, want %v, for %+v", got, tt.ambient, proven)
+			}
+		})
+	}
+}
+
+func TestAProvenStringSplicedIntoAScriptKeepsItsAmbientVariables(t *testing.T) {
+	t.Parallel()
+
+	src := "let\n  w = text: writeShellScript \"x\" ''\n    A=1\n    ${text}\n  '';\nin\nw ''\n  echo \"$A\"\n''\n"
+	if got := Analyze(src).Map.Text(); !strings.Contains(got, "SC2154") {
+		t.Errorf("the spliced string may read what the script sets, so SC2154 must stay off:\n%s", got)
+	}
+	src = "let\n  w = text: writeShellScript \"x\" text;\nin\nw ''\n  echo \"$A\"\n''\n"
+	if got := Analyze(src).Map.Text(); strings.Contains(got, "SC2154") {
+		t.Errorf("a script on its own should report reads it never sets:\n%s", got)
 	}
 }

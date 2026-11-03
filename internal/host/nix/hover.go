@@ -35,7 +35,13 @@ func (d *Document) Hover(offset int, known Evaluated) (Hover, bool) {
 	return Hover{Markdown: hoverFence + k.Name + "\n```\n\n" + k.Doc, Span: token.Span}, true
 }
 
-func (a Analysis) Document() *Document { return &Document{tree: a.tree, table: a.Scope} }
+func (a Analysis) Document() *Document {
+	return &Document{tree: a.tree, table: a.Scope, hosted: a.Hosted}
+}
+
+func (d *Document) Hosted() []HostedText { return d.hosted }
+
+func (d *Document) HostedCount() int { return len(d.hosted) }
 
 type LexicalName struct {
 	Name    string

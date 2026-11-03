@@ -184,7 +184,12 @@ type subshellWrite struct {
 	site parser.Span
 }
 
+const stateChunk = 16
+
+type stateArena struct{ free []state }
+
 type state struct {
+	arena    *stateArena
 	live     bool
 	symbolic bool
 	vars     pmap[value]
@@ -205,8 +210,16 @@ func deadState(symbolic bool) *state {
 }
 
 func (s *state) clone() *state {
-	out := *s
-	return &out
+	if s.arena == nil {
+		s.arena = &stateArena{}
+	}
+	if len(s.arena.free) == 0 {
+		s.arena.free = make([]state, stateChunk)
+	}
+	out := &s.arena.free[0]
+	s.arena.free = s.arena.free[1:]
+	*out = *s
+	return out
 }
 
 func (s *state) get(name string) value {

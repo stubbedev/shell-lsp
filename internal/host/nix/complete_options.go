@@ -66,6 +66,7 @@ type Evaluated interface {
 	OptionAt(site OptionSite) (SourcedOption, bool)
 	NixpkgsChildren(path []string, prefix string) []string
 	NixpkgsPackage(path []string) (*nixeval.Package, bool)
+	NixpkgsDeclaration(path []string) (nixeval.Declaration, bool)
 	ModuleSites(start int) []OptionSite
 }
 
@@ -78,6 +79,10 @@ func (noEvaluation) OptionAt(OptionSite) (SourcedOption, bool) { return SourcedO
 func (noEvaluation) NixpkgsChildren([]string, string) []string { return nil }
 
 func (noEvaluation) NixpkgsPackage([]string) (*nixeval.Package, bool) { return nil, false }
+
+func (noEvaluation) NixpkgsDeclaration([]string) (nixeval.Declaration, bool) {
+	return nixeval.Declaration{}, false
+}
 
 func (noEvaluation) ModuleSites(int) []OptionSite { return nil }
 

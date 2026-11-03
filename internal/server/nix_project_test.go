@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
@@ -10,6 +11,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/shell-lsp/internal/host/nix"
+	"github.com/stubbedev/shell-lsp/internal/hostnav"
+	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
+	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 )
 
@@ -325,4 +330,378 @@ func TestNixOffersToUpdateAnInputUnderTheCursor(t *testing.T) {
 		}
 	}
 	t.Error("no action updates the input")
+}
+
+func TestNixWrapperStringHoverExplainsItsFinding(t *testing.T) {
+	t.Parallel()
+
+	p, _ := openWrapperProject(t, time.Millisecond)
+	p.awaitNixStringRefresh()
+	if _, found := p.wrapperFinding(); !found {
+		t.Fatal("the proven string has no shell finding")
+	}
+	hover := decodeResult[*lsp.Hover](t, p.c.call("textDocument/hover", p.params(wrapperProbes, "$expected", 0, "")))
+	if hover == nil || !strings.Contains(hover.Contents.Value, "SC2086") {
+		t.Fatalf("hover of the finding = %+v", hover)
+	}
+	if !strings.Contains(hover.Contents.Value, "expected") {
+		t.Errorf("hover lost what the variable is: %s", hover.Contents.Value)
+	}
+}
+
+func TestNixWrapperStringShellHoverWithoutASymbol(t *testing.T) {
+	t.Parallel()
+
+	p, _ := openWrapperProject(t, time.Millisecond)
+	p.awaitNixStringRefresh()
+	if _, found := p.wrapperFinding(); !found {
+		t.Fatal("the proven string has no shell finding")
+	}
+	hover := decodeResult[*lsp.Hover](t, p.c.call("textDocument/hover", p.params(wrapperProbes, "touch", 0, "")))
+	if hover == nil || hover.Range == nil {
+		t.Fatalf("hover of a command in the proven string = %+v", hover)
+	}
+	if want := p.at(wrapperProbes, "touch", 0).Range; *hover.Range != want {
+		t.Errorf("hover range = %+v, want %+v", *hover.Range, want)
+	}
+}
+
+func TestNixWrapperStringOfAClosedFileInWorkspaceDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	files := corpusProject(t, "dendritic")
+	const quoted = `test -e "$expected"`
+	files[wrapperProbes] = strings.Replace(files[wrapperProbes], quoted, `ls $expected`, 1)
+	p := openNativeProjectWith(t, func(s *Server) { s.nixEval.strings.quiet = time.Hour }, wrapperCapabilities, files, "flake.nix")
+	report := decodeResult[lsp.WorkspaceDiagnosticReport](t, p.c.call("workspace/diagnostic", `{"previousResultIds": []}`))
+	i := slices.IndexFunc(report.Items, func(item lsp.WorkspaceDocumentDiagnosticReport) bool { return item.URI == p.uri(wrapperProbes) })
+	if i < 0 {
+		t.Fatalf("the closed file is not reported among %d items", len(report.Items))
+	}
+	if got := codes(report.Items[i].Items); !slices.Contains(got, "SC2086") {
+		t.Errorf("closed file findings = %q, want the one of its proven string", got)
+	}
+	var previous strings.Builder
+	previous.WriteString(`{"previousResultIds": [`)
+	for n, item := range report.Items {
+		if n > 0 {
+			previous.WriteString(",")
+		}
+		fmt.Fprintf(&previous, `{"uri": %q, "value": %q}`, item.URI, item.ResultID)
+	}
+	previous.WriteString("]}")
+	again := decodeResult[lsp.WorkspaceDiagnosticReport](t, p.c.call("workspace/diagnostic", previous.String()))
+	for _, item := range again.Items {
+		if item.Kind != lsp.ReportUnchanged {
+			t.Errorf("%s changed without an edit: %+v", item.URI, item.Items)
+		}
+	}
+}
+
+func TestNixWrapperStringFixAllFixesIt(t *testing.T) {
+	t.Parallel()
+
+	files := corpusProject(t, "dendritic")
+	const quoted = `test -e "$expected"`
+	files[wrapperProbes] = strings.Replace(files[wrapperProbes], quoted, "test -e \"`id -u`\"", 1)
+	p := openNativeProjectWith(t, func(s *Server) { s.nixEval.strings.quiet = time.Millisecond }, `"capabilities": {"workspace": {"applyEdit": true, "workspaceEdit": {"documentChanges": true}, "diagnostics": {"refreshSupport": true}, "semanticTokens": {"refreshSupport": true}}, "textDocument": {"diagnostic": {}}}`, files, wrapperProbes)
+	p.awaitNixStringRefresh()
+	if got := codes(pullDiagnostics(t, p.c, p.uri(wrapperProbes))); !slices.Contains(got, "SC2006") {
+		t.Fatalf("findings = %q, want the one of the proven string", got)
+	}
+	id := p.c.start("workspace/executeCommand", fmt.Sprintf(`{"command": "shellLsp.fixAll", "arguments": [%q]}`, p.uri(wrapperProbes)))
+	applied := p.c.await("workspace/applyEdit", func(m *jsonrpc.Message) bool { return m.IsRequest() && m.Method == "workspace/applyEdit" })
+	var params lsp.ApplyWorkspaceEditParams
+	if err := json.Unmarshal(applied.Params, &params); err != nil {
+		t.Fatal(err)
+	}
+	if len(params.Edit.DocumentChanges) != 1 {
+		t.Fatalf("applyEdit = %+v", params)
+	}
+	var modern bool
+	for _, edit := range params.Edit.DocumentChanges[0].Edits {
+		modern = modern || edit.NewText == "$(id -u)"
+	}
+	if !modern {
+		t.Errorf("no edit replaces the backtick: %+v", params.Edit.DocumentChanges[0].Edits)
+	}
+	if err := p.c.conn.Reply(applied.ID, lsp.ApplyWorkspaceEditResult{Applied: true}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if done := p.c.awaitResponse(id, "workspace/executeCommand"); done.Error != nil {
+		t.Errorf("executeCommand error = %+v", done.Error)
+	}
+}
+
+func TestNixWrapperStringReportsAReadItNeverSetsWhereThatMeansSomething(t *testing.T) {
+	t.Parallel()
+
+	const caller = "caller.nix"
+	files := map[string]string{
+		"flake.nix":  "{\n  outputs = _: { };\n}\n",
+		"writer.nix": "{ writeShellScript }:\ntext: writeShellScript \"x\" text\n",
+		caller:       "{ callPackage }:\nlet\n  w = callPackage ./writer.nix { };\nin\nw ''\n  echo \"$neverSet\"\n''\n",
+	}
+	var srv *Server
+	p := openNativeProjectWith(t, func(s *Server) {
+		srv = s
+		s.nixEval.strings.quiet = time.Millisecond
+	}, wrapperCapabilities, files, caller)
+	p.awaitNixStringRefresh()
+	proof, _, held := srv.nixEval.strings.of(p.uri(caller))
+	if !held || len(proof.Strings) != 1 || proof.Strings[0].Ambient {
+		t.Fatalf("proof = %+v, held %v", proof, held)
+	}
+	if got := codes(pullDiagnostics(t, p.c, p.uri(caller))); !slices.Contains(got, "SC2154") {
+		t.Errorf("findings = %q, want SC2154", got)
+	}
+}
+
+const embeddedTextCapabilities = `"capabilities": {"general": {"positionEncodings": ["utf-16"]}, "textDocument": {"diagnostic": {}, "signatureHelp": {}, "completion": {}}}`
+
+func openEmbeddedText(t *testing.T, source string) *nativeProject {
+	t.Helper()
+	const name = "embedded.nix"
+	return openNativeProject(t, embeddedTextCapabilities, map[string]string{name: source}, name)
+}
+
+func embeddedCompletion(t *testing.T, p *nativeProject, name, needle string, nth int) []string {
+	t.Helper()
+	at := p.at(name, needle, nth).Range.End
+	return completionLabels(decodeResult[lsp.CompletionList](t, p.c.call("textDocument/completion", fmt.Sprintf(`{"textDocument": {"uri": %q}, "position": {"line": %d, "character": %d}}`, p.uri(name), at.Line, at.Character))))
+}
+
+func TestNixEmbeddedJustfileCompletesItsNames(t *testing.T) {
+	t.Parallel()
+
+	p := openEmbeddedText(t, "{ writeText }:\nwriteText \"justfile\" ''\n  deploy: bui\n    echo deploy\n  build:\n    echo build\n''\n")
+	if got := embeddedCompletion(t, p, "embedded.nix", "bui", 0); !slices.Contains(got, "build") {
+		t.Errorf("completion in the recipe's dependency = %q", got)
+	}
+}
+
+func TestNixEmbeddedMakefileCompletesItsNames(t *testing.T) {
+	t.Parallel()
+
+	p := openEmbeddedText(t, "{ writeText }:\nwriteText \"Makefile\" ''\n  VALUE := 1\n  OTHER := $(VAL)\n  all:\n  \techo $(OTHER)\n''\n")
+	if got := embeddedCompletion(t, p, "embedded.nix", "$(VAL", 0); !slices.Contains(got, "VALUE") {
+		t.Errorf("completion in a reference = %q", got)
+	}
+}
+
+func TestNixEmbeddedDockerfileCompletesItsNames(t *testing.T) {
+	t.Parallel()
+
+	p := openEmbeddedText(t, "{ writeText }:\nwriteText \"Dockerfile\" ''\n  FROM alpine:3.20 AS build\n  RUN true\n  FROM alpine:3.20\n  COPY --from=bu /a /b\n''\n")
+	if got := embeddedCompletion(t, p, "embedded.nix", "--from=bu", 0); !slices.Contains(got, "build") {
+		t.Errorf("completion of a stage = %q", got)
+	}
+}
+
+func TestNixEmbeddedJustfileSignatureHelp(t *testing.T) {
+	t.Parallel()
+
+	p := openEmbeddedText(t, "{ writeText }:\nwriteText \"justfile\" ''\n  value := replace(\"a\", \n  all:\n    echo {{value}}\n''\n")
+	at := p.at("embedded.nix", `"a", `, 0).Range.End
+	help := decodeResult[*lsp.SignatureHelp](t, p.c.call("textDocument/signatureHelp", fmt.Sprintf(`{"textDocument": {"uri": %q}, "position": {"line": %d, "character": %d}}`, p.uri("embedded.nix"), at.Line, at.Character)))
+	if help == nil || len(help.Signatures) != 1 || !strings.HasPrefix(help.Signatures[0].Label, "replace(") {
+		t.Fatalf("signature help = %+v", help)
+	}
+	if help.ActiveParameter == nil || *help.ActiveParameter != 1 {
+		t.Errorf("active parameter = %v, want the second", help.ActiveParameter)
+	}
+}
+
+func TestNixEmbeddedDockerfileGetsHadolintRules(t *testing.T) {
+	t.Parallel()
+
+	p := openEmbeddedText(t, "{ writeText, version }:\nwriteText \"Dockerfile\" ''\n  FROM alpine\n  # hadolint ignore=DL3059\n  RUN cd /tmp\n  FROM alpine:${version}\n''\n")
+	items := pullDiagnostics(t, p.c, p.uri("embedded.nix"))
+	got := codes(items)
+	for _, want := range []string{"DL3006", "DL3003"} {
+		if !slices.Contains(got, want) {
+			t.Errorf("findings = %q, want %s", got, want)
+		}
+	}
+	if want := p.at("embedded.nix", "alpine", 0).Range.Start; !slices.ContainsFunc(items, func(d lsp.Diagnostic) bool { return d.Code == "DL3006" && d.Range.Start == want }) {
+		t.Errorf("DL3006 is not at the FROM: %+v", items)
+	}
+	if n := len(slices.DeleteFunc(slices.Clone(got), func(code string) bool { return code != "DL3006" })); n != 1 {
+		t.Errorf("a FROM whose tag is an antiquotation was reported: %q", got)
+	}
+}
+
+func TestNixEmbeddedDockerfileHonoursItsPragmas(t *testing.T) {
+	t.Parallel()
+
+	p := openEmbeddedText(t, "{ writeText }:\nwriteText \"Dockerfile\" ''\n  # hadolint ignore=DL3006\n  FROM alpine\n''\n")
+	if got := codes(pullDiagnostics(t, p.c, p.uri("embedded.nix"))); slices.Contains(got, "DL3006") {
+		t.Errorf("findings = %q, want the pragma honoured", got)
+	}
+}
+
+func TestNixEmbeddedNamesAreCheckedForUse(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name, source string
+		code         lint.Code
+	}{
+		{"a justfile variable", "{ writeText }:\nwriteText \"justfile\" ''\n  unused := \"1\"\n  all:\n    echo hi\n''\n", lint.CodeJustUnusedVariable},
+		{"a Dockerfile ARG", "{ writeText }:\nwriteText \"Dockerfile\" ''\n  FROM alpine:3.20\n  ARG unused=1\n  COPY a b\n''\n", lint.CodeDockerUnusedArg},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			p := openEmbeddedText(t, tt.source)
+			got := codes(pullDiagnostics(t, p.c, p.uri("embedded.nix")))
+			if !slices.Contains(got, tt.code.String()) {
+				t.Errorf("findings = %q, want %s", got, tt.code)
+			}
+		})
+	}
+}
+
+func TestNixEmbeddedIncludes(t *testing.T) {
+	t.Parallel()
+
+	missing := lint.CodeJustMissingFile.String()
+	for _, tt := range []struct {
+		name, source string
+		reported     bool
+	}{
+		{"a store file has nothing beside it", "{ writeText }:\nwriteText \"justfile\" ''\n  import 'lib.just'\n  all:\n    echo hi\n''\n", true},
+		{"a placed file may have a real file beside it", "{\n  home.file.\"app/justfile\".text = ''\n    import 'lib.just'\n    all:\n      echo hi\n  '';\n}\n", false},
+		{"a dynamic include is not known", "{ writeText, dir }:\nwriteText \"justfile\" ''\n  import '${dir}/lib.just'\n  all:\n    echo hi\n''\n", false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			p := openEmbeddedText(t, tt.source)
+			got := codes(pullDiagnostics(t, p.c, p.uri("embedded.nix")))
+			if slices.Contains(got, missing) != tt.reported {
+				t.Errorf("findings = %q, want %s reported: %v", got, missing, tt.reported)
+			}
+		})
+	}
+}
+
+func TestNixEmbeddedIncludeResolvesToItsSibling(t *testing.T) {
+	t.Parallel()
+
+	p := openEmbeddedText(t, "{\n  home.file.\"app/justfile\".text = ''\n    import 'lib.just'\n    all: shared\n      echo hi\n  '';\n  home.file.\"app/lib.just\".text = ''\n    shared:\n      echo shared\n  '';\n}\n")
+	got := codes(pullDiagnostics(t, p.c, p.uri("embedded.nix")))
+	for _, unwanted := range []lint.Code{lint.CodeJustMissingFile, lint.CodeJustUnknownRecipe} {
+		if slices.Contains(got, unwanted.String()) {
+			t.Errorf("findings = %q hold %s, although the sibling defines it", got, unwanted)
+		}
+	}
+}
+
+func TestNixTextNamedNixIsAnalysedAsNix(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct{ name, source string }{
+		{"writeText", "{ writeText }:\nwriteText \"gen.nix\" ''\n  let\n    kept = 1;\n    unused = 2;\n  in\n  kept\n''\n"},
+		{"a home file", "{\n  home.file.\"gen.nix\".text = ''\n    let\n      kept = 1;\n      unused = 2;\n    in\n    kept\n  '';\n}\n"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			const name = "embedded.nix"
+			p := openEmbeddedText(t, tt.source)
+			items := pullDiagnostics(t, p.c, p.uri(name))
+			if want := p.at(name, "unused", 0).Range.Start; !slices.ContainsFunc(items, func(d lsp.Diagnostic) bool { return d.Range.Start == want }) {
+				t.Errorf("no finding on the unused binding at %+v: %+v", want, items)
+			}
+			definition := decodeResult[[]lsp.Location](t, p.c.call("textDocument/definition", p.params(name, "kept", 1, "")))
+			if want := []lsp.Location{p.at(name, "kept", 0)}; !slices.Equal(definition, want) {
+				t.Errorf("definition = %+v, want %+v", definition, want)
+			}
+			data := decodeResult[lsp.SemanticTokens](t, p.c.call("textDocument/semanticTokens/full", `{"textDocument": {"uri": "`+p.uri(name)+`"}}`)).Data
+			spelled := texts(spellTokens(t, tt.source, "utf-16", data))
+			checkInOrder(t, spelled, []string{"let keyword", "in keyword"})
+		})
+	}
+}
+
+func TestNixTextNamedNixKeepsTheAntiquotationOutOfItsFindings(t *testing.T) {
+	t.Parallel()
+
+	p := openEmbeddedText(t, "{ writeText, value }:\nwriteText \"gen.nix\" ''\n  { a = ${value}; }\n''\n")
+	if got := codes(pullDiagnostics(t, p.c, p.uri("embedded.nix"))); len(got) != 0 {
+		t.Errorf("findings = %q, want none about the stand-in", got)
+	}
+}
+
+func (p *nativeProject) linkedProject(t *testing.T, srv *Server, name string) *nix.Project {
+	t.Helper()
+	docs := srv.docs.View()
+	snap, err := srv.snapshot(docs, p.uri(name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	h, hosted := hostnav.Of(snap.File)
+	if !hosted {
+		t.Fatalf("%s is not a Nix file", name)
+	}
+	g, err := srv.group(t.Context(), docs, h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	project, linked := g.Module.Links().(*nix.Project)
+	if !linked {
+		t.Fatalf("%s holds no project", name)
+	}
+	return project
+}
+
+func TestNixOpeningAnUnchangedFileKeepsTheProject(t *testing.T) {
+	t.Parallel()
+
+	const reader, setter = stalenessReader, stalenessSetter
+	var srv *Server
+	p := openNativeProjectWith(t, func(s *Server) { srv = s }, nativeCapabilities, corpusProject(t, "dendritic"), reader)
+	if got := decodeResult[[]lsp.Location](t, p.c.call("textDocument/definition", p.params(reader, "ownerName", 1, ""))); len(got) == 0 {
+		t.Fatal("no definition before opening the other file")
+	}
+	before := p.linkedProject(t, srv, reader)
+
+	p.c.notify("textDocument/didOpen", openLanguageParams(p.uri(setter), "", p.files[setter]))
+	if got := decodeResult[[]lsp.Location](t, p.c.call("textDocument/definition", p.params(reader, "ownerName", 1, ""))); len(got) == 0 {
+		t.Fatal("no definition after opening the other file")
+	}
+	if after := p.linkedProject(t, srv, reader); after != before {
+		t.Error("opening a file whose text is on disk linked the project again")
+	}
+
+	p.c.notify("textDocument/didClose", fmt.Sprintf(`{"textDocument": {"uri": %q}}`, p.uri(setter)))
+	if got := decodeResult[[]lsp.Location](t, p.c.call("textDocument/definition", p.params(reader, "ownerName", 1, ""))); len(got) == 0 {
+		t.Fatal("no definition after closing the other file")
+	}
+	if after := p.linkedProject(t, srv, reader); after != before {
+		t.Error("closing a file whose text is on disk linked the project again")
+	}
+
+	p.c.notify("textDocument/didOpen", openLanguageParams(p.uri(setter), "", p.files[setter]+"\n"))
+	if got := decodeResult[[]lsp.Location](t, p.c.call("textDocument/definition", p.params(reader, "ownerName", 1, ""))); len(got) == 0 {
+		t.Fatal("no definition after opening the other file changed")
+	}
+	if after := p.linkedProject(t, srv, reader); after == before {
+		t.Error("a file opened with other text kept the project of its old text")
+	}
+}
+
+func TestNixScriptAfterARewrittenOneKeepsItsPositions(t *testing.T) {
+	t.Parallel()
+
+	const name = "scripts.nix"
+	source := "{ pkgs, x }:\n{\n  a = pkgs.writeShellScript \"a\" ''\n    ${pkgs.gnused}/bin/sed s/a/b/ \"$1\"\n    echo '${x}'\n  '';\n  b = pkgs.writeShellScript \"b\" ''\n    echo 'quoted' ${x}\n    ls $1\n    cat `pwd`\n  '';\n}\n"
+	p := openNativeProject(t, nativeCapabilities, map[string]string{name: source}, name)
+	items := pullDiagnostics(t, p.c, p.uri(name))
+	for _, want := range []struct{ code, at string }{{"SC2086", "$1\n    cat"}, {"SC2006", "`pwd`"}} {
+		start := p.at(name, want.at, 0).Range.Start
+		if !slices.ContainsFunc(items, func(d lsp.Diagnostic) bool { return d.Code == want.code && d.Range.Start == start }) {
+			t.Errorf("no %s at %+v among %+v", want.code, start, items)
+		}
+	}
+	data := decodeResult[lsp.SemanticTokens](t, p.c.call("textDocument/semanticTokens/full", `{"textDocument": {"uri": "`+p.uri(name)+`"}}`)).Data
+	checkInOrder(t, texts(spellTokens(t, source, "utf-16", data)), []string{"sed function external", "ls function external"})
 }

@@ -112,7 +112,7 @@ func (in *indexer) attributes(attrs []Attribute, owner int) {
 		if a.Partial {
 			args = model.NoArgs
 		}
-		in.ix.Refs = append(in.ix.Refs, model.Ref{Name: a.Name.Text, Kind: model.KindAttribute, Span: a.Name.Span, Args: args, Owner: owner})
+		in.ix.Refs = append(in.ix.Refs, model.Ref{Name: a.Name.Text, Kind: model.KindAttribute, Span: a.Name.Span, Args: model.Narrow(args), Owner: model.Narrow(owner)})
 		in.token(a.Name.Span, semantic.TypeDecorator, 0)
 		for _, arg := range a.Args {
 			if arg.Key.Text != "" {
@@ -173,12 +173,12 @@ func (in *indexer) alias(a *Alias) {
 func (in *indexer) path(p Path, owner, args int, edge bool) {
 	qualifier := make([]string, 0, len(p)-1)
 	for _, part := range p[:len(p)-1] {
-		in.ix.Refs = append(in.ix.Refs, model.Ref{Name: part.Text, Kind: model.KindModule, Span: part.Span, Qualifier: slices.Clone(qualifier), Args: model.NoArgs, Owner: owner})
+		in.ix.Refs = append(in.ix.Refs, model.Ref{Name: part.Text, Kind: model.KindModule, Span: part.Span, Call: model.Qualified(slices.Clone(qualifier)), Args: model.NoArgs, Owner: model.Narrow(owner)})
 		in.token(part.Span, semantic.TypeNamespace, 0)
 		qualifier = append(qualifier, part.Text)
 	}
 	last := p[len(p)-1]
-	in.ix.Refs = append(in.ix.Refs, model.Ref{Name: last.Text, Kind: model.KindRecipe, Span: last.Span, Qualifier: qualifier, Args: args, Owner: owner, Edge: edge})
+	in.ix.Refs = append(in.ix.Refs, model.Ref{Name: last.Text, Kind: model.KindRecipe, Span: last.Span, Call: model.Qualified(qualifier), Args: model.Narrow(args), Owner: model.Narrow(owner), Edge: edge})
 	in.token(last.Span, semantic.TypeFunction, 0)
 }
 
@@ -285,7 +285,7 @@ func (in *indexer) recipe(r *Recipe, positional bool) {
 		first := len(in.ix.Refs)
 		in.expr(p.Default, scope, i, false)
 		for j := first; j < len(in.ix.Refs); j++ {
-			in.ix.Refs[j].Horizon = p.Span.Start
+			in.ix.Refs[j].Horizon = model.Narrow(p.Span.Start)
 		}
 	}
 	for _, d := range slices.Concat(r.Deps, r.Subsequent) {
@@ -297,7 +297,7 @@ func (in *indexer) recipe(r *Recipe, positional bool) {
 		if d.Paren {
 			call := &in.ix.Refs[len(in.ix.Refs)-1]
 			for _, a := range d.Args {
-				call.ArgSpans = append(call.ArgSpans, a.Span)
+				call.AddArg(a.Span)
 			}
 		}
 		for _, a := range d.Args {
@@ -353,12 +353,12 @@ func (in *indexer) expr(e *Expr, scope model.Scope, owner int, edge bool) {
 	Walk(e, func(x *Expr) {
 		switch x.Kind {
 		case ExprVariable:
-			in.ix.Refs = append(in.ix.Refs, model.Ref{Name: x.Name.Text, Kind: model.KindVariable, Span: x.Span, Scope: scope, Args: model.NoArgs, Owner: owner, Edge: edge})
+			in.ix.Refs = append(in.ix.Refs, model.Ref{Name: x.Name.Text, Kind: model.KindVariable, Span: x.Span, Scope: scope, Args: model.NoArgs, Owner: model.Narrow(owner), Edge: edge})
 			in.token(x.Span, semantic.TypeVariable, 0)
 		case ExprCall:
-			call := model.Ref{Name: x.Name.Text, Kind: model.KindFunction, Span: x.Name.Span, Scope: scope, Args: len(x.Args), Owner: owner}
+			call := model.Ref{Name: x.Name.Text, Kind: model.KindFunction, Span: x.Name.Span, Scope: scope, Args: model.Narrow(len(x.Args)), Owner: model.Narrow(owner)}
 			for _, a := range x.Args {
-				call.ArgSpans = append(call.ArgSpans, a.Span)
+				call.AddArg(a.Span)
 			}
 			in.ix.Refs = append(in.ix.Refs, call)
 			in.token(x.Name.Span, semantic.TypeFunction, 0)

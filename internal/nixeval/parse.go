@@ -186,6 +186,14 @@ func parsePackage(data []byte) (*Package, error) {
 	return &Package{Name: raw.Name, Version: raw.Version, Description: raw.Description, Declaration: parsePosition(raw.Position)}, nil
 }
 
+func parseDeclaration(data []byte) (*Declaration, error) {
+	var declaration *Declaration
+	if err := json.Unmarshal(data, &declaration); err != nil {
+		return nil, fmt.Errorf("parsing an attribute's position: %w", err)
+	}
+	return declaration, nil
+}
+
 func parsePosition(position string) Declaration {
 	file, number, found := strings.CutLast(position, ":")
 	if !found {

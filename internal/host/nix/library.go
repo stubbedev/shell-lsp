@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/stubbedev/shell-lsp/internal/host/nix/builtins"
 	"github.com/stubbedev/shell-lsp/internal/host/nix/scope"
@@ -49,6 +50,7 @@ type libraryHit struct {
 }
 
 type Library struct {
+	mu     sync.Mutex
 	dir    string
 	read   func(path string) (string, bool)
 	files  map[string]*libraryFile
@@ -262,6 +264,9 @@ func (l *Library) lookup(sets []librarySet, name string) (libraryHit, bool) {
 }
 
 func (l *Library) Lookup(names []string) (LibraryEntry, bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.steps = 0
 	current := l.root()
 	var hit libraryHit
 	for _, name := range names {
@@ -287,6 +292,9 @@ func (l *Library) Lookup(names []string) (LibraryEntry, bool) {
 }
 
 func (l *Library) Members(names []string) []string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.steps = 0
 	current := l.root()
 	for _, name := range names {
 		found, ok := l.lookup(current, name)

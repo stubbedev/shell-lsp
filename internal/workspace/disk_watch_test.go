@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/stubbedev/shell-lsp/internal/diskwatch"
+	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/regularfile"
 )
 
@@ -148,5 +149,88 @@ func TestWatchedNixIncludesFollowAnEdit(t *testing.T) {
 	second, _, err := w.NixIncludes(path)
 	if err != nil || len(second) != 2 {
 		t.Errorf("after an edit, includes = %v, %v", second, err)
+	}
+}
+
+func TestANixFileIsReadOnceBetweenItsImportsAndItsLoad(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "a.nix")
+	const text = "{ imports = [ ./b.nix ]; }\n"
+	if err := os.WriteFile(path, []byte(text), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	w := New(func(string) (*File, bool) { return nil, false }, Detect)
+	reads := 0
+	w.UseRead(func(name string, info fs.FileInfo, limit int64) ([]byte, fs.FileInfo, error) {
+		reads++
+		return regularfile.ReadStat(name, info, limit)
+	})
+	includes, _, err := w.NixIncludes(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(includes) != 1 {
+		t.Fatalf("includes = %+v", includes)
+	}
+	file, err := w.LoadAs(path, host.Nix)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reads != 1 {
+		t.Errorf("%d reads of one file, want one", reads)
+	}
+	if got := file.Doc.Source().Text(); got != text {
+		t.Errorf("text = %q", got)
+	}
+	if len(file.Native.Index.Includes) == 0 {
+		t.Error("the load lost what the file imports")
+	}
+	if w.stashed != 0 || len(w.stash) != 0 {
+		t.Errorf("the parse stays held: %d bytes in %d entries", w.stashed, len(w.stash))
+	}
+}
+
+func TestAKeptParseIsNotUsedForAFileThatChanged(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "a.nix")
+	if err := os.WriteFile(path, []byte("{ a = 1; }\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	w := New(func(string) (*File, bool) { return nil, false }, Detect)
+	if _, _, err := w.NixIncludes(path); err != nil {
+		t.Fatal(err)
+	}
+	const changed = "{ a = 1; b = 2; }\n"
+	if err := os.WriteFile(path, []byte(changed), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	file, err := w.LoadAs(path, host.Nix)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := file.Doc.Source().Text(); got != changed {
+		t.Errorf("text = %q, want the file as it is now", got)
+	}
+}
+
+func TestReleasingTheStashDropsWhatWasNeverLoaded(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "a.nix")
+	if err := os.WriteFile(path, []byte("{ a = 1; }\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	w := New(func(string) (*File, bool) { return nil, false }, Detect)
+	if _, _, err := w.NixIncludes(path); err != nil {
+		t.Fatal(err)
+	}
+	if w.stashed == 0 {
+		t.Fatal("nothing was kept")
+	}
+	w.ReleaseStash()
+	if w.stashed != 0 || w.stash != nil {
+		t.Errorf("%d bytes stay held", w.stashed)
 	}
 }

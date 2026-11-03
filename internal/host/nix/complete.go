@@ -32,13 +32,24 @@ type Item struct {
 
 func (it Item) HasDoc() bool { return it.Doc != "" || it.packagePath != nil }
 
-func Complete(text string, offset int, files Files, known Evaluated) []Item {
+type Cursor struct{ *cursor }
+
+func Locate(text string, offset int, files Files) (Cursor, bool) {
 	c, ok := locate(text, offset, files)
+	return Cursor{c}, ok
+}
+
+func (c Cursor) Complete(known Evaluated) []Item {
+	c.known = known
+	return c.items()
+}
+
+func Complete(text string, offset int, files Files, known Evaluated) []Item {
+	c, ok := Locate(text, offset, files)
 	if !ok {
 		return nil
 	}
-	c.known = known
-	return c.items()
+	return c.Complete(known)
 }
 
 func ItemDoc(text string, offset int, label string, files Files, known Evaluated) (string, bool) {
@@ -451,7 +462,7 @@ func setItems(v flowSet) []Item {
 		if s.Kind == model.KindFunction {
 			kind = model.KindFunction
 		}
-		out = append(out, Item{Label: attrLabel(s.Name), Kind: kind, Detail: s.Detail, Doc: commentAbove(v.unit.f.tree, s.Span.Start)})
+		out = append(out, Item{Label: attrLabel(s.Name), Kind: kind, Detail: s.Description(), Doc: commentAbove(v.unit.f.tree, s.Span.Start)})
 	}
 	return out
 }

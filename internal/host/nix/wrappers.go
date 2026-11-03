@@ -2,6 +2,7 @@ package nix
 
 import (
 	"cmp"
+	"fmt"
 	"slices"
 	"strings"
 
@@ -23,8 +24,13 @@ const (
 
 var shellEscapes = []string{"escapeShellArg", "escapeShellArgs"}
 
+type scriptSink struct {
+	writer  string
+	ambient bool
+}
+
 type lambdaSinks struct {
-	scripts  map[string]string
+	scripts  map[string]scriptSink
 	envs     map[string]bool
 	forwards []sinkForward
 }
@@ -90,7 +96,7 @@ func (w *sinkWalk) enter(fn *syntax.Lambda) {
 func (w *sinkWalk) of(fn *syntax.Lambda) *lambdaSinks {
 	s := w.out[fn]
 	if s == nil {
-		s = &lambdaSinks{scripts: map[string]string{}, envs: map[string]bool{}}
+		s = &lambdaSinks{scripts: map[string]scriptSink{}, envs: map[string]bool{}}
 		w.out[fn] = s
 	}
 	return s
@@ -149,14 +155,14 @@ func (w *sinkWalk) readInherit(stmt *syntax.Inherit, attr syntax.Attr) (sinkOwne
 }
 
 func (w *sinkWalk) apply(call *syntax.Apply) {
-	name := calleeName(syntax.Unparenthesized(call.Fn))
+	name := w.f.callName(call.Fn)
 	switch {
 	case positionalWriter(name):
-		w.script(call.Args[len(call.Args)-1], name)
+		w.script(call.Args[len(call.Args)-1], scriptSink{writer: name})
 	case runner(name):
 		if arg := callSurfaces[name].script.arg; len(call.Args) == arg {
 			w.env(call.Args[arg-2])
-			w.script(call.Args[arg-1], name)
+			w.script(call.Args[arg-1], scriptSink{writer: name, ambient: true})
 		}
 	case name == shellApp:
 		w.attrSinks(call.Args[0], shellApp)
@@ -172,30 +178,44 @@ func (w *sinkWalk) attrSinks(arg syntax.Expr, writer string) {
 	if !literal {
 		return
 	}
+	sink := scriptSink{writer: writer, ambient: declaresBinding(set, runtimeEnvAttr)}
 	w.bound(set, func(name string, value syntax.Expr, inherited sinkOwner, isInherit bool) {
-		var sink func(syntax.Expr, string)
-		switch name {
-		case shellAppText:
-			sink = w.script
-		case runtimeEnvAttr:
-			sink = func(e syntax.Expr, _ string) { w.env(e) }
+		if name != shellAppText && name != runtimeEnvAttr {
+			return
+		}
+		switch {
+		case isInherit:
+			w.markScriptOrEnv(name, inherited, sink)
+		case name == shellAppText:
+			w.script(value, sink)
 		default:
-			return
+			w.env(value)
 		}
-		if isInherit {
-			w.markScriptOrEnv(name, inherited, writer)
-			return
-		}
-		sink(value, writer)
 	})
 }
 
-func (w *sinkWalk) markScriptOrEnv(attr string, owner sinkOwner, writer string) {
+func (w *sinkWalk) markScriptOrEnv(attr string, owner sinkOwner, sink scriptSink) {
 	if attr == runtimeEnvAttr || attr == "env" {
 		w.of(owner.fn).envs[owner.key] = true
 		return
 	}
-	w.of(owner.fn).scripts[owner.key] = writer
+	w.of(owner.fn).scripts[owner.key] = sink
+}
+
+func declaresBinding(set *syntax.AttrSet, name string) bool {
+	return slices.ContainsFunc(set.Bindings, func(b syntax.Binding) bool {
+		switch b := b.(type) {
+		case *syntax.Assign:
+			attr, ok := syntax.AttrName(b.Path[0])
+			return ok && attr == name
+		case *syntax.Inherit:
+			return slices.ContainsFunc(b.Attrs, func(a syntax.Attr) bool {
+				attr, ok := syntax.AttrName(a)
+				return ok && attr == name
+			})
+		}
+		return false
+	})
 }
 
 func (w *sinkWalk) bound(set *syntax.AttrSet, visit func(name string, value syntax.Expr, inherited sinkOwner, isInherit bool)) {
@@ -235,7 +255,7 @@ func (w *sinkWalk) textFile(arg syntax.Expr) {
 			return
 		}
 		if writer, shell := w.shebangWriter(str); shell {
-			w.script(str, writer)
+			w.script(str, scriptSink{writer: writer})
 		}
 	})
 }
@@ -249,6 +269,7 @@ func (w *sinkWalk) shebangWriter(str *syntax.String) (string, bool) {
 }
 
 func (w *sinkWalk) derivation(set *syntax.AttrSet) {
+	derived := scriptSink{writer: derivationWriter, ambient: true}
 	phased := slices.ContainsFunc(set.Bindings, func(b syntax.Binding) bool {
 		a, assigned := b.(*syntax.Assign)
 		return assigned && (slices.Contains(derivationBindings, lastIdent(a.Path)) || lastIdent(a.Path) == shellHook)
@@ -257,13 +278,13 @@ func (w *sinkWalk) derivation(set *syntax.AttrSet) {
 		switch {
 		case slices.Contains(derivationBindings, name) || name == shellHook:
 			if isInherit {
-				w.markScriptOrEnv(name, inherited, derivationWriter)
+				w.markScriptOrEnv(name, inherited, derived)
 				return
 			}
-			w.script(value, derivationWriter)
+			w.script(value, derived)
 		case name == envChildren[derivationEnv] && phased:
 			if isInherit {
-				w.markScriptOrEnv(name, inherited, derivationWriter)
+				w.markScriptOrEnv(name, inherited, derived)
 				return
 			}
 			w.env(value)
@@ -271,30 +292,31 @@ func (w *sinkWalk) derivation(set *syntax.AttrSet) {
 	})
 }
 
-func (w *sinkWalk) script(e syntax.Expr, writer string) {
+func (w *sinkWalk) script(e syntax.Expr, sink scriptSink) {
 	if owner, read := w.read(e); read {
-		w.of(owner.fn).scripts[owner.key] = writer
+		w.of(owner.fn).scripts[owner.key] = sink
 		return
 	}
 	switch e := syntax.Unparenthesized(e).(type) {
 	case *syntax.String:
-		w.scriptHoles(e, writer)
+		w.scriptHoles(e, sink)
 	case *syntax.Binary:
 		if e.Op == syntax.OpAdd {
-			w.script(e.Left, writer)
-			w.script(e.Right, writer)
+			w.script(e.Left, sink)
+			w.script(e.Right, sink)
 		}
 	case *syntax.If:
-		w.script(e.Then, writer)
-		w.script(e.Else, writer)
+		w.script(e.Then, sink)
+		w.script(e.Else, sink)
 	case *syntax.Apply:
-		if stringWrap(calleeName(syntax.Unparenthesized(e.Fn))) {
-			w.script(e.Args[len(e.Args)-1], writer)
+		if stringWrap(w.f.callName(e.Fn)) {
+			w.script(e.Args[len(e.Args)-1], sink)
 		}
 	}
 }
 
-func (w *sinkWalk) scriptHoles(str *syntax.String, writer string) {
+func (w *sinkWalk) scriptHoles(str *syntax.String, sink scriptSink) {
+	sink.ambient = true
 	var positions []int
 	var via *projection.Map
 	for _, part := range str.Parts {
@@ -303,7 +325,7 @@ func (w *sinkWalk) scriptHoles(str *syntax.String, writer string) {
 			continue
 		}
 		value := syntax.Unparenthesized(hole.Value)
-		if escaped, isCall := value.(*syntax.Apply); isCall && slices.Contains(shellEscapes, calleeName(syntax.Unparenthesized(escaped.Fn))) {
+		if escaped, isCall := value.(*syntax.Apply); isCall && slices.Contains(shellEscapes, w.f.callName(escaped.Fn)) {
 			value = escaped.Args[len(escaped.Args)-1]
 		}
 		owner, read := w.read(value)
@@ -315,7 +337,7 @@ func (w *sinkWalk) scriptHoles(str *syntax.String, writer string) {
 			positions = commandPositions(via.Text())
 		}
 		if at, _ := via.Offset(projection.HostOffset(hole.Span().Start)); slices.Contains(positions, int(at)) {
-			w.of(owner.fn).scripts[owner.key] = writer
+			w.of(owner.fn).scripts[owner.key] = sink
 		}
 	}
 }
@@ -375,21 +397,21 @@ func (w *sinkWalk) forwards(call *syntax.Apply) {
 }
 
 func (b *symbolTable) wrapperCandidates() []*syntax.Apply {
-	return slices.DeleteFunc(slices.Clone(b.calls), func(call *syntax.Apply) bool { return !wrapperCandidate(call) })
+	return slices.DeleteFunc(slices.Clone(b.calls), func(call *syntax.Apply) bool { return !b.f.wrapperCandidate(call) })
 }
 
-func wrapperCandidate(call *syntax.Apply) bool {
-	name := calleeName(syntax.Unparenthesized(call.Fn))
+func (f *file) wrapperCandidate(call *syntax.Apply) bool {
+	name := f.callName(call.Fn)
 	if knownWriter(name) || slices.Contains(transparentCalls, name) || name == importName || name == mkMergeName {
 		return false
 	}
-	return slices.ContainsFunc(call.Args, stringBearing)
+	return slices.ContainsFunc(call.Args, f.stringBearing)
 }
 
 func (f *file) passesStrings() bool {
 	found := false
 	visit := func(n syntax.Node) bool {
-		if call, isCall := n.(*syntax.Apply); isCall && wrapperCandidate(call) {
+		if call, isCall := n.(*syntax.Apply); isCall && f.wrapperCandidate(call) {
 			found = true
 		}
 		return !found
@@ -401,41 +423,41 @@ func (f *file) passesStrings() bool {
 	return found
 }
 
-func stringBearing(arg syntax.Expr) bool {
+func (f *file) stringBearing(arg syntax.Expr) bool {
 	switch arg := syntax.Unparenthesized(arg).(type) {
 	case *syntax.String:
 		return true
 	case *syntax.AttrSet:
 		return slices.ContainsFunc(arg.Bindings, func(b syntax.Binding) bool {
 			a, assigned := b.(*syntax.Assign)
-			return assigned && len(a.Path) == 1 && len(scriptStrings(a.Value)) > 0
+			return assigned && len(a.Path) == 1 && len(f.scriptStrings(a.Value)) > 0
 		})
 	}
 	return false
 }
 
-func scriptStrings(e syntax.Expr) []*syntax.String {
+func (f *file) scriptStrings(e syntax.Expr) []*syntax.String {
 	switch e := syntax.Unparenthesized(e).(type) {
 	case *syntax.String:
 		return []*syntax.String{e}
 	case *syntax.Binary:
 		if e.Op == syntax.OpAdd {
-			return slices.Concat(scriptStrings(e.Left), scriptStrings(e.Right))
+			return slices.Concat(f.scriptStrings(e.Left), f.scriptStrings(e.Right))
 		}
 	case *syntax.If:
-		return slices.Concat(scriptStrings(e.Then), scriptStrings(e.Else))
+		return slices.Concat(f.scriptStrings(e.Then), f.scriptStrings(e.Else))
 	case *syntax.Apply:
-		if stringWrap(calleeName(syntax.Unparenthesized(e.Fn))) {
-			return scriptStrings(e.Args[len(e.Args)-1])
+		if stringWrap(f.callName(e.Fn)) {
+			return f.scriptStrings(e.Args[len(e.Args)-1])
 		}
 	}
 	return nil
 }
 
 type provenString struct {
-	str    *syntax.String
-	writer string
-	env    environment
+	str  *syntax.String
+	sink scriptSink
+	env  environment
 }
 
 type sinkKey struct {
@@ -459,46 +481,51 @@ func writerArgument(name string, arg int, key string) (string, bool, bool) {
 	return "", false, false
 }
 
-func (p *Project) scriptSink(fn flowLambda, key string) (string, bool) {
+func (p *Project) scriptSink(fn flowLambda, key string) (scriptSink, bool) {
 	k := sinkKey{fn: fn, key: key}
 	if done, ok := p.scriptMemo[k]; ok {
-		return done, done != ""
+		return done, done.writer != ""
 	}
 	if p.sinkVisiting[k] {
-		return "", false
+		return scriptSink{}, false
 	}
 	p.sinkVisiting[k] = true
 	defer delete(p.sinkVisiting, k)
-	writer := ""
+	var sink scriptSink
 	if s := fn.unit.sinks[fn.fn]; s != nil {
-		writer = s.scripts[key]
+		sink = s.scripts[key]
 		for _, f := range s.forwards {
-			if writer != "" {
+			if sink.writer != "" {
 				break
 			}
 			if f.from == key {
-				writer = p.forwardedScript(fn.unit, f)
+				sink = p.forwardedScript(fn.unit, f)
 			}
 		}
 	}
-	p.scriptMemo[k] = writer
-	return writer, writer != ""
+	p.scriptMemo[k] = sink
+	return sink, sink.writer != ""
 }
 
-func (p *Project) forwardedScript(u *symbolTable, f sinkForward) string {
+func (p *Project) forwardedScript(u *symbolTable, f sinkForward) scriptSink {
 	for _, v := range p.calleeAt(u, f.call, f.arg) {
-		switch v := v.(type) {
-		case flowLambda:
-			if writer, ok := p.scriptSink(v, f.key); ok {
-				return writer
-			}
-		case flowWriter:
-			if writer, script, _ := writerArgument(v.name, f.arg, f.key); script {
-				return writer
+		if sink, script := p.sinksOfValue(v, f.arg, f.key); script {
+			sink.ambient = sink.ambient || p.callGivesEnv(u, f.call)
+			return sink
+		}
+	}
+	return scriptSink{}
+}
+
+func (p *Project) callGivesEnv(u *symbolTable, call *syntax.Apply) bool {
+	for i, arg := range call.Args {
+		for _, v := range p.calleeAt(u, call, i) {
+			if _, env := p.proveArgument(u, v, i, arg); env.set != nil || env.expr != nil {
+				return true
 			}
 		}
 	}
-	return ""
+	return false
 }
 
 func (p *Project) envSink(fn flowLambda, key string) bool {
@@ -554,7 +581,7 @@ func (p *Project) proveCall(u *symbolTable, call *syntax.Apply) []provenString {
 	env := environment{}
 	for i, arg := range call.Args {
 		for _, v := range values {
-			found, given := p.proveArgument(v, i, arg)
+			found, given := p.proveArgument(u, v, i, arg)
 			out = append(out, found...)
 			if given.set != nil || given.expr != nil {
 				env = given
@@ -562,23 +589,24 @@ func (p *Project) proveCall(u *symbolTable, call *syntax.Apply) []provenString {
 		}
 		values = p.applied(values, 1)
 	}
+	given := env.set != nil || env.expr != nil
 	for i := range out {
 		out[i].env = env
+		out[i].sink.ambient = out[i].sink.ambient || given
 	}
 	p.provedCalls[call] = out
 	return out
 }
 
-func (p *Project) sinksOfValue(v flowValue, arg int, key string) (string, bool) {
+func (p *Project) sinksOfValue(v flowValue, arg int, key string) (scriptSink, bool) {
 	switch v := v.(type) {
 	case flowLambda:
-		writer, script := p.scriptSink(v, key)
-		return writer, script
+		return p.scriptSink(v, key)
 	case flowWriter:
 		writer, script, _ := writerArgument(v.name, arg, key)
-		return writer, script
+		return scriptSink{writer: writer, ambient: runner(writer)}, script
 	}
-	return "", false
+	return scriptSink{}, false
 }
 
 func (p *Project) envOfValue(v flowValue, arg int, key string) bool {
@@ -592,13 +620,13 @@ func (p *Project) envOfValue(v flowValue, arg int, key string) bool {
 	return false
 }
 
-func (p *Project) proveArgument(v flowValue, i int, arg syntax.Expr) ([]provenString, environment) {
+func (p *Project) proveArgument(u *symbolTable, v flowValue, i int, arg syntax.Expr) ([]provenString, environment) {
 	set, literal := syntax.Unparenthesized(arg).(*syntax.AttrSet)
 	if !literal {
 		var out []provenString
-		if writer, script := p.sinksOfValue(v, i, wholeArgument); script {
-			for _, str := range scriptStrings(arg) {
-				out = append(out, provenString{str: str, writer: writer})
+		if sink, script := p.sinksOfValue(v, i, wholeArgument); script {
+			for _, str := range u.f.scriptStrings(arg) {
+				out = append(out, provenString{str: str, sink: sink})
 			}
 		}
 		if p.envOfValue(v, i, wholeArgument) {
@@ -617,9 +645,9 @@ func (p *Project) proveArgument(v flowValue, i int, arg syntax.Expr) ([]provenSt
 		if !static {
 			continue
 		}
-		if writer, script := p.sinksOfValue(v, i, key); script && len(a.Path) == 1 {
-			for _, str := range scriptStrings(a.Value) {
-				out = append(out, provenString{str: str, writer: writer})
+		if sink, script := p.sinksOfValue(v, i, key); script && len(a.Path) == 1 {
+			for _, str := range u.f.scriptStrings(a.Value) {
+				out = append(out, provenString{str: str, sink: sink})
 			}
 		}
 		if p.envOfValue(v, i, key) {
@@ -657,6 +685,9 @@ func (b *symbolTable) ownsShell(str *syntax.String) bool {
 func (p *Project) Shells(file int) []model.Shell {
 	p.begin()
 	defer p.mu.Unlock()
+	if done, ok := p.provenShells[file]; ok {
+		return done
+	}
 	var out []model.Shell
 	for _, s := range p.provenIn(file) {
 		at := provenKey{file: file, str: s.str}
@@ -668,13 +699,14 @@ func (p *Project) Shells(file int) []model.Shell {
 			p.provenEnvs[model.Home{File: file, Scope: id}] = s.env
 		}
 		phase := 0
-		if runner(s.writer) {
+		if runner(s.sink.writer) {
 			phase = phaseRank("buildCommand")
 		}
 		for _, piece := range p.units[file].f.pieces(s.str) {
 			out = append(out, model.Shell{Span: piece, Scope: id, Phase: phase})
 		}
 	}
+	p.provenShells[file] = out
 	return out
 }
 
@@ -712,7 +744,7 @@ func (f *file) discoverWrapped() {
 func (f *file) aliasesWriter() bool {
 	found := false
 	visit := func(n syntax.Node) bool {
-		if a, assigned := n.(*syntax.Assign); assigned && knownWriter(calleeName(syntax.Unparenthesized(a.Value))) {
+		if a, assigned := n.(*syntax.Assign); assigned && knownWriter(f.callName(a.Value)) {
 			found = true
 		}
 		return !found
@@ -725,18 +757,18 @@ func (f *file) aliasesWriter() bool {
 }
 
 func (f *file) provenShell(s provenString) (shellString, bool) {
-	found, ok := f.written(shellString{str: s.str}, call{name: s.writer})
+	found, ok := f.written(shellString{str: s.str}, call{name: s.sink.writer})
 	if !ok {
 		return shellString{}, false
 	}
-	if s.writer == shellApp {
+	if s.sink.writer == shellApp {
 		found.prelude = strictMode
 	}
 	if s.env.set != nil || s.env.expr != nil {
 		found.env = s.env
-		if !found.derivation {
-			found.directive = phaseDirective
-		}
+	}
+	if s.sink.ambient && !found.derivation {
+		found.directive = phaseDirective
 	}
 	return found, true
 }
@@ -754,19 +786,52 @@ func outermost(found []shellString) []shellString {
 }
 
 type ProvenString struct {
-	Start  int
-	Writer string
+	Start   int
+	Writer  string
+	Ambient bool
 }
 
 func (p *Project) Proven(file int) []ProvenString {
 	p.begin()
 	defer p.mu.Unlock()
+	return p.provenStrings(file)
+}
+
+func (p *Project) provenStrings(file int) []ProvenString {
 	proven := p.provenIn(file)
 	out := make([]ProvenString, len(proven))
 	for i, s := range proven {
-		out[i] = ProvenString{Start: s.str.Span().Start, Writer: s.writer}
+		out[i] = ProvenString{Start: s.str.Span().Start, Writer: s.sink.writer, Ambient: s.sink.ambient}
 	}
 	return out
+}
+
+func ProvenKey(proven []ProvenString) string {
+	var key strings.Builder
+	for _, s := range proven {
+		fmt.Fprintf(&key, "/%d=%s,%t", s.Start, s.Writer, s.Ambient)
+	}
+	return key.String()
+}
+
+func (p *Project) ProvenFile(file int) ([]ProvenString, []model.Shell, string, bool) {
+	shells := p.Shells(file)
+	if len(shells) == 0 {
+		return nil, nil, "", false
+	}
+	p.begin()
+	defer p.mu.Unlock()
+	proven := p.provenStrings(file)
+	key, known := p.provenKeys[file]
+	if !known {
+		var spans strings.Builder
+		for _, s := range shells {
+			fmt.Fprintf(&spans, "/%d-%d:%d", s.Span.Start, s.Span.End, s.Scope)
+		}
+		key = spans.String() + ProvenKey(proven)
+		p.provenKeys[file] = key
+	}
+	return proven, shells, key, true
 }
 
 func (p *Project) FileOf(path string, ix *model.Index) (int, bool) {
@@ -817,9 +882,9 @@ func RebasedStrings(proven []ProvenString, before, after string) []ProvenString 
 }
 
 func ProjectedStrings(src string, proven []ProvenString) (Analysis, bool) {
-	writers := make(map[int]string, len(proven))
+	sinks := make(map[int]scriptSink, len(proven))
 	for _, s := range proven {
-		writers[s.Start] = s.Writer
+		sinks[s.Start] = scriptSink{writer: s.Writer, ambient: s.Ambient}
 	}
 	tree := syntax.Parse(src)
 	f := &file{src: src, tree: tree, table: scope.Resolve(tree)}
@@ -828,14 +893,11 @@ func ProjectedStrings(src string, proven []ProvenString) (Analysis, bool) {
 		if !isString {
 			return true
 		}
-		writer, wanted := writers[str.Span().Start]
+		sink, wanted := sinks[str.Span().Start]
 		if !wanted {
 			return true
 		}
-		if found, ok := f.provenShell(provenString{str: str, writer: writer}); ok {
-			if !found.derivation {
-				found.directive = phaseDirective
-			}
+		if found, ok := f.provenShell(provenString{str: str, sink: sink}); ok {
 			f.found = append(f.found, found)
 		}
 		return true
@@ -852,6 +914,9 @@ func ProjectedStrings(src string, proven []ProvenString) (Analysis, bool) {
 	index := &model.Index{}
 	for _, s := range f.found {
 		index.Holes = append(index.Holes, f.holes(s.str)...)
+		for _, piece := range f.pieces(s.str) {
+			index.Shells = append(index.Shells, model.Shell{Span: piece})
+		}
 	}
 	return Analysis{Map: m, Detection: detection, Index: index}, true
 }
@@ -883,7 +948,7 @@ func scriptOf(u *symbolTable, call *syntax.Apply) model.Script {
 			text = arg
 		}
 	}
-	script := model.Script{Name: name, Fence: scriptFence(calleeName(syntax.Unparenthesized(call.Fn)))}
+	script := model.Script{Name: name, Fence: scriptFence(u.f.callName(call.Fn))}
 	if text == nil {
 		return script
 	}

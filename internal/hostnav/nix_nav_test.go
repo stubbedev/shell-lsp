@@ -845,7 +845,11 @@ func TestNixMembersComeFromTheWholeProject(t *testing.T) {
 		{"a flake input", "on;", []string{"one"}},
 		{"an option key", "be = true", []string{"alpha", "beta"}},
 	} {
-		req, wanted := nix.MembersWanted(tr.files["b.nix"], tr.offset("b.nix", tt.sub, 0)+1)
+		cursor, located := nix.Locate(tr.files["b.nix"], tr.offset("b.nix", tt.sub, 0)+1, nix.NoFiles)
+		if !located {
+			t.Fatalf("no cursor at %q", tt.sub)
+		}
+		req, wanted := cursor.MembersWanted()
 		if !wanted {
 			t.Errorf("%s: no members wanted", tt.name)
 			continue
@@ -896,5 +900,84 @@ func TestNixSignatureReadsTheFileACallLoads(t *testing.T) {
 		if !ok || !strings.Contains(sig.Label, "./y.nix") || !strings.Contains(sig.Label, "stdenv") {
 			t.Errorf("%s: signature = %+v, %v", name, sig, ok)
 		}
+	}
+}
+
+func TestNixRenameRefusalSaysWhatWouldBreak(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name, src, sub string
+		nth            int
+		want           []string
+	}{
+		{"a set used as a whole", "let\n  set = { one = 1; };\nin\nfun set", "one", 0, []string{"used as a whole on line 4", "may read it by its name"}},
+		{"a set with no name", "{ one = 1; }", "one", 0, []string{"no name of its own", "may read it by its name"}},
+		{"a set with reads", "let\n  set = { one = 1; };\nin\n[ set.one (fun set) ]", "one", 0, []string{"used as a whole on line 4", "the reads at default.nix:4"}},
+		{"an attribute the shell reads", "stdenv.mkDerivation {\n  pname = \"x\";\n  buildPhase = ''\n    echo $pname\n  '';\n}\n", "pname", 0, []string{"environment of shell code", "the reads at default.nix:4"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := renameNix(t, tt.src, tt.sub, tt.nth, "alpha")
+			if !errors.Is(err, navigation.ErrNotRenamable) {
+				t.Fatalf("error = %v, want %v", err, navigation.ErrNotRenamable)
+			}
+			for _, want := range tt.want {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error = %q, want it to say %q", err, want)
+				}
+			}
+		})
+	}
+}
+
+func TestNixRenameRefusalNamesTheSiteAcrossFiles(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name  string
+		files map[string]string
+		in    string
+		sub   string
+		want  []string
+	}{
+		{
+			"callPackage fills a formal",
+			map[string]string{"default.nix": "{ callPackage }:\ncallPackage ./pkg.nix { }\n", "pkg.nix": "{ stdenv }: stdenv\n"},
+			"pkg.nix", "stdenv",
+			[]string{"`callPackage` at default.nix:2 fills `stdenv`"},
+		},
+		{
+			"a set below a module is passed on",
+			map[string]string{"flake.nix": deferredFlake, "y.nix": deferredModule + "  config.copy = f config.deferred.sub;\n}\n"},
+			"y.nix", "foo",
+			[]string{"passed on as a value at y.nix:"},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := newTree(t, tt.files).renamedAfter(tt.in, "", tt.sub, "alpha")
+			if !errors.Is(err, navigation.ErrNotRenamable) {
+				t.Fatalf("error = %v, want %v", err, navigation.ErrNotRenamable)
+			}
+			for _, want := range tt.want {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error = %q, want it to say %q", err, want)
+				}
+			}
+		})
+	}
+}
+
+func TestNixRenameConflictNamesTheSite(t *testing.T) {
+	t.Parallel()
+
+	tr := newTree(t, map[string]string{
+		"default.nix": "let\n  fun = import ./fun.nix;\nin\nfun {\n  one = 1;\n  two = 2;\n}\n",
+		"fun.nix":     "{ one, ... }: one\n",
+	})
+	_, err := tr.renamedAfter("fun.nix", "", "one", "two")
+	if !errors.Is(err, navigation.ErrNameConflict) || !strings.Contains(err.Error(), "default.nix:6") {
+		t.Errorf("error = %v, want a conflict at the read on default.nix:6", err)
 	}
 }

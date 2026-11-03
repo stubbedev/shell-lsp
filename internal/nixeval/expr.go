@@ -35,8 +35,8 @@ func stringArg(name, value string) exprArg {
 	return exprArg{name: name, value: nixString(value)}
 }
 
-func listArg(name string, items []string) exprArg {
-	return exprArg{name: name, value: nixStringList(items)}
+func pathArg(items []string) exprArg {
+	return exprArg{name: "path", value: nixStringList(items)}
 }
 
 func callExpr(function string, args ...exprArg) string {

@@ -133,9 +133,9 @@ func bindsFunction(origins []origin) bool {
 func (r *reading) originDetail(o origin) string {
 	f := file{src: r.tree.Text}
 	if o.assign != nil {
-		return f.detail(binding{name: nameSpan(o.assign.Path[o.depth-1]), span: o.assign.Span()})
+		return f.described(binding{name: nameSpan(o.assign.Path[o.depth-1]), span: o.assign.Span()})
 	}
-	return f.detail(binding{name: nameSpan(o.attr), span: o.inherit.Span(), inherit: true})
+	return f.described(binding{name: nameSpan(o.attr), span: o.inherit.Span(), inherit: true})
 }
 
 func (r *reading) originDoc(o origin) string {

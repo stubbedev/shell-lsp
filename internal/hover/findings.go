@@ -23,6 +23,11 @@ var fixLabels = map[lint.Safety]string{
 	lint.Review: "**Fix** (changes behaviour, review it):",
 }
 
+func WithFindings(in Input, r Result) Result {
+	r, _ = newHoverer(in).withFindings(r, true)
+	return r
+}
+
 func (h hoverer) withFindings(r Result, ok bool) (Result, bool) {
 	findings := h.findingsAt()
 	if len(findings) == 0 {

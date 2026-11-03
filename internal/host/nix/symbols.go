@@ -34,14 +34,39 @@ type attrs struct {
 	names   nameTable[entry]
 	kids    map[string]*attrs
 	reads   nameTable[struct{}]
-	callers []*attrs
+	rare    *rareAttrs
+	left    int32
 	dynamic bool
-	escaped bool
 	bound   bool
 	sources nameTable[[]flowSource]
+	lambda  *syntax.Lambda
+}
+
+type rareAttrs struct {
+	callers []*attrs
 	dynKids []*attrs
 	direct  []syntax.Expr
-	lambda  *syntax.Lambda
+}
+
+func (a *attrs) rareOnes() *rareAttrs {
+	if a.rare == nil {
+		a.rare = &rareAttrs{}
+	}
+	return a.rare
+}
+
+func (a *attrs) dynamicKids() []*attrs {
+	if a.rare == nil {
+		return nil
+	}
+	return a.rare.dynKids
+}
+
+func (a *attrs) directValues() []syntax.Expr {
+	if a.rare == nil {
+		return nil
+	}
+	return a.rare.direct
 }
 
 func (a *attrs) name(name string, e entry) { a.names.set(name, e) }
@@ -56,9 +81,24 @@ func (a *attrs) source(name string, src flowSource) {
 	a.sources.set(name, append(a.sources.of(name), src))
 }
 
+func (a *attrs) leave(offset int) {
+	if a.left == 0 {
+		a.left = model.Narrow(offset) + 1
+	}
+}
+
+func (a *attrs) leftAt() (int, bool) {
+	for ; a != nil; a = a.parent {
+		if a.left > 0 {
+			return int(a.left) - 1, true
+		}
+	}
+	return 0, false
+}
+
 func (a *attrs) closed() bool {
 	for ; a != nil; a = a.parent {
-		if a.escaped {
+		if a.left > 0 {
 			return false
 		}
 		if a.bound {
@@ -110,6 +150,9 @@ type symbolTable struct {
 	loaded     map[*syntax.Path]bool
 	selected   map[syntax.Expr]bool
 	letAlias   map[syntax.Expr]*scope.Def
+
+	symbolRewrites []pendingRewrite
+	refRewrites    []pendingRewrite
 }
 
 func newSymbolTable(f *file, ix *model.Index) *symbolTable {
@@ -197,6 +240,7 @@ func (b *symbolTable) compact() {
 	b.loaded, b.selected, b.letAlias, b.exports, b.envScopes = nil, nil, nil, nil, nil
 	b.paths = nil
 	b.attrChunk, b.oneTargets = nil, nil
+	b.symbolRewrites, b.refRewrites = syntax.Tightened(b.symbolRewrites), syntax.Tightened(b.refRewrites)
 	b.ix.Symbols = syntax.Tightened(b.ix.Symbols)
 	b.ix.Refs = syntax.Tightened(b.ix.Refs)
 	b.owners = syntax.Tightened(b.owners)
@@ -355,7 +399,8 @@ func (b *symbolTable) assign(a *syntax.Assign, into *attrs, parent int) {
 			b.expr(attr, at)
 			cur.dynamic = true
 			kid := b.fresh(nil, model.KindAttribute)
-			cur.dynKids = append(cur.dynKids, kid)
+			rare := cur.rareOnes()
+			rare.dynKids = append(rare.dynKids, kid)
 			cur, leaf = kid, nil
 			continue
 		}
@@ -439,10 +484,11 @@ func (b *symbolTable) bind(into *attrs, attr syntax.Attr, name string, stmt synt
 		b.entries[def.ID] = e
 	}
 	_, isInherit := stmt.(*syntax.Inherit)
+	detail, elided := b.f.detail(binding{name: selection, span: stmt.Span(), inherit: isInherit})
 	i := b.add(model.Symbol{
 		Name: name, Kind: e.kind, Span: stmt.Span(), Selection: selection,
 		Scope: e.scope, Parent: parent, Doc: exported.doc, Exported: isExported, Listed: true,
-		Detail: b.f.detail(binding{name: selection, span: stmt.Span(), inherit: isInherit}),
+		Detail: detail, Elided: elided,
 	}, owner{def: def, set: into})
 	b.symbolOf[attr.Slot()] = int32(i + 1) //nolint:gosec // bounded by the source length, which the transport caps well below 2^31
 	return i, true
@@ -472,7 +518,7 @@ func (b *symbolTable) inherit(stmt *syntax.Inherit, into *attrs, parent int) {
 		}
 		into.source(name, flowSource{stmt: stmt, attr: attr})
 		if i, bound := b.bind(into, attr, name, stmt, into.kind, parent); bound {
-			b.ix.Symbols[i].Rewrite = rebound(b.f.src, stmt, attr, name)
+			b.symbolRewrites = append(b.symbolRewrites, pendingRewrite{at: model.Narrow(i), form: reboundForm, stmt: stmt, attr: attr, name: name})
 		}
 	}
 }
@@ -528,8 +574,12 @@ func (b *symbolTable) parameter(into *attrs, name *syntax.Ident, span model.Span
 	return def
 }
 
-func (b *symbolTable) ref(name string, e entry, span model.Span, rewrite *model.Rewrite) {
-	b.ix.Refs = append(b.ix.Refs, model.Ref{Name: name, Kind: e.kind, Span: span, Scope: e.scope, Args: model.NoArgs, Owner: model.NoSymbol, Rewrite: rewrite})
+func (b *symbolTable) ref(name string, e entry, span model.Span, rewrite pendingRewrite) {
+	if rewrite.form != noRewrite {
+		rewrite.at = model.Narrow(len(b.ix.Refs))
+		b.refRewrites = append(b.refRewrites, rewrite)
+	}
+	b.ix.Refs = append(b.ix.Refs, model.Ref{Name: name, Kind: e.kind, Span: span, Scope: e.scope, Args: model.NoArgs, Owner: model.NoSymbol})
 }
 
 func (b *symbolTable) staticSet(e syntax.Expr) *attrs {
@@ -588,7 +638,7 @@ func (b *symbolTable) follow(target syntax.Expr, read syntax.Expr, path syntax.A
 		name, ok := syntax.AttrName(attr)
 		if !ok {
 			if set != nil {
-				set.escaped = true
+				set.leave(attr.Span().Start)
 			}
 			if open {
 				b.chains = append(b.chains, flowChain{target: target, path: slices.Clip(names), dynamic: true})
@@ -598,7 +648,7 @@ func (b *symbolTable) follow(target syntax.Expr, read syntax.Expr, path syntax.A
 		if set != nil {
 			set.read(name)
 			if e, known := set.names.get(name); known {
-				b.ref(name, e, nameSpan(attr), nil)
+				b.ref(name, e, nameSpan(attr), pendingRewrite{})
 				set = set.kids[name]
 				names = append(names, name)
 				continue
@@ -608,11 +658,11 @@ func (b *symbolTable) follow(target syntax.Expr, read syntax.Expr, path syntax.A
 		if !open {
 			return
 		}
-		b.openRead(target, slices.Clip(names), attr, name, nil)
+		b.openRead(target, slices.Clip(names), attr, name, pendingRewrite{})
 		names = append(names, name)
 	}
 	if value && set != nil {
-		set.escaped = true
+		set.leave(target.Span().Start)
 	}
 	if value && open {
 		b.chains = append(b.chains, flowChain{target: target, path: names, read: read})
@@ -628,7 +678,7 @@ func (b *symbolTable) inheritedFrom(stmt *syntax.Inherit) {
 	for _, attr := range stmt.Attrs {
 		name, ok := syntax.AttrName(attr)
 		if !ok {
-			set.escaped = true
+			set.leave(attr.Span().Start)
 			continue
 		}
 		set.read(name)
@@ -636,10 +686,10 @@ func (b *symbolTable) inheritedFrom(stmt *syntax.Inherit) {
 		if !known {
 			continue
 		}
-		b.ref(name, e, nameSpan(attr), selected(b.f.src, stmt, attr))
+		b.ref(name, e, nameSpan(attr), pendingRewrite{form: selectedForm, stmt: stmt, attr: attr})
 		b.passive(attr)
 		if kid := set.kids[name]; kid != nil {
-			kid.escaped = true
+			kid.leave(attr.Span().Start)
 		}
 	}
 }
@@ -653,17 +703,17 @@ func (b *symbolTable) passive(attr syntax.Attr) {
 func (b *symbolTable) readUse(u scope.Use, e entry) {
 	attr, inherited := u.Node.(syntax.Attr)
 	if !inherited {
-		b.ref(u.Name, e, u.Node.Span(), nil)
+		b.ref(u.Name, e, u.Node.Span(), pendingRewrite{})
 		return
 	}
 	b.passive(attr)
-	b.ref(u.Name, e, nameSpan(attr), kept(b.f.src, b.statements[attr.Slot()], attr))
+	b.ref(u.Name, e, nameSpan(attr), pendingRewrite{form: keptForm, stmt: b.statements[attr.Slot()], attr: attr})
 }
 
 func (b *symbolTable) lexical(u scope.Use) {
 	if id, ok := u.Node.(*syntax.Ident); !ok || !b.consumed[id.Slot()] {
 		if set := b.values[u.Ref.Def]; set != nil {
-			set.escaped = true
+			set.leave(u.Node.Span().Start)
 		}
 	}
 	if e := b.entries[u.Ref.Def.ID]; e.scope != model.Scope(0) {
@@ -715,14 +765,15 @@ func (b *symbolTable) call(call *syntax.Apply) {
 }
 
 func (b *symbolTable) keys(set *syntax.AttrSet, formals *attrs) {
-	formals.callers = append(formals.callers, b.sets[set])
+	rare := formals.rareOnes()
+	rare.callers = append(rare.callers, b.sets[set])
 	b.passedKeys(set, func(name string) (entry, bool) {
 		return formals.names.get(name)
 	})
 }
 
 func (b *symbolTable) passedKeys(set *syntax.AttrSet, formal func(name string) (entry, bool)) {
-	key := func(attr syntax.Attr, rewrite func(name string) *model.Rewrite) {
+	key := func(attr syntax.Attr, rewrite func(name string) pendingRewrite) {
 		name, ok := syntax.AttrName(attr)
 		if !ok {
 			return
@@ -735,10 +786,12 @@ func (b *symbolTable) passedKeys(set *syntax.AttrSet, formal func(name string) (
 	for _, binding := range set.Bindings {
 		switch binding := binding.(type) {
 		case *syntax.Assign:
-			key(binding.Path[0], func(string) *model.Rewrite { return nil })
+			key(binding.Path[0], func(string) pendingRewrite { return pendingRewrite{} })
 		case *syntax.Inherit:
 			for _, attr := range binding.Attrs {
-				key(attr, func(name string) *model.Rewrite { return rebound(b.f.src, binding, attr, name) })
+				key(attr, func(name string) pendingRewrite {
+					return pendingRewrite{form: reboundForm, stmt: binding, attr: attr, name: name}
+				})
 			}
 		}
 	}

@@ -344,6 +344,8 @@ func (p Proof) On(doc *docstore.Document) []nix.ProvenString {
 	return nix.RebasedStrings(p.Strings, p.Doc.Text(), doc.Text())
 }
 
+func (p Proof) Key() string { return nix.ProvenKey(p.Strings) }
+
 func Prove(ctx context.Context, hosts []Host, env Env) map[string]Proof {
 	out := make(map[string]Proof, len(hosts))
 	for _, h := range hosts {

@@ -181,6 +181,23 @@ func (p *Program) Shadows(name string) bool {
 	return false
 }
 
+func (p *Program) Taken(name string) bool {
+	_, bound := p.Binding(name)
+	return bound || len(p.Reads(name)) > 0
+}
+
+func (p *Program) RenameRefusal(name, text string, spans []parser.Span) string {
+	if p.NamesArguments() {
+		return fmt.Sprintf("this %s program also reads its arguments through `$ARGS`, whose keys are not followed", p.Language)
+	}
+	for _, span := range spans {
+		if text[span.Start:span.End] != name {
+			return fmt.Sprintf("`%s` is written across an antiquotation or an escape here", name)
+		}
+	}
+	return ""
+}
+
 func (p *Program) NamesArguments() bool {
 	if p.Language != Jq {
 		return false

@@ -13,6 +13,9 @@ import (
 
 func (g *Group) Signature(offset int) (assist.Signature, bool) {
 	if g.Language == host.Nix {
+		if sig, found, hosted := g.embeddedSignature(offset); hosted {
+			return sig, found
+		}
 		return nixSignature(g.Self.Doc.Source().Text(), offset, g.nixFiles())
 	}
 	inv, ok := g.Self.Native.Invocation(offset)
@@ -59,6 +62,11 @@ func nixSignature(text string, offset int, files nix.Files) (assist.Signature, b
 
 func (g *Group) ShellSignature(offset int) (assist.Signature, bool) {
 	at := g.Self.Doc.SourceOffset(offset)
+	if g.Language == host.Nix {
+		if sig, found, hosted := g.embeddedSignature(at); hosted {
+			return sig, found
+		}
+	}
 	for _, r := range regions(g.Self) {
 		for _, run := range r.runs {
 			if len(run.refs) == 0 || at < run.refs[0].Span.End+1 || at > run.span.End+1 {
@@ -71,7 +79,7 @@ func (g *Group) ShellSignature(offset int) (assist.Signature, bool) {
 					active++
 				}
 			}
-			sig, ok := g.signatureOf(model.Invocation{Name: first.Name, Qualifier: first.Qualifier, Kind: first.Kind, Active: active, Scope: first.Scope})
+			sig, ok := g.signatureOf(model.Invocation{Name: first.Name, Qualifier: first.Qualifier(), Kind: first.Kind, Active: active, Scope: first.Scope})
 			if !ok || len(sig.Params) == 0 {
 				return assist.Signature{}, false
 			}
@@ -82,7 +90,7 @@ func (g *Group) ShellSignature(offset int) (assist.Signature, bool) {
 }
 
 func (g *Group) signatureOf(inv model.Invocation) (assist.Signature, bool) {
-	res := g.Module.Resolve(g.selfAt(), model.Ref{Name: inv.Name, Kind: inv.Kind, Scope: inv.Scope, Qualifier: inv.Qualifier})
+	res := g.Module.Resolve(g.selfAt(), model.Ref{Name: inv.Name, Kind: inv.Kind, Scope: inv.Scope, Call: model.Qualified(inv.Qualifier)})
 	switch {
 	case res.Builtin != nil:
 		b := res.Builtin
@@ -96,7 +104,7 @@ func (g *Group) signatureOf(inv model.Invocation) (assist.Signature, bool) {
 	var params []string
 	for _, i := range ix.Children(t.Symbol) {
 		if c := ix.Symbols[i]; c.Kind == model.KindParameter {
-			params = append(params, c.Detail)
+			params = append(params, c.Description())
 		}
 	}
 	label := s.Name + " " + strings.Join(params, " ")

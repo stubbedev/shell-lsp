@@ -21,22 +21,18 @@ type MemberRequest struct {
 	sets     []keyCandidate
 }
 
-func MembersWanted(text string, offset int) (MemberRequest, bool) {
-	c, ok := locate(text, offset, NoFiles)
-	if !ok {
-		return MemberRequest{}, false
-	}
+func (c Cursor) MembersWanted() (MemberRequest, bool) {
 	leaf, isAttr := c.ancestor(0).(*syntax.IdentAttr)
 	if !isAttr {
 		return MemberRequest{}, false
 	}
 	switch parent := c.ancestor(1).(type) {
 	case *syntax.Select:
-		return selectedMembers(c, parent.Target, parent.Path, leaf)
+		return selectedMembers(c.cursor, parent.Target, parent.Path, leaf)
 	case *syntax.HasAttr:
-		return selectedMembers(c, parent.Target, parent.Path, leaf)
+		return selectedMembers(c.cursor, parent.Target, parent.Path, leaf)
 	case *syntax.Assign:
-		sets := keyCandidates(c, parent, leaf)
+		sets := keyCandidates(c.cursor, parent, leaf)
 		return MemberRequest{word: c.word, sets: sets}, len(sets) > 0
 	}
 	return MemberRequest{}, false
@@ -51,11 +47,7 @@ func selectedMembers(c *cursor, target syntax.Expr, path syntax.AttrPath, leaf s
 	return MemberRequest{word: c.word, target: syntax.Unparenthesized(target).Span(), path: names, selected: true}, true
 }
 
-func LibraryMembersWanted(text string, offset int) ([]string, syntax.Span, bool) {
-	c, ok := locate(text, offset, NoFiles)
-	if !ok {
-		return nil, syntax.Span{}, false
-	}
+func (c Cursor) LibraryMembersWanted() ([]string, syntax.Span, bool) {
 	leaf, isAttr := c.ancestor(0).(*syntax.IdentAttr)
 	if !isAttr {
 		return nil, syntax.Span{}, false

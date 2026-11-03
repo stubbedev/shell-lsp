@@ -46,7 +46,7 @@ func linkCalls(tree *syntax.File, ix *model.Index) {
 		open = closed(open, ix, callee.Start)
 		i, isRef := refs[callee]
 		if isRef && len(open) > 0 {
-			ix.Refs[i].Owner = open[len(open)-1]
+			ix.Refs[i].Owner = model.Narrow(open[len(open)-1])
 		}
 	}
 }

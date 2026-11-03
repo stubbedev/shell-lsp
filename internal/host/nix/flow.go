@@ -107,7 +107,8 @@ type flowCall struct {
 
 func (a *attrs) flowsFrom(name string, leaf syntax.Attr, value syntax.Expr) {
 	if leaf == nil {
-		a.direct = append(a.direct, value)
+		rare := a.rareOnes()
+		rare.direct = append(rare.direct, value)
 		return
 	}
 	a.source(name, flowSource{expr: value})
@@ -122,7 +123,7 @@ func (b *symbolTable) openable(target syntax.Expr) bool {
 	return ok && ref.Kind == scope.Definition
 }
 
-func (b *symbolTable) openRead(target syntax.Expr, path []string, attr syntax.Attr, name string, rewrite *model.Rewrite) {
+func (b *symbolTable) openRead(target syntax.Expr, path []string, attr syntax.Attr, name string, rewrite pendingRewrite) {
 	id := b.newScope()
 	b.addSlot(id, flowSlot{targets: b.oneTarget(target), path: path})
 	b.ref(name, entry{scope: id, kind: model.KindAttribute}, nameSpan(attr), rewrite)
@@ -156,7 +157,7 @@ func (b *symbolTable) inheritedOpen(stmt *syntax.Inherit) {
 			b.chains = append(b.chains, flowChain{target: target, dynamic: true})
 			continue
 		}
-		b.openRead(target, nil, attr, name, selected(b.f.src, stmt, attr))
+		b.openRead(target, nil, attr, name, pendingRewrite{form: selectedForm, stmt: stmt, attr: attr})
 		b.passive(attr)
 	}
 }
@@ -257,7 +258,7 @@ func (b *symbolTable) importedDef(d *scope.Def) bool {
 		return false
 	}
 	value, applied := syntax.Unparenthesized(bound).(*syntax.Apply)
-	return applied && calleeName(syntax.Unparenthesized(value.Fn)) == importName
+	return applied && b.f.callName(value.Fn) == importName
 }
 
 func (b *symbolTable) markTrees(args []syntax.Expr) {
@@ -407,5 +408,5 @@ func (b *symbolTable) followed(text *syntax.String, inputs *attrs) {
 		return
 	}
 	start := literal.Span().Start
-	b.ref(name, e, model.Span{Start: start, End: start + len(name)}, nil)
+	b.ref(name, e, model.Span{Start: start, End: start + len(name)}, pendingRewrite{})
 }

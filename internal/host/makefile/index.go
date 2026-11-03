@@ -247,10 +247,10 @@ func (in *indexer) evaluated(arg Expr) {
 	for _, r := range ix.Refs {
 		r.Span = shift(r.Span)
 		if r.Owner >= 0 {
-			r.Owner += base
+			r.Owner += model.Narrow(base)
 		}
-		for i, a := range r.ArgSpans {
-			r.ArgSpans[i] = shift(a)
+		for i, a := range r.ArgSpans() {
+			r.Call.ArgSpans[i] = shift(a)
 		}
 		in.ix.Refs = append(in.ix.Refs, r)
 	}
@@ -363,7 +363,7 @@ func (in *indexer) assignment(a *Assignment) {
 	edge := a.Deferred
 	in.walk(a.Name.Expr, model.Global, owner, false, nil)
 	if a.Op == "+=" && len(a.Targets) > 0 && owner != model.NoSymbol {
-		in.ix.Refs = append(in.ix.Refs, model.Ref{Name: a.Name.Text, Kind: model.KindVariable, Span: a.Name.Span, Scope: model.Global, Args: model.NoArgs, Owner: owner, Edge: true, Soft: true, Base: true})
+		in.ix.Refs = append(in.ix.Refs, model.Ref{Name: a.Name.Text, Kind: model.KindVariable, Span: a.Name.Span, Scope: model.Global, Args: model.NoArgs, Owner: model.Narrow(owner), Edge: true, Soft: true, Base: true})
 	}
 	first := len(in.ix.Refs)
 	in.walk(a.Value, scopes[0], owner, edge, nil)
@@ -374,7 +374,7 @@ func (in *indexer) assignment(a *Assignment) {
 	}
 	if !a.Deferred && len(a.Targets) > 0 {
 		for i := first; i < len(in.ix.Refs); i++ {
-			in.ix.Refs[i].Horizon = a.Span.Start
+			in.ix.Refs[i].Horizon = model.Narrow(a.Span.Start)
 		}
 	}
 	if a.Op == "?=" && (slices.Contains(predefined, a.Name.Text) || in.definedBefore(a)) {
@@ -421,17 +421,17 @@ func (in *indexer) reference(n Node, scope model.Scope, owner int, edge bool, bo
 		in.walk(n.Name, scope, owner, edge, bound)
 	case name == "" || slices.Contains(bound, name):
 	case name != raw && !strings.ContainsAny(name, " \t"):
-		in.ix.Refs = append(in.ix.Refs, model.Ref{Name: raw, Kind: model.KindVariable, Span: in.nameSpan(n.Name, name), Scope: scope, Args: model.NoArgs, Owner: owner})
+		in.ix.Refs = append(in.ix.Refs, model.Ref{Name: raw, Kind: model.KindVariable, Span: in.nameSpan(n.Name, name), Scope: scope, Args: model.NoArgs, Owner: model.Narrow(owner)})
 	case strings.ContainsAny(name, " \t"):
 		word := firstWord(name)
-		in.ix.Refs = append(in.ix.Refs, model.Ref{Name: word, Kind: model.KindFunction, Span: in.nameSpan(n.Name, word), Scope: scope, Args: model.NoArgs, Owner: owner})
+		in.ix.Refs = append(in.ix.Refs, model.Ref{Name: word, Kind: model.KindFunction, Span: in.nameSpan(n.Name, word), Scope: scope, Args: model.NoArgs, Owner: model.Narrow(owner)})
 	default:
 		span := in.nameSpan(n.Name, name)
 		edge := edge && !slices.Contains(in.redefined, name)
 		if edge && strings.Trim(name, "0123456789") == "" {
 			in.arguments = append(in.arguments, len(in.ix.Refs))
 		}
-		in.ix.Refs = append(in.ix.Refs, model.Ref{Name: name, Kind: model.KindVariable, Span: span, Scope: scope, Args: model.NoArgs, Owner: owner, Edge: edge})
+		in.ix.Refs = append(in.ix.Refs, model.Ref{Name: name, Kind: model.KindVariable, Span: span, Scope: scope, Args: model.NoArgs, Owner: model.Narrow(owner), Edge: edge})
 		mods := semantic.Modifier(0)
 		if _, builtin := Builtins.Lookup(model.KindVariable, name); builtin {
 			mods = semantic.ModDefaultLibrary
@@ -442,9 +442,9 @@ func (in *indexer) reference(n Node, scope model.Scope, owner int, edge bool, bo
 
 func (in *indexer) call(n Node, scope model.Scope, owner int, edge bool, bound []string) {
 	name, _ := n.Name.Literal(in.f.Text)
-	call := model.Ref{Name: name, Kind: model.KindFunction, Span: n.Name.Span, Scope: scope, Args: len(n.Args), Owner: owner, Edge: edge}
+	call := model.Ref{Name: name, Kind: model.KindFunction, Span: n.Name.Span, Scope: scope, Args: model.Narrow(len(n.Args)), Owner: model.Narrow(owner), Edge: edge}
 	for _, a := range n.Args {
-		call.ArgSpans = append(call.ArgSpans, a.Span)
+		call.AddArg(a.Span)
 	}
 	in.ix.Refs = append(in.ix.Refs, call)
 	in.token(n.Name.Span, semantic.TypeFunction, semantic.ModDefaultLibrary)
@@ -464,7 +464,7 @@ func (in *indexer) call(n Node, scope model.Scope, owner int, edge bool, bound [
 				in.called[variable] = true
 			}
 			span := in.nameSpan(args[0], variable)
-			in.ix.Refs = append(in.ix.Refs, model.Ref{Name: variable, Kind: model.KindVariable, Span: span, Scope: scope, Args: model.NoArgs, Owner: owner, Edge: edge})
+			in.ix.Refs = append(in.ix.Refs, model.Ref{Name: variable, Kind: model.KindVariable, Span: span, Scope: scope, Args: model.NoArgs, Owner: model.Narrow(owner), Edge: edge})
 			in.token(span, semantic.TypeVariable, 0)
 			args = args[1:]
 		}
@@ -522,7 +522,7 @@ func (in *indexer) rule(r *Rule, shell bool) {
 			in.ix.Phony = append(in.ix.Phony, w.Text)
 		}
 		if literal(w) {
-			in.ix.Refs = append(in.ix.Refs, model.Ref{Name: w.Text, Kind: model.KindTarget, Span: w.Span, Args: model.NoArgs, Owner: owner, Soft: !phony, Declares: declaring})
+			in.ix.Refs = append(in.ix.Refs, model.Ref{Name: w.Text, Kind: model.KindTarget, Span: w.Span, Args: model.NoArgs, Owner: model.Narrow(owner), Soft: !phony, Declares: declaring})
 			in.token(w.Span, semantic.TypeFunction, 0)
 		}
 	}

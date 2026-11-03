@@ -68,7 +68,7 @@ func (b *symbolTable) embed(span model.Span) {
 func (b *symbolTable) merge(inner *model.Index, base model.Scope, place func(model.Span) model.Span) {
 	symbols := len(b.ix.Symbols)
 	for _, sym := range inner.Symbols {
-		sym.Span, sym.Selection, sym.Rewrite, sym.Listed = place(sym.Span), place(sym.Selection), nil, false
+		sym.Span, sym.Selection, sym.Listed = place(sym.Span), place(sym.Selection), false
 		sym.Scope += base
 		if sym.Parent != model.NoParent {
 			sym.Parent += symbols
@@ -78,19 +78,27 @@ func (b *symbolTable) merge(inner *model.Index, base model.Scope, place func(mod
 		b.owners = append(b.owners, owner{})
 	}
 	for _, r := range inner.Refs {
-		r.Span, r.Rewrite, r.ArgSpans = place(r.Span), nil, nil
+		r.Span, r.Call = place(r.Span), nil
 		if r.Horizon > 0 {
-			r.Horizon = place(model.Span{Start: r.Horizon, End: r.Horizon}).Start
+			r.Horizon = model.Narrow(place(model.Span{Start: int(r.Horizon), End: int(r.Horizon)}).Start)
 		}
 		r.Scope += base
-		if r.Owner != model.NoSymbol {
-			r.Owner += symbols
+		if int(r.Owner) != model.NoSymbol {
+			r.Owner += model.Narrow(symbols)
 		}
 		b.ix.Refs = append(b.ix.Refs, r)
 	}
 	for _, fold := range inner.Folds {
 		fold.Span = place(fold.Span)
 		b.ix.Folds = append(b.ix.Folds, fold)
+	}
+	for shell, parents := range inner.Extends {
+		if b.ix.Extends == nil {
+			b.ix.Extends = map[model.Scope][]model.Scope{}
+		}
+		for _, parent := range parents {
+			b.ix.Extends[shell+base] = append(b.ix.Extends[shell+base], parent+base)
+		}
 	}
 }
 

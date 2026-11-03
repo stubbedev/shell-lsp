@@ -118,13 +118,33 @@ func (p SyntaxParser) Parse(text string) *syntax.File {
 	return file
 }
 
+func (p SyntaxParser) ParseFragment(text string, at FragmentStart) (*syntax.File, bool) {
+	syntax.StartAt(uint(at.Offset), uint(at.Line), 1)(p.parser)
+	file, err := p.parser.Parse(strings.NewReader(text), "")
+	return file, err == nil
+}
+
+type FragmentStart struct {
+	Offset int
+	Line   int
+}
+
 func ParseScripts(previous *Tree, text string, scripts []Span, shell dialect.Shell, origin Origin) *Tree {
+	return ParsePrepared(previous, text, scripts, shell, origin, func(int) (*syntax.File, bool) { return nil, false })
+}
+
+func ParsePrepared(previous *Tree, text string, scripts []Span, shell dialect.Shell, origin Origin, prepared func(start int) (*syntax.File, bool)) *Tree {
 	starts := lineStarts(text)
 	file := &syntax.File{}
 	var errs []Error
 	closedAtEnd := map[*syntax.Redirect]bool{}
 	reused := newSyntaxParser(shell.Lang())
 	for _, script := range scripts {
+		if part, ready := prepared(script.Start); ready {
+			file.Stmts = append(file.Stmts, part.Stmts...)
+			file.Last = append(file.Last, part.Last...)
+			continue
+		}
 		line := sort.SearchInts(starts, script.Start+1)
 		syntax.StartAt(uint(script.Start), uint(line), uint(script.Start-starts[line-1]+1))(reused)
 		part, partErrs, closed := parseSource(reused, []byte(text[script.Start:script.End]), script.Start, text[:script.End], shell.Dialect)

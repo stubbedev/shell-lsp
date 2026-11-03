@@ -1,0 +1,128 @@
+syntax: allocate statements, expansions, quotes and assignments in batches
+
+A parser already takes literals and words from chunks, which keeps a large
+script from costing one allocation per node. Statements, parameter expansions,
+double-quoted strings and assignments are the next most common nodes and were
+still allocated one by one, and each statement list grew its slice from nothing.
+
+They now come from chunks in the same way, and a list collects its statements
+on a stack the parser keeps, then copies them to a slice of exactly their size.
+The trees are the same, and a chunk's unused nodes stay for the next parse.
+
+Reproducer, before this change: a script of 5000 lines cost about 14000
+statement allocations and a further 12000 for growing lists on each parse.
+
+diff --git a/syntax/parser.go b/syntax/parser.go
+--- a/syntax/parser.go
++++ b/syntax/parser.go
+@@ -602,8 +602,13 @@
+ 	accComs []Comment
+ 	curComs *[]Comment
+ 
+-	litBatch  []Lit
+-	wordBatch []wordAlloc
++	litBatch    []Lit
++	wordBatch   []wordAlloc
++	stmtBatch   []Stmt
++	paramBatch  []ParamExp
++	quotedBatch []quotedAlloc
++	assignBatch []Assign
++	stmtStack   []*Stmt
+ 
+ 	readBuf [bufSize]byte
+ 	litBuf  [bufSize]byte
+@@ -645,6 +650,7 @@
+ 	p.accComs, p.curComs = nil, &p.accComs
+ 	p.litBatch = nil
+ 	p.wordBatch = nil
++	p.stmtStack = p.stmtStack[:0]
+ 	p.litBs = nil
+ 	clear(p.kshTypes)
+ 	clear(p.assocArrays)
+@@ -1309,11 +1315,16 @@
+ func (p *Parser) stmtListUntil(cond bool, stops ...string) ([]*Stmt, []Comment) {
+ 	var stmts []*Stmt
+ 	var last []Comment
++	mark := len(p.stmtStack)
+ 	fn := func(s *Stmt, err error) bool {
+-		stmts = append(stmts, s)
++		p.stmtStack = append(p.stmtStack, s)
+ 		return true
+ 	}
+ 	p.stmts(fn, cond, stops...)
++	if len(p.stmtStack) > mark {
++		stmts = slices.Clone(p.stmtStack[mark:])
++		p.stmtStack = p.stmtStack[:mark]
++	}
+ 	split := len(p.accComs)
+ 	if p.tok == _LitWord && (p.val == "elif" || p.val == "else" || p.val == "fi") {
+ 		// Split the comments, so that any aligned with an opening token
+@@ -1680,14 +1691,19 @@
+ 	return cs
+ }
+ 
++type quotedAlloc struct {
++	quoted DblQuoted
++	parts  [1]WordPart
++}
++
+ func (p *Parser) dblQuoted() *DblQuoted {
+-	alloc := &struct {
+-		quoted DblQuoted
+-		parts  [1]WordPart
+-	}{
+-		quoted: DblQuoted{Left: p.pos, Dollar: p.tok == dollDblQuote},
++	if len(p.quotedBatch) == 0 {
++		p.quotedBatch = make([]quotedAlloc, 16)
+ 	}
++	alloc := &p.quotedBatch[0]
++	p.quotedBatch = p.quotedBatch[1:]
+ 	q := &alloc.quoted
++	q.Left, q.Dollar = p.pos, p.tok == dollDblQuote
+ 	old := p.quote
+ 	p.quote = dblQuotes
+ 	p.next()
+@@ -1777,10 +1793,13 @@
+ 	old := p.quote
+ 	p.quote = runeByRune
+ 	// [ParamExp.Short] means we are parsing $exp rather than ${exp}.
+-	pe := &ParamExp{
+-		Dollar: p.pos,
+-		Short:  p.tok == dollar,
++	if len(p.paramBatch) == 0 {
++		p.paramBatch = make([]ParamExp, 16)
+ 	}
++	pe := &p.paramBatch[0]
++	p.paramBatch = p.paramBatch[1:]
++	pe.Dollar = p.pos
++	pe.Short = p.tok == dollar
+ 	if !pe.Short && p.r == '(' {
+ 		p.checkLang(pe.Pos(), LangZsh, `parameter expansion flags`)
+ 		// For now, for simplicity, we parse flags as just a literal.
+@@ -2441,7 +2460,11 @@
+ }
+ 
+ func (p *Parser) getAssign(needEqual bool) *Assign {
+-	as := &Assign{}
++	if len(p.assignBatch) == 0 {
++		p.assignBatch = make([]Assign, 16)
++	}
++	as := &p.assignBatch[0]
++	p.assignBatch = p.assignBatch[1:]
+ 	if p.eqlOffs > 0 { // foo=bar
+ 		nameEnd := p.eqlOffs
+ 		if p.lang.in(langBashLike|langKshLike|LangZsh) && p.val[p.eqlOffs-1] == '+' {
+@@ -2693,7 +2716,12 @@
+ 	p.nest()
+ 	defer func() { p.unnest(levels) }()
+ 	pos, ok := p.gotRsrv("!")
+-	s := &Stmt{Position: pos}
++	if len(p.stmtBatch) == 0 {
++		p.stmtBatch = make([]Stmt, 32)
++	}
++	s := &p.stmtBatch[0]
++	p.stmtBatch = p.stmtBatch[1:]
++	s.Position = pos
+ 	if ok {
+ 		s.Negated = true
+ 		if p.stopToken() {

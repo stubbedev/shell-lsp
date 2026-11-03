@@ -68,12 +68,20 @@ type analysis struct {
 	nix        *nix.Document
 }
 
-func analyzeNix(text string) analysis {
-	a := nix.AnalyzeWith(text, embedHost)
+func analyzeNix(text string) analysis { return analyzeParsedNix(nix.Parse(text)) }
+
+func analyzeParsedNix(parsed *nix.Parsed) analysis {
+	text := parsed.Text()
+	a := parsed.Analyze(embedHost)
 	return analysis{projection: a.Map, detection: a.Detection, index: a.Index, expect: a.Expect, invocation: a.Invocation, enclosing: a.Enclosing, format: func() (string, error) { return nixformat.Format(text) }, nix: a.Document()}
 }
 
-func NixIncludes(text string) []model.Include { return nix.Includes(text) }
+func ProjectParsedNix(doc *docstore.Document, parsed *nix.Parsed) Script {
+	a := analyzeParsedNix(parsed)
+	script := projectedScript(doc, a.projection, a.detection)
+	script.Native = &Native{Language: Nix, Index: a.index, expect: a.expect, invocation: a.invocation, enclosing: a.enclosing, format: a.format, nix: a.nix}
+	return script
+}
 
 func embedHost(name string) (func(string) nix.Embedding, bool) {
 	l, ok := FromName(name)
@@ -268,6 +276,13 @@ func (n *Native) Nix() *nix.Document {
 	return n.nix
 }
 
+func (n *Native) Hosts() int {
+	if n.nix == nil {
+		return 0
+	}
+	return n.nix.HostedCount()
+}
+
 func (n *Native) Dockerfile() (*dockerfile.File, bool) { return n.dockerfile, n.dockerfile != nil }
 
 func (n *Native) Enclosing(offset int) []parser.Span { return n.enclosing(offset) }
@@ -356,7 +371,10 @@ func ProvenScript(doc *docstore.Document, proven []nix.ProvenString, shells []mo
 		return Script{}, false
 	}
 	script := projectedScript(doc, a.Map, a.Detection)
-	script.Native = &Native{Language: Nix, Index: &model.Index{Shells: shells, Holes: a.Index.Holes}}
+	if shells != nil {
+		a.Index.Shells = shells
+	}
+	script.Native = &Native{Language: Nix, Index: a.Index}
 	return script, true
 }
 
@@ -393,7 +411,7 @@ func (s Script) ParseVariant(v Variant, like *parser.Tree) *parser.Tree {
 }
 
 func (s Script) parse(like *parser.Tree, scripts []parser.Span, shell dialect.Shell) *parser.Tree {
-	tree := parser.ParseScripts(like, s.Doc.Text(), scripts, shell, s.Doc)
+	tree := parser.ParsePrepared(like, s.Doc.Text(), scripts, shell, s.Doc, s.Doc.PreparedScript)
 	tree.Errors = s.authored(scripts, shell, tree.Errors)
 	return tree
 }

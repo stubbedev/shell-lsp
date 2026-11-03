@@ -33,6 +33,7 @@ const fixtureNixpkgs = `{
       hello = package "hello";
       broken = throw "broken on purpose";
       notPackage = 5;
+      helper = x: x;
       python3Packages = { requests = package "requests"; rich = package "rich"; };
       "evil\${throw \"INJECTED\"}\"; x = \"" = package "evil";
     };
@@ -317,6 +318,22 @@ func TestRealSingleFileFlake(t *testing.T) {
 	for _, path := range [][]string{{"broken"}, {"absent"}, {"python3Packages"}, {"notPackage"}} {
 		if pkg, err := freshOf(c.NixpkgsPackage(t.Context(), dir, path)); err != nil || pkg != nil {
 			t.Errorf("NixpkgsPackage(%q) = %+v, %v, want nothing", path, pkg, err)
+		}
+	}
+
+	declared, err := freshOf(c.NixpkgsDeclaration(t.Context(), dir, []string{"helper"}))
+	if err != nil || declared == nil {
+		t.Fatalf("NixpkgsDeclaration(helper) = %+v, %v", declared, err)
+	}
+	if !strings.HasSuffix(declared.File, "flake.nix") || declared.Line == 0 || declared.Column == 0 {
+		t.Errorf("NixpkgsDeclaration(helper) = %+v, want its binding in the fixture", declared)
+	}
+	if nested, err := freshOf(c.NixpkgsDeclaration(t.Context(), dir, []string{"python3Packages", "requests"})); err != nil || nested == nil {
+		t.Errorf("NixpkgsDeclaration(python3Packages.requests) = %+v, %v", nested, err)
+	}
+	for _, path := range [][]string{{"absent"}, {"notPackage", "below"}} {
+		if missing, err := freshOf(c.NixpkgsDeclaration(t.Context(), dir, path)); err != nil || missing != nil {
+			t.Errorf("NixpkgsDeclaration(%q) = %+v, %v, want nothing", path, missing, err)
 		}
 	}
 

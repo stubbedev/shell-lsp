@@ -28,7 +28,7 @@ func TestCallExprPassesArgumentsOnlyAsEscapedLiterals(t *testing.T) {
 	t.Parallel()
 
 	hostile := `"; x = ${throw "INJECTED"}; y = "`
-	got := callExpr("attrs", stringArg("ref", hostile), listArg("path", []string{hostile}))
+	got := callExpr("attrs", stringArg("ref", hostile), pathArg([]string{hostile}))
 	if strings.Contains(got, hostile) {
 		t.Errorf("callExpr() embeds the raw value: %s", got[len(evalSource):])
 	}

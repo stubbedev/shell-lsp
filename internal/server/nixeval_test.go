@@ -33,17 +33,18 @@ const flakePartsTreeJSON = `{"options": [
 ], "truncated": []}`
 
 type fakeEvaluator struct {
-	mu       sync.Mutex
-	sources  []nixeval.OptionSource
-	trees    map[nixeval.OptionSource]string
-	attrs    []string
-	packages map[string]*nixeval.Package
-	err      error
-	stale    *nixeval.Stale
-	warmed   []string
-	closed   int
-	realise  error
-	realised []string
+	mu           sync.Mutex
+	sources      []nixeval.OptionSource
+	trees        map[nixeval.OptionSource]string
+	attrs        []string
+	packages     map[string]*nixeval.Package
+	declarations map[string]*nixeval.Declaration
+	err          error
+	stale        *nixeval.Stale
+	warmed       []string
+	closed       int
+	realise      error
+	realised     []string
 }
 
 func (f *fakeEvaluator) Warm(dir string) *nixeval.Refresh {
@@ -90,6 +91,10 @@ func (f *fakeEvaluator) NixpkgsAttrs(_ context.Context, _ string, _ []string, pr
 
 func (f *fakeEvaluator) NixpkgsPackage(_ context.Context, _ string, path []string) (nixeval.Answer[*nixeval.Package], error) {
 	return fakeAnswer(f, f.packages[strings.Join(path, ".")])
+}
+
+func (f *fakeEvaluator) NixpkgsDeclaration(_ context.Context, _ string, path []string) (nixeval.Answer[*nixeval.Declaration], error) {
+	return fakeAnswer(f, f.declarations[strings.Join(path, ".")])
 }
 
 func (f *fakeEvaluator) RealiseFile(_ context.Context, _, file string) error {
@@ -776,5 +781,34 @@ func TestNixUnsupportedVersionIsOneNoticeAcrossFlakes(t *testing.T) {
 	}
 	if notices := shownNotices(p); strings.Count(notices, "nix --version reports") != 1 {
 		t.Errorf("notices = %q", notices)
+	}
+}
+
+func TestNixDefinitionOfAFunctionComesFromItsAttributePosition(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	file := filepath.Join(dir, "trivial-builders.nix")
+	if err := os.WriteFile(file, []byte("{\n  runCommand = x: x;\n}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, tt := range []struct{ name, source, attribute string }{
+		{"a function of pkgs", "{ pkgs, ... }: pkgs.runCom|mand", "runCommand"},
+		{"a package whose meta has no position", "{ pkgs, ... }: pkgs.hel|lo", "hello"},
+		{"a name of lib the source cannot follow", "{ lib, ... }: lib.compu|ted", "lib.computed"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			fake := &fakeEvaluator{
+				sources:      []nixeval.OptionSource{},
+				packages:     map[string]*nixeval.Package{"hello": {Name: "hello-2.12"}},
+				declarations: map[string]*nixeval.Declaration{tt.attribute: {File: file, Line: 2, Column: 3}},
+			}
+			p := openNixEvalProject(t, true, fake, map[string]string{"flake.nix": emptyFlake})
+			got := decodeResult[[]lsp.Location](t, p.c.call("textDocument/definition", p.open(t, "x.nix", tt.source)))
+			if len(got) != 1 || got[0].Range.Start.Line != 1 || got[0].Range.Start.Character != 2 {
+				t.Errorf("definition = %+v, want line 2 column 3 of %s", got, file)
+			}
+		})
 	}
 }

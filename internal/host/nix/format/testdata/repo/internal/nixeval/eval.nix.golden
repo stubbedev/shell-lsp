@@ -384,4 +384,25 @@ in
         description = stringOrNull (value.value.meta.description or null);
         position = canonicalFile args.trees flake (stringOrNull (value.value.meta.position or null));
       };
+
+  declaration =
+    args:
+    let
+      flake = builtins.getFlake args.ref;
+      last = builtins.length args.path - 1;
+      parent = attrAt (packagesOf flake args) (builtins.genList (builtins.elemAt args.path) last);
+      found = builtins.tryEval (
+        if builtins.isAttrs parent then
+          builtins.unsafeGetAttrPos (builtins.elemAt args.path last) parent
+        else
+          null
+      );
+    in
+    if !found.success || found.value == null then
+      null
+    else
+      {
+        file = canonicalFile args.trees flake found.value.file;
+        inherit (found.value) line column;
+      };
 }

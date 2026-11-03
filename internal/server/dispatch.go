@@ -137,6 +137,7 @@ type Server struct {
 	hadolint     *hadolint.Resolver
 	statix       *statixconfig.Resolver
 	flakeLocks   *nix.LockFiles
+	library      heldLibrary
 	sem          chan struct{}
 	exiting      chan struct{}
 	wg           sync.WaitGroup
@@ -175,6 +176,7 @@ func New(conn *jsonrpc.Conn, version string, process Process) *Server {
 	s.delivery = pullDelivery{server: s}
 	s.workspace = newWorkspace(s)
 	s.workspace.WatchDisk(s.disk)
+	s.releasing.calm = s.projects.ReleaseCaches
 	s.projects.OnDrained(func() {
 		s.releasing.schedule()
 		s.linkLanded()
@@ -358,6 +360,7 @@ func (s *Server) dispatchRequest(ctx context.Context, msg *jsonrpc.Message) {
 
 func (s *Server) invoke(ctx context.Context, handler requestHandler, docs *docstore.View, msg *jsonrpc.Message) (result any, err error) {
 	defer func() {
+		s.releasing.schedule()
 		if r := recover(); r != nil {
 			err = jsonrpc.NewError(jsonrpc.CodeInternalError,
 				"panic handling %s: %v", msg.Method, r)

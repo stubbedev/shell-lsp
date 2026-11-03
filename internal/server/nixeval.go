@@ -44,6 +44,7 @@ type nixEvaluator interface {
 	BaseOptions(ctx context.Context, dir string) (nixeval.Answer[*nixeval.OptionTree], error)
 	NixpkgsAttrs(ctx context.Context, dir string, parent []string, prefix string) (nixeval.Answer[[]string], error)
 	NixpkgsPackage(ctx context.Context, dir string, path []string) (nixeval.Answer[*nixeval.Package], error)
+	NixpkgsDeclaration(ctx context.Context, dir string, path []string) (nixeval.Answer[*nixeval.Declaration], error)
 	RealiseFile(ctx context.Context, dir, file string) error
 	Close()
 }
@@ -876,6 +877,18 @@ func (r *nixRequest) NixpkgsChildren(path []string, prefix string) []string {
 		r.incomplete = true
 	}
 	return names[:min(len(names), maxNixpkgsItems)]
+}
+
+func (r *nixRequest) NixpkgsDeclaration(path []string) (nixeval.Declaration, bool) {
+	if r.session == nil {
+		return nixeval.Declaration{}, false
+	}
+	answer, err := r.session.client.NixpkgsDeclaration(r.ctx(), r.dir, path)
+	declaration, ok := nixValue(r, answer, err)
+	if !ok || declaration == nil {
+		return nixeval.Declaration{}, false
+	}
+	return *declaration, true
 }
 
 func (r *nixRequest) NixpkgsPackage(path []string) (*nixeval.Package, bool) {

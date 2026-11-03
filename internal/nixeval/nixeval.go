@@ -33,12 +33,13 @@ var (
 type queryKind string
 
 const (
-	queryOutputs queryKind = "outputs"
-	querySources queryKind = "sources"
-	queryOptions queryKind = "options"
-	queryAttrs   queryKind = "attrs"
-	queryPackage queryKind = "package"
-	queryBase    queryKind = "base"
+	queryOutputs     queryKind = "outputs"
+	querySources     queryKind = "sources"
+	queryOptions     queryKind = "options"
+	queryAttrs       queryKind = "attrs"
+	queryPackage     queryKind = "package"
+	queryDeclaration queryKind = "declaration"
+	queryBase        queryKind = "base"
 )
 
 type settings struct {
@@ -52,23 +53,24 @@ type settings struct {
 }
 
 type Client struct {
-	run      runner
-	identify func() (string, error)
-	version  func(context.Context) ([]byte, error)
-	disk     *store
-	report   func(error)
-	life     *lifetime
-	slots    chan struct{}
-	lowSlots chan struct{}
-	releases *cache[nixRelease]
-	realised *cache[struct{}]
-	system   *cache[string]
-	locked   *cache[lockedFlake]
-	outputs  *cache[[]Output]
-	attrs    *cache[[]string]
-	packages *cache[*Package]
-	sources  *cache[[]OptionSource]
-	options  *cache[*OptionTree]
+	run          runner
+	identify     func() (string, error)
+	version      func(context.Context) ([]byte, error)
+	disk         *store
+	report       func(error)
+	life         *lifetime
+	slots        chan struct{}
+	lowSlots     chan struct{}
+	releases     *cache[nixRelease]
+	realised     *cache[struct{}]
+	system       *cache[string]
+	locked       *cache[lockedFlake]
+	outputs      *cache[[]Output]
+	attrs        *cache[[]string]
+	packages     *cache[*Package]
+	declarations *cache[*Declaration]
+	sources      *cache[[]OptionSource]
+	options      *cache[*OptionTree]
 }
 
 func New(report func(error)) (*Client, error) {
@@ -93,23 +95,24 @@ func newClient(s settings) (*Client, error) {
 	}
 	life := newLifetime()
 	return &Client{
-		run:      s.run,
-		identify: s.identify,
-		version:  s.version,
-		disk:     &store{dir: s.cacheDir, budget: storeBudget, now: s.now, report: s.report},
-		report:   s.report,
-		life:     life,
-		slots:    make(chan struct{}, maxConcurrent),
-		lowSlots: make(chan struct{}, maxBackground),
-		releases: newCache[nixRelease](life, smallCacheBudget, s.timeout, s.now),
-		realised: newCache[struct{}](life, smallCacheBudget, min(s.timeout, realiseTimeout), s.now),
-		system:   newCache[string](life, smallCacheBudget, s.timeout, s.now),
-		locked:   newCache[lockedFlake](life, smallCacheBudget, s.timeout, s.now),
-		outputs:  newCache[[]Output](life, smallCacheBudget, s.timeout, s.now),
-		attrs:    newCache[[]string](life, smallCacheBudget, s.timeout, s.now),
-		packages: newCache[*Package](life, smallCacheBudget, s.timeout, s.now),
-		sources:  newCache[[]OptionSource](life, smallCacheBudget, s.timeout, s.now),
-		options:  newCache[*OptionTree](life, optionCacheBudget, s.timeout, s.now),
+		run:          s.run,
+		identify:     s.identify,
+		version:      s.version,
+		disk:         &store{dir: s.cacheDir, budget: storeBudget, now: s.now, report: s.report},
+		report:       s.report,
+		life:         life,
+		slots:        make(chan struct{}, maxConcurrent),
+		lowSlots:     make(chan struct{}, maxBackground),
+		releases:     newCache[nixRelease](life, smallCacheBudget, s.timeout, s.now),
+		realised:     newCache[struct{}](life, smallCacheBudget, min(s.timeout, realiseTimeout), s.now),
+		system:       newCache[string](life, smallCacheBudget, s.timeout, s.now),
+		locked:       newCache[lockedFlake](life, smallCacheBudget, s.timeout, s.now),
+		outputs:      newCache[[]Output](life, smallCacheBudget, s.timeout, s.now),
+		attrs:        newCache[[]string](life, smallCacheBudget, s.timeout, s.now),
+		packages:     newCache[*Package](life, smallCacheBudget, s.timeout, s.now),
+		declarations: newCache[*Declaration](life, smallCacheBudget, s.timeout, s.now),
+		sources:      newCache[[]OptionSource](life, smallCacheBudget, s.timeout, s.now),
+		options:      newCache[*OptionTree](life, optionCacheBudget, s.timeout, s.now),
 	}, nil
 }
 
@@ -189,6 +192,20 @@ func (c *Client) NixpkgsPackage(ctx context.Context, dir string, path []string) 
 	return mapAnswer(answer, copyPackage), nil
 }
 
+func (c *Client) NixpkgsDeclaration(ctx context.Context, dir string, path []string) (Answer[*Declaration], error) {
+	answer, err := serveFlake(ctx, c, dir, func(flake flakeState) (query[*Declaration], error) {
+		scope, err := c.inputScope(ctx, flake)
+		if err != nil {
+			return query[*Declaration]{}, err
+		}
+		return c.declarationQuery(flake, scope, path), nil
+	})
+	if err != nil {
+		return Answer[*Declaration]{}, fmt.Errorf("finding the declaration of nixpkgs attribute %q of flake %s: %w", path, dir, err)
+	}
+	return mapAnswer(answer, copyDeclaration), nil
+}
+
 func serveFlake[T any](ctx context.Context, c *Client, dir string, build func(flakeState) (query[T], error)) (Answer[T], error) {
 	flake, err := c.inspect(ctx, dir)
 	if err != nil {
@@ -199,6 +216,14 @@ func serveFlake[T any](ctx context.Context, c *Client, dir string, build func(fl
 		return Answer[T]{}, err
 	}
 	return serve(ctx, c, q)
+}
+
+func copyDeclaration(declaration *Declaration) *Declaration {
+	if declaration == nil {
+		return nil
+	}
+	duplicate := *declaration
+	return &duplicate
 }
 
 func copyPackage(pkg *Package) *Package {
@@ -493,7 +518,7 @@ func (c *Client) attrsQuery(flake flakeState, scope inputScope, parent []string)
 		slot:    flake.slot(queryAttrs, detail),
 		decode:  parseNames,
 		evaluate: c.evaluating(flake, func(locked lockedFlake) []string {
-			return evalArgs(callExpr("attrs", append(scope.args(locked), listArg("path", parent))...))
+			return evalArgs(callExpr("attrs", append(scope.args(locked), pathArg(parent))...))
 		}),
 	}
 }
@@ -506,7 +531,20 @@ func (c *Client) packageQuery(flake flakeState, scope inputScope, path []string)
 		slot:    flake.slot(queryPackage, detail),
 		decode:  parsePackage,
 		evaluate: c.evaluating(flake, func(locked lockedFlake) []string {
-			return evalArgs(callExpr("package", append(scope.args(locked), listArg("path", path))...))
+			return evalArgs(callExpr("package", append(scope.args(locked), pathArg(path))...))
+		}),
+	}
+}
+
+func (c *Client) declarationQuery(flake flakeState, scope inputScope, path []string) query[*Declaration] {
+	detail := pathDetail(path)
+	return query[*Declaration]{
+		results: c.declarations,
+		key:     scope.queryKey(queryDeclaration, detail),
+		slot:    flake.slot(queryDeclaration, detail),
+		decode:  parseDeclaration,
+		evaluate: c.evaluating(flake, func(locked lockedFlake) []string {
+			return evalArgs(callExpr("declaration", append(scope.args(locked), pathArg(path))...))
 		}),
 	}
 }

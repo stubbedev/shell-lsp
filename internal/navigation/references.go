@@ -179,15 +179,10 @@ func mergeOccurrences(occs []Occurrence) []Occurrence {
 }
 
 func References(ctx context.Context, file *workspace.File, offset int, env Env, files WorkspaceFiles, includeDeclaration bool) ([]Occurrence, error) {
-	sym, ok := SymbolAt(file, offset)
-	if !ok {
-		return nil, nil
-	}
-	group, err := Group(ctx, file, env, files)
+	occs, err := occurrencesAt(ctx, file, offset, env, files)
 	if err != nil {
 		return nil, err
 	}
-	occs := Occurrences(sym, group)
 	if includeDeclaration {
 		return occs, nil
 	}
@@ -203,7 +198,39 @@ func References(ctx context.Context, file *workspace.File, offset int, env Env, 
 	return out, nil
 }
 
+func occurrencesAt(ctx context.Context, file *workspace.File, offset int, env Env, files WorkspaceFiles) ([]Occurrence, error) {
+	if n, ok := programNameAt(file, offset); ok {
+		return programReferences(ctx, file, n, env, files)
+	}
+	sym, ok := SymbolAt(file, offset)
+	if !ok {
+		return nil, nil
+	}
+	group, err := Group(ctx, file, env, files)
+	if err != nil {
+		return nil, err
+	}
+	return Occurrences(sym, group), nil
+}
+
+func HighlightsAt(file *workspace.File, offset int) []Occurrence {
+	if n, ok := programNameAt(file, offset); ok {
+		return mergeOccurrences(n.occurrences(file))
+	}
+	sym, ok := SymbolAt(file, offset)
+	if !ok {
+		return nil
+	}
+	return Occurrences(sym, []*workspace.File{file})
+}
+
 func PrepareRename(ctx context.Context, file *workspace.File, offset int, env Env, files WorkspaceFiles) (Symbol, []Occurrence, error) {
+	if n, ok := programNameAt(file, offset); ok {
+		if refusal := n.refusal(file); refusal != "" {
+			return Symbol{}, nil, fmt.Errorf("%w: %s", ErrNotRenamable, refusal)
+		}
+		return Symbol{Name: n.binding.Name, Kind: KindVariable, Path: file.Path, Span: n.span}, n.occurrences(file), nil
+	}
 	sym, ok := SymbolAt(file, offset)
 	if !ok {
 		return Symbol{}, nil, ErrNoSymbol
@@ -220,6 +247,9 @@ func PrepareRename(ctx context.Context, file *workspace.File, offset int, env En
 }
 
 func Rename(ctx context.Context, file *workspace.File, offset int, newName string, env Env, files WorkspaceFiles) ([]Occurrence, error) {
+	if n, ok := programNameAt(file, offset); ok {
+		return programRename(file, n, newName)
+	}
 	sym, occs, err := PrepareRename(ctx, file, offset, env, files)
 	if err != nil {
 		return nil, err

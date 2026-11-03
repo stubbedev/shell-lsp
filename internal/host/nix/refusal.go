@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/host/model"
 	"github.com/stubbedev/shell-lsp/internal/host/nix/syntax"
@@ -35,11 +36,9 @@ func (p *Project) readEscapes() {
 			for _, v := range values {
 				switch v := v.(type) {
 				case flowSpace:
-					v.space.escaped = v.space.escaped || !chain.dynamic
-					v.space.dynamic = v.space.dynamic || chain.dynamic
+					v.space.readAs(u, chain)
 				case flowPrimed:
-					v.space.escaped = v.space.escaped || !chain.dynamic
-					v.space.dynamic = v.space.dynamic || chain.dynamic
+					v.space.readAs(u, chain)
 				case flowSet:
 					p.escapedSets[v.set] = true
 				}
@@ -48,13 +47,31 @@ func (p *Project) readEscapes() {
 	}
 }
 
+func (s *space) readAs(u *symbolTable, chain flowChain) {
+	if s.leftIn == nil {
+		s.leftIn, s.leftAt = u, chain.target.Span().Start
+	}
+	s.escaped = s.escaped || !chain.dynamic
+	s.dynamic = s.dynamic || chain.dynamic
+}
+
+func (p *Project) siteOf(u *symbolTable, offset int) string {
+	name := p.paths[p.files[u]]
+	if rel, err := filepath.Rel(p.flakeDir, name); p.flakeDir != "" && err == nil {
+		name = rel
+	} else {
+		name = filepath.Base(name)
+	}
+	return fmt.Sprintf("%s:%d", name, strings.Count(u.f.src[:offset], "\n")+1)
+}
+
 func (p *Project) Refusal(file, symbol int) (string, bool) {
 	p.begin()
 	defer p.mu.Unlock()
 	u := p.units[file]
 	sym := u.ix.Symbols[symbol]
 	if p.foreign[file] {
-		return fmt.Sprintf("`%s` belongs to a dependency in the Nix store, which is not this project's to change", sym.Name), true
+		return fmt.Sprintf("`%s` belongs to a dependency in the Nix store, at %s, which is not this project's to change", sym.Name, p.paths[file]), true
 	}
 	p.readEscapes()
 	if spaces := p.spacesOf(model.Home{File: file, Scope: sym.Scope}, sym.Name); len(spaces) > 0 {
@@ -99,10 +116,10 @@ func (p *Project) spaceRefusal(s *space, name string) string {
 	}
 	for at := s; at != nil && !at.moduleBoundary(); at = at.parent {
 		if at.escaped {
-			return fmt.Sprintf("the set that holds `%s` is passed on as a value, so other code may read it by its name", name)
+			return fmt.Sprintf("the set that holds `%s` is passed on as a value at %s, so other code may read it by its name", name, p.siteOf(at.leftIn, at.leftAt))
 		}
 		if at.dynamic {
-			return fmt.Sprintf("the set that holds `%s` is read with a computed name, so other code may read it by its name", name)
+			return fmt.Sprintf("the set that holds `%s` is read with a computed name at %s, so other code may read it by its name", name, p.siteOf(at.leftIn, at.leftAt))
 		}
 	}
 	return ""
@@ -128,7 +145,7 @@ func (p *Project) formalRefusal(fn flowLambda, name string) (string, bool) {
 		return fmt.Sprintf("the flake receives its input `%s` under this name", name), true
 	}
 	if p.modular[fn] {
-		return fmt.Sprintf("the module system passes `%s` by this name", name), true
+		return fmt.Sprintf("the module system passes `%s` to this module by this name, so the module would no longer receive it", name), true
 	}
 	callers := p.callers[fn]
 	if reason := p.incomplete(); reason != "" && (len(callers) > 0 || p.fileLambda(fn)) {
@@ -139,7 +156,7 @@ func (p *Project) formalRefusal(fn flowLambda, name string) (string, bool) {
 	}
 	for _, c := range callers {
 		if c.call.kind == callAuto && !passes(c, name) {
-			return fmt.Sprintf("`callPackage` fills `%s` by name unless a caller passes it", name), true
+			return fmt.Sprintf("`callPackage` at %s fills `%s` by name, and that call does not pass it", p.siteOf(c.unit, c.call.call.Span().Start), name), true
 		}
 	}
 	return "", false
@@ -208,7 +225,7 @@ func (p *Project) Conflict(file, symbol int, newName string) string {
 	if o := u.owners[symbol]; o.set != nil && o.set.lambda != nil {
 		for _, c := range p.callers[flowLambda{unit: u, fn: o.set.lambda}] {
 			if passes(c, newName) {
-				return fmt.Sprintf("a call in `%s` already passes `%s` next to `%s`", filepath.Base(p.paths[p.files[c.unit]]), newName, sym.Name)
+				return fmt.Sprintf("the call at %s already passes `%s` next to `%s`", p.siteOf(c.unit, c.call.call.Span().Start), newName, sym.Name)
 			}
 		}
 	}
@@ -222,7 +239,7 @@ func (p *Project) homeConflict(at model.Home, name, newName string) string {
 			continue
 		}
 		if s.Name == newName {
-			return fmt.Sprintf("`%s` is already bound next to `%s` in `%s`", newName, name, filepath.Base(p.paths[at.File]))
+			return fmt.Sprintf("`%s` is already bound next to `%s` at %s", newName, name, p.siteOf(u, s.Selection.Start))
 		}
 		if s.Name != name {
 			continue
@@ -250,7 +267,7 @@ func (p *Project) readConflict(file int, sym model.Symbol, newName string) strin
 			}
 			for _, at := range p.homesOfSlot(model.Home{File: f, Scope: r.Scope}, slot) {
 				if slices.Contains(homes, at) {
-					return fmt.Sprintf("`%s` already reads an attribute `%s` of the set that holds `%s`, which would then find the renamed one", filepath.Base(p.paths[f]), newName, sym.Name)
+					return fmt.Sprintf("%s already reads an attribute `%s` of the set that holds `%s`, which would then find the renamed one", p.siteOf(u, r.Span.Start), newName, sym.Name)
 				}
 			}
 		}

@@ -10,8 +10,30 @@ import (
 )
 
 type Document struct {
-	tree  *syntax.File
-	table *scope.Table
+	tree   *syntax.File
+	table  *scope.Table
+	hosted []HostedText
+}
+
+func (d *Document) Broken() bool { return len(d.tree.Errors) > 0 }
+
+func (d *Document) BindingEndingAt(offset int) (model.Span, bool) {
+	var found model.Span
+	ok := false
+	d.inspect(func(n syntax.Node) bool {
+		s := n.Span()
+		if offset < s.Start || offset > s.End {
+			return false
+		}
+		switch n.(type) {
+		case *syntax.Assign, *syntax.Inherit:
+			if s.End == offset {
+				found, ok = s, true
+			}
+		}
+		return true
+	})
+	return found, ok
 }
 
 func Read(src string) *Document {
