@@ -99,12 +99,13 @@ func (p *Projects) Want(h Host, env Env) {
 	p.enqueue(self, env)
 }
 
-func (p *Projects) ReleaseCaches() {
+func (p *Projects) ReleaseIdle() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.active {
 		return
 	}
+	p.dropUnreferenced()
 	for _, l := range p.linked {
 		l.project.Release()
 	}
@@ -118,7 +119,6 @@ func (p *Projects) Forget(path string) {
 		close(job.done)
 		delete(p.jobs, path)
 	}
-	p.dropUnreferenced()
 }
 
 func (p *Projects) Retain(open func(path string) bool) {
@@ -497,6 +497,7 @@ func linkProject(ctx context.Context, env Env, request nix.Request, seeds ...*wo
 	for _, seed := range seeds {
 		b.canonical(seed)
 	}
+	request.ReachesPast = b.reachesPast
 	project := nix.Link(ctx, request, projectSource{b})
 	return &linkedProject{project: project, names: &model.NameTable{}, indexes: project.Indexes(), files: b.files}
 }

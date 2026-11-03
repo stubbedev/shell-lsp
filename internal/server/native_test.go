@@ -9,7 +9,9 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 	"unicode/utf16"
 
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
@@ -1199,4 +1201,55 @@ func TestNixFindingOffersIgnoringItInTheWorkspace(t *testing.T) {
 		}
 	}
 	t.Error("no action ignores the finding in the workspace")
+}
+
+func TestMemoryIsReleasedAfterABurstOrARest(t *testing.T) {
+	t.Parallel()
+
+	var mu sync.Mutex
+	var allocated uint64
+	var rests, frees int
+	counts := func() (int, int) {
+		mu.Lock()
+		defer mu.Unlock()
+		return rests, frees
+	}
+	counted := func(n *int) func() {
+		return func() {
+			mu.Lock()
+			defer mu.Unlock()
+			*n++
+		}
+	}
+	m := &memoryRelease{quiet: time.Millisecond, rest: 300 * time.Millisecond, burst: 100, rested: counted(&rests), free: counted(&frees), allocated: func() uint64 {
+		mu.Lock()
+		defer mu.Unlock()
+		return allocated
+	}}
+	defer m.stop()
+	waitFor := func(what string, wantRests, wantFrees int) {
+		t.Helper()
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			rest, free := counts()
+			if rest == wantRests && free == wantFrees {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("%s: %d rests and %d frees, want %d and %d", what, rest, free, wantRests, wantFrees)
+			}
+			time.Sleep(time.Millisecond)
+		}
+	}
+	mu.Lock()
+	allocated = 100
+	mu.Unlock()
+	m.schedule()
+	waitFor("a burst returns memory once quiet and keeps the caches", 0, 1)
+	m.schedule()
+	time.Sleep(5 * time.Millisecond)
+	if rest, free := counts(); rest != 0 || free != 1 {
+		t.Errorf("a pause after little work released memory: %d rests, %d frees", rest, free)
+	}
+	waitFor("a rest releases the caches and the memory", 1, 2)
 }

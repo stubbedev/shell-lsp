@@ -169,12 +169,14 @@ func (s *Server) candidatePaths(ctx context.Context, docs *docstore.View, skippe
 	}
 	paths = slices.DeleteFunc(paths, skipped)
 	for _, doc := range docs.Documents() {
-		if doc.Local {
-			paths = append(paths, doc.Path)
+		if !doc.Local {
+			continue
+		}
+		if at, listed := slices.BinarySearch(paths, doc.Path); !listed {
+			paths = slices.Insert(paths, at, doc.Path)
 		}
 	}
-	slices.Sort(paths)
-	return slices.Compact(paths), nil
+	return paths, nil
 }
 
 func (s *Server) candidates(docs *docstore.View, skipped func(path string) bool) navigation.WorkspaceFiles {

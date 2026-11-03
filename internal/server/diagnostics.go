@@ -181,7 +181,7 @@ func (s *Server) closedProvenFile(ctx context.Context, docs *docstore.View, file
 }
 
 func wrappedBy(file *workspace.File, proof hostnav.Proof, revision uint64) *workspace.File {
-	return workspace.MemoWeak(file, nixProvenFileKey, revision, func() *workspace.File {
+	return workspace.Memo(file, nixProvenFileKey, revision, func() *workspace.File {
 		return hostnav.Wrapped(file, proof.On(file.Doc.Source()), nil)
 	})
 }

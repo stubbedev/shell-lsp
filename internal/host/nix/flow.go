@@ -348,22 +348,27 @@ func (b *symbolTable) settleChains() {
 }
 
 func (b *symbolTable) pathIncludes() {
-	slices.SortFunc(b.paths, func(x, y *syntax.Path) int { return cmp.Compare(x.Span().Start, y.Span().Start) })
-	b.ix.Includes = slices.Grow(b.ix.Includes, len(b.paths))
-	for _, p := range b.paths {
+	b.ix.Includes = appendPathIncludes(b.ix.Includes, b.f.src, b.paths, b.loaded)
+}
+
+func appendPathIncludes(includes []model.Include, src string, paths []*syntax.Path, loaded map[*syntax.Path]bool) []model.Include {
+	slices.SortFunc(paths, func(x, y *syntax.Path) int { return cmp.Compare(x.Span().Start, y.Span().Start) })
+	includes = slices.Grow(includes, len(paths))
+	for _, p := range paths {
 		if !loadable(p) {
 			continue
 		}
 		span := p.Span()
-		text := b.f.src[span.Start:span.End]
+		text := src[span.Start:span.End]
 		entry := text + "/" + DirectoryEntry
 		isFile := strings.HasSuffix(text, nixExtension)
 		candidates := []string{entry}
-		if isFile || b.loaded[p] {
+		if isFile || loaded[p] {
 			candidates = []string{text, entry}
 		}
-		b.ix.Includes = append(b.ix.Includes, model.Include{Span: span, Path: text, Candidates: candidates, Optional: true, Probe: !isFile && !b.loaded[p]})
+		includes = append(includes, model.Include{Span: span, Path: text, Candidates: candidates, Optional: true, Probe: !isFile && !loaded[p]})
 	}
+	return includes
 }
 
 func (b *symbolTable) flakeFollows() {

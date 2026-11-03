@@ -35,14 +35,15 @@ type Source interface {
 }
 
 type Request struct {
-	Self     *model.Index
-	SelfPath string
-	Flake    string
-	Roots    []string
-	Failure  string
-	Home     string
-	ScanCut  bool
-	Shallow  bool
+	Self        *model.Index
+	SelfPath    string
+	Flake       string
+	Roots       []string
+	Failure     string
+	Home        string
+	ScanCut     bool
+	Shallow     bool
+	ReachesPast func(starts [][]string, limit int64, known func(string) bool) bool
 }
 
 type flowCaller struct {
@@ -61,16 +62,17 @@ type Project struct {
 	tried  map[string]bool
 	trees  map[string][]string
 
-	truncated bool
-	shallow   bool
-	bytes     int
-	failure   string
-	scanCut   bool
-	home      string
-	settled   bool
-	foreign   map[int]bool
-	peek      Files
-	peeks     int
+	truncated   bool
+	reachesPast func(starts [][]string, limit int64, known func(string) bool) bool
+	shallow     bool
+	bytes       int
+	failure     string
+	scanCut     bool
+	home        string
+	settled     bool
+	foreign     map[int]bool
+	peek        Files
+	peeks       int
 
 	flakeUnit *symbolTable
 	flakeDir  string
@@ -159,6 +161,7 @@ func Link(ctx stdcontext.Context, req Request, source Source) *Project {
 		failure:      req.Failure,
 		scanCut:      req.ScanCut,
 		shallow:      req.Shallow,
+		reachesPast:  req.ReachesPast,
 		home:         req.Home,
 		foreign:      map[int]bool{},
 		applying:     map[*space]bool{},
@@ -184,7 +187,7 @@ func Link(ctx stdcontext.Context, req Request, source Source) *Project {
 	if req.Flake != "" {
 		next = append(next, wantedFile{path: req.Flake})
 	}
-	p.closure(next)
+	p.follow(next)
 	if i, ok := p.byPath[req.Flake]; ok && req.Flake != "" {
 		p.flakeUnit, p.flakeDir = p.units[i], dirOf(req.Flake)
 	}
@@ -346,6 +349,26 @@ func (p *Project) resolve(u *symbolTable, path *syntax.Path) string {
 	return p.located(dirOf(p.paths[p.files[u]]), u.f.src[span.Start:span.End])
 }
 
+func (p *Project) follow(level []wantedFile) {
+	if p.reachesPast != nil && !p.shallow {
+		starts := make([][]string, len(level))
+		for i, w := range level {
+			starts[i] = []string{w.path}
+			if w.fallback != "" {
+				starts[i] = append(starts[i], w.fallback)
+			}
+		}
+		if p.reachesPast(starts, int64(maxProjectBytes-p.bytes), func(path string) bool {
+			_, known := p.byPath[path]
+			return known
+		}) {
+			p.truncated = true
+			return
+		}
+	}
+	p.closure(level)
+}
+
 func (p *Project) closure(level []wantedFile) {
 	for len(level) > 0 && p.ctx.Err() == nil {
 		wanted := make([]wantedFile, 0, len(level))
@@ -392,7 +415,7 @@ func (p *Project) closure(level []wantedFile) {
 func (p *Project) settle() {
 	for range maxFlowRounds {
 		p.reset()
-		if p.ctx.Err() != nil {
+		if p.ctx.Err() != nil || p.truncated {
 			break
 		}
 		if p.flakeUnit != nil {
@@ -423,6 +446,7 @@ func (p *Project) settle() {
 	p.observe()
 	p.settled = true
 	p.ctx = nil
+	p.reachesPast = nil
 }
 
 func (p *Project) foreignScanned(u *symbolTable, c flowCall) bool {

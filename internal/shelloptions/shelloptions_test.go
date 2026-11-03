@@ -81,3 +81,34 @@ func TestEnabledByOnlyNamesTheShellsThatRunHere(t *testing.T) {
 		t.Fatalf("EnabledBy(extglob) = %+v, want only the shopt on line 2", got)
 	}
 }
+
+func TestOptionsComeFromTheEnclosingShellsInSourceOrder(t *testing.T) {
+	t.Parallel()
+
+	src := "(\n  set -o pipefail\n  echo first\n)\nset -e\n(\n  echo second\n)\necho third\n"
+	tree := parser.Parse(src, dialect.Bash)
+	options := Scan(tree)
+	for _, tc := range []struct {
+		word              string
+		errexit, pipefail bool
+	}{
+		{word: "first", errexit: true, pipefail: true},
+		{word: "second", errexit: true},
+		{word: "third", errexit: true},
+	} {
+		got := options.At(strings.Index(src, tc.word))
+		if got.Errexit != tc.errexit || got.Pipefail != tc.pipefail {
+			t.Errorf("at %q: errexit %v, pipefail %v, want %v and %v", tc.word, got.Errexit, got.Pipefail, tc.errexit, tc.pipefail)
+		}
+	}
+}
+
+func BenchmarkOptionsAtWithAChangePerScript(b *testing.B) {
+	src := strings.Repeat("set -eu\necho hi\n", 2000)
+	tree := parser.Parse(src, dialect.Bash)
+	options := Scan(tree)
+	b.ReportAllocs()
+	for b.Loop() {
+		_ = options.At(len(src) / 2)
+	}
+}

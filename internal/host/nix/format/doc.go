@@ -1,6 +1,7 @@
 package format
 
 import (
+	"slices"
 	"strings"
 	"unicode/utf8"
 )
@@ -504,7 +505,7 @@ func (r *renderer) priorityPlan(g *item) *priorityPlan {
 	if p := r.prio[g.id]; p != nil {
 		return p
 	}
-	p := &priorityPlan{flat: unfolded(g.items, nil)}
+	p := &priorityPlan{flat: unfolded(g.items)}
 	before, hard := 0, false
 	for i := range p.flat {
 		it := &p.flat[i]
@@ -581,10 +582,19 @@ func tailLine(it *item, first int, broken bool) (int, bool) {
 	return first, broken
 }
 
-func unfolded(doc, out []item) []item {
+func unfolded(doc []item) []item {
+	if !slices.ContainsFunc(doc, transparentGroup) {
+		return doc
+	}
+	return appendUnfolded(make([]item, 0, len(doc)), doc)
+}
+
+func transparentGroup(it item) bool { return it.tag == tagGroup && it.group == groupTransparent }
+
+func appendUnfolded(out, doc []item) []item {
 	for i := range doc {
-		if doc[i].tag == tagGroup && doc[i].group == groupTransparent {
-			out = unfolded(doc[i].items, out)
+		if transparentGroup(doc[i]) {
+			out = appendUnfolded(out, doc[i].items)
 			continue
 		}
 		out = append(out, doc[i])

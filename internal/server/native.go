@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"runtime/debug"
+	"runtime/metrics"
 	"slices"
 	"strconv"
 	"strings"
@@ -40,30 +41,77 @@ const (
 	nixpkgsInput        = "nixpkgs"
 	maxLibraryFile      = 8 << 20
 	memoryReleaseQuiet  = 2 * time.Second
+	memoryReleaseRest   = 30 * time.Second
+	memoryReleaseBurst  = 64 << 20
 )
 
 type memoryRelease struct {
-	mu    sync.Mutex
-	timer *time.Timer
-	calm  func()
+	mu        sync.Mutex
+	timer     *time.Timer
+	resting   bool
+	stopped   bool
+	released  uint64
+	quiet     time.Duration
+	rest      time.Duration
+	burst     uint64
+	allocated func() uint64
+	rested    func()
+	free      func()
+}
+
+func newMemoryRelease(projects *hostnav.Projects) *memoryRelease {
+	return &memoryRelease{quiet: memoryReleaseQuiet, rest: memoryReleaseRest, burst: memoryReleaseBurst, allocated: heapAllocated, rested: projects.ReleaseIdle, free: debug.FreeOSMemory}
+}
+
+func heapAllocated() uint64 {
+	sample := []metrics.Sample{{Name: "/gc/heap/allocs:bytes"}}
+	metrics.Read(sample)
+	return sample[0].Value.Uint64()
 }
 
 func (m *memoryRelease) schedule() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.timer != nil {
-		m.timer.Reset(memoryReleaseQuiet)
+	if m.stopped {
 		return
 	}
-	m.timer = time.AfterFunc(memoryReleaseQuiet, func() {
-		m.calm()
-		debug.FreeOSMemory()
-	})
+	m.resting = false
+	if m.timer != nil {
+		m.timer.Reset(m.quiet)
+		return
+	}
+	m.timer = time.AfterFunc(m.quiet, m.fire)
+}
+
+func (m *memoryRelease) fire() {
+	allocated := m.allocated()
+	m.mu.Lock()
+	resting := m.resting
+	if m.stopped {
+		m.mu.Unlock()
+		return
+	}
+	if !resting && allocated-m.released < m.burst {
+		m.resting = true
+		m.timer.Reset(m.rest)
+		m.mu.Unlock()
+		return
+	}
+	m.mu.Unlock()
+	if resting {
+		m.rested()
+	}
+	m.free()
+	released := m.allocated()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.released = released
 }
 
 func (m *memoryRelease) stop() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	m.stopped = true
 	if m.timer != nil {
 		m.timer.Stop()
 	}
@@ -162,18 +210,12 @@ func (s *Server) importGraph(ctx context.Context, docs *docstore.View, language 
 		return hostnav.NewGraph(ctx, language, s.hostFiles(docs, language), env)
 	}
 	return hostnav.NewNixGraph(ctx, func(ctx context.Context) ([]string, error) {
-		paths, err := s.workspace.ShellFiles(ctx)
+		notNix := func(path string) bool { return !nixPath(path) }
+		paths, err := s.candidatePaths(ctx, docs, notNix)
 		if err != nil {
 			return nil, err
 		}
-		for _, doc := range docs.Documents() {
-			if doc.Local {
-				paths = append(paths, doc.Path)
-			}
-		}
-		slices.Sort(paths)
-		paths = slices.Compact(paths)
-		return slices.DeleteFunc(paths, func(path string) bool { return !nixPath(path) }), nil
+		return slices.DeleteFunc(paths, notNix), nil
 	}, env)
 }
 

@@ -107,7 +107,7 @@ type Server struct {
 	bats         *batsResults
 	graphs       hostGraphs
 	projects     *hostnav.Projects
-	releasing    memoryRelease
+	releasing    *memoryRelease
 	linkPatience time.Duration
 	partialShown atomic.Bool
 	symbols      symbolIndex
@@ -176,7 +176,7 @@ func New(conn *jsonrpc.Conn, version string, process Process) *Server {
 	s.delivery = pullDelivery{server: s}
 	s.workspace = newWorkspace(s)
 	s.workspace.WatchDisk(s.disk)
-	s.releasing.calm = s.projects.ReleaseCaches
+	s.releasing = newMemoryRelease(s.projects)
 	s.projects.OnDrained(func() {
 		s.releasing.schedule()
 		s.linkLanded()

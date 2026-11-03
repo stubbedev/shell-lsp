@@ -70,15 +70,43 @@ type Parsed struct {
 func Parse(src string) *Parsed {
 	tree := syntax.Parse(src)
 	tree.DropWhitespaceTokens()
-	return &Parsed{src: src, tree: tree, table: scope.Resolve(tree)}
+	return &Parsed{src: src, tree: tree}
+}
+
+func (p *Parsed) resolved() *scope.Table {
+	if p.table == nil {
+		p.table = scope.Resolve(p.tree)
+	}
+	return p.table
 }
 
 func (p *Parsed) Text() string { return p.src }
 
 func (p *Parsed) Includes() []model.Include {
+	if paths, plain := p.plainPaths(); plain {
+		return appendPathIncludes(nil, p.src, paths, nil)
+	}
 	ix := &model.Index{}
-	newSymbolTable(&file{src: p.src, tree: p.tree, table: p.table}, ix).collect()
+	newSymbolTable(&file{src: p.src, tree: p.tree, table: p.resolved()}, ix).collect()
 	return ix.Includes
+}
+
+func (p *Parsed) plainPaths() ([]*syntax.Path, bool) {
+	var paths []*syntax.Path
+	plain := true
+	visit := func(n syntax.Node) bool {
+		if path, ok := n.(*syntax.Path); ok && loadable(path) {
+			paths = append(paths, path)
+			span := path.Span()
+			plain = plain && strings.HasSuffix(p.src[span.Start:span.End], nixExtension)
+		}
+		return plain
+	}
+	syntax.Inspect(p.tree.Root, visit)
+	for _, stray := range p.tree.Stray {
+		syntax.Inspect(stray, visit)
+	}
+	return paths, plain
 }
 
 func Analyze(src string) Analysis { return AnalyzeWith(src, nil) }
@@ -86,7 +114,7 @@ func Analyze(src string) Analysis { return AnalyzeWith(src, nil) }
 func AnalyzeWith(src string, embed Embedder) Analysis { return Parse(src).Analyze(embed) }
 
 func (p *Parsed) Analyze(embed Embedder) Analysis {
-	f := &file{src: p.src, tree: p.tree, table: p.table, embed: embed}
+	f := &file{src: p.src, tree: p.tree, table: p.resolved(), embed: embed}
 	f.discover()
 	f.discoverWrapped()
 	m, detection := f.projection()

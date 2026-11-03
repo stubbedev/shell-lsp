@@ -565,11 +565,11 @@ func (p *Project) loadLate(path string) (int, bool) {
 	if p.peek != nil {
 		return p.peekFile(path)
 	}
-	if p.settled || p.shallow || p.tried[path] {
+	if p.settled || p.shallow || p.truncated || p.tried[path] {
 		return 0, false
 	}
 	before := len(p.units)
-	p.closure([]wantedFile{{path: path, fallback: joinedTo(path, DirectoryEntry)}})
+	p.follow([]wantedFile{{path: path, fallback: joinedTo(path, DirectoryEntry)}})
 	if len(p.units) == before {
 		return 0, false
 	}

@@ -8,7 +8,9 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/stubbedev/shell-lsp/internal/diskwatch"
@@ -54,6 +56,9 @@ type Graph struct {
 	imports   map[string][]string
 	bytes     map[string]int64
 	cut       bool
+
+	reachedMu sync.Mutex
+	reached   map[string]bool
 }
 
 func NewGraph(ctx context.Context, language host.Language, files navigation.WorkspaceFiles, env Env) (*Graph, error) {
@@ -133,6 +138,21 @@ func (g *Graph) reachesPast(limit int64, roots ...string) bool {
 	if g == nil {
 		return false
 	}
+	key := strconv.FormatInt(limit, 10) + "\x00" + strings.Join(roots, "\x00")
+	g.reachedMu.Lock()
+	defer g.reachedMu.Unlock()
+	reached, known := g.reached[key]
+	if !known {
+		reached = g.walkReach(limit, roots)
+		if g.reached == nil {
+			g.reached = map[string]bool{}
+		}
+		g.reached[key] = reached
+	}
+	return reached
+}
+
+func (g *Graph) walkReach(limit int64, roots []string) bool {
 	seen := map[string]bool{}
 	queue := slices.Clone(roots)
 	var total int64
@@ -148,6 +168,47 @@ func (g *Graph) reachesPast(limit int64, roots ...string) bool {
 			return true
 		}
 		queue = append(queue, g.imports[path]...)
+	}
+	return false
+}
+
+func (b *builder) reachesPast(starts [][]string, limit int64, known func(string) bool) bool {
+	if limit <= 0 {
+		return false
+	}
+	seen := map[string]bool{}
+	queue := make([]string, 0, len(starts))
+	for _, candidates := range starts {
+		if start, found := b.present("", candidates); found {
+			queue = append(queue, start)
+		}
+	}
+	var total, largest int64
+	for len(queue) > 0 && b.ctx.Err() == nil {
+		at := queue[len(queue)-1]
+		queue = queue[:len(queue)-1]
+		if seen[at] || known(at) || nix.InStore(at) {
+			continue
+		}
+		seen[at] = true
+		includes, size, err := b.env.Loader.NixIncludes(at)
+		if err != nil {
+			continue
+		}
+		total += size
+		largest = max(largest, size)
+		if total-largest >= limit {
+			return true
+		}
+		dir := filepath.Dir(at)
+		for _, inc := range includes {
+			if inc.Probe || inc.Dynamic {
+				continue
+			}
+			if target, found := b.present(dir, inc.Candidates); found {
+				queue = append(queue, target)
+			}
+		}
 	}
 	return false
 }

@@ -90,37 +90,6 @@ func Memo[T any](f *File, key string, generation uint64, compute func() T) T {
 	return value
 }
 
-type weakValue[T any] struct {
-	value  weak.Pointer[T]
-	absent bool
-}
-
-func MemoWeak[T any](f *File, key string, generation uint64, compute func() *T) *T {
-	for {
-		var fresh *T
-		kept := Memo(f, key, generation, func() weakValue[T] {
-			fresh = compute()
-			return weakValue[T]{value: weak.Make(fresh), absent: fresh == nil}
-		})
-		if fresh != nil || kept.absent {
-			return fresh
-		}
-		if value := kept.value.Value(); value != nil {
-			return value
-		}
-		f.forgetMemo(key)
-	}
-}
-
-func (f *File) forgetMemo(key string) {
-	if f.memoOf != nil {
-		f = f.memoOf
-	}
-	f.memoMu.Lock()
-	defer f.memoMu.Unlock()
-	delete(f.memo, key)
-}
-
 func (f *File) memoize(key string, generation uint64, compute func() any) any {
 	if f.memoOf != nil {
 		f = f.memoOf
@@ -193,6 +162,7 @@ type Workspace struct {
 	generation atomic.Uint64
 	watched    atomic.Bool
 	scanCut    atomic.Bool
+	lastScan   atomic.Pointer[scanned]
 }
 
 func (w *Workspace) SetWatched(watched bool) { w.watched.Store(watched) }
@@ -690,8 +660,22 @@ func (w *Workspace) AllShellFiles(ctx context.Context) ([]string, error) {
 }
 
 func (w *Workspace) scan(ctx context.Context, limit int) ([]string, error) {
+	roots := w.Roots()
+	if last := w.lastScan.Load(); last != nil && last.limit == limit && w.disk.Unchanged(last.stamp) && slices.Equal(last.roots, roots) {
+		return slices.Clone(last.files), nil
+	}
+	stamp := w.disk.Current()
+	files, err := w.walkRoots(ctx, roots, limit)
+	if err != nil {
+		return nil, err
+	}
+	w.lastScan.Store(&scanned{stamp: stamp, limit: limit, roots: roots, files: files})
+	return slices.Clone(files), nil
+}
+
+func (w *Workspace) walkRoots(ctx context.Context, roots []string, limit int) ([]string, error) {
 	var out []string
-	for _, root := range w.Roots() {
+	for _, root := range roots {
 		rel, ignores, err := w.enclosingIgnores(root)
 		if err != nil {
 			return nil, fmt.Errorf("scanning workspace root %s: %w", root, err)
@@ -736,6 +720,13 @@ func (w *Workspace) scan(ctx context.Context, limit int) ([]string, error) {
 		w.scanCut.Store(len(out) >= limit)
 	}
 	return out[:min(len(out), limit)], nil
+}
+
+type scanned struct {
+	stamp diskwatch.Stamp
+	limit int
+	roots []string
+	files []string
 }
 
 func joinRel(rel, name string) string {

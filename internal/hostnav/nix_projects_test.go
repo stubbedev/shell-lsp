@@ -2,8 +2,11 @@ package hostnav
 
 import (
 	"context"
+	"fmt"
+	"maps"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -167,7 +170,7 @@ func TestAnUnrelatedStampChangeKeepsAProjectThatIsStillFresh(t *testing.T) {
 	}
 }
 
-func TestProjectsAreDroppedWhenTheirLastFileCloses(t *testing.T) {
+func TestProjectsOutliveTheirLastFileUntilDropped(t *testing.T) {
 	t.Parallel()
 
 	tr, env := flakeDir(t, map[string]string{"flake.nix": sharedFlake, "a.nix": "{ }\n", "b.nix": "{ }\n"})
@@ -177,9 +180,19 @@ func TestProjectsAreDroppedWhenTheirLastFileCloses(t *testing.T) {
 	if got := len(env.Projects.linked); got != 1 {
 		t.Errorf("after closing one of two files, %d projects are held", got)
 	}
+	kept := slices.Collect(maps.Values(env.Projects.linked))
 	env.Projects.Forget(filepath.Join(tr.dir, "a.nix"))
+	if got := len(env.Projects.linked); got != 1 {
+		t.Errorf("right after closing every file, %d projects are held, want the last one kept for a reopen", got)
+	}
+	linked(t, tr.host(t, "a.nix"), env)
+	if got := slices.Collect(maps.Values(env.Projects.linked)); len(got) != 1 || got[0] != kept[0] {
+		t.Errorf("reopening a file linked its project again, %d held", len(got))
+	}
+	env.Projects.Forget(filepath.Join(tr.dir, "a.nix"))
+	env.Projects.ReleaseIdle()
 	if got := len(env.Projects.linked); got != 0 {
-		t.Errorf("after closing every file, %d projects are held", got)
+		t.Errorf("after closing every file and resting, %d projects are held", got)
 	}
 }
 
@@ -270,5 +283,59 @@ func TestRetainDropsProjectsOnlyClosedFilesReached(t *testing.T) {
 	}
 	if len(env.Projects.linked) != 1 {
 		t.Errorf("after retaining one file, %d projects are held", len(env.Projects.linked))
+	}
+}
+
+func overflowingFiles(sizes ...int) map[string]string {
+	files := map[string]string{}
+	var imports strings.Builder
+	for i, size := range sizes {
+		name := fmt.Sprintf("part%d.nix", i)
+		files[name] = "# " + strings.Repeat("x", size) + "\n{ }\n"
+		fmt.Fprintf(&imports, "  p%d = import ./%s;\n", i, name)
+	}
+	files["root.nix"] = "{\n" + imports.String() + "}\n"
+	return files
+}
+
+func TestALinkThatCannotFitLoadsNothing(t *testing.T) {
+	t.Parallel()
+
+	third := int(nix.MaxProjectBytes()) / 3
+	tr, env := flakeDir(t, overflowingFiles(third, third, third, third, third))
+	root := filepath.Join(tr.dir, "root.nix")
+	l := linkProject(t.Context(), env, nix.Request{Roots: []string{root}})
+	if !l.project.Truncated() {
+		t.Error("a closure past the limit was not truncated")
+	}
+	if got := l.project.Bytes(); got != 0 {
+		t.Errorf("a closure known to overflow still loaded %d bytes", got)
+	}
+}
+
+func TestAShallowLinkIsNotJudgedByItsClosure(t *testing.T) {
+	t.Parallel()
+
+	third := int(nix.MaxProjectBytes()) / 3
+	tr, env := flakeDir(t, overflowingFiles(third, third, third, third, third))
+	root := filepath.Join(tr.dir, "root.nix")
+	l := linkProject(t.Context(), env, nix.Request{Roots: []string{root}, Shallow: true})
+	if l.project.Truncated() {
+		t.Error("a shallow link was truncated by files it never follows")
+	}
+	if got := l.project.Bytes(); got == 0 {
+		t.Error("a shallow link did not load its root")
+	}
+}
+
+func TestALinkOverTheLimitOnlyByItsLastFileStillLinks(t *testing.T) {
+	t.Parallel()
+
+	half := int(nix.MaxProjectBytes()) / 2
+	tr, env := flakeDir(t, overflowingFiles(half+half/2, half))
+	root := filepath.Join(tr.dir, "root.nix")
+	l := linkProject(t.Context(), env, nix.Request{Roots: []string{root}})
+	if got := l.project.Bytes(); got == 0 {
+		t.Errorf("a closure that may fit was refused without loading: truncated %v", l.project.Truncated())
 	}
 }

@@ -226,6 +226,7 @@ type PerShell struct {
 	tree    *parser.Tree
 	base    Options
 	changes []shellChange
+	shells  []Options
 }
 
 type shellChange struct {
@@ -249,25 +250,57 @@ func Scan(tree *parser.Tree) PerShell {
 			p.changes = append(p.changes, shellChange{command: c, shell: tree.ShellAt(c.Span.Start), changes: changes, dynamic: dynamic})
 		}
 	}
+	p.shells = p.perShell()
 	return p
 }
 
-func (p PerShell) At(offset int) Options {
-	opts := p.base
+func (p PerShell) perShell() []Options {
 	if len(p.changes) == 0 {
-		return opts
+		return nil
 	}
-	shell := p.tree.ShellAt(offset)
-	for _, c := range p.changes {
-		if !p.tree.Inherits(shell, c.shell) {
+	own := make([][]int, len(p.tree.Shells))
+	for i, c := range p.changes {
+		own[c.shell] = append(own[c.shell], i)
+	}
+	options := make([]Options, len(p.tree.Shells))
+	for i := range options {
+		shell := parser.ShellID(i)
+		if len(own[i]) == 0 && shell != parser.FileShell {
+			options[i] = options[p.tree.Shells[i].Parent]
 			continue
 		}
+		options[i] = p.applied(p.inherited(shell, own))
+	}
+	return options
+}
+
+func (p PerShell) inherited(shell parser.ShellID, own [][]int) []int {
+	seen := slices.Clone(own[shell])
+	for shell != parser.FileShell {
+		shell = p.tree.Shells[shell].Parent
+		seen = append(seen, own[shell]...)
+	}
+	slices.Sort(seen)
+	return seen
+}
+
+func (p PerShell) applied(changes []int) Options {
+	opts := p.base
+	for _, at := range changes {
+		c := p.changes[at]
 		opts.Dynamic = opts.Dynamic || c.dynamic
 		for _, change := range c.changes {
 			opts.apply(change)
 		}
 	}
 	return opts
+}
+
+func (p PerShell) At(offset int) Options {
+	if p.shells == nil {
+		return p.base
+	}
+	return p.shells[p.tree.ShellAt(offset)]
 }
 
 func (p PerShell) EnabledBy(name string, at int) []parser.Command {

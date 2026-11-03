@@ -234,3 +234,38 @@ func TestReleasingTheStashDropsWhatWasNeverLoaded(t *testing.T) {
 		t.Errorf("%d bytes stay held", w.stashed)
 	}
 }
+
+func TestAQuietWorkspaceIsNotWalkedAgain(t *testing.T) {
+	root := t.TempDir()
+	first := filepath.Join(root, "a.sh")
+	rewrite(t, first, "one() { :; }\n", time.Now())
+	w := newWatchedWorkspace(t)
+	w.SetRoots([]string{root})
+	listed, err := w.ShellFiles(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	walk := w.lastScan.Load()
+	listed[0] = "changed by a caller"
+	w.disk.Drain()
+	again, err := w.ShellFiles(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w.lastScan.Load() != walk {
+		t.Error("a quiet workspace was walked again")
+	}
+	if !slices.Equal(again, []string{first}) {
+		t.Errorf("second listing = %q, want %q", again, first)
+	}
+	second := filepath.Join(root, "b.sh")
+	rewrite(t, second, "two() { :; }\n", time.Now())
+	w.disk.Drain()
+	after, err := w.ShellFiles(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(after, []string{first, second}) {
+		t.Errorf("listing after a new file = %q", after)
+	}
+}
