@@ -4,14 +4,13 @@ Written by `just corpus-baseline` from the justfiles and Makefiles of the reposi
 [repos.txt](repos.txt); see [docs/corpus.md](../docs/corpus.md). Positions and codes only, one
 finding a line. CI fails when anything here changes.
 
-169 files checked, 461 findings.
+169 files checked, 453 findings.
 
 | Code | Findings |
 | --- | ---: |
 | SC1001 | 12 |
 | SC1007 | 1 |
-| SC1010 | 6 |
-| SC1083 | 2 |
+| SC1083 | 1 |
 | SC2004 | 1 |
 | SC2006 | 34 |
 | SC2009 | 6 |
@@ -19,31 +18,29 @@ finding a line. CI fails when anything here changes.
 | SC2015 | 6 |
 | SC2016 | 17 |
 | SC2028 | 3 |
-| SC2034 | 5 |
+| SC2034 | 6 |
 | SC2035 | 69 |
 | SC2038 | 11 |
 | SC2044 | 1 |
-| SC2046 | 15 |
+| SC2046 | 13 |
 | SC2059 | 5 |
 | SC2086 | 139 |
 | SC2091 | 1 |
 | SC2092 | 2 |
 | SC2094 | 8 |
-| SC2105 | 1 |
 | SC2115 | 1 |
 | SC2121 | 1 |
 | SC2128 | 1 |
 | SC2153 | 1 |
 | SC2162 | 2 |
-| SC2164 | 78 |
-| SC2166 | 2 |
+| SC2164 | 79 |
+| SC2166 | 5 |
+| SC2181 | 1 |
 | SC2196 | 1 |
 | SC2206 | 4 |
 | SC2251 | 1 |
 | SC2254 | 5 |
 | SC2268 | 2 |
-| SC2271 | 3 |
-| SC2288 | 1 |
 | SC2336 | 2 |
 | SC3003 | 4 |
 | SC3009 | 1 |
@@ -124,12 +121,10 @@ bluefin/Justfile:768:46 SC2086
 buildroot/package/pkg-generic.mk:180:33 SC2006
 buildroot/package/pkg-generic.mk:180:33 SC2046
 buildroot/package/pkg-generic.mk:180:43 SC2086
-buildroot/package/pkg-generic.mk:182:4 SC2105
 buildroot/package/pkg-generic.mk:321:8 SC2016
 buildroot/package/pkg-generic.mk:322:8 SC2016
 buildroot/package/pkg-generic.mk:327:12 SC2044
 ffmpeg/Makefile:119:11 SC2059
-ffmpeg/Makefile:179:2 SC2271
 git-make/gitweb/Makefile:108:17 SC2015
 just/justfile:86:3 SC2251
 just/justfile:87:11 SC2006
@@ -199,6 +194,7 @@ micropython/py/mkrules.mk:255:14 SC2046
 micropython/py/mkrules.mk:274:16 SC2015
 moby-make/Makefile:260:20 SC2035
 moby-make/Makefile:281:9 SC2115
+node/Makefile:424:5 SC2181
 node/Makefile:592:2 SC2009
 node/Makefile:593:10 SC2006
 node/Makefile:593:11 SC2009
@@ -211,12 +207,7 @@ node/Makefile:669:2 SC2009
 node/Makefile:670:10 SC2006
 node/Makefile:670:11 SC2009
 node/Makefile:672:8 SC2086
-node/Makefile:872:2 SC1010
 node/Makefile:892:5 SC2336
-node/Makefile:921:2 SC1010
-node/Makefile:936:2 SC1010
-node/Makefile:949:2 SC1010
-node/Makefile:966:2 SC1010
 node/Makefile:1156:39 SC2006
 node/Makefile:1156:39 SC2092
 node/Makefile:1157:8 SC2028
@@ -239,7 +230,6 @@ node/Makefile:1342:2 SC2038
 node/Makefile:1343:2 SC2038
 node/Makefile:1388:2 SC2038
 node/Makefile:1510:10 SC2016
-node/Makefile:1551:2 SC1010
 ord/justfile:24:12 SL2020
 ord/justfile:73:48 SC2086
 ord/justfile:74:24 SC2086
@@ -262,8 +252,6 @@ redis/src/Makefile:515:154 SC2035
 redis/src/Makefile:515:161 SC2035
 redis/src/Makefile:515:202 SC2035
 redis/src/Makefile:583:23 SC3009
-ruby/common.mk:432:2 SC2288
-ruby/common.mk:432:6 SC1083
 ruby/common.mk:690:27 SC2121
 ruby/common.mk:710:29 SC2015
 ruby/common.mk:712:29 SC2015
@@ -294,10 +282,13 @@ ruby/defs/gmake.mk:605:31 SC3003
 ruby/defs/gmake.mk:605:60 SC3003
 ruby/defs/gmake.mk:605:88 SC3003
 u-boot/Makefile:364:34 SC2086
+u-boot/Makefile:634:33 SC2166
+u-boot/Makefile:635:33 SC2166
 u-boot/Makefile:1604:11 SC2086
 u-boot/Makefile:1604:26 SC2086
 u-boot/Makefile:1636:20 SC2004
 u-boot/Makefile:1637:7 SC2086
+u-boot/Makefile:2273:33 SC2166
 u-boot/Makefile:2496:21 SC2006
 u-boot/Makefile:2496:21 SC2046
 u-boot/Makefile:2501:21 SC2006
@@ -306,10 +297,8 @@ u-boot/Makefile:2521:10 SC2006
 u-boot/Makefile:2613:3 SC2038
 u-boot/Makefile:2629:3 SC2038
 u-boot/Makefile:2662:10 SC2016
+u-boot/Makefile:2664:8 SC2164
 u-boot/Makefile:2665:67 SC2086
-u-boot/Makefile:2667:2 SC2271
-u-boot/Makefile:2667:11 SC2046
-u-boot/Makefile:2667:26 SC2046
 u-boot/Makefile:2667:68 SC2086
 u-boot/Makefile:2668:32 SC2086
 u-boot/Makefile:2669:11 SC2086
@@ -321,9 +310,9 @@ u-boot/Makefile:2677:13 SC2086
 u-boot/Makefile:2677:20 SC2086
 u-boot/Makefile:2680:7 SC2086
 u-boot/Makefile:2680:14 SC2086
-u-boot/Makefile:2682:2 SC2271
 u-boot/Makefile:2682:23 SC2162
 u-boot/Makefile:2682:54 SC2162
+u-boot/Makefile:2682:59 SC2034
 u-boot/Makefile:2700:4 SC2006
 u-boot/Makefile:2701:27 SC2006
 u-boot/Makefile:2701:27 SC2046

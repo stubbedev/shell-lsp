@@ -38,7 +38,11 @@ const patternUse = "; make fails when it uses this pattern rule"
 const (
 	whitespace       = " \t\f\v"
 	escapedSemicolon = `\;`
+	shellWordEnds    = " \t\n;&|<>()"
+	callFunction     = "call"
 )
+
+var commandOpeners = []string{"!", "[[", "{", "case", "for", "function", "if", "select", "until", "while"}
 
 type define struct {
 	assignment *Assignment
@@ -63,6 +67,7 @@ type reader struct {
 	targetShells    []*Assignment
 	bareExport      bool
 	exportAllTarget bool
+	terminated      map[string]bool
 }
 
 func Parse(text string) *File {
@@ -82,6 +87,7 @@ func Project(text string) (*projection.Map, dialect.Detection) {
 
 func project(f *File) (*projection.Map, dialect.Detection, map[*Rule]bool) {
 	p := f.settings()
+	p.terminated = f.terminatedMacros()
 	b := projection.NewBuilder(f.Text)
 	detection, analysed := p.dialect()
 	b.Shell(detection)
@@ -1193,16 +1199,88 @@ func (p *reader) recipeLine(l RecipeLine) projection.RecipeLine {
 }
 
 func (p *reader) content(b *projection.Builder, line Expr, from int) {
+	command := p.commandStart(line, from)
 	for _, n := range line.Nodes {
-		if n.Span.End <= from {
-			continue
-		}
-		if n.Kind != NodeText {
+		switch {
+		case n.Span.End <= from:
+		case n.Kind == NodeText:
+			p.verbatim(b, max(n.Span.Start, from), n.Span.End)
+		case n.Span.End <= command:
+			b.Opaque(n.Span.Start, n.Span.End, "")
+		default:
 			b.Placeholder(n.Span.Start, n.Span.End)
-			continue
+			if p.expandsToTerminated(n) {
+				b.Opaque(n.Span.End, n.Span.End, ";")
+			}
 		}
-		p.verbatim(b, max(n.Span.Start, from), n.Span.End)
 	}
+}
+
+func (p *reader) commandStart(line Expr, from int) int {
+	at := from
+	for i, n := range line.Nodes {
+		switch {
+		case n.Span.End <= from:
+		case n.Kind != NodeText:
+			if !p.expandsToFlags(n) {
+				return from
+			}
+			at = n.Span.End
+		case at > from && opensCommand(p.text[n.Span.Start:n.Span.End], i == len(line.Nodes)-1):
+			return at
+		default:
+			return from
+		}
+	}
+	return from
+}
+
+func (p *reader) expandsToFlags(n Node) bool {
+	value, known := p.constant(n)
+	return !known || strings.Trim(value, recipeFlags) == ""
+}
+
+func opensCommand(text string, endsLine bool) bool {
+	if text[0] == '(' {
+		return true
+	}
+	name := text[:scan.While(text, scan.NameChar)]
+	if rest := text[len(name):]; shellName(name) && (strings.HasPrefix(rest, "=") || strings.HasPrefix(rest, "+=")) {
+		return true
+	}
+	word := text[:scan.While(text, shellWordByte)]
+	return slices.Contains(commandOpeners, word) && (len(word) < len(text) || endsLine)
+}
+
+func shellWordByte(c byte) bool { return strings.IndexByte(shellWordEnds, c) < 0 }
+
+func (p *reader) expandsToTerminated(n Node) bool {
+	switch n.Kind {
+	case NodeReference:
+		name, ok := p.resolvedName(n.Name)
+		return ok && p.terminated[name]
+	case NodeCall:
+		function, ok := n.Name.Literal(p.text)
+		if !ok || function != callFunction {
+			return false
+		}
+		name, ok := p.resolvedName(n.Args[0])
+		return ok && p.terminated[strings.TrimSpace(name)]
+	case NodeText, NodeSubstitution:
+		return false
+	}
+	panic(fmt.Sprintf("makefile: node kind %d has no expansion", n.Kind))
+}
+
+func (f *File) terminatedMacros() map[string]bool {
+	terminated := make(map[string]bool, len(f.Assignments))
+	for _, a := range f.Assignments {
+		value := strings.TrimRight(f.Text[a.Value.Span.Start:a.Value.Span.End], whitespace+"\n")
+		ends := strings.HasSuffix(value, ";") && !strings.HasSuffix(value, escapedSemicolon)
+		earlier, seen := terminated[a.Name.Text]
+		terminated[a.Name.Text] = ends && (earlier || !seen)
+	}
+	return terminated
 }
 
 func (p *reader) verbatim(b *projection.Builder, start, end int) {

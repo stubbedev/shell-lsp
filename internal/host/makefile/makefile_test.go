@@ -97,6 +97,51 @@ func TestProjectText(t *testing.T) {
 			want:     "(\necho\n)\n",
 		},
 		{
+			name:     "a macro glued before a compound command is a prefix",
+			makefile: "x:\n\t$(Q)for f in a; do echo; done\n\t$(Q){ echo; }\n\t@$(Q)if a; then b; fi\n\t$(Q)(cd a)\n\t$(Q)$(M)while a; do b; done\n",
+			want:     "(\nfor f in a; do echo; done\n)\n(\n{ echo; }\n)\n(\nif a; then b; fi\n)\n(\n(cd a)\n)\n(\nwhile a; do b; done\n)\n",
+		},
+		{
+			name:     "a macro glued before an assignment is a prefix",
+			makefile: "x:\n\t$(Q)a=1 b=2; echo\n\t$(M)a=$(R) c\n\t$(Q)a+=1\n",
+			want:     "(\na=1 b=2; echo\n)\n(\na=$$ c\n)\n(\na+=1\n)\n",
+		},
+		{
+			name:     "a function expanding to a flag is a prefix",
+			makefile: "x:\n\t$(if $(V),,@)for f in a; do echo; done\n",
+			want:     "(\nfor f in a; do echo; done\n)\n",
+		},
+		{
+			name:     "a macro known to hold only flags is a prefix",
+			makefile: "Q := @\nE :=\nx:\n\t$(Q)x=1\n\t$(E)x=1\n",
+			want:     "(\nx=1\n)\n(\nx=1\n)\n",
+		},
+		{
+			name:     "a macro known to hold a word is glued to what follows",
+			makefile: "CMD := tool\nx:\n\t$(CMD)for a\n\t$(CMD)x=1\n",
+			want:     "(\n$$for a\n)\n(\n$$x=1\n)\n",
+		},
+		{
+			name:     "a macro before a plain command stays in the word",
+			makefile: "x:\n\t$(Q)echo hi\n\t$(CC)foo\n\t$(Q)format\n\t$(Q)$$x=1\n\t$(Q)1a=2\n\t$(Q)for$(X) a\n",
+			want:     "(\n$$echo hi\n)\n(\n$$foo\n)\n(\n$$format\n)\n(\n$$$x=1\n)\n(\n$$1a=2\n)\n(\n$$for$$ a\n)\n",
+		},
+		{
+			name:     "a macro that is the command stays the command",
+			makefile: "x:\n\t$(CC) -c x.c\n\t$(MAKE)\n\t$(MAKE) a=1\n\t$(Q) for\n\tcd a && $(Q)for\n",
+			want:     "(\n$$ -c x.c\n)\n(\n$$\n)\n(\n$$ a=1\n)\n(\n$$ for\n)\n(\ncd a && $$for\n)\n",
+		},
+		{
+			name:     "a macro that always ends in a semicolon ends its command",
+			makefile: "f = a; \\\n\tb;\ndefine g\na;\nendef\nx:\n\tif c; then $(call f,1) fi\n\tif c; then $(f) fi\n\tif c; then $(g) fi\n",
+			want:     "(\nif c; then $$; fi\n)\n(\nif c; then $$; fi\n)\n(\nif c; then $$; fi\n)\n",
+		},
+		{
+			name:     "a macro that may not end in a semicolon does not end its command",
+			makefile: "a = b\nc = find -exec x \\;\nifdef X\nd = e;\nelse\nd = e\nendif\nx:\n\tif f; then $(a) fi\n\tif f; then $(c) fi\n\tif f; then $(d) fi\n\tif f; then $(u) fi\n\tif f; then $(a:b=c;) fi\n\tif f; then $(strip $(a);) fi\n",
+			want:     "(\nif f; then $$ fi\n)\n(\nif f; then $$ fi\n)\n(\nif f; then $$ fi\n)\n(\nif f; then $$ fi\n)\n(\nif f; then $$ fi\n)\n(\nif f; then $$ fi\n)\n",
+		},
+		{
 			name:     "assignments are no rules",
 			makefile: "A := b\n\techo no\nB ::= c\nC ?= d\nD != echo e\n",
 			want:     "",
@@ -183,6 +228,24 @@ func TestProjectPositions(t *testing.T) {
 		if _, ok := m.Offset(projection.HostOffset(index(t, src, outside))); ok {
 			t.Errorf("Offset of %q reports a shell position", outside)
 		}
+	}
+}
+
+func TestProjectPositionsAfterAPrefixMacro(t *testing.T) {
+	t.Parallel()
+
+	src := "x:\n\t$(Q)for f in a; do :; done\n"
+	m, _ := Project(src)
+	proj := projection.ProjOffset(index(t, m.Text(), "for"))
+	host := projection.HostOffset(index(t, src, "for"))
+	if got := m.HostOffset(proj); got != host {
+		t.Errorf("HostOffset of for = %d, want %d", got, host)
+	}
+	if got, ok := m.Offset(host); got != proj || !ok {
+		t.Errorf("Offset of for = %d, %v, want %d, true", got, ok, proj)
+	}
+	if _, ok := m.Offset(projection.HostOffset(index(t, src, "$(Q)"))); ok {
+		t.Error("Offset of the prefix macro reports a shell position")
 	}
 }
 

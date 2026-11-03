@@ -104,6 +104,36 @@ func TestRecipesShareOnlyWhatTheirHostGivesThem(t *testing.T) {
 			want: []string{"SC2154:$shared"},
 		},
 		{
+			name: "make: break in a loop behind a prefix macro is in a loop",
+			file: makeFile,
+			src:  "a:\n\t$(Q)for p in $(P); do \\\n\t\techo \"$$p\"; \\\n\t\tbreak; \\\n\tdone\n",
+			want: []string{},
+		},
+		{
+			name: "make: a brace group behind a prefix macro is a group",
+			file: makeFile,
+			src:  "a:\n\t$(Q){ echo a; }\n",
+			want: []string{},
+		},
+		{
+			name: "make: an assignment behind a prefix macro is an assignment",
+			file: makeFile,
+			src:  "a:\n\t$(Q)base=1; echo \"$$base\"\n",
+			want: []string{},
+		},
+		{
+			name: "make: a keyword after a macro ending in a semicolon closes its block",
+			file: makeFile,
+			src:  "f = echo $(1);\na:\n\tif true; then \\\n\t\t$(call f,x) \\\n\tfi\n",
+			want: []string{},
+		},
+		{
+			name: "make: a keyword after a macro not ending in a semicolon stays a word",
+			file: makeFile,
+			src:  "f = echo $(1)\na:\n\tif true; then \\\n\t\t$(call f,x) \\\n\tfi\n",
+			want: []string{"SC1010:fi"},
+		},
+		{
 			name: "make: an exported variable reaches every rule",
 			file: makeFile,
 			src:  "export SHARED := x\na:\n\techo \"$$SHARED\"\nb:\n\techo \"$$SHARED\"\n",
