@@ -55,6 +55,7 @@ func Parse(text string) *File {
 	}
 	p.parseFile()
 	p.file.lexicalErrors()
+	p.file.sortItems()
 	return p.file
 }
 

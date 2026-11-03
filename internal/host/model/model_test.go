@@ -36,6 +36,34 @@ func codes(findings []lint.Finding) []string {
 	return out
 }
 
+func TestNamedInKeepsToItsScope(t *testing.T) {
+	t.Parallel()
+
+	ix := &Index{Symbols: []Symbol{
+		{Name: "arg", Kind: KindParameter, Scope: 2},
+		{Name: "arg", Kind: KindParameter, Scope: 1},
+		{Name: "arg", Kind: KindVariable, Scope: Global},
+		{Name: "arg", Kind: KindParameter, Scope: 2},
+		{Name: "other", Kind: KindParameter, Scope: 2},
+	}}
+	for _, tt := range []struct {
+		scope Scope
+		want  []int32
+	}{
+		{Global, []int32{2}},
+		{1, []int32{1}},
+		{2, []int32{0, 3}},
+		{3, nil},
+	} {
+		if got := ix.namedIn(NamespaceValues, "arg", tt.scope); !slices.Equal(got, tt.want) {
+			t.Errorf("scope %d: namedIn = %v, want %v", tt.scope, got, tt.want)
+		}
+	}
+	if got := ix.named(NamespaceValues, "arg"); len(got) != 4 {
+		t.Errorf("named = %v, want all four in every scope", got)
+	}
+}
+
 func TestResolveHidesLocalsBeyondTheHorizon(t *testing.T) {
 	t.Parallel()
 

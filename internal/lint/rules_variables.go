@@ -6,6 +6,7 @@ import (
 	"math"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/shelldocs"
@@ -638,6 +639,17 @@ func reportVariables(p *pass) {
 	p.reportUnassigned(f)
 }
 
+func (p *pass) runsUnseenCommand() bool {
+	found := false
+	parser.Walk(p.tree.File, func(n syntax.Node) bool {
+		if call, ok := n.(*syntax.CallExpr); ok && len(call.Args) == 1 && parser.SolePart(call.Args[0]) != nil {
+			found = found || p.tree.StandIn(parser.Offset(call.Args[0].Pos()))
+		}
+		return !found
+	})
+	return found
+}
+
 func (p *pass) reportUnused(f variableFacts) {
 	names := make([]string, 0, len(f.last))
 	for name := range f.last {
@@ -648,6 +660,9 @@ func (p *pass) reportUnused(f variableFacts) {
 	if len(names) > 0 {
 		reads := p.namesReadByValue()
 		names = slices.DeleteFunc(names, reads.reads)
+	}
+	if len(names) == 0 || p.runsUnseenCommand() {
+		return
 	}
 	slices.Sort(names)
 	for _, name := range names {
@@ -665,12 +680,13 @@ func (p *pass) reportUnassigned(f variableFacts) {
 		return cmp.Or(cmp.Compare(a.exit, b.exit), cmp.Compare(a.span.End, b.span.End), cmp.Compare(b.span.Start, a.span.Start))
 	})
 	seen := map[string]bool{}
+	unseenCommand := sync.OnceValue(p.runsUnseenCommand)
 	for _, r := range reads {
 		if seen[r.name] || f.assigned[r.name] || p.parameters.Has(r.name) || (r.array != "" && p.associativeArray(r.array)) {
 			continue
 		}
 		seen[r.name] = true
-		if r.guard {
+		if r.guard || unseenCommand() {
 			continue
 		}
 		p.reportUnassignedRead(r.variableSite, f)

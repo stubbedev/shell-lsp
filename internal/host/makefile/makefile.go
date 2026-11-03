@@ -57,6 +57,8 @@ type reader struct {
 	flags    string
 	posix    bool
 	evidence string
+
+	targetShells []*Assignment
 }
 
 func Parse(text string) *File {
@@ -112,8 +114,8 @@ func project(f *File) (*projection.Map, dialect.Detection, map[*Rule]bool) {
 }
 
 func (p *reader) ruleShell(r *Rule, global dialect.Detection, analysed bool) (dialect.Detection, bool) {
-	for _, a := range slices.Backward(p.file.Assignments) {
-		if a.Name.Text != "SHELL" || a.Op == "+=" || a.Op == "?=" || !slices.ContainsFunc(a.Targets, func(t Word) bool {
+	for _, a := range slices.Backward(p.targetShells) {
+		if !slices.ContainsFunc(a.Targets, func(t Word) bool {
 			return slices.ContainsFunc(r.Targets, func(target Word) bool { return target.Text == t.Text })
 		}) {
 			continue
@@ -133,6 +135,9 @@ func (f *File) settings() *reader {
 	for _, a := range f.Assignments {
 		if len(a.Targets) == 0 && !a.Define {
 			p.setting(a)
+		}
+		if len(a.Targets) > 0 && a.Name.Text == "SHELL" && a.Op != "+=" && a.Op != "?=" {
+			p.targetShells = append(p.targetShells, a)
 		}
 	}
 	for _, r := range f.Rules {

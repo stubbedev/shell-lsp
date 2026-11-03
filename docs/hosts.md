@@ -56,6 +56,10 @@ editor gives it, or else when its language identifier is `makefile` or
   (`# shellcheck disable=SC2086`), and applies to the next line.
 - A make expansion inside single quotes (`'$(VAR)'`) is still text the shell
   cannot know, not a literal `$`.
+- Shell checks read each recipe alone and reuse the report of a recipe that did
+  not change. Exported variables reach every recipe; what one recipe assigns or
+  defines does not reach another. A word that is only `$(macro)` may run
+  anything, so its recipe is not told a variable is unused or unassigned.
 
 ### justfiles
 
@@ -84,6 +88,11 @@ gives it, or else when its language identifier is `just`.
   and checked as its own shell, so a bashism in a plain recipe is reported
   even when another recipe is bash, and hover, completion and the dialect
   status follow the recipe under the cursor.
+- Shell checks read each recipe alone and reuse the report of a recipe that did
+  not change. Exported variables reach every recipe, and a `$` parameter its
+  own; what one recipe assigns or defines does not reach another. A word that
+  is only `{{expression}}` may run anything, so its recipe is not told a
+  variable is unused or unassigned.
 
 ### Dockerfiles
 

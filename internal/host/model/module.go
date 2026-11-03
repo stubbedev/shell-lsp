@@ -133,10 +133,8 @@ func (m *Module) AtHomes(homes []Home, name string) []Target {
 	for _, h := range homes {
 		ix := m.Files[h.File]
 		for _, ns := range linkedNamespaces {
-			for _, i := range ix.named(ns, name) {
-				if ix.Symbols[i].Scope == h.Scope {
-					out = append(out, Target{Module: m, File: h.File, Symbol: int(i)})
-				}
+			for _, i := range ix.namedIn(ns, name, h.Scope) {
+				out = append(out, Target{Module: m, File: h.File, Symbol: int(i)})
 			}
 		}
 	}
@@ -199,8 +197,8 @@ func (m *Module) Resolve(file int, ref Ref) Resolution {
 func (m *Module) lookup(file int, name string, ns Namespace, scope Scope, horizon int) []Target {
 	if file >= 0 && scope != Global {
 		var local []Target
-		for _, i := range m.Files[file].named(ns, name) {
-			if s := m.Files[file].Symbols[i]; s.Scope == scope && !s.Inert && (horizon == 0 || s.Span.End <= horizon) {
+		for _, i := range m.Files[file].namedIn(ns, name, scope) {
+			if s := &m.Files[file].Symbols[i]; !s.Inert && (horizon == 0 || s.Span.End <= horizon) {
 				local = append(local, Target{Module: m, File: file, Symbol: int(i)})
 			}
 		}
@@ -213,10 +211,8 @@ func (m *Module) lookup(file int, name string, ns Namespace, scope Scope, horizo
 	}
 	var out []Target
 	for f, ix := range m.Files {
-		for _, i := range ix.named(ns, name) {
-			if ix.Symbols[i].Scope == Global {
-				out = append(out, Target{Module: m, File: f, Symbol: int(i)})
-			}
+		for _, i := range ix.namedIn(ns, name, Global) {
+			out = append(out, Target{Module: m, File: f, Symbol: int(i)})
 		}
 	}
 	return out
@@ -234,8 +230,8 @@ func (m *Module) inherited(file int, name string, ns Namespace, scope Scope) []T
 		}
 		seen[parent] = true
 		var found []Target
-		for _, i := range ix.named(ns, name) {
-			if s := ix.Symbols[i]; s.Scope == parent && !s.Local && !s.Inert {
+		for _, i := range ix.namedIn(ns, name, parent) {
+			if s := &ix.Symbols[i]; !s.Local && !s.Inert {
 				found = append(found, Target{Module: m, File: file, Symbol: int(i)})
 			}
 		}

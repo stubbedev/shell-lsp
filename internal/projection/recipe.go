@@ -15,13 +15,14 @@ type RecipeLine struct {
 func (l RecipeLine) Empty() bool { return l.Command == l.End }
 
 type LineShells struct {
+	unit      int
 	b         *Builder
 	prelude   string
 	commented bool
 }
 
 func (b *Builder) LineShells(prelude string) *LineShells {
-	return &LineShells{b: b, prelude: prelude}
+	return &LineShells{b: b, prelude: prelude, unit: b.NewUnit()}
 }
 
 func (s *LineShells) Add(l RecipeLine, body func(RecipeLine)) {
@@ -29,7 +30,7 @@ func (s *LineShells) Add(l RecipeLine, body func(RecipeLine)) {
 		return
 	}
 	if !s.commented {
-		s.b.Script()
+		s.b.UnitScript(s.unit)
 	}
 	s.commented = l.Comment
 	s.b.Opaque(l.Start, l.Command, "")
@@ -44,7 +45,7 @@ func (s *LineShells) Add(l RecipeLine, body func(RecipeLine)) {
 }
 
 func (b *Builder) OneShell(prelude string, lines []RecipeLine, body func(RecipeLine)) {
-	b.Script()
+	b.UnitScript(b.NewUnit())
 	wrapped := slices.ContainsFunc(lines, func(l RecipeLine) bool { return !l.Empty() && !l.Comment })
 	for i, l := range lines {
 		b.Opaque(l.Start, l.Command, "")

@@ -81,8 +81,8 @@ func largeDockerfile(steps int) string {
 
 var keystrokeSources = []keystrokeSource{
 	{name: "shell", file: "big.sh", language: "shellscript", text: func() string { return perf.LargeScript(5000) }, line: 2, maxBytes: 13 << 20, maxObjects: 150_000},
-	{name: "justfile", file: "justfile", language: "just", text: func() string { return largeJustfile(1200) }, line: 4, maxBytes: 38 << 20, maxObjects: 240_000},
-	{name: "makefile", file: "Makefile", language: "makefile", text: func() string { return largeMakefile(1500) }, line: 1, maxBytes: 42 << 20, maxObjects: 270_000},
+	{name: "justfile", file: "justfile", language: "just", text: func() string { return largeJustfile(1200) }, line: 4, maxBytes: 32 << 20, maxObjects: 165_000},
+	{name: "makefile", file: "Makefile", language: "makefile", text: func() string { return largeMakefile(1500) }, line: 1, maxBytes: 40 << 20, maxObjects: 220_000},
 	{name: "dockerfile", file: "Dockerfile", language: "dockerfile", text: func() string { return largeDockerfile(1000) }, line: 1, maxBytes: 18 << 20, maxObjects: 160_000},
 	{name: "nix", file: "big.nix", language: "nix", text: func() string { return largeNixFile(5000) }, line: 2, maxBytes: 62 << 20, maxObjects: 230_000},
 	{name: "nix-shell", file: "scripts.nix", language: "nix", text: func() string { return largeShellHeavyNix(700) }, line: 2, maxBytes: 16 << 20, maxObjects: 50_000},

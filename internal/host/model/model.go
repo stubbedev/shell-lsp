@@ -381,7 +381,7 @@ type Index struct {
 	foldsOf  func() []Fold
 	lookups  sync.Once
 	byName   []int32
-	nameRuns []int32
+	nameRuns []nameRun
 	byOwner  []int32
 	byParent []int32
 }
@@ -394,6 +394,8 @@ func (ix *Index) AllFolds() []Fold {
 	}
 	return ix.Folds
 }
+
+type nameRun struct{ first, end int32 }
 
 type Branches []Span
 
@@ -428,7 +430,7 @@ func (ix *Index) tables() {
 		}
 		slices.SortFunc(ix.byName, func(a, b int32) int {
 			x, y := &ix.Symbols[a], &ix.Symbols[b]
-			return cmp.Or(cmp.Compare(x.Kind.Namespace(), y.Kind.Namespace()), strings.Compare(x.Name, y.Name), cmp.Compare(a, b))
+			return cmp.Or(cmp.Compare(x.Kind.Namespace(), y.Kind.Namespace()), strings.Compare(x.Name, y.Name), cmp.Compare(x.Scope, y.Scope), cmp.Compare(a, b))
 		})
 		slices.SortFunc(ix.byParent, func(a, b int32) int {
 			return cmp.Or(cmp.Compare(ix.Symbols[a].Parent, ix.Symbols[b].Parent), cmp.Compare(a, b))
@@ -475,19 +477,21 @@ func (ix *Index) buildNameRuns() {
 	for size < 2*len(ix.byName) {
 		size *= 2
 	}
-	ix.nameRuns = make([]int32, size)
+	ix.nameRuns = make([]nameRun, size)
 	mask := uint64(size - 1) //nolint:gosec // size is a positive power of two
-	for at, item := range ix.byName {
-		s := &ix.Symbols[item]
+	for first := 0; first < len(ix.byName); {
+		s := &ix.Symbols[ix.byName[first]]
 		ns := s.Kind.Namespace()
-		if at > 0 && ix.sameName(ix.byName[at-1], ns, s.Name) {
-			continue
+		end := first + 1
+		for end < len(ix.byName) && ix.sameName(ix.byName[end], ns, s.Name) {
+			end++
 		}
 		slot := nameHash(ns, s.Name) & mask
-		for ix.nameRuns[slot] != 0 {
+		for ix.nameRuns[slot].end != 0 {
 			slot = (slot + 1) & mask
 		}
-		ix.nameRuns[slot] = Narrow(at) + 1
+		ix.nameRuns[slot] = nameRun{first: Narrow(first), end: Narrow(end)}
+		first = end
 	}
 }
 
@@ -497,26 +501,23 @@ func (ix *Index) named(ns Namespace, name string) []int32 {
 		return nil
 	}
 	mask := uint64(len(ix.nameRuns) - 1) //nolint:gosec // the table is never empty here
-	for slot := nameHash(ns, name) & mask; ix.nameRuns[slot] != 0; slot = (slot + 1) & mask {
-		first := int(ix.nameRuns[slot]) - 1
-		if !ix.sameName(ix.byName[first], ns, name) {
-			continue
+	for slot := nameHash(ns, name) & mask; ix.nameRuns[slot].end != 0; slot = (slot + 1) & mask {
+		run := ix.nameRuns[slot]
+		if ix.sameName(ix.byName[run.first], ns, name) {
+			return ix.byName[run.first:run.end]
 		}
-		last := first + 1
-		for last < len(ix.byName) && ix.sameName(ix.byName[last], ns, name) {
-			last++
-		}
-		return ix.byName[first:last]
 	}
 	return nil
 }
 
+func (ix *Index) namedIn(ns Namespace, name string, scope Scope) []int32 {
+	return equalRun(ix.named(ns, name), func(item int32) int { return cmp.Compare(ix.Symbols[item].Scope, scope) })
+}
+
 func (ix *Index) Binds(scope Scope, name string) bool {
 	for _, ns := range linkedNamespaces {
-		for _, i := range ix.named(ns, name) {
-			if ix.Symbols[i].Scope == scope {
-				return true
-			}
+		if len(ix.namedIn(ns, name, scope)) > 0 {
+			return true
 		}
 	}
 	return false

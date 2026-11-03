@@ -319,37 +319,31 @@ type File struct {
 	Stray    []Attribute
 	Comments []Comment
 	Errors   []Error
+
+	recipes     []*Recipe
+	settings    []*Setting
+	assignments []*Assignment
 }
 
-func (f *File) Recipes() []*Recipe {
-	var out []*Recipe
+func (f *File) sortItems() {
 	for _, it := range f.Items {
-		if it.Kind == ItemRecipe {
-			out = append(out, it.Recipe)
+		switch it.Kind {
+		case ItemRecipe:
+			f.recipes = append(f.recipes, it.Recipe)
+		case ItemSetting:
+			f.settings = append(f.settings, it.Setting)
+		case ItemAssignment:
+			f.assignments = append(f.assignments, it.Assignment)
+		case ItemUnexport, ItemAlias, ItemImport, ItemModule, ItemFunction:
 		}
 	}
-	return out
 }
 
-func (f *File) Settings() []*Setting {
-	var out []*Setting
-	for _, it := range f.Items {
-		if it.Kind == ItemSetting {
-			out = append(out, it.Setting)
-		}
-	}
-	return out
-}
+func (f *File) Recipes() []*Recipe { return f.recipes }
 
-func (f *File) Assignments() []*Assignment {
-	var out []*Assignment
-	for _, it := range f.Items {
-		if it.Kind == ItemAssignment {
-			out = append(out, it.Assignment)
-		}
-	}
-	return out
-}
+func (f *File) Settings() []*Setting { return f.settings }
+
+func (f *File) Assignments() []*Assignment { return f.assignments }
 
 func Walk(e *Expr, visit func(*Expr)) {
 	if e == nil {
