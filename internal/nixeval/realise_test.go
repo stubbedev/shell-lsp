@@ -275,9 +275,9 @@ func TestDeclarationOnDiskReportsThePresentFile(t *testing.T) {
 func TestOwnerNamesTheInputPathOfAFile(t *testing.T) {
 	t.Parallel()
 
-	tree := sourceTree{Path: "/s/root", Inputs: map[string]sourceTree{
-		"a": {Path: "/s/a", Inputs: map[string]sourceTree{"c": {Path: "/s/c"}}},
-		"b": {Path: "/s/ab"},
+	tree := sourceTree{Path: filepath.FromSlash("/s/root"), Inputs: map[string]sourceTree{
+		"a": {Path: filepath.FromSlash("/s/a"), Inputs: map[string]sourceTree{"c": {Path: filepath.FromSlash("/s/c")}}},
+		"b": {Path: filepath.FromSlash("/s/ab")},
 		"r": {Inputs: map[string]sourceTree{}},
 	}}
 	tests := []struct {
@@ -293,7 +293,7 @@ func TestOwnerNamesTheInputPathOfAFile(t *testing.T) {
 		{"", nil, false},
 	}
 	for _, tt := range tests {
-		got, found := tree.owner(tt.file)
+		got, found := tree.owner(filepath.FromSlash(tt.file))
 		if found != tt.found || !slices.Equal(got, tt.want) {
 			t.Errorf("owner(%q) = %q, %v, want %q, %v", tt.file, got, found, tt.want, tt.found)
 		}
