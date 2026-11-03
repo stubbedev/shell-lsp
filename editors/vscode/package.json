@@ -330,5 +330,8 @@
     "ovsx": "1.2.0",
     "typescript": "6.0.3",
     "typescript-eslint": "8.71.1"
+  },
+  "overrides": {
+    "minimatch": "11.0.1"
   }
 }
