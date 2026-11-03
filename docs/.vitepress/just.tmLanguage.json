@@ -1,0 +1,70 @@
+{
+  "name": "just",
+  "scopeName": "source.just",
+  "embeddedLangs": ["shellscript"],
+  "patterns": [
+    { "include": "#comment" },
+    { "include": "#attribute" },
+    { "include": "#keyword" },
+    { "include": "#assignment" },
+    { "include": "#recipe-header" },
+    { "include": "#recipe-body" }
+  ],
+  "repository": {
+    "comment": {
+      "match": "^\\s*#(?!!).*$",
+      "name": "comment.line.number-sign.just"
+    },
+    "attribute": {
+      "match": "^\\[[^\\]]*\\]",
+      "name": "entity.other.attribute-name.just"
+    },
+    "keyword": {
+      "match": "^(set|alias|import|mod|export)\\b",
+      "name": "keyword.control.just"
+    },
+    "assignment": {
+      "begin": "^([A-Za-z_][\\w-]*)\\s*(:=)",
+      "end": "$",
+      "beginCaptures": {
+        "1": { "name": "variable.other.just" },
+        "2": { "name": "keyword.operator.assignment.just" }
+      },
+      "patterns": [{ "include": "#string" }, { "include": "#comment-tail" }, { "include": "#expression" }]
+    },
+    "recipe-header": {
+      "begin": "^([@_]*[A-Za-z_][\\w-]*)(?=[^:=\\n]*:(?!=))",
+      "end": "$",
+      "beginCaptures": { "1": { "name": "entity.name.function.just" } },
+      "patterns": [{ "include": "#string" }, { "include": "#comment-tail" }, { "include": "#expression" }]
+    },
+    "recipe-body": {
+      "begin": "^(?=[ \\t]+\\S)",
+      "end": "$",
+      "patterns": [{ "include": "#interpolation" }, { "include": "source.shell" }]
+    },
+    "interpolation": {
+      "begin": "\\{\\{(?!\\{)",
+      "end": "\\}\\}",
+      "name": "meta.interpolation.just",
+      "beginCaptures": { "0": { "name": "punctuation.definition.template-expression.just" } },
+      "endCaptures": { "0": { "name": "punctuation.definition.template-expression.just" } },
+      "patterns": [{ "include": "#string" }, { "include": "#expression" }]
+    },
+    "string": {
+      "match": "\"(?:[^\"\\\\]|\\\\.)*\"|'[^']*'",
+      "name": "string.quoted.just"
+    },
+    "comment-tail": {
+      "match": "#.*$",
+      "name": "comment.line.number-sign.just"
+    },
+    "expression": {
+      "patterns": [
+        { "match": "\\b(if|else)\\b", "name": "keyword.control.just" },
+        { "match": "\\b[A-Za-z_][\\w-]*(?=\\()", "name": "support.function.just" },
+        { "match": "\\b[A-Za-z_][\\w-]*\\b", "name": "variable.other.just" }
+      ]
+    }
+  }
+}

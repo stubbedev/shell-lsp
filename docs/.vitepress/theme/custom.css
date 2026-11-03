@@ -1,0 +1,177 @@
+:root {
+  --vp-c-brand-1: #0b7363;
+  --vp-c-brand-2: #0d8a77;
+  --vp-c-brand-3: #0b7363;
+  --vp-c-brand-soft: rgba(13, 138, 119, 0.12);
+  --vp-c-bg-alt: #f6f8f9;
+  --vp-c-bg-soft: #f4f6f8;
+  --vp-c-divider: #e3e7ec;
+  --vp-c-gutter: #e3e7ec;
+
+  --vp-button-brand-text: #ffffff;
+  --vp-button-brand-hover-text: #ffffff;
+  --vp-button-brand-active-text: #ffffff;
+  --vp-button-brand-bg: var(--vp-c-brand-1);
+  --vp-button-brand-hover-bg: var(--vp-c-brand-2);
+  --vp-button-brand-active-bg: var(--vp-c-brand-1);
+
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(100deg, #0b7363 10%, #2f9a78 55%, #b98a2f 100%);
+
+  --sl-glow: radial-gradient(closest-side, rgba(13, 138, 119, 0.22), transparent);
+  --sl-frame-border: rgba(28, 35, 51, 0.16);
+  --sl-frame-shadow: 0 24px 60px -24px rgba(28, 35, 51, 0.4);
+}
+
+.dark {
+  --vp-c-brand-1: #4fd1b5;
+  --vp-c-brand-2: #79e0ca;
+  --vp-c-brand-3: #4fd1b5;
+  --vp-c-brand-soft: rgba(79, 209, 181, 0.13);
+  --vp-c-bg: #0f131a;
+  --vp-c-bg-alt: #0b0e13;
+  --vp-c-bg-elv: #171c25;
+  --vp-c-bg-soft: #151a22;
+  --vp-c-divider: #252c38;
+  --vp-c-gutter: #07090d;
+  --vp-c-text-1: #e6eaf0;
+  --vp-c-text-2: #a3adba;
+  --vp-c-text-3: #717b89;
+  --vp-code-block-bg: #12171f;
+  --vp-code-copy-code-bg: #1c232e;
+  --vp-nav-bg-color: #0f131a;
+  --vp-sidebar-bg-color: #0b0e13;
+
+  --vp-button-brand-text: #06201b;
+  --vp-button-brand-hover-text: #06201b;
+  --vp-button-brand-active-text: #06201b;
+  --vp-button-brand-border: transparent;
+  --vp-button-alt-bg: #1c232e;
+  --vp-button-alt-hover-bg: #252d3a;
+  --vp-button-alt-active-bg: #1c232e;
+
+  --vp-home-hero-name-background: linear-gradient(100deg, #4fd1b5 15%, #8fdcae 60%, #e8c37e 100%);
+
+  --sl-glow: radial-gradient(closest-side, rgba(79, 209, 181, 0.26), transparent);
+  --sl-frame-border: #2a3240;
+  --sl-frame-shadow: 0 30px 80px -30px rgba(0, 0, 0, 0.85);
+}
+
+.VPHome {
+  overflow-x: clip;
+}
+
+.VPHome .VPHero {
+  padding-top: calc(var(--vp-nav-height) + 56px) !important;
+  padding-bottom: 48px !important;
+}
+
+.VPHome .VPHero .main {
+  max-width: 820px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.VPHome .VPHero .heading {
+  justify-content: center;
+}
+
+.VPHome .VPHero .name {
+  font-family: var(--vp-font-family-mono);
+  font-size: clamp(44px, 9vw, 84px);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.045em;
+  max-width: none;
+  margin: 0 auto;
+}
+
+.VPHome .VPHero .tagline {
+  max-width: none;
+  margin: 18px auto 0;
+  font-size: clamp(18px, 2.3vw, 24px);
+  font-weight: 450;
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+.VPHome .VPHero .actions {
+  justify-content: center;
+  padding-top: 32px;
+}
+
+.VPHome .VPFeatures .item .VPFeature {
+  border-color: var(--vp-c-divider);
+  border-radius: 14px;
+  transition: border-color 0.2s, background-color 0.2s;
+}
+
+.VPHome .VPFeatures .item .VPFeature.link:hover {
+  border-color: var(--vp-c-brand-1);
+}
+
+.VPHome .VPFeature .icon {
+  width: fit-content;
+  min-width: 44px;
+  height: 40px;
+  padding: 0 10px;
+  font-family: var(--vp-font-family-mono);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--vp-c-brand-1);
+  background: var(--vp-c-brand-soft);
+  border-radius: 10px;
+}
+
+.VPHome .VPFeature .title {
+  font-size: 17px;
+}
+
+.VPHome .VPFeature .link-text-value {
+  color: var(--vp-c-brand-1);
+}
+
+.VPFooter a {
+  color: var(--vp-c-text-1);
+}
+
+.VPFooter.has-sidebar {
+  display: block !important;
+}
+
+@media (min-width: 960px) {
+  .VPFooter.has-sidebar {
+    padding-left: calc(var(--vp-sidebar-width) + 32px);
+  }
+}
+
+@media (min-width: 1440px) {
+  .VPFooter.has-sidebar {
+    padding-left: calc((100vw - var(--vp-layout-max-width)) / 2 + var(--vp-sidebar-width) + 32px);
+  }
+}
+
+.vp-doc details {
+  padding: 4px 16px;
+  margin: 16px 0;
+  background: var(--vp-c-bg-soft);
+  border-radius: 8px;
+}
+
+.vp-doc summary {
+  padding: 8px 0;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.vp-doc img {
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 8px;
+}
+
+.vp-doc p > a > img {
+  display: inline;
+  border: 0;
+  border-radius: 0;
+}
