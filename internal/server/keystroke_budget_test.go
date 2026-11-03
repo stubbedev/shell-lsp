@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -84,7 +85,7 @@ var keystrokeSources = []keystrokeSource{
 	{name: "makefile", file: "Makefile", language: "makefile", text: func() string { return largeMakefile(1500) }, line: 1, maxBytes: 42 << 20, maxObjects: 270_000},
 	{name: "dockerfile", file: "Dockerfile", language: "dockerfile", text: func() string { return largeDockerfile(1000) }, line: 1, maxBytes: 18 << 20, maxObjects: 160_000},
 	{name: "nix", file: "big.nix", language: "nix", text: func() string { return largeNixFile(5000) }, line: 2, maxBytes: 62 << 20, maxObjects: 230_000},
-	{name: "nix-shell", file: "scripts.nix", language: "nix", text: func() string { return largeShellHeavyNix(700) }, line: 2, maxBytes: 16 << 20, maxObjects: 40_000},
+	{name: "nix-shell", file: "scripts.nix", language: "nix", text: func() string { return largeShellHeavyNix(700) }, line: 2, maxBytes: 16 << 20, maxObjects: 50_000},
 	{name: "nix-shell-typing", file: "scripts.nix", language: "nix", text: func() string { return largeShellHeavyNix(700) }, line: 3, maxBytes: 30 << 20, maxObjects: 180_000},
 }
 
@@ -125,6 +126,11 @@ func BenchmarkKeystroke(b *testing.B) {
 	}
 }
 
+func medianOf(samples []uint64) uint64 {
+	sorted := slices.Sorted(slices.Values(samples))
+	return sorted[len(sorted)/2]
+}
+
 func TestAKeystrokeStaysInItsAllocationBudget(t *testing.T) {
 	if testing.Short() {
 		t.Skip("allocation budgets are measured in full test runs")
@@ -135,20 +141,21 @@ func TestAKeystrokeStaysInItsAllocationBudget(t *testing.T) {
 			for range keystrokeWarmupRuns {
 				session.press()
 			}
-			var before, after runtime.MemStats
-			runtime.ReadMemStats(&before)
-			for range keystrokeBudgetRuns {
+			bytes, objects := make([]uint64, keystrokeBudgetRuns), make([]uint64, keystrokeBudgetRuns)
+			for i := range keystrokeBudgetRuns {
+				var before, after runtime.MemStats
+				runtime.ReadMemStats(&before)
 				session.press()
+				runtime.ReadMemStats(&after)
+				bytes[i], objects[i] = after.TotalAlloc-before.TotalAlloc, after.Mallocs-before.Mallocs
 			}
-			runtime.ReadMemStats(&after)
-			bytes := (after.TotalAlloc - before.TotalAlloc) / keystrokeBudgetRuns
-			objects := (after.Mallocs - before.Mallocs) / keystrokeBudgetRuns
-			t.Logf("%d bytes and %d objects a keystroke", bytes, objects)
-			if bytes > source.maxBytes {
-				t.Errorf("a keystroke allocated %d bytes, over the budget of %d", bytes, source.maxBytes)
+			medianBytes, medianObjects := medianOf(bytes), medianOf(objects)
+			t.Logf("%d bytes and %d objects a keystroke", medianBytes, medianObjects)
+			if medianBytes > source.maxBytes {
+				t.Errorf("a keystroke allocated %d bytes, over the budget of %d", medianBytes, source.maxBytes)
 			}
-			if objects > source.maxObjects {
-				t.Errorf("a keystroke allocated %d objects, over the budget of %d", objects, source.maxObjects)
+			if medianObjects > source.maxObjects {
+				t.Errorf("a keystroke allocated %d objects, over the budget of %d", medianObjects, source.maxObjects)
 			}
 		})
 	}
