@@ -435,6 +435,7 @@ func (g *Group) commandTarget(file *workspace.File, r region, cmd shellCommand) 
 			sym = Symbol{Name: label, Kind: model.KindFunction}
 		}
 		sym.Span = cmd.span
+		sym.hole = cmd.hole
 		if cmd.name != "" {
 			sym.doc = fmt.Sprintf("Runs the command `%s` of `%s`.", cmd.name, label)
 		}

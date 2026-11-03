@@ -325,7 +325,13 @@ func (s *Server) nativeDefinition(ctx context.Context, docs *docstore.View, here
 	if err != nil || !hit.found {
 		return nil, err != nil, err
 	}
-	return hostLocations(hit.group.ShellDefinition(hit.symbol), here.encoding), true, nil
+	locations := hostLocations(hit.group.ShellDefinition(hit.symbol), here.encoding)
+	if head, holed := hit.symbol.HoleHead(); holed && len(locations) == 0 {
+		outside := here
+		outside.source, outside.inside = head.Start, false
+		return s.nativeDefinition(ctx, docs, outside)
+	}
+	return locations, true, nil
 }
 
 func (s *Server) nativeTypeDefinition(ctx context.Context, docs *docstore.View, here nativeHere) ([]lsp.Location, error) {

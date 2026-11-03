@@ -71,6 +71,7 @@ type Symbol struct {
 	lexical *lexicalName
 	binding *Symbol
 	phased  bool
+	hole    *model.Hole
 
 	embedded *embeddedSymbol
 }
@@ -85,6 +86,13 @@ func (s Symbol) Defined() bool {
 }
 
 func (s Symbol) AcrossPhases() bool { return s.phased }
+
+func (s Symbol) HoleHead() (parser.Span, bool) {
+	if s.hole == nil {
+		return parser.Span{}, false
+	}
+	return s.hole.Head, true
+}
 
 func (s Symbol) Exported() bool {
 	return slices.ContainsFunc(s.targets, func(t model.Target) bool {

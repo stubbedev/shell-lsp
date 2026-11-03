@@ -18,7 +18,7 @@ var checkoutFiles = map[string]string{
 	"pkgs/top-level/all-packages.nix":   "{ lib }:\nres: pkgs: super:\nwith pkgs;\n{\n  zlib = callPackage ../tools/zlib { };\n}\n",
 	"pkgs/tools/zlib/default.nix":       "{ stdenv }:\nstdenv.mkDerivation { meta.description = \"Compresses.\"; }\n",
 	"pkgs/by-name/he/hello/package.nix": "{ stdenv }:\nstdenv.mkDerivation { meta.description = \"Says hello.\"; }\n",
-	"pkgs/by-name/us/user/package.nix":  "{ lib, pkgs }:\n{\n  a = lib.id;\n  b = pkgs.hello;\n  c = pkgs.zlib;\n  d = with lib.licenses; [ mi ];\n  e = lib.licenses.as;\n  f = pkgs.absent;\n  g = { inherit (lib) id; };\n  h = { inherit (lib.licenses) mi; };\n}\n",
+	"pkgs/by-name/us/user/package.nix":  "{ lib, pkgs }:\n{\n  a = lib.id;\n  b = pkgs.hello;\n  c = pkgs.zlib;\n  d = with lib.licenses; [ mi ];\n  e = lib.licenses.as;\n  f = pkgs.absent;\n  g = { inherit (lib) id; };\n  h = { inherit (lib.licenses) mi; };\n  i = pkgs.writeShellScript \"i\" ''\n    ${pkgs.hello}/bin/hello\n    ${pkgs.absent}/bin/absent\n  '';\n}\n",
 }
 
 const checkoutUser = "pkgs/by-name/us/user/package.nix"
@@ -49,6 +49,16 @@ func TestANixpkgsCheckoutAnswersFromItsOwnSources(t *testing.T) {
 	}
 	if got := checkoutDefinition(t, p, "absent;"); len(got) != 0 {
 		t.Errorf("definition of a package that is not there = %q", got)
+	}
+	want := []string{p.uri(filepath.FromSlash("pkgs/by-name/he/hello/package.nix"))}
+	if got := checkoutDefinition(t, p, "hello}/bin"); !slices.Equal(got, want) {
+		t.Errorf("definition of the package in the antiquotation = %q, want %q", got, want)
+	}
+	if got := checkoutDefinition(t, p, "bin/hello"); !slices.Equal(got, want) {
+		t.Errorf("definition of the program next to the antiquotation = %q, want %q", got, want)
+	}
+	if got := checkoutDefinition(t, p, "bin/absent"); len(got) != 0 {
+		t.Errorf("definition of a program of a package that is not there = %q", got)
 	}
 	hover := decodeResult[lsp.Hover](t, p.c.call("textDocument/hover", p.params(checkoutUser, "hello;", 0, "")))
 	if !strings.Contains(hover.Contents.Value, "Says hello.") {
