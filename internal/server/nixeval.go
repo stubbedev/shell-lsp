@@ -375,7 +375,7 @@ func (s *Server) openNixSession() (*nixSession, error) {
 	e := &s.nixEval
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if !e.armed || e.stopped || e.failed {
+	if !e.armed || e.stopped || e.failed || !s.nixEvaluationWanted() {
 		return e.session, nil
 	}
 	if e.session != nil {

@@ -494,6 +494,27 @@ func TestNixEvaluationStopsWhenTurnedOff(t *testing.T) {
 	}
 }
 
+func TestANixSessionIsNotReopenedOnceEvaluationIsOff(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeEvaluator()
+	p := openNixEvalProject(t, true, fake, map[string]string{"flake.nix": emptyFlake})
+	params := p.open(t, "web.nix", "{ services.| }")
+	p.labels(t, params)
+	p.c.notify("workspace/didChangeConfiguration", `{"settings": {"shellLsp": {"nix": {"evaluate": false}}}}`)
+	deadline := time.Now().Add(10 * time.Second)
+	for p.srv.nixEvaluationWanted() {
+		if time.Now().After(deadline) {
+			t.Fatal("evaluation still wanted after being turned off")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	p.labels(t, params)
+	if session := p.srv.nixSession(); session != nil {
+		t.Error("a warm-up that runs after turning evaluation off opened a session")
+	}
+}
+
 func TestNixRecipeListingCarriesTheFlakeOutputs(t *testing.T) {
 	t.Parallel()
 
