@@ -20,3 +20,23 @@ func TestForVisitsEachIndexOnce(t *testing.T) {
 		}
 	}
 }
+
+func TestBudgetNeverHoldsMoreThanItsCapacity(t *testing.T) {
+	t.Parallel()
+
+	const capacity = 10
+	budget := NewBudget(capacity)
+	var held, highest atomic.Int64
+	For(16, 400, func(i int) {
+		amount := min(int64(i%15+1), capacity)
+		release := budget.Hold(int64(i%15 + 1))
+		now := held.Add(amount)
+		for seen := highest.Load(); now > seen && !highest.CompareAndSwap(seen, now); seen = highest.Load() {
+		}
+		held.Add(-amount)
+		release()
+	})
+	if got := highest.Load(); got > capacity {
+		t.Errorf("%d held at once, capacity %d", got, capacity)
+	}
+}

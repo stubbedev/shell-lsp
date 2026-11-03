@@ -214,6 +214,15 @@ func (b *symbolTable) fresh(parent *attrs, kind model.Kind) *attrs {
 }
 
 func (b *symbolTable) build() {
+	b.collect()
+	b.settleChains()
+	b.sinks = b.f.sinks()
+	b.candidates = b.wrapperCandidates()
+	b.reads, b.calls = nil, nil
+	b.publish()
+}
+
+func (b *symbolTable) collect() {
 	b.ix.Refs = slices.Grow(b.ix.Refs, b.f.tree.Slots)
 	b.ix.Symbols = slices.Grow(b.ix.Symbols, b.f.tree.Binders)
 	b.owners = slices.Grow(b.owners, b.f.tree.Binders)
@@ -226,11 +235,6 @@ func (b *symbolTable) build() {
 	b.link()
 	b.flakeFollows()
 	b.pathIncludes()
-	b.settleChains()
-	b.sinks = b.f.sinks()
-	b.candidates = b.wrapperCandidates()
-	b.reads, b.calls = nil, nil
-	b.publish()
 }
 
 func (b *symbolTable) compact() {

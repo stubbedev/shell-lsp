@@ -15,6 +15,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/diagnostics"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/filelint"
+	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/hadolint"
 	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/host/nix"
@@ -250,6 +251,10 @@ func (s *Server) handleWorkspaceDiagnostic(ctx context.Context, docs *docstore.V
 	if err != nil {
 		return nil, err
 	}
+	s.projects.Retain(func(path string) bool {
+		_, open := docs.Document(fileuri.FromPath(path))
+		return open
+	})
 	s.noticeScanCut("Workspace diagnostics")
 	s.noticeIndexLimit("Workspace diagnostics", maxWorkspaceDiagnostics, visited, total)
 	slices.SortFunc(items, func(a, b lsp.WorkspaceDocumentDiagnosticReport) int { return strings.Compare(a.URI, b.URI) })

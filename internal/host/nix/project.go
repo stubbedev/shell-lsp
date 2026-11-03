@@ -239,6 +239,8 @@ func (p *Project) Fresh(source Source) bool {
 
 func MaxProjectBytes() int64 { return maxProjectBytes }
 
+func (p *Project) Bytes() int64 { return int64(p.bytes) }
+
 func (p *Project) Truncated() bool { return p.truncated }
 
 func (p *Project) observe() {

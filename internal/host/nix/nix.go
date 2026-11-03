@@ -77,7 +77,7 @@ func (p *Parsed) Text() string { return p.src }
 
 func (p *Parsed) Includes() []model.Include {
 	ix := &model.Index{}
-	newSymbolTable(&file{src: p.src, tree: p.tree, table: p.table}, ix).build()
+	newSymbolTable(&file{src: p.src, tree: p.tree, table: p.table}, ix).collect()
 	return ix.Includes
 }
 

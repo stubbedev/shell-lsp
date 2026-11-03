@@ -17,7 +17,6 @@ import (
 )
 
 const (
-	indexBatchFiles         = 256
 	maxIndexedSymbols       = 200_000
 	maxWorkspaceDiagnostics = 100_000
 	maxListedRecipes        = 10_000
@@ -68,21 +67,28 @@ func (s *Server) eachDiskFile(ctx context.Context, wanted func(path string) bool
 		return 0, 0, err
 	}
 	defer progress.end("done")
+	visited, err := s.eachFile(ctx, paths, visit, func(visited int) {
+		progress.report(fmt.Sprintf("%d/%d files", visited, len(paths)), visited*100/max(len(paths), 1))
+	})
+	return visited, len(paths), err
+}
+
+func (s *Server) eachFile(ctx context.Context, paths []string, visit func(*workspace.File) bool, batched func(visited int)) (int, error) {
 	visited := 0
-	for batch := range slices.Chunk(paths, indexBatchFiles) {
+	for batch := range s.workspace.Batches(paths) {
 		files, err := s.workspace.LoadAll(ctx, batch, interactive.workers(), func(int, int) {})
 		if err != nil {
-			return visited, len(paths), err
+			return visited, err
 		}
 		for _, file := range files {
 			visited++
 			if !visit(file) {
-				return visited, len(paths), nil
+				return visited, nil
 			}
 		}
-		progress.report(fmt.Sprintf("%d/%d files", visited, len(paths)), visited*100/max(len(paths), 1))
+		batched(visited)
 	}
-	return visited, len(paths), nil
+	return visited, nil
 }
 
 func (s *Server) noticeScanCut(what string) {

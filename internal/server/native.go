@@ -79,7 +79,10 @@ func (s *Server) hostEnv(docs *docstore.View, language host.Language) hostnav.En
 }
 
 func (s *Server) hostFiles(docs *docstore.View, language host.Language) navigation.WorkspaceFiles {
-	all := s.candidateFiles(docs)
+	all := s.candidates(docs, func(path string) bool {
+		named, known := host.FromName(path)
+		return !known || named != language
+	})
 	return func(ctx context.Context) ([]*workspace.File, error) {
 		files, err := all(ctx)
 		return slices.DeleteFunc(files, func(f *workspace.File) bool { return f.Native == nil || f.Native.Language != language }), err

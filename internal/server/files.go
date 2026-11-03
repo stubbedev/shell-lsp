@@ -147,13 +147,13 @@ func (s *Server) handleWillRenameFiles(ctx context.Context, docs *docstore.View,
 		}
 		return path, false
 	}
-	candidates, err := s.candidateFiles(docs)(ctx)
+	paths, err := s.candidatePaths(ctx, docs, func(string) bool { return false })
 	if err != nil {
 		return nil, err
 	}
 	env := s.navigationEnv()
 	var files []fileEdits
-	for _, file := range candidates {
+	_, err = s.eachFile(ctx, paths, func(file *workspace.File) bool {
 		edits := sourceRewrites(file, env, moved)
 		if newPath, ok := moved(file.Path); ok && !file.Doc.Projected() {
 			if edit, ok := shebangRewrite(file.Tree, file.Path, newPath); ok {
@@ -164,6 +164,10 @@ func (s *Server) handleWillRenameFiles(ctx context.Context, docs *docstore.View,
 			_, open := docs.Document(file.URI)
 			files = append(files, fileEdits{doc: file.Doc, versioned: open, edits: edits})
 		}
+		return true
+	}, func(int) {})
+	if err != nil {
+		return nil, err
 	}
 	if len(files) == 0 {
 		return nil, nil

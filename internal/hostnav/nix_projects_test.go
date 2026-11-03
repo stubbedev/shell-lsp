@@ -4,6 +4,7 @@ import (
 	"context"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -230,5 +231,44 @@ func TestAnAnswerThatDidNotWaitForTheLinkIsMarked(t *testing.T) {
 	case <-called:
 	default:
 		t.Error("nothing was told that an answer did not wait for the link")
+	}
+}
+
+func TestLinkedProjectsAreBoundedByTheirBytes(t *testing.T) {
+	t.Parallel()
+
+	large := "# " + strings.Repeat("x", 7<<19) + "\n{ }\n"
+	tr, env := flakeDir(t, map[string]string{"a.nix": "[ ./a1.nix ./a2.nix ]\n", "a1.nix": large, "a2.nix": large, "b.nix": "[ ./b1.nix ./b2.nix ]\n", "b1.nix": large, "b2.nix": large, "c.nix": "[ ./c1.nix ./c2.nix ]\n", "c1.nix": large, "c2.nix": large})
+	for _, name := range []string{"a.nix", "b.nix", "c.nix"} {
+		linked(t, tr.host(t, name), env)
+	}
+	env.Projects.mu.Lock()
+	defer env.Projects.mu.Unlock()
+	if got, limit := env.Projects.linkedBytes(), linkedProjectsOfBytes*nix.MaxProjectBytes(); got > limit {
+		t.Errorf("%d bytes of projects stay linked, the budget is %d", got, limit)
+	}
+	if len(env.Projects.linked) != 2 {
+		t.Errorf("%d projects stay linked, want the two newest that fit", len(env.Projects.linked))
+	}
+	if env.Projects.byPath[filepath.Join(tr.dir, "c.nix")] == nil {
+		t.Error("the newest project was evicted")
+	}
+}
+
+func TestRetainDropsProjectsOnlyClosedFilesReached(t *testing.T) {
+	t.Parallel()
+
+	tr, env := flakeDir(t, map[string]string{"a.nix": "{ }\n", "b.nix": "{ }\n"})
+	linked(t, tr.host(t, "a.nix"), env)
+	linked(t, tr.host(t, "b.nix"), env)
+	open := filepath.Join(tr.dir, "a.nix")
+	env.Projects.Retain(func(path string) bool { return path == open })
+	env.Projects.mu.Lock()
+	defer env.Projects.mu.Unlock()
+	if len(env.Projects.byPath) != 1 || env.Projects.byPath[open] == nil {
+		t.Errorf("after retaining one file, %d files keep a project", len(env.Projects.byPath))
+	}
+	if len(env.Projects.linked) != 1 {
+		t.Errorf("after retaining one file, %d projects are held", len(env.Projects.linked))
 	}
 }

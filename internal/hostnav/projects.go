@@ -16,9 +16,10 @@ import (
 )
 
 const (
-	maxLinkedProjects = 8
-	stillLinking      = "the rest of the project is still being linked"
-	tooLarge          = "the project is too large to follow every file, so not every reader is known"
+	maxLinkedProjects     = 8
+	linkedProjectsOfBytes = 2
+	stillLinking          = "the rest of the project is still being linked"
+	tooLarge              = "the project is too large to follow every file, so not every reader is known"
 )
 
 type Stamp struct {
@@ -117,6 +118,21 @@ func (p *Projects) Forget(path string) {
 		close(job.done)
 		delete(p.jobs, path)
 	}
+	p.dropUnreferenced()
+}
+
+func (p *Projects) Retain(open func(path string) bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for path := range p.byPath {
+		if !open(path) {
+			delete(p.byPath, path)
+		}
+	}
+	p.dropUnreferenced()
+}
+
+func (p *Projects) dropUnreferenced() {
 	referenced := make(map[*linkedProject]bool, len(p.byPath))
 	for _, l := range p.byPath {
 		referenced[l] = true
@@ -257,8 +273,16 @@ func (p *Projects) run() {
 	}
 }
 
+func (p *Projects) linkedBytes() int64 {
+	var total int64
+	for _, l := range p.linked {
+		total += l.project.Bytes()
+	}
+	return total
+}
+
 func (p *Projects) evict() {
-	for len(p.linked) > maxLinkedProjects {
+	for len(p.linked) > maxLinkedProjects || len(p.linked) > 1 && p.linkedBytes() > linkedProjectsOfBytes*nix.MaxProjectBytes() {
 		var oldest *linkedProject
 		for _, l := range p.linked {
 			if oldest == nil || l.used < oldest.used || l.used == oldest.used && l.key < oldest.key {

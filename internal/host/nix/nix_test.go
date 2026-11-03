@@ -347,3 +347,22 @@ func FuzzAnalyze(f *testing.F) {
 		}
 	})
 }
+
+func TestIncludesMatchTheFullAnalysis(t *testing.T) {
+	t.Parallel()
+
+	for _, src := range []string{
+		"{ imports = [ ./a.nix ./dir ]; x = import ./b.nix; y = ./data.txt; z = ./c.nix; }\n",
+		"let p = ./d; in import p\n",
+		"{ pkgs }: pkgs.callPackage ./e { }\n",
+		"let import = x: x; in import ./f\n",
+	} {
+		got := Parse(src).Includes()
+		want := Analyze(src).Index.Includes
+		if !slices.EqualFunc(got, want, func(a, b model.Include) bool {
+			return a.Span == b.Span && a.Path == b.Path && a.Probe == b.Probe && slices.Equal(a.Candidates, b.Candidates)
+		}) {
+			t.Errorf("%q: includes = %+v, want %+v", src, got, want)
+		}
+	}
+}

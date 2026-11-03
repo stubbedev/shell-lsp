@@ -162,24 +162,28 @@ func (s *Server) shellCandidates(docs *docstore.View) navigation.WorkspaceFiles 
 	return s.candidates(docs, nixPath)
 }
 
-func (s *Server) candidateFiles(docs *docstore.View) navigation.WorkspaceFiles {
-	return s.candidates(docs, func(string) bool { return false })
+func (s *Server) candidatePaths(ctx context.Context, docs *docstore.View, skipped func(path string) bool) ([]string, error) {
+	paths, err := s.workspace.ShellFiles(ctx)
+	if err != nil {
+		return nil, err
+	}
+	paths = slices.DeleteFunc(paths, skipped)
+	for _, doc := range docs.Documents() {
+		if doc.Local {
+			paths = append(paths, doc.Path)
+		}
+	}
+	slices.Sort(paths)
+	return slices.Compact(paths), nil
 }
 
 func (s *Server) candidates(docs *docstore.View, skipped func(path string) bool) navigation.WorkspaceFiles {
 	return func(ctx context.Context) ([]*workspace.File, error) {
-		paths, err := s.workspace.ShellFiles(ctx)
+		paths, err := s.candidatePaths(ctx, docs, skipped)
 		if err != nil {
 			return nil, err
 		}
-		paths = slices.DeleteFunc(paths, skipped)
-		for _, doc := range docs.Documents() {
-			if doc.Local {
-				paths = append(paths, doc.Path)
-			}
-		}
-		slices.Sort(paths)
-		return s.workspace.LoadAll(ctx, slices.Compact(paths), interactive.workers(), func(int, int) {})
+		return s.workspace.LoadAll(ctx, paths, interactive.workers(), func(int, int) {})
 	}
 }
 

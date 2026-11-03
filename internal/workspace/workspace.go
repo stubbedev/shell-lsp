@@ -187,6 +187,8 @@ type Workspace struct {
 	read       func(string, fs.FileInfo, int64) ([]byte, fs.FileInfo, error)
 	stash      map[string]stashedNix
 	stashed    int
+	parsing    *parallel.Budget
+	outgrown   bool
 	repos      map[string]repoEntry
 	generation atomic.Uint64
 	watched    atomic.Bool
@@ -208,7 +210,7 @@ func (w *Workspace) UseRead(read func(string, fs.FileInfo, int64) ([]byte, fs.Fi
 func (w *Workspace) ReleaseStash() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	w.stash, w.stashed = nil, 0
+	w.stash, w.stashed, w.outgrown = nil, 0, false
 }
 
 func isShellName(path string) bool {
@@ -262,7 +264,12 @@ type stashedNix struct {
 	parsed  *nix.Parsed
 }
 
-const maxStashedBytes = 16 << 20
+const (
+	maxStashedBytes = 2 << 20
+	maxBatchFiles   = 256
+	maxBatchBytes   = 2 << 20
+	maxParsingBytes = 2 << 20
+)
 
 type includesEntry struct {
 	size     int64
@@ -276,7 +283,7 @@ func Detect(_ string, in dialect.Input) dialect.Detection {
 }
 
 func New(overlay Overlay, resolve func(path string, in dialect.Input) dialect.Detection) *Workspace {
-	return &Workspace{overlay: overlay, resolve: resolve, now: time.Now, stat: regularfile.Stat, read: regularfile.ReadStat, files: map[string]diskEntry{}, dirs: map[string]dirListing{}, ignores: map[string]ignoreRules{}, missing: map[string]missingEntry{}, includes: map[string]includesEntry{}, repos: map[string]repoEntry{}}
+	return &Workspace{overlay: overlay, resolve: resolve, now: time.Now, stat: regularfile.Stat, read: regularfile.ReadStat, parsing: parallel.NewBudget(maxParsingBytes), files: map[string]diskEntry{}, dirs: map[string]dirListing{}, ignores: map[string]ignoreRules{}, missing: map[string]missingEntry{}, includes: map[string]includesEntry{}, repos: map[string]repoEntry{}}
 }
 
 func (w *Workspace) SetRoots(roots []string) {
@@ -373,6 +380,7 @@ func (w *Workspace) NixIncludes(path string) ([]model.Include, int64, error) {
 		w.mu.Unlock()
 		return cached.includes, cached.size, nil
 	}
+	defer w.parsing.Hold(info.Size())()
 	raw, info, err := w.read(path, info, maxFileSize)
 	if err != nil {
 		return nil, 0, fmt.Errorf("reading the imports of %s: %w", path, err)
@@ -394,7 +402,11 @@ func (w *Workspace) NixIncludes(path string) ([]model.Include, int64, error) {
 func (w *Workspace) keepParsed(key string, info fs.FileInfo, text string, parsed *nix.Parsed) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if w.outgrown {
+		return
+	}
 	if w.stashed+len(text) > maxStashedBytes {
+		w.stash, w.stashed, w.outgrown = nil, 0, true
 		return
 	}
 	if w.stash == nil {
@@ -619,6 +631,29 @@ func (w *Workspace) LoadAll(ctx context.Context, paths []string, workers int, re
 		return nil, err
 	}
 	return slices.DeleteFunc(loaded, func(f *File) bool { return f == nil }), nil
+}
+
+func (w *Workspace) Batches(paths []string) iter.Seq[[]string] {
+	return func(yield func([]string) bool) {
+		start := 0
+		var bytes int64
+		for i, path := range paths {
+			var size int64
+			if info, err := w.stat(path); err == nil {
+				size = info.Size()
+			}
+			if i > start && (i-start == maxBatchFiles || bytes+size > maxBatchBytes) {
+				if !yield(paths[start:i]) {
+					return
+				}
+				start, bytes = i, 0
+			}
+			bytes += size
+		}
+		if start < len(paths) {
+			yield(paths[start:])
+		}
+	}
 }
 
 type dirListing struct {
