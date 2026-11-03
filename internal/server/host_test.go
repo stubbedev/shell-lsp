@@ -313,6 +313,21 @@ func TestUnquotedExportedValuesAreSplit(t *testing.T) {
 		{"exported variable", "file:///w/justfile", "just", "export target := 'a'\nrun:\n    cp $target /tmp\n", []string{"SC2086"}},
 		{"exported parameter in a shebang recipe", "file:///w/justfile", "just", "run $target:\n    #!/bin/sh\n    cp $target /tmp\n", []string{"SC2086"}},
 		{"parameter the shell never sees", "file:///w/justfile", "just", "run target:\n    cp $target /tmp\n", []string{"SC2086", "SC2154", "SL5013"}},
+		{"make: export with a value", "file:///w/Makefile", "makefile", "export token := a b\nall:\n\tcp $$token /tmp\n", []string{"SC2086"}},
+		{"make: quoted", "file:///w/Makefile", "makefile", "export token := a b\nall:\n\tcp \"$$token\" /tmp\n", nil},
+		{"make: export of a name assigned nowhere", "file:///w/Makefile", "makefile", "export token\nall:\n\tcp $$token /tmp\n", []string{"SC2086"}},
+		{"make: assignment then export", "file:///w/Makefile", "makefile", "token := a\nexport token\nall:\n\tcp $$token /tmp\n", []string{"SC2086"}},
+		{"make: export then assignment", "file:///w/Makefile", "makefile", "export token\ntoken := a\nall:\n\tcp $$token /tmp\n", []string{"SC2086"}},
+		{"make: export define", "file:///w/Makefile", "makefile", "export define token\na b\nendef\nall:\n\tcp $$token /tmp\n", []string{"SC2086"}},
+		{"make: .EXPORT_ALL_VARIABLES", "file:///w/Makefile", "makefile", ".EXPORT_ALL_VARIABLES:\ntoken := a\nall:\n\tcp $$token /tmp\n", []string{"SC2086"}},
+		{"make: bare export", "file:///w/Makefile", "makefile", "export\ntoken := a\nall:\n\tcp $$token /tmp\n", []string{"SC2086"}},
+		{"make: target-specific export", "file:///w/Makefile", "makefile", "all: export token := a\nall:\n\tcp $$token /tmp\n", []string{"SC2086"}},
+		{"make: unexport after export", "file:///w/Makefile", "makefile", "export token := a\nunexport token\nall:\n\tcp $$token /tmp\n", []string{"SC2086", "SC2154"}},
+		{"make: export after unexport", "file:///w/Makefile", "makefile", "unexport token\nexport token := a\nall:\n\tcp $$token /tmp\n", []string{"SC2086"}},
+		{"make: unexport under .EXPORT_ALL_VARIABLES", "file:///w/Makefile", "makefile", ".EXPORT_ALL_VARIABLES:\ntoken := a\nunexport token\nall:\n\tcp $$token /tmp\n", []string{"SC2086", "SC2154"}},
+		{"make: bare unexport undoes bare export", "file:///w/Makefile", "makefile", "export\nunexport\ntoken := a\nall:\n\tcp $$token /tmp\n", []string{"SC2086", "SC2154", "SL6014"}},
+		{"make: bare unexport leaves .EXPORT_ALL_VARIABLES", "file:///w/Makefile", "makefile", ".EXPORT_ALL_VARIABLES:\nunexport\ntoken := a\nall:\n\tcp $$token /tmp\n", []string{"SC2086"}},
+		{"make: not exported", "file:///w/Makefile", "makefile", "token := a\nall:\n\tcp $$token /tmp\n", []string{"SC2086", "SC2154", "SL6014"}},
 	} {
 		c, _ := startClient(t, `{`+pullCapabilities+`}`)
 		c.notify("textDocument/didOpen", openLanguageParams(tt.uri, tt.language, tt.text))

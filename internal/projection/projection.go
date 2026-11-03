@@ -143,7 +143,10 @@ type Builder struct {
 	earlier      *Map
 }
 
-const Dynamic = "$$"
+const (
+	Dynamic      = "$$"
+	UnknownValue = "$_"
+)
 
 func NewBuilder(host string) *Builder {
 	return &Builder{host: host}

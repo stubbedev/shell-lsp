@@ -18,14 +18,16 @@ const (
 	oneShell      = ".ONESHELL"
 	posixTarget   = ".POSIX"
 	exportAll     = ".EXPORT_ALL_VARIABLES"
+	exportWord    = "export"
+	unexportWord  = "unexport"
 	defaultFlags  = "-c"
 	posixFlags    = "-ec"
 )
 
 var (
 	conditionals = []string{"ifeq", "ifneq", "ifdef", "ifndef", "else", "endif"}
-	modifiers    = []string{"export", "override", "private"}
-	directives   = []string{"include", "-include", "sinclude", "vpath", "undefine", "unexport", "export", "load", "-load"}
+	modifiers    = []string{exportWord, "override", "private"}
+	directives   = []string{"include", "-include", "sinclude", "vpath", "undefine", unexportWord, exportWord, "load", "-load"}
 	assignOps    = []string{":::=", "::=", ":=", "+=", "?=", "!=", "="}
 	recursiveOps = []string{"=", "?=", ""}
 	simpleOps    = []string{"=", ":=", "::=", ":::="}
@@ -58,7 +60,9 @@ type reader struct {
 	posix    bool
 	evidence string
 
-	targetShells []*Assignment
+	targetShells    []*Assignment
+	bareExport      bool
+	exportAllTarget bool
 }
 
 func Parse(text string) *File {
@@ -67,6 +71,7 @@ func Parse(text string) *File {
 		p.fail(ErrSyntax, Span{Start: nul, End: nul + 1}, "make reads lines as C strings: a NUL byte drops the rest of its line and joins the next one onto it")
 	}
 	p.parse()
+	p.file.ExportAll = p.bareExport || p.exportAllTarget
 	return p.file
 }
 
@@ -750,16 +755,16 @@ func (p *reader) plainDirective(at int, s, word string, mods []Word) {
 		}
 		p.file.Includes = append(p.file.Includes, inc)
 		return
-	case "export", "unexport":
+	case exportWord, unexportWord:
 		if i, rule := operator(rest); i >= 0 && !rule {
 			p.assign(rest, i, argsAt, append(mods, d.Keyword), nil)
 			return
 		}
-		if word == "export" && rest == "" {
-			p.file.ExportAll = true
+		if rest == "" {
+			p.bareExport = word == exportWord
 		}
 	}
-	if word == "export" || word == "unexport" || word == "undefine" {
+	if word == exportWord || word == unexportWord || word == "undefine" {
 		d.Names = p.fields(argsAt, rest)
 	} else {
 		d.Args = p.expr(argsAt, at+len(s))
@@ -898,7 +903,7 @@ func (p *reader) parseRule(s string, colon, at, end int) {
 	p.rule = rule
 	for _, t := range targets {
 		if t.Text == exportAll {
-			p.file.ExportAll = true
+			p.exportAllTarget = true
 		}
 	}
 }
@@ -929,7 +934,7 @@ func spacedName(s string, i int) bool {
 	return topLevel(name, 0, " \t") < len(name)
 }
 
-func exports(m Word) bool { return m.Text == "export" || m.Text == "unexport" }
+func exports(m Word) bool { return m.Text == exportWord || m.Text == unexportWord }
 
 func skipContinued(s string) string {
 	for {
@@ -1135,7 +1140,7 @@ func (p *reader) prelude(f *File) string {
 	var sb strings.Builder
 	sb.WriteString(p.shellOptions())
 	for _, name := range f.exported() {
-		sb.WriteString(name + "=" + projection.Dynamic + "\n")
+		sb.WriteString(name + "=" + projection.UnknownValue + "\n")
 	}
 	return sb.String()
 }

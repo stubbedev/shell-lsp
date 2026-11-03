@@ -373,8 +373,9 @@ func TestMakefileNavigationAcrossIncludes(t *testing.T) {
 			t.Errorf("definition of %s = %+v, want %+v", tt.sub, got, tt.want)
 		}
 	}
-	if items := pullDiagnostics(t, p.c, p.uri("Makefile")); len(items) != 0 {
-		t.Errorf("diagnostics = %+v", items)
+	token := p.at("Makefile", "$$TOKEN", 0)
+	if items := pullDiagnostics(t, p.c, p.uri("Makefile")); len(items) != 1 || items[0].Code != "SC2086" || items[0].Range != token.Range {
+		t.Errorf("diagnostics = %+v, want only SC2086 on $$TOKEN at %+v", items, token.Range)
 	}
 	hover := decodeResult[*lsp.Hover](t, p.c.call("textDocument/hover", p.params("Makefile", "MAKE", 0, "")))
 	if hover == nil || !strings.Contains(hover.Contents.Value, "recursive make") {

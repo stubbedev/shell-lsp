@@ -1,6 +1,7 @@
 package makefile
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strings"
@@ -47,7 +48,7 @@ type indexer struct {
 	f            *File
 	ix           *model.Index
 	scopes       map[string]model.Scope
-	exported     map[string]bool
+	exports      exportState
 	dynamic      bool
 	arguments    []int
 	called       map[string]bool
@@ -56,36 +57,65 @@ type indexer struct {
 	usedPatterns map[*Rule]bool
 }
 
-func (f *File) exported() []string {
-	var names []string
-	marked := f.exportedNames()
+type exportState struct {
+	all   bool
+	marks map[string]bool
+}
+
+type exportMark struct {
+	at   int
+	name string
+	on   bool
+}
+
+func (f *File) exportState() exportState {
+	var order []exportMark
 	for _, a := range f.Assignments {
-		if (f.ExportAll || marked[a.Name.Text]) && shellName(a.Name.Text) {
+		if k := slices.IndexFunc(a.Modifiers, exports); k >= 0 && len(a.Targets) == 0 {
+			order = append(order, exportMark{at: a.Span.Start, name: a.Name.Text, on: a.Modifiers[k].Text == exportWord})
+		}
+	}
+	for _, d := range f.Directives {
+		if !exports(d.Keyword) {
+			continue
+		}
+		for _, n := range d.Names {
+			order = append(order, exportMark{at: d.Span.Start, name: n.Text, on: d.Keyword.Text == exportWord})
+		}
+	}
+	slices.SortStableFunc(order, func(a, b exportMark) int { return cmp.Compare(a.at, b.at) })
+	marks := make(map[string]bool, len(order))
+	for _, m := range order {
+		marks[m.name] = m.on
+	}
+	return exportState{all: f.ExportAll, marks: marks}
+}
+
+func (x exportState) covers(a *Assignment) bool {
+	if len(a.Targets) > 0 && slices.ContainsFunc(a.Modifiers, func(w Word) bool { return w.Text == exportWord }) {
+		return true
+	}
+	if on, marked := x.marks[a.Name.Text]; marked {
+		return on
+	}
+	return x.all
+}
+
+func (f *File) exported() []string {
+	state := f.exportState()
+	names := make([]string, 0, len(state.marks))
+	for name, on := range state.marks {
+		if on && shellName(name) {
+			names = append(names, name)
+		}
+	}
+	for _, a := range f.Assignments {
+		if state.covers(a) && shellName(a.Name.Text) {
 			names = append(names, a.Name.Text)
 		}
 	}
 	slices.Sort(names)
 	return slices.Compact(names)
-}
-
-func (f *File) exportedNames() map[string]bool {
-	out := map[string]bool{}
-	for _, a := range f.Assignments {
-		if slices.ContainsFunc(a.Modifiers, func(w Word) bool { return w.Text == "export" }) {
-			out[a.Name.Text] = true
-		}
-	}
-	for _, d := range f.Directives {
-		for _, n := range d.Names {
-			switch d.Keyword.Text {
-			case "export":
-				out[n.Text] = true
-			case "unexport":
-				delete(out, n.Text)
-			}
-		}
-	}
-	return out
 }
 
 func shellName(name string) bool {
@@ -104,12 +134,12 @@ func detail(s string) string {
 }
 
 func (f *File) Index(shells map[*Rule]bool) *model.Index {
-	ix := &model.Index{ExportAll: f.ExportAll, Broken: slices.ContainsFunc(f.Errors, func(e Error) bool {
+	ix := &model.Index{Broken: slices.ContainsFunc(f.Errors, func(e Error) bool {
 		return e.Kind != ErrUnterminated && e.Kind != ErrDeferredUnterminated && e.Kind != ErrPatternUnterminated && e.Kind != ErrPatternMismatch
 	})}
 	ix.Branches = f.alternatives()
 	ix.Inherits = map[model.Scope][]model.Scope{}
-	in := &indexer{overridden: f.overridden(), usedPatterns: f.usedPatterns(), f: f, ix: ix, scopes: map[string]model.Scope{}, exported: f.exportedNames(), called: map[string]bool{}}
+	in := &indexer{overridden: f.overridden(), usedPatterns: f.usedPatterns(), f: f, ix: ix, scopes: map[string]model.Scope{}, exports: f.exportState(), called: map[string]bool{}}
 	for _, a := range f.Assignments {
 		in.assignment(a)
 	}
@@ -318,7 +348,7 @@ func (in *indexer) assignment(a *Assignment) {
 		in.token(a.End, semantic.TypeKeyword, 0)
 		in.ix.Folds = append(in.ix.Folds, model.Fold{Span: a.Span})
 	}
-	exported := in.exported[a.Name.Text] || in.f.ExportAll
+	exported := in.exports.covers(a)
 	header := in.text(Span{Start: a.Name.Span.Start, End: a.Value.Span.End})
 	if a.Define {
 		header = "define " + a.Name.Text + " " + a.Op

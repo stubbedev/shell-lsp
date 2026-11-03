@@ -57,9 +57,11 @@ editor gives it, or else when its language identifier is `makefile` or
 - A make expansion inside single quotes (`'$(VAR)'`) is still text the shell
   cannot know, not a literal `$`.
 - Shell checks read each recipe alone and reuse the report of a recipe that did
-  not change. Exported variables reach every recipe; what one recipe assigns or
-  defines does not reach another. A word that is only `$(macro)` may run
-  anything, so its recipe is not told a variable is unused or unassigned.
+  not change. Exported variables reach every recipe with a value it cannot
+  know, so an unquoted `$$NAME` of one gets SC2086 and reading it is not reading
+  an unset variable; what one recipe assigns or defines does not reach another.
+  A word that is only `$(macro)` may run anything, so its recipe is not told a
+  variable is unused or unassigned.
 
 ### justfiles
 
@@ -78,8 +80,9 @@ gives it, or else when its language identifier is `just`.
   only a script recipe takes a fix that needs a new line, indented like the
   recipe.
 - Exported variables (`export name := ...`, `set export`) and `$`
-  parameters are set when a recipe runs, so reading them is not reading an
-  unset variable.
+  parameters are set when a recipe runs, to a value that can hold spaces, so
+  reading them is not reading an unset variable and leaving them unquoted is
+  SC2086.
 - A recipe's shell is the one its shebang names, else the one its
   `[script(...)]` attribute or `set script-interpreter` names for a script
   recipe, else the one `set shell` names, else `sh`. Recipes run by something
