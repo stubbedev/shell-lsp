@@ -285,6 +285,21 @@ func TestMakefileSemanticTokensCoverMakeAndShell(t *testing.T) {
 	}
 }
 
+func TestSemanticTokensReadEveryDialectOfAHostFile(t *testing.T) {
+	t.Parallel()
+
+	const uri = "file:///w/justfile"
+	const text = "plain:\n    echo one\n\nzshy:\n    #!/usr/bin/env zsh\n    print two\n\npy:\n    #!/usr/bin/env dash\n    pwd three\n"
+	c, _ := startClient(t, `{"capabilities": {"general": {"positionEncodings": ["utf-16"]}}}`)
+	c.notify("textDocument/didOpen", openLanguageParams(uri, "just", text))
+	tokens := texts(spellTokens(t, text, "utf-16", decodeResult[lsp.SemanticTokens](t, c.call("textDocument/semanticTokens/full", `{"textDocument": {"uri": "`+uri+`"}}`)).Data))
+	for _, word := range []string{"echo ", "print ", "pwd "} {
+		if !slices.ContainsFunc(tokens, func(tok string) bool { return strings.HasPrefix(tok, word+"function") }) {
+			t.Errorf("no shell token for %q among %v", word, tokens)
+		}
+	}
+}
+
 func TestJustfileDiagnosticsAndFixes(t *testing.T) {
 	t.Parallel()
 

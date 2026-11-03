@@ -148,7 +148,11 @@ func (s *Server) placedTokens(snap *snapshot) []placedToken {
 	if snap.Native.Language == host.Nix {
 		return placeOrdered(source, s.nixTokens(snap.File))
 	}
-	shell := slices.DeleteFunc(place(nil, snap.positions(), s.semanticTokens(snap.File)), func(p placedToken) bool {
+	var shell []placedToken
+	for _, variant := range snap.Variants() {
+		shell = place(shell, snap.positions(), s.semanticTokens(variant))
+	}
+	shell = slices.DeleteFunc(shell, func(p placedToken) bool {
 		_, inside := snap.positions().Offset(p.r.Start)
 		return !inside
 	})
