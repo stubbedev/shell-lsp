@@ -84,6 +84,7 @@ type ClientCapabilities struct {
 	Experimental struct {
 		ShellLsp struct {
 			PromptsForArguments bool `json:"promptsForArguments"`
+			RunsInTerminal      bool `json:"runsInTerminal"`
 		} `json:"shellLsp"`
 	} `json:"experimental"`
 }

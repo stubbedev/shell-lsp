@@ -68,6 +68,31 @@ export function recipeListings(command: string, result: unknown): readonly Recip
   return parseResult(command, "a list of recipes", (value) => (isList(value, isListing) ? value : undefined), result);
 }
 
+export interface TerminalRun {
+  readonly name: string;
+  readonly argv: readonly [string, ...string[]];
+  readonly cwd: string;
+}
+
+export function parseTerminalRun(command: string, args: readonly unknown[]): TerminalRun {
+  return parseArgs(
+    command,
+    "one {name, argv, cwd} argument",
+    ([run, ...rest]) => {
+      if (rest.length > 0 || !isFields(run)) {
+        return undefined;
+      }
+      const { name, argv, cwd } = run;
+      if (!isString(name) || !isString(cwd) || !isList(argv, isString)) {
+        return undefined;
+      }
+      const [program, ...others] = argv;
+      return program === undefined ? undefined : { name, argv: [program, ...others], cwd };
+    },
+    args,
+  );
+}
+
 export function needsPrompt(run: RecipeRun): boolean {
   return run.arguments === undefined && (run.parameters?.length ?? 0) > 0;
 }

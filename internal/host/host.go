@@ -301,6 +301,13 @@ func (l Language) Invocation(path, name string) []string {
 	return definitions[l].invocation(path, name)
 }
 
+func (l Language) TerminalInvocation(path, name string) []string {
+	if l == Nix {
+		return nix.TerminalInvocation(name)
+	}
+	return l.Invocation(path, name)
+}
+
 func (l Language) RunLabel(name string, argv []string) string {
 	if l == Nix {
 		return strings.Join(argv, " ")

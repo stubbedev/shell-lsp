@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/docstore"
@@ -56,7 +57,8 @@ func (s *Server) handleCodeLens(_ context.Context, docs *docstore.View, p lsp.Co
 		return nil, err
 	}
 	if file.Native != nil {
-		if out, err = appendRunLenses(out, file, docs.Encoding(), s.clientCapabilities().Experimental.ShellLsp.PromptsForArguments); err != nil {
+		client := s.clientCapabilities().Experimental.ShellLsp
+		if out, err = appendRunLenses(out, file, docs.Encoding(), client.PromptsForArguments, client.RunsInTerminal); err != nil {
 			return nil, err
 		}
 		source := sourcePositions(file, docs.Encoding())
@@ -76,9 +78,17 @@ func (s *Server) handleCodeLens(_ context.Context, docs *docstore.View, p lsp.Co
 	return out, nil
 }
 
-func appendRunLenses(out []lsp.CodeLens, file *workspace.File, enc docstore.Encoding, prompts bool) ([]lsp.CodeLens, error) {
+func appendRunLenses(out []lsp.CodeLens, file *workspace.File, enc docstore.Encoding, prompts, terminal bool) ([]lsp.CodeLens, error) {
 	at := sourcePositions(file, enc)
 	for _, r := range file.Native.Index.Runnables {
+		if terminal && file.Doc.Local && file.Native.Language == host.Nix && nix.NeedsTerminal(r.Name) {
+			lens, err := terminalLens(file, at.Range(r.Span), r.Name)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, lens)
+			continue
+		}
 		args, title := recipeRunArgs{URI: file.URI, Name: r.Name}, runTitle(file, r)
 		if len(r.Params) > 0 {
 			if !prompts && r.Required() > 0 {
@@ -99,9 +109,24 @@ func appendRunLenses(out []lsp.CodeLens, file *workspace.File, enc docstore.Enco
 
 func runTitle(file *workspace.File, r model.Runnable) string {
 	if file.Native.Language == host.Nix {
-		return "▶ " + strings.Join(nix.Invocation(r.Name), " ")
+		return "▶ " + nix.UnattendedTitle(r.Name)
 	}
 	return "▶ Run"
+}
+
+type terminalRunArgs struct {
+	Name string   `json:"name"`
+	Argv []string `json:"argv"`
+	Cwd  string   `json:"cwd"`
+}
+
+func terminalLens(file *workspace.File, at lsp.Range, name string) (lsp.CodeLens, error) {
+	argv := nix.TerminalInvocation(name)
+	raw, err := json.Marshal(terminalRunArgs{Name: name, Argv: argv, Cwd: filepath.Dir(file.Doc.Path)})
+	if err != nil {
+		return lsp.CodeLens{}, fmt.Errorf("encoding %s arguments for %s: %w", commandRunInTerminal, file.URI, err)
+	}
+	return lsp.CodeLens{Range: at, Command: &lsp.Command{Title: "▶ " + strings.Join(argv, " "), Command: commandRunInTerminal, Arguments: []json.RawMessage{raw}}}, nil
 }
 
 func (s *Server) handleCodeLensResolve(ctx context.Context, docs *docstore.View, lens lsp.CodeLens) (any, error) {

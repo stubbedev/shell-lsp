@@ -17,15 +17,19 @@ const (
 )
 
 type outputCategory struct {
-	attr string
-	argv []string
+	attr            string
+	argv            []string
+	unattended      []string
+	unattendedTitle string
+	bare            bool
 }
 
 var outputCategories = []outputCategory{
 	{attr: "packages", argv: []string{"nix", "build"}},
 	{attr: "apps", argv: []string{"nix", "run"}},
-	{attr: "devShells", argv: []string{"nix", "develop"}},
+	{attr: "devShells", argv: []string{"nix", "develop"}, unattended: []string{"--command", "true"}, unattendedTitle: "Build dev shell"},
 	{attr: checksCategory, argv: []string{"nix", "flake", "check"}},
+	{attr: inputsAttr, argv: []string{"nix", "flake", "update"}, bare: true},
 }
 
 var (
@@ -33,17 +37,67 @@ var (
 	systemSuffixes = []string{"-linux", "-darwin", "-freebsd", "-netbsd", "-openbsd", "-windows", "-cygwin"}
 )
 
-func Invocation(name string) []string {
+const (
+	inputRunPrefix = inputsAttr + "."
+)
+
+func InputRun(input string) string { return inputRunPrefix + input }
+
+func (d *Document) FlakeInputAt(offset int) (string, bool) {
+	var found string
+	eachInputLeaf(d.tree.Root, func(path syntax.AttrPath, _ syntax.Expr) {
+		if name, static := syntax.AttrName(path[0]); static && path[0].Span().Touches(offset) {
+			found = name
+		}
+	})
+	return found, found != ""
+}
+
+func (d *Document) DeclaresInput(input string) bool {
+	declared, _ := flakeInputsOf(d.tree.Root)
+	return slices.ContainsFunc(declared, func(in flakeInput) bool { return in.name == input })
+}
+
+func categoryOf(name string) (outputCategory, string, bool) {
 	attr, output, hasOutput := strings.Cut(name, ".")
 	i := slices.IndexFunc(outputCategories, func(c outputCategory) bool { return c.attr == attr })
 	if i < 0 {
 		panic("nix: " + name + " is not a flake output this file offers")
 	}
-	argv := slices.Clone(outputCategories[i].argv)
-	if hasOutput {
+	return outputCategories[i], output, hasOutput
+}
+
+func TerminalInvocation(name string) []string {
+	category, output, hasOutput := categoryOf(name)
+	argv := slices.Clone(category.argv)
+	switch {
+	case hasOutput && category.bare:
+		argv = append(argv, output)
+	case hasOutput:
 		argv = append(argv, flakeRefPrefix+output)
 	}
 	return argv
+}
+
+func Invocation(name string) []string {
+	category, _, _ := categoryOf(name)
+	return append(TerminalInvocation(name), category.unattended...)
+}
+
+func NeedsTerminal(name string) bool {
+	category, _, _ := categoryOf(name)
+	return category.unattended != nil
+}
+
+func UnattendedTitle(name string) string {
+	category, output, hasOutput := categoryOf(name)
+	if category.unattendedTitle == "" {
+		return strings.Join(Invocation(name), " ")
+	}
+	if !hasOutput {
+		return category.unattendedTitle
+	}
+	return category.unattendedTitle + " " + flakeRefPrefix + output
 }
 
 type outputCollector struct {

@@ -41,7 +41,7 @@ export function createClient(command: string, output: LogOutputChannel, settingK
   client.registerFeature({
     fillClientCapabilities(capabilities) {
       const experimental: unknown = capabilities.experimental;
-      capabilities.experimental = { ...(isFields(experimental) ? experimental : {}), shellLsp: { promptsForArguments: true } };
+      capabilities.experimental = { ...(isFields(experimental) ? experimental : {}), shellLsp: { promptsForArguments: true, runsInTerminal: true } };
     },
     initialize: () => undefined,
     getState: () => ({ kind: "static" }),

@@ -7,6 +7,10 @@ export const clientCommands = {
   chooseShell: "shellLsp.chooseShell",
 } as const;
 
+export const lensCommands = {
+  runInTerminal: "shellLsp.runInTerminal",
+} as const;
+
 export const serverCommands = {
   fixAll: "shellLsp.fixAll",
   applyEdit: "shellLsp.applyEdit",

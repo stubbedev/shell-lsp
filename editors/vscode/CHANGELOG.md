@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The "▶ nix develop" lens on a dev shell opens a terminal and enters the shell,
+  instead of building it in the background and exiting.
 - Runs shell-lsp for Dockerfiles too, which checks them the way BuildKit
   does and with Hadolint's rules, `# hadolint` pragmas and `.hadolint.yaml`,
   navigates their stages and build arguments, and lints the shell in their

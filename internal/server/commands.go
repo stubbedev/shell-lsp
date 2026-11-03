@@ -21,6 +21,7 @@ const (
 	commandShowReferences = "shellLsp.showReferences"
 	commandRunBats        = "shellLsp.runBats"
 	commandRunRecipe      = "shellLsp.runRecipe"
+	commandRunInTerminal  = "shellLsp.runInTerminal"
 	commandListRecipes    = "shellLsp.listRecipes"
 )
 

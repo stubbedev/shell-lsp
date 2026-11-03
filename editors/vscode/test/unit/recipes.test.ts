@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { argumentsFrom, needsPrompt, promptFor, recipeListings, recipeRun, runsWithoutArguments } from "../../src/recipes.ts";
+import { argumentsFrom, needsPrompt, parseTerminalRun, promptFor, recipeListings, recipeRun, runsWithoutArguments } from "../../src/recipes.ts";
 
 const command = "shellLsp.runRecipe";
 const name = { name: "name", optional: false, variadic: false };
@@ -20,6 +20,21 @@ describe("recipeRun", () => {
   test("rejects anything else, naming the command", () => {
     for (const args of [[], [{ uri: "file:///w/justfile" }], [{ uri: "file:///w/justfile", name: "a", arguments: [1] }], [{ uri: "u", name: "a", parameters: [{ name: "x" }] }]]) {
       assert.throws(() => recipeRun(command, args), /^Error: shellLsp\.runRecipe takes one \{uri, name, arguments\?, parameters\?\} argument/);
+    }
+  });
+});
+
+describe("parseTerminalRun", () => {
+  const terminal = "shellLsp.runInTerminal";
+
+  test("reads the argument of a terminal lens", () => {
+    const run = { name: "devShells.a", argv: ["nix", "develop", ".#a"], cwd: "/w" };
+    assert.deepEqual(parseTerminalRun(terminal, [run]), run);
+  });
+
+  test("rejects anything else, naming the command", () => {
+    for (const args of [[], [{ name: "a", cwd: "/w" }], [{ name: "a", argv: [], cwd: "/w" }], [{ name: "a", argv: [1], cwd: "/w" }]]) {
+      assert.throws(() => parseTerminalRun(terminal, args), /^Error: shellLsp\.runInTerminal takes one \{name, argv, cwd\} argument/);
     }
   });
 });
