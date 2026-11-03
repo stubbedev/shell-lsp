@@ -240,7 +240,7 @@ func (c *cursor) formalSlot() []Item {
 	if _, bad := lambda.Body.(*syntax.Bad); !bad {
 		return nil
 	}
-	return slices.Concat(keywordItems(setKeywords), c.formalsAt(4, nil), c.optionKeysAt(len(c.chain)-1-3), c.builderKeys(len(c.chain)-1-3, nil))
+	return slices.Concat(keywordItems(setKeywords), c.formalsAt(4, nil), c.optionKeysAt(len(c.chain)-1-3), c.builderKeys(len(c.chain)-1-3, nil), c.flakeInputKeys(c.formalSlotSets(lambda)))
 }
 
 func (c *cursor) names() []Item {
@@ -349,9 +349,9 @@ func (c *cursor) attribute(leaf *syntax.IdentAttr) []Item {
 		return c.names()
 	case *syntax.Assign:
 		if parent.Path[0] == syntax.Attr(leaf) {
-			return slices.Concat(c.keys(), c.optionKeys(), c.flakeInputKeys(parent, leaf))
+			return slices.Concat(c.keys(), c.optionKeys(), c.flakeInputKeys(keyCandidates(c, parent, leaf)))
 		}
-		return slices.Concat(c.optionKeys(), c.flakeInputKeys(parent, leaf))
+		return slices.Concat(c.optionKeys(), c.flakeInputKeys(keyCandidates(c, parent, leaf)))
 	}
 	return nil
 }
@@ -412,12 +412,11 @@ func (c *cursor) readsThrough(target syntax.Expr, parent []string) []Item {
 	return out
 }
 
-func (c *cursor) flakeInputKeys(assign *syntax.Assign, leaf syntax.Attr) []Item {
+func (c *cursor) flakeInputKeys(sets []keyCandidate) []Item {
 	root, isSet := syntax.Unparenthesized(c.tree.Root).(*syntax.AttrSet)
 	if !isSet || !boundKeys(root)[flakeOutputsAttr] {
 		return nil
 	}
-	sets := keyCandidates(c, assign, leaf)
 	if len(sets) == 0 || sets[len(sets)-1].start != root.Span().Start {
 		return nil
 	}

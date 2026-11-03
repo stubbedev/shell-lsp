@@ -52,18 +52,30 @@ func (c Cursor) LibraryMembersWanted() ([]string, syntax.Span, bool) {
 	if !isAttr {
 		return nil, syntax.Span{}, false
 	}
-	parent, selected := c.ancestor(1).(*syntax.Select)
-	if !selected {
+	var target syntax.Expr
+	var names []string
+	switch parent := c.ancestor(1).(type) {
+	case *syntax.Select:
+		i := slices.IndexFunc(parent.Path, func(a syntax.Attr) bool { return a == syntax.Attr(leaf) })
+		selected, static := attrNames(parent.Path[:i])
+		if !static {
+			return nil, syntax.Span{}, false
+		}
+		target, names = parent.Target, selected
+	case *syntax.Inherit:
+		if parent.From == nil {
+			return nil, syntax.Span{}, false
+		}
+		target = parent.From.Inner
+	default:
 		return nil, syntax.Span{}, false
 	}
-	root, known := c.rootOf(c.chain, parent.Target, maxRootHops)
+	root, known := c.rootOf(c.chain, target, maxRootHops)
 	if !known || !root.nixpkgs {
 		return nil, syntax.Span{}, false
 	}
-	i := slices.IndexFunc(parent.Path, func(a syntax.Attr) bool { return a == syntax.Attr(leaf) })
-	names, static := attrNames(parent.Path[:i])
 	full := slices.Concat(root.path, names)
-	if !static || len(full) == 0 || full[0] != LibName {
+	if len(full) == 0 || full[0] != LibName {
 		return nil, syntax.Span{}, false
 	}
 	return full[1:], c.word, true
@@ -96,9 +108,15 @@ func keyCandidates(c *cursor, assign *syntax.Assign, leaf syntax.Attr) []keyCand
 	if !static {
 		return nil
 	}
-	var out []keyCandidate
-	child := syntax.Node(assign)
-	for depth := 2; ; depth++ {
+	return c.setsAround(nil, path, assign, 2)
+}
+
+func (c *cursor) formalSlotSets(lambda *syntax.Lambda) []keyCandidate {
+	return c.setsAround([]keyCandidate{{start: lambda.Span().Start}}, nil, lambda, 4)
+}
+
+func (c *cursor) setsAround(out []keyCandidate, path []string, child syntax.Node, from int) []keyCandidate {
+	for depth := from; ; depth++ {
 		switch n := c.ancestor(depth).(type) {
 		case *syntax.AttrSet:
 			out = append(out, keyCandidate{start: n.Span().Start, path: slices.Clone(path)})

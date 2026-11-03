@@ -18,7 +18,7 @@ var checkoutFiles = map[string]string{
 	"pkgs/top-level/all-packages.nix":   "{ lib }:\nres: pkgs: super:\nwith pkgs;\n{\n  zlib = callPackage ../tools/zlib { };\n}\n",
 	"pkgs/tools/zlib/default.nix":       "{ stdenv }:\nstdenv.mkDerivation { meta.description = \"Compresses.\"; }\n",
 	"pkgs/by-name/he/hello/package.nix": "{ stdenv }:\nstdenv.mkDerivation { meta.description = \"Says hello.\"; }\n",
-	"pkgs/by-name/us/user/package.nix":  "{ lib, pkgs }:\n{\n  a = lib.id;\n  b = pkgs.hello;\n  c = pkgs.zlib;\n  d = with lib.licenses; [ mi ];\n  e = lib.licenses.as;\n  f = pkgs.absent;\n}\n",
+	"pkgs/by-name/us/user/package.nix":  "{ lib, pkgs }:\n{\n  a = lib.id;\n  b = pkgs.hello;\n  c = pkgs.zlib;\n  d = with lib.licenses; [ mi ];\n  e = lib.licenses.as;\n  f = pkgs.absent;\n  g = { inherit (lib) id; };\n  h = { inherit (lib.licenses) mi; };\n}\n",
 }
 
 const checkoutUser = "pkgs/by-name/us/user/package.nix"
@@ -57,6 +57,8 @@ func TestANixpkgsCheckoutAnswersFromItsOwnSources(t *testing.T) {
 	for _, tt := range []struct{ sub, want string }{
 		{"mi ]", "mit"},
 		{"as;", "asl20"},
+		{"id; }", "id"},
+		{"mi; }", "mit"},
 	} {
 		line, character := p.pos(checkoutUser, tt.sub, 0)
 		list := decodeResult[lsp.CompletionList](t, p.c.call("textDocument/completion", positionParams(p.uri(checkoutUser), line, character+2, "")))
