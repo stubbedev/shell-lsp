@@ -229,7 +229,7 @@ and positions only, never a message, a hover text or a completion label.
 
 | Recipe | What it does |
 | --- | --- |
-| `just nix-parity [nixd\|nil]` | Compare over the two fixtures of `corpus/nix`, with nixd by default |
+| `just nix-parity [nixd\|nil]` | Compare over every fixture directory of `corpus/nix`, with nixd by default |
 | `just nix-parity-check` | The same against nixd, failing when a count no longer matches its baseline |
 | `just nix-parity-baseline` | Rewrite `corpus/nix/*.parity.json` from the current code and nixd |
 | `just nix-parity-fetch` | Fetch the large flakes that [corpus/nix/repos.txt](../corpus/nix/repos.txt) pins |
@@ -244,6 +244,12 @@ initialization options to shell-lsp, and `-ours-settle 2m` gives it that long
 between opening the files and the first question, which is how the evaluated
 option and package answers are compared with nixd's.
 
+Over the fixtures, the recipes first fetch the inputs each `flake.lock` pins,
+which needs the network the first time, and set `NIX_PATH` so that `<nixpkgs>`
+is the nixpkgs of that lock. shell-lsp reads locked sources from the Nix store
+and nixd evaluates `<nixpkgs>`, so without this the answers would depend on
+what the machine happens to have.
+
 ### Fixtures
 
 `corpus/nix/single-flake` keeps its outputs in one `flake.nix` that uses the
@@ -251,9 +257,16 @@ option and package answers are compared with nixd's.
 `callPackage ./y.nix`. `corpus/nix/flake-parts` has a `mkFlake { inherit
 inputs; }` root, an `imports` module tree, `perSystem` modules using `pkgs`,
 `system`, `config` and `self'`, top-level `flake` and `systems`, and values
-shared between modules through `config`. Both are small projects that evaluate
-and build, with shell in their phases and `shellHook`, and pin the inputs of
-this repository's `flake.lock`.
+shared between modules through `config`. Those two are small projects that
+evaluate and build, with shell in their phases and `shellHook`.
+
+`corpus/nix/dendritic` has a `mkFlake` root over `import-tree ./modules`, with
+one module per concern and `_`-prefixed directories that `import-tree` leaves
+out. Its lock pins nixpkgs alone, leaving `flake-parts`, `import-tree` and
+`home-manager` out.
+
+Every fixture locks the nixpkgs that `corpus/nix/repos.txt` pins, which need not
+be the one in this repository's `flake.lock`.
 
 The large flake is kept out of `corpus/repos.txt`, whose repositories feed the
 ShellCheck and shell baselines. `corpus/nix/repos.txt` has the same format and
@@ -359,10 +372,12 @@ process group is killed and reaped when its run ends.
 
 ### The baseline
 
-`just nix-parity-check` compares the counts with
+`just nix-parity-check` compares the counts with the tracked
 `corpus/nix/FIXTURE.parity.json` and fails on any change, including a change
-in the reference server's version, the sampling or the skipped files. A
-regression, fewer agreements or more disagreements, failures or questions only
+in the reference server's version, the sampling or the skipped files. Run it
+from the dev shell: the baselines hold the nixd of this repository's
+`flake.lock` on x86_64-linux, so updating that lock can move them, and a fixture
+directory without a baseline fails the check. A regression, fewer agreements or more disagreements, failures or questions only
 the reference answers, prints the examples for that feature; any other change
 asks for the baseline to be refreshed. Latency, memory and restarts are left
 out because they differ between runs and machines: compare them by reading the

@@ -103,10 +103,10 @@ corpus-nix-lint-baseline:
 
 nix_parity_reports := cache_directory() / "shell-lsp" / "nixparity"
 
-# Compare shell-lsp with a Nix language server (nixd or nil) over the two fixtures of corpus/nix; reports land in the user cache directory.
+# Compare shell-lsp with a Nix language server (nixd or nil) over the fixtures of corpus/nix; reports land in the user cache directory.
 nix-parity theirs="nixd": (_nix-parity-fixtures theirs "report")
 
-# Compare shell-lsp with nixd over the two fixtures; fails when a count no longer matches its baseline in corpus/nix.
+# Compare shell-lsp with nixd over the fixtures of corpus/nix; fails when a count no longer matches its baseline in corpus/nix.
 nix-parity-check: (_nix-parity-fixtures "nixd" "check")
 
 # Rewrite the parity baselines in corpus/nix from the current code and nixd; review the diff.
@@ -115,7 +115,8 @@ nix-parity-baseline: (_nix-parity-fixtures "nixd" "update")
 _nix-parity-fixtures theirs mode:
     #!/usr/bin/env bash
     set -euo pipefail
-    for fixture in single-flake flake-parts; do
+    for dir in corpus/nix/*/; do
+        fixture="$(basename "$dir")"
         baseline="corpus/nix/$fixture.parity.json"
         case "{{ mode }}" in
         report) flags=() ;;
@@ -126,7 +127,8 @@ _nix-parity-fixtures theirs mode:
             exit 2
             ;;
         esac
-        go run ./cmd/nixparity compare -theirs "{{ theirs }}" -out "{{ nix_parity_reports }}/$fixture-{{ theirs }}" "${flags[@]}" "corpus/nix/$fixture"
+        nix_path="$(nix-instantiate --eval --raw --argstr lockFile "$PWD/${dir}flake.lock" nix/parity-nix-path.nix)"
+        NIX_PATH="$nix_path" go run ./cmd/nixparity compare -theirs "{{ theirs }}" -out "{{ nix_parity_reports }}/$fixture-{{ theirs }}" "${flags[@]}" "$dir"
     done
 
 # Fetch the large flakes pinned in corpus/nix/repos.txt into the user cache directory.

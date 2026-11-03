@@ -1,0 +1,331 @@
+{
+  "scope": {
+    "project": "single-flake",
+    "seed": 1,
+    "positionsPerFile": 20,
+    "fileLimit": 200,
+    "files": 5,
+    "theirs": {
+      "name": "nixd",
+      "version": "2.9.3"
+    }
+  },
+  "skipped": [],
+  "features": [
+    {
+      "feature": "diagnostics",
+      "queries": 5,
+      "agree": 0,
+      "disagree": 0,
+      "bothEmpty": 5,
+      "oursMissing": 0,
+      "theirsMissing": 0,
+      "failed": 0,
+      "items": {
+        "shared": 0,
+        "oursOnly": 0,
+        "theirsOnly": 0
+      },
+      "ours": {
+        "answered": 0,
+        "empty": 5,
+        "refused": 0,
+        "unsupported": 0,
+        "silent": 0,
+        "malformed": 0,
+        "timeout": 0,
+        "crashed": 0
+      },
+      "theirs": {
+        "answered": 0,
+        "empty": 5,
+        "refused": 0,
+        "unsupported": 0,
+        "silent": 0,
+        "malformed": 0,
+        "timeout": 0,
+        "crashed": 0
+      }
+    },
+    {
+      "feature": "documentSymbol",
+      "queries": 5,
+      "agree": 0,
+      "disagree": 5,
+      "bothEmpty": 0,
+      "oursMissing": 0,
+      "theirsMissing": 0,
+      "failed": 0,
+      "items": {
+        "shared": 93,
+        "oursOnly": 39,
+        "theirsOnly": 147
+      },
+      "ours": {
+        "answered": 5,
+        "empty": 0,
+        "refused": 0,
+        "unsupported": 0,
+        "silent": 0,
+        "malformed": 0,
+        "timeout": 0,
+        "crashed": 0
+      },
+      "theirs": {
+        "answered": 5,
+        "empty": 0,
+        "refused": 0,
+        "unsupported": 0,
+        "silent": 0,
+        "malformed": 0,
+        "timeout": 0,
+        "crashed": 0
+      }
+    },
+    {
+      "feature": "foldingRange",
+      "queries": 5,
+      "agree": 1,
+      "disagree": 4,
+      "bothEmpty": 0,
+      "oursMissing": 0,
+      "theirsMissing": 0,
+      "failed": 0,
+      "items": {
+        "shared": 48,
+        "oursOnly": 22,
+        "theirsOnly": 8
+      },
+      "ours": {
+        "answered": 5,
+        "empty": 0,
+        "refused": 0,
+        "unsupported": 0,
+        "silent": 0,
+        "malformed": 0,
+        "timeout": 0,
+        "crashed": 0
+      },
+      "theirs": {
+        "answered": 5,
+        "empty": 0,
+        "refused": 0,
+        "unsupported": 0,
+        "silent": 0,
+        "malformed": 0,
+        "timeout": 0,
+        "crashed": 0
+      }
+    },
+    {
+      "feature": "definition",
+      "queries": 85,
+      "agree": 11,
+      "disagree": 1,
+      "bothEmpty": 41,
+      "oursMissing": 0,
+      "theirsMissing": 32,
+      "failed": 0,
+      "items": {
+        "shared": 11,
+        "oursOnly": 1,
+        "theirsOnly": 1
+      },
+      "ours": {
+        "answered": 44,
+        "empty": 41,
+        "refused": 0,
+        "unsupported": 0,
+        "silent": 0,
+        "malformed": 0,
+        "timeout": 0,
+        "crashed": 0
+      },
+      "theirs": {
+        "answered": 12,
+        "empty": 25,
+        "refused": 48,
+        "unsupported": 0,
+        "silent": 0,
+        "malformed": 0,
+        "timeout": 0,
+        "crashed": 0
+      }
+    },
+    {
+      "feature": "references",
+      "queries": 85,
+      "agree": 3,
+      "disagree": 19,
+      "bothEmpty": 39,
+      "oursMissing": 0,
+      "theirsMissing": 24,
+      "failed": 0,
+      "items": {
+        "shared": 36,
+        "oursOnly": 21,
+        "theirsOnly": 0
+      },
+      "ours": {
+        "answered": 46,
+        "empty": 39,
+        "refused": 0,
+        "unsupported": 0,
+        "silent": 0,
+        "malformed": 0,
+        "timeout": 0,
+        "crashed": 0
+      },
+      "theirs": {
+        "answered": 22,
+        "empty": 0,
+        "refused": 63,
+        "unsupported": 0,
+        "silent": 0,
+        "malformed": 0,
+        "timeout": 0,
+        "crashed": 0
+      }
+    },
+    {
+      "feature": "rename",
+      "queries": 85,
+      "agree": 7,
+      "disagree": 2,
+      "bothEmpty": 59,
+      "oursMissing": 10,
+      "theirsMissing": 7,
+      "failed": 0,
+      "items": {
+        "shared": 23,
+        "oursOnly": 2,
+        "theirsOnly": 0
+      },
+      "ours": {
+        "answered": 16,
+        "empty": 0,
+        "refused": 69,
+        "unsupported": 0,
+        "silent": 0,
+        "malformed": 0,
+        "timeout": 0,
+        "crashed": 0
+      },
+      "theirs": {
+        "answered": 19,
+        "empty": 0,
+        "refused": 66,
+        "unsupported": 0,
+        "silent": 0,
+        "malformed": 0,
+        "timeout": 0,
+        "crashed": 0
+      }
+    },
+    {
+      "feature": "hover",
+      "queries": 85,
+      "agree": 1,
+      "disagree": 1,
+      "bothEmpty": 28,
+      "oursMissing": 0,
+      "theirsMissing": 55,
+      "failed": 0,
+      "items": {
+        "shared": 1,
+        "oursOnly": 1,
+        "theirsOnly": 1
+      },
+      "ours": {
+        "answered": 57,
+        "empty": 28,
+        "refused": 0,
+        "unsupported": 0,
+        "silent": 0,
+        "malformed": 0,
+        "timeout": 0,
+        "crashed": 0
+      },
+      "theirs": {
+        "answered": 2,
+        "empty": 83,
+        "refused": 0,
+        "unsupported": 0,
+        "silent": 0,
+        "malformed": 0,
+        "timeout": 0,
+        "crashed": 0
+      }
+    },
+    {
+      "feature": "completion",
+      "queries": 85,
+      "agree": 0,
+      "disagree": 18,
+      "bothEmpty": 38,
+      "oursMissing": 1,
+      "theirsMissing": 28,
+      "failed": 0,
+      "items": {
+        "shared": 27,
+        "oursOnly": 1822,
+        "theirsOnly": 29
+      },
+      "ours": {
+        "answered": 46,
+        "empty": 39,
+        "refused": 0,
+        "unsupported": 0,
+        "silent": 0,
+        "malformed": 0,
+        "timeout": 0,
+        "crashed": 0
+      },
+      "theirs": {
+        "answered": 19,
+        "empty": 66,
+        "refused": 0,
+        "unsupported": 0,
+        "silent": 0,
+        "malformed": 0,
+        "timeout": 0,
+        "crashed": 0
+      }
+    },
+    {
+      "feature": "formatting",
+      "queries": 5,
+      "agree": 5,
+      "disagree": 0,
+      "bothEmpty": 0,
+      "oursMissing": 0,
+      "theirsMissing": 0,
+      "failed": 0,
+      "items": {
+        "shared": 5,
+        "oursOnly": 0,
+        "theirsOnly": 0
+      },
+      "ours": {
+        "answered": 5,
+        "empty": 0,
+        "refused": 0,
+        "unsupported": 0,
+        "silent": 0,
+        "malformed": 0,
+        "timeout": 0,
+        "crashed": 0
+      },
+      "theirs": {
+        "answered": 5,
+        "empty": 0,
+        "refused": 0,
+        "unsupported": 0,
+        "silent": 0,
+        "malformed": 0,
+        "timeout": 0,
+        "crashed": 0
+      }
+    }
+  ]
+}
