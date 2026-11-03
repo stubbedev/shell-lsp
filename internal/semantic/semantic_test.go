@@ -175,6 +175,16 @@ func TestNumbersInZshSubscriptFlagsAreNumbers(t *testing.T) {
 	}
 }
 
+func TestZshRegexTokensAfterAnEscapeCoverTheirOwnSource(t *testing.T) {
+	t.Parallel()
+
+	text := "[[ $v =~ ^\\.[a-z]+ ]]\n"
+	got := strings.Join(describe(text, Tokens(parser.Parse(text, dialect.Zsh), nil, nil)), " ")
+	if want := "[a-z]:regexp"; !strings.Contains(got, want) {
+		t.Errorf("tokens = %s, want %s", got, want)
+	}
+}
+
 func TestPatternsInZshSubscriptFlagsAreNotNumbers(t *testing.T) {
 	t.Parallel()
 

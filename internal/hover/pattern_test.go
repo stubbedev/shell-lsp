@@ -213,6 +213,34 @@ func TestHoverPatterns(t *testing.T) {
 	}
 }
 
+func TestHoverRegexPiecesQuoteTheirOwnSource(t *testing.T) {
+	t.Parallel()
+
+	captured := "- `([a-z]+)`: one or more of `[a-z]` (one character: `a` to `z`); captured in `$match[1]`"
+	for _, tc := range []struct {
+		dialect dialect.Dialect
+		src     string
+		needle  string
+		want    []string
+	}{
+		{dialect.Zsh, "[[ $v =~ '^([a-z]+)\\.ta' ]]\n", "[a-z]", []string{"- `^`: the start", captured, "- `\\.ta`: the text `.ta`"}},
+		{dialect.Zsh, "[[ $v =~ \"^([a-z]+)\\.ta\" ]]\n", "[a-z]", []string{"- `^`: the start", captured, "- `\\.ta`: the text `.ta`"}},
+		{dialect.Zsh, "[[ $v =~ \"^\\$([a-z]+)\\.ta\" ]]\n", "[a-z]", []string{"- `\\$`: the end", captured, "- `\\.ta`: the text `.ta`"}},
+		{dialect.Zsh, "[[ $v =~ \"\\\\.([a-z]+)x\" ]]\n", "[a-z]", []string{"- `\\\\.`: the text `.`", captured, "- `x`: the text `x`"}},
+		{dialect.Zsh, "[[ $v =~ $'^\\t([a-z]+)\\\\.ta' ]]\n", "[a-z]", []string{"- `\\t`: the text", captured, "- `\\\\.ta`: the text `.ta`"}},
+		{dialect.Zsh, "[[ $v =~ ^a\\.([a-z]+)b ]]\n", "[a-z]", []string{"- `\\.`: any one character", captured, "- `b`: the text `b`"}},
+		{dialect.Zsh, "[[ $v =~ ^'a+'\"b+\"c+ ]]\n", "c+", []string{"- `a+`: one or more of `a`", "- `b+`: one or more of `b`", "- `c+`: one or more of `c`"}},
+		{dialect.Bash, "[[ $v =~ 'x+'y+ ]]\n", "y+", []string{"- `'x+'`: the text `x+`", "- `y+`: one or more of `y`"}},
+	} {
+		got := hoverAt(t, tc.src, tc.dialect, tc.needle, 0)
+		for _, want := range tc.want {
+			if !strings.Contains(got.Markdown, want) {
+				t.Errorf("hover in %q: markdown lacks %q:\n%s", tc.src, want, got.Markdown)
+			}
+		}
+	}
+}
+
 func TestHoverShowsNoResultForAPlainParameter(t *testing.T) {
 	t.Parallel()
 

@@ -15,16 +15,25 @@ type SegmentKind uint8
 const (
 	SegmentPattern SegmentKind = iota
 	SegmentText
+	SegmentValue
 	SegmentLiteral
 	SegmentUnknown
 	SegmentQualifiers
 )
 
 type Segment struct {
-	Span parser.Span
-	Kind SegmentKind
-	Text string
-	Glob bool
+	Span    parser.Span
+	Kind    SegmentKind
+	Text    string
+	Glob    bool
+	Offsets []int
+}
+
+func (s *Segment) at(from, to int) parser.Span {
+	if s.Offsets == nil {
+		return parser.Span{Start: s.Span.Start + from, End: s.Span.Start + to}
+	}
+	return parser.Span{Start: s.Offsets[from], End: s.Offsets[to]}
 }
 
 type item struct {
@@ -65,6 +74,12 @@ func lex(segments []Segment) []item {
 			items = lexPattern(items, s, true)
 		case SegmentText:
 			items = lexPattern(items, s, false)
+		case SegmentValue:
+			from := len(items)
+			items = lexPattern(items, s, false)
+			for j := from; j < len(items); j++ {
+				items[j].at = s.Span
+			}
 		case SegmentLiteral:
 			for j := range len(s.Text) {
 				items = append(items, item{c: s.Text[j], at: s.Span})
@@ -82,14 +97,14 @@ func lexPattern(items []item, s *Segment, quotes bool) []item {
 	var quote byte
 	for j := 0; j < len(s.Text); j++ {
 		c := s.Text[j]
-		at := parser.Span{Start: s.Span.Start + j, End: s.Span.Start + j + 1}
+		at := s.at(j, j+1)
 		switch {
 		case quote != 0 && c == quote:
 			quote = 0
 		case quote == '\'' || quote == '"' && c != '\\':
 			items = append(items, item{c: c, at: at})
 		case c == '\\' && j+1 < len(s.Text):
-			items = append(items, item{c: s.Text[j+1], at: parser.Span{Start: at.Start, End: at.End + 1}, escaped: quote == 0})
+			items = append(items, item{c: s.Text[j+1], at: s.at(j, j+2), escaped: quote == 0})
 			j++
 		case quotes && quote == 0 && (c == '\'' || c == '"'):
 			quote = c

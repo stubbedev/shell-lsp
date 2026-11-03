@@ -179,16 +179,47 @@ func IsDoubleQuoteEscapable(c byte) bool {
 }
 
 func unescape(sb *strings.Builder, s string, escapable func(byte) bool) {
-	for i := 0; i < len(s); i++ {
-		if s[i] != '\\' || i+1 == len(s) || !escapable(s[i+1]) {
-			sb.WriteByte(s[i])
-			continue
-		}
-		i++
-		if s[i] != '\n' {
-			sb.WriteByte(s[i])
-		}
+	for i := 0; i < len(s); {
+		unit, width := unescapeUnit(s[i:], escapable)
+		sb.WriteString(unit)
+		i += width
 	}
+}
+
+func unescapeUnit(s string, escapable func(byte) bool) (string, int) {
+	switch {
+	case s[0] != '\\' || len(s) == 1 || !escapable(s[1]):
+		return s[:1], 1
+	case s[1] == '\n':
+		return "", 2
+	}
+	return s[1:2], 2
+}
+
+func decodedOffsets(s string, base int, next func(string) (string, int)) (string, []int) {
+	var sb strings.Builder
+	offsets := make([]int, 0, len(s)+1)
+	for i := 0; i < len(s); {
+		unit, width := next(s[i:])
+		sb.WriteString(unit)
+		for range len(unit) {
+			offsets = append(offsets, base+i)
+		}
+		i += width
+	}
+	return sb.String(), append(offsets, base+len(s))
+}
+
+func UnescapeLitOffsets(value string, doubleQuoted bool, base int) (string, []int) {
+	escapable := func(byte) bool { return true }
+	if doubleQuoted {
+		escapable = IsDoubleQuoteEscapable
+	}
+	return decodedOffsets(value, base, func(s string) (string, int) { return unescapeUnit(s, escapable) })
+}
+
+func DecodeANSICOffsets(value string, base int) (string, []int) {
+	return decodedOffsets(value, base, ansiCUnit)
 }
 
 var ansiCEscapes = map[byte]byte{

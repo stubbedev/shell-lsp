@@ -275,7 +275,7 @@ func expanded(part syntax.WordPart, span parser.Span, src string, glob bool, res
 	if resolve != nil {
 		if value, ok := resolve(part); ok {
 			if glob {
-				return Segment{Span: span, Kind: SegmentText, Text: value}
+				return Segment{Span: span, Kind: SegmentValue, Text: value}
 			}
 			return Segment{Span: span, Kind: SegmentLiteral, Text: value}
 		}
@@ -346,10 +346,6 @@ func (s Sites) segments(w *syntax.Word, role Role, resolve Resolver, opts shello
 
 func (s Sites) regexSegments(w *syntax.Word, resolve Resolver) ([]Segment, bool) {
 	literalQuotes := s.tree.Dialect.Features().QuotedRegexLiteral
-	quoted := SegmentText
-	if literalQuotes {
-		quoted = SegmentLiteral
-	}
 	var segments []Segment
 	addLit := func(lit *syntax.Lit, inQuotes bool) bool {
 		span, ok := s.tree.NodeSpan(lit)
@@ -357,7 +353,8 @@ func (s Sites) regexSegments(w *syntax.Word, resolve Resolver) ([]Segment, bool)
 			return false
 		}
 		if !literalQuotes {
-			segments = append(segments, Segment{Span: span, Kind: SegmentText, Text: parser.UnescapeLit(lit.Value, inQuotes)})
+			text, offsets := parser.UnescapeLitOffsets(lit.Value, inQuotes, span.Start)
+			segments = append(segments, Segment{Span: span, Kind: SegmentText, Text: text, Offsets: offsets})
 			return true
 		}
 		value := lit.Value
@@ -388,8 +385,7 @@ func (s Sites) regexSegments(w *syntax.Word, resolve Resolver) ([]Segment, bool)
 				return nil, false
 			}
 		case *syntax.SglQuoted:
-			value, _ := parser.Text(&syntax.Word{Parts: []syntax.WordPart{p}}, "")
-			segments = append(segments, Segment{Span: span, Kind: quoted, Text: value})
+			segments = append(segments, regexSglQuoted(p, span, literalQuotes))
 		case *syntax.DblQuoted:
 			for _, inner := range p.Parts {
 				if lit, ok := inner.(*syntax.Lit); ok {
@@ -409,6 +405,19 @@ func (s Sites) regexSegments(w *syntax.Word, resolve Resolver) ([]Segment, bool)
 		}
 	}
 	return segments, true
+}
+
+func regexSglQuoted(q *syntax.SglQuoted, span parser.Span, literalQuotes bool) Segment {
+	if literalQuotes {
+		value, _ := parser.Text(&syntax.Word{Parts: []syntax.WordPart{q}}, "")
+		return Segment{Span: span, Kind: SegmentLiteral, Text: value}
+	}
+	if q.Dollar {
+		text, offsets := parser.DecodeANSICOffsets(q.Value, span.Start+len("$'"))
+		return Segment{Span: span, Kind: SegmentText, Text: text, Offsets: offsets}
+	}
+	start := span.Start + len("'")
+	return Segment{Span: parser.Span{Start: start, End: start + len(q.Value)}, Kind: SegmentText, Text: q.Value}
 }
 
 func (p Pattern) Globs() bool {
