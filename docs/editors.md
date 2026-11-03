@@ -174,12 +174,13 @@ a complete language server of its own
 attach it alone, without just-lsp, a make language server or a Dockerfile
 language server, so the file gets one set of diagnostics, symbols and
 formatting. The VS Code extension attaches to Makefiles and Dockerfiles on its
-own, and to justfiles and Nix files when extensions give them the `just` and
-`nix` languages. Elsewhere, add the file types next to the shell ones. In
+own, and to justfiles when an extension gives them the `just` language; it declares
+the `nix` language for `.nix` files itself, with no other extension needed. Elsewhere, add the file types next to the shell ones. In
 Neovim, add `"make"`, `"just"`, `"dockerfile"` and `"nix"` to `filetypes` (or
 to the `FileType` pattern). For Nix files it follows imports, flakes, module
 trees, overlays and the shell in strings across files without evaluating them
-([Nix files](../README.md#nix-files)). The setting `nix.evaluate`, off by default,
+([Nix files](../README.md#nix-files)). It replaces nixd and nil: do not run them on the
+same files, or the editor gets every answer twice. The setting `nix.evaluate`, off by default,
 also evaluates flakes with `nix`, to complete and describe NixOS, home-manager and
 flake-parts options and nixpkgs attributes. That can fetch the flake's inputs over
 the network, uses CPU for as long as an evaluation runs, and keeps results in a

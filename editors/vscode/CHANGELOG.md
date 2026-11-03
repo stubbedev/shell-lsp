@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- Declares the `nix` language for `.nix` files, with comment toggling and bracket
+  pairs, so Nix files start the server without any other extension installed.
+- Nix: justfiles, Makefiles and Dockerfiles written from Nix get completion,
+  signature help, Hadolint's `DL` rules, unused-name checks and include checks; a
+  string named `x.nix` is read as Nix; shell tokens keep their color across a
+  splice; hover explains findings in strings proven through a wrapper in another
+  file, and such strings are also linted in closed files by workspace diagnostics.
+- Nix: an undefined name offers "Change to" and "Add to the arguments of this
+  function"; new refactorings rewrite a string between its two forms, turn an
+  `inherit` into bindings, and quote or unquote an attribute. Flake input URLs
+  link to their forge. Typing `;` formats the binding it ends where format on
+  type is on.
+- Nix: a refused rename says what would break and where. Definition with
+  `nix.evaluate` reaches functions such as `pkgs.runCommand` and any `lib.x` the
+  source cannot follow.
+- `$name` in a jq or awk program in a plain shell script follows `--arg` and `-v`
+  for definition, references and rename.
 - The "▶ nix develop" lens on a dev shell opens a terminal and enters the shell,
   instead of building it in the background and exiting.
 - Runs shell-lsp for Dockerfiles too, which checks them the way BuildKit

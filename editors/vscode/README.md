@@ -19,13 +19,18 @@ server for bash, zsh, POSIX sh, dash and ksh with dialect auto-detection.
 - The shell in Makefile and justfile recipes, Dockerfile `RUN` instructions
   and Nix phases, hooks and script writers, linted in place, with fixes
   written back in their syntax.
+- Nix: everything nixd and nil answer without evaluating, plus checks of the
+  statix and deadnix kind, a formatter that matches nixfmt, and the languages
+  written in Nix strings: shell, Nix, justfiles, Makefiles and Dockerfiles.
 
 The server starts for documents VS Code identifies as Shell Script
 (`.sh`, `.bash`, `.zsh`, `.ksh`, rc files and shebang detection), as
-Makefile or Dockerfile, or as `just` or `nix` (which justfile and Nix
-extensions provide),
-and this
-extension adds `.bats` files and `bats` shebangs.
+Makefile or Dockerfile, or as `just` (which a justfile extension provides) or
+`nix`. This extension adds `.bats` files and `bats` shebangs, and declares the
+`nix` language for `.nix` files, so Nix files work with no other extension: the
+server's semantic tokens color them. A Nix extension may add a grammar of its own;
+its server, if it has one, is then a second server on the same files, so turn
+that off.
 
 ## The server binary
 

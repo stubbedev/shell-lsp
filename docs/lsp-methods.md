@@ -50,7 +50,7 @@ advertised capability, and that nothing else is handled or advertised.
 | `textDocument/formatting` | implemented | `documentFormattingProvider` |  |
 | `textDocument/rangeFormatting` | implemented | `documentRangeFormattingProvider` |  |
 | `textDocument/rangesFormatting` | implemented | `documentRangeFormattingProvider.rangesSupport` |  |
-| `textDocument/onTypeFormatting` | not advertised | `documentOnTypeFormattingProvider` | shfmt formats whole statements, not keystrokes |
+| `textDocument/onTypeFormatting` | implemented | `documentOnTypeFormattingProvider` | in Nix files, formats the binding a `;` ends; shfmt formats whole statements, not keystrokes, so shell is left alone |
 | `textDocument/rename` | implemented | `renameProvider` |  |
 | `textDocument/prepareRename` | implemented | `renameProvider.prepareProvider` |  |
 | `textDocument/linkedEditingRange` | implemented | `linkedEditingRangeProvider` | heredoc delimiters |

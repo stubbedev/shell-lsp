@@ -729,15 +729,25 @@ of what it writes, in that language. `security.wrappers` and `makeSetupHook` tak
 paths, so they hold no string to read, and only the writer behind them counts.
 
 A string in a named file whose name is that of a justfile, Makefile or Dockerfile
-gets everything those languages have in a file of their own, as far as it can be
-reached from a Nix document: the syntax errors and checks of the language
-(`SL5`, `SL6` and `SL7`) at their place in the `.nix` file, the shell in its recipes
-and `RUN` lines with all its linting, highlighting and navigation in the shell the
-file decides, semantic tokens, and definition, references and hover for its recipes,
+gets everything those languages have in a file of their own, at its place in the
+`.nix` file: the syntax errors and checks of the language (`SL5`, `SL6` and `SL7`)
+including names that are never used, Hadolint's `DL` rules with its `# hadolint`
+pragmas and `.hadolint.yaml`, the shell in its recipes and `RUN` lines with all its
+linting, highlighting and navigation in the shell the file decides, semantic tokens,
+completion, signature help, and definition, references and hover for its recipes,
 targets and variables. `${...}` stands for text no one can know, and a finding that
-touches one is dropped. Those names are not renamed. Checks that need the files
-around it (`import`, `include`) and that a name is unused are left out, and Hadolint's
-`DL` rules, completion and signature help do not reach into such a string.
+touches one is dropped. Those names are not renamed, and these findings offer no
+fixes. An `include` or `import` in such a file resolves to another file written from
+the same place in Nix (`home.file."x/justfile"` and `home.file."x/lib.just"`). What
+it does not find is reported for a file in the store (`writeText` and the like), where
+nothing can stand beside it, and not for a file placed in the home directory or `/etc`,
+where a real file may.
+
+A string in a named file whose name ends in `.nix` is Nix: its syntax errors and
+checks, semantic tokens, and definition, references and hover for its bindings answer
+inside the string, with the shell strings it holds read as anywhere else. It is not
+followed across files, its names are not renamed, and a finding that touches a `${...}`
+is dropped.
 
 The binding counts through `lib.optionalString`, `lib.mkIf`, `mkBefore`,
 `mkAfter`, `mkForce`, `mkDefault`, `mkOverride`, `mkOrder`, `lib.hm.dag.entryAfter`,
@@ -828,9 +838,11 @@ The shell and the Nix around it answer for each other:
   and `awk -v name="$value" '...'` lead from the variable to the flag, on to the shell
   variable, an assignment `value=${x}` and the Nix binding or attribute behind it, also
   in another file. Definition lists each of them, references hold them all and hover
-  shows the chain. Renaming `$name` renames the flag and the reads in that program and
-  leaves the rest, which keep their own names; it is refused when the program also reads
-  `$ARGS` or when an antiquotation or escape splits the name.- A command word `${pkg}/bin/foo`, `${lib.getExe pkg}` or `${pkg}` is that
+  shows the chain, in a plain shell script too. Renaming `$name` renames the flag and
+  the reads in that program and leaves the rest, which keep their own names; it is
+  refused when the program also reads `$ARGS` or when an antiquotation or escape splits
+  the name.
+- A command word `${pkg}/bin/foo`, `${lib.getExe pkg}` or `${pkg}` is that
   program. On the shell text next to the antiquotation, hover says what it runs,
   and definition goes to the binding of `pkg`.
 - A name bound to `writeShellScript`, `writeShellApplication`, the other writers
@@ -839,7 +851,8 @@ The shell and the Nix around it answer for each other:
   crosses the link. Its caller is the script that holds the string.
 - A name bound to `writeText`, `writeTextFile`, `builtins.toFile` or a writer of
   another language is a file whose content is known: hover on `${cfg}` shows the head of
-  what it writes, also when that is an expression such as `builtins.toJSON { ... }`.- A command in `text`, a phase or a unit that matches an item of `runtimeInputs`,
+  what it writes, also when that is an expression such as `builtins.toJSON { ... }`.
+- A command in `text`, a phase or a unit that matches an item of `runtimeInputs`,
   `buildInputs`, `nativeBuildInputs`, `packages` or `path` leads to that item, or
   to the script the item names.
 - The phases of one derivation share a shell, so an assignment, `export` or
@@ -871,10 +884,12 @@ then asks the client to refresh diagnostics and tokens if the proven strings mov
 Until then the string reads as plain Nix, and a diagnostics or tokens request on
 its own builds nothing. Between passes a proven string follows edits around it and
 inside it, and one whose opening was edited stops being shell until the next pass.
-These strings report syntax errors and shell findings for open files only, so
-workspace diagnostics of a closed file leave them out. Their findings offer no quick
-fixes, and `SC2154` stays off in them, since the environment a wrapper gives its
-string is not known.
+These strings report syntax errors and shell findings, explained on hover and fixed by
+quick fixes and fix-all like any others. Workspace diagnostics and `shell-lsp check`
+prove them for closed files too. `SC2154` stays off in a string the wrapper splices
+into a larger script, or runs with an environment of its own (a derivation,
+`runCommand`, a `runtimeEnv` or one the caller passes), since what it can read is not
+known there, and reports reads never set in a string that is the whole script.
 
 Outside the shell, the Nix language answers too, within a file and across a project:
 
@@ -939,8 +954,10 @@ Outside the shell, the Nix language answers too, within a file and across a proj
   of comments, and selection ranges grow from the shell in a string through the
   Nix around it.
 
-A rename refuses, with the reason, to rename to anything but a plain name, or
-when another binding would capture a read of the new name or be shadowed by it.
+A rename refuses, with the reason and the place, to rename to anything but a plain
+name, or when another binding would capture a read of the new name or be shadowed by
+it. Where other files or the module system read the name, the message lists those reads
+as `file:line`, so you can change them by hand and rename after.
 It also refuses names the evaluator itself reads, such as `__overrides` and the
 `body` of a legacy `let`, and an attribute of a non-recursive set unless every
 read of that set is proven, since anything else could read it by its name. What
@@ -997,15 +1014,24 @@ Beyond that, Nix files get these:
   lists the library. Names read through `with` go to that `with`, and references
   list that name through it. `config.x.` and option keys complete from every file
   of the project, and `inputs.` from the flake.
-- With `nix.evaluate`, definition follows `pkgs.x` to `meta.position` and an option
-  to its declaration, fetching the file first when it is not on disk, and option
+- With `nix.evaluate`, definition follows `pkgs.x` to `meta.position`, or to where the
+  attribute is bound when there is none or it is not a package (`pkgs.runCommand`),
+  `lib.x` to that same position when the source of the library cannot follow it, and
+  an option to its declaration, fetching the file first when it is not on disk, and option
   completion finds the class of a module passed through a `deferredModule` option.
   Nix evaluation requires Nix 2.24 or newer, Lix 2.95 or newer, or Determinate Nix
   based on Nix 2.24 or newer.
 - Hover on a flake input shows its locked revision and date, and the code action
   "Update input x" runs `nix flake update x`.
 - The refactorings are extract to a `let` binding, inline a `let` binding, spell
-  `x = x;` as `inherit x;`, and nest or flatten an attribute path.
+  `x = x;` as `inherit x;` and an `inherit` as bindings, rewrite a string between its
+  quoted and indented forms when its value stays the same, quote or unquote an
+  attribute, and nest or flatten an attribute path.
+- An undefined name offers "Change to" the closest name in scope, and "Add to the
+  arguments of this function" for the nearest function with a pattern.
+- `url = "github:o/r"` in a flake links to the page of that repository, also for
+  `gitlab:` and `sourcehut:`.
+- Typing `;` formats the binding it ends, in editors that have format on type on.
 - Each finding offers "Ignore here" and "Ignore in this file" fixes, a malformed
   `disable` list reports `SC1125`, and with `enable=unused-directives` a directive
   that suppresses nothing reports `SL2009`.

@@ -58,6 +58,14 @@ describe("activationEvents", () => {
   });
 });
 
+describe("contributes.languages", () => {
+  test("declare nix for .nix files, so they need no other extension", () => {
+    const nix = entries(["contributes", "languages"]).find((entry) => stringOf(entry, "id") === "nix");
+    assert.ok(nix, "the manifest declares no nix language");
+    assert.deepEqual(field(nix, ["extensions"]), [".nix"]);
+  });
+});
+
 describe("contributes.commands", () => {
   test("lists every command the extension registers", () => {
     for (const command of Object.values(clientCommands)) {

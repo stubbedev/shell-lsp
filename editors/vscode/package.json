@@ -57,6 +57,17 @@
           ".bats"
         ],
         "firstLine": "^#!.*\\bbats\\b"
+      },
+      {
+        "id": "nix",
+        "aliases": [
+          "Nix",
+          "nix"
+        ],
+        "extensions": [
+          ".nix"
+        ],
+        "configuration": "./language-configuration-nix.json"
       }
     ],
     "commands": [
