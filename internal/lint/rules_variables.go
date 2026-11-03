@@ -3,6 +3,7 @@ package lint
 import (
 	"cmp"
 	"maps"
+	"math"
 	"slices"
 	"strings"
 
@@ -25,6 +26,13 @@ var variablesFamily = family{
 var batsVariables = []string{"status", "output", "lines", "stderr", "stderr_lines"}
 
 var shflagsDefiners = setOf("DEFINE_string", "DEFINE_boolean", "DEFINE_integer", "DEFINE_float")
+
+var stdenvNameReaders = map[string]struct{ first, last int }{
+	"appendToVar":      {1, 1},
+	"prependToVar":     {1, 1},
+	"concatStringsSep": {2, 2},
+	"concatTo":         {2, math.MaxInt},
+}
 
 type variableSite struct {
 	name string
@@ -426,6 +434,13 @@ func (p *pass) collectCall(call *syntax.CallExpr) {
 	case p.tree.Lang() == syntax.LangKsh93 && strings.Contains(c.name, "."):
 		if root, _, _ := strings.Cut(c.name, "."); parser.IsName(root) {
 			p.variables.use(root)
+		}
+	case stdenvNameReaders[c.name].first > 0:
+		readers := stdenvNameReaders[c.name]
+		for i := readers.first - 1; i < min(readers.last, len(c.args)); i++ {
+			if name, ok := parser.Literal(c.args[i]); ok && parser.IsName(name) {
+				p.variables.use(name)
+			}
 		}
 	case shflagsDefiners[c.name] && len(c.args) > 0:
 		if flag, ok := parser.Literal(c.args[0]); ok && parser.IsName(flag) {

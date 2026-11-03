@@ -29,6 +29,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/parallel"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/platform"
+	"github.com/stubbedev/shell-lsp/internal/projection"
 	"github.com/stubbedev/shell-lsp/internal/regularfile"
 )
 
@@ -57,7 +58,7 @@ type File struct {
 	Detection dialect.Detection
 	Native    *host.Native
 	Others    []*File
-	spans     []parser.Span
+	Scripts   []parser.Span
 
 	memoMu sync.Mutex
 	memo   map[string]*memoEntry
@@ -66,7 +67,7 @@ type File struct {
 
 func (f *File) At(offset int) *File {
 	for _, other := range f.Others {
-		if slices.ContainsFunc(other.spans, func(s parser.Span) bool { return s.Start <= offset && offset < s.End }) {
+		if slices.ContainsFunc(other.Scripts, func(s parser.Span) bool { return s.Start <= offset && offset < s.End }) {
 			return other
 		}
 	}
@@ -404,7 +405,7 @@ func (w *Workspace) takeParsed(key string, info fs.FileInfo) (stashedNix, bool) 
 func (f *File) on(doc *docstore.Document) *File {
 	projected := f.Doc.On(doc)
 	moved := func(of *File) *File {
-		return &File{Path: of.Path, URI: doc.URI, Doc: projected, Tree: of.Tree, Detection: of.Detection, Native: of.Native, spans: of.spans, memoOf: of}
+		return &File{Path: of.Path, URI: doc.URI, Doc: projected, Tree: of.Tree, Detection: of.Detection, Native: of.Native, Scripts: of.Scripts, memoOf: of}
 	}
 	out := moved(f)
 	for _, other := range f.Others {
@@ -533,7 +534,7 @@ func (w *Workspace) parseDisk(path string, doc *docstore.Document, parsed *nix.P
 	language, known := host.Of(doc.URI, doc.Language)
 	if known && language == host.Nix && host.NixStoreFile(path) {
 		script := host.ProjectDependency(doc)
-		return &File{Path: path, URI: doc.URI, Doc: script.Doc, Tree: script.Parse(nil), Detection: script.Detection, Native: script.Native, spans: script.Spans()}
+		return &File{Path: path, URI: doc.URI, Doc: script.Doc, Tree: script.Parse(nil), Detection: script.Detection, Native: script.Native, Scripts: script.Spans()}
 	}
 	if known && language == host.Nix && parsed != nil && parsed.Text() == doc.Text() {
 		return fileOf(path, doc.URI, host.ProjectParsedNix(doc, parsed), nil)
@@ -542,19 +543,29 @@ func (w *Workspace) parseDisk(path string, doc *docstore.Document, parsed *nix.P
 }
 
 func fileOf(path, uri string, script host.Script, previous *parser.Tree) *File {
-	file := &File{Path: path, URI: uri, Doc: script.Doc, Tree: script.Parse(previous), Detection: script.Detection, Native: script.Native, spans: script.Spans()}
+	file := &File{Path: path, URI: uri, Doc: script.Doc, Tree: script.Parse(previous), Detection: script.Detection, Native: script.Native, Scripts: script.Spans()}
 	for _, v := range script.Variants {
-		file.Others = append(file.Others, &File{Path: path, URI: uri, Doc: script.Doc, Tree: script.ParseVariant(v, nil), Detection: v.Detection, Native: script.Native, spans: v.Spans()})
+		file.Others = append(file.Others, &File{Path: path, URI: uri, Doc: script.Doc, Tree: script.ParseVariant(v, nil), Detection: v.Detection, Native: script.Native, Scripts: v.Spans()})
 	}
+	script.Doc.Mapping().Reuse(nil)
 	return file
 }
 
-func Parse(path string, doc *docstore.Document, previous *parser.Tree, resolve func(dialect.Input) dialect.Detection) *File {
+func Parse(path string, doc *docstore.Document, previous *File, resolve func(dialect.Input) dialect.Detection) *File {
+	var tree *parser.Tree
+	if previous != nil {
+		tree = previous.Tree
+	}
 	if language, ok := host.Of(doc.URI, doc.Language); ok {
-		return fileOf(path, doc.URI, language.Project(doc), previous)
+		var earlier *projection.Map
+		var native *host.Native
+		if previous != nil {
+			earlier, native = previous.Doc.Mapping(), previous.Native
+		}
+		return fileOf(path, doc.URI, language.ProjectAfter(doc, earlier, native), tree)
 	}
 	detection := resolve(dialect.Input{URI: doc.URI, LanguageID: doc.Language, Text: doc.Text()})
-	return &File{Path: path, URI: doc.URI, Doc: doc, Tree: parser.ParseEdit(previous, doc.Text(), detection.Shell), Detection: detection}
+	return &File{Path: path, URI: doc.URI, Doc: doc, Tree: parser.ParseEdit(tree, doc.Text(), detection.Shell), Detection: detection}
 }
 
 const maxMissing = 4096

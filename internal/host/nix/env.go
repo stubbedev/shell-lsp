@@ -190,7 +190,7 @@ func (f *file) index(m *projection.Map) *model.Index {
 	table.embedHosted(found)
 	linkCalls(f.tree, ix)
 	ix.Runnables = outputs(f.tree, f.table)
-	ix.Folds = folds(f.tree)
+	ix.DeferFolds(func() []model.Fold { return folds(f.tree) })
 	table.compact()
 	return ix
 }

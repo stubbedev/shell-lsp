@@ -136,6 +136,7 @@ type Server struct {
 	shellcheckrc *shellcheckrc.Resolver
 	hadolint     *hadolint.Resolver
 	statix       *statixconfig.Resolver
+	lintMemories lintMemories
 	flakeLocks   *nix.LockFiles
 	library      heldLibrary
 	sem          chan struct{}

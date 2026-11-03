@@ -492,7 +492,7 @@ func (p *Project) scriptSink(fn flowLambda, key string) (scriptSink, bool) {
 	p.sinkVisiting[k] = true
 	defer delete(p.sinkVisiting, k)
 	var sink scriptSink
-	if s := fn.unit.sinks[fn.fn]; s != nil {
+	if s := fn.unit.sinks()[fn.fn]; s != nil {
 		sink = s.scripts[key]
 		for _, f := range s.forwards {
 			if sink.writer != "" {
@@ -544,7 +544,7 @@ func (p *Project) envSink(fn flowLambda, key string) bool {
 }
 
 func (p *Project) envForwarded(fn flowLambda, key string) bool {
-	s := fn.unit.sinks[fn.fn]
+	s := fn.unit.sinks()[fn.fn]
 	if s == nil {
 		return false
 	}
@@ -769,6 +769,7 @@ func (f *file) provenShell(s provenString) (shellString, bool) {
 	}
 	if s.sink.ambient && !found.derivation {
 		found.directive = phaseDirective
+		found.shared = true
 	}
 	return found, true
 }

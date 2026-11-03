@@ -143,7 +143,7 @@ func checkGlobalReassignments(p *pass) {
 		}
 		addScope(reported, def.Name, def.Within)
 		fn, _ := p.tree.EnclosingFunction(def.Within)
-		p.report(codeReassignedGlobal, def.NameSpan, fn.Name+" changes the global "+def.Name+", which the top level sets on line "+strconv.Itoa(p.tree.Line(writes[0].Span.Start))+"; pass values in as arguments and out on standard output, or keep the global constant.")
+		p.report(codeReassignedGlobal, def.NameSpan, fn.Name+" changes the global "+def.Name+", which the top level sets on line "+strconv.Itoa(p.tree.SourceLine(writes[0].Span.Start))+"; pass values in as arguments and out on standard output, or keep the global constant.")
 	}
 }
 
@@ -156,7 +156,7 @@ func (p *pass) checkTopLevelReassignment(def *parser.Definition, writes []*parse
 			return
 		}
 		if overwritesGlobal(earlier) && !p.exclusiveBranches(earlier.Node, def.Node) {
-			p.report(codeReassignedGlobal, def.NameSpan, def.Name+" is set again after line "+strconv.Itoa(p.tree.Line(earlier.Span.Start))+"; a global that keeps one value can be made readonly, so give the new value its own name.")
+			p.report(codeReassignedGlobal, def.NameSpan, def.Name+" is set again after line "+strconv.Itoa(p.tree.SourceLine(earlier.Span.Start))+"; a global that keeps one value can be made readonly, so give the new value its own name.")
 			return
 		}
 	}

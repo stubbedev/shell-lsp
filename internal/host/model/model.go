@@ -378,11 +378,21 @@ type Index struct {
 	Branches  Alternatives
 	Renames   Renames
 
+	foldsOf  func() []Fold
 	lookups  sync.Once
 	byName   []int32
 	nameRuns []int32
 	byOwner  []int32
 	byParent []int32
+}
+
+func (ix *Index) DeferFolds(compute func() []Fold) { ix.foldsOf = sync.OnceValue(compute) }
+
+func (ix *Index) AllFolds() []Fold {
+	if ix.foldsOf != nil {
+		return ix.foldsOf()
+	}
+	return ix.Folds
 }
 
 type Branches []Span

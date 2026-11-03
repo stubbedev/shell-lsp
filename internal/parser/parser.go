@@ -130,25 +130,48 @@ type FragmentStart struct {
 	Line   int
 }
 
-func ParseScripts(previous *Tree, text string, scripts []Span, shell dialect.Shell, origin Origin) *Tree {
-	return ParsePrepared(previous, text, scripts, shell, origin, func(int) (*syntax.File, bool) { return nil, false })
+type ParseKey struct {
+	Text   string
+	Start  int
+	Line   int
+	Column int
+	Shell  dialect.Shell
 }
 
-func ParsePrepared(previous *Tree, text string, scripts []Span, shell dialect.Shell, origin Origin, prepared func(start int) (*syntax.File, bool)) *Tree {
+type Parses interface {
+	Recall(key ParseKey) (*syntax.File, bool)
+	Keep(key ParseKey, file *syntax.File)
+}
+
+type noParses struct{}
+
+func (noParses) Recall(ParseKey) (*syntax.File, bool) { return nil, false }
+
+func (noParses) Keep(ParseKey, *syntax.File) {}
+
+func ParseScripts(previous *Tree, text string, scripts []Span, shell dialect.Shell, origin Origin) *Tree {
+	return ParseKept(previous, text, scripts, shell, origin, noParses{})
+}
+
+func ParseKept(previous *Tree, text string, scripts []Span, shell dialect.Shell, origin Origin, parses Parses) *Tree {
 	starts := lineStarts(text)
 	file := &syntax.File{}
 	var errs []Error
 	closedAtEnd := map[*syntax.Redirect]bool{}
 	reused := newSyntaxParser(shell.Lang())
 	for _, script := range scripts {
-		if part, ready := prepared(script.Start); ready {
+		line := sort.SearchInts(starts, script.Start+1)
+		key := ParseKey{Text: text[script.Start:script.End], Start: script.Start, Line: line, Column: script.Start - starts[line-1] + 1, Shell: shell}
+		if part, ready := parses.Recall(key); ready {
 			file.Stmts = append(file.Stmts, part.Stmts...)
 			file.Last = append(file.Last, part.Last...)
 			continue
 		}
-		line := sort.SearchInts(starts, script.Start+1)
-		syntax.StartAt(uint(script.Start), uint(line), uint(script.Start-starts[line-1]+1))(reused)
+		syntax.StartAt(uint(script.Start), uint(line), uint(key.Column))(reused)
 		part, partErrs, closed := parseSource(reused, []byte(text[script.Start:script.End]), script.Start, text[:script.End], shell.Dialect)
+		if len(partErrs) == 0 && len(closed) == 0 {
+			parses.Keep(key, part)
+		}
 		file.Stmts = append(file.Stmts, part.Stmts...)
 		file.Last = append(file.Last, part.Last...)
 		errs = append(errs, partErrs...)

@@ -81,7 +81,8 @@ var keystrokeSources = []keystrokeSource{
 	{name: "makefile", file: "Makefile", language: "makefile", text: func() string { return largeMakefile(1500) }, line: 1, maxBytes: 42 << 20, maxObjects: 270_000},
 	{name: "dockerfile", file: "Dockerfile", language: "dockerfile", text: func() string { return largeDockerfile(1000) }, line: 1, maxBytes: 18 << 20, maxObjects: 160_000},
 	{name: "nix", file: "big.nix", language: "nix", text: func() string { return largeNixFile(5000) }, line: 2, maxBytes: 62 << 20, maxObjects: 230_000},
-	{name: "nix-shell", file: "scripts.nix", language: "nix", text: func() string { return largeShellHeavyNix(700) }, line: 2, maxBytes: 30 << 20, maxObjects: 180_000},
+	{name: "nix-shell", file: "scripts.nix", language: "nix", text: func() string { return largeShellHeavyNix(700) }, line: 2, maxBytes: 18 << 20, maxObjects: 60_000},
+	{name: "nix-shell-typing", file: "scripts.nix", language: "nix", text: func() string { return largeShellHeavyNix(700) }, line: 3, maxBytes: 30 << 20, maxObjects: 180_000},
 }
 
 type keystrokeSession struct {

@@ -7,10 +7,16 @@ func (b *Builder) StandIn(text string) { b.standIn = text }
 func (b *Builder) Embed(inner, via *Map) {
 	region := noRegion
 	next := 0
+	units := map[int]int{}
 	for _, s := range inner.spans {
 		for next < len(inner.scripts) && int(s.proj) >= inner.scripts[next].Start {
 			b.Shell(inner.shells[next])
-			b.Script()
+			unit, seen := units[inner.units[next]]
+			if !seen {
+				unit = b.NewUnit()
+				units[inner.units[next]] = unit
+			}
+			b.UnitScript(unit)
 			next++
 		}
 		if next == 0 {

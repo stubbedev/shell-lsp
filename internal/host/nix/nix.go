@@ -17,6 +17,7 @@ var phaseDirective = directive.Render(directive.Disable, "SC2154") + "\n"
 
 const (
 	srcBytesPerSpan = 32
+	roomDivisor     = 16
 	tool            = "nix"
 	strictMode      = "set -o errexit -o nounset -o pipefail\n"
 	phaseFunction   = "nixPhase"
@@ -29,6 +30,8 @@ type file struct {
 	found []shellString
 	path  []string
 	embed Embedder
+
+	earlier Earlier
 
 	quotesRead  map[*syntax.String]bool
 	quotedHoles map[*syntax.Interpolation]bool
@@ -63,9 +66,10 @@ type Analysis struct {
 }
 
 type Parsed struct {
-	src   string
-	tree  *syntax.File
-	table *scope.Table
+	src     string
+	tree    *syntax.File
+	table   *scope.Table
+	earlier Earlier
 }
 
 func Parse(src string) *Parsed {
@@ -114,8 +118,27 @@ func Analyze(src string) Analysis { return AnalyzeWith(src, nil) }
 
 func AnalyzeWith(src string, embed Embedder) Analysis { return Parse(src).Analyze(embed) }
 
+type Earlier struct {
+	Map           *projection.Map
+	Refs, Symbols int
+}
+
+func EarlierOf(m *projection.Map, ix *model.Index) Earlier {
+	if ix == nil {
+		return Earlier{Map: m}
+	}
+	return Earlier{Map: m, Refs: withRoom(len(ix.Refs)), Symbols: withRoom(len(ix.Symbols))}
+}
+
+func withRoom(n int) int { return n + n/roomDivisor }
+
+func (p *Parsed) After(earlier Earlier) *Parsed {
+	p.earlier = earlier
+	return p
+}
+
 func (p *Parsed) Analyze(embed Embedder) Analysis {
-	f := &file{src: p.src, tree: p.tree, table: p.resolved(), embed: embed}
+	f := &file{src: p.src, tree: p.tree, table: p.resolved(), embed: embed, earlier: p.earlier}
 	f.discover()
 	f.discoverWrapped()
 	m, detection := f.projection()
@@ -128,6 +151,7 @@ func AnalyzeDependency(src string) Analysis {
 	ix := &model.Index{}
 	table := newSymbolTable(f, ix)
 	table.build()
+	table.sinks()
 	table.compact()
 	linkCalls(tree, ix)
 	m, detection := f.projection()
@@ -141,13 +165,15 @@ func InStore(path string) bool { return strings.HasPrefix(path, storeDirectory+"
 func (f *file) projection() (*projection.Map, dialect.Detection) {
 	detection, _ := dialect.Choose(f.found, func(s shellString) dialect.Detection { return s.detection }, tool)
 	b := projection.NewBuilder(f.src)
+	b.Reuse(f.earlier.Map)
 	b.Shell(detection)
 	if len(f.found) > 0 {
 		b.Reserve(len(f.src) / srcBytesPerSpan)
 	}
+	units := scriptUnits{builder: b}
 	for n, group := range groups(f.found) {
 		b.Shell(group[0].detection)
-		f.project(b, group, n)
+		f.project(b, group, n, &units)
 	}
 	return b.Map(), detection
 }
@@ -164,7 +190,7 @@ func groups(found []shellString) [][]shellString {
 	return out
 }
 
-func (f *file) project(b *projection.Builder, group []shellString, n int) {
+func (f *file) project(b *projection.Builder, group []shellString, n int, units *scriptUnits) {
 	first := group[0]
 	if first.hosted != nil {
 		b.Embed(first.hosted.inner.Map, first.hosted.via)
@@ -180,12 +206,12 @@ func (f *file) project(b *projection.Builder, group []shellString, n int) {
 	if first.directive == sourcedDirective {
 		b.SourcedScript()
 	} else {
-		b.Script()
+		b.UnitScript(units.of(first))
 	}
 	last := 0
 	for _, s := range group {
 		last = f.body(b, s, opener, shellBody)
 		opener = "\n"
 	}
-	b.Opaque(last, last, end)
+	b.Opaque(last, last, f.holeReads(group)+end)
 }

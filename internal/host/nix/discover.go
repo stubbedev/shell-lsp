@@ -39,6 +39,7 @@ type context struct {
 	callee string
 	merged syntax.Expr
 	prefix string
+	patch  bool
 }
 
 func (c context) cleared() context {
@@ -85,6 +86,9 @@ type shellString struct {
 	skip       int
 	provides   []string
 	hosted     *hostedText
+	shared     bool
+	stage      bool
+	option     string
 }
 
 func (f *file) discover() {
@@ -185,7 +189,7 @@ func (f *file) defaults(param syntax.Param) {
 
 func (f *file) attrs(set *syntax.AttrSet, c context, callee string) {
 	inner := context{}
-	inner.set, inner.callee, inner.merged = set, callee, c.merged
+	inner.set, inner.callee, inner.merged, inner.patch = set, callee, c.merged, c.patch
 	f.bindings(set.Bindings, inner)
 }
 
@@ -234,6 +238,7 @@ func lastIdent(path syntax.AttrPath) string {
 
 func (f *file) apply(e *syntax.Apply, c context, at position) {
 	carried, carries := carriers[f.libraryName(e.Fn)]
+	c.patch = c.patch || derivationPatches[calleeName(syntax.Unparenthesized(e.Fn))]
 	f.walkApplied(e.Fn, e, 0, c, at)
 	for i, arg := range e.Args {
 		k := i + 1
@@ -438,10 +443,15 @@ func (f *file) shaped(s shellString, found *surface, via call) (shellString, boo
 	c := s.context
 	switch found.role {
 	case scriptRole:
+		s.provides = found.provides
+		if setupHookLists[f.lastPathSegment()] {
+			s.directive = sourcedDirective
+		}
 	case foreignRole:
 		return shellString{}, false
 	case phaseRole:
 		s.derivation = true
+		s.stage = true
 		s.env = environment{set: c.set, source: derivationEnv, expr: c.merged}
 		s.phase = phaseRank(c.name)
 		s.provides = declaredOutputs(c.set)
@@ -452,6 +462,7 @@ func (f *file) shaped(s shellString, found *surface, via call) (shellString, boo
 	case unitRole:
 		s.env = environment{set: c.set, source: unitEnv, prefix: c.prefix, expr: c.merged}
 		s.directive = readsEnvironment(s.env)
+		s.option = f.optionPath(found)
 	case appRole:
 		s.env = environment{set: c.set, source: appEnv, expr: c.merged}
 		s.prelude = strictMode
@@ -686,4 +697,92 @@ func (f *file) firstLine(str *syntax.String) string {
 	}
 	line, _, _ := strings.Cut(text, "\n")
 	return line
+}
+
+var derivationPatches = map[string]bool{"overrideAttrs": true, "overrideCabal": true, "overrideDerivation": true}
+
+var setupHookLists = map[string]bool{"nativeBuildInputs": true, "buildInputs": true, "propagatedBuildInputs": true, "propagatedNativeBuildInputs": true}
+
+func (f *file) lastPathSegment() string {
+	if len(f.path) == 0 {
+		return ""
+	}
+	return f.path[len(f.path)-1]
+}
+
+func (f *file) optionPath(s *surface) string {
+	known := f.path
+	for i, segment := range slices.Backward(f.path) {
+		if segment == unknownAttr {
+			known = f.path[i+1:]
+			break
+		}
+	}
+	if len(known) <= strings.Count(s.attr, ".") {
+		return ""
+	}
+	return strings.Join(known, envPathSeparator)
+}
+
+type scriptUnits struct {
+	builder *projection.Builder
+	sets    map[*syntax.AttrSet]int
+	options map[string]int
+}
+
+func (u *scriptUnits) of(s shellString) int {
+	switch {
+	case s.shared, s.stage && s.context.patch:
+		return projection.SharedUnit
+	case s.option != "":
+		return u.ofOption(s.option)
+	case s.stage:
+		return u.ofDerivation(s.context)
+	}
+	return u.builder.NewUnit()
+}
+
+func (u *scriptUnits) ofOption(path string) int {
+	unit, known := u.options[path]
+	if !known {
+		unit = u.builder.NewUnit()
+		if u.options == nil {
+			u.options = map[string]int{}
+		}
+		u.options[path] = unit
+	}
+	return unit
+}
+
+func (u *scriptUnits) ofDerivation(c context) int {
+	sets := updatedSets(c.merged, []*syntax.AttrSet{c.set})
+	if u.sets == nil {
+		u.sets = map[*syntax.AttrSet]int{}
+	}
+	unit := projection.SharedUnit
+	for _, set := range sets {
+		if known, seen := u.sets[set]; seen {
+			unit = known
+			break
+		}
+	}
+	if unit == projection.SharedUnit {
+		unit = u.builder.NewUnit()
+	}
+	for _, set := range sets {
+		u.sets[set] = unit
+	}
+	return unit
+}
+
+func updatedSets(e syntax.Expr, sets []*syntax.AttrSet) []*syntax.AttrSet {
+	switch e := syntax.Unparenthesized(e).(type) {
+	case *syntax.AttrSet:
+		return append(sets, e)
+	case *syntax.Binary:
+		if e.Op == syntax.OpUpdate {
+			return updatedSets(e.Right, updatedSets(e.Left, sets))
+		}
+	}
+	return sets
 }

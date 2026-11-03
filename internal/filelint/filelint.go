@@ -45,28 +45,26 @@ func (s Settings) DialectSource(file *workspace.File) lint.DialectSource {
 }
 
 func Check(file *workspace.File, env navigation.Env, s Settings) lint.Report {
-	var merged lint.Report
-	for _, variant := range file.Variants() {
-		report := check(variant, env, s)
-		for _, d := range report.Disabled {
-			for i := range d.Suppressed {
-				d.Suppressed[i] += len(merged.Suppressed)
-			}
-			merged.Disabled = append(merged.Disabled, d)
-		}
-		merged.Findings = append(merged.Findings, report.Findings...)
-		merged.Suppressed = append(merged.Suppressed, report.Suppressed...)
-	}
-	return merged
+	return NewMemory().Check(file, env, s)
 }
 
-func check(file *workspace.File, env navigation.Env, s Settings) lint.Report {
-	report := lint.Run(file.Tree, navigation.Imports(file, env), lint.Options{
+func merge(into *lint.Report, report lint.Report) {
+	for _, d := range report.Disabled {
+		for i := range d.Suppressed {
+			d.Suppressed[i] += len(into.Suppressed)
+		}
+		into.Disabled = append(into.Disabled, d)
+	}
+	into.Findings = append(into.Findings, report.Findings...)
+	into.Suppressed = append(into.Suppressed, report.Suppressed...)
+}
+
+func options(file *workspace.File, s Settings) lint.Options {
+	return lint.Options{
 		Exclude:       excluded(file, s),
 		Optional:      slices.Concat(s.Optional, s.RC.Enabled),
 		Profile:       s.Profile,
 		DialectSource: s.DialectSource(file),
-		Sources:       followed(file, env),
 		RCFile:        dialect.IsRCFile(file.Path),
 
 		Normalized: lint.Normalized{
@@ -77,7 +75,10 @@ func check(file *workspace.File, env navigation.Env, s Settings) lint.Report {
 		NoExtendedAnalysis: !*cmp.Or(s.Extended, s.RC.Extended, new(true)),
 
 		Sourced: file.Doc.Sourced,
-	})
+	}
+}
+
+func shown(file *workspace.File, report lint.Report) lint.Report {
 	if file.Doc.Projected() {
 		report.Findings = slices.DeleteFunc(report.Findings, func(f lint.Finding) bool {
 			return file.Doc.Synthetic(f.Span.Start) || file.Doc.OnlyStandIn(f.Span.Start, f.Span.End)

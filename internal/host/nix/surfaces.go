@@ -44,6 +44,7 @@ type surface struct {
 var (
 	homeActivationValues   = []string{"DRY_RUN_CMD", "VERBOSE_ARG", "VERBOSE_ECHO", "VERBOSE_RUN", "newGenPath", "oldGenPath"}
 	systemActivationValues = []string{"systemConfig"}
+	builderOutput          = []string{"out"}
 )
 
 func providing(names []string, surfaces []surface) []surface {
@@ -171,7 +172,8 @@ func surfaceTable() []surface {
 		onAttrs(sourcedRole, dialect.Bash, under("programs.bash", "shellInit", "loginShellInit", "interactiveShellInit", "promptInit", "promptPluginInit", "logout", "bashrcExtra", "initExtra", "logoutExtra", "profileExtra", "shellAliases.*")...),
 		onAttrs(sourcedRole, dialect.Zsh, under("programs.zsh", "shellInit", "loginShellInit", "interactiveShellInit", "promptInit", "completionInit", "envExtra", "initContent", "initExtra", "initExtraBeforeCompInit", "initExtraFirst", "loginExtra", "logoutExtra", "profileExtra", "shellAliases.*", "shellGlobalAliases.*", "siteFunctions.*")...),
 		onAttrs(sourcedRole, dialect.Busybox, under("boot.initrd", "preDeviceCommands", "preFailCommands", "preLVMCommands", "postDeviceCommands", "postResumeCommands", "postMountCommands")...),
-		onAttrs(sourcedRole, dialect.Bash, "boot.initrd.extraUtilsCommands", "boot.initrd.extraUtilsCommandsTest", "boot.initrd.extraUdevRulesCommands", "boot.postBootCommands"),
+		providing(builderOutput, onAttrs(sourcedRole, dialect.Bash, "boot.initrd.extraUtilsCommands", "boot.initrd.extraUtilsCommandsTest", "boot.initrd.extraUdevRulesCommands")),
+		onAttrs(sourcedRole, dialect.Bash, "boot.postBootCommands"),
 		onAttrs(sourcedRole, dialect.Bash, "boot.loader.grub.extraInstallCommands", "boot.loader.grub.extraPrepareConfig", "boot.loader.limine.extraInstallCommands", "boot.loader.systemd-boot.extraInstallCommands"),
 		onAttrs(sourcedRole, dialect.Bash, under("networking", "localCommands", "firewall.extraCommands", "firewall.extraStopCommands", "nat.extraCommands", "nat.extraStopCommands", "dhcpcd.runHook")...),
 		onAttrs(sourcedRole, dialect.Bash, under("networking.wireguard.interfaces.*", "preSetup", "postSetup", "preShutdown", "postShutdown")...),
@@ -207,7 +209,8 @@ func surfaceTable() []surface {
 		add(onKeys(scriptRole, call, "extraCommands", "fakeRootCommands"))
 	}
 	for _, call := range fhsBuilders {
-		add(onKeys(scriptRole, call, "runScript", "profile", "extraBuildCommands", "extraInstallCommands", "extraPreBwrapCmds"))
+		add(onKeys(scriptRole, call, "runScript", "profile", "extraPreBwrapCmds"))
+		add(providing(builderOutput, onKeys(scriptRole, call, "extraBuildCommands", "extraInstallCommands")))
 	}
 	for _, call := range nixosTests {
 		add(onKeys(foreignRole, call, "testScript"))

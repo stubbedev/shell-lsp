@@ -161,12 +161,12 @@ func Wrapped(file *workspace.File, proven []nix.ProvenString, shells []model.She
 	if !ok {
 		return nil
 	}
-	variant := func(tree *parser.Tree, detection dialect.Detection) *workspace.File {
-		return &workspace.File{Path: file.Path, URI: file.URI, Doc: script.Doc, Detection: detection, Tree: tree, Native: script.Native}
+	variant := func(tree *parser.Tree, detection dialect.Detection, scripts []parser.Span) *workspace.File {
+		return &workspace.File{Path: file.Path, URI: file.URI, Doc: script.Doc, Detection: detection, Tree: tree, Native: script.Native, Scripts: scripts}
 	}
-	out := variant(script.Parse(nil), script.Detection)
+	out := variant(script.Parse(nil), script.Detection, script.Spans())
 	for _, v := range script.Variants {
-		out.Others = append(out.Others, variant(script.ParseVariant(v, nil), v.Detection))
+		out.Others = append(out.Others, variant(script.ParseVariant(v, nil), v.Detection, v.Spans()))
 	}
 	return out
 }
@@ -378,7 +378,7 @@ func (g *Group) builderCommandTarget(file *workspace.File, r region, cmd shellCo
 			sym = Symbol{Name: cmd.name, Kind: model.KindFunction, locals: []Occurrence{{File: file, Span: input.Span, Declaration: true}}, foreign: true}
 		}
 		sym.Span = cmd.span
-		sym.doc = fmt.Sprintf("%s\n\nA setup hook of `%s`, which `%s` brings in.", hook.Builtin.Doc, hook.Provider, input.List)
+		sym.doc = fmt.Sprintf("%s\n\n%s\n\nA setup hook of `%s`, which `%s` brings in.", shellFenced(hook.Builtin.Signature), hook.Builtin.Doc, hook.Provider, input.List)
 		return sym, true
 	}
 	return Symbol{Name: cmd.name, Kind: model.KindFunction, Span: cmd.span, Builtin: &hook.Builtin, shell: true, scope: r.shell.Scope}, true

@@ -1,9 +1,11 @@
 package nix
 
 import (
+	"cmp"
 	"maps"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/stubbedev/shell-lsp/internal/host/model"
 	"github.com/stubbedev/shell-lsp/internal/host/nix/scope"
@@ -129,7 +131,7 @@ type symbolTable struct {
 	exports    map[int]export
 	envScopes  map[environment]model.Scope
 	shellEnvs  map[model.Scope]environment
-	sinks      map[*syntax.Lambda]*lambdaSinks
+	sinks      func() map[*syntax.Lambda]*lambdaSinks
 	candidates []*syntax.Apply
 	overlays   []syntax.Expr
 	owners     []owner
@@ -216,15 +218,15 @@ func (b *symbolTable) fresh(parent *attrs, kind model.Kind) *attrs {
 func (b *symbolTable) build() {
 	b.collect()
 	b.settleChains()
-	b.sinks = b.f.sinks()
+	b.sinks = sync.OnceValue(b.f.sinks)
 	b.candidates = b.wrapperCandidates()
 	b.reads, b.calls = nil, nil
 	b.publish()
 }
 
 func (b *symbolTable) collect() {
-	b.ix.Refs = slices.Grow(b.ix.Refs, b.f.tree.Slots)
-	b.ix.Symbols = slices.Grow(b.ix.Symbols, b.f.tree.Binders)
+	b.ix.Refs = slices.Grow(b.ix.Refs, cmp.Or(b.f.earlier.Refs, b.f.tree.Slots))
+	b.ix.Symbols = slices.Grow(b.ix.Symbols, cmp.Or(b.f.earlier.Symbols, b.f.tree.Binders))
 	b.owners = slices.Grow(b.owners, b.f.tree.Binders)
 	b.slots = slices.Grow(b.slots, b.f.tree.Slots/slotsPerFlowSlot)
 	b.expr(b.f.tree.Root, model.NoParent)
@@ -610,15 +612,15 @@ func (b *symbolTable) consume(e syntax.Expr) *attrs {
 
 func (b *symbolTable) bindSelves() {
 	for _, call := range b.calls {
-		if !slices.Contains(selfApplied, b.f.libraryName(syntax.Unparenthesized(call.Fn))) {
-			continue
-		}
 		fn, isLambda := syntax.Unparenthesized(call.Args[len(call.Args)-1]).(*syntax.Lambda)
 		if !isLambda {
 			continue
 		}
 		param, named := fn.Param.(*syntax.IdentParam)
 		if !named {
+			continue
+		}
+		if param.Name.Name != finalAttrsName && !slices.Contains(selfApplied, b.f.libraryName(syntax.Unparenthesized(call.Fn))) {
 			continue
 		}
 		if def, bound := b.f.table.Binder(param.Name); bound {

@@ -56,7 +56,7 @@ func (m *Map) settle(placeholders []int, programs []program) {
 		}
 		line += strings.Count(m.text[counted:script.Start], "\n")
 		counted = script.Start
-		file, base, clean := m.settledParse(p, shell, text, parser.FragmentStart{Offset: script.Start, Line: line}, shift)
+		file, base := m.settledParse(p, shell, text, parser.FragmentStart{Offset: script.Start, Line: line}, shift)
 		before := len(requotes)
 		if quoted {
 			quotes := singleQuotes(file, base)
@@ -69,12 +69,6 @@ func (m *Map) settle(placeholders []int, programs []program) {
 		if len(named) > 0 {
 			requotes = append(requotes, m.commandWords(file, base, named)...)
 		}
-		if clean && len(requotes) == before {
-			if m.prepared == nil {
-				m.prepared = map[int]*syntax.File{}
-			}
-			m.prepared[script.Start+shift] = file
-		}
 		for _, r := range requotes[before:] {
 			shift += len(r.text) - m.spans[r.span].projLen
 		}
@@ -85,19 +79,43 @@ func (m *Map) settle(placeholders []int, programs []program) {
 	}
 }
 
-func (m *Map) settledParse(p parser.SyntaxParser, shell dialect.Shell, text string, at parser.FragmentStart, shift int) (*syntax.File, ProjOffset, bool) {
-	if at.Offset == 0 || m.text[at.Offset-1] == '\n' {
-		if file, clean := p.ParseFragment(text, parser.FragmentStart{Offset: at.Offset + shift, Line: at.Line}); clean {
-			return file, ProjOffset(-shift), true
-		}
+func (m *Map) settledParse(p parser.SyntaxParser, shell dialect.Shell, text string, at parser.FragmentStart, shift int) (*syntax.File, ProjOffset) {
+	if at.Offset != 0 && m.text[at.Offset-1] != '\n' {
+		return parser.NewSyntaxParser(shell).Parse(text), ProjOffset(at.Offset)
 	}
-	return parser.NewSyntaxParser(shell).Parse(text), ProjOffset(at.Offset), false
+	key := parser.ParseKey{Text: text, Start: at.Offset + shift, Line: at.Line, Column: 1, Shell: shell}
+	if file, ready := m.Recall(key); ready {
+		return file, ProjOffset(-shift)
+	}
+	if file, clean := p.ParseFragment(text, parser.FragmentStart{Offset: key.Start, Line: at.Line}); clean {
+		m.Keep(key, file)
+		return file, ProjOffset(-shift)
+	}
+	return parser.NewSyntaxParser(shell).Parse(text), ProjOffset(at.Offset)
 }
 
-func (m *Map) Prepared(start int) (*syntax.File, bool) {
-	file, ready := m.prepared[start]
-	return file, ready
+func (m *Map) Recall(key parser.ParseKey) (*syntax.File, bool) {
+	if file, kept := m.parses[key]; kept {
+		return file, true
+	}
+	if m.earlier == nil {
+		return nil, false
+	}
+	file, kept := m.earlier.parses[key]
+	if kept {
+		m.Keep(key, file)
+	}
+	return file, kept
 }
+
+func (m *Map) Keep(key parser.ParseKey, file *syntax.File) {
+	if m.parses == nil {
+		m.parses = map[parser.ParseKey]*syntax.File{}
+	}
+	m.parses[key] = file
+}
+
+func (m *Map) Reuse(earlier *Map) { m.earlier = earlier }
 
 func singleQuotes(file *syntax.File, base ProjOffset) []singleQuote {
 	var quotes []singleQuote

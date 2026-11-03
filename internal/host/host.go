@@ -359,8 +359,20 @@ func ProjectDependency(doc *docstore.Document) Script {
 	return script
 }
 
-func (l Language) Project(doc *docstore.Document) Script {
-	a := definitions[l].analyze(doc.Text())
+func (l Language) Project(doc *docstore.Document) Script { return l.ProjectAfter(doc, nil, nil) }
+
+func (l Language) ProjectAfter(doc *docstore.Document, earlier *projection.Map, native *Native) Script {
+	var a analysis
+	if l == Nix {
+		var ix *model.Index
+		if native != nil {
+			ix = native.Index
+		}
+		a = analyzeParsedNix(nix.Parse(doc.Text()).After(nix.EarlierOf(earlier, ix)))
+	} else {
+		a = definitions[l].analyze(doc.Text())
+	}
+	a.projection.Reuse(earlier)
 	script := projectedScript(doc, a.projection, a.detection)
 	if a.index != nil {
 		script.Native = &Native{Language: l, Index: a.index, expect: a.expect, invocation: a.invocation, enclosing: a.enclosing, format: a.format, together: a.together, dockerfile: a.dockerfile, nix: a.nix}
@@ -420,7 +432,7 @@ func (s Script) ParseVariant(v Variant, like *parser.Tree) *parser.Tree {
 }
 
 func (s Script) parse(like *parser.Tree, scripts []parser.Span, shell dialect.Shell) *parser.Tree {
-	tree := parser.ParsePrepared(like, s.Doc.Text(), scripts, shell, s.Doc, s.Doc.PreparedScript)
+	tree := parser.ParseKept(like, s.Doc.Text(), scripts, shell, s.Doc, s.Doc.Parses())
 	tree.Errors = s.authored(scripts, shell, tree.Errors)
 	return tree
 }

@@ -9,7 +9,6 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/format"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
-	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/project"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
@@ -135,9 +134,9 @@ func (s *Server) snapshot(docs *docstore.View, uri string) (*snapshot, error) {
 	settings, generation := s.settingsFor(doc.Location)
 	return s.snapshots.get(uri, doc, generation, func(previous *snapshot) *snapshot {
 		path := doc.Path
-		var like *parser.Tree
+		var like *workspace.File
 		if previous != nil {
-			like = previous.Tree
+			like = previous.File
 		}
 		var resolved project.Resolution
 		var projectErr error

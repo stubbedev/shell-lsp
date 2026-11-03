@@ -53,9 +53,37 @@ func (s *Server) lintReport(file *workspace.File, settings config.Settings, gene
 	stamp := s.sourcesStamp(file.Tree)
 	lintSettings := s.lintSettings(file.Path, settings)
 	report := workspace.Memo(file, lintKey(lintSettings, generation), stamp, func() lint.Report {
-		return filelint.Check(file, s.navigationEnv(), lintSettings)
+		if !file.Doc.Projected() || !s.docs.Has(file.URI) {
+			return filelint.Check(file, s.navigationEnv(), lintSettings)
+		}
+		return s.lintMemories.of(file.URI).Check(file, s.navigationEnv(), lintSettings)
 	})
 	return report, stamp
+}
+
+type lintMemories struct {
+	mu    sync.Mutex
+	byURI map[string]*filelint.Memory
+}
+
+func (m *lintMemories) of(uri string) *filelint.Memory {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	memory, held := m.byURI[uri]
+	if !held {
+		if m.byURI == nil {
+			m.byURI = map[string]*filelint.Memory{}
+		}
+		memory = filelint.NewMemory()
+		m.byURI[uri] = memory
+	}
+	return memory
+}
+
+func (m *lintMemories) forget(uri string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.byURI, uri)
 }
 
 func lintKey(settings filelint.Settings, generation uint64) string {

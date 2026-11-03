@@ -48,6 +48,7 @@ func (s *Server) handleDidClose(_ context.Context, closeParams lsp.DidCloseTextD
 	uri := closeParams.TextDocument.URI
 	s.docs.Close(uri)
 	last := s.snapshots.forget(uri)
+	s.lintMemories.forget(uri)
 	s.semantic.forget(uri)
 	s.delivery.closed(uri)
 	s.forgetNixClasses(uri)

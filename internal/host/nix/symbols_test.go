@@ -170,7 +170,7 @@ func TestFolds(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			var got []string
-			for _, f := range Analyze(tt.src).Index.Folds {
+			for _, f := range Analyze(tt.src).Index.AllFolds() {
 				text := tt.src[f.Span.Start:f.Span.End]
 				if strings.Contains(text, "\n") || f.Comment {
 					got = append(got, text)

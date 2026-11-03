@@ -660,7 +660,7 @@ func flatten(out []lsp.SymbolInformation, uri string, symbols []lsp.DocumentSymb
 func nativeFolds(snap *snapshot) []lsp.FoldingRange {
 	at := sourcePositions(snap.File, snap.encoding)
 	var out []lsp.FoldingRange
-	for _, f := range snap.Native.Index.Folds {
+	for _, f := range snap.Native.Index.AllFolds() {
 		r := at.Range(f.Span)
 		if r.End.Line <= r.Start.Line {
 			continue

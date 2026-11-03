@@ -242,7 +242,7 @@ func Run(tree *parser.Tree, imports []parser.Import, opts Options) Report {
 	} else {
 		p.run()
 	}
-	sortFindings(p.findings)
+	SortFindings(p.findings)
 	found := slices.CompactFunc(p.findings, sameFinding)
 	suppressed := p.suppressions()
 	for _, f := range p.probes {
@@ -267,13 +267,13 @@ func Run(tree *parser.Tree, imports []parser.Import, opts Options) Report {
 		for _, f := range p.findings {
 			keep(f)
 		}
-		sortFindings(report.Findings)
+		SortFindings(report.Findings)
 	}
 	report.Disabled = suppressed.disabledCodes()
 	return report
 }
 
-func sortFindings(findings []Finding) {
+func SortFindings(findings []Finding) {
 	slices.SortStableFunc(findings, func(a, b Finding) int {
 		return cmp.Or(cmp.Compare(a.Span.Start, b.Span.Start), cmp.Compare(a.Code, b.Code), cmp.Compare(a.Span.End, b.Span.End))
 	})

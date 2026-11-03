@@ -189,7 +189,22 @@ the offending field.
 
 Formatting runs the same printer shfmt is built on, in-process, so no shfmt
 binary is needed. Documents with syntax errors are not formatted, and range
-formatting only changes the lines that intersect the range.
+formatting changes the lines that intersect the range, and what must move with
+them to keep the document's meaning.
+
+Lines move together when moving one alone would change what the document says.
+A Nix `''` string strips the smallest indentation of its lines, so its lines
+move as one. Every line of a justfile recipe needs one indentation, so a recipe
+that is reindented moves as one. And where the formatter's output only lines up
+with the source further on, as when one `fi` is taken for another, the edits up
+to that point go together rather than lose or repeat text.
+
+A selection inside the shell of a Nix string formats the Nix around that shell,
+as formatting the whole file does. The shell itself is left as it is, in
+`writeShellScript`, `runCommand`, phases and `home.file` alike, so the string
+keeps its value and the edits are empty when the string is already in place.
+Recipes of justfiles and Makefiles are not reformatted as shell either, and a
+script embedded in any other file is not formatted at all.
 
 Projects formatted with shfmt keep working unchanged: `.editorconfig` files are
 read the way shfmt reads them (`indent_style`, `indent_size`, `binary_next_line`,
@@ -1039,6 +1054,10 @@ Beyond that, Nix files get these:
 - Separate scripts do not share variables: definition, references, rename, hover and
   completion stay in the script the cursor is in, and `phases` of one derivation meet
   in the order they run.
+- Shell checks read each script alone as well, so one script no longer hides `SC2034` or
+  `SC2154` in another. The phases of one derivation and the pieces of one module option
+  count as one script, and what a sourced surface or an `overrideAttrs` phase assigns or
+  reads stays visible to every script in the file.
 - Type definition on an option goes to the `type` its `mkOption` gives.
 - With `nix.evaluate`, definition follows `pkgs.x` to `meta.position`, or to where the
   attribute is bound when there is none or it is not a package (`pkgs.runCommand`),
@@ -1054,7 +1073,13 @@ Beyond that, Nix files get these:
   quoted and indented forms when its value stays the same, quote or unquote an
   attribute, nest or flatten an attribute path, convert a `with` whose names only it
   can answer to `let inherit`, and extract a binding to a new file beside this one
-  when its value reads nothing through a `with`.
+  when its value reads nothing through a `with` and its name can spell a path. The
+  file is offered only if it does not exist and the client can create files, and takes
+  the names the value reads from this file as arguments.
+- `finalAttrs` reads the set its function returns in any builder, and `x.` offers what
+  this file reads through the same `x` when nothing else knows what `x` holds.
+- A flake input completes its keys, such as `follows` and `url`.
+- `pkgs.x` follows an alias in `pkgs/top-level/aliases.nix` to the package it names.
 - An undefined name offers "Change to" the closest name in scope, and "Add to the
   arguments of this function" for the nearest function with a pattern.
 - `url = "github:o/r"` in a flake links to the page of that repository, also for

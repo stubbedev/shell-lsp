@@ -213,3 +213,27 @@ func PhaseName(rank int) string {
 	}
 	return derivationBindings[i]
 }
+
+func (f *file) holeReads(group []shellString) string {
+	var names []string
+	collect := func(n syntax.Node) bool {
+		if literal, isLiteral := n.(*syntax.Literal); isLiteral {
+			names = appendExpansions(literal.Text, func(string) bool { return true }, names)
+		}
+		return true
+	}
+	for _, s := range group {
+		f.eachHole(s.str, func(hole *syntax.Interpolation) { syntax.Inspect(hole.Value, collect) })
+	}
+	if len(names) == 0 {
+		return ""
+	}
+	slices.Sort(names)
+	var sb strings.Builder
+	for _, name := range slices.Compact(names) {
+		sb.WriteString("\n: \"$")
+		sb.WriteString(name)
+		sb.WriteByte('"')
+	}
+	return sb.String()
+}

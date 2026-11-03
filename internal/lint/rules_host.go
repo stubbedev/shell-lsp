@@ -304,6 +304,6 @@ func HostFinding(code Code, span parser.Span, message string) Finding {
 	return Finding{Code: code, Severity: m.severity, Tag: m.tag, Span: span, Message: message}
 }
 
-func SortHostFindings(findings []Finding) { sortFindings(findings) }
+func SortHostFindings(findings []Finding) { SortFindings(findings) }
 
 func (p Profile) KeepsHost(f Finding) bool { return p.keeps(f, catalog[f.Code], false) }

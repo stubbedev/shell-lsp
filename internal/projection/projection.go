@@ -2,6 +2,7 @@ package projection
 
 import (
 	"cmp"
+	"encoding/binary"
 	"fmt"
 	"slices"
 	"sort"
@@ -94,22 +95,27 @@ func (s span) hostEnd() HostOffset { return s.host + HostOffset(s.hostLen) }
 func (s span) editable() bool { return s.kind == verbatim || s.kind == escape }
 
 type Map struct {
-	host     string
-	text     string
-	spans    []span
-	regions  []*Region
-	scripts  []parser.Span
-	shells   []dialect.Detection
-	sourced  []int
-	prepared map[int]*syntax.File
-	standIn  string
+	host    string
+	text    string
+	spans   []span
+	regions []*Region
+	scripts []parser.Span
+	shells  []dialect.Detection
+	sourced []int
+	units   []int
+	parses  map[parser.ParseKey]*syntax.File
+	earlier *Map
+	standIn string
 }
 
 func (m *Map) Host() string { return m.host }
 
 func (m *Map) Text() string { return m.text }
 
-const noRegion = -1
+const (
+	noRegion   = -1
+	SharedUnit = 0
+)
 
 type Builder struct {
 	host         string
@@ -125,6 +131,9 @@ type Builder struct {
 	sealed       bool
 	standIn      string
 	sourced      []int
+	units        []int
+	lastUnit     int
+	earlier      *Map
 }
 
 const Dynamic = "$$"
@@ -141,9 +150,19 @@ func (b *Builder) Shell(d dialect.Detection) { b.shell = d }
 
 func (b *Builder) Reserve(spans int) { b.spans = slices.Grow(b.spans, spans) }
 
-func (b *Builder) Script() {
+func (b *Builder) Reuse(earlier *Map) { b.earlier = earlier }
+
+func (b *Builder) Script() { b.UnitScript(SharedUnit) }
+
+func (b *Builder) UnitScript(unit int) {
 	b.starts = append(b.starts, b.text.Len())
 	b.shells = append(b.shells, b.shell)
+	b.units = append(b.units, unit)
+}
+
+func (b *Builder) NewUnit() int {
+	b.lastUnit++
+	return b.lastUnit
 }
 
 func (b *Builder) SourcedScript() {
@@ -200,24 +219,25 @@ func (b *Builder) add(k kind, start, end int, text string) {
 }
 
 func (b *Builder) Map() *Map {
-	scripts, shells := b.scripts()
+	scripts, shells, units := b.scripts()
 	if cap(b.spans) > 2*len(b.spans) {
 		b.spans = slices.Clone(b.spans)
 	}
-	m := &Map{host: b.host, text: b.text.String(), spans: b.spans, regions: b.regions, scripts: scripts, shells: shells, sourced: b.sourcedScripts(scripts), standIn: b.standIn}
+	m := &Map{host: b.host, text: b.text.String(), spans: b.spans, regions: b.regions, scripts: scripts, shells: shells, sourced: b.sourcedScripts(scripts), units: units, standIn: b.standIn, earlier: b.earlier}
 	if b.standIn == "" {
 		m.settle(b.placeholders, b.programs)
 	}
 	return m
 }
 
-func (b *Builder) scripts() ([]parser.Span, []dialect.Detection) {
-	starts, shells := append([]int{0}, b.starts...), append([]dialect.Detection{b.shell}, b.shells...)
+func (b *Builder) scripts() ([]parser.Span, []dialect.Detection, []int) {
+	starts, shells, units := append([]int{0}, b.starts...), append([]dialect.Detection{b.shell}, b.shells...), append([]int{SharedUnit}, b.units...)
 	if len(b.shells) > 0 {
 		shells[0] = b.shells[0]
 	}
 	var spans []parser.Span
 	var detections []dialect.Detection
+	var kept []int
 	for i, start := range starts {
 		end := b.text.Len()
 		if i+1 < len(starts) {
@@ -228,8 +248,9 @@ func (b *Builder) scripts() ([]parser.Span, []dialect.Detection) {
 		}
 		spans = append(spans, parser.Span{Start: start, End: end})
 		detections = append(detections, shells[i])
+		kept = append(kept, units[i])
 	}
-	return spans, detections
+	return spans, detections, kept
 }
 
 func (b *Builder) sourcedScripts(scripts []parser.Span) []int {
@@ -254,6 +275,21 @@ func (m *Map) Sourced(offset ProjOffset) bool {
 
 func (m *Map) ScriptOf(offset ProjOffset) int {
 	return sort.Search(len(m.scripts), func(i int) bool { return m.scripts[i].End > int(offset) })
+}
+
+func (m *Map) UnitOf(script int) int { return m.units[script] }
+
+func (m *Map) AppendLayout(dst []byte, script parser.Span) []byte {
+	first := sort.Search(len(m.spans), func(i int) bool { return m.spans[i].projEnd() > ProjOffset(script.Start) })
+	for i := first; i < len(m.spans) && int(m.spans[i].proj) < script.End; i++ {
+		s := m.spans[i]
+		dst = append(dst, byte(s.kind))
+		if s.hostLen == 0 {
+			dst = append(dst, 0)
+		}
+		dst = binary.AppendVarint(dst, int64(s.projLen))
+	}
+	return dst
 }
 
 func (m *Map) Shells() []dialect.Detection { return m.shells }

@@ -15,7 +15,6 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/projection"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
-	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
 type Encoding uint8
@@ -145,12 +144,9 @@ func (d *Document) On(source *Document) *Document {
 
 func (d *Document) Projected() bool { return d.mapping != nil }
 
-func (d *Document) PreparedScript(start int) (*syntax.File, bool) {
-	if d.mapping == nil {
-		return nil, false
-	}
-	return d.mapping.Prepared(start)
-}
+func (d *Document) Parses() parser.Parses { return d.mapping }
+
+func (d *Document) Mapping() *projection.Map { return d.mapping }
 
 func (d *Document) Source() *Document {
 	if d.mapping == nil {
@@ -210,6 +206,32 @@ func (d *Document) ScriptOf(offset int) int {
 		return 0
 	}
 	return d.mapping.ScriptOf(projection.ProjOffset(offset))
+}
+
+func (d *Document) Units(scripts []parser.Span) (shared []parser.Span, apart [][]parser.Span) {
+	if d.mapping == nil {
+		return nil, nil
+	}
+	positions := map[int]int{}
+	for _, script := range scripts {
+		unit := d.mapping.UnitOf(d.mapping.ScriptOf(projection.ProjOffset(script.Start)))
+		if unit == projection.SharedUnit {
+			shared = append(shared, script)
+			continue
+		}
+		at, seen := positions[unit]
+		if !seen {
+			at = len(apart)
+			positions[unit] = at
+			apart = append(apart, nil)
+		}
+		apart[at] = append(apart[at], script)
+	}
+	return shared, apart
+}
+
+func (d *Document) AppendLayout(dst []byte, script parser.Span) []byte {
+	return d.mapping.AppendLayout(dst, script)
 }
 
 func (d *Document) StandIn(offset int) bool {
