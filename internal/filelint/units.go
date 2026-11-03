@@ -166,6 +166,7 @@ func (c *unitCheck) report(u scriptUnit, key unitKey, neighbours func() []parser
 	opts := options(own, c.lint)
 	opts.Sources = followed(own, c.env)
 	opts.Sourced = func(offset int) bool { return c.file.Doc.Sourced(u.start(offset)) }
+	opts.ReadByHost = func(offset int, name string) bool { return c.file.Doc.ReadByHost(u.start(offset), name) }
 	opts.Normalized = lint.Normalized{CarriageReturns: u.carriageReturns(c.file.Doc)}
 	report := lint.Run(tree, imports, opts)
 	if !origin.lineAsked.Load() {

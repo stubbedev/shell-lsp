@@ -75,6 +75,11 @@ func (set *editSet) holds() bool {
 	return !slices.ContainsFunc(set.regions, func(have regionEdits) bool { return !have.region.settled(have.host, have.edits) })
 }
 
+type scriptReads struct {
+	start int
+	names map[string]bool
+}
+
 type HostOffset int
 
 type ProjOffset int
@@ -103,6 +108,7 @@ type Map struct {
 	shells  []dialect.Detection
 	sourced []int
 	units   []int
+	reads   []scriptReads
 	parses  map[parser.ParseKey]*syntax.File
 	earlier *Map
 	standIn string
@@ -132,6 +138,7 @@ type Builder struct {
 	standIn      string
 	sourced      []int
 	units        []int
+	reads        []scriptReads
 	lastUnit     int
 	earlier      *Map
 }
@@ -153,6 +160,10 @@ func (b *Builder) Reserve(spans int) { b.spans = slices.Grow(b.spans, spans) }
 func (b *Builder) Reuse(earlier *Map) { b.earlier = earlier }
 
 func (b *Builder) Script() { b.UnitScript(SharedUnit) }
+
+func (b *Builder) ReadByHost(names map[string]bool) {
+	b.reads = append(b.reads, scriptReads{start: b.text.Len(), names: names})
+}
 
 func (b *Builder) UnitScript(unit int) {
 	b.starts = append(b.starts, b.text.Len())
@@ -223,7 +234,7 @@ func (b *Builder) Map() *Map {
 	if cap(b.spans) > 2*len(b.spans) {
 		b.spans = slices.Clone(b.spans)
 	}
-	m := &Map{host: b.host, text: b.text.String(), spans: b.spans, regions: b.regions, scripts: scripts, shells: shells, sourced: b.sourcedScripts(scripts), units: units, standIn: b.standIn, earlier: b.earlier}
+	m := &Map{host: b.host, text: b.text.String(), spans: b.spans, regions: b.regions, scripts: scripts, shells: shells, sourced: b.sourcedScripts(scripts), units: units, reads: b.reads, standIn: b.standIn, earlier: b.earlier}
 	if b.standIn == "" {
 		m.settle(b.placeholders, b.programs)
 	}
@@ -271,6 +282,15 @@ func (m *Map) Scripts() []parser.Span { return m.scripts }
 func (m *Map) Sourced(offset ProjOffset) bool {
 	_, sourced := slices.BinarySearch(m.sourced, m.ScriptOf(offset))
 	return sourced
+}
+
+func (m *Map) ReadByHost(offset ProjOffset, name string) bool {
+	script := m.ScriptOf(offset)
+	if script == len(m.scripts) {
+		return false
+	}
+	i, marked := slices.BinarySearchFunc(m.reads, m.scripts[script].Start, func(r scriptReads, start int) int { return cmp.Compare(r.start, start) })
+	return marked && m.reads[i].names[name]
 }
 
 func (m *Map) ScriptOf(offset ProjOffset) int {

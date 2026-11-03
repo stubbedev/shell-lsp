@@ -201,6 +201,10 @@ func (d *Document) Sourced(offset int) bool {
 	return d.mapping != nil && d.mapping.Sourced(projection.ProjOffset(offset))
 }
 
+func (d *Document) ReadByHost(offset int, name string) bool {
+	return d.mapping != nil && d.mapping.ReadByHost(projection.ProjOffset(offset), name)
+}
+
 func (d *Document) ScriptOf(offset int) int {
 	if d.mapping == nil {
 		return 0

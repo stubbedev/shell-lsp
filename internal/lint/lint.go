@@ -215,6 +215,8 @@ type Options struct {
 	NoExtendedAnalysis bool
 
 	Sourced func(offset int) bool
+
+	ReadByHost func(offset int, name string) bool
 }
 
 type Report struct {

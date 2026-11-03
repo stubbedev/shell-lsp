@@ -641,7 +641,7 @@ func reportVariables(p *pass) {
 func (p *pass) reportUnused(f variableFacts) {
 	names := make([]string, 0, len(f.last))
 	for name := range f.last {
-		if !f.used[name] && !strings.HasPrefix(name, "_") && !p.parameters.Has(name) {
+		if !f.used[name] && !strings.HasPrefix(name, "_") && !p.parameters.Has(name) && !p.hostReads(f.last[name], name) {
 			names = append(names, name)
 		}
 	}
@@ -653,6 +653,10 @@ func (p *pass) reportUnused(f variableFacts) {
 	for _, name := range names {
 		p.report(2034, f.last[name], name+" is assigned but never read; remove it, or export it if another program needs it.")
 	}
+}
+
+func (p *pass) hostReads(assigned parser.Span, name string) bool {
+	return p.readByHost != nil && p.readByHost(assigned.Start, name)
 }
 
 func (p *pass) reportUnassigned(f variableFacts) {

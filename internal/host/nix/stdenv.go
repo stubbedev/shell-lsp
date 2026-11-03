@@ -35,6 +35,48 @@ func phaseRank(binding string) int {
 	return firstStage + stageSteps*len(phaseStages)
 }
 
+var stdenvReads = stdenvReadSet()
+
+func stdenvReadSet() map[string]bool {
+	reads := make(map[string]bool, len(stdenvInputs)+len(derivationBindings)+2*len(phaseStages))
+	for _, names := range [][]string{stdenvInputs, derivationBindings} {
+		for _, name := range names {
+			reads[name] = true
+		}
+	}
+	for _, stage := range phaseStages {
+		reads["pre"+stage+"Hooks"] = true
+		reads["post"+stage+"Hooks"] = true
+	}
+	return reads
+}
+
+var stdenvInputs = []string{
+	"NIX_BUILD_CORES", "NIX_BUILD_TOP", "NIX_DEBUG", "SOURCE_DATE_EPOCH", "TMPDIR",
+	"buildFlags", "buildFlagsArray",
+	"checkFlags", "checkFlagsArray", "checkTarget",
+	"configureFlags", "configureFlagsArray", "configureScript",
+	"depsBuildBuildPropagated", "depsBuildTargetPropagated", "depsHostHostPropagated", "depsTargetTargetPropagated",
+	"distFlags", "distFlagsArray", "distTarget",
+	"doCheck", "doDist", "doInstallCheck",
+	"dontAddDisableDepTrack", "dontAddPrefix", "dontBuild", "dontCheckForBrokenSymlinks", "dontConfigure", "dontCopyDist",
+	"dontDisableStatic", "dontFixLibtool", "dontFixup", "dontInstall", "dontMakeSourcesWritable", "dontMoveLib64", "dontMoveSbin",
+	"dontMoveSystemdUserUnits", "dontPatch", "dontPatchShebangs", "dontPatchShebangsInConfigure", "dontPruneLibtoolFiles",
+	"dontStrip", "dontUnpack",
+	"enableParallelBuilding", "enableParallelChecking", "enableParallelInstalling",
+	"exitHook", "exitHooks", "failureHook", "failureHooks", "fixupOutput", "fixupOutputHooks",
+	"forceShare", "foundMakefile",
+	"installCheckFlags", "installCheckFlagsArray", "installCheckTarget",
+	"installFlags", "installFlagsArray", "installTargets",
+	"makeFlags", "makeFlagsArray", "makefile", "moveToDev", "name", "noDumpEnvVars", "out",
+	"outputBin", "outputDev", "outputDevdoc", "outputDevman", "outputDoc", "outputInclude", "outputInfo", "outputLib", "outputMan", "outputs",
+	"patchFlags", "patches", "prefix", "prefixKey",
+	"propagatedBuildInputs", "propagatedBuildOutputs", "propagatedNativeBuildInputs", "propagatedUserEnvPkgs",
+	"setOutputFlags", "setSourceRoot", "setupHook", "setupHooks", "showBuildStats", "sourceRoot", "src", "srcs", "strictDeps",
+	"stripAllFlags", "stripAllList", "stripAllListTarget", "stripDebugFlags", "stripDebugList", "stripDebugListTarget", "stripExclude",
+	"succeedOnFailure", "tarballs", "unpackCmd", "unpackCmdHooks",
+}
+
 const spacelessValue = "=x\n"
 
 func (f *file) spacelessPrelude(group []shellString) string {

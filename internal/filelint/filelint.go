@@ -74,7 +74,8 @@ func options(file *workspace.File, s Settings) lint.Options {
 
 		NoExtendedAnalysis: !*cmp.Or(s.Extended, s.RC.Extended, new(true)),
 
-		Sourced: file.Doc.Sourced,
+		Sourced:    file.Doc.Sourced,
+		ReadByHost: file.Doc.ReadByHost,
 	}
 }
 

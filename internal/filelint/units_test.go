@@ -107,6 +107,16 @@ func TestVariablesStayWithinTheirScript(t *testing.T) {
 			src:  "{ pkgs }: pkgs.writeShellScript \"a\" (''\n  shared=1\n'' + ''\n  echo \"$shared\"\n'')\n",
 		},
 		{
+			name: "stdenv reads what a phase sets for it",
+			src:  "{ stdenv }: stdenv.mkDerivation {\n  name = \"a\";\n  installPhase = ''\n    dontPatchShebangs=\n    makeFlagsArray+=(a)\n    postFixupHooks+=(b)\n    preBuild=c\n    mine=1\n  '';\n}\n",
+			want: []string{"SC2034:mine=1"},
+		},
+		{
+			name: "stdenv reads nothing a separate script sets",
+			src:  "{ stdenv, pkgs }: [\n  (stdenv.mkDerivation {\n    name = \"a\";\n    buildPhase = ''\n      dontStrip=1\n    '';\n  })\n  (pkgs.writeShellScript \"b\" ''\n    dontStrip=1\n  '')\n]\n",
+			want: []string{"SC2034:dontStrip=1"},
+		},
+		{
 			name: "an embedded text is apart from the file around it",
 			src:  "{ pkgs }: [\n  (pkgs.writeText \"justfile\" ''\n    r:\n        shared=1; echo \"$other\"\n  '')\n  (pkgs.writeShellScript \"b\" ''\n    other=1\n    echo \"$shared\"\n  '')\n]\n",
 			want: []string{"SC2034:other=1", "SC2034:shared=1", "SC2154:$other", "SC2154:$shared"},

@@ -50,6 +50,7 @@ type pass struct {
 
 	normalized Normalized
 	sourced    func(offset int) bool
+	readByHost func(offset int, name string) bool
 	probes     []Finding
 }
 
@@ -69,6 +70,7 @@ func newPass(tree *parser.Tree, imports []parser.Import, opts Options) *pass {
 
 		normalized: opts.Normalized,
 		sourced:    opts.Sourced,
+		readByHost: opts.ReadByHost,
 	}
 }
 

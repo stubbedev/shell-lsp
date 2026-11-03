@@ -203,6 +203,9 @@ func (f *file) project(b *projection.Builder, group []shellString, n int, units 
 		opener = phaseDirective + first.directive + name + "() {\n" + strictMode + prelude
 		end = "\n:\n}\n" + name + "\n"
 	}
+	if first.derivation {
+		b.ReadByHost(stdenvReads)
+	}
 	if first.directive == sourcedDirective {
 		b.SourcedScript()
 	} else {
