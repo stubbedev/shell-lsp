@@ -1,0 +1,186 @@
+title: shell-lsp
+description: One language server for shell and every language that embeds it
+url: https://stubbedev.github.io
+baseurl: /shell-lsp
+theme: just-the-docs
+color_scheme: dark
+plugins_dir: docs/_plugins
+includes_dir: docs/_includes
+plugins:
+  - jekyll-optional-front-matter
+  - jekyll-relative-links
+optional_front_matter:
+  remove_originals: true
+relative_links:
+  enabled: true
+  collections: false
+markdown: kramdown
+kramdown:
+  input: GFM
+  hard_wrap: false
+  syntax_highlighter: rouge
+search_enabled: true
+search:
+  heading_level: 2
+  previews: 3
+  preview_words_before: 5
+  preview_words_after: 10
+  tokenizer_separator: /[\s/]+/
+  rel_url: true
+  button: false
+heading_anchors: true
+mermaid:
+  version: "11.4.1"
+callouts:
+  note:
+    title: Note
+    color: blue
+  tip:
+    title: Tip
+    color: green
+aux_links:
+  GitHub: https://github.com/stubbedev/shell-lsp
+  Releases: https://github.com/stubbedev/shell-lsp/releases
+aux_links_new_tab: true
+nav_external_links: []
+back_to_top: true
+back_to_top_text: Back to top
+include:
+  - README.md
+exclude:
+  - cmd
+  - corpus
+  - docs/_plugins
+  - docs/Gemfile
+  - docs/Gemfile.lock
+  - docs/*.go
+  - docs/releases
+  - editors
+  - flake.lock
+  - flake.nix
+  - go.mod
+  - go.sum
+  - internal
+  - justfile
+  - LICENSE
+  - main.go
+  - main_idle_linux_test.go
+  - main_test.go
+  - fixall_test.go
+  - nix
+  - scripts
+  - third_party
+  - tools
+  - vendor
+  - docs/vendor
+defaults:
+  - scope:
+      path: docs
+    values:
+      layout: default
+      render_with_liquid: false
+      permalink: /:basename/
+  - scope:
+      path: README.md
+    values:
+      title: Home
+      nav_order: 1
+      layout: default
+      render_with_liquid: false
+      permalink: /
+  - scope:
+      path: docs/editors.md
+    values:
+      title: Editor setup
+      nav_order: 2
+  - scope:
+      path: docs/cli.md
+    values:
+      title: Command line
+      nav_order: 3
+  - scope:
+      path: docs/shell.md
+    values:
+      title: Shell scripts
+      nav_order: 4
+  - scope:
+      path: docs/nix.md
+    values:
+      title: Nix
+      nav_order: 5
+  - scope:
+      path: docs/hosts.md
+    values:
+      title: Justfiles, Makefiles, Dockerfiles
+      nav_order: 6
+  - scope:
+      path: docs/formatting.md
+    values:
+      title: Formatting
+      nav_order: 7
+  - scope:
+      path: docs/linting.md
+    values:
+      title: Linting
+      nav_order: 8
+      has_children: true
+  - scope:
+      path: docs/checks.md
+    values:
+      title: All checks
+      parent: Linting
+      nav_order: 1
+  - scope:
+      path: docs/rules.md
+    values:
+      title: Native rules
+      parent: Linting
+      nav_order: 2
+  - scope:
+      path: docs/hadolint.md
+    values:
+      title: Hadolint compatibility
+      parent: Linting
+      nav_order: 3
+  - scope:
+      path: docs/lsp-methods.md
+    values:
+      title: LSP methods
+      nav_order: 9
+  - scope:
+      path: docs/development.md
+    values:
+      title: Development
+      nav_order: 10
+      has_children: true
+  - scope:
+      path: docs/corpus.md
+    values:
+      title: Corpus checks
+      parent: Development
+      nav_order: 1
+  - scope:
+      path: docs/crosscheck.md
+    values:
+      title: Cross-check
+      parent: Development
+      nav_order: 2
+  - scope:
+      path: docs/vscode-publishing.md
+    values:
+      title: Publishing the extension
+      parent: Development
+      nav_order: 3
+  - scope:
+      path: docs/how-it-was-built.md
+    values:
+      title: How it was built
+      nav_order: 11
+  - scope:
+      path: CLEAN_ROOM.md
+    values:
+      title: Clean-room policy
+      nav_order: 12
+      layout: default
+      render_with_liquid: false
+      permalink: /clean-room/
