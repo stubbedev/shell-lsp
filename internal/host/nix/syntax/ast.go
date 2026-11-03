@@ -26,13 +26,19 @@ type File struct {
 }
 
 type Token struct {
-	Kind TokenKind
-	Span Span
+	start, end int32
+	Kind       TokenKind
+}
+
+func (t Token) Span() Span { return Span{Start: int(t.start), End: int(t.end)} }
+
+func (f *File) DropWhitespaceTokens() {
+	f.Tokens = parser.Tightened(slices.DeleteFunc(f.Tokens, func(t Token) bool { return t.Kind == TokWhitespace }))
 }
 
 func (f *File) TokensIn(span Span) []Token {
-	first, _ := slices.BinarySearchFunc(f.Tokens, span.Start, func(t Token, at int) int { return t.Span.End - at - 1 })
-	last, _ := slices.BinarySearchFunc(f.Tokens, span.End, func(t Token, at int) int { return t.Span.Start - at })
+	first, _ := slices.BinarySearchFunc(f.Tokens, span.Start, func(t Token, at int) int { return int(t.end) - at - 1 })
+	last, _ := slices.BinarySearchFunc(f.Tokens, span.End, func(t Token, at int) int { return int(t.start) - at })
 	return f.Tokens[first:max(first, last)]
 }
 
@@ -65,9 +71,11 @@ type Node interface {
 	Span() Span
 }
 
-type node struct{ span Span }
+type node struct{ start, end int32 }
 
-func (n node) Span() Span { return n.span }
+func nodeAt(s Span) node { return node{start: int32(s.Start), end: int32(s.End)} } //nolint:gosec // offsets of a source file, which the transport caps well below 2^31
+
+func (n node) Span() Span { return Span{Start: int(n.start), End: int(n.end)} }
 
 type Expr interface {
 	Node
@@ -78,7 +86,7 @@ type exprNode struct{ node }
 
 func (exprNode) expr() {}
 
-func exprAt(s Span) exprNode { return exprNode{node{s}} }
+func exprAt(s Span) exprNode { return exprNode{nodeAt(s)} }
 
 type Part interface {
 	Node
@@ -89,7 +97,7 @@ type partNode struct{ node }
 
 func (partNode) part() {}
 
-func partAt(s Span) partNode { return partNode{node{s}} }
+func partAt(s Span) partNode { return partNode{nodeAt(s)} }
 
 type Attr interface {
 	Node
@@ -115,7 +123,7 @@ type bindingNode struct{ node }
 
 func (bindingNode) binding() {}
 
-func bindingAt(s Span) bindingNode { return bindingNode{node{s}} }
+func bindingAt(s Span) bindingNode { return bindingNode{nodeAt(s)} }
 
 type Param interface {
 	Node
@@ -126,7 +134,7 @@ type paramNode struct{ node }
 
 func (paramNode) param() {}
 
-func paramAt(s Span) paramNode { return paramNode{node{s}} }
+func paramAt(s Span) paramNode { return paramNode{nodeAt(s)} }
 
 type Bad struct{ exprNode }
 

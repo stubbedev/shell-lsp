@@ -1,43 +1,55 @@
 package syntax
 
-import "slices"
-
 const (
-	srcBytesPerChunkNode = 512
-	maxChunkNodes        = 256
+	minChunk = 4
+	maxChunk = 32
 )
 
-func chunkFor(src string) int {
-	return min(max(len(src)/srcBytesPerChunkNode, 1), maxChunkNodes)
+type Chunks[T any] struct {
+	free []T
+	next int
 }
 
-type nodes[T any] struct{ free []T }
+func (c *Chunks[T]) grow(atLeast int) {
+	c.next = min(max(2*c.next, minChunk), maxChunk)
+	c.free = make([]T, max(c.next, atLeast))
+}
 
-func (n *nodes[T]) put(chunk int, value T) *T {
-	if len(n.free) == 0 {
-		n.free = make([]T, chunk)
+func (c *Chunks[T]) New() *T {
+	if len(c.free) == 0 {
+		c.grow(1)
 	}
-	at := &n.free[0]
-	n.free = n.free[1:]
+	at := &c.free[0]
+	c.free = c.free[1:]
+	return at
+}
+
+func (c *Chunks[T]) Take(n int) []T {
+	if n > len(c.free) {
+		c.grow(n)
+	}
+	out := c.free[:n:n]
+	c.free = c.free[n:]
+	return out
+}
+
+func (c *Chunks[T]) put(value T) *T {
+	at := c.New()
 	*at = value
 	return at
 }
 
 type pile[T any] struct {
 	stack []T
-	free  []T
+	kept  Chunks[T]
 }
 
-func (p *pile[T]) since(mark, chunk int) []T {
+func (p *pile[T]) since(mark int) []T {
 	n := len(p.stack) - mark
 	if n == 0 {
 		return nil
 	}
-	if n > len(p.free) {
-		p.free = make([]T, max(n, chunk))
-	}
-	out := p.free[:n:n]
-	p.free = p.free[n:]
+	out := p.kept.Take(n)
 	copy(out, p.stack[mark:])
 	clear(p.stack[mark:])
 	p.stack = p.stack[:mark]
@@ -45,26 +57,23 @@ func (p *pile[T]) since(mark, chunk int) []T {
 }
 
 type nodeArena struct {
-	idents     nodes[Ident]
-	identAttrs nodes[IdentAttr]
-	selects    nodes[Select]
-	applies    nodes[Apply]
-	assigns    nodes[Assign]
-	parens     nodes[Paren]
-	sets       nodes[AttrSet]
-	inherits   nodes[Inherit]
-	literals   nodes[Literal]
-	strings    nodes[String]
-	paths      nodes[Path]
+	idents     Chunks[Ident]
+	identAttrs Chunks[IdentAttr]
+	selects    Chunks[Select]
+	applies    Chunks[Apply]
+	assigns    Chunks[Assign]
+	parens     Chunks[Paren]
+	sets       Chunks[AttrSet]
+	inherits   Chunks[Inherit]
+	literals   Chunks[Literal]
+	strings    Chunks[String]
+	paths      Chunks[Path]
 	exprs      pile[Expr]
 	bindings   pile[Binding]
 	attrs      pile[Attr]
 }
 
-const (
-	wastefulSlack         = 4
-	maxTokensPerFourBytes = 3
-)
+const maxTokensPerFourBytes = 3
 
 func estimatedTokens(src string) int {
 	count := 1
@@ -89,11 +98,4 @@ func estimatedTokens(src string) int {
 		}
 	}
 	return min(count, len(src)*maxTokensPerFourBytes/4+1)
-}
-
-func Tightened[T any](s []T) []T {
-	if cap(s)-len(s) <= len(s)/wastefulSlack {
-		return s
-	}
-	return slices.Clone(s)
 }

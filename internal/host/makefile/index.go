@@ -285,7 +285,7 @@ func (in *indexer) scope(target string) model.Scope {
 	if s, ok := in.scopes[target]; ok {
 		return s
 	}
-	s := model.Scope(len(in.scopes) + 1)
+	s := model.Scope(model.Narrow(len(in.scopes) + 1))
 	in.scopes[target] = s
 	return s
 }

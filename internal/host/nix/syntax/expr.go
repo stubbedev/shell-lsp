@@ -201,8 +201,8 @@ func (p *treeParser) application() Expr {
 		arg := p.selection()
 		p.arena.exprs.stack = append(p.arena.exprs.stack, arg)
 	}
-	args := p.arena.exprs.since(mark, p.chunk)
-	return p.arena.applies.put(p.chunk, Apply{exprNode: exprAt(p.span(fn.Span().Start)), Fn: fn, Args: args})
+	args := p.arena.exprs.since(mark)
+	return p.arena.applies.put(Apply{exprNode: exprAt(p.span(fn.Span().Start)), Fn: fn, Args: args})
 }
 
 func (p *treeParser) selection() Expr {
@@ -217,10 +217,10 @@ func (p *treeParser) selection() Expr {
 		p.advance()
 		path := p.attrPath()
 		if !p.accept(TokOrKeyword) {
-			return p.arena.selects.put(p.chunk, Select{exprNode: exprAt(p.span(start)), Target: target, Path: path})
+			return p.arena.selects.put(Select{exprNode: exprAt(p.span(start)), Target: target, Path: path})
 		}
 		fallback := p.selection()
-		return p.arena.selects.put(p.chunk, Select{exprNode: exprAt(p.span(start)), Target: target, Path: path, Default: fallback})
+		return p.arena.selects.put(Select{exprNode: exprAt(p.span(start)), Target: target, Path: path, Default: fallback})
 	case TokOrKeyword:
 		or := p.identifier()
 		return &Apply{exprNode: exprAt(p.span(start)), Fn: target, Args: []Expr{or}}
@@ -302,7 +302,7 @@ func (p *treeParser) paren() *Paren {
 	inner := p.expr()
 	p.open[inParens]--
 	closed := p.closing(TokRParen, ")", open)
-	return p.arena.parens.put(p.chunk, Paren{exprNode: exprAt(p.span(open.start)), Inner: inner, Closed: closed})
+	return p.arena.parens.put(Paren{exprNode: exprAt(p.span(open.start)), Inner: inner, Closed: closed})
 }
 
 func (p *treeParser) atListItem() bool {
@@ -328,7 +328,7 @@ func (p *treeParser) list() *List {
 		p.errorHere("expected a list element, found " + p.describe(p.tok))
 		p.skip()
 	}
-	items := p.arena.exprs.since(mark, p.chunk)
+	items := p.arena.exprs.since(mark)
 	p.open[inBrackets]--
 	closed := p.closing(TokRBracket, "]", open)
 	return &List{exprNode: exprAt(p.span(open.start)), Items: items, Closed: closed}

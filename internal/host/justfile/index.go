@@ -226,7 +226,7 @@ func (in *indexer) function(fn *Function) {
 	scope := in.scopes[fn.Span.Start]
 	i := in.symbol(model.Symbol{
 		Name: fn.Name.Text, Kind: model.KindFunction, Span: fn.Span, Selection: fn.Name.Span, Parent: model.NoParent,
-		Detail: detail(in.text(Span{Start: fn.Name.Span.Start, End: fn.Body.Span.Start})), Arity: model.Arity{Min: len(fn.Params), Max: len(fn.Params)},
+		Detail: detail(in.text(Span{Start: fn.Name.Span.Start, End: fn.Body.Span.Start})), Arity: model.Arity{Min: model.Narrow(len(fn.Params)), Max: model.Narrow(len(fn.Params))},
 	})
 	in.attributes(fn.Attributes, i)
 	in.token(fn.Name.Span, semantic.TypeFunction, semantic.ModDeclaration)

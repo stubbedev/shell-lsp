@@ -122,7 +122,7 @@ func (l *lexer) emit(kind TokenKind, start, end int) {
 	if end <= start {
 		return
 	}
-	l.tokens = append(l.tokens, Token{Kind: kind, Span: Span{Start: start, End: end}})
+	l.tokens = append(l.tokens, Token{start: int32(start), end: int32(end), Kind: kind}) //nolint:gosec // offsets of a source file, which the transport caps well below 2^31
 	l.emitted = end
 }
 

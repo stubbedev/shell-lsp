@@ -527,3 +527,45 @@ func TestScanCutIsRemembered(t *testing.T) {
 		t.Error("a scan that saw everything still counts as cut")
 	}
 }
+
+func TestMemoWeakRecomputesOnceCollected(t *testing.T) {
+	t.Parallel()
+
+	type big struct {
+		call int
+		_    [64]uintptr
+	}
+	f := &File{}
+	calls := 0
+	compute := func() *big {
+		calls++
+		return &big{call: calls}
+	}
+	func() {
+		held := MemoWeak(f, "k", 1, compute)
+		if again := MemoWeak(f, "k", 1, compute); again != held || calls != 1 {
+			t.Errorf("a held value was recomputed: calls = %d", calls)
+		}
+		runtime.KeepAlive(held)
+	}()
+	runtime.GC()
+	if value := MemoWeak(f, "k", 1, compute); value.call != 2 {
+		t.Errorf("after collection the value is computation %d, want the second", value.call)
+	}
+}
+
+func TestMemoWeakRemembersThatThereIsNoValue(t *testing.T) {
+	t.Parallel()
+
+	f := &File{}
+	calls := 0
+	compute := func() *int { calls++; return nil }
+	for range 2 {
+		if value := MemoWeak(f, "k", 1, compute); value != nil {
+			t.Errorf("value = %v, want nil", value)
+		}
+	}
+	if calls != 1 {
+		t.Errorf("calls = %d, want the absence computed once", calls)
+	}
+}

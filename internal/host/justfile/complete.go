@@ -17,7 +17,7 @@ func (f *File) itemScopes() map[int]model.Scope {
 	out := map[int]model.Scope{}
 	for _, it := range f.Items {
 		if it.Kind == ItemRecipe || it.Kind == ItemFunction {
-			out[it.Span().Start] = model.Scope(len(out) + 1)
+			out[it.Span().Start] = model.Scope(model.Narrow(len(out) + 1))
 		}
 	}
 	return out

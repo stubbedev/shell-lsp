@@ -297,7 +297,7 @@ func trimComment(s string) string { return strings.TrimRightFunc(s, unicode.IsSp
 func endsALineComment(body string) bool { return strings.ContainsRune(body, '\r') }
 
 func commentBody(c syntax.Token, src string) string {
-	raw := src[c.Span.Start:c.Span.End]
+	raw := src[c.Span().Start:c.Span().End]
 	if c.Kind == syntax.TokLineComment {
 		return strings.TrimSpace(raw[1:])
 	}
@@ -311,7 +311,7 @@ func (c *converter) trailing() string {
 		t := tokens[c.at]
 		switch t.Kind {
 		case syntax.TokWhitespace:
-			if strings.ContainsRune(c.src[t.Span.Start:t.Span.End], '\n') {
+			if strings.ContainsRune(c.src[t.Span().Start:t.Span().End], '\n') {
 				return strings.Join(parts, " ")
 			}
 		case syntax.TokLineComment:
@@ -321,7 +321,7 @@ func (c *converter) trailing() string {
 			c.at++
 			return strings.Join(parts, " ")
 		case syntax.TokBlockComment:
-			raw := c.src[t.Span.Start:t.Span.End]
+			raw := c.src[t.Span().Start:t.Span().End]
 			if strings.ContainsRune(raw, '\n') || endsALineComment(commentBody(t, c.src)) {
 				return strings.Join(parts, " ")
 			}
@@ -352,7 +352,7 @@ func (c *converter) column(offset int) int {
 }
 
 func (c *converter) blockComment(t syntax.Token, stringNext bool) (trivium, bool) {
-	raw := c.src[t.Span.Start:t.Span.End]
+	raw := c.src[t.Span().Start:t.Span().End]
 	if !strings.ContainsRune(raw, '\n') {
 		if isDocComment(raw) {
 			line := strings.TrimSpace(raw[3 : len(raw)-2])
@@ -379,7 +379,7 @@ func (c *converter) blockComment(t syntax.Token, stringNext bool) (trivium, bool
 		rows[i] = trimComment(row)
 	}
 	rows[0] = strings.TrimSpace(rows[0])
-	unstarred(rows, c.column(t.Span.Start))
+	unstarred(rows, c.column(t.Span().Start))
 	if rows[0] == "" {
 		rows = rows[1:]
 	}
@@ -390,7 +390,7 @@ func (c *converter) blockComment(t syntax.Token, stringNext bool) (trivium, bool
 		return trivium{}, false
 	}
 	first := 0
-	margin := c.column(t.Span.Start) + len("/*")
+	margin := c.column(t.Span().Start) + len("/*")
 	if strings.TrimSpace(body[:strings.IndexByte(body, '\n')]) != "" {
 		first = 1
 		margin++
@@ -456,11 +456,11 @@ func (c *converter) leading() []trivium {
 		t := tokens[c.at]
 		switch t.Kind {
 		case syntax.TokWhitespace:
-			if c.at > 0 && strings.Count(c.src[t.Span.Start:t.Span.End], "\n") >= 2 {
+			if c.at > 0 && strings.Count(c.src[t.Span().Start:t.Span().End], "\n") >= 2 {
 				out = append(out, trivium{kind: blankLine})
 			}
 		case syntax.TokLineComment:
-			out = append(out, trivium{kind: lineNote, text: trimComment(c.src[t.Span.Start+1 : t.Span.End])})
+			out = append(out, trivium{kind: lineNote, text: trimComment(c.src[t.Span().Start+1 : t.Span().End])})
 		case syntax.TokBlockComment:
 			if note, ok := c.blockComment(t, c.stringFollows(c.at+1)); ok {
 				out = append(out, note)
@@ -492,7 +492,7 @@ func (c *converter) next(kinds ...syntax.TokenKind) *token {
 		panic("format: the token stream does not match the parsed tree")
 	}
 	c.at++
-	return &token{pre: pre, text: c.src[t.Span.Start:t.Span.End], line: c.lineAt(t.Span.Start)}
+	return &token{pre: pre, text: c.src[t.Span().Start:t.Span().End], line: c.lineAt(t.Span().Start)}
 }
 
 func raiseTrail(from, to *token) {
@@ -524,7 +524,7 @@ func (c *converter) attachTrail(t *token) {
 	for ; first < c.at; first++ {
 		tok := c.file.Tokens[first]
 		if tok.Kind == syntax.TokLineComment {
-			body := c.src[tok.Span.Start+1 : tok.Span.End]
+			body := c.src[tok.Span().Start+1 : tok.Span().End]
 			t.tight = !strings.HasPrefix(body, " ") && !strings.HasPrefix(body, "\t")
 			return
 		}

@@ -26,7 +26,7 @@ func (s Stage) Key() string {
 	return strings.ToLower(s.Name.Text)
 }
 
-func stageScope(index int) model.Scope { return model.Scope(index + 2) }
+func stageScope(index int) model.Scope { return model.Scope(model.Narrow(index + 2)) }
 
 func (f *File) Preamble() []*Instruction {
 	var out []*Instruction

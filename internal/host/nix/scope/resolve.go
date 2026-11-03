@@ -10,12 +10,16 @@ import (
 type resolver struct {
 	table      *Table
 	shadow     map[string]*Def
-	defChunk   []Def
-	entryChunk []entry
-	setChunk   []setNode
-	chunk      int
+	defs       syntax.Chunks[Def]
+	outers     []*Def
+	bindings   syntax.Chunks[syntax.Binding]
+	binders    syntax.Chunks[syntax.Node]
+	scopes     syntax.Chunks[Scope]
+	entries    syntax.Chunks[entry]
+	sets       syntax.Chunks[setNode]
 	scope      *Scope
 	with       *syntax.With
+	withIndex  int
 	duplicates []pendingDuplicate
 }
 
@@ -36,25 +40,37 @@ func (r *resolver) lookup(name string, inherit bool) Ref {
 	return Ref{Kind: Undefined}
 }
 
-func (t *Table) resolve(slot int, ref Ref) {
-	ref.known = true
-	t.refs[slot] = ref
+func (r *resolver) resolve(slot int, ref Ref) {
+	r.table.refs[slot] = r.packed(ref)
+}
+
+func (r *resolver) packed(ref Ref) slotRef {
+	switch ref.Kind {
+	case Definition:
+		return packRef(Definition, int(ref.Def.ID))
+	case Global:
+		return packRef(Global, builtins.IndexOf(ref.Builtin))
+	case Dynamic:
+		return packRef(Dynamic, r.withIndex)
+	case Undefined:
+	}
+	return packRef(Undefined, 0)
 }
 
 func (r *resolver) ident(id *syntax.Ident) {
 	ref := r.lookup(id.Name, false)
-	r.table.resolve(id.Slot(), ref)
+	r.resolve(id.Slot(), ref)
 	r.table.uses = append(r.table.uses, Use{Node: id, Name: id.Name, Ref: ref})
 }
 
 func (r *resolver) inherit(attr syntax.Attr, name string) {
 	ref := r.lookup(name, true)
-	r.table.resolve(attr.Slot(), ref)
+	r.resolve(attr.Slot(), ref)
 	r.table.uses = append(r.table.uses, Use{Node: attr, Name: name, Ref: ref, Inherit: true})
 }
 
 func (r *resolver) open(kind ScopeKind, spans ...syntax.Span) *Scope {
-	s := &Scope{Kind: kind, Parent: r.scope}
+	s := r.newScope(kind, r.scope)
 	r.table.scopes = append(r.table.scopes, s)
 	for _, span := range spans {
 		r.scope.regions = append(r.scope.regions, region{span: span, scope: s})
@@ -65,7 +81,7 @@ func (r *resolver) open(kind ScopeKind, spans ...syntax.Span) *Scope {
 
 func (r *resolver) close(s *Scope) {
 	for _, d := range s.Defs {
-		r.shadow[d.Name] = d.outer
+		r.shadow[d.Name] = r.outers[d.ID]
 	}
 	r.scope = s.Parent
 }
@@ -75,8 +91,9 @@ func (r *resolver) declare(s *Scope, name string, kind DefKind) *Def {
 	if top != nil && top.Scope == s {
 		return top
 	}
-	d := r.newDef()
-	*d = Def{ID: len(r.table.defs), Name: name, Kind: kind, Scope: s, Implicit: slices.Contains(evaluatorReads, name), outer: top}
+	d := r.defs.New()
+	*d = Def{ID: int32(len(r.table.defs)), Name: name, Kind: kind, Scope: s, Implicit: slices.Contains(evaluatorReads, name)} //nolint:gosec // counts the definitions of one file, which the transport caps well below 2^31
+	r.outers = append(r.outers, top)
 	s.Defs = append(s.Defs, d)
 	r.table.defs = append(r.table.defs, d)
 	r.shadow[name] = d
@@ -84,23 +101,35 @@ func (r *resolver) declare(s *Scope, name string, kind DefKind) *Def {
 }
 
 func (r *resolver) binder(d *Def, node syntax.Node) {
-	d.Binders = append(d.Binders, node)
+	d.Binders = r.addBinder(d.Binders, node)
 	switch node := node.(type) {
 	case *syntax.Ident:
-		r.table.binders[node.Slot()] = d
-		r.table.resolve(node.Slot(), Ref{Kind: Definition, Def: d})
+		r.table.binders[node.Slot()] = packDef(d)
+		r.resolve(node.Slot(), Ref{Kind: Definition, Def: d})
 	case syntax.Attr:
-		r.table.binders[node.Slot()] = d
+		r.table.binders[node.Slot()] = packDef(d)
 	}
 }
 
-func (r *resolver) newDef() *Def {
-	if len(r.defChunk) == 0 {
-		r.defChunk = make([]Def, r.chunk)
+func (r *resolver) newScope(kind ScopeKind, parent *Scope) *Scope {
+	s := r.scopes.New()
+	s.Kind, s.Parent = kind, parent
+	return s
+}
+
+func (r *resolver) addBinder(binders []syntax.Node, node syntax.Node) []syntax.Node {
+	if binders != nil {
+		return append(binders, node)
 	}
-	d := &r.defChunk[0]
-	r.defChunk = r.defChunk[1:]
-	return d
+	first := r.binders.Take(1)
+	first[0] = node
+	return first
+}
+
+func (r *resolver) keptBindings(bindings []syntax.Binding) []syntax.Binding {
+	kept := r.bindings.Take(len(bindings))
+	copy(kept, bindings)
+	return kept
 }
 
 func (r *resolver) exprs(list []syntax.Expr) {
@@ -190,10 +219,11 @@ func (r *resolver) withExpr(e *syntax.With) {
 	s.With = e
 	r.table.owners[e] = s
 	r.table.outerWiths[e] = r.with
-	outer := r.with
-	r.with = e
+	outer, outerIndex := r.with, r.withIndex
+	r.with, r.withIndex = e, len(r.table.withs)
+	r.table.withs = append(r.table.withs, e)
 	r.expr(e.Body)
-	r.with = outer
+	r.with, r.withIndex = outer, outerIndex
 	r.close(s)
 }
 
@@ -342,7 +372,7 @@ func (r *resolver) recursive(n *setNode, kind setKind, body syntax.Expr) {
 		}
 		s.regions = append(s.regions, region{
 			span:  syntax.Span{Start: start, End: stmt.Span().End},
-			scope: &Scope{Kind: InheritScope, Parent: s.Parent},
+			scope: r.newScope(InheritScope, s.Parent),
 		})
 	}
 	for _, e := range n.entries {
@@ -361,5 +391,5 @@ func (r *resolver) bind(s *Scope, kind setKind, e *entry) {
 	for _, attr := range e.binders {
 		r.binder(d, attr)
 	}
-	d.Bindings = slices.Compact(e.bindings)
+	d.Bindings = r.keptBindings(slices.Compact(e.bindings))
 }

@@ -1,10 +1,10 @@
 package docstore
 
 import (
+	"cmp"
 	"fmt"
 	"maps"
 	"slices"
-	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -112,7 +112,7 @@ type Document struct {
 	Version   int32
 	bom       bool
 	text      string
-	lineStart []int
+	lineStart []int32
 	lineEnds  []lineEnd
 	nonASCII  int
 	source    *Document
@@ -226,8 +226,13 @@ func (d *Document) setText(raw string) {
 	text, ends := splitLineEnds(raw)
 	d.text = text
 	d.lineEnds = ends
-	d.lineStart = appendLineStarts(make([]int, 1, strings.Count(text, "\n")+1), text, 0)
+	d.lineStart = appendLineStarts(make([]int32, 1, strings.Count(text, "\n")+1), text, 0)
 	d.nonASCII = countNonASCII(text)
+}
+
+func (d *Document) lineAtOrAfter(offset int) int {
+	line, _ := slices.BinarySearchFunc(d.lineStart, offset, func(start int32, target int) int { return cmp.Compare(int(start), target) })
+	return line
 }
 
 func countNonASCII(s string) int {
@@ -240,9 +245,9 @@ func countNonASCII(s string) int {
 	return n
 }
 
-func appendLineStarts(starts []int, text string, base int) []int {
+func appendLineStarts(starts []int32, text string, base int) []int32 {
 	for i := strings.IndexByte(text, '\n'); i >= 0; {
-		starts = append(starts, base+i+1)
+		starts = append(starts, int32(base+i+1)) //nolint:gosec // offsets of a document, which the transport caps well below 2^31
 		next := strings.IndexByte(text[i+1:], '\n')
 		if next < 0 {
 			break
@@ -257,10 +262,10 @@ func (d *Document) replaceRaw(start, end int, raw string) {
 		d.replace(start, end, raw)
 		return
 	}
-	first := sort.SearchInts(d.lineStart, start+1) - 1
-	last := sort.SearchInts(d.lineStart, end+1) - 1
+	first := d.lineAtOrAfter(start+1) - 1
+	last := d.lineAtOrAfter(end+1) - 1
 	var prefix, suffix string
-	if start == d.lineStart[first] && first > 0 && d.lineEndKind(first-1) == endCR {
+	if start == int(d.lineStart[first]) && first > 0 && d.lineEndKind(first-1) == endCR {
 		start--
 		first--
 		prefix = "\r"
@@ -290,14 +295,14 @@ func (d *Document) lineEndKind(line int) lineEnd {
 }
 
 func (d *Document) replace(start, end int, text string) {
-	kept := sort.SearchInts(d.lineStart, start+1)
-	tail := d.lineStart[sort.SearchInts(d.lineStart, end+1):]
-	starts := make([]int, kept, kept+strings.Count(text, "\n")+len(tail))
+	kept := d.lineAtOrAfter(start + 1)
+	tail := d.lineStart[d.lineAtOrAfter(end+1):]
+	starts := make([]int32, kept, kept+strings.Count(text, "\n")+len(tail))
 	copy(starts, d.lineStart[:kept])
 	starts = appendLineStarts(starts, text, start)
 	shift := len(text) - (end - start)
 	for _, s := range tail {
-		starts = append(starts, s+shift)
+		starts = append(starts, s+int32(shift)) //nolint:gosec // offsets of a document, which the transport caps well below 2^31
 	}
 	d.nonASCII += countNonASCII(text) - countNonASCII(d.text[start:end])
 	d.text = d.text[:start] + text + d.text[end:]
@@ -312,7 +317,7 @@ func (d *Document) CarriageReturns() []int {
 	var out []int
 	for line, end := range d.lineEnds {
 		if end != endLF {
-			out = append(out, d.lineStart[line+1]-1)
+			out = append(out, int(d.lineStart[line+1])-1)
 		}
 	}
 	return out
@@ -324,12 +329,12 @@ func (d *Document) LineBounds(line int) (int, int) {
 	if line < 0 || line >= len(d.lineStart) {
 		return len(d.text), len(d.text)
 	}
-	return d.lineStart[line], d.lineEnd(line)
+	return int(d.lineStart[line]), d.lineEnd(line)
 }
 
 func (d *Document) lineEnd(line int) int {
 	if line+1 < len(d.lineStart) {
-		return d.lineStart[line+1] - 1
+		return int(d.lineStart[line+1]) - 1
 	}
 	return len(d.text)
 }
@@ -342,7 +347,7 @@ func (d *Document) PositionToOffset(pos lsp.Position, enc Encoding) int {
 	if line >= len(d.lineStart) {
 		return len(d.text)
 	}
-	start, end := d.lineStart[line], d.lineEnd(line)
+	start, end := int(d.lineStart[line]), d.lineEnd(line)
 	if d.nonASCII == 0 {
 		return min(start+int(pos.Character), end)
 	}
@@ -370,9 +375,8 @@ func (d *Document) OffsetToPosition(offset int, enc Encoding) lsp.Position {
 	if offset < 0 {
 		offset = 0
 	}
-	line, _ := slices.BinarySearch(d.lineStart, offset+1)
-	line--
-	start := d.lineStart[line]
+	line := d.lineAtOrAfter(offset+1) - 1
+	start := int(d.lineStart[line])
 	if d.nonASCII == 0 {
 		return lsp.Position{Line: uint32(line), Character: uint32(offset - start)} //nolint:gosec // line and column index into text, so they are bounded by len(text)
 	}

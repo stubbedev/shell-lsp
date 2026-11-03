@@ -7,7 +7,7 @@ func (p *treeParser) attrSet(start int, rec bool) *AttrSet {
 	bindings := p.bindings(false)
 	p.open[inBraces]--
 	closed := p.closing(TokRBrace, "}", open)
-	return p.arena.sets.put(p.chunk, AttrSet{exprNode: exprAt(p.span(start)), Rec: rec, Bindings: bindings, Closed: closed})
+	return p.arena.sets.put(AttrSet{exprNode: exprAt(p.span(start)), Rec: rec, Bindings: bindings, Closed: closed})
 }
 
 func (p *treeParser) bindings(isLet bool) []Binding {
@@ -25,7 +25,7 @@ func (p *treeParser) bindings(isLet bool) []Binding {
 			p.syncBinding()
 		}
 	}
-	return p.arena.bindings.since(mark, p.chunk)
+	return p.arena.bindings.since(mark)
 }
 
 func (p *treeParser) assign(isLet bool) *Assign {
@@ -42,7 +42,7 @@ func (p *treeParser) assign(isLet bool) *Assign {
 		value = p.bad()
 	}
 	p.endBinding()
-	return p.arena.assigns.put(p.chunk, Assign{bindingNode: bindingAt(p.span(start)), Path: path, Value: value})
+	return p.arena.assigns.put(Assign{bindingNode: bindingAt(p.span(start)), Path: path, Value: value})
 }
 
 func (p *treeParser) inherit() *Inherit {
@@ -60,11 +60,11 @@ func (p *treeParser) inherit() *Inherit {
 		}
 		p.arena.attrs.stack = append(p.arena.attrs.stack, a)
 	}
-	attrs := p.arena.attrs.since(mark, p.chunk)
+	attrs := p.arena.attrs.since(mark)
 	p.reads += len(attrs)
 	p.binders += len(attrs)
 	p.endBinding()
-	return p.arena.inherits.put(p.chunk, Inherit{bindingNode: bindingAt(p.span(start)), From: from, Attrs: attrs})
+	return p.arena.inherits.put(Inherit{bindingNode: bindingAt(p.span(start)), From: from, Attrs: attrs})
 }
 
 func (p *treeParser) endBinding() {
@@ -95,7 +95,7 @@ func (p *treeParser) attrPath() AttrPath {
 		next := p.attribute()
 		p.arena.attrs.stack = append(p.arena.attrs.stack, next)
 	}
-	return p.arena.attrs.since(mark, p.chunk)
+	return p.arena.attrs.since(mark)
 }
 
 func (p *treeParser) attribute() Attr {
@@ -104,7 +104,7 @@ func (p *treeParser) attribute() Attr {
 	case TokIdent, TokOrKeyword:
 		name := p.src[here.Start:here.End]
 		p.advance()
-		return p.arena.identAttrs.put(p.chunk, IdentAttr{attrNode: p.attrAt(here), Name: name})
+		return p.arena.identAttrs.put(IdentAttr{attrNode: p.attrAt(here), Name: name})
 	case TokQuote:
 		s := p.quoted()
 		return &StringAttr{attrNode: p.attrAt(s.Span()), Value: s}
@@ -123,5 +123,5 @@ func (p *treeParser) attribute() Attr {
 func (p *treeParser) attrAt(s Span) attrNode {
 	slot := p.slots
 	p.slots++
-	return attrNode{node: node{s}, slot: int32(slot)} //nolint:gosec // bounded by the source length, which the transport caps well below 2^31
+	return attrNode{node: nodeAt(s), slot: int32(slot)} //nolint:gosec // bounded by the source length, which the transport caps well below 2^31
 }

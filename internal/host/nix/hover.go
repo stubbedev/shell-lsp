@@ -113,16 +113,35 @@ func (d *Document) withSources(innermost *syntax.With) string {
 
 func (d *Document) Syntax() (*syntax.File, *scope.Table) { return d.tree, d.table }
 
-func (d *Document) tokenAt(offset int) (syntax.Token, bool) {
+type spanToken struct {
+	Kind syntax.TokenKind
+	Span syntax.Span
+}
+
+func (d *Document) InProvenString(offset int, proven []ProvenString) bool {
+	found := false
+	d.inspect(func(n syntax.Node) bool {
+		if !n.Span().Touches(offset) {
+			return false
+		}
+		if str, isString := n.(*syntax.String); isString {
+			found = found || slices.ContainsFunc(proven, func(s ProvenString) bool { return s.Start == str.Span().Start })
+		}
+		return !found
+	})
+	return found
+}
+
+func (d *Document) tokenAt(offset int) (spanToken, bool) {
 	tokens := d.tree.TokensIn(syntax.Span{Start: max(offset-1, 0), End: offset + 1})
-	i := slices.IndexFunc(tokens, func(t syntax.Token) bool { return hoverable(t.Kind) && t.Span.Start <= offset && offset < t.Span.End })
+	i := slices.IndexFunc(tokens, func(t syntax.Token) bool { return hoverable(t.Kind) && t.Span().HasByteAt(offset) })
 	if i < 0 {
-		i = slices.IndexFunc(tokens, func(t syntax.Token) bool { return hoverable(t.Kind) && t.Span.End == offset })
+		i = slices.IndexFunc(tokens, func(t syntax.Token) bool { return hoverable(t.Kind) && t.Span().End == offset })
 	}
 	if i < 0 {
-		return syntax.Token{}, false
+		return spanToken{}, false
 	}
-	return tokens[i], true
+	return spanToken{Kind: tokens[i].Kind, Span: tokens[i].Span()}, true
 }
 
 func hoverable(kind syntax.TokenKind) bool {

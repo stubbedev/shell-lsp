@@ -55,30 +55,62 @@ type Place struct {
 
 type NameTable struct {
 	building sync.Once
-	symbols  map[string][]Place
-	refs     map[string][]Place
+	symbols  placesByName
+	refs     placesByName
 }
 
 func (t *NameTable) of(m *Module) *NameTable {
 	t.building.Do(func() {
-		symbols, refs := 0, 0
-		for _, ix := range m.Files {
-			symbols += len(ix.Symbols)
-			refs += len(ix.Refs)
-		}
-		t.symbols, t.refs = make(map[string][]Place, symbols/8), make(map[string][]Place, refs/8)
-		for f, ix := range m.Files {
+		t.symbols = newPlaces(m.Files, func(ix *Index, visit func(name string, item int)) {
 			for i := range ix.Symbols {
-				name := ix.Symbols[i].Name
-				t.symbols[name] = append(t.symbols[name], Place{File: int32(f), Item: int32(i)})
+				visit(ix.Symbols[i].Name, i)
 			}
+		})
+		t.refs = newPlaces(m.Files, func(ix *Index, visit func(name string, item int)) {
 			for i := range ix.Refs {
-				name := ix.Refs[i].Name
-				t.refs[name] = append(t.refs[name], Place{File: int32(f), Item: int32(i)})
+				visit(ix.Refs[i].Name, i)
 			}
-		}
+		})
 	})
 	return t
+}
+
+type placeRun struct{ start, end int32 }
+
+type placesByName struct {
+	runs   map[string]placeRun
+	places []Place
+}
+
+func newPlaces(files []*Index, items func(ix *Index, visit func(name string, item int))) placesByName {
+	counts := map[string]int32{}
+	total := int32(0)
+	for _, ix := range files {
+		items(ix, func(name string, _ int) {
+			counts[name]++
+			total++
+		})
+	}
+	out := placesByName{runs: make(map[string]placeRun, len(counts)), places: make([]Place, total)}
+	next := int32(0)
+	for f, ix := range files {
+		items(ix, func(name string, item int) {
+			run, seen := out.runs[name]
+			if !seen {
+				run = placeRun{start: next, end: next}
+				next += counts[name]
+			}
+			out.places[run.end] = Place{File: Narrow(f), Item: Narrow(item)}
+			run.end++
+			out.runs[name] = run
+		})
+	}
+	return out
+}
+
+func (p placesByName) named(name string) []Place {
+	run := p.runs[name]
+	return p.places[run.start:run.end]
 }
 
 func (m *Module) ShareNames(t *NameTable) { m.names = t }
@@ -90,9 +122,9 @@ func (m *Module) table() *NameTable {
 	return m.names.of(m)
 }
 
-func (m *Module) SymbolsNamed(name string) []Place { return m.table().symbols[name] }
+func (m *Module) SymbolsNamed(name string) []Place { return m.table().symbols.named(name) }
 
-func (m *Module) RefsNamed(name string) []Place { return m.table().refs[name] }
+func (m *Module) RefsNamed(name string) []Place { return m.table().refs.named(name) }
 
 var linkedNamespaces = [...]Namespace{NamespaceAttributes, NamespaceFunctions, NamespaceValues}
 
@@ -103,7 +135,7 @@ func (m *Module) AtHomes(homes []Home, name string) []Target {
 		for _, ns := range linkedNamespaces {
 			for _, i := range ix.named(ns, name) {
 				if ix.Symbols[i].Scope == h.Scope {
-					out = append(out, Target{Module: m, File: h.File, Symbol: i})
+					out = append(out, Target{Module: m, File: h.File, Symbol: int(i)})
 				}
 			}
 		}
@@ -169,7 +201,7 @@ func (m *Module) lookup(file int, name string, ns Namespace, scope Scope, horizo
 		var local []Target
 		for _, i := range m.Files[file].named(ns, name) {
 			if s := m.Files[file].Symbols[i]; s.Scope == scope && !s.Inert && (horizon == 0 || s.Span.End <= horizon) {
-				local = append(local, Target{Module: m, File: file, Symbol: i})
+				local = append(local, Target{Module: m, File: file, Symbol: int(i)})
 			}
 		}
 		if len(local) > 0 {
@@ -183,7 +215,7 @@ func (m *Module) lookup(file int, name string, ns Namespace, scope Scope, horizo
 	for f, ix := range m.Files {
 		for _, i := range ix.named(ns, name) {
 			if ix.Symbols[i].Scope == Global {
-				out = append(out, Target{Module: m, File: f, Symbol: i})
+				out = append(out, Target{Module: m, File: f, Symbol: int(i)})
 			}
 		}
 	}
@@ -204,7 +236,7 @@ func (m *Module) inherited(file int, name string, ns Namespace, scope Scope) []T
 		var found []Target
 		for _, i := range ix.named(ns, name) {
 			if s := ix.Symbols[i]; s.Scope == parent && !s.Local && !s.Inert {
-				found = append(found, Target{Module: m, File: file, Symbol: i})
+				found = append(found, Target{Module: m, File: file, Symbol: int(i)})
 			}
 		}
 		if len(found) > 0 {
@@ -295,7 +327,7 @@ func (c context) scopes() []Scope {
 	var out []Scope
 	for part := range strings.SplitSeq(strings.TrimSuffix(c.chain, ","), ",") {
 		if n, err := strconv.Atoi(part); err == nil {
-			out = append(out, Scope(n))
+			out = append(out, Scope(Narrow(n)))
 		}
 	}
 	return out
@@ -514,11 +546,11 @@ func (a Arity) String() string {
 	}
 	switch {
 	case a.Max == Variadic:
-		return "at least " + plural(a.Min)
+		return "at least " + plural(int(a.Min))
 	case a.Min == a.Max:
-		return plural(a.Min)
+		return plural(int(a.Min))
 	}
-	return fmt.Sprintf("%d to %s", a.Min, plural(a.Max))
+	return fmt.Sprintf("%d to %s", a.Min, plural(int(a.Max)))
 }
 
 type node struct {

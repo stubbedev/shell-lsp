@@ -160,11 +160,11 @@ func checkLossless(t *testing.T, f *File) {
 	var sb strings.Builder
 	at := 0
 	for _, tok := range f.Tokens {
-		if tok.Span.Start != at || tok.Span.End <= at || tok.Span.End > len(f.Text) {
+		if tok.Span().Start != at || tok.Span().End <= at || tok.Span().End > len(f.Text) {
 			t.Fatalf("token %+v of %q does not follow offset %d", tok, f.Text, at)
 		}
-		sb.WriteString(f.Text[tok.Span.Start:tok.Span.End])
-		at = tok.Span.End
+		sb.WriteString(f.Text[tok.Span().Start:tok.Span().End])
+		at = tok.Span().End
 	}
 	if sb.String() != f.Text {
 		t.Fatalf("the tokens spell %q, not %q", sb.String(), f.Text)
@@ -525,7 +525,7 @@ func TestTokensKeepStringsVerbatim(t *testing.T) {
 	var text []string
 	for _, tok := range f.Tokens {
 		if tok.Kind == TokStringText || tok.Kind == TokEscape {
-			text = append(text, src[tok.Span.Start:tok.Span.End])
+			text = append(text, src[tok.Span().Start:tok.Span().End])
 		}
 	}
 	if want := []string{"\n    a ", "'''", "\\b", "''\\n", " ", "\n\n  d\n"}; !slices.Equal(text, want) {

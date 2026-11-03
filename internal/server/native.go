@@ -530,7 +530,7 @@ func (s *Server) nativeSymbols(snap *snapshot) []lsp.DocumentSymbol {
 				Kind:           nativeKind(sym.Kind),
 				Range:          at.Range(sym.Span),
 				SelectionRange: at.Range(sym.Selection),
-				Children:       build(i),
+				Children:       build(int(i)),
 			})
 		}
 		return out
@@ -640,8 +640,15 @@ type provenOffset struct {
 }
 
 func (s *Server) nixProvenOffset(here nativeHere) (provenOffset, bool) {
-	wrapped := s.nixProvenFile(here.File).wrapped
-	if here.host.Language() != host.Nix || wrapped == nil {
+	if here.host.Language() != host.Nix {
+		return provenOffset{}, false
+	}
+	proven := s.nixProvenFile(here.File)
+	if proven.wrapped == nil || !here.File.Native.Nix().InProvenString(here.source, proven.proof.On(here.Doc.Source())) {
+		return provenOffset{}, false
+	}
+	wrapped := proven.file()
+	if wrapped == nil {
 		return provenOffset{}, false
 	}
 	offset, inside := wrapped.Doc.Positions(here.encoding).Offset(here.File.Doc.Source().OffsetToPosition(here.source, here.encoding))
@@ -963,7 +970,7 @@ func (s *Server) nixUpdateInput(h hostnav.Host, at int) (lsp.CodeAction, bool, e
 }
 
 func (s *Server) nixProvenFindings(file *workspace.File) ([]lint.Finding, *workspace.File) {
-	wrapped := s.nixProvenFile(file).wrapped
+	wrapped := s.nixProvenFile(file).file()
 	if wrapped == nil {
 		return nil, nil
 	}

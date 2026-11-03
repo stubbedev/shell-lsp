@@ -68,11 +68,7 @@ func (b *symbolTable) slot(id model.Scope) (flowSlot, bool) {
 }
 
 func (b *symbolTable) oneTarget(target syntax.Expr) []syntax.Expr {
-	if len(b.oneTargets) == 0 {
-		b.oneTargets = make([]syntax.Expr, min(max(b.f.tree.Slots, 1), maxTableChunk))
-	}
-	out := b.oneTargets[:1:1]
-	b.oneTargets = b.oneTargets[1:]
+	out := b.oneTargets.Take(1)
 	out[0] = target
 	return out
 }

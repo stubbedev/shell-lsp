@@ -3,6 +3,7 @@ package scope
 import (
 	"fmt"
 	"regexp"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -404,6 +405,71 @@ func TestReserved(t *testing.T) {
 	for name, want := range map[string]bool{"__curPos": true, "__overrides": true, "__sub": true, "__findFile": true, "body": false, "x": false} {
 		if got := Reserved(name); got != want {
 			t.Errorf("Reserved(%q) = %v, want %v", name, got, want)
+		}
+	}
+}
+
+func TestResolvedTableKeepsNoResolverScratch(t *testing.T) {
+	const bindings = 20000
+	const maxBytesPerBinding = 300
+	var src strings.Builder
+	src.WriteString("let\n")
+	for i := range bindings {
+		fmt.Fprintf(&src, "  a%d.b = 1;\n", i)
+	}
+	src.WriteString("in a0\n")
+	f := syntax.Parse(src.String())
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	table := Resolve(f)
+	runtime.GC()
+	runtime.ReadMemStats(&after)
+	if len(table.Defs()) != bindings {
+		t.Fatalf("resolved %d definitions, want %d", len(table.Defs()), bindings)
+	}
+	if kept := (after.HeapAlloc - before.HeapAlloc) / bindings; kept > maxBytesPerBinding {
+		t.Errorf("the table keeps %d bytes per binding, want at most %d: the merge entries and set nodes should be collected", kept, maxBytesPerBinding)
+	}
+	runtime.KeepAlive(f)
+}
+
+func TestSlotsResolveToTheirTargetsAfterDefinitionsSort(t *testing.T) {
+	t.Parallel()
+
+	src := `{ first, ... }: with first; with builtins; let c = b; b = a; a = 1; in [ a b c first map unknown ]`
+	f := syntax.Parse(src)
+	table := Resolve(f)
+	var kinds []string
+	for _, u := range table.Uses() {
+		id, isIdent := u.Node.(*syntax.Ident)
+		if !isIdent {
+			continue
+		}
+		ref, known := table.Of(id)
+		if !known {
+			t.Fatalf("%s has no resolution", id.Name)
+		}
+		if ref.Kind != u.Ref.Kind || ref.Def != u.Ref.Def || ref.With != u.Ref.With || ref.Builtin != u.Ref.Builtin {
+			t.Errorf("%s resolves to %+v in the table and %+v as a use", id.Name, ref, u.Ref)
+		}
+		if ref.Kind == Definition && ref.Def.Name != id.Name {
+			t.Errorf("%s resolves to the definition of %s", id.Name, ref.Def.Name)
+		}
+		if ref.Kind == Dynamic && ref.With.Scope.Span().Start != strings.Index(src, "builtins") {
+			t.Errorf("%s resolves to the wrong with", id.Name)
+		}
+		kinds = append(kinds, id.Name)
+	}
+	if len(kinds) == 0 {
+		t.Fatal("no uses resolved")
+	}
+	for i, d := range table.Defs() {
+		if int(d.ID) != i {
+			t.Errorf("definition %s has id %d at position %d", d.Name, d.ID, i)
+		}
+		if binder, bound := table.Binder(d.Binders[0]); !bound || binder != d {
+			t.Errorf("the binder of %s resolves to %v", d.Name, binder)
 		}
 	}
 }

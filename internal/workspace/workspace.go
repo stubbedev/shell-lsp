@@ -90,6 +90,37 @@ func Memo[T any](f *File, key string, generation uint64, compute func() T) T {
 	return value
 }
 
+type weakValue[T any] struct {
+	value  weak.Pointer[T]
+	absent bool
+}
+
+func MemoWeak[T any](f *File, key string, generation uint64, compute func() *T) *T {
+	for {
+		var fresh *T
+		kept := Memo(f, key, generation, func() weakValue[T] {
+			fresh = compute()
+			return weakValue[T]{value: weak.Make(fresh), absent: fresh == nil}
+		})
+		if fresh != nil || kept.absent {
+			return fresh
+		}
+		if value := kept.value.Value(); value != nil {
+			return value
+		}
+		f.forgetMemo(key)
+	}
+}
+
+func (f *File) forgetMemo(key string) {
+	if f.memoOf != nil {
+		f = f.memoOf
+	}
+	f.memoMu.Lock()
+	defer f.memoMu.Unlock()
+	delete(f.memo, key)
+}
+
 func (f *File) memoize(key string, generation uint64, compute func() any) any {
 	if f.memoOf != nil {
 		f = f.memoOf

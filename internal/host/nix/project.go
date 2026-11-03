@@ -471,7 +471,12 @@ func (p *Project) Release() {
 
 func (p *Project) clearDerived() {
 	p.steps = 0
-	clear(p.memo)
+	p.memo = map[syntax.Expr][]flowValue{}
+	p.visiting = map[syntax.Expr]bool{}
+	p.selecting = map[flowSelection]bool{}
+	p.applying = map[*space]bool{}
+	p.expanding = map[flowValue]bool{}
+	p.sinkVisiting = map[sinkKey]bool{}
 	p.overlayValues = nil
 	p.scriptMemo = map[sinkKey]scriptSink{}
 	p.envMemo = map[sinkKey]bool{}

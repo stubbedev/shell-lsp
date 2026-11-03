@@ -79,12 +79,12 @@ func lexical(kind syntax.TokenKind) (class, bool) {
 func classified(f *syntax.File, named map[int]class) []semantic.Token {
 	out := make([]semantic.Token, 0, len(f.Tokens)/2)
 	for _, tok := range f.Tokens {
-		c, ok := named[tok.Span.Start]
+		c, ok := named[tok.Span().Start]
 		if !ok {
 			c, ok = lexical(tok.Kind)
 		}
 		if ok {
-			out = appendLines(out, f.Text, tok.Span, c)
+			out = appendLines(out, f.Text, tok.Span(), c)
 		}
 	}
 	return out
@@ -333,11 +333,11 @@ func literalRuns(tokens []syntax.Token) []syntax.Span {
 		if tok.Kind != syntax.TokStringText && tok.Kind != syntax.TokEscape {
 			continue
 		}
-		if n := len(runs); n > 0 && runs[n-1].End == tok.Span.Start {
-			runs[n-1].End = tok.Span.End
+		if n := len(runs); n > 0 && runs[n-1].End == tok.Span().Start {
+			runs[n-1].End = tok.Span().End
 			continue
 		}
-		runs = append(runs, tok.Span)
+		runs = append(runs, tok.Span())
 	}
 	return runs
 }

@@ -69,6 +69,7 @@ type Parsed struct {
 
 func Parse(src string) *Parsed {
 	tree := syntax.Parse(src)
+	tree.DropWhitespaceTokens()
 	return &Parsed{src: src, tree: tree, table: scope.Resolve(tree)}
 }
 

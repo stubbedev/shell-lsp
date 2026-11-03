@@ -20,7 +20,7 @@ func outline(ix *model.Index) []string {
 		for _, i := range ix.Children(parent) {
 			s := ix.Symbols[i]
 			out = append(out, depth+s.Name+":"+s.Kind.String())
-			walk(i, depth+"  ")
+			walk(int(i), depth+"  ")
 		}
 	}
 	walk(model.NoParent, "")

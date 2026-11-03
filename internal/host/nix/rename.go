@@ -139,7 +139,7 @@ func (r renames) Conflict(symbol int, newName string) string {
 	if o.set.names.has(newName) {
 		return fmt.Sprintf("`%s` is already bound next to `%s`", newName, sym.Name)
 	}
-	if o.set.reads.has(newName) {
+	if o.set.readsName(newName) {
 		return fmt.Sprintf("this file already reads an attribute `%s` of the set that holds `%s`, which would then find the renamed one", newName, sym.Name)
 	}
 	if o.set.rare != nil && slices.ContainsFunc(o.set.rare.callers, func(c *attrs) bool { return c.names.has(newName) }) {

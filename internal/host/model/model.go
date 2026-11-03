@@ -1,7 +1,9 @@
 package model
 
 import (
+	"cmp"
 	"fmt"
+	"hash/maphash"
 	"iter"
 	"slices"
 	"sort"
@@ -100,7 +102,9 @@ func (k Kind) Namespace() Namespace {
 	panic(fmt.Sprintf("model: kind %d has no namespace", k))
 }
 
-type Scope int
+var nameSeed = maphash.MakeSeed()
+
+type Scope int32
 
 const Global Scope = 0
 
@@ -108,12 +112,12 @@ type Symbol struct {
 	Name      string
 	Span      Span
 	Selection Span
-	Scope     Scope
 	Parent    int
 	Detail    string
 	Doc       string
 	Value     string
 	Arity     Arity
+	Scope     Scope
 	Kind      Kind
 	Elided    Elision
 	Exported  bool
@@ -163,7 +167,7 @@ type Renames interface {
 const NoParent = -1
 
 type Arity struct {
-	Min, Max int
+	Min, Max int32
 }
 
 var NoArity = Arity{Min: -1, Max: -1}
@@ -171,7 +175,7 @@ var NoArity = Arity{Min: -1, Max: -1}
 func (a Arity) Known() bool { return a.Min >= 0 }
 
 func (a Arity) Accepts(n int) bool {
-	return !a.Known() || n >= a.Min && (a.Max == Variadic || n <= a.Max)
+	return !a.Known() || n >= int(a.Min) && (a.Max == Variadic || n <= int(a.Max))
 }
 
 type RefCall struct {
@@ -189,8 +193,8 @@ func Qualified(qualifier []string) *RefCall {
 type Ref struct {
 	Name     string
 	Span     Span
-	Scope    Scope
 	Call     *RefCall
+	Scope    Scope
 	Args     int32
 	Owner    int32
 	Horizon  int32
@@ -332,7 +336,7 @@ func (r Runnable) Required() int {
 }
 
 func (r Runnable) Arity() Arity {
-	a := Arity{Min: r.Required(), Max: len(r.Params)}
+	a := Arity{Min: Narrow(r.Required()), Max: Narrow(len(r.Params))}
 	if len(r.Params) > 0 && r.Params[len(r.Params)-1].Variadic {
 		a.Max = Variadic
 	}
@@ -375,9 +379,10 @@ type Index struct {
 	Renames   Renames
 
 	lookups  sync.Once
-	byName   map[symbolKey][]int
-	byOwner  map[int][]int
-	byParent map[int][]int
+	byName   []int32
+	nameRuns []int32
+	byOwner  []int32
+	byParent []int32
 }
 
 type Branches []Span
@@ -395,34 +400,105 @@ func (a Alternatives) Exclusive(x, y int) bool {
 	})
 }
 
-type symbolKey struct {
-	ns   Namespace
-	name string
-}
-
 func (ix *Index) tables() {
 	ix.lookups.Do(func() {
-		ix.byName = make(map[symbolKey][]int, len(ix.Symbols))
-		ix.byParent = map[int][]int{}
-		for i, s := range ix.Symbols {
-			key := symbolKey{s.Kind.Namespace(), s.Name}
-			ix.byName[key] = append(ix.byName[key], i)
-			if !s.Hidden {
-				ix.byParent[s.Parent] = append(ix.byParent[s.Parent], i)
+		visible := 0
+		for i := range ix.Symbols {
+			if !ix.Symbols[i].Hidden {
+				visible++
 			}
 		}
-		ix.byOwner = map[int][]int{}
-		for i, r := range ix.Refs {
-			if r.Edge {
-				ix.byOwner[int(r.Owner)] = append(ix.byOwner[int(r.Owner)], i)
+		ix.byName = make([]int32, len(ix.Symbols))
+		ix.byParent = make([]int32, 0, visible)
+		for i := range ix.Symbols {
+			ix.byName[i] = Narrow(i)
+			if !ix.Symbols[i].Hidden {
+				ix.byParent = append(ix.byParent, Narrow(i))
 			}
 		}
+		slices.SortFunc(ix.byName, func(a, b int32) int {
+			x, y := &ix.Symbols[a], &ix.Symbols[b]
+			return cmp.Or(cmp.Compare(x.Kind.Namespace(), y.Kind.Namespace()), strings.Compare(x.Name, y.Name), cmp.Compare(a, b))
+		})
+		slices.SortFunc(ix.byParent, func(a, b int32) int {
+			return cmp.Or(cmp.Compare(ix.Symbols[a].Parent, ix.Symbols[b].Parent), cmp.Compare(a, b))
+		})
+		ix.buildNameRuns()
+		edges := 0
+		for i := range ix.Refs {
+			if ix.Refs[i].Edge {
+				edges++
+			}
+		}
+		ix.byOwner = make([]int32, 0, edges)
+		for i := range ix.Refs {
+			if ix.Refs[i].Edge {
+				ix.byOwner = append(ix.byOwner, Narrow(i))
+			}
+		}
+		slices.SortFunc(ix.byOwner, func(a, b int32) int {
+			return cmp.Or(cmp.Compare(ix.Refs[a].Owner, ix.Refs[b].Owner), cmp.Compare(a, b))
+		})
 	})
 }
 
-func (ix *Index) named(ns Namespace, name string) []int {
+func equalRun(sorted []int32, compare func(item int32) int) []int32 {
+	first := sort.Search(len(sorted), func(i int) bool { return compare(sorted[i]) >= 0 })
+	last := first
+	for last < len(sorted) && compare(sorted[last]) == 0 {
+		last++
+	}
+	return sorted[first:last]
+}
+
+func nameHash(ns Namespace, name string) uint64 {
+	return maphash.String(nameSeed, name) + uint64(ns)
+}
+
+func (ix *Index) sameName(item int32, ns Namespace, name string) bool {
+	s := &ix.Symbols[item]
+	return s.Kind.Namespace() == ns && s.Name == name
+}
+
+func (ix *Index) buildNameRuns() {
+	size := 1
+	for size < 2*len(ix.byName) {
+		size *= 2
+	}
+	ix.nameRuns = make([]int32, size)
+	mask := uint64(size - 1) //nolint:gosec // size is a positive power of two
+	for at, item := range ix.byName {
+		s := &ix.Symbols[item]
+		ns := s.Kind.Namespace()
+		if at > 0 && ix.sameName(ix.byName[at-1], ns, s.Name) {
+			continue
+		}
+		slot := nameHash(ns, s.Name) & mask
+		for ix.nameRuns[slot] != 0 {
+			slot = (slot + 1) & mask
+		}
+		ix.nameRuns[slot] = Narrow(at) + 1
+	}
+}
+
+func (ix *Index) named(ns Namespace, name string) []int32 {
 	ix.tables()
-	return ix.byName[symbolKey{ns, name}]
+	if len(ix.byName) == 0 {
+		return nil
+	}
+	mask := uint64(len(ix.nameRuns) - 1) //nolint:gosec // the table is never empty here
+	for slot := nameHash(ns, name) & mask; ix.nameRuns[slot] != 0; slot = (slot + 1) & mask {
+		first := int(ix.nameRuns[slot]) - 1
+		if !ix.sameName(ix.byName[first], ns, name) {
+			continue
+		}
+		last := first + 1
+		for last < len(ix.byName) && ix.sameName(ix.byName[last], ns, name) {
+			last++
+		}
+		return ix.byName[first:last]
+	}
+	return nil
 }
 
 func (ix *Index) Binds(scope Scope, name string) bool {
@@ -436,9 +512,9 @@ func (ix *Index) Binds(scope Scope, name string) bool {
 	return false
 }
 
-func (ix *Index) edgesOf(owner int) []int {
+func (ix *Index) edgesOf(owner int) []int32 {
 	ix.tables()
-	return ix.byOwner[owner]
+	return equalRun(ix.byOwner, func(item int32) int { return cmp.Compare(int(ix.Refs[item].Owner), owner) })
 }
 
 type Certainty uint8
@@ -613,12 +689,12 @@ func (ix *Index) Lookup(name string, ns Namespace, scope Scope) []int {
 		switch s.Scope {
 		case scope:
 			if scope != Global {
-				local = append(local, i)
+				local = append(local, int(i))
 				continue
 			}
-			global = append(global, i)
+			global = append(global, int(i))
 		case Global:
-			global = append(global, i)
+			global = append(global, int(i))
 		}
 	}
 	if len(local) > 0 {
@@ -645,9 +721,9 @@ func (ix *Index) Exported(name string, scope Scope) []int {
 	return out
 }
 
-func (ix *Index) Children(parent int) []int {
+func (ix *Index) Children(parent int) []int32 {
 	ix.tables()
-	return ix.byParent[parent]
+	return equalRun(ix.byParent, func(item int32) int { return cmp.Compare(ix.Symbols[item].Parent, parent) })
 }
 
 func Narrow(n int) int32 {

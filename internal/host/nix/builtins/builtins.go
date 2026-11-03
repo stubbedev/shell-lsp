@@ -57,3 +57,15 @@ func Lookup(name string) (Builtin, bool) {
 func All() []Builtin {
 	return slices.Clone(table())
 }
+
+func IndexOf(b *Builtin) int {
+	i, found := slices.BinarySearchFunc(table(), b.Name, func(e Builtin, target string) int {
+		return cmp.Compare(e.Name, target)
+	})
+	if !found {
+		panic("builtins: " + b.Name + " is not in the table")
+	}
+	return i
+}
+
+func At(index int) *Builtin { return &table()[index] }

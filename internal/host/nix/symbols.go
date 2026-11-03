@@ -12,7 +12,6 @@ import (
 )
 
 const (
-	maxTableChunk    = 256
 	slotsPerFlowSlot = 3
 	letBlockName     = "let"
 	passAsFile       = "passAsFile"
@@ -33,7 +32,6 @@ type attrs struct {
 	parent  *attrs
 	names   nameTable[entry]
 	kids    map[string]*attrs
-	reads   nameTable[struct{}]
 	rare    *rareAttrs
 	left    int32
 	dynamic bool
@@ -43,6 +41,7 @@ type attrs struct {
 }
 
 type rareAttrs struct {
+	reads   nameTable[struct{}]
 	callers []*attrs
 	dynKids []*attrs
 	direct  []syntax.Expr
@@ -71,9 +70,12 @@ func (a *attrs) directValues() []syntax.Expr {
 
 func (a *attrs) name(name string, e entry) { a.names.set(name, e) }
 
+func (a *attrs) readsName(name string) bool { return a.rare != nil && a.rare.reads.has(name) }
+
 func (a *attrs) read(name string) {
-	if !a.reads.has(name) {
-		a.reads.set(name, struct{}{})
+	reads := &a.rareOnes().reads
+	if !reads.has(name) {
+		reads.set(name, struct{}{})
 	}
 }
 
@@ -122,8 +124,8 @@ type symbolTable struct {
 	f          *file
 	ix         *model.Index
 	next       model.Scope
-	attrChunk  []attrs
-	oneTargets []syntax.Expr
+	attrChunks syntax.Chunks[attrs]
+	oneTargets syntax.Chunks[syntax.Expr]
 	exports    map[int]export
 	envScopes  map[environment]model.Scope
 	shellEnvs  map[model.Scope]environment
@@ -206,11 +208,7 @@ func (b *symbolTable) environment(env environment) model.Scope {
 }
 
 func (b *symbolTable) fresh(parent *attrs, kind model.Kind) *attrs {
-	if len(b.attrChunk) == 0 {
-		b.attrChunk = make([]attrs, min(max(b.f.tree.Binders, 1), maxTableChunk))
-	}
-	a := &b.attrChunk[0]
-	b.attrChunk = b.attrChunk[1:]
+	a := b.attrChunks.New()
 	a.id, a.kind, a.parent = b.newScope(), kind, parent
 	return a
 }
@@ -239,12 +237,17 @@ func (b *symbolTable) compact() {
 	b.entries, b.symbolOf, b.statements, b.consumed = nil, nil, nil, nil
 	b.loaded, b.selected, b.letAlias, b.exports, b.envScopes = nil, nil, nil, nil, nil
 	b.paths = nil
-	b.attrChunk, b.oneTargets = nil, nil
-	b.symbolRewrites, b.refRewrites = syntax.Tightened(b.symbolRewrites), syntax.Tightened(b.refRewrites)
-	b.ix.Symbols = syntax.Tightened(b.ix.Symbols)
-	b.ix.Refs = syntax.Tightened(b.ix.Refs)
-	b.owners = syntax.Tightened(b.owners)
-	b.slots = syntax.Tightened(b.slots)
+	b.attrChunks, b.oneTargets = syntax.Chunks[attrs]{}, syntax.Chunks[syntax.Expr]{}
+	b.tighten()
+	b.publish()
+}
+
+func (b *symbolTable) tighten() {
+	b.symbolRewrites, b.refRewrites = parser.Tightened(b.symbolRewrites), parser.Tightened(b.refRewrites)
+	b.ix.Symbols = parser.Tightened(b.ix.Symbols)
+	b.ix.Refs = parser.Tightened(b.ix.Refs)
+	b.owners = parser.Tightened(b.owners)
+	b.slots = parser.Tightened(b.slots)
 }
 
 func (b *symbolTable) publish() {

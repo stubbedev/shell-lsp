@@ -253,7 +253,9 @@ func split(params, separator string) []string {
 	return strings.Split(params, separator)
 }
 
-func args(lowest, highest int) model.Arity { return model.Arity{Min: lowest, Max: highest} }
+func args(lowest, highest int) model.Arity {
+	return model.Arity{Min: model.Narrow(lowest), Max: model.Narrow(highest)}
+}
 
 var Builtins = func() model.Builtins {
 	var entries []model.Builtin

@@ -4,6 +4,8 @@ import (
 	"cmp"
 	"slices"
 	"unicode/utf8"
+
+	"github.com/stubbedev/shell-lsp/internal/parser"
 )
 
 const (
@@ -40,7 +42,6 @@ type treeParser struct {
 	errors    []Error
 	lookahead [lookaheadMask + 1]peeked
 	bareOr    int
-	chunk     int
 	slots     int
 	reads     int
 	binders   int
@@ -48,14 +49,14 @@ type treeParser struct {
 }
 
 func Parse(src string) *File {
-	p := &treeParser{chunk: chunkFor(src)}
+	p := &treeParser{}
 	p.src = src
 	p.tokens = make([]Token, 0, estimatedTokens(src))
 	p.advance()
 	root := p.expr()
 	stray := p.strayExprs()
 	slices.SortStableFunc(p.errors, func(a, b Error) int { return cmp.Compare(a.Span.Start, b.Span.Start) })
-	return &File{Text: src, Root: root, Stray: stray, Comments: p.comments, Tokens: Tightened(p.tokens), Errors: p.errors, BareOr: p.bareOr, Slots: p.slots, Reads: p.reads, Binders: p.binders}
+	return &File{Text: src, Root: root, Stray: stray, Comments: p.comments, Tokens: parser.Tightened(p.tokens), Errors: p.errors, BareOr: p.bareOr, Slots: p.slots, Reads: p.reads, Binders: p.binders}
 }
 
 func (p *treeParser) strayExprs() []Expr {

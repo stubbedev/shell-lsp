@@ -78,11 +78,7 @@ type setNode struct {
 }
 
 func (r *resolver) newSetNode(isRec bool) *setNode {
-	if len(r.setChunk) == 0 {
-		r.setChunk = make([]setNode, r.chunk)
-	}
-	n := &r.setChunk[0]
-	r.setChunk = r.setChunk[1:]
+	n := r.sets.New()
 	n.rec = isRec
 	return n
 }
@@ -114,11 +110,7 @@ func (n *setNode) add(e *entry) {
 }
 
 func (r *resolver) newEntry(name string, attr syntax.Attr, binding syntax.Binding) *entry {
-	if len(r.entryChunk) == 0 {
-		r.entryChunk = make([]entry, r.chunk)
-	}
-	e := &r.entryChunk[0]
-	r.entryChunk = r.entryChunk[1:]
+	e := r.entries.New()
 	e.name = name
 	e.firstBinder[0] = attr
 	e.firstBinding[0] = binding

@@ -11,7 +11,6 @@ import (
 
 const (
 	maxPresizedNames = 1 << 16
-	maxResolverChunk = 256
 	CurPos           = "__curPos"
 	overrides        = "__overrides"
 	LegacyBody       = "body"
@@ -31,16 +30,14 @@ const (
 )
 
 type Def struct {
-	ID       int
 	Name     string
-	Kind     DefKind
 	Binders  []syntax.Node
 	Bindings []syntax.Binding
 	Scope    *Scope
-	Implicit bool
 	uses     []Use
-	outer    *Def
-	useCount int
+	ID       int32
+	Kind     DefKind
+	Implicit bool
 }
 
 func (d *Def) Uses() []Use { return d.uses }
@@ -58,7 +55,6 @@ const (
 
 type Ref struct {
 	Kind    RefKind
-	known   bool
 	Def     *Def
 	Builtin *builtins.Builtin
 	With    *syntax.With
@@ -100,9 +96,28 @@ type Duplicate struct {
 	Path string
 }
 
+type slotRef uint32
+
+const (
+	refKindBits = 2
+	refKnown    = slotRef(1) << refKindBits
+	refIndexAt  = refKindBits + 1
+)
+
+func packRef(kind RefKind, index int) slotRef {
+	return slotRef(index)<<refIndexAt | refKnown | slotRef(kind) //nolint:gosec // an index counts syntax nodes of one file, which the transport caps well below 2^29
+}
+
+func (s slotRef) kind() RefKind { return RefKind(s & (refKnown - 1)) }
+
+func (s slotRef) index() int { return int(s >> refIndexAt) }
+
+func packDef(d *Def) int32 { return d.ID + 1 }
+
 type Table struct {
-	refs       []Ref
-	binders    []*Def
+	refs       []slotRef
+	binders    []int32
+	withs      []*syntax.With
 	owners     map[syntax.Node]*Scope
 	outerWiths map[*syntax.With]*syntax.With
 	root       *Scope
@@ -118,8 +133,20 @@ func (t *Table) Of(id *syntax.Ident) (Ref, bool) {
 }
 
 func (t *Table) resolved(slot int) (Ref, bool) {
-	ref := t.refs[slot]
-	return ref, ref.known
+	packed := t.refs[slot]
+	if packed&refKnown == 0 {
+		return Ref{}, false
+	}
+	switch packed.kind() {
+	case Definition:
+		return Ref{Kind: Definition, Def: t.defs[packed.index()]}, true
+	case Global:
+		return Ref{Kind: Global, Builtin: builtins.At(packed.index())}, true
+	case Dynamic:
+		return Ref{Kind: Dynamic, With: t.withs[packed.index()]}, true
+	case Undefined:
+	}
+	return Ref{Kind: Undefined}, true
 }
 
 func (t *Table) Inherited(attr syntax.Attr) (Ref, bool) {
@@ -127,14 +154,17 @@ func (t *Table) Inherited(attr syntax.Attr) (Ref, bool) {
 }
 
 func (t *Table) Binder(node syntax.Node) (*Def, bool) {
-	var def *Def
+	var packed int32
 	switch node := node.(type) {
 	case *syntax.Ident:
-		def = t.binders[node.Slot()]
+		packed = t.binders[node.Slot()]
 	case syntax.Attr:
-		def = t.binders[node.Slot()]
+		packed = t.binders[node.Slot()]
 	}
-	return def, def != nil
+	if packed == 0 {
+		return nil, false
+	}
+	return t.defs[packed-1], true
 }
 
 func (t *Table) Supplied(d *Def) (syntax.Expr, bool) {
@@ -232,8 +262,8 @@ func Resolve(f *syntax.File) *Table {
 	root := &Scope{Kind: FileScope}
 	r := &resolver{
 		table: &Table{
-			refs:       make([]Ref, f.Slots),
-			binders:    make([]*Def, f.Slots),
+			refs:       make([]slotRef, f.Slots),
+			binders:    make([]int32, f.Slots),
 			owners:     map[syntax.Node]*Scope{},
 			outerWiths: map[*syntax.With]*syntax.With{},
 			root:       root,
@@ -243,7 +273,6 @@ func Resolve(f *syntax.File) *Table {
 		},
 		shadow: make(map[string]*Def, min(f.Binders, maxPresizedNames)),
 		scope:  root,
-		chunk:  min(max(f.Binders, 1), maxResolverChunk),
 	}
 	r.expr(f.Root)
 	for _, e := range f.Stray {
@@ -254,21 +283,41 @@ func Resolve(f *syntax.File) *Table {
 }
 
 func (t *Table) groupUses() {
+	counts := make([]int32, len(t.defs))
 	total := 0
 	for i := range t.uses {
 		if d := t.uses[i].Ref.Def; d != nil {
-			d.useCount++
+			counts[d.ID]++
 			total++
 		}
 	}
 	grouped := make([]Use, total)
 	for _, d := range t.defs {
-		d.uses = grouped[:0:d.useCount]
-		grouped = grouped[d.useCount:]
+		n := counts[d.ID]
+		d.uses = grouped[:0:n]
+		grouped = grouped[n:]
 	}
 	for i := range t.uses {
 		if d := t.uses[i].Ref.Def; d != nil {
 			d.uses = append(d.uses, t.uses[i])
+		}
+	}
+}
+
+func (t *Table) renumberDefs() {
+	placed := make([]int32, len(t.defs))
+	for at, d := range t.defs {
+		placed[d.ID] = int32(at)
+		d.ID = int32(at)
+	}
+	for slot, packed := range t.refs {
+		if packed&refKnown != 0 && packed.kind() == Definition {
+			t.refs[slot] = packRef(Definition, int(placed[packed.index()]))
+		}
+	}
+	for slot, packed := range t.binders {
+		if packed != 0 {
+			t.binders[slot] = placed[packed-1] + 1
 		}
 	}
 }
@@ -279,6 +328,7 @@ func (r *resolver) finish() {
 	slices.SortStableFunc(t.uses, func(a, b Use) int { return byStart(a.Node, b.Node) })
 	t.groupUses()
 	slices.SortStableFunc(t.defs, func(a, b *Def) int { return byStart(a.Binders[0], b.Binders[0]) })
+	t.renumberDefs()
 	for _, s := range t.scopes {
 		slices.SortStableFunc(s.regions, func(a, b region) int { return cmp.Compare(a.span.Start, b.span.Start) })
 	}

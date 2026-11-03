@@ -241,8 +241,25 @@ func buildIndex(file *syntax.File, lang syntax.LangVariant, d dialect.Dialect, t
 	Walk(file, b.visit)
 	slices.SortStableFunc(b.index.Keywords, func(x, y Keyword) int { return x.Span.Start - y.Span.Start })
 	slices.SortStableFunc(b.index.Comments, func(x, y Comment) int { return x.Span.Start - y.Span.Start })
+	b.index.tighten()
 	b.index.buildLookups()
 	return b.index, b.errs
+}
+
+func (ix *Index) tighten() {
+	ix.Definitions = Tightened(ix.Definitions)
+	ix.References = Tightened(ix.References)
+	ix.Commands = Tightened(ix.Commands)
+	ix.Keywords = Tightened(ix.Keywords)
+}
+
+const wastefulSlack = 8
+
+func Tightened[T any](s []T) []T {
+	if cap(s)-len(s) <= len(s)/wastefulSlack {
+		return s
+	}
+	return slices.Clone(s)
 }
 
 func presized(previous *Tree, size int) Index {

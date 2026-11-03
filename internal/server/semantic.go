@@ -170,9 +170,9 @@ func (s *Server) nixTokens(file *workspace.File) []semantic.Token {
 		tree, table := file.Native.Nix().Syntax()
 		variants := file.Variants()
 		shells := file.Native.Index.Shells
-		if proven.wrapped != nil {
-			variants = slices.Concat(variants, proven.wrapped.Variants())
-			shells = slices.Concat(shells, proven.wrapped.Native.Index.Shells)
+		if wrapped := proven.file(); wrapped != nil {
+			variants = slices.Concat(variants, wrapped.Variants())
+			shells = slices.Concat(shells, wrapped.Native.Index.Shells)
 		}
 		pieces := make([]parser.Span, len(shells))
 		for i, shell := range shells {

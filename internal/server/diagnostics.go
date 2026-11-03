@@ -144,8 +144,16 @@ func (s *Server) syntaxItems(file *workspace.File, settings config.Settings, at 
 }
 
 type provenFile struct {
-	wrapped  *workspace.File
+	wrapped  func() *workspace.File
+	proof    hostnav.Proof
 	revision uint64
+}
+
+func (p provenFile) file() *workspace.File {
+	if p.wrapped == nil {
+		return nil
+	}
+	return p.wrapped()
 }
 
 func (s *Server) nixProvenFile(file *workspace.File) provenFile {
@@ -153,7 +161,7 @@ func (s *Server) nixProvenFile(file *workspace.File) provenFile {
 	if !held {
 		return provenFile{revision: revision}
 	}
-	return provenFile{wrapped: wrappedBy(file, proof, revision), revision: revision}
+	return provenFile{wrapped: func() *workspace.File { return wrappedBy(file, proof, revision) }, proof: proof, revision: revision}
 }
 
 func (s *Server) closedProvenFile(ctx context.Context, docs *docstore.View, file *workspace.File) provenFile {
@@ -168,11 +176,11 @@ func (s *Server) closedProvenFile(ctx context.Context, docs *docstore.View, file
 		return provenFile{}
 	}
 	revision := hashOf(proof.Key())
-	return provenFile{wrapped: wrappedBy(file, proof, revision), revision: revision}
+	return provenFile{wrapped: func() *workspace.File { return wrappedBy(file, proof, revision) }, proof: proof, revision: revision}
 }
 
 func wrappedBy(file *workspace.File, proof hostnav.Proof, revision uint64) *workspace.File {
-	return workspace.Memo(file, nixProvenFileKey, revision, func() *workspace.File {
+	return workspace.MemoWeak(file, nixProvenFileKey, revision, func() *workspace.File {
 		return hostnav.Wrapped(file, proof.On(file.Doc.Source()), nil)
 	})
 }
@@ -183,9 +191,13 @@ func (s *Server) provenItems(file *workspace.File, proven provenFile, settings c
 	}
 	key := nixProvenMemoKey + lintKey(s.lintSettings(file.Path, settings), generation)
 	return workspace.Memo(file, key, proven.revision, func() []lsp.Diagnostic {
-		at := proven.wrapped.Doc.Positions(enc)
-		findings, _ := s.findings(proven.wrapped, settings, generation)
-		return append(s.syntaxItems(proven.wrapped, settings, at), diagnostics.Lint(findings, at, codeDescriptions)...)
+		wrapped := proven.file()
+		if wrapped == nil {
+			return nil
+		}
+		at := wrapped.Doc.Positions(enc)
+		findings, _ := s.findings(wrapped, settings, generation)
+		return append(s.syntaxItems(wrapped, settings, at), diagnostics.Lint(findings, at, codeDescriptions)...)
 	})
 }
 

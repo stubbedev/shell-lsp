@@ -12,7 +12,7 @@ func (p *treeParser) identifier() *Ident {
 	slot := p.slots
 	p.slots++
 	p.reads++
-	id := p.arena.idents.put(p.chunk, Ident{
+	id := p.arena.idents.put(Ident{
 		exprNode: exprAt(Span{Start: p.tok.start, End: p.tok.end}),
 		Name:     p.src[p.tok.start:p.tok.end],
 		slot:     int32(slot), //nolint:gosec // bounded by the source length, which the transport caps well below 2^31
@@ -39,7 +39,7 @@ func (p *treeParser) patternLambda(start int) Expr {
 	if p.accept(TokAt) {
 		if p.tok.kind == TokIdent {
 			param.Alias = p.identifier()
-			param.span = p.span(start)
+			param.node = nodeAt(p.span(start))
 		} else {
 			p.errorHere("expected a name after `@`, found " + p.describe(p.tok))
 		}
@@ -82,7 +82,7 @@ func (p *treeParser) pattern(start int) *PatternParam {
 	param.Ellipsis = separated && p.accept(TokEllipsis)
 	p.open[inBraces]--
 	param.Closed = p.closing(TokRBrace, "}", open)
-	param.span = p.span(start)
+	param.node = nodeAt(p.span(start))
 	return param
 }
 
@@ -93,6 +93,6 @@ func (p *treeParser) formal() *Formal {
 	if p.accept(TokQuestion) {
 		f.Default = p.expr()
 	}
-	f.span = p.span(start)
+	f.node = nodeAt(p.span(start))
 	return f
 }

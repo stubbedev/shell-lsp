@@ -2,6 +2,7 @@ package model
 
 import (
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"unsafe"
@@ -218,7 +219,7 @@ func TestIndexLookups(t *testing.T) {
 	if got := ix.Exported("p", 1); !slices.Equal(got, []int{1}) {
 		t.Errorf("Exported = %v", got)
 	}
-	if got := ix.Children(0); !slices.Equal(got, []int{1}) {
+	if got := ix.Children(0); !slices.Equal(got, []int32{1}) {
 		t.Errorf("Children = %v", got)
 	}
 }
@@ -251,5 +252,95 @@ func TestARefStaysSmall(t *testing.T) {
 	const budget = 88
 	if size := unsafe.Sizeof(Ref{}); size > budget {
 		t.Errorf("a Ref takes %d bytes, over the budget of %d: an index holds one per read", size, budget)
+	}
+}
+
+func TestLookupTablesKeepDeclarationOrder(t *testing.T) {
+	t.Parallel()
+
+	ix := &Index{
+		Symbols: []Symbol{
+			{Name: "b", Kind: KindVariable, Parent: NoParent},
+			{Name: "a", Kind: KindFunction, Parent: 0},
+			{Name: "a", Kind: KindVariable, Parent: 0},
+			{Name: "b", Kind: KindVariable, Parent: 2, Hidden: true},
+			{Name: "a", Kind: KindVariable, Parent: NoParent},
+		},
+		Refs: []Ref{
+			{Name: "x", Owner: 2, Edge: true},
+			{Name: "y", Owner: 0, Edge: true},
+			{Name: "z", Owner: 2},
+			{Name: "w", Owner: 2, Edge: true},
+		},
+	}
+	for _, c := range []struct {
+		got, want []int32
+		what      string
+	}{
+		{ix.named(NamespaceValues, "a"), []int32{2, 4}, "values named a"},
+		{ix.named(NamespaceValues, "b"), []int32{0, 3}, "values named b"},
+		{ix.named(NamespaceFunctions, "a"), []int32{1}, "functions named a"},
+		{ix.named(NamespaceFunctions, "b"), nil, "functions named b"},
+		{ix.named(NamespaceValues, ""), nil, "values with no name"},
+		{ix.Children(NoParent), []int32{0, 4}, "top level"},
+		{ix.Children(0), []int32{1, 2}, "children of 0"},
+		{ix.Children(2), nil, "children of 2, which are hidden"},
+		{ix.edgesOf(2), []int32{0, 3}, "edges of 2"},
+		{ix.edgesOf(1), nil, "edges of 1"},
+	} {
+		if !slices.Equal(c.got, c.want) {
+			t.Errorf("%s = %v, want %v", c.what, c.got, c.want)
+		}
+	}
+}
+
+func TestNamesListPlacesInFileOrder(t *testing.T) {
+	t.Parallel()
+
+	m := &Module{Files: []*Index{
+		{Symbols: []Symbol{{Name: "a"}, {Name: "b"}}, Refs: []Ref{{Name: "b"}}},
+		{Symbols: []Symbol{{Name: "a"}}, Refs: []Ref{{Name: "c"}, {Name: "b"}}},
+	}}
+	if got, want := m.SymbolsNamed("a"), []Place{{File: 0, Item: 0}, {File: 1, Item: 0}}; !slices.Equal(got, want) {
+		t.Errorf("SymbolsNamed(a) = %v, want %v", got, want)
+	}
+	if got, want := m.RefsNamed("b"), []Place{{File: 0, Item: 0}, {File: 1, Item: 1}}; !slices.Equal(got, want) {
+		t.Errorf("RefsNamed(b) = %v, want %v", got, want)
+	}
+	if got := m.SymbolsNamed("missing"); len(got) != 0 {
+		t.Errorf("SymbolsNamed(missing) = %v", got)
+	}
+}
+
+func TestNamedFindsEveryNameThroughItsHash(t *testing.T) {
+	t.Parallel()
+
+	ix := &Index{}
+	const count = 1000
+	for i := range count {
+		ix.Symbols = append(ix.Symbols, Symbol{Name: "name" + strconv.Itoa(i%300), Kind: KindVariable})
+	}
+	ix.Symbols = append(ix.Symbols, Symbol{Name: "name1", Kind: KindFunction})
+	seen := 0
+	for i := range 300 {
+		run := ix.named(NamespaceValues, "name"+strconv.Itoa(i))
+		seen += len(run)
+		for at, item := range run {
+			if ix.Symbols[item].Name != "name"+strconv.Itoa(i) || at > 0 && run[at-1] >= item {
+				t.Fatalf("name%d lists %v", i, run)
+			}
+		}
+	}
+	if seen != count {
+		t.Errorf("found %d values, want %d", seen, count)
+	}
+	if got := ix.named(NamespaceFunctions, "name1"); !slices.Equal(got, []int32{count}) {
+		t.Errorf("functions named name1 = %v", got)
+	}
+	if got := ix.named(NamespaceValues, "absent"); got != nil {
+		t.Errorf("an absent name lists %v", got)
+	}
+	if got := (&Index{}).named(NamespaceValues, "any"); got != nil {
+		t.Errorf("an empty index lists %v", got)
 	}
 }

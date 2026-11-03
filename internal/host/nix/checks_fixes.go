@@ -112,12 +112,12 @@ func (c *checker) aliasRemoval(p *syntax.PatternParam) textedit.Edit {
 	tokens := c.tree.TokensIn(p.Span())
 	if p.AliasFirst {
 		i := slices.IndexFunc(tokens, func(t syntax.Token) bool { return t.Kind == syntax.TokLBrace })
-		return textedit.Edit{Start: alias.Start, End: tokens[i].Span.Start}
+		return textedit.Edit{Start: alias.Start, End: tokens[i].Span().Start}
 	}
 	end := p.Span().Start
 	for _, t := range tokens {
-		if t.Kind == syntax.TokRBrace && t.Span.End <= alias.Start {
-			end = t.Span.End
+		if t.Kind == syntax.TokRBrace && t.Span().End <= alias.Start {
+			end = t.Span().End
 		}
 	}
 	return textedit.Edit{Start: end, End: alias.End}
