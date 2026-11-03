@@ -110,3 +110,34 @@ func TestClosureHashesFollowTheInputAndItsFollows(t *testing.T) {
 		t.Error("closureHashes(absent) = nil error")
 	}
 }
+
+func TestLockedAtFollowsNamesThroughTheLock(t *testing.T) {
+	t.Parallel()
+
+	lock, err := parseLock([]byte(`{"root": "root", "version": 7, "nodes": {
+  "root": {"inputs": {"dep": "dep_2", "alias": ["dep", "inner"]}},
+  "dep_2": {"inputs": {"inner": "inner"}, "locked": {"type": "tarball", "url": "file:///d"}},
+  "inner": {"locked": {"type": "github", "owner": "o"}}
+}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tt := range []struct {
+		names []string
+		want  string
+	}{
+		{[]string{"dep"}, `{"type": "tarball", "url": "file:///d"}`},
+		{[]string{"dep", "inner"}, `{"type": "github", "owner": "o"}`},
+		{[]string{"alias"}, `{"type": "github", "owner": "o"}`},
+	} {
+		got, err := lock.lockedAt(tt.names)
+		if err != nil || string(got) != tt.want {
+			t.Errorf("lockedAt(%q) = %s, %v, want %s", tt.names, got, err, tt.want)
+		}
+	}
+	for _, names := range [][]string{{"absent"}, {"dep", "absent"}, {}} {
+		if got, err := lock.lockedAt(names); err == nil {
+			t.Errorf("lockedAt(%q) = %s, want an error", names, got)
+		}
+	}
+}

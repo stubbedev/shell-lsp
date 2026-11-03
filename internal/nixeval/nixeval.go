@@ -44,6 +44,7 @@ const (
 type settings struct {
 	run      runner
 	identify func() (string, error)
+	version  func(context.Context) ([]byte, error)
 	cacheDir string
 	timeout  time.Duration
 	now      func() time.Time
@@ -53,11 +54,14 @@ type settings struct {
 type Client struct {
 	run      runner
 	identify func() (string, error)
+	version  func(context.Context) ([]byte, error)
 	disk     *store
 	report   func(error)
 	life     *lifetime
 	slots    chan struct{}
 	lowSlots chan struct{}
+	releases *cache[nixRelease]
+	realised *cache[struct{}]
 	system   *cache[string]
 	locked   *cache[lockedFlake]
 	outputs  *cache[[]Output]
@@ -75,6 +79,7 @@ func New(report func(error)) (*Client, error) {
 	return newClient(settings{
 		run:      execRunner(nixProgram),
 		identify: nixIdentity(nixProgram),
+		version:  nixVersion,
 		cacheDir: filepath.Join(root, filepath.FromSlash(cacheSubdirectory)),
 		timeout:  refreshTimeout,
 		now:      time.Now,
@@ -90,11 +95,14 @@ func newClient(s settings) (*Client, error) {
 	return &Client{
 		run:      s.run,
 		identify: s.identify,
+		version:  s.version,
 		disk:     &store{dir: s.cacheDir, budget: storeBudget, now: s.now, report: s.report},
 		report:   s.report,
 		life:     life,
 		slots:    make(chan struct{}, maxConcurrent),
 		lowSlots: make(chan struct{}, maxBackground),
+		releases: newCache[nixRelease](life, smallCacheBudget, s.timeout, s.now),
+		realised: newCache[struct{}](life, smallCacheBudget, min(s.timeout, realiseTimeout), s.now),
 		system:   newCache[string](life, smallCacheBudget, s.timeout, s.now),
 		locked:   newCache[lockedFlake](life, smallCacheBudget, s.timeout, s.now),
 		outputs:  newCache[[]Output](life, smallCacheBudget, s.timeout, s.now),
@@ -361,12 +369,30 @@ func loadFinished[T any](c *Client, q query[T], key contentKey) (T, bool) {
 
 func (c *Client) evaluating(flake flakeState, args func(lockedFlake) []string) func(context.Context, task) ([]byte, error) {
 	return func(ctx context.Context, work task) ([]byte, error) {
-		locked, err := c.resolve(ctx, flake)
-		if err != nil {
-			return nil, err
-		}
-		return c.runBounded(ctx, work, flake.dir, args(locked))
+		return c.withSnapshot(ctx, work, flake, func(locked lockedFlake) ([]byte, error) {
+			return c.runBounded(ctx, work, flake.dir, args(locked))
+		})
 	}
+}
+
+func (c *Client) withSnapshot(ctx context.Context, work task, flake flakeState, use func(lockedFlake) ([]byte, error)) ([]byte, error) {
+	locked, err := c.resolve(ctx, flake)
+	if err != nil {
+		return nil, err
+	}
+	out, failure := use(locked)
+	if failure == nil || !isEvaluationFailure(failure) {
+		return out, failure
+	}
+	if _, err := c.runBounded(ctx, work, "", pathInfoArgs(locked.storePath)); !isEvaluationFailure(err) {
+		return nil, failure
+	}
+	c.locked.forgetIf(flake.local, func(current lockedFlake) bool { return current == locked })
+	fresh, err := c.resolve(ctx, flake)
+	if err != nil {
+		return nil, fmt.Errorf("resolving the flake again after garbage collection removed %s: %w", locked.storePath, err)
+	}
+	return use(fresh)
 }
 
 func isEvaluationFailure(err error) bool {
@@ -428,7 +454,7 @@ func (c *Client) optionsQuery(flake flakeState, source OptionSource) query[*Opti
 		slot:    flake.slot(queryOptions, detail),
 		decode:  decodeOptions,
 		evaluate: c.renderedOptions(flake, detail, func(locked lockedFlake, rendering exprArg) []string {
-			return evalArgs(callExpr("options", stringArg("ref", locked.ref), stringArg("kind", source.Kind.evalName()), stringArg("name", source.Name), rendering))
+			return evalArgs(callExpr("options", stringArg("ref", locked.ref), stringArg("trees", locked.trees), stringArg("kind", source.Kind.evalName()), stringArg("name", source.Name), rendering))
 		}),
 	}
 	if source.Kind == SourceNixOS {
@@ -503,7 +529,14 @@ func (c *Client) resolve(ctx context.Context, flake flakeState) (lockedFlake, er
 		if err != nil {
 			return computed[lockedFlake]{}, err
 		}
-		return computed[lockedFlake]{value: value, cost: len(described) + len(fetched)}, nil
+		if flake.release.variant == variantDeterminate {
+			trees, err := c.runBounded(ctx, work, flake.dir, archiveArgs(value.ref))
+			if err != nil {
+				return computed[lockedFlake]{}, err
+			}
+			value.trees = string(trees)
+		}
+		return computed[lockedFlake]{value: value, cost: len(described) + len(fetched) + len(value.trees)}, nil
 	})
 	if err != nil {
 		return lockedFlake{}, fmt.Errorf("resolving the flake: %w", err)

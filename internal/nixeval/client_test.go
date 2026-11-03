@@ -23,6 +23,7 @@ const (
 	fakeRef      = "path:/nix/store/abc-source?narHash=sha256-AAAA%3D"
 	fakeLock     = `{"nodes": {"nixpkgs": {"locked": {"repo": "nixpkgs", "narHash": "sha256-NP="}}, "root": {"inputs": {"nixpkgs": "nixpkgs"}}}, "root": "root", "version": 7}` + "\n"
 	fakeIdentity = "/nix/store/fake-nix/bin/nix"
+	fakeVersion  = "nix (Nix) 2.34.9\n"
 	fakeOptions  = `{"options": [{"loc": ["a"], "type": "boolean"}], "truncated": []}`
 )
 
@@ -34,7 +35,7 @@ type fakeNix struct {
 }
 
 func newFakeNix(replies map[string]string) *fakeNix {
-	base := map[string]string{"flake metadata": fakeMetadata, "flake prefetch": fakePrefetch, "config show": "x86_64-linux\n", "flake show": `{}`}
+	base := map[string]string{"flake metadata": fakeMetadata, "flake prefetch": fakePrefetch, "config show": "x86_64-linux\n", "flake show": `{}`, "path-info": fakePrefetch}
 	maps.Copy(base, replies)
 	return &fakeNix{replies: base}
 }
@@ -116,6 +117,7 @@ func newHarness(t *testing.T, run runner) *testHarness {
 	h.settings = settings{
 		run:      run,
 		identify: func() (string, error) { return fakeIdentity, nil },
+		version:  func(context.Context) ([]byte, error) { return []byte(fakeVersion), nil },
 		cacheDir: t.TempDir(),
 		timeout:  testTimeout,
 		now:      time.Now,
@@ -192,7 +194,7 @@ func TestEveryEvaluatingCommandIsHardened(t *testing.T) {
 		{"--no-update-lock-file"},
 	}
 	forbidden := []string{"--impure", "--no-pure-eval", "--accept-flake-config", "--no-write-lock-file", "--commit-lock-file", "--recreate-lock-file"}
-	for _, args := range [][]string{metadataArgs(), prefetchArgs(), showArgs(fakeRef), evalArgs("1")} {
+	for _, args := range [][]string{metadataArgs(), prefetchArgs(), prefetchRefArgs("github:o/r/abc"), archiveArgs(fakeRef), showArgs(fakeRef), evalArgs("1")} {
 		for _, flag := range required {
 			if !containsRun(args, flag) {
 				t.Errorf("%q lacks %q", args, flag)

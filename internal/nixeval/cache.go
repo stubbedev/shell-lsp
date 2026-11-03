@@ -255,3 +255,11 @@ func (c *cache[T]) await(ctx context.Context, key contentKey, compute computeFun
 		return zero, fmt.Errorf("waiting for the result: %w", context.Cause(ctx))
 	}
 }
+
+func (c *cache[T]) forgetIf(key contentKey, matches func(T) bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if e, ok := c.entries[key]; ok && e.finished && e.err == nil && matches(e.value) {
+		c.removeLocked(e)
+	}
+}

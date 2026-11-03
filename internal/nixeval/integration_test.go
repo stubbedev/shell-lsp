@@ -3,16 +3,22 @@
 package nixeval
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
+	"context"
 	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -56,8 +62,10 @@ const fixtureSingleFile = `{
   in {
     packages = builtins.listToAttrs (map (system: { name = system; value.default = drv system; })
       [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ]);
-    nixosConfigurations.box.options = {
-      services.web = {
+    nixosConfigurations.box = {
+      pkgs.stdenv.system = "x86_64-linux";
+      config.system.build.toplevel = drv "x86_64-linux";
+      options.services.web = {
         enable = web "enable" { default = false; example = true; };
         package = web "package" { default = nixpkgs.legacyPackages.x86_64-linux.hello; };
         rendered = web "rendered" { default = throw "never forced"; defaultText = { _type = "literalExpression"; text = "pkgs.hello"; }; };
@@ -73,7 +81,10 @@ const fixtureSingleFile = `{
         };
       };
     };
-    homeConfigurations.me.options.programs.git.enable = leaf [ "programs" "git" "enable" ] { default = false; };
+    homeConfigurations.me = {
+      activationPackage = drv "x86_64-linux";
+      options.programs.git.enable = leaf [ "programs" "git" "enable" ] { default = false; };
+    };
   };
 }
 `
@@ -107,10 +118,15 @@ const fixtureUsesParts = `{
 }
 `
 
+func useRealNix(h *testHarness) {
+	h.settings.identify = nixIdentity(nixProgram)
+	h.settings.version = nixVersion
+}
+
 func realClient(t *testing.T) *Client {
 	t.Helper()
 	h := newHarness(t, execRunner(nixProgram))
-	h.settings.identify = nixIdentity(nixProgram)
+	useRealNix(h)
 	return h.client(t)
 }
 
@@ -118,6 +134,13 @@ func requireNix(t *testing.T) {
 	t.Helper()
 	if _, err := exec.LookPath(nixProgram); err != nil {
 		t.Skip("nix is not installed; the evaluator features need it")
+	}
+	out, err := nixVersion(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := parseRelease(out).supported(); err != nil {
+		t.Skip(err)
 	}
 }
 
@@ -500,35 +523,37 @@ func TestRealFlakeCannotLoosenEvaluationThroughNixConfig(t *testing.T) {
 	t.Parallel()
 	requireNix(t)
 
-	tests := []struct{ name, outputs, want string }{
-		{
-			name:    "import from derivation",
-			outputs: `import (derivation { name = "ifd"; system = "x86_64-linux"; builder = "/bin/sh"; args = [ "-c" "echo 1 > $out" ]; })`,
-			want:    "allow-import-from-derivation",
-		},
-		{
-			name:    "reading outside the store",
-			outputs: `builtins.readFile /etc/hostname`,
-			want:    "pure evaluation mode",
-		},
-		{
-			name:    "running a program",
-			outputs: `builtins.exec [ "true" ]`,
-			want:    "'exec'",
-		},
-	}
-	for _, tt := range tests {
-		nix := fmt.Sprintf(`{
+	loosening := func(outputs string) string {
+		return fmt.Sprintf(`{
   nixConfig.allow-import-from-derivation = true;
   nixConfig.pure-eval = false;
   nixConfig.allow-unsafe-native-code-during-evaluation = true;
   outputs = { self }: { nixosConfigurations = %s; };
 }
-`, tt.outputs)
-		dir := writeFixture(t, t.TempDir(), nix)
+`, outputs)
+	}
+	if sources, err := freshOf(realClient(t).OptionSources(t.Context(), writeFixture(t, t.TempDir(), loosening("{ }")))); err != nil || len(sources) != 0 {
+		t.Fatalf("the same flake without a refused operation = %+v, %v, want it to evaluate", sources, err)
+	}
+	tests := []struct{ name, outputs string }{
+		{
+			name:    "import from derivation",
+			outputs: `import (derivation { name = "ifd"; system = "x86_64-linux"; builder = "/bin/sh"; args = [ "-c" "echo 1 > $out" ]; })`,
+		},
+		{
+			name:    "reading outside the store",
+			outputs: `builtins.readFile /etc/hostname`,
+		},
+		{
+			name:    "running a program",
+			outputs: `builtins.exec [ "true" ]`,
+		},
+	}
+	for _, tt := range tests {
+		dir := writeFixture(t, t.TempDir(), loosening(tt.outputs))
 		_, err := freshOf(realClient(t).OptionSources(t.Context(), dir))
-		if err == nil || !strings.Contains(err.Error(), tt.want) {
-			t.Errorf("%s: error = %v, want a refusal mentioning %q", tt.name, err, tt.want)
+		if !isEvaluationFailure(err) {
+			t.Errorf("%s: error = %v, want nix to exit refusing the evaluation", tt.name, err)
 		}
 	}
 }
@@ -770,7 +795,7 @@ func TestRealFlakePartsTreeSurvivesADefaultThatNeedsPkgs(t *testing.T) {
 
 	dir := corpusFlake(t, "flake-parts")
 	h := newHarness(t, execRunner(nixProgram))
-	h.settings.identify = nixIdentity(nixProgram)
+	useRealNix(h)
 	c := h.client(t)
 	tree, err := freshOf(c.Options(t.Context(), dir, OptionSource{Kind: SourceFlakeParts}))
 	if err != nil {
@@ -818,5 +843,235 @@ func TestRealCorpusSingleFlakeNixpkgs(t *testing.T) {
 	}
 	if pkg == nil || pkg.Description == "" {
 		t.Errorf("NixpkgsPackage(hello) = %+v", pkg)
+	}
+}
+
+func TestRealNixVersionIsRecognised(t *testing.T) {
+	t.Parallel()
+	requireNix(t)
+
+	out, err := nixVersion(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	release := parseRelease(out)
+	if release.variant == variantUnrecognised {
+		t.Errorf("nix --version %q is not recognised", out)
+	}
+	if strings.Contains(release.reported, "\n") {
+		t.Errorf("the reported version %q spans lines", release.reported)
+	}
+}
+
+func TestRealNixBelowTheMinimumIsOnePreciseErrorBeforeAnyEvaluation(t *testing.T) {
+	t.Parallel()
+	if _, err := exec.LookPath(nixProgram); err != nil {
+		t.Skip("nix is not installed")
+	}
+	out, err := nixVersion(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parseRelease(out).supported() == nil {
+		t.Skipf("%s meets the minimum", out)
+	}
+	var evaluated atomic.Int32
+	h := newHarness(t, func(context.Context, string, []string) ([]byte, error) {
+		evaluated.Add(1)
+		return nil, errors.New("no evaluation may start")
+	})
+	useRealNix(h)
+	dir := writeFixture(t, t.TempDir(), `{ outputs = { self }: { }; }`+"\n")
+	refresh := h.client(t).Warm(dir)
+	<-refresh.Done()
+	if _, unsupported := errors.AsType[*UnsupportedNixError](refresh.Err()); !unsupported {
+		t.Errorf("Warm() error = %v, want *UnsupportedNixError", refresh.Err())
+	}
+	if got := evaluated.Load(); got != 0 {
+		t.Errorf("%d evaluation processes started", got)
+	}
+}
+
+func TestRealGarbageCollectedSnapshotIsResolvedAgain(t *testing.T) {
+	t.Parallel()
+	requireNix(t)
+
+	dir := writeFixture(t, t.TempDir(), `{ outputs = { self }: { lib.answer = 42; }; }`+"\n")
+	c := realClient(t)
+	flake, err := c.inspect(t.Context(), dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const collected = "/nix/store/00000000000000000000000000000000-source"
+	c.locked.insert(flake.local, computed[lockedFlake]{value: lockedFlake{
+		ref:       lockedRef(collected, "sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=", ""),
+		storePath: collected,
+	}})
+	outputs, err := freshOf(c.Outputs(t.Context(), dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(outputs) != 1 || outputs[0].Path[0] != "lib" {
+		t.Errorf("Outputs() = %+v", outputs)
+	}
+}
+
+const fixtureRecordsItsDeclaration = `{
+  outputs = { self }: let
+    place = builtins.unsafeGetAttrPos "marker" (import ./marker.nix);
+  in {
+    nixosConfigurations.box.options.here = {
+      _type = "option";
+      loc = [ "here" ];
+      type = { description = "string"; getSubOptions = _: { }; };
+      declarationPositions = [ place ];
+    };
+  };
+}
+`
+
+func TestRealDeclarationInTheFlakeItselfIsOnDisk(t *testing.T) {
+	t.Parallel()
+	requireNix(t)
+
+	dir := writeFixture(t, t.TempDir(), fixtureRecordsItsDeclaration)
+	marker := rand.Text()
+	writeFile(t, filepath.Join(dir, "marker.nix"), fmt.Sprintf("{ marker = %q; }\n", marker))
+	tree, err := freshOf(realClient(t).Options(t.Context(), dir, OptionSource{Kind: SourceNixOS, Name: "box"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	declarations := mustOption(t, tree, "here").Declarations
+	if len(declarations) != 1 || !declarations[0].OnDisk() || declarations[0].Line != 1 {
+		t.Fatalf("declarations = %+v, want the marker.nix of the snapshot on disk", declarations)
+	}
+	content, err := os.ReadFile(declarations[0].File)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(content), marker) {
+		t.Errorf("%s holds %q, want the marker %s", declarations[0].File, content, marker)
+	}
+}
+
+const fixtureInputRecordsItsPosition = `{
+  outputs = { self }: let
+    place = builtins.unsafeGetAttrPos "marker" (import ./marker.nix);
+    package = system: derivation { name = "hello"; inherit system; builder = "/bin/sh"; } // {
+      meta.position = "${place.file}:${toString place.line}";
+    };
+  in {
+    legacyPackages = builtins.listToAttrs (map (system: { name = system; value.hello = package system; })
+      [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ]);
+  };
+}
+`
+
+func writeTarball(t *testing.T, path string, files map[string]string) {
+	t.Helper()
+	var compressed bytes.Buffer
+	zipped := gzip.NewWriter(&compressed)
+	archive := tar.NewWriter(zipped)
+	for _, name := range slices.Sorted(maps.Keys(files)) {
+		content := files[name]
+		if err := archive.WriteHeader(&tar.Header{Name: "source/" + name, Mode: 0o644, Size: int64(len(content))}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := archive.Write([]byte(content)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := archive.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := zipped.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, compressed.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func neverCopiedInput(t *testing.T) (dir, marker string) {
+	t.Helper()
+	root := t.TempDir()
+	marker = rand.Text()
+	files := map[string]string{
+		"flake.nix":  fixtureInputRecordsItsPosition,
+		"marker.nix": fmt.Sprintf("{ marker = %q; }\n", marker),
+	}
+	unpacked := filepath.Join(root, "unpacked")
+	if err := os.Mkdir(unpacked, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for name, content := range files {
+		writeFile(t, filepath.Join(unpacked, name), content)
+	}
+	hash, err := exec.CommandContext(t.Context(), nixProgram, "hash", "path", unpacked, "--extra-experimental-features", experimental).Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tarball := filepath.Join(root, "input.tar.gz")
+	writeTarball(t, tarball, files)
+	url := "file://" + tarball
+	lock, err := json.Marshal(map[string]any{
+		"root":    "root",
+		"version": 7,
+		"nodes": map[string]any{
+			"root": map[string]any{"inputs": map[string]any{"nixpkgs": "nixpkgs"}},
+			"nixpkgs": map[string]any{
+				"locked":   map[string]any{"type": "tarball", "url": url, "narHash": strings.TrimSpace(string(hash))},
+				"original": map[string]any{"type": "tarball", "url": url},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir = writeFixture(t, filepath.Join(root, "flake"), fmt.Sprintf(`{
+  inputs.nixpkgs.url = "tarball+%s";
+  outputs = { self, nixpkgs }: { };
+}
+`, url))
+	writeFile(t, filepath.Join(dir, "flake.lock"), string(lock)+"\n")
+	return dir, marker
+}
+
+func TestRealFileOfAnInputNixNeverCopiedIsRealisedOnlyWhenAsked(t *testing.T) {
+	t.Parallel()
+	requireNix(t)
+
+	dir, marker := neverCopiedInput(t)
+	c := realClient(t)
+	pkg, err := freshOf(c.NixpkgsPackage(t.Context(), dir, []string{"hello"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pkg == nil || pkg.Declaration.Line != 1 {
+		t.Fatalf("NixpkgsPackage(hello) = %+v, want its position", pkg)
+	}
+	t.Logf("%s on disk after evaluating: %v", pkg.Declaration.File, pkg.Declaration.OnDisk())
+	if err := c.RealiseFile(t.Context(), dir, pkg.Declaration.File); err != nil {
+		t.Fatal(err)
+	}
+	content, err := os.ReadFile(pkg.Declaration.File)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(content), marker) {
+		t.Errorf("%s holds %q, want the marker %s", pkg.Declaration.File, content, marker)
+	}
+}
+
+func TestRealFileOutsideEveryInputIsAPreciseError(t *testing.T) {
+	t.Parallel()
+	requireNix(t)
+
+	dir, _ := neverCopiedInput(t)
+	const nowhere = "/nix/store/00000000000000000000000000000000-source/x.nix"
+	err := realClient(t).RealiseFile(t.Context(), dir, nowhere)
+	unavailable, ok := errors.AsType[*FileUnavailableError](err)
+	if !ok || unavailable.File != nowhere || !errors.Is(err, errNotInFlake) {
+		t.Errorf("error = %v, want *FileUnavailableError naming %s", err, nowhere)
 	}
 }

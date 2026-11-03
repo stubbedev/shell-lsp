@@ -11,7 +11,9 @@ import (
 )
 
 type lockedFlake struct {
-	ref string
+	ref       string
+	storePath string
+	trees     string
 }
 
 type metadata struct {
@@ -44,7 +46,7 @@ func parsePrefetch(data []byte, dir string) (lockedFlake, error) {
 	if parsed.StorePath == "" || parsed.Hash == "" {
 		return lockedFlake{}, errors.New("parsing nix flake prefetch output: no store path or NAR hash")
 	}
-	return lockedFlake{ref: lockedRef(parsed.StorePath, parsed.Hash, dir)}, nil
+	return lockedFlake{ref: lockedRef(parsed.StorePath, parsed.Hash, dir), storePath: parsed.StorePath}, nil
 }
 
 type OutputKind string
@@ -73,7 +75,16 @@ func parseOutputs(data []byte) ([]Output, error) {
 	if err := json.Unmarshal(data, &root); err != nil {
 		return nil, fmt.Errorf("parsing nix flake show output: %w", err)
 	}
-	if err := collectOutputs(nil, root, &outputs); err != nil {
+	inventory, isInventory, err := inventoryOf(root)
+	if err != nil {
+		return nil, fmt.Errorf("parsing nix flake show output: %w", err)
+	}
+	if isInventory {
+		err = collectInventory(inventory, &outputs)
+	} else {
+		err = collectOutputs(nil, root, &outputs)
+	}
+	if err != nil {
 		return nil, fmt.Errorf("parsing nix flake show output: %w", err)
 	}
 	return outputs, nil
@@ -230,4 +241,88 @@ func parseSources(data []byte) ([]OptionSource, error) {
 		sources = append(sources, OptionSource{Kind: SourceFlakeParts})
 	}
 	return sources, nil
+}
+
+const inventoryFormat = 2
+
+var inventoryOutputKinds = map[string]OutputKind{
+	"apps":                OutputApp,
+	"nixosModules":        OutputNixOSModule,
+	"nixosConfigurations": OutputNixOSConfig,
+	"overlays":            OutputOverlay,
+	"templates":           OutputTemplate,
+}
+
+type inventoryNode struct {
+	Children         map[string]inventoryNode `json:"children"`
+	Filtered         bool                     `json:"filtered"`
+	IsLegacy         bool                     `json:"isLegacy"`
+	ShortDescription string                   `json:"shortDescription"`
+	What             string                   `json:"what"`
+	Derivation       *struct {
+		Name string `json:"name"`
+	} `json:"derivation"`
+}
+
+type inventoryEntry struct {
+	Unknown bool           `json:"unknown"`
+	Output  *inventoryNode `json:"output"`
+}
+
+func inventoryOf(root map[string]json.RawMessage) (map[string]inventoryEntry, bool, error) {
+	var version int
+	if json.Unmarshal(root["version"], &version) != nil || root["inventory"] == nil {
+		return nil, false, nil
+	}
+	if version != inventoryFormat {
+		return nil, false, fmt.Errorf("inventory format %d, this version of shell-lsp reads format %d", version, inventoryFormat)
+	}
+	var inventory map[string]inventoryEntry
+	if err := json.Unmarshal(root["inventory"], &inventory); err != nil {
+		return nil, false, fmt.Errorf("inventory: %w", err)
+	}
+	return inventory, true, nil
+}
+
+func collectInventory(inventory map[string]inventoryEntry, outputs *[]Output) error {
+	for _, name := range slices.Sorted(maps.Keys(inventory)) {
+		entry := inventory[name]
+		switch {
+		case entry.Output != nil:
+			collectInventoryNode([]string{name}, name, *entry.Output, outputs)
+		case entry.Unknown:
+			*outputs = append(*outputs, Output{Path: []string{name}, Kind: OutputUnknown})
+		default:
+			return fmt.Errorf("inventory entry %s has neither an output nor the unknown mark", name)
+		}
+	}
+	return nil
+}
+
+func collectInventoryNode(path []string, output string, node inventoryNode, outputs *[]Output) {
+	if len(node.Children) > 0 {
+		for _, name := range slices.Sorted(maps.Keys(node.Children)) {
+			collectInventoryNode(append(slices.Clip(path), name), output, node.Children[name], outputs)
+		}
+		return
+	}
+	leaf := Output{Path: path, Kind: node.kind(output), Description: node.ShortDescription}
+	if node.Derivation != nil {
+		leaf.Name = node.Derivation.Name
+	}
+	*outputs = append(*outputs, leaf)
+}
+
+func (n inventoryNode) kind(output string) OutputKind {
+	switch {
+	case n.Filtered, n.IsLegacy, n.Derivation == nil && n.What == "":
+		return OutputNotEvaluated
+	}
+	if kind, known := inventoryOutputKinds[output]; known {
+		return kind
+	}
+	if n.Derivation != nil {
+		return OutputDerivation
+	}
+	return OutputUnknown
 }

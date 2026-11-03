@@ -363,3 +363,93 @@ func TestParseSystem(t *testing.T) {
 		t.Error("parseSystem(empty) = nil error")
 	}
 }
+
+func TestParseOutputsReadsTheDeterminateInventory(t *testing.T) {
+	t.Parallel()
+
+	got, err := parseOutputs([]byte(`{
+  "version": 2,
+  "inventory": {
+    "apps": {"doc": "d", "output": {"children": {"x86_64-linux": {"children": {"default": {"what": "app", "shortDescription": "an app"}}}}}},
+    "lib": {"unknown": true},
+    "legacyPackages": {"doc": "d", "output": {"children": {"x86_64-linux": {"isLegacy": true}}}},
+    "nixosConfigurations": {"doc": "d", "output": {"children": {"box": {"what": "NixOS configuration", "derivation": {"name": "nixos-system"}, "forSystems": ["x86_64-linux"]}}}},
+    "nixosModules": {"doc": "d", "output": {"children": {"default": {"what": "NixOS module"}}}},
+    "overlays": {"doc": "d", "output": {"children": {"default": {"what": "Nixpkgs overlay"}}}},
+    "packages": {"doc": "d", "output": {"children": {
+      "aarch64-linux": {"filtered": true},
+      "x86_64-linux": {"children": {"default": {"derivation": {"name": "app-1.0"}, "forSystems": ["x86_64-linux"], "shortDescription": "An app", "what": "package"}}}
+    }}},
+    "schemaWithoutKnownName": {"doc": "d", "output": {"what": "something new"}},
+    "templates": {"doc": "d", "output": {"children": {"default": {"what": "template", "shortDescription": "A template"}}}}
+  }
+}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []Output{
+		{Path: []string{"apps", "x86_64-linux", "default"}, Kind: OutputApp, Description: "an app"},
+		{Path: []string{"legacyPackages", "x86_64-linux"}, Kind: OutputNotEvaluated},
+		{Path: []string{"lib"}, Kind: OutputUnknown},
+		{Path: []string{"nixosConfigurations", "box"}, Kind: OutputNixOSConfig, Name: "nixos-system"},
+		{Path: []string{"nixosModules", "default"}, Kind: OutputNixOSModule},
+		{Path: []string{"overlays", "default"}, Kind: OutputOverlay},
+		{Path: []string{"packages", "aarch64-linux"}, Kind: OutputNotEvaluated},
+		{Path: []string{"packages", "x86_64-linux", "default"}, Kind: OutputDerivation, Name: "app-1.0", Description: "An app"},
+		{Path: []string{"schemaWithoutKnownName"}, Kind: OutputUnknown},
+		{Path: []string{"templates", "default"}, Kind: OutputTemplate, Description: "A template"},
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Error(diff)
+	}
+}
+
+func TestBothFormatsOfOneFlakeAgreeOnWhatTheyBothReport(t *testing.T) {
+	t.Parallel()
+
+	legacy, err := parseOutputs([]byte(`{
+  "packages": {"x86_64-linux": {"default": {"type": "derivation", "name": "app-1.0", "description": "An app"}}},
+  "lib": {"type": "unknown"}
+}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	inventory, err := parseOutputs([]byte(`{"version": 2, "inventory": {
+  "packages": {"output": {"children": {"x86_64-linux": {"children": {"default": {"derivation": {"name": "app-1.0"}, "shortDescription": "An app", "what": "package"}}}}}},
+  "lib": {"unknown": true}
+}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if diff := cmp.Diff(legacy, inventory); diff != "" {
+		t.Error(diff)
+	}
+}
+
+func TestAFlakeOutputNamedInventoryStaysAnOutput(t *testing.T) {
+	t.Parallel()
+
+	got, err := parseOutputs([]byte(`{"inventory": {"type": "unknown"}, "version": {"type": "unknown"}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []Output{{Path: []string{"inventory"}, Kind: OutputUnknown}, {Path: []string{"version"}, Kind: OutputUnknown}}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Error(diff)
+	}
+}
+
+func TestParseOutputsRejectsAnInventoryItCannotRead(t *testing.T) {
+	t.Parallel()
+
+	for _, in := range []string{
+		`{"version": 3, "inventory": {}}`,
+		`{"version": 2, "inventory": 5}`,
+		`{"version": 2, "inventory": {"packages": {}}}`,
+		`{"version": 2, "inventory": {"packages": {"output": 5}}}`,
+	} {
+		if got, err := parseOutputs([]byte(in)); err == nil {
+			t.Errorf("parseOutputs(%s) = %+v, want an error", in, got)
+		}
+	}
+}

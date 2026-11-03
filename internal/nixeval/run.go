@@ -68,7 +68,15 @@ func metadataArgs() []string {
 }
 
 func prefetchArgs() []string {
-	return hardened("flake", "prefetch", ".", "--json", "--option", "flake-registry", "")
+	return prefetchRefArgs(".")
+}
+
+func prefetchRefArgs(ref string) []string {
+	return hardened("flake", "prefetch", ref, "--json", "--option", "flake-registry", "")
+}
+
+func archiveArgs(ref string) []string {
+	return hardened("flake", "archive", ref, "--dry-run", "--json")
 }
 
 func showArgs(ref string) []string {
@@ -77,6 +85,14 @@ func showArgs(ref string) []string {
 
 func evalArgs(expr string) []string {
 	return hardened("eval", "--json", "--expr", expr)
+}
+
+func pathInfoArgs(storePath string) []string {
+	return []string{"path-info", "--quiet", "--extra-experimental-features", experimental, storePath}
+}
+
+func versionArgs() []string {
+	return []string{"--version"}
 }
 
 func systemArgs() []string {
@@ -158,6 +174,10 @@ func nixIdentity(program string) func() (string, error) {
 		}
 		return resolved, nil
 	}
+}
+
+func nixVersion(ctx context.Context) ([]byte, error) {
+	return runProgram(ctx, nixProgram, "", versionArgs())
 }
 
 func runProgram(ctx context.Context, program, dir string, args []string) ([]byte, error) {

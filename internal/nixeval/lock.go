@@ -14,9 +14,21 @@ var ErrNoNixpkgsInput = errors.New("the flake locks no single nixpkgs input")
 const nixpkgsName = "nixpkgs"
 
 type lockSource struct {
-	Repo    string `json:"repo"`
-	ID      string `json:"id"`
-	NarHash string `json:"narHash"`
+	Repo       string `json:"repo"`
+	ID         string `json:"id"`
+	NarHash    string `json:"narHash"`
+	attributes json.RawMessage
+}
+
+func (s *lockSource) UnmarshalJSON(data []byte) error {
+	type fields lockSource
+	var parsed fields
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		return err
+	}
+	*s = lockSource(parsed)
+	s.attributes = slices.Clone(data)
+	return nil
 }
 
 type lockNode struct {
@@ -127,4 +139,24 @@ func (l lockFile) closureHashes(input string) ([]string, bool, error) {
 	}
 	slices.Sort(hashes)
 	return hashes, true, nil
+}
+
+func (l lockFile) lockedAt(names []string) (json.RawMessage, error) {
+	current := l.Root
+	for _, name := range names {
+		reference, ok := l.Nodes[current].Inputs[name]
+		if !ok {
+			return nil, fmt.Errorf("flake.lock has no input %q under node %q", name, current)
+		}
+		next, err := l.resolve(reference, 0)
+		if err != nil {
+			return nil, err
+		}
+		current = next
+	}
+	locked := l.Nodes[current].Locked.attributes
+	if locked == nil {
+		return nil, fmt.Errorf("flake.lock has no locked source for input %q", strings.Join(names, "/"))
+	}
+	return locked, nil
 }

@@ -22,6 +22,7 @@ func digestOf(fields ...string) [32]byte {
 type flakeState struct {
 	dir      string
 	identity string
+	release  nixRelease
 	lock     []byte
 	local    contentKey
 }
@@ -47,6 +48,10 @@ func (c *Client) inspect(ctx context.Context, dir string) (flakeState, error) {
 	if err != nil {
 		return flakeState{}, err
 	}
+	release, err := c.nixRelease(ctx, identity)
+	if err != nil {
+		return flakeState{}, err
+	}
 	tree, err := fingerprintTree(ctx, clean)
 	if err != nil {
 		return flakeState{}, err
@@ -56,7 +61,7 @@ func (c *Client) inspect(ctx context.Context, dir string) (flakeState, error) {
 		lockPresent = "unlocked"
 	}
 	local := digestOf(string(evalDigest[:]), identity, string(nix), lockPresent, string(lock), tree)
-	return flakeState{dir: clean, identity: identity, lock: lock, local: local}, nil
+	return flakeState{dir: clean, identity: identity, release: release, lock: lock, local: local}, nil
 }
 
 type inputScope struct {
@@ -70,7 +75,7 @@ func (s inputScope) queryKey(kind queryKind, detail string) contentKey {
 }
 
 func (s inputScope) args(locked lockedFlake) []exprArg {
-	return []exprArg{stringArg("ref", locked.ref), stringArg("input", s.input), stringArg("system", s.system)}
+	return []exprArg{stringArg("ref", locked.ref), stringArg("trees", locked.trees), stringArg("input", s.input), stringArg("system", s.system)}
 }
 
 func (c *Client) inputScope(ctx context.Context, flake flakeState) (inputScope, error) {
