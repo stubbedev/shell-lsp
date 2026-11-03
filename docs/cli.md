@@ -26,7 +26,7 @@ on every file without one). Makefiles (`Makefile`, `makefile`, `GNUmakefile`,
 `*.mk`, `*.mak`), justfiles (`justfile`, `Justfile`, `.justfile`, `*.just`),
 Dockerfiles (`Dockerfile`, `Containerfile`, `Dockerfile.*`, `*.Dockerfile`,
 `*.dockerfile`, `*.Containerfile`) and Nix files (`*.nix`) are found too, and the shell in them is linted
-([Shell in other files](../README.md#shell-in-other-files)); `-s` does not
+([Shell in other files](hosts.md#shell-in-other-files)); `-s` does not
 apply to them, since the file decides their shell. Justfiles, Makefiles and
 Dockerfiles are also checked as just, make and Dockerfile files, with the
 `SL5`, `SL6` and `SL7` codes of [rules.md](rules.md#sl5001), following their `import`, `mod`

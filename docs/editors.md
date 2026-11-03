@@ -4,7 +4,7 @@ shell-lsp speaks LSP over stdio and needs no arguments. Put the binary on
 `PATH` (release binaries, `nix profile install github:stubbedev/shell-lsp`, or
 `go install github.com/stubbedev/shell-lsp@latest`) and point your editor at
 `shell-lsp`; the VS Code extension can also download it for you. Settings go into `initializationOptions` or the `shellLsp`
-configuration section; see the README for the keys.
+configuration section; the [README](../README.md#configuration) lists the keys.
 
 ## Neovim
 
@@ -145,7 +145,7 @@ arm64; on other platforms install the server yourself and set
 
 The server's settings are VS Code settings under `shellLsp`
 (`shellLsp.dialect`, `shellLsp.lint.exclude`, `shellLsp.format.indent`, and
-so on; the keys are listed in the README) and may differ per workspace folder.
+so on; the [README](../README.md#configuration) lists the keys) and may differ per workspace folder.
 Only values you set are sent to the server, so `.editorconfig` still decides
 whatever you leave at its default. `shellLsp.trace.server` logs the protocol
 traffic to the Shell LSP output. The commands "Shell LSP: Restart Server",
@@ -166,11 +166,11 @@ pushes them otherwise.
 
 shell-lsp also lints the shell inside Makefile and justfile recipes,
 Dockerfile `RUN` instructions and Nix strings
-([Shell in other files](../README.md#shell-in-other-files)) when the editor
+([Shell in other files](hosts.md#shell-in-other-files)) when the editor
 sends it those files; it reads the language identifiers `makefile`, `make`,
 `just`, `dockerfile` and `nix`. For justfiles, Makefiles and Dockerfiles it is
 a complete language server of its own
-([Justfiles, Makefiles and Dockerfiles natively](../README.md#justfiles-makefiles-and-dockerfiles-natively)):
+([Justfiles, Makefiles and Dockerfiles natively](hosts.md#justfiles-makefiles-and-dockerfiles-natively)):
 attach it alone, without just-lsp, a make language server or a Dockerfile
 language server, so the file gets one set of diagnostics, symbols and
 formatting. The VS Code extension attaches to Makefiles and Dockerfiles on its
@@ -179,7 +179,7 @@ the `nix` language for `.nix` files itself, with no other extension needed. Else
 Neovim, add `"make"`, `"just"`, `"dockerfile"` and `"nix"` to `filetypes` (or
 to the `FileType` pattern). For Nix files it follows imports, flakes, module
 trees, overlays and the shell in strings across files without evaluating them
-([Nix files](../README.md#nix-files)). It replaces nixd and nil: do not run them on the
+([Nix files](nix.md)). It replaces nixd and nil: do not run them on the
 same files, or the editor gets every answer twice. The setting `nix.evaluate`, off by default,
 also evaluates flakes with `nix`, to complete and describe NixOS, home-manager and
 flake-parts options and nixpkgs attributes. That can fetch the flake's inputs over
@@ -214,6 +214,28 @@ language-servers = ["shell-lsp"]
 name = "nix"
 language-servers = ["shell-lsp"]
 ```
+
+## Commands and capabilities for client authors
+
+`workspace/executeCommand` accepts:
+
+| Command | Arguments | Effect |
+| --- | --- | --- |
+| `shellLsp.fixAll` | document URI | Applies every non-overlapping safe lint fix in the document via `workspace/applyEdit` |
+| `shellLsp.applyEdit` | `WorkspaceEdit` | Applies the edit via `workspace/applyEdit`; code actions use it for clients without code action literal support |
+| `shellLsp.showReferences` | `{uri, position}` | Returns the reference locations a reference-count code lens stands for |
+| `shellLsp.runBats` | `{uri, test?}` | Runs the Bats file, or only the named test, and reports the results; an error for a document that is not a Bats file |
+| `shellLsp.runRecipe` | `{uri, name, arguments?}` | Runs the justfile recipe or Makefile target with the given arguments, reports the exit status and returns `{exitCode, output, truncated}`; an error when the arguments do not fit its parameters |
+| `shellLsp.listRecipes` | none | Lists every recipe and target in the workspace as `{uri, path, name, tool, argv, cwd, parameters}`, where `argv` runs it |
+
+Two experimental client capabilities change what the server offers:
+`shellLsp.promptsForArguments` adds "▶ Run…" lenses on recipes with required
+parameters ([details](hosts.md#justfiles-makefiles-and-dockerfiles-natively)), and
+`shellLsp.runsInTerminal` adds "▶ nix develop" lenses whose client-side command
+`shellLsp.runInTerminal` receives `{name, argv, cwd}` ([details](nix.md#everything-else)).
+The `shellLsp/documentDialect` and `shellLsp/setDialect` requests are in the
+[README](../README.md#dialects), and every other method in
+[lsp-methods.md](lsp-methods.md).
 
 ## Windows
 

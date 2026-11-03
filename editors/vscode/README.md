@@ -19,9 +19,11 @@ server for bash, zsh, POSIX sh, dash and ksh with dialect auto-detection.
 - The shell in Makefile and justfile recipes, Dockerfile `RUN` instructions
   and Nix phases, hooks and script writers, linted in place, with fixes
   written back in their syntax.
-- Nix: everything nixd and nil answer without evaluating, plus checks of the
-  statix and deadnix kind, a formatter that matches nixfmt, and the languages
-  written in Nix strings: shell, Nix, justfiles, Makefiles and Dockerfiles.
+- Nix: navigation, completion and rename across a flake without evaluating it,
+  plus checks of the statix and deadnix kind, a formatter that matches nixfmt,
+  and the languages written in Nix strings: shell, Nix, justfiles, Makefiles and
+  Dockerfiles. Generated `pkgs` attributes and option values need the
+  `shellLsp.nix.evaluate` setting, which needs Nix.
 
 The server starts for documents VS Code identifies as Shell Script
 (`.sh`, `.bash`, `.zsh`, `.ksh`, rc files and shebang detection), as
