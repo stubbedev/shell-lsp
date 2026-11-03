@@ -120,14 +120,15 @@ const (
 )
 
 type optionWalk struct {
+	table *scope.Table
 	mode  walkMode
 	class OptionClass
 	path  []string
 	top   bool
 }
 
-func optionWalkTo(chain []syntax.Node, end int) optionWalk {
-	w := optionWalk{mode: walkModule, top: true}
+func optionWalkTo(table *scope.Table, chain []syntax.Node, end int) optionWalk {
+	w := optionWalk{table: table, mode: walkModule, top: true}
 	if root, ok := chain[0].(syntax.Expr); ok && declaresOutputs(root) {
 		w.mode = walkFlakeFile
 	}
@@ -137,8 +138,8 @@ func optionWalkTo(chain []syntax.Node, end int) optionWalk {
 	return w
 }
 
-func optionSiteAt(chain []syntax.Node, end int) (OptionSite, bool) {
-	w := optionWalkTo(chain, end)
+func optionSiteAt(table *scope.Table, chain []syntax.Node, end int) (OptionSite, bool) {
+	w := optionWalkTo(table, chain, end)
 	return OptionSite{Class: w.class, Path: w.path}, w.mode == walkModule
 }
 
@@ -195,7 +196,7 @@ func (w *optionWalk) apply(n *syntax.Apply, child syntax.Node) {
 		w.mode = walkNone
 		return
 	}
-	name := calleeName(syntax.Unparenthesized(n.Fn))
+	name := callName(w.table, n.Fn)
 	if class, ok := rootClasses[name]; ok {
 		w.mode, w.class, w.path = walkCallArgs, optionClassNamed(class), nil
 		return
@@ -364,7 +365,7 @@ func (r *reading) boundRoot(chain []syntax.Node, d *scope.Def, hops int) (evalua
 		if d.Name != configFormal && d.Name != optionsFormal {
 			return evaluatedRoot{}, false
 		}
-		return formalRoot(chain, d)
+		return formalRoot(r.table, chain, d)
 	case scope.LetDef, scope.RecDef, scope.InheritDef:
 		origins := r.originsOf(d)
 		if len(origins) != 1 {
@@ -392,7 +393,7 @@ func (r *reading) originRoot(chain []syntax.Node, o origin, hops int) (evaluated
 	return evaluatedRoot{}, false
 }
 
-func formalRoot(chain []syntax.Node, d *scope.Def) (evaluatedRoot, bool) {
+func formalRoot(table *scope.Table, chain []syntax.Node, d *scope.Def) (evaluatedRoot, bool) {
 	for i, n := range chain {
 		lambda, ok := n.(*syntax.Lambda)
 		if !ok {
@@ -402,7 +403,7 @@ func formalRoot(chain []syntax.Node, d *scope.Def) (evaluatedRoot, bool) {
 		if !ok || !slices.ContainsFunc(pattern.Formals, func(f *syntax.Formal) bool { return syntax.Node(f.Name) == d.Binders[0] }) {
 			continue
 		}
-		site, inModule := optionSiteAt(chain, i)
+		site, inModule := optionSiteAt(table, chain, i)
 		return evaluatedRoot{site: site}, inModule
 	}
 	return evaluatedRoot{}, false
@@ -454,7 +455,7 @@ func (c *cursor) optionKeys() []Item {
 }
 
 func (c *cursor) optionKeysAt(end int) []Item {
-	if site, ok := optionSiteAt(c.chain, end); ok {
+	if site, ok := optionSiteAt(c.table, c.chain, end); ok {
 		if items := optionItems(c.known.OptionChildren(site)); len(items) > 0 {
 			return items
 		}
@@ -513,7 +514,7 @@ func (r *reading) evaluatedDoc(chain []syntax.Node, known Evaluated) (string, bo
 	case *syntax.IdentAttr:
 		switch parent := chain[len(chain)-2].(type) {
 		case *syntax.Assign:
-			if site, ok := optionSiteAt(chain, len(chain)-1); ok {
+			if site, ok := optionSiteAt(r.table, chain, len(chain)-1); ok {
 				if doc, found := optionDoc(known, OptionSite{Class: site.Class, Path: append(slices.Clip(site.Path), leaf.Name)}); found {
 					return doc, true
 				}

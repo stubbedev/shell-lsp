@@ -189,7 +189,7 @@ func (f *file) index(m *projection.Map) *model.Index {
 	table.embedHeredocs(m)
 	table.embedHosted(found)
 	linkCalls(f.tree, ix)
-	ix.Runnables = outputs(f.tree)
+	ix.Runnables = outputs(f.tree, f.table)
 	ix.Folds = folds(f.tree)
 	table.compact()
 	return ix

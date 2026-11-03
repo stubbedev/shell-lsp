@@ -135,7 +135,7 @@ func (l *Library) applied(f *libraryFile, call *syntax.Apply) []librarySet {
 			return l.sets(libraryValue{file: loaded, expr: loaded.tree.Root})
 		}
 	}
-	if !slices.Contains(libraryFixers, calleeName(syntax.Unparenthesized(call.Fn))) {
+	if !fixesItsArgument(f.table, call) {
 		return nil
 	}
 	fn, isLambda := syntax.Unparenthesized(call.Args[len(call.Args)-1]).(*syntax.Lambda)
@@ -148,6 +148,54 @@ func (l *Library) applied(f *libraryFile, call *syntax.Apply) []librarySet {
 		}
 	}
 	return l.sets(libraryValue{file: f, expr: fn.Body})
+}
+
+func fixesItsArgument(table *scope.Table, call *syntax.Apply) bool {
+	fn := syntax.Unparenthesized(call.Fn)
+	if !slices.Contains(libraryFixers, calleeName(fn)) {
+		return false
+	}
+	if !definedHere(table, fn) {
+		return true
+	}
+	id, plain := fn.(*syntax.Ident)
+	if !plain {
+		return false
+	}
+	value, bound := localValue(table, id)
+	return bound && appliesParameter(table, value, len(call.Args))
+}
+
+func appliesParameter(table *scope.Table, value syntax.Expr, position int) bool {
+	var lambda *syntax.Lambda
+	for range position {
+		next, isLambda := syntax.Unparenthesized(value).(*syntax.Lambda)
+		if !isLambda {
+			return false
+		}
+		lambda, value = next, next.Body
+	}
+	param, named := lambda.Param.(*syntax.IdentParam)
+	if !named {
+		return false
+	}
+	own, bound := table.Binder(param.Name)
+	if !bound {
+		return false
+	}
+	found := false
+	syntax.Inspect(lambda.Body, func(n syntax.Node) bool {
+		call, isCall := n.(*syntax.Apply)
+		if !isCall {
+			return !found
+		}
+		if id, plain := syntax.Unparenthesized(call.Fn).(*syntax.Ident); plain {
+			ref, ok := table.Of(id)
+			found = found || ok && ref.Kind == scope.Definition && ref.Def == own
+		}
+		return !found
+	})
+	return found
 }
 
 func (l *Library) named(f *libraryFile, id *syntax.Ident) []librarySet {
@@ -415,7 +463,7 @@ func (d *Document) OptionDeclarations(offset int, known Evaluated) []nixeval.Dec
 	}
 	r := newReading(d, chain, NoFiles)
 	var sites []OptionSite
-	if site, inModule := optionSiteAt(chain, len(chain)-1); inModule {
+	if site, inModule := optionSiteAt(d.table, chain, len(chain)-1); inModule {
 		sites = append(sites, site)
 	}
 	sites = append(sites, r.moduleSites(chain, len(chain)-1, known)...)

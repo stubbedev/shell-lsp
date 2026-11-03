@@ -112,7 +112,7 @@ func keyCandidates(c *cursor, assign *syntax.Assign, leaf syntax.Attr) []keyCand
 				return out
 			}
 		case *syntax.Apply:
-			if n.Args[len(n.Args)-1] != child || !slices.Contains(moduleWrappers, calleeName(syntax.Unparenthesized(n.Fn))) {
+			if n.Args[len(n.Args)-1] != child || !slices.Contains(moduleWrappers, callName(c.table, n.Fn)) {
 				return out
 			}
 		case *syntax.Binary:
@@ -323,7 +323,7 @@ func (r *reading) moduleSites(chain []syntax.Node, end int, known Evaluated) []O
 		}
 		var out []OptionSite
 		for _, base := range bases {
-			w := optionWalk{mode: walkModule, class: base.Class, path: base.Path, top: len(base.Path) == 0}
+			w := optionWalk{table: r.table, mode: walkModule, class: base.Class, path: base.Path, top: len(base.Path) == 0}
 			for j := i; j < end; j++ {
 				w.step(chain[j], chain[j+1])
 			}

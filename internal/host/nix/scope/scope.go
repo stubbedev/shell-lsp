@@ -110,6 +110,7 @@ type Table struct {
 	uses       []Use
 	defs       []*Def
 	duplicates []Duplicate
+	supplied   map[*Def]syntax.Expr
 }
 
 func (t *Table) Of(id *syntax.Ident) (Ref, bool) {
@@ -134,6 +135,22 @@ func (t *Table) Binder(node syntax.Node) (*Def, bool) {
 		def = t.binders[node.Slot()]
 	}
 	return def, def != nil
+}
+
+func (t *Table) Supplied(d *Def) (syntax.Expr, bool) {
+	value, ok := t.supplied[d]
+	return value, ok
+}
+
+func (t *Table) supply(binder *syntax.Ident, value syntax.Expr) {
+	d, bound := t.Binder(binder)
+	if !bound {
+		return
+	}
+	if t.supplied == nil {
+		t.supplied = map[*Def]syntax.Expr{}
+	}
+	t.supplied[d] = value
 }
 
 func (t *Table) Uses() []Use { return t.uses }

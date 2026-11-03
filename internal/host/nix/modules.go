@@ -407,9 +407,9 @@ func (p *Project) setsOf(v flowValue) []flowSet {
 	return nil
 }
 
-func optionType(src flowSource) (syntax.Expr, bool) {
+func optionType(u *symbolTable, src flowSource) (syntax.Expr, bool) {
 	option, isCall := syntax.Unparenthesized(src.expr).(*syntax.Apply)
-	if src.stmt != nil || !isCall || calleeName(syntax.Unparenthesized(option.Fn)) != mkOptionName {
+	if src.stmt != nil || !isCall || u.f.callName(option.Fn) != mkOptionName {
 		return nil, false
 	}
 	set, literal := syntax.Unparenthesized(option.Args[len(option.Args)-1]).(*syntax.AttrSet)
@@ -425,7 +425,7 @@ func optionType(src flowSource) (syntax.Expr, bool) {
 }
 
 func (p *Project) optionSubmodule(u *symbolTable, s *space, src flowSource) {
-	if t, typed := optionType(src); typed {
+	if t, typed := optionType(u, src); typed {
 		p.submoduleType(u, s, t)
 	}
 }
@@ -438,7 +438,7 @@ func (s *space) moduleBoundary() bool {
 	for at := s; at != nil; at = at.parent {
 		for _, twin := range at.twins() {
 			for _, b := range twin.bound {
-				if t, typed := optionType(b.source); typed {
+				if t, typed := optionType(b.unit, b.source); typed {
 					return holdsModules(b.unit, t, keys, map[*scope.Def]bool{})
 				}
 			}

@@ -102,7 +102,7 @@ func (f *file) safe(e syntax.Expr, hops int) bool {
 		return slices.Contains(safeNames, f.libraryName(e)) || f.safeBinding(e, hops)
 	case *syntax.Select:
 		root, plain := syntax.Unparenthesized(e.Target).(*syntax.Ident)
-		return plain && e.Default == nil && !f.definedHere(e) && slices.Contains(storeRoots, root.Name)
+		return plain && e.Default == nil && !definedHere(f.table, e) && slices.Contains(storeRoots, root.Name)
 	case *syntax.If:
 		return f.safe(e.Then, hops+1) && f.safe(e.Else, hops+1)
 	case *syntax.Binary:

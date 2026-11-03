@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/host/model"
+	"github.com/stubbedev/shell-lsp/internal/host/nix/scope"
 	"github.com/stubbedev/shell-lsp/internal/host/nix/syntax"
 )
 
@@ -101,12 +102,13 @@ func UnattendedTitle(name string) string {
 }
 
 type outputCollector struct {
-	out  []model.Runnable
-	seen map[string]bool
+	table *scope.Table
+	out   []model.Runnable
+	seen  map[string]bool
 }
 
-func outputs(tree *syntax.File) []model.Runnable {
-	c := &outputCollector{seen: map[string]bool{}}
+func outputs(tree *syntax.File, table *scope.Table) []model.Runnable {
+	c := &outputCollector{table: table, seen: map[string]bool{}}
 	if lambda := flakeOutputs(tree.Root); lambda != nil {
 		c.flake(lambda.Body)
 		return c.out
@@ -165,7 +167,7 @@ func (c *outputCollector) flake(e syntax.Expr) {
 		}
 	case *syntax.Apply:
 		last := e.Args[len(e.Args)-1]
-		name := calleeName(e.Fn)
+		name := callName(c.table, e.Fn)
 		switch {
 		case name == mkFlakeName:
 			if set, ok := reduced(last).(*syntax.AttrSet); ok {

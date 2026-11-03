@@ -6,12 +6,14 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/stubbedev/shell-lsp/internal/host/nix/scope"
 	"github.com/stubbedev/shell-lsp/internal/host/nix/syntax"
 )
 
 func outputNames(src string) []string {
 	var names []string
-	for _, r := range outputs(syntax.Parse(src)) {
+	tree := syntax.Parse(src)
+	for _, r := range outputs(tree, scope.Resolve(tree)) {
 		names = append(names, r.Name)
 	}
 	return names

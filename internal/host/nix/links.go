@@ -33,7 +33,7 @@ func (d *Document) PathLiterals() []PathLiteral {
 	d.inspect(func(n syntax.Node) bool {
 		switch n := n.(type) {
 		case *syntax.Apply:
-			if name := calleeName(n.Fn); name == importName || name == callPackageName {
+			if name := callName(d.table, n.Fn); name == importName || name == callPackageName {
 				mark(n.Args[0])
 			}
 		case *syntax.Assign:

@@ -141,6 +141,9 @@ func (r *resolver) expr(e syntax.Expr) {
 	case *syntax.Apply:
 		r.expr(e.Fn)
 		r.exprs(e.Args)
+		if fn, direct := syntax.Unparenthesized(e.Fn).(*syntax.Lambda); direct {
+			r.supply(fn, e.Args[0])
+		}
 	case *syntax.Select:
 		r.expr(e.Target)
 		r.path(e.Path)
@@ -205,6 +208,39 @@ func (r *resolver) lambda(e *syntax.Lambda) {
 	}
 	r.expr(e.Body)
 	r.close(s)
+}
+
+func (r *resolver) supply(fn *syntax.Lambda, arg syntax.Expr) {
+	switch p := fn.Param.(type) {
+	case *syntax.IdentParam:
+		r.table.supply(p.Name, arg)
+	case *syntax.PatternParam:
+		if p.Alias != nil {
+			r.table.supply(p.Alias, arg)
+		}
+		set, literal := syntax.Unparenthesized(arg).(*syntax.AttrSet)
+		if !literal {
+			return
+		}
+		for _, f := range p.Formals {
+			if value, passed := passedValue(set, f.Name.Name); passed {
+				r.table.supply(f.Name, value)
+			}
+		}
+	}
+}
+
+func passedValue(set *syntax.AttrSet, name string) (syntax.Expr, bool) {
+	for _, b := range set.Bindings {
+		a, assigned := b.(*syntax.Assign)
+		if !assigned || len(a.Path) != 1 {
+			continue
+		}
+		if own, static := syntax.AttrName(a.Path[0]); static && own == name {
+			return a.Value, true
+		}
+	}
+	return nil, false
 }
 
 func (r *resolver) pattern(s *Scope, p *syntax.PatternParam) {

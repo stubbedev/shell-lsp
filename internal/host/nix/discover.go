@@ -312,34 +312,32 @@ func calleeName(e syntax.Expr) string {
 	return ""
 }
 
-func (f *file) callName(fn syntax.Expr) string { return f.libraryName(syntax.Unparenthesized(fn)) }
+func (f *file) callName(fn syntax.Expr) string { return callName(f.table, fn) }
 
-func (f *file) libraryName(e syntax.Expr) string {
-	if f.definedHere(e) {
+func (f *file) libraryName(e syntax.Expr) string { return libraryName(f.table, e) }
+
+func callName(table *scope.Table, fn syntax.Expr) string {
+	return libraryName(table, syntax.Unparenthesized(fn))
+}
+
+func libraryName(table *scope.Table, e syntax.Expr) string {
+	if definedHere(table, e) {
 		return ""
 	}
 	return calleeName(e)
 }
 
-func (f *file) definedHere(e syntax.Expr) bool {
+func definedHere(table *scope.Table, e syntax.Expr) bool {
 	switch e := e.(type) {
 	case *syntax.Ident:
-		ref, ok := f.table.Of(e)
-		if !ok || ref.Kind != scope.Definition {
-			return false
-		}
-		value, bound := singleValue(ref.Def)
+		value, bound := localValue(table, e)
 		return bound && replacesName(value, e.Name)
 	case *syntax.Select:
 		target, plain := e.Target.(*syntax.Ident)
 		if !plain {
 			return false
 		}
-		ref, ok := f.table.Of(target)
-		if !ok || ref.Kind != scope.Definition {
-			return false
-		}
-		value, bound := singleValue(ref.Def)
+		value, bound := localValue(table, target)
 		if !bound {
 			return false
 		}
@@ -347,6 +345,17 @@ func (f *file) definedHere(e syntax.Expr) bool {
 		return literal
 	}
 	return false
+}
+
+func localValue(table *scope.Table, id *syntax.Ident) (syntax.Expr, bool) {
+	ref, ok := table.Of(id)
+	if !ok || ref.Kind != scope.Definition {
+		return nil, false
+	}
+	if value, bound := singleValue(ref.Def); bound {
+		return value, true
+	}
+	return table.Supplied(ref.Def)
 }
 
 func replacesName(value syntax.Expr, name string) bool {
