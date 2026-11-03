@@ -10,8 +10,9 @@ import (
 )
 
 const (
-	bytesPerShellCheck = 4 << 30
-	kibibyte           = 1 << 10
+	bytesPerShellCheck   = 4 << 30
+	reservedForLintcheck = 3 << 30
+	kibibyte             = 1 << 10
 )
 
 func referenceWorkers() int {
@@ -19,7 +20,10 @@ func referenceWorkers() int {
 	if !known {
 		return runtime.NumCPU()
 	}
-	return max(1, min(runtime.NumCPU(), int(available/bytesPerShellCheck))) //nolint:gosec // divided by 4 GiB, so it fits
+	if available <= reservedForLintcheck {
+		return 1
+	}
+	return max(1, min(runtime.NumCPU(), int((available-reservedForLintcheck)/bytesPerShellCheck))) //nolint:gosec // divided by 4 GiB, so it fits
 }
 
 func availableMemory() (uint64, bool) {
