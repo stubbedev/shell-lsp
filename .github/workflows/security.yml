@@ -95,3 +95,4 @@ jobs:
         with:
           fail-on-severity: critical
           allow-licenses: BSD-2-Clause, BSD-3-Clause, MIT, MIT-0, Apache-2.0, MPL-2.0, ISC, LicenseRef-scancode-google-patent-license-golang, Unlicense, CC-BY-4.0
+          allow-dependencies-licenses: pkg:gem/concurrent-ruby, pkg:gem/csv, pkg:gem/eventmachine, pkg:gem/json
