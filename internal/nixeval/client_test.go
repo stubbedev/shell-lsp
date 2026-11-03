@@ -927,13 +927,13 @@ func TestWarmStaysOutOfTheWayAndARequestPromotesIt(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		c.lowSlots <- struct{}{}
 		var wg sync.WaitGroup
 		wg.Go(func() {
 			if _, err := settle(t.Context(), c, c.sourcesQuery(flake)); err != nil {
 				t.Error(err)
 			}
 		})
-		c.lowSlots <- struct{}{}
 		synctest.Wait()
 		if got := running.Load(); got != 0 {
 			t.Errorf("%d background evaluations ran with the background slot taken", got)
