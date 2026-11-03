@@ -48,12 +48,8 @@ func TestCheckNamesStdinToChooseItsLanguage(t *testing.T) {
 		{"plain.sh", "#!/bin/sh\necho $1\n", []string{"plain.sh:2:6 SC2086"}},
 	} {
 		got := run(t, dir, tt.text, "check", "-f", "gcc", "-e", "DL3006", "--filename", tt.name, "-")
-		want := make([]string, len(tt.want))
-		for i, w := range tt.want {
-			want[i] = filepath.FromSlash(w)
-		}
-		if !slices.Equal(findings(t, got.stdout), want) || got.status != checkStatusFindings {
-			t.Errorf("check --filename %s = %d %v, want %v\n%s", tt.name, got.status, findings(t, got.stdout), want, got.stderr)
+		if !slices.Equal(findings(t, got.stdout), tt.want) || got.status != checkStatusFindings {
+			t.Errorf("check --filename %s = %d %v, want %v\n%s", tt.name, got.status, findings(t, got.stdout), tt.want, got.stderr)
 		}
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -125,7 +126,7 @@ type sourceTree struct {
 }
 
 func (t sourceTree) owner(file string) ([]string, bool) {
-	if t.Path != "" && (file == t.Path || strings.HasPrefix(file, t.Path+"/")) {
+	if t.Path != "" && (file == t.Path || strings.HasPrefix(file, t.Path+string(filepath.Separator))) {
 		return []string{}, true
 	}
 	for _, name := range slices.Sorted(maps.Keys(t.Inputs)) {

@@ -1,6 +1,7 @@
 package nix
 
 import (
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -374,9 +375,9 @@ func TestTheLibraryIsReadFromItsSource(t *testing.T) {
 	t.Parallel()
 
 	files := map[string]string{
-		"/np/lib/default.nix": "let\n  lib = makeExtensible (self: let\n    callLibs = file: import file { lib = self; };\n  in {\n    modules = callLibs ./modules.nix;\n    types = callLibs ./types.nix;\n    inherit (self.modules) mkIf;\n    inherit (builtins) mapAttrs;\n  });\nin lib\n",
-		"/np/lib/modules.nix": "{ lib }:\nlet\n  /**\n    Makes it conditional.\n  */\n  mkIf = condition: content: { };\nin\n{\n  inherit mkIf;\n}\n",
-		"/np/lib/types.nix":   "{ lib }:\nlet\n  outer = rec {\n    types = rec {\n      # A map.\n      attrsOf = t: t;\n    };\n  };\nin\nouter // outer.types\n",
+		filepath.FromSlash("/np/lib/default.nix"): "let\n  lib = makeExtensible (self: let\n    callLibs = file: import file { lib = self; };\n  in {\n    modules = callLibs ./modules.nix;\n    types = callLibs ./types.nix;\n    inherit (self.modules) mkIf;\n    inherit (builtins) mapAttrs;\n  });\nin lib\n",
+		filepath.FromSlash("/np/lib/modules.nix"): "{ lib }:\nlet\n  /**\n    Makes it conditional.\n  */\n  mkIf = condition: content: { };\nin\n{\n  inherit mkIf;\n}\n",
+		filepath.FromSlash("/np/lib/types.nix"):   "{ lib }:\nlet\n  outer = rec {\n    types = rec {\n      # A map.\n      attrsOf = t: t;\n    };\n  };\nin\nouter // outer.types\n",
 	}
 	read := func(path string) (string, bool) {
 		text, ok := files[path]
@@ -392,18 +393,18 @@ func TestTheLibraryIsReadFromItsSource(t *testing.T) {
 		{[]string{"modules", "mkIf"}, "/np/lib/modules.nix", 6, "Makes it conditional."},
 		{[]string{"types", "attrsOf"}, "/np/lib/types.nix", 6, "A map."},
 	} {
-		entry, ok := NewLibrary("/np", read).Lookup(tt.names)
-		if !ok || entry.Declaration.File != tt.file || entry.Declaration.Line != tt.line || entry.Doc != tt.doc {
+		entry, ok := NewLibrary(filepath.FromSlash("/np"), read).Lookup(tt.names)
+		if !ok || entry.Declaration.File != filepath.FromSlash(tt.file) || entry.Declaration.Line != tt.line || entry.Doc != tt.doc {
 			t.Errorf("Lookup(%q) = %+v, %v", tt.names, entry, ok)
 		}
 	}
-	if entry, ok := NewLibrary("/np", read).Lookup([]string{"mapAttrs"}); !ok || entry.Builtin != "mapAttrs" {
+	if entry, ok := NewLibrary(filepath.FromSlash("/np"), read).Lookup([]string{"mapAttrs"}); !ok || entry.Builtin != "mapAttrs" {
 		t.Errorf("a builtin = %+v, %v", entry, ok)
 	}
-	if _, ok := NewLibrary("/np", read).Lookup([]string{"absent"}); ok {
+	if _, ok := NewLibrary(filepath.FromSlash("/np"), read).Lookup([]string{"absent"}); ok {
 		t.Error("an unknown name has an entry")
 	}
-	if got := NewLibrary("/np", read).Members(nil); !slices.Contains(got, "mkIf") || !slices.Contains(got, "types") {
+	if got := NewLibrary(filepath.FromSlash("/np"), read).Members(nil); !slices.Contains(got, "mkIf") || !slices.Contains(got, "types") {
 		t.Errorf("Members = %q", got)
 	}
 }
