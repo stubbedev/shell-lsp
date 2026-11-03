@@ -87,6 +87,12 @@ func TestCompleteAtEveryGrammarPosition(t *testing.T) {
 		{name: "keys in parentheses", src: "let f = { one, two }: one; in f ({ two = 2; | })", want: []string{"one"}, not: []string{"two"}},
 		{name: "keys of a selected function", src: "let s = { f = { one }: one; }; in s.f { | }", want: []string{"one"}},
 		{name: "keys of an unknown function", src: "g: g { | }", want: []string{"inherit"}, not: []string{"g"}},
+		{name: "keys of a parenthesised set", src: "let f = { one, two ? 2 }: one; in f ({ | })", want: []string{"one", "two", "inherit"}, not: []string{"f", "map"}},
+		{name: "keys of a parenthesised set with a binding", src: "let f = { one, two ? 2 }: one; in f ({ one = 1; | })", want: []string{"two"}, not: []string{"one"}},
+		{name: "members through a pipe into a lambda", src: "let z = r.|; s = { a = 1; }; r = s |> (y: y); in z", want: []string{"a"}},
+		{name: "members through a pipe from a lambda", src: "let z = r.|; f = y: y; s = { a = 1; }; r = f <| s; in z", want: []string{"a"}},
+		{name: "keys of a piped set", src: "let f = { one, two }: one; in { one = 1; | } |> f", want: []string{"two", "inherit"}, not: []string{"one"}},
+
 		{name: "a value inside a call set", src: "let f = { one }: one; a = 1; in f { one = |; }", want: []string{"a", "f", "map"}, not: []string{"one"}},
 		{name: "then after a condition", src: "a: if a |", want: []string{"then", "a"}, not: []string{"else"}},
 		{name: "then after an operator", src: "a: if a == a |", want: []string{"then"}},
@@ -319,7 +325,7 @@ func TestEveryOffsetIsAnswered(t *testing.T) {
 					t.Errorf("%q at %d: the cursor leaks into %+v", src, at, it)
 				}
 			}
-			if sig, ok := SignatureAt(src, at); ok {
+			if sig, ok := SignatureAt(src, at, NoFiles); ok {
 				for _, p := range sig.Params {
 					if p.Start > p.End || p.End > len(sig.Label) {
 						t.Errorf("%q at %d: parameter %+v of %q", src, at, p, sig.Label)
@@ -336,5 +342,68 @@ func TestEveryOffsetIsAnswered(t *testing.T) {
 			}
 			analysis.Invocation(at)
 		}
+	}
+}
+
+func TestALocalDefinitionHidesTheLibraryFunctionOfItsName(t *testing.T) {
+	t.Parallel()
+
+	files := func(path string) (string, bool) { return "{ one }: one\n", path == "./y.nix" }
+	for _, src := range []string{
+		"let callPackage = _: _: { }; in callPackage ./y.nix { | }",
+		"let callPackage = other; in callPackage ./y.nix { | }",
+		"let lib = { callPackage = _: _: { }; }; in lib.callPackage ./y.nix { | }",
+	} {
+		if got := labelsOf(completeMarked(t, src, files)); slices.Contains(got, "one") {
+			t.Errorf("%q offers the formals of y.nix: %q", src, got)
+		}
+	}
+	for _, src := range []string{
+		"{ callPackage }: callPackage ./y.nix { | }",
+		"let callPackage = pkgs.callPackage; in callPackage ./y.nix { | }",
+		"let callPackage = pkgs.newScope { }; in callPackage ./y.nix { | }",
+		"pkgs: pkgs.callPackage ./y.nix { | }",
+	} {
+		if got := labelsOf(completeMarked(t, src, files)); !slices.Contains(got, "one") {
+			t.Errorf("%q does not offer the formals of y.nix: %q", src, got)
+		}
+	}
+}
+
+func TestTheLibraryIsReadFromItsSource(t *testing.T) {
+	t.Parallel()
+
+	files := map[string]string{
+		"/np/lib/default.nix": "let\n  lib = makeExtensible (self: let\n    callLibs = file: import file { lib = self; };\n  in {\n    modules = callLibs ./modules.nix;\n    types = callLibs ./types.nix;\n    inherit (self.modules) mkIf;\n    inherit (builtins) mapAttrs;\n  });\nin lib\n",
+		"/np/lib/modules.nix": "{ lib }:\nlet\n  /**\n    Makes it conditional.\n  */\n  mkIf = condition: content: { };\nin\n{\n  inherit mkIf;\n}\n",
+		"/np/lib/types.nix":   "{ lib }:\nlet\n  outer = rec {\n    types = rec {\n      # A map.\n      attrsOf = t: t;\n    };\n  };\nin\nouter // outer.types\n",
+	}
+	read := func(path string) (string, bool) {
+		text, ok := files[path]
+		return text, ok
+	}
+	for _, tt := range []struct {
+		names []string
+		file  string
+		line  int
+		doc   string
+	}{
+		{[]string{"mkIf"}, "/np/lib/modules.nix", 6, "Makes it conditional."},
+		{[]string{"modules", "mkIf"}, "/np/lib/modules.nix", 6, "Makes it conditional."},
+		{[]string{"types", "attrsOf"}, "/np/lib/types.nix", 6, "A map."},
+	} {
+		entry, ok := NewLibrary("/np", read).Lookup(tt.names)
+		if !ok || entry.Declaration.File != tt.file || entry.Declaration.Line != tt.line || entry.Doc != tt.doc {
+			t.Errorf("Lookup(%q) = %+v, %v", tt.names, entry, ok)
+		}
+	}
+	if entry, ok := NewLibrary("/np", read).Lookup([]string{"mapAttrs"}); !ok || entry.Builtin != "mapAttrs" {
+		t.Errorf("a builtin = %+v, %v", entry, ok)
+	}
+	if _, ok := NewLibrary("/np", read).Lookup([]string{"absent"}); ok {
+		t.Error("an unknown name has an entry")
+	}
+	if got := NewLibrary("/np", read).Members(nil); !slices.Contains(got, "mkIf") || !slices.Contains(got, "types") {
+		t.Errorf("Members = %q", got)
 	}
 }

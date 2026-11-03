@@ -1,17 +1,19 @@
 package hostnav
 
 import (
+	"path/filepath"
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/assist"
 	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/host/model"
 	"github.com/stubbedev/shell-lsp/internal/host/nix"
+	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
 func (g *Group) Signature(offset int) (assist.Signature, bool) {
 	if g.Language == host.Nix {
-		return nixSignature(g.Self.Doc.Source().Text(), offset)
+		return nixSignature(g.Self.Doc.Source().Text(), offset, g.nixFiles())
 	}
 	inv, ok := g.Self.Native.Invocation(offset)
 	if !ok {
@@ -20,8 +22,31 @@ func (g *Group) Signature(offset int) (assist.Signature, bool) {
 	return g.signatureOf(inv)
 }
 
-func nixSignature(text string, offset int) (assist.Signature, bool) {
-	sig, ok := nix.SignatureAt(text, offset)
+func (g *Group) nixFiles() nix.Files {
+	if g.builder == nil {
+		return nix.NoFiles
+	}
+	return NixFiles(g.builder.env.Loader, g.Self)
+}
+
+func NixFiles(loader Loader, file *workspace.File) nix.Files {
+	if !file.Doc.Local {
+		return nix.NoFiles
+	}
+	dir := filepath.Dir(file.Path)
+	return func(path string) (string, bool) {
+		named := filepath.Join(dir, filepath.FromSlash(path))
+		for _, candidate := range []string{named, filepath.Join(named, nix.DirectoryEntry)} {
+			if target, err := loader.LoadAs(candidate, host.Nix); err == nil {
+				return target.Doc.Source().Text(), true
+			}
+		}
+		return "", false
+	}
+}
+
+func nixSignature(text string, offset int, files nix.Files) (assist.Signature, bool) {
+	sig, ok := nix.SignatureAt(text, offset, files)
 	if !ok {
 		return assist.Signature{}, false
 	}
@@ -61,7 +86,7 @@ func (g *Group) signatureOf(inv model.Invocation) (assist.Signature, bool) {
 	switch {
 	case res.Builtin != nil:
 		b := res.Builtin
-		return signature(b.Signature, b.Params, b.Doc, clamp(inv.Active, b.Params, b.Arity)), true
+		return signature(b.Name, b.Signature, b.Params, b.Doc, clamp(inv.Active, b.Params, b.Arity)), true
 	case len(res.Targets) == 0:
 		return assist.Signature{}, false
 	}
@@ -78,12 +103,12 @@ func (g *Group) signatureOf(inv model.Invocation) (assist.Signature, bool) {
 	if s.Kind == model.KindFunction {
 		label = s.Name + "(" + strings.Join(params, ", ") + ")"
 	}
-	return signature(strings.TrimSpace(label), params, s.Doc, clamp(inv.Active, params, s.Arity)), true
+	return signature(s.Name, strings.TrimSpace(label), params, s.Doc, clamp(inv.Active, params, s.Arity)), true
 }
 
-func signature(label string, params []string, doc string, active int) assist.Signature {
+func signature(name, label string, params []string, doc string, active int) assist.Signature {
 	sig := assist.Signature{Label: label, Doc: doc, Active: active}
-	from := 0
+	from := strings.Index(label, name) + len(name)
 	for _, p := range params {
 		i := strings.Index(label[from:], p)
 		if i < 0 {

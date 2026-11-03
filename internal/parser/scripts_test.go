@@ -70,3 +70,5 @@ type offsetOrigin struct{}
 func (offsetOrigin) SourceLine(offset int) int { return 40 + offset }
 
 func (offsetOrigin) Synthetic(offset int) bool { return offset == 0 }
+
+func (offsetOrigin) StandIn(int) bool { return false }

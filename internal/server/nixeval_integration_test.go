@@ -35,9 +35,18 @@ func openRealCorpusFlake(t *testing.T, name string) *nixEvalProject {
 	if err := os.CopyFS(root, os.DirFS(filepath.Join("..", "..", "corpus", "nix", name))); err != nil {
 		t.Fatal(err)
 	}
+	skipWithoutLockedInputs(t, root, name)
 	c, srv := startClient(t, `{"rootUri": "`+fileuri.FromPath(root)+`", "initializationOptions": {"nix": {"evaluate": true}}, `+nativeCapabilities+`}`)
 	c.notify("initialized", `{}`)
 	return &nixEvalProject{c: c, srv: srv, root: root}
+}
+
+func skipWithoutLockedInputs(t *testing.T, root, name string) {
+	t.Helper()
+	cmd := exec.CommandContext(t.Context(), "nix", "--extra-experimental-features", "nix-command flakes", "flake", "archive", "--no-write-lock-file", "path:"+root)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Skipf("the inputs corpus flake %s locks are not in the local store and cannot be fetched: %v\n%s", name, err, out)
+	}
 }
 
 func awaitRealEvaluation[T any](t *testing.T, p *nixEvalProject, what string, ask func() (T, bool)) T {

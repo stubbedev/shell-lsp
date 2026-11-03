@@ -129,8 +129,8 @@ func TestNixFlakeRunLenses(t *testing.T) {
 		corpus []string
 		want   []string
 	}{
-		{[]string{"single-flake", "flake.nix"}, []string{"▶ nix build .#default", "▶ nix build .#logship", "▶ nix build .#logship-rotate", "▶ nix build .#manual", "▶ nix run .#default", "▶ nix flake check", "▶ nix develop .#default"}},
-		{[]string{"flake-parts", "nix", "shell.nix"}, []string{"▶ nix develop .#default"}},
+		{[]string{"single-flake", "flake.nix"}, []string{"▶ nix build .#default", "▶ nix build .#logship", "▶ nix build .#logship-rotate", "▶ nix build .#manual", "▶ nix run .#default", "▶ nix flake check", "▶ Build dev shell .#default"}},
+		{[]string{"flake-parts", "nix", "shell.nix"}, []string{"▶ Build dev shell .#default"}},
 		{[]string{"flake-parts", "nix", "checks.nix"}, []string{"▶ nix flake check"}},
 		{[]string{"flake-parts", "nix", "project.nix"}, nil},
 	} {
@@ -139,6 +139,26 @@ func TestNixFlakeRunLenses(t *testing.T) {
 		if got := nixRunTitles(t, p, name); !slices.Equal(got, tt.want) {
 			t.Errorf("run lenses of %v = %q, want %q", tt.corpus, got, tt.want)
 		}
+	}
+}
+
+func TestDevShellLensOpensATerminalWhenTheClientCan(t *testing.T) {
+	t.Parallel()
+
+	const name = "shell.nix"
+	capabilities := `"capabilities": {"experimental": {"shellLsp": {"runsInTerminal": true}}}`
+	p := openNativeProject(t, capabilities, map[string]string{name: corpusFile(t, "flake-parts", "nix", "shell.nix")}, name)
+	lenses := decodeResult[[]lsp.CodeLens](t, p.c.call("textDocument/codeLens", `{"textDocument": {"uri": "`+p.uri(name)+`"}}`))
+	i := slices.IndexFunc(lenses, func(l lsp.CodeLens) bool { return l.Command != nil && l.Command.Command == commandRunInTerminal })
+	if i < 0 {
+		t.Fatalf("no terminal lens among %+v", lenses)
+	}
+	var args terminalRunArgs
+	if err := json.Unmarshal(lenses[i].Command.Arguments[0], &args); err != nil {
+		t.Fatal(err)
+	}
+	if lenses[i].Command.Title != "▶ nix develop .#default" || !slices.Equal(args.Argv, []string{"nix", "develop", ".#default"}) || args.Cwd == "" {
+		t.Errorf("terminal lens = %q %+v", lenses[i].Command.Title, args)
 	}
 }
 

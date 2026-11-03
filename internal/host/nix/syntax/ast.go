@@ -260,6 +260,22 @@ type Apply struct {
 	Args []Expr
 }
 
+func (b *Binary) Piped() (*Apply, bool) {
+	var fn, arg Expr
+	switch b.Op {
+	case OpPipeInto:
+		fn, arg = b.Right, b.Left
+	case OpPipeFrom:
+		fn, arg = b.Left, b.Right
+	default:
+		return nil, false
+	}
+	if call, curried := Unparenthesized(fn).(*Apply); curried {
+		return &Apply{exprNode: b.exprNode, Fn: call.Fn, Args: append(slices.Clip(call.Args), arg)}, true
+	}
+	return &Apply{exprNode: b.exprNode, Fn: fn, Args: []Expr{arg}}, true
+}
+
 type Select struct {
 	exprNode
 	Target  Expr

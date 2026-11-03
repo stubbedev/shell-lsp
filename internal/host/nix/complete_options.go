@@ -13,7 +13,7 @@ import (
 
 const (
 	pkgsName        = "pkgs"
-	libName         = "lib"
+	LibName         = "lib"
 	anyAttrName     = "<name>"
 	maxRootHops     = 8
 	sourceSeparator = ", "
@@ -66,6 +66,7 @@ type Evaluated interface {
 	OptionAt(site OptionSite) (SourcedOption, bool)
 	NixpkgsChildren(path []string, prefix string) []string
 	NixpkgsPackage(path []string) (*nixeval.Package, bool)
+	ModuleSites(start int) []OptionSite
 }
 
 type noEvaluation struct{}
@@ -77,6 +78,8 @@ func (noEvaluation) OptionAt(OptionSite) (SourcedOption, bool) { return SourcedO
 func (noEvaluation) NixpkgsChildren([]string, string) []string { return nil }
 
 func (noEvaluation) NixpkgsPackage([]string) (*nixeval.Package, bool) { return nil, false }
+
+func (noEvaluation) ModuleSites(int) []OptionSite { return nil }
 
 var NoEvaluation Evaluated = noEvaluation{}
 
@@ -321,16 +324,31 @@ func (r *reading) rootOf(chain []syntax.Node, e syntax.Expr, hops int) (evaluate
 }
 
 func (r *reading) identRoot(chain []syntax.Node, id *syntax.Ident, hops int) (evaluatedRoot, bool) {
-	if ref, ok := r.table.Of(id); ok && ref.Kind == scope.Definition {
+	ref, ok := r.table.Of(id)
+	if ok && ref.Kind == scope.Dynamic && id.Name != pkgsName && id.Name != LibName {
+		for _, with := range r.table.Withs(ref.With) {
+			if root, known := r.rootOf(chain, with.Scope, hops-1); known && root.nixpkgs {
+				root.path = slices.Concat(root.path, []string{id.Name})
+				return root, true
+			}
+		}
+	}
+	if ok && ref.Kind == scope.Definition {
 		if root, ok := r.boundRoot(chain, ref.Def, hops); ok {
 			return root, true
+		}
+		if value, bound := singleValue(ref.Def); bound {
+			switch syntax.Unparenthesized(value).(type) {
+			case *syntax.AttrSet, *syntax.Lambda:
+				return evaluatedRoot{}, false
+			}
 		}
 	}
 	switch id.Name {
 	case pkgsName:
 		return evaluatedRoot{nixpkgs: true}, true
-	case libName:
-		return evaluatedRoot{nixpkgs: true, path: []string{libName}}, true
+	case LibName:
+		return evaluatedRoot{nixpkgs: true, path: []string{LibName}}, true
 	}
 	return evaluatedRoot{}, false
 }
@@ -406,7 +424,14 @@ func (c *cursor) evaluatedMembers(target syntax.Expr, path []string) []Item {
 	if root.nixpkgs {
 		return c.nixpkgsItems(full)
 	}
-	return optionItems(c.known.OptionChildren(OptionSite{Class: root.site.Class, Path: slices.Concat(root.site.Path, full)}))
+	if items := optionItems(c.known.OptionChildren(OptionSite{Class: root.site.Class, Path: slices.Concat(root.site.Path, full)})); len(items) > 0 {
+		return items
+	}
+	var out []Item
+	for _, site := range c.moduleSites(c.chain, len(c.chain)-1, c.known) {
+		out = append(out, optionItems(c.known.OptionChildren(OptionSite{Class: site.Class, Path: full}))...)
+	}
+	return out
 }
 
 func (c *cursor) nixpkgsItems(parent []string) []Item {
@@ -424,11 +449,16 @@ func (c *cursor) optionKeys() []Item {
 }
 
 func (c *cursor) optionKeysAt(end int) []Item {
-	site, ok := optionSiteAt(c.chain, end)
-	if !ok {
-		return nil
+	if site, ok := optionSiteAt(c.chain, end); ok {
+		if items := optionItems(c.known.OptionChildren(site)); len(items) > 0 {
+			return items
+		}
 	}
-	return optionItems(c.known.OptionChildren(site))
+	var out []Item
+	for _, site := range c.moduleSites(c.chain, end, c.known) {
+		out = append(out, optionItems(c.known.OptionChildren(site))...)
+	}
+	return out
 }
 
 func optionItems(children []OptionChild) []Item {
@@ -478,11 +508,17 @@ func (r *reading) evaluatedDoc(chain []syntax.Node, known Evaluated) (string, bo
 	case *syntax.IdentAttr:
 		switch parent := chain[len(chain)-2].(type) {
 		case *syntax.Assign:
-			site, ok := optionSiteAt(chain, len(chain)-1)
-			if !ok {
-				return "", false
+			if site, ok := optionSiteAt(chain, len(chain)-1); ok {
+				if doc, found := optionDoc(known, OptionSite{Class: site.Class, Path: append(slices.Clip(site.Path), leaf.Name)}); found {
+					return doc, true
+				}
 			}
-			return optionDoc(known, OptionSite{Class: site.Class, Path: append(slices.Clip(site.Path), leaf.Name)})
+			for _, site := range r.moduleSites(chain, len(chain)-1, known) {
+				if doc, found := optionDoc(known, OptionSite{Class: site.Class, Path: append(slices.Clip(site.Path), leaf.Name)}); found {
+					return doc, true
+				}
+			}
+			return "", false
 		case *syntax.Select:
 			return r.selectedDoc(chain, known, parent.Target, parent.Path, leaf)
 		case *syntax.HasAttr:
@@ -510,7 +546,15 @@ func (r *reading) selectedDoc(chain []syntax.Node, known Evaluated, target synta
 	if root.nixpkgs {
 		return packageDoc(known, full)
 	}
-	return optionDoc(known, OptionSite{Class: root.site.Class, Path: slices.Concat(root.site.Path, full)})
+	if doc, found := optionDoc(known, OptionSite{Class: root.site.Class, Path: slices.Concat(root.site.Path, full)}); found {
+		return doc, true
+	}
+	for _, site := range r.moduleSites(chain, len(chain)-1, known) {
+		if doc, found := optionDoc(known, OptionSite{Class: site.Class, Path: full}); found {
+			return doc, true
+		}
+	}
+	return "", false
 }
 
 func optionDoc(known Evaluated, site OptionSite) (string, bool) {
@@ -543,7 +587,7 @@ func optionMarkdown(o SourcedOption) string {
 	parts = append(parts, valueParts("Default", o.Option.Default)...)
 	parts = append(parts, valueParts("Example", o.Option.Example)...)
 	for _, d := range o.Option.Declarations {
-		parts = append(parts, "Declared in "+declarationText(d))
+		parts = append(parts, declaredIn(d))
 	}
 	if len(o.Sources) > 0 {
 		parts = append(parts, "From "+strings.Join(o.Sources, sourceSeparator))
@@ -568,6 +612,14 @@ func declarationText(d nixeval.Declaration) string {
 	return fmt.Sprintf("`%s:%d`", d.File, d.Line)
 }
 
+func declaredIn(d nixeval.Declaration) string {
+	text := "Declared in " + declarationText(d)
+	if !d.OnDisk() {
+		text += " (not on disk yet: go to definition fetches it)"
+	}
+	return text
+}
+
 func packageMarkdown(path []string, pkg *nixeval.Package) string {
 	parts := []string{fenced(pkgsName + "." + strings.Join(path, "."))}
 	switch {
@@ -580,7 +632,7 @@ func packageMarkdown(path []string, pkg *nixeval.Package) string {
 		parts = append(parts, pkg.Description)
 	}
 	if pkg.Declaration.File != "" {
-		parts = append(parts, "Declared in "+declarationText(pkg.Declaration))
+		parts = append(parts, declaredIn(pkg.Declaration))
 	}
 	return strings.Join(parts, "\n\n")
 }

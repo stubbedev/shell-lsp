@@ -211,7 +211,7 @@ func (c *cursor) formalSlot() []Item {
 	if _, bad := lambda.Body.(*syntax.Bad); !bad {
 		return nil
 	}
-	return slices.Concat(keywordItems(setKeywords), c.optionKeysAt(len(c.chain)-1-3))
+	return slices.Concat(keywordItems(setKeywords), c.formalsAt(4, nil), c.optionKeysAt(len(c.chain)-1-3))
 }
 
 func (c *cursor) names() []Item {
@@ -354,12 +354,15 @@ func (c *cursor) keys() []Item {
 }
 
 func (c *cursor) passedKeys(set *syntax.AttrSet) []Item {
-	site, ok := c.argumentOf(3)
+	return c.formalsAt(3, boundKeys(set))
+}
+
+func (c *cursor) formalsAt(from int, bound map[string]bool) []Item {
+	site, ok := c.argumentOf(from)
 	if !ok {
 		return nil
 	}
 	p, u := c.linked()
-	bound := boundKeys(set)
 	var out []Item
 	for _, v := range p.calleeAt(u, site.apply, site.arg) {
 		callee, isLambda := v.(flowLambda)
@@ -389,6 +392,12 @@ func (c *cursor) argumentOf(from int) (callSite, bool) {
 		case *syntax.Apply:
 			arg := slices.IndexFunc(parent.Args, func(e syntax.Expr) bool { return e == child })
 			return callSite{apply: parent, arg: arg, depth: len(c.chain) - 1 - i}, arg >= 0
+		case *syntax.Binary:
+			call, piped := parent.Piped()
+			if !piped || call.Args[len(call.Args)-1] != child {
+				return callSite{}, false
+			}
+			return callSite{apply: call, arg: len(call.Args) - 1, depth: len(c.chain) - 1 - i}, true
 		default:
 			return callSite{}, false
 		}

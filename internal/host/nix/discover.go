@@ -7,6 +7,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/directive"
 	"github.com/stubbedev/shell-lsp/internal/host/model"
+	"github.com/stubbedev/shell-lsp/internal/host/nix/scope"
 	"github.com/stubbedev/shell-lsp/internal/host/nix/syntax"
 	"github.com/stubbedev/shell-lsp/internal/projection"
 )
@@ -225,7 +226,7 @@ func lastIdent(path syntax.AttrPath) string {
 }
 
 func (f *file) apply(e *syntax.Apply, c context, at position) {
-	carried, carries := carriers[calleeName(e.Fn)]
+	carried, carries := carriers[f.libraryName(e.Fn)]
 	f.walkApplied(e.Fn, e, 0, c, at)
 	for i, arg := range e.Args {
 		k := i + 1
@@ -241,11 +242,15 @@ func (f *file) apply(e *syntax.Apply, c context, at position) {
 func (f *file) walkApplied(item syntax.Expr, e *syntax.Apply, k int, c context, at position) {
 	switch item := syntax.Unparenthesized(item).(type) {
 	case *syntax.String:
-		f.visitString(item, c, at, callOf(e, k))
+		via := call{}
+		if !f.definedHere(syntax.Unparenthesized(e.Fn)) {
+			via = callOf(e, k)
+		}
+		f.visitString(item, c, at, via)
 	case *syntax.AttrSet:
 		callee := ""
 		if k > 0 {
-			callee = calleeName(applied(e, k-1))
+			callee = f.libraryName(applied(e, k-1))
 		}
 		f.attrs(item, c, callee)
 	default:
@@ -303,6 +308,51 @@ func calleeName(e syntax.Expr) string {
 		return lastIdent(e.Path)
 	}
 	return ""
+}
+
+func (f *file) libraryName(e syntax.Expr) string {
+	if f.definedHere(e) {
+		return ""
+	}
+	return calleeName(e)
+}
+
+func (f *file) definedHere(e syntax.Expr) bool {
+	switch e := e.(type) {
+	case *syntax.Ident:
+		ref, ok := f.table.Of(e)
+		if !ok || ref.Kind != scope.Definition {
+			return false
+		}
+		value, bound := singleValue(ref.Def)
+		return bound && replacesName(value, e.Name)
+	case *syntax.Select:
+		target, plain := e.Target.(*syntax.Ident)
+		if !plain {
+			return false
+		}
+		ref, ok := f.table.Of(target)
+		if !ok || ref.Kind != scope.Definition {
+			return false
+		}
+		value, bound := singleValue(ref.Def)
+		if !bound {
+			return false
+		}
+		_, literal := syntax.Unparenthesized(value).(*syntax.AttrSet)
+		return literal
+	}
+	return false
+}
+
+func replacesName(value syntax.Expr, name string) bool {
+	switch value := syntax.Unparenthesized(value).(type) {
+	case *syntax.Ident, *syntax.Select:
+		return calleeName(value) != name
+	case *syntax.Apply:
+		return calleeName(syntax.Unparenthesized(value.Fn)) == importName
+	}
+	return true
 }
 
 func (f *file) visitString(str *syntax.String, c context, at position, via call) {

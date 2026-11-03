@@ -3,6 +3,7 @@ package server
 import (
 	"cmp"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -26,6 +27,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/navigation"
+	"github.com/stubbedev/shell-lsp/internal/nixeval"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/regularfile"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
@@ -33,6 +35,8 @@ import (
 
 const (
 	projectLinkPatience = 100 * time.Millisecond
+	nixpkgsInput        = "nixpkgs"
+	maxLibraryFile      = 8 << 20
 	memoryReleaseQuiet  = 2 * time.Second
 )
 
@@ -253,13 +257,91 @@ func (s *Server) nativeDefinition(ctx context.Context, docs *docstore.View, here
 		if err != nil {
 			return nil, true, err
 		}
-		return hostLocations(g.Definition(here.source), here.encoding), true, nil
+		locations := hostLocations(g.Definition(here.source), here.encoding)
+		if here.host.Language() == host.Nix {
+			locations = append(locations, s.nixElsewhere(ctx, docs, here)...)
+		}
+		return locations, true, nil
 	}
 	hit, err := s.nativeAt(ctx, docs, here)
 	if err != nil || !hit.found {
 		return nil, err != nil, err
 	}
 	return hostLocations(hit.group.ShellDefinition(hit.symbol), here.encoding), true, nil
+}
+
+func (s *Server) nixElsewhere(ctx context.Context, docs *docstore.View, here nativeHere) []lsp.Location {
+	doc := here.Native.Nix()
+	known := s.nixEvaluated(ctx, docs, here.snapshot)
+	defer known.done()
+	names, _, inNixpkgs := doc.NixpkgsPathAt(here.source)
+	switch {
+	case inNixpkgs && names[0] == nix.LibName:
+		if entry, ok := s.nixLibraryEntry(here.File, names[1:]); ok && entry.Builtin == "" {
+			return declarationLocations(entry.Declaration)
+		}
+		return nil
+	case inNixpkgs:
+		if pkg, ok := known.NixpkgsPackage(names); ok {
+			return declarationLocations(known.realised([]nixeval.Declaration{pkg.Declaration})...)
+		}
+		return nil
+	}
+	return declarationLocations(known.realised(doc.OptionDeclarations(here.source, known))...)
+}
+
+func declarationLocations(declarations ...nixeval.Declaration) []lsp.Location {
+	var out []lsp.Location
+	for _, d := range declarations {
+		if !filepath.IsAbs(d.File) {
+			continue
+		}
+		at := lsp.Position{Line: uint32(max(d.Line-1, 0)), Character: uint32(max(d.Column-1, 0))} //nolint:gosec // lines and columns of a source file fit
+		out = append(out, lsp.Location{URI: fileuri.FromPath(d.File), Range: lsp.Range{Start: at, End: at}})
+	}
+	return out
+}
+
+func (s *Server) nixLibrary(file *workspace.File) (*nix.Library, bool) {
+	if !file.Doc.Local {
+		return nil, false
+	}
+	dir, ok := s.nixFlakeDir(file.Path)
+	if !ok {
+		return nil, false
+	}
+	source, ok := s.flakeLocks.SourceOf(dir, nixpkgsInput)
+	if !ok {
+		return nil, false
+	}
+	return nix.NewLibrary(source, func(path string) (string, bool) {
+		raw, _, err := regularfile.Read(path, maxLibraryFile)
+		return string(raw), err == nil
+	}), true
+}
+
+func (s *Server) nixLibraryEntry(file *workspace.File, names []string) (nix.LibraryEntry, bool) {
+	library, ok := s.nixLibrary(file)
+	if !ok || len(names) == 0 {
+		return nix.LibraryEntry{}, false
+	}
+	return library.Lookup(names)
+}
+
+func (s *Server) nixLibraryHover(here nativeHere) (lsp.Hover, bool) {
+	names, span, ok := here.File.Native.Nix().NixpkgsPathAt(here.source)
+	if !ok || names[0] != nix.LibName {
+		return lsp.Hover{}, false
+	}
+	entry, ok := s.nixLibraryEntry(here.File, names[1:])
+	if !ok {
+		return lsp.Hover{}, false
+	}
+	markdown, ok := nix.LibraryMarkdown(names[1:], entry)
+	if !ok {
+		return lsp.Hover{}, false
+	}
+	return s.nativeHover(here.snapshot, hostnav.Hover{Markdown: markdown, Span: span}), true
 }
 
 func nativeKind(kind model.Kind) lsp.SymbolKind {
@@ -328,7 +410,22 @@ func (s *Server) nixCompletion(ctx context.Context, docs *docstore.View, here na
 	at := sourcePositions(here.File, here.encoding)
 	known := s.nixEvaluated(ctx, docs, here.snapshot)
 	defer known.done()
-	found := nix.Complete(here.File.Doc.Source().Text(), here.source, s.nixFiles(docs, here.File), known)
+	text := here.File.Doc.Source().Text()
+	found := nix.Complete(text, here.source, s.nixFiles(docs, here.File), known)
+	linking := false
+	if req, wanted := nix.MembersWanted(text, here.source); wanted && here.Doc.Local {
+		g, err := s.group(ctx, docs, here.host)
+		if err != nil {
+			return lsp.CompletionList{}, err
+		}
+		linking = g.Linking()
+		found = withProjectMembers(found, g.NixMembers(req))
+	}
+	if parent, word, wanted := nix.LibraryMembersWanted(text, here.source); wanted {
+		if library, ok := s.nixLibrary(here.File); ok {
+			found = withProjectMembers(found, nix.LibraryItems(library.Members(parent), parent, word))
+		}
+	}
 	items := make([]lsp.CompletionItem, 0, len(found))
 	for _, it := range found {
 		item := nativeItem(it.Label, it.Kind, it.Detail, it.Span, at)
@@ -341,7 +438,16 @@ func (s *Server) nixCompletion(ctx context.Context, docs *docstore.View, here na
 		}
 		items = append(items, item)
 	}
-	return lsp.CompletionList{IsIncomplete: known.incomplete, Items: items}, nil
+	return lsp.CompletionList{IsIncomplete: known.incomplete || linking, Items: items}, nil
+}
+
+func withProjectMembers(found, members []nix.Item) []nix.Item {
+	for _, member := range members {
+		if !slices.ContainsFunc(found, func(it nix.Item) bool { return it.Label == member.Label }) {
+			found = append(found, member)
+		}
+	}
+	return found
 }
 
 func (s *Server) resolveNixCompletion(ctx context.Context, docs *docstore.View, item lsp.CompletionItem, data completionData) lsp.CompletionItem {
@@ -358,20 +464,7 @@ func (s *Server) resolveNixCompletion(ctx context.Context, docs *docstore.View, 
 }
 
 func (s *Server) nixFiles(docs *docstore.View, file *workspace.File) nix.Files {
-	if !file.Doc.Local {
-		return nix.NoFiles
-	}
-	loader := s.hostEnv(docs, host.Nix).Loader
-	dir := filepath.Dir(file.Path)
-	return func(path string) (string, bool) {
-		named := filepath.Join(dir, filepath.FromSlash(path))
-		for _, candidate := range []string{named, filepath.Join(named, nix.DirectoryEntry)} {
-			if target, err := loader.LoadAs(candidate, host.Nix); err == nil {
-				return target.Doc.Source().Text(), true
-			}
-		}
-		return "", false
-	}
+	return hostnav.NixFiles(s.hostEnv(docs, host.Nix).Loader, file)
 }
 
 func (s *Server) nativeSymbols(snap *snapshot) []lsp.DocumentSymbol {
@@ -452,6 +545,9 @@ func (s *Server) nativeHoverAt(ctx context.Context, docs *docstore.View, here na
 		defer known.done()
 		if h, ok := here.File.Native.Nix().Hover(here.source, known); ok {
 			return s.nativeHover(here.snapshot, hostnav.Hover{Markdown: h.Markdown, Span: h.Span}), true, nil
+		}
+		if h, ok := s.nixLibraryHover(here); ok {
+			return h, true, nil
 		}
 	}
 	g, err := s.group(ctx, docs, here.host)
@@ -566,12 +662,14 @@ func (s *Server) runRecipeCommand(ctx context.Context, docs *docstore.View, args
 	if !file.Doc.Local {
 		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%s: %s is not a file on disk", commandRunRecipe, args.URI)
 	}
-	i := slices.IndexFunc(file.Native.Index.Runnables, func(r model.Runnable) bool { return r.Name == args.Name })
-	if i < 0 {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%s: %s has no %q to run", commandRunRecipe, args.URI, args.Name)
-	}
-	if run := file.Native.Index.Runnables[i]; !run.Accepts(len(args.Arguments)) {
-		return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%s: %q takes %s, not %d", commandRunRecipe, args.Name, run.Arity(), len(args.Arguments))
+	if !lockedInputRun(file, args) {
+		i := slices.IndexFunc(file.Native.Index.Runnables, func(r model.Runnable) bool { return r.Name == args.Name })
+		if i < 0 {
+			return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%s: %s has no %q to run", commandRunRecipe, args.URI, args.Name)
+		}
+		if run := file.Native.Index.Runnables[i]; !run.Accepts(len(args.Arguments)) {
+			return nil, jsonrpc.NewError(jsonrpc.CodeInvalidParams, "%s: %q takes %s, not %d", commandRunRecipe, args.Name, run.Arity(), len(args.Arguments))
+		}
 	}
 	argv := append(file.Native.Language.Invocation(file.Doc.Path, args.Name), args.Arguments...)
 	label := file.Native.Language.RunLabel(args.Name, argv)
@@ -688,7 +786,7 @@ func (s *Server) nativeFixes(ctx context.Context, docs *docstore.View, h hostnav
 	creates := caps.DocumentChanges && slices.Contains(caps.ResourceOperations, "create")
 	_, open := docs.Document(file.URI)
 	var out []lsp.CodeAction
-	for _, fix := range slices.Concat(g.Fixes(within), nixIgnoreFixes(g, h, within)) {
+	for _, fix := range slices.Concat(g.Fixes(within), nixIgnoreFixes(g, h, within), s.nixProvenFixes(file, within)) {
 		action := lsp.CodeAction{Title: fix.Title, Kind: lsp.CodeActionKind(actions.QuickFix), IsPreferred: fix.Preferred}
 		finding := source.Range(fix.Finding.Span)
 		for _, d := range p.Context.Diagnostics {
@@ -711,7 +809,104 @@ func (s *Server) nativeFixes(ctx context.Context, docs *docstore.View, h hostnav
 		action.Edit = &edit
 		out = append(out, action)
 	}
+	if wants(p.Context.Only, actions.SourceFlakeInput) {
+		update, offered, err := s.nixUpdateInput(h, within.Start)
+		if err != nil {
+			return nil, err
+		}
+		if offered {
+			out = append(out, update)
+		}
+	}
+	return s.nixWorkspaceIgnores(out, g, h, within, enc)
+}
+
+func (s *Server) nixWorkspaceIgnores(out []lsp.CodeAction, g *hostnav.Group, h hostnav.Host, within parser.Span, enc docstore.Encoding) ([]lsp.CodeAction, error) {
+	if h.Language() != host.Nix || !h.File().Doc.Local {
+		return out, nil
+	}
+	settings := func() (actions.SettingsFile, bool) { return s.settingsFileFor(h.File().Path) }
+	seen := map[lint.Code]bool{}
+	for _, f := range g.Findings() {
+		if f.Span.End < within.Start || f.Span.Start > within.End || !f.Code.Nix() || f.Code == lint.CodeNixSyntax || seen[f.Code] {
+			continue
+		}
+		seen[f.Code] = true
+		change, ok := actions.DisableForWorkspace(settings, f.Code)
+		if !ok {
+			continue
+		}
+		file, ok := settings()
+		if !ok {
+			continue
+		}
+		title := actions.WorkspaceDisableTitle(f.Code)
+		edit, err := s.settingsEdit(enc, title, file, change)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, lsp.CodeAction{Title: title, Kind: lsp.CodeActionKind(actions.QuickFix), Edit: &edit})
+	}
 	return out, nil
+}
+
+func lockedInputRun(file *workspace.File, args recipeRunArgs) bool {
+	if file.Native.Language != host.Nix || len(args.Arguments) > 0 || filepath.Base(file.Path) != nix.FlakeFile {
+		return false
+	}
+	doc := file.Native.Nix()
+	input, named := strings.CutPrefix(args.Name, nix.InputRun(""))
+	return named && doc.DeclaresInput(input)
+}
+
+func (s *Server) nixUpdateInput(h hostnav.Host, at int) (lsp.CodeAction, bool, error) {
+	file := h.File()
+	if h.Language() != host.Nix || !file.Doc.Local || filepath.Base(file.Path) != nix.FlakeFile {
+		return lsp.CodeAction{}, false, nil
+	}
+	input, ok := file.Native.Nix().FlakeInputAt(at)
+	if !ok {
+		return lsp.CodeAction{}, false, nil
+	}
+	raw, err := json.Marshal(recipeRunArgs{URI: file.URI, Name: nix.InputRun(input)})
+	if err != nil {
+		return lsp.CodeAction{}, false, fmt.Errorf("encoding %s arguments for %s: %w", commandRunRecipe, file.URI, err)
+	}
+	title := "Update input " + input
+	return lsp.CodeAction{Title: title, Kind: lsp.CodeActionKind(actions.SourceFlakeInput), Command: &lsp.Command{Title: title, Command: commandRunRecipe, Arguments: []json.RawMessage{raw}}}, true, nil
+}
+
+func (s *Server) nixProvenFindings(file *workspace.File) ([]lint.Finding, *workspace.File) {
+	proof, _, held := s.nixEval.strings.of(file.URI)
+	if !held {
+		return nil, nil
+	}
+	wrapped := hostnav.Wrapped(file, proof.On(file.Doc.Source()), nil)
+	if wrapped == nil {
+		return nil, nil
+	}
+	settings, generation := s.settingsFor(file.Doc.Location)
+	findings, _ := s.findings(wrapped, settings, generation)
+	return findings, wrapped
+}
+
+func (s *Server) nixProvenFixes(file *workspace.File, within parser.Span) []hostnav.Fix {
+	findings, wrapped := s.nixProvenFindings(file)
+	var out []hostnav.Fix
+	for _, f := range findings {
+		start, end := wrapped.Doc.SourceOffset(f.Span.Start), wrapped.Doc.SourceOffset(f.Span.End)
+		if end < within.Start || start > within.End {
+			continue
+		}
+		for _, fix := range f.Fixes {
+			if edits, ok := wrapped.Doc.SourceEdits(fix.Edits); ok {
+				placed := f
+				placed.Span = parser.Span{Start: start, End: end}
+				out = append(out, hostnav.Fix{Title: fix.Title, Finding: placed, Edits: edits})
+			}
+		}
+	}
+	return out
 }
 
 func nixIgnoreFixes(g *hostnav.Group, h hostnav.Host, within parser.Span) []hostnav.Fix {
@@ -736,7 +931,7 @@ func (s *Server) listRecipesCommand(ctx context.Context, docs *docstore.View) (a
 		}
 		language := f.Native.Language
 		for _, r := range f.Native.Index.Runnables {
-			argv := language.Invocation(f.Path, r.Name)
+			argv := language.TerminalInvocation(f.Path, r.Name)
 			out = append(out, recipeListing{
 				URI: f.URI, Path: f.Path, Name: strings.Clone(r.Name), Tool: argv[0],
 				Argv: argv, Cwd: filepath.Dir(f.Path), Parameters: append([]model.RunParam{}, r.Params...),

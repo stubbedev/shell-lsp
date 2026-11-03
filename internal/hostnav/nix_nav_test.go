@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/host"
+	"github.com/stubbedev/shell-lsp/internal/host/nix"
 	"github.com/stubbedev/shell-lsp/internal/navigation"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 )
@@ -102,8 +103,6 @@ func TestNixNamesThatCannotBeProvenHaveNoTarget(t *testing.T) {
 		nth            int
 	}{
 		{name: "self is an argument", src: "{ self }: {\n  one = 1;\n  two = self.one;\n}\n", sub: "one", nth: 1},
-		{name: "a with over an unknown set", src: "with pkgs; hello\n", sub: "hello"},
-		{name: "a builtin", src: "map\n", sub: "map"},
 		{name: "a set behind an update", src: "let\n  set = { one = 1; } // other;\nin\n  set.one\n", sub: "one", nth: 1},
 		{name: "a dynamic attribute before it", src: "let\n  set = { sub.one = 1; };\nin\n  set.${key}.one\n", sub: "one", nth: 1},
 	} {
@@ -469,6 +468,31 @@ const (
 	deferredModule = "{ config, inputs, lib, ... }: {\n  options.deferred = lib.mkOption { };\n  config.deferred.sub.foo = 1;\n  config.flake.nixosConfigurations.a = inputs.nixpkgs.lib.nixosSystem {\n    modules = [\n      config.deferred\n      { options.sub.foo = lib.mkOption { }; }\n    ];\n  };\n"
 )
 
+func TestNixRenameThroughADeferredModuleOption(t *testing.T) {
+	t.Parallel()
+
+	module := strings.Replace(deferredModule, "lib.mkOption { }", "lib.mkOption { type = lib.types.deferredModule; }", 1) + "}\n"
+	got, err := newTree(t, map[string]string{"flake.nix": deferredFlake, "y.nix": module}).renamedAfter("y.nix", "config.deferred.sub.", "foo", "alpha")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got["y.nix"], "config.deferred.sub.alpha = 1;") {
+		t.Errorf("renamed to %q", got["y.nix"])
+	}
+}
+
+func TestNixRenameFollowsAPipedCall(t *testing.T) {
+	t.Parallel()
+
+	got, err := renameNix(t, "let f = { one }: one; in { one = 1; } |> f", "one", 0, "alpha")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "let f = { alpha }: alpha; in { alpha = 1; } |> f"; got != want {
+		t.Errorf("renamed to %q, want %q", got, want)
+	}
+}
+
 func TestNixRenameThroughAModulePassedToTheModuleSystem(t *testing.T) {
 	t.Parallel()
 
@@ -494,6 +518,7 @@ func TestNixRenameRefusesWhatOtherFilesCannotFollow(t *testing.T) {
 		{name: "the set leaves through an import", files: map[string]string{"default.nix": "{ f }: f (import ./y.nix)\n", "y.nix": "{\n  foo = 1;\n}\n"}, in: "y.nix", sub: "foo"},
 		{name: "a selected set is passed on", files: map[string]string{"default.nix": "{ f }: f (import ./y.nix).bar\n", "y.nix": "{\n  bar.foo = 1;\n}\n"}, in: "y.nix", sub: "foo"},
 		{name: "a set below a module is passed on", files: map[string]string{"flake.nix": deferredFlake, "y.nix": deferredModule + "  config.copy = f config.deferred.sub;\n}\n"}, in: "y.nix", sub: "foo"},
+		{name: "a plainly typed option is imported as a module", files: map[string]string{"flake.nix": deferredFlake, "y.nix": strings.Replace(deferredModule, "lib.mkOption { }", "lib.mkOption { type = lib.types.attrs; }", 1) + "}\n"}, in: "y.nix", sub: "foo"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
@@ -740,6 +765,136 @@ func TestNixDendriticCorpus(t *testing.T) {
 	} {
 		if _, err := tr.renamedAfter(tt.file, tt.before, tt.sub, "alpha"); !errors.Is(err, navigation.ErrNotRenamable) {
 			t.Errorf("renaming %s in %s: %v, want %v", tt.sub, tt.file, err, navigation.ErrNotRenamable)
+		}
+	}
+}
+
+func TestNixInheritFromIsAlsoABinding(t *testing.T) {
+	t.Parallel()
+
+	const src = "{ final }:\nlet\n  inherit (final) lib;\n  a = lib.x;\n  b = lib.y;\nin a\n"
+	tr := nixTree(t, src)
+	g := tr.group(nixFile)
+	sym, ok := g.At(tr.offset(nixFile, "lib", 0))
+	if !ok {
+		t.Fatal("no symbol on the inherited name")
+	}
+	got := tr.describe(References(g, sym, true))
+	for _, want := range []string{nixFile + ":4:lib", nixFile + ":5:lib"} {
+		if !slices.Contains(got, want) {
+			t.Errorf("references = %q, want them to hold %q", got, want)
+		}
+	}
+}
+
+func TestNixNamesReadThroughWith(t *testing.T) {
+	t.Parallel()
+
+	const src = "{ pkgs, bat }:\nwith pkgs; [\n  bc\n  bat\n  bc\n  (let bc = 1; in bc)\n]\n"
+	tr := nixTree(t, src)
+	g := tr.group(nixFile)
+	at := tr.offset(nixFile, "bc", 0)
+	expectStrings(t, "the name goes to its with", tr.locations(g.Definition(at)), []string{tr.site(nixFile, "pkgs, bat }:\n", "with")})
+	sym, ok := g.At(at)
+	if !ok {
+		t.Fatal("no symbol on a name read through with")
+	}
+	expectStrings(t, "only this name, only through this with", tr.describe(References(g, sym, true)), []string{nixFile + ":3:bc", nixFile + ":5:bc"})
+	if err := g.PrepareRename(sym); !errors.Is(err, navigation.ErrNotRenamable) {
+		t.Errorf("renaming a name read through with = %v", err)
+	}
+	h, ok := g.Hover(at)
+	if !ok || !strings.Contains(h.Markdown, "`with pkgs`") {
+		t.Errorf("hover = %+v, %v", h, ok)
+	}
+}
+
+func TestNixBuiltinNamesHaveReferencesInTheirFile(t *testing.T) {
+	t.Parallel()
+
+	const src = "{\n  a = true;\n  b = true;\n  c = map (x: x) [ ];\n  d = let true = 1; in true;\n}\n"
+	tr := nixTree(t, src)
+	g := tr.group(nixFile)
+	at := tr.offset(nixFile, "true", 0)
+	sym, ok := g.At(at)
+	if !ok {
+		t.Fatal("no symbol on a builtin")
+	}
+	expectStrings(t, "every read of the builtin, not a shadowing one", tr.describe(References(g, sym, true)), []string{nixFile + ":2:true", nixFile + ":3:true"})
+	if locations := g.Definition(at); len(locations) != 0 {
+		t.Errorf("a builtin has a definition: %v", tr.locations(locations))
+	}
+	if err := g.PrepareRename(sym); !errors.Is(err, navigation.ErrNotRenamable) {
+		t.Errorf("renaming a builtin = %v", err)
+	}
+}
+
+func TestNixMembersComeFromTheWholeProject(t *testing.T) {
+	t.Parallel()
+
+	const flake = "{\n  inputs.one.url = \"x\";\n  outputs = inputs@{ flake-parts, ... }: flake-parts.lib.mkFlake { inherit inputs; } { imports = [ ./a.nix ./b.nix ]; };\n}\n"
+	const declares = "{ lib, inputs, ... }: {\n  options.features.alpha = lib.mkOption { };\n  options.features.beta = lib.mkOption { };\n}\n"
+	const reader = "{ config, inputs, ... }: {\n  flake.x = config.features.al;\n  flake.y = inputs.on;\n  features.be = true;\n}\n"
+	tr := newTree(t, map[string]string{"flake.nix": flake, "a.nix": declares, "b.nix": reader})
+	g := tr.group("b.nix")
+	for _, tt := range []struct {
+		name, sub string
+		want      []string
+	}{
+		{"an option read from config", "al;", []string{"alpha", "beta"}},
+		{"a flake input", "on;", []string{"one"}},
+		{"an option key", "be = true", []string{"alpha", "beta"}},
+	} {
+		req, wanted := nix.MembersWanted(tr.files["b.nix"], tr.offset("b.nix", tt.sub, 0)+1)
+		if !wanted {
+			t.Errorf("%s: no members wanted", tt.name)
+			continue
+		}
+		var got []string
+		for _, it := range g.NixMembers(req) {
+			got = append(got, it.Label)
+		}
+		for _, want := range tt.want {
+			if !slices.Contains(got, want) {
+				t.Errorf("%s: %q lacks %q", tt.name, got, want)
+			}
+		}
+	}
+}
+
+func TestNixModuleSitesFollowADeferredModule(t *testing.T) {
+	t.Parallel()
+
+	module := strings.Replace(deferredModule, "lib.mkOption { }", "lib.mkOption { type = lib.types.deferredModule; }", 1) + "}\n"
+	tr := newTree(t, map[string]string{"flake.nix": deferredFlake, "y.nix": module})
+	sites := tr.group("y.nix").NixModuleSites(strings.Index(module, "{ options.sub.foo"))
+	if !slices.ContainsFunc(sites, func(s nix.OptionSite) bool { return s.Class == nix.ClassNixOS && len(s.Path) == 0 }) {
+		t.Errorf("sites = %+v, want the root of the NixOS class", sites)
+	}
+}
+
+func TestNixSharedModuleArgumentGoesToOnePlace(t *testing.T) {
+	t.Parallel()
+
+	const flake = "{\n  outputs = inputs@{ flake-parts, ... }: flake-parts.lib.mkFlake { inherit inputs; } { imports = [ ./a.nix ./b.nix ]; };\n}\n"
+	const a = "{ lib, ... }: {\n  x = lib.one;\n}\n"
+	const b = "{ lib, ... }: {\n  y = lib.two;\n}\n"
+	tr := newTree(t, map[string]string{"flake.nix": flake, "a.nix": a, "b.nix": b})
+	expectStrings(t, "the formal of this file", tr.definitionAfter("a.nix", "x = ", "lib"), []string{"a.nix:1:lib"})
+	expectStrings(t, "the formal of the other file", tr.definitionAfter("b.nix", "y = ", "lib"), []string{"b.nix:1:lib"})
+	withArgs := "{ lib, ... }: {\n  _module.args.shared = 1;\n}\n"
+	tr = newTree(t, map[string]string{"flake.nix": flake, "a.nix": withArgs, "b.nix": "{ shared, ... }: {\n  y = shared;\n}\n"})
+	expectStrings(t, "the place that sets it", tr.definitionAfter("b.nix", "y = ", "shared"), []string{tr.site("a.nix", "_module.args.", "shared")})
+}
+
+func TestNixSignatureReadsTheFileACallLoads(t *testing.T) {
+	t.Parallel()
+
+	tr := newTree(t, map[string]string{"y.nix": "{ stdenv, lib }: 1\n", "a.nix": "pkgs: pkgs.callPackage ./y.nix { lib = 1; }\n", "b.nix": "import ./y.nix { lib = 1; }\n"})
+	for _, name := range []string{"a.nix", "b.nix"} {
+		sig, ok := tr.group(name).Signature(tr.offset(name, "lib", 0))
+		if !ok || !strings.Contains(sig.Label, "./y.nix") || !strings.Contains(sig.Label, "stdenv") {
+			t.Errorf("%s: signature = %+v, %v", name, sig, ok)
 		}
 	}
 }

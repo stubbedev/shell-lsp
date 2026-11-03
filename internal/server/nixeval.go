@@ -31,6 +31,7 @@ const (
 	nixOpenedQuiet     = 20 * time.Millisecond
 	nixStringsJob      = "strings"
 	nixClassPatience   = 50 * time.Millisecond
+	nixJumpDeadline    = 2 * time.Second
 	nixMissingNotice   = "shellLsp.nix.evaluate is on, but no nix binary is on PATH: NixOS, home-manager and flake-parts options and nixpkgs attributes are unavailable until it is installed. Static Nix features keep working."
 )
 
@@ -43,6 +44,7 @@ type nixEvaluator interface {
 	BaseOptions(ctx context.Context, dir string) (nixeval.Answer[*nixeval.OptionTree], error)
 	NixpkgsAttrs(ctx context.Context, dir string, parent []string, prefix string) (nixeval.Answer[[]string], error)
 	NixpkgsPackage(ctx context.Context, dir string, path []string) (nixeval.Answer[*nixeval.Package], error)
+	RealiseFile(ctx context.Context, dir, file string) error
 	Close()
 }
 
@@ -497,6 +499,9 @@ func (s *Server) nixProblem(err error) {
 	if _, missing := errors.AsType[*nixeval.NixNotFoundError](err); missing {
 		message = nixMissingNotice
 	}
+	if unsupported, ok := errors.AsType[*nixeval.UnsupportedNixError](err); ok {
+		message = unsupported.Error()
+	}
 	if s.notices.add("nixeval:"+message, struct{}{}) {
 		s.notify(showMessageMethod, lsp.ShowMessageParams{Type: lsp.MessageWarning, Message: message})
 	}
@@ -508,6 +513,7 @@ type nixRequest struct {
 	parent  context.Context
 	dir     string
 	classes func() []nix.OptionClass
+	module  func() *hostnav.Group
 
 	deadline   context.Context
 	cancel     context.CancelFunc
@@ -537,7 +543,70 @@ func (s *Server) nixEvaluated(ctx context.Context, docs *docstore.View, snap *sn
 	s.warmFlake(session, dir, false)
 	r.session, r.dir = session, dir
 	r.classes = sync.OnceValue(func() []nix.OptionClass { return r.fileClasses(docs, snap) })
+	r.module = sync.OnceValue(func() *hostnav.Group { return r.moduleGroup(docs, snap) })
 	return r
+}
+
+func (r *nixRequest) moduleGroup(docs *docstore.View, snap *snapshot) *hostnav.Group {
+	h, ok := hostnav.Of(snap.File)
+	if !ok {
+		return nil
+	}
+	g, err := r.server.group(r.parent, docs, h)
+	if err != nil {
+		if r.parent.Err() == nil {
+			r.server.logger.Warn("finding the modules of a Nix file", "path", snap.Path, "err", err)
+		}
+		return nil
+	}
+	r.incomplete = r.incomplete || g.Linking()
+	return g
+}
+
+func (r *nixRequest) realised(declarations []nixeval.Declaration) []nixeval.Declaration {
+	if r.session == nil {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(r.parent, nixJumpDeadline)
+	defer cancel()
+	var out []nixeval.Declaration
+	for _, d := range declarations {
+		if !filepath.IsAbs(d.File) {
+			continue
+		}
+		err := r.session.client.RealiseFile(ctx, r.dir, d.File)
+		if err == nil {
+			out = append(out, d)
+			continue
+		}
+		r.jumpProblem(d, err)
+	}
+	return out
+}
+
+func (r *nixRequest) jumpProblem(d nixeval.Declaration, err error) {
+	s := r.server
+	if notReady, fetching := errors.AsType[*nixeval.NotReadyError](err); fetching {
+		s.notify(showMessageMethod, lsp.ShowMessageParams{Type: lsp.MessageInfo, Message: "Still fetching " + d.File + "; try again when it is on disk."})
+		r.session.watch(notReady.Refresh, s.nixProblem)
+		return
+	}
+	if unavailable, gone := errors.AsType[*nixeval.FileUnavailableError](err); gone {
+		s.notify(showMessageMethod, lsp.ShowMessageParams{Type: lsp.MessageWarning, Message: unavailable.Error()})
+		return
+	}
+	s.nixProblem(err)
+}
+
+func (r *nixRequest) ModuleSites(start int) []nix.OptionSite {
+	if r.module == nil {
+		return nil
+	}
+	g := r.module()
+	if g == nil {
+		return nil
+	}
+	return g.NixModuleSites(start)
 }
 
 func (r *nixRequest) fileClasses(docs *docstore.View, snap *snapshot) []nix.OptionClass {

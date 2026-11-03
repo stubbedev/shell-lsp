@@ -224,10 +224,10 @@ func (c *checker) mkIfFix(e *syntax.If) []lint.Fix {
 	if !ok || len(otherwise.Bindings) != 0 {
 		return nil
 	}
-	if d, bound := c.bindingAt(libName, e.Span().Start); !bound || d == nil {
+	if d, bound := c.bindingAt(LibName, e.Span().Start); !bound || d == nil {
 		return nil
 	}
-	replacement := libName + "." + mkIfCall + " " + c.argument(e.Cond) + " " + c.argument(e.Then)
+	replacement := LibName + "." + mkIfCall + " " + c.argument(e.Cond) + " " + c.argument(e.Then)
 	return c.offer("Use `lib.mkIf`", lint.Review, textedit.Edit{Start: e.Span().Start, End: e.Span().End, NewText: replacement})
 }
 
@@ -363,11 +363,11 @@ func (c *checker) pkgsLib(n *syntax.Select) {
 		return
 	}
 	first, static := syntax.AttrName(n.Path[0])
-	if !static || first != libName {
+	if !static || first != LibName {
 		return
 	}
 	at := n.Span().Start
-	d, bound := c.bindingAt(libName, at)
+	d, bound := c.bindingAt(LibName, at)
 	if !bound || slices.ContainsFunc(d.Bindings, func(b syntax.Binding) bool {
 		span := b.Span()
 		return span.Start <= at && at < span.End
@@ -375,7 +375,7 @@ func (c *checker) pkgsLib(n *syntax.Select) {
 		return
 	}
 	end := n.Path[0].Span().End
-	c.report(lint.CodeNixPkgsLib, syntax.Span{Start: at, End: end}, "`lib` is in scope here, so `pkgs.lib` is the long way to it", c.offer("Use `lib`", lint.Review, textedit.Edit{Start: at, End: end, NewText: libName}))
+	c.report(lint.CodeNixPkgsLib, syntax.Span{Start: at, End: end}, "`lib` is in scope here, so `pkgs.lib` is the long way to it", c.offer("Use `lib`", lint.Review, textedit.Edit{Start: at, End: end, NewText: LibName}))
 }
 
 type flakeInput struct {

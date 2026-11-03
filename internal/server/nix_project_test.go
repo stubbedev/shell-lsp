@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -174,7 +175,7 @@ func TestNixWrapperAcrossFilesThroughTheServer(t *testing.T) {
 }
 
 const (
-	wrapperCapabilities = `"capabilities": {"general": {"positionEncodings": ["utf-16"]}, "textDocument": {"diagnostic": {}}, "workspace": {"diagnostics": {"refreshSupport": true}, "semanticTokens": {"refreshSupport": true}}}`
+	wrapperCapabilities = `"capabilities": {"general": {"positionEncodings": ["utf-16"]}, "textDocument": {"diagnostic": {}, "codeAction": {"codeActionLiteralSupport": {"codeActionKind": {"valueSet": ["quickfix"]}}}}, "workspace": {"diagnostics": {"refreshSupport": true}, "semanticTokens": {"refreshSupport": true}}}`
 	wrapperProbes       = "modules/probes.nix"
 	wrapperBuilder      = "modules/core/builders/probe.nix"
 	wrapperVariable     = "expected variable"
@@ -239,6 +240,27 @@ func TestNixWrapperStringInAnotherFileIsShellAfterLinking(t *testing.T) {
 	}
 }
 
+func TestNixWrapperStringFindingsCanBeFixed(t *testing.T) {
+	t.Parallel()
+
+	p, _ := openWrapperProject(t, time.Millisecond)
+	p.awaitNixStringRefresh()
+	finding, found := p.wrapperFinding()
+	if !found {
+		t.Fatal("the proven string has no shell finding")
+	}
+	r := finding.Range
+	params := fmt.Sprintf(`{"textDocument": {"uri": %q}, "range": {"start": {"line": %d, "character": %d}, "end": {"line": %d, "character": %d}}, "context": {"diagnostics": []}}`, p.uri(wrapperProbes), r.Start.Line, r.Start.Character, r.End.Line, r.End.Character)
+	fixes := decodeResult[[]lsp.CodeAction](t, p.c.call("textDocument/codeAction", params))
+	if !slices.ContainsFunc(fixes, func(a lsp.CodeAction) bool { return strings.Contains(a.Title, "Double-quote") && a.Edit != nil }) {
+		titles := make([]string, len(fixes))
+		for i, a := range fixes {
+			titles[i] = a.Title
+		}
+		t.Errorf("no quoting fix among %q", titles)
+	}
+}
+
 func TestNixDiagnosticsAndTokensAloneBuildNoProject(t *testing.T) {
 	t.Parallel()
 
@@ -284,4 +306,23 @@ func TestNixWrapperStringStopsBeingShellWhenTheOverlayStopsProvingIt(t *testing.
 	if _, _, held := srv.nixEval.strings.of(p.uri(wrapperProbes)); held {
 		t.Error("a proof that no longer holds stays in memory")
 	}
+}
+
+func TestNixOffersToUpdateAnInputUnderTheCursor(t *testing.T) {
+	t.Parallel()
+
+	const name = "flake.nix"
+	files := map[string]string{name: "{\n  inputs.nixpkgs.url = \"github:nixos/nixpkgs\";\n  outputs = _: { };\n}\n"}
+	p := openNativeProject(t, `"capabilities": {"textDocument": {"diagnostic": {}, "codeAction": {"codeActionLiteralSupport": {"codeActionKind": {"valueSet": ["quickfix"]}}}}}`, files, name)
+	r := p.at(name, "nixpkgs", 0).Range
+	params := fmt.Sprintf(`{"textDocument": {"uri": %q}, "range": {"start": {"line": %d, "character": %d}, "end": {"line": %d, "character": %d}}, "context": {"diagnostics": []}}`, p.uri(name), r.Start.Line, r.Start.Character, r.End.Line, r.End.Character)
+	for _, action := range decodeResult[[]lsp.CodeAction](t, p.c.call("textDocument/codeAction", params)) {
+		if action.Title == "Update input nixpkgs" {
+			if action.Command == nil || action.Command.Command != commandRunRecipe {
+				t.Errorf("the action = %+v", action)
+			}
+			return
+		}
+	}
+	t.Error("no action updates the input")
 }

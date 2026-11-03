@@ -322,6 +322,15 @@ func TestAntiquotationsSplitPrograms(t *testing.T) {
 	}
 }
 
+func TestAQuotedHeredocKeepsItsLiteralDollars(t *testing.T) {
+	t.Parallel()
+
+	programs := find(t, "awk -f - f <<'EOF'\nBEGIN { x = \"$$\" }\nEOF\n")
+	if len(programs) != 1 || !strings.Contains(programs[0].Text, `"$$"`) {
+		t.Errorf("programs = %+v", programs)
+	}
+}
+
 func TestAnAntiquotationHidesTheErrorsItTouches(t *testing.T) {
 	t.Parallel()
 
@@ -399,11 +408,21 @@ func TestDeclaredVariablesAreNotTheBinding(t *testing.T) {
 func TestAntiquotationsInAHereDocument(t *testing.T) {
 	t.Parallel()
 
-	programs := find(t, "awk -f - <<'EOF'\n{ print $$ }\nEOF\n")
+	const text = "awk -f - <<'EOF'\n{ print $$ }\nEOF\n"
+	tree := parser.ParseScripts(nil, text, []parser.Span{{Start: 0, End: len(text)}}, dialect.Shell{Dialect: dialect.Bash}, everyDollarHole{})
+	programs := Find(tree)
 	if len(programs) != 1 || programs[0].Text != "{ print __nix__ }\n" || len(programs[0].Result.Errors) != 0 {
 		t.Errorf("programs = %+v", programs)
 	}
 }
+
+type everyDollarHole struct{}
+
+func (everyDollarHole) SourceLine(int) int { return 1 }
+
+func (everyDollarHole) Synthetic(int) bool { return false }
+
+func (everyDollarHole) StandIn(int) bool { return true }
 
 func TestNamesArgumentsReadsTheProgram(t *testing.T) {
 	t.Parallel()

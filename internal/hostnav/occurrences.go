@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"slices"
 
+	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/host/model"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
@@ -67,6 +68,13 @@ type Symbol struct {
 	shell   bool
 	foreign bool
 	link    *programLink
+	lexical *lexicalName
+	binding *Symbol
+}
+
+type lexicalName struct {
+	origins []Location
+	source  string
 }
 
 func (s Symbol) Defined() bool { return len(s.targets) > 0 || len(s.locals) > 0 || s.link != nil }
@@ -96,17 +104,45 @@ func (g *Group) symbolFor(hit model.Hit, file int, module *model.Module) (Symbol
 func (g *Group) At(offset int) (Symbol, bool) {
 	hit, ok := g.Index().At(offset)
 	if !ok {
+		if sym, lexical := g.lexicalSymbol(offset); lexical {
+			return sym, true
+		}
 		return g.wrappedSymbol(offset)
 	}
 	sym, found := g.symbolFor(hit, g.selfAt(), g.Module)
 	if found || hit.Declaration {
+		if found && !hit.Declaration {
+			if own, declared := g.Index().DeclarationAt(offset); declared {
+				if binding, bound := g.symbolFor(own, g.selfAt(), g.Module); bound {
+					sym.binding = &binding
+				}
+			}
+		}
 		return sym, found
 	}
 	own, declared := g.Index().DeclarationAt(offset)
 	if !declared {
-		return Symbol{}, false
+		return g.lexicalSymbol(offset)
 	}
 	return g.symbolFor(own, g.selfAt(), g.Module)
+}
+
+func (g *Group) lexicalSymbol(offset int) (Symbol, bool) {
+	if g.Language != host.Nix {
+		return Symbol{}, false
+	}
+	found, ok := g.Self.Native.Nix().LexicalAt(offset)
+	if !ok {
+		return Symbol{}, false
+	}
+	sym := Symbol{Name: found.Name, Kind: model.KindVariable, Span: found.Span, lexical: &lexicalName{source: found.Source}, foreign: true}
+	for _, use := range found.Uses {
+		sym.locals = append(sym.locals, Occurrence{File: g.Self, Span: use})
+	}
+	for _, origin := range found.Origins {
+		sym.lexical.origins = append(sym.lexical.origins, Location{File: g.Self, Span: origin})
+	}
+	return sym, true
 }
 
 func (g *Group) fileOf(module *model.Module, i int) *workspace.File {

@@ -848,7 +848,7 @@ func (p *Project) slotValues(u *symbolTable, slot flowSlot) []flowValue {
 func (p *Project) calleeAt(u *symbolTable, call *syntax.Apply, arg int) []flowValue {
 	fn := syntax.Unparenthesized(call.Fn)
 	values, skip := []flowValue(nil), 0
-	switch name := calleeName(fn); {
+	switch name := u.f.libraryName(fn); {
 	case name == importName && u.builtinImport(fn), name == callPackageName:
 		values, skip = p.importValue(u, call.Args[0]), 1
 	case name == callPackageWithName && len(call.Args) > 1:

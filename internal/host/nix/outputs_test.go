@@ -77,11 +77,29 @@ func TestInvocation(t *testing.T) {
 	for name, want := range map[string][]string{
 		"packages.a":  {"nix", "build", ".#a"},
 		"apps.a":      {"nix", "run", ".#a"},
-		"devShells.a": {"nix", "develop", ".#a"},
+		"devShells.a": {"nix", "develop", ".#a", "--command", "true"},
 		"checks":      {"nix", "flake", "check"},
+		"inputs.a":    {"nix", "flake", "update", "a"},
 	} {
 		if got := Invocation(name); !slices.Equal(got, want) {
 			t.Errorf("Invocation(%q) = %q, want %q", name, got, want)
 		}
+	}
+}
+
+func TestOnlyADevShellNeedsATerminal(t *testing.T) {
+	t.Parallel()
+
+	if got := TerminalInvocation("devShells.a"); !slices.Equal(got, []string{"nix", "develop", ".#a"}) {
+		t.Errorf("TerminalInvocation = %q", got)
+	}
+	if !NeedsTerminal("devShells.a") || NeedsTerminal("packages.a") {
+		t.Error("NeedsTerminal should hold for dev shells only")
+	}
+	if got := UnattendedTitle("devShells.a"); got != "Build dev shell .#a" {
+		t.Errorf("UnattendedTitle = %q", got)
+	}
+	if got := UnattendedTitle("packages.a"); got != "nix build .#a" {
+		t.Errorf("UnattendedTitle = %q", got)
 	}
 }

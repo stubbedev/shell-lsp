@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/host/model"
+	"github.com/stubbedev/shell-lsp/internal/host/nix/scope"
 	"github.com/stubbedev/shell-lsp/internal/host/nix/syntax"
 )
 
@@ -404,20 +405,106 @@ func (p *Project) setsOf(v flowValue) []flowSet {
 	return nil
 }
 
-func (p *Project) optionSubmodule(u *symbolTable, s *space, src flowSource) {
+func optionType(src flowSource) (syntax.Expr, bool) {
 	option, isCall := syntax.Unparenthesized(src.expr).(*syntax.Apply)
 	if src.stmt != nil || !isCall || calleeName(syntax.Unparenthesized(option.Fn)) != mkOptionName {
-		return
+		return nil, false
 	}
 	set, literal := syntax.Unparenthesized(option.Args[len(option.Args)-1]).(*syntax.AttrSet)
 	if !literal {
-		return
+		return nil, false
 	}
 	for _, b := range set.Bindings {
 		if a, assigned := b.(*syntax.Assign); assigned && lastIdent(a.Path) == "type" {
-			p.submoduleType(u, s, a.Value)
+			return a.Value, true
 		}
 	}
+	return nil, false
+}
+
+func (p *Project) optionSubmodule(u *symbolTable, s *space, src flowSource) {
+	if t, typed := optionType(src); typed {
+		p.submoduleType(u, s, t)
+	}
+}
+
+func (s *space) moduleBoundary() bool {
+	if !s.module {
+		return false
+	}
+	keys := 0
+	for at := s; at != nil; at = at.parent {
+		for _, twin := range at.twins() {
+			for _, b := range twin.bound {
+				if t, typed := optionType(b.source); typed {
+					return holdsModules(b.unit, t, keys, map[*scope.Def]bool{})
+				}
+			}
+		}
+		keys++
+	}
+	return true
+}
+
+func (s *space) twins() []*space {
+	if s.parent == nil {
+		return []*space{s}
+	}
+	var out []*space
+	for _, up := range s.parent.twins() {
+		if kid := up.kids[s.name]; kid != nil {
+			out = append(out, kid)
+		}
+		if wild := up.kids[anyName]; wild != nil && s.name != anyName {
+			out = append(out, wild)
+		}
+	}
+	return out
+}
+
+func holdsModules(u *symbolTable, t syntax.Expr, keys int, seen map[*scope.Def]bool) bool {
+	switch t := syntax.Unparenthesized(t).(type) {
+	case *syntax.Ident:
+		ref, ok := u.f.table.Of(t)
+		if !ok || ref.Kind != scope.Definition {
+			return keys == 0 && deferredModuleType(t.Name)
+		}
+		value, bound := singleValue(ref.Def)
+		if !bound || seen[ref.Def] {
+			return true
+		}
+		seen[ref.Def] = true
+		return holdsModules(u, value, keys, seen)
+	case *syntax.Select:
+		return keys == 0 && deferredModuleType(lastIdent(t.Path))
+	case *syntax.Apply:
+		name := calleeName(syntax.Unparenthesized(t.Fn))
+		last := t.Args[len(t.Args)-1]
+		switch {
+		case slices.Contains(wrappingTypes, name):
+			return holdsModules(u, last, keys, seen)
+		case keys > 0 && slices.Contains(keyedTypes, name):
+			return holdsModules(u, last, keys-1, seen)
+		case keys == 0:
+			return deferredModuleType(name)
+		}
+	}
+	return true
+}
+
+func singleValue(d *scope.Def) (syntax.Expr, bool) {
+	if len(d.Bindings) != 1 {
+		return nil, false
+	}
+	a, assigned := d.Bindings[0].(*syntax.Assign)
+	if !assigned || len(a.Path) != 1 {
+		return nil, false
+	}
+	return a.Value, true
+}
+
+func deferredModuleType(name string) bool {
+	return name == "deferredModule" || name == "deferredModuleWith"
 }
 
 func (p *Project) submoduleType(u *symbolTable, s *space, t syntax.Expr) {

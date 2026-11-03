@@ -493,3 +493,27 @@ func TestNixTextFileHoverShowsItsHead(t *testing.T) {
 		})
 	}
 }
+
+func TestAHolePathIsNotRelativeToTheNixFile(t *testing.T) {
+	t.Parallel()
+
+	for _, word := range []string{"${x}/foo", "\"${x}/foo\"", "${x}/bin/foo", "${x}/sbin/foo", "${lib.getExe x}", "${pkgs.foo}/bin/foo", "${pkgs.foo}/foo", "${x}foo"} {
+		files := map[string]string{
+			"pkg.nix": "{ x, lib, pkgs, stdenv }: stdenv.mkDerivation { buildPhase = ''\n  source " + word + "\n  helper\n''; }\n",
+			"foo":     "helper() { echo hi; }\n",
+			"x":       "helper() { echo hi; }\n",
+		}
+		tr := newTree(t, files)
+		file, err := tr.ws.Load(tr.path("pkg.nix"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, variant := range file.Variants() {
+			for _, ref := range navigation.Sources(variant, navigation.Env{Loader: tr.ws, Roots: []string{tr.dir}}) {
+				if ref.Target != nil {
+					t.Errorf("source %s followed to %s", word, ref.Target.Path)
+				}
+			}
+		}
+	}
+}

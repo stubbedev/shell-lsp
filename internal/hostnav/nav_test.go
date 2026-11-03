@@ -256,6 +256,19 @@ func TestJustHoverAndCompletion(t *testing.T) {
 	}
 }
 
+func TestSignatureMarksTheParameterAfterTheFunctionName(t *testing.T) {
+	t.Parallel()
+
+	tr := newTree(t, map[string]string{"justfile": "x := absolute_path(\"a\")\n"})
+	sig, ok := tr.group("justfile").Signature(tr.offset("justfile", "\"a\"", 0))
+	if !ok || len(sig.Params) != 1 {
+		t.Fatalf("signature = %+v, %v", sig, ok)
+	}
+	if got := sig.Label[sig.Params[0].Start:sig.Params[0].End]; got != "path" || sig.Params[0].Start != strings.Index(sig.Label, "(")+1 {
+		t.Errorf("parameter %q at %d of %q", got, sig.Params[0].Start, sig.Label)
+	}
+}
+
 func TestJustUnknownNamesWaitForMissingImports(t *testing.T) {
 	t.Parallel()
 

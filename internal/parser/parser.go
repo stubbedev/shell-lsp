@@ -68,6 +68,7 @@ type Tree struct {
 type Origin interface {
 	SourceLine(offset int) int
 	Synthetic(offset int) bool
+	StandIn(offset int) bool
 }
 
 func Parse(text string, d dialect.Dialect) *Tree {

@@ -97,7 +97,7 @@ func (p *Project) spaceRefusal(s *space, name string) string {
 			return fmt.Sprintf("`%s` is an option declared outside this project, so the name is not this project's to change", name)
 		}
 	}
-	for at := s; at != nil && !at.module; at = at.parent {
+	for at := s; at != nil && !at.moduleBoundary(); at = at.parent {
 		if at.escaped {
 			return fmt.Sprintf("the set that holds `%s` is passed on as a value, so other code may read it by its name", name)
 		}
@@ -278,6 +278,23 @@ func (p *Project) Sources(file, symbol int) []string {
 		return nil
 	}
 	return []string{joinedTo(source, FlakeFile), joinedTo(source, DirectoryEntry)}
+}
+
+func (p *Project) LockedInput(file, symbol int) (string, bool) {
+	p.begin()
+	defer p.mu.Unlock()
+	sym := p.units[file].ix.Symbols[symbol]
+	shared := slices.ContainsFunc(p.memberships[model.Home{File: file, Scope: sym.Scope}], func(m membership) bool {
+		return m.space == p.inputs && m.applies(sym.Name)
+	})
+	if !shared || p.flakeUnit == nil {
+		return "", false
+	}
+	lock, ok := p.flakeLockFile()
+	if !ok {
+		return "", false
+	}
+	return lock.describe(sym.Name)
 }
 
 func (p *Project) flakeLockFile() (flakeLock, bool) {

@@ -24,6 +24,22 @@ func (g *Group) NixClasses() []nix.OptionClass {
 	return project.OptionClasses(g.Self.Path)
 }
 
+func (g *Group) NixMembers(req nix.MemberRequest) []nix.Item {
+	project, ok := g.Module.Links().(*nix.Project)
+	if !ok {
+		return nil
+	}
+	return project.Members(g.Self.Path, req)
+}
+
+func (g *Group) NixModuleSites(start int) []nix.OptionSite {
+	project, ok := g.Module.Links().(*nix.Project)
+	if !ok {
+		return nil
+	}
+	return project.ModuleSites(g.Self.Path, start)
+}
+
 func checksNixOptional(settings filelint.Settings, check string) bool {
 	enabled := func(names []string) bool {
 		return slices.Contains(names, check) || slices.Contains(names, directive.All)

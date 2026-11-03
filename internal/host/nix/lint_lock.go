@@ -31,6 +31,14 @@ func (l *LockFiles) Watch(disk *diskwatch.Watcher) { l.files.Watch(disk) }
 
 func (l *LockFiles) Invalidate(path string) { l.files.Invalidate(path) }
 
+func (l *LockFiles) SourceOf(flakeDir, input string) (string, bool) {
+	lock, found, err := l.files.Load(filepath.Join(flakeDir, LockFileName))
+	if err != nil || !found {
+		return "", false
+	}
+	return lock.sourceOf(input)
+}
+
 func (l *LockFiles) FindingsFor(path, text string, enabled lint.CodeSet) ([]lint.Finding, error) {
 	if filepath.Base(path) != FlakeFile {
 		return nil, nil

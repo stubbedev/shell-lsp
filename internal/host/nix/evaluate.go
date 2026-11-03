@@ -135,7 +135,11 @@ func (p *Project) compute(u *symbolTable, e syntax.Expr) []flowValue {
 			if suffix, literal := syntax.Unparenthesized(e.Right).(*syntax.String); literal {
 				return p.joined(u, e.Left, literalOf(suffix))
 			}
-		case syntax.OpPipeInto, syntax.OpPipeFrom, syntax.OpImplies, syntax.OpOr, syntax.OpAnd, syntax.OpEq, syntax.OpNe, syntax.OpLt, syntax.OpLe, syntax.OpGt, syntax.OpGe, syntax.OpSub, syntax.OpMul, syntax.OpDiv:
+		case syntax.OpPipeInto, syntax.OpPipeFrom:
+			if call, piped := e.Piped(); piped {
+				return p.evalApply(u, call)
+			}
+		case syntax.OpImplies, syntax.OpOr, syntax.OpAnd, syntax.OpEq, syntax.OpNe, syntax.OpLt, syntax.OpLe, syntax.OpGt, syntax.OpGe, syntax.OpSub, syntax.OpMul, syntax.OpDiv:
 		}
 	}
 	return nil
@@ -394,7 +398,7 @@ func (p *Project) evalModuleValue(u *symbolTable, e syntax.Expr) []flowValue {
 
 func (p *Project) evalApply(u *symbolTable, call *syntax.Apply) []flowValue {
 	fn := syntax.Unparenthesized(call.Fn)
-	name := calleeName(fn)
+	name := u.f.libraryName(fn)
 	last := call.Args[len(call.Args)-1]
 	if u.ownFunction(fn) {
 		return p.callResult(u, call, p.eval(u, fn))

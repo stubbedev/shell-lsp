@@ -986,8 +986,24 @@ Beyond that, Nix files get these:
   functions across files.
 - Completion, hover and signature help cover the builtins, keywords, bindings,
   attributes and paths the file can see.
-- A "▶ Run" lens on a flake output runs `nix build`, `nix run`, `nix develop` or
-  `nix flake check`.
+- A "▶" lens on a flake output runs `nix build`, `nix run` or `nix flake check`. A
+  dev shell needs a terminal: a client with the experimental capability
+  `shellLsp.runsInTerminal`, such as the VS Code extension, gets a "▶ nix develop"
+  lens whose client-side command `shellLsp.runInTerminal` receives `{name, argv, cwd}`;
+  any other client gets "▶ Build dev shell", which proves the shell builds with
+  `nix develop --command true`.
+- Without evaluating anything, `lib.x` is read from the source of the locked
+  nixpkgs: hover shows its documentation, definition goes to it and completion
+  lists the library. Names read through `with` go to that `with`, and references
+  list that name through it. `config.x.` and option keys complete from every file
+  of the project, and `inputs.` from the flake.
+- With `nix.evaluate`, definition follows `pkgs.x` to `meta.position` and an option
+  to its declaration, fetching the file first when it is not on disk, and option
+  completion finds the class of a module passed through a `deferredModule` option.
+  Nix evaluation requires Nix 2.24 or newer, Lix 2.95 or newer, or Determinate Nix
+  based on Nix 2.24 or newer.
+- Hover on a flake input shows its locked revision and date, and the code action
+  "Update input x" runs `nix flake update x`.
 - The refactorings are extract to a `let` binding, inline a `let` binding, spell
   `x = x;` as `inherit x;`, and nest or flatten an attribute path.
 - Each finding offers "Ignore here" and "Ignore in this file" fixes, a malformed

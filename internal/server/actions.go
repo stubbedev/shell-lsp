@@ -80,6 +80,10 @@ func (s *Server) handleCodeAction(ctx context.Context, docs *docstore.View, acti
 				out = append(out, fix)
 				continue
 			}
+			if fix.Command != nil {
+				out = append(out, *fix.Command)
+				continue
+			}
 			arg, err := json.Marshal(fix.Edit)
 			if err != nil {
 				return nil, err
@@ -144,7 +148,13 @@ func (s *Server) hostFixAllEdits(snap *snapshot, h hostnav.Host) ([]textedit.Edi
 	}
 	docker, _ := hostnav.HadolintOf(snap.File, s.hadolintConfig(snap.Path, snap.settings))
 	native := lint.FindingsSafeEdits(docker.Host(s.nativeFindings(h, snap.settings, docker)))
-	return textedit.NonOverlapping([][]textedit.Edit{shell, native}), true
+	groups := [][]textedit.Edit{shell, native}
+	if findings, wrapped := s.nixProvenFindings(snap.File); wrapped != nil {
+		if proven, written := wrapped.Doc.SourceEdits(lint.FindingsSafeEdits(findings)); written {
+			groups = append(groups, proven)
+		}
+	}
+	return textedit.NonOverlapping(groups), true
 }
 
 func expressible(snap *snapshot, sources func() actionSources, a actions.Action) bool {

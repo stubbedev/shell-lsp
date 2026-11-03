@@ -253,3 +253,19 @@ func (s onceSource) LoadAll(paths []string) []*model.Index {
 	}
 	return out
 }
+
+func TestALockedInputDescribesItsRevisionAndDate(t *testing.T) {
+	t.Parallel()
+
+	lock, ok := parseFlakeLock([]byte(`{"nodes": {"a": {"locked": {"narHash": "sha256-VVTPf+Hyd5ebpjBMHmrLMSBIeW6ls48Bqtosj7CNKLA=", "rev": "0123456789abcdef0123", "lastModified": 86400}}, "root": {"inputs": {"a": "a"}}}, "root": "root", "version": 7}`))
+	if !ok {
+		t.Fatal("the lock does not parse")
+	}
+	want := "Locked at `0123456789ab` from 1970-01-02 in `" + lockedStore + "`"
+	if got, found := lock.describe("a"); !found || got != want {
+		t.Errorf("describe = %q, %v, want %q", got, found, want)
+	}
+	if got, found := lock.describe("absent"); found {
+		t.Errorf("an input that is not locked = %q", got)
+	}
+}

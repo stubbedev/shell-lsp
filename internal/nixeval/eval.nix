@@ -246,7 +246,9 @@ let
     canonical: entry:
     entry
     // {
-      declarations = map (declaration: declaration // { file = canonical declaration.file; }) entry.declarations;
+      declarations = map (
+        declaration: declaration // { file = canonical declaration.file; }
+      ) entry.declarations;
     };
 
   optionsReport =

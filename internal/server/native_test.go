@@ -1180,3 +1180,23 @@ func TestNixDirectivesReachDiagnostics(t *testing.T) {
 		t.Errorf("under the strict profile = %q", got)
 	}
 }
+
+func TestNixFindingOffersIgnoringItInTheWorkspace(t *testing.T) {
+	t.Parallel()
+
+	const name = "default.nix"
+	files := map[string]string{name: "let unused = 1; in 2\n"}
+	caps := `"capabilities": {"textDocument": {"diagnostic": {}, "codeAction": {"codeActionLiteralSupport": {"codeActionKind": {"valueSet": ["quickfix"]}}}}, "workspace": {"workspaceEdit": {"documentChanges": true, "resourceOperations": ["create"]}}}`
+	p := openNativeProject(t, caps, files, name)
+	r := p.at(name, "unused", 0).Range
+	params := fmt.Sprintf(`{"textDocument": {"uri": %q}, "range": {"start": {"line": %d, "character": %d}, "end": {"line": %d, "character": %d}}, "context": {"diagnostics": []}}`, p.uri(name), r.Start.Line, r.Start.Character, r.End.Line, r.End.Character)
+	for _, action := range decodeResult[[]lsp.CodeAction](t, p.c.call("textDocument/codeAction", params)) {
+		if action.Title == "Ignore SL8005 in this workspace" {
+			if action.Edit == nil {
+				t.Errorf("the action has no edit: %+v", action)
+			}
+			return
+		}
+	}
+	t.Error("no action ignores the finding in the workspace")
+}

@@ -143,7 +143,7 @@ func heredocProgram(tree *parser.Tree, stmt *syntax.Stmt, standIn string) (strin
 			continue
 		}
 		lineStart = text[i] == '\n'
-		if strings.HasPrefix(text[i:], dynamicText) && !nameByteAt(text, i+len(dynamicText)) {
+		if strings.HasPrefix(text[i:], dynamicText) && !nameByteAt(text, i+len(dynamicText)) && tree.StandIn(body.Start+i) {
 			d.hole()
 			i++
 			continue

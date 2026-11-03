@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/host/model"
+	"github.com/stubbedev/shell-lsp/internal/host/nix"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/navigation"
 	"github.com/stubbedev/shell-lsp/internal/parser"
@@ -77,6 +78,9 @@ func (g *Group) definitions(sym Symbol) []Location {
 	if sym.link != nil {
 		return g.linkDefinitions(sym)
 	}
+	if sym.lexical != nil {
+		return sym.lexical.origins
+	}
 	if len(sym.locals) > 0 {
 		out := make([]Location, len(sym.locals))
 		for i, o := range sym.locals {
@@ -95,6 +99,8 @@ func (g *Group) definitions(sym Symbol) []Location {
 	declarations := g.Declarations(sym)
 	if slices.ContainsFunc(declarations, func(d Occurrence) bool { return d.kind != model.KindParameter }) {
 		declarations = slices.DeleteFunc(declarations, func(d Occurrence) bool { return d.kind == model.KindParameter })
+	} else if len(declarations) > 1 {
+		declarations = g.nearestParameter(declarations)
 	}
 	if sym.id.module != nil && sym.id.module.Links() != nil {
 		declarations = merge(declarations)
@@ -104,6 +110,14 @@ func (g *Group) definitions(sym Symbol) []Location {
 		out = append(out, Location{File: d.File, Span: d.Span})
 	}
 	return append(out, g.sources(sym)...)
+}
+
+func (g *Group) nearestParameter(formals []Occurrence) []Occurrence {
+	own := slices.DeleteFunc(slices.Clone(formals), func(d Occurrence) bool { return d.File.Path != g.Self.Path })
+	if len(own) > 0 {
+		return own[:1]
+	}
+	return formals[:1]
 }
 
 func (g *Group) sources(sym Symbol) []Location {
@@ -145,6 +159,9 @@ func (g *Group) ShellDefinition(sym Symbol) []Location { return g.definitions(sy
 
 func References(g *Group, sym Symbol, includeDeclaration bool) []Occurrence {
 	occs := g.Occurrences(sym)
+	if sym.binding != nil {
+		occs = merge(slices.Concat(occs, g.Occurrences(*sym.binding)))
+	}
 	if includeDeclaration {
 		return occs
 	}
@@ -152,7 +169,7 @@ func References(g *Group, sym Symbol, includeDeclaration bool) []Occurrence {
 }
 
 func (g *Group) Highlights(sym Symbol) []Occurrence {
-	return slices.DeleteFunc(g.Occurrences(sym), func(o Occurrence) bool { return o.File.Path != g.Self.Path })
+	return slices.DeleteFunc(References(g, sym, true), func(o Occurrence) bool { return o.File.Path != g.Self.Path })
 }
 
 func (g *Group) PrepareRename(sym Symbol) error {
@@ -164,6 +181,9 @@ func (g *Group) PrepareRename(sym Symbol) error {
 	}
 	if !sym.Defined() {
 		return fmt.Errorf("%w: %s `%s` is built in", navigation.ErrNotRenamable, sym.Kind, sym.Name)
+	}
+	if sym.lexical != nil {
+		return fmt.Errorf("%w: `%s` %s", navigation.ErrNotRenamable, sym.Name, sym.lexical.source)
 	}
 	if sym.foreign {
 		return fmt.Errorf("%w: `%s` is the name of a program, not a binding of this file", navigation.ErrNotRenamable, sym.Name)
@@ -271,6 +291,9 @@ func (g *Group) Describe(sym Symbol) Hover {
 	if sym.link != nil {
 		return g.describeLink(sym)
 	}
+	if sym.lexical != nil {
+		return Hover{Markdown: "`" + sym.Name + "` " + sym.lexical.source, Span: sym.Span}
+	}
 	fence := g.Language.Fence()
 	if b := sym.Builtin; b != nil {
 		md := "```" + fence + "\n" + b.Signature + "\n```\n\n" + b.Doc
@@ -296,6 +319,11 @@ func (g *Group) Describe(sym Symbol) Hover {
 		if links := t.Module.Links(); links != nil {
 			if script, ok := links.Script(t.File, t.Symbol); ok && script.Head != "" {
 				md += "\n\n```" + script.Fence + "\n" + script.Head + "\n```"
+			}
+		}
+		if project, nixLinks := t.Module.Links().(*nix.Project); nixLinks {
+			if locked, ok := project.LockedInput(t.File, t.Symbol); ok {
+				md += "\n\n" + locked
 			}
 		}
 		parts = append(parts, md)

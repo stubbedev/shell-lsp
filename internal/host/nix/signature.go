@@ -25,8 +25,8 @@ type callSite struct {
 	depth int
 }
 
-func SignatureAt(text string, offset int) (Signature, bool) {
-	c, ok := locate(text, offset, NoFiles)
+func SignatureAt(text string, offset int, files Files) (Signature, bool) {
+	c, ok := locate(text, offset, files)
 	if !ok {
 		return Signature{}, false
 	}
@@ -35,6 +35,9 @@ func SignatureAt(text string, offset int) (Signature, bool) {
 		return Signature{}, false
 	}
 	head := c.calleeLabel(site.apply.Fn)
+	if sig, handled := c.importedCall(head, site); handled {
+		return sig, true
+	}
 	for _, callee := range c.eval(site.apply.Fn) {
 		switch callee := callee.(type) {
 		case flowBuiltin:
@@ -45,6 +48,23 @@ func SignatureAt(text string, offset int) (Signature, bool) {
 			return builtinCall(head, b, site.arg)
 		case flowLambda:
 			return c.lambdaCall(head, callee, site)
+		}
+	}
+	return Signature{}, false
+}
+
+func (c *cursor) importedCall(head string, site callSite) (Signature, bool) {
+	p, u := c.linked()
+	fn := syntax.Unparenthesized(site.apply.Fn)
+	name := u.f.libraryName(fn)
+	if site.arg == 0 || name != callPackageName && (name != importName || !u.builtinImport(fn)) {
+		return Signature{}, false
+	}
+	span := syntax.Unparenthesized(site.apply.Args[0]).Span()
+	for _, v := range p.importValue(u, site.apply.Args[0]) {
+		if callee, isLambda := v.(flowLambda); isLambda {
+			shifted := callSite{apply: &syntax.Apply{Fn: site.apply.Fn, Args: site.apply.Args[1:]}, arg: site.arg - 1, depth: site.depth}
+			return c.lambdaCall(head+" "+c.clean(c.tree.Text[span.Start:span.End]), callee, shifted)
 		}
 	}
 	return Signature{}, false

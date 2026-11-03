@@ -1,6 +1,8 @@
 package nix
 
 import (
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -37,6 +39,8 @@ func (f *fakeEvaluated) NixpkgsChildren(path []string, prefix string) []string {
 func (f *fakeEvaluated) NixpkgsPackage(path []string) (*nixeval.Package, bool) {
 	return &nixeval.Package{Name: "hello-2.0", Version: "2.0", Description: "Says hello.", Declaration: nixeval.Declaration{File: "/pkgs/" + strings.Join(path, "/") + ".nix", Line: 3}}, true
 }
+
+func (f *fakeEvaluated) ModuleSites(int) []OptionSite { return nil }
 
 func newFakeEvaluated() *fakeEvaluated { return &fakeEvaluated{roots: map[string][]string{}} }
 
@@ -208,5 +212,21 @@ func TestOptionMarkdownFencesValuesThatDoNotFitInline(t *testing.T) {
 	got := optionMarkdown(SourcedOption{Option: nixeval.Option{Path: []string{"a"}, Default: "[\n  1\n]"}})
 	if !strings.Contains(got, "Default:\n\n```nix\n[\n  1\n]\n```") {
 		t.Errorf("optionMarkdown = %q", got)
+	}
+}
+
+func TestADeclarationNotOnDiskSaysGoToDefinitionFetchesIt(t *testing.T) {
+	t.Parallel()
+
+	missing := declaredIn(nixeval.Declaration{File: "/nix/store/absent-source/a.nix", Line: 3})
+	if !strings.Contains(missing, "/nix/store/absent-source/a.nix:3") || !strings.Contains(missing, "go to definition fetches it") {
+		t.Errorf("declaredIn = %q", missing)
+	}
+	present := filepath.Join(t.TempDir(), "a.nix")
+	if err := os.WriteFile(present, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := declaredIn(nixeval.Declaration{File: present}); strings.Contains(got, "fetches") {
+		t.Errorf("a file on disk: %q", got)
 	}
 }

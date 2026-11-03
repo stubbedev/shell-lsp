@@ -45,7 +45,7 @@ func TestSignatureAtCalls(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			text, at := marked(t, tt.src)
-			got, ok := SignatureAt(text, at)
+			got, ok := SignatureAt(text, at, NoFiles)
 			if !ok {
 				t.Fatalf("%q has no signature", tt.src)
 			}
@@ -77,7 +77,7 @@ func TestSignatureWhereThereIsNone(t *testing.T) {
 		"callPackage ./y.nix { | }",
 	} {
 		text, at := marked(t, src)
-		if got, ok := SignatureAt(text, at); ok {
+		if got, ok := SignatureAt(text, at, NoFiles); ok {
 			t.Errorf("%q has the signature %+v", src, got)
 		}
 	}

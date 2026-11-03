@@ -3,6 +3,7 @@ package nix
 import (
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/host/nix/builtins"
 	"github.com/stubbedev/shell-lsp/internal/host/nix/scope"
@@ -35,6 +36,74 @@ func (d *Document) Hover(offset int, known Evaluated) (Hover, bool) {
 }
 
 func (a Analysis) Document() *Document { return &Document{tree: a.tree, table: a.Scope} }
+
+type LexicalName struct {
+	Name    string
+	Span    syntax.Span
+	Uses    []syntax.Span
+	Origins []syntax.Span
+	Source  string
+}
+
+func (d *Document) LexicalAt(offset int) (LexicalName, bool) {
+	id := d.identAt(offset)
+	if id == nil {
+		return LexicalName{}, false
+	}
+	ref, ok := d.table.Of(id)
+	if !ok || (ref.Kind != scope.Dynamic && ref.Kind != scope.Global) {
+		return LexicalName{}, false
+	}
+	found := LexicalName{Name: id.Name, Span: id.Span(), Source: "is built into Nix"}
+	if ref.Kind == scope.Dynamic {
+		found.Source = "is not bound in this file, so it comes from " + d.withSources(ref.With)
+		for _, with := range d.table.Withs(ref.With) {
+			at := with.Span().Start
+			found.Origins = append(found.Origins, syntax.Span{Start: at, End: at + len("with")})
+		}
+	}
+	for _, root := range slices.Concat([]syntax.Expr{d.tree.Root}, d.tree.Stray) {
+		syntax.Inspect(root, func(n syntax.Node) bool {
+			use, isIdent := n.(*syntax.Ident)
+			if !isIdent || use.Name != id.Name {
+				return true
+			}
+			other, known := d.table.Of(use)
+			if known && other.Kind == ref.Kind && other.With == ref.With {
+				found.Uses = append(found.Uses, use.Span())
+			}
+			return true
+		})
+	}
+	return found, true
+}
+
+func (d *Document) identAt(offset int) *syntax.Ident {
+	var out *syntax.Ident
+	for _, root := range slices.Concat([]syntax.Expr{d.tree.Root}, d.tree.Stray) {
+		syntax.Inspect(root, func(n syntax.Node) bool {
+			s := n.Span()
+			if out != nil || offset < s.Start || offset > s.End {
+				return false
+			}
+			if id, isIdent := n.(*syntax.Ident); isIdent {
+				out = id
+			}
+			return out == nil
+		})
+	}
+	return out
+}
+
+func (d *Document) withSources(innermost *syntax.With) string {
+	withs := d.table.Withs(innermost)
+	names := make([]string, len(withs))
+	for i, with := range withs {
+		s := with.Scope.Span()
+		names[i] = "`with " + d.tree.Text[s.Start:s.End] + "`"
+	}
+	return strings.Join(names, " or ")
+}
 
 func (d *Document) Syntax() (*syntax.File, *scope.Table) { return d.tree, d.table }
 

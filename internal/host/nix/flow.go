@@ -173,7 +173,7 @@ func (b *symbolTable) openKeys(arg syntax.Expr, call *syntax.Apply, at int) {
 
 func (b *symbolTable) classify(call *syntax.Apply) {
 	fn := syntax.Unparenthesized(call.Fn)
-	name := calleeName(fn)
+	name := b.f.libraryName(fn)
 	switch {
 	case name == importName && b.builtinImport(fn):
 		b.importing(callImport, call, 0)
@@ -252,14 +252,11 @@ func (b *symbolTable) localCall(fn syntax.Expr, call *syntax.Apply) {
 }
 
 func (b *symbolTable) importedDef(d *scope.Def) bool {
-	if len(d.Bindings) != 1 {
+	bound, ok := singleValue(d)
+	if !ok {
 		return false
 	}
-	a, assigned := d.Bindings[0].(*syntax.Assign)
-	if !assigned || len(a.Path) != 1 {
-		return false
-	}
-	value, applied := syntax.Unparenthesized(a.Value).(*syntax.Apply)
+	value, applied := syntax.Unparenthesized(bound).(*syntax.Apply)
 	return applied && calleeName(syntax.Unparenthesized(value.Fn)) == importName
 }
 
@@ -280,14 +277,14 @@ func (b *symbolTable) markTrees(args []syntax.Expr) {
 
 func (b *symbolTable) staticPath(id *syntax.Ident) *syntax.Path {
 	ref, ok := b.f.table.Of(id)
-	if !ok || ref.Kind != scope.Definition || len(ref.Def.Bindings) != 1 {
+	if !ok || ref.Kind != scope.Definition {
 		return nil
 	}
-	a, assigned := ref.Def.Bindings[0].(*syntax.Assign)
-	if !assigned || len(a.Path) != 1 {
+	value, bound := singleValue(ref.Def)
+	if !bound {
 		return nil
 	}
-	p, _ := syntax.Unparenthesized(a.Value).(*syntax.Path)
+	p, _ := syntax.Unparenthesized(value).(*syntax.Path)
 	return p
 }
 

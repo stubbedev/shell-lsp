@@ -8,6 +8,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 const (
@@ -27,8 +28,10 @@ type flakeLock struct {
 type lockNode struct {
 	Inputs map[string]json.RawMessage `json:"inputs"`
 	Locked struct {
-		NarHash string `json:"narHash"`
-		Dir     string `json:"dir"`
+		NarHash      string `json:"narHash"`
+		Dir          string `json:"dir"`
+		Rev          string `json:"rev"`
+		LastModified int64  `json:"lastModified"`
 	} `json:"locked"`
 }
 
@@ -83,6 +86,33 @@ func (l flakeLock) sourceOf(input string) (string, bool) {
 		return "", false
 	}
 	return path.Join(store, node.Locked.Dir), true
+}
+
+const lockedRevLength = 12
+
+func (l flakeLock) describe(input string) (string, bool) {
+	reference, listed := l.Nodes[l.Root].Inputs[input]
+	if !listed {
+		return "", false
+	}
+	node, known := l.nodeOf(reference, 0)
+	if !known {
+		return "", false
+	}
+	parts := []string{"Locked"}
+	if rev := node.Locked.Rev; rev != "" {
+		parts = append(parts, "at `"+rev[:min(len(rev), lockedRevLength)]+"`")
+	}
+	if node.Locked.LastModified > 0 {
+		parts = append(parts, "from "+time.Unix(node.Locked.LastModified, 0).UTC().Format(time.DateOnly))
+	}
+	if source, stored := l.sourceOf(input); stored {
+		parts = append(parts, "in `"+source+"`")
+	}
+	if len(parts) == 1 {
+		return "", false
+	}
+	return strings.Join(parts, " "), true
 }
 
 func storePath(narHash string) (string, bool) {

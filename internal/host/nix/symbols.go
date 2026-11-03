@@ -294,6 +294,10 @@ func (b *symbolTable) expr(root syntax.Node, parent int) {
 			b.reads = append(b.reads, n)
 		case *syntax.Apply:
 			b.calls = append(b.calls, n)
+		case *syntax.Binary:
+			if call, piped := n.Piped(); piped {
+				b.calls = append(b.calls, call)
+			}
 		case *syntax.Path:
 			b.paths = append(b.paths, n)
 		}

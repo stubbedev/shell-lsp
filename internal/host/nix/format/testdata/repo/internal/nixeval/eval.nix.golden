@@ -196,13 +196,68 @@ let
           [ ]
       ) names;
 
+  treesOf =
+    flake: tree:
+    let
+      source = builtins.tryEval (builtins.unsafeDiscardStringContext flake.sourceInfo.outPath);
+    in
+    (
+      if tree ? path && source.success then
+        [
+          {
+            name = baseNameOf source.value;
+            value = tree.path;
+          }
+        ]
+      else
+        [ ]
+    )
+    ++ builtins.concatMap (name: treesOf flake.inputs.${name} tree.inputs.${name}) (
+      builtins.attrNames (tree.inputs or { })
+    );
+
+  canonicalFile =
+    trees: flake:
+    let
+      known = builtins.listToAttrs (treesOf flake (builtins.fromJSON trees));
+      storePrefix = builtins.storeDir + "/";
+      skip = builtins.stringLength storePrefix;
+    in
+    file:
+    let
+      parts = builtins.match "([^/]+)(/.*)?" (builtins.substring skip (builtins.stringLength file) file);
+      tree = known.${builtins.elemAt parts 0} or null;
+      rest = builtins.elemAt parts 1;
+    in
+    if
+      trees == ""
+      || !builtins.isString file
+      || builtins.substring 0 skip file != storePrefix
+      || parts == null
+      || tree == null
+    then
+      file
+    else if rest == null then
+      tree
+    else
+      tree + rest;
+
+  canonicalDeclarations =
+    canonical: entry:
+    entry
+    // {
+      declarations = map (
+        declaration: declaration // { file = canonical declaration.file; }
+      ) entry.declarations;
+    };
+
   optionsReport =
-    rendering: tree:
+    rendering: canonical: tree:
     let
       entries = builtins.partition (entry: entry ? truncated) (walk rendering "top" 0 [ ] tree);
     in
     {
-      options = entries.wrong;
+      options = map (canonicalDeclarations canonical) entries.wrong;
       truncated = map (entry: entry.truncated) entries.right;
     };
 
@@ -251,13 +306,13 @@ let
     builtins.foldl' (set: name: if builtins.isAttrs set then set.${name} or null else null) root path;
 
   packagesOf =
+    flake:
     {
-      ref,
       input,
       system,
       ...
     }:
-    (builtins.getFlake ref).inputs.${input}.legacyPackages.${system};
+    flake.inputs.${input}.legacyPackages.${system};
 in
 {
   sources =
@@ -274,36 +329,47 @@ in
   options =
     {
       ref,
+      trees,
       kind,
       name,
       rendering,
     }:
-    optionsReport rendering (optionTrees (builtins.getFlake ref) name).${kind};
+    let
+      flake = builtins.getFlake ref;
+    in
+    optionsReport rendering (canonicalFile trees flake) (optionTrees flake name).${kind};
 
   base =
     {
       ref,
+      trees,
       input,
       system,
       rendering,
     }:
-    optionsReport rendering
-      ((builtins.getFlake ref).inputs.${input}.lib.nixosSystem {
+    let
+      flake = builtins.getFlake ref;
+    in
+    optionsReport rendering (canonicalFile trees flake)
+      (flake.inputs.${input}.lib.nixosSystem {
         inherit system;
         modules = [ ];
       }).options;
 
+  inputRef = { locked }: builtins.flakeRefToString (builtins.fromJSON locked);
+
   attrs =
     args:
     let
-      value = attrAt (packagesOf args) args.path;
+      value = attrAt (packagesOf (builtins.getFlake args.ref) args) args.path;
     in
     if builtins.isAttrs value then builtins.attrNames value else [ ];
 
   package =
     args:
     let
-      value = builtins.tryEval (attrAt (packagesOf args) args.path);
+      flake = builtins.getFlake args.ref;
+      value = builtins.tryEval (attrAt (packagesOf flake args) args.path);
       isDerivation =
         value.success
         && builtins.isAttrs value.value
@@ -316,6 +382,6 @@ in
         name = stringOrNull (value.value.name or null);
         version = stringOrNull (value.value.version or null);
         description = stringOrNull (value.value.meta.description or null);
-        position = stringOrNull (value.value.meta.position or null);
+        position = canonicalFile args.trees flake (stringOrNull (value.value.meta.position or null));
       };
 }

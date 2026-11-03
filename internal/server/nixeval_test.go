@@ -42,6 +42,8 @@ type fakeEvaluator struct {
 	stale    *nixeval.Stale
 	warmed   []string
 	closed   int
+	realise  error
+	realised []string
 }
 
 func (f *fakeEvaluator) Warm(dir string) *nixeval.Refresh {
@@ -88,6 +90,13 @@ func (f *fakeEvaluator) NixpkgsAttrs(_ context.Context, _ string, _ []string, pr
 
 func (f *fakeEvaluator) NixpkgsPackage(_ context.Context, _ string, path []string) (nixeval.Answer[*nixeval.Package], error) {
 	return fakeAnswer(f, f.packages[strings.Join(path, ".")])
+}
+
+func (f *fakeEvaluator) RealiseFile(_ context.Context, _, file string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.realised = append(f.realised, file)
+	return f.realise
 }
 
 func (f *fakeEvaluator) Close() {
@@ -710,5 +719,62 @@ func TestNixAModuleNamedFlakeIsNotAFlake(t *testing.T) {
 	_, labels := bare.labels(t, bare.open(t, "a.nix", "{ services.| }"))
 	if slices.Contains(labels, "nginx") || bare.opens.Load() != 0 {
 		t.Errorf("a module named flake.nix alone: labels %q, %d opens", labels, bare.opens.Load())
+	}
+}
+
+func TestNixJumpNeverOpensAMissingFile(t *testing.T) {
+	t.Parallel()
+
+	const file = "/nix/store/missing-source/pkgs/hello.nix"
+	refresh, finish := nixeval.NewRefresh()
+	t.Cleanup(func() { finish(nil) })
+	for _, tt := range []struct {
+		name    string
+		realise error
+		want    int
+		notice  string
+	}{
+		{"on disk", nil, 1, ""},
+		{"still fetching", &nixeval.NotReadyError{Refresh: refresh, Err: context.DeadlineExceeded}, 0, "Still fetching"},
+		{"unavailable", &nixeval.FileUnavailableError{File: file, Err: errors.New("no network")}, 0, "is not on disk"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			fake := &fakeEvaluator{
+				sources:  []nixeval.OptionSource{},
+				packages: map[string]*nixeval.Package{"hello": {Name: "hello-2.12", Declaration: nixeval.Declaration{File: file, Line: 3}}},
+				realise:  tt.realise,
+			}
+			p := openNixEvalProject(t, true, fake, map[string]string{"flake.nix": emptyFlake})
+			params := p.open(t, "x.nix", "{ pkgs, ... }: pkgs.hel|lo")
+			got := decodeResult[[]lsp.Location](t, p.c.call("textDocument/definition", params))
+			if len(got) != tt.want {
+				t.Errorf("definition = %+v, want %d locations", got, tt.want)
+			}
+			if tt.want == 1 && got[0].Range.Start.Line != 2 {
+				t.Errorf("definition = %+v, want line index 2", got)
+			}
+			if tt.notice != "" && !strings.Contains(shownNotices(p), tt.notice) {
+				t.Errorf("notices = %q, want %q", shownNotices(p), tt.notice)
+			}
+			fake.mu.Lock()
+			defer fake.mu.Unlock()
+			if !slices.Contains(fake.realised, file) {
+				t.Errorf("realised = %q, want the declaration", fake.realised)
+			}
+		})
+	}
+}
+
+func TestNixUnsupportedVersionIsOneNoticeAcrossFlakes(t *testing.T) {
+	t.Parallel()
+
+	fake := &fakeEvaluator{sources: []nixeval.OptionSource{}, err: &nixeval.UnsupportedNixError{Reported: "nix 2.18"}}
+	p := openNixEvalProject(t, true, fake, map[string]string{"flake.nix": emptyFlake, "other/flake.nix": emptyFlake})
+	for _, name := range []string{"x.nix", "other/x.nix"} {
+		p.labels(t, p.open(t, name, "{ flake.| }"))
+	}
+	if notices := shownNotices(p); strings.Count(notices, "nix --version reports") != 1 {
+		t.Errorf("notices = %q", notices)
 	}
 }

@@ -242,6 +242,10 @@ func (t *Tree) Synthetic(offset int) bool {
 	return t.origin != nil && t.origin.Synthetic(offset)
 }
 
+func (t *Tree) StandIn(offset int) bool {
+	return t.origin != nil && t.origin.StandIn(offset)
+}
+
 func (t *Tree) WrittenStmts() []*syntax.Stmt {
 	return t.writtenStmts(t.File.Stmts, nil)
 }

@@ -26,6 +26,7 @@ const (
 	SourceFixAll     Kind = "source.fixAll.shellLsp"
 	SourceStrictMode Kind = "source.strictMode"
 	SourceShebang    Kind = "source.shebang"
+	SourceFlakeInput Kind = "source.updateFlakeInput"
 )
 
 type Diagnostic struct {
@@ -223,8 +224,8 @@ func quickFixes(in Input, d Diagnostic) []Action {
 	if edit, ok := disableForFile(in.Tree, d.Code); ok {
 		out = append(out, Action{Title: fmt.Sprintf("Ignore %s in this file", d.Code), Kind: QuickFix, Diagnostics: []int{d.Index}, Edits: []textedit.Edit{edit}})
 	}
-	if edit, ok := disableForWorkspace(in.Settings, d.Code); ok {
-		out = append(out, Action{Title: fmt.Sprintf("Ignore %s in this workspace", d.Code), Kind: QuickFix, Diagnostics: []int{d.Index}, Settings: &edit})
+	if edit, ok := DisableForWorkspace(in.Settings, d.Code); ok {
+		out = append(out, Action{Title: WorkspaceDisableTitle(d.Code), Kind: QuickFix, Diagnostics: []int{d.Index}, Settings: &edit})
 	}
 	return out
 }
@@ -249,7 +250,11 @@ func FixAllOf(code lint.Code, all []Diagnostic) (Change, bool) {
 	return Change{Title: title, Edits: lint.MergedEdits(chosen)}, true
 }
 
-func disableForWorkspace(settings func() (SettingsFile, bool), code lint.Code) (SettingsEdit, bool) {
+func WorkspaceDisableTitle(code lint.Code) string {
+	return fmt.Sprintf("Ignore %s in this workspace", code)
+}
+
+func DisableForWorkspace(settings func() (SettingsFile, bool), code lint.Code) (SettingsEdit, bool) {
 	if settings == nil {
 		return SettingsEdit{}, false
 	}

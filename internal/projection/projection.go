@@ -207,6 +207,11 @@ func (m *Map) Synthetic(offset ProjOffset) bool {
 	return i < len(m.spans) && m.spans[i].hostLen == 0
 }
 
+func (m *Map) StandIn(offset ProjOffset) bool {
+	i := sort.Search(len(m.spans), func(i int) bool { return m.spans[i].projEnd() > offset })
+	return i < len(m.spans) && m.spans[i].kind == standIn
+}
+
 func (m *Map) OnlyStandIn(start, end ProjOffset) bool {
 	found := false
 	for i := sort.Search(len(m.spans), func(i int) bool { return m.spans[i].projEnd() > start }); i < len(m.spans) && m.spans[i].proj < end; i++ {

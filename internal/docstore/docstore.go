@@ -188,6 +188,10 @@ func (d *Document) Sourced(offset int) bool {
 	return d.mapping != nil && d.mapping.Sourced(projection.ProjOffset(offset))
 }
 
+func (d *Document) StandIn(offset int) bool {
+	return d.mapping != nil && d.mapping.StandIn(projection.ProjOffset(offset))
+}
+
 func (d *Document) OnlyStandIn(start, end int) bool {
 	return d.mapping != nil && d.mapping.OnlyStandIn(projection.ProjOffset(start), projection.ProjOffset(end))
 }
