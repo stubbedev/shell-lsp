@@ -87,6 +87,21 @@ func TestFmtFormatsStandardInput(t *testing.T) {
 	}
 }
 
+func TestFmtNamesStdinToChooseItsLanguage(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if got := run(t, dir, "{a=1;}\n", "fmt", "--filename", "x.nix"); got.stdout != "{ a = 1; }\n" || got.status != statusOK {
+		t.Errorf("fmt --filename x.nix = %+v", got)
+	}
+	if got := run(t, dir, "all:\n\techo hi\n", "fmt", "--filename", "Makefile"); got.stdout != "all:\n\techo hi\n" || got.status != statusOK {
+		t.Errorf("fmt --filename Makefile = %+v", got)
+	}
+	if got := run(t, dir, "FROM x\n", "fmt", "--filename", "Dockerfile"); got.status != statusFailed || !strings.Contains(got.stderr, "formats only") {
+		t.Errorf("fmt --filename Dockerfile = %+v", got)
+	}
+}
+
 func TestFmtWriteReplacesFilesAtomically(t *testing.T) {
 	t.Parallel()
 

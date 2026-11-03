@@ -37,7 +37,10 @@ too, configured by the nearest `.hadolint.yaml` ([hadolint.md](hadolint.md)). `.
 the `.gitignore` files from the repository's top down, and
 `.git/info/exclude`. A file named on the command line is linted even when it
 is ignored. A `-` reads the script from
-standard input. A file named more than once, directly or through a directory,
+standard input, as shell unless `--filename=NAME` names it: the language, the
+dialect and the settings then come from that path, as they would for a file
+there, whether or not one exists, so `shell-lsp check --filename=pkg.nix -` lints
+a Nix buffer and reports findings under that name. `fmt` takes the same flag. A file named more than once, directly or through a directory,
 is linted once.
 Files are linted in parallel, and the report is ordered by path, then by
 position, so it is the same on every run.

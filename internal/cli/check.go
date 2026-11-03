@@ -19,6 +19,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/editorconfig"
 	"github.com/stubbedev/shell-lsp/internal/filelint"
+	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/hadolint"
 	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/host/nix"
@@ -125,6 +126,8 @@ type checker struct {
 	resolved  map[string]error
 	warned    sync.Map
 	stdin     func() ([]byte, error)
+	named     func() *workspace.File
+	namedPath string
 	all       []target
 	graphMu   sync.Mutex
 	graphs    map[host.Language]*hostnav.Graph
@@ -145,8 +148,29 @@ func newChecker(env Env, opts checkOptions) *checker {
 		stdin:    sync.OnceValues(func() ([]byte, error) { return io.ReadAll(env.Stdin) }),
 		resolved: map[string]error{},
 	}
-	c.ws = workspace.New(func(string) (*workspace.File, bool) { return nil, false }, c.resolve)
+	c.ws = workspace.New(c.namedStdin, c.resolve)
+	if opts.filename != "" {
+		c.namedPath = absolute(env.Dir, opts.filename)
+		c.named = sync.OnceValue(c.parseNamedStdin)
+	}
 	return c
+}
+
+func (c *checker) namedStdin(uri string) (*workspace.File, bool) {
+	if c.named == nil || uri != fileuri.FromPath(c.namedPath) {
+		return nil, false
+	}
+	file := c.named()
+	return file, file != nil
+}
+
+func (c *checker) parseNamedStdin() *workspace.File {
+	raw, err := c.stdin()
+	if err != nil {
+		return nil
+	}
+	doc := docstore.NewDocument(fileuri.FromPath(c.namedPath), "", 0, string(raw))
+	return workspace.Parse(c.namedPath, doc, nil, func(in dialect.Input) dialect.Detection { return c.resolve(c.namedPath, in) })
 }
 
 func (c *checker) color() bool {
@@ -282,11 +306,18 @@ func (c *checker) targets() ([]target, []string) {
 			continue
 		}
 		if len(out) == 0 {
-			out = append(out, target{name: stdinName})
+			out = append(out, c.stdinTarget())
 		}
 	}
 	files, failures := collectTargets(c.env.Dir, operands, func(string) bool { return true })
 	return append(out, files...), failures
+}
+
+func (c *checker) stdinTarget() target {
+	if c.opts.filename == "" {
+		return target{name: stdinName}
+	}
+	return target{name: c.opts.filename, path: c.namedPath}
 }
 
 func (c *checker) display(path string) string {
@@ -423,6 +454,11 @@ func (c *checker) parse(t target, s fileSettings) (*workspace.File, error) {
 			return nil, &configError{err}
 		}
 		return file, nil
+	}
+	if t.path == c.namedPath {
+		if _, err := c.stdin(); err != nil {
+			return nil, fmt.Errorf("reading standard input: %w", err)
+		}
 	}
 	file, err := c.ws.Load(t.path)
 	if err != nil {

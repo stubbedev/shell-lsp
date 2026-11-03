@@ -31,6 +31,7 @@ and exit codes. Directories are searched for shell scripts.
   -e CODE1,CODE2..    --exclude=CODE1,CODE2..    Exclude types of warnings
                       --extended-analysis=bool   Perform dataflow analysis (default true)
   -f FORMAT           --format=FORMAT            Output format (%s)
+                      --filename=NAME            Lint standard input ("-") as the file NAME: language, dialect and settings come from that path
                       --list-optional            List checks disabled by default
                       --norc                     Don't look for .shellcheckrc files
                       --rcfile=RCFILE            Prefer the specified configuration file over searching for one
@@ -75,6 +76,7 @@ type rcChoice struct {
 
 type checkOptions struct {
 	format       outputFormat
+	filename     string
 	shell        *dialect.Dialect
 	severity     lint.Severity
 	exclude      lint.CodeSet
@@ -144,6 +146,13 @@ var checkOptionTable = []option[checkOptions]{
 		o.format = outputFormats[i]
 		return nil
 	}},
+	{0, "filename", requiredArg, func(o *checkOptions, v string) error {
+		if v == "" {
+			return badSyntax("--filename needs a name")
+		}
+		o.filename = v
+		return nil
+	}},
 	{0, "list-optional", noArg, func(o *checkOptions, _ string) error { o.listOptional = true; return nil }},
 	{0, "norc", noArg, func(o *checkOptions, _ string) error { o.rc = rcChoice{mode: rcNone}; return nil }},
 	{0, "rcfile", requiredArg, func(o *checkOptions, v string) error {
@@ -204,6 +213,9 @@ func parseCheckArgs(args []string) (checkOptions, error) {
 		return checkOptions{}, err
 	}
 	opts.operands = operands
+	if opts.filename != "" && !slices.Contains(operands, stdinName) {
+		return checkOptions{}, badSyntax("--filename names standard input, so it needs the operand %q", stdinName)
+	}
 	return opts, nil
 }
 

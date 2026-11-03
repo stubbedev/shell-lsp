@@ -33,6 +33,51 @@ func TestCheckLintsMakefileRecipes(t *testing.T) {
 	}
 }
 
+func TestCheckNamesStdinToChooseItsLanguage(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	for _, tt := range []struct {
+		name, text string
+		want       []string
+	}{
+		{"pkg.nix", "let a = 1; in 2\n", []string{"pkg.nix:1:5 SL8005"}},
+		{"sub/Makefile", "all:\n\t@echo $$1\n", []string{"sub/Makefile:2:8 SC2086"}},
+		{"justfile", "a:\n    echo $1\n", []string{"justfile:2:10 SC2086"}},
+		{"Dockerfile", "FROM x\nRUN echo $1\n", []string{"Dockerfile:2:10 SC2086"}},
+		{"plain.sh", "#!/bin/sh\necho $1\n", []string{"plain.sh:2:6 SC2086"}},
+	} {
+		got := run(t, dir, tt.text, "check", "-f", "gcc", "-e", "DL3006", "--filename", tt.name, "-")
+		want := make([]string, len(tt.want))
+		for i, w := range tt.want {
+			want[i] = filepath.FromSlash(w)
+		}
+		if !slices.Equal(findings(t, got.stdout), want) || got.status != checkStatusFindings {
+			t.Errorf("check --filename %s = %d %v, want %v\n%s", tt.name, got.status, findings(t, got.stdout), want, got.stderr)
+		}
+	}
+}
+
+func TestCheckStdinFilenameOverridesTheFileOnDisk(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeFiles(t, dir, map[string]string{"pkg.nix": "let a = 1; in 2\n"})
+	if got := run(t, dir, "1\n", "check", "--filename", "pkg.nix", "-"); got.status != statusOK {
+		t.Errorf("stdin is clean but the check read the disk: %+v", got)
+	}
+}
+
+func TestCheckFilenameNeedsStdin(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeFiles(t, dir, map[string]string{"a.sh": "#!/bin/sh\n"})
+	if got := run(t, dir, "", "check", "--filename", "x.nix", "a.sh"); got.status != checkStatusSyntax || !strings.Contains(got.stderr, "--filename") {
+		t.Errorf("--filename without stdin = %+v", got)
+	}
+}
+
 func TestCheckDiffWritesFixesInMakeSyntax(t *testing.T) {
 	t.Parallel()
 
