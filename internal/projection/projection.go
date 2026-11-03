@@ -24,6 +24,7 @@ const (
 	elided
 	pinned
 	standIn
+	indent
 )
 
 type Encoder func(host string, start, end int, text string) (string, bool)
@@ -56,6 +57,7 @@ type Map struct {
 	shells   []dialect.Detection
 	sourced  []int
 	prepared map[int]*syntax.File
+	standIn  string
 }
 
 func (m *Map) Host() string { return m.host }
@@ -124,6 +126,10 @@ func (b *Builder) Opaque(start, end int, text string) {
 	b.add(opaque, start, end, text)
 }
 
+func (b *Builder) Indent(start, end int) {
+	b.add(indent, start, end, "")
+}
+
 func (b *Builder) add(k kind, start, end int, text string) {
 	if start < b.at || end < start || end > len(b.host) {
 		panic(fmt.Sprintf("projection: span %d-%d is out of order after host offset %d of %d", start, end, b.at, len(b.host)))
@@ -153,7 +159,7 @@ func (b *Builder) Map() *Map {
 	if cap(b.spans) > 2*len(b.spans) {
 		b.spans = slices.Clone(b.spans)
 	}
-	m := &Map{host: b.host, text: b.text.String(), spans: b.spans, encoders: b.encoders, scripts: scripts, shells: shells, sourced: b.sourcedScripts(scripts)}
+	m := &Map{host: b.host, text: b.text.String(), spans: b.spans, encoders: b.encoders, scripts: scripts, shells: shells, sourced: b.sourcedScripts(scripts), standIn: b.standIn}
 	if b.standIn == "" {
 		m.settle(b.placeholders, b.programs)
 	}
@@ -279,8 +285,15 @@ func (m *Map) Offset(host HostOffset) (ProjOffset, bool) {
 }
 
 func (m *Map) Edit(e textedit.Edit) (textedit.Edit, bool) {
+	if m.writesStandIn(e) {
+		return textedit.Edit{}, false
+	}
 	start, end, text := m.trim(e)
 	return m.Replacement(textedit.Edit{Start: start, End: end, NewText: text})
+}
+
+func (m *Map) writesStandIn(e textedit.Edit) bool {
+	return m.standIn != "" && strings.Count(e.NewText, m.standIn) > strings.Count(m.text[e.Start:e.End], m.standIn)
 }
 
 func (m *Map) Replacement(e textedit.Edit) (textedit.Edit, bool) {
@@ -290,8 +303,10 @@ func (m *Map) Replacement(e textedit.Edit) (textedit.Edit, bool) {
 	}
 	first := sort.Search(len(m.spans), func(i int) bool { return m.spans[i].projEnd() > start })
 	var covered []span
-	for _, s := range m.spans[first:] {
+	following := len(m.spans)
+	for i, s := range m.spans[first:] {
 		if s.proj >= end {
+			following = first + i
 			break
 		}
 		if s.projLen == 0 && s.proj == start {
@@ -303,7 +318,7 @@ func (m *Map) Replacement(e textedit.Edit) (textedit.Edit, bool) {
 		return textedit.Edit{}, false
 	}
 	for i, s := range covered {
-		if !s.editable() || s.region != covered[0].region {
+		if !s.editable() && s.kind != indent || s.region != covered[0].region {
 			return textedit.Edit{}, false
 		}
 		if s.kind == escape && (start > s.proj || s.projEnd() > end) {
@@ -321,20 +336,37 @@ func (m *Map) Replacement(e textedit.Edit) (textedit.Edit, bool) {
 	if lastSpan.kind == verbatim {
 		hostEnd = lastSpan.host + HostOffset(end-lastSpan.proj)
 	}
+	if following < len(m.spans) && lastSpan.kind == verbatim && m.spans[following].kind == indent && m.spans[following].proj == end {
+		if own, whole := m.ownIndent(first, firstSpan, start); whole && text == "" {
+			hostStart = own
+		} else {
+			hostEnd = m.spans[following].hostEnd()
+		}
+	}
 	return m.encode(firstSpan.region, hostStart, hostEnd, text)
 }
 
+func (m *Map) ownIndent(first int, s span, start ProjOffset) (HostOffset, bool) {
+	if first == 0 || s.kind != verbatim || s.proj != start || m.spans[first-1].kind != indent {
+		return 0, false
+	}
+	return m.spans[first-1].host, true
+}
+
 func (m *Map) insert(offset ProjOffset, text string) (textedit.Edit, bool) {
-	var at *span
+	var at, past *span
 	for i := sort.Search(len(m.spans), func(i int) bool { return m.spans[i].projEnd() >= offset }); i < len(m.spans); i++ {
 		s := &m.spans[i]
 		if s.proj > offset {
 			break
 		}
+		if s.kind == indent && at != nil && at.hostEnd() == s.host && (!strings.HasSuffix(text, "\n") || m.lineHolds(i+1, at.region)) {
+			past = s
+		}
 		if !s.editable() || (s.kind == escape && offset != s.proj && offset != s.projEnd()) {
 			continue
 		}
-		at = s
+		at, past = s, nil
 		if offset < s.projEnd() {
 			break
 		}
@@ -349,7 +381,14 @@ func (m *Map) insert(offset ProjOffset, text string) (textedit.Edit, bool) {
 	case offset == at.proj:
 		host = at.host
 	}
+	if past != nil {
+		host = past.hostEnd()
+	}
 	return m.encode(at.region, host, host, text)
+}
+
+func (m *Map) lineHolds(i, region int) bool {
+	return i < len(m.spans) && m.spans[i].region == region && (m.spans[i].editable() || m.spans[i].kind == standIn)
 }
 
 func (m *Map) encode(region int, start, end HostOffset, text string) (textedit.Edit, bool) {

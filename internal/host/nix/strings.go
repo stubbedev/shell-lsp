@@ -41,7 +41,7 @@ func (f *file) body(b *projection.Builder, s shellString, opener string, mode bo
 	}
 	lines := lineEnds(str)
 	indent := minIndent(src, lines, i, end)
-	encode := indentedEncoder(strings.Repeat(" ", indent))
+	encode := indentedEncoder(i, end, strings.Repeat(" ", indent))
 	b.Region(encode)
 	b.Opaque(start, i, "")
 	if s.shebang {
@@ -111,10 +111,13 @@ func (f *file) indentedBody(b *projection.Builder, parts []syntax.Part, lines []
 		if stop <= at {
 			continue
 		}
-		skipped := min(leadingSpaces(f.src[at:stop]), indent) + lead
+		stripped := at + min(leadingSpaces(f.src[at:stop]), indent)
+		b.Indent(at, stripped)
+		if lead > 0 {
+			b.Opaque(stripped, stripped+lead, "")
+		}
+		parts = f.decode(b, parts, stripped+lead, stop, mode, encode)
 		lead = 0
-		b.Opaque(at, at+skipped, "")
-		parts = f.decode(b, parts, at+skipped, stop, mode, encode)
 		at = stop
 	}
 }
@@ -415,7 +418,7 @@ func opensAntiquote(host string, start, end int, text string) bool {
 		strings.HasSuffix(text, "$") && strings.HasPrefix(host[end:], "{")
 }
 
-func indentedEncoder(indent string) projection.Encoder {
+func indentedEncoder(body, limit int, indent string) projection.Encoder {
 	return func(host string, start, end int, text string) (string, bool) {
 		quotes := strings.HasPrefix(text, "'") && strings.HasSuffix(host[:start], "'") ||
 			strings.HasSuffix(text, "'") && strings.HasPrefix(host[end:], "'")
@@ -424,8 +427,30 @@ func indentedEncoder(indent string) projection.Encoder {
 		}
 		text = strings.ReplaceAll(text, "''", "'''")
 		text = strings.ReplaceAll(text, "${", "''${")
-		return strings.ReplaceAll(text, "\n", "\n"+indent), true
+		encoded := strings.ReplaceAll(text, "\n", "\n"+indent)
+		if strings.HasSuffix(text, "\n") && strings.TrimLeft(host[end:limit], " ") == "" {
+			encoded = strings.TrimSuffix(encoded, indent)
+		}
+		return encoded, keepsIndent(host, body, limit, start, end, encoded)
 	}
+}
+
+func keepsIndent(host string, body, limit, start, end int, encoded string) bool {
+	lineStart := strings.LastIndexByte(host[:start], '\n') + 1
+	if strings.TrimLeft(host[max(lineStart, body):start], " ") != "" && !strings.Contains(host[start:end], "\n") && !strings.Contains(encoded, "\n") {
+		return true
+	}
+	return leastIndent(host[body:start]+encoded+host[end:limit]) == leastIndent(host[body:limit])
+}
+
+func leastIndent(text string) int {
+	least := -1
+	for line := range strings.SplitSeq(text, "\n") {
+		if n := leadingSpaces(line); n < len(line) && (least < 0 || n < least) {
+			least = n
+		}
+	}
+	return least
 }
 
 var quotedEscapes = strings.NewReplacer(`\`, `\\`, `"`, `\"`, "${", `\${`)

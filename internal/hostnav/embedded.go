@@ -119,14 +119,30 @@ func (t *embeddedText) placed(span parser.Span) parser.Span {
 	return parser.Span{Start: start, End: end}
 }
 
-func (t *embeddedText) findings(findings []lint.Finding) []lint.Finding {
-	out := make([]lint.Finding, 0, len(findings))
-	for _, finding := range findings {
+func embeddedFixes(file *workspace.File, within parser.Span) []Fix {
+	var out []Fix
+	for _, t := range embeddedTexts(file) {
+		out = append(out, t.derivedFixes(within)...)
+	}
+	return out
+}
+
+func (t *embeddedText) derivedFixes(within parser.Span) []Fix {
+	var out []Fix
+	for _, finding := range t.group.Findings() {
 		if t.Via.TouchesStandIn(finding.Span.Start, finding.Span.End) {
 			continue
 		}
-		finding.Span, finding.Fixes = t.placed(finding.Span), nil
-		out = append(out, finding)
+		placed := finding
+		placed.Span, placed.Fixes = t.placed(finding.Span), nil
+		if !touches(placed.Span, within) {
+			continue
+		}
+		for _, fix := range t.group.derivedFixes(finding) {
+			if edits, mapped := t.Via.Edits(fix.Edits); mapped && fix.Create == "" {
+				out = append(out, Fix{Title: fix.Title, Finding: placed, Edits: edits, Preferred: fix.Preferred})
+			}
+		}
 	}
 	return out
 }
@@ -139,7 +155,7 @@ func embeddedFindings(file *workspace.File, known []lint.Finding) []lint.Finding
 		if t.Placed {
 			found = slices.DeleteFunc(found, func(f lint.Finding) bool { return f.Code == missing })
 		}
-		for _, finding := range t.findings(found) {
+		for _, finding := range t.Findings(found) {
 			if !slices.ContainsFunc(known, func(k lint.Finding) bool { return k.Code == finding.Code && k.Span == finding.Span }) {
 				out = append(out, finding)
 			}
@@ -199,7 +215,7 @@ type embeddedDockerfile struct {
 }
 
 func (d embeddedDockerfile) findings() []lint.Finding {
-	return d.text.findings(d.hadolint.Host(d.hadolint.Findings()))
+	return d.text.Findings(d.hadolint.Host(d.hadolint.Findings()))
 }
 
 func (d embeddedDockerfile) holds(offset int) bool {

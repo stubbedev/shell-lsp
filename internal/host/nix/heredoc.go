@@ -150,10 +150,39 @@ func (b *symbolTable) reserveHosted(s shellString) {
 }
 
 func (h *hostedText) placer() func(model.Span) model.Span {
-	return func(s model.Span) model.Span {
-		start, end := h.via.HostSpan(s.Start, s.End)
-		return model.Span{Start: start, End: end}
+	return func(s model.Span) model.Span { return placedSpan(h.via, s) }
+}
+
+func (t HostedText) Findings(found []lint.Finding) []lint.Finding {
+	return placedFindings(t.Via, found)
+}
+
+func placedSpan(via *projection.Map, s model.Span) model.Span {
+	start, end := via.HostSpan(s.Start, s.End)
+	return model.Span{Start: start, End: end}
+}
+
+func placedFindings(via *projection.Map, found []lint.Finding) []lint.Finding {
+	out := make([]lint.Finding, 0, len(found))
+	for _, finding := range found {
+		if via.TouchesStandIn(finding.Span.Start, finding.Span.End) {
+			continue
+		}
+		finding.Span, finding.Fixes = placedSpan(via, finding.Span), placedFixes(via, finding.Fixes)
+		out = append(out, finding)
 	}
+	return out
+}
+
+func placedFixes(via *projection.Map, fixes []lint.Fix) []lint.Fix {
+	var out []lint.Fix
+	for _, fix := range fixes {
+		if edits, mapped := via.Edits(fix.Edits); mapped {
+			fix.Edits = edits
+			out = append(out, fix)
+		}
+	}
+	return out
 }
 
 func (b *symbolTable) embedHosted(found []shellString) {
@@ -165,14 +194,8 @@ func (b *symbolTable) embedHosted(found []shellString) {
 		}
 		added = true
 		place := h.placer()
-		for _, findings := range [][]lint.Finding{h.inner.Index.Findings, h.inner.Findings} {
-			for _, finding := range findings {
-				if !h.via.TouchesStandIn(finding.Span.Start, finding.Span.End) {
-					finding.Span, finding.Fixes = place(finding.Span), nil
-					b.ix.Findings = append(b.ix.Findings, finding)
-				}
-			}
-		}
+		b.ix.Findings = append(b.ix.Findings, placedFindings(h.via, h.inner.Index.Findings)...)
+		b.ix.Findings = append(b.ix.Findings, placedFindings(h.via, h.inner.Findings)...)
 		for _, t := range h.inner.Index.Tokens {
 			if !h.via.TouchesStandIn(t.Span.Start, t.Span.End) {
 				t.Span = place(t.Span)

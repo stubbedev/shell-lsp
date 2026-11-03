@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"slices"
 	"strconv"
 	"strings"
@@ -157,5 +158,33 @@ func TestEmbeddedProgramHoverInNix(t *testing.T) {
 	got := decodeResult[lsp.Hover](t, c.call("textDocument/hover", `{"textDocument": {"uri": "`+uri+`"}, "position": {"line": 1, "character": `+character+`}}`))
 	if !strings.Contains(got.Contents.Value, "map(f)") {
 		t.Errorf("hover = %+v", got)
+	}
+}
+
+func TestQuickFixesInsideANixStringEditTheHost(t *testing.T) {
+	t.Parallel()
+
+	const (
+		name   = "embedded.nix"
+		source = "{ writeText }:\nwriteText \"x.nix\" ''\n  { pkgs }:\n  pkgz.hello\n''\n"
+	)
+	p := openNativeProject(t, actionCapabilities, map[string]string{name: source}, name)
+	at := p.at(name, "pkgz", 0).Range
+	got := codeActions(t, p.c, fmt.Sprintf(`{"textDocument": {"uri": %q}, "range": {"start": {"line": %d, "character": %d}, "end": {"line": %d, "character": %d}}, "context": {"diagnostics": []}}`, p.uri(name), at.Start.Line, at.Start.Character, at.End.Line, at.End.Character))
+	for title, want := range map[string]string{
+		"Change to `pkgs`":   "{ writeText }:\nwriteText \"x.nix\" ''\n  { pkgs }:\n  pkgs.hello\n''\n",
+		"Add `pkgz` to the ": "{ writeText }:\nwriteText \"x.nix\" ''\n  { pkgs, pkgz }:\n  pkgz.hello\n''\n",
+	} {
+		action, offered := titled(got, title)
+		if !offered || action.Edit == nil {
+			t.Fatalf("no action %q in %+v", title, got)
+		}
+		edits := action.Edit.Changes[p.uri(name)]
+		if len(edits) == 0 && len(action.Edit.DocumentChanges) == 1 {
+			edits = action.Edit.DocumentChanges[0].Edits
+		}
+		if edited := applyLSPEdits(source, edits); edited != want {
+			t.Errorf("%s\n got %q\nwant %q", title, edited, want)
+		}
 	}
 }

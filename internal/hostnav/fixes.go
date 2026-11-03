@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/host/model"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/parser"
@@ -36,35 +37,50 @@ var stubbed = []lint.Code{lint.CodeJustUnknownRecipe, lint.CodeMakePhonyWithoutR
 
 func (g *Group) Fixes(within parser.Span) []Fix {
 	var out []Fix
-	text := g.Self.Doc.Source().Text()
 	for _, f := range g.Findings() {
-		if f.Span.End < within.Start || f.Span.Start > within.End {
+		if !touches(f.Span, within) {
 			continue
 		}
 		for i, fix := range f.Fixes {
 			out = append(out, Fix{Title: fix.Title, Finding: f, Edits: fix.Edits, Preferred: i == 0 && fix.Safety == lint.Safe})
 		}
-		name := text[f.Span.Start:f.Span.End]
-		if kind, ok := unknownNames[f.Code]; ok {
-			if closest, found := similar.Closest(name, slices.Values(g.namesOf(kind, f.Span.Start))); found {
-				out = append(out, Fix{Title: "Change to `" + closest + "`", Finding: f, Edits: []textedit.Edit{{Start: f.Span.Start, End: f.Span.End, NewText: closest}}, Preferred: true})
-			}
+		if g.Language != host.Nix {
+			out = append(out, g.derivedFixes(f)...)
 		}
-		switch {
-		case slices.Contains(stubbed, f.Code) && g.Language.ValidName(unknownNames[f.Code], name):
-			out = append(out, Fix{Title: "Add " + unknownNames[f.Code].String() + " `" + name + "`", Finding: f, Edits: []textedit.Edit{g.appended(name + ":\n")}})
-		case f.Code == lint.CodeJustMissingFile || f.Code == lint.CodeMakeMissingInclude:
-			if path, ok := g.creatable(f.Span); ok {
-				out = append(out, Fix{Title: "Create `" + filepath.Base(path) + "`", Finding: f, Create: path})
-			}
-		case f.Code == lint.CodeMakeNotPhony:
-			start := strings.LastIndexByte(text[:f.Span.Start], '\n') + 1
-			out = append(out, Fix{Title: "Add `" + name + "` to .PHONY", Finding: f, Edits: []textedit.Edit{{Start: start, End: start, NewText: ".PHONY: " + name + "\n"}}, Preferred: true})
-		case f.Code == lint.CodeMakeRecipePrefix && !g.setsRecipePrefix():
-			start := strings.LastIndexByte(text[:f.Span.Start], '\n') + 1
-			end := start + len(text[start:]) - len(strings.TrimLeft(text[start:], " \t"))
-			out = append(out, Fix{Title: "Start the recipe line with a tab", Finding: f, Edits: []textedit.Edit{{Start: start, End: end, NewText: "\t"}}, Preferred: true})
+	}
+	if g.Language == host.Nix {
+		out = append(out, embeddedFixes(g.Self, within)...)
+	}
+	return out
+}
+
+func touches(span, within parser.Span) bool {
+	return span.End >= within.Start && span.Start <= within.End
+}
+
+func (g *Group) derivedFixes(f lint.Finding) []Fix {
+	var out []Fix
+	text := g.Self.Doc.Source().Text()
+	name := text[f.Span.Start:f.Span.End]
+	if kind, ok := unknownNames[f.Code]; ok {
+		if closest, found := similar.Closest(name, slices.Values(g.namesOf(kind, f.Span.Start))); found {
+			out = append(out, Fix{Title: "Change to `" + closest + "`", Finding: f, Edits: []textedit.Edit{{Start: f.Span.Start, End: f.Span.End, NewText: closest}}, Preferred: true})
 		}
+	}
+	switch {
+	case slices.Contains(stubbed, f.Code) && g.Language.ValidName(unknownNames[f.Code], name):
+		out = append(out, Fix{Title: "Add " + unknownNames[f.Code].String() + " `" + name + "`", Finding: f, Edits: []textedit.Edit{g.appended(name + ":\n")}})
+	case f.Code == lint.CodeJustMissingFile || f.Code == lint.CodeMakeMissingInclude:
+		if path, ok := g.creatable(f.Span); ok {
+			out = append(out, Fix{Title: "Create `" + filepath.Base(path) + "`", Finding: f, Create: path})
+		}
+	case f.Code == lint.CodeMakeNotPhony:
+		start := strings.LastIndexByte(text[:f.Span.Start], '\n') + 1
+		out = append(out, Fix{Title: "Add `" + name + "` to .PHONY", Finding: f, Edits: []textedit.Edit{{Start: start, End: start, NewText: ".PHONY: " + name + "\n"}}, Preferred: true})
+	case f.Code == lint.CodeMakeRecipePrefix && !g.setsRecipePrefix():
+		start := strings.LastIndexByte(text[:f.Span.Start], '\n') + 1
+		end := start + len(text[start:]) - len(strings.TrimLeft(text[start:], " \t"))
+		out = append(out, Fix{Title: "Start the recipe line with a tab", Finding: f, Edits: []textedit.Edit{{Start: start, End: end, NewText: "\t"}}, Preferred: true})
 	}
 	return out
 }

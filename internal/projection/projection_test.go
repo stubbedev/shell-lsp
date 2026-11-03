@@ -208,3 +208,70 @@ func TestOnlyASourcedScriptReadsAsSourced(t *testing.T) {
 		}
 	}
 }
+
+func indentedLines(host string, lines ...[2]int) *Map {
+	b := NewBuilder(host)
+	b.StandIn("__hole__")
+	b.Region(func(_ string, _, _ int, text string) (string, bool) {
+		return strings.ReplaceAll(text, "\n", "\n  "), true
+	})
+	for _, line := range lines {
+		b.Indent(line[0], line[0]+2)
+		b.Verbatim(line[0]+2, line[1])
+	}
+	return b.Map()
+}
+
+func TestEditAcrossStrippedIndentation(t *testing.T) {
+	t.Parallel()
+
+	const host = "  a\n  b\n  c\n"
+	m := indentedLines(host, [2]int{0, 4}, [2]int{4, 8}, [2]int{8, 12})
+	if got, want := m.Text(), "a\nb\nc\n"; got != want {
+		t.Fatalf("text = %q, want %q", got, want)
+	}
+	for _, tt := range []struct {
+		name string
+		edit textedit.Edit
+		want string
+	}{
+		{"a whole line goes with its indentation", textedit.Edit{Start: 2, End: 4}, "  a\n  c\n"},
+		{"two whole lines", textedit.Edit{Start: 0, End: 4}, "  c\n"},
+		{"lines joined lose the indentation between them", textedit.Edit{Start: 1, End: 2}, "  ab\n  c\n"},
+		{"a replacement across lines indents what it writes", textedit.Edit{Start: 0, End: 3, NewText: "x\ny"}, "  x\n  y\n  c\n"},
+		{"a replacement ending a line keeps one indent", textedit.Edit{Start: 2, End: 4, NewText: "x\ny\n"}, "  a\n  x\n  y\n  c\n"},
+		{"a line inserted between two", textedit.Edit{Start: 2, End: 2, NewText: "x\n"}, "  a\n  x\n  b\n  c\n"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			edit, ok := m.Edit(tt.edit)
+			if !ok {
+				t.Fatalf("Edit(%+v) was refused", tt.edit)
+			}
+			if got := textedit.Apply(host, []textedit.Edit{edit}); got != tt.want {
+				t.Errorf("host = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEditRefusesToWriteAStandIn(t *testing.T) {
+	t.Parallel()
+
+	const host = "${v} a"
+	b := NewBuilder(host)
+	b.StandIn("__hole__")
+	b.Region(func(_ string, _, _ int, text string) (string, bool) { return text, true })
+	b.Placeholder(0, 4)
+	b.Verbatim(4, 6)
+	m := b.Map()
+	if got, want := m.Text(), "__hole__ a"; got != want {
+		t.Fatalf("text = %q, want %q", got, want)
+	}
+	if edit, ok := m.Edit(textedit.Edit{Start: 9, End: 10, NewText: "__hole__"}); ok {
+		t.Errorf("a stand-in was written as %+v", edit)
+	}
+	if _, ok := m.Edit(textedit.Edit{Start: 0, End: 10, NewText: "__hole__ b"}); !ok {
+		t.Error("an edit that keeps the stand-in where it is was refused")
+	}
+}
