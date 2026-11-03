@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"slices"
 
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/editorconfig"
@@ -11,7 +10,6 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/parser"
-	"github.com/stubbedev/shell-lsp/internal/textedit"
 )
 
 func (s *Server) handleFormatting(_ context.Context, docs *docstore.View, formatParams lsp.DocumentFormattingParams) (any, error) {
@@ -73,24 +71,24 @@ func (s *Server) format(docs *docstore.View, uri string, opts lsp.FormattingOpti
 	if err != nil {
 		return nil, jsonrpc.NewError(jsonrpc.CodeRequestFailed, "%v", err)
 	}
+	at := snap.positions()
 	edits := format.Edits(text, formatted)
 	if within != nil {
-		at := snap.positions()
-		spans := make([]parser.Span, len(within))
-		for i, r := range within {
-			spans[i], _ = at.Span(r)
-		}
-		edits = slices.DeleteFunc(edits, func(e textedit.Edit) bool {
-			return !slices.ContainsFunc(spans, func(span parser.Span) bool {
-				return len(format.RangeEdits([]textedit.Edit{e}, span.Start, span.End)) > 0
-			})
-		})
+		edits = format.RangeEdits(text, edits, selectedSpans(at, within), nil)
 	}
-	out, ok := snap.positions().TextEdits(edits)
+	out, ok := at.TextEdits(edits)
 	if !ok {
 		panic("server: formatting edits " + uri + ", which is not projected, yet its edits could not be written")
 	}
 	return out, nil
+}
+
+func selectedSpans(at docstore.Positions, within []lsp.Range) []parser.Span {
+	spans := make([]parser.Span, len(within))
+	for i, r := range within {
+		spans[i], _ = at.Span(r)
+	}
+	return spans
 }
 
 func clientStyle(client lsp.FormattingOptions) format.Style {
@@ -110,15 +108,7 @@ func (s *Server) formatNative(snap *snapshot, within []lsp.Range) ([]lsp.TextEdi
 	at := source.Positions(snap.encoding)
 	edits := format.Edits(source.Text(), formatted)
 	if within != nil {
-		spans := make([]parser.Span, len(within))
-		for i, r := range within {
-			spans[i], _ = at.Span(r)
-		}
-		edits = slices.DeleteFunc(edits, func(e textedit.Edit) bool {
-			return !slices.ContainsFunc(spans, func(span parser.Span) bool {
-				return len(format.RangeEdits([]textedit.Edit{e}, span.Start, span.End)) > 0
-			})
-		})
+		edits = format.RangeEdits(source.Text(), edits, selectedSpans(at, within), snap.Native.MoveTogether())
 	}
 	out, ok := at.TextEdits(edits)
 	if !ok {

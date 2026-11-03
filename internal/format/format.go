@@ -3,7 +3,9 @@ package format
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
@@ -127,12 +129,74 @@ func render(file *syntax.File, d dialect.Dialect, opts Options, sizeHint int) (s
 	return out.String(), nil
 }
 
-func RangeEdits(edits []textedit.Edit, start, end int) []textedit.Edit {
+func RangeEdits(text string, edits []textedit.Edit, selection, together []parser.Span) []textedit.Edit {
 	var out []textedit.Edit
-	for _, e := range edits {
-		if e.End >= start && e.Start <= end {
-			out = append(out, e)
+	first, reach, next := 0, 0, 0
+	flush := func(end int) {
+		group := edits[first:end]
+		if slices.ContainsFunc(group, func(e textedit.Edit) bool { return touchesAny(e, selection) }) {
+			out = append(out, group...)
 		}
+		first = end
+	}
+	aligned := alignedAfter(text, edits)
+	for i, e := range edits {
+		if e.Start >= reach && (i == 0 || aligned[i-1]) {
+			flush(i)
+		}
+		for next < len(together) && together[next].Start < extent(e.Start, e.End) {
+			reach = max(reach, together[next].End)
+			next++
+		}
+	}
+	flush(len(edits))
+	return out
+}
+
+func alignedAfter(text string, edits []textedit.Edit) []bool {
+	moved := diff(wordsOf(text), wordsOf(textedit.Apply(text, edits)))
+	out := make([]bool, len(edits))
+	x, y, delta, last := 0, 0, 0, 0
+	for i, e := range edits {
+		kept := len(wordsOf(text[last:e.Start]))
+		x += kept + len(wordsOf(text[e.Start:e.End]))
+		y += kept + len(wordsOf(e.NewText))
+		last = e.End
+		for len(moved) > 0 && moved[0].aEnd <= x && moved[0].bEnd <= y {
+			delta = moved[0].bEnd - moved[0].aEnd
+			moved = moved[1:]
+		}
+		out[i] = y-x == delta && (len(moved) == 0 || x <= moved[0].aStart && y <= moved[0].bStart)
 	}
 	return out
 }
+
+func wordsOf(s string) []string {
+	var out []string
+	for start := 0; start < len(s); {
+		c := s[start]
+		if c <= ' ' {
+			start++
+			continue
+		}
+		end := start + 1
+		for wordByte(c) && end < len(s) && wordByte(s[end]) {
+			end++
+		}
+		out = append(out, s[start:end])
+		start = end
+	}
+	return out
+}
+
+func wordByte(c byte) bool {
+	return c >= utf8.RuneSelf || c == '_' || '0' <= c && c <= '9' || 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z'
+}
+
+func touchesAny(e textedit.Edit, spans []parser.Span) bool {
+	return slices.ContainsFunc(spans, func(s parser.Span) bool {
+		return e.Start < extent(s.Start, s.End) && s.Start < extent(e.Start, e.End)
+	})
+}
+
+func extent(start, end int) int { return max(end, start+1) }

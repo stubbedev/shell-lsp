@@ -64,6 +64,7 @@ type analysis struct {
 	invocation func(offset int) (model.Invocation, bool)
 	enclosing  func(offset int) []parser.Span
 	format     func() (string, error)
+	together   func() []parser.Span
 	dockerfile *dockerfile.File
 	nix        *nix.Document
 }
@@ -73,13 +74,13 @@ func analyzeNix(text string) analysis { return analyzeParsedNix(nix.Parse(text))
 func analyzeParsedNix(parsed *nix.Parsed) analysis {
 	text := parsed.Text()
 	a := parsed.Analyze(embedHost)
-	return analysis{projection: a.Map, detection: a.Detection, index: a.Index, expect: a.Expect, invocation: a.Invocation, enclosing: a.Enclosing, format: func() (string, error) { return nixformat.Format(text) }, nix: a.Document()}
+	return analysis{projection: a.Map, detection: a.Detection, index: a.Index, expect: a.Expect, invocation: a.Invocation, enclosing: a.Enclosing, format: func() (string, error) { return nixformat.Format(text) }, together: func() []parser.Span { return nixformat.IndentedStrings(text) }, nix: a.Document()}
 }
 
 func ProjectParsedNix(doc *docstore.Document, parsed *nix.Parsed) Script {
 	a := analyzeParsedNix(parsed)
 	script := projectedScript(doc, a.projection, a.detection)
-	script.Native = &Native{Language: Nix, Index: a.index, expect: a.expect, invocation: a.invocation, enclosing: a.enclosing, format: a.format, nix: a.nix}
+	script.Native = &Native{Language: Nix, Index: a.index, expect: a.expect, invocation: a.invocation, enclosing: a.enclosing, format: a.format, together: a.together, nix: a.nix}
 	return script
 }
 
@@ -119,7 +120,7 @@ func analyzeDocker(text string) analysis {
 
 func analyzeJust(text string) analysis {
 	a := justfile.Analyze(text)
-	return analysis{projection: a.Map, detection: a.Detection, index: a.Index, expect: a.File.Expect, invocation: a.File.Invocation, enclosing: a.File.Enclosing, format: func() (string, error) { return justfile.Format(a.File) }}
+	return analysis{projection: a.Map, detection: a.Detection, index: a.Index, expect: a.File.Expect, invocation: a.File.Invocation, enclosing: a.File.Enclosing, format: func() (string, error) { return justfile.Format(a.File) }, together: func() []parser.Span { return justfile.ReindentedRecipes(a.File) }}
 }
 
 var definitions = [...]definition{
@@ -265,6 +266,7 @@ type Native struct {
 	invocation func(offset int) (model.Invocation, bool)
 	enclosing  func(offset int) []parser.Span
 	format     func() (string, error)
+	together   func() []parser.Span
 	dockerfile *dockerfile.File
 	nix        *nix.Document
 }
@@ -298,6 +300,13 @@ func (n *Native) Format() (string, error) {
 		panic("host: " + n.Language.String() + " has no formatter")
 	}
 	return n.format()
+}
+
+func (n *Native) MoveTogether() []parser.Span {
+	if n.together == nil {
+		return nil
+	}
+	return n.together()
 }
 
 func (l Language) Builtins() model.Builtins { return definitions[l].builtins }
@@ -346,7 +355,7 @@ func NixStoreFile(path string) bool { return nix.InStore(path) }
 func ProjectDependency(doc *docstore.Document) Script {
 	a := nix.AnalyzeDependency(doc.Text())
 	script := projectedScript(doc, a.Map, a.Detection)
-	script.Native = &Native{Language: Nix, Index: a.Index, expect: a.Expect, invocation: a.Invocation, enclosing: a.Enclosing, format: func() (string, error) { return nixformat.Format(doc.Text()) }, nix: a.Document()}
+	script.Native = &Native{Language: Nix, Index: a.Index, expect: a.Expect, invocation: a.Invocation, enclosing: a.Enclosing, format: func() (string, error) { return nixformat.Format(doc.Text()) }, together: func() []parser.Span { return nixformat.IndentedStrings(doc.Text()) }, nix: a.Document()}
 	return script
 }
 
@@ -354,7 +363,7 @@ func (l Language) Project(doc *docstore.Document) Script {
 	a := definitions[l].analyze(doc.Text())
 	script := projectedScript(doc, a.projection, a.detection)
 	if a.index != nil {
-		script.Native = &Native{Language: l, Index: a.index, expect: a.expect, invocation: a.invocation, enclosing: a.enclosing, format: a.format, dockerfile: a.dockerfile, nix: a.nix}
+		script.Native = &Native{Language: l, Index: a.index, expect: a.expect, invocation: a.invocation, enclosing: a.enclosing, format: a.format, together: a.together, dockerfile: a.dockerfile, nix: a.nix}
 	}
 	return script
 }

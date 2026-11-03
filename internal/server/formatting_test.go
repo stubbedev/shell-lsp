@@ -1,9 +1,12 @@
 package server
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
+	"github.com/stubbedev/shell-lsp/internal/docstore"
+	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 )
@@ -104,5 +107,129 @@ func TestNixOnTypeFormatsTheBindingASemicolonEnds(t *testing.T) {
 	nothing := decodeResult[[]lsp.TextEdit](t, c.call("textDocument/onTypeFormatting", `{"textDocument": {"uri": "`+uri+`"}, "position": {"line": 1, "character": 3}, "ch": ";", "options": {"tabSize": 2, "insertSpaces": true}}`))
 	if len(nothing) != 0 {
 		t.Errorf("a position that ends no binding got edits %+v", nothing)
+	}
+}
+
+func TestRangeFormattingKeepsWhatAStringMeans(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name, file, src, selected, want, shell string
+	}{
+		{
+			name: "writeShellScript whose lines a blank line divides", file: "default.nix",
+			src:      "{ pkgs }:\n{\n  a = pkgs.writeShellScript \"x\" ''\n          first\n\n          second\n  '';\n}\n",
+			selected: "second",
+			want:     "{ pkgs }:\n{\n  a = pkgs.writeShellScript \"x\" ''\n    first\n\n    second\n  '';\n}\n",
+			shell:    "first\n\nsecond\n",
+		},
+		{
+			name: "writeShellScript selected at its first line", file: "default.nix",
+			src:      "{ pkgs }:\n{\n  a = pkgs.writeShellScript \"x\" ''\n          first\n\n            second\n  '';\n}\n",
+			selected: "first",
+			want:     "{ pkgs }:\n{\n  a = pkgs.writeShellScript \"x\" ''\n    first\n\n      second\n  '';\n}\n",
+			shell:    "first\n\n  second\n",
+		},
+		{
+			name: "runCommand already laid out keeps its shell", file: "default.nix",
+			src:      "{ pkgs }:\npkgs.runCommand \"x\" { } ''\n  mkdir   $out\n\n  echo a > $out/a\n''\n",
+			selected: "echo a",
+			want:     "{ pkgs }:\npkgs.runCommand \"x\" { } ''\n  mkdir   $out\n\n  echo a > $out/a\n''\n",
+			shell:    "mkdir   $out\n\necho a > $out/a\n",
+		},
+		{
+			name: "runCommand out of place", file: "default.nix",
+			src:      "{ pkgs }:\npkgs.runCommand \"x\" { } ''\n      mkdir $out\n\n      echo a > $out/a\n    ''\n",
+			selected: "mkdir",
+			want:     "{ pkgs }:\npkgs.runCommand \"x\" { } ''\n  mkdir $out\n\n  echo a > $out/a\n''\n",
+			shell:    "mkdir $out\n\necho a > $out/a\n",
+		},
+		{
+			name: "a phase with an interpolation", file: "default.nix",
+			src:      "{ stdenv, foo }:\nstdenv.mkDerivation {\n  name = \"x\";\n  buildPhase = ''\n        make ${ foo }\n          make  install\n\n     ${foo}/bin/x\n  '';\n}\n",
+			selected: "make  install",
+			want:     "{ stdenv, foo }:\nstdenv.mkDerivation {\n  name = \"x\";\n  buildPhase = ''\n       make ${foo}\n         make  install\n\n    ${foo}/bin/x\n  '';\n}\n",
+			shell:    "   make ",
+		},
+		{
+			name: "home.file", file: "default.nix",
+			src:      "{\n  home.file.\"bin/x.sh\".text = ''\n         echo a\n\n         echo b\n    '';\n}\n",
+			selected: "echo b",
+			want:     "{\n  home.file.\"bin/x.sh\".text = ''\n    echo a\n\n    echo b\n  '';\n}\n",
+			shell:    "echo a\n\necho b\n",
+		},
+		{
+			name: "a second string stays out of it", file: "default.nix",
+			src:      "{ pkgs }:\n{\n  a = pkgs.writeShellScript \"x\" ''\n        one\n\n        two\n  '';\n  b = pkgs.writeShellScript \"y\" ''\n        three\n\n        four\n  '';\n}\n",
+			selected: "four",
+			want:     "{ pkgs }:\n{\n  a = pkgs.writeShellScript \"x\" ''\n        one\n\n        two\n  '';\n  b = pkgs.writeShellScript \"y\" ''\n    three\n\n    four\n  '';\n}\n",
+			shell:    "three\n\nfour\n",
+		},
+		{
+			name: "a justfile recipe keeps one indentation", file: "justfile",
+			src:      "build:\n  echo   a\n\n  echo   b\n",
+			selected: "echo   b",
+			want:     "build:\n    echo   a\n\n    echo   b\n",
+			shell:    "echo   b\n",
+		},
+		{
+			name: "a Makefile recipe stays verbatim", file: "Makefile",
+			src:      "X=1\n\nbuild:\n\techo   a\n",
+			selected: "echo   a",
+			want:     "X=1\n\nbuild:\n\techo   a\n",
+			shell:    "echo   a\n",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			p := openNativeProject(t, `"capabilities": {}`, map[string]string{tt.file: tt.src}, tt.file)
+			line, character := p.pos(tt.file, tt.selected, 0)
+			params, err := json.Marshal(map[string]any{
+				"textDocument": map[string]any{"uri": p.uri(tt.file)},
+				"range": map[string]any{
+					"start": map[string]any{"line": line, "character": character},
+					"end":   map[string]any{"line": line, "character": character + len(tt.selected)},
+				},
+				"options": map[string]any{"tabSize": 2, "insertSpaces": true},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := applyLSPEdits(tt.src, decodeResult[[]lsp.TextEdit](t, p.c.call("textDocument/rangeFormatting", string(params))))
+			if got != tt.want {
+				t.Fatalf("after the edits = %q, want %q", got, tt.want)
+			}
+			language, ok := host.Of(p.uri(tt.file), "")
+			if !ok {
+				t.Fatalf("%s is no host language", tt.file)
+			}
+			if projected := language.Project(docstore.NewDocument(p.uri(tt.file), "", 0, got)); !strings.Contains(projected.Doc.Text(), tt.shell) {
+				t.Errorf("shell after the edits = %q, want it to hold %q", projected.Doc.Text(), tt.shell)
+			}
+		})
+	}
+}
+
+func TestRangeFormattingOnlyTouchesTheLinesOfTheRange(t *testing.T) {
+	t.Parallel()
+
+	c, _ := startClient(t, `{"capabilities": {"textDocument": {"diagnostic": {}}}}`)
+	const uri = "file:///w/default.nix"
+	c.notify("textDocument/didOpen", openParams(uri, "{\n  a=1;\n  c = 3;\n  b=2;\n}\n"))
+	for _, tt := range []struct {
+		name string
+		rng  string
+		want int
+	}{
+		{"from the start of the tidy line", `{"start": {"line": 2, "character": 0}, "end": {"line": 2, "character": 3}}`, 0},
+		{"a whole line up to the next", `{"start": {"line": 2, "character": 0}, "end": {"line": 3, "character": 0}}`, 0},
+		{"a cursor at the start of the tidy line", `{"start": {"line": 2, "character": 0}, "end": {"line": 2, "character": 0}}`, 0},
+		{"a cursor on the line", `{"start": {"line": 3, "character": 0}, "end": {"line": 3, "character": 0}}`, 1},
+	} {
+		edits := decodeResult[[]lsp.TextEdit](t, c.call("textDocument/rangeFormatting",
+			`{"textDocument": {"uri": "`+uri+`"}, "range": `+tt.rng+`, "options": {"tabSize": 2, "insertSpaces": true}}`))
+		if len(edits) != tt.want {
+			t.Errorf("%s: edits = %+v, want %d", tt.name, edits, tt.want)
+		}
 	}
 }

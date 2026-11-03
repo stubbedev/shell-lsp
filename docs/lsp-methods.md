@@ -48,8 +48,8 @@ advertised capability, and that nothing else is handled or advertised.
 | `textDocument/documentColor` | not advertised | `colorProvider` | shell has no color literals |
 | `textDocument/colorPresentation` | not advertised | `colorProvider` | shell has no color literals |
 | `textDocument/formatting` | implemented | `documentFormattingProvider` |  |
-| `textDocument/rangeFormatting` | implemented | `documentRangeFormattingProvider` |  |
-| `textDocument/rangesFormatting` | implemented | `documentRangeFormattingProvider.rangesSupport` |  |
+| `textDocument/rangeFormatting` | implemented | `documentRangeFormattingProvider` | the lines the range touches and what must move with them; in Nix files the Nix around a string, never the shell in it |
+| `textDocument/rangesFormatting` | implemented | `documentRangeFormattingProvider.rangesSupport` | the lines the range touches and what must move with them; in Nix files the Nix around a string, never the shell in it |
 | `textDocument/onTypeFormatting` | implemented | `documentOnTypeFormattingProvider` | in Nix files, formats the binding a `;` ends; shfmt formats whole statements, not keystrokes, so shell is left alone |
 | `textDocument/rename` | implemented | `renameProvider` |  |
 | `textDocument/prepareRename` | implemented | `renameProvider.prepareProvider` |  |

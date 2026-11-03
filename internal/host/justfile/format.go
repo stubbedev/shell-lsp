@@ -45,10 +45,7 @@ func Format(f *File) (string, error) {
 			return "", fmt.Errorf("%w: just rejects line %d: %s", ErrUnformattable, f.line(finding.Span.Start), finding.Message)
 		}
 	}
-	p := &printer{f: f, indent: defaultIndentation}
-	if s, ok := f.setting("indentation"); ok && s.Value != nil && s.Value.Kind == ExprString {
-		p.indent = s.Value.Str.Value
-	}
+	p := &printer{f: f, indent: f.indentation()}
 	elements, err := p.elements()
 	if err != nil {
 		return "", err
@@ -75,6 +72,26 @@ func Format(f *File) (string, error) {
 		p.sb.WriteString("\n")
 	}
 	return p.sb.String(), nil
+}
+
+func (f *File) indentation() string {
+	if s, ok := f.setting("indentation"); ok && s.Value != nil && s.Value.Kind == ExprString {
+		return s.Value.Str.Value
+	}
+	return defaultIndentation
+}
+
+func ReindentedRecipes(f *File) []Span {
+	indent := f.indentation()
+	var out []Span
+	for _, it := range f.Items {
+		if it.Kind != ItemRecipe || len(it.Recipe.Body) == 0 || it.Recipe.Indent == indent {
+			continue
+		}
+		body := it.Recipe.Body
+		out = append(out, Span{Start: body[0].Span.Start, End: body[len(body)-1].Span.End})
+	}
+	return out
 }
 
 func (f *File) line(offset int) int { return strings.Count(f.Text[:offset], "\n") + 1 }

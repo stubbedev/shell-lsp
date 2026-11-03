@@ -5,6 +5,7 @@ import (
 	"math/rand/v2"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -269,7 +270,7 @@ func TestRangeEdits(t *testing.T) {
 	t.Parallel()
 
 	edits := []textedit.Edit{{Start: 0, End: 4}, {Start: 10, End: 14}, {Start: 20, End: 24}}
-	got := RangeEdits(edits, 11, 12)
+	got := RangeEdits(strings.Repeat(" ", 30), edits, []parser.Span{{Start: 11, End: 12}}, nil)
 	if len(got) != 1 || got[0].Start != 10 {
 		t.Errorf("RangeEdits = %+v", got)
 	}
@@ -291,5 +292,69 @@ func TestEditsScaleToLargeReformats(t *testing.T) {
 	edits := Edits(before.String(), after.String())
 	if got := textedit.Apply(before.String(), edits); got != after.String() {
 		t.Fatal("large diff does not reproduce the target")
+	}
+}
+
+func TestRangeEditsKeepEditsThatMoveTogether(t *testing.T) {
+	t.Parallel()
+
+	edits := []textedit.Edit{{Start: 0, End: 4}, {Start: 10, End: 14}, {Start: 20, End: 24}, {Start: 30, End: 34}}
+	span := func(start, end int) []parser.Span { return []parser.Span{{Start: start, End: end}} }
+	for _, tt := range []struct {
+		name             string
+		selection, spans []parser.Span
+		want             []int
+	}{
+		{"nothing binds them", span(21, 22), nil, []int{20}},
+		{"a span binds two", span(21, 22), span(12, 22), []int{10, 20}},
+		{"a span binds from either end", span(11, 12), span(12, 22), []int{10, 20}},
+		{"an edit outside the span stays out", span(31, 32), span(12, 22), []int{30}},
+		{"an edit in two spans joins them", span(1, 2), []parser.Span{{Start: 2, End: 11}, {Start: 12, End: 21}}, []int{0, 10, 20}},
+		{"an edit ending where a span starts stays out", span(1, 2), span(4, 11), []int{0}},
+		{"an edit starting where a span ends stays out", span(11, 12), span(4, 20), []int{10}},
+		{"a span with no edit in it binds nothing", span(1, 2), span(5, 9), []int{0}},
+		{"no selection selects nothing", nil, span(0, 40), nil},
+	} {
+		var got []int
+		for _, e := range RangeEdits(strings.Repeat(" ", 40), edits, tt.selection, tt.spans) {
+			got = append(got, e.Start)
+		}
+		if !slices.Equal(got, tt.want) {
+			t.Errorf("%s: starts = %v, want %v", tt.name, got, tt.want)
+		}
+	}
+}
+
+func TestRangeEditsNeverLoseTextTheDiffAnchoredAcrossAnEdit(t *testing.T) {
+	t.Parallel()
+
+	const (
+		before = "if a; then\n  if b; then\n      c\n    fi\n  fi\n"
+		after  = "if a; then\n  if b; then\n    c\n  fi\nfi\n"
+	)
+	edits := Edits(before, after)
+	if len(edits) < 2 {
+		t.Fatalf("the diff was to anchor on the shared `  fi` line and leave two hunks: %+v", edits)
+	}
+	selection := []parser.Span{{Start: strings.Index(before, "c"), End: strings.Index(before, "c") + 1}}
+	if got := textedit.Apply(before, RangeEdits(before, edits, selection, nil)); got != after {
+		t.Errorf("after the edits of the selection = %q, want %q", got, after)
+	}
+}
+
+func TestRangeEditsStaySmallWhenTheFormatterChangesWords(t *testing.T) {
+	t.Parallel()
+
+	const before = "if a\nthen\nb\nfi\n\nf() {\necho a ;\n}\n"
+	tree := parser.Parse(before, dialect.Bash)
+	after, err := Format(tree, Options{Indent: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	edits := Edits(before, after)
+	selection := []parser.Span{{Start: strings.Index(before, "b"), End: strings.Index(before, "b") + 1}}
+	got := textedit.Apply(before, RangeEdits(before, edits, selection, nil))
+	if strings.Contains(got, "  echo a") || !strings.Contains(got, "  b\n") {
+		t.Errorf("after the edits of the selection = %q, want only the lines of b changed", got)
 	}
 }

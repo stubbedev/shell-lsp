@@ -74,6 +74,8 @@ type method struct {
 	handler    handler
 }
 
+const rangeFormattingNote = "the lines the range touches and what must move with them; in Nix files the Nix around a string, never the shell in it"
+
 var methods = []method{
 	{"initialize", clientRequest, supported, capability{}, "negotiates position encoding, pull or push diagnostics, workspace folders and settings", onRequest((*Server).handleInitialize)},
 	{"shutdown", clientRequest, supported, capability{}, "later requests fail with InvalidRequest", onRequest((*Server).handleShutdown)},
@@ -115,8 +117,8 @@ var methods = []method{
 	{"textDocument/documentColor", clientRequest, notAdvertised, capability{path: "colorProvider"}, "shell has no color literals", nil},
 	{"textDocument/colorPresentation", clientRequest, notAdvertised, capability{path: "colorProvider"}, "shell has no color literals", nil},
 	{"textDocument/formatting", clientRequest, supported, capability{"documentFormattingProvider", func(c *ServerCapabilities) { c.DocumentFormattingProvider = true }}, "", onRequest((*Server).handleFormatting)},
-	{"textDocument/rangeFormatting", clientRequest, supported, capability{"documentRangeFormattingProvider", func(c *ServerCapabilities) { ensure(&c.DocumentRangeFormattingProvider) }}, "", onRequest((*Server).handleRangeFormatting)},
-	{"textDocument/rangesFormatting", clientRequest, supported, capability{"documentRangeFormattingProvider.rangesSupport", func(c *ServerCapabilities) { ensure(&c.DocumentRangeFormattingProvider).RangesSupport = true }}, "", onRequest((*Server).handleRangesFormatting)},
+	{"textDocument/rangeFormatting", clientRequest, supported, capability{"documentRangeFormattingProvider", func(c *ServerCapabilities) { ensure(&c.DocumentRangeFormattingProvider) }}, rangeFormattingNote, onRequest((*Server).handleRangeFormatting)},
+	{"textDocument/rangesFormatting", clientRequest, supported, capability{"documentRangeFormattingProvider.rangesSupport", func(c *ServerCapabilities) { ensure(&c.DocumentRangeFormattingProvider).RangesSupport = true }}, rangeFormattingNote, onRequest((*Server).handleRangesFormatting)},
 	{"textDocument/onTypeFormatting", clientRequest, supported, capability{"documentOnTypeFormattingProvider", func(c *ServerCapabilities) { c.DocumentOnTypeFormattingProvider = &onTypeFormattingOptions }}, "in Nix files, formats the binding a `;` ends; shfmt formats whole statements, not keystrokes, so shell is left alone", onRequest((*Server).handleOnTypeFormatting)},
 	{"textDocument/rename", clientRequest, supported, capability{"renameProvider", func(c *ServerCapabilities) { ensure(&c.RenameProvider) }}, "", onRequest((*Server).handleRename)},
 	{"textDocument/prepareRename", clientRequest, supported, capability{"renameProvider.prepareProvider", func(c *ServerCapabilities) { ensure(&c.RenameProvider).PrepareProvider = true }}, "", onRequest((*Server).handlePrepareRename)},

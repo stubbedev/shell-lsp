@@ -47,6 +47,23 @@ func Format(src string) (string, error) {
 	return render(buildDoc(file), len(src)), nil
 }
 
+func IndentedStrings(src string) []syntax.Span {
+	var out []syntax.Span
+	syntax.Inspect(syntax.Parse(src).Root, func(n syntax.Node) bool {
+		s, isString := n.(*syntax.String)
+		if !isString || s.Kind != syntax.Indented {
+			return true
+		}
+		span := s.Span()
+		if strings.IndexByte(src[span.Start:span.End], '\n') < 0 {
+			return true
+		}
+		out = append(out, span)
+		return false
+	})
+	return out
+}
+
 func buildDoc(file *syntax.File) []item {
 	c := newConverter(file)
 	root, end := c.root(file)
