@@ -125,3 +125,60 @@ func TestRefactoringsRefuseToChangeMeaning(t *testing.T) {
 		})
 	}
 }
+
+func TestRefactoringsFromTheOtherServers(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name, title, src, marker string
+		want                     string
+	}{
+		{"quoted to indented on one line", "Rewrite as an indented", `x: "a ${x} b"` + "\n", "a ", "x: ''a ${x} b''\n"},
+		{"quoted with a line break", "Rewrite as an indented", `{ a = "one\ntwo\n"; }` + "\n", "one", "{ a = ''\n  one\n  two\n''; }\n"},
+		{"quoted with no final line break", "Rewrite as an indented", `{ a = "one\ntwo"; }` + "\n", "one", "{ a = ''\n  one\n  two''; }\n"},
+		{"quoted keeps an escaped antiquotation", "Rewrite as an indented", `"\${x}"` + "\n", "x", "''''${x}''\n"},
+		{"quoted keeps quotes and tabs", "Rewrite as an indented", `"\"a\"\tb"` + "\n", "a", "''\"a\"''\\tb''\n"},
+		{"indented to quoted", "Rewrite as a quoted", "{\n  a = ''\n    one\n      two\n  '';\n}\n", "one", "{\n  a = \"one\\n  two\\n\";\n}\n"},
+		{"indented with an antiquotation", "Rewrite as a quoted", "x: ''\n  a ${x}\n''\n", "a ", "x: \"a ${x}\\n\"\n"},
+		{"indented with characters a quoted string escapes", "Rewrite as a quoted", "''\n  \"a\" \\b ''${c}\n''\n", "a", "\"\\\"a\\\" \\\\b \\${c}\\n\"\n"},
+		{"inherit to a binding", "Convert to `a = a;`", "a: { inherit a; }\n", "inherit", "a: { a = a; }\n"},
+		{"inherit from a set", "Convert this inherit", "{ inherit (s) a b; }\n", "inherit", "{ a = s.a; b = s.b; }\n"},
+		{"inherit on its own line", "Convert this inherit", "{\n  inherit (s.t) a b;\n}\n", "inherit", "{\n  a = s.t.a;\n  b = s.t.b;\n}\n"},
+		{"inherit from an expression", "Convert to", "{ inherit (f x) a; }\n", "inherit", "{ a = (f x).a; }\n"},
+		{"quote an attribute", "Quote `a`", "{ a = 1; }\n", "a", "{ \"a\" = 1; }\n"},
+		{"unquote an attribute", "Remove the quotes", "{ \"a\" = 1; }\n", "a", "{ a = 1; }\n"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			r, d, ok := refactoring(t, tt.src, tt.marker, true, tt.title)
+			if !ok {
+				var titles []string
+				for _, r := range d.Refactorings(model.Span{Start: strings.Index(tt.src, tt.marker), End: strings.Index(tt.src, tt.marker)}) {
+					titles = append(titles, r.Title)
+				}
+				t.Fatalf("no %q among %q", tt.title, titles)
+			}
+			if got := textedit.Apply(tt.src, r.Edits); got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRefactoringsFromTheOtherServersKeepTheValue(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct{ name, title, src, marker string }{
+		{"an indented string that would lose its indentation", "Rewrite as an indented", `"  a"` + "\n", "a"},
+		{"a keyword cannot lose its quotes", "Remove the quotes", "{ \"if\" = 1; }\n", "if"},
+		{"a name with a dash stays quoted when it must", "Remove the quotes", "{ \"a b\" = 1; }\n", "a b"},
+		{"inherit in a let would read itself", "Convert to", "a: let inherit a; in a\n", "inherit"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if r, _, ok := refactoring(t, tt.src, tt.marker, true, tt.title); ok {
+				t.Errorf("offered %q: %+v", r.Title, r.Edits)
+			}
+		})
+	}
+}

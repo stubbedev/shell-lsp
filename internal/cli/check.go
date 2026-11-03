@@ -65,6 +65,7 @@ func runCheck(env Env, args []string) int {
 	}
 	warnUnknownOptional(env.Stderr, opts.enable, "--enable")
 	c := newChecker(env, opts)
+	defer c.projects.Close()
 	reports, failures, configErr := c.run()
 	if configErr != nil {
 		fmt.Fprintf(env.Stderr, "%s check: %v\n", programName, configErr)
@@ -122,6 +123,7 @@ type checker struct {
 	statix    *statixconfig.Resolver
 	locks     *nix.LockFiles
 	ws        *workspace.Workspace
+	projects  *hostnav.Projects
 	resolveMu sync.Mutex
 	resolved  map[string]error
 	warned    sync.Map
@@ -149,6 +151,7 @@ func newChecker(env Env, opts checkOptions) *checker {
 		resolved: map[string]error{},
 	}
 	c.ws = workspace.New(c.namedStdin, c.resolve)
+	c.projects = hostnav.NewProjects()
 	if opts.filename != "" {
 		c.namedPath = absolute(env.Dir, opts.filename)
 		c.named = sync.OnceValue(c.parseNamedStdin)
@@ -363,7 +366,7 @@ func (c *checker) lint(t target) linted {
 		if err != nil {
 			return linted{failure: fmt.Sprintf("%s: %v", t.name, err)}
 		}
-		findings = slices.Concat(findings, native, docker.Findings())
+		findings = slices.Concat(findings, native, c.provenFindings(h, s, env), docker.Findings())
 	}
 	findings = c.filter(s.lint.Excluded(), docker.Host(findings))
 	return linted{
@@ -373,10 +376,35 @@ func (c *checker) lint(t target) linted {
 	}
 }
 
+func (c *checker) hostEnv(language host.Language) hostnav.Env {
+	env := hostnav.Env{Loader: c.ws, Home: c.env.Home, Projects: c.projects}
+	env.Graph = func(ctx context.Context) (*hostnav.Graph, error) { return c.graph(ctx, language, env) }
+	return env
+}
+
+func (c *checker) provenFindings(h hostnav.Host, s fileSettings, env navigation.Env) []lint.Finding {
+	file := h.File()
+	if h.Language() != host.Nix || !nix.MayWrap(file.Native.Index) {
+		return nil
+	}
+	proof, held := hostnav.Prove(context.Background(), []hostnav.Host{h}, c.hostEnv(h.Language()))[file.URI]
+	if !held {
+		return nil
+	}
+	wrapped := hostnav.Wrapped(file, proof.On(file.Doc.Source()), nil)
+	if wrapped == nil {
+		return nil
+	}
+	report := filelint.Check(wrapped, env, s.lint)
+	var syntax []lint.Finding
+	for _, variant := range wrapped.Variants() {
+		syntax = append(syntax, syntaxFindings(variant.Tree, s.lint.DialectSource(variant))...)
+	}
+	return sourceFindings(wrapped.Doc, append(syntax, report.Findings...))
+}
+
 func (c *checker) nativeFindings(h hostnav.Host, settings filelint.Settings) ([]lint.Finding, error) {
-	env := hostnav.Env{Loader: c.ws, Home: c.env.Home}
-	env.Graph = func(ctx context.Context) (*hostnav.Graph, error) { return c.graph(ctx, h.Language(), env) }
-	g, err := hostnav.Build(context.Background(), h, env)
+	g, err := hostnav.Build(context.Background(), h, c.hostEnv(h.Language()))
 	if err != nil {
 		return nil, err
 	}

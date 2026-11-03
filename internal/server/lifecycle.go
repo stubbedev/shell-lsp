@@ -113,44 +113,50 @@ type DiagnosticOptions struct {
 	WorkspaceDiagnostics  bool `json:"workspaceDiagnostics"`
 }
 
+type DocumentOnTypeFormattingOptions struct {
+	FirstTriggerCharacter string `json:"firstTriggerCharacter"`
+}
+
 type ServerCapabilities struct {
-	PositionEncoding                string                   `json:"positionEncoding,omitempty"`
-	TextDocumentSync                *TextDocumentSyncOptions `json:"textDocumentSync,omitempty"`
-	DiagnosticProvider              *DiagnosticOptions       `json:"diagnosticProvider,omitempty"`
-	HoverProvider                   bool                     `json:"hoverProvider"`
-	CompletionProvider              *CompletionOptions       `json:"completionProvider,omitempty"`
-	DefinitionProvider              bool                     `json:"definitionProvider"`
-	DeclarationProvider             bool                     `json:"declarationProvider"`
-	TypeDefinitionProvider          bool                     `json:"typeDefinitionProvider"`
-	ImplementationProvider          bool                     `json:"implementationProvider"`
-	DocumentSymbolProvider          bool                     `json:"documentSymbolProvider"`
-	FoldingRangeProvider            bool                     `json:"foldingRangeProvider"`
-	WorkspaceSymbolProvider         bool                     `json:"workspaceSymbolProvider"`
-	DocumentFormattingProvider      bool                     `json:"documentFormattingProvider"`
-	DocumentRangeFormattingProvider *RangeFormattingOptions  `json:"documentRangeFormattingProvider,omitempty"`
-	CodeActionProvider              *CodeActionOptions       `json:"codeActionProvider,omitempty"`
-	ExecuteCommandProvider          *ExecuteCommandOptions   `json:"executeCommandProvider,omitempty"`
-	ReferencesProvider              bool                     `json:"referencesProvider"`
-	DocumentHighlightProvider       bool                     `json:"documentHighlightProvider"`
-	RenameProvider                  *RenameOptions           `json:"renameProvider,omitempty"`
-	SemanticTokensProvider          *SemanticTokensOptions   `json:"semanticTokensProvider,omitempty"`
-	SelectionRangeProvider          bool                     `json:"selectionRangeProvider"`
-	SignatureHelpProvider           *SignatureHelpOptions    `json:"signatureHelpProvider,omitempty"`
-	InlayHintProvider               *InlayHintOptions        `json:"inlayHintProvider,omitempty"`
-	DocumentLinkProvider            *DocumentLinkOptions     `json:"documentLinkProvider,omitempty"`
-	CodeLensProvider                *CodeLensOptions         `json:"codeLensProvider,omitempty"`
-	CallHierarchyProvider           bool                     `json:"callHierarchyProvider"`
-	InlineValueProvider             bool                     `json:"inlineValueProvider"`
-	MonikerProvider                 bool                     `json:"monikerProvider"`
-	LinkedEditingRangeProvider      bool                     `json:"linkedEditingRangeProvider"`
-	Workspace                       *WorkspaceCapabilities   `json:"workspace,omitempty"`
+	PositionEncoding                 string                           `json:"positionEncoding,omitempty"`
+	TextDocumentSync                 *TextDocumentSyncOptions         `json:"textDocumentSync,omitempty"`
+	DiagnosticProvider               *DiagnosticOptions               `json:"diagnosticProvider,omitempty"`
+	HoverProvider                    bool                             `json:"hoverProvider"`
+	CompletionProvider               *CompletionOptions               `json:"completionProvider,omitempty"`
+	DefinitionProvider               bool                             `json:"definitionProvider"`
+	DeclarationProvider              bool                             `json:"declarationProvider"`
+	TypeDefinitionProvider           bool                             `json:"typeDefinitionProvider"`
+	ImplementationProvider           bool                             `json:"implementationProvider"`
+	DocumentSymbolProvider           bool                             `json:"documentSymbolProvider"`
+	FoldingRangeProvider             bool                             `json:"foldingRangeProvider"`
+	WorkspaceSymbolProvider          bool                             `json:"workspaceSymbolProvider"`
+	DocumentFormattingProvider       bool                             `json:"documentFormattingProvider"`
+	DocumentOnTypeFormattingProvider *DocumentOnTypeFormattingOptions `json:"documentOnTypeFormattingProvider,omitempty"`
+	DocumentRangeFormattingProvider  *RangeFormattingOptions          `json:"documentRangeFormattingProvider,omitempty"`
+	CodeActionProvider               *CodeActionOptions               `json:"codeActionProvider,omitempty"`
+	ExecuteCommandProvider           *ExecuteCommandOptions           `json:"executeCommandProvider,omitempty"`
+	ReferencesProvider               bool                             `json:"referencesProvider"`
+	DocumentHighlightProvider        bool                             `json:"documentHighlightProvider"`
+	RenameProvider                   *RenameOptions                   `json:"renameProvider,omitempty"`
+	SemanticTokensProvider           *SemanticTokensOptions           `json:"semanticTokensProvider,omitempty"`
+	SelectionRangeProvider           bool                             `json:"selectionRangeProvider"`
+	SignatureHelpProvider            *SignatureHelpOptions            `json:"signatureHelpProvider,omitempty"`
+	InlayHintProvider                *InlayHintOptions                `json:"inlayHintProvider,omitempty"`
+	DocumentLinkProvider             *DocumentLinkOptions             `json:"documentLinkProvider,omitempty"`
+	CodeLensProvider                 *CodeLensOptions                 `json:"codeLensProvider,omitempty"`
+	CallHierarchyProvider            bool                             `json:"callHierarchyProvider"`
+	InlineValueProvider              bool                             `json:"inlineValueProvider"`
+	MonikerProvider                  bool                             `json:"monikerProvider"`
+	LinkedEditingRangeProvider       bool                             `json:"linkedEditingRangeProvider"`
+	Workspace                        *WorkspaceCapabilities           `json:"workspace,omitempty"`
 }
 
 const incrementalSync = 2
 
 var (
-	completionTriggers   = []string{"$", "{", "/", "-", ":", "@", "[", "%", "=", ",", "."}
-	signatureHelpOptions = SignatureHelpOptions{TriggerCharacters: []string{" ", "(", ",", "{", ";"}, RetriggerCharacters: []string{" ", ",", ";"}}
+	completionTriggers      = []string{"$", "{", "/", "-", ":", "@", "[", "%", "=", ",", "."}
+	onTypeFormattingOptions = DocumentOnTypeFormattingOptions{FirstTriggerCharacter: ";"}
+	signatureHelpOptions    = SignatureHelpOptions{TriggerCharacters: []string{" ", "(", ",", "{", ";"}, RetriggerCharacters: []string{" ", ",", ";"}}
 )
 
 func ensure[T any](field **T) *T {

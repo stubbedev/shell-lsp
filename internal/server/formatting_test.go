@@ -89,3 +89,20 @@ func TestFormattingNixRefusesSyntaxErrors(t *testing.T) {
 		t.Errorf("formatting a broken Nix file = %+v, want an error with its position", resp)
 	}
 }
+
+func TestNixOnTypeFormatsTheBindingASemicolonEnds(t *testing.T) {
+	t.Parallel()
+
+	const uri = "file:///w/a.nix"
+	text := "{\n  a   =   1;\n  b   =   2;\n}\n"
+	c, _ := startClient(t, `{"capabilities": {}}`)
+	c.notify("textDocument/didOpen", openLanguageParams(uri, "nix", text))
+	edits := decodeResult[[]lsp.TextEdit](t, c.call("textDocument/onTypeFormatting", `{"textDocument": {"uri": "`+uri+`"}, "position": {"line": 1, "character": 13}, "ch": ";", "options": {"tabSize": 2, "insertSpaces": true}}`))
+	if len(edits) != 1 || edits[0].Range.Start.Line != 1 || !strings.Contains(edits[0].NewText, "a = 1;") {
+		t.Errorf("edits = %+v, want only the binding on line 1", edits)
+	}
+	nothing := decodeResult[[]lsp.TextEdit](t, c.call("textDocument/onTypeFormatting", `{"textDocument": {"uri": "`+uri+`"}, "position": {"line": 1, "character": 3}, "ch": ";", "options": {"tabSize": 2, "insertSpaces": true}}`))
+	if len(nothing) != 0 {
+		t.Errorf("a position that ends no binding got edits %+v", nothing)
+	}
+}

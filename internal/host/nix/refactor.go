@@ -29,6 +29,8 @@ type Refactoring struct {
 	Edits []textedit.Edit
 	fresh string
 	gone  *scope.Def
+
+	repeats bool
 }
 
 func (d *Document) Refactorings(selection model.Span) []Refactoring {
@@ -37,7 +39,7 @@ func (d *Document) Refactorings(selection model.Span) []Refactoring {
 	}
 	selection = trimmed(d.tree.Text, selection)
 	var out []Refactoring
-	for _, compute := range []func(model.Span) (Refactoring, bool){d.extract, d.inline, d.toInherit, d.nest, d.flatten} {
+	for _, compute := range []func(model.Span) (Refactoring, bool){d.extract, d.inline, d.toInherit, d.toBindings, d.rewriteString, d.toggledAttr, d.nest, d.flatten} {
 		if r, ok := compute(selection); ok && d.keepsMeaning(r) {
 			out = append(out, r)
 		}
@@ -58,7 +60,14 @@ func (d *Document) keepsMeaning(r Refactoring) bool {
 	}
 	table := scope.Resolve(after)
 	return len(table.Duplicates()) == len(d.table.Duplicates()) &&
-		slices.Equal(meanings(after, table, nil, r.fresh), meanings(d.tree, d.table, r.gone, ""))
+		sameReads(r, meanings(after, table, nil, r.fresh), meanings(d.tree, d.table, r.gone, ""))
+}
+
+func sameReads(r Refactoring, after, before []string) bool {
+	if r.repeats {
+		after, before = slices.Compact(after), slices.Compact(before)
+	}
+	return slices.Equal(after, before)
 }
 
 func meanings(tree *syntax.File, t *scope.Table, gone *scope.Def, fresh string) []string {

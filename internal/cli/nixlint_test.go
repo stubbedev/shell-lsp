@@ -93,3 +93,16 @@ func TestFlakeLockChecksReadTheLockFile(t *testing.T) {
 		t.Errorf("with the optional check on: %q", got)
 	}
 }
+
+func TestCheckLintsAStringProvenThroughAWrapperInAnotherFile(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeFiles(t, dir, map[string]string{
+		"writer.nix": "{ writeShellScript }:\ntext: writeShellScript \"x\" text\n",
+		"caller.nix": "{ callPackage }:\nlet\n  w = callPackage ./writer.nix { };\nin\nw ''\n  ls $1\n''\n",
+	})
+	if got := codesIn(run(t, dir, "", "check", "-f", "gcc", "caller.nix").stdout); !slices.Contains(got, "SC2086") {
+		t.Errorf("findings = %q, want the one of the proven string", got)
+	}
+}

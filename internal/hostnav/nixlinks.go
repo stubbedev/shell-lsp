@@ -82,6 +82,9 @@ func (g *Group) SourceLinks() []assist.Link {
 			out = append(out, assist.Link{Span: p.Span, Target: fileuri.FromPath(path)})
 		}
 	}
+	for _, link := range doc.FlakeLinks() {
+		out = append(out, assist.Link{Span: link.Span, Target: link.Target})
+	}
 	text := g.Self.Doc.Source().Text()
 	for _, run := range doc.Prose() {
 		for url := range assist.WebURLs(text[run.Span.Start:run.Span.End]) {

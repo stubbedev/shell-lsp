@@ -7,6 +7,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/editorconfig"
 	"github.com/stubbedev/shell-lsp/internal/format"
+	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/parser"
@@ -26,6 +27,23 @@ func (s *Server) handleRangesFormatting(_ context.Context, docs *docstore.View, 
 		return []lsp.TextEdit{}, nil
 	}
 	return s.format(docs, formatParams.TextDocument.URI, formatParams.Options, formatParams.Ranges)
+}
+
+func (s *Server) handleOnTypeFormatting(_ context.Context, docs *docstore.View, typed lsp.DocumentOnTypeFormattingParams) (any, error) {
+	snap, err := s.snapshot(docs, typed.TextDocument.URI)
+	if err != nil {
+		return nil, err
+	}
+	if snap.Native == nil || snap.Native.Language != host.Nix || !snap.settings.Format.Enabled || snap.project.Ignore {
+		return []lsp.TextEdit{}, nil
+	}
+	doc := snap.Native.Nix()
+	at := snap.Doc.Source().Positions(snap.encoding)
+	span, ok := doc.BindingEndingAt(snap.Doc.Source().PositionToOffset(typed.Position, snap.encoding))
+	if !ok || doc.Broken() {
+		return []lsp.TextEdit{}, nil
+	}
+	return s.formatNative(snap, []lsp.Range{at.Range(span)})
 }
 
 func (s *Server) format(docs *docstore.View, uri string, opts lsp.FormattingOptions, within []lsp.Range) ([]lsp.TextEdit, error) {

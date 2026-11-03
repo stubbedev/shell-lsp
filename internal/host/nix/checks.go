@@ -94,7 +94,7 @@ func (c *checker) uses() {
 		c.names[u.Name] = true
 		span := u.Node.Span()
 		if u.Ref.Kind == scope.Undefined {
-			c.report(lint.CodeNixUndefinedVariable, span, fmt.Sprintf("`%s` is not defined here, so Nix rejects the file", u.Name), nil)
+			c.report(lint.CodeNixUndefinedVariable, span, fmt.Sprintf("`%s` is not defined here, so Nix rejects the file", u.Name), c.undefinedFixes(u))
 		}
 		if u.Name == orKeyword && !u.Inherit {
 			c.report(lint.CodeNixOrIdentifier, span, "`or` is read as a variable here, which only this one position still allows and Nix warns will change", nil)

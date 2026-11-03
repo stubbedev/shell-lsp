@@ -3,6 +3,7 @@ package nix
 import (
 	"cmp"
 	"slices"
+	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/host/model"
 	"github.com/stubbedev/shell-lsp/internal/host/nix/syntax"
@@ -49,6 +50,50 @@ func (d *Document) PathLiterals() []PathLiteral {
 		return true
 	})
 	return out
+}
+
+func (d *Document) FlakeLinks() []FlakeLink {
+	var out []FlakeLink
+	d.inspect(func(n syntax.Node) bool {
+		a, assigned := n.(*syntax.Assign)
+		if !assigned || lastIdent(a.Path) != flakeURLAttr {
+			return true
+		}
+		if str, literal := syntax.Unparenthesized(a.Value).(*syntax.String); literal {
+			if target, known := forgePage(literalOf(str)); known {
+				out = append(out, FlakeLink{Span: str.Content, Target: target})
+			}
+		}
+		return true
+	})
+	return out
+}
+
+const flakeURLAttr = "url"
+
+type FlakeLink struct {
+	Span   model.Span
+	Target string
+}
+
+var forges = map[string]string{"github": "https://github.com/", "gitlab": "https://gitlab.com/", "sourcehut": "https://git.sr.ht/"}
+
+func forgePage(ref string) (string, bool) {
+	scheme, rest, found := strings.Cut(ref, ":")
+	base, known := forges[scheme]
+	if !found || !known {
+		return "", false
+	}
+	rest, _, _ = strings.Cut(rest, "?")
+	parts := strings.SplitN(rest, "/", 3)
+	if len(parts) < 2 || parts[0] == "" || parts[1] == "" {
+		return "", false
+	}
+	page := base + parts[0] + "/" + parts[1]
+	if len(parts) == 3 && parts[2] != "" && scheme != "sourcehut" {
+		page += "/tree/" + parts[2]
+	}
+	return page, true
 }
 
 func local(p *syntax.Path) bool {

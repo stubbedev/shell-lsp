@@ -430,6 +430,13 @@ type DocumentRangeFormattingParams struct {
 	Options      FormattingOptions      `json:"options"`
 }
 
+type DocumentOnTypeFormattingParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Position     Position               `json:"position"`
+	Ch           string                 `json:"ch"`
+	Options      FormattingOptions      `json:"options"`
+}
+
 type CodeActionContext struct {
 	Diagnostics []Diagnostic     `json:"diagnostics"`
 	Only        []CodeActionKind `json:"only,omitempty"`

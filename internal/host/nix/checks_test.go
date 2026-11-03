@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/host/nix/syntax"
@@ -363,5 +364,57 @@ func TestFixAllConverges(t *testing.T) {
 		if edits := lint.FindingsSafeEdits(findingsOf(text)); len(edits) != 0 {
 			t.Errorf("fixing %q never settled: %+v", tt.src, edits)
 		}
+	}
+}
+
+func TestAnUndefinedNameOffersItsFixes(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct{ name, src, title, want string }{
+		{"a formal on one line", "{ a, b }: c", "Add `c`", "{ a, b, c }: c"},
+		{"a formal before an ellipsis", "{ a, ... }: c", "Add `c`", "{ a, c, ... }: c"},
+		{"a formal on its own line", "{\n  a,\n  ...\n}: c", "Add `c`", "{\n  a,\n  c,\n  ...\n}: c"},
+		{"only an ellipsis", "{ ... }: c", "Add `c`", "{ c, ... }: c"},
+		{"no formal yet", "{ }: c", "Add `c`", "{ c }: c"},
+		{"the nearest function with a pattern", "{ a }: { b }: x: c", "Add `c`", "{ a }: { b, c }: x: c"},
+		{"a name close to one in scope", "{ pkgs }: pkgz", "Change to `pkgs`", "{ pkgs }: pkgs"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			a := Analyze(tt.src)
+			for _, f := range a.Index.Findings {
+				if f.Code != lint.CodeNixUndefinedVariable {
+					continue
+				}
+				for _, fix := range f.Fixes {
+					if strings.HasPrefix(fix.Title, tt.title) {
+						if got := textedit.Apply(tt.src, fix.Edits); got != tt.want {
+							t.Errorf("got %q, want %q", got, tt.want)
+						}
+						return
+					}
+				}
+			}
+			t.Errorf("no fix %q in %+v", tt.title, a.Index.Findings)
+		})
+	}
+	for _, f := range Analyze("x: y").Index.Findings {
+		if f.Code == lint.CodeNixUndefinedVariable && slices.ContainsFunc(f.Fixes, func(fix lint.Fix) bool { return strings.HasPrefix(fix.Title, "Add") }) {
+			t.Errorf("a function without a pattern has nowhere to add a formal: %+v", f)
+		}
+	}
+}
+
+func TestFlakeInputsLinkToTheirForge(t *testing.T) {
+	t.Parallel()
+
+	src := "{\n  inputs.a.url = \"github:o/r\";\n  inputs.b.url = \"github:o/r/main\";\n  inputs = { c.url = \"gitlab:o/r?dir=x\"; d.url = \"sourcehut:~o/r\"; e.url = \"path:./x\"; };\n}\n"
+	var got []string
+	for _, l := range Read(src).FlakeLinks() {
+		got = append(got, src[l.Span.Start:l.Span.End]+" "+l.Target)
+	}
+	want := []string{"github:o/r https://github.com/o/r", "github:o/r/main https://github.com/o/r/tree/main", "gitlab:o/r?dir=x https://gitlab.com/o/r", "sourcehut:~o/r https://git.sr.ht/~o/r"}
+	if !slices.Equal(got, want) {
+		t.Errorf("links = %q, want %q", got, want)
 	}
 }
