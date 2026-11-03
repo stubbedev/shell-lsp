@@ -5504,3 +5504,400 @@ a = 1; }}0"
 }}00000000''
 -- case-interp-set-trailing-block-comment --
 "${{ /*0*/ }}0"
+-- case-indented-tab-before-close --
+''
+  a
+	''
+-- case-indented-spaces-then-tab-before-close --
+''
+  a
+  	''
+-- case-indented-tab-sets-the-margin --
+''
+      a
+    	''
+-- case-indented-tab-only-row-is-kept --
+''
+  a
+	
+  b
+''
+-- case-indented-carriage-return-before-close --
+''
+  a
+''
+-- case-indented-tab-only-is-one-line --
+''
+	''
+-- case-indented-leading-tab-stays-on-one-line --
+''  	${a}''
+-- case-interp-hugs-indented-string --
+"a ${''
+  b
+''} c"
+-- case-interp-hugs-indented-string-in-indented --
+''
+  a ${''
+    b
+  ''} c
+''
+-- case-interp-hugs-indented-string-in-selector --
+x.${''
+  a
+''}.y
+-- case-interp-hugs-indented-string-language-comment --
+''
+  x ${/* c */ ''
+    a
+  ''}
+''
+-- case-interp-indented-string-line-comment-before --
+''
+  x ${
+  # c
+  ''
+    a
+  ''}
+''
+-- case-interp-indented-string-trailing-comment --
+''
+  x ${''
+    a
+  '' # c
+  }
+''
+-- case-interp-set-line-comment-before --
+''
+  x ${
+  # c
+  {
+    b = 1;
+  }}
+''
+-- case-interp-lone-indented-string-comment-before-close --
+''
+  ${
+    ''
+      a
+    ''
+    # d
+  }
+''
+-- case-interp-lone-set-comment-before-close --
+"${{
+  a = 1;
+}
+# d
+}"
+-- case-interp-hugs-string-holding-a-hug --
+"a ${"b${''
+  c
+''}"} d"
+-- case-interp-hugs-paren-of-set --
+"a ${({
+  b = 1;
+})} c"
+-- case-interp-hugs-paren-of-simple-call --
+"a ${(f y ''
+  b
+'')} c"
+-- case-interp-paren-of-long-call-opens --
+"a ${(x y z ''
+  b
+'')} c"
+-- case-interp-paren-of-call-trailing-comment-opens --
+"x${(f ''
+  a
+'')#c
+}"
+-- case-interp-paren-of-set-trailing-comment-hugs --
+"x${({
+}) #c
+}"
+-- case-interp-paren-leading-comment-opens --
+"x${(
+#c
+{
+})}"
+-- case-paren-in-paren-hugs-string --
+((''
+  a
+''))
+-- case-paren-in-paren-hugs-set --
+(({
+}))
+-- case-paren-in-paren-rhs --
+{ x = (({
+})); }
+-- case-paren-in-paren-last-arg --
+f ((''
+  a
+''))
+-- case-paren-in-paren-middle-arg --
+f (({
+})) y
+-- case-paren-in-paren-comment-inside --
+((
+# c
+{
+}))
+-- case-paren-comment-before-paren --
+(
+# c
+({
+}))
+-- case-paren-select-on-list-opens --
+([
+].a)
+-- case-paren-select-on-string-opens --
+(''
+  a
+''.a)
+-- case-paren-select-on-paren-of-set-opens --
+(({
+}).y)
+-- case-paren-select-on-paren-of-set-or-opens --
+(({
+}).a or c)
+-- case-paren-select-on-paren-of-call-hugs --
+((f {
+}).a or c)
+-- case-lambda-with-in-paren-opens --
+[
+  (ps: with ps; [
+    a
+  ])
+]
+-- case-lambda-with-in-paren-middle-arg --
+f (ps: with ps; [
+  a
+]) y
+-- case-lambda-with-string-in-paren-opens --
+[ (ps: with ps; ''
+  a
+'') ]
+-- case-lambda-two-with-in-paren --
+[ (ps: with ps; with qs; [
+  a
+]) ]
+-- case-lambda-set-param-with-in-paren-hangs --
+({ y }: with z; {
+})
+-- case-lambda-name-set-with-in-paren --
+(x: { y }: with z; {
+})
+-- case-lambda-name-set-with-rhs --
+{ a = x: { y }: with z; {
+}; }
+-- case-lambda-set-set-with-rhs --
+{ a = { y, z }: { w }: with z; {
+}; }
+-- case-lambda-set-set-with-middle-arg --
+f ({ y }: { z }: with z; {
+}) b
+-- case-lambda-set-name-with-rhs --
+{ a = { y }: w: with z; {
+}; }
+-- case-lambda-name-set-body-in-comparison --
+assert
+  f (x: { y, z }: {
+    a = 1;
+  }) b == c;
+d
+-- case-lambda-name-set-body-middle-arg --
+f (x: { y, z }: {
+  a = 1;
+}) b
+-- case-lambda-name-set-body-last-arg --
+f (x: { y, z }: {
+  a = 1;
+})
+-- case-lambda-name-set-body-paren --
+(x: { y, z }: {
+  a = 1;
+})
+-- case-lambda-name-set-body-rhs --
+{ a = x: { y, z }: {
+  a = 1;
+}; }
+-- case-lambda-name-set-name-set-body-rhs --
+{ a = x: { y }: w: { z }: {
+}; }
+-- case-lambda-name-three-formals-opens --
+f (x: { y, z, w }: {
+  a = 1;
+}) b
+-- case-lambda-name-alias-opens --
+f (x: { y }@z: {
+  a = 1;
+}) b
+-- case-lambda-alias-in-paren-opens --
+(x@{ y }: {
+})
+-- case-lambda-alias-name-in-paren-opens --
+f (x@{ y }: w: {
+}) b
+-- case-lambda-alias-string-in-paren-opens --
+({ y }@x: ''
+  a
+'')
+-- case-lambda-name-body-next-line-opens --
+f (x: { y }:
+{
+  a = 1;
+}) b
+-- case-lambda-paren-body-last-arg --
+f (x: ({
+  a = 1;
+}))
+-- case-lambda-paren-paren-body-last-arg --
+f (x: (({
+})))
+-- case-lambda-paren-body-in-list --
+[ (x: (({
+}))) ]
+-- case-lambda-two-names-paren-body-last-arg --
+f (x: y: ({
+  a = 1;
+}))
+-- case-lambda-name-set-paren-body --
+{ a = x: { }: ({
+}); }
+-- case-comment-space-counts-assert --
+assert
+  a
+  == "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"; # c
+1
+-- case-comment-space-counts-assert-at-edge --
+assert a == "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"; # c
+1
+-- case-comment-space-counts-assert-past-edge --
+assert a == "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"; # cccccccccccccccc
+1
+-- case-comment-space-counts-rhs --
+{ a = b.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; # c
+}
+-- case-comment-space-counts-rhs-past-edge --
+{ a = b.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; # c
+}
+-- case-comment-space-counts-paren --
+[ (b == "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx") # c
+]
+-- case-comment-space-counts-block-comment --
+{ a = b + "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"; /* c */
+}
+-- case-string-end-past-width-last-arg --
+# c
+f ''
+  x
+  xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx''
+-- case-string-end-past-width-three-args --
+f a b ''
+  x
+  xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx''
+-- case-string-end-past-width-rhs --
+{ a = f a b ''
+  x
+  xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx''; }
+-- case-string-end-past-width-paren-arg --
+f a b (g ''
+  x
+  xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'')
+-- case-string-end-past-width-before-arg --
+f a b ''
+  x
+  xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'' c
+-- case-string-end-at-width-before-arg --
+f a b ''
+  x
+  xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'' c
+-- case-string-end-past-width-in-paren-call --
+[ (f b c d ''
+  x
+  xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'') ]
+-- case-string-end-at-width-in-paren-call --
+[ (f b c d ''
+  x
+  xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'') ]
+-- case-string-end-past-width-lambda-before-arg --
+f a b (y: ''
+  x
+  xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'') c
+-- case-call-select-last-in-paren-before-string --
+lib.warnIf (lib.versionOlder ver super.${p}.version) "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" pkg
+-- case-call-select-last-in-paren-assert --
+assert lib.assertMsg (builtins.all (d: d != null) variants.${v}.extraDeps) "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
+1
+-- case-call-lambda-arg-in-paren-before-last --
+optionals (any (arg: f arg) x) xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+-- case-call-select-last-in-paren-sweep-edge --
+f (a b.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx) (d) c
+-- case-call-select-last-in-paren-sweep-past --
+f (a b.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx) { x = 1; }
+-- case-call-select-last-in-paren-rhs --
+{ x = f (a b.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx) c; }
+-- case-quoted-key-operator-at-edge --
+{ "a" = b + xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx;
+}
+-- case-quoted-key-operator-past-edge --
+{ "a" = b + xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx;
+}
+-- case-quoted-key-or-chain-past-width --
+{ "10.a" = f "b" xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx || f "c" xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx;
+}
+-- case-quoted-key-if-at-edge --
+{ "a" = if b then xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx else c;
+}
+-- case-quoted-key-lambda-at-edge --
+{ "a" = x: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx b;
+}
+-- case-simple-call-select-on-paren-stays-flat --
+f (a xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx).y z
+-- case-simple-call-select-on-paren-dotted-stays-flat --
+f (a b.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx).y z
+-- case-simple-call-select-on-paren-fn-stays-flat --
+(a xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx).y z
+-- case-simple-call-select-on-paren-last-breaks --
+f g (a xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx).y
+-- case-inherit-only-set-rhs-stays-flat --
+{ x = { inherit a; }; }
+-- case-inherit-only-set-after-operator --
+{ x = y // { inherit a; }; }
+-- case-inherit-only-set-before-operator --
+{ x = { inherit a; } // y; }
+-- case-inherit-only-set-after-with --
+{ x = with y; { inherit a; }; }
+-- case-inherit-only-set-in-lambda-arg --
+f (z: { inherit a; })
+-- case-inherit-only-set-in-call-in-paren --
+f (g { inherit a; })
+-- case-inherit-only-set-after-alias --
+{ z }@y: { inherit a; }
+-- case-inherit-only-set-with-from-after-operator --
+{ x = y // { inherit (a) b; }; }
+-- case-inherit-only-set-default-stays-flat --
+{ a ? { inherit b; } }: 1
+-- case-paren-call-trailing-comment-opens --
+a ++ f (g {
+  b = 1;
+}) # c
+++ d
+-- case-paren-call-comment-before-close-opens --
+f (g {
+  b = 1;
+}
+# c
+)
+-- case-paren-call-trailing-comment-on-inner-hugs --
+f (g {
+  b = 1;
+} # c
+)
+-- case-paren-lambda-trailing-comment-hugs --
+f (x: {
+  b = 1;
+}) # c
+-- case-paren-call-trailing-block-comment-opens --
+f y (g [
+  b
+]) /* c */

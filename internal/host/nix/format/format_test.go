@@ -400,6 +400,12 @@ func hostileShapes() []hostileShape {
 		{"many priorities", "g (h i) [ j ] (", ") { k = 1; }", long},
 		{"with lists", "(with a; [ ", " ])", long},
 		{"negations", "!", "", "a [\n1] b"},
+		{"parens around a set", "(", ")", "{ a = 1; }"},
+		{"parens around a string", "(", ")", "''\n  a\n''"},
+		{"parens in interpolations", "\"a${(", ")}b\"", "{ a = 1; }"},
+		{"lambda chains", "x: { y }: ", "", "{ a = 1; }"},
+		{"selections in arguments", "f (a b.", ") c", "d"},
+		{"long selections in arguments", "f (a b.${", "}) c", long},
 	}
 }
 

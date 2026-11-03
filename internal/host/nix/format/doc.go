@@ -76,11 +76,6 @@ type item struct {
 	items  []item
 }
 
-func beforeComment(items []item, i int) bool {
-	next := i + 1
-	return next < len(items) && items[next].tag == tagText && items[next].kind == textTrailingComment
-}
-
 const noFloor = int32(^uint32(0) >> 1)
 
 func (it *item) lowerFloor(child *item) {
@@ -101,9 +96,6 @@ func (it *item) measure() {
 	for i := range it.items {
 		child := &it.items[i]
 		it.lowerFloor(child)
-		if child.tag == tagSpacing && child.space == spaceHard && beforeComment(it.items, i) {
-			continue
-		}
 		switch child.tag {
 		case tagText:
 			if child.counted() {
@@ -172,10 +164,8 @@ func (a *annotator) pass(items []item, f lookahead) lookahead {
 			}
 		case tagSpacing:
 			if it.space == spaceHard {
-				if !beforeComment(items, i) {
-					f.compact++
-					f.first++
-				}
+				f.compact++
+				f.first++
 				continue
 			}
 			f.compact, f.first, f.compactHard = 0, 0, false
@@ -218,6 +208,7 @@ const noHead = -1
 type planKey struct {
 	id     int32
 	forced bool
+	beyond int
 	state  state
 }
 
@@ -254,6 +245,7 @@ type renderer struct {
 	plans  map[planKey]plan
 	levels map[levelKey]*level
 	prio   []*priorityPlan
+	beyond int
 }
 
 func render(doc []item, hint int) string {
@@ -493,7 +485,7 @@ func (r *renderer) planFor(g *item, st state, forced bool) plan {
 	inner := st
 	inner.stack = r.rebased(st.stack, floor, relative)
 	inner.current -= floor.indent
-	key := planKey{id: g.id, forced: forced, state: inner}
+	key := planKey{id: g.id, forced: forced, beyond: r.beyond, state: inner}
 	p, ok := r.plans[key]
 	if !ok {
 		choice := expand
@@ -615,22 +607,34 @@ func (r *renderer) trial(g *item, p *priorityPlan, slot *prioritySlot, st state)
 		return false
 	}
 	chosen := &p.flat[slot.index]
-	tailFirst := slot.tailFirst
-	if !slot.tailBroken {
-		tailFirst += int(g.next.first)
-	}
-	if !chosen.hard && st.column+slot.beforeWidth+int(chosen.width)+tailFirst <= lineWidth {
+	beyondSlot := r.beyondSlot(g, slot)
+	if !chosen.hard && st.column+slot.beforeWidth+int(chosen.width)+beyondSlot <= lineWidth {
 		return false
 	}
 	start := outcome{state: st, head: noHead}
-	start = r.compact(p.flat[:slot.index], start, false, false)
+	start = r.compact(p.flat[:slot.index], start, true, false)
 	start.head = noHead
+	following := r.beyond
+	r.beyond = beyondSlot
 	result := r.forcedSequence(chosen, start, false)
+	r.beyond = following
 	head := result.head
 	if head == noHead {
 		head = result.state.column
 	}
-	return head <= lineWidth && result.state.column+slot.tailWidth+int(g.next.first) <= lineWidth
+	if head > lineWidth {
+		return false
+	}
+	return slot.index == len(p.flat)-1 || result.state.column+slot.tailWidth+r.beyondGroup(g) <= lineWidth
+}
+
+func (r *renderer) beyondGroup(g *item) int { return max(int(g.next.first), r.beyond) }
+
+func (r *renderer) beyondSlot(g *item, slot *prioritySlot) int {
+	if slot.tailBroken {
+		return slot.tailFirst
+	}
+	return min(slot.tailFirst+r.beyondGroup(g), lineWidth+1)
 }
 
 func (r *renderer) forcedSequence(g *item, o outcome, emit bool) outcome {
@@ -638,17 +642,53 @@ func (r *renderer) forcedSequence(g *item, o outcome, emit bool) outcome {
 }
 
 func (r *renderer) execute(g *item, choice int, o outcome, forced, emit bool) outcome {
+	following := r.beyond
+	defer func() { r.beyond = following }()
 	if choice == expand {
 		if forced && len(g.items) == 1 && g.items[0].tag == tagGroup {
 			return r.planned(&g.items[0], o, true, emit)
 		}
-		return r.sequence(g.items, o, emit)
+		r.beyond = 0
+		at, after := closingGroup(g.items)
+		if !forced || following == 0 || at < 0 {
+			return r.sequence(g.items, o, emit)
+		}
+		o = r.sequence(g.items[:at], o, emit)
+		o = r.placedBefore(&g.items[at], following+after, o, emit)
+		return r.sequence(g.items[at+1:], o, emit)
 	}
 	p := r.prio[g.id]
 	slot := &p.slots[choice]
-	o = r.compact(p.flat[:slot.index], o, false, emit)
+	o = r.compact(p.flat[:slot.index], o, true, emit)
+	r.beyond = r.beyondSlot(g, slot)
 	o = r.forcedSequence(&p.flat[slot.index], o, emit)
 	return r.compact(p.flat[slot.index+1:], o, false, emit)
+}
+
+func closingGroup(doc []item) (int, int) {
+	after := 0
+	for i := len(doc) - 1; i >= 0; i-- {
+		switch doc[i].tag {
+		case tagGroup:
+			return i, after
+		case tagSpacing:
+			return -1, 0
+		case tagText:
+			if doc[i].counted() {
+				after += int(doc[i].width)
+			}
+		}
+	}
+	return -1, 0
+}
+
+func (r *renderer) placedBefore(g *item, following int, o outcome, emit bool) outcome {
+	if g.hard || o.state.column+int(g.width)+following <= lineWidth {
+		return r.placed(g, o, emit)
+	}
+	r.beyond = min(following, lineWidth+1)
+	defer func() { r.beyond = 0 }()
+	return r.planned(g, o, false, emit)
 }
 
 func lines(count int) []item {

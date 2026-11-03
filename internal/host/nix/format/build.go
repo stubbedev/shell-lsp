@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	stringBlanks           = " \t\r"
+	stringBlanks           = " "
 	flatInterpolationWidth = 30
 	plainPathLength        = 4
 	simpleListLength       = 6
@@ -356,6 +356,9 @@ func interpDoc(in *interpolation, n int, lone bool) []item {
 	if !lone {
 		return flatDoc(in, n)
 	}
+	if len(in.close.pre) > 0 {
+		return interpOpened(in, n)
+	}
 	return group(enclosed(in.open, in.value, in.close, n))
 }
 
@@ -425,11 +428,11 @@ func flatDoc(in *interpolation, n int) []item {
 	if a, ok := in.value.(*applyExpr); ok && in.open.lone() && len(in.close.pre) == 0 && len(firstToken(a).pre) == 0 && lastToken(a).trail == "" && looseSimple(a) {
 		return seq(tokenDoc(in.open, n), group(applyDoc(a, n)), tokenDoc(in.close, n))
 	}
-	if hasCommentsIn(in.value) || !in.open.lone() || len(in.close.pre) > 0 {
-		return group(interpOpen(in, n, group(exprDoc(in.value, n+1))))
+	if in.open.lone() && len(in.close.pre) == 0 && hugsInterpolation(in.value) {
+		return group(tokenDoc(in.open, n), exprDoc(in.value, n), tokenDoc(in.close, n))
 	}
-	if isAbsorbableSetOrList(in.value) {
-		return group(tokenDoc(in.open, n), forcelessDoc(in.value, n), tokenDoc(in.close, n))
+	if hasCommentsIn(in.value) || !in.open.lone() || len(in.close.pre) > 0 {
+		return interpOpened(in, n)
 	}
 	if a, ok := in.value.(*applyExpr); ok && simpleCall(a) {
 		return seq(tokenDoc(in.open, n), group(applyDoc(a, n)), tokenDoc(in.close, n))
@@ -454,6 +457,10 @@ func lowered(doc []item) []item {
 		out[i] = it
 	}
 	return out
+}
+
+func interpOpened(in *interpolation, n int) []item {
+	return group(interpOpen(in, n, group(exprDoc(in.value, n+1))))
 }
 
 func interpOpen(in *interpolation, n int, inner []item) []item {
@@ -497,22 +504,20 @@ func flatWithin(doc []item, width *int) bool {
 	return true
 }
 
-func isAbsorbableSetOrList(e expr) bool {
-	switch e.(type) {
-	case *setTerm, *listTerm:
-		return isAbsorbable(e)
-	}
-	return false
-}
-
-func forcelessDoc(e expr, n int) []item {
+func hugsInterpolation(e expr) bool {
 	switch v := e.(type) {
-	case *setTerm:
-		return setDoc(v, n, false)
-	case *listTerm:
-		return listDoc(v, n)
+	case *stringTerm:
+		return v.open.lone() || isIndentedMulti(v)
+	case *parenTerm:
+		if !v.open.lone() || len(firstToken(v.inner).pre) > 0 {
+			return false
+		}
+		if a, ok := v.inner.(*applyExpr); ok {
+			return v.close.lone() && simpleCall(a)
+		}
+		return hugsInterpolation(v.inner)
 	}
-	panic("format: only a set or a list hugs an interpolation")
+	return isAbsorbable(e)
 }
 
 func stringBody(s *stringTerm, n int) []item {
@@ -636,7 +641,7 @@ func trimmedRow(r row) row {
 		return r
 	}
 	out := append(row(nil), r...)
-	out[0].text = strings.TrimLeft(out[0].text, " \t")
+	out[0].text = strings.TrimLeft(out[0].text, stringBlanks)
 	if out[0].text == "" {
 		out = out[1:]
 	}
@@ -879,7 +884,7 @@ func assignDoc(a *assignBinding, n int) []item {
 func forcedDoc(e expr, n int) []item {
 	switch e := e.(type) {
 	case *setTerm:
-		return setDoc(e, n, forcesSet(e))
+		return setDoc(e, n, true)
 	case *listTerm:
 		return listDoc(e, n)
 	}
@@ -904,9 +909,14 @@ func assignRHS(a *assignBinding, m int) []item {
 
 func rhsDoc(v expr, m int) []item {
 	switch v := v.(type) {
-	case *setTerm, *listTerm:
+	case *setTerm:
 		if isAbsorbable(v) {
-			return seq(hardSpace, group(forcedDoc(v, m)))
+			return seq(hardSpace, group(setDoc(v, m, forcesSet(v))))
+		}
+		return group(space, exprDoc(v, m))
+	case *listTerm:
+		if isAbsorbable(v) {
+			return seq(hardSpace, group(listDoc(v, m)))
 		}
 		return group(space, exprDoc(v, m))
 	case *stringTerm:
@@ -916,7 +926,7 @@ func rhsDoc(v expr, m int) []item {
 	case *pathTerm:
 		return seq(hardSpace, group(pathDoc(v, m)))
 	case *parenTerm:
-		if isAbsorbable(v.inner) {
+		if parenAbsorbs(v.inner) {
 			return seq(hardSpace, group(parenDoc(v, m)))
 		}
 		return seq(hardSpace, priority(parenOpen(v, m+1)))
@@ -976,38 +986,38 @@ func hasDefault(p *setParam) bool {
 }
 
 func lambdaRHS(l *lambdaExpr, m int) []item {
-	_, named := l.param.(*nameParam)
-	if named && lambdaEndsAbsorbable(l) {
+	if !lambdaEndsAbsorbable(l) {
+		return seq(space, group(lambdaDoc(l, m, 1)))
+	}
+	if _, named := l.param.(*nameParam); named {
 		return group(space, lambdaDoc(l, m, 1))
 	}
-	if _, alias := l.param.(*aliasParam); !alias && !named && paramIsSimple(l.param) && endsAbsorbableAny(l.body) && firstToken(l.body).line == l.colon.line {
-		return seq(hardSpace, group(lambdaDoc(l, m, 1)))
-	}
-	return seq(space, group(lambdaDoc(l, m, 1)))
-}
-
-func endsAbsorbableAny(e expr) bool {
-	switch v := e.(type) {
-	case *lambdaExpr:
-		return lambdaEndsAbsorbable(v)
-	case *withExpr:
-		return isAbsorbable(v.body)
-	}
-	return isAbsorbable(e)
+	return seq(hardSpace, group(lambdaDoc(l, m, 1)))
 }
 
 func lambdaEndsAbsorbable(l *lambdaExpr) bool {
-	var e expr = l
-	for {
-		next, ok := e.(*lambdaExpr)
-		if !ok {
-			return isAbsorbable(e)
+	for chainsIntoBody(l) {
+		switch b := l.body.(type) {
+		case *lambdaExpr:
+			l = b
+			continue
+		case *withExpr:
+			_, named := l.param.(*nameParam)
+			return !named && isAbsorbable(b.body)
 		}
-		if _, named := next.param.(*nameParam); !named {
-			return false
-		}
-		e = next.body
+		return parenAbsorbs(l.body)
 	}
+	return false
+}
+
+func chainsIntoBody(l *lambdaExpr) bool {
+	switch p := l.param.(type) {
+	case *nameParam:
+		return true
+	case *setParam:
+		return paramIsCompact(p) && firstToken(l.body).line == l.colon.line
+	}
+	return false
 }
 
 func binaryRHS(b *binaryExpr, m int) []item {
@@ -1142,8 +1152,8 @@ func enclosed(open *token, inner expr, closing *token, n int) []item {
 	o, c := tokenDoc(open, n), closeDoc(closing, n)
 	body := func() []item { return group(exprDoc(inner, n+1)) }
 	switch v := inner.(type) {
-	case *setTerm, *listTerm, *stringTerm:
-		if isAbsorbable(v) {
+	case *setTerm, *listTerm, *stringTerm, *parenTerm:
+		if parenAbsorbs(v) {
 			return seq(o, group(exprDoc(inner, n+1)), c)
 		}
 	case *applyExpr:
@@ -1158,16 +1168,16 @@ func enclosed(open *token, inner expr, closing *token, n int) []item {
 			f.pre = saved
 			return doc
 		}
-		if open.text == interpolationOpen && (len(closing.pre) > 0 || lastToken(v).trail != "") {
+		if open.text == interpolationOpen && lastToken(v).trail != "" {
 			break
 		}
 		return seq(o, group(hugApply(v, n+1), plainBrk), c)
 	case *selectTerm:
-		if _, onSet := v.target.(*setTerm); !onSet && (open.text != interpolationOpen || len(closing.pre) == 0) {
+		if !parenAbsorbs(v.target) {
 			return seq(o, body(), plainBrk, c)
 		}
 	case *lambdaExpr:
-		if lambdaHugs(v) {
+		if lambdaEndsAbsorbable(v) {
 			return seq(o, body(), c)
 		}
 	case *withExpr:
@@ -1176,16 +1186,6 @@ func enclosed(open *token, inner expr, closing *token, n int) []item {
 		}
 	}
 	return seq(o, plainBrk, body(), plainBrk, c)
-}
-
-func lambdaHugs(l *lambdaExpr) bool {
-	if !paramIsSimple(l.param) {
-		return false
-	}
-	if _, named := l.param.(*nameParam); !named && firstToken(l.body).line != l.colon.line {
-		return false
-	}
-	return endsAbsorbableAny(l.body)
 }
 
 func hugApply(a *applyExpr, n int) []item {
@@ -1229,7 +1229,7 @@ func simpleText(e expr, n int) []item {
 	case *stringTerm:
 		return rigid(stringBody(v, n))
 	}
-	return exprDoc(e, n)
+	return rigid(exprDoc(e, n))
 }
 
 func simpleInner(e expr, n int) []item {
@@ -1336,7 +1336,7 @@ func lastArg(e expr, n int) []item {
 			return priority(listDoc(v, n))
 		}
 	case *parenTerm:
-		if isAbsorbable(v.inner) {
+		if parenAbsorbs(v.inner) {
 			return priority(group(parenDoc(v, n)))
 		}
 		if hug := parenHugOnce(v, n); hug != nil {
@@ -1356,11 +1356,11 @@ func parenHugOnce(p *parenTerm, n int) []item {
 	}
 	switch v := p.inner.(type) {
 	case *lambdaExpr:
-		if n2, ok := v.param.(*nameParam); ok && n2.name.lone() && v.colon.lone() && isAbsorbable(v.body) {
+		if n2, ok := v.param.(*nameParam); ok && n2.name.lone() && v.colon.lone() && parenAbsorbs(v.body) {
 			return seq(tokenDoc(p.open, n), tokenDoc(n2.name, n), tokenDoc(v.colon, n), hardSpace, forcedDoc(v.body, n), tokenDoc(p.close, n))
 		}
 	case *applyExpr:
-		if fn, ok := v.fn.(*plainTerm); ok && fn.tok.lone() && len(v.args) == 1 && isAbsorbable(v.args[0]) {
+		if fn, ok := v.fn.(*plainTerm); ok && fn.tok.lone() && p.close.lone() && len(v.args) == 1 && isAbsorbable(v.args[0]) {
 			return seq(tokenDoc(p.open, n), tokenDoc(fn.tok, n), hardSpace, forcedDoc(v.args[0], n), tokenDoc(p.close, n))
 		}
 	}
@@ -1369,6 +1369,9 @@ func parenHugOnce(p *parenTerm, n int) []item {
 
 func lambdaDoc(l *lambdaExpr, n, depth int) []item {
 	head := seq(paramDoc(l.param, n), tokenDoc(l.colon, n))
+	if depth == 1 {
+		head = group(head)
+	}
 	body := l.body
 	name, named := l.param.(*nameParam)
 	if named {
@@ -1379,7 +1382,7 @@ func lambdaDoc(l *lambdaExpr, n, depth int) []item {
 	}
 	if _, alias := l.param.(*aliasParam); alias || (!named && !paramIsSimple(l.param) && firstToken(body).line == l.colon.line) {
 		if set, ok := body.(*setTerm); ok && isAbsorbable(set) {
-			return seq(head, space, group(setDoc(set, n, forcesSet(set))))
+			return seq(head, space, group(setDoc(set, n, true)))
 		}
 		return seq(head, space, inlineBody(body, n))
 	}
@@ -1392,7 +1395,7 @@ func lambdaDoc(l *lambdaExpr, n, depth int) []item {
 			return seq(head, hardSpace, lambdaDoc(v, n, depth+1))
 		}
 		if _, next := v.param.(*nameParam); !next {
-			return seq(head, space, lambdaDoc(v, n, 1))
+			return seq(head, space, lambdaDoc(v, n, depth+1))
 		}
 		if lambdaEndsAbsorbable(v) {
 			return seq(head, priority(group(space, lambdaDoc(v, n, 2))))
@@ -1417,8 +1420,10 @@ func lambdaDoc(l *lambdaExpr, n, depth int) []item {
 
 func parenOfAbsorbable(e expr) bool {
 	p, ok := e.(*parenTerm)
-	return ok && isAbsorbable(p.inner)
+	return ok && p.open.lone() && len(firstToken(p.inner).pre) == 0 && parenAbsorbs(p.inner)
 }
+
+func parenAbsorbs(e expr) bool { return isAbsorbable(e) || parenOfAbsorbable(e) }
 
 func absorbedBody(e expr, n int, named bool) []item {
 	switch v := e.(type) {
