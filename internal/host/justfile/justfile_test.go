@@ -69,12 +69,12 @@ func TestProjectText(t *testing.T) {
 		{
 			name:     "exported variables and parameters are set",
 			justfile: "export token := 'x'\nrun $user other:\n    echo $token $user $other\n",
-			want:     "(\ntoken=$$\nuser=$$\necho $token $user $other\n)\n",
+			want:     "(\ntoken=$_\nuser=$_\necho $token $user $other\n)\n",
 		},
 		{
 			name:     "set export exports everything",
 			justfile: "set export\nlevel := '1'\nrun arg:\n    echo $level $arg\n",
-			want:     "(\narg=$$\nlevel=$$\necho $level $arg\n)\n",
+			want:     "(\narg=$_\nlevel=$_\necho $level $arg\n)\n",
 		},
 		{
 			name:     "windows recipes run with the windows shell",

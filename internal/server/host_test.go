@@ -300,6 +300,33 @@ func TestSemanticTokensReadEveryDialectOfAHostFile(t *testing.T) {
 	}
 }
 
+func TestUnquotedExportedValuesAreSplit(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name, uri, language, text string
+		want                      []string
+	}{
+		{"exported parameter", "file:///w/justfile", "just", "run $target:\n    cp $target /tmp\n", []string{"SC2086"}},
+		{"quoted exported parameter", "file:///w/justfile", "just", "run $target:\n    cp \"$target\" /tmp\n", nil},
+		{"parameter under set export", "file:///w/justfile", "just", "set export\nrun target:\n    cp $target /tmp\n", []string{"SC2086"}},
+		{"exported variable", "file:///w/justfile", "just", "export target := 'a'\nrun:\n    cp $target /tmp\n", []string{"SC2086"}},
+		{"exported parameter in a shebang recipe", "file:///w/justfile", "just", "run $target:\n    #!/bin/sh\n    cp $target /tmp\n", []string{"SC2086"}},
+		{"parameter the shell never sees", "file:///w/justfile", "just", "run target:\n    cp $target /tmp\n", []string{"SC2086", "SC2154", "SL5013"}},
+	} {
+		c, _ := startClient(t, `{`+pullCapabilities+`}`)
+		c.notify("textDocument/didOpen", openLanguageParams(tt.uri, tt.language, tt.text))
+		var got []string
+		for _, d := range pullDiagnostics(t, c, tt.uri) {
+			got = append(got, d.Code)
+		}
+		slices.Sort(got)
+		if !slices.Equal(got, tt.want) {
+			t.Errorf("%s: diagnostics = %v, want %v", tt.name, got, tt.want)
+		}
+	}
+}
+
 func TestJustfileDiagnosticsAndFixes(t *testing.T) {
 	t.Parallel()
 

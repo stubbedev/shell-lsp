@@ -15,6 +15,7 @@ const (
 	tool              = "just"
 	escapedOpen       = "{{{{"
 	interpolationOpen = "{{"
+	exportedValue     = "$_"
 )
 
 var (
@@ -221,7 +222,7 @@ func shellName(name string) bool {
 func (p projector) prelude(r *Recipe) string {
 	var sb strings.Builder
 	for _, name := range p.file.ExportedTo(r) {
-		sb.WriteString(name + "=" + projection.Dynamic + "\n")
+		sb.WriteString(name + "=" + exportedValue + "\n")
 	}
 	return sb.String()
 }
