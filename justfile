@@ -275,8 +275,8 @@ release level:
         exit 1
     fi
 
-    runs="$(gh run list --branch main --limit 200 --json headSha,workflowName,conclusion \
-        --jq '.[] | [.headSha, .workflowName, .conclusion] | @tsv')"
+    runs="$(gh run list --branch main --limit 200 --json headSha,workflowName,conclusion,event \
+        --jq '.[] | select(.event != "dynamic") | [.headSha, .workflowName, .conclusion] | @tsv')"
     declare -A unreleased=()
     while read -r sha; do
         unreleased["$sha"]=1
