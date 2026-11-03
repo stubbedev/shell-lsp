@@ -328,6 +328,13 @@ func TestUnquotedExportedValuesAreSplit(t *testing.T) {
 		{"make: bare unexport undoes bare export", "file:///w/Makefile", "makefile", "export\nunexport\ntoken := a\nall:\n\tcp $$token /tmp\n", []string{"SC2086", "SC2154", "SL6014"}},
 		{"make: bare unexport leaves .EXPORT_ALL_VARIABLES", "file:///w/Makefile", "makefile", ".EXPORT_ALL_VARIABLES:\nunexport\ntoken := a\nall:\n\tcp $$token /tmp\n", []string{"SC2086"}},
 		{"make: not exported", "file:///w/Makefile", "makefile", "token := a\nall:\n\tcp $$token /tmp\n", []string{"SC2086", "SC2154", "SL6014"}},
+		{"just: a shell variable set from an interpolation", "file:///w/justfile", "just", "y := 'a b'\nrun:\n    x={{y}}; cp $x /tmp\n", []string{"SC2086"}},
+		{"just: quoted, from a quoted interpolation", "file:///w/justfile", "just", "y := 'a b'\nrun:\n    x=\"{{y}}\"; cp \"$x\" /tmp\n", nil},
+		{"just: a parameter in a shebang recipe", "file:///w/justfile", "just", "run y:\n    #!/bin/sh\n    x=a{{y}}\n    cp $x /tmp\n", []string{"SC2086"}},
+		{"just: a sole interpolation is not flagged", "file:///w/justfile", "just", "y := 'a'\nrun:\n    cp {{y}} /tmp\n", nil},
+		{"just: the shell pid stays clean", "file:///w/justfile", "just", "run:\n    x=$$; cp $x /tmp\n", nil},
+		{"make: a shell variable set from a make expansion", "file:///w/Makefile", "makefile", "Y := a b\nall:\n\tx=$(Y); cp $$x /tmp\n", []string{"SC2086"}},
+		{"make: the shell pid stays clean", "file:///w/Makefile", "makefile", "all:\n\tx=$$$$; cp $$x /tmp\n", nil},
 	} {
 		c, _ := startClient(t, `{`+pullCapabilities+`}`)
 		c.notify("textDocument/didOpen", openLanguageParams(tt.uri, tt.language, tt.text))

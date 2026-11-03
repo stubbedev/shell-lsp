@@ -185,6 +185,32 @@ func TestZshRegexTokensAfterAnEscapeCoverTheirOwnSource(t *testing.T) {
 	}
 }
 
+func TestQuotedRegexTokens(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name    string
+		dialect dialect.Dialect
+		text    string
+		want    []string
+	}{
+		{"zsh single quotes are a regex", dialect.Zsh, "[[ $v =~ '^[a-z]+x' ]]\n", []string{"':string", "^:operator", "[a-z]:regexp", "+:operator", "x':string"}},
+		{"zsh double quotes are a regex", dialect.Zsh, "[[ $v =~ \"^[a-z]+x\" ]]\n", []string{"\":string", "^:operator", "[a-z]:regexp", "+:operator", "x:string", "\":string"}},
+		{"zsh ANSI-C quotes are a regex", dialect.Zsh, "[[ $v =~ $'^\\t[a-z]+' ]]\n", []string{"$':string", "^:operator", "\\t:string", "[a-z]:regexp", "+:operator", "':string"}},
+		{"bash quotes stay one literal", dialect.Bash, "[[ $v =~ 'x+'y+ ]]\n", []string{"'x+':string", "+:operator"}},
+	} {
+		tokens := describe(tt.text, Tokens(parser.Parse(tt.text, tt.dialect), nil, nil))
+		from := slices.Index(tokens, "=~:operator")
+		if from < 0 {
+			t.Fatalf("%s: no =~ among %v", tt.name, tokens)
+		}
+		got := slices.DeleteFunc(tokens[from+1:], func(s string) bool { return strings.HasPrefix(s, "]]:") })
+		if !slices.Equal(got, tt.want) {
+			t.Errorf("%s: tokens = %v, want %v", tt.name, got, tt.want)
+		}
+	}
+}
+
 func TestPatternsInZshSubscriptFlagsAreNotNumbers(t *testing.T) {
 	t.Parallel()
 

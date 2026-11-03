@@ -277,9 +277,24 @@ func (g *generator) walk() {
 }
 
 func (g *generator) patterns() {
+	var regex []Token
 	for _, site := range glob.For(g.tree, shelloptions.Scan(g.tree)).All() {
+		from := len(g.tokens)
 		glob.Walk(site.Pattern.Root, g.patternNode)
+		if site.Role == glob.RoleRegex {
+			regex = append(regex, g.tokens[from:]...)
+			g.tokens = g.tokens[:from]
+		}
 	}
+	if len(regex) == 0 {
+		return
+	}
+	regions := make([]parser.Span, len(regex))
+	for i, t := range regex {
+		regions[i] = t.Span
+	}
+	slices.SortFunc(regions, func(a, b parser.Span) int { return cmp.Compare(a.Start, b.Start) })
+	g.tokens = append(clip(g.tokens, regions), regex...)
 }
 
 func (g *generator) patternNode(n glob.Node) bool {

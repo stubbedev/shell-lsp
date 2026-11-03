@@ -21,7 +21,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/stubbedev/shell-lsp/internal/atomicfile"
 	"github.com/stubbedev/shell-lsp/internal/host/nix"
 	"github.com/stubbedev/shell-lsp/internal/host/nix/scope"
 	"github.com/stubbedev/shell-lsp/internal/host/nix/syntax"
@@ -126,22 +125,15 @@ func runNixLint(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	got := renderNixLint(result, -1)
-	if *update {
-		return atomicfile.Write(*baselineFile, []byte(got))
-	}
-	raw, err := os.ReadFile(*baselineFile)
-	if err != nil {
-		return fmt.Errorf("reading the Nix lint baseline: %w", err)
-	}
-	if string(raw) == got {
-		fmt.Printf("%d Nix files match %s\n", result.files, *baselineFile)
-		return nil
-	}
-	for _, line := range diffLines(string(raw), got) {
-		fmt.Println(line)
-	}
-	return fmt.Errorf("the comparison with statix and deadnix no longer matches %s; fix the change, or run `just corpus-nix-lint-baseline` and review the diff", *baselineFile)
+	return checkBaseline(textBaseline{
+		file:    *baselineFile,
+		got:     renderNixLint(result, -1),
+		update:  *update,
+		name:    "Nix lint",
+		matches: fmt.Sprintf("%d Nix files match", result.files),
+		stale:   "the comparison with statix and deadnix no longer matches",
+		rewrite: "just corpus-nix-lint-baseline",
+	})
 }
 
 func requireNixLintTools(ctx context.Context) error {

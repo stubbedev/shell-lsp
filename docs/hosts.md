@@ -55,7 +55,8 @@ editor gives it, or else when its language identifier is `makefile` or
 - A directive goes on a recipe line of its own, indented like the recipe
   (`# shellcheck disable=SC2086`), and applies to the next line.
 - A make expansion inside single quotes (`'$(VAR)'`) is still text the shell
-  cannot know, not a literal `$`.
+  cannot know, not a literal `$`. A shell variable assigned from an expansion
+  holds that unknown text, so leaving it unquoted is SC2086.
 - Shell checks read each recipe alone and reuse the report of a recipe that did
   not change. Exported variables reach every recipe with a value it cannot
   know, so an unquoted `$$NAME` of one gets SC2086 and reading it is not reading
@@ -78,7 +79,8 @@ gives it, or else when its language identifier is `just`.
 - `{{expression}}` stands for text no one can know in advance, also inside
   quotes, and `{{{{` is a literal `{{`. Fixes write `{{` back as `{{{{`, and
   only a script recipe takes a fix that needs a new line, indented like the
-  recipe.
+  recipe. A shell variable assigned from one holds that unknown text, so leaving
+  it unquoted is SC2086.
 - Exported variables (`export name := ...`, `set export`) and `$`
   parameters are set when a recipe runs, to a value that can hold spaces, so
   reading them is not reading an unset variable and leaving them unquoted is

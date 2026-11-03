@@ -90,3 +90,23 @@ jobs:
       - name: Let bubblewrap create the sandbox make runs in
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - run: nix develop --command go run ./cmd/lintcheck hosts
+
+  recipes:
+    needs: fetch
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CGO_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.CORPUS_PATH }}
+          key: ${{ needs.fetch.outputs.key }}
+          fail-on-cache-miss: true
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - run: go run ./cmd/lintcheck recipes

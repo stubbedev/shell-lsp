@@ -78,28 +78,44 @@ func runHosts(ctx context.Context, args []string) error {
 	if len(slow) > 0 {
 		return fmt.Errorf("analysing the corpus is too slow:\n%s", strings.Join(slow, "\n"))
 	}
-	got := sb.String()
-	if *update {
-		return atomicfile.Write(*baselineFile, []byte(got))
-	}
-	raw, err := os.ReadFile(*baselineFile)
-	if err != nil {
-		return fmt.Errorf("reading the hosts baseline: %w", err)
-	}
 	judged := 0
 	for _, r := range reports {
 		if r.judged {
 			judged++
 		}
 	}
-	if string(raw) == got {
-		fmt.Printf("%d justfiles, Makefiles and Dockerfiles match %s; make or BuildKit judged %d of them\n", len(reports), *baselineFile, judged)
+	return checkBaseline(textBaseline{
+		file:    *baselineFile,
+		got:     sb.String(),
+		update:  *update,
+		name:    "hosts",
+		matches: fmt.Sprintf("%d justfiles, Makefiles and Dockerfiles, of which make or BuildKit judged %d, match", len(reports), judged),
+		stale:   "the analysis of the corpus justfiles, Makefiles and Dockerfiles no longer matches",
+		rewrite: "just corpus-baseline",
+	})
+}
+
+type textBaseline struct {
+	file, got, name, matches, stale, rewrite string
+	update                                   bool
+}
+
+func checkBaseline(b textBaseline) error {
+	if b.update {
+		return atomicfile.Write(b.file, []byte(b.got))
+	}
+	raw, err := os.ReadFile(b.file)
+	if err != nil {
+		return fmt.Errorf("reading the %s baseline: %w", b.name, err)
+	}
+	if string(raw) == b.got {
+		fmt.Printf("%s %s\n", b.matches, b.file)
 		return nil
 	}
-	for _, line := range diffLines(string(raw), got) {
+	for _, line := range diffLines(string(raw), b.got) {
 		fmt.Println(line)
 	}
-	return fmt.Errorf("the analysis of the corpus justfiles, Makefiles and Dockerfiles no longer matches %s; fix the change, or run `just corpus-baseline` and review the diff", *baselineFile)
+	return fmt.Errorf("%s %s; fix the change, or run `%s` and review the diff", b.stale, b.file, b.rewrite)
 }
 
 func diffLines(want, got string) []string {

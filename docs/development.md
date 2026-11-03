@@ -23,10 +23,11 @@ tests that compare with a reference tool skip.
 | `just fixtures` | Label new lint fixtures with shellcheck, then check every fixture |
 | `just lintcheck PATH...` | Per-code precision and recall of the linter against shellcheck over real scripts |
 | `just corpus-fetch` | Fetch the pinned corpus of public shell repositories into the cache |
-| `just corpus-check` | Compare the linter with shellcheck, the parser with the real shells, and the justfile, Makefile and Dockerfile analysis with just, make, BuildKit and Hadolint over the corpus, against the committed baselines |
+| `just corpus-check` | Compare the linter with shellcheck, the parser with the real shells, and the justfile, Makefile and Dockerfile analysis with just, make, BuildKit and Hadolint over the corpus, and lint the recipes, against the committed baselines |
 | `just corpus-shellcheck` | Only the shellcheck comparison, against `corpus/shellcheck.md` |
 | `just corpus-shells` | Only the comparison with bash, dash, zsh, ksh, mksh and BusyBox `-n`, against `corpus/shells.txt` |
 | `just corpus-hosts` | Only the analysis of real justfiles, Makefiles and Dockerfiles, checked with just, make, BuildKit and Hadolint, against `corpus/hosts.txt` |
+| `just corpus-recipes` | Only the shell findings in the recipes of those justfiles and Makefiles, against `corpus/recipes.md` |
 | `just corpus-nix-lint` | Compare the Nix checks with statix and deadnix, against `corpus/nix-lint.md`; `just corpus-nix-lint-baseline` rewrites it |
 | `just nix-parity [nixd\|nil]` | Compare with a Nix language server over the fixtures of `corpus/nix`; [the other `nix-parity` recipes](corpus.md#nix-server-parity) cover baselines and large flakes |
 | `just corpus-baseline` | Rewrite the corpus baselines after a deliberate change |

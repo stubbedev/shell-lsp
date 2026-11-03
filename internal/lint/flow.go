@@ -964,6 +964,9 @@ func (in *interpreter) partSpace(part syntax.WordPart, s *state) space {
 		}
 		return out
 	case *syntax.ParamExp:
+		if in.tree.StandIn(parser.Offset(p.Pos())) {
+			return spaceDirty
+		}
 		return in.expansionSpace(p, s)
 	case *syntax.ArithmExp:
 		return spaceClean

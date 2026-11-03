@@ -1,7 +1,7 @@
 # Corpus checks
 
 The lint fixtures and the parser tests are written by hand, so they only
-cover what someone thought of. Three checks run the linter, the parser and
+cover what someone thought of. Four checks run the linter, the parser and
 the justfile, Makefile and Dockerfile analysis over a pinned corpus of
 real-world files instead and compare them with their references: ShellCheck,
 the shells themselves, just, GNU make, BuildKit and Hadolint. Each records what it finds in a committed baseline, and
@@ -13,9 +13,10 @@ fails when the result changes.
 | `just corpus-shellcheck` | Compare the linter with ShellCheck against [corpus/shellcheck.md](../corpus/shellcheck.md) |
 | `just corpus-shells` | Compare the parser with the shells' `-n` against [corpus/shells.txt](../corpus/shells.txt) |
 | `just corpus-hosts` | Analyse the justfiles, Makefiles and Dockerfiles against [corpus/hosts.txt](../corpus/hosts.txt), checking them with just, make, BuildKit and Hadolint |
+| `just corpus-recipes` | Lint the shell in the recipes of the justfiles and Makefiles against [corpus/recipes.md](../corpus/recipes.md) |
 | `just corpus-nix-lint` | Compare the Nix checks with statix and deadnix on a 2,500-file sample of the nixpkgs `flake.lock` pins, against [corpus/nix-lint.md](../corpus/nix-lint.md) |
-| `just corpus-check` | All three comparisons |
-| `just corpus-baseline` | Rewrite the three baselines from the current code |
+| `just corpus-check` | All four comparisons |
+| `just corpus-baseline` | Rewrite the four baselines from the current code |
 
 All of them run `cmd/lintcheck` and need the tools from `nix develop`:
 ShellCheck 0.11.0, bash, dash, zsh, ksh, mksh, BusyBox, just, GNU Make,
@@ -193,6 +194,18 @@ line.
 The check fails when any line is added or removed, which it prints as a
 diff, and when a file takes longer than two seconds.
 
+## Recipe shell findings
+
+`lintcheck recipes` lints the shell in the recipes of the same justfiles and
+Makefiles the way the language server does, one recipe at a time with what its
+host hands it, and has no reference tool to compare with: `corpus/hosts.txt`
+holds the findings about the host files and none about the shell in them, so
+this baseline is what guards those. [corpus/recipes.md](../corpus/recipes.md)
+counts the findings per code and lists each one as `file:line:column code`, sorted
+by file and position, with nothing quoted from the files. The check fails when
+any line is added or removed, which it prints as a diff. A new line needs
+the recipe read by hand before the baseline takes it.
+
 ## Nix lint comparison
 
 `just corpus-nix-lint` runs statix and deadnix as black boxes beside the Nix checks and compares each lint. It also applies every fix in files up to 128 KiB and fails if one stops parsing or changes what a name resolves to. `lintcheck nixlint -sample 100000` covers all of nixpkgs in about 6 minutes, and `lintcheck nixlint -examples 5 -skip secrets,certs PATH` reports on any tree without a baseline. CI does not run this, because a run spawns two tools per file.
@@ -203,7 +216,7 @@ Refresh the baselines with `just corpus-baseline` after a change that is
 meant to move the numbers: a lint rule, a parser fix, a new repository or
 commit in the manifest, or a `flake.lock` update that changes ShellCheck or a
 shell. Then give every `unclassified` line in `corpus/shells.txt` its category
-by hand, and review the diff of the three files like a golden file: each changed
+by hand, and review the diff of the four files like a golden file: each changed
 count and each added or removed line should be explained by the change.
 
 ## CI
@@ -213,7 +226,8 @@ The `corpus` workflow fetches the corpus once, caches it with
 ShellCheck and the shells comparisons as two jobs in the Nix development
 shell, so they use the tools `flake.lock` pins. A third job checks the
 justfiles, Makefiles and Dockerfiles the same way, after allowing the unprivileged user
-namespaces bubblewrap needs.
+namespaces bubblewrap needs. A fourth job lints the recipes, in-process and without
+the Nix shell, since it runs no other tool.
 
 ## Nix server parity
 

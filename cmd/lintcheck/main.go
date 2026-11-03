@@ -16,6 +16,7 @@ const usage = `usage:
   lintcheck compare [-examples N] [-code SCxxxx] PATH...
   lintcheck fetch [-manifest FILE] [-cache DIR]
   lintcheck hosts [-manifest FILE] [-cache DIR] [-baseline FILE] [-update]
+  lintcheck recipes [-manifest FILE] [-cache DIR] [-baseline FILE] [-update]
   lintcheck nixlint [-nixpkgs DIR] [-sample N] [-baseline FILE] [-update] [-examples N] [-skip NAMES] [PATH...]
   lintcheck shellcheck [-manifest FILE] [-cache DIR] [-baseline FILE] [-update]
   lintcheck shells [-manifest FILE] [-cache DIR] [-baseline FILE] [-update] [-explain]`
@@ -27,6 +28,7 @@ var subcommands = map[string]func(ctx context.Context, args []string) error{
 	"nixlint":    runNixLint,
 	"fetch":      runFetch,
 	"hosts":      runHosts,
+	"recipes":    runRecipes,
 	"shellcheck": runShellcheck,
 	"shells":     runShells,
 }

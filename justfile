@@ -84,14 +84,19 @@ corpus-shells: corpus-fetch
 corpus-hosts: corpus-fetch
     go run ./cmd/lintcheck hosts
 
-# Run every corpus comparison.
-corpus-check: corpus-shellcheck corpus-shells corpus-hosts
+# Lint the recipes of the corpus justfiles and Makefiles; fails when corpus/recipes.md no longer matches.
+corpus-recipes: corpus-fetch
+    go run ./cmd/lintcheck recipes
 
-# Rewrite corpus/shellcheck.md, corpus/shells.txt and corpus/hosts.txt from the corpus; classify new shells entries by hand.
+# Run every corpus comparison.
+corpus-check: corpus-shellcheck corpus-shells corpus-hosts corpus-recipes
+
+# Rewrite corpus/shellcheck.md, corpus/shells.txt, corpus/hosts.txt and corpus/recipes.md from the corpus; classify new shells entries by hand.
 corpus-baseline: corpus-fetch
     go run ./cmd/lintcheck shellcheck -update
     go run ./cmd/lintcheck shells -update
     go run ./cmd/lintcheck hosts -update
+    go run ./cmd/lintcheck recipes -update
 
 # Compare the Nix checks with statix and deadnix; fails when corpus/nix-lint.md no longer matches.
 corpus-nix-lint:
