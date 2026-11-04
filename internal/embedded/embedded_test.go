@@ -381,6 +381,20 @@ func TestCommandLineBindings(t *testing.T) {
 	}
 }
 
+func TestUnclosedBindingValueRunsToTheEnd(t *testing.T) {
+	t.Parallel()
+
+	src := "jq '$name' --arg name \"$value"
+	programs := Find(parser.Parse(src, dialect.Bash))
+	if len(programs) != 1 {
+		t.Fatalf("Find(%q) = %d programs", src, len(programs))
+	}
+	b, ok := programs[0].Binding("name")
+	if !ok || b.Text != "\"$value" {
+		t.Errorf("%q: binding = %+v, %v, want the text %q", src, b, ok, "\"$value")
+	}
+}
+
 func TestBoundVariableHover(t *testing.T) {
 	t.Parallel()
 

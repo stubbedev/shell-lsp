@@ -50,8 +50,12 @@ func pairedBinding(tree *parser.Tree, f flagged) (Binding, bool) {
 		return Binding{}, false
 	}
 	b := Binding{Name: name, Flag: f.flag, Span: parser.Span{Start: start, End: start + len(name)}}
+	value, ok := tree.NodeSpan(f.value)
+	if !ok {
+		return Binding{}, false
+	}
 	b.readValue(f.value.Parts)
-	b.Text = tree.Text()[parser.Offset(f.value.Pos()):parser.Offset(f.value.End())]
+	b.Text = tree.Text()[value.Start:value.End]
 	return b, true
 }
 
@@ -69,7 +73,11 @@ func assignedBinding(tree *parser.Tree, f flagged) (Binding, bool) {
 	if rest == "" {
 		b.readValue(f.name.Parts[1:])
 	}
-	b.Text = tree.Text()[b.Span.End+len("=") : parser.Offset(f.name.End())]
+	word, ok := tree.NodeSpan(f.name)
+	if !ok {
+		return Binding{}, false
+	}
+	b.Text = tree.Text()[b.Span.End+len("=") : word.End]
 	return b, true
 }
 
