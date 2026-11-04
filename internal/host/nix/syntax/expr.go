@@ -277,8 +277,9 @@ func (p *treeParser) simple() Expr {
 	case TokIf, TokWith, TokAssert:
 		return p.misplaced()
 	case TokOrKeyword:
-		p.errorHere("`or` cannot stand alone as an expression")
-		p.bareOr++
+		if p.errorHere("`or` cannot stand alone as an expression") {
+			p.bareOr++
+		}
 		return p.identifier()
 	default:
 		return p.notAnExpression(t)

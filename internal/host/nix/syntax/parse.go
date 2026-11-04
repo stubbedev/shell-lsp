@@ -121,18 +121,19 @@ func (p *treeParser) peekAfter(t token) token {
 
 func (p *treeParser) peek() token { return p.peekAfter(p.tok) }
 
-func (p *treeParser) report(span Span, message string) {
+func (p *treeParser) report(span Span, message string) bool {
 	if p.fatal {
-		return
+		return false
 	}
 	if n := len(p.errors); n > 0 && p.errors[n-1].Span.Start == span.Start {
-		return
+		return false
 	}
 	p.errors = append(p.errors, Error{Span: span, Message: message})
+	return true
 }
 
-func (p *treeParser) errorHere(message string) {
-	p.report(Span{Start: p.tok.start, End: p.tok.end}, message)
+func (p *treeParser) errorHere(message string) bool {
+	return p.report(Span{Start: p.tok.start, End: p.tok.end}, message)
 }
 
 func (p *treeParser) describe(t token) string {

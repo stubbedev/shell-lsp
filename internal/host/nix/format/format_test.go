@@ -313,6 +313,7 @@ func TestRefusesSyntaxErrors(t *testing.T) {
 		{"{\n  a = 1;\n  b =\n}\n", 4, 1},
 		{"[ 1\n", 1, 1},
 		{"\"é ${\n", 1, 1},
+		{"{A,or", 1, 4},
 	} {
 		out, err := Format(c.src)
 		if err == nil {
