@@ -1086,6 +1086,8 @@ func selectDoc(s *selectTerm, n int) []item {
 		if strings.ContainsAny(t.tok.text[:1], "0123456789.") {
 			out = seq(out, hardSpace)
 		}
+	case *pathTerm:
+		out = seq(exprDoc(t, n), hardSpace)
 	case *setTerm:
 		out = seq(exprDoc(t, n), plainBrk)
 	case *parenTerm:

@@ -213,7 +213,7 @@ func preservationProblem(t testing.TB, input, output string) string {
 	if file := syntax.Parse(output); len(file.Errors) > file.BareOr {
 		return fmt.Sprintf("formatting %q gave %q, which does not parse: %v", input, output, file.Errors[0])
 	}
-	if want, have := shape(t, input), shape(t, output); want != have && !selectsFromPath(input) {
+	if want, have := shape(t, input), shape(t, output); want != have {
 		return fmt.Sprintf("formatting %q changed the tree\n got: %s\nwant: %s", input, have, want)
 	}
 	for _, note := range commentLines(t, input) {
@@ -222,19 +222,6 @@ func preservationProblem(t testing.TB, input, output string) string {
 		}
 	}
 	return ""
-}
-
-func selectsFromPath(src string) bool {
-	found := false
-	syntax.Inspect(syntax.Parse(src).Root, func(n syntax.Node) bool {
-		if s, ok := n.(*syntax.Select); ok {
-			if p, isPath := s.Target.(*syntax.Path); isPath && p.Kind != syntax.SearchPath {
-				found = true
-			}
-		}
-		return !found
-	})
-	return found
 }
 
 func commentLines(t testing.TB, src string) []string {
@@ -543,6 +530,37 @@ func TestACarriageReturnInsideACommentKeepsTheCommentABlock(t *testing.T) {
 		}
 		if again, err := Format(got); err != nil || again != got {
 			t.Errorf("%s: formatting %q again gave %q, %v", tt.name, got, again, err)
+		}
+	}
+}
+
+func TestSelectingFromAPathKeepsItsSpace(t *testing.T) {
+	t.Parallel()
+
+	for src, want := range map[string]string{
+		"/0 .A'0\n":     "/0 .A'0\n",
+		"/a .b\n":       "/a .b\n",
+		"./a .b.c\n":    "./a .b.c\n",
+		"~/a .b\n":      "~/a .b\n",
+		"./a/${x} .b\n": "./a/${x} .b\n",
+		"/a .b or 1\n":  "/a .b or 1\n",
+		"f /a .b\n":     "f /a .b\n",
+		"<a> .b\n":      "<a>.b\n",
+		"/a.b\n":        "/a.b\n",
+	} {
+		got, err := Format(src)
+		if err != nil {
+			t.Errorf("Format(%q): %v", src, err)
+			continue
+		}
+		if got != want {
+			t.Errorf("Format(%q) = %q, want %q", src, got, want)
+		}
+		if problem := preservationProblem(t, src, got); problem != "" {
+			t.Error(problem)
+		}
+		if again, err := Format(got); err != nil || again != got {
+			t.Errorf("formatting %q again gave %q, %v", got, again, err)
 		}
 	}
 }
