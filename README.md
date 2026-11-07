@@ -30,7 +30,7 @@ Download the binary and lint a directory. This takes seconds and needs nothing
 else (use `linux-arm64` or `darwin-arm64` for those platforms):
 
 ```sh
-curl -fsSL -o shell-lsp https://github.com/stubbedev/shell-lsp/releases/download/v0.5.20/shell-lsp-v0.5.20-linux-amd64
+curl -fsSL -o shell-lsp https://github.com/stubbedev/shell-lsp/releases/download/v0.5.21/shell-lsp-v0.5.21-linux-amd64
 chmod +x shell-lsp
 ./shell-lsp check -f gcc .
 ```
