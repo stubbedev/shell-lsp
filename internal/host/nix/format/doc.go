@@ -64,6 +64,7 @@ type item struct {
 	group  groupKind
 	hard   bool
 	broken bool
+	opens  bool
 	nest   int32
 	offset int32
 	count  int32
@@ -391,10 +392,17 @@ func (r *renderer) sequence(doc []item, o outcome, emit bool) outcome {
 		case tagSpacing:
 			o = r.spaced(it, o, emit)
 		case tagGroup:
-			o = r.placed(it, o, emit)
+			o = r.placedAt(it, o, emit)
 		}
 	}
 	return o
+}
+
+func (r *renderer) placedAt(g *item, o outcome, emit bool) outcome {
+	if g.opens && o.state.lineStart {
+		return r.forcedSequence(g, o, emit)
+	}
+	return r.placed(g, o, emit)
 }
 
 func (r *renderer) spaced(it *item, o outcome, emit bool) outcome {
@@ -693,6 +701,9 @@ func closingGroup(doc []item) (int, int) {
 }
 
 func (r *renderer) placedBefore(g *item, following int, o outcome, emit bool) outcome {
+	if g.opens && o.state.lineStart {
+		return r.forcedSequence(g, o, emit)
+	}
 	if g.hard || o.state.column+int(g.width)+following <= lineWidth {
 		return r.placed(g, o, emit)
 	}
@@ -755,6 +766,12 @@ func grouped(kind groupKind, parts ...[]item) []item {
 func group(parts ...[]item) []item { return grouped(groupRegular, parts...) }
 
 func priority(parts ...[]item) []item { return grouped(groupPriority, parts...) }
+
+func openingPriority(parts ...[]item) []item {
+	out := priority(parts...)
+	out[0].opens = true
+	return out
+}
 
 func transparent(parts ...[]item) []item { return grouped(groupTransparent, parts...) }
 

@@ -986,23 +986,34 @@ func lambdaRHS(l *lambdaExpr, m int) []item {
 	if !lambdaEndsAbsorbable(l) {
 		return seq(space, group(lambdaDoc(l, m, 1)))
 	}
-	if _, named := l.param.(*nameParam); named {
+	if _, named := l.param.(*nameParam); named || widthBreaksHead(l) {
 		return group(space, lambdaDoc(l, m, 1))
 	}
 	return seq(hardSpace, group(lambdaDoc(l, m, 1)))
 }
 
+func widthBreaksHead(l *lambdaExpr) bool {
+	_, named := l.param.(*nameParam)
+	return !named && len(l.colon.pre) == 0
+}
+
 func lambdaEndsAbsorbable(l *lambdaExpr) bool {
 	for chainsIntoBody(l) {
+		if !firstToken(l.body).inlinePre() {
+			return false
+		}
 		switch b := l.body.(type) {
 		case *lambdaExpr:
+			if !firstToken(b).lone() || !b.colon.lone() {
+				return false
+			}
 			l = b
 			continue
 		case *withExpr:
 			_, named := l.param.(*nameParam)
 			return !named && isAbsorbable(b.body)
 		}
-		return firstToken(l.body).inlinePre() && parenAbsorbs(l.body)
+		return parenAbsorbs(l.body)
 	}
 	return false
 }
@@ -1176,9 +1187,13 @@ func enclosed(open *token, inner expr, closing *token, n int) []item {
 			return seq(o, body(), plainBrk, c)
 		}
 	case *lambdaExpr:
-		if lambdaEndsAbsorbable(v) {
-			return seq(o, body(), c)
+		if !lambdaEndsAbsorbable(v) {
+			break
 		}
+		if widthBreaksHead(v) {
+			return seq(o, group(plainBrk, exprDoc(inner, n+1), plainBrk), c)
+		}
+		return seq(o, body(), c)
 	case *withExpr:
 		if isAbsorbable(v.body) {
 			return seq(o, group(plainBrk, withAbsorbed(v, n+1)), c)
@@ -1397,16 +1412,25 @@ func lambdaDoc(l *lambdaExpr, n, depth int) []item {
 			return seq(head, space, lambdaDoc(v, n, depth+1))
 		}
 		if lambdaEndsAbsorbable(v) {
+			if widthBreaksHead(l) && firstToken(v).lone() && v.colon.lone() {
+				return seq(head, space, priority(group(lambdaDoc(v, n, 2))))
+			}
 			return seq(head, priority(group(space, lambdaDoc(v, n, 2))))
 		}
 		return seq(head, space, group(lambdaDoc(v, n, 1)))
 	}
 	if isAbsorbable(body) || parenOfAbsorbable(body) {
+		if widthBreaksHead(l) {
+			return seq(head, space, openingPriority(absorbedBody(body, n, named)))
+		}
 		return seq(head, hardSpace, priority(absorbedBody(body, n, named)))
 	}
 	if w, ok := body.(*withExpr); ok && isAbsorbable(w.body) {
 		if named {
 			return seq(head, priority(group(space, withAbsorbed(w, n))))
+		}
+		if widthBreaksHead(l) {
+			return seq(head, space, openingPriority(withDoc(w, n)))
 		}
 		return seq(head, hardSpace, priority(withDoc(w, n)))
 	}
