@@ -5931,3 +5931,11 @@ f (/* nix */ ''
   a
   b
 '')
+-- case-binding-pattern-lambda-into-blank-body-stays-open --
+{
+  A =
+    { }:
+    A:
+
+    { };
+}

@@ -1002,7 +1002,7 @@ func lambdaEndsAbsorbable(l *lambdaExpr) bool {
 			_, named := l.param.(*nameParam)
 			return !named && isAbsorbable(b.body)
 		}
-		return parenAbsorbs(l.body)
+		return firstToken(l.body).inlinePre() && parenAbsorbs(l.body)
 	}
 	return false
 }
