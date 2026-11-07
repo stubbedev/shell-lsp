@@ -699,7 +699,7 @@ func rowDoc(r row, n, margin int) []item {
 	lone := false
 	if count := len(r); count == 1 && r[0].interp != nil {
 		lone = true
-	} else if count == 2 && r[0].interp == nil && r[1].interp != nil && strings.Trim(r[0].text, " \t") == "" {
+	} else if count == 2 && r[0].interp == nil && r[1].interp != nil && strings.Trim(r[0].text, " ") == "" {
 		lone = true
 	}
 	for j, p := range r {
