@@ -41,6 +41,10 @@ func (t *token) note() string {
 
 func (t *token) lone() bool { return len(t.pre) == 0 && t.trail == "" }
 
+func (t *token) inlinePre() bool {
+	return len(t.pre) == 0 || (len(t.pre) == 1 && t.pre[0].kind == languageNote)
+}
+
 type expr interface{ exprNode() }
 
 type term interface {

@@ -8410,3 +8410,43 @@ f y (
     b
   ]
 ) # c
+-- case-paren-arg-comment-after-open-opens --
+f (
+  # c
+  { a = 1; }
+)
+-- case-paren-arg-comment-after-open-empty-set-opens --
+(0 (
+  # c
+  { }
+))
+-- case-paren-arg-comment-before-set-opens --
+f (
+  # c
+  { a = 1; }
+)
+-- case-paren-arg-comment-before-empty-list-opens --
+f a (
+  # c
+  [ ]
+)
+-- case-paren-binding-comment-before-set-opens --
+{
+  x = (
+    # c
+    { a = 1; }
+  );
+}
+-- case-paren-arg-comment-before-indented-string-opens --
+f (
+  # c
+  ''
+    a
+    b
+  ''
+)
+-- case-paren-arg-language-before-indented-string-hugs --
+f (/* nix */ ''
+  a
+  b
+'')

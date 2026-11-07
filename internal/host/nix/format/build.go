@@ -58,10 +58,7 @@ func blockDoc(t trivium, nest int) []item {
 }
 
 func tokenPre(t *token, nest int) []item {
-	if len(t.pre) == 0 {
-		return nil
-	}
-	if len(t.pre) == 1 && t.pre[0].kind == languageNote {
+	if t.inlinePre() {
 		return notesDoc(t.pre, nest)
 	}
 	return seq(hardLine, notesDoc(t.pre, nest))
@@ -278,7 +275,7 @@ func computeSimpleCall(a *applyExpr) bool {
 }
 
 func simpleParenInner(e expr) bool {
-	if isSimple(e) || isIndentedMulti(e) {
+	if isSimple(e) || (isIndentedMulti(e) && firstToken(e).inlinePre()) {
 		return true
 	}
 	a, ok := e.(*applyExpr)
@@ -926,7 +923,7 @@ func rhsDoc(v expr, m int) []item {
 	case *pathTerm:
 		return seq(hardSpace, group(pathDoc(v, m)))
 	case *parenTerm:
-		if parenAbsorbs(v.inner) {
+		if parenOfAbsorbable(v) {
 			return seq(hardSpace, group(parenDoc(v, m)))
 		}
 		return seq(hardSpace, priority(parenOpen(v, m+1)))
@@ -1338,7 +1335,7 @@ func lastArg(e expr, n int) []item {
 			return priority(listDoc(v, n))
 		}
 	case *parenTerm:
-		if parenAbsorbs(v.inner) {
+		if parenOfAbsorbable(v) {
 			return priority(group(parenDoc(v, n)))
 		}
 		if hug := parenHugOnce(v, n); hug != nil {
@@ -1422,7 +1419,7 @@ func lambdaDoc(l *lambdaExpr, n, depth int) []item {
 
 func parenOfAbsorbable(e expr) bool {
 	p, ok := e.(*parenTerm)
-	return ok && p.open.lone() && len(firstToken(p.inner).pre) == 0 && parenAbsorbs(p.inner)
+	return ok && p.open.lone() && firstToken(p.inner).inlinePre() && parenAbsorbs(p.inner)
 }
 
 func parenAbsorbs(e expr) bool { return isAbsorbable(e) || parenOfAbsorbable(e) }
