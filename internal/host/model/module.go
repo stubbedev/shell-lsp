@@ -322,9 +322,11 @@ func (c context) scopes() []Scope {
 	}
 	var out []Scope
 	for part := range strings.SplitSeq(strings.TrimSuffix(c.chain, ","), ",") {
-		if n, err := strconv.Atoi(part); err == nil {
-			out = append(out, Scope(Narrow(n)))
+		n, err := strconv.ParseInt(part, 10, 32)
+		if err != nil {
+			panic(fmt.Sprintf("model: scope chain %q holds %q, which is not a scope: %v", c.chain, part, err))
 		}
+		out = append(out, Scope(n))
 	}
 	return out
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"hash/maphash"
 	"iter"
+	"math"
 	"slices"
 	"sort"
 	"strings"
@@ -738,5 +739,8 @@ func (ix *Index) Children(parent int) []int32 {
 }
 
 func Narrow(n int) int32 {
-	return int32(n) //nolint:gosec // offsets, counts and indexes of a source file, which the transport caps well below 2^31
+	if n < math.MinInt32 || n > math.MaxInt32 {
+		panic(fmt.Sprintf("model: %d does not fit in 32 bits", n))
+	}
+	return int32(n)
 }

@@ -1,6 +1,7 @@
 package model
 
 import (
+	"math"
 	"slices"
 	"strconv"
 	"strings"
@@ -371,4 +372,45 @@ func TestNamedFindsEveryNameThroughItsHash(t *testing.T) {
 	if got := (&Index{}).named(NamespaceValues, "any"); got != nil {
 		t.Errorf("an empty index lists %v", got)
 	}
+}
+
+func TestNarrowRejectsWhatDoesNotFitIn32Bits(t *testing.T) {
+	t.Parallel()
+
+	for _, n := range []int{0, -1, math.MinInt32, math.MaxInt32} {
+		if got := Narrow(n); int(got) != n {
+			t.Errorf("Narrow(%d) = %d", n, got)
+		}
+	}
+	if strconv.IntSize == 32 {
+		return
+	}
+	for _, n := range []int{math.MaxInt32 + 1, math.MinInt32 - 1, math.MaxInt} {
+		func() {
+			defer func() {
+				if recover() == nil {
+					t.Errorf("Narrow(%d) did not panic", n)
+				}
+			}()
+			Narrow(n)
+		}()
+	}
+}
+
+func TestScopeChainsRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	want := []Scope{3, 1, math.MaxInt32}
+	if got := (context{chain: chainOf(want)}).scopes(); !slices.Equal(got, want) {
+		t.Errorf("scopes() = %v, want %v", got, want)
+	}
+	if got := (context{}).scopes(); got != nil {
+		t.Errorf("scopes() of the global chain = %v, want nil", got)
+	}
+	defer func() {
+		if recover() == nil {
+			t.Error("a chain holding a number past 32 bits did not panic")
+		}
+	}()
+	context{chain: "1,2147483648,"}.scopes()
 }
