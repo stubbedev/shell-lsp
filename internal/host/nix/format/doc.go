@@ -65,6 +65,8 @@ type item struct {
 	hard   bool
 	broken bool
 	opens  bool
+	trials bool
+	follow bool
 	nest   int32
 	offset int32
 	count  int32
@@ -198,6 +200,7 @@ type state struct {
 	current   int
 	column    int
 	lineStart bool
+	headOpen  bool
 }
 
 type outcome struct {
@@ -402,10 +405,22 @@ func (r *renderer) placedAt(g *item, o outcome, emit bool) outcome {
 	if g.opens && o.state.lineStart {
 		return r.forcedSequence(g, o, emit)
 	}
+	if g.trials {
+		opened := !r.fits(g, &o.state)
+		o = r.placed(g, o, emit)
+		o.state.headOpen = opened
+		return o
+	}
 	return r.placed(g, o, emit)
 }
 
 func (r *renderer) spaced(it *item, o outcome, emit bool) outcome {
+	if it.follow && !o.state.headOpen {
+		if it.space == breakPlain {
+			return o
+		}
+		return r.blank(o, emit)
+	}
 	switch it.space {
 	case spaceHard:
 		return r.blank(o, emit)
@@ -730,6 +745,8 @@ var (
 	softBreak = []item{{tag: tagSpacing, space: breakSoft}}
 	plainBrk  = []item{{tag: tagSpacing, space: breakPlain}}
 	space     = []item{{tag: tagSpacing, space: spacePlain}}
+	following = []item{{tag: tagSpacing, space: spacePlain, follow: true}}
+	followBrk = []item{{tag: tagSpacing, space: breakPlain, follow: true}}
 	hardLine  = []item{{tag: tagSpacing, space: lineHard}}
 	emptyLine = []item{{tag: tagSpacing, space: lineEmpty}}
 )
@@ -770,6 +787,12 @@ func priority(parts ...[]item) []item { return grouped(groupPriority, parts...) 
 func openingPriority(parts ...[]item) []item {
 	out := priority(parts...)
 	out[0].opens = true
+	return out
+}
+
+func trialHead(parts ...[]item) []item {
+	out := group(parts...)
+	out[0].trials = true
 	return out
 }
 

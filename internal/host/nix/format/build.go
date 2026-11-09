@@ -985,6 +985,9 @@ func hasDefault(p *setParam) bool {
 }
 
 func lambdaRHS(l *lambdaExpr, m int) []item {
+	if headMayOpen(l) {
+		return group(lambdaFrom(l, m, 1, pinFollowsHead, space))
+	}
 	if !lambdaEndsAbsorbable(l) {
 		return seq(space, group(lambdaDoc(l, m, 1)))
 	}
@@ -1205,6 +1208,9 @@ func enclosed(open *token, inner expr, closing *token, n int) []item {
 		if !lambdaEndsAbsorbable(v) {
 			break
 		}
+		if open.text == interpolationOpen && headMayOpen(v) {
+			return seq(o, group(lambdaFrom(v, n+1, 1, pinFollowsHead, plainBrk), followBrk), c)
+		}
 		if widthBreaksHead(v) {
 			return seq(o, group(plainBrk, exprDoc(inner, n+1), plainBrk), c)
 		}
@@ -1396,7 +1402,27 @@ func parenHugOnce(p *parenTerm, n int) []item {
 	return nil
 }
 
-func lambdaDoc(l *lambdaExpr, n, depth int) []item { return chainedLambda(l, n, depth, false) }
+type chainPin uint8
+
+const (
+	pinNone chainPin = iota
+	pinHard
+	pinFollowsHead
+)
+
+func lambdaDoc(l *lambdaExpr, n, depth int) []item { return lambdaFrom(l, n, depth, pinNone, nil) }
+
+func headMayOpen(l *lambdaExpr) bool {
+	_, set := l.param.(*setParam)
+	return set && len(l.colon.pre) > 0 && colonPinsChain(l)
+}
+
+func (p chainPin) separator() []item {
+	if p == pinFollowsHead {
+		return following
+	}
+	return hardSpace
+}
 
 func colonPinsChain(l *lambdaExpr) bool {
 	if !lambdaEndsAbsorbable(l) {
@@ -1409,10 +1435,16 @@ func colonPinsChain(l *lambdaExpr) bool {
 	return named && (name.name.trail != "" || l.colon.trail != "")
 }
 
-func chainedLambda(l *lambdaExpr, n, depth int, pinned bool) []item {
-	pinned = pinned || colonPinsChain(l)
-	widthBreaks := !pinned && widthBreaksHead(l)
-	head := seq(paramDoc(l.param, n), tokenDoc(l.colon, n))
+func lambdaFrom(l *lambdaExpr, n, depth int, pin chainPin, lead []item) []item {
+	if pin == pinNone && colonPinsChain(l) {
+		pin = pinHard
+	}
+	widthBreaks := pin == pinNone && widthBreaksHead(l)
+	paramItems := paramDoc(l.param, n)
+	if lead != nil {
+		paramItems = trialHead(lead, paramItems)
+	}
+	head := seq(paramItems, tokenDoc(l.colon, n))
 	if depth == 1 {
 		head = group(head)
 	}
@@ -1439,8 +1471,8 @@ func chainedLambda(l *lambdaExpr, n, depth int, pinned bool) []item {
 			return seq(head, hardSpace, lambdaDoc(v, n, depth+1))
 		}
 		if _, next := v.param.(*nameParam); !next {
-			if pinned {
-				return seq(head, hardSpace, chainedLambda(v, n, depth+1, true))
+			if pin != pinNone {
+				return seq(head, pin.separator(), lambdaFrom(v, n, depth+1, pin, nil))
 			}
 			return seq(head, space, lambdaDoc(v, n, depth+1))
 		}
@@ -1456,6 +1488,9 @@ func chainedLambda(l *lambdaExpr, n, depth int, pinned bool) []item {
 		if widthBreaks {
 			return seq(head, space, openingPriority(absorbedBody(body, n, named)))
 		}
+		if pin == pinFollowsHead {
+			return seq(head, following, openingPriority(absorbedBody(body, n, named)))
+		}
 		return seq(head, hardSpace, priority(absorbedBody(body, n, named)))
 	}
 	if w, ok := body.(*withExpr); ok && isAbsorbable(w.body) {
@@ -1464,6 +1499,9 @@ func chainedLambda(l *lambdaExpr, n, depth int, pinned bool) []item {
 		}
 		if widthBreaks {
 			return seq(head, space, openingPriority(withDoc(w, n)))
+		}
+		if pin == pinFollowsHead {
+			return seq(head, following, openingPriority(withDoc(w, n)))
 		}
 		return seq(head, hardSpace, priority(withDoc(w, n)))
 	}
