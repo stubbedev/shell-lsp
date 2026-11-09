@@ -8510,3 +8510,8 @@ f (/* nix */ ''
   a: # 0
   { }: {
   })
+-- case-paren-lambda-comment-after-colon-hugs-through-a-name --
+(
+  A: # 0
+  B: { }: {
+  })

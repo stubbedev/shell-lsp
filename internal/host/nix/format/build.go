@@ -1468,7 +1468,7 @@ func lambdaFrom(l *lambdaExpr, n, depth int, pin chainPin, lead []item) []item {
 	switch v := body.(type) {
 	case *lambdaExpr:
 		if _, next := v.param.(*nameParam); next && named {
-			return seq(head, hardSpace, lambdaDoc(v, n, depth+1))
+			return seq(head, hardSpace, lambdaFrom(v, n, depth+1, pin, nil))
 		}
 		if _, next := v.param.(*nameParam); !next {
 			if pin != pinNone {
@@ -1480,7 +1480,7 @@ func lambdaFrom(l *lambdaExpr, n, depth int, pin chainPin, lead []item) []item {
 			if widthBreaks && firstToken(v).lone() && v.colon.lone() {
 				return seq(head, space, priority(group(lambdaDoc(v, n, 2))))
 			}
-			return seq(head, priority(group(space, lambdaDoc(v, n, 2))))
+			return seq(head, priority(group(space, lambdaFrom(v, n, 2, pin, nil))))
 		}
 		return seq(head, space, group(lambdaDoc(v, n, 1)))
 	}
