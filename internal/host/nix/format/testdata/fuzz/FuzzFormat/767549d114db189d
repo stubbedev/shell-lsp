@@ -1,0 +1,2 @@
+go test fuzz v1
+string("\"${{a}\n\n:/*0*/ {A=A;}}\"")

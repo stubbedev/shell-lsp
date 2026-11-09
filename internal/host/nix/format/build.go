@@ -1020,12 +1020,16 @@ func lambdaEndsAbsorbable(l *lambdaExpr) bool {
 	return false
 }
 
+func bodyOnColonLine(l *lambdaExpr) bool {
+	return l.colon.trail == "" && firstToken(l.body).line == l.colon.line
+}
+
 func chainsIntoBody(l *lambdaExpr) bool {
 	switch p := l.param.(type) {
 	case *nameParam:
 		return true
 	case *setParam:
-		return paramIsCompact(p) && firstToken(l.body).line == l.colon.line
+		return paramIsCompact(p) && bodyOnColonLine(l)
 	}
 	return false
 }
@@ -1404,13 +1408,13 @@ func chainedLambda(l *lambdaExpr, n, depth int, pinned bool) []item {
 			head = seq(plainBrk, head)
 		}
 	}
-	if _, alias := l.param.(*aliasParam); alias || (!named && !paramIsSimple(l.param) && firstToken(body).line == l.colon.line) {
+	if _, alias := l.param.(*aliasParam); alias || (!named && !paramIsSimple(l.param) && bodyOnColonLine(l)) {
 		if set, ok := body.(*setTerm); ok && isAbsorbable(set) {
 			return seq(head, space, group(setDoc(set, n, true)))
 		}
 		return seq(head, space, inlineBody(body, n))
 	}
-	if !named && firstToken(body).line != l.colon.line {
+	if !named && !bodyOnColonLine(l) {
 		return seq(head, hardLine, inlineBody(body, n))
 	}
 	switch v := body.(type) {
