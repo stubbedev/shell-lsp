@@ -386,12 +386,14 @@ func opensABody(e expr) bool {
 
 func looseSimple(e expr) bool {
 	switch v := e.(type) {
-	case *plainTerm, *uriTerm:
-		return true
+	case *plainTerm:
+		return v.tok.lone()
+	case *uriTerm:
+		return v.tok.lone()
 	case *pathTerm:
-		return len(v.pieces) == 1 && v.pieces[0].interp == nil
+		return v.tok.lone() && len(v.pieces) == 1 && v.pieces[0].interp == nil
 	case *stringTerm:
-		return !isIndentedMulti(v)
+		return v.open.lone() && !isIndentedMulti(v)
 	case *selectTerm:
 		if v.or != nil || !looseSimple(v.target) {
 			return false
@@ -403,13 +405,13 @@ func looseSimple(e expr) bool {
 		}
 		return true
 	case *parenTerm:
-		return looseSimple(v.inner)
+		return v.open.lone() && v.close.lone() && looseSimple(v.inner)
 	case *applyExpr:
 		if len(v.args) > 2 || !looseSimple(v.fn) {
 			return false
 		}
 		for _, x := range v.args {
-			if len(firstToken(x).pre) > 0 || !looseSimple(x) {
+			if !looseSimple(x) {
 				return false
 			}
 		}
@@ -422,7 +424,7 @@ func flatDoc(in *interpolation, n int) []item {
 	if simpleInterp(in) {
 		return rigid(seq(tokenDoc(in.open, n), exprDoc(in.value, n), tokenDoc(in.close, n)))
 	}
-	if a, ok := in.value.(*applyExpr); ok && in.open.lone() && len(in.close.pre) == 0 && len(firstToken(a).pre) == 0 && lastToken(a).trail == "" && looseSimple(a) {
+	if a, ok := in.value.(*applyExpr); ok && in.open.lone() && len(in.close.pre) == 0 && looseSimple(a) {
 		return seq(tokenDoc(in.open, n), group(applyDoc(a, n)), tokenDoc(in.close, n))
 	}
 	if in.open.lone() && len(in.close.pre) == 0 && hugsInterpolation(in.value) {

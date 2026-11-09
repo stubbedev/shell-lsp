@@ -8470,3 +8470,15 @@ f (/* nix */ ''
 }
 -- case-string-tab-before-interpolation-stays-inline --
 "	${A0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000}"
+-- case-string-interpolation-comment-inside-call-opens --
+"0${
+  0
+    # 0
+    (0)
+    0
+}"
+-- case-string-interpolation-comment-after-call-argument-opens --
+"0${
+  f 0 # 0
+    0
+}"
