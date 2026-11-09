@@ -436,7 +436,7 @@ func flatDoc(in *interpolation, n int) []item {
 	if a, ok := in.value.(*applyExpr); ok && simpleCall(a) {
 		return seq(tokenDoc(in.open, n), group(applyDoc(a, n)), tokenDoc(in.close, n))
 	}
-	inner := exprDoc(in.value, n+1)
+	inner := interpValue(in.value, n+1)
 	if !flatFits(inner) {
 		return group(interpOpen(in, n, group(inner)))
 	}
@@ -459,7 +459,14 @@ func lowered(doc []item) []item {
 }
 
 func interpOpened(in *interpolation, n int) []item {
-	return group(interpOpen(in, n, group(exprDoc(in.value, n+1))))
+	return group(interpOpen(in, n, group(interpValue(in.value, n+1))))
+}
+
+func interpValue(e expr, n int) []item {
+	if l, ok := e.(*lambdaExpr); ok && headMayOpen(l) {
+		return lambdaFrom(l, n, 1, pinFollowsHead, plainBrk)
+	}
+	return exprDoc(e, n)
 }
 
 func interpOpen(in *interpolation, n int, inner []item) []item {
