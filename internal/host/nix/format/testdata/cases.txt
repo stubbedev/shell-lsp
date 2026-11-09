@@ -5971,3 +5971,10 @@ f (/* nix */ ''
 ({}
 
 :{}:{a=0;})
+-- case-string-lambda-comment-after-name-hugs-its-chain --
+"${a#0
+: {...}: {A=A;}}"
+-- case-paren-lambda-comment-after-colon-hugs-its-chain --
+(a: #0
+ { }: {
+})

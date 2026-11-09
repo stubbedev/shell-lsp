@@ -1021,7 +1021,16 @@ func lambdaEndsAbsorbable(l *lambdaExpr) bool {
 }
 
 func bodyOnColonLine(l *lambdaExpr) bool {
-	return l.colon.trail == "" && firstToken(l.body).line == l.colon.line
+	first := firstToken(l.body)
+	if l.colon.trail != "" || !first.inlinePre() || first.line != l.colon.line {
+		return false
+	}
+	b, ok := l.body.(*lambdaExpr)
+	if !ok {
+		return true
+	}
+	_, named := b.param.(*nameParam)
+	return !named || (first.lone() && b.colon.lone())
 }
 
 func chainsIntoBody(l *lambdaExpr) bool {
@@ -1390,7 +1399,14 @@ func parenHugOnce(p *parenTerm, n int) []item {
 func lambdaDoc(l *lambdaExpr, n, depth int) []item { return chainedLambda(l, n, depth, false) }
 
 func colonPinsChain(l *lambdaExpr) bool {
-	return len(l.colon.pre) > 0 && l.colon.trail == "" && lambdaEndsAbsorbable(l)
+	if !lambdaEndsAbsorbable(l) {
+		return false
+	}
+	if len(l.colon.pre) > 0 {
+		return true
+	}
+	name, named := l.param.(*nameParam)
+	return named && (name.name.trail != "" || l.colon.trail != "")
 }
 
 func chainedLambda(l *lambdaExpr, n, depth int, pinned bool) []item {
