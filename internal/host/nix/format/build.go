@@ -1383,7 +1383,15 @@ func parenHugOnce(p *parenTerm, n int) []item {
 	return nil
 }
 
-func lambdaDoc(l *lambdaExpr, n, depth int) []item {
+func lambdaDoc(l *lambdaExpr, n, depth int) []item { return chainedLambda(l, n, depth, false) }
+
+func colonPinsChain(l *lambdaExpr) bool {
+	return len(l.colon.pre) > 0 && l.colon.trail == "" && lambdaEndsAbsorbable(l)
+}
+
+func chainedLambda(l *lambdaExpr, n, depth int, pinned bool) []item {
+	pinned = pinned || colonPinsChain(l)
+	widthBreaks := !pinned && widthBreaksHead(l)
 	head := seq(paramDoc(l.param, n), tokenDoc(l.colon, n))
 	if depth == 1 {
 		head = group(head)
@@ -1411,10 +1419,13 @@ func lambdaDoc(l *lambdaExpr, n, depth int) []item {
 			return seq(head, hardSpace, lambdaDoc(v, n, depth+1))
 		}
 		if _, next := v.param.(*nameParam); !next {
+			if pinned {
+				return seq(head, hardSpace, chainedLambda(v, n, depth+1, true))
+			}
 			return seq(head, space, lambdaDoc(v, n, depth+1))
 		}
 		if lambdaEndsAbsorbable(v) {
-			if widthBreaksHead(l) && firstToken(v).lone() && v.colon.lone() {
+			if widthBreaks && firstToken(v).lone() && v.colon.lone() {
 				return seq(head, space, priority(group(lambdaDoc(v, n, 2))))
 			}
 			return seq(head, priority(group(space, lambdaDoc(v, n, 2))))
@@ -1422,7 +1433,7 @@ func lambdaDoc(l *lambdaExpr, n, depth int) []item {
 		return seq(head, space, group(lambdaDoc(v, n, 1)))
 	}
 	if isAbsorbable(body) || parenOfAbsorbable(body) {
-		if widthBreaksHead(l) {
+		if widthBreaks {
 			return seq(head, space, openingPriority(absorbedBody(body, n, named)))
 		}
 		return seq(head, hardSpace, priority(absorbedBody(body, n, named)))
@@ -1431,7 +1442,7 @@ func lambdaDoc(l *lambdaExpr, n, depth int) []item {
 		if named {
 			return seq(head, priority(group(space, withAbsorbed(w, n))))
 		}
-		if widthBreaksHead(l) {
+		if widthBreaks {
 			return seq(head, space, openingPriority(withDoc(w, n)))
 		}
 		return seq(head, hardSpace, priority(withDoc(w, n)))

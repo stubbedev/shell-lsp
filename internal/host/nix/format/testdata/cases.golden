@@ -8482,3 +8482,22 @@ f (/* nix */ ''
   f 0 # 0
     0
 }"
+-- case-binding-lambda-blank-before-colon-hugs-its-chain --
+{
+  A = { }
+
+    : { }: {
+    };
+}
+-- case-binding-lambda-blank-before-colon-hugs-a-long-chain --
+{
+  A =
+    b
+    #c
+    : { }: { }: x: {
+    };
+}
+-- case-paren-lambda-blank-before-colon-hugs-its-chain --
+({ }
+
+  : { }: { a = 0; })
