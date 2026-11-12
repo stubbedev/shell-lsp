@@ -1,5 +1,5 @@
-{ buildGo127Module }:
-buildGo127Module {
+{ buildGoModule }:
+buildGoModule {
   pname = "dockerfile-oracle";
   version = "0.34.0";
   src = ./.;

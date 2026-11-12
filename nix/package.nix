@@ -1,8 +1,8 @@
 { self, ... }: {
   perSystem =
     {
+      buildGoModule,
       lib,
-      pkgs,
       self',
       ...
     }:
@@ -13,7 +13,7 @@
     in
     {
       packages = {
-        shell-lsp = pkgs.buildGo127Module {
+        shell-lsp = buildGoModule {
           pname = "shell-lsp";
           inherit version;
 

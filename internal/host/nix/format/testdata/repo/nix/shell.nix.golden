@@ -1,6 +1,7 @@
 {
   perSystem =
     {
+      buildGoModule,
       lib,
       pkgs,
       self',
@@ -8,11 +9,6 @@
     }:
     {
       devShells.default = pkgs.mkShell {
-        # The package's Go toolchain, pinned to the version go.mod declares:
-        # the default `go` attribute lags behind, and with GOTOOLCHAIN=auto it
-        # would silently download its own toolchain instead of failing. gopls
-        # and golangci-lint are built with the same nixpkgs Go, so they parse
-        # what the compiler accepts.
         inputsFrom = [ self'.packages.default ];
 
         packages =
@@ -28,7 +24,7 @@
             # Cross-checking the language server under development
             shellcheck # Reference oracle that labels the linter's test fixtures
             gnumake # Reference oracle for the Makefile fixtures
-            (callPackage ../tools/dockerfile-oracle/package.nix { }) # BuildKit's Dockerfile frontend, the reference oracle for the Dockerfile fixtures
+            (callPackage ../tools/dockerfile-oracle/package.nix { inherit buildGoModule; }) # BuildKit's Dockerfile frontend, the reference oracle for the Dockerfile fixtures
             hadolint # Reference oracle for the Hadolint-compatible Dockerfile checks
             yq-go # Reference YAML parser for the .hadolint.yaml reader
             nixfmt # Reference formatter for the Nix golden files
