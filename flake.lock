@@ -10,11 +10,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1794480761,
-        "narHash": "sha256-vhgaMHFoBo3wAkLe7xrKtYfLoP2EQ2Fc/OFl8q3Z3Qk=",
+        "lastModified": 1794483992,
+        "narHash": "sha256-OQJNL8Z4C9vuz4lubwPqN88SYtWh5Hn0UUeG/M1aKzw=",
         "owner": "stubbedev",
         "repo": "flakes.nix",
-        "rev": "18ae16c0597d270e6e20d61cdcb93969c7836fe1",
+        "rev": "c16d9554846d05da43083c90014b1921e7ed24b5",
         "type": "github"
       },
       "original": {
