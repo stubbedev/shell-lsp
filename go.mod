@@ -2,6 +2,8 @@ module github.com/stubbedev/shell-lsp
 
 go 1.27.3
 
+toolchain go1.27.4
+
 ignore ./editors/vscode/node_modules
 
 require (
