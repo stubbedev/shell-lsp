@@ -4,25 +4,30 @@
 [![Latest release](https://img.shields.io/github/v/release/stubbedev/shell-lsp)](https://github.com/stubbedev/shell-lsp/releases/latest)
 [![License: MIT](https://img.shields.io/github/license/stubbedev/shell-lsp)](LICENSE)
 
-shell-lsp is one language server for shell and every language that embeds it:
-bash, zsh, POSIX sh, dash and ksh, plus justfiles, Makefiles, Dockerfiles and
-Nix. The same binary lints and formats those files from the command line.
+shell-lsp is a language server and command-line linter and formatter for shell
+scripts (bash, zsh, POSIX sh, dash and ksh) and for the files that embed shell:
+justfiles, Makefiles, Dockerfiles and Nix. It began as a shell server and grew
+to follow shell into those files, and then to understand each of them as a
+language of its own. A `.zsh` file and a `flake.nix` get the same depth.
 
-- **The languages are connected.** A jq program in a shell script in a Nix string
-  is one chain. Hover, definition and references walk from `$name` in the jq
-  program to its `--arg` flag, the shell variable and the Nix binding behind it.
+- **Every shell by its own rules.** Each dialect has its own parser, and the
+  dialect is detected per file from the shebang, a directive, `.shellcheckrc`
+  or the file name. zsh is linted as zsh, which ShellCheck refuses to do.
+- **Nix without an evaluator.** Flakes, module trees and overlays are followed
+  from source, using 95 MiB at peak on an 89-file flake where nixd uses 576 MiB.
+  [The comparison](#how-it-compares) says what that costs.
+- **The languages are connected.** A recipe, a `RUN` instruction or a Nix string
+  is linted and navigated as shell where it stands, and fixes are written back
+  in the host's syntax. A jq program in a shell script in a Nix string is one
+  chain, from `$name` in the jq program to its `--arg` flag, the shell variable
+  and the Nix binding behind it.
 - **One static binary replaces a toolbox.** The linter, the formatters and the
   manual-page reader are built in, so shellcheck, shfmt, man, Hadolint, statix,
   deadnix and nixfmt do not need to be installed. Their check codes, directives
   and flags keep working.
-- **Nix without an evaluator.** Flakes, module trees and overlays are followed
-  from source, using 95 MiB at peak on an 89-file flake where nixd uses 576 MiB.
-  [The comparison](#how-it-compares) says what that costs.
-- **Compatibility is measured.** The Nix formatter has 0 differences from nixfmt
-  1.5.0 across all 44,765 files of nixpkgs, and CI holds the linter to ShellCheck
-  over a pinned corpus of 4,716 scripts.
-
-![A shell finding inside a writeShellScript string in a Nix file, with a hover that explains it and previews the fix](docs/assets/screenshots/nix-finding-hover.png)
+- **Compatibility is measured.** CI holds the linter to ShellCheck over a pinned
+  corpus of 4,716 scripts, and the Nix formatter has 0 differences from nixfmt
+  1.5.0 across all 44,765 files of nixpkgs.
 
 ## Quick start
 
@@ -59,7 +64,8 @@ enough; the extension offers to download the binary for you.
 
 ## Contents
 
-- [See it work](#see-it-work): real examples, from a Nix string to a justfile
+- [See it work](#see-it-work): real examples in shell scripts, the files that
+  embed them, and Nix
 - [What it covers](#what-it-covers): the feature matrix per language
 - [How embedded languages work](#how-embedded-languages-work)
 - [Installation](#installation), [editor setup](#editor-setup) and the
@@ -76,166 +82,86 @@ The documentation is also a [searchable site](https://stubbedev.github.io/shell-
 
 ## See it work
 
-Everything here is real output from v0.5.17. `check` and `fmt` ran on these files,
+Everything here is real output from v0.5.17 or later. `check` and `fmt` ran on these files,
 and the editor answers came from driving the server over LSP: hover text as
 returned, locations as `file:line:column`, edits applied and shown as diffs. The
 screenshots are the VS Code extension on the same kind of files.
 
-### A script inside a Nix string
+### In a shell script
 
-A `writeShellScript` string needs no marker to be read as shell, and findings land
-on the line of the `.nix` file:
+#### zsh, linted as zsh
 
-```nix
-{
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+ShellCheck stops at a zsh shebang. Here the unquoted `$f`, which zsh neither
+splits nor globs, is left alone, and what zsh would really do wrong is reported:
 
-  outputs =
-    { nixpkgs, ... }:
-    let
-      pkgs = nixpkgs.legacyPackages.x86_64-linux;
-      channel = "stable";
-    in
-    {
-      packages.x86_64-linux.latest = pkgs.writeShellScript "latest" ''
-        index=$(mktemp)
-        curl -fsSL https://example.com/index.json > $index
-        wanted=${channel}
-        ${pkgs.jq}/bin/jq -r --arg name "$wanted" '.[$name]' "$index"
-      '';
-    };
-}
+```zsh
+#!/usr/bin/env zsh
+read -r answer
+if [[ $answer == (#i)y(es|) ]]; then
+  print -r -- "syncing $match[1]"
+  for f in *.conf(.N); do
+    rsync $f host:
+  done
+fi
 ```
 
 ```console
-$ shell-lsp check flake.nix
+$ shell-lsp check sync.zsh
 
-In flake.nix line 13:
-        curl -fsSL https://example.com/index.json > $index
-                                                    ^----^ SC2086 (info): Unquoted $index is split on whitespace and expanded as a glob; double-quote it.
+In sync.zsh line 3:
+if [[ $answer == (#i)y(es|) ]]; then
+                 ^--^ SL2016 (warning): (#i) is an extended glob operator, and this file never runs `setopt extendedglob`, so zsh matches it literally.
+
+
+In sync.zsh line 4:
+  print -r -- "syncing $match[1]"
+                        ^---^ SL2017 (warning): $match is only set by a pattern with (#b) or by =~, and nothing in this file uses either.
 
 For more information:
-  https://www.shellcheck.net/wiki/SC2086 -- Unquoted $index is split on white...
+  https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl2016 -- (#i) is an extended glob operator...
+  https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl2017 -- $match is only set by a pattern w...
 ```
 
-### From a jq variable to the Nix binding behind it
+#### Patterns explained
 
-The last line of that script is three languages deep. Hover on `$name` in the jq
-program shows the whole chain:
+The shell's own patterns are the hardest part of a script to read, so hover takes them
+apart and, when the values are known from literal assignments, computes the result:
+
+```zsh
+#!/usr/bin/env zsh
+setopt extendedglob
+line='a=1 b=2'
+print -r -- ${line//(#b)([^= ]##)=([^ ]#)/$match[2]:$match[1]}
+```
 
 ```text
-`name` in this jq program is set by `--arg name`, as `"$wanted"`.
+**line**: global variable
+
+Declared on line 3:
+line='a=1 b=2'
+
 ---
-wanted
+
+`${name//pattern/string}`: Replaces every match of `pattern` with `string`.
+
 ---
-channel = "stable";
-*variable*
+
+**Pattern**: every match, each as long as possible, is replaced.
+- `(#b)`: Backreferences: every parenthesised group after this flag stores what it matched in `$match`, with offsets in `$mbegin` and `$mend`
+- `([^= ]##)`: one or more of `[^= ]` (one character other than `=` or a space); captured in `$match[1]`
+- `=`: the text `=`
+- `([^ ]#)`: zero or more of `[^ ]` (one character other than a space); captured in `$match[2]`
+
+---
+
+**Result**: `1:a 2:b`
+
+Given `line` = `a=1 b=2` (line 3).
 ```
 
-Definition lists each step, from the flag to the shell variable to the Nix binding:
+#### A jq program in a script
 
-```text
-flake.nix:15:36  name
-flake.nix:14:9  wanted
-flake.nix:8:7  channel
-```
-
-![Peek definition on a jq variable listing the jq flag, the shell variable and the Nix binding](docs/assets/screenshots/jq-peek-chain.png)
-
-Renames stay honest about where a name lives. Renaming `$name` edits the flag and
-its reads and leaves `$wanted` alone:
-
-```diff
--        ${pkgs.jq}/bin/jq -r --arg name "$wanted" '.[$name]' "$index"
-+        ${pkgs.jq}/bin/jq -r --arg pick "$wanted" '.[$pick]' "$index"
-```
-
-Renaming from the `${channel}` antiquotation in the shell edits the Nix binding:
-
-```diff
--      channel = "stable";
-+      track = "stable";
--        wanted=${channel}
-+        wanted=${track}
-```
-
-### A jump into nixpkgs, with nothing evaluated
-
-Definition on `${pkgs.jq}` opens the package in the nixpkgs that `flake.lock` pins,
-read from its source in the Nix store:
-
-```text
-file:///nix/store/x85g4cmcjva68vjxn3wr5j3mabvx0jk4-source/pkgs/by-name/jq/jq/package.nix:1:1
-```
-
-Hover there gives the package description, and on the `jq` of `/bin/jq` it says what
-runs (``Runs the command `jq` of `jq`.``).
-
-![Peek definition from pkgs.jq in a shell string opening package.nix from the locked nixpkgs](docs/assets/screenshots/nix-peek-pkgs-jq.png)
-
-`lib.` completes from the same source:
-
-![Completion after lib.mk listing mkAfter, mkAssert, mkDefault and the rest of the library](docs/assets/screenshots/nix-completion-lib.png)
-
-> [!NOTE]
-> This needs a `flake.lock` whose nixpkgs is in the store; without one `pkgs.jq` leads
-> nowhere. Attributes that only exist after evaluation need
-> [`nix.evaluate`](#where-it-falls-short).
-
-### A rename that refuses, and says why
-
-The module system passes `lib` by name, so renaming it in a module would break the
-module. Instead of doing that, the server names what would break:
-
-![A refused rename: symbol cannot be renamed, the module system passes lib to this module by this name](docs/assets/screenshots/nix-rename-refused.png)
-
-An option the project declares does rename, across the class:
-
-```diff
--  options.backup.enable = lib.mkEnableOption "backups";
-+  options.archive.enable = lib.mkEnableOption "backups";
--  config.systemd.services.backup = lib.mkIf config.backup.enable {
-+  config.systemd.services.backup = lib.mkIf config.archive.enable {
-```
-
-And `$DEST` in that unit's `script` leads to the attribute that sets it:
-
-```text
-environment.DEST = "/srv/backup";
-
-Set in the environment by the unit's `environment`.
-
-*variable*, exported to the shell
-```
-
-### Colour across a splice
-
-Semantic tokens follow the languages, so the Nix in `${...}`, the shell around it, the
-nested string in `lib.optionalString` and the jq program are each coloured as what
-they are:
-
-![Semantic colouring of a Nix string holding shell, an antiquoted Nix expression and a jq program](docs/assets/screenshots/nix-semantic-splice.png)
-
-### Fixes written back in the host's syntax
-
-A fix is computed on the shell and escaped for the place it lands in. In a Nix `"`
-string a quote becomes `\"`, and in a Makefile `$f` stays `$$f`:
-
-```diff
--  home.packages = [ (pkgs.writeShellScriptBin "hello" "echo $1") ];
-+  home.packages = [ (pkgs.writeShellScriptBin "hello" "echo \"$1\"") ];
-```
-
-```diff
--	for f in *.c; do $(CC) -c $$f; done
-+	for f in *.c; do $(CC) -c "$$f"; done
-```
-
-A fix that cannot be written there is not offered.
-
-### A jq program in a plain script
-
-The same chain works without Nix. No jq binary is run; the program is parsed in place:
+awk, sed and jq programs in a script are parsed in place, and no jq binary is run:
 
 ```bash
 #!/usr/bin/env bash
@@ -268,7 +194,9 @@ Hover on `$name`:
 `name` is set by `--arg name` on the command line of this jq program, as `"$wanted"`.
 ```
 
-### A justfile recipe
+### In justfiles, Makefiles and Dockerfiles
+
+#### A justfile recipe
 
 The just syntax and the shell in its recipes are both understood, and each knows about
 the other:
@@ -311,13 +239,169 @@ A rename to a name the shell cannot read is refused
 +test:
 ```
 
-### A Dockerfile
+#### A Dockerfile
 
 Hadolint's rules, BuildKit's checks and the shell in `RUN` report together. Here the Problems panel also holds what the other open files found:
 
 ![A Dockerfile with squiggles and a Problems panel listing DL and SC findings next to findings from a justfile, a script and a Nix file](docs/assets/screenshots/dockerfile-problems.png)
 
-### Languages written from Nix
+#### Fixes written back in the host's syntax
+
+A fix is computed on the shell and escaped for the place it lands in. In a Nix `"`
+string a quote becomes `\"`, and in a Makefile `$f` stays `$$f`:
+
+```diff
+-  home.packages = [ (pkgs.writeShellScriptBin "hello" "echo $1") ];
++  home.packages = [ (pkgs.writeShellScriptBin "hello" "echo \"$1\"") ];
+```
+
+```diff
+-	for f in *.c; do $(CC) -c $$f; done
++	for f in *.c; do $(CC) -c "$$f"; done
+```
+
+A fix that cannot be written there is not offered.
+
+### In Nix
+
+#### A script inside a Nix string
+
+A `writeShellScript` string needs no marker to be read as shell, and findings land
+on the line of the `.nix` file:
+
+```nix
+{
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+
+  outputs =
+    { nixpkgs, ... }:
+    let
+      pkgs = nixpkgs.legacyPackages.x86_64-linux;
+      channel = "stable";
+    in
+    {
+      packages.x86_64-linux.latest = pkgs.writeShellScript "latest" ''
+        index=$(mktemp)
+        curl -fsSL https://example.com/index.json > $index
+        wanted=${channel}
+        ${pkgs.jq}/bin/jq -r --arg name "$wanted" '.[$name]' "$index"
+      '';
+    };
+}
+```
+
+```console
+$ shell-lsp check flake.nix
+
+In flake.nix line 13:
+        curl -fsSL https://example.com/index.json > $index
+                                                    ^----^ SC2086 (info): Unquoted $index is split on whitespace and expanded as a glob; double-quote it.
+
+For more information:
+  https://www.shellcheck.net/wiki/SC2086 -- Unquoted $index is split on white...
+```
+
+![A shell finding inside a writeShellScript string in a Nix file, with a hover that explains it and previews the fix](docs/assets/screenshots/nix-finding-hover.png)
+
+#### From a jq variable to the Nix binding behind it
+
+The last line of that script is three languages deep. Hover on `$name` in the jq
+program shows the whole chain:
+
+```text
+`name` in this jq program is set by `--arg name`, as `"$wanted"`.
+---
+wanted
+---
+channel = "stable";
+*variable*
+```
+
+Definition lists each step, from the flag to the shell variable to the Nix binding:
+
+```text
+flake.nix:15:36  name
+flake.nix:14:9  wanted
+flake.nix:8:7  channel
+```
+
+![Peek definition on a jq variable listing the jq flag, the shell variable and the Nix binding](docs/assets/screenshots/jq-peek-chain.png)
+
+Renames stay honest about where a name lives. Renaming `$name` edits the flag and
+its reads and leaves `$wanted` alone:
+
+```diff
+-        ${pkgs.jq}/bin/jq -r --arg name "$wanted" '.[$name]' "$index"
++        ${pkgs.jq}/bin/jq -r --arg pick "$wanted" '.[$pick]' "$index"
+```
+
+Renaming from the `${channel}` antiquotation in the shell edits the Nix binding:
+
+```diff
+-      channel = "stable";
++      track = "stable";
+-        wanted=${channel}
++        wanted=${track}
+```
+
+#### A jump into nixpkgs, with nothing evaluated
+
+Definition on `${pkgs.jq}` opens the package in the nixpkgs that `flake.lock` pins,
+read from its source in the Nix store:
+
+```text
+file:///nix/store/x85g4cmcjva68vjxn3wr5j3mabvx0jk4-source/pkgs/by-name/jq/jq/package.nix:1:1
+```
+
+Hover there gives the package description, and on the `jq` of `/bin/jq` it says what
+runs (``Runs the command `jq` of `jq`.``).
+
+![Peek definition from pkgs.jq in a shell string opening package.nix from the locked nixpkgs](docs/assets/screenshots/nix-peek-pkgs-jq.png)
+
+`lib.` completes from the same source:
+
+![Completion after lib.mk listing mkAfter, mkAssert, mkDefault and the rest of the library](docs/assets/screenshots/nix-completion-lib.png)
+
+> [!NOTE]
+> This needs a `flake.lock` whose nixpkgs is in the store; without one `pkgs.jq` leads
+> nowhere. Attributes that only exist after evaluation need
+> [`nix.evaluate`](#where-it-falls-short).
+
+#### A rename that refuses, and says why
+
+The module system passes `lib` by name, so renaming it in a module would break the
+module. Instead of doing that, the server names what would break:
+
+![A refused rename: symbol cannot be renamed, the module system passes lib to this module by this name](docs/assets/screenshots/nix-rename-refused.png)
+
+An option the project declares does rename, across the class:
+
+```diff
+-  options.backup.enable = lib.mkEnableOption "backups";
++  options.archive.enable = lib.mkEnableOption "backups";
+-  config.systemd.services.backup = lib.mkIf config.backup.enable {
++  config.systemd.services.backup = lib.mkIf config.archive.enable {
+```
+
+And `$DEST` in that unit's `script` leads to the attribute that sets it:
+
+```text
+environment.DEST = "/srv/backup";
+
+Set in the environment by the unit's `environment`.
+
+*variable*, exported to the shell
+```
+
+#### Colour across a splice
+
+Semantic tokens follow the languages, so the Nix in `${...}`, the shell around it, the
+nested string in `lib.optionalString` and the jq program are each coloured as what
+they are:
+
+![Semantic colouring of a Nix string holding shell, an antiquoted Nix expression and a jq program](docs/assets/screenshots/nix-semantic-splice.png)
+
+#### Languages written from Nix
 
 A string that Nix writes to a named file is read as that file's language, with its own
 checks, at its place in the `.nix` file:
@@ -364,43 +448,6 @@ For more information:
   https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl5002 -- unknown recipe `build`
   https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8002 -- `pkgs` is not defined here, so Ni...
   https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl8005 -- `unused` is bound but nothing tha...
-```
-
-### Patterns explained
-
-The shell's own patterns are the hardest part of a script to read, so hover takes them
-apart and, when the values are known from literal assignments, computes the result:
-
-```zsh
-#!/usr/bin/env zsh
-setopt extendedglob
-line='a=1 b=2'
-print -r -- ${line//(#b)([^= ]##)=([^ ]#)/$match[2]:$match[1]}
-```
-
-```text
-**line**: global variable
-
-Declared on line 3:
-line='a=1 b=2'
-
----
-
-`${name//pattern/string}`: Replaces every match of `pattern` with `string`.
-
----
-
-**Pattern**: every match, each as long as possible, is replaced.
-- `(#b)`: Backreferences: every parenthesised group after this flag stores what it matched in `$match`, with offsets in `$mbegin` and `$mend`
-- `([^= ]##)`: one or more of `[^= ]` (one character other than `=` or a space); captured in `$match[1]`
-- `=`: the text `=`
-- `([^ ]#)`: zero or more of `[^ ]` (one character other than a space); captured in `$match[2]`
-
----
-
-**Result**: `1:a 2:b`
-
-Given `line` = `a=1 b=2` (line 3).
 ```
 
 ### The command line
@@ -827,6 +874,29 @@ and `.hadolint.yaml`. The full rules are in [docs/hosts.md](docs/hosts.md) and
 
 ## Performance and memory
 
+### Editing
+
+A keystroke with `BenchmarkKeystroke` in `internal/server`, in the numbers the v0.5.17 release notes give for
+that release's change:
+
+| Keystroke | Before | After |
+| --- | ---: | ---: |
+| 700 scripts, editing outside them | 41 ms | 14 ms |
+| 700 scripts, typing in one | 41 ms | 20.5 ms |
+| Plain 5,000-line Nix file | 45.8 ms | 43 ms |
+
+Findings for a script whose text did not change are reused, and that was verified against a full
+recompute over a 600-edit replay. The test suite holds keystrokes to allocation budgets and parsing and
+completion to time budgets, and `GOGC` overrides the collector's pacing if you want to trade CPU for memory.
+
+### Shell
+
+`shell-lsp check` lints the 1,219 `*.sh` and `*.bash` files of the pinned nixpkgs in 0.18 s
+on 12 cores (1.2 s of CPU). One `shellcheck` process over the same files takes 20.7 s. The rule sets differ,
+so read that as an order of magnitude, not a like-for-like benchmark.
+
+### Nix
+
 Measured with `cmd/nixparity`, which runs both servers over the same files, one after the other and
 one request at a time. Peak RSS sums the server's process group, sampled every 250 ms; idle RSS samples
 it again three seconds after the last request.
@@ -846,25 +916,8 @@ To reproduce it, `just nix-parity-large [PATH] [nixd|nil]` runs the comparison o
 pinned nixpkgs when no path is given. The method, sampling and outcomes are described in
 [docs/corpus.md](docs/corpus.md#latency-memory-and-failures).
 
-A keystroke with `BenchmarkKeystroke` in `internal/server`, in the numbers the v0.5.17 release notes give for
-that release's change:
-
-| Keystroke | Before | After |
-| --- | ---: | ---: |
-| 700 scripts, editing outside them | 41 ms | 14 ms |
-| 700 scripts, typing in one | 41 ms | 20.5 ms |
-| Plain 5,000-line Nix file | 45.8 ms | 43 ms |
-
-Findings for a script whose text did not change are reused, and that was verified against a full
-recompute over a 600-edit replay. The test suite holds keystrokes to allocation budgets and parsing and
-completion to time budgets, and `GOGC` overrides the collector's pacing if you want to trade CPU for memory.
-
-**Formatter:** 0 differences from nixfmt 1.5.0 across all 44,765 `.nix` files of nixpkgs, both as written
+The formatter has 0 differences from nixfmt 1.5.0 across all 44,765 `.nix` files of nixpkgs, both as written
 and with their layout destroyed three different ways.
-
-**Command line:** `shell-lsp check` lints the 1,219 `*.sh` and `*.bash` files of the pinned nixpkgs in 0.18 s
-on 12 cores (1.2 s of CPU). One `shellcheck` process over the same files takes 20.7 s. The rule sets differ,
-so read that as an order of magnitude, not a like-for-like benchmark.
 
 ## How it compares
 
@@ -881,6 +934,11 @@ so read that as an order of magnitude, not a like-for-like benchmark.
 
 ### Where it falls short
 
+- **fish and csh are not supported.** Scripts whose shebang names them are reported as unsupported.
+- **Dockerfiles are not formatted**, and Dockerfile findings have no quick fixes of their own beyond the shell's.
+- **Large projects stop being followed**: past 4096 files or 8 MiB of source, and a workspace scan stops at 20000
+  files. A rename that has to know every reader is then refused.
+- **Prebuilt binaries** cover Linux and Windows on amd64 and arm64 and macOS on arm64.
 - **`nix.evaluate` is off by default and needs Nix.** Without it nothing is evaluated, so generated `pkgs`
   attributes get no answer. `pkgs.nerd-fonts.jetbrains-mono`, members of a set `callPackage` builds such as
   `pkgs.writers.writePython3`, and the versions nixd shows as inlay hints all need the setting. nixd answers
@@ -895,12 +953,7 @@ so read that as an order of magnitude, not a like-for-like benchmark.
 - **Shell that Nix assembles across `${...}`**, such as a `case` whose patterns come from `lib.optionalString`,
   cannot be checked, and may be reported as a syntax error.
 - **A string passed to a wrapper in another file** is linted only after a background pass has proven it.
-- **Large projects stop being followed**: past 4096 files or 8 MiB of source, and a workspace scan stops at 20000
-  files. A rename that has to know every reader is then refused.
 - **Some variables stdenv reads**, such as `dontPatchShebangs`, still report `SC2034`.
-- **Dockerfiles are not formatted**, and Dockerfile findings have no quick fixes of their own beyond the shell's.
-- **fish and csh are not supported.** Scripts whose shebang names them are reported as unsupported.
-- **Prebuilt binaries** cover Linux and Windows on amd64 and arm64 and macOS on arm64.
 
 ## Documentation
 

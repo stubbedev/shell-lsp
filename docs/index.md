@@ -22,9 +22,19 @@ screenshot:
   caption: A shell finding inside a Nix string, with a hover that explains it and previews the fix.
 
 features:
+  - icon: '$_'
+    title: Every shell by its own rules
+    details: bash, zsh, POSIX sh, dash and ksh each have their own parser, and the dialect is detected per file from the shebang, a directive, .shellcheckrc or the file name. zsh is linted as zsh, which ShellCheck refuses to do.
+    link: /overview/#dialects
+    linkText: Dialects
+  - icon: 'λ'
+    title: Nix without an evaluator
+    details: Flakes, module trees and overlays are followed from source, using 95 MiB at peak on an 89-file flake where nixd uses 576 MiB.
+    link: /nix/
+    linkText: Nix files
   - icon: '${ }'
     title: The languages are connected
-    details: A jq program in a shell script in a Nix string is one chain. Hover, definition and references walk from the jq variable to its flag, the shell variable and the Nix binding behind it.
+    details: A recipe, a RUN instruction or a Nix string is linted and navigated as shell where it stands. A jq program in a shell script in a Nix string is one chain, from the jq variable to its flag, the shell variable and the Nix binding behind it.
     link: /overview/#how-embedded-languages-work
     linkText: How embedded languages work
   - icon: '1'
@@ -32,21 +42,11 @@ features:
     details: The linter, the formatters and the manual-page reader are built in, so shellcheck, shfmt, man, Hadolint, statix, deadnix and nixfmt do not need to be installed. Their check codes, directives and flags keep working.
     link: /overview/#how-it-compares
     linkText: How it compares
-  - icon: 'λ'
-    title: Nix without an evaluator
-    details: Flakes, module trees and overlays are followed from source, using 95 MiB at peak on an 89-file flake where nixd uses 576 MiB.
-    link: /nix/
-    linkText: Nix files
   - icon: '0Δ'
     title: Compatibility is measured
-    details: The Nix formatter has 0 differences from nixfmt 1.5.0 across all 44,765 files of nixpkgs, and CI holds the linter to ShellCheck over a pinned corpus of 4,716 scripts.
+    details: CI holds the linter to ShellCheck over a pinned corpus of 4,716 scripts, and the Nix formatter has 0 differences from nixfmt 1.5.0 across all 44,765 files of nixpkgs.
     link: /corpus/
     linkText: Corpus checks
-  - icon: 'jq'
-    title: Embedded programs, parsed in place
-    details: Programs embedded in a script are parsed in place, and no awk, sed or jq binary is run. Syntax errors and regular expressions are reported at their exact position.
-    link: /shell/#embedded-languages
-    linkText: Embedded languages
   - icon: 'SL'
     title: Every check is listed
     details: The linter has 459 SC checks, 143 SL checks and 54 DL checks, each listed with its severity. The same binary lints and formats from the command line.
