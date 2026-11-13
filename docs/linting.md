@@ -2,7 +2,6 @@
 
 The linter behind the diagnostics and `shell-lsp check`. Every check is listed
 in [checks.md](checks.md), and `SL` checks are explained in [rules.md](rules.md).
-[Profiles](../README.md#profiles) are described in the README.
 
 The linter is built into the server; nothing else needs to be installed. It
 uses shellcheck's check codes and honours `# shellcheck disable=...`,
@@ -54,6 +53,32 @@ a script never calls, temporary files it never removes, `trap` and `exit`
 that only affect a subshell, syntax errors in embedded awk, sed and jq, and
 optional rules from the Google Shell Style Guide.
 They are configured exactly like the `SC` checks.
+
+## Profiles
+
+`lint.profile` (or `--profile` for `shell-lsp check`) sets how much is
+reported:
+
+- `recommended`, the default, runs every check that is on by default.
+- `minimal` keeps errors, warnings, and the informational checks that point at
+  a real bug: the script can print the wrong thing, lose data, run the wrong
+  command or fail on input it can plausibly meet, such as an unquoted `$var`
+  (`SC2086`) or `A && B || C` used as if-then-else (`SC2015`). Style notes,
+  portability notes below warning level, deprecations and redundancies are
+  left out. [checks.md](checks.md) marks every check `minimal` keeps.
+- `strict` also turns on every optional check except
+  `check-unassigned-uppercase`, which reports every all-uppercase variable a
+  script reads without assigning, so it flags ordinary environment inputs
+  such as `$HOME` or `$CI` rather than mistakes, and
+  `avoid-global-reassignment` and the `google-` checks, which follow one
+  style guide's preferences rather than point at mistakes.
+
+The profile is the starting point, and the other settings apply on top:
+optional checks named in `lint.optional` or turned on with a `# shellcheck
+enable=` directive always run and are reported in every profile, codes in
+`lint.exclude` are never reported, and `disable=` directives silence findings
+as usual. `.shellcheckrc` files have no profile key, so they stay compatible
+with ShellCheck.
 
 ## Directives
 

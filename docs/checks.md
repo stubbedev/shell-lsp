@@ -5,7 +5,7 @@ Every check the linter runs, generated from the lint catalog by
 `DL` codes Hadolint's, for Dockerfiles; see [hadolint.md](hadolint.md) for how they differ from it.
 `SL` codes are shell-lsp's own and are described in [rules.md](rules.md). Optional checks run only
 when switched on by name with `enable=`, `--enable` or the `lint.optional` setting. The Minimal column
-marks the checks the `minimal` profile keeps; see [Profiles](../README.md#profiles).
+marks the checks the `minimal` profile keeps; see [Profiles](linting.md#profiles).
 
 | Code | Severity | Optional | Minimal | Summary |
 | --- | --- | --- | --- | --- |

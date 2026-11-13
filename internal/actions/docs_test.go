@@ -8,16 +8,16 @@ import (
 	"testing"
 )
 
-func TestReadmeListsEveryRefactoring(t *testing.T) {
+func TestShellDocListsEveryRefactoring(t *testing.T) {
 	t.Parallel()
 
-	raw, err := os.ReadFile(filepath.Join("..", "..", "README.md"))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "docs", "shell.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, table, found := strings.Cut(string(raw), "| Action | Kind | What it does |\n")
 	if !found {
-		t.Fatal("README.md has no refactoring table")
+		t.Fatal("docs/shell.md has no refactoring table")
 	}
 	table, _, _ = strings.Cut(table, "\n\n")
 	var documented []string
@@ -35,6 +35,6 @@ func TestReadmeListsEveryRefactoring(t *testing.T) {
 	slices.Sort(documented)
 	slices.Sort(implemented)
 	if !slices.Equal(documented, implemented) {
-		t.Errorf("README.md documents refactorings of kinds %v, the server offers %v", documented, implemented)
+		t.Errorf("docs/shell.md documents refactorings of kinds %v, the server offers %v", documented, implemented)
 	}
 }

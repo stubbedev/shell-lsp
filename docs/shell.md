@@ -1,8 +1,39 @@
 # Shell scripts
 
 What shell-lsp does for a script beyond the linter, which has its own page
-([linting.md](linting.md)). The [README](../README.md#shell-scripts) covers
-dialects, manual pages and refactorings.
+([linting.md](linting.md)): dialects, completion and hover, sourced files,
+embedded programs, refactorings and Bats.
+
+## Dialects
+
+Each document is linted as one shell. The first of these that applies decides which:
+
+1. the `dialect` setting;
+2. `shell=` in the nearest `.shellcheckrc`;
+3. `shell_variant` in `.editorconfig`;
+4. a `# shellcheck shell=` directive in the comment header before the first
+   command;
+5. the shebang, also behind `env`, `busybox` and `nix-shell -i`, and with
+   the interpreter's version in its name (`bash5`, `zsh-5.9`);
+6. a zsh completion tag (`#compdef`, `#autoload`) on the first line;
+7. the file name (`.bashrc`, `.zshrc`, `.profile` and the other rc files) or
+   its extension (`.bash`, `.bats`, `.zsh`, `.dash`, `.sh`, `.ksh`);
+8. the editor's language identifier, unless it is the generic `shellscript`;
+9. a vim modeline (`# vim: ft=zsh`);
+10. otherwise bash.
+
+An extension or the bash default is only a guess, and a wrong guess is the usual cause of findings
+that make no sense for the shell you use. When nothing names the shell at all, SC2148 says so, in the
+editor as in `shell-lsp check`. The VS Code extension shows the shell in the status bar with what
+decided it, and clicking it records your choice as a `# shellcheck shell=` directive, which every
+editor and `shell-lsp check` then follow.
+
+The parser understands the whole grammar of each shell, including zsh's
+short and brace forms of loops and `if`, `foreach`, `repeat`,
+`{ } always { }`, anonymous functions with arguments and glob qualifiers,
+and ksh93's compound variables and types, `namespace` and dotted names. A
+ksh script is parsed as ksh93 unless its shebang, shell directive or file
+name says mksh.
 
 ## Completion and hover
 
@@ -27,8 +58,21 @@ vocabulary, filtered by the dialect of the document:
   such as a `getopts` loop, a cleanup trap, `mktemp` with cleanup, strict
   mode and the script's own directory, written for the document's dialect.
 
-Documentation and subcommands of external commands come from their manual pages;
-see [Completion and hover](../README.md#completion-and-hover) in the README.
+Documentation for external commands comes from the installed manual pages,
+which the server locates through `MANPATH` (where it is unset or has an
+empty entry, in the `share/man` and `man` directories next to every `PATH`
+entry and in `/usr/share/man`, `/usr/local/share/man`, `/usr/local/man` and
+`/opt/homebrew/share/man`), decompresses and renders itself; neither `man`
+nor groff is involved. Subcommands come from the same pages: after `git`,
+`systemctl` or `docker` completion offers the documented subcommands, and
+the flags completed and hovered after `git checkout` are those of
+git-checkout(1), falling back to the command's own page. Nested subcommands
+such as `git remote add`, `kubectl config set-context` or `ip link set`
+resolve as deep as the pages document them, global options before a
+subcommand are skipped with their values (`git -C dir checkout`,
+`kubectl -n ns get`), and commands behind the wrappers `builtin`, `busybox`,
+`command`, `doas`, `env`, `exec`, `nice`, `nohup`, `setsid`, `sudo`, `time`,
+`timeout`, `watch` and `xargs` complete and hover as if typed directly.
 
 Completing inside a word can replace the rest of it (for clients with
 insert-replace support). Hover explains the same vocabulary where it is
@@ -131,6 +175,29 @@ program: hovering `$name` in jq or `name` in awk says which flag sets it and to
 what. In a file with a host language this goes on through the chain, see
 [Nix files](nix.md). A program variable that the program also declares (`as
 $name`, a function parameter) is left alone.
+
+## Refactorings
+
+Code actions offered at the cursor or selection, each only where it applies and keeps the script's
+meaning; their edits are computed on `codeAction/resolve` when the client supports it, and an action
+that edits another file as well carries a change annotation asking the client to confirm it, so
+editors that support annotations show a preview first.
+
+| Action | Kind | What it does |
+| --- | --- | --- |
+| Extract to variable | `refactor.extract` | Moves the selected word or part of a word into a variable |
+| Extract to function | `refactor.extract` | Moves the selected statements into a new function |
+| Toggle quotes | `refactor.rewrite` | Converts between single and double quotes |
+| Remove the quotes | `refactor.rewrite` | Unquotes a quoted literal made only of letters, digits and `_ . / : @ % + -`, which the shell reads the same either way; not offered for a command name, a here-document delimiter or inside arithmetic |
+| Declare as local | `refactor.rewrite` | Adds `local` to an assignment inside a function |
+| Convert backticks | `refactor.rewrite` | Rewrites `` `cmd` `` as `$(cmd)`, undoing the backquote escaping |
+| Convert to `[[ ]]` | `refactor.rewrite` | Rewrites `[ ... ]` or `test ...` in bash, zsh and ksh, turning `-a`, `-o`, `\(`, `\)`, `\<` and `\>` into `&&`, `\|\|`, `(`, `)`, `<` and `>`; skipped when globs or unquoted expansions would be read differently |
+| Inline variable | `refactor.inline` | Replaces the reads of a variable assigned once to a literal with the value, quoted for each place it is read, and removes the assignment; only when nothing else writes, exports, unsets or could read the variable before the assignment or from another scope. A word spelling the name counts as harmless only as an argument of `echo`, `cd`, `pwd`, `type`, `true`, `false`, `:` or (in bash and sh) an external command, or as a redirection target; `eval`, `trap` and `alias` block it unless all their arguments are literals that never mention the name; and `source`/`.` blocks it only when a sourced file, followed transitively, cannot be resolved or touches the variable outside its own `local`s |
+| Toggle the function keyword | `refactor.rewrite` | Switches between `function f { ... }` and `f() { ... }` when the cursor or selection is on the keyword, the name or its `()`; the keyword form is only offered in bash and zsh, and ksh is left alone because there the two forms scope variables differently |
+| Add strict mode | `source.strictMode` | Adds whatever part of `set -euo pipefail` (`set -eu` in sh, dash and busybox) a script does not already enable, counting shebang flags, `set -o` names and zsh's `setopt err_exit`, `no_unset` and `pipe_fail` in any case or underscore spelling; it extends the first top-level `set` or `setopt` line that enables some of them, or else inserts a `set` line after the shebang and leading comments |
+| Add shebang | `source.shebang` | Inserts the interpreter line for the detected shell (`#!/usr/bin/env bash`, `#!/bin/sh`, ...) into a script that has none; not offered for Bats files or zsh completion functions, whose first line must stay `#compdef` or `#autoload` |
+| Convert to case | `refactor.rewrite` | Rewrites an `if`/`elif` chain whose every condition compares the same expansion for equality (`[ "$x" = lit ]`, `test`, `[[ $x == pattern ]]`, joined with `\|\|` or `-o`) into `case`, keeping each body and the `else` branch; one-line chains and `then`, `else` or `fi` sharing a line with commands are split onto their own lines, and the arms follow the document's tab or space indentation (falling back to the configured `indent`) and the `switchCaseIndent` / `switch_case_indent` setting |
+| Move function to a sourced file | `refactor.move` | Moves a top-level function, with the comment block directly above it, to the end of a workspace file this script sources before defining the function, as one edit across both files; not offered when the target file is written for another shell that would not parse the function or that the portability checks (`SC3xxx`) flag it for, such as bash syntax moving into an sh, dash or busybox file |
 
 ## Bats
 

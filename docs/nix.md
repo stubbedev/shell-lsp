@@ -2,7 +2,7 @@
 
 shell-lsp is a language server for Nix and for everything written inside Nix
 strings. This page is the full reference; the
-[README](../README.md#nix-files) has the overview, and
+[README](../README.md#in-nix) has examples, and
 [corpus.md](corpus.md#nix-server-parity) records how the answers compare with
 nixd and nil. The Nix checks are listed in [rules.md](rules.md#sl8001).
 
@@ -206,6 +206,8 @@ since other Nix code may read it by its name.
 
 ## The shell and the Nix answer for each other
 
+![Semantic colouring of a Nix string holding shell, an antiquoted Nix expression and a jq program](assets/screenshots/nix-semantic-splice.png)
+
 The shell and the Nix around it answer for each other:
 
 - `${...}` in a shell string is Nix: every feature of the Nix language answers
@@ -401,6 +403,9 @@ Beyond that, Nix files get these:
   lists the library. Names read through `with` go to that `with`, and references
   list that name through it. `config.x.` and option keys complete from every file
   of the project, and `inputs.` from the flake.
+
+  ![Completion after lib.mk listing mkAfter, mkAssert, mkDefault and the rest of the library](assets/screenshots/nix-completion-lib.png)
+
 - Without an evaluator, definition and hover read `pkgs.x` from the locked nixpkgs
   source, or from the checkout when the file is inside nixpkgs, and `lib.x` the same
   way, looking through `lib.mapAttrs` and into what `makeExtensible` adds, as

@@ -9,21 +9,21 @@ import (
 	"testing"
 )
 
-func TestReadmeNamesEverySource(t *testing.T) {
+func TestEditorsDocNamesEverySource(t *testing.T) {
 	t.Parallel()
 
-	raw, err := os.ReadFile(filepath.Join("..", "..", "README.md"))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "docs", "editors.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, row, found := strings.Cut(string(raw), "| `shellLsp/documentDialect` |")
 	if !found {
-		t.Fatal("README.md has no shellLsp/documentDialect row")
+		t.Fatal("docs/editors.md has no shellLsp/documentDialect row")
 	}
 	row, _, _ = strings.Cut(row, "\n")
 	for _, name := range sourceNames {
 		if !strings.Contains(row, "`"+name+"`") {
-			t.Errorf("README.md's shellLsp/documentDialect row does not name the source %q", name)
+			t.Errorf("docs/editors.md's shellLsp/documentDialect row does not name the source %q", name)
 		}
 	}
 }

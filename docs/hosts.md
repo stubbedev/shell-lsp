@@ -2,7 +2,7 @@
 
 shell-lsp reads these files twice: the shell they hold, and the language around
 it. This page is the full reference; the
-[README](../README.md#shell-in-other-files) has the overview. The checks are
+[README](../README.md#see-it-work) has examples. The checks are
 listed in [rules.md](rules.md#sl5001), and [hadolint.md](hadolint.md) covers
 Hadolint's rules.
 
@@ -24,6 +24,45 @@ languages of their own
 An editor sends these files when the server is attached to their file type
 ([editors.md](editors.md)); `shell-lsp check` and the workspace scan
 find them by name.
+
+### How the shell is mapped
+
+The shell in a host file is analysed by the same code as a `.sh` file. The host's parser
+finds it, a *projection* builds a script from it with a map back to the file, and every
+answer goes through that map on its way out.
+
+```mermaid
+flowchart TD
+  host["Host file: Nix, justfile,<br/>Makefile or Dockerfile"]
+  parse["Host parser finds the<br/>shell and its dialect"]
+  map["Projection: script text plus<br/>a span map back to the host"]
+  analysis["The analysis every .sh file gets:<br/>parser, linter, navigation, hover"]
+  positions["Answers in host positions"]
+  edits["Edits escaped for the host,<br/>or withheld"]
+  host --> parse --> map --> analysis
+  analysis -- "offset through the map" --> positions
+  analysis -- "edit through the map and<br/>the region's encoder" --> edits
+```
+
+The map is a list of spans, each saying what a piece of the script stands for in the host:
+
+| Span | In the host | In the script | Example |
+| --- | --- | --- | --- |
+| Verbatim | Text the shell sees as written | The same text | `curl -fsSL` |
+| Escape | A sequence of the host's string syntax | What it decodes to | `''$` in a Nix string is `$`; `$$` in a recipe is `$` |
+| Stand-in | A value only the host knows | `$$`, one opaque word | `${channel}`, `$(CC)`, `{{version}}` |
+| Program | A command word built by the host | The program's name | `${pkgs.jq}/bin/jq` reads as `jq`, so `jq` checks apply |
+| Opaque | Nothing, or syntax to skip | Text the analysis needs | A subshell around each Makefile recipe line, since each line runs in a shell of its own |
+| Indent | Indentation the host strips | Nothing | The leading spaces of a `''` string |
+
+Stand-ins, programs and opaque spans cannot be edited. An edit that crosses one maps to
+nothing, which is why a fix that would write into `${...}` is not offered. Each string has
+an encoder for its syntax, so what lands in a `"` string is escaped differently from what
+lands in a `''` string, and a set of edits that would empty the shallowest lines of a `''`
+string, and so re-indent the rest, is withheld.
+
+Maps compose. A justfile written by `home.file."x/justfile".text` is parsed from the decoded
+string, and its recipe's shell goes through two maps on the way back to the `.nix` file.
 
 ### Makefiles
 

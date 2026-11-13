@@ -40,7 +40,7 @@ The repository's `scripts/nvim-smoke.lua` exercises the 0.9 form in CI.
 
 To show which shell a buffer is linted as, and switch it, ask the server with
 the `shellLsp/documentDialect` and `shellLsp/setDialect` requests (see
-[Dialects](../README.md#dialects)). On Neovim 0.11 and later, with the
+[Dialects](shell.md#dialects)). On Neovim 0.11 and later, with the
 `shell_lsp` configuration above, this keeps the shell in the statusline, marked
 with `?` when it is only guessed, and adds `:ShellDialect dash` to record a
 shell as a `# shellcheck shell=` directive and `:ShellDialect` to remove it:
@@ -233,9 +233,15 @@ Two experimental client capabilities change what the server offers:
 parameters ([details](hosts.md#justfiles-makefiles-and-dockerfiles-natively)), and
 `shellLsp.runsInTerminal` adds "▶ nix develop" lenses whose client-side command
 `shellLsp.runInTerminal` receives `{name, argv, cwd}` ([details](nix.md#everything-else)).
-The `shellLsp/documentDialect` and `shellLsp/setDialect` requests are in the
-[README](../README.md#dialects), and every other method in
-[lsp-methods.md](lsp-methods.md).
+Two requests show and set the shell a document is linted as
+([Dialects](shell.md#dialects)):
+
+| Request | Params | Result |
+| --- | --- | --- |
+| `shellLsp/documentDialect` | `{textDocument, position?}`; with a position in a justfile, Makefile or Nix file, the shell of the recipe or string there | `{selectable, dialect, source, evidence, guessed, description}`, plus `{directive, dialects}` when `selectable` is `true`: whether a directive can choose the shell (`false` for [shell in other files](hosts.md#shell-in-other-files), whose host decides it), the shell, what decided it (`default`, `override`, `shellcheckrc`, `editorconfig`, `directive`, `shebang`, `completionTag`, `fileName`, `extension`, `languageId`, `modeline`, or for shell in other files `hostSetting` and `hostDefault`), the text that did, whether that is a guess, a sentence to show, whether a header shell directive exists, and the shells that can be chosen |
+| `shellLsp/setDialect` | `{textDocument, dialect}` | The `WorkspaceEdit` that adds or updates the header directive for `dialect`, or removes it when `dialect` is `null`; `null` when nothing changes; an error for shell in other files |
+
+Every other method is in [lsp-methods.md](lsp-methods.md).
 
 ## Windows
 

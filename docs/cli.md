@@ -53,7 +53,7 @@ position, so it is the same on every run.
 | `-e`, `--exclude=CODES` | Drop these codes, such as `SC2034,2086` or `SL1001`, or a range such as `SC2000-SC2100` that leaves out its end; repeatable |
 | `-i`, `--include=CODES` | Report only these codes; repeatable |
 | `-o`, `--enable=CHECKS` | Enable optional checks by name, or `all`; `--list-optional` lists them with the checks each turns on |
-| `--profile=PROFILE` | `recommended` (default), `minimal` or `strict`, as described under [Profiles](../README.md#profiles); `--enable`, `--exclude` and directives apply on top |
+| `--profile=PROFILE` | `recommended` (default), `minimal` or `strict`, as described under [Profiles](linting.md#profiles); `--enable`, `--exclude` and directives apply on top |
 | `--extended-analysis=BOOL` | Turn the data-flow checks off with `false` |
 | `-P`, `--source-path=DIRS` | Also look for sourced files in these directories (`SCRIPTDIR` is the script's own) |
 | `-a`, `--check-sourced` | Also report the findings in the files the scripts source |

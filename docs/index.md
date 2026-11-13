@@ -17,15 +17,15 @@ hero:
 languages: [bash, zsh, POSIX sh, dash, ksh, justfile, Makefile, Dockerfile, Nix]
 
 screenshot:
-  file: nix-finding-hover.png
-  alt: A shell finding inside a writeShellScript string in a Nix file, with a hover that explains it and previews the fix
-  caption: A shell finding inside a Nix string, with a hover that explains it and previews the fix.
+  file: shell-finding-hover.png
+  alt: A bash script with findings and inlay hints, and a hover that explains an unquoted command substitution and previews the fix
+  caption: A finding in a bash script, with a hover that explains it and previews the fix.
 
 features:
   - icon: '$_'
     title: Every shell by its own rules
     details: bash, zsh, POSIX sh, dash and ksh each have their own parser, and the dialect is detected per file from the shebang, a directive, .shellcheckrc or the file name. zsh is linted as zsh, which ShellCheck refuses to do.
-    link: /overview/#dialects
+    link: /shell/#dialects
     linkText: Dialects
   - icon: 'λ'
     title: Nix without an evaluator
@@ -35,7 +35,7 @@ features:
   - icon: '${ }'
     title: The languages are connected
     details: A recipe, a RUN instruction or a Nix string is linted and navigated as shell where it stands. A jq program in a shell script in a Nix string is one chain, from the jq variable to its flag, the shell variable and the Nix binding behind it.
-    link: /overview/#how-embedded-languages-work
+    link: /hosts/#how-the-shell-is-mapped
     linkText: How embedded languages work
   - icon: '1'
     title: One static binary replaces a toolbox
@@ -54,24 +54,30 @@ features:
     linkText: All checks
 
 showcase:
+  - file: zsh-pattern-hover.png
+    alt: Hover on a zsh substitution listing each part of the pattern, the groups captured into $match, and the result 1:a 2:b
+    title: Patterns explained
+    text: Hover takes the shell's own patterns apart and, when the values are known, computes the result.
+    link: /overview/#patterns-explained
+    linkText: See the example
+  - file: shell-completion-manpage.png
+    alt: Completion after git switch -- listing its flags, with the manual page's description of --discard-changes
+    title: Completion from the manual pages
+    text: Flags and subcommands of installed commands come from their manual pages, read without man.
+    link: /shell/#completion-and-hover
+    linkText: Completion and hover
+  - file: nix-finding-hover.png
+    alt: A shell finding inside a writeShellScript string in a Nix file, with a hover that explains it and previews the fix
+    title: A script inside a Nix string
+    text: A writeShellScript string is read as shell with no marker, and findings land on the line of the .nix file.
+    link: /overview/#a-script-inside-a-nix-string
+    linkText: See the example
   - file: jq-peek-chain.png
     alt: Peek definition on a jq variable listing the jq flag, the shell variable and the Nix binding
     title: From a jq variable to the Nix binding behind it
     text: Peek definition on a jq variable lists the jq flag, the shell variable and the Nix binding.
     link: /overview/#from-a-jq-variable-to-the-nix-binding-behind-it
     linkText: See the example
-  - file: nix-peek-pkgs-jq.png
-    alt: Peek definition from pkgs.jq in a shell string opening package.nix from the locked nixpkgs
-    title: A jump into nixpkgs, with nothing evaluated
-    text: Definition on a package opens it in the nixpkgs that flake.lock pins, read from its source in the Nix store.
-    link: /overview/#a-jump-into-nixpkgs-with-nothing-evaluated
-    linkText: See the example
-  - file: nix-rename-refused.png
-    alt: 'A refused rename: symbol cannot be renamed, the module system passes lib to this module by this name'
-    title: A rename that refuses, and says why
-    text: The module system passes lib by name, so instead of breaking the module, the server names what would break.
-    link: /nix/#rename
-    linkText: Rename in Nix
   - file: dockerfile-problems.png
     alt: A Dockerfile with squiggles and a Problems panel listing DL and SC findings next to findings from a justfile, a script and a Nix file
     title: Findings from every file, together
@@ -86,10 +92,12 @@ showcase:
     linkText: Command line
 
 numbers:
+  - value: 0.18 s
+    label: To lint the 1,219 shell scripts of nixpkgs, where one shellcheck process takes 20.7 s
   - value: 95 MiB
     label: Peak memory on an 89-file flake, where nixd uses 576 MiB
-  - value: '0'
-    label: Formatter differences from nixfmt 1.5.0 across all 44,765 files of nixpkgs
   - value: 4,716
     label: Scripts in the pinned corpus that CI holds the linter to ShellCheck over
+  - value: '0'
+    label: Formatter differences from nixfmt 1.5.0 across all 44,765 files of nixpkgs
 ---
