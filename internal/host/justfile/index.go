@@ -45,7 +45,7 @@ type indexer struct {
 }
 
 func (f *File) Index(shells []*Recipe) *model.Index {
-	ix := &model.Index{ExportAll: f.Enabled("export"), Broken: len(f.Errors) > 0}
+	ix := &model.Index{Exports: f.exported(), ExportAll: f.Enabled("export"), Broken: len(f.Errors) > 0}
 	in := &indexer{f: f, ix: ix, scopes: f.itemScopes(), shells: map[*Recipe]bool{}}
 	for _, r := range shells {
 		in.shells[r] = true

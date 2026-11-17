@@ -20,6 +20,8 @@ type Settings struct {
 	Optional []string
 	Profile  lint.Profile
 	Extended *bool
+
+	Environment []string
 }
 
 func (s Settings) Forced() *dialect.Detection {
@@ -76,6 +78,8 @@ func options(file *workspace.File, s Settings) lint.Options {
 
 		Sourced:    file.Doc.Sourced,
 		ReadByHost: file.Doc.ReadByHost,
+
+		Environment: s.Environment,
 	}
 }
 

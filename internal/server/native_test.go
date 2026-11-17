@@ -383,6 +383,34 @@ func TestMakefileNavigationAcrossIncludes(t *testing.T) {
 	}
 }
 
+func TestMakefileRecipesReadExportsAcrossIncludes(t *testing.T) {
+	t.Parallel()
+
+	files := map[string]string{
+		"Makefile": "include inc.mk\nexport top := 1\nall:\n\techo \"$$foo $$bar $$top\"\n",
+		"inc.mk":   "export foo\nexport bar = 1\nx:\n\techo \"$$top\"\n",
+	}
+	p := openNativeProject(t, nativeCapabilities, files, "Makefile", "inc.mk")
+	unassigned := func(name string) []lsp.Range {
+		var out []lsp.Range
+		for _, d := range pullDiagnostics(t, p.c, p.uri(name)) {
+			if d.Code == "SC2154" {
+				out = append(out, d.Range)
+			}
+		}
+		return out
+	}
+	for _, name := range []string{"Makefile", "inc.mk"} {
+		if got := unassigned(name); len(got) != 0 {
+			t.Errorf("SC2154 in %s = %+v, want none", name, got)
+		}
+	}
+	p.c.notify("textDocument/didChange", `{"textDocument": {"uri": "`+p.uri("inc.mk")+`", "version": 2}, "contentChanges": [{"text": "export foo\nx:\n\techo \"$$top\"\n"}]}`)
+	if got, want := unassigned("Makefile"), []lsp.Range{p.at("Makefile", "$$bar", 0).Range}; !slices.Equal(got, want) {
+		t.Errorf("SC2154 in Makefile once inc.mk stops exporting bar = %+v, want %+v", got, want)
+	}
+}
+
 func TestJustfileTokensLensesAndRangeFormatting(t *testing.T) {
 	t.Parallel()
 

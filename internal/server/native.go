@@ -249,6 +249,16 @@ func (s *Server) group(ctx context.Context, docs *docstore.View, h hostnav.Host)
 	return hostnav.Build(ctx, h, s.hostEnv(docs, h.Language()))
 }
 
+func (s *Server) hostGroup(h hostnav.Host) (*hostnav.Group, bool) {
+	g, err := s.group(context.Background(), s.docs.View(), h)
+	if err != nil {
+		file := h.File()
+		s.noticeOnce("hostnav:"+file.URI+":"+err.Error(), lsp.MessageWarning, "Checking "+file.Path+" on its own, without the files it includes: "+err.Error())
+		return nil, false
+	}
+	return g, true
+}
+
 func sourcePositions(file *workspace.File, enc docstore.Encoding) docstore.Positions {
 	return file.Doc.Source().Positions(enc)
 }
@@ -821,10 +831,8 @@ func (s *Server) nativeFindings(h hostnav.Host, settings config.Settings, docker
 	}
 	file := h.File()
 	findings := file.Native.Index.Findings
-	if g, err := s.group(context.Background(), s.docs.View(), h); err == nil {
+	if g, ok := s.hostGroup(h); ok {
 		findings = g.Findings()
-	} else {
-		s.noticeOnce("hostnav:"+file.URI+":"+err.Error(), lsp.MessageWarning, "Checking "+file.Path+" on its own, without the files it includes: "+err.Error())
 	}
 	checks := s.lintSettings(file.Path, settings)
 	unused := hostnav.OptionalNixFindings(h, checks)

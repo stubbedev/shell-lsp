@@ -52,6 +52,11 @@ func (s *Server) lintReport(file *workspace.File, settings config.Settings, gene
 	}
 	stamp := s.sourcesStamp(file.Tree)
 	lintSettings := s.lintSettings(file.Path, settings)
+	if h, ok := hostnav.Of(file); ok {
+		if g, ok := s.hostGroup(h); ok {
+			lintSettings.Environment = g.Environment()
+		}
+	}
 	report := workspace.Memo(file, lintKey(lintSettings, generation), stamp, func() lint.Report {
 		if !file.Doc.Projected() || !s.docs.Has(file.URI) {
 			return filelint.Check(file, s.navigationEnv(), lintSettings)
@@ -87,7 +92,7 @@ func (m *lintMemories) forget(uri string) {
 }
 
 func lintKey(settings filelint.Settings, generation uint64) string {
-	return lintMemoKey + strconv.FormatUint(generation, 10) + "/" + settings.RC.Path + "\x00" + settings.RC.Text
+	return lintMemoKey + strconv.FormatUint(generation, 10) + "/" + settings.RC.Path + "\x00" + settings.RC.Text + "\x00" + strings.Join(settings.Environment, " ")
 }
 
 func (s *Server) nearestShellcheckrc(path string) (shellcheckrc.File, bool, error) {

@@ -33,6 +33,21 @@ func TestCheckLintsMakefileRecipes(t *testing.T) {
 	}
 }
 
+func TestCheckReadsExportsAcrossMakefileIncludes(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeFiles(t, dir, map[string]string{
+		"Makefile": "include inc.mk\nexport top := 1\nall:\n\techo \"$$foo $$bar $$top $$gone\"\n",
+		"inc.mk":   "export foo\nexport bar = 1\nx:\n\techo \"$$top $$gone\"\n",
+	})
+	got := run(t, dir, "", "check", "-f", "gcc", ".")
+	want := []string{"Makefile:4:26 SC2154", "inc.mk:4:14 SC2154"}
+	if !slices.Equal(findings(t, got.stdout), want) || got.status != checkStatusFindings {
+		t.Errorf("checking a Makefile and the file it includes = %d %v, want %v\n%s", got.status, findings(t, got.stdout), want, got.stderr)
+	}
+}
+
 func TestCheckNamesStdinToChooseItsLanguage(t *testing.T) {
 	t.Parallel()
 

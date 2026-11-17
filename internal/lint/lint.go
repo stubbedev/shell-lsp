@@ -217,6 +217,8 @@ type Options struct {
 	Sourced func(offset int) bool
 
 	ReadByHost func(offset int, name string) bool
+
+	Environment []string
 }
 
 type Report struct {

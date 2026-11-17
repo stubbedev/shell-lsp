@@ -173,38 +173,17 @@ func hadolintDisagreements(ctx context.Context, f corpus.HostFile, cfg hadolint.
 
 func analyseHosts(ctx context.Context, files []corpus.HostFile) ([]hostReport, error) {
 	configs := hadolint.NewResolver(regularfile.ReadConfig, time.Now, time.Hour, nil)
-	byRoot := map[string]*workspace.Workspace{}
-	graphs := map[string]*hostnav.Graph{}
+	hosts := newCorpusHosts(files)
 	var out []hostReport
 	for _, f := range files {
-		ws, ok := byRoot[f.Root]
-		if !ok {
-			ws = workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect)
-			ws.SetRoots([]string{f.Root})
-			byRoot[f.Root] = ws
-		}
-		file, err := ws.LoadAs(f.File, f.Language)
+		file, err := hosts.load(f)
 		if err != nil {
-			return nil, fmt.Errorf("loading %s: %w", f.Path, err)
-		}
-		h, ok := hostnav.Of(file)
-		if !ok {
-			return nil, fmt.Errorf("%s has no native analysis", f.Path)
-		}
-		env := hostnav.Env{Loader: ws}
-		key := f.Root + "\x00" + f.Language.String()
-		env.Graph = func(ctx context.Context) (*hostnav.Graph, error) {
-			if g, ok := graphs[key]; ok {
-				return g, nil
-			}
-			g, err := hostnav.NewGraph(ctx, f.Language, sameLanguage(ws, files, f), env)
-			graphs[key] = g
-			return g, err
+			return nil, err
 		}
 		start := time.Now()
-		g, err := hostnav.Build(ctx, h, env)
+		g, err := hosts.group(ctx, f, file)
 		if err != nil {
-			return nil, fmt.Errorf("analysing %s: %w", f.Path, err)
+			return nil, err
 		}
 		findings := g.Findings()
 		dockerConfig, err := hadolintConfig(configs, f)
@@ -261,6 +240,57 @@ func analyseHosts(ctx context.Context, files []corpus.HostFile) ([]hostReport, e
 		out = append(out, r)
 	}
 	return out, nil
+}
+
+type corpusHosts struct {
+	files  []corpus.HostFile
+	byRoot map[string]*workspace.Workspace
+	graphs map[string]*hostnav.Graph
+}
+
+func newCorpusHosts(files []corpus.HostFile) *corpusHosts {
+	return &corpusHosts{files: files, byRoot: map[string]*workspace.Workspace{}, graphs: map[string]*hostnav.Graph{}}
+}
+
+func (c *corpusHosts) workspace(root string) *workspace.Workspace {
+	ws, ok := c.byRoot[root]
+	if !ok {
+		ws = workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect)
+		ws.SetRoots([]string{root})
+		c.byRoot[root] = ws
+	}
+	return ws
+}
+
+func (c *corpusHosts) load(f corpus.HostFile) (*workspace.File, error) {
+	file, err := c.workspace(f.Root).LoadAs(f.File, f.Language)
+	if err != nil {
+		return nil, fmt.Errorf("loading %s: %w", f.Path, err)
+	}
+	return file, nil
+}
+
+func (c *corpusHosts) group(ctx context.Context, f corpus.HostFile, file *workspace.File) (*hostnav.Group, error) {
+	h, ok := hostnav.Of(file)
+	if !ok {
+		return nil, fmt.Errorf("%s has no native analysis", f.Path)
+	}
+	ws := c.workspace(f.Root)
+	env := hostnav.Env{Loader: ws}
+	key := f.Root + "\x00" + f.Language.String()
+	env.Graph = func(ctx context.Context) (*hostnav.Graph, error) {
+		if g, ok := c.graphs[key]; ok {
+			return g, nil
+		}
+		g, err := hostnav.NewGraph(ctx, f.Language, sameLanguage(ws, c.files, f), env)
+		c.graphs[key] = g
+		return g, err
+	}
+	g, err := hostnav.Build(ctx, h, env)
+	if err != nil {
+		return nil, fmt.Errorf("analysing %s: %w", f.Path, err)
+	}
+	return g, nil
 }
 
 func sameLanguage(ws *workspace.Workspace, files []corpus.HostFile, self corpus.HostFile) func(context.Context) ([]*workspace.File, error) {

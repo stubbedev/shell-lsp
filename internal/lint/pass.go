@@ -48,10 +48,11 @@ type pass struct {
 	quotedHeredocs map[int]bool
 	assignmentArms map[*syntax.Assign][]branchArm
 
-	normalized Normalized
-	sourced    func(offset int) bool
-	readByHost func(offset int, name string) bool
-	probes     []Finding
+	normalized  Normalized
+	sourced     func(offset int) bool
+	readByHost  func(offset int, name string) bool
+	environment []string
+	probes      []Finding
 }
 
 func newPass(tree *parser.Tree, imports []parser.Import, opts Options) *pass {
@@ -68,9 +69,10 @@ func newPass(tree *parser.Tree, imports []parser.Import, opts Options) *pass {
 		variables:      variableUsage{reads: make([]variableRead, 0, len(tree.References))},
 		parameters:     shelldocs.KnownParameters(tree.Dialect),
 
-		normalized: opts.Normalized,
-		sourced:    opts.Sourced,
-		readByHost: opts.ReadByHost,
+		normalized:  opts.Normalized,
+		sourced:     opts.Sourced,
+		readByHost:  opts.ReadByHost,
+		environment: opts.Environment,
 	}
 }
 

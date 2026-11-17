@@ -15,7 +15,6 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/navigation"
-	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
 const recipesBaselineFile = "corpus/recipes.md"
@@ -70,24 +69,22 @@ func runRecipes(ctx context.Context, args []string) error {
 }
 
 func recipeFindings(ctx context.Context, files []corpus.HostFile) ([]recipeFinding, error) {
-	byRoot := map[string]*workspace.Workspace{}
+	hosts := newCorpusHosts(files)
 	var out []recipeFinding
 	for _, f := range files {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		ws, ok := byRoot[f.Root]
-		if !ok {
-			ws = workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect)
-			ws.SetRoots([]string{f.Root})
-			byRoot[f.Root] = ws
-		}
-		file, err := ws.LoadAs(f.File, f.Language)
+		file, err := hosts.load(f)
 		if err != nil {
-			return nil, fmt.Errorf("loading %s: %w", f.Path, err)
+			return nil, err
+		}
+		g, err := hosts.group(ctx, f, file)
+		if err != nil {
+			return nil, err
 		}
 		text := file.Doc.Source().Text()
-		report := filelint.Check(file, navigation.Env{Loader: ws, Roots: []string{f.Root}}, filelint.Settings{})
+		report := filelint.Check(file, navigation.Env{Loader: hosts.workspace(f.Root), Roots: []string{f.Root}}, filelint.Settings{Environment: g.Environment()})
 		placed := make([]lint.Finding, len(report.Findings))
 		for i, finding := range report.Findings {
 			finding.Span.Start = file.Doc.SourceOffset(finding.Span.Start)

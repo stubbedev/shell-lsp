@@ -298,6 +298,33 @@ func TestMakeIncludesShareVariablesAndTargets(t *testing.T) {
 	}
 }
 
+func TestIncludesShareTheirExportsWithEachOther(t *testing.T) {
+	t.Parallel()
+
+	tr := newTree(t, map[string]string{
+		"Makefile":  "include inc.mk\nexport top := 1\nlocal := 2\nall:\n\techo \"$$foo $$bar $$top\"\n",
+		"inc.mk":    "export foo\nexport bar = 1\nhidden = 2\nx:\n\techo \"$$top\"\n",
+		"other.mk":  "export apart := 1\n",
+		"justfile":  "import 'inc.just'\nexport top := '1'\na:\n    echo \"$bar $top\"\n",
+		"inc.just":  "export bar := '1'\nhidden := '2'\n",
+		"lone.just": "import 'set.just'\n",
+		"set.just":  "set export\nsome := '1'\n",
+	})
+	for _, tt := range []struct {
+		file string
+		want []string
+	}{
+		{"Makefile", []string{"bar", "foo"}},
+		{"inc.mk", []string{"top"}},
+		{"other.mk", nil},
+		{"justfile", []string{"bar"}},
+		{"inc.just", []string{"top"}},
+		{"lone.just", []string{"some"}},
+	} {
+		expectStrings(t, "environment of "+tt.file, tr.group(tt.file).Environment(), tt.want)
+	}
+}
+
 func TestMakeExportedVariablesAndTargetScopes(t *testing.T) {
 	t.Parallel()
 

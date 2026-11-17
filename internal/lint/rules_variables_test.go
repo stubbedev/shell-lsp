@@ -31,6 +31,19 @@ func TestSourcedFilesShareVariables(t *testing.T) {
 	}
 }
 
+func TestEnvironmentNamesAreAssigned(t *testing.T) {
+	t.Parallel()
+
+	src := "echo \"$token\" \"$level\"\n"
+	var got []string
+	for _, f := range Check(parser.Parse(src, dialect.Bash), nil, Options{Environment: []string{"token"}}) {
+		got = append(got, f.Code.String()+" "+src[f.Span.Start:f.Span.End])
+	}
+	if want := []string{"SC2154 $level"}; !slices.Equal(got, want) {
+		t.Errorf("findings with token in the environment = %v, want %v", got, want)
+	}
+}
+
 func TestSourcedFunctionReadsItsArgumentByName(t *testing.T) {
 	t.Parallel()
 

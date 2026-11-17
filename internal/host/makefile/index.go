@@ -137,6 +137,7 @@ func (f *File) Index(shells map[*Rule]bool) *model.Index {
 	ix := &model.Index{Broken: slices.ContainsFunc(f.Errors, func(e Error) bool {
 		return e.Kind != ErrUnterminated && e.Kind != ErrDeferredUnterminated && e.Kind != ErrPatternUnterminated && e.Kind != ErrPatternMismatch
 	})}
+	ix.Exports = f.exported()
 	ix.Branches = f.alternatives()
 	ix.Inherits = map[model.Scope][]model.Scope{}
 	in := &indexer{overridden: f.overridden(), usedPatterns: f.usedPatterns(), f: f, ix: ix, scopes: map[string]model.Scope{}, exports: f.exportState(), called: map[string]bool{}}

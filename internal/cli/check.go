@@ -354,6 +354,14 @@ func (c *checker) lint(t target) linted {
 		s.lint.Exclude = s.lint.Exclude.Union(lint.CodesOf(disabled...))
 	}
 	env := c.navigationEnv(s.roots)
+	h, isHost := hostnav.Of(file)
+	var g *hostnav.Group
+	if isHost {
+		if g, err = hostnav.Build(context.Background(), h, c.hostEnv(h.Language())); err != nil {
+			return linted{failure: fmt.Sprintf("%s: %v", t.name, err)}
+		}
+		s.lint.Environment = g.Environment()
+	}
 	report := filelint.Check(file, env, s.lint)
 	var syntax []lint.Finding
 	for _, variant := range file.Variants() {
@@ -361,8 +369,8 @@ func (c *checker) lint(t target) linted {
 	}
 	findings := sourceFindings(file.Doc, append(syntax, report.Findings...))
 	docker, _ := hostnav.HadolintOf(file, s.hadolint)
-	if h, ok := hostnav.Of(file); ok {
-		native, err := c.nativeFindings(h, s.lint)
+	if isHost {
+		native, err := c.nativeFindings(g, h, s.lint)
 		if err != nil {
 			return linted{failure: fmt.Sprintf("%s: %v", t.name, err)}
 		}
@@ -403,11 +411,7 @@ func (c *checker) provenFindings(h hostnav.Host, s fileSettings, env navigation.
 	return sourceFindings(wrapped.Doc, append(syntax, report.Findings...))
 }
 
-func (c *checker) nativeFindings(h hostnav.Host, settings filelint.Settings) ([]lint.Finding, error) {
-	g, err := hostnav.Build(context.Background(), h, c.hostEnv(h.Language()))
-	if err != nil {
-		return nil, err
-	}
+func (c *checker) nativeFindings(g *hostnav.Group, h hostnav.Host, settings filelint.Settings) ([]lint.Finding, error) {
 	locked, err := hostnav.FlakeLockFindings(h, c.locks, settings)
 	if err != nil {
 		return nil, err

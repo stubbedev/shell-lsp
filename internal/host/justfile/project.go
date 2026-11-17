@@ -188,7 +188,7 @@ func detect(s script, shebang, evidence string, src dialect.Source) (script, boo
 	return s, true
 }
 
-func (f *File) ExportedTo(r *Recipe) []string {
+func (f *File) exported() []string {
 	var names []string
 	all := f.Enabled("export")
 	for _, a := range f.Assignments() {
@@ -196,6 +196,12 @@ func (f *File) ExportedTo(r *Recipe) []string {
 			names = append(names, a.Name.Text)
 		}
 	}
+	return shellNames(names)
+}
+
+func (f *File) ExportedTo(r *Recipe) []string {
+	names := f.exported()
+	all := f.Enabled("export")
 	for _, param := range r.Params {
 		if param.Export || all {
 			names = append(names, param.Name.Text)
@@ -207,6 +213,10 @@ func (f *File) ExportedTo(r *Recipe) []string {
 			names = append(names, values...)
 		}
 	}
+	return shellNames(names)
+}
+
+func shellNames(names []string) []string {
 	slices.Sort(names)
 	return slices.DeleteFunc(slices.Compact(names), func(name string) bool { return !shellName(name) })
 }

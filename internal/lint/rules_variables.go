@@ -580,6 +580,9 @@ func (p *pass) variableFacts() variableFacts {
 	for name := range u.assigned {
 		f.assigned[name] = true
 	}
+	for _, name := range p.environment {
+		f.assigned[name] = true
+	}
 	for name := range u.used {
 		f.used[name] = true
 	}

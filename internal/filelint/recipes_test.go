@@ -307,3 +307,30 @@ func TestAnEditReusesTheOtherRecipes(t *testing.T) {
 		})
 	}
 }
+
+func TestTheEnvironmentKeysRememberedRecipeReports(t *testing.T) {
+	t.Parallel()
+
+	memory := NewMemory()
+	env := nixEnv()
+	text := "a:\n\techo \"$$token\"\nb:\n\techo b\n"
+	codes := func(s Settings) []string {
+		var out []string
+		for _, f := range memory.Check(makeFile(t, text), env, s).Findings {
+			out = append(out, f.Code.String())
+		}
+		return out
+	}
+	for _, step := range []struct {
+		environment []string
+		want        []string
+	}{
+		{nil, []string{"SC2154"}},
+		{[]string{"token"}, nil},
+		{nil, []string{"SC2154"}},
+	} {
+		if got := codes(Settings{Environment: step.environment}); !slices.Equal(got, step.want) {
+			t.Errorf("findings with the environment %q = %v, want %v", step.environment, got, step.want)
+		}
+	}
+}

@@ -214,6 +214,17 @@ func (g *Group) ShellSymbol(offset int) (Symbol, bool) {
 	return Symbol{}, false
 }
 
+func (g *Group) Environment() []string {
+	var names []string
+	for f, ix := range g.Module.Files {
+		if f != g.self {
+			names = append(names, ix.Exports...)
+		}
+	}
+	slices.Sort(names)
+	return slices.Compact(names)
+}
+
 func (g *Group) shellUsage() model.Usage {
 	used := model.Usage{}
 	for f := range g.Module.Files {

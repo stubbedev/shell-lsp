@@ -366,6 +366,7 @@ type Index struct {
 	Tokens    []semantic.Token
 	Runnables []Runnable
 	Findings  []lint.Finding
+	Exports   []string
 	ExportAll bool
 	Broken    bool
 	Opaque    bool
