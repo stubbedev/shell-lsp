@@ -73,8 +73,9 @@ subcommand are skipped with their values (`git -C dir checkout`,
 `kubectl -n ns get`), and commands behind the wrappers `builtin`, `busybox`,
 `command`, `doas`, `env`, `exec`, `nice`, `nohup`, `setsid`, `sudo`, `time`,
 `timeout`, `watch` and `xargs` complete and hover as if typed directly.
-A flag's documentation keeps the page's bold and italic text, and text
-such as `<new-branch>` or `*` literally.
+A flag's documentation keeps the page's bold and italic text, the
+paragraphs and example blocks indented under it, and text such as
+`<new-branch>` or `*` literally.
 
 Completing inside a word can replace the rest of it (for clients with
 insert-replace support). Hover explains the same vocabulary where it is

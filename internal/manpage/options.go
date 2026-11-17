@@ -25,7 +25,7 @@ func collectOptions(doc document) []Option {
 
 func appendOptions(options []Option, blocks []block, seen map[string]bool) []Option {
 	var grouped Option
-	for _, b := range blocks {
+	for i, b := range blocks {
 		if b.kind != taggedBlock || !strings.HasPrefix(b.tag, "-") {
 			grouped = Option{}
 			continue
@@ -43,7 +43,7 @@ func appendOptions(options []Option, blocks []block, seen map[string]bool) []Opt
 		for _, n := range option.Names {
 			seen[n] = true
 		}
-		option.Doc = Doc{blocks: []block{b}}
+		option.Doc = Doc{blocks: append([]block{b}, nestedUnder(blocks[i+1:], b.depth)...)}
 		options = append(options, option)
 	}
 	return options
@@ -69,4 +69,14 @@ func takesValue(syntax string) bool {
 	}
 	value := strings.TrimLeft(syntax, " ")
 	return len(value) < len(syntax) && value != "" && !strings.ContainsAny(value[:1], "-[|")
+}
+
+func nestedUnder(blocks []block, depth int) []block {
+	end := slices.IndexFunc(blocks, func(b block) bool {
+		return b.kind != paragraphBlock && b.kind != literalBlock || b.depth <= depth
+	})
+	if end < 0 {
+		return blocks
+	}
+	return blocks[:end]
 }

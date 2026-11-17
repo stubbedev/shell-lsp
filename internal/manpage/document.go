@@ -174,8 +174,12 @@ func (b *builder) flush() {
 		if len(b.doc.sections) == 0 {
 			b.doc.sections = append(b.doc.sections, section{})
 		}
+		depth := b.depth
+		if b.kind != taggedBlock {
+			depth = b.level()
+		}
 		last := &b.doc.sections[len(b.doc.sections)-1]
-		last.blocks = append(last.blocks, block{kind: b.kind, tag: b.tag, text: rich(text), depth: b.depth})
+		last.blocks = append(last.blocks, block{kind: b.kind, tag: b.tag, text: rich(text), depth: depth})
 	}
 	b.text.Reset()
 	b.tag = ""

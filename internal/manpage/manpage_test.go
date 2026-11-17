@@ -515,6 +515,8 @@ func TestRenderedTextBecomesEscapedMarkdown(t *testing.T) {
 	want := []Option{
 		{Names: []string{"-c", "--create"}, Valued: true, Doc: Doc{blocks: []block{
 			{kind: paragraphBlock, text: "Create a new branch named \uE002<new-branch>\uE000 starting at \uE002<start-point>\uE000 before switching to the branch. This is the transactional equivalent of"},
+			{kind: literalBlock, text: "$ git branch <new-branch> [<start-point>]\n$ git switch <new-branch>"},
+			{kind: paragraphBlock, text: `that is, the branch is not reset unless "git switch" is successful.`},
 		}}},
 		{Names: []string{"--detach"}, Doc: paragraph("Switch to a commit for inspection.")},
 		{Names: []string{"-q", "--quiet"}, Doc: paragraph("Suppress \uE001all\uE000 feedback, see \uE002git\uE000(1).")},
@@ -522,7 +524,9 @@ func TestRenderedTextBecomesEscapedMarkdown(t *testing.T) {
 	if !slices.EqualFunc(page.Options(), want, sameOption) {
 		t.Errorf("Options() = %+v, want %+v", page.Options(), want)
 	}
-	wantDoc := "Create a new branch named *\\<new-branch\\>* starting at *\\<start-point\\>* before switching to the branch. This is the transactional equivalent of"
+	wantDoc := "Create a new branch named *\\<new-branch\\>* starting at *\\<start-point\\>* before switching to the branch. This is the transactional equivalent of\n\n" +
+		"```\n$ git branch <new-branch> [<start-point>]\n$ git switch <new-branch>\n```\n\n" +
+		`that is, the branch is not reset unless "git switch" is successful.`
 	if got := page.Options()[0].Doc.Markdown(); got != wantDoc {
 		t.Errorf("-c Doc.Markdown() = %q, want %q", got, wantDoc)
 	}
