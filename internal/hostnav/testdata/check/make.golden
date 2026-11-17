@@ -254,6 +254,16 @@ accepted
 1:6 SL6015 warning this variable reference is not closed on the same logical line; make fails when it expands `CC`
 1:8 SL6010 warning unknown function `CC`
 2:3 SL6006 info unknown variable `OBJS`
+-- rule-targets-from-an-unset-flags-variable --
+accepted
+-- rule-targets-from-a-chain-of-recursive-variables --
+accepted
+5:6 SL6015 warning this variable reference is not closed on the same logical line; make fails when it expands `CC`
+5:8 SL6010 warning unknown function `CC`
+-- rule-targets-from-an-immediate-self-append --
+rejected 5:1 unterminated variable reference
+5:6 SL6012 error this variable reference is not closed on the same logical line; make fails when it expands `CC`
+5:8 SL6010 warning unknown function `CC`
 -- rule-with-known-computed-targets --
 rejected 2:1 unterminated variable reference
 2:6 SL6012 error this variable reference is not closed on the same logical line; make fails when it expands `CC`

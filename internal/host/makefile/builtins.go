@@ -181,3 +181,5 @@ var Builtins = func() model.Builtins {
 }()
 
 var predefined = []string{"AR", "ARFLAGS", "AS", "CC", "CO", "COFLAGS", "COMPILE.c", "COMPILE.C", "COMPILE.cc", "COMPILE.cpp", "COMPILE.def", "COMPILE.f", "COMPILE.F", "COMPILE.m", "COMPILE.mod", "COMPILE.p", "COMPILE.r", "COMPILE.s", "COMPILE.S", "CPP", "CTANGLE", "CWEAVE", "CXX", "F77", "F77FLAGS", "FC", "GET", "LD", "LEX", "LEX.l", "LEX.m", "LINK.c", "LINK.C", "LINK.cc", "LINK.cpp", "LINK.f", "LINK.F", "LINK.m", "LINK.o", "LINK.p", "LINK.r", "LINK.s", "LINK.S", "LINT", "LINT.c", "M2C", "MAKE", "MAKE_COMMAND", "MAKEFILES", "MAKE_HOST", "MAKEINFO", "MAKE_VERSION", "OBJC", "OUTPUT_OPTION", "PC", "PREPROCESS.F", "PREPROCESS.r", "PREPROCESS.S", "RM", "SUFFIXES", "TANGLE", "TEX", "TEXI2DVI", "WEAVE", "YACC", "YACC.m", "YACC.y"}
+
+var unsetByDefault = []string{"ASFLAGS", "CFLAGS", "CPPFLAGS", "CXXFLAGS", "FFLAGS", "GFLAGS", "LDFLAGS", "LDLIBS", "LFLAGS", "LINTFLAGS", "LOADLIBES", "PFLAGS", "RFLAGS", "TARGET_ARCH", "YFLAGS"}

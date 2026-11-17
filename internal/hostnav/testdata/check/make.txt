@@ -384,6 +384,24 @@ CC = $(CC -O2
 $(OBJS): %.o: %.c
 	@$(CC) -o $@ $^
 all: ; @:
+-- rule-targets-from-an-unset-flags-variable --
+OBJS ?= ${CFLAGS}
+CC += ${CC} \
+	README.md
+$(OBJS): %.o: %.c ; @echo ${CC}
+-- rule-targets-from-a-chain-of-recursive-variables --
+A = $(B)
+B = $(LDFLAGS)
+$(A): %.o: %.c
+	@$(CC) -o $@ $^
+CC = $(CC -O2
+-- rule-targets-from-an-immediate-self-append --
+OBJS := a.o
+OBJS := $(OBJS) b.o
+$(OBJS): %.o: %.c
+	@$(CC) -o $@ $^
+CC = $(CC -O2
+a.c b.c: ; @:
 -- rule-with-known-computed-targets --
 OBJS = a.o
 CC = $(CC -O2

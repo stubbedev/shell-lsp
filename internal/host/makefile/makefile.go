@@ -505,27 +505,40 @@ func (p *reader) emptyReference(n Node) bool {
 	return ok && blankText(value)
 }
 
+type expansion struct {
+	name   string
+	before int
+}
+
 func (p *reader) constant(n Node) (string, bool) {
+	return p.constantBefore(n, n.Span.Start, nil)
+}
+
+func (p *reader) constantBefore(n Node, before int, expanding []expansion) (string, bool) {
 	name, ok := p.resolvedName(n.Name)
 	if n.Kind != NodeReference || n.Unbalanced || !ok || n.Braced && strings.ContainsAny(name, "(){}") {
 		return "", false
 	}
-	if _, builtin := Builtins.Lookup(model.KindVariable, name); builtin && !automatic(name) {
+	if _, builtin := Builtins.Lookup(model.KindVariable, name); builtin && !automatic(name) && !slices.Contains(unsetByDefault, name) {
 		return "", false
 	}
-	value, defined := "", false
+	self := expansion{name: name, before: before}
+	if slices.Contains(expanding, self) {
+		return "", false
+	}
+	expanding = append(slices.Clip(expanding), self)
+	value, defined, immediate := "", false, false
 	declared := func(before int) bool {
 		return slices.ContainsFunc(p.file.Directives, func(d *Directive) bool {
 			return d.Span.Start < before && slices.ContainsFunc(d.Names, func(w Word) bool { return w.Text == name })
 		})
 	}
 	for _, a := range p.file.Assignments {
-		if a.Name.Text != name || len(a.Targets) > 0 {
+		if a.Name.Text != name || len(a.Targets) > 0 || a.Span.End > before {
 			continue
 		}
 		defined = defined || declared(a.Span.Start)
-		literal, ok := a.Value.Literal(p.text)
-		if !ok || a.Define {
+		if a.Define {
 			return "", false
 		}
 		switch {
@@ -533,9 +546,18 @@ func (p *reader) constant(n Node) (string, bool) {
 			return "", false
 		case a.Op == "?=" && defined:
 		case a.Op == "+=" && defined:
-			value += " " + literal
+			piece, ok := p.assignedText(a, immediate, before, expanding)
+			if !ok {
+				return "", false
+			}
+			value += " " + piece
 		case a.Op == "+=", a.Op == "?=", slices.Contains(simpleOps, a.Op):
-			value, defined = literal, true
+			immediate = a.Op == ":=" || a.Op == "::="
+			piece, ok := p.assignedText(a, immediate || a.Op == ":::=", before, expanding)
+			if !ok {
+				return "", false
+			}
+			value, defined = piece, true
 		default:
 			return "", false
 		}
@@ -543,14 +565,28 @@ func (p *reader) constant(n Node) (string, bool) {
 	return value, true
 }
 
+func (p *reader) assignedText(a *Assignment, immediate bool, before int, expanding []expansion) (string, bool) {
+	if literal, ok := a.Value.Literal(p.text); ok {
+		return literal, true
+	}
+	if immediate {
+		before = a.Span.Start
+	}
+	return p.constantTextBefore(a.Value, before, expanding)
+}
+
 func (p *reader) constantText(e Expr) (string, bool) {
+	return p.constantTextBefore(e, e.Span.Start, nil)
+}
+
+func (p *reader) constantTextBefore(e Expr, before int, expanding []expansion) (string, bool) {
 	var sb strings.Builder
 	for _, n := range e.Nodes {
 		if n.Kind == NodeText {
 			sb.WriteString(p.text[n.Span.Start:n.Span.End])
 			continue
 		}
-		value, ok := p.constant(n)
+		value, ok := p.constantBefore(n, before, expanding)
 		if !ok {
 			return "", false
 		}
