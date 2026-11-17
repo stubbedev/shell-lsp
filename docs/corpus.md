@@ -282,7 +282,7 @@ out. Its lock pins nixpkgs alone, leaving `flake-parts`, `import-tree` and
 Every fixture locks the nixpkgs that `corpus/nix/repos.txt` pins, which need not
 be the one in this repository's `flake.lock`.
 
-The large flake is kept out of `corpus/repos.txt`, whose repositories feed the
+The large flakes are kept out of `corpus/repos.txt`, whose repositories feed the
 ShellCheck and shell baselines. `corpus/nix/repos.txt` has the same format and
 is fetched by the same code into its own cache directory, `corpus-nix`. Its
 `kind` column is not read here. Unlike the corpus above, a measured project
@@ -397,3 +397,41 @@ asks for the baseline to be refreshed. Latency, memory and restarts are left
 out because they differ between runs and machines: compare them by reading the
 reports. Refresh with `just nix-parity-baseline` and review the diff like the
 other baselines. CI does not run this check.
+
+## Performance report
+
+The figures of the README's [Performance](../README.md#performance) section
+come from `cmd/perfreport`, which writes one JSON report of:
+
+- the median time of each case of `BenchmarkKeystroke` in `internal/server`;
+- the wall and CPU time of `shell-lsp check` over every `*.sh` and `*.bash` file
+  of the nixpkgs that [corpus/nix/repos.txt](../corpus/nix/repos.txt) pins,
+  against one `shellcheck` process over the same files, as medians of the runs
+  after one warm-up run of each;
+- the peak and idle memory `nixparity compare` measures for shell-lsp, nixd and
+  nil on every flake that file pins, a public flake and nixpkgs, with
+  `NIX_PATH` naming that nixpkgs;
+- the number of that nixpkgs' `.nix` files that shell-lsp formats differently
+  from `nixfmt`, where a file both reject counts as agreeing.
+
+It records the runner, the core count, processor and memory, the Go version and
+each tool's version next to the figures, since absolute times mean something
+only with them. Wall times on shared runners are noisy, so read the shell check
+as a ratio against `shellcheck` on the same machine; memory and the formatter
+count are stable.
+
+Every release runs the `perf` workflow in the Nix development shell, so the
+tools are the ones `flake.lock` pins. It uploads the report as the
+`perf-report` artifact, and the release job appends the figures to the release
+notes and attaches the report as `shell-lsp-VERSION-perf.json`. The workflow
+can also be started by hand.
+
+| Recipe | What it does |
+| --- | --- |
+| `just perf` | Measure on this machine, from the dev shell; the report lands in `shell-lsp/perf.json` in the user cache directory |
+| `just perf-readme [FILE]` | Copy a report to `corpus/perf.json` and regenerate the README section from it |
+
+A test fails when the README section no longer matches `corpus/perf.json`. To
+refresh both from a release, download its report with
+`gh release download VERSION -p '*-perf.json'`, or a run's with
+`gh run download RUN -n perf-report`, and pass it to `just perf-readme`.

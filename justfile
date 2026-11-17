@@ -151,6 +151,16 @@ nix-parity-large path="" theirs="nixd":
     fi
     go run ./cmd/nixparity compare -theirs "{{ theirs }}" -out "{{ nix_parity_reports }}/large-{{ theirs }}" "${target[@]}"
 
+perf_report := cache_directory() / "shell-lsp" / "perf.json"
+
+# Measure the figures of the README's Performance section on this machine, from the dev shell; the report lands in the user cache directory.
+perf runner="local":
+    go run ./cmd/perfreport run -runner "{{ runner }}" -out "{{ perf_report }}"
+
+# Copy a performance report, such as a release's or a perf workflow run's, to corpus/perf.json and regenerate the README's Performance section from it.
+perf-readme report=perf_report:
+    go run ./cmd/perfreport readme "{{ report }}"
+
 # Print every fuzz target as "package target", one per line.
 fuzz-targets:
     #!/usr/bin/env bash

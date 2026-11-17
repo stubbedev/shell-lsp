@@ -1,1 +1,2 @@
+disko scripts MIT https://github.com/nix-community/disko 1dd30c29c88d99ce295f15e27f93c49bc5fbae07
 nixpkgs scripts MIT https://github.com/NixOS/nixpkgs e94cb152ed51bd6e24eb4a41f1460252beb52cd2
