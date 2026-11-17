@@ -3,6 +3,7 @@ package nixeval
 import (
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 )
@@ -98,5 +99,29 @@ func TestStoreLatestPointerRejectsDamage(t *testing.T) {
 	}
 	if len(*reports) != 1 {
 		t.Errorf("reports = %v, want the damaged pointer", *reports)
+	}
+}
+
+func TestStorePointerSurvivesConcurrentReadsAndReplacements(t *testing.T) {
+	t.Parallel()
+
+	s, reports := newTestStore(t, 1<<20)
+	slot := slotKey(testKey("slot"))
+	keys := []contentKey{testKey("a"), testKey("b")}
+	var wg sync.WaitGroup
+	for i := range 8 {
+		wg.Go(func() {
+			for j := range 200 {
+				if (i+j)%2 == 0 {
+					s.setLatest(slot, keys[j%len(keys)])
+					continue
+				}
+				s.latest(slot)
+			}
+		})
+	}
+	wg.Wait()
+	if len(*reports) != 0 {
+		t.Errorf("reported %v", *reports)
 	}
 }

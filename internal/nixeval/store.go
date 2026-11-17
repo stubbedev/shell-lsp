@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/stubbedev/shell-lsp/internal/atomicfile"
@@ -31,6 +32,7 @@ const (
 var storeChecksum = crc32.MakeTable(crc32.Castagnoli)
 
 type store struct {
+	mu     sync.Mutex
 	dir    string
 	budget int64
 	now    func() time.Time
@@ -75,6 +77,8 @@ func unframe(key contentKey, data []byte) ([]byte, error) {
 }
 
 func (s *store) read(key contentKey) ([]byte, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	path := s.entryPath(key)
 	data, err := os.ReadFile(path) //nolint:gosec // G304: the path is a hex digest inside the cache directory
 	if errors.Is(err, fs.ErrNotExist) {
@@ -97,6 +101,8 @@ func (s *store) read(key contentKey) ([]byte, bool) {
 }
 
 func (s *store) write(key contentKey, payload []byte) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	path := s.entryPath(key)
 	if err := atomicfile.Write(path, frame(key, payload)); err != nil {
 		s.report(fmt.Errorf("writing the evaluation cache entry: %w", err))
@@ -108,6 +114,12 @@ func (s *store) write(key contentKey, payload []byte) {
 }
 
 func (s *store) latest(slot slotKey) (contentKey, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.readLatest(slot)
+}
+
+func (s *store) readLatest(slot slotKey) (contentKey, bool) {
 	path := s.latestPath(slot)
 	data, err := os.ReadFile(path) //nolint:gosec // G304: the path is a hex digest inside the cache directory
 	if errors.Is(err, fs.ErrNotExist) {
@@ -130,7 +142,9 @@ func (s *store) setLatest(slot slotKey, key contentKey) {
 	if slot == (slotKey{}) {
 		return
 	}
-	if current, ok := s.latest(slot); ok && current == key {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if current, ok := s.readLatest(slot); ok && current == key {
 		return
 	}
 	if err := atomicfile.Write(s.latestPath(slot), key[:]); err != nil {
