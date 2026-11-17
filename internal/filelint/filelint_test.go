@@ -58,6 +58,41 @@ func TestCheckFollowsSourcedFilesAndHonoursSettings(t *testing.T) {
 	}
 }
 
+func TestCheckTakesShellOptionsFromSourcedFiles(t *testing.T) {
+	t.Parallel()
+
+	uses := "answer=${1:-YES}\nif [[ ${answer} == (#i)yes ]]; then\n  print matched\nfi\nprint -r -- ${answer} | tr \"[:lower:]\" \"[:upper:]\"\n"
+	dir := t.TempDir()
+	for name, text := range map[string]string{
+		"main.zsh":     "#!/usr/bin/env zsh\nsource \"$(dirname \"$0\")/a.zsh\"\n" + uses,
+		"a.zsh":        "source ./b.zsh\n",
+		"b.zsh":        "source ./a.zsh\nsetopt pipe_fail extended_glob\n",
+		"in-func.zsh":  "#!/usr/bin/env zsh\nsource \"$(dirname \"$0\")/func-lib.zsh\"\n" + uses,
+		"func-lib.zsh": "strict() {\n  setopt pipe_fail extended_glob\n}\n",
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(text), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect)
+	env := navigation.Env{Loader: loader{ws}, Roots: []string{dir}}
+	for _, tt := range []struct {
+		name string
+		want []lint.Code
+	}{
+		{"main.zsh", nil},
+		{"in-func.zsh", []lint.Code{12016, 2312}},
+	} {
+		file, err := ws.Load(filepath.Join(dir, tt.name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := codes(Check(file, env, Settings{Profile: lint.ProfileStrict}).Findings); !slices.Equal(got, tt.want) {
+			t.Errorf("%s: findings = %v, want %v", tt.name, got, tt.want)
+		}
+	}
+}
+
 func TestCheckReportsWindowsLineEndings(t *testing.T) {
 	t.Parallel()
 

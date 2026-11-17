@@ -76,6 +76,7 @@ func (m *Memory) check(run uint64, file *workspace.File, env navigation.Env, s S
 	if len(apart) == 0 {
 		opts := options(file, s)
 		opts.Sources = followed(file, env)
+		opts.SourcedOptions = navigation.SourcedOptions(file, env)
 		return shown(file, lint.Run(file.Tree, navigation.Imports(file, env), opts))
 	}
 	c := unitCheck{memory: m, run: run, settings: settingsKey(file, s), file: file, env: env, lint: s}
@@ -165,6 +166,7 @@ func (c *unitCheck) report(u scriptUnit, key unitKey, neighbours func() []parser
 	}
 	opts := options(own, c.lint)
 	opts.Sources = followed(own, c.env)
+	opts.SourcedOptions = navigation.SourcedOptions(own, c.env)
 	opts.Sourced = func(offset int) bool { return c.file.Doc.Sourced(u.start(offset)) }
 	opts.ReadByHost = func(offset int, name string) bool { return c.file.Doc.ReadByHost(u.start(offset), name) }
 	opts.Normalized = lint.Normalized{CarriageReturns: u.carriageReturns(c.file.Doc)}

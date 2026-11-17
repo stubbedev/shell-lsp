@@ -9,7 +9,7 @@ import (
 
 func (p *pass) shellOptions() shelloptions.PerShell {
 	if p.perShell == nil {
-		options := shelloptions.Scan(p.tree)
+		options := shelloptions.Scan(p.tree, p.sourcedOptions...)
 		p.perShell = &options
 	}
 	return *p.perShell

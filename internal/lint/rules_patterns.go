@@ -117,8 +117,12 @@ func (p *pass) checkParsedExtglob(need glob.Need, text, enable string) bool {
 	if slices.ContainsFunc(enablers, func(c parser.Command) bool { return c.Span.End <= top.Start }) {
 		return false
 	}
-	if slices.ContainsFunc(enablers, func(c parser.Command) bool { return c.Span.Start >= top.Start && c.Span.End <= need.Span.Start }) {
-		p.report(codePatternNeedsOption, need.Span, fmt.Sprintf("bash reads %s together with the `%s` before it, on one line or in one function, so the option is not on yet when bash parses the extended glob; enable it on a line of its own above.", text, enable), p.enableOptionFix(need, enable)...)
+	if i := slices.IndexFunc(enablers, func(c parser.Command) bool { return c.Span.Start >= top.Start && c.Span.End <= need.Span.Start }); i >= 0 {
+		enabler := fmt.Sprintf("the `%s`", enable)
+		if enablers[i].IsSourceBuiltin() {
+			enabler = fmt.Sprintf("`%s`, which runs `%s`,", p.spanText(enablers[i].Span), enable)
+		}
+		p.report(codePatternNeedsOption, need.Span, fmt.Sprintf("bash reads %s together with %s before it, on one line or in one function, so the option is not on yet when bash parses the extended glob; enable it on a line of its own above.", text, enabler), p.enableOptionFix(need, enable)...)
 		return true
 	}
 	p.reportNeed(need, fmt.Sprintf("%s is an extended glob, which bash rejects as a syntax error unless `%s` ran before it read this line", text, enable),

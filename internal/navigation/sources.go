@@ -8,6 +8,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/directive"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/platform"
+	"github.com/stubbedev/shell-lsp/internal/shelloptions"
 	"github.com/stubbedev/shell-lsp/internal/textline"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
@@ -138,6 +139,32 @@ func Closure(file *workspace.File, env Env) ([]*workspace.File, bool) {
 		}
 	}
 	return chain, complete && len(queue) == 0
+}
+
+// SourcedOptions is, for each source or . command in file that was followed, what the file it runs
+// does to the shell's options, through the files that one sources in turn.
+func SourcedOptions(file *workspace.File, env Env) []shelloptions.Sourced {
+	return sourcedOptions(file, env, map[string]*shelloptions.Effect{file.Path: {}})
+}
+
+// effects holds each file's Effect once computed; a file still being computed, reached again
+// through a cycle, contributes nothing.
+func sourcedOptions(file *workspace.File, env Env, effects map[string]*shelloptions.Effect) []shelloptions.Sourced {
+	var out []shelloptions.Sourced
+	for _, ref := range Sources(file, env) {
+		if ref.Target == nil {
+			continue
+		}
+		effect, seen := effects[ref.Target.Path]
+		if !seen {
+			effects[ref.Target.Path] = &shelloptions.Effect{}
+			computed := shelloptions.TopLevel(ref.Target.Tree, sourcedOptions(ref.Target, env, effects))
+			effect = &computed
+			effects[ref.Target.Path] = effect
+		}
+		out = append(out, shelloptions.Sourced{Command: ref.Command.Span, Effect: *effect})
+	}
+	return out
 }
 
 func loadFirst(candidates []string, env Env) *workspace.File {

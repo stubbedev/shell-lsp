@@ -10,6 +10,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/shelloptions"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 )
 
@@ -219,6 +220,8 @@ type Options struct {
 	ReadByHost func(offset int, name string) bool
 
 	Environment []string
+
+	SourcedOptions []shelloptions.Sourced
 }
 
 type Report struct {

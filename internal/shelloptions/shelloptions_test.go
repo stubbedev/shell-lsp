@@ -82,6 +82,70 @@ func TestEnabledByOnlyNamesTheShellsThatRunHere(t *testing.T) {
 	}
 }
 
+// sourcing gives every source command in tree the Effect of lib.
+func sourcing(tree *parser.Tree, lib Effect) []Sourced {
+	var out []Sourced
+	for _, c := range tree.Commands {
+		if c.IsSourceBuiltin() {
+			out = append(out, Sourced{Command: c.Span, Effect: lib})
+		}
+	}
+	return out
+}
+
+func TestSourcedFilesChangeTheOptionsOfTheShellThatRunsThem(t *testing.T) {
+	t.Parallel()
+
+	lib := parser.Parse("#!/bin/zsh -e\nsetopt pipe_fail extended_glob\nf() { setopt null_glob; }\n(setopt no_case_match)\n", dialect.Zsh)
+	effect := TopLevel(lib, nil)
+	for _, tt := range []struct {
+		src  string
+		at   string
+		want Options
+	}{
+		{"source ./lib.zsh\necho out\n", "out", Options{Pipefail: true, ExtendedGlob: true}},
+		{". ./lib.zsh\necho out\n", "out", Options{Pipefail: true, ExtendedGlob: true}},
+		{"(source ./lib.zsh)\necho out\n", "out", Options{}},
+		{"(source ./lib.zsh; echo in)\n", "in", Options{Pipefail: true, ExtendedGlob: true}},
+		{"x=$(source ./lib.zsh)\necho out\n", "out", Options{}},
+	} {
+		tree := parser.Parse(tt.src, dialect.Zsh)
+		if got := Scan(tree, sourcing(tree, effect)...).At(strings.Index(tt.src, tt.at)); got != tt.want {
+			t.Errorf("%q: options at %q = %+v, want %+v", tt.src, tt.at, got, tt.want)
+		}
+	}
+}
+
+func TestSourcedEffectsFollowNestedSourcesAndStayUnknownWhenDynamic(t *testing.T) {
+	t.Parallel()
+
+	inner := TopLevel(parser.Parse("setopt extended_glob\n", dialect.Zsh), nil)
+	outer := parser.Parse("source ./inner.zsh\nsetopt pipe_fail\n", dialect.Zsh)
+	main := parser.Parse("source ./outer.zsh\necho out\n", dialect.Zsh)
+	got := Scan(main, sourcing(main, TopLevel(outer, sourcing(outer, inner)))...).At(strings.Index(main.Text(), "out"))
+	if want := (Options{Pipefail: true, ExtendedGlob: true}); got != want {
+		t.Errorf("options after a nested source = %+v, want %+v", got, want)
+	}
+
+	dynamic := TopLevel(parser.Parse("opts=extended_glob\nsetopt $opts\n", dialect.Zsh), nil)
+	main = parser.Parse("source ./lib.zsh\necho out\n", dialect.Zsh)
+	if got := Scan(main, sourcing(main, dynamic)...).At(strings.Index(main.Text(), "out")); !got.Dynamic {
+		t.Errorf("options after sourcing a file with setopt $opts = %+v, want Dynamic", got)
+	}
+}
+
+func TestEnabledByNamesTheSourceCommand(t *testing.T) {
+	t.Parallel()
+
+	src := "setopt pipe_fail\nsource ./lib.zsh\necho in\n"
+	tree := parser.Parse(src, dialect.Zsh)
+	lib := TopLevel(parser.Parse("setopt extended_glob\n", dialect.Zsh), nil)
+	got := Scan(tree, sourcing(tree, lib)...).EnabledBy("extendedglob", strings.Index(src, "in"))
+	if len(got) != 1 || !got[0].IsSourceBuiltin() {
+		t.Fatalf("EnabledBy(extendedglob) = %+v, want the source command", got)
+	}
+}
+
 func TestOptionsComeFromTheEnclosingShellsInSourceOrder(t *testing.T) {
 	t.Parallel()
 

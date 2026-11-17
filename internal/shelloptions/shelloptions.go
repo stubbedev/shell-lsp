@@ -236,18 +236,56 @@ type shellChange struct {
 	dynamic bool
 }
 
-func Scan(tree *parser.Tree) PerShell {
+// Effect is what running a file with source or . does to the options of the shell that runs it.
+type Effect struct {
+	changes []optionChange
+	dynamic bool
+}
+
+// Sourced pairs a source or . command with the Effect of the file it was followed to.
+type Sourced struct {
+	Command parser.Span
+	Effect  Effect
+}
+
+// TopLevel is the Effect of sourcing tree: the option changes of its top level, including those of
+// the files it sources there. Changes in its functions and subshells stay there, and its shebang
+// does not apply, since the file runs in the shell that sources it.
+func TopLevel(tree *parser.Tree, sourced []Sourced) Effect {
+	var e Effect
+	for _, c := range tree.Commands {
+		if c.Within != parser.FileScope || tree.ShellAt(c.Span.Start) != parser.FileShell {
+			continue
+		}
+		change := commandChange(c, tree, sourced)
+		e.changes = append(e.changes, change.changes...)
+		e.dynamic = e.dynamic || change.dynamic
+	}
+	return e
+}
+
+func commandChange(c parser.Command, tree *parser.Tree, sourced []Sourced) shellChange {
+	change := shellChange{command: c, shell: tree.ShellAt(c.Span.Start)}
+	if i := slices.IndexFunc(sourced, func(s Sourced) bool { return s.Command == c.Span }); i >= 0 {
+		change.changes, change.dynamic = sourced[i].Effect.changes, sourced[i].Effect.dynamic
+		return change
+	}
+	if mayChangeOptions(c.Name) {
+		change.changes, change.dynamic = optionChanges(c.Name, c.Args, tree.Dialect), setsUnknownOptions(c.Name, c.Args)
+	}
+	return change
+}
+
+// Scan computes the options of every shell in tree. A command in sourced counts as making the
+// option changes of the file it runs, in the shell that runs it.
+func Scan(tree *parser.Tree, sourced ...Sourced) PerShell {
 	p := PerShell{tree: tree, base: Options{
 		Errexit:      turnsOn(shebangOptionChanges(tree.Text(), tree.Dialect), "errexit"),
 		ExtendedGlob: tree.Dialect == dialect.Zsh && dialect.CompletionFile(tree.Text()),
 	}}
 	for _, c := range tree.Commands {
-		if !mayChangeOptions(c.Name) {
-			continue
-		}
-		changes, dynamic := optionChanges(c.Name, c.Args, tree.Dialect), setsUnknownOptions(c.Name, c.Args)
-		if len(changes) > 0 || dynamic {
-			p.changes = append(p.changes, shellChange{command: c, shell: tree.ShellAt(c.Span.Start), changes: changes, dynamic: dynamic})
+		if change := commandChange(c, tree, sourced); len(change.changes) > 0 || change.dynamic {
+			p.changes = append(p.changes, change)
 		}
 	}
 	p.shells = p.perShell()
