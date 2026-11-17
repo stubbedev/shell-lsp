@@ -5,7 +5,7 @@ go.mod declares, gopls, golangci-lint, delve, just, shellcheck, shfmt, git, gh,
 Node.js for the VS Code extension, bats, bash-language-server and Neovim for the
 Bats, `crosscheck` and `smoke` tests, dash, zsh, ksh93u+m, mksh and busybox, the
 real shells the parser conformance tests compare with, and the other reference
-tools: GNU Make, Hadolint, `dockerfile-oracle`, nixfmt, nixd, nil, statix,
+tools: GNU Make, GNU sed, Hadolint, `dockerfile-oracle`, nixfmt, nixd, nil, statix,
 deadnix and bubblewrap. Enter it with `direnv allow` on entry, or `nix develop` explicitly. Outside it, the
 tests that compare with a reference tool skip.
 

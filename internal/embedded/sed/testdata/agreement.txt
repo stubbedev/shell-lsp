@@ -1,0 +1,304 @@
+-- bre: a substitution --
+s/a/b/
+-- bre: global substitution with a group --
+s/\(x\)/[\1]/g
+-- bre: flags --
+s/a/b/2gpI
+-- bre: write flag --
+s/a/b/w out.txt
+-- bre: write flag without a file --
+s/a/b/w
+-- bre: unknown flag --
+s/a/b/x
+-- bre: repeated g --
+s/a/b/gg
+-- bre: zero count --
+s/a/b/0
+-- bre: unterminated substitution --
+s/a/b
+-- bre: substitution broken by a newline --
+s/a/b
+/
+-- bre: another delimiter --
+s|/usr|/opt|
+-- bre: escaped delimiter --
+s/\//|/g
+-- bre: bracket hiding the delimiter --
+s/[/]/x/
+-- bre: transliteration --
+y/abc/xyz/
+-- bre: transliteration lengths differ --
+y/abc/de/
+-- bre: unterminated transliteration --
+y/abc/xyz
+-- bre: transliteration with flags --
+y/abc/xyz/g
+-- bre: append one-liner --
+/x/a hello
+-- bre: append without text --
+/x/a
+-- bre: classic insert --
+1i\
+first line
+-- bre: change without text --
+c
+-- bre: block --
+/x/{p;d}
+-- bre: nested blocks --
+/a/{/b/{p}}
+-- bre: unclosed block --
+/x/{p
+-- bre: stray closing brace --
+p}
+-- bre: command after a closing brace --
+{p}p
+-- bre: blank and command after a closing brace --
+{p} p
+-- bre: comment after a closing brace --
+{p}#c
+-- bre: semicolon after a closing brace --
+{p};p
+-- bre: brace with an address --
+1}
+-- bre: unknown command --
+k
+-- bre: the removed L command --
+L
+-- bre: missing command --
+/x/
+-- bre: negation --
+/^#/!s/a/b/
+-- bre: double negation --
+1!!p
+-- bre: extra characters --
+dp
+-- bre: read without a file --
+r
+-- bre: read another file line without a file --
+R
+-- bre: write without a file --
+w
+-- bre: quit with two addresses --
+1,2q
+-- bre: quit with an exit code --
+q5
+-- bre: quit with garbage --
+q x
+-- bre: line zero alone --
+0p
+-- bre: line zero with a regex --
+0,/x/p
+-- bre: step --
+0~4p
+-- bre: relative range --
+/x/,+2d
+-- bre: missing second address --
+1,p
+-- bre: unterminated address --
+/abc
+-- bre: custom address delimiter --
+\,foo,d
+-- bre: address flags --
+/x/I,/y/Mp
+-- bre: branch to a label --
+b end; s/a/b/; :end
+-- bre: branch to a missing label --
+b nowhere
+-- bre: label from another expression line --
+:a
+N
+$!ba
+s/\n/ /g
+-- bre: label without a name --
+:
+-- bre: label with an address --
+1:a
+-- bre: label ends at a hash --
+b a#c;:a#c
+-- bre: branch label ends at a blank --
+b a k;:a
+-- bre: colon label ends at a blank --
+:a p
+-- bre: colon label then unknown command --
+:a k
+-- bre: branch followed by a comment --
+b # c
+-- bre: branch with a comment after its label --
+ba # c;:a
+-- bre: branch label ends at a brace --
+{b a};:a
+-- bre: conditional branches --
+:a;s/x/y/;ta;T
+-- bre: comment --
+# a comment
+p
+-- bre: exec --
+e echo hi
+-- bre: GNU commands --
+F;z;=;l 5;Q 3
+-- bre: a version --
+v 4.2
+-- bre: a newer sed version --
+v 9.0
+-- bre: a version that is not a number --
+v abc
+-- bre: interval --
+s/a\{2,3\}/x/
+-- bre: interval without a minimum --
+s/a\{,2\}/x/
+-- bre: interval without bounds --
+s/a\{,\}/x/
+-- bre: empty interval --
+s/a\{\}/x/
+-- bre: interval with leading zeros --
+s/a\{000001\}/x/
+-- bre: interval above the maximum count --
+s/a\{32768\}/x/
+-- bre: interval at the maximum count --
+s/a\{32767\}/x/
+-- bre: interval minimum above maximum --
+s/a\{3,1\}/x/
+-- bre: invalid interval --
+s/a\{x\}/x/
+-- bre: unclosed interval --
+s/a\{2/x/
+-- bre: leading interval --
+s/\{1\}a//
+-- bre: leading star --
+s/*a//
+-- bre: star after a caret --
+s/^*a//
+-- bre: star after a word anchor --
+s/\<*//
+-- bre: unclosed group --
+s/\(a/x/
+-- bre: unmatched group close --
+s/a\)/x/
+-- bre: literal parentheses --
+s/(a)/x/
+-- bre: GNU alternation --
+s/a\|b/x/
+-- bre: GNU plus and question --
+s/a\+b\?/x/
+-- bre: back-reference --
+s/\(a\)\1//
+-- bre: back-reference without groups --
+s/\1//
+-- bre: back-reference inside its group --
+s/\(a\1\)//
+-- bre: back-reference across alternatives --
+s/\(a\)\|\1//
+-- bre: back-reference past an alternation --
+s/\(\(a\)\|b\)\2//
+-- bre: replacement reference to a missing group --
+s/\(a\)/\2/
+-- bre: replacement reference without groups --
+s/a/\1/
+-- bre: unknown character class --
+s/[[:alhpa:]]//
+-- bre: character classes --
+s/[[:alpha:][:digit:]]//
+-- bre: equivalence class --
+s/[[=a=]]//
+-- bre: collating element --
+s/[[.a.]]//
+-- bre: a multi-character collating name --
+s/[[.foo.]]//
+-- bre: empty range --
+s/[z-a]//
+-- bre: range starting at a class --
+s/[[:alpha:]-z]//
+-- bre: range starting at an equivalence class --
+s/[[=a=]-z]//
+-- bre: range ending at a class --
+s/[a-[:alpha:]]//
+-- bre: a range ending at a collating element --
+s/[a-[.b.]]//
+-- bre: class followed by a dash --
+s/[[:alpha:]-]//
+-- bre: range starting at a collating element --
+s/[[.a.]-z]//
+-- bre: dash ranges --
+s/[%--]//
+-- bre: unclosed bracket --
+/[abc/d
+-- bre: bracket starting with a closing bracket --
+s/[]a]//
+-- ere: group and alternation --
+s/(a|b)+/x/g
+-- ere: interval --
+s/a{2,3}/x/
+-- ere: interval without a minimum --
+s/a{,2}/x/
+-- ere: interval without bounds --
+s/a{,}/x/
+-- ere: empty interval --
+s/a{}/x/
+-- ere: invalid interval --
+s/a{x}/x/
+-- ere: interval with a blank --
+s/a{ 1}/x/
+-- ere: unclosed interval --
+s/a{1/x/
+-- ere: lone brace --
+s/a{//
+-- ere: leading interval --
+s/{1}//
+-- ere: interval after an alternation --
+s/a|{1}//
+-- ere: interval after a caret --
+s/^{1}//
+-- ere: interval above the maximum count --
+s/a{1,99999}//
+-- ere: stacked intervals --
+s/a{1}{2}//
+-- ere: stacked quantifiers --
+s/a+?*//
+-- ere: closing brace alone --
+s/a}//
+-- ere: leading star --
+s/*a//
+-- ere: leading plus --
+s/+a//
+-- ere: star after a caret --
+s/^*a//
+-- ere: star after a dollar --
+s/a$*//
+-- ere: star after a word boundary --
+s/\b*//
+-- ere: question after a word end --
+s/a\>?//
+-- ere: star in a group after a caret --
+s/(^*)//
+-- ere: plus after an alternation --
+s/a|+b//
+-- ere: anchors in a group --
+s/(^a|b$)//
+-- ere: unclosed group --
+s/(a/x/
+-- ere: unmatched group close --
+s/a)/x/
+-- ere: escaped parentheses --
+s/\(a\)//
+-- ere: empty group --
+s/()//
+-- ere: empty alternative --
+s/a||b//
+-- ere: back-reference --
+s/(a)\1//
+-- ere: back-reference before its group --
+s/\1{2}(a)//
+-- ere: back-reference across alternatives --
+s/(a)|\1//
+-- ere: back-reference past an alternation --
+s/((a)|b)\2//
+-- ere: back-reference in a later alternative of a group --
+s/(a)(b|\1)//
+-- ere: back-reference to a repeated group --
+s/(a)*\1//
+-- ere: replacement reference to a missing group --
+s/(a)/\2/
+-- ere: GNU escapes --
+s/\w*\W+\s?\S{2}//
+-- ere: address with an interval --
+/a{1}/p

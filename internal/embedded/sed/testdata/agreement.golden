@@ -1,0 +1,298 @@
+-- bre: a substitution --
+accepted
+-- bre: global substitution with a group --
+accepted
+-- bre: flags --
+accepted
+-- bre: write flag --
+accepted
+-- bre: write flag without a file --
+rejected 1:7 missing filename in r/R/w/W commands
+-- bre: unknown flag --
+rejected 1:7 unknown option to 's'
+-- bre: repeated g --
+rejected 1:8 multiple 'g' options to 's' command
+-- bre: zero count --
+rejected 1:7 number option to 's' command may not be zero
+-- bre: unterminated substitution --
+rejected 1:5 unterminated 's' command
+-- bre: substitution broken by a newline --
+rejected 1:5 unterminated 's' command
+-- bre: another delimiter --
+accepted
+-- bre: escaped delimiter --
+accepted
+-- bre: bracket hiding the delimiter --
+accepted
+-- bre: transliteration --
+accepted
+-- bre: transliteration lengths differ --
+rejected 1:9 'y' command strings have different lengths
+-- bre: unterminated transliteration --
+rejected 1:9 unterminated 'y' command
+-- bre: transliteration with flags --
+rejected 1:11 extra characters after command
+-- bre: append one-liner --
+accepted
+-- bre: append without text --
+rejected 1:4 expected \ after 'a', 'c' or 'i'
+-- bre: classic insert --
+accepted
+-- bre: change without text --
+rejected 1:1 expected \ after 'a', 'c' or 'i'
+-- bre: block --
+accepted
+-- bre: nested blocks --
+accepted
+-- bre: unclosed block --
+rejected 0:0 unmatched '{'
+-- bre: stray closing brace --
+rejected 1:2 unexpected '}'
+-- bre: command after a closing brace --
+rejected 1:4 extra characters after command
+-- bre: blank and command after a closing brace --
+rejected 1:5 extra characters after command
+-- bre: comment after a closing brace --
+accepted
+-- bre: semicolon after a closing brace --
+accepted
+-- bre: brace with an address --
+rejected 1:2 unexpected '}'
+-- bre: unknown command --
+rejected 1:1 unknown command: 'k'
+-- bre: the removed L command --
+rejected 1:1 unknown command: 'L'
+-- bre: missing command --
+rejected 1:3 missing command
+-- bre: negation --
+accepted
+-- bre: double negation --
+rejected 1:3 multiple '!'s
+-- bre: extra characters --
+rejected 1:2 extra characters after command
+-- bre: read without a file --
+rejected 1:1 missing filename in r/R/w/W commands
+-- bre: read another file line without a file --
+rejected 1:1 missing filename in r/R/w/W commands
+-- bre: write without a file --
+rejected 1:1 missing filename in r/R/w/W commands
+-- bre: quit with two addresses --
+rejected 1:4 command only uses one address
+-- bre: quit with an exit code --
+accepted
+-- bre: quit with garbage --
+rejected 1:3 extra characters after command
+-- bre: line zero alone --
+rejected 1:2 invalid usage of line address 0
+-- bre: line zero with a regex --
+accepted
+-- bre: step --
+accepted
+-- bre: relative range --
+accepted
+-- bre: missing second address --
+rejected 1:3 unexpected ','
+-- bre: unterminated address --
+rejected 1:4 unterminated address regex
+-- bre: custom address delimiter --
+accepted
+-- bre: address flags --
+accepted
+-- bre: branch to a label --
+accepted
+-- bre: branch to a missing label --
+rejected 0:0 can't find label for jump to 'nowhere'
+-- bre: label from another expression line --
+accepted
+-- bre: label without a name --
+rejected 1:1 ":" lacks a label
+-- bre: label with an address --
+rejected 1:2 : doesn't want any addresses
+-- bre: label ends at a hash --
+rejected 0:0 can't find label for jump to 'a'
+-- bre: branch label ends at a blank --
+rejected 1:5 unknown command: 'k'
+-- bre: colon label ends at a blank --
+accepted
+-- bre: colon label then unknown command --
+rejected 1:4 unknown command: 'k'
+-- bre: branch followed by a comment --
+accepted
+-- bre: branch with a comment after its label --
+rejected 0:0 can't find label for jump to 'a'
+-- bre: branch label ends at a brace --
+accepted
+-- bre: conditional branches --
+accepted
+-- bre: comment --
+accepted
+-- bre: exec --
+accepted
+-- bre: GNU commands --
+accepted
+-- bre: a version --
+accepted
+-- bre: a newer sed version --
+rejected 1:5 expected newer version of sed
+-- bre: a version that is not a number --
+rejected 1:5 expected newer version of sed
+-- bre: interval --
+accepted
+-- bre: interval without a minimum --
+accepted
+-- bre: interval without bounds --
+accepted
+-- bre: empty interval --
+rejected 1:10 Invalid content of \{\}
+-- bre: interval with leading zeros --
+accepted
+-- bre: interval above the maximum count --
+rejected 1:15 Regular expression too big
+-- bre: interval at the maximum count --
+accepted
+-- bre: interval minimum above maximum --
+rejected 1:13 Invalid content of \{\}
+-- bre: invalid interval --
+rejected 1:11 Invalid content of \{\}
+-- bre: unclosed interval --
+rejected 1:9 Unmatched \{
+-- bre: leading interval --
+accepted
+-- bre: leading star --
+accepted
+-- bre: star after a caret --
+accepted
+-- bre: star after a word anchor --
+accepted
+-- bre: unclosed group --
+rejected 1:8 Unmatched ( or \(
+-- bre: unmatched group close --
+rejected 1:8 Unmatched ) or \)
+-- bre: literal parentheses --
+accepted
+-- bre: GNU alternation --
+accepted
+-- bre: GNU plus and question --
+accepted
+-- bre: back-reference --
+accepted
+-- bre: back-reference without groups --
+rejected 1:6 Invalid back reference
+-- bre: back-reference inside its group --
+rejected 1:11 Invalid back reference
+-- bre: back-reference across alternatives --
+rejected 1:13 Invalid back reference
+-- bre: back-reference past an alternation --
+accepted
+-- bre: replacement reference to a missing group --
+rejected 1:11 invalid reference \2 on 's' command's RHS
+-- bre: replacement reference without groups --
+rejected 1:7 invalid reference \1 on 's' command's RHS
+-- bre: unknown character class --
+rejected 1:15 Invalid character class name
+-- bre: character classes --
+accepted
+-- bre: equivalence class --
+accepted
+-- bre: collating element --
+accepted
+-- bre: a multi-character collating name --
+rejected 1:13 Invalid collation character
+-- bre: empty range --
+rejected 1:9 Invalid range end
+-- bre: range starting at a class --
+rejected 1:17 Invalid range end
+-- bre: range starting at an equivalence class --
+rejected 1:13 Invalid range end
+-- bre: range ending at a class --
+rejected 1:17 Invalid range end
+-- bre: a range ending at a collating element --
+accepted
+-- bre: class followed by a dash --
+accepted
+-- bre: range starting at a collating element --
+accepted
+-- bre: dash ranges --
+accepted
+-- bre: unclosed bracket --
+rejected 1:7 unterminated address regex
+-- bre: bracket starting with a closing bracket --
+accepted
+-- ere: group and alternation --
+accepted
+-- ere: interval --
+accepted
+-- ere: interval without a minimum --
+accepted
+-- ere: interval without bounds --
+accepted
+-- ere: empty interval --
+rejected 1:8 Invalid content of \{\}
+-- ere: invalid interval --
+rejected 1:9 Invalid content of \{\}
+-- ere: interval with a blank --
+rejected 1:10 Invalid content of \{\}
+-- ere: unclosed interval --
+rejected 1:8 Unmatched \{
+-- ere: lone brace --
+rejected 1:6 Unmatched \{
+-- ere: leading interval --
+rejected 1:7 Invalid preceding regular expression
+-- ere: interval after an alternation --
+rejected 1:9 Invalid preceding regular expression
+-- ere: interval after a caret --
+rejected 1:8 Invalid preceding regular expression
+-- ere: interval above the maximum count --
+rejected 1:14 Regular expression too big
+-- ere: stacked intervals --
+accepted
+-- ere: stacked quantifiers --
+accepted
+-- ere: closing brace alone --
+accepted
+-- ere: leading star --
+rejected 1:6 Invalid preceding regular expression
+-- ere: leading plus --
+rejected 1:6 Invalid preceding regular expression
+-- ere: star after a caret --
+rejected 1:7 Invalid preceding regular expression
+-- ere: star after a dollar --
+rejected 1:7 Invalid preceding regular expression
+-- ere: star after a word boundary --
+rejected 1:7 Invalid preceding regular expression
+-- ere: question after a word end --
+rejected 1:8 Invalid preceding regular expression
+-- ere: star in a group after a caret --
+rejected 1:8 Invalid preceding regular expression
+-- ere: plus after an alternation --
+rejected 1:8 Invalid preceding regular expression
+-- ere: anchors in a group --
+accepted
+-- ere: unclosed group --
+rejected 1:7 Unmatched ( or \(
+-- ere: unmatched group close --
+rejected 1:7 Unmatched ) or \)
+-- ere: escaped parentheses --
+accepted
+-- ere: empty group --
+accepted
+-- ere: empty alternative --
+accepted
+-- ere: back-reference --
+accepted
+-- ere: back-reference before its group --
+rejected 1:12 Invalid back reference
+-- ere: back-reference across alternatives --
+rejected 1:10 Invalid back reference
+-- ere: back-reference past an alternation --
+accepted
+-- ere: back-reference in a later alternative of a group --
+accepted
+-- ere: back-reference to a repeated group --
+accepted
+-- ere: replacement reference to a missing group --
+rejected 1:9 invalid reference \2 on 's' command's RHS
+-- ere: GNU escapes --
+accepted
+-- ere: address with an interval --
+accepted
