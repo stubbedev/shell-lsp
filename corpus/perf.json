@@ -1,0 +1,182 @@
+{
+  "version": "0.5.22-0.20261117183746-5b898f7acb6b",
+  "date": "2026-11-17",
+  "machine": {
+    "runner": "a local workstation running other jobs at the same time (load average about 80), so its times read high until a release measures them again",
+    "os": "linux",
+    "arch": "amd64",
+    "cores": 12,
+    "cpu": "Intel(R) Core(TM) i5-10400F CPU @ 2.90GHz",
+    "memoryBytes": 33586204672
+  },
+  "go": "go1.27.4",
+  "repeats": 5,
+  "keystrokes": [
+    {
+      "name": "shell",
+      "medianNanos": 352460284
+    },
+    {
+      "name": "justfile",
+      "medianNanos": 247738307
+    },
+    {
+      "name": "makefile",
+      "medianNanos": 236507656
+    },
+    {
+      "name": "dockerfile",
+      "medianNanos": 166786314
+    },
+    {
+      "name": "nix",
+      "medianNanos": 176455803
+    },
+    {
+      "name": "nix-shell",
+      "medianNanos": 79375797
+    },
+    {
+      "name": "nix-shell-typing",
+      "medianNanos": 118063543
+    }
+  ],
+  "check": {
+    "project": {
+      "name": "nixpkgs",
+      "commit": "e94cb152ed51bd6e24eb4a41f1460252beb52cd2"
+    },
+    "files": 1187,
+    "ours": {
+      "wallMicros": 472850,
+      "cpuMicros": 1379984
+    },
+    "reference": {
+      "name": "shellcheck",
+      "version": "0.11.0"
+    },
+    "theirs": {
+      "wallMicros": 57216971,
+      "cpuMicros": 37748773
+    }
+  },
+  "memory": [
+    {
+      "project": {
+        "name": "disko",
+        "commit": "1dd30c29c88d99ce295f15e27f93c49bc5fbae07"
+      },
+      "files": 127,
+      "ours": {
+        "server": {
+          "name": "shell-lsp",
+          "version": "0.5.22-0.20261117183746-5b898f7acb6b"
+        },
+        "peakBytes": 63774720,
+        "idleBytes": 48205824,
+        "restarts": 0
+      },
+      "theirs": {
+        "server": {
+          "name": "nixd",
+          "version": "2.9.3"
+        },
+        "peakBytes": 626655232,
+        "idleBytes": 614486016,
+        "restarts": 0
+      }
+    },
+    {
+      "project": {
+        "name": "disko",
+        "commit": "1dd30c29c88d99ce295f15e27f93c49bc5fbae07"
+      },
+      "files": 127,
+      "ours": {
+        "server": {
+          "name": "shell-lsp",
+          "version": "0.5.22-0.20261117183746-5b898f7acb6b"
+        },
+        "peakBytes": 63512576,
+        "idleBytes": 48914432,
+        "restarts": 0
+      },
+      "theirs": {
+        "server": {
+          "name": "nil",
+          "version": "2026-07-23"
+        },
+        "peakBytes": 55820288,
+        "idleBytes": 20533248,
+        "restarts": 0
+      }
+    },
+    {
+      "project": {
+        "name": "nixpkgs",
+        "commit": "e94cb152ed51bd6e24eb4a41f1460252beb52cd2"
+      },
+      "files": 200,
+      "ours": {
+        "server": {
+          "name": "shell-lsp",
+          "version": "0.5.22-0.20261117183746-5b898f7acb6b"
+        },
+        "peakBytes": 217174016,
+        "idleBytes": 147955712,
+        "restarts": 0
+      },
+      "theirs": {
+        "server": {
+          "name": "nixd",
+          "version": "2.9.3"
+        },
+        "peakBytes": 534618112,
+        "idleBytes": 534618112,
+        "restarts": 3
+      }
+    },
+    {
+      "project": {
+        "name": "nixpkgs",
+        "commit": "e94cb152ed51bd6e24eb4a41f1460252beb52cd2"
+      },
+      "files": 200,
+      "ours": {
+        "server": {
+          "name": "shell-lsp",
+          "version": "0.5.22-0.20261117183746-5b898f7acb6b"
+        },
+        "peakBytes": 236052480,
+        "idleBytes": 146485248,
+        "restarts": 0
+      },
+      "theirs": {
+        "server": {
+          "name": "nil",
+          "version": "2026-07-23"
+        },
+        "peakBytes": 33644544,
+        "idleBytes": 20758528,
+        "restarts": 0
+      }
+    }
+  ],
+  "format": {
+    "project": {
+      "name": "nixpkgs",
+      "commit": "e94cb152ed51bd6e24eb4a41f1460252beb52cd2"
+    },
+    "files": 44765,
+    "reference": {
+      "name": "nixfmt",
+      "version": "1.5.0"
+    },
+    "differences": 2,
+    "bothRejected": 0,
+    "examples": [
+      "nixos/lib/utils.nix",
+      "nixos/tests/sftpgo.nix"
+    ]
+  }
+}

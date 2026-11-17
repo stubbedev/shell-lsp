@@ -13,14 +13,14 @@ language of its own. A `.zsh` file and a `flake.nix` get the same depth.
 - **Every shell by its own rules.** Each dialect has its own parser and is
   detected per file. zsh is linted as zsh, which ShellCheck refuses to do.
 - **Nix without an evaluator.** Flakes, modules and overlays are followed from
-  source, in 95 MiB where nixd uses 576 MiB.
+  source, in a fraction of the memory nixd uses ([measured](#performance)).
 - **The languages are connected.** Shell in a recipe, a `RUN` instruction or a
   Nix string is checked where it stands, and fixes are written back in the
   host's syntax.
 - **One binary replaces a toolbox:** shellcheck, shfmt, man, Hadolint, statix,
   deadnix and nixfmt, with their check codes, directives and flags.
 - **Compatibility is measured** against ShellCheck on 4,716 scripts and nixfmt on
-  all 44,765 files of nixpkgs.
+  every file of nixpkgs.
 
 ![A bash script with findings and inlay hints, and a hover that explains an unquoted command substitution and previews the fix](docs/assets/screenshots/shell-finding-hover.png)
 
@@ -392,20 +392,31 @@ the lint profiles in [docs/linting.md](docs/linting.md#profiles), and how
 | [nixd](https://github.com/nix-community/nixd) | Navigation, completion, hover, rename, formatting | Compared question by question with `cmd/nixparity`, [`docs/corpus.md`](docs/corpus.md#nix-server-parity) | Nothing is evaluated by default, see below. Deliberate differences are [listed](docs/corpus.md#differences-that-are-decided) |
 | [nil](https://github.com/oxalica/nil) | The same | The same | Reads the whole project, where nil does not; no type inference on hover |
 | [statix](https://github.com/molybdenumsoftware/statix), [deadnix](https://github.com/astro/deadnix) | Lints and findings, `statix.toml`, `# deadnix: skip` | On 2,500 nixpkgs files, [`corpus/nix-lint.md`](corpus/nix-lint.md): 676 agree, 65 only ours, 0 only theirs | [Details](docs/rules.md#statix-and-deadnix-compatibility) |
-| [nixfmt](https://github.com/NixOS/nixfmt) | Output, byte for byte | 0 differences across 44,765 files | Default width and indent only |
+| [nixfmt](https://github.com/NixOS/nixfmt) | Output, byte for byte | Compared on every file of nixpkgs, [measured](#performance) | Default width and indent only |
 | [Hadolint](https://github.com/hadolint/hadolint) | `DL` codes, pragmas, `.hadolint.yaml` | More than 500 Dockerfiles run through it | [Deliberate differences](docs/hadolint.md) |
 
 ### Performance
 
+<!-- perfreport:begin -->
+Measured by `cmd/perfreport` on shell-lsp 0.5.22-0.20261117183746-5b898f7acb6b, 2026-11-17: a local workstation running other jobs at the same time (load average about 80), so its times read high until a release measures them again, 12 cores (Intel(R) Core(TM) i5-10400F CPU @ 2.90GHz), 31 GiB of memory, linux/amd64, go1.27.4. Times are medians of 5 runs.
+
 | Measure | shell-lsp | For comparison |
 | --- | ---: | --- |
-| `check` over the 1,219 shell scripts of nixpkgs, 12 cores | 0.18 s | one `shellcheck` process: 20.7 s, with a different rule set |
-| A keystroke with 700 scripts open, typing in one (v0.5.17) | 20.5 ms | |
-| Peak memory on an 89-file flake | 95 MiB | nixd 576 MiB, nil 380 MiB |
-| Peak memory on nixpkgs | 145 MiB | nixd 394 MiB; nil does not index a project |
+| `check` over the 1,187 `*.sh` and `*.bash` files of nixpkgs | 473 ms, 1.38 s of CPU | one shellcheck 0.11.0 process: 57.2 s, 121 times as long, with a different rule set |
+| A keystroke with 700 scripts open, editing outside them | 79.4 ms |  |
+| A keystroke with 700 scripts open, typing in one | 118 ms |  |
+| A keystroke in a plain 5,000-line Nix file | 176 ms |  |
+| Peak / idle memory on disko, 127 files open | 61 / 46 MiB | nixd 2.9.3: 598 / 586 MiB |
+| Peak / idle memory on disko, 127 files open | 61 / 47 MiB | nil 2026-07-23: 53 / 20 MiB |
+| Peak / idle memory on nixpkgs, 200 files open | 207 / 141 MiB | nixd 2.9.3: 510 / 510 MiB, restarted 3 times |
+| Peak / idle memory on nixpkgs, 200 files open | 225 / 140 MiB | nil 2026-07-23: 32 / 20 MiB |
+| Formatting differences from nixfmt 1.5.0 over the 44,765 `.nix` files of nixpkgs | 2 |  |
+<!-- perfreport:end -->
 
-The method, idle figures and how to rerun them with `just nix-parity-large` are
-in [docs/corpus.md](docs/corpus.md#latency-memory-and-failures). The test suite
+Each release measures these again and adds them to its release notes. nil reads
+only the files that are open, where shell-lsp and nixd index the project. How they
+are measured and how to rerun them is in
+[docs/corpus.md](docs/corpus.md#performance-report). The test suite
 holds keystrokes to allocation budgets and parsing and completion to time budgets.
 
 ### Where it falls short
