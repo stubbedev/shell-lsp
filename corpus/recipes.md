@@ -4,7 +4,7 @@ Written by `just corpus-baseline` from the justfiles and Makefiles of the reposi
 [repos.txt](repos.txt); see [docs/corpus.md](../docs/corpus.md). Positions and codes only, one
 finding a line. CI fails when anything here changes.
 
-169 files checked, 453 findings.
+169 files checked, 454 findings.
 
 | Code | Findings |
 | --- | ---: |
@@ -20,7 +20,7 @@ finding a line. CI fails when anything here changes.
 | SC2028 | 3 |
 | SC2034 | 6 |
 | SC2035 | 69 |
-| SC2038 | 11 |
+| SC2038 | 12 |
 | SC2044 | 1 |
 | SC2046 | 13 |
 | SC2059 | 5 |
@@ -296,6 +296,7 @@ u-boot/Makefile:2501:21 SC2046
 u-boot/Makefile:2521:10 SC2006
 u-boot/Makefile:2613:3 SC2038
 u-boot/Makefile:2629:3 SC2038
+u-boot/Makefile:2660:6 SC2038
 u-boot/Makefile:2662:10 SC2016
 u-boot/Makefile:2664:8 SC2164
 u-boot/Makefile:2665:67 SC2086

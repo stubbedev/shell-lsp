@@ -519,7 +519,7 @@ func (p *reader) constantBefore(n Node, before int, expanding []expansion) (stri
 	if n.Kind != NodeReference || n.Unbalanced || !ok || n.Braced && strings.ContainsAny(name, "(){}") {
 		return "", false
 	}
-	if _, builtin := Builtins.Lookup(model.KindVariable, name); builtin && !automatic(name) && !slices.Contains(unsetByDefault, name) {
+	if defaulted(name) {
 		return "", false
 	}
 	self := expansion{name: name, before: before}
@@ -563,6 +563,11 @@ func (p *reader) constantBefore(n Node, before int, expanding []expansion) (stri
 		}
 	}
 	return value, true
+}
+
+func defaulted(name string) bool {
+	_, builtin := Builtins.Lookup(model.KindVariable, name)
+	return builtin && !automatic(name) && !slices.Contains(unsetByDefault, name)
 }
 
 func (p *reader) assignedText(a *Assignment, immediate bool, before int, expanding []expansion) (string, bool) {
@@ -1253,28 +1258,59 @@ func (p *reader) content(b *projection.Builder, line Expr, from int) {
 }
 
 func (p *reader) commandStart(line Expr, from int) int {
-	at := from
+	at, settled := from, from
 	for i, n := range line.Nodes {
+		flags := at == settled
 		switch {
 		case n.Span.End <= from:
 		case n.Kind != NodeText:
 			if !p.expandsToFlags(n) {
-				return from
+				return settled
 			}
 			at = n.Span.End
-		case at > from && opensCommand(p.text[n.Span.Start:n.Span.End], i == len(line.Nodes)-1):
+			if flags && p.holdsOnlyFlags(n, nil) {
+				settled = at
+			}
+		case flags && strings.Trim(p.text[n.Span.Start:n.Span.End], whitespace) == "":
+		case at > from && (flags || opensCommand(p.text[n.Span.Start:n.Span.End], i == len(line.Nodes)-1)):
 			return at
 		default:
-			return from
+			return settled
 		}
 	}
-	return from
+	return settled
 }
 
 func (p *reader) expandsToFlags(n Node) bool {
 	value, known := p.constant(n)
-	return !known || strings.Trim(value, recipeFlags) == ""
+	return !known || flagsOnly(value)
 }
+
+func (p *reader) holdsOnlyFlags(n Node, visiting []string) bool {
+	name, ok := p.resolvedName(n.Name)
+	if n.Kind != NodeReference || n.Unbalanced || !ok || defaulted(name) || slices.Contains(visiting, name) {
+		return false
+	}
+	visiting = append(slices.Clip(visiting), name)
+	assigned := false
+	for _, a := range p.file.Assignments {
+		if a.Name.Text != name || len(a.Targets) > 0 {
+			continue
+		}
+		if a.Define || a.Op == "!=" || slices.ContainsFunc(a.Value.Nodes, func(v Node) bool {
+			if v.Kind == NodeText {
+				return !flagsOnly(p.text[v.Span.Start:v.Span.End])
+			}
+			return !p.holdsOnlyFlags(v, visiting)
+		}) {
+			return false
+		}
+		assigned = true
+	}
+	return assigned
+}
+
+func flagsOnly(value string) bool { return strings.Trim(value, recipeFlags) == "" }
 
 func opensCommand(text string, endsLine bool) bool {
 	if text[0] == '(' {

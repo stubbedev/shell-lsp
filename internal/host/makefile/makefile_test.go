@@ -132,6 +132,16 @@ func TestProjectText(t *testing.T) {
 			want:     "(\n$$ -c x.c\n)\n(\n$$\n)\n(\n$$ a=1\n)\n(\n$$ for\n)\n(\ncd a && $$for\n)\n",
 		},
 		{
+			name:     "a macro the file only defines as flags is a prefix before any command",
+			makefile: "ifeq ($(V),1)\nQ =\nelse\nQ = @\nendif\nE ?=\nE += -\nF = $(E)+\nx:\n\t$(Q) echo hi\n\t+$(Q) \\\n\t{ a; }\n\t$(E)echo\n\t$(F) $(Q) a=1\n\t$(Q) $(M)for a; do b; done\n\t$(Q)$(CC) -c\n\t$(Q)\n",
+			want:     "(\n echo hi\n)\n(\n \\\n{ a; }\n)\n(\necho\n)\n(\n  a=1\n)\n(\n for a; do b; done\n)\n(\n$$ -c\n)\n(\n\n)\n",
+		},
+		{
+			name:     "a macro the file may define as a word stays the command",
+			makefile: "ifdef X\nQ = @\nelse\nQ = tool\nendif\nS != echo @\ndefine D\n@\nendef\nCC = @\nB := $(B)\nT = $(U)\nx:\n\t$(Q) {\n\t$(S) {\n\t$(D) {\n\t$(CC) {\n\t$(B) {\n\t$(T) {\n\t$(R) {\n\t$(R) $(Q)for\n",
+			want:     "(\n$$ {\n)\n(\n$$ {\n)\n(\n$$ {\n)\n(\n$$ {\n)\n(\n$$ {\n)\n(\n$$ {\n)\n(\n$$ {\n)\n(\n$$ $$for\n)\n",
+		},
+		{
 			name:     "a macro that always ends in a semicolon ends its command",
 			makefile: "f = a; \\\n\tb;\ndefine g\na;\nendef\nx:\n\tif c; then $(call f,1) fi\n\tif c; then $(f) fi\n\tif c; then $(g) fi\n",
 			want:     "(\nif c; then $$; fi\n)\n(\nif c; then $$; fi\n)\n(\nif c; then $$; fi\n)\n",

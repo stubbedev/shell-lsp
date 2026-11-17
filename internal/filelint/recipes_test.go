@@ -122,6 +122,18 @@ func TestRecipesShareOnlyWhatTheirHostGivesThem(t *testing.T) {
 			want: []string{},
 		},
 		{
+			name: "make: a brace group after a spaced macro the file defines as flags is a group",
+			file: makeFile,
+			src:  "ifeq ($(V),1)\nQ =\nelse\nQ = @\nendif\na:\n\t+$(Q) \\\n\t{ \\\n\t  echo a; \\\n\t} | cat\n",
+			want: []string{},
+		},
+		{
+			name: "make: a brace after a spaced macro the file does not define is an argument",
+			file: makeFile,
+			src:  "a:\n\t+$(Q) \\\n\t{ \\\n\t  echo a; \\\n\t} | cat\n",
+			want: []string{"SC1083:{"},
+		},
+		{
 			name: "make: a keyword after a macro ending in a semicolon closes its block",
 			file: makeFile,
 			src:  "f = echo $(1);\na:\n\tif true; then \\\n\t\t$(call f,x) \\\n\tfi\n",

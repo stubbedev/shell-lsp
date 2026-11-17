@@ -80,6 +80,13 @@ editor gives it, or else when its language identifier is `makefile` or
   every make expansion (`$(CC)`, `${FLAGS}`, `$@`, `$(call f,x)`) stands for
   text the shell sees but no one can know in advance, so it is neither a
   constant nor split into words. Fixes write a `$` back as `$$`.
+- make drops those prefixes again after expanding a line, so a macro that
+  starts it and that the file only ever sets to `@`, `-`, `+` or nothing
+  (`Q := @`, or `Q =` and `Q = @` in the branches of a conditional) is
+  dropped too, glued to the command or not. A macro the file does not set
+  that way is dropped only when glued to a compound command or an assignment
+  (`$(Q)for`, `$(Q){`, `$(Q)x=1`); otherwise it is the command, as in
+  `$(MAKE) x=1`.
 - Each recipe line runs in a shell of its own, as make runs it, so a variable
   set or a `cd` on one line does not reach the next (`SC2030`, `SC2031`), and
   a syntax error stays on its line. With `.ONESHELL`, each recipe is one
