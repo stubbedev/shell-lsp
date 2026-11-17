@@ -608,7 +608,11 @@ awk '$2 ~ /^(GET|POST/' log    # SL3001: `(` is never closed
 
 **A sed script does not parse.** The script given to `sed` or `gsed` has a
 syntax error, so sed refuses to run it. GNU extensions such as `0,/re/`,
-`first~step`, `addr,+N`, `T`, `e`, `F` and `z` are accepted.
+`first~step`, `addr,+N`, `T`, `e`, `F` and `z` are accepted. The pieces
+given with several `-e` or `--expression` options are read together as one
+script, so a branch with `b`, `t` or `T` must name a label that a `:`
+somewhere in them defines. Labels end at a blank, `;`, `#` or `}`, as in
+GNU sed.
 
 The regular expressions of addresses and `s` commands are read as POSIX
 basic expressions, or extended ones under `-E`, `-r` or `--regexp-extended`,

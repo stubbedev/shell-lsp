@@ -92,7 +92,12 @@ var validScripts = []string{
 	`/x/I,/y/Mp`,
 	`l`,
 	`l 0`,
-	`l;L`,
+	`l;l 1`,
+	`b #c`,
+	`:a#x;ba#x`,
+	`:a p`,
+	`{p}#c`,
+	`{p};p`,
 	`z;s/^$/x/`,
 	`F`,
 	`{p}`,
@@ -219,6 +224,13 @@ func TestInvalidScripts(t *testing.T) {
 		{`pq`, `q`, "extra characters after command"},
 		{`/x/!!p`, `!p`, "multiple `!`s"},
 		{`1~d`, `~`, "expected a number after `~`"},
+		{`{p}p`, `p`, "extra characters after command"},
+		{`r`, `r`, "`r` needs a file name"},
+		{`R`, `R`, "`R` needs a file name"},
+		{`L`, `L`, "unknown command `L`"},
+		{`:a k`, `k`, "unknown command `k`"},
+		{`b a k;:a`, `k`, "unknown command `k`"},
+		{`b a#c;:a#c`, `a#c;`, "no label named `a`"},
 	})
 }
 

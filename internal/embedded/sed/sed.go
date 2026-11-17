@@ -171,6 +171,7 @@ func (p *parser) parseCommand() {
 		} else if p.structure {
 			p.fail(at, at+1, lang.Unexpected(p.src, at, at+1))
 		}
+		p.end("extra characters after command")
 		return
 	case '#':
 		p.pos = textline.End(p.src, at)
@@ -193,6 +194,7 @@ func (p *parser) parseCommand() {
 		if name := p.label(); name.name != "" {
 			p.jumps = append(p.jumps, name)
 		}
+		return
 	case 'r', 'R', 'w', 'W':
 		p.filename(at)
 		return
@@ -217,7 +219,7 @@ func (p *parser) parseCommand() {
 			p.fail(at, at+1, lang.Quote(p.src, at, at+1)+" takes at most one address")
 		}
 		p.number()
-	case 'l', 'L':
+	case 'l':
 		p.number()
 	case '=', 'd', 'D', 'g', 'G', 'h', 'H', 'n', 'N', 'p', 'P', 'x', 'z', 'F':
 	default:
@@ -246,22 +248,23 @@ func wordEnd(src string, from int) int {
 	return len(src)
 }
 
+const labelEnds = " \t\r\v\f\n;#}"
+
 func (p *parser) label() label {
 	p.blanks()
 	start := p.pos
-	p.pos = wordEnd(p.src, p.pos)
-	name, _, _ := strings.Cut(strings.TrimRight(p.src[start:p.pos], " \t\r"), " ")
-	name, _, _ = strings.Cut(name, "\t")
-	end := start + len(name)
-	p.res.Emit(start, end, lang.Property, 0)
-	return label{name: name, start: start, end: end}
+	for !p.eof() && !p.peekIs(labelEnds) {
+		p.pos++
+	}
+	p.emit(start, lang.Property)
+	return label{name: p.src[start:p.pos], start: start, end: p.pos}
 }
 
 func (p *parser) filename(command int) {
 	p.blanks()
 	start := p.pos
 	p.pos = textline.End(p.src, p.pos)
-	if p.pos == start && (p.src[command] == 'w' || p.src[command] == 'W') {
+	if p.pos == start {
 		p.fail(command, command+1, lang.Quote(p.src, command, command+1)+" needs a file name")
 	}
 	p.emit(start, lang.String)
