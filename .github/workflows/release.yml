@@ -7,6 +7,10 @@ on:
 permissions:
   contents: read
 
+env:
+  VERSION: ${{ github.ref_name }}
+  NOTES: docs/releases/${{ github.ref_name }}.md
+
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -24,28 +28,58 @@ jobs:
       - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4.0.0
       - run: go test ./...
       - name: Build binaries
-        env:
-          VERSION: ${{ github.ref_name }}
         run: just dist "$VERSION"
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
       - name: Check the binaries against what the VS Code extension downloads
-        env:
-          VERSION: ${{ github.ref_name }}
         run: node editors/vscode/scripts/checkReleaseAssets.ts dist "${VERSION#v}"
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          notes="docs/releases/${VERSION}.md"
-          if [[ ! -f "$notes" ]]; then
-            echo "missing release notes: $notes" >&2
+          if [[ ! -f "$NOTES" ]]; then
+            echo "missing release notes: $NOTES" >&2
             exit 1
           fi
-          gh release create "$VERSION" dist/* --repo "$GITHUB_REPOSITORY" --title "$VERSION" --notes-file "$notes" --verify-tag
+          gh release create "$VERSION" dist/* --repo "$GITHUB_REPOSITORY" --title "$VERSION" --notes-file "$NOTES" --verify-tag
+
+  perf:
+    needs: release
+    uses: ./.github/workflows/perf.yml
+
+  perf-notes:
+    needs: perf
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+    env:
+      CGO_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Add the measured performance to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/perf"
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name perf-report --dir "$dir"
+          report="$dir/shell-lsp-${VERSION}-perf.json"
+          mv "$dir/perf.json" "$report"
+          {
+            cat "$NOTES"
+            echo
+            go run ./cmd/perfreport notes "$report"
+          } >"$dir/notes.md"
+          gh release edit "$VERSION" --repo "$GITHUB_REPOSITORY" --notes-file "$dir/notes.md"
+          gh release upload "$VERSION" "$report" --repo "$GITHUB_REPOSITORY" --clobber
 
   vscode:
     needs: release
@@ -55,8 +89,6 @@ jobs:
     defaults:
       run:
         working-directory: editors/vscode
-    env:
-      VERSION: ${{ github.ref_name }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
