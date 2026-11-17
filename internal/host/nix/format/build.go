@@ -307,13 +307,19 @@ func exprDoc(e expr, n int) []item {
 	case *assertExpr:
 		return assertDoc(e, n)
 	case *ifExpr:
-		return ifDoc(e, n, false)
+		return group(ifDoc(e, n, false))
 	case *lambdaExpr:
+		if _, named := e.param.(*nameParam); named {
+			return group(lambdaDoc(e, n, 1))
+		}
 		return lambdaDoc(e, n, 1)
 	case *applyExpr:
-		return applyDoc(e, n)
+		return group(applyDoc(e, n))
 	case *binaryExpr:
-		return binaryDoc(e, n)
+		if comparison(e.op) {
+			return binaryDoc(e, n)
+		}
+		return group(binaryDoc(e, n))
 	case *hasAttrExpr:
 		return hasAttrDoc(e, n)
 	case *unaryExpr:

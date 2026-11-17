@@ -5982,3 +5982,24 @@ f (/* nix */ ''
 (A: #0
  B: { }: {
 })
+-- case-root-application-after-comment-before-final-comment --
+#a
+f (g x) y z
+# c
+-- case-root-operation-before-final-comment --
+a + b
+# c
+-- case-root-if-before-final-comment --
+#a
+if a then b else c
+# c
+-- case-root-name-lambda-before-final-comment --
+#a
+x: y: f x y
+# c
+-- case-root-set-lambda-before-final-comment --
+{a}: f x y
+# c
+-- case-root-with-before-final-comment --
+with a; f x y
+# c
