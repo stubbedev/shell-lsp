@@ -71,67 +71,26 @@ func parseFlags(fs *flag.FlagSet, args []string) error {
 	return nil
 }
 
-type corpusFlags struct {
-	manifest, cache string
-}
-
-func defaultCache() string {
-	dir, err := os.UserCacheDir()
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(dir, "shell-lsp", "corpus-nix")
-}
-
-func (c *corpusFlags) register(fs *flag.FlagSet) {
-	fs.StringVar(&c.manifest, "manifest", defaultManifest, "manifest of the large flakes")
-	fs.StringVar(&c.cache, "cache", defaultCache(), "directory the large flakes are fetched into")
-}
-
-func (c corpusFlags) repos() ([]corpus.Repo, error) {
-	if c.cache == "" {
-		return nil, errors.New("no cache directory: pass -cache, or set HOME or XDG_CACHE_HOME")
-	}
-	return corpus.LoadManifest(c.manifest)
+func registerCorpus(fs *flag.FlagSet, c *corpus.Source) {
+	c.Register(fs, defaultManifest, "corpus-nix")
 }
 
 func runFetch(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("fetch", flag.ContinueOnError)
-	var c corpusFlags
-	c.register(fs)
+	var c corpus.Source
+	registerCorpus(fs, &c)
 	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
 	if fs.NArg() != 0 {
 		return errUsage
 	}
-	repos, err := c.repos()
-	if err != nil {
-		return err
-	}
-	return corpus.Fetch(ctx, repos, c.cache)
-}
-
-func (c corpusFlags) repoDir(name string) (string, error) {
-	repos, err := c.repos()
-	if err != nil {
-		return "", err
-	}
-	for _, r := range repos {
-		if r.Name != name {
-			continue
-		}
-		dir := r.Dir(c.cache)
-		if _, err := os.Stat(dir); err != nil {
-			return "", fmt.Errorf("%s is not fetched; run `just nix-parity-fetch` first: %w", name, err)
-		}
-		return dir, nil
-	}
-	return "", fmt.Errorf("%s does not list %s", c.manifest, name)
+	_, err := c.Fetch(ctx)
+	return err
 }
 
 type compareOptions struct {
-	corpusFlags
+	corpus.Source
 	ours, theirs string
 	oursInit     string
 	oursSettle   time.Duration
@@ -147,7 +106,7 @@ type compareOptions struct {
 func parseCompare(args []string) (compareOptions, string, error) {
 	fs := flag.NewFlagSet("compare", flag.ContinueOnError)
 	var o compareOptions
-	o.register(fs)
+	registerCorpus(fs, &o.Source)
 	fs.StringVar(&o.ours, "ours", "", "command line of the server under test; built from this repository when empty")
 	fs.StringVar(&o.theirs, "theirs", "nixd", "command line of the reference server, such as nixd or nil")
 	fs.StringVar(&o.oursInit, "ours-init", "", "initializationOptions of the server under test, as JSON, such as {\"nix\":{\"evaluate\":true}}")
@@ -172,8 +131,8 @@ func parseCompare(args []string) (compareOptions, string, error) {
 	}
 	switch {
 	case o.repo != "" && fs.NArg() == 0:
-		dir, err := o.repoDir(o.repo)
-		return o, dir, err
+		r, err := o.Find(o.repo)
+		return o, r.Dir(o.Cache), err
 	case o.repo == "" && fs.NArg() == 1:
 		return o, fs.Arg(0), nil
 	}

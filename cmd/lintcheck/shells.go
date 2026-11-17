@@ -127,8 +127,8 @@ func cmpDifference(a, b difference) int {
 
 func runShells(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("shells", flag.ContinueOnError)
-	var c corpusFlags
-	c.register(fs)
+	var c corpus.Source
+	registerCorpus(fs, &c)
 	baselineFile := fs.String("baseline", shellsBaselineFile, "baseline to compare with or rewrite")
 	update := fs.Bool("update", false, "rewrite the baseline instead of comparing with it")
 	explain := fs.Bool("explain", false, "print each difference with the shell's message or the parser's first error")
@@ -138,11 +138,11 @@ func runShells(ctx context.Context, args []string) error {
 	if fs.NArg() != 0 {
 		return errUsage
 	}
-	repos, err := c.fetched()
+	repos, err := c.Fetched()
 	if err != nil {
 		return err
 	}
-	items, err := parseItems(repos, c.cache)
+	items, err := parseItems(repos, c.Cache)
 	if err != nil {
 		return err
 	}

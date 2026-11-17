@@ -31,8 +31,8 @@ func (f recipeFinding) String() string {
 
 func runRecipes(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("recipes", flag.ContinueOnError)
-	var c corpusFlags
-	c.register(fs)
+	var c corpus.Source
+	registerCorpus(fs, &c)
 	baselineFile := fs.String("baseline", recipesBaselineFile, "baseline to compare with or rewrite")
 	update := fs.Bool("update", false, "rewrite the baseline instead of comparing with it")
 	if err := parseFlags(fs, args); err != nil {
@@ -41,11 +41,11 @@ func runRecipes(ctx context.Context, args []string) error {
 	if fs.NArg() != 0 {
 		return errUsage
 	}
-	repos, err := c.fetched()
+	repos, err := c.Fetched()
 	if err != nil {
 		return err
 	}
-	all, err := corpus.Hosts(repos, c.cache)
+	all, err := corpus.Hosts(repos, c.Cache)
 	if err != nil {
 		return err
 	}

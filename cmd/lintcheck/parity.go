@@ -52,8 +52,8 @@ type parity struct {
 
 func runShellcheck(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("shellcheck", flag.ContinueOnError)
-	var c corpusFlags
-	c.register(fs)
+	var c corpus.Source
+	registerCorpus(fs, &c)
 	baselineFile := fs.String("baseline", parityBaselineFile, "baseline to compare with or rewrite")
 	update := fs.Bool("update", false, "rewrite the baseline instead of comparing with it")
 	if err := parseFlags(fs, args); err != nil {
@@ -65,11 +65,11 @@ func runShellcheck(ctx context.Context, args []string) error {
 	if err := requireShellcheck(ctx); err != nil {
 		return err
 	}
-	repos, err := c.fetched()
+	repos, err := c.Fetched()
 	if err != nil {
 		return err
 	}
-	listing, err := corpus.Scripts(repos, c.cache)
+	listing, err := corpus.Scripts(repos, c.Cache)
 	if err != nil {
 		return err
 	}
