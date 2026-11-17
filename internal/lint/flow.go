@@ -382,7 +382,7 @@ type interpreter struct {
 	sourceReturns *state
 }
 
-func analyzeFlow(tree *parser.Tree, imports []parser.Import, bats bool, sourced ...shelloptions.Sourced) *flowResult {
+func analyzeFlow(tree *parser.Tree, imports []parser.Import, bats bool, sourced map[parser.Span]shelloptions.Effect) *flowResult {
 	in := &interpreter{
 		bats:       bats,
 		tree:       tree,
@@ -393,7 +393,7 @@ func analyzeFlow(tree *parser.Tree, imports []parser.Import, bats bool, sourced 
 		summaries:  map[*syntax.FuncDecl]*summary{},
 		computing:  map[*syntax.FuncDecl]bool{},
 		staticFunc: map[string]*syntax.FuncDecl{},
-		options:    shelloptions.Scan(tree, sourced...),
+		options:    shelloptions.Scan(tree, sourced),
 	}
 	in.visitor = in.visit
 	for _, fn := range tree.Functions {

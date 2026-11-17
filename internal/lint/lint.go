@@ -188,6 +188,7 @@ func MergedEdits(fixes []Fix) []textedit.Edit {
 type Source struct {
 	Command parser.Span
 	Tree    *parser.Tree
+	Options shelloptions.Effect
 }
 
 type DialectSource uint8
@@ -220,8 +221,6 @@ type Options struct {
 	ReadByHost func(offset int, name string) bool
 
 	Environment []string
-
-	SourcedOptions []shelloptions.Sourced
 }
 
 type Report struct {

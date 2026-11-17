@@ -278,7 +278,7 @@ func (g *generator) walk() {
 
 func (g *generator) patterns() {
 	var regex []Token
-	for _, site := range glob.For(g.tree, shelloptions.Scan(g.tree)).All() {
+	for _, site := range glob.For(g.tree, shelloptions.Scan(g.tree, nil)).All() {
 		from := len(g.tokens)
 		glob.Walk(site.Pattern.Root, g.patternNode)
 		if site.Role == glob.RoleRegex {

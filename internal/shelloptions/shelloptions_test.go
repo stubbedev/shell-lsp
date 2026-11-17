@@ -8,6 +8,16 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/parser"
 )
 
+func sourcing(tree *parser.Tree, lib Effect) map[parser.Span]Effect {
+	out := map[parser.Span]Effect{}
+	for _, c := range tree.Commands {
+		if c.IsSourceBuiltin() {
+			out[c.Span] = lib
+		}
+	}
+	return out
+}
+
 func TestScan(t *testing.T) {
 	t.Parallel()
 
@@ -29,7 +39,7 @@ func TestScan(t *testing.T) {
 		{dialect.Zsh, "opts=(extendedglob)\nsetopt $opts\n", Options{Dynamic: true}},
 	}
 	for _, tt := range tests {
-		if got := Scan(parser.Parse(tt.src, tt.dialect)).At(len(tt.src)); got != tt.want {
+		if got := Scan(parser.Parse(tt.src, tt.dialect), nil).At(len(tt.src)); got != tt.want {
 			t.Errorf("Scan(%q) = %+v, want %+v", tt.src, got, tt.want)
 		}
 	}
@@ -39,7 +49,7 @@ func TestEnabledBy(t *testing.T) {
 	t.Parallel()
 
 	tree := parser.Parse("shopt -s extglob\nshopt -u extglob\nf() { shopt -s nullglob extglob; }\n", dialect.Bash)
-	got := Scan(tree).EnabledBy("extglob", len(tree.Text()))
+	got := Scan(tree, nil).EnabledBy("extglob", len(tree.Text()))
 	if len(got) != 2 || got[0].Span.Start != 0 || tree.Line(got[1].Span.Start) != 3 {
 		t.Fatalf("EnabledBy(extglob) = %+v", got)
 	}
@@ -65,7 +75,7 @@ func TestOptionsStayInTheirShell(t *testing.T) {
 		{"f() { shopt -s nullglob; }\necho out\n", "out", Options{NullGlob: true}},
 	} {
 		tree := parser.Parse(tt.src, dialect.Bash)
-		if got := Scan(tree).At(strings.Index(tt.src, tt.at)); got != tt.want {
+		if got := Scan(tree, nil).At(strings.Index(tt.src, tt.at)); got != tt.want {
 			t.Errorf("%q: options at %q = %+v, want %+v", tt.src, tt.at, got, tt.want)
 		}
 	}
@@ -76,28 +86,16 @@ func TestEnabledByOnlyNamesTheShellsThatRunHere(t *testing.T) {
 
 	src := "(shopt -s extglob)\nshopt -s extglob\n(echo in)\n"
 	tree := parser.Parse(src, dialect.Bash)
-	got := Scan(tree).EnabledBy("extglob", strings.Index(src, "in"))
+	got := Scan(tree, nil).EnabledBy("extglob", strings.Index(src, "in"))
 	if len(got) != 1 || tree.Line(got[0].Span.Start) != 2 {
 		t.Fatalf("EnabledBy(extglob) = %+v, want only the shopt on line 2", got)
 	}
 }
 
-// sourcing gives every source command in tree the Effect of lib.
-func sourcing(tree *parser.Tree, lib Effect) []Sourced {
-	var out []Sourced
-	for _, c := range tree.Commands {
-		if c.IsSourceBuiltin() {
-			out = append(out, Sourced{Command: c.Span, Effect: lib})
-		}
-	}
-	return out
-}
-
 func TestSourcedFilesChangeTheOptionsOfTheShellThatRunsThem(t *testing.T) {
 	t.Parallel()
 
-	lib := parser.Parse("#!/bin/zsh -e\nsetopt pipe_fail extended_glob\nf() { setopt null_glob; }\n(setopt no_case_match)\n", dialect.Zsh)
-	effect := TopLevel(lib, nil)
+	lib := EffectOf(parser.Parse("#!/bin/zsh -e\nsetopt pipe_fail\nf() { setopt extended_glob; }\n(setopt no_case_match)\n", dialect.Zsh))
 	for _, tt := range []struct {
 		src  string
 		at   string
@@ -110,27 +108,28 @@ func TestSourcedFilesChangeTheOptionsOfTheShellThatRunsThem(t *testing.T) {
 		{"x=$(source ./lib.zsh)\necho out\n", "out", Options{}},
 	} {
 		tree := parser.Parse(tt.src, dialect.Zsh)
-		if got := Scan(tree, sourcing(tree, effect)...).At(strings.Index(tt.src, tt.at)); got != tt.want {
+		if got := Scan(tree, sourcing(tree, lib)).At(strings.Index(tt.src, tt.at)); got != tt.want {
 			t.Errorf("%q: options at %q = %+v, want %+v", tt.src, tt.at, got, tt.want)
 		}
 	}
 }
 
-func TestSourcedEffectsFollowNestedSourcesAndStayUnknownWhenDynamic(t *testing.T) {
+func TestEffectsCountEachChangeOnce(t *testing.T) {
 	t.Parallel()
 
-	inner := TopLevel(parser.Parse("setopt extended_glob\n", dialect.Zsh), nil)
-	outer := parser.Parse("source ./inner.zsh\nsetopt pipe_fail\n", dialect.Zsh)
-	main := parser.Parse("source ./outer.zsh\necho out\n", dialect.Zsh)
-	got := Scan(main, sourcing(main, TopLevel(outer, sourcing(outer, inner)))...).At(strings.Index(main.Text(), "out"))
-	if want := (Options{Pipefail: true, ExtendedGlob: true}); got != want {
-		t.Errorf("options after a nested source = %+v, want %+v", got, want)
+	lib := parser.Parse("setopt pipe_fail extended_glob\nsetopt pipe_fail\n", dialect.Zsh)
+	if got := EffectOf(lib, lib, lib).changes; len(got) != 2 {
+		t.Errorf("changes of a file counted three times = %v, want pipefail and extendedglob once each", got)
 	}
+}
 
-	dynamic := TopLevel(parser.Parse("opts=extended_glob\nsetopt $opts\n", dialect.Zsh), nil)
-	main = parser.Parse("source ./lib.zsh\necho out\n", dialect.Zsh)
-	if got := Scan(main, sourcing(main, dynamic)...).At(strings.Index(main.Text(), "out")); !got.Dynamic {
-		t.Errorf("options after sourcing a file with setopt $opts = %+v, want Dynamic", got)
+func TestSourcingAFileThatSetsOptionsFromAVariableMakesThemUnknown(t *testing.T) {
+	t.Parallel()
+
+	lib := EffectOf(parser.Parse("opts=extended_glob\nsetopt $opts\n", dialect.Zsh))
+	tree := parser.Parse("source ./lib.zsh\necho out\n", dialect.Zsh)
+	if got := Scan(tree, sourcing(tree, lib)).At(strings.Index(tree.Text(), "out")); !got.Dynamic {
+		t.Errorf("options after the source = %+v, want Dynamic", got)
 	}
 }
 
@@ -139,8 +138,8 @@ func TestEnabledByNamesTheSourceCommand(t *testing.T) {
 
 	src := "setopt pipe_fail\nsource ./lib.zsh\necho in\n"
 	tree := parser.Parse(src, dialect.Zsh)
-	lib := TopLevel(parser.Parse("setopt extended_glob\n", dialect.Zsh), nil)
-	got := Scan(tree, sourcing(tree, lib)...).EnabledBy("extendedglob", strings.Index(src, "in"))
+	lib := EffectOf(parser.Parse("setopt extended_glob\n", dialect.Zsh))
+	got := Scan(tree, sourcing(tree, lib)).EnabledBy("extendedglob", strings.Index(src, "in"))
 	if len(got) != 1 || !got[0].IsSourceBuiltin() {
 		t.Fatalf("EnabledBy(extendedglob) = %+v, want the source command", got)
 	}
@@ -151,7 +150,7 @@ func TestOptionsComeFromTheEnclosingShellsInSourceOrder(t *testing.T) {
 
 	src := "(\n  set -o pipefail\n  echo first\n)\nset -e\n(\n  echo second\n)\necho third\n"
 	tree := parser.Parse(src, dialect.Bash)
-	options := Scan(tree)
+	options := Scan(tree, nil)
 	for _, tc := range []struct {
 		word              string
 		errexit, pipefail bool
@@ -170,7 +169,7 @@ func TestOptionsComeFromTheEnclosingShellsInSourceOrder(t *testing.T) {
 func BenchmarkOptionsAtWithAChangePerScript(b *testing.B) {
 	src := strings.Repeat("set -eu\necho hi\n", 2000)
 	tree := parser.Parse(src, dialect.Bash)
-	options := Scan(tree)
+	options := Scan(tree, nil)
 	b.ReportAllocs()
 	for b.Loop() {
 		_ = options.At(len(src) / 2)

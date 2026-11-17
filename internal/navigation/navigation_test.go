@@ -2,11 +2,15 @@ package navigation
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/shelloptions"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
@@ -265,5 +269,28 @@ func TestWorkspaceFilesError(t *testing.T) {
 	_, err := Definition(t.Context(), file, 0, f.env, func(context.Context) ([]*workspace.File, error) { return nil, os.ErrPermission }, ModeDefinition)
 	if err == nil {
 		t.Error("workspace listing error swallowed")
+	}
+}
+
+func TestOptionsOfALatticeOfSourcesReadEachFileOnce(t *testing.T) {
+	t.Parallel()
+
+	const levels = 30
+	files := map[string]string{}
+	for level := range levels {
+		for _, side := range []string{"a", "b"} {
+			text := "setopt pipe_fail\n"
+			if level < levels-1 {
+				text = fmt.Sprintf("source ./%d-a.zsh\nsource ./%d-b.zsh\n", level+1, level+1)
+			}
+			files[fmt.Sprintf("%d-%s.zsh", level, side)] = text
+		}
+	}
+	f := newFixture(t, files)
+	effect := OptionsOf(f.load(t, "0-a.zsh"), f.env)
+	main := parser.Parse("source ./0-a.zsh\necho out\n", dialect.Zsh)
+	sourced := map[parser.Span]shelloptions.Effect{main.Commands[0].Span: effect}
+	if got := shelloptions.Scan(main, sourced).At(strings.Index(main.Text(), "out")); !got.Pipefail {
+		t.Errorf("options after sourcing the top of a %d-level lattice = %+v, want Pipefail from its last level", levels, got)
 	}
 }

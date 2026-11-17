@@ -11,7 +11,7 @@ import (
 func flowOf(t *testing.T, src string) (*parser.Tree, *flowResult) {
 	t.Helper()
 	tree := parser.Parse(src, dialect.Bash)
-	return tree, analyzeFlow(tree, nil, false)
+	return tree, analyzeFlow(tree, nil, false, nil)
 }
 
 func namedCalls(tree *parser.Tree, name string) []*syntax.CallExpr {

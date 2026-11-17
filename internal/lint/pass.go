@@ -52,7 +52,7 @@ type pass struct {
 	sourced        func(offset int) bool
 	readByHost     func(offset int, name string) bool
 	environment    []string
-	sourcedOptions []shelloptions.Sourced
+	sourcedOptions map[parser.Span]shelloptions.Effect
 	probes         []Finding
 }
 
@@ -74,7 +74,7 @@ func newPass(tree *parser.Tree, imports []parser.Import, opts Options) *pass {
 		sourced:        opts.Sourced,
 		readByHost:     opts.ReadByHost,
 		environment:    opts.Environment,
-		sourcedOptions: opts.SourcedOptions,
+		sourcedOptions: sourcedOptions(opts.Sources),
 	}
 }
 
@@ -122,7 +122,7 @@ func (p *pass) startFlow() func() *flowResult {
 				done <- flowOutcome{failure: fmt.Sprintf("%v\n%s", r, debug.Stack())}
 			}
 		}()
-		done <- flowOutcome{result: analyzeFlow(p.tree, p.imports, p.bats, p.sourcedOptions...)}
+		done <- flowOutcome{result: analyzeFlow(p.tree, p.imports, p.bats, p.sourcedOptions)}
 	}()
 	return func() *flowResult {
 		outcome := <-done

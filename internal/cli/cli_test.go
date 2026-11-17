@@ -223,10 +223,11 @@ func TestCheckReadsShellOptionsFromSourcedFiles(t *testing.T) {
 	dir := t.TempDir()
 	writeFiles(t, dir, map[string]string{
 		"lib/options.zsh": "setopt pipe_fail extended_glob\n",
-		"bin/sourced.zsh": "#!/usr/bin/env zsh\nsource \"$(dirname \"$0\")/../lib/options.zsh\"\n\nanswer=${1:-YES}\nif [[ ${answer} == (#i)yes ]]; then\n\tprint \"matched: extended_glob is on\"\nfi\nprint -r -- ${answer} | tr \"[:upper:]\" \"[:lower:]\"\n",
+		"bin/sourced.zsh": "#!/usr/bin/env zsh\nsource \"$(dirname \"$0\")/../lib/options.zsh\"\nif [[ ${1-} == (#i)yes ]]; then\n  print -r -- ${1-} | tr \"[:upper:]\" \"[:lower:]\"\nfi\n",
 	})
-	if got := run(t, dir, "", "check", "--profile", "strict", "-f", "gcc", "bin"); got.status != statusOK {
-		t.Errorf("a script whose sourced file turns on pipe_fail and extended_glob = %d %q, want no findings", got.status, got.stdout)
+	got := run(t, dir, "", "check", "--profile", "strict", "-f", "gcc", "bin")
+	if got.status != statusOK || got.stdout != "" {
+		t.Errorf("a script whose sourced file turns on pipe_fail and extended_glob = %d %q, want no findings\n%s", got.status, got.stdout, got.stderr)
 	}
 }
 

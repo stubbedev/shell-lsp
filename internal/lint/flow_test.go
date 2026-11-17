@@ -13,7 +13,7 @@ import (
 func lostReads(t *testing.T, src string, d dialect.Dialect) []string {
 	t.Helper()
 	tree := parser.Parse(src, d)
-	result := analyzeFlow(tree, nil, tree.Bats())
+	result := analyzeFlow(tree, nil, tree.Bats(), nil)
 	var out []string
 	parser.Walk(tree.File, func(n syntax.Node) bool {
 		if _, ok := result.lostRead(n); ok {
@@ -61,7 +61,7 @@ func TestFlowReportsLatestLostWrite(t *testing.T) {
 
 	src := "( x=1 )\n( x=2 )\necho \"$x\"\n"
 	tree := parser.Parse(src, dialect.Bash)
-	result := analyzeFlow(tree, nil, false)
+	result := analyzeFlow(tree, nil, false, nil)
 	var got []lostWrite
 	for _, w := range result.lostReads {
 		got = append(got, w)

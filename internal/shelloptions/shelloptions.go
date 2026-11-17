@@ -236,60 +236,53 @@ type shellChange struct {
 	dynamic bool
 }
 
-// Effect is what running a file with source or . does to the options of the shell that runs it.
 type Effect struct {
 	changes []optionChange
 	dynamic bool
 }
 
-// Sourced pairs a source or . command with the Effect of the file it was followed to.
-type Sourced struct {
-	Command parser.Span
-	Effect  Effect
-}
-
-// TopLevel is the Effect of sourcing tree: the option changes of its top level, including those of
-// the files it sources there. Changes in its functions and subshells stay there, and its shebang
-// does not apply, since the file runs in the shell that sources it.
-func TopLevel(tree *parser.Tree, sourced []Sourced) Effect {
+func EffectOf(trees ...*parser.Tree) Effect {
 	var e Effect
-	for _, c := range tree.Commands {
-		if c.Within != parser.FileScope || tree.ShellAt(c.Span.Start) != parser.FileShell {
-			continue
+	for _, tree := range trees {
+		for _, c := range tree.Commands {
+			if !mayChangeOptions(c.Name) || tree.ShellAt(c.Span.Start) != parser.FileShell {
+				continue
+			}
+			for _, change := range optionChanges(c.Name, c.Args, tree.Dialect) {
+				if !slices.Contains(e.changes, change) {
+					e.changes = append(e.changes, change)
+				}
+			}
+			e.dynamic = e.dynamic || setsUnknownOptions(c.Name, c.Args)
 		}
-		change := commandChange(c, tree, sourced)
-		e.changes = append(e.changes, change.changes...)
-		e.dynamic = e.dynamic || change.dynamic
 	}
 	return e
 }
 
-func commandChange(c parser.Command, tree *parser.Tree, sourced []Sourced) shellChange {
-	change := shellChange{command: c, shell: tree.ShellAt(c.Span.Start)}
-	if i := slices.IndexFunc(sourced, func(s Sourced) bool { return s.Command == c.Span }); i >= 0 {
-		change.changes, change.dynamic = sourced[i].Effect.changes, sourced[i].Effect.dynamic
-		return change
-	}
-	if mayChangeOptions(c.Name) {
-		change.changes, change.dynamic = optionChanges(c.Name, c.Args, tree.Dialect), setsUnknownOptions(c.Name, c.Args)
-	}
-	return change
-}
-
-// Scan computes the options of every shell in tree. A command in sourced counts as making the
-// option changes of the file it runs, in the shell that runs it.
-func Scan(tree *parser.Tree, sourced ...Sourced) PerShell {
+func Scan(tree *parser.Tree, sourced map[parser.Span]Effect) PerShell {
 	p := PerShell{tree: tree, base: Options{
 		Errexit:      turnsOn(shebangOptionChanges(tree.Text(), tree.Dialect), "errexit"),
 		ExtendedGlob: tree.Dialect == dialect.Zsh && dialect.CompletionFile(tree.Text()),
 	}}
 	for _, c := range tree.Commands {
-		if change := commandChange(c, tree, sourced); len(change.changes) > 0 || change.dynamic {
-			p.changes = append(p.changes, change)
+		changes, dynamic := commandOptions(c, tree.Dialect, sourced)
+		if len(changes) > 0 || dynamic {
+			p.changes = append(p.changes, shellChange{command: c, shell: tree.ShellAt(c.Span.Start), changes: changes, dynamic: dynamic})
 		}
 	}
 	p.shells = p.perShell()
 	return p
+}
+
+func commandOptions(c parser.Command, d dialect.Dialect, sourced map[parser.Span]Effect) ([]optionChange, bool) {
+	if c.IsSourceBuiltin() {
+		effect := sourced[c.Span]
+		return effect.changes, effect.dynamic
+	}
+	if !mayChangeOptions(c.Name) {
+		return nil, false
+	}
+	return optionChanges(c.Name, c.Args, d), setsUnknownOptions(c.Name, c.Args)
 }
 
 func (p PerShell) perShell() []Options {

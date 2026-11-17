@@ -14,7 +14,7 @@ func TestRegexErrorsPointInsideTheQuotes(t *testing.T) {
 
 	src := "[[ $v =~ 'ab(c' ]]\n"
 	tree := parser.Parse(src, dialect.Zsh)
-	sites := For(tree, shelloptions.Scan(tree)).All()
+	sites := For(tree, shelloptions.Scan(tree, nil)).All()
 	if len(sites) != 1 || len(sites[0].Pattern.Errors) != 1 {
 		t.Fatalf("sites = %+v, want one site with one error", sites)
 	}
@@ -28,7 +28,7 @@ func TestResolvedValuesKeepToTheSpanOfTheirExpansion(t *testing.T) {
 
 	src := "[[ $v =~ $re ]]\n"
 	tree := parser.Parse(src, dialect.Zsh)
-	sites := For(tree, shelloptions.Scan(tree))
+	sites := For(tree, shelloptions.Scan(tree, nil))
 	all := sites.All()
 	if len(all) != 1 {
 		t.Fatalf("sites = %+v, want one", all)
@@ -49,7 +49,7 @@ func TestWordsWithOverlappingPartsAreNotPatterns(t *testing.T) {
 
 	for _, src := range []string{"$A[0[0[0[0 .#000", "$A[0[0[0[0 .#000\n"} {
 		tree := parser.Parse(src, dialect.Zsh)
-		if sites := For(tree, shelloptions.Scan(tree)).All(); len(sites) != 0 {
+		if sites := For(tree, shelloptions.Scan(tree, nil)).All(); len(sites) != 0 {
 			t.Errorf("%q: sites = %+v, want none", src, sites)
 		}
 	}
@@ -60,7 +60,7 @@ func TestOrderedWordsStayPatterns(t *testing.T) {
 
 	src := "print -l *.#000\n"
 	tree := parser.Parse(src, dialect.Zsh)
-	sites := For(tree, shelloptions.Scan(tree)).All()
+	sites := For(tree, shelloptions.Scan(tree, nil)).All()
 	if len(sites) != 1 || src[sites[0].Span.Start:sites[0].Span.End] != "*.#000" {
 		t.Fatalf("sites = %+v, want the *.#000 word", sites)
 	}
