@@ -1,44 +1,44 @@
 {
-  "version": "0.5.22-0.20261117183746-5b898f7acb6b",
+  "version": "0.5.22-0.20261117190216-40990b1ddad6",
   "date": "2026-11-17",
   "machine": {
-    "runner": "a local workstation running other jobs at the same time (load average about 80), so its times read high until a release measures them again",
+    "runner": "GitHub Actions ubuntu26 20261111.196.1",
     "os": "linux",
     "arch": "amd64",
-    "cores": 12,
-    "cpu": "Intel(R) Core(TM) i5-10400F CPU @ 2.90GHz",
-    "memoryBytes": 33586204672
+    "cores": 4,
+    "cpu": "Intel(R) Xeon(R) 6973P-C",
+    "memoryBytes": 16758403072
   },
   "go": "go1.27.4",
   "repeats": 5,
   "keystrokes": [
     {
       "name": "shell",
-      "medianNanos": 352460284
+      "medianNanos": 19491499
     },
     {
       "name": "justfile",
-      "medianNanos": 247738307
+      "medianNanos": 18514367
     },
     {
       "name": "makefile",
-      "medianNanos": 236507656
+      "medianNanos": 21194706
     },
     {
       "name": "dockerfile",
-      "medianNanos": 166786314
+      "medianNanos": 22543562
     },
     {
       "name": "nix",
-      "medianNanos": 176455803
+      "medianNanos": 33888457
     },
     {
       "name": "nix-shell",
-      "medianNanos": 79375797
+      "medianNanos": 9851459
     },
     {
       "name": "nix-shell-typing",
-      "medianNanos": 118063543
+      "medianNanos": 15859188
     }
   ],
   "check": {
@@ -48,16 +48,16 @@
     },
     "files": 1187,
     "ours": {
-      "wallMicros": 472850,
-      "cpuMicros": 1379984
+      "wallMicros": 266849,
+      "cpuMicros": 973239
     },
     "reference": {
       "name": "shellcheck",
       "version": "0.11.0"
     },
     "theirs": {
-      "wallMicros": 57216971,
-      "cpuMicros": 37748773
+      "wallMicros": 15993458,
+      "cpuMicros": 16007177
     }
   },
   "memory": [
@@ -70,10 +70,10 @@
       "ours": {
         "server": {
           "name": "shell-lsp",
-          "version": "0.5.22-0.20261117183746-5b898f7acb6b"
+          "version": "0.5.22-0.20261117190216-40990b1ddad6"
         },
-        "peakBytes": 63774720,
-        "idleBytes": 48205824,
+        "peakBytes": 59621376,
+        "idleBytes": 48095232,
         "restarts": 0
       },
       "theirs": {
@@ -81,8 +81,8 @@
           "name": "nixd",
           "version": "2.9.3"
         },
-        "peakBytes": 626655232,
-        "idleBytes": 614486016,
+        "peakBytes": 600350720,
+        "idleBytes": 588079104,
         "restarts": 0
       }
     },
@@ -95,10 +95,10 @@
       "ours": {
         "server": {
           "name": "shell-lsp",
-          "version": "0.5.22-0.20261117183746-5b898f7acb6b"
+          "version": "0.5.22-0.20261117190216-40990b1ddad6"
         },
-        "peakBytes": 63512576,
-        "idleBytes": 48914432,
+        "peakBytes": 59809792,
+        "idleBytes": 48132096,
         "restarts": 0
       },
       "theirs": {
@@ -106,8 +106,8 @@
           "name": "nil",
           "version": "2026-07-23"
         },
-        "peakBytes": 55820288,
-        "idleBytes": 20533248,
+        "peakBytes": 33124352,
+        "idleBytes": 19460096,
         "restarts": 0
       }
     },
@@ -120,10 +120,10 @@
       "ours": {
         "server": {
           "name": "shell-lsp",
-          "version": "0.5.22-0.20261117183746-5b898f7acb6b"
+          "version": "0.5.22-0.20261117190216-40990b1ddad6"
         },
-        "peakBytes": 217174016,
-        "idleBytes": 147955712,
+        "peakBytes": 230383616,
+        "idleBytes": 143495168,
         "restarts": 0
       },
       "theirs": {
@@ -131,8 +131,8 @@
           "name": "nixd",
           "version": "2.9.3"
         },
-        "peakBytes": 534618112,
-        "idleBytes": 534618112,
+        "peakBytes": 505630720,
+        "idleBytes": 496521216,
         "restarts": 3
       }
     },
@@ -145,10 +145,10 @@
       "ours": {
         "server": {
           "name": "shell-lsp",
-          "version": "0.5.22-0.20261117183746-5b898f7acb6b"
+          "version": "0.5.22-0.20261117190216-40990b1ddad6"
         },
-        "peakBytes": 236052480,
-        "idleBytes": 146485248,
+        "peakBytes": 241438720,
+        "idleBytes": 143597568,
         "restarts": 0
       },
       "theirs": {
@@ -156,8 +156,8 @@
           "name": "nil",
           "version": "2026-07-23"
         },
-        "peakBytes": 33644544,
-        "idleBytes": 20758528,
+        "peakBytes": 32780288,
+        "idleBytes": 20226048,
         "restarts": 0
       }
     }
@@ -172,11 +172,8 @@
       "name": "nixfmt",
       "version": "1.5.0"
     },
-    "differences": 2,
+    "differences": 0,
     "bothRejected": 0,
-    "examples": [
-      "nixos/lib/utils.nix",
-      "nixos/tests/sftpgo.nix"
-    ]
+    "examples": []
   }
 }

@@ -398,19 +398,19 @@ the lint profiles in [docs/linting.md](docs/linting.md#profiles), and how
 ### Performance
 
 <!-- perfreport:begin -->
-Measured by `cmd/perfreport` on shell-lsp 0.5.22-0.20261117183746-5b898f7acb6b, 2026-11-17: a local workstation running other jobs at the same time (load average about 80), so its times read high until a release measures them again, 12 cores (Intel(R) Core(TM) i5-10400F CPU @ 2.90GHz), 31 GiB of memory, linux/amd64, go1.27.4. Times are medians of 5 runs.
+Measured by `cmd/perfreport` on shell-lsp 0.5.22-0.20261117190216-40990b1ddad6, 2026-11-17: GitHub Actions ubuntu26 20261111.196.1, 4 cores (Intel(R) Xeon(R) 6973P-C), 16 GiB of memory, linux/amd64, go1.27.4. Times are medians of 5 runs.
 
 | Measure | shell-lsp | For comparison |
 | --- | ---: | --- |
-| `check` over the 1,187 `*.sh` and `*.bash` files of nixpkgs | 473 ms, 1.38 s of CPU | one shellcheck 0.11.0 process: 57.2 s, 121 times as long, with a different rule set |
-| A keystroke with 700 scripts open, editing outside them | 79.4 ms |  |
-| A keystroke with 700 scripts open, typing in one | 118 ms |  |
-| A keystroke in a plain 5,000-line Nix file | 176 ms |  |
-| Peak / idle memory on disko, 127 files open | 61 / 46 MiB | nixd 2.9.3: 598 / 586 MiB |
-| Peak / idle memory on disko, 127 files open | 61 / 47 MiB | nil 2026-07-23: 53 / 20 MiB |
-| Peak / idle memory on nixpkgs, 200 files open | 207 / 141 MiB | nixd 2.9.3: 510 / 510 MiB, restarted 3 times |
-| Peak / idle memory on nixpkgs, 200 files open | 225 / 140 MiB | nil 2026-07-23: 32 / 20 MiB |
-| Formatting differences from nixfmt 1.5.0 over the 44,765 `.nix` files of nixpkgs | 2 |  |
+| `check` over the 1,187 `*.sh` and `*.bash` files of nixpkgs | 267 ms, 973 ms of CPU | one shellcheck 0.11.0 process: 16.0 s, 59.9 times as long, with a different rule set |
+| A keystroke with 700 scripts open, editing outside them | 9.85 ms |  |
+| A keystroke with 700 scripts open, typing in one | 15.9 ms |  |
+| A keystroke in a plain 5,000-line Nix file | 33.9 ms |  |
+| Peak / idle memory on disko, 127 files open | 57 / 46 MiB | nixd 2.9.3: 573 / 561 MiB |
+| Peak / idle memory on disko, 127 files open | 57 / 46 MiB | nil 2026-07-23: 32 / 19 MiB |
+| Peak / idle memory on nixpkgs, 200 files open | 220 / 137 MiB | nixd 2.9.3: 482 / 474 MiB, restarted 3 times |
+| Peak / idle memory on nixpkgs, 200 files open | 230 / 137 MiB | nil 2026-07-23: 31 / 19 MiB |
+| Formatting differences from nixfmt 1.5.0 over the 44,765 `.nix` files of nixpkgs | 0 |  |
 <!-- perfreport:end -->
 
 Each release measures these again and adds them to its release notes. nil reads
