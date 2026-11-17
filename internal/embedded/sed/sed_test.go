@@ -135,10 +135,10 @@ func TestRegularExpressions(t *testing.T) {
 
 	langtest.CheckValid(t, parseBasic, []string{
 		`s/\(a\)\(b\)/\2\1/`, `s/(a)/x/;s/x/\\1/`, `/^*/d`, `s/a)/x/`, `s|a\|b|x|`, `s,a\,b,x,`,
-		`s//\1/`, `/[[:space:]]*$/d`, `s/[/]/x/`, `/[/]/d`, `s^.*/env[ ]*\(py\|pypy\)[^ ]*^#!@x@^`, `s/[]/]/x/`, `s/x\{2,3\}/y/`, `\,a\(b\),s,,\1,`, `sxa\(b\)x\1x`, `s1a\(b\)1\21`,
+		`s//\1/`, `/[[:space:]]*$/d`, `s/[/]/x/`, `/[/]/d`, `s^.*/env[ ]*\(py\|pypy\)[^ ]*^#!@x@^`, `s/[]/]/x/`, `s/x\{2,3\}/y/`, `s/a\{,2\}//`, `s/\(\(a\)\|b\)\2//`, `\,a\(b\),s,,\1,`, `sxa\(b\)x\1x`, `s1a\(b\)1\21`,
 	})
 	langtest.CheckValid(t, parseExtended, []string{
-		`s/(a)(b)/\2\1/`, `s/a)/x/`, `s/a{2,3}/b/`, `s/(x|y)+/z/g`, `s|a\|b|x|`,
+		`s/(a)(b)/\2\1/`, `s/a\)/x/`, `s/a{2,3}/b/`, `s/(x|y)+/z/g`, `s|a\|b|x|`,
 	})
 	langtest.CheckInvalid(t, parseBasic, []langtest.Case{
 		{`s/\(a/x/`, `\(`, "`\\(` is never closed in the regular expression"},
@@ -158,6 +158,10 @@ func TestRegularExpressions(t *testing.T) {
 		{`s/*a/x/`, `*`, "`*` has nothing to repeat"},
 		{`s/(a)/\2/`, `\2`, "`\\2` refers to group 2, but the regular expression has only 1 group"},
 		{`s(a\(b(x(`, `\(`, "`(` is never closed in the regular expression"},
+		{`s/a)/x/`, `)`, "`)` has no matching opening parenthesis in the regular expression"},
+		{`s/a{1/x/`, `{`, "`{` is never closed in the regular expression"},
+		{`s/a|^*//`, `*`, "`*` has nothing to repeat"},
+		{`s/(a)|\1//`, `\1`, "`\\1` refers to group 1 from another alternative, where it cannot have matched"},
 	})
 	langtest.CheckInvalid(t, parseBasic, []langtest.Case{
 		{`/(/s/\(//q`, `q`, "unknown option to `s`"},

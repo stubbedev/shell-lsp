@@ -28,7 +28,11 @@ type Pattern struct {
 
 func (p Pattern) Groups() (int, bool) { return p.groups, p.known }
 
-const maxTrackedGroups = 32
+const (
+	maxTrackedGroups = 32
+	maxRepeat        = 32767
+	maxReference     = 9
+)
 
 var classNames = map[string]bool{
 	"alnum": true, "alpha": true, "blank": true, "cntrl": true, "digit": true, "graph": true,
@@ -43,17 +47,32 @@ const (
 	invalid
 )
 
+type references uint16
+
+func (r references) has(n int) bool { return r&(1<<n) != 0 }
+
+type alternation struct {
+	initial, accumulated references
+}
+
 type scanner struct {
-	src        string
-	flavor     Flavor
-	pos        int
-	groups     int
-	depth      int
-	opened     [maxTrackedGroups]int
-	repeatable bool
-	reference  int
-	referredAt int
-	err        *Error
+	src          string
+	flavor       Flavor
+	pos          int
+	groups       int
+	depth        int
+	opened       [maxTrackedGroups]int
+	numbers      [maxTrackedGroups]int
+	alternations [maxTrackedGroups + 1]alternation
+	completed    references
+	closed       references
+	repeatable   bool
+	reference    int
+	referredAt   int
+	early        int
+	earlyAt      int
+	earlyClosed  bool
+	err          *Error
 }
 
 func Check(pattern string, flavor Flavor) (Pattern, *Error) {
@@ -84,7 +103,19 @@ func Check(pattern string, flavor Flavor) (Pattern, *Error) {
 		at := s.referredAt
 		return Pattern{}, s.error(at, at+2, "`"+s.src[at:at+2]+"` refers to group "+strconv.Itoa(s.reference)+", but the regular expression has "+GroupCount(s.groups))
 	}
+	if s.early > 0 {
+		at := s.earlyAt
+		return Pattern{}, s.error(at, at+2, s.earlyReference())
+	}
 	return Pattern{groups: s.groups, known: true}, nil
+}
+
+func (s *scanner) earlyReference() string {
+	reference := "`" + s.src[s.earlyAt:s.earlyAt+2] + "` refers to group " + strconv.Itoa(s.early)
+	if s.earlyClosed {
+		return reference + " from another alternative, where it cannot have matched"
+	}
+	return reference + " before the group is closed"
 }
 
 func GroupCount(n int) string {
@@ -114,13 +145,16 @@ func (s *scanner) groupWidth() int {
 }
 
 func (s *scanner) open(at int) outcome {
+	if s.depth == maxTrackedGroups {
+		return unknown
+	}
 	if s.flavor != Oniguruma {
 		s.groups++
 	}
-	if s.depth < maxTrackedGroups {
-		s.opened[s.depth] = at
-	}
+	s.opened[s.depth] = at
+	s.numbers[s.depth] = s.groups
 	s.depth++
+	s.alternations[s.depth] = alternation{initial: s.completed}
 	s.repeatable = false
 	return proceed
 }
@@ -129,11 +163,32 @@ func (s *scanner) close(at, width int) outcome {
 	s.repeatable = true
 	switch {
 	case s.depth > 0:
+		s.completed |= s.alternations[s.depth].accumulated
 		s.depth--
-	case s.flavor == Basic || s.flavor == Oniguruma:
+		if n := s.numbers[s.depth]; n <= maxReference {
+			s.completed |= 1 << n
+			s.closed |= 1 << n
+		}
+	case s.flavor != Awk:
 		return s.fail(at, at+width, "`"+s.src[at:at+width]+"` has no matching opening parenthesis in the regular expression")
 	}
 	return proceed
+}
+
+func (s *scanner) alternate() {
+	a := &s.alternations[s.depth]
+	a.accumulated |= s.completed
+	s.completed = a.initial
+	s.repeatable = false
+}
+
+func (s *scanner) refer(at, n int) {
+	if n > s.reference {
+		s.reference, s.referredAt = n, at
+	}
+	if s.early == 0 && !s.completed.has(n) {
+		s.early, s.earlyAt, s.earlyClosed = n, at, s.closed.has(n)
+	}
 }
 
 func (s *scanner) escape() outcome {
@@ -150,13 +205,13 @@ func (s *scanner) escape() outcome {
 	case s.flavor == Basic && c == ')':
 		return s.close(at, 2)
 	case s.flavor == Basic && c == '|':
-		s.repeatable = false
+		s.alternate()
 	case s.flavor == Basic && c == '{':
 		return s.basicInterval(at)
 	case (s.flavor == Basic || s.flavor == Extended) && c >= '1' && c <= '9':
-		if n := int(c - '0'); n > s.reference {
-			s.reference, s.referredAt = n, at
-		}
+		s.refer(at, int(c-'0'))
+	case s.flavor == Extended && strings.IndexByte("bB<>`'", c) >= 0:
+		s.repeatable = false
 	case s.flavor == Oniguruma && c == 'Q':
 		return unknown
 	}
@@ -170,43 +225,63 @@ func (s *scanner) basicInterval(at int) outcome {
 	}
 	body := s.src[s.pos : s.pos+end]
 	s.pos += end + 2
-	low, high, ranged := strings.Cut(body, ",")
-	if !isCount(low) || (ranged && high != "" && !isCount(high)) {
-		return s.fail(at, s.pos, "invalid interval `"+s.src[at:s.pos]+"`: it must hold a count such as 2, 1,3 or 2,")
-	}
-	return s.interval(at, low, high)
+	return s.interval(at, body)
 }
 
-func (s *scanner) braceInterval(at int) outcome {
+func (s *scanner) extendedInterval(at int) outcome {
+	if !s.repeatable {
+		return s.fail(at, at+1, "`{` has nothing to repeat")
+	}
+	end := strings.IndexByte(s.src[s.pos:], '}')
+	if end < 0 {
+		return s.fail(at, at+1, "`{` is never closed in the regular expression")
+	}
+	body := s.src[s.pos : s.pos+end]
+	s.pos += end + 1
+	return s.interval(at, body)
+}
+
+func (s *scanner) interval(at int, body string) outcome {
+	low, high, ranged := strings.Cut(body, ",")
+	if !isDigits(low) || !isDigits(high) || (low == "" && !ranged) {
+		return s.fail(at, s.pos, "invalid interval `"+s.src[at:s.pos]+"`: it must hold a count such as 2, 1,3, 2, or ,3")
+	}
+	if max(count(low), count(high)) > maxRepeat {
+		return s.fail(at, s.pos, "the interval `"+s.src[at:s.pos]+"` exceeds the largest count, "+strconv.Itoa(maxRepeat))
+	}
+	return s.ordered(at, low, high)
+}
+
+func (s *scanner) onigurumaInterval(at int) outcome {
 	end := strings.IndexByte(s.src[s.pos:], '}')
 	if end < 0 {
 		s.repeatable = true
 		return proceed
 	}
 	low, high, ranged := strings.Cut(s.src[s.pos:s.pos+end], ",")
-	if !isCount(low) || (ranged && high != "" && !isCount(high)) {
+	if low == "" || !isDigits(low) || (ranged && !isDigits(high)) {
 		s.repeatable = true
 		return proceed
 	}
 	s.pos += end + 1
-	return s.interval(at, low, high)
+	return s.ordered(at, low, high)
 }
 
-func (s *scanner) interval(at int, low, high string) outcome {
+func (s *scanner) ordered(at int, low, high string) outcome {
 	if high != "" && count(low) > count(high) {
 		return s.fail(at, s.pos, "the interval `"+s.src[at:s.pos]+"` has a minimum above its maximum")
 	}
 	return proceed
 }
 
-func isCount(digits string) bool {
-	return digits != "" && len(digits) <= 5 && strings.Trim(digits, "0123456789") == ""
+func isDigits(text string) bool {
+	return strings.Trim(text, "0123456789") == ""
 }
 
 func count(digits string) int {
-	n, err := strconv.Atoi(digits)
-	if err != nil {
-		panic("regex: interval count " + strconv.Quote(digits) + " was checked to be digits: " + err.Error())
+	n := 0
+	for i := range len(digits) {
+		n = min(n*10+int(digits[i]-'0'), maxRepeat+1)
 	}
 	return n
 }
@@ -228,15 +303,19 @@ func (s *scanner) operator(c byte) outcome {
 	case extended && c == ')':
 		return s.close(at, 1)
 	case extended && c == '|':
-		s.repeatable = false
+		s.alternate()
 	case c == '*' || (extended && (c == '+' || c == '?')):
-		if s.repeatable || s.flavor == Basic || s.flavor == Awk || (at > 0 && s.src[at-1] == '^') {
+		if s.repeatable || s.flavor == Basic || s.flavor == Awk || (s.flavor == Oniguruma && at > 0 && s.src[at-1] == '^') {
 			s.repeatable = true
 			return proceed
 		}
 		return s.fail(at, at+1, "`"+string(c)+"` has nothing to repeat")
-	case c == '{' && (s.flavor == Extended || s.flavor == Oniguruma):
-		return s.braceInterval(at)
+	case c == '{' && s.flavor == Extended:
+		return s.extendedInterval(at)
+	case c == '{' && s.flavor == Oniguruma:
+		return s.onigurumaInterval(at)
+	case s.flavor == Extended && (c == '^' || c == '$'):
+		s.repeatable = false
 	case c != '^':
 		s.repeatable = true
 	}
@@ -308,13 +387,20 @@ func (s *scanner) bracketContents(at, end int, classes bool) outcome {
 			if close < 0 {
 				return proceed
 			}
+			end := i + close + 4
 			if name := s.src[i+2 : i+2+close]; classes && s.src[i+1] == ':' && !classNames[name] {
-				return s.fail(i, i+close+4, "unknown character class `"+s.src[i:i+close+4]+"`")
+				return s.fail(i, end, "unknown character class `"+s.src[i:end]+"`")
 			}
-			i += close + 4
+			if s.posix() && s.src[i+1] != '.' && end+1 < last && s.src[end] == '-' {
+				return s.fail(i, end+2, "the range `"+s.src[i:end+2]+"` starts at a character class")
+			}
+			i = end
 			continue
 		}
 		if i+2 < last && s.src[i+1] == '-' {
+			if end, ok := s.classAt(i+2, last); ok {
+				return s.fail(i, end, "the range `"+s.src[i:end]+"` ends at a character class")
+			}
 			if low, high := s.src[i], s.src[i+2]; sameClass(low, high) && low > high {
 				return s.fail(i, i+3, "the range `"+s.src[i:i+3]+"` is empty because `"+string(low)+"` sorts after `"+string(high)+"`")
 			}
@@ -324,6 +410,19 @@ func (s *scanner) bracketContents(at, end int, classes bool) outcome {
 		i++
 	}
 	return proceed
+}
+
+func (s *scanner) posix() bool { return s.flavor == Basic || s.flavor == Extended }
+
+func (s *scanner) classAt(i, last int) (int, bool) {
+	if !s.posix() || i+1 >= last || s.src[i] != '[' || (s.src[i+1] != ':' && s.src[i+1] != '=') {
+		return 0, false
+	}
+	close := strings.Index(s.src[i+2:last], s.src[i+1:i+2]+"]")
+	if close < 0 {
+		return 0, false
+	}
+	return i + close + 4, true
 }
 
 func sameClass(a, b byte) bool {

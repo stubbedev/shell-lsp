@@ -612,12 +612,16 @@ syntax error, so sed refuses to run it. GNU extensions such as `0,/re/`,
 
 The regular expressions of addresses and `s` commands are read as POSIX
 basic expressions, or extended ones under `-E`, `-r` or `--regexp-extended`,
-and only definite mistakes are reported: a group, bracket expression or
-`\{` interval that is never closed, a `\)` without its `\(`, an unknown
-character class, an empty range such as `[z-a]`, an interval whose minimum
-is above its maximum, a quantifier with nothing to repeat in an extended
-expression, and a back-reference such as `\2` to a group the expression
-does not have, in the expression or in the replacement of `s`.
+and only mistakes GNU sed rejects are reported: a group, bracket expression
+or interval that is never closed, a closing parenthesis without its opening
+one, an unknown character class, an empty range such as `[z-a]` or a range
+that starts or ends at a character class, an interval that is not a count
+such as `{2}`, `{1,3}`, `{2,}` or `{,3}`, whose minimum is above its maximum
+or whose count exceeds 32767, a quantifier with nothing to repeat in an
+extended expression (at the start, after `(`, `|` or an anchor), and a
+back-reference such as `\2` to a group the expression does not have, to a
+group that is not closed yet, or to a group in another alternative, in the
+expression or in the replacement of `s`.
 
 ```bash
 sed 's/a/b/x' file.txt    # SL3002: unknown option to `s`
