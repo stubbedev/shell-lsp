@@ -84,6 +84,12 @@ builtin flags (also combined, as in `read -rs`), test, arithmetic,
 list and `case` operators, redirections and whether a here-document body is
 expanded, signals, option names, expansion operators, and every letter that
 `$-` can contain.
+Hovering a function, or a variable assigned directly or by a declaration
+builtin such as `local` or `readonly`, shows the comment lines directly
+above the definition as its documentation (no blank line in
+between; `shellcheck` directives are left out). A variable also takes a
+comment that ends its assignment, as in `RETRIES=3 # attempts per host`,
+and the documentation shows again when completion resolves the variable.
 
 ### Patterns and expansions
 

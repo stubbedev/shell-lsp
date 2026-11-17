@@ -349,3 +349,27 @@ func (t *Tree) associative(name string) bool {
 		return d.Name == name && d.Attrs.Has(AttrAssoc)
 	})
 }
+
+func (t *Tree) DefinitionDoc(d Definition) string {
+	if d.Kind != DefAssign && d.Kind != DefDeclare {
+		return ""
+	}
+	lines := docLinesAbove(t.text, d.Span.Start)
+	if trailing, ok := t.trailingDocLine(d.Span.End); ok {
+		lines = append(lines, trailing)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (t *Tree) trailingDocLine(end int) (string, bool) {
+	i, _ := slices.BinarySearchFunc(t.Comments, end, func(c Comment, at int) int { return c.Span.Start - at })
+	if i == len(t.Comments) {
+		return "", false
+	}
+	c := t.Comments[i]
+	if strings.Trim(t.text[end:c.Span.Start], " \t") != "" {
+		return "", false
+	}
+	body, ok := docLine(t.text[c.Span.Start:c.Span.End])
+	return body, ok && body != ""
+}

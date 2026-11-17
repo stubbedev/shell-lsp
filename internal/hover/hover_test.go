@@ -131,6 +131,20 @@ func TestHover(t *testing.T) {
 	}
 }
 
+func TestHoverVariableShowsItsDocComment(t *testing.T) {
+	t.Parallel()
+
+	src := "#!/bin/sh\nRESULT=\n# Successful result\nRESULT=0\nLIMIT=3 # retries\necho \"$RESULT $LIMIT\"\n"
+	for needle, want := range map[string]string{
+		"$RESULT": "**RESULT**: global variable\n\nSuccessful result\n\nDeclared on line 2:",
+		"$LIMIT":  "**LIMIT**: global variable\n\nretries\n\nDeclared on line 5:",
+	} {
+		if got := hoverAt(t, src, dialect.Posix, needle, 0); !strings.HasPrefix(got.Markdown, want) {
+			t.Errorf("hover %q = %q, want it to start with %q", needle, got.Markdown, want)
+		}
+	}
+}
+
 func TestHoverDialectNotes(t *testing.T) {
 	t.Parallel()
 

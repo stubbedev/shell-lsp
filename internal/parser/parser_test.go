@@ -464,6 +464,35 @@ func TestFunctionDocComment(t *testing.T) {
 	}
 }
 
+func TestDefinitionDocComment(t *testing.T) {
+	t.Parallel()
+
+	src := "#!/bin/sh\n# Successful result\n#  of the run\nRESULT=0\n\n# detached\n\nDETACHED=1\nTRAILING=1 # the trailing note\n" +
+		"# shellcheck disable=SC2034\nDIRECTIVE=1 # shellcheck disable=SC2154\nA=1 B=2 # only B\nf() {\n  # counter\n  local n=0 #\n}\n" +
+		"# loop\nfor i in 1; do :; done\n# environment\nENV=1 cmd\nreadonly LIMIT=3 # cap\n"
+	tree := Parse(src, dialect.Posix)
+	want := map[string]string{
+		"RESULT": "Successful result\n of the run", "DETACHED": "", "TRAILING": "the trailing note", "DIRECTIVE": "",
+		"A": "", "B": "only B", "n": "counter", "i": "", "ENV": "", "LIMIT": "cap",
+	}
+	seen := map[string]bool{}
+	for _, d := range tree.Definitions {
+		w, ok := want[d.Name]
+		if !ok {
+			continue
+		}
+		seen[d.Name] = true
+		if got := tree.DefinitionDoc(d); got != w {
+			t.Errorf("DefinitionDoc(%s) = %q, want %q", d.Name, got, w)
+		}
+	}
+	for name := range want {
+		if !seen[name] {
+			t.Errorf("no definition of %s", name)
+		}
+	}
+}
+
 func TestHeredocs(t *testing.T) {
 	t.Parallel()
 

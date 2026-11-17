@@ -170,6 +170,9 @@ func (h hoverer) variable(name string) string {
 	first := *defs.At(0)
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "**%s**: %s", name, h.describe(first, defs))
+	if doc := h.definitionDoc(defs); doc != "" {
+		fmt.Fprintf(&sb, "\n\n%s", doc)
+	}
 	fmt.Fprintf(&sb, "\n\nDeclared on line %d:\n```%s\n%s\n```", h.line(first.Span.Start), shelldocs.FenceLanguage(h.dialect), h.snippet(first.Span.Start))
 	if n := defs.Len(); n > 1 {
 		fmt.Fprintf(&sb, "\n\nAssigned in %d places.", n)
@@ -178,6 +181,15 @@ func (h hoverer) variable(name string) string {
 		fmt.Fprintf(&sb, "\n\n%s", entry.Doc)
 	}
 	return sb.String()
+}
+
+func (h hoverer) definitionDoc(defs parser.Definitions) string {
+	for d := range defs.All() {
+		if doc := h.Tree.DefinitionDoc(*d); doc != "" {
+			return doc
+		}
+	}
+	return ""
 }
 
 func (h hoverer) describe(first parser.Definition, defs parser.Definitions) string {

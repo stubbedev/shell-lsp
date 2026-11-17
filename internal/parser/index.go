@@ -1262,15 +1262,23 @@ func IsName(s string) bool {
 }
 
 func docComment(text string, start int) string {
+	return strings.Join(docLinesAbove(text, start), "\n")
+}
+
+func docLinesAbove(text string, start int) []string {
 	lineStart := textline.Start(text, start)
 	var lines []string
 	for line := range strings.Lines(text[textline.CommentBlockStart(text, lineStart):lineStart]) {
-		body := strings.TrimPrefix(strings.TrimPrefix(strings.TrimSpace(line), "#"), " ")
-		if !strings.HasPrefix(body, "shellcheck ") {
+		if body, ok := docLine(line); ok {
 			lines = append(lines, body)
 		}
 	}
-	return strings.Join(lines, "\n")
+	return lines
+}
+
+func docLine(comment string) (string, bool) {
+	body := strings.TrimPrefix(strings.TrimPrefix(strings.TrimSpace(comment), "#"), " ")
+	return body, !strings.HasPrefix(body, "shellcheck ")
 }
 
 func (b *builder) isElseBranch(n *syntax.IfClause) bool {

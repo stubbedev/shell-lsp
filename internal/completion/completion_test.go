@@ -160,6 +160,10 @@ func TestCommandPosition(t *testing.T) {
 	if doc, ok := Documentation(tree, nil, ResolveVariable, "HOME", 3); !ok || !strings.Contains(doc, "Home directory") {
 		t.Errorf("variable documentation = %q, %t", doc, ok)
 	}
+	documented := parser.Parse("# Where logs go.\nLOG_DIR=/tmp\n", dialect.Bash)
+	if doc, ok := Documentation(documented, nil, ResolveVariable, "LOG_DIR", 30); !ok || !strings.Contains(doc, "Where logs go.") {
+		t.Errorf("documented variable documentation = %q, %t", doc, ok)
+	}
 	kw, _ := find(all, "for")
 	if !kw.Snippet || !strings.Contains(kw.InsertText, "${1:name}") {
 		t.Errorf("for keyword = %+v, want snippet", kw)
