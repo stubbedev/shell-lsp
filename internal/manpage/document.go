@@ -51,7 +51,8 @@ type builder struct {
 func parseDocument(src string) document {
 	b := &builder{st: roffState{strings: map[string]string{}}}
 	b.mdoc = isMdoc(src)
-	for _, line := range joinContinuations(strings.Split(strings.ReplaceAll(src, "\r", ""), "\n")) {
+	src = strings.Map(literalRune, strings.ReplaceAll(src, "\r", ""))
+	for _, line := range joinContinuations(strings.Split(src, "\n")) {
 		b.line(line)
 	}
 	b.flush()
@@ -140,7 +141,7 @@ func (b *builder) appendRendered(text string) {
 		b.appendWords(&b.tagText, text)
 		b.tagLines--
 		if b.tagLines == 0 {
-			b.kind, b.tag = taggedBlock, strings.TrimSpace(b.tagText.String())
+			b.kind, b.tag = taggedBlock, strings.TrimSpace(withoutMarkers(b.tagText.String()))
 			b.tagText.Reset()
 		}
 		return
@@ -169,12 +170,12 @@ func (b *builder) flush() {
 	if b.kind != literalBlock {
 		text = strings.TrimSpace(text)
 	}
-	if text != "" || b.kind == taggedBlock {
+	if strings.TrimSpace(withoutMarkers(text)) != "" || b.kind == taggedBlock {
 		if len(b.doc.sections) == 0 {
 			b.doc.sections = append(b.doc.sections, section{})
 		}
 		last := &b.doc.sections[len(b.doc.sections)-1]
-		last.blocks = append(last.blocks, block{kind: b.kind, tag: b.tag, text: text, depth: b.depth})
+		last.blocks = append(last.blocks, block{kind: b.kind, tag: b.tag, text: rich(text), depth: b.depth})
 	}
 	b.text.Reset()
 	b.tag = ""
@@ -188,19 +189,19 @@ func (b *builder) flush() {
 func (b *builder) startSection(name string) {
 	b.flush()
 	b.headingDue, b.indent = noHeading, 0
-	b.doc.sections = append(b.doc.sections, section{name: strings.ToUpper(strings.TrimSpace(name))})
+	b.doc.sections = append(b.doc.sections, section{name: strings.ToUpper(strings.TrimSpace(withoutMarkers(name)))})
 }
 
 func (b *builder) startSubsection(name string) {
 	b.flush()
 	b.headingDue, b.indent = noHeading, 0
 	b.kind = headingBlock
-	b.appendWords(&b.text, name)
+	b.appendWords(&b.text, withoutMarkers(name))
 	b.flush()
 }
 
 func (b *builder) promoteHeading() {
-	text := strings.TrimSpace(b.text.String())
+	text := strings.TrimSpace(withoutMarkers(b.text.String()))
 	if b.kind != paragraphBlock || !isTerm(text) {
 		b.flush()
 		return
@@ -226,7 +227,7 @@ func endsSentence(text string) bool {
 }
 
 func (b *builder) startTag(tag string) {
-	b.kind, b.tag, b.depth = taggedBlock, tag, b.level()
+	b.kind, b.tag, b.depth = taggedBlock, withoutMarkers(tag), b.level()
 }
 
 func (b *builder) level() int {
@@ -356,12 +357,16 @@ func (b *builder) manRequest(name, rest string) {
 	case "RS":
 		b.promoteHeading()
 		b.indent++
-	case "B", "I", "SM", "SB", "CW":
+	case "B", "SB":
+		b.fontLine("B", args)
+	case "I":
+		b.fontLine("I", args)
+	case "SM", "CW":
 		if len(args) > 0 {
 			b.textLine(strings.Join(args, " "))
 		}
 	case "BR", "BI", "IB", "IR", "RB", "RI":
-		b.textLine(strings.Join(args, ""))
+		b.alternatingLine(name, args)
 	case "OP":
 		b.textLine("[" + strings.Join(args, " ") + "]")
 	case "UR", "MT":
@@ -377,4 +382,25 @@ func (b *builder) manRequest(name, rest string) {
 		b.nofill = false
 		b.kind = paragraphBlock
 	}
+}
+
+func (b *builder) fontLine(font string, args []string) {
+	if len(args) == 0 {
+		return
+	}
+	b.textLine(`\f` + font + strings.Join(args, " ") + `\fR`)
+}
+
+func (b *builder) alternatingLine(fonts string, args []string) {
+	if len(args) == 0 {
+		return
+	}
+	var line strings.Builder
+	for i, arg := range args {
+		line.WriteString(`\f`)
+		line.WriteByte(fonts[i%len(fonts)])
+		line.WriteString(arg)
+	}
+	line.WriteString(`\fR`)
+	b.textLine(line.String())
 }

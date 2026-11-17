@@ -188,8 +188,8 @@ func TestRenderCollectsSubcommands(t *testing.T) {
 	if all, _ := findSubcommand(page.subcommands, "sync-all"); all.Doc != "```\ntool sync-all\n```\n\nSynchronise everything." {
 		t.Errorf("sync-all = %+v", all)
 	}
-	if !slices.Equal(page.Description, []string{"Run this:"}) {
-		t.Errorf("Description = %q, want the lead-in kept as prose", page.Description)
+	if !slices.Equal(paragraphs(page.description), []string{"Run this:"}) {
+		t.Errorf("Description = %q, want the lead-in kept as prose", paragraphs(page.description))
 	}
 }
 
@@ -282,8 +282,8 @@ func TestRenderCollectsSubcommandsFromSubsectionHeadings(t *testing.T) {
 	if show, _ := findSubcommand(page.subcommands, "show"); show.Summary != "display device attributes" {
 		t.Errorf("show = %+v", show)
 	}
-	if !slices.Equal(page.Description, []string(nil)) {
-		t.Errorf("Description = %q, want the headings kept out of the prose", page.Description)
+	if !slices.Equal(paragraphs(page.description), []string(nil)) {
+		t.Errorf("Description = %q, want the headings kept out of the prose", paragraphs(page.description))
 	}
 }
 

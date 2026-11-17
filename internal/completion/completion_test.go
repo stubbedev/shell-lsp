@@ -12,6 +12,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/manpage"
+	"github.com/stubbedev/shell-lsp/internal/manpage/manpagetest"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/platform"
 )
@@ -67,10 +68,11 @@ var env = fakeEnv{
 		"/home/u/scripts": {{Name: "x.sh"}},
 	},
 	options: map[string][]manpage.Option{
-		"grep":                  {{Names: []string{"-E", "--extended-regexp"}, Doc: "Extended regexps."}, {Names: []string{"-i", "--ignore-case"}, Doc: "Ignore case."}},
-		"git -q checkout":       {{Names: []string{"-b"}, Doc: "Create a branch."}},
-		"git -C dir remote add": {{Names: []string{"-t"}, Doc: "Track a branch."}},
-		"sudo":                  {{Names: []string{"-u", "--user"}, Doc: "Run as user.", Valued: true}},
+		"grep":                  manpagetest.Options(manpagetest.Entry{Tag: "-E, --extended-regexp", Body: "Extended regexps."}, manpagetest.Entry{Tag: "-i, --ignore-case", Body: "Ignore case."}),
+		"git -q checkout":       manpagetest.Options(manpagetest.Entry{Tag: "-b", Body: "Create a branch."}),
+		"git -C dir remote add": manpagetest.Options(manpagetest.Entry{Tag: "-t", Body: "Track a branch."}),
+		"tool":                  manpagetest.Options(manpagetest.Markup),
+		"sudo":                  manpagetest.Options(manpagetest.Entry{Tag: "-u, --user=VALUE", Body: "Run as user."}),
 	},
 	subcommands: map[string]manpage.Listing{
 		"git": {Subcommands: []manpage.Subcommand{
@@ -275,6 +277,18 @@ func TestFlags(t *testing.T) {
 	}
 	if got := complete(t, dialect.Bash, "nopage -‸"); len(got.Items) != 0 {
 		t.Errorf("flags for command without a page = %v", labels(got))
+	}
+}
+
+func TestFlagDocumentationKeepsManPageMarkupLiteral(t *testing.T) {
+	t.Parallel()
+
+	got := complete(t, dialect.Bash, "tool --cr‸")
+	if !slices.Equal(labels(got), []string{"--create"}) {
+		t.Fatalf("flags = %v", labels(got))
+	}
+	if it := got.Items[0]; it.Documentation != manpagetest.MarkupMarkdown || it.Detail != manpagetest.MarkupNames {
+		t.Errorf("flag item = %+v, want documentation %q", it, manpagetest.MarkupMarkdown)
 	}
 }
 

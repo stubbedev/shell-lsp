@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+
+	"github.com/stubbedev/shell-lsp/internal/prose"
 )
 
 const (
@@ -20,7 +22,7 @@ var ErrNoPage = errors.New("no manual page")
 type Page struct {
 	Summary     string
 	Synopsis    []string
-	Description []string
+	description Doc
 	options     []Option
 	tagline     string
 	subcommands []Subcommand
@@ -41,8 +43,8 @@ func Render(src []byte) (Page, error) {
 	page.subcommands = collectSubcommands(doc, names, page.Synopsis, page.options)
 	if description, ok := doc.section(sectionDescribe); ok {
 		for _, b := range description.blocks {
-			if b.kind == paragraphBlock && len(page.Description) < maxDescription {
-				page.Description = append(page.Description, b.text)
+			if b.kind == paragraphBlock && len(page.description.blocks) < maxDescription {
+				page.description.blocks = append(page.description.blocks, b)
 			}
 		}
 	}
@@ -52,7 +54,7 @@ func Render(src []byte) (Page, error) {
 func texts(blocks []block) []string {
 	out := make([]string, 0, len(blocks))
 	for _, b := range blocks {
-		out = append(out, b.text)
+		out = append(out, b.text.plain())
 	}
 	return out
 }
@@ -62,11 +64,11 @@ func synopsisLines(s section) []string {
 	for _, b := range s.blocks {
 		switch b.kind {
 		case literalBlock:
-			lines = append(lines, strings.Split(b.text, "\n")...)
+			lines = append(lines, strings.Split(b.text.plain(), "\n")...)
 		case taggedBlock:
-			lines = append(lines, strings.TrimSpace(b.tag+" "+b.text))
+			lines = append(lines, strings.TrimSpace(b.tag+" "+b.text.plain()))
 		default:
-			lines = append(lines, b.text)
+			lines = append(lines, b.text.plain())
 		}
 	}
 	return lines
@@ -77,12 +79,12 @@ func (p Page) Options() []Option { return p.options }
 func (p Page) Markdown() string {
 	var sb strings.Builder
 	if p.Summary != "" {
-		fmt.Fprintf(&sb, "**%s**\n\n", p.Summary)
+		fmt.Fprintf(&sb, "**%s**\n\n", prose.Escape(p.Summary))
 	}
 	if len(p.Synopsis) > 0 {
-		fmt.Fprintf(&sb, "```\n%s\n```\n\n", strings.Join(p.Synopsis, "\n"))
+		fmt.Fprintf(&sb, "%s\n\n", prose.CodeBlock(strings.Join(p.Synopsis, "\n")))
 	}
-	sb.WriteString(strings.Join(p.Description, "\n\n"))
+	sb.WriteString(p.description.Markdown())
 	return strings.TrimSpace(sb.String())
 }
 

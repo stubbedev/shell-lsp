@@ -8,6 +8,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/manpage"
+	"github.com/stubbedev/shell-lsp/internal/manpage/manpagetest"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 )
 
@@ -300,8 +301,8 @@ func TestHoverSubcommandsAndFlags(t *testing.T) {
 	commands := fakeCommands{
 		subcommands: map[string]manpage.Subcommand{"tool -v stop": {Name: "stop", Doc: "**tool-stop**"}},
 		options: map[string][]manpage.Option{
-			"tool":         {{Names: []string{"-v", "--verbose"}, Doc: "be verbose"}, {Names: []string{"--width"}, Doc: "set the width"}},
-			"tool -v stop": {{Names: []string{"-f", "--force"}, Doc: "kill them"}},
+			"tool":         manpagetest.Options(manpagetest.Entry{Tag: "-v, --verbose", Body: "be verbose"}, manpagetest.Entry{Tag: "--width", Body: "set the width"}),
+			"tool -v stop": manpagetest.Options(manpagetest.Entry{Tag: "-f, --force", Body: "kill them"}),
 		},
 	}
 	src := "tool -v stop --force web\ntool --width=80 '-v'\nf() { :; }\nf stop\ntool $(tool -v)\n"
@@ -351,6 +352,17 @@ func TestHoverSubcommandsAndFlags(t *testing.T) {
 	}
 }
 
+func TestHoverFlagKeepsManPageMarkupLiteral(t *testing.T) {
+	t.Parallel()
+
+	commands := fakeCommands{options: map[string][]manpage.Option{"tool": manpagetest.Options(manpagetest.Markup)}}
+	src := "tool --create topic\n"
+	got, ok, err := Hover(t.Context(), Input{Tree: parser.Parse(src, dialect.Bash), Offset: strings.Index(src, "--create") + 2, Commands: commands})
+	if want := "**" + manpagetest.MarkupNames + "**\n\n" + manpagetest.MarkupMarkdown; err != nil || !ok || got.Markdown != want {
+		t.Errorf("Hover(--create) = %+v, %t, %v; want %q", got, ok, err, want)
+	}
+}
+
 func TestHoverNestedSubcommands(t *testing.T) {
 	t.Parallel()
 
@@ -360,7 +372,7 @@ func TestHoverNestedSubcommands(t *testing.T) {
 			"tool -C dir remote add": {Name: "add", Doc: "**tool remote add**"},
 		},
 		options: map[string][]manpage.Option{
-			"tool -C dir remote add": {{Names: []string{"-f"}, Doc: "fetch at once"}},
+			"tool -C dir remote add": manpagetest.Options(manpagetest.Entry{Tag: "-f", Body: "fetch at once"}),
 		},
 	}
 	src := "tool -C dir remote add -f origin\n"
@@ -387,9 +399,9 @@ func TestHoverLooksThroughWrappers(t *testing.T) {
 			"tool start":             {Name: "start", Doc: "**tool-start**"},
 		},
 		options: map[string][]manpage.Option{
-			"sudo":                   {{Names: []string{"-u", "--user"}, Doc: "run as user", Valued: true}},
-			"tool -C dir remote add": {{Names: []string{"-f"}, Doc: "fetch at once"}},
-			"tool":                   {{Names: []string{"-w"}, Doc: "wait"}},
+			"sudo":                   manpagetest.Options(manpagetest.Entry{Tag: "-u, --user=VALUE", Body: "run as user"}),
+			"tool -C dir remote add": manpagetest.Options(manpagetest.Entry{Tag: "-f", Body: "fetch at once"}),
+			"tool":                   manpagetest.Options(manpagetest.Entry{Tag: "-w", Body: "wait"}),
 		},
 	}
 	src := "sudo -u root env -i A=1 tool -C dir remote add -f origin\ntimeout 5 nice -n 3 tool start -w\nhelper() { :; }\ncommand helper start\nrun tool start\n"

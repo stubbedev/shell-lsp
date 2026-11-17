@@ -534,7 +534,7 @@ func (h hoverer) flag(ctx context.Context, command string, before []string, word
 	if i < 0 {
 		return Result{}, false, nil
 	}
-	return Result{Markdown: fmt.Sprintf("**%s**\n\n%s", strings.Join(options[i].Names, ", "), options[i].Doc), Span: span}, true, nil
+	return Result{Markdown: fmt.Sprintf("**%s**\n\n%s", strings.Join(options[i].Names, ", "), options[i].Doc.Markdown()), Span: span}, true, nil
 }
 
 func found(r Result, err error) (Result, bool, error) {

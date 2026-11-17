@@ -489,7 +489,7 @@ func (c completer) flags(ctx context.Context, command string, args []string) (Re
 			}
 			it := c.item(name, KindFlag, fmt.Sprintf("%04d", i))
 			it.Detail = strings.Join(opt.Names, ", ")
-			it.Documentation = opt.Doc
+			it.Documentation = opt.Doc.Markdown()
 			items = append(items, it)
 		}
 	}

@@ -128,12 +128,12 @@ func TestRenderManPage(t *testing.T) {
 		"Show the entries of each PATH (the working directory by default). Entries are sorted by name unless --unsorted is given.",
 		"Long options and short options take the same arguments.",
 	}
-	if !slices.Equal(page.Description, want) {
-		t.Errorf("Description = %q", page.Description)
+	if !slices.Equal(paragraphs(page.description), want) {
+		t.Errorf("Description = %q", paragraphs(page.description))
 	}
 	wantOptions := []Option{
-		{Names: []string{"-a", "--all"}, Doc: "include entries whose names start with ."},
-		{Names: []string{"--width"}, Doc: "wrap output at COLUMNS characters", Valued: true},
+		{Names: []string{"-a", "--all"}, Doc: paragraph("include entries whose names start with .")},
+		{Names: []string{"--width"}, Doc: paragraph("wrap output at COLUMNS characters"), Valued: true},
 	}
 	if !slices.EqualFunc(page.Options(), wantOptions, sameOption) {
 		t.Errorf("Options() = %+v", page.Options())
@@ -147,7 +147,7 @@ func TestRenderManPage(t *testing.T) {
 }
 
 func sameOption(a, b Option) bool {
-	return slices.Equal(a.Names, b.Names) && a.Doc == b.Doc && a.Valued == b.Valued
+	return slices.Equal(a.Names, b.Names) && a.Doc.Markdown() == b.Doc.Markdown() && a.Valued == b.Valued
 }
 
 func TestRenderPodManPage(t *testing.T) {
@@ -163,10 +163,10 @@ func TestRenderPodManPage(t *testing.T) {
 	if !slices.Equal(page.Synopsis, []string{"  transform [-v] FILE..."}) {
 		t.Errorf("Synopsis = %q", page.Synopsis)
 	}
-	if len(page.Description) != 1 || page.Description[0] != `"transform" reads each FILE and rewrites it.` {
-		t.Errorf("Description = %q", page.Description)
+	if len(paragraphs(page.description)) != 1 || paragraphs(page.description)[0] != `"transform" reads each FILE and rewrites it.` {
+		t.Errorf("Description = %q", paragraphs(page.description))
 	}
-	if want := []Option{{Names: []string{"-v", "--verbose"}, Doc: "Print every record before rewriting it."}}; !slices.EqualFunc(page.Options(), want, sameOption) {
+	if want := []Option{{Names: []string{"-v", "--verbose"}, Doc: paragraph("Print every record before rewriting it.")}}; !slices.EqualFunc(page.Options(), want, sameOption) {
 		t.Errorf("Options() = %+v", page.Options())
 	}
 }
@@ -184,12 +184,12 @@ func TestRenderMdocPage(t *testing.T) {
 	if !slices.Equal(page.Synopsis, []string{"fetcher [-qv] [-o output] url ..."}) {
 		t.Errorf("Synopsis = %q", page.Synopsis)
 	}
-	if len(page.Description) == 0 || page.Description[0] != "The fetcher utility downloads each url." {
-		t.Errorf("Description = %q", page.Description)
+	if len(paragraphs(page.description)) == 0 || paragraphs(page.description)[0] != "The fetcher utility downloads each url." {
+		t.Errorf("Description = %q", paragraphs(page.description))
 	}
 	want := []Option{
-		{Names: []string{"-o", "--output"}, Doc: "Write to output instead of standard output, see curl(1).", Valued: true},
-		{Names: []string{"-q"}, Doc: "Run quietly."},
+		{Names: []string{"-o", "--output"}, Doc: paragraph("Write to output instead of standard output, see curl(1)."), Valued: true},
+		{Names: []string{"-q"}, Doc: paragraph("Run quietly.")},
 	}
 	if !slices.EqualFunc(page.Options(), want, sameOption) {
 		t.Errorf("Options() = %+v", page.Options())
@@ -268,8 +268,8 @@ func TestRenderTreatsIndentedTermsAsDefinitions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := []string{"The modes are:", "See also.", "More prose."}; !slices.Equal(page.Description, want) {
-		t.Errorf("Description = %q, want %q", page.Description, want)
+	if want := []string{"The modes are:", "See also.", "More prose."}; !slices.Equal(paragraphs(page.description), want) {
+		t.Errorf("Description = %q, want %q", paragraphs(page.description), want)
 	}
 }
 
@@ -441,5 +441,104 @@ func TestRealManPage(t *testing.T) {
 	}
 	if !strings.HasPrefix(page.Summary, "ls") || len(page.Options()) < 10 {
 		t.Errorf("Summary = %q, %d options", page.Summary, len(page.Options()))
+	}
+}
+
+func paragraph(text string) Doc {
+	return Doc{blocks: []block{{kind: paragraphBlock, text: rich(text)}}}
+}
+
+func paragraphs(d Doc) []string {
+	out := make([]string, 0, len(d.blocks))
+	for _, b := range d.blocks {
+		out = append(out, b.text.plain())
+	}
+	return out
+}
+
+const switchPage = `.TH GIT\-SWITCH 1
+.SH NAME
+git-switch \- Switch branches
+.SH SYNOPSIS
+.sp
+.nf
+\fIgit switch\fR [<options>] <branch>
+.fi
+.SH DESCRIPTION
+.sp
+Switch to a specified \fI<branch>\fR; see *globs* and snake_case.
+.SH OPTIONS
+.PP
+\fB\-c\fR \fI<new\-branch>\fR, \fB\-\-create\fR \fI<new\-branch>\fR
+.RS 4
+Create a new branch named \fI<new\-branch>\fR starting at \fI<start\-point>\fR before switching to the branch. This is the transactional equivalent of
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+$ git branch <new\-branch> [<start\-point>]
+$ git switch <new\-branch>
+.fi
+.if n \{\
+.RE
+.\}
+.sp
+that is, the branch is not reset unless "git switch" is successful.
+.RE
+.PP
+\fB\-\-detach\fR
+.RS 4
+Switch to a commit for inspection.
+.RE
+.sp
+Back at the top level.
+.TP
+.BR \-q ", " \-\-quiet
+Suppress \fBall\fP feedback, see
+.IR git (1).
+`
+
+func TestRenderedTextBecomesEscapedMarkdown(t *testing.T) {
+	t.Parallel()
+
+	page, err := Render([]byte(switchPage))
+	if err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+	if !slices.Equal(page.Synopsis, []string{"git switch [<options>] <branch>"}) {
+		t.Errorf("Synopsis = %q", page.Synopsis)
+	}
+	if want := "Switch to a specified *\\<branch\\>*; see \\*globs\\* and snake\\_case."; !strings.HasSuffix(page.Markdown(), "\n\n"+want) {
+		t.Errorf("Markdown() = %q, want it to end in %q", page.Markdown(), want)
+	}
+	want := []Option{
+		{Names: []string{"-c", "--create"}, Valued: true, Doc: Doc{blocks: []block{
+			{kind: paragraphBlock, text: "Create a new branch named \uE002<new-branch>\uE000 starting at \uE002<start-point>\uE000 before switching to the branch. This is the transactional equivalent of"},
+		}}},
+		{Names: []string{"--detach"}, Doc: paragraph("Switch to a commit for inspection.")},
+		{Names: []string{"-q", "--quiet"}, Doc: paragraph("Suppress \uE001all\uE000 feedback, see \uE002git\uE000(1).")},
+	}
+	if !slices.EqualFunc(page.Options(), want, sameOption) {
+		t.Errorf("Options() = %+v, want %+v", page.Options(), want)
+	}
+	wantDoc := "Create a new branch named *\\<new-branch\\>* starting at *\\<start-point\\>* before switching to the branch. This is the transactional equivalent of"
+	if got := page.Options()[0].Doc.Markdown(); got != wantDoc {
+		t.Errorf("-c Doc.Markdown() = %q, want %q", got, wantDoc)
+	}
+	if got, want := page.Options()[2].Doc.Markdown(), "Suppress **all** feedback, see *git*(1)."; got != want {
+		t.Errorf("-q Doc.Markdown() = %q, want %q", got, want)
+	}
+}
+
+func TestFontMarkersInTheSourceStayLiteral(t *testing.T) {
+	t.Parallel()
+
+	page, err := Render([]byte(".TH X 1\n.SH NAME\nx \\- x\n.SH OPTIONS\n.TP\n-a\nraw \uE001 and \\[uE002] and \\N'57344' marks\n"))
+	if err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+	if got, want := page.Options()[0].Doc.Markdown(), "raw \uFFFD and \uFFFD and \uFFFD marks"; got != want {
+		t.Errorf("Doc.Markdown() = %q, want %q", got, want)
 	}
 }

@@ -7,7 +7,7 @@ import (
 
 type Option struct {
 	Names  []string
-	Doc    string
+	Doc    Doc
 	Valued bool
 }
 
@@ -32,7 +32,7 @@ func appendOptions(options []Option, blocks []block, seen map[string]bool) []Opt
 		}
 		option := grouped
 		option.addNames(b.tag)
-		if b.text == "" {
+		if b.text.plain() == "" {
 			grouped = option
 			continue
 		}
@@ -43,7 +43,7 @@ func appendOptions(options []Option, blocks []block, seen map[string]bool) []Opt
 		for _, n := range option.Names {
 			seen[n] = true
 		}
-		option.Doc = b.text
+		option.Doc = Doc{blocks: []block{b}}
 		options = append(options, option)
 	}
 	return options

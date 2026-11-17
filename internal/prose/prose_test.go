@@ -33,3 +33,34 @@ func TestCodeFencesTextThatHoldsBackticks(t *testing.T) {
 		}
 	}
 }
+
+func TestCodeBlockFencesTextThatHoldsFences(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct{ in, want string }{
+		{in: "ls -l", want: "```\nls -l\n```"},
+		{in: "```\nx\n```", want: "````\n```\nx\n```\n````"},
+	} {
+		if got := CodeBlock(tc.in); got != tc.want {
+			t.Errorf("CodeBlock(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+func TestEscapeKeepsMarkdownSyntaxLiteral(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct{ in, want string }{
+		{in: "plain words, (and) dots.", want: "plain words, (and) dots."},
+		{in: "named <new-branch>", want: `named \<new-branch\>`},
+		{in: "*glob* snake_case `x` [a|b] a&b ~x \\", want: `\*glob\* snake\_case \` + "`" + `x\` + "`" + ` \[a\|b\] a\&b \~x \\`},
+		{in: "# title", want: `\# title`},
+		{in: "- item\n  + item\n= rule", want: "\\- item\n  \\+ item\n\\= rule"},
+		{in: "1. first\n2) second\n10 items", want: "1\\. first\n2\\) second\n10 items"},
+		{in: "a - b # c", want: "a - b # c"},
+	} {
+		if got := Escape(tc.in); got != tc.want {
+			t.Errorf("Escape(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}

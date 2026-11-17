@@ -19,7 +19,7 @@ const (
 type block struct {
 	kind  blockKind
 	tag   string
-	text  string
+	text  rich
 	depth int
 }
 
@@ -92,7 +92,11 @@ func (st *roffState) inline(s string) string {
 		case e == '.':
 			out.WriteByte('.')
 		case strings.IndexByte("&|^,/:%c{}a)!", e) >= 0:
-		case e == 'f' || e == 'F' || e == 'n' || e == 'm' || e == 'M' || e == 'g' || e == 'k' || e == '$' || e == 's':
+		case e == 'f':
+			name, next := escapeName(s, i)
+			out.WriteRune(fontNamed(name).marker())
+			i = next
+		case e == 'F' || e == 'n' || e == 'm' || e == 'M' || e == 'g' || e == 'k' || e == '$' || e == 's':
 			i = skipEscapeName(s, i, e == 's')
 		case e == '(':
 			if i+2 < len(s) {
@@ -113,7 +117,7 @@ func (st *roffState) inline(s string) string {
 		case e == 'N':
 			arg, next := delimited(s, i)
 			if n, err := strconv.Atoi(arg); err == nil && n > 0 && n < utf8.MaxRune {
-				out.WriteRune(rune(n))
+				out.WriteRune(literalRune(rune(n)))
 			} else {
 				out.WriteString(s[i-1 : next+1])
 			}
@@ -133,7 +137,7 @@ func special(name string) string {
 	}
 	if hex, ok := strings.CutPrefix(name, "u"); ok {
 		if n, err := strconv.ParseUint(strings.SplitN(hex, "_", 2)[0], 16, 32); err == nil && n <= unicode.MaxRune {
-			return string(rune(n))
+			return string(literalRune(rune(n)))
 		}
 	}
 	return name

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/getopt"
+	"github.com/stubbedev/shell-lsp/internal/prose"
 )
 
 const (
@@ -153,7 +154,7 @@ func (s entryScope) listed(blocks []block) []Subcommand {
 		body := entryBody(blocks[i+1:], level)
 		sub := Subcommand{
 			Name:    name,
-			Summary: firstSentence(b.text),
+			Summary: firstSentence(b.text.plain()),
 			Doc:     entryDoc(usage, b.text),
 			Options: first(appendOptions(nil, body, map[string]bool{}), s.fallback),
 		}
@@ -179,7 +180,7 @@ func (s entryScope) headed(blocks []block) []Subcommand {
 		if b.kind != headingBlock {
 			continue
 		}
-		heads, summary := splitName(b.text)
+		heads, summary := splitName(b.text.plain())
 		if len(heads) != 1 {
 			continue
 		}
@@ -194,7 +195,7 @@ func (s entryScope) headed(blocks []block) []Subcommand {
 		subs = append(subs, Subcommand{
 			Name:    name,
 			Summary: summary,
-			Doc:     entryDoc(usage, summary),
+			Doc:     entryDoc(usage, rich(summary)),
 			Options: first(appendOptions(nil, body, map[string]bool{}), s.fallback),
 		})
 	}
@@ -268,12 +269,12 @@ func firstSentence(text string) string {
 	return text
 }
 
-func entryDoc(usage, text string) string {
-	doc := "```\n" + usage + "\n```"
+func entryDoc(usage string, text rich) string {
+	doc := prose.CodeBlock(usage)
 	if text == "" {
 		return doc
 	}
-	return doc + "\n\n" + text
+	return doc + "\n\n" + text.markdown()
 }
 
 func first[T any](lists ...[]T) []T {
