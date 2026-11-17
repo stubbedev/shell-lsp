@@ -1017,7 +1017,7 @@ func widthBreaksHead(l *lambdaExpr) bool {
 
 func lambdaEndsAbsorbable(l *lambdaExpr) bool {
 	for chainsIntoBody(l) {
-		if !firstToken(l.body).inlinePre() {
+		if _, named := l.param.(*nameParam); !named && !firstToken(l.body).inlinePre() {
 			return false
 		}
 		switch b := l.body.(type) {

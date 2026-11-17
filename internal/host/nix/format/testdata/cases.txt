@@ -6003,3 +6003,12 @@ x: y: f x y
 -- case-root-with-before-final-comment --
 with a; f x y
 # c
+-- case-paren-name-lambda-chain-to-a-commented-indented-string --
+f (
+  imap1 (
+    index: name:
+    # c
+    ''
+      a
+    '') (attrNames secrets)
+)
