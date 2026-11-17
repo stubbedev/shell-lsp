@@ -188,3 +188,27 @@ func TestQuickFixesInsideANixStringEditTheHost(t *testing.T) {
 		}
 	}
 }
+
+func TestEmbeddedSedCompletion(t *testing.T) {
+	t.Parallel()
+
+	const uri = "file:///w/c.bash"
+	c, _ := startClient(t, `{"capabilities": {"textDocument": {"diagnostic": {}}}}`)
+	c.notify("textDocument/didOpen", openParams(uri, "sed -e ':top' -e 'b t' f\nsed -E 's/a' f\n"))
+	at := func(line, character uint32) lsp.CompletionList {
+		t.Helper()
+		params := fmt.Sprintf(`{"textDocument": {"uri": %q}, "position": {"line": %d, "character": %d}}`, uri, line, character)
+		return decodeResult[lsp.CompletionList](t, c.call("textDocument/completion", params))
+	}
+	labels := at(0, uint32(len("sed -e ':top' -e 'b t")))
+	i := slices.IndexFunc(labels.Items, func(it lsp.CompletionItem) bool { return it.Label == "top" })
+	want := lsp.Range{Start: lsp.Position{Line: 0, Character: 20}, End: lsp.Position{Line: 0, Character: 21}}
+	if i < 0 || labels.Items[i].Kind != lsp.CompletionReference || labels.Items[i].TextEdit == nil || labels.Items[i].TextEdit.Insert != want {
+		t.Errorf("label completion = %+v, want top over %+v", labels.Items, want)
+	}
+	operators := at(1, uint32(len("sed -E 's/a")))
+	i = slices.IndexFunc(operators.Items, func(it lsp.CompletionItem) bool { return it.Label == "+" })
+	if i < 0 || operators.Items[i].Kind != lsp.CompletionOperator || operators.Items[i].Documentation == nil {
+		t.Errorf("operator completion = %+v, want a documented +", operators.Items)
+	}
+}

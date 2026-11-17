@@ -15,7 +15,6 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/diskwatch"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/embedded"
-	"github.com/stubbedev/shell-lsp/internal/host/model"
 	"github.com/stubbedev/shell-lsp/internal/hostnav"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
@@ -223,11 +222,7 @@ func (s *Server) handleCompletion(ctx context.Context, docs *docstore.View, comp
 		}
 	}
 	for _, it := range embedded.CompletionsAt(embeddedPrograms(here.File), here.offset) {
-		kind := model.KindFunction
-		if it.Binding {
-			kind = model.KindVariable
-		}
-		item := nativeItem(it.Label, kind, it.Detail, it.Span, here.positions())
+		item := plainItem(it.Label, embeddedCompletionKind(it.Kind), it.Detail, it.Span, here.positions())
 		if it.Doc != "" {
 			item.Documentation = lsp.Markdown(it.Doc)
 		}

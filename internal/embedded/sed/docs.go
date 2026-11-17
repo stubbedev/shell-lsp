@@ -52,6 +52,43 @@ var options = lang.Docs{
 	"M": {Signature: "/regexp/M", Summary: "GNU: multi-line mode: `^` and `$` also match next to newlines in the pattern space."},
 }
 
+type spelled [2]string
+
+type regexOperator struct {
+	label     spelled
+	signature spelled
+	summary   string
+}
+
+var regexOperators = []regexOperator{
+	{spelled{Basic: "*", Extended: "*"}, spelled{Basic: "x*", Extended: "x*"}, "Matches the preceding item zero or more times."},
+	{spelled{Basic: `\+`, Extended: "+"}, spelled{Basic: `x\+`, Extended: "x+"}, "Matches the preceding item one or more times."},
+	{spelled{Basic: `\?`, Extended: "?"}, spelled{Basic: `x\?`, Extended: "x?"}, "Matches the preceding item zero or one time."},
+	{spelled{Basic: `\{`, Extended: "{"}, spelled{Basic: `x\{n,m\}`, Extended: "x{n,m}"}, "Matches the preceding item at least `n` and at most `m` times; `{n}` matches it exactly `n` times, `{n,}` at least `n` times and `{,m}` at most `m` times."},
+	{spelled{Basic: `\(`, Extended: "("}, spelled{Basic: `\(regexp\)`, Extended: "(regexp)"}, "Groups `regexp` as one item and captures what it matches for `\\1`…`\\9`."},
+	{spelled{Basic: `\|`, Extended: "|"}, spelled{Basic: `regexp1\|regexp2`, Extended: "regexp1|regexp2"}, "Matches either `regexp1` or `regexp2`."},
+	{spelled{Basic: ".", Extended: "."}, spelled{Basic: ".", Extended: "."}, "Matches any character, including a newline in the pattern space."},
+	{spelled{Basic: "^", Extended: "^"}, spelled{Basic: "^regexp", Extended: "^regexp"}, "Matches at the start of the pattern space, or of each line with the `M` flag."},
+	{spelled{Basic: "$", Extended: "$"}, spelled{Basic: "regexp$", Extended: "regexp$"}, "Matches at the end of the pattern space, or of each line with the `M` flag."},
+	{spelled{Basic: "[", Extended: "["}, spelled{Basic: "[list]", Extended: "[list]"}, "Matches any one character of `list`, such as `[a-z]` or `[[:digit:]]`; `[^list]` matches any character not in it."},
+	{spelled{Basic: `\w`, Extended: `\w`}, spelled{Basic: `\w`, Extended: `\w`}, "GNU: matches a word character, a letter, digit or underscore."},
+	{spelled{Basic: `\W`, Extended: `\W`}, spelled{Basic: `\W`, Extended: `\W`}, "GNU: matches a character that is not a word character."},
+	{spelled{Basic: `\s`, Extended: `\s`}, spelled{Basic: `\s`, Extended: `\s`}, "GNU: matches a whitespace character, including a newline."},
+	{spelled{Basic: `\S`, Extended: `\S`}, spelled{Basic: `\S`, Extended: `\S`}, "GNU: matches a character that is not whitespace."},
+	{spelled{Basic: `\b`, Extended: `\b`}, spelled{Basic: `\b`, Extended: `\b`}, "GNU: matches at a word boundary."},
+	{spelled{Basic: `\B`, Extended: `\B`}, spelled{Basic: `\B`, Extended: `\B`}, "GNU: matches anywhere but at a word boundary."},
+	{spelled{Basic: `\<`, Extended: `\<`}, spelled{Basic: `\<`, Extended: `\<`}, "GNU: matches at the start of a word."},
+	{spelled{Basic: `\>`, Extended: `\>`}, spelled{Basic: `\>`, Extended: `\>`}, "GNU: matches at the end of a word."},
+}
+
+func operatorsOf(syntax Syntax) []Candidate {
+	out := make([]Candidate, len(regexOperators))
+	for i, op := range regexOperators {
+		out[i] = Candidate{Label: op.label[syntax], Doc: lang.Doc{Signature: op.signature[syntax], Summary: op.summary}}
+	}
+	return out
+}
+
 var nthMatch = lang.Doc{Signature: "s/regexp/replacement/N", Summary: "Replaces only the Nth match; together with `g`, the Nth and every later match."}
 
 func Doc(name string, tok lang.Token) (lang.Doc, bool) {

@@ -45,6 +45,8 @@ type parser struct {
 	queued    int
 	commandAt int
 	lastLines []int
+	separated bool
+	offered   offer
 }
 
 func Parse(src string, syntax Syntax) lang.Result {
@@ -60,7 +62,7 @@ func LastLineAddresses(src string) []int {
 }
 
 func newParser(src string, syntax Syntax) parser {
-	return parser{src: src, res: lang.NewResult(src), structure: true, flavor: flavors[syntax]}
+	return parser{src: src, res: lang.NewResult(src), structure: true, flavor: flavors[syntax], separated: true}
 }
 
 func (p *parser) run() {
@@ -81,6 +83,12 @@ func (p *parser) run() {
 	}
 }
 
+func (p *parser) offer(context Context, start int) {
+	if p.offered.context == 0 {
+		p.offered = offer{context: context, start: start}
+	}
+}
+
 func (p *parser) skipFailedCommand() {
 	p.lastLines = slices.DeleteFunc(p.lastLines, func(at int) bool { return at >= p.commandAt })
 	end := textline.End(p.src, max(p.commandAt, min(p.pos, len(p.src))))
@@ -92,10 +100,15 @@ func (p *parser) skipFailedCommand() {
 
 func (p *parser) commands() {
 	for {
+		from := p.pos
 		p.skip(" \t\r\n;")
 		if p.eof() {
+			if p.separated || strings.ContainsAny(p.src[from:], "\n;") {
+				p.offer(Commands, p.pos)
+			}
 			return
 		}
+		p.separated = false
 		p.commandAt = p.pos
 		p.queued = 0
 		p.parseCommand()
@@ -147,6 +160,7 @@ func (p *parser) parseCommand() {
 	}
 	if p.eof() || p.peekIs("\n;") {
 		if addresses > 0 || negated {
+			p.offer(Commands, p.pos)
 			p.fail(start, p.pos, "missing command")
 		}
 		return
@@ -157,6 +171,7 @@ func (p *parser) parseCommand() {
 	case '{':
 		p.blocks = append(p.blocks, at)
 		p.pos++
+		p.separated = true
 		return
 	case '}', '#', ':':
 		if addresses > 0 || negated {
@@ -191,7 +206,11 @@ func (p *parser) parseCommand() {
 		p.text(at)
 		return
 	case 'b', 't', 'T':
-		if name := p.label(); name.name != "" {
+		name := p.label()
+		if p.eof() {
+			p.offer(Labels, name.start)
+		}
+		if name.name != "" {
 			p.jumps = append(p.jumps, name)
 		}
 		return
@@ -236,6 +255,7 @@ func (p *parser) end(message string) {
 	}
 	if p.peekIs(";\n") {
 		p.pos++
+		p.separated = true
 		return
 	}
 	p.fail(p.pos, lang.RuneEnd(p.src, p.pos), message)
@@ -394,7 +414,7 @@ func (p *parser) step() {
 func (p *parser) regexpAddress(start int, delimiter byte) {
 	p.pos++
 	from := p.pos
-	if !p.delimitedRegex(delimiter) {
+	if p.delimitedRegex(delimiter) != closed {
 		p.unterminated(start, p.pos, "unterminated address regex")
 	}
 	p.queue(expression{start: from, end: p.pos, delimiter: delimiter})
@@ -410,30 +430,59 @@ func (p *parser) option(start int, kind lang.Kind) {
 	p.res.Emit(start, p.pos, kind, lang.Builtin|lang.Option)
 }
 
-func (p *parser) delimited(delimiter byte) bool { return p.scanTo(delimiter, false) }
+type ending uint8
 
-func (p *parser) delimitedRegex(delimiter byte) bool { return p.scanTo(delimiter, true) }
+const (
+	closed ending = iota
+	lineBreak
+	cutInText
+	cutInEscape
+	cutInBracket
+)
 
-func (p *parser) scanTo(delimiter byte, brackets bool) bool {
+func (p *parser) delimited(delimiter byte) bool { return p.scanTo(delimiter, false) == closed }
+
+func (p *parser) delimitedRegex(delimiter byte) ending {
+	end := p.scanTo(delimiter, true)
+	switch end {
+	case cutInText:
+		p.offer(Operators, p.pos)
+	case cutInEscape:
+		p.offer(Operators, p.pos-1)
+	case closed, lineBreak, cutInBracket:
+	}
+	return end
+}
+
+func (p *parser) scanTo(delimiter byte, brackets bool) ending {
+	inBracket := false
 	for !p.eof() {
 		switch c := p.src[p.pos]; {
 		case c == '\\':
+			if p.pos+1 == len(p.src) && !inBracket {
+				p.pos++
+				return cutInEscape
+			}
 			p.pos += 2
 			continue
 		case c == '\n':
-			return false
+			return lineBreak
 		case c == delimiter:
-			return true
+			return closed
 		case brackets && c == '[':
 			if end, ok := regex.BracketEnd(p.src[:textline.End(p.src, p.pos)], p.pos); ok {
 				p.pos = end
 				continue
 			}
+			inBracket = true
 		}
 		p.pos++
 	}
 	p.pos = len(p.src)
-	return false
+	if inBracket {
+		return cutInBracket
+	}
+	return cutInText
 }
 
 func (p *parser) substitute(command int) {
@@ -447,7 +496,7 @@ func (p *parser) substitution() bool {
 	delimiter := p.src[p.pos]
 	start := p.pos
 	p.pos++
-	if !p.delimitedRegex(delimiter) {
+	if p.delimitedRegex(delimiter) != closed {
 		return false
 	}
 	p.queue(expression{start: start + 1, end: p.pos, delimiter: delimiter})

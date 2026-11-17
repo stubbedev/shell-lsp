@@ -153,7 +153,11 @@ to match.
 ## Embedded languages
 
 Inside an awk or jq program, completion offers its functions and the variables its
-command line sets, and signature help follows the arguments of a call.
+command line sets, and signature help follows the arguments of a call. Inside a
+sed script it offers the commands where a command can start, the regular
+expression operators inside an address or `s` pattern, spelled as basic or
+extended (`-E`, `-r`) expressions need them, and after `b`, `t` or `T` the
+labels the script defines, in any of its `-e` pieces.
 
 awk, sed and jq programs passed as literal arguments (`awk '...'`, `sed -e
 '...'`, `jq -r '...'`) or fed as a quoted here-document to `awk -f -` and

@@ -16,6 +16,7 @@ type Program struct {
 	Text     string
 	Result   lang.Result
 	Bindings []Binding
+	extended bool
 	pieces   []piece
 	holes    []hole
 }
@@ -86,7 +87,7 @@ func embeddedIn(tree *parser.Tree, stmt *syntax.Stmt, run parser.Invocation) (Pr
 	if !ok {
 		return Program{}, false
 	}
-	program := Program{Language: language}
+	program := Program{Language: language, extended: inv.extended}
 	switch source := inv.program.(type) {
 	case inline:
 		program.Text, program.pieces, program.holes, ok = decode(source, languages[language].standIn)
@@ -372,6 +373,13 @@ func (p *Program) Regions(yield func(parser.Span)) {
 	if len(p.pieces) > 0 {
 		yield(run)
 	}
+}
+
+func (p *Program) cursor(source int) (int, bool) {
+	if at, ok := p.offset(max(source-1, 0)); ok {
+		return at + 1, true
+	}
+	return p.offset(source)
 }
 
 func (p *Program) offset(source int) (int, bool) {

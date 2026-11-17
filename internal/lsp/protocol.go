@@ -250,6 +250,7 @@ const (
 	CompletionKeyword    CompletionItemKind = 14
 	CompletionSnippet    CompletionItemKind = 15
 	CompletionFile       CompletionItemKind = 17
+	CompletionReference  CompletionItemKind = 18
 	CompletionFolder     CompletionItemKind = 19
 	CompletionEnumMember CompletionItemKind = 20
 	CompletionConstant   CompletionItemKind = 21

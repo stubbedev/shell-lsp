@@ -5,48 +5,84 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/embedded/lang"
+	"github.com/stubbedev/shell-lsp/internal/embedded/sed"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 )
 
+type ItemKind uint8
+
+const (
+	FunctionItem ItemKind = iota
+	VariableItem
+	CommandItem
+	OperatorItem
+	LabelItem
+)
+
 type Item struct {
-	Label   string
-	Detail  string
-	Doc     string
-	Span    parser.Span
-	Binding bool
+	Label  string
+	Detail string
+	Doc    string
+	Span   parser.Span
+	Kind   ItemKind
 }
 
 func CompletionsAt(programs []Program, source int) []Item {
 	for i := range programs {
 		p := &programs[i]
-		at, ok := p.offset(max(source-1, 0))
+		cursor, ok := p.cursor(source)
 		if !ok {
 			continue
 		}
-		tok, ok := p.Result.TokenAt(at)
-		if !ok || tok.Kind != lang.Function && tok.Kind != lang.Variable {
-			return nil
-		}
-		return p.completions(tok, p.Text[tok.Start:min(at+1, tok.End)])
+		return languages[p.Language].complete(p, cursor, source)
 	}
 	return nil
 }
 
-func (p *Program) completions(tok lang.Token, prefix string) []Item {
+func completeNames(names func() lang.Docs) func(*Program, int, int) []Item {
+	return func(p *Program, cursor, _ int) []Item {
+		at := cursor - 1
+		tok, ok := p.Result.TokenAt(at)
+		if !ok || tok.Kind != lang.Function && tok.Kind != lang.Variable {
+			return nil
+		}
+		return p.completions(tok, p.Text[tok.Start:min(at+1, tok.End)], names())
+	}
+}
+
+func (p *Program) completions(tok lang.Token, prefix string, names lang.Docs) []Item {
 	span := p.Span(tok.Start, tok.End)
 	var out []Item
 	for _, b := range p.Bindings {
 		if strings.HasPrefix(b.Name, prefix) {
-			out = append(out, Item{Label: b.Name, Detail: b.Flag + " " + b.Name, Span: span, Binding: true})
+			out = append(out, Item{Label: b.Name, Detail: b.Flag + " " + b.Name, Span: span, Kind: VariableItem})
 		}
 	}
-	for name, doc := range languages[p.Language].names() {
+	for name, doc := range names {
 		if strings.HasPrefix(name, prefix) {
-			out = append(out, Item{Label: name, Detail: doc.Signature, Doc: doc.Summary, Span: span})
+			out = append(out, Item{Label: name, Detail: doc.Signature, Doc: doc.Summary, Span: span, Kind: FunctionItem})
 		}
 	}
 	slices.SortStableFunc(out, func(a, b Item) int { return strings.Compare(a.Label, b.Label) })
 	return slices.CompactFunc(out, func(a, b Item) bool { return a.Label == b.Label })
+}
+
+var sedItemKinds = [...]ItemKind{sed.Commands: CommandItem, sed.Operators: OperatorItem, sed.Labels: LabelItem}
+
+func completeSed(p *Program, cursor, source int) []Item {
+	c, ok := sed.Complete(p.Text, sedSyntax(p.extended), cursor)
+	if !ok || len(c.Candidates) == 0 {
+		return nil
+	}
+	span := parser.Span{Start: source, End: source}
+	if c.Start < cursor {
+		span.Start = p.Span(c.Start, cursor).Start
+	}
+	out := make([]Item, len(c.Candidates))
+	for i, candidate := range c.Candidates {
+		out[i] = Item{Label: candidate.Label, Detail: candidate.Doc.Signature, Doc: candidate.Doc.Summary, Span: span, Kind: sedItemKinds[c.Context]}
+	}
+	return out
 }
 
 type Signature struct {

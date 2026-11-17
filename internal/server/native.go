@@ -526,9 +526,13 @@ func nativeCompletionKind(kind model.Kind) lsp.CompletionItemKind {
 }
 
 func nativeItem(label string, kind model.Kind, detail string, span parser.Span, at docstore.Positions) lsp.CompletionItem {
+	return plainItem(label, nativeCompletionKind(kind), detail, span, at)
+}
+
+func plainItem(label string, kind lsp.CompletionItemKind, detail string, span parser.Span, at docstore.Positions) lsp.CompletionItem {
 	return lsp.CompletionItem{
 		Label:            label,
-		Kind:             nativeCompletionKind(kind),
+		Kind:             kind,
 		Detail:           detail,
 		InsertTextFormat: lsp.InsertPlainText,
 		TextEdit:         &lsp.CompletionEdit{NewText: label, Insert: at.Range(span)},

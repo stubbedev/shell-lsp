@@ -22,7 +22,7 @@ type language struct {
 	commands     []string
 	parse        func(string, invocation) lang.Result
 	doc          func(string, lang.Token) (lang.Doc, bool)
-	names        func() lang.Docs
+	complete     func(p *Program, cursor, source int) []Item
 	argSeparator string
 	cli          cli
 	sigil        string
@@ -36,7 +36,7 @@ var languages = [...]language{
 		commands:     []string{"awk", "gawk", "mawk", "nawk", "original-awk"},
 		parse:        func(text string, _ invocation) lang.Result { return awk.Parse(text) },
 		doc:          awk.Doc,
-		names:        awk.Names,
+		complete:     completeNames(awk.Names),
 		argSeparator: ",",
 		cli: cli{
 			short: [128]option{
@@ -62,7 +62,7 @@ var languages = [...]language{
 		commands:     []string{"sed", "gsed"},
 		parse:        parseSed,
 		doc:          sed.Doc,
-		names:        func() lang.Docs { return nil },
+		complete:     completeSed,
 		argSeparator: ";",
 		cli: cli{
 			short: [128]option{
@@ -87,7 +87,7 @@ var languages = [...]language{
 		commands:     []string{"jq", "gojq", "jaq"},
 		parse:        func(text string, _ invocation) lang.Result { return jq.Parse(text) },
 		doc:          jq.Doc,
-		names:        jq.Names,
+		complete:     completeNames(jq.Names),
 		argSeparator: ";",
 		cli: cli{
 			short: [128]option{
@@ -109,11 +109,15 @@ var languages = [...]language{
 	},
 }
 
-func parseSed(text string, inv invocation) lang.Result {
-	if inv.extended {
-		return sed.Parse(text, sed.Extended)
+func sedSyntax(extended bool) sed.Syntax {
+	if extended {
+		return sed.Extended
 	}
-	return sed.Parse(text, sed.Basic)
+	return sed.Basic
+}
+
+func parseSed(text string, inv invocation) lang.Result {
+	return sed.Parse(text, sedSyntax(inv.extended))
 }
 
 func (l Language) String() string { return languages[l].name }
