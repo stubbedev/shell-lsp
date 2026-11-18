@@ -6,9 +6,8 @@ on:
   workflow_dispatch:
     inputs:
       fuzztime:
-        description: "How long to fuzz each target, as a Go duration"
-        required: true
-        default: "20m"
+        description: "How long to fuzz each target, as a Go duration; empty for the nightly time"
+        required: false
 
 permissions:
   contents: read
@@ -51,6 +50,9 @@ jobs:
     name: ${{ matrix.target }} in ${{ matrix.package }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: write
     strategy:
       fail-fast: false
       max-parallel: 3
@@ -60,7 +62,7 @@ jobs:
       CGO_ENABLED: "0"
       PACKAGE: ${{ matrix.package }}
       TARGET: ${{ matrix.target }}
-      FUZZTIME: ${{ inputs.fuzztime || '20m' }}
+      FUZZTIME: ${{ inputs.fuzztime || '5m' }}
       GOMEMLIMIT: 3GiB
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -70,7 +72,28 @@ jobs:
         with:
           go-version-file: go.mod
       - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4.0.0
-      - run: just fuzz "$PACKAGE" "$TARGET" "$FUZZTIME"
+      - id: corpus
+        run: echo "dir=$(go env GOCACHE)/fuzz/$PACKAGE/$TARGET" >>"$GITHUB_OUTPUT"
+      - id: restore
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.corpus.outputs.dir }}
+          key: fuzz-${{ matrix.target }}-${{ matrix.package }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: fuzz-${{ matrix.target }}-${{ matrix.package }}-
+      - id: fuzz
+        run: just fuzz "$PACKAGE" "$TARGET" "$FUZZTIME"
+      - id: save
+        if: always() && steps.restore.outcome == 'success'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.corpus.outputs.dir }}
+          key: ${{ steps.restore.outputs.cache-primary-key }}
+      - name: Drop the corpus this run grew from
+        if: always() && steps.fuzz.outcome == 'success' && steps.save.outcome == 'success' && steps.restore.outputs.cache-matched-key != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OLD: ${{ steps.restore.outputs.cache-matched-key }}
+        run: gh cache delete "$OLD" --repo "$GITHUB_REPOSITORY"
       - name: Collect the failing inputs
         if: failure()
         run: |
