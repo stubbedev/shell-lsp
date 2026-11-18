@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/docstore"
+	"github.com/stubbedev/shell-lsp/internal/fileuri"
 )
 
 type clock struct{ t time.Time }
@@ -526,4 +528,32 @@ func TestScanCutIsRemembered(t *testing.T) {
 	if ws.ScanCut() {
 		t.Error("a scan that saw everything still counts as cut")
 	}
+}
+
+func TestAdoptingAReopenedNixFileKeepsTheFileItWasReopenedFrom(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "default.nix")
+	const text = "{ a = 1; }\n"
+	if err := os.WriteFile(path, []byte(text), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	w := New(noOverlay, Detect)
+	disk, err := w.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reopened, ok := w.Reopened(path, docstore.NewDocument(fileuri.FromPath(path), "nix", 1, text))
+	if !ok {
+		t.Fatal("an unchanged Nix file did not reopen from the loaded one")
+	}
+	w.Adopt(path, reopened)
+	runtime.GC()
+	runtime.GC()
+	got, err := w.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Native.Index != disk.Native.Index {
+		t.Error("after the closed document was collected, loading parsed the unchanged file again instead of returning the file still in use")
+	}
+	runtime.KeepAlive(disk)
 }

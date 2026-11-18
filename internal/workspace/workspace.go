@@ -453,9 +453,13 @@ func (w *Workspace) Adopt(path string, file *File) {
 	if err != nil || docstore.NormalizeCanonical(string(raw)) != file.Doc.Source().Text() {
 		return
 	}
+	key := platform.Native.Fold(path)
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	w.files[platform.Native.Fold(path)] = newDiskEntry(file, info, w.now(), stamp)
+	if known := w.files[key].file(); known != nil && known.Native == file.Native {
+		file = known
+	}
+	w.files[key] = newDiskEntry(file, info, w.now(), stamp)
 }
 
 func (f *File) parsedAs(languageID string) bool {
