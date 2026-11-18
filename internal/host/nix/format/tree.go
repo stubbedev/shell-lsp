@@ -280,6 +280,7 @@ type converter struct {
 	line    int
 	seen    int
 	probing int
+	emitted bool
 }
 
 func newConverter(file *syntax.File) *converter {
@@ -460,7 +461,7 @@ func (c *converter) leading() []trivium {
 		t := tokens[c.at]
 		switch t.Kind {
 		case syntax.TokWhitespace:
-			if c.at > 0 && strings.Count(c.src[t.Span().Start:t.Span().End], "\n") >= 2 {
+			if (c.emitted || len(out) > 0) && strings.Count(c.src[t.Span().Start:t.Span().End], "\n") >= 2 {
 				out = append(out, trivium{kind: blankLine})
 			}
 		case syntax.TokLineComment:
@@ -496,6 +497,7 @@ func (c *converter) next(kinds ...syntax.TokenKind) *token {
 		panic("format: the token stream does not match the parsed tree")
 	}
 	c.at++
+	c.emitted = true
 	return &token{pre: pre, text: c.src[t.Span().Start:t.Span().End], line: c.lineAt(t.Span().Start)}
 }
 

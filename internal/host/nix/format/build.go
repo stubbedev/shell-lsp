@@ -1421,6 +1421,7 @@ const (
 	pinNone chainPin = iota
 	pinHard
 	pinFollowsHead
+	pinAfterName
 )
 
 func lambdaDoc(l *lambdaExpr, n, depth int) []item { return lambdaFrom(l, n, depth, pinNone, nil) }
@@ -1449,10 +1450,14 @@ func colonPinsChain(l *lambdaExpr) bool {
 }
 
 func lambdaFrom(l *lambdaExpr, n, depth int, pin chainPin, lead []item) []item {
+	afterName := pin == pinAfterName
+	if afterName {
+		pin = pinNone
+	}
 	if pin == pinNone && colonPinsChain(l) {
 		pin = pinHard
 	}
-	widthBreaks := pin == pinNone && widthBreaksHead(l)
+	widthBreaks := pin == pinNone && !afterName && widthBreaksHead(l)
 	paramItems := paramDoc(l.param, n)
 	if lead != nil {
 		paramItems = trialHead(lead, paramItems)
@@ -1487,11 +1492,17 @@ func lambdaFrom(l *lambdaExpr, n, depth int, pin chainPin, lead []item) []item {
 			if pin != pinNone {
 				return seq(head, pin.separator(), lambdaFrom(v, n, depth+1, pin, nil))
 			}
+			if named {
+				return seq(head, space, lambdaFrom(v, n, depth+1, pinAfterName, nil))
+			}
 			return seq(head, space, lambdaDoc(v, n, depth+1))
 		}
 		if lambdaEndsAbsorbable(v) {
 			if widthBreaks && firstToken(v).lone() && v.colon.lone() {
 				return seq(head, space, priority(group(lambdaDoc(v, n, 2))))
+			}
+			if !named {
+				return seq(head, hardSpace, priority(group(lambdaFrom(v, n, 2, pin, nil))))
 			}
 			return seq(head, priority(group(space, lambdaFrom(v, n, 2, pin, nil))))
 		}
