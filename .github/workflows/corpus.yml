@@ -55,10 +55,10 @@ jobs:
           key: ${{ needs.fetch.outputs.key }}
           fail-on-cache-miss: true
       - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: stubbedev/xilo@v2
         with:
-          extra_nix_config: |
-            extra-substituters = https://xilos.dev/c/stubbedev/main
-            extra-trusted-public-keys = xilos.dev/stubbedev/main-1:397R6S49v/FSvP+mZ3HlKrVN1KXhgzHIEIHxA/UuG6Y=
+          url: https://xilos.dev
+          cache: stubbedev/main
       - run: nix develop --command go run ./cmd/lintcheck shellcheck
 
   shells:
@@ -75,10 +75,10 @@ jobs:
           key: ${{ needs.fetch.outputs.key }}
           fail-on-cache-miss: true
       - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: stubbedev/xilo@v2
         with:
-          extra_nix_config: |
-            extra-substituters = https://xilos.dev/c/stubbedev/main
-            extra-trusted-public-keys = xilos.dev/stubbedev/main-1:397R6S49v/FSvP+mZ3HlKrVN1KXhgzHIEIHxA/UuG6Y=
+          url: https://xilos.dev
+          cache: stubbedev/main
       - run: nix develop --command go run ./cmd/lintcheck shells
 
   hosts:
@@ -95,10 +95,10 @@ jobs:
           key: ${{ needs.fetch.outputs.key }}
           fail-on-cache-miss: true
       - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: stubbedev/xilo@v2
         with:
-          extra_nix_config: |
-            extra-substituters = https://xilos.dev/c/stubbedev/main
-            extra-trusted-public-keys = xilos.dev/stubbedev/main-1:397R6S49v/FSvP+mZ3HlKrVN1KXhgzHIEIHxA/UuG6Y=
+          url: https://xilos.dev
+          cache: stubbedev/main
       - name: Let bubblewrap create the sandbox make runs in
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - run: nix develop --command go run ./cmd/lintcheck hosts
