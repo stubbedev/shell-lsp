@@ -19,6 +19,15 @@ func newTestWatcher(t *testing.T) *Watcher {
 	return w
 }
 
+func watchableDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	if !newTestWatcher(t).TrackDir(dir).tracked {
+		t.Skipf("inotify cannot watch every ancestor of %s", dir)
+	}
+	return dir
+}
+
 func write(t *testing.T, path, text string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(text), 0o600); err != nil {
@@ -27,7 +36,7 @@ func write(t *testing.T, path, text string) {
 }
 
 func TestChangesToATrackedFileAreSeen(t *testing.T) {
-	dir := t.TempDir()
+	dir := watchableDir(t)
 	path := filepath.Join(dir, "a.nix")
 	write(t, path, "1")
 	w := newTestWatcher(t)
@@ -44,7 +53,7 @@ func TestChangesToATrackedFileAreSeen(t *testing.T) {
 }
 
 func TestAMissingFileIsSeenWhenItAppears(t *testing.T) {
-	dir := t.TempDir()
+	dir := watchableDir(t)
 	path := filepath.Join(dir, "missing", "deep", ".shellcheckrc")
 	w := newTestWatcher(t)
 	stamp := w.Track(path)
@@ -68,7 +77,7 @@ func TestAMissingFileIsSeenWhenItAppears(t *testing.T) {
 }
 
 func TestUnrelatedNamesInAWatchedDirectoryAreIgnored(t *testing.T) {
-	dir := t.TempDir()
+	dir := watchableDir(t)
 	path := filepath.Join(dir, "a.nix")
 	write(t, path, "1")
 	w := newTestWatcher(t)
@@ -81,7 +90,7 @@ func TestUnrelatedNamesInAWatchedDirectoryAreIgnored(t *testing.T) {
 }
 
 func TestAListingSeesOnlyLinkChanges(t *testing.T) {
-	dir := t.TempDir()
+	dir := watchableDir(t)
 	child := filepath.Join(dir, "a.nix")
 	write(t, child, "1")
 	w := newTestWatcher(t)
@@ -99,7 +108,7 @@ func TestAListingSeesOnlyLinkChanges(t *testing.T) {
 }
 
 func TestRenamingAnAncestorIsSeen(t *testing.T) {
-	root := t.TempDir()
+	root := watchableDir(t)
 	dir := filepath.Join(root, "a", "b")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
@@ -130,7 +139,7 @@ func TestRenamingAnAncestorIsSeen(t *testing.T) {
 }
 
 func TestSymlinkedFilesFollowTheirTarget(t *testing.T) {
-	root := t.TempDir()
+	root := watchableDir(t)
 	target := filepath.Join(root, "real", "config")
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 		t.Fatal(err)
@@ -150,7 +159,7 @@ func TestSymlinkedFilesFollowTheirTarget(t *testing.T) {
 }
 
 func TestABusyWriterCannotHoldUpADrain(t *testing.T) {
-	dir := t.TempDir()
+	dir := watchableDir(t)
 	path := filepath.Join(dir, "a.nix")
 	write(t, path, "1")
 	w := newTestWatcher(t)
@@ -200,7 +209,7 @@ func TestANilWatcherTracksNothing(t *testing.T) {
 }
 
 func TestAnOverflowForgetsEverything(t *testing.T) {
-	dir := t.TempDir()
+	dir := watchableDir(t)
 	path := filepath.Join(dir, "a")
 	write(t, path, "1")
 	w := newTestWatcher(t)
