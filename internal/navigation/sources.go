@@ -8,6 +8,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/directive"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/platform"
+	"github.com/stubbedev/shell-lsp/internal/shelloptions"
 	"github.com/stubbedev/shell-lsp/internal/textline"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
@@ -138,6 +139,25 @@ func Closure(file *workspace.File, env Env) ([]*workspace.File, bool) {
 		}
 	}
 	return chain, complete && len(queue) == 0
+}
+
+func OptionsOf(file *workspace.File, env Env) shelloptions.Effect {
+	visited := map[string]bool{file.Path: true}
+	queue := []*workspace.File{file}
+	var trees []*parser.Tree
+	for len(queue) > 0 && len(trees) < maxChain {
+		current := queue[0]
+		queue = queue[1:]
+		trees = append(trees, current.Tree)
+		for _, ref := range Sources(current, env) {
+			if ref.Target == nil || visited[ref.Target.Path] || current.Tree.ShellAt(ref.Command.Span.Start) != parser.FileShell {
+				continue
+			}
+			visited[ref.Target.Path] = true
+			queue = append(queue, ref.Target)
+		}
+	}
+	return shelloptions.EffectOf(trees...)
 }
 
 func loadFirst(candidates []string, env Env) *workspace.File {

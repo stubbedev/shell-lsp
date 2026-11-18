@@ -217,6 +217,20 @@ func TestCheckFollowsAndOptionallyReportsSourcedFiles(t *testing.T) {
 	}
 }
 
+func TestCheckReadsShellOptionsFromSourcedFiles(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeFiles(t, dir, map[string]string{
+		"lib/options.zsh": "setopt pipe_fail extended_glob\n",
+		"bin/sourced.zsh": "#!/usr/bin/env zsh\nsource \"$(dirname \"$0\")/../lib/options.zsh\"\nif [[ ${1-} == (#i)yes ]]; then\n  print -r -- ${1-} | tr \"[:upper:]\" \"[:lower:]\"\nfi\n",
+	})
+	got := run(t, dir, "", "check", "--profile", "strict", "-f", "gcc", "bin")
+	if got.status != statusOK || got.stdout != "" {
+		t.Errorf("a script whose sourced file turns on pipe_fail and extended_glob = %d %q, want no findings\n%s", got.status, got.stdout, got.stderr)
+	}
+}
+
 func TestCheckDiffAppliesTheFixAllEdits(t *testing.T) {
 	t.Parallel()
 

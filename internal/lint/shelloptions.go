@@ -9,7 +9,7 @@ import (
 
 func (p *pass) shellOptions() shelloptions.PerShell {
 	if p.perShell == nil {
-		options := shelloptions.Scan(p.tree)
+		options := shelloptions.Scan(p.tree, p.sourcedOptions)
 		p.perShell = &options
 	}
 	return *p.perShell
@@ -33,4 +33,12 @@ func (p *pass) implicitlyGlobbed(pe *syntax.ParamExp) bool {
 
 func (p *pass) substitutionGlobbed(cs *syntax.CmdSubst) bool {
 	return p.dialect.Features().GlobsUnquoted || p.optionsAt(cs).GlobSubst
+}
+
+func sourcedOptions(sources []Source) map[parser.Span]shelloptions.Effect {
+	options := make(map[parser.Span]shelloptions.Effect, len(sources))
+	for _, s := range sources {
+		options[s.Command] = s.Options
+	}
+	return options
 }

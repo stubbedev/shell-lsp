@@ -48,11 +48,12 @@ type pass struct {
 	quotedHeredocs map[int]bool
 	assignmentArms map[*syntax.Assign][]branchArm
 
-	normalized  Normalized
-	sourced     func(offset int) bool
-	readByHost  func(offset int, name string) bool
-	environment []string
-	probes      []Finding
+	normalized     Normalized
+	sourced        func(offset int) bool
+	readByHost     func(offset int, name string) bool
+	environment    []string
+	sourcedOptions map[parser.Span]shelloptions.Effect
+	probes         []Finding
 }
 
 func newPass(tree *parser.Tree, imports []parser.Import, opts Options) *pass {
@@ -69,10 +70,11 @@ func newPass(tree *parser.Tree, imports []parser.Import, opts Options) *pass {
 		variables:      variableUsage{reads: make([]variableRead, 0, len(tree.References))},
 		parameters:     shelldocs.KnownParameters(tree.Dialect),
 
-		normalized:  opts.Normalized,
-		sourced:     opts.Sourced,
-		readByHost:  opts.ReadByHost,
-		environment: opts.Environment,
+		normalized:     opts.Normalized,
+		sourced:        opts.Sourced,
+		readByHost:     opts.ReadByHost,
+		environment:    opts.Environment,
+		sourcedOptions: sourcedOptions(opts.Sources),
 	}
 }
 
@@ -120,7 +122,7 @@ func (p *pass) startFlow() func() *flowResult {
 				done <- flowOutcome{failure: fmt.Sprintf("%v\n%s", r, debug.Stack())}
 			}
 		}()
-		done <- flowOutcome{result: analyzeFlow(p.tree, p.imports, p.bats)}
+		done <- flowOutcome{result: analyzeFlow(p.tree, p.imports, p.bats, p.sourcedOptions)}
 	}()
 	return func() *flowResult {
 		outcome := <-done

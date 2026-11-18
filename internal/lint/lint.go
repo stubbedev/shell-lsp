@@ -10,6 +10,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/shelloptions"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 )
 
@@ -187,6 +188,7 @@ func MergedEdits(fixes []Fix) []textedit.Edit {
 type Source struct {
 	Command parser.Span
 	Tree    *parser.Tree
+	Options shelloptions.Effect
 }
 
 type DialectSource uint8

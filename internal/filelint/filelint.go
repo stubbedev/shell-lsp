@@ -118,7 +118,7 @@ func followed(file *workspace.File, env navigation.Env) []lint.Source {
 	var out []lint.Source
 	for _, ref := range navigation.Sources(file, env) {
 		if ref.Target != nil {
-			out = append(out, lint.Source{Command: ref.Command.Span, Tree: ref.Target.Tree})
+			out = append(out, lint.Source{Command: ref.Command.Span, Tree: ref.Target.Tree, Options: navigation.OptionsOf(ref.Target, env)})
 		}
 	}
 	return out

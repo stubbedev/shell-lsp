@@ -236,22 +236,53 @@ type shellChange struct {
 	dynamic bool
 }
 
-func Scan(tree *parser.Tree) PerShell {
+type Effect struct {
+	changes []optionChange
+	dynamic bool
+}
+
+func EffectOf(trees ...*parser.Tree) Effect {
+	var e Effect
+	for _, tree := range trees {
+		for _, c := range tree.Commands {
+			if !mayChangeOptions(c.Name) || tree.ShellAt(c.Span.Start) != parser.FileShell {
+				continue
+			}
+			for _, change := range optionChanges(c.Name, c.Args, tree.Dialect) {
+				if !slices.Contains(e.changes, change) {
+					e.changes = append(e.changes, change)
+				}
+			}
+			e.dynamic = e.dynamic || setsUnknownOptions(c.Name, c.Args)
+		}
+	}
+	return e
+}
+
+func Scan(tree *parser.Tree, sourced map[parser.Span]Effect) PerShell {
 	p := PerShell{tree: tree, base: Options{
 		Errexit:      turnsOn(shebangOptionChanges(tree.Text(), tree.Dialect), "errexit"),
 		ExtendedGlob: tree.Dialect == dialect.Zsh && dialect.CompletionFile(tree.Text()),
 	}}
 	for _, c := range tree.Commands {
-		if !mayChangeOptions(c.Name) {
-			continue
-		}
-		changes, dynamic := optionChanges(c.Name, c.Args, tree.Dialect), setsUnknownOptions(c.Name, c.Args)
+		changes, dynamic := commandOptions(c, tree.Dialect, sourced)
 		if len(changes) > 0 || dynamic {
 			p.changes = append(p.changes, shellChange{command: c, shell: tree.ShellAt(c.Span.Start), changes: changes, dynamic: dynamic})
 		}
 	}
 	p.shells = p.perShell()
 	return p
+}
+
+func commandOptions(c parser.Command, d dialect.Dialect, sourced map[parser.Span]Effect) ([]optionChange, bool) {
+	if c.IsSourceBuiltin() {
+		effect := sourced[c.Span]
+		return effect.changes, effect.dynamic
+	}
+	if !mayChangeOptions(c.Name) {
+		return nil, false
+	}
+	return optionChanges(c.Name, c.Args, d), setsUnknownOptions(c.Name, c.Args)
 }
 
 func (p PerShell) perShell() []Options {

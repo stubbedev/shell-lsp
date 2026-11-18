@@ -288,7 +288,7 @@ func regexOutcome(t *testing.T, d dialect.Dialect, script string) (Outcome, erro
 	if !ok {
 		t.Fatalf("%q: no regex site", script)
 	}
-	return New(tree, shelloptions.Scan(tree)).Matches(site)
+	return New(tree, shelloptions.Scan(tree, nil)).Matches(site)
 }
 
 func TestRegexEvaluationLeavesOutWhatDependsOnTheLibrary(t *testing.T) {
@@ -311,7 +311,7 @@ func TestRegexEvaluationLeavesOutWhatDependsOnTheLibrary(t *testing.T) {
 }
 
 func siteOfRegex(tree *parser.Tree) (glob.Site, bool) {
-	for _, site := range glob.For(tree, shelloptions.Scan(tree)).All() {
+	for _, site := range glob.For(tree, shelloptions.Scan(tree, nil)).All() {
 		if site.Role == glob.RoleRegex {
 			return site, true
 		}
@@ -329,7 +329,7 @@ func ours(t *testing.T, d dialect.Dialect, script string) (string, error) {
 	if dq, ok := part.(*syntax.DblQuoted); ok {
 		part, quoted = dq.Parts[0], true
 	}
-	got, err := New(tree, shelloptions.Scan(tree)).Expansion(part.(*syntax.ParamExp), quoted)
+	got, err := New(tree, shelloptions.Scan(tree, nil)).Expansion(part.(*syntax.ParamExp), quoted)
 	if err != nil {
 		return "", err
 	}
@@ -418,7 +418,7 @@ func TestEvaluationRefusesWhatItCannotKnow(t *testing.T) {
 func TestAssumptionsNameTheirLines(t *testing.T) {
 	tree := parser.Parse("f=archive.tar.gz\nsuffix=.gz\necho \"${f%\"$suffix\"}\"\n", dialect.Bash)
 	pe := tree.File.Stmts[2].Cmd.(*syntax.CallExpr).Args[1].Parts[0].(*syntax.DblQuoted).Parts[0].(*syntax.ParamExp)
-	got, err := New(tree, shelloptions.Scan(tree)).Expansion(pe, true)
+	got, err := New(tree, shelloptions.Scan(tree, nil)).Expansion(pe, true)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -58,6 +58,68 @@ func TestCheckFollowsSourcedFilesAndHonoursSettings(t *testing.T) {
 	}
 }
 
+const usesPipefailAndExtendedGlob = "answer=${1:-YES}\nif [[ ${answer} == (#i)yes ]]; then\n  print matched\nfi\nprint -r -- ${answer} | tr \"[:lower:]\" \"[:upper:]\"\n"
+
+func strictFindings(t *testing.T, files map[string]string, names ...string) map[string][]lint.Code {
+	t.Helper()
+	dir := t.TempDir()
+	for name, text := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(text), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect)
+	env := navigation.Env{Loader: loader{ws}, Roots: []string{dir}}
+	out := map[string][]lint.Code{}
+	for _, name := range names {
+		file, err := ws.Load(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		out[name] = codes(Check(file, env, Settings{Profile: lint.ProfileStrict}).Findings)
+	}
+	return out
+}
+
+func TestCheckTakesShellOptionsFromSourcedFiles(t *testing.T) {
+	t.Parallel()
+
+	got := strictFindings(t, map[string]string{
+		"nested.zsh":   "#!/usr/bin/env zsh\nsource \"$(dirname \"$0\")/a.zsh\"\n" + usesPipefailAndExtendedGlob,
+		"a.zsh":        "source ./b.zsh\n",
+		"b.zsh":        "setopt pipe_fail extended_glob\n",
+		"function.zsh": "#!/usr/bin/env zsh\nsource \"$(dirname \"$0\")/func-lib.zsh\"\n" + usesPipefailAndExtendedGlob,
+		"func-lib.zsh": "strict() {\n  setopt pipe_fail extended_glob\n}\n",
+		"subshell.zsh": "#!/usr/bin/env zsh\nsource \"$(dirname \"$0\")/sub-lib.zsh\"\n" + usesPipefailAndExtendedGlob,
+		"sub-lib.zsh":  "(setopt pipe_fail extended_glob)\n",
+	}, "nested.zsh", "function.zsh", "subshell.zsh")
+	for name, want := range map[string][]lint.Code{
+		"nested.zsh":   nil,
+		"function.zsh": nil,
+		"subshell.zsh": {12016, 2312},
+	} {
+		if !slices.Equal(got[name], want) {
+			t.Errorf("%s: findings = %v, want %v", name, got[name], want)
+		}
+	}
+}
+
+func TestASourceCycleGivesTheSameOptionsWhicheverFileComesFirst(t *testing.T) {
+	t.Parallel()
+
+	got := strictFindings(t, map[string]string{
+		"g1-first.zsh": "#!/usr/bin/env zsh\n(source \"$(dirname \"$0\")/g1.zsh\")\nsource \"$(dirname \"$0\")/g2.zsh\"\n" + usesPipefailAndExtendedGlob,
+		"g2-first.zsh": "#!/usr/bin/env zsh\n(source \"$(dirname \"$0\")/g2.zsh\")\nsource \"$(dirname \"$0\")/g1.zsh\"\n" + usesPipefailAndExtendedGlob,
+		"g1.zsh":       "source ./g2.zsh\nsetopt pipe_fail extended_glob\n",
+		"g2.zsh":       "source ./g1.zsh\n",
+	}, "g1-first.zsh", "g2-first.zsh")
+	for name, findings := range got {
+		if len(findings) != 0 {
+			t.Errorf("%s: findings = %v, want none: g1 and g2 source each other, and g1 turns the options on", name, findings)
+		}
+	}
+}
+
 func TestCheckReportsWindowsLineEndings(t *testing.T) {
 	t.Parallel()
 

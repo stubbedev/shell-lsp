@@ -44,7 +44,7 @@ type Result struct {
 func Hover(ctx context.Context, in Input) (Result, bool, error) {
 	h := newHoverer(in)
 	h.path = in.Tree.PathAt(in.Offset)
-	h.options = shelloptions.Scan(in.Tree)
+	h.options = shelloptions.Scan(in.Tree, nil)
 	r, ok, err := h.hover(ctx)
 	if err != nil {
 		return Result{}, false, err
