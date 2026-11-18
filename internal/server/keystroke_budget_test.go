@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/shell-lsp/internal/diskwatch/diskwatchtest"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/perf"
@@ -162,7 +163,7 @@ func TestAKeystrokeStaysInItsAllocationBudget(t *testing.T) {
 }
 
 func TestQuietFilesCostNoStatPerRequest(t *testing.T) {
-	root := t.TempDir()
+	root := diskwatchtest.Dir(t)
 	files := map[string]string{"lib.sh": "greet() { echo hi; }\n", "main.sh": "source ./lib.sh\ngreet\n"}
 	for name, text := range files {
 		if err := os.WriteFile(filepath.Join(root, name), []byte(text), 0o600); err != nil {

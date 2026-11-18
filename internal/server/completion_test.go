@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stubbedev/shell-lsp/internal/diskwatch"
+	"github.com/stubbedev/shell-lsp/internal/diskwatch/diskwatchtest"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/manpage"
@@ -358,12 +358,8 @@ func TestCompletionResolveDocumentsFunctionsAndVariables(t *testing.T) {
 }
 
 func TestAWatchedExecutableListSeesAnInstall(t *testing.T) {
-	disk, err := diskwatch.New()
-	if err != nil {
-		t.Skipf("no inotify here: %v", err)
-	}
-	defer disk.Close()
-	dir := t.TempDir()
+	disk := diskwatchtest.New(t)
+	dir := diskwatchtest.Dir(t)
 	if err := os.WriteFile(filepath.Join(dir, executableName("tool")), nil, 0o755); err != nil {
 		t.Fatal(err)
 	}

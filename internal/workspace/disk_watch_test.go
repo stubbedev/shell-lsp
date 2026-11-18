@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/stubbedev/shell-lsp/internal/diskwatch"
+	"github.com/stubbedev/shell-lsp/internal/diskwatch/diskwatchtest"
 	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/regularfile"
 )
@@ -25,11 +26,7 @@ type watchedWorkspace struct {
 
 func newWatchedWorkspace(t *testing.T) watchedWorkspace {
 	t.Helper()
-	disk, err := diskwatch.New()
-	if err != nil {
-		t.Skipf("no inotify here: %v", err)
-	}
-	t.Cleanup(disk.Close)
+	disk := diskwatchtest.New(t)
 	c := &clock{t: time.Now()}
 	ws := newTestWorkspace(c)
 	ws.WatchDisk(disk)
@@ -44,7 +41,7 @@ func newWatchedWorkspace(t *testing.T) watchedWorkspace {
 func (w watchedWorkspace) pastTheRecheck() { w.clock.t = w.clock.t.Add(2 * DiskRecheck) }
 
 func TestAWatchedFileNeedsNoStatUntilItChanges(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "a.sh")
+	path := filepath.Join(diskwatchtest.Dir(t), "a.sh")
 	rewrite(t, path, "one() { :; }\n", time.Now())
 	w := newWatchedWorkspace(t)
 	if got := firstFunction(t, w.Workspace, path); got != "one" {
@@ -68,7 +65,7 @@ func TestAWatchedFileNeedsNoStatUntilItChanges(t *testing.T) {
 }
 
 func TestAWatchedMissingFileIsSeenWhenCreated(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "later.sh")
+	path := filepath.Join(diskwatchtest.Dir(t), "later.sh")
 	w := newWatchedWorkspace(t)
 	if _, err := w.Load(path); err == nil {
 		t.Fatal("loaded a file that does not exist")
@@ -91,7 +88,7 @@ func TestAWatchedMissingFileIsSeenWhenCreated(t *testing.T) {
 }
 
 func TestAWatchedScanSeesNewFilesAndIgnoreRules(t *testing.T) {
-	root := t.TempDir()
+	root := diskwatchtest.Dir(t)
 	rewrite(t, filepath.Join(root, "a.sh"), "a() { :; }\n", time.Now())
 	w := newWatchedWorkspace(t)
 	w.SetRoots([]string{root})
@@ -129,7 +126,7 @@ func TestAWatchedScanSeesNewFilesAndIgnoreRules(t *testing.T) {
 }
 
 func TestWatchedNixIncludesFollowAnEdit(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "a.nix")
+	path := filepath.Join(diskwatchtest.Dir(t), "a.nix")
 	rewrite(t, path, "{ imports = [ ./one.nix ]; }\n", time.Now())
 	w := newWatchedWorkspace(t)
 	first, _, err := w.NixIncludes(path)
@@ -236,7 +233,7 @@ func TestReleasingTheStashDropsWhatWasNeverLoaded(t *testing.T) {
 }
 
 func TestAQuietWorkspaceIsNotWalkedAgain(t *testing.T) {
-	root := t.TempDir()
+	root := diskwatchtest.Dir(t)
 	first := filepath.Join(root, "a.sh")
 	rewrite(t, first, "one() { :; }\n", time.Now())
 	w := newWatchedWorkspace(t)

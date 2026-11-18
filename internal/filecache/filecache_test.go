@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stubbedev/shell-lsp/internal/diskwatch"
+	"github.com/stubbedev/shell-lsp/internal/diskwatch/diskwatchtest"
 )
 
 func parseNumber(path string, data []byte) (int, error) {
@@ -88,12 +88,8 @@ func TestCacheForgetsStalePaths(t *testing.T) {
 }
 
 func TestAWatchedCacheSkipsReadsUntilTheFileChanges(t *testing.T) {
-	disk, err := diskwatch.New()
-	if err != nil {
-		t.Skipf("no inotify here: %v", err)
-	}
-	defer disk.Close()
-	path := filepath.Join(t.TempDir(), "config")
+	disk := diskwatchtest.New(t)
+	path := filepath.Join(diskwatchtest.Dir(t), "config")
 	if err := os.WriteFile(path, []byte("1"), 0o600); err != nil {
 		t.Fatal(err)
 	}
