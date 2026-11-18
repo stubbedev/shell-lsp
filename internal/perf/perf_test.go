@@ -115,14 +115,14 @@ func BenchmarkHover(b *testing.B) {
 func BenchmarkSemanticTokens(b *testing.B) {
 	tree := parser.Parse(text, dialect.Bash)
 	for b.Loop() {
-		semantic.Tokens(tree, nil, embedded.Find(tree))
+		semantic.Tokens(tree, nil, nil, embedded.Find(tree))
 	}
 }
 
 func BenchmarkEmbeddedPrograms(b *testing.B) {
 	tree := parser.Parse(embeddedText, dialect.Bash)
 	for b.Loop() {
-		semantic.Tokens(tree, nil, embedded.Find(tree))
+		semantic.Tokens(tree, nil, nil, embedded.Find(tree))
 	}
 }
 

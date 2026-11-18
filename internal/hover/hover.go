@@ -31,6 +31,7 @@ type Commands interface {
 type Input struct {
 	Tree     *parser.Tree
 	Imports  []parser.Import
+	Sourced  map[parser.Span]shelloptions.Effect
 	Offset   int
 	Commands Commands
 	Lint     func() (lint.Report, bool)
@@ -44,7 +45,7 @@ type Result struct {
 func Hover(ctx context.Context, in Input) (Result, bool, error) {
 	h := newHoverer(in)
 	h.path = in.Tree.PathAt(in.Offset)
-	h.options = shelloptions.Scan(in.Tree, nil)
+	h.options = shelloptions.Scan(in.Tree, in.Sourced)
 	r, ok, err := h.hover(ctx)
 	if err != nil {
 		return Result{}, false, err

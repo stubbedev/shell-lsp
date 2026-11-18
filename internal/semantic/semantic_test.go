@@ -11,6 +11,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/embedded"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/shelloptions"
 	"github.com/stubbedev/shell-lsp/internal/structure"
 )
 
@@ -32,7 +33,7 @@ func TestTokens(t *testing.T) {
 	t.Parallel()
 
 	text := "#!/bin/bash\nreadonly MAX=3\ngreet() {\n\tlocal who=\"$1\"\n\techo \"hi $who\" 'raw' >&2\n}\nif (( MAX > 2 )); then greet -v \"$HOME\" | grep x; fi\ncat <<EOF\nbody $MAX\nEOF\n"
-	got := describe(text, Tokens(parser.Parse(text, dialect.Bash), nil, nil))
+	got := describe(text, Tokens(parser.Parse(text, dialect.Bash), nil, nil, nil))
 	want := []string{
 		"#!/bin/bash:comment",
 		"readonly:function+defaultLibrary",
@@ -78,7 +79,7 @@ func TestUnterminatedHeredocBodyIsStringToTheEnd(t *testing.T) {
 	t.Parallel()
 
 	text := "cat <<EOF\nfirst\nlast"
-	got := describe(text, Tokens(parser.Parse(text, dialect.Bash), nil, nil))
+	got := describe(text, Tokens(parser.Parse(text, dialect.Bash), nil, nil, nil))
 	want := []string{"cat:function+external", "<<:operator", "EOF:string", "first:string", "last:string"}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Errorf("tokens:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
@@ -90,7 +91,7 @@ func TestEmbeddedProgramTokensReplaceTheirString(t *testing.T) {
 
 	text := "awk '{ print $1 }' f\njq \".a | length\" x\nsed -f - <<'EOF'\ns/a/b/\nEOF\n"
 	tree := parser.Parse(text, dialect.Bash)
-	got := describe(text, Tokens(tree, nil, embedded.Find(tree)))
+	got := describe(text, Tokens(tree, nil, nil, embedded.Find(tree)))
 	want := []string{
 		"awk:function+external", "':string", "print:keyword", "$:operator", "1:number", "':string",
 		"jq:function+external", "\":string", ".a:property", "|:operator", "length:function+defaultLibrary", "\":string",
@@ -107,7 +108,7 @@ func TestEmbeddedTokensAcrossEscapesAndScripts(t *testing.T) {
 
 	text := "awk \"{ print \\\"a\\\" }\"\nsed -e 'a\\' -e 'appended' f\n"
 	tree := parser.Parse(text, dialect.Bash)
-	got := describe(text, Tokens(tree, nil, embedded.Find(tree)))
+	got := describe(text, Tokens(tree, nil, nil, embedded.Find(tree)))
 	want := []string{
 		"awk:function+external", "\":string", "print:keyword", "\\\"a\\\":string", "\":string",
 		"sed:function+external", "-e:property", "':string", "a:keyword+defaultLibrary", "':string",
@@ -122,7 +123,7 @@ func TestTokensAreSingleLineAndOrdered(t *testing.T) {
 	t.Parallel()
 
 	text := "echo 'multi\nline\nstring' \"a\nb\"\n"
-	tokens := Tokens(parser.Parse(text, dialect.Bash), nil, nil)
+	tokens := Tokens(parser.Parse(text, dialect.Bash), nil, nil, nil)
 	last := -1
 	for _, tok := range tokens {
 		if strings.Contains(text[tok.Span.Start:tok.Span.End], "\n") {
@@ -143,7 +144,7 @@ func TestDirectiveTokens(t *testing.T) {
 
 	text := "  # shellcheck disable=SC2086,SC2034 source=lib.sh # quoting is deliberate\necho $1 # just a comment\n"
 	var got []string
-	for _, d := range describe(text, Tokens(parser.Parse(text, dialect.Bash), nil, nil)) {
+	for _, d := range describe(text, Tokens(parser.Parse(text, dialect.Bash), nil, nil, nil)) {
 		if !strings.HasPrefix(d, "echo") && !strings.HasPrefix(d, "1:") {
 			got = append(got, d)
 		}
@@ -169,7 +170,7 @@ func TestNumbersInZshSubscriptFlagsAreNumbers(t *testing.T) {
 	t.Parallel()
 
 	text := "echo ${words[(w)42]}\n"
-	got := strings.Join(describe(text, Tokens(parser.Parse(text, dialect.Zsh), nil, nil)), " ")
+	got := strings.Join(describe(text, Tokens(parser.Parse(text, dialect.Zsh), nil, nil, nil)), " ")
 	if want := "42:number"; !strings.Contains(got, want) {
 		t.Errorf("tokens = %s, want %s", got, want)
 	}
@@ -179,7 +180,7 @@ func TestZshRegexTokensAfterAnEscapeCoverTheirOwnSource(t *testing.T) {
 	t.Parallel()
 
 	text := "[[ $v =~ ^\\.[a-z]+ ]]\n"
-	got := strings.Join(describe(text, Tokens(parser.Parse(text, dialect.Zsh), nil, nil)), " ")
+	got := strings.Join(describe(text, Tokens(parser.Parse(text, dialect.Zsh), nil, nil, nil)), " ")
 	if want := "[a-z]:regexp"; !strings.Contains(got, want) {
 		t.Errorf("tokens = %s, want %s", got, want)
 	}
@@ -199,7 +200,7 @@ func TestQuotedRegexTokens(t *testing.T) {
 		{"zsh ANSI-C quotes are a regex", dialect.Zsh, "[[ $v =~ $'^\\t[a-z]+' ]]\n", []string{"$':string", "^:operator", "\\t:string", "[a-z]:regexp", "+:operator", "':string"}},
 		{"bash quotes stay one literal", dialect.Bash, "[[ $v =~ 'x+'y+ ]]\n", []string{"'x+':string", "+:operator"}},
 	} {
-		tokens := describe(tt.text, Tokens(parser.Parse(tt.text, tt.dialect), nil, nil))
+		tokens := describe(tt.text, Tokens(parser.Parse(tt.text, tt.dialect), nil, nil, nil))
 		from := slices.Index(tokens, "=~:operator")
 		if from < 0 {
 			t.Fatalf("%s: no =~ among %v", tt.name, tokens)
@@ -215,7 +216,7 @@ func TestPatternsInZshSubscriptFlagsAreNotNumbers(t *testing.T) {
 	t.Parallel()
 
 	text := "echo ${items[(r)42]}\n"
-	got := strings.Join(describe(text, Tokens(parser.Parse(text, dialect.Zsh), nil, nil)), " ")
+	got := strings.Join(describe(text, Tokens(parser.Parse(text, dialect.Zsh), nil, nil, nil)), " ")
 	if strings.Contains(got, "42:number") {
 		t.Errorf("tokens = %s, want the pattern 42 not to be a number", got)
 	}
@@ -234,7 +235,7 @@ func TestZshAndKsh93KeywordsAreKeywords(t *testing.T) {
 	} {
 		var keywords []string
 		tree := parser.Parse(tc.text, tc.d)
-		for _, tok := range Tokens(tree, nil, nil) {
+		for _, tok := range Tokens(tree, nil, nil, nil) {
 			if TypeNames[tok.Type] == "keyword" {
 				keywords = append(keywords, tc.text[tok.Span.Start:tok.Span.End])
 			}
@@ -251,8 +252,8 @@ func TestTokensUseImports(t *testing.T) {
 	text := "test\necho \"$LIMIT\"\n"
 	tree := parser.Parse(text, dialect.Bash)
 	lib := parser.Import{Name: "lib.sh", Tree: parser.Parse("readonly LIMIT=3\ntest() { :; }\n", dialect.Bash)}
-	without := strings.Join(describe(text, Tokens(tree, nil, nil)), " ")
-	with := strings.Join(describe(text, Tokens(tree, []parser.Import{lib}, nil)), " ")
+	without := strings.Join(describe(text, Tokens(tree, nil, nil, nil)), " ")
+	with := strings.Join(describe(text, Tokens(tree, []parser.Import{lib}, nil, nil)), " ")
 	if want := "test:function+defaultLibrary"; !strings.Contains(without, want) {
 		t.Errorf("tokens without imports = %s, want %s", without, want)
 	}
@@ -364,7 +365,7 @@ func TestPatternTokens(t *testing.T) {
 	}
 	for _, tt := range tests {
 		var got []string
-		for _, d := range describe(tt.text, Tokens(parser.Parse(tt.text, tt.dialect), nil, nil)) {
+		for _, d := range describe(tt.text, Tokens(parser.Parse(tt.text, tt.dialect), nil, nil, nil)) {
 			if strings.HasSuffix(d, ":operator") || strings.HasSuffix(d, ":regexp") || strings.HasSuffix(d, ":property") || strings.HasPrefix(d, "(#") || strings.HasPrefix(d, "~(") {
 				got = append(got, d)
 			}
@@ -372,5 +373,21 @@ func TestPatternTokens(t *testing.T) {
 		if strings.Join(got, "\n") != strings.Join(tt.want, "\n") {
 			t.Errorf("%q tokens:\n%s\nwant:\n%s", tt.text, strings.Join(got, "\n"), strings.Join(tt.want, "\n"))
 		}
+	}
+}
+
+func TestPatternTokensReadTheOptionsOfSourcedFiles(t *testing.T) {
+	t.Parallel()
+
+	text := "source ./lib.zsh\nprint *(.N)\n"
+	tree := parser.Parse(text, dialect.Zsh)
+	lib := shelloptions.EffectOf(parser.Parse("setopt no_bare_glob_qual\n", dialect.Zsh))
+	without := strings.Join(describe(text, Tokens(tree, nil, nil, nil)), " ")
+	with := strings.Join(describe(text, Tokens(tree, nil, map[parser.Span]shelloptions.Effect{tree.Commands[0].Span: lib}, nil)), " ")
+	if !strings.Contains(without, "(.N):property") {
+		t.Errorf("tokens without the sourced file = %s, want (.N) as a glob qualifier", without)
+	}
+	if strings.Contains(with, "(.N):property") {
+		t.Errorf("tokens after sourcing a file that runs setopt no_bare_glob_qual = %s, want (.N) not a glob qualifier", with)
 	}
 }

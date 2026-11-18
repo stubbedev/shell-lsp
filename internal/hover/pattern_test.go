@@ -6,6 +6,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/shelloptions"
 )
 
 func TestHoverPatterns(t *testing.T) {
@@ -266,5 +267,21 @@ func TestHoverPlainArgumentsAreNotPatterns(t *testing.T) {
 		if strings.Contains(got.Markdown, "**Pattern**") {
 			t.Errorf("%q: hover explains a pattern:\n%s", tc.src, got.Markdown)
 		}
+	}
+}
+
+func TestHoverPatternsReadTheOptionsOfSourcedFiles(t *testing.T) {
+	t.Parallel()
+
+	src := "source ./lib.zsh\nprint ${line//(#b)(*)/x}\n"
+	tree := parser.Parse(src, dialect.Zsh)
+	lib := shelloptions.EffectOf(parser.Parse("setopt extendedglob\n", dialect.Zsh))
+	sourced := map[parser.Span]shelloptions.Effect{tree.Commands[0].Span: lib}
+	got, _, err := Hover(t.Context(), Input{Tree: tree, Sourced: sourced, Offset: strings.Index(src, "(#b)")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got.Markdown, "**Pattern**") || strings.Contains(got.Markdown, "needs `setopt extendedglob`") {
+		t.Errorf("hover after sourcing a file that runs setopt extendedglob:\n%s", got.Markdown)
 	}
 }

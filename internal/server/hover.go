@@ -68,7 +68,7 @@ func (s *Server) shellHover(ctx context.Context, whole, variant *workspace.File,
 		return hover.Result{Markdown: h.Markdown, Span: h.Span}, true, nil
 	}
 	return hover.Hover(ctx, hover.Input{
-		Tree: variant.Tree, Imports: s.imports(variant), Offset: offset, Commands: s.commandDocs,
+		Tree: variant.Tree, Imports: s.imports(variant), Sourced: s.sourcedOptions(variant), Offset: offset, Commands: s.commandDocs,
 		Lint: s.lintOf(whole, settings, generation),
 	})
 }

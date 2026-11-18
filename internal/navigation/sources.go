@@ -141,6 +141,16 @@ func Closure(file *workspace.File, env Env) ([]*workspace.File, bool) {
 	return chain, complete && len(queue) == 0
 }
 
+func SourcedOptions(file *workspace.File, env Env) map[parser.Span]shelloptions.Effect {
+	options := map[parser.Span]shelloptions.Effect{}
+	for _, ref := range Sources(file, env) {
+		if ref.Target != nil {
+			options[ref.Command.Span] = OptionsOf(ref.Target, env)
+		}
+	}
+	return options
+}
+
 func OptionsOf(file *workspace.File, env Env) shelloptions.Effect {
 	visited := map[string]bool{file.Path: true}
 	queue := []*workspace.File{file}

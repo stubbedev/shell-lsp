@@ -294,3 +294,20 @@ func TestOptionsOfALatticeOfSourcesReadEachFileOnce(t *testing.T) {
 		t.Errorf("options after sourcing the top of a %d-level lattice = %+v, want Pipefail from its last level", levels, got)
 	}
 }
+
+func TestSourcedOptionsKeyEachFollowedSourceByItsCommand(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, map[string]string{
+		"main.zsh": "source ./lib.zsh\nsource ./missing.zsh\necho out\n",
+		"lib.zsh":  "setopt extended_glob\n",
+	})
+	main := f.load(t, "main.zsh")
+	sourced := SourcedOptions(main, f.env)
+	if len(sourced) != 1 {
+		t.Fatalf("SourcedOptions = %v, want only the source of lib.zsh, which resolves", sourced)
+	}
+	if got := shelloptions.Scan(main.Tree, sourced).At(strings.Index(main.Tree.Text(), "out")); !got.ExtendedGlob {
+		t.Errorf("options after sourcing lib.zsh = %+v, want ExtendedGlob", got)
+	}
+}

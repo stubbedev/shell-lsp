@@ -160,7 +160,7 @@ func (s *Server) placedTokens(snap *snapshot) []placedToken {
 
 func (s *Server) semanticTokens(file *workspace.File) []semantic.Token {
 	return workspace.Memo(file, "semantic.tokens", s.workspace.Generation(), func() []semantic.Token {
-		return semantic.Tokens(file.Tree, s.imports(file), embeddedPrograms(file))
+		return semantic.Tokens(file.Tree, s.imports(file), s.sourcedOptions(file), embeddedPrograms(file))
 	})
 }
 

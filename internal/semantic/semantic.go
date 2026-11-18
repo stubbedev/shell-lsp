@@ -85,8 +85,8 @@ type Token struct {
 	Modifiers Modifier
 }
 
-func Tokens(tree *parser.Tree, imports []parser.Import, programs []embedded.Program) []Token {
-	g := generator{tree: tree, imports: imports, text: tree.Text()}
+func Tokens(tree *parser.Tree, imports []parser.Import, sourced map[parser.Span]shelloptions.Effect, programs []embedded.Program) []Token {
+	g := generator{tree: tree, imports: imports, options: shelloptions.Scan(tree, sourced), text: tree.Text()}
 	g.tokens = make([]Token, 0, 2*(len(tree.Comments)+len(tree.Keywords)+len(tree.Definitions)+len(tree.References)+2*len(tree.Commands))+embeddedTokens(programs))
 	g.index()
 	g.walk()
@@ -98,6 +98,7 @@ func Tokens(tree *parser.Tree, imports []parser.Import, programs []embedded.Prog
 type generator struct {
 	tree    *parser.Tree
 	imports []parser.Import
+	options shelloptions.PerShell
 	text    string
 	tokens  []Token
 }
@@ -278,7 +279,7 @@ func (g *generator) walk() {
 
 func (g *generator) patterns() {
 	var regex []Token
-	for _, site := range glob.For(g.tree, shelloptions.Scan(g.tree, nil)).All() {
+	for _, site := range glob.For(g.tree, g.options).All() {
 		from := len(g.tokens)
 		glob.Walk(site.Pattern.Root, g.patternNode)
 		if site.Role == glob.RoleRegex {

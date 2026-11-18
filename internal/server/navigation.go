@@ -16,6 +16,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/navigation"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/shellcheckrc"
+	"github.com/stubbedev/shell-lsp/internal/shelloptions"
 	"github.com/stubbedev/shell-lsp/internal/statixconfig"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
@@ -195,4 +196,8 @@ func (s *Server) candidates(docs *docstore.View, skipped func(path string) bool)
 
 func (s *Server) imports(file *workspace.File) []parser.Import {
 	return navigation.Imports(file, s.navigationEnv())
+}
+
+func (s *Server) sourcedOptions(file *workspace.File) map[parser.Span]shelloptions.Effect {
+	return navigation.SourcedOptions(file, s.navigationEnv())
 }
