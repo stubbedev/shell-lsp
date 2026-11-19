@@ -87,7 +87,6 @@ func Quote(s string, lang LangVariant) (string, error) {
 		offs += size
 	}
 	if lang.in(LangZsh) && strings.HasSuffix(s, "}") {
-		// zsh reads an unquoted } that ends a word as a closing brace.
 		shellChars = true
 	}
 	if !shellChars && !nonPrintable && !IsKeyword(s) {
