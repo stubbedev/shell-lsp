@@ -323,3 +323,21 @@ func TestEnclosing(t *testing.T) {
 		t.Errorf("Enclosing = %q, want %q", got, want)
 	}
 }
+
+func TestSubstitutedFollowsMakeSubstitutionReferences(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct{ value, from, to, want string }{
+		{"", ".c", ".o", ""},
+		{"a.c  b.c\tc.h", ".c", ".o", "a.o b.o c.h"},
+		{"x.c", ".c", "", "x"},
+		{"src/a.c lib/b.c", "src/%.c", "out/%.o", "out/a.o lib/b.c"},
+		{"a.c", "%.c", "fixed", "fixed"},
+		{"a.c", ".c", ".%.o", "a.%.o"},
+		{".c", ".c", ".o", ".o"},
+	} {
+		if got := substituted(tc.value, tc.from, tc.to); got != tc.want {
+			t.Errorf("$(V:%s=%s) with V = %q is %q, want %q", tc.from, tc.to, tc.value, got, tc.want)
+		}
+	}
+}

@@ -402,6 +402,23 @@ $(OBJS): %.o: %.c
 	@$(CC) -o $@ $^
 CC = $(CC -O2
 a.c b.c: ; @:
+-- rule-targets-from-a-substitution-of-an-unset-flags-variable --
+OBJS ?= $(CFLAGS:.c=.o)
+$(OBJS): %.o: %.c
+	@$(CC) $(CFLAGS) -o $@ $^
+CC = $(CC -O2
+-- rule-targets-from-a-suffix-substitution --
+SRCS = a.c b.c
+$(SRCS:.c=.o): %.o: %.c
+	@$(CC) -o $@ $^
+CC = $(CC -O2
+a.c b.c: ; @:
+-- rule-targets-from-a-pattern-substitution --
+SRCS = src/a.c
+$(SRCS:src/%.c=out/%.o): out/%.o: src/%.c
+	@$(CC) -o $@ $^
+CC = $(CC -O2
+src/a.c: ; @:
 -- rule-with-known-computed-targets --
 OBJS = a.o
 CC = $(CC -O2

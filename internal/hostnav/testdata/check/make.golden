@@ -264,6 +264,18 @@ accepted
 rejected 5:1 unterminated variable reference
 5:6 SL6012 error this variable reference is not closed on the same logical line; make fails when it expands `CC`
 5:8 SL6010 warning unknown function `CC`
+-- rule-targets-from-a-substitution-of-an-unset-flags-variable --
+accepted
+4:6 SL6015 warning this variable reference is not closed on the same logical line; make fails when it expands `CC`
+4:8 SL6010 warning unknown function `CC`
+-- rule-targets-from-a-suffix-substitution --
+rejected 4:1 unterminated variable reference
+4:6 SL6012 error this variable reference is not closed on the same logical line; make fails when it expands `CC`
+4:8 SL6010 warning unknown function `CC`
+-- rule-targets-from-a-pattern-substitution --
+rejected 4:1 unterminated variable reference
+4:6 SL6012 error this variable reference is not closed on the same logical line; make fails when it expands `CC`
+4:8 SL6010 warning unknown function `CC`
 -- rule-with-known-computed-targets --
 rejected 2:1 unterminated variable reference
 2:6 SL6012 error this variable reference is not closed on the same logical line; make fails when it expands `CC`

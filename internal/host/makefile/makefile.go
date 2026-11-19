@@ -515,6 +515,9 @@ func (p *reader) constant(n Node) (string, bool) {
 }
 
 func (p *reader) constantBefore(n Node, before int, expanding []expansion) (string, bool) {
+	if n.Kind == NodeSubstitution {
+		return p.substitutionBefore(n, before, expanding)
+	}
 	name, ok := p.resolvedName(n.Name)
 	if n.Kind != NodeReference || n.Unbalanced || !ok || n.Braced && strings.ContainsAny(name, "(){}") {
 		return "", false
@@ -568,6 +571,42 @@ func (p *reader) constantBefore(n Node, before int, expanding []expansion) (stri
 func defaulted(name string) bool {
 	_, builtin := Builtins.Lookup(model.KindVariable, name)
 	return builtin && !automatic(name) && !slices.Contains(unsetByDefault, name)
+}
+
+func (p *reader) substitutionBefore(n Node, before int, expanding []expansion) (string, bool) {
+	value, ok := p.constantBefore(Node{Kind: NodeReference, Span: n.Span, Name: n.Name, Braced: n.Braced}, before, expanding)
+	if !ok {
+		return "", false
+	}
+	from, ok := p.constantTextBefore(n.Args[0], before, expanding)
+	if !ok {
+		return "", false
+	}
+	to, ok := p.constantTextBefore(n.Args[1], before, expanding)
+	if !ok || strings.ContainsRune(from, '\\') || strings.ContainsRune(to, '\\') {
+		return "", false
+	}
+	return substituted(value, from, to), true
+}
+
+func substituted(value, from, to string) string {
+	if !strings.Contains(from, "%") {
+		from, to = "%"+from, "%"+to
+	}
+	prefix, suffix, _ := strings.Cut(from, "%")
+	words := strings.FieldsFunc(value, func(r rune) bool { return strings.ContainsRune(whitespace+"\n", r) })
+	for i, w := range words {
+		if len(w) < len(prefix)+len(suffix) || !strings.HasPrefix(w, prefix) || !strings.HasSuffix(w, suffix) {
+			continue
+		}
+		stem := w[len(prefix) : len(w)-len(suffix)]
+		if head, tail, ok := strings.Cut(to, "%"); ok {
+			words[i] = head + stem + tail
+		} else {
+			words[i] = to
+		}
+	}
+	return strings.Join(words, " ")
 }
 
 func (p *reader) assignedText(a *Assignment, immediate bool, before int, expanding []expansion) (string, bool) {
