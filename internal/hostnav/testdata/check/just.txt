@@ -465,3 +465,18 @@ ci: lint
 alias l := lint
 build:
     echo
+-- call-with-a-space-before-its-arguments --
+x := uppercase ("a")
+build:
+    echo {{ x }} {{ lowercase (x) }}
+-- call-split-by-a-newline-in-an-interpolation --
+build:
+    echo {{ uppercase
+    ("a") }}
+-- undefined-function-split-by-a-newline-in-an-interpolation --
+A:
+ {{A
+()}}
+-- newline-ends-an-assignment-before-parentheses --
+x := uppercase
+("a")

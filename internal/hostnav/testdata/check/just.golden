@@ -317,3 +317,13 @@ accepted
 2:1 SL5024 warning recipe `lint` cannot run: it depends on `tools::check` of the absent module `tools`
 4:1 SL5024 warning recipe `ci` cannot run: it depends on `lint`, which needs the absent module `tools`
 6:7 SL5024 warning alias `l` cannot run: it depends on `lint`, which needs the absent module `tools`
+-- call-with-a-space-before-its-arguments --
+accepted
+-- call-split-by-a-newline-in-an-interpolation --
+accepted
+-- undefined-function-split-by-a-newline-in-an-interpolation --
+rejected 2:4 call to undefined function `A`
+2:4 SL5004 error unknown function `A`
+-- newline-ends-an-assignment-before-parentheses --
+rejected 2:1 expected '@', '[', comment, end of file, end of line, or identifier, but found '('
+2:1 SL5001 error expected a recipe, assignment, alias, setting, import or module, found `(`
