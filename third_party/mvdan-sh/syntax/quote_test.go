@@ -30,6 +30,8 @@ func TestQuote(t *testing.T) {
 		{"mksh16\U00086199", LangMirBSDKorn, &QuoteError{6, quoteErrMksh}},
 		{"\x1b\x1caaa", LangBash, `$'\x1b\x1caaa'`},
 		{"\x1b\x1caaa", LangMirBSDKorn, `$'\x1b\x1c'$'aaa'`},
+		{"\x1b\x1caaa", LangKsh93, `$'\x1b\x1c'$'aaa'`},
+		{"\xe200", LangKsh93, `$'\xe2'$'00'`},
 		{"\xff\x00", LangBash, &QuoteError{1, quoteErrNull}},
 	}
 

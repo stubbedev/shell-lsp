@@ -130,9 +130,9 @@ func Quote(s string, lang LangVariant) (string, error) {
 			case r < utf8.RuneSelf, r == utf8.RuneError && size == 1:
 				// \xXX, fixed at two hexadecimal characters.
 				fmt.Fprintf(&b, "\\x%02x", rem[0])
-				// Unfortunately, mksh allows \x to consume more hex characters.
-				// Ensure that we don't allow it to read more than two.
-				if lang.in(LangMirBSDKorn) {
+				// Unfortunately, mksh and ksh93 allow \x to consume more hex characters.
+				// Ensure that we don't allow them to read more than two.
+				if lang.in(LangMirBSDKorn | LangKsh93) {
 					nextRequoteIfHex = true
 				}
 			case r > utf8.MaxRune:
