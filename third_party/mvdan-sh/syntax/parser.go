@@ -1089,6 +1089,7 @@ func (p *Parser) errPass(err error) {
 		p.r = runeEOF
 		p.w = 1
 		p.tok = _EOF
+		p.hasPushed = false
 	}
 }
 

@@ -609,6 +609,10 @@ var errorCases = []errorCase{
 		langErr("1:1: reached EOF without matching `{` with `}`", LangZsh),
 	),
 	errCase(
+		">0}}})",
+		langErr("1:5: `}` can only be used to close a block", LangZsh),
+	),
+	errCase(
 		"echo a}",
 		langErr("1:7: `}` can only be used to close a block", LangZsh),
 	),
