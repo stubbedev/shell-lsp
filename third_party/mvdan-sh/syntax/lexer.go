@@ -237,6 +237,10 @@ func (p *Parser) nextKeepSpaces() {
 	case paramExpExp:
 		switch r {
 		case '}':
+			if p.zshParamBraces > 0 {
+				p.advanceLitOther(r)
+				break
+			}
 			p.tok = p.paramToken(r)
 		case '`', '"', '$', '\'':
 			p.tok = p.regToken(r)
@@ -281,6 +285,11 @@ runeLoop:
 }
 
 func (p *Parser) next() {
+	if p.hasPushed {
+		p.tok, p.val, p.pos, p.spaced, p.eqlOffs = p.pushed.tok, p.pushed.val, p.pushed.pos, p.pushed.spaced, p.pushed.eqlOffs
+		p.hasPushed = false
+		return
+	}
 	p.eqlOffs = -1
 	if p.r == runeEOF {
 		p.tok = _EOF
@@ -1158,7 +1167,15 @@ loop:
 		case '\'', '"', '`', '$':
 			tok = _Lit
 			break loop
+		case '{':
+			if p.zshNestBraces && p.quote&(paramExpRepl|paramExpExp) != 0 {
+				p.zshParamBraces++
+			}
 		case '}':
+			if p.zshParamBraces > 0 && p.quote&(paramExpRepl|paramExpExp) != 0 {
+				p.zshParamBraces--
+				break
+			}
 			if p.quote&allParamExp != 0 {
 				break loop
 			}

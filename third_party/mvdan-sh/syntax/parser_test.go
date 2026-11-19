@@ -605,6 +605,30 @@ var errorCases = []errorCase{
 		langErr("1:5: `}` can only be used to close a block", LangZsh),
 	),
 	errCase(
+		"{echo hi}x",
+		langErr("1:1: reached EOF without matching `{` with `}`", LangZsh),
+	),
+	errCase(
+		"echo a}",
+		langErr("1:7: `}` can only be used to close a block", LangZsh),
+	),
+	errCase(
+		"echo a};",
+		langErr("1:7: `}` can only be used to close a block", LangZsh),
+	),
+	errCase(
+		"echo $x}",
+		langErr("1:8: `}` can only be used to close a block", LangZsh),
+	),
+	errCase(
+		"echo {a}}",
+		langErr("1:9: `}` can only be used to close a block", LangZsh),
+	),
+	errCase(
+		"echo a}|cat",
+		langErr("1:7: `}` can only be used to close a block", LangZsh),
+	),
+	errCase(
 		"then",
 		langErr("1:1: `then` can only be used in an `if`"),
 	),

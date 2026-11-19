@@ -979,6 +979,55 @@ var fileTests = []fileTestCase{
 		langFile(&CoprocClause{Stmt: stmt(block(litStmt("foo")))}, LangZsh),
 	),
 	fileTest(
+		[]string{"{ echo a}"},
+		printsAs("{ echo a; }"),
+		langFile(block(litStmt("echo", "a")), LangZsh),
+	),
+	fileTest(
+		[]string{"{echo hi}", "{echo hi;}"},
+		printsAs("{ echo hi; }"),
+		langFile(block(litStmt("echo", "hi")), LangZsh),
+	),
+	fileTest(
+		[]string{"true && {echo a; echo b}"},
+		printsAs("true && {\n\techo a\n\techo b\n}"),
+		langFile(&BinaryCmd{Op: AndStmt, X: litStmt("true"), Y: stmt(block(litStmt("echo", "a"), litStmt("echo", "b")))}, LangZsh),
+	),
+	fileTest(
+		[]string{"f() {echo hi}"},
+		printsAs("f() { echo hi; }"),
+		langFile(&FuncDecl{Parens: true, Name: lit("f"), Body: stmt(block(litStmt("echo", "hi")))}, LangZsh),
+	),
+	fileTest(
+		[]string{"{echo hi 2>&1}"},
+		printsAs("{ echo hi 2>&1; }"),
+		langFile(block(&Stmt{Cmd: litCall("echo", "hi"), Redirs: []*Redirect{{Op: DplOut, N: lit("2"), Word: litWord("1")}}}), LangZsh),
+	),
+	fileTest(
+		[]string{"{1..3}"},
+		printsAs("{ 1..3; }"),
+		langFile(block(litStmt("1..3")), LangZsh),
+	),
+	fileTest(
+		[]string{"echo ${x/{f}/Y} ${y:-%F{yellow}} ${z//{Q}/1 2} \"${x/{f}/Y}\""},
+		printsAs("echo ${x/{f}/Y} ${y:-%F{yellow}} ${z//{Q}/1 2} \"${x/{f/}/Y}\""),
+		langFile(stmt(call(
+			litWord("echo"),
+			word(&ParamExp{Param: lit("x"), Repl: &Replace{Orig: litWord("{f}"), With: litWord("Y")}}),
+			word(&ParamExp{Param: lit("y"), Exp: &Expansion{Op: DefaultUnsetOrNull, Word: litWord("%F{yellow}")}}),
+			word(&ParamExp{Param: lit("z"), Repl: &Replace{All: true, Orig: litWord("{Q}"), With: litWord("1 2")}}),
+			word(&DblQuoted{Parts: []WordPart{&ParamExp{Param: lit("x"), Repl: &Replace{Orig: litWord("{f")}}, lit("/Y}")}}),
+		)), LangZsh),
+	),
+	fileTest(
+		[]string{"echo a}b x{a} {a} a}#"},
+		langFile(litStmt("echo", "a}b", "x{a}", "{a}", "a}#"), LangZsh),
+	),
+	fileTest(
+		[]string{"echo {$x}"},
+		langFile(stmt(call(litWord("echo"), word(lit("{"), litParamExp("x"), lit("}")))), LangZsh),
+	),
+	fileTest(
 		[]string{"{ local a; }", "{ local a }"},
 		printsAs("{ local a; }"),
 		langFile(block(stmt(&DeclClause{
@@ -3014,8 +3063,6 @@ var fileTests = []fileTestCase{
 	),
 	fileTest(
 		// TODO: should shfmt lean towards no semicolons in Zsh mode?
-		// Note that zsh seems to support "{foo}" too, but that is undocumented,
-		// and hopefully noone actually relies on that.
 		[]string{"{ foo; }", "{ foo }"},
 		langFile(block(litStmt("foo")), LangZsh),
 	),
@@ -3190,7 +3237,12 @@ var fileTests = []fileTestCase{
 	),
 	fileTest(
 		[]string{`{foo}`},
-		langFile(litWord(`{foo}`)),
+		langFile(litWord(`{foo}`), langResolvedVariants&^LangZsh),
+	),
+	fileTest(
+		[]string{`{foo}`},
+		printsAs("{ foo; }"),
+		langFile(block(litStmt("foo")), LangZsh),
 	),
 	fileTest(
 		[]string{`{"foo"`},
@@ -7029,6 +7081,7 @@ func (c sanityChecker) visit(node Node) bool {
 				// ended by whitespace
 			case regOps(rune(end)):
 				// ended by end character
+			case end == '}':
 			case endOff > 0 && c.src[endOff-1] == ';':
 				// ended by semicolon
 			case endOff > 0 && c.src[endOff-1] == '&':

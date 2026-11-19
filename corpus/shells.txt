@@ -225,8 +225,6 @@ runtime-check bash parser-rejects oils/spec/blog1.test.sh#8
 runtime-check dash parser-rejects oils/spec/blog1.test.sh#8
 runtime-check mksh parser-rejects oils/spec/blog1.test.sh#8
 posix-extension dash shell-rejects oils/spec/blog1.test.sh#9
-parser-gap zsh shell-rejects oils/spec/brace-expansion.test.sh#27
-parser-gap zsh shell-rejects oils/spec/brace-expansion.test.sh#5
 parser-gap zsh parser-rejects oils/spec/bugs.test.sh#10
 other-dialect zsh parser-rejects oils/spec/bugs.test.sh#12
 other-dialect mksh parser-rejects oils/spec/bugs.test.sh#12
@@ -421,7 +419,6 @@ posix-extension dash shell-rejects rvm/scripts/extras/bash_zsh_support/chpwd/loa
 parser-gap zsh parser-rejects spaceship-prompt/tests/package_gradle.test.zsh
 parser-gap zsh parser-rejects spaceship-prompt/tests/package_maven.test.zsh
 parser-gap zsh parser-rejects systemd/shell-completion/zsh/_loginctl
-parser-gap zsh parser-rejects systemd/shell-completion/zsh/_machinectl
 parser-gap zsh parser-rejects systemd/shell-completion/zsh/_systemctl.in
 posix-extension dash shell-rejects termux-packages/scripts/aptly_api.sh
 posix-extension dash shell-rejects termux-packages/scripts/build/configure/termux_step_configure_cmake.sh

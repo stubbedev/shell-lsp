@@ -523,6 +523,12 @@ type Parser struct {
 
 	spaced bool // whether [Parser.tok] has whitespace on its left
 
+	pushed    lexed // the token [Parser.next] hands out before lexing more
+	hasPushed bool
+
+	zshNestBraces  bool // the current [LangZsh] ${...} is unquoted, so braces in it nest
+	zshParamBraces int  // unmatched { in the words of that ${...}
+
 	err     error // lexer/parser error
 	readErr error // got a read error, but bytes left
 	readEOF bool  // [Parser.src] already gave us an [io.EOF] error
@@ -631,6 +637,7 @@ const bufSize = 1 << 10
 func (p *Parser) reset() {
 	p.tok, p.val = illegalTok, ""
 	p.eqlOffs = 0
+	p.hasPushed = false
 	p.bs, p.bsp = nil, 0
 	p.offs, p.line, p.col = p.startOffs, p.startLine, p.startCol
 	p.r, p.w = 0, 0
@@ -1791,6 +1798,12 @@ func (p *Parser) unexpandableParamExp() *Lit {
 // as a literal.
 func (p *Parser) paramExp() *ParamExp {
 	old := p.quote
+	oldNest, oldBraces := p.zshNestBraces, p.zshParamBraces
+	if old&(allParamExp|runeByRune|paramExpSubFlagsArg|paramExpKey) == 0 {
+		p.zshNestBraces = p.lang.in(LangZsh) && old&(dblQuotes|hdocBody|hdocBodyTabs|hdocBodyBlanks) == 0
+	}
+	p.zshParamBraces = 0
+	defer func() { p.zshNestBraces, p.zshParamBraces = oldNest, oldBraces }()
 	p.quote = runeByRune
 	// [ParamExp.Short] means we are parsing $exp rather than ${exp}.
 	if len(p.paramBatch) == 0 {
@@ -2708,6 +2721,7 @@ func (p *Parser) doRedirect(s *Stmt) {
 		}
 	default:
 		r.Word = p.followWordTok(token(r.Op), r.OpPos)
+		p.splitZshCloseBrace(r.Word)
 	}
 }
 
@@ -2887,6 +2901,9 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
 		p.doRedirect(s)
 	}
 	redirsStart := len(s.Redirs)
+	if p.zshGluedBrace() {
+		p.splitGluedBrace()
+	}
 	switch p.tok {
 	case _LitWord:
 		switch p.val {
@@ -4174,6 +4191,126 @@ func (p *Parser) unexpectedInCallExpr(ce *CallExpr) {
 	p.curErr("a command can only contain words and redirects; encountered %#q", p.tok)
 }
 
+type lexed struct {
+	tok     token
+	val     string
+	pos     Pos
+	spaced  bool
+	eqlOffs int
+}
+
+func (p *Parser) push(next lexed) {
+	p.pushed = lexed{tok: p.tok, val: p.val, pos: p.pos, spaced: p.spaced, eqlOffs: p.eqlOffs}
+	p.hasPushed = true
+	p.tok, p.val, p.pos, p.spaced, p.eqlOffs = next.tok, next.val, next.pos, next.spaced, next.eqlOffs
+}
+
+func (p *Parser) zshGluedBrace() bool {
+	return p.lang.in(LangZsh) && (p.tok == _LitWord || p.tok == _Lit) && len(p.val) > 1 && p.val[0] == '{' && p.val != "{}"
+}
+
+func (p *Parser) splitGluedBrace() {
+	lbrace, spaced := p.pos, p.spaced
+	p.val, p.pos, p.spaced = p.val[1:], posAddCol(p.pos, 1), false
+	if p.eqlOffs > 0 {
+		p.eqlOffs--
+	}
+	p.push(lexed{tok: _LitWord, val: "{", pos: lbrace, spaced: spaced, eqlOffs: -1})
+}
+
+func (p *Parser) splitZshCloseBrace(w *Word) {
+	if !p.lang.in(LangZsh) || w == nil || !(p.spaced || p.stopToken() || p.peekRedir()) || !zshClosesBrace(w.Parts) {
+		return
+	}
+	last := w.Parts[len(w.Parts)-1].(*Lit)
+	if len(w.Parts) == 1 && last.Value == "}" {
+		return
+	}
+	last.Value = last.Value[:len(last.Value)-1]
+	last.ValueEnd = posAddCol(last.ValueEnd, -1)
+	if last.Value == "" {
+		w.Parts = w.Parts[:len(w.Parts)-1]
+	}
+	p.push(lexed{tok: _LitWord, val: "}", pos: last.ValueEnd, spaced: true, eqlOffs: -1})
+}
+
+func zshClosesBrace(parts []WordPart) bool {
+	open := 0
+	for i, part := range parts {
+		lit, ok := part.(*Lit)
+		if !ok {
+			open += zshBracesWithin(part)
+			continue
+		}
+		for j := 0; j < len(lit.Value); j++ {
+			switch lit.Value[j] {
+			case '\\':
+				j++
+			case '{':
+				open++
+			case '}':
+				if open > 0 {
+					open--
+				} else if i == len(parts)-1 && j == len(lit.Value)-1 {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func zshBracesWithin(part WordPart) int {
+	pe, ok := part.(*ParamExp)
+	if !ok {
+		return 0
+	}
+	open := 0
+	if pe.NestedParam != nil {
+		open += zshBracesWithin(pe.NestedParam)
+	}
+	for _, w := range []*Word{expansionWord(pe.Exp), replaceWord(pe.Repl, false), replaceWord(pe.Repl, true)} {
+		if w == nil {
+			continue
+		}
+		for _, part := range w.Parts {
+			lit, ok := part.(*Lit)
+			if !ok {
+				open += zshBracesWithin(part)
+				continue
+			}
+			for j := 0; j < len(lit.Value); j++ {
+				switch lit.Value[j] {
+				case '\\':
+					j++
+				case '{':
+					open++
+				case '}':
+					open--
+				}
+			}
+		}
+	}
+	return max(open, 0)
+}
+
+func expansionWord(e *Expansion) *Word {
+	if e == nil {
+		return nil
+	}
+	return e.Word
+}
+
+func replaceWord(r *Replace, with bool) *Word {
+	switch {
+	case r == nil:
+		return nil
+	case with:
+		return r.With
+	}
+	return r.Orig
+}
+
 func (p *Parser) callExpr(s *Stmt, w *Word, assign bool) {
 	ce := p.call(w)
 	redirsStart := len(s.Redirs)
@@ -4183,8 +4320,12 @@ func (p *Parser) callExpr(s *Stmt, w *Word, assign bool) {
 	if assign {
 		ce.Assigns = append(ce.Assigns, p.getAssign(true))
 	}
+	checked := 0
 loop:
 	for {
+		for ; checked < len(ce.Args); checked++ {
+			p.splitZshCloseBrace(ce.Args[checked])
+		}
 		switch p.tok {
 		case _EOF, _Newl, semicolon, and, or, andAnd, orOr, orAnd, andPipe, andBang,
 			dblSemicolon, semiAnd, dblSemiAnd, semiOr:
