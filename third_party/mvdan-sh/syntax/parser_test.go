@@ -21,6 +21,7 @@ import (
 	"github.com/go-quicktest/qt"
 	"github.com/google/go-cmp/cmp"
 
+	"github.com/stubbedev/shell-lsp/internal/referencetest"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/internal"
 )
 
@@ -247,45 +248,33 @@ type externalShell struct {
 	require func(testing.TB)
 }
 
-// requireShells can be set to make sure that no external shell tests
-// are being skipped due to a misalignment in installed versions.
-var requireShells = os.Getenv("REQUIRE_SHELLS") == "1"
-
-func skipExternal(tb testing.TB, message string) {
-	if requireShells {
-		tb.Fatal(message)
-	} else {
-		tb.Skip(message)
-	}
-}
-
 // Note that externalShells is a map, and not an array,
 // because [LangVariant.index] is not a constant expression.
 // This seems fine; this table is only for the sake of testing.
 var externalShells = map[LangVariant]externalShell{
 	LangBash: {"bash", func(tb testing.TB) {
 		if !onceHasBash53() {
-			skipExternal(tb, "bash 5.2 required to run")
+			referencetest.Unavailable(tb, "bash 5.3 required to run")
 		}
 	}},
 	LangPOSIX: {"dash", func(tb testing.TB) {
 		if !onceHasDash059() {
-			skipExternal(tb, "dash 0.5.9+ required to run")
+			referencetest.Unavailable(tb, "dash 0.5.9+ required to run")
 		}
 	}},
 	LangMirBSDKorn: {"mksh", func(tb testing.TB) {
 		if !onceHasMksh59() {
-			skipExternal(tb, "mksh 59 required to run")
+			referencetest.Unavailable(tb, "mksh 59 required to run")
 		}
 	}},
 	LangZsh: {"zsh", func(tb testing.TB) {
 		if !onceHasZsh59() {
-			skipExternal(tb, "zsh 5.9 required to run")
+			referencetest.Unavailable(tb, "zsh 5.9 required to run")
 		}
 	}},
 	LangKsh93: {"ksh", func(tb testing.TB) {
 		if !onceHasKsh93um() {
-			skipExternal(tb, "ksh 93u+m required to run")
+			referencetest.Unavailable(tb, "ksh 93u+m required to run")
 		}
 	}},
 }

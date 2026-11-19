@@ -8,6 +8,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/stubbedev/shell-lsp/internal/referencetest"
 )
 
 type Shell struct {
@@ -35,11 +37,7 @@ func (s Shell) Require(t *testing.T) {
 	if s.available() {
 		return
 	}
-	message := s.Name + " with " + s.Version + " is not installed"
-	if os.Getenv("REQUIRE_SHELLS") == "1" {
-		t.Fatal(message)
-	}
-	t.Skip(message)
+	referencetest.Unavailable(t, s.Name+" with "+s.Version+" is not installed")
 }
 
 const (

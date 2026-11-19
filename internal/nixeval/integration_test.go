@@ -20,6 +20,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+
+	"github.com/stubbedev/shell-lsp/internal/referencetest"
 )
 
 const fixtureNixpkgs = `{
@@ -134,7 +136,7 @@ func realClient(t *testing.T) *Client {
 func requireNix(t *testing.T) {
 	t.Helper()
 	if _, err := exec.LookPath(nixProgram); err != nil {
-		t.Skip("nix is not installed; the evaluator features need it")
+		referencetest.Unavailable(t, "nix is not installed; the evaluator features need it")
 	}
 	out, err := nixVersion(t.Context())
 	if err != nil {

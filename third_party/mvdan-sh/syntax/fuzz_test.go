@@ -10,11 +10,13 @@ import (
 	"testing"
 
 	"github.com/go-quicktest/qt"
+
+	"github.com/stubbedev/shell-lsp/internal/referencetest"
 )
 
 func FuzzQuote(f *testing.F) {
 	if _, err := exec.LookPath("bash"); err != nil {
-		f.Skipf("requires bash to verify quoted strings")
+		referencetest.Unavailable(f, "requires bash to verify quoted strings")
 	}
 
 	// Keep in sync with ExampleQuote.

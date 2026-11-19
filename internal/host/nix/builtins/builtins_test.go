@@ -2,10 +2,13 @@ package builtins
 
 import (
 	"encoding/json"
+	"fmt"
 	"os/exec"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/stubbedev/shell-lsp/internal/referencetest"
 )
 
 const (
@@ -148,7 +151,7 @@ func requireNix(t *testing.T) {
 	t.Helper()
 	for _, binary := range []string{nixBinary, nixInstantiate} {
 		if _, err := exec.LookPath(binary); err != nil {
-			t.Skipf("comparing with nix needs %s on PATH: %v", binary, err)
+			referencetest.Unavailable(t, fmt.Sprintf("comparing with nix needs %s on PATH: %v", binary, err))
 		}
 	}
 }

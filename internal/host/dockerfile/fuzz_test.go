@@ -57,8 +57,8 @@ func FuzzRealisticParsesAgreeWithBuildKit(f *testing.F) {
 	for _, seed := range []string{"", "\x01\x02\x03", "\x02\x01\x04\x05\x06\x07", "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d"} {
 		f.Add([]byte(seed))
 	}
+	hosttest.LiveTool(f, "dockerfile-oracle", hosttest.DockerfileVersion)
 	f.Fuzz(func(t *testing.T, choices []byte) {
-		hosttest.LiveTool(t, "dockerfile-oracle", hosttest.DockerfileVersion)
 		text := hosttest.GenerateDockerfile(choices)
 		path := filepath.Join(t.TempDir(), "Dockerfile")
 		if err := os.WriteFile(path, []byte(text), 0o600); err != nil {

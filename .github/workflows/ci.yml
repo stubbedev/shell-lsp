@@ -147,6 +147,6 @@ jobs:
       - name: Test against the reference tools of the dev shell
         run: nix develop --command go test -skip '^TestBudgets$' ./...
         env:
-          REQUIRE_SHELLS: "1"
+          REQUIRE_REFERENCES: "1"
       - name: Hold the time budgets on a runner with no shells running beside them
         run: nix develop --command go test -run '^TestBudgets$' ./internal/perf

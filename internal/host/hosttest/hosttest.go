@@ -17,6 +17,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/host/oracle"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/referencetest"
 )
 
 type Case struct {
@@ -170,20 +171,20 @@ func RequireTool(t *testing.T, name, want string) {
 	}
 }
 
-func LiveTool(t *testing.T, name, want string) {
-	t.Helper()
-	got, err := toolVersion(t, name)
+func LiveTool(tb testing.TB, name, want string) {
+	tb.Helper()
+	got, err := toolVersion(tb, name)
 	if err != nil {
-		t.Skipf("comparing with the live reference needs %s on PATH: %v", name, err)
+		referencetest.Unavailable(tb, fmt.Sprintf("comparing with the live reference needs %s on PATH: %v", name, err))
 	}
 	if got != want {
-		t.Skipf("comparing with the live reference needs %s, but %s is installed", want, got)
+		referencetest.Unavailable(tb, fmt.Sprintf("comparing with the live reference needs %s, but %s is installed", want, got))
 	}
 }
 
-func toolVersion(t *testing.T, name string) (string, error) {
-	t.Helper()
-	out, err := exec.CommandContext(t.Context(), name, "--version").Output()
+func toolVersion(tb testing.TB, name string) (string, error) {
+	tb.Helper()
+	out, err := exec.CommandContext(tb.Context(), name, "--version").Output()
 	if err != nil {
 		return "", err
 	}

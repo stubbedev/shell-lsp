@@ -1,12 +1,15 @@
 package syntax
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/stubbedev/shell-lsp/internal/referencetest"
 )
 
 const (
@@ -73,10 +76,10 @@ func nixParse(t testing.TB, src string) (string, string, bool) {
 func requireNix(t testing.TB) {
 	t.Helper()
 	if _, err := exec.LookPath(nixBinary); err != nil {
-		t.Skipf("comparing with nix needs %s on PATH: %v", nixBinary, err)
+		referencetest.Unavailable(t, fmt.Sprintf("comparing with nix needs %s on PATH: %v", nixBinary, err))
 	}
 	if _, stderr, ok := nixParse(t, "1"); !ok {
-		t.Skipf("%s cannot parse here: %s", nixBinary, stderr)
+		referencetest.Unavailable(t, fmt.Sprintf("%s cannot parse here: %s", nixBinary, stderr))
 	}
 }
 
@@ -559,8 +562,8 @@ func FuzzMatchesNix(f *testing.F) {
 	for _, seed := range []string{"x", "x + y", "{ a = 1", "./a/", "x: x", "''${x}''"} {
 		f.Add(seed)
 	}
+	requireNix(f)
 	f.Fuzz(func(t *testing.T, src string) {
-		requireNix(t)
 		if len(src) > fuzzInputLimit {
 			t.Skip("inputs over the limit say nothing the smaller ones do not")
 		}

@@ -31,8 +31,8 @@ func skipLoneCarriageReturns(t *testing.T, text string) {
 
 func FuzzJustChecksAgreeWithJust(f *testing.F) {
 	checkSeeds(f, "just.txt")
+	hosttest.LiveTool(f, "just", hosttest.JustVersion)
 	f.Fuzz(func(t *testing.T, text string) {
-		hosttest.LiveTool(t, "just", hosttest.JustVersion)
 		skipLoneCarriageReturns(t, text)
 		hosttest.Agree(t, docstore.NormalizeCanonical(text), hosttest.JustVerdict(t, text), findingsAlone(t, "justfile")(text))
 	})
@@ -42,8 +42,8 @@ func FuzzRealisticMakefilesAgreeWithMake(f *testing.F) {
 	for _, seed := range []string{"", "\x00\x03\x01\x05", "\x03\x00\x02\x03\x01\x0b\x01", "\x09\x01\x0a\x00\x04\x0b\x06"} {
 		f.Add([]byte(seed))
 	}
+	hosttest.LiveTool(f, "make", hosttest.MakeVersion)
 	f.Fuzz(func(t *testing.T, choices []byte) {
-		hosttest.LiveTool(t, "make", hosttest.MakeVersion)
 		text := hosttest.GenerateMakefile(choices)
 		if strings.Contains(text, "export") && slices.ContainsFunc(makefile.Parse(text).Rules, func(r *makefile.Rule) bool { return len(r.Recipe) > 0 }) {
 			t.Skip("make expands exported variables only when it executes a recipe, which the dry run the oracle uses never does")
@@ -140,8 +140,8 @@ func FuzzRealisticDockerfilesAgreeWithBuildKit(f *testing.F) {
 	for _, seed := range []string{"", "\x01\x02\x03", "\x02\x01\x04\x05\x06\x07", "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d"} {
 		f.Add([]byte(seed))
 	}
+	hosttest.LiveTool(f, "dockerfile-oracle", hosttest.DockerfileVersion)
 	f.Fuzz(func(t *testing.T, choices []byte) {
-		hosttest.LiveTool(t, "dockerfile-oracle", hosttest.DockerfileVersion)
 		text := hosttest.GenerateDockerfile(choices)
 		v, checks := buildkitVerdict(t, text)
 		findings := findingsAlone(t, "Dockerfile")(text)
