@@ -64,6 +64,7 @@ jobs:
       TARGET: ${{ matrix.target }}
       FUZZTIME: ${{ inputs.fuzztime || '5m' }}
       GOMEMLIMIT: 3GiB
+      REQUIRE_REFERENCES: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -71,7 +72,11 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4.0.0
+      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: stubbedev/xilo@v2
+        with:
+          url: https://xilos.dev
+          cache: stubbedev/main
       - id: corpus
         run: echo "dir=$(go env GOCACHE)/fuzz/$PACKAGE/$TARGET" >>"$GITHUB_OUTPUT"
       - id: restore
@@ -81,7 +86,7 @@ jobs:
           key: fuzz-${{ matrix.target }}-${{ matrix.package }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: fuzz-${{ matrix.target }}-${{ matrix.package }}-
       - id: fuzz
-        run: just fuzz "$PACKAGE" "$TARGET" "$FUZZTIME"
+        run: nix develop .#fuzz --command just fuzz "$PACKAGE" "$TARGET" "$FUZZTIME"
       - id: save
         if: always() && steps.restore.outcome == 'success'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

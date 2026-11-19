@@ -7,7 +7,29 @@
       self',
       ...
     }:
+    let
+      # The reference oracles the fuzz targets compare against live; the
+      # fuzz workflow runs them from devShells.fuzz.
+      fuzzReferences = [
+        pkgs.just # Task runner, and the reference oracle for the justfile fixtures
+        pkgs.gnumake # Reference oracle for the Makefile fixtures
+        (pkgs.callPackage ../tools/dockerfile-oracle/package.nix { inherit buildGoModule; }) # BuildKit's Dockerfile frontend, the reference oracle for the Dockerfile fixtures
+
+        # Real shells for the conformance tests, FuzzQuote and
+        # `just corpus-shells`, which check that the parser accepts and
+        # rejects what each shell does. The forked parser's TestParseConfirm
+        # wants ksh93u+m, which nixpkgs lacks: its ksh is the abandoned
+        # ksh2020.
+        pkgs.bash
+        pkgs.dash
+        pkgs.zsh
+        (pkgs.callPackage ./ksh93.nix { })
+        pkgs.mksh
+      ];
+    in
     {
+      devShells.fuzz = pkgs.mkShellNoCC { packages = fuzzReferences; };
+
       devShells.default = pkgs.mkShell {
         inputsFrom = [ self'.packages.default ];
 
@@ -18,13 +40,10 @@
             gopls # Go language server
             golangci-lint # Linter behind `just lint`, config in .golangci.yml
             delve # Go debugger
-            just # Task runner, and the reference oracle for the justfile fixtures
             nodejs_24
 
             # Cross-checking the language server under development
             shellcheck # Reference oracle that labels the linter's test fixtures
-            gnumake # Reference oracle for the Makefile fixtures
-            (callPackage ../tools/dockerfile-oracle/package.nix { inherit buildGoModule; }) # BuildKit's Dockerfile frontend, the reference oracle for the Dockerfile fixtures
             hadolint # Reference oracle for the Hadolint-compatible Dockerfile checks
             yq-go # Reference YAML parser for the .hadolint.yaml reader
             nixfmt # Reference formatter for the Nix golden files
@@ -36,15 +55,6 @@
             bats # Real test runner behind the Bats integration test
             bash-language-server # Comparison server behind `just crosscheck`
             neovim # Headless editor smoke test behind `just smoke`
-
-            # Real shells for the conformance tests and `just corpus-shells`,
-            # which check that the parser accepts and rejects what each
-            # shell does. The forked parser's TestParseConfirm wants
-            # ksh93u+m, which nixpkgs lacks: its ksh is the abandoned ksh2020.
-            dash
-            zsh
-            (callPackage ./ksh93.nix { })
-            mksh
 
             # Development workflow
             git # Version control
@@ -61,7 +71,8 @@
               mkdir -p $out/bin
               ln -s ${busybox}/bin/busybox $out/bin/busybox
             '')
-          ];
+          ]
+          ++ fuzzReferences;
 
         shellHook = ''
           # Keep accidental cgo out, and keep the compiler the flake

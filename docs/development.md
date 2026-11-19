@@ -7,7 +7,10 @@ Bats, `crosscheck` and `smoke` tests, dash, zsh, ksh93u+m, mksh and busybox, the
 real shells the parser conformance tests compare with, and the other reference
 tools: GNU Make, GNU sed, Hadolint, `dockerfile-oracle`, nixfmt, nixd, nil, statix,
 deadnix and bubblewrap. Enter it with `direnv allow` on entry, or `nix develop` explicitly. Outside it, the
-tests that compare with a reference tool skip.
+tests that compare with a reference tool skip; with `REQUIRE_REFERENCES=1`, as CI
+sets it, they fail instead, also when the tool is of another version. The fuzz
+targets that compare with just, make, BuildKit or the real shells need only those,
+which `nix develop .#fuzz` provides beside your own Go toolchain.
 
 | Recipe | What it does |
 | --- | --- |
