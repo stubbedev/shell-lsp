@@ -193,20 +193,21 @@ func Qualified(qualifier []string) *RefCall {
 }
 
 type Ref struct {
-	Name     string
-	Span     Span
-	Call     *RefCall
-	Scope    Scope
-	Args     int32
-	Owner    int32
-	Horizon  int32
-	Kind     Kind
-	Edge     bool
-	Soft     bool
-	Declares bool
-	Base     bool
-	Inert    bool
-	Late     bool
+	Name        string
+	Span        Span
+	Call        *RefCall
+	Scope       Scope
+	Args        int32
+	Owner       int32
+	Horizon     int32
+	Kind        Kind
+	Edge        bool
+	Soft        bool
+	Declares    bool
+	Base        bool
+	Inert       bool
+	Late        bool
+	ModuleFirst bool
 }
 
 const NoArgs = -1

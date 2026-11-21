@@ -172,6 +172,7 @@ func (in *indexer) alias(a *Alias) {
 	in.attributes(a.Attributes, i)
 	in.token(a.Name.Span, semantic.TypeFunction, semantic.ModDeclaration)
 	in.path(a.Target, i, 0, true)
+	in.ix.Refs[len(in.ix.Refs)-1].ModuleFirst = true
 }
 
 func (in *indexer) path(p Path, owner, args int, edge bool) {

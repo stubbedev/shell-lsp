@@ -181,6 +181,12 @@ func attributeNames(attrs []any) []any {
 
 const dumpSystem = "linux"
 
+func declaresModule(f *File, target Path) bool {
+	return len(target) == 1 && slices.ContainsFunc(f.Items, func(it Item) bool {
+		return it.Kind == ItemModule && it.Module.Name.Text == target[0].Text
+	})
+}
+
 func unavailable(f *File) map[string]bool {
 	absent := map[string]bool{}
 	for _, it := range f.Items {
@@ -235,7 +241,7 @@ func dump(f *File) map[string]any {
 			_, private := attributeNamed(a.Attributes, "private")
 			assignments[a.Name.Text] = map[string]any{"export": a.Export, "eager": a.Eager, "private": private || strings.HasPrefix(a.Name.Text, "_"), "value": d.sexp(a.Value)}
 		case ItemAlias:
-			if EnabledOn(it.Alias.Attributes, dumpSystem) && !dropped[it.Alias.Name.Text] {
+			if EnabledOn(it.Alias.Attributes, dumpSystem) && !dropped[it.Alias.Name.Text] && !declaresModule(f, it.Alias.Target) {
 				aliases[it.Alias.Name.Text] = it.Alias.Target.String()
 			}
 		case ItemModule:
