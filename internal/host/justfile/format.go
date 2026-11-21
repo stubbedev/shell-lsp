@@ -177,7 +177,7 @@ func (p *printer) elements() ([]element, error) {
 		span := it.Span()
 		el := element{start: span.Start, end: span.End, item: it}
 		for _, a := range attributesOf(*it) {
-			el.start = min(el.start, p.f.lineStart(a.Span.Start))
+			el.start = min(el.start, p.f.lineStart(a.Bracket))
 		}
 		if a, ok := p.unsettledArgument(*it); ok {
 			return nil, fmt.Errorf("%w: `just --fmt` orders the [arg] attributes on line %d by the columns of their `flag`, `help`, `max`, `min` and `multiple` keys, so formatting again would reorder them; order them by those columns yourself", ErrUnformattable, p.f.line(a.Span.Start))

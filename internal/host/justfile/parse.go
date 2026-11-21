@@ -698,10 +698,10 @@ func (p *reader) dispatch(start int, first token, attrs []Attribute, doc string)
 }
 
 func (p *reader) attributes() {
-	p.expect("[")
+	bracket := p.expect("[").span.Start
 	p.depth++
 	for {
-		p.attribute()
+		p.attribute(bracket)
 		if _, ok := p.accept(","); ok {
 			continue
 		}
@@ -712,10 +712,10 @@ func (p *reader) attributes() {
 	p.endOfLine()
 }
 
-func (p *reader) attribute() {
+func (p *reader) attribute(bracket int) {
 	name := p.name()
 	p.known(model.KindAttribute, name, lint.CodeJustUnknownAttribute)
-	p.pending = append(p.pending, Attribute{Name: name, Span: name.Span, Partial: true})
+	p.pending = append(p.pending, Attribute{Name: name, Span: name.Span, Bracket: bracket, Partial: true})
 	attr := &p.pending[len(p.pending)-1]
 	switch t := p.peek(); {
 	case t.kind == tokPunct && t.text == ":":

@@ -92,6 +92,7 @@ func (s *StringLit) Raw() bool { return s.Quote[0] == '\'' }
 type Attribute struct {
 	Name    Name
 	Span    Span
+	Bracket int
 	Args    []AttributeArg
 	Partial bool
 }
