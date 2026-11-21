@@ -40,10 +40,17 @@ func TestSetOptionsMatchRealShells(t *testing.T) {
 			reference.Require(t)
 			letters := map[byte]bool{}
 			for _, o := range shellOptions {
+				patched := d == dialect.Dash && o.debianDash
 				for _, l := range o.letters {
-					letters[l.letter] = true
+					letters[l.letter] = letters[l.letter] || !patched
 				}
 				want := o.dialects.Has(d)
+				if patched {
+					if want {
+						t.Errorf("set -o %s is marked as added only by Debian's dash, but is documented for dash", o.name)
+					}
+					continue
+				}
 				if d == dialect.Dash && o.dashSince != "" {
 					if !want {
 						t.Errorf("set -o %s names the dash release %s that added it, but is not documented for dash", o.name, o.dashSince)
@@ -54,7 +61,10 @@ func TestSetOptionsMatchRealShells(t *testing.T) {
 					t.Errorf("set -o %s documented for %s = %t, but %s accepts it = %t", o.name, d, want, reference.Name, got)
 				}
 			}
-			for letter := range letters {
+			for letter, checked := range letters {
+				if !checked {
+					continue
+				}
 				_, want := SetLetter(letter, d)
 				if got := reference.Succeeds(t, "set -"+string(letter)); got != want {
 					t.Errorf("set -%c documented for %s = %t, but %s accepts it = %t", letter, d, want, reference.Name, got)

@@ -9,11 +9,12 @@ import (
 )
 
 type shellOption struct {
-	name      string
-	dialects  dialect.Set
-	doc       string
-	letters   []optionLetter
-	dashSince string
+	name       string
+	dialects   dialect.Set
+	doc        string
+	letters    []optionLetter
+	dashSince  string
+	debianDash bool
 }
 
 type optionLetter struct {
@@ -50,7 +51,7 @@ var shellOptions = []shellOption{
 	{name: "hashall", dialects: bashOnly, doc: "Remember the location of commands as they are looked up.", letters: []optionLetter{{'h', bashOnly}}},
 	{name: "trackall", dialects: kshOnly, doc: "Remember the location of commands as they are looked up.", letters: []optionLetter{{'h', kshOnly}}},
 	{name: "physical", dialects: bashOnly, doc: "Resolve symbolic links in `cd` and `pwd` instead of keeping the logical path.", letters: []optionLetter{{'P', bashOnly}}},
-	{name: "privileged", dialects: bashOnly, doc: "Do not read startup files or inherit functions from the environment.", letters: []optionLetter{{'p', bashOnly}}},
+	{name: "privileged", dialects: bashOnly, doc: "Do not read startup files or inherit functions from the environment.", letters: []optionLetter{{'p', bashOnly}}, debianDash: true},
 	{name: "braceexpand", dialects: bashKsh, doc: "Enable brace expansion; on by default.", letters: []optionLetter{{'B', bashKsh}}},
 	{name: "histexpand", dialects: bashKsh, doc: "Enable `!` history expansion.", letters: []optionLetter{{'H', bashKsh}}},
 	{name: "keyword", dialects: bashKsh, doc: "Treat assignments anywhere on the command line as environment assignments.", letters: []optionLetter{{'k', bashKsh}}},
