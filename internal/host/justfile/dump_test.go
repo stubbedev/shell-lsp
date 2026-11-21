@@ -395,7 +395,11 @@ func (d dumper) sexp(e *Expr) any {
 		return []any{"variable", e.Name.Text}
 	case ExprCall:
 		if e.Name.Text == "assert" {
-			return append([]any{"assert"}, d.sexps(e.Args)...)
+			args := d.sexps(e.Args)
+			if len(args) == 1 {
+				args = append(args, nil)
+			}
+			return append([]any{"assert"}, args...)
 		}
 		return append([]any{"call", e.Name.Text}, d.sexps(e.Args)...)
 	case ExprBinary:

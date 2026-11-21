@@ -179,10 +179,15 @@ func (c constants) variable(name string) ([]string, bool) {
 	return nil, false
 }
 
+const shellExpanded = "$~"
+
 func (c constants) str(lit *StringLit) (string, bool) {
 	switch lit.Prefix {
 	case 'x':
-		return "", false
+		if strings.ContainsAny(lit.Value, shellExpanded) {
+			return "", false
+		}
+		return lit.Value, true
 	case 'f':
 		return c.format(lit)
 	}

@@ -583,3 +583,27 @@ rejected 5:1 function `greet` first defined on line 4 is redefined on line 5
 accepted
 -- function-shares-names --
 accepted
+-- dependency-named-f-with-a-string --
+accepted
+-- dependency-argument-format-string --
+rejected 2:6 expected '*', backtick, '!', '[', '::', identifier, '(', ')', '/', or string, but found format string
+2:6 SL5001 error expected an expression, found format string
+-- cache-needs-unstable --
+rejected 0:0 cached recipes are currently unstable, invoke `just` with `--unstable`, set the `JUST_UNSTABLE` environment variable, or add `set unstable` to your `justfile` to enable unstable features
+1:2 SL5023 error cached recipes are unstable and need `set unstable`
+-- assert-takes-no-trailing-comma --
+rejected 1:24 expected backtick, '!', '[', identifier, '(', '/', or string, but found ')'
+1:24 SL5001 error expected an expression, found `)`
+-- assert-message-takes-no-trailing-comma --
+rejected 1:28 expected '&&', '!=', '!~', '||', '==', '=~', ')', '+', '++', or '/', but found ','
+1:28 SL5001 error expected `)`, found `,`
+-- assert-without-message --
+accepted
+1:1 SL5014 info variable `x` is never used
+-- call-takes-a-trailing-comma --
+accepted
+1:1 SL5014 info variable `x` is never used
+-- function-attribute-checked-before-its-parameters --
+rejected 3:1 function `greet` has invalid attribute `script`
+3:1 SL5020 error function `greet` has invalid attribute `script`
+3:7 SL5001 error expected a name, found end of file

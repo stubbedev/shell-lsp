@@ -906,3 +906,29 @@ greet := "x"
 uppercase(x) := x
 greet:
     echo {{greet}}
+-- dependency-named-f-with-a-string --
+A: (f"")
+f y:
+    echo {{y}}
+-- dependency-argument-format-string --
+n := "1"
+A: (f"a{{n}}")
+f y:
+    echo {{y}}
+-- cache-needs-unstable --
+[cache]
+[script]
+build:
+    echo built
+-- assert-takes-no-trailing-comma --
+x := assert("a" == "a",)
+-- assert-message-takes-no-trailing-comma --
+x := assert("a" == "a", "m",)
+-- assert-without-message --
+x := assert("a" == "a")
+-- call-takes-a-trailing-comma --
+x := uppercase("a",)
+-- function-attribute-checked-before-its-parameters --
+set unstable
+[script("bash")]
+greet(

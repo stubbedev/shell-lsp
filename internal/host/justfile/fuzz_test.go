@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	gocmp "github.com/google/go-cmp/cmp"
@@ -90,6 +91,22 @@ func FuzzAnalyze(f *testing.F) {
 	})
 }
 
+func settingReadsEnvironment(f *File) bool {
+	for _, it := range f.Items {
+		if it.Kind != ItemSetting || it.Setting.Value == nil {
+			continue
+		}
+		expands := false
+		Walk(it.Setting.Value, func(e *Expr) {
+			expands = expands || e.Kind == ExprString && e.Str.Prefix == 'x' && strings.ContainsAny(e.Str.Value, shellExpanded)
+		})
+		if expands {
+			return true
+		}
+	}
+	return false
+}
+
 func FuzzMatchesJust(f *testing.F) {
 	seeds(f)
 	hosttest.LiveTool(f, "just", hosttest.JustVersion)
@@ -97,6 +114,9 @@ func FuzzMatchesJust(f *testing.F) {
 		a := Analyze(text)
 		if len(a.File.Errors) > 0 || !hosttest.JustVerdict(t, text).Accepted {
 			return
+		}
+		if settingReadsEnvironment(a.File) {
+			t.Skip("a setting's value shell-expands $ or ~, which depends on the environment just runs in")
 		}
 		path := filepath.Join(t.TempDir(), "justfile")
 		if err := os.WriteFile(path, []byte(text), 0o600); err != nil {

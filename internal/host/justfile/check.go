@@ -32,6 +32,9 @@ func (f *File) check() []lint.Finding {
 		if stray.Recipe != nil {
 			c.argAttributes(*stray.Recipe, args)
 		}
+		if stray.Function != nil {
+			c.placement(ItemFunction, "function", *stray.Function, stray.Attributes)
+		}
 	}
 	if c.lists && !c.unstable {
 		s, _ := f.setting("lists")
@@ -402,13 +405,17 @@ func knownAttribute(a Attribute) bool {
 func (c *checker) attributes(it Item) []argAttribute {
 	attrs := attributesOf(it)
 	args := c.attributeSet(attrs)
-	kind, name := c.itemToken(it)
+	label, name := c.itemToken(it)
+	c.placement(it.Kind, label, name, attrs)
+	return args
+}
+
+func (c *checker) placement(kind ItemKind, label string, name Name, attrs []Attribute) {
 	for _, a := range attrs {
-		if knownAttribute(a) && !allowedOn(it.Kind, a.Name.Text) {
-			c.report(lint.CodeJustAttributeArguments, name.Span, "%s `%s` has invalid attribute `%s`", kind, name.Text, a.Name.Text)
+		if knownAttribute(a) && !allowedOn(kind, a.Name.Text) {
+			c.report(lint.CodeJustAttributeArguments, name.Span, "%s `%s` has invalid attribute `%s`", label, name.Text, a.Name.Text)
 		}
 	}
-	return args
 }
 
 func (c *checker) attributeSet(attrs []Attribute) []argAttribute {
@@ -434,6 +441,10 @@ func (c *checker) attribute(a Attribute) (argAttribute, bool) {
 	before := len(c.findings)
 	c.attributeArguments(a)
 	switch a.Name.Text {
+	case "cache":
+		if !c.unstable {
+			c.report(lint.CodeJustNeedsSetting, a.Name.Span, "cached recipes are unstable and need `set unstable`")
+		}
 	case "continue":
 		c.continueSignals(a)
 	case "arg":

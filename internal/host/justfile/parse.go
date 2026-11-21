@@ -45,6 +45,7 @@ type reader struct {
 	file    *File
 	pending []Attribute
 	header  *RecipeHeader
+	defined *Name
 	doc     string
 	failure Span
 	lexing  bool
@@ -272,7 +273,15 @@ func (p *reader) stringRest(start, resumed, open int, lit *StringLit, f format) 
 			if invalid != "" {
 				p.lexError(Span{Start: quoted, End: p.pos}, fmt.Sprintf("`%s` is not a valid escape sequence", invalid))
 			}
-			return token{kind: tokString, span: Span{Start: start, End: p.pos}, str: lit}
+			kind := tokString
+			if f == skippedFormat {
+				if lit.braced() {
+					kind = tokFormat
+				} else {
+					lit.Prefix = 0
+				}
+			}
+			return token{kind: kind, span: Span{Start: start, End: p.pos}, str: lit}
 		case cooked && p.text[i] == '\\' && i+1 < len(p.text):
 			i += 2
 		case f != unformatted && strings.HasPrefix(p.text[i:], escapedOpen):
@@ -306,6 +315,10 @@ func (p *reader) stringRest(start, resumed, open int, lit *StringLit, f format) 
 			i++
 		}
 	}
+}
+
+func (s *StringLit) braced() bool {
+	return slices.ContainsFunc(s.Segments, func(seg Segment) bool { return seg.Kind != FragmentText })
 }
 
 func (p *reader) skipInterpolation() bool {
@@ -598,9 +611,9 @@ func (p *reader) recover(start int, header bool) {
 
 func (p *reader) stray() {
 	if len(p.pending) > 0 {
-		p.file.Stray = append(p.file.Stray, Stray{Attributes: p.pending, Recipe: p.header})
+		p.file.Stray = append(p.file.Stray, Stray{Attributes: p.pending, Recipe: p.header, Function: p.defined})
 	}
-	p.pending, p.header = nil, nil
+	p.pending, p.header, p.defined = nil, nil, nil
 }
 
 func (p *reader) item() {
@@ -872,6 +885,7 @@ func (p *reader) module(start int, attrs []Attribute, doc string) {
 
 func (p *reader) function(start int, attrs []Attribute) {
 	f := &Function{Attributes: attrs, Name: p.name()}
+	p.defined = &f.Name
 	p.expect("(")
 	p.depth++
 	for {
@@ -890,6 +904,7 @@ func (p *reader) function(start int, attrs []Attribute) {
 	f.Body = p.expression()
 	f.Span = Span{Start: start, End: f.Body.Span.End}
 	p.endOfLine()
+	p.defined = nil
 	p.file.Items = append(p.file.Items, Item{Kind: ItemFunction, Function: f})
 }
 
@@ -1250,20 +1265,35 @@ func (p *reader) prefixedString(prefix token) (token, bool) {
 	return s, true
 }
 
+func (p *reader) arguments(e *Expr) {
+	for {
+		if _, ok := p.accept(")"); ok {
+			return
+		}
+		e.Args = append(e.Args, p.expression())
+		if _, ok := p.accept(","); !ok {
+			p.expect(")")
+			return
+		}
+	}
+}
+
+func (p *reader) assertArguments(e *Expr) {
+	e.Args = append(e.Args, p.expression())
+	if _, ok := p.accept(","); ok {
+		e.Args = append(e.Args, p.expression())
+	}
+	p.expect(")")
+}
+
 func (p *reader) call(name Name) *Expr {
 	p.expect("(")
 	p.depth++
 	e := &Expr{Kind: ExprCall, Name: name}
-	for {
-		if _, ok := p.accept(")"); ok {
-			break
-		}
-		e.Args = append(e.Args, p.expression())
-		if _, ok := p.accept(","); ok {
-			continue
-		}
-		p.expect(")")
-		break
+	if name.Text == "assert" {
+		p.assertArguments(e)
+	} else {
+		p.arguments(e)
 	}
 	p.depth--
 	e.Span = Span{Start: name.Span.Start, End: p.pos}
