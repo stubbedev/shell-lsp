@@ -1003,3 +1003,13 @@ a := which('sh')
 b := join_list('x')
 build:
     echo {{a}} {{b}}
+-- alias-to-an-absent-optional-module --
+mod? tools
+alias t := tools
+-- two-starred-arguments-reported-at-the-second --
+set unstable
+set lists
+a: (b *x
+  *y)
+b *args:
+    echo {{args}}

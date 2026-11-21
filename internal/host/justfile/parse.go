@@ -1070,12 +1070,12 @@ func (p *reader) parenDependency() Dependency {
 	p.depth--
 	dep.Span = Span{Start: start, End: p.pos}
 	switch {
+	case len(starred) > 1:
+		p.report(lint.CodeJustDependencyArguments, starred[1].span, "a mapped dependency takes only one starred argument")
 	case dep.Star && len(starred) == 0:
 		p.report(lint.CodeJustDependencyArguments, dep.Span, "a mapped dependency needs a starred argument such as `*items`")
 	case !dep.Star && len(starred) > 0:
 		p.report(lint.CodeJustDependencyArguments, starred[0].span, "a starred argument needs a mapped dependency such as `*(recipe *items)`")
-	case len(starred) > 1:
-		p.report(lint.CodeJustDependencyArguments, starred[1].span, "a mapped dependency takes only one starred argument")
 	}
 	return dep
 }

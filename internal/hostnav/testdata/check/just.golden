@@ -680,3 +680,8 @@ accepted
 rejected 1:6 the `which()` function requires `set lists`
 1:6 SL5023 error the `which()` function needs `set lists`
 2:6 SL5023 error the `join_list()` function needs `set lists`
+-- alias-to-an-absent-optional-module --
+accepted
+-- two-starred-arguments-reported-at-the-second --
+rejected 4:3 mapped dependencies may not have multiple starred arguments
+4:3 SL5006 error a mapped dependency takes only one starred argument
