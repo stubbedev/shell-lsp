@@ -588,3 +588,7 @@ rejected 2:1 Recursive variable 'X' references itself (eventually)
 2:7 SL6007 error variable `X` depends on itself
 -- target-append-without-a-target-assignment-is-deferred --
 accepted
+-- default-compiler-filtered-to-no-targets --
+accepted
+4:6 SL6015 warning this variable reference is not closed on the same logical line; make fails when it expands `CC`
+4:8 SL6010 warning unknown function `CC`

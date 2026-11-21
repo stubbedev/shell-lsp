@@ -88,7 +88,8 @@ func (p *reader) nodeValue(n Node, before int, expanding []expansion) value {
 func (p *reader) referenceValue(n Node, before int, expanding []expansion) value {
 	name, ok := p.resolvedName(n.Name)
 	inherited := slices.Contains(environmentVariables, name)
-	if n.Unbalanced || !ok || n.Braced && strings.ContainsAny(name, "(){}") || defaulted(name) && !inherited {
+	program, known := programDefaults[name]
+	if n.Unbalanced || !ok || n.Braced && strings.ContainsAny(name, "(){}") || defaulted(name) && !inherited && !known {
 		return value{}
 	}
 	self := expansion{name: name, before: before}
@@ -97,8 +98,11 @@ func (p *reader) referenceValue(n Node, before int, expanding []expansion) value
 	}
 	expanding = append(slices.Clip(expanding), self)
 	v, defined, immediate := knownValue(""), false, false
-	if inherited {
+	switch {
+	case inherited:
 		v = value{existing: true}
+	case known:
+		v, defined = knownValue(program), true
 	}
 	declared := func(before int) bool {
 		return slices.ContainsFunc(p.file.Directives, func(d *Directive) bool {
@@ -114,6 +118,7 @@ func (p *reader) referenceValue(n Node, before int, expanding []expansion) value
 			return value{}
 		}
 		switch {
+		case a.Op == "?=" && known:
 		case a.Op == "?=" && slices.Contains(predefined, name):
 			return value{}
 		case a.Op == "?=" && inherited:

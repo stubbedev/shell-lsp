@@ -894,3 +894,8 @@ V := a
 X = $(X)
 all: V += $(X)
 all: ;
+-- default-compiler-filtered-to-no-targets --
+OBJS ?= $(filter %.c,$(CC))
+$(OBJS): %.o: %.c
+	@$(CC) $(CFLAGS) -o $@ $^
+CC = $(CC -O2
