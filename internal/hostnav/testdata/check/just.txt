@@ -320,6 +320,7 @@ a:
 [group: "ci"]
 [script("bash")]
 [env("A", "b")]
+[continue("SIGINT", "SIGHUP", "SIGQUIT")]
 a:
     echo $A
 -- export-param-default --

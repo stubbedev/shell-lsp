@@ -69,7 +69,7 @@ var attributeSpecs = []attributeSpec{
 	{"arg", args(1, model.Variadic), "Configure how a parameter is passed on the command line: `long`, `short`, `value`, `flag`, `multiple`, `help`, `pattern`, `min` and `max`.", []string{positionalArgument, "long", "short"}},
 	{"cache", args(0, model.Variadic), "Skip the recipe when its cached inputs and outputs are unchanged. Unstable.", nil},
 	{"confirm", args(0, 1), "Ask for confirmation before running the recipe, optionally with a custom prompt.", nil},
-	{"continue", args(0, 1), "Keep running when a command is interrupted by one of these signals and then exits successfully.", []string{positionalArgument}},
+	{"continue", args(0, model.Variadic), "Keep running when a command is interrupted by one of these signals and then exits successfully.", []string{positionalArgument}},
 	{"default", args(0, 0), "Make this the module's default recipe.", nil},
 	{"doc", args(0, 1), "Set the documentation shown by `just --list`, or remove it when given no argument.", nil},
 	{"dragonfly", args(0, 0), "Enable the item only on DragonFly BSD.", nil},
