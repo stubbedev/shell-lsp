@@ -121,7 +121,11 @@ func enabledOnly(text string) (string, bool) {
 		for _, a := range it.Attributes() {
 			start = min(start, a.Bracket)
 		}
-		for i := start; i < it.Span().End; i++ {
+		end := it.Span().End
+		for end < len(out) && out[end] != '\n' {
+			end++
+		}
+		for i := start; i < end; i++ {
 			if out[i] != '\n' {
 				out[i] = ' '
 			}
