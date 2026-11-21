@@ -68,7 +68,14 @@ func tokenTrail(t *token, nest int) []item {
 	if t.trail == "" {
 		return nil
 	}
-	return seq(hardSpace, textOf(nest, "# "+t.trail, textTrailingComment), hardLine)
+	return seq(trailNote(t, nest), hardLine)
+}
+
+func trailNote(t *token, nest int) []item {
+	if t.trail == "" {
+		return nil
+	}
+	return seq(hardSpace, textOf(nest, "# "+t.trail, textTrailingComment))
 }
 
 func tokenDoc(t *token, nest int) []item {
@@ -1030,7 +1037,7 @@ func lambdaEndsAbsorbable(l *lambdaExpr) bool {
 
 func bodyOnColonLine(l *lambdaExpr) bool {
 	first := firstToken(l.body)
-	if l.colon.trail != "" || !first.inlinePre() || first.line != l.colon.line {
+	if !first.inlinePre() || first.line != l.colon.line {
 		return false
 	}
 	b, ok := l.body.(*lambdaExpr)
@@ -1554,15 +1561,15 @@ func headedChain(l *lambdaExpr, n int, lead []item) []item {
 		if named {
 			return trialHead(head, priority(group(space, withAbsorbed(w, n))))
 		}
-		return trialHead(head, following, openingPriority(withDoc(w, n)))
+		return trialHead(head, patternSeparator(l), openingPriority(withDoc(w, n)))
 	}
 	if named {
 		return trialHead(head, hardSpace, priority(absorbedBody(l.body, n, true)))
 	}
 	if _, set := l.body.(*setTerm); set {
-		return trialHead(head, following, openingPriority(absorbedBody(l.body, n, false)))
+		return trialHead(head, patternSeparator(l), openingPriority(absorbedBody(l.body, n, false)))
 	}
-	return trialHead(head, following, priority(absorbedBody(l.body, n, false)))
+	return trialHead(head, patternSeparator(l), priority(absorbedBody(l.body, n, false)))
 }
 
 func hugging(lead []item) []item {
@@ -1580,9 +1587,9 @@ func chainLink(l *lambdaExpr, n, depth int) []item {
 	case !ok:
 		return lambdaHead(l, n, depth, nil)
 	case depth == 1 && len(l.colon.pre) == 0:
-		return group(setParamDoc(set, n), tokenDoc(l.colon, n))
+		return seq(group(setParamDoc(set, n), tokenBare(l.colon, n)), trailNote(l.colon, n))
 	}
-	return seq(paramDoc(set, n), tokenDoc(l.colon, n))
+	return seq(paramDoc(set, n), tokenBare(l.colon, n), trailNote(l.colon, n))
 }
 
 func chainSeparator(l, next *lambdaExpr) []item {
@@ -1591,8 +1598,15 @@ func chainSeparator(l, next *lambdaExpr) []item {
 	switch {
 	case named && nextNamed:
 		return hardSpace
-	case nextNamed:
+	case nextNamed && l.colon.trail == "":
 		return space
+	}
+	return patternSeparator(l)
+}
+
+func patternSeparator(l *lambdaExpr) []item {
+	if l.colon.trail != "" {
+		return noteBreak
 	}
 	return following
 }

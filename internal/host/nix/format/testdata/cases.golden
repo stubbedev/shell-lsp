@@ -8765,3 +8765,50 @@ C: { A = 0; }
     A = x111111111111111111111111111111111111111111111111111111111111111111111111111111111;
   }
 )
+-- case-paren-block-comment-after-a-pattern-colon-keeps-a-body-that-broke --
+(
+  { A }: # c
+  { A, A00000000000000000000000000000000000000000000000000000000000000000000000000000000 }: {
+    A = 0;
+  }
+)
+-- case-root-block-comment-after-a-pattern-colon-breaks-the-chain --
+{ A }: # c
+{ A, A0000000000000000000000000000000000000000000000000000000000000000000000 }: { A = 0; }
+-- case-binding-block-comment-between-patterns-opens-the-binding --
+{
+  x =
+    { A, A00000000000000000000000000000000000000000000000000000000000000000000000000000000 }: # c
+    { B }: { A = 0; };
+}
+-- case-paren-block-comment-before-a-name-opens-the-chain --
+(
+  { A }: # c
+  B: { A, A000000000000000000000000000000000000000000000000000000000000 }: { A = 0; }
+)
+-- case-binding-empty-pattern-before-a-name-and-a-blank-line --
+{
+  A =
+    { }:
+    A:
+
+    { };
+}
+-- case-root-alias-pattern-hugs-the-next-pattern --
+{ A, A00000000000000000000000000000000000000000000000000000000000000000000000000000000 }@y: { B }: {
+  A = 0;
+}
+-- case-root-alias-head-hugs-a-wide-pattern --
+{ A }@y: { A, A00000000000000000000000000000000000000000000000000000000000000000000000000000000 }: {
+  A = 0;
+}
+-- case-paren-alias-pattern-breaks-in-the-band --
+(
+  {
+    A,
+    A000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000,
+  }@y:
+  {
+    A = 0;
+  }
+)

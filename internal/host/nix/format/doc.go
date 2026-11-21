@@ -172,7 +172,7 @@ func (a *annotator) pass(items []item, f lookahead) lookahead {
 				f.first++
 				continue
 			}
-			if it.follow {
+			if it.follow && !breaksLine(it) {
 				continue
 			}
 			f.compact, f.first, f.compactHard = 0, 0, false
@@ -383,7 +383,7 @@ func (r *renderer) compact(doc []item, o outcome, register, emit bool) outcome {
 				o = r.blank(o, emit)
 			}
 		case tagGroup:
-			o = r.compact(it.items, o, register && (it.group == groupTransparent || it.trials), emit)
+			o = r.compact(it.items, o, register && unfoldable(*it), emit)
 		}
 	}
 	return o
@@ -462,7 +462,7 @@ func (r *renderer) trialed(g *item, o outcome, emit bool) outcome {
 func (r *renderer) hugBreaks(g *item, i int, hug *outcome) bool {
 	it := &g.items[i]
 	if it.tag != tagGroup {
-		yields := yieldsLine(g, i, &hug.state)
+		yields := it.follow && breaksLine(it) || yieldsLine(g, i, &hug.state)
 		*hug = r.trialFlow(g, i, 0, *hug, false)
 		return yields
 	}
@@ -478,7 +478,7 @@ func hardHead(g *item) bool {
 		case trailsTrial(it):
 		case it.tag == tagGroup && it.hard:
 			return true
-		case it.tag == tagSpacing && hardOrBlank(it) && it.space != spaceHard:
+		case breaksLine(it):
 			return true
 		}
 	}
@@ -489,7 +489,27 @@ func trailsTrial(it *item) bool { return it.tag == tagGroup && it.group == group
 
 func yieldsLine(g *item, i int, st *state) bool {
 	it := &g.items[i]
-	return i > 0 && it.tag == tagSpacing && it.space == spacePlain && !it.follow && st.column+1+int(it.next.first) > lineWidth
+	if i == 0 || it.tag != tagSpacing || it.space != spacePlain || it.follow {
+		return false
+	}
+	return st.column+1+int(it.next.first) > lineWidth || hardBeforeGroup(g.items[i+1:])
+}
+
+func breaksLine(it *item) bool {
+	return it.tag == tagSpacing && (it.space == lineHard || it.space == lineEmpty || it.space == lineCount)
+}
+
+func hardBeforeGroup(items []item) bool {
+	for i := range items {
+		it := &items[i]
+		if it.tag == tagGroup {
+			return false
+		}
+		if breaksLine(it) {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *renderer) trialFlow(g *item, i, opened int, o outcome, emit bool) outcome {
@@ -506,7 +526,7 @@ func (r *renderer) trialFlow(g *item, i, opened int, o outcome, emit bool) outco
 }
 
 func (r *renderer) spaced(it *item, o outcome, emit bool) outcome {
-	if it.follow && !o.state.headOpen {
+	if it.follow && !o.state.headOpen && !breaksLine(it) {
 		if it.space == breakPlain {
 			return o
 		}
@@ -697,17 +717,19 @@ func tailLine(it *item, first int, broken bool) (int, bool) {
 }
 
 func unfolded(doc []item) []item {
-	if !slices.ContainsFunc(doc, transparentGroup) {
+	if !slices.ContainsFunc(doc, unfoldable) {
 		return doc
 	}
 	return appendUnfolded(make([]item, 0, len(doc)), doc)
 }
 
-func transparentGroup(it item) bool { return it.tag == tagGroup && it.group == groupTransparent }
+func unfoldable(it item) bool {
+	return it.tag == tagGroup && (it.group == groupTransparent || it.trials)
+}
 
 func appendUnfolded(out, doc []item) []item {
 	for i := range doc {
-		if transparentGroup(doc[i]) {
+		if unfoldable(doc[i]) {
 			out = appendUnfolded(out, doc[i].items)
 			continue
 		}
@@ -837,6 +859,7 @@ var (
 	plainBrk  = []item{{tag: tagSpacing, space: breakPlain}}
 	space     = []item{{tag: tagSpacing, space: spacePlain}}
 	following = []item{{tag: tagSpacing, space: spacePlain, follow: true}}
+	noteBreak = []item{{tag: tagSpacing, space: lineHard, follow: true}}
 	followBrk = []item{{tag: tagSpacing, space: breakPlain, follow: true}}
 	hardLine  = []item{{tag: tagSpacing, space: lineHard}}
 	emptyLine = []item{{tag: tagSpacing, space: lineEmpty}}
@@ -1000,8 +1023,7 @@ func fixupGroup(out []item, it item) []item {
 	}
 	moved := inner[end:]
 	inner = inner[:end]
-	if len(inner) == 1 && it.group == groupRegular && inner[0].tag == tagGroup && inner[0].group == groupRegular {
-		it.trials = it.trials || inner[0].trials
+	if len(inner) == 1 && it.group == groupRegular && inner[0].tag == tagGroup && inner[0].group == groupRegular && !inner[0].trials {
 		inner = inner[0].items
 	}
 	if len(inner) > 0 {
