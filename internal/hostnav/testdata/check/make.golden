@@ -583,3 +583,8 @@ accepted
 accepted
 2:6 SL6015 warning this variable reference is not closed on the same logical line; make fails when it expands `CC`
 2:8 SL6010 warning unknown function `CC`
+-- target-append-after-a-simple-target-assignment-expands-at-once --
+rejected 2:1 Recursive variable 'X' references itself (eventually)
+2:7 SL6007 error variable `X` depends on itself
+-- target-append-without-a-target-assignment-is-deferred --
+accepted

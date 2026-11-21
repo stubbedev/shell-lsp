@@ -884,3 +884,13 @@ $(OBJS): %.o: %.c ; @echo ${CC}
 OBJS := $(foreach f,,$(f).o)
 CC = $(CC -O2
 $(OBJS): ; @echo $(CC)
+-- target-append-after-a-simple-target-assignment-expands-at-once --
+all: V := a
+X = $(X)
+all: V += $(X)
+all: ;
+-- target-append-without-a-target-assignment-is-deferred --
+V := a
+X = $(X)
+all: V += $(X)
+all: ;

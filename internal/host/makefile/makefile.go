@@ -407,7 +407,7 @@ func (p *reader) directive(start, end int) {
 }
 
 func (p *reader) deferred(first int, a *Assignment) {
-	a.Deferred = slices.Contains(recursiveOps, a.Op) || a.Op == "+=" && (len(a.Targets) > 0 || p.appendsRecursively(a))
+	a.Deferred = slices.Contains(recursiveOps, a.Op) || a.Op == "+=" && p.appendsRecursively(a)
 	if !a.Deferred {
 		return
 	}
@@ -456,9 +456,9 @@ func (p *reader) unterminatedIn(span Span) bool {
 }
 
 func (p *reader) appendsRecursively(a *Assignment) bool {
-	defined, recursive := slices.Contains(predefined, a.Name.Text), true
+	defined, recursive := len(a.Targets) == 0 && slices.Contains(predefined, a.Name.Text), true
 	declares := func(from, to int) bool {
-		return slices.ContainsFunc(p.file.Directives, func(d *Directive) bool {
+		return len(a.Targets) == 0 && slices.ContainsFunc(p.file.Directives, func(d *Directive) bool {
 			return from <= d.Span.Start && d.Span.Start < to && slices.ContainsFunc(d.Names, func(w Word) bool { return w.Text == a.Name.Text })
 		})
 	}
@@ -467,7 +467,7 @@ func (p *reader) appendsRecursively(a *Assignment) bool {
 		if prior == a {
 			break
 		}
-		if prior.Name.Text != a.Name.Text || len(prior.Targets) > 0 && len(prior.Targets) != len(a.Targets) {
+		if prior.Name.Text != a.Name.Text || !sameTargets(prior.Targets, a.Targets) {
 			continue
 		}
 		if !defined && declares(from, prior.Span.Start) {
@@ -485,6 +485,10 @@ func (p *reader) appendsRecursively(a *Assignment) bool {
 		recursive = false
 	}
 	return recursive
+}
+
+func sameTargets(a, b []Word) bool {
+	return slices.EqualFunc(a, b, func(x, y Word) bool { return fileName(x.Text) == fileName(y.Text) })
 }
 
 func (p *reader) convert(first int, kind ErrorKind, why string) {
