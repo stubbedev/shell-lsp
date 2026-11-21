@@ -8,20 +8,21 @@ import (
 )
 
 const (
-	configurationMethod         = "workspace/configuration"
-	applyEditMethod             = "workspace/applyEdit"
-	registerCapabilityMethod    = "client/registerCapability"
-	progressCreateMethod        = "window/workDoneProgress/create"
-	codeLensRefreshMethod       = "workspace/codeLens/refresh"
-	semanticTokensRefreshMethod = "workspace/semanticTokens/refresh"
-	inlayHintRefreshMethod      = "workspace/inlayHint/refresh"
-	diagnosticRefreshMethod     = "workspace/diagnostic/refresh"
-	showMessageMethod           = "window/showMessage"
-	logMessageMethod            = "window/logMessage"
-	publishDiagnosticsMethod    = "textDocument/publishDiagnostics"
-	progressMethod              = "$/progress"
-	logTraceMethod              = "$/logTrace"
-	didChangeWatchedFilesMethod = "workspace/didChangeWatchedFiles"
+	configurationMethod          = "workspace/configuration"
+	applyEditMethod              = "workspace/applyEdit"
+	registerCapabilityMethod     = "client/registerCapability"
+	progressCreateMethod         = "window/workDoneProgress/create"
+	codeLensRefreshMethod        = "workspace/codeLens/refresh"
+	semanticTokensRefreshMethod  = "workspace/semanticTokens/refresh"
+	inlayHintRefreshMethod       = "workspace/inlayHint/refresh"
+	diagnosticRefreshMethod      = "workspace/diagnostic/refresh"
+	showMessageMethod            = "window/showMessage"
+	logMessageMethod             = "window/logMessage"
+	publishDiagnosticsMethod     = "textDocument/publishDiagnostics"
+	progressMethod               = "$/progress"
+	logTraceMethod               = "$/logTrace"
+	didChangeWatchedFilesMethod  = "workspace/didChangeWatchedFiles"
+	didChangeConfigurationMethod = "workspace/didChangeConfiguration"
 )
 
 type direction uint8
@@ -153,7 +154,7 @@ var methods = []method{
 	{"workspace/didChangeWorkspaceFolders", clientNotification, supported, capability{"workspace.workspaceFolders.changeNotifications", func(c *ServerCapabilities) {
 		ensure(&c.Workspace).WorkspaceFolders = &workspaceFoldersCapability{Supported: true, ChangeNotifications: true}
 	}}, "", onNotification((*Server).handleDidChangeWorkspaceFolders)},
-	{"workspace/didChangeConfiguration", clientNotification, supported, capability{}, "", onNotification((*Server).handleDidChangeConfiguration)},
+	{didChangeConfigurationMethod, clientNotification, supported, capability{}, "", onNotification((*Server).handleDidChangeConfiguration)},
 	{didChangeWatchedFilesMethod, clientNotification, supported, capability{}, "watchers are registered dynamically", onNotification((*Server).handleDidChangeWatchedFiles)},
 	{"workspace/didCreateFiles", clientNotification, supported, capability{"workspace.fileOperations.didCreate", func(c *ServerCapabilities) { fileOperations(c).DidCreate = &watchedFileOperations }}, "", onNotification((*Server).handleFilesChanged)},
 	{"workspace/didRenameFiles", clientNotification, supported, capability{"workspace.fileOperations.didRename", func(c *ServerCapabilities) { fileOperations(c).DidRename = &watchedFileOperations }}, "", onNotification((*Server).handleDidRenameFiles)},

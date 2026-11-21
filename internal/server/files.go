@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/stubbedev/shell-lsp/internal/config"
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/editorconfig"
@@ -24,7 +25,10 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
-const watcherRegistration = "shell-lsp/watched-files"
+const (
+	watcherRegistration       = "shell-lsp/watched-files"
+	configurationRegistration = "shell-lsp/configuration"
+)
 
 type workspaceFoldersCapability struct {
 	Supported           bool `json:"supported"`
@@ -83,10 +87,32 @@ type registrationParams struct {
 	Registrations []registration `json:"registrations"`
 }
 
-func (s *Server) registerWatchers(ctx context.Context) {
-	if !s.clientCapabilities().Workspace.DidChangeWatchedFiles.DynamicRegistration {
+func (s *Server) registerCapabilities(ctx context.Context) {
+	caps := s.clientCapabilities().Workspace
+	var params registrationParams
+	if caps.DidChangeWatchedFiles.DynamicRegistration {
+		params.Registrations = append(params.Registrations, watchedFilesRegistration())
+	}
+	if caps.DidChangeConfiguration.DynamicRegistration {
+		params.Registrations = append(params.Registrations, registration{
+			ID:              configurationRegistration,
+			Method:          didChangeConfigurationMethod,
+			RegisterOptions: map[string]any{"section": config.Section},
+		})
+	}
+	if len(params.Registrations) == 0 {
 		return
 	}
+	if err := s.call(ctx, registerCapabilityMethod, params, nil); err != nil {
+		s.noticeOnce("register-capabilities", lsp.MessageWarning, "registering file watchers and settings changes failed; changes made outside the editor are picked up when files are next read, and changed settings after a restart: "+err.Error())
+		return
+	}
+	if caps.DidChangeWatchedFiles.DynamicRegistration {
+		s.workspace.SetWatched(true)
+	}
+}
+
+func watchedFilesRegistration() registration {
 	globs := append(workspace.WatchGlobs(), "**/"+editorconfig.FileName)
 	for _, name := range slices.Concat(shellcheckrc.Names, hadolint.ConfigNames, []string{statixconfig.FileName, nix.LockFileName}) {
 		globs = append(globs, "**/"+name)
@@ -95,16 +121,7 @@ func (s *Server) registerWatchers(ctx context.Context) {
 	for i, glob := range globs {
 		watchers[i] = fileWatcher{GlobPattern: glob}
 	}
-	params := registrationParams{Registrations: []registration{{
-		ID:              watcherRegistration,
-		Method:          didChangeWatchedFilesMethod,
-		RegisterOptions: map[string]any{"watchers": watchers},
-	}}}
-	if err := s.call(ctx, registerCapabilityMethod, params, nil); err != nil {
-		s.noticeOnce("register-watchers", lsp.MessageWarning, "registering file watchers failed; changes made outside the editor are picked up when files are next read: "+err.Error())
-		return
-	}
-	s.workspace.SetWatched(true)
+	return registration{ID: watcherRegistration, Method: didChangeWatchedFilesMethod, RegisterOptions: map[string]any{"watchers": watchers}}
 }
 
 func (s *Server) handleFilesChanged(_ context.Context, _ lsp.FileOperationsParams) error {

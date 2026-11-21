@@ -34,7 +34,7 @@ func TestConfigurationPullPerFolder(t *testing.T) {
 
 	a, b := t.TempDir(), t.TempDir()
 	c, _ := startClient(t, `{"workspaceFolders": [{"uri": "`+fileuri.FromPath(a)+`", "name": "a"}, {"uri": "`+fileuri.FromPath(b)+`", "name": "b"}],
-		"capabilities": {"textDocument": {"diagnostic": {}}, "workspace": {"configuration": true, "didChangeWatchedFiles": {"dynamicRegistration": true}}}}`)
+		"capabilities": {"textDocument": {"diagnostic": {}}, "workspace": {"configuration": true, "didChangeWatchedFiles": {"dynamicRegistration": true}, "didChangeConfiguration": {"dynamicRegistration": true}}}}`)
 	c.notify("initialized", `{}`)
 
 	request := c.await("workspace/configuration", func(m *jsonrpc.Message) bool { return m.IsRequest() && m.Method == "workspace/configuration" })
@@ -51,6 +51,9 @@ func TestConfigurationPullPerFolder(t *testing.T) {
 	registered := c.answerServerRequest("client/registerCapability")
 	if !strings.Contains(string(registered), `"workspace/didChangeWatchedFiles"`) || !strings.Contains(string(registered), `**/*.{sh,bash,zsh,ksh,dash,bats,`) || !strings.Contains(string(registered), `**/{Makefile,`) {
 		t.Errorf("registration = %s", registered)
+	}
+	if !strings.Contains(string(registered), `{"id":"shell-lsp/configuration","method":"workspace/didChangeConfiguration","registerOptions":{"section":"shellLsp"}}`) {
+		t.Errorf("settings changes are not registered for the shellLsp section: %s", registered)
 	}
 
 	uriA := fileuri.FromPath(filepath.Join(a, "x.sh"))

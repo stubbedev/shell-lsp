@@ -80,6 +80,9 @@ type ClientCapabilities struct {
 		DidChangeWatchedFiles struct {
 			DynamicRegistration bool `json:"dynamicRegistration"`
 		} `json:"didChangeWatchedFiles"`
+		DidChangeConfiguration struct {
+			DynamicRegistration bool `json:"dynamicRegistration"`
+		} `json:"didChangeConfiguration"`
 	} `json:"workspace"`
 	Experimental struct {
 		ShellLsp struct {
@@ -240,7 +243,7 @@ func (s *Server) handleInitialized(ctx context.Context, _ json.RawMessage) error
 	})
 	go func() {
 		s.loadConfiguration(ctx)
-		s.registerWatchers(ctx)
+		s.registerCapabilities(ctx)
 		s.syncNixEvaluation()
 		s.indexInBackground(ctx)
 	}()
