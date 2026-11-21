@@ -478,15 +478,13 @@ func (c *checker) attributeArguments(a Attribute) {
 	keys := attributeKeys[a.Name.Text]
 	seen := map[string]bool{}
 	for _, arg := range a.Args {
-		if arg.Key.Text == "" {
+		if arg.Key.Text == "" || seen[arg.Key.Text] {
 			continue
 		}
 		i := keyIndex(a.Name.Text, arg.Key.Text)
 		switch {
 		case i < 0:
 			c.report(lint.CodeJustAttributeArguments, arg.Key.Span, "unknown key `%s` for `%s` attribute", arg.Key.Text, a.Name.Text)
-		case seen[arg.Key.Text]:
-			c.report(lint.CodeJustAttributeArguments, arg.Key.Span, "duplicate key `%s` for `%s` attribute", arg.Key.Text, a.Name.Text)
 		case !keys[i].accepts(arg) && arg.Value == nil:
 			c.report(lint.CodeJustAttributeArguments, arg.Key.Span, "attribute key `%s` requires a value", arg.Key.Text)
 		case !keys[i].accepts(arg):

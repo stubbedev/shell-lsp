@@ -725,8 +725,11 @@ func (p *reader) attribute() {
 				break
 			}
 			arg := p.attributeArg(attributeKeys[name.Text] != nil)
-			if arg.Key.Text == "" && slices.ContainsFunc(attr.Args, func(prior AttributeArg) bool { return prior.Key.Text != "" }) {
+			switch {
+			case arg.Key.Text == "" && slices.ContainsFunc(attr.Args, func(prior AttributeArg) bool { return prior.Key.Text != "" }):
 				p.report(lint.CodeJustAttributeArguments, arg.Span, "positional attribute arguments cannot follow keyword attribute arguments")
+			case arg.Key.Text != "" && slices.ContainsFunc(attr.Args, func(prior AttributeArg) bool { return prior.Key.Text == arg.Key.Text }):
+				p.report(lint.CodeJustAttributeArguments, arg.Key.Span, fmt.Sprintf("duplicate key `%s` for `%s` attribute", arg.Key.Text, name.Text))
 			}
 			attr.Args = append(attr.Args, arg)
 			if _, ok := p.accept(","); ok {
