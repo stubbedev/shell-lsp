@@ -1013,9 +1013,12 @@ set quiet    # SL5015
 
 ## SL5016
 
-**A setting has a value of the wrong kind.** Boolean settings take `true` or
+**A setting has a value just refuses.** Boolean settings take `true` or
 `false`, settings that name a command such as `shell` take a list like
-`['bash', '-c']`, and the others take a string.
+`['bash', '-c']`, and the others take a string. Settings just reads before
+running anything, such as `shell`, `tempdir`, `working-directory` and the
+`dotenv-*` paths, cannot call backticks or functions or use a variable that
+does.
 
 ```just
 set shell := "bash"    # SL5016
@@ -1056,8 +1059,10 @@ test target="all" filter:    # SL5019
 
 **An attribute is used in a way just refuses.** It is given the wrong number
 of arguments, a key it does not know, a key twice or a value it does not take,
-it is repeated or put on an item that cannot carry it, or an `[arg]` names a
-parameter the recipe lacks, an option another parameter already uses, or an
+it is repeated or put on an item that cannot carry it, `[cache]` or
+`[extension]` is put on a recipe that runs line by line, `[doc]` or an
+`[arg]` `help` or `pattern` calls a backtick or function, or an `[arg]` names
+a parameter the recipe lacks, an option another parameter already uses, or an
 invalid option name, count or pattern.
 
 ```just

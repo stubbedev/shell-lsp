@@ -17,7 +17,6 @@ var (
 
 const (
 	regexFlags          = "imsUuxR"
-	regexUnicodeLetters = "CLMNPSZ"
 	regexClassEscapes   = "dswDSW"
 	regexLiteralEscapes = "aftnrv"
 	regexAssertions     = "AzbB<>"
@@ -345,22 +344,70 @@ func (r *regexChecker) unicodeClass() error {
 	}
 	c := r.peek()
 	r.pos++
-	if c != '{' {
-		if !strings.ContainsRune(regexUnicodeLetters, unicode.ToUpper(c)) {
-			return fmt.Errorf("`%c` names no Unicode class", c)
+	name := string(c)
+	switch c {
+	case '\\':
+		return errors.New("a Unicode class cannot be named by an escape")
+	case '{':
+		end := slices.Index(r.src[r.pos:], '}')
+		if end < 0 {
+			return errRegexEnd
 		}
-		return nil
+		name = string(r.src[r.pos : r.pos+end])
+		r.pos += end + 1
 	}
-	close := slices.Index(r.src[r.pos:], '}')
-	if close < 0 {
-		return errRegexEnd
-	}
-	name := strings.TrimSpace(string(r.src[r.pos : r.pos+close]))
-	r.pos += close + 1
-	if name == "" {
-		return errors.New("a Unicode class name is empty")
+	if !unicodeClassKnown(name) {
+		return fmt.Errorf("`%s` names no Unicode class", name)
 	}
 	return nil
+}
+
+func unicodeClassKnown(query string) bool {
+	for _, op := range []string{"!=", ":", "="} {
+		if property, value, ok := strings.Cut(query, op); ok {
+			return unicodePropertyValueKnown(property, value)
+		}
+	}
+	norm := normalizeUnicodeName(query)
+	if canonical, ok := regexPropertyNames[norm]; ok && !slices.Contains(unicodeCategoryAbbreviations, norm) {
+		_, boolean := slices.BinarySearch(regexBooleanProperties, canonical)
+		return boolean || slices.Contains(unicodeBuiltinProperties, canonical)
+	}
+	return unicodeValueKnown("General_Category", norm) || unicodeValueKnown("Script", norm)
+}
+
+func unicodePropertyValueKnown(property, value string) bool {
+	canonical, ok := regexPropertyNames[normalizeUnicodeName(property)]
+	return ok && unicodeValueKnown(canonical, normalizeUnicodeName(value))
+}
+
+func unicodeValueKnown(property, norm string) bool {
+	if property == "General_Category" && slices.Contains(unicodeGeneralCategoryExtras, norm) {
+		return true
+	}
+	_, found := slices.BinarySearch(regexPropertyValues[property], norm)
+	return found
+}
+
+func normalizeUnicodeName(name string) string {
+	prefixed := len(name) >= 2 && strings.EqualFold(name[:2], "is")
+	if prefixed {
+		name = name[2:]
+	}
+	var sb strings.Builder
+	for _, b := range []byte(name) {
+		switch {
+		case b == ' ' || b == '_' || b == '-' || b >= utf8.RuneSelf:
+		case b >= 'A' && b <= 'Z':
+			sb.WriteByte(b + 'a' - 'A')
+		default:
+			sb.WriteByte(b)
+		}
+	}
+	if prefixed && sb.String() == "c" {
+		return "isc"
+	}
+	return sb.String()
 }
 
 func (r *regexChecker) wordBoundary() error {
@@ -437,6 +484,12 @@ func (r *regexChecker) posix() bool {
 	r.pos += utf8.RuneCountInString(body) + len("::]")
 	return true
 }
+
+var (
+	unicodeCategoryAbbreviations = []string{"cf", "sc", "lc"}
+	unicodeBuiltinProperties     = []string{"Decimal_Number", "White_Space"}
+	unicodeGeneralCategoryExtras = []string{"any", "assigned", "ascii"}
+)
 
 var posixClasses = []string{"alnum", "alpha", "ascii", "blank", "cntrl", "digit", "graph", "lower", "print", "punct", "space", "upper", "word", "xdigit"}
 

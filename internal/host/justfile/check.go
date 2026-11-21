@@ -14,14 +14,15 @@ import (
 )
 
 type checker struct {
-	f        *File
-	findings []lint.Finding
-	lists    bool
-	unstable bool
+	f              *File
+	findings       []lint.Finding
+	lists          bool
+	unstable       bool
+	constVariables map[string]bool
 }
 
 func (f *File) check() []lint.Finding {
-	c := &checker{f: f, lists: f.Enabled("lists"), unstable: f.Enabled("unstable")}
+	c := &checker{f: f, lists: f.Enabled("lists"), unstable: f.Enabled("unstable"), constVariables: map[string]bool{}}
 	for _, e := range f.Errors {
 		c.report(e.Code, e.Span, "%s", e.Message)
 	}
@@ -150,6 +151,9 @@ func (c *checker) settingValue(s *Setting) {
 	if !known {
 		return
 	}
+	if slices.Contains(constSettings, s.Name.Text) && overlap(systems(s.Attributes), []string{"linux"}) {
+		c.constant(lint.CodeJustSettingValue, s.Value)
+	}
 	v := s.Value
 	switch kind {
 	case settingBool:
@@ -180,21 +184,30 @@ func (c *checker) settingValue(s *Setting) {
 	}
 }
 
+func condition(e *Expr) (*Expr, bool) {
+	switch {
+	case e.Kind == ExprIf, e.Kind == ExprCall && e.Name.Text == "assert" && len(e.Args) > 0:
+		return e.Args[0], true
+	}
+	return nil, false
+}
+
 func isComparison(e *Expr) bool { return e.Kind == ExprBinary && operators[e.Op] == comparison }
 
 func (c *checker) features(it Item) {
 	visit := func(e *Expr) {
 		conditions := map[*Expr]bool{}
 		Walk(e, func(x *Expr) {
-			if x.Kind == ExprIf {
-				conditions[x.Args[0]] = true
+			if cond, ok := condition(x); ok {
+				conditions[cond] = true
 			}
 		})
 		Walk(e, func(x *Expr) {
+			cond, conditional := condition(x)
 			switch {
 			case c.lists:
-			case x.Kind == ExprIf && !isComparison(x.Args[0]):
-				c.report(lint.CodeJustNeedsSetting, x.Args[0].Span, "an `if` condition other than a comparison needs `set lists`")
+			case conditional && !isComparison(cond):
+				c.report(lint.CodeJustNeedsSetting, cond.Span, "an `if` or `assert` condition other than a comparison needs `set lists`")
 			case isComparison(x) && !conditions[x]:
 				c.report(lint.CodeJustNeedsSetting, x.OpSpan, "`%s` outside the condition of an `if` needs `set lists`", x.Op)
 			case x.Kind == ExprNot:
@@ -257,8 +270,27 @@ func itemExprs(it Item) []*Expr {
 	return out
 }
 
+func (c *checker) script(r *Recipe) bool {
+	_, shell := attributeNamed(r.Attributes, "shell")
+	_, script := attributeNamed(r.Attributes, "script")
+	return !shell && (r.Shebang || script || c.f.Enabled("default-script"))
+}
+
+func (c *checker) scriptAttributes(r *Recipe) {
+	if c.script(r) {
+		return
+	}
+	for _, name := range scriptAttributes {
+		if _, ok := attributeNamed(r.Attributes, name); ok {
+			c.report(lint.CodeJustAttributeArguments, r.Name.Span, "shell recipe `%s` has script recipe attribute `%s`", r.Name.Text, name)
+		}
+	}
+}
+
 func (c *checker) recipe(r *Recipe, args []argAttribute) {
 	c.parameters(r)
+	c.constAttributes(r)
+	c.scriptAttributes(r)
 	c.argAttributes(RecipeHeader{Name: r.Name, Params: r.Params, Colon: true}, args)
 	c.listArguments(args)
 	for _, d := range slices.Concat(r.Deps, r.Subsequent) {
@@ -296,8 +328,7 @@ func (c *checker) indentation(r *Recipe) {
 	if len(r.Body) == 0 {
 		return
 	}
-	_, script := attributeNamed(r.Attributes, "script")
-	linewise := !r.Shebang && !script && !c.f.Enabled("default-script")
+	linewise := !c.script(r)
 	continued := false
 	for _, l := range r.Body {
 		indent := c.f.Text[l.Indent.Start:l.Indent.End]
@@ -717,8 +748,126 @@ func stringToken(s *StringLit) Span {
 
 func (c *checker) compareTokens(a, b Span) int {
 	return cmp.Or(
-		cmp.Compare(a.Start-c.f.lineStart(a.Start), b.Start-c.f.lineStart(b.Start)),
+		cmp.Compare(c.f.column(a.Start), c.f.column(b.Start)),
 		cmp.Compare(a.End-a.Start, b.End-b.Start),
 		cmp.Compare(a.Start, b.Start),
 	)
+}
+
+type constFailure struct {
+	span    Span
+	message string
+}
+
+func (c *checker) constant(code lint.Code, e *Expr) {
+	if failure, failed := c.constFailure(e); failed {
+		c.report(code, failure.span, "%s", failure.message)
+	}
+}
+
+func (c *checker) constFailure(e *Expr) (constFailure, bool) {
+	if e == nil {
+		return constFailure{}, false
+	}
+	switch e.Kind {
+	case ExprBacktick:
+		return constFailure{e.Span, "cannot call backticks in const context"}, true
+	case ExprCall:
+		if e.Name.Text == "assert" && len(e.Args) > 0 {
+			return c.assertion(e)
+		}
+		return constFailure{e.Name.Span, "cannot call functions in const context"}, true
+	case ExprVariable:
+		if c.nonConstVariable(e.Name.Text) {
+			return constFailure{e.Name.Span, fmt.Sprintf("cannot access non-const variable `%s` in const context", e.Name.Text)}, true
+		}
+		return constFailure{}, false
+	case ExprIf:
+		return c.constConditional(e)
+	case ExprBinary:
+		if e.Op == "&&" || e.Op == "||" {
+			return c.constShortCircuit(e)
+		}
+	case ExprString:
+		return c.constFirst(e.Str.Interps())
+	case ExprNot, ExprRoot, ExprList, ExprGroup, ExprBad:
+	}
+	return c.constFirst(e.Args)
+}
+
+func (c *checker) constFirst(exprs []*Expr) (constFailure, bool) {
+	for _, x := range exprs {
+		if failure, failed := c.constFailure(x); failed {
+			return failure, true
+		}
+	}
+	return constFailure{}, false
+}
+
+func (c *checker) assertion(e *Expr) (constFailure, bool) {
+	if failure, failed := c.constFailure(e.Args[0]); failed {
+		return failure, true
+	}
+	holds, known := constants{f: c.f, visiting: map[string]bool{}}.condition(e.Args[0])
+	if !known || holds {
+		return constFailure{}, false
+	}
+	if len(e.Args) > 1 {
+		if failure, failed := c.constFailure(e.Args[1]); failed {
+			return failure, true
+		}
+	}
+	return constFailure{e.Name.Span, "assertion fails in const context"}, true
+}
+
+func (c *checker) constConditional(e *Expr) (constFailure, bool) {
+	if failure, failed := c.constFailure(e.Args[0]); failed {
+		return failure, true
+	}
+	holds, known := constants{f: c.f, visiting: map[string]bool{}}.condition(e.Args[0])
+	switch {
+	case !known:
+		return constFailure{}, false
+	case holds:
+		return c.constFailure(e.Args[1])
+	case len(e.Args) > 2:
+		return c.constFailure(e.Args[2])
+	}
+	return constFailure{}, false
+}
+
+func (c *checker) constShortCircuit(e *Expr) (constFailure, bool) {
+	if failure, failed := c.constFailure(e.Args[0]); failed {
+		return failure, true
+	}
+	values, known := c.f.Constant(e.Args[0])
+	if !known || (len(values) > 0) == (e.Op == "||") {
+		return constFailure{}, false
+	}
+	return c.constFailure(e.Args[1])
+}
+
+func (c *checker) nonConstVariable(name string) bool {
+	if failed, ok := c.constVariables[name]; ok {
+		return failed
+	}
+	c.constVariables[name] = false
+	for _, a := range slices.Backward(c.f.Assignments()) {
+		if a.Name.Text == name {
+			_, failed := c.constFailure(a.Value)
+			c.constVariables[name] = failed
+			return failed
+		}
+	}
+	return false
+}
+
+func (c *checker) constAttributes(r *Recipe) {
+	for _, a := range r.Attributes {
+		for _, arg := range a.Args {
+			if slices.Contains(constAttributeArguments[a.Name.Text], arg.Key.Text) {
+				c.constant(lint.CodeJustAttributeArguments, arg.Value)
+			}
+		}
+	}
 }

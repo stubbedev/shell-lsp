@@ -1,0 +1,14 @@
+set unstable
+set lists
+
+[arg('a', long='abc', help='x')]
+[arg('b', long='éé', help='y')]
+help a b:
+
+[arg('c', short='c', flag, help='abc')]
+[arg('d', short='d', flag, help='éé')]
+flags c d:
+
+[arg('f', short='f', multiple, help='öö')]
+[arg('e', short='e', multiple, help='abc')]
+multiple e f:

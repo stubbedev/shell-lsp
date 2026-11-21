@@ -106,6 +106,15 @@ func (k attributeKey) accepts(arg AttributeArg) bool {
 	return true
 }
 
+var constSettings = []string{"dotenv-command", "dotenv-filename", "dotenv-path", "script-interpreter", "shell", "tempdir", "windows-shell", "working-directory"}
+
+var constAttributeArguments = map[string][]string{
+	"arg": {"help", "pattern"},
+	"doc": {positionalArgument},
+}
+
+var scriptAttributes = []string{"cache", "extension"}
+
 var repeatableAttributes = []string{"arg", "env", "group", "metadata"}
 
 var optionKeys = []string{"value", "flag", "multiple"}

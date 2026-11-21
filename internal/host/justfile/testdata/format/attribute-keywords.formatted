@@ -1,5 +1,6 @@
 set unstable
 set lists
+set default-script
 
 [arg('target', long, value="", help="00")]
 a target:

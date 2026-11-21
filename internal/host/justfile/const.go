@@ -60,12 +60,58 @@ func (c constants) eval(e *Expr) ([]string, bool) {
 		return c.conditional(e)
 	case ExprVariable:
 		return c.variable(e.Name.Text)
-	case ExprBacktick, ExprCall, ExprNot, ExprBad:
+	case ExprNot:
+		values, ok := c.eval(e.Args[0])
+		return truth(len(values) == 0), ok
+	case ExprCall:
+		return c.assertion(e)
+	case ExprBacktick, ExprBad:
 	}
 	return nil, false
 }
 
+func truth(holds bool) []string {
+	if holds {
+		return []string{"true"}
+	}
+	return nil
+}
+
+func (c constants) assertion(e *Expr) ([]string, bool) {
+	if e.Name.Text != "assert" || len(e.Args) == 0 {
+		return nil, false
+	}
+	values, ok := c.eval(e.Args[0])
+	if !ok || len(values) == 0 {
+		return nil, false
+	}
+	if c.f.Enabled("lists") {
+		return values, true
+	}
+	return []string{""}, true
+}
+
 func (c constants) binary(e *Expr) ([]string, bool) {
+	switch e.Op {
+	case "||", "&&":
+		left, ok := c.eval(e.Args[0])
+		switch {
+		case !ok:
+			return nil, false
+		case len(left) > 0 && e.Op == "||":
+			return left, true
+		case len(left) == 0 && e.Op == "&&":
+			return nil, true
+		}
+		return c.eval(e.Args[1])
+	case "++":
+		left, okLeft := c.eval(e.Args[0])
+		right, okRight := c.eval(e.Args[1])
+		return slices.Concat(left, right), okLeft && okRight
+	}
+	if holds, ok := c.condition(e); ok {
+		return truth(holds), true
+	}
 	left, okLeft := c.scalar(e.Args[0])
 	right, okRight := c.scalar(e.Args[1])
 	if !okLeft || !okRight {

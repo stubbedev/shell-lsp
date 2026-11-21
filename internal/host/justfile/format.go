@@ -7,7 +7,6 @@ import (
 	"slices"
 	"strings"
 	"unicode"
-	"unicode/utf8"
 
 	"github.com/stubbedev/shell-lsp/internal/lint"
 )
@@ -95,6 +94,8 @@ func ReindentedRecipes(f *File) []Span {
 }
 
 func (f *File) line(offset int) int { return strings.Count(f.Text[:offset], "\n") + 1 }
+
+func (f *File) column(offset int) int { return offset - f.lineStart(offset) }
 
 func (f *File) lineStart(offset int) int {
 	return strings.LastIndexByte(f.Text[:offset], '\n') + 1
@@ -239,7 +240,7 @@ func (p *printer) formattedKeyColumn(a Attribute, key string) (int, bool) {
 	before := "[" + a.Name.Text + "("
 	for _, arg := range canonicalArgs(a) {
 		if arg.Key.Text == key {
-			return utf8.RuneCountInString(before), true
+			return len(before), true
 		}
 		before += p.attributeArg(a, arg) + ", "
 	}
@@ -250,7 +251,7 @@ func (p *printer) compareSourceKeys(a, b Attribute, key string) int {
 	ka, oka := a.keyed(key)
 	kb, okb := b.keyed(key)
 	if oka && okb {
-		return cmp.Or(cmp.Compare(p.column(ka.Key.Span.Start), p.column(kb.Key.Span.Start)), cmp.Compare(ka.Key.Span.Start, kb.Key.Span.Start))
+		return cmp.Or(cmp.Compare(p.f.column(ka.Key.Span.Start), p.f.column(kb.Key.Span.Start)), cmp.Compare(ka.Key.Span.Start, kb.Key.Span.Start))
 	}
 	return compareBool(oka, okb)
 }
@@ -337,11 +338,7 @@ func quoteRank(s *StringLit) int {
 }
 
 func (p *printer) comparePosition(a, b *Expr) int {
-	return cmp.Or(cmp.Compare(p.column(a.Span.Start), p.column(b.Span.Start)), cmp.Compare(a.Span.Start, b.Span.Start))
-}
-
-func (p *printer) column(offset int) int {
-	return utf8.RuneCountInString(p.f.Text[p.f.lineStart(offset):offset])
+	return cmp.Or(cmp.Compare(p.f.column(a.Span.Start), p.f.column(b.Span.Start)), cmp.Compare(a.Span.Start, b.Span.Start))
 }
 
 func compareArgAttributes(a, b Attribute, compareKeys func(a, b Attribute, key string) int) int {

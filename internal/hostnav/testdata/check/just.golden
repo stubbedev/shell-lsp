@@ -134,7 +134,7 @@ rejected 1:10 list concatenation operator `++` requires `set lists`
 1:10 SL5023 error `++` needs `set lists`
 -- negation-needs-lists --
 rejected 1:9 negation operator requires `set lists`
-1:9 SL5023 error an `if` condition other than a comparison needs `set lists`
+1:9 SL5023 error an `if` or `assert` condition other than a comparison needs `set lists`
 1:9 SL5023 error `!` needs `set lists`
 1:15 SL5023 error `==` outside the condition of an `if` needs `set lists`
 -- logic-needs-lists --
@@ -277,7 +277,7 @@ rejected 1:11 comparison operators require `set lists`
 -- condition-that-is-not-a-comparison --
 rejected 1:9 `if` and `assert` conditions other than comparisons require `set lists`
 1:1 SL5014 info variable `x` is never used
-1:9 SL5023 error an `if` condition other than a comparison needs `set lists`
+1:9 SL5023 error an `if` or `assert` condition other than a comparison needs `set lists`
 -- attribute-arguments-must-be-literals --
 rejected 2:8 attribute `group` arguments must be string literals
 2:8 SL5020 error the arguments of attribute `group` must be string literals
@@ -348,9 +348,11 @@ rejected 1:2 attribute `arg` got 2 arguments but takes 1 argument
 -- cache-unknown-key --
 rejected 2:8 unknown key `colour` for `cache` attribute
 2:8 SL5020 error unknown key `colour` for `cache` attribute
+3:1 SL5020 error shell recipe `build` has script recipe attribute `cache`
 -- cache-key-without-value --
 rejected 2:8 attribute key `inputs` requires value
 2:8 SL5020 error attribute key `inputs` requires a value
+3:1 SL5020 error shell recipe `build` has script recipe attribute `cache`
 -- cache-keys --
 accepted
 -- arg-key-without-value --
@@ -495,3 +497,78 @@ rejected 7:3 starred arguments may not be used outside mapped dependencies
 -- mapped-dependency-with-two-starred-arguments --
 rejected 7:3 mapped dependencies may not have multiple starred arguments
 7:3 SL5006 error a mapped dependency takes only one starred argument
+-- backtick-in-a-constant-setting --
+rejected 1:16 cannot call backticks in const context
+1:16 SL5016 error cannot call backticks in const context
+-- function-call-in-a-constant-setting --
+rejected 1:26 cannot call functions in const context
+1:26 SL5016 error cannot call functions in const context
+-- non-constant-variable-in-a-constant-setting --
+rejected 2:20 cannot access non-const variable `dir` in const context
+2:20 SL5016 error cannot access non-const variable `dir` in const context
+-- non-constant-variable-through-another-variable --
+rejected 3:24 cannot access non-const variable `dir` in const context
+3:24 SL5016 error cannot access non-const variable `dir` in const context
+-- non-constant-variable-used-only-at-runtime --
+accepted
+-- backtick-in-a-shell-list --
+rejected 1:23 cannot call backticks in const context
+1:23 SL5016 error cannot call backticks in const context
+-- backtick-in-a-windows-only-setting --
+accepted
+-- backtick-in-an-untaken-branch --
+accepted
+-- backtick-in-a-taken-branch --
+rejected 1:52 cannot call backticks in const context
+1:52 SL5016 error cannot call backticks in const context
+-- backtick-after-a-truthy-or --
+accepted
+-- backtick-after-a-falsy-or --
+rejected 3:29 cannot call backticks in const context
+3:29 SL5016 error cannot call backticks in const context
+-- backtick-in-a-format-string-setting --
+rejected 1:29 cannot call backticks in const context
+1:29 SL5016 error cannot call backticks in const context
+-- assertion-in-a-constant-setting --
+accepted
+-- failing-assertion-in-a-constant-setting --
+rejected 1:23 assert failed: m
+1:23 SL5016 error assertion fails in const context
+-- non-comparison-assertion-needs-lists --
+rejected 1:30 `if` and `assert` conditions other than comparisons require `set lists`
+1:30 SL5023 error an `if` or `assert` condition other than a comparison needs `set lists`
+-- backtick-in-a-doc-attribute --
+rejected 1:6 cannot call backticks in const context
+1:6 SL5020 error cannot call backticks in const context
+-- function-call-in-an-arg-help --
+rejected 1:16 cannot call functions in const context
+1:16 SL5020 error cannot call functions in const context
+-- non-constant-variable-in-an-arg-pattern --
+rejected 2:19 cannot access non-const variable `pattern` in const context
+2:19 SL5020 error cannot access non-const variable `pattern` in const context
+-- backtick-in-a-confirm-prompt --
+accepted
+-- cache-on-a-shell-recipe --
+rejected 3:1 shell recipe `build` has script recipe attribute `cache`
+3:1 SL5020 error shell recipe `build` has script recipe attribute `cache`
+-- extension-on-a-shell-recipe --
+rejected 2:1 shell recipe `build` has script recipe attribute `extension`
+2:1 SL5020 error shell recipe `build` has script recipe attribute `extension`
+-- extension-on-a-shebang-recipe --
+accepted
+-- extension-on-a-shebang-recipe-marked-shell --
+rejected 3:1 shell recipe `build` has script recipe attribute `extension`
+3:1 SL5020 error shell recipe `build` has script recipe attribute `extension`
+-- extension-with-default-script --
+accepted
+-- arg-pattern-with-an-unknown-unicode-class --
+rejected 1:11 failed to parse argument pattern
+1:11 SL5020 error argument pattern `\p{Foo}` is not a regular expression just accepts: at character 8 of `\p{Foo}`: `Foo` names no Unicode class
+-- arg-pattern-with-a-negated-unicode-class-name --
+rejected 1:11 failed to parse argument pattern
+1:11 SL5020 error argument pattern `\p{^L}` is not a regular expression just accepts: at character 7 of `\p{^L}`: `^L` names no Unicode class
+-- arg-pattern-with-a-script-without-data --
+rejected 1:11 failed to parse argument pattern
+1:11 SL5020 error argument pattern `\p{Unknown}` is not a regular expression just accepts: at character 12 of `\p{Unknown}`: `Unknown` names no Unicode class
+-- arg-pattern-with-known-unicode-classes --
+accepted

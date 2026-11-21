@@ -523,7 +523,7 @@ marks the checks the `minimal` profile keeps; see [Profiles](linting.md#profiles
 | <a name="sl5013"></a>[SL5013](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl5013) | info |  |  | A recipe parameter is never used. |
 | <a name="sl5014"></a>[SL5014](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl5014) | info |  |  | A variable is never used. |
 | <a name="sl5015"></a>[SL5015](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl5015) | error |  | yes | A setting is set twice. |
-| <a name="sl5016"></a>[SL5016](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl5016) | error |  | yes | A setting has a value of the wrong kind. |
+| <a name="sl5016"></a>[SL5016](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl5016) | error |  | yes | A setting has a value just refuses. |
 | <a name="sl5017"></a>[SL5017](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl5017) | error |  | yes | A path names a module that does not exist. |
 | <a name="sl5018"></a>[SL5018](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl5018) | error |  | yes | An imported file or module source file is not found. |
 | <a name="sl5019"></a>[SL5019](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl5019) | error |  | yes | A recipe's parameters are in an order just refuses. |

@@ -785,3 +785,101 @@ compile a b:
 build: *(compile *items
   *items)
     echo
+-- backtick-in-a-constant-setting --
+set tempdir := `pwd`
+-- function-call-in-a-constant-setting --
+set working-directory := uppercase('build')
+-- non-constant-variable-in-a-constant-setting --
+dir := `pwd`
+set dotenv-path := dir
+-- non-constant-variable-through-another-variable --
+dir := base + '/x'
+base := `pwd`
+set dotenv-filename := dir
+-- non-constant-variable-used-only-at-runtime --
+dir := `pwd`
+build:
+    echo {{dir}}
+-- backtick-in-a-shell-list --
+set shell := ['bash', `echo -c`]
+-- backtick-in-a-windows-only-setting --
+[windows]
+set shell := ['bash', `echo -c`]
+-- backtick-in-an-untaken-branch --
+set dotenv-command := if 'a' == 'a' { 'x' } else { `pwd` }
+-- backtick-in-a-taken-branch --
+set dotenv-command := if 'a' == 'b' { 'x' } else { `pwd` }
+-- backtick-after-a-truthy-or --
+set unstable
+set lists
+set dotenv-command := 'a' || `pwd`
+-- backtick-after-a-falsy-or --
+set unstable
+set lists
+set dotenv-command := [] || `pwd`
+-- backtick-in-a-format-string-setting --
+set dotenv-command := f'a{{ `pwd` }}'
+-- assertion-in-a-constant-setting --
+set dotenv-command := assert('a' == 'a', 'm')
+-- failing-assertion-in-a-constant-setting --
+set dotenv-command := assert('a' == 'b', 'm')
+-- non-comparison-assertion-needs-lists --
+set dotenv-command := assert('a', 'm')
+-- backtick-in-a-doc-attribute --
+[doc(`echo`)]
+build:
+    echo
+-- function-call-in-an-arg-help --
+[arg('a', help=uppercase('x'))]
+build a:
+    echo {{a}}
+-- non-constant-variable-in-an-arg-pattern --
+pattern := env('PATTERN')
+[arg('a', pattern=pattern)]
+build a:
+    echo {{a}}
+-- backtick-in-a-confirm-prompt --
+[confirm(`echo sure`)]
+build:
+    echo
+-- cache-on-a-shell-recipe --
+set unstable
+[cache]
+build:
+    echo
+-- extension-on-a-shell-recipe --
+[extension('.sh')]
+build:
+    echo
+-- extension-on-a-shebang-recipe --
+[extension('.sh')]
+build:
+    #!/bin/sh
+    echo
+-- extension-on-a-shebang-recipe-marked-shell --
+[extension('.sh')]
+[shell]
+build:
+    #!/bin/sh
+    echo
+-- extension-with-default-script --
+set default-script
+[extension('.sh')]
+build:
+    echo
+-- arg-pattern-with-an-unknown-unicode-class --
+[arg('a', pattern='\p{Foo}')]
+build a:
+    echo {{a}}
+-- arg-pattern-with-a-negated-unicode-class-name --
+[arg('a', pattern='\p{^L}')]
+build a:
+    echo {{a}}
+-- arg-pattern-with-a-script-without-data --
+[arg('a', pattern='\p{Unknown}')]
+build a:
+    echo {{a}}
+-- arg-pattern-with-known-unicode-classes --
+[arg('a', pattern='\p{Greek}\p{IsAlpha}\p{gc=Lu}\p{scx:Latn}\p{Age=6.0}\pN')]
+build a:
+    echo {{a}}
