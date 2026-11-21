@@ -154,7 +154,6 @@ func Agree(t *testing.T, text string, v oracle.Verdict, findings []lint.Finding)
 }
 
 const (
-	JustVersion       = "just 1.58.0"
 	MakeVersion       = "GNU Make 4.4.1"
 	DockerfileVersion = "dockerfile-oracle 0.35.1"
 	HadolintVersion   = "Haskell Dockerfile Linter 2.14.0"

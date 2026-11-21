@@ -96,10 +96,10 @@ rejected 2:5 setting `quiet` first set on line 1 is redefined on line 2
 2:5 SL5015 error setting `quiet` first set on line 1 is set again on line 2
 -- bool-setting-with-string --
 rejected 1:15 expected identifier, but found string
-1:15 SL5016 error setting `export` takes `true` or `false`
+1:15 SL5016 error setting `export` takes `true` or `false`, found string
 -- list-setting-with-string --
 rejected 1:14 expected '[', but found string
-1:14 SL5016 error setting `shell` takes a list such as `['bash', '-c']`
+1:14 SL5016 error setting `shell` takes a list such as `['bash', '-c']`, found string
 -- duplicate-parameter --
 rejected 1:5 recipe `a` has duplicate parameter `x`
 1:5 SL5019 error recipe `a` has duplicate parameter `x`
@@ -312,6 +312,59 @@ rejected 2:20 indentation may not be mixed
 2:20 SL5016 error the indentation must be all spaces or all tabs
 -- tab-indentation --
 accepted
+-- interpreter-setting-with-a-multi-line-string --
+rejected 1:14 expected '[', but found string
+1:14 SL5016 error setting `shell` takes a list such as `['bash', '-c']`, found string
+-- bool-setting-with-another-name --
+rejected 1:14 expected keyword `true` or `false` but found identifier `yes`
+1:14 SL5016 error setting `quiet` takes `true` or `false`, found name `yes`
+-- bool-setting-without-a-value --
+rejected 1:13 expected identifier, but found end of line
+1:13 SL5016 error setting `quiet` takes `true` or `false`, found end of line
+-- interpreter-setting-without-a-value --
+rejected 1:10 expected ':=', but found end of line
+1:10 SL5016 error setting `shell` needs a value, found end of line
+-- interpreter-setting-without-a-command --
+rejected 1:15 expected backtick, '!', '[', identifier, '(', '/', or string, but found ']'
+1:15 SL5016 error setting `shell` needs at least the command, found `]`
+-- interpreter-setting-with-a-nested-list --
+rejected 1:15 list literals require `set lists`
+1:15 SL5023 error list literals need `set lists`
+-- string-setting-with-a-list --
+accepted
+-- shell-expanded-indentation --
+rejected 1:5 `indentation` setting must be a plain string literal
+1:5 SL5016 error `indentation` setting must be a plain string literal
+-- indented-string-indentation --
+rejected 1:5 `indentation` setting must be a plain string literal
+1:5 SL5016 error `indentation` setting must be a plain string literal
+-- format-string-indentation --
+rejected 1:5 `indentation` setting must be a plain string literal
+1:5 SL5016 error `indentation` setting must be a plain string literal
+-- concatenated-indentation --
+rejected 1:5 `indentation` setting must be a plain string literal
+1:5 SL5016 error `indentation` setting must be a plain string literal
+-- grouped-indentation-over-lines --
+rejected 1:5 `indentation` setting must be a plain string literal
+1:5 SL5016 error `indentation` setting must be a plain string literal
+-- minimum-version-met --
+accepted
+-- minimum-version-too-new --
+rejected 1:24 justfile requires just 99.0.0 or later, but using 1.58.0
+1:24 SL5016 error justfile requires just 99.0.0 or later, but using 1.58.0
+-- minimum-version-on-a-continued-line --
+rejected 2:3 justfile requires just 99.0.0 or later, but using 1.58.0
+2:3 SL5016 error justfile requires just 99.0.0 or later, but using 1.58.0
+-- minimum-version-with-a-leading-zero --
+rejected 1:24 `minimum-version` setting has invalid version `01.2.3`: expected `MAJOR.MINOR.PATCH`
+1:24 SL5016 error `minimum-version` setting has invalid version `01.2.3`: expected `MAJOR.MINOR.PATCH`
+-- minimum-version-without-a-patch --
+rejected 1:24 `minimum-version` setting has invalid version `1.58`: expected `MAJOR.MINOR.PATCH`
+1:24 SL5016 error `minimum-version` setting has invalid version `1.58`: expected `MAJOR.MINOR.PATCH`
+-- keyword-that-is-not-a-setting --
+rejected 1:5 unknown setting `true`
+1:5 SL5007 error unknown setting `true`
+1:14 SL5001 error expected an expression, found end of file
 -- recipe-depending-on-an-absent-module --
 accepted
 2:1 SL5024 warning recipe `lint` cannot run: it depends on `tools::check` of the absent module `tools`

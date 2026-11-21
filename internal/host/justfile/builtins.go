@@ -20,38 +20,39 @@ type settingSpec struct {
 	kind       settingType
 	doc        string
 	deprecated string
+	literal    func(string) error
 }
 
 var settingSpecs = []settingSpec{
-	{"allow-duplicate-recipes", settingBool, "Let a later recipe with the same name replace an earlier one instead of failing.", ""},
-	{"allow-duplicate-variables", settingBool, "Let a later assignment to the same variable replace an earlier one instead of failing.", ""},
-	{"default-list", settingBool, "Make plain `just` list the recipes instead of running the default recipe.", ""},
-	{"default-script", settingBool, "Run every recipe as a script, as if it had a `[script]` attribute.", ""},
-	{"dotenv-command", settingString, "Run this command and read its output as environment variable assignments.", ""},
-	{"dotenv-filename", settingString, "Load environment variables from a file with this name, searching upwards, when one exists.", ""},
-	{"dotenv-load", settingBool, "Load environment variables from a `.env` file when one exists.", ""},
-	{"dotenv-override", settingBool, "Let values from the environment file replace variables that are already set.", ""},
-	{"dotenv-path", settingString, "Load environment variables from this file, and fail when it is missing.", ""},
-	{"dotenv-required", settingBool, "Fail when no environment file is found.", ""},
-	{"export", settingBool, "Pass every variable and parameter to recipes as an environment variable.", ""},
-	{"fallback", settingBool, "Look for a justfile in the parent directory when a recipe on the command line is not found here.", ""},
-	{"guards", settingBool, "Treat a leading `?` on a recipe line as a guard: exit status 1 stops the recipe without failing.", ""},
-	{"ignore-comments", settingBool, "Skip recipe lines that start with `#` instead of passing them to the shell.", ""},
-	{"indentation", settingString, "The indentation `just --fmt` writes for recipe bodies.", ""},
-	{"lazy", settingBool, "Evaluate a variable only when something uses it.", ""},
-	{"lists", settingBool, "Let values be lists of strings. Unstable.", ""},
-	{"minimum-version", settingString, "Fail when `just` is older than this version, written as MAJOR.MINOR.PATCH.", ""},
-	{"no-cd", settingBool, "Run recipes in the directory `just` was started in instead of the justfile's directory.", ""},
-	{"no-exit-message", settingBool, "Do not print a message when a recipe fails.", ""},
-	{"positional-arguments", settingBool, "Pass recipe arguments to the shell as positional parameters `$1`, `$2` and so on.", ""},
-	{"quiet", settingBool, "Do not echo recipe lines before running them.", ""},
-	{"script-interpreter", settingList, "The command and arguments that run recipes with a bare `[script]` attribute. Defaults to `['sh', '-eu']`.", ""},
-	{"shell", settingList, "The command and arguments that run recipe lines and backticks. Defaults to `['sh', '-cu']`.", ""},
-	{"tempdir", settingString, "Create the temporary files for script recipes in this directory.", ""},
-	{"unstable", settingBool, "Allow features that are not stable yet.", ""},
-	{"windows-powershell", settingBool, "Use PowerShell as the shell on Windows.", "use `[windows]` on `set shell` instead"},
-	{"windows-shell", settingList, "The shell used on Windows.", "use `[windows]` on `set shell` instead"},
-	{"working-directory", settingString, "Run recipes and backticks in this directory, relative to the justfile.", ""},
+	{"allow-duplicate-recipes", settingBool, "Let a later recipe with the same name replace an earlier one instead of failing.", "", nil},
+	{"allow-duplicate-variables", settingBool, "Let a later assignment to the same variable replace an earlier one instead of failing.", "", nil},
+	{"default-list", settingBool, "Make plain `just` list the recipes instead of running the default recipe.", "", nil},
+	{"default-script", settingBool, "Run every recipe as a script, as if it had a `[script]` attribute.", "", nil},
+	{"dotenv-command", settingString, "Run this command and read its output as environment variable assignments.", "", nil},
+	{"dotenv-filename", settingString, "Load environment variables from a file with this name, searching upwards, when one exists.", "", nil},
+	{"dotenv-load", settingBool, "Load environment variables from a `.env` file when one exists.", "", nil},
+	{"dotenv-override", settingBool, "Let values from the environment file replace variables that are already set.", "", nil},
+	{"dotenv-path", settingString, "Load environment variables from this file, and fail when it is missing.", "", nil},
+	{"dotenv-required", settingBool, "Fail when no environment file is found.", "", nil},
+	{"export", settingBool, "Pass every variable and parameter to recipes as an environment variable.", "", nil},
+	{"fallback", settingBool, "Look for a justfile in the parent directory when a recipe on the command line is not found here.", "", nil},
+	{"guards", settingBool, "Treat a leading `?` on a recipe line as a guard: exit status 1 stops the recipe without failing.", "", nil},
+	{"ignore-comments", settingBool, "Skip recipe lines that start with `#` instead of passing them to the shell.", "", nil},
+	{"indentation", settingString, "The indentation `just --fmt` writes for recipe bodies.", "", validIndentation},
+	{"lazy", settingBool, "Evaluate a variable only when something uses it.", "", nil},
+	{"lists", settingBool, "Let values be lists of strings. Unstable.", "", nil},
+	{"minimum-version", settingString, "Fail when `just` is older than this version, written as MAJOR.MINOR.PATCH.", "", supportedVersion},
+	{"no-cd", settingBool, "Run recipes in the directory `just` was started in instead of the justfile's directory.", "", nil},
+	{"no-exit-message", settingBool, "Do not print a message when a recipe fails.", "", nil},
+	{"positional-arguments", settingBool, "Pass recipe arguments to the shell as positional parameters `$1`, `$2` and so on.", "", nil},
+	{"quiet", settingBool, "Do not echo recipe lines before running them.", "", nil},
+	{"script-interpreter", settingList, "The command and arguments that run recipes with a bare `[script]` attribute. Defaults to `['sh', '-eu']`.", "", nil},
+	{"shell", settingList, "The command and arguments that run recipe lines and backticks. Defaults to `['sh', '-cu']`.", "", nil},
+	{"tempdir", settingString, "Create the temporary files for script recipes in this directory.", "", nil},
+	{"unstable", settingBool, "Allow features that are not stable yet.", "", nil},
+	{"windows-powershell", settingBool, "Use PowerShell as the shell on Windows.", "use `[windows]` on `set shell` instead", nil},
+	{"windows-shell", settingList, "The shell used on Windows.", "use `[windows]` on `set shell` instead", nil},
+	{"working-directory", settingString, "Run recipes and backticks in this directory, relative to the justfile.", "", nil},
 }
 
 type attributeSpec struct {
@@ -361,10 +362,10 @@ var Builtins = func() model.Builtins {
 	return model.NewBuiltins(entries, keywordDocs)
 }()
 
-var settingTypes = func() map[string]settingType {
-	out := make(map[string]settingType, len(settingSpecs))
+var settingsByName = func() map[string]settingSpec {
+	out := make(map[string]settingSpec, len(settingSpecs))
 	for _, s := range settingSpecs {
-		out[s.name] = s.kind
+		out[s.name] = s
 	}
 	return out
 }()

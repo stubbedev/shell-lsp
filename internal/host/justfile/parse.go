@@ -81,8 +81,8 @@ func isNameByte(c byte) bool {
 	return isNameStart(c) || c == '-' || c >= '0' && c <= '9'
 }
 
-func (p *reader) fail(span Span, format string, args ...any) {
-	p.lexError(span, fmt.Sprintf(format, args...))
+func (p *reader) fail(code lint.Code, span Span, format string, args ...any) {
+	p.report(code, span, fmt.Sprintf(format, args...))
 	p.failure = span
 	panic(bail{})
 }
@@ -491,6 +491,10 @@ func describe(t token) string {
 }
 
 func (p *reader) unexpected(t token, wanted string) {
+	p.mismatch(lint.CodeJustSyntax, t, "expected "+wanted)
+}
+
+func (p *reader) mismatch(code lint.Code, t token, message string) {
 	span := t.span
 	switch {
 	case t.kind == tokEOF && t.span.Start > 0 && p.text[t.span.Start-1] == '\n':
@@ -498,7 +502,7 @@ func (p *reader) unexpected(t token, wanted string) {
 	case t.kind == tokNewline || t.kind == tokEOF:
 		span = Span{Start: t.span.Start, End: t.span.Start}
 	}
-	p.fail(span, "expected %s, found %s", wanted, describe(t))
+	p.fail(code, span, "%s, found %s", message, describe(t))
 }
 
 func (p *reader) name() Name {
@@ -540,6 +544,8 @@ func (p *reader) parseFile() {
 		switch {
 		case line == `\` && end < len(p.text):
 			p.pos, joined = end+1, true
+		case trimmed == "" && end == len(p.text):
+			p.pos = end
 		case trimmed == "":
 			p.extraneous()
 			p.doc = ""
@@ -599,7 +605,7 @@ func (p *reader) recover(start int, header bool) {
 		panic(r)
 	}
 	p.depth, p.braces = 0, 0
-	end := p.lineEnd(max(p.failure.Start, start))
+	end := p.lineEnd(max(p.failure.End, start))
 	if header {
 		p.skipIndented(end + 1)
 	} else {
@@ -818,14 +824,69 @@ func (p *reader) unexport(start int, attrs []Attribute) {
 func (p *reader) setting(start int, attrs []Attribute) {
 	p.next()
 	s := &Setting{Attributes: attrs, Name: p.name()}
-	p.known(model.KindSetting, s.Name, lint.CodeJustUnknownSetting)
 	s.Span = Span{Start: start, End: s.Name.Span.End}
-	if _, ok := p.accept(":="); ok {
-		s.Value = p.expression()
+	if spec, ok := settingsByName[s.Name.Text]; ok {
+		s.Value = p.settingValue(s.Name, spec)
+	} else {
+		p.known(model.KindSetting, s.Name, lint.CodeJustUnknownSetting)
+		if _, ok := p.accept(":="); ok {
+			s.Value = p.expression()
+		}
+	}
+	if s.Value != nil {
 		s.Span.End = s.Value.Span.End
 	}
 	p.endOfLine()
 	p.file.Items = append(p.file.Items, Item{Kind: ItemSetting, Setting: s})
+}
+
+func (p *reader) settingValue(name Name, spec settingSpec) *Expr {
+	if spec.kind == settingBool {
+		if _, ok := p.accept(":="); !ok {
+			return nil
+		}
+		t := p.next()
+		if t.kind != tokName || t.text != "true" && t.text != "false" {
+			p.mismatch(lint.CodeJustSettingValue, t, fmt.Sprintf("setting `%s` takes `true` or `false`", name.Text))
+		}
+		return &Expr{Kind: ExprVariable, Span: t.span, Name: Name{Text: t.text, Span: t.span}}
+	}
+	if t := p.next(); t.kind != tokPunct || t.text != ":=" {
+		p.mismatch(lint.CodeJustSettingValue, t, fmt.Sprintf("setting `%s` needs a value", name.Text))
+	}
+	switch {
+	case spec.kind == settingList:
+		return p.interpreter(name)
+	case spec.literal != nil:
+		return p.literalSetting(name, spec.literal)
+	}
+	return p.expression()
+}
+
+func (p *reader) interpreter(name Name) *Expr {
+	open := p.next()
+	if open.kind != tokPunct || open.text != "[" {
+		p.mismatch(lint.CodeJustSettingValue, open, fmt.Sprintf("setting `%s` takes a list such as `['bash', '-c']`", name.Text))
+	}
+	p.depth++
+	if t := p.peek(); t.kind == tokPunct && t.text == "]" {
+		p.mismatch(lint.CodeJustSettingValue, t, fmt.Sprintf("setting `%s` needs at least the command", name.Text))
+	}
+	p.depth--
+	return p.list(open)
+}
+
+func (p *reader) literalSetting(name Name, valid func(string) error) *Expr {
+	v := p.expression()
+	switch {
+	case v.Kind != ExprString || v.Str.Prefix != 0 || v.Str.Indented():
+		p.report(lint.CodeJustSettingValue, name.Span, fmt.Sprintf("`%s` setting must be a plain string literal", name.Text))
+	default:
+		if err := valid(v.Str.Value); err != nil {
+			p.report(lint.CodeJustSettingValue, v.Span, err.Error())
+		}
+	}
+	return v
 }
 
 func (p *reader) importItem(start int, attrs []Attribute) {
@@ -1135,7 +1196,7 @@ func (p *reader) interpolation() *Expr {
 	depth, braces := p.depth, p.braces
 	p.depth, p.braces = 1, 0
 	if t := p.peek(); t.kind == tokPunct && t.text == interpolationClose {
-		p.fail(t.span, "an interpolation needs an expression")
+		p.fail(lint.CodeJustSyntax, t.span, "an interpolation needs an expression")
 	}
 	expr := p.expression()
 	p.expect(interpolationClose)

@@ -109,7 +109,7 @@ func settingReadsEnvironment(f *File) bool {
 
 func FuzzMatchesJust(f *testing.F) {
 	seeds(f)
-	hosttest.LiveTool(f, "just", hosttest.JustVersion)
+	hosttest.LiveTool(f, "just", "just "+Version)
 	f.Fuzz(func(t *testing.T, text string) {
 		a := Analyze(text)
 		if len(a.File.Errors) > 0 || !hosttest.JustVerdict(t, text).Accepted {

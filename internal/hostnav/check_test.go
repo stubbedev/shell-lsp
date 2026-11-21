@@ -80,7 +80,7 @@ func TestJustChecksAgreeWithJust(t *testing.T) {
 	t.Parallel()
 
 	if *update {
-		hosttest.RequireTool(t, "just", hosttest.JustVersion)
+		hosttest.RequireTool(t, "just", "just "+justfile.Version)
 	}
 	hosttest.Check(t, filepath.Join("testdata", "check", "just.txt"), findingsAlone(t, "justfile"), hosttest.JustVerdict, justReports, *update)
 }

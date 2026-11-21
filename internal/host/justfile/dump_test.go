@@ -61,7 +61,7 @@ func TestParseAgreesWithJust(t *testing.T) {
 		t.Fatalf("no parse fixtures: %v", err)
 	}
 	if *update {
-		hosttest.RequireTool(t, "just", hosttest.JustVersion)
+		hosttest.RequireTool(t, "just", "just "+Version)
 	}
 	for _, path := range paths {
 		t.Run(filepath.Base(path), func(t *testing.T) {
@@ -256,10 +256,14 @@ func dump(f *File) map[string]any {
 	return map[string]any{"recipes": recipes, "assignments": assignments, "aliases": aliases, "modules": modules, "settings": settings}
 }
 
-var listSettings = []string{"shell", "windows_shell", "script_interpreter"}
+var listSettings = []string{"shell", "windows_shell"}
+
+var undumpedSettings = []string{"minimum_version", "script_interpreter"}
 
 func dumpSetting(f *File, name string, value *Expr) (any, bool) {
 	switch {
+	case slices.Contains(undumpedSettings, name):
+		return nil, false
 	case value == nil:
 		return true, true
 	case value.Kind == ExprVariable && value.Name.Text == "true":

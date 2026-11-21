@@ -1015,7 +1015,9 @@ set quiet    # SL5015
 
 **A setting has a value just refuses.** Boolean settings take `true` or
 `false`, settings that name a command such as `shell` take a list like
-`['bash', '-c']`, and the others take a string.
+`['bash', '-c']`, and the others take a string. `indentation` and
+`minimum-version` take a plain string literal: spaces or tabs for the
+indentation, and a `MAJOR.MINOR.PATCH` version no newer than just 1.58.0.
 
 ```just
 set shell := "bash"    # SL5016

@@ -457,6 +457,48 @@ set indentation := " 	"
 -- tab-indentation --
 set unstable
 set indentation := "	"
+-- interpreter-setting-with-a-multi-line-string --
+set shell := "
+"A
+-- bool-setting-with-another-name --
+set quiet := yes
+-- bool-setting-without-a-value --
+set quiet :=
+-- interpreter-setting-without-a-value --
+set shell
+-- interpreter-setting-without-a-command --
+set shell := []
+-- interpreter-setting-with-a-nested-list --
+set shell := [["sh"]]
+-- string-setting-with-a-list --
+set unstable
+set lists
+set tempdir := ["a"]
+-- shell-expanded-indentation --
+set indentation := x"  "
+-- indented-string-indentation --
+set indentation := '''  '''
+-- format-string-indentation --
+set indentation := f"  "
+-- concatenated-indentation --
+set indentation := "  " + ""
+-- grouped-indentation-over-lines --
+set indentation := (
+  "  "
+)
+-- minimum-version-met --
+set minimum-version := "1.58.0"
+-- minimum-version-too-new --
+set minimum-version := "99.0.0"
+-- minimum-version-on-a-continued-line --
+set minimum-version := \
+  "99.0.0"
+-- minimum-version-with-a-leading-zero --
+set minimum-version := "01.2.3"
+-- minimum-version-without-a-patch --
+set minimum-version := "1.58"
+-- keyword-that-is-not-a-setting --
+set true := (
 -- recipe-depending-on-an-absent-module --
 mod? tools
 lint: tools::check

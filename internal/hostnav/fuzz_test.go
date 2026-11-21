@@ -9,6 +9,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/host/hosttest"
+	"github.com/stubbedev/shell-lsp/internal/host/justfile"
 	"github.com/stubbedev/shell-lsp/internal/host/makefile"
 	"github.com/stubbedev/shell-lsp/internal/host/oracle"
 	"github.com/stubbedev/shell-lsp/internal/lint"
@@ -34,7 +35,7 @@ var shellExpandedString = regexp.MustCompile(`x(?:'|")[^\n]*[$~]`)
 
 func FuzzJustChecksAgreeWithJust(f *testing.F) {
 	checkSeeds(f, "just.txt")
-	hosttest.LiveTool(f, "just", hosttest.JustVersion)
+	hosttest.LiveTool(f, "just", "just "+justfile.Version)
 	f.Fuzz(func(t *testing.T, text string) {
 		skipLoneCarriageReturns(t, text)
 		if shellExpandedString.MatchString(text) {

@@ -44,7 +44,9 @@ func (f *File) check() []lint.Finding {
 		args := c.attributes(it)
 		switch it.Kind {
 		case ItemSetting:
-			c.settingValue(it.Setting)
+			if slices.Contains(constSettings, it.Setting.Name.Text) {
+				c.constant(it.Setting.Value)
+			}
 		case ItemRecipe:
 			c.recipe(it.Recipe, args)
 		case ItemFunction:
@@ -149,59 +151,6 @@ func clash(prior []definition, d definition) (definition, bool) {
 	return definition{}, false
 }
 
-func (c *checker) indentationSetting(v *Expr) {
-	values, ok := c.f.Constant(v)
-	if !ok || len(values) != 1 {
-		return
-	}
-	switch value := values[0]; {
-	case value == "":
-		c.report(lint.CodeJustSettingValue, v.Span, "the indentation must not be empty")
-	case strings.Trim(value, " \t") != "":
-		c.report(lint.CodeJustSettingValue, v.Span, "the indentation must be spaces or tabs")
-	case strings.Contains(value, " ") && strings.Contains(value, "\t"):
-		c.report(lint.CodeJustSettingValue, v.Span, "the indentation must be all spaces or all tabs")
-	}
-}
-
-func (c *checker) settingValue(s *Setting) {
-	kind, known := settingTypes[s.Name.Text]
-	if !known {
-		return
-	}
-	if slices.Contains(constSettings, s.Name.Text) {
-		c.constant(s.Value)
-	}
-	v := s.Value
-	switch kind {
-	case settingBool:
-		if v != nil && (v.Kind != ExprVariable || v.Name.Text != "true" && v.Name.Text != "false") {
-			c.report(lint.CodeJustSettingValue, v.Span, "setting `%s` takes `true` or `false`", s.Name.Text)
-		}
-	case settingString:
-		switch {
-		case v == nil:
-			c.report(lint.CodeJustSettingValue, s.Name.Span, "setting `%s` needs a value: `set %s := '...'`", s.Name.Text, s.Name.Text)
-		case v.Kind == ExprList && !c.lists:
-			c.report(lint.CodeJustSettingValue, v.Span, "setting `%s` takes a string, not a list", s.Name.Text)
-		case s.Name.Text == "indentation":
-			c.indentationSetting(v)
-		}
-	case settingList:
-		if v == nil || v.Kind != ExprList {
-			span := s.Name.Span
-			if v != nil {
-				span = v.Span
-			}
-			c.report(lint.CodeJustSettingValue, span, "setting `%s` takes a list such as `['bash', '-c']`", s.Name.Text)
-			return
-		}
-		if len(v.Args) == 0 {
-			c.report(lint.CodeJustSettingValue, v.Span, "setting `%s` needs at least the command", s.Name.Text)
-		}
-	}
-}
-
 func condition(e *Expr) (*Expr, bool) {
 	switch {
 	case e.Kind == ExprIf, e.Kind == ExprCall && e.Name.Text == "assert" && len(e.Args) > 0:
@@ -232,7 +181,7 @@ func (c *checker) features(it Item) {
 				c.report(lint.CodeJustNeedsSetting, Span{Start: x.Span.Start, End: x.Span.Start + 1}, "`!` needs `set lists`")
 			case x.Kind == ExprBinary && (x.Op == "&&" || x.Op == "||" || x.Op == "++"):
 				c.report(lint.CodeJustNeedsSetting, x.OpSpan, "`%s` needs `set lists`", x.Op)
-			case x.Kind == ExprList && !commandSetting(it):
+			case x.Kind == ExprList && !interpreter(it, x):
 				c.report(lint.CodeJustNeedsSetting, x.Span, "list literals need `set lists`")
 			}
 		})
@@ -376,8 +325,8 @@ func whitespace(s string) string {
 	return sb.String()
 }
 
-func commandSetting(it Item) bool {
-	return it.Kind == ItemSetting && slices.Contains([]string{"shell", "windows-shell", "script-interpreter"}, it.Setting.Name.Text)
+func interpreter(it Item, x *Expr) bool {
+	return it.Kind == ItemSetting && it.Setting.Value == x && settingsByName[it.Setting.Name.Text].kind == settingList
 }
 
 func (c *checker) itemToken(it Item) (string, Name) {

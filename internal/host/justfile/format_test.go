@@ -39,7 +39,7 @@ func TestFormatAgreesWithJust(t *testing.T) {
 		t.Fatalf("no format fixtures: %v", err)
 	}
 	if *update {
-		hosttest.RequireTool(t, "just", hosttest.JustVersion)
+		hosttest.RequireTool(t, "just", "just "+Version)
 	}
 	for _, path := range paths {
 		t.Run(filepath.Base(path), func(t *testing.T) {
