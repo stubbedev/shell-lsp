@@ -87,6 +87,8 @@ func TestJustChecksAgreeWithJust(t *testing.T) {
 
 const justOracleSystem = "linux"
 
+var justParsePhase = []lint.Code{lint.CodeJustSyntax, lint.CodeJustUnknownAttribute, lint.CodeJustAttributeArguments, lint.CodeJustNeedsSetting}
+
 func justReports(text string, _ oracle.Verdict, findings []lint.Finding) []lint.Finding {
 	var disabled []parser.Span
 	for _, it := range justfile.Parse(text).Items {
@@ -95,7 +97,7 @@ func justReports(text string, _ oracle.Verdict, findings []lint.Finding) []lint.
 		}
 	}
 	return slices.DeleteFunc(slices.Clone(findings), func(f lint.Finding) bool {
-		return slices.ContainsFunc(disabled, func(s parser.Span) bool { return s.Covers(f.Span.Start) })
+		return !slices.Contains(justParsePhase, f.Code) && slices.ContainsFunc(disabled, func(s parser.Span) bool { return s.Covers(f.Span.Start) })
 	})
 }
 
