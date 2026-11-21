@@ -1,6 +1,7 @@
 package lint
 
 import (
+	"math"
 	"runtime"
 	"strconv"
 	"strings"
@@ -60,27 +61,39 @@ func casePatterns(n int, pattern func(i int) string) string {
 	return sb.String()
 }
 
-func TestCheckFinishesLargeInputsQuickly(t *testing.T) {
-	t.Parallel()
+func fastestCheck(script string) time.Duration {
+	tree := parser.Parse(script, dialect.Bash)
+	fastest := time.Duration(math.MaxInt64)
+	for range 3 {
+		start := time.Now()
+		Check(tree, nil, Options{})
+		fastest = min(fastest, time.Since(start))
+	}
+	return fastest
+}
 
+func TestCheckTimeGrowsLinearlyWithInputSize(t *testing.T) {
 	cases := []struct {
 		name   string
-		script string
+		base   int
+		script func(n int) string
 	}{
-		{"unclosed parameter expansions", "echo " + strings.Repeat("${", 50_000) + "\n"},
-		{"one command with many arguments", "echo " + strings.Repeat("a ", 200_000) + "\n"},
-		{"many literal case patterns", casePatterns(100_000, func(i int) string { return "p" + strconv.Itoa(i) })},
-		{"many glob case patterns", casePatterns(20_000, func(i int) string { return "p" + strconv.Itoa(i) + "*" })},
+		{"unclosed parameter expansions", 50_000, func(n int) string { return "echo " + strings.Repeat("${", n) + "\n" }},
+		{"one command with many arguments", 50_000, func(n int) string { return "echo " + strings.Repeat("a ", n) + "\n" }},
+		{"many literal case patterns", 25_000, func(n int) string {
+			return casePatterns(n, func(i int) string { return "p" + strconv.Itoa(i) })
+		}},
+		{"many glob case patterns", 5_000, func(n int) string {
+			return casePatterns(n, func(i int) string { return "p" + strconv.Itoa(i) + "*" })
+		}},
 	}
+	const growth, allowed = 4, 8
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			tree := parser.Parse(tc.script, dialect.Bash)
-			start := time.Now()
-			Check(tree, nil, Options{})
-			if elapsed := time.Since(start); elapsed > 3*time.Second {
-				t.Errorf("linting took %v", elapsed)
+			small := fastestCheck(tc.script(tc.base))
+			large := fastestCheck(tc.script(tc.base * growth))
+			if large > allowed*small {
+				t.Errorf("linting %d items took %v, %d items %v: more than %dx for %dx the input", tc.base, small, tc.base*growth, large, allowed, growth)
 			}
 		})
 	}
