@@ -14,11 +14,17 @@ var (
 	ashShells    = dialect.SetOf(dialect.Dash, dialect.Busybox)
 )
 
+const (
+	dashBefore      = "dash before "
+	dashRelease0513 = "0.5.13"
+)
+
 type portabilityIssue struct {
 	code        Code
 	feature     string
 	alternative string
 	replacement string
+	dashSince   string
 }
 
 func (p *pass) replacementFix(issue portabilityIssue, span parser.Span) []Fix {
@@ -32,7 +38,7 @@ func (p *pass) nonPortable(issue portabilityIssue, span parser.Span, fixes ...Fi
 	if !p.meta(issue.code).shells.Has(p.dialect) {
 		return
 	}
-	severity, message := SeverityError, issue.feature+" is not supported in "+shellLabel(p.dialect)+"."
+	severity, message := SeverityError, issue.feature+" is not supported in "+unsupportedShell(p.dialect, issue.dashSince)+"."
 	if p.dialect == dialect.Posix {
 		severity, message = SeverityWarning, issue.feature+" is undefined in POSIX sh."
 	}
@@ -49,6 +55,17 @@ func (p *pass) nonPortableNode(issue portabilityIssue, n syntax.Node, fixes ...F
 	if span, ok := p.span(n); ok {
 		p.nonPortable(issue, span, fixes...)
 	}
+}
+
+func (p *pass) busyboxProvides(provided map[string]bool, name string) bool {
+	return p.dialect == dialect.Busybox && provided[name]
+}
+
+func unsupportedShell(d dialect.Dialect, dashSince string) string {
+	if d == dialect.Dash && dashSince != "" {
+		return dashBefore + dashSince
+	}
+	return shellLabel(d)
 }
 
 func shellLabel(d dialect.Dialect) string {

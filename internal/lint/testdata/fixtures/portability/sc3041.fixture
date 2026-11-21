@@ -23,3 +23,8 @@ set -- curl -o index.html 'https://example.org/'
 saved=$-
 set -"$saved"
 >>> none
+
+### brace expansion flag in dash
+#!/bin/dash
+set -B
+>>+ SC3041 2:5 -- dash 0.5.13 rejects set -B

@@ -7,7 +7,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/directive"
 	"github.com/stubbedev/shell-lsp/internal/parser"
-	"github.com/stubbedev/shell-lsp/internal/shelltest"
+	"github.com/stubbedev/shell-lsp/internal/referencetest"
 )
 
 var forkRewrites = []struct {
@@ -102,18 +102,18 @@ func TestForkRewritesMatchTheShells(t *testing.T) {
 		if strings.Contains(tc.script, "basename") || strings.Contains(tc.script, "dirname") || strings.Contains(tc.script, "$(cat") {
 			continue
 		}
-		name := shelltest.Bash.Name
+		name := referencetest.Bash.Name
 		if strings.HasPrefix(tc.script, "#!/bin/zsh") {
-			name = shelltest.Zsh.Name
+			name = referencetest.Zsh.Name
 		}
 		for _, value := range values {
 			batches[name] = append(batches[name], pair{tc.script, tc.want, value})
 		}
 	}
-	for _, sh := range []shelltest.Shell{shelltest.Bash, shelltest.Zsh} {
+	for _, sh := range []referencetest.Shell{referencetest.Bash, referencetest.Zsh} {
 		sh.Require(t)
 		program := func(script, value string) string {
-			return "x=" + shelltest.Quote(value) + "\n" + strings.TrimPrefix(script, "#!/bin/zsh\n") + "printf '<%s>' \"$y\" \"$u\" \"$l\" \"$s\" \"$t\" \"$k\" \"$v\" \"$p\"\n"
+			return "x=" + referencetest.Quote(value) + "\n" + strings.TrimPrefix(script, "#!/bin/zsh\n") + "printf '<%s>' \"$y\" \"$u\" \"$l\" \"$s\" \"$t\" \"$k\" \"$v\" \"$p\"\n"
 		}
 		pairs := batches[sh.Name]
 		scripts := make([]string, 0, 2*len(pairs))

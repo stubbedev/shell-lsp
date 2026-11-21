@@ -1,15 +1,9 @@
 package dialect
 
 import (
-	"context"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"reflect"
 	"slices"
-	"strings"
 	"testing"
-	"time"
 
 	"github.com/stubbedev/shell-lsp/internal/referencetest"
 )
@@ -35,32 +29,20 @@ var featureProbes = map[string]featureProbe{
 	"ClearsErrexitInSubstitutions": {script: `set -e; f() { false; echo reached; }; v=$(f); [ "$v" = reached ]`},
 }
 
-type shellVersion struct {
-	script string
-	want   string
-}
-
 type featureRunner struct {
-	shell   Shell
-	argv    []string
-	version shellVersion
+	shell     Shell
+	reference referencetest.Shell
 }
 
-var (
-	bashVersion = shellVersion{script: `echo "${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}"`, want: "5.3"}
-
-	featureRunners = []featureRunner{
-		{shell: Shell{Dialect: Bash}, argv: []string{"bash"}, version: bashVersion},
-		{shell: FlavorBats.Shell(), argv: []string{"bash"}, version: bashVersion},
-		{shell: Shell{Dialect: Zsh}, argv: []string{"zsh"}, version: shellVersion{script: `echo "${ZSH_VERSION%.*}"`, want: "5.9"}},
-		{shell: Shell{Dialect: Dash}, argv: []string{"dash"}},
-		{shell: Shell{Dialect: Ksh}, argv: []string{"ksh"}, version: shellVersion{script: `set -- ${.sh.version}; v=$3; echo "${v%.*}"`, want: "93u+m/1.0"}},
-		{shell: FlavorMksh.Shell(), argv: []string{"mksh"}, version: shellVersion{script: `set -- $KSH_VERSION; echo "$3"`, want: "R59"}},
-		{shell: Shell{Dialect: Busybox}, argv: []string{"busybox", "sh"}, version: shellVersion{script: `set -- $(busybox 2>&1); echo "${2%.*}"`, want: "v1.37"}},
-	}
-)
-
-const probeWrapper = `(eval "$PROBE") >/dev/null 2>&1; case $? in 0) echo yes ;; *) echo no ;; esac`
+var featureRunners = []featureRunner{
+	{shell: Shell{Dialect: Bash}, reference: referencetest.Bash},
+	{shell: FlavorBats.Shell(), reference: referencetest.Bash},
+	{shell: Shell{Dialect: Zsh}, reference: referencetest.Zsh},
+	{shell: Shell{Dialect: Dash}, reference: referencetest.Dash},
+	{shell: Shell{Dialect: Ksh}, reference: referencetest.Ksh},
+	{shell: FlavorMksh.Shell(), reference: referencetest.Mksh},
+	{shell: Shell{Dialect: Busybox}, reference: referencetest.Busybox},
+}
 
 func TestEveryFeatureHasOneProbe(t *testing.T) {
 	t.Parallel()
@@ -108,54 +90,16 @@ func TestFeaturesMatchRealShells(t *testing.T) {
 	t.Parallel()
 
 	for _, r := range featureRunners {
-		t.Run(strings.Join(r.argv, " ")+"/"+r.shell.Lang().String(), func(t *testing.T) {
+		t.Run(r.reference.Name+"/"+r.shell.Lang().String(), func(t *testing.T) {
 			t.Parallel()
-			if _, err := exec.LookPath(r.argv[0]); err != nil {
-				referencetest.Unavailable(t, "checking the "+r.shell.Dialect.String()+" features needs "+r.argv[0]+" on PATH: "+err.Error())
-			}
-			if r.version.script != "" {
-				if got := shellOutput(t, r.argv, r.version.script, t.TempDir()); got != r.version.want {
-					referencetest.Unavailable(t, "the "+r.shell.Dialect.String()+" features describe "+r.argv[0]+" "+r.version.want+", but "+got+" is installed")
-				}
-			}
+			r.reference.Require(t)
 			features := reflect.ValueOf(r.shell.Features())
 			for name, probe := range featureProbes {
 				want := features.FieldByName(name).Bool() != probe.holdsOnFailure
-				if got := runProbe(t, r.argv, probe.script); got != want {
-					t.Errorf("Features.%s is %t, but %s says %t: %s", name, features.FieldByName(name).Bool(), r.argv[0], got != probe.holdsOnFailure, probe.script)
+				if got := r.reference.Succeeds(t, probe.script); got != want {
+					t.Errorf("Features.%s is %t, but %s says %t: %s", name, features.FieldByName(name).Bool(), r.reference.Name, got != probe.holdsOnFailure, probe.script)
 				}
 			}
 		})
 	}
-}
-
-func runProbe(t *testing.T, argv []string, script string) bool {
-	t.Helper()
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "probe"), nil, 0o600); err != nil {
-		t.Fatalf("creating the glob target for %q: %v", script, err)
-	}
-	switch answer := shellOutput(t, argv, probeWrapper, dir, "PROBE="+script); answer {
-	case "yes":
-		return true
-	case "no":
-		return false
-	default:
-		t.Fatalf("%s running %q printed %q, want yes or no", argv[0], script, answer)
-		return false
-	}
-}
-
-func shellOutput(t *testing.T, argv []string, script, dir string, env ...string) string {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, argv[0], append(argv[1:], "-c", script)...)
-	cmd.Dir = dir
-	cmd.Env = append(append(os.Environ(), "LC_ALL=C"), env...)
-	out, err := cmd.Output()
-	if err != nil {
-		t.Fatalf("%s running %q with %q: %v", argv[0], script, env, err)
-	}
-	return strings.TrimSpace(string(out))
 }

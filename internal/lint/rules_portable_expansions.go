@@ -14,20 +14,20 @@ import (
 var portableExpansionsFamily = family{
 	codes: map[Code]meta{
 		3002: {shells: strictShells, summary: "Extended globs are undefined in POSIX sh."},
-		3003: {shells: posixOrDash, summary: "ANSI-C quoted $'...' strings are undefined in POSIX sh and dash."},
+		3003: {shells: posixOrDash, summary: "ANSI-C quoted $'...' strings are undefined in POSIX sh and dash before 0.5.13."},
 		3004: {shells: strictShells, summary: "Locale-translated $\"...\" strings are undefined in POSIX sh."},
 		3007: {shells: strictShells, summary: "$[...] arithmetic is undefined in POSIX sh."},
-		3018: {shells: strictShells, summary: "The ++ and -- operators are undefined in POSIX sh."},
-		3019: {shells: strictShells, summary: "Exponentiation with ** is undefined in POSIX sh."},
-		3026: {shells: strictShells, summary: "Negating a bracket expression with ^ is undefined in POSIX sh."},
+		3018: {shells: posixOrDash, summary: "The ++ and -- operators are undefined in POSIX sh and dash."},
+		3019: {shells: posixOrDash, summary: "Exponentiation with ** is undefined in POSIX sh and dash."},
+		3026: {shells: posixOrDash, summary: "Negating a bracket expression with ^ is undefined in POSIX sh and dash before 0.5.13."},
 		3028: {shells: strictShells, summary: "A bash-specific variable is undefined in POSIX sh."},
-		3052: {shells: strictShells, summary: "Arithmetic base prefixes like 16# are undefined in POSIX sh."},
+		3052: {shells: posixOrDash, summary: "Arithmetic base prefixes like 16# are undefined in POSIX sh and dash."},
 		3053: {shells: strictShells, summary: "Indirect expansion with ${!name} is undefined in POSIX sh."},
 		3054: {shells: strictShells, summary: "Array subscripts are undefined in POSIX sh."},
 		3055: {shells: strictShells, summary: "Listing array keys with ${!array[@]} is undefined in POSIX sh."},
 		3056: {shells: strictShells, summary: "Listing variable names by prefix with ${!prefix*} is undefined in POSIX sh."},
 		3057: {shells: posixOrDash, summary: "Substring expansion ${var:offset} is undefined in POSIX sh and dash."},
-		3058: {shells: posixOrDash, summary: "Applying a length or trim operator to $@ or $* is undefined in POSIX sh and dash."},
+		3058: {shells: strictShells, summary: "Applying a length or trim operator to $@ or $* is undefined in POSIX sh."},
 		3059: {shells: strictShells, summary: "Case modification in parameter expansion is undefined in POSIX sh."},
 		3060: {shells: posixOrDash, summary: "Pattern substitution ${var/pattern/replacement} is undefined in POSIX sh and dash."},
 	},
@@ -36,6 +36,7 @@ var portableExpansionsFamily = family{
 
 var (
 	dynamicBashVariables = setOf("RANDOM", "SECONDS")
+	busyboxBashVariables = setOf("RANDOM", "HOSTNAME", "SHLVL", "EPOCHREALTIME", "EPOCHSECONDS", "FUNCNAME")
 	staticBashVariables  = setOf(
 		"OSTYPE", "MACHTYPE", "HOSTTYPE", "HOSTNAME", "DIRSTACK", "EUID", "UID", "SHLVL", "PIPESTATUS", "SHELLOPTS", "_",
 		"BASHOPTS", "BASHPID", "BASH_ALIASES", "BASH_ARGC", "BASH_ARGV", "BASH_ARGV0", "BASH_CMDS", "BASH_COMMAND",
@@ -53,7 +54,7 @@ func checkPortableExpansions(p *pass, n syntax.Node) {
 		p.nonPortableNode(portabilityIssue{code: 3002, feature: "The extended glob " + n.Op.String() + "...)"}, n)
 	case *syntax.SglQuoted:
 		if n.Dollar {
-			p.nonPortableNode(portabilityIssue{code: 3003, feature: "The ANSI-C quoted string $'...'", alternative: "printf to produce the special characters"}, n)
+			p.nonPortableNode(portabilityIssue{code: 3003, feature: "The ANSI-C quoted string $'...'", alternative: "printf to produce the special characters", dashSince: dashRelease0513}, n)
 		}
 	case *syntax.DblQuoted:
 		if n.Dollar {
@@ -99,7 +100,7 @@ func checkCaretBracket(p *pass, w *syntax.Word) {
 		if caret < len(p.text) && p.text[caret] == '^' {
 			fixes = append(fixes, safeFix("Replace [^ with [!", textedit.Edit{Start: caret, End: caret + 1, NewText: "!"}))
 		}
-		p.nonPortable(portabilityIssue{code: 3026, feature: "Negating a bracket expression with ^", alternative: "[!...]"}, parser.Span{Start: offset + start, End: offset + end}, fixes...)
+		p.nonPortable(portabilityIssue{code: 3026, feature: "Negating a bracket expression with ^", alternative: "[!...]", dashSince: dashRelease0513}, parser.Span{Start: offset + start, End: offset + end}, fixes...)
 	}
 }
 
@@ -136,6 +137,8 @@ func checkArithmeticOperand(p *pass, w *syntax.Word) {
 
 func (p *pass) checkBashVariable(name string, span parser.Span) {
 	switch {
+	case p.busyboxProvides(busyboxBashVariables, name):
+		return
 	case dynamicBashVariables[name]:
 	case !staticBashVariables[name], p.tree.Defines(name):
 		return

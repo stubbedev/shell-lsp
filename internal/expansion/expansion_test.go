@@ -8,8 +8,8 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/glob"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/referencetest"
 	"github.com/stubbedev/shell-lsp/internal/shelloptions"
-	"github.com/stubbedev/shell-lsp/internal/shelltest"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -243,12 +243,12 @@ var zshRegexCases = []regexCase{
 func TestRegexEvaluationMatchesTheShells(t *testing.T) {
 	shells := []struct {
 		dialect dialect.Dialect
-		shell   shelltest.Shell
+		shell   referencetest.Shell
 		cases   []regexCase
 		report  string
 	}{
-		{dialect.Bash, shelltest.Bash, bashRegexCases, `IFS='|'; printf '%s' "${BASH_REMATCH[*]}"`},
-		{dialect.Zsh, shelltest.Zsh, zshRegexCases, `print -rn -- "$MATCH|${(j:|:)match}"`},
+		{dialect.Bash, referencetest.Bash, bashRegexCases, `IFS='|'; printf '%s' "${BASH_REMATCH[*]}"`},
+		{dialect.Zsh, referencetest.Zsh, zshRegexCases, `print -rn -- "$MATCH|${(j:|:)match}"`},
 	}
 	for _, sh := range shells {
 		t.Run(sh.shell.Name, func(t *testing.T) {
@@ -346,12 +346,12 @@ func ours(t *testing.T, d dialect.Dialect, script string) (string, error) {
 func TestEvaluationMatchesTheShells(t *testing.T) {
 	shells := []struct {
 		dialect dialect.Dialect
-		shell   shelltest.Shell
+		shell   referencetest.Shell
 		cases   []evalCase
 	}{
-		{dialect.Bash, shelltest.Bash, bashCases},
-		{dialect.Zsh, shelltest.Zsh, zshCases},
-		{dialect.Ksh, shelltest.Ksh, kshCases},
+		{dialect.Bash, referencetest.Bash, bashCases},
+		{dialect.Zsh, referencetest.Zsh, zshCases},
+		{dialect.Ksh, referencetest.Ksh, kshCases},
 	}
 	for _, sh := range shells {
 		t.Run(sh.shell.Name, func(t *testing.T) {

@@ -8,7 +8,7 @@ import (
 
 var portableSyntaxFamily = family{
 	codes: map[Code]meta{
-		3001: {shells: strictShells, summary: "Process substitution is undefined in POSIX sh."},
+		3001: {shells: posixOrDash, summary: "Process substitution is undefined in POSIX sh and dash."},
 		3005: {shells: strictShells, summary: "C-style for ((...)) loops are undefined in POSIX sh."},
 		3006: {shells: strictShells, summary: "The arithmetic command ((...)) is undefined in POSIX sh."},
 		3008: {shells: strictShells, summary: "select loops are undefined in POSIX sh."},
@@ -16,7 +16,7 @@ var portableSyntaxFamily = family{
 		3029: {shells: strictShells, summary: "The |& operator is undefined in POSIX sh."},
 		3030: {shells: strictShells, summary: "Arrays are undefined in POSIX sh."},
 		3032: {shells: strictShells, summary: "coproc is undefined in POSIX sh."},
-		3033: {shells: strictShells, summary: "A function name that is not a valid identifier is undefined in POSIX sh."},
+		3033: {shells: posixOrDash, summary: "A function name that is not a valid identifier is undefined in POSIX sh and dash."},
 		3034: {shells: strictShells, summary: "Reading a file with $(< file) is undefined in POSIX sh."},
 		3035: {shells: strictShells, summary: "Reading a file with `< file` is undefined in POSIX sh."},
 	},

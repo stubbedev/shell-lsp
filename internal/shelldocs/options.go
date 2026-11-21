@@ -9,10 +9,11 @@ import (
 )
 
 type shellOption struct {
-	name     string
-	dialects dialect.Set
-	doc      string
-	letters  []optionLetter
+	name      string
+	dialects  dialect.Set
+	doc       string
+	letters   []optionLetter
+	dashSince string
 }
 
 type optionLetter struct {
@@ -39,9 +40,9 @@ var shellOptions = []shellOption{
 	{name: "notify", dialects: every, doc: "Report job status changes immediately.", letters: []optionLetter{{'b', notZsh}}},
 	{name: "ignoreeof", dialects: every, doc: "Do not exit an interactive shell on end-of-file.", letters: []optionLetter{{'I', dashBusybox}}},
 	{name: "vi", dialects: every, doc: "Use vi-style line editing.", letters: []optionLetter{{'V', dashOnly}}},
-	{name: "emacs", dialects: dialect.SetOf(dialect.Bash, dialect.Zsh, dialect.Dash, dialect.Ksh, dialect.Busybox), doc: "Use emacs-style line editing.", letters: []optionLetter{{'E', dashOnly}}},
+	{name: "emacs", dialects: dialect.SetOf(dialect.Bash, dialect.Zsh, dialect.Dash, dialect.Ksh), doc: "Use emacs-style line editing.", letters: []optionLetter{{'E', dashOnly}}},
 	{name: "nolog", dialects: dialect.SetOf(dialect.Posix, dialect.Bash, dialect.Zsh, dialect.Dash, dialect.Ksh), doc: "Do not enter function definitions into the command history; most shells accept it and ignore it."},
-	{name: "pipefail", dialects: notPosix, doc: "Make a pipeline fail when any of its commands fails, not only the last."},
+	{name: "pipefail", dialects: notPosix, doc: "Make a pipeline fail when any of its commands fails, not only the last.", dashSince: "0.5.13"},
 	{name: "posix", dialects: bashOnly, doc: "Make bash behave as a POSIX shell where the default differs."},
 	{name: "errtrace", dialects: bashBusybox, doc: "Let functions, command substitutions and subshells inherit the `ERR` trap.", letters: []optionLetter{{'E', bashBusybox}}},
 	{name: "functrace", dialects: bashOnly, doc: "Let functions inherit the `DEBUG` and `RETURN` traps.", letters: []optionLetter{{'T', bashOnly}}},
@@ -57,6 +58,15 @@ var shellOptions = []shellOption{
 
 var unnamedLetters = []Entry{
 	{Name: "h", Dialects: dialect.SetOf(dialect.Posix), Doc: "Locate and remember the utilities a function invokes when the function is defined."},
+}
+
+func SetOptionDashSince(name string) string {
+	for _, o := range shellOptions {
+		if o.name == name {
+			return o.dashSince
+		}
+	}
+	return ""
 }
 
 func SetLetter(letter byte, d dialect.Dialect) (string, bool) {

@@ -220,7 +220,7 @@ var (
 		"mapfile":   mapfileFlags,
 		"readarray": mapfileFlags,
 		"exec": {
-			{Name: "-a", Dialects: bashZsh, Doc: "Pass the next argument to the command as its name (`$0`)."},
+			{Name: "-a", Dialects: bashZshBusybox, Doc: "Pass the next argument to the command as its name (`$0`)."},
 			{Name: "-c", Dialects: bashZsh, Doc: "Run the command with an empty environment."},
 			{Name: "-l", Dialects: bashZsh, Doc: "Prefix the command's name with a dash, making it a login shell."},
 		},

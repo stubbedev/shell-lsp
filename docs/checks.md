@@ -403,9 +403,9 @@ marks the checks the `minimal` profile keeps; see [Profiles](linting.md#profiles
 | <a name="sc2336"></a>[SC2336](https://www.shellcheck.net/wiki/SC2336) | warning |  | yes | cp -r is implementation-defined for special files. |
 | <a name="sc2337"></a>[SC2337](https://www.shellcheck.net/wiki/SC2337) | warning |  | yes | A command that may exit before reading all its input can make the writer upstream fail with SIGPIPE under pipefail. |
 | <a name="sc2338"></a>[SC2338](https://www.shellcheck.net/wiki/SC2338) | style | `require-double-equals` |  | = is used for string comparison in a bash test where == is preferred. |
-| <a name="sc3001"></a>[SC3001](https://www.shellcheck.net/wiki/SC3001) | warning |  | yes | Process substitution is undefined in POSIX sh. |
+| <a name="sc3001"></a>[SC3001](https://www.shellcheck.net/wiki/SC3001) | warning |  | yes | Process substitution is undefined in POSIX sh and dash. |
 | <a name="sc3002"></a>[SC3002](https://www.shellcheck.net/wiki/SC3002) | warning |  | yes | Extended globs are undefined in POSIX sh. |
-| <a name="sc3003"></a>[SC3003](https://www.shellcheck.net/wiki/SC3003) | warning |  | yes | ANSI-C quoted $'...' strings are undefined in POSIX sh and dash. |
+| <a name="sc3003"></a>[SC3003](https://www.shellcheck.net/wiki/SC3003) | warning |  | yes | ANSI-C quoted $'...' strings are undefined in POSIX sh and dash before 0.5.13. |
 | <a name="sc3004"></a>[SC3004](https://www.shellcheck.net/wiki/SC3004) | warning |  | yes | Locale-translated $"..." strings are undefined in POSIX sh. |
 | <a name="sc3005"></a>[SC3005](https://www.shellcheck.net/wiki/SC3005) | warning |  | yes | C-style for ((...)) loops are undefined in POSIX sh. |
 | <a name="sc3006"></a>[SC3006](https://www.shellcheck.net/wiki/SC3006) | warning |  | yes | The arithmetic command ((...)) is undefined in POSIX sh. |
@@ -419,27 +419,27 @@ marks the checks the `minimal` profile keeps; see [Profiles](linting.md#profiles
 | <a name="sc3015"></a>[SC3015](https://www.shellcheck.net/wiki/SC3015) | warning |  | yes | Regex matching with =~ is undefined in POSIX sh and dash. |
 | <a name="sc3016"></a>[SC3016](https://www.shellcheck.net/wiki/SC3016) | warning |  | yes | test -v is undefined in POSIX sh. |
 | <a name="sc3017"></a>[SC3017](https://www.shellcheck.net/wiki/SC3017) | warning |  | yes | The unary test -a is undefined in POSIX sh. |
-| <a name="sc3018"></a>[SC3018](https://www.shellcheck.net/wiki/SC3018) | warning |  | yes | The ++ and -- operators are undefined in POSIX sh. |
-| <a name="sc3019"></a>[SC3019](https://www.shellcheck.net/wiki/SC3019) | warning |  | yes | Exponentiation with \*\* is undefined in POSIX sh. |
+| <a name="sc3018"></a>[SC3018](https://www.shellcheck.net/wiki/SC3018) | warning |  | yes | The ++ and -- operators are undefined in POSIX sh and dash. |
+| <a name="sc3019"></a>[SC3019](https://www.shellcheck.net/wiki/SC3019) | warning |  | yes | Exponentiation with \*\* is undefined in POSIX sh and dash. |
 | <a name="sc3020"></a>[SC3020](https://www.shellcheck.net/wiki/SC3020) | warning |  | yes | Redirecting both streams with &\> is undefined in POSIX sh and dash. |
-| <a name="sc3021"></a>[SC3021](https://www.shellcheck.net/wiki/SC3021) | warning |  | yes | Redirecting both streams to a file with \>& is undefined in POSIX sh. |
+| <a name="sc3021"></a>[SC3021](https://www.shellcheck.net/wiki/SC3021) | warning |  | yes | Redirecting both streams to a file with \>& is undefined in POSIX sh and dash. |
 | <a name="sc3022"></a>[SC3022](https://www.shellcheck.net/wiki/SC3022) | warning |  | yes | Named file descriptors like {fd}\> are undefined in POSIX sh. |
-| <a name="sc3023"></a>[SC3023](https://www.shellcheck.net/wiki/SC3023) | warning |  | yes | File descriptor numbers above 9 are undefined in POSIX sh. |
+| <a name="sc3023"></a>[SC3023](https://www.shellcheck.net/wiki/SC3023) | warning |  | yes | File descriptor numbers above 9 are undefined in POSIX sh and dash. |
 | <a name="sc3024"></a>[SC3024](https://www.shellcheck.net/wiki/SC3024) | warning |  | yes | Appending with += is undefined in POSIX sh. |
 | <a name="sc3025"></a>[SC3025](https://www.shellcheck.net/wiki/SC3025) | warning |  | yes | Network pseudo-devices such as /dev/tcp are undefined in POSIX sh. |
-| <a name="sc3026"></a>[SC3026](https://www.shellcheck.net/wiki/SC3026) | warning |  | yes | Negating a bracket expression with ^ is undefined in POSIX sh. |
+| <a name="sc3026"></a>[SC3026](https://www.shellcheck.net/wiki/SC3026) | warning |  | yes | Negating a bracket expression with ^ is undefined in POSIX sh and dash before 0.5.13. |
 | <a name="sc3028"></a>[SC3028](https://www.shellcheck.net/wiki/SC3028) | warning |  | yes | A bash-specific variable is undefined in POSIX sh. |
 | <a name="sc3029"></a>[SC3029](https://www.shellcheck.net/wiki/SC3029) | warning |  | yes | The \|& operator is undefined in POSIX sh. |
 | <a name="sc3030"></a>[SC3030](https://www.shellcheck.net/wiki/SC3030) | warning |  | yes | Arrays are undefined in POSIX sh. |
 | <a name="sc3031"></a>[SC3031](https://www.shellcheck.net/wiki/SC3031) | warning |  | yes | Redirecting to or from a glob is undefined in POSIX sh. |
 | <a name="sc3032"></a>[SC3032](https://www.shellcheck.net/wiki/SC3032) | warning |  | yes | coproc is undefined in POSIX sh. |
-| <a name="sc3033"></a>[SC3033](https://www.shellcheck.net/wiki/SC3033) | warning |  | yes | A function name that is not a valid identifier is undefined in POSIX sh. |
+| <a name="sc3033"></a>[SC3033](https://www.shellcheck.net/wiki/SC3033) | warning |  | yes | A function name that is not a valid identifier is undefined in POSIX sh and dash. |
 | <a name="sc3034"></a>[SC3034](https://www.shellcheck.net/wiki/SC3034) | warning |  | yes | Reading a file with $(\< file) is undefined in POSIX sh. |
 | <a name="sc3035"></a>[SC3035](https://www.shellcheck.net/wiki/SC3035) | warning |  | yes | Reading a file with \`\< file\` is undefined in POSIX sh. |
 | <a name="sc3036"></a>[SC3036](https://www.shellcheck.net/wiki/SC3036) | error |  | yes | echo in dash and busybox sh does not support this flag. |
 | <a name="sc3037"></a>[SC3037](https://www.shellcheck.net/wiki/SC3037) | warning |  | yes | echo flags are undefined in POSIX sh. |
 | <a name="sc3038"></a>[SC3038](https://www.shellcheck.net/wiki/SC3038) | warning |  | yes | exec options are undefined in POSIX sh. |
-| <a name="sc3039"></a>[SC3039](https://www.shellcheck.net/wiki/SC3039) | warning |  | yes | let is undefined in POSIX sh. |
+| <a name="sc3039"></a>[SC3039](https://www.shellcheck.net/wiki/SC3039) | warning |  | yes | let is undefined in POSIX sh and dash. |
 | <a name="sc3040"></a>[SC3040](https://www.shellcheck.net/wiki/SC3040) | warning |  | yes | This set -o option is undefined in POSIX sh. |
 | <a name="sc3041"></a>[SC3041](https://www.shellcheck.net/wiki/SC3041) | warning |  | yes | This set flag is undefined in POSIX sh. |
 | <a name="sc3042"></a>[SC3042](https://www.shellcheck.net/wiki/SC3042) | warning |  | yes | This set option is undefined in POSIX sh. |
@@ -452,16 +452,16 @@ marks the checks the `minimal` profile keeps; see [Profiles](linting.md#profiles
 | <a name="sc3049"></a>[SC3049](https://www.shellcheck.net/wiki/SC3049) | warning |  | yes | Lowercase signal names are undefined in POSIX sh. |
 | <a name="sc3050"></a>[SC3050](https://www.shellcheck.net/wiki/SC3050) | warning |  | yes | printf %q is undefined in POSIX sh. |
 | <a name="sc3051"></a>[SC3051](https://www.shellcheck.net/wiki/SC3051) | warning |  | yes | source is undefined in POSIX sh and dash, also when the file it loads is followed. |
-| <a name="sc3052"></a>[SC3052](https://www.shellcheck.net/wiki/SC3052) | warning |  | yes | Arithmetic base prefixes like 16# are undefined in POSIX sh. |
+| <a name="sc3052"></a>[SC3052](https://www.shellcheck.net/wiki/SC3052) | warning |  | yes | Arithmetic base prefixes like 16# are undefined in POSIX sh and dash. |
 | <a name="sc3053"></a>[SC3053](https://www.shellcheck.net/wiki/SC3053) | warning |  | yes | Indirect expansion with ${!name} is undefined in POSIX sh. |
 | <a name="sc3054"></a>[SC3054](https://www.shellcheck.net/wiki/SC3054) | warning |  | yes | Array subscripts are undefined in POSIX sh. |
 | <a name="sc3055"></a>[SC3055](https://www.shellcheck.net/wiki/SC3055) | warning |  | yes | Listing array keys with ${!array\[@\]} is undefined in POSIX sh. |
 | <a name="sc3056"></a>[SC3056](https://www.shellcheck.net/wiki/SC3056) | warning |  | yes | Listing variable names by prefix with ${!prefix\*} is undefined in POSIX sh. |
 | <a name="sc3057"></a>[SC3057](https://www.shellcheck.net/wiki/SC3057) | warning |  | yes | Substring expansion ${var:offset} is undefined in POSIX sh and dash. |
-| <a name="sc3058"></a>[SC3058](https://www.shellcheck.net/wiki/SC3058) | warning |  | yes | Applying a length or trim operator to $@ or $\* is undefined in POSIX sh and dash. |
+| <a name="sc3058"></a>[SC3058](https://www.shellcheck.net/wiki/SC3058) | warning |  | yes | Applying a length or trim operator to $@ or $\* is undefined in POSIX sh. |
 | <a name="sc3059"></a>[SC3059](https://www.shellcheck.net/wiki/SC3059) | warning |  | yes | Case modification in parameter expansion is undefined in POSIX sh. |
 | <a name="sc3060"></a>[SC3060](https://www.shellcheck.net/wiki/SC3060) | warning |  | yes | Pattern substitution ${var/pattern/replacement} is undefined in POSIX sh and dash. |
-| <a name="sc3061"></a>[SC3061](https://www.shellcheck.net/wiki/SC3061) | warning |  | yes | read without a variable name is undefined in POSIX sh. |
+| <a name="sc3061"></a>[SC3061](https://www.shellcheck.net/wiki/SC3061) | warning |  | yes | read without a variable name is undefined in POSIX sh and dash. |
 | <a name="sc3062"></a>[SC3062](https://www.shellcheck.net/wiki/SC3062) | warning |  | yes | Checking a shell option with test -o is undefined in POSIX sh. |
 | <a name="sc3063"></a>[SC3063](https://www.shellcheck.net/wiki/SC3063) | warning |  | yes | test -R is undefined in POSIX sh. |
 | <a name="sc3064"></a>[SC3064](https://www.shellcheck.net/wiki/SC3064) | warning |  | yes | test -N is undefined in POSIX sh. |

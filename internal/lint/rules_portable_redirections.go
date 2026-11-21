@@ -12,9 +12,9 @@ var portableRedirectionsFamily = family{
 	codes: map[Code]meta{
 		3011: {shells: strictShells, summary: "Here-strings with <<< are undefined in POSIX sh."},
 		3020: {shells: posixOrDash, summary: "Redirecting both streams with &> is undefined in POSIX sh and dash."},
-		3021: {shells: strictShells, summary: "Redirecting both streams to a file with >& is undefined in POSIX sh."},
+		3021: {shells: posixOrDash, summary: "Redirecting both streams to a file with >& is undefined in POSIX sh and dash."},
 		3022: {shells: strictShells, summary: "Named file descriptors like {fd}> are undefined in POSIX sh."},
-		3023: {shells: strictShells, summary: "File descriptor numbers above 9 are undefined in POSIX sh."},
+		3023: {shells: posixOrDash, summary: "File descriptor numbers above 9 are undefined in POSIX sh and dash."},
 		3025: {shells: strictShells, summary: "Network pseudo-devices such as /dev/tcp are undefined in POSIX sh."},
 		3031: {shells: strictShells, summary: "Redirecting to or from a glob is undefined in POSIX sh."},
 	},

@@ -8,10 +8,26 @@ set -o emacs
 set -o pipefail
 >>> SC3040 2:8
 
-### emacs editing mode is not checked in dash
+### emacs editing mode is supported in dash
 #!/bin/dash
 set -o emacs
 >>> none
+
+### pipefail in dash before 0.5.13
+#!/bin/dash
+set -o pipefail
+>>+ SC3040 2:8 -- dash added pipefail in 0.5.13, and Debian 13 and Ubuntu 24.04 still ship 0.5.12
+
+### posix mode in dash
+#!/bin/dash
+set -o posix
+>>+ SC3040 2:8 -- dash 0.5.13 rejects set -o posix
+
+### emacs editing mode in busybox
+#!/bin/busybox sh
+# shellcheck shell=busybox
+set -o emacs
+>>+ SC3040 3:8 -- busybox 1.37 sh rejects set -o emacs
 
 ### non-literal option name stops the check
 #!/bin/sh

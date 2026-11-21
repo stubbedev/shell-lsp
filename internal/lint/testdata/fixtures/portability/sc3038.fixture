@@ -7,3 +7,14 @@ exec -c env
 #!/bin/dash
 exec -c env
 >>> SC3038 2:6
+
+### end of options before the command in sh
+#!/bin/sh
+exec -- env
+>>- SC3038 2:6 -- -- only ends the options, which POSIX sh, dash and busybox sh all accept
+
+### command name set with -a in busybox
+#!/bin/busybox sh
+# shellcheck shell=busybox
+exec -a login /bin/sh
+>>- SC3038 3:6 -- busybox 1.37 exec takes -a to set the command name

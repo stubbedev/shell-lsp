@@ -12,8 +12,8 @@ while read -r entry; do
 done < <(ls /etc)
 >>> SC3001 4:8
 
-### output process substitution is still reported in busybox
+### output process substitution is supported in busybox
 #!/bin/busybox sh
 # shellcheck shell=busybox
 pwd | tee >(gzip > cwd.gz)
->>> SC3001 3:11
+>>- SC3001 3:11 -- busybox 1.37 sh runs both input and output process substitution

@@ -18,10 +18,10 @@ var portableBuiltinsFamily = family{
 		3036: {shells: ashShells, summary: "echo in dash and busybox sh does not support this flag."},
 		3037: {shells: posixOnly, summary: "echo flags are undefined in POSIX sh."},
 		3038: {shells: strictShells, summary: "exec options are undefined in POSIX sh."},
-		3039: {shells: strictShells, summary: "let is undefined in POSIX sh."},
-		3040: {shells: posixOnly, summary: "This set -o option is undefined in POSIX sh."},
-		3041: {shells: posixOnly, summary: "This set flag is undefined in POSIX sh."},
-		3042: {shells: posixOnly, summary: "This set option is undefined in POSIX sh."},
+		3039: {shells: posixOrDash, summary: "let is undefined in POSIX sh and dash."},
+		3040: {shells: strictShells, summary: "This set -o option is undefined in POSIX sh."},
+		3041: {shells: strictShells, summary: "This set flag is undefined in POSIX sh."},
+		3042: {shells: strictShells, summary: "This set option is undefined in POSIX sh."},
 		3043: {shells: posixOnly, summary: "local is undefined in POSIX sh."},
 		3044: {shells: strictShells, summary: "A bash builtin is used that is undefined in POSIX sh."},
 		3045: {shells: strictShells, summary: "A builtin option is used that is undefined in POSIX sh."},
@@ -31,7 +31,7 @@ var portableBuiltinsFamily = family{
 		3049: {shells: posixOnly, summary: "Lowercase signal names are undefined in POSIX sh."},
 		3050: {shells: strictShells, summary: "printf %q is undefined in POSIX sh."},
 		3051: {shells: posixOrDash, summary: "source is undefined in POSIX sh and dash, also when the file it loads is followed."},
-		3061: {shells: strictShells, summary: "read without a variable name is undefined in POSIX sh."},
+		3061: {shells: posixOrDash, summary: "read without a variable name is undefined in POSIX sh and dash."},
 	},
 	nodes: []nodeRule{onNodes(checkPortableBuiltin, &syntax.CallExpr{}, &syntax.DeclClause{}, &syntax.LetClause{})},
 }
@@ -40,6 +40,7 @@ var (
 	bashOnlyBuiltins    = setOf("caller", "builtin", "complete", "compgen", "declare", "dirs", "disown", "enable", "mapfile", "readarray", "pushd", "popd", "shopt", "suspend", "typeset")
 	flagCheckedBuiltins = setOf("cd", "export", "hash", "jobs", "printf", "read", "readonly", "trap", "type", "ulimit", "umask", "unset", "wait")
 	bashTrapSignals     = setOf("ERR", "DEBUG", "RETURN")
+	busyboxTrapSignals  = setOf("ERR")
 	echoFlagLetters     = "eEsn"
 )
 
@@ -69,9 +70,9 @@ func echoFlagsIn(d dialect.Dialect) string {
 	return "only " + prose.List(names, "and") + " are"
 }
 
-func posixSetOption(name string) bool {
-	option, ok := shelldocs.Term(shelldocs.SetOptions, name, dialect.Posix)
-	return ok && option.Dialects.Has(dialect.Posix)
+func setOptionIn(name string, d dialect.Dialect) bool {
+	option, ok := shelldocs.Term(shelldocs.SetOptions, name, d)
+	return ok && option.Dialects.Has(d)
 }
 
 func checkPortableBuiltin(p *pass, n syntax.Node) {
@@ -136,8 +137,11 @@ func checkExecFlags(p *pass, call *syntax.CallExpr) bool {
 		return false
 	}
 	flag, ok := parser.Literal(call.Args[1])
-	if !ok || !strings.HasPrefix(flag, "-") {
+	if !ok || flag == "--" || !strings.HasPrefix(flag, "-") {
 		return false
+	}
+	if _, takes := shelldocs.BuiltinFlag("exec", flag, p.dialect); takes {
+		return true
 	}
 	p.nonPortableNode(portabilityIssue{code: 3038, feature: "exec " + flag, alternative: "exec without options (env -i for a clean environment)"}, call.Args[1])
 	return true
@@ -212,9 +216,6 @@ func checkEchoFlags(p *pass, word *syntax.Word, args []*syntax.Word) {
 }
 
 func checkSetOptions(p *pass, args []*syntax.Word) {
-	if p.dialect != dialect.Posix {
-		return
-	}
 	for i := 0; i < len(args); i++ {
 		word, ok := parser.Literal(args[i])
 		switch {
@@ -227,7 +228,7 @@ func checkSetOptions(p *pass, args []*syntax.Word) {
 			return
 		}
 		for _, letter := range word[1:] {
-			if !builtinTakes("set", letter, dialect.Posix) {
+			if !builtinTakes("set", letter, p.dialect) {
 				p.nonPortableNode(portabilityIssue{code: 3041, feature: "set " + word[:1] + string(letter)}, args[i])
 			}
 		}
@@ -239,8 +240,13 @@ func checkSetOptions(p *pass, args []*syntax.Word) {
 			return
 		}
 		i++
-		if !posixSetOption(option) {
-			p.nonPortableNode(portabilityIssue{code: 3040, feature: "set -o " + option}, args[i])
+		issue := portabilityIssue{code: 3040, feature: "set -o " + option}
+		switch since := shelldocs.SetOptionDashSince(option); {
+		case p.dialect == dialect.Dash && since != "":
+			issue.dashSince = since
+			p.nonPortableNode(issue, args[i])
+		case !setOptionIn(option, p.dialect):
+			p.nonPortableNode(issue, args[i])
 		}
 	}
 }
@@ -255,7 +261,7 @@ func checkTrapSignals(p *pass, args []*syntax.Word) {
 			continue
 		}
 		upper := strings.ToUpper(signal)
-		if bashTrapSignals[upper] {
+		if bashTrapSignals[upper] && !p.busyboxProvides(busyboxTrapSignals, upper) {
 			p.nonPortableNode(portabilityIssue{code: 3047, feature: "Trapping " + upper}, arg)
 		}
 		span, spanned := p.span(arg)
