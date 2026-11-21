@@ -469,8 +469,8 @@ func interpOpened(in *interpolation, n int) []item {
 }
 
 func interpValue(e expr, n int) []item {
-	if l, ok := e.(*lambdaExpr); ok && headMayOpen(l) {
-		return lambdaFrom(l, n, 1, pinFollowsHead, plainBrk)
+	if l, ok := e.(*lambdaExpr); ok && hugsPattern(l) {
+		return headedChain(l, n, plainBrk)
 	}
 	return exprDoc(e, n)
 }
@@ -998,24 +998,13 @@ func hasDefault(p *setParam) bool {
 }
 
 func lambdaRHS(l *lambdaExpr, m int) []item {
-	if headMayOpen(l) {
-		return group(lambdaFrom(l, m, 1, pinFollowsHead, space))
-	}
-	if !lambdaEndsAbsorbable(l) {
-		return seq(space, group(lambdaDoc(l, m, 1)))
-	}
-	if _, named := l.param.(*nameParam); named {
+	if _, named := l.param.(*nameParam); named && lambdaEndsAbsorbable(l) {
 		return group(lambdaFrom(l, m, 1, pinNone, space))
 	}
-	if widthBreaksHead(l) {
-		return group(space, lambdaDoc(l, m, 1))
+	if hugsPattern(l) {
+		return group(headedChain(l, m, space))
 	}
-	return seq(hardSpace, group(lambdaDoc(l, m, 1)))
-}
-
-func widthBreaksHead(l *lambdaExpr) bool {
-	_, named := l.param.(*nameParam)
-	return !named && len(l.colon.pre) == 0
+	return seq(space, group(lambdaDoc(l, m, 1)))
 }
 
 func lambdaEndsAbsorbable(l *lambdaExpr) bool {
@@ -1025,7 +1014,7 @@ func lambdaEndsAbsorbable(l *lambdaExpr) bool {
 		}
 		switch b := l.body.(type) {
 		case *lambdaExpr:
-			if !firstToken(b).lone() || !b.colon.lone() {
+			if !firstToken(b).lone() || len(b.colon.pre) > 0 {
 				return false
 			}
 			l = b
@@ -1224,11 +1213,11 @@ func enclosed(open *token, inner expr, closing *token, n int) []item {
 		if !lambdaEndsAbsorbable(v) {
 			break
 		}
-		if open.text == interpolationOpen && headMayOpen(v) {
-			return seq(o, group(lambdaFrom(v, n+1, 1, pinFollowsHead, plainBrk), followBrk), c)
+		if hugsPattern(v) {
+			return seq(o, group(headedChain(v, n+1, plainBrk), followBrk), c)
 		}
-		if widthBreaksHead(v) {
-			return seq(o, group(plainBrk, exprDoc(inner, n+1), plainBrk), c)
+		if takesPattern(v) {
+			break
 		}
 		if gathersHead(v) {
 			return seq(o, group(lambdaDoc(v, n+1, 1), followBrk), c)
@@ -1426,23 +1415,10 @@ type chainPin uint8
 const (
 	pinNone chainPin = iota
 	pinHard
-	pinFollowsHead
 	pinAfterName
 )
 
 func lambdaDoc(l *lambdaExpr, n, depth int) []item { return lambdaFrom(l, n, depth, pinNone, nil) }
-
-func headMayOpen(l *lambdaExpr) bool {
-	_, set := l.param.(*setParam)
-	return set && len(l.colon.pre) > 0 && colonPinsChain(l)
-}
-
-func (p chainPin) separator() []item {
-	if p == pinFollowsHead {
-		return following
-	}
-	return hardSpace
-}
 
 func colonPinsChain(l *lambdaExpr) bool {
 	if !lambdaEndsAbsorbable(l) {
@@ -1460,13 +1436,12 @@ func lambdaFrom(l *lambdaExpr, n, depth int, pin chainPin, lead []item) []item {
 	if afterName {
 		pin = pinNone
 	}
-	if pin == pinNone && depth == 1 && gathersHead(l) {
-		return gatheredChain(l, n, depth, lead)
+	if pin == pinNone && (depth == 1 && gathersHead(l) || !afterName && patternChain(l)) {
+		return headedChain(l, n, lead)
 	}
 	if pin == pinNone && colonPinsChain(l) {
 		pin = pinHard
 	}
-	widthBreaks := pin == pinNone && !afterName && widthBreaksHead(l)
 	body := l.body
 	_, named := l.param.(*nameParam)
 	head := lambdaHead(l, n, depth, lead)
@@ -1486,7 +1461,7 @@ func lambdaFrom(l *lambdaExpr, n, depth int, pin chainPin, lead []item) []item {
 		}
 		if _, next := v.param.(*nameParam); !next {
 			if pin != pinNone {
-				return seq(head, pin.separator(), lambdaFrom(v, n, depth+1, pin, nil))
+				return seq(head, hardSpace, lambdaFrom(v, n, depth+1, pin, nil))
 			}
 			if named {
 				return seq(head, space, lambdaFrom(v, n, depth+1, pinAfterName, nil))
@@ -1494,12 +1469,6 @@ func lambdaFrom(l *lambdaExpr, n, depth int, pin chainPin, lead []item) []item {
 			return seq(head, space, lambdaDoc(v, n, depth+1))
 		}
 		if lambdaEndsAbsorbable(v) {
-			if widthBreaks && firstToken(v).lone() && v.colon.lone() {
-				return seq(head, space, priority(group(lambdaDoc(v, n, 2))))
-			}
-			if pin == pinFollowsHead {
-				return seq(head, following, priority(group(lambdaDoc(v, n, 2))))
-			}
 			if !named {
 				return seq(head, hardSpace, priority(group(lambdaFrom(v, n, 2, pin, nil))))
 			}
@@ -1508,23 +1477,11 @@ func lambdaFrom(l *lambdaExpr, n, depth int, pin chainPin, lead []item) []item {
 		return seq(head, space, group(lambdaDoc(v, n, 1)))
 	}
 	if isAbsorbable(body) || parenOfAbsorbable(body) {
-		if widthBreaks {
-			return seq(head, space, openingPriority(absorbedBody(body, n, named)))
-		}
-		if pin == pinFollowsHead {
-			return seq(head, following, openingPriority(absorbedBody(body, n, named)))
-		}
 		return seq(head, hardSpace, priority(absorbedBody(body, n, named)))
 	}
 	if w, ok := body.(*withExpr); ok && isAbsorbable(w.body) {
 		if named {
 			return seq(head, priority(group(space, withAbsorbed(w, n))))
-		}
-		if widthBreaks {
-			return seq(head, space, openingPriority(withDoc(w, n)))
-		}
-		if pin == pinFollowsHead {
-			return seq(head, following, openingPriority(withDoc(w, n)))
 		}
 		return seq(head, hardSpace, priority(withDoc(w, n)))
 	}
@@ -1542,26 +1499,16 @@ func lambdaHead(l *lambdaExpr, n, depth int, lead []item) []item {
 		}
 		return seq(lead, tokenDoc(p.name, n), tokenDoc(l.colon, n))
 	}
-	head := seq(paramTrial(l.param, n, lead), tokenDoc(l.colon, n))
+	head := seq(lead, paramDoc(l.param, n), tokenDoc(l.colon, n))
 	if depth == 1 {
 		return group(head)
 	}
 	return head
 }
 
-func paramTrial(p param, n int, lead []item) []item {
-	if lead == nil {
-		return paramDoc(p, n)
-	}
-	if set, ok := p.(*setParam); ok {
-		return trialHead(lead, setParamDoc(set, n))
-	}
-	return trialHead(lead, paramDoc(p, n))
-}
-
 func gathersHead(l *lambdaExpr) bool {
 	_, named := l.param.(*nameParam)
-	return named && lambdaEndsAbsorbable(l) && !anyLink(l, colonPinsChain) && anyLink(l, takesPattern)
+	return named && lambdaEndsAbsorbable(l) && anyLink(l, takesPattern)
 }
 
 func takesPattern(l *lambdaExpr) bool {
@@ -1582,17 +1529,72 @@ func anyLink(l *lambdaExpr, holds func(*lambdaExpr) bool) bool {
 	}
 }
 
-func gatheredChain(l *lambdaExpr, n, depth int, lead []item) []item {
-	v, ok := l.body.(*lambdaExpr)
-	if !ok || !anyLink(v, takesPattern) {
-		return lambdaFrom(l, n, depth, pinFollowsHead, lead)
+func patternChain(l *lambdaExpr) bool {
+	return takesPattern(l) && lambdaEndsAbsorbable(l)
+}
+
+func hugsPattern(l *lambdaExpr) bool { return patternChain(l) && firstToken(l).lone() }
+
+func headedChain(l *lambdaExpr, n int, lead []item) []item {
+	head := lead
+	if takesPattern(l) {
+		head = hugging(lead)
 	}
-	sep := space
+	for depth := 1; ; depth++ {
+		head = seq(head, chainLink(l, n, depth))
+		v, ok := l.body.(*lambdaExpr)
+		if !ok {
+			break
+		}
+		head = seq(head, chainSeparator(l, v))
+		l = v
+	}
 	_, named := l.param.(*nameParam)
-	if _, next := v.param.(*nameParam); named && next {
-		sep = hardSpace
+	if w, ok := l.body.(*withExpr); ok && isAbsorbable(w.body) {
+		if named {
+			return trialHead(head, priority(group(space, withAbsorbed(w, n))))
+		}
+		return trialHead(head, following, openingPriority(withDoc(w, n)))
 	}
-	return gatheredChain(v, n, depth+1, seq(lead, lambdaHead(l, n, depth, nil), sep))
+	if named {
+		return trialHead(head, hardSpace, priority(absorbedBody(l.body, n, true)))
+	}
+	if _, set := l.body.(*setTerm); set {
+		return trialHead(head, following, openingPriority(absorbedBody(l.body, n, false)))
+	}
+	return trialHead(head, following, priority(absorbedBody(l.body, n, false)))
+}
+
+func hugging(lead []item) []item {
+	out := make([]item, len(lead))
+	for i, it := range lead {
+		it.follow = it.tag == tagSpacing
+		out[i] = it
+	}
+	return out
+}
+
+func chainLink(l *lambdaExpr, n, depth int) []item {
+	set, ok := l.param.(*setParam)
+	switch {
+	case !ok:
+		return lambdaHead(l, n, depth, nil)
+	case depth == 1 && len(l.colon.pre) == 0:
+		return group(setParamDoc(set, n), tokenDoc(l.colon, n))
+	}
+	return seq(paramDoc(set, n), tokenDoc(l.colon, n))
+}
+
+func chainSeparator(l, next *lambdaExpr) []item {
+	_, named := l.param.(*nameParam)
+	_, nextNamed := next.param.(*nameParam)
+	switch {
+	case named && nextNamed:
+		return hardSpace
+	case nextNamed:
+		return space
+	}
+	return following
 }
 
 func parenOfAbsorbable(e expr) bool {

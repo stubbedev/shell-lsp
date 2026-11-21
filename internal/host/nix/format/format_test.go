@@ -23,6 +23,7 @@ const (
 	referenceTool        = "nixfmt"
 	referenceVersion     = "nixfmt 1.5.0"
 	repositoryRoot       = "../../../.."
+	referencePasses      = 4
 	hostileBudget        = 10 * time.Second
 	hostileDepth         = 1500
 	parserDepthLimit     = 4000
@@ -133,14 +134,27 @@ func referenceFormat(t testing.TB, src string) string {
 	return string(out)
 }
 
+func stableReference(t testing.TB, src string) (string, bool) {
+	t.Helper()
+	out := referenceFormat(t, src)
+	for range referencePasses {
+		again := referenceFormat(t, out)
+		if again == out {
+			return out, true
+		}
+		out = again
+	}
+	return out, false
+}
+
 func regenerateCases(t *testing.T) {
 	t.Helper()
 	var golden strings.Builder
 	var unstable []string
 	for _, c := range hosttest.Sections(t, casesInput) {
-		out := referenceFormat(t, c.Text)
+		out, stable := stableReference(t, c.Text)
 		fmt.Fprintf(&golden, "-- %s --\n%s", c.Name, out)
-		if referenceFormat(t, out) != out {
+		if !stable {
 			unstable = append(unstable, c.Name)
 		}
 	}
@@ -155,7 +169,8 @@ func regenerateCases(t *testing.T) {
 func regenerateCorpus(t *testing.T) {
 	t.Helper()
 	for _, path := range corpusFiles(t) {
-		writeAtomically(t, repositoryGolden(t, path), referenceFormat(t, readFile(t, path)))
+		out, _ := stableReference(t, readFile(t, path))
+		writeAtomically(t, repositoryGolden(t, path), out)
 	}
 }
 
@@ -411,6 +426,8 @@ func hostileShapes() []hostileShape {
 		{"parens around a string", "(", ")", "''\n  a\n''"},
 		{"parens in interpolations", "\"a${(", ")}b\"", "{ a = 1; }"},
 		{"lambda chains", "x: { y }: ", "", "{ a = 1; }"},
+		{"pattern chain bodies", "({ y, z }: { w }: { a = ", "; })", long},
+		{"commented chain bodies", "x: # c\n{ y }: { a = ", "; }", long},
 		{"selections in arguments", "f (a b.", ") c", "d"},
 		{"long selections in arguments", "f (a b.${", "}) c", long},
 	}
@@ -514,7 +531,7 @@ func TestAgreesWithLiveNixfmt(t *testing.T) {
 
 func assertAgrees(t *testing.T, name, src string) {
 	t.Helper()
-	want := referenceFormat(t, src)
+	want, _ := stableReference(t, src)
 	got, err := Format(src)
 	if err != nil {
 		t.Errorf("%s: %v", name, err)

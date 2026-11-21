@@ -383,7 +383,7 @@ func (r *renderer) compact(doc []item, o outcome, register, emit bool) outcome {
 				o = r.blank(o, emit)
 			}
 		case tagGroup:
-			o = r.compact(it.items, o, register && it.group == groupTransparent, emit)
+			o = r.compact(it.items, o, register && (it.group == groupTransparent || it.trials), emit)
 		}
 	}
 	return o
@@ -409,12 +409,100 @@ func (r *renderer) placedAt(g *item, o outcome, emit bool) outcome {
 		return r.forcedSequence(g, o, emit)
 	}
 	if g.trials {
-		opened := !r.fits(g, &o.state)
-		o = r.placed(g, o, emit)
-		o.state.headOpen = opened
-		return o
+		return r.trialed(g, o, emit)
 	}
 	return r.placed(g, o, emit)
+}
+
+func (r *renderer) trialed(g *item, o outcome, emit bool) outcome {
+	if r.fits(g, &o.state) {
+		o = r.compact(g.items, o, true, emit)
+		o.state.headOpen = false
+		return o
+	}
+	last, hug := -1, o
+	for i := range g.items {
+		if r.hugBreaks(g, i, &hug) && !trailsTrial(&g.items[i]) {
+			last = i
+		}
+	}
+	opened := 0
+	if last >= 0 {
+		opened = len(g.items)
+		for i := last; i < len(g.items); i++ {
+			if g.items[i].tag == tagSpacing && (i == last || !hardOrBlank(&g.items[i])) {
+				opened = i + 1
+				break
+			}
+		}
+	}
+	hug = o
+	for i := range g.items {
+		it := &g.items[i]
+		switch {
+		case it.tag != tagGroup:
+			hug = r.trialFlow(g, i, 0, hug, false)
+			o = r.trialFlow(g, i, opened, o, emit)
+		case trailsTrial(it):
+			if r.hugBreaks(g, i, &hug) && it.opens {
+				o = r.forcedSequence(it, o, emit)
+			} else {
+				o = r.placedAt(it, o, emit)
+			}
+		case r.hugBreaks(g, i, &hug):
+			o = r.forcedSequence(it, o, emit)
+		default:
+			o = r.compact(it.items, o, false, emit)
+		}
+	}
+	o.state.headOpen = last >= 0
+	return o
+}
+
+func (r *renderer) hugBreaks(g *item, i int, hug *outcome) bool {
+	it := &g.items[i]
+	if it.tag != tagGroup {
+		yields := yieldsLine(g, i, &hug.state)
+		*hug = r.trialFlow(g, i, 0, *hug, false)
+		return yields
+	}
+	hug.head = noHead
+	*hug = r.placed(it, *hug, false)
+	return hug.head != noHead
+}
+
+func hardHead(g *item) bool {
+	for i := range g.items {
+		it := &g.items[i]
+		switch {
+		case trailsTrial(it):
+		case it.tag == tagGroup && it.hard:
+			return true
+		case it.tag == tagSpacing && hardOrBlank(it) && it.space != spaceHard:
+			return true
+		}
+	}
+	return false
+}
+
+func trailsTrial(it *item) bool { return it.tag == tagGroup && it.group == groupPriority }
+
+func yieldsLine(g *item, i int, st *state) bool {
+	it := &g.items[i]
+	return i > 0 && it.tag == tagSpacing && it.space == spacePlain && !it.follow && st.column+1+int(it.next.first) > lineWidth
+}
+
+func (r *renderer) trialFlow(g *item, i, opened int, o outcome, emit bool) outcome {
+	it := &g.items[i]
+	switch {
+	case it.tag == tagText:
+		return r.write(it, o, true, emit)
+	case i < opened || hardOrBlank(it) || i == 0 && !it.follow && hardHead(g) || yieldsLine(g, i, &o.state):
+		expanded := *it
+		expanded.follow = false
+		return r.spaced(&expanded, o, emit)
+	}
+	return r.compact(g.items[i:i+1], o, true, emit)
 }
 
 func (r *renderer) spaced(it *item, o outcome, emit bool) outcome {
@@ -913,6 +1001,7 @@ func fixupGroup(out []item, it item) []item {
 	moved := inner[end:]
 	inner = inner[:end]
 	if len(inner) == 1 && it.group == groupRegular && inner[0].tag == tagGroup && inner[0].group == groupRegular {
+		it.trials = it.trials || inner[0].trials
 		inner = inner[0].items
 	}
 	if len(inner) > 0 {
