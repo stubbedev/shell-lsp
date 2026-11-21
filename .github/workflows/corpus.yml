@@ -34,7 +34,7 @@ jobs:
         with:
           path: ${{ env.CORPUS_PATH }}
           key: ${{ steps.key.outputs.key }}
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         if: steps.cache.outputs.cache-hit != 'true'
         with:
           go-version-file: go.mod
@@ -54,7 +54,7 @@ jobs:
           path: ${{ env.CORPUS_PATH }}
           key: ${{ needs.fetch.outputs.key }}
           fail-on-cache-miss: true
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: cachix/install-nix-action@3dc140bfc76c49fbd4dd958429132e3746bcb086 # v31.11.5
       - uses: stubbedev/xilo@v2
         with:
           url: https://xilos.dev
@@ -74,7 +74,7 @@ jobs:
           path: ${{ env.CORPUS_PATH }}
           key: ${{ needs.fetch.outputs.key }}
           fail-on-cache-miss: true
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: cachix/install-nix-action@3dc140bfc76c49fbd4dd958429132e3746bcb086 # v31.11.5
       - uses: stubbedev/xilo@v2
         with:
           url: https://xilos.dev
@@ -94,7 +94,7 @@ jobs:
           path: ${{ env.CORPUS_PATH }}
           key: ${{ needs.fetch.outputs.key }}
           fail-on-cache-miss: true
-      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: cachix/install-nix-action@3dc140bfc76c49fbd4dd958429132e3746bcb086 # v31.11.5
       - uses: stubbedev/xilo@v2
         with:
           url: https://xilos.dev
@@ -118,7 +118,7 @@ jobs:
           path: ${{ env.CORPUS_PATH }}
           key: ${{ needs.fetch.outputs.key }}
           fail-on-cache-miss: true
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: go.mod
       - run: go run ./cmd/lintcheck recipes
