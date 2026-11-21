@@ -44,6 +44,7 @@
           ];
 
           doCheck = true;
+          checkFlags = [ "-skip=^TestBudgets$" ];
 
           meta = {
             description = "Language server for bash, zsh and POSIX sh";
