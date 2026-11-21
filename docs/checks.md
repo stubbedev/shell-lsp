@@ -532,6 +532,7 @@ marks the checks the `minimal` profile keeps; see [Profiles](linting.md#profiles
 | <a name="sl5022"></a>[SL5022](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl5022) | warning |  | yes | A deprecated function or setting is used. |
 | <a name="sl5023"></a>[SL5023](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl5023) | error |  | yes | A feature is used without the setting it needs. |
 | <a name="sl5024"></a>[SL5024](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl5024) | warning |  | yes | A recipe depends on an absent module. |
+| <a name="sl5025"></a>[SL5025](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl5025) | error |  | yes | Two user-defined functions have the same name. |
 | <a name="sl6001"></a>[SL6001](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl6001) | error |  | yes | The Makefile does not parse. |
 | <a name="sl6002"></a>[SL6002](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl6002) | error |  | yes | A conditional is not balanced. |
 | <a name="sl6003"></a>[SL6003](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl6003) | error |  | yes | A \`define\` has no \`endef\`, or an \`endef\` has no \`define\`. |

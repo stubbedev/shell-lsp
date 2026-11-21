@@ -1118,6 +1118,20 @@ lint: tools::check    # SL5024
     echo linted
 ```
 
+## SL5025
+
+**Two user-defined functions have the same name.** just refuses the justfile
+whatever their parameters, and neither `allow-duplicate-recipes` nor
+`allow-duplicate-variables` permits it. Functions enabled on different
+systems, such as one with `[linux]` and one with `[macos]`, do not clash, and a
+function may share its name with a recipe, a variable or a built-in function.
+
+```just
+set unstable
+greet(name) := "hello " + name
+greet(name) := "hi " + name    # SL5025
+```
+
 ## SL6001
 
 **The Makefile does not parse.** make stops with "missing separator": a line

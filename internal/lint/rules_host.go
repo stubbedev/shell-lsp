@@ -39,6 +39,7 @@ const (
 	CodeJustDeprecated
 	CodeJustNeedsSetting
 	CodeJustAbsentModule
+	CodeJustDuplicateFunction
 )
 
 const (
@@ -167,6 +168,7 @@ var hostFamily = family{
 		CodeJustDeprecated:          {severity: SeverityWarning, tag: TagDeprecated},
 		CodeJustNeedsSetting:        {severity: SeverityError},
 		CodeJustAbsentModule:        {severity: SeverityWarning},
+		CodeJustDuplicateFunction:   {severity: SeverityError},
 
 		CodeMakeSyntax:                {severity: SeverityError},
 		CodeMakeConditional:           {severity: SeverityError},

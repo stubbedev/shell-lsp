@@ -84,7 +84,7 @@ type definition struct {
 
 func (c *checker) duplicates() {
 	allowRecipes, allowVariables := c.f.Enabled("allow-duplicate-recipes"), c.f.Enabled("allow-duplicate-variables")
-	var recipes, aliases, variables, settings []definition
+	var recipes, aliases, variables, settings, functions []definition
 	for _, it := range c.f.Items {
 		switch it.Kind {
 		case ItemRecipe:
@@ -117,7 +117,13 @@ func (c *checker) duplicates() {
 				c.report(lint.CodeJustDuplicateSetting, d.name.Span, "setting `%s` first set on line %d is set again on line %d", d.name.Text, c.f.line(prior.name.Span.Start), c.f.line(d.name.Span.Start))
 			}
 			settings = append(settings, d)
-		case ItemUnexport, ItemImport, ItemModule, ItemFunction:
+		case ItemFunction:
+			d := definition{"function", it.Function.Name, systems(it.Function.Attributes)}
+			if prior, ok := clash(functions, d); ok {
+				c.report(lint.CodeJustDuplicateFunction, d.name.Span, "function `%s` first defined on line %d is redefined on line %d", d.name.Text, c.f.line(prior.name.Span.Start), c.f.line(d.name.Span.Start))
+			}
+			functions = append(functions, d)
+		case ItemUnexport, ItemImport, ItemModule:
 		}
 	}
 }

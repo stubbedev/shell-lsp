@@ -883,3 +883,26 @@ build a:
 [arg('a', pattern='\p{Greek}\p{IsAlpha}\p{gc=Lu}\p{scx:Latn}\p{Age=6.0}\pN')]
 build a:
     echo {{a}}
+-- duplicate-function --
+set unstable
+greet(name) := "hello " + name
+greet(name, other) := "hi " + name
+-- duplicate-function-with-allow-settings --
+set unstable
+set allow-duplicate-recipes
+set allow-duplicate-variables
+greet(name) := name
+greet(name) := name
+-- function-per-system --
+set unstable
+[linux]
+greet(name) := name
+[macos]
+greet(name) := name
+-- function-shares-names --
+set unstable
+greet(name) := name
+greet := "x"
+uppercase(x) := x
+greet:
+    echo {{greet}}

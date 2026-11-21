@@ -572,3 +572,14 @@ rejected 1:11 failed to parse argument pattern
 1:11 SL5020 error argument pattern `\p{Unknown}` is not a regular expression just accepts: at character 12 of `\p{Unknown}`: `Unknown` names no Unicode class
 -- arg-pattern-with-known-unicode-classes --
 accepted
+-- duplicate-function --
+rejected 3:1 function `greet` first defined on line 2 is redefined on line 3
+3:1 SL5025 error function `greet` first defined on line 2 is redefined on line 3
+3:13 SL5013 info parameter `other` is never used
+-- duplicate-function-with-allow-settings --
+rejected 5:1 function `greet` first defined on line 4 is redefined on line 5
+5:1 SL5025 error function `greet` first defined on line 4 is redefined on line 5
+-- function-per-system --
+accepted
+-- function-shares-names --
+accepted
