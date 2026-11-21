@@ -151,6 +151,8 @@ func clash(prior []definition, d definition) (definition, bool) {
 	return definition{}, false
 }
 
+var listFunctions = []string{"bool", "join_list", "num_jobs", "show", "split", "which"}
+
 func condition(e *Expr) (*Expr, bool) {
 	switch {
 	case e.Kind == ExprIf, e.Kind == ExprCall && e.Name.Text == "assert" && len(e.Args) > 0:
@@ -183,6 +185,10 @@ func (c *checker) features(it Item) {
 				c.report(lint.CodeJustNeedsSetting, x.OpSpan, "`%s` needs `set lists`", x.Op)
 			case x.Kind == ExprList && !interpreter(it, x):
 				c.report(lint.CodeJustNeedsSetting, x.Span, "list literals need `set lists`")
+			case x.Kind == ExprIf && len(x.Args) < 3:
+				c.report(lint.CodeJustNeedsSetting, Span{Start: x.Span.Start, End: x.Span.Start + len("if")}, "`if` without `else` needs `set lists`")
+			case x.Kind == ExprCall && slices.Contains(listFunctions, x.Name.Text):
+				c.report(lint.CodeJustNeedsSetting, x.Name.Span, "the `%s()` function needs `set lists`", x.Name.Text)
 			}
 		})
 	}

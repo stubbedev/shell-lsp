@@ -988,3 +988,18 @@ import? "absent.just"
 [macos]
 build: missing
     echo built
+-- if-without-else-needs-lists --
+a := if 'x' != '' { 'y' }
+build:
+    echo {{a}}
+-- if-without-else-with-lists --
+set unstable
+set lists
+a := if 'x' != '' { 'y' }
+build:
+    echo {{a}}
+-- list-functions-need-lists --
+a := which('sh')
+b := join_list('x')
+build:
+    echo {{a}} {{b}}

@@ -671,3 +671,12 @@ accepted
 -- unknown-dependency-in-a-recipe-for-another-system --
 accepted
 2:8 SL5002 error unknown recipe `missing`
+-- if-without-else-needs-lists --
+rejected 1:6 `if` without `else` requires `set lists`
+1:6 SL5023 error `if` without `else` needs `set lists`
+-- if-without-else-with-lists --
+accepted
+-- list-functions-need-lists --
+rejected 1:6 the `which()` function requires `set lists`
+1:6 SL5023 error the `which()` function needs `set lists`
+2:6 SL5023 error the `join_list()` function needs `set lists`
