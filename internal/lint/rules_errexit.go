@@ -166,7 +166,7 @@ func (p *pass) losesErrexit(cs *syntax.CmdSubst) bool {
 			return false
 		}
 		c, ok := commandOf(call)
-		return ok && shelloptions.StrictModeSetBy(c.name, c.args, p.dialect).Errexit
+		return ok && shelloptions.StrictModeSetBy(c.name, c.args, p.tree.Shell).Errexit
 	})
 }
 

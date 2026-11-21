@@ -2,6 +2,7 @@ package dialect
 
 import (
 	"fmt"
+	"iter"
 	"path/filepath"
 	"strings"
 
@@ -40,6 +41,8 @@ type Shell struct {
 	Flavor  Flavor
 }
 
+func (d Dialect) Shell() Shell { return Shell{Dialect: d} }
+
 func (f Flavor) Shell() Shell {
 	if f == FlavorNone || int(f) >= len(flavors) {
 		panic(fmt.Sprintf("dialect: flavor %d names no shell", f))
@@ -53,7 +56,7 @@ func ShellOf(d Dialect, in Input) Shell {
 			return Shell{Dialect: d, Flavor: Flavor(f)}
 		}
 	}
-	return Shell{Dialect: d}
+	return d.Shell()
 }
 
 func (s Shell) Lang() syntax.LangVariant {
@@ -78,6 +81,54 @@ func (s Shell) Features() Features {
 }
 
 func (s Shell) Bats() bool { return s.Flavor == FlavorBats }
+
+type Shells uint16
+
+func (s Shell) bit() Shells {
+	if s.Flavor == FlavorNone {
+		return 1 << s.Dialect
+	}
+	_ = s.flavor()
+	return 1 << (len(specs) + int(s.Flavor) - 1)
+}
+
+func ShellsOf(shells ...Shell) Shells {
+	var out Shells
+	for _, s := range shells {
+		out |= s.bit()
+	}
+	return out
+}
+
+func (s Set) Shells() Shells {
+	var out Shells
+	for d := range s.Members() {
+		out |= d.Shell().bit()
+	}
+	for f, spec := range flavors {
+		if Flavor(f) != FlavorNone && s.Has(spec.of) {
+			out |= Flavor(f).Shell().bit()
+		}
+	}
+	return out
+}
+
+func (s Shells) Has(sh Shell) bool { return s&sh.bit() != 0 }
+
+func (s Shells) Members() iter.Seq[Shell] {
+	return func(yield func(Shell) bool) {
+		for d := range All.Members() {
+			if s.Has(d.Shell()) && !yield(d.Shell()) {
+				return
+			}
+		}
+		for f := range flavors {
+			if Flavor(f) != FlavorNone && s.Has(Flavor(f).Shell()) && !yield(Flavor(f).Shell()) {
+				return
+			}
+		}
+	}
+}
 
 func (in Input) bats() bool {
 	if strings.HasSuffix(in.URI, ".bats") {

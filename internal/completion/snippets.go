@@ -155,10 +155,10 @@ func (c completer) idioms() []Item {
 		if !strings.HasPrefix(id.label, c.site.prefix) {
 			continue
 		}
-		body := id.body(c.dialect)
+		body := id.body(c.shell.Dialect)
 		it := c.item(id.label, KindSnippet, "4")
 		it.Detail = "snippet"
-		it.Documentation = fmt.Sprintf("%s\n\n```%s\n%s\n```", id.doc, shelldocs.FenceLanguage(c.dialect), strings.TrimRight(snippetPreview(body), "\n"))
+		it.Documentation = fmt.Sprintf("%s\n\n```%s\n%s\n```", id.doc, shelldocs.FenceLanguage(c.shell.Dialect), strings.TrimRight(snippetPreview(body), "\n"))
 		it.InsertText = body
 		it.Snippet = true
 		items = append(items, it)

@@ -44,22 +44,22 @@ var (
 	echoFlagLetters     = "eEsn"
 )
 
-func builtinTakes(name string, letter rune, d dialect.Dialect) bool {
-	_, ok := shelldocs.BuiltinFlag(name, "-"+string(letter), d)
+func builtinTakes(name string, letter rune, s dialect.Shell) bool {
+	_, ok := shelldocs.BuiltinFlag(name, "-"+string(letter), s)
 	return ok
 }
 
-func echoAccepts(flag string, d dialect.Dialect) bool {
-	if d == dialect.Dash {
-		_, ok := shelldocs.BuiltinFlag("echo", flag, d)
+func echoAccepts(flag string, s dialect.Shell) bool {
+	if s.Dialect == dialect.Dash {
+		_, ok := shelldocs.BuiltinFlag("echo", flag, s)
 		return ok
 	}
-	return !slices.ContainsFunc([]rune(flag[1:]), func(letter rune) bool { return !builtinTakes("echo", letter, d) })
+	return !slices.ContainsFunc([]rune(flag[1:]), func(letter rune) bool { return !builtinTakes("echo", letter, s) })
 }
 
-func echoFlagsIn(d dialect.Dialect) string {
+func echoFlagsIn(s dialect.Shell) string {
 	var names []string
-	if flags, ok := shelldocs.BuiltinFlags("echo", d); ok {
+	if flags, ok := shelldocs.BuiltinFlags("echo", s); ok {
 		for flag := range flags {
 			names = append(names, flag.Name)
 		}
@@ -70,9 +70,9 @@ func echoFlagsIn(d dialect.Dialect) string {
 	return "only " + prose.List(names, "and") + " are"
 }
 
-func setOptionIn(name string, d dialect.Dialect) bool {
-	option, ok := shelldocs.Term(shelldocs.SetOptions, name, d)
-	return ok && option.Dialects.Has(d)
+func setOptionIn(name string, s dialect.Shell) bool {
+	option, ok := shelldocs.Term(shelldocs.SetOptions, name, s)
+	return ok && option.In(s)
 }
 
 func checkPortableBuiltin(p *pass, n syntax.Node) {
@@ -140,7 +140,7 @@ func checkExecFlags(p *pass, call *syntax.CallExpr) bool {
 	if !ok || flag == "--" || !strings.HasPrefix(flag, "-") {
 		return false
 	}
-	if _, takes := shelldocs.BuiltinFlag("exec", flag, p.dialect); takes {
+	if _, takes := shelldocs.BuiltinFlag("exec", flag, p.tree.Shell); takes {
 		return true
 	}
 	p.nonPortableNode(portabilityIssue{code: 3038, feature: "exec " + flag, alternative: "exec without options (env -i for a clean environment)"}, call.Args[1])
@@ -209,10 +209,10 @@ func checkEchoFlags(p *pass, word *syntax.Word, args []*syntax.Word) {
 		p.nonPortableNode(portabilityIssue{code: 3037, feature: "echo " + flag, alternative: "printf"}, args[0], fixes...)
 		return
 	}
-	if !ashShells.Has(p.dialect) || echoAccepts(flag, p.dialect) {
+	if !ashShells.Has(p.dialect) || echoAccepts(flag, p.tree.Shell) {
 		return
 	}
-	p.nonPortableNode(portabilityIssue{code: 3036, feature: "echo " + flag + " (" + echoFlagsIn(p.dialect) + ")", alternative: "printf"}, args[0])
+	p.nonPortableNode(portabilityIssue{code: 3036, feature: "echo " + flag + " (" + echoFlagsIn(p.tree.Shell) + ")", alternative: "printf"}, args[0])
 }
 
 func checkSetOptions(p *pass, args []*syntax.Word) {
@@ -228,7 +228,7 @@ func checkSetOptions(p *pass, args []*syntax.Word) {
 			return
 		}
 		for _, letter := range word[1:] {
-			if !builtinTakes("set", letter, p.dialect) {
+			if !builtinTakes("set", letter, p.tree.Shell) {
 				p.nonPortableNode(portabilityIssue{code: 3041, feature: "set " + word[:1] + string(letter)}, args[i])
 			}
 		}
@@ -245,7 +245,7 @@ func checkSetOptions(p *pass, args []*syntax.Word) {
 		case p.dialect == dialect.Dash && since != "":
 			issue.dashSince = since
 			p.nonPortableNode(issue, args[i])
-		case !setOptionIn(option, p.dialect):
+		case !setOptionIn(option, p.tree.Shell):
 			p.nonPortableNode(issue, args[i])
 		}
 	}
@@ -321,7 +321,7 @@ func checkPortableFlags(p *pass, name string, args []*syntax.Word) {
 			return
 		}
 		for _, letter := range word[1:] {
-			if !builtinTakes(name, letter, p.dialect) {
+			if !builtinTakes(name, letter, p.tree.Shell) {
 				p.nonPortableNode(portabilityIssue{code: 3045, feature: name + " -" + string(letter)}, arg)
 				return
 			}

@@ -122,7 +122,7 @@ func Complete(ctx context.Context, in Input) (Result, error) {
 	if directiveTrigger(in.Trigger) {
 		return Result{}, nil
 	}
-	c := completer{Input: in, dialect: in.Tree.Dialect, site: analyze(in.Tree, in.Offset)}
+	c := completer{Input: in, shell: in.Tree.Shell, site: analyze(in.Tree, in.Offset)}
 	c.site.wordEnd = tokenEnd(in.Tree, c.site)
 	switch c.site.position {
 	case positionVariable:
@@ -159,7 +159,7 @@ func (c completer) printfDirectives() []Item {
 	}
 	at := parser.Span{Start: c.Offset, End: c.Offset}
 	var items []Item
-	for e := range shelldocs.Terms(shelldocs.PrintfDirectives, c.dialect) {
+	for e := range shelldocs.Terms(shelldocs.PrintfDirectives, c.shell) {
 		label := e.Name
 		if e.Synopsis != "" {
 			label = e.Synopsis
@@ -175,7 +175,7 @@ func (c completer) printfDirectives() []Item {
 
 func (c completer) letters(v shelldocs.Vocabulary) []Item {
 	var items []Item
-	for e := range shelldocs.Terms(v, c.dialect) {
+	for e := range shelldocs.Terms(v, c.shell) {
 		if len(e.Name) == 1 && strings.Contains(c.site.typed, e.Name) && !repeatable(v, e.Name) {
 			continue
 		}
@@ -212,8 +212,8 @@ func (c completer) arrayKeys() []Item {
 
 type completer struct {
 	Input
-	dialect dialect.Dialect
-	site    site
+	shell dialect.Shell
+	site  site
 }
 
 func (c completer) item(label string, kind Kind, sort string) Item {
@@ -257,17 +257,17 @@ func (c completer) commands(withKeywords bool) Result {
 		add(it)
 	}
 	if withKeywords {
-		for _, e := range shelldocs.Keywords(c.dialect) {
+		for _, e := range shelldocs.Keywords(c.shell) {
 			add(c.keyword(e))
 		}
 		for _, it := range c.idioms() {
 			add(it)
 		}
 	}
-	for _, e := range shelldocs.Builtins(c.dialect) {
+	for _, e := range shelldocs.Builtins(c.shell) {
 		it := c.item(e.Name, KindBuiltin, "2")
 		it.Detail = "builtin"
-		it.Documentation = e.Markdown(c.dialect)
+		it.Documentation = e.Markdown(c.shell)
 		add(it)
 	}
 	executables := c.Env.Executables()
@@ -293,7 +293,7 @@ func (c completer) commands(withKeywords bool) Result {
 func (c completer) keyword(e shelldocs.Entry) Item {
 	it := c.item(e.Name, KindKeyword, "2")
 	it.Detail = "keyword"
-	it.Documentation = e.Markdown(c.dialect)
+	it.Documentation = e.Markdown(c.shell)
 	if snippet, ok := keywordSnippets[e.Name]; ok && c.Snippets {
 		it.InsertText = snippet
 		it.Snippet = true
@@ -409,7 +409,7 @@ func (c completer) positional(ctx context.Context, command string, args []string
 
 func (c completer) terms(v shelldocs.Vocabulary, kind Kind) []Item {
 	var items []Item
-	for e := range shelldocs.Terms(v, c.dialect) {
+	for e := range shelldocs.Terms(v, c.shell) {
 		if !strings.HasPrefix(e.Name, c.site.prefix) {
 			continue
 		}
@@ -428,7 +428,7 @@ func (c completer) signals(labelPrefix string, vocabularies []shelldocs.Vocabula
 	typed, spelledSIG := shelldocs.NormalizeSignal(strings.TrimPrefix(c.site.prefix, labelPrefix))
 	var items []Item
 	for i, v := range vocabularies {
-		for e := range shelldocs.Terms(v, c.dialect) {
+		for e := range shelldocs.Terms(v, c.shell) {
 			if !strings.HasPrefix(e.Name, typed) {
 				continue
 			}
@@ -449,7 +449,7 @@ func (c completer) signals(labelPrefix string, vocabularies []shelldocs.Vocabula
 
 func (c completer) options(set shelldocs.Vocabulary) []Item {
 	var items []Item
-	for o := range shelldocs.Terms(set, c.dialect) {
+	for o := range shelldocs.Terms(set, c.shell) {
 		if !strings.HasPrefix(o.Name, c.site.prefix) {
 			continue
 		}
@@ -461,7 +461,7 @@ func (c completer) options(set shelldocs.Vocabulary) []Item {
 }
 
 func (c completer) flags(ctx context.Context, command string, args []string) (Result, error) {
-	if flags, ok := shelldocs.BuiltinFlags(command, c.dialect); ok {
+	if flags, ok := shelldocs.BuiltinFlags(command, c.shell); ok {
 		var items []Item
 		for e := range flags {
 			if !strings.HasPrefix(e.Name, c.site.prefix) {
@@ -536,10 +536,10 @@ func (c completer) variables() []Item {
 			add(it)
 		}
 	}
-	for _, e := range shelldocs.Variables(c.dialect) {
+	for _, e := range shelldocs.Variables(c.shell) {
 		it := c.item(e.Name, KindVariable, "2")
 		it.Detail = "shell variable"
-		it.Documentation = e.Markdown(c.dialect)
+		it.Documentation = e.Markdown(c.shell)
 		add(it)
 	}
 	for _, name := range c.Env.EnvironmentNames() {
@@ -550,7 +550,7 @@ func (c completer) variables() []Item {
 	if c.site.prefix == "" {
 		for _, name := range []string{"@", "*", "#", "?", "$", "!", "0", "-", "_"} {
 			entry, ok := shelldocs.Parameter(name)
-			if !ok || !entry.Dialects.Has(c.dialect) {
+			if !ok || !entry.In(c.shell) {
 				continue
 			}
 			it := c.item(name, KindVariable, "4")

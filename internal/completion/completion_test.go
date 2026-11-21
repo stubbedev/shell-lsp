@@ -315,6 +315,8 @@ func TestBuiltinFlags(t *testing.T) {
 		{d: dialect.Bash, src: "kill -‸", want: []string{"-s", "-l", "-n"}},
 		{d: dialect.Posix, src: "kill -‸", want: []string{"-s", "-l"}, missing: []string{"-n"}},
 		{d: dialect.Bash, src: "mapfile -‸", want: []string{"-t", "-d"}},
+		{d: dialect.Ksh, src: "#!/bin/ksh\nset -‸", want: []string{"-B", "-G", "-H", "-s", "-t"}, missing: []string{"-U", "-X"}},
+		{d: dialect.Ksh, src: "#!/bin/mksh\nset -‸", want: []string{"-U", "-X", "-s"}, missing: []string{"-B", "-G", "-H", "-t"}},
 	}
 	for _, tc := range tests {
 		got := labels(complete(t, tc.d, tc.src))
@@ -631,6 +633,16 @@ func TestShellOptions(t *testing.T) {
 	}
 	if got := labels(complete(t, dialect.Zsh, "setopt extended‸")); !slices.Equal(got, []string{"extended_glob"}) {
 		t.Errorf("setopt = %v", got)
+	}
+	for shebang, want := range map[string][]string{"#!/bin/ksh\n": {"histexpand"}, "#!/bin/mksh\n": nil} {
+		if got := labels(complete(t, dialect.Ksh, shebang+"set -o hist‸")); !slices.Equal(got, want) {
+			t.Errorf("%qset -o hist = %v, want %v", shebang, got, want)
+		}
+	}
+	for shebang, want := range map[string][]string{"#!/bin/ksh\n": nil, "#!/bin/mksh\n": {"physical"}} {
+		if got := labels(complete(t, dialect.Ksh, shebang+"set -o phys‸")); !slices.Equal(got, want) {
+			t.Errorf("%qset -o phys = %v, want %v", shebang, got, want)
+		}
 	}
 }
 

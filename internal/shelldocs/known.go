@@ -143,8 +143,8 @@ var knownKsh = newKnownParameters(nil, slices.Concat(knownShellGroups, []knownGr
 
 var knownByDialect = map[dialect.Dialect]ParameterTable{dialect.Zsh: knownZsh, dialect.Ksh: knownKsh}
 
-func KnownParameters(d dialect.Dialect) ParameterTable {
-	if t, ok := knownByDialect[d]; ok {
+func KnownParameters(s dialect.Shell) ParameterTable {
+	if t, ok := knownByDialect[s.Dialect]; ok {
 		return t
 	}
 	return knownShell

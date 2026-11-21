@@ -68,7 +68,7 @@ func newPass(tree *parser.Tree, imports []parser.Import, opts Options) *pass {
 		dialectGuessed: opts.DialectSource == DialectGuessed && !settings.shell,
 		stmts:          make([]parser.Span, 0, tree.Statements),
 		variables:      variableUsage{reads: make([]variableRead, 0, len(tree.References))},
-		parameters:     shelldocs.KnownParameters(tree.Dialect),
+		parameters:     shelldocs.KnownParameters(tree.Shell),
 
 		normalized:     opts.Normalized,
 		sourced:        opts.Sourced,

@@ -303,7 +303,7 @@ func charName(r rune) string {
 func (d describer) flags(n *Flags) string {
 	docs := make([]string, 0, len(n.Flags))
 	for _, f := range n.Flags {
-		e, ok := shelldocs.Term(shelldocs.ZshGlobFlags, string(f.Name), dialect.Zsh)
+		e, ok := shelldocs.Term(shelldocs.ZshGlobFlags, string(f.Name), dialect.Zsh.Shell())
 		if !ok {
 			continue
 		}
@@ -345,7 +345,7 @@ func qualifierText(q Qualifier) string {
 	case ":":
 		return modifiersText(q.Arg)
 	}
-	e, ok := shelldocs.Term(shelldocs.ZshGlobQualifiers, q.Name, dialect.Zsh)
+	e, ok := shelldocs.Term(shelldocs.ZshGlobQualifiers, q.Name, dialect.Zsh.Shell())
 	if !ok {
 		return "unknown qualifier"
 	}

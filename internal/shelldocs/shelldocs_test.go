@@ -12,11 +12,11 @@ func TestEntriesAreComplete(t *testing.T) {
 
 	for _, list := range [][]Entry{builtins, keywords, variables, parameters} {
 		for _, e := range list {
-			if e.Name == "" || e.Doc == "" || e.Dialects == 0 {
+			if e.Name == "" || e.Doc == "" || e.shells == 0 {
 				t.Errorf("incomplete entry %+v", e)
 			}
 			for d := range e.Notes {
-				if !e.Dialects.Has(d) {
+				if !e.inDialect(d) {
 					t.Errorf("%s has a %s note but is not available there", e.Name, d)
 				}
 			}
@@ -45,12 +45,12 @@ func TestDialectAvailability(t *testing.T) {
 			t.Fatalf("%s not documented", tc.name)
 		}
 		for _, d := range tc.available {
-			if !e.Dialects.Has(d) {
+			if !e.In(d.Shell()) {
 				t.Errorf("%s should be available in %s", tc.name, d)
 			}
 		}
 		for _, d := range tc.missing {
-			if e.Dialects.Has(d) {
+			if e.In(d.Shell()) {
 				t.Errorf("%s should not be available in %s", tc.name, d)
 			}
 		}
@@ -61,11 +61,11 @@ func TestMarkdownCarriesNotesAndAvailability(t *testing.T) {
 	t.Parallel()
 
 	echo, _ := Builtin("echo")
-	if md := echo.Markdown(dialect.Zsh); !strings.Contains(md, "**zsh:**") || !strings.Contains(md, "```zsh\necho") {
+	if md := echo.Markdown(dialect.Zsh.Shell()); !strings.Contains(md, "**zsh:**") || !strings.Contains(md, "```zsh\necho") {
 		t.Errorf("zsh echo markdown = %q", md)
 	}
 	declare, _ := Builtin("declare")
-	if md := declare.Markdown(dialect.Posix); !strings.Contains(md, "_Not available in sh._") {
+	if md := declare.Markdown(dialect.Posix.Shell()); !strings.Contains(md, "_Not available in sh._") {
 		t.Errorf("posix declare markdown = %q", md)
 	}
 }
@@ -78,7 +78,7 @@ func TestVocabularies(t *testing.T) {
 			t.Errorf("vocabulary %d is empty", v)
 		}
 		for _, e := range entries {
-			if e.Name == "" || e.Doc == "" || e.Dialects == 0 {
+			if e.Name == "" || e.Doc == "" || e.shells == 0 {
 				t.Errorf("vocabulary %d has an incomplete entry %+v", v, e)
 			}
 		}
@@ -100,7 +100,7 @@ func TestVocabularies(t *testing.T) {
 		{Signals, "TERM"},
 		{TrapConditions, "EXIT"},
 	} {
-		if _, ok := Term(tc.v, tc.name, dialect.Bash); !ok {
+		if _, ok := Term(tc.v, tc.name, dialect.Bash.Shell()); !ok {
 			t.Errorf("%q missing from vocabulary %d", tc.name, tc.v)
 		}
 	}
@@ -110,7 +110,7 @@ func TestTermsFollowTheDialect(t *testing.T) {
 	t.Parallel()
 
 	has := func(v Vocabulary, d dialect.Dialect, name string) bool {
-		for e := range Terms(v, d) {
+		for e := range Terms(v, d.Shell()) {
 			if e.Name == name {
 				return true
 			}
@@ -137,24 +137,24 @@ func TestBuiltinFlags(t *testing.T) {
 			t.Errorf("flags documented for %q, which is not a builtin", name)
 			continue
 		}
-		seen := map[string]dialect.Set{}
+		seen := map[string]dialect.Shells{}
 		for _, f := range flags {
-			if !strings.HasPrefix(f.Name, "-") || f.Doc == "" || seen[f.Name]&f.Dialects != 0 {
+			if !strings.HasPrefix(f.Name, "-") || f.Doc == "" || seen[f.Name]&f.shells != 0 {
 				t.Errorf("%s: bad flag, or one described twice for a shell: %+v", name, f)
 			}
-			seen[f.Name] |= f.Dialects
-			if f.Dialects&b.Dialects == 0 {
+			seen[f.Name] |= f.shells
+			if f.shells&b.shells == 0 {
 				t.Errorf("%s %s is documented for shells without %s", name, f.Name, name)
 			}
 		}
 	}
-	if _, ok := BuiltinFlag("read", "-a", dialect.Zsh); ok {
+	if _, ok := BuiltinFlag("read", "-a", dialect.Zsh.Shell()); ok {
 		t.Error("read -a offered in zsh, which spells it -A")
 	}
-	if _, ok := BuiltinFlag("read", "-r", dialect.Dash); !ok {
+	if _, ok := BuiltinFlag("read", "-r", dialect.Dash.Shell()); !ok {
 		t.Error("read -r missing in dash")
 	}
-	if _, ok := BuiltinFlags("declare", dialect.Posix); ok {
+	if _, ok := BuiltinFlags("declare", dialect.Posix.Shell()); ok {
 		t.Error("declare flags offered in POSIX sh, which has no declare")
 	}
 }
@@ -164,20 +164,23 @@ func TestSetLettersFollowTheShell(t *testing.T) {
 
 	type key struct {
 		letter byte
-		d      dialect.Dialect
+		s      dialect.Shell
 	}
+	bash, zsh, dash, ksh93, mksh := dialect.Bash.Shell(), dialect.Zsh.Shell(), dialect.Dash.Shell(), dialect.Ksh.Shell(), dialect.FlavorMksh.Shell()
 	for k, want := range map[key]string{
-		{'e', dialect.Zsh}: "errexit", {'u', dialect.Dash}: "nounset", {'f', dialect.Bash}: "noglob", {'F', dialect.Zsh}: "noglob",
-		{'E', dialect.Bash}: "errtrace", {'E', dialect.Busybox}: "errtrace", {'E', dialect.Dash}: "emacs", {'I', dialect.Dash}: "ignoreeof",
-		{'k', dialect.Ksh}: "keyword", {'B', dialect.Ksh}: "braceexpand", {'h', dialect.Bash}: "hashall", {'h', dialect.Ksh}: "trackall",
+		{'e', zsh}: "errexit", {'u', dash}: "nounset", {'f', bash}: "noglob", {'F', zsh}: "noglob",
+		{'E', bash}: "errtrace", {'E', dialect.Busybox.Shell()}: "errtrace", {'E', dash}: "emacs", {'I', dash}: "ignoreeof",
+		{'k', ksh93}: "keyword", {'k', mksh}: "keyword", {'B', ksh93}: "braceexpand", {'h', bash}: "hashall", {'h', ksh93}: "trackall",
+		{'G', ksh93}: "globstar", {'G', zsh}: "nullglob", {'X', mksh}: "markdirs",
 	} {
-		if got, ok := SetLetter(k.letter, k.d); !ok || got != want {
-			t.Errorf("SetLetter(%c, %s) = %q, %t; want %q", k.letter, k.d, got, ok, want)
+		if got, ok := SetLetter(k.letter, k.s); !ok || got != want {
+			t.Errorf("SetLetter(%c, %s) = %q, %t; want %q", k.letter, k.s.Lang(), got, ok, want)
 		}
 	}
-	for _, k := range []key{{'f', dialect.Zsh}, {'h', dialect.Zsh}, {'k', dialect.Zsh}, {'b', dialect.Zsh}, {'F', dialect.Bash}, {'E', dialect.Posix}, {'h', dialect.Posix}} {
-		if got, ok := SetLetter(k.letter, k.d); ok {
-			t.Errorf("SetLetter(%c, %s) = %q, want no option of that letter", k.letter, k.d, got)
+	posix := dialect.Posix.Shell()
+	for _, k := range []key{{'f', zsh}, {'h', zsh}, {'k', zsh}, {'b', zsh}, {'F', bash}, {'E', posix}, {'h', posix}, {'B', mksh}, {'G', mksh}, {'H', mksh}, {'X', ksh93}} {
+		if got, ok := SetLetter(k.letter, k.s); ok {
+			t.Errorf("SetLetter(%c, %s) = %q, want no option of that letter", k.letter, k.s.Lang(), got)
 		}
 	}
 }
@@ -186,7 +189,7 @@ func TestPosixSetTakesHWithoutALongName(t *testing.T) {
 	t.Parallel()
 
 	for d, want := range map[dialect.Dialect]bool{dialect.Posix: true, dialect.Bash: true, dialect.Ksh: true, dialect.Dash: false, dialect.Busybox: false} {
-		if _, got := BuiltinFlag("set", "-h", d); got != want {
+		if _, got := BuiltinFlag("set", "-h", d.Shell()); got != want {
 			t.Errorf("set -h documented for %s = %t, want %t", d, got, want)
 		}
 	}

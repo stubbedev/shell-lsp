@@ -53,7 +53,7 @@ func SignatureHelp(tree *parser.Tree, offset int, lookup FunctionLookup) (Signat
 		}
 		return out, true
 	}
-	if entry, ok := shelldocs.Builtin(command); ok && entry.Dialects.Has(tree.Dialect) {
+	if entry, ok := shelldocs.Builtin(command); ok && entry.In(tree.Shell) {
 		return Signature{Label: entry.Synopsis, Doc: entry.Doc, Active: -1}, true
 	}
 	return Signature{}, false

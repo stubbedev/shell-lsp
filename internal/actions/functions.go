@@ -46,7 +46,7 @@ func toggleFunctionKeyword(s *site) (Change, bool) {
 		return Change{Title: "Declare " + fn.Name.Value + "() without the function keyword", Edits: lint.FunctionKeywordRemoval(fn)}, true
 	}
 	keyword, known := shelldocs.Keyword("function")
-	if _, block := fn.Body.Cmd.(*syntax.Block); !block || !known || !keyword.Dialects.Has(d) {
+	if _, block := fn.Body.Cmd.(*syntax.Block); !block || !known || !keyword.In(s.Tree.Shell) {
 		return Change{}, false
 	}
 	if !hasParens {

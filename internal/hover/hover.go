@@ -89,7 +89,7 @@ func (h hoverer) hover(ctx context.Context) (Result, bool, error) {
 type hoverer struct {
 	Input
 	text    string
-	dialect dialect.Dialect
+	shell   dialect.Shell
 	scope   parser.ScopeID
 	path    []parser.Located
 	options shelloptions.PerShell
@@ -104,7 +104,7 @@ func (h hoverer) keyword() (Result, bool) {
 		if !ok {
 			return Result{}, false
 		}
-		return Result{Markdown: entry.Markdown(h.dialect), Span: k.Span}, true
+		return Result{Markdown: entry.Markdown(h.shell), Span: k.Span}, true
 	}
 	return Result{}, false
 }
@@ -119,7 +119,7 @@ func (h hoverer) paramExp() (Result, bool) {
 		if exp.Param != nil {
 			sections = append(sections, h.parameter(exp.Param.Value))
 		}
-		sections = append(sections, expansionDocs(exp, h.dialect)...)
+		sections = append(sections, expansionDocs(exp, h.shell)...)
 		if doc, ok := h.expansionPattern(exp); ok {
 			sections = append(sections, doc)
 		}
@@ -135,7 +135,7 @@ func (h hoverer) parameter(name string) string {
 	kind, _ := parser.ParamKindOf(name)
 	fn, inFunction := h.Tree.FunctionOfBody(h.scope)
 	switch {
-	case kind == parser.ParamZero && inFunction && fn.NamesArgZero(h.dialect):
+	case kind == parser.ParamZero && inFunction && fn.NamesArgZero(h.shell.Dialect):
 		return fmt.Sprintf("**$0**: name of function `%s` while it runs", fn.Name)
 	case kind == parser.ParamPositional && inFunction:
 		return fmt.Sprintf("**$%s**: argument %s of function `%s`", name, name, fn.Name)
@@ -154,7 +154,7 @@ func (h hoverer) optionFlagsDoc() string {
 	entry, _ := shelldocs.Parameter("-")
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "**$-**: %s", entry.Doc)
-	for e := range shelldocs.Terms(shelldocs.OptionLetters, h.dialect) {
+	for e := range shelldocs.Terms(shelldocs.OptionLetters, h.shell) {
 		fmt.Fprintf(&sb, "\n- `%s`: %s", e.Name, e.Doc)
 	}
 	return sb.String()
@@ -174,7 +174,7 @@ func (h hoverer) variable(name string) string {
 	if doc := h.definitionDoc(defs); doc != "" {
 		fmt.Fprintf(&sb, "\n\n%s", doc)
 	}
-	fmt.Fprintf(&sb, "\n\nDeclared on line %d:\n```%s\n%s\n```", h.line(first.Span.Start), shelldocs.FenceLanguage(h.dialect), h.snippet(first.Span.Start))
+	fmt.Fprintf(&sb, "\n\nDeclared on line %d:\n```%s\n%s\n```", h.line(first.Span.Start), shelldocs.FenceLanguage(h.shell.Dialect), h.snippet(first.Span.Start))
 	if n := defs.Len(); n > 1 {
 		fmt.Fprintf(&sb, "\n\nAssigned in %d places.", n)
 	}
@@ -237,7 +237,7 @@ func (h hoverer) describe(first parser.Definition, defs parser.Definitions) stri
 
 func (h hoverer) undefinedVariable(name string) string {
 	if entry, ok := shelldocs.Variable(name); ok {
-		return fmt.Sprintf("**%s**: shell variable\n\n%s", name, entry.Markdown(h.dialect))
+		return fmt.Sprintf("**%s**: shell variable\n\n%s", name, entry.Markdown(h.shell))
 	}
 	return fmt.Sprintf("**%s**: not assigned in this file; expected from the environment or a sourced file", name)
 }
@@ -259,13 +259,13 @@ func VariableDoc(tree *parser.Tree, imports []parser.Import, offset int, name st
 }
 
 func newHoverer(in Input) hoverer {
-	return hoverer{Input: in, text: in.Tree.Text(), dialect: in.Tree.Dialect, scope: in.Tree.ScopeAt(in.Offset)}
+	return hoverer{Input: in, text: in.Tree.Text(), shell: in.Tree.Shell, scope: in.Tree.ScopeAt(in.Offset)}
 }
 
 func (h hoverer) function(fn parser.Function) string {
 	var sb strings.Builder
 	sig := FunctionSignature(h.Tree, fn)
-	fmt.Fprintf(&sb, "```%s\n%s\n```", shelldocs.FenceLanguage(h.dialect), sig.Label())
+	fmt.Fprintf(&sb, "```%s\n%s\n```", shelldocs.FenceLanguage(h.shell.Dialect), sig.Label())
 	if sig.Doc != "" {
 		fmt.Fprintf(&sb, "\n\n%s", sig.Doc)
 	}
@@ -384,8 +384,8 @@ func (h hoverer) vocabularyArgument(command string, before []string, word string
 
 func (h hoverer) term(name string, vocabularies ...shelldocs.Vocabulary) (string, bool) {
 	for _, v := range vocabularies {
-		if e, ok := shelldocs.Term(v, name, h.dialect); ok {
-			return fmt.Sprintf("**%s**\n\n%s", name, e.Markdown(h.dialect)), true
+		if e, ok := shelldocs.Term(v, name, h.shell); ok {
+			return fmt.Sprintf("**%s**\n\n%s", name, e.Markdown(h.shell)), true
 		}
 	}
 	return "", false
@@ -394,12 +394,12 @@ func (h hoverer) term(name string, vocabularies ...shelldocs.Vocabulary) (string
 func (h hoverer) signal(word string, vocabularies []shelldocs.Vocabulary) (string, bool) {
 	name, _ := shelldocs.NormalizeSignal(word)
 	for _, v := range vocabularies {
-		if e, ok := shelldocs.Term(v, name, h.dialect); ok {
+		if e, ok := shelldocs.Term(v, name, h.shell); ok {
 			title := name
 			if v == shelldocs.Signals {
 				title = "SIG" + name
 			}
-			return fmt.Sprintf("**%s**\n\n%s", title, e.Markdown(h.dialect)), true
+			return fmt.Sprintf("**%s**\n\n%s", title, e.Markdown(h.shell)), true
 		}
 	}
 	return "", false
@@ -417,9 +417,9 @@ func (h hoverer) zshOption(word string) (string, bool) {
 		return "", false
 	}
 	if negated {
-		return fmt.Sprintf("**%s** (negates `%s`)\n\n%s", word, e.Name, e.Markdown(h.dialect)), true
+		return fmt.Sprintf("**%s** (negates `%s`)\n\n%s", word, e.Name, e.Markdown(h.shell)), true
 	}
-	return fmt.Sprintf("**%s**\n\n%s", e.Name, e.Markdown(h.dialect)), true
+	return fmt.Sprintf("**%s**\n\n%s", e.Name, e.Markdown(h.shell)), true
 }
 
 func zshOptionKey(name string) string {
@@ -427,7 +427,7 @@ func zshOptionKey(name string) string {
 }
 
 func zshOptionNamed(key string) (shelldocs.Entry, bool) {
-	for e := range shelldocs.Terms(shelldocs.SetoptOptions, dialect.Zsh) {
+	for e := range shelldocs.Terms(shelldocs.SetoptOptions, dialect.Zsh.Shell()) {
 		if zshOptionKey(e.Name) == key {
 			return e, true
 		}
@@ -437,7 +437,7 @@ func zshOptionNamed(key string) (shelldocs.Entry, bool) {
 
 func (h hoverer) builtinFlag(command, word string) (string, bool) {
 	name, _, _ := strings.Cut(word, "=")
-	if e, ok := shelldocs.BuiltinFlag(command, name, h.dialect); ok {
+	if e, ok := shelldocs.BuiltinFlag(command, name, h.shell); ok {
 		return fmt.Sprintf("**%s %s**\n\n%s", command, name, e.Doc), true
 	}
 	if len(name) < 3 || name[1] == '-' {
@@ -445,7 +445,7 @@ func (h hoverer) builtinFlag(command, word string) (string, bool) {
 	}
 	lines := make([]string, 0, len(name)-1)
 	for _, letter := range name[1:] {
-		e, ok := shelldocs.BuiltinFlag(command, "-"+string(letter), h.dialect)
+		e, ok := shelldocs.BuiltinFlag(command, "-"+string(letter), h.shell)
 		if !ok {
 			return "", false
 		}
@@ -576,10 +576,10 @@ func (h hoverer) commandName(ctx context.Context, name string, span parser.Span)
 		return Result{Markdown: ImportedFunctionDoc(imp, fn), Span: span}, true, nil
 	}
 	if entry, ok := shelldocs.Builtin(name); ok {
-		return Result{Markdown: entry.Markdown(h.dialect), Span: span}, true, nil
+		return Result{Markdown: entry.Markdown(h.shell), Span: span}, true, nil
 	}
 	if entry, ok := shelldocs.Keyword(name); ok {
-		return Result{Markdown: entry.Markdown(h.dialect), Span: span}, true, nil
+		return Result{Markdown: entry.Markdown(h.shell), Span: span}, true, nil
 	}
 	if h.Commands == nil {
 		return Result{}, false, nil
@@ -727,10 +727,10 @@ func positionalUse(fn parser.Function) (int, bool) {
 	return highest, variadic
 }
 
-func expansionDocs(exp *syntax.ParamExp, d dialect.Dialect) []string {
+func expansionDocs(exp *syntax.ParamExp, s dialect.Shell) []string {
 	var docs []string
 	add := func(v shelldocs.Vocabulary, key string) {
-		if e, ok := shelldocs.Term(v, key, d); ok {
+		if e, ok := shelldocs.Term(v, key, s); ok {
 			docs = append(docs, termDoc(e))
 		}
 	}
@@ -791,7 +791,7 @@ func replaceOperator(r *syntax.Replace) string {
 func zshFlagDocs(flags *syntax.Lit) string {
 	var lines []string
 	for _, flag := range parser.ParameterFlags(flags) {
-		if e, ok := shelldocs.Term(shelldocs.ZshParameterFlags, string(flag.Name), dialect.Zsh); ok {
+		if e, ok := shelldocs.Term(shelldocs.ZshParameterFlags, string(flag.Name), dialect.Zsh.Shell()); ok {
 			lines = append(lines, fmt.Sprintf("- `%c`: %s", flag.Name, e.Doc))
 		}
 	}

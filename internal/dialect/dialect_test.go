@@ -204,6 +204,29 @@ func TestSet(t *testing.T) {
 	}
 }
 
+func TestShells(t *testing.T) {
+	t.Parallel()
+
+	ksh93, mksh, bash, bats := Ksh.Shell(), FlavorMksh.Shell(), Bash.Shell(), FlavorBats.Shell()
+	s := SetOf(Bash, Ksh).Shells()
+	if got := slices.Collect(s.Members()); !slices.Equal(got, []Shell{bash, ksh93, bats, mksh}) {
+		t.Errorf("SetOf(Bash, Ksh).Shells() = %v, want bash, ksh93, bats and mksh", got)
+	}
+	only93 := s &^ ShellsOf(mksh)
+	if !only93.Has(ksh93) || only93.Has(mksh) || !only93.Has(bats) || only93.Has(Zsh.Shell()) {
+		t.Errorf("SetOf(Bash, Ksh).Shells() without mksh membership wrong: %016b", only93)
+	}
+	if got := slices.Collect(ShellsOf(mksh).Members()); !slices.Equal(got, []Shell{mksh}) {
+		t.Errorf("ShellsOf(mksh).Members() = %v", got)
+	}
+	defer func() {
+		if recover() == nil {
+			t.Error("ShellsOf accepted the mksh flavor of bash")
+		}
+	}()
+	ShellsOf(Shell{Dialect: Bash, Flavor: FlavorMksh})
+}
+
 func TestEveryDialectIsDescribedOnce(t *testing.T) {
 	t.Parallel()
 
@@ -226,7 +249,7 @@ func TestEveryDialectIsDescribedOnce(t *testing.T) {
 	}
 	for name, use := range map[string]func(Dialect){
 		"String":   func(d Dialect) { _ = d.String() },
-		"Features": func(d Dialect) { _ = Shell{Dialect: d}.Features() },
+		"Features": func(d Dialect) { _ = d.Shell().Features() },
 		"Language": func(d Dialect) { _ = d.Language() },
 	} {
 		func() {

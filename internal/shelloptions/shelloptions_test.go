@@ -36,6 +36,9 @@ func TestScan(t *testing.T) {
 		{dialect.Bash, "#compdef foo\n", Options{}},
 		{dialect.Zsh, "f() { builtin emulate -L zsh -o EXTENDED_GLOB; }\n", Options{ExtendedGlob: true}},
 		{dialect.Bash, "command shopt -s extglob\n", Options{ExtGlob: true}},
+		{dialect.Ksh, "#!/bin/ksh\nset -G\n", Options{GlobStar: true}},
+		{dialect.Ksh, "#!/bin/mksh\nset -G\n", Options{}},
+		{dialect.Zsh, "set -G\n", Options{NullGlob: true}},
 		{dialect.Zsh, "opts=(extendedglob)\nsetopt $opts\n", Options{Dynamic: true}},
 	}
 	for _, tt := range tests {

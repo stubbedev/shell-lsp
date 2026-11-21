@@ -39,20 +39,20 @@ type StrictMode struct {
 }
 
 func StrictModeOf(tree *parser.Tree) StrictMode {
-	shebang := shebangOptionChanges(tree.Text(), tree.Dialect)
+	shebang := shebangOptionChanges(tree.Text(), tree.Shell)
 	m := StrictMode{Errexit: turnsOn(shebang, "errexit"), Nounset: turnsOn(shebang, "nounset")}
 	for _, c := range tree.Commands {
 		if m.Errexit && m.Nounset && m.Pipefail {
 			break
 		}
-		set := StrictModeSetBy(c.Name, c.Args, tree.Dialect)
+		set := StrictModeSetBy(c.Name, c.Args, tree.Shell)
 		m = StrictMode{Errexit: m.Errexit || set.Errexit, Nounset: m.Nounset || set.Nounset, Pipefail: m.Pipefail || set.Pipefail}
 	}
 	return m
 }
 
-func StrictModeSetBy(command string, args []*syntax.Word, d dialect.Dialect) StrictMode {
-	changes := optionChanges(command, args, d)
+func StrictModeSetBy(command string, args []*syntax.Word, s dialect.Shell) StrictMode {
+	changes := optionChanges(command, args, s)
 	return StrictMode{Errexit: turnsOn(changes, "errexit"), Nounset: turnsOn(changes, "nounset"), Pipefail: turnsOn(changes, "pipefail")}
 }
 
@@ -96,11 +96,11 @@ func setsUnknownOptions(command string, args []*syntax.Word) bool {
 	})
 }
 
-func optionChanges(command string, args []*syntax.Word, d dialect.Dialect) []optionChange {
+func optionChanges(command string, args []*syntax.Word, s dialect.Shell) []optionChange {
 	command, args = unwrap(command, args)
 	switch command {
 	case "set":
-		return setOptionChanges(args, d)
+		return setOptionChanges(args, s)
 	case "shopt":
 		return shoptOptionChanges(args)
 	case "setopt", "unsetopt":
@@ -117,7 +117,7 @@ func optionChanges(command string, args []*syntax.Word, d dialect.Dialect) []opt
 	return nil
 }
 
-func setOptionChanges(args []*syntax.Word, d dialect.Dialect) []optionChange {
+func setOptionChanges(args []*syntax.Word, s dialect.Shell) []optionChange {
 	var changes []optionChange
 	var owed []bool
 	for _, a := range args {
@@ -137,7 +137,7 @@ func setOptionChanges(args []*syntax.Word, d dialect.Dialect) []optionChange {
 		for i := 1; i < len(lit); i++ {
 			if lit[i] == 'o' {
 				owed = append(owed, on)
-			} else if name, ok := shelldocs.SetLetter(lit[i], d); ok {
+			} else if name, ok := shelldocs.SetLetter(lit[i], s); ok {
 				changes = append(changes, optionChange{name: name, on: on})
 			}
 		}
@@ -248,7 +248,7 @@ func EffectOf(trees ...*parser.Tree) Effect {
 			if !mayChangeOptions(c.Name) || tree.ShellAt(c.Span.Start) != parser.FileShell {
 				continue
 			}
-			for _, change := range optionChanges(c.Name, c.Args, tree.Dialect) {
+			for _, change := range optionChanges(c.Name, c.Args, tree.Shell) {
 				if !slices.Contains(e.changes, change) {
 					e.changes = append(e.changes, change)
 				}
@@ -261,11 +261,11 @@ func EffectOf(trees ...*parser.Tree) Effect {
 
 func Scan(tree *parser.Tree, sourced map[parser.Span]Effect) PerShell {
 	p := PerShell{tree: tree, base: Options{
-		Errexit:      turnsOn(shebangOptionChanges(tree.Text(), tree.Dialect), "errexit"),
+		Errexit:      turnsOn(shebangOptionChanges(tree.Text(), tree.Shell), "errexit"),
 		ExtendedGlob: tree.Dialect == dialect.Zsh && dialect.CompletionFile(tree.Text()),
 	}}
 	for _, c := range tree.Commands {
-		changes, dynamic := commandOptions(c, tree.Dialect, sourced)
+		changes, dynamic := commandOptions(c, tree.Shell, sourced)
 		if len(changes) > 0 || dynamic {
 			p.changes = append(p.changes, shellChange{command: c, shell: tree.ShellAt(c.Span.Start), changes: changes, dynamic: dynamic})
 		}
@@ -274,7 +274,7 @@ func Scan(tree *parser.Tree, sourced map[parser.Span]Effect) PerShell {
 	return p
 }
 
-func commandOptions(c parser.Command, d dialect.Dialect, sourced map[parser.Span]Effect) ([]optionChange, bool) {
+func commandOptions(c parser.Command, s dialect.Shell, sourced map[parser.Span]Effect) ([]optionChange, bool) {
 	if c.IsSourceBuiltin() {
 		effect := sourced[c.Span]
 		return effect.changes, effect.dynamic
@@ -282,7 +282,7 @@ func commandOptions(c parser.Command, d dialect.Dialect, sourced map[parser.Span
 	if !mayChangeOptions(c.Name) {
 		return nil, false
 	}
-	return optionChanges(c.Name, c.Args, d), setsUnknownOptions(c.Name, c.Args)
+	return optionChanges(c.Name, c.Args, s), setsUnknownOptions(c.Name, c.Args)
 }
 
 func (p PerShell) perShell() []Options {
@@ -390,7 +390,7 @@ func (o *Options) apply(change optionChange) {
 	}
 }
 
-func shebangOptionChanges(text string, d dialect.Dialect) []optionChange {
+func shebangOptionChanges(text string, s dialect.Shell) []optionChange {
 	first, _, _ := strings.Cut(text, "\n")
 	if !strings.HasPrefix(first, "#!") {
 		return nil
@@ -401,7 +401,7 @@ func shebangOptionChanges(text string, d dialect.Dialect) []optionChange {
 			continue
 		}
 		for i := 1; i < len(field); i++ {
-			if name, ok := shelldocs.SetLetter(field[i], d); ok {
+			if name, ok := shelldocs.SetLetter(field[i], s); ok {
 				changes = append(changes, optionChange{name: name, on: true})
 			}
 		}

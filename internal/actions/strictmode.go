@@ -61,7 +61,7 @@ func shortStrictFlags(m shelloptions.StrictMode) string {
 
 func strictModeLine(tree *parser.Tree) (parser.Command, bool) {
 	for _, c := range tree.Commands {
-		if c.Within != parser.FileScope || shelloptions.StrictModeSetBy(c.Name, c.Args, tree.Dialect) == (shelloptions.StrictMode{}) {
+		if c.Within != parser.FileScope || shelloptions.StrictModeSetBy(c.Name, c.Args, tree.Shell) == (shelloptions.StrictMode{}) {
 			continue
 		}
 		for _, stmt := range tree.File.Stmts {

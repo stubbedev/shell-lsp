@@ -198,7 +198,7 @@ func (g *generator) referenceModifiers(ref parser.Reference) Modifier {
 	if g.tree.Visible(ref.Name, ref.Within).Len() == 0 {
 		imp, _, ok := parser.ImportedGlobal(g.imports, ref.Name)
 		if !ok {
-			if shelldocs.KnownParameters(g.tree.Dialect).Has(ref.Name) {
+			if shelldocs.KnownParameters(g.tree.Shell).Has(ref.Name) {
 				return ModDefaultLibrary
 			}
 			return 0
@@ -218,7 +218,7 @@ func (g *generator) commandModifiers(name string) Modifier {
 	if _, _, ok := parser.ImportedFunction(g.imports, name); ok {
 		return 0
 	}
-	if entry, ok := shelldocs.Builtin(name); ok && entry.Dialects.Has(g.tree.Dialect) {
+	if entry, ok := shelldocs.Builtin(name); ok && entry.In(g.tree.Shell) {
 		return ModDefaultLibrary
 	}
 	return ModExternal

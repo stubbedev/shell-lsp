@@ -30,7 +30,7 @@ func directiveCompletion(in Input) (Result, bool, error) {
 		if !ok {
 			return Result{}, false, nil
 		}
-		c := completer{Input: in, dialect: in.Tree.Dialect}
+		c := completer{Input: in, shell: in.Tree.Shell}
 		start, end := comment.Span.Start+cursor.Start, comment.Span.Start+cursor.End
 		if cursor.Slot == directive.SlotValue && cursor.Key.List() {
 			if dash := strings.LastIndexByte(text[start:offset], '-'); dash >= 0 {

@@ -15,12 +15,13 @@ type optionRunner struct {
 }
 
 var optionRunners = []optionRunner{
-	{shell: dialect.Shell{Dialect: dialect.Bash}, reference: referencetest.Bash},
-	{shell: dialect.Shell{Dialect: dialect.Zsh}, reference: referencetest.Zsh},
-	{shell: dialect.Shell{Dialect: dialect.Ksh}, reference: referencetest.Ksh},
+	{shell: dialect.Bash.Shell(), reference: referencetest.Bash},
+	{shell: dialect.FlavorBats.Shell(), reference: referencetest.Bash},
+	{shell: dialect.Zsh.Shell(), reference: referencetest.Zsh},
+	{shell: dialect.Ksh.Shell(), reference: referencetest.Ksh},
 	{shell: dialect.FlavorMksh.Shell(), reference: referencetest.Mksh},
-	{shell: dialect.Shell{Dialect: dialect.Dash}, reference: referencetest.Dash},
-	{shell: dialect.Shell{Dialect: dialect.Busybox}, reference: referencetest.Busybox},
+	{shell: dialect.Dash.Shell(), reference: referencetest.Dash},
+	{shell: dialect.Busybox.Shell(), reference: referencetest.Busybox},
 }
 
 var execFlagProbes = map[string]string{
@@ -29,30 +30,42 @@ var execFlagProbes = map[string]string{
 	"-l": `exec -l awk 'BEGIN { exit }'`,
 }
 
-func (v kshVariant) has(s dialect.Shell) bool {
-	switch v {
-	case ksh93Only:
-		return s.Dialect != dialect.Ksh || s.Flavor != dialect.FlavorMksh
-	case mkshOnly:
-		return s.Dialect != dialect.Ksh || s.Flavor == dialect.FlavorMksh
-	default:
-		return true
-	}
-}
-
-func (o shellOption) documentedIn(s dialect.Shell) bool {
-	return o.dialects.Has(s.Dialect) && o.ksh.has(s)
+var setFlagProbes = map[string]func(testing.TB, referencetest.Shell) bool{
+	"-r": func(tb testing.TB, s referencetest.Shell) bool {
+		return s.Succeeds(tb, `set -r; ! cd / 2>/dev/null`)
+	},
+	"-s": func(tb testing.TB, s referencetest.Shell) bool {
+		return s.Succeeds(tb, `set -s -- b a; [ "$1" = a ]`)
+	},
+	"-t": func(tb testing.TB, s referencetest.Shell) bool {
+		return !strings.Contains(s.Run(tb, "(set -t) 2>/dev/null && set -t\necho reached\n"), "reached")
+	},
 }
 
 func (o shellOption) lettersIn(s dialect.Shell) []byte {
 	var letters []byte
 	for _, l := range o.letters {
-		if o.documentedIn(s) && l.dialects.Has(s.Dialect) && l.ksh.has(s) {
+		if l.shells.Has(s) {
 			letters = append(letters, l.letter)
 		}
 	}
 	slices.Sort(letters)
 	return letters
+}
+
+func TestEveryShellHasARunner(t *testing.T) {
+	t.Parallel()
+
+	var covered dialect.Shells
+	for _, r := range optionRunners {
+		covered |= dialect.ShellsOf(r.shell)
+	}
+	if missing := dialect.All.Shells() &^ dialect.ShellsOf(dialect.Posix.Shell()) &^ covered; missing != 0 {
+		t.Errorf("%v have no real shell that checks their set and exec data", slices.Collect(missing.Members()))
+	}
+	if covered.Has(dialect.Posix.Shell()) {
+		t.Error("posix sh is a standard rather than one shell, so no single binary can stand for it")
+	}
 }
 
 func TestEveryExecFlagHasAProbe(t *testing.T) {
@@ -71,30 +84,21 @@ func TestEveryExecFlagHasAProbe(t *testing.T) {
 func TestSetOptionDataIsConsistent(t *testing.T) {
 	t.Parallel()
 
-	shells := []dialect.Shell{dialect.FlavorMksh.Shell()}
-	for d := range dialect.All.Members() {
-		shells = append(shells, dialect.Shell{Dialect: d})
-	}
+	dash := dialect.Dash.Shell()
 	for _, o := range shellOptions {
-		if o.debianDash && o.dialects.Has(dialect.Dash) {
+		if o.debianDash && o.shells.Has(dash) {
 			t.Errorf("set -o %s is marked as added only by Debian's dash, but is documented for dash", o.name)
 		}
-		if o.dashSince != "" && !o.dialects.Has(dialect.Dash) {
+		if o.dashSince != "" && !o.shells.Has(dash) {
 			t.Errorf("set -o %s names the dash release %s that added it, but is not documented for dash", o.name, o.dashSince)
 		}
-		if o.ksh != everyKsh && !o.dialects.Has(dialect.Ksh) {
-			t.Errorf("set -o %s names the ksh that has it, but is not documented for ksh", o.name)
-		}
 		for _, l := range o.letters {
-			if extra := l.dialects &^ o.dialects; extra != 0 {
-				t.Errorf("set -%c is documented for %v, where set -o %s is not", l.letter, extra, o.name)
-			}
-			if l.ksh != everyKsh && (o.ksh != everyKsh || !l.dialects.Has(dialect.Ksh)) {
-				t.Errorf("set -%c names the ksh that has it, but set -o %s already does or ksh lacks the letter", l.letter, o.name)
+			if extra := l.shells &^ o.shells; extra != 0 {
+				t.Errorf("set -%c is documented for %v, where set -o %s is not", l.letter, slices.Collect(extra.Members()), o.name)
 			}
 		}
 	}
-	for _, s := range shells {
+	for s := range dialect.All.Shells().Members() {
 		owners := map[byte]string{}
 		for _, o := range shellOptions {
 			for _, letter := range o.lettersIn(s) {
@@ -119,7 +123,7 @@ func TestSetOptionsMatchRealShells(t *testing.T) {
 				if r.shell.Dialect == dialect.Dash && (o.debianDash || o.dashSince != "") {
 					continue
 				}
-				want := o.documentedIn(r.shell)
+				want := o.shells.Has(r.shell)
 				got := r.reference.Succeeds(t, "set +o "+o.name)
 				if got != want {
 					t.Errorf("set -o %s documented for %s = %t, but %s accepts it = %t", o.name, r.shell.Lang(), want, r.reference.Name, got)
@@ -129,6 +133,15 @@ func TestSetOptionsMatchRealShells(t *testing.T) {
 				}
 			}
 			checkSetLetters(t, r, accepted)
+			for flag, probe := range setFlagProbes {
+				if _, named := SetLetter(flag[1], r.shell); named {
+					continue
+				}
+				_, want := BuiltinFlag("set", flag, r.shell)
+				if got := probe(t, r.reference); got != want {
+					t.Errorf("set %s documented for %s = %t, but %s takes it = %t", flag, r.shell.Lang(), want, r.reference.Name, got)
+				}
+			}
 		})
 	}
 }
@@ -206,7 +219,7 @@ func TestExecFlagsMatchRealShells(t *testing.T) {
 			t.Parallel()
 			r.reference.Require(t)
 			for flag, script := range execFlagProbes {
-				_, want := BuiltinFlag("exec", flag, r.shell.Dialect)
+				_, want := BuiltinFlag("exec", flag, r.shell)
 				if got := r.reference.Succeeds(t, script); got != want {
 					t.Errorf("exec %s documented for %s = %t, but %s runs %q = %t", flag, r.shell.Lang(), want, r.reference.Name, script, got)
 				}

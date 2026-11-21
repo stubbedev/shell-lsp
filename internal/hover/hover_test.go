@@ -89,6 +89,16 @@ func hoverAt(t *testing.T, src string, d dialect.Dialect, needle string, nth int
 	return got
 }
 
+func TestKsh93OnlySetLetterHasNoHoverInMksh(t *testing.T) {
+	t.Parallel()
+
+	src := "#!/bin/mksh\nset -B\n"
+	got, ok, err := Hover(t.Context(), Input{Tree: parser.Parse(src, dialect.Ksh), Offset: strings.Index(src, "-B"), Commands: fakeCommands{}})
+	if err != nil || ok {
+		t.Errorf("Hover(set -B) in mksh = %+v, %t, %v; want nothing, since -B is ksh93's", got, ok, err)
+	}
+}
+
 func TestHover(t *testing.T) {
 	t.Parallel()
 
@@ -248,6 +258,11 @@ func TestHoverShellVocabulary(t *testing.T) {
 		{d: dialect.Ksh, src: "f() { echo $0; }\n", needle: "$0", want: "Name of the shell or script", span: "$0"},
 		{d: dialect.Zsh, src: "set -o noglob\n", needle: "noglob", want: "Disable filename generation. (`-F`)", span: "noglob"},
 		{d: dialect.Bash, src: "set -o noglob\n", needle: "noglob", want: "Disable filename generation. (`-f`)", span: "noglob"},
+		{d: dialect.Ksh, src: "#!/bin/ksh\nset -o histexpand\n", needle: "histexpand", want: "history expansion. (`-H`)", span: "histexpand", wantMissing: "Not available"},
+		{d: dialect.Ksh, src: "#!/bin/mksh\nset -o histexpand\n", needle: "histexpand", want: "_Not available in mksh._", span: "histexpand"},
+		{d: dialect.Ksh, src: "#!/bin/mksh\nset -o physical\n", needle: "physical", want: "logical path.", span: "physical", wantMissing: "Not available"},
+		{d: dialect.Ksh, src: "#!/bin/ksh\nset -o physical\n", needle: "physical", want: "_Not available in ksh93._", span: "physical"},
+		{d: dialect.Ksh, src: "#!/bin/ksh\nset -B\n", needle: "-B", want: "`braceexpand`", span: "-B", wantMissing: "Not available"},
 	}
 	for _, tc := range tests {
 		got := hoverAt(t, tc.src, tc.d, tc.needle, tc.nth)

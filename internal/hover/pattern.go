@@ -43,7 +43,7 @@ func (h hoverer) patternDoc(site glob.Site) string {
 	}
 	for _, need := range site.Pattern.Unmet(site.Options) {
 		text := h.text[need.Span.Start:need.Span.End]
-		fmt.Fprintf(&sb, "\n\n%s needs `%s`; this file never enables it, so the shell matches it literally.", prose.Code(text), need.Option.Enable(h.dialect))
+		fmt.Fprintf(&sb, "\n\n%s needs `%s`; this file never enables it, so the shell matches it literally.", prose.Code(text), need.Option.Enable(h.shell.Dialect))
 	}
 	for _, e := range site.Pattern.Errors {
 		fmt.Fprintf(&sb, "\n\nInvalid pattern: %s.", e.Message)
@@ -56,7 +56,7 @@ func (h hoverer) matchingNote(site glob.Site) string {
 	case glob.RoleFilenames:
 		return strings.TrimSpace(h.unmatchedNote(site.Options) + " " + h.caseNote(site.Options.NoCaseGlob, "nocaseglob"))
 	case glob.RoleTest, glob.RoleCase, glob.RoleReplaceFirst, glob.RoleReplaceAll, glob.RoleReplacePrefix, glob.RoleReplaceSuffix, glob.RoleRegex:
-		if h.dialect == dialect.Bash || site.Role == glob.RoleRegex {
+		if h.shell.Dialect == dialect.Bash || site.Role == glob.RoleRegex {
 			return h.caseNote(site.Options.NoCaseMatch, "nocasematch")
 		}
 	case glob.RoleRemoveShortestPrefix, glob.RoleRemoveLongestPrefix, glob.RoleRemoveShortestSuffix, glob.RoleRemoveLongestSuffix,
@@ -78,7 +78,7 @@ func (h hoverer) unmatchedNote(opts shelloptions.Options) string {
 		return "When nothing matches, it expands to nothing (`nullglob` is set in this file)."
 	case opts.FailGlob:
 		return "When nothing matches, the command fails (`failglob` is set in this file)."
-	case h.dialect == dialect.Zsh:
+	case h.shell.Dialect == dialect.Zsh:
 		return "When nothing matches, zsh stops with \"no matches found\"; the `(N)` qualifier makes it expand to nothing instead."
 	}
 	return "When nothing matches, the pattern is passed on as it is written."
@@ -123,7 +123,7 @@ func (h hoverer) matchOutcome(site glob.Site) (string, bool) {
 }
 
 func (h hoverer) captures(groups []string) string {
-	if h.dialect == dialect.Zsh {
+	if h.shell.Dialect == dialect.Zsh {
 		return fmt.Sprintf("`$MATCH` is %s and `$match` is %s.", prose.Code(groups[0]), h.valueText(expansion.Value{Words: groups[1:], Array: true}))
 	}
 	return fmt.Sprintf("`BASH_REMATCH` is %s.", h.valueText(expansion.Value{Words: groups, Array: true}))
@@ -161,7 +161,7 @@ func (h hoverer) valueText(v expansion.Value) string {
 	}
 	quoted := make([]string, len(v.Words))
 	for i, w := range v.Words {
-		q, err := syntax.Quote(w, h.dialect.Language())
+		q, err := syntax.Quote(w, h.shell.Dialect.Language())
 		if err != nil {
 			q = fmt.Sprintf("%q", w)
 		}
