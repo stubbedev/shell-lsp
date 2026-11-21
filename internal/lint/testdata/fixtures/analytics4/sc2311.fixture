@@ -76,3 +76,30 @@ version() { :; }
 current=$(version)
 >>> SC2034 5:1
 >>+ SC2311 5:11 -- shellcheck treats any set -o or a mention of inherit_errexit as inheriting errexit; only shopt -s inherit_errexit and bash's posix mode make command substitutions inherit set -e
+
+### zsh keeps err_exit in command substitutions
+#!/bin/zsh
+# shellcheck enable=check-set-e-suppressed
+setopt err_exit
+version() { :; }
+current=$(version)
+print -r -- "${current}"
+>>- SC1071 1:1 -- shellcheck refuses zsh
+
+### ksh keeps errexit in command substitutions
+#!/bin/ksh
+# shellcheck enable=check-set-e-suppressed
+set -e
+version() { :; }
+current=$(version)
+print -r -- "${current}"
+>>- SC2311 5:11 -- ksh93 and mksh keep errexit in command substitutions; only bash outside posix mode clears it
+
+### mksh keeps errexit in command substitutions
+#!/bin/mksh
+# shellcheck enable=check-set-e-suppressed
+set -e
+version() { :; }
+current=$(version)
+print -r -- "${current}"
+>>- SC2311 5:11 -- ksh93 and mksh keep errexit in command substitutions; only bash outside posix mode clears it

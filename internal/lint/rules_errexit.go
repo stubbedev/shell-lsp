@@ -150,12 +150,7 @@ func (p *pass) errexitSuppression(owner, child syntax.Node) (string, bool) {
 }
 
 func (p *pass) losesErrexit(cs *syntax.CmdSubst) bool {
-	if cs.TempFile || cs.ReplyVar || p.optionsAt(cs).InheritErrexit {
-		return false
-	}
-	switch p.dialect {
-	case dialect.Bash, dialect.Ksh, dialect.Zsh:
-	default:
+	if p.dialect != dialect.Bash || cs.TempFile || cs.ReplyVar || p.optionsAt(cs).InheritErrexit {
 		return false
 	}
 	return !parser.Any(cs, func(n syntax.Node) bool {
