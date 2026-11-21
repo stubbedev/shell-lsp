@@ -50,9 +50,6 @@ func (f *File) lexicalErrors() {
 			l.body(end)
 			continue
 		}
-		if len(indent) < len(l.indent) {
-			l.colon = false
-		}
 		l.level(Span{Start: start, End: start + len(indent)}, indent)
 		l.inBody, l.indent = false, indent
 		l.tokens()
@@ -73,6 +70,7 @@ func (l *lexer) level(span Span, indent string) {
 	}
 	for len(l.levels) > 1 && len(l.levels[len(l.levels)-1]) > len(indent) {
 		l.levels = l.levels[:len(l.levels)-1]
+		l.colon = false
 	}
 	if l.levels[len(l.levels)-1] != indent {
 		l.lexError(span, "inconsistent leading whitespace: the lines above start with "+whitespace(top))
