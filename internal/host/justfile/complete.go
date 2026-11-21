@@ -156,7 +156,7 @@ func lexLine(text string, start int, stop func(token) bool, closedStrings bool) 
 			return out, true
 		case t.kind == tokNewline:
 			out = out[:0]
-		case closedStrings && (t.kind == tokString || t.kind == tokBacktick) && t.str.Unclosed:
+		case closedStrings && (t.kind == tokString || t.kind == tokBacktick || t.kind == tokFormat) && t.str.Unclosed:
 			return nil, false
 		case t.kind == tokPunct && (t.text == "(" || t.text == "[" || t.text == "{"):
 			r.depth++

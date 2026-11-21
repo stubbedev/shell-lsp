@@ -261,7 +261,7 @@ func (p *reader) stringRest(start, resumed, open int, lit *StringLit, f format) 
 			lit.Inner = Span{Start: open, End: len(p.text)}
 			p.pos = len(p.text)
 			p.lexError(Span{Start: resumed, End: len(p.text)}, "unterminated string")
-			return token{kind: tokString, span: Span{Start: start, End: p.pos}, str: lit}
+			return token{kind: skippedKind(f, lit), span: Span{Start: start, End: p.pos}, str: lit}
 		}
 		switch {
 		case strings.HasPrefix(p.text[i:], quote):
@@ -273,15 +273,7 @@ func (p *reader) stringRest(start, resumed, open int, lit *StringLit, f format) 
 			if invalid != "" {
 				p.lexError(Span{Start: quoted, End: p.pos}, fmt.Sprintf("`%s` is not a valid escape sequence", invalid))
 			}
-			kind := tokString
-			if f == skippedFormat {
-				if lit.braced() {
-					kind = tokFormat
-				} else {
-					lit.Prefix = 0
-				}
-			}
-			return token{kind: kind, span: Span{Start: start, End: p.pos}, str: lit}
+			return token{kind: skippedKind(f, lit), span: Span{Start: start, End: p.pos}, str: lit}
 		case cooked && p.text[i] == '\\' && i+1 < len(p.text):
 			i += 2
 		case f != unformatted && strings.HasPrefix(p.text[i:], escapedOpen):
@@ -306,7 +298,7 @@ func (p *reader) stringRest(start, resumed, open int, lit *StringLit, f format) 
 			if !closed {
 				lit.Unclosed = true
 				lit.Inner = Span{Start: open, End: p.pos}
-				return token{kind: tokString, span: Span{Start: start, End: p.pos}, str: lit}
+				return token{kind: skippedKind(f, lit), span: Span{Start: start, End: p.pos}, str: lit}
 			}
 			i = p.pos
 			segment = i
@@ -315,6 +307,17 @@ func (p *reader) stringRest(start, resumed, open int, lit *StringLit, f format) 
 			i++
 		}
 	}
+}
+
+func skippedKind(f format, lit *StringLit) tokenKind {
+	if f != skippedFormat {
+		return tokString
+	}
+	if lit.braced() {
+		return tokFormat
+	}
+	lit.Prefix = 0
+	return tokString
 }
 
 func (s *StringLit) braced() bool {
