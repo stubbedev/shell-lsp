@@ -75,7 +75,8 @@ func writesVariable(kind parser.DefinitionKind) bool {
 }
 
 func checkImplicitGlobals(p *pass) {
-	if !p.active(codeImplicitGlobal) || !p.dialect.Features().Local {
+	hasLocal := p.tree.Features().Local
+	if !p.active(codeImplicitGlobal) || !hasLocal && p.dialect != dialect.Ksh {
 		return
 	}
 	scopes := p.variableScopes()
@@ -88,7 +89,7 @@ func checkImplicitGlobals(p *pass) {
 		}
 		fn, _ := p.tree.EnclosingFunction(def.Within)
 		keyword := "local"
-		if p.dialect == dialect.Ksh {
+		if !hasLocal {
 			if fn.Decl == nil || !fn.Decl.RsrvWord {
 				continue
 			}

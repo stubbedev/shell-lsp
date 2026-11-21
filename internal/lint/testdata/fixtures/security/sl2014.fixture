@@ -172,6 +172,23 @@ keyword x
 posix y
 >>+ SL2014 4:3 -- shell-lsp native check; shellcheck does not ask for local
 
+### mksh has local in both function forms
+#!/bin/mksh
+# shellcheck enable=require-local-variables
+function keyword {
+  name=$1
+  echo "$name"
+}
+posix() {
+  other=$1
+  echo "$other"
+}
+keyword x
+posix y
+>>- SC1008 1:1 -- deliberate: we recognise mksh and lint it as a ksh variant, so the shebang is not unrecognised
+>>+ SL2014 4:3 -- shell-lsp native check; shellcheck does not ask for local
+>>+ SL2014 8:3 -- shell-lsp native check; shellcheck does not ask for local
+
 ### zsh
 #!/bin/zsh
 # shellcheck enable=require-local-variables

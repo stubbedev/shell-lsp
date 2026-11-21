@@ -400,7 +400,7 @@ func (p *pass) restrictedByCase(pe *syntax.ParamExp) bool {
 }
 
 func checkInjectedArithmetic(p *pass, n syntax.Node) {
-	if !p.active(codeArithmeticInjection) || !p.dialect.Features().SubscriptsRunCode {
+	if !p.active(codeArithmeticInjection) || !p.tree.Features().SubscriptsRunCode {
 		return
 	}
 	scope := p.tree.ScopeAt(parser.Offset(n.Pos()))

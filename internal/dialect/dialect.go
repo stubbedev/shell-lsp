@@ -47,18 +47,15 @@ var specs = [...]spec{
 		name: "bash", aliases: []string{"bats", genericLanguageID, "bashrc"},
 		family: posixFamily, width: 3, language: syntax.LangBash,
 		features: Features{
-			Arrays: true, AssociativeArrays: true, DoubleBracket: true,
-			ArithmeticCommand: true, ProcessSubstitution: true, Coproc: true,
-			Nameref: true, Local: true, Select: true, SplitsUnquoted: true, GlobsUnquoted: true, DeclarationAssigns: true,
-			QuotedRegexLiteral: true, SubscriptsRunCode: true,
+			Arrays: true, DoubleBracket: true, Local: true, SplitsUnquoted: true, GlobsUnquoted: true,
+			DeclarationAssigns: true, AssociativePairs: true, QuotedRegexLiteral: true, SubscriptsRunCode: true,
+			ClearsErrexitInSubstitutions: true,
 		},
 	},
 	Zsh: {
 		name: "zsh", family: zshFamily, language: syntax.LangZsh,
 		features: Features{
-			Arrays: true, AssociativeArrays: true, DoubleBracket: true,
-			ArithmeticCommand: true, ProcessSubstitution: true, GlobQualifiers: true,
-			Coproc: true, Nameref: true, Local: true, Select: true, LastPipeInShell: true, DeclarationAssigns: true,
+			Arrays: true, DoubleBracket: true, Local: true, LastPipeInShell: true, DeclarationAssigns: true,
 			ArithmeticStatus: true, AssignsPositionals: true, AssociativePairs: true,
 		},
 	},
@@ -76,10 +73,8 @@ var specs = [...]spec{
 		name: "ksh", aliases: []string{"ksh88", "ksh93", "mksh", "oksh"},
 		family: kshFamily, language: syntax.LangKsh93,
 		features: Features{
-			Arrays: true, AssociativeArrays: true, DoubleBracket: true,
-			ArithmeticCommand: true, ProcessSubstitution: true, Coproc: true,
-			Nameref: true, Local: true, Select: true, SplitsUnquoted: true, GlobsUnquoted: true, LastPipeInShell: true,
-			DeclarationAssigns: true, QuotedRegexLiteral: true, SubscriptsRunCode: true,
+			Arrays: true, DoubleBracket: true, SplitsUnquoted: true, GlobsUnquoted: true, LastPipeInShell: true,
+			DeclarationAssigns: true,
 		},
 	},
 	Busybox: {
@@ -87,7 +82,7 @@ var specs = [...]spec{
 		family: posixFamily, width: 2, language: syntax.LangBash,
 		features: Features{
 			DoubleBracket: true, Local: true, SplitsUnquoted: true, GlobsUnquoted: true, DeclarationAssigns: true,
-			QuotedRegexLiteral: true,
+			ClearsErrexitInSubstitutions: true,
 		},
 	},
 }
@@ -121,8 +116,6 @@ func (d Dialect) String() string { return d.spec().name }
 
 func (d Dialect) Language() syntax.LangVariant { return d.spec().language }
 
-func (d Dialect) Features() Features { return d.spec().features }
-
 func (d Dialect) family() family { return d.spec().family }
 
 func Names() []string {
@@ -139,25 +132,19 @@ func FromName(name string) (Dialect, bool) {
 }
 
 type Features struct {
-	Arrays              bool
-	AssociativeArrays   bool
-	DoubleBracket       bool
-	ArithmeticCommand   bool
-	ProcessSubstitution bool
-	GlobQualifiers      bool
-	Coproc              bool
-	Nameref             bool
-	Local               bool
-	Select              bool
-	SplitsUnquoted      bool
-	LastPipeInShell     bool
-	DeclarationAssigns  bool
-	ArithmeticStatus    bool
-	AssignsPositionals  bool
-	AssociativePairs    bool
-	GlobsUnquoted       bool
-	QuotedRegexLiteral  bool
-	SubscriptsRunCode   bool
+	Arrays                       bool
+	DoubleBracket                bool
+	Local                        bool
+	SplitsUnquoted               bool
+	GlobsUnquoted                bool
+	LastPipeInShell              bool
+	DeclarationAssigns           bool
+	ArithmeticStatus             bool
+	AssignsPositionals           bool
+	AssociativePairs             bool
+	QuotedRegexLiteral           bool
+	SubscriptsRunCode            bool
+	ClearsErrexitInSubstitutions bool
 }
 
 // Input is everything detection may look at for one document.

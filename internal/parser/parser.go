@@ -181,7 +181,7 @@ func ParseKept(previous *Tree, text string, scripts []Span, shell dialect.Shell,
 }
 
 func newTree(previous *Tree, file *syntax.File, errs []Error, closedAtEnd map[*syntax.Redirect]bool, text string, shell dialect.Shell, origin Origin) *Tree {
-	index, recovered := buildIndex(file, shell.Lang(), shell.Dialect, text, closedAtEnd, previous)
+	index, recovered := buildIndex(file, shell, text, closedAtEnd, previous)
 	errs = append(errs, recovered...)
 	return &Tree{Shell: shell, File: file, Errors: sortErrors(errs), Index: index, text: text, lineStarts: lineStarts(text), origin: origin}
 }

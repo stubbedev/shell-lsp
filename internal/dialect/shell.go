@@ -19,12 +19,20 @@ const (
 type flavorSpec struct {
 	of       Dialect
 	language syntax.LangVariant
+	features Features
 	detect   func(Input) bool
 }
 
 var flavors = [...]flavorSpec{
-	FlavorBats: {of: Bash, language: syntax.LangBats, detect: Input.bats},
-	FlavorMksh: {of: Ksh, language: syntax.LangMirBSDKorn, detect: Input.mksh},
+	FlavorBats: {of: Bash, language: syntax.LangBats, features: specs[Bash].features, detect: Input.bats},
+	FlavorMksh: {
+		of: Ksh, language: syntax.LangMirBSDKorn,
+		features: Features{
+			Arrays: true, DoubleBracket: true, Local: true, SplitsUnquoted: true, GlobsUnquoted: true,
+			DeclarationAssigns: true, QuotedRegexLiteral: true, SubscriptsRunCode: true,
+		},
+		detect: Input.mksh,
+	},
 }
 
 type Shell struct {
@@ -52,10 +60,21 @@ func (s Shell) Lang() syntax.LangVariant {
 	if s.Flavor == FlavorNone {
 		return s.Dialect.Language()
 	}
+	return s.flavor().language
+}
+
+func (s Shell) flavor() flavorSpec {
 	if int(s.Flavor) >= len(flavors) || flavors[s.Flavor].of != s.Dialect {
 		panic(fmt.Sprintf("dialect: flavor %d is not a flavor of %s", s.Flavor, s.Dialect))
 	}
-	return flavors[s.Flavor].language
+	return flavors[s.Flavor]
+}
+
+func (s Shell) Features() Features {
+	if s.Flavor == FlavorNone {
+		return s.Dialect.spec().features
+	}
+	return s.flavor().features
 }
 
 func (s Shell) Bats() bool { return s.Flavor == FlavorBats }

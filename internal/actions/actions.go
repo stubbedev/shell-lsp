@@ -634,7 +634,7 @@ func backslashEscaped(s, specials string) string {
 
 func declareLocal(s *site) (Change, bool) {
 	tree, at := s.Tree, s.sel.Start
-	if !tree.Dialect.Features().Local {
+	if !tree.Features().Local {
 		return Change{}, false
 	}
 	for _, def := range tree.Definitions {

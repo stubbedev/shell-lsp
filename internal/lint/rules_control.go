@@ -203,7 +203,7 @@ func (p *pass) pipedStatement(depth int) bool {
 	if !ok || !pipes(pipe.Op) {
 		return false
 	}
-	if pipe.X == stmt || !runsLastPipeInShell(p.dialect, p.optionsAt(pipe)) {
+	if pipe.X == stmt || !runsLastPipeInShell(p.tree.Shell, p.optionsAt(pipe)) {
 		return true
 	}
 	outer, ok := p.ancestor(depth + 3).(*syntax.BinaryCmd)

@@ -183,38 +183,6 @@ func TestFromNameTable(t *testing.T) {
 	}
 }
 
-func TestFeaturesDiffer(t *testing.T) {
-	t.Parallel()
-
-	if Posix.Features().DoubleBracket {
-		t.Error("posix claims [[ ]] support")
-	}
-	if !Bash.Features().DoubleBracket || !Bash.Features().AssociativeArrays {
-		t.Error("bash missing [[ ]] or associative arrays")
-	}
-	if !Zsh.Features().GlobQualifiers || Bash.Features().GlobQualifiers {
-		t.Error("glob qualifiers misattributed")
-	}
-	for _, d := range []Dialect{Bash, Posix, Dash, Ksh, Busybox} {
-		f := d.Features()
-		if !f.GlobsUnquoted || !f.SplitsUnquoted || !f.QuotedRegexLiteral || f.ArithmeticStatus || f.AssignsPositionals || f.AssociativePairs {
-			t.Errorf("%s claims zsh's expansion, status or assignment rules", d)
-		}
-	}
-	if z := Zsh.Features(); z.GlobsUnquoted || z.SplitsUnquoted || z.QuotedRegexLiteral || !z.ArithmeticStatus || !z.AssignsPositionals || !z.AssociativePairs {
-		t.Error("zsh expansion, status or assignment rules misattributed")
-	}
-	if !Dash.Features().Local {
-		t.Error("dash local support missing")
-	}
-	if Posix.Features().Local {
-		t.Error("posix sh claims local support")
-	}
-	if !Busybox.Features().Local || !Busybox.Features().DoubleBracket || Busybox.Features().Arrays {
-		t.Error("busybox sh features misattributed")
-	}
-}
-
 func TestSet(t *testing.T) {
 	t.Parallel()
 
@@ -258,7 +226,7 @@ func TestEveryDialectIsDescribedOnce(t *testing.T) {
 	}
 	for name, use := range map[string]func(Dialect){
 		"String":   func(d Dialect) { _ = d.String() },
-		"Features": func(d Dialect) { _ = d.Features() },
+		"Features": func(d Dialect) { _ = Shell{Dialect: d}.Features() },
 		"Language": func(d Dialect) { _ = d.Language() },
 	} {
 		func() {

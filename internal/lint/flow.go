@@ -1205,7 +1205,7 @@ func (in *interpreter) binary(cmd *syntax.BinaryCmd, s *state) *state {
 		return join(left, right)
 	}
 	in.subshell(subshellPipeline, func(sub *state) *state { return in.stmt(cmd.X, sub) }, s)
-	if runsLastPipeInShell(in.dialect, in.options.At(parser.Offset(cmd.Pos()))) {
+	if runsLastPipeInShell(in.tree.Shell, in.options.At(parser.Offset(cmd.Pos()))) {
 		return in.stmt(cmd.Y, s)
 	}
 	if end := in.subshell(subshellPipeline, func(sub *state) *state { return in.stmt(cmd.Y, sub) }, s); end.live {

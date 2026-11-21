@@ -154,6 +154,13 @@ func TestDeclareLocal(t *testing.T) {
 	if got, _, ok := refactorIn(t, dialect.Posix, DeclareLocal, "f() {\n\t«count»=1\n}\n"); ok {
 		t.Errorf("declare local offered in POSIX sh, which has no local: %q", got)
 	}
+	if got, _, ok := refactorIn(t, dialect.Ksh, DeclareLocal, "function f {\n\t«count»=1\n}\n"); ok {
+		t.Errorf("declare local offered in ksh93, which has no local builtin: %q", got)
+	}
+	got, _, ok = refactorIn(t, dialect.Ksh, DeclareLocal, "#!/bin/mksh\nf() {\n\t«count»=1\n}\n")
+	if !ok || got != "#!/bin/mksh\nf() {\n\tlocal count=1\n}\n" {
+		t.Errorf("declare local in mksh = %q, offered %t", got, ok)
+	}
 }
 
 func lintDiagnostics(tree *parser.Tree) []Diagnostic {

@@ -224,11 +224,11 @@ type builder struct {
 	features    dialect.Features
 }
 
-func buildIndex(file *syntax.File, lang syntax.LangVariant, d dialect.Dialect, text string, closedAtEnd map[*syntax.Redirect]bool, previous *Tree) (Index, []Error) {
+func buildIndex(file *syntax.File, shell dialect.Shell, text string, closedAtEnd map[*syntax.Redirect]bool, previous *Tree) (Index, []Error) {
 	b := &builder{
-		lang:        lang,
-		dialect:     d,
-		features:    d.Features(),
+		lang:        shell.Lang(),
+		dialect:     shell.Dialect,
+		features:    shell.Features(),
 		text:        text,
 		closedAtEnd: closedAtEnd,
 		index:       presized(previous, len(text)),

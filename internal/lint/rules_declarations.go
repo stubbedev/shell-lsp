@@ -50,7 +50,7 @@ func checkInvalidDeclaredName(p *pass, c command) {
 }
 
 func (p *pass) declarableName(name string) bool {
-	if p.dialect.Features().Arrays {
+	if p.tree.Features().Arrays {
 		if open := strings.IndexByte(name, '['); open > 0 && strings.HasSuffix(name, "]") {
 			name = name[:open]
 		}

@@ -8,7 +8,7 @@ import (
 )
 
 func doubleBrackets(s *site) (Change, bool) {
-	if !s.Tree.Dialect.Features().DoubleBracket {
+	if !s.Tree.Features().DoubleBracket {
 		return Change{}, false
 	}
 	for _, located := range slices.Backward(s.pathAt()) {

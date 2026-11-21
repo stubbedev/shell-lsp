@@ -31,3 +31,16 @@
 ### single quoted words with a space are fine
 [[ $line =~ 'disk full' ]] && echo "hit"
 >>> SC2154 1:4
+
+### ksh93 reads a quoted right side as a regex
+#!/bin/ksh
+[[ $file =~ ".*\.txt" ]] && print text
+>>- SC2076 2:13 -- ksh93 matches a quoted right side of =~ as a regex, so the quotes do not make it literal
+>>> SC2154 2:4
+
+### busybox reads a quoted right side as a regex
+#!/bin/busybox sh
+[[ $file =~ ".*\.txt" ]] && echo text
+>>- SC2076 2:13 -- busybox sh matches a quoted right side of =~ as a regex, so the quotes do not make it literal
+>>> SC2154 2:4
+>>> SC3015 2:10

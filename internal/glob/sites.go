@@ -262,7 +262,7 @@ func anchored(role Role, segments []Segment) (Role, []Segment) {
 }
 
 func (s Sites) globSubst(pe *syntax.ParamExp, opts shelloptions.Options) bool {
-	if s.tree.Dialect.Features().GlobsUnquoted {
+	if s.tree.Features().GlobsUnquoted {
 		return true
 	}
 	if pe == nil {
@@ -345,7 +345,7 @@ func (s Sites) segments(w *syntax.Word, role Role, resolve Resolver, opts shello
 }
 
 func (s Sites) regexSegments(w *syntax.Word, resolve Resolver) ([]Segment, bool) {
-	literalQuotes := s.tree.Dialect.Features().QuotedRegexLiteral
+	literalQuotes := s.tree.Features().QuotedRegexLiteral
 	var segments []Segment
 	addLit := func(lit *syntax.Lit, inQuotes bool) bool {
 		span, ok := s.tree.NodeSpan(lit)

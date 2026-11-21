@@ -39,7 +39,7 @@ func (p *pass) contextOf(part syntax.WordPart) expansionContext {
 		if owner.Naked && owner.Name == nil {
 			return contextSplit
 		}
-		if _, declared := p.ancestor(2).(*syntax.DeclClause); declared && !p.dialect.Features().DeclarationAssigns {
+		if _, declared := p.ancestor(2).(*syntax.DeclClause); declared && !p.tree.Features().DeclarationAssigns {
 			return contextSplit
 		}
 	case *syntax.ArrayElem:

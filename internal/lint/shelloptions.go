@@ -19,20 +19,20 @@ func (p *pass) optionsAt(n syntax.Node) shelloptions.Options {
 	return p.shellOptions().At(parser.Offset(n.Pos()))
 }
 
-func runsLastPipeInShell(d dialect.Dialect, opts shelloptions.Options) bool {
-	return d.Features().LastPipeInShell || d == dialect.Bash && opts.Lastpipe
+func runsLastPipeInShell(s dialect.Shell, opts shelloptions.Options) bool {
+	return s.Features().LastPipeInShell || s.Dialect == dialect.Bash && opts.Lastpipe
 }
 
 func (p *pass) implicitlySplit(pe *syntax.ParamExp) bool {
-	return p.dialect.Features().SplitsUnquoted || pe.Split == syntax.OptUnset && p.optionsAt(pe).ShWordSplit
+	return p.tree.Features().SplitsUnquoted || pe.Split == syntax.OptUnset && p.optionsAt(pe).ShWordSplit
 }
 
 func (p *pass) implicitlyGlobbed(pe *syntax.ParamExp) bool {
-	return p.dialect.Features().GlobsUnquoted || pe.GlobSubst == syntax.OptUnset && p.optionsAt(pe).GlobSubst
+	return p.tree.Features().GlobsUnquoted || pe.GlobSubst == syntax.OptUnset && p.optionsAt(pe).GlobSubst
 }
 
 func (p *pass) substitutionGlobbed(cs *syntax.CmdSubst) bool {
-	return p.dialect.Features().GlobsUnquoted || p.optionsAt(cs).GlobSubst
+	return p.tree.Features().GlobsUnquoted || p.optionsAt(cs).GlobSubst
 }
 
 func sourcedOptions(sources []Source) map[parser.Span]shelloptions.Effect {

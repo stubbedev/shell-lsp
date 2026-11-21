@@ -145,7 +145,7 @@ func (p *pass) checkTaintedReference(pe *syntax.ParamExp) {
 		return
 	}
 	advice := "use an array to keep arguments with spaces together"
-	if !p.dialect.Features().Arrays {
+	if !p.tree.Features().Arrays {
 		advice = "use set -- or a function to keep arguments with spaces together"
 	}
 	p.report(2089, origin, "The quotes or backslashes in this value are stored literally and will not group words when "+pe.Param.Value+" is expanded; "+advice+".")

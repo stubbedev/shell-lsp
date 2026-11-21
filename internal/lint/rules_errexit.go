@@ -120,7 +120,7 @@ func checkSuppressedErrexit(p *pass, call *syntax.CallExpr) {
 			p.reportNode(2310, name, "set -e has no effect inside "+lit.Value+" because it is invoked as "+context+"; check its status explicitly if that matters.")
 		}
 		if cs, ok := p.ancestor(depth).(*syntax.CmdSubst); ok && p.losesErrexit(cs) {
-			p.reportNode(2311, name, "set -e has no effect inside "+lit.Value+" because command substitutions do not inherit it; enable shopt -s inherit_errexit or call set -e inside.")
+			p.reportNode(2311, name, "set -e has no effect inside "+lit.Value+" because command substitutions do not inherit it; "+p.errexitInheritance()+".")
 		}
 		child = p.ancestor(depth)
 	}
@@ -149,8 +149,15 @@ func (p *pass) errexitSuppression(owner, child syntax.Node) (string, bool) {
 	return "", false
 }
 
+func (p *pass) errexitInheritance() string {
+	if p.dialect == dialect.Bash {
+		return "enable shopt -s inherit_errexit or call set -e inside"
+	}
+	return "call set -e inside"
+}
+
 func (p *pass) losesErrexit(cs *syntax.CmdSubst) bool {
-	if p.dialect != dialect.Bash || cs.TempFile || cs.ReplyVar || p.optionsAt(cs).InheritErrexit {
+	if !p.tree.Features().ClearsErrexitInSubstitutions || cs.TempFile || cs.ReplyVar || p.optionsAt(cs).InheritErrexit {
 		return false
 	}
 	return !parser.Any(cs, func(n syntax.Node) bool {

@@ -177,14 +177,19 @@ func checkArrayLiteral(p *pass, a *syntax.Assign) {
 	if a.Array == nil || a.Index != nil || a.Name == nil {
 		return
 	}
-	associative := p.associativeArray(a.Name.Value) && !p.dialect.Features().AssociativePairs
+	associative := p.associativeArray(a.Name.Value)
+	pairs := associative && p.tree.Features().AssociativePairs && len(a.Array.Elems) > 0 && a.Array.Elems[0].Index == nil
 	for _, elem := range a.Array.Elems {
 		switch {
 		case elem.Index != nil:
 			p.checkIndexedElement(elem)
 		case elem.Value == nil:
 		case p.numberedElement(elem.Value):
-		case associative:
+		case pairs && p.dialect == dialect.Bash:
+			if span, ok := p.span(elem.Value); ok {
+				p.report(2190, span, "bash before 5.1 rejects an associative array element without a key; write [key]=value, which every bash reads the same way.")
+			}
+		case associative && !pairs:
 			if span, ok := p.span(elem.Value); ok {
 				p.report(2190, span, "Elements of an associative array need a key: write [key]=value.")
 			}

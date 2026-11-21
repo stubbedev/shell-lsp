@@ -47,12 +47,13 @@ sudo sh -c 'echo "$1" > /etc/motd' _ "$1"    # safe: $1 stays an argument
 ## SL1003
 
 **Untrusted data is evaluated as arithmetic.** The rule is optional
-(`arithmetic-injection`). Bash and ksh evaluate array subscripts inside
+(`arithmetic-injection`). Bash and mksh evaluate array subscripts inside
 arithmetic, so a value like `a[$(reboot)]` runs a command in `(( n > 3 ))`,
 `$(( n + 1 ))` and `[[ $n -eq 3 ]]`. zsh evaluates the subscript without
-running the command, and POSIX sh, dash and busybox sh have no arrays, so the
-rule only applies to bash and ksh scripts. `[ "$n" -eq 3 ]` is safe because `test`
-only accepts plain integers.
+running the command, ksh93u+m rejects the command substitution as an
+arithmetic syntax error, and POSIX sh, dash and busybox sh have no arrays, so
+the rule only applies to bash and mksh scripts. `[ "$n" -eq 3 ]` is safe
+because `test` only accepts plain integers.
 
 ```bash
 #!/bin/bash
@@ -351,7 +352,7 @@ helpers by bare name.
 
 **A function assigns a variable it did not declare local.** The rule is
 optional (`require-local-variables`). Variables in a shell function are
-global unless declared with `local` (`typeset` in a ksh `function name`), so
+global unless declared with `local` (`typeset` in a ksh93 `function name`), so
 an assignment, a `for` loop, `read`, `getopts` or `(( n = 0 ))` inside the
 function changes a variable of the same name in its caller, and the value
 outlives the call. The Google Shell Style Guide asks for `local` on every
@@ -363,8 +364,9 @@ makes it a global by design and is [SL2015](#sl2015)'s concern; when code outsid
 assigning it, which shows it is the function's output; and for the shell's
 own variables, such as `REPLY`, `OPTIND`, `IFS` or `COMPREPLY`. Each variable
 is reported once per function. POSIX sh has no `local`, so sh scripts are not
-checked, and neither are ksh functions written as `name()`, where `typeset`
-does not make a variable local.
+checked. ksh93 has no `local` either, and its functions written as `name()`
+are not checked because `typeset` does not make a variable local there; mksh
+has `local` in both function forms.
 
 ```bash
 #!/bin/bash

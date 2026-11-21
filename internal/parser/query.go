@@ -303,7 +303,7 @@ func (t *Tree) NodeSpan(node syntax.Node) (Span, bool) {
 }
 
 func (t *Tree) LiteralKeys(name string) []string {
-	pairs := t.Dialect.Features().AssociativePairs && t.associative(name)
+	pairs := t.Features().AssociativePairs && t.associative(name)
 	var keys []string
 	add := func(index syntax.ArithmExpr) {
 		w, ok := index.(*syntax.Word)

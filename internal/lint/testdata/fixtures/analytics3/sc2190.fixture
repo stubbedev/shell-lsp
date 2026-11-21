@@ -28,3 +28,25 @@ declare -A limits
 limits=([cpu]=2 [memory]=512)
 echo "${limits[@]}"
 >>> none
+
+### a bare element after a bracketed key is rejected in every bash
+declare -A limits
+limits=([cpu]=2 memory)
+echo "${limits[@]}"
+>>> SC2190 2:17
+
+### zsh reads a list without bracketed keys as key value pairs
+#!/bin/zsh
+typeset -A limits
+limits=(cpu 2 memory 512)
+print -r -- ${(kv)limits}
+>>- SC1071 1:1 -- shellcheck refuses zsh
+
+### zsh rejects a bare element after a bracketed key
+#!/bin/zsh
+typeset -A limits
+limits=([cpu]=2 memory 512)
+print -r -- ${(kv)limits}
+>>- SC1071 1:1 -- shellcheck refuses zsh
+>>+ SC2190 3:17 -- zsh rejects a bare element once the first one has a bracketed key
+>>+ SC2190 3:24 -- zsh rejects a bare element once the first one has a bracketed key

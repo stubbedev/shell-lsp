@@ -173,7 +173,7 @@ func (p *pass) checkLegacyExists(e *syntax.UnaryTest) {
 }
 
 func (p *pass) preferDoubleBrackets(t testCommand) {
-	if !p.dialect.Features().DoubleBracket {
+	if !p.tree.Features().DoubleBracket {
 		return
 	}
 	span, ok := p.span(t.node)

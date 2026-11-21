@@ -45,7 +45,7 @@ func (p *pass) soleExpansionQuoteFix(w *syntax.Word, span parser.Span) []Fix {
 }
 
 func checkUnquotedExpansion(p *pass, pe *syntax.ParamExp) {
-	if pe.Param == nil || !p.dialect.Features().SplitsUnquoted {
+	if pe.Param == nil || !p.tree.Features().SplitsUnquoted {
 		return
 	}
 	span, ok := p.span(pe)

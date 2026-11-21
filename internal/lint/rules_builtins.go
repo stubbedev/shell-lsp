@@ -129,7 +129,7 @@ func (p *pass) validStatus(w *syntax.Word) bool {
 	status, _ := parser.Text(w, "0")
 	if !parser.IsDigits(status) {
 		_, arithmetic := parser.LiteralArithmeticReads(w)
-		return arithmetic && p.dialect.Features().ArithmeticStatus
+		return arithmetic && p.tree.Features().ArithmeticStatus
 	}
 	if len(status) > 5 {
 		return false

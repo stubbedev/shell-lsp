@@ -276,7 +276,7 @@ func checkRegexEscapes(p *pass, test *syntax.BinaryTest) {
 	if test.Op != syntax.TsReMatch || !ok || p.dialect != dialect.Bash && p.dialect != dialect.Zsh {
 		return
 	}
-	literalQuotes := p.dialect.Features().QuotedRegexLiteral
+	literalQuotes := p.tree.Features().QuotedRegexLiteral
 	for _, part := range w.Parts {
 		switch part := part.(type) {
 		case *syntax.Lit:

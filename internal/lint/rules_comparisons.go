@@ -506,7 +506,7 @@ func decimalNumber(s string) bool {
 
 func (p *pass) checkComparison(double bool, op testOp, x, y *syntax.Word) {
 	operator := testOperators[op.name]
-	if operator.kind == regexTest && !double && p.dialect.Features().DoubleBracket {
+	if operator.kind == regexTest && !double && p.tree.Features().DoubleBracket {
 		p.report(2074, op.span, "=~ only works inside [[ ]]; [ ] has no regex matching.")
 	}
 	switch {
@@ -543,7 +543,7 @@ func (p *pass) checkOrdering(flow *flowResult, double bool, op testOp, x, y *syn
 	}
 	if op.redirected && strict && !posix {
 		hint := ""
-		if p.dialect.Features().DoubleBracket {
+		if p.tree.Features().DoubleBracket {
 			hint = " or use [[ ]]"
 		}
 		p.report(2073, op.span, "An unescaped "+op.name+" inside [ ] is a redirection, not a comparison; escape it as \\"+op.name+hint+".")
@@ -635,7 +635,7 @@ func (p *pass) checkRegexOperand(w *syntax.Word) {
 	if !ok {
 		return
 	}
-	if len(w.Parts) == 1 && quotesRegex(w.Parts[0]) && p.dialect.Features().QuotedRegexLiteral {
+	if len(w.Parts) == 1 && quotesRegex(w.Parts[0]) && p.tree.Features().QuotedRegexLiteral {
 		p.report(2076, span, "Quoting the right-hand side of =~ makes it match literally; leave it unquoted (or store the regex in a variable) to match as a regex.")
 	}
 	text := regexText(w)

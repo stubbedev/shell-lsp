@@ -420,7 +420,7 @@ func (p *pass) collectCall(call *syntax.CallExpr) {
 	switch {
 	case c.name == "@test":
 		p.variables.bats = true
-	case p.dialect.Features().ArithmeticStatus && parser.ArithmeticStatusBuiltin(c.name) && len(c.args) == 1:
+	case p.tree.Features().ArithmeticStatus && parser.ArithmeticStatusBuiltin(c.name) && len(c.args) == 1:
 		p.readLiteralArithmetic(c.args[0])
 	case c.is("trap") && len(c.args) > 0:
 		if span, ok := p.span(c.args[0]); ok {

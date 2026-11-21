@@ -104,3 +104,12 @@ current=$(version)
 print -r -- "${current}"
 >>- SC1008 1:1 -- deliberate: we recognise mksh and lint it as a ksh variant, so the shebang is not unrecognised
 >>- SC2311 5:11 -- ksh93 and mksh keep errexit in command substitutions; only bash outside posix mode clears it
+
+### busybox sh clears errexit in command substitutions like bash
+#!/bin/busybox sh
+# shellcheck enable=check-set-e-suppressed
+set -e
+version() { :; }
+current=$(version)
+echo "${current}"
+>>+ SC2311 5:11 -- shellcheck models SC2311 for bash only, but busybox sh also clears errexit in command substitutions
