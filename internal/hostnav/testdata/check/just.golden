@@ -688,3 +688,7 @@ rejected 4:3 mapped dependencies may not have multiple starred arguments
 -- assert-is-a-keyword --
 rejected 1:12 expected '(', but found end of line
 1:12 SL5001 error expected `(`, found end of line
+-- assignment-attribute-checked-before-the-line-ends --
+rejected 2:1 assignment `x` has invalid attribute `group`
+2:1 SL5020 error assignment `x` has invalid attribute `group`
+2:10 SL5001 error expected end of line, found name `b`

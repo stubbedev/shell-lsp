@@ -32,8 +32,8 @@ func (f *File) check() []lint.Finding {
 		if stray.Recipe != nil {
 			c.argAttributes(*stray.Recipe, args)
 		}
-		if stray.Function != nil {
-			c.placement(ItemFunction, "function", *stray.Function, stray.Attributes)
+		if d := stray.Defined; d != nil {
+			c.placement(d.Kind, itemLabel(d.Kind), d.Name, stray.Attributes)
 		}
 	}
 	if c.lists && !c.unstable {
@@ -334,24 +334,37 @@ func interpreter(it Item, x *Expr) bool {
 	return it.Kind == ItemSetting && it.Setting.Value == x && settingsByName[it.Setting.Name.Text].kind == settingList
 }
 
+var itemLabels = map[ItemKind]string{
+	ItemSetting: "setting", ItemAssignment: "assignment", ItemUnexport: "unexport", ItemAlias: "alias",
+	ItemImport: "import", ItemModule: "module", ItemFunction: "function", ItemRecipe: "recipe",
+}
+
+func itemLabel(kind ItemKind) string {
+	label, ok := itemLabels[kind]
+	if !ok {
+		panic(fmt.Sprintf("justfile: item kind %d has no label", kind))
+	}
+	return label
+}
+
 func (c *checker) itemToken(it Item) (string, Name) {
 	switch it.Kind {
 	case ItemSetting:
-		return "setting", it.Setting.Name
+		return itemLabel(it.Kind), it.Setting.Name
 	case ItemAssignment:
-		return "assignment", it.Assignment.Name
+		return itemLabel(it.Kind), it.Assignment.Name
 	case ItemUnexport:
-		return "unexport", it.Unexport.Name
+		return itemLabel(it.Kind), it.Unexport.Name
 	case ItemAlias:
-		return "alias", it.Alias.Name
+		return itemLabel(it.Kind), it.Alias.Name
 	case ItemImport:
-		return "import", Name{Text: c.f.Text[it.Import.Path.Span.Start:it.Import.Path.Span.End], Span: it.Import.Path.Span}
+		return itemLabel(it.Kind), Name{Text: c.f.Text[it.Import.Path.Span.Start:it.Import.Path.Span.End], Span: it.Import.Path.Span}
 	case ItemModule:
-		return "module", it.Module.Name
+		return itemLabel(it.Kind), it.Module.Name
 	case ItemFunction:
-		return "function", it.Function.Name
+		return itemLabel(it.Kind), it.Function.Name
 	case ItemRecipe:
-		return "recipe", it.Recipe.Name
+		return itemLabel(it.Kind), it.Recipe.Name
 	}
 	panic(fmt.Sprintf("justfile: item kind %d has no name", it.Kind))
 }

@@ -1015,3 +1015,6 @@ b *args:
     echo {{args}}
 -- assert-is-a-keyword --
 x := assert
+-- assignment-attribute-checked-before-the-line-ends --
+[group('ci')]
+x := 'a' b

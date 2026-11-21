@@ -45,7 +45,7 @@ type reader struct {
 	file    *File
 	pending []Attribute
 	header  *RecipeHeader
-	defined *Name
+	defined *Defined
 	doc     string
 	failure Span
 	lexing  bool
@@ -618,15 +618,20 @@ func (p *reader) recover(start int, header bool) {
 	p.doc = ""
 }
 
+func (p *reader) define(kind ItemKind, name Name) {
+	p.defined = &Defined{Kind: kind, Name: name}
+}
+
 func (p *reader) stray() {
 	if len(p.pending) > 0 {
-		p.file.Stray = append(p.file.Stray, Stray{Attributes: p.pending, Recipe: p.header, Function: p.defined})
+		p.file.Stray = append(p.file.Stray, Stray{Attributes: p.pending, Recipe: p.header, Defined: p.defined})
 	}
 	p.pending, p.header, p.defined = nil, nil, nil
 }
 
 func (p *reader) item() {
 	start := p.pos
+	p.defined = nil
 	defer p.recover(start, true)
 	first := p.peek()
 	if first.kind == tokPunct && first.text == "[" {
@@ -780,6 +785,7 @@ func (p *reader) alias(start int, attrs []Attribute) {
 	p.expect(":=")
 	target := p.path()
 	end := p.pos
+	p.define(ItemAlias, name)
 	p.endOfLine()
 	p.file.Items = append(p.file.Items, Item{Kind: ItemAlias, Alias: &Alias{Attributes: attrs, Name: name, Target: target, Span: Span{Start: start, End: end}}})
 }
@@ -813,6 +819,7 @@ func (p *reader) assignment(start int, attrs []Attribute, doc string) {
 	p.expect(":=")
 	a.Value = p.expression()
 	a.Span = Span{Start: start, End: a.Value.Span.End}
+	p.define(ItemAssignment, a.Name)
 	p.endOfLine()
 	p.file.Items = append(p.file.Items, Item{Kind: ItemAssignment, Assignment: a})
 }
@@ -820,6 +827,7 @@ func (p *reader) assignment(start int, attrs []Attribute, doc string) {
 func (p *reader) unexport(start int, attrs []Attribute) {
 	p.next()
 	name := p.name()
+	p.define(ItemUnexport, name)
 	p.endOfLine()
 	p.file.Items = append(p.file.Items, Item{Kind: ItemUnexport, Unexport: &Unexport{Attributes: attrs, Name: name, Span: Span{Start: start, End: name.Span.End}}})
 }
@@ -829,6 +837,7 @@ func (p *reader) setting(start int, attrs []Attribute) {
 	s := &Setting{Attributes: attrs, Name: p.name()}
 	s.Span = Span{Start: start, End: s.Name.Span.End}
 	if spec, ok := settingsByName[s.Name.Text]; ok {
+		p.define(ItemSetting, s.Name)
 		s.Value = p.settingValue(s.Name, spec)
 	} else {
 		p.known(model.KindSetting, s.Name, lint.CodeJustUnknownSetting)
@@ -900,6 +909,7 @@ func (p *reader) importItem(start int, attrs []Attribute) {
 	}
 	imp.Path = p.stringValue()
 	imp.Span = Span{Start: start, End: imp.Path.Span.End}
+	p.define(ItemImport, Name{Text: p.text[imp.Path.Span.Start:imp.Path.Span.End], Span: imp.Path.Span})
 	p.endOfLine()
 	p.file.Items = append(p.file.Items, Item{Kind: ItemImport, Import: imp})
 }
@@ -945,13 +955,14 @@ func (p *reader) module(start int, attrs []Attribute, doc string) {
 		m.Path = p.stringValue()
 		m.Span.End = m.Path.Span.End
 	}
+	p.define(ItemModule, m.Name)
 	p.endOfLine()
 	p.file.Items = append(p.file.Items, Item{Kind: ItemModule, Module: m})
 }
 
 func (p *reader) function(start int, attrs []Attribute) {
 	f := &Function{Attributes: attrs, Name: p.name()}
-	p.defined = &f.Name
+	p.define(ItemFunction, f.Name)
 	p.expect("(")
 	p.depth++
 	for {
@@ -970,7 +981,6 @@ func (p *reader) function(start int, attrs []Attribute) {
 	f.Body = p.expression()
 	f.Span = Span{Start: start, End: f.Body.Span.End}
 	p.endOfLine()
-	p.defined = nil
 	p.file.Items = append(p.file.Items, Item{Kind: ItemFunction, Function: f})
 }
 
@@ -980,6 +990,7 @@ func (p *reader) recipe(start int, attrs []Attribute, doc string) {
 		r.Quiet = true
 	}
 	r.Name = p.name()
+	p.define(ItemRecipe, r.Name)
 	p.header = &RecipeHeader{Name: r.Name}
 	for {
 		t := p.peek()

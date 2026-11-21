@@ -331,7 +331,12 @@ func (it Item) Span() Span {
 type Stray struct {
 	Attributes []Attribute
 	Recipe     *RecipeHeader
-	Function   *Name
+	Defined    *Defined
+}
+
+type Defined struct {
+	Kind ItemKind
+	Name Name
 }
 
 type RecipeHeader struct {
