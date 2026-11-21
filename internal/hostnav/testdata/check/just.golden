@@ -499,54 +499,54 @@ rejected 7:3 mapped dependencies may not have multiple starred arguments
 7:3 SL5006 error a mapped dependency takes only one starred argument
 -- backtick-in-a-constant-setting --
 rejected 1:16 cannot call backticks in const context
-1:16 SL5016 error cannot call backticks in const context
+1:16 SL5026 error cannot call backticks in const context
 -- function-call-in-a-constant-setting --
 rejected 1:26 cannot call functions in const context
-1:26 SL5016 error cannot call functions in const context
+1:26 SL5026 error cannot call functions in const context
 -- non-constant-variable-in-a-constant-setting --
 rejected 2:20 cannot access non-const variable `dir` in const context
-2:20 SL5016 error cannot access non-const variable `dir` in const context
+2:20 SL5026 error cannot access non-const variable `dir` in const context
 -- non-constant-variable-through-another-variable --
 rejected 3:24 cannot access non-const variable `dir` in const context
-3:24 SL5016 error cannot access non-const variable `dir` in const context
+3:24 SL5026 error cannot access non-const variable `dir` in const context
 -- non-constant-variable-used-only-at-runtime --
 accepted
 -- backtick-in-a-shell-list --
 rejected 1:23 cannot call backticks in const context
-1:23 SL5016 error cannot call backticks in const context
+1:23 SL5026 error cannot call backticks in const context
 -- backtick-in-a-windows-only-setting --
 accepted
-2:23 SL5016 error cannot call backticks in const context
+2:23 SL5026 error cannot call backticks in const context
 -- backtick-in-an-untaken-branch --
 accepted
 -- backtick-in-a-taken-branch --
 rejected 1:52 cannot call backticks in const context
-1:52 SL5016 error cannot call backticks in const context
+1:52 SL5026 error cannot call backticks in const context
 -- backtick-after-a-truthy-or --
 accepted
 -- backtick-after-a-falsy-or --
 rejected 3:29 cannot call backticks in const context
-3:29 SL5016 error cannot call backticks in const context
+3:29 SL5026 error cannot call backticks in const context
 -- backtick-in-a-format-string-setting --
 rejected 1:29 cannot call backticks in const context
-1:29 SL5016 error cannot call backticks in const context
+1:29 SL5026 error cannot call backticks in const context
 -- assertion-in-a-constant-setting --
 accepted
 -- failing-assertion-in-a-constant-setting --
 rejected 1:23 assert failed: m
-1:23 SL5016 error assertion fails in const context
+1:23 SL5026 error assertion fails in const context
 -- non-comparison-assertion-needs-lists --
 rejected 1:30 `if` and `assert` conditions other than comparisons require `set lists`
 1:30 SL5023 error an `if` or `assert` condition other than a comparison needs `set lists`
 -- backtick-in-a-doc-attribute --
 rejected 1:6 cannot call backticks in const context
-1:6 SL5020 error cannot call backticks in const context
+1:6 SL5026 error cannot call backticks in const context
 -- function-call-in-an-arg-help --
 rejected 1:16 cannot call functions in const context
-1:16 SL5020 error cannot call functions in const context
+1:16 SL5026 error cannot call functions in const context
 -- non-constant-variable-in-an-arg-pattern --
 rejected 2:19 cannot access non-const variable `pattern` in const context
-2:19 SL5020 error cannot access non-const variable `pattern` in const context
+2:19 SL5026 error cannot access non-const variable `pattern` in const context
 -- backtick-in-a-confirm-prompt --
 accepted
 -- cache-on-a-shell-recipe --

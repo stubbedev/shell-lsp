@@ -170,7 +170,7 @@ func (c *checker) settingValue(s *Setting) {
 		return
 	}
 	if slices.Contains(constSettings, s.Name.Text) {
-		c.constant(lint.CodeJustSettingValue, s.Value)
+		c.constant(s.Value)
 	}
 	v := s.Value
 	switch kind {
@@ -776,9 +776,9 @@ type constFailure struct {
 	message string
 }
 
-func (c *checker) constant(code lint.Code, e *Expr) {
+func (c *checker) constant(e *Expr) {
 	if failure, failed := c.constFailure(e); failed {
-		c.report(code, failure.span, "%s", failure.message)
+		c.report(lint.CodeJustConstContext, failure.span, "%s", failure.message)
 	}
 }
 
@@ -883,7 +883,7 @@ func (c *checker) constAttributes(r *Recipe) {
 	for _, a := range r.Attributes {
 		for _, arg := range a.Args {
 			if slices.Contains(constAttributeArguments[a.Name.Text], arg.Key.Text) {
-				c.constant(lint.CodeJustAttributeArguments, arg.Value)
+				c.constant(arg.Value)
 			}
 		}
 	}

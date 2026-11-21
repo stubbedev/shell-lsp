@@ -87,7 +87,10 @@ func TestJustChecksAgreeWithJust(t *testing.T) {
 
 const justOracleSystem = "linux"
 
-var justParsePhase = []lint.Code{lint.CodeJustSyntax, lint.CodeJustUnknownAttribute, lint.CodeJustAttributeArguments, lint.CodeJustNeedsSetting}
+var justParsePhase = []lint.Code{
+	lint.CodeJustSyntax, lint.CodeJustUnknownAttribute, lint.CodeJustAttributeArguments, lint.CodeJustNeedsSetting,
+	lint.CodeJustUnknownSetting, lint.CodeJustSettingValue,
+}
 
 func justReports(text string, _ oracle.Verdict, findings []lint.Finding) []lint.Finding {
 	var disabled []parser.Span

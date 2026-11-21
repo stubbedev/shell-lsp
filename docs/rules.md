@@ -1015,10 +1015,7 @@ set quiet    # SL5015
 
 **A setting has a value just refuses.** Boolean settings take `true` or
 `false`, settings that name a command such as `shell` take a list like
-`['bash', '-c']`, and the others take a string. Settings just reads before
-running anything, such as `shell`, `tempdir`, `working-directory` and the
-`dotenv-*` paths, cannot call backticks or functions or use a variable that
-does.
+`['bash', '-c']`, and the others take a string.
 
 ```just
 set shell := "bash"    # SL5016
@@ -1060,8 +1057,7 @@ test target="all" filter:    # SL5019
 **An attribute is used in a way just refuses.** It is given the wrong number
 of arguments, a key it does not know, a key twice or a value it does not take,
 it is repeated or put on an item that cannot carry it, `[cache]` or
-`[extension]` is put on a recipe that runs line by line, `[doc]` or an
-`[arg]` `help` or `pattern` calls a backtick or function, or an `[arg]` names
+`[extension]` is put on a recipe that runs line by line, or an `[arg]` names
 a parameter the recipe lacks, an option another parameter already uses, or an
 invalid option name, count or pattern.
 
@@ -1130,6 +1126,20 @@ function may share its name with a recipe, a variable or a built-in function.
 set unstable
 greet(name) := "hello " + name
 greet(name) := "hi " + name    # SL5025
+```
+
+## SL5026
+
+**A compile-time value runs a backtick or calls a function.** Settings just reads before running anything, such as `shell`,
+`tempdir`, `working-directory` and the `dotenv-*` paths, and the `[doc]`
+attribute and `[arg]`'s `help` and `pattern`, cannot call a backtick or a
+function or read a variable that does, however indirectly. Only the branch of
+an `if` that is taken counts, and `||` and `&&` stop as just's evaluator does.
+just checks this only for items enabled on the system it runs on; shell-lsp
+checks it for every system.
+
+```just
+set tempdir := `mktemp -d`    # SL5026
 ```
 
 ## SL6001

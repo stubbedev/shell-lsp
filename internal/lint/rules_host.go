@@ -40,6 +40,7 @@ const (
 	CodeJustNeedsSetting
 	CodeJustAbsentModule
 	CodeJustDuplicateFunction
+	CodeJustConstContext
 )
 
 const (
@@ -169,6 +170,7 @@ var hostFamily = family{
 		CodeJustNeedsSetting:        {severity: SeverityError},
 		CodeJustAbsentModule:        {severity: SeverityWarning},
 		CodeJustDuplicateFunction:   {severity: SeverityError},
+		CodeJustConstContext:        {severity: SeverityError},
 
 		CodeMakeSyntax:                {severity: SeverityError},
 		CodeMakeConditional:           {severity: SeverityError},
