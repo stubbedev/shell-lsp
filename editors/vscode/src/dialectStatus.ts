@@ -44,7 +44,7 @@ function isCancellation(error: unknown): boolean {
 
 export class DialectStatus implements Disposable {
   private readonly item: StatusBarItem;
-  private readonly subscriptions: Disposable[];
+  private readonly subscriptions: { dispose(): unknown }[];
   private readonly client: () => LanguageClient | undefined;
   private readonly output: LogOutputChannel;
   private timer: ReturnType<typeof setTimeout> | undefined;

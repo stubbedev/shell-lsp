@@ -14,7 +14,6 @@ export function createClient(command: string, output: LogOutputChannel, settingK
   const options: LanguageClientOptions = {
     documentSelector,
     outputChannel: output,
-    synchronize: { configurationSection: section },
     initializationOptions: () => settingsFor(undefined),
     middleware: {
       executeCommand: executeCommandMiddleware(() => client),
