@@ -1004,7 +1004,10 @@ func lambdaRHS(l *lambdaExpr, m int) []item {
 	if !lambdaEndsAbsorbable(l) {
 		return seq(space, group(lambdaDoc(l, m, 1)))
 	}
-	if _, named := l.param.(*nameParam); named || widthBreaksHead(l) {
+	if _, named := l.param.(*nameParam); named {
+		return group(lambdaFrom(l, m, 1, pinNone, space))
+	}
+	if widthBreaksHead(l) {
 		return group(space, lambdaDoc(l, m, 1))
 	}
 	return seq(hardSpace, group(lambdaDoc(l, m, 1)))
@@ -1226,6 +1229,9 @@ func enclosed(open *token, inner expr, closing *token, n int) []item {
 		}
 		if widthBreaksHead(v) {
 			return seq(o, group(plainBrk, exprDoc(inner, n+1), plainBrk), c)
+		}
+		if gathersHead(v) {
+			return seq(o, group(lambdaDoc(v, n+1, 1), followBrk), c)
 		}
 		return seq(o, body(), c)
 	case *withExpr:
@@ -1454,26 +1460,16 @@ func lambdaFrom(l *lambdaExpr, n, depth int, pin chainPin, lead []item) []item {
 	if afterName {
 		pin = pinNone
 	}
+	if pin == pinNone && depth == 1 && gathersHead(l) {
+		return gatheredChain(l, n, depth, lead)
+	}
 	if pin == pinNone && colonPinsChain(l) {
 		pin = pinHard
 	}
 	widthBreaks := pin == pinNone && !afterName && widthBreaksHead(l)
-	paramItems := paramDoc(l.param, n)
-	if lead != nil {
-		paramItems = trialHead(lead, paramItems)
-	}
-	head := seq(paramItems, tokenDoc(l.colon, n))
-	if depth == 1 {
-		head = group(head)
-	}
 	body := l.body
-	name, named := l.param.(*nameParam)
-	if named {
-		head = seq(tokenDoc(name.name, n), tokenDoc(l.colon, n))
-		if depth == 1 {
-			head = seq(plainBrk, head)
-		}
-	}
+	_, named := l.param.(*nameParam)
+	head := lambdaHead(l, n, depth, lead)
 	if _, alias := l.param.(*aliasParam); alias || (!named && !paramIsSimple(l.param) && bodyOnColonLine(l)) {
 		if set, ok := body.(*setTerm); ok && isAbsorbable(set) {
 			return seq(head, space, group(setDoc(set, n, true)))
@@ -1500,6 +1496,9 @@ func lambdaFrom(l *lambdaExpr, n, depth int, pin chainPin, lead []item) []item {
 		if lambdaEndsAbsorbable(v) {
 			if widthBreaks && firstToken(v).lone() && v.colon.lone() {
 				return seq(head, space, priority(group(lambdaDoc(v, n, 2))))
+			}
+			if pin == pinFollowsHead {
+				return seq(head, following, priority(group(lambdaDoc(v, n, 2))))
 			}
 			if !named {
 				return seq(head, hardSpace, priority(group(lambdaFrom(v, n, 2, pin, nil))))
@@ -1534,6 +1533,66 @@ func lambdaFrom(l *lambdaExpr, n, depth int, pin chainPin, lead []item) []item {
 		sep = hardLine
 	}
 	return seq(head, sep, inlineBody(body, n))
+}
+
+func lambdaHead(l *lambdaExpr, n, depth int, lead []item) []item {
+	if p, named := l.param.(*nameParam); named {
+		if depth == 1 {
+			lead = seq(lead, plainBrk)
+		}
+		return seq(lead, tokenDoc(p.name, n), tokenDoc(l.colon, n))
+	}
+	head := seq(paramTrial(l.param, n, lead), tokenDoc(l.colon, n))
+	if depth == 1 {
+		return group(head)
+	}
+	return head
+}
+
+func paramTrial(p param, n int, lead []item) []item {
+	if lead == nil {
+		return paramDoc(p, n)
+	}
+	if set, ok := p.(*setParam); ok {
+		return trialHead(lead, setParamDoc(set, n))
+	}
+	return trialHead(lead, paramDoc(p, n))
+}
+
+func gathersHead(l *lambdaExpr) bool {
+	_, named := l.param.(*nameParam)
+	return named && lambdaEndsAbsorbable(l) && !anyLink(l, colonPinsChain) && anyLink(l, takesPattern)
+}
+
+func takesPattern(l *lambdaExpr) bool {
+	_, set := l.param.(*setParam)
+	return set
+}
+
+func anyLink(l *lambdaExpr, holds func(*lambdaExpr) bool) bool {
+	for {
+		if holds(l) {
+			return true
+		}
+		v, ok := l.body.(*lambdaExpr)
+		if !ok {
+			return false
+		}
+		l = v
+	}
+}
+
+func gatheredChain(l *lambdaExpr, n, depth int, lead []item) []item {
+	v, ok := l.body.(*lambdaExpr)
+	if !ok || !anyLink(v, takesPattern) {
+		return lambdaFrom(l, n, depth, pinFollowsHead, lead)
+	}
+	sep := space
+	_, named := l.param.(*nameParam)
+	if _, next := v.param.(*nameParam); named && next {
+		sep = hardSpace
+	}
+	return gatheredChain(v, n, depth+1, seq(lead, lambdaHead(l, n, depth, nil), sep))
 }
 
 func parenOfAbsorbable(e expr) bool {

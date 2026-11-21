@@ -6012,3 +6012,13 @@ f (
       a
     '') (attrNames secrets)
 )
+-- case-name-lambda-pattern-broken-by-width --
+(A: {
+  A,
+  A00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000,
+}: { A = 0; })
+-- case-name-lambda-pattern-hugging-at-full-width --
+(A:{A,A000000000000000000000000000000000000000000000000000000000000000000000000000000000000}:{A=0;})
+-- case-name-lambda-chain-of-patterns-hugging --
+(A: B: {C}: D: {A,B}:with 0;{
+A=0;})

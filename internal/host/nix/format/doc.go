@@ -167,9 +167,12 @@ func (a *annotator) pass(items []item, f lookahead) lookahead {
 				f.first += it.width
 			}
 		case tagSpacing:
-			if it.space == spaceHard {
+			if it.space == spaceHard || it.follow && it.space == spacePlain {
 				f.compact++
 				f.first++
+				continue
+			}
+			if it.follow {
 				continue
 			}
 			f.compact, f.first, f.compactHard = 0, 0, false
