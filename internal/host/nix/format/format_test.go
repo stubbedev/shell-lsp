@@ -43,6 +43,11 @@ var (
 
 func repositoryFiles(t testing.TB) []string {
 	t.Helper()
+	return slices.Sorted(slices.Values(append(ownFiles(t), corpusFiles(t)...)))
+}
+
+func ownFiles(t testing.TB) []string {
+	t.Helper()
 	var out []string
 	for _, pattern := range []string{"flake.nix", "nix/*.nix", "tools/dockerfile-oracle/package.nix", "internal/nixeval/eval.nix"} {
 		found, err := filepath.Glob(filepath.Join(repositoryRoot, pattern))
@@ -51,6 +56,12 @@ func repositoryFiles(t testing.TB) []string {
 		}
 		out = append(out, found...)
 	}
+	return out
+}
+
+func corpusFiles(t testing.TB) []string {
+	t.Helper()
+	var out []string
 	corpus := filepath.Join(repositoryRoot, "corpus", "nix")
 	err := filepath.WalkDir(corpus, func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
@@ -64,7 +75,6 @@ func repositoryFiles(t testing.TB) []string {
 	if err != nil && !os.IsNotExist(err) {
 		t.Fatal(err)
 	}
-	slices.Sort(out)
 	return out
 }
 
@@ -142,9 +152,9 @@ func regenerateCases(t *testing.T) {
 	writeAtomically(t, unstableList, listing)
 }
 
-func regenerateRepository(t *testing.T) {
+func regenerateCorpus(t *testing.T) {
 	t.Helper()
-	for _, path := range repositoryFiles(t) {
+	for _, path := range corpusFiles(t) {
 		writeAtomically(t, repositoryGolden(t, path), referenceFormat(t, readFile(t, path)))
 	}
 }
@@ -167,14 +177,23 @@ func TestCases(t *testing.T) {
 	}
 }
 
-func TestRepositoryFiles(t *testing.T) {
+func TestCorpusFiles(t *testing.T) {
 	if *update {
 		hosttest.RequireTool(t, referenceTool, referenceVersion)
-		regenerateRepository(t)
+		regenerateCorpus(t)
 	}
-	for _, path := range repositoryFiles(t) {
+	for _, path := range corpusFiles(t) {
 		t.Run(path, func(t *testing.T) {
 			assertFormats(t, readFile(t, path), readFile(t, repositoryGolden(t, path)), true)
+		})
+	}
+}
+
+func TestOwnFilesAreFormatted(t *testing.T) {
+	for _, path := range ownFiles(t) {
+		t.Run(path, func(t *testing.T) {
+			text := readFile(t, path)
+			assertFormats(t, text, text, true)
 		})
 	}
 }
