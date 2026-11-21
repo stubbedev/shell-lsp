@@ -23,6 +23,7 @@ const (
 	tokBacktick
 	tokPunct
 	tokError
+	tokFormat
 )
 
 type token struct {
@@ -33,6 +34,8 @@ type token struct {
 }
 
 var punctuation = []string{"{{", "}}", ":=", "::", "==", "=~", "!=", "!~", "&&", "||", "++", ":", "=", "+", "/", "!", "(", ")", "[", "]", "{", "}", ",", "@", "$", "*", "?"}
+
+const interpolationClose = "}}"
 
 type bail struct{}
 
@@ -79,9 +82,7 @@ func isNameByte(c byte) bool {
 }
 
 func (p *reader) fail(span Span, format string, args ...any) {
-	if !p.lexing {
-		p.lexError(span, fmt.Sprintf(format, args...))
-	}
+	p.lexError(span, fmt.Sprintf(format, args...))
 	p.failure = span
 	panic(bail{})
 }
@@ -175,9 +176,6 @@ func (p *reader) next() token {
 	case c == '#':
 		p.comment()
 		return p.next()
-	case (c == 'x' || c == 'f') && start+1 < len(p.text) && (p.text[start+1] == '\'' || p.text[start+1] == '"'):
-		p.pos++
-		return p.stringToken(start, c)
 	case isNameStart(c):
 		end := start + 1
 		for end < len(p.text) && isNameByte(p.text[end]) {
@@ -186,7 +184,7 @@ func (p *reader) next() token {
 		p.pos = end
 		return token{kind: tokName, span: Span{Start: start, End: end}, text: p.text[start:end]}
 	case c == '\'' || c == '"':
-		return p.stringToken(start, 0)
+		return p.stringToken(start, p.formatAt(start))
 	case c == '`':
 		return p.backtickToken(start)
 	case c == '}' && p.braces > 0:
@@ -213,13 +211,44 @@ func (p *reader) quoteAt(at int) string {
 	return ""
 }
 
-func (p *reader) stringToken(start int, prefix byte) token {
+type format uint8
+
+const (
+	unformatted format = iota
+	parsedFormat
+	skippedFormat
+	splitFormat
+)
+
+func (p *reader) formatAt(quote int) format {
+	switch {
+	case quote == 0 || p.text[quote-1] != 'f' || quote > 1 && isNameByte(p.text[quote-2]):
+		return unformatted
+	case p.lexing:
+		return splitFormat
+	}
+	return skippedFormat
+}
+
+func (p *reader) stringToken(start int, f format) token {
 	quote := p.quoteAt(p.pos)
-	lit := &StringLit{Prefix: prefix, Quote: quote}
-	open := p.pos + len(quote)
+	lit := &StringLit{Quote: quote}
+	if f != unformatted {
+		lit.Prefix = 'f'
+	}
+	return p.stringRest(start, p.pos, p.pos+len(quote), lit, f)
+}
+
+func (p *reader) formatContinuation(quote string) token {
+	return p.stringRest(p.pos, p.pos, p.pos+len(interpolationClose), &StringLit{Prefix: 'f', Quote: quote}, splitFormat)
+}
+
+func (p *reader) stringRest(start, resumed, open int, lit *StringLit, f format) token {
+	quote := lit.Quote
 	cooked := quote[0] == '"'
 	i := open
 	segment := open
+	quoted := resumed
 	flush := func(at int) {
 		if at > segment {
 			lit.Segments = append(lit.Segments, Segment{Kind: FragmentText, Span: Span{Start: segment, End: at}})
@@ -231,7 +260,7 @@ func (p *reader) stringToken(start int, prefix byte) token {
 			lit.Unclosed = true
 			lit.Inner = Span{Start: open, End: len(p.text)}
 			p.pos = len(p.text)
-			p.lexError(Span{Start: start, End: len(p.text)}, "unterminated string")
+			p.lexError(Span{Start: resumed, End: len(p.text)}, "unterminated string")
 			return token{kind: tokString, span: Span{Start: start, End: p.pos}, str: lit}
 		}
 		switch {
@@ -242,25 +271,62 @@ func (p *reader) stringToken(start int, prefix byte) token {
 			value, invalid := cook(p.text[open:i], cooked, lit.Indented())
 			lit.Value = value
 			if invalid != "" {
-				p.lexError(Span{Start: start, End: p.pos}, fmt.Sprintf("`%s` is not a valid escape sequence", invalid))
+				p.lexError(Span{Start: quoted, End: p.pos}, fmt.Sprintf("`%s` is not a valid escape sequence", invalid))
 			}
 			return token{kind: tokString, span: Span{Start: start, End: p.pos}, str: lit}
 		case cooked && p.text[i] == '\\' && i+1 < len(p.text):
 			i += 2
-		case prefix == 'f' && strings.HasPrefix(p.text[i:], "{{{{"):
+		case f != unformatted && strings.HasPrefix(p.text[i:], escapedOpen):
 			flush(i)
-			lit.Segments = append(lit.Segments, Segment{Kind: FragmentEscape, Span: Span{Start: i, End: i + 4}})
-			i += 4
+			lit.Segments = append(lit.Segments, Segment{Kind: FragmentEscape, Span: Span{Start: i, End: i + len(escapedOpen)}})
+			i += len(escapedOpen)
 			segment = i
-		case prefix == 'f' && strings.HasPrefix(p.text[i:], "{{"):
+		case f == splitFormat && strings.HasPrefix(p.text[i:], interpolationOpen):
+			p.pos = i + len(interpolationOpen)
+			return token{kind: tokFormat, span: Span{Start: start, End: p.pos}, text: interpolationOpen, str: lit}
+		case f != unformatted && strings.HasPrefix(p.text[i:], interpolationOpen):
 			flush(i)
-			p.pos = i + 2
-			interp := p.interpolation()
+			p.pos = i + len(interpolationOpen)
+			var interp *Expr
+			closed := true
+			if f == parsedFormat {
+				interp = p.interpolation()
+			} else {
+				closed = p.skipInterpolation()
+			}
 			lit.Segments = append(lit.Segments, Segment{Kind: FragmentInterpolation, Span: Span{Start: i, End: p.pos}, Interp: interp})
+			if !closed {
+				lit.Unclosed = true
+				lit.Inner = Span{Start: open, End: p.pos}
+				return token{kind: tokString, span: Span{Start: start, End: p.pos}, str: lit}
+			}
 			i = p.pos
 			segment = i
+			resumed = i - len(interpolationClose)
 		default:
 			i++
+		}
+	}
+}
+
+func (p *reader) skipInterpolation() bool {
+	depth, braces := p.depth, p.braces
+	defer func() { p.depth, p.braces = depth, braces }()
+	open := 0
+	for {
+		p.depth, p.braces = open+1, open
+		t := p.next()
+		switch {
+		case t.kind == tokEOF:
+			return false
+		case t.kind == tokPunct && t.text == interpolationClose:
+			return true
+		case t.kind == tokPunct && t.text == interpolationOpen:
+			open += len(interpolationOpen)
+		case t.kind == tokPunct && closers[t.text] != "":
+			open = max(open-1, 0)
+		case t.kind == tokPunct && (t.text == "(" || t.text == "[" || t.text == "{"):
+			open++
 		}
 	}
 }
@@ -395,7 +461,12 @@ func describe(t token) string {
 	case tokName:
 		return "name `" + t.text + "`"
 	case tokString:
+		if len(t.str.Interps()) > 0 {
+			return "format string"
+		}
 		return "string"
+	case tokFormat:
+		return "format string"
 	case tokBacktick:
 		return "backtick"
 	case tokError:
@@ -555,7 +626,9 @@ func (p *reader) dispatch(start int, first token, attrs []Attribute, doc string)
 	}
 	save := p.pos
 	p.next()
+	pathFollows := p.atPath()
 	second := p.next()
+	pathFollowsSecond := p.atPath()
 	third := p.peek()
 	p.pos = save
 	isName := second.kind == tokName
@@ -584,12 +657,12 @@ func (p *reader) dispatch(start int, first token, attrs []Attribute, doc string)
 			return
 		}
 	case "import":
-		if second.kind == tokString || optional {
+		if optional || pathFollows {
 			p.importItem(start, attrs)
 			return
 		}
 	case "mod":
-		if optional || isName && (ends || third.kind == tokString) {
+		if optional || isName && (ends || pathFollowsSecond) {
 			p.module(start, attrs, doc)
 			return
 		}
@@ -756,12 +829,33 @@ func (p *reader) importItem(start int, attrs []Attribute) {
 	p.file.Items = append(p.file.Items, Item{Kind: ItemImport, Import: imp})
 }
 
+func (p *reader) atPath() bool {
+	save := p.pos
+	defer func() { p.pos = save }()
+	t := p.next()
+	if t.kind == tokName {
+		t = p.next()
+	}
+	return t.kind == tokString
+}
+
 func (p *reader) stringValue() *Expr {
 	t := p.next()
+	start := t.span.Start
+	expanded := t.kind == tokName
+	if expanded {
+		if t.text != "x" {
+			p.unexpected(t, "a string")
+		}
+		t = p.next()
+	}
 	if t.kind != tokString {
 		p.unexpected(t, "a string")
 	}
-	return &Expr{Kind: ExprString, Span: t.span, Str: t.str}
+	if expanded {
+		t.str.Prefix = 'x'
+	}
+	return &Expr{Kind: ExprString, Span: Span{Start: start, End: t.span.End}, Str: t.str}
 }
 
 func (p *reader) module(start int, attrs []Attribute, doc string) {
@@ -772,7 +866,7 @@ func (p *reader) module(start int, attrs []Attribute, doc string) {
 	}
 	m.Name = p.name()
 	m.Span = Span{Start: start, End: m.Name.Span.End}
-	if t := p.peek(); t.kind == tokString {
+	if p.atPath() {
 		m.Path = p.stringValue()
 		m.Span.End = m.Path.Span.End
 	}
@@ -997,7 +1091,7 @@ func (p *reader) bodyInterpolation(at int) (out interpolated) {
 			if _, ok := r.(bail); !ok {
 				panic(r)
 			}
-			end := strings.Index(p.text[at:], "}}")
+			end := strings.Index(p.text[at:], interpolationClose)
 			lineEnd := p.lineEnd(at)
 			if end < 0 || at+end > lineEnd {
 				end = lineEnd - at
@@ -1016,11 +1110,11 @@ func (p *reader) bodyInterpolation(at int) (out interpolated) {
 func (p *reader) interpolation() *Expr {
 	depth, braces := p.depth, p.braces
 	p.depth, p.braces = 1, 0
-	if t := p.peek(); t.kind == tokPunct && t.text == "}}" {
+	if t := p.peek(); t.kind == tokPunct && t.text == interpolationClose {
 		p.fail(t.span, "an interpolation needs an expression")
 	}
 	expr := p.expression()
-	p.expect("}}")
+	p.expect(interpolationClose)
 	p.depth, p.braces = depth, braces
 	return expr
 }
@@ -1096,8 +1190,8 @@ func (p *reader) block() *Expr {
 	p.braces++
 	p.depth++
 	x := p.expression()
-	p.braces--
 	closing := p.expect("}")
+	p.braces--
 	p.depth--
 	return &Expr{Kind: ExprGroup, Span: Span{Start: open.span.Start, End: closing.span.End}, Args: []*Expr{x}}
 }
@@ -1113,6 +1207,9 @@ func (p *reader) value() *Expr {
 	case t.kind == tokBacktick:
 		return &Expr{Kind: ExprBacktick, Span: t.span, Str: t.str}
 	case t.kind == tokName:
+		if s, ok := p.prefixedString(t); ok {
+			return &Expr{Kind: ExprString, Span: s.span, Str: s.str}
+		}
 		name := Name{Text: t.text, Span: t.span}
 		if open := p.peek(); open.kind == tokPunct && open.text == "(" {
 			return p.call(name)
@@ -1129,6 +1226,21 @@ func (p *reader) value() *Expr {
 	}
 	p.unexpected(t, "an expression")
 	return nil
+}
+
+func (p *reader) prefixedString(prefix token) (token, bool) {
+	if prefix.text != "f" && prefix.text != "x" || p.pos != prefix.span.End {
+		return token{}, false
+	}
+	if q := p.quoteAt(p.pos); q == "" || q[0] == '`' {
+		return token{}, false
+	}
+	if prefix.text == "f" {
+		return p.stringToken(prefix.span.Start, parsedFormat), true
+	}
+	s := p.stringToken(prefix.span.Start, unformatted)
+	s.str.Prefix = 'x'
+	return s, true
 }
 
 func (p *reader) call(name Name) *Expr {

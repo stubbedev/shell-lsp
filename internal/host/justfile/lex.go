@@ -92,15 +92,19 @@ func (l *lexer) report(e Error) {
 
 func (l *lexer) tokens() {
 	for {
-		t, ok := l.r.token()
-		if !ok {
-			return
-		}
+		t := l.r.next()
 		if t.kind == tokEOF || t.kind == tokNewline {
 			return
 		}
 		l.token(t)
-		l.r.depth = len(l.open)
+		l.nest(0)
+	}
+}
+
+func (l *lexer) nest(outer int) {
+	l.r.depth, l.r.braces = len(l.open)+outer, 0
+	if len(l.open) > 0 && !l.inFormat() {
+		l.r.braces = 1
 	}
 }
 
@@ -115,13 +119,30 @@ func (l *lexer) token(t token) {
 	case t.kind == tokPunct && t.text == interpolationOpen:
 		first, second := halves(t)
 		l.open = append(l.open, first, second)
+	case t.kind == tokFormat:
+		l.open = append(l.open, t)
 	case t.kind == tokPunct && closers[t.text] != "":
 		l.close(t)
-	case t.kind == tokPunct && t.text == "}}":
+	case t.kind == tokPunct && t.text == interpolationClose:
+		l.closeInterpolation(t)
+	}
+}
+
+func (l *lexer) closeInterpolation(t token) {
+	if !l.inFormat() {
 		first, second := halves(t)
 		l.close(first)
 		l.close(second)
+		return
 	}
+	l.r.pos = t.span.Start
+	if l.r.formatContinuation(l.open[len(l.open)-1].str.Quote).kind != tokFormat {
+		l.open = l.open[:len(l.open)-1]
+	}
+}
+
+func (l *lexer) inFormat() bool {
+	return len(l.open) > 0 && l.open[len(l.open)-1].kind == tokFormat
 }
 
 func halves(t token) (token, token) {
@@ -167,36 +188,18 @@ func (l *lexer) body(end int) {
 func (l *lexer) interpolation(open int) bool {
 	r := l.r
 	r.depth = 1
-	defer func() { r.depth, l.open = 0, nil }()
+	defer func() { r.depth, r.braces, l.open = 0, 0, nil }()
 	for {
-		t, ok := r.token()
-		if !ok {
-			return false
-		}
+		t := r.next()
 		switch {
 		case t.kind == tokEOF:
 			l.lexError(Span{Start: open, End: open + len(interpolationOpen)}, "unterminated interpolation")
 			return false
-		case t.kind == tokPunct && t.text == "}}" && len(l.open) == 0:
+		case t.kind == tokPunct && t.text == interpolationClose && len(l.open) == 0:
 			return true
 		default:
 			l.token(t)
-			r.depth = len(l.open) + 1
+			l.nest(1)
 		}
 	}
-}
-
-func (r *reader) token() (t token, ok bool) {
-	start := r.pos
-	defer func() {
-		if p := recover(); p != nil {
-			if _, bailed := p.(bail); !bailed {
-				panic(p)
-			}
-			r.depth, r.braces = 0, 0
-			r.pos = max(r.lineEnd(start)+1, start+1)
-			ok = false
-		}
-	}()
-	return r.next(), true
 }

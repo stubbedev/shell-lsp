@@ -1,7 +1,9 @@
 package justfile
 
 import (
+	"fmt"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -62,5 +64,80 @@ func TestParseKeepsEveryExpressionSpan(t *testing.T) {
 	})
 	if !slices.Equal(ops, []string{"||", "&&", "+"}) {
 		t.Errorf("operators = %v", ops)
+	}
+}
+
+func TestSyntaxErrorsLandWhereJustReportsThem(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct{ text, at string }{
+		{"f\"\n0{{", "1:2"},
+		{"f\"{{ 'a' }}\"\n", "1:2"},
+		{"f\"\n0{{x}}\"\na:\n", "1:2"},
+		{"a f\"{{\n1 }}\":\n", "2:1"},
+		{"a: f\"{{\n1 }}\"\n", "2:1"},
+		{"x := f\"\nab", "1:7"},
+		{"x := x\"\nab", "1:7"},
+		{"x := f\"\\q\"\n", "1:7"},
+		{"x := f\"{{ 'a' }}\n", "1:15"},
+		{"x := f\"{{ 'a'\n}}\ny := 1\n", "2:1"},
+		{"x := f\"{{ 'a'\n}}\"\ny := \"b", "3:6"},
+		{"x := f\"a{{\n\"", "2:1"},
+		{"x := f\"{{ f\"{{ 'a\n' }}\n\" }}\"\ny := 1 2\n", "4:6"},
+		{"import f\"x\"\n", "1:8"},
+		{"a:\n  echo {{ if 'a' == 'b' { 'c' } else { 'd' }}\n", "2:45"},
+		{"x := if 'a' == 'b' { 'c' }} else { 'd' }\n", "1:27"},
+	} {
+		var got []string
+		for _, e := range Parse(tc.text).Errors {
+			start := strings.LastIndexByte(tc.text[:e.Span.Start], '\n') + 1
+			got = append(got, fmt.Sprintf("%d:%d", strings.Count(tc.text[:start], "\n")+1, e.Span.Start-start+1))
+		}
+		if !slices.Contains(got, tc.at) {
+			t.Errorf("Parse(%q) reports errors at %v, want one at %s where just reports it", tc.text, got, tc.at)
+		}
+	}
+}
+
+func TestParseAcceptsWhatJustAccepts(t *testing.T) {
+	t.Parallel()
+
+	for _, text := range []string{
+		"a:\n  echo {{ if 'a' == 'b' { 'c' } else { 'd' }}}\n",
+		"x := f\"{{ if 'a' == 'b' { 'c' } else { 'd' }}}\"\n",
+		"x := f\"{{ f\"{{ 'a' }}\" }}\"\n",
+		"x := f\"{{ 'a' }}\n}}\"\nb:\n",
+		"x := f\"a\nb\"\n",
+		"import x \"a\"\n",
+		"mod a x \"b\"\n",
+		"a: (b x\"a\" f\"{{'c'}}\")\nb x y:\n",
+	} {
+		if f := Parse(text); len(f.Errors) > 0 {
+			t.Errorf("Parse(%q) = %+v, want no errors as just accepts it", text, f.Errors)
+		}
+	}
+}
+
+func TestPathsMayBeShellExpandedAfterWhitespace(t *testing.T) {
+	t.Parallel()
+
+	f := Parse("import x \"a\"\nmod b x \"c\"\n")
+	var paths []*Expr
+	for _, it := range f.Items {
+		switch it.Kind {
+		case ItemImport:
+			paths = append(paths, it.Import.Path)
+		case ItemModule:
+			paths = append(paths, it.Module.Path)
+		case ItemSetting, ItemUnexport, ItemAlias, ItemAssignment, ItemRecipe, ItemFunction:
+		}
+	}
+	if len(paths) != 2 {
+		t.Fatalf("paths = %v, want the import and the module path", paths)
+	}
+	for _, p := range paths {
+		if text := f.Text[p.Span.Start:p.Span.End]; p.Str.Prefix != 'x' || text[0] != 'x' {
+			t.Errorf("path %q has prefix %q, want a shell-expanded string spanning its `x`", text, p.Str.Prefix)
+		}
 	}
 }
