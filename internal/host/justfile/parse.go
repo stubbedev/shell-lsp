@@ -1301,7 +1301,7 @@ func (p *reader) value() *Expr {
 			return &Expr{Kind: ExprString, Span: s.span, Str: s.str}
 		}
 		name := Name{Text: t.text, Span: t.span}
-		if open := p.peek(); open.kind == tokPunct && open.text == "(" {
+		if open := p.peek(); name.Text == "assert" || open.kind == tokPunct && open.text == "(" {
 			return p.call(name)
 		}
 		return &Expr{Kind: ExprVariable, Span: t.span, Name: name}
