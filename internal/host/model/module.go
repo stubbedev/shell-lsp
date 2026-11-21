@@ -799,8 +799,7 @@ func MissingInclude(checks Checks, inc Include) lint.Finding {
 }
 
 func UnreadableInclude(checks Checks, inc Include, err error) lint.Finding {
-	var pathErr *fs.PathError
-	if errors.As(err, &pathErr) {
+	if pathErr, ok := errors.AsType[*fs.PathError](err); ok {
 		err = pathErr.Err
 	}
 	return lint.HostFinding(checks.Missing, inc.Span, fmt.Sprintf("`%s` cannot be read: %v", inc.Path, err))
