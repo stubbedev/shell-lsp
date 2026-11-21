@@ -2,6 +2,7 @@ package hostnav
 
 import (
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -29,11 +30,16 @@ func skipLoneCarriageReturns(t *testing.T, text string) {
 	}
 }
 
+var shellExpandedString = regexp.MustCompile(`x(?:'|")[^\n]*[$~]`)
+
 func FuzzJustChecksAgreeWithJust(f *testing.F) {
 	checkSeeds(f, "just.txt")
 	hosttest.LiveTool(f, "just", hosttest.JustVersion)
 	f.Fuzz(func(t *testing.T, text string) {
 		skipLoneCarriageReturns(t, text)
+		if shellExpandedString.MatchString(text) {
+			t.Skip("just expands $ and ~ in an x-string while parsing, so the verdict depends on its environment")
+		}
 		normalized := docstore.NormalizeCanonical(text)
 		verdict := hosttest.JustVerdict(t, text)
 		hosttest.Agree(t, normalized, verdict, justReports(normalized, verdict, findingsAlone(t, "justfile")(text)))
