@@ -15,6 +15,7 @@ type shellOption struct {
 	letters    []optionLetter
 	dashSince  string
 	debianDash bool
+	editing    bool
 }
 
 type optionLetter struct {
@@ -50,8 +51,8 @@ var shellOptions = []shellOption{
 	{name: "monitor", shells: every, doc: "Enable job control.", letters: []optionLetter{{letter: 'm', shells: every}}},
 	{name: "notify", shells: every, doc: "Report job status changes immediately.", letters: []optionLetter{{letter: 'b', shells: notZsh}, {letter: '5', shells: zshOnly}}},
 	{name: "ignoreeof", shells: every, doc: "Do not exit an interactive shell on end-of-file.", letters: []optionLetter{{letter: 'I', shells: dashBusybox}, {letter: '7', shells: zshOnly}}},
-	{name: "vi", shells: every, doc: "Use vi-style line editing.", letters: []optionLetter{{letter: 'V', shells: dashOnly}}},
-	{name: "emacs", shells: dialect.SetOf(dialect.Bash, dialect.Zsh, dialect.Dash, dialect.Ksh).Shells(), doc: "Use emacs-style line editing.", letters: []optionLetter{{letter: 'E', shells: dashOnly}}},
+	{name: "vi", shells: every, doc: "Use vi-style line editing.", letters: []optionLetter{{letter: 'V', shells: dashOnly}}, editing: true},
+	{name: "emacs", shells: dialect.SetOf(dialect.Bash, dialect.Zsh, dialect.Dash, dialect.Ksh).Shells(), doc: "Use emacs-style line editing.", letters: []optionLetter{{letter: 'E', shells: dashOnly}}, editing: true},
 	{name: "nolog", shells: dialect.SetOf(dialect.Posix, dialect.Bash, dialect.Zsh, dialect.Dash, dialect.Ksh).Shells(), doc: "Do not enter function definitions into the command history; most shells accept it and ignore it."},
 	{name: "pipefail", shells: notPosix, doc: "Make a pipeline fail when any of its commands fails, not only the last.", dashSince: "0.5.13"},
 	{name: "posix", shells: bashKsh, doc: "Make the shell behave as a POSIX shell where the default differs."},

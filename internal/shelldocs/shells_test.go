@@ -118,9 +118,10 @@ func TestSetOptionsMatchRealShells(t *testing.T) {
 		t.Run(r.reference.Name, func(t *testing.T) {
 			t.Parallel()
 			r.reference.Require(t)
+			withoutEditing := r.shell.Dialect == dialect.Bash && !r.reference.Succeeds(t, "type bind")
 			var accepted []shellOption
 			for _, o := range shellOptions {
-				if r.shell.Dialect == dialect.Dash && (o.debianDash || o.dashSince != "") {
+				if r.shell.Dialect == dialect.Dash && (o.debianDash || o.dashSince != "") || o.editing && withoutEditing {
 					continue
 				}
 				want := o.shells.Has(r.shell)
