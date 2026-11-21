@@ -2,7 +2,9 @@ package model
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
+	"io/fs"
 	"slices"
 	"strconv"
 	"strings"
@@ -794,6 +796,14 @@ func MissingInclude(checks Checks, inc Include) lint.Finding {
 		return lint.HostFinding(checks.Missing, inc.Span, fmt.Sprintf("no source file for module `%s`; looked for %s", inc.Module, strings.Join(quoted(inc.Candidates), ", ")))
 	}
 	return lint.HostFinding(checks.Missing, inc.Span, fmt.Sprintf("`%s` is not found", inc.Path))
+}
+
+func UnreadableInclude(checks Checks, inc Include, err error) lint.Finding {
+	var pathErr *fs.PathError
+	if errors.As(err, &pathErr) {
+		err = pathErr.Err
+	}
+	return lint.HostFinding(checks.Missing, inc.Span, fmt.Sprintf("`%s` cannot be read: %v", inc.Path, err))
 }
 
 func quoted(names []string) []string {

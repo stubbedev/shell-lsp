@@ -332,7 +332,7 @@ rejected 1:11 unknown key `colour` for `arg` attribute
 1:11 SL5020 error unknown key `colour` for `arg` attribute
 -- key-on-an-attribute-without-keys --
 rejected 1:17 expected '&&', '!=', '!~', '||', ',', '==', '=~', '(', ')', '+', '++', or '/', but found '='
-1:10 SL5020 error attribute `confirm` takes no keyword arguments
+1:17 SL5001 error expected `)`, found `=`
 -- arg-duplicate-key --
 rejected 1:21 duplicate key `help` for `arg` attribute
 1:21 SL5020 error duplicate key `help` for `arg` attribute
@@ -607,3 +607,13 @@ accepted
 rejected 3:1 function `greet` has invalid attribute `script`
 3:1 SL5020 error function `greet` has invalid attribute `script`
 3:7 SL5001 error expected a name, found end of file
+-- keyword-argument-in-an-attribute-without-keys --
+rejected 1:16 expected '&&', '!=', '!~', '||', ',', '==', '=~', '(', ')', '+', '++', or '/', but found '='
+1:16 SL5001 error expected `)`, found `=`
+-- shell-expanded-string-in-arg --
+accepted
+-- optional-import-that-cannot-be-read --
+rejected 0:0 I/O error at `/tmp/nix-shell.zjXQJx/TestJustChecksAgreeWithJust3822118239/437/nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn`: File name too long (os error 36)
+1:9 SL5018 error `nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn` cannot be read: file name too long
+-- optional-import-that-is-missing --
+accepted

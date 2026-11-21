@@ -246,7 +246,7 @@ type Group struct {
 	Module   *model.Module
 	self     int
 	files    map[*model.Index]*workspace.File
-	missing  []model.Include
+	missing  []resolvedInclude
 	includes []resolvedInclude
 	parents  []parent
 	exists   func(path string) bool
@@ -268,8 +268,13 @@ type builder struct {
 }
 
 type resolvedInclude struct {
-	include model.Include
-	target  *workspace.File
+	include    model.Include
+	target     *workspace.File
+	unreadable error
+}
+
+func (r resolvedInclude) missing() bool {
+	return r.target == nil && !r.include.Dynamic && (!r.include.Optional || r.unreadable != nil)
 }
 
 type Host struct {
@@ -321,8 +326,8 @@ func Build(ctx context.Context, h Host, env Env) (*Group, error) {
 	}
 	g.includes = b.includes(self)
 	for _, r := range g.includes {
-		if r.target == nil && !r.include.Optional && !r.include.Dynamic {
-			g.missing = append(g.missing, r.include)
+		if r.missing() {
+			g.missing = append(g.missing, r)
 		}
 	}
 	for _, imp := range graph.of(self.Path) {
@@ -517,23 +522,28 @@ func (b *builder) includes(f *workspace.File) []resolvedInclude {
 func (b *builder) resolveInclude(f *workspace.File, inc model.Include) resolvedInclude {
 	r := resolvedInclude{include: inc}
 	if !inc.Dynamic && f.Path != "" {
-		r.target = b.find(filepath.Dir(f.Path), inc.Candidates)
+		r.target, r.unreadable = b.find(filepath.Dir(f.Path), inc.Candidates)
 	}
 	return r
 }
 
-func (b *builder) find(dir string, candidates []string) *workspace.File {
+func (b *builder) find(dir string, candidates []string) (*workspace.File, error) {
+	var unreadable error
 	for _, c := range candidates {
 		for _, path := range b.candidates(c) {
 			if !filepath.IsAbs(path) {
 				path = filepath.Join(dir, path)
 			}
-			if target, err := b.env.Loader.LoadAs(filepath.Clean(path), b.language); err == nil && target.Native != nil {
-				return b.canonical(target)
+			target, err := b.env.Loader.LoadAs(filepath.Clean(path), b.language)
+			switch {
+			case err == nil && target.Native != nil:
+				return b.canonical(target), nil
+			case err != nil && !errors.Is(err, fs.ErrNotExist) && unreadable == nil:
+				unreadable = err
 			}
 		}
 	}
-	return nil
+	return nil, unreadable
 }
 
 func (b *builder) closure(root *workspace.File) []*workspace.File {
@@ -584,7 +594,7 @@ func (b *builder) fill(m *model.Module, files []*workspace.File) {
 	}
 	for _, f := range files {
 		for _, r := range b.includes(f) {
-			if r.target == nil && (!r.include.Optional || r.include.Dynamic) {
+			if r.missing() || r.target == nil && r.include.Dynamic {
 				m.Complete = false
 			}
 			if r.include.Module == "" {

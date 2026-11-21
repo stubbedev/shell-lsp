@@ -113,8 +113,9 @@ func (g *Group) appended(text string) textedit.Edit {
 }
 
 func (g *Group) creatable(span parser.Span) (string, bool) {
-	for _, inc := range g.missing {
-		if inc.Span != span || inc.Dynamic || len(inc.Candidates) == 0 {
+	for _, r := range g.missing {
+		inc := r.include
+		if inc.Span != span || r.unreadable != nil || len(inc.Candidates) == 0 {
 			continue
 		}
 		path := inc.Candidates[0]

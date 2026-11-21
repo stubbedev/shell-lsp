@@ -37,8 +37,12 @@ func (g *Group) moduleFindings() []lint.Finding {
 		used[t] = true
 	}
 	out := g.Module.Findings(g.selfAt(), checks, used)
-	for _, inc := range g.missing {
-		out = append(out, model.MissingInclude(checks, inc))
+	for _, r := range g.missing {
+		if r.unreadable != nil {
+			out = append(out, model.UnreadableInclude(checks, r.include, r.unreadable))
+			continue
+		}
+		out = append(out, model.MissingInclude(checks, r.include))
 	}
 	return out
 }

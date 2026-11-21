@@ -932,3 +932,15 @@ x := uppercase("a",)
 set unstable
 [script("bash")]
 greet(
+-- keyword-argument-in-an-attribute-without-keys --
+[confirm(prompt="sure?")]
+a:
+    echo a
+-- shell-expanded-string-in-arg --
+[arg('a', help=x"$HOME")]
+a a:
+    echo {{a}}
+-- optional-import-that-cannot-be-read --
+import? "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn"
+-- optional-import-that-is-missing --
+import? "absent.just"
