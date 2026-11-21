@@ -28,11 +28,14 @@ func (f *File) check() []lint.Finding {
 		switch e.Kind {
 		case ErrDeferredUnterminated:
 		case ErrUnterminated:
-			if f.inReplacedRecipe(replaced, e.Span) {
+			switch r := f.recipeRule(e.Span); {
+			case r != nil && replaced[r]:
 				out = append(out, lint.HostFinding(lint.CodeMakeDeferredUnterminatedReference, e.Span, e.Message+"; a later recipe replaces this one, so make never expands it"))
-				continue
+			case r != nil && r.MayBeUpToDate:
+				out = append(out, lint.HostFinding(lint.CodeMakeDeferredUnterminatedReference, e.Span, e.Message+"; every target of this rule may already exist, so make may never run this recipe"))
+			default:
+				out = append(out, lint.HostFinding(errorCodes[e.Kind], e.Span, e.Message))
 			}
-			out = append(out, lint.HostFinding(errorCodes[e.Kind], e.Span, e.Message))
 		case ErrPatternUnterminated:
 			if name, used := f.patternUsed(e.Span); used {
 				out = append(out, lint.HostFinding(lint.CodeMakeUnterminatedReference, e.Span, strings.TrimSuffix(e.Message, patternUse)+fmt.Sprintf("; make uses this pattern rule for `%s`", name)))
@@ -46,10 +49,14 @@ func (f *File) check() []lint.Finding {
 	return append(out, f.duplicateRecipes()...)
 }
 
-func (f *File) inReplacedRecipe(replaced map[*Rule]bool, at Span) bool {
-	return slices.ContainsFunc(f.Rules, func(r *Rule) bool {
-		return replaced[r] && slices.ContainsFunc(r.Recipe, func(l RecipeLine) bool { return l.Span.Start <= at.Start && at.Start <= l.Span.End })
+func (f *File) recipeRule(at Span) *Rule {
+	i := slices.IndexFunc(f.Rules, func(r *Rule) bool {
+		return slices.ContainsFunc(r.Recipe, func(l RecipeLine) bool { return l.Span.Start <= at.Start && at.Start <= l.Span.End })
 	})
+	if i < 0 {
+		return nil
+	}
+	return f.Rules[i]
 }
 
 func (f *File) patternUsed(at Span) (string, bool) {
@@ -160,13 +167,14 @@ func (f *File) replacements() []replacement {
 			if !literal(t) {
 				continue
 			}
-			prior := slices.IndexFunc(earlier[t.Text], func(e recipe) bool { return !alternatives.Exclusive(e.target.Span.Start, t.Span.Start) })
+			name := fileName(t.Text)
+			prior := slices.IndexFunc(earlier[name], func(e recipe) bool { return !alternatives.Exclusive(e.target.Span.Start, t.Span.Start) })
 			if prior < 0 {
-				earlier[t.Text] = append(earlier[t.Text], recipe{t, r})
+				earlier[name] = append(earlier[name], recipe{t, r})
 				continue
 			}
-			out = append(out, replacement{prior: earlier[t.Text][prior].target, later: t, rule: earlier[t.Text][prior].rule})
-			earlier[t.Text][prior] = recipe{t, r}
+			out = append(out, replacement{prior: earlier[name][prior].target, later: t, rule: earlier[name][prior].rule})
+			earlier[name][prior] = recipe{t, r}
 		}
 	}
 	return out

@@ -1,11 +1,15 @@
 package makefile
 
 import (
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/host/hosttest"
+	"github.com/stubbedev/shell-lsp/internal/host/oracle"
 	"github.com/stubbedev/shell-lsp/internal/projection"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 )
@@ -338,6 +342,52 @@ func TestSubstitutedFollowsMakeSubstitutionReferences(t *testing.T) {
 	} {
 		if got := substituted(tc.value, tc.from, tc.to); got != tc.want {
 			t.Errorf("$(V:%s=%s) with V = %q is %q, want %q", tc.from, tc.to, tc.value, got, tc.want)
+		}
+	}
+}
+
+func TestTextFunctionsExpandLikeMake(t *testing.T) {
+	t.Parallel()
+
+	hosttest.LiveTool(t, "make", hosttest.MakeVersion)
+	for _, expr := range []string{
+		"$(dir a b/c /usr/local)",
+		"$(notdir a/ b/c d)",
+		"$(basename src/a.c b src.d/x)",
+		"$(suffix a.c b src.d/x)",
+		"$(addprefix x/, a b)",
+		"$(addsuffix .o, a  b)",
+		"$(patsubst %.c, %.o, a.c b.h)",
+		"$(patsubst a,b c,a x)",
+		"$(subst a, b, a a)",
+		"$(filter %.c b, a.c b c)",
+		"$(filter-out %.c, a.c b c)",
+		"$(sort  b a b )",
+		"$(strip  a   b )",
+		"$(firstword  a b)",
+		"$(lastword a b )",
+		"$(words a b  c)",
+		"$(sort $(dir src/a.c b.c) /)",
+	} {
+		text := "X := " + expr + "\n"
+		f := Parse(text)
+		got, known := f.settings().constantText(f.Assignments[0].Value)
+		if !known {
+			t.Errorf("%s is not evaluated", expr)
+			continue
+		}
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, "Makefile"), []byte(text+"$(info [$(X)])\nall:;\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		cmd := oracle.BoundedMake(t.Context(), "-s", "-f", "Makefile")
+		cmd.Dir = dir
+		out, err := cmd.Output()
+		if err != nil {
+			t.Fatalf("make on %s: %v", expr, err)
+		}
+		if want := strings.TrimSuffix(strings.TrimPrefix(strings.TrimSuffix(string(out), "\n"), "["), "]"); got != want {
+			t.Errorf("%s evaluates to %q, make expands it to %q", expr, got, want)
 		}
 	}
 }

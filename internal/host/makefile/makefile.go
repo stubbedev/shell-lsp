@@ -18,6 +18,7 @@ const (
 	oneShell      = ".ONESHELL"
 	posixTarget   = ".POSIX"
 	exportAll     = ".EXPORT_ALL_VARIABLES"
+	phonyTarget   = ".PHONY"
 	exportWord    = "export"
 	unexportWord  = "unexport"
 	defaultFlags  = "-c"
@@ -68,10 +69,11 @@ type reader struct {
 	bareExport      bool
 	exportAllTarget bool
 	terminated      map[string]bool
+	named           map[*Rule]value
 }
 
 func Parse(text string) *File {
-	p := &reader{text: text, prefix: defaultPrefix, file: &File{Text: text}}
+	p := &reader{text: text, prefix: defaultPrefix, file: &File{Text: text}, named: map[*Rule]value{}}
 	if nul := strings.IndexByte(text, 0); nul >= 0 {
 		p.fail(ErrSyntax, Span{Start: nul, End: nul + 1}, "make reads lines as C strings: a NUL byte drops the rest of its line and joins the next one onto it")
 	}
@@ -214,6 +216,7 @@ func (p *reader) parse() {
 		p.deferred(first, a)
 		a.Span.End = len(p.text)
 	}
+	p.remadeAnyway()
 	colons := map[string]*Rule{}
 	for _, r := range p.file.Rules {
 		if r.Grouped && len(r.Recipe) == 0 {
@@ -223,11 +226,11 @@ func (p *reader) parse() {
 			if t.Expr.Dynamic() || hasPercent(t.Text) {
 				continue
 			}
-			if prior, ok := colons[t.Text]; ok && prior.DoubleColon != r.DoubleColon {
+			if prior, ok := colons[fileName(t.Text)]; ok && prior.DoubleColon != r.DoubleColon {
 				p.fail(ErrSyntax, t.Span, fmt.Sprintf("target `%s` has both `:` and `::` rules; the first is on line %d", t.Text, strings.Count(p.text[:prior.Span.Start], "\n")+1))
 				continue
 			}
-			colons[t.Text] = r
+			colons[fileName(t.Text)] = r
 		}
 	}
 	for _, c := range p.open {
@@ -235,6 +238,32 @@ func (p *reader) parse() {
 		p.fail(ErrConditional, Span{Start: len(p.text), End: len(p.text)}, fmt.Sprintf("the `%s` on line %d has no `endif`", c.Open.Keyword.Text, line))
 		c.Broken = true
 		c.Span.End = len(p.text)
+	}
+}
+
+func (p *reader) remadeAnyway() {
+	remade := map[string]bool{}
+	mark := func(v value) {
+		if v.known {
+			for _, name := range fileWords(v.text) {
+				remade[fileName(name)] = true
+			}
+		}
+	}
+	for _, r := range p.file.Rules {
+		switch {
+		case slices.ContainsFunc(r.Targets, func(t Word) bool { return t.Text == phonyTarget }):
+			for _, w := range r.Prereqs {
+				mark(p.exprValue(w.Expr, w.Span.Start, nil))
+			}
+		case len(r.Prereqs) > 0 && len(r.Patterns) == 0:
+			mark(p.named[r])
+		}
+	}
+	for _, r := range p.file.Rules {
+		if named := p.named[r]; r.MayBeUpToDate && named.known {
+			r.MayBeUpToDate = !slices.ContainsFunc(fileWords(named.text), func(name string) bool { return remade[fileName(name)] })
+		}
 	}
 }
 
@@ -503,140 +532,6 @@ func (p *reader) resolvedName(e Expr) (string, bool) {
 func (p *reader) emptyReference(n Node) bool {
 	value, ok := p.constant(n)
 	return ok && blankText(value)
-}
-
-type expansion struct {
-	name   string
-	before int
-}
-
-func (p *reader) constant(n Node) (string, bool) {
-	return p.constantBefore(n, n.Span.Start, nil)
-}
-
-func (p *reader) constantBefore(n Node, before int, expanding []expansion) (string, bool) {
-	if n.Kind == NodeSubstitution {
-		return p.substitutionBefore(n, before, expanding)
-	}
-	name, ok := p.resolvedName(n.Name)
-	if n.Kind != NodeReference || n.Unbalanced || !ok || n.Braced && strings.ContainsAny(name, "(){}") {
-		return "", false
-	}
-	if defaulted(name) {
-		return "", false
-	}
-	self := expansion{name: name, before: before}
-	if slices.Contains(expanding, self) {
-		return "", false
-	}
-	expanding = append(slices.Clip(expanding), self)
-	value, defined, immediate := "", false, false
-	declared := func(before int) bool {
-		return slices.ContainsFunc(p.file.Directives, func(d *Directive) bool {
-			return d.Span.Start < before && slices.ContainsFunc(d.Names, func(w Word) bool { return w.Text == name })
-		})
-	}
-	for _, a := range p.file.Assignments {
-		if a.Name.Text != name || len(a.Targets) > 0 || a.Span.End > before {
-			continue
-		}
-		defined = defined || declared(a.Span.Start)
-		if a.Define {
-			return "", false
-		}
-		switch {
-		case a.Op == "?=" && slices.Contains(predefined, name):
-			return "", false
-		case a.Op == "?=" && defined:
-		case a.Op == "+=" && defined:
-			piece, ok := p.assignedText(a, immediate, before, expanding)
-			if !ok {
-				return "", false
-			}
-			value += " " + piece
-		case a.Op == "+=", a.Op == "?=", slices.Contains(simpleOps, a.Op):
-			immediate = a.Op == ":=" || a.Op == "::="
-			piece, ok := p.assignedText(a, immediate || a.Op == ":::=", before, expanding)
-			if !ok {
-				return "", false
-			}
-			value, defined = piece, true
-		default:
-			return "", false
-		}
-	}
-	return value, true
-}
-
-func defaulted(name string) bool {
-	_, builtin := Builtins.Lookup(model.KindVariable, name)
-	return builtin && !automatic(name) && !slices.Contains(unsetByDefault, name)
-}
-
-func (p *reader) substitutionBefore(n Node, before int, expanding []expansion) (string, bool) {
-	value, ok := p.constantBefore(Node{Kind: NodeReference, Span: n.Span, Name: n.Name, Braced: n.Braced}, before, expanding)
-	if !ok {
-		return "", false
-	}
-	from, ok := p.constantTextBefore(n.Args[0], before, expanding)
-	if !ok {
-		return "", false
-	}
-	to, ok := p.constantTextBefore(n.Args[1], before, expanding)
-	if !ok || strings.ContainsRune(from, '\\') || strings.ContainsRune(to, '\\') {
-		return "", false
-	}
-	return substituted(value, from, to), true
-}
-
-func substituted(value, from, to string) string {
-	if !strings.Contains(from, "%") {
-		from, to = "%"+from, "%"+to
-	}
-	prefix, suffix, _ := strings.Cut(from, "%")
-	words := strings.FieldsFunc(value, func(r rune) bool { return strings.ContainsRune(whitespace+"\n", r) })
-	for i, w := range words {
-		if len(w) < len(prefix)+len(suffix) || !strings.HasPrefix(w, prefix) || !strings.HasSuffix(w, suffix) {
-			continue
-		}
-		stem := w[len(prefix) : len(w)-len(suffix)]
-		if head, tail, ok := strings.Cut(to, "%"); ok {
-			words[i] = head + stem + tail
-		} else {
-			words[i] = to
-		}
-	}
-	return strings.Join(words, " ")
-}
-
-func (p *reader) assignedText(a *Assignment, immediate bool, before int, expanding []expansion) (string, bool) {
-	if literal, ok := a.Value.Literal(p.text); ok {
-		return literal, true
-	}
-	if immediate {
-		before = a.Span.Start
-	}
-	return p.constantTextBefore(a.Value, before, expanding)
-}
-
-func (p *reader) constantText(e Expr) (string, bool) {
-	return p.constantTextBefore(e, e.Span.Start, nil)
-}
-
-func (p *reader) constantTextBefore(e Expr, before int, expanding []expansion) (string, bool) {
-	var sb strings.Builder
-	for _, n := range e.Nodes {
-		if n.Kind == NodeText {
-			sb.WriteString(p.text[n.Span.Start:n.Span.End])
-			continue
-		}
-		value, ok := p.constantBefore(n, before, expanding)
-		if !ok {
-			return "", false
-		}
-		sb.WriteString(value)
-	}
-	return sb.String(), true
 }
 
 func (p *reader) spaced(e Expr) bool {
@@ -933,10 +828,12 @@ func (p *reader) parseRule(s string, colon, at, end int) {
 	}
 	i = topLevel(s, after, ";")
 	rule := &Rule{Targets: targets, DoubleColon: double, Grouped: len(targetText) < colon, Colon: at + colon, Header: Span{Start: at, End: at + i}, Span: Span{Start: at, End: end}}
-	if slices.ContainsFunc(targets, func(w Word) bool { return w.Expr.Dynamic() }) {
-		text, known := p.constantText(p.expr(at, at+len(targetText)))
-		rule.NoTargets = known && blankText(text)
+	named := knownValue("")
+	for _, t := range targets {
+		named = join(named, p.exprValue(t.Expr, t.Span.Start, nil))
 	}
+	rule.NoTargets = named.known && blankText(named.text)
+	p.named[rule] = named
 	deps := s[after:i]
 	depsAt := at + after
 	if second := topLevel(deps, 0, ":"); second < len(deps) {
@@ -973,6 +870,7 @@ func (p *reader) parseRule(s string, colon, at, end int) {
 	} else {
 		rule.Prereqs = p.fields(depsAt, deps)
 	}
+	rule.MayBeUpToDate = !rule.NoTargets && !double && !rule.Pattern() && (len(rule.Prereqs) == 0 || len(rule.Patterns) > 0) && named.mayExist()
 	for _, w := range slices.Concat(targets, rule.Prereqs, rule.OrderOnly) {
 		if symbol := strings.Index(w.Text, "(("); symbol > 0 && !strings.Contains(w.Text[:symbol], "(") && strings.HasSuffix(w.Text, "))") && !w.Expr.Dynamic() {
 			p.fail(ErrSyntax, w.Span, fmt.Sprintf("make does not support archive symbols such as `%s`; name the member as `archive(member.o)`", w.Text))

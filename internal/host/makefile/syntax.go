@@ -36,17 +36,18 @@ type RecipeLine struct {
 }
 
 type Rule struct {
-	Targets     []Word
-	Prereqs     []Word
-	OrderOnly   []Word
-	Patterns    []Word
-	DoubleColon bool
-	Grouped     bool
-	Colon       int
-	Header      Span
-	Recipe      []RecipeLine
-	Span        Span
-	NoTargets   bool
+	Targets       []Word
+	Prereqs       []Word
+	OrderOnly     []Word
+	Patterns      []Word
+	DoubleColon   bool
+	Grouped       bool
+	Colon         int
+	Header        Span
+	Recipe        []RecipeLine
+	Span          Span
+	NoTargets     bool
+	MayBeUpToDate bool
 }
 
 func (r *Rule) Pattern() bool {

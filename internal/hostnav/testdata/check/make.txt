@@ -752,3 +752,126 @@ all:
 -- eval-defines-a-target --
 $(eval built: ; @echo built)
 all: built
+-- static-pattern-target-is-the-working-directory --
+OBJS ?= $(dir $(CC))
+$(OBJS): %.o: %.c
+	@$(CC) $(CFLAGS) -o $@ $^
+CC = $(CC -O2
+-- static-pattern-target-is-a-missing-directory --
+OBJS = $(dir build/main.c)
+$(OBJS): %.o: %.c
+	@$(CC) $(CFLAGS) -o $@ $^
+CC = $(CC -O2
+-- target-is-the-working-directory --
+.:
+	@echo $(CC)
+CC = $(CC -O2
+-- working-directory-target-remakes-for-its-prerequisite --
+.: all
+all:
+	@echo all
+.:
+	@echo $(CC)
+CC = $(CC -O2
+-- sorted-targets-all-exist --
+OBJS = $(sort $(dir $(CC)) /)
+$(OBJS):
+	@echo $(CC)
+CC = $(CC -O2
+-- target-glued-to-a-directory --
+OBJS = $(dir $(CC))x
+$(OBJS):
+	@echo $(CC)
+CC = $(CC -O2
+-- unterminated-recipe-of-an-existing-target --
+$(dir $(CC)):
+	@echo $(CFLAGS
+-- double-colon-existing-target-always-runs --
+$(dir $(CC))::
+	@echo $(CC)
+CC = $(CC -O2
+-- static-pattern-target-from-the-environment --
+CC = $(CC) -O2
+OBJS ?= ${PREFIX}
+$(OBJS): %.o: %.c ; @echo ${CC}
+-- target-from-the-environment-defaults-to-a-missing-file --
+PREFIX ?= build
+$(PREFIX):
+	@echo $(CC)
+CC = $(CC -O2
+-- target-from-the-environment-defaults-to-the-root --
+PREFIX ?= /
+$(PREFIX):
+	@echo $(CC)
+CC = $(CC -O2
+-- target-assigned-over-the-environment --
+PREFIX = build
+$(PREFIX):
+	@echo $(CC)
+CC = $(CC -O2
+-- phony-declared-after-the-rule --
+.:
+	@echo $(CC)
+CC = $(CC -O2
+.PHONY: .
+-- phony-through-a-variable --
+D = .
+.PHONY: $(D)
+.:
+	@echo $(CC)
+CC = $(CC -O2
+-- phony-variable-defined-too-late --
+.PHONY: $(D)
+D = .
+.:
+	@echo $(CC)
+CC = $(CC -O2
+-- phony-on-a-second-line-with-a-dot-slash --
+.PHONY: all
+.PHONY: ./.
+.:
+	@echo $(CC)
+CC = $(CC -O2
+-- force-prerequisite-in-another-rule --
+.: FORCE
+.:
+	@echo $(CC)
+FORCE:
+CC = $(CC -O2
+-- dot-force-prerequisite --
+.: .FORCE
+	@echo $(CC)
+.FORCE:
+CC = $(CC -O2
+-- tilde-names-the-home-directory --
+~:
+	@echo $(CC)
+CC = $(CC -O2
+-- tilde-user-names-a-home-directory --
+~root/:
+	@echo $(CC)
+CC = $(CC -O2
+-- dot-slash-dot-merges-prerequisites --
+./.: all
+all:
+	@echo all
+.:
+	@echo $(CC)
+CC = $(CC -O2
+-- dot-slash-is-not-the-working-directory-name --
+./: all
+all:
+	@echo all
+.:
+	@echo $(CC)
+CC = $(CC -O2
+-- dot-slash-recipe-is-replaced --
+./x:
+	@echo one
+x:
+	@echo two
+-- dot-slash-mixes-colons --
+.//x::
+	@echo one
+x:
+	@echo two

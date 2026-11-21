@@ -296,7 +296,7 @@ func (in *indexer) ruleTargets() []string {
 	for _, r := range in.f.Rules {
 		for _, t := range r.Targets {
 			if literal(t) {
-				out = append(out, t.Text)
+				out = append(out, fileName(t.Text))
 			}
 		}
 	}
@@ -358,7 +358,7 @@ func (in *indexer) assignment(a *Assignment) {
 	if len(a.Targets) > 0 {
 		scopes = scopes[:0]
 		for _, t := range a.Targets {
-			scopes = append(scopes, in.scope(t.Text))
+			scopes = append(scopes, in.scope(fileName(t.Text)))
 			if !t.Expr.Dynamic() && hasPercent(t.Text) {
 				for _, name := range in.ruleTargets() {
 					if name != t.Text && model.MatchesRulePattern(t.Text, name) {
@@ -368,7 +368,7 @@ func (in *indexer) assignment(a *Assignment) {
 			}
 			in.walk(t.Expr, model.Global, model.NoSymbol, false, nil)
 			if literal(t) {
-				in.ix.Refs = append(in.ix.Refs, model.Ref{Name: t.Text, Kind: model.KindTarget, Span: t.Span, Args: model.NoArgs, Owner: model.NoSymbol, Soft: true, Declares: true})
+				in.ix.Refs = append(in.ix.Refs, model.Ref{Name: fileName(t.Text), Kind: model.KindTarget, Span: t.Span, Args: model.NoArgs, Owner: model.NoSymbol, Soft: true, Declares: true})
 				in.token(t.Span, semantic.TypeFunction, 0)
 			}
 		}
@@ -528,15 +528,15 @@ func (in *indexer) rule(r *Rule, shell bool) {
 			continue
 		}
 		if _, special := specialTargets[t.Text]; special {
-			phony, declaring = phony || t.Text == ".PHONY", true
+			phony, declaring = phony || t.Text == phonyTarget, true
 			in.ix.Refs = append(in.ix.Refs, model.Ref{Name: t.Text, Kind: model.KindTarget, Span: t.Span, Args: model.NoArgs, Owner: model.NoSymbol, Soft: true})
 			in.token(t.Span, semantic.TypeKeyword, 0)
 			continue
 		}
-		i := in.symbol(model.Symbol{Name: t.Text, Kind: model.KindTarget, Span: r.Span, Selection: t.Span, Parent: model.NoParent, Detail: detail(in.text(r.Header)), Arity: model.NoArity})
+		i := in.symbol(model.Symbol{Name: fileName(t.Text), Kind: model.KindTarget, Span: r.Span, Selection: t.Span, Parent: model.NoParent, Detail: detail(in.text(r.Header)), Arity: model.NoArity})
 		in.token(t.Span, semantic.TypeFunction, semantic.ModDeclaration)
 		if owner == model.NoSymbol {
-			owner, scope = i, in.scope(t.Text)
+			owner, scope = i, in.scope(fileName(t.Text))
 		}
 		in.ix.Runnables = append(in.ix.Runnables, model.Runnable{Name: t.Text, Span: t.Span})
 	}
@@ -545,15 +545,15 @@ func (in *indexer) rule(r *Rule, shell bool) {
 	}
 	for _, w := range slices.Concat(r.Prereqs, r.OrderOnly) {
 		if scope != model.Global && literal(w) {
-			child := in.scope(w.Text)
+			child := in.scope(fileName(w.Text))
 			in.ix.Inherits[child] = append(in.ix.Inherits[child], scope)
 		}
 		in.walk(w.Expr, model.Global, owner, false, nil)
 		if literal(w) && phony {
-			in.ix.Phony = append(in.ix.Phony, w.Text)
+			in.ix.Phony = append(in.ix.Phony, fileName(w.Text))
 		}
 		if literal(w) {
-			in.ix.Refs = append(in.ix.Refs, model.Ref{Name: w.Text, Kind: model.KindTarget, Span: w.Span, Args: model.NoArgs, Owner: model.Narrow(owner), Soft: !phony, Declares: declaring})
+			in.ix.Refs = append(in.ix.Refs, model.Ref{Name: fileName(w.Text), Kind: model.KindTarget, Span: w.Span, Args: model.NoArgs, Owner: model.Narrow(owner), Soft: !phony, Declares: declaring})
 			in.token(w.Span, semantic.TypeFunction, 0)
 		}
 	}
@@ -571,6 +571,9 @@ func (in *indexer) rule(r *Rule, shell bool) {
 	if strings.Contains(in.text(r.Span), "\n") {
 		in.ix.Folds = append(in.ix.Folds, model.Fold{Span: r.Span})
 	}
+	if r.MayBeUpToDate {
+		owner = model.NoSymbol
+	}
 	for _, l := range r.Recipe {
 		text := in.text(l.Span)
 		flags := len(text) - len(strings.TrimLeft(text, recipeFlags))
@@ -579,7 +582,7 @@ func (in *indexer) rule(r *Rule, shell bool) {
 		in.walk(l.Expr, scope, owner, false, nil)
 		for j := first; j < len(in.ix.Refs); j++ {
 			in.ix.Refs[j].Late = true
-			in.ix.Refs[j].Edge = r.Pattern() && !in.usedPatterns[r]
+			in.ix.Refs[j].Edge = r.Pattern() && !in.usedPatterns[r] || r.MayBeUpToDate
 			in.ix.Refs[j].Inert = in.overridden[r] || r.NoTargets
 		}
 	}

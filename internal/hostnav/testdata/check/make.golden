@@ -485,3 +485,95 @@ accepted
 accepted
 -- eval-defines-a-target --
 accepted
+-- static-pattern-target-is-the-working-directory --
+accepted
+4:6 SL6015 warning this variable reference is not closed on the same logical line; make fails when it expands `CC`
+4:8 SL6010 warning unknown function `CC`
+-- static-pattern-target-is-a-missing-directory --
+rejected 4:1 unterminated variable reference
+4:6 SL6012 error this variable reference is not closed on the same logical line; make fails when it expands `CC`
+4:8 SL6010 warning unknown function `CC`
+-- target-is-the-working-directory --
+accepted
+3:6 SL6015 warning this variable reference is not closed on the same logical line; make fails when it expands `CC`
+3:8 SL6010 warning unknown function `CC`
+-- working-directory-target-remakes-for-its-prerequisite --
+rejected 6:1 unterminated variable reference
+6:6 SL6012 error this variable reference is not closed on the same logical line; make fails when it expands `CC`
+6:8 SL6010 warning unknown function `CC`
+-- sorted-targets-all-exist --
+accepted
+4:6 SL6015 warning this variable reference is not closed on the same logical line; make fails when it expands `CC`
+4:8 SL6010 warning unknown function `CC`
+-- target-glued-to-a-directory --
+rejected 4:1 unterminated variable reference
+4:6 SL6012 error this variable reference is not closed on the same logical line; make fails when it expands `CC`
+4:8 SL6010 warning unknown function `CC`
+-- unterminated-recipe-of-an-existing-target --
+accepted
+2:8 SL6015 warning this variable reference is not closed on the same logical line; every target of this rule may already exist, so make may never run this recipe
+-- double-colon-existing-target-always-runs --
+rejected 3:1 unterminated variable reference
+3:6 SL6012 error this variable reference is not closed on the same logical line; make fails when it expands `CC`
+3:8 SL6010 warning unknown function `CC`
+-- static-pattern-target-from-the-environment --
+accepted
+-- target-from-the-environment-defaults-to-a-missing-file --
+rejected 4:1 unterminated variable reference
+4:6 SL6012 error this variable reference is not closed on the same logical line; make fails when it expands `CC`
+4:8 SL6010 warning unknown function `CC`
+-- target-from-the-environment-defaults-to-the-root --
+accepted
+4:6 SL6015 warning this variable reference is not closed on the same logical line; make fails when it expands `CC`
+4:8 SL6010 warning unknown function `CC`
+-- target-assigned-over-the-environment --
+rejected 4:1 unterminated variable reference
+4:6 SL6012 error this variable reference is not closed on the same logical line; make fails when it expands `CC`
+4:8 SL6010 warning unknown function `CC`
+-- phony-declared-after-the-rule --
+rejected 3:1 unterminated variable reference
+3:6 SL6012 error this variable reference is not closed on the same logical line; make fails when it expands `CC`
+3:8 SL6010 warning unknown function `CC`
+-- phony-through-a-variable --
+rejected 5:1 unterminated variable reference
+5:6 SL6012 error this variable reference is not closed on the same logical line; make fails when it expands `CC`
+5:8 SL6010 warning unknown function `CC`
+-- phony-variable-defined-too-late --
+accepted
+5:6 SL6015 warning this variable reference is not closed on the same logical line; make fails when it expands `CC`
+5:8 SL6010 warning unknown function `CC`
+-- phony-on-a-second-line-with-a-dot-slash --
+rejected 5:1 unterminated variable reference
+1:9 SL6008 warning unknown target `all`
+5:6 SL6012 error this variable reference is not closed on the same logical line; make fails when it expands `CC`
+5:8 SL6010 warning unknown function `CC`
+-- force-prerequisite-in-another-rule --
+rejected 5:1 unterminated variable reference
+5:6 SL6012 error this variable reference is not closed on the same logical line; make fails when it expands `CC`
+5:8 SL6010 warning unknown function `CC`
+-- dot-force-prerequisite --
+rejected 4:1 unterminated variable reference
+4:6 SL6012 error this variable reference is not closed on the same logical line; make fails when it expands `CC`
+4:8 SL6010 warning unknown function `CC`
+-- tilde-names-the-home-directory --
+accepted
+3:6 SL6015 warning this variable reference is not closed on the same logical line; make fails when it expands `CC`
+3:8 SL6010 warning unknown function `CC`
+-- tilde-user-names-a-home-directory --
+accepted
+3:6 SL6015 warning this variable reference is not closed on the same logical line; make fails when it expands `CC`
+3:8 SL6010 warning unknown function `CC`
+-- dot-slash-dot-merges-prerequisites --
+rejected 6:1 unterminated variable reference
+6:6 SL6012 error this variable reference is not closed on the same logical line; make fails when it expands `CC`
+6:8 SL6010 warning unknown function `CC`
+-- dot-slash-is-not-the-working-directory-name --
+accepted
+6:6 SL6015 warning this variable reference is not closed on the same logical line; make fails when it expands `CC`
+6:8 SL6010 warning unknown function `CC`
+-- dot-slash-recipe-is-replaced --
+accepted
+3:1 SL6009 warning this recipe for `x` replaces the one on line 1
+-- dot-slash-mixes-colons --
+rejected 3:1 target file 'x' has both : and :: entries
+3:1 SL6001 error target `x` has both `:` and `::` rules; the first is on line 1
