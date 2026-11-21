@@ -48,6 +48,7 @@ type Rule struct {
 	Span          Span
 	NoTargets     bool
 	MayBeUpToDate bool
+	OnThisMachine bool
 }
 
 func (r *Rule) Pattern() bool {

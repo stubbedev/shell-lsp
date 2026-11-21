@@ -55,8 +55,15 @@ func FuzzRealisticMakefilesAgreeWithMake(f *testing.F) {
 	hosttest.LiveTool(f, "make", hosttest.MakeVersion)
 	f.Fuzz(func(t *testing.T, choices []byte) {
 		text := hosttest.GenerateMakefile(choices)
-		if strings.Contains(text, "export") && slices.ContainsFunc(makefile.Parse(text).Rules, func(r *makefile.Rule) bool { return len(r.Recipe) > 0 }) {
+		parsed := makefile.Parse(text)
+		if strings.Contains(text, "export") && slices.ContainsFunc(parsed.Rules, func(r *makefile.Rule) bool { return len(r.Recipe) > 0 }) {
 			t.Skip("make expands exported variables only when it executes a recipe, which the dry run the oracle uses never does")
+		}
+		if slices.ContainsFunc(parsed.Rules, func(r *makefile.Rule) bool { return r.OnThisMachine }) {
+			t.Skip("whether a rule's targets already exist decides if its recipe runs, and that depends on the machine make runs on")
+		}
+		if slices.ContainsFunc(parsed.Assignments, func(a *makefile.Assignment) bool { return a.Op == "?=" && makefile.FromEnvironment(a.Name.Text) }) {
+			t.Skip("a ?= on a variable the environment usually sets applies only where it is unset, so make's verdict depends on its environment")
 		}
 		verdict := hosttest.IsolatedMakeVerdict(t, text)
 		hosttest.Agree(t, text, verdict, makeReports(text, verdict, findingsAlone(t, "Makefile")(text)))

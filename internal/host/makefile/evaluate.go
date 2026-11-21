@@ -40,10 +40,12 @@ func existingPaths(s string) bool {
 }
 
 func existingPath(w string) bool {
-	return strings.HasPrefix(w, "/") || strings.HasPrefix(w, "~") || !slices.ContainsFunc(strings.Split(w, "/"), func(part string) bool {
+	return machinePath(w) || !slices.ContainsFunc(strings.Split(w, "/"), func(part string) bool {
 		return part != "" && part != "." && part != ".."
 	})
 }
+
+func machinePath(w string) bool { return strings.HasPrefix(w, "/") || strings.HasPrefix(w, "~") }
 
 func fileName(w string) string {
 	for len(w) > 2 && strings.HasPrefix(w, "./") {
@@ -87,7 +89,7 @@ func (p *reader) nodeValue(n Node, before int, expanding []expansion) value {
 
 func (p *reader) referenceValue(n Node, before int, expanding []expansion) value {
 	name, ok := p.resolvedName(n.Name)
-	inherited := slices.Contains(environmentVariables, name)
+	inherited := FromEnvironment(name)
 	program, known := programDefaults[name]
 	if n.Unbalanced || !ok || n.Braced && strings.ContainsAny(name, "(){}") || defaulted(name) && !inherited && !known {
 		return value{}

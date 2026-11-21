@@ -875,6 +875,7 @@ func (p *reader) parseRule(s string, colon, at, end int) {
 		rule.Prereqs = p.fields(depsAt, deps)
 	}
 	rule.MayBeUpToDate = !rule.NoTargets && !double && !rule.Pattern() && (len(rule.Prereqs) == 0 || len(rule.Patterns) > 0) && named.mayExist()
+	rule.OnThisMachine = rule.MayBeUpToDate && (!named.known || slices.ContainsFunc(fileWords(named.text), machinePath))
 	for _, w := range slices.Concat(targets, rule.Prereqs, rule.OrderOnly) {
 		if symbol := strings.Index(w.Text, "(("); symbol > 0 && !strings.Contains(w.Text[:symbol], "(") && strings.HasSuffix(w.Text, "))") && !w.Expr.Dynamic() {
 			p.fail(ErrSyntax, w.Span, fmt.Sprintf("make does not support archive symbols such as `%s`; name the member as `archive(member.o)`", w.Text))

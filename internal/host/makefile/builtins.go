@@ -1,6 +1,7 @@
 package makefile
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/host/model"
@@ -105,6 +106,8 @@ var specialVariables = map[string]string{
 }
 
 var environmentVariables = []string{"HOME", "PATH", "PWD", "USER", "LOGNAME", "TMPDIR", "LANG", "TERM", "DESTDIR", "PREFIX", "OS"}
+
+func FromEnvironment(name string) bool { return slices.Contains(environmentVariables, name) }
 
 var specialTargets = map[string]string{
 	".DEFAULT":              "The recipe for targets that have no rule.",
