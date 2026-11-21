@@ -35,20 +35,30 @@ var featureProbes = map[string]featureProbe{
 	"ClearsErrexitInSubstitutions": {script: `set -e; f() { false; echo reached; }; v=$(f); [ "$v" = reached ]`},
 }
 
-type featureRunner struct {
-	shell Shell
-	argv  []string
+type shellVersion struct {
+	script string
+	want   string
 }
 
-var featureRunners = []featureRunner{
-	{shell: Shell{Dialect: Bash}, argv: []string{"bash"}},
-	{shell: FlavorBats.Shell(), argv: []string{"bash"}},
-	{shell: Shell{Dialect: Zsh}, argv: []string{"zsh"}},
-	{shell: Shell{Dialect: Dash}, argv: []string{"dash"}},
-	{shell: Shell{Dialect: Ksh}, argv: []string{"ksh"}},
-	{shell: FlavorMksh.Shell(), argv: []string{"mksh"}},
-	{shell: Shell{Dialect: Busybox}, argv: []string{"busybox", "sh"}},
+type featureRunner struct {
+	shell   Shell
+	argv    []string
+	version shellVersion
 }
+
+var (
+	bashVersion = shellVersion{script: `echo "${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}"`, want: "5.3"}
+
+	featureRunners = []featureRunner{
+		{shell: Shell{Dialect: Bash}, argv: []string{"bash"}, version: bashVersion},
+		{shell: FlavorBats.Shell(), argv: []string{"bash"}, version: bashVersion},
+		{shell: Shell{Dialect: Zsh}, argv: []string{"zsh"}, version: shellVersion{script: `echo "${ZSH_VERSION%.*}"`, want: "5.9"}},
+		{shell: Shell{Dialect: Dash}, argv: []string{"dash"}},
+		{shell: Shell{Dialect: Ksh}, argv: []string{"ksh"}, version: shellVersion{script: `set -- ${.sh.version}; v=$3; echo "${v%.*}"`, want: "93u+m/1.0"}},
+		{shell: FlavorMksh.Shell(), argv: []string{"mksh"}, version: shellVersion{script: `set -- $KSH_VERSION; echo "$3"`, want: "R59"}},
+		{shell: Shell{Dialect: Busybox}, argv: []string{"busybox", "sh"}, version: shellVersion{script: `set -- $(busybox 2>&1); echo "${2%.*}"`, want: "v1.37"}},
+	}
+)
 
 const probeWrapper = `(eval "$PROBE") >/dev/null 2>&1; case $? in 0) echo yes ;; *) echo no ;; esac`
 
@@ -103,6 +113,11 @@ func TestFeaturesMatchRealShells(t *testing.T) {
 			if _, err := exec.LookPath(r.argv[0]); err != nil {
 				referencetest.Unavailable(t, "checking the "+r.shell.Dialect.String()+" features needs "+r.argv[0]+" on PATH: "+err.Error())
 			}
+			if r.version.script != "" {
+				if got := shellOutput(t, r.argv, r.version.script, t.TempDir()); got != r.version.want {
+					referencetest.Unavailable(t, "the "+r.shell.Dialect.String()+" features describe "+r.argv[0]+" "+r.version.want+", but "+got+" is installed")
+				}
+			}
 			features := reflect.ValueOf(r.shell.Features())
 			for name, probe := range featureProbes {
 				want := features.FieldByName(name).Bool() != probe.holdsOnFailure
@@ -120,16 +135,7 @@ func runProbe(t *testing.T, argv []string, script string) bool {
 	if err := os.WriteFile(filepath.Join(dir, "probe"), nil, 0o600); err != nil {
 		t.Fatalf("creating the glob target for %q: %v", script, err)
 	}
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, argv[0], append(argv[1:], "-c", probeWrapper)...)
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "PROBE="+script, "LC_ALL=C")
-	out, err := cmd.Output()
-	if err != nil {
-		t.Fatalf("%s running %q: %v", argv[0], script, err)
-	}
-	switch answer := strings.TrimSpace(string(out)); answer {
+	switch answer := shellOutput(t, argv, probeWrapper, dir, "PROBE="+script); answer {
 	case "yes":
 		return true
 	case "no":
@@ -138,4 +144,18 @@ func runProbe(t *testing.T, argv []string, script string) bool {
 		t.Fatalf("%s running %q printed %q, want yes or no", argv[0], script, answer)
 		return false
 	}
+}
+
+func shellOutput(t *testing.T, argv []string, script, dir string, env ...string) string {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, argv[0], append(argv[1:], "-c", script)...)
+	cmd.Dir = dir
+	cmd.Env = append(append(os.Environ(), "LC_ALL=C"), env...)
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("%s running %q with %q: %v", argv[0], script, env, err)
+	}
+	return strings.TrimSpace(string(out))
 }
