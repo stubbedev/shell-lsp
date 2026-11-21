@@ -416,7 +416,7 @@ marks the checks the `minimal` profile keeps; see [Profiles](linting.md#profiles
 | <a name="sc3011"></a>[SC3011](https://www.shellcheck.net/wiki/SC3011) | warning |  | yes | Here-strings with \<\<\< are undefined in POSIX sh. |
 | <a name="sc3012"></a>[SC3012](https://www.shellcheck.net/wiki/SC3012) | warning |  | yes | Lexicographic comparison with \< or \> in \[ \] is undefined in POSIX sh. |
 | <a name="sc3014"></a>[SC3014](https://www.shellcheck.net/wiki/SC3014) | warning |  | yes | == in \[ \] is undefined in POSIX sh and dash. |
-| <a name="sc3015"></a>[SC3015](https://www.shellcheck.net/wiki/SC3015) | warning |  | yes | Regex matching with =~ is undefined in POSIX sh. |
+| <a name="sc3015"></a>[SC3015](https://www.shellcheck.net/wiki/SC3015) | warning |  | yes | Regex matching with =~ is undefined in POSIX sh and dash. |
 | <a name="sc3016"></a>[SC3016](https://www.shellcheck.net/wiki/SC3016) | warning |  | yes | test -v is undefined in POSIX sh. |
 | <a name="sc3017"></a>[SC3017](https://www.shellcheck.net/wiki/SC3017) | warning |  | yes | The unary test -a is undefined in POSIX sh. |
 | <a name="sc3018"></a>[SC3018](https://www.shellcheck.net/wiki/SC3018) | warning |  | yes | The ++ and -- operators are undefined in POSIX sh. |

@@ -14,7 +14,7 @@ var portableTestsFamily = family{
 		3010: {shells: posixOrDash, summary: "[[ ]] tests are undefined in POSIX sh and dash."},
 		3012: {shells: posixOnly, summary: "Lexicographic comparison with < or > in [ ] is undefined in POSIX sh."},
 		3014: {shells: posixOrDash, summary: "== in [ ] is undefined in POSIX sh and dash."},
-		3015: {shells: strictShells, summary: "Regex matching with =~ is undefined in POSIX sh."},
+		3015: {shells: posixOrDash, summary: "Regex matching with =~ is undefined in POSIX sh and dash."},
 		3016: {shells: strictShells, summary: "test -v is undefined in POSIX sh."},
 		3017: {shells: strictShells, summary: "The unary test -a is undefined in POSIX sh."},
 		3062: {shells: strictShells, summary: "Checking a shell option with test -o is undefined in POSIX sh."},

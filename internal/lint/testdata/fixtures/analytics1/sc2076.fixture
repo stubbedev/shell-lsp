@@ -43,4 +43,4 @@
 [[ $file =~ ".*\.txt" ]] && echo text
 >>- SC2076 2:13 -- busybox sh matches a quoted right side of =~ as a regex, so the quotes do not make it literal
 >>> SC2154 2:4
->>> SC3015 2:10
+>>- SC3015 2:10 -- busybox sh matches =~ as a regex, so it is supported there

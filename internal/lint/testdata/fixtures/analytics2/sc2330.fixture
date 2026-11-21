@@ -53,7 +53,7 @@ x=$1
 [[ $x -eq 1 ]] && echo 4
 [[ $x == ~ ]] && echo 5
 case $x in *a*) echo 6 ;; esac
->>> SC3015 5:7
+>>- SC3015 5:7 -- busybox sh matches =~ as a regex, so it is supported there
 
 ### busybox glob on the left is SC2203 instead
 # shellcheck shell=busybox
