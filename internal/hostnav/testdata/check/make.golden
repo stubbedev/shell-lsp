@@ -577,3 +577,9 @@ accepted
 -- dot-slash-mixes-colons --
 rejected 3:1 target file 'x' has both : and :: entries
 3:1 SL6001 error target `x` has both `:` and `::` rules; the first is on line 1
+-- foreach-over-an-unset-variable-gives-no-targets --
+accepted
+-- foreach-over-an-empty-list --
+accepted
+2:6 SL6015 warning this variable reference is not closed on the same logical line; make fails when it expands `CC`
+2:8 SL6010 warning unknown function `CC`

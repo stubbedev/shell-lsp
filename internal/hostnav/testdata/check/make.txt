@@ -875,3 +875,12 @@ x:
 	@echo one
 x:
 	@echo two
+-- foreach-over-an-unset-variable-gives-no-targets --
+OBJS ?= $(foreach f,$(CFLAGS),$(f).o)
+CC += ${CC} \
+	README.md
+$(OBJS): %.o: %.c ; @echo ${CC}
+-- foreach-over-an-empty-list --
+OBJS := $(foreach f,,$(f).o)
+CC = $(CC -O2
+$(OBJS): ; @echo $(CC)

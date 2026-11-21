@@ -294,6 +294,16 @@ var textFunctions = map[string]textFunction{
 	}},
 }
 
+func foreachValue(list value) value {
+	switch {
+	case list.known && len(fileWords(list.text)) == 0:
+		return knownValue("")
+	case !list.known && list.existing:
+		return value{existing: true}
+	}
+	return value{}
+}
+
 func eachWord(list string, f func(string) string) string {
 	words := fileWords(list)
 	for i, w := range words {
@@ -324,6 +334,9 @@ func (p *reader) callValue(n Node, before int, expanding []expansion) value {
 	name, _ := n.Name.Literal(p.text)
 	if slices.Contains(foundFiles, name) {
 		return value{existing: true}
+	}
+	if name == "foreach" && len(n.Args) == 3 {
+		return foreachValue(p.exprValue(n.Args[1], before, expanding))
 	}
 	fn, ok := textFunctions[name]
 	if !ok || len(n.Args) != fn.args {
