@@ -35,8 +35,6 @@ type token struct {
 
 var punctuation = []string{"{{", "}}", ":=", "::", "==", "=~", "!=", "!~", "&&", "||", "++", ":", "=", "+", "/", "!", "(", ")", "[", "]", "{", "}", ",", "@", "$", "*", "?"}
 
-const interpolationClose = "}}"
-
 type bail struct{}
 
 type reader struct {

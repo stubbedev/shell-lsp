@@ -146,16 +146,9 @@ func (f *File) tokensUntil(start, end int) ([]token, bool) {
 	return lexLine(f.Text, start, func(t token) bool { return t.kind == tokEOF || t.span.Start >= end }, false)
 }
 
-func lexLine(text string, start int, stop func(token) bool, closedStrings bool) (out []token, ok bool) {
+func lexLine(text string, start int, stop func(token) bool, closedStrings bool) ([]token, bool) {
 	r := &reader{text: text, pos: start, file: &File{}}
-	defer func() {
-		if p := recover(); p != nil {
-			if _, bailed := p.(bail); !bailed {
-				panic(p)
-			}
-			out, ok = nil, false
-		}
-	}()
+	var out []token
 	for {
 		t := r.next()
 		switch {

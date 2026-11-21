@@ -12,9 +12,10 @@ import (
 )
 
 const (
-	tool              = "just"
-	escapedOpen       = "{{{{"
-	interpolationOpen = "{{"
+	tool               = "just"
+	escapedOpen        = "{{{{"
+	interpolationOpen  = "{{"
+	interpolationClose = "}}"
 )
 
 var (
