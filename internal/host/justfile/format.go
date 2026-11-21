@@ -133,7 +133,7 @@ func newlines(text string) int {
 	return n
 }
 
-func blankBetween(s string) bool { return strings.Count(s, "\n") > 1 }
+func blankBetween(s string) bool { return newlines(s) > 1 }
 
 func attributesOf(it Item) []Attribute {
 	switch it.Kind {
