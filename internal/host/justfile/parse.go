@@ -993,6 +993,15 @@ func (p *reader) recipe(start int, attrs []Attribute, doc string) {
 		}
 		r.Params = append(r.Params, p.param())
 		p.header.Params = r.Params
+		if r.Params[len(r.Params)-1].Variadic == Singular {
+			continue
+		}
+		switch t := p.peek(); {
+		case t.kind == tokName:
+			p.fail(lint.CodeJustParameterOrder, t.span, "parameter `%s` follows variadic parameter", t.text)
+		case t.kind != tokPunct || t.text != ":":
+			p.unexpected(p.next(), "`:`")
+		}
 	}
 	r.Deps = p.dependencies()
 	if _, ok := p.accept("&&"); ok {

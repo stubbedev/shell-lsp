@@ -282,14 +282,11 @@ func (c *checker) recipe(r *Recipe, args []argAttribute) {
 func (c *checker) parameters(r *Recipe) {
 	seen := map[string]bool{}
 	defaulted := false
-	for i, p := range r.Params {
+	for _, p := range r.Params {
 		if seen[p.Name.Text] {
 			c.report(lint.CodeJustParameterOrder, p.Name.Span, "recipe `%s` has duplicate parameter `%s`", r.Name.Text, p.Name.Text)
 		}
 		seen[p.Name.Text] = true
-		if i > 0 && r.Params[i-1].Variadic != Singular {
-			c.report(lint.CodeJustParameterOrder, p.Name.Span, "parameter `%s` follows variadic parameter", p.Name.Text)
-		}
 		switch {
 		case p.Default != nil:
 			defaulted = true
