@@ -323,7 +323,13 @@ func (p *printer) compareLiteral(a, b *Expr) int {
 	if a == nil || b == nil || a.Kind != ExprString || b.Kind != ExprString {
 		return compareBool(a != nil, b != nil)
 	}
-	return cmp.Or(strings.Compare(a.Str.Value, b.Str.Value), cmp.Compare(quoteRank(a.Str), quoteRank(b.Str)), p.comparePosition(a, b))
+	return cmp.Or(
+		strings.Compare(a.Str.Value, b.Str.Value),
+		compareBool(a.Str.Prefix == 'x', b.Str.Prefix == 'x'),
+		cmp.Compare(quoteRank(a.Str), quoteRank(b.Str)),
+		compareBool(a.Str.Prefix == 'f', b.Str.Prefix == 'f'),
+		p.comparePosition(a, b),
+	)
 }
 
 func quoteRank(s *StringLit) int {
