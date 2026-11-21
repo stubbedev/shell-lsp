@@ -1059,6 +1059,9 @@ func (p *reader) parenDependency() Dependency {
 			break
 		}
 		if t, ok := p.accept("*"); ok {
+			if len(starred) == 1 {
+				p.report(lint.CodeJustDependencyArguments, t.span, "a mapped dependency takes only one starred argument")
+			}
 			starred = append(starred, t)
 			arg := p.value()
 			arg.Starred = true
@@ -1071,7 +1074,6 @@ func (p *reader) parenDependency() Dependency {
 	dep.Span = Span{Start: start, End: p.pos}
 	switch {
 	case len(starred) > 1:
-		p.report(lint.CodeJustDependencyArguments, starred[1].span, "a mapped dependency takes only one starred argument")
 	case dep.Star && len(starred) == 0:
 		p.report(lint.CodeJustDependencyArguments, dep.Span, "a mapped dependency needs a starred argument such as `*items`")
 	case !dep.Star && len(starred) > 0:
