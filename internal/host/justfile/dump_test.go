@@ -381,6 +381,9 @@ func (d dumper) sexp(e *Expr) any {
 		if e.Str.Prefix == 'f' {
 			return d.formatParts(e)
 		}
+		if expanded, static := staticExpansion(e.Str.Value); e.Str.Prefix == 'x' && static {
+			return expanded
+		}
 		return e.Str.Value
 	case ExprBacktick:
 		value := e.Str.Value

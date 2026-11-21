@@ -179,15 +179,10 @@ func (c constants) variable(name string) ([]string, bool) {
 	return nil, false
 }
 
-const shellExpanded = "$~"
-
 func (c constants) str(lit *StringLit) (string, bool) {
 	switch lit.Prefix {
 	case 'x':
-		if strings.ContainsAny(lit.Value, shellExpanded) {
-			return "", false
-		}
-		return lit.Value, true
+		return staticExpansion(lit.Value)
 	case 'f':
 		return c.format(lit)
 	}
@@ -223,3 +218,28 @@ func (c constants) format(lit *StringLit) (string, bool) {
 }
 
 func placeholder(i int) string { return "\x00" + strconv.Itoa(i) + "\x00" }
+
+func staticExpansion(s string) (string, bool) {
+	if s == "~" || strings.HasPrefix(s, "~/") {
+		return "", false
+	}
+	var sb strings.Builder
+	for i := 0; i < len(s); i++ {
+		switch {
+		case s[i] != '$':
+			sb.WriteByte(s[i])
+		case i+1 < len(s) && s[i+1] == '$':
+			sb.WriteByte('$')
+			i++
+		case i+1 < len(s) && (s[i+1] == '{' || s[i+1] == '_' || isAlphanumeric(s[i+1])):
+			return "", false
+		default:
+			sb.WriteByte('$')
+		}
+	}
+	return sb.String(), true
+}
+
+func isAlphanumeric(c byte) bool {
+	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9'
+}

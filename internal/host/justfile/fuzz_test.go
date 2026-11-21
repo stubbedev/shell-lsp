@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 	"testing"
 
 	gocmp "github.com/google/go-cmp/cmp"
@@ -91,20 +90,19 @@ func FuzzAnalyze(f *testing.F) {
 	})
 }
 
-func settingReadsEnvironment(f *File) bool {
+func readsEnvironment(f *File) bool {
+	reads := false
 	for _, it := range f.Items {
-		if it.Kind != ItemSetting || it.Setting.Value == nil {
-			continue
-		}
-		expands := false
-		Walk(it.Setting.Value, func(e *Expr) {
-			expands = expands || e.Kind == ExprString && e.Str.Prefix == 'x' && strings.ContainsAny(e.Str.Value, shellExpanded)
-		})
-		if expands {
-			return true
+		for _, e := range itemExprs(it) {
+			Walk(e, func(x *Expr) {
+				if x.Kind == ExprString && x.Str.Prefix == 'x' {
+					_, static := staticExpansion(x.Str.Value)
+					reads = reads || !static
+				}
+			})
 		}
 	}
-	return false
+	return reads
 }
 
 func FuzzMatchesJust(f *testing.F) {
@@ -115,8 +113,8 @@ func FuzzMatchesJust(f *testing.F) {
 		if len(a.File.Errors) > 0 || !hosttest.JustVerdict(t, text).Accepted {
 			return
 		}
-		if settingReadsEnvironment(a.File) {
-			t.Skip("a setting's value shell-expands $ or ~, which depends on the environment just runs in")
+		if readsEnvironment(a.File) {
+			t.Skip("an x-string expands $ or ~, which depends on the environment just runs in")
 		}
 		path := filepath.Join(t.TempDir(), "justfile")
 		if err := os.WriteFile(path, []byte(text), 0o600); err != nil {
