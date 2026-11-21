@@ -1,0 +1,29 @@
+[arg('b', short='y', multiple)]
+[arg('a', short='x', multiple)]
+[arg('d', short='w', flag)]
+[arg('c', short='z', flag)]
+flags a b c d:
+
+[arg('c', long)]
+[arg('a', help='x')]
+[arg('bb', help='y')]
+help a bb c:
+
+[arg('d', short='w', multiple)]
+[arg('c', short='z', multiple, min='1')]
+[arg('b', short='y', multiple, max='9')]
+[arg('a', short='x', multiple, max='10')]
+counts a b c d:
+
+[arg('d', short='w', multiple, min='2')]
+[arg('c', short='z', multiple, min='2')]
+[arg('b', short='x', multiple, max='3')]
+[arg('a', short='y', multiple, max='3')]
+keys a b c d:
+
+[arg('d', short='d')]
+[arg('e', short='e', value='v')]
+[arg('c', long='cc', short='c')]
+[arg('a', long, help='h')]
+[arg('b', short='x', flag, help='h')]
+mixed a b c d e:

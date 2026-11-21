@@ -90,11 +90,20 @@ func TestFormatRefusesToDropComments(t *testing.T) {
 func TestFormatRefusesArgumentOrderThatWouldNotSettle(t *testing.T) {
 	t.Parallel()
 
-	if _, err := Format(Parse("[arg('a0',help='')]\n[arg('a', help='')]\nA a0 a:\n")); !errors.Is(err, ErrUnformattable) {
-		t.Errorf("Format error = %v, want ErrUnformattable", err)
+	for _, text := range []string{
+		"[arg('a0',help='')]\n[arg('a', help='')]\nA a0 a:\n",
+		"[arg('a0',short='a',flag)]\n[arg('a', short='b', flag)]\nA a0 a:\n",
+	} {
+		if _, err := Format(Parse(text)); !errors.Is(err, ErrUnformattable) {
+			t.Errorf("Format(%q) error = %v, want ErrUnformattable", text, err)
+		}
 	}
-	want := "[arg('a', help='x')]\n[arg('a0', help='y')]\nA a0 a:\n"
-	if got, err := Format(Parse("[arg('a0', help='y')]\n[arg('a', help='x')]\nA a0 a:\n")); err != nil || got != want {
-		t.Errorf("Format = %q, %v; want %q", got, err, want)
+	for text, want := range map[string]string{
+		"[arg('a0', help='y')]\n[arg('a', help='x')]\nA a0 a:\n":               "[arg('a', help='x')]\n[arg('a0', help='y')]\nA a0 a:\n",
+		"[arg('a0', short='b', flag)]\n[arg('a', short='a', flag)]\nA a0 a:\n": "[arg('a', short='a', flag)]\n[arg('a0', short='b', flag)]\nA a0 a:\n",
+	} {
+		if got, err := Format(Parse(text)); err != nil || got != want {
+			t.Errorf("Format(%q) = %q, %v; want %q", text, got, err, want)
+		}
 	}
 }

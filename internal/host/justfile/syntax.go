@@ -1,6 +1,7 @@
 package justfile
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/lint"
@@ -101,13 +102,12 @@ type AttributeArg struct {
 	Span  Span
 }
 
-func (a Attribute) keyed(key string) *Expr {
-	for _, arg := range a.Args {
-		if arg.Key.Text == key {
-			return arg.Value
-		}
+func (a Attribute) keyed(key string) (AttributeArg, bool) {
+	i := slices.IndexFunc(a.Args, func(arg AttributeArg) bool { return arg.Key.Text == key })
+	if i < 0 {
+		return AttributeArg{}, false
 	}
-	return nil
+	return a.Args[i], true
 }
 
 func (a Attribute) first() string {

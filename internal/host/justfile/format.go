@@ -19,6 +19,15 @@ const (
 
 var ErrUnformattable = errors.New("cannot format the justfile")
 
+var attributeKeyOrder = map[string][]string{
+	"arg":   {"long", "short", "pattern", "value", "flag", "multiple", "min", "max", "help"},
+	"cache": {"extra", "inputs", "outputs"},
+}
+
+var countKeys = []string{"min", "max"}
+
+var continueSignals = []string{"SIGHUP", "SIGINT", "SIGQUIT"}
+
 type printer struct {
 	f      *File
 	sb     strings.Builder
@@ -172,9 +181,12 @@ func (p *printer) elements() ([]element, error) {
 		el := element{start: span.Start, end: span.End, item: it}
 		for _, a := range attributesOf(*it) {
 			el.start = min(el.start, p.lineStart(a.Span.Start))
+			if err := p.checkAttribute(a); err != nil {
+				return nil, err
+			}
 		}
 		if a, ok := p.unsettledArgument(*it); ok {
-			return nil, fmt.Errorf("%w: `just --fmt` orders the [arg] attributes on line %d by the column of their help text, so formatting again would reorder them; order them by that column yourself", ErrUnformattable, p.f.line(a.Span.Start))
+			return nil, fmt.Errorf("%w: `just --fmt` orders the [arg] attributes on line %d by the columns of their `flag`, `help`, `max`, `min` and `multiple` keys, so formatting again would reorder them; order them by those columns yourself", ErrUnformattable, p.f.line(a.Span.Start))
 		}
 		header := span.End
 		if it.Kind == ItemRecipe {
@@ -218,31 +230,40 @@ func (p *printer) unsettledArgument(it Item) (Attribute, bool) {
 	attrs := p.sortedAttributes(it)
 	for i := 1; i < len(attrs); i++ {
 		a, b := attrs[i-1], attrs[i]
-		if a.Name.Text == "arg" && b.Name.Text == "arg" && compareArgs(p.compareFormattedHelp(a, b), a, b) > 0 {
+		if a.Name.Text == "arg" && b.Name.Text == "arg" && compareArgAttributes(a, b, p.compareFormattedKeys) > 0 {
 			return b, true
 		}
 	}
 	return Attribute{}, false
 }
 
-func (p *printer) compareFormattedHelp(a, b Attribute) int {
-	ca, oka := p.formattedHelpColumn(a)
-	cb, okb := p.formattedHelpColumn(b)
+func (p *printer) compareFormattedKeys(a, b Attribute, key string) int {
+	ca, oka := p.formattedKeyColumn(a, key)
+	cb, okb := p.formattedKeyColumn(b, key)
 	if oka && okb {
 		return cmp.Or(cmp.Compare(ca, cb), -1)
 	}
 	return compareBool(oka, okb)
 }
 
-func (p *printer) formattedHelpColumn(a Attribute) (int, bool) {
+func (p *printer) formattedKeyColumn(a Attribute, key string) (int, bool) {
 	before := "[" + a.Name.Text + "("
-	for _, arg := range a.Args {
-		if arg.Key.Text == "help" && arg.Value != nil {
-			return utf8.RuneCountInString(before + "help="), true
+	for _, arg := range canonicalArgs(a) {
+		if arg.Key.Text == key {
+			return utf8.RuneCountInString(before), true
 		}
-		before += p.attributeArg(arg) + ", "
+		before += p.attributeArg(a, arg) + ", "
 	}
 	return 0, false
+}
+
+func (p *printer) compareSourceKeys(a, b Attribute, key string) int {
+	ka, oka := a.keyed(key)
+	kb, okb := b.keyed(key)
+	if oka && okb {
+		return cmp.Or(cmp.Compare(p.column(ka.Key.Span.Start), p.column(kb.Key.Span.Start)), cmp.Compare(ka.Key.Span.Start, kb.Key.Span.Start))
+	}
+	return compareBool(oka, okb)
 }
 
 func (p *printer) item(it Item) {
@@ -294,7 +315,7 @@ func (p *printer) compareAttributes(a, b Attribute) int {
 		return c
 	}
 	if a.Name.Text == "arg" {
-		return compareArgs(p.compareHelp(a.keyed("help"), b.keyed("help")), a, b)
+		return compareArgAttributes(a, b, p.compareSourceKeys)
 	}
 	return p.compareArguments(a.Args, b.Args)
 }
@@ -330,24 +351,32 @@ func (p *printer) comparePosition(a, b *Expr) int {
 	return cmp.Or(cmp.Compare(p.column(a.Span.Start), p.column(b.Span.Start)), cmp.Compare(a.Span.Start, b.Span.Start))
 }
 
-func (p *printer) compareHelp(a, b *Expr) int {
-	switch {
-	case a == nil && b == nil:
-		return 0
-	case a == nil:
-		return -1
-	case b == nil:
-		return 1
-	}
-	return p.comparePosition(a, b)
-}
-
 func (p *printer) column(offset int) int {
 	return utf8.RuneCountInString(p.f.Text[p.lineStart(offset):offset])
 }
 
-func compareArgs(help int, a, b Attribute) int {
-	return cmp.Or(help, compareLong(a, b), strings.Compare(a.first(), b.first()))
+func compareArgAttributes(a, b Attribute, compareKeys func(a, b Attribute, key string) int) int {
+	return cmp.Or(
+		compareKeys(a, b, "flag"),
+		compareKeys(a, b, "help"),
+		compareLong(a, b),
+		compareCount(a, b, "max"),
+		compareKeys(a, b, "max"),
+		compareCount(a, b, "min"),
+		compareKeys(a, b, "min"),
+		compareKeys(a, b, "multiple"),
+		strings.Compare(a.first(), b.first()),
+	)
+}
+
+func compareCount(a, b Attribute, key string) int {
+	ka, oka := a.keyed(key)
+	kb, okb := b.keyed(key)
+	if !oka || !okb {
+		return compareBool(oka, okb)
+	}
+	ca, cb := literal(ka.Value), literal(kb.Value)
+	return cmp.Or(cmp.Compare(len(ca), len(cb)), strings.Compare(ca, cb))
 }
 
 func compareLong(a, b Attribute) int {
@@ -377,15 +406,47 @@ func (p *printer) attribute(a Attribute) string {
 	if len(a.Args) == 0 {
 		return a.Name.Text
 	}
-	args := make([]string, len(a.Args))
-	for i, arg := range a.Args {
-		args[i] = p.attributeArg(arg)
+	canonical := canonicalArgs(a)
+	args := make([]string, len(canonical))
+	for i, arg := range canonical {
+		args[i] = p.attributeArg(a, arg)
 	}
 	return a.Name.Text + "(" + strings.Join(args, ", ") + ")"
 }
 
-func (p *printer) attributeArg(arg AttributeArg) string {
+func (p *printer) checkAttribute(a Attribute) error {
+	for _, arg := range a.Args {
+		switch {
+		case arg.Key.Text != "" && !slices.Contains(attributeKeyOrder[a.Name.Text], arg.Key.Text):
+			return fmt.Errorf("%w: just rejects the key `%s` of the [%s] attribute on line %d", ErrUnformattable, arg.Key.Text, a.Name.Text, p.f.line(arg.Key.Span.Start))
+		case a.Name.Text == "continue" && !slices.Contains(continueSignals, literal(arg.Value)):
+			return fmt.Errorf("%w: just rejects the signal %s of the [continue] attribute on line %d", ErrUnformattable, p.text(arg.Span), p.f.line(arg.Span.Start))
+		}
+	}
+	return nil
+}
+
+func canonicalArgs(a Attribute) []AttributeArg {
+	args := slices.Clone(a.Args)
+	if a.Name.Text == "continue" {
+		slices.SortStableFunc(args, func(x, y AttributeArg) int {
+			return cmp.Compare(slices.Index(continueSignals, literal(x.Value)), slices.Index(continueSignals, literal(y.Value)))
+		})
+		return slices.CompactFunc(args, func(x, y AttributeArg) bool { return literal(x.Value) == literal(y.Value) })
+	}
+	order := attributeKeyOrder[a.Name.Text]
+	slices.SortStableFunc(args, func(x, y AttributeArg) int {
+		return cmp.Compare(slices.Index(order, x.Key.Text), slices.Index(order, y.Key.Text))
+	})
+	return args
+}
+
+func (p *printer) attributeArg(a Attribute, arg AttributeArg) string {
 	switch {
+	case a.Name.Text == "continue":
+		return `"` + literal(arg.Value) + `"`
+	case a.Name.Text == "arg" && slices.Contains(countKeys, arg.Key.Text):
+		return arg.Key.Text + "='" + literal(arg.Value) + "'"
 	case arg.Key.Text != "" && arg.Value != nil:
 		return arg.Key.Text + "=" + p.expr(arg.Value)
 	case arg.Key.Text != "":

@@ -1,0 +1,26 @@
+[arg('target', long, value="", help="00")]
+a target:
+
+[arg('a', long='l', short='s', pattern='p', value="v", help="h")]
+b a:
+
+[arg('b', long, short, pattern='p', value="v", help="h")]
+c b:
+
+[arg('c', long='l', short, multiple, min='1', max='3', help="h")]
+d c:
+
+[arg('d', short='t', flag, help='x')]
+e d:
+
+[cache(extra="e", inputs="i", outputs="o")]
+f:
+
+[cache(extra="e", inputs="i")]
+g:
+
+[arg('e', long, multiple, min='2', max='10')]
+h e:
+
+[continue("SIGHUP", "SIGINT", "SIGQUIT")]
+i:
