@@ -62,6 +62,15 @@ func (c *checker) report(code lint.Code, span Span, format string, args ...any) 
 	c.findings = append(c.findings, lint.HostFinding(code, span, fmt.Sprintf(format, args...)))
 }
 
+func EnabledOn(attrs []Attribute, system string) bool {
+	s := systems(attrs)
+	return len(s) == 0 || slices.Contains(s, system)
+}
+
+func (it Item) EnabledOn(system string) bool {
+	return EnabledOn(attributesOf(it), system)
+}
+
 func systems(attrs []Attribute) []string {
 	var out []string
 	for _, a := range attrs {
@@ -160,7 +169,7 @@ func (c *checker) settingValue(s *Setting) {
 	if !known {
 		return
 	}
-	if slices.Contains(constSettings, s.Name.Text) && overlap(systems(s.Attributes), []string{"linux"}) {
+	if slices.Contains(constSettings, s.Name.Text) {
 		c.constant(lint.CodeJustSettingValue, s.Value)
 	}
 	v := s.Value

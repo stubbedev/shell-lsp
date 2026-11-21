@@ -5,12 +5,16 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/host/hosttest"
+	"github.com/stubbedev/shell-lsp/internal/host/justfile"
+	"github.com/stubbedev/shell-lsp/internal/host/oracle"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/navigation"
+	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
@@ -78,7 +82,21 @@ func TestJustChecksAgreeWithJust(t *testing.T) {
 	if *update {
 		hosttest.RequireTool(t, "just", hosttest.JustVersion)
 	}
-	hosttest.Check(t, filepath.Join("testdata", "check", "just.txt"), findingsAlone(t, "justfile"), hosttest.JustVerdict, hosttest.AsFound, *update)
+	hosttest.Check(t, filepath.Join("testdata", "check", "just.txt"), findingsAlone(t, "justfile"), hosttest.JustVerdict, justReports, *update)
+}
+
+const justOracleSystem = "linux"
+
+func justReports(text string, _ oracle.Verdict, findings []lint.Finding) []lint.Finding {
+	var disabled []parser.Span
+	for _, it := range justfile.Parse(text).Items {
+		if !it.EnabledOn(justOracleSystem) {
+			disabled = append(disabled, it.Span())
+		}
+	}
+	return slices.DeleteFunc(slices.Clone(findings), func(f lint.Finding) bool {
+		return slices.ContainsFunc(disabled, func(s parser.Span) bool { return s.Covers(f.Span.Start) })
+	})
 }
 
 func TestMakeChecksAgreeWithMake(t *testing.T) {

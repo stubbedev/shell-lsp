@@ -34,7 +34,9 @@ func FuzzJustChecksAgreeWithJust(f *testing.F) {
 	hosttest.LiveTool(f, "just", hosttest.JustVersion)
 	f.Fuzz(func(t *testing.T, text string) {
 		skipLoneCarriageReturns(t, text)
-		hosttest.Agree(t, docstore.NormalizeCanonical(text), hosttest.JustVerdict(t, text), findingsAlone(t, "justfile")(text))
+		normalized := docstore.NormalizeCanonical(text)
+		verdict := hosttest.JustVerdict(t, text)
+		hosttest.Agree(t, normalized, verdict, justReports(normalized, verdict, findingsAlone(t, "justfile")(text)))
 	})
 }
 

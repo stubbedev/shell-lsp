@@ -516,6 +516,7 @@ rejected 1:23 cannot call backticks in const context
 1:23 SL5016 error cannot call backticks in const context
 -- backtick-in-a-windows-only-setting --
 accepted
+2:23 SL5016 error cannot call backticks in const context
 -- backtick-in-an-untaken-branch --
 accepted
 -- backtick-in-a-taken-branch --
@@ -612,8 +613,8 @@ rejected 1:16 expected '&&', '!=', '!~', '||', ',', '==', '=~', '(', ')', '+', '
 1:16 SL5001 error expected `)`, found `=`
 -- shell-expanded-string-in-arg --
 accepted
--- optional-import-that-cannot-be-read --
-rejected 0:0 I/O error at `/tmp/nix-shell.zjXQJx/TestJustChecksAgreeWithJust3822118239/437/nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn`: File name too long (os error 36)
-1:9 SL5018 error `nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn` cannot be read: file name too long
 -- optional-import-that-is-missing --
 accepted
+-- unknown-dependency-in-a-recipe-for-another-system --
+accepted
+2:8 SL5002 error unknown recipe `missing`

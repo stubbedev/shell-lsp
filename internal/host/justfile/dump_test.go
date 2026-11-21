@@ -179,22 +179,7 @@ func attributeNames(attrs []any) []any {
 	return out
 }
 
-var currentSystem = []string{"linux", "unix"}
-
-var systemAttributes = []string{"android", "dragonfly", "freebsd", "linux", "macos", "netbsd", "openbsd", "unix", "windows"}
-
-func enabled(attrs []Attribute) bool {
-	conditional := false
-	for _, a := range attrs {
-		if slices.Contains(systemAttributes, a.Name.Text) {
-			conditional = true
-			if slices.Contains(currentSystem, a.Name.Text) {
-				return true
-			}
-		}
-	}
-	return !conditional
-}
+const dumpSystem = "linux"
 
 func unavailable(f *File) map[string]bool {
 	absent := map[string]bool{}
@@ -238,19 +223,19 @@ func dump(f *File) map[string]any {
 		switch it.Kind {
 		case ItemRecipe:
 			r := it.Recipe
-			if !enabled(r.Attributes) || dropped[r.Name.Text] {
+			if !EnabledOn(r.Attributes, dumpSystem) || dropped[r.Name.Text] {
 				continue
 			}
 			recipes[r.Name.Text] = dumpRecipe(f, r)
 		case ItemAssignment:
 			a := it.Assignment
-			if !enabled(a.Attributes) {
+			if !EnabledOn(a.Attributes, dumpSystem) {
 				continue
 			}
 			_, private := attributeNamed(a.Attributes, "private")
 			assignments[a.Name.Text] = map[string]any{"export": a.Export, "eager": a.Eager, "private": private || strings.HasPrefix(a.Name.Text, "_"), "value": d.sexp(a.Value)}
 		case ItemAlias:
-			if enabled(it.Alias.Attributes) && !dropped[it.Alias.Name.Text] {
+			if EnabledOn(it.Alias.Attributes, dumpSystem) && !dropped[it.Alias.Name.Text] {
 				aliases[it.Alias.Name.Text] = it.Alias.Target.String()
 			}
 		case ItemModule:
@@ -259,7 +244,7 @@ func dump(f *File) map[string]any {
 			}
 		case ItemSetting:
 			s := it.Setting
-			if enabled(s.Attributes) {
+			if EnabledOn(s.Attributes, dumpSystem) {
 				name := strings.ReplaceAll(s.Name.Text, "-", "_")
 				if value, ok := dumpSetting(f, name, s.Value); ok {
 					settings[name] = value
@@ -293,6 +278,8 @@ func dumpSetting(f *File, name string, value *Expr) (any, bool) {
 			args = append(args, w)
 		}
 		return map[string]any{"command": words[0], "arguments": args}, true
+	case name == "dotenv_command" && len(words) == 0:
+		return nil, false
 	case name == "dotenv_command":
 		out := []any{}
 		for _, w := range words {

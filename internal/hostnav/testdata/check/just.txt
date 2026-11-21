@@ -940,7 +940,9 @@ a:
 [arg('a', help=x"$HOME")]
 a a:
     echo {{a}}
--- optional-import-that-cannot-be-read --
-import? "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn"
 -- optional-import-that-is-missing --
 import? "absent.just"
+-- unknown-dependency-in-a-recipe-for-another-system --
+[macos]
+build: missing
+    echo built
