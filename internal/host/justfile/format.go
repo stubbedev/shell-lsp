@@ -165,9 +165,9 @@ func (p *printer) lineEnd(offset int) int {
 }
 
 func (p *printer) logicalLineEnd(offset int) int {
-	end := p.lineEnd(offset)
-	for end < len(p.f.Text) && end > 0 && p.f.Text[end-1] == '\\' {
-		end = p.lineEnd(end + 1)
+	start, end := offset, p.lineEnd(offset)
+	for end < len(p.f.Text) && end > 0 && p.f.Text[end-1] == '\\' && !strings.ContainsRune(p.f.Text[start:end], '#') {
+		start, end = end+1, p.lineEnd(end+1)
 	}
 	return end
 }
