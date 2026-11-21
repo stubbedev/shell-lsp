@@ -488,8 +488,6 @@ func (c *checker) attributeArguments(a Attribute) {
 		keyword = true
 		i := keyIndex(a.Name.Text, arg.Key.Text)
 		switch {
-		case keys == nil:
-			c.report(lint.CodeJustAttributeArguments, arg.Key.Span, "attribute `%s` takes no keyword arguments", a.Name.Text)
 		case i < 0:
 			c.report(lint.CodeJustAttributeArguments, arg.Key.Span, "unknown key `%s` for `%s` attribute", arg.Key.Text, a.Name.Text)
 		case seen[arg.Key.Text]:

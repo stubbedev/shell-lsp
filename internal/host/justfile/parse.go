@@ -745,19 +745,14 @@ func (p *reader) literalArguments(a Attribute) {
 }
 
 func (p *reader) attributeArg(keyed bool) AttributeArg {
-	t := p.peek()
-	if t.kind == tokName {
-		save := p.pos
+	if t := p.peek(); keyed && t.kind == tokName && !p.prefixesString(t, "x") {
 		p.next()
 		key := Name{Text: t.text, Span: t.span}
 		if _, ok := p.accept("="); ok {
 			value := p.expression()
 			return AttributeArg{Key: key, Value: value, Span: Span{Start: t.span.Start, End: value.Span.End}}
 		}
-		if keyed {
-			return AttributeArg{Key: key, Span: t.span}
-		}
-		p.pos = save
+		return AttributeArg{Key: key, Span: t.span}
 	}
 	value := p.expression()
 	return AttributeArg{Value: value, Span: value.Span}
@@ -1250,11 +1245,16 @@ func (p *reader) value() *Expr {
 	return nil
 }
 
-func (p *reader) prefixedString(prefix token) (token, bool) {
-	if prefix.text != "f" && prefix.text != "x" || p.pos != prefix.span.End {
-		return token{}, false
+func (p *reader) prefixesString(t token, prefix string) bool {
+	if t.kind != tokName || t.text != prefix {
+		return false
 	}
-	if q := p.quoteAt(p.pos); q == "" || q[0] == '`' {
+	q := p.quoteAt(t.span.End)
+	return q != "" && q[0] != '`'
+}
+
+func (p *reader) prefixedString(prefix token) (token, bool) {
+	if p.pos != prefix.span.End || !p.prefixesString(prefix, "f") && !p.prefixesString(prefix, "x") {
 		return token{}, false
 	}
 	if prefix.text == "f" {
