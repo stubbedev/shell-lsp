@@ -164,6 +164,14 @@ func (p *printer) lineEnd(offset int) int {
 	return len(p.f.Text)
 }
 
+func (p *printer) logicalLineEnd(offset int) int {
+	end := p.lineEnd(offset)
+	for end < len(p.f.Text) && end > 0 && p.f.Text[end-1] == '\\' {
+		end = p.lineEnd(end + 1)
+	}
+	return end
+}
+
 func (p *printer) elements() ([]element, error) {
 	var out []element
 	comments := slices.Clone(p.f.Comments)
@@ -190,9 +198,9 @@ func (p *printer) elements() ([]element, error) {
 			switch {
 			case c.Span.Start >= el.start && c.Span.Start < header:
 				return nil, fmt.Errorf("%w: `just --fmt` would drop the comment on line %d; move it to a line of its own above", ErrUnformattable, p.f.line(c.Span.Start))
-			case it.Kind == ItemRecipe && c.Span.Start >= header && c.Span.Start <= p.lineEnd(header):
+			case it.Kind == ItemRecipe && len(it.Recipe.Body) > 0 && c.Span.Start >= header && c.Span.Start <= p.logicalLineEnd(header):
 				return nil, fmt.Errorf("%w: `just --fmt` would drop the comment after the recipe header on line %d; move it to a line of its own above the recipe", ErrUnformattable, p.f.line(c.Span.Start))
-			case it.Kind != ItemRecipe && c.Span.Start >= span.End && c.Span.Start <= p.lineEnd(span.End):
+			case c.Span.Start >= header && c.Span.Start <= p.logicalLineEnd(header):
 				el.trailing, used[j] = &comments[j], true
 				el.end = c.Span.End
 			}
