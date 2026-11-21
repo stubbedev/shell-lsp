@@ -61,13 +61,20 @@ func casePatterns(n int, pattern func(i int) string) string {
 	return sb.String()
 }
 
-func fastestCheck(script string) time.Duration {
-	tree := parser.Parse(script, dialect.Bash)
-	fastest := time.Duration(math.MaxInt64)
-	for range 3 {
-		start := time.Now()
-		Check(tree, nil, Options{})
-		fastest = min(fastest, time.Since(start))
+func fastestChecks(scripts ...string) []time.Duration {
+	trees := make([]*parser.Tree, len(scripts))
+	fastest := make([]time.Duration, len(scripts))
+	for i, script := range scripts {
+		trees[i] = parser.Parse(script, dialect.Bash)
+		fastest[i] = time.Duration(math.MaxInt64)
+	}
+	for range 7 {
+		for i, tree := range trees {
+			runtime.GC()
+			start := time.Now()
+			Check(tree, nil, Options{})
+			fastest[i] = min(fastest[i], time.Since(start))
+		}
 	}
 	return fastest
 }
@@ -90,8 +97,8 @@ func TestCheckTimeGrowsLinearlyWithInputSize(t *testing.T) {
 	const growth, allowed = 4, 8
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			small := fastestCheck(tc.script(tc.base))
-			large := fastestCheck(tc.script(tc.base * growth))
+			times := fastestChecks(tc.script(tc.base), tc.script(tc.base*growth))
+			small, large := times[0], times[1]
 			if large > allowed*small {
 				t.Errorf("linting %d items took %v, %d items %v: more than %dx for %dx the input", tc.base, small, tc.base*growth, large, allowed, growth)
 			}
