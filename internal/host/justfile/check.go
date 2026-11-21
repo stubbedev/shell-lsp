@@ -1,14 +1,17 @@
 package justfile
 
 import (
+	"cmp"
 	"fmt"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
+	"unicode/utf8"
 
+	"github.com/stubbedev/shell-lsp/internal/host/model"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 )
-
-var unixSystems = []string{"android", "dragonfly", "freebsd", "linux", "macos", "netbsd", "openbsd"}
 
 type checker struct {
 	f        *File
@@ -23,16 +26,23 @@ func (f *File) check() []lint.Finding {
 		c.report(e.Code, e.Span, "%s", e.Message)
 	}
 	c.duplicates()
+	for _, stray := range f.Stray {
+		args := c.attributeSet(stray.Attributes)
+		if stray.Recipe != nil {
+			c.argAttributes(*stray.Recipe, args)
+		}
+	}
 	if c.lists && !c.unstable {
 		s, _ := f.setting("lists")
 		c.report(lint.CodeJustNeedsSetting, s.Name.Span, "`set lists` is unstable and needs `set unstable`")
 	}
 	for _, it := range f.Items {
+		args := c.attributes(it)
 		switch it.Kind {
 		case ItemSetting:
 			c.settingValue(it.Setting)
 		case ItemRecipe:
-			c.recipe(it.Recipe)
+			c.recipe(it.Recipe, args)
 		case ItemFunction:
 			if !c.unstable {
 				c.report(lint.CodeJustNeedsSetting, it.Function.Name.Span, "user-defined functions are unstable and need `set unstable`")
@@ -48,15 +58,13 @@ func (c *checker) report(code lint.Code, span Span, format string, args ...any) 
 	c.findings = append(c.findings, lint.HostFinding(code, span, fmt.Sprintf(format, args...)))
 }
 
-func (c *checker) line(offset int) int { return strings.Count(c.f.Text[:offset], "\n") + 1 }
-
 func systems(attrs []Attribute) []string {
 	var out []string
 	for _, a := range attrs {
 		switch {
 		case a.Name.Text == "unix":
 			out = append(out, unixSystems...)
-		case a.Name.Text == "windows" || slices.Contains(unixSystems, a.Name.Text):
+		case enabler(a.Name.Text):
 			out = append(out, a.Name.Text)
 		}
 	}
@@ -81,19 +89,19 @@ func (c *checker) duplicates() {
 		case ItemRecipe:
 			d := definition{"recipe", it.Recipe.Name, systems(it.Recipe.Attributes)}
 			if prior, ok := clash(aliases, d); ok {
-				c.report(lint.CodeJustDuplicateAlias, d.name.Span, "alias `%s` defined on line %d is redefined as a recipe on line %d", d.name.Text, c.line(prior.name.Span.Start), c.line(d.name.Span.Start))
+				c.report(lint.CodeJustDuplicateAlias, d.name.Span, "alias `%s` defined on line %d is redefined as a recipe on line %d", d.name.Text, c.f.line(prior.name.Span.Start), c.f.line(d.name.Span.Start))
 			}
 			if prior, ok := clash(recipes, d); ok && !allowRecipes {
-				c.report(lint.CodeJustDuplicateRecipe, d.name.Span, "recipe `%s` first defined on line %d is redefined on line %d", d.name.Text, c.line(prior.name.Span.Start), c.line(d.name.Span.Start))
+				c.report(lint.CodeJustDuplicateRecipe, d.name.Span, "recipe `%s` first defined on line %d is redefined on line %d", d.name.Text, c.f.line(prior.name.Span.Start), c.f.line(d.name.Span.Start))
 			}
 			recipes = append(recipes, d)
 		case ItemAlias:
 			d := definition{"alias", it.Alias.Name, systems(it.Alias.Attributes)}
 			if prior, ok := clash(aliases, d); ok {
-				c.report(lint.CodeJustDuplicateAlias, d.name.Span, "alias `%s` first defined on line %d is redefined on line %d", d.name.Text, c.line(prior.name.Span.Start), c.line(d.name.Span.Start))
+				c.report(lint.CodeJustDuplicateAlias, d.name.Span, "alias `%s` first defined on line %d is redefined on line %d", d.name.Text, c.f.line(prior.name.Span.Start), c.f.line(d.name.Span.Start))
 			}
 			if prior, ok := clash(recipes, d); ok {
-				c.report(lint.CodeJustDuplicateAlias, d.name.Span, "alias `%s` has the same name as the recipe on line %d", d.name.Text, c.line(prior.name.Span.Start))
+				c.report(lint.CodeJustDuplicateAlias, d.name.Span, "alias `%s` has the same name as the recipe on line %d", d.name.Text, c.f.line(prior.name.Span.Start))
 			}
 			aliases = append(aliases, d)
 		case ItemAssignment:
@@ -105,7 +113,7 @@ func (c *checker) duplicates() {
 		case ItemSetting:
 			d := definition{"setting", it.Setting.Name, systems(it.Setting.Attributes)}
 			if prior, ok := clash(settings, d); ok {
-				c.report(lint.CodeJustDuplicateSetting, d.name.Span, "setting `%s` first set on line %d is set again on line %d", d.name.Text, c.line(prior.name.Span.Start), c.line(d.name.Span.Start))
+				c.report(lint.CodeJustDuplicateSetting, d.name.Span, "setting `%s` first set on line %d is set again on line %d", d.name.Text, c.f.line(prior.name.Span.Start), c.f.line(d.name.Span.Start))
 			}
 			settings = append(settings, d)
 		case ItemUnexport, ItemImport, ItemModule, ItemFunction:
@@ -244,12 +252,15 @@ func itemExprs(it Item) []*Expr {
 			}
 		}
 	case ItemUnexport:
+		attrs(it.Unexport.Attributes)
 	}
 	return out
 }
 
-func (c *checker) recipe(r *Recipe) {
+func (c *checker) recipe(r *Recipe, args []argAttribute) {
 	c.parameters(r)
+	c.argAttributes(RecipeHeader{Name: r.Name, Params: r.Params, Colon: true}, args)
+	c.listArguments(args)
 	for _, d := range slices.Concat(r.Deps, r.Subsequent) {
 		if !d.Star {
 			continue
@@ -318,4 +329,396 @@ func whitespace(s string) string {
 
 func commandSetting(it Item) bool {
 	return it.Kind == ItemSetting && slices.Contains([]string{"shell", "windows-shell", "script-interpreter"}, it.Setting.Name.Text)
+}
+
+func (c *checker) itemToken(it Item) (string, Name) {
+	switch it.Kind {
+	case ItemSetting:
+		return "setting", it.Setting.Name
+	case ItemAssignment:
+		return "assignment", it.Assignment.Name
+	case ItemUnexport:
+		return "unexport", it.Unexport.Name
+	case ItemAlias:
+		return "alias", it.Alias.Name
+	case ItemImport:
+		return "import", Name{Text: c.f.Text[it.Import.Path.Span.Start:it.Import.Path.Span.End], Span: it.Import.Path.Span}
+	case ItemModule:
+		return "module", it.Module.Name
+	case ItemFunction:
+		return "function", it.Function.Name
+	case ItemRecipe:
+		return "recipe", it.Recipe.Name
+	}
+	panic(fmt.Sprintf("justfile: item kind %d has no name", it.Kind))
+}
+
+func allowedOn(kind ItemKind, attribute string) bool {
+	return kind == ItemRecipe || enabler(attribute) || slices.Contains(itemAttributes[kind], attribute)
+}
+
+func knownAttribute(a Attribute) bool {
+	_, known := Builtins.Lookup(model.KindAttribute, a.Name.Text)
+	return known && !a.Partial
+}
+
+func (c *checker) attributes(it Item) []argAttribute {
+	attrs := attributesOf(it)
+	args := c.attributeSet(attrs)
+	kind, name := c.itemToken(it)
+	for _, a := range attrs {
+		if knownAttribute(a) && !allowedOn(it.Kind, a.Name.Text) {
+			c.report(lint.CodeJustAttributeArguments, name.Span, "%s `%s` has invalid attribute `%s`", kind, name.Text, a.Name.Text)
+		}
+	}
+	return args
+}
+
+func (c *checker) attributeSet(attrs []Attribute) []argAttribute {
+	var args []argAttribute
+	firsts := map[string]Attribute{}
+	groups := map[string]Attribute{}
+	for _, a := range attrs {
+		if !knownAttribute(a) {
+			continue
+		}
+		if arg, ok := c.attribute(a); ok {
+			args = c.distinctArgument(args, arg)
+		}
+		c.repeated(firsts, a.Name.Text, a, "attribute `"+a.Name.Text+"`", repeatableAttributes)
+		if group, ok := cooked(a.positionalArg().Value); ok && a.Name.Text == "group" {
+			c.repeated(groups, group, a, "group `"+group+"`", nil)
+		}
+	}
+	return args
+}
+
+func (c *checker) attribute(a Attribute) (argAttribute, bool) {
+	before := len(c.findings)
+	c.attributeArguments(a)
+	switch a.Name.Text {
+	case "continue":
+		c.continueSignals(a)
+	case "arg":
+		arg, ok := c.argAttribute(a)
+		_, broken := nonLiteralArgument(a)
+		return arg, ok && !broken && len(c.findings) == before && a.positional() == 1
+	}
+	return argAttribute{}, false
+}
+
+func (c *checker) repeated(firsts map[string]Attribute, key string, a Attribute, label string, repeatable []string) {
+	prior, ok := firsts[key]
+	switch {
+	case !ok:
+		firsts[key] = a
+	case !slices.Contains(repeatable, key):
+		c.report(lint.CodeJustAttributeArguments, a.Name.Span, "%s first used on line %d is duplicated on line %d", label, c.f.line(prior.Name.Span.Start), c.f.line(a.Name.Span.Start))
+	}
+}
+
+func (c *checker) distinctArgument(args []argAttribute, arg argAttribute) []argAttribute {
+	i := slices.IndexFunc(args, func(prior argAttribute) bool { return prior.parameter == arg.parameter })
+	if i < 0 {
+		return append(args, arg)
+	}
+	c.report(lint.CodeJustAttributeArguments, arg.attribute.Name.Span, "attribute for argument `%s` first used on line %d is duplicated on line %d", arg.parameter, c.f.line(args[i].attribute.Name.Span.Start), c.f.line(arg.attribute.Name.Span.Start))
+	return args
+}
+
+func (c *checker) attributeArguments(a Attribute) {
+	keys := attributeKeys[a.Name.Text]
+	seen := map[string]bool{}
+	keyword := false
+	for _, arg := range a.Args {
+		if arg.Key.Text == "" {
+			if keyword {
+				c.report(lint.CodeJustAttributeArguments, arg.Span, "positional attribute arguments cannot follow keyword attribute arguments")
+			}
+			continue
+		}
+		keyword = true
+		i := keyIndex(a.Name.Text, arg.Key.Text)
+		switch {
+		case keys == nil:
+			c.report(lint.CodeJustAttributeArguments, arg.Key.Span, "attribute `%s` takes no keyword arguments", a.Name.Text)
+		case i < 0:
+			c.report(lint.CodeJustAttributeArguments, arg.Key.Span, "unknown key `%s` for `%s` attribute", arg.Key.Text, a.Name.Text)
+		case seen[arg.Key.Text]:
+			c.report(lint.CodeJustAttributeArguments, arg.Key.Span, "duplicate key `%s` for `%s` attribute", arg.Key.Text, a.Name.Text)
+		case !keys[i].accepts(arg) && arg.Value == nil:
+			c.report(lint.CodeJustAttributeArguments, arg.Key.Span, "attribute key `%s` requires a value", arg.Key.Text)
+		case !keys[i].accepts(arg):
+			c.report(lint.CodeJustAttributeArguments, arg.Key.Span, "attribute key `%s` takes no value", arg.Key.Text)
+		}
+		seen[arg.Key.Text] = true
+	}
+}
+
+func (c *checker) continueSignals(a Attribute) {
+	for _, arg := range a.Args {
+		if lit, ok := stringLiteral(arg.Value); ok && arg.Key.Text == "" && !slices.Contains(continueSignals, lit.Value) {
+			c.report(lint.CodeJustAttributeArguments, arg.Span, "invalid signal `%s`: expected one of `%s`", lit.Value, strings.Join(continueSignals, "`, `"))
+		}
+	}
+}
+
+type argOption struct {
+	literal *Expr
+	bare    *Name
+	value   string
+	known   bool
+}
+
+func (o argOption) span() Span {
+	if o.bare != nil {
+		return o.bare.Span
+	}
+	return o.literal.Span
+}
+
+type argAttribute struct {
+	attribute Attribute
+	name      *Expr
+	parameter string
+	long      *argOption
+	short     *argOption
+	max, min  *uint64
+}
+
+var argumentCount = regexp.MustCompile(`^(0|[1-9][0-9]*)$`)
+
+func cooked(e *Expr) (string, bool) {
+	lit, ok := stringLiteral(e)
+	if !ok || lit.Prefix == 'x' && (strings.ContainsRune(lit.Value, '$') || strings.HasPrefix(lit.Value, "~")) {
+		return "", false
+	}
+	return lit.Value, true
+}
+
+func (c *checker) argAttribute(a Attribute) (argAttribute, bool) {
+	name := a.positionalArg().Value
+	parameter, known := cooked(name)
+	if name == nil {
+		return argAttribute{}, false
+	}
+	arg := argAttribute{attribute: a, name: name, parameter: parameter}
+	arg.long = c.argOption(a, "long", arg)
+	arg.short = c.argOption(a, "short", arg)
+	option := arg.long != nil || arg.short != nil
+	_, flag := a.keyed("flag")
+	value, valued := a.keyed("value")
+	pattern, patterned := a.keyed("pattern")
+	for _, key := range optionKeys {
+		if k, ok := a.keyed(key); ok && !option && attributeKeys[a.Name.Text][keyIndex(a.Name.Text, key)].accepts(k) {
+			c.report(lint.CodeJustAttributeArguments, k.Key.Span, "argument attribute `%s` only valid with `long` or `short`", key)
+		}
+	}
+	if k, _ := a.keyed("flag"); flag && k.Value == nil && option {
+		switch {
+		case valued && value.Value != nil:
+			c.report(lint.CodeJustAttributeArguments, k.Key.Span, "argument `%s` may not have both `flag` and `value` attributes", parameter)
+		case patterned && pattern.Value != nil:
+			c.report(lint.CodeJustAttributeArguments, k.Key.Span, "argument `%s` may not have both `flag` and `pattern` attributes", parameter)
+		}
+	}
+	arg.max, arg.min = c.argumentCount(a, "max"), c.argumentCount(a, "min")
+	if arg.min != nil && arg.max != nil && *arg.min > *arg.max {
+		k, _ := a.keyed("min")
+		c.report(lint.CodeJustAttributeArguments, k.Key.Span, "argument attribute `min` `%d` exceeds `max` `%d`", *arg.min, *arg.max)
+	}
+	if patterned && pattern.Value != nil {
+		c.argumentPattern(pattern)
+	}
+	return arg, known
+}
+
+func (c *checker) argOption(a Attribute, key string, arg argAttribute) *argOption {
+	k, ok := a.keyed(key)
+	if !ok {
+		return nil
+	}
+	if k.Value == nil {
+		value, known := cooked(arg.name)
+		return &argOption{literal: arg.name, bare: &k.Key, value: value, known: known}
+	}
+	value, known := cooked(k.Value)
+	option := &argOption{literal: k.Value, value: value, known: known}
+	if !known {
+		return option
+	}
+	switch {
+	case strings.Contains(value, "="):
+		c.report(lint.CodeJustAttributeArguments, k.Value.Span, "option name for parameter `%s` contains an equal sign", arg.parameter)
+	case strings.HasPrefix(value, "-"):
+		c.report(lint.CodeJustAttributeArguments, k.Value.Span, "option name for parameter `%s` starts with a dash", arg.parameter)
+	case value == "":
+		c.report(lint.CodeJustAttributeArguments, k.Value.Span, "option name for parameter `%s` is empty", arg.parameter)
+	case key == "short" && utf8.RuneCountInString(value) != 1:
+		c.report(lint.CodeJustAttributeArguments, k.Value.Span, "short option name for parameter `%s` must be a single character", arg.parameter)
+	}
+	return option
+}
+
+func (c *checker) argumentCount(a Attribute, key string) *uint64 {
+	k, ok := a.keyed(key)
+	if !ok {
+		return nil
+	}
+	value, known := cooked(k.Value)
+	if !known {
+		return nil
+	}
+	if !argumentCount.MatchString(value) {
+		c.report(lint.CodeJustAttributeArguments, k.Value.Span, "invalid `%s` value `%s`", key, value)
+		return nil
+	}
+	n, err := strconv.ParseUint(value, 10, 64)
+	if err != nil {
+		c.report(lint.CodeJustAttributeArguments, k.Value.Span, "invalid `%s` value `%s`: too large", key, value)
+		return nil
+	}
+	return &n
+}
+
+func (c *checker) argumentPattern(pattern AttributeArg) {
+	values, ok := c.f.Constant(pattern.Value)
+	if !ok {
+		return
+	}
+	for _, v := range values {
+		if err := checkRegex(v); err != nil {
+			c.report(lint.CodeJustAttributeArguments, pattern.Key.Span, "argument pattern `%s` is not a regular expression just accepts: %v", v, err)
+			return
+		}
+	}
+}
+
+func (c *checker) listArguments(args []argAttribute) {
+	if c.lists {
+		return
+	}
+	for _, a := range args {
+		for _, key := range listArgumentKeys {
+			if k, ok := a.attribute.keyed(key); ok {
+				c.report(lint.CodeJustNeedsSetting, k.Key.Span, "`[arg(%s)]` needs `set lists`", key)
+			}
+		}
+	}
+}
+
+func (c *checker) argAttributes(r RecipeHeader, args []argAttribute) {
+	unused := make(map[string]argAttribute, len(args))
+	for _, a := range args {
+		unused[a.parameter] = a
+	}
+	c.duplicateOptions(r.Name, args)
+	for _, p := range r.Params {
+		a, ok := unused[p.Name.Text]
+		if !ok {
+			continue
+		}
+		delete(unused, p.Name.Text)
+		if _, flag := a.attribute.keyed("flag"); flag && p.Default != nil {
+			c.report(lint.CodeJustAttributeArguments, p.Name.Span, "flag parameter `%s` may not have a default", p.Name.Text)
+		}
+		_, multiple := a.attribute.keyed("multiple")
+		if multiple || p.Variadic != Singular {
+			continue
+		}
+		for _, key := range []string{"max", "min"} {
+			if k, ok := a.attribute.keyed(key); ok {
+				c.report(lint.CodeJustAttributeArguments, k.Key.Span, "argument attribute `%s` only valid with `multiple` or a variadic parameter", key)
+				break
+			}
+		}
+	}
+	for _, a := range args {
+		if _, undefined := unused[a.parameter]; undefined && r.Colon {
+			c.report(lint.CodeJustAttributeArguments, a.name.Span, "argument attribute for undefined argument `%s`", a.parameter)
+		}
+	}
+}
+
+func (c *checker) duplicateOptions(recipe Name, args []argAttribute) {
+	sorted := slices.Clone(args)
+	slices.SortFunc(sorted, c.compareArgAttributes)
+	longs, shorts := map[string]bool{}, map[rune]bool{}
+	for _, a := range sorted {
+		if o := a.long; o != nil && o.known {
+			if longs[o.value] {
+				c.report(lint.CodeJustAttributeArguments, o.span(), "recipe `%s` defines option `--%s` multiple times", recipe.Text, o.value)
+				continue
+			}
+			longs[o.value] = true
+		}
+		if o := a.short; o != nil && o.known && o.value != "" {
+			short, _ := utf8.DecodeRuneInString(o.value)
+			if shorts[short] {
+				c.report(lint.CodeJustAttributeArguments, o.span(), "recipe `%s` defines option `-%c` multiple times", recipe.Text, short)
+			}
+			shorts[short] = true
+		}
+	}
+}
+
+func (c *checker) compareArgAttributes(a, b argAttribute) int {
+	return cmp.Or(
+		c.compareKeys(a, b, "flag"),
+		c.compareKeys(a, b, "help"),
+		compareOptional(a.long, b.long, func(x, y *argOption) int { return c.compareLiterals(x.literal, y.literal) }),
+		compareOptional(bareKey(a.long), bareKey(b.long), func(x, y *Name) int { return c.compareTokens(x.Span, y.Span) }),
+		compareOptional(a.max, b.max, func(x, y *uint64) int { return cmp.Compare(*x, *y) }),
+		c.compareKeys(a, b, "max"),
+		compareOptional(a.min, b.min, func(x, y *uint64) int { return cmp.Compare(*x, *y) }),
+		c.compareKeys(a, b, "min"),
+		c.compareKeys(a, b, "multiple"),
+		c.compareLiterals(a.name, b.name),
+	)
+}
+
+func bareKey(o *argOption) *Name {
+	if o == nil {
+		return nil
+	}
+	return o.bare
+}
+
+func compareOptional[T any](a, b *T, compare func(x, y *T) int) int {
+	if a == nil || b == nil {
+		return compareBool(a != nil, b != nil)
+	}
+	return compare(a, b)
+}
+
+func (c *checker) compareKeys(a, b argAttribute, key string) int {
+	ka, oka := a.attribute.keyed(key)
+	kb, okb := b.attribute.keyed(key)
+	if !oka || !okb {
+		return compareBool(oka, okb)
+	}
+	return c.compareTokens(ka.Key.Span, kb.Key.Span)
+}
+
+func (c *checker) compareLiterals(a, b *Expr) int {
+	x, y := a.Str, b.Str
+	return cmp.Or(
+		strings.Compare(x.Value, y.Value),
+		compareBool(x.Prefix == 'x', y.Prefix == 'x'),
+		cmp.Compare(strings.IndexByte("`\"'", x.Quote[0]), strings.IndexByte("`\"'", y.Quote[0])),
+		compareBool(x.Indented(), y.Indented()),
+		c.compareTokens(stringToken(x), stringToken(y)),
+	)
+}
+
+func stringToken(s *StringLit) Span {
+	return Span{Start: s.Inner.Start - len(s.Quote), End: s.Inner.End + len(s.Quote)}
+}
+
+func (c *checker) compareTokens(a, b Span) int {
+	return cmp.Or(
+		cmp.Compare(a.Start-c.f.lineStart(a.Start), b.Start-c.f.lineStart(b.Start)),
+		cmp.Compare(a.End-a.Start, b.End-b.Start),
+		cmp.Compare(a.Start, b.Start),
+	)
 }

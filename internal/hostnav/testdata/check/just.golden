@@ -327,3 +327,171 @@ rejected 2:4 call to undefined function `A`
 -- newline-ends-an-assignment-before-parentheses --
 rejected 2:1 expected '@', '[', comment, end of file, end of line, or identifier, but found '('
 2:1 SL5001 error expected a recipe, assignment, alias, setting, import or module, found `(`
+-- arg-unknown-key --
+rejected 1:11 unknown key `colour` for `arg` attribute
+1:11 SL5020 error unknown key `colour` for `arg` attribute
+-- key-on-an-attribute-without-keys --
+rejected 1:17 expected '&&', '!=', '!~', '||', ',', '==', '=~', '(', ')', '+', '++', or '/', but found '='
+1:10 SL5020 error attribute `confirm` takes no keyword arguments
+-- arg-duplicate-key --
+rejected 1:21 duplicate key `help` for `arg` attribute
+1:21 SL5020 error duplicate key `help` for `arg` attribute
+-- arg-positional-after-keyword --
+rejected 1:16 positional attribute arguments cannot follow keyword attribute arguments
+1:16 SL5020 error positional attribute arguments cannot follow keyword attribute arguments
+-- arg-without-parameter-name --
+rejected 1:2 attribute `arg` got 0 arguments but takes 1 argument
+1:2 SL5020 error attribute `arg` takes 1 argument but is given 0
+-- arg-with-two-parameter-names --
+rejected 1:2 attribute `arg` got 2 arguments but takes 1 argument
+1:2 SL5020 error attribute `arg` takes 1 argument but is given 2
+-- cache-unknown-key --
+rejected 2:8 unknown key `colour` for `cache` attribute
+2:8 SL5020 error unknown key `colour` for `cache` attribute
+-- cache-key-without-value --
+rejected 2:8 attribute key `inputs` requires value
+2:8 SL5020 error attribute key `inputs` requires a value
+-- cache-keys --
+accepted
+-- arg-key-without-value --
+rejected 1:11 attribute key `pattern` requires value
+1:11 SL5020 error attribute key `pattern` requires a value
+-- arg-flag-with-value --
+rejected 3:17 `flag` attribute for argument `a` takes no value
+3:17 SL5020 error attribute key `flag` takes no value
+-- arg-multiple-with-value --
+rejected 3:17 attribute key `multiple` takes no value
+3:17 SL5020 error attribute key `multiple` takes no value
+-- arg-long-with-equal-sign --
+rejected 1:16 option name for parameter `a` contains equal sign
+1:16 SL5020 error option name for parameter `a` contains an equal sign
+-- arg-long-starting-with-dash --
+rejected 1:16 option name for parameter `a` starts with dash
+1:16 SL5020 error option name for parameter `a` starts with a dash
+-- arg-empty-long --
+rejected 1:16 option name for parameter `a` is empty
+1:16 SL5020 error option name for parameter `a` is empty
+-- arg-short-of-two-characters --
+rejected 1:17 short option name for parameter `a` contains multiple characters
+1:17 SL5020 error short option name for parameter `a` must be a single character
+-- arg-short-named-after-a-long-parameter --
+accepted
+-- arg-short-of-one-wide-character --
+accepted
+-- arg-value-without-option --
+rejected 1:11 argument attribute `value` only valid with `long` or `short`
+1:11 SL5020 error argument attribute `value` only valid with `long` or `short`
+-- arg-flag-without-option --
+rejected 3:11 argument attribute `flag` only valid with `long` or `short`
+3:11 SL5020 error argument attribute `flag` only valid with `long` or `short`
+-- arg-multiple-without-option --
+rejected 3:11 argument attribute `multiple` only valid with `long` or `short`
+3:11 SL5020 error argument attribute `multiple` only valid with `long` or `short`
+-- arg-flag-and-value --
+rejected 3:17 argument `a` may not have both `flag` and `value` attributes
+3:17 SL5020 error argument `a` may not have both `flag` and `value` attributes
+-- arg-flag-and-pattern --
+rejected 3:17 argument `a` may not have both `flag` and `pattern` attributes
+3:17 SL5020 error argument `a` may not have both `flag` and `pattern` attributes
+-- arg-count-with-leading-zero --
+rejected 3:31 invalid `max` value `03`
+3:31 SL5020 error invalid `max` value `03`
+-- arg-count-too-large --
+rejected 3:31 invalid `max` value `99999999999999999999999`: number too large to fit in target type
+3:31 SL5020 error invalid `max` value `99999999999999999999999`: too large
+-- arg-min-exceeds-max --
+rejected 3:27 argument attribute `min` `3` exceeds `max` `2`
+3:27 SL5020 error argument attribute `min` `3` exceeds `max` `2`
+-- arg-min-below-max --
+accepted
+-- arg-non-literal-on-the-line-after-its-key --
+rejected 1:11 attribute `arg` arguments must be string literals
+1:11 SL5020 error the arguments of attribute `arg` must be string literals
+-- arg-max-without-multiple --
+rejected 3:11 argument attribute `max` only valid with `multiple` or a variadic parameter
+3:11 SL5020 error argument attribute `max` only valid with `multiple` or a variadic parameter
+-- arg-min-without-multiple --
+rejected 3:17 argument attribute `min` only valid with `multiple` or a variadic parameter
+3:17 SL5020 error argument attribute `min` only valid with `multiple` or a variadic parameter
+-- arg-max-on-a-variadic-parameter --
+accepted
+-- arg-max-with-multiple --
+accepted
+-- arg-flag-needs-lists --
+rejected 1:17 `flag` arguments require `set lists`
+1:17 SL5023 error `[arg(flag)]` needs `set lists`
+-- arg-multiple-needs-lists --
+rejected 1:17 `[arg(multiple)]` requires `set lists`
+1:17 SL5023 error `[arg(multiple)]` needs `set lists`
+-- arg-flag-with-default --
+rejected 4:7 flag parameter `a` may not have a default
+4:7 SL5020 error flag parameter `a` may not have a default
+-- arg-for-an-undefined-parameter --
+rejected 1:6 argument attribute for undefined argument `b`
+1:6 SL5020 error argument attribute for undefined argument `b`
+-- arg-repeated-for-a-parameter --
+rejected 2:2 attribute for argument `a` first used on line 1 is duplicated on line 2
+2:2 SL5020 error attribute for argument `a` first used on line 1 is duplicated on line 2
+-- arg-duplicate-long --
+rejected 2:16 recipe `build` defines option `--x` multiple times
+2:16 SL5020 error recipe `build` defines option `--x` multiple times
+-- arg-duplicate-long-reported-on-the-earlier-line --
+rejected 1:16 recipe `build` defines option `--x` multiple times
+1:16 SL5020 error recipe `build` defines option `--x` multiple times
+-- arg-duplicate-long-from-a-parameter-name --
+rejected 1:16 recipe `build` defines option `--b` multiple times
+1:16 SL5020 error recipe `build` defines option `--b` multiple times
+-- arg-duplicate-short-from-a-parameter-name --
+rejected 1:11 recipe `build` defines option `-b` multiple times
+1:11 SL5020 error recipe `build` defines option `-b` multiple times
+-- arg-duplicate-short --
+rejected 2:27 recipe `build` defines option `-x` multiple times
+2:27 SL5020 error recipe `build` defines option `-x` multiple times
+-- arg-distinct-options --
+accepted
+-- arg-invalid-pattern --
+rejected 1:11 failed to parse argument pattern
+1:11 SL5020 error argument pattern `a)` is not a regular expression just accepts: at character 3 of `a)`: `)` closes no group
+-- arg-invalid-pattern-from-a-variable --
+rejected 2:11 failed to parse argument pattern
+2:11 SL5020 error argument pattern `[a` is not a regular expression just accepts: at character 3 of `[a`: a class is not closed with `]`
+-- arg-extended-pattern --
+accepted
+-- continue-unknown-signal --
+rejected 2:3 invalid signal `SIGTERM`: expected `SIGHUP`, `SIGINT`, or `SIGQUIT`
+2:3 SL5020 error invalid signal `SIGTERM`: expected one of `SIGHUP`, `SIGINT`, `SIGQUIT`
+-- continue-repeated-signal --
+accepted
+-- arg-on-an-alias --
+rejected 2:7 alias `b` has invalid attribute `arg`
+2:7 SL5020 error alias `b` has invalid attribute `arg`
+-- group-on-an-assignment --
+rejected 2:1 assignment `x` has invalid attribute `group`
+2:1 SL5020 error assignment `x` has invalid attribute `group`
+-- private-on-unexport --
+rejected 2:10 unexport `FOO` has invalid attribute `private`
+2:10 SL5020 error unexport `FOO` has invalid attribute `private`
+-- system-on-unexport --
+accepted
+-- group-on-a-module --
+accepted
+-- duplicate-attribute --
+rejected 2:2 attribute `private` first used on line 1 is duplicated on line 2
+2:2 SL5020 error attribute `private` first used on line 1 is duplicated on line 2
+-- duplicate-group --
+rejected 2:2 `[group("a")]` attribute first used on line 1 is duplicated on line 2
+2:2 SL5020 error group `a` first used on line 1 is duplicated on line 2
+-- repeatable-attributes --
+accepted
+-- dependency-on-an-alias --
+rejected 1:8 recipe `build` has unknown dependency `b`
+1:8 SL5002 error unknown recipe `b`
+-- alias-to-an-alias --
+rejected 1:7 alias `b` has an unknown target `c`
+1:12 SL5002 error unknown recipe `c`
+-- starred-argument-outside-a-mapped-dependency --
+rejected 7:3 starred arguments may not be used outside mapped dependencies
+7:3 SL5006 error a starred argument needs a mapped dependency such as `*(recipe *items)`
+-- mapped-dependency-with-two-starred-arguments --
+rejected 7:3 mapped dependencies may not have multiple starred arguments
+7:3 SL5006 error a mapped dependency takes only one starred argument

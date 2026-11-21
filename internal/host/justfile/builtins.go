@@ -1,6 +1,7 @@
 package justfile
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/host/model"
@@ -62,12 +63,79 @@ type attributeSpec struct {
 
 const positionalArgument = ""
 
-var keyedAttributes = []string{"arg", "cache"}
+type keyValue uint8
+
+const (
+	keyValueRequired keyValue = iota
+	keyValueOptional
+	keyValueForbidden
+)
+
+type attributeKey struct {
+	name  string
+	value keyValue
+}
+
+var attributeKeys = map[string][]attributeKey{
+	"arg": {
+		{"long", keyValueOptional},
+		{"short", keyValueOptional},
+		{"pattern", keyValueRequired},
+		{"value", keyValueRequired},
+		{"flag", keyValueForbidden},
+		{"multiple", keyValueForbidden},
+		{"min", keyValueRequired},
+		{"max", keyValueRequired},
+		{"help", keyValueRequired},
+	},
+	"cache": {
+		{"extra", keyValueRequired},
+		{"inputs", keyValueRequired},
+		{"outputs", keyValueRequired},
+	},
+}
+
+func (k attributeKey) accepts(arg AttributeArg) bool {
+	switch k.value {
+	case keyValueRequired:
+		return arg.Value != nil
+	case keyValueForbidden:
+		return arg.Value == nil
+	case keyValueOptional:
+	}
+	return true
+}
+
+var repeatableAttributes = []string{"arg", "env", "group", "metadata"}
+
+var optionKeys = []string{"value", "flag", "multiple"}
+
+var listArgumentKeys = []string{"flag", "multiple", "max", "min"}
+
+func keyIndex(attribute, key string) int {
+	return slices.IndexFunc(attributeKeys[attribute], func(k attributeKey) bool { return k.name == key })
+}
+
+var countKeys = []string{"min", "max"}
+
+var continueSignals = []string{"SIGHUP", "SIGINT", "SIGQUIT"}
+
+var unixSystems = []string{"android", "dragonfly", "freebsd", "linux", "macos", "netbsd", "openbsd"}
+
+func enabler(attribute string) bool {
+	return attribute == "unix" || attribute == "windows" || slices.Contains(unixSystems, attribute)
+}
+
+var itemAttributes = map[ItemKind][]string{
+	ItemAlias:      {"private"},
+	ItemAssignment: {"private"},
+	ItemModule:     {"doc", "group", "private"},
+}
 
 var attributeSpecs = []attributeSpec{
 	{"android", args(0, 0), "Enable the item only on Android.", nil},
-	{"arg", args(1, model.Variadic), "Configure how a parameter is passed on the command line: `long`, `short`, `value`, `flag`, `multiple`, `help`, `pattern`, `min` and `max`.", []string{positionalArgument, "long", "short"}},
-	{"cache", args(0, model.Variadic), "Skip the recipe when its cached inputs and outputs are unchanged. Unstable.", nil},
+	{"arg", args(1, 1), "Configure how a parameter is passed on the command line: `long`, `short`, `value`, `flag`, `multiple`, `help`, `pattern`, `min` and `max`.", []string{positionalArgument, "long", "short", "min", "max"}},
+	{"cache", args(0, 0), "Skip the recipe when its cached inputs and outputs are unchanged. Unstable.", nil},
 	{"confirm", args(0, 1), "Ask for confirmation before running the recipe, optionally with a custom prompt.", nil},
 	{"continue", args(0, model.Variadic), "Keep running when a command is interrupted by one of these signals and then exits successfully.", []string{positionalArgument}},
 	{"default", args(0, 0), "Make this the module's default recipe.", nil},
@@ -245,6 +313,16 @@ var literalArguments = func() map[string][]string {
 	}
 	return out
 }()
+
+func nonLiteralArgument(a Attribute) (AttributeArg, bool) {
+	keys := literalArguments[a.Name.Text]
+	for _, arg := range a.Args {
+		if _, ok := stringLiteral(arg.Value); arg.Value != nil && slices.Contains(keys, arg.Key.Text) && !ok {
+			return arg, true
+		}
+	}
+	return AttributeArg{}, false
+}
 
 func split(params, separator string) []string {
 	if params == "" {

@@ -1054,7 +1054,11 @@ test target="all" filter:    # SL5019
 
 ## SL5020
 
-**An attribute is given the wrong number of arguments.**
+**An attribute is used in a way just refuses.** It is given the wrong number
+of arguments, a key it does not know, a key twice or a value it does not take,
+it is repeated or put on an item that cannot carry it, or an `[arg]` names a
+parameter the recipe lacks, an option another parameter already uses, or an
+invalid option name, count or pattern.
 
 ```just
 [group]    # SL5020

@@ -18,7 +18,7 @@ var Checks = model.Checks{Of: rules, Deprecated: lint.CodeJustDeprecated, Missin
 func rules(kind model.Kind) model.Rules {
 	switch kind {
 	case model.KindRecipe:
-		return model.Rules{Unknown: lint.CodeJustUnknownRecipe, Arity: lint.CodeJustDependencyArguments, Circular: lint.CodeJustCircular}
+		return model.Rules{Unknown: lint.CodeJustUnknownRecipe, Exact: true, Arity: lint.CodeJustDependencyArguments, Circular: lint.CodeJustCircular}
 	case model.KindAlias:
 		return model.Rules{Circular: lint.CodeJustCircular}
 	case model.KindVariable:
@@ -58,6 +58,7 @@ func (f *File) Index(shells []*Recipe) *model.Index {
 		case ItemAssignment:
 			in.assignment(it.Assignment)
 		case ItemUnexport:
+			in.attributes(it.Unexport.Attributes, model.NoSymbol)
 			in.keyword(it.Unexport.Span.Start, "unexport")
 		case ItemAlias:
 			in.alias(it.Alias)
@@ -71,7 +72,9 @@ func (f *File) Index(shells []*Recipe) *model.Index {
 			in.recipe(it.Recipe, positional)
 		}
 	}
-	in.attributes(f.Stray, model.NoSymbol)
+	for _, stray := range f.Stray {
+		in.attributes(stray.Attributes, model.NoSymbol)
+	}
 	for _, c := range f.Comments {
 		ix.Tokens = append(ix.Tokens, semantic.Token{Span: c.Span, Type: semantic.TypeComment})
 	}
@@ -108,7 +111,7 @@ func (in *indexer) keyword(at int, word string) {
 
 func (in *indexer) attributes(attrs []Attribute, owner int) {
 	for _, a := range attrs {
-		args := len(a.Args)
+		args := a.positional()
 		if a.Partial {
 			args = model.NoArgs
 		}

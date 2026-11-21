@@ -547,6 +547,7 @@ const (
 type Rules struct {
 	Unknown     lint.Code
 	UnknownWhen Certainty
+	Exact       bool
 	Arity       lint.Code
 	Circular    lint.Code
 	Expanded    Expansion

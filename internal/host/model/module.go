@@ -481,6 +481,9 @@ func (m *Module) Findings(file int, checks Checks, used Usage) []lint.Finding {
 	var out []lint.Finding
 	for _, r := range ix.Refs {
 		res := m.Resolve(file, r)
+		if checks.Of(r.Kind).Exact {
+			res.Targets = slices.DeleteFunc(slices.Clone(res.Targets), func(t Target) bool { return t.Info().Kind != r.Kind })
+		}
 		switch {
 		case res.Missing || r.Soft || r.Inert || dormant(r) || r.Declares && m.required(r):
 		case !res.Found():

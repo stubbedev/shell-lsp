@@ -1,3 +1,6 @@
+set unstable
+set lists
+
 [arg('target', long, value="", help="00")]
 a target:
 

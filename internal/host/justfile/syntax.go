@@ -110,14 +110,26 @@ func (a Attribute) keyed(key string) (AttributeArg, bool) {
 	return a.Args[i], true
 }
 
-func (a Attribute) first() string {
+func (a Attribute) positional() int {
+	n := 0
 	for _, arg := range a.Args {
 		if arg.Key.Text == "" {
-			return literal(arg.Value)
+			n++
 		}
 	}
-	return ""
+	return n
 }
+
+func (a Attribute) positionalArg() AttributeArg {
+	for _, arg := range a.Args {
+		if arg.Key.Text == "" {
+			return arg
+		}
+	}
+	return AttributeArg{}
+}
+
+func (a Attribute) first() string { return literal(a.positionalArg().Value) }
 
 func (a Attribute) long() (string, bool) {
 	for _, arg := range a.Args {
@@ -130,6 +142,13 @@ func (a Attribute) long() (string, bool) {
 		return literal(arg.Value), true
 	}
 	return "", false
+}
+
+func stringLiteral(e *Expr) (*StringLit, bool) {
+	if e == nil || e.Kind != ExprString || e.Str.Prefix == 'f' {
+		return nil, false
+	}
+	return e.Str, true
 }
 
 func literal(e *Expr) string {
@@ -163,8 +182,9 @@ type Assignment struct {
 }
 
 type Unexport struct {
-	Name Name
-	Span Span
+	Attributes []Attribute
+	Name       Name
+	Span       Span
 }
 
 type Alias struct {
@@ -307,6 +327,17 @@ func (it Item) Span() Span {
 	panic("justfile: unknown item kind")
 }
 
+type Stray struct {
+	Attributes []Attribute
+	Recipe     *RecipeHeader
+}
+
+type RecipeHeader struct {
+	Name   Name
+	Params []Param
+	Colon  bool
+}
+
 type Error struct {
 	Code    lint.Code
 	Span    Span
@@ -316,7 +347,7 @@ type Error struct {
 type File struct {
 	Text     string
 	Items    []Item
-	Stray    []Attribute
+	Stray    []Stray
 	Comments []Comment
 	Errors   []Error
 

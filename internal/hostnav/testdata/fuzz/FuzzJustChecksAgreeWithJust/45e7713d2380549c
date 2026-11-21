@@ -1,0 +1,2 @@
+go test fuzz v1
+string("#000000000\nx000:A00000#000000000000000\nA0: l\nalias l :=A1")

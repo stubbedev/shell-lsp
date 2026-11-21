@@ -1,0 +1,2 @@
+go test fuzz v1
+string("[arg('a',pattern='(?0')]\nA a:")

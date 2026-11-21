@@ -527,7 +527,7 @@ marks the checks the `minimal` profile keeps; see [Profiles](linting.md#profiles
 | <a name="sl5017"></a>[SL5017](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl5017) | error |  | yes | A path names a module that does not exist. |
 | <a name="sl5018"></a>[SL5018](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl5018) | error |  | yes | An imported file or module source file is not found. |
 | <a name="sl5019"></a>[SL5019](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl5019) | error |  | yes | A recipe's parameters are in an order just refuses. |
-| <a name="sl5020"></a>[SL5020](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl5020) | error |  | yes | An attribute is given the wrong number of arguments. |
+| <a name="sl5020"></a>[SL5020](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl5020) | error |  | yes | An attribute is used in a way just refuses. |
 | <a name="sl5021"></a>[SL5021](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl5021) | error |  | yes | A recipe line is indented differently from the recipe's first line. |
 | <a name="sl5022"></a>[SL5022](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl5022) | warning |  | yes | A deprecated function or setting is used. |
 | <a name="sl5023"></a>[SL5023](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl5023) | error |  | yes | A feature is used without the setting it needs. |

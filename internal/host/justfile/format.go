@@ -19,15 +19,6 @@ const (
 
 var ErrUnformattable = errors.New("cannot format the justfile")
 
-var attributeKeyOrder = map[string][]string{
-	"arg":   {"long", "short", "pattern", "value", "flag", "multiple", "min", "max", "help"},
-	"cache": {"extra", "inputs", "outputs"},
-}
-
-var countKeys = []string{"min", "max"}
-
-var continueSignals = []string{"SIGHUP", "SIGINT", "SIGQUIT"}
-
 type printer struct {
 	f      *File
 	sb     strings.Builder
@@ -105,6 +96,10 @@ func ReindentedRecipes(f *File) []Span {
 
 func (f *File) line(offset int) int { return strings.Count(f.Text[:offset], "\n") + 1 }
 
+func (f *File) lineStart(offset int) int {
+	return strings.LastIndexByte(f.Text[:offset], '\n') + 1
+}
+
 func trimComment(text string) string { return strings.TrimRightFunc(text, unicode.IsSpace) }
 
 func docOf(it Item) string {
@@ -156,6 +151,7 @@ func attributesOf(it Item) []Attribute {
 	case ItemRecipe:
 		return it.Recipe.Attributes
 	case ItemUnexport:
+		return it.Unexport.Attributes
 	}
 	return nil
 }
@@ -180,10 +176,7 @@ func (p *printer) elements() ([]element, error) {
 		span := it.Span()
 		el := element{start: span.Start, end: span.End, item: it}
 		for _, a := range attributesOf(*it) {
-			el.start = min(el.start, p.lineStart(a.Span.Start))
-			if err := p.checkAttribute(a); err != nil {
-				return nil, err
-			}
+			el.start = min(el.start, p.f.lineStart(a.Span.Start))
 		}
 		if a, ok := p.unsettledArgument(*it); ok {
 			return nil, fmt.Errorf("%w: `just --fmt` orders the [arg] attributes on line %d by the columns of their `flag`, `help`, `max`, `min` and `multiple` keys, so formatting again would reorder them; order them by those columns yourself", ErrUnformattable, p.f.line(a.Span.Start))
@@ -212,10 +205,6 @@ func (p *printer) elements() ([]element, error) {
 	}
 	slices.SortStableFunc(out, func(a, b element) int { return a.start - b.start })
 	return out, nil
-}
-
-func (p *printer) lineStart(offset int) int {
-	return strings.LastIndexByte(p.f.Text[:offset], '\n') + 1
 }
 
 func (p *printer) text(s Span) string { return p.f.Text[s.Start:s.End] }
@@ -352,7 +341,7 @@ func (p *printer) comparePosition(a, b *Expr) int {
 }
 
 func (p *printer) column(offset int) int {
-	return utf8.RuneCountInString(p.f.Text[p.lineStart(offset):offset])
+	return utf8.RuneCountInString(p.f.Text[p.f.lineStart(offset):offset])
 }
 
 func compareArgAttributes(a, b Attribute, compareKeys func(a, b Attribute, key string) int) int {
@@ -414,18 +403,6 @@ func (p *printer) attribute(a Attribute) string {
 	return a.Name.Text + "(" + strings.Join(args, ", ") + ")"
 }
 
-func (p *printer) checkAttribute(a Attribute) error {
-	for _, arg := range a.Args {
-		switch {
-		case arg.Key.Text != "" && !slices.Contains(attributeKeyOrder[a.Name.Text], arg.Key.Text):
-			return fmt.Errorf("%w: just rejects the key `%s` of the [%s] attribute on line %d", ErrUnformattable, arg.Key.Text, a.Name.Text, p.f.line(arg.Key.Span.Start))
-		case a.Name.Text == "continue" && !slices.Contains(continueSignals, literal(arg.Value)):
-			return fmt.Errorf("%w: just rejects the signal %s of the [continue] attribute on line %d", ErrUnformattable, p.text(arg.Span), p.f.line(arg.Span.Start))
-		}
-	}
-	return nil
-}
-
 func canonicalArgs(a Attribute) []AttributeArg {
 	args := slices.Clone(a.Args)
 	if a.Name.Text == "continue" {
@@ -434,9 +411,8 @@ func canonicalArgs(a Attribute) []AttributeArg {
 		})
 		return slices.CompactFunc(args, func(x, y AttributeArg) bool { return literal(x.Value) == literal(y.Value) })
 	}
-	order := attributeKeyOrder[a.Name.Text]
 	slices.SortStableFunc(args, func(x, y AttributeArg) int {
-		return cmp.Compare(slices.Index(order, x.Key.Text), slices.Index(order, y.Key.Text))
+		return cmp.Compare(keyIndex(a.Name.Text, x.Key.Text), keyIndex(a.Name.Text, y.Key.Text))
 	})
 	return args
 }

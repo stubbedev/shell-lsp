@@ -481,3 +481,307 @@ A:
 -- newline-ends-an-assignment-before-parentheses --
 x := uppercase
 ("a")
+-- arg-unknown-key --
+[arg('a', colour='red')]
+build a:
+    echo {{a}}
+-- key-on-an-attribute-without-keys --
+[confirm(prompt = "sure?")]
+build:
+    echo
+-- arg-duplicate-key --
+[arg('a', help='x', help='y')]
+build a:
+    echo {{a}}
+-- arg-positional-after-keyword --
+[arg(long='x', 'a')]
+build a:
+    echo {{a}}
+-- arg-without-parameter-name --
+[arg(long)]
+build a:
+    echo {{a}}
+-- arg-with-two-parameter-names --
+[arg('a', 'b')]
+build a b:
+    echo {{a}} {{b}}
+-- cache-unknown-key --
+set unstable
+[cache(colour='red')]
+build:
+    echo
+-- cache-key-without-value --
+set unstable
+[cache(inputs)]
+build:
+    echo
+-- cache-keys --
+set unstable
+[cache(inputs='src', outputs='out')]
+[script]
+build:
+    echo
+-- arg-key-without-value --
+[arg('a', pattern)]
+build a:
+    echo {{a}}
+-- arg-flag-with-value --
+set unstable
+set lists
+[arg('a', long, flag='yes')]
+build a:
+    echo {{a}}
+-- arg-multiple-with-value --
+set unstable
+set lists
+[arg('a', long, multiple='yes')]
+build a:
+    echo {{a}}
+-- arg-long-with-equal-sign --
+[arg('a', long='x=y')]
+build a:
+    echo {{a}}
+-- arg-long-starting-with-dash --
+[arg('a', long='-x')]
+build a:
+    echo {{a}}
+-- arg-empty-long --
+[arg('a', long='')]
+build a:
+    echo {{a}}
+-- arg-short-of-two-characters --
+[arg('a', short='xy')]
+build a:
+    echo {{a}}
+-- arg-short-named-after-a-long-parameter --
+[arg('abc', short)]
+build abc:
+    echo {{abc}}
+-- arg-short-of-one-wide-character --
+[arg('a', short='é')]
+build a:
+    echo {{a}}
+-- arg-value-without-option --
+[arg('a', value='1')]
+build a:
+    echo {{a}}
+-- arg-flag-without-option --
+set unstable
+set lists
+[arg('a', flag)]
+build a:
+    echo {{a}}
+-- arg-multiple-without-option --
+set unstable
+set lists
+[arg('a', multiple)]
+build a:
+    echo {{a}}
+-- arg-flag-and-value --
+set unstable
+set lists
+[arg('a', long, flag, value='1')]
+build a:
+    echo {{a}}
+-- arg-flag-and-pattern --
+set unstable
+set lists
+[arg('a', long, flag, pattern='y')]
+build a:
+    echo {{a}}
+-- arg-count-with-leading-zero --
+set unstable
+set lists
+[arg('a', long, multiple, max='03')]
+build a:
+    echo {{a}}
+-- arg-count-too-large --
+set unstable
+set lists
+[arg('a', long, multiple, max='99999999999999999999999')]
+build a:
+    echo {{a}}
+-- arg-min-exceeds-max --
+set unstable
+set lists
+[arg('a', long, multiple, min='3', max='2')]
+build a:
+    echo {{a}}
+-- arg-min-below-max --
+set unstable
+set lists
+[arg('a', long, multiple, max='3', min='2')]
+build a:
+    echo {{a}}
+-- arg-non-literal-on-the-line-after-its-key --
+[arg('a', long=
+  f'x')]
+build a:
+    echo {{a}}
+-- arg-max-without-multiple --
+set unstable
+set lists
+[arg('a', max='3')]
+build a:
+    echo {{a}}
+-- arg-min-without-multiple --
+set unstable
+set lists
+[arg('a', long, min='1')]
+build a:
+    echo {{a}}
+-- arg-max-on-a-variadic-parameter --
+set unstable
+set lists
+[arg('a', max='3')]
+build *a:
+    echo {{a}}
+-- arg-max-with-multiple --
+set unstable
+set lists
+[arg('a', long, multiple, max='3')]
+build a:
+    echo {{a}}
+-- arg-flag-needs-lists --
+[arg('a', long, flag)]
+build a:
+    echo {{a}}
+-- arg-multiple-needs-lists --
+[arg('a', long, multiple)]
+build a:
+    echo {{a}}
+-- arg-flag-with-default --
+set unstable
+set lists
+[arg('a', long, flag)]
+build a='1':
+    echo {{a}}
+-- arg-for-an-undefined-parameter --
+[arg('b')]
+build a:
+    echo {{a}}
+-- arg-repeated-for-a-parameter --
+[arg('a', long)]
+[arg('a', short='a')]
+build a:
+    echo {{a}}
+-- arg-duplicate-long --
+[arg('a', long='x')]
+[arg('b', long='x')]
+build a b:
+    echo {{a}} {{b}}
+-- arg-duplicate-long-reported-on-the-earlier-line --
+[arg('a', long='x')]
+[arg('b',
+  long='x')]
+build a b:
+    echo {{a}} {{b}}
+-- arg-duplicate-long-from-a-parameter-name --
+[arg('a', long='b')]
+[arg('b', long)]
+build a b:
+    echo {{a}} {{b}}
+-- arg-duplicate-short-from-a-parameter-name --
+[arg('b', short)]
+[arg('a', short='b')]
+build a b:
+    echo {{a}} {{b}}
+-- arg-duplicate-short --
+[arg('a', long='x', short='x')]
+[arg('b', long='y', short='x')]
+build a b:
+    echo {{a}} {{b}}
+-- arg-distinct-options --
+[arg('a', long='b', short='a')]
+[arg('b', long='a', short='b')]
+build a b:
+    echo {{a}} {{b}}
+-- arg-invalid-pattern --
+[arg('a', pattern='a)')]
+build a:
+    echo {{a}}
+-- arg-invalid-pattern-from-a-variable --
+pattern := '[a'
+[arg('a', pattern=pattern)]
+build a:
+    echo {{a}}
+-- arg-extended-pattern --
+[arg('a', pattern='(?x) \d+ a**')]
+build a:
+    echo {{a}}
+-- continue-unknown-signal --
+[continue('SIGINT',
+  'SIGTERM')]
+build:
+    echo
+-- continue-repeated-signal --
+[continue('SIGINT', 'SIGINT')]
+build:
+    echo
+-- arg-on-an-alias --
+[arg('a')]
+alias b := build
+build:
+    echo
+-- group-on-an-assignment --
+[group('a')]
+x := 'a'
+build:
+    echo {{x}}
+-- private-on-unexport --
+[private]
+unexport FOO
+-- system-on-unexport --
+[linux]
+unexport FOO
+-- group-on-a-module --
+[group('a')]
+mod? tools
+-- duplicate-attribute --
+[private]
+[private]
+build:
+    echo
+-- duplicate-group --
+[group('a')]
+[group("a")]
+build:
+    echo
+-- repeatable-attributes --
+[group('a')]
+[group('b')]
+[env('A', 'b')]
+[env('B', 'c')]
+[metadata('x')]
+[metadata('x')]
+build:
+    echo
+-- dependency-on-an-alias --
+build: b
+    echo
+alias b := compile
+compile:
+    echo
+-- alias-to-an-alias --
+alias b := c
+alias c := compile
+compile:
+    echo
+-- starred-argument-outside-a-mapped-dependency --
+set unstable
+set lists
+items := ['a']
+compile item:
+    echo {{item}}
+build: (compile
+  *items)
+    echo
+-- mapped-dependency-with-two-starred-arguments --
+set unstable
+set lists
+items := ['a']
+compile a b:
+    echo {{a}} {{b}}
+build: *(compile *items
+  *items)
+    echo

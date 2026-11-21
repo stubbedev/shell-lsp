@@ -44,6 +44,7 @@ type reader struct {
 	braces  int
 	file    *File
 	pending []Attribute
+	header  *RecipeHeader
 	doc     string
 	failure Span
 	lexing  bool
@@ -596,8 +597,10 @@ func (p *reader) recover(start int, header bool) {
 }
 
 func (p *reader) stray() {
-	p.file.Stray = append(p.file.Stray, p.pending...)
-	p.pending = nil
+	if len(p.pending) > 0 {
+		p.file.Stray = append(p.file.Stray, Stray{Attributes: p.pending, Recipe: p.header})
+	}
+	p.pending, p.header = nil, nil
 }
 
 func (p *reader) item() {
@@ -646,7 +649,7 @@ func (p *reader) dispatch(start int, first token, attrs []Attribute, doc string)
 		}
 	case "unexport":
 		if isName && ends {
-			p.unexport(start)
+			p.unexport(start, attrs)
 			return
 		}
 	case "set":
@@ -708,7 +711,7 @@ func (p *reader) attribute() {
 			if _, ok := p.accept(")"); ok {
 				break
 			}
-			attr.Args = append(attr.Args, p.attributeArg(slices.Contains(keyedAttributes, name.Text)))
+			attr.Args = append(attr.Args, p.attributeArg(attributeKeys[name.Text] != nil))
 			if _, ok := p.accept(","); ok {
 				continue
 			}
@@ -723,12 +726,8 @@ func (p *reader) attribute() {
 }
 
 func (p *reader) literalArguments(a Attribute) {
-	keys := literalArguments[a.Name.Text]
-	for _, arg := range a.Args {
-		if arg.Value != nil && slices.Contains(keys, arg.Key.Text) && (arg.Value.Kind != ExprString || arg.Value.Str.Prefix == 'f') {
-			p.report(lint.CodeJustAttributeArguments, arg.Value.Span, fmt.Sprintf("the arguments of attribute `%s` must be string literals", a.Name.Text))
-			return
-		}
+	if arg, ok := nonLiteralArgument(a); ok {
+		p.report(lint.CodeJustAttributeArguments, arg.Span, fmt.Sprintf("the arguments of attribute `%s` must be string literals", a.Name.Text))
 	}
 }
 
@@ -737,14 +736,13 @@ func (p *reader) attributeArg(keyed bool) AttributeArg {
 	if t.kind == tokName {
 		save := p.pos
 		p.next()
-		after := p.peek()
-		switch {
-		case after.kind == tokPunct && after.text == "=":
-			p.next()
+		key := Name{Text: t.text, Span: t.span}
+		if _, ok := p.accept("="); ok {
 			value := p.expression()
-			return AttributeArg{Key: Name{Text: t.text, Span: t.span}, Value: value, Span: Span{Start: t.span.Start, End: value.Span.End}}
-		case keyed && after.kind == tokPunct && (after.text == "," || after.text == ")"):
-			return AttributeArg{Key: Name{Text: t.text, Span: t.span}, Span: t.span}
+			return AttributeArg{Key: key, Value: value, Span: Span{Start: t.span.Start, End: value.Span.End}}
+		}
+		if keyed {
+			return AttributeArg{Key: key, Span: t.span}
 		}
 		p.pos = save
 	}
@@ -795,11 +793,11 @@ func (p *reader) assignment(start int, attrs []Attribute, doc string) {
 	p.file.Items = append(p.file.Items, Item{Kind: ItemAssignment, Assignment: a})
 }
 
-func (p *reader) unexport(start int) {
+func (p *reader) unexport(start int, attrs []Attribute) {
 	p.next()
 	name := p.name()
 	p.endOfLine()
-	p.file.Items = append(p.file.Items, Item{Kind: ItemUnexport, Unexport: &Unexport{Name: name, Span: Span{Start: start, End: name.Span.End}}})
+	p.file.Items = append(p.file.Items, Item{Kind: ItemUnexport, Unexport: &Unexport{Attributes: attrs, Name: name, Span: Span{Start: start, End: name.Span.End}}})
 }
 
 func (p *reader) setting(start int, attrs []Attribute) {
@@ -901,16 +899,19 @@ func (p *reader) recipe(start int, attrs []Attribute, doc string) {
 		r.Quiet = true
 	}
 	r.Name = p.name()
+	p.header = &RecipeHeader{Name: r.Name}
 	for {
 		t := p.peek()
 		if t.kind == tokPunct && t.text == ":" {
 			p.next()
+			p.header.Colon = true
 			break
 		}
 		if t.kind != tokName && (t.kind != tokPunct || !slices.Contains([]string{"$", "+", "*"}, t.text)) {
 			p.unexpected(p.next(), "a parameter or `:`")
 		}
 		r.Params = append(r.Params, p.param())
+		p.header.Params = r.Params
 	}
 	r.Deps = p.dependencies()
 	if _, ok := p.accept("&&"); ok {
@@ -923,6 +924,7 @@ func (p *reader) recipe(start int, attrs []Attribute, doc string) {
 	p.endOfLine()
 	r.Span = r.Header
 	p.body(r)
+	p.header = nil
 	p.file.Items = append(p.file.Items, Item{Kind: ItemRecipe, Recipe: r})
 }
 
@@ -973,11 +975,13 @@ func (p *reader) parenDependency() Dependency {
 	p.expect("(")
 	p.depth++
 	dep.Target = p.path()
+	var starred []token
 	for {
 		if _, ok := p.accept(")"); ok {
 			break
 		}
-		if _, ok := p.accept("*"); ok {
+		if t, ok := p.accept("*"); ok {
+			starred = append(starred, t)
 			arg := p.value()
 			arg.Starred = true
 			dep.Args = append(dep.Args, arg)
@@ -987,8 +991,13 @@ func (p *reader) parenDependency() Dependency {
 	}
 	p.depth--
 	dep.Span = Span{Start: start, End: p.pos}
-	if dep.Star && !slices.ContainsFunc(dep.Args, func(a *Expr) bool { return a.Starred }) {
+	switch {
+	case dep.Star && len(starred) == 0:
 		p.report(lint.CodeJustDependencyArguments, dep.Span, "a mapped dependency needs a starred argument such as `*items`")
+	case !dep.Star && len(starred) > 0:
+		p.report(lint.CodeJustDependencyArguments, starred[0].span, "a starred argument needs a mapped dependency such as `*(recipe *items)`")
+	case len(starred) > 1:
+		p.report(lint.CodeJustDependencyArguments, starred[1].span, "a mapped dependency takes only one starred argument")
 	}
 	return dep
 }

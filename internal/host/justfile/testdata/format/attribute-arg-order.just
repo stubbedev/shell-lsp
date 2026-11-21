@@ -1,3 +1,6 @@
+set unstable
+set lists
+
 [arg('d', short='w', flag)]
 [arg('c', short='z', flag)]
 [arg('b', short='y', multiple)]
