@@ -146,6 +146,7 @@ func (in *indexer) assignment(a *Assignment) {
 		Name: a.Name.Text, Kind: model.KindVariable, Span: a.Span, Selection: a.Name.Span, Parent: model.NoParent,
 		Detail: detail(in.text(Span{Start: a.Name.Span.Start, End: a.Span.End})), Doc: a.Doc,
 		Exported: a.Export || in.ix.ExportAll, Unused: !a.Export && !in.ix.ExportAll && !strings.HasPrefix(a.Name.Text, "_"), Arity: model.NoArity,
+		Systems: systems(a.Attributes),
 	})
 	if values, ok := in.f.Constant(a.Value); ok && len(values) == 1 {
 		in.ix.Symbols[i].Value, in.ix.Symbols[i].Constant = strconv.Quote(values[0]), true
@@ -166,7 +167,7 @@ func (in *indexer) alias(a *Alias) {
 	in.keyword(a.Span.Start, "alias")
 	i := in.symbol(model.Symbol{
 		Name: a.Name.Text, Kind: model.KindAlias, Span: a.Span, Selection: a.Name.Span, Parent: model.NoParent,
-		Detail: detail(in.text(a.Span)), Arity: model.NoArity,
+		Detail: detail(in.text(a.Span)), Arity: model.NoArity, Systems: systems(a.Attributes),
 	})
 	in.attributes(a.Attributes, i)
 	in.token(a.Name.Span, semantic.TypeFunction, semantic.ModDeclaration)
@@ -204,7 +205,7 @@ func (in *indexer) module(m *Module) {
 	in.keyword(m.Span.Start, "mod")
 	i := in.symbol(model.Symbol{
 		Name: m.Name.Text, Kind: model.KindModule, Span: m.Span, Selection: m.Name.Span, Parent: model.NoParent,
-		Detail: detail(in.text(m.Span)), Doc: m.Doc, Arity: model.NoArity,
+		Detail: detail(in.text(m.Span)), Doc: m.Doc, Arity: model.NoArity, Systems: systems(m.Attributes),
 	})
 	in.attributes(m.Attributes, i)
 	in.token(m.Name.Span, semantic.TypeNamespace, semantic.ModDeclaration)
@@ -230,6 +231,7 @@ func (in *indexer) function(fn *Function) {
 	i := in.symbol(model.Symbol{
 		Name: fn.Name.Text, Kind: model.KindFunction, Span: fn.Span, Selection: fn.Name.Span, Parent: model.NoParent,
 		Detail: detail(in.text(Span{Start: fn.Name.Span.Start, End: fn.Body.Span.Start})), Arity: model.Arity{Min: model.Narrow(len(fn.Params)), Max: model.Narrow(len(fn.Params))},
+		Systems: systems(fn.Attributes),
 	})
 	in.attributes(fn.Attributes, i)
 	in.token(fn.Name.Span, semantic.TypeFunction, semantic.ModDeclaration)
@@ -272,6 +274,7 @@ func (in *indexer) recipe(r *Recipe, positional bool) {
 	i := in.symbol(model.Symbol{
 		Name: r.Name.Text, Kind: model.KindRecipe, Span: r.Span, Selection: r.Name.Span, Parent: model.NoParent,
 		Detail: detail(in.text(Span{Start: r.Name.Span.Start, End: r.signatureEnd()})), Doc: recipeDoc(r), Arity: r.Arity(),
+		Systems: systems(r.Attributes),
 	})
 	in.attributes(r.Attributes, i)
 	if r.Quiet {

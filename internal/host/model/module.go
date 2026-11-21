@@ -296,13 +296,29 @@ func effective(targets []Target, at moment) []Target {
 	for _, f := range files {
 		visible := byFile[f]
 		slices.SortFunc(visible, func(a, b Target) int { return a.Info().Span.Start - b.Info().Span.Start })
-		last := len(visible) - 1
-		for last > 0 && visible[last].Info().Appends {
-			last--
+		for i, t := range visible {
+			if !shadowed(t, visible[i+1:]) {
+				out = append(out, t)
+			}
 		}
-		out = append(out, visible[last:]...)
 	}
 	return out
+}
+
+func shadowed(t Target, later []Target) bool {
+	var covered []string
+	for _, u := range later {
+		info := u.Info()
+		if info.Appends {
+			continue
+		}
+		if len(info.Systems) == 0 {
+			return true
+		}
+		covered = append(covered, info.Systems...)
+	}
+	systems := t.Info().Systems
+	return len(systems) > 0 && len(covered) > 0 && !slices.ContainsFunc(systems, func(s string) bool { return !slices.Contains(covered, s) })
 }
 
 type context struct {

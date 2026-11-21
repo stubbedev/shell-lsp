@@ -130,6 +130,7 @@ type Symbol struct {
 	Passive   bool
 	Listed    bool
 	Hidden    bool
+	Systems   []string
 }
 
 type Elision uint8
