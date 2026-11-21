@@ -20,7 +20,7 @@ var (
 	namedAnchor   = regexp.MustCompile(`<a name="([^"]+)"></a>`)
 	notSlug       = regexp.MustCompile(`[^\p{L}\p{N}_\- ]`)
 	ownRepository = regexp.MustCompile(`^https://github\.com/stubbedev/shell-lsp/(?:blob|tree)/main/([^#]*)(?:#(.*))?$`)
-	skippedDirs   = map[string]bool{".git": true, ".claude": true, "node_modules": true, "result": true, "out": true}
+	skippedDirs   = map[string]bool{".git": true, ".claude": true, "node_modules": true, "result": true, "out": true, ".vscode-test": true}
 )
 
 func markdownFiles(t *testing.T) []string {
