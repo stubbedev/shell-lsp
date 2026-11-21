@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"runtime/debug"
+	"strings"
 	"time"
 
 	"github.com/moby/buildkit/client/llb"
@@ -68,11 +70,29 @@ type report struct {
 	Lint         []finding     `json:"lint"`
 }
 
-const version = "dockerfile-oracle 0.34.0"
+const buildkitModule = "github.com/moby/buildkit"
+
+func version() (string, error) {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "", errors.New("the binary carries no build information")
+	}
+	for _, dep := range info.Deps {
+		if dep.Path == buildkitModule {
+			return "dockerfile-oracle " + strings.TrimPrefix(dep.Version, "v"), nil
+		}
+	}
+	return "", fmt.Errorf("the build information does not list %s", buildkitModule)
+}
 
 func main() {
 	if len(os.Args) == 2 && os.Args[1] == "--version" {
-		fmt.Println(version)
+		v, err := version()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "reading the BuildKit version:", err)
+			os.Exit(2)
+		}
+		fmt.Println(v)
 		return
 	}
 	if len(os.Args) != 2 {
