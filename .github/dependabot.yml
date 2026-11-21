@@ -2,7 +2,9 @@ version: 2
 
 updates:
   - package-ecosystem: "gomod"
-    directory: "/"
+    directories:
+      - "/"
+      - "/tools/dockerfile-oracle"
     schedule:
       interval: "monthly"
     labels:
