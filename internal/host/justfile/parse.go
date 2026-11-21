@@ -724,7 +724,11 @@ func (p *reader) attribute() {
 			if _, ok := p.accept(")"); ok {
 				break
 			}
-			attr.Args = append(attr.Args, p.attributeArg(attributeKeys[name.Text] != nil))
+			arg := p.attributeArg(attributeKeys[name.Text] != nil)
+			if arg.Key.Text == "" && slices.ContainsFunc(attr.Args, func(prior AttributeArg) bool { return prior.Key.Text != "" }) {
+				p.report(lint.CodeJustAttributeArguments, arg.Span, "positional attribute arguments cannot follow keyword attribute arguments")
+			}
+			attr.Args = append(attr.Args, arg)
 			if _, ok := p.accept(","); ok {
 				continue
 			}

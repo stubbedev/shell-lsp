@@ -477,15 +477,10 @@ func (c *checker) distinctArgument(args []argAttribute, arg argAttribute) []argA
 func (c *checker) attributeArguments(a Attribute) {
 	keys := attributeKeys[a.Name.Text]
 	seen := map[string]bool{}
-	keyword := false
 	for _, arg := range a.Args {
 		if arg.Key.Text == "" {
-			if keyword {
-				c.report(lint.CodeJustAttributeArguments, arg.Span, "positional attribute arguments cannot follow keyword attribute arguments")
-			}
 			continue
 		}
-		keyword = true
 		i := keyIndex(a.Name.Text, arg.Key.Text)
 		switch {
 		case i < 0:
