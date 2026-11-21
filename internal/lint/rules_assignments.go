@@ -10,16 +10,23 @@ import (
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
+const (
+	codeSubscriptInPairList = nativeBase + 2023
+	codeOddPairList         = nativeBase + 2024
+)
+
 var assignmentsFamily = family{
 	codes: map[Code]meta{
-		2097: {severity: SeverityWarning, summary: "A prefix assignment only affects the command's environment, not expansions on the same line."},
-		2098: {severity: SeverityWarning, summary: "An expansion runs before a prefix assignment on the same line takes effect."},
-		2123: {severity: SeverityWarning, summary: "PATH is replaced with something that is not a list of directories."},
-		2141: {severity: SeverityWarning, summary: "An escape like \\n inside a quoted IFS value is a literal backslash and letter, not a control character."},
-		2147: {severity: SeverityWarning, summary: "A quoted ~ in PATH is not expanded."},
-		2190: {severity: SeverityWarning, summary: "An element of an associative array has no key."},
-		2191: {severity: SeverityWarning, summary: "An = in an array element is literal text rather than part of [index]=value."},
-		2192: {severity: SeverityWarning, summary: "An array element has an index but no value."},
+		codeSubscriptInPairList: {severity: SeverityWarning},
+		codeOddPairList:         {severity: SeverityWarning},
+		2097:                    {severity: SeverityWarning, summary: "A prefix assignment only affects the command's environment, not expansions on the same line."},
+		2098:                    {severity: SeverityWarning, summary: "An expansion runs before a prefix assignment on the same line takes effect."},
+		2123:                    {severity: SeverityWarning, summary: "PATH is replaced with something that is not a list of directories."},
+		2141:                    {severity: SeverityWarning, summary: "An escape like \\n inside a quoted IFS value is a literal backslash and letter, not a control character."},
+		2147:                    {severity: SeverityWarning, summary: "A quoted ~ in PATH is not expanded."},
+		2190:                    {severity: SeverityWarning, summary: "An element of an associative array has no key."},
+		2191:                    {severity: SeverityWarning, summary: "An = in an array element is literal text rather than part of [index]=value."},
+		2192:                    {severity: SeverityWarning, summary: "An array element has an index but no value."},
 	},
 	nodes: []nodeRule{
 		onNode(checkPrefixAssignmentUse),
@@ -178,9 +185,14 @@ func checkArrayLiteral(p *pass, a *syntax.Assign) {
 		return
 	}
 	associative := p.associativeArray(a.Name.Value)
-	pairs := associative && p.tree.Features().AssociativePairs && len(a.Array.Elems) > 0 && a.Array.Elems[0].Index == nil
+	pairs := associative && p.tree.PairList(a.Array)
+	if pairs {
+		p.checkPairCount(a.Array)
+	}
 	for _, elem := range a.Array.Elems {
 		switch {
+		case elem.Index != nil && pairs:
+			p.reportSubscriptInPairList(elem)
 		case elem.Index != nil:
 			p.checkIndexedElement(elem)
 		case elem.Value == nil:
@@ -195,6 +207,37 @@ func checkArrayLiteral(p *pass, a *syntax.Assign) {
 			}
 		}
 	}
+}
+
+func (p *pass) reportSubscriptInPairList(elem *syntax.ArrayElem) {
+	start := parser.Offset(elem.Index.Pos()) - len("[")
+	span := parser.Span{Start: start, End: parser.Offset(elem.End())}
+	text := p.text[span.Start:span.End]
+	if p.dialect == dialect.Zsh {
+		p.report(codeSubscriptInPairList, span, "zsh rejects "+text+" here: the list starts without [key]=, so it is read as key value pairs, which cannot mix with [key]=value; write every element one way.")
+		return
+	}
+	p.report(codeSubscriptInPairList, span, "The list starts without [key]=, so bash reads it as key value pairs and "+text+" is the literal text of a key or value, not a subscript assignment; write every element one way.")
+}
+
+func (p *pass) checkPairCount(arr *syntax.ArrayExpr) {
+	if len(arr.Elems)%2 == 0 || slices.ContainsFunc(arr.Elems, uncountedPairElement) {
+		return
+	}
+	last := arr.Elems[len(arr.Elems)-1]
+	span, ok := p.span(last.Value)
+	if !ok {
+		return
+	}
+	if p.dialect == dialect.Zsh {
+		p.report(codeOddPairList, span, "zsh rejects this key value list: it has an odd number of elements, so this last key has no value.")
+		return
+	}
+	p.report(codeOddPairList, span, "This key value list has an odd number of elements, so bash gives this last key an empty value; add its value, or write '' if empty is intended.")
+}
+
+func uncountedPairElement(elem *syntax.ArrayElem) bool {
+	return elem.Index != nil || elem.Value == nil || canWordSplit(elem.Value)
 }
 
 func (p *pass) checkIndexedElement(elem *syntax.ArrayElem) {

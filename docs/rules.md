@@ -570,6 +570,42 @@ escapes only reach the regular expression when it is kept in a variable
 [[ $1 =~ ^[0-9]+$ ]] && echo number    # safe
 ```
 
+## SL2023
+
+**A [key]=value element in an associative array's key value list.** In bash
+5.1 and later and in zsh, an associative array assignment whose first element
+has no `[key]=` is read as alternating keys and values. A later element written
+`[key]=value` is then not a subscript assignment: bash stores its text,
+brackets and `=` included, as the next key or value, and zsh stops with "bad
+[key]=value syntax for associative array". Write every element of the list the
+same way, either all as key value pairs or all as `[key]=value`.
+
+```bash
+#!/bin/bash
+declare -A port
+port=(http 80 [https]=443)    # SL2023: the key is the text [https]=443
+port=([http]=80 [https]=443)    # safe
+```
+
+## SL2024
+
+**An associative array's key value list has an odd number of elements.** When
+an associative array assignment is read as alternating keys and values, the
+last key of an odd-length list has no value. zsh rejects the assignment with
+"bad set of key/value pairs for associative array"; bash 5.1 and later quietly
+give that key an empty value, which is almost always a forgotten value rather
+than an intended one. The elements are only counted when none of them can
+expand to a different number of words, such as an unquoted `$rest`,
+`"${list[@]}"`, a command substitution, a glob or a brace expansion. Write an
+intended empty value as `''`.
+
+```bash
+#!/bin/bash
+declare -A port
+port=(http 80 https)    # SL2024
+port=(http 80 https 443)    # safe
+```
+
 The embedded-language rules check awk, sed and jq programs written inside the
 script with built-in parsers; no awk, sed or jq binary is run. A program is
 checked when it is a literal argument (`awk '...'`, `sed -e '...'`,

@@ -302,8 +302,12 @@ func (t *Tree) NodeSpan(node syntax.Node) (Span, bool) {
 	return spanWithin(offset(start), node.End(), t.text), true
 }
 
+func (t *Tree) PairList(arr *syntax.ArrayExpr) bool {
+	return t.Features().AssociativePairs && len(arr.Elems) > 0 && arr.Elems[0].Index == nil
+}
+
 func (t *Tree) LiteralKeys(name string) []string {
-	pairs := t.Features().AssociativePairs && t.associative(name)
+	associative := t.associative(name)
 	var keys []string
 	add := func(index syntax.ArithmExpr) {
 		w, ok := index.(*syntax.Word)
@@ -326,11 +330,22 @@ func (t *Tree) LiteralKeys(name string) []string {
 			if n.Array == nil {
 				return true
 			}
+			if !associative || !t.PairList(n.Array) {
+				for _, elem := range n.Array.Elems {
+					if elem.Index != nil {
+						add(elem.Index)
+					}
+				}
+				return true
+			}
 			for i, elem := range n.Array.Elems {
-				switch {
-				case elem.Index != nil:
-					add(elem.Index)
-				case pairs && i%2 == 0 && elem.Value != nil:
+				if elem.Index != nil || elem.Value == nil {
+					break
+				}
+				if _, literal := Literal(elem.Value); !literal {
+					break
+				}
+				if i%2 == 0 {
 					add(elem.Value)
 				}
 			}

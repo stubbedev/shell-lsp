@@ -1,0 +1,90 @@
+### zsh rejects an odd number of elements in a pair list
+#!/bin/zsh
+typeset -A o
+o=(a 1 b)
+print -r -- ${(kv)o}
+>>- SC1071 1:1 -- shellcheck refuses zsh
+>>+ SL2024 3:8 -- zsh rejects a key value list with an odd number of elements
+
+### zsh rejects an odd pair list in a declaration
+#!/bin/zsh
+typeset -A o=(a 1 b)
+print -r -- ${(kv)o}
+>>- SC1071 1:1 -- shellcheck refuses zsh
+>>+ SL2024 2:19 -- zsh rejects a key value list with an odd number of elements
+
+### zsh rejects an odd pair list appended to an associative array
+#!/bin/zsh
+typeset -A o=(a 1)
+o+=(b)
+print -r -- ${(kv)o}
+>>- SC1071 1:1 -- shellcheck refuses zsh
+>>+ SL2024 3:5 -- zsh rejects a key value list with an odd number of elements
+
+### bash gives the last key of an odd pair list an empty value
+#!/bin/bash
+declare -A o
+o=(a 1 b)
+echo "${o[@]}"
+>>> SC2190 3:4
+>>> SC2190 3:6
+>>> SC2190 3:8
+>>+ SL2024 3:8 -- shell-lsp native check; shellcheck does not count the elements of a key value list
+
+### an even pair list is complete
+#!/bin/zsh
+typeset -A o
+o=(a 1 b '')
+print -r -- ${(kv)o}
+>>- SC1071 1:1 -- shellcheck refuses zsh
+
+### an unquoted expansion can add or drop words
+#!/bin/zsh
+typeset -A o
+o=(a $rest b)
+print -r -- ${(kv)o}
+>>- SC1071 1:1 -- shellcheck refuses zsh
+
+### an array expansion can add words
+#!/bin/zsh
+typeset -A o
+o=(a "${rest[@]}")
+print -r -- ${(kv)o}
+>>- SC1071 1:1 -- shellcheck refuses zsh
+
+### a command substitution is split into words
+#!/bin/zsh
+typeset -A o
+o=(a $(date) b)
+print -r -- ${(kv)o}
+>>- SC1071 1:1 -- shellcheck refuses zsh
+>>+ SC2207 3:6 -- shellcheck refuses zsh
+
+### a glob can add words
+#!/bin/zsh
+typeset -A o
+o=(a *.txt b)
+print -r -- ${(kv)o}
+>>- SC1071 1:1 -- shellcheck refuses zsh
+
+### a brace expansion adds words
+#!/bin/zsh
+typeset -A o
+o=(a {1,2} b)
+print -r -- ${(kv)o}
+>>- SC1071 1:1 -- shellcheck refuses zsh
+
+### a quoted expansion is one word
+#!/bin/zsh
+typeset -A o
+o=(a "$rest" b)
+print -r -- ${(kv)o}
+>>- SC1071 1:1 -- shellcheck refuses zsh
+>>+ SL2024 3:14 -- zsh rejects a key value list with an odd number of elements
+
+### a list in subscript form is not counted
+#!/bin/zsh
+typeset -A o
+o=([a]=1 [b]=2 [c]=3)
+print -r -- ${(kv)o}
+>>- SC1071 1:1 -- shellcheck refuses zsh

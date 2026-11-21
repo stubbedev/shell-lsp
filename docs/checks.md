@@ -496,6 +496,8 @@ marks the checks the `minimal` profile keeps; see [Profiles](linting.md#profiles
 | <a name="sl2020"></a>[SL2020](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl2020) | style |  |  | An external command does what a parameter expansion or \[\[ \]\] does without a new process. |
 | <a name="sl2021"></a>[SL2021](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl2021) | style | `useless-use-of-cat` |  | $(cat file) runs cat to read a file the shell can read itself. |
 | <a name="sl2022"></a>[SL2022](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl2022) | warning |  | yes | A regular expression escape does not work where =~ uses it. |
+| <a name="sl2023"></a>[SL2023](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl2023) | warning |  | yes | A \[key\]=value element in an associative array's key value list. |
+| <a name="sl2024"></a>[SL2024](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl2024) | warning |  | yes | An associative array's key value list has an odd number of elements. |
 | <a name="sl3001"></a>[SL3001](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl3001) | error |  | yes | An awk program does not parse. |
 | <a name="sl3002"></a>[SL3002](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl3002) | error |  | yes | A sed script does not parse. |
 | <a name="sl3003"></a>[SL3003](https://github.com/stubbedev/shell-lsp/blob/main/docs/rules.md#sl3003) | error |  | yes | A jq filter does not parse. |

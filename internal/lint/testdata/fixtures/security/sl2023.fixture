@@ -1,0 +1,55 @@
+### bash reads a bracketed element of a pair list as a literal key
+#!/bin/bash
+declare -A n
+n=(a 1 [b]=2)
+echo "${n[@]}"
+>>> SC2190 3:4
+>>> SC2190 3:6
+>>+ SL2023 3:8 -- shell-lsp native check; shellcheck does not know that bash 5.1 reads this list as key value pairs
+
+### bash reads a bracketed element of a pair list as a literal value
+#!/bin/bash
+declare -A n
+n=(a [b]=2)
+echo "${n[@]}"
+>>> SC2190 3:4
+>>+ SL2023 3:6 -- shell-lsp native check; shellcheck does not know that bash 5.1 reads this list as key value pairs
+
+### a pair list appended to an associative array
+#!/bin/bash
+declare -A n
+n+=(a 1 [b]=2 3)
+echo "${n[@]}"
+>>> SC2190 3:15
+>>> SC2190 3:5
+>>> SC2190 3:7
+>>+ SL2023 3:9 -- shell-lsp native check; shellcheck does not know that bash 5.1 reads this list as key value pairs
+
+### zsh rejects a bracketed element in a pair list
+#!/bin/zsh
+typeset -A n
+n=(a 1 [b]=2)
+print -r -- ${(kv)n}
+>>- SC1071 1:1 -- shellcheck refuses zsh
+>>+ SL2023 3:8 -- zsh rejects [key]=value in a key value list
+
+### zsh rejects a bracketed element in the value position of a pair list
+#!/bin/zsh
+typeset -A n
+n=(a [b]=2)
+print -r -- ${(kv)n}
+>>- SC1071 1:1 -- shellcheck refuses zsh
+>>+ SL2023 3:6 -- zsh rejects [key]=value in a key value list
+
+### an escaped bracket in a pair list is plain text
+#!/bin/zsh
+typeset -A n
+n=(a 1 \[b]=2 3)
+print -r -- ${(kv)n}
+>>- SC1071 1:1 -- shellcheck refuses zsh
+
+### an indexed array may mix bare and bracketed elements
+#!/bin/bash
+list=(a [3]=b)
+echo "${list[@]}"
+>>> none

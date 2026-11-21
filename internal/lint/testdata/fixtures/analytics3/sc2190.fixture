@@ -3,12 +3,14 @@ declare -A mime
 mime=(text/html)
 echo "${mime[@]}"
 >>> SC2190 2:7
+>>+ SL2024 2:7 -- bash 5.1 reads the lone element as a key and gives it an empty value; shellcheck does not count the elements of a key value list
 
 ### typeset -A then append a plain element
 typeset -A owners
 owners+=(alice)
 echo "${owners[@]}"
 >>> SC2190 2:10
+>>+ SL2024 2:10 -- bash 5.1 reads the lone element as a key and gives it an empty value; shellcheck does not count the elements of a key value list
 
 ### associative array literal with name=value element
 declare -A limits
