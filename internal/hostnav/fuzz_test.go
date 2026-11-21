@@ -43,7 +43,8 @@ func FuzzJustChecksAgreeWithJust(f *testing.F) {
 		}
 		normalized := docstore.NormalizeCanonical(text)
 		verdict := hosttest.JustVerdict(t, text)
-		hosttest.Agree(t, normalized, verdict, justReports(normalized, verdict, findingsAlone(t, "justfile")(text)))
+		analyze := findingsAlone(t, "justfile")
+		hosttest.Agree(t, normalized, verdict, justReports(analyze)(normalized, verdict, analyze(text)))
 	})
 }
 

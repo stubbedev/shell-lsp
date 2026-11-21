@@ -73,6 +73,8 @@ func (it Item) EnabledOn(system string) bool {
 	return EnabledOn(attributesOf(it), system)
 }
 
+func (it Item) Attributes() []Attribute { return attributesOf(it) }
+
 func systems(attrs []Attribute) []string {
 	var out []string
 	for _, a := range attrs {

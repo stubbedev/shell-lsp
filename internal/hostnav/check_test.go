@@ -14,7 +14,6 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/host/oracle"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/navigation"
-	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
@@ -82,7 +81,8 @@ func TestJustChecksAgreeWithJust(t *testing.T) {
 	if *update {
 		hosttest.RequireTool(t, "just", "just "+justfile.Version)
 	}
-	hosttest.Check(t, filepath.Join("testdata", "check", "just.txt"), findingsAlone(t, "justfile"), hosttest.JustVerdict, justReports, *update)
+	analyze := findingsAlone(t, "justfile")
+	hosttest.Check(t, filepath.Join("testdata", "check", "just.txt"), analyze, hosttest.JustVerdict, justReports(analyze), *update)
 }
 
 const justOracleSystem = "linux"
@@ -92,16 +92,42 @@ var justParsePhase = []lint.Code{
 	lint.CodeJustUnknownSetting, lint.CodeJustSettingValue,
 }
 
-func justReports(text string, _ oracle.Verdict, findings []lint.Finding) []lint.Finding {
-	var disabled []parser.Span
+func justReports(analyze hosttest.Analyze) hosttest.Reports {
+	return func(text string, _ oracle.Verdict, findings []lint.Finding) []lint.Finding {
+		enabled, blanked := enabledOnly(text)
+		if !blanked {
+			return findings
+		}
+		analysis := func(f lint.Finding) bool { return !slices.Contains(justParsePhase, f.Code) }
+		out := slices.DeleteFunc(slices.Clone(findings), analysis)
+		for _, f := range analyze(enabled) {
+			if analysis(f) {
+				out = append(out, f)
+			}
+		}
+		return out
+	}
+}
+
+func enabledOnly(text string) (string, bool) {
+	out := []byte(text)
+	blanked := false
 	for _, it := range justfile.Parse(text).Items {
-		if !it.EnabledOn(justOracleSystem) {
-			disabled = append(disabled, it.Span())
+		if it.EnabledOn(justOracleSystem) {
+			continue
+		}
+		blanked = true
+		start := it.Span().Start
+		for _, a := range it.Attributes() {
+			start = min(start, a.Bracket)
+		}
+		for i := start; i < it.Span().End; i++ {
+			if out[i] != '\n' {
+				out[i] = ' '
+			}
 		}
 	}
-	return slices.DeleteFunc(slices.Clone(findings), func(f lint.Finding) bool {
-		return !slices.Contains(justParsePhase, f.Code) && slices.ContainsFunc(disabled, func(s parser.Span) bool { return s.Covers(f.Span.Start) })
-	})
+	return string(out), blanked
 }
 
 func TestMakeChecksAgreeWithMake(t *testing.T) {
