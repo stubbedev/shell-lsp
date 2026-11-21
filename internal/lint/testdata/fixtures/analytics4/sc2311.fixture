@@ -102,4 +102,5 @@ set -e
 version() { :; }
 current=$(version)
 print -r -- "${current}"
+>>- SC1008 1:1 -- deliberate: we recognise mksh and lint it as a ksh variant, so the shebang is not unrecognised
 >>- SC2311 5:11 -- ksh93 and mksh keep errexit in command substitutions; only bash outside posix mode clears it
