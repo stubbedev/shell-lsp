@@ -7,7 +7,7 @@ buildGoModule {
     )
   );
   src = ./.;
-  vendorHash = "sha256-xIIgu/y1D/S0d7bykxliqJcv4IWzh5s4qPYx1T0M0c4=";
+  vendorHash = "sha256-3YFMuweD4QkeYKPSI/mzRnbWxYE1hvDRIJ33SMViyfw=";
   env.CGO_ENABLED = 0;
   meta.description = "BuildKit's Dockerfile parser and checks as a black box for the shell-lsp fixtures";
 }
