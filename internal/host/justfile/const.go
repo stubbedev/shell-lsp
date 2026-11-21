@@ -139,8 +139,10 @@ func (c constants) conditional(e *Expr) ([]string, bool) {
 	return nil, true
 }
 
+var comparisons = []string{"==", "!=", "=~", "!~"}
+
 func (c constants) condition(cond *Expr) (bool, bool) {
-	if cond.Kind != ExprBinary {
+	if cond.Kind != ExprBinary || !slices.Contains(comparisons, cond.Op) {
 		return false, false
 	}
 	left, okLeft := c.scalar(cond.Args[0])
