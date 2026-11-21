@@ -214,24 +214,29 @@ dist version=`git describe --tags --always --dirty`:
     done
     (cd dist && sha256sum shell-lsp-* >SHA256SUMS)
 
-# Recompute vendorHash in nix/package.nix from go.mod and go.sum; run after any dependency change.
+# Recompute the vendorHash of shell-lsp and of the Dockerfile oracle from their go.mod and go.sum; run after any dependency change.
 sync-flake:
     #!/usr/bin/env bash
     set -euo pipefail
     fake="sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
-    cur="$(grep -oP 'vendorHash = "\K[^"]+' nix/package.nix)"
-    sed -i "s#vendorHash = \"${cur}\"#vendorHash = \"${fake}\"#" nix/package.nix
-    out="$(nix build .#default --no-link 2>&1 || true)"
-    got="$(printf '%s' "$out" | grep -oP 'got:\s+\K(sha256-\S+)' | head -1 || true)"
-    sed -i "s#vendorHash = \"${fake}\"#vendorHash = \"${got:-$cur}\"#" nix/package.nix
     err="$(mktemp)"
     trap 'rm -f "$err"' EXIT
-    if ! nix build .#default --no-link >/dev/null 2>"$err"; then
-        echo "nix build fails for a reason other than a stale vendorHash:" >&2
-        tail -20 "$err" >&2
-        exit 1
-    fi
-    echo "vendorHash = ${got:-$cur}"
+    sync() {
+        local file="$1" attr="$2" cur out got
+        cur="$(grep -oP 'vendorHash = "\K[^"]+' "$file")"
+        sed -i "s#vendorHash = \"${cur}\"#vendorHash = \"${fake}\"#" "$file"
+        out="$(nix build ".#${attr}" --no-link 2>&1 || true)"
+        got="$(printf '%s' "$out" | grep -oP 'got:\s+\K(sha256-\S+)' | head -1 || true)"
+        sed -i "s#vendorHash = \"${fake}\"#vendorHash = \"${got:-$cur}\"#" "$file"
+        if ! nix build ".#${attr}" --no-link >/dev/null 2>"$err"; then
+            echo "nix build .#${attr} fails for a reason other than a stale vendorHash:" >&2
+            tail -20 "$err" >&2
+            exit 1
+        fi
+        echo "${file}: vendorHash = ${got:-$cur}"
+    }
+    sync nix/package.nix default
+    sync tools/dockerfile-oracle/package.nix dockerfile-oracle
 
 # Print the current version or the one a release level would cut, from the latest v* tag.
 _next-version level:

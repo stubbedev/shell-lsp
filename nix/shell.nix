@@ -13,7 +13,7 @@
       fuzzReferences = [
         pkgs.just # Task runner, and the reference oracle for the justfile fixtures
         pkgs.gnumake # Reference oracle for the Makefile fixtures
-        (pkgs.callPackage ../tools/dockerfile-oracle/package.nix { inherit buildGoModule; }) # BuildKit's Dockerfile frontend, the reference oracle for the Dockerfile fixtures
+        self'.packages.dockerfile-oracle # BuildKit's Dockerfile frontend, the reference oracle for the Dockerfile fixtures
 
         # Real shells for the conformance tests, FuzzQuote and
         # `just corpus-shells`, which check that the parser accepts and
@@ -28,6 +28,10 @@
       ];
     in
     {
+      packages.dockerfile-oracle = pkgs.callPackage ../tools/dockerfile-oracle/package.nix {
+        inherit buildGoModule;
+      };
+
       devShells.fuzz = pkgs.mkShellNoCC { packages = fuzzReferences; };
 
       devShells.default = pkgs.mkShell {
