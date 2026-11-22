@@ -32,6 +32,7 @@ const (
 	maxTrackedGroups = 32
 	maxRepeat        = 32767
 	maxReference     = 9
+	bracketElements  = ":.="
 )
 
 var classNames = map[string]bool{
@@ -349,6 +350,7 @@ func (s *scanner) bracket() outcome {
 func BracketEnd(pattern string, at int) (int, bool) { return bracketEnd(pattern, at, false) }
 
 func bracketEnd(src string, at int, escapes bool) (int, bool) {
+	var unterminated [len(bracketElements)]bool
 	i := skipBracketStart(src, at+1, len(src))
 	for i < len(src) {
 		switch c := src[i]; {
@@ -357,11 +359,16 @@ func bracketEnd(src string, at int, escapes bool) (int, bool) {
 		case escapes && c == '\\':
 			i += 2
 			continue
-		case c == '[' && i+1 < len(src) && strings.IndexByte(":.=", src[i+1]) >= 0:
+		case c == '[' && i+1 < len(src):
+			kind := strings.IndexByte(bracketElements, src[i+1])
+			if kind < 0 || unterminated[kind] {
+				break
+			}
 			if end := strings.Index(src[i+2:], src[i+1:i+2]+"]"); end >= 0 {
 				i += end + 4
 				continue
 			}
+			unterminated[kind] = true
 		}
 		i++
 	}
@@ -382,7 +389,7 @@ func (s *scanner) bracketContents(at, end int, classes bool) outcome {
 	last := end - 1
 	for i := skipBracketStart(s.src, at+1, last); i < last; {
 		c := s.src[i]
-		if c == '[' && i+1 < last && strings.IndexByte(":.=", s.src[i+1]) >= 0 {
+		if c == '[' && i+1 < last && strings.IndexByte(bracketElements, s.src[i+1]) >= 0 {
 			close := strings.Index(s.src[i+2:last], s.src[i+1:i+2]+"]")
 			if close < 0 {
 				return proceed

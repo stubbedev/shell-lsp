@@ -456,6 +456,7 @@ func (p *parser) delimitedRegex(delimiter byte) ending {
 
 func (p *parser) scanTo(delimiter byte, brackets bool) ending {
 	inBracket := false
+	lineEnd := -1
 	for !p.eof() {
 		switch c := p.src[p.pos]; {
 		case c == '\\':
@@ -469,8 +470,11 @@ func (p *parser) scanTo(delimiter byte, brackets bool) ending {
 			return lineBreak
 		case c == delimiter:
 			return closed
-		case brackets && c == '[':
-			if end, ok := regex.BracketEnd(p.src[:textline.End(p.src, p.pos)], p.pos); ok {
+		case brackets && c == '[' && !inBracket:
+			if p.pos > lineEnd {
+				lineEnd = textline.End(p.src, p.pos)
+			}
+			if end, ok := regex.BracketEnd(p.src[:lineEnd], p.pos); ok {
 				p.pos = end
 				continue
 			}
