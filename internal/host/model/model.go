@@ -390,6 +390,7 @@ type Index struct {
 	byOwner  []int32
 	byParent []int32
 	binding  map[Scope]bool
+	settles  []int
 }
 
 func (ix *Index) DeferFolds(compute func() []Fold) { ix.foldsOf = sync.OnceValue(compute) }
@@ -443,11 +444,18 @@ func (ix *Index) tables() {
 		})
 		ix.buildNameRuns()
 		ix.binding = map[Scope]bool{}
+		ix.settles = make([]int, 0, len(ix.Symbols)+len(ix.Deferred))
 		for i := range ix.Symbols {
 			if scope := ix.Symbols[i].Scope; scope != Global {
 				ix.binding[scope] = true
 			}
+			ix.settles = append(ix.settles, ix.Symbols[i].Span.End)
 		}
+		for _, d := range ix.Deferred {
+			ix.settles = append(ix.settles, d.Until)
+		}
+		slices.Sort(ix.settles)
+		ix.settles = slices.Compact(ix.settles)
 		edges := 0
 		for i := range ix.Refs {
 			if ix.Refs[i].Edge {
@@ -529,6 +537,18 @@ func (ix *Index) namedIn(ns Namespace, name string, scope Scope) []int32 {
 func (ix *Index) scopedName(ns Namespace, name string) bool {
 	run := ix.named(ns, name)
 	return len(run) > 0 && ix.Symbols[run[len(run)-1]].Scope != Global
+}
+
+func (ix *Index) settled(offset int) int {
+	ix.tables()
+	i, found := slices.BinarySearch(ix.settles, offset)
+	switch {
+	case found:
+		return offset
+	case i == 0:
+		return 0
+	}
+	return ix.settles[i-1]
 }
 
 func (ix *Index) bindsAny(scope Scope) bool {

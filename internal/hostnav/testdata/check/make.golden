@@ -622,3 +622,6 @@ rejected 1:1 Recursive variable 'OBJS' references itself (eventually)
 -- target-variable-reaches-a-later-target-a-variable-names --
 rejected 2:1 Recursive variable 'OBJS' references itself (eventually)
 2:15 SL6007 error variable `OBJS` depends on itself
+-- variable-expanded-before-a-later-line-redefines-what-it-uses --
+rejected 1:1 Recursive variable 'SRCS' references itself (eventually)
+1:10 SL6007 error variable `SRCS` depends on itself

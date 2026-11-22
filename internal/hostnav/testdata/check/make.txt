@@ -955,3 +955,9 @@ all: OBJS = $(OBJS)
 all: src/io.c ;
 $(OBJS):
 	rm -f $(OBJS)
+-- variable-expanded-before-a-later-line-redefines-what-it-uses --
+SRCS = $(SRCS) -O2
+OBJS = $(SRCS)
+$(OBJS): ; @echo
+SRCS =
+CC := $(OBJS)

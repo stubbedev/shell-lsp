@@ -454,26 +454,19 @@ func (m *Module) resolveIn(file int, r Ref, c context) []Target {
 
 func (m *Module) expansions() map[Target][]context {
 	out := map[Target][]context{}
-	type key struct {
-		target Target
-		chain  string
-	}
-	seen := map[key]moment{}
 	type visit struct {
 		target Target
 		c      context
 	}
+	seen := map[visit]bool{}
 	var queue []visit
 	mark := func(t Target, c context) {
-		if t.Module != m || !t.before(c.at) {
+		v := visit{t, c}
+		if t.Module != m || !t.before(c.at) || seen[v] {
 			return
 		}
-		k := key{t, c.chain}
-		if prior, ok := seen[k]; ok && (prior == whenever || c.at != whenever && prior.offset >= c.at.offset) {
-			return
-		}
-		seen[k], out[t] = c.at, append(out[t], c)
-		queue = append(queue, visit{t, c})
+		seen[v], out[t] = true, append(out[t], c)
+		queue = append(queue, v)
 	}
 	for f, ix := range m.Files {
 		chains := map[Scope][]string{}
@@ -481,7 +474,7 @@ func (m *Module) expansions() map[Target][]context {
 			if r.Edge || r.Inert || r.Declares {
 				continue
 			}
-			at := moment{file: f, offset: r.Span.Start}
+			at := moment{file: f, offset: ix.settled(r.Span.Start)}
 			if r.Late {
 				at = whenever
 			}
