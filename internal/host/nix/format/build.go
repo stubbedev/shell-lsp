@@ -1422,7 +1422,6 @@ type chainPin uint8
 const (
 	pinNone chainPin = iota
 	pinHard
-	pinAfterName
 )
 
 func lambdaDoc(l *lambdaExpr, n, depth int) []item { return lambdaFrom(l, n, depth, pinNone, nil) }
@@ -1439,11 +1438,7 @@ func colonPinsChain(l *lambdaExpr) bool {
 }
 
 func lambdaFrom(l *lambdaExpr, n, depth int, pin chainPin, lead []item) []item {
-	afterName := pin == pinAfterName
-	if afterName {
-		pin = pinNone
-	}
-	if pin == pinNone && (depth == 1 && gathersHead(l) || !afterName && patternChain(l)) {
+	if pin == pinNone && (depth == 1 && gathersHead(l) || patternChain(l)) {
 		return headedChain(l, n, lead)
 	}
 	if pin == pinNone && colonPinsChain(l) {
@@ -1469,9 +1464,6 @@ func lambdaFrom(l *lambdaExpr, n, depth int, pin chainPin, lead []item) []item {
 		if _, next := v.param.(*nameParam); !next {
 			if pin != pinNone {
 				return seq(head, hardSpace, lambdaFrom(v, n, depth+1, pin, nil))
-			}
-			if named {
-				return seq(head, space, lambdaFrom(v, n, depth+1, pinAfterName, nil))
 			}
 			return seq(head, space, lambdaDoc(v, n, depth+1))
 		}

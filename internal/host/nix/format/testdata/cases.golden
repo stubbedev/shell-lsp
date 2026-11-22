@@ -8812,3 +8812,29 @@ C: { A = 0; }
     A = 0;
   }
 )
+-- case-wide-pattern-after-a-name-and-a-blank-line --
+x:
+
+{
+  A,
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA,
+}:
+{
+  A = 0;
+}
+-- case-wide-pattern-after-a-name-and-a-blank-line-with-body --
+x:
+
+{
+  A,
+  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA,
+}:
+with x;
+{
+  A = 0;
+}
+-- case-wide-pattern-after-a-name-and-a-blank-line-chains --
+x:
+
+{ A, AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA }:
+z: { A = 0; }
