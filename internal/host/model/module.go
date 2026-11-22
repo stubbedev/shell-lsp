@@ -377,15 +377,21 @@ func (m *Module) chains(file int, scope Scope) []string {
 	if scope == Global {
 		return []string{""}
 	}
-	inherits := m.Files[file].Inherits
+	ix := m.Files[file]
 	var out []string
+	seen := map[string]bool{}
+	walked := 0
 	var walk func(path []Scope)
 	walk = func(path []Scope) {
-		if len(out) >= maxChains {
+		if walked >= maxChains {
 			return
 		}
-		out = append(out, chainOf(path))
-		for _, parent := range inherits[path[len(path)-1]] {
+		walked++
+		if chain := chainOf(slices.DeleteFunc(slices.Clone(path), func(s Scope) bool { return !ix.bindsAny(s) })); !seen[chain] {
+			seen[chain] = true
+			out = append(out, chain)
+		}
+		for _, parent := range ix.Inherits[path[len(path)-1]] {
 			if !slices.Contains(path, parent) {
 				walk(append(slices.Clone(path), parent))
 			}
@@ -443,6 +449,7 @@ func (m *Module) expansions() map[Target][]context {
 		queue = append(queue, visit{t, c})
 	}
 	for f, ix := range m.Files {
+		chains := map[Scope][]string{}
 		for _, r := range ix.Refs {
 			if r.Edge || r.Inert || r.Declares {
 				continue
@@ -451,7 +458,12 @@ func (m *Module) expansions() map[Target][]context {
 			if r.Late {
 				at = whenever
 			}
-			for _, chain := range m.chains(f, r.Scope) {
+			of, known := chains[r.Scope]
+			if !known {
+				of = m.chains(f, r.Scope)
+				chains[r.Scope] = of
+			}
+			for _, chain := range of {
 				c := context{at: at, chain: chain}
 				for _, t := range m.resolveIn(f, r, c) {
 					mark(t, c)

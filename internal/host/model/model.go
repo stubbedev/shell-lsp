@@ -388,6 +388,7 @@ type Index struct {
 	nameRuns []nameRun
 	byOwner  []int32
 	byParent []int32
+	binding  map[Scope]bool
 }
 
 func (ix *Index) DeferFolds(compute func() []Fold) { ix.foldsOf = sync.OnceValue(compute) }
@@ -440,6 +441,12 @@ func (ix *Index) tables() {
 			return cmp.Or(cmp.Compare(ix.Symbols[a].Parent, ix.Symbols[b].Parent), cmp.Compare(a, b))
 		})
 		ix.buildNameRuns()
+		ix.binding = map[Scope]bool{}
+		for i := range ix.Symbols {
+			if scope := ix.Symbols[i].Scope; scope != Global {
+				ix.binding[scope] = true
+			}
+		}
 		edges := 0
 		for i := range ix.Refs {
 			if ix.Refs[i].Edge {
@@ -516,6 +523,11 @@ func (ix *Index) named(ns Namespace, name string) []int32 {
 
 func (ix *Index) namedIn(ns Namespace, name string, scope Scope) []int32 {
 	return equalRun(ix.named(ns, name), func(item int32) int { return cmp.Compare(ix.Symbols[item].Scope, scope) })
+}
+
+func (ix *Index) bindsAny(scope Scope) bool {
+	ix.tables()
+	return ix.binding[scope]
 }
 
 func (ix *Index) Binds(scope Scope, name string) bool {
