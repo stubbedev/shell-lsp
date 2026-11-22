@@ -921,3 +921,21 @@ $(REVISION_H)$(yes_git:yes=~disabled~):
 -- target-named-twice-in-one-rule-keeps-its-recipe --
 X = a
 a $(X): ; @echo $@
+-- target-variable-reaches-a-variable-prerequisite --
+all: OBJS = $(OBJS)
+OBJS ?= src/io.c
+all: src/io.c ;
+$(OBJS):
+	rm -f $(OBJS)
+-- target-variable-reaches-a-mismatched-static-pattern-target --
+all: OBJS = $(OBJS)
+OBJS ?= src/io.c
+all: src/io.c ;
+$(OBJS): %.o: %.c
+	rm -f $(OBJS)
+-- target-variable-reaches-a-variable-named-prerequisite --
+SRCS = src/io.c
+all: OBJS = $(OBJS)
+all: $(SRCS) ;
+src/io.c:
+	rm -f $(OBJS)

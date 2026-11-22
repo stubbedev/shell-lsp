@@ -55,6 +55,7 @@ type indexer struct {
 	redefined    []string
 	overridden   map[*Rule]bool
 	usedPatterns map[*Rule]bool
+	evaluator    *reader
 }
 
 type exportState struct {
@@ -141,7 +142,7 @@ func (f *File) Index(shells map[*Rule]bool) *model.Index {
 	ix.Branches = f.alternatives()
 	ix.Inherits = map[model.Scope][]model.Scope{}
 	replacements := f.replacements()
-	in := &indexer{overridden: f.overridden(replacements), usedPatterns: f.usedPatterns(), f: f, ix: ix, scopes: map[string]model.Scope{}, exports: f.exportState(), called: map[string]bool{}}
+	in := &indexer{evaluator: f.evaluator(), overridden: f.overridden(replacements), usedPatterns: f.usedPatterns(), f: f, ix: ix, scopes: map[string]model.Scope{}, exports: f.exportState(), called: map[string]bool{}}
 	for _, a := range f.Assignments {
 		in.assignment(a)
 	}
@@ -519,8 +520,36 @@ func (in *indexer) call(n Node, scope model.Scope, owner int, edge bool, bound [
 
 func literal(w Word) bool { return !w.Expr.Dynamic() && !hasPercent(w.Text) }
 
+func (in *indexer) targetScopes(r *Rule) []model.Scope {
+	named, _ := in.evaluator.namedFiles(r.Targets)
+	scopes := make([]model.Scope, 0, len(named))
+	for _, n := range named {
+		if _, special := specialTargets[n.name]; !special {
+			scopes = append(scopes, in.scope(n.name))
+		}
+	}
+	return scopes
+}
+
+func (in *indexer) inherit(r *Rule, parents []model.Scope) {
+	named, _ := in.evaluator.namedFiles(slices.Concat(r.Prereqs, r.OrderOnly))
+	for _, n := range named {
+		child := in.scope(n.name)
+		for _, parent := range parents {
+			if !slices.Contains(in.ix.Inherits[child], parent) {
+				in.ix.Inherits[child] = append(in.ix.Inherits[child], parent)
+			}
+		}
+	}
+}
+
 func (in *indexer) rule(r *Rule, shell bool) {
+	scopes := in.targetScopes(r)
 	scope := model.Global
+	if len(scopes) > 0 {
+		scope = scopes[0]
+	}
+	in.inherit(r, scopes)
 	owner := model.NoSymbol
 	phony, declaring := false, false
 	for _, t := range r.Targets {
@@ -537,7 +566,7 @@ func (in *indexer) rule(r *Rule, shell bool) {
 		i := in.symbol(model.Symbol{Name: fileName(t.Text), Kind: model.KindTarget, Span: r.Span, Selection: t.Span, Parent: model.NoParent, Detail: detail(in.text(r.Header)), Arity: model.NoArity})
 		in.token(t.Span, semantic.TypeFunction, semantic.ModDeclaration)
 		if owner == model.NoSymbol {
-			owner, scope = i, in.scope(fileName(t.Text))
+			owner = i
 		}
 		in.ix.Runnables = append(in.ix.Runnables, model.Runnable{Name: t.Text, Span: t.Span})
 	}
@@ -545,10 +574,6 @@ func (in *indexer) rule(r *Rule, shell bool) {
 		in.walk(w.Expr, model.Global, owner, false, nil)
 	}
 	for _, w := range slices.Concat(r.Prereqs, r.OrderOnly) {
-		if scope != model.Global && literal(w) {
-			child := in.scope(fileName(w.Text))
-			in.ix.Inherits[child] = append(in.ix.Inherits[child], scope)
-		}
 		in.walk(w.Expr, model.Global, owner, false, nil)
 		if literal(w) && phony {
 			in.ix.Phony = append(in.ix.Phony, fileName(w.Text))
