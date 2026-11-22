@@ -380,6 +380,19 @@ func TestMakeTargetVariablesReachPrerequisiteRecipes(t *testing.T) {
 	}
 }
 
+func TestMakeTargetVariablesReachEveryTargetOfARecipe(t *testing.T) {
+	t.Parallel()
+
+	tr := newTree(t, map[string]string{
+		"Makefile": "app.o app:\n\t@echo $(MODE)\napp: MODE = fast\n",
+	})
+	g, sym := tr.at("Makefile", "MODE", 1)
+	expectStrings(t, "definition of MODE in a recipe its later target defines it for", tr.locations(g.definitions(sym)), []string{"Makefile:3:MODE"})
+	if findings := g.Findings(); len(findings) > 0 {
+		t.Errorf("findings = %+v", findings)
+	}
+}
+
 type twoCopies struct {
 	*workspace.Workspace
 }

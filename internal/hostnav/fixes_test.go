@@ -68,6 +68,10 @@ func TestMakefileFixes(t *testing.T) {
 	if got, want := phony.fixes("Makefile"), []string{"Add `clean` to .PHONY -> all:\n\ttrue\n\n.PHONY: clean\nclean:\n\trm -f app\n"}; !slices.Equal(got, want) {
 		t.Errorf("fixes for a target missing from .PHONY = %q, want %q", got, want)
 	}
+	shared := newTree(t, map[string]string{"Makefile": "app.o app:\n\t@echo $(MOD)\napp: MODE = fast\n"})
+	if got, want := shared.fixes("Makefile"), []string{"Change to `MODE` -> app.o app:\n\t@echo $(MODE)\napp: MODE = fast\n"}; !slices.Equal(got, want) {
+		t.Errorf("fixes for a name a later target of the recipe defines = %q, want %q", got, want)
+	}
 }
 
 func TestNixFixes(t *testing.T) {

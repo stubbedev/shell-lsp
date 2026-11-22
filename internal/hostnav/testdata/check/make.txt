@@ -944,3 +944,14 @@ all: OBJS = x
 all: src/io.c ;
 src/io.c:
 	rm -f $(OBJS)
+-- target-variable-reaches-a-later-target-of-a-rule --
+all: OBJS = $(OBJS)
+all: src/io.c ;
+a.o src/io.c:
+	rm -f $(OBJS)
+-- target-variable-reaches-a-later-target-a-variable-names --
+OBJS = -O2 src/io.c
+all: OBJS = $(OBJS)
+all: src/io.c ;
+$(OBJS):
+	rm -f $(OBJS)

@@ -48,6 +48,7 @@ type indexer struct {
 	f            *File
 	ix           *model.Index
 	scopes       map[string]model.Scope
+	lastScope    model.Scope
 	exports      exportState
 	dynamic      bool
 	arguments    []int
@@ -141,6 +142,7 @@ func (f *File) Index(shells map[*Rule]bool) *model.Index {
 	ix.Exports = f.exported()
 	ix.Branches = f.alternatives()
 	ix.Inherits = map[model.Scope][]model.Scope{}
+	ix.Members = map[model.Scope][]model.Scope{}
 	replacements := f.replacements()
 	in := &indexer{evaluator: f.evaluator(), overridden: f.overridden(replacements), usedPatterns: f.usedPatterns(), f: f, ix: ix, scopes: map[string]model.Scope{}, exports: f.exportState(), called: map[string]bool{}}
 	for _, a := range f.Assignments {
@@ -318,8 +320,25 @@ func (in *indexer) scope(target string) model.Scope {
 	if s, ok := in.scopes[target]; ok {
 		return s
 	}
-	s := model.Scope(model.Narrow(len(in.scopes) + 1))
+	s := in.freshScope()
 	in.scopes[target] = s
+	return s
+}
+
+func (in *indexer) freshScope() model.Scope {
+	in.lastScope++
+	return in.lastScope
+}
+
+func (in *indexer) eachOf(scopes []model.Scope) model.Scope {
+	switch len(scopes) {
+	case 0:
+		return model.Global
+	case 1:
+		return scopes[0]
+	}
+	s := in.freshScope()
+	in.ix.Members[s] = scopes
 	return s
 }
 
@@ -545,10 +564,7 @@ func (in *indexer) inherit(r *Rule, parents []model.Scope) {
 
 func (in *indexer) rule(r *Rule, shell bool) {
 	scopes := in.targetScopes(r)
-	scope := model.Global
-	if len(scopes) > 0 {
-		scope = scopes[0]
-	}
+	scope := in.eachOf(scopes)
 	in.inherit(r, scopes)
 	owner := model.NoSymbol
 	phony, declaring := false, false

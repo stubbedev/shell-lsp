@@ -87,11 +87,12 @@ func (g *Group) derivedFixes(f lint.Finding) []Fix {
 
 func (g *Group) namesOf(kind model.Kind, at int) []string {
 	ns := kind.Namespace()
-	scope, _ := g.Index().ScopeAt(at)
+	self := g.Index()
+	scope, _ := self.ScopeAt(at)
 	var out []string
 	for f, ix := range g.Module.Files {
 		for _, s := range ix.Symbols {
-			if s.Kind.Namespace() == ns && (s.Scope == model.Global || f == g.selfAt() && s.Scope == scope) {
+			if s.Kind.Namespace() == ns && (s.Scope == model.Global || f == g.selfAt() && self.Covers(scope, s.Scope)) {
 				out = append(out, s.Name)
 			}
 		}

@@ -616,3 +616,9 @@ rejected 2:1 Recursive variable 'OBJS' references itself (eventually)
 2:15 SL6007 error variable `OBJS` depends on itself
 -- target-variable-is-known-in-a-prerequisite-recipe --
 accepted
+-- target-variable-reaches-a-later-target-of-a-rule --
+rejected 1:1 Recursive variable 'OBJS' references itself (eventually)
+1:15 SL6007 error variable `OBJS` depends on itself
+-- target-variable-reaches-a-later-target-a-variable-names --
+rejected 2:1 Recursive variable 'OBJS' references itself (eventually)
+2:15 SL6007 error variable `OBJS` depends on itself

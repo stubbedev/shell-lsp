@@ -209,6 +209,20 @@ func (m *Module) resolve(file int, ref Ref, within reach) Resolution {
 }
 
 func (m *Module) lookup(file int, name string, ns Namespace, scope Scope, horizon int, within reach) []Target {
+	if members := m.members(file, scope); len(members) > 0 {
+		if within == reachScope || !m.Files[file].scopedName(ns, name) {
+			return m.global(name, ns)
+		}
+		var out []Target
+		for _, member := range members {
+			for _, t := range m.lookup(file, name, ns, member, horizon, within) {
+				if !slices.Contains(out, t) {
+					out = append(out, t)
+				}
+			}
+		}
+		return out
+	}
 	if file >= 0 && scope != Global {
 		var local []Target
 		for _, i := range m.Files[file].namedIn(ns, name, scope) {
@@ -230,6 +244,13 @@ func (m *Module) lookup(file int, name string, ns Namespace, scope Scope, horizo
 		}
 	}
 	return m.global(name, ns)
+}
+
+func (m *Module) members(file int, scope Scope) []Scope {
+	if file < 0 || scope == Global {
+		return nil
+	}
+	return m.Files[file].Members[scope]
 }
 
 func (m *Module) global(name string, ns Namespace) []Target {
@@ -378,26 +399,32 @@ func (m *Module) chains(file int, scope Scope) []string {
 		return []string{""}
 	}
 	ix := m.Files[file]
+	starts := []Scope{scope}
+	if members := m.members(file, scope); len(members) > 0 {
+		starts = members
+	}
 	var out []string
 	seen := map[string]bool{}
-	walked := 0
-	var walk func(path []Scope)
-	walk = func(path []Scope) {
-		if walked >= maxChains {
-			return
-		}
-		walked++
-		if chain := chainOf(slices.DeleteFunc(slices.Clone(path), func(s Scope) bool { return !ix.bindsAny(s) })); !seen[chain] {
-			seen[chain] = true
-			out = append(out, chain)
-		}
-		for _, parent := range ix.Inherits[path[len(path)-1]] {
-			if !slices.Contains(path, parent) {
-				walk(append(slices.Clone(path), parent))
+	for _, start := range starts {
+		walked := 0
+		var walk func(path []Scope)
+		walk = func(path []Scope) {
+			if walked >= maxChains || len(out) >= maxChains {
+				return
+			}
+			walked++
+			if chain := chainOf(slices.DeleteFunc(slices.Clone(path), func(s Scope) bool { return !ix.bindsAny(s) })); !seen[chain] {
+				seen[chain] = true
+				out = append(out, chain)
+			}
+			for _, parent := range ix.Inherits[path[len(path)-1]] {
+				if !slices.Contains(path, parent) {
+					walk(append(slices.Clone(path), parent))
+				}
 			}
 		}
+		walk([]Scope{start})
 	}
-	walk([]Scope{scope})
 	return out
 }
 
@@ -405,7 +432,7 @@ func (m *Module) resolveIn(file int, r Ref, c context) []Target {
 	var scopes []Scope
 	switch {
 	case r.Base:
-	case r.Scope != Global:
+	case r.Scope != Global && len(m.members(file, r.Scope)) == 0:
 		scopes = append(scopes, r.Scope)
 		fallthrough
 	default:

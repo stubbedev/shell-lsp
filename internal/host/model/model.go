@@ -375,6 +375,7 @@ type Index struct {
 	Recipes   bool
 	Inherits  map[Scope][]Scope
 	Extends   map[Scope][]Scope
+	Members   map[Scope][]Scope
 	Paths     []PathRef
 	Phony     []string
 	Fileless  []int
@@ -523,6 +524,11 @@ func (ix *Index) named(ns Namespace, name string) []int32 {
 
 func (ix *Index) namedIn(ns Namespace, name string, scope Scope) []int32 {
 	return equalRun(ix.named(ns, name), func(item int32) int { return cmp.Compare(ix.Symbols[item].Scope, scope) })
+}
+
+func (ix *Index) scopedName(ns Namespace, name string) bool {
+	run := ix.named(ns, name)
+	return len(run) > 0 && ix.Symbols[run[len(run)-1]].Scope != Global
 }
 
 func (ix *Index) bindsAny(scope Scope) bool {
@@ -737,6 +743,10 @@ func (ix *Index) ScopeAt(offset int) (Scope, bool) {
 		return ix.Shells[i].Scope, true
 	}
 	return Global, false
+}
+
+func (ix *Index) Covers(scope, inner Scope) bool {
+	return inner == scope || slices.Contains(ix.Members[scope], inner)
 }
 
 func (ix *Index) Exported(name string, scope Scope) []int {
