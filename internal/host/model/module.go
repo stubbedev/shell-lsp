@@ -160,7 +160,16 @@ type Resolution struct {
 
 func (r Resolution) Found() bool { return len(r.Targets) > 0 || r.Builtin != nil }
 
-func (m *Module) Resolve(file int, ref Ref) Resolution {
+type reach uint8
+
+const (
+	reachAncestors reach = iota
+	reachScope
+)
+
+func (m *Module) Resolve(file int, ref Ref) Resolution { return m.resolve(file, ref, reachAncestors) }
+
+func (m *Module) resolve(file int, ref Ref, within reach) Resolution {
 	if links := m.Links(); links != nil {
 		if homes, linked := links.Homes(file, ref.Scope, ref.Name); linked {
 			return Resolution{Targets: m.AtHomes(homes, ref.Name)}
@@ -182,7 +191,7 @@ func (m *Module) Resolve(file int, ref Ref) Resolution {
 		if ok && sub == nil {
 			return Resolution{Missing: true}
 		}
-		return Resolution{Targets: module.lookup(-1, ref.Name, NamespaceModules, Global, 0)}
+		return Resolution{Targets: module.lookup(-1, ref.Name, NamespaceModules, Global, 0, within)}
 	}
 	ns := ref.Kind.Namespace()
 	scope := ref.Scope
@@ -190,7 +199,7 @@ func (m *Module) Resolve(file int, ref Ref) Resolution {
 	if ref.Qualified() {
 		scope, from = Global, -1
 	}
-	if targets := module.lookup(from, ref.Name, ns, scope, int(ref.Horizon)); len(targets) > 0 {
+	if targets := module.lookup(from, ref.Name, ns, scope, int(ref.Horizon), within); len(targets) > 0 {
 		return Resolution{Targets: targets}
 	}
 	if b, ok := m.Builtins.Lookup(ref.Kind, ref.Name); ok {
@@ -199,7 +208,7 @@ func (m *Module) Resolve(file int, ref Ref) Resolution {
 	return Resolution{}
 }
 
-func (m *Module) lookup(file int, name string, ns Namespace, scope Scope, horizon int) []Target {
+func (m *Module) lookup(file int, name string, ns Namespace, scope Scope, horizon int, within reach) []Target {
 	if file >= 0 && scope != Global {
 		var local []Target
 		for _, i := range m.Files[file].namedIn(ns, name, scope) {
@@ -210,10 +219,20 @@ func (m *Module) lookup(file int, name string, ns Namespace, scope Scope, horizo
 		if len(local) > 0 {
 			return local
 		}
-		if inherited := m.inherited(file, name, ns, scope); len(inherited) > 0 {
+		if within == reachScope {
+			return m.global(name, ns)
+		}
+		if inherited := m.inherited(file, m.Files[file].Extends, name, ns, scope); len(inherited) > 0 {
 			return inherited
 		}
+		if inherited := m.inherited(file, m.Files[file].Inherits, name, ns, scope); len(inherited) > 0 {
+			return append(m.global(name, ns), inherited...)
+		}
 	}
+	return m.global(name, ns)
+}
+
+func (m *Module) global(name string, ns Namespace) []Target {
 	var out []Target
 	for f, ix := range m.Files {
 		for _, i := range ix.namedIn(ns, name, Global) {
@@ -223,10 +242,10 @@ func (m *Module) lookup(file int, name string, ns Namespace, scope Scope, horizo
 	return out
 }
 
-func (m *Module) inherited(file int, name string, ns Namespace, scope Scope) []Target {
+func (m *Module) inherited(file int, parentsOf map[Scope][]Scope, name string, ns Namespace, scope Scope) []Target {
 	ix := m.Files[file]
 	seen := map[Scope]bool{scope: true}
-	parents := slices.Clone(ix.Extends[scope])
+	parents := slices.Clone(parentsOf[scope])
 	for len(parents) > 0 {
 		parent := parents[0]
 		parents = parents[1:]
@@ -243,7 +262,7 @@ func (m *Module) inherited(file int, name string, ns Namespace, scope Scope) []T
 		if len(found) > 0 {
 			return found
 		}
-		parents = append(parents, ix.Extends[parent]...)
+		parents = append(parents, parentsOf[parent]...)
 	}
 	return nil
 }
@@ -392,7 +411,7 @@ func (m *Module) resolveIn(file int, r Ref, c context) []Target {
 	}
 	for _, scope := range append(scopes, Global) {
 		r.Scope = scope
-		targets := slices.DeleteFunc(effective(m.Resolve(file, r).Targets, c.at), func(t Target) bool { return t.Info().Scope != scope })
+		targets := slices.DeleteFunc(effective(m.resolve(file, r, reachScope).Targets, c.at), func(t Target) bool { return t.Info().Scope != scope })
 		if len(targets) > 0 {
 			return targets
 		}

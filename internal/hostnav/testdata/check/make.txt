@@ -939,3 +939,8 @@ all: OBJS = $(OBJS)
 all: $(SRCS) ;
 src/io.c:
 	rm -f $(OBJS)
+-- target-variable-is-known-in-a-prerequisite-recipe --
+all: OBJS = x
+all: src/io.c ;
+src/io.c:
+	rm -f $(OBJS)

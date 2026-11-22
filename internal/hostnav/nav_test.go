@@ -361,6 +361,25 @@ func TestMakePatternSpecificVariables(t *testing.T) {
 	expectStrings(t, "definition of CFLAGS in notes.txt's recipe", tr.locations(g.definitions(sym)), []string{"Makefile:1:CFLAGS"})
 }
 
+func TestMakeTargetVariablesReachPrerequisiteRecipes(t *testing.T) {
+	t.Parallel()
+
+	tr := newTree(t, map[string]string{
+		"Makefile":  "release: MODE = fast\nrelease: app\napp:\n\t@echo $(MODE)\n",
+		"global.mk": "MODE := slow\nrelease: MODE = fast\nrelease: app\napp:\n\t@echo $(MODE)\n",
+	})
+	g, sym := tr.at("Makefile", "MODE", 1)
+	expectStrings(t, "definition of MODE in a prerequisite's recipe", tr.locations(g.definitions(sym)), []string{"Makefile:1:MODE"})
+	if findings := g.Findings(); len(findings) > 0 {
+		t.Errorf("findings = %+v", findings)
+	}
+	g, sym = tr.at("global.mk", "MODE", 2)
+	expectStrings(t, "definition of MODE in a prerequisite's recipe beside a global one", tr.locations(g.definitions(sym)), []string{"global.mk:1:MODE"})
+	if findings := g.Findings(); len(findings) > 0 {
+		t.Errorf("findings beside a global MODE = %+v", findings)
+	}
+}
+
 type twoCopies struct {
 	*workspace.Workspace
 }
