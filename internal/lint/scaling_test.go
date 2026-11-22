@@ -1,15 +1,14 @@
 package lint
 
 import (
-	"math"
 	"runtime"
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/scalingtest"
 )
 
 func nested(open, inner, close string, depth int) string {
@@ -61,47 +60,27 @@ func casePatterns(n int, pattern func(i int) string) string {
 	return sb.String()
 }
 
-func fastestChecks(scripts ...string) []time.Duration {
-	trees := make([]*parser.Tree, len(scripts))
-	fastest := make([]time.Duration, len(scripts))
-	for i, script := range scripts {
-		trees[i] = parser.Parse(script, dialect.Bash)
-		fastest[i] = time.Duration(math.MaxInt64)
-	}
-	for range 7 {
-		for i, tree := range trees {
-			runtime.GC()
-			start := time.Now()
-			Check(tree, nil, Options{})
-			fastest[i] = min(fastest[i], time.Since(start))
-		}
-	}
-	return fastest
-}
-
 func TestCheckTimeGrowsLinearlyWithInputSize(t *testing.T) {
 	cases := []struct {
 		name   string
 		base   int
 		script func(n int) string
 	}{
-		{"unclosed parameter expansions", 50_000, func(n int) string { return "echo " + strings.Repeat("${", n) + "\n" }},
-		{"one command with many arguments", 50_000, func(n int) string { return "echo " + strings.Repeat("a ", n) + "\n" }},
-		{"many literal case patterns", 25_000, func(n int) string {
+		{"unclosed parameter expansions", 25_000, func(n int) string { return "echo " + strings.Repeat("${", n) + "\n" }},
+		{"one command with many arguments", 25_000, func(n int) string { return "echo " + strings.Repeat("a ", n) + "\n" }},
+		{"many literal case patterns", 12_500, func(n int) string {
 			return casePatterns(n, func(i int) string { return "p" + strconv.Itoa(i) })
 		}},
-		{"many glob case patterns", 5_000, func(n int) string {
+		{"many glob case patterns", 2_500, func(n int) string {
 			return casePatterns(n, func(i int) string { return "p" + strconv.Itoa(i) + "*" })
 		}},
 	}
-	const growth, allowed = 4, 8
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			times := fastestChecks(tc.script(tc.base), tc.script(tc.base*growth))
-			small, large := times[0], times[1]
-			if large > allowed*small {
-				t.Errorf("linting %d items took %v, %d items %v: more than %dx for %dx the input", tc.base, small, tc.base*growth, large, allowed, growth)
-			}
+			scalingtest.Linear(t, "linting "+tc.name, tc.base, func(n int) func() {
+				tree := parser.Parse(tc.script(n), dialect.Bash)
+				return func() { Check(tree, nil, Options{}) }
+			})
 		})
 	}
 }

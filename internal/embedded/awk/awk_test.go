@@ -1,14 +1,12 @@
 package awk
 
 import (
-	"math"
-	"runtime"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stubbedev/shell-lsp/internal/embedded/lang"
 	"github.com/stubbedev/shell-lsp/internal/embedded/lang/langtest"
+	"github.com/stubbedev/shell-lsp/internal/scalingtest"
 )
 
 var validPrograms = []string{
@@ -299,29 +297,11 @@ func TestDocs(t *testing.T) {
 	}
 }
 
-func fastestParses(sources ...string) []time.Duration {
-	fastest := make([]time.Duration, len(sources))
-	for i := range fastest {
-		fastest[i] = time.Duration(math.MaxInt64)
-	}
-	for range 5 {
-		for i, src := range sources {
-			runtime.GC()
-			start := time.Now()
-			Parse(src)
-			fastest[i] = min(fastest[i], time.Since(start))
-		}
-	}
-	return fastest
-}
-
 func TestParseTimeGrowsLinearlyWithUnclosedBracketElements(t *testing.T) {
-	program := func(n int) string { return "/[" + strings.Repeat("[:", n) + "x/\n" }
-	const base, growth, allowed = 50_000, 8, 24
-	times := fastestParses(program(base), program(base*growth))
-	if small, large := times[0], times[1]; large > allowed*small {
-		t.Errorf("parsing %d unclosed `[:` took %v, %d took %v: more than %dx for %dx the input", base, small, base*growth, large, allowed, growth)
-	}
+	scalingtest.Linear(t, "parsing unclosed `[:`", 20_000, func(n int) func() {
+		src := "/[" + strings.Repeat("[:", n) + "x/\n"
+		return func() { Parse(src) }
+	})
 }
 
 func FuzzParse(f *testing.F) {
