@@ -233,6 +233,8 @@ func (l *lexer) quoted(k kind, sem lang.Kind, closer byte, unterminated string) 
 	start := l.pos
 	l.pos++
 	inBracket := false
+	lineEnd := -1
+	var unclosed [len(regex.BracketElements)]bool
 	for l.pos < len(l.src) {
 		c := l.src[l.pos]
 		switch {
@@ -245,11 +247,19 @@ func (l *lexer) quoted(k kind, sem lang.Kind, closer byte, unterminated string) 
 			inBracket = true
 			l.pos = bracketBody(l.src, l.pos+1)
 			continue
-		case closer == '/' && c == '[' && l.pos+1 < len(l.src) && strings.IndexByte(":.=", l.src[l.pos+1]) >= 0:
-			if end := strings.Index(l.src[l.pos+2:], l.src[l.pos+1:l.pos+2]+"]"); end >= 0 && !strings.Contains(l.src[l.pos+2:l.pos+2+end], "\n") {
+		case closer == '/' && c == '[' && l.pos+1 < len(l.src):
+			if l.pos > lineEnd {
+				lineEnd, unclosed = textline.End(l.src, l.pos), [len(regex.BracketElements)]bool{}
+			}
+			kind := strings.IndexByte(regex.BracketElements, l.src[l.pos+1])
+			if kind < 0 || unclosed[kind] {
+				break
+			}
+			if end := strings.Index(l.src[l.pos+2:lineEnd], l.src[l.pos+1:l.pos+2]+"]"); end >= 0 {
 				l.pos += end + 4
 				continue
 			}
+			unclosed[kind] = true
 		case closer == '/' && c == ']':
 			inBracket = false
 		case c == closer && !inBracket:
