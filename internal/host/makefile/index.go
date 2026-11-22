@@ -140,7 +140,8 @@ func (f *File) Index(shells map[*Rule]bool) *model.Index {
 	ix.Exports = f.exported()
 	ix.Branches = f.alternatives()
 	ix.Inherits = map[model.Scope][]model.Scope{}
-	in := &indexer{overridden: f.overridden(), usedPatterns: f.usedPatterns(), f: f, ix: ix, scopes: map[string]model.Scope{}, exports: f.exportState(), called: map[string]bool{}}
+	replacements := f.replacements()
+	in := &indexer{overridden: f.overridden(replacements), usedPatterns: f.usedPatterns(), f: f, ix: ix, scopes: map[string]model.Scope{}, exports: f.exportState(), called: map[string]bool{}}
 	for _, a := range f.Assignments {
 		in.assignment(a)
 	}
@@ -169,7 +170,7 @@ func (f *File) Index(shells map[*Rule]bool) *model.Index {
 		}
 	}
 	in.dropCallArguments()
-	ix.Findings = f.check()
+	ix.Findings = f.check(replacements, in.overridden)
 	in.deferred()
 	slices.SortFunc(ix.Tokens, func(a, b semantic.Token) int { return a.Span.Start - b.Span.Start })
 	return ix

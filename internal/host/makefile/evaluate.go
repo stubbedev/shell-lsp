@@ -13,9 +13,15 @@ type value struct {
 	text     string
 	known    bool
 	existing bool
+	assumed  bool
 }
 
 func knownValue(text string) value { return value{text: text, known: true} }
+
+func (v value) after(inputs ...value) value {
+	v.assumed = v.assumed || slices.ContainsFunc(inputs, func(in value) bool { return in.assumed })
+	return v
+}
 
 func (v value) mayExist() bool {
 	if v.known {
@@ -26,7 +32,7 @@ func (v value) mayExist() bool {
 
 func join(a, b value) value {
 	if a.known && b.known {
-		return knownValue(a.text + " " + b.text)
+		return knownValue(a.text+" "+b.text).after(a, b)
 	}
 	return value{existing: a.mayExist() && b.mayExist()}
 }
@@ -56,6 +62,46 @@ func fileName(w string) string {
 		w = rest
 	}
 	return w
+}
+
+type namedFile struct {
+	word    Word
+	name    string
+	assumed bool
+}
+
+func (f *File) evaluator() *reader { return &reader{text: f.Text, file: f} }
+
+func (p *reader) namedFiles(words []Word) ([]namedFile, bool) {
+	out := make([]namedFile, 0, len(words))
+	seen := make(map[string]bool, len(words))
+	known := true
+	add := func(w Word, name string, assumed bool) {
+		name = fileName(name)
+		if !seen[name] {
+			seen[name] = true
+			out = append(out, namedFile{word: w, name: name, assumed: assumed})
+		}
+	}
+	for _, w := range words {
+		if !w.Expr.Dynamic() {
+			if hasPercent(w.Text) {
+				known = false
+				continue
+			}
+			add(w, w.Text, false)
+			continue
+		}
+		v := p.exprValue(w.Expr, w.Span.Start, nil)
+		if !v.known || hasPercent(v.text) {
+			known = false
+			continue
+		}
+		for _, name := range fileWords(v.text) {
+			add(w, name, v.assumed)
+		}
+	}
+	return out, known
 }
 
 type expansion struct {
@@ -135,6 +181,7 @@ func (p *reader) referenceValue(n Node, before int, expanding []expansion) value
 			return value{}
 		}
 	}
+	v.assumed = v.assumed || !defined && !inherited
 	return v
 }
 
@@ -153,7 +200,7 @@ func (p *reader) substitutionValue(n Node, before int, expanding []expansion) va
 	case !v.known:
 		return value{existing: v.existing}
 	}
-	return knownValue(substituted(v.text, from.text, to.text))
+	return knownValue(substituted(v.text, from.text, to.text)).after(v, from, to)
 }
 
 func substituted(value, from, to string) string {
@@ -195,11 +242,13 @@ func (p *reader) assignedValue(a *Assignment, immediate bool, before int, expand
 
 func (p *reader) exprValue(e Expr, before int, expanding []expansion) value {
 	segments := []string{""}
+	assumed := false
 	for _, n := range e.Nodes {
 		v := p.nodeValue(n, before, expanding)
 		switch {
 		case v.known:
 			segments[len(segments)-1] += v.text
+			assumed = assumed || v.assumed
 		case !v.existing:
 			return value{}
 		default:
@@ -207,7 +256,7 @@ func (p *reader) exprValue(e Expr, before int, expanding []expansion) value {
 		}
 	}
 	if len(segments) == 1 {
-		return knownValue(segments[0])
+		return value{text: segments[0], known: true, assumed: assumed}
 	}
 	return value{existing: separated(segments)}
 }
@@ -304,7 +353,7 @@ var textFunctions = map[string]textFunction{
 func foreachValue(list value) value {
 	switch {
 	case list.known && len(fileWords(list.text)) == 0:
-		return knownValue("")
+		return knownValue("").after(list)
 	case !list.known && list.existing:
 		return value{existing: true}
 	}
@@ -350,8 +399,10 @@ func (p *reader) callValue(n Node, before int, expanding []expansion) value {
 		return value{}
 	}
 	args := make([]string, len(n.Args))
+	inputs := make([]value, len(n.Args))
 	for i, e := range n.Args {
 		v := p.exprValue(e, before, expanding)
+		inputs[i] = v
 		switch {
 		case v.known:
 			args[i] = v.text
@@ -367,5 +418,5 @@ func (p *reader) callValue(n Node, before int, expanding []expansion) value {
 	if !ok {
 		return value{}
 	}
-	return knownValue(text)
+	return knownValue(text).after(inputs...)
 }

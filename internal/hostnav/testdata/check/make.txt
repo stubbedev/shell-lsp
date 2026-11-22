@@ -899,3 +899,25 @@ OBJS ?= $(filter %.c,$(CC))
 $(OBJS): %.o: %.c
 	@$(CC) $(CFLAGS) -o $@ $^
 CC = $(CC -O2
+-- static-pattern-recipe-replaced-for-a-variable-target --
+OBJS ?= ${CC}
+all: ; @echo ${CC}
+$(OBJS): %.o: %.c
+	@install -m 755 $(TARGET) $(DESTDIR)$(PREFIX)/bin
+PREFIX = $(PREFIX) -O2
+$(OBJS): %.o: %.c ; @echo ${CC}
+-- recipe-replaced-for-one-of-two-targets-still-runs --
+X = $(X)
+OBJS = a b
+$(OBJS): ; @echo $(X)
+a: ; @echo a
+-- recipe-replaced-only-while-an-unassigned-variable-is-empty --
+REVISION_H = revision.h
+all: $(REVISION_H)
+$(REVISION_H)$(no_git:no=~disabled~):
+	@echo one
+$(REVISION_H)$(yes_git:yes=~disabled~):
+	@echo two
+-- target-named-twice-in-one-rule-keeps-its-recipe --
+X = a
+a $(X): ; @echo $@

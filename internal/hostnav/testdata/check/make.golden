@@ -592,3 +592,16 @@ accepted
 accepted
 4:6 SL6015 warning this variable reference is not closed on the same logical line; make fails when it expands `CC`
 4:8 SL6010 warning unknown function `CC`
+-- static-pattern-recipe-replaced-for-a-variable-target --
+accepted
+6:1 SL6009 warning this recipe for `cc` replaces the one on line 3
+-- recipe-replaced-for-one-of-two-targets-still-runs --
+rejected 1:1 Recursive variable 'X' references itself (eventually)
+1:7 SL6007 error variable `X` depends on itself
+4:1 SL6009 warning this recipe for `a` replaces the one on line 3
+-- recipe-replaced-only-while-an-unassigned-variable-is-empty --
+accepted
+3:16 SL6006 info unknown variable `no_git`
+5:16 SL6006 info unknown variable `yes_git`
+-- target-named-twice-in-one-rule-keeps-its-recipe --
+accepted

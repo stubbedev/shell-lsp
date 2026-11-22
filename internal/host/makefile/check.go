@@ -21,9 +21,8 @@ var errorCodes = map[ErrorKind]lint.Code{
 	ErrPatternMismatch:     lint.CodeMakePatternMismatch,
 }
 
-func (f *File) check() []lint.Finding {
+func (f *File) check(replacements []replacement, replaced map[*Rule]bool) []lint.Finding {
 	var out []lint.Finding
-	replaced := f.overridden()
 	for _, e := range f.Errors {
 		switch e.Kind {
 		case ErrDeferredUnterminated:
@@ -46,7 +45,7 @@ func (f *File) check() []lint.Finding {
 			out = append(out, lint.HostFinding(errorCodes[e.Kind], e.Span, e.Message))
 		}
 	}
-	return append(out, f.duplicateRecipes()...)
+	return append(out, f.duplicateRecipes(replacements)...)
 }
 
 func (f *File) recipeRule(at Span) *Rule {
@@ -147,55 +146,58 @@ func (f *File) alternatives() model.Alternatives {
 }
 
 type replacement struct {
-	prior, later Word
+	prior, later namedFile
 	rule         *Rule
 }
 
 func (f *File) replacements() []replacement {
 	type recipe struct {
-		target Word
+		target namedFile
 		rule   *Rule
 	}
 	var out []replacement
 	alternatives := f.alternatives()
+	evaluator := f.evaluator()
 	earlier := map[string][]recipe{}
 	for _, r := range f.Rules {
-		if r.DoubleColon || len(r.Recipe) == 0 || len(r.Patterns) > 0 {
+		if r.DoubleColon || len(r.Recipe) == 0 {
 			continue
 		}
-		for _, t := range r.Targets {
-			if !literal(t) {
-				continue
-			}
-			name := fileName(t.Text)
-			prior := slices.IndexFunc(earlier[name], func(e recipe) bool { return !alternatives.Exclusive(e.target.Span.Start, t.Span.Start) })
+		named, _ := evaluator.namedFiles(r.Targets)
+		for _, n := range named {
+			prior := slices.IndexFunc(earlier[n.name], func(e recipe) bool { return !alternatives.Exclusive(e.target.word.Span.Start, n.word.Span.Start) })
 			if prior < 0 {
-				earlier[name] = append(earlier[name], recipe{t, r})
+				earlier[n.name] = append(earlier[n.name], recipe{n, r})
 				continue
 			}
-			out = append(out, replacement{prior: earlier[name][prior].target, later: t, rule: earlier[name][prior].rule})
-			earlier[name][prior] = recipe{t, r}
+			out = append(out, replacement{prior: earlier[n.name][prior].target, later: n, rule: earlier[n.name][prior].rule})
+			earlier[n.name][prior] = recipe{n, r}
 		}
 	}
 	return out
 }
 
-func (f *File) duplicateRecipes() []lint.Finding {
-	var out []lint.Finding
-	for _, r := range f.replacements() {
-		out = append(out, lint.HostFinding(lint.CodeMakeDuplicateRecipe, r.later.Span, fmt.Sprintf("this recipe for `%s` replaces the one on line %d", r.later.Text, f.line(r.prior.Span.Start))))
+func (f *File) duplicateRecipes(replacements []replacement) []lint.Finding {
+	out := make([]lint.Finding, 0, len(replacements))
+	for _, r := range replacements {
+		if r.prior.assumed || r.later.assumed {
+			continue
+		}
+		out = append(out, lint.HostFinding(lint.CodeMakeDuplicateRecipe, r.later.word.Span, fmt.Sprintf("this recipe for `%s` replaces the one on line %d", r.later.name, f.line(r.prior.word.Span.Start))))
 	}
 	return out
 }
 
-func (f *File) overridden() map[*Rule]bool {
+func (f *File) overridden(replacements []replacement) map[*Rule]bool {
 	replaced := map[*Rule]int{}
-	for _, r := range f.replacements() {
+	for _, r := range replacements {
 		replaced[r.rule]++
 	}
-	out := map[*Rule]bool{}
+	evaluator := f.evaluator()
+	out := make(map[*Rule]bool, len(replaced))
 	for r, n := range replaced {
-		out[r] = n == len(slices.DeleteFunc(slices.Clone(r.Targets), func(w Word) bool { return !literal(w) }))
+		named, known := evaluator.namedFiles(r.Targets)
+		out[r] = known && n == len(named)
 	}
 	return out
 }
