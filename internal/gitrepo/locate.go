@@ -111,6 +111,7 @@ func (p Process) Locate(cwd string) Locator {
 	}
 	var location processLocation
 	set := false
+	var at place
 	for _, v := range []struct {
 		name string
 		path *string
@@ -122,18 +123,20 @@ func (p Process) Locate(cwd string) Locator {
 		if value == "" {
 			return Locator{err: fmt.Errorf("%s is set to the empty string, which git does not accept as a path", v.name)}
 		}
+		if !set {
+			var err error
+			if at, err = placeOf(cwd); err != nil {
+				return Locator{err: err}
+			}
+		}
 		set = true
 		*v.path = filepath.Clean(value)
 		if !filepath.IsAbs(value) {
-			*v.path = filepath.Join(cwd, value)
+			*v.path = filepath.Join(at.real, value)
 		}
 	}
 	if !set {
 		return locator
-	}
-	at, err := placeOf(cwd)
-	if err != nil {
-		return Locator{err: err}
 	}
 	location.cwd = at
 	locator.process = &location

@@ -462,3 +462,33 @@ func TestDiscoverChangesIntoCoreWorktreeFromTheResolvedGitDirectory(t *testing.T
 		t.Errorf("a missing absolute core.worktree = %+v, %v, %v; want no work tree, as git finds none", repo, found, err)
 	}
 }
+
+func TestDiscoverReportsTheRealPathOfAGitFileTarget(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, map[string]string{
+		"store/real.git/HEAD":     "ref: refs/heads/main\n",
+		"store/real.git/objects/": "",
+		"store/real.git/refs/":    "",
+		"wt/.git":                 "gitdir: ../alias.git\n",
+	})
+	symlink(t, f.path("store/real.git"), f.path("alias.git"))
+	repo, found, err := Discover(f.path("wt"))
+	if err != nil || !found || repo.Dirs.Git != f.path("store/real.git") {
+		t.Errorf("Discover through a gitdir: file naming a symlink = %+v, %v, %v; want the git directory %s", repo, found, err, f.path("store/real.git"))
+	}
+}
+
+func TestLocateResolvesRelativeVariablesFromTheRealWorkingDirectory(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, repoFiles("a"))
+	if err := os.MkdirAll(f.path("a/b"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	symlink(t, f.path("a/b"), f.path("l"))
+	_, dirs, found := locateIn(t, f, map[string]string{"GIT_DIR": filepath.Join("..", ".git")}, "l", "l")
+	if !found || dirs.Git != f.path("a/.git") {
+		t.Errorf("GIT_DIR=../.git from a symlinked working directory = %v, %+v; want %s", found, dirs, f.path("a/.git"))
+	}
+}

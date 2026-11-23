@@ -37,7 +37,10 @@ func readGitFile(path, commonDir string, p probe) (gitDirectory, error) {
 	if target == "" {
 		return gitDirectory{}, fmt.Errorf("%s names no path after %q", path, gitFilePrefix)
 	}
-	gitDir := resolveLink(filepath.Dir(path), target)
+	gitDir, err := realDir(resolveLink(filepath.Dir(path), target))
+	if err != nil {
+		return gitDirectory{}, fmt.Errorf("resolving the git directory %s names: %w", path, err)
+	}
 	git, valid, err := openGitDirectory(gitDir, commonDir, p)
 	if err != nil {
 		return gitDirectory{}, err
