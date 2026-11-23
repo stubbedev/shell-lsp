@@ -495,7 +495,6 @@ parser-gap zsh parser-rejects zsh/Completion/Unix/Command/_perl
 parser-gap zsh parser-rejects zsh/Completion/Unix/Command/_texinfo
 parser-gap zsh parser-rejects zsh/Completion/Unix/Command/_todo.sh
 runtime-check zsh parser-rejects zsh/Completion/Unix/Type/_dates
-parser-gap zsh parser-rejects zsh/Completion/Unix/Type/_ldap_attributes
 runtime-check zsh parser-rejects zsh/Completion/Unix/Type/_path_files
 parser-gap zsh parser-rejects zsh/Completion/Unix/Type/_pids
 parser-gap zsh parser-rejects zsh/Completion/Zsh/Command/_zle

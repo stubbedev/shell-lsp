@@ -94,6 +94,7 @@ set, as CI's nix job does after `go mod download "$(cat UPSTREAM)"`; [UPSTREAM](
 | 0050 | syntax tests: the external shell tests name bash 5.3, which they require, when skipping or failing for its absence, instead of bash 5.2 | — |
 | 0051 | shell-lsp only: a blank line between the imports of other modules and those of this one, as shell-lsp's gci configuration groups them once the import paths are rewritten | not for upstream |
 | 0052 | shell-lsp only: a missing or mismatched reference shell fails the tests under shell-lsp's `REQUIRE_REFERENCES=1`, through its `referencetest.Unavailable`, in place of `REQUIRE_SHELLS` | not for upstream |
+| 0053 | zsh: `&&` or `\|\|` followed by the end of the input or by a token closing an enclosing construct ends the list, as zsh runs it (`a &&`, `{ a \|\| }`, `if a && then b; fi`), with an empty statement after the operator; and a lone `;` between the elements of an array literal reads as a newline (`a=(x ; y)`), as with `zsh -n`, instead of failing | [mvdan/sh#120](https://github.com/mvdan/sh/issues/120) |
 
 ## Tests
 

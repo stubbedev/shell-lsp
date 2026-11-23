@@ -19,7 +19,9 @@ the left-hand side of the operator:
 
 zsh 5.9 runs these as written in the comments: the condition of the
 loop writes to the pipe until it fails, and b runs after the empty if.
-An operator at the end of the input, and `&`, stay errors, as in zsh.
+`&`, and `|` or `|&` at the end of the input, stay errors, as in zsh.
+`&&` and `||` at the end of the input, which zsh accepts, are a
+separate change.
 
 Last, a comment ends the word list of "for" and "select" even at the
 end of the input without a trailing newline, as zsh's lexer ends a

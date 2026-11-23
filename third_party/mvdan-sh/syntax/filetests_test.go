@@ -2087,6 +2087,99 @@ var fileTests = []fileTestCase{
 		langFile(&BinaryCmd{Op: Pipe, X: litStmt("a"), Y: litStmt("b")}, LangZsh),
 	),
 	fileTest(
+		[]string{"a &&", "a && ;", "a &&\n;\n"},
+		langFile(&BinaryCmd{Op: AndStmt, X: litStmt("a"), Y: &Stmt{}}, LangZsh),
+	),
+	fileTest(
+		[]string{"a ||"},
+		langFile(&BinaryCmd{Op: OrStmt, X: litStmt("a"), Y: &Stmt{}}, LangZsh),
+	),
+	fileTest(
+		[]string{"{ a && }", "{ a &&; }"},
+		printsAs("{ a &&; }"),
+		langFile(block(stmt(&BinaryCmd{Op: AndStmt, X: litStmt("a"), Y: &Stmt{}})), LangZsh),
+	),
+	fileTest(
+		[]string{"{ a && } && b"},
+		printsAs("{ a &&; } && b"),
+		langFile(&BinaryCmd{
+			Op: AndStmt,
+			X:  stmt(block(stmt(&BinaryCmd{Op: AndStmt, X: litStmt("a"), Y: &Stmt{}}))),
+			Y:  litStmt("b"),
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"(a ||)"},
+		langFile(subshell(stmt(&BinaryCmd{Op: OrStmt, X: litStmt("a"), Y: &Stmt{}})), LangZsh),
+	),
+	fileTest(
+		[]string{"echo $(a &&)"},
+		langFile(call(litWord("echo"), word(cmdSubst(stmt(&BinaryCmd{Op: AndStmt, X: litStmt("a"), Y: &Stmt{}})))), LangZsh),
+	),
+	fileTest(
+		[]string{"case x in x) a && ;; esac"},
+		langFile(&CaseClause{
+			Word: litWord("x"),
+			Items: []*CaseItem{{
+				Op:       Break,
+				Patterns: litWords("x"),
+				Stmts:    stmts(&BinaryCmd{Op: AndStmt, X: litStmt("a"), Y: &Stmt{}}),
+			}},
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"if a && then b; fi"},
+		printsAs("if a &&; then b; fi"),
+		langFile(&IfClause{
+			Cond: stmts(&BinaryCmd{Op: AndStmt, X: litStmt("a"), Y: &Stmt{}}),
+			Then: litStmts("b"),
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"while a ||\ndo b; done"},
+		printsAs("while a ||; do b; done"),
+		langFile(&WhileClause{
+			Cond: stmts(&BinaryCmd{Op: OrStmt, X: litStmt("a"), Y: &Stmt{}}),
+			Do:   litStmts("b"),
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"a=(x y)", "a=(x ; y)", "a=(x;y)", "a=( ; x\n; y ; )"},
+		langFile(&CallExpr{Assigns: []*Assign{{Name: lit("a"), Array: arrValues(litWords("x", "y")...)}}}, LangZsh),
+	),
+	fileTest(
+		[]string{"a=()", "a=(;)", "a=( ; ; )"},
+		langFile(&CallExpr{Assigns: []*Assign{{Name: lit("a"), Array: &ArrayExpr{}}}}, LangZsh),
+	),
+	fileTest(
+		[]string{"a && &"},
+		langErr2("1:3: `&&` must be followed by a statement", LangZsh),
+	),
+	fileTest(
+		[]string{"a && | b"},
+		langErr2("1:3: `&&` must be followed by a statement", LangZsh),
+	),
+	fileTest(
+		[]string{"a || &&"},
+		langErr2("1:3: `||` must be followed by a statement", LangZsh),
+	),
+	fileTest(
+		[]string{"a && ;;"},
+		langErr2("1:6: `;;` can only be used in a case clause", LangZsh),
+	),
+	fileTest(
+		[]string{"a &&\n}"},
+		langErr2("2:1: `}` can only be used to close a block", LangZsh),
+	),
+	fileTest(
+		[]string{"a=(x ;; y)"},
+		langErr2("1:6: array element values must be words", LangZsh),
+	),
+	fileTest(
+		[]string{"a=(x & y)"},
+		langErr2("1:6: array element values must be words", LangZsh),
+	),
+	fileTest(
 		[]string{
 			"case x in a) b ;; esac",
 			"case x ; in ; a) b;; ; ; esac",
@@ -7614,7 +7707,7 @@ func (c sanityChecker) visit(node Node) bool {
 					endOff, end, c.src)
 			}
 		}
-		if c.src[node.Position.Offset()] == '#' {
+		if offs := node.Position.Offset(); offs < uint(len(c.src)) && c.src[offs] == '#' {
 			c.tb.Errorf("Stmt.Pos() should not be a comment")
 		}
 		c.checkPos(node, node.Position)

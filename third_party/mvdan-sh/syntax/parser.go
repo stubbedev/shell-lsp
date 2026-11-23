@@ -2621,7 +2621,7 @@ func (p *Parser) arrayExpr(name *Lit) *ArrayExpr {
 	}
 	old := p.preNested(newQuote)
 	p.next()
-	p.got(_Newl)
+	p.linebreak()
 	if p.lang.in(LangKsh93) && p.kshCompoundStart() {
 		p.quote = subCmd
 		ae.Stmts, ae.Last = p.stmtList()
@@ -2673,7 +2673,7 @@ func (p *Parser) arrayExpr(name *Lit) *ArrayExpr {
 			}
 		}
 		ae.Elems = append(ae.Elems, el)
-		p.got(_Newl)
+		p.linebreak()
 	}
 	ae.Last, p.accComs = p.accComs, nil
 	p.postNested(old)
@@ -2815,9 +2815,14 @@ func (p *Parser) getStmt(readEnd, binCmd, fnBody bool) *Stmt {
 		p.nest()
 		p.next()
 		p.linebreak()
-		if p.showmeAllowed(false) && p.tok == semicolon {
+		switch {
+		case p.showmeAllowed(false) && p.tok == semicolon:
 			b.Y = p.showmeStmt(false, true)
-		} else {
+		case p.zshEmptyOperand():
+			// The operator only ends the list in zsh, which runs the
+			// commands before it as if it were not there.
+			b.Y = &Stmt{Position: posAddCol(b.OpPos, 2)}
+		default:
 			b.Y = p.getStmt(false, true, false)
 		}
 		if b.Y == nil || p.err != nil {
@@ -2932,6 +2937,24 @@ func (p *Parser) closingRsrv() bool {
 		return p.lang.in(LangZsh)
 	}
 	return false
+}
+
+// zshEmptyOperand reports whether the current token, after `&&` or `||` and
+// any newlines or `;`, lets zsh end the list there with no command after the
+// operator: the end of the input, or a token which closes an enclosing
+// construct and so cannot start a command. Any other token which cannot
+// start a command, like `&` or `|`, is still an error.
+func (p *Parser) zshEmptyOperand() bool {
+	if !p.lang.in(LangZsh) {
+		return false
+	}
+	switch p.tok {
+	case _EOF, rightParen, dblSemicolon, semiAnd, dblSemiAnd, semiOr:
+		return true
+	case bckQuote:
+		return p.backquoteEnd()
+	}
+	return p.closingRsrv()
 }
 
 // showmeCmd reports whether a statement can follow ksh93's showme `;`.

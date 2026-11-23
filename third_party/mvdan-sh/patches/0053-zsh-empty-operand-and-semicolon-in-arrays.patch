@@ -1,0 +1,248 @@
+zsh: `&&` and `||` with nothing after them, and a lone `;` in arrays
+
+After `&&` or `||` and any newlines or `;`, zsh parses the rest of the
+list only if a command can start there. If none can, the list ends after
+the commands before the operator, which run as if it were not there:
+
+	a &&             # runs a, at the end of the input of zsh -c, a
+	                 # script or a sourced file alike
+	{ a || }         # runs a
+	if a && then b; fi
+	case x in x) a && ;; esac
+
+The token after the operator still has to be valid where it stands, so
+`a && }` at the top level fails at `}` as before, and `&`, `|`, `|&`,
+`&&` and `||` right after the operator remain errors, as in zsh. zsh 5.9
+runs every example above, with the exit status of the last command it
+ran. A pipe, `|` or `|&`, with nothing after it stays an error, as in zsh.
+
+zsh's lexer also turns a `;` inside the parentheses of an array
+assignment into the separator token that a newline gives, so
+`a=(x ; y)`, `a=(x;y)` and `a=(;)` assign the words without the `;`,
+while `;;` or `&` there are errors. `[[ ]]` still rejects a `;`, as zsh
+does.
+
+Reproducer, before this change:
+
+	$ printf 'a &&' | shfmt -ln zsh
+	<standard input>:1:3: `&&` must be followed by a statement
+	$ printf 'a=(x ; y)\n' | shfmt -ln zsh
+	<standard input>:1:6: array element values must be words
+
+With LangZsh, such an operator gets an empty BinaryCmd.Y statement at
+the end of the operator, and array literals skip any number of `;` and
+newlines between elements. The test sanity checker allows a statement
+that starts at the end of the input.
+
+Part of https://github.com/mvdan/sh/issues/120.
+
+diff --git a/syntax/filetests_test.go b/syntax/filetests_test.go
+index 43c20c7..e18ee4f 100644
+--- a/syntax/filetests_test.go
++++ b/syntax/filetests_test.go
+@@ -2086,6 +2086,99 @@ var fileTests = []fileTestCase{
+ 		[]string{"a | b", "a | ; ; b"},
+ 		langFile(&BinaryCmd{Op: Pipe, X: litStmt("a"), Y: litStmt("b")}, LangZsh),
+ 	),
++	fileTest(
++		[]string{"a &&", "a && ;", "a &&\n;\n"},
++		langFile(&BinaryCmd{Op: AndStmt, X: litStmt("a"), Y: &Stmt{}}, LangZsh),
++	),
++	fileTest(
++		[]string{"a ||"},
++		langFile(&BinaryCmd{Op: OrStmt, X: litStmt("a"), Y: &Stmt{}}, LangZsh),
++	),
++	fileTest(
++		[]string{"{ a && }", "{ a &&; }"},
++		printsAs("{ a &&; }"),
++		langFile(block(stmt(&BinaryCmd{Op: AndStmt, X: litStmt("a"), Y: &Stmt{}})), LangZsh),
++	),
++	fileTest(
++		[]string{"{ a && } && b"},
++		printsAs("{ a &&; } && b"),
++		langFile(&BinaryCmd{
++			Op: AndStmt,
++			X:  stmt(block(stmt(&BinaryCmd{Op: AndStmt, X: litStmt("a"), Y: &Stmt{}}))),
++			Y:  litStmt("b"),
++		}, LangZsh),
++	),
++	fileTest(
++		[]string{"(a ||)"},
++		langFile(subshell(stmt(&BinaryCmd{Op: OrStmt, X: litStmt("a"), Y: &Stmt{}})), LangZsh),
++	),
++	fileTest(
++		[]string{"echo $(a &&)"},
++		langFile(call(litWord("echo"), word(cmdSubst(stmt(&BinaryCmd{Op: AndStmt, X: litStmt("a"), Y: &Stmt{}})))), LangZsh),
++	),
++	fileTest(
++		[]string{"case x in x) a && ;; esac"},
++		langFile(&CaseClause{
++			Word: litWord("x"),
++			Items: []*CaseItem{{
++				Op:       Break,
++				Patterns: litWords("x"),
++				Stmts:    stmts(&BinaryCmd{Op: AndStmt, X: litStmt("a"), Y: &Stmt{}}),
++			}},
++		}, LangZsh),
++	),
++	fileTest(
++		[]string{"if a && then b; fi"},
++		printsAs("if a &&; then b; fi"),
++		langFile(&IfClause{
++			Cond: stmts(&BinaryCmd{Op: AndStmt, X: litStmt("a"), Y: &Stmt{}}),
++			Then: litStmts("b"),
++		}, LangZsh),
++	),
++	fileTest(
++		[]string{"while a ||\ndo b; done"},
++		printsAs("while a ||; do b; done"),
++		langFile(&WhileClause{
++			Cond: stmts(&BinaryCmd{Op: OrStmt, X: litStmt("a"), Y: &Stmt{}}),
++			Do:   litStmts("b"),
++		}, LangZsh),
++	),
++	fileTest(
++		[]string{"a=(x y)", "a=(x ; y)", "a=(x;y)", "a=( ; x\n; y ; )"},
++		langFile(&CallExpr{Assigns: []*Assign{{Name: lit("a"), Array: arrValues(litWords("x", "y")...)}}}, LangZsh),
++	),
++	fileTest(
++		[]string{"a=()", "a=(;)", "a=( ; ; )"},
++		langFile(&CallExpr{Assigns: []*Assign{{Name: lit("a"), Array: &ArrayExpr{}}}}, LangZsh),
++	),
++	fileTest(
++		[]string{"a && &"},
++		langErr2("1:3: `&&` must be followed by a statement", LangZsh),
++	),
++	fileTest(
++		[]string{"a && | b"},
++		langErr2("1:3: `&&` must be followed by a statement", LangZsh),
++	),
++	fileTest(
++		[]string{"a || &&"},
++		langErr2("1:3: `||` must be followed by a statement", LangZsh),
++	),
++	fileTest(
++		[]string{"a && ;;"},
++		langErr2("1:6: `;;` can only be used in a case clause", LangZsh),
++	),
++	fileTest(
++		[]string{"a &&\n}"},
++		langErr2("2:1: `}` can only be used to close a block", LangZsh),
++	),
++	fileTest(
++		[]string{"a=(x ;; y)"},
++		langErr2("1:6: array element values must be words", LangZsh),
++	),
++	fileTest(
++		[]string{"a=(x & y)"},
++		langErr2("1:6: array element values must be words", LangZsh),
++	),
+ 	fileTest(
+ 		[]string{
+ 			"case x in a) b ;; esac",
+@@ -7614,7 +7707,7 @@ func (c sanityChecker) visit(node Node) bool {
+ 					endOff, end, c.src)
+ 			}
+ 		}
+-		if c.src[node.Position.Offset()] == '#' {
++		if offs := node.Position.Offset(); offs < uint(len(c.src)) && c.src[offs] == '#' {
+ 			c.tb.Errorf("Stmt.Pos() should not be a comment")
+ 		}
+ 		c.checkPos(node, node.Position)
+diff --git a/syntax/parser.go b/syntax/parser.go
+index 911526d..5ee0058 100644
+--- a/syntax/parser.go
++++ b/syntax/parser.go
+@@ -2621,7 +2621,7 @@ func (p *Parser) arrayExpr(name *Lit) *ArrayExpr {
+ 	}
+ 	old := p.preNested(newQuote)
+ 	p.next()
+-	p.got(_Newl)
++	p.linebreak()
+ 	if p.lang.in(LangKsh93) && p.kshCompoundStart() {
+ 		p.quote = subCmd
+ 		ae.Stmts, ae.Last = p.stmtList()
+@@ -2673,7 +2673,7 @@ func (p *Parser) arrayExpr(name *Lit) *ArrayExpr {
+ 			}
+ 		}
+ 		ae.Elems = append(ae.Elems, el)
+-		p.got(_Newl)
++		p.linebreak()
+ 	}
+ 	ae.Last, p.accComs = p.accComs, nil
+ 	p.postNested(old)
+@@ -2815,9 +2815,14 @@ func (p *Parser) getStmt(readEnd, binCmd, fnBody bool) *Stmt {
+ 		p.nest()
+ 		p.next()
+ 		p.linebreak()
+-		if p.showmeAllowed(false) && p.tok == semicolon {
++		switch {
++		case p.showmeAllowed(false) && p.tok == semicolon:
+ 			b.Y = p.showmeStmt(false, true)
+-		} else {
++		case p.zshEmptyOperand():
++			// The operator only ends the list in zsh, which runs the
++			// commands before it as if it were not there.
++			b.Y = &Stmt{Position: posAddCol(b.OpPos, 2)}
++		default:
+ 			b.Y = p.getStmt(false, true, false)
+ 		}
+ 		if b.Y == nil || p.err != nil {
+@@ -2934,6 +2939,24 @@ func (p *Parser) closingRsrv() bool {
+ 	return false
+ }
+ 
++// zshEmptyOperand reports whether the current token, after `&&` or `||` and
++// any newlines or `;`, lets zsh end the list there with no command after the
++// operator: the end of the input, or a token which closes an enclosing
++// construct and so cannot start a command. Any other token which cannot
++// start a command, like `&` or `|`, is still an error.
++func (p *Parser) zshEmptyOperand() bool {
++	if !p.lang.in(LangZsh) {
++		return false
++	}
++	switch p.tok {
++	case _EOF, rightParen, dblSemicolon, semiAnd, dblSemiAnd, semiOr:
++		return true
++	case bckQuote:
++		return p.backquoteEnd()
++	}
++	return p.closingRsrv()
++}
++
+ // showmeCmd reports whether a statement can follow ksh93's showme `;`.
+ func showmeCmd(s *Stmt) bool {
+ 	if s.Negated || (len(s.Redirs) > 0 && (s.Cmd == nil || s.Cmd.Pos().After(s.Redirs[0].Pos()))) {
+diff --git a/syntax/parser_test.go b/syntax/parser_test.go
+index 08a350a..1dfcb0d 100644
+--- a/syntax/parser_test.go
++++ b/syntax/parser_test.go
+@@ -886,6 +886,7 @@ var errorCases = []errorCase{
+ 	errCase(
+ 		"echo &&",
+ 		langErr("1:6: `&&` must be followed by a statement"),
++		langErr("", LangZsh), // ends the list
+ 	),
+ 	errCase(
+ 		"echo |",
+@@ -894,6 +895,7 @@ var errorCases = []errorCase{
+ 	errCase(
+ 		"echo ||",
+ 		langErr("1:6: `||` must be followed by a statement"),
++		langErr("", LangZsh), // ends the list
+ 	),
+ 	errCase(
+ 		"echo | #bar",
+@@ -902,10 +904,12 @@ var errorCases = []errorCase{
+ 	errCase(
+ 		"echo && #bar",
+ 		langErr("1:6: `&&` must be followed by a statement"),
++		langErr("", LangZsh), // ends the list
+ 	),
+ 	errCase(
+ 		"`echo &&`",
+ 		langErr("1:7: `&&` must be followed by a statement"),
++		langErr("", LangZsh), // ends the list
+ 	),
+ 	errCase(
+ 		"`echo |`",

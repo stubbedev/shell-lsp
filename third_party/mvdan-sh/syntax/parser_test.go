@@ -886,6 +886,7 @@ var errorCases = []errorCase{
 	errCase(
 		"echo &&",
 		langErr("1:6: `&&` must be followed by a statement"),
+		langErr("", LangZsh), // ends the list
 	),
 	errCase(
 		"echo |",
@@ -894,6 +895,7 @@ var errorCases = []errorCase{
 	errCase(
 		"echo ||",
 		langErr("1:6: `||` must be followed by a statement"),
+		langErr("", LangZsh), // ends the list
 	),
 	errCase(
 		"echo | #bar",
@@ -902,10 +904,12 @@ var errorCases = []errorCase{
 	errCase(
 		"echo && #bar",
 		langErr("1:6: `&&` must be followed by a statement"),
+		langErr("", LangZsh), // ends the list
 	),
 	errCase(
 		"`echo &&`",
 		langErr("1:7: `&&` must be followed by a statement"),
+		langErr("", LangZsh), // ends the list
 	),
 	errCase(
 		"`echo |`",
