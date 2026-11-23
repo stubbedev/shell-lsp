@@ -1,0 +1,333 @@
+syntax: zsh's short form of if with an empty body
+
+Unless SHORT_LOOPS is unset, zsh takes the list after "if" or "elif" up to
+the first token that cannot continue it as the condition. When that token
+is neither "then" nor "{", the branch is the short form, whose body is a
+single sublist that may also be empty, so that whatever closes an
+enclosing construct ends the "if" as well. zsh accepts and runs, with
+both commands as the condition and no body:
+
+	{ if a; b; }
+	f() { if [[ -n $x ]]; then :; else if c && d; e; fi; }
+
+whereas "if a; b; fi" at the top level is still an error at "fi", and
+so is an "else" right after a short branch, which zsh attaches to the
+"if" and then fails on because it expects "fi" straight away. The end of
+a command or process substitution does not end the "if" either, since zsh
+parses the substitution on its own and finds the end of the input there:
+"$(if a)" fails as "if a" does, while "$( (if a) )" parses. The empty
+condition of `{ if }` parses too, as with zsh -n.
+
+Reproducer, before this change:
+
+	$ printf '{ if a; b; }\n' | shfmt -ln zsh
+	<standard input>:1:12: `}` can only be used to close a block
+
+With LangZsh, a condition list now also ends at a reserved word which
+closes a compound command, IfClause.Short may come with an empty Then,
+and IfClause.End falls back to the end of the condition. The parser
+tracks whether a ')' closes a substitution rather than a subshell. A closing
+reserved word right after a statement is reported as such rather than as
+a missing separator.
+
+Part of https://github.com/mvdan/sh/issues/120.
+
+diff --git a/syntax/filetests_test.go b/syntax/filetests_test.go
+--- a/syntax/filetests_test.go
++++ b/syntax/filetests_test.go
+@@ -1597,6 +1597,65 @@
+ 		}, LangZsh),
+ 	),
+ 	fileTest(
++		[]string{"{ if a; b; }"},
++		printsAs("{ if\n\ta\n\tb\nthen; fi; }"),
++		langFile(block(stmt(&IfClause{
++			Short: true,
++			Cond:  litStmts("a", "b"),
++		})), LangZsh),
++	),
++	fileTest(
++		[]string{"if a; then b; else\n\tif ! c && d\n\te\nfi"},
++		printsAs("if a; then b; else\n\tif\n\t\t! c && d\n\t\te\n\tthen; fi\nfi"),
++		langFile(&IfClause{
++			Cond: litStmts("a"),
++			Then: litStmts("b"),
++			Else: &IfClause{
++				Then: stmts(&IfClause{
++					Short: true,
++					Cond: []*Stmt{
++						{Cmd: &BinaryCmd{
++							Op: AndStmt,
++							X:  &Stmt{Cmd: litCall("c"), Negated: true},
++							Y:  litStmt("d"),
++						}},
++						litStmt("e"),
++					},
++				}),
++			},
++		}, LangZsh),
++	),
++	fileTest(
++		[]string{"case a in b) if c; d;; esac"},
++		printsAs("case a in b) if\n\tc\n\td\nthen; fi ;; esac"),
++		langFile(&CaseClause{
++			Word: litWord("a"),
++			Items: []*CaseItem{{
++				Op:       Break,
++				Patterns: litWords("b"),
++				Stmts: stmts(&IfClause{
++					Short: true,
++					Cond:  litStmts("c", "d"),
++				}),
++			}},
++		}, LangZsh),
++	),
++	fileTest(
++		[]string{"( if )"},
++		printsAs("(if; then; fi)"),
++		langFile(subshell(stmt(&IfClause{Short: true})), LangZsh),
++	),
++	fileTest(
++		[]string{"echo $( (if a) )"},
++		printsAs("echo $( (if a; then; fi) )"),
++		langFile(call(litWord("echo"), word(&CmdSubst{
++			Stmts: stmts(subshell(stmt(&IfClause{
++				Short: true,
++				Cond:  litStmts("a"),
++			}))),
++		})), LangZsh),
++	),
++	fileTest(
+ 		[]string{"if a; then foo; elif [[ b ]] { bar }\n"},
+ 		printsAs("if a; then foo; elif [[ b ]]; then bar; fi"),
+ 		langFile(&IfClause{
+diff --git a/syntax/nodes.go b/syntax/nodes.go
+--- a/syntax/nodes.go
++++ b/syntax/nodes.go
+@@ -442,8 +442,9 @@
+ //
+ // With [LangZsh], each branch may use one of the alternate forms instead of
+ // "then": a body in braces, as in `if cond { body }`, or a single sublist, as
+-// in `if cond body`. An if statement whose last branch uses either of them
+-// does not end with "fi".
++// in `if cond body`, which may be empty when whatever follows the condition
++// closes an enclosing construct, as in `{ if cond1; cond2; }`. An if statement
++// whose last branch uses either of them does not end with "fi".
+ type IfClause struct {
+ 	Position Pos // position of the starting "if", "elif", or "else" token
+ 	ThenPos  Pos // position of "then", or of "{" with Braces; empty with Short or if this is an "else"
+@@ -451,7 +452,7 @@
+ 	Rbrace   Pos // position of "}" with Braces
+ 
+ 	Braces bool // zsh's alternate form with { } instead of "then"
+-	Short  bool // zsh's short form, where Then is a single sublist
++	Short  bool // zsh's short form, where Then is a single sublist or empty
+ 
+ 	Cond     []*Stmt
+ 	CondLast []Comment
+@@ -473,7 +474,18 @@
+ 	case last.Braces:
+ 		return posAddCol(last.Rbrace, len("}"))
+ 	case last.Short:
+-		return stmtLastEnd(last.Then)
++		// The short form may have an empty body, and zsh even allows an
++		// empty condition, as in `{ if }`.
++		if end := stmtLastEnd(last.Then); end.IsValid() {
++			return end
++		}
++		if end := stmtLastEnd(last.Cond); end.IsValid() {
++			return end
++		}
++		if last == c {
++			return posAddCol(last.Position, len("if"))
++		}
++		return posAddCol(last.Position, len("elif"))
+ 	}
+ 	return posAddCol(c.FiPos, len("fi"))
+ }
+diff --git a/syntax/parser.go b/syntax/parser.go
+--- a/syntax/parser.go
++++ b/syntax/parser.go
+@@ -566,6 +566,11 @@
+ 	// a comment, also inside command substitutions.
+ 	wordCont bool
+ 
++	// inSubst is set while the statements of a command or process
++	// substitution are being parsed, outside of any further nested input,
++	// so that its closing ')' can be told apart from that of a subshell.
++	inSubst bool
++
+ 	// list of pending heredoc bodies
+ 	buriedHdocs int
+ 	heredocs    []*Redirect
+@@ -792,6 +797,7 @@
+ 	quote       quoteState
+ 	buriedHdocs int
+ 	wordCont    bool
++	inSubst     bool
+ }
+ 
+ // maxNesting is how deeply the syntax tree may nest. Deeper input, such as
+@@ -815,13 +821,34 @@
+ }
+ 
+ func (p *Parser) preNested(quote quoteState) (s saveState) {
+-	s.quote, s.buriedHdocs, s.wordCont = p.quote, p.buriedHdocs, p.wordCont
+-	p.buriedHdocs, p.quote, p.wordCont = len(p.heredocs), quote, false
++	s.quote, s.buriedHdocs, s.wordCont, s.inSubst = p.quote, p.buriedHdocs, p.wordCont, p.inSubst
++	p.buriedHdocs, p.quote, p.wordCont, p.inSubst = len(p.heredocs), quote, false, false
++	return s
++}
++
++// preNestedSubst is like preNested for the statements of a command or
++// process substitution in parentheses.
++func (p *Parser) preNestedSubst() saveState {
++	s := p.preNested(subCmd)
++	p.inSubst = true
+ 	return s
+ }
+ 
+ func (p *Parser) postNested(s saveState) {
+-	p.quote, p.buriedHdocs, p.wordCont = s.quote, s.buriedHdocs, s.wordCont
++	p.quote, p.buriedHdocs, p.wordCont, p.inSubst = s.quote, s.buriedHdocs, s.wordCont, s.inSubst
++}
++
++// substEnd reports whether the current token ends the statements of a
++// command or process substitution. zsh parses those on their own, so
++// that such a token ends the input for them.
++func (p *Parser) substEnd() bool {
++	switch p.tok {
++	case rightParen:
++		return p.inSubst
++	case bckQuote:
++		return p.backquoteEnd()
++	}
++	return false
+ }
+ 
+ func (p *Parser) unquotedWordBytes(w *Word) ([]byte, bool) {
+@@ -1258,7 +1285,10 @@
+ // If cond is set, the statements form the condition of an `if`, `elif`,
+ // `while` or `until`; see [Parser.followCondStmts].
+ func (p *Parser) stmts(yield func(*Stmt, error) bool, cond bool, stops ...string) {
+-	endUnseparated := cond && p.lang.in(LangZsh)
++	// With [LangZsh], a condition list also ends at a statement which is not
++	// followed by a separator, or at a reserved word which closes a compound
++	// command, so that a short form without "then" or "do" can follow it.
++	zshCond := cond && p.lang.in(LangZsh)
+ 	showme := p.showmeAllowed(cond)
+ 	gotEnd := true
+ loop:
+@@ -1271,6 +1301,9 @@
+ 					break loop
+ 				}
+ 			}
++			if zshCond && p.closingRsrv() {
++				break loop
++			}
+ 			if p.val == "}" {
+ 				p.curErr(`%#q can only be used to close a block`, rightBrace)
+ 			}
+@@ -1288,8 +1321,11 @@
+ 			}
+ 			p.curErr("%#q can only be used in a case clause", p.tok)
+ 		}
+-		if !newLine && !gotEnd {
+-			if endUnseparated {
++		// A reserved word which closes a compound command is reported as
++		// such below, which is more precise than a missing separator; it
++		// can follow a statement directly after zsh's short form of "if".
++		if !newLine && !gotEnd && !p.closingRsrv() {
++			if zshCond {
+ 				break
+ 			}
+ 			p.curErr("statements must be separated by &, ; or a newline")
+@@ -1476,7 +1512,7 @@
+ 	case cmdIn, cmdOut:
+ 		p.ensureNoNested(p.pos)
+ 		ps := &ProcSubst{Op: ProcOperator(p.tok), OpPos: p.pos}
+-		old := p.preNested(subCmd)
++		old := p.preNestedSubst()
+ 		p.next()
+ 		ps.Stmts, ps.Last = p.stmtList()
+ 		p.postNested(old)
+@@ -1691,7 +1727,7 @@
+ 
+ func (p *Parser) cmdSubst() *CmdSubst {
+ 	cs := &CmdSubst{Left: p.pos}
+-	old := p.preNested(subCmd)
++	old := p.preNestedSubst()
+ 	p.next()
+ 	cs.Stmts, cs.Last = p.stmtList()
+ 	p.postNested(old)
+@@ -3180,7 +3216,13 @@
+ 		curIf.Else = elf
+ 		curIf = elf
+ 	}
+-	if !curIf.Short {
++	if curIf.Short {
++		// zsh attaches an "else" right after the short form to the "if",
++		// but always fails to parse it, as it expects "fi" right away.
++		if p.tok == _LitWord && p.val == "else" {
++			p.curErr("%#q cannot follow the short form of an `if` branch", "else")
++		}
++	} else {
+ 		if elsePos, ok := p.gotRsrv("else"); ok {
+ 			curIf.Last = p.accComs
+ 			p.accComs = nil
+@@ -3222,9 +3264,15 @@
+ 			ic.ThenPos = p.pos
+ 			ic.Then, ic.ThenLast, ic.Rbrace = p.bracedBody(ic, rsrv)
+ 			return
+-		case p.shortBodyStart():
++		case p.tok != _EOF && !p.substEnd() && !(p.tok == _LitWord && p.val == "then"):
++			// The single sublist of the short form may be empty, so that
++			// whatever closes an enclosing construct also ends the "if",
++			// as in `{ if a; b; }`, where both a and b form the condition.
++			// Like the end of the input, the end of a substitution does not.
+ 			ic.Short = true
+-			ic.Then = p.shortBody()
++			if p.shortBodyStart() {
++				ic.Then = p.shortBody()
++			}
+ 			return
+ 		}
+ 	}
+diff --git a/syntax/parser_test.go b/syntax/parser_test.go
+--- a/syntax/parser_test.go
++++ b/syntax/parser_test.go
+@@ -1048,6 +1048,34 @@
+ 		langErr("1:1: `if` statement must end with `fi`"),
+ 	),
+ 	errCase(
++		"if a; b; fi",
++		langErr("1:10: `fi` can only be used to end an `if`"),
++	),
++	errCase(
++		"{ if a; else b; }",
++		langErr("1:9: `else` cannot follow the short form of an `if` branch", LangZsh),
++	),
++	errCase(
++		"if a; then if b; c; else d; fi; fi",
++		langErr("1:21: `else` cannot follow the short form of an `if` branch", LangZsh),
++	),
++	errCase(
++		"if [[ a ]] (b) else c; fi",
++		langErr("1:16: `else` cannot follow the short form of an `if` branch", LangZsh),
++	),
++	errCase(
++		"echo $(if a)",
++		langErr("1:8: `if <cond>` must be followed by `then`", LangZsh),
++	),
++	errCase(
++		"echo <(if a; b)",
++		langErr("1:8: `if <cond>` must be followed by `then`", LangZsh),
++	),
++	errCase(
++		"echo `if a`",
++		langErr("1:7: `if <cond>` must be followed by `then`", LangZsh),
++	),
++	errCase(
+ 		"if a; then b; elif c;",
+ 		langErr("1:15: `elif <cond>` must be followed by `then`"),
+ 	),

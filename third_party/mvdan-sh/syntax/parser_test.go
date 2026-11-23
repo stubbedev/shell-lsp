@@ -1048,6 +1048,34 @@ var errorCases = []errorCase{
 		langErr("1:1: `if` statement must end with `fi`"),
 	),
 	errCase(
+		"if a; b; fi",
+		langErr("1:10: `fi` can only be used to end an `if`"),
+	),
+	errCase(
+		"{ if a; else b; }",
+		langErr("1:9: `else` cannot follow the short form of an `if` branch", LangZsh),
+	),
+	errCase(
+		"if a; then if b; c; else d; fi; fi",
+		langErr("1:21: `else` cannot follow the short form of an `if` branch", LangZsh),
+	),
+	errCase(
+		"if [[ a ]] (b) else c; fi",
+		langErr("1:16: `else` cannot follow the short form of an `if` branch", LangZsh),
+	),
+	errCase(
+		"echo $(if a)",
+		langErr("1:8: `if <cond>` must be followed by `then`", LangZsh),
+	),
+	errCase(
+		"echo <(if a; b)",
+		langErr("1:8: `if <cond>` must be followed by `then`", LangZsh),
+	),
+	errCase(
+		"echo `if a`",
+		langErr("1:7: `if <cond>` must be followed by `then`", LangZsh),
+	),
+	errCase(
 		"if a; then b; elif c;",
 		langErr("1:15: `elif <cond>` must be followed by `then`"),
 	),

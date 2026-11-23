@@ -1597,6 +1597,65 @@ var fileTests = []fileTestCase{
 		}, LangZsh),
 	),
 	fileTest(
+		[]string{"{ if a; b; }"},
+		printsAs("{ if\n\ta\n\tb\nthen; fi; }"),
+		langFile(block(stmt(&IfClause{
+			Short: true,
+			Cond:  litStmts("a", "b"),
+		})), LangZsh),
+	),
+	fileTest(
+		[]string{"if a; then b; else\n\tif ! c && d\n\te\nfi"},
+		printsAs("if a; then b; else\n\tif\n\t\t! c && d\n\t\te\n\tthen; fi\nfi"),
+		langFile(&IfClause{
+			Cond: litStmts("a"),
+			Then: litStmts("b"),
+			Else: &IfClause{
+				Then: stmts(&IfClause{
+					Short: true,
+					Cond: []*Stmt{
+						{Cmd: &BinaryCmd{
+							Op: AndStmt,
+							X:  &Stmt{Cmd: litCall("c"), Negated: true},
+							Y:  litStmt("d"),
+						}},
+						litStmt("e"),
+					},
+				}),
+			},
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"case a in b) if c; d;; esac"},
+		printsAs("case a in b) if\n\tc\n\td\nthen; fi ;; esac"),
+		langFile(&CaseClause{
+			Word: litWord("a"),
+			Items: []*CaseItem{{
+				Op:       Break,
+				Patterns: litWords("b"),
+				Stmts: stmts(&IfClause{
+					Short: true,
+					Cond:  litStmts("c", "d"),
+				}),
+			}},
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"( if )"},
+		printsAs("(if; then; fi)"),
+		langFile(subshell(stmt(&IfClause{Short: true})), LangZsh),
+	),
+	fileTest(
+		[]string{"echo $( (if a) )"},
+		printsAs("echo $( (if a; then; fi) )"),
+		langFile(call(litWord("echo"), word(&CmdSubst{
+			Stmts: stmts(subshell(stmt(&IfClause{
+				Short: true,
+				Cond:  litStmts("a"),
+			}))),
+		})), LangZsh),
+	),
+	fileTest(
 		[]string{"if a; then foo; elif [[ b ]] { bar }\n"},
 		printsAs("if a; then foo; elif [[ b ]]; then bar; fi"),
 		langFile(&IfClause{

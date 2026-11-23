@@ -88,7 +88,6 @@ parser-gap zsh parser-rejects ohmyzsh/plugins/genpass/genpass-apple
 posix-extension dash shell-rejects ohmyzsh/plugins/gitfast/git-prompt.sh
 parser-gap zsh parser-rejects ohmyzsh/plugins/lando/lando.plugin.zsh
 parser-gap zsh parser-rejects ohmyzsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.plugin.zsh
-parser-gap zsh parser-rejects ohmyzsh/themes/gallois.zsh-theme
 parser-gap zsh parser-rejects ohmyzsh/tools/theme_chooser.sh
 parser-gap mksh shell-rejects oils/spec/append.test.sh#19
 parser-gap mksh shell-rejects oils/spec/append.test.sh#7

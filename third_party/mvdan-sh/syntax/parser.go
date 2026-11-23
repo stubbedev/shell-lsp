@@ -566,6 +566,11 @@ type Parser struct {
 	// a comment, also inside command substitutions.
 	wordCont bool
 
+	// inSubst is set while the statements of a command or process
+	// substitution are being parsed, outside of any further nested input,
+	// so that its closing ')' can be told apart from that of a subshell.
+	inSubst bool
+
 	// list of pending heredoc bodies
 	buriedHdocs int
 	heredocs    []*Redirect
@@ -792,6 +797,7 @@ type saveState struct {
 	quote       quoteState
 	buriedHdocs int
 	wordCont    bool
+	inSubst     bool
 }
 
 // maxNesting is how deeply the syntax tree may nest. Deeper input, such as
@@ -815,13 +821,34 @@ func (p *Parser) unnest(levels int) {
 }
 
 func (p *Parser) preNested(quote quoteState) (s saveState) {
-	s.quote, s.buriedHdocs, s.wordCont = p.quote, p.buriedHdocs, p.wordCont
-	p.buriedHdocs, p.quote, p.wordCont = len(p.heredocs), quote, false
+	s.quote, s.buriedHdocs, s.wordCont, s.inSubst = p.quote, p.buriedHdocs, p.wordCont, p.inSubst
+	p.buriedHdocs, p.quote, p.wordCont, p.inSubst = len(p.heredocs), quote, false, false
+	return s
+}
+
+// preNestedSubst is like preNested for the statements of a command or
+// process substitution in parentheses.
+func (p *Parser) preNestedSubst() saveState {
+	s := p.preNested(subCmd)
+	p.inSubst = true
 	return s
 }
 
 func (p *Parser) postNested(s saveState) {
-	p.quote, p.buriedHdocs, p.wordCont = s.quote, s.buriedHdocs, s.wordCont
+	p.quote, p.buriedHdocs, p.wordCont, p.inSubst = s.quote, s.buriedHdocs, s.wordCont, s.inSubst
+}
+
+// substEnd reports whether the current token ends the statements of a
+// command or process substitution. zsh parses those on their own, so
+// that such a token ends the input for them.
+func (p *Parser) substEnd() bool {
+	switch p.tok {
+	case rightParen:
+		return p.inSubst
+	case bckQuote:
+		return p.backquoteEnd()
+	}
+	return false
 }
 
 func (p *Parser) unquotedWordBytes(w *Word) ([]byte, bool) {
@@ -1258,7 +1285,10 @@ func (p *Parser) checkLang(pos Pos, langSet LangVariant, format string, a ...any
 // If cond is set, the statements form the condition of an `if`, `elif`,
 // `while` or `until`; see [Parser.followCondStmts].
 func (p *Parser) stmts(yield func(*Stmt, error) bool, cond bool, stops ...string) {
-	endUnseparated := cond && p.lang.in(LangZsh)
+	// With [LangZsh], a condition list also ends at a statement which is not
+	// followed by a separator, or at a reserved word which closes a compound
+	// command, so that a short form without "then" or "do" can follow it.
+	zshCond := cond && p.lang.in(LangZsh)
 	showme := p.showmeAllowed(cond)
 	gotEnd := true
 loop:
@@ -1270,6 +1300,9 @@ loop:
 				if p.val == stop {
 					break loop
 				}
+			}
+			if zshCond && p.closingRsrv() {
+				break loop
 			}
 			if p.val == "}" {
 				p.curErr(`%#q can only be used to close a block`, rightBrace)
@@ -1288,8 +1321,11 @@ loop:
 			}
 			p.curErr("%#q can only be used in a case clause", p.tok)
 		}
-		if !newLine && !gotEnd {
-			if endUnseparated {
+		// A reserved word which closes a compound command is reported as
+		// such below, which is more precise than a missing separator; it
+		// can follow a statement directly after zsh's short form of "if".
+		if !newLine && !gotEnd && !p.closingRsrv() {
+			if zshCond {
 				break
 			}
 			p.curErr("statements must be separated by &, ; or a newline")
@@ -1476,7 +1512,7 @@ func (p *Parser) wordPart() WordPart {
 	case cmdIn, cmdOut:
 		p.ensureNoNested(p.pos)
 		ps := &ProcSubst{Op: ProcOperator(p.tok), OpPos: p.pos}
-		old := p.preNested(subCmd)
+		old := p.preNestedSubst()
 		p.next()
 		ps.Stmts, ps.Last = p.stmtList()
 		p.postNested(old)
@@ -1691,7 +1727,7 @@ func (p *Parser) arithmExp(left token) *ArithmExp {
 
 func (p *Parser) cmdSubst() *CmdSubst {
 	cs := &CmdSubst{Left: p.pos}
-	old := p.preNested(subCmd)
+	old := p.preNestedSubst()
 	p.next()
 	cs.Stmts, cs.Last = p.stmtList()
 	p.postNested(old)
@@ -3180,7 +3216,13 @@ func (p *Parser) ifClause(s *Stmt) {
 		curIf.Else = elf
 		curIf = elf
 	}
-	if !curIf.Short {
+	if curIf.Short {
+		// zsh attaches an "else" right after the short form to the "if",
+		// but always fails to parse it, as it expects "fi" right away.
+		if p.tok == _LitWord && p.val == "else" {
+			p.curErr("%#q cannot follow the short form of an `if` branch", "else")
+		}
+	} else {
 		if elsePos, ok := p.gotRsrv("else"); ok {
 			curIf.Last = p.accComs
 			p.accComs = nil
@@ -3222,9 +3264,15 @@ func (p *Parser) ifBranch(ic *IfClause, rsrv string) {
 			ic.ThenPos = p.pos
 			ic.Then, ic.ThenLast, ic.Rbrace = p.bracedBody(ic, rsrv)
 			return
-		case p.shortBodyStart():
+		case p.tok != _EOF && !p.substEnd() && !(p.tok == _LitWord && p.val == "then"):
+			// The single sublist of the short form may be empty, so that
+			// whatever closes an enclosing construct also ends the "if",
+			// as in `{ if a; b; }`, where both a and b form the condition.
+			// Like the end of the input, the end of a substitution does not.
 			ic.Short = true
-			ic.Then = p.shortBody()
+			if p.shortBodyStart() {
+				ic.Then = p.shortBody()
+			}
 			return
 		}
 	}

@@ -442,8 +442,9 @@ func (n *NamespaceClause) End() Pos { return n.Body.End() }
 //
 // With [LangZsh], each branch may use one of the alternate forms instead of
 // "then": a body in braces, as in `if cond { body }`, or a single sublist, as
-// in `if cond body`. An if statement whose last branch uses either of them
-// does not end with "fi".
+// in `if cond body`, which may be empty when whatever follows the condition
+// closes an enclosing construct, as in `{ if cond1; cond2; }`. An if statement
+// whose last branch uses either of them does not end with "fi".
 type IfClause struct {
 	Position Pos // position of the starting "if", "elif", or "else" token
 	ThenPos  Pos // position of "then", or of "{" with Braces; empty with Short or if this is an "else"
@@ -451,7 +452,7 @@ type IfClause struct {
 	Rbrace   Pos // position of "}" with Braces
 
 	Braces bool // zsh's alternate form with { } instead of "then"
-	Short  bool // zsh's short form, where Then is a single sublist
+	Short  bool // zsh's short form, where Then is a single sublist or empty
 
 	Cond     []*Stmt
 	CondLast []Comment
@@ -473,7 +474,18 @@ func (c *IfClause) End() Pos {
 	case last.Braces:
 		return posAddCol(last.Rbrace, len("}"))
 	case last.Short:
-		return stmtLastEnd(last.Then)
+		// The short form may have an empty body, and zsh even allows an
+		// empty condition, as in `{ if }`.
+		if end := stmtLastEnd(last.Then); end.IsValid() {
+			return end
+		}
+		if end := stmtLastEnd(last.Cond); end.IsValid() {
+			return end
+		}
+		if last == c {
+			return posAddCol(last.Position, len("if"))
+		}
+		return posAddCol(last.Position, len("elif"))
 	}
 	return posAddCol(c.FiPos, len("fi"))
 }

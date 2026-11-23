@@ -72,6 +72,7 @@ reproducer so that it can be sent upstream as it is.
 | 0040 | syntax: a parameter expansion token whose read fails (invalid UTF-8 right after `]` in `${0#$[a a]\xf1`) ends the input, as every other token does after an error, instead of leaving `callExpr` looping forever on it | — |
 | 0041 | syntax: a here-document becomes pending only once its word is parsed, so a word that crosses a newline (`<<$A[` and a newline, with zsh) is no longer read as a here-document with a nil word, which panicked | — |
 | 0042 | syntax: statements, parameter expansions, double-quoted strings and assignments come from chunks, and a statement list collects on a stack and copies to its exact size, so a large script costs far fewer allocations for the same tree | — |
+| 0043 | zsh: the short form of `if` with an empty body, which a token closing an enclosing construct ends (`{ if a; b; }`, an `if` without `then` inside an `else` closed by its `fi`), as with `zsh -n`, instead of failing at that token; an `else` right after a short branch is still an error, as is an empty body ended by the end of a command or process substitution (`$(if a)`), as in zsh | [mvdan/sh#120](https://github.com/mvdan/sh/issues/120) |
 
 ## Tests
 
