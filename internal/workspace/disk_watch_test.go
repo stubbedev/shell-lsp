@@ -110,9 +110,12 @@ func TestAWatchedScanSeesNewFilesAndIgnoreRules(t *testing.T) {
 	if got := scan(); !slices.Equal(got, []string{filepath.Join(root, "a.sh"), filepath.Join(root, "b.sh")}) {
 		t.Errorf("after adding a file, scan = %v", got)
 	}
-	if err := os.Mkdir(filepath.Join(root, ".git"), 0o755); err != nil {
-		t.Fatal(err)
+	for _, dir := range []string{"objects", "refs"} {
+		if err := os.MkdirAll(filepath.Join(root, ".git", dir), 0o755); err != nil {
+			t.Fatal(err)
+		}
 	}
+	rewrite(t, filepath.Join(root, ".git", "HEAD"), "ref: refs/heads/main\n", time.Now())
 	if got := scan(); len(got) != 2 {
 		t.Errorf("after creating a repository, scan = %v", got)
 	}

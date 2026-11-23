@@ -18,6 +18,8 @@ const (
 	refStorage
 	formatVersion
 	objectFormat
+	workTree
+	bare
 )
 
 type setting struct {
@@ -65,6 +67,10 @@ func classify(name string) (key, string, bool) {
 		return formatVersion, "", true
 	case "extensions.objectformat":
 		return objectFormat, "", true
+	case "core.worktree":
+		return workTree, "", true
+	case "core.bare":
+		return bare, "", true
 	}
 	section, rest, _ := strings.Cut(name, ".")
 	before, after, ok := strings.CutLast(rest, ".")
@@ -88,9 +94,9 @@ func newSetting(name, value string, hasValue bool, line int) (setting, bool, err
 	}
 	if !hasValue {
 		switch k {
-		case worktreeConfig:
+		case worktreeConfig, bare:
 			value = "true"
-		case formatVersion:
+		case formatVersion, workTree:
 		case excludesFile, include, conditionalInclude, remoteURL, refStorage, objectFormat:
 			return setting{}, false, fmt.Errorf("%s: %w", name, errNoValue)
 		}

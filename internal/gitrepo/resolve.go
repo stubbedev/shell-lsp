@@ -4,11 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"slices"
 	"strings"
-	"syscall"
-
-	"github.com/stubbedev/shell-lsp/internal/regularfile"
 )
 
 const (
@@ -36,8 +32,6 @@ var (
 	errRelativeInclude   = errors.New("a relative include path must come from a config file")
 	errRelativeCondition = errors.New("a relative gitdir condition must come from a config file")
 	errURLUnderCondition = errors.New("remote URLs cannot be set in a file an includeIf includes while a hasconfig:remote.*.url condition is in use")
-	errReftable          = errors.New("the repository keeps HEAD in a reftable, which shell-lsp does not read")
-	errFormatVersion     = fmt.Errorf("git reads repositories only up to format version %d", maxFormatVersion)
 )
 
 type expander struct {
@@ -130,49 +124,6 @@ func (s source) origin(st setting) string {
 	return s.label
 }
 
-type repositoryFormat struct {
-	version        int64
-	worktreeConfig bool
-	refStorage     string
-	objectFormat   string
-}
-
-func readFormat(path string, settings config) (repositoryFormat, error) {
-	var out repositoryFormat
-	for _, s := range settings {
-		switch s.key {
-		case formatVersion:
-			version, err := parseInt(s.value)
-			if err != nil {
-				return repositoryFormat{}, fmt.Errorf("%s:%d: core.repositoryFormatVersion: %w", path, s.line, err)
-			}
-			out.version = version
-		case worktreeConfig:
-			on, err := parseBool(s.value)
-			if err != nil {
-				return repositoryFormat{}, fmt.Errorf("%s:%d: extensions.worktreeConfig: %w", path, s.line, err)
-			}
-			out.worktreeConfig = on
-		case refStorage:
-			out.refStorage = s.value
-		case objectFormat:
-			out.objectFormat = s.value
-		case excludesFile, include, conditionalInclude, remoteURL:
-		}
-	}
-	if out.version > maxFormatVersion {
-		return repositoryFormat{}, fmt.Errorf("%s: core.repositoryFormatVersion is %d: %w", path, out.version, errFormatVersion)
-	}
-	return out, nil
-}
-
-func (f repositoryFormat) objectIDLength() int {
-	if f.version >= 1 && f.objectFormat == sha256Format {
-		return sha256Length
-	}
-	return sha1Length
-}
-
 type assignment struct {
 	named pathValue
 	set   bool
@@ -180,9 +131,7 @@ type assignment struct {
 
 type walker struct {
 	g          *Ignores
-	top        string
-	dirs       Dirs
-	format     repositoryFormat
+	repo       Repository
 	sources    []source
 	collecting bool
 	urls       []string
@@ -229,7 +178,7 @@ func (w *walker) visit(s source, depth int, within bool) error {
 			if w.collecting {
 				continue
 			}
-			named, err := w.g.expand.pathname(st.value, w.top)
+			named, err := w.g.expand.pathname(st.value, w.repo.Top)
 			if err != nil {
 				return fmt.Errorf("%s: %w", origin, err)
 			}
@@ -257,7 +206,7 @@ func (w *walker) visit(s source, depth int, within bool) error {
 			if err := w.include(st.value, base, origin, depth, true); err != nil {
 				return err
 			}
-		case worktreeConfig, refStorage, formatVersion, objectFormat:
+		case worktreeConfig, refStorage, formatVersion, objectFormat, workTree, bare:
 		}
 	}
 	return nil
@@ -295,11 +244,11 @@ func (w *walker) gitdir(pattern, path string, fold bool) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	real, err := w.g.expand.realPath(w.dirs.Git)
+	real, err := w.g.expand.realPath(w.repo.Dirs.Git)
 	if err != nil {
-		return false, fmt.Errorf("resolving the git directory %s: %w", w.dirs.Git, err)
+		return false, fmt.Errorf("resolving the git directory %s: %w", w.repo.Dirs.Git, err)
 	}
-	for _, text := range []string{real, w.dirs.Git} {
+	for _, text := range []string{real, w.repo.Dirs.Git} {
 		if prefixMatch(pattern, filepath.ToSlash(text), prefix, fold) {
 			return true, nil
 		}
@@ -353,89 +302,15 @@ func prefixMatch(pattern, text string, prefix int, fold bool) bool {
 }
 
 func (w *walker) onBranch(pattern string) (bool, error) {
-	if w.format.refStorage != "" && w.format.refStorage != filesRefStorage {
-		return false, errReftable
-	}
-	name, resolved, err := w.resolveRef(headFile)
+	head, resolved, err := w.repo.ResolveRef(w.g.texts.Load, headFile)
 	if err != nil || !resolved {
 		return false, err
 	}
-	branch, ok := strings.CutPrefix(name, branchPrefix)
+	branch, ok := strings.CutPrefix(head.Name, branchPrefix)
 	if !ok {
 		return false, nil
 	}
 	return wildmatch(withTrailingStars(pattern), branch, false), nil
-}
-
-func (w *walker) resolveRef(name string) (string, bool, error) {
-	for range maxSymrefDepth {
-		text, found, err := w.g.texts.Load(w.refPath(name))
-		switch {
-		case refAbsent(err):
-			return name, true, nil
-		case err != nil:
-			return "", false, err
-		case !found:
-			return name, true, nil
-		}
-		target, symbolic := strings.CutPrefix(text, symbolicRef)
-		if !symbolic {
-			return name, w.isObjectID(text), nil
-		}
-		name = strings.TrimRight(strings.TrimLeft(target, cSpace), cSpace)
-		if !validRefName(name) {
-			return "", false, nil
-		}
-	}
-	return "", false, nil
-}
-
-func refAbsent(err error) bool {
-	return errors.Is(err, syscall.ENOTDIR) || errors.Is(err, syscall.EISDIR) || errors.Is(err, regularfile.ErrNotRegular)
-}
-
-func (w *walker) refPath(name string) string {
-	dir := w.dirs.Common
-	if !strings.Contains(name, "/") || hasAnyPrefix(name, perWorktreeRefs) {
-		dir = w.dirs.Git
-	}
-	return filepath.Join(dir, filepath.FromSlash(name))
-}
-
-var perWorktreeRefs = []string{"refs/worktree/", "refs/bisect/", "refs/rewritten/"}
-
-func hasAnyPrefix(text string, prefixes []string) bool {
-	return slices.ContainsFunc(prefixes, func(prefix string) bool { return strings.HasPrefix(text, prefix) })
-}
-
-func (w *walker) isObjectID(text string) bool {
-	n := w.format.objectIDLength()
-	if len(text) < n || len(text) > n && !isCSpace(text[n]) {
-		return false
-	}
-	for _, c := range []byte(text[:n]) {
-		if digitValue(c) >= 16 {
-			return false
-		}
-	}
-	return true
-}
-
-func validRefName(name string) bool {
-	if name == "" || name == "@" || strings.HasSuffix(name, "/") || strings.HasSuffix(name, ".") || strings.Contains(name, "..") || strings.Contains(name, "@{") {
-		return false
-	}
-	for component := range strings.SplitSeq(name, "/") {
-		if component == "" || strings.HasPrefix(component, ".") || strings.HasSuffix(component, ".lock") {
-			return false
-		}
-	}
-	for _, c := range []byte(name) {
-		if c < ' ' || c == 0x7f || strings.IndexByte(" ~^:?*[\\", c) >= 0 {
-			return false
-		}
-	}
-	return true
 }
 
 func (w *walker) remoteURL(pattern string) (bool, error) {
@@ -443,7 +318,7 @@ func (w *walker) remoteURL(pattern string) (bool, error) {
 		return true, nil
 	}
 	if !w.collected {
-		collector := walker{g: w.g, top: w.top, dirs: w.dirs, format: w.format, sources: w.sources, collecting: true}
+		collector := walker{g: w.g, repo: w.repo, sources: w.sources, collecting: true}
 		if err := collector.run(); err != nil {
 			return false, err
 		}

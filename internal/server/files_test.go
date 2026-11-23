@@ -173,6 +173,8 @@ func TestAFullInvalidationRereadsTheGitConfigurationOfBakeFiles(t *testing.T) {
 		"home/first":                     "generated/\n",
 		"home/second":                    "vendored/\n",
 		"repo/.git/HEAD":                 "ref: refs/heads/main\n",
+		"repo/.git/objects/info/packs":   "",
+		"repo/.git/refs/heads/main":      "0123456789abcdef0123456789abcdef01234567\n",
 		"repo/build/Dockerfile":          "FROM base\n",
 		"repo/generated/docker-bake.hcl": strings.ReplaceAll(bakeFile, "%s", "generated"),
 		"repo/vendored/docker-bake.hcl":  strings.ReplaceAll(bakeFile, "%s", "vendored"),

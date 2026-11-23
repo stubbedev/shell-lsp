@@ -327,9 +327,11 @@ func TestCheckReadsContextsOfASiblingBakeFileForCopyFrom(t *testing.T) {
 
 	dir := t.TempDir()
 	writeFiles(t, dir, map[string]string{
-		".git/HEAD":           "ref: refs/heads/main\n",
-		"deploy/compose.yaml": "services:\n  app:\n    build:\n      context: ../app\n      additional_contexts:\n        builder: docker-image://alpine\n        img: docker-image://busybox\n",
-		"app/Dockerfile":      "FROM alpine:3 AS builder\nFROM alpine:3\nCOPY --from=builder / /b\nCOPY --from=img / /i\n",
+		".git/HEAD":               "ref: refs/heads/main\n",
+		".git/objects/info/packs": "",
+		".git/refs/heads/main":    "0123456789abcdef0123456789abcdef01234567\n",
+		"deploy/compose.yaml":     "services:\n  app:\n    build:\n      context: ../app\n      additional_contexts:\n        builder: docker-image://alpine\n        img: docker-image://busybox\n",
+		"app/Dockerfile":          "FROM alpine:3 AS builder\nFROM alpine:3\nCOPY --from=builder / /b\nCOPY --from=img / /i\n",
 	})
 	got := run(t, dir, "", "check", "-f", "gcc", "app/Dockerfile")
 	want := []string{"app/Dockerfile:4:13 DL3006"}
@@ -346,9 +348,11 @@ func TestCheckSaysOnceWhereTheBakeFileSearchStopped(t *testing.T) {
 
 	dir := t.TempDir()
 	writeFiles(t, dir, map[string]string{
-		".git/HEAD":      "ref: refs/heads/main\n",
-		"Dockerfile":     "FROM alpine:3\n",
-		"sub/Dockerfile": "FROM alpine:3\n",
+		".git/HEAD":               "ref: refs/heads/main\n",
+		".git/objects/info/packs": "",
+		".git/refs/heads/main":    "0123456789abcdef0123456789abcdef01234567\n",
+		"Dockerfile":              "FROM alpine:3\n",
+		"sub/Dockerfile":          "FROM alpine:3\n",
 	})
 	for i := range 20000 {
 		if err := os.MkdirAll(filepath.Join(dir, "many", strconv.Itoa(i)), 0o755); err != nil {

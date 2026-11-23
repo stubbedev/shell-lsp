@@ -51,7 +51,7 @@ func (p Process) dirs() platform.UserDirs {
 }
 
 func (p Process) git() gitrepo.Environment {
-	return gitrepo.Environment{User: p.dirs(), Git: p.Git, Repositories: gitrepo.Discovery()}
+	return gitrepo.Environment{User: p.dirs(), Git: p.Git, Repositories: p.Git.Discovery()}
 }
 
 func (p Process) PathDirs() []string { return filepath.SplitList(p.Path) }

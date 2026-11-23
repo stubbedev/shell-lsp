@@ -213,11 +213,13 @@ func TestFmtWalkHonoursTheGitConfigVariables(t *testing.T) {
 
 	dir := t.TempDir()
 	writeFiles(t, dir, map[string]string{
-		".git/HEAD":        "ref: refs/heads/main\n",
-		"kept/a.sh":        ugly,
-		"skipped/b.sh":     ugly,
-		"home/.gitconfig":  "[core]\n\texcludesFile = ~/nowhere\n",
-		"elsewhere/ignore": "skipped/\n",
+		".git/HEAD":               "ref: refs/heads/main\n",
+		".git/objects/info/packs": "",
+		".git/refs/heads/main":    "0123456789abcdef0123456789abcdef01234567\n",
+		"kept/a.sh":               ugly,
+		"skipped/b.sh":            ugly,
+		"home/.gitconfig":         "[core]\n\texcludesFile = ~/nowhere\n",
+		"elsewhere/ignore":        "skipped/\n",
 	})
 	var stdout, stderr bytes.Buffer
 	status := Run(Env{
@@ -244,11 +246,15 @@ func TestFmtWalkFindsTheRepositoryWhereGitDirPoints(t *testing.T) {
 
 	dir := t.TempDir()
 	writeFiles(t, dir, map[string]string{
-		"work/.git/HEAD":         "ref: refs/heads/main\n",
-		"work/kept/a.sh":         ugly,
-		"work/skipped/b.sh":      ugly,
-		"store/git/HEAD":         "ref: refs/heads/main\n",
-		"store/git/info/exclude": "/skipped/\n",
+		"work/.git/HEAD":               "ref: refs/heads/main\n",
+		"work/.git/objects/info/packs": "",
+		"work/.git/refs/heads/main":    "0123456789abcdef0123456789abcdef01234567\n",
+		"work/kept/a.sh":               ugly,
+		"work/skipped/b.sh":            ugly,
+		"store/git/HEAD":               "ref: refs/heads/main\n",
+		"store/git/objects/info/packs": "",
+		"store/git/refs/heads/main":    "0123456789abcdef0123456789abcdef01234567\n",
+		"store/git/info/exclude":       "/skipped/\n",
 	})
 	fmtList := func(vars map[string]string) (int, string, string) {
 		var stdout, stderr bytes.Buffer

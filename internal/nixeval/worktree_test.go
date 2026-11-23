@@ -230,6 +230,45 @@ func TestTreeKeyFindsALinkedWorktreeAndPackedReferences(t *testing.T) {
 	}
 }
 
+func headStateOf(t *testing.T, dir string) string {
+	t.Helper()
+	repo, found, err := findRepository(dir)
+	if err != nil || !found {
+		t.Fatalf("findRepository(%s) = %v, %v", dir, found, err)
+	}
+	state, err := repo.headState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(state)
+}
+
+func TestHeadStateFollowsABranchThatIsASymbolicRef(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	root, git := gitRepository(t)
+	git("switch", "-q", "-c", "target")
+	git("symbolic-ref", "refs/heads/alias", "refs/heads/target")
+	linked := filepath.Join(t.TempDir(), "linked")
+	git("worktree", "add", "-q", "--detach", linked)
+	gitIn(t, linked)("symbolic-ref", "HEAD", "refs/heads/alias")
+	if got, want := headStateOf(t, linked), headStateOf(t, root); got != want {
+		t.Errorf("a HEAD through a symbolic branch = %q, want the state of the branch it names, %q", got, want)
+	}
+	before := headStateOf(t, linked)
+	git("commit", "-q", "--allow-empty", "-m", "next")
+	if headStateOf(t, linked) == before {
+		t.Error("a commit to the branch a symbolic branch names left the state alone")
+	}
+	git("pack-refs", "--all")
+	git("commit", "-q", "--allow-empty", "-m", "packed")
+	git("pack-refs", "--all")
+	if got, want := headStateOf(t, linked), headStateOf(t, root); got != want {
+		t.Errorf("after packing, the linked state = %q, want %q", got, want)
+	}
+}
+
 func TestTreeKeyFollowsTrackedLinksAndExecutableBits(t *testing.T) {
 	t.Parallel()
 	requireGit(t)

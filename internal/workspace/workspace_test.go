@@ -434,6 +434,9 @@ func TestShellFilesSkipWhatGitIgnores(t *testing.T) {
 	repo := t.TempDir()
 	writeTree(t, repo, map[string]string{
 		".git/info/exclude":        "/local.sh\n",
+		".git/HEAD":                "ref: refs/heads/main\n",
+		".git/objects/info/packs":  "",
+		".git/refs/heads/main":     "0123456789abcdef0123456789abcdef01234567\n",
 		".gitignore":               ".devenv*\n**/target/**\n*.gen.sh\n!keep.gen.sh\n",
 		"a.sh":                     "",
 		"local.sh":                 "",
@@ -467,10 +470,12 @@ func TestShellFilesSkipWhatASymlinkedGitDirectoryExcludes(t *testing.T) {
 
 	dir := t.TempDir()
 	writeTree(t, dir, map[string]string{
-		"store/git/HEAD":         "ref: refs/heads/main\n",
-		"store/git/info/exclude": "/local.sh\n",
-		"repo/a.sh":              "",
-		"repo/local.sh":          "",
+		"store/git/HEAD":               "ref: refs/heads/main\n",
+		"store/git/objects/info/packs": "",
+		"store/git/refs/heads/main":    "0123456789abcdef0123456789abcdef01234567\n",
+		"store/git/info/exclude":       "/local.sh\n",
+		"repo/a.sh":                    "",
+		"repo/local.sh":                "",
 	})
 	if err := os.Symlink(filepath.Join(dir, "store", "git"), filepath.Join(dir, "repo", ".git")); err != nil {
 		t.Skipf("symbolic links are unavailable: %v", err)
@@ -517,13 +522,15 @@ func TestShellFilesSkipWhatTheUsersExcludesFileIgnores(t *testing.T) {
 
 	base := t.TempDir()
 	writeTree(t, base, map[string]string{
-		"home/.gitconfig":     "[core]\n\texcludesFile = ~/global-ignore\n",
-		"home/global-ignore":  "generated/\nvendored/\n",
-		"repo/.git/HEAD":      "ref: refs/heads/main\n",
-		"repo/.gitignore":     "!vendored/\n",
-		"repo/a.sh":           "",
-		"repo/generated/g.sh": "",
-		"repo/vendored/v.sh":  "",
+		"home/.gitconfig":              "[core]\n\texcludesFile = ~/global-ignore\n",
+		"home/global-ignore":           "generated/\nvendored/\n",
+		"repo/.git/HEAD":               "ref: refs/heads/main\n",
+		"repo/.git/objects/info/packs": "",
+		"repo/.git/refs/heads/main":    "0123456789abcdef0123456789abcdef01234567\n",
+		"repo/.gitignore":              "!vendored/\n",
+		"repo/a.sh":                    "",
+		"repo/generated/g.sh":          "",
+		"repo/vendored/v.sh":           "",
 	})
 	repo := filepath.Join(base, "repo")
 	ws := New(func(string) (*File, bool) { return nil, false }, Detect, gitrepo.Environment{User: platform.UserDirs{Home: filepath.Join(base, "home")}})
@@ -538,12 +545,14 @@ func TestInvalidateAllRereadsTheGitConfiguration(t *testing.T) {
 
 	base := t.TempDir()
 	writeTree(t, base, map[string]string{
-		"home/.gitconfig":  "[core]\n\texcludesFile = ~/first\n",
-		"home/first":       "first/\n",
-		"home/second":      "second/\n",
-		"repo/.git/HEAD":   "ref: refs/heads/main\n",
-		"repo/first/a.sh":  "",
-		"repo/second/b.sh": "",
+		"home/.gitconfig":              "[core]\n\texcludesFile = ~/first\n",
+		"home/first":                   "first/\n",
+		"home/second":                  "second/\n",
+		"repo/.git/HEAD":               "ref: refs/heads/main\n",
+		"repo/.git/objects/info/packs": "",
+		"repo/.git/refs/heads/main":    "0123456789abcdef0123456789abcdef01234567\n",
+		"repo/first/a.sh":              "",
+		"repo/second/b.sh":             "",
 	})
 	repo := filepath.Join(base, "repo")
 	ws := New(func(string) (*File, bool) { return nil, false }, Detect, gitrepo.Environment{User: platform.UserDirs{Home: filepath.Join(base, "home")}})
@@ -567,6 +576,10 @@ func TestShellFilesReadTheExcludeFileOfALinkedWorktree(t *testing.T) {
 	writeTree(t, base, map[string]string{
 		"main/.git/info/exclude":           "excluded.sh\n",
 		"main/.git/worktrees/wt/commondir": "../..\n",
+		"main/.git/worktrees/wt/HEAD":      "ref: refs/heads/wt\n",
+		"main/.git/HEAD":                   "ref: refs/heads/main\n",
+		"main/.git/objects/info/packs":     "",
+		"main/.git/refs/heads/main":        "0123456789abcdef0123456789abcdef01234567\n",
 		"wt/.git":                          "gitdir: ../main/.git/worktrees/wt\n",
 		"wt/a.sh":                          "",
 		"wt/excluded.sh":                   "",

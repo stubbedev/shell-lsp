@@ -46,7 +46,7 @@ var errNotExpanded = errors.New("unknown")
 func CurrentProcess(environ, pathDirs, pathExt []string) Process {
 	variables := map[string]string{}
 	for _, kv := range environ {
-		if name, value, ok := strings.Cut(kv, "="); ok && (strings.HasPrefix(name, variablePrefix) || slices.Contains(locationVariables, name)) {
+		if name, value, ok := strings.Cut(kv, "="); ok && (strings.HasPrefix(name, variablePrefix) || slices.Contains(processVariables, name)) {
 			variables[name] = value
 		}
 	}

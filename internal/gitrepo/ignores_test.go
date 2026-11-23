@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,6 +17,12 @@ func writeFiles(t *testing.T, dir string, files map[string]string) {
 	t.Helper()
 	for name, text := range files {
 		path := filepath.Join(dir, filepath.FromSlash(name))
+		if strings.HasSuffix(name, "/") {
+			if err := os.MkdirAll(path, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			continue
+		}
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -46,7 +53,14 @@ func (f fixture) ignores() *Ignores {
 func (f fixture) base(t *testing.T, repo string) error {
 	t.Helper()
 	ignores := f.ignores()
-	_, err := ignores.Base(f.repository(t, ignores, repo))
+	found, located, err := ignores.Repository(f.path(repo))
+	if err != nil {
+		return err
+	}
+	if !located {
+		t.Fatalf("%s is in no repository", repo)
+	}
+	_, err = ignores.Base(found)
 	return err
 }
 
@@ -94,6 +108,8 @@ func TestBaseReadsTheDefaultExcludesFileWhenNoneIsSet(t *testing.T) {
 		"home/.config/git/ignore": "home-default\n",
 		"xdg/git/ignore":          "xdg-default\n",
 		"repo/.git/HEAD":          "ref: refs/heads/main\n",
+		"repo/.git/objects/":      "",
+		"repo/.git/refs/":         "",
 	})
 	assertIgnored(t, f.ignored(t, "repo", "home-default", "xdg-default"), "home-default")
 
@@ -112,7 +128,12 @@ func TestBaseTakesTheLastExcludesFileSetAcrossConfigFiles(t *testing.T) {
 		"home/.config/git/ignore": "from-default\n",
 		"repo/.git/config":        "[core]\n\texcludesFile = repo-set\n",
 		"repo/repo-set":           "from-repo\n",
-		"other/.git/HEAD":         "",
+		"other/.git/HEAD":         "ref: refs/heads/main\n",
+		"other/.git/objects/":     "",
+		"other/.git/refs/":        "",
+		"repo/.git/HEAD":          "ref: refs/heads/main\n",
+		"repo/.git/objects/":      "",
+		"repo/.git/refs/":         "",
 	})
 	all := []string{"from-xdg-config", "from-gitconfig", "from-default", "from-repo"}
 	assertIgnored(t, f.ignored(t, "repo", all...), "from-repo")
@@ -126,9 +147,17 @@ func TestBaseFollowsIncludesAndOptionalPaths(t *testing.T) {
 		"home/.gitconfig":         "[include]\n\tpath = conf/extra\n\tpath = missing\n",
 		"home/conf/extra":         "[core]\n\texcludesFile = :(optional)~/absent\n",
 		"home/.config/git/ignore": "from-default\n",
-		"repo/.git/HEAD":          "",
+		"repo/.git/HEAD":          "ref: refs/heads/main\n",
+		"repo/.git/objects/":      "",
+		"repo/.git/refs/":         "",
 		"empty/.git/config":       "[core]\n\texcludesFile =\n",
 		"optional/.git/config":    "[core]\n\texcludesFile = :(optional)\n",
+		"empty/.git/HEAD":         "ref: refs/heads/main\n",
+		"empty/.git/objects/":     "",
+		"empty/.git/refs/":        "",
+		"optional/.git/HEAD":      "ref: refs/heads/main\n",
+		"optional/.git/objects/":  "",
+		"optional/.git/refs/":     "",
 	})
 	assertIgnored(t, f.ignored(t, "repo", "from-default"), "from-default")
 	assertIgnored(t, f.ignored(t, "empty", "from-default"))
@@ -139,11 +168,17 @@ func TestBaseExpandsEveryExcludesFileItReads(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t, map[string]string{
-		"home/.gitconfig":      "[core]\n\texcludesFile = ~nobody/ignore\n",
-		"repo/.git/config":     "[core]\n\texcludesFile = ~/repo-ignore\n",
-		"home/repo-ignore":     "from-repo\n",
-		"prefixed/.git/config": "[core]\n\texcludesFile = %(prefix)/etc/ignore\n",
-		"prefix/etc/ignore":    "from-prefix\n",
+		"home/.gitconfig":        "[core]\n\texcludesFile = ~nobody/ignore\n",
+		"repo/.git/config":       "[core]\n\texcludesFile = ~/repo-ignore\n",
+		"home/repo-ignore":       "from-repo\n",
+		"prefixed/.git/config":   "[core]\n\texcludesFile = %(prefix)/etc/ignore\n",
+		"prefix/etc/ignore":      "from-prefix\n",
+		"prefixed/.git/HEAD":     "ref: refs/heads/main\n",
+		"prefixed/.git/objects/": "",
+		"prefixed/.git/refs/":    "",
+		"repo/.git/HEAD":         "ref: refs/heads/main\n",
+		"repo/.git/objects/":     "",
+		"repo/.git/refs/":        "",
 	})
 	f.env.Git.UserHome = func(string) (string, error) { return "", errNotExpanded }
 	if err := f.base(t, "repo"); !errors.Is(err, errNotExpanded) {
@@ -165,25 +200,39 @@ func TestBaseEvaluatesGitdirConditions(t *testing.T) {
 			"[includeIf \"gitdir:named/.git\"]\n\tpath = named.inc\n" +
 			"[includeIf \"gitdir:./work/rel/\"]\n\tpath = relative.inc\n" +
 			"[includeIf \"gitdir:~/work/glob*/\"]\n\tpath = glob.inc\n",
-		"home/work.inc":               "[core]\n\texcludesFile = ~/work-ignore\n",
-		"home/upper.inc":              "[core]\n\texcludesFile = ~/upper-ignore\n",
-		"home/never.inc":              "[core]\n\texcludesFile = ~/never-ignore\n",
-		"home/named.inc":              "[core]\n\texcludesFile = ~/named-ignore\n",
-		"home/relative.inc":           "[core]\n\texcludesFile = ~/relative-ignore\n",
-		"home/glob.inc":               "[core]\n\texcludesFile = ~/glob-ignore\n",
-		"home/work-ignore":            "work\n",
-		"home/upper-ignore":           "upper\n",
-		"home/never-ignore":           "never\n",
-		"home/named-ignore":           "named\n",
-		"home/relative-ignore":        "relative\n",
-		"home/glob-ignore":            "glob\n",
-		"home/work/a/.git/HEAD":       "",
-		"home/work/upper/.git/HEAD":   "",
-		"home/work/exact/.git/HEAD":   "",
-		"deep/x/named/.git/HEAD":      "",
-		"home/work/rel/.git/HEAD":     "",
-		"home/work/globbed/.git/HEAD": "",
-		"elsewhere/.git/HEAD":         "",
+		"home/work.inc":                   "[core]\n\texcludesFile = ~/work-ignore\n",
+		"home/upper.inc":                  "[core]\n\texcludesFile = ~/upper-ignore\n",
+		"home/never.inc":                  "[core]\n\texcludesFile = ~/never-ignore\n",
+		"home/named.inc":                  "[core]\n\texcludesFile = ~/named-ignore\n",
+		"home/relative.inc":               "[core]\n\texcludesFile = ~/relative-ignore\n",
+		"home/glob.inc":                   "[core]\n\texcludesFile = ~/glob-ignore\n",
+		"home/work-ignore":                "work\n",
+		"home/upper-ignore":               "upper\n",
+		"home/never-ignore":               "never\n",
+		"home/named-ignore":               "named\n",
+		"home/relative-ignore":            "relative\n",
+		"home/glob-ignore":                "glob\n",
+		"home/work/a/.git/HEAD":           "ref: refs/heads/main\n",
+		"home/work/a/.git/objects/":       "",
+		"home/work/a/.git/refs/":          "",
+		"home/work/upper/.git/HEAD":       "ref: refs/heads/main\n",
+		"home/work/upper/.git/objects/":   "",
+		"home/work/upper/.git/refs/":      "",
+		"home/work/exact/.git/HEAD":       "ref: refs/heads/main\n",
+		"home/work/exact/.git/objects/":   "",
+		"home/work/exact/.git/refs/":      "",
+		"deep/x/named/.git/HEAD":          "ref: refs/heads/main\n",
+		"deep/x/named/.git/objects/":      "",
+		"deep/x/named/.git/refs/":         "",
+		"home/work/rel/.git/HEAD":         "ref: refs/heads/main\n",
+		"home/work/rel/.git/objects/":     "",
+		"home/work/rel/.git/refs/":        "",
+		"home/work/globbed/.git/HEAD":     "ref: refs/heads/main\n",
+		"home/work/globbed/.git/objects/": "",
+		"home/work/globbed/.git/refs/":    "",
+		"elsewhere/.git/HEAD":             "ref: refs/heads/main\n",
+		"elsewhere/.git/objects/":         "",
+		"elsewhere/.git/refs/":            "",
 	})
 	all := []string{"work", "upper", "never", "named", "relative", "glob"}
 	assertIgnored(t, f.ignored(t, "home/work/a", all...), "work")
@@ -199,8 +248,10 @@ func TestBaseMatchesGitdirAgainstTheResolvedAndTheGivenPath(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t, map[string]string{
-		"real/repo/.git/HEAD": "",
-		"home/ignore":         "linked\n",
+		"real/repo/.git/HEAD":     "ref: refs/heads/main\n",
+		"real/repo/.git/objects/": "",
+		"real/repo/.git/refs/":    "",
+		"home/ignore":             "linked\n",
 	})
 	if err := os.Symlink(f.path("real"), f.path("link")); err != nil {
 		t.Skipf("symbolic links are unavailable: %v", err)
@@ -216,7 +267,7 @@ func TestBaseMatchesGitdirAgainstTheResolvedAndTheGivenPath(t *testing.T) {
 func TestBaseRefusesARelativeGitdirConditionOutsideAFile(t *testing.T) {
 	t.Parallel()
 
-	f := newFixture(t, map[string]string{"repo/.git/HEAD": ""})
+	f := newFixture(t, map[string]string{"repo/.git/HEAD": "ref: refs/heads/main\n", "repo/.git/objects/": "", "repo/.git/refs/": ""})
 	f.env.Git.Variables = map[string]string{
 		"GIT_CONFIG_COUNT":   "1",
 		"GIT_CONFIG_KEY_0":   "includeIf.gitdir:./x/.path",
@@ -234,18 +285,30 @@ func TestBaseEvaluatesOnbranchConditions(t *testing.T) {
 		"home/.gitconfig": "[includeIf \"onbranch:main\"]\n\tpath = main\n" +
 			"[includeIf \"onbranch:feature/\"]\n\tpath = feature\n" +
 			"[includeIf \"onbranch:*\"]\n\tpath = any\n",
-		"home/main":           "[core]\n\texcludesFile = ~/main-ignore\n",
-		"home/feature":        "[core]\n\texcludesFile = ~/feature-ignore\n",
-		"home/any":            "[core]\n\texcludesFile = ~/any-ignore\n",
-		"home/main-ignore":    "main\n",
-		"home/feature-ignore": "feature\n",
-		"home/any-ignore":     "any\n",
-		"main/.git/HEAD":      "ref: refs/heads/main\n",
-		"feature/.git/HEAD":   "ref:refs/heads/feature/deep/x\n",
-		"other/.git/HEAD":     "ref: refs/heads/other\n",
-		"detached/.git/HEAD":  "0123456789012345678901234567890123456789\n",
-		"tag/.git/HEAD":       "ref: refs/tags/main\n",
-		"reftable/.git/HEAD":  "ref: refs/heads/.invalid\n",
+		"home/main":              "[core]\n\texcludesFile = ~/main-ignore\n",
+		"home/feature":           "[core]\n\texcludesFile = ~/feature-ignore\n",
+		"home/any":               "[core]\n\texcludesFile = ~/any-ignore\n",
+		"home/main-ignore":       "main\n",
+		"home/feature-ignore":    "feature\n",
+		"home/any-ignore":        "any\n",
+		"main/.git/HEAD":         "ref: refs/heads/main\n",
+		"main/.git/objects/":     "",
+		"main/.git/refs/":        "",
+		"feature/.git/HEAD":      "ref:refs/heads/feature/deep/x\n",
+		"feature/.git/objects/":  "",
+		"feature/.git/refs/":     "",
+		"other/.git/HEAD":        "ref: refs/heads/other\n",
+		"other/.git/objects/":    "",
+		"other/.git/refs/":       "",
+		"detached/.git/HEAD":     "0123456789012345678901234567890123456789\n",
+		"detached/.git/objects/": "",
+		"detached/.git/refs/":    "",
+		"tag/.git/HEAD":          "ref: refs/tags/main\n",
+		"tag/.git/objects/":      "",
+		"tag/.git/refs/":         "",
+		"reftable/.git/HEAD":     "ref: refs/heads/.invalid\n",
+		"reftable/.git/objects/": "",
+		"reftable/.git/refs/":    "",
 		"reftable/.git/config": "[core]\n\trepositoryformatversion = 1\n" +
 			"[extensions]\n\trefStorage = reftable\n",
 	})
@@ -264,12 +327,21 @@ func TestBaseEvaluatesRemoteURLConditionsOverEveryConfigFile(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t, map[string]string{
-		"home/.gitconfig":     "[includeIf \"hasconfig:remote.*.url:https://example.com/**\"]\n\tpath = team\n",
-		"home/team":           "[core]\n\texcludesFile = ~/team-ignore\n",
-		"home/team-ignore":    "team\n",
-		"team/.git/config":    "[remote \"origin\"]\n\turl = https://example.com/team/repo.git\n",
-		"other/.git/config":   "[remote \"origin\"]\n\turl = https://example.org/repo.git\n",
-		"shallow/.git/config": "[remote \"origin\"]\n\turl = https://example.com/repo.git\n",
+		"home/.gitconfig":       "[includeIf \"hasconfig:remote.*.url:https://example.com/**\"]\n\tpath = team\n",
+		"home/team":             "[core]\n\texcludesFile = ~/team-ignore\n",
+		"home/team-ignore":      "team\n",
+		"team/.git/config":      "[remote \"origin\"]\n\turl = https://example.com/team/repo.git\n",
+		"other/.git/config":     "[remote \"origin\"]\n\turl = https://example.org/repo.git\n",
+		"shallow/.git/config":   "[remote \"origin\"]\n\turl = https://example.com/repo.git\n",
+		"other/.git/HEAD":       "ref: refs/heads/main\n",
+		"other/.git/objects/":   "",
+		"other/.git/refs/":      "",
+		"shallow/.git/HEAD":     "ref: refs/heads/main\n",
+		"shallow/.git/objects/": "",
+		"shallow/.git/refs/":    "",
+		"team/.git/HEAD":        "ref: refs/heads/main\n",
+		"team/.git/objects/":    "",
+		"team/.git/refs/":       "",
 	})
 	assertIgnored(t, f.ignored(t, "team", "team"), "team")
 	assertIgnored(t, f.ignored(t, "other", "team"))
@@ -285,10 +357,12 @@ func TestBaseRefusesRemoteURLsUnderAnIncludeIfWhileHasconfigIsUsed(t *testing.T)
 	f := newFixture(t, map[string]string{
 		"home/.gitconfig": "[includeIf \"gitdir:**\"]\n\tpath = any\n" +
 			"[includeIf \"hasconfig:remote.*.url:nothing\"]\n\tpath = none\n",
-		"home/any":       "[include]\n\tpath = nested\n",
-		"home/nested":    "[remote \"x\"]\n\turl = https://example.com/x\n",
-		"home/none":      "",
-		"repo/.git/HEAD": "",
+		"home/any":           "[include]\n\tpath = nested\n",
+		"home/nested":        "[remote \"x\"]\n\turl = https://example.com/x\n",
+		"home/none":          "",
+		"repo/.git/HEAD":     "ref: refs/heads/main\n",
+		"repo/.git/objects/": "",
+		"repo/.git/refs/":    "",
 	})
 	if err := f.base(t, "repo"); !errors.Is(err, errURLUnderCondition) {
 		t.Errorf("Base = %v, want %v", err, errURLUnderCondition)
@@ -309,15 +383,25 @@ func TestBaseReadsWorktreeConfigOnlyWithTheExtension(t *testing.T) {
 		"off/.git/config.worktree":               "[core]\n\texcludesFile = worktree-ignore\n",
 		"off/repo-ignore":                        "repo\n",
 		"off/worktree-ignore":                    "worktree\n",
-		"main/.git/config":                       "[core]\n\texcludesFile = repo-ignore\n[extensions]\n\tworktreeConfig\n",
+		"main/.git/config":                       "[core]\n\trepositoryformatversion = 0\n\texcludesFile = repo-ignore\n[extensions]\n\tworktreeConfig\n",
 		"main/.git/config.worktree":              "[core]\n\texcludesFile = worktree-ignore\n",
 		"main/repo-ignore":                       "repo\n",
 		"main/worktree-ignore":                   "worktree\n",
 		"main/.git/worktrees/wt/commondir":       "../..\n",
+		"main/.git/worktrees/wt/HEAD":            "ref: refs/heads/wt\n",
 		"main/.git/worktrees/wt/config.worktree": "[core]\n\texcludesFile = linked-ignore\n",
 		"wt/.git":                                "gitdir: ../main/.git/worktrees/wt\n",
 		"wt/linked-ignore":                       "linked\n",
 		"bad/.git/config":                        "[extensions]\n\tworktreeConfig = maybe\n",
+		"bad/.git/HEAD":                          "ref: refs/heads/main\n",
+		"bad/.git/objects/":                      "",
+		"bad/.git/refs/":                         "",
+		"main/.git/HEAD":                         "ref: refs/heads/main\n",
+		"main/.git/objects/":                     "",
+		"main/.git/refs/":                        "",
+		"off/.git/HEAD":                          "ref: refs/heads/main\n",
+		"off/.git/objects/":                      "",
+		"off/.git/refs/":                         "",
 	})
 	all := []string{"repo", "worktree", "linked"}
 	assertIgnored(t, f.ignored(t, "off", all...), "repo")
@@ -340,6 +424,8 @@ func TestBaseMatchesConditionsOfALinkedWorktreeAgainstItsOwnGitDirectory(t *test
 		"home/topic-extra":                 "[core]\n\texcludesFile = ~/topic-ignore\n",
 		"home/topic-ignore":                "topic\n",
 		"main/.git/HEAD":                   "ref: refs/heads/topic\n",
+		"main/.git/objects/":               "",
+		"main/.git/refs/":                  "",
 		"main/.git/worktrees/wt/HEAD":      "ref: refs/heads/side\n",
 		"main/.git/worktrees/wt/commondir": "../..\n",
 		"wt/.git":                          "gitdir: ../main/.git/worktrees/wt\n",
@@ -352,11 +438,13 @@ func TestBaseReadsTheSystemConfigAndTheConfigVariables(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t, map[string]string{
-		"etc/gitconfig":   "[core]\n\texcludesFile = ~/system\n",
-		"other/system":    "[core]\n\texcludesFile = ~/other-system\n",
-		"home/.gitconfig": "[core]\n\texcludesFile = ~/home\n",
-		"env/global":      "[core]\n\texcludesFile = ~/env-global\n",
-		"repo/.git/HEAD":  "",
+		"etc/gitconfig":      "[core]\n\texcludesFile = ~/system\n",
+		"other/system":       "[core]\n\texcludesFile = ~/other-system\n",
+		"home/.gitconfig":    "[core]\n\texcludesFile = ~/home\n",
+		"env/global":         "[core]\n\texcludesFile = ~/env-global\n",
+		"repo/.git/HEAD":     "ref: refs/heads/main\n",
+		"repo/.git/objects/": "",
+		"repo/.git/refs/":    "",
 	})
 	f.env.Git.SystemConfig = f.path("etc/gitconfig")
 	last := func(vars map[string]string) (string, error) {
@@ -366,8 +454,8 @@ func TestBaseReadsTheSystemConfigAndTheConfigVariables(t *testing.T) {
 		if ignores.scopesErr != nil {
 			return "", ignores.scopesErr
 		}
-		dirs := Dirs{Git: f.path("repo/.git"), Common: f.path("repo/.git")}
-		w := walker{g: ignores, top: f.path("repo"), dirs: dirs, sources: ignores.sources(f.path("repo"), dirs, repositoryFormat{})}
+		repo := Repository{Top: f.path("repo"), Dirs: Dirs{Git: f.path("repo/.git"), Common: f.path("repo/.git")}}
+		w := walker{g: ignores, repo: repo, sources: ignores.sources(repo)}
 		if err := w.run(); err != nil || !w.last.set {
 			return "", err
 		}
@@ -430,7 +518,9 @@ func TestBaseReadsTheDefaultExcludesFileWhicheverGlobalConfigIsRead(t *testing.T
 
 	f := newFixture(t, map[string]string{
 		"home/.config/git/ignore": "default\n",
-		"repo/.git/HEAD":          "",
+		"repo/.git/HEAD":          "ref: refs/heads/main\n",
+		"repo/.git/objects/":      "",
+		"repo/.git/refs/":         "",
 	})
 	f.env.Git.Variables = map[string]string{"GIT_CONFIG_GLOBAL": f.path("missing")}
 	assertIgnored(t, f.ignored(t, "repo", "default"), "default")
@@ -443,7 +533,11 @@ func TestBaseLetsInfoExcludeOverrideTheExcludesFile(t *testing.T) {
 		"home/.config/git/ignore":          "build\nkept\n",
 		"main/.git/info/exclude":           "!kept\n",
 		"main/.git/worktrees/wt/commondir": "../..\n",
+		"main/.git/worktrees/wt/HEAD":      "ref: refs/heads/wt\n",
 		"wt/.git":                          "gitdir: ../main/.git/worktrees/wt\n",
+		"main/.git/HEAD":                   "ref: refs/heads/main\n",
+		"main/.git/objects/":               "",
+		"main/.git/refs/":                  "",
 	})
 	assertIgnored(t, f.ignored(t, "main", "build", "kept"), "build")
 	assertIgnored(t, f.ignored(t, "wt", "build", "kept"), "build")
@@ -453,10 +547,12 @@ func TestInvalidateAllRereadsEveryGitFile(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t, map[string]string{
-		"home/.gitconfig": "[core]\n\texcludesFile = ~/first\n",
-		"home/first":      "first\n",
-		"home/second":     "second\n",
-		"repo/.git/HEAD":  "",
+		"home/.gitconfig":    "[core]\n\texcludesFile = ~/first\n",
+		"home/first":         "first\n",
+		"home/second":        "second\n",
+		"repo/.git/HEAD":     "ref: refs/heads/main\n",
+		"repo/.git/objects/": "",
+		"repo/.git/refs/":    "",
 	})
 	ignores := f.ignores()
 	repo := f.repository(t, ignores, "repo")
@@ -472,14 +568,35 @@ func TestBaseRefusesARepositoryFormatGitDoesNotRead(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t, map[string]string{
-		"home/.gitconfig":       "[core]\n\trepositoryformatversion\n",
-		"v1/.git/config":        "[core]\n\trepositoryformatversion = 1\n",
-		"hex/.git/config":       "[core]\n\trepositoryformatversion = 0x1\n",
-		"later/.git/config":     "[core]\n\trepositoryformatversion = 2\n\trepositoryformatversion = 0\n",
-		"v2/.git/config":        "[core]\n\trepositoryformatversion = 2\n",
-		"unit/.git/config":      "[core]\n\trepositoryformatversion = 1k\n",
-		"text/.git/config":      "[core]\n\trepositoryformatversion = abc\n",
-		"valueless/.git/config": "[core]\n\trepositoryformatversion\n",
+		"home/.gitconfig":         "[core]\n\trepositoryformatversion\n",
+		"v1/.git/config":          "[core]\n\trepositoryformatversion = 1\n",
+		"hex/.git/config":         "[core]\n\trepositoryformatversion = 0x1\n",
+		"later/.git/config":       "[core]\n\trepositoryformatversion = 2\n\trepositoryformatversion = 0\n",
+		"v2/.git/config":          "[core]\n\trepositoryformatversion = 2\n",
+		"unit/.git/config":        "[core]\n\trepositoryformatversion = 1k\n",
+		"text/.git/config":        "[core]\n\trepositoryformatversion = abc\n",
+		"valueless/.git/config":   "[core]\n\trepositoryformatversion\n",
+		"hex/.git/HEAD":           "ref: refs/heads/main\n",
+		"hex/.git/objects/":       "",
+		"hex/.git/refs/":          "",
+		"later/.git/HEAD":         "ref: refs/heads/main\n",
+		"later/.git/objects/":     "",
+		"later/.git/refs/":        "",
+		"text/.git/HEAD":          "ref: refs/heads/main\n",
+		"text/.git/objects/":      "",
+		"text/.git/refs/":         "",
+		"unit/.git/HEAD":          "ref: refs/heads/main\n",
+		"unit/.git/objects/":      "",
+		"unit/.git/refs/":         "",
+		"v1/.git/HEAD":            "ref: refs/heads/main\n",
+		"v1/.git/objects/":        "",
+		"v1/.git/refs/":           "",
+		"v2/.git/HEAD":            "ref: refs/heads/main\n",
+		"v2/.git/objects/":        "",
+		"v2/.git/refs/":           "",
+		"valueless/.git/HEAD":     "ref: refs/heads/main\n",
+		"valueless/.git/objects/": "",
+		"valueless/.git/refs/":    "",
 	})
 	for _, repo := range []string{"v1", "hex", "later"} {
 		if err := f.base(t, repo); err != nil {
@@ -507,23 +624,39 @@ func TestBaseFollowsBranchesThatAreSymbolicRefs(t *testing.T) {
 		"home/alias":                     "[core]\n\texcludesFile = ~/alias-ignore\n",
 		"home/alias-ignore":              "alias\n",
 		"direct/.git/HEAD":               "ref: refs/heads/b\n",
+		"direct/.git/objects/":           "",
+		"direct/.git/refs/":              "",
 		"direct/.git/refs/heads/b":       oid,
 		"alias/.git/HEAD":                "ref: refs/heads/a\n",
+		"alias/.git/objects/":            "",
+		"alias/.git/refs/":               "",
 		"alias/.git/refs/heads/a":        "ref:   refs/heads/b  \n",
 		"chain/.git/HEAD":                "ref: refs/heads/c\n",
+		"chain/.git/objects/":            "",
+		"chain/.git/refs/":               "",
 		"chain/.git/refs/heads/c":        "ref: refs/heads/a\n",
 		"chain/.git/refs/heads/a":        "ref: refs/heads/b\n",
 		"unborn/.git/HEAD":               "ref: refs/heads/a\n",
+		"unborn/.git/objects/":           "",
+		"unborn/.git/refs/":              "",
 		"unborn/.git/refs/heads/a":       "ref: refs/heads/unborn\n",
 		"directory/.git/HEAD":            "ref: refs/heads/dd\n",
+		"directory/.git/objects/":        "",
+		"directory/.git/refs/":           "",
 		"directory/.git/refs/heads/dd/e": oid,
 		"garbage/.git/HEAD":              "ref: refs/heads/b\n",
+		"garbage/.git/objects/":          "",
+		"garbage/.git/refs/":             "",
 		"garbage/.git/refs/heads/b":      "garbage\n",
 		"unsafe/.git/HEAD":               "ref: refs/heads/a\n",
+		"unsafe/.git/objects/":           "",
+		"unsafe/.git/refs/":              "",
 		"unsafe/.git/refs/heads/a":       "ref: refs/heads/../heads/b\n",
 	}
 	for depth, repo := range map[int]string{3: "deepest", 4: "too-deep"} {
 		files[repo+"/.git/HEAD"] = "ref: refs/heads/s1\n"
+		files[repo+"/.git/objects/"] = ""
+		files[repo+"/.git/refs/"] = ""
 		for i := 1; i < depth; i++ {
 			files[fmt.Sprintf("%s/.git/refs/heads/s%d", repo, i)] = fmt.Sprintf("ref: refs/heads/s%d\n", i+1)
 		}
@@ -546,6 +679,8 @@ func TestBaseReadsTheBranchOfALinkedWorktreeFromTheCommonDirectory(t *testing.T)
 		"home/branch":                      "[core]\n\texcludesFile = ~/branch-ignore\n",
 		"home/branch-ignore":               "set\n",
 		"main/.git/HEAD":                   "ref: refs/heads/main\n",
+		"main/.git/objects/":               "",
+		"main/.git/refs/":                  "",
 		"main/.git/refs/heads/alias":       "ref: refs/heads/target\n",
 		"main/.git/worktrees/wt/HEAD":      "ref: refs/heads/alias\n",
 		"main/.git/worktrees/wt/commondir": "../..\n",

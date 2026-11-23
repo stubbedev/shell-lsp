@@ -86,10 +86,12 @@ func TestBaseLeavesAGitdirPatternGitCannotExpandAsWritten(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t, map[string]string{
-		"home/.gitconfig":   "[includeIf \"gitdir:~nobody/\"]\n\tpath = never\n",
-		"home/never":        "[core]\n\texcludesFile = ~/never-ignore\n",
-		"home/never-ignore": "never\n",
-		"repo/.git/HEAD":    "",
+		"home/.gitconfig":    "[includeIf \"gitdir:~nobody/\"]\n\tpath = never\n",
+		"home/never":         "[core]\n\texcludesFile = ~/never-ignore\n",
+		"home/never-ignore":  "never\n",
+		"repo/.git/HEAD":     "ref: refs/heads/main\n",
+		"repo/.git/objects/": "",
+		"repo/.git/refs/":    "",
 	})
 	f.env.Git.UserHome = func(string) (string, error) { return "", errNotExpanded }
 	assertIgnored(t, f.ignored(t, "repo", "never"))

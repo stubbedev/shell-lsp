@@ -36,6 +36,8 @@ func TestResolverFindsBakeFilesBesideTheDockerfileInTheRepository(t *testing.T) 
 	repo := filepath.Join(dir, "repo")
 	writeFiles(t, dir, map[string]string{
 		"repo/.git/HEAD":                      "ref: refs/heads/main\n",
+		"repo/.git/objects/info/packs":        "",
+		"repo/.git/refs/heads/main":           "0123456789abcdef0123456789abcdef01234567\n",
 		"repo/.gitignore":                     "/out/\n",
 		"repo/build/Dockerfile":               "FROM base\n",
 		"repo/deploy/docker-bake.hcl":         "target \"app\" {\n  context = \"../build\"\n  contexts = { base = \"docker-image://alpine\" }\n}\n",
@@ -151,9 +153,11 @@ func TestResolverReportsWhereTheRepositoryWalkStops(t *testing.T) {
 
 	dir := t.TempDir()
 	writeFiles(t, dir, map[string]string{
-		".git/HEAD":         "ref: refs/heads/main\n",
-		"a/Dockerfile":      "FROM base\n",
-		"b/docker-bake.hcl": "target \"b\" {\n  context = \"../a\"\n  contexts = { base = \"x\" }\n}\n",
+		".git/HEAD":               "ref: refs/heads/main\n",
+		".git/objects/info/packs": "",
+		".git/refs/heads/main":    "0123456789abcdef0123456789abcdef01234567\n",
+		"a/Dockerfile":            "FROM base\n",
+		"b/docker-bake.hcl":       "target \"b\" {\n  context = \"../a\"\n  contexts = { base = \"x\" }\n}\n",
 	})
 	complete := newTestResolver()
 	complete.limit = 3
@@ -190,8 +194,11 @@ func TestResolverSkipsDirectoriesTheRepositoryExcludes(t *testing.T) {
 	dir := t.TempDir()
 	writeFiles(t, dir, map[string]string{
 		"main/.git/HEAD":                   "ref: refs/heads/main\n",
+		"main/.git/objects/info/packs":     "",
+		"main/.git/refs/heads/main":        "0123456789abcdef0123456789abcdef01234567\n",
 		"main/.git/info/exclude":           "/deploy/hidden/\n",
 		"main/.git/worktrees/wt/commondir": "../..\n",
+		"main/.git/worktrees/wt/HEAD":      "ref: refs/heads/wt\n",
 		"main/build/Dockerfile":            dockerfile,
 		"main/deploy/hidden/a.hcl":         hidden,
 		"main/deploy/shown/a.hcl":          shown,
@@ -215,11 +222,13 @@ func TestResolverReadsARepositoryWhoseGitDirectoryIsASymlink(t *testing.T) {
 
 	dir := t.TempDir()
 	writeFiles(t, dir, map[string]string{
-		"store/git/HEAD":         "ref: refs/heads/main\n",
-		"store/git/info/exclude": "/hidden/\n",
-		"repo/build/Dockerfile":  "FROM base\n",
-		"repo/hidden/a.hcl":      "target \"h\" {\n  context = \"../build\"\n  contexts = { hidden = \"x\" }\n}\n",
-		"repo/shown/a.hcl":       "target \"s\" {\n  context = \"../build\"\n  contexts = { shown = \"x\" }\n}\n",
+		"store/git/HEAD":               "ref: refs/heads/main\n",
+		"store/git/objects/info/packs": "",
+		"store/git/refs/heads/main":    "0123456789abcdef0123456789abcdef01234567\n",
+		"store/git/info/exclude":       "/hidden/\n",
+		"repo/build/Dockerfile":        "FROM base\n",
+		"repo/hidden/a.hcl":            "target \"h\" {\n  context = \"../build\"\n  contexts = { hidden = \"x\" }\n}\n",
+		"repo/shown/a.hcl":             "target \"s\" {\n  context = \"../build\"\n  contexts = { shown = \"x\" }\n}\n",
 	})
 	if err := os.Symlink(filepath.Join(dir, "store", "git"), filepath.Join(dir, "repo", ".git")); err != nil {
 		t.Skipf("symbolic links are unavailable: %v", err)
@@ -242,6 +251,8 @@ func TestResolverSkipsDirectoriesTheUsersExcludesFileIgnores(t *testing.T) {
 	writeFiles(t, dir, map[string]string{
 		"home/.config/git/ignore":        "generated/\nvendored/\n",
 		"repo/.git/HEAD":                 "ref: refs/heads/main\n",
+		"repo/.git/objects/info/packs":   "",
+		"repo/.git/refs/heads/main":      "0123456789abcdef0123456789abcdef01234567\n",
 		"repo/.gitignore":                "!vendored/\n",
 		"repo/build/Dockerfile":          dockerfile,
 		"repo/generated/docker-bake.hcl": fmt.Sprintf(bakeFile, "g", "generated"),
@@ -265,6 +276,8 @@ func TestResolverInvalidateAllRereadsTheUsersExcludesFile(t *testing.T) {
 		"home/first":                     "generated/\n",
 		"home/second":                    "vendored/\n",
 		"repo/.git/HEAD":                 "ref: refs/heads/main\n",
+		"repo/.git/objects/info/packs":   "",
+		"repo/.git/refs/heads/main":      "0123456789abcdef0123456789abcdef01234567\n",
 		"repo/build/Dockerfile":          "FROM base\n",
 		"repo/generated/docker-bake.hcl": fmt.Sprintf(bakeFile, "g", "generated"),
 		"repo/vendored/docker-bake.hcl":  fmt.Sprintf(bakeFile, "v", "vendored"),

@@ -78,12 +78,24 @@ func (g *Ignores) Invalidate(path string) {
 	g.rules.Invalidate(path)
 	g.configs.Invalidate(path)
 	g.texts.Invalidate(path)
-	if filepath.Base(path) != MarkerName {
+	top, ok := markerParent(path)
+	if !ok {
 		return
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	maps.DeleteFunc(g.repos, func(dir string, _ located) bool { return platform.Native.Within(dir, filepath.Dir(path)) })
+	maps.DeleteFunc(g.repos, func(dir string, _ located) bool { return platform.Native.Within(dir, top) })
+}
+
+func markerParent(path string) (string, bool) {
+	for dir := filepath.Clean(path); ; dir = filepath.Dir(dir) {
+		if filepath.Base(dir) == MarkerName {
+			return filepath.Dir(dir), true
+		}
+		if filepath.Dir(dir) == dir {
+			return "", false
+		}
+	}
 }
 
 func (g *Ignores) InvalidateAll() {
@@ -104,7 +116,7 @@ func (g *Ignores) Repository(dir string) (Repository, bool, error) {
 		return cached.repo, cached.found, nil
 	}
 	stamp := g.disk.Current()
-	repo, found, err := g.locate.find(dir, func(path string) { stamp = stamp.And(g.disk.Track(path)) })
+	repo, found, err := g.locate.find(dir, probe{track: func(path string) { stamp = stamp.And(g.disk.Track(path)) }, device: platform.DeviceOf})
 	if err != nil {
 		return Repository{}, false, err
 	}
@@ -120,32 +132,28 @@ func (g *Ignores) Rules(path string) (gitignore.Rules, error) {
 }
 
 func (g *Ignores) Base(repo Repository) (*gitignore.Stack, error) {
-	dirs, err := repo.Dirs(g.texts.Load)
-	if err != nil {
-		return nil, err
-	}
-	excludes, err := g.excludesFile(repo.Top, dirs)
+	excludes, err := g.excludesFile(repo)
 	if err != nil {
 		return nil, fmt.Errorf("reading core.excludesFile for the repository at %s: %w", repo.Top, err)
 	}
-	info, err := g.Rules(filepath.Join(dirs.Common, "info", "exclude"))
+	info, err := g.Rules(filepath.Join(repo.Dirs.Common, "info", "exclude"))
 	if err != nil {
 		return nil, err
 	}
 	return (*gitignore.Stack)(nil).Push("", excludes).Push("", info), nil
 }
 
-func (g *Ignores) sources(top string, dirs Dirs, format repositoryFormat) []source {
+func (g *Ignores) sources(repo Repository) []source {
 	var out []source
 	if g.scopes.system != "" {
-		out = append(out, source{path: within(top, g.scopes.system)})
+		out = append(out, source{path: within(repo.Top, g.scopes.system)})
 	}
 	for _, path := range g.scopes.globals {
-		out = append(out, source{path: within(top, path)})
+		out = append(out, source{path: within(repo.Top, path)})
 	}
-	out = append(out, source{path: filepath.Join(dirs.Common, "config")})
-	if format.worktreeConfig {
-		out = append(out, source{path: filepath.Join(dirs.Git, worktreeFile)})
+	out = append(out, source{path: filepath.Join(repo.Dirs.Common, configFile)})
+	if repo.format.worktreeConfig {
+		out = append(out, source{path: filepath.Join(repo.Dirs.Git, worktreeFile)})
 	}
 	return append(out, g.scopes.commandLine...)
 }
@@ -157,20 +165,11 @@ func within(top, path string) string {
 	return filepath.Join(top, path)
 }
 
-func (g *Ignores) excludesFile(top string, dirs Dirs) (gitignore.Rules, error) {
+func (g *Ignores) excludesFile(repo Repository) (gitignore.Rules, error) {
 	if g.scopesErr != nil {
 		return nil, g.scopesErr
 	}
-	repoConfig := filepath.Join(dirs.Common, "config")
-	settings, _, err := g.configs.Load(repoConfig)
-	if err != nil {
-		return nil, err
-	}
-	format, err := readFormat(repoConfig, settings)
-	if err != nil {
-		return nil, err
-	}
-	w := walker{g: g, top: top, dirs: dirs, format: format, sources: g.sources(top, dirs, format)}
+	w := walker{g: g, repo: repo, sources: g.sources(repo)}
 	if err := w.run(); err != nil {
 		return nil, err
 	}

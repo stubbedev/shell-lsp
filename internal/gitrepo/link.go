@@ -1,15 +1,20 @@
 package gitrepo
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"path/filepath"
 	"strings"
+
+	"github.com/stubbedev/shell-lsp/internal/regularfile"
 )
 
 const (
-	linkPrefix    = "gitdir:"
+	gitFilePrefix = "gitdir: "
 	commonDirFile = "commondir"
+	maxGitFile    = 1 << 20
+	lineEnds      = "\r\n"
 )
 
 type ReadText func(path string) (text string, found bool, err error)
@@ -19,48 +24,50 @@ type Dirs struct {
 	Common string
 }
 
-func (r Repository) Dirs(read ReadText) (Dirs, error) {
-	git, err := r.gitDir(read)
+func readGitFile(path, commonDir string, p probe) (gitDirectory, error) {
+	data, _, err := regularfile.Read(path, maxGitFile)
 	if err != nil {
-		return Dirs{}, err
+		return gitDirectory{}, fmt.Errorf("reading the gitdir: file %s: %w", path, err)
 	}
-	if r.commonDir != "" {
-		return Dirs{Git: git, Common: r.commonDir}, nil
-	}
-	common, shared, err := read(filepath.Join(git, commonDirFile))
-	if err != nil {
-		return Dirs{}, err
-	}
-	if !shared {
-		return Dirs{Git: git, Common: git}, nil
-	}
-	return Dirs{Git: git, Common: resolveLink(git, common)}, nil
-}
-
-func (r Repository) gitDir(read ReadText) (string, error) {
-	if !r.linked {
-		return r.marker, nil
-	}
-	link, found, err := read(r.marker)
-	if err != nil {
-		return "", err
-	}
-	if !found {
-		return "", fmt.Errorf("reading the git link %s: %w", r.marker, fs.ErrNotExist)
-	}
-	return linkTarget(r.marker, link)
-}
-
-func linkTarget(dotGit, text string) (string, error) {
-	target, ok := strings.CutPrefix(strings.TrimSpace(text), linkPrefix)
+	target, ok := strings.CutPrefix(string(data), gitFilePrefix)
 	if !ok {
-		return "", fmt.Errorf("%s does not name a git directory", dotGit)
+		return gitDirectory{}, fmt.Errorf("%s does not start with %q, so it names no git directory", path, gitFilePrefix)
 	}
-	return resolveLink(filepath.Dir(dotGit), target), nil
+	target = strings.TrimRight(target, lineEnds)
+	if target == "" {
+		return gitDirectory{}, fmt.Errorf("%s names no path after %q", path, gitFilePrefix)
+	}
+	gitDir := resolveLink(filepath.Dir(path), target)
+	git, valid, err := openGitDirectory(gitDir, commonDir, p)
+	if err != nil {
+		return gitDirectory{}, err
+	}
+	if !valid {
+		return gitDirectory{}, fmt.Errorf("%s points to %s, which is not a git repository: it lacks a valid HEAD, objects or refs", path, gitDir)
+	}
+	return git, nil
+}
+
+func commonDirOf(gitDir, commonDir string, p probe) (gitDirectory, error) {
+	if commonDir != "" {
+		return gitDirectory{Git: gitDir, Common: commonDir, shared: true}, nil
+	}
+	path := filepath.Join(gitDir, commonDirFile)
+	p.track(path)
+	data, _, err := regularfile.Read(path, maxGitFile)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return gitDirectory{Git: gitDir, Common: gitDir}, nil
+	case err != nil:
+		return gitDirectory{}, fmt.Errorf("reading %s: %w", path, err)
+	case len(data) == 0:
+		return gitDirectory{}, fmt.Errorf("%s is empty, so it names no common git directory", path)
+	}
+	return gitDirectory{Git: gitDir, Common: resolveLink(gitDir, strings.TrimRight(string(data), lineEnds)), shared: true}, nil
 }
 
 func resolveLink(base, path string) string {
-	path = filepath.FromSlash(strings.TrimSpace(path))
+	path = filepath.FromSlash(path)
 	if filepath.IsAbs(path) {
 		return filepath.Clean(path)
 	}

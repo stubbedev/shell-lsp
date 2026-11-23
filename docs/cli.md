@@ -88,20 +88,41 @@ back what the other two exclude.
 
 The repository of a directory is found as git finds it: the nearest `.git` in
 the directory or one of its parents, whether a directory, a symbolic link to
-one, or a `gitdir:` file of a linked worktree. `check` and `fmt` also honour
-the variables git sets for hooks, relative to the working directory:
-`GIT_DIR` names the git directory (a `gitdir:` file too), `GIT_WORK_TREE` the
-top of the work tree (else the working directory when `GIT_DIR` is set, or the
-top of the repository found from the working directory), and
-`GIT_COMMON_DIR` the directory that holds the repository's `config` and
-`info/exclude`. With any of them set, that one repository is the repository of
-every walked directory inside its work tree, and directories outside it are in
-none, as git sees them; an empty variable or a missing `GIT_DIR` stops the
-walk with an error. The language server ignores these variables: its folders come from the
-editor, and an editor started from a git hook or `git commit` would otherwise
-pass git's view of that one command's repository to every folder. A
-repository whose `core.repositoryFormatVersion` is above 1, which git refuses
-to work in, stops the walk with an error.
+one, or a `gitdir:` file of a linked worktree or submodule. A `.git`
+directory counts only when git would take it for a repository, with a valid
+`HEAD` and `objects` and `refs` directories; one without them is passed over
+and the search goes on upwards. A `gitdir:` file git cannot read, or one that
+names no repository, stops the walk with an error, as does a `.git` that is
+neither a directory nor a file. The search stops below each directory listed in
+`GIT_CEILING_DIRECTORIES` (absolute paths, resolved through symbolic links up
+to an empty entry, as git resolves them), and at a filesystem boundary unless
+`GIT_DISCOVERY_ACROSS_FILESYSTEM` is true; on Windows, as in Git for Windows,
+there is no boundary. Both variables hold for the language server too: they
+are settings a user keeps in a shell profile, not variables git sets for one
+command.
+
+The repository's `core.worktree`, read from its own `config` (or from
+`config.worktree` under `extensions.worktreeConfig`) when
+`core.repositoryFormatVersion` is set, moves the top of the work tree,
+relative to the git directory; a linked worktree ignores the shared
+`core.worktree` and `core.bare` unless `extensions.worktreeConfig` is set. A directory outside that work tree, or in a repository with
+`core.bare` set, is in no repository, and a relative `core.worktree` that names
+no directory stops the walk with an error.
+
+`check` and `fmt` also honour the variables git sets for hooks, relative to
+the working directory: `GIT_DIR` names the git directory (a `gitdir:` file
+too), `GIT_WORK_TREE` the top of the work tree (else `core.worktree`, else the
+working directory when `GIT_DIR` is set, or the top of the repository found
+from the working directory), and `GIT_COMMON_DIR` the directory that holds the
+repository's `config` and `info/exclude`. With any of them set, that one
+repository is the repository of every walked directory inside its work tree,
+and directories outside it are in none, as git sees them; an empty variable or
+a `GIT_DIR` that is not a repository stops the walk with an error. The language
+server ignores these three variables: its folders come from the editor, and an
+editor started from a git hook or `git commit` would otherwise pass git's view
+of that one command's repository to every folder. A repository whose
+`core.repositoryFormatVersion` is above 1, which git refuses to work in, stops
+the walk with an error.
 
 `core.excludesFile` is read the way git reads its configuration, the last
 setting winning:
@@ -137,7 +158,8 @@ holds: `gitdir:` and `gitdir/i:` match the repository's git directory (for a
 linked worktree, its directory under `.git/worktrees`) with git's rules for
 `~/`, `./`, a leading `**/` and a trailing `/`; `onbranch:` matches the branch
 `HEAD` names, following a branch that is itself a symbolic reference to
-another branch as git does; and `hasconfig:remote.*.url:` matches the remote URLs of every
+another branch as git does, into the main worktree (`main-worktree/HEAD`) or
+another one (`worktrees/<id>/HEAD`) too; and `hasconfig:remote.*.url:` matches the remote URLs of every
 configuration file above, refusing, as git does, a remote URL set in a file an
 `includeIf` includes. Other conditions never hold.
 

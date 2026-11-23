@@ -117,8 +117,10 @@ func TestDockerfileHonoursContextsOfASiblingBakeFile(t *testing.T) {
 	t.Parallel()
 
 	project := map[string]string{
-		".git/HEAD":       "ref: refs/heads/main\n",
-		"deploy/vars.hcl": "variable \"TOOLS\" {\n  default = \"docker-image://tools\"\n}\n",
+		".git/HEAD":               "ref: refs/heads/main\n",
+		".git/objects/info/packs": "",
+		".git/refs/heads/main":    "0123456789abcdef0123456789abcdef01234567\n",
+		"deploy/vars.hcl":         "variable \"TOOLS\" {\n  default = \"docker-image://tools\"\n}\n",
 		"deploy/docker-bake.hcl": "variable \"DIR\" {\n  default = \"build\"\n}\n" +
 			"target \"base\" {\n  contexts = { infra = \"docker-image://infra:1\" }\n}\n" +
 			"target \"app\" {\n  context = \"../${DIR}\"\n  inherits = [\"base\", \"shared\"]\n  contexts = { tools = \"${TOOLS}\", src = \"cwd://src\" }\n}\n",
@@ -140,9 +142,11 @@ func TestDockerfileWarnsOnceWhereTheBakeFileSearchStopped(t *testing.T) {
 
 	root := t.TempDir()
 	files := map[string]string{
-		".git/HEAD":      "ref: refs/heads/main\n",
-		"Dockerfile":     "FROM alpine:3\n",
-		"sub/Dockerfile": "FROM alpine:3\n",
+		".git/HEAD":               "ref: refs/heads/main\n",
+		".git/objects/info/packs": "",
+		".git/refs/heads/main":    "0123456789abcdef0123456789abcdef01234567\n",
+		"Dockerfile":              "FROM alpine:3\n",
+		"sub/Dockerfile":          "FROM alpine:3\n",
 	}
 	for name, text := range files {
 		path := filepath.Join(root, name)
