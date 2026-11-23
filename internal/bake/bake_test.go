@@ -103,10 +103,12 @@ func TestParseClassifiesUnreadableFiles(t *testing.T) {
 func TestBuildsResolveDockerfilesAndInheritance(t *testing.T) {
 	t.Parallel()
 
+	repo := filepath.Join(t.TempDir(), "repo")
+	elsewhere := filepath.Join(filepath.Dir(repo), "elsewhere", "Dockerfile")
 	targets := []target{
 		{Name: "base", Contexts: map[string]Value{"a": {Text: "docker-image://a:1", Known: true}, "b": {Text: "./b", Known: true}}},
 		{Name: "app", Context: known("app"), Inherits: []string{"base"}, Contexts: map[string]Value{"a": {Text: "target:a", Known: true}}},
-		{Name: "abs", Context: known("ctx"), Dockerfile: known("/elsewhere/Dockerfile"), Contexts: map[string]Value{"c": {}}},
+		{Name: "abs", Context: known("ctx"), Dockerfile: known(elsewhere), Contexts: map[string]Value{"c": {}}},
 		{Name: "remote", Context: known("https://github.com/x/y.git"), Contexts: map[string]Value{"d": {}}},
 		{Name: "unknown", Context: &Value{}, Contexts: map[string]Value{"e": {}}},
 		{Name: "loop", Inherits: []string{"loop2"}, Context: known("loop")},
@@ -114,18 +116,18 @@ func TestBuildsResolveDockerfilesAndInheritance(t *testing.T) {
 		{Name: "app", Dockerfile: known("Other")},
 	}
 	got := Dockerfiles{}
-	builds("/repo", targets, got)
+	builds(repo, targets, got)
 	want := Dockerfiles{
-		"/repo/Dockerfile": {
+		filepath.Join(repo, "Dockerfile"): {
 			"a": {{Text: "docker-image://a:1", Known: true}},
 			"b": {{Text: "./b", Known: true}},
 		},
-		"/repo/app/Other": {
+		filepath.Join(repo, "app", "Other"): {
 			"a": {{Text: "target:a", Known: true}},
 			"b": {{Text: "./b", Known: true}},
 		},
-		"/elsewhere/Dockerfile": {"c": {{}}},
-		"/repo/loop/Dockerfile": {"f": {{}}},
+		elsewhere: {"c": {{}}},
+		filepath.Join(repo, "loop", "Dockerfile"): {"f": {{}}},
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("dockerfiles (-want +got):\n%s", diff)

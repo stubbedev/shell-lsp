@@ -273,9 +273,9 @@ func TestCheckHonoursBakeNamedContexts(t *testing.T) {
 	})
 	got := run(t, dir, "", "check", "-f", "gcc", "app/Dockerfile", "json/Dockerfile", "other/Dockerfile")
 	want := []string{
-		filepath.FromSlash("json/Dockerfile:1:6 DL3006"),
-		filepath.FromSlash("other/Dockerfile:1:6 DL3006"),
-		filepath.FromSlash("other/Dockerfile:2:13 SL7005"),
+		"json/Dockerfile:1:6 DL3006",
+		"other/Dockerfile:1:6 DL3006",
+		"other/Dockerfile:2:13 SL7005",
 	}
 	if !slices.Equal(findings(t, got.stdout), want) || got.status != checkStatusFindings {
 		t.Errorf("checking Dockerfiles that bake contexts name = %d %v, want %v\n%s", got.status, findings(t, got.stdout), want, got.stderr)
@@ -295,7 +295,7 @@ func TestCheckFollowsTheErrexitAStageShellSets(t *testing.T) {
 		"plain/Dockerfile":     "FROM alpine:3\nSHELL [\"/bin/sh\", \"-c\"]\nRUN cd /x; ls\n",
 	})
 	got := run(t, dir, "", "check", "-f", "gcc", "-e", "DL3003", "errexit/Dockerfile", "inherited/Dockerfile", "plain/Dockerfile")
-	want := []string{filepath.FromSlash("plain/Dockerfile:3:5 SC2164")}
+	want := []string{"plain/Dockerfile:3:5 SC2164"}
 	if !slices.Equal(findings(t, got.stdout), want) || got.status != checkStatusFindings {
 		t.Errorf("checking Dockerfiles whose SHELL sets errexit = %d %v, want %v\n%s", got.status, findings(t, got.stdout), want, got.stderr)
 	}
