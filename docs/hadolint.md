@@ -139,9 +139,13 @@ way the tool does. The cases record every difference; these are the kinds.
   target of the same bake run builds, is common and deliberate.
   - *Where bake files are found.* In the Dockerfile's directory and every
     directory above it, and, inside a git repository, in every directory of
-    the repository that `.gitignore` does not exclude (`.git`, `node_modules`,
-    `vendor`, `.venv` and similar directories are skipped, and the search
-    stops after 20,000 directories). Outside a repository only the directory
+    the repository that neither `.gitignore` nor the repository's
+    `.git/info/exclude` excludes (`.git`, `node_modules`, `vendor`, `.venv`
+    and similar directories are skipped). The search stops after 20,000
+    directories; the server then warns once per repository and
+    `shell-lsp check` prints one line to standard error, without changing its
+    exit status, since contexts from bake files past that point are not known.
+    `core.excludesFile` is not read. Outside a repository only the directory
     and its ancestors are searched. Ignored
     bake files in a searched directory still count, since a local
     `docker-bake.override.hcl` is often ignored on purpose.
@@ -149,11 +153,12 @@ way the tool does. The cases record every difference; these are the kinds.
     directory, which is where bake runs from when it finds its default files;
     a `cwd://` path is read the same way. A remote `context` names no local
     Dockerfile. A `cwd://` context value is a local directory, not an image.
-  - *Variables.* `${NAME}` takes the plain string `default` of
-    `variable "NAME"`. The environment is not read, so the server and
-    `shell-lsp check` agree whatever environment they run in; a default that
-    itself interpolates, a variable without a default, and any function call
-    leave the value unknown. A target whose `context` or `dockerfile` is
+  - *Variables.* `${NAME}` takes the string `default` of `variable "NAME"`,
+    and a default may itself interpolate other variables, as in
+    `default = "${REGISTRY}/base"`. The environment is not read, so the
+    server and `shell-lsp check` agree whatever environment they run in; a
+    variable without a default, any function call, and defaults that refer
+    to each other in a cycle leave the value unknown. A target whose `context` or `dockerfile` is
     unknown is skipped; a context whose value is unknown still counts as
     named, but its tag is not checked.
   - *Several files.* The default files of a directory (Compose files,

@@ -36,7 +36,7 @@ func TestJSONReadsTargets(t *testing.T) {
 				"z": plainTemplate("${z}"),
 			}},
 		},
-		Variables: variables{"TAG": {Text: "1", Known: true}},
+		Variables: variables{"TAG": plainTemplate("1")},
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("targets (-want +got):\n%s", diff)
@@ -186,7 +186,7 @@ func TestResolverFindsBakeFilesInAncestors(t *testing.T) {
 		},
 		filepath.Join(dir, "build", "other.Dockerfile"): {"x": {{Text: "y", Known: true}}},
 	}
-	if diff := cmp.Diff(want, got); diff != "" {
+	if diff := cmp.Diff(want, got.Dockerfiles); diff != "" {
 		t.Errorf("dockerfiles of build (-want +got):\n%s", diff)
 	}
 	first := reads
@@ -200,8 +200,8 @@ func TestResolverFindsBakeFilesInAncestors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := (Contexts{"j": {{Text: "docker-image://j", Known: true}}}); !cmp.Equal(sub.Of(filepath.Join(dir, "build", "sub", "Dockerfile")), want) {
-		t.Errorf("dockerfiles of build/sub = %v, want j", sub)
+	if want := (Contexts{"j": {{Text: "docker-image://j", Known: true}}}); !cmp.Equal(sub.Dockerfiles.Of(filepath.Join(dir, "build", "sub", "Dockerfile")), want) {
+		t.Errorf("dockerfiles of build/sub = %v, want j", sub.Dockerfiles)
 	}
 }
 

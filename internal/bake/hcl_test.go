@@ -74,7 +74,7 @@ target "one-line" { context = "x" }
 			{Name: "app", Dockerfile: known("app.Dockerfile"), Inherits: []string{"base", "missing"}},
 			{Name: "one-line", Context: known("x")},
 		},
-		Variables: variables{"TAG": {Text: "1.0", Known: true}},
+		Variables: variables{"TAG": plainTemplate("1.0")},
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("targets (-want +got):\n%s", diff)

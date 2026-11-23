@@ -59,10 +59,10 @@ func parseJSON(text string) (file, error) {
 		}
 		text, isString := v.Default.(string)
 		if !isString {
-			out.Variables[name] = Value{}
+			out.Variables[name] = unknown
 			continue
 		}
-		out.Variables[name] = literalText(text).value()
+		out.Variables[name] = literalText(text)
 	}
 	return out, nil
 }

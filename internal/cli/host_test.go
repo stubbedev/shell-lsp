@@ -1,8 +1,10 @@
 package cli
 
 import (
+	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -336,5 +338,26 @@ func TestCheckReadsContextsOfASiblingBakeFileForCopyFrom(t *testing.T) {
 	}
 	if !strings.Contains(got.stdout, "docker-image://busybox") {
 		t.Errorf("the DL3006 on COPY --from=img does not name the context value:\n%s", got.stdout)
+	}
+}
+
+func TestCheckSaysOnceWhereTheBakeFileSearchStopped(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeFiles(t, dir, map[string]string{
+		".git/HEAD":      "ref: refs/heads/main\n",
+		"Dockerfile":     "FROM alpine:3\n",
+		"sub/Dockerfile": "FROM alpine:3\n",
+	})
+	for i := range 20000 {
+		if err := os.MkdirAll(filepath.Join(dir, "many", strconv.Itoa(i)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := run(t, dir, "", "check", "-f", "gcc", "Dockerfile", "sub/Dockerfile")
+	want := "shell-lsp check: looking for bake files under " + dir + " stopped after 20000 directories, so contexts that bake files past them define are not known\n"
+	if got.stderr != want || got.status != statusOK {
+		t.Errorf("checking Dockerfiles in a repository past the bake search limit = %d %q, want %d %q\n%s", got.status, got.stderr, statusOK, want, got.stdout)
 	}
 }

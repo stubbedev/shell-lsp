@@ -15,7 +15,9 @@ type template struct {
 	Dynamic bool
 }
 
-type variables map[string]Value
+type variables map[string]template
+
+type environment map[string]Value
 
 var unknown = template{Dynamic: true}
 
@@ -35,7 +37,11 @@ func (t template) plain() (string, bool) {
 	return sb.String(), true
 }
 
-func (t template) resolve(vars variables) Value {
+func (t template) resolve(env environment) Value {
+	return t.substitute(func(name string) Value { return env[name] })
+}
+
+func (t template) substitute(lookup func(name string) Value) Value {
 	if t.Dynamic {
 		return Value{}
 	}
@@ -45,8 +51,8 @@ func (t template) resolve(vars variables) Value {
 			sb.WriteString(p.Text)
 			continue
 		}
-		v, ok := vars[p.Text]
-		if !ok || !v.Known {
+		v := lookup(p.Text)
+		if !v.Known {
 			return Value{}
 		}
 		sb.WriteString(v.Text)
@@ -54,12 +60,28 @@ func (t template) resolve(vars variables) Value {
 	return Value{Text: sb.String(), Known: true}
 }
 
-func (t template) value() Value {
-	text, ok := t.plain()
-	if !ok {
-		return Value{}
+func (vars variables) environment() environment {
+	env := make(environment, len(vars))
+	pending := map[string]bool{}
+	var value func(name string) Value
+	value = func(name string) Value {
+		if v, done := env[name]; done {
+			return v
+		}
+		t, defined := vars[name]
+		if !defined || pending[name] {
+			return Value{}
+		}
+		pending[name] = true
+		v := t.substitute(value)
+		delete(pending, name)
+		env[name] = v
+		return v
 	}
-	return Value{Text: text, Known: true}
+	for name := range vars {
+		value(name)
+	}
+	return env
 }
 
 type templateBuilder struct {

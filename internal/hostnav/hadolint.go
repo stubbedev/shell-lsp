@@ -27,7 +27,7 @@ func HadolintOf(file *workspace.File, cfg hadolint.Config) (Hadolint, bool) {
 	if !ok {
 		return embeddedHadolint(file, cfg)
 	}
-	contexts := cfg.Bake.Of(file.Path)
+	contexts := cfg.Bake.Dockerfiles.Of(file.Path)
 	return Hadolint{file: file, dockerfile: f, config: cfg, contexts: contexts, suppression: hadolint.NewSuppression(f, cfg, contexts)}, true
 }
 

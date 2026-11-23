@@ -3,10 +3,15 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/stubbedev/shell-lsp/internal/fileuri"
+	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 )
 
@@ -127,5 +132,47 @@ func TestDockerfileHonoursContextsOfASiblingBakeFile(t *testing.T) {
 	}
 	if got[0].Range.Start.Line != 1 || !strings.Contains(got[0].Message, "docker-image://tools") {
 		t.Errorf("DL3006 = %+v, want it on `COPY --from=tools` naming the untagged context value", got[0])
+	}
+}
+
+func TestDockerfileWarnsOnceWhereTheBakeFileSearchStopped(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	files := map[string]string{
+		".git/HEAD":      "ref: refs/heads/main\n",
+		"Dockerfile":     "FROM alpine:3\n",
+		"sub/Dockerfile": "FROM alpine:3\n",
+	}
+	for name, text := range files {
+		path := filepath.Join(root, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(text), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := range 20000 {
+		if err := os.MkdirAll(filepath.Join(root, "many", strconv.Itoa(i)), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	c, _ := startClient(t, `{"rootUri": "`+fileuri.FromPath(root)+`", `+nativeCapabilities+`}`, func(*Server) {})
+	p := &nativeProject{t: t, root: root, files: files, c: c}
+	for _, name := range []string{"Dockerfile", "sub/Dockerfile"} {
+		c.notify("textDocument/didOpen", openLanguageParams(p.uri(name), "", files[name]))
+		if got := pullDiagnostics(t, c, p.uri(name)); len(got) != 0 {
+			t.Errorf("diagnostics of %s = %v, want none", name, codes(got))
+		}
+	}
+	cut := func(m *jsonrpc.Message) bool {
+		return m.IsNotification() && m.Method == logMessageMethod && strings.Contains(string(m.Params), "stopped after 20000 directories")
+	}
+	c.await("the bake search cut", cut)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if again := slices.IndexFunc(c.messages, cut); again >= 0 {
+		t.Errorf("the bake search cut is reported twice: %s", c.messages[again].Params)
 	}
 }

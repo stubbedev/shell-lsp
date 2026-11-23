@@ -353,7 +353,7 @@ func variableOf(src, name string, tokens []token, into variables) error {
 	}
 	for _, it := range items {
 		if !it.block && it.name == attrDefault {
-			into[name] = literal(it.value).value()
+			into[name] = literal(it.value)
 		}
 	}
 	return nil

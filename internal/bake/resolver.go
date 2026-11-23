@@ -7,12 +7,14 @@ import (
 	"maps"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/stubbedev/shell-lsp/internal/diskwatch"
 	"github.com/stubbedev/shell-lsp/internal/filecache"
 	"github.com/stubbedev/shell-lsp/internal/gitignore"
+	"github.com/stubbedev/shell-lsp/internal/gitlink"
 	"github.com/stubbedev/shell-lsp/internal/platform"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
@@ -20,15 +22,41 @@ import (
 const (
 	repositoryMarker = ".git"
 	ignoreFile       = ".gitignore"
+	infoDir          = "info"
+	excludeFile      = "exclude"
 	maxTreeDirs      = 20000
 )
+
+type repository uint8
+
+const (
+	noRepository repository = iota
+	gitDirectory
+	gitLink
+)
+
+type Cut struct {
+	Root  string
+	Limit int
+}
+
+func (c Cut) String() string {
+	return fmt.Sprintf("looking for bake files under %s stopped after %d directories, so contexts that bake files past them define are not known", c.Root, c.Limit)
+}
+
+type Found struct {
+	Dockerfiles Dockerfiles
+	Cut         *Cut
+}
 
 type ReadDir func(dir string) ([]fs.DirEntry, error)
 
 type Resolver struct {
 	files   *filecache.Cache[file]
 	ignores *filecache.Cache[gitignore.Rules]
+	links   *filecache.Cache[string]
 	readDir ReadDir
+	limit   int
 	now     func() time.Time
 	recheck time.Duration
 	disk    *diskwatch.Watcher
@@ -41,7 +69,7 @@ type Resolver struct {
 type listing struct {
 	names      []string
 	dirs       []string
-	repository bool
+	repository repository
 	ignoreFile bool
 	checked    time.Time
 	stamp      diskwatch.Stamp
@@ -49,6 +77,7 @@ type listing struct {
 
 type tree struct {
 	dirs    []string
+	cut     bool
 	checked time.Time
 	stamp   diskwatch.Stamp
 }
@@ -63,11 +92,17 @@ func parseIgnore(_ string, data []byte) (gitignore.Rules, error) {
 	return gitignore.Parse(platform.Native.Fold(string(data))), nil
 }
 
+func parseLink(_ string, data []byte) (string, error) {
+	return strings.TrimSpace(string(data)), nil
+}
+
 func NewResolver(read filecache.ReadFile, readDir ReadDir, now func() time.Time, recheck time.Duration) *Resolver {
 	return &Resolver{
 		files:    filecache.New(read, parse, now, recheck),
 		ignores:  filecache.New(read, parseIgnore, now, recheck),
+		links:    filecache.New(read, parseLink, now, recheck),
 		readDir:  readDir,
+		limit:    maxTreeDirs,
 		now:      now,
 		recheck:  recheck,
 		listings: map[string]listing{},
@@ -78,12 +113,14 @@ func NewResolver(read filecache.ReadFile, readDir ReadDir, now func() time.Time,
 func (r *Resolver) Watch(disk *diskwatch.Watcher) {
 	r.files.Watch(disk)
 	r.ignores.Watch(disk)
+	r.links.Watch(disk)
 	r.disk = disk
 }
 
 func (r *Resolver) Invalidate(path string) {
 	r.files.Invalidate(path)
 	r.ignores.Invalidate(path)
+	r.links.Invalidate(path)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for dir := filepath.Dir(path); ; dir = filepath.Dir(dir) {
@@ -95,40 +132,40 @@ func (r *Resolver) Invalidate(path string) {
 	maps.DeleteFunc(r.trees, func(root string, _ tree) bool { return platform.Native.Within(path, root) })
 }
 
-func (r *Resolver) Dockerfiles(dir string) (Dockerfiles, error) {
+func (r *Resolver) Dockerfiles(dir string) (Found, error) {
 	dir = filepath.Clean(dir)
-	dirs, err := r.bakeDirs(dir)
+	dirs, cut, err := r.bakeDirs(dir)
 	if err != nil {
-		return nil, err
+		return Found{}, err
 	}
-	found := Dockerfiles{}
+	all := Dockerfiles{}
 	for _, at := range dirs {
-		if err := r.directory(at, found); err != nil {
-			return nil, err
+		if err := r.directory(at, all); err != nil {
+			return Found{}, err
 		}
 	}
-	out := Dockerfiles{}
-	for path, contexts := range found {
+	out := Found{Dockerfiles: Dockerfiles{}, Cut: cut}
+	for path, contexts := range all {
 		if filepath.Dir(path) == dir {
-			out[path] = contexts
+			out.Dockerfiles[path] = contexts
 		}
 	}
 	return out, nil
 }
 
-func (r *Resolver) bakeDirs(dir string) ([]string, error) {
+func (r *Resolver) bakeDirs(dir string) ([]string, *Cut, error) {
 	var dirs []string
-	root := ""
+	root, kind := "", noRepository
 	for at := dir; ; {
 		l, err := r.listing(at)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if len(l.names) > 0 {
 			dirs = append(dirs, at)
 		}
-		if root == "" && l.repository {
-			root = at
+		if kind == noRepository && l.repository != noRepository {
+			root, kind = at, l.repository
 		}
 		parent := filepath.Dir(at)
 		if parent == at {
@@ -136,16 +173,52 @@ func (r *Resolver) bakeDirs(dir string) ([]string, error) {
 		}
 		at = parent
 	}
-	if root == "" {
-		return dirs, nil
+	if kind == noRepository {
+		return dirs, nil, nil
 	}
-	below, err := r.tree(root)
+	below, err := r.tree(root, kind)
+	if err != nil {
+		return nil, nil, fmt.Errorf("looking for bake files under %s: %w", root, err)
+	}
+	dirs = append(dirs, below.dirs...)
+	slices.Sort(dirs)
+	var cut *Cut
+	if below.cut {
+		cut = &Cut{Root: root, Limit: r.limit}
+	}
+	return slices.Compact(dirs), cut, nil
+}
+
+func (r *Resolver) gitDir(root string, kind repository) (string, error) {
+	marker := filepath.Join(root, repositoryMarker)
+	if kind == gitDirectory {
+		return marker, nil
+	}
+	link, _, err := r.links.Load(marker)
+	if err != nil {
+		return "", err
+	}
+	dir, err := gitlink.Target(marker, link)
+	if err != nil {
+		return "", err
+	}
+	common, shared, err := r.links.Load(filepath.Join(dir, gitlink.CommonDirFile))
+	if err != nil || !shared {
+		return dir, err
+	}
+	return gitlink.Resolve(dir, common), nil
+}
+
+func (r *Resolver) excluded(root string, kind repository) (*gitignore.Stack, error) {
+	gitDir, err := r.gitDir(root, kind)
 	if err != nil {
 		return nil, err
 	}
-	dirs = append(dirs, below...)
-	slices.Sort(dirs)
-	return slices.Compact(dirs), nil
+	rules, _, err := r.ignores.Load(filepath.Join(gitDir, infoDir, excludeFile))
+	if err != nil {
+		return nil, err
+	}
+	return (*gitignore.Stack)(nil).Push("", rules), nil
 }
 
 func (r *Resolver) directory(dir string, into Dockerfiles) error {
@@ -169,23 +242,31 @@ func (r *Resolver) directory(dir string, into Dockerfiles) error {
 	return nil
 }
 
-func (r *Resolver) tree(root string) ([]string, error) {
+func (r *Resolver) tree(root string, kind repository) (tree, error) {
 	now := r.now()
 	r.mu.Lock()
 	cached, ok := r.trees[root]
 	r.mu.Unlock()
 	if ok && (now.Sub(cached.checked) < r.recheck || r.disk.Unchanged(cached.stamp)) {
-		return cached.dirs, nil
+		return cached, nil
 	}
 	start := r.disk.Current()
 	fresh := tree{checked: now}
-	pending := []pendingDir{{path: root}}
-	for visited := 0; len(pending) > 0 && visited < maxTreeDirs; visited++ {
+	excluded, err := r.excluded(root, kind)
+	if err != nil {
+		return tree{}, err
+	}
+	pending := []pendingDir{{path: root, ignores: excluded}}
+	for visited := 0; len(pending) > 0; visited++ {
+		if visited == r.limit {
+			fresh.cut = true
+			break
+		}
 		at := pending[len(pending)-1]
 		pending = pending[:len(pending)-1]
 		l, err := r.listing(at.path)
 		if err != nil {
-			return nil, fmt.Errorf("looking for bake files under %s: %w", root, err)
+			return tree{}, err
 		}
 		if len(l.names) > 0 {
 			fresh.dirs = append(fresh.dirs, at.path)
@@ -194,7 +275,7 @@ func (r *Resolver) tree(root string) ([]string, error) {
 		if l.ignoreFile {
 			rules, _, err := r.ignores.Load(filepath.Join(at.path, ignoreFile))
 			if err != nil {
-				return nil, fmt.Errorf("looking for bake files under %s: %w", root, err)
+				return tree{}, err
 			}
 			ignores = ignores.Push(at.rel, rules)
 		}
@@ -209,7 +290,7 @@ func (r *Resolver) tree(root string) ([]string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.trees[root] = fresh
-	return fresh.dirs, nil
+	return fresh, nil
 }
 
 func (r *Resolver) listing(dir string) (listing, error) {
@@ -231,8 +312,10 @@ func (r *Resolver) listing(dir string) (listing, error) {
 	for _, e := range entries {
 		name := e.Name()
 		switch {
+		case name == repositoryMarker && e.IsDir():
+			fresh.repository = gitDirectory
 		case name == repositoryMarker:
-			fresh.repository = true
+			fresh.repository = gitLink
 		case e.IsDir():
 			if !workspace.SkipsDir(name) {
 				fresh.dirs = append(fresh.dirs, name)

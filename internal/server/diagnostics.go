@@ -118,6 +118,9 @@ func (s *Server) hadolintConfig(path string, settings config.Settings) hadolint.
 		s.noticeOnce("hadolint:"+err.Error(), lsp.MessageWarning, "Ignoring the Hadolint configuration that applies to "+path+": "+err.Error())
 		cfg = hadolint.Config{}
 	}
+	if cut := cfg.Bake.Cut; cut != nil {
+		s.noticeOnce("bake-cut:"+cut.Root, lsp.MessageWarning, "Checking "+path+": "+cut.String()+".")
+	}
 	cfg.Optional = slices.Concat(settings.Lint.Optional, s.lintSettings(path, settings).RC.Enabled)
 	return cfg
 }

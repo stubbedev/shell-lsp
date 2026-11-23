@@ -213,7 +213,7 @@ func localPath(v Value) (string, bool) {
 	return v.Text, !remote(v.Text)
 }
 
-func dockerfile(dir string, t target, vars variables) (string, bool) {
+func dockerfile(dir string, t target, env environment) (string, bool) {
 	context, file := plainTemplate(defaultContext), plainTemplate(defaultDockerfile)
 	if t.Context != nil {
 		context = *t.Context
@@ -221,21 +221,21 @@ func dockerfile(dir string, t target, vars variables) (string, bool) {
 	if t.Dockerfile != nil {
 		file = *t.Dockerfile
 	}
-	contextPath, ok := localPath(context.resolve(vars))
+	contextPath, ok := localPath(context.resolve(env))
 	if !ok {
 		return "", false
 	}
-	filePath, ok := localPath(file.resolve(vars))
+	filePath, ok := localPath(file.resolve(env))
 	if !ok {
 		return "", false
 	}
 	return within(within(dir, contextPath), filePath), true
 }
 
-func resolved(contexts map[string]template, vars variables) map[string]Value {
+func resolved(contexts map[string]template, env environment) map[string]Value {
 	out := make(map[string]Value, len(contexts))
 	for name, t := range contexts {
-		out[name] = t.resolve(vars)
+		out[name] = t.resolve(env)
 	}
 	return out
 }
@@ -257,6 +257,7 @@ func builds(dir string, projects [][]file, into Dockerfiles) {
 			targets = append(targets, f.Targets...)
 			maps.Copy(vars, f.Variables)
 		}
+		env := vars.environment()
 		order, byName := merge(targets)
 		scope := maps.Clone(everyTarget)
 		maps.Copy(scope, byName)
@@ -265,8 +266,8 @@ func builds(dir string, projects [][]file, into Dockerfiles) {
 			if len(t.Contexts) == 0 {
 				continue
 			}
-			if path, ok := dockerfile(dir, t, vars); ok {
-				into.add(path, resolved(t.Contexts, vars))
+			if path, ok := dockerfile(dir, t, env); ok {
+				into.add(path, resolved(t.Contexts, env))
 			}
 		}
 	}

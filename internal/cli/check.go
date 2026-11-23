@@ -38,6 +38,7 @@ import (
 const (
 	stdinName    = "-"
 	parseFailure = lint.Code(1072)
+	bakeCutKey   = "bake-cut:"
 )
 
 func runCheck(env Env, args []string) int {
@@ -206,6 +207,11 @@ func (c *checker) settings(dir string) (fileSettings, error) {
 	docker, _, err := c.hadolint.Nearest(dir)
 	if err != nil {
 		return fileSettings{}, err
+	}
+	if cut := docker.Bake.Cut; cut != nil {
+		if _, warned := c.warned.LoadOrStore(bakeCutKey+cut.Root, true); !warned {
+			fmt.Fprintf(c.env.Stderr, "%s check: %s\n", programName, cut)
+		}
 	}
 	docker.Optional = slices.Concat(c.opts.enable, rc.Enabled)
 	s := fileSettings{hadolint: docker, lint: filelint.Settings{

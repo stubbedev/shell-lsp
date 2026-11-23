@@ -19,7 +19,10 @@ func dockerfilesOf(t *testing.T, r *Resolver, dir string) Dockerfiles {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return got
+	if got.Cut != nil {
+		t.Errorf("dockerfiles of %s: %s", dir, got.Cut)
+	}
+	return got.Dockerfiles
 }
 
 func TestResolverFindsBakeFilesBesideTheDockerfileInTheRepository(t *testing.T) {
@@ -76,6 +79,30 @@ func TestResolverSubstitutesVariableDefaults(t *testing.T) {
 		"pinned":   {{Text: "docker-image://app:1", Known: true}},
 		"remote":   {{}},
 		"computed": {{}},
+	}, filepath.Join(dir, "app", "app.Dockerfile"): {"x": {{Text: "y", Known: true}}}}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("dockerfiles (-want +got):\n%s", diff)
+	}
+}
+
+func TestResolverResolvesDefaultsThroughOtherDefaultsUntilACycle(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeFiles(t, dir, map[string]string{
+		"vars.hcl": "variable \"REGISTRY\" {\n  default = \"registry.example\"\n}\n",
+		"docker-bake.hcl": "variable \"IMAGE\" {\n  default = \"${REPO}:1\"\n}\nvariable \"REPO\" {\n  default = \"${REGISTRY}/base\"\n}\n" +
+			"variable \"PING\" {\n  default = \"${PONG}\"\n}\nvariable \"PONG\" {\n  default = \"${PING}-x\"\n}\nvariable \"SELF\" {\n  default = \"${SELF}\"\n}\n" +
+			"variable \"AFTER\" {\n  default = \"${PING}\"\n}\nvariable \"MISSING\" {\n  default = \"${NOWHERE}\"\n}\n" +
+			"target \"app\" {\n  context = \"app\"\n  contexts = {\n    base = \"docker-image://${IMAGE}\"\n    ping = \"${PING}\"\n    self = \"${SELF}\"\n    after = \"${AFTER}\"\n    missing = \"${MISSING}\"\n  }\n}\n",
+	})
+	got := dockerfilesOf(t, newTestResolver(), filepath.Join(dir, "app"))
+	want := Dockerfiles{filepath.Join(dir, "app", "Dockerfile"): {
+		"base":    {{Text: "docker-image://registry.example/base:1", Known: true}},
+		"ping":    {{}},
+		"self":    {{}},
+		"after":   {{}},
+		"missing": {{}},
 	}}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("dockerfiles (-want +got):\n%s", diff)
@@ -112,5 +139,69 @@ func TestResolverReadsCwdPathsAsLocal(t *testing.T) {
 	}
 	if _, isImage := (Value{Text: "cwd://src", Known: true}).Image(); isImage {
 		t.Error("a cwd:// context value is read as an image")
+	}
+}
+
+func TestResolverReportsWhereTheRepositoryWalkStops(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeFiles(t, dir, map[string]string{
+		".git/HEAD":         "ref: refs/heads/main\n",
+		"a/Dockerfile":      "FROM base\n",
+		"b/docker-bake.hcl": "target \"b\" {\n  context = \"../a\"\n  contexts = { base = \"x\" }\n}\n",
+	})
+	complete := newTestResolver()
+	complete.limit = 3
+	if got := dockerfilesOf(t, complete, filepath.Join(dir, "a")); len(got) != 1 {
+		t.Errorf("dockerfiles with a limit of every directory = %v, want the context from b", got)
+	}
+
+	cut := newTestResolver()
+	cut.limit = 2
+	got, err := cut.Dockerfiles(filepath.Join(dir, "a"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if diff := cmp.Diff(&Cut{Root: dir, Limit: 2}, got.Cut); diff != "" {
+		t.Errorf("cut (-want +got):\n%s", diff)
+	}
+	again, err := cut.Dockerfiles(filepath.Join(dir, "a"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.Cut == nil {
+		t.Error("a cached walk forgets that it was cut")
+	}
+}
+
+func TestResolverSkipsDirectoriesTheRepositoryExcludes(t *testing.T) {
+	t.Parallel()
+
+	const (
+		dockerfile = "FROM base\n"
+		hidden     = "target \"h\" {\n  context = \"../../build\"\n  contexts = { hidden = \"x\" }\n}\n"
+		shown      = "target \"s\" {\n  context = \"../../build\"\n  contexts = { shown = \"x\" }\n}\n"
+	)
+	dir := t.TempDir()
+	writeFiles(t, dir, map[string]string{
+		"main/.git/HEAD":                   "ref: refs/heads/main\n",
+		"main/.git/info/exclude":           "/deploy/hidden/\n",
+		"main/.git/worktrees/wt/commondir": "../..\n",
+		"main/build/Dockerfile":            dockerfile,
+		"main/deploy/hidden/a.hcl":         hidden,
+		"main/deploy/shown/a.hcl":          shown,
+		"wt/.git":                          "gitdir: ../main/.git/worktrees/wt\n",
+		"wt/build/Dockerfile":              dockerfile,
+		"wt/deploy/hidden/a.hcl":           hidden,
+		"wt/deploy/shown/a.hcl":            shown,
+	})
+	r := newTestResolver()
+	for _, repo := range []string{"main", "wt"} {
+		got := dockerfilesOf(t, r, filepath.Join(dir, repo, "build"))
+		want := Dockerfiles{filepath.Join(dir, repo, "build", "Dockerfile"): {"shown": {{Text: "x", Known: true}}}}
+		if diff := cmp.Diff(want, got); diff != "" {
+			t.Errorf("dockerfiles of %s/build (-want +got):\n%s", repo, diff)
+		}
 	}
 }

@@ -41,7 +41,7 @@ type Config struct {
 	StrictLabels        bool
 	DisableIgnorePragma bool
 	Optional            []string
-	Bake                bake.Dockerfiles
+	Bake                bake.Found
 }
 
 var (
