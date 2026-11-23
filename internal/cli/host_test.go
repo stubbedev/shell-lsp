@@ -284,3 +284,19 @@ func TestCheckHonoursBakeNamedContexts(t *testing.T) {
 		t.Errorf("the DL3006 on json/Dockerfile does not name the context value:\n%s", got.stdout)
 	}
 }
+
+func TestCheckFollowsTheErrexitAStageShellSets(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeFiles(t, dir, map[string]string{
+		"errexit/Dockerfile":   "FROM alpine:3\nSHELL [\"/bin/bash\", \"-euo\", \"pipefail\", \"-c\"]\nRUN <<EOF2\ncd /x\nls\ncd ..\nEOF2\n",
+		"inherited/Dockerfile": "FROM alpine:3 AS base\nSHELL [\"/bin/bash\", \"-eu\", \"-c\"]\nFROM base\nRUN cd /x; ls\n",
+		"plain/Dockerfile":     "FROM alpine:3\nSHELL [\"/bin/sh\", \"-c\"]\nRUN cd /x; ls\n",
+	})
+	got := run(t, dir, "", "check", "-f", "gcc", "-e", "DL3003", "errexit/Dockerfile", "inherited/Dockerfile", "plain/Dockerfile")
+	want := []string{filepath.FromSlash("plain/Dockerfile:3:5 SC2164")}
+	if !slices.Equal(findings(t, got.stdout), want) || got.status != checkStatusFindings {
+		t.Errorf("checking Dockerfiles whose SHELL sets errexit = %d %v, want %v\n%s", got.status, findings(t, got.stdout), want, got.stderr)
+	}
+}
