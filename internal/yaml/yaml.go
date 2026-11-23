@@ -119,6 +119,64 @@ type anchor struct {
 	size int
 }
 
+type effect uint8
+
+const (
+	keep effect = iota
+	remove
+)
+
+var composeTags = map[string]effect{"override": keep, "reset": remove}
+
+type mapping struct {
+	node  *Node
+	reset map[string]bool
+}
+
+func (p *parser) mapping(pos int) *mapping {
+	n := p.node(Mapping, pos)
+	n.Pairs = []Pair{}
+	return &mapping{node: n, reset: map[string]bool{}}
+}
+
+func (p *parser) add(m *mapping, pos int, key, value *Node, e effect) error {
+	if key.Kind != Scalar {
+		return p.failAt(pos, "a mapping key must be a scalar")
+	}
+	if _, dup := m.node.Get(key.Value); dup || m.reset[key.Value] {
+		return p.failAt(pos, "the key %q appears twice in this mapping", key.Value)
+	}
+	if e == remove {
+		m.reset[key.Value] = true
+		return nil
+	}
+	m.node.Pairs = append(m.node.Pairs, Pair{Key: key, Value: value})
+	return nil
+}
+
+func (m *mapping) done() (*Node, error) {
+	return m.node, merge(m.node, m.reset)
+}
+
+func (p *parser) tag(pos int, flow bool) (effect, int, error) {
+	start := p.skipBlanks(pos)
+	if p.at(start) != '!' {
+		return keep, pos, nil
+	}
+	name, end, err := p.name(start)
+	if err != nil {
+		return keep, 0, err
+	}
+	e, ok := composeTags[name]
+	if !ok {
+		return keep, 0, p.failAt(start, "the tag !%s is not supported; only the compose tags !reset and !override are", name)
+	}
+	if b := p.at(end); !scan.Blank(b) && !breakOrEnd(b) && (!flow || b != ',' && b != '}') {
+		return keep, 0, p.failAt(end, "the tag !%s must be followed by a space", name)
+	}
+	return e, end, nil
+}
+
 func (p *parser) node(kind Kind, pos int) *Node {
 	p.nodes++
 	line, column := p.position(pos)
@@ -264,7 +322,7 @@ func (p *parser) block(pos, parent int) (*Node, int, error) {
 		return nil, 0, err
 	}
 	if p.at(end) == ':' && p.indicator(end) {
-		return p.mapping(pos, indent, key, end)
+		return p.blockMapping(pos, indent, key, end)
 	}
 	if err := p.lineDone(end); err != nil {
 		return nil, 0, err
@@ -312,28 +370,28 @@ func (p *parser) sequence(pos, indent int) (*Node, int, error) {
 	}
 }
 
-func (p *parser) mapping(pos, indent int, key *Node, colon int) (*Node, int, error) {
-	m := p.node(Mapping, pos)
-	m.Pairs = []Pair{}
+func (p *parser) blockMapping(pos, indent int, key *Node, colon int) (*Node, int, error) {
+	m := p.mapping(pos)
 	for {
-		if key.Kind != Scalar {
-			return nil, 0, p.failAt(pos, "a mapping key must be a scalar")
-		}
-		if _, dup := m.Get(key.Value); dup {
-			return nil, 0, p.failAt(pos, "the key %q appears twice in this mapping", key.Value)
-		}
-		value, end, err := p.value(colon+1, indent, false)
+		e, start, err := p.tag(colon+1, false)
 		if err != nil {
 			return nil, 0, err
 		}
-		m.Pairs = append(m.Pairs, Pair{Key: key, Value: value})
+		value, end, err := p.value(start, indent, false)
+		if err != nil {
+			return nil, 0, err
+		}
+		if err := p.add(m, pos, key, value, e); err != nil {
+			return nil, 0, err
+		}
 		next, err := p.nextContent(end)
 		if err != nil {
 			return nil, 0, err
 		}
 		switch {
 		case next >= len(p.text) || p.column(next) < indent || p.marker(next, "...") || p.marker(next, "---"):
-			return m, next, merge(m)
+			n, err := m.done()
+			return n, next, err
 		case p.column(next) > indent:
 			return nil, 0, p.failAt(next, "this line is indented deeper than the mapping key before it")
 		case p.at(next) == '-' && p.indicator(next):
@@ -406,7 +464,7 @@ func (p *parser) value(pos, indent int, item bool) (*Node, int, error) {
 func (p *parser) unsupported(pos int) error {
 	switch p.at(pos) {
 	case '!':
-		return p.failAt(pos, "tags are not supported")
+		return p.failAt(pos, "tags are only supported as !reset or !override on the value of a mapping key")
 	case '|', '>':
 		return p.failAt(pos, "block scalars are not supported; quote the value on one line")
 	case '?':
@@ -545,11 +603,14 @@ func mergeSources(pair Pair) ([]*Node, error) {
 	return nil, nodeError(pair.Key, "the merge key %s takes a mapping or a list of mappings, found %s", mergeKey, pair.Value.Kind)
 }
 
-func merge(m *Node) error {
+func merge(m *Node, reset map[string]bool) error {
 	if !slices.ContainsFunc(m.Pairs, mergeKeyed) {
 		return nil
 	}
-	seen := make(map[string]bool, len(m.Pairs))
+	seen := make(map[string]bool, len(m.Pairs)+len(reset))
+	for key := range reset {
+		seen[key] = true
+	}
 	for _, pair := range m.Pairs {
 		if !mergeKeyed(pair) {
 			seen[pair.Key.Value] = true
@@ -701,8 +762,7 @@ func (p *parser) flowSequence(pos int) (*Node, int, error) {
 }
 
 func (p *parser) flowMapping(pos int) (*Node, int, error) {
-	m := p.node(Mapping, pos)
-	m.Pairs = []Pair{}
+	m := p.mapping(pos)
 	pos++
 	for {
 		var err error
@@ -710,24 +770,26 @@ func (p *parser) flowMapping(pos int) (*Node, int, error) {
 			return nil, 0, err
 		}
 		if p.at(pos) == '}' {
-			return m, pos + 1, merge(m)
+			n, err := m.done()
+			return n, pos + 1, err
 		}
 		key, end, err := p.inline(pos, true)
 		if err != nil {
 			return nil, 0, err
 		}
-		if key.Kind != Scalar {
-			return nil, 0, p.failAt(pos, "a mapping key must be a scalar")
-		}
-		if _, dup := m.Get(key.Value); dup {
-			return nil, 0, p.failAt(pos, "the key %q appears twice in this mapping", key.Value)
-		}
 		if end, err = p.skipFlowSpace(end); err != nil {
 			return nil, 0, err
 		}
 		value := p.node(Scalar, end)
+		e := keep
 		if p.at(end) == ':' {
 			if end, err = p.skipFlowSpace(end + 1); err != nil {
+				return nil, 0, err
+			}
+			if e, end, err = p.tag(end, true); err != nil {
+				return nil, 0, err
+			}
+			if end, err = p.skipFlowSpace(end); err != nil {
 				return nil, 0, err
 			}
 			if p.at(end) != ',' && p.at(end) != '}' {
@@ -736,7 +798,9 @@ func (p *parser) flowMapping(pos int) (*Node, int, error) {
 				}
 			}
 		}
-		m.Pairs = append(m.Pairs, Pair{Key: key, Value: value})
+		if err := p.add(m, pos, key, value, e); err != nil {
+			return nil, 0, err
+		}
 		if pos, err = p.flowSeparator(end, '}'); err != nil {
 			return nil, 0, err
 		}
@@ -761,7 +825,7 @@ func (p *parser) flowEntry(pos int) (*Node, int, error) {
 	}
 	m := p.node(Mapping, pos)
 	m.Pairs = []Pair{{Key: node, Value: value}}
-	return m, end, merge(m)
+	return m, end, merge(m, nil)
 }
 
 func (p *parser) flowSeparator(pos int, closer byte) (int, error) {

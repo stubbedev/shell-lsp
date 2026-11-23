@@ -180,6 +180,15 @@ func TestParseReportsPositions(t *testing.T) {
 		{"a: &x 1\nb:\n  <<: [*x]\n", 3, 3},
 		{"a:\n\t- b\n", 2, 1},
 		{"x:\n  é: \"\\q\"\n", 2, 7},
+		{"a: !foo 1\n", 1, 4},
+		{"a: !!str 1\n", 1, 4},
+		{"a: !\n", 1, 4},
+		{"a: !reset[]\n", 1, 10},
+		{"- !reset x\n", 1, 3},
+		{"!reset a: 1\n", 1, 1},
+		{"a: &x !reset 1\n", 1, 7},
+		{"a: !reset\na: 1\n", 2, 1},
+		{"m: {a: !custom 1}\n", 1, 8},
 	} {
 		_, err := Parse(tt.text)
 		var yamlErr *Error
@@ -340,6 +349,142 @@ services:
 				"environment": map[string]any{"TZ": "!!str UTC"},
 				"build":       common["build"],
 				"command":     []any{"!!str worker", "!!str --queue", "!!str default"},
+			},
+		},
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("the compose file parses wrong (-want +got):\n%s", diff)
+	}
+}
+
+func TestParseAppliesComposeTags(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name, text string
+		want       any
+	}{
+		{
+			name: "!reset removes a key that a merged mapping provides",
+			text: "a: &a {x: 1, y: 1}\nm:\n  <<: *a\n  x: !reset null\n",
+			want: map[string]any{"y": "!!int 1"},
+		},
+		{
+			name: "!reset before the merge key removes the merged key too",
+			text: "m:\n  x: !reset []\n  <<: {x: 1, y: 2}\n",
+			want: map[string]any{"y": "!!int 2"},
+		},
+		{
+			name: "!reset ignores a block value",
+			text: "a: &a {x: [1]}\nm:\n  <<: *a\n  x: !reset\n    - 2\n  y: 3\n",
+			want: map[string]any{"y": "!!int 3"},
+		},
+		{
+			name: "!override replaces a merged mapping wholesale",
+			text: "a: &a {x: {p: 1, q: 1}}\nm:\n  <<: *a\n  x: !override\n    p: 2\n",
+			want: map[string]any{"x": map[string]any{"p": "!!int 2"}},
+		},
+		{
+			name: "!override takes a sequence at the indentation of its key",
+			text: "a: &a {x: [1, 2]}\nm:\n  <<: *a\n  x: !override\n  - 3\n",
+			want: map[string]any{"x": []any{"!!int 3"}},
+		},
+		{
+			name: "!reset removes a key of a mapping without a merge",
+			text: "m:\n  x: !reset {}\n  y: 1\n",
+			want: map[string]any{"y": "!!int 1"},
+		},
+		{
+			name: "!override keeps the value of a mapping without a merge",
+			text: "m:\n  x: !override 1 # one\n",
+			want: map[string]any{"x": "!!int 1"},
+		},
+		{
+			name: "a tag precedes an anchor",
+			text: "m:\n  x: !override &v 1\n  y: *v\n",
+			want: map[string]any{"x": "!!int 1", "y": "!!int 1"},
+		},
+		{
+			name: "tags apply inside a flow mapping",
+			text: "m: {<<: {x: 1, y: 1, z: 1}, x: !reset , y: !override 2, z: !reset}\n",
+			want: map[string]any{"y": "!!int 2"},
+		},
+		{
+			name: "!reset can leave a mapping empty",
+			text: "m:\n  x: !reset\n",
+			want: map[string]any{},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			m, ok := parseTagged(t, tt.text).(map[string]any)
+			if !ok {
+				t.Fatalf("Parse(%q) is no mapping", tt.text)
+			}
+			if diff := cmp.Diff(tt.want, m["m"]); diff != "" {
+				t.Errorf("Parse(%q) applies the tags wrong (-want +got):\n%s", tt.text, diff)
+			}
+		})
+	}
+}
+
+func TestParseComposeWithResetTags(t *testing.T) {
+	t.Parallel()
+
+	got := parseTagged(t, `x-common: &common
+  restart: unless-stopped
+  ports:
+    - "8080:80"
+  environment:
+    TZ: UTC
+  build: &build
+    context: .
+    additional_contexts:
+      base: ../base
+
+services:
+  app:
+    <<: *common
+    ports: !reset []
+    build:
+      <<: *build
+      additional_contexts: !override
+        shared: docker-image://alpine:3.20
+  worker:
+    <<: *common
+    environment: !reset null
+    build:
+      <<: *build
+      dockerfile: worker/Dockerfile
+`)
+	build := map[string]any{
+		"context":             "!!str .",
+		"additional_contexts": map[string]any{"base": "!!str ../base"},
+	}
+	want := map[string]any{
+		"x-common": map[string]any{
+			"restart":     "!!str unless-stopped",
+			"ports":       []any{"!!str 8080:80"},
+			"environment": map[string]any{"TZ": "!!str UTC"},
+			"build":       build,
+		},
+		"services": map[string]any{
+			"app": map[string]any{
+				"restart":     "!!str unless-stopped",
+				"environment": map[string]any{"TZ": "!!str UTC"},
+				"build": map[string]any{
+					"context":             "!!str .",
+					"additional_contexts": map[string]any{"shared": "!!str docker-image://alpine:3.20"},
+				},
+			},
+			"worker": map[string]any{
+				"restart": "!!str unless-stopped",
+				"ports":   []any{"!!str 8080:80"},
+				"build": map[string]any{
+					"context":             "!!str .",
+					"dockerfile":          "!!str worker/Dockerfile",
+					"additional_contexts": map[string]any{"base": "!!str ../base"},
+				},
 			},
 		},
 	}
