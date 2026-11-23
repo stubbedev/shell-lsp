@@ -8,6 +8,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/host/model"
 	"github.com/stubbedev/shell-lsp/internal/projection"
 	"github.com/stubbedev/shell-lsp/internal/scan"
+	"github.com/stubbedev/shell-lsp/internal/shelloptions"
 	"github.com/stubbedev/shell-lsp/internal/textline"
 )
 
@@ -34,6 +35,7 @@ type script struct {
 	lines     []line
 	whole     bool
 	detection dialect.Detection
+	options   string
 }
 
 type projector struct {
@@ -144,7 +146,8 @@ func (p projector) script(r *Recipe) (script, bool) {
 	}
 	first := strings.TrimLeft(p.text[lines[0].start:lines[0].end], " \t")
 	if r.Shebang {
-		return detect(script{recipe: r, lines: lines[1:], whole: true}, first, first, dialect.SourceHostSetting)
+		found, ok := shelloptions.InvokeShebang(first)
+		return detect(script{recipe: r, lines: lines[1:], whole: true}, found, ok, first, dialect.SourceHostSetting)
 	}
 	if attr, ok := attributeNamed(r.Attributes, "script"); ok {
 		if len(attr.Args) > 0 {
@@ -153,16 +156,19 @@ func (p projector) script(r *Recipe) (script, bool) {
 				values, _ := p.file.Constant(arg.Value)
 				words = append(words, values...)
 			}
-			return detect(script{recipe: r, lines: lines, whole: true}, "#!"+strings.Join(words, " "), "["+p.text[attr.Span.Start:attr.Span.End]+"]", dialect.SourceHostSetting)
+			found, ok := shelloptions.Invoke(words)
+			return detect(script{recipe: r, lines: lines, whole: true}, found, ok, "["+p.text[attr.Span.Start:attr.Span.End]+"]", dialect.SourceHostSetting)
 		}
 		interpreter, text, set := p.file.settingValues("script-interpreter", defaultScript)
-		return detect(script{recipe: r, lines: lines, whole: true}, "#!"+strings.Join(interpreter, " "), text, source(set))
+		found, ok := shelloptions.Invoke(interpreter)
+		return detect(script{recipe: r, lines: lines, whole: true}, found, ok, text, source(set))
 	}
 	if p.windowsRecipe(r) {
 		return script{}, false
 	}
 	shell, text, set := p.file.settingValues("shell", defaultShell)
-	return detect(script{recipe: r, lines: lines}, "#!"+strings.Join(shell, " "), text, source(set))
+	found, ok := shelloptions.Invoke(shell)
+	return detect(script{recipe: r, lines: lines}, found, ok, text, source(set))
 }
 
 func source(set bool) dialect.Source {
@@ -177,8 +183,11 @@ func (p projector) windowsRecipe(r *Recipe) bool {
 	return windowsOnly(r.Attributes) && shell
 }
 
-func detect(s script, shebang, evidence string, src dialect.Source) (script, bool) {
-	d, ok := dialect.FromShebang(shebang)
+func detect(s script, found shelloptions.Invocation, invoked bool, evidence string, src dialect.Source) (script, bool) {
+	if !invoked {
+		return script{}, false
+	}
+	d, ok := found.Dialect()
 	if !ok {
 		return script{}, false
 	}
@@ -186,6 +195,7 @@ func detect(s script, shebang, evidence string, src dialect.Source) (script, boo
 		evidence = tool
 	}
 	s.detection = dialect.Detection{Dialect: d, Source: src, Evidence: evidence}
+	s.options = found.Flags.SetCommand()
 	return s, true
 }
 
@@ -229,9 +239,10 @@ func shellName(name string) bool {
 	return !strings.Contains(name, "-")
 }
 
-func (p projector) prelude(r *Recipe) string {
+func (p projector) prelude(s script) string {
 	var sb strings.Builder
-	for _, name := range p.file.ExportedTo(r) {
+	sb.WriteString(s.options)
+	for _, name := range p.file.ExportedTo(s.recipe) {
 		sb.WriteString(name + "=" + projection.UnknownValue + "\n")
 	}
 	return sb.String()
@@ -239,7 +250,7 @@ func (p projector) prelude(r *Recipe) string {
 
 func (p projector) project(b *projection.Builder, s script) {
 	b.Region(encoder(s.whole, s.recipe.Indent))
-	prelude := p.prelude(s.recipe)
+	prelude := p.prelude(s)
 	if s.whole {
 		lines := make([]projection.RecipeLine, len(s.lines))
 		for i, l := range s.lines {

@@ -19,17 +19,17 @@ func TestProjectText(t *testing.T) {
 		{
 			name:     "each line of a recipe runs in its own shell",
 			justfile: "build:\n    cd src\n    cargo build\n",
-			want:     "(\ncd src\n)\n(\ncargo build\n)\n",
+			want:     "(\nset -u\ncd src\n)\n(\nset -u\ncargo build\n)\n",
 		},
 		{
 			name:     "sigils and interpolations",
 			justfile: "test name='x':\n  @echo {{name}} {{ uppercase(name) }}\n  -@rm '{{name}}.tmp'\n  @-echo {{{{literal}}\n",
-			want:     "(\necho $$ $$\n)\n(\nrm ''$$'.tmp'\n)\n(\necho {{literal}}\n)\n",
+			want:     "(\nset -u\necho $$ $$\n)\n(\nset -u\nrm ''$$'.tmp'\n)\n(\nset -u\necho {{literal}}\n)\n",
 		},
 		{
 			name:     "continuations join into one line",
 			justfile: "x:\n    for f in a b; do \\\n      echo $f; \\\n    done\n",
-			want:     "(\nfor f in a b; do echo $f; done\n)\n",
+			want:     "(\nset -u\nfor f in a b; do echo $f; done\n)\n",
 		},
 		{
 			name:     "shebang recipes are one script without the shebang",
@@ -44,7 +44,7 @@ func TestProjectText(t *testing.T) {
 		{
 			name:     "script attributes keep sigils as shell",
 			justfile: "[script]\nx:\n    @echo quiet\n",
-			want:     "(\n@echo quiet\n)\n",
+			want:     "(\nset -eu\n@echo quiet\n)\n",
 		},
 		{
 			name:     "a shebang recipe of only comments opens no empty subshell",
@@ -54,32 +54,62 @@ func TestProjectText(t *testing.T) {
 		{
 			name:     "script attributes",
 			justfile: "[script]\nx:\n    a=1\n    echo $a\n\n[script(\"python3\")]\ny:\n    print(1)\n",
-			want:     "(\na=1\necho $a\n)\n",
+			want:     "(\nset -eu\na=1\necho $a\n)\n",
 		},
 		{
 			name:     "comment lines are directives",
 			justfile: "x:\n    # shellcheck disable=SC2086\n    echo $1\n",
-			want:     "# shellcheck disable=SC2086\n(\necho $1\n)\n",
+			want:     "# shellcheck disable=SC2086\n(\nset -u\necho $1\n)\n",
 		},
 		{
 			name:     "just syntax around recipes is not shell",
 			justfile: "set shell := [\"bash\", \"-uc\"]\nalias b := build\nversion := `git describe`\n# a comment\n[private]\nbuild target=\"a:b\": (dep \"x\") other\n    echo {{target}}\n\nother:\n\techo other\n",
-			want:     "(\necho $$\n)\n(\necho other\n)\n",
+			want:     "(\nset -u\necho $$\n)\n(\nset -u\necho other\n)\n",
 		},
 		{
 			name:     "exported variables and parameters are set",
 			justfile: "export token := 'x'\nrun $user other:\n    echo $token $user $other\n",
-			want:     "(\ntoken=$_\nuser=$_\necho $token $user $other\n)\n",
+			want:     "(\nset -u\ntoken=$_\nuser=$_\necho $token $user $other\n)\n",
 		},
 		{
 			name:     "set export exports everything",
 			justfile: "set export\nlevel := '1'\nrun arg:\n    echo $level $arg\n",
-			want:     "(\narg=$_\nlevel=$_\necho $level $arg\n)\n",
+			want:     "(\nset -u\narg=$_\nlevel=$_\necho $level $arg\n)\n",
+		},
+		{
+			name:     "shell flags become set options",
+			justfile: "set shell := [\"bash\", \"-euo\", \"pipefail\", \"-c\"]\nx:\n    echo\n",
+			want:     "(\nset -eu -o pipefail\necho\n)\n",
+		},
+		{
+			name:     "shell flags behind env become set options",
+			justfile: "set shell := [\"/usr/bin/env\", \"bash\", \"-e\", \"-c\"]\nx:\n    echo\n",
+			want:     "(\nset -e\necho\n)\n",
+		},
+		{
+			name:     "script interpreter flags become set options",
+			justfile: "set script-interpreter := ['bash', '-o', 'pipefail']\n[script]\nx:\n    echo\n",
+			want:     "(\nset -o pipefail\necho\n)\n",
+		},
+		{
+			name:     "script attribute flags become set options",
+			justfile: "[script('bash', '-e')]\nx:\n    echo\n",
+			want:     "(\nset -e\necho\n)\n",
+		},
+		{
+			name:     "shebang flags become set options",
+			justfile: "set shell := [\"bash\", \"-euc\"]\nx:\n    #!/usr/bin/env -S bash -x\n    echo\n",
+			want:     "(\nset -x\necho\n)\n",
+		},
+		{
+			name:     "the windows shell gives unix recipes no options",
+			justfile: "set windows-shell := [\"bash\", \"-euc\"]\nx:\n    echo\n",
+			want:     "(\nset -u\necho\n)\n",
 		},
 		{
 			name:     "windows recipes run with the windows shell",
 			justfile: "set windows-shell := [\"powershell.exe\", \"-c\"]\n[windows]\nx:\n    Get-ChildItem\n[unix]\nx:\n    ls\n",
-			want:     "(\nls\n)\n",
+			want:     "(\nset -u\nls\n)\n",
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
