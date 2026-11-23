@@ -122,10 +122,6 @@ func fingerprintTree(ctx context.Context, dir string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("reading the HEAD of %s: %w", repo.Top, err)
 	}
-	relative, err := filepath.Rel(repo.Top, dir)
-	if err != nil {
-		return "", fmt.Errorf("locating %s in %s: %w", dir, repo.Top, err)
-	}
 	tracked, err := repo.trackedDigest(ctx)
 	if errors.Is(err, errIndexUnsupported) {
 		tracked, err = walkTree(ctx, repo.Top)
@@ -135,7 +131,7 @@ func fingerprintTree(ctx context.Context, dir string) (string, error) {
 	}
 	h := sha256.New()
 	writeField(h, string(head))
-	writeField(h, filepath.ToSlash(relative))
+	writeField(h, filepath.ToSlash(repo.Prefix))
 	writeField(h, tracked)
 	return string(h.Sum(nil)), nil
 }

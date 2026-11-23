@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"syscall"
 
 	"github.com/stubbedev/shell-lsp/internal/regularfile"
 )
@@ -38,45 +37,77 @@ func (r Repository) ResolveRef(read ReadText, name string) (Ref, bool, error) {
 		return Ref{}, false, errReftable
 	}
 	for range maxSymrefDepth {
-		text, stored, err := r.looseRef(read, name)
+		ref, stored, err := r.looseRef(read, name)
 		if err != nil || !stored {
 			return Ref{Name: name}, err == nil, err
 		}
-		target, symbolic := strings.CutPrefix(text, symbolicRef)
-		if !symbolic {
+		if !ref.symbolic {
 			n := r.format.objectIDLength()
-			if !hexPrefix(text, n) || len(text) > n && !isGitSpace(text[n]) {
+			if !hexPrefix(ref.text, n) || len(ref.text) > n && !isGitSpace(ref.text[n]) {
 				return Ref{}, false, nil
 			}
-			return Ref{Name: name, id: text[:n]}, true, nil
+			return Ref{Name: name, id: ref.text[:n]}, true, nil
 		}
-		name = strings.Trim(target, gitSpace)
-		if !validRefName(name) {
+		if !validRefName(ref.text) {
 			return Ref{}, false, nil
 		}
+		name = ref.text
 	}
 	return Ref{}, false, nil
 }
 
-func (r Repository) looseRef(read ReadText, name string) (string, bool, error) {
+type looseRef struct {
+	text     string
+	symbolic bool
+}
+
+func (r Repository) looseRef(read ReadText, name string) (looseRef, bool, error) {
 	path := r.refPath(name)
+	info, err := os.Lstat(path)
+	switch {
+	case missing(err):
+		return looseRef{}, false, nil
+	case err != nil:
+		return looseRef{}, false, fmt.Errorf("reading the ref %s: %w", path, err)
+	case info.Mode()&fs.ModeSymlink != 0:
+		return linkedRef(read, path)
+	}
+	return refFile(read, path, info)
+}
+
+func linkedRef(read ReadText, path string) (looseRef, bool, error) {
+	target, err := os.Readlink(path)
+	if err != nil {
+		return looseRef{}, false, fmt.Errorf("reading the ref %s: %w", path, err)
+	}
+	if strings.HasPrefix(target, refsPrefix) && validRefName(target) {
+		return looseRef{text: target, symbolic: true}, true, nil
+	}
 	info, err := os.Stat(path)
 	switch {
-	case errors.Is(err, fs.ErrNotExist), errors.Is(err, syscall.ENOTDIR):
-		return "", false, nil
+	case missing(err):
+		return looseRef{}, false, nil
 	case err != nil:
-		return "", false, fmt.Errorf("reading the ref %s: %w", path, err)
-	case info.IsDir():
-		return "", false, nil
+		return looseRef{}, false, fmt.Errorf("reading the ref %s: %w", path, err)
+	}
+	return refFile(read, path, info)
+}
+
+func refFile(read ReadText, path string, info fs.FileInfo) (looseRef, bool, error) {
+	if info.IsDir() {
+		return looseRef{}, false, nil
 	}
 	text, found, err := read(path)
 	switch {
 	case errors.Is(err, regularfile.ErrNotRegular):
-		return "", false, nil
-	case err != nil:
-		return "", false, err
+		return looseRef{}, false, nil
+	case err != nil || !found:
+		return looseRef{}, false, err
 	}
-	return text, found, nil
+	if target, symbolic := strings.CutPrefix(text, symbolicRef); symbolic {
+		return looseRef{text: strings.Trim(target, gitSpace), symbolic: true}, true, nil
+	}
+	return looseRef{text: text}, true, nil
 }
 
 func (r Repository) ObjectID(readPacked ReadText, ref Ref) (string, bool, error) {

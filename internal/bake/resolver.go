@@ -115,31 +115,37 @@ func (r *Resolver) InvalidateAll() {
 
 func (r *Resolver) Dockerfiles(dir string) (Found, error) {
 	dir = filepath.Clean(dir)
-	dirs, cut, err := r.bakeDirs(dir)
+	search, err := r.bakeDirs(dir)
 	if err != nil {
 		return Found{}, err
 	}
 	all := Dockerfiles{}
-	for _, at := range dirs {
+	for _, at := range search.dirs {
 		if err := r.directory(at, all); err != nil {
 			return Found{}, err
 		}
 	}
-	out := Found{Dockerfiles: Dockerfiles{}, Cut: cut}
+	out := Found{Dockerfiles: Dockerfiles{}, Cut: search.cut}
 	for path, contexts := range all {
-		if filepath.Dir(path) == dir {
-			out.Dockerfiles[path] = contexts
+		if slices.Contains(search.names, filepath.Dir(path)) {
+			out.Dockerfiles.merge(filepath.Join(dir, filepath.Base(path)), contexts)
 		}
 	}
 	return out, nil
 }
 
-func (r *Resolver) bakeDirs(dir string) ([]string, *Cut, error) {
+type bakeSearch struct {
+	dirs  []string
+	names []string
+	cut   *Cut
+}
+
+func (r *Resolver) bakeDirs(dir string) (bakeSearch, error) {
 	var dirs []string
 	for at := dir; ; {
 		l, err := r.listing(at)
 		if err != nil {
-			return nil, nil, err
+			return bakeSearch{}, err
 		}
 		if len(l.names) > 0 {
 			dirs = append(dirs, at)
@@ -152,11 +158,11 @@ func (r *Resolver) bakeDirs(dir string) ([]string, *Cut, error) {
 	}
 	repo, found, err := r.git.Repository(dir)
 	if err != nil || !found {
-		return dirs, nil, err
+		return bakeSearch{dirs: dirs, names: []string{dir}}, err
 	}
 	below, err := r.tree(repo)
 	if err != nil {
-		return nil, nil, fmt.Errorf("looking for bake files under %s: %w", repo.Top, err)
+		return bakeSearch{}, fmt.Errorf("looking for bake files under %s: %w", repo.Top, err)
 	}
 	dirs = append(dirs, below.dirs...)
 	slices.Sort(dirs)
@@ -164,7 +170,7 @@ func (r *Resolver) bakeDirs(dir string) ([]string, *Cut, error) {
 	if below.cut {
 		cut = &Cut{Root: repo.Top, Limit: r.limit}
 	}
-	return slices.Compact(dirs), cut, nil
+	return bakeSearch{dirs: slices.Compact(dirs), names: []string{dir, filepath.Join(repo.Top, repo.Prefix)}, cut: cut}, nil
 }
 
 func (r *Resolver) directory(dir string, into Dockerfiles) error {

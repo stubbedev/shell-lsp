@@ -69,20 +69,38 @@ type Dockerfiles map[string]Contexts
 func (d Dockerfiles) Of(path string) Contexts { return d[filepath.Clean(path)] }
 
 func (d Dockerfiles) add(path string, contexts map[string]Value) {
+	merged := d.at(path)
+	for name, v := range contexts {
+		merged.insert(name, v)
+	}
+}
+
+func (d Dockerfiles) merge(path string, contexts Contexts) {
+	merged := d.at(path)
+	for name, values := range contexts {
+		for _, v := range values {
+			merged.insert(name, v)
+		}
+	}
+}
+
+func (d Dockerfiles) at(path string) Contexts {
 	merged := d[path]
 	if merged == nil {
 		merged = Contexts{}
 		d[path] = merged
 	}
-	for name, v := range contexts {
-		if slices.Contains(merged[name], v) {
-			continue
-		}
-		merged[name] = append(merged[name], v)
-		slices.SortFunc(merged[name], func(a, b Value) int {
-			return cmp.Or(strings.Compare(a.Text, b.Text), boolOrder(a.Known, b.Known))
-		})
+	return merged
+}
+
+func (c Contexts) insert(name string, v Value) {
+	if slices.Contains(c[name], v) {
+		return
 	}
+	c[name] = append(c[name], v)
+	slices.SortFunc(c[name], func(a, b Value) int {
+		return cmp.Or(strings.Compare(a.Text, b.Text), boolOrder(a.Known, b.Known))
+	})
 }
 
 func boolOrder(a, b bool) int {

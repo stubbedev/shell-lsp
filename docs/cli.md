@@ -88,12 +88,23 @@ back what the other two exclude.
 
 The repository of a directory is found as git finds it: the nearest `.git` in
 the directory or one of its parents, whether a directory, a symbolic link to
-one, or a `gitdir:` file of a linked worktree or submodule. A `.git`
-directory counts only when git would take it for a repository, with a valid
-`HEAD` and `objects` and `refs` directories; one without them is passed over
-and the search goes on upwards. A `gitdir:` file git cannot read, or one that
-names no repository, stops the walk with an error, as does a `.git` that is
-neither a directory nor a file. The search stops below each directory listed in
+one, or a `gitdir:` file of a linked worktree or submodule. The parents are
+those of the directory with its symbolic links resolved, as git, which changes
+into each parent in turn, walks them: a folder that is a symbolic link into
+another repository takes that repository's rules, and a folder linked from
+outside any repository takes those of the repository it lies in, with paths
+matched from the top of that repository. A `.git` directory counts only when
+git would take it for a repository, with a valid `HEAD` and `objects` and
+`refs` directories; one without them is passed over and the search goes on
+upwards. A directory that is itself such a git directory, such as a bare
+repository or a `.git` directory, ends the search as git does: it has no work
+tree unless `GIT_WORK_TREE` or its `core.worktree` names one (even with
+`core.bare` false), so what lies in it is in no repository, and the rules of
+an enclosing repository do not apply. `safe.bareRepository` is not read: when
+it is `explicit`, git refuses to work in such a directory, which applies no
+ignore rules either. A `gitdir:` file git cannot read, or one that names no
+repository, stops the walk with an error, as does a `.git` that is neither a
+directory nor a file. The search stops below each directory listed in
 `GIT_CEILING_DIRECTORIES` (absolute paths, resolved through symbolic links up
 to an empty entry, as git resolves them), and at a filesystem boundary unless
 `GIT_DISCOVERY_ACROSS_FILESYSTEM` is true; on Windows, as in Git for Windows,
@@ -104,9 +115,11 @@ command.
 The repository's `core.worktree`, read from its own `config` (or from
 `config.worktree` under `extensions.worktreeConfig`) when
 `core.repositoryFormatVersion` is set, moves the top of the work tree,
-relative to the git directory; a linked worktree ignores the shared
+relative to the git directory with its symbolic links resolved, as git
+changes into it; a linked worktree ignores the shared
 `core.worktree` and `core.bare` unless `extensions.worktreeConfig` is set. A directory outside that work tree, or in a repository with
-`core.bare` set, is in no repository, and a relative `core.worktree` that names
+`core.bare` set, or one whose absolute `core.worktree` or `GIT_WORK_TREE` names
+no directory, is in no repository, and a relative `core.worktree` that names
 no directory stops the walk with an error.
 
 `check` and `fmt` also honour the variables git sets for hooks, relative to
@@ -158,7 +171,8 @@ holds: `gitdir:` and `gitdir/i:` match the repository's git directory (for a
 linked worktree, its directory under `.git/worktrees`) with git's rules for
 `~/`, `./`, a leading `**/` and a trailing `/`; `onbranch:` matches the branch
 `HEAD` names, following a branch that is itself a symbolic reference to
-another branch as git does, into the main worktree (`main-worktree/HEAD`) or
+another branch as git does (a `ref:` file, or a symbolic link whose target is
+a reference name under `refs/`), into the main worktree (`main-worktree/HEAD`) or
 another one (`worktrees/<id>/HEAD`) too; and `hasconfig:remote.*.url:` matches the remote URLs of every
 configuration file above, refusing, as git does, a remote URL set in a file an
 `includeIf` includes. Other conditions never hold.

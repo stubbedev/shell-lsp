@@ -240,6 +240,31 @@ func TestResolverReadsARepositoryWhoseGitDirectoryIsASymlink(t *testing.T) {
 	}
 }
 
+func TestResolverReadsTheRepositoryGitFindsThroughASymlinkedDirectory(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeFiles(t, dir, map[string]string{
+		"a/.git/HEAD":               "ref: refs/heads/main\n",
+		"a/.git/objects/info/packs": "",
+		"a/.git/refs/heads/main":    "0123456789abcdef0123456789abcdef01234567\n",
+		"b/.git/HEAD":               "ref: refs/heads/main\n",
+		"b/.git/objects/info/packs": "",
+		"b/.git/refs/heads/main":    "0123456789abcdef0123456789abcdef01234567\n",
+		"b/build/Dockerfile":        "FROM base\n",
+		"b/deploy/docker-bake.hcl":  "target \"b\" {\n  context = \"../build\"\n  contexts = { base = \"x\" }\n}\n",
+		"a/deploy/docker-bake.hcl":  "target \"a\" {\n  context = \"../sub\"\n  contexts = { written = \"x\" }\n}\n",
+	})
+	if err := os.Symlink(filepath.Join(dir, "b", "build"), filepath.Join(dir, "a", "sub")); err != nil {
+		t.Skipf("symbolic links are unavailable: %v", err)
+	}
+	got := dockerfilesOf(t, newTestResolver(), filepath.Join(dir, "a", "sub"))
+	want := Dockerfiles{filepath.Join(dir, "a", "sub", "Dockerfile"): {"base": {{Text: "x", Known: true}}}}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("dockerfiles of a/sub (-want +got):\n%s", diff)
+	}
+}
+
 func TestResolverSkipsDirectoriesTheUsersExcludesFileIgnores(t *testing.T) {
 	t.Parallel()
 

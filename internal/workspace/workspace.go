@@ -798,9 +798,8 @@ func (w *Workspace) enclosingIgnores(root string) (string, *gitignore.Stack, err
 	if err != nil {
 		return "", nil, err
 	}
-	below, _ := platform.RelativeWithin(repo.Top, root)
 	rel, dir := "", repo.Top
-	for name := range strings.SplitSeq(filepath.ToSlash(below), "/") {
+	for name := range strings.SplitSeq(filepath.ToSlash(repo.Prefix), "/") {
 		if name == "." {
 			continue
 		}

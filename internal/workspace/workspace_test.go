@@ -487,6 +487,48 @@ func TestShellFilesSkipWhatASymlinkedGitDirectoryExcludes(t *testing.T) {
 	}
 }
 
+func TestShellFilesApplyTheRulesOfTheRepositoryGitFindsThroughSymlinks(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	head := map[string]string{"/.git/HEAD": "ref: refs/heads/main\n", "/.git/objects/info/packs": "", "/.git/refs/heads/main": "0123456789abcdef0123456789abcdef01234567\n"}
+	files := map[string]string{
+		"a/.gitignore":     "/sub/shown.sh\n",
+		"b/.gitignore":     "/x/hidden.sh\n/lib/private.sh\n",
+		"b/x/shown.sh":     "",
+		"b/x/hidden.sh":    "",
+		"b/lib/b.sh":       "",
+		"b/lib/private.sh": "",
+		"links/keep":       "",
+	}
+	for _, repo := range []string{"a", "b"} {
+		for name, text := range head {
+			files[repo+name] = text
+		}
+	}
+	writeTree(t, dir, files)
+	for link, target := range map[string]string{"a/sub": "b/x", "links/x": "b/x", "via": "b"} {
+		if err := os.Symlink(filepath.Join(dir, filepath.FromSlash(target)), filepath.Join(dir, filepath.FromSlash(link))); err != nil {
+			t.Skipf("symbolic links are unavailable: %v", err)
+		}
+	}
+	for _, tt := range []struct {
+		name, root string
+		want       []string
+	}{
+		{"a symlink into another repository", "a/sub", []string{"shown.sh"}},
+		{"a symlink from outside any repository", "links/x", []string{"shown.sh"}},
+		{"a repository through a symlinked parent", "via/lib", []string{"b.sh"}},
+	} {
+		root := filepath.Join(dir, filepath.FromSlash(tt.root))
+		ws := New(func(string) (*File, bool) { return nil, false }, Detect, gitrepo.Environment{})
+		ws.SetRoots([]string{root})
+		if got := relShellFiles(t, ws, root); !slices.Equal(got, tt.want) {
+			t.Errorf("%s: ShellFiles = %v, want %v", tt.name, got, tt.want)
+		}
+	}
+}
+
 func TestShellFilesFollowGitignoreEdits(t *testing.T) {
 	t.Parallel()
 

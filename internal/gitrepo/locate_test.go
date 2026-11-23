@@ -217,29 +217,34 @@ func TestDiscoverRefusesAGitFileGitRefuses(t *testing.T) {
 func TestDiscoverStopsBelowTheCeilingDirectories(t *testing.T) {
 	t.Parallel()
 
-	f := newFixture(t, repoFiles("repo"))
-	writeFiles(t, f.dir, map[string]string{"repo/a/b/": ""})
+	resolved := newFixture(t, repoFiles("repo"))
+	writeFiles(t, resolved.dir, map[string]string{"repo/a/b/": ""})
 	symlinked := filepath.Join(t.TempDir(), "link")
-	symlink(t, f.path("repo"), symlinked)
+	symlink(t, resolved.path("repo"), symlinked)
+	aliased := resolved
+	aliased.dir = filepath.Join(t.TempDir(), "alias")
+	symlink(t, resolved.dir, aliased.dir)
 	sep := string(filepath.ListSeparator)
-	for _, tt := range []struct {
-		name    string
-		ceiling string
-		dir     string
-		found   bool
-	}{
-		{"a ceiling below the repository", f.path("repo/a"), "repo/a/b", false},
-		{"the repository as ceiling", f.path("repo"), "repo/a/b", false},
-		{"a ceiling with a trailing separator", f.path("repo") + string(filepath.Separator), "repo/a/b", false},
-		{"the start directory as ceiling", f.path("repo/a"), "repo/a", true},
-		{"a ceiling below the start", f.path("repo/a/b/c"), "repo/a/b", true},
-		{"a relative ceiling", "repo", "repo/a/b", true},
-		{"a ceiling through a symbolic link", filepath.Join(symlinked, "a"), "repo/a/b", false},
-		{"a ceiling after an empty entry is not resolved", sep + filepath.Join(symlinked, "a"), "repo/a/b", true},
-		{"an empty list", "", "repo/a/b", true},
-	} {
-		if _, found := discoverWith(t, f, map[string]string{"GIT_CEILING_DIRECTORIES": tt.ceiling}, tt.dir); found != tt.found {
-			t.Errorf("%s: found = %v, want %v", tt.name, found, tt.found)
+	for base, f := range map[string]fixture{"resolved": resolved, "behind a symbolic link": aliased} {
+		for _, tt := range []struct {
+			name    string
+			ceiling string
+			dir     string
+			found   bool
+		}{
+			{"a ceiling below the repository", f.path("repo/a"), "repo/a/b", false},
+			{"the repository as ceiling", f.path("repo"), "repo/a/b", false},
+			{"a ceiling with a trailing separator", f.path("repo") + string(filepath.Separator), "repo/a/b", false},
+			{"the start directory as ceiling", f.path("repo/a"), "repo/a", true},
+			{"a ceiling below the start", f.path("repo/a/b/c"), "repo/a/b", true},
+			{"a relative ceiling", "repo", "repo/a/b", true},
+			{"a ceiling through a symbolic link", filepath.Join(symlinked, "a"), "repo/a/b", false},
+			{"a ceiling after an empty entry is not resolved", sep + filepath.Join(symlinked, "a"), "repo/a/b", true},
+			{"an empty list", "", "repo/a/b", true},
+		} {
+			if _, found := discoverWith(t, f, map[string]string{"GIT_CEILING_DIRECTORIES": tt.ceiling}, tt.dir); found != tt.found {
+				t.Errorf("%s, %s: found = %v, want %v", base, tt.name, found, tt.found)
+			}
 		}
 	}
 }
@@ -345,5 +350,115 @@ func TestInvalidatingAFileInAGitDirectoryDropsTheLookup(t *testing.T) {
 	ignores.Invalidate(f.path("repo/.git/HEAD"))
 	if repo, found, err := ignores.Repository(f.path("repo/sub")); !found || err != nil || repo.Top != f.path("repo") {
 		t.Errorf("Repository after HEAD appears = %+v, %v, %v", repo, found, err)
+	}
+}
+
+func TestDiscoverWalksTheResolvedParentsOfTheDirectory(t *testing.T) {
+	t.Parallel()
+
+	files := repoFiles("a", "b")
+	files["b/x/deep/"] = ""
+	files["links/"] = ""
+	f := newFixture(t, files)
+	symlink(t, f.path("b/x"), f.path("a/sub"))
+	symlink(t, f.path("b/x"), f.path("links/x"))
+	symlink(t, f.path("b"), f.path("via"))
+	for _, tt := range []struct {
+		name, dir, top, prefix, git string
+	}{
+		{"a symlink inside another work tree", "a/sub", "b", "x", "b/.git"},
+		{"a symlink outside any work tree", "links/x/deep", "b", filepath.Join("x", "deep"), "b/.git"},
+		{"a symlinked parent of the work tree", "via/x/deep", "via", filepath.Join("x", "deep"), "b/.git"},
+		{"the top through a symlinked parent", "via", "via", ".", "via/.git"},
+	} {
+		repo, found, err := Discover(f.path(tt.dir))
+		if err != nil || !found || repo.Top != f.path(tt.top) || repo.Prefix != tt.prefix || repo.Dirs.Git != f.path(tt.git) {
+			t.Errorf("%s: Discover = %+v, %v, %v; want the top %s, prefix %s and git directory %s", tt.name, repo, found, err, f.path(tt.top), tt.prefix, f.path(tt.git))
+		}
+	}
+}
+
+func TestDiscoverStopsAtABareRepository(t *testing.T) {
+	t.Parallel()
+
+	const versioned = "[core]\n\trepositoryformatversion = 0\n"
+	files := repoFiles("outer", "both")
+	maps.Copy(files, map[string]string{
+		"outer/bare/HEAD":        "ref: refs/heads/main\n",
+		"outer/bare/objects/":    "",
+		"outer/bare/refs/":       "",
+		"outer/bare/sub/":        "",
+		"outer/nonbare/HEAD":     "ref: refs/heads/main\n",
+		"outer/nonbare/objects/": "",
+		"outer/nonbare/refs/":    "",
+		"outer/nonbare/config":   versioned + "\tbare = false\n",
+		"outer/moved/HEAD":       "ref: refs/heads/main\n",
+		"outer/moved/objects/":   "",
+		"outer/moved/refs/":      "",
+		"outer/moved/config":     versioned + "\tbare = false\n\tworktree = ../wt\n",
+		"outer/wt/deep/":         "",
+		"both/HEAD":              "ref: refs/heads/main\n",
+		"both/objects/":          "",
+		"both/refs/":             "",
+	})
+	f := newFixture(t, files)
+	for _, dir := range []string{"outer/bare", "outer/bare/sub", "outer/bare/objects", "outer/.git/refs", "outer/nonbare", "outer/moved"} {
+		if repo, found := discoverWith(t, f, nil, dir); found {
+			t.Errorf("%s: repository = %+v, want none, as git finds a repository without a work tree", dir, repo)
+		}
+	}
+	if repo, found := discoverWith(t, f, nil, "outer/wt/deep"); !found || repo.Top != f.path("outer") {
+		t.Errorf("outer/wt/deep: repository = %+v, %v; want the enclosing one, as git does not look for bare repositories below", repo, found)
+	}
+	if repo, found := discoverWith(t, f, nil, "both"); !found || repo.Dirs.Git != f.path("both/.git") {
+		t.Errorf("both: repository = %+v, %v; want the .git directory before the directory itself", repo, found)
+	}
+	repo, dirs, found := locateIn(t, f, map[string]string{"GIT_WORK_TREE": f.path("outer/wt")}, "outer/bare", "outer/wt/deep")
+	if !found || repo.Top != f.path("outer/wt") || dirs.Git != f.path("outer/bare") {
+		t.Errorf("GIT_WORK_TREE in a bare repository: repository = %+v, %v; want the work tree %s", repo, found, f.path("outer/wt"))
+	}
+}
+
+func TestDiscoverChangesIntoCoreWorktreeFromTheResolvedGitDirectory(t *testing.T) {
+	t.Parallel()
+
+	const versioned = "[core]\n\trepositoryformatversion = 0\n"
+	f := newFixture(t, map[string]string{
+		"store/git/HEAD":     "ref: refs/heads/main\n",
+		"store/git/objects/": "",
+		"store/git/refs/":    "",
+		"store/git/config":   versioned + "\tworktree = ../sub\n",
+		"store/sub/deep/":    "",
+		"repo/sub/":          "",
+		"abs/.git/HEAD":      "ref: refs/heads/main\n",
+		"abs/.git/objects/":  "",
+		"abs/.git/refs/":     "",
+		"real/wt/deep/":      "",
+	})
+	symlink(t, f.path("store/git"), f.path("repo/.git"))
+	symlink(t, f.path("real"), f.path("link"))
+	f.env.Git.Variables = map[string]string{"GIT_DIR": f.path("repo/.git")}
+	locator := f.env.Git.Locate(f.path("store/sub/deep"))
+	p := probe{track: func(string) {}, device: platform.DeviceOf}
+	repo, found, err := locator.find(f.path("store/sub/deep"), p)
+	if err != nil || !found || repo.Top != f.path("store/sub") || repo.Prefix != "deep" {
+		t.Errorf("a relative core.worktree through a symlinked git directory = %+v, %v, %v; want the top %s", repo, found, err, f.path("store/sub"))
+	}
+	if repo, found, err := locator.find(f.path("repo/sub"), p); err != nil || found {
+		t.Errorf("the work tree as written = %+v, %v, %v; want none", repo, found, err)
+	}
+
+	writeFiles(t, f.dir, map[string]string{"abs/.git/config": versioned + "\tworktree = " + filepath.ToSlash(f.path("link/wt")) + "\n"})
+	f.env.Git.Variables = map[string]string{"GIT_DIR": f.path("abs/.git")}
+	locator = f.env.Git.Locate(f.path("real/wt"))
+	for dir, top := range map[string]string{"real/wt/deep": "real/wt", "link/wt/deep": "link/wt"} {
+		if repo, found, err := locator.find(f.path(dir), p); err != nil || !found || repo.Top != f.path(top) || repo.Prefix != "deep" {
+			t.Errorf("%s with an absolute core.worktree through a symlink = %+v, %v, %v; want the top %s", dir, repo, found, err, f.path(top))
+		}
+	}
+
+	writeFiles(t, f.dir, map[string]string{"abs/.git/config": versioned + "\tworktree = " + filepath.ToSlash(f.path("gone")) + "\n"})
+	if repo, found, err := locator.find(f.path("real/wt"), p); err != nil || found {
+		t.Errorf("a missing absolute core.worktree = %+v, %v, %v; want no work tree, as git finds none", repo, found, err)
 	}
 }

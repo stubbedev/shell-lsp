@@ -133,26 +133,53 @@ func (f repositoryFormat) usesReftable() bool {
 func (f repositoryFormat) workTreeOf(gitDir, envWorkTree, implicit string, p probe) (string, bool, error) {
 	switch {
 	case envWorkTree != "":
-		return envWorkTree, true, nil
+		return absoluteWorkTree(envWorkTree, p)
 	case f.bare:
 		return "", false, nil
 	case !f.hasWorkTree:
-		return implicit, true, nil
+		return implicit, implicit != "", nil
 	case f.workTree == "":
 		return "", false, fmt.Errorf("core.worktree of %s is empty, which git cannot change into", gitDir)
 	}
 	path := filepath.FromSlash(f.workTree)
 	if filepath.IsAbs(path) {
-		return filepath.Clean(path), true, nil
+		return absoluteWorkTree(filepath.Clean(path), p)
 	}
-	path = filepath.Join(gitDir, path)
+	base, err := filepath.EvalSymlinks(gitDir)
+	if err != nil {
+		return "", false, fmt.Errorf("resolving the git directory %s to change into core.worktree %q: %w", gitDir, f.workTree, err)
+	}
+	path = base + string(filepath.Separator) + path
 	p.track(path)
-	info, err := os.Stat(path)
+	real, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return "", false, fmt.Errorf("core.worktree %q of %s: %w", f.workTree, gitDir, err)
+	}
+	info, err := os.Stat(real)
 	if err != nil {
 		return "", false, fmt.Errorf("core.worktree %q of %s: %w", f.workTree, gitDir, err)
 	}
 	if !info.IsDir() {
 		return "", false, fmt.Errorf("core.worktree %q of %s names a %s, not a directory", f.workTree, gitDir, info.Mode().Type())
 	}
-	return path, true, nil
+	return real, true, nil
+}
+
+func absoluteWorkTree(path string, p probe) (string, bool, error) {
+	p.track(path)
+	real, err := filepath.EvalSymlinks(path)
+	if missing(err) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("resolving the work tree %s: %w", path, err)
+	}
+	info, err := os.Stat(real)
+	if err != nil {
+		return "", false, fmt.Errorf("resolving the work tree %s: %w", path, err)
+	}
+	if !info.IsDir() {
+		return "", false, nil
+	}
+	return real, true, nil
 }

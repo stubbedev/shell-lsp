@@ -30,6 +30,7 @@ var processVariables = []string{gitDirVariable, workTreeVariable, commonDirVaria
 
 type Repository struct {
 	Top    string
+	Prefix string
 	Dirs   Dirs
 	format repositoryFormat
 }
@@ -55,7 +56,7 @@ type search struct {
 }
 
 type processLocation struct {
-	cwd       string
+	cwd       place
 	gitDir    string
 	workTree  string
 	commonDir string
@@ -108,7 +109,7 @@ func (p Process) Locate(cwd string) Locator {
 	if locator.err != nil {
 		return locator
 	}
-	location := processLocation{cwd: cwd}
+	var location processLocation
 	set := false
 	for _, v := range []struct {
 		name string
@@ -127,9 +128,15 @@ func (p Process) Locate(cwd string) Locator {
 			*v.path = filepath.Join(cwd, value)
 		}
 	}
-	if set {
-		locator.process = &location
+	if !set {
+		return locator
 	}
+	at, err := placeOf(cwd)
+	if err != nil {
+		return Locator{err: err}
+	}
+	location.cwd = at
+	locator.process = &location
 	return locator
 }
 
@@ -137,15 +144,72 @@ func (l Locator) find(dir string, p probe) (Repository, bool, error) {
 	if l.err != nil {
 		return Repository{}, false, l.err
 	}
-	location := processLocation{cwd: dir}
+	at, err := placeOf(dir)
+	if err != nil {
+		return Repository{}, false, err
+	}
+	location := processLocation{cwd: at}
 	if l.process != nil {
 		location = *l.process
 	}
 	repo, worked, err := l.search.open(location, p)
-	if err != nil || !worked || !platform.Native.Within(dir, repo.Top) {
+	if err != nil || !worked {
 		return Repository{}, false, err
 	}
+	prefix, within := platform.RelativeWithin(repo.Top, at.real)
+	if !within {
+		return Repository{}, false, nil
+	}
+	repo.Top, repo.Prefix = at.alias(prefix, repo.Top), prefix
 	return repo, true, nil
+}
+
+type place struct {
+	written string
+	real    string
+}
+
+func placeOf(dir string) (place, error) {
+	real, err := realDir(dir)
+	if err != nil {
+		return place{}, fmt.Errorf("resolving %s while looking for a git repository: %w", dir, err)
+	}
+	return place{written: dir, real: real}, nil
+}
+
+func realDir(dir string) (string, error) {
+	real, err := filepath.EvalSymlinks(dir)
+	if err == nil || !missing(err) {
+		return real, err
+	}
+	parent := filepath.Dir(dir)
+	if parent == dir {
+		return "", err
+	}
+	real, err = realDir(parent)
+	return filepath.Join(real, filepath.Base(dir)), err
+}
+
+func missing(err error) bool {
+	return errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ENOTDIR)
+}
+
+func (at place) alias(prefix, top string) string {
+	if prefix == "." {
+		return at.written
+	}
+	written := at.written
+	for range strings.SplitSeq(prefix, string(filepath.Separator)) {
+		parent := filepath.Dir(written)
+		if parent == written {
+			return top
+		}
+		written = parent
+	}
+	if real, err := filepath.EvalSymlinks(written); err != nil || real != top {
+		return top
+	}
+	return written
 }
 
 func (s search) open(location processLocation, p probe) (Repository, bool, error) {
@@ -155,7 +219,7 @@ func (s search) open(location processLocation, p probe) (Repository, bool, error
 	}
 	if !found {
 		if location.workTree != "" || location.commonDir != "" {
-			return Repository{}, false, fmt.Errorf("%s or %s is set, but %s is not in a git repository", workTreeVariable, commonDirVariable, location.cwd)
+			return Repository{}, false, fmt.Errorf("%s or %s is set, but %s is not in a git repository", workTreeVariable, commonDirVariable, location.cwd.written)
 		}
 		return Repository{}, false, nil
 	}
@@ -179,6 +243,7 @@ func (s search) gitDirectory(location processLocation, p probe) (gitDirectory, s
 	if location.gitDir == "" {
 		return s.discover(location.cwd, location.commonDir, p)
 	}
+	cwd := location.cwd.real
 	path := location.gitDir
 	p.track(path)
 	info, err := os.Stat(path)
@@ -188,7 +253,7 @@ func (s search) gitDirectory(location processLocation, p probe) (gitDirectory, s
 	switch {
 	case info.Mode().IsRegular():
 		git, err := readGitFile(path, location.commonDir, p)
-		return git, location.cwd, err == nil, err
+		return git, cwd, err == nil, err
 	case !info.IsDir():
 		return gitDirectory{}, "", false, fmt.Errorf("%s=%s is a %s, not a git repository", gitDirVariable, path, info.Mode().Type())
 	}
@@ -199,19 +264,23 @@ func (s search) gitDirectory(location processLocation, p probe) (gitDirectory, s
 	if !valid {
 		return gitDirectory{}, "", false, fmt.Errorf("%s=%s is not a git repository: it lacks a valid HEAD, objects or refs", gitDirVariable, path)
 	}
-	return git, location.cwd, true, nil
+	return git, cwd, true, nil
 }
 
-func (s search) discover(dir, commonDir string, p probe) (gitDirectory, string, bool, error) {
-	ceiling := s.ceiling(dir)
+func (s search) discover(at place, commonDir string, p probe) (gitDirectory, string, bool, error) {
+	ceiling := s.ceiling(at.real)
 	var start filesystem
-	if _, err := s.leaves(&start, dir, p); err != nil {
+	if _, err := s.leaves(&start, at.real, p); err != nil {
 		return gitDirectory{}, "", false, err
 	}
-	for current := dir; ; {
-		git, found, err := gitDirectoryAt(current, commonDir, p)
+	for look, current := at.written, at.real; ; look = current {
+		git, found, err := gitDirectoryAt(look, commonDir, p)
 		if err != nil || found {
 			return git, current, found, err
+		}
+		git, bare, err := openGitDirectory(look, commonDir, p)
+		if err != nil || bare {
+			return git, "", bare, err
 		}
 		parent := filepath.Dir(current)
 		if parent == current || ceiling != "" && sameDir(parent, ceiling) {
@@ -236,7 +305,7 @@ func (s search) leaves(start *filesystem, dir string, p probe) (bool, error) {
 	}
 	device, err := p.device(dir)
 	switch {
-	case errors.Is(err, fs.ErrNotExist), errors.Is(err, syscall.ENOTDIR):
+	case missing(err):
 		return false, nil
 	case err != nil:
 		return false, fmt.Errorf("finding the filesystem of %s while looking for a git repository: %w", dir, err)
@@ -266,7 +335,7 @@ func gitDirectoryAt(dir, commonDir string, p probe) (gitDirectory, bool, error) 
 	p.track(marker)
 	info, err := os.Stat(marker)
 	switch {
-	case errors.Is(err, fs.ErrNotExist), errors.Is(err, syscall.ENOTDIR):
+	case missing(err):
 		return gitDirectory{}, false, nil
 	case err != nil:
 		return gitDirectory{}, false, fmt.Errorf("looking for a git repository at %s: %w", marker, err)

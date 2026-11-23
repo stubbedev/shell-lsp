@@ -39,7 +39,10 @@ type fixture struct {
 
 func newFixture(t *testing.T, files map[string]string) fixture {
 	t.Helper()
-	dir := t.TempDir()
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
 	writeFiles(t, dir, files)
 	return fixture{dir: dir, env: Environment{User: platform.UserDirs{Home: filepath.Join(dir, "home")}}}
 }
