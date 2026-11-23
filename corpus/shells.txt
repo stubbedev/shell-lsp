@@ -1,7 +1,7 @@
 # Known differences between the parser and the real shells' -n, written by
 # `just corpus-baseline` and classified by hand as docs/corpus.md describes.
 # Each line: category shell verdict script[#case]
-# parses compared: 15677
+# parses compared: 15814
 posix-extension dash shell-rejects bash-my-aws/bash_completion.sh
 posix-extension dash shell-rejects brew/Library/Homebrew/brew.sh
 posix-extension dash shell-rejects brew/Library/Homebrew/cmd/--repository.sh
@@ -88,6 +88,7 @@ parser-gap zsh parser-rejects ohmyzsh/plugins/genpass/genpass-apple
 posix-extension dash shell-rejects ohmyzsh/plugins/gitfast/git-prompt.sh
 parser-gap zsh parser-rejects ohmyzsh/plugins/lando/lando.plugin.zsh
 parser-gap zsh parser-rejects ohmyzsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.plugin.zsh
+parser-gap zsh parser-rejects ohmyzsh/themes/gallois.zsh-theme
 parser-gap zsh parser-rejects ohmyzsh/tools/theme_chooser.sh
 parser-gap mksh shell-rejects oils/spec/append.test.sh#19
 parser-gap mksh shell-rejects oils/spec/append.test.sh#7
