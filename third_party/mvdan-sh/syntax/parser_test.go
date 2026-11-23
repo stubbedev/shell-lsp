@@ -1089,12 +1089,12 @@ var errorCases = []errorCase{
 	),
 	errCase(
 		"while",
-		langErr("1:1: `while` must be followed by a statement list"),
-		langErr("1:1: `while <cond>` must be followed by `do`", LangZsh|LangMirBSDKorn),
+		langErr("1:1: `while` must be followed by a statement list", langBashLike|LangPOSIX|LangKsh93),
+		langErr("1:1: `while <cond>` must be followed by `do`", LangMirBSDKorn),
 	),
 	errCase(
 		"while true;",
-		langErr("1:1: `while <cond>` must be followed by `do`"),
+		langErr("1:1: `while <cond>` must be followed by `do`", langBashLike|LangPOSIX|langKshLike),
 	),
 	errCase(
 		"while true; do bar",
@@ -1106,12 +1106,12 @@ var errorCases = []errorCase{
 	),
 	errCase(
 		"until",
-		langErr("1:1: `until` must be followed by a statement list"),
-		langErr("1:1: `until <cond>` must be followed by `do`", LangZsh|LangMirBSDKorn),
+		langErr("1:1: `until` must be followed by a statement list", langBashLike|LangPOSIX|LangKsh93),
+		langErr("1:1: `until <cond>` must be followed by `do`", LangMirBSDKorn),
 	),
 	errCase(
 		"until true;",
-		langErr("1:1: `until <cond>` must be followed by `do`"),
+		langErr("1:1: `until <cond>` must be followed by `do`", langBashLike|LangPOSIX|langKshLike),
 	),
 	errCase(
 		"until true; do bar",
@@ -1127,19 +1127,20 @@ var errorCases = []errorCase{
 	),
 	errCase(
 		"for i",
-		langErr("1:1: `for foo` must be followed by `in`, `do`, `;`, or a newline"),
+		langErr("1:1: `for foo` must be followed by `in`, `do`, `;`, or a newline", langBashLike|LangPOSIX|langKshLike),
 	),
 	errCase(
 		"for i in;",
-		langErr("1:1: `for foo [in words]` must be followed by `do`"),
+		langErr("1:1: `for foo [in words]` must be followed by `do`", langBashLike|LangPOSIX|langKshLike),
 	),
 	errCase(
 		"for i in 1 2 3;",
-		langErr("1:1: `for foo [in words]` must be followed by `do`"),
+		langErr("1:1: `for foo [in words]` must be followed by `do`", langBashLike|LangPOSIX|langKshLike),
 	),
 	errCase(
 		"for i in 1 2 &",
-		langErr("1:1: `for foo [in words]` must be followed by `do`"),
+		langErr("1:1: `for foo [in words]` must be followed by `do`", langBashLike|LangPOSIX|langKshLike),
+		langErr("1:1: `for foo in words` must be followed by `;` or a newline", LangZsh),
 	),
 	errCase(
 		"for i in 1 2 (",
@@ -1169,15 +1170,15 @@ var errorCases = []errorCase{
 	),
 	errCase(
 		"select i",
-		langErr("1:1: `select foo` must be followed by `in`, `do`, `;`, or a newline", LangBash|LangMirBSDKorn|LangZsh),
+		langErr("1:1: `select foo` must be followed by `in`, `do`, `;`, or a newline", LangBash|LangMirBSDKorn),
 	),
 	errCase(
 		"select i in;",
-		langErr("1:1: `select foo [in words]` must be followed by `do`", LangBash|LangMirBSDKorn|LangZsh),
+		langErr("1:1: `select foo [in words]` must be followed by `do`", LangBash|LangMirBSDKorn),
 	),
 	errCase(
 		"select i in 1 2 3;",
-		langErr("1:1: `select foo [in words]` must be followed by `do`", LangBash|LangMirBSDKorn|LangZsh),
+		langErr("1:1: `select foo [in words]` must be followed by `do`", LangBash|LangMirBSDKorn),
 	),
 	errCase(
 		"select i in 1 2 3; do echo $i;",
@@ -1193,7 +1194,72 @@ var errorCases = []errorCase{
 	),
 	errCase(
 		"select in 1 2 3; do echo $i; done",
-		langErr("1:1: `select foo` must be followed by `in`, `do`, `;`, or a newline", LangBash|LangMirBSDKorn|LangZsh),
+		langErr("1:1: `select foo` must be followed by `in`, `do`, `;`, or a newline", LangBash|LangMirBSDKorn),
+		langErr("1:18: `do` can only be used in a loop", LangZsh),
+	),
+	errCase(
+		"for i in 1",
+		langErr("1:1: `for foo in words` must be followed by `;` or a newline", LangZsh),
+	),
+	errCase(
+		"select i in 1",
+		langErr("1:1: `select foo in words` must be followed by `;` or a newline", LangZsh),
+	),
+	errCase(
+		"echo $(for i in 1)",
+		langErr("1:8: `for foo in words` must be followed by `;` or a newline", LangZsh),
+	),
+	errCase(
+		"case a in b) for i in 1;; esac",
+		langErr("1:14: `for foo in words` must be followed by `;` or a newline", LangZsh),
+	),
+	errCase(
+		"repeat 2 &",
+		langErr("1:10: `&` cannot follow a loop with an empty body", LangZsh),
+	),
+	errCase(
+		"{ for i (1) & }",
+		langErr("1:13: `&` cannot follow a loop with an empty body", LangZsh),
+	),
+	errCase(
+		"for ((;;)) &!",
+		langErr("1:12: `&!` cannot follow a loop with an empty body", LangZsh),
+	),
+	errCase(
+		"for i in 1; &|",
+		langErr("1:13: `&|` cannot follow a loop with an empty body", LangZsh),
+	),
+	errCase(
+		"for i &",
+		langErr("1:7: `&` cannot follow a loop with an empty body", LangZsh),
+	),
+	errCase(
+		"while a; b; done",
+		langErr("1:13: `done` can only be used to end a loop", LangZsh),
+	),
+	errCase(
+		"for i in 1; done",
+		langErr("1:13: `done` can only be used to end a loop", LangZsh),
+	),
+	errCase(
+		"while a; then",
+		langErr("1:10: `then` can only be used in an `if`", LangZsh),
+	),
+	errCase(
+		"for i fi",
+		langErr("1:7: `fi` can only be used to end an `if`", LangZsh),
+	),
+	errCase(
+		"for i }",
+		langErr("1:7: `}` can only be used to close a block", LangZsh),
+	),
+	errCase(
+		"end",
+		langErr("1:1: `end` can only be used to end a `foreach`", LangZsh),
+	),
+	errCase(
+		"while a; b; end",
+		langErr("1:13: `end` can only be used to end a `foreach`", LangZsh),
 	),
 	errCase(
 		"echo foo &\n;",
@@ -2870,6 +2936,30 @@ func TestNodeEndPos(t *testing.T) {
 	f, err = p.Parse(strings.NewReader("case x { a) b ;; }"), "")
 	qt.Assert(t, qt.IsNil(err))
 	qt.Check(t, qt.Equals(f.Stmts[0].Cmd.(*CaseClause).End().Offset(), uint(18)))
+
+	// zsh's short forms of loops with an empty body end with their header.
+	p = NewParser(Variant(LangZsh))
+	for _, tc := range []struct {
+		in  string
+		end uint
+	}{
+		{"{ while a; b; }", 13},
+		{"{ until }", 7},
+		{"for i in a b;", 12},
+		{"for i (a b)", 11},
+		{"for i j", 7},
+		{"for ((;;))", 10},
+		{"repeat 2", 8},
+		{"select i in a;", 13},
+	} {
+		f, err = p.Parse(strings.NewReader(tc.in), "")
+		qt.Assert(t, qt.IsNil(err), qt.Commentf("input: %q", tc.in))
+		cmd := f.Stmts[0].Cmd
+		if b, ok := cmd.(*Block); ok {
+			cmd = b.Stmts[0].Cmd
+		}
+		qt.Check(t, qt.Equals(cmd.End().Offset(), tc.end), qt.Commentf("input: %q", tc.in))
+	}
 }
 
 func TestParseRecoverErrorsAfterAssignment(t *testing.T) {

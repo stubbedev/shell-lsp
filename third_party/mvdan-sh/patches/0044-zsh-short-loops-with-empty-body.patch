@@ -1,0 +1,820 @@
+syntax: zsh's short forms of loops with an empty body
+
+Unless SHORT_LOOPS is unset, zsh lets the body of "while", "until",
+"for", "select" and "repeat" be a single sublist instead of "do list
+done", and that sublist may also be empty. zsh takes the list after
+"while" or "until" up to the first token that cannot continue it as the
+condition, and after the header of the other loops it skips any number
+of separators; whatever token then cannot start a command, including the
+end of the input or of a substitution, ends the loop. zsh accepts and
+runs, with both commands as the condition and no body:
+
+	{ while a; b; }
+	while false; print x
+	for i in 1;
+	repeat 2
+	echo $(for i (1 2))
+	foreach i (1); while a; end
+
+The words after "in" still need a ";" or a newline after them, so
+"for i in 1" at the end of the input is an error, as is "for i in 1;;"
+in a case item. An empty body directly followed by "&", "&!" or "&|"
+is an error too, and so is "end" anywhere but at the end of a
+"foreach", since zsh reserves it. Names after "for" stop at a word which
+closes a compound command, as in "{ for i }".
+
+Reproducer, before this change:
+
+	$ printf '{ while a; b; }\n' | shfmt -ln zsh
+	<standard input>:1:3: `while <cond>` must be followed by `do`
+
+With LangZsh, a loop whose header is not followed by "do" or "{" now
+takes the short form, with Do empty unless a sublist follows, and the
+End of WhileClause, ForClause and RepeatClause falls back to the end of
+the header. "end" closes a compound command like "fi" or "done" does.
+The printer needs no change: an empty body prints as "do; done", which
+zsh accepts.
+
+Part of https://github.com/mvdan/sh/issues/120.
+
+diff --git a/syntax/filetests_test.go b/syntax/filetests_test.go
+--- a/syntax/filetests_test.go
++++ b/syntax/filetests_test.go
+@@ -1606,6 +1606,306 @@
+ 			}))),
+ 		})), LangZsh),
+ 	),
++	fileTest(
++		[]string{
++			"{ while a; b; }",
++			"{ while a; b\n}",
++		},
++		printsAs("{ while\n\ta\n\tb\ndo; done; }"),
++		langFile(block(stmt(&WhileClause{
++			Short: true,
++			Cond:  litStmts("a", "b"),
++		})), LangZsh),
++	),
++	fileTest(
++		[]string{
++			"while false; print x",
++			"while false\nprint x\n",
++		},
++		printsAs("while\n\tfalse\n\tprint x\ndo; done"),
++		langFile(&WhileClause{
++			Short: true,
++			Cond:  []*Stmt{litStmt("false"), litStmt("print", "x")},
++		}, LangZsh),
++	),
++	fileTest(
++		[]string{"( until a; b )"},
++		printsAs("(until\n\ta\n\tb\ndo; done)"),
++		langFile(subshell(stmt(&WhileClause{
++			Until: true,
++			Short: true,
++			Cond:  litStmts("a", "b"),
++		})), LangZsh),
++	),
++	fileTest(
++		[]string{"{ while (( a )) }"},
++		printsAs("{ while ((a)); do; done; }"),
++		langFile(block(stmt(&WhileClause{
++			Short: true,
++			Cond:  stmts(arithmCmd(litWord("a"))),
++		})), LangZsh),
++	),
++	fileTest(
++		[]string{"{ until }"},
++		printsAs("{ until; do; done; }"),
++		langFile(block(stmt(&WhileClause{Until: true, Short: true})), LangZsh),
++	),
++	fileTest(
++		[]string{
++			"echo $(while a)",
++			"echo `while a`",
++		},
++		printsAs("echo $(while a; do; done)"),
++		langFile(call(litWord("echo"), word(&CmdSubst{
++			Stmts: stmts(&WhileClause{
++				Short: true,
++				Cond:  litStmts("a"),
++			}),
++		})), LangZsh),
++	),
++	fileTest(
++		[]string{"case a in b) while c;; esac"},
++		printsAs("case a in b) while c; do; done ;; esac"),
++		langFile(&CaseClause{
++			Word: litWord("a"),
++			Items: []*CaseItem{{
++				Op:       Break,
++				Patterns: litWords("b"),
++				Stmts: stmts(&WhileClause{
++					Short: true,
++					Cond:  litStmts("c"),
++				}),
++			}},
++		}, LangZsh),
++	),
++	fileTest(
++		[]string{"if a; then while b; c; else d; fi"},
++		printsAs("if a; then while\n\tb\n\tc\ndo; done; else d; fi"),
++		langFile(&IfClause{
++			Cond: litStmts("a"),
++			Then: stmts(&WhileClause{
++				Short: true,
++				Cond:  litStmts("b", "c"),
++			}),
++			Else: &IfClause{Then: litStmts("d")},
++		}, LangZsh),
++	),
++	fileTest(
++		[]string{
++			"for i in 1 2;",
++			"for i in 1 2\n",
++		},
++		printsAs("for i in 1 2; do; done"),
++		langFile(&ForClause{
++			Short: true,
++			Loop:  &WordIter{Name: lit("i"), Items: litWords("1", "2")},
++		}, LangZsh),
++	),
++	fileTest(
++		[]string{"for i (1 2)"},
++		printsAs("for i in 1 2; do; done"),
++		langFile(&ForClause{
++			Short: true,
++			Loop:  &WordIter{Name: lit("i"), Items: litWords("1", "2")},
++		}, LangZsh),
++	),
++	fileTest(
++		[]string{
++			"{ for i (1 2) }",
++			"{ for i in 1 2; }",
++			"{ for i in 1 2\n}",
++		},
++		printsAs("{ for i in 1 2; do; done; }"),
++		langFile(block(stmt(&ForClause{
++			Short: true,
++			Loop:  &WordIter{Name: lit("i"), Items: litWords("1", "2")},
++		})), LangZsh),
++	),
++	fileTest(
++		[]string{
++			"echo $(for i (1 2))",
++			"echo $(for i in 1 2;)",
++		},
++		printsAs("echo $(for i in 1 2; do; done)"),
++		langFile(call(litWord("echo"), word(&CmdSubst{
++			Stmts: stmts(&ForClause{
++				Short: true,
++				Loop:  &WordIter{Name: lit("i"), Items: litWords("1", "2")},
++			}),
++		})), LangZsh),
++	),
++	fileTest(
++		[]string{"case a in b) for i (1 2);; esac"},
++		printsAs("case a in b) for i in 1 2; do; done ;; esac"),
++		langFile(&CaseClause{
++			Word: litWord("a"),
++			Items: []*CaseItem{{
++				Op:       Break,
++				Patterns: litWords("b"),
++				Stmts: stmts(&ForClause{
++					Short: true,
++					Loop:  &WordIter{Name: lit("i"), Items: litWords("1", "2")},
++				}),
++			}},
++		}, LangZsh),
++	),
++	fileTest(
++		[]string{"for ((;;))"},
++		printsAs("for (( ; ; )); do; done"),
++		langFile(&ForClause{
++			Short: true,
++			Loop:  &CStyleLoop{},
++		}, LangZsh),
++	),
++	fileTest(
++		[]string{
++			"{ for ((;;)) }",
++			"{ for ((;;)); }",
++		},
++		printsAs("{ for (( ; ; )); do; done; }"),
++		langFile(block(stmt(&ForClause{
++			Short: true,
++			Loop:  &CStyleLoop{},
++		})), LangZsh),
++	),
++	fileTest(
++		[]string{
++			"for i",
++			"for i;",
++		},
++		printsAs("for i; do; done"),
++		langFile(&ForClause{
++			Short: true,
++			Loop:  &WordIter{Name: lit("i")},
++		}, LangZsh),
++	),
++	fileTest(
++		[]string{
++			"{ for i }",
++			"{ for i; }",
++		},
++		printsAs("{ for i; do; done; }"),
++		langFile(block(stmt(&ForClause{
++			Short: true,
++			Loop:  &WordIter{Name: lit("i")},
++		})), LangZsh),
++	),
++	fileTest(
++		[]string{"for i j k"},
++		printsAs("for i j k; do; done"),
++		langFile(&ForClause{
++			Short: true,
++			Loop:  &WordIter{Names: lits("i", "j", "k")},
++		}, LangZsh),
++	),
++	fileTest(
++		[]string{
++			"for i in a; ; ; print $i",
++			"for i in a\n;\n\nprint $i",
++		},
++		printsAs("for i in a; do print $i; done"),
++		langFile(&ForClause{
++			Short: true,
++			Loop:  &WordIter{Name: lit("i"), Items: litWords("a")},
++			Do:    stmts(call(litWord("print"), word(litParamExp("i")))),
++		}, LangZsh),
++	),
++	fileTest(
++		[]string{
++			"{ select i in a; }",
++			"{ select i (a) }",
++		},
++		printsAs("{ select i in a; do; done; }"),
++		langFile(block(stmt(&ForClause{
++			Select: true,
++			Short:  true,
++			Loop:   &WordIter{Name: lit("i"), Items: litWords("a")},
++		})), LangZsh),
++	),
++	fileTest(
++		[]string{
++			"repeat 2",
++			"repeat 2;",
++			"repeat 2\n",
++		},
++		printsAs("repeat 2; do; done"),
++		langFile(&RepeatClause{
++			Short: true,
++			Count: litWord("2"),
++		}, LangZsh),
++	),
++	fileTest(
++		[]string{
++			"echo $(repeat 2)",
++			"echo `repeat 2`",
++		},
++		printsAs("echo $(repeat 2; do; done)"),
++		langFile(call(litWord("echo"), word(&CmdSubst{
++			Stmts: stmts(&RepeatClause{
++				Short: true,
++				Count: litWord("2"),
++			}),
++		})), LangZsh),
++	),
++	fileTest(
++		[]string{
++			"{ repeat 2 }",
++			"{ repeat 2; ; }",
++		},
++		printsAs("{ repeat 2; do; done; }"),
++		langFile(block(stmt(&RepeatClause{
++			Short: true,
++			Count: litWord("2"),
++		})), LangZsh),
++	),
++	fileTest(
++		[]string{"repeat 2 | a"},
++		printsAs("repeat 2; do; done | a"),
++		langFile(&BinaryCmd{
++			Op: Pipe,
++			X: stmt(&RepeatClause{
++				Short: true,
++				Count: litWord("2"),
++			}),
++			Y: litStmt("a"),
++		}, LangZsh),
++	),
++	fileTest(
++		[]string{"foreach i (1) while a; b; end"},
++		printsAs("for i in 1; do while\n\ta\n\tb\ndo; done; done"),
++		langFile(&ForClause{
++			Foreach: true,
++			Loop:    &WordIter{Name: lit("i"), Items: litWords("1")},
++			Do: stmts(&WhileClause{
++				Short: true,
++				Cond:  litStmts("a", "b"),
++			}),
++		}, LangZsh),
++	),
++	fileTest(
++		[]string{"foreach i (1); repeat 2; end"},
++		printsAs("for i in 1; do repeat 2; do; done; done"),
++		langFile(&ForClause{
++			Foreach: true,
++			Loop:    &WordIter{Name: lit("i"), Items: litWords("1")},
++			Do: stmts(&RepeatClause{
++				Short: true,
++				Count: litWord("2"),
++			}),
++		}, LangZsh),
++	),
++	fileTest(
++		[]string{"foreach i (1); if a; b; end"},
++		printsAs("for i in 1; do if\n\ta\n\tb\nthen; fi; done"),
++		langFile(&ForClause{
++			Foreach: true,
++			Loop:    &WordIter{Name: lit("i"), Items: litWords("1")},
++			Do: stmts(&IfClause{
++				Short: true,
++				Cond:  litStmts("a", "b"),
++			}),
++		}, LangZsh),
++	),
+ 	fileTest(
+ 		[]string{"if a; then foo; elif [[ b ]] { bar }\n"},
+ 		printsAs("if a; then foo; elif [[ b ]]; then bar; fi"),
+diff --git a/syntax/nodes.go b/syntax/nodes.go
+--- a/syntax/nodes.go
++++ b/syntax/nodes.go
+@@ -474,28 +474,34 @@
+ 	case last.Braces:
+ 		return posAddCol(last.Rbrace, len("}"))
+ 	case last.Short:
+-		// The short form may have an empty body, and zsh even allows an
+-		// empty condition, as in `{ if }`.
+-		if end := stmtLastEnd(last.Then); end.IsValid() {
+-			return end
++		rsrv := "if"
++		if last != c {
++			rsrv = "elif"
+ 		}
+-		if end := stmtLastEnd(last.Cond); end.IsValid() {
++		if end := stmtLastEnd(last.Then); end.IsValid() {
+ 			return end
+ 		}
+-		if last == c {
+-			return posAddCol(last.Position, len("if"))
+-		}
+-		return posAddCol(last.Position, len("elif"))
++		return condEnd(last.Cond, last.Position, rsrv)
+ 	}
+ 	return posAddCol(c.FiPos, len("fi"))
+ }
+ 
++// condEnd returns the end position of the condition of an `if`, `elif`,
++// `while` or `until`, which with zsh may be empty, as in `{ if }`, in which
++// case it ends with the reserved word rsrv at rsrvPos.
++func condEnd(cond []*Stmt, rsrvPos Pos, rsrv string) Pos {
++	if end := stmtLastEnd(cond); end.IsValid() {
++		return end
++	}
++	return posAddCol(rsrvPos, len(rsrv))
++}
++
+ // WhileClause represents a while or an until clause.
+ type WhileClause struct {
+ 	WhilePos, DoPos, DonePos Pos
+ 	Until                    bool
+ 	Braces                   bool // zsh's form with { } instead of do/done
+-	Short                    bool // zsh's short form, where Do is a single sublist
++	Short                    bool // zsh's short form, where Do is a single sublist or empty
+ 
+ 	Cond     []*Stmt
+ 	CondLast []Comment
+@@ -504,17 +510,28 @@
+ }
+ 
+ func (w *WhileClause) Pos() Pos { return w.WhilePos }
+-func (w *WhileClause) End() Pos { return loopEnd(w.DonePos, w.Braces, w.Short, w.Do) }
++func (w *WhileClause) End() Pos {
++	rsrv := "while"
++	if w.Until {
++		rsrv = "until"
++	}
++	return loopEnd(w.DonePos, w.Braces, w.Short, w.Do, func() Pos {
++		return condEnd(w.Cond, w.WhilePos, rsrv)
++	})
++}
+ 
+ // loopEnd returns the end position of a loop body which ends with "done" at
+ // donePos, or with "}" there if braces is set, or which is a single sublist
+-// if short is set.
+-func loopEnd(donePos Pos, braces, short bool, do []*Stmt) Pos {
++// or empty if short is set, in which case the loop ends with its header,
++// whose end headerEnd returns.
++func loopEnd(donePos Pos, braces, short bool, do []*Stmt, headerEnd func() Pos) Pos {
+ 	switch {
+ 	case braces:
+ 		return posAddCol(donePos, len("}"))
+-	case short:
++	case short && len(do) > 0:
+ 		return stmtLastEnd(do)
++	case short:
++		return headerEnd()
+ 	}
+ 	return posAddCol(donePos, len("done"))
+ }
+@@ -523,12 +540,13 @@
+ // Bash, [LangMirBSDKorn], and [LangZsh].
+ //
+ // With [LangZsh], the body may also be a single sublist without do/done,
+-// and the loop may be written as `foreach name ... (word ...) list end`.
++// which may be empty, as in `{ for i in a b; }`, and the loop may be
++// written as `foreach name ... (word ...) list end`.
+ type ForClause struct {
+ 	ForPos, DoPos, DonePos Pos // DonePos is the position of "end" with Foreach
+ 	Select                 bool
+ 	Braces                 bool // deprecated form with { } instead of do/done
+-	Short                  bool // zsh's short form, where Do is a single sublist
++	Short                  bool // zsh's short form, where Do is a single sublist or empty
+ 	Foreach                bool // zsh's foreach form, ending with "end"
+ 	Loop                   Loop
+ 
+@@ -541,7 +559,7 @@
+ 	if f.Foreach {
+ 		return posAddCol(f.DonePos, len("end"))
+ 	}
+-	return loopEnd(f.DonePos, f.Braces, f.Short, f.Do)
++	return loopEnd(f.DonePos, f.Braces, f.Short, f.Do, f.Loop.End)
+ }
+ 
+ // RepeatClause represents a zsh repeat loop, which runs its body as many
+@@ -551,7 +569,7 @@
+ type RepeatClause struct {
+ 	RepeatPos, DoPos, DonePos Pos
+ 	Braces                    bool // form with { } instead of do/done
+-	Short                     bool // short form, where Do is a single sublist
++	Short                     bool // short form, where Do is a single sublist or empty
+ 
+ 	Count  *Word
+ 	Do     []*Stmt
+@@ -559,7 +577,9 @@
+ }
+ 
+ func (r *RepeatClause) Pos() Pos { return r.RepeatPos }
+-func (r *RepeatClause) End() Pos { return loopEnd(r.DonePos, r.Braces, r.Short, r.Do) }
++func (r *RepeatClause) End() Pos {
++	return loopEnd(r.DonePos, r.Braces, r.Short, r.Do, r.Count.End)
++}
+ 
+ // Loop holds either [*WordIter] or [*CStyleLoop].
+ type Loop interface {
+diff --git a/syntax/parser.go b/syntax/parser.go
+--- a/syntax/parser.go
++++ b/syntax/parser.go
+@@ -2899,6 +2899,8 @@
+ 	switch p.val {
+ 	case "}", "then", "elif", "else", "fi", "do", "done", "esac":
+ 		return true
++	case "end":
++		return p.lang.in(LangZsh)
+ 	}
+ 	return false
+ }
+@@ -2962,6 +2964,10 @@
+ 			p.curErr(`%#q can only be used to end a loop`, p.val)
+ 		case "esac":
+ 			p.curErr("%#q can only be used to end a `case`", p.val)
++		case "end":
++			if p.lang.in(LangZsh) {
++				p.curErr("%#q can only be used to end a `foreach`", p.val)
++			}
+ 		case "!":
+ 			if !s.Negated {
+ 				p.curErr(`%#q can only be used in full statements`, exclMark)
+@@ -3276,16 +3282,7 @@
+ // which forms the body of one of zsh's short forms of complex commands,
+ // such as `if [[ cond ]] body` or `for name (words) body`.
+ func (p *Parser) shortBodyStart() bool {
+-	if p.stopToken() {
+-		return false
+-	}
+-	if p.tok == _LitWord {
+-		switch p.val {
+-		case "then", "elif", "else", "fi", "do", "done", "esac", "{", "}":
+-			return false
+-		}
+-	}
+-	return true
++	return !p.stopToken() && !p.closingRsrv() && !(p.tok == _LitWord && p.val == "{")
+ }
+ 
+ // shortBody parses the single sublist which forms the body of one of zsh's
+@@ -3311,7 +3308,9 @@
+ }
+ 
+ // loopBody parses the body of a loop clause: "do list done", "{ list }" with
+-// braceLangs, or with [LangZsh] a single sublist. A non-empty braceFeature
++// braceLangs, or with [LangZsh] a single sublist, which may be empty, so that
++// whatever ends the header, such as the end of the input or a token closing
++// an enclosing construct, also ends the loop. A non-empty braceFeature
+ // names braces as a feature to report in other language variants.
+ // The comments before the body are moved to hoist if it is non-nil.
+ // The node, its reserved word, the description of its header and the
+@@ -3337,10 +3336,15 @@
+ 			return b
+ 		}
+ 	}
+-	if p.lang.in(LangZsh) && p.shortBodyStart() {
++	if p.lang.in(LangZsh) && !(p.tok == _LitWord && p.val == "do") {
+ 		b.short = true
+ 		hoistComments()
+-		b.stmts = p.shortBody()
++		switch {
++		case p.shortBodyStart():
++			b.stmts = p.shortBody()
++		case p.tok == and || p.tok == andPipe || p.tok == andBang:
++			p.curErr("%#q cannot follow a loop with an empty body", p.tok)
++		}
+ 		return b
+ 	}
+ 	b.doPos = p.followRsrv(rsrvPos, header, "do")
+@@ -3371,8 +3375,7 @@
+ 	if rc.Count = p.getWord(); rc.Count == nil {
+ 		p.followErr(rc.RepeatPos, "repeat", noQuote("a word"))
+ 	}
+-	p.got(semicolon)
+-	p.got(_Newl)
++	p.headerSeps()
+ 	b := p.loopBody(rc, "repeat", "repeat word", rc.RepeatPos, LangZsh, "", nil)
+ 	rc.DoPos, rc.DonePos, rc.Braces, rc.Short, rc.Do, rc.DoLast = b.doPos, b.donePos, b.braces, b.short, b.stmts, b.last
+ 	s.Cmd = rc
+@@ -3419,7 +3422,7 @@
+ 			// ksh93 wants `do` or `{` on the same line as the `;`.
+ 			p.checkLang(p.pos, langBashLike|LangZsh, "a newline after `));`")
+ 		}
+-		p.got(_Newl)
++		p.headerSeps()
+ 		return cl
+ 	}
+ 	return p.wordIter("for", fpos)
+@@ -3439,8 +3442,8 @@
+ 			wi.Names = append(wi.Names, p.getLit())
+ 		}
+ 	}
+-	if p.got(semicolon) {
+-		p.got(_Newl)
++	if p.tok == semicolon {
++		p.headerSeps()
+ 		return wi
+ 	}
+ 	newline := p.got(_Newl)
+@@ -3453,8 +3456,11 @@
+ 				wi.Items = append(wi.Items, w)
+ 			}
+ 		}
+-		p.got(semicolon)
+-		p.got(_Newl)
++		if !p.headerSeps() && p.lang.in(LangZsh) {
++			// zsh needs a separator to end the words, even before
++			// the end of the input or a token closing a construct.
++			p.followErr(fpos, ftok+" foo in words", noQuote("`;` or a newline"))
++		}
+ 	} else if p.lang.in(LangZsh) && p.tok == leftParen {
+ 		wi.Lparen = p.pos
+ 		p.next()
+@@ -3471,11 +3477,11 @@
+ 			wi.Items = append(wi.Items, w)
+ 		}
+ 		wi.Rparen = p.matched(wi.Lparen, leftParen, rightParen)
+-		p.got(semicolon)
+-		p.got(_Newl)
++		p.headerSeps()
+ 	} else if p.tok == _LitWord && p.val == "do" {
+-	} else if p.lang.in(LangZsh) && newline {
+-		// With zsh, a body other than do/done may follow the newline.
++	} else if p.lang.in(LangZsh) && (newline || ftok != "foreach") {
++		// With zsh, the short form of the body may follow the names
++		// directly, and it may be empty, as in `{ for i }`.
+ 	} else {
+ 		p.followErr(fpos, ftok+" foo", noQuote("`in`, `do`, `;`, or a newline"))
+ 	}
+@@ -3485,16 +3491,28 @@
+ // iterName reports whether the current token is one more name for a zsh
+ // loop to assign words to, as opposed to what follows the names.
+ func (p *Parser) iterName() bool {
+-	if p.tok != _LitWord {
++	if p.tok != _LitWord || p.closingRsrv() {
+ 		return false
+ 	}
+ 	switch p.val {
+-	case "in", "do", "{":
++	case "in", "{":
+ 		return false
+ 	}
+ 	return true
+ }
+ 
++// headerSeps consumes the separators which end the header of a loop, which
++// are a `;` and a newline, or with [LangZsh] any number of either, and
++// reports whether there were any.
++func (p *Parser) headerSeps() bool {
++	semi := p.got(semicolon)
++	got := p.got(_Newl) || semi
++	for p.lang.in(LangZsh) && (p.got(semicolon) || p.got(_Newl)) {
++		got = true
++	}
++	return got
++}
++
+ func (p *Parser) selectClause(s *Stmt) {
+ 	fc := &ForClause{ForPos: p.pos, Select: true}
+ 	p.next()
+diff --git a/syntax/parser_test.go b/syntax/parser_test.go
+--- a/syntax/parser_test.go
++++ b/syntax/parser_test.go
+@@ -1071,12 +1071,12 @@
+ 	),
+ 	errCase(
+ 		"while",
+-		langErr("1:1: `while` must be followed by a statement list"),
+-		langErr("1:1: `while <cond>` must be followed by `do`", LangZsh|LangMirBSDKorn),
++		langErr("1:1: `while` must be followed by a statement list", langBashLike|LangPOSIX|LangKsh93),
++		langErr("1:1: `while <cond>` must be followed by `do`", LangMirBSDKorn),
+ 	),
+ 	errCase(
+ 		"while true;",
+-		langErr("1:1: `while <cond>` must be followed by `do`"),
++		langErr("1:1: `while <cond>` must be followed by `do`", langBashLike|LangPOSIX|langKshLike),
+ 	),
+ 	errCase(
+ 		"while true; do bar",
+@@ -1088,12 +1088,12 @@
+ 	),
+ 	errCase(
+ 		"until",
+-		langErr("1:1: `until` must be followed by a statement list"),
+-		langErr("1:1: `until <cond>` must be followed by `do`", LangZsh|LangMirBSDKorn),
++		langErr("1:1: `until` must be followed by a statement list", langBashLike|LangPOSIX|LangKsh93),
++		langErr("1:1: `until <cond>` must be followed by `do`", LangMirBSDKorn),
+ 	),
+ 	errCase(
+ 		"until true;",
+-		langErr("1:1: `until <cond>` must be followed by `do`"),
++		langErr("1:1: `until <cond>` must be followed by `do`", langBashLike|LangPOSIX|langKshLike),
+ 	),
+ 	errCase(
+ 		"until true; do bar",
+@@ -1109,19 +1109,20 @@
+ 	),
+ 	errCase(
+ 		"for i",
+-		langErr("1:1: `for foo` must be followed by `in`, `do`, `;`, or a newline"),
++		langErr("1:1: `for foo` must be followed by `in`, `do`, `;`, or a newline", langBashLike|LangPOSIX|langKshLike),
+ 	),
+ 	errCase(
+ 		"for i in;",
+-		langErr("1:1: `for foo [in words]` must be followed by `do`"),
++		langErr("1:1: `for foo [in words]` must be followed by `do`", langBashLike|LangPOSIX|langKshLike),
+ 	),
+ 	errCase(
+ 		"for i in 1 2 3;",
+-		langErr("1:1: `for foo [in words]` must be followed by `do`"),
++		langErr("1:1: `for foo [in words]` must be followed by `do`", langBashLike|LangPOSIX|langKshLike),
+ 	),
+ 	errCase(
+ 		"for i in 1 2 &",
+-		langErr("1:1: `for foo [in words]` must be followed by `do`"),
++		langErr("1:1: `for foo [in words]` must be followed by `do`", langBashLike|LangPOSIX|langKshLike),
++		langErr("1:1: `for foo in words` must be followed by `;` or a newline", LangZsh),
+ 	),
+ 	errCase(
+ 		"for i in 1 2 (",
+@@ -1151,15 +1152,15 @@
+ 	),
+ 	errCase(
+ 		"select i",
+-		langErr("1:1: `select foo` must be followed by `in`, `do`, `;`, or a newline", LangBash|LangMirBSDKorn|LangZsh),
++		langErr("1:1: `select foo` must be followed by `in`, `do`, `;`, or a newline", LangBash|LangMirBSDKorn),
+ 	),
+ 	errCase(
+ 		"select i in;",
+-		langErr("1:1: `select foo [in words]` must be followed by `do`", LangBash|LangMirBSDKorn|LangZsh),
++		langErr("1:1: `select foo [in words]` must be followed by `do`", LangBash|LangMirBSDKorn),
+ 	),
+ 	errCase(
+ 		"select i in 1 2 3;",
+-		langErr("1:1: `select foo [in words]` must be followed by `do`", LangBash|LangMirBSDKorn|LangZsh),
++		langErr("1:1: `select foo [in words]` must be followed by `do`", LangBash|LangMirBSDKorn),
+ 	),
+ 	errCase(
+ 		"select i in 1 2 3; do echo $i;",
+@@ -1175,7 +1176,72 @@
+ 	),
+ 	errCase(
+ 		"select in 1 2 3; do echo $i; done",
+-		langErr("1:1: `select foo` must be followed by `in`, `do`, `;`, or a newline", LangBash|LangMirBSDKorn|LangZsh),
++		langErr("1:1: `select foo` must be followed by `in`, `do`, `;`, or a newline", LangBash|LangMirBSDKorn),
++		langErr("1:18: `do` can only be used in a loop", LangZsh),
++	),
++	errCase(
++		"for i in 1",
++		langErr("1:1: `for foo in words` must be followed by `;` or a newline", LangZsh),
++	),
++	errCase(
++		"select i in 1",
++		langErr("1:1: `select foo in words` must be followed by `;` or a newline", LangZsh),
++	),
++	errCase(
++		"echo $(for i in 1)",
++		langErr("1:8: `for foo in words` must be followed by `;` or a newline", LangZsh),
++	),
++	errCase(
++		"case a in b) for i in 1;; esac",
++		langErr("1:14: `for foo in words` must be followed by `;` or a newline", LangZsh),
++	),
++	errCase(
++		"repeat 2 &",
++		langErr("1:10: `&` cannot follow a loop with an empty body", LangZsh),
++	),
++	errCase(
++		"{ for i (1) & }",
++		langErr("1:13: `&` cannot follow a loop with an empty body", LangZsh),
++	),
++	errCase(
++		"for ((;;)) &!",
++		langErr("1:12: `&!` cannot follow a loop with an empty body", LangZsh),
++	),
++	errCase(
++		"for i in 1; &|",
++		langErr("1:13: `&|` cannot follow a loop with an empty body", LangZsh),
++	),
++	errCase(
++		"for i &",
++		langErr("1:7: `&` cannot follow a loop with an empty body", LangZsh),
++	),
++	errCase(
++		"while a; b; done",
++		langErr("1:13: `done` can only be used to end a loop", LangZsh),
++	),
++	errCase(
++		"for i in 1; done",
++		langErr("1:13: `done` can only be used to end a loop", LangZsh),
++	),
++	errCase(
++		"while a; then",
++		langErr("1:10: `then` can only be used in an `if`", LangZsh),
++	),
++	errCase(
++		"for i fi",
++		langErr("1:7: `fi` can only be used to end an `if`", LangZsh),
++	),
++	errCase(
++		"for i }",
++		langErr("1:7: `}` can only be used to close a block", LangZsh),
++	),
++	errCase(
++		"end",
++		langErr("1:1: `end` can only be used to end a `foreach`", LangZsh),
++	),
++	errCase(
++		"while a; b; end",
++		langErr("1:13: `end` can only be used to end a `foreach`", LangZsh),
+ 	),
+ 	errCase(
+ 		"echo foo &\n;",
+@@ -2852,6 +2918,30 @@
+ 	f, err = p.Parse(strings.NewReader("case x { a) b ;; }"), "")
+ 	qt.Assert(t, qt.IsNil(err))
+ 	qt.Check(t, qt.Equals(f.Stmts[0].Cmd.(*CaseClause).End().Offset(), uint(18)))
++
++	// zsh's short forms of loops with an empty body end with their header.
++	p = NewParser(Variant(LangZsh))
++	for _, tc := range []struct {
++		in  string
++		end uint
++	}{
++		{"{ while a; b; }", 13},
++		{"{ until }", 7},
++		{"for i in a b;", 12},
++		{"for i (a b)", 11},
++		{"for i j", 7},
++		{"for ((;;))", 10},
++		{"repeat 2", 8},
++		{"select i in a;", 13},
++	} {
++		f, err = p.Parse(strings.NewReader(tc.in), "")
++		qt.Assert(t, qt.IsNil(err), qt.Commentf("input: %q", tc.in))
++		cmd := f.Stmts[0].Cmd
++		if b, ok := cmd.(*Block); ok {
++			cmd = b.Stmts[0].Cmd
++		}
++		qt.Check(t, qt.Equals(cmd.End().Offset(), tc.end), qt.Commentf("input: %q", tc.in))
++	}
+ }
+ 
+ func TestParseRecoverErrorsAfterAssignment(t *testing.T) {

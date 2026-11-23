@@ -73,6 +73,7 @@ reproducer so that it can be sent upstream as it is.
 | 0041 | syntax: a here-document becomes pending only once its word is parsed, so a word that crosses a newline (`<<$A[` and a newline, with zsh) is no longer read as a here-document with a nil word, which panicked | — |
 | 0042 | syntax: statements, parameter expansions, double-quoted strings and assignments come from chunks, and a statement list collects on a stack and copies to its exact size, so a large script costs far fewer allocations for the same tree | — |
 | 0043 | zsh: the short form of `if` with an empty body, which a token closing an enclosing construct ends (`{ if a; b; }`, an `if` without `then` inside an `else` closed by its `fi`), as with `zsh -n`, instead of failing at that token; an `else` right after a short branch is still an error, as is an empty body ended by the end of a command or process substitution (`$(if a)`), as in zsh | [mvdan/sh#120](https://github.com/mvdan/sh/issues/120) |
+| 0044 | zsh: the short forms of `while`, `until`, `for`, `select` and `repeat` with an empty body, which whatever cannot start a command ends, the end of the input or of a substitution included (`{ while a; b; }`, `for i in 1;`, `repeat 2`, `$(for i (1 2))`), with any number of separators after a loop header, as with `zsh -n`; words after `in` without a separator after them, an empty body followed by `&`, `&!` or `&|`, and `end` outside a `foreach` are errors, as in zsh | [mvdan/sh#120](https://github.com/mvdan/sh/issues/120) |
 
 ## Tests
 

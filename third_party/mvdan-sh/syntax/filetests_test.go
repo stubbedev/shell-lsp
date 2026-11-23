@@ -1656,6 +1656,306 @@ var fileTests = []fileTestCase{
 		})), LangZsh),
 	),
 	fileTest(
+		[]string{
+			"{ while a; b; }",
+			"{ while a; b\n}",
+		},
+		printsAs("{ while\n\ta\n\tb\ndo; done; }"),
+		langFile(block(stmt(&WhileClause{
+			Short: true,
+			Cond:  litStmts("a", "b"),
+		})), LangZsh),
+	),
+	fileTest(
+		[]string{
+			"while false; print x",
+			"while false\nprint x\n",
+		},
+		printsAs("while\n\tfalse\n\tprint x\ndo; done"),
+		langFile(&WhileClause{
+			Short: true,
+			Cond:  []*Stmt{litStmt("false"), litStmt("print", "x")},
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"( until a; b )"},
+		printsAs("(until\n\ta\n\tb\ndo; done)"),
+		langFile(subshell(stmt(&WhileClause{
+			Until: true,
+			Short: true,
+			Cond:  litStmts("a", "b"),
+		})), LangZsh),
+	),
+	fileTest(
+		[]string{"{ while (( a )) }"},
+		printsAs("{ while ((a)); do; done; }"),
+		langFile(block(stmt(&WhileClause{
+			Short: true,
+			Cond:  stmts(arithmCmd(litWord("a"))),
+		})), LangZsh),
+	),
+	fileTest(
+		[]string{"{ until }"},
+		printsAs("{ until; do; done; }"),
+		langFile(block(stmt(&WhileClause{Until: true, Short: true})), LangZsh),
+	),
+	fileTest(
+		[]string{
+			"echo $(while a)",
+			"echo `while a`",
+		},
+		printsAs("echo $(while a; do; done)"),
+		langFile(call(litWord("echo"), word(&CmdSubst{
+			Stmts: stmts(&WhileClause{
+				Short: true,
+				Cond:  litStmts("a"),
+			}),
+		})), LangZsh),
+	),
+	fileTest(
+		[]string{"case a in b) while c;; esac"},
+		printsAs("case a in b) while c; do; done ;; esac"),
+		langFile(&CaseClause{
+			Word: litWord("a"),
+			Items: []*CaseItem{{
+				Op:       Break,
+				Patterns: litWords("b"),
+				Stmts: stmts(&WhileClause{
+					Short: true,
+					Cond:  litStmts("c"),
+				}),
+			}},
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"if a; then while b; c; else d; fi"},
+		printsAs("if a; then while\n\tb\n\tc\ndo; done; else d; fi"),
+		langFile(&IfClause{
+			Cond: litStmts("a"),
+			Then: stmts(&WhileClause{
+				Short: true,
+				Cond:  litStmts("b", "c"),
+			}),
+			Else: &IfClause{Then: litStmts("d")},
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{
+			"for i in 1 2;",
+			"for i in 1 2\n",
+		},
+		printsAs("for i in 1 2; do; done"),
+		langFile(&ForClause{
+			Short: true,
+			Loop:  &WordIter{Name: lit("i"), Items: litWords("1", "2")},
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"for i (1 2)"},
+		printsAs("for i in 1 2; do; done"),
+		langFile(&ForClause{
+			Short: true,
+			Loop:  &WordIter{Name: lit("i"), Items: litWords("1", "2")},
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{
+			"{ for i (1 2) }",
+			"{ for i in 1 2; }",
+			"{ for i in 1 2\n}",
+		},
+		printsAs("{ for i in 1 2; do; done; }"),
+		langFile(block(stmt(&ForClause{
+			Short: true,
+			Loop:  &WordIter{Name: lit("i"), Items: litWords("1", "2")},
+		})), LangZsh),
+	),
+	fileTest(
+		[]string{
+			"echo $(for i (1 2))",
+			"echo $(for i in 1 2;)",
+		},
+		printsAs("echo $(for i in 1 2; do; done)"),
+		langFile(call(litWord("echo"), word(&CmdSubst{
+			Stmts: stmts(&ForClause{
+				Short: true,
+				Loop:  &WordIter{Name: lit("i"), Items: litWords("1", "2")},
+			}),
+		})), LangZsh),
+	),
+	fileTest(
+		[]string{"case a in b) for i (1 2);; esac"},
+		printsAs("case a in b) for i in 1 2; do; done ;; esac"),
+		langFile(&CaseClause{
+			Word: litWord("a"),
+			Items: []*CaseItem{{
+				Op:       Break,
+				Patterns: litWords("b"),
+				Stmts: stmts(&ForClause{
+					Short: true,
+					Loop:  &WordIter{Name: lit("i"), Items: litWords("1", "2")},
+				}),
+			}},
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"for ((;;))"},
+		printsAs("for (( ; ; )); do; done"),
+		langFile(&ForClause{
+			Short: true,
+			Loop:  &CStyleLoop{},
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{
+			"{ for ((;;)) }",
+			"{ for ((;;)); }",
+		},
+		printsAs("{ for (( ; ; )); do; done; }"),
+		langFile(block(stmt(&ForClause{
+			Short: true,
+			Loop:  &CStyleLoop{},
+		})), LangZsh),
+	),
+	fileTest(
+		[]string{
+			"for i",
+			"for i;",
+		},
+		printsAs("for i; do; done"),
+		langFile(&ForClause{
+			Short: true,
+			Loop:  &WordIter{Name: lit("i")},
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{
+			"{ for i }",
+			"{ for i; }",
+		},
+		printsAs("{ for i; do; done; }"),
+		langFile(block(stmt(&ForClause{
+			Short: true,
+			Loop:  &WordIter{Name: lit("i")},
+		})), LangZsh),
+	),
+	fileTest(
+		[]string{"for i j k"},
+		printsAs("for i j k; do; done"),
+		langFile(&ForClause{
+			Short: true,
+			Loop:  &WordIter{Names: lits("i", "j", "k")},
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{
+			"for i in a; ; ; print $i",
+			"for i in a\n;\n\nprint $i",
+		},
+		printsAs("for i in a; do print $i; done"),
+		langFile(&ForClause{
+			Short: true,
+			Loop:  &WordIter{Name: lit("i"), Items: litWords("a")},
+			Do:    stmts(call(litWord("print"), word(litParamExp("i")))),
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{
+			"{ select i in a; }",
+			"{ select i (a) }",
+		},
+		printsAs("{ select i in a; do; done; }"),
+		langFile(block(stmt(&ForClause{
+			Select: true,
+			Short:  true,
+			Loop:   &WordIter{Name: lit("i"), Items: litWords("a")},
+		})), LangZsh),
+	),
+	fileTest(
+		[]string{
+			"repeat 2",
+			"repeat 2;",
+			"repeat 2\n",
+		},
+		printsAs("repeat 2; do; done"),
+		langFile(&RepeatClause{
+			Short: true,
+			Count: litWord("2"),
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{
+			"echo $(repeat 2)",
+			"echo `repeat 2`",
+		},
+		printsAs("echo $(repeat 2; do; done)"),
+		langFile(call(litWord("echo"), word(&CmdSubst{
+			Stmts: stmts(&RepeatClause{
+				Short: true,
+				Count: litWord("2"),
+			}),
+		})), LangZsh),
+	),
+	fileTest(
+		[]string{
+			"{ repeat 2 }",
+			"{ repeat 2; ; }",
+		},
+		printsAs("{ repeat 2; do; done; }"),
+		langFile(block(stmt(&RepeatClause{
+			Short: true,
+			Count: litWord("2"),
+		})), LangZsh),
+	),
+	fileTest(
+		[]string{"repeat 2 | a"},
+		printsAs("repeat 2; do; done | a"),
+		langFile(&BinaryCmd{
+			Op: Pipe,
+			X: stmt(&RepeatClause{
+				Short: true,
+				Count: litWord("2"),
+			}),
+			Y: litStmt("a"),
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"foreach i (1) while a; b; end"},
+		printsAs("for i in 1; do while\n\ta\n\tb\ndo; done; done"),
+		langFile(&ForClause{
+			Foreach: true,
+			Loop:    &WordIter{Name: lit("i"), Items: litWords("1")},
+			Do: stmts(&WhileClause{
+				Short: true,
+				Cond:  litStmts("a", "b"),
+			}),
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"foreach i (1); repeat 2; end"},
+		printsAs("for i in 1; do repeat 2; do; done; done"),
+		langFile(&ForClause{
+			Foreach: true,
+			Loop:    &WordIter{Name: lit("i"), Items: litWords("1")},
+			Do: stmts(&RepeatClause{
+				Short: true,
+				Count: litWord("2"),
+			}),
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"foreach i (1); if a; b; end"},
+		printsAs("for i in 1; do if\n\ta\n\tb\nthen; fi; done"),
+		langFile(&ForClause{
+			Foreach: true,
+			Loop:    &WordIter{Name: lit("i"), Items: litWords("1")},
+			Do: stmts(&IfClause{
+				Short: true,
+				Cond:  litStmts("a", "b"),
+			}),
+		}, LangZsh),
+	),
+	fileTest(
 		[]string{"if a; then foo; elif [[ b ]] { bar }\n"},
 		printsAs("if a; then foo; elif [[ b ]]; then bar; fi"),
 		langFile(&IfClause{

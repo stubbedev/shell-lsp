@@ -2914,6 +2914,8 @@ func (p *Parser) closingRsrv() bool {
 	switch p.val {
 	case "}", "then", "elif", "else", "fi", "do", "done", "esac":
 		return true
+	case "end":
+		return p.lang.in(LangZsh)
 	}
 	return false
 }
@@ -2980,6 +2982,10 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
 			p.curErr(`%#q can only be used to end a loop`, p.val)
 		case "esac":
 			p.curErr("%#q can only be used to end a `case`", p.val)
+		case "end":
+			if p.lang.in(LangZsh) {
+				p.curErr("%#q can only be used to end a `foreach`", p.val)
+			}
 		case "!":
 			if !s.Negated {
 				p.curErr(`%#q can only be used in full statements`, exclMark)
@@ -3294,16 +3300,7 @@ func (p *Parser) bracedBody(n Node, rsrv string) ([]*Stmt, []Comment, Pos) {
 // which forms the body of one of zsh's short forms of complex commands,
 // such as `if [[ cond ]] body` or `for name (words) body`.
 func (p *Parser) shortBodyStart() bool {
-	if p.stopToken() {
-		return false
-	}
-	if p.tok == _LitWord {
-		switch p.val {
-		case "then", "elif", "else", "fi", "do", "done", "esac", "{", "}":
-			return false
-		}
-	}
-	return true
+	return !p.stopToken() && !p.closingRsrv() && !(p.tok == _LitWord && p.val == "{")
 }
 
 // shortBody parses the single sublist which forms the body of one of zsh's
@@ -3329,7 +3326,9 @@ type loopBody struct {
 }
 
 // loopBody parses the body of a loop clause: "do list done", "{ list }" with
-// braceLangs, or with [LangZsh] a single sublist. A non-empty braceFeature
+// braceLangs, or with [LangZsh] a single sublist, which may be empty, so that
+// whatever ends the header, such as the end of the input or a token closing
+// an enclosing construct, also ends the loop. A non-empty braceFeature
 // names braces as a feature to report in other language variants.
 // The comments before the body are moved to hoist if it is non-nil.
 // The node, its reserved word, the description of its header and the
@@ -3355,10 +3354,15 @@ func (p *Parser) loopBody(n Node, rsrv, header string, rsrvPos Pos, braceLangs L
 			return b
 		}
 	}
-	if p.lang.in(LangZsh) && p.shortBodyStart() {
+	if p.lang.in(LangZsh) && !(p.tok == _LitWord && p.val == "do") {
 		b.short = true
 		hoistComments()
-		b.stmts = p.shortBody()
+		switch {
+		case p.shortBodyStart():
+			b.stmts = p.shortBody()
+		case p.tok == and || p.tok == andPipe || p.tok == andBang:
+			p.curErr("%#q cannot follow a loop with an empty body", p.tok)
+		}
 		return b
 	}
 	b.doPos = p.followRsrv(rsrvPos, header, "do")
@@ -3389,8 +3393,7 @@ func (p *Parser) repeatClause(s *Stmt) {
 	if rc.Count = p.getWord(); rc.Count == nil {
 		p.followErr(rc.RepeatPos, "repeat", noQuote("a word"))
 	}
-	p.got(semicolon)
-	p.got(_Newl)
+	p.headerSeps()
 	b := p.loopBody(rc, "repeat", "repeat word", rc.RepeatPos, LangZsh, "", nil)
 	rc.DoPos, rc.DonePos, rc.Braces, rc.Short, rc.Do, rc.DoLast = b.doPos, b.donePos, b.braces, b.short, b.stmts, b.last
 	s.Cmd = rc
@@ -3437,7 +3440,7 @@ func (p *Parser) loop(fpos Pos) Loop {
 			// ksh93 wants `do` or `{` on the same line as the `;`.
 			p.checkLang(p.pos, langBashLike|LangZsh, "a newline after `));`")
 		}
-		p.got(_Newl)
+		p.headerSeps()
 		return cl
 	}
 	return p.wordIter("for", fpos)
@@ -3457,8 +3460,8 @@ func (p *Parser) wordIter(ftok string, fpos Pos) *WordIter {
 			wi.Names = append(wi.Names, p.getLit())
 		}
 	}
-	if p.got(semicolon) {
-		p.got(_Newl)
+	if p.tok == semicolon {
+		p.headerSeps()
 		return wi
 	}
 	newline := p.got(_Newl)
@@ -3471,8 +3474,11 @@ func (p *Parser) wordIter(ftok string, fpos Pos) *WordIter {
 				wi.Items = append(wi.Items, w)
 			}
 		}
-		p.got(semicolon)
-		p.got(_Newl)
+		if !p.headerSeps() && p.lang.in(LangZsh) {
+			// zsh needs a separator to end the words, even before
+			// the end of the input or a token closing a construct.
+			p.followErr(fpos, ftok+" foo in words", noQuote("`;` or a newline"))
+		}
 	} else if p.lang.in(LangZsh) && p.tok == leftParen {
 		wi.Lparen = p.pos
 		p.next()
@@ -3489,11 +3495,11 @@ func (p *Parser) wordIter(ftok string, fpos Pos) *WordIter {
 			wi.Items = append(wi.Items, w)
 		}
 		wi.Rparen = p.matched(wi.Lparen, leftParen, rightParen)
-		p.got(semicolon)
-		p.got(_Newl)
+		p.headerSeps()
 	} else if p.tok == _LitWord && p.val == "do" {
-	} else if p.lang.in(LangZsh) && newline {
-		// With zsh, a body other than do/done may follow the newline.
+	} else if p.lang.in(LangZsh) && (newline || ftok != "foreach") {
+		// With zsh, the short form of the body may follow the names
+		// directly, and it may be empty, as in `{ for i }`.
 	} else {
 		p.followErr(fpos, ftok+" foo", noQuote("`in`, `do`, `;`, or a newline"))
 	}
@@ -3503,14 +3509,26 @@ func (p *Parser) wordIter(ftok string, fpos Pos) *WordIter {
 // iterName reports whether the current token is one more name for a zsh
 // loop to assign words to, as opposed to what follows the names.
 func (p *Parser) iterName() bool {
-	if p.tok != _LitWord {
+	if p.tok != _LitWord || p.closingRsrv() {
 		return false
 	}
 	switch p.val {
-	case "in", "do", "{":
+	case "in", "{":
 		return false
 	}
 	return true
+}
+
+// headerSeps consumes the separators which end the header of a loop, which
+// are a `;` and a newline, or with [LangZsh] any number of either, and
+// reports whether there were any.
+func (p *Parser) headerSeps() bool {
+	semi := p.got(semicolon)
+	got := p.got(_Newl) || semi
+	for p.lang.in(LangZsh) && (p.got(semicolon) || p.got(_Newl)) {
+		got = true
+	}
+	return got
 }
 
 func (p *Parser) selectClause(s *Stmt) {

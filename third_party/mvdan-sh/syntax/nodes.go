@@ -474,20 +474,26 @@ func (c *IfClause) End() Pos {
 	case last.Braces:
 		return posAddCol(last.Rbrace, len("}"))
 	case last.Short:
-		// The short form may have an empty body, and zsh even allows an
-		// empty condition, as in `{ if }`.
+		rsrv := "if"
+		if last != c {
+			rsrv = "elif"
+		}
 		if end := stmtLastEnd(last.Then); end.IsValid() {
 			return end
 		}
-		if end := stmtLastEnd(last.Cond); end.IsValid() {
-			return end
-		}
-		if last == c {
-			return posAddCol(last.Position, len("if"))
-		}
-		return posAddCol(last.Position, len("elif"))
+		return condEnd(last.Cond, last.Position, rsrv)
 	}
 	return posAddCol(c.FiPos, len("fi"))
+}
+
+// condEnd returns the end position of the condition of an `if`, `elif`,
+// `while` or `until`, which with zsh may be empty, as in `{ if }`, in which
+// case it ends with the reserved word rsrv at rsrvPos.
+func condEnd(cond []*Stmt, rsrvPos Pos, rsrv string) Pos {
+	if end := stmtLastEnd(cond); end.IsValid() {
+		return end
+	}
+	return posAddCol(rsrvPos, len(rsrv))
 }
 
 // WhileClause represents a while or an until clause.
@@ -495,7 +501,7 @@ type WhileClause struct {
 	WhilePos, DoPos, DonePos Pos
 	Until                    bool
 	Braces                   bool // zsh's form with { } instead of do/done
-	Short                    bool // zsh's short form, where Do is a single sublist
+	Short                    bool // zsh's short form, where Do is a single sublist or empty
 
 	Cond     []*Stmt
 	CondLast []Comment
@@ -504,17 +510,28 @@ type WhileClause struct {
 }
 
 func (w *WhileClause) Pos() Pos { return w.WhilePos }
-func (w *WhileClause) End() Pos { return loopEnd(w.DonePos, w.Braces, w.Short, w.Do) }
+func (w *WhileClause) End() Pos {
+	rsrv := "while"
+	if w.Until {
+		rsrv = "until"
+	}
+	return loopEnd(w.DonePos, w.Braces, w.Short, w.Do, func() Pos {
+		return condEnd(w.Cond, w.WhilePos, rsrv)
+	})
+}
 
 // loopEnd returns the end position of a loop body which ends with "done" at
 // donePos, or with "}" there if braces is set, or which is a single sublist
-// if short is set.
-func loopEnd(donePos Pos, braces, short bool, do []*Stmt) Pos {
+// or empty if short is set, in which case the loop ends with its header,
+// whose end headerEnd returns.
+func loopEnd(donePos Pos, braces, short bool, do []*Stmt, headerEnd func() Pos) Pos {
 	switch {
 	case braces:
 		return posAddCol(donePos, len("}"))
-	case short:
+	case short && len(do) > 0:
 		return stmtLastEnd(do)
+	case short:
+		return headerEnd()
 	}
 	return posAddCol(donePos, len("done"))
 }
@@ -523,12 +540,13 @@ func loopEnd(donePos Pos, braces, short bool, do []*Stmt) Pos {
 // Bash, [LangMirBSDKorn], and [LangZsh].
 //
 // With [LangZsh], the body may also be a single sublist without do/done,
-// and the loop may be written as `foreach name ... (word ...) list end`.
+// which may be empty, as in `{ for i in a b; }`, and the loop may be
+// written as `foreach name ... (word ...) list end`.
 type ForClause struct {
 	ForPos, DoPos, DonePos Pos // DonePos is the position of "end" with Foreach
 	Select                 bool
 	Braces                 bool // deprecated form with { } instead of do/done
-	Short                  bool // zsh's short form, where Do is a single sublist
+	Short                  bool // zsh's short form, where Do is a single sublist or empty
 	Foreach                bool // zsh's foreach form, ending with "end"
 	Loop                   Loop
 
@@ -541,7 +559,7 @@ func (f *ForClause) End() Pos {
 	if f.Foreach {
 		return posAddCol(f.DonePos, len("end"))
 	}
-	return loopEnd(f.DonePos, f.Braces, f.Short, f.Do)
+	return loopEnd(f.DonePos, f.Braces, f.Short, f.Do, f.Loop.End)
 }
 
 // RepeatClause represents a zsh repeat loop, which runs its body as many
@@ -551,7 +569,7 @@ func (f *ForClause) End() Pos {
 type RepeatClause struct {
 	RepeatPos, DoPos, DonePos Pos
 	Braces                    bool // form with { } instead of do/done
-	Short                     bool // short form, where Do is a single sublist
+	Short                     bool // short form, where Do is a single sublist or empty
 
 	Count  *Word
 	Do     []*Stmt
@@ -559,7 +577,9 @@ type RepeatClause struct {
 }
 
 func (r *RepeatClause) Pos() Pos { return r.RepeatPos }
-func (r *RepeatClause) End() Pos { return loopEnd(r.DonePos, r.Braces, r.Short, r.Do) }
+func (r *RepeatClause) End() Pos {
+	return loopEnd(r.DonePos, r.Braces, r.Short, r.Do, r.Count.End)
+}
 
 // Loop holds either [*WordIter] or [*CStyleLoop].
 type Loop interface {
