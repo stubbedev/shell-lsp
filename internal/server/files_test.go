@@ -49,7 +49,7 @@ func TestConfigurationPullPerFolder(t *testing.T) {
 		t.Fatal(err)
 	}
 	registered := c.answerServerRequest("client/registerCapability")
-	if !strings.Contains(string(registered), `"workspace/didChangeWatchedFiles"`) || !strings.Contains(string(registered), `**/*.{sh,bash,zsh,ksh,dash,bats,`) || !strings.Contains(string(registered), `**/{Makefile,`) {
+	if !strings.Contains(string(registered), `"workspace/didChangeWatchedFiles"`) || !strings.Contains(string(registered), `**/*.{bash,bats,zsh,zsh-theme,dash,sh,ksh,`) || !strings.Contains(string(registered), `**/{Makefile,`) {
 		t.Errorf("registration = %s", registered)
 	}
 	if !strings.Contains(string(registered), `{"id":"shell-lsp/configuration","method":"workspace/didChangeConfiguration","registerOptions":{"section":"shellLsp"}}`) {
