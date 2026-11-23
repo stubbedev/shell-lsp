@@ -75,8 +75,13 @@ func (r Repository) looseRef(read ReadText, name string) (looseRef, bool, error)
 	return refFile(read, path, info)
 }
 
-func linkedRef(read ReadText, path string) (looseRef, bool, error) {
+func linkTarget(path string) (string, error) {
 	target, err := os.Readlink(path)
+	return filepath.ToSlash(target), err
+}
+
+func linkedRef(read ReadText, path string) (looseRef, bool, error) {
+	target, err := linkTarget(path)
 	if err != nil {
 		return looseRef{}, false, fmt.Errorf("reading the ref %s: %w", path, err)
 	}

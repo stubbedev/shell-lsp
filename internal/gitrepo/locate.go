@@ -376,7 +376,7 @@ func validHead(path string, p probe) bool {
 		return false
 	}
 	if info.Mode()&fs.ModeSymlink != 0 {
-		target, err := os.Readlink(path)
+		target, err := linkTarget(path)
 		return err == nil && strings.HasPrefix(target, refsPrefix)
 	}
 	f, _, err := regularfile.Open(path)
