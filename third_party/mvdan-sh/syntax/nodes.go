@@ -607,10 +607,15 @@ type WordIter struct {
 }
 
 func (w *WordIter) Pos() Pos {
-	if w.Name != nil {
+	switch {
+	case w.Name != nil:
 		return w.Name.Pos()
+	case len(w.Names) > 0:
+		return w.Names[0].Pos()
 	}
-	return w.Names[0].Pos()
+	// Only a parse error leaves an iteration without a name, such as
+	// in "for ;", and nothing else of the header follows it then.
+	return Pos{}
 }
 
 func (w *WordIter) End() Pos {
@@ -620,11 +625,14 @@ func (w *WordIter) End() Pos {
 	if len(w.Items) > 0 {
 		return wordLastEnd(w.Items)
 	}
-	name := w.Name
-	if name == nil {
-		name = w.Names[len(w.Names)-1]
+	var nameEnd Pos
+	switch {
+	case w.Name != nil:
+		nameEnd = w.Name.End()
+	case len(w.Names) > 0:
+		nameEnd = w.Names[len(w.Names)-1].End()
 	}
-	return posMax(name.End(), posAddCol(w.InPos, 2))
+	return posMax(nameEnd, posAddCol(w.InPos, 2))
 }
 
 // CStyleLoop represents the behavior of a for clause similar to the C

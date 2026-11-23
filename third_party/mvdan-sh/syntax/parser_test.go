@@ -3177,6 +3177,54 @@ func TestParseRecoverErrors(t *testing.T) {
 	}
 }
 
+func TestParseBrokenLoopHeaderPositions(t *testing.T) {
+	t.Parallel()
+
+	// Only a parse error leaves an iteration without a name, and asking
+	// for its position must not panic.
+	qt.Check(t, qt.IsFalse((&WordIter{}).Pos().IsValid()))
+	qt.Check(t, qt.IsFalse((&WordIter{}).End().IsValid()))
+
+	inputs := []string{
+		"for ; do :; done",
+		"for",
+		"for $x in a; do :; done",
+		"for 'i' in a; do :; done",
+		"for (a) do :; done",
+		"for i (",
+		"for i in $(",
+		"for i in a b do",
+		"for i j",
+		"for (( ; do :; done",
+		"select ; do :; done",
+		"select",
+		"select i in",
+		"foreach ; end",
+		"foreach i (",
+		"time for ;",
+		"a | for ;",
+		"a && for ;",
+		"echo $(for ;)",
+		"{ for ; }",
+		"if for ; then :; fi",
+	}
+	for lang := range langResolvedVariants.bits() {
+		for _, opts := range [][]ParserOption{nil, {RecoverErrors(3)}} {
+			parser := NewParser(append(opts, Variant(lang), KeepComments(true))...)
+			for _, src := range inputs {
+				f, _ := parser.Parse(strings.NewReader(src), "")
+				Walk(f, func(node Node) bool {
+					if node != nil {
+						node.Pos()
+						node.End()
+					}
+					return true
+				})
+			}
+		}
+	}
+}
+
 func countRecoveredPositions(x reflect.Value) int {
 	switch x.Kind() {
 	case reflect.Interface:

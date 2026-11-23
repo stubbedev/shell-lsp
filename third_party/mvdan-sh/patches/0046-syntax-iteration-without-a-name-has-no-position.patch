@@ -1,0 +1,114 @@
+syntax: an iteration without a name has no position
+
+WordIter.Pos returned Names[0].Pos() whenever Name was nil, and End
+indexed the last element of Names, without checking that there was
+one. A parse error right after "for" or "select", as in "for ;" or
+"for $x in a", leaves a WordIter with neither, and asking it for its
+position panicked with an index out of range. The parser drops the
+statement holding such a loop as it stops at the error, so no parse
+has been found to hand one out, but callers that keep partial trees
+should not depend on that. Such an iteration now reports an invalid
+position, as a case item without patterns does.
+
+Reproducer, before this change:
+
+	(&syntax.WordIter{}).Pos() // panics
+
+diff --git a/syntax/nodes.go b/syntax/nodes.go
+--- a/syntax/nodes.go
++++ b/syntax/nodes.go
+@@ -607,10 +607,15 @@
+ }
+ 
+ func (w *WordIter) Pos() Pos {
+-	if w.Name != nil {
++	switch {
++	case w.Name != nil:
+ 		return w.Name.Pos()
++	case len(w.Names) > 0:
++		return w.Names[0].Pos()
+ 	}
+-	return w.Names[0].Pos()
++	// Only a parse error leaves an iteration without a name, such as
++	// in "for ;", and nothing else of the header follows it then.
++	return Pos{}
+ }
+ 
+ func (w *WordIter) End() Pos {
+@@ -620,11 +625,14 @@
+ 	if len(w.Items) > 0 {
+ 		return wordLastEnd(w.Items)
+ 	}
+-	name := w.Name
+-	if name == nil {
+-		name = w.Names[len(w.Names)-1]
++	var nameEnd Pos
++	switch {
++	case w.Name != nil:
++		nameEnd = w.Name.End()
++	case len(w.Names) > 0:
++		nameEnd = w.Names[len(w.Names)-1].End()
+ 	}
+-	return posMax(name.End(), posAddCol(w.InPos, 2))
++	return posMax(nameEnd, posAddCol(w.InPos, 2))
+ }
+ 
+ // CStyleLoop represents the behavior of a for clause similar to the C
+diff --git a/syntax/parser_test.go b/syntax/parser_test.go
+--- a/syntax/parser_test.go
++++ b/syntax/parser_test.go
+@@ -3159,6 +3159,54 @@
+ 	}
+ }
+ 
++func TestParseBrokenLoopHeaderPositions(t *testing.T) {
++	t.Parallel()
++
++	// Only a parse error leaves an iteration without a name, and asking
++	// for its position must not panic.
++	qt.Check(t, qt.IsFalse((&WordIter{}).Pos().IsValid()))
++	qt.Check(t, qt.IsFalse((&WordIter{}).End().IsValid()))
++
++	inputs := []string{
++		"for ; do :; done",
++		"for",
++		"for $x in a; do :; done",
++		"for 'i' in a; do :; done",
++		"for (a) do :; done",
++		"for i (",
++		"for i in $(",
++		"for i in a b do",
++		"for i j",
++		"for (( ; do :; done",
++		"select ; do :; done",
++		"select",
++		"select i in",
++		"foreach ; end",
++		"foreach i (",
++		"time for ;",
++		"a | for ;",
++		"a && for ;",
++		"echo $(for ;)",
++		"{ for ; }",
++		"if for ; then :; fi",
++	}
++	for lang := range langResolvedVariants.bits() {
++		for _, opts := range [][]ParserOption{nil, {RecoverErrors(3)}} {
++			parser := NewParser(append(opts, Variant(lang), KeepComments(true))...)
++			for _, src := range inputs {
++				f, _ := parser.Parse(strings.NewReader(src), "")
++				Walk(f, func(node Node) bool {
++					if node != nil {
++						node.Pos()
++						node.End()
++					}
++					return true
++				})
++			}
++		}
++	}
++}
++
+ func countRecoveredPositions(x reflect.Value) int {
+ 	switch x.Kind() {
+ 	case reflect.Interface:
