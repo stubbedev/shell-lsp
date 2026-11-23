@@ -119,6 +119,8 @@ func (r *Resolver) Watch(disk *diskwatch.Watcher) { r.files.Watch(disk) }
 
 func (r *Resolver) Invalidate(path string) { r.files.Invalidate(path) }
 
+func (r *Resolver) InvalidateAll() { r.files.InvalidateAll() }
+
 func (r *Resolver) ExcludedFor(path string) ([]lint.Code, error) {
 	cfg, found, err := r.files.Nearest(filepath.Dir(path), []string{FileName}, nil)
 	if err != nil || !found {

@@ -127,7 +127,11 @@ func watchedFilesRegistration() registration {
 
 func (s *Server) invalidateAll() {
 	s.workspace.InvalidateAll()
+	s.editorconfig.InvalidateAll()
+	s.shellcheckrc.InvalidateAll()
 	s.hadolint.InvalidateAll()
+	s.statix.InvalidateAll()
+	s.flakeLocks.InvalidateAll()
 }
 
 func (s *Server) handleFilesChanged(_ context.Context, _ lsp.FileOperationsParams) error {

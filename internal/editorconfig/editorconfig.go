@@ -140,3 +140,5 @@ func (r *Resolver) Properties(path string, languages []string) (Properties, erro
 func (r *Resolver) Invalidate(path string) {
 	r.files.Invalidate(path)
 }
+
+func (r *Resolver) InvalidateAll() { r.files.InvalidateAll() }

@@ -48,3 +48,5 @@ func (r *Resolver) Load(path string) (File, bool, error) {
 func (r *Resolver) Invalidate(path string) {
 	r.files.Invalidate(path)
 }
+
+func (r *Resolver) InvalidateAll() { r.files.InvalidateAll() }

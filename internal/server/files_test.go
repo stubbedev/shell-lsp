@@ -11,6 +11,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
+	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 )
@@ -201,5 +202,47 @@ func TestAFullInvalidationRereadsTheGitConfigurationOfBakeFiles(t *testing.T) {
 	}
 	if got := contexts(); !slices.Equal(got, []string{"generated"}) {
 		t.Errorf("bake contexts after a full invalidation = %v, want [generated]", got)
+	}
+}
+
+func TestAFullInvalidationRereadsEveryConfigurationFile(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	flake := filepath.Join(dir, "flake.nix")
+	const flakeText = "{ outputs = { self }: { }; }\n"
+	srv := New(jsonrpc.NewConn(nil, nil), "test", Process{Home: filepath.Join(dir, "home")})
+	for _, tt := range []struct {
+		file, broken, fixed string
+		load                func() error
+	}{
+		{".editorconfig", "not a property\n", "root = true\n", func() error {
+			_, err := srv.editorconfig.Properties(filepath.Join(dir, "x.sh"), nil)
+			return err
+		}},
+		{".shellcheckrc", "not a setting\n", "disable=SC2034\n", func() error {
+			_, _, err := srv.shellcheckrc.Nearest(dir)
+			return err
+		}},
+		{"statix.toml", "disabled = [\n", "disabled = []\n", func() error {
+			_, err := srv.statix.ExcludedFor(filepath.Join(dir, "x.nix"))
+			return err
+		}},
+		{"flake.lock", "{", `{"nodes": {"root": {}}, "root": "root", "version": 7}`, func() error {
+			_, err := srv.flakeLocks.FindingsFor(flake, flakeText, lint.CodeSet{})
+			return err
+		}},
+	} {
+		writeFiles(t, dir, map[string]string{tt.file: tt.broken})
+		if err := tt.load(); err == nil {
+			t.Fatalf("%s: a broken file loaded without an error", tt.file)
+		}
+		writeFiles(t, dir, map[string]string{tt.file: tt.fixed})
+		if err := srv.handleFilesChanged(t.Context(), lsp.FileOperationsParams{}); err != nil {
+			t.Fatal(err)
+		}
+		if err := tt.load(); err != nil {
+			t.Errorf("%s after it was fixed and a full invalidation: %v", tt.file, err)
+		}
 	}
 }
