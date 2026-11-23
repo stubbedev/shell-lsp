@@ -20,16 +20,24 @@ type expander struct {
 	at       int
 	known    bool
 	declared bool
+	literal  bool
 }
 
 func (f *File) evaluate(text string, env environment) (string, bool) {
-	e := &expander{text: text, escape: f.Escape, env: env, known: true}
-	out := e.word(func(byte) bool { return false })
-	return out, e.known
+	return f.run(&expander{env: env}, text)
 }
 
 func (f *File) evaluateDeclared(text string, env environment) (string, bool) {
-	e := &expander{text: text, escape: f.Escape, env: env, known: true, declared: true}
+	return f.run(&expander{env: env, declared: true}, text)
+}
+
+func (f *File) unquote(text string) string {
+	out, _ := f.run(&expander{literal: true}, text)
+	return out
+}
+
+func (f *File) run(e *expander, text string) (string, bool) {
+	e.text, e.escape, e.known = text, f.Escape, true
 	out := e.word(func(byte) bool { return false })
 	return out, e.known
 }
@@ -107,7 +115,7 @@ func (e *expander) lookup(name string) (string, bool) {
 
 func (e *expander) dollar() string {
 	e.at++
-	if !e.more() {
+	if !e.more() || e.literal {
 		return "$"
 	}
 	if e.text[e.at] != '{' {

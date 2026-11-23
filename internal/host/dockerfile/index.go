@@ -241,17 +241,21 @@ func (in *indexer) paths(instr *Instruction) {
 	if slices.ContainsFunc(instr.Flags, func(f Flag) bool { return f.Name.Text == "from" }) {
 		return
 	}
-	sources := instr.Args
+	sources, value := instr.Args, in.f.unquote
 	if instr.Form == FormJSON {
-		sources = instr.JSON
+		sources, value = instr.JSON, func(text string) string { return text }
 	}
 	if len(sources) < 2 {
 		return
 	}
 	for _, w := range sources[:len(sources)-1] {
-		if strings.HasPrefix(w.Text, "<<") || strings.Contains(w.Text, "://") || strings.ContainsAny(w.Text, "$*?[") {
+		if strings.HasPrefix(w.Text, "<<") {
 			continue
 		}
-		in.ix.Paths = append(in.ix.Paths, model.PathRef{Span: w.Span, Path: w.Text})
+		path := value(w.Text)
+		if strings.Contains(path, "://") || strings.ContainsAny(path, "$*?[") {
+			continue
+		}
+		in.ix.Paths = append(in.ix.Paths, model.PathRef{Span: w.Span, Path: path})
 	}
 }
