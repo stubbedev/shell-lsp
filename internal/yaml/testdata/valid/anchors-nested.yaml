@@ -1,0 +1,16 @@
+defaults: &defaults
+  image: alpine
+  tags: &tags
+    - a
+    - b
+copy: *defaults
+items:
+  - &item
+    name: one
+  - *item
+  - &key k: v
+flow: [&f {x: 1}, *f, &e , *e]
+again: {list: *tags, scalar: &s "quoted"}
+reuse: *s
+later: &tags [c]
+shadowed: *tags

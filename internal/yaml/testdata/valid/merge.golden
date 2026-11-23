@@ -1,0 +1,1 @@
+{"x-common":{"restart":"!!str always","environment":{"A":"!!str 1"}},"x-extra":{"init":"!!bool true"},"services":{"web":{"init":"!!bool true","restart":"!!str always","environment":{"A":"!!str 1"},"image":"!!str nginx"},"db":{"image":"!!str postgres","restart":"!!str always","environment":{"A":"!!str 1"}},"flow":{"init":"!!bool true","image":"!!str redis"}}}

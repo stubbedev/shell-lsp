@@ -90,10 +90,14 @@ func (e *Error) Error() string {
 	return fmt.Sprintf("line %d, column %d: %s", e.Line, e.Column, e.Message)
 }
 
-const byteOrderMark = "\uFEFF"
+const (
+	byteOrderMark = "\uFEFF"
+	mergeKey      = "<<"
+	maxExpansion  = 1 << 16
+)
 
 func Parse(text string) (*Node, error) {
-	p := &parser{text: strings.TrimPrefix(text, byteOrderMark)}
+	p := &parser{text: strings.TrimPrefix(text, byteOrderMark), anchors: map[string]anchor{}}
 	for i := range len(p.text) {
 		if p.text[i] == '\n' {
 			p.lineStarts = append(p.lineStarts, i+1)
@@ -105,6 +109,20 @@ func Parse(text string) (*Node, error) {
 type parser struct {
 	text       string
 	lineStarts []int
+	anchors    map[string]anchor
+	nodes      int
+	expanded   int
+}
+
+type anchor struct {
+	node *Node
+	size int
+}
+
+func (p *parser) node(kind Kind, pos int) *Node {
+	p.nodes++
+	line, column := p.position(pos)
+	return &Node{Kind: kind, Line: line, Column: column}
 }
 
 func (p *parser) position(pos int) (int, int) {
@@ -228,6 +246,15 @@ func (p *parser) indicator(pos int) bool {
 }
 
 func (p *parser) block(pos, parent int) (*Node, int, error) {
+	if p.at(pos) == '&' {
+		name, end, err := p.name(pos)
+		if err != nil {
+			return nil, 0, err
+		}
+		if p.restIsEmpty(end) {
+			return p.anchored(name, func() (*Node, int, error) { return p.empty(end, parent, true) })
+		}
+	}
 	indent := p.column(pos)
 	if p.at(pos) == '-' && p.indicator(pos) {
 		return p.sequence(pos, indent)
@@ -261,8 +288,8 @@ func (p *parser) lineDone(pos int) error {
 }
 
 func (p *parser) sequence(pos, indent int) (*Node, int, error) {
-	line, column := p.position(pos)
-	seq := &Node{Kind: Sequence, Line: line, Column: column, Items: []*Node{}}
+	seq := p.node(Sequence, pos)
+	seq.Items = []*Node{}
 	for {
 		item, end, err := p.value(pos+1, indent, true)
 		if err != nil {
@@ -286,8 +313,8 @@ func (p *parser) sequence(pos, indent int) (*Node, int, error) {
 }
 
 func (p *parser) mapping(pos, indent int, key *Node, colon int) (*Node, int, error) {
-	line, column := p.position(pos)
-	m := &Node{Kind: Mapping, Line: line, Column: column, Pairs: []Pair{}}
+	m := p.node(Mapping, pos)
+	m.Pairs = []Pair{}
 	for {
 		if key.Kind != Scalar {
 			return nil, 0, p.failAt(pos, "a mapping key must be a scalar")
@@ -306,7 +333,7 @@ func (p *parser) mapping(pos, indent int, key *Node, colon int) (*Node, int, err
 		}
 		switch {
 		case next >= len(p.text) || p.column(next) < indent || p.marker(next, "...") || p.marker(next, "---"):
-			return m, next, nil
+			return m, next, merge(m)
 		case p.column(next) > indent:
 			return nil, 0, p.failAt(next, "this line is indented deeper than the mapping key before it")
 		case p.at(next) == '-' && p.indicator(next):
@@ -322,21 +349,33 @@ func (p *parser) mapping(pos, indent int, key *Node, colon int) (*Node, int, err
 	}
 }
 
+func (p *parser) empty(pos, indent int, item bool) (*Node, int, error) {
+	next, err := p.nextContent(p.lineEnd(pos))
+	if err != nil {
+		return nil, 0, err
+	}
+	switch {
+	case next < len(p.text) && p.column(next) > indent && !p.marker(next, "..."):
+		return p.block(next, indent)
+	case !item && next < len(p.text) && p.column(next) == indent && p.at(next) == '-' && p.indicator(next):
+		return p.sequence(next, indent)
+	}
+	return p.node(Scalar, pos), p.lineEnd(pos), nil
+}
+
 func (p *parser) value(pos, indent int, item bool) (*Node, int, error) {
 	start := p.skipBlanks(pos)
-	if p.restIsEmpty(start) {
-		next, err := p.nextContent(p.lineEnd(start))
+	if p.at(start) == '&' {
+		name, end, err := p.name(start)
 		if err != nil {
 			return nil, 0, err
 		}
-		switch {
-		case next < len(p.text) && p.column(next) > indent && !p.marker(next, "..."):
-			return p.block(next, indent)
-		case !item && next < len(p.text) && p.column(next) == indent && p.at(next) == '-' && p.indicator(next):
-			return p.sequence(next, indent)
+		if p.restIsEmpty(end) {
+			return p.anchored(name, func() (*Node, int, error) { return p.empty(end, indent, item) })
 		}
-		line, column := p.position(start)
-		return &Node{Kind: Scalar, Line: line, Column: column}, p.lineEnd(start), nil
+	}
+	if p.restIsEmpty(start) {
+		return p.empty(start, indent, item)
 	}
 	if !item && p.at(start) == '-' && p.indicator(start) {
 		return nil, 0, p.failAt(start, "a block sequence cannot start on the line of its key; start it on the next line")
@@ -366,10 +405,6 @@ func (p *parser) value(pos, indent int, item bool) (*Node, int, error) {
 
 func (p *parser) unsupported(pos int) error {
 	switch p.at(pos) {
-	case '&':
-		return p.failAt(pos, "anchors are not supported")
-	case '*':
-		return p.failAt(pos, "aliases are not supported")
 	case '!':
 		return p.failAt(pos, "tags are not supported")
 	case '|', '>':
@@ -388,26 +423,164 @@ func (p *parser) inline(pos int, flow bool) (*Node, int, error) {
 	if err := p.unsupported(pos); err != nil {
 		return nil, 0, err
 	}
-	line, column := p.position(pos)
 	switch p.at(pos) {
+	case '&':
+		return p.inlineAnchored(pos, flow)
+	case '*':
+		return p.alias(pos)
 	case '[':
 		return p.flowSequence(pos)
 	case '{':
 		return p.flowMapping(pos)
-	case '\'':
-		value, end, err := p.singleQuoted(pos)
-		return &Node{Kind: Scalar, Value: value, Quoted: true, Line: line, Column: column}, end, err
-	case '"':
-		value, end, err := p.doubleQuoted(pos)
-		return &Node{Kind: Scalar, Value: value, Quoted: true, Line: line, Column: column}, end, err
+	case '\'', '"':
+		return p.quoted(pos)
 	case ']', '}', ',':
 		if !flow {
 			return nil, 0, p.failAt(pos, "a plain scalar cannot start with %q; quote it", p.at(pos))
 		}
-		return &Node{Kind: Scalar, Line: line, Column: column}, pos, nil
+		return p.node(Scalar, pos), pos, nil
 	}
 	end := p.plainEnd(pos, flow)
-	return &Node{Kind: Scalar, Value: strings.TrimRight(p.text[pos:end], " \t"), Line: line, Column: column}, end, nil
+	n := p.node(Scalar, pos)
+	n.Value = strings.TrimRight(p.text[pos:end], " \t")
+	return n, end, nil
+}
+
+func (p *parser) quoted(pos int) (*Node, int, error) {
+	read := p.doubleQuoted
+	if p.at(pos) == '\'' {
+		read = p.singleQuoted
+	}
+	value, end, err := read(pos)
+	if err != nil {
+		return nil, 0, err
+	}
+	n := p.node(Scalar, pos)
+	n.Value = value
+	n.Quoted = true
+	return n, end, nil
+}
+
+func (p *parser) name(pos int) (string, int, error) {
+	end := pos + 1
+	for b := p.at(end); !scan.Blank(b) && !breakOrEnd(b) && !flowIndicator(b); b = p.at(end) {
+		end++
+	}
+	if end == pos+1 {
+		return "", 0, p.failAt(pos, "%q must be followed by a name", p.at(pos))
+	}
+	return p.text[pos+1 : end], end, nil
+}
+
+func (p *parser) anchored(name string, parse func() (*Node, int, error)) (*Node, int, error) {
+	p.anchors[name] = anchor{}
+	before := p.nodes
+	n, end, err := parse()
+	if err != nil {
+		return nil, 0, err
+	}
+	p.anchors[name] = anchor{node: n, size: p.nodes - before}
+	return n, end, nil
+}
+
+func (p *parser) inlineAnchored(pos int, flow bool) (*Node, int, error) {
+	name, end, err := p.name(pos)
+	if err != nil {
+		return nil, 0, err
+	}
+	next := p.skipBlanks(end)
+	if flow {
+		if next, err = p.skipFlowSpace(end); err != nil {
+			return nil, 0, err
+		}
+	}
+	switch {
+	case p.at(next) == '&':
+		return nil, 0, p.failAt(next, "a node carries at most one anchor, but &%s already names this one", name)
+	case p.at(next) == '*':
+		return nil, 0, p.failAt(next, "an alias cannot carry an anchor; &%s names it", name)
+	case !flow && p.at(next) == '-' && p.indicator(next):
+		return nil, 0, p.failAt(next, "a block sequence cannot start on the line of its anchor; start it on the next line")
+	}
+	return p.anchored(name, func() (*Node, int, error) { return p.inline(next, flow) })
+}
+
+func (p *parser) alias(pos int) (*Node, int, error) {
+	name, end, err := p.name(pos)
+	if err != nil {
+		return nil, 0, err
+	}
+	a, ok := p.anchors[name]
+	switch {
+	case !ok:
+		return nil, 0, p.failAt(pos, "the alias *%s refers to no anchor &%s defined before it", name, name)
+	case a.node == nil:
+		return nil, 0, p.failAt(pos, "the alias *%s sits inside the node that &%s names; recursive aliases are not supported", name, name)
+	}
+	p.nodes += a.size
+	p.expanded += a.size
+	if p.expanded > maxExpansion {
+		return nil, 0, p.failAt(pos, "aliases expand to more than %d nodes, which looks like an alias bomb", maxExpansion)
+	}
+	return a.node, p.skipBlanks(end), nil
+}
+
+func mergeKeyed(pair Pair) bool {
+	return pair.Key.Kind == Scalar && !pair.Key.Quoted && pair.Key.Value == mergeKey
+}
+
+func mergeSources(pair Pair) ([]*Node, error) {
+	switch pair.Value.Kind {
+	case Mapping:
+		return []*Node{pair.Value}, nil
+	case Sequence:
+		for _, item := range pair.Value.Items {
+			if item.Kind != Mapping {
+				return nil, nodeError(pair.Key, "the merge key %s takes a mapping or a list of mappings, but the list holds %s", mergeKey, item.Kind)
+			}
+		}
+		return pair.Value.Items, nil
+	case Scalar:
+	}
+	return nil, nodeError(pair.Key, "the merge key %s takes a mapping or a list of mappings, found %s", mergeKey, pair.Value.Kind)
+}
+
+func merge(m *Node) error {
+	if !slices.ContainsFunc(m.Pairs, mergeKeyed) {
+		return nil
+	}
+	seen := make(map[string]bool, len(m.Pairs))
+	for _, pair := range m.Pairs {
+		if !mergeKeyed(pair) {
+			seen[pair.Key.Value] = true
+		}
+	}
+	pairs := make([]Pair, 0, len(m.Pairs))
+	for _, pair := range m.Pairs {
+		if !mergeKeyed(pair) {
+			pairs = append(pairs, pair)
+			continue
+		}
+		sources, err := mergeSources(pair)
+		if err != nil {
+			return err
+		}
+		for _, source := range sources {
+			for _, merged := range source.Pairs {
+				if seen[merged.Key.Value] {
+					continue
+				}
+				seen[merged.Key.Value] = true
+				pairs = append(pairs, merged)
+			}
+		}
+	}
+	m.Pairs = pairs
+	return nil
+}
+
+func nodeError(n *Node, format string, args ...any) error {
+	return &Error{Line: n.Line, Column: n.Column, Message: fmt.Sprintf(format, args...)}
 }
 
 func flowIndicator(b byte) bool { return b == ',' || b == '[' || b == ']' || b == '{' || b == '}' }
@@ -505,8 +678,8 @@ func (p *parser) skipFlowSpace(pos int) (int, error) {
 }
 
 func (p *parser) flowSequence(pos int) (*Node, int, error) {
-	line, column := p.position(pos)
-	seq := &Node{Kind: Sequence, Line: line, Column: column, Items: []*Node{}}
+	seq := p.node(Sequence, pos)
+	seq.Items = []*Node{}
 	pos++
 	for {
 		var err error
@@ -528,8 +701,8 @@ func (p *parser) flowSequence(pos int) (*Node, int, error) {
 }
 
 func (p *parser) flowMapping(pos int) (*Node, int, error) {
-	line, column := p.position(pos)
-	m := &Node{Kind: Mapping, Line: line, Column: column, Pairs: []Pair{}}
+	m := p.node(Mapping, pos)
+	m.Pairs = []Pair{}
 	pos++
 	for {
 		var err error
@@ -537,7 +710,7 @@ func (p *parser) flowMapping(pos int) (*Node, int, error) {
 			return nil, 0, err
 		}
 		if p.at(pos) == '}' {
-			return m, pos + 1, nil
+			return m, pos + 1, merge(m)
 		}
 		key, end, err := p.inline(pos, true)
 		if err != nil {
@@ -552,8 +725,7 @@ func (p *parser) flowMapping(pos int) (*Node, int, error) {
 		if end, err = p.skipFlowSpace(end); err != nil {
 			return nil, 0, err
 		}
-		kline, kcolumn := p.position(end)
-		value := &Node{Kind: Scalar, Line: kline, Column: kcolumn}
+		value := p.node(Scalar, end)
 		if p.at(end) == ':' {
 			if end, err = p.skipFlowSpace(end + 1); err != nil {
 				return nil, 0, err
@@ -587,7 +759,9 @@ func (p *parser) flowEntry(pos int) (*Node, int, error) {
 	if err != nil {
 		return nil, 0, err
 	}
-	return &Node{Kind: Mapping, Line: node.Line, Column: node.Column, Pairs: []Pair{{Key: node, Value: value}}}, end, nil
+	m := p.node(Mapping, pos)
+	m.Pairs = []Pair{{Key: node, Value: value}}
+	return m, end, merge(m)
 }
 
 func (p *parser) flowSeparator(pos int, closer byte) (int, error) {

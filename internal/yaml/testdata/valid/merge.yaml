@@ -1,0 +1,14 @@
+x-common: &common
+  restart: always
+  environment:
+    A: "1"
+x-extra: &extra
+  init: true
+services:
+  web:
+    <<: [*common, *extra]
+    image: nginx
+  db:
+    image: postgres
+    <<: *common
+  flow: {<<: *extra, image: redis}

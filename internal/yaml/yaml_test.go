@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -172,7 +173,11 @@ func TestParseReportsPositions(t *testing.T) {
 	}{
 		{"a: 1\na: 2\n", 2, 1},
 		{"a:\n  b: [1, 2\n", 3, 1},
-		{"a: &x 1\n", 1, 4},
+		{"a: 1\nb:\n  - *missing\n", 3, 5},
+		{"a: &x [*x]\n", 1, 8},
+		{"a: &x &y 1\n", 1, 7},
+		{"a: &a 1\n<<: *a\n", 2, 1},
+		{"a: &x 1\nb:\n  <<: [*x]\n", 3, 3},
 		{"a:\n\t- b\n", 2, 1},
 		{"x:\n  é: \"\\q\"\n", 2, 7},
 	} {
@@ -189,5 +194,156 @@ func TestParseReportsPositions(t *testing.T) {
 	value, _ := root.Get("a")
 	if item := value.Items[0]; item.Line != 2 || item.Column != 5 {
 		t.Errorf("the item b sits at %d:%d, want 2:5", item.Line, item.Column)
+	}
+}
+
+func parseTagged(t *testing.T, text string) any {
+	t.Helper()
+	root, err := Parse(text)
+	if err != nil {
+		t.Fatalf("Parse(%q): %v", text, err)
+	}
+	return tagged(root)
+}
+
+func TestParseMergesMappings(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name, text string
+		want       any
+	}{
+		{
+			name: "explicit keys win over a merged mapping on either side of it",
+			text: "a: &a {x: 1, y: 1, z: 1}\nm:\n  x: 2\n  <<: *a\n  z: 3\n",
+			want: map[string]any{"x": "!!int 2", "y": "!!int 1", "z": "!!int 3"},
+		},
+		{
+			name: "earlier merged mappings win over later ones",
+			text: "a: &a {x: 1}\nb: &b {x: 2, y: 2}\nm:\n  <<: [*a, *b]\n",
+			want: map[string]any{"x": "!!int 1", "y": "!!int 2"},
+		},
+		{
+			name: "explicit keys win over every merged mapping",
+			text: "a: &a {x: 1}\nb: &b {x: 2, y: 2}\nm: {<<: [*a, *b], y: 3}\n",
+			want: map[string]any{"x": "!!int 1", "y": "!!int 3"},
+		},
+		{
+			name: "an inline mapping merges like an alias",
+			text: "m:\n  <<: {x: 1}\n  y: 2\n",
+			want: map[string]any{"x": "!!int 1", "y": "!!int 2"},
+		},
+		{
+			name: "a quoted << is an ordinary key",
+			text: "m:\n  \"<<\": {x: 1}\n",
+			want: map[string]any{"<<": map[string]any{"x": "!!int 1"}},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			m, ok := parseTagged(t, tt.text).(map[string]any)
+			if !ok {
+				t.Fatalf("Parse(%q) is no mapping", tt.text)
+			}
+			if diff := cmp.Diff(tt.want, m["m"]); diff != "" {
+				t.Errorf("Parse(%q) merges wrong (-want +got):\n%s", tt.text, diff)
+			}
+		})
+	}
+}
+
+func TestParseKeepsMergedKeysInDocumentOrder(t *testing.T) {
+	t.Parallel()
+
+	root, err := Parse("a: &a {x: 1, y: 1}\nm:\n  w: 0\n  <<: *a\n  y: 2\n  z: 3\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, _ := root.Get("m")
+	var keys []string
+	for _, p := range m.Pairs {
+		keys = append(keys, p.Key.Value)
+	}
+	if diff := cmp.Diff([]string{"w", "x", "y", "z"}, keys); diff != "" {
+		t.Errorf("merged keys out of order (-want +got):\n%s", diff)
+	}
+}
+
+func TestParseRejectsAliasBombs(t *testing.T) {
+	t.Parallel()
+
+	var sb strings.Builder
+	sb.WriteString("l0: &l0 [x, x, x, x, x, x, x, x, x, x]\n")
+	for i := 1; i < 10; i++ {
+		fmt.Fprintf(&sb, "l%d: &l%d [", i, i)
+		for j := range 10 {
+			if j > 0 {
+				sb.WriteString(", ")
+			}
+			fmt.Fprintf(&sb, "*l%d", i-1)
+		}
+		sb.WriteString("]\n")
+	}
+	_, err := Parse(sb.String())
+	var yamlErr *Error
+	if !errors.As(err, &yamlErr) || !strings.Contains(yamlErr.Message, "alias bomb") {
+		t.Errorf("Parse of a billion laughs = %v, want an alias bomb error", err)
+	}
+}
+
+func TestParseComposeWithAnchors(t *testing.T) {
+	t.Parallel()
+
+	got := parseTagged(t, `x-common: &common
+  restart: unless-stopped
+  environment:
+    TZ: UTC
+  build: &build
+    context: .
+    additional_contexts:
+      base: ../base
+
+services:
+  app:
+    <<: *common
+    build:
+      <<: *build
+      dockerfile: app/Dockerfile
+      additional_contexts:
+        shared: docker-image://alpine:3.20
+  worker:
+    <<: *common
+    command: ["worker", "--queue", default]
+`)
+	common := map[string]any{
+		"restart":     "!!str unless-stopped",
+		"environment": map[string]any{"TZ": "!!str UTC"},
+		"build": map[string]any{
+			"context":             "!!str .",
+			"additional_contexts": map[string]any{"base": "!!str ../base"},
+		},
+	}
+	want := map[string]any{
+		"x-common": common,
+		"services": map[string]any{
+			"app": map[string]any{
+				"restart":     "!!str unless-stopped",
+				"environment": map[string]any{"TZ": "!!str UTC"},
+				"build": map[string]any{
+					"context":             "!!str .",
+					"dockerfile":          "!!str app/Dockerfile",
+					"additional_contexts": map[string]any{"shared": "!!str docker-image://alpine:3.20"},
+				},
+			},
+			"worker": map[string]any{
+				"restart":     "!!str unless-stopped",
+				"environment": map[string]any{"TZ": "!!str UTC"},
+				"build":       common["build"],
+				"command":     []any{"!!str worker", "!!str --queue", "!!str default"},
+			},
+		},
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("the compose file parses wrong (-want +got):\n%s", diff)
 	}
 }
