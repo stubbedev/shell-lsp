@@ -1,10 +1,12 @@
 package hadolint
 
 import (
+	"os"
 	"path/filepath"
 	"slices"
 	"time"
 
+	"github.com/stubbedev/shell-lsp/internal/bake"
 	"github.com/stubbedev/shell-lsp/internal/diskwatch"
 	"github.com/stubbedev/shell-lsp/internal/filecache"
 )
@@ -15,15 +17,19 @@ var userConfigNames = []string{"hadolint.yaml", "hadolint.yml"}
 
 type Resolver struct {
 	files    *filecache.Cache[Config]
+	bake     *bake.Resolver
 	fallback []string
 }
 
 func NewResolver(read filecache.ReadFile, now func() time.Time, recheck time.Duration, fallback []string) *Resolver {
 	parse := func(path string, data []byte) (Config, error) { return ParseConfig(path, string(data)) }
-	return &Resolver{files: filecache.New(read, parse, now, recheck), fallback: fallback}
+	return &Resolver{files: filecache.New(read, parse, now, recheck), bake: bake.NewResolver(read, os.ReadDir, now, recheck), fallback: fallback}
 }
 
-func (r *Resolver) Watch(disk *diskwatch.Watcher) { r.files.Watch(disk) }
+func (r *Resolver) Watch(disk *diskwatch.Watcher) {
+	r.files.Watch(disk)
+	r.bake.Watch(disk)
+}
 
 func ConfigFallback(home, configHome string) []string {
 	var out []string
@@ -48,13 +54,23 @@ func ConfigFallback(home, configHome string) []string {
 
 func IsConfigName(path string) bool {
 	base := filepath.Base(path)
-	return slices.Contains(ConfigNames, base) || slices.Contains(userConfigNames, base)
+	return slices.Contains(ConfigNames, base) || slices.Contains(userConfigNames, base) || bake.IsName(path)
 }
 
 func (r *Resolver) Nearest(dir string) (Config, bool, error) {
-	return r.files.Nearest(dir, ConfigNames, r.fallback)
+	cfg, found, err := r.files.Nearest(dir, ConfigNames, r.fallback)
+	if err != nil {
+		return Config{}, false, err
+	}
+	if cfg.Bake, err = r.bake.Dockerfiles(dir); err != nil {
+		return Config{}, false, err
+	}
+	return cfg, found, nil
 }
 
 func (r *Resolver) Load(path string) (Config, bool, error) { return r.files.Load(path) }
 
-func (r *Resolver) Invalidate(path string) { r.files.Invalidate(path) }
+func (r *Resolver) Invalidate(path string) {
+	r.files.Invalidate(path)
+	r.bake.Invalidate(path)
+}

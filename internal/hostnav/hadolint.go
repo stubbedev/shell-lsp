@@ -1,6 +1,7 @@
 package hostnav
 
 import (
+	"github.com/stubbedev/shell-lsp/internal/bake"
 	"github.com/stubbedev/shell-lsp/internal/hadolint"
 	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/host/dockerfile"
@@ -13,6 +14,7 @@ type Hadolint struct {
 	file        *workspace.File
 	dockerfile  *dockerfile.File
 	config      hadolint.Config
+	contexts    bake.Contexts
 	suppression hadolint.Suppression
 	embedded    []embeddedDockerfile
 }
@@ -25,7 +27,8 @@ func HadolintOf(file *workspace.File, cfg hadolint.Config) (Hadolint, bool) {
 	if !ok {
 		return embeddedHadolint(file, cfg)
 	}
-	return Hadolint{file: file, dockerfile: f, config: cfg, suppression: hadolint.NewSuppression(f, cfg)}, true
+	contexts := cfg.Bake.Of(file.Path)
+	return Hadolint{file: file, dockerfile: f, config: cfg, contexts: contexts, suppression: hadolint.NewSuppression(f, cfg, contexts)}, true
 }
 
 func embeddedHadolint(file *workspace.File, cfg hadolint.Config) (Hadolint, bool) {
@@ -59,7 +62,7 @@ func (h Hadolint) Findings() []lint.Finding {
 		}
 		return out
 	}
-	return hadolint.Check(hadolint.Input{File: h.dockerfile, Runs: h.runs(), Config: h.config})
+	return hadolint.Check(hadolint.Input{File: h.dockerfile, Runs: h.runs(), Config: h.config, Contexts: h.contexts})
 }
 
 func (h Hadolint) Host(findings []lint.Finding) []lint.Finding {

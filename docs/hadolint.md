@@ -130,6 +130,11 @@ way the tool does. The cases record every difference; these are the kinds.
   and `ADD` heredocs are valid, and a syntax error does not stop the other
   checks. The exec form of `RUN` runs no shell, so `&&` in it is a word, and
   neither a PowerShell `RUN` nor the string `sh -c` runs is read as shell.
+- **Named contexts.** A `FROM` image that a bake file (`docker-bake.hcl`,
+  `docker-bake.json` or any `*.hcl` with `target` blocks in the Dockerfile's
+  directory or above it) or a Compose `additional_contexts` maps for this
+  Dockerfile is that context, not a registry image: DL3006 is reported only
+  when the context is a `docker-image://` reference without a tag.
 - **Formats.** RFC 3339, SemVer and email values are held to their
   specifications; `spdx` accepts SPDX license expressions over License List
   3.27, which the OCI `licenses` label is defined to hold; and `hash` accepts

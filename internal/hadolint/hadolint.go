@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/stubbedev/shell-lsp/internal/bake"
 	"github.com/stubbedev/shell-lsp/internal/directive"
 	"github.com/stubbedev/shell-lsp/internal/host/dockerfile"
 	"github.com/stubbedev/shell-lsp/internal/lint"
@@ -13,9 +14,10 @@ import (
 )
 
 type Input struct {
-	File   *dockerfile.File
-	Runs   []*Run
-	Config Config
+	File     *dockerfile.File
+	Runs     []*Run
+	Config   Config
+	Contexts bake.Contexts
 }
 
 type checker struct {

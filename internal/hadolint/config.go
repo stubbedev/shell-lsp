@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/stubbedev/shell-lsp/internal/bake"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/yaml"
 )
@@ -40,6 +41,7 @@ type Config struct {
 	StrictLabels        bool
 	DisableIgnorePragma bool
 	Optional            []string
+	Bake                bake.Dockerfiles
 }
 
 var (

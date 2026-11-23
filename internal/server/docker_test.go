@@ -85,3 +85,25 @@ func TestDockerfileWithABrokenHadolintConfigurationIsCheckedWithout(t *testing.T
 		return strings.Contains(string(raw), ".hadolint.yaml") && strings.Contains(string(raw), "line 1, column 10")
 	})
 }
+
+func TestDockerfileHonoursBakeNamedContexts(t *testing.T) {
+	t.Parallel()
+
+	text := "FROM infra\nCOPY --from=deps / /x\n\nFROM base\n"
+	project := map[string]string{
+		"build.hcl":        "target \"t\" {\n  context = \"build\"\n  contexts = {\n    infra = \"docker-image://localhost:5000/infra:latest\"\n    deps  = \"target:deps\"\n    base  = \"docker-image://alpine\"\n  }\n}\n",
+		"build/Dockerfile": text,
+		"other/Dockerfile": text,
+	}
+	p := openNativeProject(t, nativeCapabilities, project, "build/Dockerfile", "other/Dockerfile")
+	baked := pullDiagnostics(t, p.c, p.uri("build/Dockerfile"))
+	if got, want := codes(baked), []string{"DL3006"}; !slices.Equal(got, want) {
+		t.Errorf("diagnostics of the Dockerfile build.hcl names = %v, want %v", got, want)
+	}
+	if len(baked) == 1 && (baked[0].Range.Start.Line != 3 || !strings.Contains(baked[0].Message, "docker-image://alpine")) {
+		t.Errorf("DL3006 = %+v, want it on `FROM base` naming the untagged context value", baked[0])
+	}
+	if got, want := codes(pullDiagnostics(t, p.c, p.uri("other/Dockerfile"))), []string{"DL3006", "DL3006", "SL7005"}; !slices.Equal(got, want) {
+		t.Errorf("diagnostics of a Dockerfile no bake target names = %v, want %v", got, want)
+	}
+}

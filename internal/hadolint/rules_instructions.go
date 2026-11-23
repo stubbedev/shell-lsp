@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/stubbedev/shell-lsp/internal/bake"
 	"github.com/stubbedev/shell-lsp/internal/host/dockerfile"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 )
@@ -65,8 +66,12 @@ func (c *checker) from(s dockerfile.Stage) {
 	if !ok {
 		return
 	}
+	if values, named := c.Contexts[ref.ContextName()]; named {
+		c.contextTags(s, values)
+		return
+	}
 	switch {
-	case ref.Tag == "" && ref.Digest == "":
+	case untagged(ref):
 		c.report(lint.DL3006, s.Image.Span, "`%s` has no tag, so each build may start from a different image; name a version, as in `%s:<version>`", s.Image.Text, s.Image.Text)
 	case ref.Tag == latest && ref.Digest == "":
 		c.report(lint.DL3007, s.Image.Span, "the latest tag moves, so each build may start from a different image; name a version")
@@ -77,6 +82,20 @@ func (c *checker) from(s dockerfile.Stage) {
 	registry := cmpOr(ref.Domain, dockerHub)
 	if !slices.ContainsFunc(c.Config.TrustedRegistries, func(trusted string) bool { return trusts(trusted, registry) }) {
 		c.report(lint.DL3026, s.Image.Span, "%s is not one of the trusted registries %s lists", registry, c.Config.Path)
+	}
+}
+
+func untagged(ref dockerfile.Reference) bool { return ref.Tag == "" && ref.Digest == "" }
+
+func (c *checker) contextTags(s dockerfile.Stage, values []bake.Value) {
+	for _, v := range values {
+		image, isImage := v.Image()
+		if !isImage {
+			continue
+		}
+		if ref, valid := dockerfile.ParseReference(image); valid && untagged(ref) {
+			c.report(lint.DL3006, s.Image.Span, "`%s` is the named context `%s`, which has no tag, so each build may start from a different image; name a version, as in `%s:<version>`", s.Image.Text, v.Text, image)
+		}
 	}
 }
 

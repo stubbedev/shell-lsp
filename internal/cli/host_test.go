@@ -258,3 +258,29 @@ func TestCheckWalksTheNixCorpus(t *testing.T) {
 		}
 	}
 }
+
+func TestCheckHonoursBakeNamedContexts(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	copyDeps := "FROM base\nCOPY --from=deps / /x\n"
+	writeFiles(t, dir, map[string]string{
+		"compose.yaml":     "services:\n  app:\n    build:\n      context: app\n      additional_contexts:\n        deps: target:deps\n        base: docker-image://alpine:3.20\n",
+		"docker-bake.json": `{"target": {"json": {"context": "json", "contexts": {"infra": "docker-image://registry.example/infra"}}}}`,
+		"app/Dockerfile":   copyDeps,
+		"json/Dockerfile":  "FROM infra\n",
+		"other/Dockerfile": copyDeps,
+	})
+	got := run(t, dir, "", "check", "-f", "gcc", "app/Dockerfile", "json/Dockerfile", "other/Dockerfile")
+	want := []string{
+		filepath.FromSlash("json/Dockerfile:1:6 DL3006"),
+		filepath.FromSlash("other/Dockerfile:1:6 DL3006"),
+		filepath.FromSlash("other/Dockerfile:2:13 SL7005"),
+	}
+	if !slices.Equal(findings(t, got.stdout), want) || got.status != checkStatusFindings {
+		t.Errorf("checking Dockerfiles that bake contexts name = %d %v, want %v\n%s", got.status, findings(t, got.stdout), want, got.stderr)
+	}
+	if !strings.Contains(got.stdout, "docker-image://registry.example/infra") {
+		t.Errorf("the DL3006 on json/Dockerfile does not name the context value:\n%s", got.stdout)
+	}
+}

@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/stubbedev/shell-lsp/internal/bake"
 	"github.com/stubbedev/shell-lsp/internal/config"
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
@@ -114,7 +115,7 @@ func (s *Server) registerCapabilities(ctx context.Context) {
 
 func watchedFilesRegistration() registration {
 	globs := append(workspace.WatchGlobs(), "**/"+editorconfig.FileName)
-	for _, name := range slices.Concat(shellcheckrc.Names, hadolint.ConfigNames, []string{statixconfig.FileName, nix.LockFileName}) {
+	for _, name := range slices.Concat(shellcheckrc.Names, hadolint.ConfigNames, bake.Patterns, []string{statixconfig.FileName, nix.LockFileName}) {
 		globs = append(globs, "**/"+name)
 	}
 	watchers := make([]fileWatcher, len(globs))

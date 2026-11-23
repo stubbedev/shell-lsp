@@ -3,6 +3,7 @@ package hadolint
 import (
 	"slices"
 
+	"github.com/stubbedev/shell-lsp/internal/bake"
 	"github.com/stubbedev/shell-lsp/internal/host/dockerfile"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/parser"
@@ -53,8 +54,8 @@ type Suppression struct {
 	overrides map[lint.Code]lint.Severity
 }
 
-func NewSuppression(f *dockerfile.File, cfg Config) Suppression {
-	s := Suppression{global: expand(cfg.Ignored), overrides: map[lint.Code]lint.Severity{}}
+func NewSuppression(f *dockerfile.File, cfg Config, contexts bake.Contexts) Suppression {
+	s := Suppression{global: expand(cfg.Ignored), overrides: map[lint.Code]lint.Severity{}, scoped: namedContextCopies(f, contexts)}
 	for code, severity := range cfg.Overrides {
 		for _, c := range expand([]lint.Code{code}) {
 			s.overrides[c] = severity
@@ -93,6 +94,25 @@ func (s Suppression) Apply(findings []lint.Finding, hostOffset func(int) int) []
 			f.Severity = severity
 		}
 		out = append(out, f)
+	}
+	return out
+}
+
+func namedContextCopies(f *dockerfile.File, contexts bake.Contexts) []scoped {
+	var out []scoped
+	for _, in := range f.Instructions {
+		if in.Name != "COPY" {
+			continue
+		}
+		for _, flag := range in.Flags {
+			if flag.Name.Text != stageCopyKey || flag.Value == nil {
+				continue
+			}
+			ref, valid := dockerfile.ParseReference(flag.Value.Text)
+			if _, named := contexts[ref.ContextName()]; valid && named {
+				out = append(out, scoped{span: flag.Value.Span, codes: []lint.Code{lint.CodeDockerUnknownStage}})
+			}
+		}
 	}
 	return out
 }

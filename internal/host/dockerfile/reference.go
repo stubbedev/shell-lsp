@@ -6,7 +6,13 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/scan"
 )
 
-const maxTag = 128
+const (
+	maxTag          = 128
+	hubDomain       = "docker.io"
+	legacyHubDomain = "index.docker.io"
+	officialPrefix  = "library/"
+	latestTag       = "latest"
+)
 
 type Reference struct {
 	Domain string
@@ -45,6 +51,31 @@ func ParseReference(ref string) (Reference, bool) {
 	}
 	r.Path = strings.Join(parts, "/")
 	return r, true
+}
+
+func (r Reference) ContextName() string {
+	domain, path := r.Domain, r.Path
+	if domain == legacyHubDomain {
+		domain = hubDomain
+	}
+	if domain == hubDomain {
+		domain = ""
+	}
+	if rest, official := strings.CutPrefix(path, officialPrefix); domain == "" && official && !strings.Contains(rest, "/") {
+		path = rest
+	}
+	var sb strings.Builder
+	if domain != "" {
+		sb.WriteString(domain + "/")
+	}
+	sb.WriteString(path)
+	if r.Tag != "" && (r.Tag != latestTag || r.Digest != "") {
+		sb.WriteString(":" + r.Tag)
+	}
+	if r.Digest != "" {
+		sb.WriteString("@" + r.Digest)
+	}
+	return sb.String()
 }
 
 func validReference(ref string) bool {

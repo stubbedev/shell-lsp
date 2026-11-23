@@ -1392,7 +1392,10 @@ CMD ./server --port 80
 
 **`COPY --from` names a stage that does not exist.** Without a stage of that
 name Docker pulls an image called that, which is rarely what a misspelt stage
-name meant.
+name meant. A name that a bake file (`docker-bake.hcl`, `docker-bake.json` or
+any `*.hcl` with `target` blocks) or a Compose `additional_contexts` maps to a
+named context for this Dockerfile is not reported, since the build reads that
+context instead.
 
 ```dockerfile
 FROM golang:1.23 AS build
