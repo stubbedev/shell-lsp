@@ -17,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/stubbedev/shell-lsp/internal/gitlink"
 	"github.com/stubbedev/shell-lsp/internal/regularfile"
 )
 
@@ -225,27 +226,19 @@ func linkedRepository(root, marker string) (repository, error) {
 	if err != nil {
 		return repository{}, fmt.Errorf("reading the git link %s: %w", marker, err)
 	}
-	target, ok := strings.CutPrefix(strings.TrimSpace(string(data)), "gitdir: ")
-	if !ok {
-		return repository{}, fmt.Errorf("reading the git link %s: no gitdir line", marker)
+	gitDir, err := gitlink.Target(marker, string(data))
+	if err != nil {
+		return repository{}, err
 	}
-	gitDir := absoluteFrom(root, target)
 	common := gitDir
-	shared, _, err := regularfile.Read(filepath.Join(gitDir, "commondir"), maxRefFile)
+	shared, _, err := regularfile.Read(filepath.Join(gitDir, gitlink.CommonDirFile), maxRefFile)
 	switch {
 	case err == nil:
-		common = absoluteFrom(gitDir, strings.TrimSpace(string(shared)))
+		common = gitlink.Resolve(gitDir, string(shared))
 	case !errors.Is(err, fs.ErrNotExist):
 		return repository{}, fmt.Errorf("reading the common directory of %s: %w", gitDir, err)
 	}
 	return repository{root: root, gitDir: gitDir, common: common}, nil
-}
-
-func absoluteFrom(base, path string) string {
-	if filepath.IsAbs(path) {
-		return filepath.Clean(path)
-	}
-	return filepath.Join(base, path)
 }
 
 func (r repository) headState() ([]byte, error) {

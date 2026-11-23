@@ -23,6 +23,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/gitignore"
+	"github.com/stubbedev/shell-lsp/internal/gitlink"
 	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/host/model"
 	"github.com/stubbedev/shell-lsp/internal/host/nix"
@@ -849,7 +850,7 @@ func repository(root string) (top, gitDir string, found bool, err error) {
 		case err == nil && info.IsDir():
 			return dir, dotGit, true, nil
 		case err == nil:
-			gitDir, err := linkedGitDir(dir, dotGit)
+			gitDir, err := linkedGitDir(dotGit)
 			return dir, gitDir, err == nil, err
 		case !errors.Is(err, fs.ErrNotExist) && !errors.Is(err, fs.ErrPermission):
 			return "", "", false, fmt.Errorf("looking for the git repository of %s: %w", root, err)
@@ -862,32 +863,23 @@ func repository(root string) (top, gitDir string, found bool, err error) {
 	}
 }
 
-func linkedGitDir(top, dotGit string) (string, error) {
+func linkedGitDir(dotGit string) (string, error) {
 	raw, err := regularfile.ReadConfig(dotGit)
 	if err != nil {
 		return "", fmt.Errorf("reading %s: %w", dotGit, err)
 	}
-	gitDir, ok := strings.CutPrefix(strings.TrimSpace(string(raw)), "gitdir:")
-	if !ok {
-		return "", fmt.Errorf("%s does not name a git directory", dotGit)
+	gitDir, err := gitlink.Target(dotGit, string(raw))
+	if err != nil {
+		return "", err
 	}
-	gitDir = resolveFrom(top, strings.TrimSpace(gitDir))
-	common, err := regularfile.ReadConfig(filepath.Join(gitDir, "commondir"))
+	common, err := regularfile.ReadConfig(filepath.Join(gitDir, gitlink.CommonDirFile))
 	if errors.Is(err, fs.ErrNotExist) {
 		return gitDir, nil
 	}
 	if err != nil {
 		return "", fmt.Errorf("reading the common directory of %s: %w", gitDir, err)
 	}
-	return resolveFrom(gitDir, strings.TrimSpace(string(common))), nil
-}
-
-func resolveFrom(dir, path string) string {
-	path = filepath.FromSlash(path)
-	if filepath.IsAbs(path) {
-		return path
-	}
-	return filepath.Join(dir, path)
+	return gitlink.Resolve(gitDir, string(common)), nil
 }
 
 func (w *Workspace) ignoreRules(path string) (gitignore.Rules, error) {
