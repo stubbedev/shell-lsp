@@ -387,6 +387,38 @@ func TestSourcedFilesAreDetectedByName(t *testing.T) {
 	}
 }
 
+func TestInvokeResolvesTheInterpreterAndItsArguments(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		argv []string
+		want Invocation
+	}{
+		{argv: []string{"/bin/bash", "-e"}, want: Invocation{Interpreter: "bash", Arguments: []string{"-e"}}},
+		{argv: []string{"/usr/bin/env", "bash", "-e", "-c"}, want: Invocation{Interpreter: "bash", Arguments: []string{"-e", "-c"}}},
+		{argv: []string{"/usr/bin/env", "-S", "bash", "-e"}, want: Invocation{Interpreter: "bash", Arguments: []string{"-e"}}},
+		{argv: []string{"/usr/bin/env", "-S", "bash -e", "-c"}, want: Invocation{Interpreter: "bash", Arguments: []string{"-e", "-c"}}},
+		{argv: []string{"/usr/bin/env", "-S bash -e"}, want: Invocation{Interpreter: "bash", Arguments: []string{"-e"}}},
+		{argv: []string{"/usr/bin/env", "--split-string=-i zsh -f"}, want: Invocation{Interpreter: "zsh", Arguments: []string{"-f"}}},
+		{argv: []string{"env", "-u", "HOME", "-i", "A=1", "dash"}, want: Invocation{Interpreter: "dash", Arguments: []string{}}},
+		{argv: []string{"env", "--", "sh", "-x"}, want: Invocation{Interpreter: "sh", Arguments: []string{"-x"}}},
+		{argv: []string{"/bin/busybox", "sh", "-e"}, want: Invocation{Interpreter: "busybox sh", Arguments: []string{"-e"}}},
+	} {
+		got, ok := Invoke(tt.argv)
+		if !ok || got.Interpreter != tt.want.Interpreter || !slices.Equal(got.Arguments, tt.want.Arguments) {
+			t.Errorf("Invoke(%q) = %+v, %v; want %+v", tt.argv, got, ok, tt.want)
+		}
+	}
+	for _, argv := range [][]string{nil, {"/usr/bin/env"}, {"env", "-i", "A=1"}, {"env", "-S"}, {"env", "-u"}} {
+		if got, ok := Invoke(argv); ok {
+			t.Errorf("Invoke(%q) = %+v, want no interpreter", argv, got)
+		}
+	}
+	if got, ok := Interpreter("#!/usr/bin/env -S bash -e\n"); !ok || got != "bash" {
+		t.Errorf("Interpreter of an env -S shebang = %q, %v; want bash", got, ok)
+	}
+}
+
 func TestNixShellShebangsNameTheirInterpreter(t *testing.T) {
 	t.Parallel()
 

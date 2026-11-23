@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/directive"
+	"github.com/stubbedev/shell-lsp/internal/getopt"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
 
@@ -246,31 +247,90 @@ func shebangLine(line string) (Shebang, bool) {
 	return Shebang{Interpreter: words[0], Arguments: words[1:]}, true
 }
 
-func Interpreter(text string) (string, bool) {
-	shebang, ok := ParseShebang(text)
-	if !ok {
-		return "", false
+type Invocation struct {
+	Interpreter string
+	Arguments   []string
+}
+
+func Invoke(argv []string) (Invocation, bool) {
+	if len(argv) == 0 {
+		return Invocation{}, false
 	}
-	interpreter, arguments := shebang.Interpreter, shebang.Arguments
+	interpreter, arguments := argv[0], argv[1:]
 	if filepath.Base(interpreter) == "env" {
-		i := slices.IndexFunc(arguments, func(argument string) bool {
-			return !strings.HasPrefix(argument, "-") && !strings.Contains(argument, "=")
-		})
-		if i < 0 {
-			return "", false
+		command, ok := envCommand(arguments)
+		if !ok {
+			return Invocation{}, false
 		}
-		interpreter, arguments = arguments[i], arguments[i+1:]
+		interpreter, arguments = command[0], command[1:]
 	}
 	name := filepath.Base(interpreter)
 	if name == "busybox" && len(arguments) > 0 {
-		return name + " " + arguments[0], true
+		return Invocation{Interpreter: name + " " + arguments[0], Arguments: arguments[1:]}, true
 	}
-	if name == nixShell {
-		if interpreter, ok := nixShellInterpreter(text); ok {
-			return interpreter, true
+	return Invocation{Interpreter: name, Arguments: arguments}, true
+}
+
+var envGrammar = getopt.Commands["env"]
+
+func envCommand(arguments []string) ([]string, bool) {
+	for i := 0; i < len(arguments); i++ {
+		word := arguments[i]
+		switch {
+		case word == getopt.EndOfOptions:
+			return envOperands(arguments[i+1:])
+		case word == "-":
+		case !getopt.IsOption(word):
+			return envOperands(arguments[i:])
+		default:
+			words, _ := getopt.Words(word, envGrammar.Arity)
+			option := arguments[i:min(i+words, len(arguments))]
+			if split, ok := envSplitString(option); ok {
+				return envCommand(append(strings.Fields(split), arguments[i+len(option):]...))
+			}
+			i += len(option) - 1
 		}
 	}
-	return name, true
+	return nil, false
+}
+
+func envSplitString(option []string) (string, bool) {
+	for _, o := range getopt.Parse(envGrammar, option, verbatim).Options {
+		if o.Name == "-S" || o.Name == "--split-string" {
+			return o.Argument.Text(verbatim)
+		}
+	}
+	return "", false
+}
+
+func verbatim(word string) (string, bool) { return word, true }
+
+func envOperands(words []string) ([]string, bool) {
+	i := slices.IndexFunc(words, func(word string) bool { return !strings.Contains(word, "=") })
+	if i < 0 {
+		return nil, false
+	}
+	return words[i:], true
+}
+
+func ShebangInvocation(text string) (Invocation, bool) {
+	shebang, ok := ParseShebang(text)
+	if !ok {
+		return Invocation{}, false
+	}
+	found, ok := Invoke(append([]string{shebang.Interpreter}, shebang.Arguments...))
+	if !ok || found.Interpreter != nixShell {
+		return found, ok
+	}
+	if interpreter, ok := nixShellInterpreter(text); ok {
+		return Invocation{Interpreter: interpreter}, true
+	}
+	return found, true
+}
+
+func Interpreter(text string) (string, bool) {
+	found, ok := ShebangInvocation(text)
+	return found.Interpreter, ok
 }
 
 const nixShell = "nix-shell"

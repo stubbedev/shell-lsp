@@ -9,6 +9,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/getopt"
 	"github.com/stubbedev/shell-lsp/internal/host/dockerfile"
 	"github.com/stubbedev/shell-lsp/internal/lint"
+	"github.com/stubbedev/shell-lsp/internal/shelloptions"
 )
 
 var (
@@ -176,22 +177,11 @@ func (c *checker) shellOf(run *Run) []string {
 	return shell
 }
 
-func setsPipefail(words []string) bool {
-	for i := 0; i+1 < len(words); i++ {
-		if strings.HasPrefix(words[i], "-") && !strings.HasPrefix(words[i], "--") && strings.HasSuffix(words[i], "o") && words[i+1] == "pipefail" {
-			return true
-		}
-	}
-	return false
-}
-
 func (c *checker) pipefail(run *Run) {
 	if len(run.Pipes) == 0 || run.Trigger != nil {
 		return
 	}
-	shell := c.shellOf(run)
-	program := strings.TrimSuffix(strings.ToLower(path.Base(strings.ReplaceAll(shell[0], `\`, "/"))), ".exe")
-	if slices.Contains(noPipes, program) || setsPipefail(shell[1:]) {
+	if shell, ok := shelloptions.Invoke(c.shellOf(run)); ok && (slices.Contains(noPipes, program(shell.Interpreter)) || shell.Flags.Pipefail()) {
 		return
 	}
 	pipe := run.Pipes[0]
@@ -199,11 +189,15 @@ func (c *checker) pipefail(run *Run) {
 		if cmd.Span.Start >= pipe.Start {
 			break
 		}
-		if cmd.Name() == "set" && setsPipefail(texts(cmd.Args())) {
+		if cmd.Name() == "set" && shelloptions.ParseFlags(texts(cmd.Args())).Pipefail() {
 			return
 		}
 	}
 	c.report(lint.DL4006, pipe, "a pipeline succeeds when its last command does, so a failure earlier in the pipe goes unnoticed; set `SHELL [\"/bin/bash\", \"-o\", \"pipefail\", \"-c\"]` or run `set -o pipefail` first")
+}
+
+func program(interpreter string) string {
+	return strings.TrimSuffix(strings.ToLower(path.Base(strings.ReplaceAll(interpreter, `\`, "/"))), ".exe")
 }
 
 func texts(words []Word) []string {

@@ -12,7 +12,6 @@ import (
 
 const (
 	tool          = "Dockerfile"
-	defaultShell  = "/bin/sh -c"
 	subshellOpen  = "(\n"
 	subshellClose = "\n)\n"
 )
@@ -100,20 +99,28 @@ func shellOf(f *File, in *Instruction) runShell {
 	for i, w := range in.JSON {
 		words[i] = w.Text
 	}
-	return invoked(words, f.Text[in.Line.Start:in.Line.End])
+	found, ok := shelloptions.Invoke(words)
+	return invoked(found, ok, f.Text[in.Line.Start:in.Line.End])
 }
 
 func pragmaShell(f *File, p Pragma) runShell {
-	return invoked([]string{p.Shell}, f.Text[p.Span.Start:p.Span.End])
+	found, ok := shelloptions.Invoke([]string{p.Shell})
+	return invoked(found, ok, f.Text[p.Span.Start:p.Span.End])
 }
 
-func invoked(argv []string, evidence string) runShell {
-	d, ok := dialect.FromShebang("#!" + strings.Join(argv, " "))
-	shell := runShell{detection: dialect.Detection{Dialect: d, Source: dialect.SourceHostSetting, Evidence: evidence}, analysed: ok}
-	if ok {
-		shell.options = shelloptions.SetCommand(argv[1:])
+func invoked(found shelloptions.Invocation, ok bool, evidence string) runShell {
+	if !ok {
+		return runShell{}
 	}
-	return shell
+	d, ok := found.Dialect()
+	if !ok {
+		return runShell{}
+	}
+	return runShell{
+		detection: dialect.Detection{Dialect: d, Source: dialect.SourceHostSetting, Evidence: evidence},
+		analysed:  true,
+		options:   found.Flags.SetCommand(),
+	}
 }
 
 func (f *File) declares(in *Instruction) []string {
@@ -203,7 +210,8 @@ func (p *projector) command(in *Instruction) {
 func (p *projector) heredocScript(h Heredoc, shell runShell, declared []string, scope model.Scope) bool {
 	body := p.f.Text[h.Body.Start:h.Body.End]
 	if first, _, _ := strings.Cut(body, "\n"); strings.HasPrefix(first, "#!") {
-		shell = invoked(strings.Fields(first[2:]), first)
+		found, ok := shelloptions.InvokeShebang(body)
+		shell = invoked(found, ok, first)
 		if !shell.analysed {
 			return false
 		}

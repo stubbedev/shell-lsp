@@ -71,6 +71,21 @@ func TestShellFlagsBecomeOptionsOfEveryRun(t *testing.T) {
 			want:       []string{"set -e"},
 		},
 		{
+			name:       "flags of a shell launched through env",
+			dockerfile: "FROM alpine:3\nSHELL [\"/usr/bin/env\", \"bash\", \"-e\", \"-c\"]\nRUN cd /x\n",
+			want:       []string{"set -e"},
+		},
+		{
+			name:       "flags of a shell launched through env -S",
+			dockerfile: "FROM alpine:3\nSHELL [\"/usr/bin/env\", \"-S\", \"bash -eu\", \"-c\"]\nRUN cd /x\n",
+			want:       []string{"set -eu"},
+		},
+		{
+			name:       "a heredoc shebang through env -S keeps only the shell's flags",
+			dockerfile: "FROM alpine:3\nRUN <<EOF\n#!/usr/bin/env -S bash -e\ncd /x\nEOF\n",
+			want:       []string{"set -e"},
+		},
+		{
 			name:       "a heredoc shebang replaces the shell and its options",
 			dockerfile: "FROM alpine:3\nSHELL [\"/bin/bash\", \"-euo\", \"pipefail\", \"-c\"]\nRUN <<EOF\n#!/bin/sh -e\ncd /x\nEOF\n",
 			want:       []string{"set -e"},

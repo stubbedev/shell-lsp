@@ -1147,7 +1147,7 @@ func (p *reader) shellOptions() string {
 	if strings.ContainsRune(flags, '$') {
 		return ""
 	}
-	return shelloptions.SetCommand(strings.Fields(flags))
+	return shelloptions.ParseFlags(strings.Fields(flags)).SetCommand()
 }
 
 func (p *reader) recipeLine(l RecipeLine) projection.RecipeLine {

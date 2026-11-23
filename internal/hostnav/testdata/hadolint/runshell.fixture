@@ -310,6 +310,16 @@ FROM debian:12
 SHELL ["/usr/bin/bash", "-o", "pipefail", "-c"]
 RUN wget -qO- https://example.org/a.tgz | tar xz
 >>- DL4006 3 -- SHELL runs bash -o pipefail, so pipefail is on
+### dl4006-shell-env-bash-pipefail
+FROM debian:12
+SHELL ["/usr/bin/env", "bash", "-o", "pipefail", "-c"]
+RUN wget -qO- https://example.org/a.tgz | tar xz
+>>- DL4006 3 -- SHELL runs bash -o pipefail through env, so pipefail is on
+### dl4006-shell-env-bash-without-pipefail
+FROM debian:12
+SHELL ["/usr/bin/env", "bash", "-e", "-c"]
+RUN wget -qO- https://example.org/a.tgz | tar xz
+>>> DL4006 3
 ### dl4006-shell-bash-without-pipefail
 FROM debian:12
 SHELL ["/bin/bash", "-c"]

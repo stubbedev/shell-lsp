@@ -40,7 +40,7 @@ type StrictMode struct {
 
 func StrictModeOf(tree *parser.Tree) StrictMode {
 	shebang := shebangOptionChanges(tree.Text(), tree.Shell)
-	m := StrictMode{Errexit: turnsOn(shebang, "errexit"), Nounset: turnsOn(shebang, "nounset")}
+	m := StrictMode{Errexit: turnsOn(shebang, "errexit"), Nounset: turnsOn(shebang, "nounset"), Pipefail: turnsOn(shebang, "pipefail")}
 	for _, c := range tree.Commands {
 		if m.Errexit && m.Nounset && m.Pipefail {
 			break
@@ -118,26 +118,34 @@ func optionChanges(command string, args []*syntax.Word, s dialect.Shell) []optio
 }
 
 func setOptionChanges(args []*syntax.Word, s dialect.Shell) []optionChange {
-	var changes []optionChange
-	var owed []bool
+	words := make([]string, 0, len(args))
 	for _, a := range args {
 		lit, ok := parser.Literal(a)
 		if !ok {
-			return changes
+			break
 		}
+		words = append(words, lit)
+	}
+	return setWordChanges(words, s)
+}
+
+func setWordChanges(words []string, s dialect.Shell) []optionChange {
+	var changes []optionChange
+	var owed []bool
+	for _, word := range words {
 		if len(owed) > 0 {
-			changes = append(changes, optionChange{name: optionName(lit), on: owed[0]})
+			changes = append(changes, optionChange{name: optionName(word), on: owed[0]})
 			owed = owed[1:]
 			continue
 		}
-		if len(lit) < 2 || (lit[0] != '-' && lit[0] != '+') || lit == "--" {
+		if len(word) < 2 || (word[0] != '-' && word[0] != '+') || word == "--" {
 			return changes
 		}
-		on := lit[0] == '-'
-		for i := 1; i < len(lit); i++ {
-			if lit[i] == 'o' {
+		on := word[0] == '-'
+		for i := 1; i < len(word); i++ {
+			if word[i] == 'o' {
 				owed = append(owed, on)
-			} else if name, ok := shelldocs.SetLetter(lit[i], s); ok {
+			} else if name, ok := shelldocs.SetLetter(word[i], s); ok {
 				changes = append(changes, optionChange{name: name, on: on})
 			}
 		}
@@ -260,10 +268,10 @@ func EffectOf(trees ...*parser.Tree) Effect {
 }
 
 func Scan(tree *parser.Tree, sourced map[parser.Span]Effect) PerShell {
-	p := PerShell{tree: tree, base: Options{
-		Errexit:      turnsOn(shebangOptionChanges(tree.Text(), tree.Shell), "errexit"),
-		ExtendedGlob: tree.Dialect == dialect.Zsh && dialect.CompletionFile(tree.Text()),
-	}}
+	p := PerShell{tree: tree, base: Options{ExtendedGlob: tree.Dialect == dialect.Zsh && dialect.CompletionFile(tree.Text())}}
+	for _, change := range shebangOptionChanges(tree.Text(), tree.Shell) {
+		p.base.apply(change)
+	}
 	for _, c := range tree.Commands {
 		changes, dynamic := commandOptions(c, tree.Shell, sourced)
 		if len(changes) > 0 || dynamic {
@@ -391,20 +399,9 @@ func (o *Options) apply(change optionChange) {
 }
 
 func shebangOptionChanges(text string, s dialect.Shell) []optionChange {
-	first, _, _ := strings.Cut(text, "\n")
-	if !strings.HasPrefix(first, "#!") {
+	found, ok := InvokeShebang(text)
+	if !ok {
 		return nil
 	}
-	var changes []optionChange
-	for _, field := range strings.Fields(first)[1:] {
-		if !strings.HasPrefix(field, "-") || strings.HasPrefix(field, "--") {
-			continue
-		}
-		for i := 1; i < len(field); i++ {
-			if name, ok := shelldocs.SetLetter(field[i], s); ok {
-				changes = append(changes, optionChange{name: name, on: true})
-			}
-		}
-	}
-	return changes
+	return found.Flags.changes(s)
 }
