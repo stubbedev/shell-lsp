@@ -506,6 +506,7 @@ func TestBaseReadsTheSystemConfigAndTheConfigVariables(t *testing.T) {
 		"valueless parameter":    {"GIT_CONFIG_PARAMETERS": "'core.excludesfile'="},
 		"unterminated parameter": {"GIT_CONFIG_PARAMETERS": "'core.excludesfile"},
 		"junk after a parameter": {"GIT_CONFIG_PARAMETERS": "'core.excludesfile'='x'y"},
+		"vertical tab separator": {"GIT_CONFIG_PARAMETERS": "'core.a'='1'\v'core.excludesfile'='x'"},
 	} {
 		if got, err := last(vars); err == nil {
 			t.Errorf("%s: excludesFile = %q, want an error", name, got)

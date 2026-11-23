@@ -319,7 +319,7 @@ func validHead(path string, p probe) bool {
 	}
 	text, _, _ := strings.Cut(string(peek[:n]), "\x00")
 	if target, symbolic := strings.CutPrefix(text, symbolicRef); symbolic {
-		return strings.HasPrefix(strings.TrimLeft(target, cSpace), refsPrefix)
+		return strings.HasPrefix(strings.TrimLeft(target, gitSpace), refsPrefix)
 	}
 	return hexPrefix(text, sha1Length)
 }

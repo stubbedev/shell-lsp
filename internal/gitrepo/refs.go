@@ -45,12 +45,12 @@ func (r Repository) ResolveRef(read ReadText, name string) (Ref, bool, error) {
 		target, symbolic := strings.CutPrefix(text, symbolicRef)
 		if !symbolic {
 			n := r.format.objectIDLength()
-			if !hexPrefix(text, n) || len(text) > n && !isCSpace(text[n]) {
+			if !hexPrefix(text, n) || len(text) > n && !isGitSpace(text[n]) {
 				return Ref{}, false, nil
 			}
 			return Ref{Name: name, id: text[:n]}, true, nil
 		}
-		name = strings.Trim(target, cSpace)
+		name = strings.Trim(target, gitSpace)
 		if !validRefName(name) {
 			return Ref{}, false, nil
 		}

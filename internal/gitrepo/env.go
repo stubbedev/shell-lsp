@@ -143,28 +143,31 @@ func commandSetting(label, name, value string, hasValue bool) ([]source, error) 
 	return []source{{label: label, settings: config{parsed}}}, nil
 }
 
-const cSpace = " \t\n\v\f\r"
+const (
+	cSpace   = " \t\n\v\f\r"
+	gitSpace = " \t\n\r"
+)
 
-func isCSpace(c byte) bool { return strings.IndexByte(cSpace, c) >= 0 }
+func isGitSpace(c byte) bool { return strings.IndexByte(gitSpace, c) >= 0 }
 
 var errBadParameters = errors.New("not a list of quoted settings")
 
 func parameters(text string) ([]source, error) {
 	var out []source
-	for rest := text; rest != ""; rest = strings.TrimLeft(rest, cSpace) {
+	for rest := text; rest != ""; rest = strings.TrimLeft(rest, gitSpace) {
 		name, after, ok := dequote(rest)
 		if !ok {
 			return nil, errBadParameters
 		}
 		value, hasValue := "", true
 		switch {
-		case after == "" || isCSpace(after[0]):
+		case after == "" || isGitSpace(after[0]):
 			name, value, hasValue = strings.Cut(name, "=")
-		case after[0] == '=' && (len(after) == 1 || isCSpace(after[1])):
+		case after[0] == '=' && (len(after) == 1 || isGitSpace(after[1])):
 			after, hasValue = after[1:], false
 		case after[0] == '=':
 			value, after, ok = dequote(after[1:])
-			if !ok || after != "" && !isCSpace(after[0]) {
+			if !ok || after != "" && !isGitSpace(after[0]) {
 				return nil, errBadParameters
 			}
 		default:

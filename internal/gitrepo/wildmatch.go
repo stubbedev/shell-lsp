@@ -228,7 +228,7 @@ func inClass(name string, c byte, fold bool) (bool, bool) {
 	case "punct":
 		return isPrint && c != ' ' && !isUpper && !isLower && !isDigit, true
 	case "space":
-		return isCSpace(c), true
+		return isGitSpace(c), true
 	case "upper":
 		return isUpper || fold && isLower, true
 	case "xdigit":
