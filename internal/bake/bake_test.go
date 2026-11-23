@@ -125,7 +125,7 @@ func TestBuildsResolveDockerfilesAndInheritance(t *testing.T) {
 			"b": {{Text: "./b", Known: true}},
 		},
 		"/elsewhere/Dockerfile": {"c": {{}}},
-		"/repo/loop/Dockerfile":  {"f": {{}}},
+		"/repo/loop/Dockerfile": {"f": {{}}},
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("dockerfiles (-want +got):\n%s", diff)

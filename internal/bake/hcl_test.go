@@ -107,7 +107,7 @@ func TestHCLRejectsBrokenFiles(t *testing.T) {
 		{"target \"t\" {}\n}\n", "line 2, column 1: `}` closes nothing"},
 		{"/* open\n", "line 1, column 1: the comment is never closed"},
 		{"x = <<EOT\nbody\n", "line 1, column 5: the heredoc is never closed by a line with EOT"},
-		{"x = \"${a\"\n", "line 1, column 8: the string is never closed"},
+		{"x = \"${a\"\n", "line 1, column 9: the string is never closed"},
 		{"target \"t\" {\n  context = \"\\q\"\n}\n", "line 2, column 14: \\q is no escape sequence"},
 		{"\"x\" = 1\n", "line 1, column 1: expected an attribute name or a block type"},
 		{"target \"t\"\n", "line 1, column 1: `target` is neither an attribute nor a block"},

@@ -226,7 +226,7 @@ func (l *lexer) codePoint(start, digits int) (string, error) {
 		return "", l.fail(start, "the escape sequence needs %d hexadecimal digits", digits)
 	}
 	n, err := strconv.ParseUint(l.src[l.pos:l.pos+digits], 16, 32)
-	if err != nil || !utf8.ValidRune(rune(n)) {
+	if err != nil || n > utf8.MaxRune || !utf8.ValidRune(rune(n)) {
 		return "", l.fail(start, "the escape sequence needs %d hexadecimal digits naming a character", digits)
 	}
 	l.pos += digits
