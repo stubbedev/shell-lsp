@@ -209,6 +209,40 @@ func TestShellFilesCacheFollowsDirectoryChanges(t *testing.T) {
 	}
 }
 
+func TestSourcedShellFilesAreFoundAndDetectedByName(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	want := map[string]dialect.Dialect{".envrc": dialect.Bash, "x.zsh-theme": dialect.Zsh}
+	for name := range want {
+		if err := os.WriteFile(filepath.Join(root, name), []byte("export A=1\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ws := New(func(string) (*File, bool) { return nil, false }, Detect)
+	ws.SetRoots([]string{root})
+	if got := relShellFiles(t, ws, root); !slices.Equal(got, []string{".envrc", "x.zsh-theme"}) {
+		t.Errorf("ShellFiles = %v, want .envrc and x.zsh-theme", got)
+	}
+	for name, d := range want {
+		path := filepath.Join(root, name)
+		if !ShellByName(path) {
+			t.Errorf("ShellByName(%q) = false, want true", name)
+		}
+		f, err := ws.Load(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if f.Detection.Dialect != d {
+			t.Errorf("%s is detected as %v, want %v", name, f.Detection.Dialect, d)
+		}
+	}
+	globs := WatchGlobs()
+	if !strings.Contains(globs[0], ",zsh-theme,") || !strings.Contains(globs[1], ",envrc,") {
+		t.Errorf("WatchGlobs = %q, want zsh-theme and envrc", globs)
+	}
+}
+
 func TestRootOfPicksTheInnermostRoot(t *testing.T) {
 	t.Parallel()
 

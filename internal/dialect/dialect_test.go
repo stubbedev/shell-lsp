@@ -355,7 +355,7 @@ func TestRCFiles(t *testing.T) {
 	t.Parallel()
 
 	for path, want := range map[string]bool{
-		"/home/u/.zshrc": true, "/home/u/.bashrc": true, "/home/u/.profile": true, "/home/u/.mkshrc": true,
+		"/home/u/.zshrc": true, "/home/u/.bashrc": true, "/home/u/.profile": true, "/home/u/.mkshrc": true, "/p/.envrc": true,
 		"/home/u/zshrc.zsh": false, "/home/u/.bash_history": false, "": false,
 	} {
 		if got := IsRCFile(path); got != want {
@@ -365,6 +365,24 @@ func TestRCFiles(t *testing.T) {
 	for _, name := range RCFileNames() {
 		if _, ok := FromFileName(name); !ok {
 			t.Errorf("rc file %s has no dialect", name)
+		}
+	}
+}
+
+func TestSourcedFilesAreDetectedByName(t *testing.T) {
+	t.Parallel()
+
+	for path, want := range map[string]Dialect{"/p/.envrc": Bash, "/p/themes/x.zsh-theme": Zsh} {
+		if !IsShellFileName(path) {
+			t.Errorf("IsShellFileName(%q) = false, want true", path)
+		}
+		if got := Detect(nil, Input{URI: "file://" + path, Text: "export A=1\n"}); got != want {
+			t.Errorf("%s is detected as %v, want %v", path, got, want)
+		}
+	}
+	for _, path := range []string{"/p/.envrc.local", "/p/x.zsh-themes", "/p/.bash_history", "/p/notes.txt"} {
+		if IsShellFileName(path) {
+			t.Errorf("IsShellFileName(%q) = true, want false", path)
 		}
 	}
 }

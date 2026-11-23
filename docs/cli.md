@@ -19,8 +19,8 @@ shell-lsp help [check|fmt]
 `shell-lsp check` is a drop-in for the `shellcheck` command line: same
 options, same `.shellcheckrc` lookup, same output formats and same exit codes.
 Directories are searched for shell scripts the way the editor's workspace
-scan finds them: by extension (`.sh`, `.bash`, `.zsh`, `.ksh`, `.dash`,
-`.bats`), by rc-file name (`.bashrc`, `.zshrc`, ...), and by a shell shebang on
+scan finds them: by extension (`.sh`, `.bash`, `.zsh`, `.zsh-theme`, `.ksh`,
+`.dash`, `.bats`), by rc-file name (`.bashrc`, `.zshrc`, `.envrc`, ...), and by a shell shebang on
 executable files without an extension (on Windows, which has no execute bit,
 on every file without one). Makefiles (`Makefile`, `makefile`, `GNUmakefile`,
 `*.mk`, `*.mak`), justfiles (`justfile`, `Justfile`, `.justfile`, `*.just`),

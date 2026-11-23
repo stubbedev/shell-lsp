@@ -16,8 +16,9 @@ Each document is linted as one shell. The first of these that applies decides wh
 5. the shebang, also behind `env`, `busybox` and `nix-shell -i`, and with
    the interpreter's version in its name (`bash5`, `zsh-5.9`);
 6. a zsh completion tag (`#compdef`, `#autoload`) on the first line;
-7. the file name (`.bashrc`, `.zshrc`, `.profile` and the other rc files) or
-   its extension (`.bash`, `.bats`, `.zsh`, `.dash`, `.sh`, `.ksh`);
+7. the file name (`.bashrc`, `.zshrc`, `.profile` and the other rc files,
+   and direnv's `.envrc` as bash) or its extension (`.bash`, `.bats`, `.zsh`,
+   `.zsh-theme`, `.dash`, `.sh`, `.ksh`);
 8. the editor's language identifier, unless it is the generic `shellscript`;
 9. a vim modeline (`# vim: ft=zsh`);
 10. otherwise bash.

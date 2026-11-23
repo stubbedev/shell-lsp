@@ -43,8 +43,6 @@ const (
 	nixExtension = ".nix"
 )
 
-var shellExtensions = []string{".sh", ".bash", ".zsh", ".ksh", ".dash", ".bats"}
-
 var skippedDirs = map[string]bool{
 	".git": true, ".hg": true, ".svn": true, "node_modules": true, ".direnv": true, ".venv": true,
 	"vendor": true, "__pycache__": true, ".cache": true, "result": true,
@@ -188,7 +186,7 @@ func isShellName(path string) bool {
 	if _, ok := host.FromName(path); ok {
 		return true
 	}
-	return dialect.IsRCFile(path) || slices.Contains(shellExtensions, filepath.Ext(path))
+	return dialect.IsShellFileName(path)
 }
 
 type diskEntry struct {
@@ -1011,8 +1009,8 @@ func (w *Workspace) forgetTreeLocked(dir string) {
 }
 
 func WatchGlobs() []string {
-	extensions := make([]string, len(shellExtensions))
-	for i, ext := range shellExtensions {
+	extensions := dialect.Extensions()
+	for i, ext := range extensions {
 		extensions[i] = strings.TrimPrefix(ext, ".")
 	}
 	names := dialect.RCFileNames()

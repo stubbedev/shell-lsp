@@ -307,7 +307,7 @@ func completionTag(text string) (string, bool) {
 var rcFiles = map[string]Dialect{
 	".bashrc": Bash, ".bash_profile": Bash, ".bash_login": Bash, ".bash_logout": Bash, ".bash_aliases": Bash,
 	".profile": Posix, ".zshrc": Zsh, ".zprofile": Zsh, ".zshenv": Zsh, ".zlogin": Zsh, ".zlogout": Zsh,
-	".kshrc": Ksh, ".mkshrc": Ksh,
+	".kshrc": Ksh, ".mkshrc": Ksh, ".envrc": Bash,
 }
 
 func IsRCFile(path string) bool {
@@ -324,11 +324,39 @@ func FromFileName(path string) (Dialect, bool) {
 	return found.Dialect, ok
 }
 
-var extensions = []struct {
+type extension struct {
 	suffix  string
 	dialect Dialect
-}{
-	{".bash", Bash}, {".bats", Bash}, {".zsh", Zsh}, {".dash", Dash}, {".sh", Posix}, {".ksh", Ksh},
+}
+
+var extensions = []extension{
+	{".bash", Bash}, {".bats", Bash}, {".zsh", Zsh}, {".zsh-theme", Zsh}, {".dash", Dash}, {".sh", Posix}, {".ksh", Ksh},
+}
+
+func Extensions() []string {
+	out := make([]string, len(extensions))
+	for i, ext := range extensions {
+		out[i] = ext.suffix
+	}
+	return out
+}
+
+func IsShellFileName(path string) bool {
+	base := filepath.Base(path)
+	if _, ok := rcFiles[base]; ok {
+		return true
+	}
+	_, ok := extensionOf(base)
+	return ok
+}
+
+func extensionOf(base string) (extension, bool) {
+	for _, ext := range extensions {
+		if strings.HasSuffix(base, ext.suffix) {
+			return ext, true
+		}
+	}
+	return extension{}, false
 }
 
 func fromFileName(path string) (Detection, bool) {
@@ -339,10 +367,8 @@ func fromFileName(path string) (Detection, bool) {
 	if strings.HasPrefix(base, ".bash") {
 		return Detection{Dialect: Bash, Source: SourceFileName, Evidence: base}, true
 	}
-	for _, ext := range extensions {
-		if strings.HasSuffix(base, ext.suffix) {
-			return Detection{Dialect: ext.dialect, Source: SourceExtension, Evidence: ext.suffix}, true
-		}
+	if ext, ok := extensionOf(base); ok {
+		return Detection{Dialect: ext.dialect, Source: SourceExtension, Evidence: ext.suffix}, true
 	}
 	return Detection{}, false
 }
