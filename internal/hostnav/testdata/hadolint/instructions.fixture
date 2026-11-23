@@ -227,6 +227,29 @@ ADD ftp://example.com/a.txt /srv/
 ADD rootfs.zip /srv/
 >>> DL3020 2
 >>> DL3020 3
+### add-quoted-and-variable-remote-sources
+FROM debian:12
+ARG V=1 SRC=https://example.com/c.tar.gz
+ADD https://example.com/b.tar.gz /src/
+ADD "https://example.com/a-${V}.tar.gz" /src/
+ADD "https://github.com/a/b.git#v${V}" /src/b
+ADD ${SRC} /
+>>- DL3020 6 -- SRC defaults to a URL, which COPY cannot fetch
+### add-unset-variable-source
+FROM debian:12
+ARG SRC
+ADD $SRC /srv/
+>>- DL3020 3 -- the source is unknown, so it may be a URL COPY cannot fetch
+### add-quoted-local-sources
+FROM debian:12
+ADD "notes.txt" /srv/
+ADD "rootfs.tar.xz" /
+>>> DL3020 2
+### copy-quoted-archive-then-extract
+FROM debian:12
+COPY "bundle.tar.gz" "/tmp/"
+RUN tar -xzf /tmp/bundle.tar.gz -C /opt
+>>> DL3010 2
 ### expose-out-of-range
 FROM debian:12
 EXPOSE 80 65536

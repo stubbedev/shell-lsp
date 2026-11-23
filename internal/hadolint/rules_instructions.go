@@ -182,7 +182,11 @@ func (c *checker) add(in *dockerfile.Instruction) {
 		return
 	}
 	for _, src := range p.sources {
-		if !remote(src.Text) && !archive(src.Text) && !heredocSource(src) {
+		if heredocSource(src) {
+			continue
+		}
+		value, known := c.expand(in, src.Text)
+		if known && !remote(value) && !archive(value) {
 			c.report(lint.DL3020, src.Span, "ADD copies `%s` as it is; use COPY, which does only that", src.Text)
 			return
 		}
@@ -250,14 +254,18 @@ func (c *checker) archives(s dockerfile.Stage) {
 		if !ok {
 			continue
 		}
+		dest, ok := c.expand(in, p.dest.Text)
+		if !ok {
+			continue
+		}
+		renamed := !strings.HasSuffix(dest, "/") && archive(path.Base(dest))
 		for _, src := range p.sources {
-			name := path.Base(src.Text)
-			if strings.HasSuffix(p.dest.Text, "/") || !archive(path.Base(p.dest.Text)) {
-				if !archive(name) {
+			name := path.Base(dest)
+			if !renamed {
+				value, known := c.expand(in, src.Text)
+				if name = path.Base(value); !known || !archive(name) {
 					continue
 				}
-			} else {
-				name = path.Base(p.dest.Text)
 			}
 			if c.extracted(s, in, name) {
 				c.report(lint.DL3010, src.Span, "`%s` is copied and then unpacked; ADD unpacks a local archive itself, in one layer", src.Text)
