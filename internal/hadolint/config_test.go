@@ -34,7 +34,6 @@ var stricter = map[string]string{
 	"override-capitalised-level-ignored":      "an unknown level is an error, so a misspelt one cannot pass unnoticed",
 	"override-unknown-level-ignored":          "an unknown level is an error, so a misspelt one cannot pass unnoticed",
 	"ignored-unknown-code-accepted":           "a code that is no check code is an error",
-	"anchors-and-aliases":                     "the YAML reader takes no anchors or aliases",
 }
 
 var laxer = map[string]string{
@@ -180,6 +179,21 @@ format: json
 	}
 	if !cfg.StrictLabels || cfg.DisableIgnorePragma || cfg.Path != "/p/.hadolint.yaml" {
 		t.Errorf("StrictLabels %v, DisableIgnorePragma %v, Path %q", cfg.StrictLabels, cfg.DisableIgnorePragma, cfg.Path)
+	}
+}
+
+func TestParseConfigFollowsAliases(t *testing.T) {
+	t.Parallel()
+
+	cfg, err := ParseConfig("/p/.hadolint.yaml", "ignored: &codes [DL3006, SC2086]\noverride:\n  error: *codes\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(cfg.Ignored, []lint.Code{code(t, "DL3006"), code(t, "SC2086")}) {
+		t.Errorf("Ignored = %v", cfg.Ignored)
+	}
+	if cfg.Overrides[code(t, "DL3006")] != lint.SeverityError || cfg.Overrides[code(t, "SC2086")] != lint.SeverityError {
+		t.Errorf("Overrides = %v; the aliased list should be raised to error", cfg.Overrides)
 	}
 }
 
