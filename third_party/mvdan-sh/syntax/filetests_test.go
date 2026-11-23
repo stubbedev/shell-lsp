@@ -1956,6 +1956,168 @@ var fileTests = []fileTestCase{
 		}, LangZsh),
 	),
 	fileTest(
+		[]string{
+			"while a; | b",
+			"while a;\n| b",
+			"while a; ; | b",
+		},
+		printsAs("while a; do; done | b"),
+		langFile(&BinaryCmd{
+			Op: Pipe,
+			X: stmt(&WhileClause{
+				Short: true,
+				Cond:  litStmts("a"),
+			}),
+			Y: litStmt("b"),
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"{ until a; b; |& c; }"},
+		printsAs("{ until\n\ta\n\tb\ndo; done |& c; }"),
+		langFile(block(stmt(&BinaryCmd{
+			Op: PipeAll,
+			X: stmt(&WhileClause{
+				Until: true,
+				Short: true,
+				Cond:  litStmts("a", "b"),
+			}),
+			Y: litStmt("c"),
+		})), LangZsh),
+	),
+	fileTest(
+		[]string{
+			"if a; && b",
+			"if a;\n&& b",
+		},
+		printsAs("if a; then; fi && b"),
+		langFile(&BinaryCmd{
+			Op: AndStmt,
+			X: stmt(&IfClause{
+				Short: true,
+				Cond:  litStmts("a"),
+			}),
+			Y: litStmt("b"),
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"if a; then b; elif c; || d"},
+		printsAs("if a; then b; elif c; then; fi || d"),
+		langFile(&BinaryCmd{
+			Op: OrStmt,
+			X: stmt(&IfClause{
+				Cond: litStmts("a"),
+				Then: litStmts("b"),
+				Else: &IfClause{
+					Short: true,
+					Cond:  litStmts("c"),
+				},
+			}),
+			Y: litStmt("d"),
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"echo $(while a; | b)"},
+		printsAs("echo $(while a; do; done | b)"),
+		langFile(call(litWord("echo"), word(&CmdSubst{
+			Stmts: stmts(&BinaryCmd{
+				Op: Pipe,
+				X: stmt(&WhileClause{
+					Short: true,
+					Cond:  litStmts("a"),
+				}),
+				Y: litStmt("b"),
+			}),
+		})), LangZsh),
+	),
+	fileTest(
+		[]string{
+			"while a; ; b",
+			"while a;\n;\nb",
+			"while ; a; ; ; b",
+		},
+		printsAs("while\n\ta\n\tb\ndo; done"),
+		langFile(&WhileClause{
+			Short: true,
+			Cond:  litStmts("a", "b"),
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"{ if a; ; b; }"},
+		printsAs("{ if\n\ta\n\tb\nthen; fi; }"),
+		langFile(block(stmt(&IfClause{
+			Short: true,
+			Cond:  litStmts("a", "b"),
+		})), LangZsh),
+	),
+	fileTest(
+		[]string{
+			"if a; then b; fi",
+			"if ; a; ; then ; b; ; fi",
+		},
+		langFile(&IfClause{
+			Cond: litStmts("a"),
+			Then: litStmts("b"),
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{
+			"a\nb",
+			"; a; ; b",
+			"a\n;\nb;",
+		},
+		langFile(litStmts("a", "b"), LangZsh),
+	),
+	fileTest(
+		[]string{"", ";", "; ; ;", "\n;\n"},
+		langFile(&File{}, LangZsh),
+	),
+	fileTest(
+		[]string{"a &\nb", "a & ; b", "a &\n;\nb"},
+		langFile([]*Stmt{
+			{Cmd: litCall("a"), Background: true},
+			litStmt("b"),
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{"a && b", "a && ; b", "a &&\n;\n; b"},
+		langFile(&BinaryCmd{Op: AndStmt, X: litStmt("a"), Y: litStmt("b")}, LangZsh),
+	),
+	fileTest(
+		[]string{"a | b", "a | ; ; b"},
+		langFile(&BinaryCmd{Op: Pipe, X: litStmt("a"), Y: litStmt("b")}, LangZsh),
+	),
+	fileTest(
+		[]string{
+			"case x in a) b ;; esac",
+			"case x ; in ; a) b;; ; ; esac",
+			"case x ;\nin a) b;; esac",
+		},
+		langFile(&CaseClause{
+			Word: litWord("x"),
+			Items: []*CaseItem{{
+				Op:       Break,
+				Patterns: litWords("a"),
+				Stmts:    litStmts("b"),
+			}},
+		}, LangZsh),
+	),
+	fileTest(
+		[]string{
+			"{ a; }",
+			"{ ; a; }",
+			"{ a; ; }",
+		},
+		langFile(block(litStmt("a")), LangZsh),
+	),
+	fileTest(
+		[]string{"for i in a b # c"},
+		printsAs("for i in a b; do; done # c"),
+		langFile(&ForClause{
+			Short: true,
+			Loop:  &WordIter{Name: lit("i"), Items: litWords("a", "b")},
+		}, LangZsh),
+	),
+	fileTest(
 		[]string{"if a; then foo; elif [[ b ]] { bar }\n"},
 		printsAs("if a; then foo; elif [[ b ]]; then bar; fi"),
 		langFile(&IfClause{

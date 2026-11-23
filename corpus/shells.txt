@@ -81,7 +81,6 @@ posix-extension dash shell-rejects liquidprompt/tests/test_tools.sh
 posix-extension dash shell-rejects liquidprompt/tests/test_utils.sh
 paren-ambiguity bash parser-rejects oh-my-bash/lib/omb-prompt-base.sh
 posix-extension dash shell-rejects oh-my-bash/tools/git-prompt.sh
-parser-gap zsh parser-rejects ohmyzsh/lib/clipboard.zsh
 posix-extension dash shell-rejects ohmyzsh/plugins/catimg/catimg.sh
 posix-extension dash shell-rejects ohmyzsh/plugins/drush/drush.complete.sh
 parser-gap zsh parser-rejects ohmyzsh/plugins/genpass/genpass-apple
@@ -488,12 +487,10 @@ parser-gap zsh parser-rejects zsh/Completion/Darwin/Command/_fink
 parser-gap zsh parser-rejects zsh/Completion/Linux/Command/_lsusb
 other-dialect zsh parser-rejects zsh/Completion/Linux/Command/_lvm2
 parser-gap zsh parser-rejects zsh/Completion/Linux/Type/_fuse_values
-parser-gap zsh parser-rejects zsh/Completion/Solaris/Command/_dladm
 parser-gap zsh parser-rejects zsh/Completion/Unix/Command/_configure
 parser-gap zsh parser-rejects zsh/Completion/Unix/Command/_git
 paren-ambiguity zsh parser-rejects zsh/Completion/Unix/Command/_growisofs
 parser-gap zsh parser-rejects zsh/Completion/Unix/Command/_make
-parser-gap zsh parser-rejects zsh/Completion/Unix/Command/_openstack
 parser-gap zsh parser-rejects zsh/Completion/Unix/Command/_perl
 parser-gap zsh parser-rejects zsh/Completion/Unix/Command/_texinfo
 parser-gap zsh parser-rejects zsh/Completion/Unix/Command/_todo.sh

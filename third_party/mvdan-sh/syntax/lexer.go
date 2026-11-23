@@ -262,6 +262,7 @@ runeLoop:
 	for {
 		switch r {
 		case '\n', runeEOF:
+			p.commentAtEOF = r == runeEOF
 			break runeLoop
 		case escNewl:
 			p.litBs = append(p.litBs, '\\', '\n')

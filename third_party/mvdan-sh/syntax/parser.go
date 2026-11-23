@@ -571,6 +571,10 @@ type Parser struct {
 	// so that its closing ')' can be told apart from that of a subshell.
 	inSubst bool
 
+	// commentAtEOF is set when the input ends inside a comment, which zsh
+	// ends with a newline even then.
+	commentAtEOF bool
+
 	// list of pending heredoc bodies
 	buriedHdocs int
 	heredocs    []*Redirect
@@ -664,6 +668,7 @@ func (p *Parser) reset() {
 	p.wordBatch = nil
 	p.stmtStack = p.stmtStack[:0]
 	p.litBs = nil
+	p.commentAtEOF = false
 	clear(p.kshTypes)
 	clear(p.assocArrays)
 }
@@ -1018,8 +1023,9 @@ func (p *Parser) followList(left string, lpos Pos, cond bool, stops ...string) (
 	// * [LangZsh]: "A list is a sequence of zero or more sublists...".
 	// * [LangMirBSDKorn]: "Lists of commands can be created by separating pipelines...";
 	//   note that the man page is not explicit, but the shell clearly allows e.g. `{ }`.
-	if !p.showmeAllowed(cond) && p.got(semicolon) {
-		if p.lang.in(LangZsh | LangMirBSDKorn) {
+	// With [LangZsh], a lone `;` reads as a newline, which the list skips.
+	if !p.showmeAllowed(cond) && !p.lang.in(LangZsh) && p.got(semicolon) {
+		if p.lang.in(LangMirBSDKorn) {
 			return nil, nil // allow an empty list
 		}
 		p.followErr(lpos, left, noQuote("a statement list"))
@@ -1293,7 +1299,7 @@ func (p *Parser) stmts(yield func(*Stmt, error) bool, cond bool, stops ...string
 	gotEnd := true
 loop:
 	for p.tok != _EOF {
-		newLine := p.got(_Newl)
+		newLine := p.linebreak()
 		switch p.tok {
 		case _LitWord:
 			for _, stop := range stops {
@@ -1320,6 +1326,14 @@ loop:
 				break loop
 			}
 			p.curErr("%#q can only be used in a case clause", p.tok)
+		case or, orAnd, andAnd, orOr:
+			// The condition list ends before an operator which cannot
+			// start a statement, so that the clause takes the short form
+			// with an empty body and is itself its left-hand side, as in
+			// `while a; | b`.
+			if zshCond {
+				break loop
+			}
 		}
 		// A reserved word which closes a compound command is reported as
 		// such below, which is more precise than a missing separator; it
@@ -2800,7 +2814,7 @@ func (p *Parser) getStmt(readEnd, binCmd, fnBody bool) *Stmt {
 		levels++
 		p.nest()
 		p.next()
-		p.got(_Newl)
+		p.linebreak()
 		if p.showmeAllowed(false) && p.tok == semicolon {
 			b.Y = p.showmeStmt(false, true)
 		} else {
@@ -3127,7 +3141,7 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
 		levels++
 		p.nest()
 		p.next()
-		p.got(_Newl)
+		p.linebreak()
 		if b.Y = p.gotStmtPipe(&Stmt{Position: p.pos}, true); b.Y == nil || p.err != nil {
 			if p.recoverError() {
 				b.Y = &Stmt{Position: recoveredPos}
@@ -3474,9 +3488,10 @@ func (p *Parser) wordIter(ftok string, fpos Pos) *WordIter {
 				wi.Items = append(wi.Items, w)
 			}
 		}
-		if !p.headerSeps() && p.lang.in(LangZsh) {
+		if !p.headerSeps() && p.lang.in(LangZsh) && !(p.tok == _EOF && p.commentAtEOF) {
 			// zsh needs a separator to end the words, even before
-			// the end of the input or a token closing a construct.
+			// the end of the input or a token closing a construct,
+			// although a comment at the end of the input will do.
 			p.followErr(fpos, ftok+" foo in words", noQuote("`;` or a newline"))
 		}
 	} else if p.lang.in(LangZsh) && p.tok == leftParen {
@@ -3524,7 +3539,14 @@ func (p *Parser) iterName() bool {
 // reports whether there were any.
 func (p *Parser) headerSeps() bool {
 	semi := p.got(semicolon)
-	got := p.got(_Newl) || semi
+	return p.linebreak() || semi
+}
+
+// linebreak consumes a newline, or with [LangZsh] any number of newlines and
+// `;`, as zsh reads a `;` which does not end a statement as a newline, and
+// reports whether there were any.
+func (p *Parser) linebreak() bool {
+	got := p.got(_Newl)
 	for p.lang.in(LangZsh) && (p.got(semicolon) || p.got(_Newl)) {
 		got = true
 	}
@@ -3548,7 +3570,7 @@ func (p *Parser) caseClause(s *Stmt) {
 		p.followErr(cc.Case, "case", noQuote("a word"))
 	}
 	end := "esac"
-	p.got(_Newl)
+	p.linebreak()
 	if pos, ok := p.gotRsrv("{"); ok {
 		cc.In = pos
 		cc.Braces = true
@@ -3681,7 +3703,7 @@ func (p *Parser) zshGroupWord(lparen Pos, group []*Word, bars []Pos, rparen Pos)
 }
 
 func (p *Parser) caseItems(stop string) (items []*CaseItem) {
-	p.got(_Newl)
+	p.linebreak()
 	for p.tok != _EOF && (p.tok != _LitWord || p.val != stop) {
 		ci := &CaseItem{}
 		ci.Comments, p.accComs = p.accComs, nil
@@ -3722,7 +3744,7 @@ func (p *Parser) caseItems(stop string) (items []*CaseItem) {
 			p.checkLang(ci.OpPos, langBashLike, "%#q", ci.Op)
 		}
 		p.next()
-		p.got(_Newl)
+		p.linebreak()
 
 		// Split the comments:
 		//

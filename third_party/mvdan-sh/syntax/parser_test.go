@@ -703,30 +703,36 @@ var errorCases = []errorCase{
 		";",
 		langErr("1:1: `;` can only immediately follow a statement"),
 		langErr("", LangKsh93), // a showme command
+		langErr("", LangZsh),   // read as a newline
 	),
 	errCase(
 		"; { a; }",
 		langErr("1:1: `;` can only immediately follow a statement"),
 		langErr("1:1: `;` can only precede a simple command", LangKsh93),
+		langErr("", LangZsh), // read as a newline
 	),
 	errCase(
 		"; >f",
 		langErr("1:1: `;` can only immediately follow a statement"),
 		langErr("1:1: `;` can only precede a simple command", LangKsh93),
+		langErr("", LangZsh), // read as a newline
 	),
 	errCase(
 		"; ! a",
 		langErr("1:1: `;` can only immediately follow a statement"),
 		langErr("1:1: `;` can only precede a simple command", LangKsh93),
+		langErr("", LangZsh), // read as a newline
 	),
 	errCase(
 		"; ; a",
 		langErr("1:1: `;` can only immediately follow a statement"),
 		langErr("1:3: statements must be separated by &, ; or a newline", LangKsh93),
+		langErr("", LangZsh), // read as a newline
 	),
 	errCase(
 		"a | ; b",
 		langErr("1:3: `|` must be followed by a statement"),
+		langErr("", LangZsh), // read as a newline
 	),
 	errCase(
 		"if ; then a; fi",
@@ -808,6 +814,7 @@ var errorCases = []errorCase{
 		"echo & ; bar",
 		langErr("1:8: `;` can only immediately follow a statement"),
 		langErr("", LangKsh93), // a showme command
+		langErr("", LangZsh),   // read as a newline
 	),
 	errCase(
 		"foo;;",
@@ -1262,9 +1269,30 @@ var errorCases = []errorCase{
 		langErr("1:13: `end` can only be used to end a `foreach`", LangZsh),
 	),
 	errCase(
+		"if a; ; b",
+		langErr("1:1: `if <cond>` must be followed by `then`", LangZsh),
+	),
+	errCase(
+		"while a; b; |",
+		langErr("1:13: `|` must be followed by a statement", LangZsh),
+	),
+	errCase(
+		"while a; & b",
+		langErr("1:10: `&` can only immediately follow a statement", LangZsh),
+	),
+	errCase(
+		"if a; ; & b",
+		langErr("1:9: `&` can only immediately follow a statement", LangZsh),
+	),
+	errCase(
+		"while a; ;; b",
+		langErr("1:10: `;;` can only be used in a case clause", LangZsh),
+	),
+	errCase(
 		"echo foo &\n;",
 		langErr("2:1: `;` can only immediately follow a statement"),
 		langErr("", LangKsh93), // a showme command
+		langErr("", LangZsh),   // read as a newline
 	),
 	errCase(
 		"echo $(foo",
@@ -1573,6 +1601,7 @@ var errorCases = []errorCase{
 		"echo foo\n;",
 		langErr("2:1: `;` can only immediately follow a statement"),
 		langErr("", LangKsh93), // a showme command
+		langErr("", LangZsh),   // read as a newline
 	),
 	errCase(
 		"<<$ <<0\n$(<<$<<",
