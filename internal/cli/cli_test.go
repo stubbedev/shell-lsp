@@ -46,7 +46,7 @@ func writeFiles(t *testing.T, dir string, files map[string]string) {
 	}
 }
 
-var gccLine = regexp.MustCompile(`^(.*):(\d+):(\d+): \w+: .* \[(S[CL]\d+)\]$`)
+var gccLine = regexp.MustCompile(`^(.*):(\d+):(\d+): \w+: .* \[([A-Z]+\d+)\]$`)
 
 func findings(t *testing.T, gcc string) []string {
 	t.Helper()
@@ -93,7 +93,7 @@ func TestCheckSkipsNamedFilesOfOtherLanguages(t *testing.T) {
 		"notes":      "echo hi\n",
 		"run.py":     unquoted,
 		"d.hcl":      "# shellcheck shell=bash\necho $1\n",
-		"Dockerfile": "FROM x\nRUN echo $1\n",
+		"Dockerfile": "FROM x:1\nRUN echo $1\n",
 	})
 	skipped := run(t, dir, "", "check", "-f", "gcc", "t.py", "b.hcl", "c.yaml", "p.py")
 	if skipped.status != statusOK || skipped.stdout != "" || skipped.stderr != "" {
