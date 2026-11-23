@@ -1156,7 +1156,7 @@ func (b *builder) recoveredClosers(node syntax.Node) {
 		}
 		open, closer := loopDelimiters(n.Braces)
 		if stray := listedDo(n); stray != nil && n.DoPos.IsRecovered() {
-			b.errorAt(stray.Pos(), "`do` needs a `;` or line break before it; here it is read as one more word of the list")
+			b.errorAt(stray.Pos(), listedDoMessage)
 		} else {
 			b.missing(n.ForPos, n.DoPos, opener, open)
 		}
@@ -1210,13 +1210,17 @@ func (b *builder) recoveredClosers(node syntax.Node) {
 	}
 }
 
+const listedDoMessage = "`do` needs a `;` or line break before it; here it is read as one more word of the list"
+
 func listedDo(n *syntax.ForClause) *syntax.Word {
 	iter, ok := n.Loop.(*syntax.WordIter)
-	if !ok || len(iter.Items) == 0 {
+	if !ok {
 		return nil
 	}
-	if last := iter.Items[len(iter.Items)-1]; last.Lit() == "do" {
-		return last
+	for _, item := range slices.Backward(iter.Items) {
+		if item.Lit() == "do" {
+			return item
+		}
 	}
 	return nil
 }

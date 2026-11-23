@@ -208,6 +208,9 @@ func parseSource(parser *syntax.Parser, src []byte, base int, text string, d dia
 		}
 		file, parsedSrc = parsed, src
 		errs = append(errs, parseErr)
+		if do := doListedBeforeStrayDone(parser, src, base, err); do != nil {
+			errs = append(errs, Error{Span: tokenSpan(text, offset(do.Pos())), Kind: ErrSyntax, Message: listedDoMessage})
+		}
 		if !located {
 			break
 		}
@@ -224,6 +227,27 @@ func parseSource(parser *syntax.Parser, src []byte, base int, text string, d dia
 		closedAtEnd = closeAtEndOfText(file, text)
 	}
 	return file, errs, closedAtEnd
+}
+
+const strayDoneText = "`done` can only be used to end a loop"
+
+func doListedBeforeStrayDone(parser *syntax.Parser, src []byte, base int, err error) *syntax.Word {
+	parseErr, ok := errors.AsType[syntax.ParseError](err)
+	if !ok || parseErr.Text != strayDoneText || !parseErr.Pos.IsValid() {
+		return nil
+	}
+	prefix, _ := parser.Parse(bytes.NewReader(src[:offset(parseErr.Pos)-base]), "")
+	var closest *syntax.ForClause
+	Walk(prefix, func(n syntax.Node) bool {
+		if loop, ok := n.(*syntax.ForClause); ok && loop.Short && (closest == nil || !closest.End().After(loop.End())) {
+			closest = loop
+		}
+		return true
+	})
+	if closest == nil {
+		return nil
+	}
+	return listedDo(closest)
 }
 
 func parsedPastText(file *syntax.File, err error, text string) bool {

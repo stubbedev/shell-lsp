@@ -11,6 +11,7 @@ func TestSyntaxErrorsExplainTheLikelyMistake(t *testing.T) {
 
 	tests := []struct {
 		src     string
+		dialect dialect.Dialect
 		message string
 		at      string
 	}{
@@ -35,10 +36,14 @@ func TestSyntaxErrorsExplainTheLikelyMistake(t *testing.T) {
 		{src: "if [[ \\( $1 = x \\) ]]; then :; fi\n", message: "inside `[[ ]]`, group conditions with plain `( )`; do not escape or quote the parentheses", at: "$1"},
 		{src: "if [[ echo \"$x\" ]]; then :; fi\n", message: "expected a test operator after `echo`; to check whether a command succeeds, run it without `[[ ]]`", at: "\"$x\""},
 		{src: "for h in a b do\n  echo \"$h\"\ndone\n", message: "`do` needs a `;` or line break before it; here it is read as one more word of the list", at: "do"},
+		{src: "for h in a b do echo \"$h\"; done\n", message: "`do` needs a `;` or line break before it; here it is read as one more word of the list", at: "do"},
+		{src: "for h in a b do\n  echo \"$h\"\ndone\n", dialect: dialect.Zsh, message: "`do` needs a `;` or line break before it; here it is read as one more word of the list", at: "do"},
+		{src: "for h in a b do\n  echo \"$h\"\ndone\n", dialect: dialect.Zsh, message: "`done` can only be used to end a loop", at: "done"},
+		{src: "f() {\n  for i in 1; do :; done\n  select h in a b do echo \"$h\"; done\n}\n", dialect: dialect.Zsh, message: "`do` needs a `;` or line break before it; here it is read as one more word of the list", at: "do"},
 		{src: "if true; then\n  :\nelse\nfi\n", message: "expected a command after `else`", at: "else"},
 	}
 	for _, tc := range tests {
-		tree := Parse(tc.src, dialect.Bash)
+		tree := Parse(tc.src, tc.dialect)
 		found := false
 		for _, e := range tree.Errors {
 			if e.Message == tc.message && tc.src[e.Span.Start:e.Span.End] == tc.at {
