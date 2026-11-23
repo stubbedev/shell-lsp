@@ -78,7 +78,7 @@ func installPrefix(pathDirs, pathExt []string) (string, error) {
 
 func userHome(name string) (string, error) {
 	u, err := user.Lookup(name)
-	if _, ok := errors.AsType[user.UnknownUserError](err); ok {
+	if _, ok := errors.AsType[user.UnknownUserError](err); ok || unmappedAccount(err) {
 		return "", fmt.Errorf("the user %q: %w", name, errNotExpanded)
 	}
 	if err != nil {
