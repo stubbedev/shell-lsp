@@ -179,3 +179,27 @@ func TestFmtFormatsNixFiles(t *testing.T) {
 		t.Errorf("a refused file was rewritten to %q", after)
 	}
 }
+
+func TestFmtSkipsNamedFilesOfOtherLanguages(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeFiles(t, dir, map[string]string{
+		"t.py":   "import os\n\ndef main(argv):\n    print(os.getcwd())\n",
+		"b.hcl":  "resource \"x\" \"y\" {\n  name = \"z\"\n}\n",
+		"script": ugly,
+		"run.py": "#!/bin/bash\n" + ugly,
+	})
+	if got := run(t, dir, "", "fmt", "-l", "t.py", "b.hcl"); got.status != statusOK || got.stdout != "" || got.stderr != "" {
+		t.Errorf("formatting only files of other languages = %+v", got)
+	}
+	if got := run(t, dir, "", "fmt", "-l", "t.py", "b.hcl", "script", "run.py"); got.status != statusFailed || got.stdout != "script\nrun.py\n" || got.stderr != "" {
+		t.Errorf("fmt -l over mixed files = %+v, want the extensionless script and the bash .py listed", got)
+	}
+	if got := run(t, dir, "", "fmt", "-f", "t.py", "script", "run.py"); got.status != statusOK || got.stdout != "script\nrun.py\n" {
+		t.Errorf("fmt -f over mixed files = %+v", got)
+	}
+	if got := run(t, dir, "", "fmt", "-ln", "bash", "t.py"); got.status != statusFailed || !strings.HasPrefix(got.stderr, "t.py:") {
+		t.Errorf("fmt -ln bash t.py = %+v, want it parsed as bash", got)
+	}
+}

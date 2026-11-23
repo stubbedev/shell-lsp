@@ -5,10 +5,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+	"sync"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
+	"github.com/stubbedev/shell-lsp/internal/parallel"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/platform"
 	"github.com/stubbedev/shell-lsp/internal/project"
@@ -28,15 +31,31 @@ func absolute(dir, path string) string {
 	return filepath.Join(dir, path)
 }
 
-func collectTargets(dir string, operands []string, walkKeeps func(path string) bool) ([]target, []string) {
-	var out []target
+type collected struct {
+	target
+	text func() ([]byte, error)
+}
+
+type targetSelection struct {
+	walkKeeps   func(path string) bool
+	forcedShell bool
+	read        func(path string) ([]byte, error)
+}
+
+func readDisk(path string) ([]byte, error) {
+	raw, _, err := workspace.ReadDisk(path)
+	return raw, err
+}
+
+func collectTargets(dir string, operands []string, sel targetSelection) ([]collected, []string) {
+	var out []collected
 	var failures []string
 	seen := map[string]bool{}
 	add := func(t target) {
 		key := platform.Native.Fold(t.path)
 		if !seen[key] {
 			seen[key] = true
-			out = append(out, t)
+			out = append(out, collected{target: t, text: sync.OnceValues(func() ([]byte, error) { return sel.read(t.path) })})
 		}
 	}
 	for _, operand := range operands {
@@ -46,7 +65,7 @@ func collectTargets(dir string, operands []string, walkKeeps func(path string) b
 		case err != nil:
 			failures = append(failures, fmt.Sprintf("%s: %v", operand, err))
 		case info.IsDir():
-			found, walkFailures := walkTargets(operand, path, walkKeeps)
+			found, walkFailures := walkTargets(operand, path, sel.walkKeeps)
 			failures = append(failures, walkFailures...)
 			for _, t := range found {
 				add(t)
@@ -55,7 +74,41 @@ func collectTargets(dir string, operands []string, walkKeeps func(path string) b
 			add(target{name: operand, path: path})
 		}
 	}
-	return out, failures
+	if sel.forcedShell {
+		return out, failures
+	}
+	kept, skipFailures := shellOperands(out)
+	return kept, append(failures, skipFailures...)
+}
+
+func shellOperands(found []collected) ([]collected, []string) {
+	shell := make([]bool, len(found))
+	errs := make([]error, len(found))
+	parallel.For(runtime.GOMAXPROCS(0), len(found), func(i int) {
+		shell[i], errs[i] = found[i].shell()
+	})
+	kept := make([]collected, 0, len(found))
+	var failures []string
+	for i, o := range found {
+		switch {
+		case errs[i] != nil:
+			failures = append(failures, fmt.Sprintf("%s: %v", o.name, errs[i]))
+		case shell[i]:
+			kept = append(kept, o)
+		}
+	}
+	return kept, failures
+}
+
+func (o collected) shell() (bool, error) {
+	if o.walked || workspace.ShellByName(o.path) {
+		return true, nil
+	}
+	raw, err := o.text()
+	if err != nil {
+		return false, err
+	}
+	return workspace.NamesShell(string(raw)), nil
 }
 
 func walkTargets(operand, dir string, keeps func(path string) bool) ([]target, []string) {

@@ -19,7 +19,6 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/parallel"
 	"github.com/stubbedev/shell-lsp/internal/project"
 	"github.com/stubbedev/shell-lsp/internal/regularfile"
-	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
 var fmtUsage = fmt.Sprintf(`usage: shell-lsp fmt [flags] [path ...]
@@ -289,9 +288,13 @@ func (f *formatter) stdin() int {
 }
 
 func (f *formatter) files() int {
-	targets, failures := collectTargets(f.env.Dir, f.opts.paths, func(path string) bool {
-		language, embedded := host.FromName(path)
-		return !embedded || language.Formats()
+	targets, failures := collectTargets(f.env.Dir, f.opts.paths, targetSelection{
+		walkKeeps: func(path string) bool {
+			language, embedded := host.FromName(path)
+			return !embedded || language.Formats()
+		},
+		forcedShell: f.opts.language != nil,
+		read:        readDisk,
 	})
 	for _, failure := range failures {
 		f.fail("%s", failure)
@@ -305,12 +308,12 @@ func (f *formatter) files() int {
 	results := make([]formatted, len(targets))
 	parallel.For(runtime.GOMAXPROCS(0), len(targets), func(i int) {
 		t := targets[i]
-		raw, _, err := workspace.ReadDisk(t.path)
+		raw, err := t.text()
 		if err != nil {
 			results[i] = formatted{name: t.name, err: err}
 			return
 		}
-		results[i] = f.format(t, string(raw))
+		results[i] = f.format(t.target, string(raw))
 	})
 	for _, r := range results {
 		f.report(r)
