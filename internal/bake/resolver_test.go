@@ -1,16 +1,19 @@
 package bake
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+
+	"github.com/stubbedev/shell-lsp/internal/platform"
 )
 
 func newTestResolver() *Resolver {
-	return NewResolver(os.ReadFile, os.ReadDir, func() time.Time { return time.Time{} }, time.Hour)
+	return NewResolver(os.ReadFile, os.ReadDir, func() time.Time { return time.Time{} }, time.Hour, platform.UserDirs{})
 }
 
 func dockerfilesOf(t *testing.T, r *Resolver, dir string) Dockerfiles {
@@ -203,5 +206,29 @@ func TestResolverSkipsDirectoriesTheRepositoryExcludes(t *testing.T) {
 		if diff := cmp.Diff(want, got); diff != "" {
 			t.Errorf("dockerfiles of %s/build (-want +got):\n%s", repo, diff)
 		}
+	}
+}
+
+func TestResolverSkipsDirectoriesTheUsersExcludesFileIgnores(t *testing.T) {
+	t.Parallel()
+
+	const (
+		dockerfile = "FROM base\n"
+		bakeFile   = "target \"%s\" {\n  context = \"../build\"\n  contexts = { %s = \"x\" }\n}\n"
+	)
+	dir := t.TempDir()
+	writeFiles(t, dir, map[string]string{
+		"home/.config/git/ignore":        "generated/\nvendored/\n",
+		"repo/.git/HEAD":                 "ref: refs/heads/main\n",
+		"repo/.gitignore":                "!vendored/\n",
+		"repo/build/Dockerfile":          dockerfile,
+		"repo/generated/docker-bake.hcl": fmt.Sprintf(bakeFile, "g", "generated"),
+		"repo/vendored/docker-bake.hcl":  fmt.Sprintf(bakeFile, "v", "vendored"),
+	})
+	r := NewResolver(os.ReadFile, os.ReadDir, func() time.Time { return time.Time{} }, time.Hour, platform.UserDirs{Home: filepath.Join(dir, "home")})
+	got := dockerfilesOf(t, r, filepath.Join(dir, "repo", "build"))
+	want := Dockerfiles{filepath.Join(dir, "repo", "build", "Dockerfile"): {"vendored": {{Text: "x", Known: true}}}}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("dockerfiles of repo/build (-want +got):\n%s", diff)
 	}
 }

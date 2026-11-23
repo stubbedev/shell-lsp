@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+
+	"github.com/stubbedev/shell-lsp/internal/platform"
 )
 
 func TestJSONReadsTargets(t *testing.T) {
@@ -174,7 +176,7 @@ func TestResolverFindsBakeFilesInAncestors(t *testing.T) {
 		reads++
 		return os.ReadFile(path)
 	}
-	r := NewResolver(read, os.ReadDir, func() time.Time { return time.Time{} }, time.Hour)
+	r := NewResolver(read, os.ReadDir, func() time.Time { return time.Time{} }, time.Hour, platform.UserDirs{})
 	got, err := r.Dockerfiles(filepath.Join(dir, "build"))
 	if err != nil {
 		t.Fatal(err)
@@ -210,7 +212,7 @@ func TestResolverReportsBrokenBakeFiles(t *testing.T) {
 
 	dir := t.TempDir()
 	writeFiles(t, dir, map[string]string{"docker-bake.json": "{", "app/Dockerfile": "FROM a\n"})
-	r := NewResolver(os.ReadFile, os.ReadDir, time.Now, time.Hour)
+	r := NewResolver(os.ReadFile, os.ReadDir, time.Now, time.Hour, platform.UserDirs{})
 	if _, err := r.Dockerfiles(filepath.Join(dir, "app")); err == nil || !strings.Contains(err.Error(), "docker-bake.json") {
 		t.Errorf("error = %v, want one naming docker-bake.json", err)
 	}
@@ -234,7 +236,7 @@ func TestResolverSkipsDirectoriesItCannotList(t *testing.T) {
 		}
 		return nil, fs.ErrNotExist
 	}
-	r := NewResolver(os.ReadFile, list, time.Now, time.Hour)
+	r := NewResolver(os.ReadFile, list, time.Now, time.Hour, platform.UserDirs{})
 	if _, err := r.Dockerfiles("/x/private/app"); err != nil {
 		t.Errorf("an unlistable ancestor = %v, want it skipped", err)
 	}

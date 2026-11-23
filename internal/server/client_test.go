@@ -29,7 +29,9 @@ type testClient struct {
 func startClient(t testing.TB, initializeParams string, setup ...func(*Server)) (*testClient, *Server) {
 	t.Helper()
 
-	return startClientIn(t, CurrentProcess(), initializeParams, setup...)
+	process := CurrentProcess()
+	process.Home, process.ConfigHome = t.TempDir(), ""
+	return startClientIn(t, process, initializeParams, setup...)
 }
 
 func startClientIn(t testing.TB, process Process, initializeParams string, setup ...func(*Server)) (*testClient, *Server) {
@@ -39,7 +41,7 @@ func startClientIn(t testing.TB, process Process, initializeParams string, setup
 	serverReader, clientWriter := io.Pipe()
 	srv := New(jsonrpc.NewConn(serverReader, serverWriter), "test", process)
 	srv.shellcheckrc = newShellcheckrcResolver(nil)
-	srv.hadolint = newHadolintResolver(nil)
+	srv.hadolint = newHadolintResolver(nil, process.dirs())
 	srv.linkPatience = clientTimeout
 	for _, fn := range setup {
 		fn(srv)

@@ -10,6 +10,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/directive"
 	"github.com/stubbedev/shell-lsp/internal/lint"
+	"github.com/stubbedev/shell-lsp/internal/platform"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 )
 
@@ -65,7 +66,7 @@ func TestNearestWalksUpThenFallsBack(t *testing.T) {
 		filepath.Join("/home", "u", ".shellcheckrc"): "disable=SC2086\n",
 	}
 	now := time.Unix(0, 0)
-	r := NewResolver(disk.read, func() time.Time { return now }, time.Minute, Fallback(filepath.Join("/home", "u"), ""))
+	r := NewResolver(disk.read, func() time.Time { return now }, time.Minute, Fallback(platform.UserDirs{Home: filepath.Join("/home", "u")}))
 	rc, found, err := r.Nearest(filepath.Join(root, "a", "b"))
 	if err != nil || !found || rc.Path != filepath.Join(root, "a", "shellcheckrc") {
 		t.Fatalf("Nearest = %+v, %t, %v", rc, found, err)

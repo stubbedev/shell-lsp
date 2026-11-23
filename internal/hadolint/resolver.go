@@ -9,6 +9,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/bake"
 	"github.com/stubbedev/shell-lsp/internal/diskwatch"
 	"github.com/stubbedev/shell-lsp/internal/filecache"
+	"github.com/stubbedev/shell-lsp/internal/platform"
 )
 
 var ConfigNames = []string{".hadolint.yaml", ".hadolint.yml"}
@@ -21,9 +22,9 @@ type Resolver struct {
 	fallback []string
 }
 
-func NewResolver(read filecache.ReadFile, now func() time.Time, recheck time.Duration, fallback []string) *Resolver {
+func NewResolver(read filecache.ReadFile, now func() time.Time, recheck time.Duration, fallback []string, git platform.UserDirs) *Resolver {
 	parse := func(path string, data []byte) (Config, error) { return ParseConfig(path, string(data)) }
-	return &Resolver{files: filecache.New(read, parse, now, recheck), bake: bake.NewResolver(read, os.ReadDir, now, recheck), fallback: fallback}
+	return &Resolver{files: filecache.New(read, parse, now, recheck), bake: bake.NewResolver(read, os.ReadDir, now, recheck, git), fallback: fallback}
 }
 
 func (r *Resolver) Watch(disk *diskwatch.Watcher) {
@@ -31,22 +32,19 @@ func (r *Resolver) Watch(disk *diskwatch.Watcher) {
 	r.bake.Watch(disk)
 }
 
-func ConfigFallback(home, configHome string) []string {
+func ConfigFallback(dirs platform.UserDirs) []string {
 	var out []string
-	if configHome == "" && home != "" {
-		configHome = filepath.Join(home, ".config")
-	}
-	if configHome != "" {
+	if dir := dirs.ConfigDir(); dir != "" {
 		for _, name := range userConfigNames {
-			out = append(out, filepath.Join(configHome, name))
+			out = append(out, filepath.Join(dir, name))
 		}
 	}
-	if home != "" {
+	if dirs.Home != "" {
 		for _, name := range userConfigNames {
-			out = append(out, filepath.Join(home, ".hadolint", name))
+			out = append(out, filepath.Join(dirs.Home, ".hadolint", name))
 		}
 		for _, name := range ConfigNames {
-			out = append(out, filepath.Join(home, name))
+			out = append(out, filepath.Join(dirs.Home, name))
 		}
 	}
 	return out

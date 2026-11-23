@@ -42,6 +42,10 @@ func CurrentProcess() Process {
 	}
 }
 
+func (p Process) dirs() platform.UserDirs {
+	return platform.UserDirs{Home: p.Home, ConfigHome: p.ConfigHome}
+}
+
 func (p Process) PathDirs() []string { return filepath.SplitList(p.Path) }
 
 func (p Process) pathExt() []string { return platform.Native.PathExt(p.PathExt) }

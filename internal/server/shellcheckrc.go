@@ -5,6 +5,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/hadolint"
 	"github.com/stubbedev/shell-lsp/internal/host/nix"
+	"github.com/stubbedev/shell-lsp/internal/platform"
 	"github.com/stubbedev/shell-lsp/internal/regularfile"
 	"github.com/stubbedev/shell-lsp/internal/shellcheckrc"
 	"github.com/stubbedev/shell-lsp/internal/statixconfig"
@@ -23,6 +24,6 @@ func newFlakeLocks() *nix.LockFiles {
 	return nix.NewLockFiles(regularfile.ReadConfig, time.Now, workspace.DiskRecheck)
 }
 
-func newHadolintResolver(fallback []string) *hadolint.Resolver {
-	return hadolint.NewResolver(regularfile.ReadConfig, time.Now, workspace.DiskRecheck, fallback)
+func newHadolintResolver(fallback []string, git platform.UserDirs) *hadolint.Resolver {
+	return hadolint.NewResolver(regularfile.ReadConfig, time.Now, workspace.DiskRecheck, fallback, git)
 }

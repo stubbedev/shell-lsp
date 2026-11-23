@@ -14,6 +14,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/diskwatch"
 	"github.com/stubbedev/shell-lsp/internal/diskwatch/diskwatchtest"
 	"github.com/stubbedev/shell-lsp/internal/host"
+	"github.com/stubbedev/shell-lsp/internal/platform"
 	"github.com/stubbedev/shell-lsp/internal/regularfile"
 )
 
@@ -157,7 +158,7 @@ func TestANixFileIsReadOnceBetweenItsImportsAndItsLoad(t *testing.T) {
 	if err := os.WriteFile(path, []byte(text), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	w := New(func(string) (*File, bool) { return nil, false }, Detect)
+	w := New(func(string) (*File, bool) { return nil, false }, Detect, platform.UserDirs{})
 	reads := 0
 	w.UseRead(func(name string, info fs.FileInfo, limit int64) ([]byte, fs.FileInfo, error) {
 		reads++
@@ -195,7 +196,7 @@ func TestAKeptParseIsNotUsedForAFileThatChanged(t *testing.T) {
 	if err := os.WriteFile(path, []byte("{ a = 1; }\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	w := New(func(string) (*File, bool) { return nil, false }, Detect)
+	w := New(func(string) (*File, bool) { return nil, false }, Detect, platform.UserDirs{})
 	if _, _, err := w.NixIncludes(path); err != nil {
 		t.Fatal(err)
 	}
@@ -219,7 +220,7 @@ func TestReleasingTheStashDropsWhatWasNeverLoaded(t *testing.T) {
 	if err := os.WriteFile(path, []byte("{ a = 1; }\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	w := New(func(string) (*File, bool) { return nil, false }, Detect)
+	w := New(func(string) (*File, bool) { return nil, false }, Detect, platform.UserDirs{})
 	if _, _, err := w.NixIncludes(path); err != nil {
 		t.Fatal(err)
 	}

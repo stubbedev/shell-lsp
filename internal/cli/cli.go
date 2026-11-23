@@ -3,6 +3,8 @@ package cli
 import (
 	"fmt"
 	"io"
+
+	"github.com/stubbedev/shell-lsp/internal/platform"
 )
 
 type Env struct {
@@ -17,6 +19,10 @@ type Env struct {
 	PathDirs   []string
 	Terminal   bool
 	Serve      func() error
+}
+
+func (e Env) dirs() platform.UserDirs {
+	return platform.UserDirs{Home: e.Home, ConfigHome: e.ConfigHome}
 }
 
 const (

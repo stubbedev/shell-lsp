@@ -139,13 +139,14 @@ way the tool does. The cases record every difference; these are the kinds.
   target of the same bake run builds, is common and deliberate.
   - *Where bake files are found.* In the Dockerfile's directory and every
     directory above it, and, inside a git repository, in every directory of
-    the repository that neither `.gitignore` nor the repository's
-    `.git/info/exclude` excludes (`.git`, `node_modules`, `vendor`, `.venv`
-    and similar directories are skipped). The search stops after 20,000
+    the repository that neither `.gitignore`, the repository's
+    `.git/info/exclude` nor the file `core.excludesFile` names excludes, read
+    as [the workspace scan reads them](cli.md#ignored-files) (`.git`,
+    `node_modules`, `vendor`, `.venv` and similar directories are skipped). The search stops after 20,000
     directories; the server then warns once per repository and
     `shell-lsp check` prints one line to standard error, without changing its
     exit status, since contexts from bake files past that point are not known.
-    `core.excludesFile` is not read. Outside a repository only the directory
+    Outside a repository only the directory
     and its ancestors are searched. Ignored
     bake files in a searched directory still count, since a local
     `docker-bake.override.hcl` is often ignored on purpose.

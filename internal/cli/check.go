@@ -144,14 +144,14 @@ func newChecker(env Env, opts checkOptions) *checker {
 		env:      env,
 		opts:     opts,
 		editor:   editorconfig.NewResolver(regularfile.ReadConfig, time.Now, time.Hour),
-		rcs:      newRCFinder(opts.rc, regularfile.ReadConfig, env.Home, env.ConfigHome),
-		hadolint: hadolint.NewResolver(regularfile.ReadConfig, time.Now, time.Duration(math.MaxInt64), hadolint.ConfigFallback(env.Home, env.ConfigHome)),
+		rcs:      newRCFinder(opts.rc, regularfile.ReadConfig, env.dirs()),
+		hadolint: hadolint.NewResolver(regularfile.ReadConfig, time.Now, time.Duration(math.MaxInt64), hadolint.ConfigFallback(env.dirs()), env.dirs()),
 		statix:   statixconfig.NewResolver(regularfile.ReadConfig, time.Now, time.Duration(math.MaxInt64)),
 		locks:    nix.NewLockFiles(regularfile.ReadConfig, time.Now, time.Duration(math.MaxInt64)),
 		stdin:    sync.OnceValues(func() ([]byte, error) { return io.ReadAll(env.Stdin) }),
 		resolved: map[string]error{},
 	}
-	c.ws = workspace.New(c.namedStdin, c.resolve)
+	c.ws = workspace.New(c.namedStdin, c.resolve, env.dirs())
 	c.projects = hostnav.NewProjects()
 	if opts.filename != "" {
 		c.namedPath = absolute(env.Dir, opts.filename)
@@ -318,7 +318,7 @@ func (c *checker) targets() ([]target, []string) {
 			out = append(out, c.stdinTarget())
 		}
 	}
-	files, failures := collectTargets(c.env.Dir, operands, targetSelection{
+	files, failures := collectTargets(c.env.Dir, c.env.dirs(), operands, targetSelection{
 		walkKeeps:   func(string) bool { return true },
 		forcedShell: c.opts.shell != nil,
 		read:        c.diskOrNamedStdin,

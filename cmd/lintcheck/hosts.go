@@ -20,6 +20,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/host/oracle"
 	"github.com/stubbedev/shell-lsp/internal/hostnav"
 	"github.com/stubbedev/shell-lsp/internal/lint"
+	"github.com/stubbedev/shell-lsp/internal/platform"
 	"github.com/stubbedev/shell-lsp/internal/regularfile"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
@@ -172,7 +173,7 @@ func hadolintDisagreements(ctx context.Context, f corpus.HostFile, cfg hadolint.
 }
 
 func analyseHosts(ctx context.Context, files []corpus.HostFile) ([]hostReport, error) {
-	configs := hadolint.NewResolver(regularfile.ReadConfig, time.Now, time.Hour, nil)
+	configs := hadolint.NewResolver(regularfile.ReadConfig, time.Now, time.Hour, nil, platform.UserDirs{})
 	hosts := newCorpusHosts(files)
 	var out []hostReport
 	for _, f := range files {
@@ -255,7 +256,7 @@ func newCorpusHosts(files []corpus.HostFile) *corpusHosts {
 func (c *corpusHosts) workspace(root string) *workspace.Workspace {
 	ws, ok := c.byRoot[root]
 	if !ok {
-		ws = workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect)
+		ws = workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect, platform.UserDirs{})
 		ws.SetRoots([]string{root})
 		c.byRoot[root] = ws
 	}

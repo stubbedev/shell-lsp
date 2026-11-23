@@ -7,33 +7,18 @@ import (
 	"maps"
 	"path/filepath"
 	"slices"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/stubbedev/shell-lsp/internal/diskwatch"
 	"github.com/stubbedev/shell-lsp/internal/filecache"
 	"github.com/stubbedev/shell-lsp/internal/gitignore"
-	"github.com/stubbedev/shell-lsp/internal/gitlink"
+	"github.com/stubbedev/shell-lsp/internal/gitrepo"
 	"github.com/stubbedev/shell-lsp/internal/platform"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
-const (
-	repositoryMarker = ".git"
-	ignoreFile       = ".gitignore"
-	infoDir          = "info"
-	excludeFile      = "exclude"
-	maxTreeDirs      = 20000
-)
-
-type repository uint8
-
-const (
-	noRepository repository = iota
-	gitDirectory
-	gitLink
-)
+const maxTreeDirs = 20000
 
 type Cut struct {
 	Root  string
@@ -53,8 +38,7 @@ type ReadDir func(dir string) ([]fs.DirEntry, error)
 
 type Resolver struct {
 	files   *filecache.Cache[file]
-	ignores *filecache.Cache[gitignore.Rules]
-	links   *filecache.Cache[string]
+	git     *gitrepo.Ignores
 	readDir ReadDir
 	limit   int
 	now     func() time.Time
@@ -69,7 +53,7 @@ type Resolver struct {
 type listing struct {
 	names      []string
 	dirs       []string
-	repository repository
+	repository *gitrepo.Repository
 	ignoreFile bool
 	checked    time.Time
 	stamp      diskwatch.Stamp
@@ -88,19 +72,10 @@ type pendingDir struct {
 	ignores *gitignore.Stack
 }
 
-func parseIgnore(_ string, data []byte) (gitignore.Rules, error) {
-	return gitignore.Parse(platform.Native.Fold(string(data))), nil
-}
-
-func parseLink(_ string, data []byte) (string, error) {
-	return strings.TrimSpace(string(data)), nil
-}
-
-func NewResolver(read filecache.ReadFile, readDir ReadDir, now func() time.Time, recheck time.Duration) *Resolver {
+func NewResolver(read filecache.ReadFile, readDir ReadDir, now func() time.Time, recheck time.Duration, user platform.UserDirs) *Resolver {
 	return &Resolver{
 		files:    filecache.New(read, parse, now, recheck),
-		ignores:  filecache.New(read, parseIgnore, now, recheck),
-		links:    filecache.New(read, parseLink, now, recheck),
+		git:      gitrepo.NewIgnores(user, read, now, recheck),
 		readDir:  readDir,
 		limit:    maxTreeDirs,
 		now:      now,
@@ -112,15 +87,13 @@ func NewResolver(read filecache.ReadFile, readDir ReadDir, now func() time.Time,
 
 func (r *Resolver) Watch(disk *diskwatch.Watcher) {
 	r.files.Watch(disk)
-	r.ignores.Watch(disk)
-	r.links.Watch(disk)
+	r.git.Watch(disk)
 	r.disk = disk
 }
 
 func (r *Resolver) Invalidate(path string) {
 	r.files.Invalidate(path)
-	r.ignores.Invalidate(path)
-	r.links.Invalidate(path)
+	r.git.Invalidate(path)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for dir := filepath.Dir(path); ; dir = filepath.Dir(dir) {
@@ -155,7 +128,7 @@ func (r *Resolver) Dockerfiles(dir string) (Found, error) {
 
 func (r *Resolver) bakeDirs(dir string) ([]string, *Cut, error) {
 	var dirs []string
-	root, kind := "", noRepository
+	var repo *gitrepo.Repository
 	for at := dir; ; {
 		l, err := r.listing(at)
 		if err != nil {
@@ -164,8 +137,8 @@ func (r *Resolver) bakeDirs(dir string) ([]string, *Cut, error) {
 		if len(l.names) > 0 {
 			dirs = append(dirs, at)
 		}
-		if kind == noRepository && l.repository != noRepository {
-			root, kind = at, l.repository
+		if repo == nil {
+			repo = l.repository
 		}
 		parent := filepath.Dir(at)
 		if parent == at {
@@ -173,52 +146,20 @@ func (r *Resolver) bakeDirs(dir string) ([]string, *Cut, error) {
 		}
 		at = parent
 	}
-	if kind == noRepository {
+	if repo == nil {
 		return dirs, nil, nil
 	}
-	below, err := r.tree(root, kind)
+	below, err := r.tree(*repo)
 	if err != nil {
-		return nil, nil, fmt.Errorf("looking for bake files under %s: %w", root, err)
+		return nil, nil, fmt.Errorf("looking for bake files under %s: %w", repo.Top, err)
 	}
 	dirs = append(dirs, below.dirs...)
 	slices.Sort(dirs)
 	var cut *Cut
 	if below.cut {
-		cut = &Cut{Root: root, Limit: r.limit}
+		cut = &Cut{Root: repo.Top, Limit: r.limit}
 	}
 	return slices.Compact(dirs), cut, nil
-}
-
-func (r *Resolver) gitDir(root string, kind repository) (string, error) {
-	marker := filepath.Join(root, repositoryMarker)
-	if kind == gitDirectory {
-		return marker, nil
-	}
-	link, _, err := r.links.Load(marker)
-	if err != nil {
-		return "", err
-	}
-	dir, err := gitlink.Target(marker, link)
-	if err != nil {
-		return "", err
-	}
-	common, shared, err := r.links.Load(filepath.Join(dir, gitlink.CommonDirFile))
-	if err != nil || !shared {
-		return dir, err
-	}
-	return gitlink.Resolve(dir, common), nil
-}
-
-func (r *Resolver) excluded(root string, kind repository) (*gitignore.Stack, error) {
-	gitDir, err := r.gitDir(root, kind)
-	if err != nil {
-		return nil, err
-	}
-	rules, _, err := r.ignores.Load(filepath.Join(gitDir, infoDir, excludeFile))
-	if err != nil {
-		return nil, err
-	}
-	return (*gitignore.Stack)(nil).Push("", rules), nil
 }
 
 func (r *Resolver) directory(dir string, into Dockerfiles) error {
@@ -242,7 +183,8 @@ func (r *Resolver) directory(dir string, into Dockerfiles) error {
 	return nil
 }
 
-func (r *Resolver) tree(root string, kind repository) (tree, error) {
+func (r *Resolver) tree(repo gitrepo.Repository) (tree, error) {
+	root := repo.Top
 	now := r.now()
 	r.mu.Lock()
 	cached, ok := r.trees[root]
@@ -252,7 +194,7 @@ func (r *Resolver) tree(root string, kind repository) (tree, error) {
 	}
 	start := r.disk.Current()
 	fresh := tree{checked: now}
-	excluded, err := r.excluded(root, kind)
+	excluded, err := r.git.Base(repo)
 	if err != nil {
 		return tree{}, err
 	}
@@ -273,7 +215,7 @@ func (r *Resolver) tree(root string, kind repository) (tree, error) {
 		}
 		ignores := at.ignores
 		if l.ignoreFile {
-			rules, _, err := r.ignores.Load(filepath.Join(at.path, ignoreFile))
+			rules, err := r.git.Rules(filepath.Join(at.path, gitrepo.IgnoreFile))
 			if err != nil {
 				return tree{}, err
 			}
@@ -312,15 +254,13 @@ func (r *Resolver) listing(dir string) (listing, error) {
 	for _, e := range entries {
 		name := e.Name()
 		switch {
-		case name == repositoryMarker && e.IsDir():
-			fresh.repository = gitDirectory
-		case name == repositoryMarker:
-			fresh.repository = gitLink
+		case name == gitrepo.MarkerName:
+			fresh.repository = &gitrepo.Repository{Top: dir, Linked: !e.IsDir()}
 		case e.IsDir():
 			if !workspace.SkipsDir(name) {
 				fresh.dirs = append(fresh.dirs, name)
 			}
-		case name == ignoreFile:
+		case name == gitrepo.IgnoreFile:
 			fresh.ignoreFile = true
 		case IsName(name):
 			fresh.names = append(fresh.names, name)

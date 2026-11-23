@@ -34,9 +34,9 @@ and `include` statements, and the other justfiles and Makefiles among the
 paths that include them. Nix files are checked with the `SL8` codes of [rules.md](rules.md#sl8001), with `# shellcheck disable=` honoured in Nix comments. Dockerfiles are checked with Hadolint's `DL` rules
 too, configured by the nearest `.hadolint.yaml` ([hadolint.md](hadolint.md)). `.git`, `node_modules`,
 `vendor` and similar directories are skipped, and so is whatever git ignores:
-the `.gitignore` files from the repository's top down, and
-`.git/info/exclude`. A file named on the command line is linted even when it
-is ignored. A `-` reads the script from
+the `.gitignore` files from the repository's top down, `.git/info/exclude`,
+and the file `core.excludesFile` names ([Ignored files](#ignored-files)). A
+file named on the command line is linted even when it is ignored. A `-` reads the script from
 standard input, as shell unless `--filename=NAME` names it: the language, the
 dialect and the settings then come from that path, as they would for a file
 there, whether or not one exists, so `shell-lsp check --filename=pkg.nix -` lints
@@ -76,6 +76,33 @@ long options may be abbreviated while they stay unambiguous (`--sev=error`).
 | 2 | A file could not be read; the others were still checked |
 | 3 | The command line is malformed, such as an unknown option or no files |
 | 4 | An option value, a `.shellcheckrc`, a `.hadolint.yaml` or a `statix.toml` is invalid |
+
+### Ignored files
+
+Inside a git repository, a directory walk, the server's workspace scan and the
+search for bake files skip what git ignores, with git's precedence: a
+`.gitignore` in a deeper directory wins over one above it, any `.gitignore`
+wins over `.git/info/exclude`, and that wins over the file
+`core.excludesFile` names. A `!pattern` in a `.gitignore` therefore brings
+back what the other two exclude.
+
+`core.excludesFile` is read from `$XDG_CONFIG_HOME/git/config` (or
+`~/.config/git/config`), then `~/.gitconfig`, then the repository's
+`.git/config`; the last one that sets it wins. When none does, the file is
+`$XDG_CONFIG_HOME/git/ignore`, or `~/.config/git/ignore` when
+`XDG_CONFIG_HOME` is unset or empty. As in git, `~/` is the home directory, a
+relative path is relative to the top of the work tree, an empty value names no
+file, a missing file excludes nothing, a `:(optional)` path that is missing
+falls back to the default, and `[include]` paths are followed. Linked
+worktrees read the `.git/info/exclude` and `.git/config` of their main
+repository.
+
+Not read: the system config, `GIT_CONFIG_GLOBAL` and the other `GIT_CONFIG_*`
+variables, and a worktree's `config.worktree`. `includeIf` conditions are not
+evaluated: when the `core.excludesFile` that would apply is set in a file an
+`includeIf` includes, or names a `~user/` or `%(prefix)/` path, the walk stops
+with an error that names the setting, rather than guessing. A git config file
+git itself would reject is reported the same way.
 
 ### .shellcheckrc
 

@@ -23,7 +23,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
 	"github.com/stubbedev/shell-lsp/internal/gitignore"
-	"github.com/stubbedev/shell-lsp/internal/gitlink"
+	"github.com/stubbedev/shell-lsp/internal/gitrepo"
 	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/host/model"
 	"github.com/stubbedev/shell-lsp/internal/host/nix"
@@ -40,12 +40,11 @@ const (
 	maxFileSize  = 4 << 20
 	maxScanFiles = 20000
 	shebangProbe = 256
-	ignoreFile   = ".gitignore"
 	nixExtension = ".nix"
 )
 
 var skippedDirs = map[string]bool{
-	".git": true, ".hg": true, ".svn": true, "node_modules": true, ".direnv": true, ".venv": true,
+	gitrepo.MarkerName: true, ".hg": true, ".svn": true, "node_modules": true, ".direnv": true, ".venv": true,
 	"vendor": true, "__pycache__": true, ".cache": true, "result": true,
 }
 
@@ -145,6 +144,7 @@ type Workspace struct {
 	now     func() time.Time
 	disk    *diskwatch.Watcher
 	stat    func(string) (fs.FileInfo, error)
+	git     *gitrepo.Ignores
 
 	mu         sync.Mutex
 	roots      []string
@@ -169,7 +169,10 @@ func (w *Workspace) SetWatched(watched bool) { w.watched.Store(watched) }
 
 func (w *Workspace) Watched() bool { return w.watched.Load() }
 
-func (w *Workspace) WatchDisk(disk *diskwatch.Watcher) { w.disk = disk }
+func (w *Workspace) WatchDisk(disk *diskwatch.Watcher) {
+	w.disk = disk
+	w.git.Watch(disk)
+}
 
 func (w *Workspace) UseStat(stat func(string) (fs.FileInfo, error)) { w.stat = stat }
 
@@ -205,9 +208,9 @@ type missingEntry struct {
 }
 
 type repoEntry struct {
-	top, gitDir string
-	found       bool
-	stamp       diskwatch.Stamp
+	repo  gitrepo.Repository
+	found bool
+	stamp diskwatch.Stamp
 }
 
 func newDiskEntry(file *File, info fs.FileInfo, checked time.Time, stamp diskwatch.Stamp) diskEntry {
@@ -252,8 +255,10 @@ func Detect(_ string, in dialect.Input) dialect.Detection {
 	return dialect.Resolve(nil, in)
 }
 
-func New(overlay Overlay, resolve func(path string, in dialect.Input) dialect.Detection) *Workspace {
-	return &Workspace{overlay: overlay, resolve: resolve, now: time.Now, stat: regularfile.Stat, read: regularfile.ReadStat, parsing: parallel.NewBudget(maxParsingBytes), files: map[string]diskEntry{}, dirs: map[string]dirListing{}, ignores: map[string]ignoreRules{}, missing: map[string]missingEntry{}, includes: map[string]includesEntry{}, repos: map[string]repoEntry{}}
+func New(overlay Overlay, resolve func(path string, in dialect.Input) dialect.Detection, user platform.UserDirs) *Workspace {
+	w := &Workspace{overlay: overlay, resolve: resolve, now: time.Now, stat: regularfile.Stat, read: regularfile.ReadStat, parsing: parallel.NewBudget(maxParsingBytes), files: map[string]diskEntry{}, dirs: map[string]dirListing{}, ignores: map[string]ignoreRules{}, missing: map[string]missingEntry{}, includes: map[string]includesEntry{}, repos: map[string]repoEntry{}}
+	w.git = gitrepo.NewIgnores(user, regularfile.ReadConfig, func() time.Time { return w.now() }, DiskRecheck)
+	return w
 }
 
 func (w *Workspace) SetRoots(roots []string) {
@@ -298,6 +303,7 @@ func (w *Workspace) Invalidate(path string) {
 	delete(w.missing, key)
 	delete(w.dirs, platform.Native.Fold(filepath.Dir(path)))
 	w.generation.Add(1)
+	w.git.Invalidate(path)
 }
 
 func (w *Workspace) InvalidateAll() {
@@ -710,7 +716,7 @@ func (w *Workspace) walkRoots(ctx context.Context, roots []string, limit int) ([
 			}
 			ignores := dir.ignores
 			if listing.ignoreFile {
-				rules, err := w.ignoreRules(filepath.Join(dir.path, ignoreFile))
+				rules, err := w.ignoreRules(filepath.Join(dir.path, gitrepo.IgnoreFile))
 				if err != nil {
 					return nil, fmt.Errorf("scanning workspace root %s: %w", root, err)
 				}
@@ -791,23 +797,21 @@ func (w *Workspace) NixFiles(dir string) ([]string, error) {
 }
 
 func (w *Workspace) enclosingIgnores(root string) (string, *gitignore.Stack, error) {
-	repo, err := w.repositoryOf(root)
-	if err != nil || !repo.found {
+	entry, err := w.repositoryOf(root)
+	if err != nil || !entry.found {
 		return "", nil, err
 	}
-	top, gitDir := repo.top, repo.gitDir
-	exclude, err := w.ignoreRules(filepath.Join(gitDir, "info", "exclude"))
+	ignores, err := w.git.Base(entry.repo)
 	if err != nil {
 		return "", nil, err
 	}
-	ignores := (*gitignore.Stack)(nil).Push("", exclude)
-	below, _ := platform.RelativeWithin(top, root)
-	rel, dir := "", top
+	below, _ := platform.RelativeWithin(entry.repo.Top, root)
+	rel, dir := "", entry.repo.Top
 	for name := range strings.SplitSeq(filepath.ToSlash(below), "/") {
 		if name == "." {
 			continue
 		}
-		rules, err := w.ignoreRules(filepath.Join(dir, ignoreFile))
+		rules, err := w.ignoreRules(filepath.Join(dir, gitrepo.IgnoreFile))
 		if err != nil {
 			return "", nil, err
 		}
@@ -826,60 +830,37 @@ func (w *Workspace) repositoryOf(root string) (repoEntry, error) {
 	}
 	stamp := w.disk.Current()
 	for dir := root; ; dir = filepath.Dir(dir) {
-		stamp = stamp.And(w.disk.Track(filepath.Join(dir, ".git")))
+		stamp = stamp.And(w.disk.Track(filepath.Join(dir, gitrepo.MarkerName)))
 		if dir == filepath.Dir(dir) {
 			break
 		}
 	}
-	top, gitDir, found, err := repository(root)
+	repo, found, err := repository(root)
 	if err != nil {
 		return repoEntry{}, err
 	}
-	entry := repoEntry{top: top, gitDir: gitDir, found: found, stamp: stamp}
+	entry := repoEntry{repo: repo, found: found, stamp: stamp}
 	w.mu.Lock()
 	w.repos[root] = entry
 	w.mu.Unlock()
 	return entry, nil
 }
 
-func repository(root string) (top, gitDir string, found bool, err error) {
+func repository(root string) (gitrepo.Repository, bool, error) {
 	for dir := root; ; {
-		dotGit := filepath.Join(dir, ".git")
-		info, err := os.Lstat(dotGit)
+		info, err := os.Lstat(filepath.Join(dir, gitrepo.MarkerName))
 		switch {
-		case err == nil && info.IsDir():
-			return dir, dotGit, true, nil
 		case err == nil:
-			gitDir, err := linkedGitDir(dotGit)
-			return dir, gitDir, err == nil, err
+			return gitrepo.Repository{Top: dir, Linked: !info.IsDir()}, true, nil
 		case !errors.Is(err, fs.ErrNotExist) && !errors.Is(err, fs.ErrPermission):
-			return "", "", false, fmt.Errorf("looking for the git repository of %s: %w", root, err)
+			return gitrepo.Repository{}, false, fmt.Errorf("looking for the git repository of %s: %w", root, err)
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			return "", "", false, nil
+			return gitrepo.Repository{}, false, nil
 		}
 		dir = parent
 	}
-}
-
-func linkedGitDir(dotGit string) (string, error) {
-	raw, err := regularfile.ReadConfig(dotGit)
-	if err != nil {
-		return "", fmt.Errorf("reading %s: %w", dotGit, err)
-	}
-	gitDir, err := gitlink.Target(dotGit, string(raw))
-	if err != nil {
-		return "", err
-	}
-	common, err := regularfile.ReadConfig(filepath.Join(gitDir, gitlink.CommonDirFile))
-	if errors.Is(err, fs.ErrNotExist) {
-		return gitDir, nil
-	}
-	if err != nil {
-		return "", fmt.Errorf("reading the common directory of %s: %w", gitDir, err)
-	}
-	return gitlink.Resolve(gitDir, string(common)), nil
 }
 
 func (w *Workspace) ignoreRules(path string) (gitignore.Rules, error) {
@@ -912,7 +893,10 @@ func (w *Workspace) ignoreRules(path string) (gitignore.Rules, error) {
 	if err != nil {
 		return nil, fmt.Errorf("reading ignore rules %s: %w", path, err)
 	}
-	rules := gitignore.Parse(platform.Native.Fold(string(raw)))
+	rules, err := gitrepo.ParseRules(path, raw)
+	if err != nil {
+		return nil, err
+	}
 	w.mu.Lock()
 	w.ignores[key] = ignoreRules{size: info.Size(), modTime: info.ModTime(), stamp: stamp, rules: rules}
 	w.mu.Unlock()
@@ -953,7 +937,7 @@ func (w *Workspace) listDir(dir string) (dirListing, error) {
 			if !SkipsDir(entry.Name()) {
 				listing.dirs = append(listing.dirs, path)
 			}
-		case entry.Name() == ignoreFile:
+		case entry.Name() == gitrepo.IgnoreFile:
 			listing.ignoreFile = entry.Type().IsRegular()
 		case entry.Type().IsRegular() && isShellFile(path, entry):
 			listing.files = append(listing.files, path)
@@ -963,7 +947,7 @@ func (w *Workspace) listDir(dir string) (dirListing, error) {
 	if previous, ok := w.dirs[platform.Native.Fold(dir)]; ok {
 		w.forgetRemovedLocked(previous, listing)
 		if previous.ignoreFile && !listing.ignoreFile {
-			delete(w.ignores, platform.Native.Fold(filepath.Join(dir, ignoreFile)))
+			delete(w.ignores, platform.Native.Fold(filepath.Join(dir, gitrepo.IgnoreFile)))
 		}
 	}
 	w.dirs[platform.Native.Fold(dir)] = listing

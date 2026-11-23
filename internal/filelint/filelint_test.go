@@ -9,6 +9,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/navigation"
+	"github.com/stubbedev/shell-lsp/internal/platform"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
@@ -40,7 +41,7 @@ func TestCheckFollowsSourcedFilesAndHonoursSettings(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect)
+	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect, platform.UserDirs{})
 	file, err := ws.Load(filepath.Join(dir, "main.sh"))
 	if err != nil {
 		t.Fatal(err)
@@ -68,7 +69,7 @@ func strictFindings(t *testing.T, files map[string]string, names ...string) map[
 			t.Fatal(err)
 		}
 	}
-	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect)
+	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect, platform.UserDirs{})
 	env := navigation.Env{Loader: loader{ws}, Roots: []string{dir}}
 	out := map[string][]lint.Code{}
 	for _, name := range names {
@@ -128,7 +129,7 @@ func TestCheckReportsWindowsLineEndings(t *testing.T) {
 	if err := os.WriteFile(path, []byte("#!/bin/bash\r\necho hi\r\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect)
+	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect, platform.UserDirs{})
 	file, err := ws.Load(path)
 	if err != nil {
 		t.Fatal(err)
@@ -152,7 +153,7 @@ func TestCheckReportsAByteOrderMark(t *testing.T) {
 	if err := os.WriteFile(path, []byte("\uFEFF#!/bin/bash\necho hi\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect)
+	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect, platform.UserDirs{})
 	file, err := ws.Load(path)
 	if err != nil {
 		t.Fatal(err)
@@ -175,7 +176,7 @@ func TestCheckLintsEachRecipeAsItsOwnShell(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect)
+	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect, platform.UserDirs{})
 	for name, text := range files {
 		file, err := ws.Load(filepath.Join(dir, name))
 		if err != nil {
@@ -234,7 +235,7 @@ func TestNixStringsReportOnlyWhatTheShellWouldDo(t *testing.T) {
 			if err := os.WriteFile(path, []byte(tt.nix+"\n"), 0o600); err != nil {
 				t.Fatal(err)
 			}
-			ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect)
+			ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect, platform.UserDirs{})
 			file, err := ws.Load(path)
 			if err != nil {
 				t.Fatal(err)
@@ -252,7 +253,7 @@ func TestFunctionsInConventionallySourcedFilesAreNotUnused(t *testing.T) {
 
 	const text = "#!/usr/bin/env zsh\nprompt_status() { print -r -- ready; }\nprint -r -- loaded\n"
 	dir := t.TempDir()
-	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect)
+	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect, platform.UserDirs{})
 	env := navigation.Env{Loader: loader{ws}, Roots: []string{dir}}
 	for name, want := range map[string]bool{"x.zsh-theme": false, "x.plugin.zsh": false, ".zshrc": false, "x.zsh": true} {
 		path := filepath.Join(dir, name)

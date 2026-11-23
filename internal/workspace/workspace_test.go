@@ -18,6 +18,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
+	"github.com/stubbedev/shell-lsp/internal/platform"
 )
 
 type clock struct{ t time.Time }
@@ -25,7 +26,7 @@ type clock struct{ t time.Time }
 func (c *clock) now() time.Time { return c.t }
 
 func newTestWorkspace(c *clock) *Workspace {
-	ws := New(func(string) (*File, bool) { return nil, false }, Detect)
+	ws := New(func(string) (*File, bool) { return nil, false }, Detect, platform.UserDirs{})
 	ws.now = c.now
 	return ws
 }
@@ -191,7 +192,7 @@ func TestShellFilesCacheFollowsDirectoryChanges(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	ws := New(func(string) (*File, bool) { return nil, false }, Detect)
+	ws := New(func(string) (*File, bool) { return nil, false }, Detect, platform.UserDirs{})
 	ws.SetRoots([]string{root})
 	rel := func() []string { return relShellFiles(t, ws, root) }
 	if got := rel(); len(got) != 3 || got[0] != "a.sh" || got[1] != "sub/.zshrc" || got[2] != "sub/deep/b.bash" {
@@ -219,7 +220,7 @@ func TestSourcedShellFilesAreFoundAndDetectedByName(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	ws := New(func(string) (*File, bool) { return nil, false }, Detect)
+	ws := New(func(string) (*File, bool) { return nil, false }, Detect, platform.UserDirs{})
 	ws.SetRoots([]string{root})
 	if got := relShellFiles(t, ws, root); !slices.Equal(got, []string{".envrc", "x.zsh-theme"}) {
 		t.Errorf("ShellFiles = %v, want .envrc and x.zsh-theme", got)
@@ -246,7 +247,7 @@ func TestSourcedShellFilesAreFoundAndDetectedByName(t *testing.T) {
 func TestRootOfPicksTheInnermostRoot(t *testing.T) {
 	t.Parallel()
 
-	ws := New(nil, nil)
+	ws := New(nil, nil, platform.UserDirs{})
 	ws.SetRoots([]string{filepath.FromSlash("/a"), filepath.FromSlash("/a/b"), filepath.FromSlash("/c")})
 	for path, want := range map[string]string{"/a/b/x.bats": "/a/b", "/a/x.bats": "/a", "/c/d/e.bats": "/c", "/z/x.bats": ""} {
 		path, want = filepath.FromSlash(path), filepath.FromSlash(want)
@@ -371,7 +372,7 @@ func TestMakefilesLoadAsTheShellOfTheirRecipes(t *testing.T) {
 	ws := New(func(string) (*File, bool) { return nil, false }, func(string, dialect.Input) dialect.Detection {
 		t.Error("a Makefile asked for the dialect of a shell script")
 		return dialect.Detection{Dialect: dialect.Bash}
-	})
+	}, platform.UserDirs{})
 	ws.SetRoots([]string{root})
 	paths, err := ws.AllShellFiles(t.Context())
 	if err != nil {
@@ -446,7 +447,7 @@ func TestShellFilesSkipWhatGitIgnores(t *testing.T) {
 		"lib/deep/private.sh":      "",
 		"lib/deep/target/inner.sh": "",
 	})
-	ws := New(func(string) (*File, bool) { return nil, false }, Detect)
+	ws := New(func(string) (*File, bool) { return nil, false }, Detect, platform.UserDirs{})
 	ws.SetRoots([]string{repo})
 	want := []string{"a.sh", "keep.gen.sh", "lib/b.sh", "lib/deep/private.sh", "lib/y.gen.sh"}
 	if got := relShellFiles(t, ws, repo); !slices.Equal(got, want) {
@@ -465,7 +466,7 @@ func TestShellFilesFollowGitignoreEdits(t *testing.T) {
 
 	root := t.TempDir()
 	writeTree(t, root, map[string]string{".gitignore": "", "a.sh": "", "b.sh": ""})
-	ws := New(func(string) (*File, bool) { return nil, false }, Detect)
+	ws := New(func(string) (*File, bool) { return nil, false }, Detect, platform.UserDirs{})
 	ws.SetRoots([]string{root})
 	if got := relShellFiles(t, ws, root); !slices.Equal(got, []string{"a.sh", "b.sh"}) {
 		t.Fatalf("ShellFiles = %v", got)
@@ -490,6 +491,27 @@ func TestShellFilesFollowGitignoreEdits(t *testing.T) {
 	}
 }
 
+func TestShellFilesSkipWhatTheUsersExcludesFileIgnores(t *testing.T) {
+	t.Parallel()
+
+	base := t.TempDir()
+	writeTree(t, base, map[string]string{
+		"home/.gitconfig":     "[core]\n\texcludesFile = ~/global-ignore\n",
+		"home/global-ignore":  "generated/\nvendored/\n",
+		"repo/.git/HEAD":      "ref: refs/heads/main\n",
+		"repo/.gitignore":     "!vendored/\n",
+		"repo/a.sh":           "",
+		"repo/generated/g.sh": "",
+		"repo/vendored/v.sh":  "",
+	})
+	repo := filepath.Join(base, "repo")
+	ws := New(func(string) (*File, bool) { return nil, false }, Detect, platform.UserDirs{Home: filepath.Join(base, "home")})
+	ws.SetRoots([]string{repo})
+	if got, want := relShellFiles(t, ws, repo), []string{"a.sh", "vendored/v.sh"}; !slices.Equal(got, want) {
+		t.Errorf("ShellFiles = %v, want %v", got, want)
+	}
+}
+
 func TestShellFilesReadTheExcludeFileOfALinkedWorktree(t *testing.T) {
 	t.Parallel()
 
@@ -502,7 +524,7 @@ func TestShellFilesReadTheExcludeFileOfALinkedWorktree(t *testing.T) {
 		"wt/excluded.sh":                   "",
 	})
 	worktree := filepath.Join(base, "wt")
-	ws := New(func(string) (*File, bool) { return nil, false }, Detect)
+	ws := New(func(string) (*File, bool) { return nil, false }, Detect, platform.UserDirs{})
 	ws.SetRoots([]string{worktree})
 	if got := relShellFiles(t, ws, worktree); !slices.Equal(got, []string{"a.sh"}) {
 		t.Errorf("ShellFiles = %v, want [a.sh]", got)
@@ -525,7 +547,7 @@ func TestNixFilesFollowsLinksAndSkipsNothing(t *testing.T) {
 	if err := os.Symlink(filepath.Join(dir, "a.nix"), filepath.Join(dir, "link.nix")); err != nil {
 		t.Fatal(err)
 	}
-	ws := New(func(string) (*File, bool) { return nil, false }, Detect)
+	ws := New(func(string) (*File, bool) { return nil, false }, Detect, platform.UserDirs{})
 	got, err := ws.NixFiles(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -548,7 +570,7 @@ func TestScanCutIsRemembered(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	ws := New(func(string) (*File, bool) { return nil, false }, Detect)
+	ws := New(func(string) (*File, bool) { return nil, false }, Detect, platform.UserDirs{})
 	ws.SetRoots([]string{dir})
 	if _, err := ws.scan(context.Background(), 1); err != nil {
 		t.Fatal(err)
@@ -570,7 +592,7 @@ func TestAdoptingAReopenedNixFileKeepsTheFileItWasReopenedFrom(t *testing.T) {
 	if err := os.WriteFile(path, []byte(text), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	w := New(noOverlay, Detect)
+	w := New(noOverlay, Detect, platform.UserDirs{})
 	disk, err := w.Load(path)
 	if err != nil {
 		t.Fatal(err)

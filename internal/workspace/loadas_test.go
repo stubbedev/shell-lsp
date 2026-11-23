@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/host"
+	"github.com/stubbedev/shell-lsp/internal/platform"
 )
 
 func TestLoadAsParsesAFileInTheGivenLanguage(t *testing.T) {
@@ -16,7 +17,7 @@ func TestLoadAsParsesAFileInTheGivenLanguage(t *testing.T) {
 	if err := os.WriteFile(path, []byte("CFLAGS := -O2\nbuild:\n\techo $$HOME\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	w := New(func(string) (*File, bool) { return nil, false }, Detect)
+	w := New(func(string) (*File, bool) { return nil, false }, Detect, platform.UserDirs{})
 	plain, err := w.Load(path)
 	if err != nil {
 		t.Fatal(err)

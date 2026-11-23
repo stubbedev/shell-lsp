@@ -47,7 +47,7 @@ func readDisk(path string) ([]byte, error) {
 	return raw, err
 }
 
-func collectTargets(dir string, operands []string, sel targetSelection) ([]collected, []string) {
+func collectTargets(dir string, git platform.UserDirs, operands []string, sel targetSelection) ([]collected, []string) {
 	var out []collected
 	var failures []string
 	seen := map[string]bool{}
@@ -65,7 +65,7 @@ func collectTargets(dir string, operands []string, sel targetSelection) ([]colle
 		case err != nil:
 			failures = append(failures, fmt.Sprintf("%s: %v", operand, err))
 		case info.IsDir():
-			found, walkFailures := walkTargets(operand, path, sel.walkKeeps)
+			found, walkFailures := walkTargets(operand, path, git, sel.walkKeeps)
 			failures = append(failures, walkFailures...)
 			for _, t := range found {
 				add(t)
@@ -111,8 +111,8 @@ func (o collected) shell() (bool, error) {
 	return workspace.NamesShell(string(raw)), nil
 }
 
-func walkTargets(operand, dir string, keeps func(path string) bool) ([]target, []string) {
-	walker := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect)
+func walkTargets(operand, dir string, git platform.UserDirs, keeps func(path string) bool) ([]target, []string) {
+	walker := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect, git)
 	walker.SetRoots([]string{dir})
 	paths, err := walker.AllShellFiles(context.Background())
 	if err != nil {

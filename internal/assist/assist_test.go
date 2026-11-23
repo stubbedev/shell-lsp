@@ -10,6 +10,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/navigation"
 	"github.com/stubbedev/shell-lsp/internal/parser"
+	"github.com/stubbedev/shell-lsp/internal/platform"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
@@ -37,7 +38,7 @@ func setup(t *testing.T) (*workspace.File, navigation.Env, FunctionLookup) {
 			t.Fatal(err)
 		}
 	}
-	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect)
+	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect, platform.UserDirs{})
 	file, err := ws.Load(filepath.Join(root, "main.sh"))
 	if err != nil {
 		t.Fatal(err)
@@ -140,7 +141,7 @@ func TestDocumentLinksIncludeSourceDirectives(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect)
+	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect, platform.UserDirs{})
 	file, err := ws.Load(filepath.Join(root, "main.sh"))
 	if err != nil {
 		t.Fatal(err)

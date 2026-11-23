@@ -7,6 +7,7 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/diskwatch"
 	"github.com/stubbedev/shell-lsp/internal/filecache"
+	"github.com/stubbedev/shell-lsp/internal/platform"
 )
 
 type Resolver struct {
@@ -21,16 +22,13 @@ func NewResolver(read filecache.ReadFile, now func() time.Time, recheck time.Dur
 
 func (r *Resolver) Watch(disk *diskwatch.Watcher) { r.files.Watch(disk) }
 
-func Fallback(home, configHome string) []string {
+func Fallback(dirs platform.UserDirs) []string {
 	var out []string
-	if configHome == "" && home != "" {
-		configHome = filepath.Join(home, ".config")
+	if dir := dirs.ConfigDir(); dir != "" {
+		out = append(out, filepath.Join(dir, "shellcheckrc"))
 	}
-	if configHome != "" {
-		out = append(out, filepath.Join(configHome, "shellcheckrc"))
-	}
-	if home != "" {
-		out = append(out, filepath.Join(home, FileName))
+	if dirs.Home != "" {
+		out = append(out, filepath.Join(dirs.Home, FileName))
 	}
 	return out
 }
