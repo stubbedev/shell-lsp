@@ -182,6 +182,9 @@ func TestProjectDialect(t *testing.T) {
 		{"x:\n\techo\n", dialect.Detection{Dialect: dialect.Posix, Source: dialect.SourceHostDefault, Evidence: "make"}, true},
 		{"SHELL := /bin/bash\nx:\n\techo\n", dialect.Detection{Dialect: dialect.Bash, Source: dialect.SourceHostSetting, Evidence: "SHELL := /bin/bash"}, true},
 		{"export SHELL = /usr/bin/env zsh\nx:\n\techo\n", dialect.Detection{Dialect: dialect.Zsh, Source: dialect.SourceHostSetting, Evidence: "SHELL = /usr/bin/env zsh"}, true},
+		{"SHELL := /usr/bin/env -S zsh -f\nx:\n\techo\n", dialect.Detection{Dialect: dialect.Zsh, Source: dialect.SourceHostSetting, Evidence: "SHELL := /usr/bin/env -S zsh -f"}, true},
+		{"SHELL := /usr/bin/env -i PATH=/bin dash\nx:\n\techo\n", dialect.Detection{Dialect: dialect.Dash, Source: dialect.SourceHostSetting, Evidence: "SHELL := /usr/bin/env -i PATH=/bin dash"}, true},
+		{"SHELL := /usr/bin/env\nx:\n\techo\n", dialect.Detection{Dialect: dialect.Posix, Source: dialect.SourceHostSetting, Evidence: "SHELL := /usr/bin/env"}, false},
 		{"SHELL = bash\nSHELL = dash\nx:\n\techo\n", dialect.Detection{Dialect: dialect.Dash, Source: dialect.SourceHostSetting, Evidence: "SHELL = dash"}, true},
 		{"SHELL ?= bash\nx:\n\techo\n", dialect.Detection{Dialect: dialect.Posix, Source: dialect.SourceHostDefault, Evidence: "make"}, true},
 		{"SHELL := python3\nx:\n\techo\n", dialect.Detection{Dialect: dialect.Posix, Source: dialect.SourceHostSetting, Evidence: "SHELL := python3"}, false},
@@ -201,12 +204,12 @@ func TestProjectDialect(t *testing.T) {
 func TestProjectShellPerRule(t *testing.T) {
 	t.Parallel()
 
-	m, _ := Project("a:\n\techo a\nb: SHELL := /bin/bash\nb:\n\techo b\nc: SHELL := python3\nc:\n\tprint(1)\n")
+	m, _ := Project("a:\n\techo a\nb: SHELL := /bin/bash\nb:\n\techo b\nc: SHELL := python3\nc:\n\tprint(1)\nd: SHELL := /usr/bin/env -S zsh -f\nd:\n\tprint d\n")
 	var got []dialect.Dialect
 	for _, d := range m.Shells() {
 		got = append(got, d.Dialect)
 	}
-	if want := []dialect.Dialect{dialect.Posix, dialect.Bash}; !slices.Equal(got, want) || len(m.Scripts()) != len(want) {
+	if want := []dialect.Dialect{dialect.Posix, dialect.Bash, dialect.Zsh}; !slices.Equal(got, want) || len(m.Scripts()) != len(want) {
 		t.Errorf("shells of the scripts = %v over %d scripts, want %v:\n%s", got, len(m.Scripts()), want, m.Text())
 	}
 }

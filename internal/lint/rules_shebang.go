@@ -1,11 +1,10 @@
 package lint
 
 import (
-	"path"
+	"slices"
 	"strings"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
-	"github.com/stubbedev/shell-lsp/internal/getopt"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/textedit"
 	"github.com/stubbedev/shell-lsp/internal/textline"
@@ -42,7 +41,7 @@ func checkShebang(p *pass) {
 		return
 	}
 	interpreter := shebang.Interpreter
-	if len(shebang.Arguments) > 1 && !envSplitsArguments(shebang) {
+	if len(shebang.Arguments) > 1 && !kernelSplitsArguments(shebang) {
 		p.report(2096, line, "The kernel passes everything after "+interpreter+" as one argument, so "+strings.Join(shebang.Arguments, " ")+" arrives as a single word; use 'env -S' or set options in the script.")
 	}
 	if p.settings.shell {
@@ -59,13 +58,13 @@ func checkShebang(p *pass) {
 	}
 }
 
-func envSplitsArguments(shebang dialect.Shebang) bool {
-	if path.Base(shebang.Interpreter) != "env" {
+func kernelSplitsArguments(shebang dialect.Shebang) bool {
+	written, ok := dialect.Invoke(append([]string{shebang.Interpreter}, shebang.Arguments...))
+	if !ok {
 		return false
 	}
-	argument := []string{strings.Join(shebang.Arguments, " ")}
-	parsed := getopt.Parse(getopt.Commands["env"], argument, func(word string) (string, bool) { return word, true })
-	return parsed.Complete && parsed.Has("-S", "--split-string")
+	received, ok := dialect.Invoke([]string{shebang.Interpreter, strings.Join(shebang.Arguments, " ")})
+	return ok && received.Interpreter == written.Interpreter && slices.Equal(received.Arguments, written.Arguments)
 }
 
 func checkShebangShape(p *pass) {

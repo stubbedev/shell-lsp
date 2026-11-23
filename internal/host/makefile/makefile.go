@@ -138,7 +138,7 @@ func (p *reader) ruleShell(r *Rule, global dialect.Detection, analysed bool) (di
 		if !literal {
 			return dialect.Detection{}, false
 		}
-		d, ok := dialect.FromShebang("#!" + strings.TrimSpace(value))
+		d, ok := shellDialect(value)
 		return dialect.Detection{Dialect: d, Source: dialect.SourceHostSetting, Evidence: oneLine(p.text[a.Span.Start:a.Value.Span.End])}, ok
 	}
 	return global, analysed
@@ -178,12 +178,20 @@ func (p *reader) dialect() (dialect.Detection, bool) {
 	if strings.ContainsRune(p.shell, '$') {
 		return found, false
 	}
-	d, ok := dialect.FromShebang("#!" + p.shell)
+	d, ok := shellDialect(p.shell)
 	if !ok {
 		return found, false
 	}
 	found.Dialect = d
 	return found, true
+}
+
+func shellDialect(shell string) (dialect.Dialect, bool) {
+	found, ok := dialect.Invoke(strings.Fields(shell))
+	if !ok {
+		return 0, false
+	}
+	return dialect.FromInterpreter(found.Interpreter)
 }
 
 func (p *reader) parse() {

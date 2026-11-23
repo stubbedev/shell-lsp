@@ -283,7 +283,10 @@ func envCommand(arguments []string) ([]string, bool) {
 		case !getopt.IsOption(word):
 			return envOperands(arguments[i:])
 		default:
-			words, _ := getopt.Words(word, envGrammar.Arity)
+			words, known := getopt.Words(word, envGrammar.Arity)
+			if !known {
+				return nil, false
+			}
 			option := arguments[i:min(i+words, len(arguments))]
 			if split, ok := envSplitString(option); ok {
 				return envCommand(append(strings.Fields(split), arguments[i+len(option):]...))
