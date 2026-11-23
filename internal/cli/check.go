@@ -313,7 +313,53 @@ func (c *checker) targets() ([]target, []string) {
 		}
 	}
 	files, failures := collectTargets(c.env.Dir, operands, func(string) bool { return true })
-	return append(out, files...), failures
+	kept, skipFailures := c.shellOperands(files)
+	return append(out, kept...), append(failures, skipFailures...)
+}
+
+func (c *checker) shellOperands(files []target) ([]target, []string) {
+	if c.opts.shell != nil {
+		return files, nil
+	}
+	shell := make([]bool, len(files))
+	errs := make([]error, len(files))
+	parallel.For(runtime.GOMAXPROCS(0), len(files), func(i int) {
+		shell[i], errs[i] = c.shellOperand(files[i])
+	})
+	var kept []target
+	var failures []string
+	for i, t := range files {
+		switch {
+		case errs[i] != nil:
+			failures = append(failures, fmt.Sprintf("%s: %v", t.name, errs[i]))
+		case shell[i]:
+			kept = append(kept, t)
+		}
+	}
+	return kept, failures
+}
+
+func (c *checker) shellOperand(t target) (bool, error) {
+	if t.walked || workspace.ShellByName(t.path) {
+		return true, nil
+	}
+	raw, err := c.diskOrNamedStdin(t.path)
+	if err != nil {
+		return false, err
+	}
+	return workspace.NamesShell(string(raw)), nil
+}
+
+func (c *checker) diskOrNamedStdin(path string) ([]byte, error) {
+	if path != c.namedPath {
+		raw, _, err := workspace.ReadDisk(path)
+		return raw, err
+	}
+	raw, err := c.stdin()
+	if err != nil {
+		return nil, fmt.Errorf("reading standard input: %w", err)
+	}
+	return raw, nil
 }
 
 func (c *checker) stdinTarget() target {

@@ -81,6 +81,35 @@ func TestCheckReportsOnlyTheInterpreterForForeignFiles(t *testing.T) {
 	}
 }
 
+func TestCheckSkipsNamedFilesOfOtherLanguages(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeFiles(t, dir, map[string]string{
+		"t.py":       "import os\n\ndef main(argv):\n    print(os.getcwd())\n",
+		"b.hcl":      "resource \"x\" \"y\" {\n  name = \"z\"\n}\n",
+		"c.yaml":     "key: value\nlist:\n  - a\n",
+		"p.py":       "#!/usr/bin/env python3\nprint(1)\n",
+		"notes":      "echo hi\n",
+		"run.py":     unquoted,
+		"d.hcl":      "# shellcheck shell=bash\necho $1\n",
+		"Dockerfile": "FROM x\nRUN echo $1\n",
+	})
+	skipped := run(t, dir, "", "check", "-f", "gcc", "t.py", "b.hcl", "c.yaml", "p.py")
+	if skipped.status != statusOK || skipped.stdout != "" || skipped.stderr != "" {
+		t.Errorf("checking only files of other languages = %d\nstdout: %s\nstderr: %s", skipped.status, skipped.stdout, skipped.stderr)
+	}
+	got := run(t, dir, "", "check", "-f", "gcc", "t.py", "b.hcl", "c.yaml", "p.py", "notes", "run.py", "d.hcl", "Dockerfile")
+	want := []string{"Dockerfile:2:10 SC2086", "d.hcl:2:6 SC2086", "notes:1:1 SC2148", "run.py:2:6 SC2086"}
+	if !slices.Equal(findings(t, got.stdout), want) || got.status != checkStatusFindings {
+		t.Errorf("findings = %d %v, want %v\n%s", got.status, findings(t, got.stdout), want, got.stderr)
+	}
+	forced := run(t, dir, "", "check", "-f", "gcc", "--shell=bash", "b.hcl")
+	if !slices.ContainsFunc(findings(t, forced.stdout), func(f string) bool { return strings.HasPrefix(f, "b.hcl:") }) {
+		t.Errorf("findings with --shell = %v, want the file linted as bash", findings(t, forced.stdout))
+	}
+}
+
 func TestCheckExitStatuses(t *testing.T) {
 	t.Parallel()
 

@@ -1029,6 +1029,17 @@ func WatchGlobs() []string {
 	}
 }
 
+func ShellByName(path string) bool {
+	return isShellName(path) || filepath.Ext(path) == ""
+}
+
+func NamesShell(text string) bool {
+	if _, ok := dialect.FromShebang(text); ok {
+		return true
+	}
+	return dialect.HasShellDirective(text)
+}
+
 func isShellFile(path string, entry fs.DirEntry) bool {
 	if isShellName(path) {
 		return true
