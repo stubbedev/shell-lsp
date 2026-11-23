@@ -300,3 +300,22 @@ func TestCheckFollowsTheErrexitAStageShellSets(t *testing.T) {
 		t.Errorf("checking Dockerfiles whose SHELL sets errexit = %d %v, want %v\n%s", got.status, findings(t, got.stdout), want, got.stderr)
 	}
 }
+
+func TestCheckProfileFiltersHadolintFindings(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeFiles(t, dir, map[string]string{"Dockerfile": "FROM x:1\nRUN apt-get install foo\nRUN echo $1\n"})
+	for _, tt := range []struct {
+		profile string
+		want    []string
+	}{
+		{"recommended", []string{"Dockerfile:2:13 DL3014", "Dockerfile:2:13 DL3015", "Dockerfile:2:21 DL3008", "Dockerfile:3:1 DL3059", "Dockerfile:3:10 SC2086"}},
+		{"minimal", []string{"Dockerfile:2:13 DL3014", "Dockerfile:2:21 DL3008", "Dockerfile:3:10 SC2086"}},
+	} {
+		got := run(t, dir, "", "check", "-f", "gcc", "--profile="+tt.profile, "Dockerfile")
+		if !slices.Equal(findings(t, got.stdout), tt.want) || got.status != checkStatusFindings {
+			t.Errorf("check --profile=%s = %d %v, want %v\n%s", tt.profile, got.status, findings(t, got.stdout), tt.want, got.stderr)
+		}
+	}
+}

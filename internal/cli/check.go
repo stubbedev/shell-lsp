@@ -388,11 +388,11 @@ func (c *checker) lint(t target) linted {
 	findings := sourceFindings(file.Doc, append(syntax, report.Findings...))
 	docker, _ := hostnav.HadolintOf(file, s.hadolint)
 	if isHost {
-		native, err := c.nativeFindings(g, h, s.lint)
+		locked, err := hostnav.FlakeLockFindings(h, c.locks, s.lint)
 		if err != nil {
 			return linted{failure: fmt.Sprintf("%s: %v", t.name, err)}
 		}
-		findings = slices.Concat(findings, native, c.provenFindings(h, s, env), docker.Findings())
+		findings = slices.Concat(findings, hostnav.HostFindings(h, g.Findings(), locked, docker, s.lint), c.provenFindings(h, s, env))
 	}
 	findings = c.filter(s.lint.Excluded(), docker.Host(findings))
 	return linted{
@@ -427,15 +427,6 @@ func (c *checker) provenFindings(h hostnav.Host, s fileSettings, env navigation.
 		syntax = append(syntax, syntaxFindings(variant.Tree, s.lint.DialectSource(variant))...)
 	}
 	return sourceFindings(wrapped.Doc, append(syntax, report.Findings...))
-}
-
-func (c *checker) nativeFindings(g *hostnav.Group, h hostnav.Host, settings filelint.Settings) ([]lint.Finding, error) {
-	locked, err := hostnav.FlakeLockFindings(h, c.locks, settings)
-	if err != nil {
-		return nil, err
-	}
-	findings := slices.Concat(g.Findings(), hostnav.OptionalNixFindings(h, settings), locked)
-	return slices.DeleteFunc(findings, func(f lint.Finding) bool { return !c.opts.profile.KeepsHost(f) }), nil
 }
 
 func (c *checker) graph(ctx context.Context, language host.Language, env hostnav.Env) (*hostnav.Graph, error) {
