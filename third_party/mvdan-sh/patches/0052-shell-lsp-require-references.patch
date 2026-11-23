@@ -1,0 +1,92 @@
+shell-lsp: fail on a missing reference shell under REQUIRE_REFERENCES
+
+Not for upstream. shell-lsp compares many parsers and formatters with
+the tools they mirror, and one variable, REQUIRE_REFERENCES=1, makes
+every such comparison fail instead of skip when its reference tool is
+missing or of another version; CI sets it where its dev shell provides
+each tool at its pinned version. The external shells of
+TestParseConfirm and FuzzQuote's bash check go through shell-lsp's
+referencetest.Unavailable, which does that, in place of REQUIRE_SHELLS.
+
+diff --git a/syntax/fuzz_test.go b/syntax/fuzz_test.go
+index 160fecb..43ee3e5 100644
+--- a/syntax/fuzz_test.go
++++ b/syntax/fuzz_test.go
+@@ -10,11 +10,13 @@ import (
+ 	"testing"
+ 
+ 	"github.com/go-quicktest/qt"
++
++	"github.com/stubbedev/shell-lsp/internal/referencetest"
+ )
+ 
+ func FuzzQuote(f *testing.F) {
+ 	if _, err := exec.LookPath("bash"); err != nil {
+-		f.Skipf("requires bash to verify quoted strings")
++		referencetest.Unavailable(f, "requires bash to verify quoted strings")
+ 	}
+ 
+ 	// Keep in sync with ExampleQuote.
+diff --git a/syntax/parser_test.go b/syntax/parser_test.go
+index e7c948e..08a350a 100644
+--- a/syntax/parser_test.go
++++ b/syntax/parser_test.go
+@@ -21,6 +21,7 @@ import (
+ 	"github.com/go-quicktest/qt"
+ 	"github.com/google/go-cmp/cmp"
+ 
++	"github.com/stubbedev/shell-lsp/internal/referencetest"
+ 	"mvdan.cc/sh/v3/internal"
+ )
+ 
+@@ -247,45 +248,33 @@ type externalShell struct {
+ 	require func(testing.TB)
+ }
+ 
+-// requireShells can be set to make sure that no external shell tests
+-// are being skipped due to a misalignment in installed versions.
+-var requireShells = os.Getenv("REQUIRE_SHELLS") == "1"
+-
+-func skipExternal(tb testing.TB, message string) {
+-	if requireShells {
+-		tb.Fatal(message)
+-	} else {
+-		tb.Skip(message)
+-	}
+-}
+-
+ // Note that externalShells is a map, and not an array,
+ // because [LangVariant.index] is not a constant expression.
+ // This seems fine; this table is only for the sake of testing.
+ var externalShells = map[LangVariant]externalShell{
+ 	LangBash: {"bash", func(tb testing.TB) {
+ 		if !onceHasBash53() {
+-			skipExternal(tb, "bash 5.3 required to run")
++			referencetest.Unavailable(tb, "bash 5.3 required to run")
+ 		}
+ 	}},
+ 	LangPOSIX: {"dash", func(tb testing.TB) {
+ 		if !onceHasDash059() {
+-			skipExternal(tb, "dash 0.5.9+ required to run")
++			referencetest.Unavailable(tb, "dash 0.5.9+ required to run")
+ 		}
+ 	}},
+ 	LangMirBSDKorn: {"mksh", func(tb testing.TB) {
+ 		if !onceHasMksh59() {
+-			skipExternal(tb, "mksh 59 required to run")
++			referencetest.Unavailable(tb, "mksh 59 required to run")
+ 		}
+ 	}},
+ 	LangZsh: {"zsh", func(tb testing.TB) {
+ 		if !onceHasZsh59() {
+-			skipExternal(tb, "zsh 5.9 required to run")
++			referencetest.Unavailable(tb, "zsh 5.9 required to run")
+ 		}
+ 	}},
+ 	LangKsh93: {"ksh", func(tb testing.TB) {
+ 		if !onceHasKsh93um() {
+-			skipExternal(tb, "ksh 93u+m required to run")
++			referencetest.Unavailable(tb, "ksh 93u+m required to run")
+ 		}
+ 	}},
+ }

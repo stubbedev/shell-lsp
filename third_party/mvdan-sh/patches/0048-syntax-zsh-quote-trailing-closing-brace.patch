@@ -1,0 +1,54 @@
+zsh: quote a word that ends in }
+
+zsh reads an unquoted } that ends a word as a closing brace, so the 0}
+that Quote returned for "0}" with LangZsh is a parse error in zsh. bash,
+ksh93 and mksh read 0} as one word, and a } inside a word is fine in zsh
+too, so only a trailing } with LangZsh needs quoting.
+
+Reproducer, before this change:
+
+	syntax.Quote("0}", syntax.LangZsh) // 0}
+	$ zsh -c 'printf %s 0}'
+	zsh:1: parse error near `}'
+
+FuzzQuote found it with zsh 5.9 on PATH; the input is a seed.
+
+Part of https://github.com/mvdan/sh/issues/120.
+
+diff --git a/syntax/quote.go b/syntax/quote.go
+index d438dbf..896c7e9 100644
+--- a/syntax/quote.go
++++ b/syntax/quote.go
+@@ -86,6 +86,9 @@ func Quote(s string, lang LangVariant) (string, error) {
+ 		rem = rem[size:]
+ 		offs += size
+ 	}
++	if lang.in(LangZsh) && strings.HasSuffix(s, "}") {
++		shellChars = true
++	}
+ 	if !shellChars && !nonPrintable && !IsKeyword(s) {
+ 		// Nothing to quote; avoid allocating.
+ 		return s, nil
+diff --git a/syntax/quote_test.go b/syntax/quote_test.go
+index 9117370..a0f0e78 100644
+--- a/syntax/quote_test.go
++++ b/syntax/quote_test.go
+@@ -32,6 +32,9 @@ func TestQuote(t *testing.T) {
+ 		{"\x1b\x1caaa", LangMirBSDKorn, `$'\x1b\x1c'$'aaa'`},
+ 		{"\x1b\x1caaa", LangKsh93, `$'\x1b\x1c'$'aaa'`},
+ 		{"\xe200", LangKsh93, `$'\xe2'$'00'`},
++		{"0}", LangZsh, `'0}'`},
++		{"a}b", LangZsh, `a}b`},
++		{"0}", LangBash, `0}`},
+ 		{"\xff\x00", LangBash, &QuoteError{1, quoteErrNull}},
+ 	}
+ 
+diff --git a/syntax/testdata/fuzz/FuzzQuote/bc696b2353638248 b/syntax/testdata/fuzz/FuzzQuote/bc696b2353638248
+new file mode 100644
+index 0000000..032b610
+--- /dev/null
++++ b/syntax/testdata/fuzz/FuzzQuote/bc696b2353638248
+@@ -0,0 +1,3 @@
++go test fuzz v1
++string("0}")
++byte('\x10')

@@ -1,0 +1,63 @@
+syntax: end ksh93 \x escapes before a following hex digit
+
+ksh93 reads every hex digit after \x, as mksh does, so the $'\xe200'
+that Quote returned for the byte 0xe2 followed by "00" is U+E200 in
+ksh93, and $'\x0f0' is a single character. Quote already closes and
+reopens the $'' before a hex digit that follows a \x escape for mksh;
+ksh93 now gets the same treatment, as $'\xe2'$'00'.
+
+Reproducer, before this change:
+
+	syntax.Quote("\xe200", syntax.LangKsh93) // $'\xe200', which ksh93 reads as U+E200
+
+FuzzQuote found both inputs with ksh93u+m on PATH; they are seeds, beside
+table cases that hold without the shell.
+
+diff --git a/syntax/quote.go b/syntax/quote.go
+index 8f7f57e..d438dbf 100644
+--- a/syntax/quote.go
++++ b/syntax/quote.go
+@@ -130,9 +130,9 @@ func Quote(s string, lang LangVariant) (string, error) {
+ 			case r < utf8.RuneSelf, r == utf8.RuneError && size == 1:
+ 				// \xXX, fixed at two hexadecimal characters.
+ 				fmt.Fprintf(&b, "\\x%02x", rem[0])
+-				// Unfortunately, mksh allows \x to consume more hex characters.
+-				// Ensure that we don't allow it to read more than two.
+-				if lang.in(LangMirBSDKorn) {
++				// Unfortunately, mksh and ksh93 allow \x to consume more hex characters.
++				// Ensure that we don't allow them to read more than two.
++				if lang.in(LangMirBSDKorn | LangKsh93) {
+ 					nextRequoteIfHex = true
+ 				}
+ 			case r > utf8.MaxRune:
+diff --git a/syntax/quote_test.go b/syntax/quote_test.go
+index c8e0d0e..9117370 100644
+--- a/syntax/quote_test.go
++++ b/syntax/quote_test.go
+@@ -30,6 +30,8 @@ func TestQuote(t *testing.T) {
+ 		{"mksh16\U00086199", LangMirBSDKorn, &QuoteError{6, quoteErrMksh}},
+ 		{"\x1b\x1caaa", LangBash, `$'\x1b\x1caaa'`},
+ 		{"\x1b\x1caaa", LangMirBSDKorn, `$'\x1b\x1c'$'aaa'`},
++		{"\x1b\x1caaa", LangKsh93, `$'\x1b\x1c'$'aaa'`},
++		{"\xe200", LangKsh93, `$'\xe2'$'00'`},
+ 		{"\xff\x00", LangBash, &QuoteError{1, quoteErrNull}},
+ 	}
+ 
+diff --git a/syntax/testdata/fuzz/FuzzQuote/4844427719de0b87 b/syntax/testdata/fuzz/FuzzQuote/4844427719de0b87
+new file mode 100644
+index 0000000..6e1da3d
+--- /dev/null
++++ b/syntax/testdata/fuzz/FuzzQuote/4844427719de0b87
+@@ -0,0 +1,3 @@
++go test fuzz v1
++string("\xe200")
++byte(' ')
+diff --git a/syntax/testdata/fuzz/FuzzQuote/f399c956f1bcb758 b/syntax/testdata/fuzz/FuzzQuote/f399c956f1bcb758
+new file mode 100644
+index 0000000..5a52859
+--- /dev/null
++++ b/syntax/testdata/fuzz/FuzzQuote/f399c956f1bcb758
+@@ -0,0 +1,3 @@
++go test fuzz v1
++string("\x0f0")
++byte(' ')

@@ -1,0 +1,413 @@
+zsh: braces as zsh's lexer reads them
+
+zsh decides what a brace is while it lexes, and the parser read three of
+its rules differently:
+
+- An unquoted } that ends a word, followed by a separator, closes a
+  block unless a { earlier in the word, including in an unquoted ${...}
+  in it, is still open. The parser kept it in the word, so it accepted
+  "echo a}", which zsh rejects, and read "{ echo a}" as unterminated.
+- A { that starts a word at command position opens a block even when
+  glued, so "{echo hi}", "{a}" and "f() {echo hi 2>&1}" are blocks. The
+  parser read "{echo" as a command name.
+- An unquoted ${...} ends at the } that balances its braces, so
+  "${x/{f}/Y}" replaces {f} and "${y//{Q}/1 2}" is one word. The parser
+  closed it at the first }, which is right only inside double quotes and
+  here-documents, where zsh does the same.
+
+Reproducer, before this change:
+
+	$ printf 'echo a}\n' | shfmt -ln zsh
+	echo a}
+	$ printf '{ echo a}\n' | shfmt -ln zsh
+	<standard input>:1:1: reached EOF without matching `{` with `}`
+	$ zsh -nc 'echo a}'
+	zsh:1: parse error near `}'
+
+With LangZsh, the parser now splits such a } off arguments and redirect
+targets as its own token, splits a glued { off a word at command
+position, and counts the braces in the words of an unquoted ${...}. It
+hands out the split tokens through a one-token pushback in the lexer,
+which a parse error drops along with the current token, so that the
+parser stops at the error instead of reading the pushed token
+(">0}}})" looped forever in callExpr).
+
+Part of https://github.com/mvdan/sh/issues/120.
+
+diff --git a/syntax/filetests_test.go b/syntax/filetests_test.go
+index 8be3686..43c20c7 100644
+--- a/syntax/filetests_test.go
++++ b/syntax/filetests_test.go
+@@ -978,6 +978,55 @@ var fileTests = []fileTestCase{
+ 		printsAs("coproc { foo; }"),
+ 		langFile(&CoprocClause{Stmt: stmt(block(litStmt("foo")))}, LangZsh),
+ 	),
++	fileTest(
++		[]string{"{ echo a}"},
++		printsAs("{ echo a; }"),
++		langFile(block(litStmt("echo", "a")), LangZsh),
++	),
++	fileTest(
++		[]string{"{echo hi}", "{echo hi;}"},
++		printsAs("{ echo hi; }"),
++		langFile(block(litStmt("echo", "hi")), LangZsh),
++	),
++	fileTest(
++		[]string{"true && {echo a; echo b}"},
++		printsAs("true && {\n\techo a\n\techo b\n}"),
++		langFile(&BinaryCmd{Op: AndStmt, X: litStmt("true"), Y: stmt(block(litStmt("echo", "a"), litStmt("echo", "b")))}, LangZsh),
++	),
++	fileTest(
++		[]string{"f() {echo hi}"},
++		printsAs("f() { echo hi; }"),
++		langFile(&FuncDecl{Parens: true, Name: lit("f"), Body: stmt(block(litStmt("echo", "hi")))}, LangZsh),
++	),
++	fileTest(
++		[]string{"{echo hi 2>&1}"},
++		printsAs("{ echo hi 2>&1; }"),
++		langFile(block(&Stmt{Cmd: litCall("echo", "hi"), Redirs: []*Redirect{{Op: DplOut, N: lit("2"), Word: litWord("1")}}}), LangZsh),
++	),
++	fileTest(
++		[]string{"{1..3}"},
++		printsAs("{ 1..3; }"),
++		langFile(block(litStmt("1..3")), LangZsh),
++	),
++	fileTest(
++		[]string{"echo ${x/{f}/Y} ${y:-%F{yellow}} ${z//{Q}/1 2} \"${x/{f}/Y}\""},
++		printsAs("echo ${x/{f}/Y} ${y:-%F{yellow}} ${z//{Q}/1 2} \"${x/{f/}/Y}\""),
++		langFile(stmt(call(
++			litWord("echo"),
++			word(&ParamExp{Param: lit("x"), Repl: &Replace{Orig: litWord("{f}"), With: litWord("Y")}}),
++			word(&ParamExp{Param: lit("y"), Exp: &Expansion{Op: DefaultUnsetOrNull, Word: litWord("%F{yellow}")}}),
++			word(&ParamExp{Param: lit("z"), Repl: &Replace{All: true, Orig: litWord("{Q}"), With: litWord("1 2")}}),
++			word(&DblQuoted{Parts: []WordPart{&ParamExp{Param: lit("x"), Repl: &Replace{Orig: litWord("{f")}}, lit("/Y}")}}),
++		)), LangZsh),
++	),
++	fileTest(
++		[]string{"echo a}b x{a} {a} a}#"},
++		langFile(litStmt("echo", "a}b", "x{a}", "{a}", "a}#"), LangZsh),
++	),
++	fileTest(
++		[]string{"echo {$x}"},
++		langFile(stmt(call(litWord("echo"), word(lit("{"), litParamExp("x"), lit("}")))), LangZsh),
++	),
+ 	fileTest(
+ 		[]string{"{ local a; }", "{ local a }"},
+ 		printsAs("{ local a; }"),
+@@ -3535,8 +3584,6 @@ var fileTests = []fileTestCase{
+ 	),
+ 	fileTest(
+ 		// TODO: should shfmt lean towards no semicolons in Zsh mode?
+-		// Note that zsh seems to support "{foo}" too, but that is undocumented,
+-		// and hopefully noone actually relies on that.
+ 		[]string{"{ foo; }", "{ foo }"},
+ 		langFile(block(litStmt("foo")), LangZsh),
+ 	),
+@@ -3711,7 +3758,12 @@ var fileTests = []fileTestCase{
+ 	),
+ 	fileTest(
+ 		[]string{`{foo}`},
+-		langFile(litWord(`{foo}`)),
++		langFile(litWord(`{foo}`), langResolvedVariants&^LangZsh),
++	),
++	fileTest(
++		[]string{`{foo}`},
++		printsAs("{ foo; }"),
++		langFile(block(litStmt("foo")), LangZsh),
+ 	),
+ 	fileTest(
+ 		[]string{`{"foo"`},
+@@ -7550,6 +7602,7 @@ func (c sanityChecker) visit(node Node) bool {
+ 				// ended by whitespace
+ 			case regOps(rune(end)):
+ 				// ended by end character
++			case end == '}':
+ 			case endOff > 0 && c.src[endOff-1] == ';':
+ 				// ended by semicolon
+ 			case endOff > 0 && c.src[endOff-1] == '&':
+diff --git a/syntax/lexer.go b/syntax/lexer.go
+index 5dca876..43d4e41 100644
+--- a/syntax/lexer.go
++++ b/syntax/lexer.go
+@@ -237,6 +237,10 @@ func (p *Parser) nextKeepSpaces() {
+ 	case paramExpExp:
+ 		switch r {
+ 		case '}':
++			if p.zshParamBraces > 0 {
++				p.advanceLitOther(r)
++				break
++			}
+ 			p.tok = p.paramToken(r)
+ 		case '`', '"', '$', '\'':
+ 			p.tok = p.regToken(r)
+@@ -282,6 +286,11 @@ runeLoop:
+ }
+ 
+ func (p *Parser) next() {
++	if p.hasPushed {
++		p.tok, p.val, p.pos, p.spaced, p.eqlOffs = p.pushed.tok, p.pushed.val, p.pushed.pos, p.pushed.spaced, p.pushed.eqlOffs
++		p.hasPushed = false
++		return
++	}
+ 	p.eqlOffs = -1
+ 	if p.r == runeEOF {
+ 		p.tok = _EOF
+@@ -1159,7 +1168,15 @@ loop:
+ 		case '\'', '"', '`', '$':
+ 			tok = _Lit
+ 			break loop
++		case '{':
++			if p.zshNestBraces && p.quote&(paramExpRepl|paramExpExp) != 0 {
++				p.zshParamBraces++
++			}
+ 		case '}':
++			if p.zshParamBraces > 0 && p.quote&(paramExpRepl|paramExpExp) != 0 {
++				p.zshParamBraces--
++				break
++			}
+ 			if p.quote&allParamExp != 0 {
+ 				break loop
+ 			}
+diff --git a/syntax/parser.go b/syntax/parser.go
+index daf9bff..911526d 100644
+--- a/syntax/parser.go
++++ b/syntax/parser.go
+@@ -523,6 +523,12 @@ type Parser struct {
+ 
+ 	spaced bool // whether [Parser.tok] has whitespace on its left
+ 
++	pushed    lexed // the token [Parser.next] hands out before lexing more
++	hasPushed bool
++
++	zshNestBraces  bool // the current [LangZsh] ${...} is unquoted, so braces in it nest
++	zshParamBraces int  // unmatched { in the words of that ${...}
++
+ 	err     error // lexer/parser error
+ 	readErr error // got a read error, but bytes left
+ 	readEOF bool  // [Parser.src] already gave us an [io.EOF] error
+@@ -640,6 +646,7 @@ const bufSize = 1 << 10
+ func (p *Parser) reset() {
+ 	p.tok, p.val = illegalTok, ""
+ 	p.eqlOffs = 0
++	p.hasPushed = false
+ 	p.bs, p.bsp = nil, 0
+ 	p.offs, p.line, p.col = p.startOffs, p.startLine, p.startCol
+ 	p.r, p.w = 0, 0
+@@ -1115,6 +1122,7 @@ func (p *Parser) errPass(err error) {
+ 		p.r = runeEOF
+ 		p.w = 1
+ 		p.tok = _EOF
++		p.hasPushed = false
+ 	}
+ }
+ 
+@@ -1841,6 +1849,12 @@ func (p *Parser) unexpandableParamExp() *Lit {
+ // as a literal.
+ func (p *Parser) paramExp() *ParamExp {
+ 	old := p.quote
++	oldNest, oldBraces := p.zshNestBraces, p.zshParamBraces
++	if old&(allParamExp|runeByRune|paramExpSubFlagsArg|paramExpKey) == 0 {
++		p.zshNestBraces = p.lang.in(LangZsh) && old&(dblQuotes|hdocBody|hdocBodyTabs|hdocBodyBlanks) == 0
++	}
++	p.zshParamBraces = 0
++	defer func() { p.zshNestBraces, p.zshParamBraces = oldNest, oldBraces }()
+ 	p.quote = runeByRune
+ 	// [ParamExp.Short] means we are parsing $exp rather than ${exp}.
+ 	if len(p.paramBatch) == 0 {
+@@ -2758,6 +2772,7 @@ func (p *Parser) doRedirect(s *Stmt) {
+ 		}
+ 	default:
+ 		r.Word = p.followWordTok(token(r.Op), r.OpPos)
++		p.splitZshCloseBrace(r.Word)
+ 	}
+ }
+ 
+@@ -2939,6 +2954,9 @@ func (p *Parser) gotStmtPipe(s *Stmt, binCmd bool) *Stmt {
+ 		p.doRedirect(s)
+ 	}
+ 	redirsStart := len(s.Redirs)
++	if p.zshGluedBrace() {
++		p.splitGluedBrace()
++	}
+ 	switch p.tok {
+ 	case _LitWord:
+ 		switch p.val {
+@@ -4262,6 +4280,126 @@ func (p *Parser) unexpectedInCallExpr(ce *CallExpr) {
+ 	p.curErr("a command can only contain words and redirects; encountered %#q", p.tok)
+ }
+ 
++type lexed struct {
++	tok     token
++	val     string
++	pos     Pos
++	spaced  bool
++	eqlOffs int
++}
++
++func (p *Parser) push(next lexed) {
++	p.pushed = lexed{tok: p.tok, val: p.val, pos: p.pos, spaced: p.spaced, eqlOffs: p.eqlOffs}
++	p.hasPushed = true
++	p.tok, p.val, p.pos, p.spaced, p.eqlOffs = next.tok, next.val, next.pos, next.spaced, next.eqlOffs
++}
++
++func (p *Parser) zshGluedBrace() bool {
++	return p.lang.in(LangZsh) && (p.tok == _LitWord || p.tok == _Lit) && len(p.val) > 1 && p.val[0] == '{' && p.val != "{}"
++}
++
++func (p *Parser) splitGluedBrace() {
++	lbrace, spaced := p.pos, p.spaced
++	p.val, p.pos, p.spaced = p.val[1:], posAddCol(p.pos, 1), false
++	if p.eqlOffs > 0 {
++		p.eqlOffs--
++	}
++	p.push(lexed{tok: _LitWord, val: "{", pos: lbrace, spaced: spaced, eqlOffs: -1})
++}
++
++func (p *Parser) splitZshCloseBrace(w *Word) {
++	if !p.lang.in(LangZsh) || w == nil || !(p.spaced || p.stopToken() || p.peekRedir()) || !zshClosesBrace(w.Parts) {
++		return
++	}
++	last := w.Parts[len(w.Parts)-1].(*Lit)
++	if len(w.Parts) == 1 && last.Value == "}" {
++		return
++	}
++	last.Value = last.Value[:len(last.Value)-1]
++	last.ValueEnd = posAddCol(last.ValueEnd, -1)
++	if last.Value == "" {
++		w.Parts = w.Parts[:len(w.Parts)-1]
++	}
++	p.push(lexed{tok: _LitWord, val: "}", pos: last.ValueEnd, spaced: true, eqlOffs: -1})
++}
++
++func zshClosesBrace(parts []WordPart) bool {
++	open := 0
++	for i, part := range parts {
++		lit, ok := part.(*Lit)
++		if !ok {
++			open += zshBracesWithin(part)
++			continue
++		}
++		for j := 0; j < len(lit.Value); j++ {
++			switch lit.Value[j] {
++			case '\\':
++				j++
++			case '{':
++				open++
++			case '}':
++				if open > 0 {
++					open--
++				} else if i == len(parts)-1 && j == len(lit.Value)-1 {
++					return true
++				}
++			}
++		}
++	}
++	return false
++}
++
++func zshBracesWithin(part WordPart) int {
++	pe, ok := part.(*ParamExp)
++	if !ok {
++		return 0
++	}
++	open := 0
++	if pe.NestedParam != nil {
++		open += zshBracesWithin(pe.NestedParam)
++	}
++	for _, w := range []*Word{expansionWord(pe.Exp), replaceWord(pe.Repl, false), replaceWord(pe.Repl, true)} {
++		if w == nil {
++			continue
++		}
++		for _, part := range w.Parts {
++			lit, ok := part.(*Lit)
++			if !ok {
++				open += zshBracesWithin(part)
++				continue
++			}
++			for j := 0; j < len(lit.Value); j++ {
++				switch lit.Value[j] {
++				case '\\':
++					j++
++				case '{':
++					open++
++				case '}':
++					open--
++				}
++			}
++		}
++	}
++	return max(open, 0)
++}
++
++func expansionWord(e *Expansion) *Word {
++	if e == nil {
++		return nil
++	}
++	return e.Word
++}
++
++func replaceWord(r *Replace, with bool) *Word {
++	switch {
++	case r == nil:
++		return nil
++	case with:
++		return r.With
++	}
++	return r.Orig
++}
++
+ func (p *Parser) callExpr(s *Stmt, w *Word, assign bool) {
+ 	ce := p.call(w)
+ 	redirsStart := len(s.Redirs)
+@@ -4271,8 +4409,12 @@ func (p *Parser) callExpr(s *Stmt, w *Word, assign bool) {
+ 	if assign {
+ 		ce.Assigns = append(ce.Assigns, p.getAssign(true))
+ 	}
++	checked := 0
+ loop:
+ 	for {
++		for ; checked < len(ce.Args); checked++ {
++			p.splitZshCloseBrace(ce.Args[checked])
++		}
+ 		switch p.tok {
+ 		case _EOF, _Newl, semicolon, and, or, andAnd, orOr, orAnd, andPipe, andBang,
+ 			dblSemicolon, semiAnd, dblSemiAnd, semiOr:
+diff --git a/syntax/parser_test.go b/syntax/parser_test.go
+index 7ec94d1..ba298b6 100644
+--- a/syntax/parser_test.go
++++ b/syntax/parser_test.go
+@@ -614,6 +614,34 @@ var errorCases = []errorCase{
+ 		"foo }",
+ 		langErr("1:5: `}` can only be used to close a block", LangZsh),
+ 	),
++	errCase(
++		"{echo hi}x",
++		langErr("1:1: reached EOF without matching `{` with `}`", LangZsh),
++	),
++	errCase(
++		">0}}})",
++		langErr("1:5: `}` can only be used to close a block", LangZsh),
++	),
++	errCase(
++		"echo a}",
++		langErr("1:7: `}` can only be used to close a block", LangZsh),
++	),
++	errCase(
++		"echo a};",
++		langErr("1:7: `}` can only be used to close a block", LangZsh),
++	),
++	errCase(
++		"echo $x}",
++		langErr("1:8: `}` can only be used to close a block", LangZsh),
++	),
++	errCase(
++		"echo {a}}",
++		langErr("1:9: `}` can only be used to close a block", LangZsh),
++	),
++	errCase(
++		"echo a}|cat",
++		langErr("1:7: `}` can only be used to close a block", LangZsh),
++	),
+ 	errCase(
+ 		"then",
+ 		langErr("1:1: `then` can only be used in an `if`"),

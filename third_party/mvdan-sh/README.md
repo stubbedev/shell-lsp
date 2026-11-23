@@ -22,11 +22,23 @@ producing syntax errors, so the gaps are closed here first.
 ## Changes
 
 Besides leaving out the `typedjson` package and the `go:generate` tool
-dependency, which shell-lsp does not use, the fork differs from v3.14.1 by the
-patches in [patches/](patches). Each one is a `git diff` against the module
-root, applies on top of the previous ones starting from pristine v3.14.1
-(`git apply patches/*.patch`), and starts with a description and a minimal
-reproducer so that it can be sent upstream as it is.
+dependency, which shell-lsp does not use, and rewriting the import paths from
+`mvdan.cc/sh/v3/` to `github.com/stubbedev/shell-lsp/third_party/mvdan-sh/`,
+the fork differs from v3.14.1 by the patches in [patches/](patches) and by
+nothing else. Each one is a `git diff` against the module root, applies on top
+of the previous ones starting from pristine v3.14.1
+(`for p in patches/*.patch; do git apply "$p"; done` in a copy of the module),
+and starts with a description and a minimal reproducer so that it can be sent
+upstream as it is. The few marked as shell-lsp only adapt the fork to this
+repository and are not meant for upstream.
+
+Every change to the fork therefore lands as a new patch, together with the
+change to the files themselves. `TestPatchesReproduceFork` in
+[patches_test.go](patches_test.go) applies the chain to the copy of v3.14.1 in
+the module cache, rewrites the import paths, and fails with the files that
+differ from this directory in any byte, or that exist on only one side. It
+skips when the module is not in the cache, unless `REQUIRE_REFERENCES=1` is
+set, as CI's nix job does after `go mod download "$(cat UPSTREAM)"`; [UPSTREAM](UPSTREAM) names the pristine module and version.
 
 | Patch | Change | Upstream issue |
 | --- | --- | --- |
@@ -76,6 +88,12 @@ reproducer so that it can be sent upstream as it is.
 | 0044 | zsh: the short forms of `while`, `until`, `for`, `select` and `repeat` with an empty body, which whatever cannot start a command ends, the end of the input or of a substitution included (`{ while a; b; }`, `for i in 1;`, `repeat 2`, `$(for i (1 2))`), with any number of separators after a loop header, as with `zsh -n`; words after `in` without a separator after them, an empty body followed by `&`, `&!` or `&|`, and `end` outside a `foreach` are errors, as in zsh | [mvdan/sh#120](https://github.com/mvdan/sh/issues/120) |
 | 0045 | zsh: a lone `;` wherever a newline may stand, in any list, after `&&`, `\|\|`, `\|` and `\|&` and around case items (`a; ; b`, `while a; ; b`, `a && ; b`), an empty short body of `if`, `while` or `until` ended by one of those operators (`while a; \| b`, `if a; && b`), and a comment ending the words of `for` at the end of the input (`for i in a # c`), as with `zsh -n` | [mvdan/sh#120](https://github.com/mvdan/sh/issues/120) |
 | 0046 | syntax: a `WordIter` that a parse error leaves without a name (`for ;`) reports an invalid position instead of panicking in `Pos` and `End` | — |
+| 0047 | syntax: `Quote` ends a `\x` escape before a following hex digit with ksh93 too (`$'\xe2'$'00'`), since ksh93 reads every hex digit after `\x`, as mksh does | — |
+| 0048 | zsh: `Quote` quotes a word that ends in `}` (`'0}'`), which zsh would read as a closing brace | [mvdan/sh#120](https://github.com/mvdan/sh/issues/120) |
+| 0049 | zsh: braces as zsh's lexer reads them: a `}` that ends a word closes a block unless a `{` in the word is still open (`echo a}` is an error, `{ echo a}` a block), a `{` glued to a word at command position opens one (`{echo hi}`), and an unquoted `${...}` ends at the `}` that balances its braces (`${x/{f}/Y}`), as with `zsh -n` | [mvdan/sh#120](https://github.com/mvdan/sh/issues/120) |
+| 0050 | syntax tests: the external shell tests name bash 5.3, which they require, when skipping or failing for its absence, instead of bash 5.2 | — |
+| 0051 | shell-lsp only: a blank line between the imports of other modules and those of this one, as shell-lsp's gci configuration groups them once the import paths are rewritten | not for upstream |
+| 0052 | shell-lsp only: a missing or mismatched reference shell fails the tests under shell-lsp's `REQUIRE_REFERENCES=1`, through its `referencetest.Unavailable`, in place of `REQUIRE_SHELLS` | not for upstream |
 
 ## Tests
 

@@ -1,0 +1,25 @@
+syntax tests: name bash 5.3 when skipping for its absence
+
+The external shell tests require bash 5.3 through onceHasBash53, but the
+message they skip or fail with still asked for bash 5.2, which sends
+someone with bash 5.2 installed looking for the wrong problem.
+
+Reproducer, before this change, with bash 5.2 on PATH:
+
+	$ REQUIRE_SHELLS=1 go test -run TestParseConfirm ./syntax
+
+fails with "bash 5.2 required to run".
+
+diff --git a/syntax/parser_test.go b/syntax/parser_test.go
+index ba298b6..2d153b1 100644
+--- a/syntax/parser_test.go
++++ b/syntax/parser_test.go
+@@ -264,7 +264,7 @@ func skipExternal(tb testing.TB, message string) {
+ var externalShells = map[LangVariant]externalShell{
+ 	LangBash: {"bash", func(tb testing.TB) {
+ 		if !onceHasBash53() {
+-			skipExternal(tb, "bash 5.2 required to run")
++			skipExternal(tb, "bash 5.3 required to run")
+ 		}
+ 	}},
+ 	LangPOSIX: {"dash", func(tb testing.TB) {

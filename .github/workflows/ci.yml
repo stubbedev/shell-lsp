@@ -144,6 +144,8 @@ jobs:
           cache: stubbedev/main
       - run: nix build --print-build-logs
       - run: ./result/bin/shell-lsp --version
+      - name: Fetch pristine mvdan.cc/sh, which the fork's patch chain is checked against
+        run: nix develop --command go mod download "$(cat third_party/mvdan-sh/UPSTREAM)"
       - name: Test against the reference tools of the dev shell
         run: nix develop --command go test -skip '^TestBudgets$' ./...
         env:

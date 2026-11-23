@@ -1,0 +1,34 @@
+shell-lsp: group the fork's own imports apart from other modules
+
+Not for upstream. shell-lsp vendors this module as
+github.com/stubbedev/shell-lsp/third_party/mvdan-sh and formats it with
+gci, which puts imports from shell-lsp in a section of their own after
+the other modules. Once the import paths are rewritten, the two test
+files that import another module next to a package of this one need a
+blank line between them. In upstream's paths the change is only that
+blank line.
+
+diff --git a/expand/expand_test.go b/expand/expand_test.go
+index 86f0569..720a0a6 100644
+--- a/expand/expand_test.go
++++ b/expand/expand_test.go
+@@ -10,6 +10,7 @@ import (
+ 	"testing"
+ 
+ 	"github.com/go-quicktest/qt"
++
+ 	"mvdan.cc/sh/v3/syntax"
+ )
+ 
+diff --git a/syntax/parser_test.go b/syntax/parser_test.go
+index 2d153b1..e7c948e 100644
+--- a/syntax/parser_test.go
++++ b/syntax/parser_test.go
+@@ -20,6 +20,7 @@ import (
+ 
+ 	"github.com/go-quicktest/qt"
+ 	"github.com/google/go-cmp/cmp"
++
+ 	"mvdan.cc/sh/v3/internal"
+ )
+ 
