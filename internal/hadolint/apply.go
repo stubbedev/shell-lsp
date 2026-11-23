@@ -101,18 +101,25 @@ func (s Suppression) Apply(findings []lint.Finding, hostOffset func(int) int) []
 func namedContextCopies(f *dockerfile.File, contexts bake.Contexts) []scoped {
 	var out []scoped
 	for _, in := range f.Instructions {
-		if in.Name != "COPY" {
-			continue
-		}
-		for _, flag := range in.Flags {
-			if flag.Name.Text != stageCopyKey || flag.Value == nil {
-				continue
-			}
-			ref, valid := dockerfile.ParseReference(flag.Value.Text)
-			if _, named := contexts[ref.ContextName()]; valid && named {
-				out = append(out, scoped{span: flag.Value.Span, codes: []lint.Code{lint.CodeDockerUnknownStage}})
-			}
+		if from, _, named := copiedContext(in, contexts); named {
+			out = append(out, scoped{span: from.Span, codes: []lint.Code{lint.CodeDockerUnknownStage}})
 		}
 	}
 	return out
+}
+
+func copiedContext(in *dockerfile.Instruction, contexts bake.Contexts) (dockerfile.Word, []bake.Value, bool) {
+	if in.Name != "COPY" {
+		return dockerfile.Word{}, nil, false
+	}
+	for _, flag := range in.Flags {
+		if flag.Name.Text != stageCopyKey || flag.Value == nil {
+			continue
+		}
+		ref, valid := dockerfile.ParseReference(flag.Value.Text)
+		if values, named := contexts[ref.ContextName()]; valid && named {
+			return *flag.Value, values, true
+		}
+	}
+	return dockerfile.Word{}, nil, false
 }

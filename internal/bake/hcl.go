@@ -19,17 +19,30 @@ const (
 )
 
 type token struct {
-	kind  tokenKind
-	text  string
-	known bool
-	pos   int
+	kind tokenKind
+	text string
+	tmpl template
+	pos  int
 }
 
 func (t token) is(punct string) bool { return t.kind == tokenPunct && t.text == punct }
 
+func (t token) name() (string, bool) {
+	switch t.kind {
+	case tokenIdent:
+		return t.text, true
+	case tokenString:
+		return t.tmpl.plain()
+	case tokenNewline, tokenPunct, tokenOther:
+	}
+	return "", false
+}
+
 const (
 	structural      = "={}[](),:"
 	targetBlock     = "target"
+	variableBlock   = "variable"
+	attrDefault     = "default"
 	heredocOpen     = "<<"
 	interpolation   = "${"
 	directive       = "%{"
@@ -154,8 +167,7 @@ func lineLength(text string) int {
 func (l *lexer) quoted() (token, bool, error) {
 	start := l.pos
 	l.pos++
-	var sb strings.Builder
-	known := true
+	var b templateBuilder
 	for {
 		if l.pos >= len(l.src) || l.src[l.pos] == '\n' {
 			return token{}, false, l.fail(start, "the string is never closed")
@@ -165,23 +177,24 @@ func (l *lexer) quoted() (token, bool, error) {
 		switch {
 		case rest[0] == '"':
 			l.pos++
-			return token{kind: tokenString, text: sb.String(), known: known, pos: start}, true, nil
+			return token{kind: tokenString, tmpl: b.build(), pos: start}, true, nil
 		case rest[0] == '\\':
 			decoded, err := l.escape()
 			if err != nil {
 				return token{}, false, err
 			}
-			sb.WriteString(decoded)
+			b.text(decoded)
 		case escaped != "":
-			sb.WriteString(escaped)
+			b.text(escaped)
 			l.pos += escapedTemplate
 		case interpolates:
-			known = false
-			if err := l.template(); err != nil {
+			name, err := l.template()
+			if err != nil {
 				return token{}, false, err
 			}
+			b.reference(name)
 		default:
-			sb.WriteByte(rest[0])
+			b.text(rest[:1])
 			l.pos++
 		}
 	}
@@ -233,25 +246,31 @@ func (l *lexer) codePoint(start, digits int) (string, error) {
 	return string(rune(n)), nil
 }
 
-func (l *lexer) template() error {
+func (l *lexer) template() (string, error) {
 	start := l.pos
+	reference := strings.HasPrefix(l.src[start:], interpolation)
 	l.pos += len(interpolation)
 	depth := 0
+	var inner []token
 	for {
 		t, ok, err := l.next()
 		if err != nil {
-			return err
+			return "", err
 		}
 		switch {
 		case !ok:
-			return l.fail(start, "the template sequence is never closed")
+			return "", l.fail(start, "the template sequence is never closed")
+		case t.is("}") && depth == 0:
+			if reference && len(inner) == 1 && inner[0].kind == tokenIdent {
+				return inner[0].text, nil
+			}
+			return "", nil
 		case t.is("{"):
 			depth++
-		case t.is("}") && depth == 0:
-			return nil
 		case t.is("}"):
 			depth--
 		}
+		inner = append(inner, t)
 	}
 }
 
@@ -287,37 +306,57 @@ func (l *lexer) heredoc() (token, bool, error) {
 		line := l.src[l.pos : l.pos+lineLength(l.src[l.pos:])]
 		l.pos += len(line)
 		if strings.TrimSpace(line) == marker {
-			return token{kind: tokenString, pos: start}, true, nil
+			return token{kind: tokenString, tmpl: unknown, pos: start}, true, nil
 		}
 	}
 	return token{}, false, l.fail(start, "the heredoc is never closed by a line with %s", marker)
 }
 
-func parseHCL(src string) ([]target, error) {
+func parseHCL(src string) (file, error) {
 	tokens, err := lex(src)
 	if err != nil {
-		return nil, err
+		return file{}, err
 	}
 	items, err := body(src, tokens)
 	if err != nil {
-		return nil, err
+		return file{}, err
 	}
-	var out []target
+	out := file{Variables: variables{}}
 	for _, it := range items {
-		if !it.block || it.name != targetBlock || len(it.labels) != 1 {
+		if !it.block || len(it.labels) != 1 {
 			continue
 		}
-		label := it.labels[0]
-		if label.kind == tokenString && !label.known {
+		label, plain := it.labels[0].name()
+		if !plain {
 			continue
 		}
-		t, err := targetOf(src, label.text, it.value)
-		if err != nil {
-			return nil, err
+		switch it.name {
+		case targetBlock:
+			t, err := targetOf(src, label, it.value)
+			if err != nil {
+				return file{}, err
+			}
+			out.Targets = append(out.Targets, t)
+		case variableBlock:
+			if err := variableOf(src, label, it.value, out.Variables); err != nil {
+				return file{}, err
+			}
 		}
-		out = append(out, t)
 	}
 	return out, nil
+}
+
+func variableOf(src, name string, tokens []token, into variables) error {
+	items, err := body(src, tokens)
+	if err != nil {
+		return err
+	}
+	for _, it := range items {
+		if !it.block && it.name == attrDefault {
+			into[name] = literal(it.value).value()
+		}
+	}
+	return nil
 }
 
 type item struct {
@@ -436,11 +475,11 @@ func targetOf(src, name string, tokens []token) (target, error) {
 	return t, nil
 }
 
-func literal(tokens []token) Value {
-	if len(tokens) != 1 || tokens[0].kind != tokenString || !tokens[0].known {
-		return Value{}
+func literal(tokens []token) template {
+	if len(tokens) != 1 || tokens[0].kind != tokenString {
+		return unknown
 	}
-	return Value{Text: tokens[0].text, Known: true}
+	return tokens[0].tmpl
 }
 
 func bracketed(tokens []token, open, close string) ([]token, bool) {
@@ -465,7 +504,7 @@ func entries(src string, tokens []token) ([][]token, error) {
 	return out, nil
 }
 
-func object(src string, tokens []token) (map[string]Value, error) {
+func object(src string, tokens []token) (map[string]template, error) {
 	inner, ok := bracketed(tokens, "{", "}")
 	if !ok {
 		return nil, nil
@@ -474,14 +513,13 @@ func object(src string, tokens []token) (map[string]Value, error) {
 	if err != nil {
 		return nil, err
 	}
-	out := map[string]Value{}
+	out := map[string]template{}
 	for _, p := range parts {
 		if len(p) < 2 || !p[1].is("=") && !p[1].is(":") {
 			continue
 		}
-		key := p[0]
-		if key.kind == tokenIdent || key.kind == tokenString && key.known {
-			out[key.text] = literal(p[2:])
+		if key, plain := p[0].name(); plain {
+			out[key] = literal(p[2:])
 		}
 	}
 	return out, nil
@@ -498,8 +536,8 @@ func names(src string, tokens []token) ([]string, error) {
 	}
 	var out []string
 	for _, p := range parts {
-		if v := literal(p); v.Known {
-			out = append(out, v.Text)
+		if name, plain := literal(p).plain(); plain {
+			out = append(out, name)
 		}
 	}
 	return out, nil

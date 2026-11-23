@@ -67,7 +67,7 @@ func (c *checker) from(s dockerfile.Stage) {
 		return
 	}
 	if values, named := c.Contexts[ref.ContextName()]; named {
-		c.contextTags(s, values)
+		c.contextTags(*s.Image, values, "each build may start from a different image")
 		return
 	}
 	switch {
@@ -87,16 +87,24 @@ func (c *checker) from(s dockerfile.Stage) {
 
 func untagged(ref dockerfile.Reference) bool { return ref.Tag == "" && ref.Digest == "" }
 
-func (c *checker) contextTags(s dockerfile.Stage, values []bake.Value) {
+func (c *checker) contextTags(name dockerfile.Word, values []bake.Value, effect string) {
 	for _, v := range values {
 		image, isImage := v.Image()
 		if !isImage {
 			continue
 		}
 		if ref, valid := dockerfile.ParseReference(image); valid && untagged(ref) {
-			c.report(lint.DL3006, s.Image.Span, "`%s` is the named context `%s`, which has no tag, so each build may start from a different image; name a version, as in `%s:<version>`", s.Image.Text, v.Text, image)
+			c.report(lint.DL3006, name.Span, "`%s` is the named context `%s`, which has no tag, so %s; name a version, as in `%s:<version>`", name.Text, v.Text, effect, image)
 		}
 	}
+}
+
+func (c *checker) copiedContextTags(s dockerfile.Stage, in *dockerfile.Instruction) {
+	from, values, named := copiedContext(in, c.Contexts)
+	if !named || c.stageNamed(from.Text, s.Index) {
+		return
+	}
+	c.contextTags(from, values, "each build may copy from a different image")
 }
 
 func cmpOr(s, fallback string) string {
@@ -146,6 +154,7 @@ func (c *checker) instruction(s dockerfile.Stage, in *dockerfile.Instruction) {
 		c.sources(s, in)
 	case "COPY":
 		c.sources(s, in)
+		c.copiedContextTags(s, in)
 	case "ENV":
 		c.env(in)
 	}

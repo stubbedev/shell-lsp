@@ -319,3 +319,22 @@ func TestCheckProfileFiltersHadolintFindings(t *testing.T) {
 		}
 	}
 }
+
+func TestCheckReadsContextsOfASiblingBakeFileForCopyFrom(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeFiles(t, dir, map[string]string{
+		".git/HEAD":           "ref: refs/heads/main\n",
+		"deploy/compose.yaml": "services:\n  app:\n    build:\n      context: ../app\n      additional_contexts:\n        builder: docker-image://alpine\n        img: docker-image://busybox\n",
+		"app/Dockerfile":      "FROM alpine:3 AS builder\nFROM alpine:3\nCOPY --from=builder / /b\nCOPY --from=img / /i\n",
+	})
+	got := run(t, dir, "", "check", "-f", "gcc", "app/Dockerfile")
+	want := []string{"app/Dockerfile:4:13 DL3006"}
+	if !slices.Equal(findings(t, got.stdout), want) || got.status != checkStatusFindings {
+		t.Errorf("checking a Dockerfile a sibling compose file names = %d %v, want %v\n%s", got.status, findings(t, got.stdout), want, got.stderr)
+	}
+	if !strings.Contains(got.stdout, "docker-image://busybox") {
+		t.Errorf("the DL3006 on COPY --from=img does not name the context value:\n%s", got.stdout)
+	}
+}

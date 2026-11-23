@@ -21,7 +21,12 @@ const (
 )
 
 type jsonFile struct {
-	Target map[string]jsonTarget `json:"target"`
+	Target   map[string]jsonTarget   `json:"target"`
+	Variable map[string]jsonVariable `json:"variable"`
+}
+
+type jsonVariable struct {
+	Default any `json:"default"`
 }
 
 type jsonTarget struct {
@@ -31,49 +36,69 @@ type jsonTarget struct {
 	Inherits   []string          `json:"inherits"`
 }
 
-func parseJSON(text string) ([]target, error) {
-	var file jsonFile
-	if err := json.Unmarshal([]byte(text), &file); err != nil {
-		return nil, err
+func parseJSON(text string) (file, error) {
+	var raw jsonFile
+	if err := json.Unmarshal([]byte(text), &raw); err != nil {
+		return file{}, err
 	}
-	out := make([]target, 0, len(file.Target))
-	for _, name := range slices.Sorted(maps.Keys(file.Target)) {
-		raw := file.Target[name]
-		t := target{Name: name, Context: literalOf(raw.Context), Dockerfile: literalOf(raw.Dockerfile), Inherits: raw.Inherits}
-		if raw.Contexts != nil {
-			t.Contexts = make(map[string]Value, len(raw.Contexts))
-			for key, v := range raw.Contexts {
+	out := file{Targets: make([]target, 0, len(raw.Target)), Variables: make(variables, len(raw.Variable))}
+	for _, name := range slices.Sorted(maps.Keys(raw.Target)) {
+		rt := raw.Target[name]
+		t := target{Name: name, Context: literalOf(rt.Context), Dockerfile: literalOf(rt.Dockerfile), Inherits: rt.Inherits}
+		if rt.Contexts != nil {
+			t.Contexts = make(map[string]template, len(rt.Contexts))
+			for key, v := range rt.Contexts {
 				t.Contexts[key] = literalText(v)
 			}
 		}
-		out = append(out, t)
+		out.Targets = append(out.Targets, t)
+	}
+	for name, v := range raw.Variable {
+		if v.Default == nil {
+			continue
+		}
+		text, isString := v.Default.(string)
+		if !isString {
+			out.Variables[name] = Value{}
+			continue
+		}
+		out.Variables[name] = literalText(text).value()
 	}
 	return out, nil
 }
 
-func literalOf(text *string) *Value {
+func literalOf(text *string) *template {
 	if text == nil {
 		return nil
 	}
-	v := literalText(*text)
-	return &v
+	t := literalText(*text)
+	return &t
 }
 
-func literalText(text string) Value {
-	var sb strings.Builder
+func literalText(text string) template {
+	var b templateBuilder
 	for i := 0; i < len(text); i++ {
 		escaped, interpolates := templateMarker(text[i:])
 		switch {
 		case escaped != "":
-			sb.WriteString(escaped)
+			b.text(escaped)
 			i += escapedTemplate - 1
 		case interpolates:
-			return Value{}
+			end := strings.IndexByte(text[i:], '}')
+			if end < 0 || !strings.HasPrefix(text[i:], interpolation) {
+				return unknown
+			}
+			name := strings.TrimSpace(text[i+len(interpolation) : i+end])
+			if !identifier(name) {
+				return unknown
+			}
+			b.reference(name)
+			i += end
 		default:
-			sb.WriteByte(text[i])
+			b.text(text[i : i+1])
 		}
 	}
-	return Value{Text: sb.String(), Known: true}
+	return b.build()
 }
 
 func parseCompose(text string) ([]target, error) {
@@ -112,7 +137,7 @@ func parseCompose(text string) ([]target, error) {
 	return out, nil
 }
 
-func composeField(n *yaml.Node, key string) *Value {
+func composeField(n *yaml.Node, key string) *template {
 	field, ok := n.Get(key)
 	if !ok || field.Null() {
 		return nil
@@ -120,23 +145,24 @@ func composeField(n *yaml.Node, key string) *Value {
 	return composeValue(field)
 }
 
-func composeValue(n *yaml.Node) *Value {
+func composeValue(n *yaml.Node) *template {
 	if n.Kind != yaml.Scalar {
-		return &Value{}
+		t := unknown
+		return &t
 	}
-	v := composeText(n.Value)
-	return &v
+	t := composeText(n.Value)
+	return &t
 }
 
-func composeText(text string) Value {
+func composeText(text string) template {
 	if strings.Contains(strings.ReplaceAll(text, composeEscape, ""), composeVariable) {
-		return Value{}
+		return unknown
 	}
-	return Value{Text: strings.ReplaceAll(text, composeEscape, composeVariable), Known: true}
+	return plainTemplate(strings.ReplaceAll(text, composeEscape, composeVariable))
 }
 
-func composeContextMap(n *yaml.Node) map[string]Value {
-	out := map[string]Value{}
+func composeContextMap(n *yaml.Node) map[string]template {
+	out := map[string]template{}
 	switch n.Kind {
 	case yaml.Mapping:
 		for _, p := range n.Pairs {

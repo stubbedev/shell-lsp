@@ -7,7 +7,12 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
-func known(text string) *Value { return &Value{Text: text, Known: true} }
+func known(text string) *template {
+	t := plainTemplate(text)
+	return &t
+}
+
+func ref(name string) template { return template{Parts: []part{{Text: name, Variable: true}}} }
 
 func TestHCLReadsTargets(t *testing.T) {
 	t.Parallel()
@@ -57,16 +62,19 @@ target "one-line" { context = "x" }
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []target{
-		{Name: "base", Context: known("base"), Contexts: map[string]Value{
-			"alpine":   {Text: "docker-image://alpine:3.20", Known: true},
-			"src":      {Text: "../src", Known: true},
-			"tools":    {Text: "target:tools", Known: true},
-			"dynamic":  {},
-			"computed": {},
-		}},
-		{Name: "app", Dockerfile: known("app.Dockerfile"), Inherits: []string{"base", "missing"}},
-		{Name: "one-line", Context: known("x")},
+	want := file{
+		Targets: []target{
+			{Name: "base", Context: known("base"), Contexts: map[string]template{
+				"alpine":   plainTemplate("docker-image://alpine:3.20"),
+				"src":      plainTemplate("../src"),
+				"tools":    plainTemplate("target:tools"),
+				"dynamic":  {Parts: []part{{Text: "docker-image://"}, {Text: "REGISTRY", Variable: true}, {Text: "/x"}}},
+				"computed": unknown,
+			}},
+			{Name: "app", Dockerfile: known("app.Dockerfile"), Inherits: []string{"base", "missing"}},
+			{Name: "one-line", Context: known("x")},
+		},
+		Variables: variables{"TAG": {Text: "1.0", Known: true}},
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("targets (-want +got):\n%s", diff)
@@ -80,8 +88,8 @@ func TestHCLDecodesStringLiterals(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := "a\tb\\c\"d${e}%{f}\U0001F600"; len(got) != 1 || got[0].Context == nil || *got[0].Context != (Value{Text: want, Known: true}) {
-		t.Errorf("targets = %+v, want context %q", got, want)
+	if want := "a\tb\\c\"d${e}%{f}\U0001F600"; len(got.Targets) != 1 || !cmp.Equal(got.Targets[0].Context, known(want)) {
+		t.Errorf("targets = %+v, want context %q", got.Targets, want)
 	}
 }
 
@@ -92,8 +100,9 @@ func TestHCLToleratesNestedTemplates(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []target{{Name: "t", Context: &Value{}, Dockerfile: known("D")}}
-	if diff := cmp.Diff(want, got); diff != "" {
+	dynamic := unknown
+	want := []target{{Name: "t", Context: &dynamic, Dockerfile: known("D")}}
+	if diff := cmp.Diff(want, got.Targets); diff != "" {
 		t.Errorf("targets (-want +got):\n%s", diff)
 	}
 }

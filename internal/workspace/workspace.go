@@ -716,12 +716,12 @@ func (w *Workspace) walkRoots(ctx context.Context, roots []string, limit int) ([
 				ignores = ignores.Push(dir.rel, rules)
 			}
 			for _, file := range listing.files {
-				if !ignores.Ignored(joinRel(dir.rel, filepath.Base(file)), false) {
+				if !ignores.Ignored(JoinRel(dir.rel, filepath.Base(file)), false) {
 					out = append(out, file)
 				}
 			}
 			for _, sub := range listing.dirs {
-				if rel := joinRel(dir.rel, filepath.Base(sub)); !ignores.Ignored(rel, true) {
+				if rel := JoinRel(dir.rel, filepath.Base(sub)); !ignores.Ignored(rel, true) {
 					pending = append(pending, pendingDir{path: sub, rel: rel, ignores: ignores})
 				}
 			}
@@ -742,7 +742,9 @@ type scanned struct {
 	files []string
 }
 
-func joinRel(rel, name string) string {
+func SkipsDir(name string) bool { return skippedDirs[name] }
+
+func JoinRel(rel, name string) string {
 	name = platform.Native.Fold(name)
 	if rel == "" {
 		return name
@@ -809,7 +811,7 @@ func (w *Workspace) enclosingIgnores(root string) (string, *gitignore.Stack, err
 			return "", nil, err
 		}
 		ignores = ignores.Push(rel, rules)
-		rel, dir = joinRel(rel, name), filepath.Join(dir, name)
+		rel, dir = JoinRel(rel, name), filepath.Join(dir, name)
 	}
 	return rel, ignores, nil
 }
@@ -956,7 +958,7 @@ func (w *Workspace) listDir(dir string) (dirListing, error) {
 		path := filepath.Join(dir, entry.Name())
 		switch {
 		case entry.IsDir():
-			if !skippedDirs[entry.Name()] {
+			if !SkipsDir(entry.Name()) {
 				listing.dirs = append(listing.dirs, path)
 			}
 		case entry.Name() == ignoreFile:

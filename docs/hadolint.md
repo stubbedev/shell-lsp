@@ -130,11 +130,37 @@ way the tool does. The cases record every difference; these are the kinds.
   and `ADD` heredocs are valid, and a syntax error does not stop the other
   checks. The exec form of `RUN` runs no shell, so `&&` in it is a word, and
   neither a PowerShell `RUN` nor the string `sh -c` runs is read as shell.
-- **Named contexts.** A `FROM` image that a bake file (`docker-bake.hcl`,
-  `docker-bake.json` or any `*.hcl` with `target` blocks in the Dockerfile's
-  directory or above it) or a Compose `additional_contexts` maps for this
-  Dockerfile is that context, not a registry image: DL3006 is reported only
-  when the context is a `docker-image://` reference without a tag.
+- **Named contexts.** A `FROM` image or `COPY --from` name that a bake file
+  (`docker-bake.hcl`, `docker-bake.json` or any `*.hcl` with `target` blocks)
+  or a Compose `additional_contexts` maps for this Dockerfile is that context,
+  not a registry image: DL3006 is reported only when the context is a
+  `docker-image://` reference without a tag. DL3007 and DL3026 are not applied
+  to context values, since a `:latest` context, such as an image another
+  target of the same bake run builds, is common and deliberate.
+  - *Where bake files are found.* In the Dockerfile's directory and every
+    directory above it, and, inside a git repository, in every directory of
+    the repository that `.gitignore` does not exclude (`.git`, `node_modules`,
+    `vendor`, `.venv` and similar directories are skipped, and the search
+    stops after 20,000 directories). Outside a repository only the directory
+    and its ancestors are searched. Ignored
+    bake files in a searched directory still count, since a local
+    `docker-bake.override.hcl` is often ignored on purpose.
+  - *Paths.* `context` and `dockerfile` are relative to the bake file's
+    directory, which is where bake runs from when it finds its default files;
+    a `cwd://` path is read the same way. A remote `context` names no local
+    Dockerfile. A `cwd://` context value is a local directory, not an image.
+  - *Variables.* `${NAME}` takes the plain string `default` of
+    `variable "NAME"`. The environment is not read, so the server and
+    `shell-lsp check` agree whatever environment they run in; a default that
+    itself interpolates, a variable without a default, and any function call
+    leave the value unknown. A target whose `context` or `dockerfile` is
+    unknown is skipped; a context whose value is unknown still counts as
+    named, but its tag is not checked.
+  - *Several files.* The default files of a directory (Compose files,
+    `docker-bake.json`, `docker-bake.hcl` and their overrides) form one
+    project and other `*.hcl` files one each, as bake reads them. `inherits`
+    and variables a project does not define are taken from the other bake
+    files of the same directory, the project's own definitions winning.
 - **Formats.** RFC 3339, SemVer and email values are held to their
   specifications; `spdx` accepts SPDX license expressions over License List
   3.27, which the OCI `licenses` label is defined to hold; and `hash` accepts

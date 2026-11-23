@@ -26,13 +26,17 @@ func TestJSONReadsTargets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []target{
-		{Name: "a", Dockerfile: &Value{}, Inherits: []string{"b"}},
-		{Name: "b", Context: known("b"), Contexts: map[string]Value{
-			"x": {Text: "docker-image://x", Known: true},
-			"y": {},
-			"z": {Text: "${z}", Known: true},
-		}},
+	dockerfileRef := ref("FILE")
+	want := file{
+		Targets: []target{
+			{Name: "a", Dockerfile: &dockerfileRef, Inherits: []string{"b"}},
+			{Name: "b", Context: known("b"), Contexts: map[string]template{
+				"x": plainTemplate("docker-image://x"),
+				"y": ref("Y"),
+				"z": plainTemplate("${z}"),
+			}},
+		},
+		Variables: variables{"TAG": {Text: "1", Known: true}},
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("targets (-want +got):\n%s", diff)
@@ -68,12 +72,12 @@ func TestComposeReadsAdditionalContexts(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []target{
-		{Name: "web", Context: known("./web"), Dockerfile: known("web.Dockerfile"), Contexts: map[string]Value{
-			"base": {Text: "docker-image://base", Known: true},
-			"cost": {Text: "$5", Known: true},
-			"env":  {},
+		{Name: "web", Context: known("./web"), Dockerfile: known("web.Dockerfile"), Contexts: map[string]template{
+			"base": plainTemplate("docker-image://base"),
+			"cost": plainTemplate("$5"),
+			"env":  unknown,
 		}},
-		{Name: "api", Contexts: map[string]Value{"deps": {Text: "target:deps", Known: true}}},
+		{Name: "api", Contexts: map[string]template{"deps": plainTemplate("target:deps")}},
 		{Name: "plain", Context: known("./plain")},
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
@@ -85,17 +89,17 @@ func TestParseClassifiesUnreadableFiles(t *testing.T) {
 	t.Parallel()
 
 	broken := "x = \"open\n"
-	if targets, err := parse("/p/terraform.hcl", []byte(broken)); err != nil || targets != nil {
-		t.Errorf("an unreadable .hcl that is no bake file = %v, %v; want it skipped", targets, err)
+	if parsed, err := parse("/p/terraform.hcl", []byte(broken)); err != nil || !cmp.Equal(parsed, file{}) {
+		t.Errorf("an unreadable .hcl that is no bake file = %v, %v; want it skipped", parsed, err)
 	}
 	if _, err := parse("/p/docker-bake.hcl", []byte(broken)); err == nil || !strings.Contains(err.Error(), "/p/docker-bake.hcl: line 1, column 5") {
 		t.Errorf("an unreadable docker-bake.hcl = %v, want an error naming its position", err)
 	}
-	anchors := "x-base: &base\n  image: a\nservices:\n  web:\n    <<: *base\n"
-	if targets, err := parse("/p/compose.yaml", []byte(anchors)); err != nil || targets != nil {
-		t.Errorf("a compose file without additional_contexts = %v, %v; want it skipped", targets, err)
+	unreadable := "x-base: [a\nservices:\n  web:\n"
+	if parsed, err := parse("/p/compose.yaml", []byte(unreadable)); err != nil || !cmp.Equal(parsed, file{}) {
+		t.Errorf("a compose file without additional_contexts = %v, %v; want it skipped", parsed, err)
 	}
-	if _, err := parse("/p/compose.yaml", []byte(anchors+"    build:\n      additional_contexts: {a: b}\n")); err == nil {
+	if _, err := parse("/p/compose.yaml", []byte(unreadable+"    build:\n      additional_contexts: {a: b}\n")); err == nil {
 		t.Error("an unreadable compose file with additional_contexts is skipped")
 	}
 }
@@ -105,18 +109,19 @@ func TestBuildsResolveDockerfilesAndInheritance(t *testing.T) {
 
 	repo := filepath.Join(t.TempDir(), "repo")
 	elsewhere := filepath.Join(filepath.Dir(repo), "elsewhere", "Dockerfile")
+	dynamic := unknown
 	targets := []target{
-		{Name: "base", Contexts: map[string]Value{"a": {Text: "docker-image://a:1", Known: true}, "b": {Text: "./b", Known: true}}},
-		{Name: "app", Context: known("app"), Inherits: []string{"base"}, Contexts: map[string]Value{"a": {Text: "target:a", Known: true}}},
-		{Name: "abs", Context: known("ctx"), Dockerfile: known(elsewhere), Contexts: map[string]Value{"c": {}}},
-		{Name: "remote", Context: known("https://github.com/x/y.git"), Contexts: map[string]Value{"d": {}}},
-		{Name: "unknown", Context: &Value{}, Contexts: map[string]Value{"e": {}}},
+		{Name: "base", Contexts: map[string]template{"a": plainTemplate("docker-image://a:1"), "b": plainTemplate("./b")}},
+		{Name: "app", Context: known("app"), Inherits: []string{"base"}, Contexts: map[string]template{"a": plainTemplate("target:a")}},
+		{Name: "abs", Context: known("ctx"), Dockerfile: known(elsewhere), Contexts: map[string]template{"c": unknown}},
+		{Name: "remote", Context: known("https://github.com/x/y.git"), Contexts: map[string]template{"d": unknown}},
+		{Name: "unknown", Context: &dynamic, Contexts: map[string]template{"e": unknown}},
 		{Name: "loop", Inherits: []string{"loop2"}, Context: known("loop")},
-		{Name: "loop2", Inherits: []string{"loop"}, Contexts: map[string]Value{"f": {}}},
+		{Name: "loop2", Inherits: []string{"loop"}, Contexts: map[string]template{"f": unknown}},
 		{Name: "app", Dockerfile: known("Other")},
 	}
 	got := Dockerfiles{}
-	builds(repo, targets, got)
+	builds(repo, [][]file{{{Targets: targets}}}, got)
 	want := Dockerfiles{
 		filepath.Join(repo, "Dockerfile"): {
 			"a": {{Text: "docker-image://a:1", Known: true}},

@@ -1395,7 +1395,9 @@ name Docker pulls an image called that, which is rarely what a misspelt stage
 name meant. A name that a bake file (`docker-bake.hcl`, `docker-bake.json` or
 any `*.hcl` with `target` blocks) or a Compose `additional_contexts` maps to a
 named context for this Dockerfile is not reported, since the build reads that
-context instead.
+context instead; how bake files are found and read is described under
+[Named contexts](hadolint.md). When that context is a `docker-image://`
+reference without a tag, DL3006 is reported on the name instead.
 
 ```dockerfile
 FROM golang:1.23 AS build

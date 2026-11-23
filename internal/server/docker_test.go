@@ -107,3 +107,25 @@ func TestDockerfileHonoursBakeNamedContexts(t *testing.T) {
 		t.Errorf("diagnostics of a Dockerfile no bake target names = %v, want %v", got, want)
 	}
 }
+
+func TestDockerfileHonoursContextsOfASiblingBakeFile(t *testing.T) {
+	t.Parallel()
+
+	project := map[string]string{
+		".git/HEAD":       "ref: refs/heads/main\n",
+		"deploy/vars.hcl": "variable \"TOOLS\" {\n  default = \"docker-image://tools\"\n}\n",
+		"deploy/docker-bake.hcl": "variable \"DIR\" {\n  default = \"build\"\n}\n" +
+			"target \"base\" {\n  contexts = { infra = \"docker-image://infra:1\" }\n}\n" +
+			"target \"app\" {\n  context = \"../${DIR}\"\n  inherits = [\"base\", \"shared\"]\n  contexts = { tools = \"${TOOLS}\", src = \"cwd://src\" }\n}\n",
+		"deploy/shared.hcl": "target \"shared\" {\n  contexts = { pinned = \"docker-image://pinned:2\" }\n}\n",
+		"build/Dockerfile":  "FROM infra\nCOPY --from=tools / /t\nCOPY --from=src / /s\nCOPY --from=pinned / /p\n",
+	}
+	p := openNativeProject(t, nativeCapabilities, project, "build/Dockerfile")
+	got := pullDiagnostics(t, p.c, p.uri("build/Dockerfile"))
+	if want := []string{"DL3006"}; !slices.Equal(codes(got), want) {
+		t.Fatalf("diagnostics = %v, want %v", codes(got), want)
+	}
+	if got[0].Range.Start.Line != 1 || !strings.Contains(got[0].Message, "docker-image://tools") {
+		t.Errorf("DL3006 = %+v, want it on `COPY --from=tools` naming the untagged context value", got[0])
+	}
+}

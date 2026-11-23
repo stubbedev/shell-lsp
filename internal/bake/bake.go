@@ -17,6 +17,7 @@ const (
 	defaultContext    = "."
 	defaultDockerfile = "Dockerfile"
 	imageScheme       = "docker-image://"
+	cwdScheme         = "cwd://"
 	hclSuffix         = ".hcl"
 	sshPrefix         = "git@"
 	schemeSeparator   = "://"
@@ -50,10 +51,15 @@ func (v Value) Image() (string, bool) {
 
 type target struct {
 	Name       string
-	Context    *Value
-	Dockerfile *Value
-	Contexts   map[string]Value
+	Context    *template
+	Dockerfile *template
+	Contexts   map[string]template
 	Inherits   []string
+}
+
+type file struct {
+	Targets   []target
+	Variables variables
 }
 
 type Contexts map[string][]Value
@@ -89,32 +95,32 @@ func boolOrder(a, b bool) int {
 	return -1
 }
 
-func parse(path string, data []byte) ([]target, error) {
+func parse(path string, data []byte) (file, error) {
 	base := filepath.Base(path)
 	text := string(data)
-	var targets []target
+	var parsed file
 	var err error
 	switch {
 	case slices.Contains(composeNames, base):
-		targets, err = parseCompose(text)
+		parsed.Targets, err = parseCompose(text)
 		if err != nil && !strings.Contains(text, composeContexts) {
-			return nil, nil
+			return file{}, nil
 		}
 	case slices.Contains(jsonNames, base):
-		targets, err = parseJSON(text)
+		parsed, err = parseJSON(text)
 	case slices.Contains(hclNames, base):
-		targets, err = parseHCL(text)
+		parsed, err = parseHCL(text)
 	case strings.HasSuffix(base, hclSuffix):
-		if targets, err = parseHCL(text); err != nil {
-			return nil, nil
+		if parsed, err = parseHCL(text); err != nil {
+			return file{}, nil
 		}
 	default:
-		return nil, fmt.Errorf("reading %s: %s is no bake file name", path, base)
+		return file{}, fmt.Errorf("reading %s: %s is no bake file name", path, base)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("reading %s: %w", path, err)
+		return file{}, fmt.Errorf("reading %s: %w", path, err)
 	}
-	return targets, nil
+	return parsed, nil
 }
 
 func projects(names []string) [][]string {
@@ -146,7 +152,7 @@ func overlay(base, top target) target {
 	if top.Dockerfile != nil {
 		out.Dockerfile = top.Dockerfile
 	}
-	out.Contexts = make(map[string]Value, len(base.Contexts)+len(top.Contexts))
+	out.Contexts = make(map[string]template, len(base.Contexts)+len(top.Contexts))
 	maps.Copy(out.Contexts, base.Contexts)
 	maps.Copy(out.Contexts, top.Contexts)
 	return out
@@ -197,29 +203,71 @@ func within(dir, path string) string {
 	return filepath.Join(dir, path)
 }
 
-func dockerfile(dir string, t target) (string, bool) {
-	context, file := Value{Text: defaultContext, Known: true}, Value{Text: defaultDockerfile, Known: true}
+func localPath(v Value) (string, bool) {
+	if !v.Known {
+		return "", false
+	}
+	if path, ok := strings.CutPrefix(v.Text, cwdScheme); ok {
+		return path, true
+	}
+	return v.Text, !remote(v.Text)
+}
+
+func dockerfile(dir string, t target, vars variables) (string, bool) {
+	context, file := plainTemplate(defaultContext), plainTemplate(defaultDockerfile)
 	if t.Context != nil {
 		context = *t.Context
 	}
 	if t.Dockerfile != nil {
 		file = *t.Dockerfile
 	}
-	if !context.Known || !file.Known || remote(context.Text) {
+	contextPath, ok := localPath(context.resolve(vars))
+	if !ok {
 		return "", false
 	}
-	return within(within(dir, context.Text), file.Text), true
+	filePath, ok := localPath(file.resolve(vars))
+	if !ok {
+		return "", false
+	}
+	return within(within(dir, contextPath), filePath), true
 }
 
-func builds(dir string, targets []target, into Dockerfiles) {
-	order, byName := merge(targets)
-	for _, name := range order {
-		t := inherit(byName[name], byName, nil)
-		if len(t.Contexts) == 0 {
-			continue
+func resolved(contexts map[string]template, vars variables) map[string]Value {
+	out := make(map[string]Value, len(contexts))
+	for name, t := range contexts {
+		out[name] = t.resolve(vars)
+	}
+	return out
+}
+
+func builds(dir string, projects [][]file, into Dockerfiles) {
+	var all []target
+	shared := variables{}
+	for _, project := range projects {
+		for _, f := range project {
+			all = append(all, f.Targets...)
+			maps.Copy(shared, f.Variables)
 		}
-		if path, ok := dockerfile(dir, t); ok {
-			into.add(path, t.Contexts)
+	}
+	_, everyTarget := merge(all)
+	for _, project := range projects {
+		var targets []target
+		vars := maps.Clone(shared)
+		for _, f := range project {
+			targets = append(targets, f.Targets...)
+			maps.Copy(vars, f.Variables)
+		}
+		order, byName := merge(targets)
+		scope := maps.Clone(everyTarget)
+		maps.Copy(scope, byName)
+		for _, name := range order {
+			t := inherit(byName[name], scope, nil)
+			if len(t.Contexts) == 0 {
+				continue
+			}
+			if path, ok := dockerfile(dir, t, vars); ok {
+				into.add(path, resolved(t.Contexts, vars))
+			}
 		}
 	}
 }
