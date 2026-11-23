@@ -14,6 +14,7 @@ func TestSensitivePathsAreDescribedForWhatTheyAre(t *testing.T) {
 		"/home/ann":         "a home directory",
 		"~":                 "a home directory",
 		"~/.bashrc":         "a shell startup file",
+		"~/.zshenv":         "a shell startup file",
 		"~/.ssh":            "a directory of private keys",
 		"~/.ssh/config":     "part of a directory of private keys",
 		"~/.ssh/id_rsa":     "an SSH private key",
@@ -23,7 +24,9 @@ func TestSensitivePathsAreDescribedForWhatTheyAre(t *testing.T) {
 			t.Errorf("sensitivePath(%q) = %q, %t; want %q", shape, got, ok, want)
 		}
 	}
-	if got, ok := sensitivePath("build/out"); ok {
-		t.Errorf("sensitivePath(build/out) = %q, want no sensitive path", got)
+	for _, shape := range []string{"build/out", "~/.envrc"} {
+		if got, ok := sensitivePath(shape); ok {
+			t.Errorf("sensitivePath(%s) = %q, want no sensitive path", shape, got)
+		}
 	}
 }

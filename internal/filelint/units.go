@@ -51,7 +51,7 @@ func (m *Memory) Check(file *workspace.File, env navigation.Env, s Settings) lin
 
 func settingsKey(file *workspace.File, s Settings) string {
 	opts := options(file, s)
-	return fmt.Sprintf("%v|%v|%v|%v|%v|%q", opts.Exclude, opts.Optional, opts.Profile, opts.NoExtendedAnalysis, opts.RCFile, opts.Environment)
+	return fmt.Sprintf("%v|%v|%v|%v|%v|%q", opts.Exclude, opts.Optional, opts.Profile, opts.NoExtendedAnalysis, opts.SourcedByConvention, opts.Environment)
 }
 
 func (m *Memory) begin() uint64 {

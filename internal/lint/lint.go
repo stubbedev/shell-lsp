@@ -205,12 +205,12 @@ type Normalized struct {
 }
 
 type Options struct {
-	Exclude       CodeSet
-	Optional      []string
-	DialectSource DialectSource
-	Sources       []Source
-	RCFile        bool
-	Profile       Profile
+	Exclude             CodeSet
+	Optional            []string
+	DialectSource       DialectSource
+	Sources             []Source
+	SourcedByConvention bool
+	Profile             Profile
 
 	Normalized Normalized
 

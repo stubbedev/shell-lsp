@@ -63,11 +63,11 @@ func merge(into *lint.Report, report lint.Report) {
 
 func options(file *workspace.File, s Settings) lint.Options {
 	return lint.Options{
-		Exclude:       excluded(file, s),
-		Optional:      slices.Concat(s.Optional, s.RC.Enabled),
-		Profile:       s.Profile,
-		DialectSource: s.DialectSource(file),
-		RCFile:        dialect.IsRCFile(file.Path),
+		Exclude:             excluded(file, s),
+		Optional:            slices.Concat(s.Optional, s.RC.Enabled),
+		Profile:             s.Profile,
+		DialectSource:       s.DialectSource(file),
+		SourcedByConvention: dialect.IsSourced(file.Path),
 
 		Normalized: lint.Normalized{
 			ByteOrderMark:   file.Doc.ByteOrderMark(),

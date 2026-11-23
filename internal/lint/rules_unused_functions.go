@@ -75,7 +75,7 @@ func (p *pass) executedScript() bool {
 }
 
 func (p *pass) runsAsScript() bool {
-	if p.bats || p.rcFile || p.sourceable() || p.libraryShaped() || p.configuresInteractiveShell() {
+	if p.bats || p.sourcedByConvention || p.sourceable() || p.libraryShaped() || p.configuresInteractiveShell() {
 		return false
 	}
 	_, executable := dialect.Interpreter(p.text)

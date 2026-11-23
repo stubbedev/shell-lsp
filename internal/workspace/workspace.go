@@ -1015,7 +1015,7 @@ func WatchGlobs() []string {
 	for i, ext := range extensions {
 		extensions[i] = strings.TrimPrefix(ext, ".")
 	}
-	names := dialect.RCFileNames()
+	names := dialect.FileNames()
 	for i, name := range names {
 		names[i] = strings.TrimPrefix(name, ".")
 	}

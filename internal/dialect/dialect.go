@@ -364,19 +364,43 @@ func completionTag(text string) (string, bool) {
 	return tag, slices.Contains(completionTags, tag)
 }
 
-var rcFiles = map[string]Dialect{
-	".bashrc": Bash, ".bash_profile": Bash, ".bash_login": Bash, ".bash_logout": Bash, ".bash_aliases": Bash,
-	".profile": Posix, ".zshrc": Zsh, ".zprofile": Zsh, ".zshenv": Zsh, ".zlogin": Zsh, ".zlogout": Zsh,
-	".kshrc": Ksh, ".mkshrc": Ksh, ".envrc": Bash,
+type fileRole int
+
+const (
+	startupFile fileRole = iota
+	sourcedFile
+)
+
+type namedFile struct {
+	dialect Dialect
+	role    fileRole
 }
+
+var namedFiles = map[string]namedFile{
+	".bashrc": {Bash, startupFile}, ".bash_profile": {Bash, startupFile}, ".bash_login": {Bash, startupFile},
+	".bash_logout": {Bash, startupFile}, ".bash_aliases": {Bash, startupFile}, ".profile": {Posix, startupFile},
+	".zshrc": {Zsh, startupFile}, ".zprofile": {Zsh, startupFile}, ".zshenv": {Zsh, startupFile},
+	".zlogin": {Zsh, startupFile}, ".zlogout": {Zsh, startupFile}, ".kshrc": {Ksh, startupFile},
+	".mkshrc": {Ksh, startupFile}, ".envrc": {Bash, sourcedFile},
+}
+
+var sourcedSuffixes = []string{".zsh-theme", ".plugin.zsh"}
 
 func IsRCFile(path string) bool {
-	_, ok := rcFiles[filepath.Base(path)]
-	return ok
+	named, ok := namedFiles[filepath.Base(path)]
+	return ok && named.role == startupFile
 }
 
-func RCFileNames() []string {
-	return slices.Sorted(maps.Keys(rcFiles))
+func IsSourced(path string) bool {
+	base := filepath.Base(path)
+	if _, ok := namedFiles[base]; ok {
+		return true
+	}
+	return slices.ContainsFunc(sourcedSuffixes, func(suffix string) bool { return strings.HasSuffix(base, suffix) })
+}
+
+func FileNames() []string {
+	return slices.Sorted(maps.Keys(namedFiles))
 }
 
 func FromFileName(path string) (Dialect, bool) {
@@ -403,7 +427,7 @@ func Extensions() []string {
 
 func IsShellFileName(path string) bool {
 	base := filepath.Base(path)
-	if _, ok := rcFiles[base]; ok {
+	if _, ok := namedFiles[base]; ok {
 		return true
 	}
 	_, ok := extensionOf(base)
@@ -421,8 +445,8 @@ func extensionOf(base string) (extension, bool) {
 
 func fromFileName(path string) (Detection, bool) {
 	base := filepath.Base(path)
-	if d, ok := rcFiles[base]; ok {
-		return Detection{Dialect: d, Source: SourceFileName, Evidence: base}, true
+	if named, ok := namedFiles[base]; ok {
+		return Detection{Dialect: named.dialect, Source: SourceFileName, Evidence: base}, true
 	}
 	if strings.HasPrefix(base, ".bash") {
 		return Detection{Dialect: Bash, Source: SourceFileName, Evidence: base}, true

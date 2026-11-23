@@ -26,7 +26,7 @@ var (
 )
 
 func checkRelativeSources(p *pass) {
-	if p.rcFile || p.bats {
+	if p.sourcedByConvention || p.bats {
 		return
 	}
 	changesDirectory := p.firstDirectoryChange()

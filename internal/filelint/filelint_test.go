@@ -246,3 +246,26 @@ func TestNixStringsReportOnlyWhatTheShellWouldDo(t *testing.T) {
 		})
 	}
 }
+
+func TestFunctionsInConventionallySourcedFilesAreNotUnused(t *testing.T) {
+	t.Parallel()
+
+	const text = "#!/usr/bin/env zsh\nprompt_status() { print -r -- ready; }\nprint -r -- loaded\n"
+	dir := t.TempDir()
+	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect)
+	env := navigation.Env{Loader: loader{ws}, Roots: []string{dir}}
+	for name, want := range map[string]bool{"x.zsh-theme": false, "x.plugin.zsh": false, ".zshrc": false, "x.zsh": true} {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte(text), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		file, err := ws.Load(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		unused := slices.ContainsFunc(Check(file, env, Settings{}).Findings, func(f lint.Finding) bool { return f.Code.String() == "SL2001" })
+		if unused != want {
+			t.Errorf("%s reports the uncalled function as unused: %v, want %v", name, unused, want)
+		}
+	}
+}

@@ -33,20 +33,20 @@ type pass struct {
 	firstCommand    int
 	directives      []directiveComment
 
-	rcFile         bool
-	shellChosen    bool
-	perShell       *shelloptions.PerShell
-	sites          *[]glob.Site
-	variables      variableUsage
-	parameters     shelldocs.ParameterTable
-	dialectGuessed bool
-	emptinessTests map[int]bool
-	maskWalked     map[syntax.Node]bool
-	braceScan      *braceScanner
-	executed       *bool
-	lastResolved   resolvedCall
-	quotedHeredocs map[int]bool
-	assignmentArms map[*syntax.Assign][]branchArm
+	sourcedByConvention bool
+	shellChosen         bool
+	perShell            *shelloptions.PerShell
+	sites               *[]glob.Site
+	variables           variableUsage
+	parameters          shelldocs.ParameterTable
+	dialectGuessed      bool
+	emptinessTests      map[int]bool
+	maskWalked          map[syntax.Node]bool
+	braceScan           *braceScanner
+	executed            *bool
+	lastResolved        resolvedCall
+	quotedHeredocs      map[int]bool
+	assignmentArms      map[*syntax.Assign][]branchArm
 
 	normalized     Normalized
 	sourced        func(offset int) bool
@@ -61,7 +61,7 @@ func newPass(tree *parser.Tree, imports []parser.Import, opts Options) *pass {
 	firstCommand := firstCommandStart(tree)
 	settings := fileWideSettings(directives, firstCommand, opts)
 	return &pass{
-		tree: tree, imports: imports, sources: opts.Sources, rcFile: opts.RCFile, text: tree.Text(), dialect: tree.Dialect, bats: tree.Bats(),
+		tree: tree, imports: imports, sources: opts.Sources, sourcedByConvention: opts.SourcedByConvention, text: tree.Text(), dialect: tree.Dialect, bats: tree.Bats(),
 		firstCommand: firstCommand, directives: directives,
 		settings:       settings,
 		shellChosen:    shellChosen(opts.DialectSource, settings.shell),
