@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/stubbedev/shell-lsp/internal/gitrepo"
 	"github.com/stubbedev/shell-lsp/internal/platform"
 )
 
@@ -19,6 +20,7 @@ type Process struct {
 	WorkDir    string
 	SystemRoot string
 	Environ    []string
+	Git        gitrepo.Process
 }
 
 func CurrentProcess() Process {
@@ -30,7 +32,7 @@ func CurrentProcess() Process {
 	if err != nil {
 		workDir = ""
 	}
-	return Process{
+	p := Process{
 		Path:       os.Getenv("PATH"),
 		ManPath:    os.Getenv("MANPATH"),
 		PathExt:    os.Getenv("PATHEXT"),
@@ -40,10 +42,16 @@ func CurrentProcess() Process {
 		SystemRoot: os.Getenv("SystemRoot"),
 		Environ:    os.Environ(),
 	}
+	p.Git = gitrepo.CurrentProcess(p.Environ, p.PathDirs(), p.pathExt())
+	return p
 }
 
 func (p Process) dirs() platform.UserDirs {
 	return platform.UserDirs{Home: p.Home, ConfigHome: p.ConfigHome}
+}
+
+func (p Process) git() gitrepo.Environment {
+	return gitrepo.Environment{User: p.dirs(), Git: p.Git}
 }
 
 func (p Process) PathDirs() []string { return filepath.SplitList(p.Path) }

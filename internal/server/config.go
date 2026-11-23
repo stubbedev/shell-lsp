@@ -71,7 +71,7 @@ func (s *Server) applySettings(ctx context.Context, update func()) {
 	s.generation++
 	caps := s.client.Workspace
 	s.mu.Unlock()
-	s.workspace.InvalidateAll()
+	s.invalidateAll()
 	s.syncNixEvaluation()
 	s.refreshDiagnostics(ctx)
 	for _, refresh := range []struct {
@@ -156,7 +156,7 @@ func (s *Server) handleDidChangeWorkspaceFolders(ctx context.Context, change lsp
 		}
 	}
 	s.workspace.SetRoots(roots)
-	s.workspace.InvalidateAll()
+	s.invalidateAll()
 	s.pullConfiguration(ctx)
 	return nil
 }

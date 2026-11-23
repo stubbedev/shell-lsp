@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stubbedev/shell-lsp/internal/gitrepo"
 )
 
 func requireGit(t *testing.T) {
@@ -265,7 +267,7 @@ func TestWalkedTreeKeyCoversEveryFileExceptGit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	git := filepath.Join(dir, "vendored", gitDirName)
+	git := filepath.Join(dir, "vendored", gitrepo.MarkerName)
 	if err := os.MkdirAll(git, 0o700); err != nil {
 		t.Fatal(err)
 	}

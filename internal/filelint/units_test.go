@@ -13,10 +13,10 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
+	"github.com/stubbedev/shell-lsp/internal/gitrepo"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/navigation"
 	"github.com/stubbedev/shell-lsp/internal/parser"
-	"github.com/stubbedev/shell-lsp/internal/platform"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 	"github.com/stubbedev/shell-lsp/third_party/mvdan-sh/syntax"
 )
@@ -28,7 +28,7 @@ func nixFile(t testing.TB, text string) *workspace.File {
 }
 
 func nixEnv() navigation.Env {
-	return navigation.Env{Loader: loader{ws: workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect, platform.UserDirs{})}}
+	return navigation.Env{Loader: loader{ws: workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect, gitrepo.Environment{})}}
 }
 
 func variableFindings(t *testing.T, text string) []string {
@@ -270,7 +270,7 @@ func TestSourcedFilesInvalidateARememberedReport(t *testing.T) {
 	if err := os.WriteFile(lib, []byte("#!/bin/bash\nfrom_lib=1\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect, platform.UserDirs{})
+	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect, gitrepo.Environment{})
 	generation := &countingLoader{ws: ws}
 	env := navigation.Env{Loader: generation, Roots: []string{dir}}
 	path := filepath.Join(dir, "file.nix")

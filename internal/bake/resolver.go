@@ -72,10 +72,10 @@ type pendingDir struct {
 	ignores *gitignore.Stack
 }
 
-func NewResolver(read filecache.ReadFile, readDir ReadDir, now func() time.Time, recheck time.Duration, user platform.UserDirs) *Resolver {
+func NewResolver(read filecache.ReadFile, readDir ReadDir, now func() time.Time, recheck time.Duration, git gitrepo.Environment) *Resolver {
 	return &Resolver{
 		files:    filecache.New(read, parse, now, recheck),
-		git:      gitrepo.NewIgnores(user, read, now, recheck),
+		git:      gitrepo.NewIgnores(git, read, now, recheck),
 		readDir:  readDir,
 		limit:    maxTreeDirs,
 		now:      now,
@@ -103,6 +103,15 @@ func (r *Resolver) Invalidate(path string) {
 		}
 	}
 	maps.DeleteFunc(r.trees, func(root string, _ tree) bool { return platform.Native.Within(path, root) })
+}
+
+func (r *Resolver) InvalidateAll() {
+	r.files.InvalidateAll()
+	r.git.InvalidateAll()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	clear(r.listings)
+	clear(r.trees)
 }
 
 func (r *Resolver) Dockerfiles(dir string) (Found, error) {

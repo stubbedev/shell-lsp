@@ -116,3 +116,30 @@ func TestAWatchedCacheSkipsReadsUntilTheFileChanges(t *testing.T) {
 		t.Errorf("an edit outside the editor went unseen: %d", n)
 	}
 }
+
+func TestInvalidateAllRereadsEveryPath(t *testing.T) {
+	t.Parallel()
+
+	files := map[string]string{"/a": "1", "/b": "2"}
+	read := func(path string) ([]byte, error) {
+		text, ok := files[path]
+		if !ok {
+			return nil, fs.ErrNotExist
+		}
+		return []byte(text), nil
+	}
+	c := New(read, parseNumber, func() time.Time { return time.Time{} }, time.Hour)
+	for _, path := range []string{"/a", "/b", "/c"} {
+		_, _, _ = c.Load(path)
+	}
+	files["/a"], files["/b"], files["/c"] = "10", "20", "30"
+	if n, _, _ := c.Load("/a"); n != 1 {
+		t.Fatalf("/a = %d before InvalidateAll, want the cached 1", n)
+	}
+	c.InvalidateAll()
+	for path, want := range map[string]int{"/a": 10, "/b": 20, "/c": 30} {
+		if n, present, err := c.Load(path); n != want || !present || err != nil {
+			t.Errorf("%s = %d, %v, %v after InvalidateAll, want %d", path, n, present, err, want)
+		}
+	}
+}

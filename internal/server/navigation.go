@@ -34,7 +34,7 @@ func newWorkspace(s *Server) *workspace.Workspace {
 			resolved, _ := s.resolveProject(path, s.lintSettings(path, settings).Forced(), in)
 			return resolved.Detection
 		},
-		s.process.dirs(),
+		s.process.git(),
 	)
 }
 

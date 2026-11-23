@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/shell-lsp/internal/gitrepo"
 	"github.com/stubbedev/shell-lsp/internal/jsonrpc"
 )
 
@@ -30,7 +31,7 @@ func startClient(t testing.TB, initializeParams string, setup ...func(*Server)) 
 	t.Helper()
 
 	process := CurrentProcess()
-	process.Home, process.ConfigHome = t.TempDir(), ""
+	process.Home, process.ConfigHome, process.Git = t.TempDir(), "", gitrepo.Process{}
 	return startClientIn(t, process, initializeParams, setup...)
 }
 
@@ -41,7 +42,7 @@ func startClientIn(t testing.TB, process Process, initializeParams string, setup
 	serverReader, clientWriter := io.Pipe()
 	srv := New(jsonrpc.NewConn(serverReader, serverWriter), "test", process)
 	srv.shellcheckrc = newShellcheckrcResolver(nil)
-	srv.hadolint = newHadolintResolver(nil, process.dirs())
+	srv.hadolint = newHadolintResolver(nil, process.git())
 	srv.linkPatience = clientTimeout
 	for _, fn := range setup {
 		fn(srv)

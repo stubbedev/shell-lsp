@@ -11,6 +11,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/fileuri"
+	"github.com/stubbedev/shell-lsp/internal/gitrepo"
 	"github.com/stubbedev/shell-lsp/internal/parallel"
 	"github.com/stubbedev/shell-lsp/internal/parser"
 	"github.com/stubbedev/shell-lsp/internal/platform"
@@ -47,7 +48,7 @@ func readDisk(path string) ([]byte, error) {
 	return raw, err
 }
 
-func collectTargets(dir string, git platform.UserDirs, operands []string, sel targetSelection) ([]collected, []string) {
+func collectTargets(dir string, git gitrepo.Environment, operands []string, sel targetSelection) ([]collected, []string) {
 	var out []collected
 	var failures []string
 	seen := map[string]bool{}
@@ -111,7 +112,7 @@ func (o collected) shell() (bool, error) {
 	return workspace.NamesShell(string(raw)), nil
 }
 
-func walkTargets(operand, dir string, git platform.UserDirs, keeps func(path string) bool) ([]target, []string) {
+func walkTargets(operand, dir string, git gitrepo.Environment, keeps func(path string) bool) ([]target, []string) {
 	walker := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect, git)
 	walker.SetRoots([]string{dir})
 	paths, err := walker.AllShellFiles(context.Background())

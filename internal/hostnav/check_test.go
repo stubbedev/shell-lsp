@@ -8,20 +8,20 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/stubbedev/shell-lsp/internal/gitrepo"
 	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/host/hosttest"
 	"github.com/stubbedev/shell-lsp/internal/host/justfile"
 	"github.com/stubbedev/shell-lsp/internal/host/oracle"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/navigation"
-	"github.com/stubbedev/shell-lsp/internal/platform"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
 
 var update = flag.Bool("update", false, "record the reference tools' verdicts and the current findings in the golden files")
 
 func newWorkspace() *workspace.Workspace {
-	return workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect, platform.UserDirs{})
+	return workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect, gitrepo.Environment{})
 }
 
 func groupFor(t *testing.T, ws *workspace.Workspace, path string, files navigation.WorkspaceFiles) *Group {

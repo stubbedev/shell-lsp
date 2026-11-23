@@ -76,6 +76,13 @@ func (c *Cache[T]) Invalidate(path string) {
 	delete(c.entries, path)
 }
 
+func (c *Cache[T]) InvalidateAll() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	clear(c.entries)
+	c.sweepAt = minSweep
+}
+
 func (c *Cache[T]) sweepLocked(now time.Time) {
 	for path, cached := range c.entries {
 		if now.Sub(cached.checked) >= c.recheck && !c.disk.Unchanged(cached.stamp) {

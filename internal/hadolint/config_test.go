@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/shell-lsp/internal/gitrepo"
 	"github.com/stubbedev/shell-lsp/internal/host/hosttest"
 	"github.com/stubbedev/shell-lsp/internal/host/oracle"
 	"github.com/stubbedev/shell-lsp/internal/lint"
@@ -234,7 +235,7 @@ func TestResolverFindsTheNearestConfiguration(t *testing.T) {
 	write(filepath.Join(root, "repo", ".hadolint.yml"), "ignored: [DL3008]\n")
 	write(filepath.Join(root, "repo", "svc", ".hadolint.yaml"), "ignored: [DL3009]\n")
 	write(filepath.Join(home, ".config", "hadolint.yaml"), "ignored: [DL3010]\n")
-	r := NewResolver(os.ReadFile, func() time.Time { return time.Time{} }, time.Hour, ConfigFallback(platform.UserDirs{Home: home}), platform.UserDirs{})
+	r := NewResolver(os.ReadFile, func() time.Time { return time.Time{} }, time.Hour, ConfigFallback(platform.UserDirs{Home: home}), gitrepo.Environment{})
 	for dir, want := range map[string]string{
 		filepath.Join(root, "repo", "svc", "deep"): "DL3009",
 		filepath.Join(root, "repo", "other"):       "DL3008",

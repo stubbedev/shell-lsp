@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stubbedev/shell-lsp/internal/platform"
+	"github.com/stubbedev/shell-lsp/internal/gitrepo"
 	"github.com/stubbedev/shell-lsp/internal/regularfile"
 )
 
@@ -32,7 +32,7 @@ func TestAScanThatOutgrowsTheStashHoldsNoParse(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	w := New(noOverlay, Detect, platform.UserDirs{})
+	w := New(noOverlay, Detect, gitrepo.Environment{})
 	for i := range 4 {
 		path := writeNix(t, dir, fmt.Sprintf("big%d.nix", i), maxStashedBytes*2/3)
 		if _, _, err := w.NixIncludes(path); err != nil {
@@ -56,7 +56,7 @@ func TestAScanWithinTheStashKeepsItsParses(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	w := New(noOverlay, Detect, platform.UserDirs{})
+	w := New(noOverlay, Detect, gitrepo.Environment{})
 	for i := range 3 {
 		if _, _, err := w.NixIncludes(writeNix(t, dir, fmt.Sprintf("f%d.nix", i), 1024)); err != nil {
 			t.Fatal(err)
@@ -83,7 +83,7 @@ func TestBatchesAreBoundedByFilesAndBytes(t *testing.T) {
 	add(5, maxBatchBytes/2+1)
 	add(1, 2*maxBatchBytes)
 	add(3, 10)
-	w := New(noOverlay, Detect, platform.UserDirs{})
+	w := New(noOverlay, Detect, gitrepo.Environment{})
 	w.UseStat(func(path string) (fs.FileInfo, error) { return sizedInfo(sizes[path]), nil })
 
 	var joined []string
@@ -109,7 +109,7 @@ func TestParsingImportsIsBoundedByBytes(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	w := New(noOverlay, Detect, platform.UserDirs{})
+	w := New(noOverlay, Detect, gitrepo.Environment{})
 	var inFlight, highest atomic.Int64
 	w.UseRead(func(path string, info fs.FileInfo, limit int64) ([]byte, fs.FileInfo, error) {
 		now := inFlight.Add(info.Size())

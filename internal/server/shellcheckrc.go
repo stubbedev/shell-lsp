@@ -3,9 +3,9 @@ package server
 import (
 	"time"
 
+	"github.com/stubbedev/shell-lsp/internal/gitrepo"
 	"github.com/stubbedev/shell-lsp/internal/hadolint"
 	"github.com/stubbedev/shell-lsp/internal/host/nix"
-	"github.com/stubbedev/shell-lsp/internal/platform"
 	"github.com/stubbedev/shell-lsp/internal/regularfile"
 	"github.com/stubbedev/shell-lsp/internal/shellcheckrc"
 	"github.com/stubbedev/shell-lsp/internal/statixconfig"
@@ -24,6 +24,6 @@ func newFlakeLocks() *nix.LockFiles {
 	return nix.NewLockFiles(regularfile.ReadConfig, time.Now, workspace.DiskRecheck)
 }
 
-func newHadolintResolver(fallback []string, git platform.UserDirs) *hadolint.Resolver {
+func newHadolintResolver(fallback []string, git gitrepo.Environment) *hadolint.Resolver {
 	return hadolint.NewResolver(regularfile.ReadConfig, time.Now, workspace.DiskRecheck, fallback, git)
 }

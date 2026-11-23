@@ -34,6 +34,7 @@ func environment(dir string, process server.Process) cli.Env {
 		Dir:        dir,
 		Home:       process.Home,
 		ConfigHome: process.ConfigHome,
+		Git:        process.Git,
 		PathDirs:   process.PathDirs(),
 		Terminal:   terminal(os.Stdout) && os.Getenv("TERM") != "dumb",
 		Serve: func() error {

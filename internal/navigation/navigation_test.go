@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/stubbedev/shell-lsp/internal/dialect"
+	"github.com/stubbedev/shell-lsp/internal/gitrepo"
 	"github.com/stubbedev/shell-lsp/internal/parser"
-	"github.com/stubbedev/shell-lsp/internal/platform"
 	"github.com/stubbedev/shell-lsp/internal/shelloptions"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
@@ -34,7 +34,7 @@ func newFixture(t *testing.T, files map[string]string) fixture {
 			t.Fatal(err)
 		}
 	}
-	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect, platform.UserDirs{})
+	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect, gitrepo.Environment{})
 	ws.SetRoots([]string{root})
 	return fixture{
 		root: root,

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/stubbedev/shell-lsp/internal/gitrepo"
 	"github.com/stubbedev/shell-lsp/internal/platform"
 )
 
@@ -16,6 +17,7 @@ type Env struct {
 	Dir        string
 	Home       string
 	ConfigHome string
+	Git        gitrepo.Process
 	PathDirs   []string
 	Terminal   bool
 	Serve      func() error
@@ -23,6 +25,10 @@ type Env struct {
 
 func (e Env) dirs() platform.UserDirs {
 	return platform.UserDirs{Home: e.Home, ConfigHome: e.ConfigHome}
+}
+
+func (e Env) git() gitrepo.Environment {
+	return gitrepo.Environment{User: e.dirs(), Git: e.Git}
 }
 
 const (

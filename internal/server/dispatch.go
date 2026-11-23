@@ -161,7 +161,7 @@ func New(conn *jsonrpc.Conn, version string, process Process) *Server {
 		settings:     config.Default(),
 		editorconfig: editorconfig.NewResolver(regularfile.ReadConfig, time.Now, workspace.DiskRecheck),
 		shellcheckrc: newShellcheckrcResolver(shellcheckrc.Fallback(process.dirs())),
-		hadolint:     newHadolintResolver(hadolint.ConfigFallback(process.dirs()), process.dirs()),
+		hadolint:     newHadolintResolver(hadolint.ConfigFallback(process.dirs()), process.git()),
 		statix:       newStatixResolver(),
 		flakeLocks:   newFlakeLocks(),
 		pending:      newRegistry[chan *jsonrpc.Message](),

@@ -9,11 +9,12 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
+	"github.com/stubbedev/shell-lsp/internal/gitrepo"
 	"github.com/stubbedev/shell-lsp/internal/platform"
 )
 
 func newTestResolver() *Resolver {
-	return NewResolver(os.ReadFile, os.ReadDir, func() time.Time { return time.Time{} }, time.Hour, platform.UserDirs{})
+	return NewResolver(os.ReadFile, os.ReadDir, func() time.Time { return time.Time{} }, time.Hour, gitrepo.Environment{})
 }
 
 func dockerfilesOf(t *testing.T, r *Resolver, dir string) Dockerfiles {
@@ -225,10 +226,42 @@ func TestResolverSkipsDirectoriesTheUsersExcludesFileIgnores(t *testing.T) {
 		"repo/generated/docker-bake.hcl": fmt.Sprintf(bakeFile, "g", "generated"),
 		"repo/vendored/docker-bake.hcl":  fmt.Sprintf(bakeFile, "v", "vendored"),
 	})
-	r := NewResolver(os.ReadFile, os.ReadDir, func() time.Time { return time.Time{} }, time.Hour, platform.UserDirs{Home: filepath.Join(dir, "home")})
+	r := NewResolver(os.ReadFile, os.ReadDir, func() time.Time { return time.Time{} }, time.Hour, gitrepo.Environment{User: platform.UserDirs{Home: filepath.Join(dir, "home")}})
 	got := dockerfilesOf(t, r, filepath.Join(dir, "repo", "build"))
 	want := Dockerfiles{filepath.Join(dir, "repo", "build", "Dockerfile"): {"vendored": {{Text: "x", Known: true}}}}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("dockerfiles of repo/build (-want +got):\n%s", diff)
+	}
+}
+
+func TestResolverInvalidateAllRereadsTheUsersExcludesFile(t *testing.T) {
+	t.Parallel()
+
+	const bakeFile = "target \"%s\" {\n  context = \"../build\"\n  contexts = { %s = \"x\" }\n}\n"
+	dir := t.TempDir()
+	writeFiles(t, dir, map[string]string{
+		"home/.gitconfig":                "[core]\n\texcludesFile = ~/first\n",
+		"home/first":                     "generated/\n",
+		"home/second":                    "vendored/\n",
+		"repo/.git/HEAD":                 "ref: refs/heads/main\n",
+		"repo/build/Dockerfile":          "FROM base\n",
+		"repo/generated/docker-bake.hcl": fmt.Sprintf(bakeFile, "g", "generated"),
+		"repo/vendored/docker-bake.hcl":  fmt.Sprintf(bakeFile, "v", "vendored"),
+	})
+	r := NewResolver(os.ReadFile, os.ReadDir, func() time.Time { return time.Time{} }, time.Hour, gitrepo.Environment{User: platform.UserDirs{Home: filepath.Join(dir, "home")}})
+	build := filepath.Join(dir, "repo", "build")
+	dockerfile := filepath.Join(build, "Dockerfile")
+	vendored := Dockerfiles{dockerfile: {"vendored": {{Text: "x", Known: true}}}}
+	if diff := cmp.Diff(vendored, dockerfilesOf(t, r, build)); diff != "" {
+		t.Errorf("dockerfiles before the edit (-want +got):\n%s", diff)
+	}
+	writeFiles(t, dir, map[string]string{"home/.gitconfig": "[core]\n\texcludesFile = ~/second\n"})
+	if diff := cmp.Diff(vendored, dockerfilesOf(t, r, build)); diff != "" {
+		t.Errorf("dockerfiles before InvalidateAll (-want +got):\n%s", diff)
+	}
+	r.InvalidateAll()
+	generated := Dockerfiles{dockerfile: {"generated": {{Text: "x", Known: true}}}}
+	if diff := cmp.Diff(generated, dockerfilesOf(t, r, build)); diff != "" {
+		t.Errorf("dockerfiles after InvalidateAll (-want +got):\n%s", diff)
 	}
 }

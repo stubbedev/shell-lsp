@@ -14,13 +14,13 @@ import (
 
 	"github.com/stubbedev/shell-lsp/internal/atomicfile"
 	"github.com/stubbedev/shell-lsp/internal/corpus"
+	"github.com/stubbedev/shell-lsp/internal/gitrepo"
 	"github.com/stubbedev/shell-lsp/internal/hadolint"
 	"github.com/stubbedev/shell-lsp/internal/host"
 	"github.com/stubbedev/shell-lsp/internal/host/dockerfile"
 	"github.com/stubbedev/shell-lsp/internal/host/oracle"
 	"github.com/stubbedev/shell-lsp/internal/hostnav"
 	"github.com/stubbedev/shell-lsp/internal/lint"
-	"github.com/stubbedev/shell-lsp/internal/platform"
 	"github.com/stubbedev/shell-lsp/internal/regularfile"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
 )
@@ -173,7 +173,7 @@ func hadolintDisagreements(ctx context.Context, f corpus.HostFile, cfg hadolint.
 }
 
 func analyseHosts(ctx context.Context, files []corpus.HostFile) ([]hostReport, error) {
-	configs := hadolint.NewResolver(regularfile.ReadConfig, time.Now, time.Hour, nil, platform.UserDirs{})
+	configs := hadolint.NewResolver(regularfile.ReadConfig, time.Now, time.Hour, nil, gitrepo.Environment{})
 	hosts := newCorpusHosts(files)
 	var out []hostReport
 	for _, f := range files {
@@ -256,7 +256,7 @@ func newCorpusHosts(files []corpus.HostFile) *corpusHosts {
 func (c *corpusHosts) workspace(root string) *workspace.Workspace {
 	ws, ok := c.byRoot[root]
 	if !ok {
-		ws = workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect, platform.UserDirs{})
+		ws = workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect, gitrepo.Environment{})
 		ws.SetRoots([]string{root})
 		c.byRoot[root] = ws
 	}

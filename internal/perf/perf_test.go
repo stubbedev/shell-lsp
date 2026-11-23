@@ -19,13 +19,13 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/docstore"
 	"github.com/stubbedev/shell-lsp/internal/embedded"
 	"github.com/stubbedev/shell-lsp/internal/format"
+	"github.com/stubbedev/shell-lsp/internal/gitrepo"
 	"github.com/stubbedev/shell-lsp/internal/hover"
 	"github.com/stubbedev/shell-lsp/internal/lint"
 	"github.com/stubbedev/shell-lsp/internal/lsp"
 	"github.com/stubbedev/shell-lsp/internal/manpage"
 	"github.com/stubbedev/shell-lsp/internal/navigation"
 	"github.com/stubbedev/shell-lsp/internal/parser"
-	"github.com/stubbedev/shell-lsp/internal/platform"
 	"github.com/stubbedev/shell-lsp/internal/semantic"
 	"github.com/stubbedev/shell-lsp/internal/structure"
 	"github.com/stubbedev/shell-lsp/internal/workspace"
@@ -207,7 +207,7 @@ func benchFile() *workspace.File {
 }
 
 func benchEnv() navigation.Env {
-	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect, platform.UserDirs{})
+	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect, gitrepo.Environment{})
 	return navigation.Env{Loader: ws}
 }
 
@@ -337,7 +337,7 @@ func largeWorkspace(b *testing.B) (*workspace.Workspace, *workspace.File) {
 	if err := os.WriteFile(filepath.Join(root, "lib.sh"), []byte("shared() { echo \"$1\"; }\n"), 0o600); err != nil {
 		b.Fatal(err)
 	}
-	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect, platform.UserDirs{})
+	ws := workspace.New(func(string) (*workspace.File, bool) { return nil, false }, workspace.Detect, gitrepo.Environment{})
 	ws.SetRoots([]string{root})
 	lib, err := ws.Load(filepath.Join(root, "lib.sh"))
 	if err != nil {

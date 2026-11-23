@@ -9,6 +9,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/bake"
 	"github.com/stubbedev/shell-lsp/internal/diskwatch"
 	"github.com/stubbedev/shell-lsp/internal/filecache"
+	"github.com/stubbedev/shell-lsp/internal/gitrepo"
 	"github.com/stubbedev/shell-lsp/internal/platform"
 )
 
@@ -22,7 +23,7 @@ type Resolver struct {
 	fallback []string
 }
 
-func NewResolver(read filecache.ReadFile, now func() time.Time, recheck time.Duration, fallback []string, git platform.UserDirs) *Resolver {
+func NewResolver(read filecache.ReadFile, now func() time.Time, recheck time.Duration, fallback []string, git gitrepo.Environment) *Resolver {
 	parse := func(path string, data []byte) (Config, error) { return ParseConfig(path, string(data)) }
 	return &Resolver{files: filecache.New(read, parse, now, recheck), bake: bake.NewResolver(read, os.ReadDir, now, recheck, git), fallback: fallback}
 }
@@ -71,4 +72,9 @@ func (r *Resolver) Load(path string) (Config, bool, error) { return r.files.Load
 func (r *Resolver) Invalidate(path string) {
 	r.files.Invalidate(path)
 	r.bake.Invalidate(path)
+}
+
+func (r *Resolver) InvalidateAll() {
+	r.files.InvalidateAll()
+	r.bake.InvalidateAll()
 }

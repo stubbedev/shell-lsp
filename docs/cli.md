@@ -86,23 +86,46 @@ wins over `.git/info/exclude`, and that wins over the file
 `core.excludesFile` names. A `!pattern` in a `.gitignore` therefore brings
 back what the other two exclude.
 
-`core.excludesFile` is read from `$XDG_CONFIG_HOME/git/config` (or
-`~/.config/git/config`), then `~/.gitconfig`, then the repository's
-`.git/config`; the last one that sets it wins. When none does, the file is
-`$XDG_CONFIG_HOME/git/ignore`, or `~/.config/git/ignore` when
-`XDG_CONFIG_HOME` is unset or empty. As in git, `~/` is the home directory, a
-relative path is relative to the top of the work tree, an empty value names no
-file, a missing file excludes nothing, a `:(optional)` path that is missing
-falls back to the default, and `[include]` paths are followed. Linked
-worktrees read the `.git/info/exclude` and `.git/config` of their main
-repository.
+`core.excludesFile` is read the way git reads its configuration, the last
+setting winning:
 
-Not read: the system config, `GIT_CONFIG_GLOBAL` and the other `GIT_CONFIG_*`
-variables, and a worktree's `config.worktree`. `includeIf` conditions are not
-evaluated: when the `core.excludesFile` that would apply is set in a file an
-`includeIf` includes, or names a `~user/` or `%(prefix)/` path, the walk stops
-with an error that names the setting, rather than guessing. A git config file
-git itself would reject is reported the same way.
+1. the system configuration: the file `GIT_CONFIG_SYSTEM` names, or else
+   `/etc/gitconfig`, git's default as Linux distributions and Nix build it,
+   unless `GIT_CONFIG_NOSYSTEM` is true. For a git built with another
+   default, and on Windows, where the default depends on where git is
+   installed, set `GIT_CONFIG_SYSTEM` to its system file;
+2. the global configuration: the file `GIT_CONFIG_GLOBAL` names, or else
+   `$XDG_CONFIG_HOME/git/config` (`~/.config/git/config`) and then
+   `~/.gitconfig`;
+3. the repository's `.git/config`, shared by its linked worktrees;
+4. the worktree's `config.worktree`, when the repository config sets
+   `extensions.worktreeConfig`;
+5. the settings in `GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_<n>` and
+   `GIT_CONFIG_VALUE_<n>`, then those in `GIT_CONFIG_PARAMETERS` (where
+   `git -c` passes its settings to hooks and aliases).
+
+When none sets it, the file is `$XDG_CONFIG_HOME/git/ignore`, or
+`~/.config/git/ignore` when `XDG_CONFIG_HOME` is unset or empty. As in git, a
+relative path is relative to the top of the work tree (also for
+`GIT_CONFIG_SYSTEM` and `GIT_CONFIG_GLOBAL`), an empty value names no file, a
+missing file excludes nothing, and a `:(optional)` path that is missing falls
+back to the default. `~/` is the home directory, `~user/` that user's home
+directory, and `%(prefix)/` git's installation prefix, taken as the parent of
+the `bin` directory that holds the `git` found on `PATH` once symbolic links
+are resolved; a `git` that is not in a `bin` directory, or none on `PATH`,
+makes a `%(prefix)/` path an error.
+
+`[include]` paths are followed, and `[includeIf]` paths when their condition
+holds: `gitdir:` and `gitdir/i:` match the repository's git directory (for a
+linked worktree, its directory under `.git/worktrees`) with git's rules for
+`~/`, `./`, a leading `**/` and a trailing `/`; `onbranch:` matches the branch
+`HEAD` names; and `hasconfig:remote.*.url:` matches the remote URLs of every
+configuration file above, refusing, as git does, a remote URL set in a file an
+`includeIf` includes. Other conditions never hold.
+
+A git config file git itself would reject, a setting git cannot expand, and an
+`onbranch:` condition in a repository that keeps its references in a reftable
+stop the walk with an error naming the setting, rather than guessing.
 
 ### .shellcheckrc
 

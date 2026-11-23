@@ -1,11 +1,15 @@
 package cli
 
 import (
+	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/stubbedev/shell-lsp/internal/gitrepo"
 )
 
 const (
@@ -201,5 +205,36 @@ func TestFmtSkipsNamedFilesOfOtherLanguages(t *testing.T) {
 	}
 	if got := run(t, dir, "", "fmt", "-ln", "bash", "t.py"); got.status != statusFailed || !strings.HasPrefix(got.stderr, "t.py:") {
 		t.Errorf("fmt -ln bash t.py = %+v, want it parsed as bash", got)
+	}
+}
+
+func TestFmtWalkHonoursTheGitConfigVariables(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeFiles(t, dir, map[string]string{
+		".git/HEAD":        "ref: refs/heads/main\n",
+		"kept/a.sh":        ugly,
+		"skipped/b.sh":     ugly,
+		"home/.gitconfig":  "[core]\n\texcludesFile = ~/nowhere\n",
+		"elsewhere/ignore": "skipped/\n",
+	})
+	var stdout, stderr bytes.Buffer
+	status := Run(Env{
+		Args:   []string{"fmt", "-l", "."},
+		Stdin:  strings.NewReader(""),
+		Stdout: &stdout,
+		Stderr: &stderr,
+		Dir:    dir,
+		Home:   filepath.Join(dir, "home"),
+		Git: gitrepo.Process{Variables: map[string]string{
+			"GIT_CONFIG_COUNT":   "1",
+			"GIT_CONFIG_KEY_0":   "core.excludesFile",
+			"GIT_CONFIG_VALUE_0": filepath.Join(dir, "elsewhere", "ignore"),
+		}},
+		Serve: func() error { return errors.New("serving is not part of this test") },
+	})
+	if want := filepath.Join("kept", "a.sh") + "\n"; status != statusFailed || stdout.String() != want {
+		t.Errorf("fmt -l . = %d, %q (%s); want %d, %q", status, stdout.String(), stderr.String(), statusFailed, want)
 	}
 }

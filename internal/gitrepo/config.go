@@ -3,40 +3,36 @@ package gitrepo
 import (
 	"errors"
 	"fmt"
-	"path/filepath"
+	"strconv"
 	"strings"
 )
 
-type directive uint8
+type key uint8
 
 const (
-	excludesFile directive = iota + 1
+	excludesFile key = iota + 1
 	include
 	conditionalInclude
+	remoteURL
+	worktreeConfig
+	refStorage
 )
 
 type setting struct {
-	directive directive
+	key       key
+	condition string
 	value     string
 	line      int
 }
 
 type config []setting
 
-type section uint8
-
 const (
-	otherSection section = iota
-	coreSection
-	includeSection
-	includeIfSection
-)
-
-const (
-	byteOrderMark  = "\xef\xbb\xbf"
-	optionalPrefix = ":(optional)"
-	prefixVariable = "%(prefix)/"
-	tilde          = "~"
+	byteOrderMark      = "\xef\xbb\xbf"
+	conditionalSection = "includeif"
+	remoteSection      = "remote"
+	pathName           = "path"
+	urlName            = "url"
 )
 
 var (
@@ -46,12 +42,56 @@ var (
 	errOpenQuote    = errors.New("unterminated quote in a value")
 	errNoValue      = errors.New("missing value")
 	errEmptyInclude = errors.New("empty include path")
+	errBadBoolean   = errors.New("not a boolean")
+	errNoSection    = errors.New("the key has no section")
+	errNoName       = errors.New("the key has no variable name")
+	errBadKey       = errors.New("invalid key")
 )
+
+func classify(name string) (key, string, bool) {
+	switch name {
+	case "core.excludesfile":
+		return excludesFile, "", true
+	case "include.path":
+		return include, "", true
+	case "extensions.worktreeconfig":
+		return worktreeConfig, "", true
+	case "extensions.refstorage":
+		return refStorage, "", true
+	}
+	section, rest, _ := strings.Cut(name, ".")
+	before, after, ok := strings.CutLast(rest, ".")
+	if !ok {
+		return 0, "", false
+	}
+	subsection, variable := before, after
+	switch {
+	case section == conditionalSection && variable == pathName:
+		return conditionalInclude, subsection, true
+	case section == remoteSection && variable == urlName:
+		return remoteURL, "", true
+	}
+	return 0, "", false
+}
+
+func newSetting(name, value string, hasValue bool, line int) (setting, bool, error) {
+	k, condition, ok := classify(name)
+	if !ok {
+		return setting{}, false, nil
+	}
+	if !hasValue {
+		if k != worktreeConfig {
+			return setting{}, false, fmt.Errorf("%s: %w", name, errNoValue)
+		}
+		value = "true"
+	}
+	return setting{key: k, condition: condition, value: value, line: line}, true, nil
+}
 
 func parseConfig(path string, data []byte) (config, error) {
 	s := scanner{text: strings.TrimPrefix(string(data), byteOrderMark), line: 1}
 	var out config
-	current := otherSection
+	base := ""
 	comment := false
 	for {
 		c := s.next()
@@ -75,34 +115,73 @@ func parseConfig(path string, data []byte) (config, error) {
 			if err != nil {
 				return nil, fmt.Errorf("reading git config %s, line %d: %w", path, line, err)
 			}
-			current = parsed
+			base = parsed
 			continue
 		}
 		name, value, hasValue, err := s.variable(c)
 		if err != nil {
 			return nil, fmt.Errorf("reading git config %s, line %d: %w", path, line, err)
 		}
-		d, ok := current.directive(name)
-		if !ok {
-			continue
+		parsed, ok, err := newSetting(base+"."+name, value, hasValue, line)
+		if err != nil {
+			return nil, fmt.Errorf("reading git config %s, line %d: %w", path, line, err)
 		}
-		if !hasValue {
-			return nil, fmt.Errorf("reading git config %s, line %d: %s: %w", path, line, name, errNoValue)
+		if ok {
+			out = append(out, parsed)
 		}
-		out = append(out, setting{directive: d, value: value, line: line})
 	}
 }
 
-func (s section) directive(name string) (directive, bool) {
-	switch {
-	case s == coreSection && name == "excludesfile":
-		return excludesFile, true
-	case s == includeSection && name == "path":
-		return include, true
-	case s == includeIfSection && name == "path":
-		return conditionalInclude, true
+func canonicalKey(name string) (string, error) {
+	last := strings.LastIndexByte(name, '.')
+	if last <= 0 {
+		return "", fmt.Errorf("%q: %w", name, errNoSection)
 	}
-	return 0, false
+	if last == len(name)-1 {
+		return "", fmt.Errorf("%q: %w", name, errNoName)
+	}
+	first := strings.IndexByte(name, '.')
+	out := []byte(name)
+	for i := range out {
+		c := out[i]
+		if i > first && i < last {
+			if c == '\n' {
+				return "", fmt.Errorf("%q: %w", name, errBadKey)
+			}
+			continue
+		}
+		if i == first || i == last {
+			continue
+		}
+		if !isKeyChar(c) || i == last+1 && !isAlpha(c) {
+			return "", fmt.Errorf("%q: %w", name, errBadKey)
+		}
+		out[i] = lower(c)
+	}
+	return string(out), nil
+}
+
+func parseBool(value string) (bool, error) {
+	switch strings.ToLower(value) {
+	case "true", "yes", "on":
+		return true, nil
+	case "false", "no", "off", "":
+		return false, nil
+	}
+	number, unit := value, int64(1)
+	switch lower(value[len(value)-1]) {
+	case 'k':
+		number, unit = value[:len(value)-1], 1<<10
+	case 'm':
+		number, unit = value[:len(value)-1], 1<<20
+	case 'g':
+		number, unit = value[:len(value)-1], 1<<30
+	}
+	n, err := strconv.ParseInt(number, 0, 64)
+	if err != nil || n > 0 && n > (1<<63-1)/unit || n < 0 && n < -(1<<63-1)/unit {
+		return false, fmt.Errorf("%q: %w", value, errBadBoolean)
+	}
+	return n != 0, nil
 }
 
 type scanner struct {
@@ -129,43 +208,35 @@ func (s *scanner) next() byte {
 	return c
 }
 
-func (s *scanner) section() (section, error) {
+func (s *scanner) section() (string, error) {
 	var name strings.Builder
 	for {
 		c := s.next()
 		switch {
 		case c == ']':
-			return plainSection(name.String())
+			if name.Len() == 0 {
+				return "", errBadSection
+			}
+			return name.String(), nil
 		case isSpace(c):
 			return s.subsection(name.String())
 		case c == '.' || isKeyChar(c):
 			name.WriteByte(lower(c))
 		default:
-			return 0, errBadSection
+			return "", errBadSection
 		}
 	}
 }
 
-func plainSection(name string) (section, error) {
-	switch name {
-	case "":
-		return 0, errBadSection
-	case "core":
-		return coreSection, nil
-	case "include":
-		return includeSection, nil
-	}
-	return otherSection, nil
-}
-
-func (s *scanner) subsection(name string) (section, error) {
+func (s *scanner) subsection(name string) (string, error) {
 	c := s.next()
 	for isSpace(c) {
 		c = s.next()
 	}
 	if c != '"' || name == "" {
-		return 0, errBadSection
+		return "", errBadSection
 	}
+	out := []byte(name + ".")
 	for {
 		c = s.next()
 		if c == '\\' {
@@ -174,16 +245,14 @@ func (s *scanner) subsection(name string) (section, error) {
 			break
 		}
 		if c == '\n' {
-			return 0, errBadSection
+			return "", errBadSection
 		}
+		out = append(out, c)
 	}
 	if s.next() != ']' {
-		return 0, errBadSection
+		return "", errBadSection
 	}
-	if name == "includeif" {
-		return includeIfSection, nil
-	}
-	return otherSection, nil
+	return string(out), nil
 }
 
 func (s *scanner) variable(first byte) (name, value string, hasValue bool, err error) {
@@ -283,30 +352,4 @@ func lower(c byte) byte {
 		return c + 'a' - 'A'
 	}
 	return c
-}
-
-type pathValue struct {
-	path     string
-	optional bool
-}
-
-func expandPath(value, home, base string) (pathValue, error) {
-	rest, optional := strings.CutPrefix(value, optionalPrefix)
-	if strings.HasPrefix(rest, prefixVariable) {
-		return pathValue{}, fmt.Errorf("the path %q starts with %s, git's installation prefix, which shell-lsp does not know", value, prefixVariable)
-	}
-	if after, ok := strings.CutPrefix(rest, tilde); ok {
-		if after != "" && !strings.HasPrefix(after, "/") && !strings.HasPrefix(after, string(filepath.Separator)) {
-			return pathValue{}, fmt.Errorf("the path %q names another user's home directory, which shell-lsp does not look up", value)
-		}
-		if home == "" {
-			return pathValue{}, fmt.Errorf("the path %q starts at the home directory, which is unknown", value)
-		}
-		return pathValue{path: filepath.Join(home, filepath.FromSlash(after)), optional: optional}, nil
-	}
-	rest = filepath.FromSlash(rest)
-	if !filepath.IsAbs(rest) {
-		rest = filepath.Join(base, rest)
-	}
-	return pathValue{path: filepath.Clean(rest), optional: optional}, nil
 }

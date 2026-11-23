@@ -125,13 +125,18 @@ func watchedFilesRegistration() registration {
 	return registration{ID: watcherRegistration, Method: didChangeWatchedFilesMethod, RegisterOptions: map[string]any{"watchers": watchers}}
 }
 
-func (s *Server) handleFilesChanged(_ context.Context, _ lsp.FileOperationsParams) error {
+func (s *Server) invalidateAll() {
 	s.workspace.InvalidateAll()
+	s.hadolint.InvalidateAll()
+}
+
+func (s *Server) handleFilesChanged(_ context.Context, _ lsp.FileOperationsParams) error {
+	s.invalidateAll()
 	return nil
 }
 
 func (s *Server) handleDidRenameFiles(_ context.Context, _ lsp.RenameFilesParams) error {
-	s.workspace.InvalidateAll()
+	s.invalidateAll()
 	return nil
 }
 

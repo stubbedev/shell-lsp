@@ -288,7 +288,7 @@ func (f *formatter) stdin() int {
 }
 
 func (f *formatter) files() int {
-	targets, failures := collectTargets(f.env.Dir, f.env.dirs(), f.opts.paths, targetSelection{
+	targets, failures := collectTargets(f.env.Dir, f.env.git(), f.opts.paths, targetSelection{
 		walkKeeps: func(path string) bool {
 			language, embedded := host.FromName(path)
 			return !embedded || language.Formats()

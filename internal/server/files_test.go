@@ -161,3 +161,45 @@ func mustPath(t *testing.T, uri string) string {
 	}
 	return path
 }
+
+func TestAFullInvalidationRereadsTheGitConfigurationOfBakeFiles(t *testing.T) {
+	t.Parallel()
+
+	const bakeFile = "target \"t\" {\n  context = \"../build\"\n  contexts = { %s = \"x\" }\n}\n"
+	dir := t.TempDir()
+	writeFiles(t, dir, map[string]string{
+		"home/.gitconfig":                "[core]\n\texcludesFile = ~/first\n",
+		"home/first":                     "generated/\n",
+		"home/second":                    "vendored/\n",
+		"repo/.git/HEAD":                 "ref: refs/heads/main\n",
+		"repo/build/Dockerfile":          "FROM base\n",
+		"repo/generated/docker-bake.hcl": strings.ReplaceAll(bakeFile, "%s", "generated"),
+		"repo/vendored/docker-bake.hcl":  strings.ReplaceAll(bakeFile, "%s", "vendored"),
+	})
+	process := Process{Home: filepath.Join(dir, "home")}
+	srv := New(jsonrpc.NewConn(nil, nil), "test", process)
+	srv.hadolint = newHadolintResolver(nil, process.git())
+	build := filepath.Join(dir, "repo", "build")
+	contexts := func() []string {
+		t.Helper()
+		cfg, _, err := srv.hadolint.Nearest(build)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var names []string
+		for name := range cfg.Bake.Dockerfiles.Of(filepath.Join(build, "Dockerfile")) {
+			names = append(names, name)
+		}
+		return names
+	}
+	if got := contexts(); !slices.Equal(got, []string{"vendored"}) {
+		t.Fatalf("bake contexts = %v, want [vendored]", got)
+	}
+	writeFiles(t, dir, map[string]string{"home/.gitconfig": "[core]\n\texcludesFile = ~/second\n"})
+	if err := srv.handleFilesChanged(t.Context(), lsp.FileOperationsParams{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := contexts(); !slices.Equal(got, []string{"generated"}) {
+		t.Errorf("bake contexts after a full invalidation = %v, want [generated]", got)
+	}
+}

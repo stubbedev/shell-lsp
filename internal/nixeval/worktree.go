@@ -17,12 +17,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/stubbedev/shell-lsp/internal/gitlink"
+	"github.com/stubbedev/shell-lsp/internal/gitrepo"
 	"github.com/stubbedev/shell-lsp/internal/regularfile"
 )
 
 const (
-	gitDirName        = ".git"
 	maxIndexFile      = 256 << 20
 	maxRefFile        = 1 << 16
 	maxPackedRefsFile = 64 << 20
@@ -148,7 +147,7 @@ func walkTree(ctx context.Context, root string) (string, error) {
 			return err
 		}
 		if item.IsDir() {
-			if item.Name() == gitDirName {
+			if item.Name() == gitrepo.MarkerName {
 				return filepath.SkipDir
 			}
 			return nil
@@ -197,21 +196,20 @@ func (d *treeDigest) addWalked(path, relative string, item fs.DirEntry) error {
 }
 
 type repository struct {
-	root   string
-	gitDir string
-	common string
+	root string
+	gitrepo.Dirs
 }
 
 func findRepository(dir string) (repository, bool, error) {
 	for current := dir; ; current = filepath.Dir(current) {
-		marker := filepath.Join(current, gitDirName)
-		info, err := os.Stat(marker)
+		info, err := os.Stat(filepath.Join(current, gitrepo.MarkerName))
 		switch {
-		case err == nil && info.IsDir():
-			return repository{root: current, gitDir: marker, common: marker}, true, nil
-		case err == nil && info.Mode().IsRegular():
-			repo, err := linkedRepository(current, marker)
-			return repo, err == nil, err
+		case err == nil && (info.IsDir() || info.Mode().IsRegular()):
+			dirs, err := gitrepo.Repository{Top: current, Linked: !info.IsDir()}.Dirs(readGitFile)
+			if err != nil {
+				return repository{}, false, err
+			}
+			return repository{root: current, Dirs: dirs}, true, nil
 		case err != nil && !errors.Is(err, fs.ErrNotExist) && !errors.Is(err, syscall.ENOTDIR):
 			return repository{}, false, fmt.Errorf("looking for a git repository at %s: %w", current, err)
 		}
@@ -221,28 +219,19 @@ func findRepository(dir string) (repository, bool, error) {
 	}
 }
 
-func linkedRepository(root, marker string) (repository, error) {
-	data, _, err := regularfile.Read(marker, maxRefFile)
-	if err != nil {
-		return repository{}, fmt.Errorf("reading the git link %s: %w", marker, err)
-	}
-	gitDir, err := gitlink.Target(marker, string(data))
-	if err != nil {
-		return repository{}, err
-	}
-	common := gitDir
-	shared, _, err := regularfile.Read(filepath.Join(gitDir, gitlink.CommonDirFile), maxRefFile)
+func readGitFile(path string) (string, bool, error) {
+	data, _, err := regularfile.Read(path, maxRefFile)
 	switch {
-	case err == nil:
-		common = gitlink.Resolve(gitDir, string(shared))
-	case !errors.Is(err, fs.ErrNotExist):
-		return repository{}, fmt.Errorf("reading the common directory of %s: %w", gitDir, err)
+	case errors.Is(err, fs.ErrNotExist):
+		return "", false, nil
+	case err != nil:
+		return "", false, fmt.Errorf("reading %s: %w", path, err)
 	}
-	return repository{root: root, gitDir: gitDir, common: common}, nil
+	return string(data), true, nil
 }
 
 func (r repository) headState() ([]byte, error) {
-	head, _, err := regularfile.Read(filepath.Join(r.gitDir, "HEAD"), maxRefFile)
+	head, _, err := regularfile.Read(filepath.Join(r.Git, "HEAD"), maxRefFile)
 	if err != nil {
 		return nil, err
 	}
@@ -253,21 +242,21 @@ func (r repository) headState() ([]byte, error) {
 	if !filepath.IsLocal(filepath.FromSlash(name)) {
 		return nil, fmt.Errorf("HEAD names the reference %q outside the repository", name)
 	}
-	tables, _, err := regularfile.Read(filepath.Join(r.common, "reftable", "tables.list"), maxRefFile)
+	tables, _, err := regularfile.Read(filepath.Join(r.Common, "reftable", "tables.list"), maxRefFile)
 	if err == nil {
 		return append(head, tables...), nil
 	}
 	if !errors.Is(err, fs.ErrNotExist) {
 		return nil, err
 	}
-	loose, _, err := regularfile.Read(filepath.Join(r.common, filepath.FromSlash(name)), maxRefFile)
+	loose, _, err := regularfile.Read(filepath.Join(r.Common, filepath.FromSlash(name)), maxRefFile)
 	if err == nil {
 		return append(head, bytes.TrimSpace(loose)...), nil
 	}
 	if !errors.Is(err, fs.ErrNotExist) && !errors.Is(err, syscall.ENOTDIR) {
 		return nil, err
 	}
-	packed, _, err := regularfile.Read(filepath.Join(r.common, "packed-refs"), maxPackedRefsFile)
+	packed, _, err := regularfile.Read(filepath.Join(r.Common, "packed-refs"), maxPackedRefsFile)
 	if errors.Is(err, fs.ErrNotExist) {
 		return head, nil
 	}
@@ -288,7 +277,7 @@ func packedReference(packed []byte, name string) []byte {
 }
 
 func (r repository) trackedDigest(ctx context.Context) (string, error) {
-	config, err := regularfile.ReadConfig(filepath.Join(r.common, "config"))
+	config, err := regularfile.ReadConfig(filepath.Join(r.Common, "config"))
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return "", fmt.Errorf("reading the git configuration of %s: %w", r.root, err)
 	}
@@ -296,7 +285,7 @@ func (r repository) trackedDigest(ctx context.Context) (string, error) {
 		return "", errIndexUnsupported
 	}
 	d := newTreeDigest(r.root, "index")
-	indexPath := filepath.Join(r.gitDir, "index")
+	indexPath := filepath.Join(r.Git, "index")
 	data, info, err := regularfile.Read(indexPath, maxIndexFile)
 	if errors.Is(err, fs.ErrNotExist) {
 		return string(d.hash.Sum(nil)), nil

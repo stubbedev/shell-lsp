@@ -255,9 +255,9 @@ func Detect(_ string, in dialect.Input) dialect.Detection {
 	return dialect.Resolve(nil, in)
 }
 
-func New(overlay Overlay, resolve func(path string, in dialect.Input) dialect.Detection, user platform.UserDirs) *Workspace {
+func New(overlay Overlay, resolve func(path string, in dialect.Input) dialect.Detection, git gitrepo.Environment) *Workspace {
 	w := &Workspace{overlay: overlay, resolve: resolve, now: time.Now, stat: regularfile.Stat, read: regularfile.ReadStat, parsing: parallel.NewBudget(maxParsingBytes), files: map[string]diskEntry{}, dirs: map[string]dirListing{}, ignores: map[string]ignoreRules{}, missing: map[string]missingEntry{}, includes: map[string]includesEntry{}, repos: map[string]repoEntry{}}
-	w.git = gitrepo.NewIgnores(user, regularfile.ReadConfig, func() time.Time { return w.now() }, DiskRecheck)
+	w.git = gitrepo.NewIgnores(git, regularfile.ReadConfig, func() time.Time { return w.now() }, DiskRecheck)
 	return w
 }
 
@@ -315,6 +315,7 @@ func (w *Workspace) InvalidateAll() {
 	clear(w.missing)
 	clear(w.repos)
 	w.generation.Add(1)
+	w.git.InvalidateAll()
 }
 
 func (w *Workspace) Load(path string) (*File, error) {
