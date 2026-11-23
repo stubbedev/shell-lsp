@@ -129,7 +129,7 @@ func TestParseBoolFollowsGitBooleans(t *testing.T) {
 			t.Errorf("parseBool(%q) = %v, %v; want %v", value, got, err, want)
 		}
 	}
-	for _, value := range []string{"garbage", "1x", "k", "99999999999999999999", "9999999999999999g"} {
+	for _, value := range []string{"garbage", "1x", "k", "99999999999999999999", "9999999999999999g", "3g", "2147483648"} {
 		if got, err := parseBool(value); !errors.Is(err, errBadBoolean) {
 			t.Errorf("parseBool(%q) = %v, %v; want %v", value, got, err, errBadBoolean)
 		}
@@ -186,6 +186,24 @@ func TestPathnameFollowsGitPathValues(t *testing.T) {
 	for _, value := range []string{"~/x", "~other/x", "%(prefix)/x"} {
 		if got, err := (expander{}).pathname(value, base); err == nil {
 			t.Errorf("pathname(%q) without a home, a user lookup or a prefix = %+v, want an error", value, got)
+		}
+	}
+}
+
+func TestParseIntFollowsGitIntegers(t *testing.T) {
+	t.Parallel()
+
+	for value, want := range map[string]int64{
+		"0": 0, "1": 1, "+1": 1, "-1": -1, " 7": 7, "010": 8, "0x1f": 31, "0X1F": 31, "0b11": 3, "1k": 1 << 10, "2M": 2 << 20, "1g": 1 << 30,
+		"2147483647": 1<<31 - 1, "-2147483648": -1 << 31, "-2g": -1 << 31, "+0x1k": 1 << 10,
+	} {
+		if got, err := parseInt(value); err != nil || got != want {
+			t.Errorf("parseInt(%q) = %d, %v; want %d", value, got, err, want)
+		}
+	}
+	for _, value := range []string{"", "x", "k", "08", "0x", " 0x", "1_0", "0o7", "1 k", "1kb", "true", "2147483648", "2g", "-2147483649", "99999999999999999999"} {
+		if got, err := parseInt(value); !errors.Is(err, errBadNumber) {
+			t.Errorf("parseInt(%q) = %d, %v; want %v", value, got, err, errBadNumber)
 		}
 	}
 }

@@ -238,3 +238,41 @@ func TestFmtWalkHonoursTheGitConfigVariables(t *testing.T) {
 		t.Errorf("fmt -l . = %d, %q (%s); want %d, %q", status, stdout.String(), stderr.String(), statusFailed, want)
 	}
 }
+
+func TestFmtWalkFindsTheRepositoryWhereGitDirPoints(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeFiles(t, dir, map[string]string{
+		"work/.git/HEAD":         "ref: refs/heads/main\n",
+		"work/kept/a.sh":         ugly,
+		"work/skipped/b.sh":      ugly,
+		"store/git/HEAD":         "ref: refs/heads/main\n",
+		"store/git/info/exclude": "/skipped/\n",
+	})
+	fmtList := func(vars map[string]string) (int, string, string) {
+		var stdout, stderr bytes.Buffer
+		status := Run(Env{
+			Args:   []string{"fmt", "-l", "."},
+			Stdin:  strings.NewReader(""),
+			Stdout: &stdout,
+			Stderr: &stderr,
+			Dir:    filepath.Join(dir, "work"),
+			Home:   filepath.Join(dir, "home"),
+			Git:    gitrepo.Process{Variables: vars},
+			Serve:  func() error { return errors.New("serving is not part of this test") },
+		})
+		return status, stdout.String(), stderr.String()
+	}
+	kept, skipped := filepath.Join("kept", "a.sh"), filepath.Join("skipped", "b.sh")
+	if status, stdout, stderr := fmtList(nil); status != statusFailed || stdout != kept+"\n"+skipped+"\n" {
+		t.Errorf("fmt -l . without GIT_DIR = %d, %q (%s); want both files", status, stdout, stderr)
+	}
+	gitDir := filepath.Join("..", "store", "git")
+	if status, stdout, stderr := fmtList(map[string]string{"GIT_DIR": gitDir}); status != statusFailed || stdout != kept+"\n" {
+		t.Errorf("fmt -l . with GIT_DIR=%s = %d, %q (%s); want %q", gitDir, status, stdout, stderr, kept)
+	}
+	if status, _, stderr := fmtList(map[string]string{"GIT_DIR": filepath.Join(dir, "missing")}); status != statusFailed || !strings.Contains(stderr, "GIT_DIR") {
+		t.Errorf("fmt -l . with a missing GIT_DIR = %d, %q; want an error naming GIT_DIR", status, stderr)
+	}
+}

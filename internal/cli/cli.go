@@ -28,7 +28,7 @@ func (e Env) dirs() platform.UserDirs {
 }
 
 func (e Env) git() gitrepo.Environment {
-	return gitrepo.Environment{User: e.dirs(), Git: e.Git}
+	return gitrepo.Environment{User: e.dirs(), Git: e.Git, Repositories: e.Git.Locate(e.Dir)}
 }
 
 const (

@@ -158,7 +158,6 @@ type Workspace struct {
 	stashed    int
 	parsing    *parallel.Budget
 	outgrown   bool
-	repos      map[string]repoEntry
 	generation atomic.Uint64
 	watched    atomic.Bool
 	scanCut    atomic.Bool
@@ -207,12 +206,6 @@ type missingEntry struct {
 	stamp diskwatch.Stamp
 }
 
-type repoEntry struct {
-	repo  gitrepo.Repository
-	found bool
-	stamp diskwatch.Stamp
-}
-
 func newDiskEntry(file *File, info fs.FileInfo, checked time.Time, stamp diskwatch.Stamp) diskEntry {
 	entry := diskEntry{size: info.Size(), modTime: info.ModTime(), checked: checked, stamp: stamp}
 	if file.Native != nil && file.Native.Language == host.Nix {
@@ -256,7 +249,7 @@ func Detect(_ string, in dialect.Input) dialect.Detection {
 }
 
 func New(overlay Overlay, resolve func(path string, in dialect.Input) dialect.Detection, git gitrepo.Environment) *Workspace {
-	w := &Workspace{overlay: overlay, resolve: resolve, now: time.Now, stat: regularfile.Stat, read: regularfile.ReadStat, parsing: parallel.NewBudget(maxParsingBytes), files: map[string]diskEntry{}, dirs: map[string]dirListing{}, ignores: map[string]ignoreRules{}, missing: map[string]missingEntry{}, includes: map[string]includesEntry{}, repos: map[string]repoEntry{}}
+	w := &Workspace{overlay: overlay, resolve: resolve, now: time.Now, stat: regularfile.Stat, read: regularfile.ReadStat, parsing: parallel.NewBudget(maxParsingBytes), files: map[string]diskEntry{}, dirs: map[string]dirListing{}, ignores: map[string]ignoreRules{}, missing: map[string]missingEntry{}, includes: map[string]includesEntry{}}
 	w.git = gitrepo.NewIgnores(git, regularfile.ReadConfig, func() time.Time { return w.now() }, DiskRecheck)
 	return w
 }
@@ -313,7 +306,6 @@ func (w *Workspace) InvalidateAll() {
 	clear(w.dirs)
 	clear(w.ignores)
 	clear(w.missing)
-	clear(w.repos)
 	w.generation.Add(1)
 	w.git.InvalidateAll()
 }
@@ -798,16 +790,16 @@ func (w *Workspace) NixFiles(dir string) ([]string, error) {
 }
 
 func (w *Workspace) enclosingIgnores(root string) (string, *gitignore.Stack, error) {
-	entry, err := w.repositoryOf(root)
-	if err != nil || !entry.found {
+	repo, found, err := w.git.Repository(root)
+	if err != nil || !found {
 		return "", nil, err
 	}
-	ignores, err := w.git.Base(entry.repo)
+	ignores, err := w.git.Base(repo)
 	if err != nil {
 		return "", nil, err
 	}
-	below, _ := platform.RelativeWithin(entry.repo.Top, root)
-	rel, dir := "", entry.repo.Top
+	below, _ := platform.RelativeWithin(repo.Top, root)
+	rel, dir := "", repo.Top
 	for name := range strings.SplitSeq(filepath.ToSlash(below), "/") {
 		if name == "." {
 			continue
@@ -820,48 +812,6 @@ func (w *Workspace) enclosingIgnores(root string) (string, *gitignore.Stack, err
 		rel, dir = JoinRel(rel, name), filepath.Join(dir, name)
 	}
 	return rel, ignores, nil
-}
-
-func (w *Workspace) repositoryOf(root string) (repoEntry, error) {
-	w.mu.Lock()
-	cached, ok := w.repos[root]
-	w.mu.Unlock()
-	if ok && w.disk.Unchanged(cached.stamp) {
-		return cached, nil
-	}
-	stamp := w.disk.Current()
-	for dir := root; ; dir = filepath.Dir(dir) {
-		stamp = stamp.And(w.disk.Track(filepath.Join(dir, gitrepo.MarkerName)))
-		if dir == filepath.Dir(dir) {
-			break
-		}
-	}
-	repo, found, err := repository(root)
-	if err != nil {
-		return repoEntry{}, err
-	}
-	entry := repoEntry{repo: repo, found: found, stamp: stamp}
-	w.mu.Lock()
-	w.repos[root] = entry
-	w.mu.Unlock()
-	return entry, nil
-}
-
-func repository(root string) (gitrepo.Repository, bool, error) {
-	for dir := root; ; {
-		info, err := os.Lstat(filepath.Join(dir, gitrepo.MarkerName))
-		switch {
-		case err == nil:
-			return gitrepo.Repository{Top: dir, Linked: !info.IsDir()}, true, nil
-		case !errors.Is(err, fs.ErrNotExist) && !errors.Is(err, fs.ErrPermission):
-			return gitrepo.Repository{}, false, fmt.Errorf("looking for the git repository of %s: %w", root, err)
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return gitrepo.Repository{}, false, nil
-		}
-		dir = parent
-	}
 }
 
 func (w *Workspace) ignoreRules(path string) (gitignore.Rules, error) {

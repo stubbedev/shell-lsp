@@ -11,11 +11,11 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/platform"
 )
 
-func TestCurrentProcessKeepsOnlyTheGitConfigVariables(t *testing.T) {
+func TestCurrentProcessKeepsOnlyTheGitVariablesItReads(t *testing.T) {
 	t.Parallel()
 
-	p := CurrentProcess([]string{"HOME=/h", "GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=a.b", "GIT_DIR=/x", "GIT_CONFIG_GLOBAL="}, nil, nil)
-	want := map[string]string{"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "a.b", "GIT_CONFIG_GLOBAL": ""}
+	p := CurrentProcess([]string{"HOME=/h", "GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=a.b", "GIT_DIR=/x", "GIT_INDEX_FILE=/i", "GIT_CONFIG_GLOBAL="}, nil, nil)
+	want := map[string]string{"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "a.b", "GIT_DIR": "/x", "GIT_CONFIG_GLOBAL": ""}
 	if diff := cmp.Diff(want, p.Variables); diff != "" {
 		t.Errorf("Variables (-want +got):\n%s", diff)
 	}

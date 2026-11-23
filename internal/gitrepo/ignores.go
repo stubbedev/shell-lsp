@@ -2,7 +2,9 @@ package gitrepo
 
 import (
 	"fmt"
+	"maps"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/stubbedev/shell-lsp/internal/diskwatch"
@@ -16,19 +18,28 @@ const (
 	IgnoreFile = ".gitignore"
 )
 
-type Repository struct {
-	Top    string
-	Linked bool
-}
-
 type Ignores struct {
 	user      platform.UserDirs
 	expand    expander
 	scopes    scopes
 	scopesErr error
+	locate    Locator
+	now       func() time.Time
+	recheck   time.Duration
+	disk      *diskwatch.Watcher
 	rules     *filecache.Cache[gitignore.Rules]
 	configs   *filecache.Cache[config]
 	texts     *filecache.Cache[string]
+
+	mu    sync.Mutex
+	repos map[string]located
+}
+
+type located struct {
+	repo    Repository
+	found   bool
+	checked time.Time
+	stamp   diskwatch.Stamp
 }
 
 func ParseRules(_ string, data []byte) (gitignore.Rules, error) {
@@ -46,6 +57,10 @@ func NewIgnores(env Environment, read filecache.ReadFile, now func() time.Time, 
 		expand:    expander{home: env.User.Home, prefix: env.Git.Prefix, userHome: env.Git.UserHome, realPath: filepath.EvalSymlinks},
 		scopes:    scopes,
 		scopesErr: err,
+		locate:    env.Repositories,
+		now:       now,
+		recheck:   recheck,
+		repos:     map[string]located{},
 		rules:     filecache.New(read, ParseRules, now, recheck),
 		configs:   filecache.New(read, parseConfig, now, recheck),
 		texts:     filecache.New(read, parseText, now, recheck),
@@ -53,6 +68,7 @@ func NewIgnores(env Environment, read filecache.ReadFile, now func() time.Time, 
 }
 
 func (g *Ignores) Watch(disk *diskwatch.Watcher) {
+	g.disk = disk
 	g.rules.Watch(disk)
 	g.configs.Watch(disk)
 	g.texts.Watch(disk)
@@ -62,12 +78,40 @@ func (g *Ignores) Invalidate(path string) {
 	g.rules.Invalidate(path)
 	g.configs.Invalidate(path)
 	g.texts.Invalidate(path)
+	if filepath.Base(path) != MarkerName {
+		return
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	maps.DeleteFunc(g.repos, func(dir string, _ located) bool { return platform.Native.Within(dir, filepath.Dir(path)) })
 }
 
 func (g *Ignores) InvalidateAll() {
 	g.rules.InvalidateAll()
 	g.configs.InvalidateAll()
 	g.texts.InvalidateAll()
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	clear(g.repos)
+}
+
+func (g *Ignores) Repository(dir string) (Repository, bool, error) {
+	now := g.now()
+	g.mu.Lock()
+	cached, ok := g.repos[dir]
+	g.mu.Unlock()
+	if ok && (now.Sub(cached.checked) < g.recheck || g.disk.Unchanged(cached.stamp)) {
+		return cached.repo, cached.found, nil
+	}
+	stamp := g.disk.Current()
+	repo, found, err := g.locate.find(dir, func(path string) { stamp = stamp.And(g.disk.Track(path)) })
+	if err != nil {
+		return Repository{}, false, err
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.repos[dir] = located{repo: repo, found: found, checked: now, stamp: stamp}
+	return repo, found, nil
 }
 
 func (g *Ignores) Rules(path string) (gitignore.Rules, error) {

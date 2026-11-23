@@ -86,6 +86,23 @@ wins over `.git/info/exclude`, and that wins over the file
 `core.excludesFile` names. A `!pattern` in a `.gitignore` therefore brings
 back what the other two exclude.
 
+The repository of a directory is found as git finds it: the nearest `.git` in
+the directory or one of its parents, whether a directory, a symbolic link to
+one, or a `gitdir:` file of a linked worktree. `check` and `fmt` also honour
+the variables git sets for hooks, relative to the working directory:
+`GIT_DIR` names the git directory (a `gitdir:` file too), `GIT_WORK_TREE` the
+top of the work tree (else the working directory when `GIT_DIR` is set, or the
+top of the repository found from the working directory), and
+`GIT_COMMON_DIR` the directory that holds the repository's `config` and
+`info/exclude`. With any of them set, that one repository is the repository of
+every walked directory inside its work tree, and directories outside it are in
+none, as git sees them; an empty variable or a missing `GIT_DIR` stops the
+walk with an error. The language server ignores these variables: its folders come from the
+editor, and an editor started from a git hook or `git commit` would otherwise
+pass git's view of that one command's repository to every folder. A
+repository whose `core.repositoryFormatVersion` is above 1, which git refuses
+to work in, stops the walk with an error.
+
 `core.excludesFile` is read the way git reads its configuration, the last
 setting winning:
 
@@ -119,7 +136,8 @@ makes a `%(prefix)/` path an error.
 holds: `gitdir:` and `gitdir/i:` match the repository's git directory (for a
 linked worktree, its directory under `.git/worktrees`) with git's rules for
 `~/`, `./`, a leading `**/` and a trailing `/`; `onbranch:` matches the branch
-`HEAD` names; and `hasconfig:remote.*.url:` matches the remote URLs of every
+`HEAD` names, following a branch that is itself a symbolic reference to
+another branch as git does; and `hasconfig:remote.*.url:` matches the remote URLs of every
 configuration file above, refusing, as git does, a remote URL set in a file an
 `includeIf` includes. Other conditions never hold.
 

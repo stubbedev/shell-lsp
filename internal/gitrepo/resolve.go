@@ -4,7 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
+	"syscall"
+
+	"github.com/stubbedev/shell-lsp/internal/regularfile"
 )
 
 const (
@@ -21,6 +25,11 @@ const (
 	filesRefStorage   = "files"
 	worktreeFile      = "config.worktree"
 	maxIncludeDepth   = 10
+	maxFormatVersion  = 1
+	maxSymrefDepth    = 5
+	sha256Format      = "sha256"
+	sha1Length        = 40
+	sha256Length      = 64
 )
 
 var (
@@ -28,6 +37,7 @@ var (
 	errRelativeCondition = errors.New("a relative gitdir condition must come from a config file")
 	errURLUnderCondition = errors.New("remote URLs cannot be set in a file an includeIf includes while a hasconfig:remote.*.url condition is in use")
 	errReftable          = errors.New("the repository keeps HEAD in a reftable, which shell-lsp does not read")
+	errFormatVersion     = fmt.Errorf("git reads repositories only up to format version %d", maxFormatVersion)
 )
 
 type expander struct {
@@ -121,14 +131,22 @@ func (s source) origin(st setting) string {
 }
 
 type repositoryFormat struct {
+	version        int64
 	worktreeConfig bool
 	refStorage     string
+	objectFormat   string
 }
 
 func readFormat(path string, settings config) (repositoryFormat, error) {
 	var out repositoryFormat
 	for _, s := range settings {
 		switch s.key {
+		case formatVersion:
+			version, err := parseInt(s.value)
+			if err != nil {
+				return repositoryFormat{}, fmt.Errorf("%s:%d: core.repositoryFormatVersion: %w", path, s.line, err)
+			}
+			out.version = version
 		case worktreeConfig:
 			on, err := parseBool(s.value)
 			if err != nil {
@@ -137,10 +155,22 @@ func readFormat(path string, settings config) (repositoryFormat, error) {
 			out.worktreeConfig = on
 		case refStorage:
 			out.refStorage = s.value
+		case objectFormat:
+			out.objectFormat = s.value
 		case excludesFile, include, conditionalInclude, remoteURL:
 		}
 	}
+	if out.version > maxFormatVersion {
+		return repositoryFormat{}, fmt.Errorf("%s: core.repositoryFormatVersion is %d: %w", path, out.version, errFormatVersion)
+	}
 	return out, nil
+}
+
+func (f repositoryFormat) objectIDLength() int {
+	if f.version >= 1 && f.objectFormat == sha256Format {
+		return sha256Length
+	}
+	return sha1Length
 }
 
 type assignment struct {
@@ -227,7 +257,7 @@ func (w *walker) visit(s source, depth int, within bool) error {
 			if err := w.include(st.value, base, origin, depth, true); err != nil {
 				return err
 			}
-		case worktreeConfig, refStorage:
+		case worktreeConfig, refStorage, formatVersion, objectFormat:
 		}
 	}
 	return nil
@@ -326,19 +356,86 @@ func (w *walker) onBranch(pattern string) (bool, error) {
 	if w.format.refStorage != "" && w.format.refStorage != filesRefStorage {
 		return false, errReftable
 	}
-	head, found, err := w.g.texts.Load(filepath.Join(w.dirs.Git, headFile))
-	if err != nil || !found {
+	name, resolved, err := w.resolveRef(headFile)
+	if err != nil || !resolved {
 		return false, err
 	}
-	target, symbolic := strings.CutPrefix(strings.TrimSpace(head), symbolicRef)
-	if !symbolic {
-		return false, nil
-	}
-	branch, ok := strings.CutPrefix(strings.TrimLeft(target, cSpace), branchPrefix)
+	branch, ok := strings.CutPrefix(name, branchPrefix)
 	if !ok {
 		return false, nil
 	}
 	return wildmatch(withTrailingStars(pattern), branch, false), nil
+}
+
+func (w *walker) resolveRef(name string) (string, bool, error) {
+	for range maxSymrefDepth {
+		text, found, err := w.g.texts.Load(w.refPath(name))
+		switch {
+		case refAbsent(err):
+			return name, true, nil
+		case err != nil:
+			return "", false, err
+		case !found:
+			return name, true, nil
+		}
+		target, symbolic := strings.CutPrefix(text, symbolicRef)
+		if !symbolic {
+			return name, w.isObjectID(text), nil
+		}
+		name = strings.TrimRight(strings.TrimLeft(target, cSpace), cSpace)
+		if !validRefName(name) {
+			return "", false, nil
+		}
+	}
+	return "", false, nil
+}
+
+func refAbsent(err error) bool {
+	return errors.Is(err, syscall.ENOTDIR) || errors.Is(err, syscall.EISDIR) || errors.Is(err, regularfile.ErrNotRegular)
+}
+
+func (w *walker) refPath(name string) string {
+	dir := w.dirs.Common
+	if !strings.Contains(name, "/") || hasAnyPrefix(name, perWorktreeRefs) {
+		dir = w.dirs.Git
+	}
+	return filepath.Join(dir, filepath.FromSlash(name))
+}
+
+var perWorktreeRefs = []string{"refs/worktree/", "refs/bisect/", "refs/rewritten/"}
+
+func hasAnyPrefix(text string, prefixes []string) bool {
+	return slices.ContainsFunc(prefixes, func(prefix string) bool { return strings.HasPrefix(text, prefix) })
+}
+
+func (w *walker) isObjectID(text string) bool {
+	n := w.format.objectIDLength()
+	if len(text) < n || len(text) > n && !isCSpace(text[n]) {
+		return false
+	}
+	for _, c := range []byte(text[:n]) {
+		if digitValue(c) >= 16 {
+			return false
+		}
+	}
+	return true
+}
+
+func validRefName(name string) bool {
+	if name == "" || name == "@" || strings.HasSuffix(name, "/") || strings.HasSuffix(name, ".") || strings.Contains(name, "..") || strings.Contains(name, "@{") {
+		return false
+	}
+	for component := range strings.SplitSeq(name, "/") {
+		if component == "" || strings.HasPrefix(component, ".") || strings.HasSuffix(component, ".lock") {
+			return false
+		}
+	}
+	for _, c := range []byte(name) {
+		if c < ' ' || c == 0x7f || strings.IndexByte(" ~^:?*[\\", c) >= 0 {
+			return false
+		}
+	}
+	return true
 }
 
 func (w *walker) remoteURL(pattern string) (bool, error) {

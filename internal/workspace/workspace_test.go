@@ -462,6 +462,26 @@ func TestShellFilesSkipWhatGitIgnores(t *testing.T) {
 	}
 }
 
+func TestShellFilesSkipWhatASymlinkedGitDirectoryExcludes(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeTree(t, dir, map[string]string{
+		"store/git/HEAD":         "ref: refs/heads/main\n",
+		"store/git/info/exclude": "/local.sh\n",
+		"repo/a.sh":              "",
+		"repo/local.sh":          "",
+	})
+	if err := os.Symlink(filepath.Join(dir, "store", "git"), filepath.Join(dir, "repo", ".git")); err != nil {
+		t.Skipf("symbolic links are unavailable: %v", err)
+	}
+	ws := New(func(string) (*File, bool) { return nil, false }, Detect, gitrepo.Environment{})
+	ws.SetRoots([]string{filepath.Join(dir, "repo")})
+	if got := relShellFiles(t, ws, filepath.Join(dir, "repo")); !slices.Equal(got, []string{"a.sh"}) {
+		t.Errorf("ShellFiles = %v, want [a.sh]", got)
+	}
+}
+
 func TestShellFilesFollowGitignoreEdits(t *testing.T) {
 	t.Parallel()
 

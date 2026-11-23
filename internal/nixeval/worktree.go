@@ -201,22 +201,15 @@ type repository struct {
 }
 
 func findRepository(dir string) (repository, bool, error) {
-	for current := dir; ; current = filepath.Dir(current) {
-		info, err := os.Stat(filepath.Join(current, gitrepo.MarkerName))
-		switch {
-		case err == nil && (info.IsDir() || info.Mode().IsRegular()):
-			dirs, err := gitrepo.Repository{Top: current, Linked: !info.IsDir()}.Dirs(readGitFile)
-			if err != nil {
-				return repository{}, false, err
-			}
-			return repository{root: current, Dirs: dirs}, true, nil
-		case err != nil && !errors.Is(err, fs.ErrNotExist) && !errors.Is(err, syscall.ENOTDIR):
-			return repository{}, false, fmt.Errorf("looking for a git repository at %s: %w", current, err)
-		}
-		if filepath.Dir(current) == current {
-			return repository{}, false, nil
-		}
+	repo, found, err := gitrepo.Discover(dir)
+	if err != nil || !found {
+		return repository{}, false, err
 	}
+	dirs, err := repo.Dirs(readGitFile)
+	if err != nil {
+		return repository{}, false, err
+	}
+	return repository{root: repo.Top, Dirs: dirs}, true, nil
 }
 
 func readGitFile(path string) (string, bool, error) {

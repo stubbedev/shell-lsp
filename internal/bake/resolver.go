@@ -53,7 +53,6 @@ type Resolver struct {
 type listing struct {
 	names      []string
 	dirs       []string
-	repository *gitrepo.Repository
 	ignoreFile bool
 	checked    time.Time
 	stamp      diskwatch.Stamp
@@ -137,7 +136,6 @@ func (r *Resolver) Dockerfiles(dir string) (Found, error) {
 
 func (r *Resolver) bakeDirs(dir string) ([]string, *Cut, error) {
 	var dirs []string
-	var repo *gitrepo.Repository
 	for at := dir; ; {
 		l, err := r.listing(at)
 		if err != nil {
@@ -146,19 +144,17 @@ func (r *Resolver) bakeDirs(dir string) ([]string, *Cut, error) {
 		if len(l.names) > 0 {
 			dirs = append(dirs, at)
 		}
-		if repo == nil {
-			repo = l.repository
-		}
 		parent := filepath.Dir(at)
 		if parent == at {
 			break
 		}
 		at = parent
 	}
-	if repo == nil {
-		return dirs, nil, nil
+	repo, found, err := r.git.Repository(dir)
+	if err != nil || !found {
+		return dirs, nil, err
 	}
-	below, err := r.tree(*repo)
+	below, err := r.tree(repo)
 	if err != nil {
 		return nil, nil, fmt.Errorf("looking for bake files under %s: %w", repo.Top, err)
 	}
@@ -263,8 +259,6 @@ func (r *Resolver) listing(dir string) (listing, error) {
 	for _, e := range entries {
 		name := e.Name()
 		switch {
-		case name == gitrepo.MarkerName:
-			fresh.repository = &gitrepo.Repository{Top: dir, Linked: !e.IsDir()}
 		case e.IsDir():
 			if !workspace.SkipsDir(name) {
 				fresh.dirs = append(fresh.dirs, name)

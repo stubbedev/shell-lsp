@@ -20,29 +20,35 @@ type Dirs struct {
 }
 
 func (r Repository) Dirs(read ReadText) (Dirs, error) {
-	marker := filepath.Join(r.Top, MarkerName)
-	if !r.Linked {
-		return Dirs{Git: marker, Common: marker}, nil
-	}
-	link, found, err := read(marker)
+	git, err := r.gitDir(read)
 	if err != nil {
 		return Dirs{}, err
 	}
-	if !found {
-		return Dirs{}, fmt.Errorf("reading the git link %s: %w", marker, fs.ErrNotExist)
+	if r.commonDir != "" {
+		return Dirs{Git: git, Common: r.commonDir}, nil
 	}
-	dir, err := linkTarget(marker, link)
-	if err != nil {
-		return Dirs{}, err
-	}
-	common, shared, err := read(filepath.Join(dir, commonDirFile))
+	common, shared, err := read(filepath.Join(git, commonDirFile))
 	if err != nil {
 		return Dirs{}, err
 	}
 	if !shared {
-		return Dirs{Git: dir, Common: dir}, nil
+		return Dirs{Git: git, Common: git}, nil
 	}
-	return Dirs{Git: dir, Common: resolveLink(dir, common)}, nil
+	return Dirs{Git: git, Common: resolveLink(git, common)}, nil
+}
+
+func (r Repository) gitDir(read ReadText) (string, error) {
+	if !r.linked {
+		return r.marker, nil
+	}
+	link, found, err := read(r.marker)
+	if err != nil {
+		return "", err
+	}
+	if !found {
+		return "", fmt.Errorf("reading the git link %s: %w", r.marker, fs.ErrNotExist)
+	}
+	return linkTarget(r.marker, link)
 }
 
 func linkTarget(dotGit, text string) (string, error) {

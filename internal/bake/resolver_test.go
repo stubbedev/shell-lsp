@@ -210,6 +210,27 @@ func TestResolverSkipsDirectoriesTheRepositoryExcludes(t *testing.T) {
 	}
 }
 
+func TestResolverReadsARepositoryWhoseGitDirectoryIsASymlink(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeFiles(t, dir, map[string]string{
+		"store/git/HEAD":         "ref: refs/heads/main\n",
+		"store/git/info/exclude": "/hidden/\n",
+		"repo/build/Dockerfile":  "FROM base\n",
+		"repo/hidden/a.hcl":      "target \"h\" {\n  context = \"../build\"\n  contexts = { hidden = \"x\" }\n}\n",
+		"repo/shown/a.hcl":       "target \"s\" {\n  context = \"../build\"\n  contexts = { shown = \"x\" }\n}\n",
+	})
+	if err := os.Symlink(filepath.Join(dir, "store", "git"), filepath.Join(dir, "repo", ".git")); err != nil {
+		t.Skipf("symbolic links are unavailable: %v", err)
+	}
+	got := dockerfilesOf(t, newTestResolver(), filepath.Join(dir, "repo", "build"))
+	want := Dockerfiles{filepath.Join(dir, "repo", "build", "Dockerfile"): {"shown": {{Text: "x", Known: true}}}}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("dockerfiles of repo/build (-want +got):\n%s", diff)
+	}
+}
+
 func TestResolverSkipsDirectoriesTheUsersExcludesFileIgnores(t *testing.T) {
 	t.Parallel()
 

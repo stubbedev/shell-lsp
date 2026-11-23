@@ -2,6 +2,7 @@ package gitrepo
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -38,16 +39,24 @@ func newFixture(t *testing.T, files map[string]string) fixture {
 
 func (f fixture) path(rel string) string { return filepath.Join(f.dir, filepath.FromSlash(rel)) }
 
-func (f fixture) base(repo string, linked bool) (*Ignores, error) {
-	ignores := NewIgnores(f.env, os.ReadFile, func() time.Time { return time.Time{} }, time.Hour)
-	_, err := ignores.Base(Repository{Top: f.path(repo), Linked: linked})
-	return ignores, err
+func (f fixture) ignores() *Ignores {
+	return NewIgnores(f.env, os.ReadFile, func() time.Time { return time.Time{} }, time.Hour)
 }
 
-func (f fixture) ignoredIn(t *testing.T, repo string, linked bool, rels ...string) []string {
+func (f fixture) base(t *testing.T, repo string) error {
 	t.Helper()
-	ignores := NewIgnores(f.env, os.ReadFile, func() time.Time { return time.Time{} }, time.Hour)
-	return ignoredBy(t, ignores, Repository{Top: f.path(repo), Linked: linked}, rels...)
+	ignores := f.ignores()
+	_, err := ignores.Base(f.repository(t, ignores, repo))
+	return err
+}
+
+func (f fixture) repository(t *testing.T, ignores *Ignores, dir string) Repository {
+	t.Helper()
+	repo, found, err := ignores.Repository(f.path(dir))
+	if err != nil || !found {
+		t.Fatalf("the repository of %s: found %v, %v", dir, found, err)
+	}
+	return repo
 }
 
 func ignoredBy(t *testing.T, ignores *Ignores, repo Repository, rels ...string) []string {
@@ -67,7 +76,8 @@ func ignoredBy(t *testing.T, ignores *Ignores, repo Repository, rels ...string) 
 
 func (f fixture) ignored(t *testing.T, repo string, rels ...string) []string {
 	t.Helper()
-	return f.ignoredIn(t, repo, false, rels...)
+	ignores := f.ignores()
+	return ignoredBy(t, ignores, f.repository(t, ignores, repo), rels...)
 }
 
 func assertIgnored(t *testing.T, got []string, want ...string) {
@@ -136,7 +146,7 @@ func TestBaseExpandsEveryExcludesFileItReads(t *testing.T) {
 		"prefix/etc/ignore":    "from-prefix\n",
 	})
 	f.env.Git.UserHome = func(string) (string, error) { return "", errNotExpanded }
-	if _, err := f.base("repo", false); !errors.Is(err, errNotExpanded) {
+	if err := f.base(t, "repo"); !errors.Is(err, errNotExpanded) {
 		t.Errorf("an unknown user overridden by a later excludesFile = %v, want %v as git reports it", err, errNotExpanded)
 	}
 
@@ -212,7 +222,7 @@ func TestBaseRefusesARelativeGitdirConditionOutsideAFile(t *testing.T) {
 		"GIT_CONFIG_KEY_0":   "includeIf.gitdir:./x/.path",
 		"GIT_CONFIG_VALUE_0": "/nowhere",
 	}
-	if _, err := f.base("repo", false); !errors.Is(err, errRelativeCondition) {
+	if err := f.base(t, "repo"); !errors.Is(err, errRelativeCondition) {
 		t.Errorf("Base = %v, want %v", err, errRelativeCondition)
 	}
 }
@@ -245,7 +255,7 @@ func TestBaseEvaluatesOnbranchConditions(t *testing.T) {
 	assertIgnored(t, f.ignored(t, "other", all...), "any")
 	assertIgnored(t, f.ignored(t, "detached", all...))
 	assertIgnored(t, f.ignored(t, "tag", all...))
-	if _, err := f.base("reftable", false); !errors.Is(err, errReftable) {
+	if err := f.base(t, "reftable"); !errors.Is(err, errReftable) {
 		t.Errorf("onbranch in a reftable repository = %v, want %v", err, errReftable)
 	}
 }
@@ -280,12 +290,12 @@ func TestBaseRefusesRemoteURLsUnderAnIncludeIfWhileHasconfigIsUsed(t *testing.T)
 		"home/none":      "",
 		"repo/.git/HEAD": "",
 	})
-	if _, err := f.base("repo", false); !errors.Is(err, errURLUnderCondition) {
+	if err := f.base(t, "repo"); !errors.Is(err, errURLUnderCondition) {
 		t.Errorf("Base = %v, want %v", err, errURLUnderCondition)
 	}
 
 	writeFiles(t, f.dir, map[string]string{"home/.gitconfig": "[includeIf \"gitdir:**\"]\n\tpath = any\n"})
-	if _, err := f.base("repo", false); err != nil {
+	if err := f.base(t, "repo"); err != nil {
 		t.Errorf("a remote URL under includeIf without a hasconfig condition was refused: %v", err)
 	}
 }
@@ -312,8 +322,8 @@ func TestBaseReadsWorktreeConfigOnlyWithTheExtension(t *testing.T) {
 	all := []string{"repo", "worktree", "linked"}
 	assertIgnored(t, f.ignored(t, "off", all...), "repo")
 	assertIgnored(t, f.ignored(t, "main", all...), "worktree")
-	assertIgnored(t, f.ignoredIn(t, "wt", true, all...), "linked")
-	if _, err := f.base("bad", false); !errors.Is(err, errBadBoolean) {
+	assertIgnored(t, f.ignored(t, "wt", all...), "linked")
+	if err := f.base(t, "bad"); !errors.Is(err, errBadBoolean) {
 		t.Errorf("Base = %v, want %v", err, errBadBoolean)
 	}
 }
@@ -335,7 +345,7 @@ func TestBaseMatchesConditionsOfALinkedWorktreeAgainstItsOwnGitDirectory(t *test
 		"wt/.git":                          "gitdir: ../main/.git/worktrees/wt\n",
 	})
 	assertIgnored(t, f.ignored(t, "main", "linked", "topic"), "topic")
-	assertIgnored(t, f.ignoredIn(t, "wt", true, "linked", "topic"), "linked")
+	assertIgnored(t, f.ignored(t, "wt", "linked", "topic"), "linked")
 }
 
 func TestBaseReadsTheSystemConfigAndTheConfigVariables(t *testing.T) {
@@ -436,7 +446,7 @@ func TestBaseLetsInfoExcludeOverrideTheExcludesFile(t *testing.T) {
 		"wt/.git":                          "gitdir: ../main/.git/worktrees/wt\n",
 	})
 	assertIgnored(t, f.ignored(t, "main", "build", "kept"), "build")
-	assertIgnored(t, f.ignoredIn(t, "wt", true, "build", "kept"), "build")
+	assertIgnored(t, f.ignored(t, "wt", "build", "kept"), "build")
 }
 
 func TestInvalidateAllRereadsEveryGitFile(t *testing.T) {
@@ -448,12 +458,99 @@ func TestInvalidateAllRereadsEveryGitFile(t *testing.T) {
 		"home/second":     "second\n",
 		"repo/.git/HEAD":  "",
 	})
-	ignores := NewIgnores(f.env, os.ReadFile, func() time.Time { return time.Time{} }, time.Hour)
-	repo := Repository{Top: f.path("repo")}
+	ignores := f.ignores()
+	repo := f.repository(t, ignores, "repo")
 	assertIgnored(t, ignoredBy(t, ignores, repo, "first", "second"), "first")
 
 	writeFiles(t, f.dir, map[string]string{"home/.gitconfig": "[core]\n\texcludesFile = ~/second\n"})
 	assertIgnored(t, ignoredBy(t, ignores, repo, "first", "second"), "first")
 	ignores.InvalidateAll()
 	assertIgnored(t, ignoredBy(t, ignores, repo, "first", "second"), "second")
+}
+
+func TestBaseRefusesARepositoryFormatGitDoesNotRead(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, map[string]string{
+		"home/.gitconfig":       "[core]\n\trepositoryformatversion\n",
+		"v1/.git/config":        "[core]\n\trepositoryformatversion = 1\n",
+		"hex/.git/config":       "[core]\n\trepositoryformatversion = 0x1\n",
+		"later/.git/config":     "[core]\n\trepositoryformatversion = 2\n\trepositoryformatversion = 0\n",
+		"v2/.git/config":        "[core]\n\trepositoryformatversion = 2\n",
+		"unit/.git/config":      "[core]\n\trepositoryformatversion = 1k\n",
+		"text/.git/config":      "[core]\n\trepositoryformatversion = abc\n",
+		"valueless/.git/config": "[core]\n\trepositoryformatversion\n",
+	})
+	for _, repo := range []string{"v1", "hex", "later"} {
+		if err := f.base(t, repo); err != nil {
+			t.Errorf("%s: %v", repo, err)
+		}
+	}
+	for repo, want := range map[string]error{"v2": errFormatVersion, "unit": errFormatVersion, "text": errBadNumber, "valueless": errBadNumber} {
+		if err := f.base(t, repo); !errors.Is(err, want) {
+			t.Errorf("%s: Base = %v, want %v", repo, err, want)
+		}
+	}
+}
+
+func TestBaseFollowsBranchesThatAreSymbolicRefs(t *testing.T) {
+	t.Parallel()
+
+	const oid = "0123456789012345678901234567890123456789\n"
+	files := map[string]string{
+		"home/.gitconfig": "[includeIf \"onbranch:b\"]\n\tpath = matched\n" +
+			"[includeIf \"onbranch:unborn\"]\n\tpath = matched\n" +
+			"[includeIf \"onbranch:dd\"]\n\tpath = matched\n" +
+			"[includeIf \"onbranch:a\"]\n\tpath = alias\n",
+		"home/matched":                   "[core]\n\texcludesFile = ~/matched-ignore\n",
+		"home/matched-ignore":            "matched\n",
+		"home/alias":                     "[core]\n\texcludesFile = ~/alias-ignore\n",
+		"home/alias-ignore":              "alias\n",
+		"direct/.git/HEAD":               "ref: refs/heads/b\n",
+		"direct/.git/refs/heads/b":       oid,
+		"alias/.git/HEAD":                "ref: refs/heads/a\n",
+		"alias/.git/refs/heads/a":        "ref:   refs/heads/b  \n",
+		"chain/.git/HEAD":                "ref: refs/heads/c\n",
+		"chain/.git/refs/heads/c":        "ref: refs/heads/a\n",
+		"chain/.git/refs/heads/a":        "ref: refs/heads/b\n",
+		"unborn/.git/HEAD":               "ref: refs/heads/a\n",
+		"unborn/.git/refs/heads/a":       "ref: refs/heads/unborn\n",
+		"directory/.git/HEAD":            "ref: refs/heads/dd\n",
+		"directory/.git/refs/heads/dd/e": oid,
+		"garbage/.git/HEAD":              "ref: refs/heads/b\n",
+		"garbage/.git/refs/heads/b":      "garbage\n",
+		"unsafe/.git/HEAD":               "ref: refs/heads/a\n",
+		"unsafe/.git/refs/heads/a":       "ref: refs/heads/../heads/b\n",
+	}
+	for depth, repo := range map[int]string{3: "deepest", 4: "too-deep"} {
+		files[repo+"/.git/HEAD"] = "ref: refs/heads/s1\n"
+		for i := 1; i < depth; i++ {
+			files[fmt.Sprintf("%s/.git/refs/heads/s%d", repo, i)] = fmt.Sprintf("ref: refs/heads/s%d\n", i+1)
+		}
+		files[fmt.Sprintf("%s/.git/refs/heads/s%d", repo, depth)] = "ref: refs/heads/b\n"
+	}
+	f := newFixture(t, files)
+	for _, repo := range []string{"direct", "alias", "chain", "unborn", "directory", "deepest"} {
+		assertIgnored(t, f.ignored(t, repo, "matched", "alias"), "matched")
+	}
+	for _, repo := range []string{"garbage", "unsafe", "too-deep"} {
+		assertIgnored(t, f.ignored(t, repo, "matched", "alias"))
+	}
+}
+
+func TestBaseReadsTheBranchOfALinkedWorktreeFromTheCommonDirectory(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, map[string]string{
+		"home/.gitconfig":                  "[includeIf \"onbranch:target\"]\n\tpath = branch\n",
+		"home/branch":                      "[core]\n\texcludesFile = ~/branch-ignore\n",
+		"home/branch-ignore":               "set\n",
+		"main/.git/HEAD":                   "ref: refs/heads/main\n",
+		"main/.git/refs/heads/alias":       "ref: refs/heads/target\n",
+		"main/.git/worktrees/wt/HEAD":      "ref: refs/heads/alias\n",
+		"main/.git/worktrees/wt/commondir": "../..\n",
+		"wt/.git":                          "gitdir: ../main/.git/worktrees/wt\n",
+	})
+	assertIgnored(t, f.ignored(t, "wt", "set"), "set")
+	assertIgnored(t, f.ignored(t, "main", "set"))
 }

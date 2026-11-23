@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -21,8 +22,9 @@ type Process struct {
 }
 
 type Environment struct {
-	User platform.UserDirs
-	Git  Process
+	User         platform.UserDirs
+	Git          Process
+	Repositories Locator
 }
 
 const (
@@ -44,7 +46,7 @@ var errNotExpanded = errors.New("unknown")
 func CurrentProcess(environ, pathDirs, pathExt []string) Process {
 	variables := map[string]string{}
 	for _, kv := range environ {
-		if name, value, ok := strings.Cut(kv, "="); ok && strings.HasPrefix(name, variablePrefix) {
+		if name, value, ok := strings.Cut(kv, "="); ok && (strings.HasPrefix(name, variablePrefix) || slices.Contains(locationVariables, name)) {
 			variables[name] = value
 		}
 	}
