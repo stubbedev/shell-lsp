@@ -7,6 +7,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/dialect"
 	"github.com/stubbedev/shell-lsp/internal/host/model"
 	"github.com/stubbedev/shell-lsp/internal/projection"
+	"github.com/stubbedev/shell-lsp/internal/shelloptions"
 )
 
 const (
@@ -16,7 +17,16 @@ const (
 	subshellClose = "\n)\n"
 )
 
-var defaultDetection = dialect.Detection{Dialect: dialect.Posix, Source: dialect.SourceHostDefault, Evidence: tool}
+var (
+	defaultDetection = dialect.Detection{Dialect: dialect.Posix, Source: dialect.SourceHostDefault, Evidence: tool}
+	defaultRunShell  = runShell{detection: defaultDetection, analysed: true}
+)
+
+type runShell struct {
+	detection dialect.Detection
+	analysed  bool
+	options   string
+}
 
 type Analysis struct {
 	File      *File
@@ -52,17 +62,13 @@ func (f *File) project() (*projection.Map, dialect.Detection, []model.Shell) {
 	p := &projector{f: f, b: projection.NewBuilder(f.Text)}
 	p.b.Shell(defaultDetection)
 	var detections []dialect.Detection
-	type stageShell struct {
-		detection dialect.Detection
-		analysed  bool
-	}
 	stages := f.Stages()
-	ends := make([]stageShell, len(stages))
+	ends := make([]runShell, len(stages))
 	pragmas := slices.DeleteFunc(f.Pragmas(), func(p Pragma) bool { return p.Kind != PragmaShell })
 	for i, s := range stages {
-		shell, analysed := defaultDetection, true
+		shell := defaultRunShell
 		if s.Parent >= 0 {
-			shell, analysed = ends[s.Parent].detection, ends[s.Parent].analysed
+			shell = ends[s.Parent]
 		}
 		for i > 0 && len(pragmas) > 0 && pragmas[0].Span.Start < s.From.Span.Start {
 			pragmas = pragmas[1:]
@@ -70,37 +76,44 @@ func (f *File) project() (*projection.Map, dialect.Detection, []model.Shell) {
 		declared := f.inheritedNames(s)
 		for _, in := range s.Instructions {
 			for len(pragmas) > 0 && pragmas[0].Span.Start < in.Span.Start {
-				shell, analysed = pragmaShell(f, pragmas[0])
+				shell = pragmaShell(f, pragmas[0])
 				pragmas = pragmas[1:]
 			}
 			if in.Name == "SHELL" && in.Form == FormJSON {
-				shell, analysed = shellOf(f, in)
+				shell = shellOf(f, in)
 			}
 			for _, target := range []*Instruction{in, in.Inner} {
-				if target != nil && analysed && p.script(target, shell, declared, s.Scope) {
-					detections = append(detections, shell)
+				if target != nil && shell.analysed && p.script(target, shell, declared, s.Scope) {
+					detections = append(detections, shell.detection)
 				}
 			}
 			declared = append(declared, f.declares(in)...)
 		}
-		ends[i] = stageShell{detection: shell, analysed: analysed}
+		ends[i] = shell
 	}
 	detection, _ := dialect.Choose(detections, func(d dialect.Detection) dialect.Detection { return d }, tool)
 	return p.b.Map(), detection, p.shells
 }
 
-func shellOf(f *File, in *Instruction) (dialect.Detection, bool) {
+func shellOf(f *File, in *Instruction) runShell {
 	words := make([]string, len(in.JSON))
 	for i, w := range in.JSON {
 		words[i] = w.Text
 	}
-	d, ok := dialect.FromShebang("#!" + strings.Join(words, " "))
-	return dialect.Detection{Dialect: d, Source: dialect.SourceHostSetting, Evidence: f.Text[in.Line.Start:in.Line.End]}, ok
+	return invoked(words, f.Text[in.Line.Start:in.Line.End])
 }
 
-func pragmaShell(f *File, p Pragma) (dialect.Detection, bool) {
-	d, ok := dialect.FromShebang("#!" + p.Shell)
-	return dialect.Detection{Dialect: d, Source: dialect.SourceHostSetting, Evidence: f.Text[p.Span.Start:p.Span.End]}, ok
+func pragmaShell(f *File, p Pragma) runShell {
+	return invoked([]string{p.Shell}, f.Text[p.Span.Start:p.Span.End])
+}
+
+func invoked(argv []string, evidence string) runShell {
+	d, ok := dialect.FromShebang("#!" + strings.Join(argv, " "))
+	shell := runShell{detection: dialect.Detection{Dialect: d, Source: dialect.SourceHostSetting, Evidence: evidence}, analysed: ok}
+	if ok {
+		shell.options = shelloptions.SetCommand(argv[1:])
+	}
+	return shell
 }
 
 func (f *File) declares(in *Instruction) []string {
@@ -139,7 +152,7 @@ func prelude(names []string) string {
 	return sb.String()
 }
 
-func (p *projector) script(in *Instruction, shell dialect.Detection, declared []string, scope model.Scope) bool {
+func (p *projector) script(in *Instruction, shell runShell, declared []string, scope model.Scope) bool {
 	if in.Form != FormShell {
 		return false
 	}
@@ -147,10 +160,10 @@ func (p *projector) script(in *Instruction, shell dialect.Detection, declared []
 	if len(in.Heredocs) == 1 && bareHeredoc(command) {
 		return p.heredocScript(in.Heredocs[0], shell, declared, scope)
 	}
-	p.b.Shell(shell)
+	p.b.Shell(shell.detection)
 	p.b.Region(lineEncoder)
 	p.b.Script()
-	p.b.Opaque(in.Command.Start, in.Command.Start, subshellOpen+prelude(declared))
+	p.b.Opaque(in.Command.Start, in.Command.Start, subshellOpen+shell.options+prelude(declared))
 	p.command(in)
 	end := in.Command.End
 	for _, h := range in.Heredocs {
@@ -187,19 +200,18 @@ func (p *projector) command(in *Instruction) {
 	}
 }
 
-func (p *projector) heredocScript(h Heredoc, shell dialect.Detection, declared []string, scope model.Scope) bool {
+func (p *projector) heredocScript(h Heredoc, shell runShell, declared []string, scope model.Scope) bool {
 	body := p.f.Text[h.Body.Start:h.Body.End]
 	if first, _, _ := strings.Cut(body, "\n"); strings.HasPrefix(first, "#!") {
-		d, ok := dialect.FromShebang(first)
-		if !ok {
+		shell = invoked(strings.Fields(first[2:]), first)
+		if !shell.analysed {
 			return false
 		}
-		shell = dialect.Detection{Dialect: d, Source: dialect.SourceHostSetting, Evidence: first}
 	}
-	p.b.Shell(shell)
+	p.b.Shell(shell.detection)
 	p.b.Region(bodyEncoder)
 	p.b.Script()
-	p.b.Opaque(h.Body.Start, h.Body.Start, subshellOpen+prelude(declared))
+	p.b.Opaque(h.Body.Start, h.Body.Start, subshellOpen+shell.options+prelude(declared))
 	p.b.Verbatim(h.Body.Start, h.Body.End)
 	p.b.Opaque(h.Body.End, h.Body.End, subshellClose)
 	p.shells = append(p.shells, model.Shell{Span: h.Body, Scope: scope})

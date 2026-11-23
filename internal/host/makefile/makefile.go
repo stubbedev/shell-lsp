@@ -9,6 +9,7 @@ import (
 	"github.com/stubbedev/shell-lsp/internal/host/model"
 	"github.com/stubbedev/shell-lsp/internal/projection"
 	"github.com/stubbedev/shell-lsp/internal/scan"
+	"github.com/stubbedev/shell-lsp/internal/shelloptions"
 	"github.com/stubbedev/shell-lsp/internal/textline"
 )
 
@@ -1146,33 +1147,7 @@ func (p *reader) shellOptions() string {
 	if strings.ContainsRune(flags, '$') {
 		return ""
 	}
-	words := strings.Fields(flags)
-	var options []string
-	for i := 0; i < len(words); i++ {
-		word := words[i]
-		switch {
-		case word == "-o" && i+1 < len(words):
-			options = append(options, word, words[i+1])
-			i++
-		case strings.HasPrefix(word, "-") && !strings.HasPrefix(word, "--"):
-			letters := strings.ReplaceAll(word[1:], "c", "")
-			named := strings.HasSuffix(letters, "o") && i+1 < len(words)
-			if named {
-				letters = strings.TrimSuffix(letters, "o")
-			}
-			if letters != "" {
-				options = append(options, "-"+letters)
-			}
-			if named {
-				options = append(options, "-o", words[i+1])
-				i++
-			}
-		}
-	}
-	if len(options) == 0 {
-		return ""
-	}
-	return "set " + strings.Join(options, " ") + "\n"
+	return shelloptions.SetCommand(strings.Fields(flags))
 }
 
 func (p *reader) recipeLine(l RecipeLine) projection.RecipeLine {
