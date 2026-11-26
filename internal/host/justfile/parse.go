@@ -417,14 +417,7 @@ func unindent(s string) string {
 	if lines[len(lines)-1] == "" {
 		lines = lines[:len(lines)-1]
 	}
-	if len(lines) > 0 && blankLine(lines[0]) {
-		lines = lines[1:]
-	}
-	if len(lines) > 0 && blankLine(lines[len(lines)-1]) {
-		lines = lines[:len(lines)-1]
-	}
-	common := ""
-	first := true
+	common, first := "", true
 	for _, l := range lines {
 		if blankLine(l) {
 			continue
@@ -439,12 +432,17 @@ func unindent(s string) string {
 		}
 	}
 	var sb strings.Builder
-	for _, l := range lines {
-		if blankLine(l) {
-			sb.WriteString(l[len(strings.TrimRight(l, "\r\n")):])
-			continue
+	sb.Grow(len(s))
+	for i, l := range lines {
+		switch {
+		case !blankLine(l):
+			sb.WriteString(l[len(common):])
+		case i == 0 || i == len(lines)-1:
+		case strings.HasSuffix(l, "\r\n"):
+			sb.WriteString("\r\n")
+		default:
+			sb.WriteString("\n")
 		}
-		sb.WriteString(strings.TrimPrefix(l, common))
 	}
 	return sb.String()
 }

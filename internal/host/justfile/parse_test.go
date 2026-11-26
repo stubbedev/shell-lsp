@@ -141,3 +141,30 @@ func TestPathsMayBeShellExpandedAfterWhitespace(t *testing.T) {
 		}
 	}
 }
+
+func TestUnindentMatchesJust(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct{ in, want string }{
+		{"foo", "foo"},
+		{"foo\nbar\nbaz\n", "foo\nbar\nbaz\n"},
+		{"", ""},
+		{"  foo\n  bar", "foo\nbar"},
+		{"  foo\n  bar\n\n", "foo\nbar\n"},
+		{"  foo\r\n\r\n  bar\r\n", "foo\r\n\r\nbar\r\n"},
+		{"\n          hello\n          bar\n        ", "hello\nbar\n"},
+		{"hello\n  bar\n  foo", "hello\n  bar\n  foo"},
+		{"\n\n          hello\n          bar\n\n        ", "\nhello\nbar\n\n"},
+		{"0\n  \r\r\n0", "0\n\r\n0"},
+		{"a\n \t\r\nb", "a\n\r\nb"},
+		{"a\n\r \nb", "a\n\nb"},
+		{"  a\n\r\r\n  b\n  ", "a\n\r\nb\n"},
+		{" \r\n", ""},
+		{"\r\n\r\n", ""},
+		{"\n\n\n", "\n"},
+	} {
+		if got := unindent(tt.in); got != tt.want {
+			t.Errorf("unindent(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}
