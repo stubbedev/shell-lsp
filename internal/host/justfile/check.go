@@ -426,7 +426,9 @@ func (c *checker) attribute(a Attribute) (argAttribute, bool) {
 	case "arg":
 		arg, ok := c.argAttribute(a)
 		_, broken := nonLiteralArgument(a)
-		return arg, ok && !broken && len(c.findings) == before && a.positional() == 1
+		ok = ok && !broken && len(c.findings) == before && a.positional() == 1
+		c.argumentPattern(a)
+		return arg, ok
 	}
 	return argAttribute{}, false
 }
@@ -542,9 +544,6 @@ func (c *checker) argAttribute(a Attribute) (argAttribute, bool) {
 		k, _ := a.keyed("min")
 		c.report(lint.CodeJustAttributeArguments, k.Key.Span, "argument attribute `min` `%d` exceeds `max` `%d`", *arg.min, *arg.max)
 	}
-	if patterned && pattern.Value != nil {
-		c.argumentPattern(pattern)
-	}
 	return arg, known
 }
 
@@ -596,7 +595,11 @@ func (c *checker) argumentCount(a Attribute, key string) *uint64 {
 	return &n
 }
 
-func (c *checker) argumentPattern(pattern AttributeArg) {
+func (c *checker) argumentPattern(a Attribute) {
+	pattern, ok := a.keyed("pattern")
+	if !ok || pattern.Value == nil {
+		return
+	}
 	values, ok := c.f.Constant(pattern.Value)
 	if !ok {
 		return

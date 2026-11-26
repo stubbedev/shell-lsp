@@ -747,6 +747,10 @@ pattern := '[a'
 [arg('a', pattern=pattern)]
 build a:
     echo {{a}}
+-- arg-invalid-pattern-for-an-undefined-argument --
+[arg('b', pattern='(')]
+build a:
+    echo {{a}}
 -- arg-extended-pattern --
 [arg('a', pattern='(?x) \d+ a**')]
 build a:

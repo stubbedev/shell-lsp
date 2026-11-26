@@ -510,6 +510,10 @@ rejected 1:11 failed to parse argument pattern
 -- arg-invalid-pattern-from-a-variable --
 rejected 2:11 failed to parse argument pattern
 2:11 SL5020 error argument pattern `[a` is not a regular expression just accepts: at character 3 of `[a`: a class is not closed with `]`
+-- arg-invalid-pattern-for-an-undefined-argument --
+rejected 1:6 argument attribute for undefined argument `b`
+1:6 SL5020 error argument attribute for undefined argument `b`
+1:11 SL5020 error argument pattern `(` is not a regular expression just accepts: at character 2 of `(`: a group is not closed
 -- arg-extended-pattern --
 accepted
 -- continue-unknown-signal --
