@@ -757,7 +757,7 @@ func (m *Module) cycles(file int, checks Checks, expansions map[Target][]context
 		if e, path, found := search.cycle(start, contexts); found {
 			names := []string{s.Name}
 			for _, n := range path {
-				names = append(names, m.Files[n.file].Symbols[n.symbol].Name)
+				names = append(names, m.Files[n.file].Symbols[n.symbol].pathName())
 			}
 			message := fmt.Sprintf("%s `%s` depends on itself", s.Kind, s.Name)
 			if len(names) > 2 {
@@ -884,4 +884,11 @@ func quoted(names []string) []string {
 		out[i] = "`" + n + "`"
 	}
 	return out
+}
+
+func (s Symbol) pathName() string {
+	if s.Kind == KindFunction {
+		return s.Name + "()"
+	}
+	return s.Name
 }

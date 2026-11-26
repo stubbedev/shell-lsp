@@ -240,7 +240,7 @@ func (in *indexer) function(fn *Function) {
 		in.symbol(model.Symbol{Name: p.Text, Kind: model.KindParameter, Span: p.Span, Selection: p.Span, Scope: scope, Parent: i, Detail: p.Text, Unused: true, Arity: model.NoArity})
 		in.token(p.Span, semantic.TypeParameter, semantic.ModDeclaration)
 	}
-	in.expr(fn.Body, scope, i, false)
+	in.expr(fn.Body, scope, i, true)
 }
 
 func (r *Recipe) Arity() model.Arity {
@@ -363,7 +363,7 @@ func (in *indexer) expr(e *Expr, scope model.Scope, owner int, edge bool) {
 			in.ix.Refs = append(in.ix.Refs, model.Ref{Name: x.Name.Text, Kind: model.KindVariable, Span: x.Span, Scope: scope, Args: model.NoArgs, Owner: model.Narrow(owner), Edge: edge})
 			in.token(x.Span, semantic.TypeVariable, 0)
 		case ExprCall:
-			call := model.Ref{Name: x.Name.Text, Kind: model.KindFunction, Span: x.Name.Span, Scope: scope, Args: model.Narrow(len(x.Args)), Owner: model.Narrow(owner)}
+			call := model.Ref{Name: x.Name.Text, Kind: model.KindFunction, Span: x.Name.Span, Scope: scope, Args: model.Narrow(len(x.Args)), Owner: model.Narrow(owner), Edge: edge}
 			for _, a := range x.Args {
 				call.AddArg(a.Span)
 			}

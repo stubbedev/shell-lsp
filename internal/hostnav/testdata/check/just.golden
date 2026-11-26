@@ -696,3 +696,14 @@ rejected 1:12 expected '(', but found end of line
 rejected 2:1 assignment `x` has invalid attribute `group`
 2:1 SL5020 error assignment `x` has invalid attribute `group`
 2:10 SL5001 error expected end of line, found name `b`
+-- circular-variable-through-function --
+rejected 2:1 variable `x` is defined in terms of itself
+2:6 SL5012 error variable `x` is circular: `x -> f() -> x`
+-- circular-variable-through-functions --
+rejected 2:1 variable `x` depends on its own value: `x -> y -> x`
+2:6 SL5012 error variable `x` is circular: `x -> y -> f() -> g() -> x`
+3:6 SL5012 error variable `y` is circular: `y -> f() -> g() -> x -> y`
+-- recursive-function --
+accepted
+-- function-parameter-shadows-variable --
+accepted

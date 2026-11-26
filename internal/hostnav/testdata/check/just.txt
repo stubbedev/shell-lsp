@@ -1022,3 +1022,29 @@ x := assert
 -- assignment-attribute-checked-before-the-line-ends --
 [group('ci')]
 x := 'a' b
+-- circular-variable-through-function --
+set unstable
+x := f()
+f() := x
+a:
+    echo {{x}}
+-- circular-variable-through-functions --
+set unstable
+x := y
+y := f()
+f() := g()
+g() := x
+a:
+    echo {{x}}
+-- recursive-function --
+set unstable
+f() := f()
+x := f()
+a:
+    echo {{x}}
+-- function-parameter-shadows-variable --
+set unstable
+x := f("1")
+f(x) := x
+a:
+    echo {{x}}
